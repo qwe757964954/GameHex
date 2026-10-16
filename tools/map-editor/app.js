@@ -1267,10 +1267,21 @@
   }
 
   // ---- 视图（滚轮缩放 / 中键或空格平移）----------------------------------------
-  function applyView() {
+  /**
+   * 当前视口矩形 —— `viewBox` 与背景图盒的**唯一写入口**。
+   *
+   * 🔴 两处必须是同一个盒子：背景图靠 `preserveAspectRatio="xMidYMid slice"` 做等比 cover，
+   * 图盒一旦偏离 viewBox，可见区域就只剩图盒与视口的交集（曾多减了一个 halfW/halfH ⇒
+   * 右侧与下侧各空半屏，全链路零报错）。共用本函数后这类漂移在结构上不可能发生。
+   */
+  function viewportRect() {
     var halfW = baseHalfW / zoom, halfH = baseHalfH / zoom;
-    svg.setAttribute('viewBox', (panX - halfW).toFixed(1) + ' ' + (panY - halfH).toFixed(1) + ' ' +
-      (halfW * 2).toFixed(1) + ' ' + (halfH * 2).toFixed(1));
+    return { x: panX - halfW, y: panY - halfH, width: halfW * 2, height: halfH * 2 };
+  }
+  function applyView() {
+    var rect = viewportRect();
+    svg.setAttribute('viewBox', rect.x.toFixed(1) + ' ' + rect.y.toFixed(1) + ' ' +
+      rect.width.toFixed(1) + ' ' + rect.height.toFixed(1));
     // 背景图占满 viewBox，缩放 / 平移变了必须重画。
     drawBackground();
   }
@@ -1447,19 +1458,22 @@
    * 居中，溢出由 `preserveAspectRatio="xMidYMid slice"` 切掉（绝不拉伸）。
    * 关闭背景（`showBackground=false`）或名字为空时清空图层，不占绘制。
    */
+  /**
+   * 背景图标记（纯函数）：图盒取 `viewportRect()`，与 `viewBox` 同一个盒子。
+   * 关掉背景或没名字时返回空串。
+   */
+  function backgroundMarkup() {
+    if (!backgroundName || !showBackground) return '';
+    var rect = viewportRect();
+    return '<image class="backgroundImage" href="' + esc('/bg/' + backgroundName) +
+      '" x="' + rect.x.toFixed(1) + '" y="' + rect.y.toFixed(1) +
+      '" width="' + rect.width.toFixed(2) + '" height="' + rect.height.toFixed(2) +
+      '" preserveAspectRatio="xMidYMid slice"></image>';
+  }
   function drawBackground() {
     var layers = svg.querySelectorAll ? svg.querySelectorAll('g.backgroundLayer') : null;
     if (!layers || !layers.length) return;
-    var layer = layers[0];
-    if (!backgroundName || !showBackground) { layer.innerHTML = ''; return; }
-    var halfW = baseHalfW / zoom, halfH = baseHalfH / zoom;
-    var w = halfW * 2, h = halfH * 2;
-    // `preserveAspectRatio="xMidYMid slice"` 让 image 按等比 cover 自适应、不要求预设尺寸；
-    // 不写 width/height 时浏览器对没有 intrinsic size 的元素行为不一致。
-    layer.innerHTML = '<image class="backgroundImage" href="' + esc('/bg/' + backgroundName) +
-      '" x="' + (-halfW + panX - w / 2).toFixed(1) + '" y="' + (-halfH + panY - h / 2).toFixed(1) +
-      '" width="' + w.toFixed(2) + '" height="' + h.toFixed(2) +
-      '" preserveAspectRatio="xMidYMid slice"></image>';
+    layers[0].innerHTML = backgroundMarkup();
   }
   function resourceMarkup() {
     var parts = [];
@@ -2535,6 +2549,8 @@
     isMultiCellDecor: isMultiCellDecor, decorBoxOf: decorBoxOf, decorSpanCells: decorSpanCells,
     setResourceBrush: setResourceBrush, resourceMarkup: resourceMarkup,
     addResourcePoint: addResourcePoint, removeResourcePoint: removeResourcePoint,
+    // 视图矩形 / 背景图标记：判据要能断言「图盒 == viewBox」（见 viewportRect 的红字说明）。
+    viewportRect: viewportRect, backgroundMarkup: backgroundMarkup,
     snapshot: snapshot, commitUndo: commitUndo,
     buildJSON: buildJSON, validate: validate,
     // 画布几何：与工程渲染间距 1:1（来源 ZCGameViewUtil）。探针与用例都靠它断言，

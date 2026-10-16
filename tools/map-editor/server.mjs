@@ -297,13 +297,31 @@ function validatePreset(data, id) {
       if (decorRow >= rows || decorColumn >= columns) {
         throw new Error(`装饰 ${key} 不在 ${columns}×${rows} 的地图内`);
       }
+      // 值兼容两种格式：老字符串（等价单格）与多格对象 `{ art, span?, offset? }`。
+      // 单格等价时编辑器也会写成字符串，所以这里把对象归一成 span 再逐格判。
+      const entry = typeof value === 'string' ? { art: value, span: [[0, 0]] } : value;
+      if (!entry || typeof entry.art !== 'string' || !entry.art) {
+        throw new Error(`装饰 ${key} 的资源名必须是非空字符串`);
+      }
       // anchor 那格恒定要判：span 理论上含 [0,0]，但坏数据不能靠"约定"兜底。
       if (!isVoidAt(decorRow, decorColumn)) {
         throw new Error(`装饰 ${key} 必须落在虚空格上（当前不是虚空）`);
       }
-      // [RED-PROBE] 临时回退到"只接受字符串"，验证用例会红。
-      if (typeof value !== 'string' || !value) {
-        throw new Error(`装饰 ${key} 的资源名必须是非空字符串`);
+      const span = Array.isArray(entry.span) && entry.span.length ? entry.span : [[0, 0]];
+      for (const cell of span) {
+        // 形状不合法（非 [dr, dc] 有限数对）直接判错，不做隐性 `Number(null) → 0` 的兜底。
+        if (!Array.isArray(cell) || cell.length < 2 ||
+            typeof cell[0] !== 'number' || typeof cell[1] !== 'number' ||
+            !Number.isFinite(cell[0]) || !Number.isFinite(cell[1])) {
+          throw new Error(`装饰 ${key} 的占位形态（span）必须是 [dr, dc] 数字对`);
+        }
+        const cellRow = decorRow + cell[0], cellColumn = decorColumn + cell[1];
+        if (cellRow < 0 || cellRow >= rows || cellColumn < 0 || cellColumn >= columns) {
+          throw new Error(`装饰 ${key} 的占位格 ${cellRow},${cellColumn} 不在 ${columns}×${rows} 的地图内`);
+        }
+        if (!isVoidAt(cellRow, cellColumn)) {
+          throw new Error(`装饰 ${key} 的占位格 ${cellRow},${cellColumn} 必须落在虚空格上（当前不是虚空）`);
+        }
       }
     }
   }

@@ -1,0 +1,32 @@
+{
+  "id": "normal",
+  "name": "默认",
+  "version": 3,
+  "rows": 16,
+  "columns": 9,
+  "playerCount": 2,
+  "cityMode": "fixed",
+  "mirrorVertical": true,
+  "mirrorHorizontal": false,
+  "mirror180": false,
+  "ascii": [
+    "000000000",
+    "000000000",
+    "000000000",
+    "000000000",
+    "000010000",
+    "000000000",
+    "000000000",
+    "000000000"
+  ],
+  "homes": [
+    {
+      "row": 12,
+      "column": 4
+    },
+    {
+      "row": 3,
+      "column": 4
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+{
+  "id": "cross",
+  "name": "十字",
+  "version": 3,
+  "rows": 16,
+  "columns": 16,
+  "playerCount": 2,
+  "cityMode": "fixed",
+  "mirrorVertical": true,
+  "mirrorHorizontal": false,
+  "mirror180": false,
+  "ascii": [
+    "......000000....",
+    "0.00000000000.00",
+    "0000000111000000",
+    "0000000111000000",
+    "0000000111000000",
+    ".....00000000...",
+    ".....00000000...",
+    ".....00000000..."
+  ],
+  "homes": [
+    {
+      "row": 12,
+      "column": 8
+    },
+    {
+      "row": 3,
+      "column": 8
+    }
+  ],
+  "art": {
+    "tiles": {
+      "6,1": "image/decor/wasteland/cao3",
+      "6,13": "image/decor/wasteland/cao1",
+      "7,0": "image/decor/wasteland/cannon",
+      "7,1": "image/decor/wasteland/cao",
+      "7,2": "image/decor/wasteland/cao3",
+      "7,3": "image/decor/wasteland/cao3",
+      "7,4": "image/decor/wasteland/cao3",
+      "7,12": "image/decor/wasteland/cannon",
+      "7,13": "image/decor/wasteland/barricade",
+      "7,14": "image/decor/wasteland/cao",
+      "7,15": "image/decor/wasteland/tires",
+      "8,0": "image/decor/wasteland/cannon",
+      "8,1": "image/decor/wasteland/cao",
+      "8,2": "image/decor/wasteland/cao3",
+      "8,3": "image/decor/wasteland/cao3",
+      "8,4": "image/decor/wasteland/cao3",
+      "8,12": "image/decor/wasteland/cannon",
+      "8,13": "image/decor/wasteland/barricade",
+      "8,14": "image/decor/wasteland/cao",
+      "8,15": "image/decor/wasteland/tires",
+      "9,1": "image/decor/wasteland/cao3",
+      "9,13": "image/decor/wasteland/cao1"
+    }
+  }
+}

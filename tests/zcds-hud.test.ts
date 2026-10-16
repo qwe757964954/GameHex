@@ -1,0 +1,830 @@
+import assert from 'node:assert/strict';
+import { readFileSync, readdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import test from 'node:test';
+import { runInNewContext } from 'node:vm';
+import ts from 'typescript';
+
+/**
+ * ZCGameViewUtil 在**模块作用域**就 `new Color(...)` 建了四个血表配色常量，
+ * 所以 `cc` 桩必须给出真能 new 的类 —— 只给 `{}` 会在 require 期就抛
+ * `Color is not a constructor`，挂在 import 链上表现为「整条用例莫名崩」。
+ */
+const STUB_CC = {
+    Color: class { constructor(public r = 0, public g = 0, public b = 0, public a = 255) {} },
+    Graphics: class { moveTo() {} lineTo() {} close() {} stroke() {} fill() {} clear() {} },
+    ProgressBar: class {},
+    // 下面三个是「装饰器组件模块」（`ZCGameHudScoreSlot`）在**类定义期**要用的 ——
+    // 少了 `_decorator` 就 `@ccclass(...)` 直接抛，整个模块 require 失败。
+    // ⚠️ `ccclass` 必须返回**装饰器函数**：`@ccclass('X')` 展开后是 `__decorate([ccclass('X')], Y)`，
+    //    `ccclass` 直接把入参（字符串 'X'）返回的话，`__decorate` 会拿字符串当函数调 ⇒
+    //    运行期抛 `d is not a function`（踩过，报错信息完全指不到真因）。
+    _decorator: { ccclass: () => (value: unknown) => value, property: () => () => {} },
+    Component: class {},
+    Label: class {},
+    Sprite: class {},
+    SpriteFrame: class {},
+    // `ZCGameHudScoreSlot` 在**模块顶层**就 `new Vec3(...)` 造弹跳的缩放常量
+    // （2026-10-14 数字变化弹跳），桩里没有就 `Vec3 is not a constructor`、整条用例崩。
+    Vec3: class { constructor(public x = 1, public y = 1, public z = 1) {} },
+};
+
+/**
+ * 加载纯逻辑模块：按工程真源逐个解析相对路径。
+ *
+ * ⚠️ 别用 `require: () => cc` 一把梭给全部依赖 —— 那样 `HexGridLayout` 的格距常量
+ * 会变成 undefined，`mapToViewX/Y` 全返回 NaN，而 **NaN 的任何比较都是 false**，
+ * 表现为「断言莫名失败」而不是「数值不对」，极难归因。
+ */
+function loadPureModule(entry: string) {
+    const cache = new Map<string, any>();
+    const exists = (path: string): boolean => {
+        try { readFileSync(path); return true; } catch { return false; }
+    };
+    const load = (rel: string): any => {
+        if (cache.has(rel)) return cache.get(rel);
+        const code = ts.transpileModule(readFileSync(rel, 'utf8'), {
+            // ⚠️ `experimentalDecorators` 必开：要load 的 `ZCGameHudScoreSlot` 是 `@ccclass` 装饰器组件，
+            //    不开的话 tsc 按新语义降级成 `__esDecorate` 的 polyfill 形式，
+            //    运行期直接抛 `(0 , decorators[i]) is not a function`（踩过）。
+            //    对纯逻辑模块无副作用 —— 它们本来就没装饰器。
+            compilerOptions: {
+                module: ts.ModuleKind.CommonJS,
+                target: ts.ScriptTarget.ES2020,
+                experimentalDecorators: true,
+            },
+        }).outputText;
+        const module = { exports: {} as any };
+        const fromDir = dirname(rel);
+        new Function('require', 'module', 'exports', code)((name: string) => {
+            if (name === 'cc') return STUB_CC;
+            const abs = join(fromDir, name);
+            return load(exists(abs + '.ts') ? abs + '.ts' : abs + '/index.ts');
+        }, module, module.exports);
+        cache.set(rel, module.exports);
+        return module.exports;
+    };
+    return load(entry);
+}
+
+// 运行真实 HUD 脚本，仅替换 Cocos 的节点和事件基础设施。
+function createHud(
+    hexes = [{ x: -500, y: -700 }, { x: 500, y: 700 }],
+    headFrameResult: unknown = null,
+) {
+    const tweenRuns: Array<{
+        startScale: { x: number; y: number; z: number };
+        startPosition: { x: number; y: number; z: number };
+        endScale: { x: number; y: number; z: number };
+        endPosition: { x: number; y: number; z: number };
+        delay: number; duration: number;
+    }> = [];
+    class FakeNode {
+        static EventType = { TOUCH_START: 'start', TOUCH_MOVE: 'move', TOUCH_END: 'end', TOUCH_CANCEL: 'cancel', SIZE_CHANGED: 'size' };
+        listeners: Array<{ event: string; callback: Function; target: unknown; capture: boolean }> = [];
+        position = { x: 0, y: 0, z: 0 };
+        scale = { x: 1, y: 1, z: 1 };
+        transform = { width: 720, height: 1280 };
+        getComponent() { return this.transform; }
+        getChildByPath() { return null; }
+        setScale(x: any, y?: number, z?: number) { this.scale = typeof x === 'object' ? x : { x, y, z }; }
+        setPosition(x: any, y?: number, z?: number) { this.position = typeof x === 'object' ? x : { x, y, z }; }
+        on(event: string, callback: Function, target: unknown, capture = false) { this.listeners.push({ event, callback, target, capture }); }
+        off(event: string, callback: Function, target: unknown, capture = false) {
+            this.listeners = this.listeners.filter(item => !(item.event === event && item.callback === callback && item.target === target && item.capture === capture));
+        }
+        emit(event: string, argument?: unknown) {
+            for (const item of [...this.listeners]) if (item.event === event) item.callback.call(item.target, argument);
+        }
+    }
+    class FakeButton { static EventType = { CLICK: 'click' }; node = new FakeNode(); interactable = true; }
+    class FakeComponent {
+        enabledInHierarchy = true;
+        node = new FakeNode();
+        scheduled: Function[] = [];
+        unschedule(callback: Function) { this.scheduled = this.scheduled.filter(fn => fn !== callback); }
+        scheduleOnce(callback: Function) { this.scheduled.push(callback); }
+    }
+    const fakeTween = (target: FakeNode) => {
+        let delay = 0;
+        let duration = 0;
+        let properties: Record<string, any> = {};
+        let callback = () => {};
+        const chain = {
+            delay(value: number) { delay = value; return chain; },
+            to(value: number, next: Record<string, any>) { duration = value; properties = next; return chain; },
+            call(next: () => void) { callback = next; return chain; },
+            start() {
+                // endScale / endPosition 记 tween 的**目标**，与 start 分离 ——
+                // 入场镜头起点是整盘全景、终点才是己方落点，两者缩放不同；
+                // 只看 start 会把"起始居中"错当成"收尾居中"。
+                tweenRuns.push({
+                    startScale: { ...target.scale },
+                    startPosition: { ...target.position },
+                    endScale: { ...(properties.scale ?? target.scale) },
+                    endPosition: { ...(properties.position ?? target.position) },
+                    delay,
+                    duration,
+                });
+                if (properties.scale) target.setScale(properties.scale);
+                if (properties.position) target.setPosition(properties.position);
+                callback();
+                return chain;
+            },
+            stop() { return chain; },
+        };
+        return chain;
+    };
+    const cc = {
+        _decorator: { ccclass: () => (value: unknown) => value, property: () => () => {} },
+        Component: FakeComponent, Node: FakeNode, Button: FakeButton,
+        Vec3: class { constructor(public x: number, public y: number, public z: number) {} },
+        Label: class {}, Sprite: class {}, SpriteFrame: class {}, ScrollView: class {}, UITransform: class {},
+        Color: class { constructor(public r: number, public g: number, public b: number, public a: number) {} },
+        tween: fakeTween,
+    };
+    // 纯逻辑模块跑工程真源（`cc` 才走桩）—— 见 loadPureModule 的警告：
+    // 旧写法 `require: () => cc` 会让格距常量变 undefined，`mapToViewX/Y` 全是 NaN。
+    const view = loadPureModule('assets/script/app/zcds/view/ZCGameViewUtil.ts');
+    assert.ok(Number.isFinite(view.mapToViewX(36)), '夹具自检：mapToViewX 必须是有限数');
+    const dependencies: Record<string, unknown> = {
+        cc,
+        // 「多队伍」改造后 HUD 不再引用 GamePlayerItem / GameVS（两方版节点已从 prefab 删除），
+        // 改为引用两个新的行组件 + 头像加载器。
+        // 顶部尺寸与数字互斥由真实组件负责，夹具只记录 HUD 的派发数据。
+        './ZCGameHudScoreSlot': loadPureModule('assets/script/app/zcds/view/ZCGameHudScoreSlot.ts'),
+        './ZCGameHudPlayerRow': { ZCGameHudPlayerRow: class {} },
+        '../../../vscrollview/VScrollView': { VirtualScrollView: class {} },
+        '../../HeadArt': { HeadArt: { loadHeadFrame: async () => headFrameResult } },
+        '../model/ZCCombatCatalog': { getPlayerDeck: () => [{ name: '测试卡' }] },
+        '../model/ZCGameModel': { ZC_HEX_CONFIG: hexes },
+        './ZCGameViewUtil': view,
+    };
+    const source = readFileSync('assets/script/app/zcds/view/ZCGameHUDView.ts', 'utf8');
+    const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true } }).outputText;
+    const context = { exports: {} as any, require: (name: string) => { assert.ok(name in dependencies, name); return dependencies[name]; } };
+    runInNewContext(code, context);
+    const hud = new context.exports.ZCGameHUDView();
+    hud.mapViewport = new FakeNode();
+    hud.mapLayer = new FakeNode();
+    hud.mapScrollView = { enabled: true, stopAutoScroll() {} };
+    // 三块「按模式收起」的面板：`render()` 现在会按「是否守城局」开关 `topInfoPanel`
+    // （守城局顶部信息带整个收起），夹具必须把节点给上，否则第一帧就炸在 `.active` 上。
+    for (const key of ['topInfoPanel', 'bottomInfoPanel', 'leftPanel']) hud[key] = new FakeNode();
+    for (const key of ['artifactButton', 'rankButton', 'guideButton', 'damageButton', 'retreatButton']) hud[key] = new FakeButton();
+    for (const key of ['timeLabel', 'goldLabel', 'logLabel', 'deckLabel']) hud[key] = { string: '' };
+    // 金币不足时跳动的那个图标（`BottomInfoPanel/CoinPanel/coin`）：`flashInsufficientGold` 会读它的
+    // position / scale，缺了就是运行期崩 —— 与 prefab 上「必填引用」同一口径。
+    hud.goldIcon = new FakeNode();
+    hud.artifactIcon = { grayscale: false };
+    hud.artifactProgress = { fillRange: 0, grayscale: false };
+    hud.artifactCountLabel = { string: '' };
+    // 「多队伍」：顶部四格 + 左侧玩家列表。
+    // 左侧是**虚拟列表**：条目由 `setTotalCount` 造、`getItemByIndex` 取，行的 `render`
+    // 通过条目节点的 `getComponent` 拿到（与真引擎的取法一致）。
+    hud.scoreCalls = [];
+    hud.layoutUpdates = 0;
+    hud.scoreLayout = { updateLayout() { hud.layoutUpdates++; } };
+    hud.rowCalls = [];
+    for (let i = 1; i <= 4; i++) {
+        const slot = {
+            node: new FakeNode(),
+            render(data: unknown) { hud.scoreCalls.push(data); return true; },
+        };
+        hud[`scoreSlot${i}`] = slot;
+    }
+    const rowNodes: { getComponent: () => unknown }[] = [];
+    const makeRowNode = (index: number) => ({
+        getComponent: () => ({
+            node: new FakeNode(),
+            render(data: Record<string, unknown>) { hud.rowCalls.push({ index, ...data }); },
+        }),
+    });
+    hud.playerList = {
+        totalCount: 0,
+        isValid: true,
+        setTotalCount(count: number) {
+            this.totalCount = count;
+            while (rowNodes.length < count) rowNodes.push(makeRowNode(rowNodes.length));
+        },
+        getItemByIndex(index: number) { return rowNodes[index] ?? null; },
+    };
+    // ⚠️ 不要在这里覆盖 `scheduleOnce`/`unschedule` —— 夹具的 `FakeComponent` 已经把它们
+    // 记进 `hud.scheduled`，测试靠 `hud.scheduled` 手动跑"下一帧"的回调（覆盖会让拖动用例变红）。
+    const model = {
+        snapshot: { playerGold: 123.9, artifactReadyUses: 1, artifactCharge: 0, artifactCooldown: 0, status: 'playing', resultReason: '', units: [
+            { owner: 'player', battleState: 'idle' }, { owner: 'player', battleState: 'dead' },
+            { owner: 'enemy', battleState: 'attack' }, { owner: 'enemy', battleState: 'move' },
+        ] },
+        remainingSeconds: 60.1, unitCap: 100, playerTerritoryCount: 70, enemyTerritoryCount: 68, playerBonds: ['羁绊A'],
+        artifactChargeFull: 100, artifactMaxStored: 2, artifactCooldownDuration: 1,
+        // 「多队伍」后 HUD 按**席位**渲染：`owners` 给席位序，`territoryCountOf` 给逐席地块数。
+        // 2 人局只给 2 席（后两格应被 render 关掉）。
+        owners: ['player', 'enemy'] as const,
+        territoryCountOf(owner: string) { return owner === 'player' ? 70 : owner === 'enemy' ? 68 : 0; },
+    };
+    return { hud, model, tweenRuns, view, hudModule: context.exports };
+}
+
+test('开局先以居中全景展示完整棋盘，再放大到居中的原始倍率', () => {
+    const { hud, tweenRuns } = createHud();
+    hud.initialize({ useArtifact() {} });
+    assert.equal(tweenRuns.length, 1);
+    assert.ok(tweenRuns[0].startScale.x < 1);
+    assert.equal(tweenRuns[0].startScale.x, tweenRuns[0].startScale.y);
+    assert.equal(tweenRuns[0].startPosition.x, 0);
+    assert.equal(tweenRuns[0].startPosition.y, 0);
+    assert.equal(hud.mapLayer.scale.x, 1);
+    assert.equal(hud.mapLayer.scale.y, 1);
+    assert.equal(hud.mapLayer.position.x, 0);
+    assert.equal(hud.mapLayer.position.y, 0);
+    hud.initialize({ useArtifact() {} });
+    assert.equal(tweenRuns.length, 1, '重复初始化不应重复播放开局镜头');
+});
+
+test('开局镜头停在我方主城那一格，而不是整盘中心（3 / 4 人图上中心落在中立空白处）', () => {
+    // 复刻 3 人图（standard_3）的取样：主城在左下角，明显偏离整盘中心。
+    const hexes = [{ x: -500, y: -500 }, { x: 500, y: 700 }];
+    const { hud, tweenRuns, view } = createHud(hexes);
+    // 落点按工程真源换算（`mapToViewX/Y`），别手抄数字 —— 抄错会静默变成"断言在测一个错的东西"。
+    const home = { x: view.mapToViewX(-300), y: view.mapToViewY(-400) };
+    // centerAt 复刻 HUD 的 mapCenterAtScale，**连 `|| 0` 一起抄** ——
+    // 少了它期望值是 -0 而实际是 0，assert.equal 用 Object.is 判 -0 !== 0，
+    // 报出来是"0 不等于 -0"，完全看不出是公式抄漏了一个归一化。
+    const centerAt = (scale: number) => ({
+        x: -(view.mapToViewX(-500) + view.mapToViewX(500)) / 2 * scale || 0,
+        y: -(view.mapToViewY(-500) + view.mapToViewY(700)) / 2 * scale || 0,
+    });
+    const center = centerAt(1);
+    hud.setMapFocus(home);
+    hud.initialize({ useArtifact() {} });
+
+    assert.notEqual(hud.mapLayer.position.x, center.x, '落点不应停在整盘中心 X');
+    assert.notEqual(hud.mapLayer.position.y, center.y, '落点不应停在整盘中心 Y');
+    // 镜头要真的朝己方挪（不是换了个中心那么简单）：主城那一格必须落在视口内。
+    const onScreenX = home.x + hud.mapLayer.position.x;
+    const onScreenY = home.y + hud.mapLayer.position.y;
+    assert.ok(Math.abs(onScreenX) <= 360, `主城应落在视口内 X，实际 ${onScreenX}`);
+    assert.ok(Math.abs(onScreenY) <= 640, `主城应落在视口内 Y，实际 ${onScreenY}`);
+    assert.ok(
+        Math.abs(hud.mapLayer.position.x - center.x) + Math.abs(hud.mapLayer.position.y - center.y) > 1,
+        '镜头相对整盘中心必须有位移',
+    );
+    // 全景起始仍是整盘中心（要看得见完整棋盘），只有收尾落点改。
+    // 全景用 overviewScale（不是 1），按 `位置 / 缩放` 断言 —— 那个比值才是与缩放无关的整盘中心。
+    const startScale = tweenRuns[0].startScale.x;
+    assert.ok(startScale > 0 && startScale < 1, `全景应是缩小的整盘视图，实际 ${startScale}`);
+    assert.equal(tweenRuns[0].startPosition.x / startScale, centerAt(1).x);
+    assert.equal(tweenRuns[0].startPosition.y / startScale, centerAt(1).y);
+});
+
+test('落点必须活过 resize 夹取：夹取后再夹一次不动，否则镜头会自己弹回整盘中心', () => {
+    const hexes = [{ x: -500, y: -500 }, { x: 500, y: 700 }];
+    const { hud, view } = createHud(hexes);
+    hud.onLoad(); // 引擎在节点激活时触发一次：监听在此绑定（规范 7.2），initialize 不再负责绑事件
+    hud.setMapFocus({ x: view.mapToViewX(-300), y: view.mapToViewY(-400) });
+    hud.initialize({ useArtifact() {} });
+    const settled = { x: hud.mapLayer.position.x, y: hud.mapLayer.position.y };
+    // 触发一次视口尺寸变化 —— applyMapOffset 会重新夹取
+    hud.mapViewport.transform.width = 900;
+    hud.mapViewport.emit('size');
+    assert.equal(hud.mapLayer.position.x, settled.x, 'resize 后落点不应被弹走');
+    assert.equal(hud.mapLayer.position.y, settled.y, 'resize 后落点不应被弹走');
+});
+
+test('没给落点时退回整盘中心（2 人图与旧行为一致）', () => {
+    const hexes = [{ x: -500, y: -500 }, { x: 500, y: 700 }];
+    const { hud, view } = createHud(hexes);
+    const center = {
+        x: -(view.mapToViewX(-500) + view.mapToViewX(500)) / 2 || 0,
+        y: -(view.mapToViewY(-500) + view.mapToViewY(700)) / 2 || 0,
+    };
+    hud.initialize({ useArtifact() {} });
+    assert.equal(hud.mapLayer.position.x, center.x);
+    assert.equal(hud.mapLayer.position.y, center.y);
+});
+
+test('结算拉远仍回整盘居中，不受开局落点影响', () => {
+    const hexes = [{ x: -500, y: -500 }, { x: 500, y: 700 }];
+    const { hud, view, tweenRuns } = createHud(hexes);
+    const center = {
+        x: -(view.mapToViewX(-500) + view.mapToViewX(500)) / 2 || 0,
+        y: -(view.mapToViewY(-500) + view.mapToViewY(700)) / 2 || 0,
+    };
+    hud.setMapFocus({ x: view.mapToViewX(-300), y: view.mapToViewY(-400) });
+    hud.initialize({ useArtifact() {} });
+    const before = tweenRuns.length;
+    hud.startSettlementOverview();
+    // 结算拉到 overviewScale（不是 1），按 `位置 / 缩放` 断言整盘居中。
+    const scale = tweenRuns[before].endScale.x;
+    assert.ok(scale > 0 && scale < 1, `结算应拉远到整盘视图，实际 ${scale}`);
+    assert.equal(tweenRuns[before].endPosition.x / scale, center.x, '结算要看整盘，必须居中');
+    assert.equal(tweenRuns[before].endPosition.y / scale, center.y);
+});
+
+test('buildPlayerHomeFocus 恒取 homes[0]（我方主城），与人数无关；select 图未选点时不给落点', () => {
+    const { buildPlayerHomeFocus, mapToViewX, mapToViewY } = loadPureModule('assets/script/app/zcds/view/ZCGameViewUtil.ts');
+
+    // 3 / 4 人图：homes 有 3~4 项，落点必须始终是第 0 项（我方），不能被长度带偏。
+    const hexes = [
+        { x: -100, y: -100 }, { x: 0, y: 0 }, { x: 100, y: 100 },
+        { x: -200, y: 200 }, { x: 200, y: -200 },
+    ];
+    for (const homes of [[0], [0, 2], [0, 2, 4], [0, 2, 4, 1]]) {
+        const focus = buildPlayerHomeFocus({ homes, playerHomeId: -1, hexes });
+        assert.deepEqual(focus, { x: mapToViewX(-100), y: mapToViewY(-100) }, `homes=${JSON.stringify(homes)}`);
+    }
+    // 无 homes 时退回 playerHomeId（v1 / v2 老图口径）
+    assert.deepEqual(
+        buildPlayerHomeFocus({ playerHomeId: 2, hexes }),
+        { x: mapToViewX(100), y: mapToViewY(100) },
+    );
+    // select 图：homes 只是默认建议，真正主城要等选点 ⇒ 不给落点
+    assert.equal(buildPlayerHomeFocus({ homes: [0], playerHomeId: 0, cityMode: 'select', hexes }), null);
+    // 没定主城（homes 空 + playerHomeId = -1）
+    assert.equal(buildPlayerHomeFocus({ homes: [], playerHomeId: -1, hexes }), null);
+});
+
+test('每张工程地图的开局落点都成立：主城在屏内、且不被 resize 弹走', () => {
+    const { buildPlayerHomeFocus, mapToViewX, mapToViewY, ZC_HEX_VIEW_WIDTH, ZC_HEX_VIEW_HEIGHT } =
+        loadPureModule('assets/script/app/zcds/view/ZCGameViewUtil.ts');
+    const mapConfig = loadPureModule('assets/script/app/zcds/model/ZCMapConfig.ts');
+    const dir = 'assets/resources/config/maps';
+    // 与 HUD 的常量保持一致（ZCGameHUDView 的 MAP_EDGE_MARGIN_* 与 prefab 上的 720×1280 视口）
+    const VIEW_W = 720, VIEW_H = 1280, MARGIN_X = 80, MARGIN_Y = 230;
+    let checked = 0;
+    for (const file of readdirSync(dir).filter((f) => f.endsWith('.json'))) {
+        mapConfig.configureZCMap(JSON.parse(readFileSync(join(dir, file), 'utf8')));
+        const hexes = mapConfig.ZC_HEX_CONFIG;
+        const focus = buildPlayerHomeFocus({
+            homes: mapConfig.ZC_MAP_HOMES,
+            playerHomeId: mapConfig.ZC_PLAYER_HOME_ID,
+            cityMode: mapConfig.ZC_MAP_CITY_MODE,
+            hexes,
+        });
+        const xs = hexes.map((h: { x: number }) => mapToViewX(h.x));
+        const ys = hexes.map((h: { y: number }) => mapToViewY(h.y));
+        const bounds = {
+            minX: Math.min(...xs) - ZC_HEX_VIEW_WIDTH / 2, maxX: Math.max(...xs) + ZC_HEX_VIEW_WIDTH / 2,
+            minY: Math.min(...ys) - ZC_HEX_VIEW_HEIGHT / 2, maxY: Math.max(...ys) + ZC_HEX_VIEW_HEIGHT / 2,
+        };
+        const center = { x: -(bounds.minX + bounds.maxX) / 2, y: -(bounds.minY + bounds.maxY) / 2 };
+        const limitX = Math.max(0, (bounds.maxX - bounds.minX) / 2 - VIEW_W / 2 + MARGIN_X);
+        const limitY = Math.max(0, (bounds.maxY - bounds.minY) / 2 - VIEW_H / 2 + MARGIN_Y);
+        const clamp = (x: number, y: number) => ({
+            x: Math.max(center.x - limitX, Math.min(center.x + limitX, x)),
+            y: Math.max(center.y - limitY, Math.min(center.y + limitY, y)),
+        });
+        // select 图未选点时没有落点，走整盘中心 —— 那是预期行为，不参与落点断言
+        if (!focus) continue;
+        const rest = clamp(-focus.x, -focus.y);
+        // ① 主城那一格在视口内 ② 夹取幂等（resize 不会把镜头弹走）
+        assert.ok(Math.abs(focus.x + rest.x) <= VIEW_W / 2, `${file}: 主城 X 出屏 ${(focus.x + rest.x).toFixed(1)}`);
+        assert.ok(Math.abs(focus.y + rest.y) <= VIEW_H / 2, `${file}: 主城 Y 出屏 ${(focus.y + rest.y).toFixed(1)}`);
+        const again = clamp(rest.x, rest.y);
+        assert.ok(
+            Math.abs(again.x - rest.x) < 0.01 && Math.abs(again.y - rest.y) < 0.01,
+            `${file}: 落点会被 resize 弹走`,
+        );
+        checked += 1;
+    }
+    assert.ok(checked >= 8, `应至少覆盖 8 张固定主城图，实际 ${checked}`);
+});
+
+test('HUD 按区域刷新：顶部计时与金币、逐席位地块数与兵力', () => {
+    const { hud, model } = createHud();
+    hud.initialize({ useArtifact() {} });
+    hud.setSeatProfiles(new Map([
+        ['player', { name: '蓝方', headKey: '' }],
+        ['enemy', { name: '红方', headKey: '' }],
+    ]) as any);
+    // ★★ 自选主城的**选点阶段**专用：那时 `ZCGame.update` 会在 `if (this.spawnSelection)` 里
+    // 提前 return、`this.model` 也还没建 ⇒ `render` 一次都不会跑。
+    // 所以 `setSeatProfiles` 必须**当场**把四行刷出来，否则左侧只有 prefab 默认的
+    // 「四个圆盘 + 空名字、没头像」（真机实测症状）。
+    assert.equal(hud.rowCalls.length, 2, '★setSeatProfiles 必须立刻刷行（选点阶段没有 render）');
+    assert.equal(hud.rowCalls[0].name, '蓝方');
+    assert.equal(hud.rowCalls[1].name, '红方');
+    assert.equal(hud.rowCalls[0].unitText, null, '★选点阶段还没有兵力数据 ⇒ 兵力整组收掉');
+    hud.rowCalls.length = 0;
+    hud.render(model);
+    assert.equal(hud.timeLabel.string, '1:01');
+    assert.equal(hud.goldLabel.string, '123');
+    // ⚠️ `scoreCalls` 是**累积**的（render 每帧都往里push），所以只 render 这一次再断言。
+    //    之前多render 了一次却忘了清，结果条数翻倍（4 !== 2）。
+    // 顶部四格：2 人局只给 2 席 ⇒ 只该渲染 2 格；地块数 70 / 68 都 > 0 ⇒ 都不显示红 X。
+    // ⚠️ 逐字段 `assert.equal`，不用 `deepEqual`：`render` 里 new 出来的对象是在
+    //    `runInNewContext` 的**另一个 realm** 里造的，原型不同 ⇒ deepEqual 会报
+    //    "same structure but not reference-equal"（踩过）。
+    assert.equal(hud.scoreCalls.length, 2, '只有 2 个席位 ⇒ 只该渲染 2 格');
+    assert.equal(hud.scoreCalls[0].value, 70);
+    assert.equal(hud.scoreCalls[0].finished, false);
+    assert.equal(hud.scoreCalls[1].value, 68);
+    assert.equal(hud.scoreCalls[1].finished, false);
+    // 70 > 68 ⇒ 第 1 格唯一领先；横向 Layout 自动居中。
+    assert.equal(hud.scoreCalls[0].leading, true, '★地块数唯一领先的那格才变大');
+    assert.equal(hud.scoreCalls[1].leading, false);
+    assert.equal(hud.layoutUpdates, 1, '尺寸或人数变化后刷新 Layout');
+    // 左侧四行：名字来自席位档案；**兵力四行都显示**（2026-10-09 用户要求，设计稿只画了第 1 行），
+    // 按 `unit.owner` 现数活口（夹具里 player 1 个非 dead、enemy 2 个非 dead）。
+    assert.equal(hud.rowCalls.length, 2);
+    assert.equal(hud.rowCalls[0].name, '蓝方');
+    assert.equal(hud.rowCalls[0].unitText, '1/100');
+    assert.equal(hud.rowCalls[1].name, '红方');
+    assert.equal(hud.rowCalls[1].unitText, '2/100', '★兵力四行都显示（不再只第 1 行）');
+});
+
+test('四格顶栏：领先者变化和并列时，尺寸状态同步交给 Layout', () => {
+    const { hud } = createHud();
+    const four = ['player', 'enemy', 'enemy2', 'enemy3'] as const;
+    const counts: Record<string, number> = { player: 10, enemy: 20, enemy2: 30, enemy3: 40 };
+    const model = {
+        snapshot: {
+            playerGold: 0, artifactReadyUses: 0, artifactCharge: 0, artifactCooldown: 0,
+            artifactChargeFull: 100, artifactMaxStored: 3, artifactCooldownDuration: 1,
+            status: 'playing', resultReason: '', units: [],
+        },
+        remainingSeconds: 60, unitCap: 100,
+        owners: four,
+        territoryCountOf: (owner: string) => counts[owner] ?? 0,
+    };
+    hud.scoreCalls.length = 0;
+    hud.render(model);
+    const lead = (i: number) => hud.scoreCalls[i].leading;
+    // 第 4 席唯一领先，其余保持普通尺寸。
+    assert.deepEqual([lead(0), lead(1), lead(2), lead(3)], [false, false, false, true]);
+    assert.equal(hud.layoutUpdates, 1);
+
+    // 换领先者：旧格恢复普通尺寸，新格变大。
+    counts.enemy3 = 5;
+    counts.enemy = 99;
+    hud.scoreCalls.length = 0;
+    hud.render(model);
+    assert.deepEqual([lead(0), lead(1), lead(2), lead(3)], [false, true, false, false], '★换领先者后标记跟着换');
+    assert.equal(hud.layoutUpdates, 2);
+
+    // 并列第一 ⇒ 全部恢复普通尺寸。
+    counts.enemy = 50;
+    counts.enemy2 = 50;
+    hud.scoreCalls.length = 0;
+    hud.render(model);
+    assert.deepEqual([lead(0), lead(1), lead(2), lead(3)], [false, false, false, false], '★并列第一不算领先');
+    assert.equal(hud.layoutUpdates, 3);
+});
+
+test('神器三态与进度同步；不可充能时按钮仍可点，只有结算后才禁用', () => {
+    const { hud, model } = createHud();
+    let uses = 0;
+    hud.onLoad(); // 引擎在节点激活时触发一次：按钮点击监听在此绑定（规范 7.2）
+    hud.initialize({ useArtifact() { uses += 1; } });
+    for (const [usesCount, charge, cooldown, status, ready, progress] of [
+        [0, 50, 0, 'playing', false, 0.5],
+        [1, 0, 0.5, 'playing', false, 0.5],
+        [1, 25, 0, 'playing', true, 0.25],
+        [2, 0, 0, 'playing', true, 1],
+        [2, 0, 0, 'victory', false, 1],
+    ] as const) {
+        Object.assign(model.snapshot, { artifactReadyUses: usesCount, artifactCharge: charge, artifactCooldown: cooldown, status, resultReason: '胜利' });
+        hud.render(model);
+        // 不可充能时按钮**仍须可点**：interactable=false 会让 Button 不再派发 CLICK，
+        // 点击被整段静默吞掉，「神器尚未充满」这句原因就永远送不到玩家眼前。
+        // 「不可用」的表达交给 grayscale，不靠 interactable。
+        assert.equal(hud.artifactButton.interactable, status === 'playing');
+        assert.equal(hud.artifactIcon.grayscale, !ready);
+        assert.equal(hud.artifactProgress.fillRange, progress);
+        assert.equal(hud.artifactCountLabel.string, `×${usesCount}`);
+        hud.artifactButton.node.emit('click');
+    }
+    // 5 行里 4 行 status='playing' → 每一下点击都送达动作层（由模型决定成败与文案）；
+    // 只有结算后那一行不再派发。
+    assert.equal(uses, 4);
+});
+
+test('只传 useArtifact 时点其他按钮不崩（第二个 ?. 的守卫）', () => {
+    const { hud, model } = createHud();
+    // 未注入 openRank / openGuide / openDamageStats / retreat。
+    hud.onLoad();
+    hud.initialize({ useArtifact() {} });
+    hud.render(model);
+    // 这些按钮的 interactable 正好是 false（无法引擎不派发）。
+    // 但一旦某天有测试/调试直接 emit，写成 `this.actions?.openRank()` 就会推出 undefined 并报错。
+    // 第二个 `?.` 就是为了让这不膨演成页面崩溃（规范 §7.5 配套第 5 条）。
+    assert.equal(hud.rankButton.interactable, false);
+    assert.equal(hud.guideButton.interactable, false);
+    assert.equal(hud.retreatButton.interactable, false);
+    hud.rankButton.node.emit('click');
+    hud.guideButton.node.emit('click');
+    hud.retreatButton.node.emit('click');
+    hud.damageButton.node.emit('click');
+});
+
+test('视口组件由 prefab 保证：两处都直写不再判空', () => {
+    const HUD_SRC = readFileSync('assets/script/app/zcds/view/ZCGameHUDView.ts', 'utf8');
+    // MapScrollView/view 在 ZCGameHUD.prefab 上静态挂着 UITransform，且全工程无人给 mapViewport 赋值
+    // ⇒取不到就是 prefab 错误，应当场爆，不需要降级分支。
+    const probes = HUD_SRC.match(/mapViewport\.getComponent\(UITransform\)/g) ?? [];
+    assert.equal(probes.length, 2, `应恰好 2 处（mapOverviewScale / clampMapOffset），实际 ${probes.length} 处`);
+    // 两处都是 `!`：判空不赚功力、只多一次 getComponent，且不留「判了不用」的死代码。
+    assert.equal((HUD_SRC.match(/getComponent\(UITransform\)!/g) ?? []).length, 2, '两处都应写 `!`');
+    assert.ok(!/getComponent\(UITransform\);\s*\n\s*if \(!viewport/.test(HUD_SRC), '不应再有「取到不去就退回」的判空分支');
+    // 视口尺寸由 Widget 四边拉伸 + ON_WINDOW_RESIZE 决定，恒等于窗口宽高 ⇒ 不可能是 0，
+    // 所以 mapOverviewScale 里不应存在 `width > 0` 尺寸兜底。
+    assert.ok(!/viewport\.width > 0/.test(HUD_SRC), '不应再有「视口宽高为 0」的尺寸兜底');
+    assert.ok(!/getComponent\(UITransform\);\s*\n\s*if \(!viewport/.test(HUD_SRC), '不应再有「取到不去就退回」的判空分支');
+    // 正常路径不受影响：视口有尺寸时照常走下去。
+    const { hud, model } = createHud();
+    hud.onLoad();
+    hud.initialize({ useArtifact() {} });
+    Object.assign(model.snapshot, { status: 'victory', resultReason: '胜利' });
+    hud.render(model);
+    hud.startSettlementOverview();
+    assert.equal(hud.mapLayer.scale.x > 0, true, '镜头应正常带一个正缩放');
+});
+
+test('视口只在真正用它的两处查（playMapIntro / applyMapOffset 不多查）', () => {
+    const { hud } = createHud();
+    // `applyMapOffset` 原来也判了一次，但判完的 viewport 根本没用上，紧接着 `clampMapOffset`
+    // 又 getComponent 判一次 ⇒ 多余的一次查询 + 一条“已判空”的错觉。
+    // 按调用计数钉住：一趟 applyMapOffset 只能查一次视口。
+    let probes = 0;
+    // 必须在 onLoad 之前替换：SIZE_CHANGED 正是 onLoad 里绑到 applyMapOffset 的。
+    // createHud 里的 mapViewport 本身就是会真派发的 FakeNode，只在 getComponent 上包一层计数。
+    const viewport = hud.mapViewport as unknown as { getComponent: () => unknown };
+    viewport.getComponent = () => { probes += 1; return { width: 720, height: 1280 }; };
+    hud.onLoad();
+    hud.initialize({ useArtifact() {} });
+    probes = 0; // 跳过 initialize 期间的查询，只算运行期的
+    hud.mapViewport.emit('size');
+    assert.equal(probes, 1, `applyMapOffset 应只查 1 次视口，实际 ${probes} 次`);
+
+    // 整个类里真正读 `viewport.width/height` 的只有 mapOverviewScale 与 clampMapOffset 两处；
+    // `playMapIntro` 曾多查一次（判完就丢），`applyMapOffset` 也曾多查一次 —— 都被删了。
+    // 这条按源码形状钉：任何地方再往 mapViewport 上加 getComponent 都会红。
+    const HUD_SRC = readFileSync('assets/script/app/zcds/view/ZCGameHUDView.ts', 'utf8');
+    const probesInSrc = (HUD_SRC.match(/mapViewport\.getComponent\(UITransform\)/g) ?? []).length;
+    assert.equal(probesInSrc, 2, `mapViewport.getComponent 只该有 2 处（mapOverviewScale / clampMapOffset），实际 ${probesInSrc} 处`);
+});
+
+test('头像异步到货：HUD 已销毁时不刷行（CCObject.isValid 不能删）', async () => {
+    const hexes = [{ x: -500, y: -700 }, { x: 500, y: 700 }];
+    const frame = { name: 'head.png' };
+    const { hud } = createHud(hexes, frame);
+    hud.onLoad();
+    hud.initialize({ useArtifact() {} });
+    // 头像是异步的：resolve 时 HUD 可能已经 destroy（退出对局）。
+    // 此时再刷行就是向已销毁的节点树写了。
+    hud.setSeatProfiles(new Map([['player', { name: '蓝方', headKey: 'blue' }]]) as never);
+    hud.rowCalls.length = 0;
+    hud.isValid = false;
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.equal(hud.rowCalls.length, 0, '已销毁后不应再刷行（会向已销毁节点树写入）');
+    // headKey 为空时直接 continue，不走异步分支。
+    const { hud: hud2 } = createHud(hexes, frame);
+    hud2.onLoad();
+    hud2.initialize({ useArtifact() {} });
+    hud2.setSeatProfiles(new Map([['player', { name: '蓝方', headKey: '' }]]) as never);
+    assert.equal(hud2.rowCalls.length, 1, 'headKey 为空时仍要当场刷一遍（选点阶段靠这一遍）');
+});
+
+test('重绘回调是稳定引用：unschedule 能撤掉重复排程（方法不是箭头字段时也成立）', () => {
+    const { hud, model } = createHud();
+    hud.onLoad();
+    hud.initialize({ useArtifact() {} });
+    hud.setSeatProfiles(new Map([['player', { name: '蓝方', headKey: '' }]]));
+    // paintPlayerRows 里是`unschedule(...)` + `scheduleOnce(...)` 配对，靠的是两次拿到同一个函数引用。
+    // 若把 repaintPlayerRows 改成每次新建的闭包，unschedule 就拿不到、会重复排程。
+    assert.equal(hud.scheduled.length, 1, '应只有一个待跑回调');
+    hud.setSeatProfiles(new Map([['player', { name: '蓝方', headKey: '' }]]));
+    assert.equal(hud.scheduled.length, 1, '重复设置不得重复排程');
+    for (const callback of hud.scheduled) callback.call(hud);
+    assert.ok(hud.rowCalls.length > 0, '排程回调应当跑出行数据');
+    hud.render(model);
+});
+
+test('绑定只在 onLoad 完成一次；重复 initialize 不重复注册，销毁后监听仍由引擎清理', () => {
+    const { hud, model } = createHud();
+    let ranks = 0;
+    const actions = { useArtifact() {}, openRank() { ranks += 1; } };
+    hud.onLoad(); // 引擎保证 onLoad 每实例只跑一次 ⇒ 没有 bound 守卫（规范 7.2）
+    hud.initialize(actions);
+    hud.initialize(actions);
+    hud.render(model);
+    assert.equal(hud.rankButton.interactable, true);
+    assert.equal(hud.guideButton.interactable, false);
+    assert.equal(hud.retreatButton.interactable, false);
+    hud.rankButton.node.emit('click');
+    assert.equal(ranks, 1);
+    // 重复 initialize 只重设 actions 与渲染状态，不会重复注册监听
+    hud.rankButton.node.emit('click');
+    assert.equal(ranks, 2);
+    assert.equal(hud.mapScrollView.enabled, false);
+    // onDestroy 不再手动解绑：业务引用已清空，监听保留交由节点销毁时引擎自动清理
+    hud.onDestroy();
+    hud.rankButton.node.emit('click');
+    assert.equal(ranks, 2);
+    assert.equal(hud.mapViewport.listeners.length, 5);
+    assert.equal(hud.rankButton.node.listeners.length, 1);
+});
+
+test('地图拖动标记保持到触摸结束派发后，并随视口尺寸重新约束', () => {
+    const { hud } = createHud();
+    hud.onLoad(); // 引擎在节点激活时触发一次：棋盘触摸监听在此绑定（规范 7.2）
+    hud.initialize({ useArtifact() {} });
+    hud.mapViewport.emit('start');
+    hud.mapViewport.emit('move', { getUIDelta: () => ({ x: 10000, y: 10000 }) });
+    assert.equal(hud.dragMoved, true);
+    const oldX = hud.mapLayer.position.x;
+    hud.mapViewport.transform.width = 1000;
+    hud.mapViewport.emit('size');
+    assert.ok(hud.mapLayer.position.x < oldX);
+    hud.mapViewport.emit('end');
+    assert.equal(hud.dragMoved, true);
+    for (const callback of hud.scheduled) callback.call(hud);
+    assert.equal(hud.dragMoved, false);
+});
+
+test('HUD prefab 的直接引用与嵌套组件引用完整且没有旧字段', () => {
+    const read = (name: string) => JSON.parse(readFileSync(`assets/resources/ui/game/${name}.prefab`, 'utf8'));
+    const data = read('ZCGameHUD');
+    const component = data.find((o: any) => o.mapViewport && o.mapLayer && o.artifactButton);
+    for (const key of ['statLabel', 'hintLabel', 'artifactLabel', 'resetButton']) assert.ok(!(key in component));
+    for (const key of ['mapScrollView', 'mapViewport', 'mapLayer', 'timeLabel', 'goldLabel', 'artifactButton', 'artifactIcon', 'artifactProgress', 'artifactCountLabel', 'rankButton', 'guideButton', 'damageButton', 'retreatButton', 'topInfoPanel', 'bottomInfoPanel', 'leftPanel']) {
+        const target = data[component[key].__id__];
+        assert.ok(target, key);
+        if (target.__type__ !== 'cc.Node') assert.ok(target.node && data[target.node.__id__], key);
+    }
+    const artifactProgressNode = data.find((o: any) => o.__type__ === 'cc.Node' && o._name === 'ArtifactChargeFill');
+    const artifactCountNode = data.find((o: any) => o.__type__ === 'cc.Node' && o._name === 'ArtifactCountLabel');
+    assert.ok(artifactProgressNode && artifactCountNode, '神器进度与次数节点由 MCP 创建');
+    const artifactButtonNode = data[data[component.artifactButton.__id__].node.__id__];
+    assert.equal(data[artifactProgressNode._parent.__id__], artifactButtonNode);
+    assert.equal(data[artifactCountNode._parent.__id__], artifactButtonNode);
+    const baseSprite = data.find((o: any) => o.__type__ === 'cc.Sprite' && data[o.node?.__id__] === artifactButtonNode);
+    const progressSprite = data.find((o: any) => o.__type__ === 'cc.Sprite' && data[o.node?.__id__] === artifactProgressNode);
+    assert.equal(baseSprite._spriteFrame.__uuid__, '9ef09ba7-9265-485d-96fa-b971d1a5bc39@f9941');
+    assert.equal(progressSprite._spriteFrame.__uuid__, '22abdb6f-a24c-49d2-b5e2-6f42047a48a3@f9941');
+    assert.equal(progressSprite._type, 3, '充能层必须使用 FILLED Sprite');
+    assert.equal(progressSprite._fillType, 2, '充能层必须使用 RADIAL 填充');
+    assert.ok(data.some((o: any) => o.__type__ === 'cc.Label' && data[o.node?.__id__] === artifactCountNode));
+    // 两方时代的三个嵌套实例（LeftPlayer / RightPlayer / GameVS）已随 HUD 多队伍改造删除，
+    // 根节点上的 `targetOverrides` 必须**一起清干净**。
+    //
+    // ⚠️ 旧断言是「遍历这三个 key，检查条目存在 + source 指向本组件 + targetInfo.localID 能在源 prefab 里找到」
+    // —— 这三条对 **`target: null` 的悬空条目**同样成立（source 还在、targetInfo 还在），
+    // 所以实例删掉之后它**照样是绿的**（实测：3 条悬空条目溜过去一整轮）。
+    // 正确判据是「一条都不该有」。
+    const rootInfo = data[data[1]._prefab.__id__];
+    const dangling = (rootInfo.targetOverrides ?? []).length;
+    assert.equal(
+        dangling, 0,
+        `★根 PrefabInfo 上不该再有 targetOverrides（实测残留 ${dangling} 条悬空条目：`
+        + 'propertyPath 指向的字段在组件上已不存在、target 为 null）',
+    );
+});
+
+test('ZCGameHUDView 的 23 个引用全部声明为 null! 且不再运行时按名找节点', () => {
+    const source = readFileSync('assets/script/app/zcds/view/ZCGameHUDView.ts', 'utf8');
+    // 反例断言先剥注释（规则 104）：类注释里会讲旧实现
+    const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    // 「多队伍 + 虚拟列表」后：左侧四行不再是四个静态引用，改成**一个** `playerList`（虚拟列表）。
+    const refs = ['mapScrollView', 'mapViewport', 'mapLayer',
+        'scoreLayout', 'scoreSlot1', 'scoreSlot2', 'scoreSlot3', 'scoreSlot4',
+        'playerList', 'timeLabel',
+        'goldIcon', 'goldLabel', 'artifactButton', 'artifactIcon', 'artifactProgress', 'artifactCountLabel',
+        'rankButton', 'guideButton', 'damageButton', 'retreatButton',
+        'topInfoPanel', 'bottomInfoPanel', 'leftPanel'];
+    for (const key of refs) {
+        assert.match(code, new RegExp(`${key}: [A-Za-z]+ = null!;`), `${key} 应声明为 null!`);
+        assert.doesNotMatch(code, new RegExp(`this\\.${key}\\?\\.`), `${key} 是必填引用，不该有 ?.`);
+    }
+    assert.doesNotMatch(code, /getChildByName\(|getChildByPath\(/, '视图结构由 prefab 承载，不再按名找节点');
+    assert.doesNotMatch(code, /private artifactProgress|private artifactCountLabel/, '神器两个子节点已收进 @property');
+});
+
+/**
+ * 金币栏「钱不够」反馈：`ZCGame.onHexClick` 判定 `reason === 'insufficientGold'` 时调。
+ *
+ * 判据钉三件事：
+ *  1. 图标确实起了一段跳动，且**起止都在静止态**（半路被打断也不会歪在半空）；
+ *  2. 幅度就是需求口径 —— 放大缩小（峰值 > 1）+ 轻微 1~2 px 位移；
+ *  3. 数字闪红是**跳变**、且偶数拍收尾 ⇒ 一定回到原色，不留一块红字在屏幕上。
+ */
+test('金币不足：金币图标跳动（1~2px）+ 数字闪红，收尾落回静止态', () => {
+    const { hud, tweenRuns, hudModule } = createHud();
+    hud.goldIcon.setPosition(11, 22, 0);
+    hud.goldLabel.color = { r: 10, g: 20, b: 30, a: 255 };
+    const before = tweenRuns.length;
+
+    hud.flashInsufficientGold();
+
+    // ① 起了一段跳动，收尾两轴同值回到原大小、原位置
+    assert.equal(tweenRuns.length, before + 1, '应起一段金币图标跳动');
+    const run = tweenRuns[tweenRuns.length - 1];
+    assert.ok(run.duration > 0, '跳动得有长度');
+    assert.deepEqual(
+        [run.endScale.x, run.endScale.y, run.endScale.z],
+        [1, 1, 1],
+        '最后一帧就落在静止态，收尾必须回到原大小',
+    );
+    assert.deepEqual(
+        [run.endPosition.x, run.endPosition.y, run.endPosition.z],
+        [11, 22, 0],
+        '收尾必须回到原位置',
+    );
+
+    // ② 幅度即需求：「放大缩小」+「轻微 1~2 px」。数值导出给用例读，别把魔法数钉进断言。
+    assert.ok(hudModule.ZC_GOLD_DENY_POP_SCALE > 1, '要「放大再缩回」，峰值倍率必须 > 1');
+    assert.ok(
+        hudModule.ZC_GOLD_DENY_LIFT_PIXELS >= 1 && hudModule.ZC_GOLD_DENY_LIFT_PIXELS <= 2,
+        `位移要「轻微 1~2 px」，实际 ${hudModule.ZC_GOLD_DENY_LIFT_PIXELS}`,
+    );
+
+    // ③ 第一拍数字就是红的（跳变，不是补间渐变）
+    assert.deepEqual(
+        [hud.goldLabel.color.r, hud.goldLabel.color.g, hud.goldLabel.color.b],
+        [255, 91, 91],
+        '第一拍数字应变红',
+    );
+
+    // ④ 把剩下的拍子跑完 ⇒ 回到原色
+    // （本用例不调 render / initialize，`scheduled` 里只有这一次闪红排下的定时器链。
+    //  ⚠️ 必须 `.call(hud)`：引擎侧 `Component.scheduleOnce` 是以**组件**为 receiver 调的，
+    //  夹具里裸调会丢 `this`，表现为 `stepGoldLabelDenyFlash` 读私有字段直接崩。）
+    let guard = 32;
+    while (hud.scheduled.length > 0 && guard-- > 0) hud.scheduled.shift()!.call(hud);
+    assert.deepEqual(
+        [hud.goldLabel.color.r, hud.goldLabel.color.g, hud.goldLabel.color.b],
+        [10, 20, 30],
+        '闪完必须回到静止色，不能留一块红字',
+    );
+});
+
+test('金币不足：连点不叠定时器，也不把图标留在半空', () => {
+    const { hud, tweenRuns } = createHud();
+    hud.goldIcon.setPosition(11, 22, 0);
+
+    const before = tweenRuns.length;
+    hud.flashInsufficientGold();
+    const pending = hud.scheduled.length;
+    hud.flashInsufficientGold();
+    hud.flashInsufficientGold();
+
+    assert.equal(tweenRuns.length, before + 3, '每次点击各起一段跳动（旧的先 stop，不叠加长度）');
+    assert.equal(hud.scheduled.length, pending, '闪红定时器先 unschedule 再重排，连点不会越排越多');
+    assert.deepEqual([hud.goldIcon.scale.x, hud.goldIcon.scale.y], [1, 1], '连点后仍是原大小');
+    assert.deepEqual([hud.goldIcon.position.x, hud.goldIcon.position.y], [11, 22], '连点后仍停在原位置');
+});
+
+/**
+ * 🔴 `onDestroy` 里**只能**取消驱动（tween / 定时器），一个子节点都不许碰。
+ *
+ * 真机栈（2026-10-14 结算页点「确定」→ 退出对局）：
+ * `ZCGameHUDView.onDestroy:603 → stopGoldDenyFx:542 → Node.setScale:2559 → Vec3.set:102`
+ * ⇒ `Cannot set properties of null (setting 'x')`。
+ *
+ * 机理：Cocos 销毁节点是**先子节点、再组件**（`Node._onPreDestroyBase` → 子节点
+ * `_destroyImmediate` → `Component._onPreDestroy`），所以组件 `onDestroy` 跑的时候
+ * `this.goldIcon._lscale` 已经是 **null**。而那个异常会**打断组件销毁循环**
+ * ⇒ 引擎随后再销毁一遍 ⇒ 成片 `You are trying to destroy a object twice or more`
+ * —— 两条日志是同一个根因。
+ *
+ * 判据写成**源码切片 + 反注释**（MEMORY 104）：注释里就写着 `stopGoldDenyFx` 这个词
+ * （说明「为什么不能用」），连注释一起匹配会永远红。
+ * 同类先例：`HangEntryButton._stopShake` 用 `isValid` 守卫、`ActivityProgressBox.stopBreath`
+ * 用 `chestButton.isValid` 守卫 —— 都是这个坑，HUD 这次漏了。
+ */
+test('HUD 销毁期不许碰子节点：onDestroy 只调 cancelGoldDenyFx，禁止 stopGoldDenyFx', () => {
+    const src = readFileSync('assets/script/app/zcds/view/ZCGameHUDView.ts', 'utf8');
+    const codeOnly = (from: string, to: string): string => {
+        const body = src.slice(src.indexOf(from), src.indexOf(to));
+        assert.ok(body.length > 0, `切片失败：找不到 ${from} … ${to}`);
+        return body
+            .split('\n')
+            .filter((line) => !line.trim().startsWith('*') && !line.trim().startsWith('//')
+                && !line.trim().startsWith('/*'))
+            .join('\n');
+    };
+
+    const onDestroyBody = codeOnly('protected onDestroy()', 'private updateButtons()');
+    assert.ok(!onDestroyBody.includes('this.stopGoldDenyFx()'),
+        'onDestroy 不能调 stopGoldDenyFx —— 它会 setScale/setPosition 到已被引擎销毁的子节点上，'
+        + `抛 vec3 null 并打断销毁循环（连带 destroy twice）。当前：\n${onDestroyBody}`);
+    assert.ok(onDestroyBody.includes('this.cancelGoldDenyFx()'),
+        'onDestroy 必须调 cancelGoldDenyFx 收掉 tween 与定时器，否则金币栏的 tween 会漏到下一局');
+
+    // 反方向：cancelGoldDenyFx 自己也不许碰节点（它是销毁期专用分支）。
+    // ⚠️ 切片终点要用**带类型标注**的定义串：`resetMapPosition()` 在文件里有调用点（214 行）
+    // 早于它的定义（568 行），用裸名字会切出空串。
+    const cancelBody = codeOnly('private cancelGoldDenyFx()', 'resetMapPosition(): void');
+    for (const forbidden of ['setScale', 'setPosition', 'setRotation', '.color =', '.active =']) {
+        assert.ok(!cancelBody.includes(forbidden),
+            `cancelGoldDenyFx 里不能出现 ${forbidden}（销毁期子节点已失效，只能取消驱动）`);
+    }
+
+    // 但「恢复静止态」的能力不能被删掉：重复初始化仍要走 stopGoldDenyFx（那时节点还活着）。
+    const rebuildBody = codeOnly('private stopGoldDenyFx()', 'private cancelGoldDenyFx()');
+    assert.ok(rebuildBody.includes('this.goldIcon.setScale(1, 1, 1)'),
+        'stopGoldDenyFx 必须保留复位逻辑（重复初始化 / 重置时用，节点还活着）');
+});
+

@@ -1,0 +1,14 @@
+{
+  "ver": "1.1.50",
+  "importer": "prefab",
+  "imported": true,
+  "uuid": "9ab68187-9483-4cec-929f-6da1b7ff1432",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {},
+  "userData": {
+    "syncNodeName": "StoreLevelGift",
+    "hasIcon": false
+  }
+}

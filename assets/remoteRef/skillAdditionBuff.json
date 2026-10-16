@@ -1,0 +1,12 @@
+[{"id":1,"buffType":"修改卡牌效果","buffParam":{"desc":"御剑术额外释放一次","id":100003,"modify":[3000106],"name":"双发飞剑"}},
+{"id":2,"buffType":"修改卡牌效果","buffParam":{"desc":"御剑术飞剑+1","id":100002,"modify":[3000104],"name":"飞剑齐射"}},
+{"id":3,"buffType":"修改卡牌效果","buffParam":{"desc":"额外释放1次","id":101005,"modify":[3001103],"name":"双发毒气弹"}},
+{"id":4,"buffType":"无视前置条件","buffParam":{"卡牌":"毒气轰炸","无视前置条件":[["毒气爆发"],["毒气爆炸增强"]]}},
+{"id":5,"buffType":"修改卡牌效果","buffParam":{"desc":"额外发射一次寒冰箭","id":102005,"modify":[3002102],"name":"双发寒冰箭"}},
+{"id":6,"buffType":"修改卡牌效果","buffParam":{"desc":"惊雷咒额外释放1次","id":103006,"modify":[3003103],"name":"双发惊雷咒"}},
+{"id":7,"buffType":"修改卡牌效果","buffParam":{"desc":"额外投放一次石狮子","id":104008,"modify":[3004102],"name":"双发石狮子"}},
+{"id":8,"buffType":"修改卡牌效果","buffParam":{"desc":"连环闪电初始目标+1","id":108008,"modify":[3008103],"name":"连环闪电"}},
+{"id":9,"buffType":"修改卡牌效果","buffParam":{"desc":"风暴术基础持续时间不变,同时释放2个风暴术","id":110003,"modify":[3010106],"name":"双重风暴"}},
+{"id":10,"buffType":"修改卡牌效果","buffParam":{"desc":"替换电网双发,天雷网伤害+80%,额外释放2次,冷却延长40%","id":111002,"modify":[3011106],"name":"电网爆发"}},
+{"id":11,"buffType":"修改卡牌效果","buffParam":{"desc":"旋风术额外释放1次","id":113004,"modify":[3013102],"name":"旋风术连发"}},
+{"id":12,"buffType":"修改卡牌效果","buffParam":{"desc":"闪电球飞行一段时间后会分裂成2个闪电球","id":114001,"modify":[3014109],"name":"闪电球分裂"}}]

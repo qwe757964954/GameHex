@@ -1,0 +1,14 @@
+{
+  "ver": "1.1.50",
+  "importer": "prefab",
+  "imported": true,
+  "uuid": "b5b9c1d5-fcea-437a-a519-0cc186e49eb0",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {},
+  "userData": {
+    "syncNodeName": "TerritoryResourceGain",
+    "hasIcon": false
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "ver": "1.1.50",
+  "importer": "prefab",
+  "imported": true,
+  "uuid": "89822941-1dcd-4d23-9e2a-0731f195b4cb",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {},
+  "userData": {
+    "syncNodeName": "ServerSelectPanel",
+    "hasIcon": false
+  }
+}

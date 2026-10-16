@@ -1,0 +1,46 @@
+{
+  "id": "notch",
+  "name": "侧翼缺口",
+  "version": 3,
+  "rows": 20,
+  "columns": 10,
+  "playerCount": 2,
+  "cityMode": "fixed",
+  "mirrorVertical": true,
+  "mirrorHorizontal": false,
+  "mirror180": false,
+  "ascii": [
+    "00000.....",
+    "00000.....",
+    "000000...0",
+    "0000000000",
+    "0000000000",
+    "0000100000",
+    "0000000000",
+    "0000000000",
+    "0000000000",
+    "0000000000"
+  ],
+  "homes": [
+    {
+      "row": 15,
+      "column": 4
+    },
+    {
+      "row": 4,
+      "column": 4
+    }
+  ],
+  "art": {
+    "tiles": {
+      "8,8": "image/decor/wasteland/server",
+      "9,7": "image/decor/wasteland/barricade",
+      "9,8": "image/decor/wasteland/barricade",
+      "9,9": "image/decor/wasteland/ufo",
+      "10,7": "image/decor/wasteland/barricade",
+      "10,8": "image/decor/wasteland/barricade",
+      "10,9": "image/decor/wasteland/ufo",
+      "11,8": "image/decor/wasteland/server"
+    }
+  }
+}

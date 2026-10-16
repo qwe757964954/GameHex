@@ -1,0 +1,87 @@
+{
+  "__type__": "cc.AnimationClip",
+  "_name": "驭兽师_巨象践踏-loop",
+  "_objFlags": 0,
+  "_native": "",
+  "sample": 12,
+  "speed": 1,
+  "wrapMode": 2,
+  "events": [],
+  "_duration": 0.6666666667,
+  "_keys": [],
+  "_stepness": 0,
+  "curveDatas": {},
+  "_curves": [],
+  "_commonTargets": [],
+  "_hash": 0,
+  "_tracks": [
+    {
+      "__type__": "cc.animation.ObjectTrack",
+      "_binding": {
+        "__type__": "cc.animation.TrackBinding",
+        "path": {
+          "__type__": "cc.animation.TrackPath",
+          "_paths": [
+            {
+              "__type__": "cc.animation.ComponentPath",
+              "component": "cc.Sprite"
+            },
+            "spriteFrame"
+          ]
+        },
+        "proxy": null
+      },
+      "_channel": {
+        "__type__": "cc.animation.Channel",
+        "_curve": {
+          "__type__": "cc.ObjectCurve",
+          "_times": [
+            0.0,
+            0.0833333333,
+            0.1666666667,
+            0.25,
+            0.3333333333,
+            0.4166666667,
+            0.5,
+            0.5833333333
+          ],
+          "_values": [
+            {
+              "__uuid__": "9c5832b0-1f97-477f-8a7d-d05af5976f4f@f9941"
+            },
+            {
+              "__uuid__": "708b2cb4-63c0-4b0a-b493-8354e4f2806a@f9941"
+            },
+            {
+              "__uuid__": "e227727e-189d-41f1-8d6b-e9b9984dd9c8@f9941"
+            },
+            {
+              "__uuid__": "28759e6c-f6a8-4796-8a42-c267965f1ed8@f9941"
+            },
+            {
+              "__uuid__": "dbc3eb83-acc9-4081-963f-7a84ea915ae1@f9941"
+            },
+            {
+              "__uuid__": "8be8b6d8-df3f-4640-b23a-63a609f8c901@f9941"
+            },
+            {
+              "__uuid__": "ab96333a-87f1-4e79-a308-d2fe8a7e8f00@f9941"
+            },
+            {
+              "__uuid__": "a2215fc0-a9c4-42eb-a629-32caf7b97643@f9941"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "_exoticAnimation": null,
+  "_events": [],
+  "_embeddedPlayers": [],
+  "_additiveSettings": {
+    "__type__": "cc.AnimationClipAdditiveSettings",
+    "enabled": false,
+    "refClip": null
+  },
+  "_auxiliaryCurveEntries": []
+}

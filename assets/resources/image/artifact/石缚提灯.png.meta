@@ -1,0 +1,134 @@
+{
+  "ver": "1.0.27",
+  "importer": "image",
+  "imported": true,
+  "uuid": "612ded99-58a8-4eb7-987e-0042ee940302",
+  "files": [
+    ".json",
+    ".png"
+  ],
+  "subMetas": {
+    "6c48a": {
+      "importer": "texture",
+      "uuid": "612ded99-58a8-4eb7-987e-0042ee940302@6c48a",
+      "displayName": "石缚提灯",
+      "id": "6c48a",
+      "name": "texture",
+      "userData": {
+        "wrapModeS": "clamp-to-edge",
+        "wrapModeT": "clamp-to-edge",
+        "imageUuidOrDatabaseUri": "612ded99-58a8-4eb7-987e-0042ee940302",
+        "isUuid": true,
+        "visible": false,
+        "minfilter": "linear",
+        "magfilter": "linear",
+        "mipfilter": "none",
+        "anisotropy": 0
+      },
+      "ver": "1.0.22",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "f9941": {
+      "importer": "sprite-frame",
+      "uuid": "612ded99-58a8-4eb7-987e-0042ee940302@f9941",
+      "displayName": "石缚提灯",
+      "id": "f9941",
+      "name": "spriteFrame",
+      "userData": {
+        "trimThreshold": 1,
+        "rotated": false,
+        "offsetX": 0.5,
+        "offsetY": -1,
+        "trimX": 18,
+        "trimY": 13,
+        "width": 195,
+        "height": 206,
+        "rawWidth": 230,
+        "rawHeight": 230,
+        "borderTop": 0,
+        "borderBottom": 0,
+        "borderLeft": 0,
+        "borderRight": 0,
+        "packable": true,
+        "pixelsToUnit": 100,
+        "pivotX": 0.5,
+        "pivotY": 0.5,
+        "meshType": 0,
+        "vertices": {
+          "rawPosition": [
+            -97.5,
+            -103,
+            0,
+            97.5,
+            -103,
+            0,
+            -97.5,
+            103,
+            0,
+            97.5,
+            103,
+            0
+          ],
+          "indexes": [
+            0,
+            1,
+            2,
+            2,
+            1,
+            3
+          ],
+          "uv": [
+            18,
+            217,
+            213,
+            217,
+            18,
+            11,
+            213,
+            11
+          ],
+          "nuv": [
+            0.0782608695652174,
+            0.04782608695652174,
+            0.9260869565217391,
+            0.04782608695652174,
+            0.0782608695652174,
+            0.9434782608695652,
+            0.9260869565217391,
+            0.9434782608695652
+          ],
+          "minPos": [
+            -97.5,
+            -103,
+            0
+          ],
+          "maxPos": [
+            97.5,
+            103,
+            0
+          ]
+        },
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "612ded99-58a8-4eb7-987e-0042ee940302@6c48a",
+        "atlasUuid": "",
+        "trimType": "auto"
+      },
+      "ver": "1.0.12",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    }
+  },
+  "userData": {
+    "type": "sprite-frame",
+    "fixAlphaTransparencyArtifacts": false,
+    "hasAlpha": true,
+    "redirect": "612ded99-58a8-4eb7-987e-0042ee940302@6c48a"
+  }
+}

@@ -1,0 +1,167 @@
+// 前、左、右三个侧面按顶面相同的翻转投影实时构成；hex_lift_glow.png 只提供地面柔光。
+// Sprite 为 256×200、中心在原格上方 24px；片元用世界坐标还原为该尺寸的局部像素。
+// Sprite 颜色由 ZCHexView 写成当前格子的蓝/红，侧面透明度由各面控制。
+CCEffect %{
+  techniques:
+  - passes:
+    - vert: hex-ground-glow-vs:vert
+      frag: hex-ground-glow-fs:frag
+      depthStencilState:
+        depthTest: false
+        depthWrite: false
+      blendState:
+        targets:
+        - blend: true
+          blendSrc: src_alpha
+          blendDst: one_minus_src_alpha
+          blendSrcAlpha: one
+          blendDstAlpha: one_minus_src_alpha
+      rasterizerState:
+        cullMode: none
+      properties:
+        glowCenter: { value: [0.0, 0.0] }
+        glowWorldScale: { value: [1.0, 1.0] }
+        glowStrength: { value: 0.0 }
+        glowRadius: { value: 1.0 }
+        tileLift: { value: 0.0 }
+        tileFlip: { value: 1.0 }
+        tilePerspective: { value: 0.42 }
+}%
+
+CCProgram hex-ground-glow-vs %{
+  precision highp float;
+  #include <builtin/uniforms/cc-global>
+  #if USE_LOCAL
+    #include <builtin/uniforms/cc-local>
+  #endif
+  in vec3 a_position;
+  in vec2 a_texCoord;
+  in vec4 a_color;
+  out vec2 frameUV;
+  out vec2 maskPixelPosition;
+  out vec4 glowColor;
+  out float glowPulse;
+  out float glowScale;
+  out float liftHeight;
+  out float flipCos;
+  out float perspective;
+
+  uniform HexGroundGlow {
+    vec2 glowCenter;
+    vec2 glowWorldScale;
+    float glowStrength;
+    float glowRadius;
+    float tileLift;
+    float tileFlip;
+    float tilePerspective;
+  };
+
+  vec4 vert () {
+    vec4 pos = vec4(a_position, 1.0);
+    #if USE_LOCAL
+      pos = cc_matWorld * pos;
+    #endif
+    maskPixelPosition = (pos.xy - glowCenter) / max(abs(glowWorldScale), vec2(0.0001));
+    pos = cc_matViewProj * pos;
+    frameUV = a_texCoord;
+    glowColor = a_color;
+    glowPulse = glowStrength;
+    glowScale = glowRadius;
+    liftHeight = tileLift;
+    flipCos = tileFlip;
+    perspective = tilePerspective;
+    return pos;
+  }
+}%
+
+CCProgram hex-ground-glow-fs %{
+  precision highp float;
+  #include <builtin/internal/embedded-alpha>
+  in vec2 frameUV;
+  in vec2 maskPixelPosition;
+  in vec4 glowColor;
+  in float glowPulse;
+  in float glowScale;
+  in float liftHeight;
+  in float flipCos;
+  in float perspective;
+  #pragma builtin(local)
+  layout(set = 2, binding = 12) uniform sampler2D cc_spriteTexture;
+
+  // 原图开口的前沿 x=-33..33、y=-30，两侧连到 x=±65、y=0；此处减去节点偏移 24。
+  #define FRONT_GROUND_Y (-54.0)
+  #define OUTER_GROUND_Y (-24.0)
+  #define TILE_HALF_HEIGHT 59.5
+
+  float edgeCoverage(vec2 point, vec2 start, vec2 end) {
+    vec2 edge = end - start;
+    float distanceToEdge = (edge.x * (point.y - start.y) - edge.y * (point.x - start.x))
+      / max(length(edge), 0.0001);
+    return smoothstep(-0.7, 0.7, distanceToEdge);
+  }
+
+  float quadCoverage(vec2 point, vec2 a, vec2 b, vec2 c, vec2 d) {
+    return min(min(edgeCoverage(point, a, b), edgeCoverage(point, b, c)),
+      min(edgeCoverage(point, c, d), edgeCoverage(point, d, a)));
+  }
+
+  float segmentDistance(vec2 point, vec2 start, vec2 end) {
+    vec2 edge = end - start;
+    float along = clamp(dot(point - start, edge) / max(dot(edge, edge), 0.0001), 0.0, 1.0);
+    return length(point - start - along * edge);
+  }
+
+  vec4 frag () {
+    if (glowPulse <= 0.001) return vec4(0.0);
+    vec2 px = maskPixelPosition;
+    float imageMask = CCSampleWithAlphaSeparated(cc_spriteTexture, frameUV).a;
+    // 与 hex-flip.effect 的近端顶点投影使用同一 y=-30、半高与透视系数。
+    float turnSin = sqrt(max(0.0, 1.0 - flipCos * flipCos));
+    float edgeDepth = 30.0 / TILE_HALF_HEIGHT;
+    float qNear = 1.0 / (1.0 - clamp(perspective, 0.0, 0.8) * 0.45 * edgeDepth * turnSin);
+    float frontTopY = OUTER_GROUND_Y + liftHeight - 30.0 * flipCos * qNear;
+    float outerTopY = OUTER_GROUND_Y + liftHeight;
+    vec2 bottomLeftOuter = vec2(-65.0, OUTER_GROUND_Y);
+    vec2 bottomLeftFront = vec2(-33.0, FRONT_GROUND_Y);
+    vec2 bottomRightFront = vec2(33.0, FRONT_GROUND_Y);
+    vec2 bottomRightOuter = vec2(65.0, OUTER_GROUND_Y);
+    vec2 topLeftOuter = vec2(-65.0, outerTopY);
+    vec2 topLeftFront = vec2(-33.0 * qNear, frontTopY);
+    vec2 topRightFront = vec2(33.0 * qNear, frontTopY);
+    vec2 topRightOuter = vec2(65.0, outerTopY);
+
+    float frontFace = quadCoverage(px, bottomLeftFront, bottomRightFront, topRightFront, topLeftFront);
+    float leftFace = quadCoverage(px, bottomLeftOuter, bottomLeftFront, topLeftFront, topLeftOuter);
+    float rightFace = quadCoverage(px, bottomRightFront, bottomRightOuter, topRightOuter, topRightFront);
+    float frontAlpha = frontFace * glowPulse * 1.04;
+    float leftAlpha = leftFace * glowPulse * 0.94;
+    float rightAlpha = rightFace * glowPulse * 0.94;
+    float faceAlpha = max(frontAlpha, max(leftAlpha, rightAlpha));
+    float heightRatio = clamp((px.y - FRONT_GROUND_Y) / max(frontTopY - FRONT_GROUND_Y, 1.0), 0.0, 1.0);
+    // 阵营色经背景混合后会偏灰；加深侧壁的中间色，保留顶沿的亮度差。
+    vec3 sideColor = pow(glowColor.rgb, vec3(1.65));
+    vec3 frontColor = sideColor * mix(0.90, 1.0, heightRatio);
+    vec3 leftColor = sideColor * mix(0.74, 0.88, heightRatio);
+    vec3 rightColor = sideColor * mix(0.80, 0.94, heightRatio);
+    vec3 faceColor = (frontColor * frontAlpha + leftColor * leftAlpha + rightColor * rightAlpha)
+      / max(frontAlpha + leftAlpha + rightAlpha, 0.0001);
+
+    // 仅开口上缘有一道细白光；三个面本身保留阵营色，上半部不铺泛光。
+    float topDistance = min(segmentDistance(px, topLeftOuter, topLeftFront),
+      min(segmentDistance(px, topLeftFront, topRightFront), segmentDistance(px, topRightFront, topRightOuter)));
+    float edgeAlpha = exp(-pow(topDistance / 2.2, 2.0))
+      * max(frontFace, max(leftFace, rightFace)) * glowPulse * 0.46;
+    vec3 edgeColor = mix(glowColor.rgb, vec3(1.0), 0.38);
+
+    // 图片只留下原位开口下方短而淡的接触光，不再决定立体面的形状。
+    float spread = exp(-pow(abs(px.x) / (80.0 * max(glowScale, 0.0001)), 4.0));
+    float belowDistance = FRONT_GROUND_Y - px.y;
+    float groundDepth = 1.0 - smoothstep(14.0, 30.0, belowDistance);
+    float groundRegion = 1.0 - smoothstep(FRONT_GROUND_Y - 2.0, FRONT_GROUND_Y + 2.0, px.y);
+    float groundAlpha = imageMask * groundRegion * spread * groundDepth * glowPulse * 0.50;
+    float alpha = clamp(faceAlpha + edgeAlpha + groundAlpha, 0.0, 0.96);
+    vec3 rgb = (faceColor * faceAlpha + edgeColor * edgeAlpha
+      + sideColor * groundAlpha) / max(faceAlpha + edgeAlpha + groundAlpha, 0.0001);
+    return vec4(rgb, alpha * glowColor.a);
+  }
+}%

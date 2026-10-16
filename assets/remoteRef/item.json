@@ -1,0 +1,4398 @@
+[
+  {
+    "resId": 10001,
+    "name": "头盔升级图纸",
+    "desc": "可提升头盔等级，增加攻击",
+    "useType": 1,
+    "type": 8,
+    "quality": 3,
+    "icon": "icons/item/图标_图纸_帽子",
+    "access": [
+      11,
+      9
+    ],
+    "useJump": 3
+  },
+  {
+    "resId": 10002,
+    "name": "胸甲升级图纸",
+    "desc": "可提升胸甲等级，增加攻击",
+    "useType": 1,
+    "type": 8,
+    "quality": 3,
+    "icon": "icons/item/图标_图纸_衣服",
+    "access": [
+      11,
+      9
+    ],
+    "useJump": 3
+  },
+  {
+    "resId": 10003,
+    "name": "武器升级图纸",
+    "desc": "可提升武器等级，增加攻击",
+    "useType": 1,
+    "type": 8,
+    "quality": 3,
+    "icon": "icons/item/图标_图纸_武器",
+    "access": [
+      11,
+      9
+    ],
+    "useJump": 3
+  },
+  {
+    "resId": 10004,
+    "name": "靴子升级图纸",
+    "desc": "可提升靴子等级，增加攻击",
+    "useType": 1,
+    "type": 8,
+    "quality": 3,
+    "icon": "icons/item/图标_图纸_鞋子",
+    "access": [
+      11,
+      9
+    ],
+    "useJump": 3
+  },
+  {
+    "resId": 10005,
+    "name": "项链升级图纸",
+    "desc": "可提升项链等级，增加攻击",
+    "useType": 1,
+    "type": 8,
+    "quality": 3,
+    "icon": "icons/item/图标_图纸_项链",
+    "access": [
+      11,
+      9
+    ],
+    "useJump": 3
+  },
+  {
+    "resId": 10006,
+    "name": "戒指升级图纸",
+    "desc": "可提升戒指等级，增加攻击",
+    "useType": 1,
+    "type": 8,
+    "quality": 3,
+    "icon": "icons/item/图标_图纸_戒指",
+    "access": [
+      11,
+      9
+    ],
+    "useJump": 3
+  },
+  {
+    "resId": 10007,
+    "name": "新手道书",
+    "desc": "升级学徒",
+    "useType": 1,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/common/图标_新手道书"
+  },
+  {
+    "resId": 10008,
+    "name": "五色土",
+    "desc": "可提升结界等级，解锁结界、形态技能和护盾",
+    "useType": 1,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/common/图标_九天息壤"
+  },
+  {
+    "resId": 10009,
+    "name": "女娲石",
+    "desc": "可提升结界技能等级，增强技能效果",
+    "useType": 1,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/common/图标_补天神石"
+  },
+  {
+    "resId": 10010,
+    "name": "随机兵种卷轴",
+    "desc": "可随机获得兵种对应的卷轴",
+    "key": "suijijinengjuanzhou",
+    "useType": 6,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/item/图标_兵书随机",
+    "access": [
+      8,
+      9,
+      7
+    ],
+    "useJump": 3
+  },
+  {
+    "resId": 10011,
+    "name": "随机装备图纸",
+    "desc": "可随机获得各部位的装备升级图纸",
+    "key": "suijizhuangbeituzhi",
+    "useType": 2,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/item/图标_图纸_问号",
+    "access": [
+      8,
+      9,
+      7
+    ],
+    "useJump": 3
+  },
+  {
+    "resId": 10012,
+    "name": "随机兵种卷轴",
+    "desc": "可随机获得已激活兵种对应的卷轴",
+    "key": "suijijinengjuanzhou",
+    "useType": 4,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/item/图标_兵书随机",
+    "access": [
+      8,
+      9,
+      7
+    ],
+    "useJump": 5
+  },
+  {
+    "resId": 10013,
+    "name": "普通随机宝石",
+    "desc": "使用后随机获得1个宝石",
+    "useType": 3,
+    "type": 1,
+    "quality": 1,
+    "icon": "icons/gem/图标_随机宝石宝箱",
+    "access": [
+      8
+    ]
+  },
+  {
+    "resId": 10014,
+    "name": "精良随机宝石",
+    "desc": "使用后随机获得1个宝石",
+    "useType": 3,
+    "type": 1,
+    "quality": 2,
+    "icon": "icons/gem/图标_随机宝石宝箱",
+    "access": [
+      8
+    ]
+  },
+  {
+    "resId": 10015,
+    "name": "优秀随机宝石",
+    "desc": "使用后随机获得1个宝石",
+    "useType": 3,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/gem/图标_随机宝石宝箱",
+    "access": [
+      8
+    ]
+  },
+  {
+    "resId": 10016,
+    "name": "史诗随机宝石",
+    "desc": "使用后随机获得1个宝石",
+    "useType": 3,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/gem/图标_随机宝石宝箱",
+    "access": [
+      8
+    ]
+  },
+  {
+    "resId": 10017,
+    "name": "传奇随机宝石",
+    "desc": "使用后随机获得1个宝石",
+    "useType": 3,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/gem/图标_随机宝石宝箱",
+    "access": [
+      8
+    ]
+  },
+  {
+    "resId": 10018,
+    "name": "绝世随机宝石",
+    "desc": "使用后随机获得1个宝石",
+    "useType": 3,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/gem/图标_随机宝石宝箱",
+    "access": [
+      8
+    ]
+  },
+  {
+    "resId": 10019,
+    "name": "神话随机宝石",
+    "desc": "使用后随机获得1个宝石",
+    "useType": 3,
+    "type": 1,
+    "quality": 7,
+    "icon": "icons/gem/图标_随机宝石宝箱",
+    "access": [
+      8
+    ]
+  },
+  {
+    "resId": 10020,
+    "name": "宝石抽取券",
+    "desc": "可进行一次史诗宝石抽卡",
+    "useType": 1,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/gem/图标_宝石抽取券"
+  },
+  {
+    "resId": 10021,
+    "name": "灵宠抽取券",
+    "desc": "可进行一次高级灵宠抽卡",
+    "useType": 1,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/common/图标_灵兽抽取券"
+  },
+  {
+    "resId": 10022,
+    "name": "普通宝石箱",
+    "desc": "普通宝箱抽奖池",
+    "useType": 3,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/gem/图标_随机宝石宝箱"
+  },
+  {
+    "resId": 10023,
+    "name": "传世宝石箱",
+    "desc": "传世宝箱抽奖池",
+    "useType": 3,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/gem/图标_随机宝石宝箱"
+  },
+  {
+    "resId": 10024,
+    "name": "随机宝石箱子",
+    "desc": "必定获得一颗紫色及以上的宝石，有1%概率获得红色宝石,并有0.01%概率获得多彩宝石",
+    "useType": 3,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/gem/图标_随机宝石宝箱"
+  },
+  {
+    "resId": 10060,
+    "name": "城墙升级石",
+    "desc": "城墙升级材料",
+    "useType": 1,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/item/图标_城池升级材料",
+    "access": [
+      14,
+      8,
+      13
+    ],
+    "useJump": 17
+  },
+  {
+    "resId": 10061,
+    "name": "城墙突破石",
+    "desc": "城墙突破材料",
+    "useType": 1,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/item/图标_城池突破材料",
+    "access": [
+      8,
+      11
+    ],
+    "useJump": 17
+  },
+  {
+    "resId": 10062,
+    "name": "城墙技能书",
+    "desc": "城墙技能升级材料",
+    "icon": "icons/skill/图标_城墙技能升级材料",
+    "access": [
+      7
+    ],
+    "useJump": 17
+  },
+  {
+    "resId": 10081,
+    "name": "随机白色宝石",
+    "desc": "使用后随机获得1个白色宝石",
+    "useType": 3,
+    "type": 1,
+    "quality": 1,
+    "icon": "icons/gem/图标_随机白色宝石",
+    "access": [
+      8
+    ]
+  },
+  {
+    "resId": 10082,
+    "name": "随机绿色宝石",
+    "desc": "使用后随机获得1个绿色宝石",
+    "useType": 3,
+    "type": 1,
+    "quality": 2,
+    "icon": "icons/gem/图标_随机绿色宝石",
+    "access": [
+      8
+    ]
+  },
+  {
+    "resId": 10083,
+    "name": "随机蓝色宝石",
+    "desc": "使用后随机获得1个蓝色宝石",
+    "useType": 3,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/gem/图标_随机蓝色宝石",
+    "access": [
+      8
+    ]
+  },
+  {
+    "resId": 10084,
+    "name": "随机紫色宝石",
+    "desc": "使用后随机获得1个紫色宝石",
+    "useType": 3,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/gem/图标_随机紫色宝石",
+    "access": [
+      8
+    ]
+  },
+  {
+    "resId": 10085,
+    "name": "随机橙色宝石",
+    "desc": "使用后随机获得1个橙色宝石",
+    "useType": 3,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/gem/图标_随机橙色宝石",
+    "access": [
+      8
+    ]
+  },
+  {
+    "resId": 10086,
+    "name": "随机红色宝石",
+    "desc": "使用后随机获得1个红色宝石",
+    "useType": 3,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/gem/图标_随机红色宝石",
+    "access": [
+      8
+    ]
+  },
+  {
+    "resId": 10087,
+    "name": "随机粉色宝石",
+    "desc": "使用后随机获得1个粉色宝石",
+    "useType": 3,
+    "type": 1,
+    "quality": 7,
+    "icon": "icons/gem/图标_随机粉色宝石",
+    "access": [
+      8
+    ]
+  },
+  {
+    "resId": 10091,
+    "name": "橙色随机部位攻击宝石",
+    "desc": "使用后获得橙色随机部位攻击宝石",
+    "useType": 2,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/gem/图标_随机橙色宝石",
+    "access": [
+      8
+    ]
+  },
+  {
+    "resId": 10092,
+    "name": "红色随机部位攻击宝石",
+    "desc": "使用后获得红色随机部位攻击宝石",
+    "useType": 2,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/gem/图标_随机红色宝石",
+    "access": [
+      8
+    ]
+  },
+  {
+    "resId": 10093,
+    "name": "粉色随机部位攻击宝石",
+    "desc": "使用后获得粉色随机部位攻击宝石",
+    "useType": 2,
+    "type": 1,
+    "quality": 7,
+    "icon": "icons/gem/图标_随机粉色宝石",
+    "access": [
+      8
+    ]
+  },
+  {
+    "resId": 10100,
+    "name": "精炼石",
+    "desc": "用于装备升品与洗炼",
+    "useType": 1,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/common/图标_精铁",
+    "access": [
+      15
+    ]
+  },
+  {
+    "resId": 10101,
+    "name": "御剑术卷轴",
+    "desc": "用于提升御剑术等级",
+    "useType": 1,
+    "type": 5,
+    "quality": 4,
+    "icon": "icons/item/图标_法术卷轴_御剑术"
+  },
+  {
+    "resId": 10102,
+    "name": "毒气弹卷轴",
+    "desc": "用于提升毒气弹等级",
+    "useType": 1,
+    "type": 5,
+    "quality": 4,
+    "icon": "icons/item/图标_法术卷轴_火焰弹"
+  },
+  {
+    "resId": 10103,
+    "name": "寒冰箭卷轴",
+    "desc": "用于提升寒冰箭等级",
+    "useType": 1,
+    "type": 5,
+    "quality": 4,
+    "icon": "icons/item/图标_法术卷轴_寒冰箭"
+  },
+  {
+    "resId": 10104,
+    "name": "惊雷咒卷轴",
+    "desc": "用于提升惊雷咒等级",
+    "useType": 1,
+    "type": 5,
+    "quality": 4,
+    "icon": "icons/item/图标_法术卷轴_惊雷咒"
+  },
+  {
+    "resId": 10105,
+    "name": "石狮子卷轴",
+    "desc": "用于提升石狮子等级",
+    "useType": 1,
+    "type": 5,
+    "quality": 4,
+    "icon": "icons/item/图标_法术卷轴_滚石"
+  },
+  {
+    "resId": 10106,
+    "name": "剑气斩卷轴",
+    "desc": "用于提升剑气斩等级",
+    "useType": 1,
+    "type": 5,
+    "quality": 4,
+    "icon": "icons/item/图标_法术卷轴_剑气斩"
+  },
+  {
+    "resId": 10107,
+    "name": "万剑诀卷轴",
+    "desc": "用于提升万剑诀等级",
+    "useType": 1,
+    "type": 5,
+    "quality": 4,
+    "icon": "icons/item/图标_法术卷轴_万剑诀"
+  },
+  {
+    "resId": 10108,
+    "name": "寒冰突刺卷轴",
+    "desc": "用于提升寒冰突刺等级",
+    "useType": 1,
+    "type": 5,
+    "quality": 4,
+    "icon": "icons/item/图标_法术卷轴_寒冰突刺"
+  },
+  {
+    "resId": 10109,
+    "name": "连环闪电卷轴",
+    "desc": "用于提升连环闪电等级",
+    "useType": 1,
+    "type": 5,
+    "quality": 4,
+    "icon": "icons/item/图标_法术卷轴_连环闪电"
+  },
+  {
+    "resId": 10110,
+    "name": "泰山压顶卷轴",
+    "desc": "用于提升泰山压顶等级",
+    "useType": 1,
+    "type": 5,
+    "quality": 4,
+    "icon": "icons/item/图标_法术卷轴_落石术"
+  },
+  {
+    "resId": 10111,
+    "name": "风暴术卷轴",
+    "desc": "用于提升风暴术等级",
+    "useType": 1,
+    "type": 5,
+    "quality": 4,
+    "icon": "icons/item/图标_法术卷轴_风暴术"
+  },
+  {
+    "resId": 10112,
+    "name": "天雷网卷轴",
+    "desc": "用于提升天雷网等级",
+    "useType": 1,
+    "type": 5,
+    "quality": 4,
+    "icon": "icons/item/图标_法术卷轴_天雷网"
+  },
+  {
+    "resId": 10113,
+    "name": "巨石突刺卷轴",
+    "desc": "用于提升巨石突刺等级",
+    "useType": 1,
+    "type": 5,
+    "quality": 4,
+    "icon": "icons/item/图标_法术卷轴_巨石突刺"
+  },
+  {
+    "resId": 10114,
+    "name": "旋风术卷轴",
+    "desc": "用于提升旋风术等级",
+    "useType": 1,
+    "type": 5,
+    "quality": 4,
+    "icon": "icons/item/图标_法术卷轴_旋风术"
+  },
+  {
+    "resId": 10115,
+    "name": "闪电球卷轴",
+    "desc": "用于提升闪电球等级",
+    "useType": 1,
+    "type": 5,
+    "quality": 4,
+    "icon": "icons/item/图标_法术卷轴_闪电球"
+  },
+  {
+    "resId": 10116,
+    "name": "改名卡",
+    "desc": "用于修改修行者的名字",
+    "useType": 1,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/common/图标_改名卡"
+  },
+  {
+    "resId": 10117,
+    "name": "随机宝石箱子",
+    "key": "zhangjiesuijibaoshixiangzi",
+    "useType": 1,
+    "type": 11,
+    "quality": 4,
+    "icon": "icons/gem/图标_随机宝石宝箱"
+  },
+  {
+    "resId": 10118,
+    "name": "随机蓝色宝石宝箱",
+    "desc": "随机获得1个蓝色宝石",
+    "useType": 3,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/item/图标_随机宝石宝箱"
+  },
+  {
+    "resId": 10119,
+    "name": "晶石掉落",
+    "desc": "有3%的概率额外获得5个晶石",
+    "key": "zhangjiesuijijingshixiangzi",
+    "useType": 1,
+    "type": 11,
+    "quality": 4,
+    "icon": "icons/resource/图标_灵石_概率"
+  },
+  {
+    "resId": 10120,
+    "name": "技能卷轴自选宝箱",
+    "desc": "自选技能卷轴",
+    "useType": 5,
+    "type": 3,
+    "quality": 4,
+    "icon": "icons/item/图标_法术卷轴_空白"
+  },
+  {
+    "resId": 10121,
+    "name": "灵宠口粮",
+    "desc": "灵宠升级道具，可用于提升灵宠属性，15章后概率掉落",
+    "key": "yuanlingguo",
+    "useType": 1,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/common/图标_灵宠口粮"
+  },
+  {
+    "resId": 10122,
+    "name": "灵宠抽卡箱",
+    "desc": "随机获得1只灵宠",
+    "useType": 1,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/common/图标_突破丹"
+  },
+  {
+    "resId": 10123,
+    "name": "灵宠口粮",
+    "desc": "有{0}的概率额外获得{1}个灵宠口粮",
+    "key": "zhangjiesuijilingchongkouliang",
+    "useType": 1,
+    "type": 11,
+    "quality": 4,
+    "icon": "icons/common/图标_灵宠口粮_概率"
+  },
+  {
+    "resId": 10124,
+    "name": "随机白色宝石宝箱",
+    "desc": "随机获得1个白色宝石",
+    "useType": 3,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/gem/图标_随机白色宝石"
+  },
+  {
+    "resId": 10125,
+    "name": "随机绿色宝石宝箱",
+    "desc": "随机获得1个绿色宝石",
+    "useType": 3,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/gem/图标_随机绿色宝石"
+  },
+  {
+    "resId": 10126,
+    "name": "狂欢积分",
+    "desc": "狂欢积分",
+    "useType": 1,
+    "type": 11,
+    "quality": 3,
+    "icon": "icons/common/za4"
+  },
+  {
+    "resId": 10127,
+    "name": "通用宝物升星材料",
+    "desc": "通用宝物升星材料",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/item/图标_通用城墙升星材料橙"
+  },
+  {
+    "resId": 10128,
+    "name": "高级通用宝物升星材料",
+    "desc": "高级通用宝物升星材料",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/item/图标_通用城墙升星材料红"
+  },
+  {
+    "resId": 10301,
+    "name": "联盟贡献",
+    "desc": "用于联盟升级",
+    "useType": 1,
+    "type": 11,
+    "quality": 2,
+    "icon": "icons/common/图标_联盟贡献",
+    "access": [
+      10
+    ],
+    "useJump": 11
+  },
+  {
+    "resId": 10302,
+    "name": "武库石板",
+    "desc": "黑石深渊门票道具",
+    "useType": 1,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/common/图标_武库石板",
+    "access": [
+      11,
+      16
+    ],
+    "useJump": 16
+  },
+  {
+    "resId": 10400,
+    "name": "民兵·通用",
+    "desc": "民兵皮肤通用升星材料",
+    "useType": 1,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/item/图标_通用皮肤升星材料紫",
+    "access": [
+      26
+    ]
+  },
+  {
+    "resId": 10401,
+    "name": "兽人民兵",
+    "desc": "解锁民兵皮肤，最终伤害提升10%",
+    "useType": 1,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/hero/tx_icon_MB_JXK_SHOUREN",
+    "access": [
+      26
+    ]
+  },
+  {
+    "resId": 10402,
+    "name": "鱼人民兵",
+    "desc": "解锁民兵皮肤，最终伤害提升15%",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/hero/tx_icon_MB_JXK_YUREN",
+    "access": [
+      26
+    ]
+  },
+  {
+    "resId": 10403,
+    "name": "骷髅民兵",
+    "desc": "解锁民兵皮肤，最终伤害提升20%",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/hero/tx_icon_MB_JXK_KULOU",
+    "access": [
+      26
+    ]
+  },
+  {
+    "resId": 10404,
+    "name": "传说民兵·通用",
+    "desc": "传说民兵皮肤通用升星材料",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/item/图标_通用皮肤升星材料橙",
+    "access": [
+      26
+    ]
+  },
+  {
+    "resId": 10405,
+    "name": "神话民兵·通用",
+    "desc": "神话民兵皮肤通用升星材料",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/item/图标_通用皮肤升星材料红",
+    "access": [
+      26
+    ]
+  },
+  {
+    "resId": 10600,
+    "name": "城墙·通用",
+    "desc": "通用城墙升星材料",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/item/图标_通用城墙升星材料橙",
+    "access": [
+      26
+    ]
+  },
+  {
+    "resId": 10601,
+    "name": "熔岩城墙",
+    "desc": "解锁城墙幻形",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/common/城墙皮肤1",
+    "access": [
+      26
+    ]
+  },
+  {
+    "resId": 10602,
+    "name": "冰晶城墙",
+    "desc": "解锁城墙幻形",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/common/城墙皮肤2",
+    "access": [
+      26
+    ]
+  },
+  {
+    "resId": 10603,
+    "name": "高级城墙·通用",
+    "desc": "高级通用城墙升星材料",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/item/图标_通用城墙升星材料红"
+  },
+  {
+    "resId": 10891,
+    "name": "观星仪碎片",
+    "desc": "观星仪碎片",
+    "useType": 1,
+    "type": 2,
+    "quality": 5,
+    "icon": "icons/item/图标_金钥匙碎片"
+  },
+  {
+    "resId": 10898,
+    "name": "绿色保底禁军池",
+    "desc": "请神抽奖池",
+    "useType": 2,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/common/图标_请神酒"
+  },
+  {
+    "resId": 10899,
+    "name": "紫色保底禁军池",
+    "desc": "请神抽奖池",
+    "useType": 2,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/common/图标_请神酒"
+  },
+  {
+    "resId": 10900,
+    "name": "禁军池",
+    "desc": "请神抽奖池",
+    "useType": 2,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/common/图标_请神酒"
+  },
+  {
+    "resId": 10901,
+    "name": "啤酒",
+    "desc": "用于招募禁军的道具",
+    "useType": 1,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/common/图标_请神酒",
+    "access": [
+      7,
+      16,
+      20,
+      8
+    ],
+    "useJump": 21
+  },
+  {
+    "resId": 10902,
+    "name": "禁军升级卷轴",
+    "desc": "用于提升禁军等级",
+    "useType": 1,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/item/图标_禁军技能升级材料",
+    "access": [
+      21,
+      8
+    ]
+  },
+  {
+    "resId": 10903,
+    "name": "神谕晶石",
+    "desc": "用于提升宝物等级",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/resource/图标_灵石"
+  },
+  {
+    "resId": 10904,
+    "name": "宝物奖池",
+    "desc": "宝物奖池",
+    "useType": 2,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/resource/图标_灵石"
+  },
+  {
+    "resId": 10905,
+    "name": "随机近卫",
+    "desc": "随机近卫",
+    "useType": 2,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/common/图标_请神酒"
+  },
+  {
+    "resId": 10906,
+    "name": "随机城墙皮肤",
+    "desc": "随机城墙皮肤",
+    "useType": 2,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/resource/图标_灵石"
+  },
+  {
+    "resId": 10907,
+    "name": "随机主公技",
+    "desc": "随机主公技",
+    "useType": 2,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/common/图标_请神酒"
+  },
+  {
+    "resId": 10908,
+    "name": "银钥匙碎片",
+    "desc": "银钥匙碎片",
+    "useType": 1,
+    "type": 2,
+    "quality": 4,
+    "icon": "icons/item/图标_银钥匙碎片"
+  },
+  {
+    "resId": 10909,
+    "name": "金钥匙碎片",
+    "desc": "金钥匙碎片",
+    "useType": 1,
+    "type": 2,
+    "quality": 5,
+    "icon": "icons/item/图标_金钥匙碎片"
+  },
+  {
+    "resId": 10910,
+    "name": "观星仪",
+    "desc": "观星仪",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/item/图标_金钥匙"
+  },
+  {
+    "resId": 10911,
+    "name": "祈运骨片",
+    "desc": "游戏的珍稀货币，珍贵无比，用于兑换图腾赐吉商店的道具",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/item/图标_金钥匙"
+  },
+  {
+    "resId": 10912,
+    "name": "沧海徽记",
+    "desc": "游戏的珍稀货币，珍贵无比，用于兑换商旅巨舰商店的道具",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/item/图标_金钥匙"
+  },
+  {
+    "resId": 10913,
+    "name": "典藏金玺",
+    "desc": "游戏的珍稀货币，珍贵无比，用于兑换圣殿藏珍商店的道具",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/item/图标_金钥匙"
+  },
+  {
+    "resId": 10914,
+    "name": "寰宇星图",
+    "desc": "游戏的珍稀货币，珍贵无比，用于兑换星月占卜商店的道具",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/item/图标_金钥匙"
+  },
+  {
+    "resId": 10991,
+    "name": "银钥匙",
+    "desc": "可进行一次普通宝箱抽卡",
+    "useType": 1,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/item/图标_银钥匙",
+    "access": [
+      22,
+      23,
+      24
+    ],
+    "useJump": 8
+  },
+  {
+    "resId": 10992,
+    "name": "金钥匙",
+    "desc": "可进行一次传世宝箱抽卡",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/item/图标_金钥匙",
+    "access": [
+      22,
+      23,
+      24
+    ],
+    "useJump": 8
+  },
+  {
+    "resId": 10993,
+    "name": "吉骨",
+    "desc": "用于图腾赐吉抽奖",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/item/图标_金钥匙"
+  },
+  {
+    "resId": 10994,
+    "name": "远航商币",
+    "desc": "用于商旅巨舰抽奖",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/item/图标_金钥匙"
+  },
+  {
+    "resId": 10995,
+    "name": "圣殿圣币",
+    "desc": "用于圣殿藏珍抽奖",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/item/图标_金钥匙"
+  },
+  {
+    "resId": 10996,
+    "name": "吉骨碎片",
+    "desc": "吉骨碎片",
+    "useType": 1,
+    "type": 2,
+    "quality": 5,
+    "icon": "icons/item/图标_金钥匙碎片"
+  },
+  {
+    "resId": 10997,
+    "name": "远航商币碎片",
+    "desc": "远航商币碎片",
+    "useType": 1,
+    "type": 2,
+    "quality": 5,
+    "icon": "icons/item/图标_金钥匙碎片"
+  },
+  {
+    "resId": 10998,
+    "name": "圣殿圣币碎片",
+    "desc": "圣殿圣币碎片",
+    "useType": 1,
+    "type": 2,
+    "quality": 5,
+    "icon": "icons/item/图标_金钥匙碎片"
+  },
+  {
+    "resId": 10999,
+    "name": "1元代金券",
+    "desc": "1元代金券",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/common/图标_代金券"
+  },
+  {
+    "resId": 11001,
+    "name": "杰出随机兵营",
+    "desc": "使用后随机获得一名兵营，解锁即可提升对应系的兵种的伤害，且战斗开始即可解锁对应兵种",
+    "useType": 2,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/item/天师宝箱",
+    "itemBox": [
+      17011,
+      17008,
+      17012
+    ],
+    "access": [
+      26
+    ]
+  },
+  {
+    "resId": 11002,
+    "name": "威武随机英雄",
+    "desc": "使用后随机获得一名英雄,解锁即可提升攻击力并能上场助战",
+    "useType": 2,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/item/队长宝箱",
+    "itemBox": [
+      18011,
+      18008,
+      18012
+    ],
+    "access": [
+      26
+    ]
+  },
+  {
+    "resId": 11003,
+    "name": "传说随机兵营",
+    "desc": "使用后随机获得一处传说兵营，解锁即可提升对应系的兵种的伤害，且战斗开始即可解锁对应兵种",
+    "useType": 2,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/item/天师宝箱",
+    "access": [
+      26
+    ]
+  },
+  {
+    "resId": 11004,
+    "name": "绝世随机兵营",
+    "desc": "使用后随机获得一处绝世兵营，解锁即可提升对应系的兵种的伤害，且战斗开始即可解锁对应兵种",
+    "useType": 2,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/item/天师宝箱",
+    "access": [
+      26
+    ]
+  },
+  {
+    "resId": 11005,
+    "name": "传说随机英雄",
+    "desc": "使用后随机获得一名传说英雄,解锁即可提升攻击力并能上场助战",
+    "useType": 2,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/item/队长宝箱",
+    "access": [
+      26
+    ]
+  },
+  {
+    "resId": 11006,
+    "name": "绝世随机英雄",
+    "desc": "使用后随机获得一名绝世英雄,解锁即可提升攻击力并能上场助战",
+    "useType": 2,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/item/队长宝箱",
+    "access": [
+      26
+    ]
+  },
+  {
+    "resId": 11007,
+    "name": "随机民兵皮肤1",
+    "desc": "随机民兵皮肤1",
+    "useType": 2,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/common/图标_请神酒"
+  },
+  {
+    "resId": 11008,
+    "name": "随机民兵皮肤2",
+    "desc": "随机民兵皮肤2",
+    "useType": 2,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/item/队长宝箱"
+  },
+  {
+    "resId": 11009,
+    "name": "随机民兵皮肤3",
+    "desc": "随机民兵皮肤3",
+    "useType": 2,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/item/队长宝箱"
+  },
+  {
+    "resId": 12001,
+    "name": "转盘1奖池",
+    "desc": "转盘1奖池",
+    "useType": 2,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/common/图标_幻灵丹_01"
+  },
+  {
+    "resId": 12002,
+    "name": "转盘2奖池",
+    "desc": "转盘2奖池",
+    "useType": 2,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/common/图标_幻灵丹_02"
+  },
+  {
+    "resId": 12003,
+    "name": "转盘3奖池",
+    "desc": "转盘3奖池",
+    "useType": 2,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/common/图标_幻灵丹_03"
+  },
+  {
+    "resId": 12004,
+    "name": "转盘4奖池",
+    "desc": "转盘4奖池",
+    "useType": 2,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/common/图标_幻灵丹_04"
+  },
+  {
+    "resId": 13001,
+    "name": "幽光短剑碎片",
+    "desc": "幽光短剑碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/item/幽光短剑碎片"
+  },
+  {
+    "resId": 13002,
+    "name": "狂猎皮靴碎片",
+    "desc": "狂猎皮靴碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/item/狂猎皮靴碎片"
+  },
+  {
+    "resId": 13003,
+    "name": "凤炎法杖碎片",
+    "desc": "凤炎法杖碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/item/凤炎法杖碎片"
+  },
+  {
+    "resId": 13004,
+    "name": "灵纹轻铠碎片",
+    "desc": "灵纹轻铠碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/item/灵纹轻铠碎片"
+  },
+  {
+    "resId": 13005,
+    "name": "石缚提灯碎片",
+    "desc": "石缚提灯碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/item/石缚提灯碎片"
+  },
+  {
+    "resId": 13006,
+    "name": "狂暴战斧碎片",
+    "desc": "狂暴战斧碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/item/狂暴战斧碎片"
+  },
+  {
+    "resId": 13007,
+    "name": "黯灭碎片",
+    "desc": "黯灭碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/item/黯灭碎片"
+  },
+  {
+    "resId": 13008,
+    "name": "原力法杖碎片",
+    "desc": "原力法杖碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/item/原力法杖碎片"
+  },
+  {
+    "resId": 13009,
+    "name": "银龙轻甲碎片",
+    "desc": "银龙轻甲碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/item/银龙轻甲碎片"
+  },
+  {
+    "resId": 13010,
+    "name": "符文戒指碎片",
+    "desc": "符文戒指碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/item/符文戒指碎片"
+  },
+  {
+    "resId": 13011,
+    "name": "幽影面甲碎片",
+    "desc": "幽影面甲碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/item/幽影面甲碎片"
+  },
+  {
+    "resId": 13012,
+    "name": "圣殿护腿碎片",
+    "desc": "圣殿护腿碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/item/圣殿护腿碎片"
+  },
+  {
+    "resId": 13013,
+    "name": "梅肯斯姆碎片",
+    "desc": "梅肯斯姆碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/item/梅肯斯姆碎片"
+  },
+  {
+    "resId": 13014,
+    "name": "乌瑟尔之戒碎片",
+    "desc": "乌瑟尔之戒碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/item/乌瑟尔之戒碎片"
+  },
+  {
+    "resId": 13015,
+    "name": "星织腰带碎片",
+    "desc": "星织腰带碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/item/星织腰带碎片"
+  },
+  {
+    "resId": 13016,
+    "name": "归灵祭炉碎片",
+    "desc": "归灵祭炉碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/item/归灵祭炉碎片"
+  },
+  {
+    "resId": 13017,
+    "name": "龙鳞腰带碎片",
+    "desc": "龙鳞腰带碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/item/龙鳞腰带碎片"
+  },
+  {
+    "resId": 13018,
+    "name": "巫师之刃碎片",
+    "desc": "巫师之刃碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/item/巫师之刃碎片"
+  },
+  {
+    "resId": 13019,
+    "name": "阿哈利姆神杖碎片",
+    "desc": "阿哈利姆神杖碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/item/阿哈利姆神杖碎片"
+  },
+  {
+    "resId": 13020,
+    "name": "末日之刃碎片",
+    "desc": "末日之刃碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/item/末日之刃碎片"
+  },
+  {
+    "resId": 13021,
+    "name": "石脉手环碎片",
+    "desc": "石脉手环碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/item/石脉手环碎片"
+  },
+  {
+    "resId": 13022,
+    "name": "紫晶护盾碎片",
+    "desc": "紫晶护盾碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/item/紫晶护盾碎片"
+  },
+  {
+    "resId": 13023,
+    "name": "荆棘兜帽碎片",
+    "desc": "荆棘兜帽碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/item/荆棘兜帽碎片"
+  },
+  {
+    "resId": 13024,
+    "name": "恐鳌之心碎片",
+    "desc": "恐鳌之心碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/item/恐鳌之心碎片"
+  },
+  {
+    "resId": 13025,
+    "name": "昆莱岩核碎片",
+    "desc": "昆莱岩核碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/item/昆莱岩核碎片"
+  },
+  {
+    "resId": 13026,
+    "name": "金箍棒碎片",
+    "desc": "金箍棒碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/item/金箍棒碎片"
+  },
+  {
+    "resId": 13027,
+    "name": "钢纹护手碎片",
+    "desc": "钢纹护手碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/item/钢纹护手碎片"
+  },
+  {
+    "resId": 13028,
+    "name": "圣光护腕碎片",
+    "desc": "圣光护腕碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/item/圣光护腕碎片"
+  },
+  {
+    "resId": 13029,
+    "name": "陨星锤碎片",
+    "desc": "陨星锤碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/item/陨星锤碎片"
+  },
+  {
+    "resId": 13030,
+    "name": "霜封冰刃碎片",
+    "desc": "霜封冰刃碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/item/霜封冰刃碎片"
+  },
+  {
+    "resId": 13031,
+    "name": "魂匣碎片",
+    "desc": "魂匣碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/item/魂匣碎片"
+  },
+  {
+    "resId": 13032,
+    "name": "碎骨碎片",
+    "desc": "碎骨碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/item/碎骨碎片"
+  },
+  {
+    "resId": 13033,
+    "name": "赤红甲碎片",
+    "desc": "赤红甲碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/item/赤红甲碎片"
+  },
+  {
+    "resId": 13034,
+    "name": "虚空权杖碎片",
+    "desc": "虚空权杖碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/item/虚空权杖碎片"
+  },
+  {
+    "resId": 13035,
+    "name": "巨像核心碎片",
+    "desc": "巨像核心碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/item/巨像核心碎片"
+  },
+  {
+    "resId": 13036,
+    "name": "翡翠之心碎片",
+    "desc": "翡翠之心碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/item/翡翠之心碎片"
+  },
+  {
+    "resId": 13037,
+    "name": "震地重靴碎片",
+    "desc": "震地重靴碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/item/震地重靴碎片"
+  },
+  {
+    "resId": 13038,
+    "name": "星辉密钥碎片",
+    "desc": "星辉密钥碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/item/星辉密钥碎片"
+  },
+  {
+    "resId": 13039,
+    "name": "星辉斗篷碎片",
+    "desc": "星辉斗篷碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/item/星辉斗篷碎片"
+  },
+  {
+    "resId": 13040,
+    "name": "狂暴战盔碎片",
+    "desc": "狂暴战盔碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/item/狂暴战盔碎片"
+  },
+  {
+    "resId": 13041,
+    "name": "荆棘韧甲碎片",
+    "desc": "荆棘韧甲碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/item/荆棘韧甲碎片"
+  },
+  {
+    "resId": 13042,
+    "name": "黄金号角碎片",
+    "desc": "黄金号角碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/item/黄金号角碎片"
+  },
+  {
+    "resId": 13043,
+    "name": "谐舞之鼓碎片",
+    "desc": "谐舞之鼓碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/item/谐舞之鼓碎片"
+  },
+  {
+    "resId": 13044,
+    "name": "雄狮披风碎片",
+    "desc": "雄狮披风碎片",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/item/雄狮披风碎片"
+  },
+  {
+    "resId": 14011,
+    "name": "1阶精良装备",
+    "desc": "使用后可随机获得一件1阶装备，最高绿色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 2,
+    "icon": "icons/equip/wq1",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14012,
+    "name": "1阶优秀装备",
+    "desc": "使用后可随机获得一件1阶装备，最高蓝色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/equip/wq2",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14013,
+    "name": "1阶史诗装备",
+    "desc": "使用后可随机获得一件1阶装备，最高紫色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/equip/wq3",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14021,
+    "name": "2阶精良装备",
+    "desc": "使用后可随机获得一件2阶装备，最高绿色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 2,
+    "icon": "icons/equip/wq1",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14022,
+    "name": "2阶优秀装备",
+    "desc": "使用后可随机获得一件2阶装备，最高蓝色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/equip/wq2",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14023,
+    "name": "2阶史诗装备",
+    "desc": "使用后可随机获得一件2阶装备，最高紫色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/equip/wq3",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14031,
+    "name": "3阶精良装备",
+    "desc": "使用后可随机获得一件3阶装备，最高绿色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 2,
+    "icon": "icons/equip/wq1",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14032,
+    "name": "3阶优秀装备",
+    "desc": "使用后可随机获得一件3阶装备，最高蓝色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/equip/wq2",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14033,
+    "name": "3阶史诗装备",
+    "desc": "使用后可随机获得一件3阶装备，最高紫色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/equip/wq3",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14041,
+    "name": "4阶精良装备",
+    "desc": "使用后可随机获得一件4阶装备，最高绿色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 2,
+    "icon": "icons/equip/wq1",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14042,
+    "name": "4阶优秀装备",
+    "desc": "使用后可随机获得一件4阶装备，最高蓝色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/equip/wq2",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14043,
+    "name": "4阶史诗装备",
+    "desc": "使用后可随机获得一件4阶装备，最高紫色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/equip/wq3",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14051,
+    "name": "5阶精良装备",
+    "desc": "使用后可随机获得一件5阶装备，最高绿色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 2,
+    "icon": "icons/equip/wq1",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14052,
+    "name": "5阶优秀装备",
+    "desc": "使用后可随机获得一件5阶装备，最高蓝色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/equip/wq2",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14053,
+    "name": "5阶史诗装备",
+    "desc": "使用后可随机获得一件5阶装备，最高紫色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/equip/wq3",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14061,
+    "name": "6阶精良装备",
+    "desc": "使用后可随机获得一件6阶装备，最高绿色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 2,
+    "icon": "icons/equip/wq1",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14062,
+    "name": "6阶优秀装备",
+    "desc": "使用后可随机获得一件6阶装备，最高蓝色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/equip/wq2",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14063,
+    "name": "6阶史诗装备",
+    "desc": "使用后可随机获得一件6阶装备，最高紫色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/equip/wq3",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14071,
+    "name": "7阶精良装备",
+    "desc": "使用后可随机获得一件7阶装备，最高绿色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 2,
+    "icon": "icons/equip/wq1",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14072,
+    "name": "7阶优秀装备",
+    "desc": "使用后可随机获得一件7阶装备，最高蓝色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/equip/wq2",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14073,
+    "name": "7阶史诗装备",
+    "desc": "使用后可随机获得一件7阶装备，最高紫色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/equip/wq3",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14081,
+    "name": "8阶精良装备",
+    "desc": "使用后可随机获得一件8阶装备，最高绿色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 2,
+    "icon": "icons/equip/wq1",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14082,
+    "name": "8阶优秀装备",
+    "desc": "使用后可随机获得一件8阶装备，最高蓝色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/equip/wq2",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14083,
+    "name": "8阶史诗装备",
+    "desc": "使用后可随机获得一件8阶装备，最高紫色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/equip/wq3",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14091,
+    "name": "9阶精良装备",
+    "desc": "使用后可随机获得一件9阶装备，最高绿色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 2,
+    "icon": "icons/equip/wq1",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14092,
+    "name": "9阶优秀装备",
+    "desc": "使用后可随机获得一件9阶装备，最高蓝色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/equip/wq2",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14093,
+    "name": "9阶史诗装备",
+    "desc": "使用后可随机获得一件9阶装备，最高紫色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/equip/wq3",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14101,
+    "name": "10阶精良装备",
+    "desc": "使用后可随机获得一件10阶装备，最高绿色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 2,
+    "icon": "icons/equip/wq1",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14102,
+    "name": "10阶优秀装备",
+    "desc": "使用后可随机获得一件10阶装备，最高蓝色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/equip/wq2",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14103,
+    "name": "10阶史诗装备",
+    "desc": "使用后可随机获得一件10阶装备，最高紫色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/equip/wq3",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14111,
+    "name": "11阶精良装备",
+    "desc": "使用后可随机获得一件11阶装备，最高绿色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 2,
+    "icon": "icons/equip/wq1",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14112,
+    "name": "11阶优秀装备",
+    "desc": "使用后可随机获得一件11阶装备，最高蓝色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/equip/wq2",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14113,
+    "name": "11阶史诗装备",
+    "desc": "使用后可随机获得一件11阶装备，最高紫色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/equip/wq3",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14121,
+    "name": "12阶精良装备",
+    "desc": "使用后可随机获得一件12阶装备，最高绿色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 2,
+    "icon": "icons/equip/wq1",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14122,
+    "name": "12阶优秀装备",
+    "desc": "使用后可随机获得一件12阶装备，最高蓝色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/equip/wq2",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14123,
+    "name": "12阶史诗装备",
+    "desc": "使用后可随机获得一件12阶装备，最高紫色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/equip/wq3",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14131,
+    "name": "13阶精良装备",
+    "desc": "使用后可随机获得一件13阶装备，最高绿色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 2,
+    "icon": "icons/equip/wq1",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14132,
+    "name": "13阶优秀装备",
+    "desc": "使用后可随机获得一件13阶装备，最高蓝色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/equip/wq2",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14133,
+    "name": "13阶史诗装备",
+    "desc": "使用后可随机获得一件13阶装备，最高紫色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/equip/wq3",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14141,
+    "name": "14阶精良装备",
+    "desc": "使用后可随机获得一件14阶装备，最高绿色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 2,
+    "icon": "icons/equip/wq1",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14142,
+    "name": "14阶优秀装备",
+    "desc": "使用后可随机获得一件14阶装备，最高蓝色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/equip/wq2",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14143,
+    "name": "14阶史诗装备",
+    "desc": "使用后可随机获得一件14阶装备，最高紫色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/equip/wq3",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14151,
+    "name": "15阶精良装备",
+    "desc": "使用后可随机获得一件15阶装备，最高绿色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 2,
+    "icon": "icons/equip/wq1",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14152,
+    "name": "15阶优秀装备",
+    "desc": "使用后可随机获得一件15阶装备，最高蓝色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/equip/wq2",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14153,
+    "name": "15阶史诗装备",
+    "desc": "使用后可随机获得一件15阶装备，最高紫色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/equip/wq3",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14161,
+    "name": "16阶精良装备",
+    "desc": "使用后可随机获得一件16阶装备，最高绿色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 2,
+    "icon": "icons/equip/wq1",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14162,
+    "name": "16阶优秀装备",
+    "desc": "使用后可随机获得一件16阶装备，最高蓝色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/equip/wq2",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14163,
+    "name": "16阶史诗装备",
+    "desc": "使用后可随机获得一件16阶装备，最高紫色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/equip/wq3",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14171,
+    "name": "17阶精良装备",
+    "desc": "使用后可随机获得一件17阶装备，最高绿色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 2,
+    "icon": "icons/equip/wq1",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14172,
+    "name": "17阶优秀装备",
+    "desc": "使用后可随机获得一件17阶装备，最高蓝色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/equip/wq2",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14173,
+    "name": "17阶史诗装备",
+    "desc": "使用后可随机获得一件17阶装备，最高紫色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/equip/wq3",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14181,
+    "name": "18阶精良装备",
+    "desc": "使用后可随机获得一件18阶装备，最高绿色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 2,
+    "icon": "icons/equip/wq1",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14182,
+    "name": "18阶优秀装备",
+    "desc": "使用后可随机获得一件18阶装备，最高蓝色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/equip/wq2",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14183,
+    "name": "18阶史诗装备",
+    "desc": "使用后可随机获得一件18阶装备，最高紫色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/equip/wq3",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14191,
+    "name": "19阶精良装备",
+    "desc": "使用后可随机获得一件19阶装备，最高绿色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 2,
+    "icon": "icons/equip/wq1",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14192,
+    "name": "19阶优秀装备",
+    "desc": "使用后可随机获得一件19阶装备，最高蓝色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/equip/wq2",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14193,
+    "name": "19阶史诗装备",
+    "desc": "使用后可随机获得一件19阶装备，最高紫色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/equip/wq3",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14201,
+    "name": "20阶精良装备",
+    "desc": "使用后可随机获得一件20阶装备，最高绿色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 2,
+    "icon": "icons/equip/wq1",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14202,
+    "name": "20阶优秀装备",
+    "desc": "使用后可随机获得一件20阶装备，最高蓝色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/equip/wq2",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14203,
+    "name": "20阶史诗装备",
+    "desc": "使用后可随机获得一件20阶装备，最高紫色品质",
+    "useType": 5,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/equip/wq3",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14301,
+    "name": "1阶随机蓝紫橙装备",
+    "desc": "1阶随机蓝紫橙装备",
+    "useType": 5,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/wq1",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14302,
+    "name": "2阶随机蓝紫橙装备",
+    "desc": "2阶随机蓝紫橙装备",
+    "useType": 5,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/wq2",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14303,
+    "name": "3阶随机蓝紫橙装备",
+    "desc": "3阶随机蓝紫橙装备",
+    "useType": 5,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/wq3",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14304,
+    "name": "4阶随机蓝紫橙装备",
+    "desc": "4阶随机蓝紫橙装备",
+    "useType": 5,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/wq4",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14305,
+    "name": "5阶随机蓝紫橙装备",
+    "desc": "5阶随机蓝紫橙装备",
+    "useType": 5,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/wq4",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14306,
+    "name": "6阶随机蓝紫橙装备",
+    "desc": "6阶随机蓝紫橙装备",
+    "useType": 5,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/图标_随机装备",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14307,
+    "name": "7阶随机蓝紫橙装备",
+    "desc": "7阶随机蓝紫橙装备",
+    "useType": 5,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/图标_随机装备",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14308,
+    "name": "8阶随机蓝紫橙装备",
+    "desc": "8阶随机蓝紫橙装备",
+    "useType": 5,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/图标_随机装备",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14309,
+    "name": "9阶随机蓝紫橙装备",
+    "desc": "9阶随机蓝紫橙装备",
+    "useType": 5,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/图标_随机装备",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14310,
+    "name": "10阶随机蓝紫橙装备",
+    "desc": "10阶随机蓝紫橙装备",
+    "useType": 5,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/wq1",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14311,
+    "name": "11阶随机蓝紫橙装备",
+    "desc": "11阶随机蓝紫橙装备",
+    "useType": 5,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/wq1",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14312,
+    "name": "12阶随机蓝紫橙装备",
+    "desc": "12阶随机蓝紫橙装备",
+    "useType": 5,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/wq2",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14313,
+    "name": "13阶随机蓝紫橙装备",
+    "desc": "13阶随机蓝紫橙装备",
+    "useType": 5,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/wq3",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14314,
+    "name": "14阶随机蓝紫橙装备",
+    "desc": "14阶随机蓝紫橙装备",
+    "useType": 5,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/wq4",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14315,
+    "name": "15阶随机蓝紫橙装备",
+    "desc": "15阶随机蓝紫橙装备",
+    "useType": 5,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/wq4",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14316,
+    "name": "16阶随机蓝紫橙装备",
+    "desc": "16阶随机蓝紫橙装备",
+    "useType": 5,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/wq1",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14317,
+    "name": "17阶随机蓝紫橙装备",
+    "desc": "17阶随机蓝紫橙装备",
+    "useType": 5,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/wq1",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14318,
+    "name": "18阶随机蓝紫橙装备",
+    "desc": "18阶随机蓝紫橙装备",
+    "useType": 5,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/wq1",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14319,
+    "name": "19阶随机蓝紫橙装备",
+    "desc": "19阶随机蓝紫橙装备",
+    "useType": 5,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/wq1",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14320,
+    "name": "20阶随机蓝紫橙装备",
+    "desc": "20阶随机蓝紫橙装备",
+    "useType": 5,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/wq2",
+    "access": [
+      7,
+      9
+    ]
+  },
+  {
+    "resId": 14601,
+    "name": "随机装备",
+    "desc": "使用后可随机获得2~4阶装备，最高会掉落橙色装备",
+    "useType": 2,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/wq1",
+    "access": [
+      7,
+      16
+    ]
+  },
+  {
+    "resId": 14602,
+    "name": "随机装备",
+    "desc": "使用后可随机获得3~5阶装备，最高会掉落橙色装备",
+    "useType": 2,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/wq2",
+    "access": [
+      7,
+      16
+    ]
+  },
+  {
+    "resId": 14603,
+    "name": "随机装备",
+    "desc": "使用后可随机获得4~6阶装备，最高会掉落橙色装备",
+    "useType": 2,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/wq3",
+    "access": [
+      7,
+      16
+    ]
+  },
+  {
+    "resId": 14604,
+    "name": "随机装备",
+    "desc": "使用后可随机获得5~7阶装备，最高会掉落橙色装备",
+    "useType": 2,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/wq4",
+    "access": [
+      7,
+      16
+    ]
+  },
+  {
+    "resId": 14605,
+    "name": "随机装备",
+    "desc": "使用后可随机获得6~8阶装备，最高会掉落橙色装备",
+    "useType": 2,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/wq4",
+    "access": [
+      7,
+      16
+    ]
+  },
+  {
+    "resId": 14606,
+    "name": "随机装备",
+    "desc": "使用后可随机获得7~9阶装备，最高会掉落橙色装备",
+    "useType": 2,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/图标_随机装备",
+    "access": [
+      7,
+      16
+    ]
+  },
+  {
+    "resId": 14607,
+    "name": "随机装备",
+    "desc": "使用后可随机获得8~10阶装备，最高会掉落橙色装备",
+    "useType": 2,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/图标_随机装备",
+    "access": [
+      7,
+      16
+    ]
+  },
+  {
+    "resId": 14608,
+    "name": "随机装备",
+    "desc": "使用后可随机获得9~11阶装备，最高会掉落橙色装备",
+    "useType": 2,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/图标_随机装备",
+    "access": [
+      7,
+      16
+    ]
+  },
+  {
+    "resId": 14609,
+    "name": "随机装备",
+    "desc": "使用后可随机获得10~12阶装备，最高会掉落橙色装备",
+    "useType": 2,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/图标_随机装备",
+    "access": [
+      7,
+      16
+    ]
+  },
+  {
+    "resId": 14610,
+    "name": "随机装备",
+    "desc": "使用后可随机获得11~13阶装备，最高会掉落橙色装备",
+    "useType": 2,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/wq1",
+    "access": [
+      7,
+      16
+    ]
+  },
+  {
+    "resId": 14611,
+    "name": "随机装备",
+    "desc": "使用后可随机获得12~14阶装备，最高会掉落橙色装备",
+    "useType": 2,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/wq1",
+    "access": [
+      7,
+      16
+    ]
+  },
+  {
+    "resId": 14612,
+    "name": "随机装备",
+    "desc": "使用后可随机获得13~15阶装备，最高会掉落橙色装备",
+    "useType": 2,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/wq2",
+    "access": [
+      7,
+      16
+    ]
+  },
+  {
+    "resId": 14613,
+    "name": "随机装备",
+    "desc": "使用后可随机获得14~16阶装备，最高会掉落橙色装备",
+    "useType": 2,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/wq3",
+    "access": [
+      7,
+      16
+    ]
+  },
+  {
+    "resId": 14614,
+    "name": "随机装备",
+    "desc": "使用后可随机获得15~17阶装备，最高会掉落橙色装备",
+    "useType": 2,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/wq4",
+    "access": [
+      7,
+      16
+    ]
+  },
+  {
+    "resId": 14615,
+    "name": "随机装备",
+    "desc": "使用后可随机获得16~18阶装备，最高会掉落橙色装备",
+    "useType": 2,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/wq4",
+    "access": [
+      7,
+      16
+    ]
+  },
+  {
+    "resId": 14616,
+    "name": "随机装备",
+    "desc": "使用后可随机获得17~19阶装备，最高会掉落橙色装备",
+    "useType": 2,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/wq1",
+    "access": [
+      7,
+      16
+    ]
+  },
+  {
+    "resId": 14617,
+    "name": "随机装备",
+    "desc": "使用后可随机获得18~20阶装备，最高会掉落橙色装备",
+    "useType": 2,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/wq1",
+    "access": [
+      7,
+      16
+    ]
+  },
+  {
+    "resId": 14618,
+    "name": "随机装备",
+    "desc": "使用后可随机获得18~20阶装备，最高会掉落橙色装备",
+    "useType": 2,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/wq1",
+    "access": [
+      7,
+      16
+    ]
+  },
+  {
+    "resId": 14619,
+    "name": "随机装备",
+    "desc": "使用后可随机获得18~20阶装备，最高会掉落橙色装备",
+    "useType": 2,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/wq1",
+    "access": [
+      7,
+      16
+    ]
+  },
+  {
+    "resId": 14620,
+    "name": "随机装备",
+    "desc": "使用后可随机获得18~20阶装备，最高会掉落橙色装备",
+    "useType": 2,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/wq2",
+    "access": [
+      7,
+      16
+    ]
+  },
+  {
+    "resId": 14911,
+    "name": "随机装备",
+    "desc": "使用后可随机获得二到四件2~18阶装备，最高会掉落橙色装备",
+    "useType": 2,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/equip/wq1",
+    "access": [
+      16
+    ]
+  },
+  {
+    "resId": 15001,
+    "name": "幽光短剑",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/common/幽光短剑"
+  },
+  {
+    "resId": 15002,
+    "name": "狂猎皮靴",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/common/狂猎皮靴"
+  },
+  {
+    "resId": 15003,
+    "name": "凤炎法杖",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/common/凤炎法杖"
+  },
+  {
+    "resId": 15004,
+    "name": "灵纹轻铠",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/common/灵纹轻铠"
+  },
+  {
+    "resId": 15005,
+    "name": "石缚提灯",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/common/石缚提灯"
+  },
+  {
+    "resId": 15006,
+    "name": "狂暴战斧",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/common/狂暴战斧"
+  },
+  {
+    "resId": 15007,
+    "name": "黯灭",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/common/黯灭"
+  },
+  {
+    "resId": 15008,
+    "name": "原力法杖",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/common/原力法杖"
+  },
+  {
+    "resId": 15009,
+    "name": "银龙轻甲",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/common/银龙轻甲"
+  },
+  {
+    "resId": 15010,
+    "name": "符文戒指",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/common/符文戒指"
+  },
+  {
+    "resId": 15011,
+    "name": "幽影面甲",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/common/幽影面甲"
+  },
+  {
+    "resId": 15012,
+    "name": "圣殿护腿",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/common/圣殿护腿"
+  },
+  {
+    "resId": 15013,
+    "name": "梅肯斯姆",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/common/梅肯斯姆"
+  },
+  {
+    "resId": 15014,
+    "name": "乌瑟尔之戒",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/common/乌瑟尔之戒"
+  },
+  {
+    "resId": 15015,
+    "name": "星织腰带",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/common/星织腰带"
+  },
+  {
+    "resId": 15016,
+    "name": "归灵祭炉",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/common/归灵祭炉"
+  },
+  {
+    "resId": 15017,
+    "name": "龙鳞腰带",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/common/龙鳞腰带"
+  },
+  {
+    "resId": 15018,
+    "name": "巫师之刃",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/common/巫师之刃"
+  },
+  {
+    "resId": 15019,
+    "name": "阿哈利姆神杖",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/common/阿哈利姆神杖"
+  },
+  {
+    "resId": 15020,
+    "name": "末日之刃",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/common/末日之刃"
+  },
+  {
+    "resId": 15021,
+    "name": "石脉手环",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/common/石脉手环"
+  },
+  {
+    "resId": 15022,
+    "name": "紫晶护盾",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/common/紫晶护盾"
+  },
+  {
+    "resId": 15023,
+    "name": "荆棘兜帽",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/common/荆棘兜帽"
+  },
+  {
+    "resId": 15024,
+    "name": "恐鳌之心",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/common/恐鳌之心"
+  },
+  {
+    "resId": 15025,
+    "name": "昆莱岩核",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/common/昆莱岩核"
+  },
+  {
+    "resId": 15026,
+    "name": "金箍棒",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/common/金箍棒"
+  },
+  {
+    "resId": 15027,
+    "name": "钢纹护手",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/common/钢纹护手"
+  },
+  {
+    "resId": 15028,
+    "name": "圣光护腕",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/common/圣光护腕"
+  },
+  {
+    "resId": 15029,
+    "name": "陨星锤",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/common/陨星锤"
+  },
+  {
+    "resId": 15030,
+    "name": "霜封冰刃",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/common/霜封冰刃"
+  },
+  {
+    "resId": 15031,
+    "name": "魂匣",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/common/魂匣"
+  },
+  {
+    "resId": 15032,
+    "name": "碎骨",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/common/碎骨"
+  },
+  {
+    "resId": 15033,
+    "name": "赤红甲",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/common/赤红甲"
+  },
+  {
+    "resId": 15034,
+    "name": "虚空权杖",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/common/虚空权杖"
+  },
+  {
+    "resId": 15035,
+    "name": "巨像核心",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/common/巨像核心"
+  },
+  {
+    "resId": 15036,
+    "name": "翡翠之心",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/common/翡翠之心"
+  },
+  {
+    "resId": 15037,
+    "name": "震地重靴",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/common/震地重靴"
+  },
+  {
+    "resId": 15038,
+    "name": "星辉密钥",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/common/星辉密钥"
+  },
+  {
+    "resId": 15039,
+    "name": "星辉斗篷",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/common/星辉斗篷"
+  },
+  {
+    "resId": 15040,
+    "name": "狂暴战盔",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/common/狂暴战盔"
+  },
+  {
+    "resId": 15041,
+    "name": "荆棘韧甲",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/common/荆棘韧甲"
+  },
+  {
+    "resId": 15042,
+    "name": "黄金号角",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/common/黄金号角"
+  },
+  {
+    "resId": 15043,
+    "name": "谐舞之鼓",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/common/谐舞之鼓"
+  },
+  {
+    "resId": 15044,
+    "name": "雄狮披风",
+    "desc": "用于解锁宝物",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/common/雄狮披风"
+  },
+  {
+    "resId": 16000,
+    "name": "通用兵种经验",
+    "desc": "全种族通用兵种经验，对应种  \n\n族经验不足时，可替代消耗"
+  },
+  {
+    "resId": 16001,
+    "name": "精灵弓箭手",
+    "desc": "精灵弓箭手",
+    "useType": 1,
+    "type": 5,
+    "quality": 3,
+    "icon": "icons/item/图标_兵书弓兵",
+    "access": [
+      7,
+      8,
+      9
+    ],
+    "useJump": 5
+  },
+  {
+    "resId": 16002,
+    "name": "猎头者",
+    "desc": "猎头者",
+    "useType": 1,
+    "type": 5,
+    "quality": 3,
+    "icon": "icons/item/图标_兵书长枪兵",
+    "access": [
+      7,
+      8,
+      9
+    ],
+    "useJump": 5
+  },
+  {
+    "resId": 16003,
+    "name": "花果兵种经验",
+    "desc": "盆栽兵种经验",
+    "useType": 1,
+    "type": 5,
+    "quality": 3,
+    "icon": "icons/item/图标_兵书火法师",
+    "access": [
+      7,
+      8,
+      9
+    ],
+    "useJump": 5
+  },
+  {
+    "resId": 16004,
+    "name": "蘑菇兵种经验",
+    "desc": "僵尸兵种经验",
+    "useType": 1,
+    "type": 5,
+    "quality": 3,
+    "icon": "icons/item/图标_兵书轻骑兵",
+    "access": [
+      7,
+      8,
+      9
+    ],
+    "useJump": 5
+  },
+  {
+    "resId": 16005,
+    "name": "盆栽兵种经验",
+    "desc": "用于提升冰法师等级",
+    "useType": 1,
+    "type": 5,
+    "quality": 3,
+    "icon": "icons/item/图标_兵书冰法师",
+    "access": [
+      7,
+      8,
+      9
+    ],
+    "useJump": 5
+  },
+  {
+    "resId": 16006,
+    "name": "僵尸兵种经验",
+    "desc": "用于提升步兵等级",
+    "useType": 1,
+    "type": 5,
+    "quality": 3,
+    "icon": "icons/item/图标_兵书刀盾兵",
+    "access": [
+      7,
+      8,
+      9
+    ],
+    "useJump": 5
+  },
+  {
+    "resId": 16007,
+    "name": "熊猫人武僧卷轴",
+    "desc": "用于提升熊猫人武僧等级",
+    "useType": 1,
+    "type": 5,
+    "quality": 3,
+    "icon": "icons/item/图标_兵书双刀傀儡",
+    "access": [
+      7,
+      8,
+      9
+    ],
+    "useJump": 5
+  },
+  {
+    "resId": 16008,
+    "name": "萨满卷轴",
+    "desc": "用于提升萨满等级",
+    "useType": 1,
+    "type": 5,
+    "quality": 3,
+    "icon": "icons/item/图标_兵书雷法师",
+    "access": [
+      7,
+      8,
+      9
+    ],
+    "useJump": 5
+  },
+  {
+    "resId": 16009,
+    "name": "亡灵骑士卷轴",
+    "desc": "用于提升亡灵骑士等级",
+    "useType": 1,
+    "type": 5,
+    "quality": 3,
+    "icon": "icons/item/图标_兵书巨马傀儡",
+    "access": [
+      7,
+      8,
+      9
+    ],
+    "useJump": 5
+  },
+  {
+    "resId": 16010,
+    "name": "猛禽德鲁伊卷轴",
+    "desc": "用于提升猛禽德鲁伊等级",
+    "useType": 1,
+    "type": 5,
+    "quality": 3,
+    "icon": "icons/item/图标_兵书风法师",
+    "access": [
+      7,
+      8,
+      9
+    ],
+    "useJump": 5
+  },
+  {
+    "resId": 16011,
+    "name": "女猎手卷轴",
+    "desc": "用于提升女猎手等级",
+    "useType": 1,
+    "type": 5,
+    "quality": 3,
+    "icon": "icons/item/图标_兵书巨弩傀儡",
+    "access": [
+      7,
+      8,
+      9
+    ],
+    "useJump": 5
+  },
+  {
+    "resId": 16012,
+    "name": "牛头人战士卷轴",
+    "desc": "用于提升牛头人战士等级",
+    "useType": 1,
+    "type": 5,
+    "quality": 3,
+    "icon": "icons/item/图标_兵书斧盾兵",
+    "access": [
+      7,
+      8,
+      9
+    ],
+    "useJump": 5
+  },
+  {
+    "resId": 16013,
+    "name": "兽人驭兽师卷轴",
+    "desc": "用于提升兽人驭兽师等级",
+    "useType": 1,
+    "type": 5,
+    "quality": 3,
+    "icon": "icons/item/图标_兵书驾驭兽师",
+    "access": [
+      7,
+      8,
+      9
+    ],
+    "useJump": 5
+  },
+  {
+    "resId": 16014,
+    "name": "天赋石",
+    "desc": "用于提升民兵天赋",
+    "useType": 1,
+    "type": 13,
+    "quality": 3,
+    "icon": "icons/common/图标_突破丹",
+    "access": [
+      7,
+      8,
+      9
+    ],
+    "useJump": 4
+  },
+  {
+    "resId": 17000,
+    "name": "兵营·通用",
+    "desc": "用于提升兵营星级",
+    "useType": 1,
+    "type": 1,
+    "quality": 5,
+    "icon": "icons/item/图标_通用兵营升星材料橙",
+    "access": [
+      26
+    ],
+    "useJump": 19
+  },
+  {
+    "resId": 17001,
+    "name": "战争古树",
+    "desc": "激活属性：暴击伤害+10%，射手系伤害+20%\n解锁技能：初始解锁精灵弓箭手选项，精灵弓箭手伤害-20%",
+    "useType": 1,
+    "type": 13,
+    "quality": 6,
+    "icon": "icons/common/战争古树",
+    "access": [
+      8
+    ],
+    "useJump": 19
+  },
+  {
+    "resId": 17002,
+    "name": "巨魔兵营",
+    "desc": "激活属性：暴击伤害+10%，斗士系伤害+20%\n解锁技能：初始解锁猎头者选项，猎头者伤害-20%",
+    "useType": 1,
+    "type": 13,
+    "quality": 5,
+    "icon": "icons/common/巨魔兵营",
+    "access": [
+      8
+    ],
+    "useJump": 19
+  },
+  {
+    "resId": 17003,
+    "name": "火焰圣地",
+    "desc": "激活属性：暴击伤害+10%，法师系伤害+15%\n解锁技能：初始解锁火法师选项，火法师伤害-20%",
+    "useType": 1,
+    "type": 13,
+    "quality": 6,
+    "icon": "icons/common/火焰圣地",
+    "access": [
+      8
+    ],
+    "useJump": 19
+  },
+  {
+    "resId": 17004,
+    "name": "狼圈",
+    "desc": "激活属性：暴击伤害+10%，骑兵系伤害+20%\n解锁技能：初始解锁狼骑兵选项，狼骑兵伤害-20%",
+    "useType": 1,
+    "type": 13,
+    "quality": 6,
+    "icon": "icons/common/狼圈",
+    "access": [
+      8
+    ],
+    "useJump": 19
+  },
+  {
+    "resId": 17005,
+    "name": "冰霜圣地",
+    "desc": "激活属性：暴击伤害+10%，法师系伤害+15%\n解锁技能：初始解锁冰法师选项，冰法师伤害-20%",
+    "useType": 1,
+    "type": 13,
+    "quality": 6,
+    "icon": "icons/common/冰霜圣地",
+    "access": [
+      8
+    ],
+    "useJump": 19
+  },
+  {
+    "resId": 17006,
+    "name": "步兵营",
+    "desc": "激活属性：暴击伤害+10%，重装系伤害+20%\n解锁技能：初始解锁步兵选项，步兵伤害-20%",
+    "useType": 1,
+    "type": 13,
+    "quality": 6,
+    "icon": "icons/common/步兵营",
+    "access": [
+      8
+    ],
+    "useJump": 19
+  },
+  {
+    "resId": 17007,
+    "name": "小酒馆",
+    "desc": "激活属性：暴击伤害+10%，斗士系伤害+20%\n解锁技能：初始解锁熊猫人武僧选项，熊猫人武僧伤害-20%",
+    "useType": 1,
+    "type": 13,
+    "quality": 5,
+    "icon": "icons/common/小酒馆",
+    "access": [
+      8
+    ],
+    "useJump": 19
+  },
+  {
+    "resId": 17008,
+    "name": "风暴圣地",
+    "desc": "激活属性：暴击伤害+10%，法师系伤害+15%\n解锁技能：初始解锁萨满选项，萨满伤害-20%",
+    "useType": 1,
+    "type": 13,
+    "quality": 5,
+    "icon": "icons/common/风暴圣地",
+    "access": [
+      8
+    ],
+    "useJump": 19
+  },
+  {
+    "resId": 17009,
+    "name": "大墓地",
+    "desc": "激活属性：暴击伤害+10%，骑兵系伤害+20%\n解锁技能：初始解锁亡灵骑士选项，亡灵骑士伤害-20%",
+    "useType": 1,
+    "type": 13,
+    "quality": 6,
+    "icon": "icons/common/大墓地",
+    "access": [
+      8
+    ],
+    "useJump": 19
+  },
+  {
+    "resId": 17010,
+    "name": "风之古树",
+    "desc": "激活属性：暴击伤害+10%，法师系伤害+15%\n解锁技能：初始解锁猛禽德鲁伊选项，猛禽德鲁伊伤害-20%",
+    "useType": 1,
+    "type": 13,
+    "quality": 6,
+    "icon": "icons/common/风之古树",
+    "access": [
+      8
+    ],
+    "useJump": 19
+  },
+  {
+    "resId": 17011,
+    "name": "狂猎古树",
+    "desc": "激活属性：暴击伤害+10%，弓箭系伤害+20%\n解锁技能：初始解锁女猎手选项，女猎手伤害-20%",
+    "useType": 1,
+    "type": 13,
+    "quality": 5,
+    "icon": "icons/common/狂猎古树",
+    "access": [
+      8
+    ],
+    "useJump": 19
+  },
+  {
+    "resId": 17012,
+    "name": "牛头人兽栏",
+    "desc": "激活属性：暴击伤害+10%，重装系伤害+20%\n解锁技能：初始解锁牛头人战士选项，牛头人战士伤害-20%",
+    "useType": 1,
+    "type": 13,
+    "quality": 5,
+    "icon": "icons/common/牛头人兽栏",
+    "access": [
+      8
+    ],
+    "useJump": 19
+  },
+  {
+    "resId": 17013,
+    "name": "兽栏",
+    "desc": "激活属性：暴击伤害+10%，召唤系伤害+20%\n解锁技能：初始解锁兽人驭兽师选项，兽人驭兽师伤害-20%",
+    "useType": 1,
+    "type": 13,
+    "quality": 5,
+    "icon": "icons/common/兽栏",
+    "access": [
+      8
+    ],
+    "useJump": 19
+  },
+  {
+    "resId": 17014,
+    "name": "民兵营",
+    "desc": "激活属性：暴击伤害+10%，民兵伤害+20%\n解锁技能：民兵刷新时获得【凌波微步】，闪避+50%，移速+20%，持续8秒",
+    "useType": 1,
+    "type": 13,
+    "quality": 5,
+    "icon": "icons/common/民兵营",
+    "access": [
+      8
+    ],
+    "useJump": 19
+  },
+  {
+    "resId": 17015,
+    "name": "高级兵营·通用",
+    "desc": "用于提升兵营星级",
+    "useType": 1,
+    "type": 1,
+    "quality": 6,
+    "icon": "icons/item/图标_通用兵营升星材料红",
+    "access": [
+      26
+    ],
+    "useJump": 19
+  },
+  {
+    "resId": 18000,
+    "name": "英雄·通用",
+    "desc": "用于英雄升星",
+    "useType": 1,
+    "type": 12,
+    "quality": 5,
+    "icon": "icons/item/图标_通用英雄升星材料橙",
+    "access": [
+      26
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 18001,
+    "name": "民兵",
+    "desc": "用于英雄升级",
+    "useType": 1,
+    "type": 12,
+    "quality": 1,
+    "icon": "icons/item/请神牛头碎片",
+    "access": [
+      8
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 18002,
+    "name": "金矿",
+    "desc": "用于英雄升级",
+    "useType": 1,
+    "type": 12,
+    "quality": 1,
+    "icon": "icons/item/请神马面碎片",
+    "access": [
+      8
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 18003,
+    "name": "精灵弓箭手",
+    "desc": "用于英雄升级",
+    "useType": 1,
+    "type": 12,
+    "quality": 2,
+    "icon": "icons/item/请神黑无常碎片",
+    "access": [
+      8
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 18004,
+    "name": "骷髅战士",
+    "desc": "用于英雄升级",
+    "useType": 1,
+    "type": 12,
+    "quality": 2,
+    "icon": "icons/item/请神白无常碎片",
+    "access": [
+      8
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 18005,
+    "name": "火法师",
+    "desc": "用于英雄升级",
+    "useType": 1,
+    "type": 12,
+    "quality": 3,
+    "icon": "icons/item/请神牛头碎片",
+    "access": [
+      8
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 18006,
+    "name": "女猎手",
+    "desc": "用于英雄升级",
+    "useType": 1,
+    "type": 12,
+    "quality": 3,
+    "icon": "icons/item/请神马面碎片",
+    "access": [
+      8
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 18007,
+    "name": "熊猫人",
+    "desc": "用于英雄升级",
+    "useType": 1,
+    "type": 12,
+    "quality": 4,
+    "icon": "icons/item/请神黑无常碎片",
+    "access": [
+      8
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 18008,
+    "name": "铜须",
+    "desc": "用于英雄升级",
+    "useType": 1,
+    "type": 12,
+    "quality": 4,
+    "icon": "icons/item/请神白无常碎片",
+    "access": [
+      8
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 18009,
+    "name": "剑圣",
+    "desc": "用于英雄升级",
+    "useType": 1,
+    "type": 12,
+    "quality": 4,
+    "icon": "icons/item/请神牛头碎片",
+    "access": [
+      8
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 18010,
+    "name": "近卫半人马",
+    "desc": "用于英雄升级",
+    "useType": 1,
+    "type": 12,
+    "quality": 4,
+    "icon": "icons/item/请神马面碎片",
+    "access": [
+      8
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 18011,
+    "name": "恶魔卫士",
+    "desc": "用于英雄升级",
+    "useType": 1,
+    "type": 12,
+    "quality": 1,
+    "icon": "icons/item/请神黑无常碎片",
+    "access": [
+      8
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 18012,
+    "name": "冰霜巨龙",
+    "desc": "用于英雄升级",
+    "useType": 1,
+    "type": 12,
+    "quality": 1,
+    "icon": "icons/item/请神白无常碎片",
+    "access": [
+      8
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 18013,
+    "name": "冰法师",
+    "desc": "用于英雄升级",
+    "useType": 1,
+    "type": 12,
+    "quality": 3,
+    "icon": "icons/item/请神牛头碎片",
+    "access": [
+      8
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 18014,
+    "name": "猎头者",
+    "desc": "用于英雄升级",
+    "useType": 1,
+    "type": 12,
+    "quality": 3,
+    "icon": "icons/item/请神牛头碎片",
+    "access": [
+      8
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 18015,
+    "name": "玛法",
+    "desc": "用于英雄升级",
+    "useType": 1,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/item/请神马面碎片",
+    "access": [
+      8
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 18016,
+    "name": "驭兽师",
+    "desc": "用于英雄升级",
+    "useType": 1,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/item/请神黑无常碎片",
+    "access": [
+      8
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 18017,
+    "name": "阿尔萨斯",
+    "desc": "用于英雄升级",
+    "useType": 1,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/item/请神白无常碎片",
+    "access": [
+      8
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 18018,
+    "name": "萨尔",
+    "desc": "用于英雄升级",
+    "useType": 1,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/item/请神牛头碎片",
+    "access": [
+      8
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 18019,
+    "name": "泰兰德",
+    "desc": "用于英雄升级",
+    "useType": 1,
+    "type": 1,
+    "quality": 1,
+    "icon": "icons/item/请神马面碎片",
+    "access": [
+      8
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 18020,
+    "name": "九头蛇",
+    "desc": "用于英雄升级",
+    "useType": 1,
+    "type": 1,
+    "quality": 2,
+    "icon": "icons/item/请神黑无常碎片",
+    "access": [
+      8
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 18021,
+    "name": "狼骑兵",
+    "desc": "用于英雄升级",
+    "useType": 1,
+    "type": 1,
+    "quality": 2,
+    "icon": "icons/item/请神白无常碎片",
+    "access": [
+      8
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 18022,
+    "name": "德鲁伊",
+    "desc": "用于英雄升级",
+    "useType": 1,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/item/请神牛头碎片",
+    "access": [
+      8
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 18023,
+    "name": "陈熊猫",
+    "desc": "用于英雄升级",
+    "useType": 1,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/item/请神马面碎片",
+    "access": [
+      8
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 18024,
+    "name": "萨满",
+    "desc": "用于英雄升级",
+    "useType": 1,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/item/请神黑无常碎片",
+    "access": [
+      8
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 18025,
+    "name": "乌瑞恩",
+    "desc": "用于英雄升级",
+    "useType": 1,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/item/请神白无常碎片",
+    "access": [
+      8
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 18026,
+    "name": "亡灵法师",
+    "desc": "用于英雄升级",
+    "useType": 1,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/item/请神牛头碎片",
+    "access": [
+      8
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 18027,
+    "name": "伊利丹",
+    "desc": "用于英雄升级",
+    "useType": 1,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/item/请神牛头碎片",
+    "access": [
+      8
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 18028,
+    "name": "凯尔萨斯",
+    "desc": "用于英雄升级",
+    "useType": 1,
+    "type": 1,
+    "quality": 1,
+    "icon": "icons/item/请神马面碎片",
+    "access": [
+      8
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 18029,
+    "name": "亡灵骑士",
+    "desc": "用于英雄升级",
+    "useType": 1,
+    "type": 1,
+    "quality": 2,
+    "icon": "icons/item/请神黑无常碎片",
+    "access": [
+      8
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 18030,
+    "name": "牛头人",
+    "desc": "用于英雄升级",
+    "useType": 1,
+    "type": 1,
+    "quality": 2,
+    "icon": "icons/item/请神白无常碎片",
+    "access": [
+      8
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 18031,
+    "name": "步兵",
+    "desc": "用于英雄升级",
+    "useType": 1,
+    "type": 1,
+    "quality": 3,
+    "icon": "icons/item/请神牛头碎片",
+    "access": [
+      8
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 18032,
+    "name": "近卫变节巫师",
+    "desc": "用于英雄升级",
+    "useType": 1,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/item/请神马面碎片",
+    "access": [
+      8
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 18033,
+    "name": "血蹄",
+    "desc": "用于英雄升级",
+    "useType": 1,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/item/请神黑无常碎片",
+    "access": [
+      8
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 18034,
+    "name": "吉安娜",
+    "desc": "用于英雄升级",
+    "useType": 1,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/item/请神白无常碎片",
+    "access": [
+      8
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 18035,
+    "name": "刺杀者",
+    "desc": "用于英雄升级",
+    "useType": 1,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/item/请神牛头碎片",
+    "access": [
+      8
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 18036,
+    "name": "雷克萨",
+    "desc": "用于英雄升级",
+    "useType": 1,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/item/请神牛头碎片",
+    "access": [
+      8
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 18037,
+    "name": "希尔瓦娜斯",
+    "desc": "用于英雄升级",
+    "useType": 1,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/item/请神牛头碎片",
+    "access": [
+      8
+    ],
+    "useJump": 18
+  },
+  {
+    "resId": 19001,
+    "name": "青铜宝箱",
+    "useType": 1,
+    "type": 1,
+    "quality": 1
+  },
+  {
+    "resId": 19002,
+    "name": "白银宝箱",
+    "useType": 1,
+    "type": 1,
+    "quality": 2
+  },
+  {
+    "resId": 19003,
+    "name": "‌黄金宝箱‌",
+    "useType": 1,
+    "type": 1,
+    "quality": 3
+  },
+  {
+    "resId": 19101,
+    "name": "青铜-绿色掉落池一",
+    "useType": 2,
+    "type": 2,
+    "quality": 1
+  },
+  {
+    "resId": 19102,
+    "name": "青铜-蓝色掉落池一",
+    "useType": 2,
+    "type": 2,
+    "quality": 2
+  },
+  {
+    "resId": 19103,
+    "name": "青铜-紫色掉落池一",
+    "useType": 2,
+    "type": 2,
+    "quality": 3
+  },
+  {
+    "resId": 19104,
+    "name": "白银-绿色掉落池一",
+    "useType": 2,
+    "type": 2,
+    "quality": 1
+  },
+  {
+    "resId": 19105,
+    "name": "白银-蓝色掉落池一",
+    "useType": 2,
+    "type": 2,
+    "quality": 2
+  },
+  {
+    "resId": 19106,
+    "name": "白银-紫色掉落池一",
+    "useType": 2,
+    "type": 2,
+    "quality": 3
+  },
+  {
+    "resId": 19401,
+    "name": "保底池一",
+    "useType": 2,
+    "type": 2,
+    "quality": 2
+  },
+  {
+    "resId": 19501,
+    "name": "希瓦的守护",
+    "desc": "用于解锁神器，并获得神器技能",
+    "useType": 1,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/skill/主公技圆1",
+    "access": [
+      26
+    ]
+  },
+  {
+    "resId": 19502,
+    "name": "致残之弩",
+    "desc": "用于解锁神器，并获得神器技能",
+    "useType": 1,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/skill/主公技圆2",
+    "access": [
+      26
+    ]
+  },
+  {
+    "resId": 19503,
+    "name": "血腥榴弹",
+    "desc": "用于解锁神器，并获得神器技能",
+    "useType": 1,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/skill/主公技圆3",
+    "access": [
+      26
+    ]
+  }
+]

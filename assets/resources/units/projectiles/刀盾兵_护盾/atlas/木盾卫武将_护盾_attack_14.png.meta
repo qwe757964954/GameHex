@@ -1,0 +1,134 @@
+{
+  "ver": "1.0.27",
+  "importer": "image",
+  "imported": true,
+  "uuid": "b641e492-7481-412d-812b-037e80c0ceeb",
+  "files": [
+    ".json",
+    ".png"
+  ],
+  "subMetas": {
+    "6c48a": {
+      "importer": "texture",
+      "uuid": "b641e492-7481-412d-812b-037e80c0ceeb@6c48a",
+      "displayName": "木盾卫武将_护盾_attack_14",
+      "id": "6c48a",
+      "name": "texture",
+      "userData": {
+        "wrapModeS": "clamp-to-edge",
+        "wrapModeT": "clamp-to-edge",
+        "imageUuidOrDatabaseUri": "b641e492-7481-412d-812b-037e80c0ceeb",
+        "isUuid": true,
+        "visible": false,
+        "minfilter": "linear",
+        "magfilter": "linear",
+        "mipfilter": "none",
+        "anisotropy": 0
+      },
+      "ver": "1.0.22",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "f9941": {
+      "importer": "sprite-frame",
+      "uuid": "b641e492-7481-412d-812b-037e80c0ceeb@f9941",
+      "displayName": "木盾卫武将_护盾_attack_14",
+      "id": "f9941",
+      "name": "spriteFrame",
+      "userData": {
+        "trimThreshold": 1,
+        "rotated": false,
+        "offsetX": 2,
+        "offsetY": -1,
+        "trimX": 8,
+        "trimY": 16,
+        "width": 88,
+        "height": 70,
+        "rawWidth": 100,
+        "rawHeight": 100,
+        "borderTop": 0,
+        "borderBottom": 0,
+        "borderLeft": 0,
+        "borderRight": 0,
+        "packable": true,
+        "pixelsToUnit": 100,
+        "pivotX": 0.5,
+        "pivotY": 0.5,
+        "meshType": 0,
+        "vertices": {
+          "rawPosition": [
+            -44,
+            -35,
+            0,
+            44,
+            -35,
+            0,
+            -44,
+            35,
+            0,
+            44,
+            35,
+            0
+          ],
+          "indexes": [
+            0,
+            1,
+            2,
+            2,
+            1,
+            3
+          ],
+          "uv": [
+            8,
+            84,
+            96,
+            84,
+            8,
+            14,
+            96,
+            14
+          ],
+          "nuv": [
+            0.08,
+            0.14,
+            0.96,
+            0.14,
+            0.08,
+            0.84,
+            0.96,
+            0.84
+          ],
+          "minPos": [
+            -44,
+            -35,
+            0
+          ],
+          "maxPos": [
+            44,
+            35,
+            0
+          ]
+        },
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "b641e492-7481-412d-812b-037e80c0ceeb@6c48a",
+        "atlasUuid": "",
+        "trimType": "auto"
+      },
+      "ver": "1.0.12",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    }
+  },
+  "userData": {
+    "type": "sprite-frame",
+    "fixAlphaTransparencyArtifacts": false,
+    "hasAlpha": true,
+    "redirect": "b641e492-7481-412d-812b-037e80c0ceeb@6c48a"
+  }
+}

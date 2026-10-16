@@ -1,0 +1,62 @@
+syntax = "proto2";
+
+package com.cca.core.network.cmd;
+
+message ClientCmdData {
+
+	optional bytes append_data = 4;
+	required sint32 client_index = 2;
+	optional bytes data = 3;
+	required sint32 message_id = 1;
+}
+
+message CmdCache {
+
+	required string cache_name = 1;
+	repeated bytes data = 3;
+	required int32 type = 2;
+}
+
+message CmdCacheField {
+
+	required bytes data = 2;
+	required int32 field_number = 1;
+}
+
+message CmdCacheUpdateByField {
+
+	repeated CmdCacheField fields = 2;
+	required bytes key = 1;
+}
+
+message CmdDouble {
+
+	required double value = 1;
+}
+
+message CmdFloat {
+
+	required float value = 1;
+}
+
+message CmdInt32 {
+
+	required int32 value = 1;
+}
+
+message CmdInt64 {
+
+	required int64 value = 1;
+}
+
+message ServerCmdData {
+
+	required sint32 client_index = 1;
+	repeated CmdCache cmd_caches = 5;
+	required bool compress = 6;
+	required bytes data = 4;
+	repeated sint32 message_ids = 2;
+	required bool result = 7;
+	repeated sint32 splits = 3;
+}
+

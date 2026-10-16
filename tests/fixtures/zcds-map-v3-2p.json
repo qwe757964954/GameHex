@@ -1,0 +1,34 @@
+{
+  "id": "zcds-map-v3-2p",
+  "name": "zcds-map-v3-2p",
+  "version": 3,
+  "rows": 20,
+  "columns": 12,
+  "playerCount": 2,
+  "cityMode": "fixed",
+  "mirrorVertical": true,
+  "mirrorHorizontal": false,
+  "mirror180": false,
+  "ascii": [
+    "111111111111",
+    "111111111111",
+    "111111111111",
+    "111111111111",
+    "111111111111",
+    "111111111111",
+    "111111111111",
+    "111111111111",
+    "111111111111",
+    "111111111111"
+  ],
+  "homes": [
+    {
+      "row": 18,
+      "column": 1
+    },
+    {
+      "row": 1,
+      "column": 1
+    }
+  ]
+}

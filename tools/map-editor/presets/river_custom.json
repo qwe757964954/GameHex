@@ -1,0 +1,179 @@
+{
+  "id": "river_custom",
+  "name": "河道自选",
+  "version": 3,
+  "rows": 20,
+  "columns": 11,
+  "playerCount": 2,
+  "cityMode": "select",
+  "mirrorVertical": true,
+  "mirrorHorizontal": false,
+  "mirror180": false,
+  "ascii": [
+    "..00...00..",
+    "..00...00..",
+    "..00...00..",
+    "..00...00..",
+    ".000000000.",
+    "00000000000",
+    "00000000000",
+    "00000000000",
+    "00000000000",
+    "00000000000"
+  ],
+  "homes": [
+    {
+      "row": 17,
+      "column": 5
+    },
+    {
+      "row": 3,
+      "column": 5
+    }
+  ],
+  "resourcePoints": [
+    {
+      "row": 15,
+      "column": 2,
+      "pool": {
+        "artifact_charge": 1
+      }
+    },
+    {
+      "row": 14,
+      "column": 8,
+      "pool": {
+        "gold": 1
+      }
+    },
+    {
+      "row": 4,
+      "column": 2,
+      "pool": {
+        "gold": 1
+      }
+    },
+    {
+      "row": 5,
+      "column": 7,
+      "pool": {
+        "gold": 1
+      }
+    },
+    {
+      "row": 9,
+      "column": 7,
+      "pool": {
+        "unit_cap": 1
+      }
+    },
+    {
+      "row": 9,
+      "column": 3,
+      "pool": {
+        "unit_cap": 1
+      }
+    },
+    {
+      "row": 18,
+      "column": 3,
+      "pool": {
+        "unit_cap": 1
+      }
+    },
+    {
+      "row": 18,
+      "column": 7,
+      "pool": {
+        "unit_cap": 1
+      }
+    },
+    {
+      "row": 2,
+      "column": 8,
+      "pool": {
+        "unit_cap": 1
+      }
+    },
+    {
+      "row": 1,
+      "column": 4,
+      "pool": {
+        "unit_cap": 1
+      }
+    },
+    {
+      "row": 2,
+      "column": 0,
+      "pool": {
+        "gold": 1
+      }
+    },
+    {
+      "row": 12,
+      "column": 2,
+      "pool": {
+        "artifact_charge": 1
+      }
+    },
+    {
+      "row": 12,
+      "column": 7,
+      "pool": {
+        "artifact_charge": 1
+      }
+    }
+  ],
+  "art": {
+    "tiles": {
+      "5,0": "image/decor/wasteland/barricade",
+      "5,10": "image/decor/wasteland/cao1",
+      "6,0": "image/decor/wasteland/st1",
+      "6,1": "image/decor/wasteland/cao2",
+      "6,5": "image/decor/wasteland/cao2",
+      "6,10": "image/decor/wasteland/jeep",
+      "7,0": "image/decor/wasteland/cao2",
+      "7,1": "image/decor/wasteland/cao2",
+      "7,4": "image/decor/wasteland/cannon",
+      "7,5": "image/decor/wasteland/cao2",
+      "7,9": "image/decor/wasteland/cao2",
+      "7,10": "image/decor/wasteland/st1",
+      "8,0": "image/decor/wasteland/jeep",
+      "8,1": "image/decor/wasteland/st1",
+      "8,5": "image/decor/wasteland/cao2",
+      "8,6": "image/decor/wasteland/cao3",
+      "8,9": "image/decor/wasteland/cao2",
+      "9,0": "image/decor/wasteland/tires",
+      "9,1": "image/decor/wasteland/cao2",
+      "9,4": "image/decor/wasteland/cao3",
+      "9,5": "image/decor/wasteland/cao3",
+      "9,6": "image/decor/wasteland/st1",
+      "9,9": "image/decor/wasteland/cao2",
+      "9,10": "image/decor/wasteland/cao1",
+      "10,0": "image/decor/wasteland/tires",
+      "10,1": "image/decor/wasteland/cao2",
+      "10,4": "image/decor/wasteland/cao3",
+      "10,5": "image/decor/wasteland/cao3",
+      "10,6": "image/decor/wasteland/st1",
+      "10,9": "image/decor/wasteland/cao2",
+      "10,10": "image/decor/wasteland/cao1",
+      "11,0": "image/decor/wasteland/jeep",
+      "11,1": "image/decor/wasteland/st1",
+      "11,5": "image/decor/wasteland/cao2",
+      "11,6": "image/decor/wasteland/cao3",
+      "11,9": "image/decor/wasteland/cao2",
+      "12,0": "image/decor/wasteland/cao2",
+      "12,1": "image/decor/wasteland/cao2",
+      "12,4": "image/decor/wasteland/cannon",
+      "12,5": "image/decor/wasteland/cao2",
+      "12,9": "image/decor/wasteland/cao2",
+      "12,10": "image/decor/wasteland/st1",
+      "13,0": "image/decor/wasteland/st1",
+      "13,1": "image/decor/wasteland/cao2",
+      "13,5": "image/decor/wasteland/cao2",
+      "13,10": "image/decor/wasteland/jeep",
+      "14,0": "image/decor/wasteland/barricade",
+      "14,10": "image/decor/wasteland/cao1"
+    }
+  }
+}

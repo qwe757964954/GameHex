@@ -1,0 +1,107 @@
+// Cocos Creator 3.8 Sprite shader. CircleAvatar supplies frame-local UV data.
+CCEffect %{
+  techniques:
+  - passes:
+    - vert: avatar-vs:vert
+      frag: avatar-fs:frag
+      depthStencilState:
+        depthTest: false
+        depthWrite: false
+      blendState:
+        targets:
+        - blend: true
+          blendSrc: src_alpha
+          blendDst: one_minus_src_alpha
+          blendSrcAlpha: one
+          blendDstAlpha: one_minus_src_alpha
+      rasterizerState:
+        cullMode: none
+      properties:
+        uvOrigin: { value: [0, 1, 0, 0] }
+        uvAxes: { value: [1, 0, 0, -1] }
+        avatarSize: { value: [100, 100, 100, 100] }
+        circleParams: { value: [0.5, 1, 1, 0] }
+}%
+
+CCProgram avatar-vs %{
+  precision highp float;
+  #include <builtin/uniforms/cc-global>
+  #if USE_LOCAL
+    #include <builtin/uniforms/cc-local>
+  #endif
+  in vec3 a_position;
+  in vec2 a_texCoord;
+  in vec4 a_color;
+  out vec2 frameUV;
+  out vec4 color;
+
+  vec4 vert () {
+    vec4 pos = vec4(a_position, 1.0);
+    #if USE_LOCAL
+      pos = cc_matWorld * pos;
+    #endif
+    #if USE_PIXEL_ALIGNMENT
+      pos = cc_matView * pos;
+      pos.xyz = floor(pos.xyz);
+      pos = cc_matProj * pos;
+    #else
+      pos = cc_matViewProj * pos;
+    #endif
+    frameUV = a_texCoord;
+    color = a_color;
+    return pos;
+  }
+}%
+
+CCProgram avatar-fs %{
+  precision highp float;
+  #include <builtin/internal/embedded-alpha>
+  #if SAMPLE_FROM_RT
+    #include <builtin/uniforms/cc-global>
+    #include <common/common-define>
+  #endif
+  in vec2 frameUV;
+  in vec4 color;
+  #pragma builtin(local)
+  layout(set = 2, binding = 12) uniform sampler2D cc_spriteTexture;
+
+  uniform Avatar {
+    vec4 uvOrigin;
+    vec4 uvAxes;
+    // xy: node dimensions; zw: source frame dimensions (before atlas rotation).
+    vec4 avatarSize;
+    // radius / shorter side, feather in UI units, cover enabled, reserved.
+    vec4 circleParams;
+  };
+
+  vec4 frag () {
+    // Project onto the frame's two orthogonal UV axes, including rotated atlas frames.
+    vec2 delta = frameUV - uvOrigin.xy;
+    vec2 localUV = vec2(
+      dot(delta, uvAxes.xy) / max(dot(uvAxes.xy, uvAxes.xy), 1e-12),
+      dot(delta, uvAxes.zw) / max(dot(uvAxes.zw, uvAxes.zw), 1e-12)
+    );
+    vec2 size = max(avatarSize.xy, vec2(0.001));
+    vec2 sampleUV = localUV;
+    if (circleParams.z > 0.5) {
+      vec2 sourceSize = max(avatarSize.zw, vec2(0.001));
+      float scale = max(size.x / sourceSize.x, size.y / sourceSize.y);
+      sampleUV = (localUV - 0.5) * size / (sourceSize * scale) + 0.5;
+    }
+    vec2 textureUV = uvOrigin.xy + uvAxes.xy * sampleUV.x + uvAxes.zw * sampleUV.y;
+    #if SAMPLE_FROM_RT
+      CC_HANDLE_RT_SAMPLE_FLIP(textureUV);
+    #endif
+    vec4 result = CCSampleWithAlphaSeparated(cc_spriteTexture, textureUV);
+    #if IS_GRAY
+      result.rgb = vec3(dot(result.rgb, vec3(0.2126, 0.7152, 0.0722)));
+    #endif
+    float radius = clamp(circleParams.x, 0.0, 0.5) * min(size.x, size.y);
+    float distanceToCenter = length((localUV - 0.5) * size);
+    float feather = max(min(circleParams.y, radius), 0.0001);
+    float coverage = 1.0 - smoothstep(radius - feather, radius, distanceToCenter);
+    result *= color;
+    result.a *= coverage;
+    return result;
+  }
+}%

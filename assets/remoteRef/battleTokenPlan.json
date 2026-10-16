@@ -1,0 +1,13 @@
+[{"resId":1,"type":1,"order":1,"rmb":0,"openCostItemResId":0,"openCostItemNum":0,"rewardPlan":1},
+{"resId":2,"type":1,"order":2,"rmb":7,"openCostItemResId":0,"openCostItemNum":0,"rewardPlan":2},
+{"resId":3,"type":1,"order":3,"rmb":8,"openCostItemResId":0,"openCostItemNum":0,"rewardPlan":3},
+{"resId":4,"type":2,"order":1,"rmb":0,"openCostItemResId":0,"openCostItemNum":0,"rewardPlan":4},
+{"resId":5,"type":2,"order":2,"rmb":15,"openCostItemResId":0,"openCostItemNum":0,"rewardPlan":5},
+{"resId":6,"type":3,"order":1,"rmb":0,"openCostItemResId":0,"openCostItemNum":0,"rewardPlan":6},
+{"resId":7,"type":3,"order":2,"rmb":16,"openCostItemResId":0,"openCostItemNum":0,"rewardPlan":7},
+{"resId":8,"type":4,"order":1,"rmb":0,"openCostItemResId":0,"openCostItemNum":0,"rewardPlan":8},
+{"resId":9,"type":4,"order":2,"rmb":0,"openCostItemResId":10,"openCostItemNum":680,"rewardPlan":9},
+{"resId":10,"type":5,"order":1,"rmb":0,"openCostItemResId":0,"openCostItemNum":0,"rewardPlan":10},
+{"resId":11,"type":5,"order":2,"rmb":19,"openCostItemResId":0,"openCostItemNum":0,"rewardPlan":11},
+{"resId":12,"type":6,"order":1,"rmb":0,"openCostItemResId":0,"openCostItemNum":0,"rewardPlan":12},
+{"resId":13,"type":6,"order":2,"rmb":20,"openCostItemResId":0,"openCostItemNum":0,"rewardPlan":13}]

@@ -1,0 +1,40 @@
+
+#///////////////////////////
+# Cocos Creator 3D Project
+#///////////////////////////
+library/
+temp/
+local/
+build/
+profiles/
+native
+#//////////////////////////
+# NPM
+#//////////////////////////
+node_modules/
+
+#//////////////////////////
+# VSCode
+#//////////////////////////
+.vscode/
+
+#//////////////////////////
+# WebStorm
+#//////////////////////////
+.idea/
+
+# Local tooling state and generated review artifacts
+.codegraph/
+.codex-artifacts/
+.codex-tmp/
+.creative-design/
+.creator/
+.skill_tmp/
+.workbuddy/
+data/
+outputs/
+tmp/
+
+# Python cache files
+__pycache__/
+*.py[cod]

@@ -1,0 +1,98 @@
+{
+  "__type__": "cc.AnimationClip",
+  "_name": "死亡特效",
+  "_objFlags": 0,
+  "_native": "",
+  "sample": 12,
+  "speed": 1,
+  "wrapMode": 1,
+  "events": [],
+  "_duration": 1.083333,
+  "_keys": [],
+  "_stepness": 0,
+  "curveDatas": {},
+  "_curves": [],
+  "_commonTargets": [],
+  "_hash": 0,
+  "_tracks": [
+    {
+      "__type__": "cc.animation.ObjectTrack",
+      "_binding": {
+        "__type__": "cc.animation.TrackBinding",
+        "path": {
+          "__type__": "cc.animation.TrackPath",
+          "_paths": [
+            {
+              "__type__": "cc.animation.ComponentPath",
+              "component": "cc.Sprite"
+            },
+            "spriteFrame"
+          ]
+        },
+        "proxy": null
+      },
+      "_channel": {
+        "__type__": "cc.animation.Channel",
+        "_curve": {
+          "__type__": "cc.ObjectCurve",
+          "_times": [
+            0.0,
+            0.083333333,
+            0.166666667,
+            0.25,
+            0.333333333,
+            0.416666667,
+            0.5,
+            0.583333333,
+            0.666666667,
+            0.75,
+            0.833333333,
+            0.916666667,
+            1.0
+          ],
+          "_values": [
+            {
+              "__uuid__": "a2b083f6-065b-4b52-be6b-763cbcd2c739@f9941"
+            },
+            {
+              "__uuid__": "0d1fb530-549e-4746-b4c1-e0644c504487@f9941"
+            },
+            {
+              "__uuid__": "9cd5ef9c-0bef-4e67-aa4a-7e0a3053906c@f9941"
+            },
+            {
+              "__uuid__": "67187618-6d3c-4b24-a365-1fdf8db44f04@f9941"
+            },
+            {
+              "__uuid__": "0c72903e-3775-4564-a123-6f4f29668b4a@f9941"
+            },
+            {
+              "__uuid__": "fe9dc2a7-6aad-474a-9bac-5d1fbf4507a9@f9941"
+            },
+            {
+              "__uuid__": "441e405e-0e97-4dcf-b196-e2ddec8f209f@f9941"
+            },
+            {
+              "__uuid__": "307e3a26-5297-489f-9f2d-d86feb99700b@f9941"
+            },
+            {
+              "__uuid__": "ca4ecfd0-d887-4398-aa0b-536af8c12531@f9941"
+            },
+            {
+              "__uuid__": "c9df33ad-b826-466f-8ae2-cf20767bfa3b@f9941"
+            },
+            {
+              "__uuid__": "5a2602f9-b0fe-4a1e-ad0b-aad901e888ca@f9941"
+            },
+            {
+              "__uuid__": "895e5d59-661b-4597-a2bf-9f21eadd5365@f9941"
+            },
+            {
+              "__uuid__": "841d52c7-e04c-4818-bf4e-6f445501b65e@f9941"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

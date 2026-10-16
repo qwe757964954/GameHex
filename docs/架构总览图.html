@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>占城大师 · 架构总览图</title>
+<style>
+  :root {
+    --bg: #f4f7fa;
+    --ink: #1f2d3d;
+    --muted: #5b6b7f;
+    --line: #c9d6e2;
+    --app: #2b7de9;
+    --platform: #14a38b;
+    --core: #e8890c;
+    --framework: #6b7fd7;
+    --engine: #6b7785;
+    --app-bg: #e8f1fe;
+    --platform-bg: #e3f6f1;
+    --core-bg: #fdf1e0;
+    --framework-bg: #eceefb;
+    --engine-bg: #eef1f4;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    line-height: 1.55;
+    font-size: 15px;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 32px 24px 56px; }
+  h1 { font-size: 26px; margin: 0 0 6px; }
+  .sub { color: var(--muted); margin: 0 0 4px; }
+  .src { font-size: 13px; color: var(--muted); margin-bottom: 28px; }
+  .src code { background: #e4ebf2; padding: 1px 6px; border-radius: 4px; }
+  h2 {
+    font-size: 19px; margin: 38px 0 14px; padding-left: 10px;
+    border-left: 4px solid var(--app);
+  }
+  .card {
+    background: #fff; border: 1px solid var(--line); border-radius: 10px;
+    padding: 20px; margin-bottom: 14px;
+  }
+  /* Layers */
+  .layer {
+    display: flex; align-items: stretch; gap: 14px;
+    border-radius: 8px; padding: 12px 14px; margin: 8px 0;
+    border: 1px solid var(--line);
+  }
+  .layer .tag {
+    flex: 0 0 150px; display: flex; flex-direction: column; justify-content: center;
+    border-radius: 6px; padding: 8px 12px; color: #fff; font-weight: 600;
+  }
+  .layer .tag small { font-weight: 400; font-size: 12px; opacity: .92; }
+  .layer.app { background: var(--app-bg); } .layer.app .tag { background: var(--app); }
+  .layer.platform { background: var(--platform-bg); } .layer.platform .tag { background: var(--platform); }
+  .layer.core { background: var(--core-bg); } .layer.core .tag { background: var(--core); }
+  .layer.framework { background: var(--framework-bg); } .layer.framework .tag { background: var(--framework); }
+  .layer.engine { background: var(--engine-bg); } .layer.engine .tag { background: var(--engine); }
+  .layer .body { flex: 1; font-size: 14px; }
+  .layer .body .duty { color: var(--muted); }
+  .layer .ban { color: #c0392b; font-size: 13px; margin-top: 2px; }
+  .arrow-down { text-align: center; color: var(--muted); font-size: 18px; line-height: 1; margin: 2px 0; }
+  .rulebox {
+    background: #fbfdff; border: 1px dashed var(--line); border-radius: 8px;
+    padding: 10px 14px; margin-top: 12px; font-size: 13.5px;
+  }
+  .rulebox b { color: var(--app); }
+  code { font-family: Consolas, "Courier New", monospace; font-size: 13px; }
+  /* feature structure */
+  .feat { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .feat .col { border-radius: 8px; border: 1px solid var(--line); overflow: hidden; }
+  .feat .col .head { padding: 9px 12px; font-weight: 600; color: #fff; font-size: 14px; }
+  .feat .col ul { margin: 0; padding: 10px 12px 10px 28px; font-size: 13px; }
+  .feat .col li { margin: 3px 0; }
+  .c-application .head { background: var(--app); } .c-application { background: var(--app-bg); }
+  .c-model .head { background: var(--core); } .c-model { background: var(--core-bg); }
+  .c-view .head { background: var(--platform); } .c-view { background: var(--platform-bg); }
+  .c-ui .head { background: var(--framework); } .c-ui { background: var(--framework-bg); }
+  .root-file {
+    grid-column: 1 / -1; background: #fff; border: 1px solid var(--line);
+    border-radius: 8px; padding: 9px 14px; font-size: 14px;
+  }
+  .root-file code { color: var(--app); font-weight: 600; }
+  /* flow */
+  .flow { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; }
+  .step {
+    flex: 1; min-width: 180px; border-radius: 8px; padding: 12px 14px;
+    border: 1px solid var(--line); background: #fff; position: relative;
+  }
+  .step .n {
+    display: inline-block; width: 22px; height: 22px; border-radius: 50%;
+    background: var(--app); color: #fff; text-align: center; line-height: 22px;
+    font-size: 13px; font-weight: 600; margin-right: 6px;
+  }
+  .step .t { font-weight: 600; }
+  .step .d { font-size: 13px; color: var(--muted); margin-top: 6px; }
+  .step ul { margin: 6px 0 0; padding-left: 20px; font-size: 13px; }
+  .gap { flex: 0 0 26px; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 20px; }
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin-top: 12px; }
+  .dot { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+  .note { font-size: 13px; color: var(--muted); margin-top: 10px; }
+  @media (max-width: 860px) {
+    .feat { grid-template-columns: repeat(2, 1fr); }
+    .layer .tag { flex-basis: 110px; }
+    .gap { flex-basis: 100%; transform: rotate(90deg); height: 14px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>占城大师 · 架构总览图</h1>
+  <p class="sub">Cocos Creator 3.8.8 + TypeScript · 分层架构 / 玩法模块 / 对局数据流</p>
+  <p class="src">本图为规范的可视化配套，完整规则见 <code>docs/AI架构与代码规范.md</code>，精简入口见 <code>AGENTS.md</code>。</p>
+
+  <h2>一、总体分层架构（依赖只能从上往下）</h2>
+  <div class="card">
+    <div class="layer app">
+      <div class="tag">app<small>业务层</small></div>
+      <div class="body">
+        <div><b>bootstrap（组合根）</b>、<b>procedure（页面阶段）</b>、各 feature：zcds / login / battle / mail / store / role / league / territory …</div>
+        <div class="duty">职责：业务功能、用例编排、页面阶段；feature 内分 application / model / view / ui。</div>
+        <div class="ban">禁止：不允许在 model 层 import 'cc'；不直连 fetch / resources.load / socket。</div>
+      </div>
+    </div>
+    <div class="arrow-down">▼</div>
+    <div class="layer platform">
+      <div class="tag">platform<small>平台实现</small></div>
+      <div class="body">
+        <div>cocos / config（RefConfigService）/ network（FetchNetworkTransport）/ hotupdate / payment</div>
+        <div class="duty">职责：把引擎与外部服务适配成 core 端口；只实现端口，不写玩法规则。</div>
+        <div class="ban">禁止：依赖具体页面、在 adapter 中放业务规则。</div>
+      </div>
+    </div>
+    <div class="arrow-down">▼</div>
+    <div class="layer core">
+      <div class="tag">core<small>契约 / 纯规则</small></div>
+      <div class="body">
+        <div>asset（AssetService、ResourceScope）/ config（ConfigService）/ network（NetworkTransport）/ runtime（GameContext、GameRoute）/ update</div>
+        <div class="duty">职责：稳定端口、纯规则、值对象、资源作用域；纯 TypeScript。</div>
+        <div class="ban">禁止：import cc、framework、app、platform；禁止直接 I/O 与全局单例。</div>
+      </div>
+    </div>
+    <div class="arrow-down">▼</div>
+    <div class="layer framework">
+      <div class="tag">framework<small>通用框架</small></div>
+      <div class="body">
+        <div>procedure / fsm / event / ui（PopupBase、PopupManager）/ pool / net / cache / log / task / timer</div>
+        <div class="duty">职责：跨玩法可复用的 UI、弹窗、流程基础设施。</div>
+        <div class="ban">禁止：依赖任何具体 feature 或 Procedure*。</div>
+      </div>
+    </div>
+    <div class="arrow-down">▼</div>
+    <div class="layer engine">
+      <div class="tag">engine<small>引擎入口</small></div>
+      <div class="body">
+        <div>EngineMain：平台判断、刘海屏适配等设备能力。</div>
+      </div>
+    </div>
+    <div class="rulebox">
+      <b>核心规则：</b>framework / core 不得 import app；core 不得 import cc。framework 需要业务能力时，用 <code>FW</code> 上的静态注入槽
+      （<code>showTip / showReward / pay</code>），由组合根 <code>app/bootstrap/ProcedureBootstrap.ts</code> 注入，未注入时静默丢弃。
+      页面切换统一 <code>ProcedureManager.navigate(GameRoute.X, params)</code>。
+    </div>
+  </div>
+
+  <h2>二、玩法模块（zcds）内部结构</h2>
+  <div class="card">
+    <div class="feat">
+      <div class="root-file">
+        <code>ZCGame.ts</code> —— 对局组合根（Component）：创建并连接 model / view / ui；每帧驱动逻辑与渲染。
+      </div>
+      <div class="col c-application">
+        <div class="head">application 应用层</div>
+        <ul>
+          <li>ZCGameLoader（首屏资源）</li>
+          <li>ZCGamePreload（预加载包装）</li>
+          <li>ZCClientCombatConfig（构筑装配）</li>
+        </ul>
+      </div>
+      <div class="col c-model">
+        <div class="head">model 纯逻辑层</div>
+        <ul>
+          <li>ZCGameTypes / ZCGameModel</li>
+          <li>ZCSnapshotCodec（快照）</li>
+          <li>ZCGameRuntimeConfig（数值）</li>
+          <li>ZCMapConfig / ZCCombatCatalog</li>
+          <li>systems/ 纯规则系统</li>
+        </ul>
+      </div>
+      <div class="col c-view">
+        <div class="head">view 渲染层</div>
+        <ul>
+          <li>ZCGameRenderWorld（渲染世界）</li>
+          <li>ZCHexView / ZCUnitView</li>
+          <li>ZCGameHUDView</li>
+          <li>ZCNodePool / ZCTheme</li>
+        </ul>
+      </div>
+      <div class="col c-ui">
+        <div class="head">ui 弹窗层</div>
+        <ul>
+          <li>GameRunAway（结算/统计）</li>
+          <li>GameVS / GamePlayerItem</li>
+          <li>ZCGuidePanel（战斗指南）</li>
+        </ul>
+      </div>
+    </div>
+    <p class="note">
+      application 不持有场景节点；model 禁止 import 'cc'；view 只读快照、不裁决规则；ui 继承 PopupBase。
+      新 feature 按同样四层组织（小功能可不建空层）。
+    </p>
+  </div>
+
+  <h2>三、对局数据流（每帧）</h2>
+  <div class="card">
+    <div class="flow">
+      <div class="step">
+        <div><span class="n">1</span><span class="t">逻辑推进 model.tick</span></div>
+        <div class="d">固定步长 0.05s（20Hz），单次 tick 上限 5s</div>
+        <ul>
+          <li>累加器按步长 advance()</li>
+          <li>各 System 依次推进</li>
+          <li>产出快照 + 瞬时事件</li>
+        </ul>
+      </div>
+      <div class="gap">→</div>
+      <div class="step">
+        <div><span class="n">2</span><span class="t">动态层每帧</span></div>
+        <div class="d">renderDynamic(model)</div>
+        <ul>
+          <li>单位 / 特效 / 飘字</li>
+          <li>节点池复用</li>
+        </ul>
+      </div>
+      <div class="gap">→</div>
+      <div class="step">
+        <div><span class="n">3</span><span class="t">静态层低频（0.15s）</span></div>
+        <div class="d">hudView.render + renderStatic</div>
+        <ul>
+          <li>HUD / 地块刷新</li>
+        </ul>
+      </div>
+      <div class="gap">→</div>
+      <div class="step">
+        <div><span class="n">4</span><span class="t">结算分支</span></div>
+        <div class="d">status ≠ playing</div>
+        <ul>
+          <li>胜利扫场演出</li>
+          <li>结算弹窗 + 上报</li>
+        </ul>
+      </div>
+    </div>
+    <div class="legend">
+      <span><span class="dot" style="background:var(--app)"></span>应用/组合</span>
+      <span><span class="dot" style="background:var(--core)"></span>纯逻辑/数值</span>
+      <span><span class="dot" style="background:var(--platform)"></span>渲染</span>
+      <span><span class="dot" style="background:var(--framework)"></span>弹窗/框架</span>
+    </div>
+    <p class="note">
+      铁律：渲染层只读 model.snapshot（DeepReadonly）；所有状态变更只能经 model 公开方法发生。
+      随机由组合根注入（createSeededRandom）、模型唯一消费；冷却时间用绝对时刻，保证同种子可复现。
+    </p>
+  </div>
+</div>
+</body>
+</html>

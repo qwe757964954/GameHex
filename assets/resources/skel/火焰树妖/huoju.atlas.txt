@@ -1,0 +1,195 @@
+
+huoju.png
+size: 364,364
+format: RGBA8888
+filter: Linear,Linear
+repeat: none
+huoju_0
+  rotate: false
+  xy: 206, 133
+  size: 16, 28
+  orig: 16, 28
+  offset: 0, 0
+  index: -1
+huoju_1
+  rotate: true
+  xy: 200, 112
+  size: 17, 28
+  orig: 17, 28
+  offset: 0, 0
+  index: -1
+huoju_10
+  rotate: true
+  xy: 157, 109
+  size: 20, 41
+  orig: 20, 41
+  offset: 0, 0
+  index: -1
+huoju_11
+  rotate: true
+  xy: 39, 10
+  size: 16, 25
+  orig: 16, 25
+  offset: 0, 0
+  index: -1
+huoju_12
+  rotate: true
+  xy: 113, 106
+  size: 55, 42
+  orig: 55, 42
+  offset: 0, 0
+  index: -1
+huoju_13
+  rotate: true
+  xy: 160, 32
+  size: 39, 18
+  orig: 39, 18
+  offset: 0, 0
+  index: -1
+huoju_14
+  rotate: false
+  xy: 100, 54
+  size: 9, 13
+  orig: 9, 13
+  offset: 0, 0
+  index: -1
+huoju_15
+  rotate: false
+  xy: 113, 63
+  size: 45, 41
+  orig: 45, 41
+  offset: 0, 0
+  index: -1
+huoju_16
+  rotate: false
+  xy: 157, 131
+  size: 47, 30
+  orig: 47, 30
+  offset: 0, 0
+  index: -1
+huoju_17
+  rotate: false
+  xy: 97, 21
+  size: 9, 9
+  orig: 9, 9
+  offset: 0, 0
+  index: -1
+huoju_18
+  rotate: true
+  xy: 67, 32
+  size: 35, 31
+  orig: 35, 31
+  offset: 0, 0
+  index: -1
+huoju_19
+  rotate: false
+  xy: 2, 163
+  size: 227, 198
+  orig: 227, 198
+  offset: 0, 0
+  index: -1
+huoju_2
+  rotate: true
+  xy: 190, 78
+  size: 14, 25
+  orig: 14, 25
+  offset: 0, 0
+  index: -1
+huoju_20
+  rotate: true
+  xy: 2, 28
+  size: 65, 63
+  orig: 65, 63
+  offset: 0, 0
+  index: -1
+huoju_21
+  rotate: true
+  xy: 190, 94
+  size: 13, 32
+  orig: 13, 32
+  offset: 0, 0
+  index: -1
+huoju_22
+  rotate: false
+  xy: 160, 73
+  size: 28, 34
+  orig: 28, 34
+  offset: 0, 0
+  index: -1
+huoju_23
+  rotate: false
+  xy: 180, 40
+  size: 18, 31
+  orig: 18, 31
+  offset: 0, 0
+  index: -1
+huoju_24
+  rotate: true
+  xy: 231, 58
+  size: 163, 122
+  orig: 163, 122
+  offset: 0, 0
+  index: -1
+huoju_3
+  rotate: false
+  xy: 355, 208
+  size: 3, 5
+  orig: 3, 5
+  offset: 0, 0
+  index: -1
+huoju_4
+  rotate: false
+  xy: 355, 215
+  size: 4, 6
+  orig: 4, 6
+  offset: 0, 0
+  index: -1
+huoju_5
+  rotate: true
+  xy: 2, 8
+  size: 18, 35
+  orig: 18, 35
+  offset: 0, 0
+  index: -1
+huoju_6
+  rotate: false
+  xy: 2, 95
+  size: 66, 66
+  orig: 66, 66
+  offset: 0, 0
+  index: -1
+huoju_7
+  rotate: false
+  xy: 111, 24
+  size: 24, 37
+  orig: 24, 37
+  offset: 0, 0
+  index: -1
+huoju_8
+  rotate: true
+  xy: 67, 4
+  size: 26, 28
+  orig: 26, 28
+  offset: 0, 0
+  index: -1
+huoju_9
+  rotate: false
+  xy: 137, 31
+  size: 19, 30
+  orig: 19, 30
+  offset: 0, 0
+  index: -1
+yz
+  rotate: true
+  xy: 70, 69
+  size: 92, 41
+  orig: 92, 41
+  offset: 0, 0
+  index: -1
+zuiba
+  rotate: true
+  xy: 231, 223
+  size: 138, 130
+  orig: 138, 130
+  offset: 0, 0
+  index: -1

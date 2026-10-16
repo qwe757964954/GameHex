@@ -1,0 +1,296 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import test from 'node:test';
+
+/**
+ * 自选主城 HUD（`ZCSpawnSelectionView` + `ZCSpawnSelection.prefab`）的结构守卫。
+ *
+ * 这一版是**蓝湖「落点选择」稿**的切图版：顶部信息带 / 绿勾 / 左下「收回提示」全部用设计稿导出的
+ * 单图（`image/gameui/` 下的 `bg_01`、`btn_01`、`btn_gou`、`jiantou_01`、`progress_b_01/02`），
+ * 只有设计稿里没有的吐司仍用 `cc.Graphics` 画。
+ *
+ * 判据分四层：
+ *   ① 源码里不许再退回「代码搭节点 / 代码画面板底」；
+ *   ② prefab 的树形、尺寸、相对几何逐项等于**下面手抄的设计稿量测表**（独立于生成脚本，别让两边一起错）；
+ *   ③ 每张切图都真的指到 `image/gameui/<名>.png`，且 `sizeMode=CUSTOM` + `trim=false`；
+ *   ④ 视图的每个 `@property` 在 prefab 上都反解到正确类型的对象（漏绑 = 运行时空指针）。
+ */
+const viewSource = readFileSync('assets/script/app/zcds/view/ZCSpawnSelectionView.ts', 'utf8');
+const gameSource = readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8');
+const loaderSource = readFileSync('assets/script/app/zcds/application/ZCGameLoader.ts', 'utf8');
+const viewMeta = JSON.parse(readFileSync('assets/script/app/zcds/view/ZCSpawnSelectionView.ts.meta', 'utf8'));
+const prefabText = readFileSync('assets/resources/ui/game/ZCSpawnSelection.prefab', 'utf8');
+const objects: any[] = JSON.parse(prefabText);
+
+/** cid 由脚本 uuid 推出（前 5 hex 原样 + 每 3 hex → 2 个 base64 字符），与编辑器同一套规则。 */
+const CID_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+function cidOf(uuid: string): string {
+    const hex = uuid.replace(/-/g, '');
+    return hex.slice(0, 5) + Array.from({ length: 9 }, (_, i) => {
+        const value = parseInt(hex.slice(5 + i * 3, 8 + i * 3), 16);
+        return CID_ALPHABET[value >> 6] + CID_ALPHABET[value & 0x3f];
+    }).join('');
+}
+
+/** 反向断言前先剥注释：本文件的注释里就写着 `new Node`（规则 104）。 */
+function stripComments(source: string): string {
+    return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+}
+
+/**
+ * 设计稿量测表（蓝湖「落点选择」稿，画布 720×1610，与工程美术 1:1）——**手抄**，别由 prefab 反推。
+ * cocosY = 805 − 设计y（y 反向）；子树坐标 = 子中心 − 父中心。顶栏/按钮另有 Widget 钉边。
+ */
+const DESIGN = {
+    band: { w: 663, h: 130, top: 78 },
+    hint: { w: 221, h: 27, y: 35.5, fontSize: 28 },
+    clock: { w: 60, h: 28, y: 0, fontSize: 30 },
+    progress: { w: 398, h: 32, x: 0.5, y: -34 },
+    fill: { w: 387, h: 21, x: -0.5, y: -0.5 },
+    confirm: { w: 80, h: 82, bottom: 200, centerX: 28 },
+    toggle: { w: 194, h: 69, left: 9, bottom: 114 },
+    toggleLabel: { w: 109, h: 27, x: -20.5, y: 0, fontSize: 28 },
+    arrow: { w: 32, h: 22, x: 60, y: -0.5 },
+    toast: { w: 520, h: 64 },
+};
+
+const nodes = objects.filter((o) => o.__type__ === 'cc.Node');
+const nodeNamed = (name: string, parentName?: string) => nodes.find((node) => {
+    if (node._name !== name) return false;
+    if (parentName === undefined) return node._parent === null;
+    return objects[node._parent.__id__]._name === parentName;
+});
+const componentOf = (node: any, type: string) =>
+    node._components.map((ref: any) => objects[ref.__id__]).find((c: any) => c.__type__ === type);
+const sizeOf = (node: any): [number, number] => {
+    const transform = componentOf(node, 'cc.UITransform');
+    return [transform._contentSize.width, transform._contentSize.height];
+};
+const positionOf = (node: any): [number, number] => [node._lpos.x, node._lpos.y];
+const childrenOf = (node: any): string[] => node._children.map((ref: any) => objects[ref.__id__]._name);
+const widgetOf = (node: any) => componentOf(node, 'cc.Widget');
+const spriteOf = (node: any) => componentOf(node, 'cc.Sprite');
+const labelOf = (node: any) => componentOf(node, 'cc.Label');
+
+/** 美术名 → SpriteFrame uuid（`.meta` 的 subMetas uuid **已自带 `@f9941`**，别再拼）。 */
+const frameOf = (art: string): string =>
+    JSON.parse(readFileSync(`assets/resources/image/gameui/${art}.png.meta`, 'utf8')).subMetas.f9941.uuid;
+
+test('视图脚本不再自己建节点 / 不再用 Graphics 画面板底', () => {
+    const code = stripComments(viewSource);
+    assert.doesNotMatch(code, /new Node\(/, '节点必须来自 prefab，不再 new Node');
+    assert.doesNotMatch(code, /\.addComponent\(/, '组件必须挂在 prefab 上，不再 addComponent');
+    assert.doesNotMatch(code, /removeAllChildren/, '宿主节点由 prefab 提供，不再清空子节点');
+    // 面板底 / 进度条 / 按钮底都换成设计稿切图 ⇒ 只剩吐司还用 Graphics
+    assert.doesNotMatch(code, /drawPanelBackground|drawProgress/, '面板底与进度条不再由 Graphics 画');
+    assert.match(code, /toastBackground\.roundRect/, '吐司底仍归 Graphics（设计稿里没有吐司）');
+    // 反过来正面确认：脚本确实按 @property 消费这些引用。
+    for (const key of ['hintLabel', 'progressFill', 'confirmIcon', 'toggleArrow', 'toastNode']) {
+        assert.match(code, new RegExp(`this\\.${key}\\b`), `${key} 应当被直接使用（而不是先判空）`);
+    }
+});
+
+test('ZCSpawnSelection.prefab：12 个节点、四块结构、尺寸与相对几何按设计稿', () => {
+    assert.equal(nodes.length, 12);
+    const root = nodeNamed('ZCSpawnSelection')!;
+    assert.deepEqual(childrenOf(root), ['SpawnInfoBand', 'ConfirmSpawn', 'ToggleHints', 'SpawnToast'],
+        '子节点顺序 = 渲染顺序');
+    assert.deepEqual(sizeOf(root), [720, 1280]);
+
+    const band = nodeNamed('SpawnInfoBand', 'ZCSpawnSelection')!;
+    assert.deepEqual(childrenOf(band), ['Hint', 'Clock', 'Progress']);
+    assert.deepEqual(sizeOf(band), [DESIGN.band.w, DESIGN.band.h]);
+    assert.deepEqual(positionOf(band), [0, 640 - DESIGN.band.top - DESIGN.band.h / 2], '顶栏静态落位（720×1280 根）');
+
+    const progress = nodeNamed('Progress', 'SpawnInfoBand')!;
+    assert.deepEqual(sizeOf(progress), [DESIGN.progress.w, DESIGN.progress.h]);
+    assert.deepEqual(positionOf(progress), [DESIGN.progress.x, DESIGN.progress.y]);
+    const fill = nodeNamed('ProgressFill', 'Progress')!;
+    assert.deepEqual(sizeOf(fill), [DESIGN.fill.w, DESIGN.fill.h]);
+    assert.deepEqual(positionOf(fill), [DESIGN.fill.x, DESIGN.fill.y]);
+
+    assert.deepEqual(sizeOf(nodeNamed('Hint', 'SpawnInfoBand')!), [DESIGN.hint.w, DESIGN.hint.h]);
+    assert.deepEqual(positionOf(nodeNamed('Hint', 'SpawnInfoBand')!), [0, DESIGN.hint.y]);
+    assert.deepEqual(positionOf(nodeNamed('Clock', 'SpawnInfoBand')!), [0, DESIGN.clock.y]);
+
+    const confirm = nodeNamed('ConfirmSpawn', 'ZCSpawnSelection')!;
+    assert.deepEqual(sizeOf(confirm), [DESIGN.confirm.w, DESIGN.confirm.h]);
+    assert.deepEqual(positionOf(confirm), [DESIGN.confirm.centerX, -640 + DESIGN.confirm.bottom + DESIGN.confirm.h / 2]);
+
+    const toggle = nodeNamed('ToggleHints', 'ZCSpawnSelection')!;
+    assert.deepEqual(childrenOf(toggle), ['Label', 'Arrow'], '箭头要压在按钮底上面');
+    assert.deepEqual(sizeOf(toggle), [DESIGN.toggle.w, DESIGN.toggle.h]);
+    assert.deepEqual(positionOf(toggle), [-360 + DESIGN.toggle.left + DESIGN.toggle.w / 2,
+        -640 + DESIGN.toggle.bottom + DESIGN.toggle.h / 2]);
+    assert.deepEqual(sizeOf(nodeNamed('Label', 'ToggleHints')!), [DESIGN.toggleLabel.w, DESIGN.toggleLabel.h]);
+    assert.deepEqual(positionOf(nodeNamed('Label', 'ToggleHints')!), [DESIGN.toggleLabel.x, DESIGN.toggleLabel.y]);
+    assert.deepEqual(sizeOf(nodeNamed('Arrow', 'ToggleHints')!), [DESIGN.arrow.w, DESIGN.arrow.h]);
+    assert.deepEqual(positionOf(nodeNamed('Arrow', 'ToggleHints')!), [DESIGN.arrow.x, DESIGN.arrow.y]);
+
+    assert.deepEqual(sizeOf(nodeNamed('SpawnToast', 'ZCSpawnSelection')!), [DESIGN.toast.w, DESIGN.toast.h]);
+    assert.deepEqual(positionOf(nodeNamed('SpawnToast', 'ZCSpawnSelection')!), [0, 360]);
+});
+
+test('字号取自渲染图墨迹实测（设计稿 textLayer 没有 raw_style）', () => {
+    assert.equal(labelOf(nodeNamed('Hint', 'SpawnInfoBand')!)._fontSize, DESIGN.hint.fontSize);
+    assert.equal(labelOf(nodeNamed('Clock', 'SpawnInfoBand')!)._fontSize, DESIGN.clock.fontSize);
+    assert.equal(labelOf(nodeNamed('Label', 'ToggleHints')!)._fontSize, DESIGN.toggleLabel.fontSize);
+    for (const path of [['Hint', 'SpawnInfoBand'], ['Clock', 'SpawnInfoBand'], ['Label', 'ToggleHints']]) {
+        const label = labelOf(nodeNamed(path[0], path[1])!);
+        assert.equal(label._overflow, 2, 'SHRINK：定宽框里只缩字不折行');
+        assert.equal(label._enableWrapText, false);
+        assert.equal(label._horizontalAlign, 1);
+        assert.equal(label._verticalAlign, 1);
+    }
+});
+
+test('ZCSpawnSelection.prefab：Toast 出厂隐藏，layer 全 UI_2D，Widget 位掩码对得上', () => {
+    assert.equal(nodeNamed('SpawnToast', 'ZCSpawnSelection')!._active, false, '吐司出厂必须隐藏');
+    for (const node of nodes) {
+        assert.equal(node._layer, 33554432, `${node._name} layer 必须是 UI_2D`);
+    }
+    // 位掩码 TOP1/MID2/BOT4/LEFT8/CENTER16/RIGHT32；根四边对齐 = 45。
+    const rootWidget = widgetOf(nodeNamed('ZCSpawnSelection')!);
+    assert.equal(rootWidget._alignFlags, 45);
+    assert.deepEqual([rootWidget._left, rootWidget._right, rootWidget._top, rootWidget._bottom], [0, 0, 0, 0]);
+
+    const bandWidget = widgetOf(nodeNamed('SpawnInfoBand', 'ZCSpawnSelection')!);
+    assert.equal(bandWidget._alignFlags, 17, '信息带 = TOP + 水平居中');
+    assert.equal(bandWidget._top, DESIGN.band.top);
+
+    const confirmWidget = widgetOf(nodeNamed('ConfirmSpawn', 'ZCSpawnSelection')!);
+    assert.equal(confirmWidget._alignFlags, 20, '绿勾 = BOT + 水平居中');
+    assert.equal(confirmWidget._bottom, DESIGN.confirm.bottom);
+    assert.equal(confirmWidget._horizontalCenter, DESIGN.confirm.centerX, '设计稿绿勾比屏心偏右 28');
+
+    const toggleWidget = widgetOf(nodeNamed('ToggleHints', 'ZCSpawnSelection')!);
+    assert.equal(toggleWidget._alignFlags, 12, '收回提示 = BOT + LEFT');
+    assert.equal(toggleWidget._left, DESIGN.toggle.left);
+    assert.equal(toggleWidget._bottom, DESIGN.toggle.bottom);
+});
+
+test('六张切图逐张指到 image/gameui 下的对应美术，且 sizeMode=CUSTOM + trim=false', () => {
+    const expected: Record<string, string> = {
+        'ZCSpawnSelection/SpawnInfoBand': 'bg_01',
+        'ZCSpawnSelection/SpawnInfoBand/Progress': 'progress_b_02',
+        'ZCSpawnSelection/SpawnInfoBand/Progress/ProgressFill': 'progress_b_01',
+        'ZCSpawnSelection/ConfirmSpawn': 'btn_gou',
+        'ZCSpawnSelection/ToggleHints': 'btn_01',
+        'ZCSpawnSelection/ToggleHints/Arrow': 'jiantou_01',
+    };
+    const find = (path: string) => {
+        const [name, parent] = path.split('/').reverse();
+        return nodeNamed(name, parent)!;
+    };
+    for (const [path, art] of Object.entries(expected)) {
+        const node = find(path);
+        assert.ok(node, `${path} 不存在`);
+        const sprite = spriteOf(node);
+        assert.ok(sprite, `${path} 上应当有 cc.Sprite`);
+        assert.equal(sprite._spriteFrame.__uuid__, frameOf(art), `${path} 的图应当是 ${art}.png`);
+        // 定尺寸的 UI 图：默认 TRIMMED 会用贴图裁框改写节点尺寸（技能 §1 的「改尺寸没反应」）
+        assert.equal(sprite._sizeMode, 0, `${path} sizeMode 必须 CUSTOM`);
+        assert.equal(sprite._isTrimmedMode, false, `${path} 必须关掉裁剪模式`);
+    }
+    // 进度填充用 FILLED + HORIZONTAL：只改 fillRange，贴图与圆角都不被拉伸
+    const fillSprite = spriteOf(nodeNamed('ProgressFill', 'Progress')!);
+    assert.equal(fillSprite._type, 3, 'ProgressFill 必须是 FILLED');
+    assert.equal(fillSprite._fillType, 0, 'FILLED 的 fillType 必须是 HORIZONTAL');
+    assert.equal(fillSprite._fillStart, 0);
+    // 全篇只允许一个 FILLED（其余都是 SIMPLE）
+    assert.equal(objects.filter((o) => o.__type__ === 'cc.Sprite' && o._type === 3).length, 1);
+    // 空对象形态的 spriteFrame 会让引擎抛 uv[0] 读 undefined（技能 §0 铁律 3）
+    assert.doesNotMatch(prefabText, /"_spriteFrame":\s*\{\s*\}/);
+    assert.equal(objects.filter((o) => o.__type__ === 'cc.Sprite' && !o._spriteFrame?.__uuid__).length, 0);
+});
+
+test('prefab 的 prefabInfo / fileId 形态正确（手改 JSON 最容易崩的两处）', () => {
+    const rootIndex = objects[0].data.__id__;
+    assert.equal(objects[rootIndex].__type__, 'cc.Node');
+    assert.equal(rootIndex, objects.findIndex((o) => o?.__type__ === 'cc.Node'), '根必须是第一个 cc.Node');
+    const fileIds = objects.filter((o) => typeof o?.fileId === 'string').map((o) => o.fileId);
+    for (const id of fileIds) assert.equal(id.length, 22, `fileId 必须 22 位：${id}`);
+    assert.equal(new Set(fileIds).size, fileIds.length, 'fileId 不许重复');
+    for (const node of nodes) {
+        const info = objects[node._prefab.__id__];
+        assert.equal(info.asset.__id__, 0, `${node._name} 的 PrefabInfo.asset 必须指本 prefab`);
+        assert.equal(info.root.__id__, rootIndex);
+    }
+});
+
+test('prefab 上 12 个 @property 全部绑到正确类型的对象', () => {
+    const cid = cidOf(viewMeta.uuid);
+    assert.equal(cid, 'b4482r88UpOjZZJQIWKostE', 'cid 必须与生成脚本里写的那个一致');
+    const script = objects.find((o) => o.__type__ === cid);
+    assert.ok(script, `prefab 里应当挂 ${cid}（ZCSpawnSelectionView）`);
+
+    const expected: Record<string, string> = {
+        hintLabel: 'cc.Label',
+        clockLabel: 'cc.Label',
+        progressNode: 'cc.Node',
+        progressFill: 'cc.Sprite',
+        confirmButton: 'cc.Node',
+        confirmIcon: 'cc.Sprite',
+        toggleButton: 'cc.Node',
+        toggleLabel: 'cc.Label',
+        toggleArrow: 'cc.Node',
+        toastNode: 'cc.Node',
+        toastBackground: 'cc.Graphics',
+        toastLabel: 'cc.Label',
+    };
+    for (const [prop, type] of Object.entries(expected)) {
+        const ref = script[prop];
+        assert.ok(ref && typeof ref.__id__ === 'number', `${prop} 未绑定`);
+        assert.equal(objects[ref.__id__].__type__, type, `${prop} 应指向 ${type}`);
+    }
+    // 「按钮与它的底同节点」是这组引用的硬约束（隐藏/染色针对的是那一块）。
+    // ⚠️ 引用有两种形态：`cc.Node` 就是节点本身，组件要看 `.node`（规则 105）。
+    const ownerNodeId = (id: number) => {
+        const target = objects[id];
+        return target.__type__ === 'cc.Node' ? id : target.node.__id__;
+    };
+    const sameNode = (a: string, b: string) => ownerNodeId(script[a].__id__) === ownerNodeId(script[b].__id__);
+    assert.ok(sameNode('confirmButton', 'confirmIcon'), 'confirmButton 与 confirmIcon 必须同节点');
+    assert.ok(sameNode('toastNode', 'toastBackground'), 'toastNode 与 toastBackground 必须同节点');
+    // 进度填充在进度节点**下**：隐藏整条时填充要跟着走。
+    const fillOwner = objects[script.progressFill.__id__].node.__id__;
+    assert.equal(objects[fillOwner]._name, 'ProgressFill');
+    assert.equal(objects[fillOwner]._parent.__id__, script.progressNode.__id__, 'progressFill 必须挂在 progressNode 下');
+    // 箭头在收回提示按钮**下**（`toggleButton` 控制点击，箭头只做方向）。
+    const arrowOwner = objects[script.toggleArrow.__id__]._parent.__id__;
+    assert.equal(arrowOwner, script.toggleButton.__id__);
+    // 吐司的 Label 在子节点上（`toastNode` 控制整块显隐，`toastLabel` 只写文案）。
+    const toastLabelOwner = objects[script.toastLabel.__id__].node.__id__;
+    assert.equal(objects[toastLabelOwner]._parent.__id__, script.toastNode.__id__);
+});
+
+test('两态口径：文案只有两条、等待态收掉倒计时/进度/绿勾、标题回到居中', () => {
+    const code = stripComments(viewSource);
+    // 设计稿只给了两条文案 —— 不许再冒出「已确认 · 等待对方」这类第三条。
+    assert.match(code, /waiting: '等待其他玩家'/);
+    assert.match(code, /picking: '选择己方主城位置'/);
+    assert.doesNotMatch(code, /已确认|对方已锁定|最后 3 秒/, '文案只照设计稿的两条');
+    assert.match(code, /SPAWN_HINT_OFFSET_Y = 35\.5/, '选择态标题带在顶栏上部（设计稿 y94，带宽 130）');
+    assert.match(code, /SPAWN_HINT_CENTER_Y = 0/, '等待态只剩一行 ⇒ 垂直居中（设计稿「落点选择2」）');
+    // 等待态 = 已确认；三处显隐必须成对（规则：显隐要成对复位，否则复用到下一局会残留）
+    assert.match(code, /const waiting = mine\.confirmedHexId !== null/);
+    for (const key of ['clockLabel.node', 'progressNode', 'confirmButton']) {
+        assert.match(code, new RegExp(`this\\.${key.replace('.', '\\.')}\\.active = !waiting`), `${key} 等待态必须隐藏`);
+    }
+    // 进度按剩余时间归一化，且只写 fillRange（几何归 prefab）
+    assert.match(code, /this\.progressFill\.fillRange = Math\.max\(0, Math\.min\(1, ratio\)\)/);
+    assert.match(code, /const ratio = snapshot\.remainingSeconds \/ COUNTDOWN_SECONDS/);
+    // 箭头方向：收起朝上（设计稿 ∧），显示提示翻转
+    assert.match(code, /this\.toggleArrow\.setRotationFromEuler\(0, 0, hintsVisible \? 0 : 180\)/);
+});
+
+test('自选主城 HUD 走实例化路径，并进了对局预加载清单', () => {
+    const game = stripComments(gameSource);
+    assert.match(game, /instantiate\(this\.cachedSpawnSelectionPrefab\)/, '必须实例化 prefab');
+    assert.doesNotMatch(game, /addComponent\(ZCSpawnSelectionView\)/, '不再运行时挂脚本');
+    assert.match(game, /getComponent\(ZCSpawnSelectionView\)!/, '取组件失败应当场抛');
+
+    assert.match(loaderSource, /const SPAWN_SELECTION_URL = 'ui\/game\/ZCSpawnSelection'/);
+    assert.match(loaderSource, /this\.assets\.load\(SPAWN_SELECTION_URL, Prefab/);
+    assert.match(loaderSource, /spawnSelectionPrefab: Prefab;/);
+});

@@ -1,0 +1,134 @@
+{
+  "ver": "1.0.27",
+  "importer": "image",
+  "imported": true,
+  "uuid": "8a823292-63f4-413e-8493-786e58e205c5",
+  "files": [
+    ".json",
+    ".png"
+  ],
+  "subMetas": {
+    "6c48a": {
+      "importer": "texture",
+      "uuid": "8a823292-63f4-413e-8493-786e58e205c5@6c48a",
+      "displayName": "风道人_龙卷风_attack_25",
+      "id": "6c48a",
+      "name": "texture",
+      "userData": {
+        "wrapModeS": "clamp-to-edge",
+        "wrapModeT": "clamp-to-edge",
+        "imageUuidOrDatabaseUri": "8a823292-63f4-413e-8493-786e58e205c5",
+        "isUuid": true,
+        "visible": false,
+        "minfilter": "linear",
+        "magfilter": "linear",
+        "mipfilter": "none",
+        "anisotropy": 0
+      },
+      "ver": "1.0.22",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "f9941": {
+      "importer": "sprite-frame",
+      "uuid": "8a823292-63f4-413e-8493-786e58e205c5@f9941",
+      "displayName": "风道人_龙卷风_attack_25",
+      "id": "f9941",
+      "name": "spriteFrame",
+      "userData": {
+        "trimThreshold": 1,
+        "rotated": false,
+        "offsetX": 2.5,
+        "offsetY": -36,
+        "trimX": 55,
+        "trimY": 149,
+        "width": 131,
+        "height": 83,
+        "rawWidth": 236,
+        "rawHeight": 309,
+        "borderTop": 0,
+        "borderBottom": 0,
+        "borderLeft": 0,
+        "borderRight": 0,
+        "packable": true,
+        "pixelsToUnit": 100,
+        "pivotX": 0.5,
+        "pivotY": 0.5,
+        "meshType": 0,
+        "vertices": {
+          "rawPosition": [
+            -65.5,
+            -41.5,
+            0,
+            65.5,
+            -41.5,
+            0,
+            -65.5,
+            41.5,
+            0,
+            65.5,
+            41.5,
+            0
+          ],
+          "indexes": [
+            0,
+            1,
+            2,
+            2,
+            1,
+            3
+          ],
+          "uv": [
+            55,
+            160,
+            186,
+            160,
+            55,
+            77,
+            186,
+            77
+          ],
+          "nuv": [
+            0.2330508474576271,
+            0.24919093851132687,
+            0.788135593220339,
+            0.24919093851132687,
+            0.2330508474576271,
+            0.517799352750809,
+            0.788135593220339,
+            0.517799352750809
+          ],
+          "minPos": [
+            -65.5,
+            -41.5,
+            0
+          ],
+          "maxPos": [
+            65.5,
+            41.5,
+            0
+          ]
+        },
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "8a823292-63f4-413e-8493-786e58e205c5@6c48a",
+        "atlasUuid": "",
+        "trimType": "auto"
+      },
+      "ver": "1.0.12",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    }
+  },
+  "userData": {
+    "type": "sprite-frame",
+    "fixAlphaTransparencyArtifacts": false,
+    "hasAlpha": true,
+    "redirect": "8a823292-63f4-413e-8493-786e58e205c5@6c48a"
+  }
+}

@@ -1,0 +1,134 @@
+{
+  "ver": "1.0.27",
+  "importer": "image",
+  "imported": true,
+  "uuid": "45d6d66e-d809-4ec4-9e91-a546440c1dd3",
+  "files": [
+    ".json",
+    ".png"
+  ],
+  "subMetas": {
+    "6c48a": {
+      "importer": "texture",
+      "uuid": "45d6d66e-d809-4ec4-9e91-a546440c1dd3@6c48a",
+      "displayName": "兽道人_召唤物殉爆_attack_01",
+      "id": "6c48a",
+      "name": "texture",
+      "userData": {
+        "wrapModeS": "clamp-to-edge",
+        "wrapModeT": "clamp-to-edge",
+        "imageUuidOrDatabaseUri": "45d6d66e-d809-4ec4-9e91-a546440c1dd3",
+        "isUuid": true,
+        "visible": false,
+        "minfilter": "linear",
+        "magfilter": "linear",
+        "mipfilter": "none",
+        "anisotropy": 0
+      },
+      "ver": "1.0.22",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "f9941": {
+      "importer": "sprite-frame",
+      "uuid": "45d6d66e-d809-4ec4-9e91-a546440c1dd3@f9941",
+      "displayName": "兽道人_召唤物殉爆_attack_01",
+      "id": "f9941",
+      "name": "spriteFrame",
+      "userData": {
+        "trimThreshold": 1,
+        "rotated": false,
+        "offsetX": -37,
+        "offsetY": -23,
+        "trimX": 105,
+        "trimY": 143,
+        "width": 184,
+        "height": 180,
+        "rawWidth": 468,
+        "rawHeight": 420,
+        "borderTop": 0,
+        "borderBottom": 0,
+        "borderLeft": 0,
+        "borderRight": 0,
+        "packable": true,
+        "pixelsToUnit": 100,
+        "pivotX": 0.5,
+        "pivotY": 0.5,
+        "meshType": 0,
+        "vertices": {
+          "rawPosition": [
+            -92,
+            -90,
+            0,
+            92,
+            -90,
+            0,
+            -92,
+            90,
+            0,
+            92,
+            90,
+            0
+          ],
+          "indexes": [
+            0,
+            1,
+            2,
+            2,
+            1,
+            3
+          ],
+          "uv": [
+            105,
+            277,
+            289,
+            277,
+            105,
+            97,
+            289,
+            97
+          ],
+          "nuv": [
+            0.22435897435897437,
+            0.23095238095238096,
+            0.6175213675213675,
+            0.23095238095238096,
+            0.22435897435897437,
+            0.6595238095238095,
+            0.6175213675213675,
+            0.6595238095238095
+          ],
+          "minPos": [
+            -92,
+            -90,
+            0
+          ],
+          "maxPos": [
+            92,
+            90,
+            0
+          ]
+        },
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "45d6d66e-d809-4ec4-9e91-a546440c1dd3@6c48a",
+        "atlasUuid": "",
+        "trimType": "auto"
+      },
+      "ver": "1.0.12",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    }
+  },
+  "userData": {
+    "type": "sprite-frame",
+    "fixAlphaTransparencyArtifacts": false,
+    "hasAlpha": true,
+    "redirect": "45d6d66e-d809-4ec4-9e91-a546440c1dd3@6c48a"
+  }
+}

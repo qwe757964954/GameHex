@@ -1,0 +1,134 @@
+{
+  "ver": "1.0.27",
+  "importer": "image",
+  "imported": true,
+  "uuid": "575291e7-c323-46cb-8e77-334c522aacc5",
+  "files": [
+    ".json",
+    ".png"
+  ],
+  "subMetas": {
+    "6c48a": {
+      "importer": "texture",
+      "uuid": "575291e7-c323-46cb-8e77-334c522aacc5@6c48a",
+      "displayName": "战争古树",
+      "id": "6c48a",
+      "name": "texture",
+      "userData": {
+        "wrapModeS": "clamp-to-edge",
+        "wrapModeT": "clamp-to-edge",
+        "imageUuidOrDatabaseUri": "575291e7-c323-46cb-8e77-334c522aacc5",
+        "isUuid": true,
+        "visible": false,
+        "minfilter": "linear",
+        "magfilter": "linear",
+        "mipfilter": "none",
+        "anisotropy": 0
+      },
+      "ver": "1.0.22",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "f9941": {
+      "importer": "sprite-frame",
+      "uuid": "575291e7-c323-46cb-8e77-334c522aacc5@f9941",
+      "displayName": "战争古树",
+      "id": "f9941",
+      "name": "spriteFrame",
+      "userData": {
+        "trimThreshold": 1,
+        "rotated": false,
+        "offsetX": 0,
+        "offsetY": -0.5,
+        "trimX": 2,
+        "trimY": 1,
+        "width": 413,
+        "height": 491,
+        "rawWidth": 417,
+        "rawHeight": 492,
+        "borderTop": 0,
+        "borderBottom": 0,
+        "borderLeft": 0,
+        "borderRight": 0,
+        "packable": true,
+        "pixelsToUnit": 100,
+        "pivotX": 0.5,
+        "pivotY": 0.5,
+        "meshType": 0,
+        "vertices": {
+          "rawPosition": [
+            -206.5,
+            -245.5,
+            0,
+            206.5,
+            -245.5,
+            0,
+            -206.5,
+            245.5,
+            0,
+            206.5,
+            245.5,
+            0
+          ],
+          "indexes": [
+            0,
+            1,
+            2,
+            2,
+            1,
+            3
+          ],
+          "uv": [
+            2,
+            491,
+            415,
+            491,
+            2,
+            0,
+            415,
+            0
+          ],
+          "nuv": [
+            0.004796163069544364,
+            0,
+            0.9952038369304557,
+            0,
+            0.004796163069544364,
+            0.9979674796747967,
+            0.9952038369304557,
+            0.9979674796747967
+          ],
+          "minPos": [
+            -206.5,
+            -245.5,
+            0
+          ],
+          "maxPos": [
+            206.5,
+            245.5,
+            0
+          ]
+        },
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "575291e7-c323-46cb-8e77-334c522aacc5@6c48a",
+        "atlasUuid": "",
+        "trimType": "auto"
+      },
+      "ver": "1.0.12",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    }
+  },
+  "userData": {
+    "type": "sprite-frame",
+    "fixAlphaTransparencyArtifacts": false,
+    "hasAlpha": true,
+    "redirect": "575291e7-c323-46cb-8e77-334c522aacc5@6c48a"
+  }
+}

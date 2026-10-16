@@ -1,0 +1,14 @@
+{
+  "ver": "1.1.50",
+  "importer": "prefab",
+  "imported": true,
+  "uuid": "743781ab-534c-4b7c-8530-e8ce0fe20bd3",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {},
+  "userData": {
+    "syncNodeName": "ZCGameDecor",
+    "hasIcon": false
+  }
+}

@@ -1,0 +1,134 @@
+{
+  "ver": "1.0.27",
+  "importer": "image",
+  "imported": true,
+  "uuid": "c540405c-8eff-4f40-8030-ed8ebcfaba61",
+  "files": [
+    ".json",
+    ".png"
+  ],
+  "subMetas": {
+    "6c48a": {
+      "importer": "texture",
+      "uuid": "c540405c-8eff-4f40-8030-ed8ebcfaba61@6c48a",
+      "displayName": "民兵武将技能_attack_05",
+      "id": "6c48a",
+      "name": "texture",
+      "userData": {
+        "wrapModeS": "clamp-to-edge",
+        "wrapModeT": "clamp-to-edge",
+        "imageUuidOrDatabaseUri": "c540405c-8eff-4f40-8030-ed8ebcfaba61",
+        "isUuid": true,
+        "visible": false,
+        "minfilter": "linear",
+        "magfilter": "linear",
+        "mipfilter": "none",
+        "anisotropy": 0
+      },
+      "ver": "1.0.22",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "f9941": {
+      "importer": "sprite-frame",
+      "uuid": "c540405c-8eff-4f40-8030-ed8ebcfaba61@f9941",
+      "displayName": "民兵武将技能_attack_05",
+      "id": "f9941",
+      "name": "spriteFrame",
+      "userData": {
+        "trimThreshold": 1,
+        "rotated": false,
+        "offsetX": -12.5,
+        "offsetY": -1,
+        "trimX": 20,
+        "trimY": 5,
+        "width": 165,
+        "height": 84,
+        "rawWidth": 230,
+        "rawHeight": 92,
+        "borderTop": 0,
+        "borderBottom": 0,
+        "borderLeft": 0,
+        "borderRight": 0,
+        "packable": true,
+        "pixelsToUnit": 100,
+        "pivotX": 0.5,
+        "pivotY": 0.5,
+        "meshType": 0,
+        "vertices": {
+          "rawPosition": [
+            -82.5,
+            -42,
+            0,
+            82.5,
+            -42,
+            0,
+            -82.5,
+            42,
+            0,
+            82.5,
+            42,
+            0
+          ],
+          "indexes": [
+            0,
+            1,
+            2,
+            2,
+            1,
+            3
+          ],
+          "uv": [
+            20,
+            87,
+            185,
+            87,
+            20,
+            3,
+            185,
+            3
+          ],
+          "nuv": [
+            0.08695652173913043,
+            0.03260869565217391,
+            0.8043478260869565,
+            0.03260869565217391,
+            0.08695652173913043,
+            0.9456521739130435,
+            0.8043478260869565,
+            0.9456521739130435
+          ],
+          "minPos": [
+            -82.5,
+            -42,
+            0
+          ],
+          "maxPos": [
+            82.5,
+            42,
+            0
+          ]
+        },
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "c540405c-8eff-4f40-8030-ed8ebcfaba61@6c48a",
+        "atlasUuid": "",
+        "trimType": "auto"
+      },
+      "ver": "1.0.12",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    }
+  },
+  "userData": {
+    "type": "sprite-frame",
+    "fixAlphaTransparencyArtifacts": false,
+    "hasAlpha": true,
+    "redirect": "c540405c-8eff-4f40-8030-ed8ebcfaba61@6c48a"
+  }
+}

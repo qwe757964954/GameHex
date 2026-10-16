@@ -1,0 +1,24 @@
+{
+  "id": "zcds-map-v3-select",
+  "name": "zcds-map-v3-select",
+  "version": 3,
+  "rows": 20,
+  "columns": 12,
+  "playerCount": 4,
+  "cityMode": "select",
+  "mirrorVertical": true,
+  "mirrorHorizontal": true,
+  "mirror180": false,
+  "ascii": [
+    "111111",
+    "111111",
+    "111111",
+    "111111",
+    "111111",
+    "111111",
+    "111111",
+    "111111",
+    "111111",
+    "111111"
+  ]
+}

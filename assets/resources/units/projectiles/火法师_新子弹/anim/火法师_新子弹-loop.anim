@@ -1,0 +1,215 @@
+{
+  "__type__": "cc.AnimationClip",
+  "_name": "火法师_新子弹-loop",
+  "_objFlags": 0,
+  "_native": "",
+  "sample": 12,
+  "speed": 1,
+  "wrapMode": 2,
+  "events": [],
+  "_duration": 3.3333333333,
+  "_keys": [],
+  "_stepness": 0,
+  "curveDatas": {},
+  "_curves": [],
+  "_commonTargets": [],
+  "_hash": 0,
+  "_tracks": [
+    {
+      "__type__": "cc.animation.ObjectTrack",
+      "_binding": {
+        "__type__": "cc.animation.TrackBinding",
+        "path": {
+          "__type__": "cc.animation.TrackPath",
+          "_paths": [
+            {
+              "__type__": "cc.animation.ComponentPath",
+              "component": "cc.Sprite"
+            },
+            "spriteFrame"
+          ]
+        },
+        "proxy": null
+      },
+      "_channel": {
+        "__type__": "cc.animation.Channel",
+        "_curve": {
+          "__type__": "cc.ObjectCurve",
+          "_times": [
+            0.0,
+            0.0833333333,
+            0.1666666667,
+            0.25,
+            0.3333333333,
+            0.4166666667,
+            0.5,
+            0.5833333333,
+            0.6666666667,
+            0.75,
+            0.8333333333,
+            0.9166666667,
+            1.0,
+            1.0833333333,
+            1.1666666667,
+            1.25,
+            1.3333333333,
+            1.4166666667,
+            1.5,
+            1.5833333333,
+            1.6666666667,
+            1.75,
+            1.8333333333,
+            1.9166666667,
+            2.0,
+            2.0833333333,
+            2.1666666667,
+            2.25,
+            2.3333333333,
+            2.4166666667,
+            2.5,
+            2.5833333333,
+            2.6666666667,
+            2.75,
+            2.8333333333,
+            2.9166666667,
+            3.0,
+            3.0833333333,
+            3.1666666667,
+            3.25
+          ],
+          "_values": [
+            {
+              "__uuid__": "08a323f9-fe42-47f7-828b-7471c0fbaab0@f9941"
+            },
+            {
+              "__uuid__": "8218f53b-79cd-4e54-8c2e-313723fab961@f9941"
+            },
+            {
+              "__uuid__": "af3465c8-ab41-451c-81c0-0516aa1ccd51@f9941"
+            },
+            {
+              "__uuid__": "db62dd55-5e61-48e5-bada-cc3ed06390aa@f9941"
+            },
+            {
+              "__uuid__": "be320afe-dd96-442e-9202-fa498f4a08c2@f9941"
+            },
+            {
+              "__uuid__": "8ca9ded1-c8e6-44bc-a1e7-e9ebf1471bc8@f9941"
+            },
+            {
+              "__uuid__": "6550376c-f373-4743-af53-2e949a6361a3@f9941"
+            },
+            {
+              "__uuid__": "7be7d047-9e03-43b3-b63f-3dc483ba4637@f9941"
+            },
+            {
+              "__uuid__": "e5753663-42a5-45a2-a8c1-9346643b6570@f9941"
+            },
+            {
+              "__uuid__": "1aaa7b7a-0d00-498c-840f-0260976c807b@f9941"
+            },
+            {
+              "__uuid__": "27b0e73e-1500-48fa-9294-8c02f545d770@f9941"
+            },
+            {
+              "__uuid__": "c4781d9d-8512-4d61-a9ac-9ea453b251d6@f9941"
+            },
+            {
+              "__uuid__": "398f4e19-3a78-436b-98ba-2263ee8f653a@f9941"
+            },
+            {
+              "__uuid__": "d98e1500-a4cc-4fbe-9bb1-26729a6ea168@f9941"
+            },
+            {
+              "__uuid__": "5a02cacc-99ac-490b-a00d-95de1904c39f@f9941"
+            },
+            {
+              "__uuid__": "62f4212c-781f-47ad-b7d1-6a3708299026@f9941"
+            },
+            {
+              "__uuid__": "8505fbf0-cd44-4b3a-aaa1-595c8e818956@f9941"
+            },
+            {
+              "__uuid__": "03c52b11-7b90-4187-8a9d-b13ea1e9998f@f9941"
+            },
+            {
+              "__uuid__": "71d6dbd0-94c1-4079-9e50-e37f7ee85a47@f9941"
+            },
+            {
+              "__uuid__": "57134d23-d828-4db2-a959-105b5df9c8d0@f9941"
+            },
+            {
+              "__uuid__": "8aec965e-3aab-40c7-8a0d-f8b23401b58b@f9941"
+            },
+            {
+              "__uuid__": "8e2ef01b-c672-4c69-bc12-ccaf4a5f99f2@f9941"
+            },
+            {
+              "__uuid__": "ab6ee2e8-c60c-4bb2-90d9-65d76a18aeb5@f9941"
+            },
+            {
+              "__uuid__": "1bb66071-db9c-4246-a9d2-6969d3ee4e28@f9941"
+            },
+            {
+              "__uuid__": "43909919-f5e0-4882-9115-300ddb5e948f@f9941"
+            },
+            {
+              "__uuid__": "a4daab11-4bc1-4bea-8e72-a747bebe6cf5@f9941"
+            },
+            {
+              "__uuid__": "0cf11f43-988a-4e23-b689-e340ffb81aae@f9941"
+            },
+            {
+              "__uuid__": "32f637fc-f4db-4cc1-aacf-185d9770f8d8@f9941"
+            },
+            {
+              "__uuid__": "a247a404-47e6-419a-97df-faeb270e0c05@f9941"
+            },
+            {
+              "__uuid__": "ecac602d-8ba9-4b8d-ba95-ceea11eaaaed@f9941"
+            },
+            {
+              "__uuid__": "8eea8d69-319c-48e9-b8ed-f73b904ac602@f9941"
+            },
+            {
+              "__uuid__": "02ace7c3-d505-4c43-91f4-c8cbb374162c@f9941"
+            },
+            {
+              "__uuid__": "4576ebe4-6616-49a7-9dc1-aa3b2b6414b4@f9941"
+            },
+            {
+              "__uuid__": "08c9c728-2e8d-4b81-a275-9a20b1cb1099@f9941"
+            },
+            {
+              "__uuid__": "83643670-873f-4b0f-89ec-b24cfec447d0@f9941"
+            },
+            {
+              "__uuid__": "398e5220-0fe2-4d95-a7da-0af3f6940d73@f9941"
+            },
+            {
+              "__uuid__": "9f07bc9a-9f68-49a8-bc17-ccad04f5d935@f9941"
+            },
+            {
+              "__uuid__": "7edae15c-a3d4-4624-b6f6-11b64c77f12c@f9941"
+            },
+            {
+              "__uuid__": "e958c04a-1fb9-4c86-9b08-cbd311ed731f@f9941"
+            },
+            {
+              "__uuid__": "1d15153a-7ed1-4ce7-899f-a0236ce39abd@f9941"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "_exoticAnimation": null,
+  "_events": [],
+  "_embeddedPlayers": [],
+  "_additiveSettings": {
+    "__type__": "cc.AnimationClipAdditiveSettings",
+    "enabled": false,
+    "refClip": null
+  },
+  "_auxiliaryCurveEntries": []
+}

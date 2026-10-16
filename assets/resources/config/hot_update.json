@@ -1,0 +1,21 @@
+{
+  "enabled": true,
+  "enabledPlatforms": [
+    "android",
+    "ios"
+  ],
+  "channel": "dev",
+  "clientVersion": "0.6.0.0",
+  "latestUrlTemplate": "https://ray-1254042967.cos.ap-guangzhou.myqcloud.com/zhancheng/hotupdate/{platform}/{channel}/latest.json",
+  "startupBundles": [
+    "remoteRef"
+  ],
+  "requestTimeoutMs": 8000,
+  "allowHttpForLocalDebug": true,
+  "allowUnsignedManifests": true,
+  "requireRemoteOnFirstInstall": false,
+  "nativeStorageDir": "hotupdate-dev",
+  "nativeMaxConcurrentTask": 3,
+  "nativeVersionCompare": "release-stamp",
+  "nativeRestartDelayMs": 1200
+}

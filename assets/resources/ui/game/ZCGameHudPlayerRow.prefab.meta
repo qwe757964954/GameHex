@@ -1,0 +1,14 @@
+{
+  "ver": "1.1.50",
+  "importer": "prefab",
+  "imported": true,
+  "uuid": "b199c270-969f-483f-af48-823f4f9abc8e",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {},
+  "userData": {
+    "syncNodeName": "ZCGameHudPlayerRow",
+    "hasIcon": false
+  }
+}

@@ -1,0 +1,128 @@
+// Cocos Creator 3.8 Sprite shader for battle wall bricks.
+// 城墙砖重叠/接缝处理：只替换「已连接端部的深色描边像素」，不动砖的亮面实体与外轮廓。
+// 接缝暗线取墙砖内部颜色覆盖，但始终保留原 alpha，避免下面一段覆盖不满时露出地块形成断口。
+// Sprite color alpha 不再表示透明度，
+// 而是渲染层写入的 2-bit 连接标记（bit0=局部左端、bit1=局部右端）。
+CCEffect %{
+  techniques:
+  - passes:
+    - vert: wall-vs:vert
+      frag: wall-fs:frag
+      depthStencilState:
+        depthTest: false
+        depthWrite: false
+      blendState:
+        targets:
+        - blend: true
+          blendSrc: src_alpha
+          blendDst: one_minus_src_alpha
+          blendSrcAlpha: one
+          blendDstAlpha: one_minus_src_alpha
+      rasterizerState:
+        cullMode: none
+      properties:
+        darkThreshold: { value: 0.42 }
+        wallAxisTransform0: { value: [1.0, 0.0, 0.0, 0.0] }
+        wallAxisTransform1: { value: [1.0, 0.0, 0.0, 0.0] }
+        wallAxisTransform2: { value: [1.0, 0.0, 0.0, 0.0] }
+        wallAxisTransform3: { value: [1.0, 0.0, 0.0, 0.0] }
+        wallJoinProfile0: { value: [0.1, 0.1, 0.15, 0.15] }
+        wallJoinProfile1: { value: [0.1, 0.1, 0.15, 0.15] }
+        wallJoinProfile2: { value: [0.1, 0.1, 0.15, 0.15] }
+        wallJoinProfile3: { value: [0.1, 0.1, 0.15, 0.15] }
+}%
+
+CCProgram wall-vs %{
+  precision highp float;
+  #include <builtin/uniforms/cc-global>
+  #if USE_LOCAL
+    #include <builtin/uniforms/cc-local>
+  #endif
+  in vec3 a_position;
+  in vec2 a_texCoord;
+  in vec4 a_color;
+  out vec2 frameUV;
+  out vec4 color;
+
+  vec4 vert () {
+    vec4 pos = vec4(a_position, 1.0);
+    #if USE_LOCAL
+      pos = cc_matWorld * pos;
+    #endif
+    #if USE_PIXEL_ALIGNMENT
+      pos = cc_matView * pos;
+      pos.xyz = floor(pos.xyz);
+      pos = cc_matProj * pos;
+    #else
+      pos = cc_matViewProj * pos;
+    #endif
+    frameUV = a_texCoord;
+    color = a_color;
+    return pos;
+  }
+}%
+
+CCProgram wall-fs %{
+  precision highp float;
+  #include <builtin/internal/embedded-alpha>
+  #if SAMPLE_FROM_RT
+    #include <builtin/uniforms/cc-global>
+    #include <common/common-define>
+  #endif
+  in vec2 frameUV;
+  in vec4 color;
+  #pragma builtin(local)
+  layout(set = 2, binding = 12) uniform sampler2D cc_spriteTexture;
+
+  uniform WallTile {
+    vec4 wallAxisTransform0; // atlas UV -> 墙砖轴向 0..1；斜墙沿图片对角线而不是局部 x
+    vec4 wallAxisTransform1;
+    vec4 wallAxisTransform2;
+    vec4 wallAxisTransform3;
+    // xy=左右端融合宽度，zw=左右端向墙体内部取样距离；四张透视砖分别标定。
+    vec4 wallJoinProfile0;
+    vec4 wallJoinProfile1;
+    vec4 wallJoinProfile2;
+    vec4 wallJoinProfile3;
+    float darkThreshold; // 端帽/侧面暗色识别阈值；亮面不参与淡化
+  };
+
+  vec4 frag () {
+    vec4 result = CCSampleWithAlphaSeparated(cc_spriteTexture, frameUV);
+    float joinCode = floor(color.a * 3.0 + 0.5);
+    float leftJoined = mod(joinCode, 2.0);
+    float rightJoined = step(1.5, joinCode);
+    float frameCode = floor(color.b * 3.0 + 0.5);
+    vec4 wallAxisTransform = wallAxisTransform0;
+    vec4 wallJoinProfile = wallJoinProfile0;
+    if (frameCode > 0.5) wallAxisTransform = wallAxisTransform1;
+    if (frameCode > 1.5) wallAxisTransform = wallAxisTransform2;
+    if (frameCode > 2.5) wallAxisTransform = wallAxisTransform3;
+    if (frameCode > 0.5) wallJoinProfile = wallJoinProfile1;
+    if (frameCode > 1.5) wallJoinProfile = wallJoinProfile2;
+    if (frameCode > 2.5) wallJoinProfile = wallJoinProfile3;
+    float wallAxis = dot(vec3(frameUV, 1.0), wallAxisTransform.xyz);
+    float leftWidth = max(wallJoinProfile.x, 0.0001);
+    float rightWidth = max(wallJoinProfile.y, 0.0001);
+    // 端帽主体完全替换，最后 30% 区间平滑过渡到原墙面，避免产生新的硬边。
+    float leftBand = (1.0 - smoothstep(leftWidth * 0.7, leftWidth, wallAxis)) * leftJoined;
+    float rightBand = (1.0 - smoothstep(rightWidth * 0.7, rightWidth, 1.0 - wallAxis)) * rightJoined;
+    float edgeBand = max(leftBand, rightBand);
+    // 沿 atlas UV 中的墙砖轴向往内部移动各自标定的距离；旋转图集也能正确取样。
+    // 左端向轴向正方向取样，右端向负方向取样。
+    vec2 axisGradient = wallAxisTransform.xy;
+    float axisGradientSquared = max(dot(axisGradient, axisGradient), 0.000001);
+    float inwardDistance = leftBand >= rightBand ? wallJoinProfile.z : -wallJoinProfile.w;
+    vec2 interiorUV = frameUV + axisGradient * (inwardDistance / axisGradientSquared);
+    vec4 interior = CCSampleWithAlphaSeparated(cc_spriteTexture, interiorUV);
+    // 只替换连接端的深色端帽/描边颜色；alpha 始终保留，避免接缝被挖空。
+    float lum = dot(result.rgb, vec3(0.299, 0.587, 0.114));
+    float isDark = 1.0 - step(darkThreshold, lum);
+    float interiorAvailable = step(0.01, interior.a);
+    float darkMask = edgeBand * isDark * interiorAvailable;
+    result.rgb = mix(result.rgb, interior.rgb, darkMask);
+    // alpha/blue 分别用于连接标记和帧索引；敌方墙染色由 green 同时还原到 G/B。
+    result *= vec4(color.r, color.g, color.g, 1.0);
+    return result;
+  }
+}%

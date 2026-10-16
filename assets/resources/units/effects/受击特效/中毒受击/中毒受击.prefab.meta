@@ -1,0 +1,14 @@
+{
+  "ver": "1.1.50",
+  "importer": "prefab",
+  "imported": true,
+  "uuid": "4aa7c5e1-af1d-4857-9c27-1ae05a726eef",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {},
+  "userData": {
+    "syncNodeName": "中毒受击",
+    "hasIcon": false
+  }
+}

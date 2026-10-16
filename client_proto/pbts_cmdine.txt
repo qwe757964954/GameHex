@@ -1,0 +1,23 @@
+enerates TypeScript definitions from annotated JavaScript files.
+
+  -o, --out       Saves to a file instead of writing to stdout.
+
+  -g, --global    Name of the global object in browser environments, if any.
+
+  -i, --import    Comma delimited list of imports. Local names will equal camelCase of the basename.
+
+  --no-comments   Does not output any JSDoc comments.
+
+  Internal flags:
+
+  -n, --name      Wraps everything in a module of the specified name.
+
+  -m, --main      Whether building the main library without any imports.
+
+
+
+cmd /c npx pbts --no-comments --global --out Cmd.d-g.ts protoCompiled.js
+cmd /c npx pbts --no-comments --global --main --out Cmd.d-g-m.ts protoCompiled.js
+cmd /c npx pbts --no-comments --global --main --name --out Cmd.d-g-m.ts protoCompiled.js
+cmd /c npx pbts --no-comments --import --global --main --name --out Cmd.d-g-m-i.ts protoCompiled.js
+cmd /c npx pbts --no-comments --global --out Cmd.d.ts protoCompiled.js

@@ -1,0 +1,2324 @@
+{
+    "CmdActivity": {
+        "tlKey": [
+            "openResId"
+        ],
+        "tmField": {
+            "activityRefId": {
+                "fieldNumber": 2,
+                "type": "sint32",
+                "name": "activityRefId"
+            },
+            "detail": {
+                "fieldNumber": 5,
+                "type": "CmdActivityDetail",
+                "name": "detail"
+            },
+            "endTime": {
+                "fieldNumber": 4,
+                "type": "sint64",
+                "name": "endTime"
+            },
+            "openResId": {
+                "fieldNumber": 1,
+                "type": "sint32",
+                "name": "openResId"
+            },
+            "startTime": {
+                "fieldNumber": 3,
+                "type": "sint64",
+                "name": "startTime"
+            }
+        }
+    },
+    "CmdRole": {
+        "tlKey": [
+            "id"
+        ],
+        "tmField": {
+            "battleSpiritAnimalUniqueId": {
+                "fieldNumber": 29,
+                "type": "sint64",
+                "name": "battleSpiritAnimalUniqueId"
+            },
+            "cmdFirstRechargeInfo": {
+                "fieldNumber": 18,
+                "type": "CmdFirstRechargeInfo",
+                "name": "cmdFirstRechargeInfo"
+            },
+            "coin": {
+                "fieldNumber": 9,
+                "type": "string",
+                "name": "coin"
+            },
+            "createTime": {
+                "fieldNumber": 12,
+                "type": "sint64",
+                "name": "createTime"
+            },
+            "end": {
+                "fieldNumber": 11,
+                "type": "sint32",
+                "name": "end"
+            },
+            "endMax": {
+                "fieldNumber": 23,
+                "type": "sint32",
+                "name": "endMax"
+            },
+            "exp": {
+                "fieldNumber": 6,
+                "type": "sint32",
+                "name": "exp"
+            },
+            "freeRenameCount": {
+                "fieldNumber": 21,
+                "type": "sint32",
+                "name": "freeRenameCount"
+            },
+            "gem": {
+                "fieldNumber": 8,
+                "type": "string",
+                "name": "gem"
+            },
+            "gold": {
+                "fieldNumber": 7,
+                "type": "string",
+                "name": "gold"
+            },
+            "headFrame": {
+                "fieldNumber": 4,
+                "type": "sint64",
+                "name": "headFrame"
+            },
+            "id": {
+                "fieldNumber": 1,
+                "type": "sint64",
+                "name": "id"
+            },
+            "img": {
+                "fieldNumber": 3,
+                "type": "sint64",
+                "name": "img"
+            },
+            "internal": {
+                "fieldNumber": 24,
+                "type": "sint32",
+                "name": "internal"
+            },
+            "lv": {
+                "fieldNumber": 5,
+                "type": "sint32",
+                "name": "lv"
+            },
+            "maxBattleLevelPassTime": {
+                "fieldNumber": 31,
+                "type": "sint64",
+                "name": "maxBattleLevelPassTime"
+            },
+            "miningProcess": {
+                "fieldNumber": 15,
+                "type": "sint32",
+                "name": "miningProcess"
+            },
+            "miningShow": {
+                "fieldNumber": 16,
+                "type": "bool",
+                "name": "miningShow"
+            },
+            "name": {
+                "fieldNumber": 2,
+                "type": "string",
+                "name": "name"
+            },
+            "nextEndRecoverTime": {
+                "fieldNumber": 13,
+                "type": "sint64",
+                "name": "nextEndRecoverTime"
+            },
+            "platformImg": {
+                "fieldNumber": 20,
+                "type": "string",
+                "name": "platformImg"
+            },
+            "recharge": {
+                "fieldNumber": 17,
+                "type": "sint32",
+                "name": "recharge"
+            },
+            "region": {
+                "fieldNumber": 27,
+                "type": "string",
+                "name": "region"
+            },
+            "selectEquipPage": {
+                "fieldNumber": 14,
+                "type": "sint32",
+                "name": "selectEquipPage"
+            },
+            "selectServerId": {
+                "fieldNumber": 28,
+                "type": "sint32",
+                "name": "selectServerId"
+            },
+            "spiritAnimalAtkAdd": {
+                "fieldNumber": 30,
+                "type": "sint32",
+                "name": "spiritAnimalAtkAdd"
+            },
+            "sweepTimes": {
+                "fieldNumber": 26,
+                "type": "sint32",
+                "name": "sweepTimes"
+            },
+            "tlCmdAdvert": {
+                "fieldNumber": 19,
+                "type": "CmdAdvert",
+                "name": "tlCmdAdvert"
+            },
+            "tlCmdAppletInfo": {
+                "fieldNumber": 25,
+                "type": "CmdAppletInfo",
+                "name": "tlCmdAppletInfo"
+            },
+            "tlExtraId": {
+                "fieldNumber": 22,
+                "type": "sint32",
+                "name": "tlExtraId"
+            },
+            "washStone": {
+                "fieldNumber": 10,
+                "type": "sint32",
+                "name": "washStone"
+            },
+            "showAdvisorId": {
+                "fieldNumber": 32,
+                "type": "sint32",
+                "name": "showAdvisorId"
+            },
+            "selectAdvisorPage": {
+                "fieldNumber": 33,
+                "type": "sint32",
+                "name": "selectAdvisorPage"
+            },
+            "selectGeneralPage": {
+                "fieldNumber": 34,
+                "type": "sint32",
+                "name": "selectGeneralPage"
+            },
+            "takeFriendEndCount": {
+                "fieldNumber": 35,
+                "type": "sint32",
+                "name": "takeFriendEndCount"
+            },
+            "sendFriendEndCount": {
+                "fieldNumber": 36,
+                "type": "sint32",
+                "name": "sendFriendEndCount"
+            },
+            "lastGranaryGenTime": {
+                "fieldNumber": 37,
+                "type": "sint64",
+                "name": "lastGranaryGenTime"
+            },
+            "firstPassRewardMaxLevel": {
+                "fieldNumber": 38,
+                "type": "sint32",
+                "name": "firstPassRewardMaxLevel"
+            },
+            "lastIdleRewardTime": {
+                "fieldNumber": 39,
+                "type": "sint64",
+                "name": "lastIdleRewardTime"
+            },
+            "unionCoin": {
+                "fieldNumber": 40,
+                "type": "sint32",
+                "name": "unionCoin"
+            },
+            "unionGold": {
+                "fieldNumber": 41,
+                "type": "sint32",
+                "name": "unionGold"
+            },
+            "unionContribute": {
+                "fieldNumber": 42,
+                "type": "sint32",
+                "name": "unionContribute"
+            },
+            "enterLockMonsterCount": {
+                "fieldNumber": 43,
+                "type": "sint32",
+                "name": "enterLockMonsterCount"
+            },
+            "enterGuardsJianGeCount": {
+                "fieldNumber": 44,
+                "type": "sint32",
+                "name": "enterGuardsJianGeCount"
+            },
+            "usedSkinResId": {
+                "fieldNumber": 45,
+                "type": "sint64",
+                "name": "usedSkinResId"
+            },
+            "jianGeCoin": {
+                "fieldNumber": 46,
+                "type": "sint32",
+                "name": "jianGeCoin"
+            },
+            "activityCoin": {
+                "fieldNumber": 47,
+                "type": "sint32",
+                "name": "activityCoin"
+            },
+            "lastLoginTime": {
+                "fieldNumber": 48,
+                "type": "sint64",
+                "name": "lastLoginTime"
+            },
+            "sgeyCoin": {
+                "fieldNumber": 49,
+                "type": "sint32",
+                "name": "sgeyCoin"
+            },
+            "chhjCoin": {
+                "fieldNumber": 50,
+                "type": "sint32",
+                "name": "chhjCoin"
+            },
+            "dcjxCoin": {
+                "fieldNumber": 51,
+                "type": "sint32",
+                "name": "dcjxCoin"
+            },
+            "hyxtCoin": {
+                "fieldNumber": 52,
+                "type": "sint32",
+                "name": "hyxtCoin"
+            }
+        }
+    },
+    "CmdActivitySimple": {
+        "tlKey": [
+            "id"
+        ],
+        "tmField": {
+            "changeTime": {
+                "fieldNumber": 6,
+                "type": "int64",
+                "name": "changeTime"
+            },
+            "cmdActivityTime": {
+                "fieldNumber": 4,
+                "type": "CmdActivityTime",
+                "name": "cmdActivityTime"
+            },
+            "exist": {
+                "fieldNumber": 8,
+                "type": "bool",
+                "name": "exist"
+            },
+            "id": {
+                "fieldNumber": 1,
+                "type": "string",
+                "name": "id"
+            },
+            "jsonNames": {
+                "fieldNumber": 7,
+                "type": "string",
+                "name": "jsonNames"
+            },
+            "name": {
+                "fieldNumber": 3,
+                "type": "string",
+                "name": "name"
+            },
+            "tlCmdActivityTime": {
+                "fieldNumber": 5,
+                "type": "CmdActivityTime",
+                "name": "tlCmdActivityTime"
+            },
+            "type": {
+                "fieldNumber": 2,
+                "type": "int32",
+                "name": "type"
+            }
+        }
+    },
+    "CmdBattleChapter": {
+        "tlKey": [
+            "chapterId"
+        ],
+        "tmField": {
+            "chapterId": {
+                "fieldNumber": 1,
+                "type": "sint32",
+                "name": "chapterId"
+            },
+            "tlCmdBattleLevel": {
+                "fieldNumber": 2,
+                "type": "CmdBattleLevel",
+                "name": "tlCmdBattleLevel"
+            }
+        }
+    },
+    "CmdBattleLevel": {
+        "tlKey": [
+            "level"
+        ],
+        "tmField": {
+            "level": {
+                "fieldNumber": 1,
+                "type": "sint32",
+                "name": "level"
+            },
+            "star": {
+                "fieldNumber": 2,
+                "type": "sint32",
+                "name": "star"
+            },
+            "takeStar": {
+                "fieldNumber": 3,
+                "type": "sint32",
+                "name": "takeStar"
+            },
+            "battleTime": {
+                "fieldNumber": 4,
+                "type": "sint32",
+                "name": "battleTime"
+            },
+            "buyTimes": {
+                "fieldNumber": 5,
+                "type": "sint32",
+                "name": "buyTimes"
+            }
+        }
+    },
+    "CmdBattleToken": {
+        "tlKey": [
+            "type"
+        ],
+        "tmField": {
+            "type": {
+                "fieldNumber": 1,
+                "type": "sint32",
+                "name": "type"
+            },
+            "level": {
+                "fieldNumber": 2,
+                "type": "sint32",
+                "name": "level"
+            },
+            "exp": {
+                "fieldNumber": 3,
+                "type": "sint32",
+                "name": "exp"
+            },
+            "tlBattleTokenMessage": {
+                "fieldNumber": 4,
+                "type": "CmdBattleTokenMessage",
+                "name": "tlBattleTokenMessage"
+            },
+            "endTime": {
+                "fieldNumber": 5,
+                "type": "sint64",
+                "name": "endTime"
+            }
+        }
+    },
+    "CmdBreach": {
+        "tlKey": [],
+        "tmField": {}
+    },
+    "CmdCardCache": {
+        "tlKey": [
+            "resId"
+        ],
+        "tmField": {
+            "resId": {
+                "fieldNumber": 1,
+                "type": "sint32",
+                "name": "resId"
+            },
+            "endTime": {
+                "fieldNumber": 2,
+                "type": "sint64",
+                "name": "endTime"
+            }
+        }
+    },
+    "CmdCastleApprentice": {
+        "tlKey": [
+            "id"
+        ],
+        "tmField": {
+            "id": {
+                "fieldNumber": 1,
+                "type": "sint32",
+                "name": "id"
+            },
+            "level": {
+                "fieldNumber": 2,
+                "type": "sint32",
+                "name": "level"
+            },
+            "state": {
+                "fieldNumber": 3,
+                "type": "bool",
+                "name": "state"
+            }
+        }
+    },
+    "CmdCastleSkill": {
+        "tlKey": [
+            "skillId"
+        ],
+        "tmField": {
+            "level": {
+                "fieldNumber": 2,
+                "type": "sint32",
+                "name": "level"
+            },
+            "skillId": {
+                "fieldNumber": 1,
+                "type": "sint32",
+                "name": "skillId"
+            }
+        }
+    },
+    "CmdCastleWall": {
+        "tlKey": [
+            "roleId"
+        ],
+        "tmField": {
+            "roleId": {
+                "fieldNumber": 1,
+                "type": "sint64",
+                "name": "roleId"
+            },
+            "selectType": {
+                "fieldNumber": 2,
+                "type": "sint32",
+                "name": "selectType"
+            },
+            "level": {
+                "fieldNumber": 3,
+                "type": "sint32",
+                "name": "level"
+            },
+            "selectSkillPageId": {
+                "fieldNumber": 4,
+                "type": "sint32",
+                "name": "selectSkillPageId"
+            }
+        }
+    },
+    "CmdCastleWallSkill": {
+        "tlKey": [
+            "id"
+        ],
+        "tmField": {
+            "id": {
+                "fieldNumber": 1,
+                "type": "sint32",
+                "name": "id"
+            },
+            "level": {
+                "fieldNumber": 2,
+                "type": "sint32",
+                "name": "level"
+            }
+        }
+    },
+    "CmdCastleWorkShop": {
+        "tlKey": [
+            "id"
+        ],
+        "tmField": {
+            "history": {
+                "fieldNumber": 6,
+                "type": "string",
+                "name": "history"
+            },
+            "id": {
+                "fieldNumber": 1,
+                "type": "sint32",
+                "name": "id"
+            },
+            "level": {
+                "fieldNumber": 2,
+                "type": "sint32",
+                "name": "level"
+            },
+            "levelEndTime": {
+                "fieldNumber": 4,
+                "type": "sint64",
+                "name": "levelEndTime"
+            },
+            "rewardEndTime": {
+                "fieldNumber": 5,
+                "type": "sint64",
+                "name": "rewardEndTime"
+            },
+            "rewardNum": {
+                "fieldNumber": 3,
+                "type": "sint32",
+                "name": "rewardNum"
+            }
+        }
+    },
+    "CmdChapter": {
+        "tlKey": [
+            "resId"
+        ],
+        "tmField": {
+            "finishState": {
+                "fieldNumber": 2,
+                "type": "sint32",
+                "name": "finishState"
+            },
+            "giftState": {
+                "fieldNumber": 5,
+                "type": "sint32",
+                "name": "giftState"
+            },
+            "liveTime": {
+                "fieldNumber": 3,
+                "type": "sint64",
+                "name": "liveTime"
+            },
+            "resId": {
+                "fieldNumber": 1,
+                "type": "sint64",
+                "name": "resId"
+            },
+            "tlChapterBoxState": {
+                "fieldNumber": 4,
+                "type": "CmdChapterBoxState",
+                "name": "tlChapterBoxState"
+            }
+        }
+    },
+    "CmdCode": {
+        "tlKey": [],
+        "tmField": {}
+    },
+    "CmdDayWeekMonthGift": {
+        "tlKey": [
+            "tlDayGift"
+        ],
+        "tmField": {
+            "rechargeDay": {
+                "fieldNumber": 5,
+                "type": "sint32",
+                "name": "rechargeDay"
+            },
+            "tlDayGift": {
+                "fieldNumber": 1,
+                "type": "EveryDayGift",
+                "name": "tlDayGift"
+            },
+            "tlMonthGift": {
+                "fieldNumber": 3,
+                "type": "EveryDayGift",
+                "name": "tlMonthGift"
+            },
+            "tlRechargeCount": {
+                "fieldNumber": 4,
+                "type": "RechargeCount",
+                "name": "tlRechargeCount"
+            },
+            "tlWeekGift": {
+                "fieldNumber": 2,
+                "type": "EveryDayGift",
+                "name": "tlWeekGift"
+            }
+        }
+    },
+    "CmdEquipPage": {
+        "tlKey": [
+            "page"
+        ],
+        "tmField": {
+            "name": {
+                "fieldNumber": 2,
+                "type": "string",
+                "name": "name"
+            },
+            "page": {
+                "fieldNumber": 1,
+                "type": "sint32",
+                "name": "page"
+            },
+            "tlCmdEquip": {
+                "fieldNumber": 3,
+                "type": "CmdEquip",
+                "name": "tlCmdEquip"
+            }
+        }
+    },
+    "CmdEveryDaySign": {
+        "tlKey": [],
+        "tmField": {}
+    },
+    "CmdFirstRecharge": {
+        "tlKey": [],
+        "tmField": {}
+    },
+    "CmdFuBen": {
+        "tlKey": [
+            "resId"
+        ],
+        "tmField": {
+            "detail": {
+                "fieldNumber": 2,
+                "type": "CmdFuBenDetail",
+                "name": "detail"
+            },
+            "resId": {
+                "fieldNumber": 1,
+                "type": "sint64",
+                "name": "resId"
+            }
+        }
+    },
+    "CmdFund": {
+        "tlKey": [],
+        "tmField": {}
+    },
+    "CmdGameCircle": {
+        "tlKey": [
+            "likeRewardState"
+        ],
+        "tmField": {
+            "likeRewardState": {
+                "fieldNumber": 1,
+                "type": "CmdCommonState",
+                "name": "likeRewardState"
+            }
+        }
+    },
+    "CmdGem": {
+        "tlKey": [
+            "id"
+        ],
+        "tmField": {
+            "attribute": {
+                "fieldNumber": 5,
+                "type": "sint32",
+                "name": "attribute"
+            },
+            "id": {
+                "fieldNumber": 1,
+                "type": "sint64",
+                "name": "id"
+            },
+            "lock": {
+                "fieldNumber": 6,
+                "type": "sint32",
+                "name": "lock"
+            },
+            "newAttribute": {
+                "fieldNumber": 7,
+                "type": "sint32",
+                "name": "newAttribute"
+            },
+            "num": {
+                "fieldNumber": 4,
+                "type": "sint32",
+                "name": "num"
+            },
+            "quality": {
+                "fieldNumber": 3,
+                "type": "sint32",
+                "name": "quality"
+            },
+            "resId": {
+                "fieldNumber": 2,
+                "type": "sint64",
+                "name": "resId"
+            }
+        }
+    },
+    "CmdGuanKaGift": {
+        "tlKey": [
+            "resId"
+        ],
+        "tmField": {
+            "resId": {
+                "fieldNumber": 1,
+                "type": "sint32",
+                "name": "resId"
+            },
+            "buyCount": {
+                "fieldNumber": 2,
+                "type": "sint64",
+                "name": "buyCount"
+            }
+        }
+    },
+    "CmdGuide": {
+        "tlKey": [],
+        "tmField": {}
+    },
+    "CmdHang": {
+        "tlKey": [],
+        "tmField": {}
+    },
+    "CmdHero": {
+        "tlKey": [
+            "resId"
+        ],
+        "tmField": {
+            "equipId": {
+                "fieldNumber": 4,
+                "type": "sint64",
+                "name": "equipId"
+            },
+            "level": {
+                "fieldNumber": 2,
+                "type": "sint64",
+                "name": "level"
+            },
+            "resId": {
+                "fieldNumber": 1,
+                "type": "sint64",
+                "name": "resId"
+            },
+            "state": {
+                "fieldNumber": 3,
+                "type": "sint32",
+                "name": "state"
+            }
+        }
+    },
+    "CmdItem": {
+        "tlKey": [
+            "resId"
+        ],
+        "tmField": {
+            "isNew": {
+                "fieldNumber": 3,
+                "type": "bool",
+                "name": "isNew"
+            },
+            "number": {
+                "fieldNumber": 2,
+                "type": "sint32",
+                "name": "number"
+            },
+            "resId": {
+                "fieldNumber": 1,
+                "type": "sint64",
+                "name": "resId"
+            }
+        }
+    },
+    "CmdLockMonster": {
+        "tlKey": [
+            "roleId"
+        ],
+        "tmField": {
+            "roleId": {
+                "fieldNumber": 1,
+                "type": "sint64",
+                "name": "roleId"
+            },
+            "level": {
+                "fieldNumber": 2,
+                "type": "sint32",
+                "name": "level"
+            },
+            "levelPassTime": {
+                "fieldNumber": 3,
+                "type": "sint64",
+                "name": "levelPassTime"
+            },
+            "takeBoxlevel": {
+                "fieldNumber": 4,
+                "type": "sint32",
+                "name": "takeBoxlevel"
+            },
+            "buyEnterCount": {
+                "fieldNumber": 5,
+                "type": "sint32",
+                "name": "buyEnterCount"
+            }
+        }
+    },
+    "CmdMall": {
+        "tlKey": [
+            "id"
+        ],
+        "tmField": {
+            "detail": {
+                "fieldNumber": 2,
+                "type": "CmdMallDetail",
+                "name": "detail"
+            },
+            "id": {
+                "fieldNumber": 1,
+                "type": "sint64",
+                "name": "id"
+            }
+        }
+    },
+    "CmdOpenCache": {
+        "tlKey": [
+            "refId"
+        ],
+        "tmField": {
+            "refId": {
+                "fieldNumber": 1,
+                "type": "sint32",
+                "name": "refId"
+            },
+            "show": {
+                "fieldNumber": 2,
+                "type": "bool",
+                "name": "show"
+            }
+        }
+    },
+    "CmdRankItem": {
+        "tlKey": [
+            "type"
+        ],
+        "tmField": {
+            "endTime": {
+                "fieldNumber": 3,
+                "type": "sint32",
+                "name": "endTime"
+            },
+            "showEndTime": {
+                "fieldNumber": 4,
+                "type": "sint32",
+                "name": "showEndTime"
+            },
+            "startTime": {
+                "fieldNumber": 2,
+                "type": "sint32",
+                "name": "startTime"
+            },
+            "type": {
+                "fieldNumber": 1,
+                "type": "sint32",
+                "name": "type"
+            }
+        }
+    },
+    "CmdRedDotCache": {
+        "tlKey": [
+            "redDotType"
+        ],
+        "tmField": {
+            "nextRefreshTime": {
+                "fieldNumber": 3,
+                "type": "sint64",
+                "name": "nextRefreshTime"
+            },
+            "number": {
+                "fieldNumber": 2,
+                "type": "sint32",
+                "name": "number"
+            },
+            "redDotType": {
+                "fieldNumber": 1,
+                "type": "CmdRedDotType",
+                "name": "redDotType"
+            }
+        }
+    },
+    "CmdRune": {
+        "tlKey": [
+            "id"
+        ],
+        "tmField": {
+            "id": {
+                "fieldNumber": 1,
+                "type": "sint64",
+                "name": "id"
+            },
+            "isNew": {
+                "fieldNumber": 6,
+                "type": "bool",
+                "name": "isNew"
+            },
+            "isPutOn": {
+                "fieldNumber": 5,
+                "type": "bool",
+                "name": "isPutOn"
+            },
+            "phase": {
+                "fieldNumber": 4,
+                "type": "sint32",
+                "name": "phase"
+            },
+            "quality": {
+                "fieldNumber": 3,
+                "type": "sint32",
+                "name": "quality"
+            },
+            "resId": {
+                "fieldNumber": 2,
+                "type": "sint64",
+                "name": "resId"
+            }
+        }
+    },
+    "CmdSecretRealm": {
+        "tlKey": [
+            "roleId"
+        ],
+        "tmField": {
+            "endTime": {
+                "fieldNumber": 4,
+                "type": "sint64",
+                "name": "endTime"
+            },
+            "level": {
+                "fieldNumber": 3,
+                "type": "sint32",
+                "name": "level"
+            },
+            "roleId": {
+                "fieldNumber": 1,
+                "type": "sint64",
+                "name": "roleId"
+            },
+            "secretRealmScore": {
+                "fieldNumber": 5,
+                "type": "CmdSecretRealmScore",
+                "name": "secretRealmScore"
+            },
+            "type": {
+                "fieldNumber": 2,
+                "type": "sint32",
+                "name": "type"
+            }
+        }
+    },
+    "CmdShare": {
+        "tlKey": [],
+        "tmField": {}
+    },
+    "CmdShop": {
+        "tlKey": [
+            "cmdShopType"
+        ],
+        "tmField": {
+            "cmdShopType": {
+                "fieldNumber": 1,
+                "type": "CmdShopType",
+                "name": "cmdShopType"
+            },
+            "tlCmdShopGoods": {
+                "fieldNumber": 2,
+                "type": "CmdShopGoods",
+                "name": "tlCmdShopGoods"
+            }
+        }
+    },
+    "CmdSkin": {
+        "tlKey": [
+            "resId"
+        ],
+        "tmField": {
+            "resId": {
+                "fieldNumber": 1,
+                "type": "sint64",
+                "name": "resId"
+            },
+            "used": {
+                "fieldNumber": 2,
+                "type": "bool",
+                "name": "used"
+            }
+        }
+    },
+    "CmdSpecialGiftCache": {
+        "tlKey": [
+            "resId"
+        ],
+        "tmField": {
+            "endTime": {
+                "fieldNumber": 3,
+                "type": "sint64",
+                "name": "endTime"
+            },
+            "resId": {
+                "fieldNumber": 1,
+                "type": "sint64",
+                "name": "resId"
+            },
+            "state": {
+                "fieldNumber": 2,
+                "type": "CmdCommonState",
+                "name": "state"
+            }
+        }
+    },
+    "CmdSpiritAnimal": {
+        "tlKey": [
+            "uniqueId"
+        ],
+        "tmField": {
+            "level": {
+                "fieldNumber": 3,
+                "type": "sint32",
+                "name": "level"
+            },
+            "resId": {
+                "fieldNumber": 2,
+                "type": "sint64",
+                "name": "resId"
+            },
+            "uniqueId": {
+                "fieldNumber": 1,
+                "type": "sint64",
+                "name": "uniqueId"
+            }
+        }
+    },
+    "CmdTask": {
+        "tlKey": [
+            "resId"
+        ],
+        "tmField": {
+            "count": {
+                "fieldNumber": 2,
+                "type": "sint64",
+                "name": "count"
+            },
+            "resId": {
+                "fieldNumber": 1,
+                "type": "sint32",
+                "name": "resId"
+            },
+            "rewardState": {
+                "fieldNumber": 3,
+                "type": "CmdCommonState",
+                "name": "rewardState"
+            }
+        }
+    },
+    "CmdArmyLevel": {
+        "tlKey": [
+            "armyId"
+        ],
+        "tmField": {
+            "armyId": {
+                "fieldNumber": 1,
+                "type": "sint32",
+                "name": "armyId"
+            },
+            "level": {
+                "fieldNumber": 2,
+                "type": "sint32",
+                "name": "level"
+            }
+        }
+    },
+    "CmdGeneral": {
+        "tlKey": [
+            "generalId"
+        ],
+        "tmField": {
+            "generalId": {
+                "fieldNumber": 1,
+                "type": "sint32",
+                "name": "generalId"
+            },
+            "star": {
+                "fieldNumber": 2,
+                "type": "sint32",
+                "name": "star"
+            }
+        }
+    },
+    "CmdAdvisor": {
+        "tlKey": [
+            "advisorId"
+        ],
+        "tmField": {
+            "advisorId": {
+                "fieldNumber": 1,
+                "type": "sint32",
+                "name": "advisorId"
+            },
+            "star": {
+                "fieldNumber": 2,
+                "type": "sint32",
+                "name": "star"
+            }
+        }
+    },
+    "CmdAdvisorPage": {
+        "tlKey": [
+            "PageId"
+        ],
+        "tmField": {
+            "PageId": {
+                "fieldNumber": 1,
+                "type": "sint32",
+                "name": "PageId"
+            },
+            "advisorList": {
+                "fieldNumber": 2,
+                "type": "sint32",
+                "name": "advisorList"
+            }
+        }
+    },
+    "CmdArmySkinStar": {
+        "tlKey": [
+            "skinId"
+        ],
+        "tmField": {
+            "skinId": {
+                "fieldNumber": 1,
+                "type": "sint32",
+                "name": "skinId"
+            },
+            "star": {
+                "fieldNumber": 2,
+                "type": "sint32",
+                "name": "star"
+            }
+        }
+    },
+    "CmdArmySkinSelect": {
+        "tlKey": [
+            "armyId"
+        ],
+        "tmField": {
+            "armyId": {
+                "fieldNumber": 1,
+                "type": "sint32",
+                "name": "armyId"
+            },
+            "skinId": {
+                "fieldNumber": 2,
+                "type": "sint32",
+                "name": "skinId"
+            }
+        }
+    },
+    "CmdGeneralPage": {
+        "tlKey": [
+            "PageId"
+        ],
+        "tmField": {
+            "PageId": {
+                "fieldNumber": 1,
+                "type": "sint32",
+                "name": "PageId"
+            },
+            "generalList": {
+                "fieldNumber": 2,
+                "type": "sint32",
+                "name": "generalList"
+            }
+        }
+    },
+    "CmdFriend": {
+        "tlKey": [
+            "friendId"
+        ],
+        "tmField": {
+            "friendId": {
+                "fieldNumber": 1,
+                "type": "sint64",
+                "name": "friendId"
+            },
+            "name": {
+                "fieldNumber": 2,
+                "type": "string",
+                "name": "name"
+            },
+            "level": {
+                "fieldNumber": 3,
+                "type": "sint32",
+                "name": "level"
+            },
+            "title": {
+                "fieldNumber": 4,
+                "type": "sint32",
+                "name": "title"
+            },
+            "img": {
+                "fieldNumber": 5,
+                "type": "sint64",
+                "name": "img"
+            },
+            "headFrame": {
+                "fieldNumber": 6,
+                "type": "sint64",
+                "name": "headFrame"
+            },
+            "power": {
+                "fieldNumber": 7,
+                "type": "sint64",
+                "name": "power"
+            },
+            "serverId": {
+                "fieldNumber": 8,
+                "type": "sint32",
+                "name": "serverId"
+            },
+            "selectServerId": {
+                "fieldNumber": 9,
+                "type": "sint32",
+                "name": "selectServerId"
+            },
+            "online": {
+                "fieldNumber": 10,
+                "type": "bool",
+                "name": "online"
+            },
+            "lastOfflineTime": {
+                "fieldNumber": 11,
+                "type": "sint64",
+                "name": "lastOfflineTime"
+            },
+            "todaySend": {
+                "fieldNumber": 12,
+                "type": "bool",
+                "name": "todaySend"
+            },
+            "todayReceive": {
+                "fieldNumber": 13,
+                "type": "bool",
+                "name": "todayReceive"
+            },
+            "todayTake": {
+                "fieldNumber": 14,
+                "type": "bool",
+                "name": "todayTake"
+            }
+        }
+    },
+    "CmdFriendApply": {
+        "tlKey": [
+            "friendId"
+        ],
+        "tmField": {
+            "friendId": {
+                "fieldNumber": 1,
+                "type": "sint64",
+                "name": "friendId"
+            },
+            "name": {
+                "fieldNumber": 2,
+                "type": "string",
+                "name": "name"
+            },
+            "level": {
+                "fieldNumber": 3,
+                "type": "sint32",
+                "name": "level"
+            },
+            "title": {
+                "fieldNumber": 4,
+                "type": "sint32",
+                "name": "title"
+            },
+            "img": {
+                "fieldNumber": 5,
+                "type": "sint64",
+                "name": "img"
+            },
+            "headFrame": {
+                "fieldNumber": 6,
+                "type": "sint64",
+                "name": "headFrame"
+            },
+            "power": {
+                "fieldNumber": 7,
+                "type": "sint64",
+                "name": "power"
+            },
+            "selectServerId": {
+                "fieldNumber": 8,
+                "type": "sint32",
+                "name": "selectServerId"
+            },
+            "serverId": {
+                "fieldNumber": 9,
+                "type": "sint32",
+                "name": "serverId"
+            }
+        }
+    },
+    "CmdFriendBlack": {
+        "tlKey": [
+            "friendId"
+        ],
+        "tmField": {
+            "friendId": {
+                "fieldNumber": 1,
+                "type": "sint64",
+                "name": "friendId"
+            },
+            "name": {
+                "fieldNumber": 2,
+                "type": "string",
+                "name": "name"
+            },
+            "level": {
+                "fieldNumber": 3,
+                "type": "sint32",
+                "name": "level"
+            },
+            "title": {
+                "fieldNumber": 4,
+                "type": "sint32",
+                "name": "title"
+            },
+            "img": {
+                "fieldNumber": 5,
+                "type": "sint64",
+                "name": "img"
+            },
+            "headFrame": {
+                "fieldNumber": 6,
+                "type": "sint64",
+                "name": "headFrame"
+            },
+            "power": {
+                "fieldNumber": 7,
+                "type": "sint64",
+                "name": "power"
+            },
+            "selectServerId": {
+                "fieldNumber": 8,
+                "type": "sint32",
+                "name": "selectServerId"
+            },
+            "serverId": {
+                "fieldNumber": 9,
+                "type": "sint32",
+                "name": "serverId"
+            }
+        }
+    },
+    "CmdChatRole": {
+        "tlKey": [
+            "roleId"
+        ],
+        "tmField": {
+            "roleId": {
+                "fieldNumber": 1,
+                "type": "sint64",
+                "name": "roleId"
+            },
+            "name": {
+                "fieldNumber": 2,
+                "type": "string",
+                "name": "name"
+            },
+            "img": {
+                "fieldNumber": 3,
+                "type": "sint64",
+                "name": "img"
+            },
+            "headFrame": {
+                "fieldNumber": 4,
+                "type": "sint64",
+                "name": "headFrame"
+            },
+            "platformImg": {
+                "fieldNumber": 5,
+                "type": "string",
+                "name": "platformImg"
+            },
+            "level": {
+                "fieldNumber": 6,
+                "type": "sint32",
+                "name": "level"
+            },
+            "power": {
+                "fieldNumber": 7,
+                "type": "sint64",
+                "name": "power"
+            },
+            "serverId": {
+                "fieldNumber": 8,
+                "type": "sint32",
+                "name": "serverId"
+            },
+            "selectServerId": {
+                "fieldNumber": 9,
+                "type": "sint32",
+                "name": "selectServerId"
+            },
+            "titleId": {
+                "fieldNumber": 10,
+                "type": "sint32",
+                "name": "titleId"
+            },
+            "lastOfflineTime": {
+                "fieldNumber": 11,
+                "type": "sint64",
+                "name": "lastOfflineTime"
+            }
+        }
+    },
+    "CmdGranary": {
+        "tlKey": [
+            "id"
+        ],
+        "tmField": {
+            "id": {
+                "fieldNumber": 1,
+                "type": "sint64",
+                "name": "id"
+            },
+            "genTime": {
+                "fieldNumber": 2,
+                "type": "sint64",
+                "name": "genTime"
+            },
+            "outTime": {
+                "fieldNumber": 3,
+                "type": "sint64",
+                "name": "outTime"
+            }
+        }
+    },
+    "CmdMonsterManualItem": {
+        "tlKey": [
+            "monsterId"
+        ],
+        "tmField": {
+            "monsterId": {
+                "fieldNumber": 1,
+                "type": "sint32",
+                "name": "monsterId"
+            },
+            "activeState": {
+                "fieldNumber": 2,
+                "type": "bool",
+                "name": "activeState"
+            },
+            "rewardState": {
+                "fieldNumber": 3,
+                "type": "bool",
+                "name": "rewardState"
+            }
+        }
+    },
+    "CmdEquipItem": {
+        "tlKey": [
+            "uniqueId"
+        ],
+        "tmField": {
+            "uniqueId": {
+                "fieldNumber": 1,
+                "type": "sint64",
+                "name": "uniqueId"
+            },
+            "resId": {
+                "fieldNumber": 2,
+                "type": "sint32",
+                "name": "resId"
+            },
+            "baseId": {
+                "fieldNumber": 3,
+                "type": "sint32",
+                "name": "baseId"
+            },
+            "rank": {
+                "fieldNumber": 4,
+                "type": "sint32",
+                "name": "rank"
+            },
+            "baseQuality": {
+                "fieldNumber": 5,
+                "type": "sint32",
+                "name": "baseQuality"
+            },
+            "curQuality": {
+                "fieldNumber": 6,
+                "type": "sint32",
+                "name": "curQuality"
+            },
+            "costNum": {
+                "fieldNumber": 7,
+                "type": "sint32",
+                "name": "costNum"
+            },
+            "washNum": {
+                "fieldNumber": 8,
+                "type": "sint32",
+                "name": "washNum"
+            },
+            "tlAttributes": {
+                "fieldNumber": 9,
+                "type": "sint32",
+                "name": "tlAttributes"
+            },
+            "tlEffects": {
+                "fieldNumber": 10,
+                "type": "sint32",
+                "name": "tlEffects"
+            }
+        }
+    },
+    "CmdEquipPart": {
+        "tlKey": [
+            "equipId"
+        ],
+        "tmField": {
+            "equipId": {
+                "fieldNumber": 1,
+                "type": "sint32",
+                "name": "equipId"
+            },
+            "equip": {
+                "fieldNumber": 2,
+                "type": "CmdEquipItem",
+                "name": "equip"
+            }
+        }
+    },
+    "CmdUnion": {
+        "tlKey": [
+            "id"
+        ],
+        "tmField": {
+            "id": {
+                "fieldNumber": 1,
+                "type": "sint64",
+                "name": "id"
+            },
+            "exp": {
+                "fieldNumber": 2,
+                "type": "sint32",
+                "name": "exp"
+            },
+            "level": {
+                "fieldNumber": 3,
+                "type": "sint32",
+                "name": "level"
+            },
+            "icon": {
+                "fieldNumber": 4,
+                "type": "sint32",
+                "name": "icon"
+            },
+            "count": {
+                "fieldNumber": 5,
+                "type": "sint32",
+                "name": "count"
+            },
+            "maxCount": {
+                "fieldNumber": 6,
+                "type": "sint32",
+                "name": "maxCount"
+            },
+            "autoJoin": {
+                "fieldNumber": 7,
+                "type": "bool",
+                "name": "autoJoin"
+            },
+            "name": {
+                "fieldNumber": 8,
+                "type": "string",
+                "name": "name"
+            },
+            "leaderId": {
+                "fieldNumber": 9,
+                "type": "sint64",
+                "name": "leaderId"
+            },
+            "leaderName": {
+                "fieldNumber": 10,
+                "type": "string",
+                "name": "leaderName"
+            },
+            "notice": {
+                "fieldNumber": 11,
+                "type": "string",
+                "name": "notice"
+            },
+            "declaration": {
+                "fieldNumber": 12,
+                "type": "string",
+                "name": "declaration"
+            },
+            "wxChat": {
+                "fieldNumber": 13,
+                "type": "string",
+                "name": "wxChat"
+            },
+            "serverId": {
+                "fieldNumber": 14,
+                "type": "sint32",
+                "name": "serverId"
+            },
+            "selectServerId": {
+                "fieldNumber": 15,
+                "type": "sint32",
+                "name": "selectServerId"
+            },
+            "state": {
+                "fieldNumber": 16,
+                "type": "sint64",
+                "name": "state"
+            }
+        }
+    },
+    "CmdUnionMember": {
+        "tlKey": [
+            "roleId"
+        ],
+        "tmField": {
+            "roleId": {
+                "fieldNumber": 1,
+                "type": "sint64",
+                "name": "roleId"
+            },
+            "name": {
+                "fieldNumber": 2,
+                "type": "string",
+                "name": "name"
+            },
+            "img": {
+                "fieldNumber": 3,
+                "type": "sint64",
+                "name": "img"
+            },
+            "headFrame": {
+                "fieldNumber": 4,
+                "type": "sint64",
+                "name": "headFrame"
+            },
+            "level": {
+                "fieldNumber": 5,
+                "type": "sint32",
+                "name": "level"
+            },
+            "power": {
+                "fieldNumber": 6,
+                "type": "sint64",
+                "name": "power"
+            },
+            "serverId": {
+                "fieldNumber": 7,
+                "type": "sint32",
+                "name": "serverId"
+            },
+            "selectServerId": {
+                "fieldNumber": 8,
+                "type": "sint32",
+                "name": "selectServerId"
+            },
+            "titleId": {
+                "fieldNumber": 9,
+                "type": "sint32",
+                "name": "titleId"
+            },
+            "position": {
+                "fieldNumber": 10,
+                "type": "sint32",
+                "name": "position"
+            },
+            "online": {
+                "fieldNumber": 11,
+                "type": "bool",
+                "name": "online"
+            },
+            "lastOfflineTime": {
+                "fieldNumber": 12,
+                "type": "sint64",
+                "name": "lastOfflineTime"
+            },
+            "todayContribute": {
+                "fieldNumber": 13,
+                "type": "sint32",
+                "name": "todayContribute"
+            },
+            "allContribute": {
+                "fieldNumber": 14,
+                "type": "sint32",
+                "name": "allContribute"
+            }
+        }
+    },
+    "CmdUnionApplys": {
+        "tlKey": [
+            "applyId"
+        ],
+        "tmField": {
+            "applyId": {
+                "fieldNumber": 1,
+                "type": "sint64",
+                "name": "applyId"
+            },
+            "name": {
+                "fieldNumber": 2,
+                "type": "string",
+                "name": "name"
+            },
+            "level": {
+                "fieldNumber": 3,
+                "type": "sint32",
+                "name": "level"
+            },
+            "title": {
+                "fieldNumber": 4,
+                "type": "sint32",
+                "name": "title"
+            },
+            "img": {
+                "fieldNumber": 5,
+                "type": "sint64",
+                "name": "img"
+            },
+            "headFrame": {
+                "fieldNumber": 6,
+                "type": "sint64",
+                "name": "headFrame"
+            },
+            "power": {
+                "fieldNumber": 7,
+                "type": "sint64",
+                "name": "power"
+            },
+            "serverId": {
+                "fieldNumber": 8,
+                "type": "sint32",
+                "name": "serverId"
+            },
+            "selectServerId": {
+                "fieldNumber": 9,
+                "type": "sint32",
+                "name": "selectServerId"
+            }
+        }
+    },
+    "CmdUnionLogs": {
+        "tlKey": [
+            "id"
+        ],
+        "tmField": {
+            "id": {
+                "fieldNumber": 1,
+                "type": "sint64",
+                "name": "id"
+            },
+            "name": {
+                "fieldNumber": 2,
+                "type": "string",
+                "name": "name"
+            },
+            "join": {
+                "fieldNumber": 3,
+                "type": "sint32",
+                "name": "join"
+            },
+            "time": {
+                "fieldNumber": 4,
+                "type": "sint64",
+                "name": "time"
+            },
+            "opPosition": {
+                "fieldNumber": 5,
+                "type": "sint32",
+                "name": "opPosition"
+            },
+            "opName": {
+                "fieldNumber": 6,
+                "type": "string",
+                "name": "opName"
+            }
+        }
+    },
+    "CmdRoleUnion": {
+        "tlKey": [
+            "roleId"
+        ],
+        "tmField": {
+            "roleId": {
+                "fieldNumber": 1,
+                "type": "sint64",
+                "name": "roleId"
+            },
+            "unionId": {
+                "fieldNumber": 2,
+                "type": "sint64",
+                "name": "unionId"
+            },
+            "lastQuitTime": {
+                "fieldNumber": 3,
+                "type": "sint64",
+                "name": "lastQuitTime"
+            },
+            "serverId": {
+                "fieldNumber": 4,
+                "type": "sint32",
+                "name": "serverId"
+            },
+            "selectServerId": {
+                "fieldNumber": 5,
+                "type": "sint32",
+                "name": "selectServerId"
+            },
+            "todayDonateTimes": {
+                "fieldNumber": 6,
+                "type": "sint32",
+                "name": "todayDonateTimes"
+            },
+            "todayDonateAdvTimes": {
+                "fieldNumber": 7,
+                "type": "sint32",
+                "name": "todayDonateAdvTimes"
+            },
+            "todayTaskAdvTimes": {
+                "fieldNumber": 8,
+                "type": "sint32",
+                "name": "todayTaskAdvTimes"
+            },
+            "todayTaskGetProgressCount": {
+                "fieldNumber": 9,
+                "type": "int32",
+                "name": "todayTaskGetProgressCount"
+            },
+            "todayExchangeTimes": {
+                "fieldNumber": 10,
+                "type": "sint32",
+                "name": "todayExchangeTimes"
+            },
+            "todayBargainTimes": {
+                "fieldNumber": 11,
+                "type": "sint32",
+                "name": "todayBargainTimes"
+            },
+            "todayBuyBargainTimes": {
+                "fieldNumber": 12,
+                "type": "sint32",
+                "name": "todayBuyBargainTimes"
+            },
+            "todayDrumTimes": {
+                "fieldNumber": 13,
+                "type": "sint32",
+                "name": "todayDrumTimes"
+            }
+        }
+    },
+    "CmdUnionActivity": {
+        "tlKey": [
+            "unionId"
+        ],
+        "tmField": {
+            "unionId": {
+                "fieldNumber": 1,
+                "type": "sint64",
+                "name": "unionId"
+            },
+            "type": {
+                "fieldNumber": 2,
+                "type": "sint32",
+                "name": "type"
+            },
+            "tlCmdUnionActInfo": {
+                "fieldNumber": 3,
+                "type": "CmdUnionActInfo",
+                "name": "tlCmdUnionActInfo"
+            },
+            "resetTime": {
+                "fieldNumber": 4,
+                "type": "sint64",
+                "name": "resetTime"
+            },
+            "id": {
+                "fieldNumber": 5,
+                "type": "sint32",
+                "name": "id"
+            },
+            "addBuffTimes": {
+                "fieldNumber": 6,
+                "type": "sint32",
+                "name": "addBuffTimes"
+            },
+            "addBuffTime": {
+                "fieldNumber": 7,
+                "type": "sint64",
+                "name": "addBuffTime"
+            },
+            "allValue": {
+                "fieldNumber": 8,
+                "type": "sint64",
+                "name": "allValue"
+            }
+        }
+    },
+    "CmdRoleActBossDamage": {
+        "tlKey": [
+            "roleId"
+        ],
+        "tmField": {
+            "roleId": {
+                "fieldNumber": 1,
+                "type": "sint64",
+                "name": "roleId"
+            },
+            "bossId": {
+                "fieldNumber": 2,
+                "type": "sint32",
+                "name": "bossId"
+            },
+            "damage": {
+                "fieldNumber": 3,
+                "type": "sint64",
+                "name": "damage"
+            }
+        }
+    },
+    "CmdOathAlliance": {
+        "tlKey": [
+            "roleId"
+        ],
+        "tmField": {
+            "roleId": {
+                "fieldNumber": 1,
+                "type": "sint64",
+                "name": "roleId"
+            },
+            "todayTakeCount": {
+                "fieldNumber": 2,
+                "type": "sint32",
+                "name": "todayTakeCount"
+            },
+            "lastTakeTime": {
+                "fieldNumber": 3,
+                "type": "sint64",
+                "name": "lastTakeTime"
+            },
+            "renown": {
+                "fieldNumber": 4,
+                "type": "sint32",
+                "name": "renown"
+            }
+        }
+    },
+    "CmdUnionActBossDamage": {
+        "tlKey": [
+            "unionId"
+        ],
+        "tmField": {
+            "unionId": {
+                "fieldNumber": 1,
+                "type": "sint64",
+                "name": "unionId"
+            },
+            "bossId": {
+                "fieldNumber": 2,
+                "type": "sint32",
+                "name": "bossId"
+            },
+            "damage": {
+                "fieldNumber": 3,
+                "type": "sint64",
+                "name": "damage"
+            }
+        }
+    },
+    "CmdCastleWallSkinStar": {
+        "tlKey": [
+            "type"
+        ],
+        "tmField": {
+            "type": {
+                "fieldNumber": 1,
+                "type": "sint32",
+                "name": "type"
+            },
+            "star": {
+                "fieldNumber": 2,
+                "type": "sint32",
+                "name": "star"
+            }
+        }
+    },
+    "CmdCastleWallSkillPage": {
+        "tlKey": [
+            "pageId"
+        ],
+        "tmField": {
+            "pageId": {
+                "fieldNumber": 1,
+                "type": "sint32",
+                "name": "pageId"
+            },
+            "skillList": {
+                "fieldNumber": 2,
+                "type": "sint32",
+                "name": "skillList"
+            }
+        }
+    },
+    "CmdCastleGuards": {
+        "tlKey": [
+            "id"
+        ],
+        "tmField": {
+            "id": {
+                "fieldNumber": 1,
+                "type": "sint32",
+                "name": "id"
+            },
+            "level": {
+                "fieldNumber": 2,
+                "type": "sint32",
+                "name": "level"
+            },
+            "battle": {
+                "fieldNumber": 3,
+                "type": "sint32",
+                "name": "battle"
+            },
+            "curQuality": {
+                "fieldNumber": 4,
+                "type": "sint32",
+                "name": "curQuality"
+            }
+        }
+    },
+    "CmdFirstRechargeNew": {
+        "tlKey": [
+            "infos"
+        ],
+        "tmField": {
+            "infos": {
+                "fieldNumber": 1,
+                "type": "CmdFirstRechargeNewItem",
+                "name": "infos"
+            }
+        }
+    },
+    "CmdRoleActDamage": {
+        "tlKey": [
+            "roleId"
+        ],
+        "tmField": {
+            "roleId": {
+                "fieldNumber": 1,
+                "type": "sint64",
+                "name": "roleId"
+            },
+            "actType": {
+                "fieldNumber": 2,
+                "type": "sint32",
+                "name": "actType"
+            },
+            "id": {
+                "fieldNumber": 3,
+                "type": "sint32",
+                "name": "id"
+            },
+            "resetTime": {
+                "fieldNumber": 4,
+                "type": "sint64",
+                "name": "resetTime"
+            },
+            "times": {
+                "fieldNumber": 5,
+                "type": "sint32",
+                "name": "times"
+            },
+            "damage": {
+                "fieldNumber": 6,
+                "type": "sint64",
+                "name": "damage"
+            },
+            "maxDamage": {
+                "fieldNumber": 7,
+                "type": "sint64",
+                "name": "maxDamage"
+            }
+        }
+    },
+    "CmdRechargeDaily": {
+        "tlKey": [
+            "roleId"
+        ],
+        "tmField": {
+            "roleId": {
+                "fieldNumber": 1,
+                "type": "sint64",
+                "name": "roleId"
+            },
+            "rechargeCount": {
+                "fieldNumber": 2,
+                "type": "int32",
+                "name": "rechargeCount"
+            },
+            "endTime": {
+                "fieldNumber": 3,
+                "type": "sint64",
+                "name": "endTime"
+            },
+            "infos": {
+                "fieldNumber": 4,
+                "type": "CmdRechargeDailyItem",
+                "name": "infos"
+            }
+        }
+    },
+    "CmdLeaderSkill": {
+        "tlKey": [
+            "roleId"
+        ],
+        "tmField": {
+            "roleId": {
+                "fieldNumber": 1,
+                "type": "sint64",
+                "name": "roleId"
+            },
+            "showId": {
+                "fieldNumber": 2,
+                "type": "sint32",
+                "name": "showId"
+            },
+            "tlBattles": {
+                "fieldNumber": 3,
+                "type": "sint32",
+                "name": "tlBattles"
+            },
+            "tlLevels": {
+                "fieldNumber": 4,
+                "type": "CmdLeaderSkillLevel",
+                "name": "tlLevels"
+            }
+        }
+    },
+    "CmdLimitedTimeBundle": {
+        "tlKey": [
+            "resId"
+        ],
+        "tmField": {
+            "resId": {
+                "fieldNumber": 1,
+                "type": "sint32",
+                "name": "resId"
+            },
+            "refreshTime": {
+                "fieldNumber": 2,
+                "type": "sint64",
+                "name": "refreshTime"
+            },
+            "sendTime": {
+                "fieldNumber": 3,
+                "type": "sint64",
+                "name": "sendTime"
+            },
+            "buyCount": {
+                "fieldNumber": 4,
+                "type": "sint32",
+                "name": "buyCount"
+            }
+        }
+    },
+    "CmdCelebrationInfo": {
+        "tlKey": [
+            "id"
+        ],
+        "tmField": {
+            "id": {
+                "fieldNumber": 1,
+                "type": "sint32",
+                "name": "id"
+            },
+            "curValue": {
+                "fieldNumber": 2,
+                "type": "sint64",
+                "name": "curValue"
+            },
+            "targetInfos": {
+                "fieldNumber": 3,
+                "type": "sint32",
+                "name": "targetInfos"
+            },
+            "shopInfos": {
+                "fieldNumber": 4,
+                "type": "sint32",
+                "name": "shopInfos"
+            }
+        }
+    },
+    "CmdRoleQuestion": {
+        "tlKey": [
+            "id"
+        ],
+        "tmField": {
+            "id": {
+                "fieldNumber": 1,
+                "type": "sint32",
+                "name": "id"
+            },
+            "state": {
+                "fieldNumber": 2,
+                "type": "sint32",
+                "name": "state"
+            }
+        }
+    },
+    "CmdRoleInteractInfo": {
+        "tlKey": [
+            "resId"
+        ],
+        "tmField": {
+            "resId": {
+                "fieldNumber": 1,
+                "type": "sint32",
+                "name": "resId"
+            },
+            "state": {
+                "fieldNumber": 2,
+                "type": "sint32",
+                "name": "state"
+            }
+        }
+    },
+    "CmdArtifact": {
+        "tlKey": [
+            "artifactId"
+        ],
+        "tmField": {
+            "artifactId": {
+                "fieldNumber": 1,
+                "type": "sint32",
+                "name": "artifactId"
+            },
+            "level": {
+                "fieldNumber": 2,
+                "type": "sint32",
+                "name": "level"
+            },
+            "star": {
+                "fieldNumber": 3,
+                "type": "sint32",
+                "name": "star"
+            }
+        }
+    },
+    "CmdArtifactPage": {
+        "tlKey": [
+            "PageId"
+        ],
+        "tmField": {
+            "PageId": {
+                "fieldNumber": 1,
+                "type": "sint32",
+                "name": "PageId"
+            },
+            "artifactList": {
+                "fieldNumber": 2,
+                "type": "sint32",
+                "name": "artifactList"
+            }
+        }
+    }
+}

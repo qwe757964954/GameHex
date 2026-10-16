@@ -1,0 +1,14 @@
+{
+  "ver": "1.1.50",
+  "importer": "prefab",
+  "imported": true,
+  "uuid": "34c8d4af-e16a-4adc-95b4-e32c1e86289b",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {},
+  "userData": {
+    "syncNodeName": "LeagueMgr",
+    "hasIcon": false
+  }
+}

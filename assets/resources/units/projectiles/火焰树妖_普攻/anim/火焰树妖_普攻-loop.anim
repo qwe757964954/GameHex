@@ -1,0 +1,87 @@
+{
+  "__type__": "cc.AnimationClip",
+  "_name": "火焰树妖_普攻-loop",
+  "_objFlags": 0,
+  "_native": "",
+  "sample": 12,
+  "speed": 1,
+  "wrapMode": 2,
+  "events": [],
+  "_duration": 0.6666666667,
+  "_keys": [],
+  "_stepness": 0,
+  "curveDatas": {},
+  "_curves": [],
+  "_commonTargets": [],
+  "_hash": 0,
+  "_tracks": [
+    {
+      "__type__": "cc.animation.ObjectTrack",
+      "_binding": {
+        "__type__": "cc.animation.TrackBinding",
+        "path": {
+          "__type__": "cc.animation.TrackPath",
+          "_paths": [
+            {
+              "__type__": "cc.animation.ComponentPath",
+              "component": "cc.Sprite"
+            },
+            "spriteFrame"
+          ]
+        },
+        "proxy": null
+      },
+      "_channel": {
+        "__type__": "cc.animation.Channel",
+        "_curve": {
+          "__type__": "cc.ObjectCurve",
+          "_times": [
+            0.0,
+            0.0833333333,
+            0.1666666667,
+            0.25,
+            0.3333333333,
+            0.4166666667,
+            0.5,
+            0.5833333333
+          ],
+          "_values": [
+            {
+              "__uuid__": "26ba8e5c-fba0-46d9-b9c3-4c14cb5f49dc@f9941"
+            },
+            {
+              "__uuid__": "39eea186-bc1a-4b53-aa26-29dc2370e948@f9941"
+            },
+            {
+              "__uuid__": "eb7c7fd8-4887-4b41-8155-4c15feb89e5d@f9941"
+            },
+            {
+              "__uuid__": "ee60129d-3f74-4e34-85ae-36e710d34a4a@f9941"
+            },
+            {
+              "__uuid__": "0d5b7c1a-e303-43da-9f75-018ab933641d@f9941"
+            },
+            {
+              "__uuid__": "81d258d1-3f03-4bfa-9b80-b3769c995980@f9941"
+            },
+            {
+              "__uuid__": "23d1113e-f50e-45b1-86bd-c041f27d38db@f9941"
+            },
+            {
+              "__uuid__": "84123cde-f250-4a0c-b351-3c5cd108e2b0@f9941"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "_exoticAnimation": null,
+  "_events": [],
+  "_embeddedPlayers": [],
+  "_additiveSettings": {
+    "__type__": "cc.AnimationClipAdditiveSettings",
+    "enabled": false,
+    "refClip": null
+  },
+  "_auxiliaryCurveEntries": []
+}

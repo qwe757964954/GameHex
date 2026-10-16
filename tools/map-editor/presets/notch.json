@@ -1,0 +1,52 @@
+{
+  "id": "notch",
+  "name": "侧翼缺口",
+  "version": 3,
+  "rows": 20,
+  "columns": 10,
+  "playerCount": 2,
+  "cityMode": "fixed",
+  "mirrorVertical": true,
+  "mirrorHorizontal": false,
+  "mirror180": false,
+  "ascii": [
+    "00000.....",
+    "00000.....",
+    "000000...0",
+    "0000000000",
+    "0000000000",
+    "0000100000",
+    "0000000000",
+    "0000000000",
+    "0000000000",
+    "0000000000"
+  ],
+  "homes": [
+    {
+      "row": 15,
+      "column": 4
+    },
+    {
+      "row": 4,
+      "column": 4
+    }
+  ],
+  "art": {
+    "tiles": {
+      "8,6": "image/decor/wasteland/cao",
+      "8,7": "image/decor/wasteland/cao",
+      "8,8": "image/decor/wasteland/st3",
+      "9,6": "image/decor/wasteland/cao",
+      "9,7": "image/decor/wasteland/tires",
+      "9,8": "image/decor/wasteland/cao1",
+      "9,9": "image/decor/wasteland/cao1",
+      "10,6": "image/decor/wasteland/cao",
+      "10,7": "image/decor/wasteland/tires",
+      "10,8": "image/decor/wasteland/cao1",
+      "10,9": "image/decor/wasteland/cao1",
+      "11,6": "image/decor/wasteland/cao",
+      "11,7": "image/decor/wasteland/cao",
+      "11,8": "image/decor/wasteland/st3"
+    }
+  }
+}

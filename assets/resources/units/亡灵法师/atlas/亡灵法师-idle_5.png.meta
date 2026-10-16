@@ -1,0 +1,134 @@
+{
+  "ver": "1.0.27",
+  "importer": "image",
+  "imported": true,
+  "uuid": "afa88498-e579-485d-b596-b72b0789f831",
+  "files": [
+    ".json",
+    ".png"
+  ],
+  "subMetas": {
+    "6c48a": {
+      "importer": "texture",
+      "uuid": "afa88498-e579-485d-b596-b72b0789f831@6c48a",
+      "displayName": "亡灵法师-idle_5",
+      "id": "6c48a",
+      "name": "texture",
+      "userData": {
+        "wrapModeS": "repeat",
+        "wrapModeT": "repeat",
+        "minfilter": "linear",
+        "magfilter": "linear",
+        "mipfilter": "none",
+        "anisotropy": 0,
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "afa88498-e579-485d-b596-b72b0789f831",
+        "visible": false
+      },
+      "ver": "1.0.22",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "f9941": {
+      "importer": "sprite-frame",
+      "uuid": "afa88498-e579-485d-b596-b72b0789f831@f9941",
+      "displayName": "亡灵法师-idle_5",
+      "id": "f9941",
+      "name": "spriteFrame",
+      "userData": {
+        "trimThreshold": 1,
+        "rotated": false,
+        "offsetX": -0.5,
+        "offsetY": -30.5,
+        "trimX": 55,
+        "trimY": 69,
+        "width": 145,
+        "height": 179,
+        "rawWidth": 256,
+        "rawHeight": 256,
+        "borderTop": 0,
+        "borderBottom": 0,
+        "borderLeft": 0,
+        "borderRight": 0,
+        "packable": true,
+        "pixelsToUnit": 100,
+        "pivotX": 0.5,
+        "pivotY": 0.5,
+        "meshType": 0,
+        "vertices": {
+          "rawPosition": [
+            -72.5,
+            -89.5,
+            0,
+            72.5,
+            -89.5,
+            0,
+            -72.5,
+            89.5,
+            0,
+            72.5,
+            89.5,
+            0
+          ],
+          "indexes": [
+            0,
+            1,
+            2,
+            2,
+            1,
+            3
+          ],
+          "uv": [
+            55,
+            187,
+            200,
+            187,
+            55,
+            8,
+            200,
+            8
+          ],
+          "nuv": [
+            0.21484375,
+            0.03125,
+            0.78125,
+            0.03125,
+            0.21484375,
+            0.73046875,
+            0.78125,
+            0.73046875
+          ],
+          "minPos": [
+            -72.5,
+            -89.5,
+            0
+          ],
+          "maxPos": [
+            72.5,
+            89.5,
+            0
+          ]
+        },
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "afa88498-e579-485d-b596-b72b0789f831@6c48a",
+        "atlasUuid": "",
+        "trimType": "auto"
+      },
+      "ver": "1.0.12",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    }
+  },
+  "userData": {
+    "type": "sprite-frame",
+    "fixAlphaTransparencyArtifacts": false,
+    "hasAlpha": true,
+    "redirect": "afa88498-e579-485d-b596-b72b0789f831@6c48a"
+  }
+}

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>章节领地地图编辑器</title>
+  <style>
+    :root { color-scheme: dark; font: 14px system-ui, sans-serif; --bg:#111827; --panel:#1f2937; --line:#374151; --accent:#60a5fa; }
+    * { box-sizing:border-box } body { margin:0; background:var(--bg); color:#e5e7eb; height:100vh; overflow:hidden }
+    header { height:54px; display:flex; align-items:center; gap:10px; padding:8px 14px; border-bottom:1px solid var(--line); background:#0f172a }
+    header h1 { margin:0 18px 0 0; font-size:17px } button, input, select, textarea { color:inherit; background:#111827; border:1px solid #4b5563; border-radius:5px; padding:6px 8px }
+    .dirtyBadge { padding:3px 7px; border:1px solid #92400e; border-radius:999px; background:#451a03; color:#fbbf24; font-size:11px }
+    button { cursor:pointer } button:hover { border-color:var(--accent) } .layout { height:calc(100vh - 54px); display:grid; grid-template-columns:230px 1fr 300px }
+    aside { padding:12px; overflow:auto; border-right:1px solid var(--line); background:var(--panel) } aside.right { border-left:1px solid var(--line); border-right:0 }
+    label { display:block; margin:9px 0 4px; color:#cbd5e1 } input, select, textarea { width:100% } textarea { min-height:72px; resize:vertical }
+    .tools { display:grid; grid-template-columns:1fr 1fr; gap:6px } .tools button.active { background:#1d4ed8; border-color:#93c5fd } .toolStatus { margin:0 0 8px; padding:6px 8px; border:1px solid #1d4ed8; border-radius:6px; background:#172554; color:#bfdbfe }
+    .stage { position:relative; overflow:auto; background:#0b1220; text-align:center } .stage.dragging, .stage.dragging svg, .stage.dragging .cell { cursor:grabbing !important } svg { display:block; margin:18px auto; background:#0b1220; touch-action:none; user-select:none } .cell { stroke:#64748b; stroke-width:1; cursor:crosshair } .cell:hover { stroke:#f8fafc; stroke-width:2 }
+    .cell.start { fill:#16a34a } .cell.site-stage { fill:#2563eb } .cell.site-boss { fill:#dc2626 } .cell.site-asyncPvp { fill:#9333ea } .cell.site-fixedResource { fill:#ca8a04 } .cell.site-bonus { fill:#0891b2 } .cell.candidate { stroke:#fbbf24; stroke-width:4 }
+    .cell.format-src { stroke:#c4b5fd; stroke-width:4; } .cell.format-hover { stroke:#c4b5fd; stroke-width:2; stroke-dasharray:4 3; }
+    .cell.decor { stroke:#f472b6; stroke-width:3 } text { pointer-events:none; user-select:none } .muted { color:#94a3b8 } .row { display:flex; gap:6px; align-items:center } .row > * { flex:1 }
+    .siteIcon { pointer-events:none; filter:drop-shadow(0 1px 2px #0008) }
+    .siteIcon circle.icon-bg { stroke:#0f172a; stroke-width:1.5 }
+    .siteIcon.stage { color:#bfdbfe } .siteIcon.boss { color:#fecaca } .siteIcon.asyncPvp { color:#e9d5ff } .siteIcon.fixedResource { color:#fef3c7 } .siteIcon.bonus { color:#cffafe } .siteIcon.start { color:#dcfce7 } .siteIcon.candidate { color:#fef08a }
+    .siteIcon .icon-glyph { fill:currentColor; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round }
+    .validationFloat { fill:#f87171; font:700 12px system-ui,sans-serif; text-anchor:middle; paint-order:stroke; stroke:#450a0a; stroke-width:3px; stroke-linejoin:round; pointer-events:none; transform-box:fill-box; transform-origin:center; animation:territoryWarningFloat 1.8s ease-out forwards }
+    @keyframes territoryWarningFloat { 0% { opacity:0; transform:translateY(5px) } 15% { opacity:1 } 100% { opacity:0; transform:translateY(-28px) } }
+    .siteIcon text { fill:currentColor; font:700 13px system-ui,sans-serif; text-anchor:middle; dominant-baseline:middle }
+    .dependency { stroke:#fbbf24; stroke-width:1.5; stroke-dasharray:4 3; opacity:.75; pointer-events:none }
+    /* 校验失败的格子：红环描格 + 右上角红点角标（一个格子多条错误时显示条数），
+       完整原因在 <title> 里（悬停看）。只有角标吃指针事件 —— 红环是 <path>，会被误判成格子的点击。 */
+    .error-ring { fill:none; stroke:#ef4444; stroke-width:3; pointer-events:none }
+    .cellError { filter:drop-shadow(0 1px 2px #0009) }
+    .error-bg, .error-glyph { pointer-events:auto }
+    .error-bg { fill:#ef4444; stroke:#450a0a; stroke-width:1.5 }
+    .error-glyph { fill:#fff; font:700 9px system-ui,sans-serif; text-anchor:middle; dominant-baseline:middle }
+    .validation { margin:10px 0; padding:8px; border:1px solid #475569; border-radius:5px; white-space:pre-wrap; font-size:12px; line-height:1.45 }
+    .validation.ok { border-color:#166534; background:#052e16; color:#bbf7d0 }
+    .validation.warn { border-color:#92400e; background:#451a03; color:#fde68a }
+    .validation.error { border-color:#991b1b; background:#450a0a; color:#fecaca }
+    #message { position:absolute; left:18px; bottom:12px; padding:8px 10px; background:#111827dd; border:1px solid var(--line); border-radius:5px }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>章节领地地图编辑器</h1><span id="dirtyBadge" class="dirtyBadge" hidden>未保存</span><select id="presetSelect" title="选择领地预设"><option value="">选择预设</option></select><button id="load">加载预设</button><button id="save">保存</button><button id="validate">校验</button><button id="publish">发布到客户端</button><button id="export">导出 JSON</button><button id="import">导入 JSON</button><button id="undo">撤销</button><button id="redo">重做</button><button id="fit">适应窗口</button><span id="zoomInfo" class="muted">100%</span>
+    <input id="file" type="file" accept=".json,application/json" hidden>
+  </header>
+  <div class="layout">
+    <aside>
+      <label>地图 ID</label><input id="mapId" value="chapter_01">
+      <label>章节编号</label><input id="chapterId" type="number" min="1" max="9999" value="1">
+      <label>章节名称</label><input id="mapName" value="第一章">
+      <div class="row"><div><label>行</label><input id="rows" type="number" min="4" max="60" value="20"></div><div><label>列</label><input id="columns" type="number" min="4" max="60" value="20"></div></div>
+      <label>编辑工具</label><p id="toolStatus" class="toolStatus">当前工具：选择</p><div class="tools" id="tools"><button data-mode="select" class="active">选择</button><button data-mode="start">初始格</button><button data-mode="stage">关卡</button><button data-mode="boss">BOSS</button><button data-mode="asyncPvp">异步据点</button><button data-mode="fixedResource">固定资源</button><button data-mode="bonus">奖励据点</button><button data-mode="candidate">随机候选</button><button data-mode="decor">背景装饰</button><button data-mode="format">格式刷</button><button data-mode="erase">擦除</button></div>
+      <label>笔刷大小</label><div class="row"><div><label>1 格</label><input type="radio" name="brushRadius" value="0" checked></div><div><label>3 格</label><input type="radio" name="brushRadius" value="3"></div><div><label>7 格</label><input type="radio" name="brushRadius" value="1"></div><div><label>19 格</label><input type="radio" name="brushRadius" value="2"></div></div>
+      <label>显示</label><div class="row"><div><label>依赖连线</label><input type="checkbox" id="showLinks" checked></div></div>
+      <label>背景资源</label><input id="background" placeholder="image/territory/chapter_01">
+      <p class="muted">领地地图不设置对局人数、主城镜像或 void 格。所有格子均可开启；点击格子后在右侧填写站点配置。</p>
+      <div id="status" class="muted"></div>
+    </aside>
+    <main class="stage"><svg id="map" xmlns="http://www.w3.org/2000/svg"></svg><div id="message">就绪</div></main>
+    <aside class="right">
+      <h3>选中格</h3><div id="cellInfo" class="muted">点击地图格子</div>
+      <div id="validation" class="validation" hidden></div>
+      <section id="siteEditor" hidden><label>站点 ID</label><input id="siteId"><label>类型</label><select id="siteType"><option value="stage">关卡</option><option value="boss">BOSS</option><option value="asyncPvp">异步据点</option><option value="fixedResource">固定资源</option><option value="bonus">奖励据点</option></select><label>战斗/配置 ID</label><input id="configId"><div id="fixedResourceRewardField" hidden><label for="rewardId">固定资源奖励 ID（关卡地图格子奖励表）</label><input id="rewardId" type="number" min="1" step="1" placeholder="填写奖励表数字 ID"></div><label>建筑 ID</label><input id="buildingId"><label>前置格 ID（逗号分隔）</label><input id="requiredCells"><label>解锁类型</label><select id="unlockType"><option value="combatPower">战力</option><option value="playerLevel">玩家等级</option></select><div class="row"><div><label>解锁值</label><input id="unlockValue" type="number" min="0" value="0"></div><div><label>银币</label><input id="silverCost" type="number" min="0" value="200"></div></div><div class="row"><div><label>探索秒</label><input id="exploreSeconds" type="number" min="0" value="180"></div><div><label>体力</label><input id="staminaCost" type="number" min="0" value="10"></div></div><button id="applySite">应用站点</button><button id="removeSite">删除站点</button></section>
+      <section><h3>批量设置固定资源奖励</h3><label for="batchRewardId">奖励 ID（关卡地图格子奖励表）</label><input id="batchRewardId" type="number" min="1" step="1" placeholder="填写同一个奖励 ID"><button id="applyBatchRewardId">应用到当前地图全部固定资源格</button><p class="muted">会覆盖已填写的奖励 ID；可撤销，Ctrl+S 后保存。</p></section>
+      <section><h3>随机站点</h3><label>触发银币</label><input id="triggerSilver" type="number" min="0" value="1000"><label>奖励池 ID</label><input id="rewardPoolId" value="territory_random_01"><label>最大同时存在数</label><input id="maxActive" type="number" min="1" value="1"></section>
+      <section id="randomSiteEditor" hidden><h3>随机据点（所选格）</h3><label>建筑 ID</label><input id="randomBuildingId" placeholder="留空 = 这一格交给奖励池抽签"><p class="muted">建筑 ID 是<b>针对单个随机据点</b>的：点不同的候选格分别填写，产物落在 <code>randomSites.buildingIds["格子号"]</code>。留空则该格由奖励池决定。</p></section>
+    </aside>
+  </div>
+  <script type="module" src="/territory-app.js"></script>
+</body>
+</html>

@@ -1,0 +1,46 @@
+{
+  "id": "neutral",
+  "name": "中立地图",
+  "version": 3,
+  "rows": 20,
+  "columns": 11,
+  "playerCount": 2,
+  "cityMode": "fixed",
+  "mirrorVertical": true,
+  "mirrorHorizontal": false,
+  "mirror180": false,
+  "ascii": [
+    "0..00000..0",
+    "00000000000",
+    "00000000000",
+    "00000000000",
+    "00000000000",
+    "00000100000",
+    "00000000000",
+    "00000000000",
+    "00000000000",
+    "00000000000"
+  ],
+  "homes": [
+    {
+      "row": 15,
+      "column": 5
+    },
+    {
+      "row": 4,
+      "column": 5
+    }
+  ],
+  "art": {
+    "tiles": {
+      "9,1": "image/decor/wasteland/cao3",
+      "9,2": "image/decor/wasteland/cao1",
+      "9,8": "image/decor/wasteland/st3",
+      "9,9": "image/decor/wasteland/cao",
+      "10,1": "image/decor/wasteland/cao3",
+      "10,2": "image/decor/wasteland/cao1",
+      "10,8": "image/decor/wasteland/st3",
+      "10,9": "image/decor/wasteland/cao"
+    }
+  }
+}

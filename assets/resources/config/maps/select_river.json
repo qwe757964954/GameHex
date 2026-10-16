@@ -1,0 +1,174 @@
+{
+  "id": "select_river",
+  "name": "河道争先",
+  "version": 3,
+  "rows": 20,
+  "columns": 11,
+  "playerCount": 2,
+  "cityMode": "select",
+  "mirrorVertical": true,
+  "mirrorHorizontal": false,
+  "mirror180": false,
+  "ascii": [
+    "..00...00..",
+    "..00...00..",
+    "..00...00..",
+    ".000...0000",
+    ".000000000.",
+    "00000000000",
+    "00000000000",
+    "00000000000",
+    "00000000000",
+    "00000000000"
+  ],
+  "homes": [
+    {
+      "row": 16,
+      "column": 5
+    },
+    {
+      "row": 3,
+      "column": 5
+    }
+  ],
+  "regions": [
+    {
+      "section": 1,
+      "depth": "front",
+      "cells": [
+        113
+      ],
+      "tendency": "rush"
+    },
+    {
+      "section": 1,
+      "depth": "mid",
+      "cells": [
+        159
+      ],
+      "tendency": "control"
+    },
+    {
+      "section": 1,
+      "depth": "back",
+      "cells": [
+        201
+      ],
+      "tendency": "develop"
+    },
+    {
+      "section": 2,
+      "depth": "front",
+      "cells": [
+        102
+      ],
+      "tendency": "rush"
+    },
+    {
+      "section": 2,
+      "depth": "mid",
+      "cells": [
+        60
+      ],
+      "tendency": "control"
+    },
+    {
+      "section": 2,
+      "depth": "back",
+      "cells": [
+        18
+      ],
+      "tendency": "develop"
+    }
+  ],
+  "resourcePoints": [
+    {
+      "row": 5,
+      "column": 3,
+      "pool": {
+        "chest": 1
+      }
+    },
+    {
+      "row": 5,
+      "column": 7,
+      "pool": {
+        "gold": 1
+      }
+    },
+    {
+      "row": 15,
+      "column": 2,
+      "pool": {
+        "unit_cap": 1
+      }
+    },
+    {
+      "row": 13,
+      "column": 8,
+      "pool": {
+        "gold": 1
+      }
+    },
+    {
+      "row": 9,
+      "column": 8,
+      "pool": {
+        "artifact_charge": 1
+      }
+    },
+    {
+      "row": 9,
+      "column": 2,
+      "pool": {
+        "artifact_charge": 1
+      }
+    }
+  ],
+  "spacing": {
+    "homeMinDistance": 2,
+    "resourceMinDistance": 3
+  },
+  "art": {
+    "tiles": {
+      "6,5": "image/decor/wasteland/cao1",
+      "7,0": "image/decor/wasteland/st2",
+      "7,4": "image/decor/wasteland/cannon",
+      "7,5": "image/decor/wasteland/cao2",
+      "7,6": "image/decor/wasteland/cao1",
+      "7,10": "image/decor/wasteland/st1",
+      "8,0": "image/decor/wasteland/st4",
+      "8,4": "image/decor/wasteland/cao",
+      "8,5": "image/decor/wasteland/cao",
+      "8,6": "image/decor/wasteland/cao1",
+      "8,9": "image/decor/wasteland/cao",
+      "8,10": "image/decor/wasteland/cao",
+      "9,0": "image/decor/wasteland/cao2",
+      "9,1": "image/decor/wasteland/cao",
+      "9,4": "image/decor/wasteland/cao",
+      "9,5": "image/decor/wasteland/cao2",
+      "9,6": "image/decor/wasteland/cao2",
+      "9,9": "image/decor/wasteland/cao1",
+      "9,10": "image/decor/wasteland/barricade",
+      "10,0": "image/decor/wasteland/cao2",
+      "10,1": "image/decor/wasteland/cao",
+      "10,4": "image/decor/wasteland/cao",
+      "10,5": "image/decor/wasteland/cao2",
+      "10,6": "image/decor/wasteland/cao2",
+      "10,9": "image/decor/wasteland/cao1",
+      "10,10": "image/decor/wasteland/barricade",
+      "11,0": "image/decor/wasteland/st4",
+      "11,4": "image/decor/wasteland/cao",
+      "11,5": "image/decor/wasteland/cao",
+      "11,6": "image/decor/wasteland/cao1",
+      "11,9": "image/decor/wasteland/cao",
+      "11,10": "image/decor/wasteland/cao",
+      "12,0": "image/decor/wasteland/st2",
+      "12,4": "image/decor/wasteland/cannon",
+      "12,5": "image/decor/wasteland/cao2",
+      "12,6": "image/decor/wasteland/cao1",
+      "12,10": "image/decor/wasteland/st1",
+      "13,5": "image/decor/wasteland/cao1"
+    }
+  }
+}

@@ -1,0 +1,7 @@
+[{"round":1,"days":1,"rewards":[{"number":10,"resId":9},{"number":500,"resId":7}],"finishRewards":[]},
+{"round":1,"days":2,"rewards":[{"number":30,"resId":10012},{"number":500,"resId":7}],"finishRewards":[{"number":1,"resId":10992}]},
+{"round":1,"days":3,"rewards":[{"number":5,"resId":10011},{"number":500,"resId":7}],"finishRewards":[]},
+{"round":1,"days":4,"rewards":[{"number":1,"resId":10991},{"number":500,"resId":7}],"finishRewards":[{"number":2,"resId":8}]},
+{"round":1,"days":5,"rewards":[{"number":30,"resId":10012},{"number":500,"resId":7}],"finishRewards":[]},
+{"round":1,"days":6,"rewards":[{"number":5,"resId":10011},{"number":500,"resId":7}],"finishRewards":[{"number":4,"resId":8}]},
+{"round":1,"days":7,"rewards":[{"number":1,"resId":10991},{"number":500,"resId":7}],"finishRewards":[]}]

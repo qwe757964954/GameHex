@@ -1,0 +1,14 @@
+{
+  "ver": "1.1.50",
+  "importer": "prefab",
+  "imported": true,
+  "uuid": "c8ec7f38-50d0-416e-b6fb-8b1608b4e105",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {},
+  "userData": {
+    "syncNodeName": "RewardPreview",
+    "hasIcon": false
+  }
+}

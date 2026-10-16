@@ -1,0 +1,14 @@
+{
+  "ver": "1.1.50",
+  "importer": "prefab",
+  "imported": true,
+  "uuid": "76555f50-757b-4bfa-991c-2da0ab72227e",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {},
+  "userData": {
+    "syncNodeName": "普攻爆炸",
+    "hasIcon": false
+  }
+}

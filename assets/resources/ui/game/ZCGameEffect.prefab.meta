@@ -1,0 +1,14 @@
+{
+  "ver": "1.1.50",
+  "importer": "prefab",
+  "imported": true,
+  "uuid": "e2da78c3-25dd-4bf5-bb29-028e1723cfaf",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {},
+  "userData": {
+    "syncNodeName": "ZCGameEffect",
+    "hasIcon": false
+  }
+}

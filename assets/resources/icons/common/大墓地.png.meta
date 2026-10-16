@@ -1,0 +1,134 @@
+{
+  "ver": "1.0.27",
+  "importer": "image",
+  "imported": true,
+  "uuid": "d6ce0038-e764-42bf-a4f6-2614b83a9f77",
+  "files": [
+    ".json",
+    ".png"
+  ],
+  "subMetas": {
+    "6c48a": {
+      "importer": "texture",
+      "uuid": "d6ce0038-e764-42bf-a4f6-2614b83a9f77@6c48a",
+      "displayName": "大墓地",
+      "id": "6c48a",
+      "name": "texture",
+      "userData": {
+        "wrapModeS": "clamp-to-edge",
+        "wrapModeT": "clamp-to-edge",
+        "imageUuidOrDatabaseUri": "d6ce0038-e764-42bf-a4f6-2614b83a9f77",
+        "isUuid": true,
+        "visible": false,
+        "minfilter": "linear",
+        "magfilter": "linear",
+        "mipfilter": "none",
+        "anisotropy": 0
+      },
+      "ver": "1.0.22",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "f9941": {
+      "importer": "sprite-frame",
+      "uuid": "d6ce0038-e764-42bf-a4f6-2614b83a9f77@f9941",
+      "displayName": "大墓地",
+      "id": "f9941",
+      "name": "spriteFrame",
+      "userData": {
+        "trimThreshold": 1,
+        "rotated": false,
+        "offsetX": 0,
+        "offsetY": 1,
+        "trimX": 2,
+        "trimY": 1,
+        "width": 478,
+        "height": 467,
+        "rawWidth": 482,
+        "rawHeight": 471,
+        "borderTop": 0,
+        "borderBottom": 0,
+        "borderLeft": 0,
+        "borderRight": 0,
+        "packable": true,
+        "pixelsToUnit": 100,
+        "pivotX": 0.5,
+        "pivotY": 0.5,
+        "meshType": 0,
+        "vertices": {
+          "rawPosition": [
+            -239,
+            -233.5,
+            0,
+            239,
+            -233.5,
+            0,
+            -239,
+            233.5,
+            0,
+            239,
+            233.5,
+            0
+          ],
+          "indexes": [
+            0,
+            1,
+            2,
+            2,
+            1,
+            3
+          ],
+          "uv": [
+            2,
+            470,
+            480,
+            470,
+            2,
+            3,
+            480,
+            3
+          ],
+          "nuv": [
+            0.004149377593360996,
+            0.006369426751592357,
+            0.995850622406639,
+            0.006369426751592357,
+            0.004149377593360996,
+            0.9978768577494692,
+            0.995850622406639,
+            0.9978768577494692
+          ],
+          "minPos": [
+            -239,
+            -233.5,
+            0
+          ],
+          "maxPos": [
+            239,
+            233.5,
+            0
+          ]
+        },
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "d6ce0038-e764-42bf-a4f6-2614b83a9f77@6c48a",
+        "atlasUuid": "",
+        "trimType": "auto"
+      },
+      "ver": "1.0.12",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    }
+  },
+  "userData": {
+    "type": "sprite-frame",
+    "fixAlphaTransparencyArtifacts": false,
+    "hasAlpha": true,
+    "redirect": "d6ce0038-e764-42bf-a4f6-2614b83a9f77@6c48a"
+  }
+}

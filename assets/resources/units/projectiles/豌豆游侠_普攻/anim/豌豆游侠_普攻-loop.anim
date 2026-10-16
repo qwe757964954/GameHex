@@ -1,0 +1,91 @@
+{
+  "__type__": "cc.AnimationClip",
+  "_name": "豌豆游侠_普攻-loop",
+  "_objFlags": 0,
+  "_native": "",
+  "sample": 12,
+  "speed": 1,
+  "wrapMode": 2,
+  "events": [],
+  "_duration": 0.75,
+  "_keys": [],
+  "_stepness": 0,
+  "curveDatas": {},
+  "_curves": [],
+  "_commonTargets": [],
+  "_hash": 0,
+  "_tracks": [
+    {
+      "__type__": "cc.animation.ObjectTrack",
+      "_binding": {
+        "__type__": "cc.animation.TrackBinding",
+        "path": {
+          "__type__": "cc.animation.TrackPath",
+          "_paths": [
+            {
+              "__type__": "cc.animation.ComponentPath",
+              "component": "cc.Sprite"
+            },
+            "spriteFrame"
+          ]
+        },
+        "proxy": null
+      },
+      "_channel": {
+        "__type__": "cc.animation.Channel",
+        "_curve": {
+          "__type__": "cc.ObjectCurve",
+          "_times": [
+            0.0,
+            0.0833333333,
+            0.1666666667,
+            0.25,
+            0.3333333333,
+            0.4166666667,
+            0.5,
+            0.5833333333,
+            0.6666666667
+          ],
+          "_values": [
+            {
+              "__uuid__": "aac6476e-05dc-4716-8b73-a660ae784281@f9941"
+            },
+            {
+              "__uuid__": "d6ce64cd-bc71-49d9-afcb-db5b55eb5483@f9941"
+            },
+            {
+              "__uuid__": "4ca39c08-5d22-43aa-a144-b98b0854520d@f9941"
+            },
+            {
+              "__uuid__": "6c7013d3-c0fd-4071-bc26-646ad86cb220@f9941"
+            },
+            {
+              "__uuid__": "4e20db57-c3f3-4dc5-9b56-7f42fd180d4a@f9941"
+            },
+            {
+              "__uuid__": "a0a2355f-9fe3-4b45-8c57-fb0aa989bf3b@f9941"
+            },
+            {
+              "__uuid__": "dab433af-5788-45bb-8c0e-c76918a901d3@f9941"
+            },
+            {
+              "__uuid__": "151cb80a-85be-44f8-9bb2-278ce1b06e9c@f9941"
+            },
+            {
+              "__uuid__": "13d5079e-fefe-4c1e-ba92-e3fdeb141abf@f9941"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "_exoticAnimation": null,
+  "_events": [],
+  "_embeddedPlayers": [],
+  "_additiveSettings": {
+    "__type__": "cc.AnimationClipAdditiveSettings",
+    "enabled": false,
+    "refClip": null
+  },
+  "_auxiliaryCurveEntries": []
+}

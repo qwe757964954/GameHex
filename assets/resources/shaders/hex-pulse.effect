@@ -1,0 +1,138 @@
+// 地块「脉冲水波纹」专用着色器（2026-10-15）。
+//
+// 为什么需要它：`image/effects/hex_pulse/fkz_*` 是一组**灰度**序列帧 ——
+// **填充纯白 (255)、边缘灰 (117)**，两者同样不透明。而 Sprite 的 `color` 是**乘法**染色：
+// 填充染成阵营色、边缘只剩 46%（兵营色下 = #3E4075，近黑）。
+// 需求「脉冲效果的边缘颜色与整体颜色保持相近色系，更亮一点」用纯乘法做不到 ——
+// 要让 117 那档染出阵营色的亮度，染色得开到 2 倍以上（超出 255）。
+//
+// 所以这里把「灰度 → 色」的映射换成**带保底亮度**的乘法：
+//   lum     = max(tex.rgb)                 纹理采样自身的亮度（灰阶图 ⇒ 就是灰度值）
+//   k       = mix(edgeFloor, 1.0, lum)     暗部抬到 edgeFloor，亮部保持 1
+//   out.rgb = tex.rgb × k × color.rgb      色相、饱和度与阵营色完全一致，只抬亮度
+// 填充（lum = 1）⇒ k = 1 ⇒ 与默认 Sprite 材质**逐像素一致**（不动填充）；
+// 边缘（lum ≈ 0.459）⇒ k = edgeFloor + (1 − edgeFloor) × 0.459；缺省 edgeFloor = 0.72 ⇒ k ≈ 0.85
+//   （兵营色 #888CFF 下边缘由 #3E4075 提到 #7377D9，同色系、明显更亮）。
+//
+// ⚠️ `pulseEdgeFloor = 0` ⇒ k 退化成 `lum`，即回到旧的纯乘法观感 —— 这是回退开关，
+// 观感不对时先调它，不要改 `ZCHexView.applyPulseRipple` 的染色逻辑。
+//
+// ⚠️ 只挂在脉冲段的 `GroundGlow` 上（见 `ZCHexView.applyPulseMaterial`）：同一个节点在
+// 非脉冲段要装的是**开口光序列帧**（彩色美术），套本着色器会被再乘一次亮度而变暗。
+//
+// ── 外缘虚化（2026-10-15 row16）────────────────────────────────────────────────
+// 需求「脉冲效果从缩小改成向外扩散消失，最大扩散 1.25 个单位格子大小，**扩散的部分虚化**」。
+// 扩散本身是**节点缩放**（视图侧把格根的缩没抵消掉，见 `ZCHexView.applyPulseRipple`），
+// 虚化则在这里做：按**归一化半径** `r`（0 = 波纹中心，1 = 原图边缘）给一个径向遮罩 ——
+// `r ≥ pulseShape.x` 的那一圈按 `pulseFade.x`（0 → 1，随扩散推进）逐渐变淡，
+// 中心保持较实 ⇒ 读起来是「冲击波向外扩、外缘虚掉」。
+//
+// ⚠️ 半径必须由**顶点局部坐标**算，不能用 `a_texCoord`：`fkz_*` 的 SpriteFrame 是**裁剪过**的
+// （trim），UV 只覆盖裁剪框，拿它当半径会整圈偏掉。节点的 `sizeMode` 是 RAW ⇒ 四边形恒等于
+// **原图尺寸**（155×144），局部坐标与像素 1:1 ⇒ 除以 `pulseShape.yz`（原图半尺寸）得到的就是
+// 与帧无关的归一化半径（早期帧被裁得很小，其局部坐标自然只落在内圈，正好对应它自己在原图里的位置）。
+// ⚠️ 下面那段效果声明是 **YAML 块，块内不写注释**（项目里其余 effect 都这样：块内只留纯
+// `键: { value: [...] }`，说明一律写在这里与后面的 GLSL 段里）。
+//
+// 本 effect 的 properties（三个 vec4，口径都写在下面的 GLSL 段里）：
+//   · `pulseParams`  —— x = 边缘保底亮度（0.72；0 = 退回旧的纯乘法观感）
+//   · `pulseFade`    —— x = **外缘虚化强度**（0 = 不虚化，1 = 外缘虚到全透）。**视图每帧写**
+//   · `pulseShape`   —— x = 虚化起始半径（归一化）；yz = 波纹**原图**半尺寸（节点局部单位）
+//     ⚠️ `pulseShape.yz` 必须与 `image/effects/hex_pulse/fkz_*.png` 的原始尺寸一致（现为 155×144
+//     ⇒ 77.5 / 72）。换了美术图要同步改，否则整个虚化圈会缩放错位。
+//     `tests/zcds-hex-activation.test.ts` 有一条用例把这两个值与 PNG 头里的实测尺寸对齐。
+CCEffect %{
+  techniques:
+  - passes:
+    - vert: hex-pulse-vs:vert
+      frag: hex-pulse-fs:frag
+      depthStencilState:
+        depthTest: false
+        depthWrite: false
+      blendState:
+        targets:
+        - blend: true
+          blendSrc: src_alpha
+          blendDst: one_minus_src_alpha
+          blendSrcAlpha: one
+          blendDstAlpha: one_minus_src_alpha
+      rasterizerState:
+        cullMode: none
+      properties:
+        pulseParams: { value: [0.72, 0, 0, 0] }
+        pulseFade: { value: [0, 0, 0, 0] }
+        pulseShape: { value: [0.35, 77.5, 72.0, 0.0] }
+}%
+
+CCProgram hex-pulse-vs %{
+  precision highp float;
+  #include <builtin/uniforms/cc-global>
+  #if USE_LOCAL
+    #include <builtin/uniforms/cc-local>
+  #endif
+  in vec3 a_position;
+  in vec2 a_texCoord;
+  in vec4 a_color;
+  out vec2 frameUV;
+  // 顶点在**节点局部**空间的坐标：片元侧拿它算归一化半径（见文件头「外缘虚化」）。
+  out vec2 localPos;
+  out vec4 color;
+
+  vec4 vert () {
+    vec4 pos = vec4(a_position, 1.0);
+    #if USE_LOCAL
+      pos = cc_matWorld * pos;
+    #endif
+    #if USE_PIXEL_ALIGNMENT
+      pos = cc_matView * pos;
+      pos.xyz = floor(pos.xyz);
+      pos = cc_matProj * pos;
+    #else
+      pos = cc_matViewProj * pos;
+    #endif
+    frameUV = a_texCoord;
+    localPos = a_position.xy;
+    color = a_color;
+    return pos;
+  }
+}%
+
+CCProgram hex-pulse-fs %{
+  precision highp float;
+  #include <builtin/internal/embedded-alpha>
+  #if SAMPLE_FROM_RT
+    #include <builtin/uniforms/cc-global>
+    #include <common/common-define>
+  #endif
+  in vec2 frameUV;
+  in vec2 localPos;
+  in vec4 color;
+  #pragma builtin(local)
+  layout(set = 2, binding = 12) uniform sampler2D cc_spriteTexture;
+
+  uniform HexPulse {
+    // x = 边缘保底亮度（0 = 退回旧观感，1 = 边缘与填充同亮）。
+    // 用 vec4 而不是裸 float：与项目其余 sprite 着色器同口径，避开 UBO 对齐差异。
+    vec4 pulseParams;
+    // x = 外缘虚化强度（0~1，视图每帧写）；yzw 保留。
+    vec4 pulseFade;
+    // x = 虚化起始半径（归一化）；yz = 原图半尺寸（局部单位）；w 保留。
+    vec4 pulseShape;
+  };
+
+  vec4 frag () {
+    vec2 uv = frameUV;
+    #if SAMPLE_FROM_RT
+      CC_HANDLE_RT_SAMPLE_FLIP(uv);
+    #endif
+    vec4 tex = CCSampleWithAlphaSeparated(cc_spriteTexture, uv);
+    float lum = clamp(max(max(tex.r, tex.g), tex.b), 0.0, 1.0);
+    float k = mix(clamp(pulseParams.x, 0.0, 1.0), 1.0, lum);
+    // 外缘虚化：归一化半径 → 只在起始半径之外生效，强度随扩散推进。
+    vec2 halfSize = max(vec2(pulseShape.y, pulseShape.z), vec2(1.0, 1.0));
+    float radius = length(localPos / halfSize);
+    float edge = smoothstep(clamp(pulseShape.x, 0.0, 1.0), 1.0, radius);
+    float alpha = tex.a * (1.0 - clamp(pulseFade.x, 0.0, 1.0) * edge);
+    return vec4(tex.rgb * k, alpha) * color;
+  }
+}%

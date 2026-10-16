@@ -1,0 +1,91 @@
+{
+  "__type__": "cc.AnimationClip",
+  "_name": "冰法师_冰峰-loop",
+  "_objFlags": 0,
+  "_native": "",
+  "sample": 12,
+  "speed": 1,
+  "wrapMode": 2,
+  "events": [],
+  "_duration": 0.75,
+  "_keys": [],
+  "_stepness": 0,
+  "curveDatas": {},
+  "_curves": [],
+  "_commonTargets": [],
+  "_hash": 0,
+  "_tracks": [
+    {
+      "__type__": "cc.animation.ObjectTrack",
+      "_binding": {
+        "__type__": "cc.animation.TrackBinding",
+        "path": {
+          "__type__": "cc.animation.TrackPath",
+          "_paths": [
+            {
+              "__type__": "cc.animation.ComponentPath",
+              "component": "cc.Sprite"
+            },
+            "spriteFrame"
+          ]
+        },
+        "proxy": null
+      },
+      "_channel": {
+        "__type__": "cc.animation.Channel",
+        "_curve": {
+          "__type__": "cc.ObjectCurve",
+          "_times": [
+            0.0,
+            0.0833333333,
+            0.1666666667,
+            0.25,
+            0.3333333333,
+            0.4166666667,
+            0.5,
+            0.5833333333,
+            0.6666666667
+          ],
+          "_values": [
+            {
+              "__uuid__": "a40100bb-94d2-461c-882e-9b4aacaf54ab@f9941"
+            },
+            {
+              "__uuid__": "7a67c982-64c8-4bed-8131-34d954bc0860@f9941"
+            },
+            {
+              "__uuid__": "47762b87-7770-4b46-a5a5-d8a6a6a5587f@f9941"
+            },
+            {
+              "__uuid__": "fe8e97bb-e88d-4528-8620-3ce395b638f5@f9941"
+            },
+            {
+              "__uuid__": "67a09350-9f49-4572-a94d-6512343feb90@f9941"
+            },
+            {
+              "__uuid__": "19e11bfb-4275-403b-8d98-55167ed3465e@f9941"
+            },
+            {
+              "__uuid__": "ae603b9b-5abf-4e6b-b0fb-abcd979f5b6c@f9941"
+            },
+            {
+              "__uuid__": "29992ee6-ef1b-4c1f-829e-87ec43879746@f9941"
+            },
+            {
+              "__uuid__": "5c6b6e61-3432-41de-b7ce-71d300b0145f@f9941"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "_exoticAnimation": null,
+  "_events": [],
+  "_embeddedPlayers": [],
+  "_additiveSettings": {
+    "__type__": "cc.AnimationClipAdditiveSettings",
+    "enabled": false,
+    "refClip": null
+  },
+  "_auxiliaryCurveEntries": []
+}

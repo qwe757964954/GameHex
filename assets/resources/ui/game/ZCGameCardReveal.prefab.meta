@@ -1,0 +1,14 @@
+{
+  "ver": "1.1.50",
+  "importer": "prefab",
+  "imported": true,
+  "uuid": "910233e8-f1dc-4663-ac69-2a7aac297ea0",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {},
+  "userData": {
+    "syncNodeName": "ZCGameCardReveal",
+    "hasIcon": false
+  }
+}

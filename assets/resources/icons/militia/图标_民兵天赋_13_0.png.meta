@@ -1,0 +1,134 @@
+{
+  "ver": "1.0.27",
+  "importer": "image",
+  "imported": true,
+  "uuid": "eff36a46-3911-493b-8b26-179220cf2443",
+  "files": [
+    ".json",
+    ".png"
+  ],
+  "subMetas": {
+    "6c48a": {
+      "importer": "texture",
+      "uuid": "eff36a46-3911-493b-8b26-179220cf2443@6c48a",
+      "displayName": "图标_民兵天赋_13_0",
+      "id": "6c48a",
+      "name": "texture",
+      "userData": {
+        "wrapModeS": "clamp-to-edge",
+        "wrapModeT": "clamp-to-edge",
+        "imageUuidOrDatabaseUri": "eff36a46-3911-493b-8b26-179220cf2443",
+        "isUuid": true,
+        "visible": false,
+        "minfilter": "linear",
+        "magfilter": "linear",
+        "mipfilter": "none",
+        "anisotropy": 0
+      },
+      "ver": "1.0.22",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "f9941": {
+      "importer": "sprite-frame",
+      "uuid": "eff36a46-3911-493b-8b26-179220cf2443@f9941",
+      "displayName": "图标_民兵天赋_13_0",
+      "id": "f9941",
+      "name": "spriteFrame",
+      "userData": {
+        "trimThreshold": 1,
+        "rotated": false,
+        "offsetX": 0,
+        "offsetY": 0,
+        "trimX": 6,
+        "trimY": 0,
+        "width": 68,
+        "height": 80,
+        "rawWidth": 80,
+        "rawHeight": 80,
+        "borderTop": 0,
+        "borderBottom": 0,
+        "borderLeft": 0,
+        "borderRight": 0,
+        "packable": true,
+        "pixelsToUnit": 100,
+        "pivotX": 0.5,
+        "pivotY": 0.5,
+        "meshType": 0,
+        "vertices": {
+          "rawPosition": [
+            -34,
+            -40,
+            0,
+            34,
+            -40,
+            0,
+            -34,
+            40,
+            0,
+            34,
+            40,
+            0
+          ],
+          "indexes": [
+            0,
+            1,
+            2,
+            2,
+            1,
+            3
+          ],
+          "uv": [
+            6,
+            80,
+            74,
+            80,
+            6,
+            0,
+            74,
+            0
+          ],
+          "nuv": [
+            0.075,
+            0,
+            0.925,
+            0,
+            0.075,
+            1,
+            0.925,
+            1
+          ],
+          "minPos": [
+            -34,
+            -40,
+            0
+          ],
+          "maxPos": [
+            34,
+            40,
+            0
+          ]
+        },
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "eff36a46-3911-493b-8b26-179220cf2443@6c48a",
+        "atlasUuid": "",
+        "trimType": "auto"
+      },
+      "ver": "1.0.12",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    }
+  },
+  "userData": {
+    "type": "sprite-frame",
+    "fixAlphaTransparencyArtifacts": false,
+    "hasAlpha": true,
+    "redirect": "eff36a46-3911-493b-8b26-179220cf2443@6c48a"
+  }
+}

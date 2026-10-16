@@ -1,0 +1,33 @@
+{
+  "id": "neutral_standard",
+  "name": "中立前线",
+  "version": 3,
+  "rows": 18,
+  "columns": 11,
+  "playerCount": 2,
+  "cityMode": "fixed",
+  "mirrorVertical": true,
+  "mirrorHorizontal": false,
+  "mirror180": false,
+  "ascii": [
+    "00000000000",
+    "00000000000",
+    "00000000000",
+    "00000000000",
+    "00000100000",
+    "00000000000",
+    "00000000000",
+    "00000000000",
+    "00000000000"
+  ],
+  "homes": [
+    {
+      "row": 13,
+      "column": 5
+    },
+    {
+      "row": 4,
+      "column": 5
+    }
+  ]
+}

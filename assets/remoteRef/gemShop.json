@@ -1,0 +1,6 @@
+[{"id":1,"desc":"晶石*72","rewards":[{"number":72,"resId":6}],"priceType":10,"cost":60,"doubleTimes":1,"limit":-1},
+{"id":2,"desc":"晶石*384","rewards":[{"number":384,"resId":6}],"priceType":10,"cost":320,"doubleTimes":1,"limit":-1},
+{"id":3,"desc":"晶石*900","rewards":[{"number":900,"resId":6}],"priceType":10,"cost":750,"doubleTimes":1,"limit":-1},
+{"id":4,"desc":"晶石*1848","rewards":[{"number":1848,"resId":6}],"priceType":10,"cost":1540,"doubleTimes":1,"limit":-1},
+{"id":5,"desc":"晶石*5016","rewards":[{"number":5016,"resId":6}],"priceType":10,"cost":4180,"doubleTimes":1,"limit":-1},
+{"id":6,"desc":"晶石*11136","rewards":[{"number":11136,"resId":6}],"priceType":10,"cost":9280,"doubleTimes":1,"limit":-1}]

@@ -1,0 +1,7 @@
+[{"quality":1,"desc":"白色宝石","consume":0,"consume1":0,"icon":"图标_宝石_白色"},
+{"quality":2,"desc":"绿色宝石","consume":5,"consume1":0,"icon":"图标_宝石_绿色"},
+{"quality":3,"desc":"蓝色宝石","consume":5,"consume1":0,"icon":"图标_宝石_蓝色"},
+{"quality":4,"desc":"紫色宝石","consume":5,"consume1":0,"icon":"图标_宝石_紫色"},
+{"quality":5,"desc":"金色宝石","consume":5,"consume1":6,"icon":"图标_宝石_橙色"},
+{"quality":6,"desc":"红色宝石","consume":5,"consume1":12,"icon":"图标_宝石_红色"},
+{"quality":7,"desc":"多彩宝石","consume":5,"consume1":24,"icon":"图标_宝石_粉色"}]

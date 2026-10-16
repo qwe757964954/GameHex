@@ -1,0 +1,14 @@
+{
+  "ver": "1.1.50",
+  "importer": "prefab",
+  "imported": true,
+  "uuid": "31fd2633-d140-4749-9608-6f6bfde3ebf1",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {},
+  "userData": {
+    "syncNodeName": "LaunchProgress",
+    "hasIcon": false
+  }
+}

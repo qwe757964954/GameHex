@@ -1,0 +1,1049 @@
+{
+	"CmdActivity": {
+		"tlKey": [
+			"openResId"
+		],
+		"tmField": {
+			"activityRefId": {
+				"fieldNumber": 2,
+				"name": "activityRefId",
+				"type": "sint32"
+			},
+			"detail": {
+				"fieldNumber": 5,
+				"name": "detail",
+				"type": "CmdActivityDetail"
+			},
+			"endTime": {
+				"fieldNumber": 4,
+				"name": "endTime",
+				"type": "sint64"
+			},
+			"openResId": {
+				"fieldNumber": 1,
+				"name": "openResId",
+				"type": "sint32"
+			},
+			"startTime": {
+				"fieldNumber": 3,
+				"name": "startTime",
+				"type": "sint64"
+			}
+		}
+	},
+	"CmdActivitySimple": {
+		"tlKey": [
+			"id"
+		],
+		"tmField": {
+			"changeTime": {
+				"fieldNumber": 6,
+				"name": "changeTime",
+				"type": "int64"
+			},
+			"cmdActivityTime": {
+				"fieldNumber": 4,
+				"name": "cmdActivityTime",
+				"type": "CmdActivityTime"
+			},
+			"exist": {
+				"fieldNumber": 8,
+				"name": "exist",
+				"type": "bool"
+			},
+			"id": {
+				"fieldNumber": 1,
+				"name": "id",
+				"type": "string"
+			},
+			"jsonNames": {
+				"fieldNumber": 7,
+				"name": "jsonNames",
+				"type": "string"
+			},
+			"name": {
+				"fieldNumber": 3,
+				"name": "name",
+				"type": "string"
+			},
+			"tlCmdActivityTime": {
+				"fieldNumber": 5,
+				"name": "tlCmdActivityTime",
+				"type": "CmdActivityTime"
+			},
+			"type": {
+				"fieldNumber": 2,
+				"name": "type",
+				"type": "int32"
+			}
+		}
+	},
+	"CmdApplyFriendCache": {
+		"tlKey": [
+			"roleId"
+		],
+		"tmField": {
+			"friendDetail": {
+				"fieldNumber": 2,
+				"name": "friendDetail",
+				"type": "CmdFriendsShowDetail"
+			},
+			"roleId": {
+				"fieldNumber": 1,
+				"name": "roleId",
+				"type": "sint64"
+			}
+		}
+	},
+	"CmdBattleChapter": {
+		"tlKey": [
+			"chapterId"
+		],
+		"tmField": {
+			"chapterId": {
+				"fieldNumber": 1,
+				"name": "chapterId",
+				"type": "sint32"
+			},
+			"star": {
+				"fieldNumber": 3,
+				"name": "star",
+				"type": "sint32"
+			},
+			"takeStar": {
+				"fieldNumber": 2,
+				"name": "takeStar",
+				"type": "sint32"
+			},
+			"tlCmdBattleLevel": {
+				"fieldNumber": 4,
+				"name": "tlCmdBattleLevel",
+				"type": "CmdBattleLevel"
+			}
+		}
+	},
+	"CmdBattleLevel": {
+		"tlKey": [
+			"level"
+		],
+		"tmField": {
+			"battleTime": {
+				"fieldNumber": 3,
+				"name": "battleTime",
+				"type": "sint32"
+			},
+			"level": {
+				"fieldNumber": 1,
+				"name": "level",
+				"type": "sint32"
+			},
+			"star": {
+				"fieldNumber": 2,
+				"name": "star",
+				"type": "sint32"
+			}
+		}
+	},
+	"CmdBattleToken": {
+		"tlKey": [
+			"roleId"
+		],
+		"tmField": {
+			"exp": {
+				"fieldNumber": 3,
+				"name": "exp",
+				"type": "sint32"
+			},
+			"level": {
+				"fieldNumber": 2,
+				"name": "level",
+				"type": "sint32"
+			},
+			"roleId": {
+				"fieldNumber": 1,
+				"name": "roleId",
+				"type": "sint64"
+			},
+			"surplusDay": {
+				"fieldNumber": 5,
+				"name": "surplusDay",
+				"type": "sint32"
+			},
+			"tlBattleTokenMessage": {
+				"fieldNumber": 4,
+				"name": "tlBattleTokenMessage",
+				"type": "CmdBattleTokenMessage"
+			}
+		}
+	},
+	"CmdBlackFriendCache": {
+		"tlKey": [
+			"roleId"
+		],
+		"tmField": {
+			"friendDetail": {
+				"fieldNumber": 2,
+				"name": "friendDetail",
+				"type": "CmdFriendsShowDetail"
+			},
+			"roleId": {
+				"fieldNumber": 1,
+				"name": "roleId",
+				"type": "sint64"
+			}
+		}
+	},
+	"CmdBreach": {
+		"tlKey": [
+			"resId"
+		],
+		"tmField": {}
+	},
+	"CmdCardCache": {
+		"tlKey": [
+			"resId"
+		],
+		"tmField": {
+			"endTime": {
+				"fieldNumber": 2,
+				"name": "endTime",
+				"type": "sint64"
+			},
+			"resId": {
+				"fieldNumber": 1,
+				"name": "resId",
+				"type": "sint32"
+			}
+		}
+	},
+	"CmdCastleApprentice": {
+		"tlKey": [
+			"id"
+		],
+		"tmField": {
+			"id": {
+				"fieldNumber": 1,
+				"name": "id",
+				"type": "sint32"
+			},
+			"level": {
+				"fieldNumber": 2,
+				"name": "level",
+				"type": "sint32"
+			},
+			"state": {
+				"fieldNumber": 3,
+				"name": "state",
+				"type": "bool"
+			}
+		}
+	},
+	"CmdCastleSkill": {
+		"tlKey": [
+			"skillId"
+		],
+		"tmField": {
+			"level": {
+				"fieldNumber": 2,
+				"name": "level",
+				"type": "sint32"
+			},
+			"skillId": {
+				"fieldNumber": 1,
+				"name": "skillId",
+				"type": "sint32"
+			}
+		}
+	},
+	"CmdCastleWall": {
+		"tlKey": [],
+		"tmField": {
+			"level": {
+				"fieldNumber": 3,
+				"name": "level",
+				"type": "sint32"
+			},
+			"selectType": {
+				"fieldNumber": 1,
+				"name": "selectType",
+				"type": "sint32"
+			},
+			"tlWallType": {
+				"fieldNumber": 2,
+				"name": "tlWallType",
+				"type": "sint32"
+			}
+		}
+	},
+	"CmdCastleWallSkill": {
+		"tlKey": [
+			"id"
+		],
+		"tmField": {
+			"id": {
+				"fieldNumber": 1,
+				"name": "id",
+				"type": "sint32"
+			},
+			"level": {
+				"fieldNumber": 2,
+				"name": "level",
+				"type": "sint32"
+			}
+		}
+	},
+	"CmdCastleWorkShop": {
+		"tlKey": [
+			"id"
+		],
+		"tmField": {
+			"history": {
+				"fieldNumber": 6,
+				"name": "history",
+				"type": "string"
+			},
+			"id": {
+				"fieldNumber": 1,
+				"name": "id",
+				"type": "sint32"
+			},
+			"level": {
+				"fieldNumber": 2,
+				"name": "level",
+				"type": "sint32"
+			},
+			"levelEndTime": {
+				"fieldNumber": 4,
+				"name": "levelEndTime",
+				"type": "sint64"
+			},
+			"rewardEndTime": {
+				"fieldNumber": 5,
+				"name": "rewardEndTime",
+				"type": "sint64"
+			},
+			"rewardNum": {
+				"fieldNumber": 3,
+				"name": "rewardNum",
+				"type": "sint32"
+			}
+		}
+	},
+	"CmdChapter": {
+		"tlKey": [
+			"resId"
+		],
+		"tmField": {
+			"finishState": {
+				"fieldNumber": 2,
+				"name": "finishState",
+				"type": "sint32"
+			},
+			"giftState": {
+				"fieldNumber": 5,
+				"name": "giftState",
+				"type": "sint32"
+			},
+			"liveTime": {
+				"fieldNumber": 3,
+				"name": "liveTime",
+				"type": "sint64"
+			},
+			"resId": {
+				"fieldNumber": 1,
+				"name": "resId",
+				"type": "sint64"
+			},
+			"tlChapterBoxState": {
+				"fieldNumber": 4,
+				"name": "tlChapterBoxState",
+				"type": "CmdChapterBoxState"
+			}
+		}
+	},
+	"CmdCode": {
+		"tlKey": [
+			"id"
+		],
+		"tmField": {}
+	},
+	"CmdDayWeekMonthGift": {
+		"tlKey": [
+			"id"
+		],
+		"tmField": {
+			"rechargeDay": {
+				"fieldNumber": 5,
+				"name": "rechargeDay",
+				"type": "sint32"
+			},
+			"tlDayGift": {
+				"fieldNumber": 1,
+				"name": "tlDayGift",
+				"type": "EveryDayGift"
+			},
+			"tlMonthGift": {
+				"fieldNumber": 3,
+				"name": "tlMonthGift",
+				"type": "EveryDayGift"
+			},
+			"tlRechargeCount": {
+				"fieldNumber": 4,
+				"name": "tlRechargeCount",
+				"type": "RechargeCount"
+			},
+			"tlWeekGift": {
+				"fieldNumber": 2,
+				"name": "tlWeekGift",
+				"type": "EveryDayGift"
+			}
+		}
+	},
+	"CmdEquipPage": {
+		"tlKey": [
+			"page"
+		],
+		"tmField": {
+			"name": {
+				"fieldNumber": 2,
+				"name": "name",
+				"type": "string"
+			},
+			"page": {
+				"fieldNumber": 1,
+				"name": "page",
+				"type": "sint32"
+			},
+			"tlCmdEquip": {
+				"fieldNumber": 3,
+				"name": "tlCmdEquip",
+				"type": "CmdEquip"
+			}
+		}
+	},
+	"CmdEveryDaySign": {
+		"tlKey": [
+			"id"
+		],
+		"tmField": {}
+	},
+	"CmdFirstRecharge": {
+		"tlKey": [
+			"id"
+		],
+		"tmField": {}
+	},
+	"CmdFriendCache": {
+		"tlKey": [
+			"roleId"
+		],
+		"tmField": {
+			"friendDetail": {
+				"fieldNumber": 2,
+				"name": "friendDetail",
+				"type": "CmdFriendsShowDetail"
+			},
+			"roleId": {
+				"fieldNumber": 1,
+				"name": "roleId",
+				"type": "sint64"
+			}
+		}
+	},
+	"CmdFuBen": {
+		"tlKey": [
+			"resId"
+		],
+		"tmField": {
+			"detail": {
+				"fieldNumber": 2,
+				"name": "detail",
+				"type": "CmdFuBenDetail"
+			},
+			"resId": {
+				"fieldNumber": 1,
+				"name": "resId",
+				"type": "sint64"
+			}
+		}
+	},
+	"CmdFund": {
+		"tlKey": [
+			"id"
+		],
+		"tmField": {}
+	},
+	"CmdGameCircle": {
+		"tlKey": [],
+		"tmField": {
+			"likeRewardState": {
+				"fieldNumber": 1,
+				"name": "likeRewardState",
+				"type": "CmdCommonState"
+			}
+		}
+	},
+	"CmdGem": {
+		"tlKey": [
+			"id"
+		],
+		"tmField": {
+			"attribute": {
+				"fieldNumber": 5,
+				"name": "attribute",
+				"type": "sint32"
+			},
+			"id": {
+				"fieldNumber": 1,
+				"name": "id",
+				"type": "sint64"
+			},
+			"lock": {
+				"fieldNumber": 6,
+				"name": "lock",
+				"type": "sint32"
+			},
+			"newAttribute": {
+				"fieldNumber": 7,
+				"name": "newAttribute",
+				"type": "sint32"
+			},
+			"num": {
+				"fieldNumber": 4,
+				"name": "num",
+				"type": "sint32"
+			},
+			"quality": {
+				"fieldNumber": 3,
+				"name": "quality",
+				"type": "sint32"
+			},
+			"resId": {
+				"fieldNumber": 2,
+				"name": "resId",
+				"type": "sint64"
+			}
+		}
+	},
+	"CmdGuanKaGift": {
+		"tlKey": [
+			"resId"
+		],
+		"tmField": {
+			"endTime": {
+				"fieldNumber": 2,
+				"name": "endTime",
+				"type": "int64"
+			},
+			"receive": {
+				"fieldNumber": 4,
+				"name": "receive",
+				"type": "sint32"
+			},
+			"resId": {
+				"fieldNumber": 1,
+				"name": "resId",
+				"type": "sint32"
+			},
+			"selectId": {
+				"fieldNumber": 3,
+				"name": "selectId",
+				"type": "sint64"
+			}
+		}
+	},
+	"CmdGuide": {
+		"tlKey": [
+			"id"
+		],
+		"tmField": {}
+	},
+	"CmdHang": {
+		"tlKey": [
+			"resId"
+		],
+		"tmField": {}
+	},
+	"CmdHero": {
+		"tlKey": [
+			"resId"
+		],
+		"tmField": {
+			"equipId": {
+				"fieldNumber": 4,
+				"name": "equipId",
+				"type": "sint64"
+			},
+			"level": {
+				"fieldNumber": 2,
+				"name": "level",
+				"type": "sint64"
+			},
+			"resId": {
+				"fieldNumber": 1,
+				"name": "resId",
+				"type": "sint64"
+			},
+			"state": {
+				"fieldNumber": 3,
+				"name": "state",
+				"type": "sint32"
+			}
+		}
+	},
+	"CmdItem": {
+		"tlKey": [
+			"resId"
+		],
+		"tmField": {
+			"isNew": {
+				"fieldNumber": 3,
+				"name": "isNew",
+				"type": "bool"
+			},
+			"number": {
+				"fieldNumber": 2,
+				"name": "number",
+				"type": "sint32"
+			},
+			"resId": {
+				"fieldNumber": 1,
+				"name": "resId",
+				"type": "sint64"
+			}
+		}
+	},
+	"CmdLockMonster": {
+		"tlKey": [],
+		"tmField": {
+			"level": {
+				"fieldNumber": 1,
+				"name": "level",
+				"type": "sint32"
+			},
+			"nextBoxRefreshTime": {
+				"fieldNumber": 2,
+				"name": "nextBoxRefreshTime",
+				"type": "sint64"
+			}
+		}
+	},
+	"CmdMall": {
+		"tlKey": [
+			"id"
+		],
+		"tmField": {
+			"detail": {
+				"fieldNumber": 2,
+				"name": "detail",
+				"type": "CmdMallDetail"
+			},
+			"id": {
+				"fieldNumber": 1,
+				"name": "id",
+				"type": "sint64"
+			}
+		}
+	},
+	"CmdOpenCache": {
+		"tlKey": [
+			"refId"
+		],
+		"tmField": {
+			"refId": {
+				"fieldNumber": 1,
+				"name": "refId",
+				"type": "sint32"
+			},
+			"show": {
+				"fieldNumber": 2,
+				"name": "show",
+				"type": "bool"
+			}
+		}
+	},
+	"CmdRankItem": {
+		"tlKey": [
+			"type"
+		],
+		"tmField": {
+			"endTime": {
+				"fieldNumber": 3,
+				"name": "endTime",
+				"type": "sint32"
+			},
+			"showEndTime": {
+				"fieldNumber": 4,
+				"name": "showEndTime",
+				"type": "sint32"
+			},
+			"startTime": {
+				"fieldNumber": 2,
+				"name": "startTime",
+				"type": "sint32"
+			},
+			"type": {
+				"fieldNumber": 1,
+				"name": "type",
+				"type": "CmdRankType"
+			}
+		}
+	},
+	"CmdRedDotCache": {
+		"tlKey": [
+			"redDotType"
+		],
+		"tmField": {
+			"nextRefreshTime": {
+				"fieldNumber": 3,
+				"name": "nextRefreshTime",
+				"type": "sint64"
+			},
+			"number": {
+				"fieldNumber": 2,
+				"name": "number",
+				"type": "sint32"
+			},
+			"redDotType": {
+				"fieldNumber": 1,
+				"name": "redDotType",
+				"type": "CmdRedDotType"
+			}
+		}
+	},
+	"CmdRole": {
+		"tlKey": [],
+		"tmField": {
+			"battleSpiritAnimalUniqueId": {
+				"fieldNumber": 29,
+				"name": "battleSpiritAnimalUniqueId",
+				"type": "sint64"
+			},
+			"cmdFirstRechargeInfo": {
+				"fieldNumber": 18,
+				"name": "cmdFirstRechargeInfo",
+				"type": "CmdFirstRechargeInfo"
+			},
+			"coin": {
+				"fieldNumber": 9,
+				"name": "coin",
+				"type": "string"
+			},
+			"createTime": {
+				"fieldNumber": 12,
+				"name": "createTime",
+				"type": "sint64"
+			},
+			"end": {
+				"fieldNumber": 11,
+				"name": "end",
+				"type": "sint32"
+			},
+			"endMax": {
+				"fieldNumber": 23,
+				"name": "endMax",
+				"type": "sint32"
+			},
+			"exp": {
+				"fieldNumber": 6,
+				"name": "exp",
+				"type": "sint32"
+			},
+			"freeRenameCount": {
+				"fieldNumber": 21,
+				"name": "freeRenameCount",
+				"type": "sint32"
+			},
+			"gem": {
+				"fieldNumber": 8,
+				"name": "gem",
+				"type": "string"
+			},
+			"gold": {
+				"fieldNumber": 7,
+				"name": "gold",
+				"type": "string"
+			},
+			"headFrame": {
+				"fieldNumber": 4,
+				"name": "headFrame",
+				"type": "sint64"
+			},
+			"id": {
+				"fieldNumber": 1,
+				"name": "id",
+				"type": "sint64"
+			},
+			"img": {
+				"fieldNumber": 3,
+				"name": "img",
+				"type": "sint64"
+			},
+			"internal": {
+				"fieldNumber": 24,
+				"name": "internal",
+				"type": "sint32"
+			},
+			"lv": {
+				"fieldNumber": 5,
+				"name": "lv",
+				"type": "sint32"
+			},
+			"maxBattleLevelPassTime": {
+				"fieldNumber": 31,
+				"name": "maxBattleLevelPassTime",
+				"type": "sint64"
+			},
+			"miningProcess": {
+				"fieldNumber": 15,
+				"name": "miningProcess",
+				"type": "sint32"
+			},
+			"miningShow": {
+				"fieldNumber": 16,
+				"name": "miningShow",
+				"type": "bool"
+			},
+			"name": {
+				"fieldNumber": 2,
+				"name": "name",
+				"type": "string"
+			},
+			"nextEndRecoverTime": {
+				"fieldNumber": 13,
+				"name": "nextEndRecoverTime",
+				"type": "sint64"
+			},
+			"platformImg": {
+				"fieldNumber": 20,
+				"name": "platformImg",
+				"type": "string"
+			},
+			"recharge": {
+				"fieldNumber": 17,
+				"name": "recharge",
+				"type": "sint32"
+			},
+			"region": {
+				"fieldNumber": 27,
+				"name": "region",
+				"type": "string"
+			},
+			"selectEquipPage": {
+				"fieldNumber": 14,
+				"name": "selectEquipPage",
+				"type": "sint32"
+			},
+			"selectServerId": {
+				"fieldNumber": 28,
+				"name": "selectServerId",
+				"type": "sint32"
+			},
+			"spiritAnimalAtkAdd": {
+				"fieldNumber": 30,
+				"name": "spiritAnimalAtkAdd",
+				"type": "sint32"
+			},
+			"sweepTimes": {
+				"fieldNumber": 26,
+				"name": "sweepTimes",
+				"type": "sint32"
+			},
+			"tlCmdAdvert": {
+				"fieldNumber": 19,
+				"name": "tlCmdAdvert",
+				"type": "CmdAdvert"
+			},
+			"tlCmdAppletInfo": {
+				"fieldNumber": 25,
+				"name": "tlCmdAppletInfo",
+				"type": "CmdAppletInfo"
+			},
+			"tlExtraId": {
+				"fieldNumber": 22,
+				"name": "tlExtraId",
+				"type": "sint32"
+			},
+			"washStone": {
+				"fieldNumber": 10,
+				"name": "washStone",
+				"type": "sint32"
+			}
+		}
+	},
+	"CmdRune": {
+		"tlKey": [
+			"id"
+		],
+		"tmField": {
+			"id": {
+				"fieldNumber": 1,
+				"name": "id",
+				"type": "sint64"
+			},
+			"isNew": {
+				"fieldNumber": 6,
+				"name": "isNew",
+				"type": "bool"
+			},
+			"isPutOn": {
+				"fieldNumber": 5,
+				"name": "isPutOn",
+				"type": "bool"
+			},
+			"phase": {
+				"fieldNumber": 4,
+				"name": "phase",
+				"type": "sint32"
+			},
+			"quality": {
+				"fieldNumber": 3,
+				"name": "quality",
+				"type": "sint32"
+			},
+			"resId": {
+				"fieldNumber": 2,
+				"name": "resId",
+				"type": "sint64"
+			}
+		}
+	},
+	"CmdSecretRealm": {
+		"tlKey": [
+			"roleId"
+		],
+		"tmField": {
+			"endTime": {
+				"fieldNumber": 4,
+				"name": "endTime",
+				"type": "sint64"
+			},
+			"level": {
+				"fieldNumber": 3,
+				"name": "level",
+				"type": "sint32"
+			},
+			"roleId": {
+				"fieldNumber": 1,
+				"name": "roleId",
+				"type": "sint64"
+			},
+			"secretRealmScore": {
+				"fieldNumber": 5,
+				"name": "secretRealmScore",
+				"type": "CmdSecretRealmScore"
+			},
+			"type": {
+				"fieldNumber": 2,
+				"name": "type",
+				"type": "sint32"
+			}
+		}
+	},
+	"CmdShare": {
+		"tlKey": [
+			"id"
+		],
+		"tmField": {}
+	},
+	"CmdShop": {
+		"tlKey": [
+			"cmdShopType"
+		],
+		"tmField": {
+			"cmdShopType": {
+				"fieldNumber": 1,
+				"name": "cmdShopType",
+				"type": "CmdShopType"
+			},
+			"tlCmdShopGoods": {
+				"fieldNumber": 2,
+				"name": "tlCmdShopGoods",
+				"type": "CmdShopGoods"
+			}
+		}
+	},
+	"CmdSkin": {
+		"tlKey": [
+			"resId"
+		],
+		"tmField": {
+			"resId": {
+				"fieldNumber": 1,
+				"name": "resId",
+				"type": "sint64"
+			},
+			"used": {
+				"fieldNumber": 2,
+				"name": "used",
+				"type": "bool"
+			}
+		}
+	},
+	"CmdSpecialGiftCache": {
+		"tlKey": [
+			"resId"
+		],
+		"tmField": {
+			"endTime": {
+				"fieldNumber": 3,
+				"name": "endTime",
+				"type": "sint64"
+			},
+			"resId": {
+				"fieldNumber": 1,
+				"name": "resId",
+				"type": "sint64"
+			},
+			"state": {
+				"fieldNumber": 2,
+				"name": "state",
+				"type": "CmdCommonState"
+			}
+		}
+	},
+	"CmdSpiritAnimal": {
+		"tlKey": [
+			"uniqueId"
+		],
+		"tmField": {
+			"level": {
+				"fieldNumber": 3,
+				"name": "level",
+				"type": "sint32"
+			},
+			"resId": {
+				"fieldNumber": 2,
+				"name": "resId",
+				"type": "sint64"
+			},
+			"uniqueId": {
+				"fieldNumber": 1,
+				"name": "uniqueId",
+				"type": "sint64"
+			}
+		}
+	},
+	"CmdTask": {
+		"tlKey": [
+			"resId"
+		],
+		"tmField": {
+			"count": {
+				"fieldNumber": 2,
+				"name": "count",
+				"type": "sint32"
+			},
+			"resId": {
+				"fieldNumber": 1,
+				"name": "resId",
+				"type": "sint32"
+			},
+			"rewardState": {
+				"fieldNumber": 3,
+				"name": "rewardState",
+				"type": "CmdCommonState"
+			}
+		}
+	}
+}

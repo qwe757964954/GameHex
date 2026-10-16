@@ -1,0 +1,159 @@
+{
+  "__type__": "cc.AnimationClip",
+  "_name": "表演家MJ_普攻-loop",
+  "_objFlags": 0,
+  "_native": "",
+  "sample": 12,
+  "speed": 1,
+  "wrapMode": 2,
+  "events": [],
+  "_duration": 2.1666666667,
+  "_keys": [],
+  "_stepness": 0,
+  "curveDatas": {},
+  "_curves": [],
+  "_commonTargets": [],
+  "_hash": 0,
+  "_tracks": [
+    {
+      "__type__": "cc.animation.ObjectTrack",
+      "_binding": {
+        "__type__": "cc.animation.TrackBinding",
+        "path": {
+          "__type__": "cc.animation.TrackPath",
+          "_paths": [
+            {
+              "__type__": "cc.animation.ComponentPath",
+              "component": "cc.Sprite"
+            },
+            "spriteFrame"
+          ]
+        },
+        "proxy": null
+      },
+      "_channel": {
+        "__type__": "cc.animation.Channel",
+        "_curve": {
+          "__type__": "cc.ObjectCurve",
+          "_times": [
+            0.0,
+            0.0833333333,
+            0.1666666667,
+            0.25,
+            0.3333333333,
+            0.4166666667,
+            0.5,
+            0.5833333333,
+            0.6666666667,
+            0.75,
+            0.8333333333,
+            0.9166666667,
+            1.0,
+            1.0833333333,
+            1.1666666667,
+            1.25,
+            1.3333333333,
+            1.4166666667,
+            1.5,
+            1.5833333333,
+            1.6666666667,
+            1.75,
+            1.8333333333,
+            1.9166666667,
+            2.0,
+            2.0833333333
+          ],
+          "_values": [
+            {
+              "__uuid__": "4686f877-24c1-46ef-918e-85d8eb84c4bc@f9941"
+            },
+            {
+              "__uuid__": "ca4213df-92f4-487d-af3e-21dedc6ee314@f9941"
+            },
+            {
+              "__uuid__": "a654302a-dee7-4591-a96c-27bf688a458e@f9941"
+            },
+            {
+              "__uuid__": "f9197ec5-154f-44f1-be2c-533fddcb5cbc@f9941"
+            },
+            {
+              "__uuid__": "b76411f0-e2f9-455f-866c-9bc227cf3ac9@f9941"
+            },
+            {
+              "__uuid__": "6c0b1482-75a6-44c3-b487-df9bcb86dcc8@f9941"
+            },
+            {
+              "__uuid__": "9f5207d0-3a17-4974-b128-c0a51f45301d@f9941"
+            },
+            {
+              "__uuid__": "7ee698e0-f8d2-4637-849a-4945624abdfa@f9941"
+            },
+            {
+              "__uuid__": "db56f208-9b40-4e4d-a6c2-039bebcf2913@f9941"
+            },
+            {
+              "__uuid__": "98bee6af-ac54-407f-9f47-9bbe43a2d8cf@f9941"
+            },
+            {
+              "__uuid__": "ff03c040-b990-47c5-b8bb-83993bf68a02@f9941"
+            },
+            {
+              "__uuid__": "544909be-7915-4d39-a2a3-f1545454dffb@f9941"
+            },
+            {
+              "__uuid__": "e7b6c66a-5963-421f-b255-93345909f9c6@f9941"
+            },
+            {
+              "__uuid__": "02a641fb-a273-4560-ad58-d4ae4eb0e7cb@f9941"
+            },
+            {
+              "__uuid__": "7f0e6e65-ad17-4fc3-8a9b-f93e73317081@f9941"
+            },
+            {
+              "__uuid__": "b9bad2ac-8431-4782-be66-e75c45addfd7@f9941"
+            },
+            {
+              "__uuid__": "83756ab0-4e62-4f44-97a9-7e276690f861@f9941"
+            },
+            {
+              "__uuid__": "f24a5dba-f408-41d5-963a-6c52091a5941@f9941"
+            },
+            {
+              "__uuid__": "a2511c1d-b852-44e2-9700-da9ad84bccf1@f9941"
+            },
+            {
+              "__uuid__": "16661195-fcef-4cff-a93f-9319fab3ff40@f9941"
+            },
+            {
+              "__uuid__": "2fdcd40d-5dd7-4835-952b-68c4b70f2486@f9941"
+            },
+            {
+              "__uuid__": "5c6fb19b-2b0b-42f6-8039-568e81f1c701@f9941"
+            },
+            {
+              "__uuid__": "7f2be58c-7fbf-43e3-a57c-0835a5c56557@f9941"
+            },
+            {
+              "__uuid__": "619e3712-f4a6-4c03-8176-17b077bc0eb3@f9941"
+            },
+            {
+              "__uuid__": "b487dd29-b3aa-4e09-8e26-892edc607e7e@f9941"
+            },
+            {
+              "__uuid__": "c99e548a-b11c-442f-9155-b99227a36696@f9941"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "_exoticAnimation": null,
+  "_events": [],
+  "_embeddedPlayers": [],
+  "_additiveSettings": {
+    "__type__": "cc.AnimationClipAdditiveSettings",
+    "enabled": false,
+    "refClip": null
+  },
+  "_auxiliaryCurveEntries": []
+}

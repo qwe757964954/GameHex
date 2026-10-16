@@ -1,0 +1,139 @@
+
+sanyecao.png
+size: 284,284
+format: RGBA8888
+filter: Linear,Linear
+repeat: none
+syc_0
+  rotate: false
+  xy: 83, 10
+  size: 16, 16
+  orig: 16, 16
+  offset: 0, 0
+  index: -1
+syc_1
+  rotate: false
+  xy: 249, 75
+  size: 33, 28
+  orig: 33, 28
+  offset: 0, 0
+  index: -1
+syc_10
+  rotate: false
+  xy: 250, 120
+  size: 32, 14
+  orig: 32, 14
+  offset: 0, 0
+  index: -1
+syc_11
+  rotate: false
+  xy: 2, 2
+  size: 50, 56
+  orig: 50, 56
+  offset: 0, 0
+  index: -1
+syc_12
+  rotate: false
+  xy: 225, 9
+  size: 46, 42
+  orig: 46, 42
+  offset: 0, 0
+  index: -1
+syc_2
+  rotate: false
+  xy: 109, 28
+  size: 29, 10
+  orig: 29, 10
+  offset: 0, 0
+  index: -1
+syc_3
+  rotate: false
+  xy: 249, 59
+  size: 14, 14
+  orig: 14, 14
+  offset: 0, 0
+  index: -1
+syc_4
+  rotate: true
+  xy: 83, 28
+  size: 30, 24
+  orig: 30, 24
+  offset: 0, 0
+  index: -1
+syc_6
+  rotate: false
+  xy: 2, 168
+  size: 115, 114
+  orig: 115, 114
+  offset: 0, 0
+  index: -1
+syc_7
+  rotate: true
+  xy: 119, 97
+  size: 88, 100
+  orig: 88, 100
+  offset: 0, 0
+  index: -1
+syc_8
+  rotate: false
+  xy: 2, 60
+  size: 105, 106
+  orig: 105, 106
+  offset: 0, 0
+  index: -1
+syc_9
+  rotate: false
+  xy: 119, 187
+  size: 112, 95
+  orig: 112, 95
+  offset: 0, 0
+  index: -1
+yz
+  rotate: true
+  xy: 233, 190
+  size: 92, 41
+  orig: 92, 41
+  offset: 0, 0
+  index: -1
+zx1
+  rotate: true
+  xy: 192, 42
+  size: 53, 31
+  orig: 53, 31
+  offset: 0, 0
+  index: -1
+zx2
+  rotate: true
+  xy: 250, 136
+  size: 52, 28
+  orig: 52, 28
+  offset: 0, 0
+  index: -1
+zx3
+  rotate: false
+  xy: 109, 40
+  size: 81, 55
+  orig: 81, 55
+  offset: 0, 0
+  index: -1
+zx4
+  rotate: true
+  xy: 225, 53
+  size: 50, 22
+  orig: 50, 22
+  offset: 0, 0
+  index: -1
+zx5
+  rotate: true
+  xy: 54, 2
+  size: 56, 27
+  orig: 57, 27
+  offset: 1, 0
+  index: -1
+zx6
+  rotate: true
+  xy: 221, 105
+  size: 80, 27
+  orig: 80, 27
+  offset: 0, 0
+  index: -1

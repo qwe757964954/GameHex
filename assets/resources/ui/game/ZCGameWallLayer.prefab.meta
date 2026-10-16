@@ -1,0 +1,14 @@
+{
+  "ver": "1.1.50",
+  "importer": "prefab",
+  "imported": true,
+  "uuid": "35a192ea-50d0-41b5-bd8d-027bc0a4bd29",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {},
+  "userData": {
+    "syncNodeName": "ZCGameWallLayer",
+    "hasIcon": false
+  }
+}

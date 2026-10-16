@@ -1,0 +1,10 @@
+[{"type":1,"order":1,"time":0,"tlRate":[70,20,10],"tlMonsterNum":[60,60],"attrRate":1000},
+{"type":1,"order":2,"time":15,"tlRate":[50,30,20],"tlMonsterNum":[60,60],"attrRate":1030},
+{"type":1,"order":3,"time":30,"tlRate":[40,30,30],"tlMonsterNum":[60,60],"attrRate":1060},
+{"type":1,"order":4,"time":45,"tlRate":[30,30,50],"tlMonsterNum":[100,100],"attrRate":1090},
+{"type":1,"order":5,"time":60,"tlRate":[10,20,70],"tlMonsterNum":[100,100],"attrRate":1120},
+{"type":2,"order":1,"time":0,"tlRate":[70,20,10],"tlMonsterNum":[80,80],"attrRate":1000},
+{"type":2,"order":2,"time":15,"tlRate":[50,30,20],"tlMonsterNum":[80,80],"attrRate":1100},
+{"type":2,"order":3,"time":30,"tlRate":[40,30,30],"tlMonsterNum":[80,80],"attrRate":1200},
+{"type":2,"order":4,"time":45,"tlRate":[30,30,50],"tlMonsterNum":[100,100],"attrRate":1300},
+{"type":2,"order":5,"time":60,"tlRate":[10,20,70],"tlMonsterNum":[100,100],"attrRate":1400}]

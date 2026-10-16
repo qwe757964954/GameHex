@@ -1,0 +1,14 @@
+{
+  "ver": "1.1.50",
+  "importer": "prefab",
+  "imported": true,
+  "uuid": "450040c4-d3c4-47b4-85ad-e9d1ddca9672",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {},
+  "userData": {
+    "syncNodeName": "LeagueTaskBox",
+    "hasIcon": false
+  }
+}

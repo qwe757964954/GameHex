@@ -1,0 +1,12 @@
+[{"id":1,"key":"playerAtt","cacheName":"CmdRole","flag":"playerAtt","fileName":"attribute","min":1,"max":9999},
+{"id":2,"key":"item","cacheName":"CmdItem","flag":"item","fileName":"item","min":10000,"max":19999},
+{"id":3,"key":"gem","cacheName":"CmdGem","flag":"gem","fileName":"gem","min":1000000,"max":1100000},
+{"id":4,"key":"skill","cacheName":"CmdSkill","flag":"skill","fileName":"skill","min":30000,"max":39999},
+{"id":5,"key":"equip","cacheName":"CmdEquip","flag":"equip","fileName":"equip","min":400000,"max":499999},
+{"id":6,"key":"task","cacheName":"CmdTask","flag":"task","fileName":"task","min":50000,"max":59999},
+{"id":7,"key":"monster","cacheName":"CmdMonster","flag":"monster","fileName":"monster","min":60000,"max":66999},
+{"id":8,"key":"head","cacheName":"CmdHead","flag":"head","fileName":"head","min":70000,"max":79999},
+{"id":9,"key":"skin","cacheName":"CmdSkin","flag":"skin","fileName":"skin","min":80000,"max":89999},
+{"id":10,"key":"spiritAnimal","cacheName":"CmdSpiritAnimal","flag":"spiritAnimal","fileName":"spiritAnimal","min":90000,"max":99999},
+{"id":12,"key":"general","cacheName":"CmdGeneral","flag":"general","fileName":"general","min":68000,"max":69999},
+{"id":13,"key":"advisor","cacheName":"CmdAdvisor","flag":"advisor","fileName":"advisor","min":67000,"max":67999}]

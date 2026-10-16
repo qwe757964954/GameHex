@@ -1,0 +1,87 @@
+{
+  "__type__": "cc.AnimationClip",
+  "_name": "长戟兵_飞刀-loop",
+  "_objFlags": 0,
+  "_native": "",
+  "sample": 12,
+  "speed": 1,
+  "wrapMode": 2,
+  "events": [],
+  "_duration": 0.6666666667,
+  "_keys": [],
+  "_stepness": 0,
+  "curveDatas": {},
+  "_curves": [],
+  "_commonTargets": [],
+  "_hash": 0,
+  "_tracks": [
+    {
+      "__type__": "cc.animation.ObjectTrack",
+      "_binding": {
+        "__type__": "cc.animation.TrackBinding",
+        "path": {
+          "__type__": "cc.animation.TrackPath",
+          "_paths": [
+            {
+              "__type__": "cc.animation.ComponentPath",
+              "component": "cc.Sprite"
+            },
+            "spriteFrame"
+          ]
+        },
+        "proxy": null
+      },
+      "_channel": {
+        "__type__": "cc.animation.Channel",
+        "_curve": {
+          "__type__": "cc.ObjectCurve",
+          "_times": [
+            0.0,
+            0.0833333333,
+            0.1666666667,
+            0.25,
+            0.3333333333,
+            0.4166666667,
+            0.5,
+            0.5833333333
+          ],
+          "_values": [
+            {
+              "__uuid__": "137d45ea-ff37-4ba9-8830-b2a47595cab4@f9941"
+            },
+            {
+              "__uuid__": "f5df8ffc-9a06-4b40-b40f-7f6e6d905b4e@f9941"
+            },
+            {
+              "__uuid__": "617aa022-f51a-4a7a-ab36-87bc692bc454@f9941"
+            },
+            {
+              "__uuid__": "de85266f-f19f-414a-be03-49f0f8e99b0e@f9941"
+            },
+            {
+              "__uuid__": "e9ee4d42-fcdb-4950-bb5a-be4d2ca01e15@f9941"
+            },
+            {
+              "__uuid__": "063d1a81-07ae-42ff-a376-eefb4ff6db43@f9941"
+            },
+            {
+              "__uuid__": "7ce0f95e-e55b-44a4-9b94-397f7bf37b30@f9941"
+            },
+            {
+              "__uuid__": "8d79e338-3a10-449d-aa7c-b65071bd0466@f9941"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "_exoticAnimation": null,
+  "_events": [],
+  "_embeddedPlayers": [],
+  "_additiveSettings": {
+    "__type__": "cc.AnimationClipAdditiveSettings",
+    "enabled": false,
+    "refClip": null
+  },
+  "_auxiliaryCurveEntries": []
+}

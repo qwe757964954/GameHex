@@ -1,0 +1,95 @@
+{
+  "__type__": "cc.AnimationClip",
+  "_name": "驭兽师-run",
+  "_objFlags": 0,
+  "_native": "",
+  "sample": 10,
+  "speed": 1,
+  "wrapMode": 2,
+  "events": [],
+  "_duration": 1.0,
+  "_keys": [],
+  "_stepness": 0,
+  "curveDatas": {},
+  "_curves": [],
+  "_commonTargets": [],
+  "_hash": 0,
+  "_tracks": [
+    {
+      "__type__": "cc.animation.ObjectTrack",
+      "_binding": {
+        "__type__": "cc.animation.TrackBinding",
+        "path": {
+          "__type__": "cc.animation.TrackPath",
+          "_paths": [
+            {
+              "__type__": "cc.animation.ComponentPath",
+              "component": "cc.Sprite"
+            },
+            "spriteFrame"
+          ]
+        },
+        "proxy": null
+      },
+      "_channel": {
+        "__type__": "cc.animation.Channel",
+        "_curve": {
+          "__type__": "cc.ObjectCurve",
+          "_times": [
+            0.0,
+            0.1,
+            0.2,
+            0.3,
+            0.4,
+            0.5,
+            0.6,
+            0.7,
+            0.8,
+            0.9
+          ],
+          "_values": [
+            {
+              "__uuid__": "d99f888e-8ed5-480c-8463-5d69db58fee2@f9941"
+            },
+            {
+              "__uuid__": "b5e6081b-46d0-4f98-945e-862eb71024bf@f9941"
+            },
+            {
+              "__uuid__": "eab5c262-55f7-439f-9d5e-e0e78e09a0e1@f9941"
+            },
+            {
+              "__uuid__": "b988971a-0945-4f73-8165-d1b6dcbc37c5@f9941"
+            },
+            {
+              "__uuid__": "31434700-2a50-42b7-bf11-de8d5c0c2f02@f9941"
+            },
+            {
+              "__uuid__": "f1385ff0-fcaf-4f85-a768-77d2247c1f01@f9941"
+            },
+            {
+              "__uuid__": "ed7a0914-3e45-4f0c-9b9b-36b0ef93accb@f9941"
+            },
+            {
+              "__uuid__": "bb29710d-f68e-474b-ae21-4a90daad23c3@f9941"
+            },
+            {
+              "__uuid__": "8152e3b2-d9af-48ee-a05e-8faac3eac2b3@f9941"
+            },
+            {
+              "__uuid__": "a8238a1e-bab0-4217-84b1-2cea5a3ee554@f9941"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "_exoticAnimation": null,
+  "_events": [],
+  "_embeddedPlayers": [],
+  "_additiveSettings": {
+    "__type__": "cc.AnimationClipAdditiveSettings",
+    "enabled": false,
+    "refClip": null
+  },
+  "_auxiliaryCurveEntries": []
+}

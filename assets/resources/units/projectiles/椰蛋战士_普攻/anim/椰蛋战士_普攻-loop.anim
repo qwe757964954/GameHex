@@ -1,0 +1,107 @@
+{
+  "__type__": "cc.AnimationClip",
+  "_name": "椰蛋战士_普攻-loop",
+  "_objFlags": 0,
+  "_native": "",
+  "sample": 12,
+  "speed": 1,
+  "wrapMode": 2,
+  "events": [],
+  "_duration": 1.0833333333,
+  "_keys": [],
+  "_stepness": 0,
+  "curveDatas": {},
+  "_curves": [],
+  "_commonTargets": [],
+  "_hash": 0,
+  "_tracks": [
+    {
+      "__type__": "cc.animation.ObjectTrack",
+      "_binding": {
+        "__type__": "cc.animation.TrackBinding",
+        "path": {
+          "__type__": "cc.animation.TrackPath",
+          "_paths": [
+            {
+              "__type__": "cc.animation.ComponentPath",
+              "component": "cc.Sprite"
+            },
+            "spriteFrame"
+          ]
+        },
+        "proxy": null
+      },
+      "_channel": {
+        "__type__": "cc.animation.Channel",
+        "_curve": {
+          "__type__": "cc.ObjectCurve",
+          "_times": [
+            0.0,
+            0.0833333333,
+            0.1666666667,
+            0.25,
+            0.3333333333,
+            0.4166666667,
+            0.5,
+            0.5833333333,
+            0.6666666667,
+            0.75,
+            0.8333333333,
+            0.9166666667,
+            1.0
+          ],
+          "_values": [
+            {
+              "__uuid__": "3d1ae140-c31c-4c3a-8131-3a6dc8ca008b@f9941"
+            },
+            {
+              "__uuid__": "b8ebe005-ad59-4a06-a705-b02fd4d41829@f9941"
+            },
+            {
+              "__uuid__": "dc9be4c0-3e3d-4a0a-a4a8-c9af60a990e4@f9941"
+            },
+            {
+              "__uuid__": "37931188-726a-40dd-81bb-3c6b5eb23d2d@f9941"
+            },
+            {
+              "__uuid__": "f8129320-be9e-4a3d-bb7e-ceee52d6cd0c@f9941"
+            },
+            {
+              "__uuid__": "4d7eaabb-7dbe-4d0a-afc1-4bb866312896@f9941"
+            },
+            {
+              "__uuid__": "d7fab56f-3c88-4b46-8abe-885251c9743a@f9941"
+            },
+            {
+              "__uuid__": "88942a64-57fe-4941-bb12-0e78c4094cc5@f9941"
+            },
+            {
+              "__uuid__": "a32bb5a9-b747-4307-ad31-2fc879bb9284@f9941"
+            },
+            {
+              "__uuid__": "bc5fe3ad-2927-4709-938a-39db2fe5cd52@f9941"
+            },
+            {
+              "__uuid__": "e23b5409-948f-410c-8386-b31700a9441e@f9941"
+            },
+            {
+              "__uuid__": "c0486162-7f4c-4510-afef-ecc0f0af7bf3@f9941"
+            },
+            {
+              "__uuid__": "f37e6682-bb91-4459-ad82-e75bb8934687@f9941"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "_exoticAnimation": null,
+  "_events": [],
+  "_embeddedPlayers": [],
+  "_additiveSettings": {
+    "__type__": "cc.AnimationClipAdditiveSettings",
+    "enabled": false,
+    "refClip": null
+  },
+  "_auxiliaryCurveEntries": []
+}

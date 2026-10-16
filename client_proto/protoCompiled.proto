@@ -1,0 +1,4949 @@
+package com.xkhy.tafang.cmd;
+
+message CmdActivity {
+
+	optional sint32 activity_ref_id = 2;
+	optional CmdActivityDetail detail = 5;
+	optional sint64 end_time = 4;
+	optional sint32 open_res_id = 1;
+	optional sint64 start_time = 3;
+}
+
+// 抽奖活动类型
+enum CmdTurntableLotteryType {
+    Type1 = 1; //  类型1
+    Type2 = 2; //  类型2
+    Type3 = 3; //  类型3
+    Type4 = 4; //  类型4
+}
+
+// 抽奖活动详情
+message CmdLotteryActDetail {
+    required int32 actType = 1; // 抽奖类型(1,2,3,4)
+    required int32 lotteryType = 2; // 抽奖类型(1,2,3,4)
+    required int32 drawCount = 3; // 抽奖次数
+    required int32 luckValue = 4; // 幸运值
+    required int32 claimedMask = 5; // 领取奖励标志
+}
+
+// 活动详情
+message CmdActivityDetail {
+    optional CmdDayChallengeActDetail dayChallengeActDetail = 1; // 每日挑战活动数据
+    optional CmdMonthCardActDetail monthCardActDetail = 2; // 月卡特权活动数据1
+    optional CmdRechargeGiftActDetail rechargeGiftActDetail = 3; // 充值好礼活动数据1
+    optional CmdRechargeGiftAct2Detail cmdRechargeGiftAct2Detail = 4; // 充值好礼活动数据2
+    optional CmdRechargeGiftAct3Detail cmdRechargeGiftAct3Detail = 5; // 充值好礼活动数据3
+    optional CmdMonthCardActDetail monthCardActDetail2 = 6; // 月卡特权活动数据2
+    optional CmdSkinActDetail skinActDetail = 7; // 皮肤活动
+    repeated CmdLotteryActDetail tlLotteryActDetail = 8; // 抽奖活动详情列表
+}
+
+message CmdActivityGoods {
+
+	required int32 res_id = 1;
+	required int32 times = 2;
+}
+
+message CmdActivityJsonReqMsg {
+
+	required string activity_id = 1;
+	repeated string tl_json_name = 2;
+}
+
+message CmdActivityJsonRspMsg {
+
+	required string content = 1;
+}
+
+message CmdActivityLimitSkinBuyReqMsg {
+
+	required sint32 id = 1;
+}
+
+message CmdActivityLimitSkinBuyRspMsg {
+
+	required CmdSkinPlayer cmd_skin_player = 2;
+	repeated CmdGoods tl_reward = 1;
+}
+
+message CmdActivityLimitSkinInfoReqMsg {
+}
+
+message CmdActivityLimitSkinInfoRspMsg {
+
+	required CmdSkinPlayer cmd_skin_player = 1;
+}
+
+message CmdActivityLimitTimeInfoReqMsg {
+}
+
+message CmdActivityLimitTimeInfoRspMsg {
+
+	repeated CmdTask tl_cmd_task = 1;
+	repeated CmdActivityGoods tl_limit_time_activity = 3;
+	repeated CmdActivityGoods tl_limit_time_day = 2;
+}
+
+message CmdActivityLimitTimeTakeReqMsg {
+
+	required sint32 res_id = 1;
+	required sint32 type = 2;
+}
+
+message CmdActivityLimitTimeTakeRspMsg {
+
+	repeated CmdGoods tl_cmd_goods = 1;
+	repeated CmdTask tl_cmd_task = 2;
+	repeated CmdActivityGoods tl_limit_time_activity = 4;
+	repeated CmdActivityGoods tl_limit_time_day = 3;
+}
+
+message CmdActivitySimple {
+
+	optional int64 change_time = 6;
+	required CmdActivityTime cmd_activity_time = 4;
+	required bool exist = 8;
+	required string id = 1;
+	repeated string json_names = 7;
+	required string name = 3;
+	repeated CmdActivityTime tl_cmd_activity_time = 5;
+	required int32 type = 2;
+}
+
+message CmdActivitySimple_Key {
+
+	required string id = 1;
+}
+
+message CmdActivityTime {
+
+	optional sint64 end_time = 2;
+	optional sint64 start_time = 1;
+}
+
+enum CmdActivityTypeEnum {
+
+	limit_skin = 102;
+	limit_time = 101;
+}
+
+message CmdActivity_Key {
+
+	required sint32 open_res_id = 1;
+}
+
+message CmdAdvert {
+
+	optional sint64 next_time = 3;
+	required sint32 num = 2;
+	required sint32 type = 1;
+}
+
+message CmdAppletInfo {
+
+	optional string extra = 3;
+	required sint32 num = 2;
+	required sint32 type = 1;
+}
+
+message CmdBattleAttr {
+
+	required sint32 ref_id = 1;
+	required string value = 2;
+}
+
+message CmdBattleBroMsg {
+}
+
+message CmdBattleBuff {
+
+	required sint32 id = 1;
+	required sint32 ref_id = 2;
+}
+
+message CmdBattleCard {
+
+	required sint32 id = 1;
+	required sint32 use_num = 2;
+}
+
+message CmdBattleChapter {
+	required sint32 chapter_id = 1;
+	repeated CmdBattleLevel tl_cmd_battle_level = 2;
+}
+
+message CmdBattleChapter_Key {
+	required sint32 chapter_id = 1;
+}
+
+message CmdBattleCompleteInfoReqMsg {
+
+	required sint32 level = 1;
+}
+
+message CmdBattleCompleteInfoRspMsg {
+
+	required sint32 star3 = 1;
+}
+
+message CmdBattleData {
+
+	required sint32 advert_num = 5;
+	required string battle_id = 7;
+	optional CmdBattleType battle_type = 10;
+	optional bytes client_data = 9;
+	optional CmdBattleSkill cmd_battle_skill = 15;
+	optional sint32 gem_refresh_skill_num = 11;
+	required sint32 random_times = 6;
+	optional CmdSpiritAnimalData spirit_animal_data = 14;
+	required sint32 times = 12;
+	repeated CmdBattleAttr tl_cmd_battle_attr = 4;
+	repeated CmdBattleBuff tl_cmd_battle_buff = 3;
+	repeated CmdBattleCard tl_cmd_battle_card = 2;
+	repeated sint32 tl_id = 8;
+	repeated sint32 tl_skill_id = 1;
+	repeated sint32 tl_wall_skill_id = 13;
+}
+
+message CmdBattleDataUploadReqMsg {
+
+	required string battle_id = 1;
+	required bytes client_data = 2;
+}
+
+message CmdBattleDataUploadRspMsg {
+}
+
+message CmdBattleLevel {
+    required sint32 level = 1; // 等级
+    required sint32 star = 2; // 通关星数
+    required sint32 takeStar = 3; // 星数
+    required sint32 battleTime = 4; // 战斗时间
+    required sint32 buyTimes = 5; // 购买天官赐福次数
+}
+message CmdBattleLevel_Key {
+	required sint32 level = 1;
+}
+
+message CmdBattlePreviewReqMsg {
+	required sint32 level = 1;
+	optional sint32 wave = 2; // 波次
+}
+
+message CmdBattlePreviewRspMsg {
+
+	repeated CmdGoods tl_cmd_goods = 1;
+}
+
+message CmdBattleRandomSkillReqMsg {
+
+	optional sint32 battle_time = 6;
+	optional sint32 card_id = 4;
+	optional bytes client_data = 5;
+	optional sint32 hp = 3;
+	optional sint32 level = 1;
+	optional sint32 type = 2;
+}
+
+message CmdBattleRandomSkillRspMsg {
+
+	optional CmdBattleData cmd_battle_data = 3;
+	repeated sint32 select_id = 2;
+	repeated sint32 tl_id = 1;
+}
+
+// 战斗内兵种数据
+message CmdBattleArmyData {
+	required sint32 armyId = 1; // 兵种Id
+	required sint32 skillLv = 2; // 技能等级
+	required sint64 damage = 3; // 伤害
+}
+
+message CmdBattleResultReqMsg {
+	optional sint32 battle_time = 3;
+	optional CmdBattleType cmd_battle_type = 7;
+	optional sint32 kill_number = 4;
+	optional sint32 level = 1;
+	optional bytes report = 5;
+	optional sint32 star = 2;
+	optional sint32 version = 6;
+	optional sint32 wave = 8;
+	optional sint32 killBossNumber = 9;
+	optional sint64 totalDamage = 10;
+	repeated CmdBattleArmyData armyInfos = 11; // 战斗内各兵种数据
+}
+
+message CmdBattleResultRspMsg {
+	optional sint32 tip_type = 2;
+	repeated CmdGoods tl_cmd_goods = 1;
+	optional sint32 star = 3; // 星级
+}
+
+message CmdBattleSelectSkillReqMsg {
+
+	repeated sint32 id = 2;
+	optional sint32 level = 1;
+	optional sint32 type = 3;
+}
+
+message CmdBattleSelectSkillRspMsg {
+
+	required CmdBattleData cmd_battle_data = 1;
+}
+
+message CmdBattleSkill {
+
+	repeated sint32 cur_random_skill = 4;
+	optional sint32 cur_random_skill_type = 5;
+	repeated sint32 tl_base_skill_id = 2;
+	repeated sint32 tl_boss_skill_id = 3;
+	repeated sint32 tl_skill_id = 1;
+}
+
+message CmdBattleStatisticsReqMsg {
+
+	required string battle_id = 1;
+	optional sint32 battle_time = 4;
+	optional CmdBattleType cmd_battle_type = 3;
+	optional sint32 level = 2;
+	optional bytes report = 5;
+	optional sint32 round_index = 7;
+	optional sint32 version = 6;
+}
+
+message CmdBattleStatisticsRspMsg {
+}
+
+message CmdBattleSweepReqMsg {
+
+	required sint32 level = 2;
+	required sint32 type = 1;
+}
+
+message CmdBattleSweepRspMsg {
+
+	repeated CmdGoods tl_cmd_goods = 1;
+}
+
+
+
+enum CmdBattleType {
+
+	CHAPTER = 1;
+	LOCK_MONSTER = 2;
+	SECRET_REALM = 3;
+}
+
+message CmdBreach {
+}
+
+message CmdBreachReqMsg {
+
+	required sint64 res_id = 1;
+	required sint32 type = 2;
+}
+
+message CmdBreachRspMsg {
+}
+
+message CmdBreach_Key {
+
+	required sint64 res_id = 1;
+}
+
+message CmdBuySkinReqMsg {
+
+	required sint32 res_id = 1;
+}
+
+message CmdBuySkinRspMsg {
+
+	repeated CmdGoods tl_reward = 1;
+}
+
+message CmdBuyStaBuyReqMsg {
+
+	required sint32 res_id = 1;
+}
+
+message CmdBuyStaBuyRspMsg {
+}
+
+message CmdBuyStaInfoReqMsg {
+}
+
+message CmdBuyStaInfoRspMsg {
+
+	repeated CmdBuyStaState cmd_buy_sta_state = 1;
+}
+
+message CmdBuyStaState {
+
+	required sint32 res_id = 1;
+	required sint32 state = 2;
+}
+
+message CmdCacheBroMsg {
+}
+
+// 城墙 技能书
+message CmdCastleSkill {
+	required sint32 level = 2;
+	required sint32 skill_id = 1;
+}
+message CmdCastleSkill_Key {
+	required sint32 skill_id = 1;
+}
+
+// 城墙 工坊
+message CmdCastleWorkShop {
+	required string history = 6;
+	required sint32 id = 1;
+	required sint32 level = 2;
+	required sint64 level_end_time = 4;
+	required sint64 reward_end_time = 5;
+	required sint32 reward_num = 3;
+}
+message CmdCastleWorkShop_Key {
+	required sint32 id = 1;
+}
+
+// 城墙 学徒
+message CmdCastleApprentice {
+	required sint32 id = 1;
+	required sint32 level = 2;
+	required bool state = 3;
+}
+message CmdCastleApprentice_Key {
+	required sint32 id = 1;
+}
+
+// 城墙
+message CmdCastleWall {
+	required sint64 roleId = 1; // 角色id
+	required sint32 selectType = 2; // 当前选择生效的城墙ID
+	required sint32 level = 3; // 等级
+	required sint32 selectSkillPageId = 4; // 当前选择城墙皮肤技能切页id
+}
+message CmdCastleWall_Key {
+	required sint64 roleId = 1; // 角色id
+}
+
+// 城墙 技能
+message CmdCastleWallSkill {
+	required sint32 id = 1;
+	required sint32 level = 2;
+}
+message CmdCastleWallSkill_Key {
+	required sint32 id = 1;
+}
+
+// 城墙 皮肤星级（幻形）
+message CmdCastleWallSkinStar {
+	required sint32 type = 1; // 城墙ID
+	required sint32 star = 2; // 星级
+}
+message CmdCastleWallSkinStar_Key {
+	required sint32 type = 1; // 城墙ID
+}
+
+// 城墙 皮肤技能切页
+message CmdCastleWallSkillPage {
+	required sint32 pageId = 1; // 切页ID
+	repeated sint32 skillList = 2; // 技能列表
+}
+message CmdCastleWallSkillPage_Key {
+	required sint32 pageId = 1; // 切页ID
+}
+
+
+// 城墙 技能书升级
+message CmdCastleSkillUpLevelReqMsg {
+	required sint32 skill_id = 1;
+}
+message CmdCastleSkillUpLevelRspMsg {
+}
+
+// 城墙 技能书密研
+message CmdCastleSkillResearchReqMsg {
+}
+message CmdCastleSkillResearchRspMsg {
+}
+
+// 城墙 工坊解锁
+message CmdCastleWorkShopOpenReqMsg {
+	required sint32 id = 1;
+}
+message CmdCastleWorkShopOpenRspMsg {
+}
+
+// 城墙 工坊升级
+message CmdCastleWorkShopUpLevelReqMsg {
+	required sint32 id = 1;
+}
+message CmdCastleWorkShopUpLevelRspMsg {
+}
+
+// 城墙 工坊升级加速
+message CmdCastleWorkShopSpeedReqMsg {
+	required sint32 id = 1;
+}
+message CmdCastleWorkShopSpeedRspMsg {
+}
+
+// 城墙 工坊领取奖励
+message CmdCastleWorkShopTakeReqMsg {
+	required sint32 id = 1;
+}
+message CmdCastleWorkShopTakeRspMsg {
+	repeated CmdGoods tl_cmd_goods = 1;
+}
+
+// 城墙 学徒上阵
+message CmdCastleApprenticeUpReqMsg {
+	required sint32 id = 1;
+	required sint32 type = 2;
+}
+message CmdCastleApprenticeUpRspMsg {
+}
+
+// 城墙 学徒升级
+message CmdCastleApprenticeUpLevelReqMsg {
+	required sint32 id = 1;
+}
+message CmdCastleApprenticeUpLevelRspMsg {
+}
+
+
+// 城墙 升级
+message CmdCastleWallUpLevelReqMsg {
+}
+message CmdCastleWallUpLevelRspMsg {
+	optional bool ret = 1;
+}
+
+// 城墙 突破（废弃）
+message CmdCastleWallQualityUpReqMsg {
+	required sint32 wall_type = 1;
+}
+message CmdCastleWallQualityUpRspMsg {
+}
+
+// 城墙 选择显示外形
+message CmdCastleWallSelectReqMsg {
+	required sint32 type = 1; // 城墙ID
+}
+message CmdCastleWallSelectRspMsg {
+	optional bool ret = 1;
+}
+
+// 城墙 技能升级
+message CmdCastleWallUpSkillLevelReqMsg {
+	required sint32 id = 1; // 技能ID
+}
+message CmdCastleWallUpSkillLevelRspMsg {
+	optional bool ret = 1;
+}
+
+// 城墙 皮肤（幻形）升星
+message CmdCastleWallSkinUpStarReqMsg {
+	required sint32 wallType = 1; // 城墙ID
+}
+message CmdCastleWallSkinUpStarRspMsg {
+	optional bool ret = 1;
+}
+
+// 城墙 选择技能切页
+message CmdCastleWallSelectSkillPageReqMsg {
+	required sint32 pageId = 1; // 技能切页Id
+}
+message CmdCastleWallSelectSkillPageRspMsg {
+	optional bool ret = 1;
+}
+
+// 城墙 选择上阵技能
+message CmdCastleWallSelectSkillReqMsg {
+	required sint32 pageId = 1; // 切页Id
+	required sint32 index = 2; // 下标Id
+	required sint32 wallType = 3; // 城墙ID
+}
+message CmdCastleWallSelectSkillRspMsg {
+	optional bool ret = 1;
+}
+
+message CmdChangeUsedSkinReqMsg {
+
+	required sint64 res_id = 1;
+}
+
+message CmdChangeUsedSkinRspMsg {
+}
+
+message CmdChapter {
+
+	required sint32 finish_state = 2;
+	required sint32 gift_state = 5;
+	required sint64 live_time = 3;
+	required sint64 res_id = 1;
+	repeated CmdChapterBoxState tl_chapter_box_state = 4;
+}
+
+message CmdChapterBoxState {
+
+	required int64 box_res_id = 1;
+	required CmdCommonState reward_state = 2;
+}
+
+message CmdChapter_Key {
+
+	required sint64 res_id = 1;
+}
+
+message CmdClientAppendData {
+
+	repeated CmdClientAppendDataModel tl_cmd_client_append_data_model = 1;
+}
+
+message CmdClientAppendDataModel {
+
+	required bytes append_data = 2;
+	required CmdClientAppendDataModelEnum cmd_client_append_data_model_enum = 1;
+}
+
+enum CmdClientAppendDataModelEnum {
+
+	CmdGuideList = 1;
+}
+
+message CmdClientInfo {
+
+	optional string app_id = 15;
+	optional string app_type = 14;
+	required string big_channel = 11;
+	required string idfa = 3;
+	required string imei = 1;
+	required string mac = 2;
+	required string mobile_brand = 4;
+	required string mobile_model = 5;
+	required string network_type = 10;
+	required string small_channel = 12;
+	required string small_channel_pack = 13;
+	required string system_name = 8;
+	required string system_version = 9;
+	required string version_code = 7;
+	required string version_name = 6;
+}
+
+message CmdCode {
+}
+
+message CmdCodeExchangeReqMsg {
+
+	required string code = 1;
+}
+
+message CmdCodeExchangeRspMsg {
+
+	repeated CmdGoods tl_reward = 1;
+}
+
+message CmdCode_Key {
+
+	required sint64 id = 1;
+}
+
+enum CmdCommonState {
+
+	FINISH = 1;
+	REWARDED = 2;
+	UNDONE = 0;
+}
+
+message CmdCommonTips {
+
+	required CmdI18N content = 1;
+}
+
+message CmdContinueNextBattleReqMsg {
+
+	required CmdBattleType battle_type = 1;
+	optional bool continue = 2;
+}
+
+message CmdContinueNextBattleRspMsg {
+
+	optional CmdBattleData cmd_battle_data = 1;
+}
+
+message CmdContinuityGiftFinishRewardReqMsg {
+
+	required int32 days = 1;
+}
+
+message CmdContinuityGiftFinishRewardRspMsg {
+
+	repeated CmdGoods tl_cmd_goods = 1;
+}
+
+message CmdContinuityGiftInfo {
+
+	required int32 days = 1;
+	required int32 status = 2;
+}
+
+message CmdContinuityGiftInfoReqMsg {
+}
+
+message CmdContinuityGiftInfoRspMsg {
+
+	repeated int32 accumulative_award = 3;
+	required int64 end_time = 2;
+	repeated CmdContinuityGiftInfo tl_cmd_continuity_gift_info = 1;
+}
+
+message CmdContinuityGiftRewardReqMsg {
+
+	required int32 days = 1;
+}
+
+message CmdContinuityGiftRewardRspMsg {
+
+	repeated CmdContinuityGiftInfo tl_cmd_continuity_gift_info = 1;
+	repeated CmdGoods tl_cmd_goods = 2;
+}
+
+message CmdDayChallengeActDetail {
+	repeated CmdDayChallengeTask tl_day_challenge_task = 1;
+	repeated sint32 tlProgressInfo = 2; // 进度宝箱领取状态
+}
+
+message CmdDayChallengeTask {
+
+	required sint32 process = 2;
+	required sint32 res_id = 1;
+	required CmdCommonState state = 3;
+}
+
+message RechargeCount {
+	required sint32 buy_state = 2;
+	required sint32 res_id = 1;
+	repeated CmdGoods rewards = 3;
+}
+
+message CmdDayWeekMonthGift {
+	required sint32 recharge_day = 5;
+	repeated EveryDayGift tl_day_gift = 1;
+	repeated EveryDayGift tl_month_gift = 3;
+	repeated RechargeCount tl_recharge_count = 4;
+	repeated EveryDayGift tl_week_gift = 2;
+}
+
+message CmdDayWeekMonthGiftFreeBuyReqMsg {
+
+	required sint64 id = 1;
+}
+
+message CmdDayWeekMonthGiftFreeBuyRspMsg {
+
+	repeated CmdGoods tl_cmd_goods = 1;
+}
+
+message CmdDayWeekMonthGiftGetRewardReqMsg {
+
+	required sint32 id = 1;
+}
+
+message CmdDayWeekMonthGiftGetRewardRspMsg {
+
+	repeated CmdGoods tl_cmd_goods = 1;
+}
+
+message CmdDayWeekMonthGiftInfoReqMsg {
+}
+
+message CmdDayWeekMonthGiftInfoRspMsg {
+
+	required CmdDayWeekMonthGift cmd_day_week_month_gift = 1;
+}
+
+message CmdDayWeekMonthGift_Key {
+
+	required sint64 id = 1;
+}
+
+message CmdEndBroMsg {
+
+	required sint32 end = 1;
+	required sint64 next_time = 2;
+}
+
+message CmdEndBuyInfoReqMsg {
+}
+
+message CmdEndBuyInfoRspMsg {
+
+	repeated CmdRoleEndBuyInfo tl_end_buy_info = 1;
+}
+
+message CmdEndBuyReqMsg {
+
+	required sint32 buy_id = 1;
+}
+
+message CmdEndBuyRspMsg {
+    repeated CmdGoods tlReward = 1; // 奖励
+}
+
+message CmdEnterBattleReqMsg {
+
+	required CmdBattleType battle_type = 1;
+	optional sint32 level = 2;
+}
+
+message CmdEnterBattleRspMsg {
+
+	optional CmdBattleData cmd_battle_data = 1;
+}
+
+message CmdEquip {
+	required sint32 equip_id = 1;
+	required sint32 level = 2;
+	repeated CmdGemInfo tl_cmd_gem_info = 3;
+}
+
+message CmdEquipChangePageNameReqMsg {
+
+	required string name = 2;
+	required sint32 page = 1;
+}
+
+message CmdEquipChangePageNameRspMsg {
+}
+
+// 装备（单个）信息
+message CmdEquipItem {
+	required sint64 uniqueId = 1; // 唯一id
+	required sint32 resId = 2; // 装备resId（配置表ID）
+	required sint32 baseId = 3; // 初始装备部位（1-6）
+	required sint32 rank = 4; // 阶
+	required sint32 baseQuality = 5; // 初始品质
+	required sint32 curQuality = 6; // 当前品质
+	required sint32 costNum = 7; // 升阶消耗强化石数量
+	required sint32 washNum = 8; // 洗炼次数
+	repeated sint32 tlAttributes = 9; // 初始属性列表
+	repeated sint32 tlEffects = 10; // 效果列表
+}
+message CmdEquipItem_Key {
+	required sint64 uniqueId = 1; // 唯一id
+}
+
+// 装备部位
+message CmdEquipPart {
+	required sint32 equipId = 1; // 装备部位(1-6)
+	required CmdEquipItem equip = 2; // 装备
+}
+message CmdEquipPart_Key {
+	required sint32 equipId = 1; // 装备部位(1-6)
+}
+
+message CmdEquipPage {
+
+	required string name = 2;
+	required sint32 page = 1;
+	repeated CmdEquip tl_cmd_equip = 3;
+}
+
+message CmdEquipPage_Key {
+
+	required sint32 page = 1;
+}
+
+message CmdEquipSelectPageReqMsg {
+
+	required sint32 page = 1;
+}
+
+message CmdEquipSelectPageRspMsg {
+}
+
+message CmdEquipUpLevelAllReqMsg {
+}
+
+message CmdEquipUpLevelAllRspMsg {
+}
+
+message CmdEquipUpLevelReqMsg {
+
+	required sint32 id = 1;
+	optional sint32 type = 2;
+}
+
+message CmdEquipUpLevelRspMsg {
+}
+
+// 装备升品
+message CmdEquipUpQualityReqMsg {
+	required sint32 equipId = 1; // 装备部位(1-6)
+}
+message CmdEquipUpQualityRspMsg {
+	optional bool ret = 1; // 返回结果
+	optional CmdEquipPart equipPart = 2; // 升品后的装备
+}
+
+// 装备洗炼
+message CmdEquipWashReqMsg {
+	required sint32 equipId = 1; // 装备部位(1-6)
+}
+message CmdEquipWashRspMsg {
+	optional bool ret = 1; // 返回结果
+	optional sint32 equipId = 2; // 装备部位(1-6)
+	repeated sint32 tlLibs = 3; // 随机到的词条列表
+}
+
+// 装备洗炼确认
+message CmdEquipWashConformReqMsg {
+	required sint32 equipId = 1; // 装备部位(1-6)
+	required bool change = 2; // 是否确认替换属性 false 不替换，true 替换
+}
+message CmdEquipWashConformRspMsg {
+	optional CmdEquipPart equipPart = 1;  // 替换属性后的装备
+}
+
+// 装备分解
+message CmdEquipDecomposeReqMsg {
+	repeated sint64 tlUniqueIds = 1;  // 分解列表唯一id
+}
+message CmdEquipDecomposeRspMsg {
+	repeated sint64 tlUniqueIds = 1;  // 分解列表唯一id
+	repeated CmdGoods tlCmdGoods = 2; // 分解获得的物品列表
+}
+
+// 穿戴（替换）装备
+message CmdEquipReplaceReqMsg {
+	required sint64 uniqueId = 1;  // 装备唯一id
+}
+message CmdEquipReplaceRspMsg {
+	optional bool ret = 1; // 返回结果
+	optional sint64 uniqueId = 2;  // 装备唯一id
+	optional CmdEquipPart equipPart = 3;  // 替换后的装备部位信息
+	optional CmdEquipItem equip = 4; // 替换下来的装备（单个）信息
+}
+
+message CmdEveryDayGetRewardsReqMsg {
+
+	required sint32 day = 1;
+}
+
+message CmdEveryDayGetRewardsRspMsg {
+
+	repeated CmdGoods tl_cmd_goods = 1;
+}
+
+message CmdEveryDaySign {
+}
+
+message CmdEveryDaySignInInfoReqMsg {
+}
+
+message CmdEveryDaySignInInfoRspMsg {
+
+	required sint32 days = 2;
+	repeated EveryDaySignInReward tl_every_day_sign_in_reward = 1;
+}
+
+message CmdEveryDaySignInReqMsg {
+}
+
+message CmdEveryDaySignInRspMsg {
+
+	repeated CmdGoods tl_cmd_goods = 1;
+}
+
+message CmdEveryDaySign_Key {
+
+	required sint64 id = 1;
+}
+
+message CmdFirstRechargeInfo {
+
+	required sint32 id = 1;
+	optional sint64 last_take_time = 3;
+	repeated sint64 reward_ids = 2;
+}
+
+message CmdFuBen {
+
+	required CmdFuBenDetail detail = 2;
+	required sint64 res_id = 1;
+}
+
+message CmdFuBenDailyDetail {
+
+	required sint32 buy_time = 4;
+	repeated CmdFuBenRewardState cmd_fu_ben_reward_state = 7;
+	required sint32 enter_count = 6;
+	required sint32 free_time = 5;
+	required sint32 level = 3;
+	required sint64 res_id = 1;
+	required sint32 type = 2;
+}
+
+message CmdFuBenDailyGetRewardReqMsg {
+
+	required sint32 res_id = 1;
+}
+
+message CmdFuBenDailyGetRewardRspMsg {
+
+	repeated CmdGoods tl_cmd_goods = 1;
+}
+
+message CmdFuBenDetail {
+
+	optional CmdFuBenDailyDetail cmd_fu_ben_daily_detail = 2;
+	optional CmdFuBenGoldDetail cmd_fu_ben_gold_detail = 1;
+}
+
+message CmdFuBenEnterReqMsg {
+
+	required sint64 res_id = 2;
+	required CmdFuBenType type = 1;
+}
+
+message CmdFuBenEnterRspMsg {
+}
+
+message CmdFuBenGoldDetail {
+
+	required sint32 buy_time = 4;
+	required sint32 enter_count = 6;
+	required sint32 free_time = 5;
+	required sint32 level = 3;
+	required sint64 res_id = 1;
+	required sint32 type = 2;
+}
+
+message CmdFuBenRewardState {
+
+	required sint32 res_id = 1;
+	required sint32 state = 2;
+}
+
+enum CmdFuBenType {
+
+	CHAPTER = 1;
+	DAILY = 3;
+	MONEY = 2;
+}
+
+message CmdFuBen_Key {
+
+	required sint64 res_id = 1;
+}
+
+message CmdFund {
+}
+
+message CmdFundDetail {
+
+	required sint32 buy_state = 2;
+	repeated CmdFundRewardState cmd_fund_reward_state = 3;
+	required sint64 res_id = 1;
+}
+
+message CmdFundGetInfoReqMsg {
+}
+
+message CmdFundGetInfoRspMsg {
+
+	repeated CmdFundDetail cmd_fund_detail = 1;
+}
+
+message CmdFundGetRewardReqMsg {
+
+	required sint64 res_id = 1;
+}
+
+message CmdFundGetRewardRspMsg {
+
+	repeated CmdGoods tl_cmd_goods = 1;
+}
+
+message CmdFundRewardState {
+
+	required sint64 res_id = 1;
+	required sint32 state = 2;
+}
+
+message CmdFund_Key {
+
+	required sint64 id = 1;
+}
+
+message CmdGameCircle {
+
+	required CmdCommonState like_reward_state = 1;
+}
+
+message CmdGameCircle_Key {
+}
+
+message CmdGameExtend {
+
+	required string clazz_name = 1;
+	required bytes message = 2;
+}
+
+message CmdGem {
+
+	required sint32 attribute = 5;
+	required sint64 id = 1;
+	required sint32 lock = 6;
+	optional sint32 new_attribute = 7;
+	required sint32 num = 4;
+	required sint32 quality = 3;
+	required sint64 res_id = 2;
+}
+
+message CmdGemComposePreviewReqMsg {
+}
+
+message CmdGemComposePreviewRspMsg {
+
+	repeated CmdGemPreview tl_cmd_gem_preview = 1;
+}
+
+message CmdGemComposeReqMsg {
+}
+
+message CmdGemComposeRspMsg {
+
+	repeated CmdGoods tl_cmd_goods = 1;
+}
+
+message CmdGemDownReqMsg {
+
+	required sint32 equip_id = 1;
+	required sint32 order = 3;
+	required sint32 page = 2;
+}
+
+message CmdGemDownRspMsg {
+}
+
+message CmdGemInfo {
+
+	required sint64 gem_id = 2;
+	required sint32 order = 1;
+}
+
+message CmdGemLockReqMsg {
+
+	required sint64 id = 1;
+	optional sint32 lock = 2;
+}
+
+message CmdGemLockRspMsg {
+}
+
+message CmdGemOnReqMsg {
+
+	required sint32 equip_id = 1;
+	required sint64 id = 3;
+	required sint32 page = 2;
+}
+
+message CmdGemOnRspMsg {
+}
+
+message CmdGemPreview {
+
+	required sint64 id = 1;
+	required sint32 num = 2;
+}
+
+message CmdGemRefineReqMsg {
+
+	required sint64 id = 1;
+	optional sint64 type = 2;
+}
+
+message CmdGemRefineRspMsg {
+}
+
+message CmdGemRefineSaveReqMsg {
+
+	required sint64 id = 1;
+	required sint64 type = 2;
+}
+
+message CmdGemRefineSaveRspMsg {
+
+	optional sint64 id = 1;
+}
+
+message CmdGemRefreshSkillReqMsg {
+}
+
+message CmdGemRefreshSkillRspMsg {
+
+	repeated sint32 tl_id = 1;
+}
+
+message CmdGemReplaceReqMsg {
+
+	required sint32 equip_id = 1;
+	required sint64 id = 3;
+	required sint32 order = 4;
+	required sint32 page = 2;
+}
+
+message CmdGemReplaceRspMsg {
+}
+
+message CmdGem_Key {
+
+	required sint64 id = 1;
+}
+
+message CmdGetAllPlayClientAniReqMsg {
+}
+
+message CmdGetAllPlayClientAniRspMsg {
+
+	repeated int32 client_ani_ref_id = 1;
+}
+
+message CmdGetHallRoleListReqMsg {
+}
+
+message CmdGetHallRoleListRspMsg {
+
+	repeated CmdHallRole tl_hall_role = 1;
+}
+
+message CmdGetRankReqMsg {
+	required CmdRankType rank_type = 1; // 排行榜类型
+	optional sint32 showNum = 2; // 排行榜显示数量默认50
+	optional sint32 type = 3; // 秘境类型
+	optional sint64 unionId = 4; // 联盟Id
+}
+
+message CmdGetRankRspMsg {
+	optional CmdRankData rank_info = 1;
+}
+
+message CmdGmInfo {
+
+	required string cmd = 1;
+	optional string desc = 2;
+}
+
+message CmdGmListReqMsg {
+}
+
+message CmdGmListRspMsg {
+
+	repeated CmdGmInfo cmd = 1;
+}
+
+message CmdGoodReplace {
+
+	required int64 new_res_id = 2;
+	required int32 number = 3;
+	required int64 old_res_id = 1;
+}
+
+message CmdGoods {
+
+	required string number = 2;
+	optional sint32 quality = 3;
+	required sint64 res_id = 1;
+}
+
+message CmdGoodsList {
+
+	repeated CmdGoods tl_cmd_goods = 1;
+}
+
+message CmdGoodsRedDot {
+
+	optional int64 id = 2;
+	required int64 res_id = 1;
+}
+
+message CmdGoodsRedDotDispelReqMsg {
+
+	repeated CmdGoodsRedDot dispel_param = 1;
+}
+
+message CmdGoodsRedDotDispelRspMsg {
+}
+
+message CmdGuanKaGift {
+	required sint32 res_id = 1;
+	optional sint64 buy_count = 2;
+}
+
+message CmdGuanKaGiftBroMsg {
+
+	required CmdGuanKaGift cmd_guan_ka_gift = 1;
+}
+
+message CmdGuanKaGift_Key {
+
+	required sint32 res_id = 1;
+}
+
+message CmdGuide {
+}
+
+message CmdGuideDetail {
+
+	optional string extend = 3;
+	required sint32 res_id = 1;
+	required sint32 type = 2;
+}
+
+message CmdGuideReadReqMsg {
+}
+
+message CmdGuideReadRspMsg {
+
+	repeated CmdGuideDetail cmd_guide_detail = 1;
+}
+
+message CmdGuideRecordReqMsg {
+
+	optional string extend = 3;
+	required sint32 res_id = 1;
+	required sint32 type = 2;
+}
+
+message CmdGuideRecordRspMsg {
+}
+
+message CmdGuide_Key {
+
+	required sint64 id = 1;
+}
+
+message CmdHallRole {
+
+	optional CmdPoint point = 3;
+	required sint64 role_id = 1;
+	optional string role_name = 2;
+}
+
+message CmdHang {
+}
+
+message CmdHangGetRewardReqMsg {
+}
+
+message CmdHangGetRewardRspMsg {
+
+	repeated CmdGoods tl_cmd_goods = 1;
+}
+
+message CmdHangQuickReqMsg {
+}
+
+message CmdHangQuickRspMsg {
+
+	repeated CmdGoods tl_cmd_goods = 1;
+}
+
+message CmdHangTimeReqMsg {
+}
+
+message CmdHangTimeRspMsg {
+
+	required sint64 time = 1;
+}
+
+message CmdHang_Key {
+
+	required sint64 res_id = 1;
+}
+
+message CmdHero {
+
+	optional sint64 equip_id = 4;
+	required sint64 level = 2;
+	required sint64 res_id = 1;
+	required sint32 state = 3;
+}
+
+message CmdHeroChangeReqMsg {
+
+	required sint64 res_id = 1;
+}
+
+message CmdHeroChangeRspMsg {
+}
+
+message CmdHeroLevelUpOneKeyReqMsg {
+
+	required sint64 res_id = 1;
+}
+
+message CmdHeroLevelUpOneKeyRspMsg {
+}
+
+message CmdHeroLevelUpReqMsg {
+
+	required sint64 res_id = 1;
+}
+
+message CmdHeroLevelUpRspMsg {
+}
+
+message CmdHeroOpenReqMsg {
+}
+
+message CmdHeroOpenRspMsg {
+}
+
+message CmdHeroUnlockGetInfoReqMsg {
+}
+
+message CmdHeroUnlockGetInfoRspMsg {
+
+	repeated CmdHeroUnlockInfo cmd_hero_unlock_info = 1;
+}
+
+message CmdHeroUnlockInfo {
+
+	required sint32 count = 2;
+	required sint64 res_id = 1;
+	required sint32 reward_state = 3;
+}
+
+message CmdHeroUnlockRewardReqMsg {
+
+	required sint64 res_id = 1;
+}
+
+message CmdHeroUnlockRewardRspMsg {
+}
+
+message CmdHero_Key {
+
+	required sint64 res_id = 1;
+}
+
+message CmdI18N {
+
+	optional string cmdI18N_ref = 2;
+	optional string template = 1;
+	repeated CmdI18N tl_param = 3;
+}
+
+message CmdItem {
+
+	required bool is_new = 3;
+	required sint32 number = 2;
+	required sint64 res_id = 1;
+}
+
+message CmdItemBoxUseReqMsg {
+
+	optional CmdGoodsList cmd_goods_list = 3;
+	required sint32 number = 2;
+	required sint64 res_id = 1;
+}
+
+message CmdItemBoxUseRspMsg {
+
+	repeated CmdGoods tl_cmd_goods = 1;
+}
+
+message CmdItemUseReqMsg {
+
+	required sint32 number = 2;
+	required sint64 res_id = 1;
+}
+
+message CmdItemUseRspMsg {
+
+	repeated CmdGoods tl_cmd_goods = 1;
+}
+
+message CmdItem_Key {
+
+	required sint64 res_id = 1;
+}
+
+message CmdLockMonster {
+	required sint64 roleId = 1; // 角色Id
+	required sint32 level = 2; // 当前通关层数
+	required sint64 levelPassTime = 3; // 当前关卡通关时间
+	required sint32 takeBoxlevel = 4; // 领取宝箱通关等级
+	required sint32 buyEnterCount = 5; // 购买参与次数
+}
+message CmdLockMonster_Key {
+	required sint64 roleId = 1; // 角色Id
+}
+
+message CmdOathAlliance {
+	required sint64 roleId = 1; // 角色Id
+	required sint32 todayTakeCount = 2; // 今天领取奖励个数
+	required sint64 lastTakeTime = 3; // 上次领取奖励时间
+	required sint32 renown = 4; // 最大誓盟声望
+}
+message CmdOathAlliance_Key {
+	required sint64 roleId = 1;
+}
+
+message CmdMail {
+
+	optional CmdGoodsList cmd_goods_list = 4;
+	required string content = 3;
+	required sint64 id = 1;
+	required bool read = 5;
+	required int64 read_time = 8;
+	required int64 send_time = 7;
+	required bool take = 6;
+	required string title = 2;
+}
+
+message CmdMailDeleteReqMsg {
+
+	repeated sint64 id = 1;
+}
+
+message CmdMailDeleteRspMsg {
+}
+
+message CmdMailListReqMsg {
+}
+
+message CmdMailListRspMsg {
+
+	repeated CmdMailSimple tl_cmd_mail_simple = 1;
+}
+
+message CmdMailReadReqMsg {
+
+	required sint64 id = 1;
+}
+
+message CmdMailReadRspMsg {
+
+	required CmdMail cmd_mail = 1;
+}
+
+message CmdMailSimple {
+
+	required sint64 id = 1;
+	required bool read = 3;
+	required int64 send_time = 5;
+	required bool take = 4;
+	required string title = 2;
+}
+
+message CmdMailTakeRewardReqMsg {
+
+	repeated sint64 id = 1;
+}
+
+message CmdMailTakeRewardRspMsg {
+
+	repeated CmdGoods tl_reward = 1;
+}
+
+message CmdMall {
+
+	optional CmdMallDetail detail = 2;
+	optional sint64 id = 1;
+}
+
+message CmdMallBroMsg {
+
+	required CmdMall cmd_mall = 2;
+	required sint64 mall_id = 1;
+}
+
+message CmdMallChapterGiftDetail {
+
+	optional sint64 res_id = 1;
+	optional sint32 state = 2;
+}
+
+message CmdMallChargeDetail {
+
+	optional sint64 res_id = 1;
+	optional sint32 state = 2;
+}
+
+message CmdMallCoinBuyReqMsg {
+
+	required sint64 mall_id = 1;
+	required sint64 res_id = 2;
+	required sint32 type = 3;
+}
+
+message CmdMallCoinBuyRspMsg {
+}
+
+message CmdMallCoinDetail {
+
+	optional sint32 buy_count = 2;
+	optional sint64 free_time = 3;
+	optional sint64 res_id = 1;
+}
+
+message CmdMallDailyShopBuyReqMsg {
+
+	required sint32 is_ad = 3;
+	required sint64 mall_id = 1;
+	required sint64 plan_id = 2;
+}
+
+message CmdMallDailyShopBuyRspMsg {
+
+	repeated CmdGoods tl_cmd_goods = 1;
+}
+
+message CmdMallDailyShopDetail {
+
+	optional sint64 ad_time = 4;
+	optional sint32 buy_count = 3;
+	optional string discount = 6;
+	optional string final_number = 7;
+	optional string original = 5;
+	optional sint64 res_id = 1;
+	optional sint64 reward_id = 2;
+}
+
+message CmdMallDetail {
+
+	repeated CmdMallChapterGiftDetail cmd_mall_chapter_gift_detail = 4;
+	repeated CmdMallChargeDetail cmd_mall_charge_detail = 5;
+	repeated CmdMallCoinDetail cmd_mall_coin_detail = 6;
+	repeated CmdMallDailyShopDetail cmd_mall_daily_shop_detail = 3;
+	repeated CmdMallLuckDrawDetail cmd_mall_luck_draw_detail = 2;
+	repeated CmdMallSEquipDetail cmd_mallS_equip_detail = 1;
+}
+
+message CmdMallGetDataReqMsg {
+}
+
+message CmdMallGetDataRspMsg {
+
+	repeated CmdMall cmd_mall = 1;
+}
+
+message CmdMallLuckDrawDetail {
+
+	optional sint32 big_prize_count = 3;
+	optional sint32 buy_count = 2;
+	optional sint64 free_time = 4;
+	optional sint64 res_id = 1;
+}
+
+message CmdMallLuckDrawReqMsg {
+
+	required sint64 mall_id = 1;
+	required sint64 res_id = 2;
+	required sint32 type = 3;
+}
+
+message CmdMallLuckDrawRspMsg {
+
+	repeated CmdGoods tl_cmd_goods = 1;
+}
+
+message CmdMallSEquipDetail {
+
+	optional sint32 big_prize_count = 3;
+	optional sint32 buy_count = 2;
+	optional sint64 res_id = 1;
+	optional sint32 ultimate_prize_count = 4;
+}
+
+message CmdMallSEquipDrawReqMsg {
+
+	required bool count = 4;
+	required sint64 mall_id = 1;
+	required sint64 res_id = 2;
+	required sint32 type = 3;
+}
+
+message CmdMallSEquipDrawRspMsg {
+
+	repeated CmdGoods tl_cmd_goods = 1;
+}
+
+message CmdMall_Key {
+
+	required sint64 id = 1;
+}
+
+message CmdMiningBuyReqMsg {
+}
+
+message CmdMiningBuyRspMsg {
+
+	repeated CmdGoods tl_reward = 1;
+}
+
+message CmdModifyItemBroMsg {
+
+	repeated CmdGoods tl_cmd_goods = 1;
+}
+
+message CmdMonthCardActDetail {
+
+	required sint64 card_end_time = 1;
+	optional bool today_take = 2;
+}
+
+message CmdOpenCache {
+
+	required sint32 ref_id = 1;
+	required bool show = 2;
+}
+
+message CmdOpenCache_Key {
+
+	required sint32 ref_id = 1;
+}
+
+message CmdPoint {
+
+	required sint32 x = 1;
+	required sint32 y = 2;
+}
+
+message CmdRankData {
+
+	required CmdRankRole my_rank = 2;
+	repeated CmdRankRole rank_list = 1;
+	optional string region = 3;
+}
+
+message CmdRankItem {
+	optional sint32 end_time = 3;
+	optional sint32 show_end_time = 4;
+	optional sint32 start_time = 2;
+	required sint32 type = 1;
+}
+message CmdRankItem_Key {
+
+	required sint32 type = 1;
+}
+
+message CmdRankRole {
+	optional sint64 head_frame = 6;
+	optional string plat_form_img = 5;
+	required sint32 rank = 1;
+	required sint64 role_id = 2;
+	optional sint64 role_img = 4;
+	optional string role_name = 3;
+	optional sint64 select_server_id = 9;
+	optional sint64 server_id = 8;
+	optional sint64 value = 7;
+	optional sint32 power = 10; // 战力
+	optional sint32 titleId = 11; // 称号Id
+	optional sint64 usedSkinResId = 12; // 当前使用皮肤Id
+	optional sint32 count = 13; // 当前人数
+	optional sint32 maxCount = 14; // 最大人数
+}
+
+message CmdChapterFirstPassInfo {
+	required sint32 passLevel = 1;
+	required sint64 roleId = 2;
+	required string name = 3;
+	required sint64 img = 4;
+	required sint64 headFrame = 5;
+	required string platformImg = 6;
+	required sint32 level = 7;
+	required sint32 selectServerId = 8;
+	required sint32 power = 9;
+	required sint32 serverId = 10;
+	required sint32 titleId = 11;
+}
+
+message CmdChapterFirstPassInfo_Key {
+	required sint32 passLevel = 1; // 通关章节的等级
+}
+
+enum CmdRankType {
+	CHAPTER_FULL_RANK = 1; // 章节全服排行榜
+	CHAPTER_SERVER_RANK = 2; // 章节分服排行榜
+	LOCK_MONSTER_FULL_RANK = 3; // 过关斩将（九层妖塔）全服排行
+	LOCK_MONSTER_SERVER_RANK = 4; // 过关斩将（九层妖塔）分服排行榜
+	SECRET_REALM_FULL_RANK = 5; // 秘境全服排行
+	SECRET_REALM_SERVER_RANK = 6; // 秘境分服排行榜
+	OATH_ALLIANCE_FULL_RANK = 7; // 誓盟之战（道友协战）全服排行榜
+	OATH_ALLIANCE_SERVER_RANK = 8; // 誓盟之战（道友协战）分服排行榜
+	GUARDS_JIANGE_FULL_RANK = 9; // 守卫剑阁全服排行榜
+	GUARDS_JIANGE_SERVER_RANK = 10; // 守卫剑阁分服排行榜
+
+	NORTH_EXPEDITION_FULL_RANK = 21; // 北伐中原个人伤害全服排行
+	NORTH_EXPEDITION_SERVER_RANK = 22; // 北伐中原个人伤害分服排行榜
+	NORTH_EXPEDITION_UNION_FULL_RANK = 23; // 北伐中原联盟伤害全服排行
+	NORTH_EXPEDITION_UNION_SERVER_RANK = 24; // 北伐中原联盟伤害分服排行榜
+
+	CELEBRATION_POWER_FULL_RANK = 31;  // 开服庆典-罡气战力全服排行榜
+	CELEBRATION_POWER_SERVER_RANK = 32;  // 开服庆典-罡气战力分服排行榜
+	CELEBRATION_END_FULL_RANK = 33; // 开服庆典-体力消耗全服排行榜
+	CELEBRATION_END_SERVER_RANK = 34; // 开服庆典-体力消耗分服排行榜
+	CELEBRATION_EQUIP_FULL_RANK = 35; // 开服庆典-装备评分全服排行榜
+	CELEBRATION_EQUIP_SERVER_RANK = 36; // 开服庆典-装备评分分服排行榜
+	CELEBRATION_GEM_FULL_RANK = 37; // 开服庆典-宝石品质全服排行榜
+	CELEBRATION_GEM_SERVER_RANK = 38; // 开服庆典-宝石品质分服排行榜
+	CELEBRATION_TELENT_FULL_RANK = 39; // 开服庆典-天赋等级全服排行榜
+	CELEBRATION_TELENT_SERVER_RANK = 40; // 开服庆典-天赋等级分服排行榜
+	CELEBRATION_ARMY_FULL_RANK = 41; // 开服庆典-道法等级全服排行榜
+	CELEBRATION_ARMY_SERVER_RANK = 42; // 开服庆典-道法等级分服排行榜
+	CELEBRATION_CHAPTER_STAR_FULL_RANK = 43; // 开服庆典-关卡星级全服排行榜
+	CELEBRATION_CHAPTER_STAR_SERVER_RANK = 44; // 开服庆典-关卡星级分服排行榜
+	CELEBRATION_GUARDS_LEVEL_FULL_RANK = 45; // 开服庆典-请神等级全服排行榜
+	CELEBRATION_GUARDS_LEVEL_SERVER_RANK = 46; // 开服庆典-请神等级分服排行榜
+	CELEBRATION_WALL_LEVEL_FULL_RANK = 47; // 开服庆典-结界等级全服排行榜
+	CELEBRATION_WALL_LEVEL_SERVER_RANK = 48; // 开服庆典-结界等级分服排行榜
+	CELEBRATION_LOCK_MONSTER_FULL_RANK = 49; // 开服庆典-九层妖塔全服排行
+	CELEBRATION_LOCK_MONSTER_SERVER_RANK = 50; // 开服庆典-九层妖塔分服排行榜
+	CELEBRATION_OATH_ALLIANCE_FULL_RANK = 51; // 开服庆典-道友协战全服排行榜
+	CELEBRATION_OATH_ALLIANCE_SERVER_RANK = 52; // 开服庆典-道友协战分服排行榜
+}
+
+message CmdRecharge {
+
+	required sint64 id = 1;
+	repeated CmdGoods rewards = 2;
+}
+
+message CmdRechargeBroMsg {
+
+	required CmdRecharge cmd_recharge = 1;
+}
+
+message CmdRechargeGiftAct2Detail {
+
+	required sint32 cur_process = 1;
+	repeated sint32 tl_take_process = 2;
+}
+
+message CmdRechargeGiftAct3Detail {
+
+	required sint32 cur_process = 1;
+	repeated sint32 tl_take_process = 2;
+}
+
+message CmdRechargeGiftActDetail {
+
+	required sint32 cur_recharge_process = 1;
+	repeated sint32 tl_take_recharge_process = 2;
+}
+
+message CmdRecordClientAniReqMsg {
+
+	required int32 client_ani_ref_id = 1;
+}
+
+message CmdRecordClientAniRspMsg {
+}
+
+message CmdRedDotCache {
+
+	optional sint64 next_refresh_time = 3;
+	required sint32 number = 2;
+	required CmdRedDotType red_dot_type = 1;
+}
+
+message CmdRedDotCache_Key {
+
+	required CmdRedDotType red_dot_type = 1;
+}
+
+enum CmdRedDotType {
+	TEST = 1;
+	MAil = 2;
+	continuity_days = 3;
+	GEM_COMPOSE = 4;
+	SEVEN_DAY = 5;
+	limit_time_activity = 6;
+	signin = 7;
+	SPIRIT_ANIMAL_BOX = 8;
+	FIRST_RECHARGE = 9; // 首充
+}
+
+message CmdRole {
+	optional sint64 battle_spirit_animal_unique_id = 29;
+	required CmdFirstRechargeInfo cmd_first_recharge_info = 18;
+	required string coin = 9;
+	required sint64 create_time = 12;
+	required sint32 end = 11;
+	required sint32 end_max = 23;
+	required sint32 exp = 6;
+	required sint32 free_rename_count = 21;
+	required string gem = 8;
+	required string gold = 7;
+	required sint64 head_frame = 4;
+	required sint64 id = 1;
+	required sint64 img = 3;
+	required sint32 internal = 24;
+	required sint32 lv = 5;
+	optional sint64 max_battle_level_pass_time = 31;
+	required sint32 mining_process = 15;
+	required bool mining_show = 16;
+	required string name = 2;
+	required sint64 next_end_recover_time = 13;
+	required string platform_img = 20;
+	required sint32 recharge = 17;
+	optional string region = 27;
+	required sint32 select_equip_page = 14;
+	optional sint32 select_server_id = 28;
+	optional sint32 spirit_animal_atk_add = 30;
+	required sint32 sweep_times = 26;
+	repeated CmdAdvert tl_cmd_advert = 19;
+	repeated CmdAppletInfo tl_cmd_applet_info = 25;
+	repeated sint32 tl_extra_id = 22;
+	required sint32 wash_stone = 10;
+	optional sint32 showAdvisorId = 32;
+	optional sint32 selectAdvisorPage = 33;
+	optional sint32 selectGeneralPage = 34;
+	optional sint32 takeFriendEndCount = 35;
+	optional sint32 sendFriendEndCount = 36;
+	optional sint64 lastGranaryGenTime = 37;
+	optional sint32 firstPassRewardMaxLevel = 38;
+	optional sint64 lastIdleRewardTime = 39;
+	required sint32 unionCoin = 40; // 联盟银币
+	required sint32 unionGold = 41; // 联盟金币
+	required sint32 unionContribute = 42; // 联盟贡献
+	required sint32 enterLockMonsterCount = 43; // 今日进入过关斩将次数
+	required sint32 enterGuardsJianGeCount = 44; // 今日进入守卫剑阁次数
+	optional sint64 usedSkinResId = 45; // 当前使用皮肤Id
+	optional sint32 jianGeCoin = 46; // 剑阁货币
+	optional sint32 activityCoin = 47; // 活跃积分
+	optional sint64 lastLoginTime = 48; // 上次登陆时间
+	optional sint32 sgeyCoin = 49; // 圣光恩印
+	optional sint32 chhjCoin = 50; // 沧海徽记
+	optional sint32 dcjxCoin = 51; // 典藏金玺
+	optional sint32 hyxtCoin = 52; // 寰宇星图
+}
+
+message CmdRoleAppletShareReqMsg {
+}
+
+message CmdRoleAppletShareRewardReqMsg {
+}
+
+message CmdRoleAppletShareRewardRspMsg {
+
+	repeated CmdGoods tl_cmd_goods = 1;
+}
+
+message CmdRoleAppletShareRspMsg {
+}
+
+message CmdRoleChangeHeadFrameReqMsg {
+
+	required sint64 res_id = 1;
+}
+
+message CmdRoleChangeHeadFrameRspMsg {
+}
+
+message CmdRoleChangeImgReqMsg {
+
+	required sint64 res_id = 1;
+}
+
+message CmdRoleChangeImgRspMsg {
+}
+
+message CmdRoleChangeNameReqMsg {
+
+	required string name = 1;
+}
+
+message CmdRoleChangeNameRspMsg {
+}
+
+message CmdRoleDouYinRewardReqMsg {
+}
+
+message CmdRoleDouYinRewardRspMsg {
+
+	repeated CmdGoods tl_cmd_goods = 1;
+}
+
+message CmdRoleEndBuyInfo {
+
+	required sint32 buy_id = 1;
+	required sint32 number = 2;
+}
+
+message CmdRoleEndUpdateReqMsg {
+}
+
+message CmdRoleEndUpdateRspMsg {
+}
+
+message CmdRoleGuanKaGiftBuyReqMsg {
+
+	required int32 res_id = 1;
+}
+
+message CmdRoleGuanKaGiftBuyRspMsg {
+
+	repeated CmdGoods tl_cmd_goods = 1;
+}
+
+message CmdRoleGuanKaGiftSelectReqMsg {
+
+	required int32 gem_id = 2;
+	required int32 res_id = 1;
+}
+
+message CmdRoleGuanKaGiftSelectRspMsg {
+}
+
+message CmdRoleInfoViewReqMsg {
+
+	required int64 role_id = 1;
+	required int32 server_id = 2;
+}
+
+message CmdArmyShow {
+  required sint32 id = 1;
+  required sint32 star = 2;
+}
+
+message CmdArmyShowList {
+  repeated CmdArmyShow tlShow = 1;
+}
+
+// 装备部位信息
+message CmdEquipLook {
+    required sint32 equipId = 1; // 装备部位(1-6)
+    required sint32 level = 2; // 装备部位等级
+    repeated CmdGem tlCmdGem = 3; // 宝石信息
+    repeated CmdGemInfo tlCmdGemInfo = 4; // 宝石信息
+}
+
+message CmdRoleInfoViewRspMsg {
+	optional int64 roleId = 1;
+	optional string roleName = 2;
+	optional sint64 img = 3;
+	optional string platformImg = 4;
+	optional sint64 headFrame = 5;
+	optional sint32 level = 6;
+	repeated CmdEquipLook tlCmdEquip = 7;
+	optional sint32 skinId = 8;
+	optional sint32 power = 9;
+	optional sint32 battleLevel = 10;
+	optional CmdArmyShowList tlArmySkin = 11;
+	optional CmdArmyShowList tlGeneral = 12;
+	optional CmdArmyShowList tlAdvisor = 13;
+	optional int32 selectServerId = 14;
+ 	repeated CmdEquipPart tlEquipPart = 15; // 装备详情
+	optional CmdUnionShow unionInfo = 16;// 联盟信息
+}
+
+message CmdRoleLoginReqMsg {
+
+	required CmdClientInfo cmd_client_info = 1;
+	required string code = 3;
+	optional string img = 8;
+	optional string openid = 9;
+	required int32 platform = 2;
+	optional bool reconnect = 7;
+	required int64 role_id = 4;
+	optional int32 select_server_id = 10;
+	required int64 time = 5;
+	required string token = 6;
+}
+
+message CmdRoleLoginRspMsg {
+
+	optional CmdBattleData cmd_battle_data = 2;
+	required LoginStatus login_status = 3;
+	optional bool new_role = 1;
+}
+
+message CmdRoleOfflineBroMsg {
+
+	required int32 type = 1;
+}
+
+message CmdRoleTakeFirstChargeReqMsg {
+}
+
+message CmdRoleTakeFirstChargeRspMsg {
+
+	repeated CmdGoods tl_cmd_goods = 1;
+}
+
+message CmdRoleUploadPlatformImgReqMsg {
+
+	required string platform_img = 1;
+}
+
+message CmdRoleUploadPlatformImgRspMsg {
+}
+
+message CmdRoleWatchAdvertReqMsg {
+	required sint32 type = 1; // 观看广告
+	optional sint32 id = 2; // 小类型id
+}
+
+message CmdRoleWatchAdvertRspMsg {
+
+	repeated CmdGoods tl_cmd_goods = 1;
+	repeated sint32 tl_id = 2;
+}
+
+message CmdRole_Key {
+}
+
+message CmdRoll {
+
+	required string content = 1;
+	required sint64 time = 2;
+}
+
+message CmdRollBroMsg {
+
+	required CmdRoll cmd_roll = 1;
+}
+
+message CmdRune {
+
+	required sint64 id = 1;
+	required bool is_new = 6;
+	required bool is_put_on = 5;
+	required sint32 phase = 4;
+	required sint32 quality = 3;
+	required sint64 res_id = 2;
+}
+
+message CmdRunePutOnReqMsg {
+
+	required sint32 area = 2;
+	required sint64 id = 1;
+}
+
+message CmdRunePutOnRspMsg {
+}
+
+message CmdRuneReplaceReqMsg {
+
+	required sint64 id = 1;
+	required sint64 replace_id = 2;
+}
+
+message CmdRuneReplaceRspMsg {
+}
+
+message CmdRuneSynthesisOneKeyReqMsg {
+}
+
+message CmdRuneSynthesisOneKeyRspMsg {
+
+	repeated sint64 id = 1;
+}
+
+message CmdRuneSynthesisReqMsg {
+
+	repeated sint64 nid = 4;
+	required sint32 phase = 3;
+	required sint32 quality = 2;
+	required sint64 res_id = 1;
+}
+
+message CmdRuneSynthesisRspMsg {
+}
+
+message CmdRuneTakeOffReqMsg {
+
+	required sint32 area = 2;
+	required sint64 id = 1;
+}
+
+message CmdRuneTakeOffRspMsg {
+}
+
+message CmdRune_Key {
+
+	required sint64 id = 1;
+}
+
+message CmdSecretRealm {
+
+	required sint64 end_time = 4;
+	required sint32 level = 3;
+	required sint64 role_id = 1;
+	repeated CmdSecretRealmScore secret_realm_score = 5;
+	required sint32 type = 2;
+}
+
+message CmdSecretRealmScore {
+
+	required sint32 level = 2;
+	required sint32 type = 1;
+}
+
+message CmdSecretRealm_Key {
+
+	required sint64 role_id = 1;
+}
+
+message CmdSevenDayInfo {
+
+	required CmdSevenDayPoint cmd_seven_day_point = 2;
+	repeated CmdSevenDayShop tl_cmd_seven_day_shop = 3;
+	repeated CmdTask tl_cmd_task = 1;
+}
+
+message CmdSevenDayInfoReqMsg {
+}
+
+message CmdSevenDayInfoRspMsg {
+
+	required CmdSevenDayInfo cmd_seven_day_info = 1;
+}
+
+message CmdSevenDayPoint {
+
+	required sint32 point = 1;
+	repeated sint32 tl_ids = 2;
+}
+
+message CmdSevenDayShop {
+
+	required int32 buy_times = 2;
+	required int32 id = 1;
+}
+
+message CmdSevenDayShopBuyReqMsg {
+
+	required int32 id = 1;
+}
+
+message CmdSevenDayShopBuyRspMsg {
+
+	optional CmdSevenDayInfo cmd_seven_day_info = 1;
+	repeated CmdGoods tl_cmd_goods = 2;
+}
+
+message CmdSevenDayTakePointRewardReqMsg {
+
+	required sint32 res_id = 1;
+}
+
+message CmdSevenDayTakePointRewardRspMsg {
+
+	optional CmdSevenDayInfo cmd_seven_day_info = 1;
+	repeated CmdGoods tl_cmd_goods = 2;
+}
+
+// 七日狂欢 领取任务奖励
+message CmdSevenDayTakeTaskRewardReqMsg {
+	required sint32 day = 1; // 天
+}
+message CmdSevenDayTakeTaskRewardRspMsg {
+	optional CmdSevenDayInfo cmd_seven_day_info = 1;
+	repeated CmdGoods tl_cmd_goods = 2;
+}
+
+message CmdShare {
+}
+
+message CmdShareGetRewardReqMsg {
+}
+
+message CmdShareGetRewardRspMsg {
+
+	repeated CmdGoods tl_cmd_goods = 1;
+}
+
+message CmdShareStateReqMsg {
+}
+
+message CmdShareStateRspMsg {
+
+	required sint32 reward_state = 2;
+	required sint32 share_state = 1;
+}
+
+message CmdShare_Key {
+
+	required sint64 id = 1;
+}
+
+message CmdShop {
+
+	required CmdShopType cmd_shop_type = 1;
+	repeated CmdShopGoods tl_cmd_shop_goods = 2;
+}
+
+message CmdShopBuyReqMsg {
+    required int32 id = 1; // 商品id
+    required CmdShopType cmdShopType = 2;  // 商店类型
+    optional int32 buyTimes = 3; // 购买次数
+    repeated CmdGoodReplace tlGoodReplace = 4;
+    optional int32 openResId = 5; // 唯一resId，activityOpen.json的resId字段==>>转盘抽奖，转盘兑换商店要传
+}
+
+message CmdShopBuyRspMsg {
+
+	repeated CmdGoods tl_cmd_goods = 1;
+}
+
+message CmdShopGoods {
+
+	repeated sint32 already_take_box = 7;
+	optional sint32 box_process = 6;
+	required int32 buy_times = 2;
+	required int32 id = 1;
+	optional sint64 next_buy_time = 3;
+	optional sint32 next_time = 4;
+	optional sint32 next_time50 = 5;
+}
+
+enum CmdShopType {
+    box = 1; // 宝箱商城
+    resource = 2; // 资源商城
+    diamond = 3; // 钻石商城
+    gold = 4; // 金币商城
+    gift = 5; // 超值礼包商城
+    spiritAnimal = 6; // 灵兽宝箱商城
+    chapter = 7; // 通关商城
+    union = 8; // 联盟商城
+    god = 9; // 请神商城
+    jianGe = 10; // 剑阁商城
+    lottery = 11;  // 转盘抽奖
+    lotteryChange1 = 12;  // 转盘抽奖兑换1
+    lotteryChange2 = 13;  // 转盘抽奖兑换2
+    lotteryChange3 = 14;  // 转盘抽奖兑换3
+    lotteryChange4 = 15;  // 转盘抽奖兑换4
+}
+
+message CmdShop_Key {
+
+	required CmdShopType cmd_shop_type = 1;
+}
+
+message CmdSigninInfo {
+
+	repeated CmdTask box_tl_cmd_task = 2;
+	required int32 day = 5;
+	required int32 round = 4;
+	repeated CmdTask tl_cmd_task = 1;
+	required int32 type = 3;
+}
+
+message CmdSigninInfoReqMsg {
+}
+
+message CmdSigninInfoRspMsg {
+
+	required CmdSigninInfo cmd_signin_info = 1;
+}
+
+message CmdSigninTakeTaskRewardReqMsg {
+
+	required sint32 res_id = 1;
+}
+
+message CmdSigninTakeTaskRewardRspMsg {
+
+	optional CmdSigninInfo cmd_signin_info = 1;
+	repeated CmdGoods tl_cmd_goods = 2;
+}
+
+message CmdSkin {
+
+	required sint64 res_id = 1;
+	optional bool used = 2;
+}
+
+message CmdSkinActDetail {
+
+	required bool already_buy = 3;
+	required int32 price = 2;
+	required int64 skin_res_id = 1;
+}
+
+message CmdSkinPlayer {
+
+	repeated CmdSkinShop tl_cmd_skin_shop = 1;
+}
+
+message CmdSkinShop {
+
+	required bool buy = 2;
+	required int32 id = 1;
+}
+
+message CmdSkin_Key {
+
+	required sint64 res_id = 1;
+}
+
+message CmdSpecialGiftCache {
+
+	required sint64 end_time = 3;
+	required sint64 res_id = 1;
+	required CmdCommonState state = 2;
+}
+
+message CmdSpecialGiftCache_Key {
+
+	required sint64 res_id = 1;
+}
+
+message CmdSpiritAnimal {
+
+	required sint32 level = 3;
+	required sint64 res_id = 2;
+	required sint64 unique_id = 1;
+}
+
+message CmdSpiritAnimalBattleReqMsg {
+
+	required sint64 unique_id = 1;
+}
+
+message CmdSpiritAnimalBattleRspMsg {
+}
+
+message CmdSpiritAnimalData {
+
+	repeated CmdBattleAttr tl_cmd_battle_attr = 3;
+	repeated CmdBattleBuff tl_cmd_battle_buff = 2;
+	repeated sint32 tl_skill_id = 1;
+}
+
+message CmdSpiritAnimalLevelUpReqMsg {
+
+	required sint64 unique_id = 1;
+}
+
+message CmdSpiritAnimalLevelUpRspMsg {
+}
+
+message CmdSpiritAnimalResetPreviewReqMsg {
+
+	required sint64 unique_id = 1;
+}
+
+message CmdSpiritAnimalResetPreviewRspMsg {
+
+	repeated CmdGoods tl_cmd_goods = 1;
+}
+
+message CmdSpiritAnimalResetReqMsg {
+
+	required sint64 unique_id = 1;
+}
+
+message CmdSpiritAnimalResetRspMsg {
+
+	repeated CmdGoods tl_cmd_goods = 1;
+}
+
+message CmdSpiritAnimalStepUpReqMsg {
+
+	repeated sint64 tl_camp_unique_id = 3;
+	repeated sint64 tl_same_unique_id = 2;
+	required sint64 unique_id = 1;
+}
+
+message CmdSpiritAnimalStepUpRspMsg {
+}
+
+message CmdSpiritAnimal_Key {
+
+	required sint64 unique_id = 1;
+}
+
+message CmdSystemGmReqMsg {
+
+	required string cmd = 1;
+}
+
+message CmdSystemGmRspMsg {
+
+	repeated CmdGoods tl_cmd_goods = 1;
+}
+
+message CmdSystemSyncTimeReqMsg {
+}
+
+message CmdSystemSyncTimeRspMsg {
+
+	required int64 server_time = 1;
+}
+
+message CmdTakeChapterRewardReqMsg {
+
+	required sint32 chapter = 1;
+}
+
+message CmdTakeChapterRewardRspMsg {
+
+	repeated CmdGoods tl_cmd_goods = 1;
+}
+
+message CmdTakeDayChallengeActRewardReqMsg {
+
+	required sint32 res_id = 1;
+	required sint32 task_res_id = 2;
+}
+
+message CmdTakeDayChallengeActRewardRspMsg {
+
+	repeated CmdGoods tl_reward = 1;
+}
+
+message CmdTakeGameCircleRewardReqMsg {
+}
+
+message CmdTakeGameCircleRewardRspMsg {
+
+	repeated CmdGoods tl_cmd_goods = 1;
+}
+
+// 领取过关斩将宝箱奖励
+message CmdTakeLockMonsterBoxReqMsg {
+}
+
+message CmdTakeLockMonsterBoxRspMsg {
+	repeated CmdGoods tl_cmd_goods = 1;
+}
+
+// 过关斩将扫荡
+message CmdLockMonsterSweepReqMsg {
+}
+
+message CmdLockMonsterSweepRspMsg {
+	repeated CmdGoods tlCmdGoods = 1; // 获得物品
+}
+
+message CmdTakeMonthCardActRewardReqMsg {
+
+	required sint32 res_id = 1;
+}
+
+message CmdTakeMonthCardActRewardRspMsg {
+
+	repeated CmdGoods tl_reward = 1;
+}
+
+message CmdTakeRechargeGiftActRewardReqMsg {
+
+	required sint32 recharge_process = 2;
+	required sint32 res_id = 1;
+}
+
+message CmdTakeRechargeGiftActRewardRspMsg {
+
+	repeated CmdGoods tl_reward = 1;
+}
+
+message CmdTakeSpiritAnimalBoxReqMsg {
+
+	required sint32 id = 1;
+	required sint64 res_id = 3;
+	required sint32 take_process = 2;
+}
+
+message CmdTakeSpiritAnimalBoxRspMsg {
+
+	repeated CmdGoods tl_cmd_goods = 1;
+}
+
+message CmdTask {
+	required sint64 count = 2;
+	required sint32 res_id = 1;
+	required CmdCommonState reward_state = 3;
+}
+
+enum CmdTaskType {
+    ACT_DAY_CHALLENGE_TASK = 1; // 每日挑战任务
+    SEVEN_DAY_TASK = 2;  // 七日任务
+    LIMIT_TIME_TASK = 3;  // 限时活动
+    SIGN_IN_TASK = 4; // 签到
+    MAIN_TASK = 5; // 主线任务
+    UNION_TASK = 6; // 联盟任务
+    TURNTABLE_LOTTERY_TASK = 7; // 转盘任务
+}
+
+message CmdTask_Key {
+
+	required sint32 res_id = 1;
+}
+
+message CmdTips {
+
+	required string content = 1;
+}
+
+message CmdUpdateRedDotReqMsg {
+
+	required CmdRedDotType red_dot_type = 1;
+}
+
+message CmdUpdateRedDotRspMsg {
+}
+
+message EveryDayGift {
+
+	required sint32 buy_count = 3;
+	required sint32 from_id = 2;
+	required sint64 gift_id = 1;
+	repeated CmdGoods rewards = 4;
+}
+
+message EveryDaySignInReward {
+
+	required sint32 day = 1;
+	required sint32 state = 3;
+	repeated CmdGoods tl_cmd_goods = 2;
+}
+
+enum LoginStatus {
+
+	BAN = 3;
+	SUCCESS = 1;
+	WEI_HU = 2;
+}
+
+// 通用成员信息
+message CmdCommonRole {
+	required sint64 roleId = 1; // 角色id
+	required string name = 2; // 角色名
+	required sint64 img = 3; // 头像
+	required sint64 headFrame = 4; // 头像框
+	required string platformImg = 5; // 平台图标
+	required sint32 level = 6; // 等级
+	required sint64 power = 7; // 修练值（战力）
+	required sint32 serverId = 8; // 服务器
+	required sint32 selectServerId = 9; // 选择的服务器
+	required sint32 titleId = 10; // 称号Id
+	required sint64 usedSkinResId = 11; // 当前使用皮肤Id
+}
+message CmdCommonRole_Key {
+	required sint64 id = 1; // 角色id
+}
+
+// 战斗数据
+message CmdBattleRoleAttr {
+	required sint64 roleId = 1; // 角色id
+	repeated string attrKeys = 2;
+	repeated sint32 attrValues = 3;
+	repeated sint32 cards = 4;
+	repeated sint32 modifyList = 5;
+}
+
+// 战斗数据列表
+message CmdBattleRoleAttrList {
+	repeated CmdBattleRoleAttr attrList = 1; // 列表
+}
+
+// 队伍信息
+message CmdTeamDetail {
+	required sint64 teamId = 1; // 队伍id
+	required sint64 leaderId = 2; // 队长id
+	required sint32 battleType = 3; // 战斗类型
+	required sint32 battleId = 4; // 战斗ID
+	repeated CmdCommonRole memberList = 5; // 成员列表
+	repeated CmdBattleRoleAttr attrList = 6; // 战斗数据列表
+}
+
+// 邀请信息
+message CmdInviteInfo {
+	required CmdCommonRole invite = 1; // 邀请者信息
+	required sint32 battleType = 2; // 战斗类型
+	required sint32 battleId = 3; // 战斗ID
+}
+
+// 招募信息
+message CmdRecruitInfo {
+	required sint64 roleId = 1; // 角色id
+	required sint32 battleType = 2; // 战斗类型
+	required sint32 battleId = 3; // 战斗ID
+	required string name = 4; // 角色名
+	required sint64 img = 5; // 头像
+	required sint64 headFrame = 6; // 头像框
+	required string platformImg = 7; // 平台图标
+	required sint32 level = 8; // 等级
+	required sint32 power = 9; // 战力
+	required sint32 serverId = 10; // 服务器Id
+	required sint32 selectServerId = 11; // 分服Id
+	required sint32 titleId = 12; // 称号Id
+	required sint32 textId = 13; // 随机文字Id
+	required sint64 sendTime = 14; // 发送时间
+}
+
+// 招募信息
+message CmdRecruitInfoList {
+	repeated CmdRecruitInfo recruitList = 1; // 列表
+}
+
+// 初始化组队数据
+message CmdTeamInitReqMsg {
+}
+message CmdTeamInitRspMsg {
+	optional CmdTeamDetail info = 1; // 队伍详情
+}
+
+// 用户创建组队
+message CmdTeamCreateReqMsg {
+	required sint32 battleType = 1; // 战斗类型
+	required sint32 battleId = 2; // 战斗ID
+	required CmdBattleRoleAttr attr = 3; // 战斗数据
+}
+message CmdTeamCreateRspMsg {
+	optional sint32 ret = 1; // 结果
+}
+
+// 队伍详情广播
+message CmdTeamDetailBroMsg {
+	optional CmdTeamDetail info = 1; // 队伍详情
+	optional sint32 randomNum = 2; // 随机数
+}
+
+// 队伍解散广播
+message CmdTeamDisbandBroMsg {
+}
+
+// 用户邀请组队
+message CmdTeamInviteReqMsg {
+	required sint64 targetId = 1; // 被邀请角色id
+	required sint32 battleType = 2; // 战斗类型
+	required sint32 battleId = 3; // 战斗ID
+	required CmdBattleRoleAttr attr = 4; // 战斗数据
+}
+message CmdTeamInviteRspMsg {
+	optional sint32 ret = 1; // 结果
+}
+// 邀请组队
+message CmdTeamInviteBroMsg {
+	optional CmdInviteInfo info = 1; // 邀请详情
+}
+
+// 回复邀请组队
+message CmdTeamReplyInviteReqMsg {
+	required sint64 inviteId = 1; // 邀请角色id
+	optional bool agree = 2; // 是否同意
+	optional CmdBattleRoleAttr attr = 3; // 战斗数据
+}
+message CmdTeamReplyInviteRspMsg {
+	optional sint32 ret = 1; // 结果
+}
+// 回复邀请组队
+message CmdTeamReplyInviteBroMsg {
+	required sint64 roleId = 1; // 角色id
+	optional string name = 2; // 角色名
+	optional bool agree = 3; // 是否同意
+}
+
+// 用户退出队伍
+message CmdTeamQuitReqMsg {
+}
+message CmdTeamQuitRspMsg {
+	optional sint32 ret = 1; // 结果
+}
+
+// 踢出队伍
+message CmdTeamKickReqMsg {
+	required sint64 targetId = 1; // 被踢出角色id
+}
+message CmdTeamKickRspMsg {
+	optional sint32 ret = 1; // 结果
+}
+
+// 初始化招募数据
+message CmdTeamRecruitInitReqMsg {
+}
+message CmdTeamRecruitInitRspMsg {
+	optional CmdRecruitInfoList infoList = 1;
+}
+
+// 用户发布招募
+message CmdTeamRecruitSendReqMsg {
+	required sint32 battleType = 1; // 战斗类型
+	required sint32 battleId = 2; // 战斗ID
+	optional CmdBattleRoleAttr attr = 3; // 战斗数据
+}
+message CmdTeamRecruitSendRspMsg {
+	optional sint32 ret = 1; // 结果
+}
+// 用户发布招募
+message CmdTeamRecruitSendBroMsg {
+	required CmdRecruitInfo info = 1;
+}
+
+// 加入招募
+message CmdTeamRecruitJoinReqMsg {
+	required sint64 roleId = 1; // 发送招募的角色id
+	required CmdBattleRoleAttr attr = 2; // 战斗数据
+}
+message CmdTeamRecruitJoinRspMsg {
+	optional sint32 ret = 1; // 结果
+}
+
+// 踢出队伍广播
+message CmdTeamKickBroMsg {
+
+}
+
+// 请求进入双人战斗
+message CmdBattleTeamEnterReqMsg {
+}
+message CmdBattleTeamEnterRspMsg {
+	optional sint32 ret = 1; // 结果
+}
+message CmdBattleTeamEnterBroMsg {
+
+}
+
+// 双人战斗数据更新请求
+message CmdBattleTeamUpdateReqMsg {
+	required sint32 type = 1;
+	repeated sint32 value = 2;
+	required sint32 frame = 3;
+	required sint32 number = 4;
+}
+message CmdBattleTeamUpdateRspMsg {
+	optional sint32 ret = 1; // 结果
+}
+// 双人战斗数据更新广播
+message CmdBattleTeamUpdateBroMsg {
+	required sint32 type = 1;
+	repeated sint32 value = 2;
+	required sint32 frame = 3;
+	required sint32 number = 4;
+	required sint64 sendId = 5;
+}
+
+
+
+// 兵种等级
+message CmdArmyLevel {
+	required sint32 armyId = 1; // 兵种ID
+	required sint32 level = 2;  // 等级
+}
+message CmdArmyLevel_Key {
+	required sint32 armyId = 1; // 兵种ID
+}
+
+// 兵种皮肤选择
+message CmdArmySkinSelect {
+	required sint32 armyId = 1; // 兵种ID
+	required sint32 skinId = 2; // 皮肤ID
+}
+message CmdArmySkinSelect_Key {
+	required sint32 armyId = 1; // 兵种ID
+}
+
+// 兵种皮肤星级
+message CmdArmySkinStar {
+	required sint32 skinId = 1; // 皮肤ID
+	required sint32 star = 2; // 星级
+}
+message CmdArmySkinStar_Key {
+	required sint32 skinId = 1; // 皮肤ID
+}
+
+// 军师
+message CmdAdvisor {
+	required sint32 advisorId = 1; // 军师ID
+	required sint32 star = 2; // 军师星级
+}
+message CmdAdvisor_Key {
+	required sint32 advisorId = 1; // 军师ID
+}
+
+// 军师切页
+message CmdAdvisorPage {
+	required sint32 PageId = 1; // 军师切页ID
+	repeated sint32 advisorList = 2; // 军师列表
+}
+message CmdAdvisorPage_Key {
+	required sint32 PageId = 1; // 军师切页ID
+}
+
+// 武将
+message CmdGeneral {
+	required sint32 generalId = 1; // 武将ID
+	required sint32 star = 2; // 武将星级
+}
+message CmdGeneral_Key {
+	required sint32 generalId = 1; // 武将ID
+}
+
+// 武将切页
+message CmdGeneralPage {
+	required sint32 PageId = 1; // 武将切页ID
+	repeated sint32 generalList = 2; // 武将列表
+}
+message CmdGeneralPage_Key {
+	required sint32 PageId = 1; // 武将切页ID
+}
+
+
+
+// 兵种升级
+message CmdArmyLevelUpReqMsg {
+	required sint32 armyId = 1; // 兵种Id
+}
+message CmdArmyLevelUpRspMsg {
+	optional bool ret = 1;
+}
+
+// 兵种皮肤升星
+message CmdArmySkinAddStarReqMsg {
+	required sint32 skinId = 1; // 皮肤Id
+}
+message CmdArmySkinAddStarRspMsg {
+	optional bool ret = 1;
+}
+
+// 选择兵种皮肤
+message CmdArmySelectSkinReqMsg {
+	required sint32 armyId = 1; // 兵种Id
+	required sint32 skinId = 2; // 皮肤Id
+}
+message CmdArmySelectSkinRspMsg {
+	optional bool ret = 1;
+}
+
+// 军师升星
+message CmdAdvisorAddStarReqMsg {
+	required sint32 advisorId = 1; // 军师Id
+}
+message CmdAdvisorAddStarRspMsg {
+	optional bool ret = 1;
+}
+
+// 选择军师阵容
+message CmdAdvisorSelectPageReqMsg {
+	required sint32 pageId = 1; // 阵容Id
+}
+message CmdAdvisorSelectPageRspMsg {
+	optional bool ret = 1;
+}
+
+// 军师上阵
+message CmdAdvisorBattleReqMsg {
+	required sint32 pageId = 1; // 阵容Id
+	required sint32 index = 2; // 下标Id
+	required sint32 advisorId = 3; // 军师Id
+}
+message CmdAdvisorBattleRspMsg {
+	optional bool ret = 1;
+}
+
+// 军师显示（站上城墙）
+message CmdAdvisorShowReqMsg {
+	required sint32 advisorId = 1; // 军师Id
+}
+message CmdAdvisorShowRspMsg {
+	optional bool ret = 1;
+}
+
+// 武将升星
+message CmdGeneralAddStarReqMsg {
+	required sint32 generalId = 1; // 武将Id
+}
+message CmdGeneralAddStarRspMsg {
+	optional bool ret = 1;
+}
+
+// 选择武将阵容
+message CmdGeneralSelectPageReqMsg {
+	required sint32 pageId = 1; // 阵容Id
+}
+message CmdGeneralSelectPageRspMsg {
+	optional bool ret = 1;
+}
+
+// 武将上阵
+message CmdGeneralBattleReqMsg {
+	required sint32 pageId = 1; // 阵容Id
+	required sint32 index = 2; // 下标Id
+	required sint32 generalId = 3; // 武将Id
+}
+message CmdGeneralBattleRspMsg {
+	optional bool ret = 1;
+}
+
+
+
+// 玩家好友缓存
+message CmdFriend {
+	required sint64 friendId = 1; // 好友roleId
+	required string name = 2; // 好友名称
+	required sint32 level = 3; // 好友等级
+	required sint32 title = 4; // 好友称号
+	required sint64 img = 5; // 好友头像
+	required sint64 headFrame = 6; // 好友头像框
+	required sint64 power = 7; // 好友修练值（战力）
+	required sint32 serverId = 8; // 好友服务器
+	required sint32 selectServerId = 9; // 好友选择的服务器
+	optional bool online = 10; // 好友在线状态
+	optional sint64 lastOfflineTime = 11; // 好友最后一次下线时间，用于计算离线时长
+	optional bool todaySend = 12; // 今日是否已赠送体力给该好友
+	optional bool todayReceive = 13; // 今日是否收到该好友赠送的体力
+	optional bool todayTake = 14; // 今日是否已领取该好友赠送的体力
+}
+message CmdFriend_Key {
+	required sint64 friendId = 1; // 好友roleId
+}
+
+// 好友申请缓存
+message CmdFriendApply {
+	required sint64 friendId = 1; // 好友roleId
+	required string name = 2; // 好友名称
+	required sint32 level = 3; // 好友等级
+	required sint32 title = 4; // 好友称号
+	required sint64 img = 5; // 好友头像
+	required sint64 headFrame = 6; // 好友头像框
+	required sint64 power = 7; // 好友修练值（战力）
+	required sint32 selectServerId = 8; // 好友选择的服务器
+	required sint32 serverId = 9; // 好友服务器
+}
+message CmdFriendApply_Key {
+	required sint64 friendId = 1; // 申请好友roleId
+}
+
+// 好友黑名单缓存
+message CmdFriendBlack {
+	required sint64 friendId = 1; // 好友roleId
+	required string name = 2; // 好友名称
+	required sint32 level = 3; // 好友等级
+	required sint32 title = 4; // 好友称号
+	required sint64 img = 5; // 好友头像
+	required sint64 headFrame = 6; // 好友头像框
+	required sint64 power = 7; // 好友修练值（战力）
+	required sint32 selectServerId = 8; // 好友选择的服务器
+	required sint32 serverId = 9; // 好友服务器
+}
+message CmdFriendBlack_Key {
+	required sint64 friendId = 1; // 黑名单好友roleId
+}
+
+// 好友申请
+message CmdFriendsApplyReqMsg {
+	required sint64 targetId = 1 ; // 目标Id
+}
+message CmdFriendsApplyRspMsg {
+	optional sint64 targetId = 1 ; // 目标Id
+}
+
+// 好友申请通知
+message CmdFriendsApplyBroMsg {
+	required CmdFriendApply apply = 1;
+}
+
+// 通过好友申请
+message CmdFriendsAddReqMsg {
+	optional sint64 targetId = 1 ; // 目标Id
+}
+message CmdFriendsAddRspMsg {
+}
+
+// 通过好友通知
+message CmdFriendsAddBroMsg {
+	required CmdFriend friend = 1;
+}
+
+// 拒绝好友申请
+message CmdFriendsRefuseReqMsg {
+	required sint64 targetId = 1 ; // 目标Id
+}
+message CmdFriendsRefuseRspMsg {
+}
+
+// 拒绝好友申请通知
+message CmdFriendsRefuseBroMsg {
+	required sint64 targetId = 1 ; // 目标Id
+	required string name = 2; // 好友名称
+}
+
+// 删除好友
+message CmdFriendsRemoveReqMsg {
+	repeated sint64 targetId = 1 ; // 目标Id
+}
+message CmdFriendsRemoveRspMsg {
+	repeated sint64 targetId = 1 ; // 目标Id
+}
+
+// 删除好友通知
+message CmdFriendsRemoveBroMsg {
+	required sint64 targetId = 1 ; // 目标Id
+}
+
+// 拉黑好友
+message CmdFriendsBlackReqMsg {
+	required sint64 targetId = 1 ; // 目标Id
+}
+message CmdFriendsBlackRspMsg {
+}
+
+// 移除黑名单
+message CmdFriendBlackRemoveReqMsg {
+	required sint64 targetId = 1; // 目标id
+}
+message CmdFriendBlackRemoveRspMsg {
+	optional sint64 targetId = 1 ; // 目标Id
+}
+
+// 好友搜索
+message CmdFriendsSearchReqMsg {
+	optional sint64 targetId = 1; // 目标id
+	optional string targetName = 2; // 目标名称
+}
+message CmdFriendsSearchRspMsg {
+	optional CmdFriend friend = 1 ;
+}
+
+// 领取体力
+message CmdFriendGetEndReqMsg {
+	required sint64 targetId = 1; // 目标id
+}
+message CmdFriendGetEndRspMsg {
+	optional CmdFriend friend = 1;
+}
+
+// 一键领取体力
+message CmdFriendGetEndOneKeyReqMsg {
+}
+message CmdFriendGetEndOneKeyRspMsg {
+	repeated CmdFriend friendList = 1;
+}
+
+// 赠送体力
+message CmdFriendSendEndReqMsg {
+	required sint64 targetId = 1; // 目标id
+}
+message CmdFriendSendEndRspMsg {
+	optional CmdFriend friend = 1;
+}
+
+// 赠送好友体力通知
+message CmdFriendSendEndBroMsg {
+	required CmdFriend friend = 1;
+}
+
+// 一键赠送体力
+message CmdFriendSendEndOneKeyReqMsg {
+}
+message CmdFriendSendEndOneKeyRspMsg {
+	repeated CmdFriend friendList = 1;
+}
+
+// 一键赠送好友体力广播
+message CmdFriendSendEndOneKeyBroMsg {
+}
+
+// 一键同意
+message CmdFriendAgreeOneKeyReqMsg {
+}
+message CmdFriendAgreeOneKeyRspMsg {
+}
+
+// 一键同意好友广播
+message CmdFriendAgreeOneKeyBroMsg {
+}
+
+// 一键拒绝
+message CmdFriendRefuseOneKeyReqMsg {
+}
+message CmdFriendRefuseOneKeyRspMsg {
+}
+
+// 一键拒绝好友广播
+message CmdFriendRefuseOneKeyBroMsg {
+}
+
+// 刷新推荐好友数据
+message CmdFriendRefreshSuggestReqMsg {
+}
+message CmdFriendRefreshSuggestRspMsg {
+	repeated CmdFriend suggestList = 1; // 推荐好友信息
+}
+
+// 频道类型
+enum ChatChannelType {
+	CHAT_CHANNEL_RECRUIT = 0; // 招募频道
+	CHAT_CHANNEL_THEATER = 1; // 战区频道
+	CHAT_CHANNEL_WORLD = 2; // 世界频道
+	CHAT_CHANNEL_PRIVATE = 3; // 私聊频道
+	CHAT_CHANNEL_UNION = 4; // 联盟频道
+}
+
+// 玩家聊天展示信息
+message CmdChatRole {
+	required sint64 roleId = 1; // 角色id
+	required string name = 2; // 角色名
+	required sint64 img = 3; // 头像
+	required sint64 headFrame = 4; // 头像框
+	required string platformImg = 5; // 平台图标
+	required sint32 level = 6; // 等级
+	required sint64 power = 7; // 修练值（战力）
+	required sint32 serverId = 8; // 服务器
+	required sint32 selectServerId = 9; // 选择的服务器
+	required sint32 titleId = 10; // 称号Id
+	required sint64 lastOfflineTime = 11; // 最后一次下线时间，用于计算离线时长
+}
+message CmdChatRole_Key {
+	required sint64 roleId = 1; // 角色id
+}
+
+// 聊天信息
+message CmdChatMsgClient {
+	required sint64 chatId = 1; // 聊天Id（自增长）
+	required CmdChatRole speaker = 2; // 角色对象
+	required sint64 sendTime =  3; // 发送时间
+	required string content = 4; // 聊天信息
+}
+
+// 聊天信息
+message CmdChatMsg {
+	required sint64 chatId = 1; // 聊天Id 雪花算法生成唯一Id
+	required sint64 sendId = 2; // 发送者Id
+	required sint64 recvId = 3; // 接收者Id
+	required sint64 sendTime =  4; // 发送时间
+	required string content = 5; // 聊天信息
+}
+message CmdChatMsg_Key {
+	required sint64 chatId = 1; // 聊天Id
+}
+
+// 初始化聊天数据
+message CmdChatInitReqMsg {
+	required sint32 channel = 1; // 频道
+	optional sint64 id = 2; // 私聊，联盟用到 -- 玩家Id，联盟Id
+	required sint32 page = 3;  // 页
+}
+message CmdChatInitRspMsg {
+	optional sint32 ret = 1;  // 结果
+	optional sint32 channel = 2; // 频道
+	optional sint64 id = 3; // 私聊，联盟用到：玩家Id，联盟Id
+	optional sint32 page = 4;  // 页
+	repeated CmdChatMsgClient list = 5; // 聊天信息列表
+}
+
+// 用户发送聊天
+message CmdChatSendReqMsg {
+	required sint32 channel = 1; // 频道
+	optional sint64 id = 2; // 私聊，联盟用到 -- 玩家Id，联盟Id
+	required string content = 3; // 聊天信息
+}
+message CmdChatSendRspMsg {
+	optional sint32 ret = 1;  // 结果
+}
+// 聊天广播数据
+message CmdChatBroMsg {
+	required sint32 channel = 1; // 频道
+	required sint64 id = 2; // 私聊，联盟用到：玩家Id，联盟Id
+	required CmdChatMsgClient content = 3; // 聊天信息列表
+}
+
+// 从聊天对象列表删除聊天对象
+message CmdChatDelTargetReqMsg {
+	required sint64 id = 1; // 玩家Id
+}
+message CmdChatDelTargetRspMsg {
+	required sint64 id = 1; // 玩家Id
+}
+
+// 粮仓
+message CmdGranary {
+	required sint64 id = 1; // id
+	required sint64 genTime = 2; // 生成时间
+	required sint64 outTime = 3; // 过期时间
+}
+message CmdGranary_Key {
+	required sint64 id = 1; // 兵种ID
+}
+
+// 粮仓领取
+message CmdGranaryGetReqMsg {
+	required sint64 id = 1; // Id
+}
+message CmdGranaryGetRspMsg {
+	required bool ret = 1; // 返回值
+	required sint64 id = 2; // Id
+}
+
+// 粮仓一键领取
+message CmdGranaryGetOneKeyReqMsg {
+}
+message CmdGranaryGetOneKeyRspMsg {
+	repeated sint64 id = 1; // Id
+}
+
+// 粮仓列表更新
+message CmdGranaryUpdateBroMsg {
+	required CmdGranary granarys = 1;
+}
+
+// 获取章节首次通关信息列表
+message CmdGetChapterFirstPassListReqMsg {
+
+}
+message CmdGetChapterFirstPassListRspMsg {
+	repeated CmdChapterFirstPassInfo tlCmdInfos = 1; // 首次通关信息列表
+}
+
+// 获取章节首次通关排行奖励
+message CmdGetChapterFirstPassRewardReqMsg {
+
+}
+message CmdGetChapterFirstPassRewardRspMsg {
+	repeated CmdGoods tlCmdGoods = 1; // 物品列表
+}
+
+// 怪物图鉴
+message CmdMonsterManualItem {
+	required sint32 monsterId = 1; // 怪物Id
+	required bool activeState = 2; // 是否激活(Class:Boolean)
+	required bool rewardState = 3; // 是否领取奖励(Class:Boolean)
+}
+message CmdMonsterManualItem_Key {
+	required sint32 monsterId = 1; // 怪物Id
+}
+
+// 激活怪物图鉴广播
+message CmdMonsterManualActiveBroMsg {
+	repeated CmdMonsterManualItem tlCmdItems = 1;
+}
+
+// 领取怪物图鉴奖励
+message CmdMonsterManualGetRewardReqMsg {
+	optional int32 monsterId = 1; // 怪物id
+}
+message CmdMonsterManualGetRewardRspMsg {
+	repeated CmdGoods tlCmdGoods = 1; // 物品列表
+}
+
+// 领取主线任务奖励请求
+message CmdTakeMainTaskRewardReqMsg {
+	required sint32 resId = 1; // 主线任务id
+}
+message CmdTakeMainTaskRewardRspMsg {
+	optional bool ret = 1; // 返回结果
+	optional sint32 resId = 2; // 主线任务id
+	repeated CmdGoods tlCmdGoods = 3; // 获得奖励列表
+}
+
+// 请求领取联盟任务奖励
+message CmdTaskUnionGetRewardReqMsg {
+	required sint32 resId = 1; // 联盟任务id
+}
+message CmdTaskUnionGetRewardRspMsg {
+	optional bool ret = 1; // 返回结果
+	optional sint32 resId = 2; // 联盟任务id
+	repeated CmdGoods tlCmdGoods = 3; // 获得奖励列表
+}
+
+// 请求领取联盟任务进度奖励
+message CmdTaskUnionGetProgressRewardReqMsg {
+	required sint32 subType = 1; // 联盟任务子类型 1： 联盟任务  2： 北伐中原联盟伤害  3：北伐中原个人伤害
+}
+message CmdTaskUnionGetProgressRewardRspMsg {
+	optional bool ret = 1; // 返回结果
+	repeated CmdGoods tlCmdGoods = 2; // 获得奖励列表
+}
+
+// 联盟状态
+enum CmdUnionState {
+	FORMAL = 1; // 正常
+	DISBAND = 2; // 解散
+}
+
+// 编辑联盟数据类型
+enum CmdUnionEditType {
+	NAME = 1; // 名字
+	VXCHAT = 2; // 微信号
+	NOTICE = 3; // 公告
+	DECLARATION = 4; // 宣言
+}
+
+// 联盟进入状态
+enum CmdUnionJoinState {
+	QUIT = 0; // 退出
+	JOIN = 1; // 进入
+}
+
+// 联盟职位
+enum CmdUnionPosition {
+	LEADER = 1; // 盟主
+	DEPUTY = 2; // 副盟主
+	MEMBER = 3; // 成员
+}
+
+
+// 联盟
+message CmdUnion {
+	required sint64 id = 1; // 联盟id
+	required sint32 exp = 2; // 经验
+	required sint32 level = 3; // 等级
+	required sint32 icon = 4; // 联盟icon
+	required sint32 count = 5; // 成员数
+	required sint32 maxCount = 6; // 最大成员数
+	required bool autoJoin = 7; // 是否自动加入
+	required string name = 8; // 联盟名
+	required sint64 leaderId = 9; // 盟主id
+	required string leaderName = 10; // 盟主名
+	required string notice = 11; // 联盟公告
+	required string declaration = 12; // 联盟宣言
+	required string wxChat = 13; // 微信号
+	required sint32 serverId = 14; // 服务器id
+	required sint32 selectServerId = 15; // 选择的服务器id
+	required sint64 state = 16; // 联盟状态
+}
+message CmdUnion_Key {
+	required sint64 id = 1; // 联盟id
+}
+
+// 联盟
+message CmdUnionSimple {
+	required sint64 id = 1; // 联盟id
+	required sint32 icon = 2; // 联盟icon
+	required sint32 level = 3; // 联盟icon
+	required sint32 count = 4; // 成员数
+	required sint32 maxCount = 5; // 最大成员数
+	required sint64 leaderId = 6; // 盟主id
+	required string name = 7; // 联盟名
+	required string leaderName = 8; // 盟主名
+	required sint32 serverId = 9; // 服务器id
+	required sint32 selectServerId = 10; // 选择的服务器id
+	required sint64 state = 11; // 联盟状态
+}
+message CmdUnionSimple_Key {
+	required sint64 id = 1; // 联盟id
+}
+
+// 通用成员信息
+message CmdUnionMember {
+	required sint64 roleId = 1; // 角色id
+	required string name = 2; // 角色名
+	required sint64 img = 3; // 头像
+	required sint64 headFrame = 4; // 头像框
+	required sint32 level = 5; // 等级
+	required sint64 power = 6; // 修练值（战力）
+	required sint32 serverId = 7; // 服务器
+	required sint32 selectServerId = 8; // 选择的服务器
+	required sint32 titleId = 9; // 称号Id
+	required sint32 position = 10; // 职位
+	required bool online = 11; // 在线状态
+	required sint64 lastOfflineTime = 12; // 最后一次下线时间
+	required sint32 todayContribute = 13; // 今天贡献
+	required sint32 allContribute = 14; // 所有贡献
+}
+message CmdUnionMember_Key {
+	required sint64 roleId = 1; // 角色id
+}
+
+// 联盟申请
+message CmdUnionApplys {
+	required sint64 applyId = 1; // 申请者Id
+	required string name = 2; // 申请者名称
+	required sint32 level = 3; // 申请者等级
+	required sint32 title = 4; // 申请者称号
+	required sint64 img = 5; // 申请者头像
+	required sint64 headFrame = 6; // 申请者头像框
+	required sint64 power = 7; // 申请者修练值（战力）
+	required sint32 serverId = 8; // 申请者服务器
+	required sint32 selectServerId = 9; // 申请者选择的服务器
+}
+message CmdUnionApplys_Key {
+	required sint64 applyId = 1; // 联盟Id
+}
+
+// 联盟动态
+message CmdUnionLogs {
+	required sint64 id = 1; // 动态id
+	required string name = 2; // 玩家名称
+	required sint32 join = 3; // 进出状态 0退出，1加入 2 被踢出
+	required sint64 time = 4; // 时间
+	required sint32 opPosition = 5; // 操作者的职位
+	required string opName = 6; // 操作者的名字
+}
+message CmdUnionLogs_Key {
+	required sint64 id = 1; // 动态id
+}
+
+// 角色联盟数据
+message CmdRoleUnion {
+	required sint64 roleId = 1; // 角色Id
+	required sint64 unionId = 2; // 联盟Id
+	required sint64 lastQuitTime = 3; // 最后退出联盟时间
+	required sint32 serverId = 4; // 服务器id
+	required sint32 selectServerId = 5; // 选择的服务器id
+	required sint32 todayDonateTimes = 6; // 今日捐献次数
+	required sint32 todayDonateAdvTimes = 7; // 今日捐献看广告次数
+	required sint32 todayTaskAdvTimes = 8; // 今日任务看广告次数
+	required int32 todayTaskGetProgressCount = 9; // 今日领取任务进度奖励个数
+	required sint32 todayExchangeTimes = 10; // 今日交换次数
+	required sint32 todayBargainTimes = 11; // 今日砍价次数
+	required sint32 todayBuyBargainTimes = 12; // 今日购买砍价物品次数
+	required sint32 todayDrumTimes = 13; // 今日擂鼓次数
+}
+message CmdRoleUnion_Key {
+	required sint64 roleId = 1; // 角色Id
+}
+
+// 查看联盟显示
+message CmdUnionShow {
+	required sint64 id = 1; // 联盟id
+	required sint32 icon = 2; // 联盟icon
+	required sint32 level = 3; // 联盟等级
+	required string name = 4; // 联盟名
+}
+
+// 创建联盟
+message CmdUnionCreateReqMsg {
+	required sint32 icon = 1; // 联盟icon
+	required string name = 2; // 联盟名
+	required bool quick = 3; // 是否允许快速加入
+}
+message CmdUnionCreateRspMsg {
+	optional bool ret = 1; // 结果
+	optional CmdUnion union = 2; // 创建的联盟信息
+}
+
+// 申请(快速)加入联盟
+message CmdUnionJoinReqMsg {
+	repeated sint64 unionIds = 1; // 申请的联盟id列表
+}
+message CmdUnionJoinRspMsg {
+	optional bool ret = 1; // 结果
+	repeated sint64 unionIds = 2; // 申请的联盟id列表
+}
+
+// 批准或拒绝加入
+message CmdUnionApproveJoinReqMsg {
+	required sint64 reqId = 1; // 申请者id
+	required bool agree = 2; // 同意或拒绝
+}
+message CmdUnionApproveJoinRspMsg {
+	optional bool ret = 1; // 结果
+}
+
+// 一键批准或拒绝
+message CmdUnionApproveJoinOneKeyReqMsg {
+	required bool agree = 1; // 同意或拒绝
+}
+message CmdUnionApproveJoinOneKeyRspMsg {
+}
+
+// 退出联盟
+message CmdUnionQuitReqMsg {
+
+}
+message CmdUnionQuitRspMsg {
+	optional bool ret = 1; // 结果
+}
+
+// 踢出联盟
+message CmdUnionKickReqMsg {
+	required sint64 memberId = 1; // 成员id
+}
+message CmdUnionKickRspMsg {
+	optional bool ret = 1; // 结果
+}
+
+// 任命职位
+message CmdUnionAppointReqMsg {
+	required sint64 memberId = 1; // 成员id
+	required sint32 officialId = 2; // 官职id
+	required bool type = 3; // 任命类型：true为任命，false为卸任
+}
+message CmdUnionAppointRspMsg {
+	optional bool ret = 1; // 结果
+}
+
+// 设置快速加入
+message CmdUnionSetQuickJoinReqMsg {
+	required bool quick = 1; // 是否快速加入
+}
+message CmdUnionSetQuickJoinRspMsg {
+	optional bool ret = 1; // 结果
+}
+
+// 修改请求 1名字，2微信号，3公告，4宣言
+message CmdUnionEditReqMsg {
+	required sint32 type = 1; // 类型
+	required string content = 2; // 内容
+}
+message CmdUnionEditRspMsg {
+	optional bool ret = 1; // 结果
+}
+
+// 请求详情
+message CmdUnionDetailReqMsg {
+
+}
+message CmdUnionDetailRspMsg {
+
+}
+
+// 请求申请列表
+message CmdUnionApplyListReqMsg {
+
+}
+message CmdUnionApplyListRspMsg {
+
+}
+
+// 请求动态
+message CmdUnionLogReqMsg {
+
+}
+message CmdUnionLogRspMsg {
+
+}
+
+// 请求联盟列表
+message CmdUnionListReqMsg {
+
+}
+message CmdUnionListRspMsg {
+
+}
+
+// 请求搜索
+message CmdUnionSearchReqMsg {
+	required sint64 id = 1; // 联盟id
+}
+message CmdUnionSearchRspMsg {
+	optional bool ret = 1;  // 结果
+	optional CmdUnion union = 2; // 搜索到的联盟信息
+}
+
+// 请求捐献
+message CmdUnionDonateReqMsg {
+	required bool adv = 1; // 是否看广告
+}
+message CmdUnionDonateRspMsg {
+	optional bool ret = 1; // 结果
+}
+
+// 批准或拒绝加入广播
+message CmdUnionApproveJoinBroMsg {
+	optional bool agree = 1; // 是否同意
+}
+
+// 联盟信息刷新广播
+message CmdUnionInfoUpdateBroMsg {
+
+}
+
+// 联盟成员列表刷新广播
+message CmdUnionMemberListUpdateBroMsg {
+
+}
+
+// 联盟申请列表刷新广播
+message CmdUnionApplyListUpdateBroMsg {
+
+}
+
+// 联盟动态列表刷新广播
+message CmdUnionLogListUpdateBroMsg {
+
+}
+
+// 联盟列表刷新广播
+message CmdUnionListUpdateBroMsg {
+
+}
+
+// 联盟任务列表刷新广播
+message CmdUnionTaskListUpdateBroMsg {
+
+}
+
+// 联盟活动类型
+enum CmdUnionActType {
+	BARGAIN = 1; // 砍价
+	NORTH_EXPEDITION = 2; // 北伐中原
+}
+
+// 联盟活动数据
+message CmdUnionActInfo {
+	required sint64 roleId = 1; // 角色Id
+	required sint32 times = 2; // 角色参与活动次数
+	required sint64 value = 3; // 角色参与活动产生的数值
+}
+
+// 联盟活动数据
+message CmdUnionActivity {
+	required sint64 unionId = 1; // 联盟Id
+	required sint32 type = 2; // 联盟活动类型
+	repeated CmdUnionActInfo tlCmdUnionActInfo = 3; // 角色活动数据
+	required sint64 resetTime = 4; // 活动重置时间
+	required sint32 id = 5; // 随机的id
+	required sint32 addBuffTimes = 6; // 增加buff次数
+	required sint64 addBuffTime = 7; // 增加buff时间
+	required sint64 allValue = 8; // 总的数值
+}
+message CmdUnionActivity_Key {
+	required sint64 unionId = 1; // 联盟Id
+}
+
+// 个人活动Boss最高伤害
+message CmdRoleActBossDamage {
+	required sint64 roleId = 1; // 角色Id
+	required sint32 bossId = 2; // bossId（关卡id）
+	required sint64 damage = 3; // 最高伤害
+}
+message CmdRoleActBossDamage_Key {
+	required sint64 roleId = 1; // 角色Id
+}
+
+// 联盟活动Boss最高伤害
+message CmdUnionActBossDamage {
+	required sint64 unionId = 1; // 联盟Id
+	required sint32 bossId = 2; // bossId（关卡id）
+	required sint64 damage = 3; // 总伤害
+}
+message CmdUnionActBossDamage_Key {
+	required sint64 unionId = 1; // 联盟Id
+}
+
+// 请求砍价或购买
+message CmdUnionBargainReqMsg {
+	required bool buy = 1; // 是否购买？ false 砍价，true 购买
+}
+message CmdUnionBargainRspMsg {
+	optional bool ret = 1; // 结果
+	repeated CmdGoods tlCmdGoods = 2; // 获得物品
+}
+
+// 联盟活动请求列表
+message CmdUnionActListReqMsg {
+	required sint32 type = 1; // 联盟活动类型
+}
+message CmdUnionActListRspMsg {
+}
+
+// 联盟活动请求擂鼓
+message CmdUnionActDrumReqMsg {
+	required sint32 type = 1; // 联盟活动类型
+}
+message CmdUnionActDrumRspMsg {
+	optional bool ret = 1; // 结果
+}
+
+// 联盟活动请求扫荡
+message CmdUnionActSweepReqMsg {
+	required sint32 type = 1; // 联盟活动类型
+}
+message CmdUnionActSweepRspMsg {
+	optional bool ret = 1; // 结果
+	repeated CmdGoods tlCmdGoods = 2; // 获得物品
+}
+
+// 领取誓盟之战每日奖励
+message CmdTakeOathAllianceRewardReqMsg {
+}
+message CmdTakeOathAllianceRewardRspMsg {
+	repeated CmdGoods tlCmdGoods = 1; // 获得物品
+}
+
+// 购买天官赐福请求
+message CmdBattleBuyBlessReqMsg {
+	required sint32 level = 1; // 关卡等级
+}
+message CmdBattleBuyBlessRspMsg {
+	optional bool ret = 1; // 结果
+}
+// 购买天官赐福广播
+message CmdBattleBuyBlessBroMsg {
+	repeated CmdGoods tlCmdGoods = 1; // 奖励
+}
+
+// 城墙 近卫
+message CmdCastleGuards {
+	required sint32 id = 1; // 近卫id
+	required sint32 level = 2; // 近卫等级
+	required sint32 battle = 3; // 上阵位置 不上阵为0
+	required sint32 curQuality = 4; // 当前品级
+}
+message CmdCastleGuards_Key {
+	required sint32 id = 1;
+}
+
+// 城墙 近卫激活
+message CmdCastleGuardsActiveReqMsg {
+	required sint32 id = 1; // 近卫ID
+}
+message CmdCastleGuardsActiveRspMsg {
+	optional bool ret = 1;
+}
+// 近卫激活广播
+message CmdCastleGuardsActiveBroMsg {
+    required sint32 id = 1; // 近卫ID
+}
+
+// 城墙 近卫升级
+message CmdCastleGuardsLevelUpReqMsg {
+	required sint32 id = 1; // 近卫ID
+}
+message CmdCastleGuardsLevelUpRspMsg {
+	optional bool ret = 1;
+}
+
+// 城墙 近卫升品
+message CmdCastleGuardsRankUpReqMsg {
+	required sint32 id = 1; // 近卫ID
+}
+message CmdCastleGuardsRankUpRspMsg {
+	optional bool ret = 1;
+}
+
+// 城墙 近卫上阵
+message CmdCastleGuardsUpReqMsg {
+	required sint32 id = 1; // 近卫ID
+	required sint32 index = 2; // 下阵: 0 上阵: 1 2 3
+}
+message CmdCastleGuardsUpRspMsg {
+	optional bool ret = 1;
+}
+
+// 首充
+message CmdFirstRecharge {
+}
+message CmdFirstRecharge_Key {
+	required sint64 id = 1;
+}
+
+// 新首充
+message CmdFirstRechargeNewItem {
+	required sint32 id = 1; // 首充id
+	required bool active = 2; // 激活状态
+	required sint64 activeTime = 3; // 激活时间
+	repeated sint32 takenIds = 4; // 领取状态
+}
+message CmdFirstRechargeNew {
+	repeated CmdFirstRechargeNewItem infos = 1;
+}
+message CmdFirstRechargeNew_Key {
+}
+
+// 打开界面
+message CmdFirstRechargeOpenReqMsg {
+}
+message CmdFirstRechargeOpenRspMsg {
+}
+
+// 购买首充请求
+message CmdFirstRechargesBuyReqMsg {
+	required sint32 id = 1 ;
+}
+message CmdFirstRechargesBuyRspMsg {
+	optional bool ret = 1; // 结果
+}
+// 购买首充广播
+message CmdFirstRechargesBuyBroMsg {
+}
+
+// 领取首充奖励请求
+message CmdFirstRechargeRewardReqMsg {
+	required sint32 id = 1 ;
+	required sint32 day = 2 ;
+}
+message CmdFirstRechargeRewardRspMsg {
+	optional bool ret = 1; // 结果
+	repeated CmdGoods tlCmdGoods = 2; // 奖励
+}
+
+// 活动伤害数据
+message CmdRoleActDamage {
+	required sint64 roleId = 1; // 角色Id
+	required sint32 actType = 2; // 活动类型
+	required sint32 id = 3; // 副本Id
+	required sint64 resetTime = 4; // 重置时间
+	required sint32 times = 5; // 当天参与次数
+	required sint64 damage = 6; // 当天总伤害
+	required sint64 maxDamage = 7; // 当天最高伤害
+}
+message CmdRoleActDamage_Key {
+	required sint64 roleId = 1; // 角色Id
+}
+
+// 购买副本次数请求
+message CmdFuBenBuyTimesReqMsg {
+	required sint32 type = 1 ; // 5=守卫剑阁  ...其他
+}
+message CmdFuBenBuyTimesRspMsg {
+}
+
+// 副本扫荡请求
+message CmdFuBenSweepReqMsg {
+	required sint32 type = 1 ; // 5=守卫剑阁 ...其他
+}
+message CmdFuBenSweepRspMsg {
+	repeated CmdGoods tlCmdGoods = 1;
+}
+
+// 战令类型
+enum CmdBattleTokenType {
+    battleToken_end = 1; // 体力
+    battleToken_signIn = 2; // 签到
+    battleToken_levelFund = 3; // 等级基金
+    battleToken_pass = 4; // 过关令
+    battleToken_lottery1 = 5; // 转盘1
+    battleToken_lottery2 = 6; // 转盘2
+    battleToken_max = 7; // 最大
+}
+
+// 战令缓存
+message CmdBattleTokenMessage {
+	required bool open = 2;
+	required sint32 res_id = 1;
+	repeated sint32 tl_take_level = 3;
+}
+message CmdBattleToken {
+	required sint32 type = 1;
+	required sint32 level = 2;
+	required sint32 exp = 3;
+	repeated CmdBattleTokenMessage tl_battle_token_message = 4;
+	required sint64 endTime = 5;
+}
+message CmdBattleToken_Key {
+	required sint32 type = 1; // 战令类型
+}
+
+// 购买战令
+message CmdBattleTokenOpenReqMsg {
+	required sint32 res_id = 1;
+}
+message CmdBattleTokenOpenRspMsg {
+	required bool ret = 1;
+}
+// 购买战令广播
+message CmdBattleTokenOpenBroMsg {
+}
+
+// 战令重置
+message CmdBattleTokenResetReqMsg {
+}
+message CmdBattleTokenResetRspMsg {
+}
+
+// 战令奖励领取
+message CmdBattleTokenTakeRewardReqMsg {
+	optional bool take_all = 1;
+	optional sint32 res_id = 2;
+	optional sint32 level = 3;
+	optional sint32 type = 4; // 领取的战令类型
+}
+message CmdBattleTokenTakeRewardRspMsg {
+	repeated CmdGoods tl_reward = 1;
+}
+
+// 月卡缓存
+message CmdCardCache {
+	required sint32 res_id = 1;
+	required sint64 end_time = 2;
+}
+message CmdCardCache_Key {
+	required sint32 res_id = 1;
+}
+
+// 购买月卡
+message CmdCardBuyReqMsg {
+	required sint32 res_Id = 1; // 月卡resId
+}
+message CmdCardBuyRspMsg {
+	required bool ret = 1;
+}
+// 购买月卡广播
+message CmdCardBuyBroMsg {
+	repeated CmdGoods tlRewards = 1;
+}
+
+// 每日充值信息
+message CmdRechargeDailyItem {
+	required int32 id = 1; // id（档位）
+	required int32 day = 2; // 充值天数
+	required int32 accDay = 3; // 累积充值天数
+	repeated int32 takenIds = 4; // 每日奖励领取状态
+	repeated int32 accTakenIds = 5; // 累积奖励领取状态
+}
+message CmdRechargeDaily {
+	required sint64 roleId = 1; // 角色id
+	required int32 rechargeCount = 2; // 当天充值
+	required sint64 endTime = 3; // 活动截止时间
+	repeated CmdRechargeDailyItem infos = 4; // 每日充值信息
+}
+message CmdRechargeDaily_Key {
+	required sint64 roleId = 1; // 角色id
+}
+
+// 每日充值数据刷新
+message CmdRechargeDailyUpdateBroMsg {
+
+}
+
+// 领取每日充值每日奖励
+message CmdRechargeDailyGetRewardReqMsg {
+	required sint32 id = 1; // 档位
+	required sint32 day = 2; // 天数
+}
+message CmdRechargeDailyGetRewardRspMsg {
+	repeated CmdGoods tlCmdGoods = 1; // 获得奖励列表
+}
+
+// 领取每日充值累积奖励
+message CmdRechargeDailyGetAccRewardReqMsg {
+	required sint32 id = 1; // 档位
+	required sint32 day = 2; // 天数
+}
+message CmdRechargeDailyGetAccRewardRspMsg {
+	repeated CmdGoods tlCmdGoods = 1; // 获得奖励列表
+}
+
+// 领取每日挑战活动进度奖励
+message CmdTakeDayActProgressRewardReqMsg {
+	required sint32 resId = 1; // 唯一resId，activityOpen.json的resId字段
+	required sint32 id = 2; // 进度下标 1, 2, 3 ...
+}
+message CmdTakeDayActProgressRewardRspMsg {
+	repeated CmdGoods tlCmdGoods = 1;
+}
+
+// 主公技等级
+message CmdLeaderSkillLevel {
+	required sint32 id = 1; // 主公技Id
+	required sint32 level = 2; // 主公技等级
+}
+// 主公技信息
+message CmdLeaderSkill {
+	required sint64 roleId = 1; // 角色id
+	required sint32 showId = 2; // 角色id
+	repeated sint32 tlBattles = 3; // 上阵主公技信息
+	repeated CmdLeaderSkillLevel tlLevels = 4; // 技能等级信息
+}
+message CmdLeaderSkill_Key {
+	required sint64 roleId = 1; // 角色id
+}
+
+// 主公技上阵
+message CmdLeaderSkillBattleReqMsg {
+	required sint32 idx = 1; // 下标
+	required sint32 id = 2; // id
+}
+message CmdLeaderSkillBattleRspMsg {
+}
+
+// 主公技形象显示
+message CmdLeaderSkillShowReqMsg {
+	required sint32 id = 1; // id
+	required bool up = 2; // 1 上阵, 2 下阵
+}
+message CmdLeaderSkillShowRspMsg {
+}
+
+// 主公技升级
+message CmdLeaderSkillUpgradeReqMsg {
+	required sint32 id = 1; // id
+}
+message CmdLeaderSkillUpgradeRspMsg {
+}
+
+// 限时礼包信息
+message CmdLimitedTimeBundle {
+    required sint32 resId = 1; // 配置id
+    required sint64 refreshTime = 2; // 数据刷新时间
+    required sint64 sendTime = 3; // 推送时间
+    required sint32 buyCount = 4; // 已购买次数
+}
+message CmdLimitedTimeBundle_Key {
+    required sint32 resId = 1; // 配置id
+}
+
+// 刷新限时礼包广播
+message CmdRefreshLimitedTimeBundleBroMsg {
+}
+
+// 购买限时礼包广播
+message CmdBuyLimitedTimeBundleBroMsg {
+    repeated CmdGoods tlRewards = 1;
+}
+
+message CmdCelebrationInfo {
+    required sint32 id = 1; // 开服庆典id
+    required sint64 curValue = 2; // 当前数值
+    repeated sint32 targetInfos = 3; // 开服庆典目标信息
+    repeated sint32 shopInfos = 4; // 开服庆典特惠信息
+}
+message CmdCelebrationInfo_Key {
+    required sint32 id = 1; // 开服庆典id
+}
+
+// 开服庆典更新协议广播
+message CmdCelebrationUpdateDataBroMsg {
+}
+
+// 获取开服庆典目标奖励
+message CmdCelebrationGetTargetRewardReqMsg {
+    required sint32 id = 1; // 目标达标组
+    required sint32 subId = 2; // 组内id
+}
+message CmdCelebrationGetTargetRewardRspMsg {
+    repeated CmdGoods tlCmdGoods = 1; // 物品列表
+}
+
+// 购买开服庆典购买特惠礼包
+message CmdCelebrationBuyShopGoodsReqMsg {
+    required sint32 id = 1; // 目标达标组
+    required sint32 subId = 2; // 组内id
+}
+message CmdCelebrationBuyShopGoodsRspMsg {
+    optional bool canRmb = 1; // 是否可以直购 元宝购买时为:false，直购时能直购为:true
+    repeated CmdGoods tlCmdGoods = 2; // 物品列表（元宝购买）
+}
+// 购买开服庆典购买特惠礼包广播
+message CmdCelebrationBuyShopGoodsBroMsg {
+    repeated CmdGoods tlCmdGoods = 1; // 物品列表（直购）
+}
+
+// 调查问卷数据
+message CmdRoleQuestion {
+    required sint32 id = 1; // 调查问卷id
+    required sint32 state = 2; // 调查问卷状态
+}
+message CmdRoleQuestion_Key {
+    required sint32 id = 1; // 调查问卷id
+}
+
+// 调查问卷
+message CmdRoleQuestionClickReqMsg {
+    required int32 id = 1; // 问卷ID
+}
+message CmdRoleQuestionClickRspMsg {
+    // 在CmdRoleQuestion缓存中更新
+}
+
+// 请求领取转盘抽奖任务奖励
+message CmdTaskTurntableLotteryGetRewardReqMsg {
+    required sint32 resId = 1; // 转盘抽奖任务id
+}
+message CmdTaskTurntableLotteryGetRewardRspMsg {
+    optional bool ret = 1; // 返回结果
+    optional sint32 resId = 2; // 转盘抽奖任务id
+    repeated CmdGoods tlCmdGoods = 3; // 获得奖励列表
+}
+
+// 领取转盘次数奖励
+message CmdActivityLotteryGetRewardReqMsg {
+    required sint32 resId = 1; // 唯一resId，activityOpen.json的resId字段
+}
+message CmdActivityLotteryGetRewardRspMsg {
+    repeated CmdGoods tlReward = 1;
+}
+
+// 抽奖大奖日志
+message CmdLotteryLuckLog {
+    required sint32 itemId = 1; // 大奖物品id
+    required string roleName = 2; // 角色名
+}
+
+// 获取转盘大奖记录
+message CmdActivityLotteryGetLuckLogReqMsg {
+    required sint32 resId = 1; // 唯一resId，activityOpen.json的resId字段
+}
+message CmdActivityLotteryGetLuckLogRspMsg {
+    required sint32 resId = 1; // 唯一resId，activityOpen.json的resId字段
+    repeated CmdLotteryLuckLog tlLog = 2;
+}
+
+// 交互数据
+message CmdRoleInteractInfo {
+    required sint32 resId = 1; // resid
+    required sint32 state = 2; // 状态
+}
+message CmdRoleInteractInfo_Key {
+    required sint32 resId = 1; // resid
+}
+
+// 交互物件请求
+message CmdRoleInteractReqMsg {
+    required int32 resId = 1; // resid
+}
+message CmdRoleInteractRspMsg {
+    repeated CmdGoods tlCmdGoods = 1; // 活动物品
+}
+
+// 宝物
+message CmdArtifact {
+    required sint32 artifactId = 1; // 宝物将ID
+    required sint32 level = 2; // 宝物星级
+    required sint32 star = 3; // 宝物星级
+}
+message CmdArtifact_Key {
+    required sint32 artifactId = 1; // 宝物ID
+}
+
+// 宝物切页
+message CmdArtifactPage {
+    required sint32 PageId = 1; // 宝物切页ID
+    repeated sint32 artifactList = 2; // 宝物列表
+}
+message CmdArtifactPage_Key {
+    required sint32 PageId = 1; // 宝物切页ID
+}
+
+// 宝物升级
+message CmdArtifactAddLevelReqMsg {
+    required sint32 artifactId = 1; // 宝物Id
+}
+message CmdArtifactAddLevelRspMsg {
+    optional bool ret = 1;
+}
+
+// 宝物升星
+message CmdArtifactAddStarReqMsg {
+    required sint32 artifactId = 1; // 宝物Id
+}
+message CmdArtifactAddStarRspMsg {
+    optional bool ret = 1;
+}
+
+// 宝物上阵
+message CmdArtifactBattleReqMsg {
+    required sint32 pageId = 1; // 阵容Id
+    repeated sint32 artifactIds = 2; // 宝物Id列表
+}
+message CmdArtifactBattleRspMsg {
+    optional bool ret = 1;
+}
+
+// 合成物品(碎片合成)
+message CmdItemComposReqMsg {
+    required sint32 resId = 1; // id
+    required sint32 number = 2; // 数量
+}
+message CmdItemComposRspMsg {
+    repeated CmdGoods tlCmdGoods = 1; // 获得物品
+}
+
+// 阵型信息
+message CmdFormationInfo {
+  required uint32 formationId = 1; // 阵型id
+  repeated uint32 heroId = 2;      // 英雄id
+  optional uint32 select = 3;      // 1选中,0没有选中
+}
+
+message CmdFormationInfo_Key {
+  optional uint32 formationId = 1; // 阵型id
+}
+
+// 阵型信息请求
+message CmdFormationInfoReqMsg {
+}
+
+// 阵型信息响应
+message CmdFormationInfoRspMsg {
+  repeated CmdFormationInfo infos = 1; // 阵容信息
+}
+
+// 阵型操作请求
+message CmdFormationOpReqMsg {
+  required CmdFormationInfo info = 1; // 要保存的阵型
+}
+
+// 阵型操作响应
+message CmdFormationOpRspMsg {
+  required CmdFormationInfo info = 1; // 操作后的阵型
+}
+
+
+// 请求阵型选中
+message CmdFormationSelectReqMsg {
+  required uint32 formationId = 1; // 阵型id
+}
+
+// 响应阵型选中
+message CmdFormationSelectRspMsg {
+  required uint32 formationId = 1; // 阵型id
+}
+
+//宝箱协议
+message CmdNewTreasureInfo {
+  required uint32 cardBoxID = 1;//宝箱id
+  required uint32 openTime  = 2;//开启时间秒时间戳,为0则尚未开启
+  required uint32 index     = 3;//对应下标
+}
+
+// 新宝箱请求列表
+message CmdNewTreasureInfoListReqMsg {
+
+}
+
+// 新宝箱响应列表
+message CmdNewTreasureInfoListRspMsg {
+    repeated CmdNewTreasureInfo infos = 1;//宝箱列表
+}
+
+// 新宝箱请求激活
+message CmdNewTreasureActivateReqMsg {
+  required uint32 index      = 1;//对应下标
+}
+
+// 新宝箱响应激活
+message CmdNewTreasureActivateRspMsg {
+    required CmdNewTreasureInfo info = 1;//宝箱
+}
+
+// 新宝箱请求快速开启
+message CmdNewTreasureFastOpenReqMsg {
+  required uint32 index      = 1;//对应下标
+}
+
+// 新宝箱响应快速开启
+message CmdNewTreasureFastOpenRspMsg {
+      required uint32 index      = 1;//对应下标
+      required uint32 succ       = 2;//1成功2失败,收到成功移除宝箱
+      repeated CmdGoods tlCmdGoods = 3; //物品列表
+}
+
+// 新宝箱请求开启
+message CmdNewTreasureOpenReqMsg {
+      required uint32 index      = 1;//对应下标
+}
+
+// 新宝箱响应开启
+message CmdNewTreasureOpenRspMsg {
+      required uint32 index      = 1;//对应下标
+      required uint32 succ       = 2;//1成功2失败,收到成功移除宝箱
+      repeated CmdGoods tlCmdGoods = 3; //物品列表
+}
+
+// 新宝箱广播
+message CmdNewTreasureInfoBroMsg {
+    required CmdNewTreasureInfo info = 1;//宝箱
+}
+
+// pvp英雄技能信息
+message CmdPvpHeroSkillInfo {
+   required uint32 id     = 1;//等级
+   required uint32 level  = 2;//等级
+}
+
+// pvp英雄信息
+message CmdPvpHeroInfo {
+   required uint32 heroId = 1;//英雄id
+   required uint32 level  = 2;//等级
+   repeated CmdPvpHeroSkillInfo skills = 3;//技能等级
+}
+
+// pvp神器信息
+message CmdPvpArtifactInfo {
+   required uint32 artifactId = 1;//神器id
+   required uint32 level      = 2;//神器等级
+   required uint32 select     = 3;//1选中,0没有选中
+}
+
+// 请求pvp英雄列表
+message CmdPvpHeroInfoListReqMsg {
+
+}
+
+// 响应pvp英雄列表
+message CmdPvpHeroInfoListRspMsg {
+   repeated CmdPvpHeroInfo infos = 1;//列表集合
+}
+
+// 请求pvp英雄升级
+message CmdPvpHeroUpLevelReqMsg {
+   required uint32 heroId = 1;//英雄id
+}
+
+// 响应pvp英雄升级
+message CmdPvpHeroUpLevelRspMsg {
+   required CmdPvpHeroInfo info = 1;//信息
+}
+
+// 请求pvp英雄技能升级
+message CmdPvpHeroUpSkillReqMsg {
+   required uint32 heroId  = 1;//英雄id
+   required uint32 skillId = 2;//等级id
+}
+
+// 响应pvp英雄技能升级
+message CmdPvpHeroUpSkillRspMsg {
+   required CmdPvpHeroInfo info = 1;//信息
+}
+
+// 请求pvp神器列表
+message CmdPvpArtifactInfoListReqMsg {
+
+}
+
+// 响应pvp神器列表
+message CmdPvpArtifactInfoListRspMsg {
+   repeated CmdPvpArtifactInfo infos = 1;//神器集合
+}
+
+// 请求升级pvp神器
+message CmdPvpArtifactUpLevelReqMsg {
+   required uint32 artifactId = 1;//神器id
+}
+
+// 响应升级pvp神器
+message CmdPvpArtifactUpLevelRspMsg {
+   required CmdPvpArtifactInfo info = 1;//神器
+}
+
+// 请求选中pvp神器
+message CmdPvpArtifactSelectReqMsg {
+   required uint32 artifactId = 1;//神器id
+}
+
+// 响应选中pvp神器
+message CmdPvpArtifactSelectRspMsg {
+   required CmdPvpArtifactInfo info = 1;//神器
+}
+
+// pvp信息
+message CmdPvpInfo {
+   required uint32 grade  = 1;//段位
+   required uint32 score  = 2;//积分
+   required uint32 winCount  = 3;//连胜次数
+   required uint32 gradeRewardTag = 4;//奖励领取标记
+}
+
+// 战斗统计信息
+message CmdBattleStatisticsInfo {
+  required uint32 unitId     = 1;//单元id
+  required uint32 eventType  = 2;//事件类型(1,怪物波次,塔防模式使用,k固定为0,v为波次数)
+  required uint32 frameId    = 3;//帧id(某一帧触发)
+  repeated string kv         = 4;//k_v_k_v的形式(前端后约定)
+}
+
+// 请求pvp玩法信息
+message CmdPvpInfoReqMsg {
+
+}
+
+// 响应pvp玩法信息
+message CmdPvpInfoRspMsg {
+   required CmdPvpInfo info = 1;//pvp信息
+}
+
+// 请求领取pvp段位奖励
+message CmdPvpGradeRewardReqMsg {
+
+}
+
+// 响应领取pvp段位奖励
+message CmdPvpGradeRewardRspMsg {
+   required uint32 gradeRewardTag = 1;//奖励领取标记
+}
+
+// pvp战斗单元展示信息
+message CmdBattleUnitShowInfo {
+   required uint64 roleId   = 1;//角色id
+   required uint32 serverId = 2;//区服id
+   required uint32 power    = 3;//战力
+   required string name     = 4;//昵称
+   required uint64 img      = 5;//头像id
+   required uint64 headFrame = 6;//头像框id
+   required uint32 gradeId      = 7;//段位id
+   required uint32 gradeScore   = 8;//段位积分
+}
+
+// 战斗单元信息
+message CmdBattleUnitInfo {
+
+   required CmdBattleUnitShowInfo showInfo = 1;//展示信息
+
+   //战斗相关
+   required uint32 campId            = 2;//阵营id
+   repeated CmdPvpHeroInfo heroInfos = 3;//英雄集合
+   required uint32 artifactId        = 4;//神器id
+   required uint32 artifactLevel     = 5;//神器等级
+   required uint32 unitId            = 6;//单元id
+
+}
+
+// 请求战斗信息
+message CmdStartBattleInfo {
+     required uint32 battleType    = 1;//战斗类型
+     repeated string battleParams  = 2;//战斗参数(业务指定)
+}
+
+// PVE战斗结果信息
+message CmdPveBattleResultInfo {
+  required int32  addScore  = 1;//本次加减分
+  required uint32 newGrade  = 2;//新段位
+  required uint32 newScore  = 3;//新积分
+  repeated CmdGoods cmdGoods = 4;//道具奖励
+  optional uint32 treasureId  = 5;//宝箱id
+  
+}
+
+// 章节战斗结果信息(1002)
+message CmdChapterBattleResultInfo {
+  repeated CmdGoods cmdGoods = 1;//道具奖励
+  optional uint32 treasureId  = 2;//宝箱id
+}
+
+// 战斗帧信息
+message CmdBattleFrameInfo {
+  required uint32 frameId = 1;//帧id
+  required uint32 unitId  = 2;//单元id
+  required uint32 op      = 3;//操作 1翻格(参数为格子id) 2释放技能(参数为释放技能位置,如无不用传) 3聊天(参数为聊天id)
+  repeated uint32 params  = 4;//操作参数格子坐标
+}
+
+// 请求开始战斗
+message CmdStartBattleReqMsg {
+   required CmdStartBattleInfo startBattleInfo = 1;//发起战斗信息
+   optional string version = 2;//客户端版本号
+}
+
+// 响应开始战斗
+message CmdStartBattleRspMsg {
+
+   required uint32 code     = 1;//1成功,2失败
+   required uint64 seed     = 2;//随机种子
+   required string version  = 3;//版本号
+   required string battleId = 4;//战斗id
+   required CmdStartBattleInfo startBattleInfo = 5;//发起战斗信息
+   repeated CmdBattleUnitInfo unitInfos = 6;//战斗单元集合
+
+}
+
+// 请求完成战斗
+message CmdFinishBattleReqMsg {
+
+  required uint32 clientTickCount            = 1;//前端tick总数
+  required uint32 result                     = 2;//前端上报结果 1胜 2负
+  repeated CmdBattleFrameInfo commands       = 3;//关键事件流
+  repeated CmdBattleStatisticsInfo statisticsInfos = 4;//统计信息集合
+
+}
+
+// 响应完成战斗
+message CmdFinishBattleRspMsg {
+  required uint32 code = 1; //1成功
+}
+
+// 响应战斗结果(广播)
+message CmdBattleResultBroMsg {
+  required uint32 battleType = 1;//战斗类型
+  required uint32 code       = 2;//1胜 2负
+  required bytes  dataBytes  = 3;//结算数据(1001->CmdPveBattleResultInfo,)
+}
+
+// 占城 章节信息
+message ChapterInfo {
+   required uint32 idleTime = 1;//上次挂机时间戳(秒)
+   repeated uint32 chapters = 2;//章节集合
+}
+
+// 占城 章节信息请求
+message CmdCityChapterInfoReqMsg {
+
+}
+
+// 占城 章节信息响应
+message CmdCityChapterInfoRspMsg {
+   required ChapterInfo info = 1;//章节信息
+}
+
+// 占城 请求领取挂机奖励
+message CmdCityChapterIdleRewardReqMsg {
+
+}
+
+// 占城 响应领取挂机奖励
+message CmdCityChapterIdleRewardRspMsg {
+   required uint32 idleTime     = 1;//上次挂机时间戳(秒)
+   repeated CmdGoods tlCmdGoods = 2; //物品列表
+}
+
+// 占城 请求章节扫荡
+message CmdCityChapterSweepReqMsg {
+   required uint32 levelChapter   = 1;//章节
+   required uint32 cellId         = 2;//格子id
+}
+
+// 占城 响应章节扫荡
+message CmdCityChapterSweepRspMsg {
+   required uint32 succ = 1;//1成功
+   repeated CmdGoods tlCmdGoods = 2; //物品列表
+}
+
+// 占城 请求解锁格子
+message CmdCityChapterUnlockCellReqMsg {
+   required uint32 levelChapter   = 1;//章节
+   required uint32 cellId         = 2;//格子id
+}
+
+// 占城 响应解锁格子
+message CmdCityChapterUnlockCellRspMsg {
+   required uint32 levelChapter   = 1;//章节
+   repeated uint32 cellId         = 2;//格子id
+   required uint32 succ           = 3;//1成功
+   repeated CmdGoods tlCmdGoods   = 4;//物品列表
+}
+
+// 占城 请求通关格子
+message CmdCityChapterPassCellReqMsg {
+   required uint32 levelChapter   = 1;//章节
+   required uint32 cellId         = 2;//格子id
+}
+
+// 占城 响应通关格子
+message CmdCityChapterPassCellRspMsg {
+   required uint32 levelChapter   = 1;//章节
+   required uint32 cellId         = 2;//格子id
+   required uint32 succ           = 3;//1成功
+   repeated CmdGoods tlCmdGoods   = 4;//物品列表
+}
+
+// 占城 广播通关格子
+message CmdCityChapterPassCellBroMsg {
+   required uint32 levelChapter   = 1;//章节
+   repeated uint32 cellId         = 2;//格子id
+}
+
+// 占城 广播章节信息
+message CmdCityChapterInfoBroMsg {
+   required ChapterInfo info = 1;//章节信息
+}
+
+// 占城 请求章节格子信息
+message CmdCityChapterCellInfoReqMsg {
+   required uint32 levelChapter = 1;//章节id
+}
+
+// 占城 响应章节格子信息
+message CmdCityChapterCellInfoRspMsg {
+   required uint32 levelChapter = 1;//章节id
+   required uint32 rewardState  = 2;//奖励状态,0尚未领取,1已领取
+   repeated uint64 unlockCells  = 3;//解锁的格子(bitSet)
+   repeated uint64 passCells    = 4;//通关的格子集合(bitSet)
+}
+
+// 游戏接口ID类型枚举
+enum MessageId {
+	CmdTakeDayChallengeActRewardRspMsg = 1731012380; //领取每日挑战活动奖励
+	CmdTakeDayActProgressRewardRspMsg = 381806326; //领取每日挑战活动进度奖励
+	CmdTakeMonthCardActRewardRspMsg = 650624469; //领取月卡特权活动奖励
+	CmdTakeRechargeGiftActRewardRspMsg = 364759860; //领取充值好礼活动奖励
+	CmdActivityJsonRspMsg = 904212428; //读取活动json
+	CmdActivityLimitTimeInfoRspMsg = 1769777808; //限时活动信息
+	CmdActivityLimitTimeTakeRspMsg = 1469215657; //限时活动奖励领取信息
+	CmdBuySkinRspMsg = 55511540; //购买皮肤
+	CmdActivityLimitSkinInfoRspMsg = 2115460800; //限时皮肤信息
+	CmdActivityLimitSkinBuyRspMsg = 730391206; //购买限时皮肤
+	CmdActivityLotteryGetRewardRspMsg = 1615692712; //领取转盘次数奖励
+	CmdActivityLotteryGetLuckLogRspMsg = 550340320; //获取转盘大奖记录
+	CmdArmyLevelUpRspMsg = 2019044469; //兵种升级
+	CmdArmySkinAddStarRspMsg = 606377246; //兵种皮肤升星
+	CmdArmySelectSkinRspMsg = 1423980531; //选择兵种皮肤
+	CmdAdvisorAddStarRspMsg = 301757744; //军师升星
+	CmdAdvisorSelectPageRspMsg = 497519860; //选择军师阵容
+	CmdAdvisorBattleRspMsg = 821095103; //军师上阵
+	CmdAdvisorShowRspMsg = 214563142; //军师显示（站上城墙）
+	CmdGeneralAddStarRspMsg = 1417805144; //武将升星
+	CmdGeneralSelectPageRspMsg = 328735204; //选择武将阵容
+	CmdGeneralBattleRspMsg = 251282025; //武将上阵
+    CmdArtifactAddLevelRspMsg = 457117554; //宝物升级
+    CmdArtifactAddStarRspMsg = 1889730358; //宝物升星
+    CmdArtifactBattleRspMsg = 236058631; //宝物上阵
+	CmdEnterBattleRspMsg = 954352089; //进入战斗
+	CmdContinueNextBattleRspMsg = 986683025; //继续下一场战斗
+	CmdGemRefreshSkillRspMsg = 2140529010; //宝石刷新技能
+	CmdBattleDataUploadRspMsg = 1914585408; //上传数据
+	CmdBattleResultRspMsg = 475498478; //战斗结算
+	CmdBattleStatisticsRspMsg = 881202280; //战斗统计上报
+	CmdTakeChapterRewardRspMsg = 1792000898; //领取章节奖励
+	CmdBattleSweepRspMsg = 70842819; //扫荡
+	CmdBattleRandomSkillRspMsg = 140321439; //随机技能
+	CmdBattleSelectSkillRspMsg = 355247302; //选择技能
+	CmdBattlePreviewRspMsg = 1720724839; //奖励预览
+	CmdBattleCompleteInfoRspMsg = 1330132868; //通关人数
+	CmdBattleTeamEnterRspMsg = 135638924; //请求进入双人战斗
+	CmdBattleTeamUpdateRspMsg = 1515286085; //双人战斗数据更新请求
+	CmdBattleBuyBlessRspMsg = 1331629962; //购买天官赐福请求
+	CmdBattleTokenOpenRspMsg = 224520948; //购买战令
+	CmdBattleTokenTakeRewardRspMsg = 2063652608; //战令奖励领取
+	CmdBattleTokenResetRspMsg = 952348427; //战令重置
+	CmdBreachRspMsg = 287063570; //请求突破
+	CmdBuyStaBuyRspMsg = 730345707; //请求购买
+	CmdBuyStaInfoRspMsg = 2114050331; //请求信息
+	CmdCardBuyRspMsg = 579891201; //购买月卡
+	CmdCastleSkillUpLevelRspMsg = 21015693; //城墙 技能书升级
+	CmdCastleSkillResearchRspMsg = 1359547363; //城墙 技能书密研
+	CmdCastleWorkShopOpenRspMsg = 1776254022; //城墙 工坊解锁
+	CmdCastleWorkShopUpLevelRspMsg = 581980397; //城墙 工坊升级
+	CmdCastleWorkShopSpeedRspMsg = 367202545; //城墙 工坊升级加速
+	CmdCastleWorkShopTakeRspMsg = 310061251; //城墙 工坊领取奖励
+	CmdCastleApprenticeUpRspMsg = 1220313759; //城墙 学徒上阵
+	CmdCastleApprenticeUpLevelRspMsg = 492743159; //城墙 学徒升级
+	CmdCastleWallUpLevelRspMsg = 157500720; //城墙 升级
+	CmdCastleWallQualityUpRspMsg = 486054753; //城堡 突破（废弃）
+	CmdCastleWallSelectRspMsg = 108080165; //城墙 选择显示外形
+	CmdCastleWallUpSkillLevelRspMsg = 2070127885; //城墙 技能升级
+	CmdCastleWallSkinUpStarRspMsg = 668984887; //城墙 皮肤（幻形）升星
+	CmdCastleWallSelectSkillPageRspMsg = 303108149; //城墙 选择技能切页
+	CmdCastleWallSelectSkillRspMsg = 64167132; //城墙 选择上阵技能
+	CmdCastleGuardsActiveRspMsg = 393859209; //城墙 近卫激活
+	CmdCastleGuardsLevelUpRspMsg = 1218372674; //城墙 近卫升级
+	CmdCastleGuardsRankUpRspMsg = 1054187350; //城墙 近卫升品
+	CmdCastleGuardsUpRspMsg = 1134916514; //城墙 近卫上阵
+	CmdChatInitRspMsg = 691376229; //初始化聊天数据
+	CmdChatSendRspMsg = 917389533; //用户发送聊天
+	CmdChatDelTargetRspMsg = 63079597; //从聊天对象列表删除聊天对象
+    CmdCityChapterInfoRspMsg = 904257191; //占城 章节信息请求
+    CmdCityChapterIdleRewardRspMsg = 1309083890; //占城 请求领取挂机奖励
+    CmdCityChapterSweepRspMsg = 1335059463; //占城 请求章节扫荡
+    CmdCityChapterUnlockCellRspMsg = 45711217; //占城 请求解锁格子
+    CmdCityChapterPassCellRspMsg = 1560327682; //占城 请求通关格子
+    CmdCityChapterCellInfoRspMsg = 1137184677; //占城 请求章节格子信息
+	CmdDayWeekMonthGiftGetRewardRspMsg = 1356079122; //领取奖励
+	CmdDayWeekMonthGiftInfoRspMsg = 1005269291; //请求数据
+	CmdDayWeekMonthGiftFreeBuyRspMsg = 355499005; //免费购买
+	CmdEquipUpLevelAllRspMsg = 1246543183; //装备一键升级
+	CmdEquipUpLevelRspMsg = 154590858; //装备升级
+	CmdEquipSelectPageRspMsg = 806986012; //选择装备页数
+	CmdEquipChangePageNameRspMsg = 918039683; //装备页签改名
+	CmdEquipUpQualityRspMsg = 24217329; //装备升品
+	CmdEquipWashRspMsg = 211219800; //装备洗炼
+	CmdEquipWashConformRspMsg = 1592294924; //装备洗炼确认
+	CmdEquipDecomposeRspMsg = 1476438722; //装备分解
+	CmdEquipReplaceRspMsg = 152967745; //穿戴（替换）装备
+	CmdEveryDaySignInInfoRspMsg = 1133773426; //每日签到信息
+	CmdEveryDaySignInRspMsg = 1704555072; //请求签到
+	CmdEveryDayGetRewardsRspMsg = 1935261292; //领取奖励
+	CmdFirstRechargeOpenRspMsg = 938272586; //打开界面
+	CmdFirstRechargesBuyRspMsg = 1309919437; //购买首充请求
+	CmdFirstRechargeRewardRspMsg = 622072529; //领取首充奖励请求
+    CmdFormationInfoRspMsg = 1211220072; //阵型信息请求
+    CmdFormationOpRspMsg = 1506971931; //阵型操作请求	
+	CmdFriendsApplyRspMsg = 2057674506; //好友申请
+	CmdFriendsAddRspMsg = 552573225; //通过好友申请
+	CmdFriendsRefuseRspMsg = 1262322162; //拒绝好友申请
+	CmdFriendsRemoveRspMsg = 1219983774; //删除好友
+	CmdFriendsBlackRspMsg = 227867847; //拉黑好友
+	CmdFriendBlackRemoveRspMsg = 78131250; //移除黑名单
+	CmdFriendsSearchRspMsg = 246249338; //好友搜索
+	CmdFriendGetEndRspMsg = 2055097216; //领取体力
+	CmdFriendGetEndOneKeyRspMsg = 437546553; //一键领取体力
+	CmdFriendSendEndRspMsg = 1466069662; //赠送体力
+	CmdFriendSendEndOneKeyRspMsg = 384409047; //一键赠送体力
+	CmdFriendAgreeOneKeyRspMsg = 1277358288; //一键同意
+	CmdFriendRefuseOneKeyRspMsg = 1734010408; //一键拒绝
+	CmdFriendRefreshSuggestRspMsg = 429905916; //刷新推荐好友数据
+	CmdFuBenEnterRspMsg = 827208359; //进入副本
+	CmdFuBenDailyGetRewardRspMsg = 1528771729; //获取副本每日奖励
+	CmdFuBenBuyTimesRspMsg = 427584667; //购买副本次数请求
+	CmdFuBenSweepRspMsg = 1878627949; //副本扫荡请求
+	CmdFundGetInfoRspMsg = 510764152; //请求信息
+	CmdFundGetRewardRspMsg = 1902555017; //领取奖励
+	CmdTakeGameCircleRewardRspMsg = 1855584437; //领取游戏圈任务奖励
+	CmdGemOnRspMsg = 723509321; //穿戴宝石
+	CmdGemReplaceRspMsg = 1557847038; //替换宝石
+	CmdGemDownRspMsg = 561910022; //卸下宝石
+	CmdGemRefineRspMsg = 346087611; //洗练宝石
+	CmdGemRefineSaveRspMsg = 1149209122; //洗练 保存
+	CmdGemComposeRspMsg = 1565473696; //合成宝石
+	CmdGemLockRspMsg = 998030141; //锁定宝石
+	CmdGemComposePreviewRspMsg = 1938966802; //合成预览
+	CmdGranaryGetRspMsg = 4384515; //粮仓领取
+	CmdGranaryGetOneKeyRspMsg = 914853252; //粮仓一键领取
+	CmdGuideRecordRspMsg = 353871062; //新手引导记录
+	CmdGuideReadRspMsg = 142005541; //客户端读取新手引导记录
+	CmdGetHallRoleListRspMsg = 1624091372; //获取大厅玩家信息
+	CmdHangQuickRspMsg = 1023337980; //快速巡逻（暂未用到）
+	CmdHangTimeRspMsg = 20353276; //巡逻（暂未用到）时长
+	CmdHangGetRewardRspMsg = 1443586620; //获取巡逻（挂机）奖励
+	CmdHeroChangeRspMsg = 302212057; //切换英雄
+	CmdHeroLevelUpRspMsg = 914609230; //英雄升级
+	CmdHeroLevelUpOneKeyRspMsg = 200868985; //英雄升级
+	CmdHeroOpenRspMsg = 1722636353; //打开界面
+	CmdHeroUnlockGetInfoRspMsg = 647497073; //打开英雄解锁界面
+	CmdHeroUnlockRewardRspMsg = 2024711478; //领取英雄
+	CmdItemUseRspMsg = 486417821; //使用物品
+	CmdItemBoxUseRspMsg = 522720460; //使用宝箱
+    CmdItemComposRspMsg = 1879302909; //合成物品(碎片合成)
+	CmdLeaderSkillBattleRspMsg = 100005559; //主公技上阵
+	CmdLeaderSkillShowRspMsg = 1149390670; //主公技形象显示
+	CmdLeaderSkillUpgradeRspMsg = 77042543; //主公技升级
+	CmdTakeLockMonsterBoxRspMsg = 1090703712; //领取过关斩将宝箱奖励
+	CmdLockMonsterSweepRspMsg = 421431834; //过关斩将扫荡
+	CmdMailListRspMsg = 319013138; //邮件列表
+	CmdMailReadRspMsg = 546189302; //查看邮件
+	CmdMailDeleteRspMsg = 172353567; //删除邮件
+	CmdMailTakeRewardRspMsg = 555367350; //获取邮件奖励
+	CmdMallSEquipDrawRspMsg = 163390926; //S级战备抽奖
+	CmdMallLuckDrawRspMsg = 1193344794; //升官发财抽奖
+	CmdMallDailyShopBuyRspMsg = 1185112280; //每日商店购买
+	CmdMallCoinBuyRspMsg = 115313430; //金币购买
+	CmdMallGetDataRspMsg = 1322643093; //商城请求全部数据
+	CmdMonsterManualGetRewardRspMsg = 1031509406; //领取怪物图鉴奖励
+    CmdNewTreasureInfoListRspMsg = 2011197980; //新宝箱请求列表
+    CmdNewTreasureActivateRspMsg = 399007957; //新宝箱请求激活
+    CmdNewTreasureFastOpenRspMsg = 291587262; //新宝箱请求快速开启	
+	CmdTakeOathAllianceRewardRspMsg = 271053488; //领取誓盟之战每日奖励
+    CmdPvpHeroInfoListRspMsg = 1516169721; //请求pvp英雄列表
+    CmdPvpHeroUpLevelRspMsg = 937856670; //请求pvp英雄升级
+    CmdPvpHeroUpSkillRspMsg = 473853329; //请求pvp英雄技能升级
+    CmdPvpArtifactInfoListRspMsg = 214080977; //请求pvp神器列表
+    CmdPvpArtifactUpLevelRspMsg = 1929634442; //请求升级pvp神器
+    CmdPvpArtifactSelectRspMsg = 1344720097; //请求选中pvp神器	
+    CmdPvpInfoRspMsg = 45368353; //请求pvp玩法信息
+    CmdPvpGradeRewardRspMsg = 1849483705; //请求领取pvp段位奖励
+    CmdStartBattleRspMsg = 1785200541; //请求开始战斗
+    CmdFinishBattleRspMsg = 975557688; //请求完成战斗
+	CmdGetRankRspMsg = 345265589; //获取排行榜
+	CmdGetChapterFirstPassListRspMsg = 518424945; //获取章节首次通关信息列表
+	CmdGetChapterFirstPassRewardRspMsg = 1035774786; //获取章节首次通关排行奖励
+	CmdCelebrationGetTargetRewardRspMsg = 1808065367; //获取开服庆典目标奖励
+	CmdCelebrationBuyShopGoodsRspMsg = 1473298867; //购买开服庆典购买特惠礼包
+	CmdRechargeDailyGetRewardRspMsg = 203020112; //领取每日充值每日奖励
+	CmdRechargeDailyGetAccRewardRspMsg = 599406123; //领取每日充值累积奖励
+	CmdUpdateRedDotRspMsg = 87323966; //更新红点
+	CmdGoodsRedDotDispelRspMsg = 805392448; //物品红点消除
+	CmdRoleLoginRspMsg = 158618628; //用户注册请求message CmdRoleRegisterReqMsg { required CmdClientInfo cmdClientInfo = 1; // 客户端信息 required int32 platform = 2; // 平台Id。默认为0 required string code = 3; // 平台用户编号 required string token = 4; // 签名字段 required int64 roleId = 5; // 角色Id required int64 time = 6; // 时间 required int32 sex = 7; // 性别(1:男，2:女) optional string name = 8; // 角色名 optional string avatar = 9; //头像}message CmdRoleRegisterRspMsg { required int32 status = 1; // 0：成功注册·，1：角色已存在，2：注册失败}用户登陆请求
+	CmdRoleChangeNameRspMsg = 1996633358; //修改名字
+	CmdRoleChangeImgRspMsg = 912768250; //修改头像
+	CmdRoleUploadPlatformImgRspMsg = 225100382; //上传平台头像
+	CmdRoleChangeHeadFrameRspMsg = 2075087664; //修改头像框
+	CmdEndBuyInfoRspMsg = 1357989782; //体力购买信息
+	CmdEndBuyRspMsg = 1695409208; //体力购买
+	CmdRoleEndUpdateRspMsg = 1865990615; //体力更新
+	CmdMiningBuyRspMsg = 1065397953; //挖矿购买
+	CmdCodeExchangeRspMsg = 452401139; //礼包码兑换
+	CmdRoleTakeFirstChargeRspMsg = 17475600; //首充礼包领取
+	CmdRoleWatchAdvertRspMsg = 1151490410; //广告
+	CmdRoleInfoViewRspMsg = 1505925414; //玩家信息查看
+	CmdRoleDouYinRewardRspMsg = 1594668726; //抖音
+	CmdRoleAppletShareRspMsg = 1597596872; //分享
+	CmdRoleAppletShareRewardRspMsg = 1186069383; //领取分享奖励
+	CmdRoleGuanKaGiftSelectRspMsg = 1810611536; //关卡礼包选择
+	CmdRoleGuanKaGiftBuyRspMsg = 549296840; //关卡礼包购买
+	CmdRoleQuestionClickRspMsg = 690020587; //调查问卷
+	CmdRoleInteractRspMsg = 1678080855; //交互物件请求
+	CmdRunePutOnRspMsg = 648739037; //穿戴符文
+	CmdRuneTakeOffRspMsg = 887086199; //卸下符文
+	CmdRuneReplaceRspMsg = 224396995; //替换符文
+	CmdRuneSynthesisRspMsg = 1308719965; //符文合成
+	CmdRuneSynthesisOneKeyRspMsg = 1160730652; //符文一键合成
+	CmdShareGetRewardRspMsg = 883372771; //分享有礼领奖
+	CmdShareStateRspMsg = 669018575; //分享状态
+	CmdShopBuyRspMsg = 1338068263; //商店购买
+	CmdContinuityGiftInfoRspMsg = 1330212203; //连续礼包信息
+	CmdContinuityGiftRewardRspMsg = 1554306220; //连续礼包奖励
+	CmdContinuityGiftFinishRewardRspMsg = 402025121; //连续礼包完成奖励
+	CmdTakeSpiritAnimalBoxRspMsg = 923167072; // 领取灵兽进度宝箱奖励
+	CmdChangeUsedSkinRspMsg = 1911316089; //切换皮肤
+	CmdSpiritAnimalLevelUpRspMsg = 2051518427; //灵兽升级
+	CmdSpiritAnimalStepUpRspMsg = 1991681903; //灵兽升阶
+	CmdSpiritAnimalBattleRspMsg = 1439043070; //灵兽上阵
+	CmdSpiritAnimalResetRspMsg = 454379051; //灵兽重置
+	CmdSpiritAnimalResetPreviewRspMsg = 1924442819; //灵兽重置预览
+	CmdSystemSyncTimeRspMsg = 2058086284; //同步时间
+	CmdSystemGmRspMsg = 1915513454; //Gm命令
+	CmdGmListRspMsg = 323387391; //Gm命令列表
+	CmdRecordClientAniRspMsg = 855569897; //记录客户端已播放的动画
+	CmdGetAllPlayClientAniRspMsg = 1343478075; //客户端获取已播放的动画
+	CmdSevenDayInfoRspMsg = 867503290; //七日狂欢信息
+	CmdSevenDayShopBuyRspMsg = 1979875530; //七日狂欢 商城购买
+	CmdSevenDayTakeTaskRewardRspMsg = 328767495; //七日狂欢 领取任务奖励
+	CmdSevenDayTakePointRewardRspMsg = 1539905038; //七日狂欢 获取积分奖励
+	CmdSigninInfoRspMsg = 946249011; //签到信息
+	CmdSigninTakeTaskRewardRspMsg = 75320742; //签到 领取任务奖励
+	CmdTakeMainTaskRewardRspMsg = 189258127; //领取主线任务奖励请求
+	CmdTaskUnionGetRewardRspMsg = 1155347992; //请求领取联盟任务奖励
+	CmdTaskUnionGetProgressRewardRspMsg = 779946725; //请求领取联盟任务进度奖励
+	CmdTaskTurntableLotteryGetRewardRspMsg = 1308198127; //请求领取转盘抽奖任务奖励
+	CmdTeamInitRspMsg = 1260780842; //初始化组队数据
+	CmdTeamCreateRspMsg = 85784150; //用户创建组队
+	CmdTeamInviteRspMsg = 1162344797; //用户邀请组队
+	CmdTeamReplyInviteRspMsg = 2136264863; //回复邀请组队
+	CmdTeamQuitRspMsg = 78606551; //用户退出队伍
+	CmdTeamKickRspMsg = 50565600; //踢出队伍
+	CmdTeamRecruitInitRspMsg = 1960461510; //初始化招募数据
+	CmdTeamRecruitSendRspMsg = 1734448206; //用户发布招募
+	CmdTeamRecruitJoinRspMsg = 699516972; //加入招募
+	CmdUnionBargainRspMsg = 845972768; //请求砍价或购买
+	CmdUnionActListRspMsg = 1121112734; //联盟活动请求列表
+	CmdUnionActDrumRspMsg = 879094694; //联盟活动请求擂鼓
+	CmdUnionActSweepRspMsg = 1708291410; //联盟活动请求扫荡
+	CmdUnionCreateRspMsg = 1480156308; //创建联盟
+	CmdUnionJoinRspMsg = 1114808446; //申请(快速)加入联盟
+	CmdUnionApproveJoinRspMsg = 759231909; //批准或拒绝加入
+	CmdUnionApproveJoinOneKeyRspMsg = 790265954; //一键批准或拒绝
+	CmdUnionQuitRspMsg = 579826919; //退出联盟
+	CmdUnionKickRspMsg = 708999070; //踢出联盟
+	CmdUnionAppointRspMsg = 1310063537; //任命职位
+	CmdUnionSetQuickJoinRspMsg = 483032179; //设置快速加入
+	CmdUnionEditRspMsg = 695023518; //修改请求 1名字，2微信号，3公告，4宣言
+	CmdUnionDetailRspMsg = 473581609; //请求详情
+	CmdUnionApplyListRspMsg = 1880253510; //请求申请列表
+	CmdUnionLogRspMsg = 1410480146; //请求动态
+	CmdUnionListRspMsg = 2025245686; //请求联盟列表
+	CmdUnionSearchRspMsg = 64682048; //请求搜索
+	CmdUnionDonateRspMsg = 936504263; //请求捐献
+	CmdBattleTeamEnterBroMsg = 310481301; //进入双人战斗广播
+	CmdBattleTeamUpdateBroMsg = 1961406310; //双人战斗数据更新广播
+	CmdBattleBuyBlessBroMsg = 885509737; //购买天官赐福广播
+	CmdBattleTokenOpenBroMsg = 221599277; //购买战令广播
+	CmdCardBuyBroMsg = 1026011426; //购买月卡广播
+	CmdCastleGuardsActiveBroMsg = 52261016; //近卫激活广播
+	CmdChatBroMsg = 754420972; //聊天广播数据
+    CmdCityChapterPassCellBroMsg = 2006447907; //占城 广播通关格子
+    CmdCityChapterInfoBroMsg = 1350377416; //占城 广播章节信息	
+	CmdCacheBroMsg = 331957642; //缓存广播
+	CmdRoleOfflineBroMsg = 2041625045; //玩家被踢下线...情况
+	CmdRechargeBroMsg = 495748573; //充值广播
+	CmdModifyItemBroMsg = 658416489; //通用获得物品广播
+	CmdBattleBroMsg = 1253466612; //服务端广播未完成战斗
+	CmdMallBroMsg = 528672976; //商城广播更新数据
+	CmdEndBroMsg = 1882529373; //体力广播更新数据
+	CmdFirstRechargesBuyBroMsg = 1756039662; //购买首充广播
+	CmdFriendsApplyBroMsg = 1791172565; //好友申请通知
+	CmdFriendsAddBroMsg = 106453000; //通过好友通知
+	CmdFriendsRefuseBroMsg = 816201937; //拒绝好友申请通知
+	CmdFriendsRemoveBroMsg = 1666103999; //删除好友通知
+	CmdFriendSendEndBroMsg = 1019949437; //赠送好友体力通知
+	CmdFriendSendEndOneKeyBroMsg = 61711178; //一键赠送好友体力广播
+	CmdFriendAgreeOneKeyBroMsg = 831238063; //一键同意好友广播
+	CmdFriendRefuseOneKeyBroMsg = 1287890183; //一键拒绝好友广播
+	CmdGranaryUpdateBroMsg = 789546177; //粮仓列表更新
+	CmdRefreshLimitedTimeBundleBroMsg = 1678727286; //刷新限时礼包广播
+	CmdBuyLimitedTimeBundleBroMsg = 937248641; //购买限时礼包广播
+	CmdRollBroMsg = 11546745; //提示飘字广播
+	CmdMonsterManualActiveBroMsg = 1339999214; //激活怪物图鉴广播
+    CmdNewTreasureInfoBroMsg = 779511813; //新宝箱广播
+    CmdBattleResultBroMsg = 921618703; //响应战斗结果(广播)
+	CmdCelebrationUpdateDataBroMsg = 1157544859; //开服庆典更新协议广播
+	CmdCelebrationBuyShopGoodsBroMsg = 1919419092; //购买开服庆典购买特惠礼包广播
+	CmdRechargeDailyUpdateBroMsg = 161909789; //每日充值数据刷新
+	CmdGuanKaGiftBroMsg = 915823971; //限时礼包
+	CmdTeamDetailBroMsg = 1366910774; //队伍详情广播
+	CmdTeamDisbandBroMsg = 2097470162; //队伍解散广播
+	CmdTeamInviteBroMsg = 1608465022; //邀请组队
+	CmdTeamReplyInviteBroMsg = 1690144638; //回复邀请组队
+	CmdTeamRecruitSendBroMsg = 2114398865; //用户发布招募
+	CmdTeamKickBroMsg = 395554625; //踢出队伍广播
+	CmdUnionApproveJoinBroMsg = 313111684; //批准或拒绝加入广播
+	CmdUnionInfoUpdateBroMsg = 434491086; //联盟信息刷新广播
+	CmdUnionMemberListUpdateBroMsg = 1523089848; //联盟成员列表刷新广播
+	CmdUnionApplyListUpdateBroMsg = 520724354; //联盟申请列表刷新广播
+	CmdUnionLogListUpdateBroMsg = 196894184; //联盟动态列表刷新广播
+	CmdUnionListUpdateBroMsg = 505721534; //联盟列表刷新广播
+	CmdUnionTaskListUpdateBroMsg = 2080473117; //联盟任务列表刷新广播
+}

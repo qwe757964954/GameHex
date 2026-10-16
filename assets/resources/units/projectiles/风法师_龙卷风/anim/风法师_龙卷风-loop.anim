@@ -1,0 +1,155 @@
+{
+  "__type__": "cc.AnimationClip",
+  "_name": "风法师_龙卷风-loop",
+  "_objFlags": 0,
+  "_native": "",
+  "sample": 12,
+  "speed": 1,
+  "wrapMode": 2,
+  "events": [],
+  "_duration": 2.0833333333,
+  "_keys": [],
+  "_stepness": 0,
+  "curveDatas": {},
+  "_curves": [],
+  "_commonTargets": [],
+  "_hash": 0,
+  "_tracks": [
+    {
+      "__type__": "cc.animation.ObjectTrack",
+      "_binding": {
+        "__type__": "cc.animation.TrackBinding",
+        "path": {
+          "__type__": "cc.animation.TrackPath",
+          "_paths": [
+            {
+              "__type__": "cc.animation.ComponentPath",
+              "component": "cc.Sprite"
+            },
+            "spriteFrame"
+          ]
+        },
+        "proxy": null
+      },
+      "_channel": {
+        "__type__": "cc.animation.Channel",
+        "_curve": {
+          "__type__": "cc.ObjectCurve",
+          "_times": [
+            0.0,
+            0.0833333333,
+            0.1666666667,
+            0.25,
+            0.3333333333,
+            0.4166666667,
+            0.5,
+            0.5833333333,
+            0.6666666667,
+            0.75,
+            0.8333333333,
+            0.9166666667,
+            1.0,
+            1.0833333333,
+            1.1666666667,
+            1.25,
+            1.3333333333,
+            1.4166666667,
+            1.5,
+            1.5833333333,
+            1.6666666667,
+            1.75,
+            1.8333333333,
+            1.9166666667,
+            2.0
+          ],
+          "_values": [
+            {
+              "__uuid__": "72dc3e89-d37a-4c59-bcba-5cbba71cfee6@f9941"
+            },
+            {
+              "__uuid__": "bc550d30-50ec-4049-878b-ea76ca2c0b7d@f9941"
+            },
+            {
+              "__uuid__": "9e37e7d8-b225-468c-8cf8-8b853eaca826@f9941"
+            },
+            {
+              "__uuid__": "d1326267-78cd-4c01-8181-7cf820c6f9b0@f9941"
+            },
+            {
+              "__uuid__": "aac7c782-59cf-43b9-8c96-942d2f3c1905@f9941"
+            },
+            {
+              "__uuid__": "4efb1a19-9652-4137-a1e3-8f0fb231aa71@f9941"
+            },
+            {
+              "__uuid__": "e860c3ac-9443-4170-b2aa-52df9380518e@f9941"
+            },
+            {
+              "__uuid__": "ba19f041-f13b-4ba2-b653-96162ac6effa@f9941"
+            },
+            {
+              "__uuid__": "b0671cbf-8131-4ec9-a6cf-8e55259d237a@f9941"
+            },
+            {
+              "__uuid__": "cef21053-0f75-40c7-a800-b1935cacd5ce@f9941"
+            },
+            {
+              "__uuid__": "8ab47cb9-89e1-4a9f-8cdb-aea59d63137f@f9941"
+            },
+            {
+              "__uuid__": "a6731ee6-f25e-42b8-8c34-f33d0f909df5@f9941"
+            },
+            {
+              "__uuid__": "e38758d7-c377-4543-8d45-a42223afcdec@f9941"
+            },
+            {
+              "__uuid__": "00492341-6c70-4f12-b7aa-4142e05a6545@f9941"
+            },
+            {
+              "__uuid__": "cf792bc4-14da-4f90-81d2-79b805796b93@f9941"
+            },
+            {
+              "__uuid__": "a3671d15-5439-4b20-a06e-5d4fa7ace97d@f9941"
+            },
+            {
+              "__uuid__": "61d39d54-f199-4f41-a294-7751f5a49b6a@f9941"
+            },
+            {
+              "__uuid__": "bcfd8ed6-8d1c-47e7-b4bd-3d5e4d8c2781@f9941"
+            },
+            {
+              "__uuid__": "582bbd47-4cd9-4ad6-88b4-ebcda061f40e@f9941"
+            },
+            {
+              "__uuid__": "0e7cda9a-5ced-441e-8114-8bdf6b708e6f@f9941"
+            },
+            {
+              "__uuid__": "a44d3455-659f-494b-9c4e-3c3e30d24897@f9941"
+            },
+            {
+              "__uuid__": "b5c7b45c-e2a5-4fae-a5d1-51d82046a109@f9941"
+            },
+            {
+              "__uuid__": "624eeef3-dd86-448a-bb3c-032b89176ed6@f9941"
+            },
+            {
+              "__uuid__": "883a06bd-3014-47a0-b690-87a35b9f1cab@f9941"
+            },
+            {
+              "__uuid__": "8a823292-63f4-413e-8493-786e58e205c5@f9941"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "_exoticAnimation": null,
+  "_events": [],
+  "_embeddedPlayers": [],
+  "_additiveSettings": {
+    "__type__": "cc.AnimationClipAdditiveSettings",
+    "enabled": false,
+    "refClip": null
+  },
+  "_auxiliaryCurveEntries": []
+}

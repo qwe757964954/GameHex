@@ -1,0 +1,11 @@
+[{"type":0,"star":1,"costs":[{"number":999,"resId":10019}],"name":"默认阵法","icon":"图标_技能_惊雷咒","desc":"全体攻击力+30","desc2":"城墙耐久+5000","model":"城墙默认"},
+{"type":1,"star":1,"costs":[{"number":1,"resId":10601}],"name":"熔岩城墙","modify":[36800094],"modify2":[36760001],"icon":"城池_皮肤技能_1","desc":"全体攻击力+30","desc2":"城墙耐久+5000","model":"城墙皮肤1"},
+{"type":1,"star":2,"costs":[{"number":1,"resId":10601}],"name":"熔岩城墙","modify":[36800070],"modify2":[36760002],"icon":"城池_皮肤技能_1","desc":"全体攻击力+40","desc2":"城墙耐久+10000","model":"城墙皮肤1"},
+{"type":1,"star":3,"costs":[{"number":1,"resId":10601}],"name":"熔岩城墙","modify":[36800046],"modify2":[36760003],"icon":"城池_皮肤技能_1","desc":"全体攻击力+50","desc2":"城墙耐久+15000","model":"城墙皮肤1"},
+{"type":1,"star":4,"costs":[{"number":1,"resId":10601}],"name":"熔岩城墙","modify":[36800023],"modify2":[36760004],"icon":"城池_皮肤技能_1","desc":"全体攻击力+60","desc2":"城墙耐久+20000","model":"城墙皮肤1"},
+{"type":1,"star":5,"costs":[{"number":1,"resId":10601}],"name":"熔岩城墙","modify":[36800001],"modify2":[36760005],"icon":"城池_皮肤技能_1","desc":"全体攻击力+70","desc2":"城墙耐久+25000","model":"城墙皮肤1"},
+{"type":2,"star":1,"costs":[{"number":1,"resId":10602}],"name":"冰晶城墙","modify":[36800095],"modify2":[36760001],"icon":"城池_皮肤技能_2","desc":"全体暴击率+3%","desc2":"城墙耐久+5000","model":"城墙皮肤2"},
+{"type":2,"star":2,"costs":[{"number":1,"resId":10602}],"name":"冰晶城墙","modify":[36800071],"modify2":[36760002],"icon":"城池_皮肤技能_2","desc":"全体暴击率+4%","desc2":"城墙耐久+10000","model":"城墙皮肤2"},
+{"type":2,"star":3,"costs":[{"number":1,"resId":10602}],"name":"冰晶城墙","modify":[36800047],"modify2":[36760003],"icon":"城池_皮肤技能_2","desc":"全体暴击率+5%","desc2":"城墙耐久+15000","model":"城墙皮肤2"},
+{"type":2,"star":4,"costs":[{"number":1,"resId":10602}],"name":"冰晶城墙","modify":[36800024],"modify2":[36760004],"icon":"城池_皮肤技能_2","desc":"全体暴击率+6%","desc2":"城墙耐久+20000","model":"城墙皮肤2"},
+{"type":2,"star":5,"costs":[{"number":1,"resId":10602}],"name":"冰晶城墙","modify":[36800002],"modify2":[36760005],"icon":"城池_皮肤技能_2","desc":"全体暴击率+7%","desc2":"城墙耐久+25000","model":"城墙皮肤2"}]

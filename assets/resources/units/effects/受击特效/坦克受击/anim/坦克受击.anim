@@ -1,0 +1,78 @@
+{
+  "__type__": "cc.AnimationClip",
+  "_name": "坦克受击",
+  "_objFlags": 0,
+  "_native": "",
+  "sample": 18,
+  "speed": 1,
+  "wrapMode": 1,
+  "events": [],
+  "_duration": 0.444444,
+  "_keys": [],
+  "_stepness": 0,
+  "curveDatas": {},
+  "_curves": [],
+  "_commonTargets": [],
+  "_hash": 0,
+  "_tracks": [
+    {
+      "__type__": "cc.animation.ObjectTrack",
+      "_binding": {
+        "__type__": "cc.animation.TrackBinding",
+        "path": {
+          "__type__": "cc.animation.TrackPath",
+          "_paths": [
+            {
+              "__type__": "cc.animation.ComponentPath",
+              "component": "cc.Sprite"
+            },
+            "spriteFrame"
+          ]
+        },
+        "proxy": null
+      },
+      "_channel": {
+        "__type__": "cc.animation.Channel",
+        "_curve": {
+          "__type__": "cc.ObjectCurve",
+          "_times": [
+            0.0,
+            0.055555556,
+            0.111111111,
+            0.166666667,
+            0.222222222,
+            0.277777778,
+            0.333333333,
+            0.388888889
+          ],
+          "_values": [
+            {
+              "__uuid__": "18992d9b-f6cd-4e2b-8ad8-262a0804831d@f9941"
+            },
+            {
+              "__uuid__": "8ed3d61f-13f1-4a27-b88b-71048e97aa8d@f9941"
+            },
+            {
+              "__uuid__": "1827f072-bdf1-41e3-a139-7b927e0e0baa@f9941"
+            },
+            {
+              "__uuid__": "1b678aa6-bf09-433f-b3f2-e57a7a58547d@f9941"
+            },
+            {
+              "__uuid__": "6c16ab35-bf97-46c8-8a79-c9413b378133@f9941"
+            },
+            {
+              "__uuid__": "946fe10d-e10f-4763-800f-ea838afabf2f@f9941"
+            },
+            {
+              "__uuid__": "1a28e474-7341-4447-8e4e-4d86118377b0@f9941"
+            },
+            {
+              "__uuid__": "c9cf4274-ec6c-490a-b106-32b7f19d0c82@f9941"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

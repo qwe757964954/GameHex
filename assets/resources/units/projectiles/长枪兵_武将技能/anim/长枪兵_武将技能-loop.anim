@@ -1,0 +1,119 @@
+{
+  "__type__": "cc.AnimationClip",
+  "_name": "长枪兵_武将技能-loop",
+  "_objFlags": 0,
+  "_native": "",
+  "sample": 12,
+  "speed": 1,
+  "wrapMode": 2,
+  "events": [],
+  "_duration": 1.3333333333,
+  "_keys": [],
+  "_stepness": 0,
+  "curveDatas": {},
+  "_curves": [],
+  "_commonTargets": [],
+  "_hash": 0,
+  "_tracks": [
+    {
+      "__type__": "cc.animation.ObjectTrack",
+      "_binding": {
+        "__type__": "cc.animation.TrackBinding",
+        "path": {
+          "__type__": "cc.animation.TrackPath",
+          "_paths": [
+            {
+              "__type__": "cc.animation.ComponentPath",
+              "component": "cc.Sprite"
+            },
+            "spriteFrame"
+          ]
+        },
+        "proxy": null
+      },
+      "_channel": {
+        "__type__": "cc.animation.Channel",
+        "_curve": {
+          "__type__": "cc.ObjectCurve",
+          "_times": [
+            0.0,
+            0.0833333333,
+            0.1666666667,
+            0.25,
+            0.3333333333,
+            0.4166666667,
+            0.5,
+            0.5833333333,
+            0.6666666667,
+            0.75,
+            0.8333333333,
+            0.9166666667,
+            1.0,
+            1.0833333333,
+            1.1666666667,
+            1.25
+          ],
+          "_values": [
+            {
+              "__uuid__": "9ce1f4fb-7645-4a7e-8530-ede87a78a12a@f9941"
+            },
+            {
+              "__uuid__": "4ccdf13e-3b18-4efe-a8ac-4217dc3e6018@f9941"
+            },
+            {
+              "__uuid__": "e6c47c7a-63bf-4584-81f3-3466d3875f3a@f9941"
+            },
+            {
+              "__uuid__": "1d35b68f-d095-4b21-9f96-c120709e5f77@f9941"
+            },
+            {
+              "__uuid__": "2bfaa2fb-db17-416a-a11d-6bad53c378da@f9941"
+            },
+            {
+              "__uuid__": "1a925c19-72f5-4139-84f1-c2a7b92747a4@f9941"
+            },
+            {
+              "__uuid__": "d266f025-abe9-44a3-a6e5-2774ba35f115@f9941"
+            },
+            {
+              "__uuid__": "07befd81-724e-4b50-ae86-8e11a0849628@f9941"
+            },
+            {
+              "__uuid__": "2a488c05-01fd-4ece-b2b3-15031c85e30d@f9941"
+            },
+            {
+              "__uuid__": "a2305100-9baa-44ea-a4ae-0fd0a932589b@f9941"
+            },
+            {
+              "__uuid__": "9bb634e0-64d4-464c-b4e2-d3c598571533@f9941"
+            },
+            {
+              "__uuid__": "11bf68cf-7926-4959-88fb-dc27fbf23324@f9941"
+            },
+            {
+              "__uuid__": "dddfc082-df9f-4b3d-87de-837f8addcd6c@f9941"
+            },
+            {
+              "__uuid__": "b5e1fe1e-00de-4579-921a-c29670cce6e4@f9941"
+            },
+            {
+              "__uuid__": "f2001a9f-16c4-41af-8995-4388b5722ec5@f9941"
+            },
+            {
+              "__uuid__": "62a3a7d7-b868-43c1-8595-30d752fb005e@f9941"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "_exoticAnimation": null,
+  "_events": [],
+  "_embeddedPlayers": [],
+  "_additiveSettings": {
+    "__type__": "cc.AnimationClipAdditiveSettings",
+    "enabled": false,
+    "refClip": null
+  },
+  "_auxiliaryCurveEntries": []
+}

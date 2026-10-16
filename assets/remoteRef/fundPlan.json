@@ -1,0 +1,6 @@
+[{"type":1,"stage":1,"resId":1,"order":1,"openCostItemResId":0,"openCostItemNum":0,"rewardPlan":1},
+{"type":1,"stage":1,"resId":2,"order":2,"openCostItemResId":10,"openCostItemNum":300,"rewardPlan":2},
+{"type":1,"stage":1,"resId":3,"order":3,"openCostItemResId":10,"openCostItemNum":680,"rewardPlan":1},
+{"type":1,"stage":2,"resId":1,"order":1,"openCostItemResId":0,"openCostItemNum":0,"rewardPlan":2},
+{"type":1,"stage":2,"resId":2,"order":2,"openCostItemResId":10,"openCostItemNum":300,"rewardPlan":1},
+{"type":1,"stage":2,"resId":3,"order":3,"openCostItemResId":10,"openCostItemNum":680,"rewardPlan":2}]

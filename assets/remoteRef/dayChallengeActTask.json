@@ -1,0 +1,5 @@
+[{"resId":1,"plan":1,"name":"累计消耗20点体力","targetType":2,"param":{"count":20},"order":1,"unlockChapter":0,"goto":2,"reward":[{"number":2,"resId":10060},{"number":40,"resId":15}]},
+{"resId":2,"plan":1,"name":"合成一次宝石","targetType":3,"param":{"count":1},"order":2,"unlockChapter":0,"goto":1,"reward":[{"number":2,"resId":10011},{"number":40,"resId":15}]},
+{"resId":3,"plan":1,"name":"完成1次装备升级","targetType":26,"param":{"count":1},"order":3,"unlockChapter":0,"goto":3,"reward":[{"number":200,"resId":7},{"number":40,"resId":15}]},
+{"resId":4,"plan":1,"name":"累计击杀2000只怪物","targetType":4,"param":{"count":2000},"order":4,"unlockChapter":0,"goto":7,"reward":[{"number":50,"resId":10},{"number":40,"resId":15}]},
+{"resId":5,"plan":1,"name":"累计击败1个精英或首领","targetType":23,"param":{"count":1},"order":5,"unlockChapter":0,"goto":7,"reward":[{"number":2,"resId":8},{"number":40,"resId":15}]}]

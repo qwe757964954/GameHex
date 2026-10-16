@@ -1,0 +1,14 @@
+{
+  "ver": "1.1.50",
+  "importer": "prefab",
+  "imported": true,
+  "uuid": "59b547f6-e3c6-4a95-9595-d8f67eedc97a",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {},
+  "userData": {
+    "syncNodeName": "StoreGemBox",
+    "hasIcon": false
+  }
+}

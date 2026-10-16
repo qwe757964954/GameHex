@@ -1,0 +1,4 @@
+[{"id":1,"name":"每日任务","tlType":[1001],"desc":"完成任务即可领取丰富奖励","key":"dailyTask"},
+{"id":2,"name":"月卡豪礼","tlType":[1002,1006],"desc":"激活月卡后，每天均可领取一份对应月卡的丰富奖励","key":"monthCard"},
+{"id":3,"name":"充值好礼","tlType":[1003],"desc":"累计充值送大礼，\n领完立即重置循环","key":"payGift1"},
+{"id":4,"name":"充值豪礼","tlType":[1004,1005],"desc":"累计充值送大礼，\n领完立即重置循环","key":"payGift2"}]

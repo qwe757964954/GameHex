@@ -1,0 +1,10 @@
+[{"resId":100101,"type":1001,"name":"每日挑战","plan":1},
+{"resId":100201,"type":1002,"name":"月卡特权","plan":1},
+{"resId":100202,"type":1006,"name":"至尊月卡","plan":2},
+{"resId":100301,"type":1003,"name":"充值好礼","plan":1},
+{"resId":100401,"type":1004,"name":"充值豪礼","plan":2},
+{"resId":100501,"type":1005,"name":"充值豪礼","plan":3},
+{"resId":100701,"type":1007,"name":"恩泽连绵","plan":1},
+{"resId":100801,"type":1008,"name":"商旅巨舰","plan":2},
+{"resId":100901,"type":1009,"name":"圣殿藏珍","plan":3},
+{"resId":101001,"type":1010,"name":"星月占卜","plan":4}]

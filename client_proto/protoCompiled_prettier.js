@@ -1,0 +1,21923 @@
+"use strict";
+var $protobuf = window.protobuf,
+  $Reader = $protobuf.Reader,
+  $Writer = $protobuf.Writer,
+  $util = $protobuf.util,
+  $root = $protobuf.roots.default || ($protobuf.roots.default = {}),
+  $window___ =
+    (($root.com = (function () {
+      var e,
+        t,
+        r,
+        L,
+        o,
+        W = {};
+      function n(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function i(e) {
+        if (
+          ((this.messageIds = []), (this.splits = []), (this.cmdCaches = []), e)
+        )
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function A(e) {
+        if (((this.data = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function j(e) {
+        if (((this.fields = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function q(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function F(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function U(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function K(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function N(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function a(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function _(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function c(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function H(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function z(e) {
+        if (((this.tlDayChallengeTask = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function V(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function J(e) {
+        if (((this.tlTakeRechargeProcess = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Q(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Y(e) {
+        if (((this.tlTakeProcess = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function X(e) {
+        if (((this.tlTakeProcess = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function d(e) {
+        if (((this.tlCmdActivityTime = []), (this.jsonNames = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Z(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ee(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function te(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function re(e) {
+        if (((this.tlCmdSkinShop = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function oe(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function s(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ne(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ie(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ae(e) {
+        if (((this.tlParam = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ce(e) {
+        if (((this.tlCmdClientAppendDataModel = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function de(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function se(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function le(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ue(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function fe(e) {
+        if (((this.rewards = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function me(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function pe(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ye(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function he(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ge(e) {
+        if (((this.tlReward = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function $e(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ke(e) {
+        if (((this.tlReward = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function we(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ve(e) {
+        if (((this.tlReward = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ce(e) {
+        if (((this.tlJsonName = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Re(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function be(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ie(e) {
+        if (
+          ((this.tlCmdTask = []),
+          (this.tlLimitTimeDay = []),
+          (this.tlLimitTimeActivity = []),
+          e)
+        )
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Pe(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function l(e) {
+        if (
+          ((this.tlCmdGoods = []),
+          (this.tlCmdTask = []),
+          (this.tlLimitTimeDay = []),
+          (this.tlLimitTimeActivity = []),
+          e)
+        )
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Oe(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Te(e) {
+        if (((this.tlReward = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Me(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ge(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function xe(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Se(e) {
+        if (((this.tlReward = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ee(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Be(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function De(e) {
+        if (((this.tlCmdTask = []), (this.tlCmdSevenDayShop = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Le(e) {
+        if (((this.tlIds = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function We(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function u(e) {
+        if (((this.tlCmdTask = []), (this.boxTlCmdTask = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ae(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function je(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function qe(e) {
+        if (((this.tlCmdBattleLevel = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Fe(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function f(e) {
+        if (
+          ((this.tlSkillId = []),
+          (this.tlCmdBattleCard = []),
+          (this.tlCmdBattleBuff = []),
+          (this.tlCmdBattleAttr = []),
+          (this.tlId = []),
+          (this.tlWallSkillId = []),
+          e)
+        )
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ue(e) {
+        if (
+          ((this.tlSkillId = []),
+          (this.tlCmdBattleBuff = []),
+          (this.tlCmdBattleAttr = []),
+          e)
+        )
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function m(e) {
+        if (
+          ((this.tlSkillId = []),
+          (this.tlBaseSkillId = []),
+          (this.tlBossSkillId = []),
+          (this.curRandomSkill = []),
+          e)
+        )
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ke(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ne(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function _e(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function He(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ze(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ve(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Je(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Qe(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ye(e) {
+        if (((this.tlId = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Xe(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ze(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function p(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function et(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function y(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function tt(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function rt(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ot(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function nt(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function it(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function at(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ct(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function h(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function dt(e) {
+        if (((this.tlId = []), (this.selectId = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function st(e) {
+        if (((this.id = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function lt(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ut(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ft(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function mt(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function pt(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function g(e) {
+        if (((this.tlBattleTokenMessage = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function yt(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ht(e) {
+        if (((this.tlTakeLevel = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function gt(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function $t(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function kt(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function wt(e) {
+        if (((this.tlReward = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function vt(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ct(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Rt(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function bt(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function It(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Pt(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function $(e) {
+        if (((this.tlChapterBoxState = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ot(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Tt(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Mt(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Gt(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function xt(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function St(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Et(e) {
+        if (((this.cmdBuyStaState = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Bt(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Dt(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Lt(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Wt(e) {
+        if (((this.tlRewards = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function At(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function jt(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function k(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function qt(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ft(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ut(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Kt(e) {
+        if (((this.tlWallType = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Nt(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function _t(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ht(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function zt(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Vt(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Jt(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Qt(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Yt(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Xt(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Zt(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function er(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function tr(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function rr(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function or(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function nr(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ir(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ar(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function cr(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function dr(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function sr(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function lr(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ur(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function fr(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function mr(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function pr(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function yr(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function hr(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function gr(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function $r(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function kr(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function wr(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function vr(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Cr(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Rr(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function br(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ir(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Pr(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Or(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Tr(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Mr(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function w(e) {
+        if (
+          ((this.cmdMallSEquipDetail = []),
+          (this.cmdMallLuckDrawDetail = []),
+          (this.cmdMallDailyShopDetail = []),
+          (this.cmdMallChapterGiftDetail = []),
+          (this.cmdMallChargeDetail = []),
+          (this.cmdMallCoinDetail = []),
+          e)
+        )
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Gr(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function xr(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function v(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Sr(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Er(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Br(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function C(e) {
+        if (
+          ((this.tlDayGift = []),
+          (this.tlWeekGift = []),
+          (this.tlMonthGift = []),
+          (this.tlRechargeCount = []),
+          e)
+        )
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Dr(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Lr(e) {
+        if (((this.rewards = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Wr(e) {
+        if (((this.rewards = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ar(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function jr(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function qr(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Fr(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ur(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Kr(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Nr(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function _r(e) {
+        if (((this.tlCmdEquip = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Hr(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function zr(e) {
+        if (((this.tlCmdGemInfo = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Vr(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Jr(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Qr(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Yr(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Xr(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Zr(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function eo(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function to(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ro(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function oo(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function no(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function io(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ao(e) {
+        if (((this.tlEveryDaySignInReward = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function co(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function so(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function lo(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function uo(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function fo(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function mo(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function po(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function yo(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ho(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function go(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function $o(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ko(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function wo(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function vo(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Co(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ro(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function R(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function bo(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Io(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Po(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Oo(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function To(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Mo(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Go(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function xo(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function So(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Eo(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Bo(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Do(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Lo(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Wo(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ao(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function jo(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function qo(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Fo(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Uo(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ko(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function No(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function _o(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ho(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function zo(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Vo(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Jo(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Qo(e) {
+        if (((this.equipList = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Yo(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Xo(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Zo(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function en(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function tn(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function rn(e) {
+        if (((this.tlSuggestFriend = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function on(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function nn(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function an(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function b(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function I(e) {
+        if (((this.cmdFuBenRewardState = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function cn(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function dn(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function sn(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ln(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function un(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function fn(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function mn(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function pn(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function yn(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function hn(e) {
+        if (((this.cmdFundRewardState = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function gn(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function $n(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function kn(e) {
+        if (((this.cmdFundDetail = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function wn(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function vn(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Cn(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Rn(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function bn(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function In(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function P(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Pn(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function On(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Tn(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Mn(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Gn(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function xn(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Sn(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function En(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Bn(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Dn(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ln(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Wn(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function An(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function jn(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function qn(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Fn(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Un(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Kn(e) {
+        if (((this.tlCmdGemPreview = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Nn(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function _n(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Hn(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function zn(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Vn(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Jn(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Qn(e) {
+        if (((this.cmdGuideDetail = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Yn(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Xn(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Zn(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ei(e) {
+        if (((this.tlHallRole = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ti(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ri(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function oi(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ni(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ii(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ai(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ci(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function di(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function si(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function li(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ui(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function fi(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function mi(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function pi(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function yi(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function hi(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function gi(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function $i(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ki(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function wi(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function vi(e) {
+        if (((this.cmdHeroUnlockInfo = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ci(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ri(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function bi(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ii(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Pi(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Oi(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ti(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Mi(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Gi(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function xi(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Si(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ei(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function O(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function T(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Bi(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Di(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Li(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Wi(e) {
+        if (((this.tlCmdMailSimple = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ai(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ji(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function qi(e) {
+        if (((this.id = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Fi(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ui(e) {
+        if (((this.id = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ki(e) {
+        if (((this.tlReward = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ni(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function _i(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Hi(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function zi(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Vi(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ji(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Qi(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Yi(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Xi(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Zi(e) {
+        if (((this.cmdMall = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ea(e) {
+        if (((this.rankList = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function M(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ta(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ra(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function oa(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function na(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ia(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function aa(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ca(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function da(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function sa(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function la(e) {
+        if (((this.dispelParam = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ua(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function G(e) {
+        if (
+          ((this.tlCmdAdvert = []),
+          (this.tlExtraId = []),
+          (this.tlCmdAppletInfo = []),
+          e)
+        )
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function fa(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ma(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function pa(e) {
+        if (((this.rewardIds = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ya(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ha(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ga(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function $a(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ka(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function x(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function wa(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function va(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ca(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ra(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ba(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ia(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Pa(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Oa(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ta(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ma(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ga(e) {
+        if (((this.tlEndBuyInfo = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function xa(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Sa(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ea(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ba(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Da(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function La(e) {
+        if (((this.tlReward = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Wa(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Aa(e) {
+        if (((this.tlReward = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ja(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function qa(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Fa(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ua(e) {
+        if (((this.tlCmdGoods = []), (this.tlId = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ka(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function S(e) {
+        if (((this.tlCmdEquip = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Na(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function _a(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ha(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function za(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Va(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ja(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Qa(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ya(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Xa(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Za(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function E(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ec(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function tc(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function rc(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function oc(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function nc(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ic(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ac(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function cc(e) {
+        if (((this.nid = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function dc(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function sc(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function lc(e) {
+        if (((this.id = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function B(e) {
+        if (((this.secretRealmScore = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function uc(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function fc(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function mc(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function pc(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function yc(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function hc(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function gc(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function $c(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function kc(e) {
+        if (((this.tlCmdShopGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function wc(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function D(e) {
+        if (((this.alreadyTakeBox = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function vc(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Cc(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Rc(e) {
+        if (((this.tlGoodReplace = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function bc(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ic(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Pc(e) {
+        if (
+          ((this.tlCmdContinuityGiftInfo = []),
+          (this.accumulativeAward = []),
+          e)
+        )
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Oc(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Tc(e) {
+        if (((this.tlCmdContinuityGiftInfo = []), (this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Mc(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Gc(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function xc(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Sc(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ec(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Bc(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Dc(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Lc(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Wc(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Ac(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function jc(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function qc(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Fc(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Uc(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Kc(e) {
+        if (((this.tlSameUniqueId = []), (this.tlCampUniqueId = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Nc(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function _c(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Hc(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function zc(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Vc(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Jc(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Qc(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Yc(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Xc(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function Zc(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ed(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function td(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function rd(e) {
+        if (((this.cmd = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function od(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function nd(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function id(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ad(e) {
+        if (((this.clientAniRefId = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function cd(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function dd(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function sd(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ld(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function ud(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function fd(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function md(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function pd(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function yd(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function hd(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function gd(e) {
+        if (e)
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      function $d(e) {
+        if (((this.tlCmdGoods = []), e))
+          for (var t = Object.keys(e), r = 0; r < t.length; ++r)
+            this[t[r]] = e[t[r]];
+      }
+      return (
+        (W.cca =
+          (((e = {}).core =
+            (((r = {}).network =
+              (((L = {}).cmd =
+                (((o = {}).ClientCmdData =
+                  ((n.prototype.messageId = 0),
+                  (n.prototype.clientIndex = 0),
+                  (n.prototype.data = $util.newBuffer([])),
+                  (n.prototype.appendData = $util.newBuffer([])),
+                  (n.create = function (e) {
+                    return new n(e);
+                  }),
+                  (n.encode = function (e, t) {
+                    return (
+                      (t = t || $Writer.create()).uint32(8).sint32(e.messageId),
+                      t.uint32(16).sint32(e.clientIndex),
+                      e.data &&
+                        e.hasOwnProperty("data") &&
+                        t.uint32(26).bytes(e.data),
+                      e.appendData &&
+                        e.hasOwnProperty("appendData") &&
+                        t.uint32(34).bytes(e.appendData),
+                      t
+                    );
+                  }),
+                  (n.decode = function (e, t) {
+                    e instanceof $Reader || (e = $Reader.create(e));
+                    for (
+                      var r = void 0 === t ? e.len : e.pos + t,
+                        o = new $root.com.cca.core.network.cmd.ClientCmdData();
+                      e.pos < r;
+
+                    ) {
+                      var n = e.uint32();
+                      switch (n >>> 3) {
+                        case 1:
+                          o.messageId = e.sint32();
+                          break;
+                        case 2:
+                          o.clientIndex = e.sint32();
+                          break;
+                        case 3:
+                          o.data = e.bytes();
+                          break;
+                        case 4:
+                          o.appendData = e.bytes();
+                          break;
+                        default:
+                          e.skipType(7 & n);
+                      }
+                    }
+                    if (!o.hasOwnProperty("messageId"))
+                      throw $util.ProtocolError("mr'messageId'", {
+                        instance: o,
+                      });
+                    if (o.hasOwnProperty("clientIndex")) return o;
+                    throw $util.ProtocolError("mr'clientIndex'", {
+                      instance: o,
+                    });
+                  }),
+                  n)),
+                (o.ServerCmdData =
+                  ((i.prototype.clientIndex = 0),
+                  (i.prototype.messageIds = $util.emptyArray),
+                  (i.prototype.splits = $util.emptyArray),
+                  (i.prototype.data = $util.newBuffer([])),
+                  (i.prototype.cmdCaches = $util.emptyArray),
+                  (i.prototype.compress = !1),
+                  (i.prototype.result = !1),
+                  (i.create = function (e) {
+                    return new i(e);
+                  }),
+                  (i.encode = function (e, t) {
+                    if (
+                      ((t = t || $Writer.create())
+                        .uint32(8)
+                        .sint32(e.clientIndex),
+                      e.messageIds && e.messageIds.length)
+                    )
+                      for (var r = 0; r < e.messageIds.length; ++r)
+                        t.uint32(16).sint32(e.messageIds[r]);
+                    if (e.splits && e.splits.length)
+                      for (r = 0; r < e.splits.length; ++r)
+                        t.uint32(24).sint32(e.splits[r]);
+                    if (
+                      (t.uint32(34).bytes(e.data),
+                      e.cmdCaches && e.cmdCaches.length)
+                    )
+                      for (r = 0; r < e.cmdCaches.length; ++r)
+                        $root.com.cca.core.network.cmd.CmdCache.encode(
+                          e.cmdCaches[r],
+                          t.uint32(42).fork(),
+                        ).ldelim();
+                    return (
+                      t.uint32(48).bool(e.compress),
+                      t.uint32(56).bool(e.result),
+                      t
+                    );
+                  }),
+                  (i.decode = function (e, t) {
+                    e instanceof $Reader || (e = $Reader.create(e));
+                    for (
+                      var r = void 0 === t ? e.len : e.pos + t,
+                        o = new $root.com.cca.core.network.cmd.ServerCmdData();
+                      e.pos < r;
+
+                    ) {
+                      var n = e.uint32();
+                      switch (n >>> 3) {
+                        case 1:
+                          o.clientIndex = e.sint32();
+                          break;
+                        case 2:
+                          if (
+                            ((o.messageIds && o.messageIds.length) ||
+                              (o.messageIds = []),
+                            2 == (7 & n))
+                          )
+                            for (var i = e.uint32() + e.pos; e.pos < i; )
+                              o.messageIds.push(e.sint32());
+                          else o.messageIds.push(e.sint32());
+                          break;
+                        case 3:
+                          if (
+                            ((o.splits && o.splits.length) || (o.splits = []),
+                            2 == (7 & n))
+                          )
+                            for (i = e.uint32() + e.pos; e.pos < i; )
+                              o.splits.push(e.sint32());
+                          else o.splits.push(e.sint32());
+                          break;
+                        case 4:
+                          o.data = e.bytes();
+                          break;
+                        case 5:
+                          (o.cmdCaches && o.cmdCaches.length) ||
+                            (o.cmdCaches = []),
+                            o.cmdCaches.push(
+                              $root.com.cca.core.network.cmd.CmdCache.decode(
+                                e,
+                                e.uint32(),
+                              ),
+                            );
+                          break;
+                        case 6:
+                          o.compress = e.bool();
+                          break;
+                        case 7:
+                          o.result = e.bool();
+                          break;
+                        default:
+                          e.skipType(7 & n);
+                      }
+                    }
+                    if (!o.hasOwnProperty("clientIndex"))
+                      throw $util.ProtocolError("mr'clientIndex'", {
+                        instance: o,
+                      });
+                    if (!o.hasOwnProperty("data"))
+                      throw $util.ProtocolError("mr'data'", { instance: o });
+                    if (!o.hasOwnProperty("compress"))
+                      throw $util.ProtocolError("mr'compress'", {
+                        instance: o,
+                      });
+                    if (o.hasOwnProperty("result")) return o;
+                    throw $util.ProtocolError("mr'result'", { instance: o });
+                  }),
+                  i)),
+                (o.CmdCache =
+                  ((A.prototype.cacheName = ""),
+                  (A.prototype.type = 0),
+                  (A.prototype.data = $util.emptyArray),
+                  (A.create = function (e) {
+                    return new A(e);
+                  }),
+                  (A.encode = function (e, t) {
+                    if (
+                      ((t = t || $Writer.create())
+                        .uint32(10)
+                        .string(e.cacheName),
+                      t.uint32(16).int32(e.type),
+                      e.data && e.data.length)
+                    )
+                      for (var r = 0; r < e.data.length; ++r)
+                        t.uint32(26).bytes(e.data[r]);
+                    return t;
+                  }),
+                  (A.decode = function (e, t) {
+                    e instanceof $Reader || (e = $Reader.create(e));
+                    for (
+                      var r = void 0 === t ? e.len : e.pos + t,
+                        o = new $root.com.cca.core.network.cmd.CmdCache();
+                      e.pos < r;
+
+                    ) {
+                      var n = e.uint32();
+                      switch (n >>> 3) {
+                        case 1:
+                          o.cacheName = e.string();
+                          break;
+                        case 2:
+                          o.type = e.int32();
+                          break;
+                        case 3:
+                          (o.data && o.data.length) || (o.data = []),
+                            o.data.push(e.bytes());
+                          break;
+                        default:
+                          e.skipType(7 & n);
+                      }
+                    }
+                    if (!o.hasOwnProperty("cacheName"))
+                      throw $util.ProtocolError("mr'cacheName'", {
+                        instance: o,
+                      });
+                    if (o.hasOwnProperty("type")) return o;
+                    throw $util.ProtocolError("mr'type'", { instance: o });
+                  }),
+                  A)),
+                (o.CmdCacheUpdateByField =
+                  ((j.prototype.key = $util.newBuffer([])),
+                  (j.prototype.fields = $util.emptyArray),
+                  (j.create = function (e) {
+                    return new j(e);
+                  }),
+                  (j.encode = function (e, t) {
+                    if (
+                      ((t = t || $Writer.create()).uint32(10).bytes(e.key),
+                      e.fields && e.fields.length)
+                    )
+                      for (var r = 0; r < e.fields.length; ++r)
+                        $root.com.cca.core.network.cmd.CmdCacheField.encode(
+                          e.fields[r],
+                          t.uint32(18).fork(),
+                        ).ldelim();
+                    return t;
+                  }),
+                  (j.decode = function (e, t) {
+                    e instanceof $Reader || (e = $Reader.create(e));
+                    for (
+                      var r = void 0 === t ? e.len : e.pos + t,
+                        o =
+                          new $root.com.cca.core.network.cmd.CmdCacheUpdateByField();
+                      e.pos < r;
+
+                    ) {
+                      var n = e.uint32();
+                      switch (n >>> 3) {
+                        case 1:
+                          o.key = e.bytes();
+                          break;
+                        case 2:
+                          (o.fields && o.fields.length) || (o.fields = []),
+                            o.fields.push(
+                              $root.com.cca.core.network.cmd.CmdCacheField.decode(
+                                e,
+                                e.uint32(),
+                              ),
+                            );
+                          break;
+                        default:
+                          e.skipType(7 & n);
+                      }
+                    }
+                    if (o.hasOwnProperty("key")) return o;
+                    throw $util.ProtocolError("mr'key'", { instance: o });
+                  }),
+                  j)),
+                (o.CmdCacheField =
+                  ((q.prototype.fieldNumber = 0),
+                  (q.prototype.data = $util.newBuffer([])),
+                  (q.create = function (e) {
+                    return new q(e);
+                  }),
+                  (q.encode = function (e, t) {
+                    return (
+                      (t = t || $Writer.create())
+                        .uint32(8)
+                        .int32(e.fieldNumber),
+                      t.uint32(18).bytes(e.data),
+                      t
+                    );
+                  }),
+                  (q.decode = function (e, t) {
+                    e instanceof $Reader || (e = $Reader.create(e));
+                    for (
+                      var r = void 0 === t ? e.len : e.pos + t,
+                        o = new $root.com.cca.core.network.cmd.CmdCacheField();
+                      e.pos < r;
+
+                    ) {
+                      var n = e.uint32();
+                      switch (n >>> 3) {
+                        case 1:
+                          o.fieldNumber = e.int32();
+                          break;
+                        case 2:
+                          o.data = e.bytes();
+                          break;
+                        default:
+                          e.skipType(7 & n);
+                      }
+                    }
+                    if (!o.hasOwnProperty("fieldNumber"))
+                      throw $util.ProtocolError("mr'fieldNumber'", {
+                        instance: o,
+                      });
+                    if (o.hasOwnProperty("data")) return o;
+                    throw $util.ProtocolError("mr'data'", { instance: o });
+                  }),
+                  q)),
+                (o.CmdInt32 =
+                  ((F.prototype.value = 0),
+                  (F.create = function (e) {
+                    return new F(e);
+                  }),
+                  (F.encode = function (e, t) {
+                    return (
+                      (t = t || $Writer.create()).uint32(8).int32(e.value), t
+                    );
+                  }),
+                  (F.decode = function (e, t) {
+                    e instanceof $Reader || (e = $Reader.create(e));
+                    for (
+                      var r = void 0 === t ? e.len : e.pos + t,
+                        o = new $root.com.cca.core.network.cmd.CmdInt32();
+                      e.pos < r;
+
+                    ) {
+                      var n = e.uint32();
+                      n >>> 3 == 1 ? (o.value = e.int32()) : e.skipType(7 & n);
+                    }
+                    if (o.hasOwnProperty("value")) return o;
+                    throw $util.ProtocolError("mr'value'", { instance: o });
+                  }),
+                  F)),
+                (o.CmdInt64 =
+                  ((U.prototype.value = $util.Long
+                    ? $util.Long.fromBits(0, 0, !1)
+                    : 0),
+                  (U.create = function (e) {
+                    return new U(e);
+                  }),
+                  (U.encode = function (e, t) {
+                    return (
+                      (t = t || $Writer.create()).uint32(8).int64(e.value), t
+                    );
+                  }),
+                  (U.decode = function (e, t) {
+                    e instanceof $Reader || (e = $Reader.create(e));
+                    for (
+                      var r = void 0 === t ? e.len : e.pos + t,
+                        o = new $root.com.cca.core.network.cmd.CmdInt64();
+                      e.pos < r;
+
+                    ) {
+                      var n = e.uint32();
+                      n >>> 3 == 1 ? (o.value = e.int64()) : e.skipType(7 & n);
+                    }
+                    if (o.hasOwnProperty("value")) return o;
+                    throw $util.ProtocolError("mr'value'", { instance: o });
+                  }),
+                  U)),
+                (o.CmdDouble =
+                  ((K.prototype.value = 0),
+                  (K.create = function (e) {
+                    return new K(e);
+                  }),
+                  (K.encode = function (e, t) {
+                    return (
+                      (t = t || $Writer.create()).uint32(9).double(e.value), t
+                    );
+                  }),
+                  (K.decode = function (e, t) {
+                    e instanceof $Reader || (e = $Reader.create(e));
+                    for (
+                      var r = void 0 === t ? e.len : e.pos + t,
+                        o = new $root.com.cca.core.network.cmd.CmdDouble();
+                      e.pos < r;
+
+                    ) {
+                      var n = e.uint32();
+                      n >>> 3 == 1 ? (o.value = e.double()) : e.skipType(7 & n);
+                    }
+                    if (o.hasOwnProperty("value")) return o;
+                    throw $util.ProtocolError("mr'value'", { instance: o });
+                  }),
+                  K)),
+                (o.CmdFloat =
+                  ((N.prototype.value = 0),
+                  (N.create = function (e) {
+                    return new N(e);
+                  }),
+                  (N.encode = function (e, t) {
+                    return (
+                      (t = t || $Writer.create()).uint32(13).float(e.value), t
+                    );
+                  }),
+                  (N.decode = function (e, t) {
+                    e instanceof $Reader || (e = $Reader.create(e));
+                    for (
+                      var r = void 0 === t ? e.len : e.pos + t,
+                        o = new $root.com.cca.core.network.cmd.CmdFloat();
+                      e.pos < r;
+
+                    ) {
+                      var n = e.uint32();
+                      n >>> 3 == 1 ? (o.value = e.float()) : e.skipType(7 & n);
+                    }
+                    if (o.hasOwnProperty("value")) return o;
+                    throw $util.ProtocolError("mr'value'", { instance: o });
+                  }),
+                  N)),
+                o)),
+              L)),
+            r)),
+          e)),
+        (W.xkhy =
+          (((o = {}).tafang =
+            (((L = {}).cmd =
+              (((r = {}).CmdActivity =
+                ((a.prototype.openResId = 0),
+                (a.prototype.activityRefId = 0),
+                (a.prototype.startTime = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (a.prototype.endTime = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (a.prototype.detail = null),
+                (a.create = function (e) {
+                  return new a(e);
+                }),
+                (a.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()),
+                    null != e.openResId &&
+                      e.hasOwnProperty("openResId") &&
+                      t.uint32(8).sint32(e.openResId),
+                    null != e.activityRefId &&
+                      e.hasOwnProperty("activityRefId") &&
+                      t.uint32(16).sint32(e.activityRefId),
+                    null != e.startTime &&
+                      e.hasOwnProperty("startTime") &&
+                      t.uint32(24).sint64(e.startTime),
+                    null != e.endTime &&
+                      e.hasOwnProperty("endTime") &&
+                      t.uint32(32).sint64(e.endTime),
+                    e.detail &&
+                      e.hasOwnProperty("detail") &&
+                      $root.com.xkhy.tafang.cmd.CmdActivityDetail.encode(
+                        e.detail,
+                        t.uint32(42).fork(),
+                      ).ldelim(),
+                    t
+                  );
+                }),
+                (a.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdActivity();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.openResId = e.sint32();
+                        break;
+                      case 2:
+                        o.activityRefId = e.sint32();
+                        break;
+                      case 3:
+                        o.startTime = e.sint64();
+                        break;
+                      case 4:
+                        o.endTime = e.sint64();
+                        break;
+                      case 5:
+                        o.detail =
+                          $root.com.xkhy.tafang.cmd.CmdActivityDetail.decode(
+                            e,
+                            e.uint32(),
+                          );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  return o;
+                }),
+                a)),
+              (r.CmdActivity_Key =
+                ((_.prototype.openResId = 0),
+                (_.create = function (e) {
+                  return new _(e);
+                }),
+                (_.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.openResId), t
+                  );
+                }),
+                (_.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdActivity_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.openResId = e.sint32())
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("openResId")) return o;
+                  throw $util.ProtocolError("mr'openResId'", { instance: o });
+                }),
+                _)),
+              (r.CmdActivityDetail =
+                ((c.prototype.dayChallengeActDetail = null),
+                (c.prototype.monthCardActDetail = null),
+                (c.prototype.rechargeGiftActDetail = null),
+                (c.prototype.cmdRechargeGiftAct2Detail = null),
+                (c.prototype.cmdRechargeGiftAct3Detail = null),
+                (c.prototype.monthCardActDetail2 = null),
+                (c.prototype.skinActDetail = null),
+                (c.create = function (e) {
+                  return new c(e);
+                }),
+                (c.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()),
+                    e.dayChallengeActDetail &&
+                      e.hasOwnProperty("dayChallengeActDetail") &&
+                      $root.com.xkhy.tafang.cmd.CmdDayChallengeActDetail.encode(
+                        e.dayChallengeActDetail,
+                        t.uint32(10).fork(),
+                      ).ldelim(),
+                    e.monthCardActDetail &&
+                      e.hasOwnProperty("monthCardActDetail") &&
+                      $root.com.xkhy.tafang.cmd.CmdMonthCardActDetail.encode(
+                        e.monthCardActDetail,
+                        t.uint32(18).fork(),
+                      ).ldelim(),
+                    e.rechargeGiftActDetail &&
+                      e.hasOwnProperty("rechargeGiftActDetail") &&
+                      $root.com.xkhy.tafang.cmd.CmdRechargeGiftActDetail.encode(
+                        e.rechargeGiftActDetail,
+                        t.uint32(26).fork(),
+                      ).ldelim(),
+                    e.cmdRechargeGiftAct2Detail &&
+                      e.hasOwnProperty("cmdRechargeGiftAct2Detail") &&
+                      $root.com.xkhy.tafang.cmd.CmdRechargeGiftAct2Detail.encode(
+                        e.cmdRechargeGiftAct2Detail,
+                        t.uint32(34).fork(),
+                      ).ldelim(),
+                    e.cmdRechargeGiftAct3Detail &&
+                      e.hasOwnProperty("cmdRechargeGiftAct3Detail") &&
+                      $root.com.xkhy.tafang.cmd.CmdRechargeGiftAct3Detail.encode(
+                        e.cmdRechargeGiftAct3Detail,
+                        t.uint32(42).fork(),
+                      ).ldelim(),
+                    e.monthCardActDetail2 &&
+                      e.hasOwnProperty("monthCardActDetail2") &&
+                      $root.com.xkhy.tafang.cmd.CmdMonthCardActDetail.encode(
+                        e.monthCardActDetail2,
+                        t.uint32(50).fork(),
+                      ).ldelim(),
+                    e.skinActDetail &&
+                      e.hasOwnProperty("skinActDetail") &&
+                      $root.com.xkhy.tafang.cmd.CmdSkinActDetail.encode(
+                        e.skinActDetail,
+                        t.uint32(58).fork(),
+                      ).ldelim(),
+                    t
+                  );
+                }),
+                (c.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdActivityDetail();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.dayChallengeActDetail =
+                          $root.com.xkhy.tafang.cmd.CmdDayChallengeActDetail.decode(
+                            e,
+                            e.uint32(),
+                          );
+                        break;
+                      case 2:
+                        o.monthCardActDetail =
+                          $root.com.xkhy.tafang.cmd.CmdMonthCardActDetail.decode(
+                            e,
+                            e.uint32(),
+                          );
+                        break;
+                      case 3:
+                        o.rechargeGiftActDetail =
+                          $root.com.xkhy.tafang.cmd.CmdRechargeGiftActDetail.decode(
+                            e,
+                            e.uint32(),
+                          );
+                        break;
+                      case 4:
+                        o.cmdRechargeGiftAct2Detail =
+                          $root.com.xkhy.tafang.cmd.CmdRechargeGiftAct2Detail.decode(
+                            e,
+                            e.uint32(),
+                          );
+                        break;
+                      case 5:
+                        o.cmdRechargeGiftAct3Detail =
+                          $root.com.xkhy.tafang.cmd.CmdRechargeGiftAct3Detail.decode(
+                            e,
+                            e.uint32(),
+                          );
+                        break;
+                      case 6:
+                        o.monthCardActDetail2 =
+                          $root.com.xkhy.tafang.cmd.CmdMonthCardActDetail.decode(
+                            e,
+                            e.uint32(),
+                          );
+                        break;
+                      case 7:
+                        o.skinActDetail =
+                          $root.com.xkhy.tafang.cmd.CmdSkinActDetail.decode(
+                            e,
+                            e.uint32(),
+                          );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  return o;
+                }),
+                c)),
+              (r.CmdSkinActDetail =
+                ((H.prototype.skinResId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (H.prototype.price = 0),
+                (H.prototype.alreadyBuy = !1),
+                (H.create = function (e) {
+                  return new H(e);
+                }),
+                (H.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).int64(e.skinResId),
+                    t.uint32(16).int32(e.price),
+                    t.uint32(24).bool(e.alreadyBuy),
+                    t
+                  );
+                }),
+                (H.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdSkinActDetail();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.skinResId = e.int64();
+                        break;
+                      case 2:
+                        o.price = e.int32();
+                        break;
+                      case 3:
+                        o.alreadyBuy = e.bool();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("skinResId"))
+                    throw $util.ProtocolError("mr'skinResId'", { instance: o });
+                  if (!o.hasOwnProperty("price"))
+                    throw $util.ProtocolError("mr'price'", { instance: o });
+                  if (o.hasOwnProperty("alreadyBuy")) return o;
+                  throw $util.ProtocolError("mr'alreadyBuy'", { instance: o });
+                }),
+                H)),
+              (r.CmdDayChallengeActDetail =
+                ((z.prototype.tlDayChallengeTask = $util.emptyArray),
+                (z.create = function (e) {
+                  return new z(e);
+                }),
+                (z.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlDayChallengeTask && e.tlDayChallengeTask.length)
+                  )
+                    for (var r = 0; r < e.tlDayChallengeTask.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdDayChallengeTask.encode(
+                        e.tlDayChallengeTask[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (z.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdDayChallengeActDetail();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlDayChallengeTask &&
+                          o.tlDayChallengeTask.length) ||
+                          (o.tlDayChallengeTask = []),
+                        o.tlDayChallengeTask.push(
+                          $root.com.xkhy.tafang.cmd.CmdDayChallengeTask.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                z)),
+              (r.CmdMonthCardActDetail =
+                ((V.prototype.cardEndTime = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (V.prototype.todayTake = !1),
+                (V.create = function (e) {
+                  return new V(e);
+                }),
+                (V.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.cardEndTime),
+                    null != e.todayTake &&
+                      e.hasOwnProperty("todayTake") &&
+                      t.uint32(16).bool(e.todayTake),
+                    t
+                  );
+                }),
+                (V.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdMonthCardActDetail();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.cardEndTime = e.sint64();
+                        break;
+                      case 2:
+                        o.todayTake = e.bool();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (o.hasOwnProperty("cardEndTime")) return o;
+                  throw $util.ProtocolError("mr'cardEndTime'", { instance: o });
+                }),
+                V)),
+              (r.CmdRechargeGiftActDetail =
+                ((J.prototype.curRechargeProcess = 0),
+                (J.prototype.tlTakeRechargeProcess = $util.emptyArray),
+                (J.create = function (e) {
+                  return new J(e);
+                }),
+                (J.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create())
+                      .uint32(8)
+                      .sint32(e.curRechargeProcess),
+                    e.tlTakeRechargeProcess && e.tlTakeRechargeProcess.length)
+                  )
+                    for (var r = 0; r < e.tlTakeRechargeProcess.length; ++r)
+                      t.uint32(16).sint32(e.tlTakeRechargeProcess[r]);
+                  return t;
+                }),
+                (J.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdRechargeGiftActDetail();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.curRechargeProcess = e.sint32();
+                        break;
+                      case 2:
+                        if (
+                          ((o.tlTakeRechargeProcess &&
+                            o.tlTakeRechargeProcess.length) ||
+                            (o.tlTakeRechargeProcess = []),
+                          2 == (7 & n))
+                        )
+                          for (var i = e.uint32() + e.pos; e.pos < i; )
+                            o.tlTakeRechargeProcess.push(e.sint32());
+                        else o.tlTakeRechargeProcess.push(e.sint32());
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (o.hasOwnProperty("curRechargeProcess")) return o;
+                  throw $util.ProtocolError("mr'curRechargeProcess'", {
+                    instance: o,
+                  });
+                }),
+                J)),
+              (r.CmdDayChallengeTask =
+                ((Q.prototype.resId = 0),
+                (Q.prototype.process = 0),
+                (Q.prototype.state = 0),
+                (Q.create = function (e) {
+                  return new Q(e);
+                }),
+                (Q.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.resId),
+                    t.uint32(16).sint32(e.process),
+                    t.uint32(24).uint32(e.state),
+                    t
+                  );
+                }),
+                (Q.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdDayChallengeTask();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.sint32();
+                        break;
+                      case 2:
+                        o.process = e.sint32();
+                        break;
+                      case 3:
+                        o.state = e.uint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("resId"))
+                    throw $util.ProtocolError("mr'resId'", { instance: o });
+                  if (!o.hasOwnProperty("process"))
+                    throw $util.ProtocolError("mr'process'", { instance: o });
+                  if (o.hasOwnProperty("state")) return o;
+                  throw $util.ProtocolError("mr'state'", { instance: o });
+                }),
+                Q)),
+              (r.CmdRechargeGiftAct2Detail =
+                ((Y.prototype.curProcess = 0),
+                (Y.prototype.tlTakeProcess = $util.emptyArray),
+                (Y.create = function (e) {
+                  return new Y(e);
+                }),
+                (Y.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()).uint32(8).sint32(e.curProcess),
+                    e.tlTakeProcess && e.tlTakeProcess.length)
+                  )
+                    for (var r = 0; r < e.tlTakeProcess.length; ++r)
+                      t.uint32(16).sint32(e.tlTakeProcess[r]);
+                  return t;
+                }),
+                (Y.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdRechargeGiftAct2Detail();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.curProcess = e.sint32();
+                        break;
+                      case 2:
+                        if (
+                          ((o.tlTakeProcess && o.tlTakeProcess.length) ||
+                            (o.tlTakeProcess = []),
+                          2 == (7 & n))
+                        )
+                          for (var i = e.uint32() + e.pos; e.pos < i; )
+                            o.tlTakeProcess.push(e.sint32());
+                        else o.tlTakeProcess.push(e.sint32());
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (o.hasOwnProperty("curProcess")) return o;
+                  throw $util.ProtocolError("mr'curProcess'", { instance: o });
+                }),
+                Y)),
+              (r.CmdRechargeGiftAct3Detail =
+                ((X.prototype.curProcess = 0),
+                (X.prototype.tlTakeProcess = $util.emptyArray),
+                (X.create = function (e) {
+                  return new X(e);
+                }),
+                (X.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()).uint32(8).sint32(e.curProcess),
+                    e.tlTakeProcess && e.tlTakeProcess.length)
+                  )
+                    for (var r = 0; r < e.tlTakeProcess.length; ++r)
+                      t.uint32(16).sint32(e.tlTakeProcess[r]);
+                  return t;
+                }),
+                (X.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdRechargeGiftAct3Detail();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.curProcess = e.sint32();
+                        break;
+                      case 2:
+                        if (
+                          ((o.tlTakeProcess && o.tlTakeProcess.length) ||
+                            (o.tlTakeProcess = []),
+                          2 == (7 & n))
+                        )
+                          for (var i = e.uint32() + e.pos; e.pos < i; )
+                            o.tlTakeProcess.push(e.sint32());
+                        else o.tlTakeProcess.push(e.sint32());
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (o.hasOwnProperty("curProcess")) return o;
+                  throw $util.ProtocolError("mr'curProcess'", { instance: o });
+                }),
+                X)),
+              (r.CmdActivitySimple =
+                ((d.prototype.id = ""),
+                (d.prototype.type = 0),
+                (d.prototype.name = ""),
+                (d.prototype.cmdActivityTime = null),
+                (d.prototype.tlCmdActivityTime = $util.emptyArray),
+                (d.prototype.changeTime = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (d.prototype.jsonNames = $util.emptyArray),
+                (d.prototype.exist = !1),
+                (d.create = function (e) {
+                  return new d(e);
+                }),
+                (d.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()).uint32(10).string(e.id),
+                    t.uint32(16).int32(e.type),
+                    t.uint32(26).string(e.name),
+                    $root.com.xkhy.tafang.cmd.CmdActivityTime.encode(
+                      e.cmdActivityTime,
+                      t.uint32(34).fork(),
+                    ).ldelim(),
+                    e.tlCmdActivityTime && e.tlCmdActivityTime.length)
+                  )
+                    for (var r = 0; r < e.tlCmdActivityTime.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdActivityTime.encode(
+                        e.tlCmdActivityTime[r],
+                        t.uint32(42).fork(),
+                      ).ldelim();
+                  if (
+                    (null != e.changeTime &&
+                      e.hasOwnProperty("changeTime") &&
+                      t.uint32(48).int64(e.changeTime),
+                    e.jsonNames && e.jsonNames.length)
+                  )
+                    for (r = 0; r < e.jsonNames.length; ++r)
+                      t.uint32(58).string(e.jsonNames[r]);
+                  return t.uint32(64).bool(e.exist), t;
+                }),
+                (d.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdActivitySimple();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.id = e.string();
+                        break;
+                      case 2:
+                        o.type = e.int32();
+                        break;
+                      case 3:
+                        o.name = e.string();
+                        break;
+                      case 4:
+                        o.cmdActivityTime =
+                          $root.com.xkhy.tafang.cmd.CmdActivityTime.decode(
+                            e,
+                            e.uint32(),
+                          );
+                        break;
+                      case 5:
+                        (o.tlCmdActivityTime && o.tlCmdActivityTime.length) ||
+                          (o.tlCmdActivityTime = []),
+                          o.tlCmdActivityTime.push(
+                            $root.com.xkhy.tafang.cmd.CmdActivityTime.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      case 6:
+                        o.changeTime = e.int64();
+                        break;
+                      case 7:
+                        (o.jsonNames && o.jsonNames.length) ||
+                          (o.jsonNames = []),
+                          o.jsonNames.push(e.string());
+                        break;
+                      case 8:
+                        o.exist = e.bool();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("id"))
+                    throw $util.ProtocolError("mr'id'", { instance: o });
+                  if (!o.hasOwnProperty("type"))
+                    throw $util.ProtocolError("mr'type'", { instance: o });
+                  if (!o.hasOwnProperty("name"))
+                    throw $util.ProtocolError("mr'name'", { instance: o });
+                  if (!o.hasOwnProperty("cmdActivityTime"))
+                    throw $util.ProtocolError("mr'cmdActivityTime'", {
+                      instance: o,
+                    });
+                  if (o.hasOwnProperty("exist")) return o;
+                  throw $util.ProtocolError("mr'exist'", { instance: o });
+                }),
+                d)),
+              (r.CmdActivitySimple_Key =
+                ((Z.prototype.id = ""),
+                (Z.create = function (e) {
+                  return new Z(e);
+                }),
+                (Z.encode = function (e, t) {
+                  return (t = t || $Writer.create()).uint32(10).string(e.id), t;
+                }),
+                (Z.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdActivitySimple_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.id = e.string()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("id")) return o;
+                  throw $util.ProtocolError("mr'id'", { instance: o });
+                }),
+                Z)),
+              (r.CmdActivityTypeEnum =
+                ((e = {}),
+                ((t = Object.create(e))[(e[101] = "limit_time")] = 101),
+                (t[(e[102] = "limit_skin")] = 102),
+                t)),
+              (r.CmdActivityTime =
+                ((ee.prototype.startTime = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (ee.prototype.endTime = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (ee.create = function (e) {
+                  return new ee(e);
+                }),
+                (ee.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()),
+                    null != e.startTime &&
+                      e.hasOwnProperty("startTime") &&
+                      t.uint32(8).sint64(e.startTime),
+                    null != e.endTime &&
+                      e.hasOwnProperty("endTime") &&
+                      t.uint32(16).sint64(e.endTime),
+                    t
+                  );
+                }),
+                (ee.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdActivityTime();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.startTime = e.sint64();
+                        break;
+                      case 2:
+                        o.endTime = e.sint64();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  return o;
+                }),
+                ee)),
+              (r.CmdActivityGoods =
+                ((te.prototype.resId = 0),
+                (te.prototype.times = 0),
+                (te.create = function (e) {
+                  return new te(e);
+                }),
+                (te.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).int32(e.resId),
+                    t.uint32(16).int32(e.times),
+                    t
+                  );
+                }),
+                (te.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdActivityGoods();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.int32();
+                        break;
+                      case 2:
+                        o.times = e.int32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("resId"))
+                    throw $util.ProtocolError("mr'resId'", { instance: o });
+                  if (o.hasOwnProperty("times")) return o;
+                  throw $util.ProtocolError("mr'times'", { instance: o });
+                }),
+                te)),
+              (r.CmdSkinPlayer =
+                ((re.prototype.tlCmdSkinShop = $util.emptyArray),
+                (re.create = function (e) {
+                  return new re(e);
+                }),
+                (re.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdSkinShop && e.tlCmdSkinShop.length)
+                  )
+                    for (var r = 0; r < e.tlCmdSkinShop.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdSkinShop.encode(
+                        e.tlCmdSkinShop[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (re.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdSkinPlayer();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdSkinShop && o.tlCmdSkinShop.length) ||
+                          (o.tlCmdSkinShop = []),
+                        o.tlCmdSkinShop.push(
+                          $root.com.xkhy.tafang.cmd.CmdSkinShop.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                re)),
+              (r.CmdSkinShop =
+                ((oe.prototype.id = 0),
+                (oe.prototype.buy = !1),
+                (oe.create = function (e) {
+                  return new oe(e);
+                }),
+                (oe.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).int32(e.id),
+                    t.uint32(16).bool(e.buy),
+                    t
+                  );
+                }),
+                (oe.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdSkinShop();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.id = e.int32();
+                        break;
+                      case 2:
+                        o.buy = e.bool();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("id"))
+                    throw $util.ProtocolError("mr'id'", { instance: o });
+                  if (o.hasOwnProperty("buy")) return o;
+                  throw $util.ProtocolError("mr'buy'", { instance: o });
+                }),
+                oe)),
+              (r.CmdClientInfo =
+                ((s.prototype.imei = ""),
+                (s.prototype.mac = ""),
+                (s.prototype.idfa = ""),
+                (s.prototype.mobileBrand = ""),
+                (s.prototype.mobileModel = ""),
+                (s.prototype.versionName = ""),
+                (s.prototype.versionCode = ""),
+                (s.prototype.systemName = ""),
+                (s.prototype.systemVersion = ""),
+                (s.prototype.networkType = ""),
+                (s.prototype.bigChannel = ""),
+                (s.prototype.smallChannel = ""),
+                (s.prototype.smallChannelPack = ""),
+                (s.prototype.appType = ""),
+                (s.prototype.appId = ""),
+                (s.create = function (e) {
+                  return new s(e);
+                }),
+                (s.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(10).string(e.imei),
+                    t.uint32(18).string(e.mac),
+                    t.uint32(26).string(e.idfa),
+                    t.uint32(34).string(e.mobileBrand),
+                    t.uint32(42).string(e.mobileModel),
+                    t.uint32(50).string(e.versionName),
+                    t.uint32(58).string(e.versionCode),
+                    t.uint32(66).string(e.systemName),
+                    t.uint32(74).string(e.systemVersion),
+                    t.uint32(82).string(e.networkType),
+                    t.uint32(90).string(e.bigChannel),
+                    t.uint32(98).string(e.smallChannel),
+                    t.uint32(106).string(e.smallChannelPack),
+                    null != e.appType &&
+                      e.hasOwnProperty("appType") &&
+                      t.uint32(114).string(e.appType),
+                    null != e.appId &&
+                      e.hasOwnProperty("appId") &&
+                      t.uint32(122).string(e.appId),
+                    t
+                  );
+                }),
+                (s.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdClientInfo();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.imei = e.string();
+                        break;
+                      case 2:
+                        o.mac = e.string();
+                        break;
+                      case 3:
+                        o.idfa = e.string();
+                        break;
+                      case 4:
+                        o.mobileBrand = e.string();
+                        break;
+                      case 5:
+                        o.mobileModel = e.string();
+                        break;
+                      case 6:
+                        o.versionName = e.string();
+                        break;
+                      case 7:
+                        o.versionCode = e.string();
+                        break;
+                      case 8:
+                        o.systemName = e.string();
+                        break;
+                      case 9:
+                        o.systemVersion = e.string();
+                        break;
+                      case 10:
+                        o.networkType = e.string();
+                        break;
+                      case 11:
+                        o.bigChannel = e.string();
+                        break;
+                      case 12:
+                        o.smallChannel = e.string();
+                        break;
+                      case 13:
+                        o.smallChannelPack = e.string();
+                        break;
+                      case 14:
+                        o.appType = e.string();
+                        break;
+                      case 15:
+                        o.appId = e.string();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("imei"))
+                    throw $util.ProtocolError("mr'imei'", { instance: o });
+                  if (!o.hasOwnProperty("mac"))
+                    throw $util.ProtocolError("mr'mac'", { instance: o });
+                  if (!o.hasOwnProperty("idfa"))
+                    throw $util.ProtocolError("mr'idfa'", { instance: o });
+                  if (!o.hasOwnProperty("mobileBrand"))
+                    throw $util.ProtocolError("mr'mobileBrand'", {
+                      instance: o,
+                    });
+                  if (!o.hasOwnProperty("mobileModel"))
+                    throw $util.ProtocolError("mr'mobileModel'", {
+                      instance: o,
+                    });
+                  if (!o.hasOwnProperty("versionName"))
+                    throw $util.ProtocolError("mr'versionName'", {
+                      instance: o,
+                    });
+                  if (!o.hasOwnProperty("versionCode"))
+                    throw $util.ProtocolError("mr'versionCode'", {
+                      instance: o,
+                    });
+                  if (!o.hasOwnProperty("systemName"))
+                    throw $util.ProtocolError("mr'systemName'", {
+                      instance: o,
+                    });
+                  if (!o.hasOwnProperty("systemVersion"))
+                    throw $util.ProtocolError("mr'systemVersion'", {
+                      instance: o,
+                    });
+                  if (!o.hasOwnProperty("networkType"))
+                    throw $util.ProtocolError("mr'networkType'", {
+                      instance: o,
+                    });
+                  if (!o.hasOwnProperty("bigChannel"))
+                    throw $util.ProtocolError("mr'bigChannel'", {
+                      instance: o,
+                    });
+                  if (!o.hasOwnProperty("smallChannel"))
+                    throw $util.ProtocolError("mr'smallChannel'", {
+                      instance: o,
+                    });
+                  if (o.hasOwnProperty("smallChannelPack")) return o;
+                  throw $util.ProtocolError("mr'smallChannelPack'", {
+                    instance: o,
+                  });
+                }),
+                s)),
+              (r.CmdTips =
+                ((ne.prototype.content = ""),
+                (ne.create = function (e) {
+                  return new ne(e);
+                }),
+                (ne.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(10).string(e.content), t
+                  );
+                }),
+                (ne.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdTips();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.content = e.string()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("content")) return o;
+                  throw $util.ProtocolError("mr'content'", { instance: o });
+                }),
+                ne)),
+              (r.CmdCommonTips =
+                ((ie.prototype.content = null),
+                (ie.create = function (e) {
+                  return new ie(e);
+                }),
+                (ie.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()),
+                    $root.com.xkhy.tafang.cmd.CmdI18N.encode(
+                      e.content,
+                      t.uint32(10).fork(),
+                    ).ldelim(),
+                    t
+                  );
+                }),
+                (ie.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdCommonTips();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.content = $root.com.xkhy.tafang.cmd.CmdI18N.decode(
+                          e,
+                          e.uint32(),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("content")) return o;
+                  throw $util.ProtocolError("mr'content'", { instance: o });
+                }),
+                ie)),
+              (r.CmdI18N =
+                ((ae.prototype.template = ""),
+                (ae.prototype.cmdI18NRef = ""),
+                (ae.prototype.tlParam = $util.emptyArray),
+                (ae.create = function (e) {
+                  return new ae(e);
+                }),
+                (ae.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    null != e.template &&
+                      e.hasOwnProperty("template") &&
+                      t.uint32(10).string(e.template),
+                    null != e.cmdI18NRef &&
+                      e.hasOwnProperty("cmdI18NRef") &&
+                      t.uint32(18).string(e.cmdI18NRef),
+                    e.tlParam && e.tlParam.length)
+                  )
+                    for (var r = 0; r < e.tlParam.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdI18N.encode(
+                        e.tlParam[r],
+                        t.uint32(26).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (ae.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdI18N();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.template = e.string();
+                        break;
+                      case 2:
+                        o.cmdI18NRef = e.string();
+                        break;
+                      case 3:
+                        (o.tlParam && o.tlParam.length) || (o.tlParam = []),
+                          o.tlParam.push(
+                            $root.com.xkhy.tafang.cmd.CmdI18N.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  return o;
+                }),
+                ae)),
+              (r.CmdClientAppendData =
+                ((ce.prototype.tlCmdClientAppendDataModel = $util.emptyArray),
+                (ce.create = function (e) {
+                  return new ce(e);
+                }),
+                (ce.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdClientAppendDataModel &&
+                      e.tlCmdClientAppendDataModel.length)
+                  )
+                    for (
+                      var r = 0;
+                      r < e.tlCmdClientAppendDataModel.length;
+                      ++r
+                    )
+                      $root.com.xkhy.tafang.cmd.CmdClientAppendDataModel.encode(
+                        e.tlCmdClientAppendDataModel[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (ce.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdClientAppendData();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdClientAppendDataModel &&
+                          o.tlCmdClientAppendDataModel.length) ||
+                          (o.tlCmdClientAppendDataModel = []),
+                        o.tlCmdClientAppendDataModel.push(
+                          $root.com.xkhy.tafang.cmd.CmdClientAppendDataModel.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                ce)),
+              (r.CmdClientAppendDataModel =
+                ((de.prototype.cmdClientAppendDataModelEnum = 1),
+                (de.prototype.appendData = $util.newBuffer([])),
+                (de.create = function (e) {
+                  return new de(e);
+                }),
+                (de.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create())
+                      .uint32(8)
+                      .uint32(e.cmdClientAppendDataModelEnum),
+                    t.uint32(18).bytes(e.appendData),
+                    t
+                  );
+                }),
+                (de.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdClientAppendDataModel();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.cmdClientAppendDataModelEnum = e.uint32();
+                        break;
+                      case 2:
+                        o.appendData = e.bytes();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("cmdClientAppendDataModelEnum"))
+                    throw $util.ProtocolError(
+                      "mr'cmdClientAppendDataModelEnum'",
+                      { instance: o },
+                    );
+                  if (o.hasOwnProperty("appendData")) return o;
+                  throw $util.ProtocolError("mr'appendData'", { instance: o });
+                }),
+                de)),
+              (r.CmdClientAppendDataModelEnum =
+                ((e = {}),
+                ((t = Object.create(e))[(e[1] = "CmdGuideList")] = 1),
+                t)),
+              (r.CmdGoods =
+                ((se.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (se.prototype.number = ""),
+                (se.prototype.quality = 0),
+                (se.create = function (e) {
+                  return new se(e);
+                }),
+                (se.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.resId),
+                    t.uint32(18).string(e.number),
+                    null != e.quality &&
+                      e.hasOwnProperty("quality") &&
+                      t.uint32(24).sint32(e.quality),
+                    t
+                  );
+                }),
+                (se.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdGoods();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.sint64();
+                        break;
+                      case 2:
+                        o.number = e.string();
+                        break;
+                      case 3:
+                        o.quality = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("resId"))
+                    throw $util.ProtocolError("mr'resId'", { instance: o });
+                  if (o.hasOwnProperty("number")) return o;
+                  throw $util.ProtocolError("mr'number'", { instance: o });
+                }),
+                se)),
+              (r.CmdGameExtend =
+                ((le.prototype.clazzName = ""),
+                (le.prototype.message = $util.newBuffer([])),
+                (le.create = function (e) {
+                  return new le(e);
+                }),
+                (le.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(10).string(e.clazzName),
+                    t.uint32(18).bytes(e.message),
+                    t
+                  );
+                }),
+                (le.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdGameExtend();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.clazzName = e.string();
+                        break;
+                      case 2:
+                        o.message = e.bytes();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("clazzName"))
+                    throw $util.ProtocolError("mr'clazzName'", { instance: o });
+                  if (o.hasOwnProperty("message")) return o;
+                  throw $util.ProtocolError("mr'message'", { instance: o });
+                }),
+                le)),
+              (r.CmdGoodsList =
+                ((ue.prototype.tlCmdGoods = $util.emptyArray),
+                (ue.create = function (e) {
+                  return new ue(e);
+                }),
+                (ue.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (ue.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdGoodsList();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                        o.tlCmdGoods.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                ue)),
+              (r.CmdRecharge =
+                ((fe.prototype.id = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (fe.prototype.rewards = $util.emptyArray),
+                (fe.create = function (e) {
+                  return new fe(e);
+                }),
+                (fe.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()).uint32(8).sint64(e.id),
+                    e.rewards && e.rewards.length)
+                  )
+                    for (var r = 0; r < e.rewards.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.rewards[r],
+                        t.uint32(18).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (fe.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdRecharge();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.id = e.sint64();
+                        break;
+                      case 2:
+                        (o.rewards && o.rewards.length) || (o.rewards = []),
+                          o.rewards.push(
+                            $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (o.hasOwnProperty("id")) return o;
+                  throw $util.ProtocolError("mr'id'", { instance: o });
+                }),
+                fe)),
+              (r.CmdGmInfo =
+                ((me.prototype.cmd = ""),
+                (me.prototype.desc = ""),
+                (me.create = function (e) {
+                  return new me(e);
+                }),
+                (me.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(10).string(e.cmd),
+                    null != e.desc &&
+                      e.hasOwnProperty("desc") &&
+                      t.uint32(18).string(e.desc),
+                    t
+                  );
+                }),
+                (me.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdGmInfo();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.cmd = e.string();
+                        break;
+                      case 2:
+                        o.desc = e.string();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (o.hasOwnProperty("cmd")) return o;
+                  throw $util.ProtocolError("mr'cmd'", { instance: o });
+                }),
+                me)),
+              (r.CmdOpenCache =
+                ((pe.prototype.refId = 0),
+                (pe.prototype.show = !1),
+                (pe.create = function (e) {
+                  return new pe(e);
+                }),
+                (pe.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.refId),
+                    t.uint32(16).bool(e.show),
+                    t
+                  );
+                }),
+                (pe.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdOpenCache();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.refId = e.sint32();
+                        break;
+                      case 2:
+                        o.show = e.bool();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("refId"))
+                    throw $util.ProtocolError("mr'refId'", { instance: o });
+                  if (o.hasOwnProperty("show")) return o;
+                  throw $util.ProtocolError("mr'show'", { instance: o });
+                }),
+                pe)),
+              (r.CmdOpenCache_Key =
+                ((ye.prototype.refId = 0),
+                (ye.create = function (e) {
+                  return new ye(e);
+                }),
+                (ye.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.refId), t
+                  );
+                }),
+                (ye.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdOpenCache_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.refId = e.sint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("refId")) return o;
+                  throw $util.ProtocolError("mr'refId'", { instance: o });
+                }),
+                ye)),
+              (r.CmdCommonState =
+                ((e = {}),
+                ((t = Object.create(e))[(e[0] = "UNDONE")] = 0),
+                (t[(e[1] = "FINISH")] = 1),
+                (t[(e[2] = "REWARDED")] = 2),
+                t)),
+              (r.CmdTakeDayChallengeActRewardReqMsg =
+                ((he.prototype.resId = 0),
+                (he.prototype.taskResId = 0),
+                (he.create = function (e) {
+                  return new he(e);
+                }),
+                (he.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.resId),
+                    t.uint32(16).sint32(e.taskResId),
+                    t
+                  );
+                }),
+                (he.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdTakeDayChallengeActRewardReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.sint32();
+                        break;
+                      case 2:
+                        o.taskResId = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("resId"))
+                    throw $util.ProtocolError("mr'resId'", { instance: o });
+                  if (o.hasOwnProperty("taskResId")) return o;
+                  throw $util.ProtocolError("mr'taskResId'", { instance: o });
+                }),
+                he)),
+              (r.CmdTakeDayChallengeActRewardRspMsg =
+                ((ge.prototype.tlReward = $util.emptyArray),
+                (ge.create = function (e) {
+                  return new ge(e);
+                }),
+                (ge.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlReward && e.tlReward.length)
+                  )
+                    for (var r = 0; r < e.tlReward.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlReward[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (ge.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdTakeDayChallengeActRewardRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlReward && o.tlReward.length) || (o.tlReward = []),
+                        o.tlReward.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                ge)),
+              (r.CmdTakeMonthCardActRewardReqMsg =
+                (($e.prototype.resId = 0),
+                ($e.create = function (e) {
+                  return new $e(e);
+                }),
+                ($e.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.resId), t
+                  );
+                }),
+                ($e.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdTakeMonthCardActRewardReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.resId = e.sint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("resId")) return o;
+                  throw $util.ProtocolError("mr'resId'", { instance: o });
+                }),
+                $e)),
+              (r.CmdTakeMonthCardActRewardRspMsg =
+                ((ke.prototype.tlReward = $util.emptyArray),
+                (ke.create = function (e) {
+                  return new ke(e);
+                }),
+                (ke.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlReward && e.tlReward.length)
+                  )
+                    for (var r = 0; r < e.tlReward.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlReward[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (ke.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdTakeMonthCardActRewardRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlReward && o.tlReward.length) || (o.tlReward = []),
+                        o.tlReward.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                ke)),
+              (r.CmdTakeRechargeGiftActRewardReqMsg =
+                ((we.prototype.resId = 0),
+                (we.prototype.rechargeProcess = 0),
+                (we.create = function (e) {
+                  return new we(e);
+                }),
+                (we.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.resId),
+                    t.uint32(16).sint32(e.rechargeProcess),
+                    t
+                  );
+                }),
+                (we.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdTakeRechargeGiftActRewardReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.sint32();
+                        break;
+                      case 2:
+                        o.rechargeProcess = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("resId"))
+                    throw $util.ProtocolError("mr'resId'", { instance: o });
+                  if (o.hasOwnProperty("rechargeProcess")) return o;
+                  throw $util.ProtocolError("mr'rechargeProcess'", {
+                    instance: o,
+                  });
+                }),
+                we)),
+              (r.CmdTakeRechargeGiftActRewardRspMsg =
+                ((ve.prototype.tlReward = $util.emptyArray),
+                (ve.create = function (e) {
+                  return new ve(e);
+                }),
+                (ve.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlReward && e.tlReward.length)
+                  )
+                    for (var r = 0; r < e.tlReward.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlReward[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (ve.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdTakeRechargeGiftActRewardRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlReward && o.tlReward.length) || (o.tlReward = []),
+                        o.tlReward.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                ve)),
+              (r.CmdActivityJsonReqMsg =
+                ((Ce.prototype.activityId = ""),
+                (Ce.prototype.tlJsonName = $util.emptyArray),
+                (Ce.create = function (e) {
+                  return new Ce(e);
+                }),
+                (Ce.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create())
+                      .uint32(10)
+                      .string(e.activityId),
+                    e.tlJsonName && e.tlJsonName.length)
+                  )
+                    for (var r = 0; r < e.tlJsonName.length; ++r)
+                      t.uint32(18).string(e.tlJsonName[r]);
+                  return t;
+                }),
+                (Ce.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdActivityJsonReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.activityId = e.string();
+                        break;
+                      case 2:
+                        (o.tlJsonName && o.tlJsonName.length) ||
+                          (o.tlJsonName = []),
+                          o.tlJsonName.push(e.string());
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (o.hasOwnProperty("activityId")) return o;
+                  throw $util.ProtocolError("mr'activityId'", { instance: o });
+                }),
+                Ce)),
+              (r.CmdActivityJsonRspMsg =
+                ((Re.prototype.content = ""),
+                (Re.create = function (e) {
+                  return new Re(e);
+                }),
+                (Re.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(10).string(e.content), t
+                  );
+                }),
+                (Re.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdActivityJsonRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.content = e.string()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("content")) return o;
+                  throw $util.ProtocolError("mr'content'", { instance: o });
+                }),
+                Re)),
+              (r.CmdActivityLimitTimeInfoReqMsg =
+                ((be.create = function (e) {
+                  return new be(e);
+                }),
+                (be.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (be.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdActivityLimitTimeInfoReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                be)),
+              (r.CmdActivityLimitTimeInfoRspMsg =
+                ((Ie.prototype.tlCmdTask = $util.emptyArray),
+                (Ie.prototype.tlLimitTimeDay = $util.emptyArray),
+                (Ie.prototype.tlLimitTimeActivity = $util.emptyArray),
+                (Ie.create = function (e) {
+                  return new Ie(e);
+                }),
+                (Ie.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdTask && e.tlCmdTask.length)
+                  )
+                    for (var r = 0; r < e.tlCmdTask.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdTask.encode(
+                        e.tlCmdTask[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  if (e.tlLimitTimeDay && e.tlLimitTimeDay.length)
+                    for (r = 0; r < e.tlLimitTimeDay.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdActivityGoods.encode(
+                        e.tlLimitTimeDay[r],
+                        t.uint32(18).fork(),
+                      ).ldelim();
+                  if (e.tlLimitTimeActivity && e.tlLimitTimeActivity.length)
+                    for (r = 0; r < e.tlLimitTimeActivity.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdActivityGoods.encode(
+                        e.tlLimitTimeActivity[r],
+                        t.uint32(26).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (Ie.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdActivityLimitTimeInfoRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        (o.tlCmdTask && o.tlCmdTask.length) ||
+                          (o.tlCmdTask = []),
+                          o.tlCmdTask.push(
+                            $root.com.xkhy.tafang.cmd.CmdTask.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      case 2:
+                        (o.tlLimitTimeDay && o.tlLimitTimeDay.length) ||
+                          (o.tlLimitTimeDay = []),
+                          o.tlLimitTimeDay.push(
+                            $root.com.xkhy.tafang.cmd.CmdActivityGoods.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      case 3:
+                        (o.tlLimitTimeActivity &&
+                          o.tlLimitTimeActivity.length) ||
+                          (o.tlLimitTimeActivity = []),
+                          o.tlLimitTimeActivity.push(
+                            $root.com.xkhy.tafang.cmd.CmdActivityGoods.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  return o;
+                }),
+                Ie)),
+              (r.CmdActivityLimitTimeTakeReqMsg =
+                ((Pe.prototype.resId = 0),
+                (Pe.prototype.type = 0),
+                (Pe.create = function (e) {
+                  return new Pe(e);
+                }),
+                (Pe.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.resId),
+                    t.uint32(16).sint32(e.type),
+                    t
+                  );
+                }),
+                (Pe.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdActivityLimitTimeTakeReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.sint32();
+                        break;
+                      case 2:
+                        o.type = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("resId"))
+                    throw $util.ProtocolError("mr'resId'", { instance: o });
+                  if (o.hasOwnProperty("type")) return o;
+                  throw $util.ProtocolError("mr'type'", { instance: o });
+                }),
+                Pe)),
+              (r.CmdActivityLimitTimeTakeRspMsg =
+                ((l.prototype.tlCmdGoods = $util.emptyArray),
+                (l.prototype.tlCmdTask = $util.emptyArray),
+                (l.prototype.tlLimitTimeDay = $util.emptyArray),
+                (l.prototype.tlLimitTimeActivity = $util.emptyArray),
+                (l.create = function (e) {
+                  return new l(e);
+                }),
+                (l.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  if (e.tlCmdTask && e.tlCmdTask.length)
+                    for (r = 0; r < e.tlCmdTask.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdTask.encode(
+                        e.tlCmdTask[r],
+                        t.uint32(18).fork(),
+                      ).ldelim();
+                  if (e.tlLimitTimeDay && e.tlLimitTimeDay.length)
+                    for (r = 0; r < e.tlLimitTimeDay.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdActivityGoods.encode(
+                        e.tlLimitTimeDay[r],
+                        t.uint32(26).fork(),
+                      ).ldelim();
+                  if (e.tlLimitTimeActivity && e.tlLimitTimeActivity.length)
+                    for (r = 0; r < e.tlLimitTimeActivity.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdActivityGoods.encode(
+                        e.tlLimitTimeActivity[r],
+                        t.uint32(34).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (l.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdActivityLimitTimeTakeRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        (o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                          o.tlCmdGoods.push(
+                            $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      case 2:
+                        (o.tlCmdTask && o.tlCmdTask.length) ||
+                          (o.tlCmdTask = []),
+                          o.tlCmdTask.push(
+                            $root.com.xkhy.tafang.cmd.CmdTask.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      case 3:
+                        (o.tlLimitTimeDay && o.tlLimitTimeDay.length) ||
+                          (o.tlLimitTimeDay = []),
+                          o.tlLimitTimeDay.push(
+                            $root.com.xkhy.tafang.cmd.CmdActivityGoods.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      case 4:
+                        (o.tlLimitTimeActivity &&
+                          o.tlLimitTimeActivity.length) ||
+                          (o.tlLimitTimeActivity = []),
+                          o.tlLimitTimeActivity.push(
+                            $root.com.xkhy.tafang.cmd.CmdActivityGoods.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  return o;
+                }),
+                l)),
+              (r.CmdBuySkinReqMsg =
+                ((Oe.prototype.resId = 0),
+                (Oe.create = function (e) {
+                  return new Oe(e);
+                }),
+                (Oe.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.resId), t
+                  );
+                }),
+                (Oe.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdBuySkinReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.resId = e.sint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("resId")) return o;
+                  throw $util.ProtocolError("mr'resId'", { instance: o });
+                }),
+                Oe)),
+              (r.CmdBuySkinRspMsg =
+                ((Te.prototype.tlReward = $util.emptyArray),
+                (Te.create = function (e) {
+                  return new Te(e);
+                }),
+                (Te.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlReward && e.tlReward.length)
+                  )
+                    for (var r = 0; r < e.tlReward.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlReward[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (Te.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdBuySkinRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlReward && o.tlReward.length) || (o.tlReward = []),
+                        o.tlReward.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                Te)),
+              (r.CmdActivityLimitSkinInfoReqMsg =
+                ((Me.create = function (e) {
+                  return new Me(e);
+                }),
+                (Me.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Me.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdActivityLimitSkinInfoReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Me)),
+              (r.CmdActivityLimitSkinInfoRspMsg =
+                ((Ge.prototype.cmdSkinPlayer = null),
+                (Ge.create = function (e) {
+                  return new Ge(e);
+                }),
+                (Ge.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()),
+                    $root.com.xkhy.tafang.cmd.CmdSkinPlayer.encode(
+                      e.cmdSkinPlayer,
+                      t.uint32(10).fork(),
+                    ).ldelim(),
+                    t
+                  );
+                }),
+                (Ge.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdActivityLimitSkinInfoRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.cmdSkinPlayer =
+                          $root.com.xkhy.tafang.cmd.CmdSkinPlayer.decode(
+                            e,
+                            e.uint32(),
+                          ))
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("cmdSkinPlayer")) return o;
+                  throw $util.ProtocolError("mr'cmdSkinPlayer'", {
+                    instance: o,
+                  });
+                }),
+                Ge)),
+              (r.CmdActivityLimitSkinBuyReqMsg =
+                ((xe.prototype.id = 0),
+                (xe.create = function (e) {
+                  return new xe(e);
+                }),
+                (xe.encode = function (e, t) {
+                  return (t = t || $Writer.create()).uint32(8).sint32(e.id), t;
+                }),
+                (xe.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdActivityLimitSkinBuyReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.id = e.sint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("id")) return o;
+                  throw $util.ProtocolError("mr'id'", { instance: o });
+                }),
+                xe)),
+              (r.CmdActivityLimitSkinBuyRspMsg =
+                ((Se.prototype.tlReward = $util.emptyArray),
+                (Se.prototype.cmdSkinPlayer = null),
+                (Se.create = function (e) {
+                  return new Se(e);
+                }),
+                (Se.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlReward && e.tlReward.length)
+                  )
+                    for (var r = 0; r < e.tlReward.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlReward[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return (
+                    $root.com.xkhy.tafang.cmd.CmdSkinPlayer.encode(
+                      e.cmdSkinPlayer,
+                      t.uint32(18).fork(),
+                    ).ldelim(),
+                    t
+                  );
+                }),
+                (Se.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdActivityLimitSkinBuyRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        (o.tlReward && o.tlReward.length) || (o.tlReward = []),
+                          o.tlReward.push(
+                            $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      case 2:
+                        o.cmdSkinPlayer =
+                          $root.com.xkhy.tafang.cmd.CmdSkinPlayer.decode(
+                            e,
+                            e.uint32(),
+                          );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (o.hasOwnProperty("cmdSkinPlayer")) return o;
+                  throw $util.ProtocolError("mr'cmdSkinPlayer'", {
+                    instance: o,
+                  });
+                }),
+                Se)),
+              (r.CmdTask =
+                ((Ee.prototype.resId = 0),
+                (Ee.prototype.count = 0),
+                (Ee.prototype.rewardState = 0),
+                (Ee.create = function (e) {
+                  return new Ee(e);
+                }),
+                (Ee.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.resId),
+                    t.uint32(16).sint32(e.count),
+                    t.uint32(24).uint32(e.rewardState),
+                    t
+                  );
+                }),
+                (Ee.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdTask();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.sint32();
+                        break;
+                      case 2:
+                        o.count = e.sint32();
+                        break;
+                      case 3:
+                        o.rewardState = e.uint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("resId"))
+                    throw $util.ProtocolError("mr'resId'", { instance: o });
+                  if (!o.hasOwnProperty("count"))
+                    throw $util.ProtocolError("mr'count'", { instance: o });
+                  if (o.hasOwnProperty("rewardState")) return o;
+                  throw $util.ProtocolError("mr'rewardState'", { instance: o });
+                }),
+                Ee)),
+              (r.CmdTask_Key =
+                ((Be.prototype.resId = 0),
+                (Be.create = function (e) {
+                  return new Be(e);
+                }),
+                (Be.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.resId), t
+                  );
+                }),
+                (Be.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdTask_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.resId = e.sint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("resId")) return o;
+                  throw $util.ProtocolError("mr'resId'", { instance: o });
+                }),
+                Be)),
+              (r.CmdTaskType =
+                ((e = {}),
+                ((t = Object.create(e))[(e[2] = "SEVEN_DAY_TASK")] = 2),
+                (t[(e[4] = "signin")] = 4),
+                t)),
+              (r.CmdSevenDayInfo =
+                ((De.prototype.tlCmdTask = $util.emptyArray),
+                (De.prototype.cmdSevenDayPoint = null),
+                (De.prototype.tlCmdSevenDayShop = $util.emptyArray),
+                (De.create = function (e) {
+                  return new De(e);
+                }),
+                (De.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdTask && e.tlCmdTask.length)
+                  )
+                    for (var r = 0; r < e.tlCmdTask.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdTask.encode(
+                        e.tlCmdTask[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  if (
+                    ($root.com.xkhy.tafang.cmd.CmdSevenDayPoint.encode(
+                      e.cmdSevenDayPoint,
+                      t.uint32(18).fork(),
+                    ).ldelim(),
+                    e.tlCmdSevenDayShop && e.tlCmdSevenDayShop.length)
+                  )
+                    for (r = 0; r < e.tlCmdSevenDayShop.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdSevenDayShop.encode(
+                        e.tlCmdSevenDayShop[r],
+                        t.uint32(26).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (De.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdSevenDayInfo();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        (o.tlCmdTask && o.tlCmdTask.length) ||
+                          (o.tlCmdTask = []),
+                          o.tlCmdTask.push(
+                            $root.com.xkhy.tafang.cmd.CmdTask.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      case 2:
+                        o.cmdSevenDayPoint =
+                          $root.com.xkhy.tafang.cmd.CmdSevenDayPoint.decode(
+                            e,
+                            e.uint32(),
+                          );
+                        break;
+                      case 3:
+                        (o.tlCmdSevenDayShop && o.tlCmdSevenDayShop.length) ||
+                          (o.tlCmdSevenDayShop = []),
+                          o.tlCmdSevenDayShop.push(
+                            $root.com.xkhy.tafang.cmd.CmdSevenDayShop.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (o.hasOwnProperty("cmdSevenDayPoint")) return o;
+                  throw $util.ProtocolError("mr'cmdSevenDayPoint'", {
+                    instance: o,
+                  });
+                }),
+                De)),
+              (r.CmdSevenDayPoint =
+                ((Le.prototype.point = 0),
+                (Le.prototype.tlIds = $util.emptyArray),
+                (Le.create = function (e) {
+                  return new Le(e);
+                }),
+                (Le.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()).uint32(8).sint32(e.point),
+                    e.tlIds && e.tlIds.length)
+                  )
+                    for (var r = 0; r < e.tlIds.length; ++r)
+                      t.uint32(16).sint32(e.tlIds[r]);
+                  return t;
+                }),
+                (Le.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdSevenDayPoint();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.point = e.sint32();
+                        break;
+                      case 2:
+                        if (
+                          ((o.tlIds && o.tlIds.length) || (o.tlIds = []),
+                          2 == (7 & n))
+                        )
+                          for (var i = e.uint32() + e.pos; e.pos < i; )
+                            o.tlIds.push(e.sint32());
+                        else o.tlIds.push(e.sint32());
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (o.hasOwnProperty("point")) return o;
+                  throw $util.ProtocolError("mr'point'", { instance: o });
+                }),
+                Le)),
+              (r.CmdSevenDayShop =
+                ((We.prototype.id = 0),
+                (We.prototype.buyTimes = 0),
+                (We.create = function (e) {
+                  return new We(e);
+                }),
+                (We.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).int32(e.id),
+                    t.uint32(16).int32(e.buyTimes),
+                    t
+                  );
+                }),
+                (We.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdSevenDayShop();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.id = e.int32();
+                        break;
+                      case 2:
+                        o.buyTimes = e.int32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("id"))
+                    throw $util.ProtocolError("mr'id'", { instance: o });
+                  if (o.hasOwnProperty("buyTimes")) return o;
+                  throw $util.ProtocolError("mr'buyTimes'", { instance: o });
+                }),
+                We)),
+              (r.CmdSigninInfo =
+                ((u.prototype.tlCmdTask = $util.emptyArray),
+                (u.prototype.boxTlCmdTask = $util.emptyArray),
+                (u.prototype.type = 0),
+                (u.prototype.round = 0),
+                (u.prototype.day = 0),
+                (u.create = function (e) {
+                  return new u(e);
+                }),
+                (u.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdTask && e.tlCmdTask.length)
+                  )
+                    for (var r = 0; r < e.tlCmdTask.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdTask.encode(
+                        e.tlCmdTask[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  if (e.boxTlCmdTask && e.boxTlCmdTask.length)
+                    for (r = 0; r < e.boxTlCmdTask.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdTask.encode(
+                        e.boxTlCmdTask[r],
+                        t.uint32(18).fork(),
+                      ).ldelim();
+                  return (
+                    t.uint32(24).int32(e.type),
+                    t.uint32(32).int32(e.round),
+                    t.uint32(40).int32(e.day),
+                    t
+                  );
+                }),
+                (u.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdSigninInfo();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        (o.tlCmdTask && o.tlCmdTask.length) ||
+                          (o.tlCmdTask = []),
+                          o.tlCmdTask.push(
+                            $root.com.xkhy.tafang.cmd.CmdTask.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      case 2:
+                        (o.boxTlCmdTask && o.boxTlCmdTask.length) ||
+                          (o.boxTlCmdTask = []),
+                          o.boxTlCmdTask.push(
+                            $root.com.xkhy.tafang.cmd.CmdTask.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      case 3:
+                        o.type = e.int32();
+                        break;
+                      case 4:
+                        o.round = e.int32();
+                        break;
+                      case 5:
+                        o.day = e.int32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("type"))
+                    throw $util.ProtocolError("mr'type'", { instance: o });
+                  if (!o.hasOwnProperty("round"))
+                    throw $util.ProtocolError("mr'round'", { instance: o });
+                  if (o.hasOwnProperty("day")) return o;
+                  throw $util.ProtocolError("mr'day'", { instance: o });
+                }),
+                u)),
+              (r.CmdBattleLevel =
+                ((Ae.prototype.level = 0),
+                (Ae.prototype.star = 0),
+                (Ae.prototype.battleTime = 0),
+                (Ae.create = function (e) {
+                  return new Ae(e);
+                }),
+                (Ae.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.level),
+                    t.uint32(16).sint32(e.star),
+                    t.uint32(24).sint32(e.battleTime),
+                    t
+                  );
+                }),
+                (Ae.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdBattleLevel();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.level = e.sint32();
+                        break;
+                      case 2:
+                        o.star = e.sint32();
+                        break;
+                      case 3:
+                        o.battleTime = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("level"))
+                    throw $util.ProtocolError("mr'level'", { instance: o });
+                  if (!o.hasOwnProperty("star"))
+                    throw $util.ProtocolError("mr'star'", { instance: o });
+                  if (o.hasOwnProperty("battleTime")) return o;
+                  throw $util.ProtocolError("mr'battleTime'", { instance: o });
+                }),
+                Ae)),
+              (r.CmdBattleLevel_Key =
+                ((je.prototype.level = 0),
+                (je.create = function (e) {
+                  return new je(e);
+                }),
+                (je.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.level), t
+                  );
+                }),
+                (je.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdBattleLevel_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.level = e.sint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("level")) return o;
+                  throw $util.ProtocolError("mr'level'", { instance: o });
+                }),
+                je)),
+              (r.CmdBattleChapter =
+                ((qe.prototype.chapterId = 0),
+                (qe.prototype.takeStar = 0),
+                (qe.prototype.star = 0),
+                (qe.prototype.tlCmdBattleLevel = $util.emptyArray),
+                (qe.create = function (e) {
+                  return new qe(e);
+                }),
+                (qe.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()).uint32(8).sint32(e.chapterId),
+                    t.uint32(16).sint32(e.takeStar),
+                    t.uint32(24).sint32(e.star),
+                    e.tlCmdBattleLevel && e.tlCmdBattleLevel.length)
+                  )
+                    for (var r = 0; r < e.tlCmdBattleLevel.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdBattleLevel.encode(
+                        e.tlCmdBattleLevel[r],
+                        t.uint32(34).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (qe.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdBattleChapter();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.chapterId = e.sint32();
+                        break;
+                      case 2:
+                        o.takeStar = e.sint32();
+                        break;
+                      case 3:
+                        o.star = e.sint32();
+                        break;
+                      case 4:
+                        (o.tlCmdBattleLevel && o.tlCmdBattleLevel.length) ||
+                          (o.tlCmdBattleLevel = []),
+                          o.tlCmdBattleLevel.push(
+                            $root.com.xkhy.tafang.cmd.CmdBattleLevel.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("chapterId"))
+                    throw $util.ProtocolError("mr'chapterId'", { instance: o });
+                  if (!o.hasOwnProperty("takeStar"))
+                    throw $util.ProtocolError("mr'takeStar'", { instance: o });
+                  if (o.hasOwnProperty("star")) return o;
+                  throw $util.ProtocolError("mr'star'", { instance: o });
+                }),
+                qe)),
+              (r.CmdBattleChapter_Key =
+                ((Fe.prototype.chapterId = 0),
+                (Fe.create = function (e) {
+                  return new Fe(e);
+                }),
+                (Fe.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.chapterId), t
+                  );
+                }),
+                (Fe.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdBattleChapter_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.chapterId = e.sint32())
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("chapterId")) return o;
+                  throw $util.ProtocolError("mr'chapterId'", { instance: o });
+                }),
+                Fe)),
+              (r.CmdBattleData =
+                ((f.prototype.tlSkillId = $util.emptyArray),
+                (f.prototype.tlCmdBattleCard = $util.emptyArray),
+                (f.prototype.tlCmdBattleBuff = $util.emptyArray),
+                (f.prototype.tlCmdBattleAttr = $util.emptyArray),
+                (f.prototype.advertNum = 0),
+                (f.prototype.randomTimes = 0),
+                (f.prototype.battleId = ""),
+                (f.prototype.tlId = $util.emptyArray),
+                (f.prototype.clientData = $util.newBuffer([])),
+                (f.prototype.battleType = 1),
+                (f.prototype.gemRefreshSkillNum = 0),
+                (f.prototype.times = 0),
+                (f.prototype.tlWallSkillId = $util.emptyArray),
+                (f.prototype.spiritAnimalData = null),
+                (f.prototype.cmdBattleSkill = null),
+                (f.create = function (e) {
+                  return new f(e);
+                }),
+                (f.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlSkillId && e.tlSkillId.length)
+                  )
+                    for (var r = 0; r < e.tlSkillId.length; ++r)
+                      t.uint32(8).sint32(e.tlSkillId[r]);
+                  if (e.tlCmdBattleCard && e.tlCmdBattleCard.length)
+                    for (r = 0; r < e.tlCmdBattleCard.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdBattleCard.encode(
+                        e.tlCmdBattleCard[r],
+                        t.uint32(18).fork(),
+                      ).ldelim();
+                  if (e.tlCmdBattleBuff && e.tlCmdBattleBuff.length)
+                    for (r = 0; r < e.tlCmdBattleBuff.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdBattleBuff.encode(
+                        e.tlCmdBattleBuff[r],
+                        t.uint32(26).fork(),
+                      ).ldelim();
+                  if (e.tlCmdBattleAttr && e.tlCmdBattleAttr.length)
+                    for (r = 0; r < e.tlCmdBattleAttr.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdBattleAttr.encode(
+                        e.tlCmdBattleAttr[r],
+                        t.uint32(34).fork(),
+                      ).ldelim();
+                  if (
+                    (t.uint32(40).sint32(e.advertNum),
+                    t.uint32(48).sint32(e.randomTimes),
+                    t.uint32(58).string(e.battleId),
+                    e.tlId && e.tlId.length)
+                  )
+                    for (r = 0; r < e.tlId.length; ++r)
+                      t.uint32(64).sint32(e.tlId[r]);
+                  if (
+                    (e.clientData &&
+                      e.hasOwnProperty("clientData") &&
+                      t.uint32(74).bytes(e.clientData),
+                    null != e.battleType &&
+                      e.hasOwnProperty("battleType") &&
+                      t.uint32(80).uint32(e.battleType),
+                    null != e.gemRefreshSkillNum &&
+                      e.hasOwnProperty("gemRefreshSkillNum") &&
+                      t.uint32(88).sint32(e.gemRefreshSkillNum),
+                    t.uint32(96).sint32(e.times),
+                    e.tlWallSkillId && e.tlWallSkillId.length)
+                  )
+                    for (r = 0; r < e.tlWallSkillId.length; ++r)
+                      t.uint32(104).sint32(e.tlWallSkillId[r]);
+                  return (
+                    e.spiritAnimalData &&
+                      e.hasOwnProperty("spiritAnimalData") &&
+                      $root.com.xkhy.tafang.cmd.CmdSpiritAnimalData.encode(
+                        e.spiritAnimalData,
+                        t.uint32(114).fork(),
+                      ).ldelim(),
+                    e.cmdBattleSkill &&
+                      e.hasOwnProperty("cmdBattleSkill") &&
+                      $root.com.xkhy.tafang.cmd.CmdBattleSkill.encode(
+                        e.cmdBattleSkill,
+                        t.uint32(122).fork(),
+                      ).ldelim(),
+                    t
+                  );
+                }),
+                (f.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdBattleData();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        if (
+                          ((o.tlSkillId && o.tlSkillId.length) ||
+                            (o.tlSkillId = []),
+                          2 == (7 & n))
+                        )
+                          for (var i = e.uint32() + e.pos; e.pos < i; )
+                            o.tlSkillId.push(e.sint32());
+                        else o.tlSkillId.push(e.sint32());
+                        break;
+                      case 2:
+                        (o.tlCmdBattleCard && o.tlCmdBattleCard.length) ||
+                          (o.tlCmdBattleCard = []),
+                          o.tlCmdBattleCard.push(
+                            $root.com.xkhy.tafang.cmd.CmdBattleCard.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      case 3:
+                        (o.tlCmdBattleBuff && o.tlCmdBattleBuff.length) ||
+                          (o.tlCmdBattleBuff = []),
+                          o.tlCmdBattleBuff.push(
+                            $root.com.xkhy.tafang.cmd.CmdBattleBuff.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      case 4:
+                        (o.tlCmdBattleAttr && o.tlCmdBattleAttr.length) ||
+                          (o.tlCmdBattleAttr = []),
+                          o.tlCmdBattleAttr.push(
+                            $root.com.xkhy.tafang.cmd.CmdBattleAttr.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      case 5:
+                        o.advertNum = e.sint32();
+                        break;
+                      case 6:
+                        o.randomTimes = e.sint32();
+                        break;
+                      case 7:
+                        o.battleId = e.string();
+                        break;
+                      case 8:
+                        if (
+                          ((o.tlId && o.tlId.length) || (o.tlId = []),
+                          2 == (7 & n))
+                        )
+                          for (i = e.uint32() + e.pos; e.pos < i; )
+                            o.tlId.push(e.sint32());
+                        else o.tlId.push(e.sint32());
+                        break;
+                      case 9:
+                        o.clientData = e.bytes();
+                        break;
+                      case 10:
+                        o.battleType = e.uint32();
+                        break;
+                      case 11:
+                        o.gemRefreshSkillNum = e.sint32();
+                        break;
+                      case 12:
+                        o.times = e.sint32();
+                        break;
+                      case 13:
+                        if (
+                          ((o.tlWallSkillId && o.tlWallSkillId.length) ||
+                            (o.tlWallSkillId = []),
+                          2 == (7 & n))
+                        )
+                          for (i = e.uint32() + e.pos; e.pos < i; )
+                            o.tlWallSkillId.push(e.sint32());
+                        else o.tlWallSkillId.push(e.sint32());
+                        break;
+                      case 14:
+                        o.spiritAnimalData =
+                          $root.com.xkhy.tafang.cmd.CmdSpiritAnimalData.decode(
+                            e,
+                            e.uint32(),
+                          );
+                        break;
+                      case 15:
+                        o.cmdBattleSkill =
+                          $root.com.xkhy.tafang.cmd.CmdBattleSkill.decode(
+                            e,
+                            e.uint32(),
+                          );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("advertNum"))
+                    throw $util.ProtocolError("mr'advertNum'", { instance: o });
+                  if (!o.hasOwnProperty("randomTimes"))
+                    throw $util.ProtocolError("mr'randomTimes'", {
+                      instance: o,
+                    });
+                  if (!o.hasOwnProperty("battleId"))
+                    throw $util.ProtocolError("mr'battleId'", { instance: o });
+                  if (o.hasOwnProperty("times")) return o;
+                  throw $util.ProtocolError("mr'times'", { instance: o });
+                }),
+                f)),
+              (r.CmdSpiritAnimalData =
+                ((Ue.prototype.tlSkillId = $util.emptyArray),
+                (Ue.prototype.tlCmdBattleBuff = $util.emptyArray),
+                (Ue.prototype.tlCmdBattleAttr = $util.emptyArray),
+                (Ue.create = function (e) {
+                  return new Ue(e);
+                }),
+                (Ue.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlSkillId && e.tlSkillId.length)
+                  )
+                    for (var r = 0; r < e.tlSkillId.length; ++r)
+                      t.uint32(8).sint32(e.tlSkillId[r]);
+                  if (e.tlCmdBattleBuff && e.tlCmdBattleBuff.length)
+                    for (r = 0; r < e.tlCmdBattleBuff.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdBattleBuff.encode(
+                        e.tlCmdBattleBuff[r],
+                        t.uint32(18).fork(),
+                      ).ldelim();
+                  if (e.tlCmdBattleAttr && e.tlCmdBattleAttr.length)
+                    for (r = 0; r < e.tlCmdBattleAttr.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdBattleAttr.encode(
+                        e.tlCmdBattleAttr[r],
+                        t.uint32(26).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (Ue.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdSpiritAnimalData();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        if (
+                          ((o.tlSkillId && o.tlSkillId.length) ||
+                            (o.tlSkillId = []),
+                          2 == (7 & n))
+                        )
+                          for (var i = e.uint32() + e.pos; e.pos < i; )
+                            o.tlSkillId.push(e.sint32());
+                        else o.tlSkillId.push(e.sint32());
+                        break;
+                      case 2:
+                        (o.tlCmdBattleBuff && o.tlCmdBattleBuff.length) ||
+                          (o.tlCmdBattleBuff = []),
+                          o.tlCmdBattleBuff.push(
+                            $root.com.xkhy.tafang.cmd.CmdBattleBuff.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      case 3:
+                        (o.tlCmdBattleAttr && o.tlCmdBattleAttr.length) ||
+                          (o.tlCmdBattleAttr = []),
+                          o.tlCmdBattleAttr.push(
+                            $root.com.xkhy.tafang.cmd.CmdBattleAttr.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  return o;
+                }),
+                Ue)),
+              (r.CmdBattleSkill =
+                ((m.prototype.tlSkillId = $util.emptyArray),
+                (m.prototype.tlBaseSkillId = $util.emptyArray),
+                (m.prototype.tlBossSkillId = $util.emptyArray),
+                (m.prototype.curRandomSkill = $util.emptyArray),
+                (m.prototype.curRandomSkillType = 0),
+                (m.create = function (e) {
+                  return new m(e);
+                }),
+                (m.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlSkillId && e.tlSkillId.length)
+                  )
+                    for (var r = 0; r < e.tlSkillId.length; ++r)
+                      t.uint32(8).sint32(e.tlSkillId[r]);
+                  if (e.tlBaseSkillId && e.tlBaseSkillId.length)
+                    for (r = 0; r < e.tlBaseSkillId.length; ++r)
+                      t.uint32(16).sint32(e.tlBaseSkillId[r]);
+                  if (e.tlBossSkillId && e.tlBossSkillId.length)
+                    for (r = 0; r < e.tlBossSkillId.length; ++r)
+                      t.uint32(24).sint32(e.tlBossSkillId[r]);
+                  if (e.curRandomSkill && e.curRandomSkill.length)
+                    for (r = 0; r < e.curRandomSkill.length; ++r)
+                      t.uint32(32).sint32(e.curRandomSkill[r]);
+                  return (
+                    null != e.curRandomSkillType &&
+                      e.hasOwnProperty("curRandomSkillType") &&
+                      t.uint32(40).sint32(e.curRandomSkillType),
+                    t
+                  );
+                }),
+                (m.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdBattleSkill();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        if (
+                          ((o.tlSkillId && o.tlSkillId.length) ||
+                            (o.tlSkillId = []),
+                          2 == (7 & n))
+                        )
+                          for (var i = e.uint32() + e.pos; e.pos < i; )
+                            o.tlSkillId.push(e.sint32());
+                        else o.tlSkillId.push(e.sint32());
+                        break;
+                      case 2:
+                        if (
+                          ((o.tlBaseSkillId && o.tlBaseSkillId.length) ||
+                            (o.tlBaseSkillId = []),
+                          2 == (7 & n))
+                        )
+                          for (i = e.uint32() + e.pos; e.pos < i; )
+                            o.tlBaseSkillId.push(e.sint32());
+                        else o.tlBaseSkillId.push(e.sint32());
+                        break;
+                      case 3:
+                        if (
+                          ((o.tlBossSkillId && o.tlBossSkillId.length) ||
+                            (o.tlBossSkillId = []),
+                          2 == (7 & n))
+                        )
+                          for (i = e.uint32() + e.pos; e.pos < i; )
+                            o.tlBossSkillId.push(e.sint32());
+                        else o.tlBossSkillId.push(e.sint32());
+                        break;
+                      case 4:
+                        if (
+                          ((o.curRandomSkill && o.curRandomSkill.length) ||
+                            (o.curRandomSkill = []),
+                          2 == (7 & n))
+                        )
+                          for (i = e.uint32() + e.pos; e.pos < i; )
+                            o.curRandomSkill.push(e.sint32());
+                        else o.curRandomSkill.push(e.sint32());
+                        break;
+                      case 5:
+                        o.curRandomSkillType = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  return o;
+                }),
+                m)),
+              (r.CmdBattleCard =
+                ((Ke.prototype.id = 0),
+                (Ke.prototype.useNum = 0),
+                (Ke.create = function (e) {
+                  return new Ke(e);
+                }),
+                (Ke.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.id),
+                    t.uint32(16).sint32(e.useNum),
+                    t
+                  );
+                }),
+                (Ke.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdBattleCard();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.id = e.sint32();
+                        break;
+                      case 2:
+                        o.useNum = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("id"))
+                    throw $util.ProtocolError("mr'id'", { instance: o });
+                  if (o.hasOwnProperty("useNum")) return o;
+                  throw $util.ProtocolError("mr'useNum'", { instance: o });
+                }),
+                Ke)),
+              (r.CmdBattleBuff =
+                ((Ne.prototype.id = 0),
+                (Ne.prototype.refId = 0),
+                (Ne.create = function (e) {
+                  return new Ne(e);
+                }),
+                (Ne.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.id),
+                    t.uint32(16).sint32(e.refId),
+                    t
+                  );
+                }),
+                (Ne.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdBattleBuff();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.id = e.sint32();
+                        break;
+                      case 2:
+                        o.refId = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("id"))
+                    throw $util.ProtocolError("mr'id'", { instance: o });
+                  if (o.hasOwnProperty("refId")) return o;
+                  throw $util.ProtocolError("mr'refId'", { instance: o });
+                }),
+                Ne)),
+              (r.CmdBattleAttr =
+                ((_e.prototype.refId = 0),
+                (_e.prototype.value = ""),
+                (_e.create = function (e) {
+                  return new _e(e);
+                }),
+                (_e.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.refId),
+                    t.uint32(18).string(e.value),
+                    t
+                  );
+                }),
+                (_e.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdBattleAttr();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.refId = e.sint32();
+                        break;
+                      case 2:
+                        o.value = e.string();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("refId"))
+                    throw $util.ProtocolError("mr'refId'", { instance: o });
+                  if (o.hasOwnProperty("value")) return o;
+                  throw $util.ProtocolError("mr'value'", { instance: o });
+                }),
+                _e)),
+              (r.CmdBattleType =
+                ((e = {}),
+                ((t = Object.create(e))[(e[1] = "CHAPTER")] = 1),
+                (t[(e[2] = "LOCK_MONSTER")] = 2),
+                (t[(e[3] = "SECRET_REALM")] = 3),
+                t)),
+              (r.CmdEnterBattleReqMsg =
+                ((He.prototype.battleType = 1),
+                (He.prototype.level = 0),
+                (He.create = function (e) {
+                  return new He(e);
+                }),
+                (He.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).uint32(e.battleType),
+                    null != e.level &&
+                      e.hasOwnProperty("level") &&
+                      t.uint32(16).sint32(e.level),
+                    t
+                  );
+                }),
+                (He.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdEnterBattleReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.battleType = e.uint32();
+                        break;
+                      case 2:
+                        o.level = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (o.hasOwnProperty("battleType")) return o;
+                  throw $util.ProtocolError("mr'battleType'", { instance: o });
+                }),
+                He)),
+              (r.CmdEnterBattleRspMsg =
+                ((ze.prototype.cmdBattleData = null),
+                (ze.create = function (e) {
+                  return new ze(e);
+                }),
+                (ze.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()),
+                    $root.com.xkhy.tafang.cmd.CmdBattleData.encode(
+                      e.cmdBattleData,
+                      t.uint32(10).fork(),
+                    ).ldelim(),
+                    t
+                  );
+                }),
+                (ze.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdEnterBattleRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.cmdBattleData =
+                          $root.com.xkhy.tafang.cmd.CmdBattleData.decode(
+                            e,
+                            e.uint32(),
+                          ))
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("cmdBattleData")) return o;
+                  throw $util.ProtocolError("mr'cmdBattleData'", {
+                    instance: o,
+                  });
+                }),
+                ze)),
+              (r.CmdContinueNextBattleReqMsg =
+                ((Ve.prototype.battleType = 1),
+                (Ve.prototype.continue = !1),
+                (Ve.create = function (e) {
+                  return new Ve(e);
+                }),
+                (Ve.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).uint32(e.battleType),
+                    null != e.continue &&
+                      e.hasOwnProperty("continue") &&
+                      t.uint32(16).bool(e.continue),
+                    t
+                  );
+                }),
+                (Ve.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdContinueNextBattleReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.battleType = e.uint32();
+                        break;
+                      case 2:
+                        o.continue = e.bool();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (o.hasOwnProperty("battleType")) return o;
+                  throw $util.ProtocolError("mr'battleType'", { instance: o });
+                }),
+                Ve)),
+              (r.CmdContinueNextBattleRspMsg =
+                ((Je.prototype.cmdBattleData = null),
+                (Je.create = function (e) {
+                  return new Je(e);
+                }),
+                (Je.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()),
+                    e.cmdBattleData &&
+                      e.hasOwnProperty("cmdBattleData") &&
+                      $root.com.xkhy.tafang.cmd.CmdBattleData.encode(
+                        e.cmdBattleData,
+                        t.uint32(10).fork(),
+                      ).ldelim(),
+                    t
+                  );
+                }),
+                (Je.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdContinueNextBattleRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.cmdBattleData =
+                          $root.com.xkhy.tafang.cmd.CmdBattleData.decode(
+                            e,
+                            e.uint32(),
+                          ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                Je)),
+              (r.CmdGemRefreshSkillReqMsg =
+                ((Qe.create = function (e) {
+                  return new Qe(e);
+                }),
+                (Qe.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Qe.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdGemRefreshSkillReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Qe)),
+              (r.CmdGemRefreshSkillRspMsg =
+                ((Ye.prototype.tlId = $util.emptyArray),
+                (Ye.create = function (e) {
+                  return new Ye(e);
+                }),
+                (Ye.encode = function (e, t) {
+                  if (((t = t || $Writer.create()), e.tlId && e.tlId.length))
+                    for (var r = 0; r < e.tlId.length; ++r)
+                      t.uint32(8).sint32(e.tlId[r]);
+                  return t;
+                }),
+                (Ye.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdGemRefreshSkillRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    if (n >>> 3 == 1)
+                      if (
+                        ((o.tlId && o.tlId.length) || (o.tlId = []),
+                        2 == (7 & n))
+                      )
+                        for (var i = e.uint32() + e.pos; e.pos < i; )
+                          o.tlId.push(e.sint32());
+                      else o.tlId.push(e.sint32());
+                    else e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                Ye)),
+              (r.CmdBattleDataUploadReqMsg =
+                ((Xe.prototype.battleId = ""),
+                (Xe.prototype.clientData = $util.newBuffer([])),
+                (Xe.create = function (e) {
+                  return new Xe(e);
+                }),
+                (Xe.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(10).string(e.battleId),
+                    t.uint32(18).bytes(e.clientData),
+                    t
+                  );
+                }),
+                (Xe.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdBattleDataUploadReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.battleId = e.string();
+                        break;
+                      case 2:
+                        o.clientData = e.bytes();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("battleId"))
+                    throw $util.ProtocolError("mr'battleId'", { instance: o });
+                  if (o.hasOwnProperty("clientData")) return o;
+                  throw $util.ProtocolError("mr'clientData'", { instance: o });
+                }),
+                Xe)),
+              (r.CmdBattleDataUploadRspMsg =
+                ((Ze.create = function (e) {
+                  return new Ze(e);
+                }),
+                (Ze.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Ze.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdBattleDataUploadRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Ze)),
+              (r.CmdBattleResultReqMsg =
+                ((p.prototype.level = 0),
+                (p.prototype.star = 0),
+                (p.prototype.battleTime = 0),
+                (p.prototype.killNumber = 0),
+                (p.prototype.report = $util.newBuffer([])),
+                (p.prototype.version = 0),
+                (p.prototype.cmdBattleType = 1),
+                (p.create = function (e) {
+                  return new p(e);
+                }),
+                (p.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()),
+                    null != e.level &&
+                      e.hasOwnProperty("level") &&
+                      t.uint32(8).sint32(e.level),
+                    null != e.star &&
+                      e.hasOwnProperty("star") &&
+                      t.uint32(16).sint32(e.star),
+                    null != e.battleTime &&
+                      e.hasOwnProperty("battleTime") &&
+                      t.uint32(24).sint32(e.battleTime),
+                    null != e.killNumber &&
+                      e.hasOwnProperty("killNumber") &&
+                      t.uint32(32).sint32(e.killNumber),
+                    e.report &&
+                      e.hasOwnProperty("report") &&
+                      t.uint32(42).bytes(e.report),
+                    null != e.version &&
+                      e.hasOwnProperty("version") &&
+                      t.uint32(48).sint32(e.version),
+                    null != e.cmdBattleType &&
+                      e.hasOwnProperty("cmdBattleType") &&
+                      t.uint32(56).uint32(e.cmdBattleType),
+                    t
+                  );
+                }),
+                (p.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdBattleResultReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.level = e.sint32();
+                        break;
+                      case 2:
+                        o.star = e.sint32();
+                        break;
+                      case 3:
+                        o.battleTime = e.sint32();
+                        break;
+                      case 4:
+                        o.killNumber = e.sint32();
+                        break;
+                      case 5:
+                        o.report = e.bytes();
+                        break;
+                      case 6:
+                        o.version = e.sint32();
+                        break;
+                      case 7:
+                        o.cmdBattleType = e.uint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  return o;
+                }),
+                p)),
+              (r.CmdBattleResultRspMsg =
+                ((et.prototype.tlCmdGoods = $util.emptyArray),
+                (et.prototype.tipType = 0),
+                (et.create = function (e) {
+                  return new et(e);
+                }),
+                (et.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return (
+                    null != e.tipType &&
+                      e.hasOwnProperty("tipType") &&
+                      t.uint32(16).sint32(e.tipType),
+                    t
+                  );
+                }),
+                (et.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdBattleResultRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        (o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                          o.tlCmdGoods.push(
+                            $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      case 2:
+                        o.tipType = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  return o;
+                }),
+                et)),
+              (r.CmdBattleStatisticsReqMsg =
+                ((y.prototype.battleId = ""),
+                (y.prototype.level = 0),
+                (y.prototype.cmdBattleType = 1),
+                (y.prototype.battleTime = 0),
+                (y.prototype.report = $util.newBuffer([])),
+                (y.prototype.version = 0),
+                (y.prototype.roundIndex = 0),
+                (y.create = function (e) {
+                  return new y(e);
+                }),
+                (y.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(10).string(e.battleId),
+                    null != e.level &&
+                      e.hasOwnProperty("level") &&
+                      t.uint32(16).sint32(e.level),
+                    null != e.cmdBattleType &&
+                      e.hasOwnProperty("cmdBattleType") &&
+                      t.uint32(24).uint32(e.cmdBattleType),
+                    null != e.battleTime &&
+                      e.hasOwnProperty("battleTime") &&
+                      t.uint32(32).sint32(e.battleTime),
+                    e.report &&
+                      e.hasOwnProperty("report") &&
+                      t.uint32(42).bytes(e.report),
+                    null != e.version &&
+                      e.hasOwnProperty("version") &&
+                      t.uint32(48).sint32(e.version),
+                    null != e.roundIndex &&
+                      e.hasOwnProperty("roundIndex") &&
+                      t.uint32(56).sint32(e.roundIndex),
+                    t
+                  );
+                }),
+                (y.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdBattleStatisticsReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.battleId = e.string();
+                        break;
+                      case 2:
+                        o.level = e.sint32();
+                        break;
+                      case 3:
+                        o.cmdBattleType = e.uint32();
+                        break;
+                      case 4:
+                        o.battleTime = e.sint32();
+                        break;
+                      case 5:
+                        o.report = e.bytes();
+                        break;
+                      case 6:
+                        o.version = e.sint32();
+                        break;
+                      case 7:
+                        o.roundIndex = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (o.hasOwnProperty("battleId")) return o;
+                  throw $util.ProtocolError("mr'battleId'", { instance: o });
+                }),
+                y)),
+              (r.CmdBattleStatisticsRspMsg =
+                ((tt.create = function (e) {
+                  return new tt(e);
+                }),
+                (tt.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (tt.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdBattleStatisticsRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                tt)),
+              (r.CmdTakeStarRewardReqMsg =
+                ((rt.prototype.level = 0),
+                (rt.prototype.star = 0),
+                (rt.create = function (e) {
+                  return new rt(e);
+                }),
+                (rt.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.level),
+                    t.uint32(16).sint32(e.star),
+                    t
+                  );
+                }),
+                (rt.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdTakeStarRewardReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.level = e.sint32();
+                        break;
+                      case 2:
+                        o.star = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("level"))
+                    throw $util.ProtocolError("mr'level'", { instance: o });
+                  if (o.hasOwnProperty("star")) return o;
+                  throw $util.ProtocolError("mr'star'", { instance: o });
+                }),
+                rt)),
+              (r.CmdTakeStarRewardRspMsg =
+                ((ot.prototype.tlCmdGoods = $util.emptyArray),
+                (ot.create = function (e) {
+                  return new ot(e);
+                }),
+                (ot.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (ot.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdTakeStarRewardRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                        o.tlCmdGoods.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                ot)),
+              (r.CmdTakeChapterRewardReqMsg =
+                ((nt.prototype.chapter = 0),
+                (nt.create = function (e) {
+                  return new nt(e);
+                }),
+                (nt.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.chapter), t
+                  );
+                }),
+                (nt.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdTakeChapterRewardReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.chapter = e.sint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("chapter")) return o;
+                  throw $util.ProtocolError("mr'chapter'", { instance: o });
+                }),
+                nt)),
+              (r.CmdTakeChapterRewardRspMsg =
+                ((it.prototype.tlCmdGoods = $util.emptyArray),
+                (it.create = function (e) {
+                  return new it(e);
+                }),
+                (it.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (it.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdTakeChapterRewardRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                        o.tlCmdGoods.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                it)),
+              (r.CmdBattleSweepReqMsg =
+                ((at.prototype.type = 0),
+                (at.prototype.level = 0),
+                (at.create = function (e) {
+                  return new at(e);
+                }),
+                (at.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.type),
+                    t.uint32(16).sint32(e.level),
+                    t
+                  );
+                }),
+                (at.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdBattleSweepReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.type = e.sint32();
+                        break;
+                      case 2:
+                        o.level = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("type"))
+                    throw $util.ProtocolError("mr'type'", { instance: o });
+                  if (o.hasOwnProperty("level")) return o;
+                  throw $util.ProtocolError("mr'level'", { instance: o });
+                }),
+                at)),
+              (r.CmdBattleSweepRspMsg =
+                ((ct.prototype.tlCmdGoods = $util.emptyArray),
+                (ct.create = function (e) {
+                  return new ct(e);
+                }),
+                (ct.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (ct.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdBattleSweepRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                        o.tlCmdGoods.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                ct)),
+              (r.CmdBattleRandomSkillReqMsg =
+                ((h.prototype.level = 0),
+                (h.prototype.type = 0),
+                (h.prototype.hp = 0),
+                (h.prototype.cardId = 0),
+                (h.prototype.clientData = $util.newBuffer([])),
+                (h.prototype.battleTime = 0),
+                (h.create = function (e) {
+                  return new h(e);
+                }),
+                (h.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()),
+                    null != e.level &&
+                      e.hasOwnProperty("level") &&
+                      t.uint32(8).sint32(e.level),
+                    null != e.type &&
+                      e.hasOwnProperty("type") &&
+                      t.uint32(16).sint32(e.type),
+                    null != e.hp &&
+                      e.hasOwnProperty("hp") &&
+                      t.uint32(24).sint32(e.hp),
+                    null != e.cardId &&
+                      e.hasOwnProperty("cardId") &&
+                      t.uint32(32).sint32(e.cardId),
+                    e.clientData &&
+                      e.hasOwnProperty("clientData") &&
+                      t.uint32(42).bytes(e.clientData),
+                    null != e.battleTime &&
+                      e.hasOwnProperty("battleTime") &&
+                      t.uint32(48).sint32(e.battleTime),
+                    t
+                  );
+                }),
+                (h.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdBattleRandomSkillReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.level = e.sint32();
+                        break;
+                      case 2:
+                        o.type = e.sint32();
+                        break;
+                      case 3:
+                        o.hp = e.sint32();
+                        break;
+                      case 4:
+                        o.cardId = e.sint32();
+                        break;
+                      case 5:
+                        o.clientData = e.bytes();
+                        break;
+                      case 6:
+                        o.battleTime = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  return o;
+                }),
+                h)),
+              (r.CmdBattleRandomSkillRspMsg =
+                ((dt.prototype.tlId = $util.emptyArray),
+                (dt.prototype.selectId = $util.emptyArray),
+                (dt.prototype.cmdBattleData = null),
+                (dt.create = function (e) {
+                  return new dt(e);
+                }),
+                (dt.encode = function (e, t) {
+                  if (((t = t || $Writer.create()), e.tlId && e.tlId.length))
+                    for (var r = 0; r < e.tlId.length; ++r)
+                      t.uint32(8).sint32(e.tlId[r]);
+                  if (e.selectId && e.selectId.length)
+                    for (r = 0; r < e.selectId.length; ++r)
+                      t.uint32(16).sint32(e.selectId[r]);
+                  return (
+                    e.cmdBattleData &&
+                      e.hasOwnProperty("cmdBattleData") &&
+                      $root.com.xkhy.tafang.cmd.CmdBattleData.encode(
+                        e.cmdBattleData,
+                        t.uint32(26).fork(),
+                      ).ldelim(),
+                    t
+                  );
+                }),
+                (dt.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdBattleRandomSkillRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        if (
+                          ((o.tlId && o.tlId.length) || (o.tlId = []),
+                          2 == (7 & n))
+                        )
+                          for (var i = e.uint32() + e.pos; e.pos < i; )
+                            o.tlId.push(e.sint32());
+                        else o.tlId.push(e.sint32());
+                        break;
+                      case 2:
+                        if (
+                          ((o.selectId && o.selectId.length) ||
+                            (o.selectId = []),
+                          2 == (7 & n))
+                        )
+                          for (i = e.uint32() + e.pos; e.pos < i; )
+                            o.selectId.push(e.sint32());
+                        else o.selectId.push(e.sint32());
+                        break;
+                      case 3:
+                        o.cmdBattleData =
+                          $root.com.xkhy.tafang.cmd.CmdBattleData.decode(
+                            e,
+                            e.uint32(),
+                          );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  return o;
+                }),
+                dt)),
+              (r.CmdBattleSelectSkillReqMsg =
+                ((st.prototype.level = 0),
+                (st.prototype.id = $util.emptyArray),
+                (st.prototype.type = 0),
+                (st.create = function (e) {
+                  return new st(e);
+                }),
+                (st.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    null != e.level &&
+                      e.hasOwnProperty("level") &&
+                      t.uint32(8).sint32(e.level),
+                    e.id && e.id.length)
+                  )
+                    for (var r = 0; r < e.id.length; ++r)
+                      t.uint32(16).sint32(e.id[r]);
+                  return (
+                    null != e.type &&
+                      e.hasOwnProperty("type") &&
+                      t.uint32(24).sint32(e.type),
+                    t
+                  );
+                }),
+                (st.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdBattleSelectSkillReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.level = e.sint32();
+                        break;
+                      case 2:
+                        if (
+                          ((o.id && o.id.length) || (o.id = []), 2 == (7 & n))
+                        )
+                          for (var i = e.uint32() + e.pos; e.pos < i; )
+                            o.id.push(e.sint32());
+                        else o.id.push(e.sint32());
+                        break;
+                      case 3:
+                        o.type = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  return o;
+                }),
+                st)),
+              (r.CmdBattleSelectSkillRspMsg =
+                ((lt.prototype.cmdBattleData = null),
+                (lt.create = function (e) {
+                  return new lt(e);
+                }),
+                (lt.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()),
+                    $root.com.xkhy.tafang.cmd.CmdBattleData.encode(
+                      e.cmdBattleData,
+                      t.uint32(10).fork(),
+                    ).ldelim(),
+                    t
+                  );
+                }),
+                (lt.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdBattleSelectSkillRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.cmdBattleData =
+                          $root.com.xkhy.tafang.cmd.CmdBattleData.decode(
+                            e,
+                            e.uint32(),
+                          ))
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("cmdBattleData")) return o;
+                  throw $util.ProtocolError("mr'cmdBattleData'", {
+                    instance: o,
+                  });
+                }),
+                lt)),
+              (r.CmdBattlePreviewReqMsg =
+                ((ut.prototype.level = 0),
+                (ut.create = function (e) {
+                  return new ut(e);
+                }),
+                (ut.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.level), t
+                  );
+                }),
+                (ut.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdBattlePreviewReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.level = e.sint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("level")) return o;
+                  throw $util.ProtocolError("mr'level'", { instance: o });
+                }),
+                ut)),
+              (r.CmdBattlePreviewRspMsg =
+                ((ft.prototype.tlCmdGoods = $util.emptyArray),
+                (ft.create = function (e) {
+                  return new ft(e);
+                }),
+                (ft.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (ft.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdBattlePreviewRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                        o.tlCmdGoods.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                ft)),
+              (r.CmdBattleCompleteInfoReqMsg =
+                ((mt.prototype.level = 0),
+                (mt.create = function (e) {
+                  return new mt(e);
+                }),
+                (mt.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.level), t
+                  );
+                }),
+                (mt.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdBattleCompleteInfoReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.level = e.sint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("level")) return o;
+                  throw $util.ProtocolError("mr'level'", { instance: o });
+                }),
+                mt)),
+              (r.CmdBattleCompleteInfoRspMsg =
+                ((pt.prototype.star3 = 0),
+                (pt.create = function (e) {
+                  return new pt(e);
+                }),
+                (pt.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.star3), t
+                  );
+                }),
+                (pt.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdBattleCompleteInfoRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.star3 = e.sint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("star3")) return o;
+                  throw $util.ProtocolError("mr'star3'", { instance: o });
+                }),
+                pt)),
+              (r.CmdBattleToken =
+                ((g.prototype.roleId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (g.prototype.level = 0),
+                (g.prototype.exp = 0),
+                (g.prototype.tlBattleTokenMessage = $util.emptyArray),
+                (g.prototype.surplusDay = 0),
+                (g.create = function (e) {
+                  return new g(e);
+                }),
+                (g.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()).uint32(8).sint64(e.roleId),
+                    t.uint32(16).sint32(e.level),
+                    t.uint32(24).sint32(e.exp),
+                    e.tlBattleTokenMessage && e.tlBattleTokenMessage.length)
+                  )
+                    for (var r = 0; r < e.tlBattleTokenMessage.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdBattleTokenMessage.encode(
+                        e.tlBattleTokenMessage[r],
+                        t.uint32(34).fork(),
+                      ).ldelim();
+                  return t.uint32(40).sint32(e.surplusDay), t;
+                }),
+                (g.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdBattleToken();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.roleId = e.sint64();
+                        break;
+                      case 2:
+                        o.level = e.sint32();
+                        break;
+                      case 3:
+                        o.exp = e.sint32();
+                        break;
+                      case 4:
+                        (o.tlBattleTokenMessage &&
+                          o.tlBattleTokenMessage.length) ||
+                          (o.tlBattleTokenMessage = []),
+                          o.tlBattleTokenMessage.push(
+                            $root.com.xkhy.tafang.cmd.CmdBattleTokenMessage.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      case 5:
+                        o.surplusDay = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("roleId"))
+                    throw $util.ProtocolError("mr'roleId'", { instance: o });
+                  if (!o.hasOwnProperty("level"))
+                    throw $util.ProtocolError("mr'level'", { instance: o });
+                  if (!o.hasOwnProperty("exp"))
+                    throw $util.ProtocolError("mr'exp'", { instance: o });
+                  if (o.hasOwnProperty("surplusDay")) return o;
+                  throw $util.ProtocolError("mr'surplusDay'", { instance: o });
+                }),
+                g)),
+              (r.CmdBattleToken_Key =
+                ((yt.prototype.roleId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (yt.create = function (e) {
+                  return new yt(e);
+                }),
+                (yt.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.roleId), t
+                  );
+                }),
+                (yt.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdBattleToken_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.roleId = e.sint64()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("roleId")) return o;
+                  throw $util.ProtocolError("mr'roleId'", { instance: o });
+                }),
+                yt)),
+              (r.CmdBattleTokenMessage =
+                ((ht.prototype.resId = 0),
+                (ht.prototype.open = !1),
+                (ht.prototype.tlTakeLevel = $util.emptyArray),
+                (ht.create = function (e) {
+                  return new ht(e);
+                }),
+                (ht.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()).uint32(8).sint32(e.resId),
+                    t.uint32(16).bool(e.open),
+                    e.tlTakeLevel && e.tlTakeLevel.length)
+                  )
+                    for (var r = 0; r < e.tlTakeLevel.length; ++r)
+                      t.uint32(24).sint32(e.tlTakeLevel[r]);
+                  return t;
+                }),
+                (ht.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdBattleTokenMessage();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.sint32();
+                        break;
+                      case 2:
+                        o.open = e.bool();
+                        break;
+                      case 3:
+                        if (
+                          ((o.tlTakeLevel && o.tlTakeLevel.length) ||
+                            (o.tlTakeLevel = []),
+                          2 == (7 & n))
+                        )
+                          for (var i = e.uint32() + e.pos; e.pos < i; )
+                            o.tlTakeLevel.push(e.sint32());
+                        else o.tlTakeLevel.push(e.sint32());
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("resId"))
+                    throw $util.ProtocolError("mr'resId'", { instance: o });
+                  if (o.hasOwnProperty("open")) return o;
+                  throw $util.ProtocolError("mr'open'", { instance: o });
+                }),
+                ht)),
+              (r.CmdBattleTokenOpenReqMsg =
+                ((gt.prototype.resId = 0),
+                (gt.create = function (e) {
+                  return new gt(e);
+                }),
+                (gt.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.resId), t
+                  );
+                }),
+                (gt.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdBattleTokenOpenReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.resId = e.sint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("resId")) return o;
+                  throw $util.ProtocolError("mr'resId'", { instance: o });
+                }),
+                gt)),
+              (r.CmdBattleTokenOpenRspMsg =
+                (($t.create = function (e) {
+                  return new $t(e);
+                }),
+                ($t.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                ($t.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdBattleTokenOpenRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                $t)),
+              (r.CmdBattleTokenTakeRewardReqMsg =
+                ((kt.prototype.takeAll = !1),
+                (kt.prototype.resId = 0),
+                (kt.prototype.level = 0),
+                (kt.create = function (e) {
+                  return new kt(e);
+                }),
+                (kt.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()),
+                    null != e.takeAll &&
+                      e.hasOwnProperty("takeAll") &&
+                      t.uint32(8).bool(e.takeAll),
+                    null != e.resId &&
+                      e.hasOwnProperty("resId") &&
+                      t.uint32(16).sint32(e.resId),
+                    null != e.level &&
+                      e.hasOwnProperty("level") &&
+                      t.uint32(24).sint32(e.level),
+                    t
+                  );
+                }),
+                (kt.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdBattleTokenTakeRewardReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.takeAll = e.bool();
+                        break;
+                      case 2:
+                        o.resId = e.sint32();
+                        break;
+                      case 3:
+                        o.level = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  return o;
+                }),
+                kt)),
+              (r.CmdBattleTokenTakeRewardRspMsg =
+                ((wt.prototype.tlReward = $util.emptyArray),
+                (wt.create = function (e) {
+                  return new wt(e);
+                }),
+                (wt.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlReward && e.tlReward.length)
+                  )
+                    for (var r = 0; r < e.tlReward.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlReward[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (wt.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdBattleTokenTakeRewardRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlReward && o.tlReward.length) || (o.tlReward = []),
+                        o.tlReward.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                wt)),
+              (r.CmdBattleTokenResetReqMsg =
+                ((vt.create = function (e) {
+                  return new vt(e);
+                }),
+                (vt.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (vt.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdBattleTokenResetReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                vt)),
+              (r.CmdBattleTokenResetRspMsg =
+                ((Ct.create = function (e) {
+                  return new Ct(e);
+                }),
+                (Ct.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Ct.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdBattleTokenResetRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Ct)),
+              (r.CmdBreach =
+                ((Rt.create = function (e) {
+                  return new Rt(e);
+                }),
+                (Rt.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Rt.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdBreach();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Rt)),
+              (r.CmdBreach_Key =
+                ((bt.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (bt.create = function (e) {
+                  return new bt(e);
+                }),
+                (bt.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.resId), t
+                  );
+                }),
+                (bt.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdBreach_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.resId = e.sint64()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("resId")) return o;
+                  throw $util.ProtocolError("mr'resId'", { instance: o });
+                }),
+                bt)),
+              (r.CmdBreachReqMsg =
+                ((It.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (It.prototype.type = 0),
+                (It.create = function (e) {
+                  return new It(e);
+                }),
+                (It.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.resId),
+                    t.uint32(16).sint32(e.type),
+                    t
+                  );
+                }),
+                (It.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdBreachReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.sint64();
+                        break;
+                      case 2:
+                        o.type = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("resId"))
+                    throw $util.ProtocolError("mr'resId'", { instance: o });
+                  if (o.hasOwnProperty("type")) return o;
+                  throw $util.ProtocolError("mr'type'", { instance: o });
+                }),
+                It)),
+              (r.CmdBreachRspMsg =
+                ((Pt.create = function (e) {
+                  return new Pt(e);
+                }),
+                (Pt.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Pt.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdBreachRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Pt)),
+              (r.CmdChapter =
+                (($.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                ($.prototype.finishState = 0),
+                ($.prototype.liveTime = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                ($.prototype.tlChapterBoxState = $util.emptyArray),
+                ($.prototype.giftState = 0),
+                ($.create = function (e) {
+                  return new $(e);
+                }),
+                ($.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()).uint32(8).sint64(e.resId),
+                    t.uint32(16).sint32(e.finishState),
+                    t.uint32(24).sint64(e.liveTime),
+                    e.tlChapterBoxState && e.tlChapterBoxState.length)
+                  )
+                    for (var r = 0; r < e.tlChapterBoxState.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdChapterBoxState.encode(
+                        e.tlChapterBoxState[r],
+                        t.uint32(34).fork(),
+                      ).ldelim();
+                  return t.uint32(40).sint32(e.giftState), t;
+                }),
+                ($.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdChapter();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.sint64();
+                        break;
+                      case 2:
+                        o.finishState = e.sint32();
+                        break;
+                      case 3:
+                        o.liveTime = e.sint64();
+                        break;
+                      case 4:
+                        (o.tlChapterBoxState && o.tlChapterBoxState.length) ||
+                          (o.tlChapterBoxState = []),
+                          o.tlChapterBoxState.push(
+                            $root.com.xkhy.tafang.cmd.CmdChapterBoxState.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      case 5:
+                        o.giftState = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("resId"))
+                    throw $util.ProtocolError("mr'resId'", { instance: o });
+                  if (!o.hasOwnProperty("finishState"))
+                    throw $util.ProtocolError("mr'finishState'", {
+                      instance: o,
+                    });
+                  if (!o.hasOwnProperty("liveTime"))
+                    throw $util.ProtocolError("mr'liveTime'", { instance: o });
+                  if (o.hasOwnProperty("giftState")) return o;
+                  throw $util.ProtocolError("mr'giftState'", { instance: o });
+                }),
+                $)),
+              (r.CmdChapter_Key =
+                ((Ot.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Ot.create = function (e) {
+                  return new Ot(e);
+                }),
+                (Ot.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.resId), t
+                  );
+                }),
+                (Ot.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdChapter_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.resId = e.sint64()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("resId")) return o;
+                  throw $util.ProtocolError("mr'resId'", { instance: o });
+                }),
+                Ot)),
+              (r.CmdChapterBoxState =
+                ((Tt.prototype.boxResId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Tt.prototype.rewardState = 0),
+                (Tt.create = function (e) {
+                  return new Tt(e);
+                }),
+                (Tt.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).int64(e.boxResId),
+                    t.uint32(16).uint32(e.rewardState),
+                    t
+                  );
+                }),
+                (Tt.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdChapterBoxState();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.boxResId = e.int64();
+                        break;
+                      case 2:
+                        o.rewardState = e.uint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("boxResId"))
+                    throw $util.ProtocolError("mr'boxResId'", { instance: o });
+                  if (o.hasOwnProperty("rewardState")) return o;
+                  throw $util.ProtocolError("mr'rewardState'", { instance: o });
+                }),
+                Tt)),
+              (r.CmdBuyStaState =
+                ((Mt.prototype.resId = 0),
+                (Mt.prototype.state = 0),
+                (Mt.create = function (e) {
+                  return new Mt(e);
+                }),
+                (Mt.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.resId),
+                    t.uint32(16).sint32(e.state),
+                    t
+                  );
+                }),
+                (Mt.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdBuyStaState();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.sint32();
+                        break;
+                      case 2:
+                        o.state = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("resId"))
+                    throw $util.ProtocolError("mr'resId'", { instance: o });
+                  if (o.hasOwnProperty("state")) return o;
+                  throw $util.ProtocolError("mr'state'", { instance: o });
+                }),
+                Mt)),
+              (r.CmdBuyStaBuyReqMsg =
+                ((Gt.prototype.resId = 0),
+                (Gt.create = function (e) {
+                  return new Gt(e);
+                }),
+                (Gt.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.resId), t
+                  );
+                }),
+                (Gt.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdBuyStaBuyReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.resId = e.sint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("resId")) return o;
+                  throw $util.ProtocolError("mr'resId'", { instance: o });
+                }),
+                Gt)),
+              (r.CmdBuyStaBuyRspMsg =
+                ((xt.create = function (e) {
+                  return new xt(e);
+                }),
+                (xt.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (xt.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdBuyStaBuyRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                xt)),
+              (r.CmdBuyStaInfoReqMsg =
+                ((St.create = function (e) {
+                  return new St(e);
+                }),
+                (St.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (St.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdBuyStaInfoReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                St)),
+              (r.CmdBuyStaInfoRspMsg =
+                ((Et.prototype.cmdBuyStaState = $util.emptyArray),
+                (Et.create = function (e) {
+                  return new Et(e);
+                }),
+                (Et.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.cmdBuyStaState && e.cmdBuyStaState.length)
+                  )
+                    for (var r = 0; r < e.cmdBuyStaState.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdBuyStaState.encode(
+                        e.cmdBuyStaState[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (Et.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdBuyStaInfoRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.cmdBuyStaState && o.cmdBuyStaState.length) ||
+                          (o.cmdBuyStaState = []),
+                        o.cmdBuyStaState.push(
+                          $root.com.xkhy.tafang.cmd.CmdBuyStaState.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                Et)),
+              (r.CmdCardCache =
+                ((Bt.prototype.resId = 0),
+                (Bt.prototype.endTime = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Bt.create = function (e) {
+                  return new Bt(e);
+                }),
+                (Bt.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.resId),
+                    t.uint32(16).sint64(e.endTime),
+                    t
+                  );
+                }),
+                (Bt.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdCardCache();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.sint32();
+                        break;
+                      case 2:
+                        o.endTime = e.sint64();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("resId"))
+                    throw $util.ProtocolError("mr'resId'", { instance: o });
+                  if (o.hasOwnProperty("endTime")) return o;
+                  throw $util.ProtocolError("mr'endTime'", { instance: o });
+                }),
+                Bt)),
+              (r.CmdCardCache_Key =
+                ((Dt.prototype.resId = 0),
+                (Dt.create = function (e) {
+                  return new Dt(e);
+                }),
+                (Dt.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.resId), t
+                  );
+                }),
+                (Dt.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdCardCache_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.resId = e.sint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("resId")) return o;
+                  throw $util.ProtocolError("mr'resId'", { instance: o });
+                }),
+                Dt)),
+              (r.CmdCardBuyReqMsg =
+                ((Lt.prototype.resId = 0),
+                (Lt.create = function (e) {
+                  return new Lt(e);
+                }),
+                (Lt.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.resId), t
+                  );
+                }),
+                (Lt.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdCardBuyReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.resId = e.sint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("resId")) return o;
+                  throw $util.ProtocolError("mr'resId'", { instance: o });
+                }),
+                Lt)),
+              (r.CmdCardBuyRspMsg =
+                ((Wt.prototype.tlRewards = $util.emptyArray),
+                (Wt.create = function (e) {
+                  return new Wt(e);
+                }),
+                (Wt.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlRewards && e.tlRewards.length)
+                  )
+                    for (var r = 0; r < e.tlRewards.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlRewards[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (Wt.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdCardBuyRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlRewards && o.tlRewards.length) ||
+                          (o.tlRewards = []),
+                        o.tlRewards.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                Wt)),
+              (r.CmdCastleSkill =
+                ((At.prototype.skillId = 0),
+                (At.prototype.level = 0),
+                (At.create = function (e) {
+                  return new At(e);
+                }),
+                (At.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.skillId),
+                    t.uint32(16).sint32(e.level),
+                    t
+                  );
+                }),
+                (At.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdCastleSkill();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.skillId = e.sint32();
+                        break;
+                      case 2:
+                        o.level = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("skillId"))
+                    throw $util.ProtocolError("mr'skillId'", { instance: o });
+                  if (o.hasOwnProperty("level")) return o;
+                  throw $util.ProtocolError("mr'level'", { instance: o });
+                }),
+                At)),
+              (r.CmdCastleSkill_Key =
+                ((jt.prototype.skillId = 0),
+                (jt.create = function (e) {
+                  return new jt(e);
+                }),
+                (jt.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.skillId), t
+                  );
+                }),
+                (jt.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdCastleSkill_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.skillId = e.sint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("skillId")) return o;
+                  throw $util.ProtocolError("mr'skillId'", { instance: o });
+                }),
+                jt)),
+              (r.CmdCastleWorkShop =
+                ((k.prototype.id = 0),
+                (k.prototype.level = 0),
+                (k.prototype.rewardNum = 0),
+                (k.prototype.levelEndTime = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (k.prototype.rewardEndTime = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (k.prototype.history = ""),
+                (k.create = function (e) {
+                  return new k(e);
+                }),
+                (k.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.id),
+                    t.uint32(16).sint32(e.level),
+                    t.uint32(24).sint32(e.rewardNum),
+                    t.uint32(32).sint64(e.levelEndTime),
+                    t.uint32(40).sint64(e.rewardEndTime),
+                    t.uint32(50).string(e.history),
+                    t
+                  );
+                }),
+                (k.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdCastleWorkShop();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.id = e.sint32();
+                        break;
+                      case 2:
+                        o.level = e.sint32();
+                        break;
+                      case 3:
+                        o.rewardNum = e.sint32();
+                        break;
+                      case 4:
+                        o.levelEndTime = e.sint64();
+                        break;
+                      case 5:
+                        o.rewardEndTime = e.sint64();
+                        break;
+                      case 6:
+                        o.history = e.string();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("id"))
+                    throw $util.ProtocolError("mr'id'", { instance: o });
+                  if (!o.hasOwnProperty("level"))
+                    throw $util.ProtocolError("mr'level'", { instance: o });
+                  if (!o.hasOwnProperty("rewardNum"))
+                    throw $util.ProtocolError("mr'rewardNum'", { instance: o });
+                  if (!o.hasOwnProperty("levelEndTime"))
+                    throw $util.ProtocolError("mr'levelEndTime'", {
+                      instance: o,
+                    });
+                  if (!o.hasOwnProperty("rewardEndTime"))
+                    throw $util.ProtocolError("mr'rewardEndTime'", {
+                      instance: o,
+                    });
+                  if (o.hasOwnProperty("history")) return o;
+                  throw $util.ProtocolError("mr'history'", { instance: o });
+                }),
+                k)),
+              (r.CmdCastleWorkShop_Key =
+                ((qt.prototype.id = 0),
+                (qt.create = function (e) {
+                  return new qt(e);
+                }),
+                (qt.encode = function (e, t) {
+                  return (t = t || $Writer.create()).uint32(8).sint32(e.id), t;
+                }),
+                (qt.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdCastleWorkShop_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.id = e.sint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("id")) return o;
+                  throw $util.ProtocolError("mr'id'", { instance: o });
+                }),
+                qt)),
+              (r.CmdCastleApprentice =
+                ((Ft.prototype.id = 0),
+                (Ft.prototype.level = 0),
+                (Ft.prototype.state = !1),
+                (Ft.create = function (e) {
+                  return new Ft(e);
+                }),
+                (Ft.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.id),
+                    t.uint32(16).sint32(e.level),
+                    t.uint32(24).bool(e.state),
+                    t
+                  );
+                }),
+                (Ft.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdCastleApprentice();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.id = e.sint32();
+                        break;
+                      case 2:
+                        o.level = e.sint32();
+                        break;
+                      case 3:
+                        o.state = e.bool();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("id"))
+                    throw $util.ProtocolError("mr'id'", { instance: o });
+                  if (!o.hasOwnProperty("level"))
+                    throw $util.ProtocolError("mr'level'", { instance: o });
+                  if (o.hasOwnProperty("state")) return o;
+                  throw $util.ProtocolError("mr'state'", { instance: o });
+                }),
+                Ft)),
+              (r.CmdCastleApprentice_Key =
+                ((Ut.prototype.id = 0),
+                (Ut.create = function (e) {
+                  return new Ut(e);
+                }),
+                (Ut.encode = function (e, t) {
+                  return (t = t || $Writer.create()).uint32(8).sint32(e.id), t;
+                }),
+                (Ut.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdCastleApprentice_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.id = e.sint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("id")) return o;
+                  throw $util.ProtocolError("mr'id'", { instance: o });
+                }),
+                Ut)),
+              (r.CmdCastleWall =
+                ((Kt.prototype.selectType = 0),
+                (Kt.prototype.tlWallType = $util.emptyArray),
+                (Kt.prototype.level = 0),
+                (Kt.create = function (e) {
+                  return new Kt(e);
+                }),
+                (Kt.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()).uint32(8).sint32(e.selectType),
+                    e.tlWallType && e.tlWallType.length)
+                  )
+                    for (var r = 0; r < e.tlWallType.length; ++r)
+                      t.uint32(16).sint32(e.tlWallType[r]);
+                  return t.uint32(24).sint32(e.level), t;
+                }),
+                (Kt.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdCastleWall();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.selectType = e.sint32();
+                        break;
+                      case 2:
+                        if (
+                          ((o.tlWallType && o.tlWallType.length) ||
+                            (o.tlWallType = []),
+                          2 == (7 & n))
+                        )
+                          for (var i = e.uint32() + e.pos; e.pos < i; )
+                            o.tlWallType.push(e.sint32());
+                        else o.tlWallType.push(e.sint32());
+                        break;
+                      case 3:
+                        o.level = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("selectType"))
+                    throw $util.ProtocolError("mr'selectType'", {
+                      instance: o,
+                    });
+                  if (o.hasOwnProperty("level")) return o;
+                  throw $util.ProtocolError("mr'level'", { instance: o });
+                }),
+                Kt)),
+              (r.CmdCastleWall_Key =
+                ((Nt.create = function (e) {
+                  return new Nt(e);
+                }),
+                (Nt.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Nt.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdCastleWall_Key();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Nt)),
+              (r.CmdCastleWallSkill =
+                ((_t.prototype.id = 0),
+                (_t.prototype.level = 0),
+                (_t.create = function (e) {
+                  return new _t(e);
+                }),
+                (_t.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.id),
+                    t.uint32(16).sint32(e.level),
+                    t
+                  );
+                }),
+                (_t.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdCastleWallSkill();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.id = e.sint32();
+                        break;
+                      case 2:
+                        o.level = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("id"))
+                    throw $util.ProtocolError("mr'id'", { instance: o });
+                  if (o.hasOwnProperty("level")) return o;
+                  throw $util.ProtocolError("mr'level'", { instance: o });
+                }),
+                _t)),
+              (r.CmdCastleWallSkill_Key =
+                ((Ht.prototype.id = 0),
+                (Ht.create = function (e) {
+                  return new Ht(e);
+                }),
+                (Ht.encode = function (e, t) {
+                  return (t = t || $Writer.create()).uint32(8).sint32(e.id), t;
+                }),
+                (Ht.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdCastleWallSkill_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.id = e.sint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("id")) return o;
+                  throw $util.ProtocolError("mr'id'", { instance: o });
+                }),
+                Ht)),
+              (r.CmdCastleSkillUpLevelReqMsg =
+                ((zt.prototype.skillId = 0),
+                (zt.create = function (e) {
+                  return new zt(e);
+                }),
+                (zt.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.skillId), t
+                  );
+                }),
+                (zt.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdCastleSkillUpLevelReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.skillId = e.sint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("skillId")) return o;
+                  throw $util.ProtocolError("mr'skillId'", { instance: o });
+                }),
+                zt)),
+              (r.CmdCastleSkillUpLevelRspMsg =
+                ((Vt.create = function (e) {
+                  return new Vt(e);
+                }),
+                (Vt.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Vt.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdCastleSkillUpLevelRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Vt)),
+              (r.CmdCastleSkillResearchReqMsg =
+                ((Jt.create = function (e) {
+                  return new Jt(e);
+                }),
+                (Jt.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Jt.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdCastleSkillResearchReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Jt)),
+              (r.CmdCastleSkillResearchRspMsg =
+                ((Qt.create = function (e) {
+                  return new Qt(e);
+                }),
+                (Qt.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Qt.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdCastleSkillResearchRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Qt)),
+              (r.CmdCastleWorkShopOpenReqMsg =
+                ((Yt.prototype.id = 0),
+                (Yt.create = function (e) {
+                  return new Yt(e);
+                }),
+                (Yt.encode = function (e, t) {
+                  return (t = t || $Writer.create()).uint32(8).sint32(e.id), t;
+                }),
+                (Yt.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdCastleWorkShopOpenReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.id = e.sint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("id")) return o;
+                  throw $util.ProtocolError("mr'id'", { instance: o });
+                }),
+                Yt)),
+              (r.CmdCastleWorkShopOpenRspMsg =
+                ((Xt.create = function (e) {
+                  return new Xt(e);
+                }),
+                (Xt.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Xt.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdCastleWorkShopOpenRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Xt)),
+              (r.CmdCastleWorkShopUpLevelReqMsg =
+                ((Zt.prototype.id = 0),
+                (Zt.create = function (e) {
+                  return new Zt(e);
+                }),
+                (Zt.encode = function (e, t) {
+                  return (t = t || $Writer.create()).uint32(8).sint32(e.id), t;
+                }),
+                (Zt.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdCastleWorkShopUpLevelReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.id = e.sint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("id")) return o;
+                  throw $util.ProtocolError("mr'id'", { instance: o });
+                }),
+                Zt)),
+              (r.CmdCastleWorkShopUpLevelRspMsg =
+                ((er.create = function (e) {
+                  return new er(e);
+                }),
+                (er.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (er.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdCastleWorkShopUpLevelRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                er)),
+              (r.CmdCastleWorkShopSpeedReqMsg =
+                ((tr.prototype.id = 0),
+                (tr.create = function (e) {
+                  return new tr(e);
+                }),
+                (tr.encode = function (e, t) {
+                  return (t = t || $Writer.create()).uint32(8).sint32(e.id), t;
+                }),
+                (tr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdCastleWorkShopSpeedReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.id = e.sint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("id")) return o;
+                  throw $util.ProtocolError("mr'id'", { instance: o });
+                }),
+                tr)),
+              (r.CmdCastleWorkShopSpeedRspMsg =
+                ((rr.create = function (e) {
+                  return new rr(e);
+                }),
+                (rr.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (rr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdCastleWorkShopSpeedRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                rr)),
+              (r.CmdCastleWorkShopTakeReqMsg =
+                ((or.prototype.id = 0),
+                (or.create = function (e) {
+                  return new or(e);
+                }),
+                (or.encode = function (e, t) {
+                  return (t = t || $Writer.create()).uint32(8).sint32(e.id), t;
+                }),
+                (or.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdCastleWorkShopTakeReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.id = e.sint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("id")) return o;
+                  throw $util.ProtocolError("mr'id'", { instance: o });
+                }),
+                or)),
+              (r.CmdCastleWorkShopTakeRspMsg =
+                ((nr.prototype.tlCmdGoods = $util.emptyArray),
+                (nr.create = function (e) {
+                  return new nr(e);
+                }),
+                (nr.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (nr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdCastleWorkShopTakeRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                        o.tlCmdGoods.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                nr)),
+              (r.CmdCastleApprenticeUpReqMsg =
+                ((ir.prototype.id = 0),
+                (ir.prototype.type = 0),
+                (ir.create = function (e) {
+                  return new ir(e);
+                }),
+                (ir.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.id),
+                    t.uint32(16).sint32(e.type),
+                    t
+                  );
+                }),
+                (ir.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdCastleApprenticeUpReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.id = e.sint32();
+                        break;
+                      case 2:
+                        o.type = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("id"))
+                    throw $util.ProtocolError("mr'id'", { instance: o });
+                  if (o.hasOwnProperty("type")) return o;
+                  throw $util.ProtocolError("mr'type'", { instance: o });
+                }),
+                ir)),
+              (r.CmdCastleApprenticeUpRspMsg =
+                ((ar.create = function (e) {
+                  return new ar(e);
+                }),
+                (ar.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (ar.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdCastleApprenticeUpRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                ar)),
+              (r.CmdCastleApprenticeUpLevelReqMsg =
+                ((cr.prototype.id = 0),
+                (cr.create = function (e) {
+                  return new cr(e);
+                }),
+                (cr.encode = function (e, t) {
+                  return (t = t || $Writer.create()).uint32(8).sint32(e.id), t;
+                }),
+                (cr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdCastleApprenticeUpLevelReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.id = e.sint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("id")) return o;
+                  throw $util.ProtocolError("mr'id'", { instance: o });
+                }),
+                cr)),
+              (r.CmdCastleApprenticeUpLevelRspMsg =
+                ((dr.create = function (e) {
+                  return new dr(e);
+                }),
+                (dr.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (dr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdCastleApprenticeUpLevelRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                dr)),
+              (r.CmdCastleWallUpLevelReqMsg =
+                ((sr.create = function (e) {
+                  return new sr(e);
+                }),
+                (sr.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (sr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdCastleWallUpLevelReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                sr)),
+              (r.CmdCastleWallUpLevelRspMsg =
+                ((lr.create = function (e) {
+                  return new lr(e);
+                }),
+                (lr.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (lr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdCastleWallUpLevelRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                lr)),
+              (r.CmdCastleWallQualityUpReqMsg =
+                ((ur.prototype.wallType = 0),
+                (ur.create = function (e) {
+                  return new ur(e);
+                }),
+                (ur.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.wallType), t
+                  );
+                }),
+                (ur.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdCastleWallQualityUpReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.wallType = e.sint32())
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("wallType")) return o;
+                  throw $util.ProtocolError("mr'wallType'", { instance: o });
+                }),
+                ur)),
+              (r.CmdCastleWallQualityUpRspMsg =
+                ((fr.create = function (e) {
+                  return new fr(e);
+                }),
+                (fr.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (fr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdCastleWallQualityUpRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                fr)),
+              (r.CmdCastleWallSelectReqMsg =
+                ((mr.prototype.type = 0),
+                (mr.create = function (e) {
+                  return new mr(e);
+                }),
+                (mr.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.type), t
+                  );
+                }),
+                (mr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdCastleWallSelectReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.type = e.sint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("type")) return o;
+                  throw $util.ProtocolError("mr'type'", { instance: o });
+                }),
+                mr)),
+              (r.CmdCastleWallSelectRspMsg =
+                ((pr.create = function (e) {
+                  return new pr(e);
+                }),
+                (pr.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (pr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdCastleWallSelectRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                pr)),
+              (r.CmdCastleWallUpSkillLevelReqMsg =
+                ((yr.prototype.id = 0),
+                (yr.create = function (e) {
+                  return new yr(e);
+                }),
+                (yr.encode = function (e, t) {
+                  return (t = t || $Writer.create()).uint32(8).sint32(e.id), t;
+                }),
+                (yr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdCastleWallUpSkillLevelReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.id = e.sint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("id")) return o;
+                  throw $util.ProtocolError("mr'id'", { instance: o });
+                }),
+                yr)),
+              (r.CmdCastleWallUpSkillLevelRspMsg =
+                ((hr.create = function (e) {
+                  return new hr(e);
+                }),
+                (hr.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (hr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdCastleWallUpSkillLevelRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                hr)),
+              (r.CmdChapterRewardReqMsg =
+                ((gr.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (gr.create = function (e) {
+                  return new gr(e);
+                }),
+                (gr.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.resId), t
+                  );
+                }),
+                (gr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdChapterRewardReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.resId = e.sint64()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("resId")) return o;
+                  throw $util.ProtocolError("mr'resId'", { instance: o });
+                }),
+                gr)),
+              (r.CmdChapterRewardRspMsg =
+                (($r.prototype.tlCmdGoods = $util.emptyArray),
+                ($r.create = function (e) {
+                  return new $r(e);
+                }),
+                ($r.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                ($r.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdChapterRewardRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                        o.tlCmdGoods.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                $r)),
+              (r.CmdCode =
+                ((kr.create = function (e) {
+                  return new kr(e);
+                }),
+                (kr.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (kr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdCode();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                kr)),
+              (r.CmdCode_Key =
+                ((wr.prototype.id = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (wr.create = function (e) {
+                  return new wr(e);
+                }),
+                (wr.encode = function (e, t) {
+                  return (t = t || $Writer.create()).uint32(8).sint64(e.id), t;
+                }),
+                (wr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdCode_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.id = e.sint64()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("id")) return o;
+                  throw $util.ProtocolError("mr'id'", { instance: o });
+                }),
+                wr)),
+              (r.CmdCacheBroMsg =
+                ((vr.create = function (e) {
+                  return new vr(e);
+                }),
+                (vr.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (vr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdCacheBroMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                vr)),
+              (r.CmdRoleOfflineBroMsg =
+                ((Cr.prototype.type = 0),
+                (Cr.create = function (e) {
+                  return new Cr(e);
+                }),
+                (Cr.encode = function (e, t) {
+                  return (t = t || $Writer.create()).uint32(8).int32(e.type), t;
+                }),
+                (Cr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdRoleOfflineBroMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.type = e.int32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("type")) return o;
+                  throw $util.ProtocolError("mr'type'", { instance: o });
+                }),
+                Cr)),
+              (r.CmdRechargeBroMsg =
+                ((Rr.prototype.cmdRecharge = null),
+                (Rr.create = function (e) {
+                  return new Rr(e);
+                }),
+                (Rr.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()),
+                    $root.com.xkhy.tafang.cmd.CmdRecharge.encode(
+                      e.cmdRecharge,
+                      t.uint32(10).fork(),
+                    ).ldelim(),
+                    t
+                  );
+                }),
+                (Rr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdRechargeBroMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.cmdRecharge =
+                          $root.com.xkhy.tafang.cmd.CmdRecharge.decode(
+                            e,
+                            e.uint32(),
+                          ))
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("cmdRecharge")) return o;
+                  throw $util.ProtocolError("mr'cmdRecharge'", { instance: o });
+                }),
+                Rr)),
+              (r.CmdModifyItemBroMsg =
+                ((br.prototype.tlCmdGoods = $util.emptyArray),
+                (br.create = function (e) {
+                  return new br(e);
+                }),
+                (br.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (br.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdModifyItemBroMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                        o.tlCmdGoods.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                br)),
+              (r.CmdBattleBroMsg =
+                ((Ir.create = function (e) {
+                  return new Ir(e);
+                }),
+                (Ir.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Ir.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdBattleBroMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Ir)),
+              (r.CmdMallBroMsg =
+                ((Pr.prototype.mallId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Pr.prototype.cmdMall = null),
+                (Pr.create = function (e) {
+                  return new Pr(e);
+                }),
+                (Pr.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.mallId),
+                    $root.com.xkhy.tafang.cmd.CmdMall.encode(
+                      e.cmdMall,
+                      t.uint32(18).fork(),
+                    ).ldelim(),
+                    t
+                  );
+                }),
+                (Pr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdMallBroMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.mallId = e.sint64();
+                        break;
+                      case 2:
+                        o.cmdMall = $root.com.xkhy.tafang.cmd.CmdMall.decode(
+                          e,
+                          e.uint32(),
+                        );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("mallId"))
+                    throw $util.ProtocolError("mr'mallId'", { instance: o });
+                  if (o.hasOwnProperty("cmdMall")) return o;
+                  throw $util.ProtocolError("mr'cmdMall'", { instance: o });
+                }),
+                Pr)),
+              (r.CmdEndBroMsg =
+                ((Or.prototype.end = 0),
+                (Or.prototype.nextTime = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Or.create = function (e) {
+                  return new Or(e);
+                }),
+                (Or.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.end),
+                    t.uint32(16).sint64(e.nextTime),
+                    t
+                  );
+                }),
+                (Or.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdEndBroMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.end = e.sint32();
+                        break;
+                      case 2:
+                        o.nextTime = e.sint64();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("end"))
+                    throw $util.ProtocolError("mr'end'", { instance: o });
+                  if (o.hasOwnProperty("nextTime")) return o;
+                  throw $util.ProtocolError("mr'nextTime'", { instance: o });
+                }),
+                Or)),
+              (r.CmdMall =
+                ((Tr.prototype.id = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Tr.prototype.detail = null),
+                (Tr.create = function (e) {
+                  return new Tr(e);
+                }),
+                (Tr.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()),
+                    null != e.id &&
+                      e.hasOwnProperty("id") &&
+                      t.uint32(8).sint64(e.id),
+                    e.detail &&
+                      e.hasOwnProperty("detail") &&
+                      $root.com.xkhy.tafang.cmd.CmdMallDetail.encode(
+                        e.detail,
+                        t.uint32(18).fork(),
+                      ).ldelim(),
+                    t
+                  );
+                }),
+                (Tr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdMall();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.id = e.sint64();
+                        break;
+                      case 2:
+                        o.detail =
+                          $root.com.xkhy.tafang.cmd.CmdMallDetail.decode(
+                            e,
+                            e.uint32(),
+                          );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  return o;
+                }),
+                Tr)),
+              (r.CmdMall_Key =
+                ((Mr.prototype.id = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Mr.create = function (e) {
+                  return new Mr(e);
+                }),
+                (Mr.encode = function (e, t) {
+                  return (t = t || $Writer.create()).uint32(8).sint64(e.id), t;
+                }),
+                (Mr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdMall_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.id = e.sint64()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("id")) return o;
+                  throw $util.ProtocolError("mr'id'", { instance: o });
+                }),
+                Mr)),
+              (r.CmdMallDetail =
+                ((w.prototype.cmdMallSEquipDetail = $util.emptyArray),
+                (w.prototype.cmdMallLuckDrawDetail = $util.emptyArray),
+                (w.prototype.cmdMallDailyShopDetail = $util.emptyArray),
+                (w.prototype.cmdMallChapterGiftDetail = $util.emptyArray),
+                (w.prototype.cmdMallChargeDetail = $util.emptyArray),
+                (w.prototype.cmdMallCoinDetail = $util.emptyArray),
+                (w.create = function (e) {
+                  return new w(e);
+                }),
+                (w.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.cmdMallSEquipDetail && e.cmdMallSEquipDetail.length)
+                  )
+                    for (var r = 0; r < e.cmdMallSEquipDetail.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdMallSEquipDetail.encode(
+                        e.cmdMallSEquipDetail[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  if (e.cmdMallLuckDrawDetail && e.cmdMallLuckDrawDetail.length)
+                    for (r = 0; r < e.cmdMallLuckDrawDetail.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdMallLuckDrawDetail.encode(
+                        e.cmdMallLuckDrawDetail[r],
+                        t.uint32(18).fork(),
+                      ).ldelim();
+                  if (
+                    e.cmdMallDailyShopDetail &&
+                    e.cmdMallDailyShopDetail.length
+                  )
+                    for (r = 0; r < e.cmdMallDailyShopDetail.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdMallDailyShopDetail.encode(
+                        e.cmdMallDailyShopDetail[r],
+                        t.uint32(26).fork(),
+                      ).ldelim();
+                  if (
+                    e.cmdMallChapterGiftDetail &&
+                    e.cmdMallChapterGiftDetail.length
+                  )
+                    for (r = 0; r < e.cmdMallChapterGiftDetail.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdMallChapterGiftDetail.encode(
+                        e.cmdMallChapterGiftDetail[r],
+                        t.uint32(34).fork(),
+                      ).ldelim();
+                  if (e.cmdMallChargeDetail && e.cmdMallChargeDetail.length)
+                    for (r = 0; r < e.cmdMallChargeDetail.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdMallChargeDetail.encode(
+                        e.cmdMallChargeDetail[r],
+                        t.uint32(42).fork(),
+                      ).ldelim();
+                  if (e.cmdMallCoinDetail && e.cmdMallCoinDetail.length)
+                    for (r = 0; r < e.cmdMallCoinDetail.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdMallCoinDetail.encode(
+                        e.cmdMallCoinDetail[r],
+                        t.uint32(50).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (w.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdMallDetail();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        (o.cmdMallSEquipDetail &&
+                          o.cmdMallSEquipDetail.length) ||
+                          (o.cmdMallSEquipDetail = []),
+                          o.cmdMallSEquipDetail.push(
+                            $root.com.xkhy.tafang.cmd.CmdMallSEquipDetail.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      case 2:
+                        (o.cmdMallLuckDrawDetail &&
+                          o.cmdMallLuckDrawDetail.length) ||
+                          (o.cmdMallLuckDrawDetail = []),
+                          o.cmdMallLuckDrawDetail.push(
+                            $root.com.xkhy.tafang.cmd.CmdMallLuckDrawDetail.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      case 3:
+                        (o.cmdMallDailyShopDetail &&
+                          o.cmdMallDailyShopDetail.length) ||
+                          (o.cmdMallDailyShopDetail = []),
+                          o.cmdMallDailyShopDetail.push(
+                            $root.com.xkhy.tafang.cmd.CmdMallDailyShopDetail.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      case 4:
+                        (o.cmdMallChapterGiftDetail &&
+                          o.cmdMallChapterGiftDetail.length) ||
+                          (o.cmdMallChapterGiftDetail = []),
+                          o.cmdMallChapterGiftDetail.push(
+                            $root.com.xkhy.tafang.cmd.CmdMallChapterGiftDetail.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      case 5:
+                        (o.cmdMallChargeDetail &&
+                          o.cmdMallChargeDetail.length) ||
+                          (o.cmdMallChargeDetail = []),
+                          o.cmdMallChargeDetail.push(
+                            $root.com.xkhy.tafang.cmd.CmdMallChargeDetail.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      case 6:
+                        (o.cmdMallCoinDetail && o.cmdMallCoinDetail.length) ||
+                          (o.cmdMallCoinDetail = []),
+                          o.cmdMallCoinDetail.push(
+                            $root.com.xkhy.tafang.cmd.CmdMallCoinDetail.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  return o;
+                }),
+                w)),
+              (r.CmdMallSEquipDetail =
+                ((Gr.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Gr.prototype.buyCount = 0),
+                (Gr.prototype.bigPrizeCount = 0),
+                (Gr.prototype.ultimatePrizeCount = 0),
+                (Gr.create = function (e) {
+                  return new Gr(e);
+                }),
+                (Gr.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()),
+                    null != e.resId &&
+                      e.hasOwnProperty("resId") &&
+                      t.uint32(8).sint64(e.resId),
+                    null != e.buyCount &&
+                      e.hasOwnProperty("buyCount") &&
+                      t.uint32(16).sint32(e.buyCount),
+                    null != e.bigPrizeCount &&
+                      e.hasOwnProperty("bigPrizeCount") &&
+                      t.uint32(24).sint32(e.bigPrizeCount),
+                    null != e.ultimatePrizeCount &&
+                      e.hasOwnProperty("ultimatePrizeCount") &&
+                      t.uint32(32).sint32(e.ultimatePrizeCount),
+                    t
+                  );
+                }),
+                (Gr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdMallSEquipDetail();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.sint64();
+                        break;
+                      case 2:
+                        o.buyCount = e.sint32();
+                        break;
+                      case 3:
+                        o.bigPrizeCount = e.sint32();
+                        break;
+                      case 4:
+                        o.ultimatePrizeCount = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  return o;
+                }),
+                Gr)),
+              (r.CmdMallLuckDrawDetail =
+                ((xr.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (xr.prototype.buyCount = 0),
+                (xr.prototype.bigPrizeCount = 0),
+                (xr.prototype.freeTime = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (xr.create = function (e) {
+                  return new xr(e);
+                }),
+                (xr.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()),
+                    null != e.resId &&
+                      e.hasOwnProperty("resId") &&
+                      t.uint32(8).sint64(e.resId),
+                    null != e.buyCount &&
+                      e.hasOwnProperty("buyCount") &&
+                      t.uint32(16).sint32(e.buyCount),
+                    null != e.bigPrizeCount &&
+                      e.hasOwnProperty("bigPrizeCount") &&
+                      t.uint32(24).sint32(e.bigPrizeCount),
+                    null != e.freeTime &&
+                      e.hasOwnProperty("freeTime") &&
+                      t.uint32(32).sint64(e.freeTime),
+                    t
+                  );
+                }),
+                (xr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdMallLuckDrawDetail();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.sint64();
+                        break;
+                      case 2:
+                        o.buyCount = e.sint32();
+                        break;
+                      case 3:
+                        o.bigPrizeCount = e.sint32();
+                        break;
+                      case 4:
+                        o.freeTime = e.sint64();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  return o;
+                }),
+                xr)),
+              (r.CmdMallDailyShopDetail =
+                ((v.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (v.prototype.rewardId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (v.prototype.buyCount = 0),
+                (v.prototype.adTime = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (v.prototype.original = ""),
+                (v.prototype.discount = ""),
+                (v.prototype.finalNumber = ""),
+                (v.create = function (e) {
+                  return new v(e);
+                }),
+                (v.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()),
+                    null != e.resId &&
+                      e.hasOwnProperty("resId") &&
+                      t.uint32(8).sint64(e.resId),
+                    null != e.rewardId &&
+                      e.hasOwnProperty("rewardId") &&
+                      t.uint32(16).sint64(e.rewardId),
+                    null != e.buyCount &&
+                      e.hasOwnProperty("buyCount") &&
+                      t.uint32(24).sint32(e.buyCount),
+                    null != e.adTime &&
+                      e.hasOwnProperty("adTime") &&
+                      t.uint32(32).sint64(e.adTime),
+                    null != e.original &&
+                      e.hasOwnProperty("original") &&
+                      t.uint32(42).string(e.original),
+                    null != e.discount &&
+                      e.hasOwnProperty("discount") &&
+                      t.uint32(50).string(e.discount),
+                    null != e.finalNumber &&
+                      e.hasOwnProperty("finalNumber") &&
+                      t.uint32(58).string(e.finalNumber),
+                    t
+                  );
+                }),
+                (v.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdMallDailyShopDetail();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.sint64();
+                        break;
+                      case 2:
+                        o.rewardId = e.sint64();
+                        break;
+                      case 3:
+                        o.buyCount = e.sint32();
+                        break;
+                      case 4:
+                        o.adTime = e.sint64();
+                        break;
+                      case 5:
+                        o.original = e.string();
+                        break;
+                      case 6:
+                        o.discount = e.string();
+                        break;
+                      case 7:
+                        o.finalNumber = e.string();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  return o;
+                }),
+                v)),
+              (r.CmdMallChapterGiftDetail =
+                ((Sr.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Sr.prototype.state = 0),
+                (Sr.create = function (e) {
+                  return new Sr(e);
+                }),
+                (Sr.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()),
+                    null != e.resId &&
+                      e.hasOwnProperty("resId") &&
+                      t.uint32(8).sint64(e.resId),
+                    null != e.state &&
+                      e.hasOwnProperty("state") &&
+                      t.uint32(16).sint32(e.state),
+                    t
+                  );
+                }),
+                (Sr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdMallChapterGiftDetail();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.sint64();
+                        break;
+                      case 2:
+                        o.state = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  return o;
+                }),
+                Sr)),
+              (r.CmdMallChargeDetail =
+                ((Er.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Er.prototype.state = 0),
+                (Er.create = function (e) {
+                  return new Er(e);
+                }),
+                (Er.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()),
+                    null != e.resId &&
+                      e.hasOwnProperty("resId") &&
+                      t.uint32(8).sint64(e.resId),
+                    null != e.state &&
+                      e.hasOwnProperty("state") &&
+                      t.uint32(16).sint32(e.state),
+                    t
+                  );
+                }),
+                (Er.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdMallChargeDetail();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.sint64();
+                        break;
+                      case 2:
+                        o.state = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  return o;
+                }),
+                Er)),
+              (r.CmdMallCoinDetail =
+                ((Br.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Br.prototype.buyCount = 0),
+                (Br.prototype.freeTime = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Br.create = function (e) {
+                  return new Br(e);
+                }),
+                (Br.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()),
+                    null != e.resId &&
+                      e.hasOwnProperty("resId") &&
+                      t.uint32(8).sint64(e.resId),
+                    null != e.buyCount &&
+                      e.hasOwnProperty("buyCount") &&
+                      t.uint32(16).sint32(e.buyCount),
+                    null != e.freeTime &&
+                      e.hasOwnProperty("freeTime") &&
+                      t.uint32(24).sint64(e.freeTime),
+                    t
+                  );
+                }),
+                (Br.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdMallCoinDetail();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.sint64();
+                        break;
+                      case 2:
+                        o.buyCount = e.sint32();
+                        break;
+                      case 3:
+                        o.freeTime = e.sint64();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  return o;
+                }),
+                Br)),
+              (r.CmdDayWeekMonthGift =
+                ((C.prototype.tlDayGift = $util.emptyArray),
+                (C.prototype.tlWeekGift = $util.emptyArray),
+                (C.prototype.tlMonthGift = $util.emptyArray),
+                (C.prototype.tlRechargeCount = $util.emptyArray),
+                (C.prototype.rechargeDay = 0),
+                (C.create = function (e) {
+                  return new C(e);
+                }),
+                (C.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlDayGift && e.tlDayGift.length)
+                  )
+                    for (var r = 0; r < e.tlDayGift.length; ++r)
+                      $root.com.xkhy.tafang.cmd.EveryDayGift.encode(
+                        e.tlDayGift[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  if (e.tlWeekGift && e.tlWeekGift.length)
+                    for (r = 0; r < e.tlWeekGift.length; ++r)
+                      $root.com.xkhy.tafang.cmd.EveryDayGift.encode(
+                        e.tlWeekGift[r],
+                        t.uint32(18).fork(),
+                      ).ldelim();
+                  if (e.tlMonthGift && e.tlMonthGift.length)
+                    for (r = 0; r < e.tlMonthGift.length; ++r)
+                      $root.com.xkhy.tafang.cmd.EveryDayGift.encode(
+                        e.tlMonthGift[r],
+                        t.uint32(26).fork(),
+                      ).ldelim();
+                  if (e.tlRechargeCount && e.tlRechargeCount.length)
+                    for (r = 0; r < e.tlRechargeCount.length; ++r)
+                      $root.com.xkhy.tafang.cmd.RechargeCount.encode(
+                        e.tlRechargeCount[r],
+                        t.uint32(34).fork(),
+                      ).ldelim();
+                  return t.uint32(40).sint32(e.rechargeDay), t;
+                }),
+                (C.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdDayWeekMonthGift();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        (o.tlDayGift && o.tlDayGift.length) ||
+                          (o.tlDayGift = []),
+                          o.tlDayGift.push(
+                            $root.com.xkhy.tafang.cmd.EveryDayGift.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      case 2:
+                        (o.tlWeekGift && o.tlWeekGift.length) ||
+                          (o.tlWeekGift = []),
+                          o.tlWeekGift.push(
+                            $root.com.xkhy.tafang.cmd.EveryDayGift.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      case 3:
+                        (o.tlMonthGift && o.tlMonthGift.length) ||
+                          (o.tlMonthGift = []),
+                          o.tlMonthGift.push(
+                            $root.com.xkhy.tafang.cmd.EveryDayGift.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      case 4:
+                        (o.tlRechargeCount && o.tlRechargeCount.length) ||
+                          (o.tlRechargeCount = []),
+                          o.tlRechargeCount.push(
+                            $root.com.xkhy.tafang.cmd.RechargeCount.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      case 5:
+                        o.rechargeDay = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (o.hasOwnProperty("rechargeDay")) return o;
+                  throw $util.ProtocolError("mr'rechargeDay'", { instance: o });
+                }),
+                C)),
+              (r.CmdDayWeekMonthGift_Key =
+                ((Dr.prototype.id = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Dr.create = function (e) {
+                  return new Dr(e);
+                }),
+                (Dr.encode = function (e, t) {
+                  return (t = t || $Writer.create()).uint32(8).sint64(e.id), t;
+                }),
+                (Dr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdDayWeekMonthGift_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.id = e.sint64()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("id")) return o;
+                  throw $util.ProtocolError("mr'id'", { instance: o });
+                }),
+                Dr)),
+              (r.EveryDayGift =
+                ((Lr.prototype.giftId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Lr.prototype.fromId = 0),
+                (Lr.prototype.buyCount = 0),
+                (Lr.prototype.rewards = $util.emptyArray),
+                (Lr.create = function (e) {
+                  return new Lr(e);
+                }),
+                (Lr.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()).uint32(8).sint64(e.giftId),
+                    t.uint32(16).sint32(e.fromId),
+                    t.uint32(24).sint32(e.buyCount),
+                    e.rewards && e.rewards.length)
+                  )
+                    for (var r = 0; r < e.rewards.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.rewards[r],
+                        t.uint32(34).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (Lr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.EveryDayGift();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.giftId = e.sint64();
+                        break;
+                      case 2:
+                        o.fromId = e.sint32();
+                        break;
+                      case 3:
+                        o.buyCount = e.sint32();
+                        break;
+                      case 4:
+                        (o.rewards && o.rewards.length) || (o.rewards = []),
+                          o.rewards.push(
+                            $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("giftId"))
+                    throw $util.ProtocolError("mr'giftId'", { instance: o });
+                  if (!o.hasOwnProperty("fromId"))
+                    throw $util.ProtocolError("mr'fromId'", { instance: o });
+                  if (o.hasOwnProperty("buyCount")) return o;
+                  throw $util.ProtocolError("mr'buyCount'", { instance: o });
+                }),
+                Lr)),
+              (r.RechargeCount =
+                ((Wr.prototype.resId = 0),
+                (Wr.prototype.buyState = 0),
+                (Wr.prototype.rewards = $util.emptyArray),
+                (Wr.create = function (e) {
+                  return new Wr(e);
+                }),
+                (Wr.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()).uint32(8).sint32(e.resId),
+                    t.uint32(16).sint32(e.buyState),
+                    e.rewards && e.rewards.length)
+                  )
+                    for (var r = 0; r < e.rewards.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.rewards[r],
+                        t.uint32(26).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (Wr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.RechargeCount();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.sint32();
+                        break;
+                      case 2:
+                        o.buyState = e.sint32();
+                        break;
+                      case 3:
+                        (o.rewards && o.rewards.length) || (o.rewards = []),
+                          o.rewards.push(
+                            $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("resId"))
+                    throw $util.ProtocolError("mr'resId'", { instance: o });
+                  if (o.hasOwnProperty("buyState")) return o;
+                  throw $util.ProtocolError("mr'buyState'", { instance: o });
+                }),
+                Wr)),
+              (r.CmdDayWeekMonthGiftGetRewardReqMsg =
+                ((Ar.prototype.id = 0),
+                (Ar.create = function (e) {
+                  return new Ar(e);
+                }),
+                (Ar.encode = function (e, t) {
+                  return (t = t || $Writer.create()).uint32(8).sint32(e.id), t;
+                }),
+                (Ar.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdDayWeekMonthGiftGetRewardReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.id = e.sint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("id")) return o;
+                  throw $util.ProtocolError("mr'id'", { instance: o });
+                }),
+                Ar)),
+              (r.CmdDayWeekMonthGiftGetRewardRspMsg =
+                ((jr.prototype.tlCmdGoods = $util.emptyArray),
+                (jr.create = function (e) {
+                  return new jr(e);
+                }),
+                (jr.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (jr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdDayWeekMonthGiftGetRewardRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                        o.tlCmdGoods.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                jr)),
+              (r.CmdDayWeekMonthGiftInfoReqMsg =
+                ((qr.create = function (e) {
+                  return new qr(e);
+                }),
+                (qr.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (qr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdDayWeekMonthGiftInfoReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                qr)),
+              (r.CmdDayWeekMonthGiftInfoRspMsg =
+                ((Fr.prototype.cmdDayWeekMonthGift = null),
+                (Fr.create = function (e) {
+                  return new Fr(e);
+                }),
+                (Fr.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()),
+                    $root.com.xkhy.tafang.cmd.CmdDayWeekMonthGift.encode(
+                      e.cmdDayWeekMonthGift,
+                      t.uint32(10).fork(),
+                    ).ldelim(),
+                    t
+                  );
+                }),
+                (Fr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdDayWeekMonthGiftInfoRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.cmdDayWeekMonthGift =
+                          $root.com.xkhy.tafang.cmd.CmdDayWeekMonthGift.decode(
+                            e,
+                            e.uint32(),
+                          ))
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("cmdDayWeekMonthGift")) return o;
+                  throw $util.ProtocolError("mr'cmdDayWeekMonthGift'", {
+                    instance: o,
+                  });
+                }),
+                Fr)),
+              (r.CmdDayWeekMonthGiftFreeBuyReqMsg =
+                ((Ur.prototype.id = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Ur.create = function (e) {
+                  return new Ur(e);
+                }),
+                (Ur.encode = function (e, t) {
+                  return (t = t || $Writer.create()).uint32(8).sint64(e.id), t;
+                }),
+                (Ur.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdDayWeekMonthGiftFreeBuyReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.id = e.sint64()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("id")) return o;
+                  throw $util.ProtocolError("mr'id'", { instance: o });
+                }),
+                Ur)),
+              (r.CmdDayWeekMonthGiftFreeBuyRspMsg =
+                ((Kr.prototype.tlCmdGoods = $util.emptyArray),
+                (Kr.create = function (e) {
+                  return new Kr(e);
+                }),
+                (Kr.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (Kr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdDayWeekMonthGiftFreeBuyRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                        o.tlCmdGoods.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                Kr)),
+              (r.CmdGemInfo =
+                ((Nr.prototype.order = 0),
+                (Nr.prototype.gemId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Nr.create = function (e) {
+                  return new Nr(e);
+                }),
+                (Nr.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.order),
+                    t.uint32(16).sint64(e.gemId),
+                    t
+                  );
+                }),
+                (Nr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdGemInfo();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.order = e.sint32();
+                        break;
+                      case 2:
+                        o.gemId = e.sint64();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("order"))
+                    throw $util.ProtocolError("mr'order'", { instance: o });
+                  if (o.hasOwnProperty("gemId")) return o;
+                  throw $util.ProtocolError("mr'gemId'", { instance: o });
+                }),
+                Nr)),
+              (r.CmdEquipPage =
+                ((_r.prototype.page = 0),
+                (_r.prototype.name = ""),
+                (_r.prototype.tlCmdEquip = $util.emptyArray),
+                (_r.create = function (e) {
+                  return new _r(e);
+                }),
+                (_r.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()).uint32(8).sint32(e.page),
+                    t.uint32(18).string(e.name),
+                    e.tlCmdEquip && e.tlCmdEquip.length)
+                  )
+                    for (var r = 0; r < e.tlCmdEquip.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdEquip.encode(
+                        e.tlCmdEquip[r],
+                        t.uint32(26).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (_r.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdEquipPage();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.page = e.sint32();
+                        break;
+                      case 2:
+                        o.name = e.string();
+                        break;
+                      case 3:
+                        (o.tlCmdEquip && o.tlCmdEquip.length) ||
+                          (o.tlCmdEquip = []),
+                          o.tlCmdEquip.push(
+                            $root.com.xkhy.tafang.cmd.CmdEquip.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("page"))
+                    throw $util.ProtocolError("mr'page'", { instance: o });
+                  if (o.hasOwnProperty("name")) return o;
+                  throw $util.ProtocolError("mr'name'", { instance: o });
+                }),
+                _r)),
+              (r.CmdEquipPage_Key =
+                ((Hr.prototype.page = 0),
+                (Hr.create = function (e) {
+                  return new Hr(e);
+                }),
+                (Hr.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.page), t
+                  );
+                }),
+                (Hr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdEquipPage_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.page = e.sint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("page")) return o;
+                  throw $util.ProtocolError("mr'page'", { instance: o });
+                }),
+                Hr)),
+              (r.CmdEquip =
+                ((zr.prototype.equipId = 0),
+                (zr.prototype.level = 0),
+                (zr.prototype.tlCmdGemInfo = $util.emptyArray),
+                (zr.create = function (e) {
+                  return new zr(e);
+                }),
+                (zr.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()).uint32(8).sint32(e.equipId),
+                    t.uint32(16).sint32(e.level),
+                    e.tlCmdGemInfo && e.tlCmdGemInfo.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGemInfo.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGemInfo.encode(
+                        e.tlCmdGemInfo[r],
+                        t.uint32(26).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (zr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdEquip();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.equipId = e.sint32();
+                        break;
+                      case 2:
+                        o.level = e.sint32();
+                        break;
+                      case 3:
+                        (o.tlCmdGemInfo && o.tlCmdGemInfo.length) ||
+                          (o.tlCmdGemInfo = []),
+                          o.tlCmdGemInfo.push(
+                            $root.com.xkhy.tafang.cmd.CmdGemInfo.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("equipId"))
+                    throw $util.ProtocolError("mr'equipId'", { instance: o });
+                  if (o.hasOwnProperty("level")) return o;
+                  throw $util.ProtocolError("mr'level'", { instance: o });
+                }),
+                zr)),
+              (r.CmdEquipUpLevelAllReqMsg =
+                ((Vr.create = function (e) {
+                  return new Vr(e);
+                }),
+                (Vr.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Vr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdEquipUpLevelAllReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Vr)),
+              (r.CmdEquipUpLevelAllRspMsg =
+                ((Jr.create = function (e) {
+                  return new Jr(e);
+                }),
+                (Jr.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Jr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdEquipUpLevelAllRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Jr)),
+              (r.CmdEquipUpLevelReqMsg =
+                ((Qr.prototype.id = 0),
+                (Qr.prototype.type = 0),
+                (Qr.create = function (e) {
+                  return new Qr(e);
+                }),
+                (Qr.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.id),
+                    null != e.type &&
+                      e.hasOwnProperty("type") &&
+                      t.uint32(16).sint32(e.type),
+                    t
+                  );
+                }),
+                (Qr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdEquipUpLevelReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.id = e.sint32();
+                        break;
+                      case 2:
+                        o.type = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (o.hasOwnProperty("id")) return o;
+                  throw $util.ProtocolError("mr'id'", { instance: o });
+                }),
+                Qr)),
+              (r.CmdEquipUpLevelRspMsg =
+                ((Yr.create = function (e) {
+                  return new Yr(e);
+                }),
+                (Yr.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Yr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdEquipUpLevelRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Yr)),
+              (r.CmdEquipSelectPageReqMsg =
+                ((Xr.prototype.page = 0),
+                (Xr.create = function (e) {
+                  return new Xr(e);
+                }),
+                (Xr.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.page), t
+                  );
+                }),
+                (Xr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdEquipSelectPageReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.page = e.sint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("page")) return o;
+                  throw $util.ProtocolError("mr'page'", { instance: o });
+                }),
+                Xr)),
+              (r.CmdEquipSelectPageRspMsg =
+                ((Zr.create = function (e) {
+                  return new Zr(e);
+                }),
+                (Zr.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Zr.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdEquipSelectPageRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Zr)),
+              (r.CmdEquipChangePageNameReqMsg =
+                ((eo.prototype.page = 0),
+                (eo.prototype.name = ""),
+                (eo.create = function (e) {
+                  return new eo(e);
+                }),
+                (eo.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.page),
+                    t.uint32(18).string(e.name),
+                    t
+                  );
+                }),
+                (eo.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdEquipChangePageNameReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.page = e.sint32();
+                        break;
+                      case 2:
+                        o.name = e.string();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("page"))
+                    throw $util.ProtocolError("mr'page'", { instance: o });
+                  if (o.hasOwnProperty("name")) return o;
+                  throw $util.ProtocolError("mr'name'", { instance: o });
+                }),
+                eo)),
+              (r.CmdEquipChangePageNameRspMsg =
+                ((to.create = function (e) {
+                  return new to(e);
+                }),
+                (to.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (to.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdEquipChangePageNameRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                to)),
+              (r.CmdEveryDaySign =
+                ((ro.create = function (e) {
+                  return new ro(e);
+                }),
+                (ro.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (ro.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdEveryDaySign();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                ro)),
+              (r.CmdEveryDaySign_Key =
+                ((oo.prototype.id = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (oo.create = function (e) {
+                  return new oo(e);
+                }),
+                (oo.encode = function (e, t) {
+                  return (t = t || $Writer.create()).uint32(8).sint64(e.id), t;
+                }),
+                (oo.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdEveryDaySign_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.id = e.sint64()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("id")) return o;
+                  throw $util.ProtocolError("mr'id'", { instance: o });
+                }),
+                oo)),
+              (r.EveryDaySignInReward =
+                ((no.prototype.day = 0),
+                (no.prototype.tlCmdGoods = $util.emptyArray),
+                (no.prototype.state = 0),
+                (no.create = function (e) {
+                  return new no(e);
+                }),
+                (no.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()).uint32(8).sint32(e.day),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(18).fork(),
+                      ).ldelim();
+                  return t.uint32(24).sint32(e.state), t;
+                }),
+                (no.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.EveryDaySignInReward();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.day = e.sint32();
+                        break;
+                      case 2:
+                        (o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                          o.tlCmdGoods.push(
+                            $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      case 3:
+                        o.state = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("day"))
+                    throw $util.ProtocolError("mr'day'", { instance: o });
+                  if (o.hasOwnProperty("state")) return o;
+                  throw $util.ProtocolError("mr'state'", { instance: o });
+                }),
+                no)),
+              (r.CmdEveryDaySignInInfoReqMsg =
+                ((io.create = function (e) {
+                  return new io(e);
+                }),
+                (io.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (io.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdEveryDaySignInInfoReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                io)),
+              (r.CmdEveryDaySignInInfoRspMsg =
+                ((ao.prototype.tlEveryDaySignInReward = $util.emptyArray),
+                (ao.prototype.days = 0),
+                (ao.create = function (e) {
+                  return new ao(e);
+                }),
+                (ao.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlEveryDaySignInReward && e.tlEveryDaySignInReward.length)
+                  )
+                    for (var r = 0; r < e.tlEveryDaySignInReward.length; ++r)
+                      $root.com.xkhy.tafang.cmd.EveryDaySignInReward.encode(
+                        e.tlEveryDaySignInReward[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t.uint32(16).sint32(e.days), t;
+                }),
+                (ao.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdEveryDaySignInInfoRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        (o.tlEveryDaySignInReward &&
+                          o.tlEveryDaySignInReward.length) ||
+                          (o.tlEveryDaySignInReward = []),
+                          o.tlEveryDaySignInReward.push(
+                            $root.com.xkhy.tafang.cmd.EveryDaySignInReward.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      case 2:
+                        o.days = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (o.hasOwnProperty("days")) return o;
+                  throw $util.ProtocolError("mr'days'", { instance: o });
+                }),
+                ao)),
+              (r.CmdEveryDaySignInReqMsg =
+                ((co.create = function (e) {
+                  return new co(e);
+                }),
+                (co.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (co.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdEveryDaySignInReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                co)),
+              (r.CmdEveryDaySignInRspMsg =
+                ((so.prototype.tlCmdGoods = $util.emptyArray),
+                (so.create = function (e) {
+                  return new so(e);
+                }),
+                (so.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (so.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdEveryDaySignInRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                        o.tlCmdGoods.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                so)),
+              (r.CmdEveryDayGetRewardsReqMsg =
+                ((lo.prototype.day = 0),
+                (lo.create = function (e) {
+                  return new lo(e);
+                }),
+                (lo.encode = function (e, t) {
+                  return (t = t || $Writer.create()).uint32(8).sint32(e.day), t;
+                }),
+                (lo.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdEveryDayGetRewardsReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.day = e.sint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("day")) return o;
+                  throw $util.ProtocolError("mr'day'", { instance: o });
+                }),
+                lo)),
+              (r.CmdEveryDayGetRewardsRspMsg =
+                ((uo.prototype.tlCmdGoods = $util.emptyArray),
+                (uo.create = function (e) {
+                  return new uo(e);
+                }),
+                (uo.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (uo.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdEveryDayGetRewardsRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                        o.tlCmdGoods.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                uo)),
+              (r.CmdFirstRecharge =
+                ((fo.create = function (e) {
+                  return new fo(e);
+                }),
+                (fo.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (fo.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdFirstRecharge();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                fo)),
+              (r.CmdFirstRecharge_Key =
+                ((mo.prototype.id = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (mo.create = function (e) {
+                  return new mo(e);
+                }),
+                (mo.encode = function (e, t) {
+                  return (t = t || $Writer.create()).uint32(8).sint64(e.id), t;
+                }),
+                (mo.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdFirstRecharge_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.id = e.sint64()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("id")) return o;
+                  throw $util.ProtocolError("mr'id'", { instance: o });
+                }),
+                mo)),
+              (r.CmdFirstRechargeRewardReqMsg =
+                ((po.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (po.create = function (e) {
+                  return new po(e);
+                }),
+                (po.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.resId), t
+                  );
+                }),
+                (po.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdFirstRechargeRewardReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.resId = e.sint64()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("resId")) return o;
+                  throw $util.ProtocolError("mr'resId'", { instance: o });
+                }),
+                po)),
+              (r.CmdFirstRechargeRewardRspMsg =
+                ((yo.prototype.tlCmdGoods = $util.emptyArray),
+                (yo.create = function (e) {
+                  return new yo(e);
+                }),
+                (yo.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (yo.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdFirstRechargeRewardRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                        o.tlCmdGoods.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                yo)),
+              (r.CmdFirstRechargeOpenReqMsg =
+                ((ho.create = function (e) {
+                  return new ho(e);
+                }),
+                (ho.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (ho.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdFirstRechargeOpenReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                ho)),
+              (r.CmdFirstRechargeOpenRspMsg =
+                ((go.create = function (e) {
+                  return new go(e);
+                }),
+                (go.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (go.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdFirstRechargeOpenRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                go)),
+              (r.CmdFriendCache =
+                (($o.prototype.roleId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                ($o.prototype.friendDetail = null),
+                ($o.create = function (e) {
+                  return new $o(e);
+                }),
+                ($o.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.roleId),
+                    $root.com.xkhy.tafang.cmd.CmdFriendsShowDetail.encode(
+                      e.friendDetail,
+                      t.uint32(18).fork(),
+                    ).ldelim(),
+                    t
+                  );
+                }),
+                ($o.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdFriendCache();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.roleId = e.sint64();
+                        break;
+                      case 2:
+                        o.friendDetail =
+                          $root.com.xkhy.tafang.cmd.CmdFriendsShowDetail.decode(
+                            e,
+                            e.uint32(),
+                          );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("roleId"))
+                    throw $util.ProtocolError("mr'roleId'", { instance: o });
+                  if (o.hasOwnProperty("friendDetail")) return o;
+                  throw $util.ProtocolError("mr'friendDetail'", {
+                    instance: o,
+                  });
+                }),
+                $o)),
+              (r.CmdFriendCache_Key =
+                ((ko.prototype.roleId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (ko.create = function (e) {
+                  return new ko(e);
+                }),
+                (ko.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.roleId), t
+                  );
+                }),
+                (ko.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdFriendCache_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.roleId = e.sint64()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("roleId")) return o;
+                  throw $util.ProtocolError("mr'roleId'", { instance: o });
+                }),
+                ko)),
+              (r.CmdApplyFriendCache =
+                ((wo.prototype.roleId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (wo.prototype.friendDetail = null),
+                (wo.create = function (e) {
+                  return new wo(e);
+                }),
+                (wo.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.roleId),
+                    $root.com.xkhy.tafang.cmd.CmdFriendsShowDetail.encode(
+                      e.friendDetail,
+                      t.uint32(18).fork(),
+                    ).ldelim(),
+                    t
+                  );
+                }),
+                (wo.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdApplyFriendCache();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.roleId = e.sint64();
+                        break;
+                      case 2:
+                        o.friendDetail =
+                          $root.com.xkhy.tafang.cmd.CmdFriendsShowDetail.decode(
+                            e,
+                            e.uint32(),
+                          );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("roleId"))
+                    throw $util.ProtocolError("mr'roleId'", { instance: o });
+                  if (o.hasOwnProperty("friendDetail")) return o;
+                  throw $util.ProtocolError("mr'friendDetail'", {
+                    instance: o,
+                  });
+                }),
+                wo)),
+              (r.CmdApplyFriendCache_Key =
+                ((vo.prototype.roleId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (vo.create = function (e) {
+                  return new vo(e);
+                }),
+                (vo.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.roleId), t
+                  );
+                }),
+                (vo.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdApplyFriendCache_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.roleId = e.sint64()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("roleId")) return o;
+                  throw $util.ProtocolError("mr'roleId'", { instance: o });
+                }),
+                vo)),
+              (r.CmdBlackFriendCache =
+                ((Co.prototype.roleId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Co.prototype.friendDetail = null),
+                (Co.create = function (e) {
+                  return new Co(e);
+                }),
+                (Co.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.roleId),
+                    $root.com.xkhy.tafang.cmd.CmdFriendsShowDetail.encode(
+                      e.friendDetail,
+                      t.uint32(18).fork(),
+                    ).ldelim(),
+                    t
+                  );
+                }),
+                (Co.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdBlackFriendCache();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.roleId = e.sint64();
+                        break;
+                      case 2:
+                        o.friendDetail =
+                          $root.com.xkhy.tafang.cmd.CmdFriendsShowDetail.decode(
+                            e,
+                            e.uint32(),
+                          );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("roleId"))
+                    throw $util.ProtocolError("mr'roleId'", { instance: o });
+                  if (o.hasOwnProperty("friendDetail")) return o;
+                  throw $util.ProtocolError("mr'friendDetail'", {
+                    instance: o,
+                  });
+                }),
+                Co)),
+              (r.CmdBlackFriendCache_Key =
+                ((Ro.prototype.roleId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Ro.create = function (e) {
+                  return new Ro(e);
+                }),
+                (Ro.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.roleId), t
+                  );
+                }),
+                (Ro.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdBlackFriendCache_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.roleId = e.sint64()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("roleId")) return o;
+                  throw $util.ProtocolError("mr'roleId'", { instance: o });
+                }),
+                Ro)),
+              (r.CmdFriendsShowDetail =
+                ((R.prototype.roleId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (R.prototype.roleImg = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (R.prototype.roleName = ""),
+                (R.prototype.power = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (R.prototype.headFrame = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (R.prototype.online = !1),
+                (R.prototype.popularity = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (R.prototype.lastOfflineTime = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (R.prototype.todaySend = !1),
+                (R.prototype.todayReceive = !1),
+                (R.prototype.todayTake = !1),
+                (R.prototype.level = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (R.prototype.heroId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (R.prototype.todayLike = !1),
+                (R.prototype.apply = !1),
+                (R.create = function (e) {
+                  return new R(e);
+                }),
+                (R.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.roleId),
+                    t.uint32(16).sint64(e.roleImg),
+                    t.uint32(26).string(e.roleName),
+                    t.uint32(32).sint64(e.power),
+                    t.uint32(40).sint64(e.headFrame),
+                    null != e.online &&
+                      e.hasOwnProperty("online") &&
+                      t.uint32(48).bool(e.online),
+                    null != e.popularity &&
+                      e.hasOwnProperty("popularity") &&
+                      t.uint32(56).sint64(e.popularity),
+                    null != e.lastOfflineTime &&
+                      e.hasOwnProperty("lastOfflineTime") &&
+                      t.uint32(64).sint64(e.lastOfflineTime),
+                    null != e.todaySend &&
+                      e.hasOwnProperty("todaySend") &&
+                      t.uint32(72).bool(e.todaySend),
+                    null != e.todayReceive &&
+                      e.hasOwnProperty("todayReceive") &&
+                      t.uint32(80).bool(e.todayReceive),
+                    null != e.todayTake &&
+                      e.hasOwnProperty("todayTake") &&
+                      t.uint32(88).bool(e.todayTake),
+                    null != e.level &&
+                      e.hasOwnProperty("level") &&
+                      t.uint32(96).sint64(e.level),
+                    null != e.heroId &&
+                      e.hasOwnProperty("heroId") &&
+                      t.uint32(104).sint64(e.heroId),
+                    null != e.todayLike &&
+                      e.hasOwnProperty("todayLike") &&
+                      t.uint32(112).bool(e.todayLike),
+                    null != e.apply &&
+                      e.hasOwnProperty("apply") &&
+                      t.uint32(120).bool(e.apply),
+                    t
+                  );
+                }),
+                (R.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdFriendsShowDetail();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.roleId = e.sint64();
+                        break;
+                      case 2:
+                        o.roleImg = e.sint64();
+                        break;
+                      case 3:
+                        o.roleName = e.string();
+                        break;
+                      case 4:
+                        o.power = e.sint64();
+                        break;
+                      case 5:
+                        o.headFrame = e.sint64();
+                        break;
+                      case 6:
+                        o.online = e.bool();
+                        break;
+                      case 7:
+                        o.popularity = e.sint64();
+                        break;
+                      case 8:
+                        o.lastOfflineTime = e.sint64();
+                        break;
+                      case 9:
+                        o.todaySend = e.bool();
+                        break;
+                      case 10:
+                        o.todayReceive = e.bool();
+                        break;
+                      case 11:
+                        o.todayTake = e.bool();
+                        break;
+                      case 12:
+                        o.level = e.sint64();
+                        break;
+                      case 13:
+                        o.heroId = e.sint64();
+                        break;
+                      case 14:
+                        o.todayLike = e.bool();
+                        break;
+                      case 15:
+                        o.apply = e.bool();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("roleId"))
+                    throw $util.ProtocolError("mr'roleId'", { instance: o });
+                  if (!o.hasOwnProperty("roleImg"))
+                    throw $util.ProtocolError("mr'roleImg'", { instance: o });
+                  if (!o.hasOwnProperty("roleName"))
+                    throw $util.ProtocolError("mr'roleName'", { instance: o });
+                  if (!o.hasOwnProperty("power"))
+                    throw $util.ProtocolError("mr'power'", { instance: o });
+                  if (o.hasOwnProperty("headFrame")) return o;
+                  throw $util.ProtocolError("mr'headFrame'", { instance: o });
+                }),
+                R)),
+              (r.CmdFriendsWearEquip =
+                ((bo.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (bo.prototype.quality = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (bo.prototype.phase = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (bo.prototype.level = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (bo.create = function (e) {
+                  return new bo(e);
+                }),
+                (bo.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.resId),
+                    t.uint32(16).sint64(e.quality),
+                    t.uint32(24).sint64(e.phase),
+                    t.uint32(32).sint64(e.level),
+                    t
+                  );
+                }),
+                (bo.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdFriendsWearEquip();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.sint64();
+                        break;
+                      case 2:
+                        o.quality = e.sint64();
+                        break;
+                      case 3:
+                        o.phase = e.sint64();
+                        break;
+                      case 4:
+                        o.level = e.sint64();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("resId"))
+                    throw $util.ProtocolError("mr'resId'", { instance: o });
+                  if (!o.hasOwnProperty("quality"))
+                    throw $util.ProtocolError("mr'quality'", { instance: o });
+                  if (!o.hasOwnProperty("phase"))
+                    throw $util.ProtocolError("mr'phase'", { instance: o });
+                  if (o.hasOwnProperty("level")) return o;
+                  throw $util.ProtocolError("mr'level'", { instance: o });
+                }),
+                bo)),
+              (r.CmdFriendsApplyReqMsg =
+                ((Io.prototype.targetId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Io.create = function (e) {
+                  return new Io(e);
+                }),
+                (Io.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.targetId), t
+                  );
+                }),
+                (Io.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdFriendsApplyReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.targetId = e.sint64())
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("targetId")) return o;
+                  throw $util.ProtocolError("mr'targetId'", { instance: o });
+                }),
+                Io)),
+              (r.CmdFriendsApplyRspMsg =
+                ((Po.create = function (e) {
+                  return new Po(e);
+                }),
+                (Po.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Po.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdFriendsApplyRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Po)),
+              (r.CmdFriendsAddReqMsg =
+                ((Oo.prototype.targetId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Oo.create = function (e) {
+                  return new Oo(e);
+                }),
+                (Oo.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.targetId), t
+                  );
+                }),
+                (Oo.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdFriendsAddReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.targetId = e.sint64())
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("targetId")) return o;
+                  throw $util.ProtocolError("mr'targetId'", { instance: o });
+                }),
+                Oo)),
+              (r.CmdFriendsAddRspMsg =
+                ((To.create = function (e) {
+                  return new To(e);
+                }),
+                (To.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (To.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdFriendsAddRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                To)),
+              (r.CmdFriendsRefuseReqMsg =
+                ((Mo.prototype.targetId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Mo.create = function (e) {
+                  return new Mo(e);
+                }),
+                (Mo.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.targetId), t
+                  );
+                }),
+                (Mo.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdFriendsRefuseReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.targetId = e.sint64())
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("targetId")) return o;
+                  throw $util.ProtocolError("mr'targetId'", { instance: o });
+                }),
+                Mo)),
+              (r.CmdFriendsRefuseRspMsg =
+                ((Go.create = function (e) {
+                  return new Go(e);
+                }),
+                (Go.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Go.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdFriendsRefuseRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Go)),
+              (r.CmdFriendsRemoveReqMsg =
+                ((xo.prototype.targetId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (xo.create = function (e) {
+                  return new xo(e);
+                }),
+                (xo.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.targetId), t
+                  );
+                }),
+                (xo.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdFriendsRemoveReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.targetId = e.sint64())
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("targetId")) return o;
+                  throw $util.ProtocolError("mr'targetId'", { instance: o });
+                }),
+                xo)),
+              (r.CmdFriendsRemoveRspMsg =
+                ((So.create = function (e) {
+                  return new So(e);
+                }),
+                (So.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (So.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdFriendsRemoveRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                So)),
+              (r.CmdFriendsBlackReqMsg =
+                ((Eo.prototype.targetId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Eo.create = function (e) {
+                  return new Eo(e);
+                }),
+                (Eo.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.targetId), t
+                  );
+                }),
+                (Eo.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdFriendsBlackReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.targetId = e.sint64())
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("targetId")) return o;
+                  throw $util.ProtocolError("mr'targetId'", { instance: o });
+                }),
+                Eo)),
+              (r.CmdFriendsBlackRspMsg =
+                ((Bo.create = function (e) {
+                  return new Bo(e);
+                }),
+                (Bo.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Bo.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdFriendsBlackRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Bo)),
+              (r.CmdFriendsSearchReqMsg =
+                ((Do.prototype.targetId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Do.create = function (e) {
+                  return new Do(e);
+                }),
+                (Do.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.targetId), t
+                  );
+                }),
+                (Do.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdFriendsSearchReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.targetId = e.sint64())
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("targetId")) return o;
+                  throw $util.ProtocolError("mr'targetId'", { instance: o });
+                }),
+                Do)),
+              (r.CmdFriendsSearchRspMsg =
+                ((Lo.prototype.detail = null),
+                (Lo.create = function (e) {
+                  return new Lo(e);
+                }),
+                (Lo.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()),
+                    $root.com.xkhy.tafang.cmd.CmdFriendsShowDetail.encode(
+                      e.detail,
+                      t.uint32(10).fork(),
+                    ).ldelim(),
+                    t
+                  );
+                }),
+                (Lo.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdFriendsSearchRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.detail =
+                          $root.com.xkhy.tafang.cmd.CmdFriendsShowDetail.decode(
+                            e,
+                            e.uint32(),
+                          ))
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("detail")) return o;
+                  throw $util.ProtocolError("mr'detail'", { instance: o });
+                }),
+                Lo)),
+              (r.CmdFriendGetEndReqMsg =
+                ((Wo.prototype.targetId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Wo.create = function (e) {
+                  return new Wo(e);
+                }),
+                (Wo.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.targetId), t
+                  );
+                }),
+                (Wo.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdFriendGetEndReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.targetId = e.sint64())
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("targetId")) return o;
+                  throw $util.ProtocolError("mr'targetId'", { instance: o });
+                }),
+                Wo)),
+              (r.CmdFriendGetEndRspMsg =
+                ((Ao.create = function (e) {
+                  return new Ao(e);
+                }),
+                (Ao.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Ao.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdFriendGetEndRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Ao)),
+              (r.CmdFriendGetEndOneKeyReqMsg =
+                ((jo.create = function (e) {
+                  return new jo(e);
+                }),
+                (jo.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (jo.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdFriendGetEndOneKeyReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                jo)),
+              (r.CmdFriendGetEndOneKeyRspMsg =
+                ((qo.create = function (e) {
+                  return new qo(e);
+                }),
+                (qo.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (qo.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdFriendGetEndOneKeyRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                qo)),
+              (r.CmdFriendSendEndReqMsg =
+                ((Fo.prototype.targetId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Fo.create = function (e) {
+                  return new Fo(e);
+                }),
+                (Fo.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.targetId), t
+                  );
+                }),
+                (Fo.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdFriendSendEndReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.targetId = e.sint64())
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("targetId")) return o;
+                  throw $util.ProtocolError("mr'targetId'", { instance: o });
+                }),
+                Fo)),
+              (r.CmdFriendSendEndRspMsg =
+                ((Uo.create = function (e) {
+                  return new Uo(e);
+                }),
+                (Uo.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Uo.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdFriendSendEndRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Uo)),
+              (r.CmdFriendSendEndOneKeyReqMsg =
+                ((Ko.create = function (e) {
+                  return new Ko(e);
+                }),
+                (Ko.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Ko.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdFriendSendEndOneKeyReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Ko)),
+              (r.CmdFriendSendEndOneKeyRspMsg =
+                ((No.create = function (e) {
+                  return new No(e);
+                }),
+                (No.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (No.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdFriendSendEndOneKeyRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                No)),
+              (r.CmdFriendAgreeOneKeyReqMsg =
+                ((_o.create = function (e) {
+                  return new _o(e);
+                }),
+                (_o.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (_o.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdFriendAgreeOneKeyReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                _o)),
+              (r.CmdFriendAgreeOneKeyRspMsg =
+                ((Ho.create = function (e) {
+                  return new Ho(e);
+                }),
+                (Ho.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Ho.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdFriendAgreeOneKeyRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Ho)),
+              (r.CmdFriendRefuseOneKeyReqMsg =
+                ((zo.create = function (e) {
+                  return new zo(e);
+                }),
+                (zo.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (zo.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdFriendRefuseOneKeyReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                zo)),
+              (r.CmdFriendRefuseOneKeyRspMsg =
+                ((Vo.create = function (e) {
+                  return new Vo(e);
+                }),
+                (Vo.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Vo.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdFriendRefuseOneKeyRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Vo)),
+              (r.CmdFriendDetailReqMsg =
+                ((Jo.prototype.targetId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Jo.create = function (e) {
+                  return new Jo(e);
+                }),
+                (Jo.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.targetId), t
+                  );
+                }),
+                (Jo.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdFriendDetailReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.targetId = e.sint64())
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("targetId")) return o;
+                  throw $util.ProtocolError("mr'targetId'", { instance: o });
+                }),
+                Jo)),
+              (r.CmdFriendDetailRspMsg =
+                ((Qo.prototype.cmdFriendsShowDetail = null),
+                (Qo.prototype.equipList = $util.emptyArray),
+                (Qo.create = function (e) {
+                  return new Qo(e);
+                }),
+                (Qo.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    $root.com.xkhy.tafang.cmd.CmdFriendsShowDetail.encode(
+                      e.cmdFriendsShowDetail,
+                      t.uint32(10).fork(),
+                    ).ldelim(),
+                    e.equipList && e.equipList.length)
+                  )
+                    for (var r = 0; r < e.equipList.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdFriendsWearEquip.encode(
+                        e.equipList[r],
+                        t.uint32(18).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (Qo.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdFriendDetailRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.cmdFriendsShowDetail =
+                          $root.com.xkhy.tafang.cmd.CmdFriendsShowDetail.decode(
+                            e,
+                            e.uint32(),
+                          );
+                        break;
+                      case 2:
+                        (o.equipList && o.equipList.length) ||
+                          (o.equipList = []),
+                          o.equipList.push(
+                            $root.com.xkhy.tafang.cmd.CmdFriendsWearEquip.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (o.hasOwnProperty("cmdFriendsShowDetail")) return o;
+                  throw $util.ProtocolError("mr'cmdFriendsShowDetail'", {
+                    instance: o,
+                  });
+                }),
+                Qo)),
+              (r.CmdFriendLikeReqMsg =
+                ((Yo.prototype.targetId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Yo.create = function (e) {
+                  return new Yo(e);
+                }),
+                (Yo.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.targetId), t
+                  );
+                }),
+                (Yo.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdFriendLikeReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.targetId = e.sint64())
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("targetId")) return o;
+                  throw $util.ProtocolError("mr'targetId'", { instance: o });
+                }),
+                Yo)),
+              (r.CmdFriendLikeRspMsg =
+                ((Xo.create = function (e) {
+                  return new Xo(e);
+                }),
+                (Xo.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Xo.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdFriendLikeRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Xo)),
+              (r.CmdFriendBlackRemoveReqMsg =
+                ((Zo.prototype.targetId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Zo.create = function (e) {
+                  return new Zo(e);
+                }),
+                (Zo.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.targetId), t
+                  );
+                }),
+                (Zo.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdFriendBlackRemoveReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.targetId = e.sint64())
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("targetId")) return o;
+                  throw $util.ProtocolError("mr'targetId'", { instance: o });
+                }),
+                Zo)),
+              (r.CmdFriendBlackRemoveRspMsg =
+                ((en.create = function (e) {
+                  return new en(e);
+                }),
+                (en.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (en.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdFriendBlackRemoveRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                en)),
+              (r.CmdFriendRefreshSuggestReqMsg =
+                ((tn.create = function (e) {
+                  return new tn(e);
+                }),
+                (tn.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (tn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdFriendRefreshSuggestReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                tn)),
+              (r.CmdFriendRefreshSuggestRspMsg =
+                ((rn.prototype.tlSuggestFriend = $util.emptyArray),
+                (rn.create = function (e) {
+                  return new rn(e);
+                }),
+                (rn.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlSuggestFriend && e.tlSuggestFriend.length)
+                  )
+                    for (var r = 0; r < e.tlSuggestFriend.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdFriendsShowDetail.encode(
+                        e.tlSuggestFriend[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (rn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdFriendRefreshSuggestRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlSuggestFriend && o.tlSuggestFriend.length) ||
+                          (o.tlSuggestFriend = []),
+                        o.tlSuggestFriend.push(
+                          $root.com.xkhy.tafang.cmd.CmdFriendsShowDetail.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                rn)),
+              (r.CmdFuBen =
+                ((on.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (on.prototype.detail = null),
+                (on.create = function (e) {
+                  return new on(e);
+                }),
+                (on.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.resId),
+                    $root.com.xkhy.tafang.cmd.CmdFuBenDetail.encode(
+                      e.detail,
+                      t.uint32(18).fork(),
+                    ).ldelim(),
+                    t
+                  );
+                }),
+                (on.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdFuBen();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.sint64();
+                        break;
+                      case 2:
+                        o.detail =
+                          $root.com.xkhy.tafang.cmd.CmdFuBenDetail.decode(
+                            e,
+                            e.uint32(),
+                          );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("resId"))
+                    throw $util.ProtocolError("mr'resId'", { instance: o });
+                  if (o.hasOwnProperty("detail")) return o;
+                  throw $util.ProtocolError("mr'detail'", { instance: o });
+                }),
+                on)),
+              (r.CmdFuBen_Key =
+                ((nn.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (nn.create = function (e) {
+                  return new nn(e);
+                }),
+                (nn.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.resId), t
+                  );
+                }),
+                (nn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdFuBen_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.resId = e.sint64()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("resId")) return o;
+                  throw $util.ProtocolError("mr'resId'", { instance: o });
+                }),
+                nn)),
+              (r.CmdFuBenDetail =
+                ((an.prototype.cmdFuBenGoldDetail = null),
+                (an.prototype.cmdFuBenDailyDetail = null),
+                (an.create = function (e) {
+                  return new an(e);
+                }),
+                (an.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()),
+                    e.cmdFuBenGoldDetail &&
+                      e.hasOwnProperty("cmdFuBenGoldDetail") &&
+                      $root.com.xkhy.tafang.cmd.CmdFuBenGoldDetail.encode(
+                        e.cmdFuBenGoldDetail,
+                        t.uint32(10).fork(),
+                      ).ldelim(),
+                    e.cmdFuBenDailyDetail &&
+                      e.hasOwnProperty("cmdFuBenDailyDetail") &&
+                      $root.com.xkhy.tafang.cmd.CmdFuBenDailyDetail.encode(
+                        e.cmdFuBenDailyDetail,
+                        t.uint32(18).fork(),
+                      ).ldelim(),
+                    t
+                  );
+                }),
+                (an.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdFuBenDetail();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.cmdFuBenGoldDetail =
+                          $root.com.xkhy.tafang.cmd.CmdFuBenGoldDetail.decode(
+                            e,
+                            e.uint32(),
+                          );
+                        break;
+                      case 2:
+                        o.cmdFuBenDailyDetail =
+                          $root.com.xkhy.tafang.cmd.CmdFuBenDailyDetail.decode(
+                            e,
+                            e.uint32(),
+                          );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  return o;
+                }),
+                an)),
+              (r.CmdFuBenGoldDetail =
+                ((b.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (b.prototype.type = 0),
+                (b.prototype.level = 0),
+                (b.prototype.buyTime = 0),
+                (b.prototype.freeTime = 0),
+                (b.prototype.enterCount = 0),
+                (b.create = function (e) {
+                  return new b(e);
+                }),
+                (b.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.resId),
+                    t.uint32(16).sint32(e.type),
+                    t.uint32(24).sint32(e.level),
+                    t.uint32(32).sint32(e.buyTime),
+                    t.uint32(40).sint32(e.freeTime),
+                    t.uint32(48).sint32(e.enterCount),
+                    t
+                  );
+                }),
+                (b.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdFuBenGoldDetail();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.sint64();
+                        break;
+                      case 2:
+                        o.type = e.sint32();
+                        break;
+                      case 3:
+                        o.level = e.sint32();
+                        break;
+                      case 4:
+                        o.buyTime = e.sint32();
+                        break;
+                      case 5:
+                        o.freeTime = e.sint32();
+                        break;
+                      case 6:
+                        o.enterCount = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("resId"))
+                    throw $util.ProtocolError("mr'resId'", { instance: o });
+                  if (!o.hasOwnProperty("type"))
+                    throw $util.ProtocolError("mr'type'", { instance: o });
+                  if (!o.hasOwnProperty("level"))
+                    throw $util.ProtocolError("mr'level'", { instance: o });
+                  if (!o.hasOwnProperty("buyTime"))
+                    throw $util.ProtocolError("mr'buyTime'", { instance: o });
+                  if (!o.hasOwnProperty("freeTime"))
+                    throw $util.ProtocolError("mr'freeTime'", { instance: o });
+                  if (o.hasOwnProperty("enterCount")) return o;
+                  throw $util.ProtocolError("mr'enterCount'", { instance: o });
+                }),
+                b)),
+              (r.CmdFuBenDailyDetail =
+                ((I.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (I.prototype.type = 0),
+                (I.prototype.level = 0),
+                (I.prototype.buyTime = 0),
+                (I.prototype.freeTime = 0),
+                (I.prototype.enterCount = 0),
+                (I.prototype.cmdFuBenRewardState = $util.emptyArray),
+                (I.create = function (e) {
+                  return new I(e);
+                }),
+                (I.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()).uint32(8).sint64(e.resId),
+                    t.uint32(16).sint32(e.type),
+                    t.uint32(24).sint32(e.level),
+                    t.uint32(32).sint32(e.buyTime),
+                    t.uint32(40).sint32(e.freeTime),
+                    t.uint32(48).sint32(e.enterCount),
+                    e.cmdFuBenRewardState && e.cmdFuBenRewardState.length)
+                  )
+                    for (var r = 0; r < e.cmdFuBenRewardState.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdFuBenRewardState.encode(
+                        e.cmdFuBenRewardState[r],
+                        t.uint32(58).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (I.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdFuBenDailyDetail();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.sint64();
+                        break;
+                      case 2:
+                        o.type = e.sint32();
+                        break;
+                      case 3:
+                        o.level = e.sint32();
+                        break;
+                      case 4:
+                        o.buyTime = e.sint32();
+                        break;
+                      case 5:
+                        o.freeTime = e.sint32();
+                        break;
+                      case 6:
+                        o.enterCount = e.sint32();
+                        break;
+                      case 7:
+                        (o.cmdFuBenRewardState &&
+                          o.cmdFuBenRewardState.length) ||
+                          (o.cmdFuBenRewardState = []),
+                          o.cmdFuBenRewardState.push(
+                            $root.com.xkhy.tafang.cmd.CmdFuBenRewardState.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("resId"))
+                    throw $util.ProtocolError("mr'resId'", { instance: o });
+                  if (!o.hasOwnProperty("type"))
+                    throw $util.ProtocolError("mr'type'", { instance: o });
+                  if (!o.hasOwnProperty("level"))
+                    throw $util.ProtocolError("mr'level'", { instance: o });
+                  if (!o.hasOwnProperty("buyTime"))
+                    throw $util.ProtocolError("mr'buyTime'", { instance: o });
+                  if (!o.hasOwnProperty("freeTime"))
+                    throw $util.ProtocolError("mr'freeTime'", { instance: o });
+                  if (o.hasOwnProperty("enterCount")) return o;
+                  throw $util.ProtocolError("mr'enterCount'", { instance: o });
+                }),
+                I)),
+              (r.CmdFuBenRewardState =
+                ((cn.prototype.resId = 0),
+                (cn.prototype.state = 0),
+                (cn.create = function (e) {
+                  return new cn(e);
+                }),
+                (cn.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.resId),
+                    t.uint32(16).sint32(e.state),
+                    t
+                  );
+                }),
+                (cn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdFuBenRewardState();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.sint32();
+                        break;
+                      case 2:
+                        o.state = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("resId"))
+                    throw $util.ProtocolError("mr'resId'", { instance: o });
+                  if (o.hasOwnProperty("state")) return o;
+                  throw $util.ProtocolError("mr'state'", { instance: o });
+                }),
+                cn)),
+              (r.CmdFuBenType =
+                ((e = {}),
+                ((t = Object.create(e))[(e[1] = "CHAPTER")] = 1),
+                (t[(e[2] = "MONEY")] = 2),
+                (t[(e[3] = "DAILY")] = 3),
+                t)),
+              (r.CmdFuBenEnterReqMsg =
+                ((dn.prototype.type = 1),
+                (dn.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (dn.create = function (e) {
+                  return new dn(e);
+                }),
+                (dn.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).uint32(e.type),
+                    t.uint32(16).sint64(e.resId),
+                    t
+                  );
+                }),
+                (dn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdFuBenEnterReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.type = e.uint32();
+                        break;
+                      case 2:
+                        o.resId = e.sint64();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("type"))
+                    throw $util.ProtocolError("mr'type'", { instance: o });
+                  if (o.hasOwnProperty("resId")) return o;
+                  throw $util.ProtocolError("mr'resId'", { instance: o });
+                }),
+                dn)),
+              (r.CmdFuBenEnterRspMsg =
+                ((sn.create = function (e) {
+                  return new sn(e);
+                }),
+                (sn.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (sn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdFuBenEnterRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                sn)),
+              (r.CmdFuBenDailyGetRewardReqMsg =
+                ((ln.prototype.resId = 0),
+                (ln.create = function (e) {
+                  return new ln(e);
+                }),
+                (ln.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.resId), t
+                  );
+                }),
+                (ln.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdFuBenDailyGetRewardReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.resId = e.sint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("resId")) return o;
+                  throw $util.ProtocolError("mr'resId'", { instance: o });
+                }),
+                ln)),
+              (r.CmdFuBenDailyGetRewardRspMsg =
+                ((un.prototype.tlCmdGoods = $util.emptyArray),
+                (un.create = function (e) {
+                  return new un(e);
+                }),
+                (un.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (un.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdFuBenDailyGetRewardRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                        o.tlCmdGoods.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                un)),
+              (r.CmdFuBenBuyTimesReqMsg =
+                ((fn.prototype.type = 0),
+                (fn.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (fn.create = function (e) {
+                  return new fn(e);
+                }),
+                (fn.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.type),
+                    t.uint32(16).sint64(e.resId),
+                    t
+                  );
+                }),
+                (fn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdFuBenBuyTimesReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.type = e.sint32();
+                        break;
+                      case 2:
+                        o.resId = e.sint64();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("type"))
+                    throw $util.ProtocolError("mr'type'", { instance: o });
+                  if (o.hasOwnProperty("resId")) return o;
+                  throw $util.ProtocolError("mr'resId'", { instance: o });
+                }),
+                fn)),
+              (r.CmdFuBenBuyTimesRspMsg =
+                ((mn.create = function (e) {
+                  return new mn(e);
+                }),
+                (mn.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (mn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdFuBenBuyTimesRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                mn)),
+              (r.CmdFund =
+                ((pn.create = function (e) {
+                  return new pn(e);
+                }),
+                (pn.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (pn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdFund();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                pn)),
+              (r.CmdFund_Key =
+                ((yn.prototype.id = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (yn.create = function (e) {
+                  return new yn(e);
+                }),
+                (yn.encode = function (e, t) {
+                  return (t = t || $Writer.create()).uint32(8).sint64(e.id), t;
+                }),
+                (yn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdFund_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.id = e.sint64()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("id")) return o;
+                  throw $util.ProtocolError("mr'id'", { instance: o });
+                }),
+                yn)),
+              (r.CmdFundDetail =
+                ((hn.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (hn.prototype.buyState = 0),
+                (hn.prototype.cmdFundRewardState = $util.emptyArray),
+                (hn.create = function (e) {
+                  return new hn(e);
+                }),
+                (hn.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()).uint32(8).sint64(e.resId),
+                    t.uint32(16).sint32(e.buyState),
+                    e.cmdFundRewardState && e.cmdFundRewardState.length)
+                  )
+                    for (var r = 0; r < e.cmdFundRewardState.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdFundRewardState.encode(
+                        e.cmdFundRewardState[r],
+                        t.uint32(26).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (hn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdFundDetail();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.sint64();
+                        break;
+                      case 2:
+                        o.buyState = e.sint32();
+                        break;
+                      case 3:
+                        (o.cmdFundRewardState && o.cmdFundRewardState.length) ||
+                          (o.cmdFundRewardState = []),
+                          o.cmdFundRewardState.push(
+                            $root.com.xkhy.tafang.cmd.CmdFundRewardState.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("resId"))
+                    throw $util.ProtocolError("mr'resId'", { instance: o });
+                  if (o.hasOwnProperty("buyState")) return o;
+                  throw $util.ProtocolError("mr'buyState'", { instance: o });
+                }),
+                hn)),
+              (r.CmdFundRewardState =
+                ((gn.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (gn.prototype.state = 0),
+                (gn.create = function (e) {
+                  return new gn(e);
+                }),
+                (gn.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.resId),
+                    t.uint32(16).sint32(e.state),
+                    t
+                  );
+                }),
+                (gn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdFundRewardState();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.sint64();
+                        break;
+                      case 2:
+                        o.state = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("resId"))
+                    throw $util.ProtocolError("mr'resId'", { instance: o });
+                  if (o.hasOwnProperty("state")) return o;
+                  throw $util.ProtocolError("mr'state'", { instance: o });
+                }),
+                gn)),
+              (r.CmdFundGetInfoReqMsg =
+                (($n.create = function (e) {
+                  return new $n(e);
+                }),
+                ($n.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                ($n.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdFundGetInfoReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                $n)),
+              (r.CmdFundGetInfoRspMsg =
+                ((kn.prototype.cmdFundDetail = $util.emptyArray),
+                (kn.create = function (e) {
+                  return new kn(e);
+                }),
+                (kn.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.cmdFundDetail && e.cmdFundDetail.length)
+                  )
+                    for (var r = 0; r < e.cmdFundDetail.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdFundDetail.encode(
+                        e.cmdFundDetail[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (kn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdFundGetInfoRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.cmdFundDetail && o.cmdFundDetail.length) ||
+                          (o.cmdFundDetail = []),
+                        o.cmdFundDetail.push(
+                          $root.com.xkhy.tafang.cmd.CmdFundDetail.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                kn)),
+              (r.CmdFundGetRewardReqMsg =
+                ((wn.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (wn.create = function (e) {
+                  return new wn(e);
+                }),
+                (wn.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.resId), t
+                  );
+                }),
+                (wn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdFundGetRewardReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.resId = e.sint64()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("resId")) return o;
+                  throw $util.ProtocolError("mr'resId'", { instance: o });
+                }),
+                wn)),
+              (r.CmdFundGetRewardRspMsg =
+                ((vn.prototype.tlCmdGoods = $util.emptyArray),
+                (vn.create = function (e) {
+                  return new vn(e);
+                }),
+                (vn.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (vn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdFundGetRewardRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                        o.tlCmdGoods.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                vn)),
+              (r.CmdGameCircle =
+                ((Cn.prototype.likeRewardState = 0),
+                (Cn.create = function (e) {
+                  return new Cn(e);
+                }),
+                (Cn.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create())
+                      .uint32(8)
+                      .uint32(e.likeRewardState),
+                    t
+                  );
+                }),
+                (Cn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdGameCircle();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.likeRewardState = e.uint32())
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("likeRewardState")) return o;
+                  throw $util.ProtocolError("mr'likeRewardState'", {
+                    instance: o,
+                  });
+                }),
+                Cn)),
+              (r.CmdGameCircle_Key =
+                ((Rn.create = function (e) {
+                  return new Rn(e);
+                }),
+                (Rn.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Rn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdGameCircle_Key();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Rn)),
+              (r.CmdTakeGameCircleRewardReqMsg =
+                ((bn.create = function (e) {
+                  return new bn(e);
+                }),
+                (bn.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (bn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdTakeGameCircleRewardReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                bn)),
+              (r.CmdTakeGameCircleRewardRspMsg =
+                ((In.prototype.tlCmdGoods = $util.emptyArray),
+                (In.create = function (e) {
+                  return new In(e);
+                }),
+                (In.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (In.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdTakeGameCircleRewardRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                        o.tlCmdGoods.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                In)),
+              (r.CmdGem =
+                ((P.prototype.id = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (P.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (P.prototype.quality = 0),
+                (P.prototype.num = 0),
+                (P.prototype.attribute = 0),
+                (P.prototype.lock = 0),
+                (P.prototype.newAttribute = 0),
+                (P.create = function (e) {
+                  return new P(e);
+                }),
+                (P.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.id),
+                    t.uint32(16).sint64(e.resId),
+                    t.uint32(24).sint32(e.quality),
+                    t.uint32(32).sint32(e.num),
+                    t.uint32(40).sint32(e.attribute),
+                    t.uint32(48).sint32(e.lock),
+                    null != e.newAttribute &&
+                      e.hasOwnProperty("newAttribute") &&
+                      t.uint32(56).sint32(e.newAttribute),
+                    t
+                  );
+                }),
+                (P.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdGem();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.id = e.sint64();
+                        break;
+                      case 2:
+                        o.resId = e.sint64();
+                        break;
+                      case 3:
+                        o.quality = e.sint32();
+                        break;
+                      case 4:
+                        o.num = e.sint32();
+                        break;
+                      case 5:
+                        o.attribute = e.sint32();
+                        break;
+                      case 6:
+                        o.lock = e.sint32();
+                        break;
+                      case 7:
+                        o.newAttribute = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("id"))
+                    throw $util.ProtocolError("mr'id'", { instance: o });
+                  if (!o.hasOwnProperty("resId"))
+                    throw $util.ProtocolError("mr'resId'", { instance: o });
+                  if (!o.hasOwnProperty("quality"))
+                    throw $util.ProtocolError("mr'quality'", { instance: o });
+                  if (!o.hasOwnProperty("num"))
+                    throw $util.ProtocolError("mr'num'", { instance: o });
+                  if (!o.hasOwnProperty("attribute"))
+                    throw $util.ProtocolError("mr'attribute'", { instance: o });
+                  if (o.hasOwnProperty("lock")) return o;
+                  throw $util.ProtocolError("mr'lock'", { instance: o });
+                }),
+                P)),
+              (r.CmdGem_Key =
+                ((Pn.prototype.id = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Pn.create = function (e) {
+                  return new Pn(e);
+                }),
+                (Pn.encode = function (e, t) {
+                  return (t = t || $Writer.create()).uint32(8).sint64(e.id), t;
+                }),
+                (Pn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdGem_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.id = e.sint64()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("id")) return o;
+                  throw $util.ProtocolError("mr'id'", { instance: o });
+                }),
+                Pn)),
+              (r.CmdGemPreview =
+                ((On.prototype.id = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (On.prototype.num = 0),
+                (On.create = function (e) {
+                  return new On(e);
+                }),
+                (On.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.id),
+                    t.uint32(16).sint32(e.num),
+                    t
+                  );
+                }),
+                (On.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdGemPreview();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.id = e.sint64();
+                        break;
+                      case 2:
+                        o.num = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("id"))
+                    throw $util.ProtocolError("mr'id'", { instance: o });
+                  if (o.hasOwnProperty("num")) return o;
+                  throw $util.ProtocolError("mr'num'", { instance: o });
+                }),
+                On)),
+              (r.CmdGemOnReqMsg =
+                ((Tn.prototype.equipId = 0),
+                (Tn.prototype.page = 0),
+                (Tn.prototype.id = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Tn.create = function (e) {
+                  return new Tn(e);
+                }),
+                (Tn.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.equipId),
+                    t.uint32(16).sint32(e.page),
+                    t.uint32(24).sint64(e.id),
+                    t
+                  );
+                }),
+                (Tn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdGemOnReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.equipId = e.sint32();
+                        break;
+                      case 2:
+                        o.page = e.sint32();
+                        break;
+                      case 3:
+                        o.id = e.sint64();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("equipId"))
+                    throw $util.ProtocolError("mr'equipId'", { instance: o });
+                  if (!o.hasOwnProperty("page"))
+                    throw $util.ProtocolError("mr'page'", { instance: o });
+                  if (o.hasOwnProperty("id")) return o;
+                  throw $util.ProtocolError("mr'id'", { instance: o });
+                }),
+                Tn)),
+              (r.CmdGemOnRspMsg =
+                ((Mn.create = function (e) {
+                  return new Mn(e);
+                }),
+                (Mn.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Mn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdGemOnRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Mn)),
+              (r.CmdGemReplaceReqMsg =
+                ((Gn.prototype.equipId = 0),
+                (Gn.prototype.page = 0),
+                (Gn.prototype.id = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Gn.prototype.order = 0),
+                (Gn.create = function (e) {
+                  return new Gn(e);
+                }),
+                (Gn.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.equipId),
+                    t.uint32(16).sint32(e.page),
+                    t.uint32(24).sint64(e.id),
+                    t.uint32(32).sint32(e.order),
+                    t
+                  );
+                }),
+                (Gn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdGemReplaceReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.equipId = e.sint32();
+                        break;
+                      case 2:
+                        o.page = e.sint32();
+                        break;
+                      case 3:
+                        o.id = e.sint64();
+                        break;
+                      case 4:
+                        o.order = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("equipId"))
+                    throw $util.ProtocolError("mr'equipId'", { instance: o });
+                  if (!o.hasOwnProperty("page"))
+                    throw $util.ProtocolError("mr'page'", { instance: o });
+                  if (!o.hasOwnProperty("id"))
+                    throw $util.ProtocolError("mr'id'", { instance: o });
+                  if (o.hasOwnProperty("order")) return o;
+                  throw $util.ProtocolError("mr'order'", { instance: o });
+                }),
+                Gn)),
+              (r.CmdGemReplaceRspMsg =
+                ((xn.create = function (e) {
+                  return new xn(e);
+                }),
+                (xn.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (xn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdGemReplaceRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                xn)),
+              (r.CmdGemDownReqMsg =
+                ((Sn.prototype.equipId = 0),
+                (Sn.prototype.page = 0),
+                (Sn.prototype.order = 0),
+                (Sn.create = function (e) {
+                  return new Sn(e);
+                }),
+                (Sn.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.equipId),
+                    t.uint32(16).sint32(e.page),
+                    t.uint32(24).sint32(e.order),
+                    t
+                  );
+                }),
+                (Sn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdGemDownReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.equipId = e.sint32();
+                        break;
+                      case 2:
+                        o.page = e.sint32();
+                        break;
+                      case 3:
+                        o.order = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("equipId"))
+                    throw $util.ProtocolError("mr'equipId'", { instance: o });
+                  if (!o.hasOwnProperty("page"))
+                    throw $util.ProtocolError("mr'page'", { instance: o });
+                  if (o.hasOwnProperty("order")) return o;
+                  throw $util.ProtocolError("mr'order'", { instance: o });
+                }),
+                Sn)),
+              (r.CmdGemDownRspMsg =
+                ((En.create = function (e) {
+                  return new En(e);
+                }),
+                (En.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (En.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdGemDownRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                En)),
+              (r.CmdGemRefineReqMsg =
+                ((Bn.prototype.id = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Bn.prototype.type = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Bn.create = function (e) {
+                  return new Bn(e);
+                }),
+                (Bn.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.id),
+                    null != e.type &&
+                      e.hasOwnProperty("type") &&
+                      t.uint32(16).sint64(e.type),
+                    t
+                  );
+                }),
+                (Bn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdGemRefineReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.id = e.sint64();
+                        break;
+                      case 2:
+                        o.type = e.sint64();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (o.hasOwnProperty("id")) return o;
+                  throw $util.ProtocolError("mr'id'", { instance: o });
+                }),
+                Bn)),
+              (r.CmdGemRefineRspMsg =
+                ((Dn.create = function (e) {
+                  return new Dn(e);
+                }),
+                (Dn.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Dn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdGemRefineRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Dn)),
+              (r.CmdGemRefineSaveReqMsg =
+                ((Ln.prototype.id = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Ln.prototype.type = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Ln.create = function (e) {
+                  return new Ln(e);
+                }),
+                (Ln.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.id),
+                    t.uint32(16).sint64(e.type),
+                    t
+                  );
+                }),
+                (Ln.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdGemRefineSaveReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.id = e.sint64();
+                        break;
+                      case 2:
+                        o.type = e.sint64();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("id"))
+                    throw $util.ProtocolError("mr'id'", { instance: o });
+                  if (o.hasOwnProperty("type")) return o;
+                  throw $util.ProtocolError("mr'type'", { instance: o });
+                }),
+                Ln)),
+              (r.CmdGemRefineSaveRspMsg =
+                ((Wn.prototype.id = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Wn.create = function (e) {
+                  return new Wn(e);
+                }),
+                (Wn.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()),
+                    null != e.id &&
+                      e.hasOwnProperty("id") &&
+                      t.uint32(8).sint64(e.id),
+                    t
+                  );
+                }),
+                (Wn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdGemRefineSaveRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.id = e.sint64()) : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                Wn)),
+              (r.CmdGemComposeReqMsg =
+                ((An.create = function (e) {
+                  return new An(e);
+                }),
+                (An.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (An.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdGemComposeReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                An)),
+              (r.CmdGemComposeRspMsg =
+                ((jn.prototype.tlCmdGoods = $util.emptyArray),
+                (jn.create = function (e) {
+                  return new jn(e);
+                }),
+                (jn.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (jn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdGemComposeRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                        o.tlCmdGoods.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                jn)),
+              (r.CmdGemLockReqMsg =
+                ((qn.prototype.id = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (qn.prototype.lock = 0),
+                (qn.create = function (e) {
+                  return new qn(e);
+                }),
+                (qn.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.id),
+                    null != e.lock &&
+                      e.hasOwnProperty("lock") &&
+                      t.uint32(16).sint32(e.lock),
+                    t
+                  );
+                }),
+                (qn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdGemLockReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.id = e.sint64();
+                        break;
+                      case 2:
+                        o.lock = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (o.hasOwnProperty("id")) return o;
+                  throw $util.ProtocolError("mr'id'", { instance: o });
+                }),
+                qn)),
+              (r.CmdGemLockRspMsg =
+                ((Fn.create = function (e) {
+                  return new Fn(e);
+                }),
+                (Fn.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Fn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdGemLockRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Fn)),
+              (r.CmdGemComposePreviewReqMsg =
+                ((Un.create = function (e) {
+                  return new Un(e);
+                }),
+                (Un.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Un.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdGemComposePreviewReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Un)),
+              (r.CmdGemComposePreviewRspMsg =
+                ((Kn.prototype.tlCmdGemPreview = $util.emptyArray),
+                (Kn.create = function (e) {
+                  return new Kn(e);
+                }),
+                (Kn.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGemPreview && e.tlCmdGemPreview.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGemPreview.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGemPreview.encode(
+                        e.tlCmdGemPreview[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (Kn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdGemComposePreviewRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdGemPreview && o.tlCmdGemPreview.length) ||
+                          (o.tlCmdGemPreview = []),
+                        o.tlCmdGemPreview.push(
+                          $root.com.xkhy.tafang.cmd.CmdGemPreview.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                Kn)),
+              (r.CmdGuide =
+                ((Nn.create = function (e) {
+                  return new Nn(e);
+                }),
+                (Nn.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Nn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdGuide();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Nn)),
+              (r.CmdGuide_Key =
+                ((_n.prototype.id = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (_n.create = function (e) {
+                  return new _n(e);
+                }),
+                (_n.encode = function (e, t) {
+                  return (t = t || $Writer.create()).uint32(8).sint64(e.id), t;
+                }),
+                (_n.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdGuide_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.id = e.sint64()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("id")) return o;
+                  throw $util.ProtocolError("mr'id'", { instance: o });
+                }),
+                _n)),
+              (r.CmdGuideDetail =
+                ((Hn.prototype.resId = 0),
+                (Hn.prototype.type = 0),
+                (Hn.prototype.extend = ""),
+                (Hn.create = function (e) {
+                  return new Hn(e);
+                }),
+                (Hn.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.resId),
+                    t.uint32(16).sint32(e.type),
+                    null != e.extend &&
+                      e.hasOwnProperty("extend") &&
+                      t.uint32(26).string(e.extend),
+                    t
+                  );
+                }),
+                (Hn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdGuideDetail();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.sint32();
+                        break;
+                      case 2:
+                        o.type = e.sint32();
+                        break;
+                      case 3:
+                        o.extend = e.string();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("resId"))
+                    throw $util.ProtocolError("mr'resId'", { instance: o });
+                  if (o.hasOwnProperty("type")) return o;
+                  throw $util.ProtocolError("mr'type'", { instance: o });
+                }),
+                Hn)),
+              (r.CmdGuideRecordReqMsg =
+                ((zn.prototype.resId = 0),
+                (zn.prototype.type = 0),
+                (zn.prototype.extend = ""),
+                (zn.create = function (e) {
+                  return new zn(e);
+                }),
+                (zn.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.resId),
+                    t.uint32(16).sint32(e.type),
+                    null != e.extend &&
+                      e.hasOwnProperty("extend") &&
+                      t.uint32(26).string(e.extend),
+                    t
+                  );
+                }),
+                (zn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdGuideRecordReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.sint32();
+                        break;
+                      case 2:
+                        o.type = e.sint32();
+                        break;
+                      case 3:
+                        o.extend = e.string();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("resId"))
+                    throw $util.ProtocolError("mr'resId'", { instance: o });
+                  if (o.hasOwnProperty("type")) return o;
+                  throw $util.ProtocolError("mr'type'", { instance: o });
+                }),
+                zn)),
+              (r.CmdGuideRecordRspMsg =
+                ((Vn.create = function (e) {
+                  return new Vn(e);
+                }),
+                (Vn.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Vn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdGuideRecordRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Vn)),
+              (r.CmdGuideReadReqMsg =
+                ((Jn.create = function (e) {
+                  return new Jn(e);
+                }),
+                (Jn.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Jn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdGuideReadReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Jn)),
+              (r.CmdGuideReadRspMsg =
+                ((Qn.prototype.cmdGuideDetail = $util.emptyArray),
+                (Qn.create = function (e) {
+                  return new Qn(e);
+                }),
+                (Qn.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.cmdGuideDetail && e.cmdGuideDetail.length)
+                  )
+                    for (var r = 0; r < e.cmdGuideDetail.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGuideDetail.encode(
+                        e.cmdGuideDetail[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (Qn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdGuideReadRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.cmdGuideDetail && o.cmdGuideDetail.length) ||
+                          (o.cmdGuideDetail = []),
+                        o.cmdGuideDetail.push(
+                          $root.com.xkhy.tafang.cmd.CmdGuideDetail.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                Qn)),
+              (r.CmdHallRole =
+                ((Yn.prototype.roleId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Yn.prototype.roleName = ""),
+                (Yn.prototype.point = null),
+                (Yn.create = function (e) {
+                  return new Yn(e);
+                }),
+                (Yn.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.roleId),
+                    null != e.roleName &&
+                      e.hasOwnProperty("roleName") &&
+                      t.uint32(18).string(e.roleName),
+                    e.point &&
+                      e.hasOwnProperty("point") &&
+                      $root.com.xkhy.tafang.cmd.CmdPoint.encode(
+                        e.point,
+                        t.uint32(26).fork(),
+                      ).ldelim(),
+                    t
+                  );
+                }),
+                (Yn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdHallRole();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.roleId = e.sint64();
+                        break;
+                      case 2:
+                        o.roleName = e.string();
+                        break;
+                      case 3:
+                        o.point = $root.com.xkhy.tafang.cmd.CmdPoint.decode(
+                          e,
+                          e.uint32(),
+                        );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (o.hasOwnProperty("roleId")) return o;
+                  throw $util.ProtocolError("mr'roleId'", { instance: o });
+                }),
+                Yn)),
+              (r.CmdPoint =
+                ((Xn.prototype.x = 0),
+                (Xn.prototype.y = 0),
+                (Xn.create = function (e) {
+                  return new Xn(e);
+                }),
+                (Xn.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.x),
+                    t.uint32(16).sint32(e.y),
+                    t
+                  );
+                }),
+                (Xn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdPoint();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.x = e.sint32();
+                        break;
+                      case 2:
+                        o.y = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("x"))
+                    throw $util.ProtocolError("mr'x'", { instance: o });
+                  if (o.hasOwnProperty("y")) return o;
+                  throw $util.ProtocolError("mr'y'", { instance: o });
+                }),
+                Xn)),
+              (r.CmdGetHallRoleListReqMsg =
+                ((Zn.create = function (e) {
+                  return new Zn(e);
+                }),
+                (Zn.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Zn.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdGetHallRoleListReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Zn)),
+              (r.CmdGetHallRoleListRspMsg =
+                ((ei.prototype.tlHallRole = $util.emptyArray),
+                (ei.create = function (e) {
+                  return new ei(e);
+                }),
+                (ei.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlHallRole && e.tlHallRole.length)
+                  )
+                    for (var r = 0; r < e.tlHallRole.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdHallRole.encode(
+                        e.tlHallRole[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (ei.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdGetHallRoleListRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlHallRole && o.tlHallRole.length) ||
+                          (o.tlHallRole = []),
+                        o.tlHallRole.push(
+                          $root.com.xkhy.tafang.cmd.CmdHallRole.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                ei)),
+              (r.CmdHang =
+                ((ti.create = function (e) {
+                  return new ti(e);
+                }),
+                (ti.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (ti.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdHang();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                ti)),
+              (r.CmdHang_Key =
+                ((ri.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (ri.create = function (e) {
+                  return new ri(e);
+                }),
+                (ri.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.resId), t
+                  );
+                }),
+                (ri.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdHang_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.resId = e.sint64()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("resId")) return o;
+                  throw $util.ProtocolError("mr'resId'", { instance: o });
+                }),
+                ri)),
+              (r.CmdHangGetRewardReqMsg =
+                ((oi.create = function (e) {
+                  return new oi(e);
+                }),
+                (oi.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (oi.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdHangGetRewardReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                oi)),
+              (r.CmdHangGetRewardRspMsg =
+                ((ni.prototype.tlCmdGoods = $util.emptyArray),
+                (ni.create = function (e) {
+                  return new ni(e);
+                }),
+                (ni.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (ni.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdHangGetRewardRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                        o.tlCmdGoods.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                ni)),
+              (r.CmdHangQuickReqMsg =
+                ((ii.create = function (e) {
+                  return new ii(e);
+                }),
+                (ii.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (ii.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdHangQuickReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                ii)),
+              (r.CmdHangQuickRspMsg =
+                ((ai.prototype.tlCmdGoods = $util.emptyArray),
+                (ai.create = function (e) {
+                  return new ai(e);
+                }),
+                (ai.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (ai.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdHangQuickRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                        o.tlCmdGoods.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                ai)),
+              (r.CmdHangTimeReqMsg =
+                ((ci.create = function (e) {
+                  return new ci(e);
+                }),
+                (ci.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (ci.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdHangTimeReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                ci)),
+              (r.CmdHangTimeRspMsg =
+                ((di.prototype.time = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (di.create = function (e) {
+                  return new di(e);
+                }),
+                (di.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.time), t
+                  );
+                }),
+                (di.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdHangTimeRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.time = e.sint64()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("time")) return o;
+                  throw $util.ProtocolError("mr'time'", { instance: o });
+                }),
+                di)),
+              (r.CmdHero =
+                ((si.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (si.prototype.level = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (si.prototype.state = 0),
+                (si.prototype.equipId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (si.create = function (e) {
+                  return new si(e);
+                }),
+                (si.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.resId),
+                    t.uint32(16).sint64(e.level),
+                    t.uint32(24).sint32(e.state),
+                    null != e.equipId &&
+                      e.hasOwnProperty("equipId") &&
+                      t.uint32(32).sint64(e.equipId),
+                    t
+                  );
+                }),
+                (si.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdHero();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.sint64();
+                        break;
+                      case 2:
+                        o.level = e.sint64();
+                        break;
+                      case 3:
+                        o.state = e.sint32();
+                        break;
+                      case 4:
+                        o.equipId = e.sint64();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("resId"))
+                    throw $util.ProtocolError("mr'resId'", { instance: o });
+                  if (!o.hasOwnProperty("level"))
+                    throw $util.ProtocolError("mr'level'", { instance: o });
+                  if (o.hasOwnProperty("state")) return o;
+                  throw $util.ProtocolError("mr'state'", { instance: o });
+                }),
+                si)),
+              (r.CmdHero_Key =
+                ((li.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (li.create = function (e) {
+                  return new li(e);
+                }),
+                (li.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.resId), t
+                  );
+                }),
+                (li.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdHero_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.resId = e.sint64()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("resId")) return o;
+                  throw $util.ProtocolError("mr'resId'", { instance: o });
+                }),
+                li)),
+              (r.CmdHeroUnlockInfo =
+                ((ui.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (ui.prototype.count = 0),
+                (ui.prototype.rewardState = 0),
+                (ui.create = function (e) {
+                  return new ui(e);
+                }),
+                (ui.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.resId),
+                    t.uint32(16).sint32(e.count),
+                    t.uint32(24).sint32(e.rewardState),
+                    t
+                  );
+                }),
+                (ui.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdHeroUnlockInfo();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.sint64();
+                        break;
+                      case 2:
+                        o.count = e.sint32();
+                        break;
+                      case 3:
+                        o.rewardState = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("resId"))
+                    throw $util.ProtocolError("mr'resId'", { instance: o });
+                  if (!o.hasOwnProperty("count"))
+                    throw $util.ProtocolError("mr'count'", { instance: o });
+                  if (o.hasOwnProperty("rewardState")) return o;
+                  throw $util.ProtocolError("mr'rewardState'", { instance: o });
+                }),
+                ui)),
+              (r.CmdHeroChangeReqMsg =
+                ((fi.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (fi.create = function (e) {
+                  return new fi(e);
+                }),
+                (fi.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.resId), t
+                  );
+                }),
+                (fi.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdHeroChangeReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.resId = e.sint64()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("resId")) return o;
+                  throw $util.ProtocolError("mr'resId'", { instance: o });
+                }),
+                fi)),
+              (r.CmdHeroChangeRspMsg =
+                ((mi.create = function (e) {
+                  return new mi(e);
+                }),
+                (mi.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (mi.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdHeroChangeRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                mi)),
+              (r.CmdHeroLevelUpReqMsg =
+                ((pi.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (pi.create = function (e) {
+                  return new pi(e);
+                }),
+                (pi.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.resId), t
+                  );
+                }),
+                (pi.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdHeroLevelUpReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.resId = e.sint64()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("resId")) return o;
+                  throw $util.ProtocolError("mr'resId'", { instance: o });
+                }),
+                pi)),
+              (r.CmdHeroLevelUpRspMsg =
+                ((yi.create = function (e) {
+                  return new yi(e);
+                }),
+                (yi.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (yi.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdHeroLevelUpRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                yi)),
+              (r.CmdHeroLevelUpOneKeyReqMsg =
+                ((hi.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (hi.create = function (e) {
+                  return new hi(e);
+                }),
+                (hi.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.resId), t
+                  );
+                }),
+                (hi.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdHeroLevelUpOneKeyReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.resId = e.sint64()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("resId")) return o;
+                  throw $util.ProtocolError("mr'resId'", { instance: o });
+                }),
+                hi)),
+              (r.CmdHeroLevelUpOneKeyRspMsg =
+                ((gi.create = function (e) {
+                  return new gi(e);
+                }),
+                (gi.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (gi.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdHeroLevelUpOneKeyRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                gi)),
+              (r.CmdHeroOpenReqMsg =
+                (($i.create = function (e) {
+                  return new $i(e);
+                }),
+                ($i.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                ($i.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdHeroOpenReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                $i)),
+              (r.CmdHeroOpenRspMsg =
+                ((ki.create = function (e) {
+                  return new ki(e);
+                }),
+                (ki.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (ki.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdHeroOpenRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                ki)),
+              (r.CmdHeroUnlockGetInfoReqMsg =
+                ((wi.create = function (e) {
+                  return new wi(e);
+                }),
+                (wi.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (wi.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdHeroUnlockGetInfoReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                wi)),
+              (r.CmdHeroUnlockGetInfoRspMsg =
+                ((vi.prototype.cmdHeroUnlockInfo = $util.emptyArray),
+                (vi.create = function (e) {
+                  return new vi(e);
+                }),
+                (vi.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.cmdHeroUnlockInfo && e.cmdHeroUnlockInfo.length)
+                  )
+                    for (var r = 0; r < e.cmdHeroUnlockInfo.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdHeroUnlockInfo.encode(
+                        e.cmdHeroUnlockInfo[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (vi.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdHeroUnlockGetInfoRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.cmdHeroUnlockInfo && o.cmdHeroUnlockInfo.length) ||
+                          (o.cmdHeroUnlockInfo = []),
+                        o.cmdHeroUnlockInfo.push(
+                          $root.com.xkhy.tafang.cmd.CmdHeroUnlockInfo.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                vi)),
+              (r.CmdHeroUnlockRewardReqMsg =
+                ((Ci.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Ci.create = function (e) {
+                  return new Ci(e);
+                }),
+                (Ci.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.resId), t
+                  );
+                }),
+                (Ci.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdHeroUnlockRewardReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.resId = e.sint64()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("resId")) return o;
+                  throw $util.ProtocolError("mr'resId'", { instance: o });
+                }),
+                Ci)),
+              (r.CmdHeroUnlockRewardRspMsg =
+                ((Ri.create = function (e) {
+                  return new Ri(e);
+                }),
+                (Ri.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Ri.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdHeroUnlockRewardRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Ri)),
+              (r.CmdItem =
+                ((bi.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (bi.prototype.number = 0),
+                (bi.prototype.isNew = !1),
+                (bi.create = function (e) {
+                  return new bi(e);
+                }),
+                (bi.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.resId),
+                    t.uint32(16).sint32(e.number),
+                    t.uint32(24).bool(e.isNew),
+                    t
+                  );
+                }),
+                (bi.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdItem();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.sint64();
+                        break;
+                      case 2:
+                        o.number = e.sint32();
+                        break;
+                      case 3:
+                        o.isNew = e.bool();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("resId"))
+                    throw $util.ProtocolError("mr'resId'", { instance: o });
+                  if (!o.hasOwnProperty("number"))
+                    throw $util.ProtocolError("mr'number'", { instance: o });
+                  if (o.hasOwnProperty("isNew")) return o;
+                  throw $util.ProtocolError("mr'isNew'", { instance: o });
+                }),
+                bi)),
+              (r.CmdItem_Key =
+                ((Ii.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Ii.create = function (e) {
+                  return new Ii(e);
+                }),
+                (Ii.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.resId), t
+                  );
+                }),
+                (Ii.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdItem_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.resId = e.sint64()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("resId")) return o;
+                  throw $util.ProtocolError("mr'resId'", { instance: o });
+                }),
+                Ii)),
+              (r.CmdItemUseReqMsg =
+                ((Pi.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Pi.prototype.number = 0),
+                (Pi.create = function (e) {
+                  return new Pi(e);
+                }),
+                (Pi.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.resId),
+                    t.uint32(16).sint32(e.number),
+                    t
+                  );
+                }),
+                (Pi.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdItemUseReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.sint64();
+                        break;
+                      case 2:
+                        o.number = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("resId"))
+                    throw $util.ProtocolError("mr'resId'", { instance: o });
+                  if (o.hasOwnProperty("number")) return o;
+                  throw $util.ProtocolError("mr'number'", { instance: o });
+                }),
+                Pi)),
+              (r.CmdItemUseRspMsg =
+                ((Oi.prototype.tlCmdGoods = $util.emptyArray),
+                (Oi.create = function (e) {
+                  return new Oi(e);
+                }),
+                (Oi.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (Oi.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdItemUseRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                        o.tlCmdGoods.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                Oi)),
+              (r.CmdItemBoxUseReqMsg =
+                ((Ti.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Ti.prototype.number = 0),
+                (Ti.prototype.cmdGoodsList = null),
+                (Ti.create = function (e) {
+                  return new Ti(e);
+                }),
+                (Ti.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.resId),
+                    t.uint32(16).sint32(e.number),
+                    e.cmdGoodsList &&
+                      e.hasOwnProperty("cmdGoodsList") &&
+                      $root.com.xkhy.tafang.cmd.CmdGoodsList.encode(
+                        e.cmdGoodsList,
+                        t.uint32(26).fork(),
+                      ).ldelim(),
+                    t
+                  );
+                }),
+                (Ti.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdItemBoxUseReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.sint64();
+                        break;
+                      case 2:
+                        o.number = e.sint32();
+                        break;
+                      case 3:
+                        o.cmdGoodsList =
+                          $root.com.xkhy.tafang.cmd.CmdGoodsList.decode(
+                            e,
+                            e.uint32(),
+                          );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("resId"))
+                    throw $util.ProtocolError("mr'resId'", { instance: o });
+                  if (o.hasOwnProperty("number")) return o;
+                  throw $util.ProtocolError("mr'number'", { instance: o });
+                }),
+                Ti)),
+              (r.CmdItemBoxUseRspMsg =
+                ((Mi.prototype.tlCmdGoods = $util.emptyArray),
+                (Mi.create = function (e) {
+                  return new Mi(e);
+                }),
+                (Mi.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (Mi.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdItemBoxUseRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                        o.tlCmdGoods.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                Mi)),
+              (r.CmdLockMonster =
+                ((Gi.prototype.level = 0),
+                (Gi.prototype.nextBoxRefreshTime = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Gi.create = function (e) {
+                  return new Gi(e);
+                }),
+                (Gi.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.level),
+                    t.uint32(16).sint64(e.nextBoxRefreshTime),
+                    t
+                  );
+                }),
+                (Gi.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdLockMonster();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.level = e.sint32();
+                        break;
+                      case 2:
+                        o.nextBoxRefreshTime = e.sint64();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("level"))
+                    throw $util.ProtocolError("mr'level'", { instance: o });
+                  if (o.hasOwnProperty("nextBoxRefreshTime")) return o;
+                  throw $util.ProtocolError("mr'nextBoxRefreshTime'", {
+                    instance: o,
+                  });
+                }),
+                Gi)),
+              (r.CmdLockMonster_Key =
+                ((xi.create = function (e) {
+                  return new xi(e);
+                }),
+                (xi.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (xi.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdLockMonster_Key();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                xi)),
+              (r.CmdTakeLockMonsterBoxReqMsg =
+                ((Si.create = function (e) {
+                  return new Si(e);
+                }),
+                (Si.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Si.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdTakeLockMonsterBoxReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Si)),
+              (r.CmdTakeLockMonsterBoxRspMsg =
+                ((Ei.prototype.tlCmdGoods = $util.emptyArray),
+                (Ei.create = function (e) {
+                  return new Ei(e);
+                }),
+                (Ei.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (Ei.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdTakeLockMonsterBoxRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                        o.tlCmdGoods.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                Ei)),
+              (r.CmdMail =
+                ((O.prototype.id = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (O.prototype.title = ""),
+                (O.prototype.content = ""),
+                (O.prototype.cmdGoodsList = null),
+                (O.prototype.read = !1),
+                (O.prototype.take = !1),
+                (O.prototype.sendTime = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (O.prototype.readTime = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (O.create = function (e) {
+                  return new O(e);
+                }),
+                (O.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.id),
+                    t.uint32(18).string(e.title),
+                    t.uint32(26).string(e.content),
+                    e.cmdGoodsList &&
+                      e.hasOwnProperty("cmdGoodsList") &&
+                      $root.com.xkhy.tafang.cmd.CmdGoodsList.encode(
+                        e.cmdGoodsList,
+                        t.uint32(34).fork(),
+                      ).ldelim(),
+                    t.uint32(40).bool(e.read),
+                    t.uint32(48).bool(e.take),
+                    t.uint32(56).int64(e.sendTime),
+                    t.uint32(64).int64(e.readTime),
+                    t
+                  );
+                }),
+                (O.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdMail();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.id = e.sint64();
+                        break;
+                      case 2:
+                        o.title = e.string();
+                        break;
+                      case 3:
+                        o.content = e.string();
+                        break;
+                      case 4:
+                        o.cmdGoodsList =
+                          $root.com.xkhy.tafang.cmd.CmdGoodsList.decode(
+                            e,
+                            e.uint32(),
+                          );
+                        break;
+                      case 5:
+                        o.read = e.bool();
+                        break;
+                      case 6:
+                        o.take = e.bool();
+                        break;
+                      case 7:
+                        o.sendTime = e.int64();
+                        break;
+                      case 8:
+                        o.readTime = e.int64();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("id"))
+                    throw $util.ProtocolError("mr'id'", { instance: o });
+                  if (!o.hasOwnProperty("title"))
+                    throw $util.ProtocolError("mr'title'", { instance: o });
+                  if (!o.hasOwnProperty("content"))
+                    throw $util.ProtocolError("mr'content'", { instance: o });
+                  if (!o.hasOwnProperty("read"))
+                    throw $util.ProtocolError("mr'read'", { instance: o });
+                  if (!o.hasOwnProperty("take"))
+                    throw $util.ProtocolError("mr'take'", { instance: o });
+                  if (!o.hasOwnProperty("sendTime"))
+                    throw $util.ProtocolError("mr'sendTime'", { instance: o });
+                  if (o.hasOwnProperty("readTime")) return o;
+                  throw $util.ProtocolError("mr'readTime'", { instance: o });
+                }),
+                O)),
+              (r.CmdMailSimple =
+                ((T.prototype.id = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (T.prototype.title = ""),
+                (T.prototype.read = !1),
+                (T.prototype.take = !1),
+                (T.prototype.sendTime = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (T.create = function (e) {
+                  return new T(e);
+                }),
+                (T.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.id),
+                    t.uint32(18).string(e.title),
+                    t.uint32(24).bool(e.read),
+                    t.uint32(32).bool(e.take),
+                    t.uint32(40).int64(e.sendTime),
+                    t
+                  );
+                }),
+                (T.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdMailSimple();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.id = e.sint64();
+                        break;
+                      case 2:
+                        o.title = e.string();
+                        break;
+                      case 3:
+                        o.read = e.bool();
+                        break;
+                      case 4:
+                        o.take = e.bool();
+                        break;
+                      case 5:
+                        o.sendTime = e.int64();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("id"))
+                    throw $util.ProtocolError("mr'id'", { instance: o });
+                  if (!o.hasOwnProperty("title"))
+                    throw $util.ProtocolError("mr'title'", { instance: o });
+                  if (!o.hasOwnProperty("read"))
+                    throw $util.ProtocolError("mr'read'", { instance: o });
+                  if (!o.hasOwnProperty("take"))
+                    throw $util.ProtocolError("mr'take'", { instance: o });
+                  if (o.hasOwnProperty("sendTime")) return o;
+                  throw $util.ProtocolError("mr'sendTime'", { instance: o });
+                }),
+                T)),
+              (r.CmdRoll =
+                ((Bi.prototype.content = ""),
+                (Bi.prototype.time = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Bi.create = function (e) {
+                  return new Bi(e);
+                }),
+                (Bi.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(10).string(e.content),
+                    t.uint32(16).sint64(e.time),
+                    t
+                  );
+                }),
+                (Bi.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdRoll();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.content = e.string();
+                        break;
+                      case 2:
+                        o.time = e.sint64();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("content"))
+                    throw $util.ProtocolError("mr'content'", { instance: o });
+                  if (o.hasOwnProperty("time")) return o;
+                  throw $util.ProtocolError("mr'time'", { instance: o });
+                }),
+                Bi)),
+              (r.CmdRollBroMsg =
+                ((Di.prototype.cmdRoll = null),
+                (Di.create = function (e) {
+                  return new Di(e);
+                }),
+                (Di.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()),
+                    $root.com.xkhy.tafang.cmd.CmdRoll.encode(
+                      e.cmdRoll,
+                      t.uint32(10).fork(),
+                    ).ldelim(),
+                    t
+                  );
+                }),
+                (Di.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdRollBroMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.cmdRoll = $root.com.xkhy.tafang.cmd.CmdRoll.decode(
+                          e,
+                          e.uint32(),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("cmdRoll")) return o;
+                  throw $util.ProtocolError("mr'cmdRoll'", { instance: o });
+                }),
+                Di)),
+              (r.CmdMailListReqMsg =
+                ((Li.create = function (e) {
+                  return new Li(e);
+                }),
+                (Li.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Li.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdMailListReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Li)),
+              (r.CmdMailListRspMsg =
+                ((Wi.prototype.tlCmdMailSimple = $util.emptyArray),
+                (Wi.create = function (e) {
+                  return new Wi(e);
+                }),
+                (Wi.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdMailSimple && e.tlCmdMailSimple.length)
+                  )
+                    for (var r = 0; r < e.tlCmdMailSimple.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdMailSimple.encode(
+                        e.tlCmdMailSimple[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (Wi.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdMailListRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdMailSimple && o.tlCmdMailSimple.length) ||
+                          (o.tlCmdMailSimple = []),
+                        o.tlCmdMailSimple.push(
+                          $root.com.xkhy.tafang.cmd.CmdMailSimple.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                Wi)),
+              (r.CmdMailReadReqMsg =
+                ((Ai.prototype.id = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Ai.create = function (e) {
+                  return new Ai(e);
+                }),
+                (Ai.encode = function (e, t) {
+                  return (t = t || $Writer.create()).uint32(8).sint64(e.id), t;
+                }),
+                (Ai.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdMailReadReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.id = e.sint64()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("id")) return o;
+                  throw $util.ProtocolError("mr'id'", { instance: o });
+                }),
+                Ai)),
+              (r.CmdMailReadRspMsg =
+                ((ji.prototype.cmdMail = null),
+                (ji.create = function (e) {
+                  return new ji(e);
+                }),
+                (ji.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()),
+                    $root.com.xkhy.tafang.cmd.CmdMail.encode(
+                      e.cmdMail,
+                      t.uint32(10).fork(),
+                    ).ldelim(),
+                    t
+                  );
+                }),
+                (ji.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdMailReadRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.cmdMail = $root.com.xkhy.tafang.cmd.CmdMail.decode(
+                          e,
+                          e.uint32(),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("cmdMail")) return o;
+                  throw $util.ProtocolError("mr'cmdMail'", { instance: o });
+                }),
+                ji)),
+              (r.CmdMailDeleteReqMsg =
+                ((qi.prototype.id = $util.emptyArray),
+                (qi.create = function (e) {
+                  return new qi(e);
+                }),
+                (qi.encode = function (e, t) {
+                  if (((t = t || $Writer.create()), e.id && e.id.length))
+                    for (var r = 0; r < e.id.length; ++r)
+                      t.uint32(8).sint64(e.id[r]);
+                  return t;
+                }),
+                (qi.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdMailDeleteReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    if (n >>> 3 == 1)
+                      if (((o.id && o.id.length) || (o.id = []), 2 == (7 & n)))
+                        for (var i = e.uint32() + e.pos; e.pos < i; )
+                          o.id.push(e.sint64());
+                      else o.id.push(e.sint64());
+                    else e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                qi)),
+              (r.CmdMailDeleteRspMsg =
+                ((Fi.create = function (e) {
+                  return new Fi(e);
+                }),
+                (Fi.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Fi.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdMailDeleteRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Fi)),
+              (r.CmdMailTakeRewardReqMsg =
+                ((Ui.prototype.id = $util.emptyArray),
+                (Ui.create = function (e) {
+                  return new Ui(e);
+                }),
+                (Ui.encode = function (e, t) {
+                  if (((t = t || $Writer.create()), e.id && e.id.length))
+                    for (var r = 0; r < e.id.length; ++r)
+                      t.uint32(8).sint64(e.id[r]);
+                  return t;
+                }),
+                (Ui.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdMailTakeRewardReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    if (n >>> 3 == 1)
+                      if (((o.id && o.id.length) || (o.id = []), 2 == (7 & n)))
+                        for (var i = e.uint32() + e.pos; e.pos < i; )
+                          o.id.push(e.sint64());
+                      else o.id.push(e.sint64());
+                    else e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                Ui)),
+              (r.CmdMailTakeRewardRspMsg =
+                ((Ki.prototype.tlReward = $util.emptyArray),
+                (Ki.create = function (e) {
+                  return new Ki(e);
+                }),
+                (Ki.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlReward && e.tlReward.length)
+                  )
+                    for (var r = 0; r < e.tlReward.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlReward[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (Ki.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdMailTakeRewardRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlReward && o.tlReward.length) || (o.tlReward = []),
+                        o.tlReward.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                Ki)),
+              (r.CmdMallSEquipDrawReqMsg =
+                ((Ni.prototype.mallId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Ni.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Ni.prototype.type = 0),
+                (Ni.prototype.count = !1),
+                (Ni.create = function (e) {
+                  return new Ni(e);
+                }),
+                (Ni.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.mallId),
+                    t.uint32(16).sint64(e.resId),
+                    t.uint32(24).sint32(e.type),
+                    t.uint32(32).bool(e.count),
+                    t
+                  );
+                }),
+                (Ni.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdMallSEquipDrawReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.mallId = e.sint64();
+                        break;
+                      case 2:
+                        o.resId = e.sint64();
+                        break;
+                      case 3:
+                        o.type = e.sint32();
+                        break;
+                      case 4:
+                        o.count = e.bool();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("mallId"))
+                    throw $util.ProtocolError("mr'mallId'", { instance: o });
+                  if (!o.hasOwnProperty("resId"))
+                    throw $util.ProtocolError("mr'resId'", { instance: o });
+                  if (!o.hasOwnProperty("type"))
+                    throw $util.ProtocolError("mr'type'", { instance: o });
+                  if (o.hasOwnProperty("count")) return o;
+                  throw $util.ProtocolError("mr'count'", { instance: o });
+                }),
+                Ni)),
+              (r.CmdMallSEquipDrawRspMsg =
+                ((_i.prototype.tlCmdGoods = $util.emptyArray),
+                (_i.create = function (e) {
+                  return new _i(e);
+                }),
+                (_i.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (_i.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdMallSEquipDrawRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                        o.tlCmdGoods.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                _i)),
+              (r.CmdMallLuckDrawReqMsg =
+                ((Hi.prototype.mallId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Hi.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Hi.prototype.type = 0),
+                (Hi.create = function (e) {
+                  return new Hi(e);
+                }),
+                (Hi.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.mallId),
+                    t.uint32(16).sint64(e.resId),
+                    t.uint32(24).sint32(e.type),
+                    t
+                  );
+                }),
+                (Hi.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdMallLuckDrawReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.mallId = e.sint64();
+                        break;
+                      case 2:
+                        o.resId = e.sint64();
+                        break;
+                      case 3:
+                        o.type = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("mallId"))
+                    throw $util.ProtocolError("mr'mallId'", { instance: o });
+                  if (!o.hasOwnProperty("resId"))
+                    throw $util.ProtocolError("mr'resId'", { instance: o });
+                  if (o.hasOwnProperty("type")) return o;
+                  throw $util.ProtocolError("mr'type'", { instance: o });
+                }),
+                Hi)),
+              (r.CmdMallLuckDrawRspMsg =
+                ((zi.prototype.tlCmdGoods = $util.emptyArray),
+                (zi.create = function (e) {
+                  return new zi(e);
+                }),
+                (zi.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (zi.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdMallLuckDrawRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                        o.tlCmdGoods.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                zi)),
+              (r.CmdMallDailyShopBuyReqMsg =
+                ((Vi.prototype.mallId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Vi.prototype.planId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Vi.prototype.isAd = 0),
+                (Vi.create = function (e) {
+                  return new Vi(e);
+                }),
+                (Vi.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.mallId),
+                    t.uint32(16).sint64(e.planId),
+                    t.uint32(24).sint32(e.isAd),
+                    t
+                  );
+                }),
+                (Vi.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdMallDailyShopBuyReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.mallId = e.sint64();
+                        break;
+                      case 2:
+                        o.planId = e.sint64();
+                        break;
+                      case 3:
+                        o.isAd = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("mallId"))
+                    throw $util.ProtocolError("mr'mallId'", { instance: o });
+                  if (!o.hasOwnProperty("planId"))
+                    throw $util.ProtocolError("mr'planId'", { instance: o });
+                  if (o.hasOwnProperty("isAd")) return o;
+                  throw $util.ProtocolError("mr'isAd'", { instance: o });
+                }),
+                Vi)),
+              (r.CmdMallDailyShopBuyRspMsg =
+                ((Ji.prototype.tlCmdGoods = $util.emptyArray),
+                (Ji.create = function (e) {
+                  return new Ji(e);
+                }),
+                (Ji.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (Ji.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdMallDailyShopBuyRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                        o.tlCmdGoods.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                Ji)),
+              (r.CmdMallCoinBuyReqMsg =
+                ((Qi.prototype.mallId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Qi.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Qi.prototype.type = 0),
+                (Qi.create = function (e) {
+                  return new Qi(e);
+                }),
+                (Qi.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.mallId),
+                    t.uint32(16).sint64(e.resId),
+                    t.uint32(24).sint32(e.type),
+                    t
+                  );
+                }),
+                (Qi.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdMallCoinBuyReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.mallId = e.sint64();
+                        break;
+                      case 2:
+                        o.resId = e.sint64();
+                        break;
+                      case 3:
+                        o.type = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("mallId"))
+                    throw $util.ProtocolError("mr'mallId'", { instance: o });
+                  if (!o.hasOwnProperty("resId"))
+                    throw $util.ProtocolError("mr'resId'", { instance: o });
+                  if (o.hasOwnProperty("type")) return o;
+                  throw $util.ProtocolError("mr'type'", { instance: o });
+                }),
+                Qi)),
+              (r.CmdMallCoinBuyRspMsg =
+                ((Yi.create = function (e) {
+                  return new Yi(e);
+                }),
+                (Yi.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Yi.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdMallCoinBuyRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Yi)),
+              (r.CmdMallGetDataReqMsg =
+                ((Xi.create = function (e) {
+                  return new Xi(e);
+                }),
+                (Xi.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Xi.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdMallGetDataReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Xi)),
+              (r.CmdMallGetDataRspMsg =
+                ((Zi.prototype.cmdMall = $util.emptyArray),
+                (Zi.create = function (e) {
+                  return new Zi(e);
+                }),
+                (Zi.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()), e.cmdMall && e.cmdMall.length)
+                  )
+                    for (var r = 0; r < e.cmdMall.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdMall.encode(
+                        e.cmdMall[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (Zi.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdMallGetDataRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.cmdMall && o.cmdMall.length) || (o.cmdMall = []),
+                        o.cmdMall.push(
+                          $root.com.xkhy.tafang.cmd.CmdMall.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                Zi)),
+              (r.CmdRankData =
+                ((ea.prototype.rankList = $util.emptyArray),
+                (ea.prototype.myRank = null),
+                (ea.prototype.region = ""),
+                (ea.create = function (e) {
+                  return new ea(e);
+                }),
+                (ea.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.rankList && e.rankList.length)
+                  )
+                    for (var r = 0; r < e.rankList.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdRankRole.encode(
+                        e.rankList[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return (
+                    $root.com.xkhy.tafang.cmd.CmdRankRole.encode(
+                      e.myRank,
+                      t.uint32(18).fork(),
+                    ).ldelim(),
+                    null != e.region &&
+                      e.hasOwnProperty("region") &&
+                      t.uint32(26).string(e.region),
+                    t
+                  );
+                }),
+                (ea.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdRankData();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        (o.rankList && o.rankList.length) || (o.rankList = []),
+                          o.rankList.push(
+                            $root.com.xkhy.tafang.cmd.CmdRankRole.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      case 2:
+                        o.myRank = $root.com.xkhy.tafang.cmd.CmdRankRole.decode(
+                          e,
+                          e.uint32(),
+                        );
+                        break;
+                      case 3:
+                        o.region = e.string();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (o.hasOwnProperty("myRank")) return o;
+                  throw $util.ProtocolError("mr'myRank'", { instance: o });
+                }),
+                ea)),
+              (r.CmdRankRole =
+                ((M.prototype.rank = 0),
+                (M.prototype.roleId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (M.prototype.roleName = ""),
+                (M.prototype.roleImg = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (M.prototype.platFormImg = ""),
+                (M.prototype.headFrame = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (M.prototype.value = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (M.prototype.serverId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (M.prototype.selectServerId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (M.create = function (e) {
+                  return new M(e);
+                }),
+                (M.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.rank),
+                    t.uint32(16).sint64(e.roleId),
+                    null != e.roleName &&
+                      e.hasOwnProperty("roleName") &&
+                      t.uint32(26).string(e.roleName),
+                    null != e.roleImg &&
+                      e.hasOwnProperty("roleImg") &&
+                      t.uint32(32).sint64(e.roleImg),
+                    null != e.platFormImg &&
+                      e.hasOwnProperty("platFormImg") &&
+                      t.uint32(42).string(e.platFormImg),
+                    null != e.headFrame &&
+                      e.hasOwnProperty("headFrame") &&
+                      t.uint32(48).sint64(e.headFrame),
+                    null != e.value &&
+                      e.hasOwnProperty("value") &&
+                      t.uint32(56).sint64(e.value),
+                    null != e.serverId &&
+                      e.hasOwnProperty("serverId") &&
+                      t.uint32(64).sint64(e.serverId),
+                    null != e.selectServerId &&
+                      e.hasOwnProperty("selectServerId") &&
+                      t.uint32(72).sint64(e.selectServerId),
+                    t
+                  );
+                }),
+                (M.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdRankRole();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.rank = e.sint32();
+                        break;
+                      case 2:
+                        o.roleId = e.sint64();
+                        break;
+                      case 3:
+                        o.roleName = e.string();
+                        break;
+                      case 4:
+                        o.roleImg = e.sint64();
+                        break;
+                      case 5:
+                        o.platFormImg = e.string();
+                        break;
+                      case 6:
+                        o.headFrame = e.sint64();
+                        break;
+                      case 7:
+                        o.value = e.sint64();
+                        break;
+                      case 8:
+                        o.serverId = e.sint64();
+                        break;
+                      case 9:
+                        o.selectServerId = e.sint64();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("rank"))
+                    throw $util.ProtocolError("mr'rank'", { instance: o });
+                  if (o.hasOwnProperty("roleId")) return o;
+                  throw $util.ProtocolError("mr'roleId'", { instance: o });
+                }),
+                M)),
+              (r.CmdRankType =
+                ((e = {}),
+                ((t = Object.create(e))[(e[1] = "LOCK_MONSTER_FULL_RANK")] = 1),
+                (t[(e[2] = "LOCK_MONSTER_REGION_RANK")] = 2),
+                (t[(e[3] = "SECRET_REALM_FULL_RANK")] = 3),
+                (t[(e[4] = "SECRET_REALM_REGION_RANK")] = 4),
+                (t[(e[5] = "CHAPTER_FULL_RANK")] = 5),
+                (t[(e[6] = "CHAPTER_REGION_RANK")] = 6),
+                (t[(e[7] = "CHAPTER_SERVER_RANK")] = 7),
+                (t[(e[8] = "LOCK_MONSTER_SERVER_RANK")] = 8),
+                (t[(e[9] = "SECRET_REALM_SERVER_RANK")] = 9),
+                (t[(e[10] = "CHAPTER_SERVER_REWARD_RANK")] = 10),
+                t)),
+              (r.CmdRankItem =
+                ((ta.prototype.type = 1),
+                (ta.prototype.startTime = 0),
+                (ta.prototype.endTime = 0),
+                (ta.prototype.showEndTime = 0),
+                (ta.create = function (e) {
+                  return new ta(e);
+                }),
+                (ta.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).uint32(e.type),
+                    null != e.startTime &&
+                      e.hasOwnProperty("startTime") &&
+                      t.uint32(16).sint32(e.startTime),
+                    null != e.endTime &&
+                      e.hasOwnProperty("endTime") &&
+                      t.uint32(24).sint32(e.endTime),
+                    null != e.showEndTime &&
+                      e.hasOwnProperty("showEndTime") &&
+                      t.uint32(32).sint32(e.showEndTime),
+                    t
+                  );
+                }),
+                (ta.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdRankItem();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.type = e.uint32();
+                        break;
+                      case 2:
+                        o.startTime = e.sint32();
+                        break;
+                      case 3:
+                        o.endTime = e.sint32();
+                        break;
+                      case 4:
+                        o.showEndTime = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (o.hasOwnProperty("type")) return o;
+                  throw $util.ProtocolError("mr'type'", { instance: o });
+                }),
+                ta)),
+              (r.CmdRankItem_Key =
+                ((ra.prototype.type = 1),
+                (ra.create = function (e) {
+                  return new ra(e);
+                }),
+                (ra.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).uint32(e.type), t
+                  );
+                }),
+                (ra.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdRankItem_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.type = e.uint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("type")) return o;
+                  throw $util.ProtocolError("mr'type'", { instance: o });
+                }),
+                ra)),
+              (r.CmdGetRankReqMsg =
+                ((oa.prototype.rankType = 1),
+                (oa.prototype.type = 0),
+                (oa.create = function (e) {
+                  return new oa(e);
+                }),
+                (oa.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).uint32(e.rankType),
+                    null != e.type &&
+                      e.hasOwnProperty("type") &&
+                      t.uint32(16).sint32(e.type),
+                    t
+                  );
+                }),
+                (oa.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdGetRankReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.rankType = e.uint32();
+                        break;
+                      case 2:
+                        o.type = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (o.hasOwnProperty("rankType")) return o;
+                  throw $util.ProtocolError("mr'rankType'", { instance: o });
+                }),
+                oa)),
+              (r.CmdGetRankRspMsg =
+                ((na.prototype.rankInfo = null),
+                (na.create = function (e) {
+                  return new na(e);
+                }),
+                (na.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()),
+                    e.rankInfo &&
+                      e.hasOwnProperty("rankInfo") &&
+                      $root.com.xkhy.tafang.cmd.CmdRankData.encode(
+                        e.rankInfo,
+                        t.uint32(10).fork(),
+                      ).ldelim(),
+                    t
+                  );
+                }),
+                (na.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdGetRankRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.rankInfo =
+                          $root.com.xkhy.tafang.cmd.CmdRankData.decode(
+                            e,
+                            e.uint32(),
+                          ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                na)),
+              (r.CmdRedDotCache =
+                ((ia.prototype.redDotType = 1),
+                (ia.prototype.number = 0),
+                (ia.prototype.nextRefreshTime = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (ia.create = function (e) {
+                  return new ia(e);
+                }),
+                (ia.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).uint32(e.redDotType),
+                    t.uint32(16).sint32(e.number),
+                    null != e.nextRefreshTime &&
+                      e.hasOwnProperty("nextRefreshTime") &&
+                      t.uint32(24).sint64(e.nextRefreshTime),
+                    t
+                  );
+                }),
+                (ia.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdRedDotCache();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.redDotType = e.uint32();
+                        break;
+                      case 2:
+                        o.number = e.sint32();
+                        break;
+                      case 3:
+                        o.nextRefreshTime = e.sint64();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("redDotType"))
+                    throw $util.ProtocolError("mr'redDotType'", {
+                      instance: o,
+                    });
+                  if (o.hasOwnProperty("number")) return o;
+                  throw $util.ProtocolError("mr'number'", { instance: o });
+                }),
+                ia)),
+              (r.CmdRedDotCache_Key =
+                ((aa.prototype.redDotType = 1),
+                (aa.create = function (e) {
+                  return new aa(e);
+                }),
+                (aa.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).uint32(e.redDotType),
+                    t
+                  );
+                }),
+                (aa.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdRedDotCache_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.redDotType = e.uint32())
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("redDotType")) return o;
+                  throw $util.ProtocolError("mr'redDotType'", { instance: o });
+                }),
+                aa)),
+              (r.CmdGoodsRedDot =
+                ((ca.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (ca.prototype.id = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (ca.create = function (e) {
+                  return new ca(e);
+                }),
+                (ca.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).int64(e.resId),
+                    null != e.id &&
+                      e.hasOwnProperty("id") &&
+                      t.uint32(16).int64(e.id),
+                    t
+                  );
+                }),
+                (ca.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdGoodsRedDot();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.int64();
+                        break;
+                      case 2:
+                        o.id = e.int64();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (o.hasOwnProperty("resId")) return o;
+                  throw $util.ProtocolError("mr'resId'", { instance: o });
+                }),
+                ca)),
+              (r.CmdRedDotType =
+                ((e = {}),
+                ((t = Object.create(e))[(e[1] = "TEST")] = 1),
+                (t[(e[2] = "MAil")] = 2),
+                (t[(e[3] = "continuity_days")] = 3),
+                (t[(e[4] = "GEM_COMPOSE")] = 4),
+                (t[(e[5] = "SEVEN_DAY")] = 5),
+                (t[(e[6] = "limit_time_activity")] = 6),
+                (t[(e[7] = "signin")] = 7),
+                (t[(e[8] = "SPIRIT_ANIMAL_BOX")] = 8),
+                t)),
+              (r.CmdUpdateRedDotReqMsg =
+                ((da.prototype.redDotType = 1),
+                (da.create = function (e) {
+                  return new da(e);
+                }),
+                (da.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).uint32(e.redDotType),
+                    t
+                  );
+                }),
+                (da.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdUpdateRedDotReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.redDotType = e.uint32())
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("redDotType")) return o;
+                  throw $util.ProtocolError("mr'redDotType'", { instance: o });
+                }),
+                da)),
+              (r.CmdUpdateRedDotRspMsg =
+                ((sa.create = function (e) {
+                  return new sa(e);
+                }),
+                (sa.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (sa.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdUpdateRedDotRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                sa)),
+              (r.CmdGoodsRedDotDispelReqMsg =
+                ((la.prototype.dispelParam = $util.emptyArray),
+                (la.create = function (e) {
+                  return new la(e);
+                }),
+                (la.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.dispelParam && e.dispelParam.length)
+                  )
+                    for (var r = 0; r < e.dispelParam.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoodsRedDot.encode(
+                        e.dispelParam[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (la.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdGoodsRedDotDispelReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.dispelParam && o.dispelParam.length) ||
+                          (o.dispelParam = []),
+                        o.dispelParam.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoodsRedDot.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                la)),
+              (r.CmdGoodsRedDotDispelRspMsg =
+                ((ua.create = function (e) {
+                  return new ua(e);
+                }),
+                (ua.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (ua.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdGoodsRedDotDispelRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                ua)),
+              (r.CmdRole =
+                ((G.prototype.id = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (G.prototype.name = ""),
+                (G.prototype.img = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (G.prototype.headFrame = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (G.prototype.lv = 0),
+                (G.prototype.exp = 0),
+                (G.prototype.gold = ""),
+                (G.prototype.gem = ""),
+                (G.prototype.coin = ""),
+                (G.prototype.washStone = 0),
+                (G.prototype.end = 0),
+                (G.prototype.createTime = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (G.prototype.nextEndRecoverTime = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (G.prototype.selectEquipPage = 0),
+                (G.prototype.miningProcess = 0),
+                (G.prototype.miningShow = !1),
+                (G.prototype.recharge = 0),
+                (G.prototype.cmdFirstRechargeInfo = null),
+                (G.prototype.tlCmdAdvert = $util.emptyArray),
+                (G.prototype.platformImg = ""),
+                (G.prototype.freeRenameCount = 0),
+                (G.prototype.tlExtraId = $util.emptyArray),
+                (G.prototype.endMax = 0),
+                (G.prototype.internal = 0),
+                (G.prototype.tlCmdAppletInfo = $util.emptyArray),
+                (G.prototype.sweepTimes = 0),
+                (G.prototype.region = ""),
+                (G.prototype.selectServerId = 0),
+                (G.prototype.battleSpiritAnimalUniqueId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (G.prototype.spiritAnimalAtkAdd = 0),
+                (G.prototype.maxBattleLevelPassTime = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (G.create = function (e) {
+                  return new G(e);
+                }),
+                (G.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()).uint32(8).sint64(e.id),
+                    t.uint32(18).string(e.name),
+                    t.uint32(24).sint64(e.img),
+                    t.uint32(32).sint64(e.headFrame),
+                    t.uint32(40).sint32(e.lv),
+                    t.uint32(48).sint32(e.exp),
+                    t.uint32(58).string(e.gold),
+                    t.uint32(66).string(e.gem),
+                    t.uint32(74).string(e.coin),
+                    t.uint32(80).sint32(e.washStone),
+                    t.uint32(88).sint32(e.end),
+                    t.uint32(96).sint64(e.createTime),
+                    t.uint32(104).sint64(e.nextEndRecoverTime),
+                    t.uint32(112).sint32(e.selectEquipPage),
+                    t.uint32(120).sint32(e.miningProcess),
+                    t.uint32(128).bool(e.miningShow),
+                    t.uint32(136).sint32(e.recharge),
+                    $root.com.xkhy.tafang.cmd.CmdFirstRechargeInfo.encode(
+                      e.cmdFirstRechargeInfo,
+                      t.uint32(146).fork(),
+                    ).ldelim(),
+                    e.tlCmdAdvert && e.tlCmdAdvert.length)
+                  )
+                    for (var r = 0; r < e.tlCmdAdvert.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdAdvert.encode(
+                        e.tlCmdAdvert[r],
+                        t.uint32(154).fork(),
+                      ).ldelim();
+                  if (
+                    (t.uint32(162).string(e.platformImg),
+                    t.uint32(168).sint32(e.freeRenameCount),
+                    e.tlExtraId && e.tlExtraId.length)
+                  )
+                    for (r = 0; r < e.tlExtraId.length; ++r)
+                      t.uint32(176).sint32(e.tlExtraId[r]);
+                  if (
+                    (t.uint32(184).sint32(e.endMax),
+                    t.uint32(192).sint32(e.internal),
+                    e.tlCmdAppletInfo && e.tlCmdAppletInfo.length)
+                  )
+                    for (r = 0; r < e.tlCmdAppletInfo.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdAppletInfo.encode(
+                        e.tlCmdAppletInfo[r],
+                        t.uint32(202).fork(),
+                      ).ldelim();
+                  return (
+                    t.uint32(208).sint32(e.sweepTimes),
+                    null != e.region &&
+                      e.hasOwnProperty("region") &&
+                      t.uint32(218).string(e.region),
+                    null != e.selectServerId &&
+                      e.hasOwnProperty("selectServerId") &&
+                      t.uint32(224).sint32(e.selectServerId),
+                    null != e.battleSpiritAnimalUniqueId &&
+                      e.hasOwnProperty("battleSpiritAnimalUniqueId") &&
+                      t.uint32(232).sint64(e.battleSpiritAnimalUniqueId),
+                    null != e.spiritAnimalAtkAdd &&
+                      e.hasOwnProperty("spiritAnimalAtkAdd") &&
+                      t.uint32(240).sint32(e.spiritAnimalAtkAdd),
+                    null != e.maxBattleLevelPassTime &&
+                      e.hasOwnProperty("maxBattleLevelPassTime") &&
+                      t.uint32(248).sint64(e.maxBattleLevelPassTime),
+                    t
+                  );
+                }),
+                (G.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdRole();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.id = e.sint64();
+                        break;
+                      case 2:
+                        o.name = e.string();
+                        break;
+                      case 3:
+                        o.img = e.sint64();
+                        break;
+                      case 4:
+                        o.headFrame = e.sint64();
+                        break;
+                      case 5:
+                        o.lv = e.sint32();
+                        break;
+                      case 6:
+                        o.exp = e.sint32();
+                        break;
+                      case 7:
+                        o.gold = e.string();
+                        break;
+                      case 8:
+                        o.gem = e.string();
+                        break;
+                      case 9:
+                        o.coin = e.string();
+                        break;
+                      case 10:
+                        o.washStone = e.sint32();
+                        break;
+                      case 11:
+                        o.end = e.sint32();
+                        break;
+                      case 12:
+                        o.createTime = e.sint64();
+                        break;
+                      case 13:
+                        o.nextEndRecoverTime = e.sint64();
+                        break;
+                      case 14:
+                        o.selectEquipPage = e.sint32();
+                        break;
+                      case 15:
+                        o.miningProcess = e.sint32();
+                        break;
+                      case 16:
+                        o.miningShow = e.bool();
+                        break;
+                      case 17:
+                        o.recharge = e.sint32();
+                        break;
+                      case 18:
+                        o.cmdFirstRechargeInfo =
+                          $root.com.xkhy.tafang.cmd.CmdFirstRechargeInfo.decode(
+                            e,
+                            e.uint32(),
+                          );
+                        break;
+                      case 19:
+                        (o.tlCmdAdvert && o.tlCmdAdvert.length) ||
+                          (o.tlCmdAdvert = []),
+                          o.tlCmdAdvert.push(
+                            $root.com.xkhy.tafang.cmd.CmdAdvert.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      case 20:
+                        o.platformImg = e.string();
+                        break;
+                      case 21:
+                        o.freeRenameCount = e.sint32();
+                        break;
+                      case 22:
+                        if (
+                          ((o.tlExtraId && o.tlExtraId.length) ||
+                            (o.tlExtraId = []),
+                          2 == (7 & n))
+                        )
+                          for (var i = e.uint32() + e.pos; e.pos < i; )
+                            o.tlExtraId.push(e.sint32());
+                        else o.tlExtraId.push(e.sint32());
+                        break;
+                      case 23:
+                        o.endMax = e.sint32();
+                        break;
+                      case 24:
+                        o.internal = e.sint32();
+                        break;
+                      case 25:
+                        (o.tlCmdAppletInfo && o.tlCmdAppletInfo.length) ||
+                          (o.tlCmdAppletInfo = []),
+                          o.tlCmdAppletInfo.push(
+                            $root.com.xkhy.tafang.cmd.CmdAppletInfo.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      case 26:
+                        o.sweepTimes = e.sint32();
+                        break;
+                      case 27:
+                        o.region = e.string();
+                        break;
+                      case 28:
+                        o.selectServerId = e.sint32();
+                        break;
+                      case 29:
+                        o.battleSpiritAnimalUniqueId = e.sint64();
+                        break;
+                      case 30:
+                        o.spiritAnimalAtkAdd = e.sint32();
+                        break;
+                      case 31:
+                        o.maxBattleLevelPassTime = e.sint64();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("id"))
+                    throw $util.ProtocolError("mr'id'", { instance: o });
+                  if (!o.hasOwnProperty("name"))
+                    throw $util.ProtocolError("mr'name'", { instance: o });
+                  if (!o.hasOwnProperty("img"))
+                    throw $util.ProtocolError("mr'img'", { instance: o });
+                  if (!o.hasOwnProperty("headFrame"))
+                    throw $util.ProtocolError("mr'headFrame'", { instance: o });
+                  if (!o.hasOwnProperty("lv"))
+                    throw $util.ProtocolError("mr'lv'", { instance: o });
+                  if (!o.hasOwnProperty("exp"))
+                    throw $util.ProtocolError("mr'exp'", { instance: o });
+                  if (!o.hasOwnProperty("gold"))
+                    throw $util.ProtocolError("mr'gold'", { instance: o });
+                  if (!o.hasOwnProperty("gem"))
+                    throw $util.ProtocolError("mr'gem'", { instance: o });
+                  if (!o.hasOwnProperty("coin"))
+                    throw $util.ProtocolError("mr'coin'", { instance: o });
+                  if (!o.hasOwnProperty("washStone"))
+                    throw $util.ProtocolError("mr'washStone'", { instance: o });
+                  if (!o.hasOwnProperty("end"))
+                    throw $util.ProtocolError("mr'end'", { instance: o });
+                  if (!o.hasOwnProperty("createTime"))
+                    throw $util.ProtocolError("mr'createTime'", {
+                      instance: o,
+                    });
+                  if (!o.hasOwnProperty("nextEndRecoverTime"))
+                    throw $util.ProtocolError("mr'nextEndRecoverTime'", {
+                      instance: o,
+                    });
+                  if (!o.hasOwnProperty("selectEquipPage"))
+                    throw $util.ProtocolError("mr'selectEquipPage'", {
+                      instance: o,
+                    });
+                  if (!o.hasOwnProperty("miningProcess"))
+                    throw $util.ProtocolError("mr'miningProcess'", {
+                      instance: o,
+                    });
+                  if (!o.hasOwnProperty("miningShow"))
+                    throw $util.ProtocolError("mr'miningShow'", {
+                      instance: o,
+                    });
+                  if (!o.hasOwnProperty("recharge"))
+                    throw $util.ProtocolError("mr'recharge'", { instance: o });
+                  if (!o.hasOwnProperty("cmdFirstRechargeInfo"))
+                    throw $util.ProtocolError("mr'cmdFirstRechargeInfo'", {
+                      instance: o,
+                    });
+                  if (!o.hasOwnProperty("platformImg"))
+                    throw $util.ProtocolError("mr'platformImg'", {
+                      instance: o,
+                    });
+                  if (!o.hasOwnProperty("freeRenameCount"))
+                    throw $util.ProtocolError("mr'freeRenameCount'", {
+                      instance: o,
+                    });
+                  if (!o.hasOwnProperty("endMax"))
+                    throw $util.ProtocolError("mr'endMax'", { instance: o });
+                  if (!o.hasOwnProperty("internal"))
+                    throw $util.ProtocolError("mr'internal'", { instance: o });
+                  if (o.hasOwnProperty("sweepTimes")) return o;
+                  throw $util.ProtocolError("mr'sweepTimes'", { instance: o });
+                }),
+                G)),
+              (r.CmdRole_Key =
+                ((fa.create = function (e) {
+                  return new fa(e);
+                }),
+                (fa.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (fa.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdRole_Key();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                fa)),
+              (r.CmdRoleEndBuyInfo =
+                ((ma.prototype.buyId = 0),
+                (ma.prototype.number = 0),
+                (ma.create = function (e) {
+                  return new ma(e);
+                }),
+                (ma.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.buyId),
+                    t.uint32(16).sint32(e.number),
+                    t
+                  );
+                }),
+                (ma.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdRoleEndBuyInfo();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.buyId = e.sint32();
+                        break;
+                      case 2:
+                        o.number = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("buyId"))
+                    throw $util.ProtocolError("mr'buyId'", { instance: o });
+                  if (o.hasOwnProperty("number")) return o;
+                  throw $util.ProtocolError("mr'number'", { instance: o });
+                }),
+                ma)),
+              (r.CmdFirstRechargeInfo =
+                ((pa.prototype.id = 0),
+                (pa.prototype.rewardIds = $util.emptyArray),
+                (pa.prototype.lastTakeTime = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (pa.create = function (e) {
+                  return new pa(e);
+                }),
+                (pa.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()).uint32(8).sint32(e.id),
+                    e.rewardIds && e.rewardIds.length)
+                  )
+                    for (var r = 0; r < e.rewardIds.length; ++r)
+                      t.uint32(16).sint64(e.rewardIds[r]);
+                  return (
+                    null != e.lastTakeTime &&
+                      e.hasOwnProperty("lastTakeTime") &&
+                      t.uint32(24).sint64(e.lastTakeTime),
+                    t
+                  );
+                }),
+                (pa.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdFirstRechargeInfo();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.id = e.sint32();
+                        break;
+                      case 2:
+                        if (
+                          ((o.rewardIds && o.rewardIds.length) ||
+                            (o.rewardIds = []),
+                          2 == (7 & n))
+                        )
+                          for (var i = e.uint32() + e.pos; e.pos < i; )
+                            o.rewardIds.push(e.sint64());
+                        else o.rewardIds.push(e.sint64());
+                        break;
+                      case 3:
+                        o.lastTakeTime = e.sint64();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (o.hasOwnProperty("id")) return o;
+                  throw $util.ProtocolError("mr'id'", { instance: o });
+                }),
+                pa)),
+              (r.CmdAdvert =
+                ((ya.prototype.type = 0),
+                (ya.prototype.num = 0),
+                (ya.prototype.nextTime = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (ya.create = function (e) {
+                  return new ya(e);
+                }),
+                (ya.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.type),
+                    t.uint32(16).sint32(e.num),
+                    null != e.nextTime &&
+                      e.hasOwnProperty("nextTime") &&
+                      t.uint32(24).sint64(e.nextTime),
+                    t
+                  );
+                }),
+                (ya.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdAdvert();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.type = e.sint32();
+                        break;
+                      case 2:
+                        o.num = e.sint32();
+                        break;
+                      case 3:
+                        o.nextTime = e.sint64();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("type"))
+                    throw $util.ProtocolError("mr'type'", { instance: o });
+                  if (o.hasOwnProperty("num")) return o;
+                  throw $util.ProtocolError("mr'num'", { instance: o });
+                }),
+                ya)),
+              (r.LoginStatus =
+                ((e = {}),
+                ((t = Object.create(e))[(e[1] = "SUCCESS")] = 1),
+                (t[(e[2] = "WEI_HU")] = 2),
+                (t[(e[3] = "BAN")] = 3),
+                t)),
+              (r.CmdAppletInfo =
+                ((ha.prototype.type = 0),
+                (ha.prototype.num = 0),
+                (ha.prototype.extra = ""),
+                (ha.create = function (e) {
+                  return new ha(e);
+                }),
+                (ha.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.type),
+                    t.uint32(16).sint32(e.num),
+                    null != e.extra &&
+                      e.hasOwnProperty("extra") &&
+                      t.uint32(26).string(e.extra),
+                    t
+                  );
+                }),
+                (ha.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdAppletInfo();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.type = e.sint32();
+                        break;
+                      case 2:
+                        o.num = e.sint32();
+                        break;
+                      case 3:
+                        o.extra = e.string();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("type"))
+                    throw $util.ProtocolError("mr'type'", { instance: o });
+                  if (o.hasOwnProperty("num")) return o;
+                  throw $util.ProtocolError("mr'num'", { instance: o });
+                }),
+                ha)),
+              (r.CmdGuanKaGift =
+                ((ga.prototype.resId = 0),
+                (ga.prototype.endTime = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (ga.prototype.selectId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (ga.prototype.receive = 0),
+                (ga.create = function (e) {
+                  return new ga(e);
+                }),
+                (ga.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.resId),
+                    t.uint32(16).int64(e.endTime),
+                    null != e.selectId &&
+                      e.hasOwnProperty("selectId") &&
+                      t.uint32(24).sint64(e.selectId),
+                    null != e.receive &&
+                      e.hasOwnProperty("receive") &&
+                      t.uint32(32).sint32(e.receive),
+                    t
+                  );
+                }),
+                (ga.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdGuanKaGift();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.sint32();
+                        break;
+                      case 2:
+                        o.endTime = e.int64();
+                        break;
+                      case 3:
+                        o.selectId = e.sint64();
+                        break;
+                      case 4:
+                        o.receive = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("resId"))
+                    throw $util.ProtocolError("mr'resId'", { instance: o });
+                  if (o.hasOwnProperty("endTime")) return o;
+                  throw $util.ProtocolError("mr'endTime'", { instance: o });
+                }),
+                ga)),
+              (r.CmdGuanKaGift_Key =
+                (($a.prototype.resId = 0),
+                ($a.create = function (e) {
+                  return new $a(e);
+                }),
+                ($a.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.resId), t
+                  );
+                }),
+                ($a.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdGuanKaGift_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.resId = e.sint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("resId")) return o;
+                  throw $util.ProtocolError("mr'resId'", { instance: o });
+                }),
+                $a)),
+              (r.CmdGuanKaGiftBroMsg =
+                ((ka.prototype.cmdGuanKaGift = null),
+                (ka.create = function (e) {
+                  return new ka(e);
+                }),
+                (ka.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()),
+                    $root.com.xkhy.tafang.cmd.CmdGuanKaGift.encode(
+                      e.cmdGuanKaGift,
+                      t.uint32(10).fork(),
+                    ).ldelim(),
+                    t
+                  );
+                }),
+                (ka.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdGuanKaGiftBroMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.cmdGuanKaGift =
+                          $root.com.xkhy.tafang.cmd.CmdGuanKaGift.decode(
+                            e,
+                            e.uint32(),
+                          ))
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("cmdGuanKaGift")) return o;
+                  throw $util.ProtocolError("mr'cmdGuanKaGift'", {
+                    instance: o,
+                  });
+                }),
+                ka)),
+              (r.CmdRoleLoginReqMsg =
+                ((x.prototype.cmdClientInfo = null),
+                (x.prototype.platform = 0),
+                (x.prototype.code = ""),
+                (x.prototype.roleId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (x.prototype.time = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (x.prototype.token = ""),
+                (x.prototype.reconnect = !1),
+                (x.prototype.img = ""),
+                (x.prototype.openid = ""),
+                (x.prototype.selectServerId = 0),
+                (x.create = function (e) {
+                  return new x(e);
+                }),
+                (x.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()),
+                    $root.com.xkhy.tafang.cmd.CmdClientInfo.encode(
+                      e.cmdClientInfo,
+                      t.uint32(10).fork(),
+                    ).ldelim(),
+                    t.uint32(16).int32(e.platform),
+                    t.uint32(26).string(e.code),
+                    t.uint32(32).int64(e.roleId),
+                    t.uint32(40).int64(e.time),
+                    t.uint32(50).string(e.token),
+                    null != e.reconnect &&
+                      e.hasOwnProperty("reconnect") &&
+                      t.uint32(56).bool(e.reconnect),
+                    null != e.img &&
+                      e.hasOwnProperty("img") &&
+                      t.uint32(66).string(e.img),
+                    null != e.openid &&
+                      e.hasOwnProperty("openid") &&
+                      t.uint32(74).string(e.openid),
+                    null != e.selectServerId &&
+                      e.hasOwnProperty("selectServerId") &&
+                      t.uint32(80).int32(e.selectServerId),
+                    t
+                  );
+                }),
+                (x.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdRoleLoginReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.cmdClientInfo =
+                          $root.com.xkhy.tafang.cmd.CmdClientInfo.decode(
+                            e,
+                            e.uint32(),
+                          );
+                        break;
+                      case 2:
+                        o.platform = e.int32();
+                        break;
+                      case 3:
+                        o.code = e.string();
+                        break;
+                      case 4:
+                        o.roleId = e.int64();
+                        break;
+                      case 5:
+                        o.time = e.int64();
+                        break;
+                      case 6:
+                        o.token = e.string();
+                        break;
+                      case 7:
+                        o.reconnect = e.bool();
+                        break;
+                      case 8:
+                        o.img = e.string();
+                        break;
+                      case 9:
+                        o.openid = e.string();
+                        break;
+                      case 10:
+                        o.selectServerId = e.int32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("cmdClientInfo"))
+                    throw $util.ProtocolError("mr'cmdClientInfo'", {
+                      instance: o,
+                    });
+                  if (!o.hasOwnProperty("platform"))
+                    throw $util.ProtocolError("mr'platform'", { instance: o });
+                  if (!o.hasOwnProperty("code"))
+                    throw $util.ProtocolError("mr'code'", { instance: o });
+                  if (!o.hasOwnProperty("roleId"))
+                    throw $util.ProtocolError("mr'roleId'", { instance: o });
+                  if (!o.hasOwnProperty("time"))
+                    throw $util.ProtocolError("mr'time'", { instance: o });
+                  if (o.hasOwnProperty("token")) return o;
+                  throw $util.ProtocolError("mr'token'", { instance: o });
+                }),
+                x)),
+              (r.CmdRoleLoginRspMsg =
+                ((wa.prototype.newRole = !1),
+                (wa.prototype.cmdBattleData = null),
+                (wa.prototype.loginStatus = 1),
+                (wa.create = function (e) {
+                  return new wa(e);
+                }),
+                (wa.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()),
+                    null != e.newRole &&
+                      e.hasOwnProperty("newRole") &&
+                      t.uint32(8).bool(e.newRole),
+                    e.cmdBattleData &&
+                      e.hasOwnProperty("cmdBattleData") &&
+                      $root.com.xkhy.tafang.cmd.CmdBattleData.encode(
+                        e.cmdBattleData,
+                        t.uint32(18).fork(),
+                      ).ldelim(),
+                    t.uint32(24).uint32(e.loginStatus),
+                    t
+                  );
+                }),
+                (wa.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdRoleLoginRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.newRole = e.bool();
+                        break;
+                      case 2:
+                        o.cmdBattleData =
+                          $root.com.xkhy.tafang.cmd.CmdBattleData.decode(
+                            e,
+                            e.uint32(),
+                          );
+                        break;
+                      case 3:
+                        o.loginStatus = e.uint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (o.hasOwnProperty("loginStatus")) return o;
+                  throw $util.ProtocolError("mr'loginStatus'", { instance: o });
+                }),
+                wa)),
+              (r.CmdRoleChangeNameReqMsg =
+                ((va.prototype.name = ""),
+                (va.create = function (e) {
+                  return new va(e);
+                }),
+                (va.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(10).string(e.name), t
+                  );
+                }),
+                (va.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdRoleChangeNameReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.name = e.string()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("name")) return o;
+                  throw $util.ProtocolError("mr'name'", { instance: o });
+                }),
+                va)),
+              (r.CmdRoleChangeNameRspMsg =
+                ((Ca.create = function (e) {
+                  return new Ca(e);
+                }),
+                (Ca.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Ca.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdRoleChangeNameRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Ca)),
+              (r.CmdRoleChangeImgReqMsg =
+                ((Ra.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Ra.create = function (e) {
+                  return new Ra(e);
+                }),
+                (Ra.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.resId), t
+                  );
+                }),
+                (Ra.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdRoleChangeImgReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.resId = e.sint64()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("resId")) return o;
+                  throw $util.ProtocolError("mr'resId'", { instance: o });
+                }),
+                Ra)),
+              (r.CmdRoleChangeImgRspMsg =
+                ((ba.create = function (e) {
+                  return new ba(e);
+                }),
+                (ba.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (ba.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdRoleChangeImgRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                ba)),
+              (r.CmdRoleUploadPlatformImgReqMsg =
+                ((Ia.prototype.platformImg = ""),
+                (Ia.create = function (e) {
+                  return new Ia(e);
+                }),
+                (Ia.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create())
+                      .uint32(10)
+                      .string(e.platformImg),
+                    t
+                  );
+                }),
+                (Ia.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdRoleUploadPlatformImgReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.platformImg = e.string())
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("platformImg")) return o;
+                  throw $util.ProtocolError("mr'platformImg'", { instance: o });
+                }),
+                Ia)),
+              (r.CmdRoleUploadPlatformImgRspMsg =
+                ((Pa.create = function (e) {
+                  return new Pa(e);
+                }),
+                (Pa.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Pa.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdRoleUploadPlatformImgRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Pa)),
+              (r.CmdRoleChangeHeadFrameReqMsg =
+                ((Oa.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Oa.create = function (e) {
+                  return new Oa(e);
+                }),
+                (Oa.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.resId), t
+                  );
+                }),
+                (Oa.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdRoleChangeHeadFrameReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.resId = e.sint64()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("resId")) return o;
+                  throw $util.ProtocolError("mr'resId'", { instance: o });
+                }),
+                Oa)),
+              (r.CmdRoleChangeHeadFrameRspMsg =
+                ((Ta.create = function (e) {
+                  return new Ta(e);
+                }),
+                (Ta.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Ta.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdRoleChangeHeadFrameRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Ta)),
+              (r.CmdEndBuyInfoReqMsg =
+                ((Ma.create = function (e) {
+                  return new Ma(e);
+                }),
+                (Ma.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Ma.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdEndBuyInfoReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Ma)),
+              (r.CmdEndBuyInfoRspMsg =
+                ((Ga.prototype.tlEndBuyInfo = $util.emptyArray),
+                (Ga.create = function (e) {
+                  return new Ga(e);
+                }),
+                (Ga.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlEndBuyInfo && e.tlEndBuyInfo.length)
+                  )
+                    for (var r = 0; r < e.tlEndBuyInfo.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdRoleEndBuyInfo.encode(
+                        e.tlEndBuyInfo[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (Ga.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdEndBuyInfoRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlEndBuyInfo && o.tlEndBuyInfo.length) ||
+                          (o.tlEndBuyInfo = []),
+                        o.tlEndBuyInfo.push(
+                          $root.com.xkhy.tafang.cmd.CmdRoleEndBuyInfo.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                Ga)),
+              (r.CmdEndBuyReqMsg =
+                ((xa.prototype.buyId = 0),
+                (xa.create = function (e) {
+                  return new xa(e);
+                }),
+                (xa.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.buyId), t
+                  );
+                }),
+                (xa.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdEndBuyReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.buyId = e.sint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("buyId")) return o;
+                  throw $util.ProtocolError("mr'buyId'", { instance: o });
+                }),
+                xa)),
+              (r.CmdEndBuyRspMsg =
+                ((Sa.create = function (e) {
+                  return new Sa(e);
+                }),
+                (Sa.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Sa.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdEndBuyRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Sa)),
+              (r.CmdRoleEndUpdateReqMsg =
+                ((Ea.create = function (e) {
+                  return new Ea(e);
+                }),
+                (Ea.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Ea.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdRoleEndUpdateReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Ea)),
+              (r.CmdRoleEndUpdateRspMsg =
+                ((Ba.create = function (e) {
+                  return new Ba(e);
+                }),
+                (Ba.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Ba.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdRoleEndUpdateRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Ba)),
+              (r.CmdMiningBuyReqMsg =
+                ((Da.create = function (e) {
+                  return new Da(e);
+                }),
+                (Da.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Da.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdMiningBuyReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Da)),
+              (r.CmdMiningBuyRspMsg =
+                ((La.prototype.tlReward = $util.emptyArray),
+                (La.create = function (e) {
+                  return new La(e);
+                }),
+                (La.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlReward && e.tlReward.length)
+                  )
+                    for (var r = 0; r < e.tlReward.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlReward[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (La.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdMiningBuyRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlReward && o.tlReward.length) || (o.tlReward = []),
+                        o.tlReward.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                La)),
+              (r.CmdCodeExchangeReqMsg =
+                ((Wa.prototype.code = ""),
+                (Wa.create = function (e) {
+                  return new Wa(e);
+                }),
+                (Wa.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(10).string(e.code), t
+                  );
+                }),
+                (Wa.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdCodeExchangeReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.code = e.string()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("code")) return o;
+                  throw $util.ProtocolError("mr'code'", { instance: o });
+                }),
+                Wa)),
+              (r.CmdCodeExchangeRspMsg =
+                ((Aa.prototype.tlReward = $util.emptyArray),
+                (Aa.create = function (e) {
+                  return new Aa(e);
+                }),
+                (Aa.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlReward && e.tlReward.length)
+                  )
+                    for (var r = 0; r < e.tlReward.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlReward[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (Aa.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdCodeExchangeRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlReward && o.tlReward.length) || (o.tlReward = []),
+                        o.tlReward.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                Aa)),
+              (r.CmdRoleTakeFirstChargeReqMsg =
+                ((ja.create = function (e) {
+                  return new ja(e);
+                }),
+                (ja.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (ja.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdRoleTakeFirstChargeReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                ja)),
+              (r.CmdRoleTakeFirstChargeRspMsg =
+                ((qa.prototype.tlCmdGoods = $util.emptyArray),
+                (qa.create = function (e) {
+                  return new qa(e);
+                }),
+                (qa.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (qa.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdRoleTakeFirstChargeRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                        o.tlCmdGoods.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                qa)),
+              (r.CmdRoleWatchAdvertReqMsg =
+                ((Fa.prototype.type = 0),
+                (Fa.create = function (e) {
+                  return new Fa(e);
+                }),
+                (Fa.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.type), t
+                  );
+                }),
+                (Fa.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdRoleWatchAdvertReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.type = e.sint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("type")) return o;
+                  throw $util.ProtocolError("mr'type'", { instance: o });
+                }),
+                Fa)),
+              (r.CmdRoleWatchAdvertRspMsg =
+                ((Ua.prototype.tlCmdGoods = $util.emptyArray),
+                (Ua.prototype.tlId = $util.emptyArray),
+                (Ua.create = function (e) {
+                  return new Ua(e);
+                }),
+                (Ua.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  if (e.tlId && e.tlId.length)
+                    for (r = 0; r < e.tlId.length; ++r)
+                      t.uint32(16).sint32(e.tlId[r]);
+                  return t;
+                }),
+                (Ua.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdRoleWatchAdvertRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        (o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                          o.tlCmdGoods.push(
+                            $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      case 2:
+                        if (
+                          ((o.tlId && o.tlId.length) || (o.tlId = []),
+                          2 == (7 & n))
+                        )
+                          for (var i = e.uint32() + e.pos; e.pos < i; )
+                            o.tlId.push(e.sint32());
+                        else o.tlId.push(e.sint32());
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  return o;
+                }),
+                Ua)),
+              (r.CmdRoleInfoViewReqMsg =
+                ((Ka.prototype.roleId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Ka.prototype.serverId = 0),
+                (Ka.create = function (e) {
+                  return new Ka(e);
+                }),
+                (Ka.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).int64(e.roleId),
+                    t.uint32(16).int32(e.serverId),
+                    t
+                  );
+                }),
+                (Ka.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdRoleInfoViewReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.roleId = e.int64();
+                        break;
+                      case 2:
+                        o.serverId = e.int32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("roleId"))
+                    throw $util.ProtocolError("mr'roleId'", { instance: o });
+                  if (o.hasOwnProperty("serverId")) return o;
+                  throw $util.ProtocolError("mr'serverId'", { instance: o });
+                }),
+                Ka)),
+              (r.CmdRoleInfoViewRspMsg =
+                ((S.prototype.roleId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (S.prototype.roleName = ""),
+                (S.prototype.img = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (S.prototype.platformImg = ""),
+                (S.prototype.headFrame = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (S.prototype.level = 0),
+                (S.prototype.tlCmdEquip = $util.emptyArray),
+                (S.create = function (e) {
+                  return new S(e);
+                }),
+                (S.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()).uint32(8).int64(e.roleId),
+                    t.uint32(18).string(e.roleName),
+                    t.uint32(24).sint64(e.img),
+                    t.uint32(34).string(e.platformImg),
+                    t.uint32(40).sint64(e.headFrame),
+                    t.uint32(48).sint32(e.level),
+                    e.tlCmdEquip && e.tlCmdEquip.length)
+                  )
+                    for (var r = 0; r < e.tlCmdEquip.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdEquip.encode(
+                        e.tlCmdEquip[r],
+                        t.uint32(58).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (S.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdRoleInfoViewRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.roleId = e.int64();
+                        break;
+                      case 2:
+                        o.roleName = e.string();
+                        break;
+                      case 3:
+                        o.img = e.sint64();
+                        break;
+                      case 4:
+                        o.platformImg = e.string();
+                        break;
+                      case 5:
+                        o.headFrame = e.sint64();
+                        break;
+                      case 6:
+                        o.level = e.sint32();
+                        break;
+                      case 7:
+                        (o.tlCmdEquip && o.tlCmdEquip.length) ||
+                          (o.tlCmdEquip = []),
+                          o.tlCmdEquip.push(
+                            $root.com.xkhy.tafang.cmd.CmdEquip.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("roleId"))
+                    throw $util.ProtocolError("mr'roleId'", { instance: o });
+                  if (!o.hasOwnProperty("roleName"))
+                    throw $util.ProtocolError("mr'roleName'", { instance: o });
+                  if (!o.hasOwnProperty("img"))
+                    throw $util.ProtocolError("mr'img'", { instance: o });
+                  if (!o.hasOwnProperty("platformImg"))
+                    throw $util.ProtocolError("mr'platformImg'", {
+                      instance: o,
+                    });
+                  if (!o.hasOwnProperty("headFrame"))
+                    throw $util.ProtocolError("mr'headFrame'", { instance: o });
+                  if (o.hasOwnProperty("level")) return o;
+                  throw $util.ProtocolError("mr'level'", { instance: o });
+                }),
+                S)),
+              (r.CmdRoleDouYinRewardReqMsg =
+                ((Na.create = function (e) {
+                  return new Na(e);
+                }),
+                (Na.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Na.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdRoleDouYinRewardReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Na)),
+              (r.CmdRoleDouYinRewardRspMsg =
+                ((_a.prototype.tlCmdGoods = $util.emptyArray),
+                (_a.create = function (e) {
+                  return new _a(e);
+                }),
+                (_a.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (_a.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdRoleDouYinRewardRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                        o.tlCmdGoods.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                _a)),
+              (r.CmdRoleAppletShareReqMsg =
+                ((Ha.create = function (e) {
+                  return new Ha(e);
+                }),
+                (Ha.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Ha.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdRoleAppletShareReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Ha)),
+              (r.CmdRoleAppletShareRspMsg =
+                ((za.create = function (e) {
+                  return new za(e);
+                }),
+                (za.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (za.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdRoleAppletShareRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                za)),
+              (r.CmdRoleAppletShareRewardReqMsg =
+                ((Va.create = function (e) {
+                  return new Va(e);
+                }),
+                (Va.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Va.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdRoleAppletShareRewardReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Va)),
+              (r.CmdRoleAppletShareRewardRspMsg =
+                ((Ja.prototype.tlCmdGoods = $util.emptyArray),
+                (Ja.create = function (e) {
+                  return new Ja(e);
+                }),
+                (Ja.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (Ja.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdRoleAppletShareRewardRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                        o.tlCmdGoods.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                Ja)),
+              (r.CmdRoleGuanKaGiftSelectReqMsg =
+                ((Qa.prototype.resId = 0),
+                (Qa.prototype.gemId = 0),
+                (Qa.create = function (e) {
+                  return new Qa(e);
+                }),
+                (Qa.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).int32(e.resId),
+                    t.uint32(16).int32(e.gemId),
+                    t
+                  );
+                }),
+                (Qa.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdRoleGuanKaGiftSelectReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.int32();
+                        break;
+                      case 2:
+                        o.gemId = e.int32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("resId"))
+                    throw $util.ProtocolError("mr'resId'", { instance: o });
+                  if (o.hasOwnProperty("gemId")) return o;
+                  throw $util.ProtocolError("mr'gemId'", { instance: o });
+                }),
+                Qa)),
+              (r.CmdRoleGuanKaGiftSelectRspMsg =
+                ((Ya.create = function (e) {
+                  return new Ya(e);
+                }),
+                (Ya.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Ya.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdRoleGuanKaGiftSelectRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Ya)),
+              (r.CmdRoleGuanKaGiftBuyReqMsg =
+                ((Xa.prototype.resId = 0),
+                (Xa.create = function (e) {
+                  return new Xa(e);
+                }),
+                (Xa.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).int32(e.resId), t
+                  );
+                }),
+                (Xa.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdRoleGuanKaGiftBuyReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.resId = e.int32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("resId")) return o;
+                  throw $util.ProtocolError("mr'resId'", { instance: o });
+                }),
+                Xa)),
+              (r.CmdRoleGuanKaGiftBuyRspMsg =
+                ((Za.prototype.tlCmdGoods = $util.emptyArray),
+                (Za.create = function (e) {
+                  return new Za(e);
+                }),
+                (Za.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (Za.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdRoleGuanKaGiftBuyRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                        o.tlCmdGoods.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                Za)),
+              (r.CmdRune =
+                ((E.prototype.id = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (E.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (E.prototype.quality = 0),
+                (E.prototype.phase = 0),
+                (E.prototype.isPutOn = !1),
+                (E.prototype.isNew = !1),
+                (E.create = function (e) {
+                  return new E(e);
+                }),
+                (E.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.id),
+                    t.uint32(16).sint64(e.resId),
+                    t.uint32(24).sint32(e.quality),
+                    t.uint32(32).sint32(e.phase),
+                    t.uint32(40).bool(e.isPutOn),
+                    t.uint32(48).bool(e.isNew),
+                    t
+                  );
+                }),
+                (E.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdRune();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.id = e.sint64();
+                        break;
+                      case 2:
+                        o.resId = e.sint64();
+                        break;
+                      case 3:
+                        o.quality = e.sint32();
+                        break;
+                      case 4:
+                        o.phase = e.sint32();
+                        break;
+                      case 5:
+                        o.isPutOn = e.bool();
+                        break;
+                      case 6:
+                        o.isNew = e.bool();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("id"))
+                    throw $util.ProtocolError("mr'id'", { instance: o });
+                  if (!o.hasOwnProperty("resId"))
+                    throw $util.ProtocolError("mr'resId'", { instance: o });
+                  if (!o.hasOwnProperty("quality"))
+                    throw $util.ProtocolError("mr'quality'", { instance: o });
+                  if (!o.hasOwnProperty("phase"))
+                    throw $util.ProtocolError("mr'phase'", { instance: o });
+                  if (!o.hasOwnProperty("isPutOn"))
+                    throw $util.ProtocolError("mr'isPutOn'", { instance: o });
+                  if (o.hasOwnProperty("isNew")) return o;
+                  throw $util.ProtocolError("mr'isNew'", { instance: o });
+                }),
+                E)),
+              (r.CmdRune_Key =
+                ((ec.prototype.id = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (ec.create = function (e) {
+                  return new ec(e);
+                }),
+                (ec.encode = function (e, t) {
+                  return (t = t || $Writer.create()).uint32(8).sint64(e.id), t;
+                }),
+                (ec.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdRune_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.id = e.sint64()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("id")) return o;
+                  throw $util.ProtocolError("mr'id'", { instance: o });
+                }),
+                ec)),
+              (r.CmdRunePutOnReqMsg =
+                ((tc.prototype.id = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (tc.prototype.area = 0),
+                (tc.create = function (e) {
+                  return new tc(e);
+                }),
+                (tc.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.id),
+                    t.uint32(16).sint32(e.area),
+                    t
+                  );
+                }),
+                (tc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdRunePutOnReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.id = e.sint64();
+                        break;
+                      case 2:
+                        o.area = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("id"))
+                    throw $util.ProtocolError("mr'id'", { instance: o });
+                  if (o.hasOwnProperty("area")) return o;
+                  throw $util.ProtocolError("mr'area'", { instance: o });
+                }),
+                tc)),
+              (r.CmdRunePutOnRspMsg =
+                ((rc.create = function (e) {
+                  return new rc(e);
+                }),
+                (rc.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (rc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdRunePutOnRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                rc)),
+              (r.CmdRuneTakeOffReqMsg =
+                ((oc.prototype.id = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (oc.prototype.area = 0),
+                (oc.create = function (e) {
+                  return new oc(e);
+                }),
+                (oc.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.id),
+                    t.uint32(16).sint32(e.area),
+                    t
+                  );
+                }),
+                (oc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdRuneTakeOffReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.id = e.sint64();
+                        break;
+                      case 2:
+                        o.area = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("id"))
+                    throw $util.ProtocolError("mr'id'", { instance: o });
+                  if (o.hasOwnProperty("area")) return o;
+                  throw $util.ProtocolError("mr'area'", { instance: o });
+                }),
+                oc)),
+              (r.CmdRuneTakeOffRspMsg =
+                ((nc.create = function (e) {
+                  return new nc(e);
+                }),
+                (nc.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (nc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdRuneTakeOffRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                nc)),
+              (r.CmdRuneReplaceReqMsg =
+                ((ic.prototype.id = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (ic.prototype.replaceId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (ic.create = function (e) {
+                  return new ic(e);
+                }),
+                (ic.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.id),
+                    t.uint32(16).sint64(e.replaceId),
+                    t
+                  );
+                }),
+                (ic.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdRuneReplaceReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.id = e.sint64();
+                        break;
+                      case 2:
+                        o.replaceId = e.sint64();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("id"))
+                    throw $util.ProtocolError("mr'id'", { instance: o });
+                  if (o.hasOwnProperty("replaceId")) return o;
+                  throw $util.ProtocolError("mr'replaceId'", { instance: o });
+                }),
+                ic)),
+              (r.CmdRuneReplaceRspMsg =
+                ((ac.create = function (e) {
+                  return new ac(e);
+                }),
+                (ac.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (ac.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdRuneReplaceRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                ac)),
+              (r.CmdRuneSynthesisReqMsg =
+                ((cc.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (cc.prototype.quality = 0),
+                (cc.prototype.phase = 0),
+                (cc.prototype.nid = $util.emptyArray),
+                (cc.create = function (e) {
+                  return new cc(e);
+                }),
+                (cc.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()).uint32(8).sint64(e.resId),
+                    t.uint32(16).sint32(e.quality),
+                    t.uint32(24).sint32(e.phase),
+                    e.nid && e.nid.length)
+                  )
+                    for (var r = 0; r < e.nid.length; ++r)
+                      t.uint32(32).sint64(e.nid[r]);
+                  return t;
+                }),
+                (cc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdRuneSynthesisReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.sint64();
+                        break;
+                      case 2:
+                        o.quality = e.sint32();
+                        break;
+                      case 3:
+                        o.phase = e.sint32();
+                        break;
+                      case 4:
+                        if (
+                          ((o.nid && o.nid.length) || (o.nid = []),
+                          2 == (7 & n))
+                        )
+                          for (var i = e.uint32() + e.pos; e.pos < i; )
+                            o.nid.push(e.sint64());
+                        else o.nid.push(e.sint64());
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("resId"))
+                    throw $util.ProtocolError("mr'resId'", { instance: o });
+                  if (!o.hasOwnProperty("quality"))
+                    throw $util.ProtocolError("mr'quality'", { instance: o });
+                  if (o.hasOwnProperty("phase")) return o;
+                  throw $util.ProtocolError("mr'phase'", { instance: o });
+                }),
+                cc)),
+              (r.CmdRuneSynthesisRspMsg =
+                ((dc.create = function (e) {
+                  return new dc(e);
+                }),
+                (dc.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (dc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdRuneSynthesisRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                dc)),
+              (r.CmdRuneSynthesisOneKeyReqMsg =
+                ((sc.create = function (e) {
+                  return new sc(e);
+                }),
+                (sc.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (sc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdRuneSynthesisOneKeyReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                sc)),
+              (r.CmdRuneSynthesisOneKeyRspMsg =
+                ((lc.prototype.id = $util.emptyArray),
+                (lc.create = function (e) {
+                  return new lc(e);
+                }),
+                (lc.encode = function (e, t) {
+                  if (((t = t || $Writer.create()), e.id && e.id.length))
+                    for (var r = 0; r < e.id.length; ++r)
+                      t.uint32(8).sint64(e.id[r]);
+                  return t;
+                }),
+                (lc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdRuneSynthesisOneKeyRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    if (n >>> 3 == 1)
+                      if (((o.id && o.id.length) || (o.id = []), 2 == (7 & n)))
+                        for (var i = e.uint32() + e.pos; e.pos < i; )
+                          o.id.push(e.sint64());
+                      else o.id.push(e.sint64());
+                    else e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                lc)),
+              (r.CmdSecretRealm =
+                ((B.prototype.roleId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (B.prototype.type = 0),
+                (B.prototype.level = 0),
+                (B.prototype.endTime = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (B.prototype.secretRealmScore = $util.emptyArray),
+                (B.create = function (e) {
+                  return new B(e);
+                }),
+                (B.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()).uint32(8).sint64(e.roleId),
+                    t.uint32(16).sint32(e.type),
+                    t.uint32(24).sint32(e.level),
+                    t.uint32(32).sint64(e.endTime),
+                    e.secretRealmScore && e.secretRealmScore.length)
+                  )
+                    for (var r = 0; r < e.secretRealmScore.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdSecretRealmScore.encode(
+                        e.secretRealmScore[r],
+                        t.uint32(42).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (B.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdSecretRealm();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.roleId = e.sint64();
+                        break;
+                      case 2:
+                        o.type = e.sint32();
+                        break;
+                      case 3:
+                        o.level = e.sint32();
+                        break;
+                      case 4:
+                        o.endTime = e.sint64();
+                        break;
+                      case 5:
+                        (o.secretRealmScore && o.secretRealmScore.length) ||
+                          (o.secretRealmScore = []),
+                          o.secretRealmScore.push(
+                            $root.com.xkhy.tafang.cmd.CmdSecretRealmScore.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("roleId"))
+                    throw $util.ProtocolError("mr'roleId'", { instance: o });
+                  if (!o.hasOwnProperty("type"))
+                    throw $util.ProtocolError("mr'type'", { instance: o });
+                  if (!o.hasOwnProperty("level"))
+                    throw $util.ProtocolError("mr'level'", { instance: o });
+                  if (o.hasOwnProperty("endTime")) return o;
+                  throw $util.ProtocolError("mr'endTime'", { instance: o });
+                }),
+                B)),
+              (r.CmdSecretRealm_Key =
+                ((uc.prototype.roleId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (uc.create = function (e) {
+                  return new uc(e);
+                }),
+                (uc.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.roleId), t
+                  );
+                }),
+                (uc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdSecretRealm_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.roleId = e.sint64()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("roleId")) return o;
+                  throw $util.ProtocolError("mr'roleId'", { instance: o });
+                }),
+                uc)),
+              (r.CmdSecretRealmScore =
+                ((fc.prototype.type = 0),
+                (fc.prototype.level = 0),
+                (fc.create = function (e) {
+                  return new fc(e);
+                }),
+                (fc.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.type),
+                    t.uint32(16).sint32(e.level),
+                    t
+                  );
+                }),
+                (fc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdSecretRealmScore();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.type = e.sint32();
+                        break;
+                      case 2:
+                        o.level = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("type"))
+                    throw $util.ProtocolError("mr'type'", { instance: o });
+                  if (o.hasOwnProperty("level")) return o;
+                  throw $util.ProtocolError("mr'level'", { instance: o });
+                }),
+                fc)),
+              (r.CmdShare =
+                ((mc.create = function (e) {
+                  return new mc(e);
+                }),
+                (mc.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (mc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdShare();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                mc)),
+              (r.CmdShare_Key =
+                ((pc.prototype.id = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (pc.create = function (e) {
+                  return new pc(e);
+                }),
+                (pc.encode = function (e, t) {
+                  return (t = t || $Writer.create()).uint32(8).sint64(e.id), t;
+                }),
+                (pc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdShare_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.id = e.sint64()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("id")) return o;
+                  throw $util.ProtocolError("mr'id'", { instance: o });
+                }),
+                pc)),
+              (r.CmdShareGetRewardReqMsg =
+                ((yc.create = function (e) {
+                  return new yc(e);
+                }),
+                (yc.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (yc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdShareGetRewardReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                yc)),
+              (r.CmdShareGetRewardRspMsg =
+                ((hc.prototype.tlCmdGoods = $util.emptyArray),
+                (hc.create = function (e) {
+                  return new hc(e);
+                }),
+                (hc.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (hc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdShareGetRewardRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                        o.tlCmdGoods.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                hc)),
+              (r.CmdShareStateReqMsg =
+                ((gc.create = function (e) {
+                  return new gc(e);
+                }),
+                (gc.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (gc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdShareStateReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                gc)),
+              (r.CmdShareStateRspMsg =
+                (($c.prototype.shareState = 0),
+                ($c.prototype.rewardState = 0),
+                ($c.create = function (e) {
+                  return new $c(e);
+                }),
+                ($c.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.shareState),
+                    t.uint32(16).sint32(e.rewardState),
+                    t
+                  );
+                }),
+                ($c.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdShareStateRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.shareState = e.sint32();
+                        break;
+                      case 2:
+                        o.rewardState = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("shareState"))
+                    throw $util.ProtocolError("mr'shareState'", {
+                      instance: o,
+                    });
+                  if (o.hasOwnProperty("rewardState")) return o;
+                  throw $util.ProtocolError("mr'rewardState'", { instance: o });
+                }),
+                $c)),
+              (r.CmdShop =
+                ((kc.prototype.cmdShopType = 1),
+                (kc.prototype.tlCmdShopGoods = $util.emptyArray),
+                (kc.create = function (e) {
+                  return new kc(e);
+                }),
+                (kc.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create())
+                      .uint32(8)
+                      .uint32(e.cmdShopType),
+                    e.tlCmdShopGoods && e.tlCmdShopGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdShopGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdShopGoods.encode(
+                        e.tlCmdShopGoods[r],
+                        t.uint32(18).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (kc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdShop();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.cmdShopType = e.uint32();
+                        break;
+                      case 2:
+                        (o.tlCmdShopGoods && o.tlCmdShopGoods.length) ||
+                          (o.tlCmdShopGoods = []),
+                          o.tlCmdShopGoods.push(
+                            $root.com.xkhy.tafang.cmd.CmdShopGoods.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (o.hasOwnProperty("cmdShopType")) return o;
+                  throw $util.ProtocolError("mr'cmdShopType'", { instance: o });
+                }),
+                kc)),
+              (r.CmdShop_Key =
+                ((wc.prototype.cmdShopType = 1),
+                (wc.create = function (e) {
+                  return new wc(e);
+                }),
+                (wc.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).uint32(e.cmdShopType),
+                    t
+                  );
+                }),
+                (wc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdShop_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.cmdShopType = e.uint32())
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("cmdShopType")) return o;
+                  throw $util.ProtocolError("mr'cmdShopType'", { instance: o });
+                }),
+                wc)),
+              (r.CmdShopGoods =
+                ((D.prototype.id = 0),
+                (D.prototype.buyTimes = 0),
+                (D.prototype.nextBuyTime = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (D.prototype.nextTime = 0),
+                (D.prototype.nextTime50 = 0),
+                (D.prototype.boxProcess = 0),
+                (D.prototype.alreadyTakeBox = $util.emptyArray),
+                (D.create = function (e) {
+                  return new D(e);
+                }),
+                (D.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()).uint32(8).int32(e.id),
+                    t.uint32(16).int32(e.buyTimes),
+                    null != e.nextBuyTime &&
+                      e.hasOwnProperty("nextBuyTime") &&
+                      t.uint32(24).sint64(e.nextBuyTime),
+                    null != e.nextTime &&
+                      e.hasOwnProperty("nextTime") &&
+                      t.uint32(32).sint32(e.nextTime),
+                    null != e.nextTime50 &&
+                      e.hasOwnProperty("nextTime50") &&
+                      t.uint32(40).sint32(e.nextTime50),
+                    null != e.boxProcess &&
+                      e.hasOwnProperty("boxProcess") &&
+                      t.uint32(48).sint32(e.boxProcess),
+                    e.alreadyTakeBox && e.alreadyTakeBox.length)
+                  )
+                    for (var r = 0; r < e.alreadyTakeBox.length; ++r)
+                      t.uint32(56).sint32(e.alreadyTakeBox[r]);
+                  return t;
+                }),
+                (D.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdShopGoods();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.id = e.int32();
+                        break;
+                      case 2:
+                        o.buyTimes = e.int32();
+                        break;
+                      case 3:
+                        o.nextBuyTime = e.sint64();
+                        break;
+                      case 4:
+                        o.nextTime = e.sint32();
+                        break;
+                      case 5:
+                        o.nextTime50 = e.sint32();
+                        break;
+                      case 6:
+                        o.boxProcess = e.sint32();
+                        break;
+                      case 7:
+                        if (
+                          ((o.alreadyTakeBox && o.alreadyTakeBox.length) ||
+                            (o.alreadyTakeBox = []),
+                          2 == (7 & n))
+                        )
+                          for (var i = e.uint32() + e.pos; e.pos < i; )
+                            o.alreadyTakeBox.push(e.sint32());
+                        else o.alreadyTakeBox.push(e.sint32());
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("id"))
+                    throw $util.ProtocolError("mr'id'", { instance: o });
+                  if (o.hasOwnProperty("buyTimes")) return o;
+                  throw $util.ProtocolError("mr'buyTimes'", { instance: o });
+                }),
+                D)),
+              (r.CmdShopType =
+                ((e = {}),
+                ((t = Object.create(e))[(e[1] = "box")] = 1),
+                (t[(e[2] = "resource")] = 2),
+                (t[(e[3] = "diamond")] = 3),
+                (t[(e[4] = "gold")] = 4),
+                (t[(e[5] = "gift")] = 5),
+                (t[(e[6] = "spiritAnimal")] = 6),
+                t)),
+              (r.CmdContinuityGiftInfo =
+                ((vc.prototype.days = 0),
+                (vc.prototype.status = 0),
+                (vc.create = function (e) {
+                  return new vc(e);
+                }),
+                (vc.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).int32(e.days),
+                    t.uint32(16).int32(e.status),
+                    t
+                  );
+                }),
+                (vc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdContinuityGiftInfo();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.days = e.int32();
+                        break;
+                      case 2:
+                        o.status = e.int32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("days"))
+                    throw $util.ProtocolError("mr'days'", { instance: o });
+                  if (o.hasOwnProperty("status")) return o;
+                  throw $util.ProtocolError("mr'status'", { instance: o });
+                }),
+                vc)),
+              (r.CmdGoodReplace =
+                ((Cc.prototype.oldResId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Cc.prototype.newResId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Cc.prototype.number = 0),
+                (Cc.create = function (e) {
+                  return new Cc(e);
+                }),
+                (Cc.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).int64(e.oldResId),
+                    t.uint32(16).int64(e.newResId),
+                    t.uint32(24).int32(e.number),
+                    t
+                  );
+                }),
+                (Cc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdGoodReplace();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.oldResId = e.int64();
+                        break;
+                      case 2:
+                        o.newResId = e.int64();
+                        break;
+                      case 3:
+                        o.number = e.int32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("oldResId"))
+                    throw $util.ProtocolError("mr'oldResId'", { instance: o });
+                  if (!o.hasOwnProperty("newResId"))
+                    throw $util.ProtocolError("mr'newResId'", { instance: o });
+                  if (o.hasOwnProperty("number")) return o;
+                  throw $util.ProtocolError("mr'number'", { instance: o });
+                }),
+                Cc)),
+              (r.CmdShopBuyReqMsg =
+                ((Rc.prototype.id = 0),
+                (Rc.prototype.cmdShopType = 1),
+                (Rc.prototype.tenTimes = !1),
+                (Rc.prototype.tlGoodReplace = $util.emptyArray),
+                (Rc.create = function (e) {
+                  return new Rc(e);
+                }),
+                (Rc.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()).uint32(8).int32(e.id),
+                    t.uint32(16).uint32(e.cmdShopType),
+                    null != e.tenTimes &&
+                      e.hasOwnProperty("tenTimes") &&
+                      t.uint32(24).bool(e.tenTimes),
+                    e.tlGoodReplace && e.tlGoodReplace.length)
+                  )
+                    for (var r = 0; r < e.tlGoodReplace.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoodReplace.encode(
+                        e.tlGoodReplace[r],
+                        t.uint32(34).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (Rc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdShopBuyReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.id = e.int32();
+                        break;
+                      case 2:
+                        o.cmdShopType = e.uint32();
+                        break;
+                      case 3:
+                        o.tenTimes = e.bool();
+                        break;
+                      case 4:
+                        (o.tlGoodReplace && o.tlGoodReplace.length) ||
+                          (o.tlGoodReplace = []),
+                          o.tlGoodReplace.push(
+                            $root.com.xkhy.tafang.cmd.CmdGoodReplace.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("id"))
+                    throw $util.ProtocolError("mr'id'", { instance: o });
+                  if (o.hasOwnProperty("cmdShopType")) return o;
+                  throw $util.ProtocolError("mr'cmdShopType'", { instance: o });
+                }),
+                Rc)),
+              (r.CmdShopBuyRspMsg =
+                ((bc.prototype.tlCmdGoods = $util.emptyArray),
+                (bc.create = function (e) {
+                  return new bc(e);
+                }),
+                (bc.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (bc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdShopBuyRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                        o.tlCmdGoods.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                bc)),
+              (r.CmdContinuityGiftInfoReqMsg =
+                ((Ic.create = function (e) {
+                  return new Ic(e);
+                }),
+                (Ic.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Ic.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdContinuityGiftInfoReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Ic)),
+              (r.CmdContinuityGiftInfoRspMsg =
+                ((Pc.prototype.tlCmdContinuityGiftInfo = $util.emptyArray),
+                (Pc.prototype.endTime = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Pc.prototype.accumulativeAward = $util.emptyArray),
+                (Pc.create = function (e) {
+                  return new Pc(e);
+                }),
+                (Pc.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdContinuityGiftInfo &&
+                      e.tlCmdContinuityGiftInfo.length)
+                  )
+                    for (var r = 0; r < e.tlCmdContinuityGiftInfo.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdContinuityGiftInfo.encode(
+                        e.tlCmdContinuityGiftInfo[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  if (
+                    (t.uint32(16).int64(e.endTime),
+                    e.accumulativeAward && e.accumulativeAward.length)
+                  )
+                    for (r = 0; r < e.accumulativeAward.length; ++r)
+                      t.uint32(24).int32(e.accumulativeAward[r]);
+                  return t;
+                }),
+                (Pc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdContinuityGiftInfoRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        (o.tlCmdContinuityGiftInfo &&
+                          o.tlCmdContinuityGiftInfo.length) ||
+                          (o.tlCmdContinuityGiftInfo = []),
+                          o.tlCmdContinuityGiftInfo.push(
+                            $root.com.xkhy.tafang.cmd.CmdContinuityGiftInfo.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      case 2:
+                        o.endTime = e.int64();
+                        break;
+                      case 3:
+                        if (
+                          ((o.accumulativeAward &&
+                            o.accumulativeAward.length) ||
+                            (o.accumulativeAward = []),
+                          2 == (7 & n))
+                        )
+                          for (var i = e.uint32() + e.pos; e.pos < i; )
+                            o.accumulativeAward.push(e.int32());
+                        else o.accumulativeAward.push(e.int32());
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (o.hasOwnProperty("endTime")) return o;
+                  throw $util.ProtocolError("mr'endTime'", { instance: o });
+                }),
+                Pc)),
+              (r.CmdContinuityGiftRewardReqMsg =
+                ((Oc.prototype.days = 0),
+                (Oc.create = function (e) {
+                  return new Oc(e);
+                }),
+                (Oc.encode = function (e, t) {
+                  return (t = t || $Writer.create()).uint32(8).int32(e.days), t;
+                }),
+                (Oc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdContinuityGiftRewardReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.days = e.int32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("days")) return o;
+                  throw $util.ProtocolError("mr'days'", { instance: o });
+                }),
+                Oc)),
+              (r.CmdContinuityGiftRewardRspMsg =
+                ((Tc.prototype.tlCmdContinuityGiftInfo = $util.emptyArray),
+                (Tc.prototype.tlCmdGoods = $util.emptyArray),
+                (Tc.create = function (e) {
+                  return new Tc(e);
+                }),
+                (Tc.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdContinuityGiftInfo &&
+                      e.tlCmdContinuityGiftInfo.length)
+                  )
+                    for (var r = 0; r < e.tlCmdContinuityGiftInfo.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdContinuityGiftInfo.encode(
+                        e.tlCmdContinuityGiftInfo[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  if (e.tlCmdGoods && e.tlCmdGoods.length)
+                    for (r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(18).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (Tc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdContinuityGiftRewardRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        (o.tlCmdContinuityGiftInfo &&
+                          o.tlCmdContinuityGiftInfo.length) ||
+                          (o.tlCmdContinuityGiftInfo = []),
+                          o.tlCmdContinuityGiftInfo.push(
+                            $root.com.xkhy.tafang.cmd.CmdContinuityGiftInfo.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      case 2:
+                        (o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                          o.tlCmdGoods.push(
+                            $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  return o;
+                }),
+                Tc)),
+              (r.CmdContinuityGiftFinishRewardReqMsg =
+                ((Mc.prototype.days = 0),
+                (Mc.create = function (e) {
+                  return new Mc(e);
+                }),
+                (Mc.encode = function (e, t) {
+                  return (t = t || $Writer.create()).uint32(8).int32(e.days), t;
+                }),
+                (Mc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdContinuityGiftFinishRewardReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.days = e.int32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("days")) return o;
+                  throw $util.ProtocolError("mr'days'", { instance: o });
+                }),
+                Mc)),
+              (r.CmdContinuityGiftFinishRewardRspMsg =
+                ((Gc.prototype.tlCmdGoods = $util.emptyArray),
+                (Gc.create = function (e) {
+                  return new Gc(e);
+                }),
+                (Gc.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (Gc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdContinuityGiftFinishRewardRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                        o.tlCmdGoods.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                Gc)),
+              (r.CmdTakeSpiritAnimalBoxReqMsg =
+                ((xc.prototype.id = 0),
+                (xc.prototype.takeProcess = 0),
+                (xc.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (xc.create = function (e) {
+                  return new xc(e);
+                }),
+                (xc.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.id),
+                    t.uint32(16).sint32(e.takeProcess),
+                    t.uint32(24).sint64(e.resId),
+                    t
+                  );
+                }),
+                (xc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdTakeSpiritAnimalBoxReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.id = e.sint32();
+                        break;
+                      case 2:
+                        o.takeProcess = e.sint32();
+                        break;
+                      case 3:
+                        o.resId = e.sint64();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("id"))
+                    throw $util.ProtocolError("mr'id'", { instance: o });
+                  if (!o.hasOwnProperty("takeProcess"))
+                    throw $util.ProtocolError("mr'takeProcess'", {
+                      instance: o,
+                    });
+                  if (o.hasOwnProperty("resId")) return o;
+                  throw $util.ProtocolError("mr'resId'", { instance: o });
+                }),
+                xc)),
+              (r.CmdTakeSpiritAnimalBoxRspMsg =
+                ((Sc.prototype.tlCmdGoods = $util.emptyArray),
+                (Sc.create = function (e) {
+                  return new Sc(e);
+                }),
+                (Sc.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (Sc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdTakeSpiritAnimalBoxRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                        o.tlCmdGoods.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                Sc)),
+              (r.CmdSkin =
+                ((Ec.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Ec.prototype.used = !1),
+                (Ec.create = function (e) {
+                  return new Ec(e);
+                }),
+                (Ec.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.resId),
+                    null != e.used &&
+                      e.hasOwnProperty("used") &&
+                      t.uint32(16).bool(e.used),
+                    t
+                  );
+                }),
+                (Ec.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdSkin();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.sint64();
+                        break;
+                      case 2:
+                        o.used = e.bool();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (o.hasOwnProperty("resId")) return o;
+                  throw $util.ProtocolError("mr'resId'", { instance: o });
+                }),
+                Ec)),
+              (r.CmdSkin_Key =
+                ((Bc.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Bc.create = function (e) {
+                  return new Bc(e);
+                }),
+                (Bc.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.resId), t
+                  );
+                }),
+                (Bc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdSkin_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.resId = e.sint64()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("resId")) return o;
+                  throw $util.ProtocolError("mr'resId'", { instance: o });
+                }),
+                Bc)),
+              (r.CmdChangeUsedSkinReqMsg =
+                ((Dc.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Dc.create = function (e) {
+                  return new Dc(e);
+                }),
+                (Dc.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.resId), t
+                  );
+                }),
+                (Dc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdChangeUsedSkinReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.resId = e.sint64()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("resId")) return o;
+                  throw $util.ProtocolError("mr'resId'", { instance: o });
+                }),
+                Dc)),
+              (r.CmdChangeUsedSkinRspMsg =
+                ((Lc.create = function (e) {
+                  return new Lc(e);
+                }),
+                (Lc.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Lc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdChangeUsedSkinRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Lc)),
+              (r.CmdSpecialGiftCache =
+                ((Wc.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Wc.prototype.state = 0),
+                (Wc.prototype.endTime = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Wc.create = function (e) {
+                  return new Wc(e);
+                }),
+                (Wc.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.resId),
+                    t.uint32(16).uint32(e.state),
+                    t.uint32(24).sint64(e.endTime),
+                    t
+                  );
+                }),
+                (Wc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdSpecialGiftCache();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.resId = e.sint64();
+                        break;
+                      case 2:
+                        o.state = e.uint32();
+                        break;
+                      case 3:
+                        o.endTime = e.sint64();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("resId"))
+                    throw $util.ProtocolError("mr'resId'", { instance: o });
+                  if (!o.hasOwnProperty("state"))
+                    throw $util.ProtocolError("mr'state'", { instance: o });
+                  if (o.hasOwnProperty("endTime")) return o;
+                  throw $util.ProtocolError("mr'endTime'", { instance: o });
+                }),
+                Wc)),
+              (r.CmdSpecialGiftCache_Key =
+                ((Ac.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Ac.create = function (e) {
+                  return new Ac(e);
+                }),
+                (Ac.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.resId), t
+                  );
+                }),
+                (Ac.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdSpecialGiftCache_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.resId = e.sint64()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("resId")) return o;
+                  throw $util.ProtocolError("mr'resId'", { instance: o });
+                }),
+                Ac)),
+              (r.CmdSpiritAnimal =
+                ((jc.prototype.uniqueId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (jc.prototype.resId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (jc.prototype.level = 0),
+                (jc.create = function (e) {
+                  return new jc(e);
+                }),
+                (jc.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.uniqueId),
+                    t.uint32(16).sint64(e.resId),
+                    t.uint32(24).sint32(e.level),
+                    t
+                  );
+                }),
+                (jc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdSpiritAnimal();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.uniqueId = e.sint64();
+                        break;
+                      case 2:
+                        o.resId = e.sint64();
+                        break;
+                      case 3:
+                        o.level = e.sint32();
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (!o.hasOwnProperty("uniqueId"))
+                    throw $util.ProtocolError("mr'uniqueId'", { instance: o });
+                  if (!o.hasOwnProperty("resId"))
+                    throw $util.ProtocolError("mr'resId'", { instance: o });
+                  if (o.hasOwnProperty("level")) return o;
+                  throw $util.ProtocolError("mr'level'", { instance: o });
+                }),
+                jc)),
+              (r.CmdSpiritAnimal_Key =
+                ((qc.prototype.uniqueId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (qc.create = function (e) {
+                  return new qc(e);
+                }),
+                (qc.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.uniqueId), t
+                  );
+                }),
+                (qc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdSpiritAnimal_Key();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.uniqueId = e.sint64())
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("uniqueId")) return o;
+                  throw $util.ProtocolError("mr'uniqueId'", { instance: o });
+                }),
+                qc)),
+              (r.CmdSpiritAnimalLevelUpReqMsg =
+                ((Fc.prototype.uniqueId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Fc.create = function (e) {
+                  return new Fc(e);
+                }),
+                (Fc.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.uniqueId), t
+                  );
+                }),
+                (Fc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdSpiritAnimalLevelUpReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.uniqueId = e.sint64())
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("uniqueId")) return o;
+                  throw $util.ProtocolError("mr'uniqueId'", { instance: o });
+                }),
+                Fc)),
+              (r.CmdSpiritAnimalLevelUpRspMsg =
+                ((Uc.create = function (e) {
+                  return new Uc(e);
+                }),
+                (Uc.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Uc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdSpiritAnimalLevelUpRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Uc)),
+              (r.CmdSpiritAnimalStepUpReqMsg =
+                ((Kc.prototype.uniqueId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Kc.prototype.tlSameUniqueId = $util.emptyArray),
+                (Kc.prototype.tlCampUniqueId = $util.emptyArray),
+                (Kc.create = function (e) {
+                  return new Kc(e);
+                }),
+                (Kc.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()).uint32(8).sint64(e.uniqueId),
+                    e.tlSameUniqueId && e.tlSameUniqueId.length)
+                  )
+                    for (var r = 0; r < e.tlSameUniqueId.length; ++r)
+                      t.uint32(16).sint64(e.tlSameUniqueId[r]);
+                  if (e.tlCampUniqueId && e.tlCampUniqueId.length)
+                    for (r = 0; r < e.tlCampUniqueId.length; ++r)
+                      t.uint32(24).sint64(e.tlCampUniqueId[r]);
+                  return t;
+                }),
+                (Kc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdSpiritAnimalStepUpReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.uniqueId = e.sint64();
+                        break;
+                      case 2:
+                        if (
+                          ((o.tlSameUniqueId && o.tlSameUniqueId.length) ||
+                            (o.tlSameUniqueId = []),
+                          2 == (7 & n))
+                        )
+                          for (var i = e.uint32() + e.pos; e.pos < i; )
+                            o.tlSameUniqueId.push(e.sint64());
+                        else o.tlSameUniqueId.push(e.sint64());
+                        break;
+                      case 3:
+                        if (
+                          ((o.tlCampUniqueId && o.tlCampUniqueId.length) ||
+                            (o.tlCampUniqueId = []),
+                          2 == (7 & n))
+                        )
+                          for (i = e.uint32() + e.pos; e.pos < i; )
+                            o.tlCampUniqueId.push(e.sint64());
+                        else o.tlCampUniqueId.push(e.sint64());
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (o.hasOwnProperty("uniqueId")) return o;
+                  throw $util.ProtocolError("mr'uniqueId'", { instance: o });
+                }),
+                Kc)),
+              (r.CmdSpiritAnimalStepUpRspMsg =
+                ((Nc.create = function (e) {
+                  return new Nc(e);
+                }),
+                (Nc.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Nc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdSpiritAnimalStepUpRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Nc)),
+              (r.CmdSpiritAnimalBattleReqMsg =
+                ((_c.prototype.uniqueId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (_c.create = function (e) {
+                  return new _c(e);
+                }),
+                (_c.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.uniqueId), t
+                  );
+                }),
+                (_c.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdSpiritAnimalBattleReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.uniqueId = e.sint64())
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("uniqueId")) return o;
+                  throw $util.ProtocolError("mr'uniqueId'", { instance: o });
+                }),
+                _c)),
+              (r.CmdSpiritAnimalBattleRspMsg =
+                ((Hc.create = function (e) {
+                  return new Hc(e);
+                }),
+                (Hc.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Hc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdSpiritAnimalBattleRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Hc)),
+              (r.CmdSpiritAnimalResetReqMsg =
+                ((zc.prototype.uniqueId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (zc.create = function (e) {
+                  return new zc(e);
+                }),
+                (zc.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.uniqueId), t
+                  );
+                }),
+                (zc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdSpiritAnimalResetReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.uniqueId = e.sint64())
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("uniqueId")) return o;
+                  throw $util.ProtocolError("mr'uniqueId'", { instance: o });
+                }),
+                zc)),
+              (r.CmdSpiritAnimalResetRspMsg =
+                ((Vc.prototype.tlCmdGoods = $util.emptyArray),
+                (Vc.create = function (e) {
+                  return new Vc(e);
+                }),
+                (Vc.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (Vc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdSpiritAnimalResetRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                        o.tlCmdGoods.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                Vc)),
+              (r.CmdSpiritAnimalResetPreviewReqMsg =
+                ((Jc.prototype.uniqueId = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Jc.create = function (e) {
+                  return new Jc(e);
+                }),
+                (Jc.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint64(e.uniqueId), t
+                  );
+                }),
+                (Jc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdSpiritAnimalResetPreviewReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.uniqueId = e.sint64())
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("uniqueId")) return o;
+                  throw $util.ProtocolError("mr'uniqueId'", { instance: o });
+                }),
+                Jc)),
+              (r.CmdSpiritAnimalResetPreviewRspMsg =
+                ((Qc.prototype.tlCmdGoods = $util.emptyArray),
+                (Qc.create = function (e) {
+                  return new Qc(e);
+                }),
+                (Qc.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (Qc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdSpiritAnimalResetPreviewRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                        o.tlCmdGoods.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                Qc)),
+              (r.CmdSystemSyncTimeReqMsg =
+                ((Yc.create = function (e) {
+                  return new Yc(e);
+                }),
+                (Yc.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (Yc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdSystemSyncTimeReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                Yc)),
+              (r.CmdSystemSyncTimeRspMsg =
+                ((Xc.prototype.serverTime = $util.Long
+                  ? $util.Long.fromBits(0, 0, !1)
+                  : 0),
+                (Xc.create = function (e) {
+                  return new Xc(e);
+                }),
+                (Xc.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).int64(e.serverTime), t
+                  );
+                }),
+                (Xc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdSystemSyncTimeRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.serverTime = e.int64())
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("serverTime")) return o;
+                  throw $util.ProtocolError("mr'serverTime'", { instance: o });
+                }),
+                Xc)),
+              (r.CmdSystemGmReqMsg =
+                ((Zc.prototype.cmd = ""),
+                (Zc.create = function (e) {
+                  return new Zc(e);
+                }),
+                (Zc.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(10).string(e.cmd), t
+                  );
+                }),
+                (Zc.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdSystemGmReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.cmd = e.string()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("cmd")) return o;
+                  throw $util.ProtocolError("mr'cmd'", { instance: o });
+                }),
+                Zc)),
+              (r.CmdSystemGmRspMsg =
+                ((ed.prototype.tlCmdGoods = $util.emptyArray),
+                (ed.create = function (e) {
+                  return new ed(e);
+                }),
+                (ed.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (ed.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdSystemGmRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                        o.tlCmdGoods.push(
+                          $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                ed)),
+              (r.CmdGmListReqMsg =
+                ((td.create = function (e) {
+                  return new td(e);
+                }),
+                (td.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (td.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdGmListReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                td)),
+              (r.CmdGmListRspMsg =
+                ((rd.prototype.cmd = $util.emptyArray),
+                (rd.create = function (e) {
+                  return new rd(e);
+                }),
+                (rd.encode = function (e, t) {
+                  if (((t = t || $Writer.create()), e.cmd && e.cmd.length))
+                    for (var r = 0; r < e.cmd.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGmInfo.encode(
+                        e.cmd[r],
+                        t.uint32(10).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (rd.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdGmListRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? ((o.cmd && o.cmd.length) || (o.cmd = []),
+                        o.cmd.push(
+                          $root.com.xkhy.tafang.cmd.CmdGmInfo.decode(
+                            e,
+                            e.uint32(),
+                          ),
+                        ))
+                      : e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                rd)),
+              (r.CmdRecordClientAniReqMsg =
+                ((od.prototype.clientAniRefId = 0),
+                (od.create = function (e) {
+                  return new od(e);
+                }),
+                (od.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create())
+                      .uint32(8)
+                      .int32(e.clientAniRefId),
+                    t
+                  );
+                }),
+                (od.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdRecordClientAniReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.clientAniRefId = e.int32())
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("clientAniRefId")) return o;
+                  throw $util.ProtocolError("mr'clientAniRefId'", {
+                    instance: o,
+                  });
+                }),
+                od)),
+              (r.CmdRecordClientAniRspMsg =
+                ((nd.create = function (e) {
+                  return new nd(e);
+                }),
+                (nd.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (nd.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdRecordClientAniRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                nd)),
+              (r.CmdGetAllPlayClientAniReqMsg =
+                ((id.create = function (e) {
+                  return new id(e);
+                }),
+                (id.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (id.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t =
+                        new $root.com.xkhy.tafang.cmd.CmdGetAllPlayClientAniReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                id)),
+              (r.CmdGetAllPlayClientAniRspMsg =
+                ((ad.prototype.clientAniRefId = $util.emptyArray),
+                (ad.create = function (e) {
+                  return new ad(e);
+                }),
+                (ad.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    e.clientAniRefId && e.clientAniRefId.length)
+                  )
+                    for (var r = 0; r < e.clientAniRefId.length; ++r)
+                      t.uint32(8).int32(e.clientAniRefId[r]);
+                  return t;
+                }),
+                (ad.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdGetAllPlayClientAniRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    if (n >>> 3 == 1)
+                      if (
+                        ((o.clientAniRefId && o.clientAniRefId.length) ||
+                          (o.clientAniRefId = []),
+                        2 == (7 & n))
+                      )
+                        for (var i = e.uint32() + e.pos; e.pos < i; )
+                          o.clientAniRefId.push(e.int32());
+                      else o.clientAniRefId.push(e.int32());
+                    else e.skipType(7 & n);
+                  }
+                  return o;
+                }),
+                ad)),
+              (r.CmdSevenDayInfoReqMsg =
+                ((cd.create = function (e) {
+                  return new cd(e);
+                }),
+                (cd.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (cd.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdSevenDayInfoReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                cd)),
+              (r.CmdSevenDayInfoRspMsg =
+                ((dd.prototype.cmdSevenDayInfo = null),
+                (dd.create = function (e) {
+                  return new dd(e);
+                }),
+                (dd.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()),
+                    $root.com.xkhy.tafang.cmd.CmdSevenDayInfo.encode(
+                      e.cmdSevenDayInfo,
+                      t.uint32(10).fork(),
+                    ).ldelim(),
+                    t
+                  );
+                }),
+                (dd.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdSevenDayInfoRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.cmdSevenDayInfo =
+                          $root.com.xkhy.tafang.cmd.CmdSevenDayInfo.decode(
+                            e,
+                            e.uint32(),
+                          ))
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("cmdSevenDayInfo")) return o;
+                  throw $util.ProtocolError("mr'cmdSevenDayInfo'", {
+                    instance: o,
+                  });
+                }),
+                dd)),
+              (r.CmdSevenDayShopBuyReqMsg =
+                ((sd.prototype.id = 0),
+                (sd.create = function (e) {
+                  return new sd(e);
+                }),
+                (sd.encode = function (e, t) {
+                  return (t = t || $Writer.create()).uint32(8).int32(e.id), t;
+                }),
+                (sd.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdSevenDayShopBuyReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.id = e.int32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("id")) return o;
+                  throw $util.ProtocolError("mr'id'", { instance: o });
+                }),
+                sd)),
+              (r.CmdSevenDayShopBuyRspMsg =
+                ((ld.prototype.cmdSevenDayInfo = null),
+                (ld.prototype.tlCmdGoods = $util.emptyArray),
+                (ld.create = function (e) {
+                  return new ld(e);
+                }),
+                (ld.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    $root.com.xkhy.tafang.cmd.CmdSevenDayInfo.encode(
+                      e.cmdSevenDayInfo,
+                      t.uint32(10).fork(),
+                    ).ldelim(),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(18).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (ld.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdSevenDayShopBuyRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.cmdSevenDayInfo =
+                          $root.com.xkhy.tafang.cmd.CmdSevenDayInfo.decode(
+                            e,
+                            e.uint32(),
+                          );
+                        break;
+                      case 2:
+                        (o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                          o.tlCmdGoods.push(
+                            $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (o.hasOwnProperty("cmdSevenDayInfo")) return o;
+                  throw $util.ProtocolError("mr'cmdSevenDayInfo'", {
+                    instance: o,
+                  });
+                }),
+                ld)),
+              (r.CmdSevenDayTakeTaskRewardReqMsg =
+                ((ud.prototype.resId = 0),
+                (ud.create = function (e) {
+                  return new ud(e);
+                }),
+                (ud.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.resId), t
+                  );
+                }),
+                (ud.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdSevenDayTakeTaskRewardReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.resId = e.sint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("resId")) return o;
+                  throw $util.ProtocolError("mr'resId'", { instance: o });
+                }),
+                ud)),
+              (r.CmdSevenDayTakeTaskRewardRspMsg =
+                ((fd.prototype.cmdSevenDayInfo = null),
+                (fd.prototype.tlCmdGoods = $util.emptyArray),
+                (fd.create = function (e) {
+                  return new fd(e);
+                }),
+                (fd.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    $root.com.xkhy.tafang.cmd.CmdSevenDayInfo.encode(
+                      e.cmdSevenDayInfo,
+                      t.uint32(10).fork(),
+                    ).ldelim(),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(18).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (fd.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdSevenDayTakeTaskRewardRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.cmdSevenDayInfo =
+                          $root.com.xkhy.tafang.cmd.CmdSevenDayInfo.decode(
+                            e,
+                            e.uint32(),
+                          );
+                        break;
+                      case 2:
+                        (o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                          o.tlCmdGoods.push(
+                            $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (o.hasOwnProperty("cmdSevenDayInfo")) return o;
+                  throw $util.ProtocolError("mr'cmdSevenDayInfo'", {
+                    instance: o,
+                  });
+                }),
+                fd)),
+              (r.CmdSevenDayTakePointRewardReqMsg =
+                ((md.prototype.resId = 0),
+                (md.create = function (e) {
+                  return new md(e);
+                }),
+                (md.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.resId), t
+                  );
+                }),
+                (md.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdSevenDayTakePointRewardReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.resId = e.sint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("resId")) return o;
+                  throw $util.ProtocolError("mr'resId'", { instance: o });
+                }),
+                md)),
+              (r.CmdSevenDayTakePointRewardRspMsg =
+                ((pd.prototype.cmdSevenDayInfo = null),
+                (pd.prototype.tlCmdGoods = $util.emptyArray),
+                (pd.create = function (e) {
+                  return new pd(e);
+                }),
+                (pd.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    $root.com.xkhy.tafang.cmd.CmdSevenDayInfo.encode(
+                      e.cmdSevenDayInfo,
+                      t.uint32(10).fork(),
+                    ).ldelim(),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(18).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                (pd.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdSevenDayTakePointRewardRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.cmdSevenDayInfo =
+                          $root.com.xkhy.tafang.cmd.CmdSevenDayInfo.decode(
+                            e,
+                            e.uint32(),
+                          );
+                        break;
+                      case 2:
+                        (o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                          o.tlCmdGoods.push(
+                            $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (o.hasOwnProperty("cmdSevenDayInfo")) return o;
+                  throw $util.ProtocolError("mr'cmdSevenDayInfo'", {
+                    instance: o,
+                  });
+                }),
+                pd)),
+              (r.CmdSigninInfoReqMsg =
+                ((yd.create = function (e) {
+                  return new yd(e);
+                }),
+                (yd.encode = function (e, t) {
+                  return (t = t || $Writer.create());
+                }),
+                (yd.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      t = new $root.com.xkhy.tafang.cmd.CmdSigninInfoReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var o = e.uint32();
+                    e.skipType(7 & o);
+                  }
+                  return t;
+                }),
+                yd)),
+              (r.CmdSigninInfoRspMsg =
+                ((hd.prototype.cmdSigninInfo = null),
+                (hd.create = function (e) {
+                  return new hd(e);
+                }),
+                (hd.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()),
+                    $root.com.xkhy.tafang.cmd.CmdSigninInfo.encode(
+                      e.cmdSigninInfo,
+                      t.uint32(10).fork(),
+                    ).ldelim(),
+                    t
+                  );
+                }),
+                (hd.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o = new $root.com.xkhy.tafang.cmd.CmdSigninInfoRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1
+                      ? (o.cmdSigninInfo =
+                          $root.com.xkhy.tafang.cmd.CmdSigninInfo.decode(
+                            e,
+                            e.uint32(),
+                          ))
+                      : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("cmdSigninInfo")) return o;
+                  throw $util.ProtocolError("mr'cmdSigninInfo'", {
+                    instance: o,
+                  });
+                }),
+                hd)),
+              (r.CmdSigninTakeTaskRewardReqMsg =
+                ((gd.prototype.resId = 0),
+                (gd.create = function (e) {
+                  return new gd(e);
+                }),
+                (gd.encode = function (e, t) {
+                  return (
+                    (t = t || $Writer.create()).uint32(8).sint32(e.resId), t
+                  );
+                }),
+                (gd.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdSigninTakeTaskRewardReqMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    n >>> 3 == 1 ? (o.resId = e.sint32()) : e.skipType(7 & n);
+                  }
+                  if (o.hasOwnProperty("resId")) return o;
+                  throw $util.ProtocolError("mr'resId'", { instance: o });
+                }),
+                gd)),
+              (r.CmdSigninTakeTaskRewardRspMsg =
+                (($d.prototype.cmdSigninInfo = null),
+                ($d.prototype.tlCmdGoods = $util.emptyArray),
+                ($d.create = function (e) {
+                  return new $d(e);
+                }),
+                ($d.encode = function (e, t) {
+                  if (
+                    ((t = t || $Writer.create()),
+                    $root.com.xkhy.tafang.cmd.CmdSigninInfo.encode(
+                      e.cmdSigninInfo,
+                      t.uint32(10).fork(),
+                    ).ldelim(),
+                    e.tlCmdGoods && e.tlCmdGoods.length)
+                  )
+                    for (var r = 0; r < e.tlCmdGoods.length; ++r)
+                      $root.com.xkhy.tafang.cmd.CmdGoods.encode(
+                        e.tlCmdGoods[r],
+                        t.uint32(18).fork(),
+                      ).ldelim();
+                  return t;
+                }),
+                ($d.decode = function (e, t) {
+                  e instanceof $Reader || (e = $Reader.create(e));
+                  for (
+                    var r = void 0 === t ? e.len : e.pos + t,
+                      o =
+                        new $root.com.xkhy.tafang.cmd.CmdSigninTakeTaskRewardRspMsg();
+                    e.pos < r;
+
+                  ) {
+                    var n = e.uint32();
+                    switch (n >>> 3) {
+                      case 1:
+                        o.cmdSigninInfo =
+                          $root.com.xkhy.tafang.cmd.CmdSigninInfo.decode(
+                            e,
+                            e.uint32(),
+                          );
+                        break;
+                      case 2:
+                        (o.tlCmdGoods && o.tlCmdGoods.length) ||
+                          (o.tlCmdGoods = []),
+                          o.tlCmdGoods.push(
+                            $root.com.xkhy.tafang.cmd.CmdGoods.decode(
+                              e,
+                              e.uint32(),
+                            ),
+                          );
+                        break;
+                      default:
+                        e.skipType(7 & n);
+                    }
+                  }
+                  if (o.hasOwnProperty("cmdSigninInfo")) return o;
+                  throw $util.ProtocolError("mr'cmdSigninInfo'", {
+                    instance: o,
+                  });
+                }),
+                $d)),
+              (r.MessageId =
+                ((e = {}),
+                ((t = Object.create(e))[
+                  (e[1731012380] = "CmdTakeDayChallengeActRewardRspMsg")
+                ] = 1731012380),
+                (t[(e[650624469] = "CmdTakeMonthCardActRewardRspMsg")] =
+                  650624469),
+                (t[(e[364759860] = "CmdTakeRechargeGiftActRewardRspMsg")] =
+                  364759860),
+                (t[(e[904212428] = "CmdActivityJsonRspMsg")] = 904212428),
+                (t[(e[1769777808] = "CmdActivityLimitTimeInfoRspMsg")] =
+                  1769777808),
+                (t[(e[1469215657] = "CmdActivityLimitTimeTakeRspMsg")] =
+                  1469215657),
+                (t[(e[55511540] = "CmdBuySkinRspMsg")] = 55511540),
+                (t[(e[2115460800] = "CmdActivityLimitSkinInfoRspMsg")] =
+                  2115460800),
+                (t[(e[730391206] = "CmdActivityLimitSkinBuyRspMsg")] =
+                  730391206),
+                (t[(e[954352089] = "CmdEnterBattleRspMsg")] = 954352089),
+                (t[(e[986683025] = "CmdContinueNextBattleRspMsg")] = 986683025),
+                (t[(e[2140529010] = "CmdGemRefreshSkillRspMsg")] = 2140529010),
+                (t[(e[1914585408] = "CmdBattleDataUploadRspMsg")] = 1914585408),
+                (t[(e[475498478] = "CmdBattleResultRspMsg")] = 475498478),
+                (t[(e[881202280] = "CmdBattleStatisticsRspMsg")] = 881202280),
+                (t[(e[1668952987] = "CmdTakeStarRewardRspMsg")] = 1668952987),
+                (t[(e[1792000898] = "CmdTakeChapterRewardRspMsg")] =
+                  1792000898),
+                (t[(e[70842819] = "CmdBattleSweepRspMsg")] = 70842819),
+                (t[(e[140321439] = "CmdBattleRandomSkillRspMsg")] = 140321439),
+                (t[(e[355247302] = "CmdBattleSelectSkillRspMsg")] = 355247302),
+                (t[(e[1720724839] = "CmdBattlePreviewRspMsg")] = 1720724839),
+                (t[(e[1330132868] = "CmdBattleCompleteInfoRspMsg")] =
+                  1330132868),
+                (t[(e[224520948] = "CmdBattleTokenOpenRspMsg")] = 224520948),
+                (t[(e[2063652608] = "CmdBattleTokenTakeRewardRspMsg")] =
+                  2063652608),
+                (t[(e[952348427] = "CmdBattleTokenResetRspMsg")] = 952348427),
+                (t[(e[287063570] = "CmdBreachRspMsg")] = 287063570),
+                (t[(e[730345707] = "CmdBuyStaBuyRspMsg")] = 730345707),
+                (t[(e[2114050331] = "CmdBuyStaInfoRspMsg")] = 2114050331),
+                (t[(e[579891201] = "CmdCardBuyRspMsg")] = 579891201),
+                (t[(e[21015693] = "CmdCastleSkillUpLevelRspMsg")] = 21015693),
+                (t[(e[1359547363] = "CmdCastleSkillResearchRspMsg")] =
+                  1359547363),
+                (t[(e[1776254022] = "CmdCastleWorkShopOpenRspMsg")] =
+                  1776254022),
+                (t[(e[581980397] = "CmdCastleWorkShopUpLevelRspMsg")] =
+                  581980397),
+                (t[(e[367202545] = "CmdCastleWorkShopSpeedRspMsg")] =
+                  367202545),
+                (t[(e[310061251] = "CmdCastleWorkShopTakeRspMsg")] = 310061251),
+                (t[(e[1220313759] = "CmdCastleApprenticeUpRspMsg")] =
+                  1220313759),
+                (t[(e[492743159] = "CmdCastleApprenticeUpLevelRspMsg")] =
+                  492743159),
+                (t[(e[157500720] = "CmdCastleWallUpLevelRspMsg")] = 157500720),
+                (t[(e[486054753] = "CmdCastleWallQualityUpRspMsg")] =
+                  486054753),
+                (t[(e[108080165] = "CmdCastleWallSelectRspMsg")] = 108080165),
+                (t[(e[2070127885] = "CmdCastleWallUpSkillLevelRspMsg")] =
+                  2070127885),
+                (t[(e[1975570309] = "CmdChapterRewardRspMsg")] = 1975570309),
+                (t[(e[1356079122] = "CmdDayWeekMonthGiftGetRewardRspMsg")] =
+                  1356079122),
+                (t[(e[1005269291] = "CmdDayWeekMonthGiftInfoRspMsg")] =
+                  1005269291),
+                (t[(e[355499005] = "CmdDayWeekMonthGiftFreeBuyRspMsg")] =
+                  355499005),
+                (t[(e[1246543183] = "CmdEquipUpLevelAllRspMsg")] = 1246543183),
+                (t[(e[154590858] = "CmdEquipUpLevelRspMsg")] = 154590858),
+                (t[(e[806986012] = "CmdEquipSelectPageRspMsg")] = 806986012),
+                (t[(e[918039683] = "CmdEquipChangePageNameRspMsg")] =
+                  918039683),
+                (t[(e[1133773426] = "CmdEveryDaySignInInfoRspMsg")] =
+                  1133773426),
+                (t[(e[1704555072] = "CmdEveryDaySignInRspMsg")] = 1704555072),
+                (t[(e[1935261292] = "CmdEveryDayGetRewardsRspMsg")] =
+                  1935261292),
+                (t[(e[622072529] = "CmdFirstRechargeRewardRspMsg")] =
+                  622072529),
+                (t[(e[938272586] = "CmdFirstRechargeOpenRspMsg")] = 938272586),
+                (t[(e[2057674506] = "CmdFriendsApplyRspMsg")] = 2057674506),
+                (t[(e[552573225] = "CmdFriendsAddRspMsg")] = 552573225),
+                (t[(e[1262322162] = "CmdFriendsRefuseRspMsg")] = 1262322162),
+                (t[(e[1219983774] = "CmdFriendsRemoveRspMsg")] = 1219983774),
+                (t[(e[227867847] = "CmdFriendsBlackRspMsg")] = 227867847),
+                (t[(e[246249338] = "CmdFriendsSearchRspMsg")] = 246249338),
+                (t[(e[2055097216] = "CmdFriendGetEndRspMsg")] = 2055097216),
+                (t[(e[437546553] = "CmdFriendGetEndOneKeyRspMsg")] = 437546553),
+                (t[(e[1466069662] = "CmdFriendSendEndRspMsg")] = 1466069662),
+                (t[(e[384409047] = "CmdFriendSendEndOneKeyRspMsg")] =
+                  384409047),
+                (t[(e[1277358288] = "CmdFriendAgreeOneKeyRspMsg")] =
+                  1277358288),
+                (t[(e[1734010408] = "CmdFriendRefuseOneKeyRspMsg")] =
+                  1734010408),
+                (t[(e[1169482284] = "CmdFriendDetailRspMsg")] = 1169482284),
+                (t[(e[545204978] = "CmdFriendLikeRspMsg")] = 545204978),
+                (t[(e[78131250] = "CmdFriendBlackRemoveRspMsg")] = 78131250),
+                (t[(e[429905916] = "CmdFriendRefreshSuggestRspMsg")] =
+                  429905916),
+                (t[(e[827208359] = "CmdFuBenEnterRspMsg")] = 827208359),
+                (t[(e[1528771729] = "CmdFuBenDailyGetRewardRspMsg")] =
+                  1528771729),
+                (t[(e[427584667] = "CmdFuBenBuyTimesRspMsg")] = 427584667),
+                (t[(e[510764152] = "CmdFundGetInfoRspMsg")] = 510764152),
+                (t[(e[1902555017] = "CmdFundGetRewardRspMsg")] = 1902555017),
+                (t[(e[1855584437] = "CmdTakeGameCircleRewardRspMsg")] =
+                  1855584437),
+                (t[(e[723509321] = "CmdGemOnRspMsg")] = 723509321),
+                (t[(e[1557847038] = "CmdGemReplaceRspMsg")] = 1557847038),
+                (t[(e[561910022] = "CmdGemDownRspMsg")] = 561910022),
+                (t[(e[346087611] = "CmdGemRefineRspMsg")] = 346087611),
+                (t[(e[1149209122] = "CmdGemRefineSaveRspMsg")] = 1149209122),
+                (t[(e[1565473696] = "CmdGemComposeRspMsg")] = 1565473696),
+                (t[(e[998030141] = "CmdGemLockRspMsg")] = 998030141),
+                (t[(e[1938966802] = "CmdGemComposePreviewRspMsg")] =
+                  1938966802),
+                (t[(e[353871062] = "CmdGuideRecordRspMsg")] = 353871062),
+                (t[(e[142005541] = "CmdGuideReadRspMsg")] = 142005541),
+                (t[(e[1624091372] = "CmdGetHallRoleListRspMsg")] = 1624091372),
+                (t[(e[1443586620] = "CmdHangGetRewardRspMsg")] = 1443586620),
+                (t[(e[1023337980] = "CmdHangQuickRspMsg")] = 1023337980),
+                (t[(e[20353276] = "CmdHangTimeRspMsg")] = 20353276),
+                (t[(e[302212057] = "CmdHeroChangeRspMsg")] = 302212057),
+                (t[(e[914609230] = "CmdHeroLevelUpRspMsg")] = 914609230),
+                (t[(e[200868985] = "CmdHeroLevelUpOneKeyRspMsg")] = 200868985),
+                (t[(e[1722636353] = "CmdHeroOpenRspMsg")] = 1722636353),
+                (t[(e[647497073] = "CmdHeroUnlockGetInfoRspMsg")] = 647497073),
+                (t[(e[2024711478] = "CmdHeroUnlockRewardRspMsg")] = 2024711478),
+                (t[(e[486417821] = "CmdItemUseRspMsg")] = 486417821),
+                (t[(e[522720460] = "CmdItemBoxUseRspMsg")] = 522720460),
+                (t[(e[1090703712] = "CmdTakeLockMonsterBoxRspMsg")] =
+                  1090703712),
+                (t[(e[319013138] = "CmdMailListRspMsg")] = 319013138),
+                (t[(e[546189302] = "CmdMailReadRspMsg")] = 546189302),
+                (t[(e[172353567] = "CmdMailDeleteRspMsg")] = 172353567),
+                (t[(e[555367350] = "CmdMailTakeRewardRspMsg")] = 555367350),
+                (t[(e[163390926] = "CmdMallSEquipDrawRspMsg")] = 163390926),
+                (t[(e[1193344794] = "CmdMallLuckDrawRspMsg")] = 1193344794),
+                (t[(e[1185112280] = "CmdMallDailyShopBuyRspMsg")] = 1185112280),
+                (t[(e[115313430] = "CmdMallCoinBuyRspMsg")] = 115313430),
+                (t[(e[1322643093] = "CmdMallGetDataRspMsg")] = 1322643093),
+                (t[(e[345265589] = "CmdGetRankRspMsg")] = 345265589),
+                (t[(e[87323966] = "CmdUpdateRedDotRspMsg")] = 87323966),
+                (t[(e[805392448] = "CmdGoodsRedDotDispelRspMsg")] = 805392448),
+                (t[(e[158618628] = "CmdRoleLoginRspMsg")] = 158618628),
+                (t[(e[1996633358] = "CmdRoleChangeNameRspMsg")] = 1996633358),
+                (t[(e[912768250] = "CmdRoleChangeImgRspMsg")] = 912768250),
+                (t[(e[225100382] = "CmdRoleUploadPlatformImgRspMsg")] =
+                  225100382),
+                (t[(e[2075087664] = "CmdRoleChangeHeadFrameRspMsg")] =
+                  2075087664),
+                (t[(e[1357989782] = "CmdEndBuyInfoRspMsg")] = 1357989782),
+                (t[(e[1695409208] = "CmdEndBuyRspMsg")] = 1695409208),
+                (t[(e[1865990615] = "CmdRoleEndUpdateRspMsg")] = 1865990615),
+                (t[(e[1065397953] = "CmdMiningBuyRspMsg")] = 1065397953),
+                (t[(e[452401139] = "CmdCodeExchangeRspMsg")] = 452401139),
+                (t[(e[17475600] = "CmdRoleTakeFirstChargeRspMsg")] = 17475600),
+                (t[(e[1151490410] = "CmdRoleWatchAdvertRspMsg")] = 1151490410),
+                (t[(e[1505925414] = "CmdRoleInfoViewRspMsg")] = 1505925414),
+                (t[(e[1594668726] = "CmdRoleDouYinRewardRspMsg")] = 1594668726),
+                (t[(e[1597596872] = "CmdRoleAppletShareRspMsg")] = 1597596872),
+                (t[(e[1186069383] = "CmdRoleAppletShareRewardRspMsg")] =
+                  1186069383),
+                (t[(e[1810611536] = "CmdRoleGuanKaGiftSelectRspMsg")] =
+                  1810611536),
+                (t[(e[549296840] = "CmdRoleGuanKaGiftBuyRspMsg")] = 549296840),
+                (t[(e[648739037] = "CmdRunePutOnRspMsg")] = 648739037),
+                (t[(e[887086199] = "CmdRuneTakeOffRspMsg")] = 887086199),
+                (t[(e[224396995] = "CmdRuneReplaceRspMsg")] = 224396995),
+                (t[(e[1308719965] = "CmdRuneSynthesisRspMsg")] = 1308719965),
+                (t[(e[1160730652] = "CmdRuneSynthesisOneKeyRspMsg")] =
+                  1160730652),
+                (t[(e[883372771] = "CmdShareGetRewardRspMsg")] = 883372771),
+                (t[(e[669018575] = "CmdShareStateRspMsg")] = 669018575),
+                (t[(e[1338068263] = "CmdShopBuyRspMsg")] = 1338068263),
+                (t[(e[1330212203] = "CmdContinuityGiftInfoRspMsg")] =
+                  1330212203),
+                (t[(e[1554306220] = "CmdContinuityGiftRewardRspMsg")] =
+                  1554306220),
+                (t[(e[402025121] = "CmdContinuityGiftFinishRewardRspMsg")] =
+                  402025121),
+                (t[(e[923167072] = "CmdTakeSpiritAnimalBoxRspMsg")] =
+                  923167072),
+                (t[(e[1911316089] = "CmdChangeUsedSkinRspMsg")] = 1911316089),
+                (t[(e[2051518427] = "CmdSpiritAnimalLevelUpRspMsg")] =
+                  2051518427),
+                (t[(e[1991681903] = "CmdSpiritAnimalStepUpRspMsg")] =
+                  1991681903),
+                (t[(e[1439043070] = "CmdSpiritAnimalBattleRspMsg")] =
+                  1439043070),
+                (t[(e[454379051] = "CmdSpiritAnimalResetRspMsg")] = 454379051),
+                (t[(e[1924442819] = "CmdSpiritAnimalResetPreviewRspMsg")] =
+                  1924442819),
+                (t[(e[2058086284] = "CmdSystemSyncTimeRspMsg")] = 2058086284),
+                (t[(e[1915513454] = "CmdSystemGmRspMsg")] = 1915513454),
+                (t[(e[323387391] = "CmdGmListRspMsg")] = 323387391),
+                (t[(e[855569897] = "CmdRecordClientAniRspMsg")] = 855569897),
+                (t[(e[1343478075] = "CmdGetAllPlayClientAniRspMsg")] =
+                  1343478075),
+                (t[(e[867503290] = "CmdSevenDayInfoRspMsg")] = 867503290),
+                (t[(e[1979875530] = "CmdSevenDayShopBuyRspMsg")] = 1979875530),
+                (t[(e[328767495] = "CmdSevenDayTakeTaskRewardRspMsg")] =
+                  328767495),
+                (t[(e[1539905038] = "CmdSevenDayTakePointRewardRspMsg")] =
+                  1539905038),
+                (t[(e[946249011] = "CmdSigninInfoRspMsg")] = 946249011),
+                (t[(e[75320742] = "CmdSigninTakeTaskRewardRspMsg")] = 75320742),
+                (t[(e[331957642] = "CmdCacheBroMsg")] = 331957642),
+                (t[(e[2041625045] = "CmdRoleOfflineBroMsg")] = 2041625045),
+                (t[(e[495748573] = "CmdRechargeBroMsg")] = 495748573),
+                (t[(e[658416489] = "CmdModifyItemBroMsg")] = 658416489),
+                (t[(e[1253466612] = "CmdBattleBroMsg")] = 1253466612),
+                (t[(e[528672976] = "CmdMallBroMsg")] = 528672976),
+                (t[(e[1882529373] = "CmdEndBroMsg")] = 1882529373),
+                (t[(e[11546745] = "CmdRollBroMsg")] = 11546745),
+                (t[(e[915823971] = "CmdGuanKaGiftBroMsg")] = 915823971),
+                t)),
+              r)),
+            L)),
+          o)),
+        W
+      );
+    })()),
+    ("object" == typeof window && window) ||
+      ("object" == typeof self && self) ||
+      this);
+$window___.protobufRoot = $root;

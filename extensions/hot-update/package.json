@@ -1,0 +1,11 @@
+{
+    "package_version": 2,
+    "name": "hot-update",
+    "version": "1.0.0",
+    "author": "City1001",
+    "editor": ">=3.8.0",
+    "description": "原生热更新构建扩展：注入 main.js 搜索路径恢复片段，并在构建根目录生成随包的 project.manifest。",
+    "contributions": {
+        "builder": "./builder"
+    }
+}

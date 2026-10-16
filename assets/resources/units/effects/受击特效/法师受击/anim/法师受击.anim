@@ -1,0 +1,98 @@
+{
+  "__type__": "cc.AnimationClip",
+  "_name": "法师受击",
+  "_objFlags": 0,
+  "_native": "",
+  "sample": 18,
+  "speed": 1,
+  "wrapMode": 1,
+  "events": [],
+  "_duration": 0.722222,
+  "_keys": [],
+  "_stepness": 0,
+  "curveDatas": {},
+  "_curves": [],
+  "_commonTargets": [],
+  "_hash": 0,
+  "_tracks": [
+    {
+      "__type__": "cc.animation.ObjectTrack",
+      "_binding": {
+        "__type__": "cc.animation.TrackBinding",
+        "path": {
+          "__type__": "cc.animation.TrackPath",
+          "_paths": [
+            {
+              "__type__": "cc.animation.ComponentPath",
+              "component": "cc.Sprite"
+            },
+            "spriteFrame"
+          ]
+        },
+        "proxy": null
+      },
+      "_channel": {
+        "__type__": "cc.animation.Channel",
+        "_curve": {
+          "__type__": "cc.ObjectCurve",
+          "_times": [
+            0.0,
+            0.055555556,
+            0.111111111,
+            0.166666667,
+            0.222222222,
+            0.277777778,
+            0.333333333,
+            0.388888889,
+            0.444444444,
+            0.5,
+            0.555555556,
+            0.611111111,
+            0.666666667
+          ],
+          "_values": [
+            {
+              "__uuid__": "c410073a-50ab-41c4-ad31-cc03e732bc1d@f9941"
+            },
+            {
+              "__uuid__": "14e6e35e-e56e-49e5-b8e4-e70e1748a3e1@f9941"
+            },
+            {
+              "__uuid__": "f7601368-6502-4bd8-802f-838bd0b763b9@f9941"
+            },
+            {
+              "__uuid__": "b7eaee2f-37e9-466d-9526-a8386b4b40ca@f9941"
+            },
+            {
+              "__uuid__": "d782cbc0-717f-4f83-a9bf-d46dd58935d3@f9941"
+            },
+            {
+              "__uuid__": "fe5224b6-5339-4f58-81c7-36530cc8c352@f9941"
+            },
+            {
+              "__uuid__": "ba63bf67-c4dc-4691-af9c-1b38aeb355b4@f9941"
+            },
+            {
+              "__uuid__": "6c5110c2-ef10-4e2e-9da6-3a34f69fc63d@f9941"
+            },
+            {
+              "__uuid__": "4bd46913-ceec-48ff-8bdd-68c9cd38581c@f9941"
+            },
+            {
+              "__uuid__": "364aca3e-fab1-482e-947c-4a87c29030b9@f9941"
+            },
+            {
+              "__uuid__": "3cb5399e-b24c-4773-af9e-fe5af4a9c924@f9941"
+            },
+            {
+              "__uuid__": "a63c8c64-4109-44ae-aaa8-ad1ac578ddf7@f9941"
+            },
+            {
+              "__uuid__": "790aec2d-43cf-449a-a019-848c4142670c@f9941"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

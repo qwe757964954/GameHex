@@ -1,0 +1,14 @@
+{
+  "ver": "1.1.50",
+  "importer": "prefab",
+  "imported": true,
+  "uuid": "0ed6ca8a-7a0a-4e7e-b972-48ede7977556",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {},
+  "userData": {
+    "syncNodeName": "射手受击",
+    "hasIcon": false
+  }
+}

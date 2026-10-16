@@ -1,0 +1,13 @@
+[{"type":1,"name":"普通物品","key":"putong"},
+{"type":2,"name":"头像","key":"touxiang"},
+{"type":3,"name":"宝箱","key":"baoxiang"},
+{"type":4,"name":"装备","key":"zhuangbei"},
+{"type":5,"name":"技能书","key":"jinengshu"},
+{"type":6,"name":"角色资源","key":"jueseziyuan"},
+{"type":7,"name":"宝石","key":"baoshi"},
+{"type":8,"name":"装备图纸","key":"zhuangbeituzhi"},
+{"type":9,"name":"皮肤","key":"pifu"},
+{"type":10,"name":"灵兽","key":"lingshou"},
+{"type":11,"name":"客户端展示类型","key":"kehuduanzhanshileixing"},
+{"type":12,"name":"武将","key":"general"},
+{"type":13,"name":"军师","key":"advisor"}]

@@ -1,0 +1,75 @@
+// 兵种「整体外轮廓」的放大副本材质（挂在第二份 sp.Skeleton 实例上，排在角色后面）。
+//
+// 口径：只保留**不透明**像素并染成轮廓色 ⇒ 副本比角色大出来的那一圈就是描边，
+// 且它是**整只角色（所有散件）的最小包围外形**，不是某个部件各自的边。
+//
+// 🔴 为什么不做「片元里采样四周 alpha」那种邻域检测描边（最常见的 2D 写法）：
+//    spine 的 `frameUV` 是**图集（atlas）坐标**，不是"当前这张碎图"的归一 UV。
+//    实测 `skel/豌豆射手/wdss.atlas.txt`：292×292 一张图集塞 16 块碎图、块间只留 1 个像素，
+//    碎图面积和占画布约 80% ⇒ 任何 ≥1.5 texel 的采样步长都会落到**隔壁碎图**上
+//    （凭空长出一条直线假轮廓）；而 spine 默认**紧裁**，角色真正的外缘又常常正好压在
+//    碎图矩形边界上，矩形外根本没有片元 ⇒ 真描边反而在那一段**断开**。
+//    放大副本只读本像素、零邻域采样 ⇒ 既无假边也无断边。
+//
+// ⚠️ 顶点色是**预乘**的：`sp.Skeleton.premultipliedAlpha` 默认 true，assembler 写进
+//    `a_color.rgb` 的是 `色 × 节点 alpha`，配套混合是 `ONE / ONE_MINUS_SRC_ALPHA`。
+//    所以输出必须回到同一口径（rgb 与 alpha 同乘 mask），否则描边会随节点 alpha 一起变暗。
+//    副本的 `premultipliedAlpha` 在 ZCUnitView.attachOutlineCopy 里显式钉成 true。
+CCEffect %{
+  techniques:
+  - passes:
+    - vert: outline-copy-vs:vert
+      frag: outline-copy-fs:frag
+      depthStencilState:
+        depthTest: false
+        depthWrite: false
+      blendState:
+        targets:
+        - blend: true
+          blendSrc: src_alpha
+          blendDst: one_minus_src_alpha
+          blendSrcAlpha: one
+          blendDstAlpha: one_minus_src_alpha
+      rasterizerState:
+        cullMode: none
+}%
+
+CCProgram outline-copy-vs %{
+  precision highp float;
+  #include <builtin/uniforms/cc-global>
+  #if USE_LOCAL
+    #include <builtin/uniforms/cc-local>
+  #endif
+  in vec3 a_position;
+  in vec2 a_texCoord;
+  in vec4 a_color;
+  out vec2 copyUV;
+  out vec4 copyColor;
+
+  vec4 vert () {
+    vec4 pos = vec4(a_position, 1.0);
+    #if USE_LOCAL
+      pos = cc_matWorld * pos;
+    #endif
+    copyUV = a_texCoord;
+    copyColor = a_color;
+    return cc_matViewProj * pos;
+  }
+}%
+
+CCProgram outline-copy-fs %{
+  precision highp float;
+  in vec2 copyUV;
+  in vec4 copyColor;
+  #pragma builtin(local)
+  layout(set = 2, binding = 12) uniform sampler2D cc_spriteTexture;
+
+  // 羽化带只用来抹掉紧裁边缘的硬锯齿；图集 1 texel ≈ 角色 0.24px，所以实际描边宽度
+  // 完全由副本的放大倍数决定（ZCUnitView.OUTLINE_COPY_SCALE），这里再宽只会发毛。
+  #define COPY_ALPHA_FEATHER 0.35
+
+  vec4 frag () {
+    float mask = smoothstep(0.0, COPY_ALPHA_FEATHER, texture(cc_spriteTexture, copyUV).a);
+    return vec4(copyColor.rgb * mask, copyColor.a * mask);
+  }
+}%

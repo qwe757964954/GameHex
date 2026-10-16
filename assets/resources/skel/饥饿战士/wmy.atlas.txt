@@ -1,0 +1,69 @@
+
+wmy.png
+size: 264,264
+format: RGBA8888
+filter: Linear,Linear
+repeat: none
+wwm_0
+  rotate: false
+  xy: 2, 85
+  size: 179, 177
+  orig: 179, 177
+  offset: 0, 0
+  index: -1
+wwm_1
+  rotate: false
+  xy: 183, 69
+  size: 71, 67
+  orig: 71, 67
+  offset: 0, 0
+  index: -1
+wwm_2
+  rotate: false
+  xy: 2, 3
+  size: 62, 64
+  orig: 62, 64
+  offset: 0, 0
+  index: -1
+wwm_3
+  rotate: false
+  xy: 66, 9
+  size: 43, 58
+  orig: 43, 58
+  offset: 0, 0
+  index: -1
+wwm_4
+  rotate: true
+  xy: 183, 138
+  size: 48, 73
+  orig: 48, 73
+  offset: 0, 0
+  index: -1
+wwm_5
+  rotate: true
+  xy: 111, 45
+  size: 38, 68
+  orig: 38, 68
+  offset: 0, 0
+  index: -1
+wwm_6
+  rotate: false
+  xy: 205, 17
+  size: 53, 50
+  orig: 53, 50
+  offset: 0, 0
+  index: -1
+wwm_7
+  rotate: false
+  xy: 183, 188
+  size: 77, 74
+  orig: 77, 74
+  offset: 0, 0
+  index: -1
+yz
+  rotate: false
+  xy: 111, 2
+  size: 92, 41
+  orig: 92, 41
+  offset: 0, 0
+  index: -1

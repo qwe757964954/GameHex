@@ -1,0 +1,87 @@
+{
+  "__type__": "cc.AnimationClip",
+  "_name": "熊猫人-run",
+  "_objFlags": 0,
+  "_native": "",
+  "sample": 8,
+  "speed": 1,
+  "wrapMode": 2,
+  "events": [],
+  "_duration": 1.0,
+  "_keys": [],
+  "_stepness": 0,
+  "curveDatas": {},
+  "_curves": [],
+  "_commonTargets": [],
+  "_hash": 0,
+  "_tracks": [
+    {
+      "__type__": "cc.animation.ObjectTrack",
+      "_binding": {
+        "__type__": "cc.animation.TrackBinding",
+        "path": {
+          "__type__": "cc.animation.TrackPath",
+          "_paths": [
+            {
+              "__type__": "cc.animation.ComponentPath",
+              "component": "cc.Sprite"
+            },
+            "spriteFrame"
+          ]
+        },
+        "proxy": null
+      },
+      "_channel": {
+        "__type__": "cc.animation.Channel",
+        "_curve": {
+          "__type__": "cc.ObjectCurve",
+          "_times": [
+            0.0,
+            0.125,
+            0.25,
+            0.375,
+            0.5,
+            0.625,
+            0.75,
+            0.875
+          ],
+          "_values": [
+            {
+              "__uuid__": "416de373-4e31-4b2a-b343-d12c41b41484@f9941"
+            },
+            {
+              "__uuid__": "f7a8b76c-955b-4c90-a136-177e890ea379@f9941"
+            },
+            {
+              "__uuid__": "c73f6263-9cbe-44bb-a71d-8443f73000bf@f9941"
+            },
+            {
+              "__uuid__": "90815892-310e-4ae1-b613-c60fb1d338c7@f9941"
+            },
+            {
+              "__uuid__": "50236806-d101-49a8-990b-240ac1e95c7b@f9941"
+            },
+            {
+              "__uuid__": "5a61a889-973f-4691-9bc8-a25794aa0491@f9941"
+            },
+            {
+              "__uuid__": "97e97877-4754-452b-adce-91be4217f71a@f9941"
+            },
+            {
+              "__uuid__": "e668ab30-875b-4a99-ab08-98e927225cfe@f9941"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "_exoticAnimation": null,
+  "_events": [],
+  "_embeddedPlayers": [],
+  "_additiveSettings": {
+    "__type__": "cc.AnimationClipAdditiveSettings",
+    "enabled": false,
+    "refClip": null
+  },
+  "_auxiliaryCurveEntries": []
+}

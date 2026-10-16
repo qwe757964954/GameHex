@@ -1,0 +1,1 @@
+[{"resId":1,"privilege":[{"desc":"体力上限+25","param":{"value":25},"type":2},{"desc":"无限次快速扫荡","param":{"value":1},"type":4}],"buyReward":[{"number":300,"resId":10}],"dayReward":[{"number":3000,"resId":7},{"number":50,"resId":10},{"number":5,"resId":10011},{"number":30,"resId":10012}]}]

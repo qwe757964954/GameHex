@@ -1,0 +1,75 @@
+{
+  "__type__": "cc.AnimationClip",
+  "_name": "飞剑术-loop",
+  "_objFlags": 0,
+  "_native": "",
+  "sample": 8,
+  "speed": 1,
+  "wrapMode": 2,
+  "events": [],
+  "_duration": 0.625,
+  "_keys": [],
+  "_stepness": 0,
+  "curveDatas": {},
+  "_curves": [],
+  "_commonTargets": [],
+  "_hash": 0,
+  "_tracks": [
+    {
+      "__type__": "cc.animation.ObjectTrack",
+      "_binding": {
+        "__type__": "cc.animation.TrackBinding",
+        "path": {
+          "__type__": "cc.animation.TrackPath",
+          "_paths": [
+            {
+              "__type__": "cc.animation.ComponentPath",
+              "component": "cc.Sprite"
+            },
+            "spriteFrame"
+          ]
+        },
+        "proxy": null
+      },
+      "_channel": {
+        "__type__": "cc.animation.Channel",
+        "_curve": {
+          "__type__": "cc.ObjectCurve",
+          "_times": [
+            0.0,
+            0.125,
+            0.25,
+            0.375,
+            0.5
+          ],
+          "_values": [
+            {
+              "__uuid__": "750b350c-aa2c-49dc-8da8-d398dbb2fe06@f9941"
+            },
+            {
+              "__uuid__": "6d81950a-8c8e-4ca3-aa3e-5a2173be6a93@f9941"
+            },
+            {
+              "__uuid__": "5398009e-386f-44a5-a8c0-261fdd53a74b@f9941"
+            },
+            {
+              "__uuid__": "977cebc0-a32e-4ae6-9297-3db7999c8f44@f9941"
+            },
+            {
+              "__uuid__": "da41c6da-955f-4959-b431-6a1c544eb759@f9941"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "_exoticAnimation": null,
+  "_events": [],
+  "_embeddedPlayers": [],
+  "_additiveSettings": {
+    "__type__": "cc.AnimationClipAdditiveSettings",
+    "enabled": false,
+    "refClip": null
+  },
+  "_auxiliaryCurveEntries": []
+}

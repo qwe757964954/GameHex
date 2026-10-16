@@ -1,0 +1,99 @@
+{
+  "__type__": "cc.AnimationClip",
+  "_name": "民兵_武将技能-loop",
+  "_objFlags": 0,
+  "_native": "",
+  "sample": 12,
+  "speed": 1,
+  "wrapMode": 2,
+  "events": [],
+  "_duration": 0.9166666667,
+  "_keys": [],
+  "_stepness": 0,
+  "curveDatas": {},
+  "_curves": [],
+  "_commonTargets": [],
+  "_hash": 0,
+  "_tracks": [
+    {
+      "__type__": "cc.animation.ObjectTrack",
+      "_binding": {
+        "__type__": "cc.animation.TrackBinding",
+        "path": {
+          "__type__": "cc.animation.TrackPath",
+          "_paths": [
+            {
+              "__type__": "cc.animation.ComponentPath",
+              "component": "cc.Sprite"
+            },
+            "spriteFrame"
+          ]
+        },
+        "proxy": null
+      },
+      "_channel": {
+        "__type__": "cc.animation.Channel",
+        "_curve": {
+          "__type__": "cc.ObjectCurve",
+          "_times": [
+            0.0,
+            0.0833333333,
+            0.1666666667,
+            0.25,
+            0.3333333333,
+            0.4166666667,
+            0.5,
+            0.5833333333,
+            0.6666666667,
+            0.75,
+            0.8333333333
+          ],
+          "_values": [
+            {
+              "__uuid__": "311aba44-8466-4418-8fb4-ca5f8746f342@f9941"
+            },
+            {
+              "__uuid__": "bbd8c5d9-8698-48b4-b7a2-0ce538c9a1e3@f9941"
+            },
+            {
+              "__uuid__": "0e7e10b2-1bb7-497e-9662-86c5d68b4b5a@f9941"
+            },
+            {
+              "__uuid__": "e92c455c-b638-4767-8140-1b31c25c1383@f9941"
+            },
+            {
+              "__uuid__": "c540405c-8eff-4f40-8030-ed8ebcfaba61@f9941"
+            },
+            {
+              "__uuid__": "6bee2acc-8d0d-4bed-aaed-be17b77a8876@f9941"
+            },
+            {
+              "__uuid__": "8eacff6a-8074-4798-a1dd-e047351cbb11@f9941"
+            },
+            {
+              "__uuid__": "4d2ff510-b903-4b72-ab84-31f6acfe96e5@f9941"
+            },
+            {
+              "__uuid__": "cab3d347-2fbd-4f27-9bb8-f1579b84a10c@f9941"
+            },
+            {
+              "__uuid__": "ceb0763c-27de-484d-98c8-cffaecaa6555@f9941"
+            },
+            {
+              "__uuid__": "36ca42a6-5499-4ea1-91d7-808e897bcbfd@f9941"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "_exoticAnimation": null,
+  "_events": [],
+  "_embeddedPlayers": [],
+  "_additiveSettings": {
+    "__type__": "cc.AnimationClipAdditiveSettings",
+    "enabled": false,
+    "refClip": null
+  },
+  "_auxiliaryCurveEntries": []
+}

@@ -1,0 +1,174 @@
+
+cxk.png
+size: 364,364
+format: RGBA8888
+filter: Linear,Linear
+repeat: none
+lq
+  rotate: false
+  xy: 104, 41
+  size: 80, 80
+  orig: 80, 80
+  offset: 0, 0
+  index: -1
+lq2
+  rotate: false
+  xy: 186, 144
+  size: 107, 107
+  orig: 107, 107
+  offset: 0, 0
+  index: -1
+lq3
+  rotate: true
+  xy: 186, 253
+  size: 109, 108
+  orig: 109, 108
+  offset: 0, 0
+  index: -1
+st
+  rotate: true
+  xy: 104, 123
+  size: 87, 80
+  orig: 87, 80
+  offset: 0, 0
+  index: -1
+tf1
+  rotate: true
+  xy: 277, 2
+  size: 20, 24
+  orig: 20, 24
+  offset: 0, 0
+  index: -1
+tf2
+  rotate: false
+  xy: 303, 3
+  size: 14, 19
+  orig: 14, 19
+  offset: 0, 0
+  index: -1
+tf3
+  rotate: true
+  xy: 186, 44
+  size: 98, 103
+  orig: 98, 103
+  offset: 0, 0
+  index: -1
+tf4
+  rotate: true
+  xy: 344, 2
+  size: 23, 16
+  orig: 23, 16
+  offset: 0, 0
+  index: -1
+tf5
+  rotate: true
+  xy: 321, 27
+  size: 25, 23
+  orig: 25, 23
+  offset: 0, 0
+  index: -1
+tf6
+  rotate: true
+  xy: 2, 98
+  size: 112, 100
+  orig: 112, 100
+  offset: 0, 0
+  index: -1
+tf7
+  rotate: true
+  xy: 316, 145
+  size: 17, 21
+  orig: 17, 21
+  offset: 0, 0
+  index: -1
+tf8
+  rotate: true
+  xy: 96, 22
+  size: 17, 18
+  orig: 17, 18
+  offset: 0, 0
+  index: -1
+tou
+  rotate: false
+  xy: 2, 212
+  size: 182, 150
+  orig: 182, 150
+  offset: 0, 0
+  index: -1
+yingzi
+  rotate: false
+  xy: 2, 3
+  size: 92, 41
+  orig: 92, 41
+  offset: 0, 0
+  index: -1
+yj
+  rotate: false
+  xy: 295, 164
+  size: 39, 87
+  orig: 39, 87
+  offset: 0, 0
+  index: -1
+ys
+  rotate: false
+  xy: 291, 24
+  size: 28, 65
+  orig: 28, 65
+  offset: 0, 0
+  index: -1
+ysz
+  rotate: false
+  xy: 321, 54
+  size: 31, 35
+  orig: 31, 35
+  offset: 0, 0
+  index: -1
+yy
+  rotate: false
+  xy: 291, 91
+  size: 50, 51
+  orig: 50, 51
+  offset: 0, 0
+  index: -1
+yytk
+  rotate: false
+  xy: 321, 4
+  size: 21, 21
+  orig: 21, 21
+  offset: 0, 0
+  index: -1
+zj
+  rotate: true
+  xy: 2, 46
+  size: 50, 87
+  orig: 50, 87
+  offset: 0, 0
+  index: -1
+zs
+  rotate: true
+  xy: 186, 14
+  size: 28, 52
+  orig: 28, 52
+  offset: 0, 0
+  index: -1
+zsz
+  rotate: true
+  xy: 240, 19
+  size: 23, 35
+  orig: 23, 35
+  offset: 0, 0
+  index: -1
+zy
+  rotate: false
+  xy: 296, 317
+  size: 45, 45
+  orig: 45, 45
+  offset: 0, 0
+  index: -1
+zytk
+  rotate: true
+  xy: 295, 144
+  size: 18, 19
+  orig: 18, 19
+  offset: 0, 0
+  index: -1

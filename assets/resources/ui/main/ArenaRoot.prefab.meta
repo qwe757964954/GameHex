@@ -1,0 +1,14 @@
+{
+  "ver": "1.1.50",
+  "importer": "prefab",
+  "imported": true,
+  "uuid": "e9fbc7f2-f631-4dfc-9f0b-a78c1205fc79",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {},
+  "userData": {
+    "syncNodeName": "ArenaRoot",
+    "hasIcon": false
+  }
+}

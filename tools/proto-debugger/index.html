@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>协议调试台 · Cocos Proto Debugger</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171b22;
+    --panel-2: #1d232c;
+    --border: #2a313c;
+    --text: #d7dde6;
+    --muted: #8b96a5;
+    --accent: #0ea5a4;
+    --green: #34d399;
+    --red: #f87171;
+    --amber: #fbbf24;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 14px/1.6 "Microsoft YaHei", system-ui, sans-serif;
+    height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+  }
+  header {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 10px 14px; background: var(--panel); border-bottom: 1px solid var(--border);
+  }
+  .brand { font-size: 16px; font-weight: 700; color: var(--accent); white-space: nowrap; }
+  .brand .sub { font-size: 12px; color: var(--muted); font-weight: 400; margin-left: 8px; }
+  .conn { display: flex; align-items: center; gap: 8px; flex: 1; flex-wrap: wrap; }
+  #url {
+    flex: 1 1 300px; min-width: 260px;
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 6px; padding: 6px 10px; font-size: 13px; outline: none;
+  }
+  #url:focus { border-color: var(--accent); }
+  button {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 14px; font-size: 13px; cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #04121a; font-weight: 700; }
+  button.primary:hover { filter: brightness(1.1); }
+  .chk { display: flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12px; }
+  #connState { font-size: 12px; padding: 3px 10px; border-radius: 10px; background: #3a2222; color: var(--red); }
+  #connState.on { background: #12332c; color: var(--green); }
+
+  main { flex: 1; display: flex; gap: 10px; padding: 10px; min-height: 0; }
+  .left { width: 430px; min-width: 360px; display: flex; flex-direction: column; gap: 10px; }
+  .block { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+  .block label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  #protoName, #jsonBody {
+    width: 100%; background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 6px; outline: none; font-family: Consolas, Menlo, monospace;
+  }
+  #protoName { padding: 6px 10px; font-size: 13px; }
+  #protoName:focus, #jsonBody:focus { border-color: var(--accent); }
+  #jsonBody { min-height: 200px; resize: vertical; padding: 8px 10px; font-size: 12.5px; line-height: 1.5; }
+  .quick { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .quick button { font-size: 12px; padding: 4px 10px; }
+  .row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  #sendHint { font-size: 12px; color: var(--muted); }
+  .hint { font-size: 12px; color: var(--muted); line-height: 1.8; }
+  .hint code { color: var(--accent); }
+
+  .right { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .log-head {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 6px 12px; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px 8px 0 0; border-bottom: none; font-size: 13px;
+  }
+  .log { flex: 1; overflow-y: auto; background: var(--panel); border: 1px solid var(--border); border-radius: 0 0 8px 8px; padding: 6px 8px; }
+  .item { border-bottom: 1px dashed var(--border); padding: 6px 4px; font-family: Consolas, Menlo, monospace; font-size: 12.5px; }
+  .item:last-child { border-bottom: none; }
+  .item .head { display: flex; align-items: center; gap: 8px; }
+  .tag { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 4px; white-space: nowrap; }
+  .tag.tx { background: #12332c; color: var(--green); }
+  .tag.rx { background: #1c2e4a; color: #7db4ff; }
+  .tag.err { background: #3a2222; color: var(--red); }
+  .tag.sys { background: #33290f; color: var(--amber); }
+  .time { color: var(--muted); font-size: 11px; }
+  .pname { color: var(--text); font-weight: 600; }
+  .item pre { background: #10141a; border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; margin-top: 5px; overflow-x: auto; color: #a8c0c0; white-space: pre-wrap; word-break: break-all; }
+  .item .raw { color: var(--muted); font-size: 11px; margin-top: 3px; word-break: break-all; }
+  .empty { color: var(--muted); text-align: center; padding: 30px 0; font-size: 13px; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: #2f3845; border-radius: 4px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">协议调试台<span class="sub">Cocos Creator 3.8 · protobuf（与游戏内 ProtoCoder 同口径）</span></div>
+  <div class="conn">
+    <input id="url" spellcheck="false" placeholder="ws://host:port/server（登录时中心服返回的 serverAddress）">
+    <button id="btnConnect" class="primary">连接</button>
+    <label class="chk"><input type="checkbox" id="chkHeartbeat" checked>心跳 5s</label>
+    <label class="chk"><input type="checkbox" id="chkShowHb">显示心跳</label>
+    <span id="connState">未连接</span>
+  </div>
+</header>
+<main>
+  <section class="left">
+    <div class="block">
+      <label>协议名（ReqMsg）</label>
+      <input id="protoName" list="protoList" spellcheck="false" placeholder="如 CmdSystemGmReqMsg，可下拉选择或粘贴">
+      <datalist id="protoList"></datalist>
+      <div class="quick">
+        <button data-proto="CmdSystemSyncTimeReqMsg" data-json="{}">心跳 / 对时</button>
+        <button data-proto="CmdSystemGmReqMsg" data-json="{&quot;cmd&quot;:&quot;addItem 10001 1&quot;}">GM 指令</button>
+      </div>
+    </div>
+    <div class="block" style="flex:1;display:flex;flex-direction:column;">
+      <label>参数（JSON，int64 建议用字符串）</label>
+      <textarea id="jsonBody" spellcheck="false">{
+  "cmd": "addItem 10001 1"
+}</textarea>
+      <div class="row">
+        <button id="btnSend" class="primary">发送</button>
+        <button id="btnFormat">格式化</button>
+        <span id="sendHint"></span>
+      </div>
+    </div>
+    <div class="block hint">
+      全局 API（F12 控制台直接可用）：<br>
+      <code>GameSocket.send("CmdSystemGmReqMsg", { "cmd": "addItem 10001 1" })</code><br>
+      协议名带 RspMsg 后缀或不带后缀会自动换算；<code>GameSocket.protocols</code> 可枚举全部 259 个可发送协议。
+    </div>
+  </section>
+  <section class="right">
+    <div class="log-head"><span>收发日志</span><button id="btnClear">清空</button></div>
+    <div id="log" class="log"><div class="empty">尚未连接。输入服务器地址（ws://host:port/server）后点击「连接」。</div></div>
+  </section>
+</main>
+
+<script src="proto-runtime.js"></script>
+<script>
+(() => {
+  'use strict';
+
+  // =====================================================================
+  // 协议包（与游戏内 ProtoCoder 同一份静态模块）
+  // =====================================================================
+  const root = (globalThis.ProtoRuntime && ProtoRuntime.default) || globalThis.ProtoRuntime;
+  const P = root.com.xkhy.tafang.cmd;          // 业务协议包
+  const N = root.com.cca.core.network.cmd;     // 网络协议包（ClientCmdData / ServerCmdData）
+
+  // 枚举可发送协议（对齐 ProtoCoder.initMessage：MessageId 键去 RspMsg 后缀 + ReqMsg）
+  const protocols = [];
+  const idToRsp = {};
+  for (const key of Object.keys(P.MessageId)) {
+    const id = P.MessageId[key];
+    const name = key.replace('RspMsg', '');
+    if (name.endsWith('BroMsg') || name.endsWith('CacheAppMsg')) { idToRsp[id] = key; continue; }
+    const reqName = name + 'ReqMsg';
+    const rspName = name + 'RspMsg';
+    if (P[reqName] && P[rspName]) { protocols.push({ reqName, rspName, id }); idToRsp[id] = rspName; }
+  }
+  protocols.sort((a, b) => a.reqName.localeCompare(b.reqName));
+
+  // =====================================================================
+  // DOM
+  // =====================================================================
+  const $ = (id) => document.getElementById(id);
+  const urlInput = $('url');
+  const protoInput = $('protoName');
+  const jsonBody = $('jsonBody');
+  const connState = $('connState');
+  const logEl = $('log');
+  const chkHeartbeat = $('chkHeartbeat');
+  const chkShowHb = $('chkShowHb');
+  const datalist = $('protoList');
+
+  datalist.innerHTML = '';
+  for (const p of protocols) {
+    const opt = document.createElement('option');
+    opt.value = p.reqName;
+    datalist.appendChild(opt);
+  }
+
+  // 记住上次地址与参数
+  try {
+    urlInput.value = localStorage.getItem('protoDebug.url') || 'ws://127.0.0.1:8080/server';
+    jsonBody.value = localStorage.getItem('protoDebug.json') || jsonBody.value;
+  } catch (e) { /* 隐私模式等场景忽略 */ }
+  const saveState = () => {
+    try {
+      localStorage.setItem('protoDebug.url', urlInput.value);
+      localStorage.setItem('protoDebug.json', jsonBody.value);
+    } catch (e) { /* ignore */ }
+  };
+
+  // =====================================================================
+  // 日志（textContent 渲染，避免服务器数据注入 DOM）
+  // =====================================================================
+  function toPlain(v) {
+    if (v == null) return v;
+    if (typeof v === 'bigint') return v.toString();
+    // protobufjs Long（int64/sint64/uint64 等）
+    if (typeof v.toNumber === 'function' && typeof v.multiply === 'function') return v.toString();
+    if (v instanceof Uint8Array) return `bytes[${v.length}] ${toHex(v)}`;
+    if (ArrayBuffer.isView(v)) return `bytes[${v.byteLength}]`;
+    if (Array.isArray(v)) return v.map(toPlain);
+    if (typeof v === 'object') {
+      const o = {};
+      for (const k of Object.keys(v)) o[k] = toPlain(v[k]);
+      return o;
+    }
+    return v;
+  }
+  function toHex(bytes) {
+    let s = '';
+    for (let i = 0; i < bytes.length && i < 24; i++) s += bytes[i].toString(16).padStart(2, '0');
+    if (bytes.length > 24) s += '…';
+    return s;
+  }
+
+  let emptyCleared = false;
+  function log(dir, name, body, raw) {
+    if (!emptyCleared) { logEl.innerHTML = ''; emptyCleared = true; }
+    const isHb = name === 'CmdSystemSyncTimeReqMsg' || name === 'CmdSystemSyncTimeRspMsg';
+    if (isHb && !chkShowHb.checked) return;
+
+    const item = document.createElement('div');
+    item.className = 'item';
+
+    const head = document.createElement('div');
+    head.className = 'head';
+    const tag = document.createElement('span');
+    tag.className = 'tag ' + dir.toLowerCase();
+    tag.textContent = dir;
+    const time = document.createElement('span');
+    time.className = 'time';
+    time.textContent = new Date().toLocaleTimeString('zh-CN', { hour12: false }) + '.' + String(Date.now() % 1000).padStart(3, '0');
+    const pname = document.createElement('span');
+    pname.className = 'pname';
+    pname.textContent = name || '';
+    head.appendChild(tag); head.appendChild(time); head.appendChild(pname);
+    item.appendChild(head);
+
+    if (body !== undefined && body !== null) {
+      const pre = document.createElement('pre');
+      pre.textContent = JSON.stringify(toPlain(body), null, 2);
+      item.appendChild(pre);
+    }
+    if (raw) {
+      const div = document.createElement('div');
+      div.className = 'raw';
+      div.textContent = raw;
+      item.appendChild(div);
+    }
+    logEl.appendChild(item);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  // =====================================================================
+  // WebSocket + 编解码（与游戏内 GameNet / ConnectedNetState 同口径）
+  // =====================================================================
+  let ws = null;
+  let clientIndex = 0;
+  let hbTimer = null;
+
+  function resolveReqName(input) {
+    let s = (input || '').trim();
+    if (!s) return null;
+    if (s.endsWith('ReqMsg')) return P[s] ? s : null;
+    if (s.endsWith('RspMsg')) { const r = s.replace(/RspMsg$/, 'ReqMsg'); return P[r] ? r : null; }
+    const r = s + 'ReqMsg';
+    return P[r] ? r : null;
+  }
+
+  function send(protoName, json) {
+    const reqName = resolveReqName(protoName);
+    if (!reqName) { log('SYS', '未找到协议：' + protoName); return false; }
+    if (!ws || ws.readyState !== 1) { log('SYS', '未连接服务器，无法发送'); return false; }
+
+    let param = {};
+    if (json != null) {
+      try { param = typeof json === 'string' ? JSON.parse(json) : json; }
+      catch (e) { log('SYS', 'JSON 解析失败：' + e.message); return false; }
+    }
+
+    const messageId = P.MessageId[reqName.replace(/ReqMsg$/, 'RspMsg')];
+    const body = P[reqName].encode(P[reqName].create(param)).finish();
+    const index = ++clientIndex;
+    const wrapped = N.ClientCmdData.encode(N.ClientCmdData.create({
+      messageId, clientIndex: index, data: body, appendData: null,
+    })).finish();
+    ws.send(wrapped.buffer.slice(wrapped.byteOffset, wrapped.byteOffset + wrapped.byteLength));
+    log('TX', reqName, param);
+    return index;
+  }
+
+  async function inflateZlib(bytes) {
+    // 服务器 compress=true 时用 zlib 封装（RFC1950），对应 DecompressionStream('deflate')
+    const ds = new DecompressionStream('deflate');
+    const stream = new Blob([bytes]).stream().pipeThrough(ds);
+    const buf = await new Response(stream).arrayBuffer();
+    return new Uint8Array(buf);
+  }
+
+  async function onMessage(ev) {
+    let scd;
+    try { scd = N.ServerCmdData.decode(new Uint8Array(ev.data)); }
+    catch (e) { log('SYS', 'ServerCmdData 解码失败：' + e.message); return; }
+
+    if (scd.cmdCaches && scd.cmdCaches.length) {
+      log('SYS', `收到缓存更新 ${scd.cmdCaches.length} 组（调试台不处理，仅提示）`);
+    }
+    if (scd.result) {
+      let data = scd.data;
+      if (scd.compress) {
+        try { data = await inflateZlib(data); }
+        catch (e) { log('SYS', '回包解压失败：' + e.message); return; }
+      }
+      let last = 0;
+      for (let i = 0; i < scd.messageIds.length; i++) {
+        const msgId = scd.messageIds[i];
+        const rspName = idToRsp[msgId] || ('messageId#' + msgId);
+        const seg = data.subarray(last, scd.splits[i]);
+        last = scd.splits[i];
+        let obj = null;
+        try { obj = P[rspName] ? P[rspName].decode(seg) : { __raw: toHex(seg) }; }
+        catch (e) { obj = { __decodeError: e.message }; }
+        log('RX', rspName, obj, `clientIndex=${scd.clientIndex} bytes=${seg.length}`);
+        if (GameSocket.onResponse) {
+          try { GameSocket.onResponse(rspName, obj, scd.clientIndex); } catch (e) { /* 用户回调异常不阻断 */ }
+        }
+      }
+    } else {
+      let tips = null;
+      try { tips = P.CmdTips.decode(scd.data); } catch (e) { /* ignore */ }
+      log('ERR', 'CmdTips', tips, `clientIndex=${scd.clientIndex}`);
+      if (GameSocket.onTips) {
+        try { GameSocket.onTips(tips); } catch (e) { /* ignore */ }
+      }
+    }
+  }
+
+  function setState(on) {
+    connState.textContent = on ? '已连接' : '未连接';
+    connState.classList.toggle('on', on);
+    btnConnect.textContent = on ? '断开' : '连接';
+  }
+
+  function connect() {
+    if (ws && (ws.readyState === 0 || ws.readyState === 1)) { ws.close(); return; }
+    const url = urlInput.value.trim();
+    if (!url) { log('SYS', '请先填写服务器地址'); return; }
+    saveState();
+    log('SYS', '正在连接 ' + url);
+    const sock = new WebSocket(url);
+    sock.binaryType = 'arraybuffer';
+    ws = sock;
+    sock.onopen = () => {
+      setState(true);
+      log('SYS', '连接成功：' + url);
+      if (GameSocket.onOpen) { try { GameSocket.onOpen(); } catch (e) { /* ignore */ } }
+    };
+    sock.onmessage = (ev) => { onMessage(ev).catch((e) => log('SYS', '收包处理异常：' + e.message)); };
+    sock.onclose = (ev) => {
+      if (ws === sock) { ws = null; clientIndex = 0; }
+      setState(false);
+      log('SYS', '连接关闭 code=' + ev.code + ' reason=' + (ev.reason || ''));
+      if (GameSocket.onClose) { try { GameSocket.onClose(ev); } catch (e) { /* ignore */ } }
+    };
+    sock.onerror = () => { log('SYS', '连接错误：' + url + '（地址不可达或被拒绝）'); };
+  }
+
+  // 心跳：与游戏内 HEARTBEAT_INTERVAL_MS=5000 一致，默认开启保活
+  function startHeartbeat() {
+    if (hbTimer) return;
+    hbTimer = setInterval(() => {
+      if (GameSocket.heartbeatEnabled && ws && ws.readyState === 1) {
+        send('CmdSystemSyncTimeReqMsg', {});
+      }
+    }, 5000);
+  }
+  startHeartbeat();
+
+  // =====================================================================
+  // 全局 API：GameSocket
+  // =====================================================================
+  window.GameSocket = {
+    connect,
+    disconnect: () => { if (ws) ws.close(); },
+    get connected() { return !!(ws && ws.readyState === 1); },
+    send,
+    resolve: resolveReqName,
+    protocols: protocols.map((p) => p.reqName),
+    heartbeatEnabled: true,
+    onResponse: null,   // (rspName, data, clientIndex) => {}
+    onTips: null,       // (tips) => {}
+    onOpen: null,
+    onClose: null,
+    onError: null,
+  };
+
+  // =====================================================================
+  // UI 事件
+  // =====================================================================
+  const btnConnect = $('btnConnect');
+  btnConnect.addEventListener('click', connect);
+  $('btnSend').addEventListener('click', () => {
+    const idx = send(protoInput.value, jsonBody.value);
+    $('sendHint').textContent = idx ? '已发送 #' + idx : '';
+    saveState();
+  });
+  $('btnFormat').addEventListener('click', () => {
+    try {
+      const obj = JSON.parse(jsonBody.value);
+      jsonBody.value = JSON.stringify(obj, null, 2);
+    } catch (e) {
+      $('sendHint').textContent = 'JSON 解析失败：' + e.message;
+    }
+  });
+  $('btnClear').addEventListener('click', () => { logEl.innerHTML = ''; emptyCleared = false; });
+  document.querySelectorAll('.quick button').forEach((b) => {
+    b.addEventListener('click', () => {
+      protoInput.value = b.dataset.proto;
+      jsonBody.value = b.dataset.json;
+      $('sendHint').textContent = '';
+    });
+  });
+  protoInput.addEventListener('change', () => {
+    const r = resolveReqName(protoInput.value);
+    if (r && r !== protoInput.value) protoInput.value = r;
+  });
+  chkHeartbeat.addEventListener('change', () => { GameSocket.heartbeatEnabled = chkHeartbeat.checked; });
+
+  // 键盘：Ctrl/Cmd + Enter 发送
+  jsonBody.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      const idx = send(protoInput.value, jsonBody.value);
+      $('sendHint').textContent = idx ? '已发送 #' + idx : '';
+      saveState();
+    }
+  });
+})();
+</script>
+</body>
+</html>

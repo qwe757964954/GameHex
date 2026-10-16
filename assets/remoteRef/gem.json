@@ -1,0 +1,6 @@
+[{"resId":1000000,"gemType":1,"type":7,"equipId":401111,"desc":"头盔","icon":"图标_宝石_帽子"},
+{"resId":1010000,"gemType":2,"type":7,"equipId":401112,"desc":"胸甲","icon":"图标_宝石_衣服"},
+{"resId":1020000,"gemType":3,"type":7,"equipId":401113,"desc":"武器","icon":"图标_宝石_武器"},
+{"resId":1030000,"gemType":4,"type":7,"equipId":401114,"desc":"护腿","icon":"图标_宝石_项链"},
+{"resId":1040000,"gemType":5,"type":7,"equipId":401115,"desc":"护腕","icon":"图标_宝石_戒指"},
+{"resId":1050000,"gemType":6,"type":7,"equipId":401116,"desc":"靴子","icon":"图标_宝石_鞋子"}]

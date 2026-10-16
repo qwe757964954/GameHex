@@ -1,0 +1,4 @@
+[{"id":1,"desc":"银币x520","rewards":[{"number":520,"resId":7}],"icon":"图标_货币_几个铜钱","priceType":10,"cost":50,"discount":0,"interval":5400,"freeTimes":0,"adTimes":1,"limit":-1},
+{"id":2,"desc":"银币x300","rewards":[{"number":300,"resId":7}],"icon":"图标_货币_几个铜钱","priceType":10,"cost":0,"discount":0,"interval":86400,"freeTimes":0,"adTimes":0,"limit":-1},
+{"id":3,"desc":"银币x1000","rewards":[{"number":1000,"resId":7}],"icon":"图标_货币_少量铜钱","priceType":10,"cost":90,"discount":9,"interval":10800,"freeTimes":0,"adTimes":0,"limit":-1},
+{"id":4,"desc":"银币x5000","rewards":[{"number":5000,"resId":7}],"icon":"图标_货币_大量铜钱","priceType":10,"cost":400,"discount":8,"interval":43200,"freeTimes":0,"adTimes":0,"limit":-1}]

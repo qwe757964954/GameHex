@@ -1,0 +1,13 @@
+[{"plan":1,"rechargeProcess":6,"rechargeReward":[{"number":1,"resId":10992}]},
+{"plan":1,"rechargeProcess":30,"rechargeReward":[{"number":2,"resId":10992}]},
+{"plan":1,"rechargeProcess":68,"rechargeReward":[{"number":1000,"resId":10012}]},
+{"plan":1,"rechargeProcess":128,"rechargeReward":[{"number":3000,"resId":10012}]},
+{"plan":1,"rechargeProcess":328,"rechargeReward":[{"number":48,"resId":8}]},
+{"plan":2,"rechargeProcess":100,"rechargeReward":[{"number":2,"resId":10992}]},
+{"plan":2,"rechargeProcess":200,"rechargeReward":[{"number":4,"resId":10992}]},
+{"plan":2,"rechargeProcess":300,"rechargeReward":[{"number":5,"resId":10992}]},
+{"plan":2,"rechargeProcess":500,"rechargeReward":[{"number":10,"resId":10992}]},
+{"plan":2,"rechargeProcess":700,"rechargeReward":[{"number":2400,"resId":10012}]},
+{"plan":2,"rechargeProcess":1000,"rechargeReward":[{"number":110,"resId":8}]},
+{"plan":3,"rechargeProcess":3000,"rechargeReward":[{"number":1,"resId":10018}]},
+{"plan":3,"rechargeProcess":6000,"rechargeReward":[{"number":1,"resId":10019}]}]

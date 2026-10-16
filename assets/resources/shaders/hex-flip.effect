@@ -1,0 +1,139 @@
+// Cocos Creator 3.8 Sprite shader —— 地块「抬起 + 翻面」的透视变形与开口补光。
+//
+// 三件事：
+//  1. 真透视变形：2D UI 走正交投影，绕水平轴旋转在数学上只有 `y *= cos`（= 等比压扁），
+//     没有「近大远小」就只剩「被拍扁」。这里在顶点上做一套**简化 3D 旋转 + 透视除法**：
+//     先把顶点统一到世界空间、以格心为原点，绕水平轴旋转得到「竖直位置 ry」与「深度 depth」
+//     （地块顶部向后倒、depth 为负 = 远离观察者），再让 x 与 y **同时**乘一个由深度决定的
+//     透视因子 q（远端收缩、近端温和放大）⇒ 上半部收成梯形、且高度方向也近大远小，
+//     这才是立体翻面；早先版本只对 x 做线性缩放、y 纯压扁，读起来像扇形而不是翻面。
+//  2. 体积明暗：片元按「旋转后深度」对向后倒的远端（顶部）压暗、对近端（底部）轻微提亮，
+//     明暗随翻转角增强 —— 压扁本身没有体积感，这道随翻转出现的明暗交界才让面「转得起来」。
+//  3. 轻微补光：只落在正面开口附近与贴图真实轮廓；侧面主体由 GroundGlow 绘制。
+// `flipPerspective = 0` / `glowStrength = 0` 时退化成「无透视的原样渲染」，便于对照。
+//
+// ⚠️ 适用范围（2026-10-14 起）：**只剩领地地图的随机资源格翻开在用**（`TerritoryHexFlip`）。
+//    对局地块的收场已改成「原地等比缩到 0.1」（`hexShrinkFx`），既不压扁、也不再挂这份材质。
+//    别把它接回 `ZCHexView` —— 对局地块是合批的，挂上自定义材质会整格退出合批。
+CCEffect %{
+  techniques:
+  - passes:
+    - vert: hex-flip-vs:vert
+      frag: hex-flip-fs:frag
+      depthStencilState:
+        depthTest: false
+        depthWrite: false
+      blendState:
+        targets:
+        - blend: true
+          blendSrc: src_alpha
+          blendDst: one_minus_src_alpha
+          blendSrcAlpha: one
+          blendDstAlpha: one_minus_src_alpha
+      rasterizerState:
+        cullMode: none
+      properties:
+        flipCos: { value: 1.0 }
+        flipSin: { value: 0.0 }
+        flipPerspective: { value: 0.32 }
+        flipCenter: { value: [0.0, 0.0] }
+        flipHalfHeight: { value: 59.5 }
+        glowStrength: { value: 0.0 }
+}%
+
+CCProgram hex-flip-vs %{
+  precision highp float;
+  #include <builtin/uniforms/cc-global>
+  #if USE_LOCAL
+    #include <builtin/uniforms/cc-local>
+  #endif
+  in vec3 a_position;
+  in vec2 a_texCoord;
+  in vec4 a_color;
+  out vec2 frameUV;
+  out vec4 color;
+  // 发光强度 / 深度 / 翻转角 / 贴图自身高度用 varying 送片元 —— 避免片元再声明同名 UBO
+  // （两边 layout 必须逐字一致，容易踩）。
+  out float glowPulse;
+  out float vDepth;  // 旋转后归一化深度（以半高为单位）：负 = 顶部向后（远），正 = 底部向前（近）
+  out float vTurn;   // 翻转角的 sin：0 = 正面，1 = 侧视（驱动明暗 / 棱光随翻转出现）
+  out float vLocalY; // 地块自身的高度；图集 UV 不能用来判断上缘和下缘
+
+  uniform HexFlip {
+    vec2 flipCenter;       // 格心世界坐标（渲染层每帧写）
+    float flipCos;         // 绕水平轴旋转的 cos：1 = 正面，0 = 侧视
+    float flipSin;         // 同上的 sin：0 = 正面，1 = 侧视
+    float flipPerspective; // 透视强度：0 = 纯压扁（对照），越大远端收缩 / 近端放大越强
+    float flipHalfHeight;  // 地块半高，用来把 y 归一化到 -1..1
+    float glowStrength;    // 开口补光强度 0~1（翻面/抬起期间由渲染层写）
+  };
+
+  vec4 vert () {
+    vec4 pos = vec4(a_position, 1.0);
+    #if USE_LOCAL
+      pos = cc_matWorld * pos;
+    #endif
+    // 先统一到世界空间，再绕**格心**做变形（直接改 pos.y 会绕世界原点缩放）。
+    float lx = pos.x - flipCenter.x;
+    float ly = pos.y - flipCenter.y;
+    float hh = max(flipHalfHeight, 0.0001);
+    float u = clamp(ly / hh, -1.0, 1.0);  // 相对转轴的归一化高度：顶部 +1、底部 -1
+
+    // ① 绕水平轴（X）旋转：顶部向后倒（远离观察者）。
+    float ry = ly * flipCos;          // 旋转后的竖直坐标
+    float depth = -u * flipSin;       // 归一化深度：顶部 u>0 ⇒ 负（远），底部 ⇒ 正（近）
+
+    // ② 透视除法：上缘明显退远，下缘只轻微靠近，读出倾斜的厚地块。
+    float p = clamp(flipPerspective, 0.0, 0.8);
+    float qFar = 1.0 / (1.0 + p * 3.1 * max(0.0, -depth));  // 远端收窄，侧视时仍看出梯形
+    float qNear = 1.0 / (1.0 - p * 0.45 * max(0.0, depth)); // 近端克制，避免底边鼓起
+    float q = qFar * qNear;
+    // x、y **同时**乘透视因子：远端不仅变窄，也更贴近转轴（近大远小），才有真实梯形。
+    pos.x = flipCenter.x + lx * q;
+    pos.y = flipCenter.y + ry * q;
+
+    pos = cc_matViewProj * pos;
+    frameUV = a_texCoord;
+    color = a_color;
+    glowPulse = glowStrength;
+    vDepth = depth;
+    vTurn = flipSin;
+    vLocalY = u;
+    return pos;
+  }
+}%
+
+CCProgram hex-flip-fs %{
+  precision highp float;
+  #include <builtin/internal/embedded-alpha>
+  in vec2 frameUV;
+  in vec4 color;
+  in float glowPulse;
+  in float vDepth;
+  in float vTurn;
+  in float vLocalY;
+  #pragma builtin(local)
+  layout(set = 2, binding = 12) uniform sampler2D cc_spriteTexture;
+
+  vec4 frag () {
+    vec4 texel = CCSampleWithAlphaSeparated(cc_spriteTexture, frameUV);
+    vec4 result = texel;
+    // 与内置 sprite 同口径：sprite.color 照常参与（地块的阵营染色 / 去色图都靠它）。
+    result *= color;
+
+    // ---- 体积明暗：向后倒的远端（顶部）压暗、向前的近端（底部）轻微提亮；随翻转角增强 ----
+    // 正面（vTurn=0）时 mix 系数为 0，原样渲染；越翻到侧面，明暗交界越明显 ⇒ 面「转得起来」。
+    float shade = 1.0 - 0.70 * max(0.0, -vDepth) + 0.18 * max(0.0, vDepth);
+    result.rgb *= mix(1.0, shade, vTurn);
+
+    // 阵营色的 alpha 约为 0.6；轮廓必须用贴图原始 alpha，否则整张正面都会被当成亮边。
+    float rim = texel.a * (1.0 - texel.a) * 4.0;
+    // 正面开口约在图中心下方 30px（vLocalY≈-0.5）；薄薄补一层，避免出现转轴横条。
+    float lowerMask = 1.0 - smoothstep(-0.55, -0.30, vLocalY);
+    float frontEdge = exp(-pow((vLocalY + 0.5) / 0.07, 2.0));
+    float glow = glowPulse * lowerMask * (0.08 + rim * 0.35 + frontEdge * 0.18);
+    result.rgb += color.rgb * glow;
+    result.a = min(1.0, result.a + lowerMask * glowPulse * rim * 0.15);
+    return result;
+  }
+}%

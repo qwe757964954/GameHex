@@ -1,0 +1,14 @@
+{
+  "ver": "1.1.50",
+  "importer": "prefab",
+  "imported": true,
+  "uuid": "9d6ad955-8d1c-4f7b-bb3e-9613ca511040",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {},
+  "userData": {
+    "syncNodeName": "LeagueNorthRewardRow",
+    "hasIcon": false
+  }
+}

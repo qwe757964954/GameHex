@@ -1,0 +1,363 @@
+import type { ZCAttackTrait } from './ZCCombatCatalog';
+import type {
+    ZCBuildingShake, ZCBuildingType, ZCCardReveal, ZCFloatText, ZCFloatTextKind, ZCHexActivation, ZCHitFx,
+} from './ZCGameTypes';
+import type { ZCOwner } from './ZCMapConfig';
+import {
+    HEX_FLIP_SECONDS, HEX_PULSE_CYCLE_SECONDS,
+} from '../../../core/hex/HexFlipPresentation';
+
+const FLOAT_TEXT_CAP = 96;
+const CARD_REVEAL_CAP = 24;
+const HEX_ACTIVATION_CAP = 24;
+/**
+ * 受击特效队列上限。
+ *
+ * 比飘字小一个量级：受击特效是**贴在被打者身上的一次性闪光**，视觉上更抢眼，一屏里
+ * 同时铺几十个会糊成一片；超出的直接丢最旧的（与飘字同策略：丢最旧、不阻塞新事件）。
+ * 一波 4 个兵的齐射也只占 4~8 个，远没到上限 —— 这个上限是给「塔防守城高频互射」兜底的。
+ */
+const HIT_FX_CAP = 64;
+/**
+ * 建筑抖动通知的上限。
+ *
+ * 比其它队列都小：这是**一次性、取走即空**的通道（见 `drainBuildingShakes`），正常一帧最多
+ * 攒下「一局里所有主城 + 所有金矿同时到点」的那个数（个位数）。上限只兜「渲染层整段没在跑
+ * （切后台 / 结算弹窗期间）还一直产金」这种极端情况 —— 丢最旧的，不许它涨成内存泄漏。
+ */
+const BUILDING_SHAKE_CAP = 32;
+/** 空抖动队列的共享实例（常态返回它 ⇒ 渲染层不必判 null，也不产生分配）。 */
+const EMPTY_BUILDING_SHAKES: readonly Readonly<ZCBuildingShake>[] = [];
+
+/**
+ * 地块**脉冲段**的时长（秒）—— 激活轴的第 ① 段：播一道美术水波纹。
+ *
+ * 山猫口径（2026-10-15 v3：「播放改成一次」）：只播 **1 道**美术水波纹
+ * （`HEX_PULSE_CYCLE_SECONDS = 0.7s`，一段就是一道）。
+ * 曲线与选帧都在 `core/hex/HexFlipPresentation.hexPulseFx`。
+ *
+ *  首批兵的推迟时刻（`ZCGameModel.scheduleFirstBarracksUnit`）也跟这一段走 ——
+ * 单位是实体、没有「未开始」态，波纹还在扩的时候不能让兵提前站上来。
+ *
+ *  想改「几道波」只改这个乘数（1 = 一道）；波纹速度只改 core 的 `HEX_PULSE_CYCLE_SECONDS`。
+ */
+export const ZC_HEX_PULSE_SECONDS = HEX_PULSE_CYCLE_SECONDS;
+/**
+ * 地块**缩没段**的时长（秒）—— 激活轴的 ②：整格**原地等比缩到 `HEX_SHRINK_MIN_SCALE`**。
+ *
+ * 🔴 2026-10-15 row13 用户口径：「② 缩没段和 ① 脉冲段 **同步播放**」⇒ 两段**并发**（同起同收），
+ * 不再像先前那样「脉冲播完才轮到缩没」。所以长度取的是脉冲段的 `ZC_HEX_PULSE_SECONDS`，
+ * **不是** core 那份「抬手 → 收场」的 `HEX_FLIP_SECONDS`：缩没收得比波快，就会剩一段
+ * 「格子已经没了、波还在原地扩」的空窗。
+ * 曲线仍是 `hexShrinkFx`（**零位移**、只缩不压扁，见 `HexFlipPresentation`）。
+ *
+ * 语义位置：点击那一刻，波纹从中心扩散、地块同时开始收；`ZC_HEX_PULSE_SECONDS` 末两者一起收干净，
+ * 舞台随即交给卡牌。两段都**不许抬起**（`tileLift` 恒 0）。
+ */
+export const ZC_HEX_SHRINK_SECONDS = ZC_HEX_PULSE_SECONDS;
+/**
+ * core 的「抬手 → 收场」共用时长（秒）—— **只剩领地地图的随机资源格翻面在消费**。
+ *
+ * 对局自 2026-10-15 起改用 `ZC_HEX_SHRINK_SECONDS`（与脉冲段并发），**不再消费本值**；
+ * 保留导出只为「对局侧要引用 core 这个常量时有个带说明的入口」，并提醒：
+ * 改 core 的 `HEX_FLIP_SECONDS` 会同时影响领地翻格的节奏。
+ */
+export const ZC_HEX_FLIP_SECONDS = HEX_FLIP_SECONDS;
+/**
+ * **建筑生成段**（秒）：卡牌开始淡出的那一刻衔接播，**与卡牌淡出重叠**。
+ *
+ * 为什么是「跟卡牌淡出重叠」而不是排在卡牌之后：卡牌最后一段淡出时，格子如果还空着
+ * （建筑隐藏、也没图标）就是一片空白六边形，观众看到的是「卡没了 → 空的 → 建筑才冒出来」。
+ * 建筑从淡出开始那一刻起由小变大，卡牌淡完时建筑已经长起来了，中间没有空窗。
+ *
+ * 取 0.36s ≈ 1.5 倍卡牌生成段（卡牌的弹入占它自己时长的 0.1），
+ * 两条曲线同一个形状，节奏看起来就是一回事。它只是**建筑自己的生长时长**，
+ * 不单独占一段激活时间轴 —— 建筑在卡牌淡出窗内就长完了。
+ */
+export const ZC_HEX_BUILDING_SECONDS = 0.36;
+/**
+ * **卡牌弹出时刻**（从点击起算的秒数）= **点击动画**（① 脉冲 ∥ ② 缩没）的结束。
+ *
+ * 🔴 需求原话（2026-10-15 row13）：「带 ui 和 icon 的地块缩小动画与脉动动画同步播放，
+ * **点击动画即将结束时，再展示卡牌生成动画**」⇒ 点击动画 = max(脉冲, 缩没) = `ZC_HEX_PULSE_SECONDS`，
+ * 卡牌就在这一刻接棒。
+ *
+ * 🔴 这是「卡牌起点」的**唯一真源**：`pushCardReveal` 的 `startedAt`、row6 的按住窗
+ * （`ZC_HEX_NEIGHBOR_HOLD_SECONDS`）、兵营首批兵的推迟时刻（`ZCGameModel`）都必须锚它 ——
+ * 2026-10-15 吃过一次亏：迁移时只改了其中一处，另一处仍锚旧段，整条链路偏了半截。
+ */
+export const ZC_CARD_START_SECONDS = ZC_HEX_PULSE_SECONDS;
+/**
+ * 抽卡小卡牌的生命周期（秒）—— 卡牌段**固定 1.156s**。
+ *
+ * 🔴 与上一版（总长钉 2.24、卡牌段由总长反推）的差别：现在**卡牌段是固定的**，总长由它
+ * 加上点击动画推出来。起因是 row13 把「脉冲 + 缩没」由串行改成并发，点击动画从 1.084s
+ * 缩到 0.7s ⇒ 总长自然从 2.24 缩到 **1.856**
+ * （用户 2026-10-15 在「总长缩到 1.856s」与「缩没拉伸到 0.7s / 总长 2.24」之间选了这个）。
+ *
+ * ⚠️ 别为了把总长凑回 2.24 去改本值：卡牌的弹入 / 淡出节奏都按它算，
+ * 拉长会让「弹出 → 淡出」的手感整个变慢。
+ */
+export const ZC_CARD_REVEAL_SECONDS = 1.156;
+/**
+ * 地块激活表现的总时长（秒）—— **也是卡牌淡出结束的那一刻**。
+ *
+ * 轴上是**两段**：① 脉冲 ∥ ② 缩没（**并发**，合起来 `ZC_HEX_PULSE_SECONDS` 0.7s）→ ③ 卡牌 1.156s；
+ * 建筑在卡牌淡出窗内长完、不占段。现值 = 0.7 + 1.156 = **1.856**。
+ *
+ * 🔴 由 2.24 改成 1.856（2026-10-15，row13 的「同步播放」）：点击动画少掉串行时缩没那 0.384s。
+ * 旧的 2.24 是上一版口径「卡牌淡出结束从 2.784 加快到 2.24」，已被本次并发改动取代。
+ */
+export const ZC_HEX_ACTIVATION_SECONDS = ZC_CARD_START_SECONDS + ZC_CARD_REVEAL_SECONDS;
+/**
+ * 卡牌段起点的轴占比 = 点击动画 / 总长。
+ *
+ * ⚠️ 换算「卡牌进度 → 激活进度」必须用本常量（用例里的 `atCard` 走的就是它）。
+ * （旧版另有一个 `ZC_HEX_FLIP_RATIO`「缩没段占比」，并发之后缩没不再独占一段，已删除。）
+ */
+export const ZC_CARD_START_RATIO = ZC_CARD_START_SECONDS / ZC_HEX_ACTIVATION_SECONDS;
+/**
+ * 卡牌轴在激活总时长里的占比 —— 卡牌段起点之后、激活结束之前正好是整段卡牌。
+ */
+export const ZC_CARD_AXIS_RATIO = ZC_CARD_REVEAL_SECONDS / ZC_HEX_ACTIVATION_SECONDS;
+/**
+ * 卡牌开始淡出的进度（0~1），与 `ZCGameCardReveal.prefab` 上 `fadeStartProgress` 同值。
+ *
+ * 地块要**正好在卡牌开始淡出这一刻**原尺寸回场：早了会在不透明的卡牌底下白弹一次、
+ * 晚了卡牌已经透出棋盘底色（那一瞬间地里是空的）。所以两边必须同值，
+ * `ZCHexView` 用它切「整格隐藏 → 地块回场」。
+ */
+export const ZC_CARD_FADE_START_PROGRESS = 0.62;
+/**
+ * 「开发后新点亮的邻格」可开发外观的**延迟量**（秒）—— 需求口径（2026-10-15 row6）。
+ *
+ * 需求原话：「消耗金币点击方块后，三个新扩展的方块展示时间延迟 0.2s，等待卡牌生成动画
+ * 开始播放后再展示出来」。这里只钉**延迟量**本身；起算点见 `ZC_HEX_NEIGHBOR_HOLD_SECONDS`。
+ */
+export const ZC_HEX_NEIGHBOR_REVEAL_DELAY_SECONDS = 0.2;
+/**
+ * 新点亮邻格可开发外观的**按住窗**（秒）= 卡牌弹出时刻 + 延迟量。
+ *
+ * 🔴 起算点就是卡牌真正的起点 `ZC_CARD_START_SECONDS`（脉冲 + 缩没）—— 需求要的是
+ * 「等卡牌动画开始播放后再展示」。锚在**别处**（比如只锚脉冲段、或锚缩没段）都会让按住窗
+ * 比卡牌更早或更晚结束，正好违反需求，所以两者共用同一个真源。
+ *
+ * 视图侧（`ZCHexView.resolveDevelopableHold`）在某格 `canDevelop` 由假变真时登记这个窗，
+ * 窗内把该格的地块图标 / 价格一起按住（表现回退成「还没点亮」）。
+ * ⚠️ 本来就可开发的邻格不登记（否则价格牌会「闪一下又回来」）。
+ */
+export const ZC_HEX_NEIGHBOR_HOLD_SECONDS = ZC_CARD_START_SECONDS + ZC_HEX_NEIGHBOR_REVEAL_DELAY_SECONDS;
+
+/** 飘字入参（世界坐标像素 + 存活时长）。 */
+export interface IZCFloatTextOptions {
+    readonly now: number;
+    readonly kind: ZCFloatTextKind;
+    readonly owner: ZCOwner;
+    readonly value: number;
+    readonly x: number;
+    readonly y: number;
+    readonly durationSeconds: number;
+}
+
+/** 受击特效入参（世界坐标像素 + 存活时长 + **攻击方**职业）。 */
+export interface IZCHitFxOptions {
+    readonly now: number;
+    readonly trait: ZCAttackTrait;
+    readonly owner: ZCOwner;
+    readonly x: number;
+    readonly y: number;
+    readonly durationSeconds: number;
+}
+
+/** 卡牌弹出入参（位置由视图以 hexId 对齐，这里同时给出世界坐标）。 */
+export interface IZCCardRevealOptions {
+    readonly now: number;
+    readonly owner: ZCOwner;
+    readonly hexId: number;
+    readonly cardId: string;
+    readonly building: ZCBuildingType;
+    readonly tier: number;
+    readonly cardName: string;
+    readonly unitId: string | null;
+    readonly luckText: string;
+    readonly x: number;
+    readonly y: number;
+}
+
+/** 每局的可视化表现事件；这些队列刻意不进对局快照。 */
+export class ZCBattlePresentationQueue {
+    private readonly floatingTexts: ZCFloatText[] = [];
+    private readonly hitFxQueue: ZCHitFx[] = [];
+    private readonly cardRevealQueue: ZCCardReveal[] = [];
+    private readonly hexActivationQueue: ZCHexActivation[] = [];
+    /**
+     * 抖动通知队列。⚠️ **不能标 `readonly`**：`drainBuildingShakes` 要把它整条**换掉**
+     * （交出去的必须是原来那条、调用方才能安全遍历，见那里的说明）。
+     */
+    private buildingShakeQueue: ZCBuildingShake[] = [];
+    private nextFloatTextId = 1;
+    private nextHitFxId = 1;
+    private nextCardRevealId = 1;
+    private nextHexActivationId = 1;
+    private nextBuildingShakeId = 1;
+
+    get floatTexts(): readonly Readonly<ZCFloatText>[] { return this.floatingTexts; }
+    get hitFxs(): readonly Readonly<ZCHitFx>[] { return this.hitFxQueue; }
+    get cardReveals(): readonly Readonly<ZCCardReveal>[] { return this.cardRevealQueue; }
+    get hexActivations(): readonly Readonly<ZCHexActivation>[] { return this.hexActivationQueue; }
+
+    pushFloatText(input: Readonly<IZCFloatTextOptions>): ZCFloatText | null {
+        if (!Number.isFinite(input.value) || (input.value <= 0 && input.kind !== 'miss')) return null;
+        const text: ZCFloatText = {
+            id: this.nextFloatTextId++,
+            kind: input.kind,
+            owner: input.owner,
+            value: Math.max(0, Math.round(input.value)),
+            x: input.x,
+            y: input.y,
+            startedAt: input.now,
+            durationSeconds: input.durationSeconds,
+        };
+        this.floatingTexts.push(text);
+        while (this.floatingTexts.length > FLOAT_TEXT_CAP) this.floatingTexts.shift();
+        return text;
+    }
+
+    /**
+     * 推一条受击特效。
+     *
+     * 坐标 / 时长非有限值一律拒收 —— 这两个值渲染层是**逐帧**拿去算节点位置的，
+     * 混进 `NaN` 会让那个节点永远算不出「过期」，直接变成永驻的幽灵节点（不报错，只是
+     * 永不回收、跨局累积）。飘字那边不需要这道闸是因为它只用于飘字文案、不参与回收判定。
+     */
+    pushHitFx(input: Readonly<IZCHitFxOptions>): ZCHitFx | null {
+        if (!Number.isFinite(input.x) || !Number.isFinite(input.y)) return null;
+        if (!Number.isFinite(input.durationSeconds) || input.durationSeconds <= 0) return null;
+        const fx: ZCHitFx = {
+            id: this.nextHitFxId++,
+            trait: input.trait,
+            owner: input.owner,
+            x: input.x,
+            y: input.y,
+            startedAt: input.now,
+            durationSeconds: input.durationSeconds,
+        };
+        this.hitFxQueue.push(fx);
+        while (this.hitFxQueue.length > HIT_FX_CAP) this.hitFxQueue.shift();
+        return fx;
+    }
+
+    removeFloatText(id: number): number {
+        const index = this.floatingTexts.findIndex((text) => text.id === id);
+        if (index < 0) return 0;
+        const value = this.floatingTexts[index].value;
+        this.floatingTexts.splice(index, 1);
+        return value;
+    }
+
+    pushCardReveal(input: Readonly<IZCCardRevealOptions>): void {
+        this.cardRevealQueue.push({
+            id: this.nextCardRevealId++,
+            cardId: input.cardId,
+            owner: input.owner,
+            building: input.building,
+            tier: input.tier,
+            cardName: input.cardName,
+            unitId: input.unitId,
+            luckText: input.luckText,
+            hexId: input.hexId,
+            x: input.x,
+            y: input.y,
+            // 卡牌等**点击动画（脉冲 ∥ 缩没）**播完才弹 —— 用户口径「点击动画即将结束时衔接卡牌段」。
+            // 起点落在未来 ⇒ 视图侧 `now < startedAt` 时**整卡不渲染**（写绝对 active = false），
+            // 不是把进度 clamp 到 0 干等（那样会留一张 0.2 缩放却可见的静止小卡）。
+            startedAt: input.now + ZC_CARD_START_SECONDS,
+            durationSeconds: ZC_CARD_REVEAL_SECONDS,
+        });
+        while (this.cardRevealQueue.length > CARD_REVEAL_CAP) this.cardRevealQueue.shift();
+    }
+
+    pushHexActivation(now: number, hexId: number, hasCardReveal: boolean): void {
+        this.hexActivationQueue.push({
+            id: this.nextHexActivationId++,
+            hexId,
+            hasCardReveal,
+            startedAt: now,
+            // 含并发的脉冲段 + 缩没段、随后的卡牌段、末尾的建筑生成段（见 `ZC_HEX_ACTIVATION_SECONDS`）。
+            durationSeconds: ZC_HEX_ACTIVATION_SECONDS,
+        });
+        while (this.hexActivationQueue.length > HEX_ACTIVATION_CAP) this.hexActivationQueue.shift();
+    }
+
+    /**
+     * 推一条「这一格的建筑该抖一下了」：主城 / 金矿的**金币倒计时结束**时调
+     * （需求 2026-10-15 row12 / row13）。
+     *
+     * 与其它队列不同，这里**不看时间、不设时长**：它是一条通知，不是一段时间。
+     * 起点由渲染层收走它那一帧落定（见 `ZCBuildingShake` 的说明）。
+     */
+    pushBuildingShake(hexId: number): void {
+        if (!Number.isFinite(hexId)) return;
+        this.buildingShakeQueue.push({ id: this.nextBuildingShakeId++, hexId });
+        while (this.buildingShakeQueue.length > BUILDING_SHAKE_CAP) this.buildingShakeQueue.shift();
+    }
+
+    /**
+     * **取走**全部待播的建筑抖动（返回后队列即空）。
+     *
+     *  为什么是取走而不是像飘字那样"读快照 + 按时间 prune"：抖动不幂等 ——
+     *  `playBuildingShake` 会把起点重置到"现在"，同一条通知被读两次就等于**重头再抖一遍**；
+     *  而抖动只有 0.24s、又必须逐帧推进，读-清两个动作必须原子。
+     *
+     * ⚠️ 交出去的是**原来那条数组本身**、内部换一条新的接手：这样调用方可以安全地遍历
+     * 交出来的那条（`length = 0` 会把正在读的内容清掉）。只有"真有事件"时才走这条路
+     * —— 空队列直接返回共享的空数组，常态零分配；而有事件意味着这一帧本来就在发金币
+     * （飘字 + 数字 + 抖动一起上），多一条小数组无足轻重。
+     */
+    drainBuildingShakes(): readonly Readonly<ZCBuildingShake>[] {
+        if (!this.buildingShakeQueue.length) return EMPTY_BUILDING_SHAKES;
+        const drained = this.buildingShakeQueue;
+        this.buildingShakeQueue = [];
+        return drained;
+    }
+
+    activationOf(hexId: number): Readonly<ZCHexActivation> | null {
+        for (let index = this.hexActivationQueue.length - 1; index >= 0; index -= 1) {
+            const activation = this.hexActivationQueue[index];
+            if (activation.hexId === hexId) return activation;
+        }
+        return null;
+    }
+
+    prune(now: number): void {
+        for (let index = this.floatingTexts.length - 1; index >= 0; index -= 1) {
+            const text = this.floatingTexts[index];
+            if (now >= text.startedAt + text.durationSeconds) this.floatingTexts.splice(index, 1);
+        }
+        for (let index = this.hitFxQueue.length - 1; index >= 0; index -= 1) {
+            const fx = this.hitFxQueue[index];
+            if (now >= fx.startedAt + fx.durationSeconds) this.hitFxQueue.splice(index, 1);
+        }
+        for (let index = this.cardRevealQueue.length - 1; index >= 0; index -= 1) {
+            const reveal = this.cardRevealQueue[index];
+            if (now >= reveal.startedAt + reveal.durationSeconds) this.cardRevealQueue.splice(index, 1);
+        }
+        for (let index = this.hexActivationQueue.length - 1; index >= 0; index -= 1) {
+            const activation = this.hexActivationQueue[index];
+            if (now >= activation.startedAt + activation.durationSeconds) this.hexActivationQueue.splice(index, 1);
+        }
+    }
+
+    reset(): void {
+        this.floatingTexts.length = 0;
+        this.hitFxQueue.length = 0;
+        this.cardRevealQueue.length = 0;
+        this.hexActivationQueue.length = 0;
+        this.buildingShakeQueue.length = 0;
+        this.nextFloatTextId = 1;
+        this.nextHitFxId = 1;
+        this.nextCardRevealId = 1;
+        this.nextHexActivationId = 1;
+        this.nextBuildingShakeId = 1;
+    }
+}

@@ -1,0 +1,151 @@
+{
+  "__type__": "cc.AnimationClip",
+  "_name": "出生特效",
+  "_objFlags": 0,
+  "_native": "",
+  "sample": 12,
+  "speed": 1,
+  "wrapMode": 1,
+  "events": [],
+  "_duration": 2,
+  "_keys": [],
+  "_stepness": 0,
+  "curveDatas": {},
+  "_curves": [],
+  "_commonTargets": [],
+  "_hash": 0,
+  "_tracks": [
+    {
+      "__type__": "cc.animation.ObjectTrack",
+      "_binding": {
+        "__type__": "cc.animation.TrackBinding",
+        "path": {
+          "__type__": "cc.animation.TrackPath",
+          "_paths": [
+            {
+              "__type__": "cc.animation.ComponentPath",
+              "component": "cc.Sprite"
+            },
+            "spriteFrame"
+          ]
+        },
+        "proxy": null
+      },
+      "_channel": {
+        "__type__": "cc.animation.Channel",
+        "_curve": {
+          "__type__": "cc.ObjectCurve",
+          "_times": [
+            0,
+            0.083333333,
+            0.166666667,
+            0.25,
+            0.333333333,
+            0.416666667,
+            0.5,
+            0.583333333,
+            0.666666667,
+            0.75,
+            0.833333333,
+            0.916666667,
+            1,
+            1.083333333,
+            1.166666667,
+            1.25,
+            1.333333333,
+            1.416666667,
+            1.5,
+            1.583333333,
+            1.666666667,
+            1.75,
+            1.833333333,
+            1.916666667
+          ],
+          "_values": [
+            {
+              "__uuid__": "f22c5af8-198d-4c97-ac7c-19724e4aefec@f9941"
+            },
+            {
+              "__uuid__": "933cb3fd-958c-472a-aa33-0fd33a9b2335@f9941"
+            },
+            {
+              "__uuid__": "a37d13b4-47db-4dd3-99e5-3b029b76ab3d@f9941"
+            },
+            {
+              "__uuid__": "d71d7b34-dbe4-4d39-b1aa-6687cef3d3a3@f9941"
+            },
+            {
+              "__uuid__": "0464fa91-4496-4fcf-a366-2de3a6cd28d4@f9941"
+            },
+            {
+              "__uuid__": "ea72adc8-4a1a-4cfd-9e0f-f87f3c15c889@f9941"
+            },
+            {
+              "__uuid__": "54e40a69-a712-4783-b674-72c3c707ca94@f9941"
+            },
+            {
+              "__uuid__": "76e690ff-c1c6-4db7-a0b5-a46a96d14ec5@f9941"
+            },
+            {
+              "__uuid__": "5e7e9176-84f2-465e-9a23-e0d07ccbb5cf@f9941"
+            },
+            {
+              "__uuid__": "7fc5fb90-a0fa-49af-bb15-c2a7669dd83c@f9941"
+            },
+            {
+              "__uuid__": "0c8031c9-7c28-4970-98c0-b53871cd4438@f9941"
+            },
+            {
+              "__uuid__": "dfa9815e-f698-4262-b040-4860775e2c39@f9941"
+            },
+            {
+              "__uuid__": "9b0fd213-56f5-468b-bad4-c455d99352b8@f9941"
+            },
+            {
+              "__uuid__": "c588897a-6c0d-4223-9ebe-dbf1c6a30e8f@f9941"
+            },
+            {
+              "__uuid__": "403e2842-7d2f-4a50-bc07-8038fd0cf081@f9941"
+            },
+            {
+              "__uuid__": "9a6fc5ee-95b2-40be-9e00-a307c5be5631@f9941"
+            },
+            {
+              "__uuid__": "a9022924-10dd-4027-9e68-c31bf5024ca1@f9941"
+            },
+            {
+              "__uuid__": "4277cad9-2f1f-4020-b598-83a89cbe3243@f9941"
+            },
+            {
+              "__uuid__": "6296b4ca-7ba7-4d6d-a105-c00b05ceec9a@f9941"
+            },
+            {
+              "__uuid__": "f095f90d-6b51-406f-9cae-3cfeafe481af@f9941"
+            },
+            {
+              "__uuid__": "d381d190-ca86-40c5-bbd7-98a6d442d82d@f9941"
+            },
+            {
+              "__uuid__": "5b39e083-584d-4867-8eba-c480565f9702@f9941"
+            },
+            {
+              "__uuid__": "1a1b384a-fd51-4330-8d4e-0de52172f80c@f9941"
+            },
+            {
+              "__uuid__": "6172f2c2-de5f-46ab-a7ab-77c8a3574b73@f9941"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "_exoticAnimation": null,
+  "_events": [],
+  "_embeddedPlayers": [],
+  "_additiveSettings": {
+    "__type__": "cc.AnimationClipAdditiveSettings",
+    "enabled": false,
+    "refClip": null
+  },
+  "_auxiliaryCurveEntries": []
+}

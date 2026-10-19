@@ -115,6 +115,6 @@ framework（通用 UI/流程机制）            -> core
 ## 版本库（SVN 与 Git 并存）
 
 - 本仓库**双版本库**：SVN 工作副本根 `D:\City1001`（映射 `https://192.168.2.250:8440/svn/City1001/trunk/Demo3.8`）+ Git 仓库 `D:\City1001\Demo3.8\.git`（GitHub remote）。提交变更时**两库都提交**；SVN 在 `D:\City1001` 根下用 `svn commit Demo3.8 -m …`。
-- ⚠️ **SVN 日志禁止中文（实测 2026-10-19）**：本机 TortoiseSVN `svn.exe`（1.14.5）对所有输入字节按 Latin-1 逐字节映射后存 UTF-8——PowerShell 内联、`-F` UTF-8 文件、宽字符 argv 三种通道**全部验证为乱码**（r662–r665），客户端无法存入正确中文。**SVN 提交日志一律 ASCII（英文/拼音）**；中文说明写进提交的文件或 Git 提交信息。
+- ⚠️ **SVN 中文日志走 TortoiseProc 通道（实测 2026-10-19）**：本机 TortoiseSVN 命令行 `svn.exe`（1.14.5）对所有输入字节按 Latin-1 逐字节映射——PowerShell 内联、`-F` UTF-8 文件、宽字符 argv 三种通道实测均乱码（r662–r665）。**中文提交日志必须用 TortoiseProc GUI 通道**：`"C:\Program Files\TortoiseSVN\bin\TortoiseProc.exe" /command:commit /path:"D:\City1001\Demo3.8" /logmsg:"中文" /closeonend:2`（宽字符参数，存储正确）；禁止命令行 `svn commit -m 中文`。
 - `svn:ignore`（`Demo3.8` 目录属性）已与 `.gitignore` 对齐：`.superpowers/.codegraph/.codex-artifacts/.codex-tmp/.creative-design/.skill_tmp/.workbuddy/data/outputs`。新增本地工具目录时两处同步。
 

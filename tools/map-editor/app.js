@@ -1687,15 +1687,55 @@
     var parts = [];
     var depthLabels = { front: '前区', mid: '中区', back: '后区' };
     var depthColors = { front: '#ff5959', mid: '#7f73ff', back: '#39a8ff' };
+    var depthPatterns = {
+      front: { dash: 'none', linecap: 'butt' },
+      mid: { dash: '6 3', linecap: 'butt' },
+      back: { dash: '1 3', linecap: 'round' }
+    };
+    var tendencyLabels = { rush: '速攻', control: '控场', develop: '发育' };
     regions.forEach(function (region) {
-      region.cells.forEach(function (id, index) {
+      var centers = [];
+      region.cells.forEach(function (id) {
         var center = hexCenter(Math.floor(id / COLS), id % COLS);
+        centers.push({ id: id, center: center });
         var color = depthColors[region.depth] || '#ffffff';
+        var pattern = depthPatterns[region.depth] || depthPatterns.front;
         parts.push('<path class="regionCell region-' + esc(region.depth) + '" d="' + hexPathD(center.x, center.y) +
-          '" fill="' + color + '" fill-opacity="0.08" stroke="' + color + '" stroke-opacity="0.65" stroke-width="1.5" pointer-events="none"></path>');
-        if (index === 0) parts.push('<text class="regionLabel" x="' + center.x.toFixed(1) + '" y="' + (center.y + 4).toFixed(1) +
-          '" text-anchor="middle" pointer-events="none">' + depthLabels[region.depth] + '</text>');
+          '" fill="' + color + '" fill-opacity="0.16" stroke="' + color + '" stroke-opacity="0.9" stroke-width="2.5"' +
+          ' stroke-dasharray="' + pattern.dash + '" stroke-linecap="' + pattern.linecap + '" pointer-events="none"></path>');
       });
+      if (!centers.length) return;
+
+      var centroid = centers.reduce(function (total, item) {
+        total.x += item.center.x;
+        total.y += item.center.y;
+        return total;
+      }, { x: 0, y: 0 });
+      centroid.x /= centers.length;
+      centroid.y /= centers.length;
+      var representative = centers[0];
+      var representativeDistance = Infinity;
+      centers.forEach(function (item) {
+        var dx = item.center.x - centroid.x;
+        var dy = item.center.y - centroid.y;
+        var distance = dx * dx + dy * dy;
+        if (distance < representativeDistance) {
+          representative = item;
+          representativeDistance = distance;
+        }
+      });
+
+      var tendency = region.tendency || defaultRegionTendency(region.depth);
+      var tendencyLabel = tendencyLabels[tendency] || '';
+      if (!tendencyLabel) return;
+      var label = depthLabels[region.depth] + ' · ' + tendencyLabel;
+      var center = representative.center;
+      var color = depthColors[region.depth] || '#ffffff';
+      parts.push('<rect class="regionBadge regionBadge-' + esc(region.depth) + '" x="' + (center.x - 56).toFixed(1) +
+        '" y="' + (center.y - 13).toFixed(1) + '" width="112" height="26" rx="13" fill="#14213d" fill-opacity="0.96"' +
+        ' stroke="' + color + '" stroke-width="2" pointer-events="none"></rect>');
+      parts.push('<text class="regionLabel" x="' + center.x.toFixed(1) + '" y="' + (center.y + 5).toFixed(1) +
+        '" text-anchor="middle" font-size="14" font-weight="700" fill="#fff" pointer-events="none">' + esc(label) + '</text>');
     });
     homeCandidates.forEach(function (entry) {
       entry.cells.forEach(function (id) {

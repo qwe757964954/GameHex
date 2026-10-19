@@ -1299,6 +1299,41 @@ test('region tendency selected before the first region is painted is used for th
     ]);
 });
 
+test('region map markup distinguishes each depth and labels the nearest in-region cell', () => {
+    const { editor } = createEditor();
+    editor.applyLayout({
+        version: 3,
+        rows: 8,
+        columns: 12,
+        playerCount: 2,
+        cityMode: 'select',
+        ascii: Array(8).fill('111111111111'),
+        regions: [
+            { section: 1, depth: 'front', cells: [84, 85, 86] },
+            { section: 1, depth: 'mid', cells: [72, 73, 74], tendency: 'develop' },
+            { section: 1, depth: 'back', cells: [60, 61, 62], tendency: 'control' },
+            { section: 2, depth: 'front', cells: [87, 88], tendency: 'control' },
+        ],
+    });
+
+    const markup = editor.mapMetadataMarkup();
+    assert.match(markup, /region-front[^>]*fill-opacity="0\.16"[^>]*stroke-opacity="0\.9"[^>]*stroke-width="2\.5"[^>]*stroke-dasharray="none"/);
+    assert.match(markup, /region-mid[^>]*stroke-dasharray="6 3"/);
+    assert.match(markup, /region-back[^>]*stroke-dasharray="1 3"[^>]*stroke-linecap="round"/);
+    assert.match(markup, /class="regionBadge regionBadge-front"[^>]*fill="#14213d"[^>]*pointer-events="none"/);
+    assert.match(markup, /<text class="regionLabel"[^>]*font-size="14"[^>]*font-weight="700"[^>]*fill="#fff"[^>]*pointer-events="none">前区 · 速攻<\/text>/);
+    assert.match(markup, /<text class="regionLabel"[^>]*>中区 · 发育<\/text>/);
+    assert.match(markup, /<text class="regionLabel"[^>]*>后区 · 控场<\/text>/);
+    assert.equal((markup.match(/class="regionBadge regionBadge-front"/g) || []).length, 2,
+        'same-depth regions from separate sections both get badges');
+
+    const center = editor.hexCenter(7, 1);
+    const expectedBadge = 'x="' + (center.x - 56).toFixed(1) + '" y="' + (center.y - 13).toFixed(1) + '"';
+    assert.ok(markup.includes(expectedBadge), 'front badge should anchor to the middle cell nearest its region centroid');
+    assert.match(markup, /class="regionBadge regionBadge-front"[^>]*width="112" height="26"/,
+        'the longest two-character tendency fits inside the badge');
+});
+
 test('editor accepts every PVP neutral-resource pool id', () => {
     const { editor } = createEditor();
     for (const id of ['gold', 'mine', 'chest', 'unit_cap', 'artifact_charge']) {

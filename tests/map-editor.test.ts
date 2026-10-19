@@ -1301,6 +1301,8 @@ test('region tendency selected before the first region is painted is used for th
 
 test('region map markup distinguishes each depth and labels the nearest in-region cell', () => {
     const { editor } = createEditor();
+    const editorHtml = readFileSync('tools/map-editor/index.html', 'utf8');
+    const frontCells = [0, 84, 86];
     editor.applyLayout({
         version: 3,
         rows: 8,
@@ -1309,7 +1311,7 @@ test('region map markup distinguishes each depth and labels the nearest in-regio
         cityMode: 'select',
         ascii: Array(8).fill('111111111111'),
         regions: [
-            { section: 1, depth: 'front', cells: [84, 85, 86] },
+            { section: 1, depth: 'front', cells: frontCells },
             { section: 1, depth: 'mid', cells: [72, 73, 74], tendency: 'develop' },
             { section: 1, depth: 'back', cells: [60, 61, 62], tendency: 'control' },
             { section: 2, depth: 'front', cells: [87, 88], tendency: 'control' },
@@ -1327,11 +1329,28 @@ test('region map markup distinguishes each depth and labels the nearest in-regio
     assert.equal((markup.match(/class="regionBadge regionBadge-front"/g) || []).length, 2,
         'same-depth regions from separate sections both get badges');
 
-    const center = editor.hexCenter(7, 1);
-    const expectedBadge = 'x="' + (center.x - 56).toFixed(1) + '" y="' + (center.y - 13).toFixed(1) + '"';
-    assert.ok(markup.includes(expectedBadge), 'front badge should anchor to the middle cell nearest its region centroid');
-    assert.match(markup, /class="regionBadge regionBadge-front"[^>]*width="112" height="26"/,
-        'the longest two-character tendency fits inside the badge');
+    const frontCenters = frontCells.map((id) => editor.hexCenter(Math.floor(id / 12), id % 12));
+    const centroid = frontCenters.reduce((sum, center) => ({ x: sum.x + center.x, y: sum.y + center.y }), { x: 0, y: 0 });
+    centroid.x /= frontCenters.length;
+    centroid.y /= frontCenters.length;
+    const nearestCenter = frontCenters.reduce((nearest, center) => {
+        const distance = (center.x - centroid.x) ** 2 + (center.y - centroid.y) ** 2;
+        const nearestDistance = (nearest.x - centroid.x) ** 2 + (nearest.y - centroid.y) ** 2;
+        return distance < nearestDistance ? center : nearest;
+    });
+    const badge = markup.match(/<rect class="regionBadge regionBadge-front" x="([^"]+)" y="([^"]+)" width="([^"]+)"/);
+    assert.ok(badge, 'front region has a badge');
+    const badgeWidth = Number(badge[3]);
+    assert.ok(badgeWidth <= editor.geometry.column, 'badge must fit within one cell pitch');
+    assert.deepEqual([
+        Number((Number(badge[1]) + badgeWidth / 2).toFixed(1)),
+        Number((Number(badge[2]) + 13).toFixed(1)),
+    ], [Number(nearestCenter.x.toFixed(1)), Number(nearestCenter.y.toFixed(1))],
+    'a disconnected region badge stays centered on its nearest actual region cell');
+    assert.match(markup, /class="regionBadge regionBadge-front"[^>]*width="90" height="26"/,
+        'the longest depth/tendency text stays within one cell pitch');
+    assert.match(editorHtml, /\.regionLabel\s*\{[^}]*font:\s*700 14px sans-serif/,
+        'the CSS class rule sets the winning font size instead of losing to presentation attributes');
 });
 
 test('editor accepts every PVP neutral-resource pool id', () => {

@@ -1731,8 +1731,8 @@
       var label = depthLabels[region.depth] + ' · ' + tendencyLabel;
       var center = representative.center;
       var color = depthColors[region.depth] || '#ffffff';
-      parts.push('<rect class="regionBadge regionBadge-' + esc(region.depth) + '" x="' + (center.x - 56).toFixed(1) +
-        '" y="' + (center.y - 13).toFixed(1) + '" width="112" height="26" rx="13" fill="#14213d" fill-opacity="0.96"' +
+      parts.push('<rect class="regionBadge regionBadge-' + esc(region.depth) + '" x="' + (center.x - 45).toFixed(1) +
+        '" y="' + (center.y - 13).toFixed(1) + '" width="90" height="26" rx="13" fill="#14213d" fill-opacity="0.96"' +
         ' stroke="' + color + '" stroke-width="2" pointer-events="none"></rect>');
       parts.push('<text class="regionLabel" x="' + center.x.toFixed(1) + '" y="' + (center.y + 5).toFixed(1) +
         '" text-anchor="middle" font-size="14" font-weight="700" fill="#fff" pointer-events="none">' + esc(label) + '</text>');

@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { loadViews } from './helpers/zcds-view-fixtures';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
@@ -13,9 +14,10 @@ const hexView = readFileSync('assets/script/app/zcds/view/ZCHexView.ts', 'utf8')
 const renderWorld = readFileSync('assets/script/app/zcds/view/ZCGameRenderWorld.ts', 'utf8');
 const game = readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8');
 const hintOverlay = readFileSync('assets/script/app/zcds/view/ZCSpawnRegionHintOverlay.ts', 'utf8');
+const boardPrefab = JSON.parse(readFileSync('assets/resources/ui/game/ZCGameBoard.prefab', 'utf8')) as any[];
 
 test('spawn region hints render in a dedicated non-interactive overlay', () => {
-    assert.match(renderWorld, /resolveZCSpawnRegionHints\(/);
+    assert.match(renderWorld, /spawnRegionHintOverlay = new ZCSpawnRegionHintOverlay\(this\.boardLayer\('CooldownOverlay'\)\)/);
     assert.match(renderWorld, /spawnRegionHintOverlay\.render\([^;]*hintsVisible/s);
     assert.doesNotMatch(renderWorld, /regionText/);
     assert.doesNotMatch(hexView, /regionText/);
@@ -23,7 +25,61 @@ test('spawn region hints render in a dedicated non-interactive overlay', () => {
     assert.match(hintOverlay, /UITransform/);
     assert.match(hintOverlay, /Graphics/);
     assert.match(hintOverlay, /Label/);
-    assert.doesNotMatch(hintOverlay, /BlockInputEvents|TOUCH_START|TOUCH_END/);
+    assert.doesNotMatch(hintOverlay, /BlockInputEvents|Button|TOUCH_START|TOUCH_END|\.on\(/);
+    const root = boardPrefab.find((object) => object?.__type__ === 'cc.Node' && object._name === 'ZCGameBoard');
+    assert.ok(root, 'ZCGameBoard root exists');
+    const boardLayers = root._children.map((child: { __id__: number }) => boardPrefab[child.__id__]);
+    const layers = boardLayers.map((layer: { _name: string }) => layer._name);
+    assert.equal(layers.at(-1), 'CooldownOverlay', 'overlay parent is the highest board layer');
+    for (const name of ['HexLayer', 'CooldownOverlay']) {
+        const layer = boardLayers.find((candidate: { _name: string }) => candidate._name === name);
+        assert.deepEqual([layer._lpos.x, layer._lpos.y, layer._lpos.z], [0, 0, 0], `${name} stays at board origin`);
+        assert.deepEqual([layer._lscale.x, layer._lscale.y, layer._lscale.z], [1, 1, 1], `${name} keeps board scale`);
+    }
+});
+
+test('spawn hint descriptors are cached at map setup rather than rebuilt per selection frame', () => {
+    const renderSelection = renderWorld.match(/renderSpawnSelection\(selection:[\s\S]*?\n    clearSpawnRegionHints\(\)/)?.[0];
+    const initialize = renderWorld.match(/initialize\(mapConfig:[\s\S]*?\n    \}/)?.[0];
+    assert.ok(renderSelection, 'selection render method is present');
+    assert.ok(initialize, 'map initialization method is present');
+    assert.match(initialize, /cacheSpawnRegionHints\(mapConfig\)/);
+    assert.match(renderSelection, /spawnRegionHints/);
+    assert.doesNotMatch(renderSelection, /resolveZCSpawnRegionHints|new Map<number, \{ x: number; y: number \}>/);
+    assert.match(renderWorld, /private cacheSpawnRegionHints\(/);
+    assert.match(renderWorld, /clearSpawnRegionHints\(\): void \{[\s\S]*?spawnRegionHints = \[\]/);
+});
+
+test('region bubble nodes reuse anchors, follow visibility, draw text, and clear from the board layer', () => {
+    const { load, FakeNode, cc } = loadViews();
+    cc.UITransform = class { setContentSize() {} };
+    cc.Label.HorizontalAlign = { CENTER: 'center' };
+    cc.Label.VerticalAlign = { CENTER: 'center' };
+    const { ZCSpawnRegionHintOverlay } = load('./ZCSpawnRegionHintOverlay');
+    const parent = new FakeNode('CooldownOverlay');
+    const overlay = new ZCSpawnRegionHintOverlay(parent);
+    const initial = [{ depth: 'front', label: '速攻', x: 17, y: 32 }];
+
+    overlay.render(initial, true);
+    const root = parent.children[0];
+    const bubble = root.children[0];
+    const label = bubble.children[0].getComponent(cc.Label);
+    assert.equal(root.active, true);
+    assert.deepEqual([bubble.position.x, bubble.position.y], [17, 32]);
+    assert.equal(label.string, '前区 · 速攻');
+    assert.ok(bubble.getComponent(cc.Graphics).commands.some((command: { kind: string }) => command.kind === 'roundRect'));
+
+    overlay.render([{ ...initial[0], x: -24, y: 8, label: '控场' }], true);
+    assert.equal(root.children.length, 1, 're-render should reuse the existing bubble');
+    assert.equal(root.children[0], bubble);
+    assert.deepEqual([bubble.position.x, bubble.position.y], [-24, 8]);
+    assert.equal(label.string, '前区 · 控场');
+
+    overlay.render(initial, false);
+    assert.equal(root.active, false);
+    overlay.clear();
+    assert.equal(parent.children.length, 0);
+    assert.equal(root.isValid, false);
 });
 
 test('spawn region hint overlay clears after selection and on render-world teardown', () => {

@@ -134,6 +134,8 @@ test('全图清空始终由可见地图操作按钮触发并在确认后可撤�
     editor.addFreeDecor('image/decor/rock/a', 10, 20);
     element('btnClearMap').listeners.click();
     assert.equal(confirmCalls.length, 1);
+    assert.match(confirmCalls[0], /重置地形、主城落点与自由装饰/);
+    assert.match(confirmCalls[0], /保留区域标记和中立资源点/);
     assert.equal(editor.state().freeDecor.length, 0);
     assert.equal(editor.undo(), true);
     assert.equal(editor.state().freeDecor.length, 1);

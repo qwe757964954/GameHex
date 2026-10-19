@@ -1319,7 +1319,7 @@
   }
 
   function clearGrid() {
-    if (!window.confirm('清空重画会重置当前地图地形与自由装饰，是否继续？')) return false;
+    if (!window.confirm('清空重画会重置地形、主城落点与自由装饰，并保留区域标记和中立资源点，是否继续？')) return false;
     var before = snapshot();
     newGrid();
     syncControls();

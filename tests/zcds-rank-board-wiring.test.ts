@@ -15,28 +15,53 @@ import { existsSync, readFileSync } from 'node:fs';
 const GAME_SRC = readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8');
 const PROC_SRC = readFileSync('assets/script/app/procedure/ProcedureGame.ts', 'utf8');
 const HUD_SRC = readFileSync('assets/script/app/zcds/view/ZCGameHUDView.ts', 'utf8');
+const WORLD_SRC = readFileSync('assets/script/app/zcds/view/ZCGameRenderWorld.ts', 'utf8');
 
-test('★★RankBtn 必须真的调 openRankBoard（漏传 actions.openRank = 点了没反应）', () => {
-    // 实测踩过：`ZCHudActions.openRank` 与 `bind(this.rankButton, …)` 早就存在，
-    // 但 `hudView.initialize({...})` 里**没给 openRank** ⇒ 按钮零反应、无报错。
-    assert.ok(
-        /openRank:\s*\(\)\s*=>\s*this\.openRankBoard\(\)/.test(GAME_SRC),
-        '★ZCGame 传给 hudView.initialize 的 actions 里必须有 openRank ⇒ 否则 RankBtn 点了没反应',
-    );
-    assert.ok(
-        /private openRankBoard\(\)/.test(GAME_SRC),
-        'openRankBoard 方法不该被删 —— 它是排行榜的入口',
-    );
-    // HUD 侧：接口 + 绑定也都要在（三处任缺其一都静默失效）。
-    assert.ok(/openRank\?:/  .test(HUD_SRC), 'ZCHudActions 要声明 openRank');
-    // 绑定写法是具名方法 + target（规范 §7.5 配套第 3 条）：不内联箭头、不抽 `const bind` 辅助。
+/** 反例断言先剥注释（规则 104）：注释里讲旧实现不算违规。 */
+function stripComments(source: string): string {
+    return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+}
+
+test('★★RankBtn 必须真的接到 openRankBoard（视图 emit + 控制器订阅，缺一就是点了没反应）', () => {
+    // 实测踩过：`bind(this.rankButton, …)` 与 `openRankBoard()` 早就都在，但两者之间的接线
+    // **漏了** ⇒ `leftPanel/RankBtn` 点了没反应、零报错。接线从「initialize 里传回调」改成
+    // 「视图 emit 意图事件 + 控制器订阅」之后，这个坑仍然是静默的 ⇒ 三处都要钉住。
+    //
+    // 视图侧：按钮 → 具名 handler → 在 HUD 根节点 emit 意图（规范 §7.5 配套第 3 条：具名方法 + this target）。
     assert.ok(
         /rankButton\.node\.on\(Button\.EventType\.CLICK,\s*this\.onRankClick,\s*this\)/.test(HUD_SRC),
         '★rankButton 必须绑到 onRankClick —— 声明了不绑等于没这按钮',
     );
     assert.ok(
-        /private onRankClick\(\): void \{\s*this\.actions\?\.openRank\?\.\(\);/.test(HUD_SRC),
-        '★onRankClick 必须调 actions.openRank —— 只绑不调等于按钮永远点不动',
+        /private onRankClick\(\): void \{\s*EventMgr\.instance\.emit\(ZCGameUiEvent\.OpenRank\);/.test(HUD_SRC),
+        '★onRankClick 必须 emit ZCGameUiEvent.OpenRank —— 只绑不发等于按钮永远点不动',
+    );
+    // 反向：视图不该再持有上层回调（意图一律走事件）。
+    assert.ok(
+        !/ZCHudActions/.test(HUD_SRC),
+        '★视图不该再有回调契约 —— `initialize({ openRank: () => … })` 那套已换成 `ZCHudEvent`',
+    );
+
+    // 控制器侧：五个意图**逐个**订阅（少订阅一个 = 那个按钮点了没反应且零报错）。
+    for (const [event, handler] of [
+        ['UseArtifact', 'onHudUseArtifact'],
+        ['OpenGuide', 'onHudOpenGuide'],
+        ['OpenDamageStats', 'onHudOpenDamageStats'],
+        ['OpenRank', 'onHudOpenRank'],
+        ['Retreat', 'onHudRetreat'],
+    ]) {
+        assert.ok(
+            new RegExp(`EventMgr\\.instance\\.on\\(ZCGameUiEvent\\.${event},\\s*this\\.${handler},\\s*this\\)`).test(GAME_SRC),
+            `★ZCGame.bindHudEvents 必须订阅 ZCGameUiEvent.${event} → ${handler}`,
+        );
+    }
+    assert.ok(
+        /private openRankBoard\(\)/.test(GAME_SRC),
+        'openRankBoard 方法不该被删 —— 它是排行榜的入口',
+    );
+    assert.ok(
+        /private onHudOpenRank\(\): void \{\s*this\.openRankBoard\(\);/.test(GAME_SRC),
+        '★onHudOpenRank 必须调 openRankBoard —— 订阅了不转给流程动作等于白订',
     );
 });
 
@@ -535,3 +560,16 @@ test('★★★contentNodes 必须是数组形态（MCP 往数组属性传单值
     }
 });
 
+
+
+test('★棋盘点击走事件（渲染世界 emit + 控制器订阅），不再往渲染世界传回调', () => {
+    const world = stripComments(WORLD_SRC);
+    const game = stripComments(GAME_SRC);
+    // 渲染世界：只派发意图（带 hexId），谁处理由控制器订阅 —— 上层不再塞回调进来。
+    assert.doesNotMatch(world, /onHexClick:\s*\(hexId/, '渲染世界的 options 不该再收 onHexClick 回调');
+    assert.match(world, /EventMgr\.instance\.emit\(ZCGameUiEvent\.HexClick, config\.id\)/);
+    // 控制器：订阅 + 拿 payload 当 hexId（`onHexClick(hexId: number)`）。
+    assert.match(game, /EventMgr\.instance\.on\(ZCGameUiEvent\.HexClick, this\.onHexClick, this\)/);
+    assert.match(game, /private onHexClick\(hexId: number\): void \{/);
+    assert.doesNotMatch(game, /onHexClick: \(hexId\) => this\.onHexClick\(hexId\)/, '那个回调参数已经删了');
+});

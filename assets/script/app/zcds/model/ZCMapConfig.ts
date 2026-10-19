@@ -115,34 +115,30 @@ export interface ZCMapSpacing {
     resourceMinDistance?: number;
 }
 
-/** 美术配置：背景图 + 地块贴图。 */
-/** 装饰的占地形态 + 像素偏移。编辑器新多格装饰 = `span + offset`，老格式直接写 `art` 字符串。 */
-export interface ZCMapDecorTile {
+/** 不绑定六边格、只参与地图美术表现的自由装饰。坐标与尺寸使用棋盘局部视图单位。 */
+export interface ZCMapFreeDecor {
+    /** 编辑器内稳定标识；客户端不将它解释为玩法实体。 */
+    id?: string | number;
     art: string;
-    /**
-     * 占位格子集合（相对 anchor 的 `[dr, dc]` 偏移）。缺省 = `[[0, 0]]`（单格）。
-     * 一张图覆盖多格 = 多组偏移；编辑器在装饰面板"占位大小"选择器选形状。
-     * 镜像侧 span 按镜像轴翻转（dr → -dr、dc → -dc）—— 编辑器已对齐。
-     */
-    span?: ReadonlyArray<readonly [number, number]>;
-    /**
-     * 相对 anchor 格中心的像素偏移 `[dx, dy]`。缺省 = `[0, 0]`。
-     * 方向键在编辑器里调（±5px / Shift 时 ±1px）；游戏侧原样透传给 sprite。
-     */
-    offset?: readonly [number, number];
+    x: number;
+    y: number;
+    /** 贴图最大显示框；渲染时按资源原始宽高等比适配。 */
+    width: number;
+    height: number;
+    rotation?: number;
+    flipX?: boolean;
+    flipY?: boolean;
+    /** 编辑器状态，渲染不读取。 */
+    locked?: boolean;
 }
 
 export interface ZCMapArt {
     /** 背景图资源名（衬在棋盘之下）；可留空。 */
     background?: string;
-    /**
-     * 地块贴图。键为分区号 '1'~'4' / 'neutral' / 'void'（按区域），
-     * 或 'row,column'（按格覆盖）。
-     *   - 分区键 → 字符串（资源名）
-     *   - '行,列'键 → `string | ZCMapDecorTile`：老存档是资源名字符串；新多格装饰是
-     *     `{ art, span?, offset? }` 对象，单格等价时编辑器也会写成字符串以兼容。
-     */
-    tiles?: Record<string, string | ZCMapDecorTile>;
+    /** 地块贴图。键为分区号 '1'~'4' / 'neutral' / 'void'，值为资源名。 */
+    tiles?: Record<string, string>;
+    /** 自由摆放的纯表现装饰；没有格占位，不受虚空约束。 */
+    freeDecor?: ReadonlyArray<ZCMapFreeDecor>;
 }
 
 export interface ZCHexConfig {
@@ -665,31 +661,51 @@ export function configureZCMap(layout: ZCMapLayout): void {
             if (!layout.art.tiles || typeof layout.art.tiles !== 'object' || Array.isArray(layout.art.tiles)) {
                 throw new Error('地块贴图必须是 { 键: 资源名 } 对象');
             }
-            const tiles: Record<string, string | ZCMapDecorTile> = {};
+            const tiles: Record<string, string> = {};
             for (const [key, value] of Object.entries(layout.art.tiles)) {
-                // '行,列' 装饰键：值可以是资源名字符串（老格式 / 单格等价），
-                // 也可以是 `{ art, span?, offset? }`（编辑器新多格装饰）。
-                // 分区键只认字符串，挡掉手写错位。
-                if (typeof value === 'string') { tiles[key] = value; continue; }
-                if (!value || typeof value !== 'object' || Array.isArray(value)) {
-                    throw new Error(`地块贴图 ${key} 必须是资源名或装饰对象`);
-                }
-                const art = (value as ZCMapDecorTile).art;
-                if (typeof art !== 'string' || !art) throw new Error(`地块贴图 ${key} 缺 art 字段或不是字符串`);
-                const spanRaw = (value as ZCMapDecorTile).span;
-                const span: ReadonlyArray<readonly [number, number]> | undefined = spanRaw
-                    ? spanRaw.filter((s): s is readonly [number, number] => Array.isArray(s) && s.length >= 2 &&
-                        Number.isFinite(s[0]) && Number.isFinite(s[1]))
-                        .map((s) => [s[0] | 0, s[1] | 0] as const)
-                    : undefined;
-                const offsetRaw = (value as ZCMapDecorTile).offset;
-                const offset: readonly [number, number] | undefined = Array.isArray(offsetRaw) && offsetRaw.length >= 2 &&
-                    Number.isFinite(offsetRaw[0]) && Number.isFinite(offsetRaw[1])
-                    ? [offsetRaw[0], offsetRaw[1]]
-                    : undefined;
-                tiles[key] = { art, span, offset };
+                if (/^\d+,\d+$/.test(key)) continue;
+                if (typeof value !== 'string') throw new Error(`地块贴图 ${key} 必须是资源名`);
+                tiles[key] = value;
             }
             art.tiles = tiles;
+        }
+        if (layout.art.freeDecor !== undefined) {
+            if (!Array.isArray(layout.art.freeDecor)) throw new Error('自由装饰必须是数组');
+            const items: ZCMapFreeDecor[] = [];
+            for (let index = 0; index < layout.art.freeDecor.length; index += 1) {
+                const value = layout.art.freeDecor[index];
+                if (!value || typeof value !== 'object' || Array.isArray(value)) {
+                    throw new Error(`自由装饰 ${index} 必须是对象`);
+                }
+                const item = value as ZCMapFreeDecor;
+                if (typeof item.art !== 'string' || !item.art.trim()) throw new Error(`自由装饰 ${index} 缺少资源名`);
+                if (!Number.isFinite(item.x) || !Number.isFinite(item.y)) throw new Error(`自由装饰 ${index} 坐标无效`);
+                if (!Number.isFinite(item.width) || item.width <= 0 ||
+                    !Number.isFinite(item.height) || item.height <= 0) {
+                    throw new Error(`自由装饰 ${index} 尺寸无效`);
+                }
+                if (item.rotation !== undefined && !Number.isFinite(item.rotation)) {
+                    throw new Error(`自由装饰 ${index} 角度无效`);
+                }
+                if (item.id !== undefined && (
+                    (typeof item.id === 'string' && !item.id.trim()) ||
+                    (typeof item.id === 'number' && !Number.isFinite(item.id)) ||
+                    (typeof item.id !== 'string' && typeof item.id !== 'number')
+                )) throw new Error(`自由装饰 ${index} id 无效`);
+                if ((item.flipX !== undefined && typeof item.flipX !== 'boolean') ||
+                    (item.flipY !== undefined && typeof item.flipY !== 'boolean')) {
+                    throw new Error(`自由装饰 ${index} 翻转值无效`);
+                }
+                items.push({
+                    ...(item.id !== undefined ? { id: item.id } : {}),
+                    art: item.art.trim(), x: item.x, y: item.y,
+                    width: item.width, height: item.height,
+                    ...(item.rotation !== undefined ? { rotation: item.rotation } : {}),
+                    ...(item.flipX !== undefined ? { flipX: item.flipX } : {}),
+                    ...(item.flipY !== undefined ? { flipY: item.flipY } : {}),
+                });
+            }
+            art.freeDecor = items;
         }
     }
 

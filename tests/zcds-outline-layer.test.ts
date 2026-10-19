@@ -16,6 +16,15 @@
  * ② 位置错（忘了加格心偏移）⇒ 整盘轮廓堆在原点；
  * ③ 分桶把不同颜色合进同一 stroke ⇒ 颜色错。
  * 所以判据不是「有没有报错」，而是**逐条比对线段集合**。
+ *
+ * ## 2026-10-16 追加：中立格也要画线
+ *
+ * 中立格原来靠 `hex_flat` 底图（白色约 60%）铺满 —— 格子被提亮、格与格之间留约 1px 缝，
+ * 整片中立区看上去就是一张暖棕网格。底图下线后这层网格随之消失（山猫：「中立没有棕色的线呢」），
+ * 于是改用矢量补回：`appendHexOutlineSegments` 对 `neutral` 不再 `return`，
+ * 改为按 mask 画**单一颜色的细格线**（`NEUTRAL_GRID_LINE_WIDTH` / `NEUTRAL_GRID_LINE_COLOR`）。
+ * ⚠️ 它与 2026-10-12 被去掉的「灰色线」不是一回事：那次走 `INNER_GRID` 混色口径，
+ * 中立格混出来是灰蓝；这次是「半透明深色叠在底图上」的暖棕。
  */
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -154,7 +163,8 @@ test('线段坐标已含格心偏移：flush 不再叠任何偏移（叠加会�
     const outline = loadOutline();
     const g = new RecordingGraphics();
     outline.resetOutlineSegments();
-    // ⚠️ 2026-10-12 中立格不再画线，改用 player（有主格仍画线，同样验证格心偏移）。
+    // 用 player 验证格心偏移（有主格走阵营色粗线，断言语义直观）。中立格 2026-10-16 起
+    // 也画线、走的是同一条内缩路径，单独由下面的「中立格画暖棕格线」用例钉。
     outline.appendHexOutlineSegments({ centerX: 300, centerY: -400, owner: 'player', boundaryMask: 0b000001 });
     outline.flushOutlineSegments(g);
 
@@ -171,25 +181,33 @@ test('线段坐标已含格心偏移：flush 不再叠任何偏移（叠加会�
     assert.ok(segments[0].includes(300 + halfWidth) || segments[0].includes(300 - halfWidth));
 });
 
-test('中立格不再画褐色网格线（2026-10-12 山猫「灰色的线去掉」）', () => {
+test('中立格画暖棕格线：只描 mask 里的边、用专门的格线色（2026-10-16 贴图下线后补回）', () => {
     const outline = loadOutline();
     const g = new RecordingGraphics();
     outline.resetOutlineSegments();
     outline.appendHexOutlineSegments({ centerX: 0, centerY: 0, owner: 'neutral', boundaryMask: 0b111111 });
     outline.flushOutlineSegments(g);
 
-    // 中立格现在直接 return，不追加任何线段 ⇒ 0 笔。
+    // 六条边同色同宽 ⇒ 合成**一笔**（共享层的收益点：整片中立区只多 1 个 subModel）。
     const strokes = strokesOf(g);
-    assert.equal(strokes.length, 0, '中立格不该再画网格线');
-});
+    assert.equal(strokes.length, 1, '中立格应出 1 笔格线');
+    assert.equal(strokes[0].lineWidth, outline.NEUTRAL_GRID_LINE_WIDTH);
+    assert.equal(strokes[0].segments.length, 6, 'mask = 0b111111 ⇒ 六条边都描');
+    const line = outline.NEUTRAL_GRID_LINE_COLOR;
+    assert.equal(strokes[0].color, `${line.r},${line.g},${line.b},${line.a}`);
+    // ⚠️ 别退回 2026-10-12 被否掉的那版：`zcFactionColor('neutral')` 混 160 灰 = **灰蓝**线，
+    // 山猫当时的口径就是「灰色的线去掉」。现在要的是贴图缝隙那种暖棕。
+    const neutral = loadViews().load('./ZCTheme').zcFactionColor('neutral');
+    assert.notEqual(strokes[0].color, `${neutral.r},${neutral.g},${neutral.b},255`,
+        '格线不能用阵营中立色 —— 那正是被去掉的灰蓝线');
 
-test('中立格线宽补偿逻辑已随灰线移除（不再画线，自然无需补偿缩放）', () => {
-    const outline = loadOutline();
-    const graphics = new RecordingGraphics();
+    // 高 6 位（同阵营内部线）对中立格**不生效**：中立区没有"内部"可言，
+    // 共享边全落在低 6 位（见 `buildTerritoryBoundaryMasks`）。
     outline.resetOutlineSegments();
-    outline.appendHexOutlineSegments({ centerX: 0, centerY: 0, owner: 'neutral', boundaryMask: 0b111111 });
-    outline.flushOutlineSegments(graphics);
-    assert.equal(strokesOf(graphics).length, 0, '中立格不画线，线宽补偿自然不再生效');
+    outline.appendHexOutlineSegments({
+        centerX: 0, centerY: 0, owner: 'neutral', boundaryMask: 0x3f | (0x3f << 8),
+    });
+    assert.equal(outline.outlineSegmentCount(), 6, '内部线位不该给中立格多描出边');
 });
 
 test('按颜色分桶：同色同宽合成一笔连续路径，异色绝不合并', () => {
@@ -197,7 +215,8 @@ test('按颜色分桶：同色同宽合成一笔连续路径，异色绝不合�
     const g = new RecordingGraphics();
     outline.resetOutlineSegments();
     // 三个不同阵营 ⇒ 应分成 3 桶（player/enemy/enemy2 各一笔）。
-    // ⚠️ 2026-10-12 中立格不再画线，从这组 cases 里去掉（neutral 现在 0 线段）。
+    // ⚠️ 这组只放**阵营格**：中立格 2026-10-16 起有自己的格线色，混进来会多一个桶、
+    // 盖住「3 个阵营 = 3 笔」这条判据。
     const cases: Array<['player' | 'enemy' | 'enemy2', number]> = [
         ['player', 0], ['enemy', 200], ['enemy2', 400],
     ];
@@ -235,7 +254,7 @@ test('按颜色分桶：同色同宽合成一笔连续路径，异色绝不合�
     assert.equal(strokes.length, 3, `应 3 笔（3 个阵营），实际 ${strokes.length}`);
 });
 
-test('选点阶段已选落点有内缩高亮且不会留到下一次绘制（中立格不再画灰线）', () => {
+test('选点阶段已选落点有内缩高亮且不会留到下一次绘制', () => {
     const outline = loadOutline();
     const graphics = new RecordingGraphics();
     outline.resetOutlineSegments();
@@ -244,8 +263,8 @@ test('选点阶段已选落点有内缩高亮且不会留到下一次绘制（�
     outline.flushOutlineSegments(graphics);
 
     const strokes = strokesOf(graphics);
-    // ⚠️ 2026-10-12 中立格不画线（灰线已去掉），只剩已选高亮一笔。
-    assert.equal(strokes.length, 1);
+    // ⚠️ 2026-10-16 起中立格自己也出 1 笔格线 ⇒ 这里是「格线 + 已选高亮」两笔。
+    assert.equal(strokes.length, 2);
     const selected = strokes.find((stroke) => stroke.color === '255,235,150,255');
     assert.equal(selected?.lineWidth, 4);
     assert.equal(selected?.segments.length, 6);
@@ -255,11 +274,13 @@ test('选点阶段已选落点有内缩高亮且不会留到下一次绘制（�
         100 + to[0] * 0.82, 200 + to[1] * 0.82,
     ]);
 
-    // ⚠️ 2026-10-12 中立格不再画线，重画后 0 笔。
+    // 重画后高亮不许留到下一次：只剩中立格那 1 笔格线（笔数与颜色都要对上）。
     outline.resetOutlineSegments();
     outline.appendHexOutlineSegments({ centerX: 100, centerY: 200, owner: 'neutral', boundaryMask: 0b111111 });
     outline.flushOutlineSegments(graphics);
-    assert.deepEqual(strokesOf(graphics).map((stroke) => stroke.color), []);
+    const line = outline.NEUTRAL_GRID_LINE_COLOR;
+    assert.deepEqual(strokesOf(graphics).map((stroke) => stroke.color),
+        [`${line.r},${line.g},${line.b},${line.a}`]);
 });
 
 test('选中没有边界 mask 的内部格也高亮；切换落点或进入对局才重画', () => {
@@ -409,7 +430,7 @@ test('逐张真图：所有可玩格的 mask 都能被共享层还原，笔数�
         // ⚠️ `ZCHexConfig` 是**地图配置**，只有 playable/邻接/坐标，**没有 owner**
         //（owner 在快照的 `ZCHexState` 上）。这里要的是"这格归谁"来算 mask，
         // 而 map json 里 v1/v2 用 `#/.` `-` 记初始归属 —— 走 `ZC_HEX_CONFIG` 拿不到。
-        // 🔴 2026-10-12 中立格**不再画线**，若整盘按 neutral 算会 0 笔、测不到分桶。
+        // 🔴 整盘按 neutral 算只会得到 1 笔（2026-10-16 起中立格画单一暖棕格线）、测不到分桶。
         // 改为按**格 id 轮流给四个阵营**（player/enemy/enemy2/enemy3），
         // 让外边界位与内部线位都走到，同时验证分桶与 mask 还原。
         const owners: ZCFaction[] = ['player', 'enemy', 'enemy2', 'enemy3'];

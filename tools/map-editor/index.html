@@ -40,7 +40,7 @@
     flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center;
     padding: 14px; position: relative;
   }
-  #board { height: 100%; max-width: 100%; touch-action: none; display: block; }
+  #board { height: 100%; max-width: 100%; touch-action: none; display: block; background: #101826; }
 
   h2 { font-size: 12px; font-weight: 500; color: #888780; margin: 0 0 8px; letter-spacing: .04em; }
   .group { margin-bottom: 18px; }
@@ -94,7 +94,7 @@
   .resourceName { max-width: 100%; font-size: 10px; line-height: 1.35; color: #888780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .resourceItem.on .resourceName { color: #2C2C2A; }
 
-  /* 虚空装饰：装饰只能摆在虚空格上，标记画在网格之上（decorLayer 排在所有 hex 之后）。 */
+  /* 场景装饰：按地图坐标自由摆放，画在网格之上。 */
   /* 选择器做成"按主题分组的缩略图网格"：35 张 128×128 缩到 44px，一屏能扫到一大片。 */
   .decorList {
     display: flex; flex-direction: column; gap: 9px;
@@ -129,9 +129,30 @@
     width: 44px; height: 44px; flex: none;
     border: 1px solid #E4E3DC; border-radius: 4px; object-fit: contain; background: #FAFAF8;
   }
-  .decorLayer { pointer-events: none; }
   .decorMark { stroke: rgba(0,0,0,.42); stroke-width: 2.5; }
   .decorImage { pointer-events: none; }
+  .freeDecorLayer { pointer-events: none; }
+  .freeDecorObject { pointer-events: none; }
+  .freeDecorImage, .freeDecorPlaceholder { pointer-events: all; cursor: move; }
+  .freeDecorPlaceholder { fill: rgba(120,92,66,.42); stroke: #6b563f; stroke-width: 2; rx: 8; }
+  .freeDecorObject.warning .freeDecorImage { filter: drop-shadow(0 0 5px #f59e0b); }
+  .freeDecorObject.warning .freeDecorPlaceholder { stroke: #f59e0b; stroke-width: 4; }
+  .freeDecorBounds { fill: #60a5fa18; stroke: #2563eb; stroke-width: 2; stroke-dasharray: 5 3; pointer-events: none; }
+  .freeDecorHandle { fill: #fff; stroke: #2563eb; stroke-width: 2; pointer-events: all; cursor: nwse-resize; }
+  .freeDecorHandle.rotate { cursor: crosshair; }
+  /* 缩放柄的隐形命中圆：r=14 比视觉圆大一圈，"角点外部一点点"也能抓住（同 Cocos）。 */
+  .freeDecorHandleHit { fill: transparent; stroke: none; pointer-events: all; cursor: nwse-resize; }
+  .freeDecorHandleHit.rotateHit { cursor: crosshair; }
+  /* 对角方向用斜向光标：左下/右上 = nesw，左上/右下 = nwse。 */
+  .freeDecorHandle[data-cx="1"][data-cy="-1"],
+  .freeDecorHandle[data-cx="-1"][data-cy="1"],
+  .freeDecorHandleHit[data-cx="1"][data-cy="-1"],
+  .freeDecorHandleHit[data-cx="-1"][data-cy="1"] { cursor: nesw-resize; }
+  .freeDecorObject.locked .freeDecorImage { cursor: not-allowed; }
+  #freeDecorInspector[hidden] { display:none; }
+  .inspectorGrid { display:grid; grid-template-columns: 1fr 1fr; gap:5px; }
+  .inspectorGrid label { display:flex; align-items:center; gap:5px; font-size:11px; color:#888780; }
+  .inspectorGrid input { width:100%; min-width:0; padding:4px 5px; border:1px solid #D3D1C7; border-radius:5px; font:inherit; }
   .resourceLayer, .resourceImage { pointer-events: none; }
   .key { margin-left: auto; color: #B4B2A9; font-size: 11px; font-family: ui-monospace, Consolas, monospace; }
 
@@ -415,17 +436,22 @@
       </div>
 
       <div class="group">
-        <div class="groupHeading"><h2>虚空装饰</h2><details class="helpTip"><summary aria-label="查看虚空装饰说明">?</summary><div class="helpBubble">装饰只能摆在<b>虚空格</b>上。虚空改为可通行格时会自动收回。清单按 <code>image/decor</code> 子目录分组；已出图显示缩略图，手填资源名会记在服务端。多格装饰用「占位大小」选形状（anchor = 点击那格），方向键 ←/→/↑/↓ 微调像素位置。</div></details></div>
-        <div class="seg" id="segDecorShape" style="width:100%;margin-bottom:7px;flex-wrap:wrap">
-          <button data-shape="1x1" class="on">1×1</button>
-          <button data-shape="1x2">1×2</button>
-          <button data-shape="1x3">1×3</button>
-          <button data-shape="2x1">2×1</button>
-          <button data-shape="2x2">2×2</button>
-          <button data-shape="2x3">2×3</button>
-          <button data-shape="3x1">3×1</button>
-          <button data-shape="3x2">3×2</button>
-          <button data-shape="3x3">3×3</button>
+        <div class="groupHeading"><h2>场景装饰</h2><details class="helpTip"><summary aria-label="查看场景装饰说明">?</summary><div class="helpBubble">装饰按地图坐标自由摆放，不占格、不影响玩法。选中后可在画布拖动，角点缩放，顶部手柄旋转；方向键微调。</div></details></div>
+        <div id="freeDecorControls">
+          <label class="row"><input type="checkbox" id="freeDecorSnap"><span class="txt">吸附到最近格心<small>只辅助对齐，不限制装饰位置</small></span></label>
+          <div class="librow"><button class="btn small" id="btnFreeDecorDuplicate" disabled>复制</button><button class="btn small" id="btnFreeDecorDelete" disabled>删除</button><button class="btn small" id="btnFreeDecorLock" disabled>锁定</button></div>
+          <div id="freeDecorInspector" style="margin-top:7px" hidden>
+            <div class="inspectorGrid">
+              <label>X <input id="freeDecorX" type="number" step="1"></label>
+              <label>Y <input id="freeDecorY" type="number" step="1"></label>
+              <label>宽 <input id="freeDecorWidth" type="number" min="1" step="1"></label>
+              <label>高 <input id="freeDecorHeight" type="number" min="1" step="1"></label>
+              <label>角度 <input id="freeDecorRotation" type="number" step="1"></label>
+            </div>
+            <label class="row" style="margin-top:6px"><input type="checkbox" id="freeDecorRatio" checked><span class="txt">缩放保持比例</span></label>
+            <div class="librow"><button class="btn small" id="btnFreeDecorFlipX">水平翻转</button><button class="btn small" id="btnFreeDecorFlipY">垂直翻转</button></div>
+          </div>
+          <p class="hint" style="margin:6px 0 0">选中画布上的装饰后可编辑位置、尺寸和角度；锁定后仍可选中，但不会拖动。</p>
         </div>
         <div class="decorList" id="decorList"></div>
         <div class="librow" style="margin-top:7px">
@@ -541,7 +567,7 @@
         <div id="statS4Wrap"><b id="statS4">0</b><span>4 区</span></div>
         <div><b id="statNeutral">0</b><span>中立格</span></div>
         <div><b id="statVoid">0</b><span>虚空</span></div>
-        <div><b id="statDecor">0</b><span>虚空装饰</span></div>
+        <div><b id="statDecor">0</b><span>场景装饰</span></div>
       </div>
 
       <h2>校验</h2>

@@ -32,15 +32,31 @@
     }
   ],
   "art": {
-    "tiles": {
-      "9,1": "image/decor/wasteland/cao3",
-      "9,2": "image/decor/wasteland/cao1",
-      "9,8": "image/decor/wasteland/st3",
-      "9,9": "image/decor/wasteland/cao",
-      "10,1": "image/decor/wasteland/cao3",
-      "10,2": "image/decor/wasteland/cao1",
-      "10,8": "image/decor/wasteland/st3",
-      "10,9": "image/decor/wasteland/cao"
-    }
+    "freeDecor": [
+      {
+        "id": 3,
+        "art": "image/decor/wasteland/cannon",
+        "x": -304.91461181640625,
+        "y": 7.406489372253418,
+        "width": 276.75,
+        "height": 90,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 4,
+        "art": "image/decor/wasteland/cannon",
+        "x": 297.6065673828125,
+        "y": 17.24359703063965,
+        "width": 276.75,
+        "height": 90,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      }
+    ]
   }
 }

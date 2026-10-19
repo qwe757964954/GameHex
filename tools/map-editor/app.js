@@ -9,142 +9,14 @@
   var ROWS = 20, COLS = 11;
   var SERVER_URL = 'http://127.0.0.1:8787/';
   var grid = [], paths = [], library = {};
-  // 虚空格装饰：decor[row][column] = 资源名字符串 / { art, span, offset }（统一存为对象，
-  // 写盘时单格等价还原成字符串以保持 art.tiles 旧格式兼容）。键固定是 **anchor** 格；
-  // 多格装饰 = span（相对 anchor 的 [dr, dc] 偏移列表）+ offset（像素偏移，可选）。
-  // 镜像的对侧由 applyMirror 统一生成 —— 跟分区色同一套"只写存储侧"的口径。
-  // 落盘走 art.tiles 的 'row,column' 键（客户端 ZCMapArt 已支持按格覆盖），不新增 v3 字段。
-  var decor = [];
-  /**
-   * 任意形式的装饰值 → 标准对象。兼容三类输入：
-   *   - 空 / undefined → null
-   *   - string         → { art, span:[[0,0]], offset:[0,0] }
-   *   - { art, span?, offset? } → 标准化 span/offset
-   * span = [[dr, dc]...]（相对 anchor 的偏移），默认 [[0,0]]（单格 = 老格式等价）。
-   * offset = [dx, dy]（相对 anchor 格中心的像素偏移），默认 [0, 0]。
-   * span / offset 的项必须是有限数字数组，否则按缺省回退 —— 输入不严谨时也不让解析挂掉。
-   */
-  function parseDecorEntry(value) {
-    if (value == null) return null;
-    if (typeof value === 'string') {
-      var name = value.trim();
-      return name ? { art: name, span: [[0, 0]], offset: [0, 0] } : null;
-    }
-    if (typeof value !== 'object' || Array.isArray(value)) return null;
-    var art = typeof value.art === 'string' ? value.art.trim() : '';
-    if (!art) return null;
-    var span = Array.isArray(value.span) ? value.span : null;
-    var cleanSpan;
-    if (!span || !span.length) {
-      cleanSpan = [[0, 0]];
-    } else {
-      cleanSpan = [];
-      for (var i = 0; i < span.length; i += 1) {
-        var item = span[i];
-        if (!Array.isArray(item) || item.length < 2) continue;
-        // 必须是**有限数字**（typeof 必要，否则 `Number(null) === 0` 会把 [null, 1] 当 [0, 1] 收下）；
-        // 这里走 typeof 卡死，避免 Number(...) 的隐性"null → 0"漏掉坏数据。
-        if (typeof item[0] !== 'number' || typeof item[1] !== 'number') continue;
-        if (!Number.isFinite(item[0]) || !Number.isFinite(item[1])) continue;
-        cleanSpan.push([item[0] | 0, item[1] | 0]);
-      }
-      if (!cleanSpan.length) cleanSpan = [[0, 0]];
-    }
-    var offset = Array.isArray(value.offset) && value.offset.length >= 2 &&
-      Number.isFinite(value.offset[0]) && Number.isFinite(value.offset[1])
-      ? [value.offset[0], value.offset[1]] : [0, 0];
-    return { art: art, span: cleanSpan, offset: offset };
-  }
-  /** span 中所有 cell（相对 anchor 的偏移，去重），用来遍历真实占用。 */
-  function decorSpanCells(entry) {
-    var span = entry && entry.span ? entry.span : [[0, 0]];
-    var seen = {}, out = [];
-    for (var i = 0; i < span.length; i += 1) {
-      var key = span[i][0] + ',' + span[i][1];
-      if (seen[key]) continue;
-      seen[key] = true;
-      out.push({ dr: span[i][0], dc: span[i][1] });
-    }
-    return out;
-  }
-  /** anchor + entry → 所有占位的绝对坐标（按规则去重 anchor 那格）。 */
-  function decorFootprint(row, column, entry) {
-    var cells = decorSpanCells(entry);
-    var out = [];
-    for (var i = 0; i < cells.length; i += 1) {
-      var r = row + cells[i].dr, c = column + cells[i].dc;
-      // 多格装饰里 anchor 是 key 那格；同一 anchor 上同一装饰记一次。
-      var exists = false;
-      for (var j = 0; j < out.length; j += 1) {
-        if (out[j].row === r && out[j].column === c) { exists = true; break; }
-      }
-      if (!exists) out.push({ row: r, column: c });
-    }
-    return out;
-  }
-  /** 装饰 = 多格时是否真的"占多格"（span 里至少一个非 [0,0] 项）。 */
-  function isMultiCellDecor(entry) {
-    if (!entry) return false;
-    var span = entry.span;
-    if (!span || span.length <= 1) {
-      return !(span && span.length === 1 && span[0][0] === 0 && span[0][1] === 0);
-    }
-    return true;
-  }
-  /** span / offset 在镜像侧按镜像轴翻转：上下（dr → -dr）、左右（dc → -dc）。 */
-  function mirrorDecorEntry(entry, vertical, horizontal) {
-    if (!vertical && !horizontal) return entry;
-    var mirroredSpan = entry.span.map(function (s) {
-      return [(vertical ? -s[0] : s[0]), (horizontal ? -s[1] : s[1])];
-    });
-    return { art: entry.art, span: mirroredSpan, offset: [entry.offset[0], entry.offset[1]] };
-  }
-  /** 写盘简化：单格等价（span=[[0,0]] & offset=[0,0]）时退化成字符串。 */
-  function serializeDecorEntry(entry) {
-    if (!entry) return '';
-    var isSingle = entry.span.length === 1 && entry.span[0][0] === 0 && entry.span[0][1] === 0 &&
-      entry.offset[0] === 0 && entry.offset[1] === 0;
-    return isSingle ? entry.art : { art: entry.art, span: entry.span, offset: entry.offset };
-  }
-  var decorBrush = '';
-  /**
-   * 装饰笔刷的几何参数。
-   *   decorSpan = [dr, dc] 列表（相对 anchor 的偏移） —— 多格装饰 = 占多个格子。
-   *   decorOffset = [dx, dy]（像素偏移，相对 anchor 格中心） —— 位置微调。
-   * 默认 = 单格 + 零偏移，与老格式 art.tiles["行,列"]=string 等价。
-   * 多格装饰由左栏"占位大小"选择器驱动；offset 用方向键调整。
-   */
-  var decorSpan = [[0, 0]];
-  var decorOffset = [0, 0];
-  /** 装饰占位大小候选清单（dr × dc 的方块）。形状是**包含 anchor 在内**的方块。 */
-  var DECOR_SHAPES = {
-    '1x1': [[0, 0]],
-    '1x2': [[0, 0], [0, 1]],
-    '1x3': [[0, 0], [0, 1], [0, 2]],
-    '2x1': [[0, 0], [1, 0]],
-    '2x2': [[0, 0], [0, 1], [1, 0], [1, 1]],
-    '2x3': [[0, 0], [0, 1], [0, 2], [1, 0], [1, 1], [1, 2]],
-    '3x1': [[0, 0], [1, 0], [2, 0]],
-    '3x2': [[0, 0], [0, 1], [1, 0], [1, 1], [2, 0], [2, 1]],
-    '3x3': [[0, 0], [0, 1], [0, 2], [1, 0], [1, 1], [1, 2], [2, 0], [2, 1], [2, 2]],
-  };
-  function setDecorShape(shape) {
-    if (DECOR_SHAPES[shape]) {
-      decorSpan = DECOR_SHAPES[shape].map(function (s) { return s.slice(); });
-      syncControls();
-      if (hover) drawCursor(brushCells(hover.row, hover.column, brushRadius));
-    }
-  }
-  /** 方向键调整像素偏移（每次 ±5px，Shift 按住 ±1px）。 */
-  function nudgeDecorOffset(dx, dy) {
-    decorOffset = [decorOffset[0] + dx, decorOffset[1] + dy];
-    syncControls();
-    render();
-    flash('装饰位置：x=' + decorOffset[0].toFixed(0) + ', y=' + decorOffset[1].toFixed(0));
-  }
+  var decorBrush = '', decorKind = 'free';
+  // 自由装饰是整张地图上的纯表现对象；不参与格子镜像和虚空清理。
+  var freeDecor = [], selectedFreeDecorId = null, freeDecorSnap = false, nextFreeDecorId = 1;
   // 装饰清单：decorLibrary = 可选的全部名字（扫到的美术 + 自定义）；
   // decorImages = 其中"服务端确实有图"的那些 —— 决定画布上画真图还是画占位菱形。
-  var decorLibrary = [], decorImages = {};
+  // decorSizes = 每张已出图装饰的原始像素尺寸（服务端 /api/decor 附带）——
+  // 新摆放时默认按 1:1 落地，编辑器里看到的大小 == 工程实际渲染大小。
+  var decorLibrary = [], decorImages = {}, decorSizes = {};
   // 自定义名能不能真的记住，取决于有没有连上服务端（/api/decor 写盘）。
   // 先乐观置真，`loadDecorLibrary` 拿到结果后再定；只影响提示文案，不影响画图。
   var decorRememberSupported = true;
@@ -173,6 +45,8 @@
   var DEFAULT_BACKGROUND = 'image/zdbg1';
   var backgroundName = DEFAULT_BACKGROUND;
   var showBackground = true;
+  // 上一次写进 backgroundLayer 的 markup —— 同值就不再重写（重写会重建 <image>、大图要重新解码）。
+  var backgroundMarkupCache = null;
   var BRUSH_RADIUS_MAX = 2;
   var brushRadius = 0;
   // 指针轨迹按 STROKE_STEP（svg 用户单位）采样，快速拖动不会跳格。
@@ -237,7 +111,7 @@
   }
   function markDirty() { if (!dirty) setDirty(true); }
   function activeBrushLabel() {
-    if (brush === 'decor') return decorBrush ? '装饰：' + decorBrush : '装饰';
+    if (brush === 'freeDecor') return decorBrush ? '自由装饰：' + decorBrush : '自由装饰';
     if (brush === 'resource') return resourceBrush ? '资源：' + (RESOURCE_LABELS[resourceBrush] || resourceBrush) : '资源';
     if (brush === 'home') return '主城';
     if (brush === 'neutral') return '中立格';
@@ -522,72 +396,14 @@
     throw new Error('字符画里的非法字符：' + token);
   }
 
-  // ---- 虚空装饰 ---------------------------------------------------------------
-  // 装饰是摆在**虚空格上**的点缀（礁石 / 沉船 / 残骸……），用来让海面不单调。
-  // 硬约束：装饰格必须是虚空格 —— 虚空没了装饰就没地方站，所以格子一旦被涂成可通行格，
-  // 该格装饰自动清掉（pruneDecor），而不是留一个指向陆地的装饰坐标给客户端。
-  // 落盘复用 art.tiles 的 'row,column' 键，值 = 资源名；分区键（'1'~'4' / 'neutral' / 'void'）
-  // 原样透传，两者互不干扰。
+  // 旧版 art.tiles 行列键只用于载入时过滤；场景装饰统一写入 art.freeDecor。
   var DECOR_CELL_KEY = /^(\d+),(\d+)$/;
-  /** 装饰标记的配色：按资源名稳定取色，同一种装饰全图同色。 */
+  /** 未出图占位符按资源名稳定取色。 */
   var DECOR_PALETTE = ['#4C5BD4', '#8A5A00', '#2F6F3E', '#A32D2D', '#5B4B8A', '#1F6F6F', '#7A4B2A', '#3B5B7A'];
-  function decorKeyOf(row, column) { return row + ',' + column; }
   function decorColor(name) {
     var hash = 0;
     for (var i = 0; i < name.length; i += 1) hash = (hash * 31 + name.charCodeAt(i)) % 100003;
     return DECOR_PALETTE[hash % DECOR_PALETTE.length];
-  }
-  function emptyDecor() {
-    var rows = [];
-    for (var row = 0; row < ROWS; row += 1) {
-      var line = [];
-      for (var column = 0; column < COLS; column += 1) line.push('');
-      rows.push(line);
-    }
-    return rows;
-  }
-  function decorEntryAt(row, column) {
-    if (!decor[row] || decor[row][column] === undefined) return null;
-    var raw = decor[row][column];
-    if (!raw) return null;
-    if (typeof raw === 'object' && !Array.isArray(raw)) return raw;
-    // 老存档里直接写的字符串：包一层当单格处理。
-    var entry = parseDecorEntry(raw);
-    return entry;
-  }
-  function decorNameAt(row, column) {
-    var entry = decorEntryAt(row, column);
-    return entry ? entry.art : '';
-  }
-  function decorCount() {
-    var total = 0;
-    for (var row = 0; row < ROWS; row += 1) {
-      for (var column = 0; column < COLS; column += 1) if (decorNameAt(row, column)) total += 1;
-    }
-    return total;
-  }
-  /**
-   * 把落在非虚空格上的装饰清掉，返回清掉几格。
-   * 虚空格被涂成中立 / 分区色、或被镜像/改尺寸重算掉之后，装饰必须跟着走 ——
-   * 否则导出的是"陆地上摆礁石"，客户端只会照画。
-   */
-  function pruneDecor() {
-    var removed = 0;
-    for (var row = 0; row < ROWS; row += 1) {
-      for (var column = 0; column < COLS; column += 1) {
-        var entry = decorEntryAt(row, column);
-        if (!entry) continue;
-        var cells = decorFootprint(row, column, entry);
-        var keep = true;
-        for (var c = 0; c < cells.length; c += 1) {
-          var cc = cells[c];
-          if (cc.row < 0 || cc.row >= ROWS || cc.column < 0 || cc.column >= COLS ||
-              grid[cc.row][cc.column] !== VOID) { keep = false; break; }
-        }
-        if (!keep) { decor[row][column] = ''; removed += 1; }
-      }
-    }
-    return removed;
   }
   function pruneResourcePoints() {
     var before = resourcePoints.length;
@@ -603,8 +419,10 @@
    *   custom  —— 记在服务端的自定义资源名（美术还没出图也能先摆，写盘所以刷新不丢）。
    * 同一个名字两边都有时算"有图"。
    */
-  function setDecorLibrary(scanned, custom) {
+  function setDecorLibrary(scanned, custom, sizes) {
     decorImages = {};
+    // 尺寸映射跟着扫到的清单一起进：`{ 资源名: {width, height} }`，没出图的自定义名没有键。
+    decorSizes = (sizes && typeof sizes === 'object' && !Array.isArray(sizes)) ? sizes : {};
     decorLibrary = [];
     var groups = [scanned, custom];
     for (var g = 0; g < groups.length; g += 1) {
@@ -618,6 +436,9 @@
     }
     if (decorBrush && decorLibrary.indexOf(decorBrush) < 0) decorLibrary.push(decorBrush);
     renderDecorPanel();
+    // 图库是异步加载的：地图数据可能先画成占位（`decorImages` 还没到），这里补齐后
+    // **必须重画装饰层**，否则画布上的装饰永远停在占位矩形、真图不出现。
+    drawFreeDecor();
   }
   /** 装饰资源名 → 图片地址。服务端 `/decor/<名字>` 会自动补扩展名。 */
   function decorUrl(name) { return '/decor/' + encodeURI(name); }
@@ -627,7 +448,7 @@
    *   `image/decor/sea/reef`  → `sea`（取 image/decor/ 之后的**第一段**子目录）
    *   `image/decor/reef`      → `其他`（没有子目录）
    *   `reef_01`               → `自定义`（压根不在 image/decor/ 下）
-   * 分组只为"好找"，不影响任何落盘数据 —— 资源名原样存进 art.tiles。
+   * 分组只为"好找"，不影响任何落盘数据 —— 资源名原样存进 art.freeDecor[].art。
    */
   function decorGroupTitle(name) {
     var prefix = 'image/decor/';
@@ -699,11 +520,150 @@
   function setDecorBrush(name) {
     decorBrush = String(name == null ? '' : name).trim();
     if (decorBrush && decorLibrary.indexOf(decorBrush) < 0) decorLibrary.push(decorBrush);
-    brush = 'decor';
+    brush = 'freeDecor';
     renderDecorPanel();
     syncControls();
     if (hover) drawCursor(brushCells(hover.row, hover.column, brushRadius));
     void rememberDecorName(decorBrush);
+  }
+  function setDecorKind(kind) {
+    decorKind = 'free';
+    brush = 'freeDecor';
+    syncControls();
+    renderDecorPanel();
+  }
+
+  function cloneFreeDecor(items) {
+    return (Array.isArray(items) ? items : []).map(function (item) {
+      return {
+        id: item.id, art: item.art, x: item.x, y: item.y,
+        width: item.width, height: item.height, rotation: item.rotation,
+        flipX: item.flipX === true, flipY: item.flipY === true, locked: item.locked === true
+      };
+    });
+  }
+  function freeDecorById(id) {
+    return freeDecor.find(function (item) { return item.id === id; }) || null;
+  }
+  function setFreeDecorSnap(value) {
+    freeDecorSnap = value === true;
+    var input = $('freeDecorSnap');
+    if (input) input.checked = freeDecorSnap;
+  }
+  function setFreeDecorBrush(name) {
+    setDecorBrush(name);
+    brush = 'freeDecor';
+    syncControls();
+  }
+  function nearestHexCenter(x, y) {
+    var best = null, bestDistance = Infinity;
+    for (var index = 0; index < centers.length; index += 1) {
+      var point = centers[index];
+      var distance = (point.x - x) * (point.x - x) + (point.y - y) * (point.y - y);
+      if (distance < bestDistance) { bestDistance = distance; best = point; }
+    }
+    return best ? { x: best.x, y: best.y } : { x: x, y: y };
+  }
+  function addFreeDecor(art, x, y) {
+    var name = String(art || decorBrush || '').trim();
+    if (!name || !Number.isFinite(x) || !Number.isFinite(y)) return null;
+    var before = snapshot();
+    var point = freeDecorSnap ? nearestHexCenter(x, y) : { x: x, y: y };
+    // 默认尺寸 = 图片原始像素（工程渲染 1:1，`installDecor` 就是按存储宽高落地）；
+    // 没出图的自定义名没有尺寸，退回旧默认（3 列距 × 1 行距）占位，出图后重摆即 1:1。
+    var size = decorSizes[name];
+    var width = size && size.width > 0 ? size.width : HEX_COL * 3;
+    var height = size && size.height > 0 ? size.height : HEX_ROW;
+    var item = {
+      id: nextFreeDecorId++, art: name, x: point.x, y: point.y,
+      width: width, height: height, rotation: 0,
+      flipX: false, flipY: false, locked: false
+    };
+    freeDecor.push(item);
+    selectedFreeDecorId = item.id;
+    brush = 'freeDecor';
+    renderDecorPanel();
+    render();
+    commitUndo(before);
+    return item.id;
+  }
+  function selectFreeDecor(id) {
+    selectedFreeDecorId = freeDecorById(id) ? id : null;
+    render();
+    return selectedFreeDecorId !== null;
+  }
+  function applyFreeDecorPatch(id, patch) {
+    var item = freeDecorById(id);
+    if (!item || item.locked || !patch || typeof patch !== 'object') return false;
+    var allowed = ['x', 'y', 'width', 'height', 'rotation', 'flipX', 'flipY'];
+    var changed = false;
+    for (var index = 0; index < allowed.length; index += 1) {
+      var key = allowed[index];
+      if (patch[key] === undefined) continue;
+      if ((key === 'flipX' || key === 'flipY') && typeof patch[key] !== 'boolean') continue;
+      if (key !== 'flipX' && key !== 'flipY' && !Number.isFinite(patch[key])) continue;
+      if ((key === 'width' || key === 'height') && patch[key] < 1) continue;
+      if (item[key] === patch[key]) continue;
+      item[key] = patch[key];
+      changed = true;
+    }
+    if (changed) render();
+    return changed;
+  }
+  function updateSelectedFreeDecor(patch) {
+    var item = freeDecorById(selectedFreeDecorId);
+    if (!item || item.locked) return false;
+    var before = snapshot();
+    if (!applyFreeDecorPatch(item.id, patch)) return false;
+    commitUndo(before);
+    return true;
+  }
+  function moveSelectedFreeDecor(x, y) {
+    return updateSelectedFreeDecor({ x: x, y: y });
+  }
+  function duplicateFreeDecor(id) {
+    var source = freeDecorById(id);
+    if (!source) return null;
+    var before = snapshot();
+    var copy = cloneFreeDecor([source])[0];
+    copy.id = nextFreeDecorId++;
+    copy.x += 18;
+    copy.y += 18;
+    copy.locked = false;
+    freeDecor.push(copy);
+    selectedFreeDecorId = copy.id;
+    render();
+    commitUndo(before);
+    return copy.id;
+  }
+  function deleteFreeDecor(id) {
+    var index = freeDecor.findIndex(function (item) { return item.id === id; });
+    if (index < 0) return false;
+    var before = snapshot();
+    freeDecor.splice(index, 1);
+    if (selectedFreeDecorId === id) selectedFreeDecorId = null;
+    render();
+    commitUndo(before);
+    return true;
+  }
+  function deleteSelectedFreeDecor() {
+    return deleteFreeDecor(selectedFreeDecorId);
+  }
+  function duplicateSelectedFreeDecor() {
+    return duplicateFreeDecor(selectedFreeDecorId);
+  }
+  function toggleSelectedFreeDecorLock() {
+    var item = freeDecorById(selectedFreeDecorId);
+    return item ? setFreeDecorLocked(item.id, !item.locked) : false;
+  }
+  function setFreeDecorLocked(id, locked) {
+    var item = freeDecorById(id);
+    if (!item || item.locked === (locked === true)) return false;
+    var before = snapshot();
+    item.locked = locked === true;
+    render();
+    commitUndo(before);
+    return true;
   }
 
   /**
@@ -722,8 +682,9 @@
       grid.push(line);
     }
     homes = [null, null, null, null];
-    // 新底图全图没有虚空格，装饰无处可站 —— 直接清空（"清空重画"要的就是一张干净底图）。
-    decor = emptyDecor();
+    freeDecor = [];
+    nextFreeDecorId = 1;
+    selectedFreeDecorId = null;
     if (CITY_MODE === 'fixed') {
       for (var index = 0; index < PLAYER_COUNT; index += 1) {
         homes[index] = defaultHome(index + 1);
@@ -788,24 +749,6 @@
           grid[row][column] = value === VOID ? VOID : sectionAfterFlip(value, flipBits(row, column));
         }
       }
-      // 装饰跟着分区色一起镜像：只写存储侧，对侧永远是派生物（否则会出现"编辑器里两边都有、
-      // 导出后只剩一侧"的图 —— 装饰没有分区号，不会自然对齐）。
-      // 多格装饰的 span / offset 要按镜像轴翻转（dr → -dr、dc → -dc），否则镜像侧的格子组
-      // 形状会反过来。写回存储用 serializeDecorEntry，单格等价时退化成字符串（与 art.tiles 旧
-      // 存档格式对齐 —— 内部 state() 与写盘同源）。
-      var mirrorVertical = MIRROR_VERTICAL;
-      var mirrorHorizontal = MIRROR_HORIZONTAL;
-      for (var drow = 0; drow < ROWS; drow += 1) {
-        for (var dcolumn = 0; dcolumn < COLS; dcolumn += 1) {
-          if (isStoredCell(drow, dcolumn)) continue;
-          var decorSource = sourceCell(drow, dcolumn);
-          var sourceEntry = decorEntryAt(decorSource.row, decorSource.column);
-          if (!decor[drow]) decor[drow] = [];
-          decor[drow][dcolumn] = sourceEntry
-            ? serializeDecorEntry(mirrorDecorEntry(sourceEntry, mirrorVertical, mirrorHorizontal))
-            : '';
-        }
-      }
       // fixed 模式只写 homes[0]，其余由镜像生成；select 模式 homes 是用户手动放置的，
       // 不能被自动镜像覆盖。
       if (CITY_MODE === 'fixed') {
@@ -820,14 +763,11 @@
     }
   }
 
-  /** 用户手工编辑后的收尾：先镜像，再让被改坏的主城失效。 */
+  /** 用户手工编辑后的收尾：先镜像，再让无效资源点和主城失效。 */
   function applyMirrorAndPrune() {
     applyMirror();
-    // 涂掉虚空的那一笔会让装饰失去落脚点，顺手收回；返回清理格数，调用方负责告诉策划。
-    var removed = pruneDecor();
     pruneResourcePoints();
     dropStaleHomes();
-    return removed;
   }
 
   /** 主城格被改成虚空 / 别的分区时，该主城作废。 */
@@ -902,7 +842,7 @@
     var c = clampInt(columns, MIN_COLS, MAX_COLS);
     if (r === ROWS && c === COLS) { syncSizeInputs(); return; }
     var before = snapshot();
-    var oldRows = ROWS, oldCols = COLS, oldGrid = grid, oldHomes = homes.slice(), oldDecor = decor;
+    var oldRows = ROWS, oldCols = COLS, oldGrid = grid, oldHomes = homes.slice();
     ROWS = r;
     COLS = c;
     // 三人的分区与主城完全由棋盘尺寸决定（等边三点），改尺寸就整体重建，不做平移保留 ——
@@ -919,19 +859,14 @@
     var rowShift = Math.floor(ROWS / 2) - Math.floor(oldRows / 2);
     var columnShift = Math.floor(COLS / 2) - Math.floor(oldCols / 2);
     grid = [];
-    decor = [];
     for (var row = 0; row < ROWS; row += 1) {
       var line = [];
-      var decorLine = [];
       for (var column = 0; column < COLS; column += 1) {
         var sourceRow = row - rowShift, sourceColumn = column - columnShift;
         var inside = sourceRow >= 0 && sourceRow < oldRows && sourceColumn >= 0 && sourceColumn < oldCols;
         line.push(inside ? oldGrid[sourceRow][sourceColumn] : VOID);
-        // 装饰跟内容一起平移，边界外补齐空串（移出去的装饰不保留）。
-        decorLine.push(inside && oldDecor[sourceRow] ? (oldDecor[sourceRow][sourceColumn] || '') : '');
       }
       grid.push(line);
-      decor.push(decorLine);
     }
     homes = oldHomes.map(function (home) {
       return home ? { row: home.row + rowShift, column: home.column + columnShift } : null;
@@ -1100,6 +1035,9 @@
     }
 
     homes = [null, null, null, null];
+    freeDecor = [];
+    nextFreeDecorId = 1;
+    selectedFreeDecorId = null;
     var list = Array.isArray(data.homes) && data.homes.length
       ? data.homes
       : (data.playerHome && data.enemyHome ? [data.playerHome, data.enemyHome] : []);
@@ -1109,38 +1047,30 @@
       if (home.row < 0 || home.row >= rows || home.column < 0 || home.column >= columns) continue;
       homes[index] = { row: home.row, column: home.column };
     }
-    dropStaleHomes();
-    // 装饰从 art.tiles 的 'row,column' 键还原。规则与落笔一致：宿主格必须是虚空格 ——
-    // 手写 / 外部来源的图上若有压在陆地里的装饰，直接丢掉并报数（不拒绝整张图：装饰是美术
-    // 点缀，不是玩法数据，为它把一张能用的图挡在门外不划算）。
-    decor = emptyDecor();
-    var droppedDecor = 0;
-    var artTiles = data.art && typeof data.art === 'object' && !Array.isArray(data.art) ? data.art.tiles : null;
-    if (artTiles && typeof artTiles === 'object' && !Array.isArray(artTiles)) {
-      var tileKeys = Object.keys(artTiles);
-      for (var t = 0; t < tileKeys.length; t += 1) {
-        if (!DECOR_CELL_KEY.test(tileKeys[t])) continue;
-        var parts = tileKeys[t].split(',');
-        var decorRow = parseInt(parts[0], 10), decorColumn = parseInt(parts[1], 10);
-        // 解析装饰值：兼容老字符串（`image/decor/reef`）和新对象
-        // （`{ art, span, offset }`）。入口统一在 parseDecorEntry。
-        var rawEntry = artTiles[tileKeys[t]];
-        var entry = parseDecorEntry(rawEntry);
-        if (!entry) { droppedDecor += 1; continue; }
-        // 多格装饰 = 整片都要落在虚空上；任一格不在虚空 / 已被别的装饰占，整片都丢。
-        // "压错格的装饰只丢弃 + 提示格数"的口径在多格场景下要继续守。
-        var cells = decorFootprint(decorRow, decorColumn, entry);
-        var inBounds = true;
-        for (var cIndex = 0; cIndex < cells.length; cIndex += 1) {
-          var cell = cells[cIndex];
-          if (cell.row < 0 || cell.row >= rows || cell.column < 0 || cell.column >= columns ||
-              grid[cell.row][cell.column] !== VOID) { inBounds = false; break; }
-        }
-        if (!inBounds) { droppedDecor += 1; continue; }
-        // 存储形式 = serializeDecorEntry —— 单格等价退化成字符串，与 art.tiles 旧存档对齐。
-        decor[decorRow][decorColumn] = serializeDecorEntry(entry);
-      }
+    var importedFreeDecor = data.art && typeof data.art === 'object' && !Array.isArray(data.art)
+      && Array.isArray(data.art.freeDecor) ? data.art.freeDecor : [];
+    var importedFreeDecorIds = {};
+    for (var freeIndex = 0; freeIndex < importedFreeDecor.length; freeIndex += 1) {
+      var freeItem = importedFreeDecor[freeIndex];
+      if (!freeItem || typeof freeItem !== 'object' || typeof freeItem.art !== 'string' || !freeItem.art.trim() ||
+          !Number.isFinite(freeItem.x) || !Number.isFinite(freeItem.y) ||
+          !Number.isFinite(freeItem.width) || freeItem.width < 1 ||
+          !Number.isFinite(freeItem.height) || freeItem.height < 1 ||
+          (freeItem.rotation !== undefined && !Number.isFinite(freeItem.rotation))) continue;
+      var freeId = Number.isInteger(freeItem.id) && freeItem.id > 0 && !importedFreeDecorIds[freeItem.id]
+        ? freeItem.id : nextFreeDecorId++;
+      while (importedFreeDecorIds[freeId]) freeId = nextFreeDecorId++;
+      importedFreeDecorIds[freeId] = true;
+      nextFreeDecorId = Math.max(nextFreeDecorId, freeId + 1);
+      freeDecor.push({
+        id: freeId, art: freeItem.art.trim(), x: freeItem.x, y: freeItem.y,
+        width: freeItem.width, height: freeItem.height, rotation: freeItem.rotation || 0,
+        flipX: freeItem.flipX === true, flipY: freeItem.flipY === true, locked: freeItem.locked === true
+      });
     }
+    selectedFreeDecorId = null;
+    dropStaleHomes();
+    // 旧版 art.tiles 的按格装饰不再导入；装饰统一由 art.freeDecor 编辑和落盘。
     // 背景图：art.background 直接读出来；缺失时回退到默认 zdbg1。客户端 art.background 字段
     // 与编辑器同源，资源名形如 `image/<子目录>/<名字>`（同 deco 命名口径）。
     var artBackground = data.art && typeof data.art === 'object' && !Array.isArray(data.art) ? data.art.background : null;
@@ -1149,7 +1079,6 @@
     } else {
       backgroundName = DEFAULT_BACKGROUND;
     }
-    if (droppedDecor) flash('有 ' + droppedDecor + ' 个装饰不在虚空格上（或坐标越界），已丢弃', 'warn');
     if (data.id !== undefined) $('mapId').value = data.id;
     if (data.name !== undefined) $('mapName').value = data.name;
     syncControls();
@@ -1178,9 +1107,12 @@
   }
   function hexPathD(cx, cy) {
     // 用**顶面**外框（HEX_TOP_*），不是整图外形 —— 见上面常量处的说明。
+    // 🔴 台面在 `hexCenter`（整图中心）**上方** `HEX_TOP_LIFT`，而本文件的 y 是 **SVG 向下**
+    //    （见 hexCenter 的取负写法）⇒ 这里必须**减** LIFT。写成加号会把整张网格画低 25px，
+    //    与工程格面中心差出 2×LIFT。
     var offsets = [[1, 0], [0.5, 1], [-0.5, 1], [-1, 0], [-0.5, -1], [0.5, -1]]
       .map(function (point) {
-        return [point[0] * HEX_TOP_R, point[1] * HEX_TOP_HALF_H + HEX_TOP_LIFT];
+        return [point[0] * HEX_TOP_R, point[1] * HEX_TOP_HALF_H - HEX_TOP_LIFT];
       });
     return offsets.map(function (point, index) {
       return (index ? 'L' : 'M') + (cx + point[0]).toFixed(1) + ' ' + (cy + point[1]).toFixed(1);
@@ -1270,8 +1202,8 @@
   /**
    * 当前视口矩形 —— `viewBox` 与背景图盒的**唯一写入口**。
    *
-   * 🔴 两处必须是同一个盒子：背景图靠 `preserveAspectRatio="xMidYMid slice"` 做等比 cover，
-   * 图盒一旦偏离 viewBox，可见区域就只剩图盒与视口的交集（曾多减了一个 halfW/halfH ⇒
+   * 🔴 两处必须是同一个盒子：背景图靠 `preserveAspectRatio="xMidYMid slice"` 做等比 cover
+   * 铺满视口，图盒一旦偏离 viewBox，可见区域就只剩图盒与视口的交集（曾多减了一个 halfW/halfH ⇒
    * 右侧与下侧各空半屏，全链路零报错）。共用本函数后这类漂移在结构上不可能发生。
    */
   function viewportRect() {
@@ -1284,6 +1216,29 @@
       rect.width.toFixed(1) + ' ' + rect.height.toFixed(1));
     // 背景图占满 viewBox，缩放 / 平移变了必须重画。
     drawBackground();
+    fitCanvas();
+  }
+  /**
+   * 画布元素尺寸保持 = viewBox 比例（contain 到 `.stage` 容器）。
+   *
+   * SVG 默认 `preserveAspectRatio="xMidYMid meet"`：元素比例一旦偏离 viewBox（CSS 里
+   * `height:100%` + `max-width:100%` 会把画布拉成任意形状），棋盘与背景只铺在中间一块、
+   * 四周露出深色底 —— 用户看到的"棋盘周围一圈黑"。比例对齐后 viewBox 内容恰好铺满画布，
+   * 背景**始终全景可见**，平移 / 缩放时与棋盘一起走。
+   */
+  function fitCanvas() {
+    var stage = svg.parentElement;
+    if (!stage) return;
+    var availW = stage.clientWidth, availH = stage.clientHeight;
+    if (!(availW > 0) || !(availH > 0)) return;
+    var rect = viewportRect();
+    if (!(rect.width > 0) || !(rect.height > 0)) return;
+    // zoom 只改 viewBox 世界尺寸、不改比例 ⇒ 算出的像素尺寸不变，同值守卫直接跳过。
+    var scale = Math.min(availW / rect.width, availH / rect.height);
+    var next = rect.width * scale + 'px', nextH = rect.height * scale + 'px';
+    if (svg.style.width === next && svg.style.height === nextH) return;
+    svg.style.width = next;
+    svg.style.height = nextH;
   }
   function resetView() { zoom = 1; panX = 0; panY = 0; applyView(); }
   function zoomAt(clientX, clientY, factor) {
@@ -1334,11 +1289,9 @@
     var size = brushRadius === 0 ? '1×1' : brushRadius === 1 ? '7 格' : '19 格';
     if (!hover) { box.textContent = '指针在棋盘外 · 笔刷 ' + size; return; }
     var value = grid[hover.row][hover.column];
-    var decorName = decorNameAt(hover.row, hover.column);
     var resourcePoint = resourcePointAt(hover.row, hover.column);
     var resourceId = resourceIdAt(resourcePoint);
     box.textContent = '(' + hover.row + ', ' + hover.column + ') · ' + sectionLabel(value) +
-      (decorName ? ' · 装饰 ' + decorName : '') +
       (resourceId ? ' · ' + (RESOURCE_LABELS[resourceId] || resourceId) : '') + ' · 笔刷 ' + size;
   }
   function buildBoard() {
@@ -1355,125 +1308,121 @@
           '" data-c="' + column + '" class="hex"/>';
       }
     }
-    // 渲染层 = 背景 / hex（grid 之前） / 装饰 / 资源 —— 文档顺序 = 绘制顺序，
+    // 渲染层 = 背景 / hex（grid 之前） / 自由装饰 / 资源 —— 文档顺序 = 绘制顺序，
     // 背景要在最底层，资源层最后画（鼠标右键光标预影像之外）。
     svg.innerHTML = '<g class="backgroundLayer"></g>' + html +
-      '<g class="decorLayer"></g><g class="resourceLayer"></g>';
+      '<g class="freeDecorLayer"></g><g class="resourceLayer"></g>';
+    // 整块 svg 换了 ⇒ 背景层是全新的空 <g>，同值守卫的缓存必须作废（否则新层永远不被写入）。
+    backgroundMarkupCache = null;
     paths = Array.prototype.slice.call(svg.querySelectorAll('path.hex'));
     buildCursorLayer();
     applyView();
   }
 
-  /**
-   * 装饰层的 SVG 片段。写成纯字符串（零 DOM 调用）—— 测试桩与 CDP 探针都能直接断言，
-   * 不必依赖 createElementNS。
-   *
-   * 出了图就画**真图**：贴在**顶面** 123×90 上等比缩（`preserveAspectRatio="xMidYMid meet"`
-   * —— 只缩不裁、绝不拉伸），尺寸与工程渲染的格子面一致，所见即游戏里的大小。
-   * 还没出图的名字画占位菱形：颜色按资源名稳定取（同一种装饰全图同色），挂 `<title>`
-   * 悬停显示名字 —— 自定义了名字但美术没到位时，也能看出摆在哪、摆的是什么。
-   */
-  function decorMarkup() {
+  function freeDecorOverlapsImportantCell(item) {
+    var points = [];
+    homes.forEach(function (home) { if (home) points.push(hexCenter(home.row, home.column)); });
+    resourcePoints.forEach(function (point) { points.push(hexCenter(point.row, point.column)); });
+    // 用装饰可视框的旋转后 AABB 做提示，不作为摆放约束；允许用户覆盖后继续保存。
+    var radians = Math.abs((item.rotation || 0) * Math.PI / 180);
+    var halfWidth = (Math.abs(Math.cos(radians)) * item.width + Math.abs(Math.sin(radians)) * item.height) / 2;
+    var halfHeight = (Math.abs(Math.sin(radians)) * item.width + Math.abs(Math.cos(radians)) * item.height) / 2;
+    return points.some(function (point) {
+      return Math.abs(point.x - item.x) <= halfWidth + HEX_TOP_R
+        && Math.abs(point.y - item.y) <= halfHeight + HEX_TOP_HALF_H;
+    });
+  }
+  function freeDecorMarkup() {
     var parts = [];
-    for (var row = 0; row < ROWS; row += 1) {
-      for (var column = 0; column < COLS; column += 1) {
-        var entry = decorEntryAt(row, column);
-        if (!entry) continue;
-        var name = entry.art;
-        // 图片中心 + 宽高：
-        //   单格 = 顶面中心 + HEX_TOP_R × HEX_TOP_HALF_H × 2（与原口径一致）。
-        //   多格 = span 包围盒几何中心 + 包围盒尺寸，按 dr/dc 范围算。
-        // 多格 center = anchor + (Σdr/n, Σdc/n) × 网格距 — 几何中心不一定落在 anchor 那格上。
-        var box = decorBoxOf(row, column, entry);
-        var center = box.center;
-        var w = box.width;
-        var h = box.height;
-        // 立体地块的可见"台面"只有顶面，单格时纵向偏移 HEX_TOP_LIFT；多格时按 span 顶面中心
-        // 对齐（dr=0 那行 cell 中心的视觉中心 = dr=0 行几何中心）。
-        var yShift = isMultiCellDecor(entry) ? 0 : HEX_TOP_LIFT;
-        if (decorImages[name]) {
-          parts.push('<image class="decorImage" data-r="' + row + '" data-c="' + column +
-            '" data-decor="' + esc(name) + '" href="' + esc(decorUrl(name)) +
-            '" x="' + (center.x - w / 2 + entry.offset[0]).toFixed(1) +
-            '" y="' + (center.y - yShift - h / 2 + entry.offset[1]).toFixed(1) +
-            '" width="' + w.toFixed(1) + '" height="' + h.toFixed(1) +
-            '" preserveAspectRatio="xMidYMid meet"><title>' + esc(name) + '</title></image>');
-          continue;
-        }
-        var size = HEX_R * 0.42;
-        var half = size * 0.62;
-        parts.push('<path class="decorMark" data-r="' + row + '" data-c="' + column +
-          '" data-decor="' + esc(name) + '" fill="' + decorColor(name) + '" d="M' +
-          center.x.toFixed(1) + ' ' + (center.y - size).toFixed(1) +
-          'L' + (center.x + half).toFixed(1) + ' ' + center.y.toFixed(1) +
-          'L' + center.x.toFixed(1) + ' ' + (center.y + size).toFixed(1) +
-          'L' + (center.x - half).toFixed(1) + ' ' + center.y.toFixed(1) + 'Z"><title>' +
-          esc(name) + '</title></path>');
+    var items = freeDecor.slice().sort(function (a, b) { return b.y - a.y || a.x - b.x; });
+    for (var index = 0; index < items.length; index += 1) {
+      var item = items[index];
+      var selected = item.id === selectedFreeDecorId;
+      var warning = freeDecorOverlapsImportantCell(item);
+      var transform = 'translate(' + item.x.toFixed(1) + ' ' + item.y.toFixed(1) + ') rotate(' +
+        (item.rotation || 0).toFixed(1) + ') scale(' + (item.flipX ? -1 : 1) + ' ' + (item.flipY ? -1 : 1) + ')';
+      var id = esc(item.id);
+      parts.push('<g class="freeDecorObject' + (selected ? ' selected' : '') + (warning ? ' warning' : '') +
+        (item.locked ? ' locked' : '') + '" data-free-decor-id="' + id + '" transform="' + transform + '">');
+      if (decorImages[item.art]) {
+        parts.push('<image class="freeDecorImage" data-free-decor-id="' + id + '" href="' + esc(decorUrl(item.art)) +
+          '" x="' + (-item.width / 2).toFixed(1) + '" y="' + (-item.height / 2).toFixed(1) +
+          '" width="' + item.width.toFixed(1) + '" height="' + item.height.toFixed(1) +
+          '" preserveAspectRatio="xMidYMid meet"><title>' + esc(item.art) +
+          (warning ? ' · 与主城或资源点重叠' : '') + '</title></image>');
+      } else {
+        parts.push('<rect class="freeDecorPlaceholder" data-free-decor-id="' + id + '" x="' + (-item.width / 2).toFixed(1) +
+          '" y="' + (-item.height / 2).toFixed(1) + '" width="' + item.width.toFixed(1) + '" height="' +
+          item.height.toFixed(1) + '"><title>' + esc(item.art) + '</title></rect>');
       }
+      if (selected) {
+        parts.push('<rect class="freeDecorBounds" x="' + (-item.width / 2).toFixed(1) + '" y="' +
+          (-item.height / 2).toFixed(1) + '" width="' + item.width.toFixed(1) + '" height="' +
+          item.height.toFixed(1) + '" pointer-events="none"></rect>');
+        // 四角缩放柄（同 Cocos 节点编辑器）：每个角一个视觉小圆 + 一个更大的透明命中圆，
+        // 命中圆 r=14 让"角点外部一点点"也能抓住；角符号 data-cx/cy 决定缩放时固定哪个对角。
+        var corners = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
+        for (var cornerIndex = 0; cornerIndex < corners.length; cornerIndex += 1) {
+          var cornerX = corners[cornerIndex][0], cornerY = corners[cornerIndex][1];
+          var handleX = (cornerX * item.width / 2).toFixed(1);
+          var handleY = (cornerY * item.height / 2).toFixed(1);
+          parts.push('<circle class="freeDecorHandle scale" data-free-decor-id="' + id +
+            '" data-handle="scale" data-cx="' + cornerX + '" data-cy="' + cornerY +
+            '" cx="' + handleX + '" cy="' + handleY + '" r="6"></circle>');
+          parts.push('<circle class="freeDecorHandleHit" data-free-decor-id="' + id +
+            '" data-handle="scale" data-cx="' + cornerX + '" data-cy="' + cornerY +
+            '" cx="' + handleX + '" cy="' + handleY + '" r="14"></circle>');
+        }
+        parts.push('<circle class="freeDecorHandle rotate" data-free-decor-id="' + id + '" data-handle="rotate" cx="0" cy="' +
+          (-item.height / 2 - 18).toFixed(1) + '" r="6"></circle>');
+        parts.push('<circle class="freeDecorHandleHit rotateHit" data-free-decor-id="' + id + '" data-handle="rotate" cx="0" cy="' +
+          (-item.height / 2 - 18).toFixed(1) + '" r="14"></circle>');
+      }
+      parts.push('</g>');
     }
     return parts.join('');
   }
-  /**
-   * anchor + entry → 包围盒（center, width, height）。
-   *   单格 = (anchor center, HEX_TOP_R×2, HEX_TOP_HALF_H×2)。
-   *   多格 = (span 几何中心, 包围盒宽, 包围盒高)。
-   * 宽 = `(maxDc - minDc) × HEX_COL + 2 × HEX_R`（顶面宽）+ 奇偶列相位差的修正（同 HEX_PHASE 口径）。
-   * 高 = `(maxDr - minDr) × HEX_ROW + 2 × HEX_HALF_H`（顶面高）。
-   * 横向相位差（column 奇偶）：dr=0 时无差异；dr>0 时差 HEX_PHASE × 行数差。
-   */
-  function decorBoxOf(row, column, entry) {
-    var cells = decorSpanCells(entry);
-    if (cells.length === 1 && cells[0].dr === 0 && cells[0].dc === 0) {
-      return { center: hexCenter(row, column), width: HEX_TOP_R * 2, height: HEX_TOP_HALF_H * 2 };
-    }
-    var minDr = cells[0].dr, maxDr = cells[0].dr, minDc = cells[0].dc, maxDc = cells[0].dc;
-    for (var i = 1; i < cells.length; i += 1) {
-      if (cells[i].dr < minDr) minDr = cells[i].dr;
-      if (cells[i].dr > maxDr) maxDr = cells[i].dr;
-      if (cells[i].dc < minDc) minDc = cells[i].dc;
-      if (cells[i].dc > maxDc) maxDc = cells[i].dc;
-    }
-    var width = (maxDc - minDc) * HEX_COL + HEX_TOP_R * 2;
-    var height = (maxDr - minDr) * HEX_ROW + HEX_TOP_HALF_H * 2;
-    // 几何中心 = anchor + 各 cell 中心点的平均 —— 直接复用 hexCenter 保证同坐标系。
-    var sumX = 0, sumY = 0;
-    for (var c = 0; c < cells.length; c += 1) {
-      var cellCenter = hexCenter(row + cells[c].dr, column + cells[c].dc);
-      sumX += cellCenter.x;
-      sumY += cellCenter.y;
-    }
-    return {
-      center: { x: sumX / cells.length, y: sumY / cells.length },
-      width: width, height: height,
-    };
-  }
-  function drawDecor() {
-    var layers = svg.querySelectorAll ? svg.querySelectorAll('g.decorLayer') : null;
-    if (layers && layers.length) layers[0].innerHTML = decorMarkup();
+  function drawFreeDecor() {
+    var layers = svg.querySelectorAll ? svg.querySelectorAll('g.freeDecorLayer') : null;
+    if (layers && layers.length) layers[0].innerHTML = freeDecorMarkup();
   }
   /**
-   * 背景图层：把 `art.background`（默认 image/zdbg1）按 viewBox 等比 cover 铺在棋盘下。
-   * 棋盘改尺寸 / 缩放 / 平移时 viewBox 一直在变（applyView），所以每次 buildBoard / applyView
-   * 都要重新画。规则同游戏 TerritoryMapView.syncBackground —— scale = max(W/图W, H/图H)，
-   * 居中，溢出由 `preserveAspectRatio="xMidYMid slice"` 切掉（绝不拉伸）。
+   * 背景图层：把 `art.background`（默认 image/zdbg1）铺在棋盘下，**与棋盘一体缩放平移**。
+   *
+   * 背景中心**锚定棋盘中心 (0,0)**：平移时 viewBox 移动、背景自动跟随（markup 不变，不重画）。
+   * 尺寸取 `max(棋盘包围盒, 当前 viewBox)`：
+   *   - 放大（viewBox ≤ 包围盒）：背景 = 包围盒，随格子**同比例放大** —— 格子稳稳"在背景上"；
+   *   - 缩小（viewBox > 包围盒）：背景 = viewBox，**始终铺满视野** —— 全景可见、无黑边。
+   * 溢出由 `preserveAspectRatio="xMidYMid slice"` 切掉（绝不拉伸）。
    * 关闭背景（`showBackground=false`）或名字为空时清空图层，不占绘制。
    */
   /**
-   * 背景图标记（纯函数）：图盒取 `viewportRect()`，与 `viewBox` 同一个盒子。
+   * 背景图标记（纯函数）：图盒中心 (0,0)，宽高 = max(viewBox, 棋盘包围盒)。
+   * 包围盒与 `buildBoard` 的 baseHalfW/H 同源（去掉 pad）。
    * 关掉背景或没名字时返回空串。
    */
   function backgroundMarkup() {
     if (!backgroundName || !showBackground) return '';
     var rect = viewportRect();
+    var boardWidth = (COLS - 1) * HEX_COL + 2 * HEX_R;
+    var boardHeight = (ROWS - 1) * HEX_ROW + 2 * HEX_HALF_H + 2 * HEX_PHASE;
+    var width = Math.max(rect.width, boardWidth);
+    var height = Math.max(rect.height, boardHeight);
     return '<image class="backgroundImage" href="' + esc('/bg/' + backgroundName) +
-      '" x="' + rect.x.toFixed(1) + '" y="' + rect.y.toFixed(1) +
-      '" width="' + rect.width.toFixed(2) + '" height="' + rect.height.toFixed(2) +
+      '" x="' + (-width / 2).toFixed(1) + '" y="' + (-height / 2).toFixed(1) +
+      '" width="' + width.toFixed(2) + '" height="' + height.toFixed(2) +
       '" preserveAspectRatio="xMidYMid slice"></image>';
   }
   function drawBackground() {
     var layers = svg.querySelectorAll ? svg.querySelectorAll('g.backgroundLayer') : null;
     if (!layers || !layers.length) return;
-    layers[0].innerHTML = backgroundMarkup();
+    var next = backgroundMarkup();
+    // 同值守卫：`render()` 每落一笔都会调到这里，无脑重写 innerHTML 会**重建 `<image>` 元素** ——
+    // 大图（zdbg1 有 1.6MB）每次都要重新解码，表现为底图闪一下 / 有时整块空白。
+    // markup 没变就直接跳过；`buildBoard` 换了整块 svg.innerHTML 时把缓存清掉。
+    if (next === backgroundMarkupCache) return;
+    backgroundMarkupCache = next;
+    layers[0].innerHTML = next;
   }
   function resourceMarkup() {
     var parts = [];
@@ -1509,7 +1458,7 @@
       rows: ROWS, columns: COLS, playerCount: PLAYER_COUNT, cityMode: CITY_MODE,
       mirrorVertical: MIRROR_VERTICAL, mirrorHorizontal: MIRROR_HORIZONTAL,
       grid: grid.map(function (row) { return row.slice(); }),
-      decor: decor.map(function (row) { return row.slice(); }),
+      freeDecor: cloneFreeDecor(freeDecor),
       resourcePoints: cloneResourcePoints(resourcePoints),
       homes: homes.map(function (home) { return home ? { row: home.row, column: home.column } : null; })
     };
@@ -1528,12 +1477,7 @@
         if (a.grid[row][column] !== b.grid[row][column]) return false;
       }
     }
-    for (var drow = 0; drow < a.decor.length; drow += 1) {
-      if (!b.decor[drow] || a.decor[drow].length !== b.decor[drow].length) return false;
-      for (var dcolumn = 0; dcolumn < a.decor[drow].length; dcolumn += 1) {
-        if (a.decor[drow][dcolumn] !== b.decor[drow][dcolumn]) return false;
-      }
-    }
+    if (JSON.stringify(a.freeDecor || []) !== JSON.stringify(b.freeDecor || [])) return false;
     if (JSON.stringify(a.resourcePoints || []) !== JSON.stringify(b.resourcePoints || [])) return false;
     return true;
   }
@@ -1563,7 +1507,11 @@
     MIRROR_VERTICAL = state.mirrorVertical;
     MIRROR_HORIZONTAL = state.mirrorHorizontal;
     grid = state.grid.map(function (row) { return row.slice(); });
-    decor = state.decor ? state.decor.map(function (row) { return row.slice(); }) : emptyDecor();
+    freeDecor = cloneFreeDecor(state.freeDecor || []);
+    nextFreeDecorId = freeDecor.reduce(function (next, item) {
+      return Number.isInteger(item.id) ? Math.max(next, item.id + 1) : next;
+    }, 1);
+    if (!freeDecorById(selectedFreeDecorId)) selectedFreeDecorId = null;
     resourcePoints = cloneResourcePoints(state.resourcePoints || []);
     homes = state.homes.map(function (home) { return home ? { row: home.row, column: home.column } : null; });
     while (homes.length < MAX_SECTIONS) homes.push(null);
@@ -1656,63 +1604,6 @@
           homes[emptySlot] = { row: homeRow, column: homeColumn };
           changed = true;
         }
-      } else if (mode === 'decor' || mode === 'decor-clear') {
-        // 装饰的唯一约束：宿主格必须是虚空格。多格装饰要检查 span 里所有 cell 都是虚空；
-        // 落到已被别的装饰占的 cell 也算冲突 —— 让 user 自己手动右键清理，或换个地方摆。
-        var name = mode === 'decor-clear' ? '' : decorBrush;
-        if (name && grid[source.row][source.column] !== VOID) { blocked += 1; continue; }
-        // 新 entry：当前笔刷的 art + 装饰面板选定的 span / offset。
-        var nextEntry = name ? { art: name, span: decorSpan, offset: decorOffset } : null;
-        // 单格等价（span=[[0,0]] & offset=[0,0]）时退化成字符串，与 art.tiles 旧存档格式对齐。
-        var nextStored = (name) ? serializeDecorEntry(nextEntry) : '';
-        var currentStored = (decor[source.row] && decor[source.row][source.column] !== undefined)
-          ? decor[source.row][source.column] : '';
-        // 字符串 vs 对象之间的等价比较 —— 必须连 span + offset 都对得上：offset 改了得重写盘，
-        // 不能因为 art 字符串相等就跳过（旧口径只看 art，会漏掉"加 offset 后实际是多格对象"的写盘）。
-        // parse 一次把字符串 / 对象都归一到 { art, span, offset } 再逐字段比。
-        var alreadySame = false;
-        if (nextEntry) {
-          var storedEntry = parseDecorEntry(currentStored);
-          if (storedEntry) {
-            alreadySame = storedEntry.art === nextEntry.art &&
-              storedEntry.span.length === nextEntry.span.length &&
-              storedEntry.offset[0] === nextEntry.offset[0] &&
-              storedEntry.offset[1] === nextEntry.offset[1];
-            if (alreadySame && storedEntry.span.length === nextEntry.span.length) {
-              for (var sIndex = 0; sIndex < storedEntry.span.length; sIndex += 1) {
-                if (storedEntry.span[sIndex][0] !== nextEntry.span[sIndex][0] ||
-                    storedEntry.span[sIndex][1] !== nextEntry.span[sIndex][1]) {
-                  alreadySame = false; break;
-                }
-              }
-            }
-          }
-        } else {
-          alreadySame = !currentStored;
-        }
-        if (!alreadySame) {
-          // 多格装饰 = 检查整片 cell 都是虚空且没被其他装饰占；单格走老路径。
-          // 注：`cells` 是 paintCells 的入参，循环体外别覆盖它 —— 否则外层 for 循环的
-          // `i < cells.length` 会读到 footprint 数组长度（详见 r293 红/绿例案）。
-          var blockedCells = 0;
-          if (name) {
-            var decorCells = decorFootprint(source.row, source.column, nextEntry);
-            for (var fc = 0; fc < decorCells.length; fc += 1) {
-              var cc = decorCells[fc];
-              if (cc.row < 0 || cc.row >= ROWS || cc.column < 0 || cc.column >= COLS ||
-                  grid[cc.row][cc.column] !== VOID) { blockedCells += 1; break; }
-              // 已存在装饰占住非 anchor cell —— 跳过这一笔。
-              if (!(cc.row === source.row && cc.column === source.column)) {
-                var existed = decorEntryAt(cc.row, cc.column);
-                if (existed) { blockedCells += 1; break; }
-              }
-            }
-          }
-          if (blockedCells) { blocked += 1; continue; }
-          if (!decor[source.row]) decor[source.row] = [];
-          decor[source.row][source.column] = nextStored;
-          changed = true;
-        }
       } else if (mode === 'resource' || mode === 'resource-clear') {
         // 资源点是中立玩法数据，不随分区格镜像：用用户实际点击的坐标，不做 sourceCell 翻转。
         var pointRow = row, pointColumn = column;
@@ -1763,18 +1654,13 @@
       }
     }
     if (!changed) {
-      if (blocked) flash(mode === 'resource'
-        ? '资源只能放在与其他资源相距至少 ' + resourceMinDistance() + ' 格的中立格；已跳过 ' + blocked + ' 格'
-        : '装饰只能摆在虚空格上：这 ' + blocked + ' 格不是虚空，已跳过', 'err');
+      if (blocked) flash('资源只能放在与其他资源相距至少 ' + resourceMinDistance() + ' 格的中立格；已跳过 ' + blocked + ' 格', 'err');
       return false;
     }
-    // 用户这一笔可能涂掉了主城格（或装饰脚下的虚空），所以编辑路径要连带失效检查。
-    var pruned = applyMirrorAndPrune();
+    // 用户这一笔可能涂掉主城格或资源点宿主格，所以编辑路径要连带失效检查。
+    applyMirrorAndPrune();
     render();
-    if (blocked) flash(mode === 'resource'
-      ? '资源只能放在与其他资源相距至少 ' + resourceMinDistance() + ' 格的中立格；已跳过 ' + blocked + ' 格'
-      : '装饰只能摆在虚空格上：这 ' + blocked + ' 格不是虚空，已跳过', 'err');
-    else if (pruned) flash('有 ' + pruned + ' 格虚空被涂成了可通行格，上面的装饰已一并收回', 'warn');
+    if (blocked) flash('资源只能放在与其他资源相距至少 ' + resourceMinDistance() + ' 格的中立格；已跳过 ' + blocked + ' 格', 'err');
     return true;
   }
   /** 单格写入：脚本与测试的稳定入口，不扩散笔刷半径。 */
@@ -1845,27 +1731,15 @@
     var playable = ROWS * COLS - stats.empty;
     checks.push([playable > 0 ? 'ok' : 'err', '可通行格：' + playable + ' / 虚空：' + stats.empty]);
 
-    // 装饰：唯一硬约束是**必须落在虚空格上**。编辑器不会产出违规组合（涂掉虚空时自动收回），
-    // 这里再核一遍 —— 外部来源的图、或将来新加的写入路径漏了 pruneDecor 时能立刻看见。
-    var decorTotal = decorCount();
-    var decorNames = [];
-    var decorStrays = [];
-    for (var drow = 0; drow < ROWS; drow += 1) {
-      for (var dcolumn = 0; dcolumn < COLS; dcolumn += 1) {
-        var decorName = decorNameAt(drow, dcolumn);
-        if (!decorName) continue;
-        if (grid[drow][dcolumn] !== VOID) { decorStrays.push('(' + drow + ', ' + dcolumn + ')'); continue; }
-        if (decorNames.indexOf(decorName) < 0) decorNames.push(decorName);
+    var decorTotal = freeDecor.length;
+    if (decorTotal) {
+      var decorNames = [];
+      for (var decorIndex = 0; decorIndex < freeDecor.length; decorIndex += 1) {
+        if (decorNames.indexOf(freeDecor[decorIndex].art) < 0) decorNames.push(freeDecor[decorIndex].art);
       }
-    }
-    if (decorStrays.length) {
-      checks.push(['err', '装饰必须落在虚空格上：' + decorStrays.slice(0, 4).join(' ') +
-        (decorStrays.length > 4 ? ' 等 ' + decorStrays.length + ' 格' : '') + '（虚空格 ' + stats.empty + ' 格）']);
-    } else if (decorTotal) {
-      checks.push(['ok', '虚空装饰：' + decorTotal + ' 格 · ' + decorNames.length + ' 种（' +
+      checks.push(['ok', '场景装饰：' + decorTotal + ' 个 · ' + decorNames.length + ' 种（' +
         decorNames.slice(0, 3).join(' / ') + (decorNames.length > 3 ? ' 等' : '') + '）']);
     }
-    // 一格装饰都没摆时不推这条：装饰是可选的美术点缀，不该在每张图上都占一行。
     var invalidResources = [];
     var resourceCells = {};
     for (var resourceIndex = 0; resourceIndex < resourcePoints.length; resourceIndex += 1) {
@@ -1955,7 +1829,7 @@
     if (homeNeighborWarning()) checks.push(homeNeighborWarning());
 
     return { counts: stats.counts, empty: stats.empty, playable: playable, connected: connected,
-      decor: decorTotal, decorStrays: decorStrays, checks: checks };
+      decor: decorTotal, decorStrays: [], checks: checks };
   }
 
   function homeNeighborWarning() {
@@ -1988,20 +1862,14 @@
   }
 
   /**
-   * 落盘的 art：装饰按 'row,column' 键合并进 tiles，与透传过来的分区键 / background 共存。
-   * 透传里的旧格子键一律丢掉 —— 那些坐标的权威来源是当前 decor，留着会写出幽灵装饰。
+   * 落盘的 art：地块贴图保留分区键，自由装饰统一写入 freeDecor。
+   * 旧版 'row,column' 装饰键一律丢掉，避免继续产出无法编辑的装饰。
    * 装饰与透传都为空时返回 null，免得每张图都挂一个空 art 对象。
    */
   function artOut() {
     var source = passthrough.art && typeof passthrough.art === 'object' && !Array.isArray(passthrough.art)
       ? passthrough.art : null;
     var tiles = {};
-    for (var row = 0; row < ROWS; row += 1) {
-      for (var column = 0; column < COLS; column += 1) {
-        var entry = decorEntryAt(row, column);
-        if (entry) tiles[decorKeyOf(row, column)] = serializeDecorEntry(entry);
-      }
-    }
     var inherited = source && source.tiles && typeof source.tiles === 'object' && !Array.isArray(source.tiles)
       ? source.tiles : null;
     if (inherited) {
@@ -2014,9 +1882,10 @@
     var art = {};
     var sourceKeys = source ? Object.keys(source) : [];
     for (var k = 0; k < sourceKeys.length; k += 1) {
-      if (sourceKeys[k] !== 'tiles') art[sourceKeys[k]] = source[sourceKeys[k]];
+      if (sourceKeys[k] !== 'tiles' && sourceKeys[k] !== 'freeDecor') art[sourceKeys[k]] = source[sourceKeys[k]];
     }
     if (Object.keys(tiles).length) art.tiles = tiles;
+    if (freeDecor.length) art.freeDecor = cloneFreeDecor(freeDecor);
     // 背景图：默认 image/zdbg1 不写出来（编辑器启动态默认值），其余都写出 —— 客户端用 art.background
     // 判断"是否有自定义背景"。未点 / 改时为默认值；用户改过后写到 art 上。
     if (backgroundName && backgroundName !== DEFAULT_BACKGROUND) art.background = backgroundName;
@@ -2044,7 +1913,7 @@
       if (passthrough[key] !== undefined) data[key] = passthrough[key];
     });
     if (resourcePoints.length) data.resourcePoints = cloneResourcePoints(resourcePoints);
-    // 装饰不占 v3 新字段：写进 art.tiles 的 'row,column' 键（客户端 ZCMapArt 已支持按格覆盖）。
+    // 场景装饰统一写进 art.freeDecor，不参与格子字符画。
     var art = artOut();
     if (art) data.art = art;
     return data;
@@ -2068,8 +1937,8 @@
     var report = validate();
     // 背景层在最底层，每次重新计算（棋盘尺寸 / 缩放 / 平移变化都会影响）。
     drawBackground();
-    // 两种附着层都在 hex 之上，格子上色之后再画。
-    drawDecor();
+    // 场景装饰在 hex 之上，格子上色之后再画。
+    drawFreeDecor();
     drawResources();
     for (var section = 1; section <= MAX_SECTIONS; section += 1) {
       var cell = $('statS' + section);
@@ -2091,6 +1960,7 @@
     updateSaveButton();
     if (hover) drawCursor(brushCells(hover.row, hover.column, brushRadius));
     updateReadout();
+    syncFreeDecorInspector();
   }
 
   // ---- 服务端 -----------------------------------------------------------------
@@ -2123,7 +1993,7 @@
    * 卡片上只写末段名（`sea/whirlpool` → `whirlpool`），全名挂 `title` —— 198px 的左栏放不下全名。
    */
   function decorCardHtml(name, hasArt, label) {
-    var on = (brush === 'decor' && decorBrush === name) ? ' on' : '';
+    var on = (brush === 'freeDecor' && decorBrush === name) ? ' on' : '';
     var swatch = hasArt
       ? '<img class="swDecorImg" src="' + esc(decorUrl(name)) + '" alt="">'
       : '<span class="swDecor' + (name ? '' : ' plain') + '"' +
@@ -2161,7 +2031,7 @@
         withArt + ' 种已出图；其余是自定义名（' + (decorRememberSupported
           ? '已记在服务端，刷新不用重填'
           : '没连服务端，只在当前页面有效、刷新要重填') +
-        '）。落盘写进 art.tiles 的 "行,列" 键。'
+        '）。落盘写进 art.freeDecor。'
       : '没扫到装饰资源、也没有自定义名（assets/resources/image/decor 为空或不存在）—— ' +
         '在下面填一个资源名即可开始摆，' + (decorRememberSupported
           ? '这个名字会被记住。' : '没连服务端，这个名字刷新后会丢。');
@@ -2173,6 +2043,7 @@
       setDecorLibrary(
         Array.isArray(result.decor) ? result.decor : [],
         Array.isArray(result.custom) ? result.custom : [],
+        result.sizes,
       );
     } catch (error) {
       // 直接双击 index.html（没连服务）也要能用：清单为空，靠手填资源名。
@@ -2248,8 +2119,10 @@
     });
     // 装饰清单与笔刷列表是两套按钮，但共用 brush——切到别的笔刷时装饰项要跟着灭灯。
     Array.prototype.forEach.call(document.querySelectorAll('.decorItem'), function (button) {
-      button.classList.toggle('on', brush === 'decor' && decorBrush === (button.dataset.decor || ''));
+      button.classList.toggle('on', brush === 'freeDecor' && decorBrush === (button.dataset.decor || ''));
     });
+    var freeControls = $('freeDecorControls');
+    if (freeControls) freeControls.hidden = false;
     Array.prototype.forEach.call(document.querySelectorAll('.resourceItem'), function (button) {
       button.classList.toggle('on', brush === 'resource' && resourceBrush === (button.dataset.resource || ''));
     });
@@ -2267,23 +2140,41 @@
     Array.prototype.forEach.call(document.querySelectorAll('#segBrush button'), function (button) {
       button.classList.toggle('on', Number(button.dataset.radius) === brushRadius);
     });
-    Array.prototype.forEach.call(document.querySelectorAll('#segDecorShape button'), function (button) {
-      var matched = false;
-      for (var shapeKey in DECOR_SHAPES) {
-        if (!DECOR_SHAPES.hasOwnProperty(shapeKey)) continue;
-        if (DECOR_SHAPES[shapeKey].length !== decorSpan.length) continue;
-        var same = true;
-        for (var i = 0; i < decorSpan.length; i += 1) {
-          if (DECOR_SHAPES[shapeKey][i][0] !== decorSpan[i][0] || DECOR_SHAPES[shapeKey][i][1] !== decorSpan[i][1]) {
-            same = false; break;
-          }
-        }
-        if (same) { matched = shapeKey; break; }
-      }
-      button.classList.toggle('on', matched === button.dataset.shape);
-    });
     syncUndoButtons();
     updateReadout();
+    syncFreeDecorInspector();
+  }
+
+  function syncFreeDecorInspector() {
+    var item = freeDecorById(selectedFreeDecorId);
+    var inspector = $('freeDecorInspector');
+    if (inspector) inspector.hidden = decorKind !== 'free' || !item;
+    var snap = $('freeDecorSnap');
+    if (snap) snap.checked = freeDecorSnap;
+    var fields = [
+      ['freeDecorX', item && item.x], ['freeDecorY', item && item.y],
+      ['freeDecorWidth', item && item.width], ['freeDecorHeight', item && item.height],
+      ['freeDecorRotation', item && item.rotation || 0]
+    ];
+    fields.forEach(function (entry) {
+      var input = $(entry[0]);
+      if (!input) return;
+      input.value = item ? String(entry[1]) : '';
+      input.disabled = !item || item.locked;
+    });
+    ['btnFreeDecorFlipX', 'btnFreeDecorFlipY'].forEach(function (id) {
+      var button = $(id);
+      if (button) button.disabled = !item || item.locked;
+    });
+    var duplicate = $('btnFreeDecorDuplicate');
+    var remove = $('btnFreeDecorDelete');
+    var lock = $('btnFreeDecorLock');
+    if (duplicate) duplicate.disabled = !item;
+    if (remove) remove.disabled = !item;
+    if (lock) {
+      lock.disabled = !item;
+      lock.textContent = item && item.locked ? '解锁' : '锁定';
+    }
   }
 
   function wireEvents() {
@@ -2309,6 +2200,14 @@
       if (commit) commitUndo(stroke.before);
       stroke = null;
     }
+    var freeDecorDrag = null;
+    function endFreeDecorDrag(commit) {
+      if (!freeDecorDrag) return;
+      var before = freeDecorDrag.before;
+      freeDecorDrag = null;
+      if (commit) commitUndo(before);
+      syncFreeDecorInspector();
+    }
     function markPanning(on) {
       var stage = $('stage');
       if (!stage || !stage.classList) return;
@@ -2327,12 +2226,44 @@
       if (event.button !== 0 && event.button !== 2) return;
       var local = pointerLocal(event);
       if (!local) return;
+      var target = event.target && event.target.closest ? event.target.closest('[data-free-decor-id]') : null;
+      if (target) {
+        var targetId = Number(target.dataset.freeDecorId);
+        var targetItem = freeDecorById(targetId);
+        if (targetItem) {
+          selectFreeDecor(targetId);
+          if (event.button === 0 && !targetItem.locked) {
+            var handle = target.dataset.handle || '';
+            var dx = local.x - targetItem.x, dy = local.y - targetItem.y;
+            freeDecorDrag = {
+              id: targetId, handle: handle, before: snapshot(), startX: local.x, startY: local.y,
+              x: targetItem.x, y: targetItem.y, width: targetItem.width, height: targetItem.height,
+              rotation: targetItem.rotation || 0,
+              // 按下的缩放角（±1），四个角决定缩放时固定哪个对角。
+              cornerX: Number(target.dataset.cx) || 0, cornerY: Number(target.dataset.cy) || 0,
+              startDistance: Math.max(1, Math.sqrt(dx * dx + dy * dy)),
+              startAngle: Math.atan2(dy, dx) * 180 / Math.PI
+            };
+            if (svg.setPointerCapture && event.pointerId !== undefined) {
+              try { svg.setPointerCapture(event.pointerId); } catch (error) { /* 合成事件没有真实 pointerId */ }
+            }
+            event.preventDefault();
+          }
+        }
+        return;
+      }
+      // 自由装饰按地图坐标摆放，空白处即使不在任何格子上也能放置。
+      if (decorKind === 'free' && brush === 'freeDecor') {
+        if (event.button === 0 && decorBrush) addFreeDecor(decorBrush, local.x, local.y);
+        else if (event.button === 0 && selectedFreeDecorId !== null) { selectedFreeDecorId = null; render(); }
+        event.preventDefault();
+        return;
+      }
       var cell = cellAtLocal(local.x, local.y);
       if (!cell) return;
       // 一次按下到抬起 = 一个撤销步；笔画期间只记起点快照。
-      // 右键 = "擦掉当前笔刷画的东西"：装饰、资源分别擦自身，其余擦成虚空。
-      var eraseMode = brush === 'decor' && decorBrush ? 'decor-clear'
-        : brush === 'resource' && resourceBrush ? 'resource-clear'
+      // 右键：资源笔刷删除资源点，其余格子笔刷擦成虚空。
+      var eraseMode = brush === 'resource' && resourceBrush ? 'resource-clear'
         : brush === 'home' ? 'home-clear' : 'void';
       stroke = {
         before: snapshot(), last: local, erase: eraseMode,
@@ -2344,10 +2275,9 @@
       paintAt(cell.row, cell.column, stroke.mode);
       drawCursor([]);
       event.preventDefault();
-      // 按住不放：每帧在当前指针位置重复铺色（分区/地形笔刷；装饰笔刷是 toggle，跳过避免闪烁）。
+      // 按住不放：每帧在当前指针位置重复铺色。
       var autoPaintMode = (event.button === 2) ? (stroke.erase || 'void') : stroke.mode;
-      if (autoPaintMode !== 'decor' && autoPaintMode !== 'decor-clear' &&
-          autoPaintMode !== 'resource' && autoPaintMode !== 'resource-clear') {
+      if (autoPaintMode !== 'resource' && autoPaintMode !== 'resource-clear') {
         stopPaintLoop();
         var tick = function () {
           if (!stroke) return;
@@ -2373,6 +2303,43 @@
         applyView();
         return;
       }
+      if (freeDecorDrag) {
+        var moving = freeDecorById(freeDecorDrag.id);
+        if (!moving || moving.locked) { endFreeDecorDrag(false); return; }
+        var drag = freeDecorDrag;
+        if (drag.handle === 'scale') {
+          var radians = drag.rotation * Math.PI / 180;
+          var worldDx = local.x - drag.startX, worldDy = local.y - drag.startY;
+          var localDx = Math.cos(radians) * worldDx + Math.sin(radians) * worldDy;
+          var localDy = -Math.sin(radians) * worldDx + Math.cos(radians) * worldDy;
+          // 按下的角（±1）。缩放时**对角固定**、被按角跟随指针 —— 同 Cocos 节点编辑器。
+          // 直接点本体（没有角符号）时退化为右下角语义，保证旧行为不丢。
+          var sx = drag.cornerX || 1, sy = drag.cornerY || 1;
+          if ($('freeDecorRatio').checked) {
+            // 等比：因子 = 指针到固定对角的距离 / 起始对角距离。
+            var fixedX = -sx * drag.width / 2, fixedY = -sy * drag.height / 2;
+            var curX = sx * drag.width / 2 + localDx, curY = sy * drag.height / 2 + localDy;
+            var startDist = Math.max(1, Math.sqrt(drag.width * drag.width + drag.height * drag.height));
+            var curDist = Math.max(1, Math.sqrt((curX - fixedX) * (curX - fixedX) + (curY - fixedY) * (curY - fixedY)));
+            var factor = Math.max(0.05, curDist / startDist);
+            moving.width = Math.max(1, drag.width * factor);
+            moving.height = Math.max(1, drag.height * factor);
+          } else {
+            moving.width = Math.max(1, drag.width + 2 * sx * localDx * (moving.flipX ? -1 : 1));
+            moving.height = Math.max(1, drag.height + 2 * sy * localDy * (moving.flipY ? -1 : 1));
+          }
+        } else if (drag.handle === 'rotate') {
+          var angle = Math.atan2(local.y - drag.y, local.x - drag.x) * 180 / Math.PI;
+          moving.rotation = drag.rotation + angle - drag.startAngle;
+        } else {
+          var nextX = drag.x + local.x - drag.startX;
+          var nextY = drag.y + local.y - drag.startY;
+          var point = freeDecorSnap ? nearestHexCenter(nextX, nextY) : { x: nextX, y: nextY };
+          moving.x = point.x; moving.y = point.y;
+        }
+        render();
+        return;
+      }
       if (!local) return;
       if (!stroke) { updateHover(local); return; }
       // 沿上一采样点到当前点补齐沿途所有格 —— 快速拖动不掉格。
@@ -2394,8 +2361,9 @@
       event.preventDefault();
       zoomAt(event.clientX, event.clientY, event.deltaY < 0 ? 1.15 : 1 / 1.15);
     }, { passive: false });
-    window.addEventListener('pointerup', function () { endStroke(true); });
-    window.addEventListener('blur', function () { endStroke(true); });
+    window.addEventListener('resize', function () { fitCanvas(); });
+    window.addEventListener('pointerup', function () { endStroke(true); endFreeDecorDrag(true); });
+    window.addEventListener('blur', function () { endStroke(true); endFreeDecorDrag(true); });
     window.addEventListener('keydown', function (event) {
       var tag = event.target && event.target.tagName ? String(event.target.tagName).toLowerCase() : '';
       var key = event.key || '';
@@ -2412,6 +2380,11 @@
       }
       if (event.ctrlKey || event.metaKey) {
         var lower = key.toLowerCase();
+        if (lower === 'd' && decorKind === 'free' && selectedFreeDecorId !== null) {
+          if (event.preventDefault) event.preventDefault();
+          duplicateSelectedFreeDecor();
+          return;
+        }
         if (lower === 'z' && !event.shiftKey) { if (event.preventDefault) event.preventDefault(); undo(); return; }
         if ((lower === 'z' && event.shiftKey) || lower === 'y') {
           if (event.preventDefault) event.preventDefault();
@@ -2419,19 +2392,24 @@
         }
         return;
       }
-      if (key === '[') setBrushRadius(brushRadius - 1);
+      if (decorKind === 'free' && selectedFreeDecorId !== null && (key === 'Delete' || key === 'Backspace')) {
+        if (event.preventDefault) event.preventDefault();
+        deleteSelectedFreeDecor();
+      }
+      else if (decorKind === 'free' && selectedFreeDecorId !== null &&
+               (key === 'ArrowLeft' || key === 'ArrowRight' || key === 'ArrowUp' || key === 'ArrowDown')) {
+        if (event.preventDefault) event.preventDefault();
+        var item = freeDecorById(selectedFreeDecorId);
+        var nudge = event.shiftKey ? 1 : 5;
+        if (item) {
+          var nx = item.x + (key === 'ArrowLeft' ? -nudge : key === 'ArrowRight' ? nudge : 0);
+          var ny = item.y + (key === 'ArrowUp' ? -nudge : key === 'ArrowDown' ? nudge : 0);
+          moveSelectedFreeDecor(nx, ny);
+        }
+      }
+      else if (key === '[') setBrushRadius(brushRadius - 1);
       else if (key === ']') setBrushRadius(brushRadius + 1);
       else if (key === '0') resetView();
-      else if (brush === 'decor' && decorBrush && (key === 'ArrowLeft' || key === 'ArrowRight' ||
-               key === 'ArrowUp' || key === 'ArrowDown')) {
-        // 方向键微调装饰图位置（offset）。Shift = 精细 1px，否则 ±5px。
-        if (event.preventDefault) event.preventDefault();
-        var step = event.shiftKey ? 1 : 5;
-        if (key === 'ArrowLeft') nudgeDecorOffset(-step, 0);
-        else if (key === 'ArrowRight') nudgeDecorOffset(step, 0);
-        else if (key === 'ArrowUp') nudgeDecorOffset(0, -step);
-        else if (key === 'ArrowDown') nudgeDecorOffset(0, step);
-      }
     });
     window.addEventListener('keyup', function (event) { if ((event.key || '') === ' ') spaceDown = false; });
     window.addEventListener('beforeunload', function (event) {
@@ -2451,9 +2429,37 @@
     Array.prototype.forEach.call(document.querySelectorAll('#segBrush button'), function (button) {
       button.addEventListener('click', function () { setBrushRadius(Number(this.dataset.radius)); });
     });
-    Array.prototype.forEach.call(document.querySelectorAll('#segDecorShape button'), function (button) {
-      button.addEventListener('click', function () { setDecorShape(this.dataset.shape); });
+    $('freeDecorSnap').addEventListener('change', function () { setFreeDecorSnap(this.checked); });
+    $('btnFreeDecorDuplicate').addEventListener('click', duplicateSelectedFreeDecor);
+    $('btnFreeDecorDelete').addEventListener('click', deleteSelectedFreeDecor);
+    $('btnFreeDecorLock').addEventListener('click', toggleSelectedFreeDecorLock);
+    $('btnFreeDecorFlipX').addEventListener('click', function () {
+      var item = freeDecorById(selectedFreeDecorId);
+      if (item) updateSelectedFreeDecor({ flipX: !item.flipX });
     });
+    $('btnFreeDecorFlipY').addEventListener('click', function () {
+      var item = freeDecorById(selectedFreeDecorId);
+      if (item) updateSelectedFreeDecor({ flipY: !item.flipY });
+    });
+    function bindFreeDecorNumber(id, key) {
+      $(id).addEventListener('change', function () {
+        var value = Number(this.value);
+        if (!Number.isFinite(value)) { syncFreeDecorInspector(); return; }
+        var patch = {}; patch[key] = value;
+        var item = freeDecorById(selectedFreeDecorId);
+        if (item && $('freeDecorRatio').checked && (key === 'width' || key === 'height')) {
+          var ratio = item.width / item.height;
+          if (key === 'width') patch.height = Math.max(1, value / ratio);
+          else patch.width = Math.max(1, value * ratio);
+        }
+        updateSelectedFreeDecor(patch);
+      });
+    }
+    bindFreeDecorNumber('freeDecorX', 'x');
+    bindFreeDecorNumber('freeDecorY', 'y');
+    bindFreeDecorNumber('freeDecorWidth', 'width');
+    bindFreeDecorNumber('freeDecorHeight', 'height');
+    bindFreeDecorNumber('freeDecorRotation', 'rotation');
     if ($('btnUndo')) $('btnUndo').addEventListener('click', undo);
     if ($('btnRedo')) $('btnRedo').addEventListener('click', redo);
     if ($('btnFit')) $('btnFit').addEventListener('click', resetView);
@@ -2504,7 +2510,10 @@
     $('decorList').addEventListener('click', function (event) {
       var target = event.target;
       var item = target && target.closest ? target.closest('.decorItem') : null;
-      if (item) setDecorBrush(item.dataset.decor || '');
+      if (item) {
+        setDecorBrush(item.dataset.decor || '');
+        if (decorKind === 'free') flash('已选中自由装饰：点击画布空白处放置，然后拖动调整', 'ok');
+      }
     });
     $('btnDecorAdd').addEventListener('click', function () {
       var input = $('inDecor');
@@ -2512,7 +2521,7 @@
       if (!name) { flash('先填一个装饰资源名，例如 reef_01', 'err'); return; }
       setDecorBrush(name);
       if (input) input.value = '';
-      flash('已选中装饰「' + name + '」：点虚空格摆放，右键擦掉', 'ok');
+      flash('已选中装饰「' + name + '」：点击画布放置，可拖动和调整大小', 'ok');
     });
     $('resourceList').addEventListener('click', function (event) {
       var target = event.target;
@@ -2541,16 +2550,18 @@
     applyLayout: applyLayout, clearGrid: clearGrid,
     paint: paintCell, paintCells: paintCells, brushCells: brushCells, hexNeighbors: hexNeighbors,
     toLocal: toLocal, cellAtLocal: cellAtLocal, walkStroke: walkStroke, hexCenter: hexCenter,
-    setBrushRadius: setBrushRadius, undo: undo, redo: redo, resetView: resetView,
-    setDecorBrush: setDecorBrush, setDecorLibrary: setDecorLibrary, setDecorShape: setDecorShape,
-    rememberDecorName: rememberDecorName, nudgeDecorOffset: nudgeDecorOffset,
-    decorMarkup: decorMarkup, decorCount: decorCount, groupDecorEntries: groupDecorEntries,
-    parseDecorEntry: parseDecorEntry, decorFootprint: decorFootprint, mirrorDecorEntry: mirrorDecorEntry,
-    isMultiCellDecor: isMultiCellDecor, decorBoxOf: decorBoxOf, decorSpanCells: decorSpanCells,
+    setBrushRadius: setBrushRadius, undo: undo, redo: redo, resetView: resetView, zoomAt: zoomAt,
+    setDecorBrush: setDecorBrush, setDecorLibrary: setDecorLibrary,
+    setDecorKind: setDecorKind, addFreeDecor: addFreeDecor, selectFreeDecor: selectFreeDecor,
+    moveSelectedFreeDecor: moveSelectedFreeDecor, updateSelectedFreeDecor: updateSelectedFreeDecor,
+    duplicateFreeDecor: duplicateFreeDecor, deleteFreeDecor: deleteFreeDecor,
+    setFreeDecorLocked: setFreeDecorLocked, setFreeDecorSnap: setFreeDecorSnap,
+    freeDecorMarkup: freeDecorMarkup,
+    rememberDecorName: rememberDecorName, groupDecorEntries: groupDecorEntries,
     setResourceBrush: setResourceBrush, resourceMarkup: resourceMarkup,
     addResourcePoint: addResourcePoint, removeResourcePoint: removeResourcePoint,
     // 视图矩形 / 背景图标记：判据要能断言「图盒 == viewBox」（见 viewportRect 的红字说明）。
-    viewportRect: viewportRect, backgroundMarkup: backgroundMarkup,
+    viewportRect: viewportRect, backgroundMarkup: backgroundMarkup, fitCanvas: fitCanvas,
     snapshot: snapshot, commitUndo: commitUndo,
     buildJSON: buildJSON, validate: validate,
     // 画布几何：与工程渲染间距 1:1（来源 ZCGameViewUtil）。探针与用例都靠它断言，
@@ -2567,13 +2578,16 @@
     state: function () {
       return {
         rows: ROWS, cols: COLS, playerCount: PLAYER_COUNT, cityMode: CITY_MODE,
+        brush: brush,
         mirrorVertical: MIRROR_VERTICAL, mirrorHorizontal: MIRROR_HORIZONTAL,
         brushRadius: brushRadius, zoom: zoom, panX: panX, panY: panY,
         undoDepth: undoStack.length, redoDepth: redoStack.length,
         grid: grid.map(function (row) { return row.slice(); }),
-        decor: decor.map(function (row) { return row.slice(); }),
+        freeDecor: cloneFreeDecor(freeDecor), selectedFreeDecorId: selectedFreeDecorId,
+        freeDecorSnap: freeDecorSnap, decorKind: decorKind,
         decorBrush: decorBrush, decorLibrary: decorLibrary.slice(),
         decorImages: Object.keys(decorImages).sort(),
+        decorSizes: decorSizes,
         decorRememberSupported: decorRememberSupported,
         resourceBrush: resourceBrush, resourceImages: Object.keys(resourceImages).sort(),
         resourcePoints: cloneResourcePoints(resourcePoints),

@@ -46,7 +46,7 @@ import { VirtualScrollView } from '../../../vscrollview/VScrollView';
 import { PopupBase } from '../../../framework/ui/PopupBase';
 import { PopupCloseReason } from '../../../framework/ui/PopupDef';
 import type { ZCGuidePreparedContent } from '../application/ZCGuideLoader';
-import type { ZCGuideEntry, ZCGuideParams } from './ZCGuideConfig';
+import type { ZCGuideEntry, ZCGuideParams } from '../model/ZCGuideConfig';
 import { ZCGuideItem } from './ZCGuideItem';
 
 const { ccclass, property } = _decorator;
@@ -89,7 +89,6 @@ export class ZCGuidePanel extends PopupBase {
 
     private entries: ZCGuideEntry[] = [];
     private iconFrames: ReadonlyMap<string, SpriteFrame> = new Map();
-    private bound = false;
 
     /** 当前展示的条目数，供上层/调试读取。 */
     get entryCount(): number {
@@ -118,27 +117,26 @@ export class ZCGuidePanel extends PopupBase {
 
     protected onInit(): void {
         this.bindEvents();
-        const list = this.listView;
-        // 虚拟列表会复用节点；回调只绑定一次，按 index 读取当前打开的数据。
-        list.renderItemFn = (itemNode: Node, index: number): void => {
-            const item = itemNode.getComponent(ZCGuideItem);
-            const entry = this.entries[index];
-            // `getComponent` 的类型契约可空：条目节点没挂脚本时跳过（这不是 Inspector 引用）。
-            if (!item) return;
-            if (!entry) {
-                item.clear();
-                return;
-            }
-            item.render(entry, this.iconFrames);
-        };
-        list.onItemClickFn = (_itemNode: Node, index: number): void => {
-            // 点击条目由父级处理（本面板只是列表展示）；占位保留以避免空回调。
-        };
+        //  赋**具名方法 + `.bind(this)`**（规范 §7.5 配套第 3 条）：`VScrollView` 侧是
+        // `this.renderItemFn(itemNode, i)` 的方法调用语法，不绑的话函数里的 `this` 会是它。
+        // 只在这里绑一次：`PopupBase` 保证 `onInit` 每实例跑一次（`onEnable` 会被实例池反复触发，
+        // 在那儿补绑才是会叠监听的那种写法 —— 规范 7.2）。
+        this.listView.renderItemFn = this.renderItem.bind(this);
     }
 
-    protected onEnable(): void {
-        // 节点被重新激活（含实例池复用）时补绑，bindEvents 内部幂等。
-        if (this.isPopupOpen) this.bindEvents();
+    /**
+     * 列表条目的渲染回调：虚拟列表会复用节点，所以按下标**现取**本趟数据（不闭包捕获）。
+     */
+    private renderItem(itemNode: Node, index: number): void {
+        const entry = this.entries[index];
+        const item = itemNode.getComponent(ZCGuideItem);
+        // `getComponent` 的类型契约可空：条目节点没挂脚本时跳过（这不是 Inspector 引用）。
+        if (!item) return;
+        if (!entry) {
+            item.clear();
+            return;
+        }
+        item.render(entry, this.iconFrames);
     }
 
     
@@ -161,8 +159,6 @@ export class ZCGuidePanel extends PopupBase {
     }
 
     private bindEvents(): void {
-        if (this.bound) return;
-        this.bound = true;
         this.closeButton.node.on(Button.EventType.CLICK, this.closeByButton, this);
     }
 }

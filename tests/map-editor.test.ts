@@ -58,7 +58,6 @@ test('左栏长说明收纳为可点击的问号帮助气泡', () => {
     assert.match(html, /查看操作说明/);
     assert.match(html, /\.helpBubble/);
 });
-
 /** 内部格子编码：-1 = 虚空、0 = 中立（可通行、无分区）、1~4 = 分区号。 */
 test('分区、中立和虚空笔刷立即上下镜像，行列都不再强制偶数', () => {
     const { editor, element } = createEditor();
@@ -678,25 +677,49 @@ test('格子按立体地块的顶面 123×90 轮廓绘制', () => {
         '格子宽应等于立体地块顶面宽 123');
     assert.ok(Math.abs(Math.max(...ys) - Math.min(...ys) - editor.geometry.tileHeight) < 0.05,
         '格子高应等于立体地块顶面高 90');
+
+    // 🔴 除了尺寸，**落点**也要钉住：台面在 `hexCenter`（整图中心）上方 topLift，而本文件 y 向下
+    //    ⇒ 轮廓中心 y = hexCenter.y − topLift。写成 +topLift 会把整张网格画低 25px，
+    //    与"装饰贴在格面上"（decorMarkup 的 `center.y - yShift`）差出 2×topLift —— 点一格摆装饰、
+    //    装饰却浮在六边形外面。这条断言就是为了让那个符号反了立刻变红。
+    const row = Number(path![2]);
+    const column = Number(path![3]);
+    const center = editor.hexCenter(row, column);
+    const outlineCenterY = (Math.min(...ys) + Math.max(...ys)) / 2;
+    const outlineCenterX = (Math.min(...xs) + Math.max(...xs)) / 2;
+    assert.ok(Math.abs(outlineCenterX - center.x) < 0.05, `轮廓中心 x 应落在格心 ${center.x}`);
+    assert.ok(Math.abs(outlineCenterY - (center.y - editor.geometry.topLift)) < 0.05,
+        `轮廓中心 y 应为格心 − topLift = ${center.y - editor.geometry.topLift}（不是格心本身、也不是格心 + topLift），实际 ${outlineCenterY}`);
 });
 
-// ---- 虚空装饰 -------------------------------------------------------------------
-// 硬约束只有一条：**装饰格必须是虚空格**。落盘复用 art.tiles 的 'row,column' 键，
-// 值 = 资源名（客户端 ZCMapArt 的注释里已经写明支持按格覆盖），不新增 v3 字段。
-
-/**
- * "装饰必须在虚空格上面" 有两层意思，一层一个判据：
- *   约束层 —— 只有虚空格能放（`装饰只能摆在虚空格上` 那条用例）；
- *   渲染层 —— 装饰层的绘制顺序排在所有格子之后。SVG 按文档顺序绘制，排在后面才盖得住。
- */
-test('装饰层的绘制顺序排在所有格之后（这就是"在虚空格上面"的实现）', () => {
+// ---- 场景装饰 -------------------------------------------------------------------
+test('自由装饰层排在所有格之后', () => {
     const { editor, element } = createEditor();
     editor.setSize(20, 11);
     const html = String(element('board').__html || '');
-    const decorLayer = html.indexOf('<g class="decorLayer">');
-    assert.ok(decorLayer > 0, '网格里没有装饰层');
-    assert.ok(decorLayer > html.lastIndexOf('class="hex"'),
-        '装饰层必须排在所有 hex 之后，否则装饰会被格子盖住');
+    const decorLayer = html.indexOf('<g class="freeDecorLayer">');
+    assert.ok(decorLayer > 0, '网格里没有自由装饰层');
+    assert.ok(decorLayer > html.lastIndexOf('class="hex"'));
+});
+
+test('选中装饰后四角都有缩放柄：视觉小圆 + 更大的透明命中圆（角点外部也能抓住）', () => {
+    const { editor } = createEditor();
+    editor.setDecorLibrary(['image/decor/rock/large'], [], {});
+    const id = editor.addFreeDecor('image/decor/rock/large', 12, 34);
+    editor.selectFreeDecor(id);
+    const markup = editor.freeDecorMarkup();
+    // 四角 ×（视觉圆 + 命中圆）= 8 个 scale 手柄，每个都带角符号。
+    const handles = markup.match(/data-handle="scale"/g) || [];
+    assert.equal(handles.length, 8, '四个角各一个视觉圆 + 一个命中圆');
+    const corners = markup.match(/data-cx="-?1" data-cy="-?1"/g) || [];
+    assert.equal(corners.length, 8, '每个手柄都带角符号（左上/右上/左下/右下各两次）');
+    // 命中圆比视觉圆大：视觉 r=6、命中 r=14。
+    assert.ok(markup.includes('r="6"') && markup.includes('r="14"'), '命中圆半径必须大于视觉圆');
+    assert.ok(markup.includes('class="freeDecorHandleHit"'), '命中圆要带独立 class 供样式透明化');
+    // 未选中时不画手柄。
+    editor.selectFreeDecor(id);
+    editor.selectFreeDecor(-999);
+    assert.ok(!editor.freeDecorMarkup().includes('data-handle="scale"'), '取消选中后手柄消失');
 });
 
 test('资源图标笔刷独立于主城模式：只能放中立格，固定与自选地图均可保存', () => {
@@ -744,97 +767,6 @@ test('导入地图也拒绝落在分区格上的资源点', () => {
     }), /中立格/);
 });
 
-test('装饰只能摆在虚空格上；可通行格一律拒绝', () => {
-    const { editor } = createEditor();
-    editor.setSize(20, 11);
-    editor.setDecorBrush('image/decor/reef');
-    assert.equal(editor.paint(10, 5, 'decor'), false, '中立格不该接受装饰');
-    assert.equal(editor.decorCount(), 0);
-    assert.ok(!editor.validate().checks.some((check: string[]) => check[1].indexOf('虚空装饰') === 0),
-        '一格装饰都没有时，校验面板不该出现装饰那一行');
-
-    editor.paint(10, 5, 'void');
-    assert.equal(editor.paint(10, 5, 'decor'), true, '虚空格应该能摆装饰');
-    assert.equal(editor.state().decor[10][5], 'image/decor/reef');
-    assert.equal(editor.buildJSON().art.tiles['10,5'], 'image/decor/reef');
-});
-
-test('装饰跟随镜像：只写存储侧，对侧由镜像生成，导出两侧都有键', () => {
-    const { editor } = createEditor();
-    editor.setSize(20, 11);
-    editor.paint(10, 5, 'void');
-    editor.setDecorBrush('image/decor/rock');
-    editor.paint(10, 5, 'decor');
-    const state = editor.state();
-    assert.equal(state.decor[10][5], 'image/decor/rock');
-    assert.equal(state.decor[9][5], 'image/decor/rock', '对侧应由镜像生成，否则导出后只有半边有装饰');
-    const tiles = editor.buildJSON().art.tiles;
-    assert.equal(tiles['10,5'], 'image/decor/rock');
-    assert.equal(tiles['9,5'], 'image/decor/rock');
-});
-
-test('虚空被涂成可通行格时，格上的装饰自动收回（装饰不能留在陆地上）', () => {
-    const { editor } = createEditor();
-    editor.setSize(20, 11);
-    editor.paint(10, 5, 'void');
-    editor.setDecorBrush('image/decor/wreck');
-    editor.paint(10, 5, 'decor');
-    assert.equal(editor.decorCount(), 2, '存储侧 + 镜像侧各一格');
-    editor.paint(10, 5, 'neutral');
-    assert.equal(editor.decorCount(), 0, '陆地不该留着装饰');
-    assert.equal(editor.buildJSON().art, undefined, '装饰清空后不该留一个空 art 对象');
-    assert.ok(editor.validate().checks.every((check: string[]) => check[0] !== 'err'),
-        '收回装饰后不该有校验错误：' + JSON.stringify(editor.validate().checks));
-});
-
-test('装饰笔刷右键擦装饰，不动虚空本身', () => {
-    const { editor } = createEditor();
-    editor.setSize(20, 11);
-    editor.paint(10, 5, 'void');
-    editor.setDecorBrush('image/decor/reef');
-    editor.paint(10, 5, 'decor');
-    editor.paint(10, 5, 'decor-clear');
-    assert.equal(editor.decorCount(), 0);
-    assert.equal(editor.state().grid[10][5], -1, '擦装饰不该顺手把格子改成别的分区');
-});
-
-test('装饰笔刷受半径影响，但只落在虚空格上', () => {
-    const { editor } = createEditor();
-    editor.setSize(20, 11);
-    editor.paint(10, 5, 'void');
-    editor.setDecorBrush('image/decor/reef');
-    const cells = editor.brushCells(10, 5, 1);
-    editor.paintCells(cells, 'decor');
-    // 7 格笔刷里只有 (10, 5) 与镜像伙伴 (9, 5) 是虚空 —— 两格映射到同一个存储侧格。
-    assert.equal(editor.decorCount(), 2, '可通行格上不该被写上装饰');
-    assert.ok(editor.validate().checks.every((check: string[]) => check[0] !== 'err'),
-        '装饰跳过可通行格不该产生校验错误：' + JSON.stringify(editor.validate().checks));
-});
-
-test('载入时按虚空格过滤装饰：压在陆地里的丢弃，虚空格上的保留', () => {
-    const { editor } = createEditor();
-    const ascii = [];
-    for (let row = 0; row < 8; row += 1) ascii.push(row === 0 ? '.0000000' : '00000000');
-    editor.applyLayout({
-        version: 3, id: 'decor-load', name: '装饰载入', rows: 8, columns: 8,
-        playerCount: 3, cityMode: 'select', mirrorVertical: false, mirrorHorizontal: false,
-        ascii,
-        art: {
-            background: 'image/decor_bg',
-            tiles: { neutral: 'image/neutral', '0,0': 'image/decor/reef', '3,3': 'image/decor/rock' },
-        },
-    });
-    const state = editor.state();
-    assert.equal(state.decor[0][0], 'image/decor/reef', '虚空格上的装饰必须保留');
-    assert.equal(state.decor[3][3], '', '压在陆地里的装饰必须丢弃');
-    assert.equal(editor.validate().decor, 1);
-    const art = editor.buildJSON().art;
-    assert.equal(art.tiles['0,0'], 'image/decor/reef');
-    assert.equal(art.tiles['3,3'], undefined, '被丢弃的装饰不能再写回去');
-    assert.equal(art.tiles.neutral, 'image/neutral', '分区键要原样透传，不能跟装饰互相顶掉');
-    assert.equal(art.background, 'image/decor_bg');
-});
-
 test('装饰清单来自服务端扫描结果，也接受手填的资源名', () => {
     const { editor } = createEditor();
     editor.setDecorLibrary(['image/decor/reef', 'image/decor/rock', 'image/decor/reef']);
@@ -844,21 +776,6 @@ test('装饰清单来自服务端扫描结果，也接受手填的资源名', ()
     assert.equal(editor.state().decorBrush, 'image/decor/custom_01');
     assert.ok(Array.from(editor.state().decorLibrary).includes('image/decor/custom_01'),
         '手填的资源名要并进清单，否则界面上会"选中了却看不到"');
-});
-
-test('撤销能回退装饰的摆放与收回', () => {
-    const { editor } = createEditor();
-    editor.setSize(20, 11);
-    editor.paint(10, 5, 'void');
-    editor.setDecorBrush('image/decor/reef');
-    const before = editor.snapshot();
-    editor.paint(10, 5, 'decor');
-    assert.equal(editor.decorCount(), 2);
-    assert.ok(editor.commitUndo(before));
-    editor.undo();
-    assert.equal(editor.decorCount(), 0, '撤销后装饰应消失');
-    editor.redo();
-    assert.equal(editor.decorCount(), 2, '重做后装饰应回来');
 });
 
 // ---- 看到装饰 / 记住资源名 ---------------------------------------------------------
@@ -913,30 +830,6 @@ test('装饰面板渲染成缩略图网格：有组标题、有卡片、有图�
         '「不摆装饰」固定在分组之前，不参与归组');
 });
 
-test('出了图的装饰在格子上画真图（按顶面 123×90），没出图的画占位菱形', () => {
-    const { editor } = createEditor();
-    editor.setSize(20, 11);
-    editor.setDecorLibrary(['image/decor/reef'], ['image/decor/custom_01']);
-    editor.paint(10, 5, 'void');
-    editor.paint(10, 3, 'void');
-    editor.setDecorBrush('image/decor/reef');
-    editor.paint(10, 5, 'decor');
-    editor.setDecorBrush('image/decor/custom_01');
-    editor.paint(10, 3, 'decor');
-
-    const markup = editor.decorMarkup();
-    assert.match(markup,
-        /<image class="decorImage"[^>]*data-decor="image\/decor\/reef"[^>]*href="\/decor\/image\/decor\/reef"/,
-        '出了图的装饰必须画真图，而不是让策划对着菱形猜');
-    assert.ok(markup.includes('width="123.0"') && markup.includes('height="90.0"'),
-        '装饰图按顶面 123×90 贴，编辑器里看到的大小就是游戏里的大小');
-    assert.ok(markup.includes('preserveAspectRatio="xMidYMid meet"'), '等比缩，不能拉伸变形');
-    assert.match(markup, /<path class="decorMark"[^>]*data-decor="image\/decor\/custom_01"/,
-        '没出图的名字退回占位菱形');
-    assert.ok(!markup.includes('href="/decor/image/decor/custom_01"'),
-        '没出图的名字不该去拉一张不存在的图（控制台会刷 404）');
-});
-
 test('自定义装饰名会记到服务端 —— 刷新之后不用重新定义', async () => {
     const posts: Array<{ path: string; body: unknown }> = [];
     const { editor } = createEditor({
@@ -964,158 +857,7 @@ test('自定义装饰名会记到服务端 —— 刷新之后不用重新定义
     assert.deepEqual(JSON.parse(String(posts[0].body)), { name: 'image/decor/custom_01' });
 });
 
-// ---- 多格装饰 + art.background（新格式） ----------------------------------------
-//
-// 装饰从单格单图扩展成「多格 + 像素偏移」是为了让礁石 / 沉船这种大图能跨多格。
-// 数据格式：`art.tiles['行,列']` 的值可以是字符串（老格式 / 单格等价），
-// 也可以是 `{ art, span, offset }`（多格装饰）—— 键固定是 anchor 格。
-//
-// 关键不变量：
-//   1. span 缺省 = `[[0, 0]]`，offset 缺省 = `[0, 0]`，**单格等价**退化成字符串（与旧 art.tiles 兼容）。
-//   2. 镜像侧 span 按镜像轴翻转（dr → -dr、dc → -dc），offset 整体保留 —— 不然镜像侧
-//      装饰形状会反过来。
-//   3. 加载外部 JSON 时多格装饰 = 整片 span cell 都必须在虚空格上；任一格不是虚空 → 整片丢。
-//   4. art.background 默认 `image/zdbg1`（最常用的海岛沙地），不是默认时写出。
-// 这些口径由下面五条用例守。任何一条红 = 装饰或背景的格式契约被打破。
-
-test('parseDecorEntry 兼容三种输入：空、字符串、对象；非法输入 → null', () => {
-    const { editor } = createEditor();
-    assert.equal(editor.parseDecorEntry(null), null);
-    assert.equal(editor.parseDecorEntry(undefined), null);
-    assert.equal(editor.parseDecorEntry(''), null);
-    assert.equal(editor.parseDecorEntry('image/decor/reef').art, 'image/decor/reef');
-    assert.equal(JSON.stringify(editor.parseDecorEntry('image/decor/reef').span), JSON.stringify([[0, 0]]));
-    assert.equal(JSON.stringify(editor.parseDecorEntry('image/decor/reef').offset), JSON.stringify([0, 0]));
-    // span / offset 字段缺省时回退到默认；非法 span 项会被过滤掉，全坏掉才回退到 [[0,0]]。
-    assert.equal(JSON.stringify(editor.parseDecorEntry({ art: 'image/decor/wreck' }).span), JSON.stringify([[0, 0]]));
-    assert.equal(JSON.stringify(editor.parseDecorEntry({ art: 'image/decor/wreck' }).offset), JSON.stringify([0, 0]));
-    assert.equal(JSON.stringify(editor.parseDecorEntry({ art: 'image/decor/wreck', span: [[0, 0], [0, 1], [1, 0]], offset: [10, -5] }).span), JSON.stringify([[0, 0], [0, 1], [1, 0]]));
-    assert.equal(JSON.stringify(editor.parseDecorEntry({ art: 'image/decor/wreck', span: [[0, 0], [0, 1], [1, 0]], offset: [10, -5] }).offset), JSON.stringify([10, -5]));
-    // span 项必须是数字数组，混进字符串 / null 都过滤。
-    assert.equal(JSON.stringify(editor.parseDecorEntry({ art: 'image/x', span: [[0, 0], 'bad', [null, 1]] }).span), JSON.stringify([[0, 0]]));
-    // 缺 art 直接 null。
-    assert.equal(editor.parseDecorEntry({}), null);
-    assert.equal(editor.parseDecorEntry({ span: [[0, 0]] }), null);
-    // 数组 / 数字不是合法装饰。
-    assert.equal(editor.parseDecorEntry([]), null);
-    assert.equal(editor.parseDecorEntry(42), null);
-});
-
-test('mirrorDecorEntry 上下 / 左右翻转：dr → -dr、dc → -dc；不翻转时原样', () => {
-    const { editor } = createEditor();
-    const entry = { art: 'image/decor/wreck', span: [[0, 0], [0, 1], [1, 0], [1, 1]], offset: [10, -5] };
-    // 不翻转 = 原样。
-    assert.equal(JSON.stringify(editor.mirrorDecorEntry(entry, false, false).span), JSON.stringify([[0, 0], [0, 1], [1, 0], [1, 1]]));
-    assert.equal(JSON.stringify(editor.mirrorDecorEntry(entry, false, false).offset), JSON.stringify([10, -5]));
-    // 上下翻转：dr 取反，dc 不变。
-    const v = editor.mirrorDecorEntry(entry, true, false);
-    assert.equal(JSON.stringify(v.span), JSON.stringify([[-0, 0], [-0, 1], [-1, 0], [-1, 1]]));
-    assert.equal(JSON.stringify(v.offset), JSON.stringify([10, -5]));
-    // 左右翻转：dc 取反，dr 不变。
-    const h = editor.mirrorDecorEntry(entry, false, true);
-    assert.equal(JSON.stringify(h.span), JSON.stringify([[0, -0], [0, -1], [1, -0], [1, -1]]));
-    assert.equal(JSON.stringify(h.offset), JSON.stringify([10, -5]));
-    // 同时翻：dr、dc 都取反。
-    const b = editor.mirrorDecorEntry(entry, true, true);
-    assert.equal(JSON.stringify(b.span), JSON.stringify([[-0, -0], [-0, -1], [-1, -0], [-1, -1]]));
-    assert.equal(JSON.stringify(b.offset), JSON.stringify([10, -5]));
-});
-
-test('多格装饰落点：整片 cell 必须都是虚空；任一格不是虚空 → 整片跳过', () => {
-    const { editor } = createEditor();
-    editor.setSize(20, 11);
-    // 1×3 装饰：3 格连成一片。
-    editor.setDecorBrush('image/decor/wreck');
-    editor.setDecorShape('1x3');
-    // 全部三格都是虚空 → 落点成功，写到 anchor (10, 5)。
-    editor.paint(10, 5, 'void');
-    editor.paint(10, 6, 'void');
-    editor.paint(10, 7, 'void');
-    assert.equal(editor.paint(10, 5, 'decor'), true);
-    // 落盘 = `{ art, span, offset }` 对象（多格不再退化成字符串）。
-    const tile = editor.buildJSON().art.tiles['10,5'];
-    assert.equal(typeof tile, 'object');
-    assert.equal(tile.art, 'image/decor/wreck');
-    assert.equal(JSON.stringify(tile.span), JSON.stringify([[0, 0], [0, 1], [0, 2]]));
-    assert.equal(JSON.stringify(tile.offset), JSON.stringify([0, 0]));
-    // 第二格里已经有别的 art → 装饰 1×3 占的 (10, 5)~(10, 7) 中 (10, 6) 已被装饰本身占着，
-    // 重新摆同一形状 = 等价（alreadySame）→ 不报 changed；摆 (10, 6) 这格 anchor = 跨 6,7,8，
-    // (10, 7) 已被装饰 1 占了 → blocked。
-    assert.equal(editor.paint(10, 6, 'decor'), false, '1×3 anchor 落在已有装饰的 (10, 6) → 整片跳过');
-    // 中间一格 (10, 6) 改成可通行格 → 装饰 1 失去落脚点，自动 prune。
-    editor.paint(10, 6, 'neutral');
-    assert.equal(editor.decorCount(), 0, '中间一格被涂成可通行 → 整片装饰收回');
-});
-
-test('多格装饰跟随镜像：存储侧 anchor → 镜像侧 anchor 也摆多格；span 按镜像轴翻转', () => {
-    const { editor } = createEditor();
-    editor.setSize(20, 11);
-    editor.paint(15, 5, 'void');
-    editor.paint(15, 6, 'void');
-    editor.setDecorBrush('image/decor/wreck');
-    editor.setDecorShape('1x2');
-    editor.paint(15, 5, 'decor');
-    const tiles = editor.buildJSON().art.tiles;
-    // 存储侧 = 多格对象。
-    assert.equal(typeof tiles['15,5'], 'object');
-    assert.equal(JSON.stringify(tiles['15,5'].span), JSON.stringify([[0, 0], [0, 1]]));
-    // 上下镜像侧 = span dr 取反；用数字下标访问数组（'4,5' 字符串作下标 = undefined）。
-    const mirrorRow = 20 - 1 - 15;
-    const state = editor.state();
-    assert.equal(typeof state.decor[mirrorRow][5], 'object');
-    assert.equal(JSON.stringify(state.decor[mirrorRow][5].span), JSON.stringify([[-0, 0], [-0, 1]]));
-    // offset 不翻转（像素偏移对镜像侧方向不变）。
-    assert.equal(JSON.stringify(state.decor[mirrorRow][5].offset), JSON.stringify([0, 0]));
-});
-
-test('单格等价落盘退化成字符串；带 offset / 多格 span 一律写对象', () => {
-    const { editor } = createEditor();
-    editor.setSize(20, 11);
-    editor.paint(10, 5, 'void');
-    editor.setDecorBrush('image/decor/reef');
-    // 单格等价 = 字符串。
-    editor.paint(10, 5, 'decor');
-    assert.equal(editor.buildJSON().art.tiles['10,5'], 'image/decor/reef');
-    // 加 offset 后虽然 span 还是单格，但 offset 非零 → 必须写对象（保留 offset 字段）。
-    editor.nudgeDecorOffset(10, -5);
-    editor.paint(10, 5, 'decor');
-    const withOffset = editor.buildJSON().art.tiles['10,5'];
-    assert.equal(typeof withOffset, 'object');
-    assert.equal(withOffset.offset[0], 10);
-    assert.equal(withOffset.offset[1], -5);
-});
-
-test('载入外部 art.tiles：新格式 `{ art, span, offset }` 还原成多格装饰；非法 span 整片丢', () => {
-    const { editor } = createEditor();
-    editor.setSize(20, 11);
-    // 行 10/15 的 5/6 列必须是虚空（VOID = '.'）—— 落盘装饰的宿主格约束与 paint 一致。
-    // 全中立底图会把装饰整片丢，所以必须把目标格切到 '.' 才能验证"还原成多格"。
-    const ascii: string[] = [];
-    for (let row = 0; row < 20; row += 1) {
-        ascii.push((row === 10 || row === 15) ? '00000..0000' : '00000000000');
-    }
-    editor.applyLayout({
-        version: 3, id: 'multi-cell-decor', name: 'multi-cell', rows: 20, columns: 11,
-        playerCount: 2, cityMode: 'fixed',
-        mirrorVertical: false, mirrorHorizontal: false, mirror180: false,
-        ascii,
-        art: {
-            tiles: {
-                // 1×2 装饰，anchor 在 (10, 5) → 实际占 (10, 5)、(10, 6)。
-                '10,5': { art: 'image/decor/wreck', span: [[0, 0], [0, 1]], offset: [3, -2] },
-                // span 中有格子不在地图内 → 整片丢。
-                '15,5': { art: 'image/decor/wreck', span: [[0, 0], [0, 1], [0, 100]] },
-            },
-        },
-    } as any);
-    const state = editor.state();
-    assert.equal(JSON.stringify(state.decor[10][5].span), JSON.stringify([[0, 0], [0, 1]]));
-    assert.equal(JSON.stringify(state.decor[10][5].offset), JSON.stringify([3, -2]));
-    assert.equal(state.decor[10][5].art, 'image/decor/wreck');
-    // 越界的整片丢。
-    assert.equal(state.decor[15][5], '', '越界 span 整片丢，anchor 那格留空');
-});
-
+// ---- art.background --------------------------------------------------------------
 test('art.background：默认 = image/zdbg1；地图 JSON 里写了的就拿出来；落盘非默认时写出', () => {
     const { editor } = createEditor();
     // 默认 = image/zdbg1 ⇒ 默认值不写盘，art 字段也可能省略（看 art 内是否有别的东西）。
@@ -1124,7 +866,7 @@ test('art.background：默认 = image/zdbg1；地图 JSON 里写了的就拿出�
         version: 3, id: 'bg', name: 'bg', rows: 8, columns: 8,
         playerCount: 2, cityMode: 'fixed',
         mirrorVertical: false, mirrorHorizontal: false, mirror180: false,
-        ascii: Array.from({ length: 8 }, () => '00000000'),
+        ascii: Array.from({ length: 8 }, (_, row) => row === 2 ? '000.0000' : '00000000'),
         art: { background: 'image/zdbg2' },
     } as any);
     // 地图写了 image/zdbg2 → 拿出来。
@@ -1138,4 +880,229 @@ test('art.background：默认 = image/zdbg1；地图 JSON 里写了的就拿出�
         art: { tiles: { neutral: 'image/neutral' } },
     } as any);
     assert.equal(editor.buildJSON().art.background, undefined, '默认 background 不写出');
+});
+
+test('自由装饰可放在可通行格并保存地图坐标与视觉变换', () => {
+    const { editor } = createEditor();
+    editor.setSize(20, 11);
+    const center = editor.hexCenter(10, 5);
+    const id = editor.addFreeDecor('image/decor/rock/large', center.x + 21, center.y - 13);
+    const json = editor.buildJSON();
+
+    assert.equal(json.art.freeDecor.length, 1);
+    assert.deepEqual({ ...json.art.freeDecor[0] }, {
+        id, art: 'image/decor/rock/large', x: center.x + 21, y: center.y - 13,
+        width: 276.75, height: 90, rotation: 0, flipX: false, flipY: false, locked: false,
+    });
+    assert.equal(json.art.tiles?.['10,5'], undefined, '自由装饰不写入格子装饰表');
+    assert.equal(editor.state().freeDecor.length, 1);
+    assert.equal(editor.validate().decor, 1, '统计面板按自由装饰对象计数');
+    assert.ok(editor.validate().checks.some((check: string[]) => check[1].startsWith('场景装饰：1 个')));
+});
+
+test('新摆放装饰默认按图片原始像素 1:1 落地；无尺寸（未出图）时回退旧默认', () => {
+    const { editor } = createEditor();
+    editor.setDecorLibrary(['image/decor/rock/large'], [], {
+        'image/decor/rock/large': { width: 512, height: 384 },
+    });
+    const id = editor.addFreeDecor('image/decor/rock/large', 12, 34);
+    let item = editor.state().freeDecor.find((entry: any) => entry.id === id);
+    assert.equal(item.width, 512, '已出图的装饰默认宽 = 图片原始像素');
+    assert.equal(item.height, 384, '已出图的装饰默认高 = 图片原始像素');
+    assert.equal(editor.state().decorSizes['image/decor/rock/large'].width, 512,
+        '尺寸映射要随清单一起暴露');
+
+    // 没出图的自定义名没有尺寸键 → 旧默认（3 列距 × 1 行距）占位，出图后重摆即 1:1。
+    const pendingId = editor.addFreeDecor('image/decor/not_yet', 60, 60);
+    item = editor.state().freeDecor.find((entry: any) => entry.id === pendingId);
+    assert.equal(item.width, editor.geometry.column * 3);
+    assert.equal(item.height, editor.geometry.row);
+});
+
+test('自由装饰可选中移动、等比缩放、旋转、翻转，锁定后不动且操作可撤销', () => {
+    const { editor } = createEditor();
+    const id = editor.addFreeDecor('image/decor/rock/large', 12, 34);
+    editor.moveSelectedFreeDecor(100, -80);
+    editor.updateSelectedFreeDecor({ width: 400, height: 260, rotation: 18, flipX: true });
+    let object = editor.state().freeDecor[0];
+    assert.deepEqual(
+        { x: object.x, y: object.y, width: object.width, height: object.height, rotation: object.rotation, flipX: object.flipX },
+        { x: 100, y: -80, width: 400, height: 260, rotation: 18, flipX: true },
+    );
+
+    assert.equal(editor.setFreeDecorLocked(id, true), true);
+    assert.equal(editor.moveSelectedFreeDecor(5, 6), false, '锁定后拖动必须无效');
+    object = editor.state().freeDecor[0];
+    assert.deepEqual({ x: object.x, y: object.y }, { x: 100, y: -80 });
+    editor.undo();
+    object = editor.state().freeDecor[0];
+    assert.equal(object.locked, false, '撤销回退锁定动作');
+    assert.equal(object.rotation, 18, '撤销锁定时保留之前的变换');
+
+    editor.selectFreeDecor(id);
+    const duplicateId = editor.duplicateFreeDecor(id);
+    assert.notEqual(duplicateId, id);
+    assert.equal(editor.state().freeDecor.length, 2);
+    assert.equal(editor.deleteFreeDecor(duplicateId), true);
+    assert.equal(editor.state().freeDecor.length, 1);
+    editor.undo();
+    assert.equal(editor.state().freeDecor.length, 2, '撤销恢复删除的副本');
+    editor.redo();
+    assert.equal(editor.state().freeDecor.length, 1, '重做再次删除副本');
+});
+
+test('自由装饰吸附开关只影响放置坐标，编辑器提供自由摆放工具', () => {
+    const { editor, element } = createEditor();
+    editor.setSize(20, 11);
+    editor.setFreeDecorSnap(true);
+    const id = editor.addFreeDecor('image/decor/rock/large', 2, 3);
+    const snapped = editor.state().freeDecor.find((item: any) => item.id === id);
+    assert.ok(snapped);
+    const nearest = editor.cellAtLocal(2, 3);
+    assert.ok(nearest);
+    const nearestCenter = editor.hexCenter(nearest.row, nearest.column);
+    assert.equal(snapped.x, nearestCenter.x);
+    assert.equal(snapped.y, nearestCenter.y);
+
+    const html = readFileSync('tools/map-editor/index.html', 'utf8');
+    assert.match(html, /id="decorList"/, '两种摆放模式共用同一套装饰资源清单');
+    assert.match(html, /id="freeDecorInspector"/);
+    assert.match(html, /id="freeDecorSnap"/);
+    assert.match(String(element('board').__html || ''), /freeDecorLayer/);
+});
+
+test('装饰面板统一为自由摆放，选择资源后直接进入自由装饰笔刷', () => {
+    const { editor } = createEditor();
+    const html = readFileSync('tools/map-editor/index.html', 'utf8');
+
+    assert.doesNotMatch(html, /id="segDecorKind"/, '不再让用户选择格子装饰或自由装饰');
+    assert.doesNotMatch(html, /id="segDecorShape"/, '自由装饰不需要占格形状');
+    assert.doesNotMatch(html, /id="freeDecorTileControls"/);
+    assert.equal(editor.state().decorKind, 'free');
+
+    editor.setDecorBrush('image/decor/rock/large');
+    assert.equal(editor.state().brush, 'freeDecor');
+});
+
+test('装饰图库异步到达后重画装饰层：占位矩形换成真图 image', () => {
+    const { editor } = createEditor();
+    // 图库未到时先摆装饰 ⇒ 画布上是占位矩形（`loadDecorLibrary` 异步竞态的败方）。
+    const id = editor.addFreeDecor('image/decor/wasteland/st3', 0, 0);
+    assert.ok(id);
+    const before = editor.freeDecorMarkup();
+    assert.match(before, /freeDecorPlaceholder/, '图库未加载时画占位矩形');
+    assert.doesNotMatch(before, /freeDecorImage/, '此时不应画图');
+    // 图库到达：`setDecorLibrary` 注入有图清单 ⇒ 装饰层必须重画成真图。
+    editor.setDecorLibrary(['image/decor/wasteland/st3'], [],
+        { 'image/decor/wasteland/st3': { width: 247, height: 201 } });
+    const after = editor.freeDecorMarkup();
+    assert.match(after, /freeDecorImage/, '图库到达后必须画真图');
+    assert.doesNotMatch(after, /freeDecorPlaceholder/, '占位矩形应被替换');
+});
+
+test('载入旧地图时忽略 art.tiles 的按格装饰，保存后只保留地块贴图和自由装饰', () => {
+    const { editor } = createEditor();
+    editor.applyLayout({
+        version: 3, id: 'legacy-decor', name: '旧装饰', rows: 8, columns: 8,
+        playerCount: 2, cityMode: 'select', mirrorVertical: false, mirrorHorizontal: false,
+        ascii: Array.from({ length: 8 }, (_, row) => row === 0 ? '.0000000' : '00000000'),
+        art: {
+            tiles: { neutral: 'image/tiles/neutral', '0,0': 'image/decor/legacy-rock' },
+        },
+    });
+
+    assert.equal(editor.state().freeDecor.length, 0, '旧按格装饰不导入编辑器，策划重新自由摆放');
+    const id = editor.addFreeDecor('image/decor/new-rock', 30, 40);
+    const art = editor.buildJSON().art;
+    assert.equal(art.tiles.neutral, 'image/tiles/neutral');
+    assert.equal(art.tiles['0,0'], undefined);
+    assert.equal(art.freeDecor[0].id, id);
+});
+
+test('背景图盒 = viewBox：始终全景铺满视口，平移时与棋盘一起拖动', () => {
+    const { editor } = createEditor();
+    const geometry = editor.geometry;
+    const state = editor.state();
+
+    // 基半宽 / 半高由棋盘尺寸直接推出（buildBoard 的公式，pad = 3）——
+    // 用例自己算一遍，才能挡住"图盒与 viewBox 各算各的"这类漂移（曾经只遮住左上四分之一）。
+    const PAD = 3;
+    const baseHalfW = ((state.cols - 1) * geometry.column + geometry.imageWidth) / 2 + PAD;
+    const baseHalfH = ((state.rows - 1) * geometry.row + geometry.imageHeight + 2 * geometry.phase) / 2 + PAD;
+    const expectedHalfW = baseHalfW / state.zoom, expectedHalfH = baseHalfH / state.zoom;
+
+    const rect = editor.viewportRect();
+    assert.ok(Math.abs(rect.width - expectedHalfW * 2) < 1e-9, `图盒宽 = 2×视口半宽，实际 ${rect.width}`);
+    assert.ok(Math.abs(rect.height - expectedHalfH * 2) < 1e-9, `图盒高 = 2×视口半高，实际 ${rect.height}`);
+    // 视口以 (panX, panY) 为中心。
+    assert.ok(Math.abs(rect.x + rect.width / 2 - state.panX) < 1e-9, '视口 x 中心应落在 panX');
+    assert.ok(Math.abs(rect.y + rect.height / 2 - state.panY) < 1e-9, '视口 y 中心应落在 panY');
+
+    // 图盒必须把棋盘整个盖住（否则就是"右半边没底图"）。
+    assert.ok(rect.x <= -baseHalfW + 1e-9, `图盒左边界 ${rect.x} 应 ≤ 棋盘左边界 ${-baseHalfW}`);
+    assert.ok(rect.x + rect.width >= baseHalfW - 1e-9, '图盒右边界应 ≥ 棋盘右边界（右侧不许露空）');
+    assert.ok(rect.y + rect.height >= baseHalfH - 1e-9, '图盒下边界应 ≥ 棋盘下边界（下侧不许露空）');
+
+    // 落盘的 <image> 属性：默认（zoom=1, pan=0）背景 = max(viewBox, 包围盒) = viewBox，
+    // 中心锚定棋盘中心 —— 此时与 viewportRect 完全一致（drawBackground 不许另算一套）。
+    const markup = editor.backgroundMarkup();
+    const attr = (name: string): number => {
+        const matched = new RegExp(`\\b${name}="([-\\d.]+)"`).exec(markup);
+        assert.ok(matched, `背景 <image> 缺 ${name} 属性：${markup}`);
+        return Number(matched![1]);
+    };
+    assert.equal(attr('x'), Number(rect.x.toFixed(1)), 'image.x 必须等于视口 x');
+    assert.equal(attr('y'), Number(rect.y.toFixed(1)), 'image.y 必须等于视口 y');
+    assert.equal(attr('width'), Number(rect.width.toFixed(2)), 'image.width 必须等于视口宽');
+    assert.equal(attr('height'), Number(rect.height.toFixed(2)), 'image.height 必须等于视口高');
+    // 背景随 viewBox 平移（中心锚定棋盘 ⇒ 与棋盘一起拖动），缩放时保持全景铺满不裁切。
+    assert.match(markup, /href="\/bg\/image\/zdbg1"/, '默认背景应请求 /bg/image/zdbg1');
+    assert.match(markup, /preserveAspectRatio="xMidYMid slice"/, '必须是等比 cover，不是拉伸');
+});
+
+test('放大后背景锚定棋盘包围盒：与格子一起缩放，格子稳稳在背景上', () => {
+    const { editor } = createEditor();
+    const geometry = editor.geometry;
+    const state = editor.state();
+    const boardWidth = (state.cols - 1) * geometry.column + geometry.imageWidth;
+    const boardHeight = (state.rows - 1) * geometry.row + geometry.imageHeight + 2 * geometry.phase;
+
+    // 放大 2 倍 ⇒ viewBox 世界尺寸减半、小于包围盒 ⇒ 背景应锚定包围盒（随格子同比例放大）。
+    editor.zoomAt(500, 500, 2);
+    const rect = editor.viewportRect();
+    assert.ok(rect.width < boardWidth, `放大后视口 ${rect.width} 应小于包围盒 ${boardWidth}`);
+    const markup = editor.backgroundMarkup();
+    const attr = (name: string): number => {
+        const matched = new RegExp(`\\b${name}="([-\\d.]+)"`).exec(markup);
+        assert.ok(matched, `背景 <image> 缺 ${name} 属性：${markup}`);
+        return Number(matched![1]);
+    };
+    assert.ok(Math.abs(attr('width') - boardWidth) < 0.05,
+        `背景宽应为包围盒 ${boardWidth}，实际 ${attr('width')}`);
+    assert.ok(Math.abs(attr('height') - boardHeight) < 0.05,
+        `背景高应为包围盒 ${boardHeight}，实际 ${attr('height')}`);
+    assert.ok(Math.abs(attr('x') - (-boardWidth / 2)) < 0.05,
+        `背景 x 应为 -包围盒/2（中心锚定棋盘），实际 ${attr('x')}`);
+});
+
+test('画布元素比例 = viewBox 比例：背景铺满画布，四周不露深色底', () => {
+    const { editor, element } = createEditor();
+    const board = element('board');
+    // 模拟真实 DOM：画布挂在 `.stage` 容器下（初始桩没有父节点 ⇒ fitCanvas 自动跳过，
+    // 这里补上后手动触发一次）。
+    board.parentElement = { clientWidth: 900, clientHeight: 700 };
+    board.style = { width: '', height: '' };
+    editor.fitCanvas();
+    const rect = editor.viewportRect();
+    const width = Number.parseFloat(board.style.width);
+    const height = Number.parseFloat(board.style.height);
+    assert.ok(width > 0 && height > 0, `画布应有非零尺寸，实际 ${width}×${height}`);
+    assert.ok(Math.abs(width / height - rect.width / rect.height) < 1e-6,
+        `画布比例 ${(width / height).toFixed(4)} 应等于 viewBox 比例 ${(rect.width / rect.height).toFixed(4)}`);
+    // contain 语义：画布不超出容器（stage 是 flex 居中，尺寸超了会被截掉）。
+    assert.ok(width <= 900 + 1e-6 && height <= 700 + 1e-6, '画布必须 contained 在容器内');
+    // 同值守卫：重复调用不重设样式（避免每次 render 都触发重排）。
+    const before = `${board.style.width} ${board.style.height}`;
+    editor.fitCanvas();
+    assert.equal(`${board.style.width} ${board.style.height}`, before, '同值不应重设');
 });

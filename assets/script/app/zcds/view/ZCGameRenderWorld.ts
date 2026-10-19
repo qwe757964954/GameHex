@@ -6,8 +6,11 @@ import { neutralResourceRewardOf } from '../model/ZCNeutralResourceReward';
 import { ZCCombatEffectView } from './ZCCombatEffectView';
 import { ZCFloatTextView } from './ZCFloatTextView';
 import { ZCCardRevealView } from './ZCCardRevealView';
+import { ProcedureGame } from '../../procedure/ProcedureGame';
 import { ZCGameLegendBannerView } from './ZCGameLegendBannerView';
 import { ZCHexView } from './ZCHexView';
+import { ZCGameUiEvent } from './ZCGameHudEvents';
+import { EventMgr } from '../../../framework/event/EventMgr';
 import type { ZCSpawnSelection } from '../model/ZCSpawnSelection';
 import type { ZCMatchMap } from '../model/ZCMatchConfig';
 import {
@@ -63,6 +66,17 @@ interface ZCIdentityComponent {
 // 视图侧的 `IZCUnitPresentation` 字段是 readonly（对外 immutability），
 // 这里用 `-readonly` 剥掉：scratch 是**内部复用缓冲**，不交给任何调用方持有。
 type ZCUnitPresentation = Parameters<ZCUnitView['render']>[0];
+
+/** 已落位的格子：中心坐标 + 地块视图 + 节点（建格与「重置落位」两处共用）。 */
+/** 描边模式：正式对局 / 选点阶段（两者底色口径不同，见 `redrawSharedOutline`）。 */
+type ZCOutlineMode = 'battle' | 'spawn';
+
+interface ZCPlacedHex {
+    x: number;
+    y: number;
+    view: ZCHexView;
+    node: Node;
+}
 
 interface ZCSceneComponent {
     node: Node;
@@ -126,7 +140,7 @@ interface ZCRenderWorldOptions {
      *  由 `ZCGameLoader` 预加载、随 `ZCGamePreparedResources` 一路传进来。
      */
     artifactIconFrame?: SpriteFrame | null;
-    /** 虚空装饰条目 prefab（`sizeMode=CUSTOM` + 不裁边烘在它身上）；缺失时只少一层表现。 */
+    /** 场景装饰条目 prefab（`sizeMode=CUSTOM` + 不裁边烘在它身上）；缺失时只少一层表现。 */
     decorPrefab?: Prefab | null;
     /**
      * 单位出生特效 prefab（`units/effects/出生特效`，老客户端 `兵种生成` 那套：
@@ -155,7 +169,6 @@ interface ZCRenderWorldOptions {
      */
     hitFxPrefabs?: ReadonlyMap<ZCAttackTrait, Prefab>;
     wallPrefab: Prefab | null;
-    onHexClick: (hexId: number) => void;
 }
 
 /**
@@ -248,15 +261,7 @@ export class ZCGameRenderWorld {
     private readonly floatTextEntityBySource = new Map<number, number>();
     private readonly cardRevealEntityBySource = new Map<number, number>();
     private readonly legendBannerEntityBySource = new Map<number, number>();
-    /**
-     * 棋盘上的虚空装饰节点。
-     *
-     * 装饰只摆在虚空格上，而虚空格（`playable === false`）在客户端根本没有节点 ——
-     * 所以它们挂在 `ZCGameBoard.prefab` 的 `DecorLayer` 上，不是挂在地块节点上。
-     *
-     * 生命周期不在 `this.scene` 里（装饰不是 ECS 实体，不参与快照对账），
-     * 所以 `destroy()` 必须显式 `clearDecor()`。
-     */
+    /** 棋盘上的纯表现装饰节点；不属于 ECS，销毁时显式清理。 */
     private readonly decorNodes: Node[] = [];
     private readonly pool = new ZCNodePool<Node>();
     private readonly pooledEntityKeys = new Map<number, string>();
@@ -273,13 +278,7 @@ export class ZCGameRenderWorld {
      * 建筑产兵时由 `renderUnitEntity` 入队，播完（`advanceBuildingShake` 返回 false）出队。
      */
     private readonly buildingShakeHexes = new Set<number>();
-    /**
-     * 玩家头像解析（owner → SpriteFrame）；由 `ZCGame` 在头像异步加载完成后注入。
-     *
-     *  拿不到就返回 null：横幅只留四个玩家色的头像环，不影响这次演出 ——
-     *  `images/head` 的头像要靠 head/icon 表 + `resources.load`，属于「可能慢一步」的资源。
-     */
-    private legendPortraitResolver: ((owner: ZCOwner) => SpriteFrame | null) | null = null;
+
 
     /**
      * 横幅**左侧卡面静态图**解析（与卡牌阵容同一条链）：`cardId` → 卡牌头像帧。
@@ -287,7 +286,7 @@ export class ZCGameRenderWorld {
      *  由 `ZCGame.loadLegendCardArt()` 预扫本局卡组后注入（异步）；没注入 / 该卡没配头像时
      *  `resolveLegendArt` 回退兵种 idle → 建筑图，横幅不会空着。
      */
-    private legendCardArtResolver: ((cardId: string) => SpriteFrame | null) | null = null;
+
     /**
      * 兵种 id → idle 立绘缓存，**传说横幅**的回退链用（见 `resolveLegendArt` ② / `resolveUnitFrame`）。
      *
@@ -372,6 +371,12 @@ export class ZCGameRenderWorld {
      * 正式战斗传入明确的地图配置，按该 map 建实体。
      */
     initialize(mapConfig: ZCMatchMap): void {
+        // 兵种帧一次算好：`unitVisualPrefabs` 整局不变 ⇒ 下面 `resolveUnitFrame` 必然命中，不必再判缓存。
+        // ⚠️ prefab 里没有 `Sprite.spriteFrame` 的兵种查不到（保持和以前一样返回 null）。
+        for (const [unitId, prefab] of this.options.unitVisualPrefabs) {
+            const frame = prefab?.data?.getComponentInChildren(Sprite)?.spriteFrame ?? null;
+            if (frame) this.unitFrames.set(unitId, frame);
+        }
         const map = mapConfig;
         this.wallRenderer.invalidate();
         this.map = map.hexes;
@@ -407,7 +412,7 @@ export class ZCGameRenderWorld {
         surface.rect(minX, minY, maxX - minX, maxY - minY);
         surface.fill();
         // 2.5D 地块有侧壁，渲染顺序须由共享布局给出；y 小的格子后画。
-        const placedById = new Map<number, { x: number; y: number; view: ZCHexView; node: Node }>();
+        const placedById = new Map<number, ZCPlacedHex>();
         for (const config of this.map) {
             if (!config.playable) continue;
             const point = layout.points.get(config.id);
@@ -423,7 +428,8 @@ export class ZCGameRenderWorld {
             // 视图组件与它的 @property 都在 ZCGameHex.prefab 上绑好了 —— 不再 `|| addComponent` 兜底：
             // 那个分支永远走不到，真掉组件时反而会悄悄补一个空视图（Inspector 引用全 null，表现全无）。
             const view = node.getComponent(ZCHexView)!;
-            view.initialize(() => this.options.onHexClick(config.id));
+            //  点击**只派发意图**（带 `hexId`），处理方由控制器订阅 —— 渲染世界不再收上层回调。
+            view.initialize(() => EventMgr.instance.emit(ZCGameUiEvent.HexClick, config.id));
             // 建筑专属外观解析整局不变，新建视图时喂一次（与 unit frame resolver 同口径）。
             view.setBuildingFrameResolver((cardId, building, owner) => this.resolveBuildingFrame(cardId, building));
             // 抬升动效要临时挂到「所有层之上」= 棋盘根节点的末位（见 `ZCHexView.setRaised`）；
@@ -493,7 +499,7 @@ export class ZCGameRenderWorld {
      * 切过主城、矿场、兵营或防御塔。层本身来自 prefab，这里只搬节点。
      */
     private attachBuildingOverlay(
-        placed: ReadonlyArray<{ x: number; y: number; view: ZCHexView; node: Node }>,
+        placed: ReadonlyArray<ZCPlacedHex>,
         overlay: Node,
     ): void {
         for (const { x, y, view } of placed) {
@@ -507,7 +513,7 @@ export class ZCGameRenderWorld {
 
     /** 同理把生命条与冷却圈抬到最上层（`CooldownOverlay`），高于城墙及建筑本体。 */
     private attachCooldownOverlay(
-        placed: ReadonlyArray<{ x: number; y: number; view: ZCHexView; node: Node }>,
+        placed: ReadonlyArray<ZCPlacedHex>,
         overlay: Node,
     ): void {
         for (const { x, y, view } of placed) {
@@ -527,17 +533,7 @@ export class ZCGameRenderWorld {
     }
 
     /**
-     * 铺地图的虚空装饰（`art.tiles` 里的 `"行,列"` 键）。
-     *
-     * 调用方负责加载资源并把「资源名 → SpriteFrame」交进来 —— 渲染层不碰资源加载，
-     * 与 `hexPrefab` / `unitVisualPrefabs` 这些走 `options` 注入的口径一致。
-     *
-     * 每个装饰从 `options.decorPrefab` 实例化：Sprite 的 `sizeMode = CUSTOM` 与
-     * `trim = false` 由那个 prefab 承载（见 `ui/game/ZCGameDecor.prefab`），这里只喂帧和尺寸。
-     * 承载它们的是 `ZCGameBoard.prefab` 里的常驻 `DecorLayer`（本类不建层、也不拆层）。
-     *
-     * 幂等：先 `clearDecor()` 再重铺，所以重复调用（重开局、换地图）不会叠出两层。
-     * `frames` 里查不到的条目**静默跳过** —— 单张装饰没加载出来不该留下一格空白 Sprite。
+     * 将自由装饰铺到 prefab 的常驻 `DecorLayer`。调用方提供帧；重复调用会先清空旧节点。
      */
     installDecor(
         placements: readonly ZCDecorPlacement[],
@@ -557,11 +553,22 @@ export class ZCGameRenderWorld {
             node.layer = layer.layer;
             node.setParent(layer);
             node.setPosition(item.x, item.y, 0);
-            // 尺寸由 UITransform 定死（= 等比缩进格面框后的宽高）。配它的
-            // `sizeMode = CUSTOM` 也烘在 prefab 里：默认的 TRIMMED 会按 SpriteFrame
-            // 自己重算尺寸，把这个 fit 整个吃掉。
+            node.setRotationFromEuler(0, 0, item.rotation ?? 0);
+            node.setScale(item.flipX ? -1 : 1, item.flipY ? -1 : 1, 1);
+            // 尺寸由 UITransform 定死。与地图编辑器 `<image preserveAspectRatio="xMidYMid meet">`
+            // 同口径：在 `item.width × item.height` 框内**等比缩放进框**，而不是 CUSTOM 拉伸 ——
+            // 宽高比与图原始比例不一致时（旧数据、非等比手动缩放），拉伸会让游戏里变形、
+            // 编辑器预览却正常。宽高等于原图时 fit = 1，正好 1:1。配它的 `sizeMode = CUSTOM`
+            // 也烘在 prefab 里：默认的 TRIMMED 会按 SpriteFrame 自己重算尺寸，把这个 fit 吃掉。
             node.getComponent(Sprite)!.spriteFrame = frame;
-            node.getComponent(UITransform)!.setContentSize(item.width, item.height);
+            const transform = node.getComponent(UITransform)!;
+            const original = frame.originalSize;
+            if (original && original.width > 0 && original.height > 0) {
+                const fit = Math.min(item.width / original.width, item.height / original.height);
+                transform.setContentSize(original.width * fit, original.height * fit);
+            } else {
+                transform.setContentSize(item.width, item.height);
+            }
             this.decorNodes.push(node);
         }
     }
@@ -611,10 +618,10 @@ export class ZCGameRenderWorld {
                 homeNeighborOwner.set(neighborId, owner);
             }
         }
-        const ownerForHex = (id: number): ZCFaction => (
-            homeNeighborOwner.get(id) ?? sectionOwnerByHex.get(id) ?? 'neutral'
-        );
-        const boundaryMasks = buildTerritoryBoundaryMasks(selection.map.hexes, ownerForHex);
+        //  选点侧也有自己的逐格归属：两份表留给具名实现 `spawnOwnerForHex` 用（不再内联闭包）。
+        this.spawnHomeNeighborOwner = homeNeighborOwner;
+        this.spawnSectionOwnerByHex = sectionOwnerByHex;
+        const boundaryMasks = buildTerritoryBoundaryMasks(selection.map.hexes, this.spawnOwnerForHex);
         const selectedHexId = playerSelection !== null
             && selection.invalidReason('player', playerSelection) === null ? playerSelection : null;
         // 我方基地的 6 格高亮：**只在「我方还在选点」期间**给。`isPlacing` 一转 false（玩家点了
@@ -625,7 +632,7 @@ export class ZCGameRenderWorld {
         const playerBaseNeighbors = new Set<number>(
             playerBaseId === null ? [] : selection.baseNeighborIds('player'),
         );
-        this.redrawSharedOutline(selection.map.hexes, ownerForHex, boundaryMasks, 'spawn', selectedHexId);
+        this.redrawSharedOutline(selection.map.hexes, boundaryMasks, 'spawn', selectedHexId);
         if (hintsVisible) {
             const depthName = { front: '前区', mid: '中区', back: '后区' } as const;
             for (const region of selection.map.regions ?? []) {
@@ -830,10 +837,7 @@ export class ZCGameRenderWorld {
                 node.name = `CardReveal_${reveal.id}`;
                 // 同上：视图组件在 ZCGameCardReveal.prefab 上。
                 const view = node.getComponent(ZCCardRevealView)!;
-                // 卡面图解析整局不变，新建视图时喂一次就够（池里复用回来的视图保留着同一个解析器）。
-                // 闭包读的是**当前**的 legendCardArtResolver，所以图晚到也能吃上（视图侧会作废内容键重画）。
-                view.setCardArtResolver((cardId) => this.legendCardArtResolver?.(cardId) ?? null);
-                view.setBuildingFrameResolver((cardId, building) => this.resolveBuildingFrame(cardId, building));
+                // 卡面图 / 建筑帧由视图自己按 id 向控制器取（`ProcedureGame.current`）⇒ 这里不再注入闭包。
                 entityId = this.createEntity('cardReveal', reveal.id, node);
                 this.pooledEntityKeys.set(entityId, 'cardReveal');
                 this.cardRevealViews.set(entityId, view);
@@ -885,7 +889,8 @@ export class ZCGameRenderWorld {
                 // 同上：视图组件在 ZCGameLegendBanner.prefab 上。
                 const view = node.getComponent(ZCGameLegendBannerView)!;
                 view.setArtResolver((item) => this.resolveLegendArt(item));
-                view.setPortraitResolver((owner) => this.legendPortraitResolver?.(owner) ?? null);
+                //  头像帧在控制器上（`ProcedureGame.current`）⇒ 闭包每帧现取，晚到也能吃上。
+                view.setPortraitResolver((owner) => ProcedureGame.current?.resolveLegendPortrait(owner) ?? null);
                 entityId = this.createEntity('legendBanner', reveal.id, node);
                 this.pooledEntityKeys.set(entityId, 'legendBanner');
                 this.legendBannerViews.set(entityId, view);
@@ -919,18 +924,6 @@ export class ZCGameRenderWorld {
     }
 
     /**
-     * 注入玩家头像解析（owner → 头像帧）。头像走 head/icon 表 + `resources.load`，是异步的，
-     * `ZCGame` 加载完成后调一次；在那之前弹出的横幅只显示四个玩家色的头像环。
-     */
-    setLegendPortraitResolver(resolver: ((owner: ZCOwner) => SpriteFrame | null) | undefined): void {
-        this.legendPortraitResolver = resolver ?? null;
-        // 已经弹出来的横幅要立刻吃上新解析器（视图内 `setPortraitResolver` 会作废内容键强制重绘）。
-        for (const view of this.legendBannerViews.values()) {
-            if (view.isValid) view.setPortraitResolver((owner) => this.legendPortraitResolver?.(owner) ?? null);
-        }
-    }
-
-    /**
      * 注入 / 摘除选点阶段的【确认位置】按钮节点。
      *
      *  进 `startSpawnSelection`、出 `finishSpawnSelection` / `shutdown` —— 都是 `ZCGame` 调
@@ -948,15 +941,16 @@ export class ZCGameRenderWorld {
      *  也没关系 —— 这里连同**已经弹出来的横幅与小卡牌**一起重设解析器（视图内会作废内容键强制重绘），
      *  所以「先弹后到」不会留下空卡面 / 建筑图卡面。
      */
-    setLegendCardArtResolver(resolver: ((cardId: string) => SpriteFrame | null) | undefined): void {
-        this.legendCardArtResolver = resolver ?? null;
+    /**
+     * 卡面帧到齐后**补刷已经弹出来**的横幅与小卡牌（帧表本身在控制器上，视图按 id 现取）。
+     * 卡视图要作废内容键，否则它缓存着"当时没有卡面图"的那一帧、会一直停在建筑图上。
+     */
+    refreshLegendCardArt(): void {
         for (const view of this.legendBannerViews.values()) {
             if (view.isValid) view.setArtResolver((item) => this.resolveLegendArt(item));
         }
-        // 小卡牌的卡面与横幅左格**同源**（2026-10-12 起），同样要补刷。
-        // `setCardArtResolver` 内部会作废 `contentKey`，下一帧重新选图。
         for (const view of this.cardRevealViews.values()) {
-            if (view.isValid) view.setCardArtResolver((cardId) => this.legendCardArtResolver?.(cardId) ?? null);
+            if (view.isValid) view.invalidateArt();
         }
     }
 
@@ -965,7 +959,7 @@ export class ZCGameRenderWorld {
         // ① 卡牌阵容那边的静态图：卡表 `headIcon` → `icons/cardHead/**`（阵容页「非spine」时
         //    铺在 Hero 位的就是同一张）。横幅是**这张卡**的出场，左格该长成阵容里那张卡的样子，
         //    而不是它产出兵种的 idle 图。由 `ZCGame` 预加载本局卡组后注入。
-        const cardArt = this.legendCardArtResolver?.(reveal.cardId);
+        const cardArt = ProcedureGame.current?.resolveCardArt(reveal.cardId) ?? null;
         if (cardArt) return cardArt;
         // ② 老链：兵种 idle 立绘。
         if (reveal.unitId) {
@@ -986,14 +980,53 @@ export class ZCGameRenderWorld {
      *  取不到就当这个兵种没有立绘，卡面回退建筑图；连 `unitVisualPrefabs` 不是 Map
      *  （视图测试的 options 桩就是普通对象）也算取不到，绝不抛错。
      */
+    /**
+     * 本帧快照与时间（描边染色用）。与 `UNIT_PRESENTATION_SCRATCH` 同口径：复用字段，
+     * 不在调用点新建闭包／对象。
+     */
+    private territoryFrame: ZCGameRenderFrame | null = null;
+    private territoryOutlineNow = 0;
+
+    /** 逐格归属的稳定引用（整局一份，每帧直接传）。 */
+    private readonly ownerForHex = this.territoryOwnerForHex.bind(this);
+
+    /**
+     * 逐格归属：领地**底图与描边共用同一处实现**（分开算就会出现「底图一个色、轮廓另一个色」）。
+     *
+     *  ① 扫场期间用胜利方覆盖真实归属（纯表现层，不回写模型）；
+     *  ② 中立且可开发的格子按可开发方染色；
+     *  ③ 新点亮的邻格在「按住窗」内仍未点亮 ⇒ 描边跟着一起等（需求 2026-10-15 row9：
+     *     描边不许比地块图标先变色）。按住状态只问地块视图，`resolveDevelopableHold` 是唯一真源。
+     */
+    private territoryOwnerForHex(id: number): ZCFaction {
+        const sweepOwner = this.sweep.ownerForHex(id);
+        if (sweepOwner) return sweepOwner;
+        const hex = this.territoryFrame?.hexesById.get(id);
+        const owner = hex?.state.owner ?? 'neutral';
+        if (hex?.canDevelop !== true) return territoryTintOwner(owner, false);
+        const entityId = this.hexEntityBySource.get(id);
+        const view = entityId === undefined ? undefined : this.hexViews.get(entityId);
+        if (view?.resolveDevelopableHold(true, this.territoryOutlineNow)) return territoryTintOwner(owner, false);
+        return territoryTintOwner(owner, true);
+    }
+
+    /** 选点阶段的逐格归属用表（由 `renderSpawnSelection` 每次刷新时写入）。 */
+    private spawnHomeNeighborOwner: ReadonlyMap<number, ZCOwner> = new Map();
+    private spawnSectionOwnerByHex: ReadonlyMap<number, ZCFaction> = new Map();
+
+    /** 选点侧的逐格归属（稳定引用，整局一份）。 */
+    private readonly spawnOwnerForHex = this.resolveSpawnOwnerForHex.bind(this);
+
+    /** 选点：已选/已确认主城的邻格 → 该方，其次区域归属，最后中立。 */
+    private resolveSpawnOwnerForHex(id: number): ZCFaction {
+        return this.spawnHomeNeighborOwner.get(id)
+            ?? this.spawnSectionOwnerByHex.get(id)
+            ?? 'neutral';
+    }
+
+    /** 兵种 id → idle 帧（`initialize` 时已按 `unitVisualPrefabs` 预填）。 */
     private resolveUnitFrame(unitId: string): SpriteFrame | null {
-        const cached = this.unitFrames.get(unitId);
-        if (cached) return cached;
-        const prefabs = this.options.unitVisualPrefabs as ReadonlyMap<ZCUnitId, Prefab> | undefined;
-        const prefab = typeof prefabs?.get === 'function' ? prefabs.get(unitId) : undefined;
-        const frame = prefab?.data?.getComponentInChildren(Sprite)?.spriteFrame ?? null;
-        if (frame) this.unitFrames.set(unitId, frame);
-        return frame;
+        return this.unitFrames.get(unitId) ?? null;
     }
 
     /**
@@ -1002,21 +1035,9 @@ export class ZCGameRenderWorld {
      * 取不到（buildingFrames 未加载 / 视图测试的 options 桩是普通对象）绝不抛错，
      * 与 resolveUnitFrame 同一防护。
      */
+    /** 建筑帧查表搬去了控制器（`ZCGame.resolveBuildingFrame`）；这里只按同一口径转发。 */
     private resolveBuildingFrame(cardId: string | null, building: string): SpriteFrame | null {
-        const frames = this.options.buildingFrames;
-        const lookup = typeof (frames as { get?: unknown })?.get === 'function'
-            ? (icon: string) => (frames as ReadonlyMap<string, SpriteFrame>).get(icon) ?? null
-            : (): SpriteFrame | null => null;
-        if (cardId) {
-            const icon = getCardBuildIcon(cardId);
-            if (icon) {
-                const frame = lookup(icon);
-                if (frame) return frame;
-            }
-        }
-        if (building === 'hq') return lookup('hq-base');
-        if (building === 'barracks') return lookup('barracks-default');
-        return null;
+        return ProcedureGame.current?.resolveBuildingFrame(cardId, building) ?? null;
     }
 
     /** 飘字使用连续表现时间，过期节点进入有界复用池。 */
@@ -1064,7 +1085,10 @@ export class ZCGameRenderWorld {
     renderHitFxs(frame: ZCGameRenderFrame): void {
         const now = this.visualTime(frame);
         this.effectPool.recycleHitFx(now);
-        for (const fx of frame.hitFxs) this.effectPool.playHitFx(fx, now);
+        // 🔴 走 `syncHitFx` 而不是逐个 `playHitFx`：`frame.hitFxs` 是模型层**整条存活队列**
+        // （保留 HIT_FX_SECONDS = 0.8s），逐帧重新 `play()` 会把动画 seek 回第 0 帧
+        // ⇒ 受击特效「停顿在角色身上、播不动」（2026-10-16 山猫反馈）。
+        this.effectPool.syncHitFx(frame.hitFxs, now);
     }
 
     destroy(): void {
@@ -1164,30 +1188,11 @@ export class ZCGameRenderWorld {
 
     private renderHexSystem(frame: ZCGameRenderFrame): void {
         const now = this.visualTime(frame);
-        const ownerForHex = (id: number): ZCFaction => {
-            // 扫场期间用胜利方覆盖真实归属（纯表现层，不回写模型）。
-            const sweepOwner = this.sweep.ownerForHex(id);
-            if (sweepOwner) return sweepOwner;
-            // 「中立且可开发 ⇒ 按可开发方染色」的口径与地块底图、扩散波终点色同源，
-            // 只有 `territoryTintOwner` 一处实现 —— 分开算就会「底图一个色、轮廓另一个色」。
-            const hex = frame.hexesById.get(id);
-            const owner = hex?.state.owner ?? 'neutral';
-            const canDevelop = hex?.canDevelop === true;
-            if (!canDevelop) return territoryTintOwner(owner, false);
-            // 🔴 需求 2026-10-15 row9：「地块的描边部分的展示时间需要和新的地块图标出现**同步**展示，
-            // 不要先展示描边」。新点亮的邻格在 row6 的**按住窗**内被地块视图压回「还没点亮」的外观
-            // （图标 / 价格 / 底色都还没上），轮廓这边如果直接按 `canPlayerDevelop` 算，
-            // 就会出现「描边先变成我方色 0.2s，图标才跟上来」——正是要修的那条。
-            //
-            // 按住状态**只问地块视图**（`resolveDevelopableHold` 是唯一真源），不在这里另算一份：
-            // 视图的 `render` 稍后也会调同一个方法，同拍重复调用幂等，谁先谁后都对。
-            const entityId = this.hexEntityBySource.get(id);
-            const view = entityId === undefined ? undefined : this.hexViews.get(entityId);
-            if (view?.resolveDevelopableHold(true, now)) return territoryTintOwner(owner, false);
-            return territoryTintOwner(owner, true);
-        };
-        const boundaryMasks = buildTerritoryBoundaryMasks(this.map, ownerForHex);
-        this.redrawSharedOutline(this.map, ownerForHex, boundaryMasks);
+        // 逐格归属抽成具名方法（规范：不在调用点写内联闭包）；本帧 frame / now 走字段。
+        this.territoryFrame = frame;
+        this.territoryOutlineNow = now;
+        const boundaryMasks = buildTerritoryBoundaryMasks(this.map, this.ownerForHex);
+        this.redrawSharedOutline(this.map, boundaryMasks);
         for (const state of frame.snapshot.hexes) {
             const entityId = this.hexEntityBySource.get(state.id);
             if (!entityId) continue;
@@ -1220,12 +1225,15 @@ export class ZCGameRenderWorld {
      * 不是每帧。`ZCHexView` 自己那份 per-cell `cc.Graphics` 已不再绘制。
      */
     private redrawSharedOutline(
-        hexes: readonly Readonly<{ id: number; x: number; y: number; playable: boolean }>[],
-        ownerForHex: (id: number) => ZCFaction,
+        //  具名类型用现成的 `ZCHexConfig`（两个调用点传的就是它）—— 不再内联形状、
+        // 也不套 `Readonly<…>`（元素字段没人改，那层包装只是噪音；数组本身仍是只读视图）。
+        hexes: readonly ZCHexConfig[],
         boundaryMasks: ReadonlyMap<number, number>,
-        mode: 'battle' | 'spawn' = 'battle',
+        mode: ZCOutlineMode = 'battle',
         selectedHexId: number | null = null,
     ): void {
+        //  逐格归属按 `mode` 选一份现成的具名实现（原先由调用点各传一个内联闭包进来）。
+        const ownerForHex = mode === 'spawn' ? this.spawnOwnerForHex : this.ownerForHex;
         //  prefab 上 `OutlineLayer` 必须挂 `cc.Graphics`。这里**不崩**而是直接不画 ——
         // 崩掉会让整个对局开不起来（`renderHexSystem` 是地块系统的入口），而"轮廓没画"
         // 是个能靠肉眼立刻发现的视觉缺陷。宁可少画也不要整局打不开。
@@ -1418,7 +1426,8 @@ export class ZCGameRenderWorld {
             // 第二个参数是卡表 `pvpCard.prefabSize`（美术等比缩放，解析层永远给值、
             // 表里留空按 1）。 从 `definition` 取、不是从 prefab 取：同一个 prefab
             // 可能被多张卡共用（女猎手/泰兰德、冰法师/吉安娜…），体型是**按卡**配的。
-            view.initialize(this.options.unitVisualPrefabs.get(unit.unitId) || null, definition.prefabSize);
+            //  视图自己按 `definition.unitId` 向控制器取美术 prefab（`prefabSize` 也在 definition 上）。
+            view.initialize(definition);
             entityId = this.createEntity('unit', unit.id, node);
             this.pooledEntityKeys.set(entityId, key);
             this.unitViews.set(entityId, view);

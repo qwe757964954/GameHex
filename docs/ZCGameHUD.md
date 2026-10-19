@@ -105,50 +105,35 @@ hud.render(model, lastHint);
    （入场动画或结算拉远期间）吞掉棋盘拖动。`shutdown()` 里要先 `clearVictorySweep()` 再 `destroy()`，
    否则 `sweepOwner` 留给下一局。
 
-## 虚空装饰（地图编辑器摆的礁石 / 沉船）
+## 场景装饰（地图编辑器摆的礁石 / 沉船）
 
-地图编辑器能往**虚空格**上摆装饰，落盘在地图 JSON 的 `art.tiles` 里（键 `"行,列"`、值 = 资源名
-`image/decor/<主题>/<名字>`）。这套数据以前只走到 `ZCMatchConfig.art` 就断了 ——
-没有任何消费方，游戏里那些虚空格还是光秃秃的。现在接上了：
+所有装饰统一落盘于 `art.freeDecor`，使用地图局部坐标和独立宽高，不占格，也不影响寻路、建造或领地判定。
+数据形如 `{ id, art, x, y, width, height, rotation, flipX, flipY }`。编辑器支持画布放置、拖动、旋转、
+等比缩放、翻转、复制、锁定、删除和可选格心吸附。旧地图 `art.tiles` 中的 `"行,列"` 装饰键不再导入或渲染，
+需要在编辑器中重新摆放；`art.tiles` 只保留地块贴图键。
 
 | 环节 | 位置 | 职责 |
 | --- | --- | --- |
-| 挑键 | `ZCGame.installMapDecor()` | 从 `model.mapConfig.art.tiles` 里按 `ZC_DECOR_KEY_PATTERN`（`/^\d+,\d+$/`）挑**按格键**。分区贴图键（`'1'`~`'4'` / `'neutral'` / `'void'`）是另一个用途，不能一起画 |
-| 加载 | 同上，`resources.load(decorFramePath(name), SpriteFrame)` | 去重后加载（一张图常被多格引用）。模块级 `decorFrameCache` 跨局复用。**失败只 warn**，不拦这一局 |
-| 算摆放 | `ZCGameViewUtil.buildDecorPlacements(map, tiles, measure)` | 纯函数：`(row,column)` → 格 → `mapToViewX/Y` + 等比尺寸。`measure` 返 `null`（图没加载出来）**不进清单** |
-| 铺节点 | `ZCGameRenderWorld.installDecor(placements, frames)` | 在 `mapLayer` 下建 `DecorLayer`，每格一个 Sprite |
+| 挑选与加载 | `ZCGameLoader.loadDecorFrames()`、`ZCGame.installMapDecor()` | 从 `art.freeDecor` 收集资源名并去重预加载 |
+| 算摆放 | `ZCGameViewUtil.buildDecorPlacements(freeDecor, measure)` | 保留地图局部坐标、尺寸、旋转与翻转；非法条目或缺失资源不进入清单 |
+| 铺节点 | `ZCGameRenderWorld.installDecor(placements, frames)` | 在棋盘 prefab 的 `DecorLayer` 下铺 Sprite；不创建玩法实体 |
 
 ⚠️ **装配路径必须补 `/spriteFrame` 这一层**。地图 JSON 里存的是 `image/decor/<主题>/<名字>`，
 而 `resources.load` 要的是 `<完整路径>/spriteFrame`（CC 3.x 的图片是「子资源容器」）。
 少了它不会报错，只会**静默 404** —— 装饰一个都画不出来，看着像功能没做。唯一入口
 `ArtPaths.decorFramePath()`（根目录常量 `DECOR_ART_ROOT`）。
 
-**为什么是独立一层**：装饰只摆在虚空格，而虚空格（`playable === false`）在客户端**根本没有节点**
-（连 `ZCHexView` 都不建），没东西可挂。层级落点 `decorSlotIndex = 已建地块数 + 1` ——
-压在虚空格与水面之上（否则被水盖住），又在 `BuildingOverlay` / `CooldownOverlay` 之下。
+自由装饰统一挂到 `ZCGameBoard.prefab` 的 `DecorLayer`，尺寸由 `UITransform` 写入，Sprite 使用 `CUSTOM` 和
+`trim = false`，从而与编辑器的完整图片预览一致。
 
-**贴图口径必须与编辑器逐条对齐**（`tests/zcds-decor.test.ts` 钉住，编辑器侧见
-`tools/map-editor/README.md` 的「看得见的装饰」）：
-
-1. **等比不拉伸**：装饰图 128×128、格面是压扁的 124×90，硬贴会变形。取 `min(124/w, 90/h)`
-   （→ 90×90 居中），对应编辑器的 `preserveAspectRatio="xMidYMid meet"`。
-2. **用整张原图**：`SpriteFrame.originalSize`（不是 trim 后的 `rect`）+ `Sprite.trim = false`
-   —— 编辑器画的就是整张 PNG，两边不同口径会让装饰忽大忽小。
-3. **尺寸定死在 UITransform 上**：`Sprite.sizeMode = CUSTOM`。默认的 `TRIMMED` 会按
-   `SpriteFrame` 自己重算尺寸，把上面算好的 fit 整个吃掉。
-
-**四条不能省的收尾**：
+**生命周期约束**：
 
 - `installDecor` 幂等（先 `clearDecor` 再铺）：重开局 / 换地图不会叠出两层。
 - `destroy()` 里必须显式 `clearDecor()` —— 装饰不在 `this.scene` 里（不是 ECS 实体），
   实体遍历收不到它。
-- `installMapDecor` 是异步的，用 `decorRequestToken` 判作废：回调回来时若已换局 / 退出
-  （`shutdown` 把 `renderWorld` 置空了），直接丢弃，不能往已销毁的 `mapLayer` 上挂节点。
 - `resources.load` 拿到的 `SpriteFrame` **必须自己 `addRef()`**。装饰图没有任何 prefab
   静态引用它，而模块级 `Map` 不参与引擎引用计数 —— 不加这一行，图一旦被回收，还挂在棋盘上的
   Sprite 下一帧就崩在渲染管线里（每帧一条 `getGFXTexture` 报错）。样板 `CardLineupIcons.loadArt`。
-
-客户端**不做"只能摆虚空格"的二次校验**（照画）—— 这条约束由编辑器的 `pruneDecor()` 守。
 
 ## 验收
 

@@ -29,7 +29,7 @@ const FLOAT_TEXT_URL = 'ui/game/ZCGameFloatText';
 const CARD_REVEAL_URL = 'ui/game/ZCGameCardReveal';
 /** 传说卡出场横幅（抽到金卡时弹出的整条 720×417 横幅，底板按玩家分四色）。 */
 const LEGEND_BANNER_URL = 'ui/game/ZCGameLegendBanner';
-/** 虚空装饰条目。Sprite 的关键配置（CUSTOM 尺寸 + 不裁边）烘在 prefab 里。 */
+/** 场景装饰条目。Sprite 的关键配置（CUSTOM 尺寸 + 不裁边）烘在 prefab 里。 */
 const DECOR_URL = 'ui/game/ZCGameDecor';
 /**
  * 单位出生特效：**老客户端那套**（`塔防/动效/sc/sc`，2026-10-14 换）。
@@ -117,8 +117,6 @@ const HEX_GROUND_GLOW_DIRECTORY = HEX_GROUND_GLOW_ART_ROOT;
  * （兵营 / 金矿两套色，平级）；替换此前手画的 Graphics 描边 + 白闪 + 圆环。只有对局在用。
  */
 const HEX_FLIP_PULSE_DIRECTORY = HEX_FLIP_PULSE_ART_ROOT;
-/** 地图 art.tiles 的装饰键格式；加载器只需识别格式，不依赖视图层。 */
-const DECOR_TILE_KEY_PATTERN = /^\d+,\d+$/;
 /**
  * 神器图标目录（`pvpArtifact[].icon`，如「霜封冰刃」）。
  *
@@ -165,7 +163,7 @@ export interface ZCGamePreparedResources {
      */
     legendBannerPrefab: Prefab;
     /**
-     * 虚空装饰条目（`image/decor` 那些装饰图的载体）。
+     * 场景装饰条目（`image/decor` 那些装饰图的载体）。
      *
      * 把「`sizeMode = CUSTOM` + `trim = false`」这两个配置烘进 prefab —— 它们不是随手设的：
      * CUSTOM 才不让 TRIMMED 按 SpriteFrame 重算尺寸、把 fit 缩放吃掉；不裁边才与地图编辑器
@@ -642,12 +640,8 @@ export class ZCGameLoader {
     /** 仅加载本局地图声明的装饰，资源生命周期交给当前流程。 */
     private async loadDecorFrames(scope?: ResourceScope): Promise<ReadonlyMap<string, SpriteFrame>> {
         const names = new Set<string>();
-        for (const [key, value] of Object.entries(this.selectedMap?.art?.tiles ?? {})) {
-            if (!DECOR_TILE_KEY_PATTERN.test(key) || !value) continue;
-            // art.tiles 的「行,列」键值兼容字符串（老格式）和 { art, span?, offset? }（多格装饰）。
-            // 加载图只关心 art 名 —— 把对象拍扁到字符串后再登记。
-            const artName = typeof value === 'string' ? value : value.art;
-            if (artName) names.add(artName);
+        for (const item of this.selectedMap?.art?.freeDecor ?? []) {
+            if (typeof item?.art === 'string' && item.art.trim()) names.add(item.art.trim());
         }
         const frames = new Map<string, SpriteFrame>();
         await Promise.all(Array.from(names).map(async (name) => {

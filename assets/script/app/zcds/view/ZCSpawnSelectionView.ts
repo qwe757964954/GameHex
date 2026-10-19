@@ -1,5 +1,7 @@
 import { _decorator, Color, Component, Graphics, Label, Node, Sprite, UITransform } from 'cc';
 import type { ZCSpawnSelectionSnapshot } from '../model/ZCSpawnSelection';
+import { ZCGameUiEvent } from './ZCGameHudEvents';
+import { EventMgr } from '../../../framework/event/EventMgr';
 
 const { ccclass, property } = _decorator;
 
@@ -13,10 +15,9 @@ const COUNTDOWN_SECONDS = 10;
 export const SPAWN_HINT_OFFSET_Y = 35.5;
 export const SPAWN_HINT_CENTER_Y = 0;
 
-export interface IZCSpawnSelectionActions {
-    confirm: () => void;
-    toggleHints: () => void;
-}
+/**
+ * 视图只**派发意图事件**（{@link ZCGameUiEvent}，在 {@link events} 上 `emit`）：
+ * 「确认落点」「切换提示显隐」由控制器 `ZCGame` 订阅后处理。
 
 /**
  * 自选主城（落点选择）阶段的常驻 HUD：顶部信息带 + 绿勾 + 左下「收回提示」+ 吐司。
@@ -96,15 +97,22 @@ export class ZCSpawnSelectionView extends Component {
     @property({ type: Label, group: '节点引用' })
     toastLabel: Label = null!;
 
-    private actions: IZCSpawnSelectionActions | null = null;
-
-    initialize(actions: IZCSpawnSelectionActions): void {
-        this.actions = actions;
-        this.toggleButton.on(Node.EventType.TOUCH_END, () => this.actions?.toggleHints(), this);
+    initialize(): void {
+        // 监听一律「具名方法 + this target」（规范 §7.5 配套第 3 条）：不内联箭头闭包 ——
+        // 箭头闭包在调用栈里没有名字，将来要 off 也没有稳定函数引用可传。
         // 失效态仍然接收点击，由状态机给出「为什么失效」；未选择态同样给明确反馈。
-        this.confirmButton.on(Node.EventType.TOUCH_END, () => this.actions?.confirm(), this);
+        this.toggleButton.on(Node.EventType.TOUCH_END, this.onToggleHintsClick, this);
+        this.confirmButton.on(Node.EventType.TOUCH_END, this.onConfirmClick, this);
         this.drawToastBackground();
         this.toastNode.active = false;
+    }
+
+    private onConfirmClick(): void {
+        EventMgr.instance.emit(ZCGameUiEvent.SpawnConfirm);
+    }
+
+    private onToggleHintsClick(): void {
+        EventMgr.instance.emit(ZCGameUiEvent.SpawnToggleHints);
     }
 
     render(snapshot: ZCSpawnSelectionSnapshot, hintsVisible: boolean): void {
@@ -148,7 +156,6 @@ export class ZCSpawnSelectionView extends Component {
 
     protected onDestroy(): void {
         this.unschedule(this.hideToast);
-        this.actions = null;
     }
 
     /** 吐司底：尺寸与圆角都从 prefab 上那个节点的 `UITransform` 读，代码不存宽高。 */

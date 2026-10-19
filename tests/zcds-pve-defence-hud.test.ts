@@ -62,12 +62,10 @@ const wave = (over: Record<string, unknown> = {}) => ({
 test('波次徽标只有一行 `第N/M波`，字号与描边取自设计稿量测', () => {
     assert.deepEqual(panel.formatZCDefenceWaveText(wave()), {
         text: '第4/8波',
-        fontSize: panel.ZC_BOSS_WAVE_FONT_SIZE,
-        lineHeight: panel.ZC_BOSS_WAVE_FONT_SIZE + 6,
-        outlineWidth: panel.ZC_BOSS_LABEL_OUTLINE_WIDTH,
+        fontSize: 32,
+        lineHeight: 38,
+        outlineWidth: 3,
     });
-    assert.equal(panel.ZC_BOSS_WAVE_FONT_SIZE, 32, '设计稿文字框 109×32、白核高 29.9');
-    assert.equal(panel.ZC_BOSS_LABEL_OUTLINE_WIDTH, 3, '白字压沙地，描边是必须的');
 });
 
 test('波次徽标：开波前是第 0/M 波，最后一波也不会越界', () => {
@@ -83,5 +81,4 @@ test('血量倍率徽标：整数不带小数点，非法值退回 X1', () => {
     assert.equal(panel.formatZCDefenceHpRate(0), 'X1');
     assert.equal(panel.formatZCDefenceHpRate(-3), 'X1');
     assert.equal(panel.formatZCDefenceHpRate(Number.NaN), 'X1');
-    assert.equal(panel.ZC_BOSS_RATE_FONT_SIZE, 22, '设计稿 `X4` 白核 26.5×16.1');
 });

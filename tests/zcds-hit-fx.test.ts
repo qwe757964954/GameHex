@@ -15,8 +15,13 @@ import { loadViews } from './helpers/zcds-view-fixtures';
  *
  * ## 素材来源与口径（2026-10-15 接入）
  * 源目录 `zarts/art/植物占领世界美术/特效/`：
- *  - `0通用-受击/{中毒,坦克,射手,战士,法师}受击/` 共 **44 帧**；
+ *  - `0通用-受击/{中毒,坦克,射手,战士,法师}受击/` 共 **47 帧**；
  *  - `死亡特效/` **13 帧**（`163 SLBLJS vfx_skill_hollow_01_01_00..12.png`）。
+ *
+ * 🔴 **战士受击 2026-10-16 换了素材**（山猫拍板「替换」）：美术在 `战士受击/` 下新增 9 帧
+ * `vfx_bullet_cloud_01-hit_0..8.png`（210×239，**内容几乎铺满画布**，占比 78%→99%），
+ * 旧的 407 六帧（1085×910 紫色星芒，内容最大仅占 70%）已从工程删除。
+ * ⇒ 帧数 6→9、`contentSize` 1085×910→210×239、`_lscale` 0.1014→**0.5238095**（屏上仍是 110px）。
  *
  * 🔴 **这批是巨图，与工程既有特效不同量级**：既有 projectile 特效全部 ≤256px，
  * 而死亡特效 535×1092、法师受击 1377×1377。5 组受击 + 死亡**图集都装不下**
@@ -40,19 +45,37 @@ const HIT_FX_ROOT = 'assets/resources/units/effects/受击特效';
 const DEATH_FX_ROOT = 'assets/resources/units/effects/死亡特效';
 
 /**
+ * 受击特效的**基准**显示宽度（px，见文件头「缩放口径」）。
+ *
+ *  = `contentSize.width × _lscale`。各组的实际期望值 = 本基准 × `sizeFactor`（缺省 1）。
+ */
+const HIT_FX_BASELINE_WIDTH = 110;
+
+/**
  * 参与"职业受击"的四组 —— 必须与卡表 `traits.attack`（= `ZCAttackTrait`）一一对应。
  *
  * 🔴 **「中毒受击」故意不在这里**：它是一个**状态**（中毒 debuff）不是职业，
  * 硬塞进职业映射会让"中毒"看起来像第五个职业。见 `ZCGameLoader.HIT_FX_TRAITS`。
  */
-const HIT_FX_GROUPS = [
+const HIT_FX_GROUPS: ReadonlyArray<{
+    name: string;
+    frames: number;
+    width: number;
+    height: number;
+    scale: number;
+    /** 相对 `HIT_FX_BASELINE_WIDTH` 的显示倍率，缺省 1。**目前只有战士受击不是 1**。 */
+    sizeFactor?: number;
+}> = [
     { name: '射手受击', frames: 9, width: 620, height: 583, scale: 0.1774 },
-    { name: '战士受击', frames: 6, width: 1085, height: 910, scale: 0.1014 },
+    // 🔴 2026-10-16 二次调整（山猫「动画改小一点」）：换上 `vfx_bullet_cloud` 后**图内容占比 70%→99%**，
+    // 在同一个 `_lscale` 口径下屏上**视觉内容**从 77px 涨到 108px（比旧版大 40%）⇒ 取 0.8 倍压回 88px。
+    // ⚠️ 别把这一条"统一"回 110px：那是把反馈改回去了。
+    { name: '战士受击', frames: 9, width: 210, height: 239, scale: 0.41904761904761904, sizeFactor: 0.8 },
     { name: '法师受击', frames: 14, width: 1377, height: 1377, scale: 0.0799 },
     { name: '坦克受击', frames: 9, width: 1085, height: 910, scale: 0.1014 },
     // 中毒那组只验资源在盘上（美术已交），但不进职业映射。
     { name: '中毒受击', frames: 6, width: 1085, height: 910, scale: 0.1014 },
-] as const;
+];
 
 /**
  * 死亡特效的帧率（13 帧 @12fps = 1.0833s，2026-10-15 未调）。
@@ -177,8 +200,10 @@ test('受击特效 prefab：_lscale 把屏上宽度压到约 110px（与出生�
         const ui = findType(prefab, 'cc.UITransform')!;
         const scale = node._lscale.x as number;
         const onScreenWidth = ui._contentSize.width * scale;
-        assert.ok(Math.abs(onScreenWidth - 110) <= 1,
-            `${group.name} 屏上宽 ${onScreenWidth.toFixed(1)}px，应约 110px（对齐出生特效的 110.2）`);
+        const expectedWidth = HIT_FX_BASELINE_WIDTH * (group.sizeFactor ?? 1);
+        assert.ok(Math.abs(onScreenWidth - expectedWidth) <= 1,
+            `${group.name} 屏上宽 ${onScreenWidth.toFixed(1)}px，应约 ${expectedWidth.toFixed(0)}px`
+            + `（基准 ${HIT_FX_BASELINE_WIDTH} × ${group.sizeFactor ?? 1}）`);
         assert.equal(ui._contentSize.width, group.width,
             `${group.name} 的 contentSize 应是帧的原始像素宽 ${group.width}`);
         assert.equal(ui._contentSize.height, group.height,
@@ -380,6 +405,49 @@ test('受击特效：这个职业没交 prefab 时跳过，不崩也不借用别
     assert.equal(mapLayer.children.length, 1, '法师有 prefab 时该播一条');
     assert.equal(mapLayer.children[0].parent, mapLayer,
         '受击特效挂 mapLayer：不挂被打单位，否则它同帧被击杀移除时特效只闪半下');
+});
+
+/**
+ * 🔴 2026-10-16 山猫「受击会停顿在角色上」的真因与判据。
+ *
+ * 模型层 `hitFxQueue` 保留到 `startedAt + HIT_FX_SECONDS(0.8s)`，而渲染世界每帧把**整条队列**
+ * 送进特效池。若逐个直接 `playHitFx`，同一个 fx 在 0.8s 内会被 `animation.play()` 约 48 次，
+ * 而 `play()` **无条件把动画 seek 回 0**（真引擎实测：每 tick 重播 ⇒ 8 帧里只出现第 0 帧；
+ * 只播一次 ⇒ 8 帧全出）⇒ 动画被钉死在起始帧 = 一坨静止的特效杵在角色身上。
+ *
+ * 修法 = `syncHitFx` 按 fx（**对象引用**）去重，记录保留到 fx 离队并自我清理。
+ */
+test('受击特效：同一个 fx 跨多帧只播一次（不去重会把动画钉死在第 0 帧 = 停在角色上）', () => {
+    const { FakeNode, makeEffectPool } = loadViews();
+    const hitPrefab = {
+        make: () => {
+            const node = new FakeNode('HitFx');
+            node.getComponent = ((type: { name?: string }) => (type?.name === 'Animation'
+                ? { defaultClip: { name: 'hit', duration: 0.4444 }, stop() {}, play() {} }
+                : null)) as never;
+            return node;
+        },
+    };
+    const { effectPool, mapLayer } = makeEffectPool({ hitFxPrefabs: new Map([['法师', hitPrefab]]) });
+    const fx = { id: 1, trait: '法师', owner: 'enemy', x: 10, y: 20, startedAt: 0, durationSeconds: 0.8 } as never;
+
+    // 模型队列在 0.8s 内每帧都还在（60fps ⇒ 48 帧）—— 渲染世界每帧把整条队列送进来。
+    for (let frame = 0; frame < 48; frame += 1) effectPool.syncHitFx([fx], frame / 60);
+    assert.equal(mapLayer.children.length, 1,
+        '同一个 fx 只应建 1 个节点；建出多个 = 每帧都重新 play()，动画会被 seek 回第 0 帧 ⇒ 停住不动');
+
+    // 动画（0.4444s）播完 ⇒ 节点回池；但 fx 还在队列里，**不能**被重新播一次。
+    effectPool.recycleHitFx(0.5);
+    assert.equal(mapLayer.children.length, 0, '动画播完应回池');
+    effectPool.syncHitFx([fx], 0.5);
+    assert.equal(mapLayer.children.length, 0,
+        '同一 fx 播完后不得重播（动画 0.4444s < 队列 0.8s，剩下那段会被"重播一次"）');
+
+    // fx 离队 ⇒ 去重记录自我清理（否则 Set 只增不减）；随后新的受击必须还能播。
+    effectPool.syncHitFx([], 0.9);
+    const next = { id: 2, trait: '法师', owner: 'enemy', x: 10, y: 20, startedAt: 0.95, durationSeconds: 0.8 } as never;
+    effectPool.syncHitFx([next], 0.95);
+    assert.equal(mapLayer.children.length, 1, 'fx 离队后新受击必须能播（去重表要自我清理）');
 });
 
 /**

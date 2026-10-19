@@ -18,7 +18,7 @@
  */
 
 import { _decorator, Color, Component, Label, Sprite, SpriteFrame, UITransform, Vec3 } from 'cc';
-import type { ZCGuideEntry, ZCGuideRarity, ZCGuideReward } from './ZCGuideConfig';
+import type { ZCGuideEntry, ZCGuideRarity, ZCGuideReward } from '../model/ZCGuideConfig';
 
 const { ccclass, property } = _decorator;
 

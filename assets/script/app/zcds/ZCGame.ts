@@ -12,8 +12,11 @@ import type { IZCGameEntry, IZCGamePveContext } from './application/ZCGameEntry'
 import { ZCDC_LOG_WARNINGS } from './ZCDCLogSwitch';
 import { GameRunAway } from './ui/GameRunAway';
 import { ZCSettlementPage } from './ui/ZCSettlementPage';
-import { getEnemyDeck, getPlayerDeck, type ZCDeckCard } from './model/ZCCombatCatalog';
+import { getCardBuildIcon, getEnemyDeck, getPlayerDeck, type ZCDeckCard, type ZCUnitId } from './model/ZCCombatCatalog';
 import { ZCGameHUDView } from './view/ZCGameHUDView';
+import { ZCGameUiEvent } from './view/ZCGameHudEvents';
+import type { Prefab } from 'cc';
+import { EventMgr } from '../../framework/event/EventMgr';
 import { ZCGuidePanel } from './ui/ZCGuidePanel';
 import { ZCActionResult, ZCGameModel } from './model/ZCGameModel';
 import { ZCGameRenderWorld } from './view/ZCGameRenderWorld';
@@ -71,7 +74,19 @@ export type { IZCGameEntry } from './application/ZCGameEntry';
  */
 @ccclass('ZCGame')
 export class ZCGame extends Component {
-    private model!: ZCGameModel;
+    /**
+     * 本局模型。**自选主城局的前半段它真的不存在**，所以声明成 `| null` 而不是 `!`
+     * （AGENTS.md 引用红线：必填引用才写 `null!`，允许为空的写 `T | null` 并在边界判一次）。
+     *
+     * 唯一的「没有模型」窗口 = **选点阶段**：`cityMode === 'select'` 时 `createGame` 故意不建模型
+     * （我方主城坐标要等玩家确认落点），`model` 到 `finishSpawnSelection()` 才 new（规则 277 同源）。
+     * 该窗口里 `update()` 早在更前面的 `spawnSelection` 分支就 `return` 了，HUD 的按钮也在
+     * `setSpawnSelectionMode(true)` 时整块隐藏 —— 所以几处 `!this.model` 现在是**边界兜底**，
+     * 而不是唯一防线（另一个「半成品」窗口是 `initialize` 抛错后的收尾期，那时 `leaving` 已为 true）。
+     * ⚠️ `initialize()` 本身是**同步**的（预加载在 ProcedureGame 里早做完了）⇒ 不存在「它跑之前 update 已经跑」。
+     * 别按「createGame 建了」就以为它恒非空 —— 那正是旧声明 `model!` 在撒谎的地方。
+     */
+    private model: ZCGameModel | null = null;
     private battleSeed: string | null = null;
     private matchConfig: ZCMatchConfig | null = null;
     private hudView: ZCGameHUDView | null = null;
@@ -102,20 +117,29 @@ export class ZCGame extends Component {
     } | null = null;
     private spawnHintsVisible = true;
     private spawnBaseConfig: ZCMatchConfig | null = null;
-    /** 选点全部确认后停留在选点画面的展示秒数，让双方看清落点再进战斗。 */
-    private spawnShowcaseLeft: number | null = null;
+    /**
+     * 选点全部确认后是否**已排定**「停留展示主城落点」的定时器。
+     *
+     *  逐帧检测（`update` 里 poll 快照）会反复命中同一个"已完成"状态，所以必须靠这个标记
+     * 防重复排程；真正的**计时归 `scheduleOnce`**（见 {@link scheduleSpawnShowcase}），
+     * 不在 `update` 里拿 `dt` 累加 —— 那是"帧率越低越慢"的手写定时器。
+     */
+    private spawnShowcaseScheduled = false;
     private spawnConfigWasStaged = false;
     /** 结算页（蓝湖「结算-胜利」/「结算-失败」）。伤害统计另走 `damagePopup`（GameRunAway）。 */
     private settlementPopup: ZCSettlementPage | null = null;
     private damagePopup: GameRunAway | null = null;
     private guidePopup: ZCGuidePanel | null = null;
-    private damagePopupLoading = false;
-    private guidePopupLoading = false;
     /** 对局内排行榜弹窗（蓝湖「排行榜」）；与伤害统计同构，离场强制关。 */
     private rankPopup: ZCGameRankBoard | null = null;
-    private rankPopupLoading = false;
-    private lastHint = '';
     private preparedResources: ZCGamePreparedResources | null = null;
+    /**
+     * 本局角色卡面图（卡表 `headIcon` → `icons/cardHead/**`）；异步加载，整局一份。
+     * 视图侧按 id 现取（`ProcedureGame.current?.resolveCardArt`），不再由渲染层往下传闭包。
+     */
+    private legendCardArtFrames: ReadonlyMap<string, SpriteFrame> = new Map();
+    /** 本局玩家头像帧（owner → `images/head` 那套）；异步加载，拿不到就只显示头像环。 */
+    private legendPortraitFrames: ReadonlyMap<string, SpriteFrame> = new Map();
     /** 守城局的首领条实例（只在 `model.defenceWaveProgress` 非空时存在）。 */
     private bossPanel: ZCHudBossPanel | null = null;
     /** 波次怪的头像帧（键 = 卡 id）；与名字一起喂给首领条，异步填、拿不到就留空框。 */
@@ -156,15 +180,8 @@ export class ZCGame extends Component {
         if (this.spawnSelection) {
             this.spawnSelection.tick(dt);
             this.renderSpawnSelection();
-            if (this.spawnSelection.snapshot.finished) {
-                // 全部确认后停留 1 秒展示主城落点，再正式进战斗。
-                if (this.spawnShowcaseLeft === null) this.spawnShowcaseLeft = SPAWN_SHOWCASE_SECONDS;
-                this.spawnShowcaseLeft -= dt;
-                if (this.spawnShowcaseLeft <= 0) {
-                    this.spawnShowcaseLeft = null;
-                    this.finishSpawnSelection();
-                }
-            }
+            // 全部确认后停留展示主城落点，再正式进战斗。计时交给 `scheduleOnce`（幂等，见下）。
+            if (this.spawnSelection.snapshot.finished) this.scheduleSpawnShowcase();
             return;
         }
         if (!this.model || this.settlementOpened || this.leaving) return;
@@ -175,18 +192,18 @@ export class ZCGame extends Component {
         const presentationEvents = this.model.drainPresentationEvents();
         if (this.model.snapshot.status === 'playing') {
             // 单位、特效与飘字每帧更新；地块和 HUD 保持低频刷新。
-            this.renderWorld?.renderDynamic(frame, presentationEvents);
+            this.renderWorld.renderDynamic(frame, presentationEvents);
             this.renderClock += dt;
             if (this.renderClock < STATIC_RENDER_INTERVAL_SECONDS) return;
             this.renderClock = 0;
-            this.hudView?.render(this.model);
-            this.renderWorld?.renderStatic(frame);
+            this.hudView.render(this.model);
+            this.renderWorld.renderStatic(frame);
             return;
         }
         this.phase.beginSettlementPresentation();
         // 结算演出：① 镜头先拉远、居中看全局 ② 逐格把地块染成胜利方 ③ 播完才弹结算弹窗。
-        this.renderWorld?.renderDynamic(frame, presentationEvents);
-        if (this.beginVictorySweep(frame) && this.hudView) {
+        this.renderWorld.renderDynamic(frame, presentationEvents);
+        if (this.beginVictorySweep(frame)) {
             // 镜头没到位就先别推进扫场：表已经建好了，但 `litStep` 还停在 -1，一格都没染，
             // 所以这里 `return` 不会先冒出几格颜色。玩家可能刚把视角拖到角落，照原视角逐格
             // 变色的话半张棋盘还在屏幕外，等于没看到"整盘归了胜利方"。
@@ -194,7 +211,7 @@ export class ZCGame extends Component {
                 this.hudView.startSettlementOverview();
                 return;
             }
-            if (this.renderWorld?.advanceVictorySweep(frame, dt)) return;
+            if (this.renderWorld.advanceVictorySweep(frame, dt)) return;
         }
         this.render();
         this.openSettlement();
@@ -219,14 +236,24 @@ export class ZCGame extends Component {
         const status = frame.snapshot.status;
         if (status !== 'victory' && status !== 'defeat') return false;
         const winner = status === 'victory' ? 'player' : 'enemy';
-        return this.renderWorld?.startVictorySweep(frame, winner) ?? false;
+        return this.renderWorld.startVictorySweep(frame, winner);
     }
 
     onDestroy(): void {
         this.shutdown();
     }
 
-    /** 流程退出时先销毁视图，再释放资源，避免等待组件的延迟销毁。 */
+    /**
+     * 流程退出时先销毁视图，再释放资源，避免等待组件的延迟销毁。
+     *
+     *  **幂等**靠 `phase.leave()` 这个闸门：`ProcedureGame.onLeave` 显式调一次，紧接着的
+     * `destroy()` → `onDestroy` 会再调一次，第二次直接早退。别把这个闸门删掉（会重复销毁）。
+     *
+     *  ⚠️ 下面几处 `?.` **不要按「createGame 都建好了」删掉**：本函数还要在**半成品节点**上收尾 ——
+     * `initialize` 的 catch 会在 `createGame` **中途抛错**时调它，而 `hudView` / `renderWorld`
+     * 是 createGame 中段才 new 的，那时可能还没建。删掉的话收尾自己会抛
+     * `Cannot read properties of null`，把真正的抛错原因盖掉（进不去对局时只能看到这个假错）。
+     */
     shutdown(): void {
         if (!this.phase.leave()) return;
         this.settlementPopup?.close(PopupCloseReason.Force);
@@ -243,6 +270,9 @@ export class ZCGame extends Component {
         this.spawnSelectionView = null;
         this.spawnSelection = null;
         this.spawnBaseConfig = null;
+        this.cancelSpawnShowcase();
+        // 中控是全局唯一的 ⇒ 必须摘掉本实例挂的 8 条订阅（否则旧实例会一直被回调）。
+        EventMgr.instance.offTarget(this);
         // 退出前先把扫场还原掉：地块的 sweepOwner 是表现层状态，不还原就留给下一局。
         this.renderWorld?.clearVictorySweep();
         // 同理：开局归属扩散波若正播到一半退出，格子会停在「过渡到一半」的颜色上。
@@ -276,9 +306,16 @@ export class ZCGame extends Component {
             HeadArt.loadHeadFrame(avatars.player).catch(() => null),
             HeadArt.loadHeadFrame(avatars.enemy).catch(() => null),
         ]).then(([player, enemy]) => {
-            if (this.leaving || !this.renderWorld) return;
+            //  判据只用 phase：`renderWorld` 与 `leaving` 同由 `shutdown()` 驱动（它首行 `phase.leave()`、
+            // 随后同步置 null）⇒ 两者在每个 await 边界上恒等，多写一个对象判空只是重复判据。
+            if (this.leaving) return;
             if (!player && !enemy) return;
-            this.renderWorld.setLegendPortraitResolver((owner) => (owner === 'player' ? player : enemy));
+            // 头像帧落在控制器上（横幅按 owner 现取）；这里只通知渲染世界补刷**已经弹出来**的横幅。
+            const portraits = new Map<string, SpriteFrame>();
+            if (player) portraits.set('player', player);
+            if (enemy) portraits.set('enemy', enemy);
+            this.legendPortraitFrames = portraits;
+            this.renderWorld.refreshLegendCardArt();
         });
     }
 
@@ -318,12 +355,66 @@ export class ZCGame extends Component {
         void Promise.all(Array.from(icons).map(async ([cardId, icon]) => (
             [cardId, await HeadArt.loadHeadIconFrame(icon).catch(() => null)] as const
         ))).then((entries) => {
-            if (this.leaving || !this.renderWorld) return;
+            //  同上：`leaving` 已经盖住「renderWorld 被收走」这件事。
+            if (this.leaving) return;
             const frames = new Map<string, SpriteFrame>();
             for (const [cardId, frame] of entries) if (frame) frames.set(cardId, frame);
             if (!frames.size) return;
-            this.renderWorld.setLegendCardArtResolver((cardId) => frames.get(cardId) ?? null);
+            // 帧表落在控制器上（视图按 id 现取）；这里只通知渲染世界重刷**已经弹出来**的卡牌/横幅。
+            this.legendCardArtFrames = frames;
+            this.renderWorld.refreshLegendCardArt();
         });
+    }
+
+    /**
+     * 玩家头像（owner → 头像帧；取不到返回 null，横幅只留四个玩家色的头像环）。
+     *
+     * 与 {@link resolveCardArt} 同一条口径：`images/head` 要过 head/icon 表 + `resources.load`，
+     * 属于"可能慢一步"的资源 —— 数据放控制器、视图按 owner 现取，不必让渲染层再包一层闭包。
+     */
+    resolveLegendPortrait(owner: string): SpriteFrame | null {
+        return this.legendPortraitFrames.get(owner) ?? null;
+    }
+
+    /**
+     * 兵种 id → 兵种美术 prefab（`preparedResources.unitVisualPrefabs`，取不到返回 null）。
+     *
+     * 与 {@link resolveCardArt} 同一条口径：数据在控制器手里，视图按 id 现取，不再由渲染层注入。
+     */
+    resolveUnitPrefab(unitId: string): Prefab | null {
+        return this.preparedResources?.unitVisualPrefabs.get(unitId as ZCUnitId) ?? null;
+    }
+
+    /**
+     * 卡牌 id → 角色卡面图（取不到返回 null，视图回退建筑图）。
+     *
+     * 跨模块只读出口：视图通过 `ProcedureGame.current?.resolveCardArt(...)` 拿，不用再被上层注入闭包。
+     */
+    resolveCardArt(cardId: string): SpriteFrame | null {
+        return this.legendCardArtFrames.get(cardId) ?? null;
+    }
+
+    /**
+     * 卡牌 id / 建筑类型 → 建筑帧（卡表 `buildIcon` 优先，再回退 `hq-base` / `barracks-default`）。
+     *
+     * 原先住在 `ZCGameRenderWorld`（那边只为了喂给视图）；数据本来就在控制器手里（`preparedResources`），
+     * 所以搬到这里，视图与渲染世界都按上面的同一口径取。
+     */
+    resolveBuildingFrame(cardId: string | null, building: string): SpriteFrame | null {
+        const frames = this.preparedResources?.buildingFrames;
+        const lookup = typeof (frames as { get?: unknown })?.get === 'function'
+            ? (icon: string) => (frames as ReadonlyMap<string, SpriteFrame>).get(icon) ?? null
+            : (): SpriteFrame | null => null;
+        if (cardId) {
+            const icon = getCardBuildIcon(cardId);
+            if (icon) {
+                const frame = lookup(icon);
+                if (frame) return frame;
+            }
+        }
+        if (building === 'hq') return lookup('hq-base');
+        if (building === 'barracks') return lookup('barracks-default');
+        return null;
     }
 
     /** 这里只做同步实例化和首帧渲染；异步工作必须在调用前全部完成。 */
@@ -353,26 +444,9 @@ export class ZCGame extends Component {
         // 由 `finishSpawnSelection` 在选点完成后补上。
         this.hudView.setMapFocus(buildPlayerHomeFocus(setupConfig.map));
         const selectingSpawn = (setupConfig.map.cityMode ?? 'fixed') === 'select';
-        this.hudView.initialize({
-            useArtifact: () => this.applyResult(this.model.useArtifact(), { toast: true }),
-            openGuide: () => {
-                if (this.guidePopupLoading || this.guidePopup?.isPopupOpen || this.leaving) return;
-                this.guidePopupLoading = true;
-                ZCGuidePanel.open({ userData: { content: prepared.guide } }).then((popup) => {
-                    if (this.leaving) popup?.close(PopupCloseReason.Force);
-                    else this.guidePopup = popup;
-                }).catch((error) => {
-                    if (ZCDC_LOG_WARNINGS) console.error('[ZCGame] 打开战斗指南失败', error);
-                }).finally(() => {
-                    this.guidePopupLoading = false;
-                });
-            },
-            openDamageStats: () => this.openRunAway(),
-            //  这条以前**漏传**了：`ZCHudActions.openRank` 与 `bind(this.rankButton, …)`
-            // 早就存在，但这里没给 ⇒ `leftPanel/RankBtn` 点了没反应（零报错）。
-            openRank: () => this.openRankBoard(),
-            retreat: () => this.openSettlement(true),
-        }, { deferMapIntro: selectingSpawn });
+        // 视图只派发意图事件（`ZCGameUiEvent`，走中控）；订阅统一在 `bindUiEvents`。
+        this.hudView.initialize({ deferMapIntro: selectingSpawn });
+        this.bindUiEvents();
         if (this.seatProfiles.size > 0) {
             // 名字 + 头像一起交给 HUD（多队伍改造后按**席位**渲染，不再是「我方/敌方」两槽）。
             this.hudView.setSeatProfiles(this.seatProfiles);
@@ -417,7 +491,6 @@ export class ZCGame extends Component {
             deathFxPrefab: prepared.deathFxPrefab,
             hitFxPrefabs: prepared.hitFxPrefabs,
             wallPrefab: prepared.wallPrefab,
-            onHexClick: (hexId) => this.onHexClick(hexId),
         });
         this.loadLegendPortraits();
         this.loadLegendCardArt();
@@ -441,35 +514,14 @@ export class ZCGame extends Component {
             this.phase.startPlaying();
             this.render();
         }
-        // 两个分支都传 `setupConfig.map`：**自选主城阶段还没有 `ZCGameModel`**，
-        // 装饰只认地图配置（`art.tiles` + `hexes`），不能从 model 取。
+        // 自选主城阶段还没有模型，自由装饰直接从本局地图配置读取。
         this.installMapDecor(setupConfig.map, prepared.decorFrames);
     }
 
-    /**
-     * 铺地图的虚空装饰（地图 JSON 的 `art.tiles` 里 `"行,列"` 键）。
-     *
-     * 地图编辑器早就把装饰选好、存好、跟着镜像展开了，**客户端此前一直没接渲染**
-     * —— 数据到 `ZCMatchConfig.art` 就断了，`ZCHexView` 只认 Inspector 上绑死的
-     * 地块贴图，所以虚空格上的装饰在游戏里一个都看不见（还是光秃秃的虚空）。
-     *
-     * 装饰只摆在虚空格上，而虚空格没有地块节点，所以这里交给渲染层单独铺一层
-     * （`installDecor`），不走地块实体。
-     *
-     * 取数**只认 `map`**（`art.tiles` + `hexes` 都是地图配置上的字段），不碰 `this.model`：
-     * 自选主城开局时 model 还没建（要等 `finishSpawnSelection`），从 model 取会静默 return
-     * ⇒ 自选主城图（`cityMode = 'select'`）一条装饰都铺不出来，而这两张图恰恰有 38~48 条装饰。
-     * 装饰坐标只由 `hexes` 的 `x/y` 决定，与主城/分区无关，所以选点前后铺一次就够，
-     * `installDecor` 幂等（先 `clearDecor`），重开局/换图重复调也不会叠层。
-     *
-     * 帧已在 Procedure 的 ResourceScope 中准备好；缺图只跳过对应装饰，不阻断对局。
-     */
+    /** 从 `art.freeDecor` 铺纯表现装饰；不依赖模型，也不参与格子规则。 */
     private installMapDecor(map: ZCMatchMap, decorFrames: ReadonlyMap<string, SpriteFrame>): void {
-        const world = this.renderWorld;
-        const tiles = map.art?.tiles;
-        if (!world || !tiles) return;
-        world.installDecor(
-            buildDecorPlacements(map.hexes, tiles, (art) => {
+        this.renderWorld.installDecor(
+            buildDecorPlacements(map.art?.freeDecor, (art) => {
                 const frame = decorFrames.get(art);
                 return frame ? frame.originalSize : null;
             }),
@@ -477,12 +529,73 @@ export class ZCGame extends Component {
         );
     }
 
+    /**
+     * 订阅**全部**界面意图（view 只 `emit`，控制器把它翻成流程动作 —— MVP：视图不认识对局流程）。
+     *
+     *  订阅全挂在中控（`EventMgr.instance`）上：三处界面的意图集中在这里、`createGame` 时注册一次。
+     * ⚠️ 中控是**全局唯一**的 ⇒ `shutdown()` 必须 `EventMgr.instance.offTarget(this)` 把自己摘干净，
+     * 否则旧实例跨局累积（泄漏 + 幽灵回调）。
+     *
+     * ⚠️ **少订阅一个 = 那个按钮/弹窗点了没反应、且零报错**（`openRank` 曾因为「动作没接上」完全哑掉）——
+     * `zcds-rank-board-wiring` / `zcds-spawn-selection-view` / `zcds-settlement-page` 三处逐条钉住。
+     */
+    private bindUiEvents(): void {
+        // 棋盘点击（`ZCGameRenderWorld` 派发，payload = 格子 id）
+        EventMgr.instance.on(ZCGameUiEvent.HexClick, this.onHexClick, this);
+        // HUD
+        EventMgr.instance.on(ZCGameUiEvent.UseArtifact, this.onHudUseArtifact, this);
+        EventMgr.instance.on(ZCGameUiEvent.OpenGuide, this.onHudOpenGuide, this);
+        EventMgr.instance.on(ZCGameUiEvent.OpenDamageStats, this.onHudOpenDamageStats, this);
+        EventMgr.instance.on(ZCGameUiEvent.OpenRank, this.onHudOpenRank, this);
+        EventMgr.instance.on(ZCGameUiEvent.Retreat, this.onHudRetreat, this);
+        // 结算页：弹窗由 PopupManager 异步建，但订阅在中控上 ⇒ 这里注册一次就够，不必等 `open` 兑现
+        EventMgr.instance.on(ZCGameUiEvent.SettlementConfirm, this.onSettlementConfirm, this);
+        // 伤害统计弹窗的「返回主界面」（与结算页确定同一条收尾）
+        EventMgr.instance.on(ZCGameUiEvent.ReturnToMain, this.onDamageStatsReturnToMain, this);
+        // 选点
+        EventMgr.instance.on(ZCGameUiEvent.SpawnConfirm, this.onSpawnConfirm, this);
+        EventMgr.instance.on(ZCGameUiEvent.SpawnToggleHints, this.onSpawnToggleHints, this);
+    }
+
+    /** 神器：能不能用由模型判（充能 / 冷却），这里只把结果落到战报 / 吐司。 */
+    private onHudUseArtifact(): void {
+        this.applyResult(this.model.useArtifact(), { toast: true });
+    }
+
+    /** 战斗指南：内容是本局预加载好的（`prepared.guide`），对局进行中直接打开。 */
+    private onHudOpenGuide(): void {
+        const prepared = this.preparedResources;
+        //  同族简化：`preparedResources` 只在 `shutdown()` 里清空（另一次赋值在 initialize，早于 createGame）
+        // ⇒ 与 `leaving` 恒等，判据取 phase。
+        if (this.leaving) return;
+        //  不再自判「正在打开 / 已打开」：`PopupManager` 按 `prefabPath` 做单实例去重
+        //（`_openingByPath` 返回同一次 Promise、已打开时返回现有实例），而弹窗一开全屏空白接收层
+        // 就吃掉了后续点击 ⇒ 重入只可能发生在加载窗口里，框架已兜住。
+        ZCGuidePanel.open({ userData: { content: prepared.guide } }).then((popup) => {
+            if (this.leaving) popup?.close(PopupCloseReason.Force);
+            else this.guidePopup = popup;
+        }).catch((error) => {
+            if (ZCDC_LOG_WARNINGS) console.error('[ZCGame] 打开战斗指南失败', error);
+        });
+    }
+
+    private onHudOpenDamageStats(): void {
+        this.openRunAway();
+    }
+
+    private onHudOpenRank(): void {
+        this.openRankBoard();
+    }
+
+    private onHudRetreat(): void {
+        this.openSettlement(true);
+    }
+
     private onHexClick(hexId: number): void {
         if (this.settlementOpened) return;
-        if (this.hudView?.dragMoved) return;
+        if (this.hudView.dragMoved) return;
         if (this.spawnSelection) {
             const result = this.spawnSelection.select('player', hexId);
-            this.lastHint = result.message;
             if (!result.ok) this.spawnSelectionView?.flash(result.message);
             this.renderSpawnSelection();
             return;
@@ -491,10 +604,30 @@ export class ZCGame extends Component {
             const result = this.model.developHex(hexId);
             // 金币不足：棋盘上放不下这段提示（那一格的图标与价格照旧），由 HUD 底部的金币栏自己表达
             // —— 金币图标跳动 + 数字闪红。判据走结构化 `reason`，不解析中文文案（文案会随策划改字）。
-            if (result.reason === 'insufficientGold') this.hudView?.flashInsufficientGold();
+            if (result.reason === 'insufficientGold') this.hudView.flashInsufficientGold();
             this.applyResult(result);
         }
         // 点到不可开发地块 / 已有建筑：当前没有任何可见反馈，不做副作用（静态文案已删）。
+    }
+
+    /**
+     * 排定「停留 `SPAWN_SHOWCASE_SECONDS` 秒展示主城落点」的定时器。
+     *
+     * 幂等：`update` 每帧都会看到"已完成"，这里靠 {@link spawnShowcaseScheduled} 只排一次
+     * （不能"先 unschedule 再 scheduleOnce"——那等于每帧把到期时间往后推，永远到不了）。
+     * 计时本身走引擎调度器（同 `ZCGameHUDView` 的金币栏闪烁、`ZCSpawnSelectionView` 的吐司），
+     * 不用 `dt` 累加：后者在低帧率下会被拉长，且把"还要等多久"藏进了逐帧状态里。
+     */
+    private scheduleSpawnShowcase(): void {
+        if (this.spawnShowcaseScheduled) return;
+        this.spawnShowcaseScheduled = true;
+        this.scheduleOnce(this.finishSpawnSelection, SPAWN_SHOWCASE_SECONDS);
+    }
+
+    /** 撤掉展示定时器（进战斗与拆对局时都要撤，别让回调迟到）。 */
+    private cancelSpawnShowcase(): void {
+        this.spawnShowcaseScheduled = false;
+        this.unschedule(this.finishSpawnSelection);
     }
 
     private startSpawnSelection(config: ZCMatchConfig, wasStaged: boolean, prepared: ZCGamePreparedResources): void {
@@ -503,29 +636,34 @@ export class ZCGame extends Component {
         this.spawnConfigWasStaged = wasStaged;
         this.spawnSelection = new ZCSpawnSelection(config.map, this.matchRandom);
         this.spawnHintsVisible = true;
-        this.hudView?.setSpawnSelectionMode(true);
+        this.hudView.setSpawnSelectionMode(true);
         // 节点树、尺寸与全部 @property 都在 `ZCSpawnSelection.prefab` 上（以前是 new Node 现搭 12 个节点）。
         const node = instantiate(prepared.spawnSelectionPrefab);
-        node.layer = this.hudView?.node.layer ?? this.node.layer;
-        node.setParent(this.hudView?.node ?? this.node);
+        node.layer = this.hudView.node.layer;
+        node.setParent(this.hudView.node);
         this.spawnSelectionView = node.getComponent(ZCSpawnSelectionView)!;
-        this.spawnSelectionView.initialize({
-            confirm: () => this.confirmSpawnSelection(),
-            toggleHints: () => {
-                this.spawnHintsVisible = !this.spawnHintsVisible;
-                this.renderSpawnSelection();
-            },
-        });
+        //  订阅已在 `bindUiEvents` 注册好（走中控），这里不用补。
+        this.spawnSelectionView.initialize();
         // 需求 2：基地正下方 2 格的绿色【确认位置】按钮 —— 直接借用 HUD 上那颗绿勾，
         // 不新建节点（见 `borrowSpawnConfirmButton`）。
         this.borrowSpawnConfirmButton();
         this.renderSpawnSelection();
     }
 
+    /** 绿勾「确认位置」：交给选点模型判定（失效态也走这条，由模型给「为什么失效」）。 */
+    private onSpawnConfirm(): void {
+        this.confirmSpawnSelection();
+    }
+
+    /** 「收回提示 / 显示提示」：只改本地显隐，再重刷一遍选点表现。 */
+    private onSpawnToggleHints(): void {
+        this.spawnHintsVisible = !this.spawnHintsVisible;
+        this.renderSpawnSelection();
+    }
+
     private confirmSpawnSelection(): void {
         if (!this.spawnSelection) return;
         const result = this.spawnSelection.confirm('player');
-        this.lastHint = result.message;
         if (!result.ok) this.spawnSelectionView?.flash(result.message);
         this.renderSpawnSelection();
         if (this.spawnSelection.snapshot.finished) this.finishSpawnSelection();
@@ -534,7 +672,7 @@ export class ZCGame extends Component {
     private renderSpawnSelection(): void {
         if (!this.spawnSelection) return;
         this.spawnSelectionView?.render(this.spawnSelection.snapshot, this.spawnHintsVisible);
-        this.renderWorld?.renderSpawnSelection(this.spawnSelection, this.spawnHintsVisible);
+        this.renderWorld.renderSpawnSelection(this.spawnSelection, this.spawnHintsVisible);
     }
 
     /**
@@ -552,11 +690,12 @@ export class ZCGame extends Component {
      *  基地坐标打架 —— 表现为按钮卡在屏幕底部纹丝不动。
      */
     private borrowSpawnConfirmButton(): void {
-        const button = this.spawnSelectionView?.confirmButton;
-        const layer = this.hudView?.mapLayer;
-        if (!button || !button.isValid || !layer) return;
+        //  这里不判「按钮 / 父级是否存在」：`confirmButton` 是 `ZCSpawnSelection.prefab` 上的**必填引用**
+        //（`ZCSpawnSelectionView` 声明 `Node = null!`），而本方法唯一的调用点是刚 `instantiate + setParent`
+        // 完的 `startSpawnSelection` ⇒ 节点必然有效、也必然有父级。真掉绑定就该在这里炸，别静默不借。
+        const button = this.spawnSelectionView.confirmButton;
+        const layer = this.hudView.mapLayer;
         const parent = button.parent;
-        if (!parent) return;
         const widget = button.getComponent(Widget);
         this.spawnConfirmBorrow = {
             node: button,
@@ -567,7 +706,7 @@ export class ZCGame extends Component {
         };
         if (widget) widget.enabled = false;
         button.setParent(layer);
-        this.renderWorld?.setSpawnConfirmButton(button);
+        this.renderWorld.setSpawnConfirmButton(button);
     }
 
     /**
@@ -598,6 +737,9 @@ export class ZCGame extends Component {
     }
 
     private finishSpawnSelection(): void {
+        //  本地玩家最后确认时 `confirmSpawnSelection` 会**立刻**调这里（不等展示）⇒ 先把定时器撤掉，
+        // 免得它几百毫秒后再打一次（第二次会被下面的空值守卫挡下，但没必要留个悬着的回调）。
+        this.cancelSpawnShowcase();
         const selection = this.spawnSelection;
         const base = this.spawnBaseConfig;
         const result = selection?.result;
@@ -625,7 +767,6 @@ export class ZCGame extends Component {
     }
 
     private applyResult(result: ZCActionResult, options?: { toast?: boolean }): void {
-        this.lastHint = result.message;
         // 主动点击类操作（神器按钮）额外弹吐司：战报栏在屏幕底部，视线在按钮上时
         // 根本不会去看，而失败原因（充能不足 / 冷却中）恰恰是这一下点击的全部意义。
         // 走 `FW.showTip` 而不是直接 import Toast，守住 framework 不反向依赖 app 的分层。
@@ -676,10 +817,12 @@ export class ZCGame extends Component {
         chapterResult: Promise<IZCChapterBattleOutcome | null> | null,
     ): Promise<void> {
         const result = chapterResult ? await chapterResult : null;
-        if (this.leaving) return;
+        //  成绩先记（`onResult` 写的是**领地存档**）：这是战斗结果，与「页面弹不弹」无关 ——
+        // 离场不该把这局成绩抹掉（原先这行在 `leaving` 之后，离场就丢存档）。
         if (result) this.recordPveResult(result.code === BATTLE_RESULT_WIN);
         const rewards = result ? await this.loadChapterRewards(result) : [];
-        // 等广播期间玩家可能已经退出对局（`shutdown`）⇒ 别再弹。
+        //  两段等待（等广播 / 等奖励图）都跨 `await`，期间玩家可能已经退出对局（`shutdown()`）⇒
+        // **一个判据**收口：离场就不再弹页（真弹了再靠 `.then` 关会闪一帧结算页）。
         if (this.leaving) return;
         ZCSettlementPage.open({
             layer: PopupLayer.SYSTEM,
@@ -687,9 +830,6 @@ export class ZCGame extends Component {
             userData: {
                 victory: result ? result.code === BATTLE_RESULT_WIN : localVictory,
                 rewards,
-                onConfirm: () => {
-                    if (!this.leaving) this.returnToMain();
-                },
             },
         }).then((popup) => {
             if (this.leaving) popup?.close(PopupCloseReason.Force);
@@ -720,6 +860,16 @@ export class ZCGame extends Component {
         if (!pve || this.pveResultRecorded) return;
         this.pveResultRecorded = true;
         pve.onResult(victory);
+    }
+
+    /** 伤害统计弹窗「返回主界面」：与结算页确定共用同一条收尾。 */
+    private onDamageStatsReturnToMain(): void {
+        if (!this.leaving) this.returnToMain();
+    }
+
+    /** 结算页「确定」：回主界面（终局与主动撤退共用同一条收尾）。 */
+    private onSettlementConfirm(): void {
+        if (!this.leaving) this.returnToMain();
     }
 
     private returnToMain(): void {
@@ -766,11 +916,13 @@ export class ZCGame extends Component {
      * 由 GameRunAway 内部按双方较大值统一，保证两根条可以直接比长短。
      *
      * 统计预览不改动对局状态，点空白处即可关闭。
+     *
+     *  守卫口径同 {@link openRankBoard}：`PopupManager` 已做同类单实例去重，
+     * 不再自己攒 `damagePopupLoading` / `isPopupOpen`（弹窗一开，全屏空白接收层就吃了后续点击，
+     * 重入只可能发生在加载窗口，框架已兜住）。
      */
     private openRunAway(): void {
         if (!this.model || this.settlementOpened || this.leaving) return;
-        if (this.damagePopupLoading || this.damagePopup?.isPopupOpen) return;
-        this.damagePopupLoading = true;
         GameRunAway.open({
             userData: this.damageSummary(),
         }).then((popup) => {
@@ -778,8 +930,6 @@ export class ZCGame extends Component {
             else this.damagePopup = popup;
         }).catch((error) => {
             if (ZCDC_LOG_WARNINGS) console.error('[ZCGame] 打开对局结算页失败', error);
-        }).finally(() => {
-            this.damagePopupLoading = false;
         });
     }
 
@@ -787,14 +937,19 @@ export class ZCGame extends Component {
      * 打开对局内排行榜（蓝湖「排行榜」设计稿）。
      *
      * 与 {@link openRunAway} 同构：都是**对局期间**只读地打开一个弹窗，
-     * 不改对局状态，点空白/关闭键收起。守卫口径也一致（重复点不叠开、离场强制关）。
+     * 不改对局状态，点空白/关闭键收起。
      *
      *  数据每次打开现取：地块数在变，缓存下来的榜会显示过期名次。
+     *
+     *  这里**只留「本局还在」和「没在离场」两个真前置**，不再自己判「正在打开 / 已打开」：
+     * `PopupManager.openAsync` 已按 `prefabPath` 实现同类单实例去重（同一次 open 返回同一个
+     * Promise、已打开时直接返回现有实例）⇒ 连点两次只会拿到同一个弹窗，重复赋给
+     * `rankPopup` 没有任何副作用。自己再攒 `rankPopupLoading` / `isPopupOpen` 两个守卫
+     * 属于把框架契约重写一遍（且后者还拦不住任何东西：弹窗一开，全屏空白接收层就把
+     * 后续点击吃掉了，`openRankBoard` 根本不会被重入）。
      */
     private openRankBoard(): void {
-        if (!this.model || this.rankPopupLoading || this.leaving) return;
-        if (this.rankPopup?.isPopupOpen) return;
-        this.rankPopupLoading = true;
+        if (!this.model || this.leaving) return;
         ZCGameRankBoard.open({
             userData: {
                 seats: buildRankSeats(
@@ -810,8 +965,6 @@ export class ZCGame extends Component {
             else this.rankPopup = popup;
         }).catch((error) => {
             if (ZCDC_LOG_WARNINGS) console.error('[ZCGame] 打开对局排行榜失败', error);
-        }).finally(() => {
-            this.rankPopupLoading = false;
         });
     }
 
@@ -838,8 +991,9 @@ export class ZCGame extends Component {
         }
         if (!this.bossPanel) {
             const prepared = this.preparedResources;
-            if (!prepared || this.leaving) return;
-            const hud = this.hudView?.node ?? this.node;
+            //  同族简化：`preparedResources` 只在 `shutdown()` 里清空 ⇒ 与 `leaving` 恒等。
+            if (this.leaving) return;
+            const hud = this.hudView.node;
             const node = instantiate(prepared.bossPanelPrefab);
             node.layer = hud.layer;
             node.setParent(hud);

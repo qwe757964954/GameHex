@@ -106,14 +106,18 @@ function captureWarn(): { lines: string[]; restore: () => void } {
 }
 
 test('小卡牌卡面用角色卡牌图，不再用这张卡产出的兵种立绘', () => {
-    const { load, cc } = loadViews();
+    const { load, cc, procedureGame } = loadViews();
     const view = stubCardRevealView(load, cc);
     const cardArt = { name: 'card-head-julijianguo' };
     const unitArt = { name: 'unit-idle-peashooter' };
     let unitResolverCalls = 0;
     // 即便注入器还在（横幅回退链仍用），小卡牌也**不许**去问它。
     (view as any).unitFrameResolver = () => { unitResolverCalls += 1; return unitArt; };
-    view.setCardArtResolver((cardId: string) => (cardId === '68001' ? cardArt : null));
+    //  卡面图由控制器按 id 现取（原先是被渲染层注入 resolver）。
+    procedureGame.current = {
+        resolveCardArt: (cardId: string) => (cardId === '68001' ? cardArt : null),
+        resolveBuildingFrame: () => null,
+    };
     view.render(revealOf({ unitId: '68011' }), 0);
     assert.equal(view.iconSprite.spriteFrame, cardArt, '卡面必须是角色卡牌图');
     assert.equal(unitResolverCalls, 0, '不能回退去问兵种立绘解析器');
@@ -121,15 +125,18 @@ test('小卡牌卡面用角色卡牌图，不再用这张卡产出的兵种立�
 });
 
 test('卡面图取不到才回退建筑图，并打出能回查卡表的日志', () => {
-    const { load, cc } = loadViews();
+    const { load, cc, procedureGame } = loadViews();
     const view = stubCardRevealView(load, cc);
     const configuredFrame = { name: 'barracks-peashooter' };
     let resolved: unknown[] = [];
-    view.setCardArtResolver(() => null);
-    view.setBuildingFrameResolver((cardId: string, building: string, owner: string) => {
-        resolved = [cardId, building, owner];
-        return configuredFrame;
-    });
+    //  卡面图 / 建筑帧由控制器按 id 现取（原先是被渲染层注入 resolver）。
+    procedureGame.current = {
+        resolveCardArt: () => null,
+        resolveBuildingFrame: (cardId: string, building: string) => {
+            resolved = [cardId, building];
+            return configuredFrame;
+        },
+    };
     const warn = captureWarn();
     try {
         // 多渲几帧。日志**不该按帧刷屏**：`renderContent` 有 `contentKey` 短路，
@@ -139,7 +146,7 @@ test('卡面图取不到才回退建筑图，并打出能回查卡表的日志',
     } finally {
         warn.restore();
     }
-    assert.deepEqual(resolved, ['68001', 'barracks', 'player'], '回退要走 buildIcon 解析器');
+    assert.deepEqual(resolved, ['68001', 'barracks'], '回退要走 buildIcon 解析器（建筑帧由控制器按 cardId 查）');
     assert.equal(view.iconSprite.spriteFrame, configuredFrame);
     assert.equal(view.iconSprite.enabled, true);
     assert.equal(warn.lines.length, 1, `同一张卡只应打一次日志（contentKey 短路），实际 ${warn.lines.length} 次`);
@@ -148,44 +155,49 @@ test('卡面图取不到才回退建筑图，并打出能回查卡表的日志',
     assert.match(warn.lines[0], /headIcon/, '日志要指明是卡表 headIcon 缺失');
 });
 
-test('卡面图晚到：setCardArtResolver 要作废内容键，已经弹出的卡下一帧换成卡面图', () => {
-    const { load, cc } = loadViews();
+test('卡面图晚到：invalidateArt 要作废内容键，已经弹出的卡下一帧换成卡面图', () => {
+    const { load, cc, procedureGame } = loadViews();
     const view = stubCardRevealView(load, cc);
     const buildingFrame = { name: 'barracks-peashooter' };
     const cardArt = { name: 'card-head-julijianguo' };
-    view.setBuildingFrameResolver(() => buildingFrame);
+    procedureGame.current = { resolveCardArt: () => null, resolveBuildingFrame: () => buildingFrame };
     const warn = captureWarn();
     try {
         view.render(revealOf({ unitId: '68011' }), 0);
         assert.equal(view.iconSprite.spriteFrame, buildingFrame, '图还没到时先显示回退图');
         // 异步资源到位（横幅那条链就是这个时序）。
-        view.setCardArtResolver(() => cardArt);
+        procedureGame.current = { resolveCardArt: () => cardArt, resolveBuildingFrame: () => buildingFrame };
+        // 帧到齐后由渲染世界调 `invalidateArt()`（原先是 setCardArtResolver 里顺手作废 contentKey）。
+        view.invalidateArt();
         view.render(revealOf({ unitId: '68011' }), 0.1);
     } finally {
         warn.restore();
     }
     assert.equal(view.iconSprite.spriteFrame, cardArt,
-        '图后到必须补刷：setCardArtResolver 不作废 contentKey 的话这条卡会一直停在回退图上');
+        '图后到必须补刷：不作废 contentKey 的话这条卡会一直停在回退图上');
 });
 
 test('弹卡建筑图按 cardId 走 buildIcon 解析器，不再依赖 prefab 固定兵营图', () => {
-    const { load, cc } = loadViews();
+    const { load, cc, procedureGame } = loadViews();
     const view = stubCardRevealView(load, cc);
     const configuredFrame = { name: 'barracks-peashooter' };
     let resolved: unknown[] = [];
     // 这条钉的是**回退链**：注入一个恒返回 null 的卡面解析器，逼它落到建筑图。
-    view.setCardArtResolver(() => null);
-    view.setBuildingFrameResolver((cardId: string, building: string, owner: string) => {
-        resolved = [cardId, building, owner];
-        return configuredFrame;
-    });
+    //  卡面图 / 建筑帧由控制器按 id 现取（原先是被渲染层注入 resolver）。
+    procedureGame.current = {
+        resolveCardArt: () => null,
+        resolveBuildingFrame: (cardId: string, building: string) => {
+            resolved = [cardId, building];
+            return configuredFrame;
+        },
+    };
     const warn = captureWarn();
     try {
         view.render(revealOf({ unitId: null }), 0);
     } finally {
         warn.restore();
     }
-    assert.deepEqual(resolved, ['68001', 'barracks', 'player']);
+    assert.deepEqual(resolved, ['68001', 'barracks']);
     assert.equal(view.iconSprite.spriteFrame, configuredFrame);
     assert.equal(view.iconSprite.enabled, true);
 });
@@ -319,17 +331,14 @@ test('TileBackground 为阵营色 60%；轮廓不再由地块自己画（已并�
         assert.deepEqual(view.outlineGraphics.commands, [], `${owner}：地块视图不该再画轮廓`);
     }
 
-    // ⚠️ 2026-10-12：中立格**也铺地块图**了。原来这里断言 `enabled === false`
-    // （不铺底图、露出棋盘橙底）—— 平面蒙版时代那底色和地块色接近、不显眼，
-    // 换 2.5D 立体地块后变成一大片橙色空缺，看着像"格子没紧贴"。
-    // 改判据：铺上底图；alpha 比领地更淡（2026-10-14 起领地 150 / 中立 110），
-    // 让"无主"读起来是素地、又能透出棋盘底色。
+    // 🔴 2026-10-16 口径（山猫）：「局内地图中立没有任何显示」。
+    // 中立格的 TileBackground 直接**停用**（alpha 0），露出棋盘底图 ——
+    // 不是"染得更淡"，是"根本不画"；格子感由 `OutlineLayer` 的矢量格线提供。
     state.owner = 'neutral';
     view.render({ state, canDevelop: false, playerGold: 0, cooldown: null, now: 0, boundaryMask: 2 });
-    assert.equal(view.tileSprite.enabled, true, '中立格也要铺地块图（否则露出棋盘底色）');
-    assert.equal(view.tileSprite.spriteFrame, view.tileFrame, '中立格铺的就是地块底图');
-    assert.equal(view.tileSprite.color.a, 110,
-        `中立格填充应比领地更淡（2026-10-14 起领地 150 / 中立 110），实际 alpha=${view.tileSprite.color.a}`);
+    assert.equal(view.tileSprite.enabled, false, '中立格不做任何显示：连 Sprite 都不启用');
+    assert.equal(view.tileSprite.color.a, 0,
+        `中立格填充 alpha 应为 0（2026-10-16 起），实际 alpha=${view.tileSprite.color.a}`);
     view.render({ state, canDevelop: false, playerGold: 0, cooldown: null, now: 0, boundaryMask: 0 });
     assert.deepEqual(view.outlineGraphics.commands, [], '中立格同样不自己画轮廓');
 });
@@ -850,8 +859,8 @@ test('新地块节点独立切换阵营、开发图标和建筑，保留 prefab 
     assert.equal(view.buildingLayer.active, false);
     assert.equal(view.iconLabel.string, '');
     state.owner = 'neutral'; state.state = 'developable'; state.building = 'none'; render(false);
-    assert.equal(view.tileSprite.color.a, 110,
-        `中立格填充应比领地更淡（2026-10-14 起领地 150 / 中立 110），实际 alpha=${view.tileSprite.color.a}`);
+    assert.equal(view.tileSprite.enabled, false,
+        '中立格（不可开发）不做任何显示 —— 口径见 2026-10-16「中立没有任何显示」');
     assert.equal(view.iconLabel.string, '');
     assert.equal(view.buildingLayer.active, false);
     // 中立格被己方「建立」点亮后玩家就能买它：价格与地块图标照常显示（这是唯一的可点提示），
@@ -1265,12 +1274,12 @@ test('结算扫场铺深饱和阵营色、回正到当前色，收起覆盖后�
     view.setSweepOwner('player', 0.5); render();
     assert.deepEqual(rgb(), [116, 121, 243, 150], '回正中应是两端线性插值');
 
-    // 中立格：不铺阵营色，改用淡中性色（2026-10-12 起也铺底图了，见上一处注释）；
+    // 中立格：不做任何显示（2026-10-16 口径：alpha 0 ⇒ Sprite 停用）；
     // 被结算扫过就该给上阵营色（同样是深饱和版：#fb4969 → #e62b54）。
     view.setSweepOwner(null);
     state.owner = 'neutral'; state.state = 'occupiable';
     render();
-    assert.equal(view.tileSprite.color.a, 110, '中立格填充比领地更淡（2026-10-14 起 150 / 110）');
+    assert.equal(view.tileSprite.enabled, false, '中立格不做任何显示（2026-10-16 起）');
     view.setSweepOwner('enemy'); render();
     assert.deepEqual(rgb(), [230, 43, 84, 150]);
     view.setSweepOwner('enemy', 1); render();

@@ -8,6 +8,8 @@
 
 import { _decorator, Button, Label, SpriteFrame } from 'cc';
 import { PopupBase } from '../../../framework/ui/PopupBase';
+import { ZCGameUiEvent } from '../view/ZCGameHudEvents';
+import { EventMgr } from '../../../framework/event/EventMgr';
 import { PopupCloseReason } from '../../../framework/ui/PopupDef';
 import { RunAwayPlayerItem, RunAwayPlayerInfo } from './RunAwayPlayerItem';
 
@@ -36,8 +38,12 @@ export interface GameRunAwayOptions {
     title?: string;
     /** 结算说明；统计预览时省略。 */
     summary?: string;
-    /** 提供时显示返回主界面按钮，关闭空白点击。 */
-    onReturnToMain?: () => void;
+    /**
+     * 显示「返回主界面」按钮（**数据开关，不是回调**）：置位时同时禁掉空白关闭
+     * ——「返回」语义下误点空白跑掉不合适。
+     * 点了只派发 `ZCGameUiEvent.ReturnToMain`，**是否真的回主界面由控制器决定**（视图不碰流程）。
+     */
+    showReturn?: boolean;
 }
 
 /** 两行进度条的**统一上限**（双方较大的值；让两条进度条可比）。 */
@@ -68,7 +74,8 @@ export class GameRunAway extends PopupBase {
     @property({ type: Button, group: '面板', tooltip: '返回主界面按钮' })
     returnButton: Button = null!;
 
-    private returnToMain: (() => void) | null = null;
+    /** 「返回主界面」模式（由 `open` 的 `showReturn` 数据决定显隐，动作走事件）。 */
+    private showReturn = false;
 
     
     // PopupBase 生命周期
@@ -86,31 +93,32 @@ export class GameRunAway extends PopupBase {
 
     /** 套用标题并填充两行；每次打开都会走这里。 */
     protected onOpen(userData?: GameRunAwayOptions): void {
-        this.returnToMain = userData?.onReturnToMain ?? null;
+        this.showReturn = Boolean(userData?.showReturn);
         this.titleLabel.string = userData?.title ?? DEFAULT_TITLE;
-        this.returnButton.node.active = !!this.returnToMain;
+        this.returnButton.node.active = this.showReturn;
         this.returnButton.interactable = true;
         // 关闭按钮是可选引用：不绑也能靠点空白关闭，所以这里保留判空。
-        if (this.closeButton) this.closeButton.node.active = !this.returnToMain;
+        if (this.closeButton) this.closeButton.node.active = !this.showReturn;
         this.apply(userData ?? {});
     }
 
     /** 节点由 PopupManager 回收/销毁，这里只做业务侧收尾。 */
     protected onClose(reason: PopupCloseReason): void {
-        this.returnToMain = null;
+        this.showReturn = false;
     }
 
     protected canCloseOnBlank(): boolean {
-        return !this.returnToMain;
+        return !this.showReturn;
     }
 
     private returnByButton(): void {
-        const callback = this.returnToMain;
-        if (!callback) return;
-        this.returnToMain = null;
+        if (!this.showReturn) return;
+        // 先收摊再派发：连点两下只发一次（收尾多半是切流程，重复发等于 navigate 两次）。
+        this.showReturn = false;
         this.returnButton.interactable = false;
         this.close(PopupCloseReason.CloseButton);
-        callback();
+        //  只派发意图：回不回主界面由控制器订阅后决定（视图不认识流程）。
+        EventMgr.instance.emit(ZCGameUiEvent.ReturnToMain);
     }
 
     

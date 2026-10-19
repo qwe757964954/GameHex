@@ -39,14 +39,16 @@ const MAP_DIR = 'assets/resources/config/maps';
 const DECOR_ROOT = 'assets/resources/image/decor';
 const ATLAS_META = `${DECOR_ROOT}/auto-atlas.pac.meta`;
 
-/** 所有地图 `art.tiles` 里被当装饰用的 art（键形如 `"行,列"`）。 */
+/** 所有地图与编辑器夹具 `art.freeDecor` 里使用的资源名。 */
 function decorArts(): Array<{ map: string; art: string }> {
     const out: Array<{ map: string; art: string }> = [];
-    for (const file of readdirSync(MAP_DIR).filter((f) => f.endsWith('.json'))) {
-        const data = JSON.parse(readFileSync(`${MAP_DIR}/${file}`, 'utf8'));
-        const tiles = data.art?.tiles ?? {};
-        for (const [key, art] of Object.entries(tiles)) {
-            if (/^\d+,\d+$/.test(key)) out.push({ map: file, art: String(art) });
+    const files = readdirSync(MAP_DIR).filter((f) => f.endsWith('.json'))
+        .map((file) => ({ name: file, path: `${MAP_DIR}/${file}` }))
+        .concat([{ name: 'zcds-map-v3-decor.json', path: 'tests/fixtures/zcds-map-v3-decor.json' }]);
+    for (const file of files) {
+        const data = JSON.parse(readFileSync(file.path, 'utf8'));
+        for (const item of data.art?.freeDecor ?? []) {
+            out.push({ map: file.name, art: String(item.art) });
         }
     }
     return out;

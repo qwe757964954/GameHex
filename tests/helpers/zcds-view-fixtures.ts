@@ -43,7 +43,8 @@ export function loadViews() {
             siblings.splice(Math.max(0, Math.min(index, siblings.length)), 0, this);
         }
         getSiblingIndex() { return this.parent ? this.parent.children.indexOf(this) : 0; }
-        setRotationFromEuler(_x: number, _y: number, _z: number) {}
+        rotation = { x: 0, y: 0, z: 0 };
+        setRotationFromEuler(x: number, y: number, z: number) { this.rotation = { x, y, z }; }
         getComponent(type?: any) {
             if (this.components.has(type)) return this.components.get(type);
             if (type?.name === 'Graphics') return null;
@@ -157,6 +158,9 @@ export function loadViews() {
         },
         instantiate: (prefab: any) => prefab.make(),
     };
+    //  假控制器：视图（卡牌揭示）按 id 向 `ProcedureGame.current` 取卡面图 / 建筑帧。
+    // 用例通过 `loadViews()` 返回值拿到它，按需设置 / 复位（缺省 null ⇒ 视图回退建筑图）。
+    const procedureGameStub = { current: null as unknown };
     const cache: Record<string, any> = {
         cc,
         '../model/ZCGameModel': { ZC_HEX_CONFIG, ZC_SIMULATION_STEP_SECONDS: 0.05 },
@@ -164,6 +168,9 @@ export function loadViews() {
         // 这种同层相对名，`../model/ZCMapConfig` 会落到 `zcds/ui/` 那个兜底分支去读不存在的文件，
         // 所以这里显式挂真源 —— 与文件顶部已经 import 的 `ZC_HEX_CONFIG` 同一个来源。
         '../model/ZCMapConfig': { ZC_OWNER_ORDER, ownersForPlayerCount },
+        //  视图会值导入 `ProcedureGame`（卡面图 / 建筑帧改由控制器按 id 现取，2026-10-16）—— 夹具给一个
+        //  **可写的假控制器**：用例按需 `ProcedureGame.current = fakeController`，缺省 null（视图回退建筑图）。
+        '../../procedure/ProcedureGame': { ProcedureGame: procedureGameStub },
         '../model/ZCCombatCatalog': {
             resolveUnitDefinition: () => ({}),
             luckTextOfTier: () => '',
@@ -181,9 +188,20 @@ export function loadViews() {
         // （`zcds/view/../../core` → `app/core`），于是去读一个不存在的文件 ——
         // 症状是**整组用例一起红**，而且报错指向的是「模块不存在」这种看起来像产品代码的问题
         // （2026-09-30 实测：core/hex 抽取落地后一次红 33 条）。
+        //  视图会**值导入**的框架纯 TS 小模块：`EventMgr` 自己又 `import './EventBus'` —— 这种
+        // 没有目录信息的裸名字，本夹具的 `load()` 按名字查表 + 只认 `zcds/view|ui` 两个目录，
+        // 会落到 `zcds/ui/EventBus.ts` 报「Missing view fixture module」并让整组用例一起红
+        // （2026-10-16 事件中控落地时踩到）。显式映射一层，别让它去猜。
+        const FRAMEWORK_FALLBACK: Record<string, string> = {
+            './EventBus': 'assets/script/framework/event/EventBus.ts',
+            './EventMgr': 'assets/script/framework/event/EventMgr.ts',
+        };
         const relative = name.replace(/^\.\//, '');
         const viewPath = join('assets/script/app/zcds/view', `${relative}.ts`);
-        const path = existsSync(viewPath) ? viewPath : join('assets/script/app/zcds/ui', `${relative}.ts`);
+        const uiPath = join('assets/script/app/zcds/ui', `${relative}.ts`);
+        const path = existsSync(viewPath) ? viewPath
+            : existsSync(uiPath) ? uiPath
+                : FRAMEWORK_FALLBACK[name] ?? '';
         if (!existsSync(path)) throw new Error(`Missing view fixture module ${name} at ${path}`);
         const code = ts.transpileModule(readFileSync(path, 'utf8'), {
             compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
@@ -279,5 +297,5 @@ export function loadViews() {
         return { renderer, wallGeometry, wallLayer, tiles };
     }
 
-    return { load, bar, FakeNode, cc, makeEffectPool, makeWallRenderer };
+    return { load, bar, FakeNode, cc, procedureGame: procedureGameStub, makeEffectPool, makeWallRenderer };
 }

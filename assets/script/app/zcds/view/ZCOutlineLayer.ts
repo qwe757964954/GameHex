@@ -31,6 +31,36 @@ const SELECTED_HEX_COLOR = new Color(255, 235, 150, 255);
 const SELECTED_HEX_LINE_WIDTH = 4;
 const SELECTED_HEX_INSET_SCALE = 0.82;
 
+/**
+ * 中立格的**矢量格线**（2026-10-16 口径：「中立没有任何显示，只做矢量绘制」）。
+ *
+ * 背景：中立格原来靠 `hex_flat` 底图铺满 —— 白色约 60% 的蒙版把格子内部提亮、
+ * 格与格之间留下约 1px 的缝，整片中立区看上去就是一张**暖棕色网格**。
+ * 贴图下线（`ZCHexView.NEUTRAL_FILL_ALPHA = 0`）后这层网格随之消失、中立区变光秃，
+ * 所以在这里用矢量把它画回来。
+ *
+ * ⚠️ 与 2026-10-12 去掉的那版**不是一回事**：那版走 `INNER_GRID` 口径
+ * （阵营色混 160 灰）⇒ 中立格混出来是**灰蓝**线，山猫当时说「灰色的线去掉」。
+ * 这里要的是**暖棕**，所以用「半透明深色叠在底图上」：颜色自动跟着底图走，
+ * 换成雪地 / 草地也仍然是"更深的底色"，不会凭空冒出一条冷色线。
+ *
+ * 🔴 **线宽必须够大（`4`）**，2026-10-16 第二轮实测踩过：先取 `2` 时颜色与深度其实都对
+ * （暗端 58/255 vs 参考图 55/255），但屏幕上线宽只剩约 **1.2px** ——
+ * 被抗锯齿摊成两个半透明像素 ⇒ 整片网格**忽隐忽现、看着深浅不一**
+ *（山猫原话「不够深，不够每个线都是均匀一样的」）。加粗到 4（屏上约 2.4px）才稳。
+ */
+export const NEUTRAL_GRID_LINE_WIDTH = 4;
+export const NEUTRAL_GRID_LINE_COLOR = new Color(90, 55, 30, 110);
+/**
+ * 中立格线的内缩系数：**`1` = 精确落在格边界上**。
+ *
+ * 与阵营格的 `OWNED_OUTLINE_INSET_SCALE (0.98)` 故意不同：阵营粗线内缩是为了别把 6px
+ * 压到邻格上；而格线要的是「相邻两格的共享边**完全重合**」—— 一旦跟着 0.98 内缩，
+ * 每条线会朝自己那一格偏约 1.2px，「谁画哪条边」就决定了这条线偏向哪一边，
+ * 整片网格看上去就是歪的 / 不匀的。（交界边不由中立格画，两者不会互相打架。）
+ */
+export const NEUTRAL_GRID_INSET_SCALE = 1;
+
 /** 棋盘层局部坐标点（不是格内偏移）。 */
 export interface IZCOutlinePoint {
     readonly x: number;
@@ -115,21 +145,27 @@ export interface IZCHexOutlineInput {
 
 /**
  * 把一格的轮廓线段追加进共享缓冲。
- * @param input.owner 该格阵营（neutral 不画线；其余走阵营色外边界 + 内部线）
+ * @param input.owner 该格阵营（neutral 只画暖棕格线；其余走阵营色外边界 + 内部线）
  * @param input.boundaryMask 低 6 位 = 外边界边；高 6 位（`>> 8`）= 同阵营内部线
  */
 export function appendHexOutlineSegments(input: Readonly<IZCHexOutlineInput>): void {
     const { centerX, centerY, owner, boundaryMask } = input;
     const boundary = boundaryMask & 0x3f;
-    if (owner === 'neutral') {
-        // 中立格不画网格线：100% 不透明填充后，格间本身已有色差，无需描线。
-        return;
-    }
-    const color = zcFactionColor(owner);
     // 复用 scratchCenter / scratchStyle：两个 appendEdges 串行调用、同步拷值，
     // 不在热路径上分配坐标点与样式对象。
     scratchCenter.x = centerX;
     scratchCenter.y = centerY;
+    if (owner === 'neutral') {
+        // 中立格**只画格线**：
+        //  · 不画阵营色外轮廓 —— 与阵营交界那条边由阵营方画粗线，
+        //    `buildTerritoryBoundaryMasks` 已经把它从这一格的 mask 里剔掉了；
+        //  · 也不画 `INNER_GRID` —— 中立格之间的共享边全落在低 6 位（见同一处注释）。
+        scratchStyle.lineWidth = NEUTRAL_GRID_LINE_WIDTH;
+        scratchStyle.color = NEUTRAL_GRID_LINE_COLOR;
+        appendEdges(boundary, scratchStyle, NEUTRAL_GRID_INSET_SCALE, scratchCenter);
+        return;
+    }
+    const color = zcFactionColor(owner);
     scratchStyle.lineWidth = OWNED_OUTLINE_LINE_WIDTH;
     scratchStyle.color = new Color(color.r, color.g, color.b, 255);
     appendEdges(boundary, scratchStyle, OWNED_OUTLINE_INSET_SCALE, scratchCenter);

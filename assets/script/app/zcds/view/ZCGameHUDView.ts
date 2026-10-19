@@ -1,5 +1,6 @@
 ﻿import { _decorator, Button, Color, Component, EventTouch, Label, Layout, Node, ScrollView, Sprite, SpriteFrame, UITransform, Vec3 } from 'cc';
 import { tween, type Tween } from 'cc';
+import { Widget } from 'cc';
 import { ZCGameHudScoreSlot } from './ZCGameHudScoreSlot';
 import { ZCGameHudPlayerRow } from './ZCGameHudPlayerRow';
 import { VirtualScrollView } from '../../../vscrollview/VScrollView';
@@ -9,6 +10,8 @@ import type { ZCOwner } from '../model/ZCMapConfig';
 import { getPlayerDeck } from '../model/ZCCombatCatalog';
 import { ZCGameModel, ZC_HEX_CONFIG } from '../model/ZCGameModel';
 import { mapToViewX, mapToViewY, ZC_HEX_VIEW_WIDTH, ZC_HEX_VIEW_HEIGHT, ZC_MAP_PRESENTATION_SCALE } from './ZCGameViewUtil';
+import { ZCGameUiEvent } from './ZCGameHudEvents';
+import { EventMgr } from '../../../framework/event/EventMgr';
 
 const { ccclass, property } = _decorator;
 /**
@@ -41,14 +44,10 @@ export const ZC_GOLD_DENY_FLASH_STEP_SECONDS = 0.06;
  */
 const ZC_GOLD_DENY_LABEL_COLOR = new Color(255, 91, 91, 255);
 
-/** HUD 只派发意图；页面打开、撤退确认及对局结算由上层处理。 */
-export interface ZCHudActions {
-    useArtifact: () => void;
-    openRank?: () => void;
-    openGuide?: () => void;
-    openDamageStats?: () => void;
-    retreat?: () => void;
-}
+/**
+ * HUD 只**派发意图事件**（{@link ZCGameUiEvent}，在 {@link events} 上 `emit`）；
+ * 页面打开、撤退确认与对局结算一律由控制器 `ZCGame` 订阅后处理。
+ */
 
 /** 对应 ZCGameHUD.prefab：地图 / 顶部四格与计时 / 左侧四行玩家 / 底部信息 / 右侧功能按钮。 */
 @ccclass('ZCGameHUDView')
@@ -127,7 +126,6 @@ export class ZCGameHUDView extends Component {
     @property({ type: Node, group: '选点收起', tooltip: 'leftPanel：选点阶段整体隐藏' })
     leftPanel: Node = null!;
 
-    private actions: ZCHudActions | null = null;
     /** 本局席位档案（键 = 席位序，与 `ZC_OWNER_ORDER` 一致）；由 `setSeatProfiles` 注入。 */
     private seatProfiles: Map<ZCOwner, IRankSeatProfile> = new Map();
     /** 已加载好的头像帧（按席位）。异步填；没到位就是 null（保留空白框，不清空）。 */
@@ -195,13 +193,13 @@ export class ZCGameHUDView extends Component {
     }
 
     /**
-     * 支持重复初始化（重复调用只重设 actions 与渲染状态）。
+     * 支持重复初始化（重复调用只重设渲染状态与镜头）。
      *
-     * 事件监听**不**在这里绑：绑定在 `onLoad` 一次性完成（规范 7.2）—— `cc.Node` 监听挂在
-     * EventTarget 上，节点失活 / 重激活都不掉，且引擎保证 `onLoad` 每实例只跑一次，无需守卫。
+     * 事件监听**不**在这里绑：视图侧的按钮监听在 `onLoad` 一次性完成（规范 7.2）—— `cc.Node`
+     * 监听挂在 EventTarget 上，节点失活 / 重激活都不掉，且引擎保证 `onLoad` 每实例只跑一次。
+     * 控制器侧的订阅统一在 `ZCGame.bindUiEvents`：视图**不持有任何回调**，只 `EventMgr.instance.emit` 意图。
      */
-    initialize(actions: ZCHudActions, options?: { deferMapIntro?: boolean }): void {
-        this.actions = actions;
+    initialize(options?: { deferMapIntro?: boolean }): void {
         // 复用同一个 HUD 实例开下一局：先把金币栏反馈落回静止态，再丢掉静止态缓存 ——
         // 上一局抓到的坐标 / 颜色对本局不再可信（同一 prefab 重排过就该重抓）。
         this.stopGoldDenyFx();
@@ -608,8 +606,8 @@ private fillPlayerRow(node: Node, index: number): void {
     /**
      * 一次性静态绑定（规范 7.2：绑在引擎保证只跑一次的 `onLoad`，禁「绑 onEnable + `bound` 守卫」）。
      *
-     * `ZCGame.createGame` 先 `instantiate + setParent`（激活 ⇒ 触发 `onLoad`），再 `initialize(actions)`
-     * 注入动作 —— 绑定时刻 `actions` 还是 null 没关系：回调在点击时读 `this.actions`，晚注入不受影响。
+     * `ZCGame.createGame` 先 `instantiate + setParent`（激活 ⇒ 触发 `onLoad`）再 `initialize(...)` 设镜头：
+     * 点击回调只 `emit` 意图事件，控制器订阅与否都不影响本绑定本身。
      */
     protected onLoad(): void {
         this.bindEvents();
@@ -623,7 +621,6 @@ private fillPlayerRow(node: Node, index: number): void {
         // 已经被引擎先销毁了，走 stopGoldDenyFx 会 setScale(null) 抛异常，
         // 进而打断销毁循环 ⇒ 连带刷出 `destroy twice`。详见 cancelGoldDenyFx 的注释。
         this.cancelGoldDenyFx();
-        this.actions = null;
     }
 
     private updateButtons(): void {
@@ -631,34 +628,33 @@ private fillPlayerRow(node: Node, index: number): void {
         // interactable=false，Cocos 的 Button 便**不再派发 CLICK**，点击被整段吞掉，
         // 连「神器尚未充满」这句文案都生成不出来，表现为「点了没反应」。
         // 置灰交给 artifactIcon / artifactProgress 的 grayscale 表达，不靠 interactable。
-        this.artifactButton.interactable = this.playing && !!this.actions?.useArtifact;
-        this.rankButton.interactable = !!this.actions?.openRank;
-        this.guideButton.interactable = !!this.actions?.openGuide;
-        this.damageButton.interactable = !!this.actions?.openDamageStats;
-        this.retreatButton.interactable = this.playing && !!this.actions?.retreat;
+        // 神器与撤退只在对局进行中可点（结束后没有意义）；排行榜 / 指南 / 统计整局都能点，
+        // 保持 prefab 默认的 `interactable = true`（事件化之后视图不再知道"上层有没有接"）。
+        this.artifactButton.interactable = this.playing;
+        this.retreatButton.interactable = this.playing;
     }
 
     private onArtifactClick(): void {
         if (!this.playing) return;
-        // 不判 artifactReady：充能不足 / 冷却中也照常交给模型，由它给原因文案。
-        this.actions?.useArtifact();
+        // 不判 artifactReady：充能不足 / 冷却中也照常派发，由模型决定成败与原因文案。
+        EventMgr.instance.emit(ZCGameUiEvent.UseArtifact);
     }
 
     private onRankClick(): void {
-        this.actions?.openRank?.();
+        EventMgr.instance.emit(ZCGameUiEvent.OpenRank);
     }
 
     private onGuideClick(): void {
-        this.actions?.openGuide?.();
+        EventMgr.instance.emit(ZCGameUiEvent.OpenGuide);
     }
 
     private onDamageClick(): void {
-        this.actions?.openDamageStats?.();
+        EventMgr.instance.emit(ZCGameUiEvent.OpenDamageStats);
     }
 
     private onRetreatClick(): void {
         if (!this.playing) return;
-        this.actions?.retreat?.();
+        EventMgr.instance.emit(ZCGameUiEvent.Retreat);
     }
 
     private bindEvents(): void {
@@ -759,6 +755,43 @@ private fillPlayerRow(node: Node, index: number): void {
         );
     }
 
+    /**
+     * 背景和棋盘继续共用 `content` 的平移与缩放，但背景尺寸要覆盖全面屏视口。
+     *
+     * prefab 的 Background 原本靠 Widget 固定在 720×1280 内容区的中心（局部 y=-640），
+     * 对局镜头却把整个 content 当地图坐标系缩放、平移。窄长屏的全景缩放受地图宽度限制，
+     * 1660×2916 的背景再被缩小后，上下就会露出视口。这里关掉 Widget 的重定位，令背景中心
+     * 对齐地图包围盒，并按全景缩放下的视口尺寸 + 最大地图拖动范围等比 cover。
+     */
+    private fitMapBackground(): void {
+        const background = this.mapLayer.getChildByName('Background');
+        if (!background) throw new Error('ZCGameHUD.prefab 的 MapLayer/content 缺少 Background');
+        const transform = background.getComponent(UITransform)!;
+        const sprite = background.getComponent(Sprite)!;
+        const widget = background.getComponent(Widget);
+        if (widget) widget.enabled = false;
+
+        const viewport = this.mapViewport.getComponent(UITransform)!;
+        const bounds = this.mapBounds;
+        const mapWidth = Math.max(1, bounds.maxX - bounds.minX);
+        const mapHeight = Math.max(1, bounds.maxY - bounds.minY);
+        const coverScale = Math.max(0.001, this.mapOverviewScale);
+        const requiredWidth = Math.max(
+            viewport.width / coverScale,
+            mapWidth + 2 * ZCGameHUDView.MAP_EDGE_MARGIN_X / coverScale,
+        );
+        const requiredHeight = Math.max(
+            viewport.height / coverScale,
+            mapHeight + 2 * ZCGameHUDView.MAP_EDGE_MARGIN_Y / coverScale,
+        );
+        const frameSize = sprite.spriteFrame?.originalSize;
+        const sourceWidth = frameSize?.width || transform.width;
+        const sourceHeight = frameSize?.height || transform.height;
+        const imageScale = Math.max(requiredWidth / sourceWidth, requiredHeight / sourceHeight);
+        transform.setContentSize(sourceWidth * imageScale, sourceHeight * imageScale);
+        background.setPosition((bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2, 0);
+    }
+
     private get mapBounds(): { minX: number; maxX: number; minY: number; maxY: number } {
         const xs = ZC_HEX_CONFIG.map((hex) => mapToViewX(hex.x));
         const ys = ZC_HEX_CONFIG.map((hex) => mapToViewY(hex.y));
@@ -816,5 +849,6 @@ private fillPlayerRow(node: Node, index: number): void {
         this.mapOffsetX = next.x;
         this.mapOffsetY = next.y;
         this.mapLayer.setPosition(this.mapOffsetX, this.mapOffsetY, 0);
+        this.fitMapBackground();
     }
 }

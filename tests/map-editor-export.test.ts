@@ -148,30 +148,13 @@ test('编辑器清空重画产出的全中立底图：除主城盘外全是中�
     }
 });
 
-/**
- * 虚空装饰（美术点缀）不占 v3 新字段：编辑器把它写进 art.tiles 的 'row,column' 键，
- * 客户端 ZCMapArt 的注释里已声明支持按格覆盖。这条证明整条链真的通 ——
- * 编辑器导出的图客户端吃得下、tiles 原样保留，且每个装饰格确实落在虚空上。
- */
-test('编辑器产出的虚空装饰图：art.tiles 的「行,列」键被客户端原样保留，且都压在虚空格上', () => {
+test('编辑器产出的自由装饰由客户端保留，且不改变地形与分区', () => {
     const source = fixture('zcds-map-v3-decor');
     configureZCMap(source);
     try {
-        const tiles = ZC_MAP_ART.tiles ?? {};
-        const cellKeys = Object.keys(tiles).filter((key) => /^\d+,\d+$/.test(key));
-        assert.ok(cellKeys.length > 0, '装饰图里应该有格子键：' + JSON.stringify(Object.keys(tiles)));
-        for (const key of cellKeys) {
-            const [row, column] = key.split(',').map((part) => Number(part));
-            assert.ok(row >= 0 && row < ZC_MAP_ROWS && column >= 0 && column < ZC_MAP_COLUMNS,
-                `装饰 ${key} 坐标越界`);
-            const hex = ZC_HEX_CONFIG[row * ZC_MAP_COLUMNS + column];
-            assert.equal(hex.playable, false, `装饰 ${key} 必须落在虚空格上，否则就是"陆地上摆礁石"`);
-            // art.tiles 兼容字符串与多格对象；断言只看 art 名（拍扁）。
-            const cellValue = tiles[key];
-            const artName = typeof cellValue === 'string' ? cellValue : cellValue.art;
-            assert.ok(artName.startsWith('image/decor/'), `装饰 ${key} 的资源名不像装饰：${artName}`);
-        }
-        // 装饰是纯美术附加信息：地形与分区不受影响。
+        assert.equal(ZC_MAP_ART.freeDecor?.length, 2);
+        assert.ok(ZC_MAP_ART.freeDecor?.every((item) => item.art.startsWith('image/decor/')));
+        assert.equal(Object.keys(ZC_MAP_ART.tiles ?? {}).some((key) => /^\d+,\d+$/.test(key)), false);
         assert.ok(ZC_HEX_CONFIG.some((hex) => !hex.playable), '这张图应该有虚空格');
         assert.equal(ZC_MAP_HOMES.length, 4);
     } finally {

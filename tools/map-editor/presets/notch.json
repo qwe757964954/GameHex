@@ -32,21 +32,67 @@
     }
   ],
   "art": {
-    "tiles": {
-      "8,6": "image/decor/wasteland/cao",
-      "8,7": "image/decor/wasteland/cao",
-      "8,8": "image/decor/wasteland/st3",
-      "9,6": "image/decor/wasteland/cao",
-      "9,7": "image/decor/wasteland/tires",
-      "9,8": "image/decor/wasteland/cao1",
-      "9,9": "image/decor/wasteland/cao1",
-      "10,6": "image/decor/wasteland/cao",
-      "10,7": "image/decor/wasteland/tires",
-      "10,8": "image/decor/wasteland/cao1",
-      "10,9": "image/decor/wasteland/cao1",
-      "11,6": "image/decor/wasteland/cao",
-      "11,7": "image/decor/wasteland/cao",
-      "11,8": "image/decor/wasteland/st3"
-    }
+    "freeDecor": [
+      {
+        "id": 5,
+        "art": "image/decor/wasteland/cao",
+        "x": 186.99327087402344,
+        "y": -154.9103240966797,
+        "width": 276.75,
+        "height": 90,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 6,
+        "art": "image/decor/wasteland/cao",
+        "x": 214.04591369628906,
+        "y": 54.133724212646484,
+        "width": 276.75,
+        "height": 90,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 7,
+        "art": "image/decor/wasteland/cao",
+        "x": 440.3052673339844,
+        "y": -19.646495819091797,
+        "width": 276.75,
+        "height": 90,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 8,
+        "art": "image/decor/wasteland/cao",
+        "x": 253.3955078125,
+        "y": 186.93820190429688,
+        "width": 276.75,
+        "height": 90,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 9,
+        "art": "image/decor/wasteland/cao",
+        "x": 110.75363159179688,
+        "y": -19.646495819091797,
+        "width": 276.75,
+        "height": 90,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      }
+    ]
   }
 }

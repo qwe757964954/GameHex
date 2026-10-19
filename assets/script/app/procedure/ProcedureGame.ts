@@ -1,4 +1,5 @@
 import { ProcedureBase } from '../../framework/procedure/ProcedureBase';
+import { ProcedureManager } from '../../framework/procedure/ProcedureManager';
 import type { ProcedurePreloadContext } from '../../framework/procedure/ProcedureBase';
 import { MAP_DIRECTORY, ZCGame } from '../zcds/ZCGame';
 import { ZCGameLoader, ZCGamePreparedResources } from '../zcds/application/ZCGameLoader';
@@ -24,6 +25,24 @@ import { buildSeatProfiles } from '../zcds/model/ZCRankBoard';
  */
 export class ProcedureGame extends ProcedureBase {
     public static __cname: string = 'ProcedureGame';
+
+    /**
+     * 当前**进行中**的对局控制器；不在对局流程里就是 `null`。
+     *
+     * 给「只想读数据」的调用方用（`ProcedureGame.current?.model…`）。它拿到的就是 `game` 的引用，
+     * 所以时序要自己兜：`onEnter` 之后才有、`onLeave` 就没了（那时 `shutdown()` 已经跑过）。
+     *
+     * ⚠️ **流程动作不要从这个出口调**（`shutdown` / `openSettlement` / `returnToMain` …）——
+     * 那会把「谁在什么时候改流程」变成隐式耦合；界面意图一律走事件中控（`EventMgr`）。
+     *
+     * 为什么做成静态访问器，而不是把 `game` 放开成 public / 挂到 `ProcedureManager` 上：
+     *  ① `ProcedureManager` 在 framework，**不许** import app 的 `ProcedureGame`（分层红线）；
+     *  ② `instanceof` 收窄比调用方自己 `as ProcedureGame` 安全 —— 别的流程实现不会被误当成对局流程。
+     */
+    static get current(): ZCGame | null {
+        const procedure = ProcedureManager.instance?.currentProcedure;
+        return procedure instanceof ProcedureGame ? procedure.game : null;
+    }
 
     private game: ZCGame | null = null;
     private preparedResources: ZCGamePreparedResources | null = null;

@@ -889,19 +889,30 @@ export function claimWaveProgress(now: number, startSeconds: number, startedAt: 
 }
 
 
-// 虚空装饰：虚空格没有节点，装饰铺在独立装饰层。
-
-
-/** 装饰键判据："行,列"两个整数。 */
-export const ZC_DECOR_KEY_PATTERN = /^\d+,\d+$/;
+// 场景装饰不占格，按棋盘局部坐标铺在独立装饰层。
 
 export interface ZCDecorPlacement {
-    id: number;
+    id: number | string;
     art: string;
     x: number;
     y: number;
     width: number;
     height: number;
+    rotation?: number;
+    flipX?: boolean;
+    flipY?: boolean;
+}
+
+export interface ZCMapFreeDecorLike {
+    id?: string | number;
+    art: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    rotation?: number;
+    flipX?: boolean;
+    flipY?: boolean;
 }
 
 /** 装饰贴进格面的等比系数：装得下就行，只缩不拉伸。 */
@@ -918,95 +929,34 @@ export function decorFitScale(
 }
 
 /**
- * 装饰 = anchor（key 那格）+ 占地形态（span）+ 像素偏移（offset）。
- * 老存档只写资源名字符串（等价 span=[[0,0]], offset=[0,0]）；多格装饰是新加的对象格式。
- * 编辑器在 `ZCMapConfig.configureZCMap` 把两种值都规范化过，这里只描述入参形状。
- */
-export interface ZCMapDecorTileLike {
-    art: string;
-    span?: ReadonlyArray<readonly [number, number]>;
-    offset?: readonly [number, number];
-}
-
-/**
- * 把 art.tiles 装饰键翻译成摆放清单。
- * 图未加载（measure null）/ 越界键跳过；按 y 降序、x 升序（画家算法）。
- *
- * 单格（值是字符串）：图片贴 anchor 顶面 `123×90` 居中。
- * 多格（值是 `{ art, span, offset }`）：图片贴 span 包围盒的几何中心 + 像素偏移。
- *   - 宽 = `(maxDc - minDc) * HEX_COL + 2 * HEX_TOP_HALF_WIDTH`（顶面宽）
- *   - 高 = `(maxDr - minDr) * HEX_ROW + 2 * HEX_TOP_HALF_HEIGHT`（顶面高）
- *   - 中心 = 各 cell 中心点的平均（与 `hexCenter` 同坐标系），保证美术位置与编辑器所见一致。
+ * 把自由装饰翻译成渲染清单。旧版 art.tiles 按格装饰不再消费。
+ * 图未加载或数据非法时跳过；结果按 y 降序、x 升序使用画家算法排序。
  */
 export function buildDecorPlacements(
-    map: ReadonlyArray<Readonly<{ id: number; column: number; row: number; x: number; y: number }>>,
-    tiles: Readonly<Record<string, string | ZCMapDecorTileLike>> | null | undefined,
+    freeDecor: ReadonlyArray<ZCMapFreeDecorLike> | null | undefined,
     measure: (art: string) => Readonly<{ width: number; height: number }> | null,
 ): ZCDecorPlacement[] {
-    if (!tiles) return [];
-    const hexByCell = new Map<string, Readonly<{ id: number; column: number; row: number; x: number; y: number }>>();
-    for (const hex of map) hexByCell.set(`${hex.row},${hex.column}`, hex);
     const placements: ZCDecorPlacement[] = [];
-    for (const [key, value] of Object.entries(tiles)) {
-        if (!ZC_DECOR_KEY_PATTERN.test(key)) continue;
-        const hex = hexByCell.get(key);
-        if (!hex || !value) continue;
-        const art = typeof value === 'string' ? value : value.art;
-        if (!art) continue;
+    for (let index = 0; index < (freeDecor?.length ?? 0); index++) {
+        const item = freeDecor![index];
+        if (!item || typeof item.art !== 'string' || !item.art.trim()) continue;
+        if (!Number.isFinite(item.x) || !Number.isFinite(item.y)
+            || !(item.width > 0) || !Number.isFinite(item.width)
+            || !(item.height > 0) || !Number.isFinite(item.height)) continue;
+        if (item.rotation !== undefined && !Number.isFinite(item.rotation)) continue;
+        const art = item.art.trim();
         const size = measure(art);
-        if (!size) continue;
-        const entry: ZCMapDecorTileLike = typeof value === 'string' ? { art: value } : value;
-        const span = entry.span && entry.span.length ? entry.span : [[0, 0]];
-        const offset = entry.offset || [0, 0];
-        const isSingle = span.length === 1 && span[0][0] === 0 && span[0][1] === 0;
-        // 单格：图片贴 anchor 顶面（与编辑器装饰面板单格行为一致）。
-        // 多格：图片贴 span 包围盒，几何中心 = 各 cell 中心点平均。
-        let centerX: number;
-        let centerY: number;
-        let boxWidth: number;
-        let boxHeight: number;
-        if (isSingle) {
-            centerX = mapToViewX(hex.x) + offset[0];
-            centerY = mapToViewY(hex.y) + offset[1];
-            boxWidth = ZC_LAND_TOP_HALF_WIDTH * 2;
-            boxHeight = ZC_LAND_TOP_HALF_HEIGHT * 2;
-        } else {
-            let minDr = span[0][0], maxDr = span[0][0], minDc = span[0][1], maxDc = span[0][1];
-            for (let i = 1; i < span.length; i += 1) {
-                if (span[i][0] < minDr) minDr = span[i][0];
-                if (span[i][0] > maxDr) maxDr = span[i][0];
-                if (span[i][1] < minDc) minDc = span[i][1];
-                if (span[i][1] > maxDc) maxDc = span[i][1];
-            }
-            boxWidth = (maxDc - minDc) * ZC_HEX_COLUMN_SPACING + ZC_LAND_TOP_HALF_WIDTH * 2;
-            boxHeight = (maxDr - minDr) * ZC_HEX_ROW_SPACING + ZC_LAND_TOP_HALF_HEIGHT * 2;
-            // 用 `hexByCell` 拿到各 cell 中心点（编辑器侧已经把 span 限定在虚空上，
-            // 此处任意 cell 缺失 = 配置烂掉，整片跳过 —— 不让单点缺失污染几何中心）。
-            let sumX = 0, sumY = 0;
-            let valid = true;
-            for (let i = 0; i < span.length; i += 1) {
-                const cellHex = hexByCell.get(`${hex.row + span[i][0]},${hex.column + span[i][1]}`);
-                if (!cellHex) { valid = false; break; }
-                sumX += mapToViewX(cellHex.x);
-                sumY += mapToViewY(cellHex.y);
-            }
-            if (!valid) continue;
-            centerX = sumX / span.length + offset[0];
-            centerY = sumY / span.length + offset[1];
-        }
-        // 适配到实际图尺寸的等比系数。盒子只能比图小（min(boxW/imgW, boxH/imgH)），
-        // 与原 decorFitScale 同口径 —— 只缩不拉伸。
-        const scale = Math.min(boxWidth / size.width, boxHeight / size.height);
-        if (!(scale > 0)) continue;
-        // placement 落点 = 图片中心（与 ZCGameRenderWorld.installDecor 期望一致：sprite.position
-        // 就是中心，宽高由 UITransform 接管，老代码也走这条）。
+        if (!size || !(size.width > 0) || !(size.height > 0)) continue;
         placements.push({
-            id: hex.id,
+            id: `free-${item.id ?? index}`,
             art,
-            x: centerX,
-            y: centerY,
-            width: size.width * scale,
-            height: size.height * scale,
+            x: item.x,
+            y: item.y,
+            width: item.width,
+            height: item.height,
+            rotation: item.rotation ?? 0,
+            flipX: item.flipX === true,
+            flipY: item.flipY === true,
         });
     }
     placements.sort((a, b) => b.y - a.y || a.x - b.x);

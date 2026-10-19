@@ -79,7 +79,10 @@ test('战斗流程先关闭视图再销毁组件和释放作用域，不等待 C
         host = { addComponent: () => game };
         releaseResourceScope() { scope.dispose(); } log() {} error() {}
     }
+    // `ProcedureGame.current` 要经 `ProcedureManager.instance.currentProcedure` 找当前流程 ⇒ 夹具给个可写的假实例。
+    const manager = { instance: null as { currentProcedure: unknown } | null };
     const { ProcedureGame } = load('assets/script/app/procedure/ProcedureGame.ts', {
+        '../../framework/procedure/ProcedureManager': { ProcedureManager: manager },
         '../../framework/procedure/ProcedureBase': { ProcedureBase: Base },
         // `ProcedureGame.onEnter` 把组装好的 entry 交给对局组件实例。
         '../zcds/ZCGame': { ZCGame: class ZCGame { initialize() {} } },
@@ -98,4 +101,38 @@ test('战斗流程先关闭视图再销毁组件和释放作用域，不等待 C
     assert.ok(initializedEntry.matchConfig);
     procedure.onLeave();
     assert.equal(destroyed, true); assert.deepEqual(order, ['view shutdown', 'component queued', 'scope released']);
+});
+
+test('流程管理器能拿到对局控制器（只读出口）；不在对局流程 / 已离场时为 null', () => {
+    class Base {
+        host = { addComponent: () => ({ initialize() {}, shutdown() {}, destroy() {} }) };
+        releaseResourceScope() {} log() {} error() {}
+    }
+    const manager = { instance: null as { currentProcedure: unknown } | null };
+    const { ProcedureGame } = load('assets/script/app/procedure/ProcedureGame.ts', {
+        '../../framework/procedure/ProcedureManager': { ProcedureManager: manager },
+        '../../framework/procedure/ProcedureBase': { ProcedureBase: Base },
+        '../zcds/ZCGame': { ZCGame: class ZCGame { initialize() {} } },
+        '../zcds/application/ZCGameLoader': {},
+        '../zcds/application/ZCClientCombatConfig': { buildZCClientCombatConfig: (config: unknown) => ({ config, skipped: [] }) },
+        '../zcds/application/ZCPveCombatConfig': { buildZCPveEnemyDecks: () => ({}) },
+        '../zcds/model/ZCMatchConfig': { captureZCMatchConfig: (config: unknown) => config ?? { map: {}, enemyDeck: [] } },
+        '../zcds/model/ZCRankBoard': { buildSeatProfiles: () => new Map() },
+        '../territory/application/TerritorySaveStoreAdapter': { createTerritorySaveStore: () => ({ resolveBattle() {} }) },
+    });
+
+    assert.equal(ProcedureGame.current, null, '还没进对局流程时必须是 null（别让调用方以为总能拿到）');
+    const procedure = new ProcedureGame();
+    procedure.preparedResources = { baseMatchConfig: { map: {}, enemyDeck: [] } };
+    procedure.onEnter();
+    manager.instance = { currentProcedure: procedure };
+    assert.ok(ProcedureGame.current, '★对局流程中必须拿得到控制器（跨模块只读 model 的入口）');
+    assert.equal(ProcedureGame.current, (procedure as unknown as { game: unknown }).game);
+    // 别的流程实现不能被误当成对局流程（`instanceof` 收窄的意义）
+    manager.instance = { currentProcedure: {} };
+    assert.equal(ProcedureGame.current, null);
+    // 离场后 `game` 已置空 ⇒ 迟到的调用方拿不到东西，不会摸到已销毁的控制器
+    manager.instance = { currentProcedure: procedure };
+    procedure.onLeave();
+    assert.equal(ProcedureGame.current, null);
 });

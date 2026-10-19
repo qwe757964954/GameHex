@@ -17,11 +17,11 @@ export interface IZCHudBossWaveText {
 }
 
 /** 波次徽标字号（设计稿文字框 109×32、白核高 29.9 ⇒ fontSize ≈ 32）。 */
-export const ZC_BOSS_WAVE_FONT_SIZE = 32;
+const ZC_BOSS_WAVE_FONT_SIZE = 32;
 /** 倍率徽标字号（设计稿 `X4` 白核 26.5×16.1 ⇒ fontSize ≈ 22）。 */
-export const ZC_BOSS_RATE_FONT_SIZE = 22;
+const ZC_BOSS_RATE_FONT_SIZE = 22;
 /** 黑描边宽度（设计稿白核四周实测 2~3px）。 */
-export const ZC_BOSS_LABEL_OUTLINE_WIDTH = 3;
+const ZC_BOSS_LABEL_OUTLINE_WIDTH = 3;
 
 /** 波次徽标：`第4/8波`（设计稿这一帧就这一行，不再塞「下 Ns / 敌 M」）。 */
 export function formatZCDefenceWaveText(progress: Readonly<ZCDefenceWaveProgress>): IZCHudBossWaveText {

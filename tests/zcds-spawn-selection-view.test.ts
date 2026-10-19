@@ -286,11 +286,59 @@ test('两态口径：文案只有两条、等待态收掉倒计时/进度/绿勾
 
 test('自选主城 HUD 走实例化路径，并进了对局预加载清单', () => {
     const game = stripComments(gameSource);
-    assert.match(game, /instantiate\(this\.cachedSpawnSelectionPrefab\)/, '必须实例化 prefab');
+    //  preload 改造后 prefab 由 `ZCGamePreparedResources` 带进来（`prepared.spawnSelectionPrefab`），
+    //  `this.cachedSpawnSelectionPrefab` 那套缓存字段已经删了 ⇒ 断言同步到新写法（口径不变：必须实例化、禁运行时挂脚本）。
+    assert.match(game, /instantiate\(prepared\.spawnSelectionPrefab\)/, '必须实例化 prefab');
     assert.doesNotMatch(game, /addComponent\(ZCSpawnSelectionView\)/, '不再运行时挂脚本');
     assert.match(game, /getComponent\(ZCSpawnSelectionView\)!/, '取组件失败应当场抛');
 
     assert.match(loaderSource, /const SPAWN_SELECTION_URL = 'ui\/game\/ZCSpawnSelection'/);
     assert.match(loaderSource, /this\.assets\.load\(SPAWN_SELECTION_URL, Prefab/);
     assert.match(loaderSource, /spawnSelectionPrefab: Prefab;/);
+});
+
+
+test('选点展示计时走 scheduleOnce，不许在 update 里拿 dt 累加（2026-10-16）', () => {
+    // 「全部确认后停留 1 秒展示主城落点」原先写在 `update` 里 `spawnShowcaseLeft -= dt`：
+    // 手写倒计时在低帧率下会被拉长，而且把"还要等多久"藏进逐帧状态里。
+    // 口径 = 计时交给引擎调度器（同 `ZCGameHUDView` 的金币栏闪烁、`ZCSpawnSelectionView` 的吐司）。
+    const game = stripComments(gameSource);
+    assert.match(game, /this\.scheduleOnce\(this\.finishSpawnSelection, SPAWN_SHOWCASE_SECONDS\)/,
+        '展示计时必须是 scheduleOnce 排的');
+    assert.match(game, /private scheduleSpawnShowcase\(\): void \{\s*if \(this\.spawnShowcaseScheduled\) return;/,
+        '逐帧检测会反复命中"已完成" ⇒ 必须有幂等标记，否则每帧重排、永远不到期');
+    assert.match(game, /private cancelSpawnShowcase\(\): void \{\s*this\.spawnShowcaseScheduled = false;\s*this\.unschedule\(this\.finishSpawnSelection\);/,
+        '进战斗 / 拆对局都要撤定时器');
+    assert.match(game, /if \(this\.spawnSelection\.snapshot\.finished\) this\.scheduleSpawnShowcase\(\);/,
+        'update 只负责检测"已完成"，计时另计');
+    assert.doesNotMatch(game, /spawnShowcaseLeft/, '旧的 dt 累加字段必须删干净');
+    assert.doesNotMatch(game, /spawnShowcaseLeft -= dt/, '不许再出现 dt 累加式倒计时');
+});
+
+
+test('选点的两个意图走事件派发（视图 emit + 控制器订阅），不再传回调（2026-10-16）', () => {
+    const view = stripComments(viewSource);
+    const game = stripComments(gameSource);
+    // 视图侧：监听是「具名方法 + this target」（规范 §7.5 配套第 3 条），意图在**根节点** emit。
+    // 旧写法 `this.confirmButton.on(TOUCH_END, () => this.actions?.confirm(), this)` 既内联箭头
+    // 又持有上层回调 —— 两个问题一起消掉。
+    assert.match(view, /this\.toggleButton\.on\(Node\.EventType\.TOUCH_END, this\.onToggleHintsClick, this\)/);
+    assert.match(view, /this\.confirmButton\.on\(Node\.EventType\.TOUCH_END, this\.onConfirmClick, this\)/);
+    // 视图侧：不再持有总线（也不自己 new），意图直接交给全局中控。
+    assert.doesNotMatch(view, /EventBus/, '视图不该再持有总线实例');
+    assert.match(view, /initialize\(\): void \{/);
+    assert.match(view, /private onConfirmClick\(\): void \{\s*EventMgr\.instance\.emit\(ZCGameUiEvent\.SpawnConfirm\);/);
+    assert.match(view, /private onToggleHintsClick\(\): void \{\s*EventMgr\.instance\.emit\(ZCGameUiEvent\.SpawnToggleHints\);/);
+    assert.ok(!/IZCSpawnSelectionActions/.test(view), '视图不该再有回调契约');
+    assert.ok(!/TOUCH_END, \(\) =>/.test(view), '按钮监听不许再用内联箭头闭包');
+    // 控制器侧：两个意图都要订阅上（少一个就是那个按钮点了没反应、且零报错）。
+    assert.match(game, /this\.spawnSelectionView\.initialize\(\);/);
+    for (const [event, handler] of [['SpawnConfirm', 'onSpawnConfirm'], ['SpawnToggleHints', 'onSpawnToggleHints']] as const) {
+        assert.ok(
+            new RegExp(`EventMgr\\.instance\\.on\\(ZCGameUiEvent\\.${event}, this\\.${handler}, this\\)`).test(game),
+            `★ZCGame 必须订阅 ZCGameUiEvent.${event} → ${handler}`,
+        );
+    }
+    assert.match(game, /private onSpawnConfirm\(\): void \{\s*this\.confirmSpawnSelection\(\);/);
+    assert.match(game, /private onSpawnToggleHints\(\): void \{\s*this\.spawnHintsVisible = !this\.spawnHintsVisible;\s*this\.renderSpawnSelection\(\);/);
 });

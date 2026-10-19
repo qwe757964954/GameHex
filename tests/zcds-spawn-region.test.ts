@@ -158,7 +158,9 @@ test('选点渲染的半区着色必须走 ZCSpawnSelection.regionOwnerOf（不�
     // 切片必须按**方法签名**取：`renderStatic` 在 `render()` 里先被调用过一次，
     // 用 `indexOf('renderStatic')` 会切出空串 ⇒ 断言恒绿（这正是要防的假绿）。
     const start = source.indexOf('renderSpawnSelection(selection: ZCSpawnSelection');
-    const end = source.indexOf('renderStatic(model: ZCGameModel)');
+    //  end 标记用**方法签名**：形参早就从 `model: ZCGameModel` 换成 `frame: ZCGameRenderFrame` 了。
+    //  切片过期会让边界取不到 ⇒ 这条恒红，而真口径（半区着色走 regionOwnerOf）反而没人守。
+    const end = source.indexOf('renderStatic(frame: ZCGameRenderFrame)');
     assert.ok(start > 0 && end > start, `切片边界没取到（start=${start} end=${end}）`);
     const body = source.slice(start, end);
     assert.match(body, /selection\.regionOwnerOf\(config\.id\)/,

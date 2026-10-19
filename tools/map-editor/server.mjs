@@ -1,6 +1,6 @@
 import { createServer, get } from 'node:http';
 import { spawn } from 'node:child_process';
-import { mkdir, readFile, readdir, stat, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, readdir, stat, unlink, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { normalizeTerritoryMap, TerritoryValidationError } from './formats/territory-format.js';
@@ -8,7 +8,7 @@ import { normalizeTerritoryMap, TerritoryValidationError } from './formats/terri
 const root = fileURLToPath(new URL('.', import.meta.url));
 const presetDir = join(root, 'presets');
 const territoryPresetDir = join(root, 'presets', 'territory');
-// 虚空格装饰的贴图目录（相对游戏 resources）：编辑器只把资源名写进 art.tiles，出图后自动出现在清单里。
+// 场景装饰贴图目录（相对游戏 resources）：资源名写进 art.freeDecor[].art。
 const resourcesDir = join(root, '..', '..', 'assets', 'resources');
 const territoryResourceDir = join(resourcesDir, 'config', 'territory-maps');
 const territoryAssetDir = join(resourcesDir, 'image', 'territory');
@@ -23,7 +23,7 @@ const mapResourceFallback = {
   unit_cap: join(resourcesDir, 'image', 'buildings', 'barracks-peashooter.png'),
   artifact_charge: join(resourcesDir, 'image', 'artifact', '阿哈利姆神杖.png'),
 };
-/** 装饰资源名的固定前缀 —— `art.tiles` 里存的就是这个形状（相对 resources、不带扩展名）。 */
+/** 装饰资源名的固定前缀（相对 resources、不带扩展名）。 */
 const decorPrefix = 'image/decor/';
 const mapResourcePrefix = 'image/map-resource/';
 /**
@@ -72,7 +72,7 @@ function json(res, status, value) {
 }
 
 /**
- * 扫装饰贴图目录，返回可直接写进 art.tiles 的资源名（相对 resources、不带扩展名）。
+ * 扫装饰贴图目录，返回可直接写进 art.freeDecor[].art 的资源名（相对 resources、不带扩展名）。
  * 目录不存在就返回空数组 —— 编辑器允许先手填资源名占位，出图后自动进清单。
  */
 async function listDecor(dir, prefix, out) {
@@ -87,6 +87,51 @@ async function listDecor(dir, prefix, out) {
     if (!/\.(png|jpe?g)$/i.test(entry.name)) continue;
     out.push(`${prefix}${entry.name.replace(/\.[^.]+$/, '')}`);
   }
+}
+
+/**
+ * 读图片原始像素尺寸（PNG 头 / JPEG SOF 段），不依赖第三方库。
+ * 编辑器新摆装饰时用它做 1:1 默认尺寸 —— 工程里装饰就是按原始像素落地的
+ * （`UITransform.setContentSize(item.width, item.height)`，1 渲染单位 = 1 像素）。
+ * 解析失败（格式未知 / 文件残缺）返回 null，由调用方回退默认尺寸。
+ */
+async function readImageSize(file) {
+  let handle;
+  try {
+    handle = await open(file, 'r');
+    const probe = Buffer.alloc(65536);
+    const { bytesRead } = await handle.read(probe, 0, probe.length, 0);
+    const buf = bytesRead < probe.length ? probe.subarray(0, bytesRead) : probe;
+    if (buf.length < 8) return null;
+    // PNG：签名 8 字节 + IHDR（第 16 字节起宽高各 4 字节，big-endian）。
+    if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47
+        && buf[4] === 0x0D && buf[5] === 0x0A && buf[6] === 0x1A && buf[7] === 0x0A) {
+      if (buf.length < 24) return null;
+      const width = buf.readUInt32BE(16);
+      const height = buf.readUInt32BE(20);
+      return width > 0 && height > 0 ? { width, height } : null;
+    }
+    // JPEG：`FF D8` 开头，跳过各标记段找 SOF（0xC0~0xCF 除 C4/C8/CC），
+    // 段内 [精度 1B][高 2B][宽 2B]，宽高在段头偏移 +5 / +7。
+    if (buf[0] === 0xFF && buf[1] === 0xD8) {
+      let i = 2;
+      while (i + 9 <= buf.length) {
+        if (buf[i] !== 0xFF) { i += 1; continue; }
+        const marker = buf[i + 1];
+        if (marker >= 0xC0 && marker <= 0xCF
+            && marker !== 0xC4 && marker !== 0xC8 && marker !== 0xCC) {
+          const height = buf.readUInt16BE(i + 5);
+          const width = buf.readUInt16BE(i + 7);
+          return width > 0 && height > 0 ? { width, height } : null;
+        }
+        const segmentLength = buf.readUInt16BE(i + 2);
+        if (segmentLength < 2) return null;
+        i += 2 + segmentLength;
+      }
+    }
+    return null;
+  } catch { return null; }
+  finally { if (handle) await handle.close().catch(() => {}); }
 }
 
 /** 资源名 → 磁盘上的贴图文件（自动试扩展名）；名字越界 / 文件不存在都返回 null。 */
@@ -269,59 +314,22 @@ function validatePreset(data, id) {
       if (point.section !== undefined && point.section !== 0) throw new Error('中立资源点的分区必须为 0');
     }
   }
-  // 虚空装饰：art.tiles 的 '行,列' 键必须落在虚空格上 —— 与编辑器 app.js、预设生成
-  // map_format.py 同一个口径。判"这格是不是虚空"要展开镜像，跟 ascii 的读法一致，
-  // 否则半场图上整张判据会错位。分区贴图键（'1'~'4' / neutral / void）不在这里管。
   const art = data.art;
-  const tiles = art && typeof art === 'object' && !Array.isArray(art) ? art.tiles : null;
-  if (tiles && typeof tiles === 'object' && !Array.isArray(tiles)) {
-    const rowOffset = rows - expectedRows;
-    const half = version >= 3 && mirrorHorizontal ? Math.ceil(columns / 2) : columns;
-    const mirror180 = data.mirror180 === true;
-    const isVoidAt = (row, column) => {
-      let sourceRow, sourceColumn;
-      if (mirror180) {
-        const lower = row >= rows / 2;
-        sourceRow = lower ? rows - 1 - row : row;
-        sourceColumn = lower ? columns - 1 - column : column;
-      } else {
-        sourceRow = mirrorVertical && row < rowOffset ? rows - 1 - row - rowOffset : row - rowOffset;
-        sourceColumn = version >= 3 && mirrorHorizontal && column >= half ? columns - 1 - column : column;
+  const freeDecor = art && typeof art === 'object' && !Array.isArray(art) ? art.freeDecor : undefined;
+  if (freeDecor !== undefined) {
+    if (!Array.isArray(freeDecor)) throw new Error('art.freeDecor 必须是数组');
+    for (let index = 0; index < freeDecor.length; index += 1) {
+      const item = freeDecor[index];
+      if (!item || typeof item !== 'object' || Array.isArray(item)) throw new Error(`自由装饰 ${index} 必须是对象`);
+      if (typeof item.art !== 'string' || !item.art.trim()) throw new Error(`自由装饰 ${index} 缺少资源名`);
+      if (!Number.isFinite(item.x) || !Number.isFinite(item.y)) throw new Error(`自由装饰 ${index} 坐标无效`);
+      if (!Number.isFinite(item.width) || item.width <= 0 || !Number.isFinite(item.height) || item.height <= 0) {
+        throw new Error(`自由装饰 ${index} 尺寸无效`);
       }
-      const line = data.ascii[sourceRow];
-      return typeof line === 'string' && line[sourceColumn] === '.';
-    };
-    for (const [key, value] of Object.entries(tiles)) {
-      if (!/^\d+,\d+$/.test(key)) continue;
-      const [decorRow, decorColumn] = key.split(',').map((part) => Number(part));
-      if (decorRow >= rows || decorColumn >= columns) {
-        throw new Error(`装饰 ${key} 不在 ${columns}×${rows} 的地图内`);
-      }
-      // 值兼容两种格式：老字符串（等价单格）与多格对象 `{ art, span?, offset? }`。
-      // 单格等价时编辑器也会写成字符串，所以这里把对象归一成 span 再逐格判。
-      const entry = typeof value === 'string' ? { art: value, span: [[0, 0]] } : value;
-      if (!entry || typeof entry.art !== 'string' || !entry.art) {
-        throw new Error(`装饰 ${key} 的资源名必须是非空字符串`);
-      }
-      // anchor 那格恒定要判：span 理论上含 [0,0]，但坏数据不能靠"约定"兜底。
-      if (!isVoidAt(decorRow, decorColumn)) {
-        throw new Error(`装饰 ${key} 必须落在虚空格上（当前不是虚空）`);
-      }
-      const span = Array.isArray(entry.span) && entry.span.length ? entry.span : [[0, 0]];
-      for (const cell of span) {
-        // 形状不合法（非 [dr, dc] 有限数对）直接判错，不做隐性 `Number(null) → 0` 的兜底。
-        if (!Array.isArray(cell) || cell.length < 2 ||
-            typeof cell[0] !== 'number' || typeof cell[1] !== 'number' ||
-            !Number.isFinite(cell[0]) || !Number.isFinite(cell[1])) {
-          throw new Error(`装饰 ${key} 的占位形态（span）必须是 [dr, dc] 数字对`);
-        }
-        const cellRow = decorRow + cell[0], cellColumn = decorColumn + cell[1];
-        if (cellRow < 0 || cellRow >= rows || cellColumn < 0 || cellColumn >= columns) {
-          throw new Error(`装饰 ${key} 的占位格 ${cellRow},${cellColumn} 不在 ${columns}×${rows} 的地图内`);
-        }
-        if (!isVoidAt(cellRow, cellColumn)) {
-          throw new Error(`装饰 ${key} 的占位格 ${cellRow},${cellColumn} 必须落在虚空格上（当前不是虚空）`);
-        }
+      if (item.rotation !== undefined && !Number.isFinite(item.rotation)) throw new Error(`自由装饰 ${index} 角度无效`);
+      if ((item.flipX !== undefined && typeof item.flipX !== 'boolean') ||
+          (item.flipY !== undefined && typeof item.flipY !== 'boolean')) {
+        throw new Error(`自由装饰 ${index} 翻转值无效`);
       }
     }
   }
@@ -465,8 +473,17 @@ const server = createServer(async (req, res) => {
       if (req.method === 'GET') {
         const decor = [];
         await listDecor(decorDir, decorPrefix, decor);
+        // 每张已出图的装饰附上原始像素尺寸，编辑器新摆时默认按 1:1 落地。
+        const sizes = {};
+        for (const name of decor) {
+          const file = await findDecorFile(name);
+          if (!file) continue;
+          const size = await readImageSize(file);
+          if (size) sizes[name] = size;
+        }
         json(res, 200, {
           decor: decor.sort(), custom: await readDecorNames(), dir: 'assets/resources/image/decor',
+          sizes,
         });
         return;
       }
@@ -542,7 +559,9 @@ const server = createServer(async (req, res) => {
       json(res, 405, { error: '不支持此操作' });
     }
   } catch (error) {
-    const badRequest = error instanceof SyntaxError || error instanceof TerritoryValidationError || error.statusCode === 400 || String(error.message || '').includes('必须') || String(error.message || '').includes('地图') || String(error.message || '').includes('预设');
+    const message = String(error.message || '');
+    const badRequest = error instanceof SyntaxError || error instanceof TerritoryValidationError || error.statusCode === 400 ||
+      message.includes('必须') || message.includes('地图') || message.includes('预设') || message.includes('自由装饰');
     json(res, badRequest ? 400 : 500, { error: error.message });
   }
 });

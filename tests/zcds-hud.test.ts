@@ -84,9 +84,21 @@ function createHud(
         listeners: Array<{ event: string; callback: Function; target: unknown; capture: boolean }> = [];
         position = { x: 0, y: 0, z: 0 };
         scale = { x: 1, y: 1, z: 1 };
-        transform = { width: 720, height: 1280 };
+        //  `UITransform` 桩要够 `fitMapBackground` 用：它读 width/height 并回写 setContentSize。
+        transform = {
+            width: 720, height: 1280,
+            setContentSize(width: number, height: number) { this.width = width; this.height = height; },
+        };
         getComponent() { return this.transform; }
         getChildByPath() { return null; }
+        //  `fitMapBackground` 要按名字取 `MapLayer/content/Background`（那边缺节点会抛），
+        // 夹具给一个**按名字稳定**的假子节点（反复取拿到同一个，和真引擎一致）。
+        private childByName = new Map<string, FakeNode>();
+        getChildByName(name: string) {
+            let child = this.childByName.get(name);
+            if (!child) { child = new FakeNode(); this.childByName.set(name, child); }
+            return child;
+        }
         setScale(x: any, y?: number, z?: number) { this.scale = typeof x === 'object' ? x : { x, y, z }; }
         setPosition(x: any, y?: number, z?: number) { this.position = typeof x === 'object' ? x : { x, y, z }; }
         on(event: string, callback: Function, target: unknown, capture = false) { this.listeners.push({ event, callback, target, capture }); }
@@ -147,6 +159,13 @@ function createHud(
     // 旧写法 `require: () => cc` 会让格距常量变 undefined，`mapToViewX/Y` 全是 NaN。
     const view = loadPureModule('assets/script/app/zcds/view/ZCGameViewUtil.ts');
     assert.ok(Number.isFinite(view.mapToViewX(36)), '夹具自检：mapToViewX 必须是有限数');
+    // 界面意图事件契约（`ZCGameUiEvent`）：用例拿它当事件名，也断言"点了哪个按钮"。
+    const events = loadPureModule('assets/script/app/zcds/view/ZCGameHudEvents.ts');
+    // 事件中控（`framework/event/EventMgr`，纯 TS 单例）：视图 `emit` 到它、控制器在它上面订阅，
+    // 所以用例也拿**同一个单例**断言"点了哪个按钮"。夹具必须把同一个模块对象喂给视图，单例才是同一个。
+    const managerModule = loadPureModule('assets/script/framework/event/EventMgr.ts');
+    const mgr = managerModule.EventMgr.instance;
+    assert.ok(events.ZCGameUiEvent?.OpenRank, '夹具自检：契约必须能加载出 ZCGameUiEvent');
     const dependencies: Record<string, unknown> = {
         cc,
         // 「多队伍」改造后 HUD 不再引用 GamePlayerItem / GameVS（两方版节点已从 prefab 删除），
@@ -159,6 +178,8 @@ function createHud(
         '../model/ZCCombatCatalog': { getPlayerDeck: () => [{ name: '测试卡' }] },
         '../model/ZCGameModel': { ZC_HEX_CONFIG: hexes },
         './ZCGameViewUtil': view,
+        './ZCGameHudEvents': events,
+        '../../../framework/event/EventMgr': managerModule,
     };
     const source = readFileSync('assets/script/app/zcds/view/ZCGameHUDView.ts', 'utf8');
     const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true } }).outputText;
@@ -223,12 +244,12 @@ function createHud(
         owners: ['player', 'enemy'] as const,
         territoryCountOf(owner: string) { return owner === 'player' ? 70 : owner === 'enemy' ? 68 : 0; },
     };
-    return { hud, model, tweenRuns, view, hudModule: context.exports };
+    return { hud, model, mgr, tweenRuns, view, events, hudModule: context.exports };
 }
 
 test('开局先以居中全景展示完整棋盘，再放大到居中的原始倍率', () => {
-    const { hud, tweenRuns } = createHud();
-    hud.initialize({ useArtifact() {} });
+    const { hud, tweenRuns, mgr } = createHud();
+    hud.initialize();
     assert.equal(tweenRuns.length, 1);
     assert.ok(tweenRuns[0].startScale.x < 1);
     assert.equal(tweenRuns[0].startScale.x, tweenRuns[0].startScale.y);
@@ -238,14 +259,14 @@ test('开局先以居中全景展示完整棋盘，再放大到居中的原始�
     assert.equal(hud.mapLayer.scale.y, 1);
     assert.equal(hud.mapLayer.position.x, 0);
     assert.equal(hud.mapLayer.position.y, 0);
-    hud.initialize({ useArtifact() {} });
+    hud.initialize();
     assert.equal(tweenRuns.length, 1, '重复初始化不应重复播放开局镜头');
 });
 
 test('开局镜头停在我方主城那一格，而不是整盘中心（3 / 4 人图上中心落在中立空白处）', () => {
     // 复刻 3 人图（standard_3）的取样：主城在左下角，明显偏离整盘中心。
     const hexes = [{ x: -500, y: -500 }, { x: 500, y: 700 }];
-    const { hud, tweenRuns, view } = createHud(hexes);
+    const { hud, tweenRuns, view, mgr } = createHud(hexes);
     // 落点按工程真源换算（`mapToViewX/Y`），别手抄数字 —— 抄错会静默变成"断言在测一个错的东西"。
     const home = { x: view.mapToViewX(-300), y: view.mapToViewY(-400) };
     // centerAt 复刻 HUD 的 mapCenterAtScale，**连 `|| 0` 一起抄** ——
@@ -257,7 +278,7 @@ test('开局镜头停在我方主城那一格，而不是整盘中心（3 / 4 �
     });
     const center = centerAt(1);
     hud.setMapFocus(home);
-    hud.initialize({ useArtifact() {} });
+    hud.initialize();
 
     assert.notEqual(hud.mapLayer.position.x, center.x, '落点不应停在整盘中心 X');
     assert.notEqual(hud.mapLayer.position.y, center.y, '落点不应停在整盘中心 Y');
@@ -280,10 +301,10 @@ test('开局镜头停在我方主城那一格，而不是整盘中心（3 / 4 �
 
 test('落点必须活过 resize 夹取：夹取后再夹一次不动，否则镜头会自己弹回整盘中心', () => {
     const hexes = [{ x: -500, y: -500 }, { x: 500, y: 700 }];
-    const { hud, view } = createHud(hexes);
+    const { hud, view, mgr } = createHud(hexes);
     hud.onLoad(); // 引擎在节点激活时触发一次：监听在此绑定（规范 7.2），initialize 不再负责绑事件
     hud.setMapFocus({ x: view.mapToViewX(-300), y: view.mapToViewY(-400) });
-    hud.initialize({ useArtifact() {} });
+    hud.initialize();
     const settled = { x: hud.mapLayer.position.x, y: hud.mapLayer.position.y };
     // 触发一次视口尺寸变化 —— applyMapOffset 会重新夹取
     hud.mapViewport.transform.width = 900;
@@ -294,25 +315,25 @@ test('落点必须活过 resize 夹取：夹取后再夹一次不动，否则镜
 
 test('没给落点时退回整盘中心（2 人图与旧行为一致）', () => {
     const hexes = [{ x: -500, y: -500 }, { x: 500, y: 700 }];
-    const { hud, view } = createHud(hexes);
+    const { hud, view, mgr } = createHud(hexes);
     const center = {
         x: -(view.mapToViewX(-500) + view.mapToViewX(500)) / 2 || 0,
         y: -(view.mapToViewY(-500) + view.mapToViewY(700)) / 2 || 0,
     };
-    hud.initialize({ useArtifact() {} });
+    hud.initialize();
     assert.equal(hud.mapLayer.position.x, center.x);
     assert.equal(hud.mapLayer.position.y, center.y);
 });
 
 test('结算拉远仍回整盘居中，不受开局落点影响', () => {
     const hexes = [{ x: -500, y: -500 }, { x: 500, y: 700 }];
-    const { hud, view, tweenRuns } = createHud(hexes);
+    const { hud, view, tweenRuns, mgr } = createHud(hexes);
     const center = {
         x: -(view.mapToViewX(-500) + view.mapToViewX(500)) / 2 || 0,
         y: -(view.mapToViewY(-500) + view.mapToViewY(700)) / 2 || 0,
     };
     hud.setMapFocus({ x: view.mapToViewX(-300), y: view.mapToViewY(-400) });
-    hud.initialize({ useArtifact() {} });
+    hud.initialize();
     const before = tweenRuns.length;
     hud.startSettlementOverview();
     // 结算拉到 overviewScale（不是 1），按 `位置 / 缩放` 断言整盘居中。
@@ -392,8 +413,8 @@ test('每张工程地图的开局落点都成立：主城在屏内、且不被 r
 });
 
 test('HUD 按区域刷新：顶部计时与金币、逐席位地块数与兵力', () => {
-    const { hud, model } = createHud();
-    hud.initialize({ useArtifact() {} });
+    const { hud, model, mgr } = createHud();
+    hud.initialize();
     hud.setSeatProfiles(new Map([
         ['player', { name: '蓝方', headKey: '' }],
         ['enemy', { name: '红方', headKey: '' }],
@@ -435,7 +456,7 @@ test('HUD 按区域刷新：顶部计时与金币、逐席位地块数与兵力'
 });
 
 test('四格顶栏：领先者变化和并列时，尺寸状态同步交给 Layout', () => {
-    const { hud } = createHud();
+    const { hud, mgr } = createHud();
     const four = ['player', 'enemy', 'enemy2', 'enemy3'] as const;
     const counts: Record<string, number> = { player: 10, enemy: 20, enemy2: 30, enemy3: 40 };
     const model = {
@@ -473,10 +494,12 @@ test('四格顶栏：领先者变化和并列时，尺寸状态同步交给 Layo
 });
 
 test('神器三态与进度同步；不可充能时按钮仍可点，只有结算后才禁用', () => {
-    const { hud, model } = createHud();
+    const { hud, model, events, mgr } = createHud();
     let uses = 0;
     hud.onLoad(); // 引擎在节点激活时触发一次：按钮点击监听在此绑定（规范 7.2）
-    hud.initialize({ useArtifact() { uses += 1; } });
+    // 控制器那侧就是这么接的（`ZCGame.bindHudEvents`）：视图只 emit，谁订阅谁处理。
+    mgr.on(events.ZCGameUiEvent.UseArtifact, () => { uses += 1; });
+    hud.initialize();
     for (const [usesCount, charge, cooldown, status, ready, progress] of [
         [0, 50, 0, 'playing', false, 0.5],
         [1, 0, 0.5, 'playing', false, 0.5],
@@ -500,22 +523,45 @@ test('神器三态与进度同步；不可充能时按钮仍可点，只有结�
     assert.equal(uses, 4);
 });
 
-test('只传 useArtifact 时点其他按钮不崩（第二个 ?. 的守卫）', () => {
-    const { hud, model } = createHud();
-    // 未注入 openRank / openGuide / openDamageStats / retreat。
+test('五个按钮各自派发对应意图事件（视图不再持有任何回调）', () => {
+    // 事件化之后视图**不知道**上层有没有接：点一下就必须派发。
+    // 「漏接」的风险从视图侧搬到了控制器侧（`ZCGame.bindHudEvents`），由 wiring 用例钉住。
+    const { hud, model, events, mgr } = createHud();
     hud.onLoad();
-    hud.initialize({ useArtifact() {} });
+    const seen: string[] = [];
+    // 契约是**全界面共用**的（还含结算页 / 选点的意图），这里只取 HUD 那 5 个来对表。
+    const hudEvents = ['UseArtifact', 'OpenGuide', 'OpenDamageStats', 'OpenRank', 'Retreat'] as const;
+    for (const key of hudEvents) {
+        mgr.on(events.ZCGameUiEvent[key], () => seen.push(events.ZCGameUiEvent[key]));
+    }
+    hud.initialize();
     hud.render(model);
-    // 这些按钮的 interactable 正好是 false（无法引擎不派发）。
-    // 但一旦某天有测试/调试直接 emit，写成 `this.actions?.openRank()` 就会推出 undefined 并报错。
-    // 第二个 `?.` 就是为了让这不膨演成页面崩溃（规范 §7.5 配套第 5 条）。
-    assert.equal(hud.rankButton.interactable, false);
-    assert.equal(hud.guideButton.interactable, false);
-    assert.equal(hud.retreatButton.interactable, false);
     hud.rankButton.node.emit('click');
     hud.guideButton.node.emit('click');
-    hud.retreatButton.node.emit('click');
     hud.damageButton.node.emit('click');
+    hud.artifactButton.node.emit('click');
+    hud.retreatButton.node.emit('click');
+    assert.deepEqual(
+        [...seen].sort(),
+        hudEvents.map((key) => events.ZCGameUiEvent[key]).sort(),
+        '★五个按钮必须各自派发自己的意图事件 —— 少一个就是那个按钮点了没反应',
+    );
+});
+
+test('神器 / 撤退在非对局进行中不派发（按钮也置灰）', () => {
+    const { hud, model, events, mgr } = createHud();
+    hud.onLoad();
+    const seen: string[] = [];
+    mgr.on(events.ZCGameUiEvent.UseArtifact, () => seen.push('artifact'));
+    mgr.on(events.ZCGameUiEvent.Retreat, () => seen.push('retreat'));
+    hud.initialize();
+    model.snapshot.status = 'victory';
+    hud.render(model);
+    assert.equal(hud.artifactButton.interactable, false);
+    assert.equal(hud.retreatButton.interactable, false);
+    hud.artifactButton.node.emit('click');
+    hud.retreatButton.node.emit('click');
+    assert.deepEqual(seen, [], '结算后神器与撤退都不该再派发');
 });
 
 test('视口组件由 prefab 保证：两处都直写不再判空', () => {
@@ -532,9 +578,9 @@ test('视口组件由 prefab 保证：两处都直写不再判空', () => {
     assert.ok(!/viewport\.width > 0/.test(HUD_SRC), '不应再有「视口宽高为 0」的尺寸兜底');
     assert.ok(!/getComponent\(UITransform\);\s*\n\s*if \(!viewport/.test(HUD_SRC), '不应再有「取到不去就退回」的判空分支');
     // 正常路径不受影响：视口有尺寸时照常走下去。
-    const { hud, model } = createHud();
+    const { hud, model, mgr } = createHud();
     hud.onLoad();
-    hud.initialize({ useArtifact() {} });
+    hud.initialize();
     Object.assign(model.snapshot, { status: 'victory', resultReason: '胜利' });
     hud.render(model);
     hud.startSettlementOverview();
@@ -542,7 +588,7 @@ test('视口组件由 prefab 保证：两处都直写不再判空', () => {
 });
 
 test('视口只在真正用它的两处查（playMapIntro / applyMapOffset 不多查）', () => {
-    const { hud } = createHud();
+    const { hud, mgr } = createHud();
     // `applyMapOffset` 原来也判了一次，但判完的 viewport 根本没用上，紧接着 `clampMapOffset`
     // 又 getComponent 判一次 ⇒ 多余的一次查询 + 一条“已判空”的错觉。
     // 按调用计数钉住：一趟 applyMapOffset 只能查一次视口。
@@ -552,7 +598,7 @@ test('视口只在真正用它的两处查（playMapIntro / applyMapOffset 不�
     const viewport = hud.mapViewport as unknown as { getComponent: () => unknown };
     viewport.getComponent = () => { probes += 1; return { width: 720, height: 1280 }; };
     hud.onLoad();
-    hud.initialize({ useArtifact() {} });
+    hud.initialize();
     probes = 0; // 跳过 initialize 期间的查询，只算运行期的
     hud.mapViewport.emit('size');
     assert.equal(probes, 1, `applyMapOffset 应只查 1 次视口，实际 ${probes} 次`);
@@ -568,9 +614,9 @@ test('视口只在真正用它的两处查（playMapIntro / applyMapOffset 不�
 test('头像异步到货：HUD 已销毁时不刷行（CCObject.isValid 不能删）', async () => {
     const hexes = [{ x: -500, y: -700 }, { x: 500, y: 700 }];
     const frame = { name: 'head.png' };
-    const { hud } = createHud(hexes, frame);
+    const { hud, mgr } = createHud(hexes, frame);
     hud.onLoad();
-    hud.initialize({ useArtifact() {} });
+    hud.initialize();
     // 头像是异步的：resolve 时 HUD 可能已经 destroy（退出对局）。
     // 此时再刷行就是向已销毁的节点树写了。
     hud.setSeatProfiles(new Map([['player', { name: '蓝方', headKey: 'blue' }]]) as never);
@@ -582,15 +628,15 @@ test('头像异步到货：HUD 已销毁时不刷行（CCObject.isValid 不能�
     // headKey 为空时直接 continue，不走异步分支。
     const { hud: hud2 } = createHud(hexes, frame);
     hud2.onLoad();
-    hud2.initialize({ useArtifact() {} });
+    hud2.initialize();
     hud2.setSeatProfiles(new Map([['player', { name: '蓝方', headKey: '' }]]) as never);
     assert.equal(hud2.rowCalls.length, 1, 'headKey 为空时仍要当场刷一遍（选点阶段靠这一遍）');
 });
 
 test('重绘回调是稳定引用：unschedule 能撤掉重复排程（方法不是箭头字段时也成立）', () => {
-    const { hud, model } = createHud();
+    const { hud, model, mgr } = createHud();
     hud.onLoad();
-    hud.initialize({ useArtifact() {} });
+    hud.initialize();
     hud.setSeatProfiles(new Map([['player', { name: '蓝方', headKey: '' }]]));
     // paintPlayerRows 里是`unschedule(...)` + `scheduleOnce(...)` 配对，靠的是两次拿到同一个函数引用。
     // 若把 repaintPlayerRows 改成每次新建的闭包，unschedule 就拿不到、会重复排程。
@@ -602,35 +648,36 @@ test('重绘回调是稳定引用：unschedule 能撤掉重复排程（方法不
     hud.render(model);
 });
 
-test('绑定只在 onLoad 完成一次；重复 initialize 不重复注册，销毁后监听仍由引擎清理', () => {
-    const { hud, model } = createHud();
+test('绑定只在 onLoad 完成一次；重复 initialize 不重复注册；onDestroy 不碰业务状态', () => {
+    const { hud, model, events, mgr } = createHud();
     let ranks = 0;
-    const actions = { useArtifact() {}, openRank() { ranks += 1; } };
+    mgr.on(events.ZCGameUiEvent.OpenRank, () => { ranks += 1; });
     hud.onLoad(); // 引擎保证 onLoad 每实例只跑一次 ⇒ 没有 bound 守卫（规范 7.2）
-    hud.initialize(actions);
-    hud.initialize(actions);
+    hud.initialize();
+    hud.initialize();
     hud.render(model);
+    // 三个左侧面板按钮整局都可点（不再按"上层有没有接"来置灰）；神器 / 撤退只在进行中可点。
     assert.equal(hud.rankButton.interactable, true);
-    assert.equal(hud.guideButton.interactable, false);
-    assert.equal(hud.retreatButton.interactable, false);
+    assert.equal(hud.guideButton.interactable, true);
+    assert.equal(hud.retreatButton.interactable, true);
     hud.rankButton.node.emit('click');
     assert.equal(ranks, 1);
-    // 重复 initialize 只重设 actions 与渲染状态，不会重复注册监听
+    // 重复 initialize 不重复注册监听 ⇒ 再点一次只 +1
     hud.rankButton.node.emit('click');
     assert.equal(ranks, 2);
     assert.equal(hud.mapScrollView.enabled, false);
-    // onDestroy 不再手动解绑：业务引用已清空，监听保留交由节点销毁时引擎自动清理
+    assert.equal(hud.mapViewport.listeners.length, 5, '棋盘触摸监听仍只在 onLoad 绑一次');
+    assert.equal(hud.rankButton.node.listeners.length, 1, '按钮点击监听不被 initialize 重复注册');
+    //  `onDestroy` 现在**不碰任何业务状态**（视图没有回调可清）⇒ 只要不抛就算过。
+    //  ⚠️ 别拿"销毁后再 emit 一次，看 ranks 变不变"当判据：真引擎里监听随节点销毁回收，
+    //  而夹具的 `FakeNode` 不会模拟回收，拿它断言等于把一个**夹具假象**固化成设计（规则 263c）。
     hud.onDestroy();
-    hud.rankButton.node.emit('click');
-    assert.equal(ranks, 2);
-    assert.equal(hud.mapViewport.listeners.length, 5);
-    assert.equal(hud.rankButton.node.listeners.length, 1);
 });
 
 test('地图拖动标记保持到触摸结束派发后，并随视口尺寸重新约束', () => {
-    const { hud } = createHud();
+    const { hud, mgr } = createHud();
     hud.onLoad(); // 引擎在节点激活时触发一次：棋盘触摸监听在此绑定（规范 7.2）
-    hud.initialize({ useArtifact() {} });
+    hud.initialize();
     hud.mapViewport.emit('start');
     hud.mapViewport.emit('move', { getUIDelta: () => ({ x: 10000, y: 10000 }) });
     assert.equal(hud.dragMoved, true);
@@ -711,7 +758,7 @@ test('ZCGameHUDView 的 23 个引用全部声明为 null! 且不再运行时按�
  *  3. 数字闪红是**跳变**、且偶数拍收尾 ⇒ 一定回到原色，不留一块红字在屏幕上。
  */
 test('金币不足：金币图标跳动（1~2px）+ 数字闪红，收尾落回静止态', () => {
-    const { hud, tweenRuns, hudModule } = createHud();
+    const { hud, tweenRuns, hudModule, mgr } = createHud();
     hud.goldIcon.setPosition(11, 22, 0);
     hud.goldLabel.color = { r: 10, g: 20, b: 30, a: 255 };
     const before = tweenRuns.length;
@@ -761,7 +808,7 @@ test('金币不足：金币图标跳动（1~2px）+ 数字闪红，收尾落回�
 });
 
 test('金币不足：连点不叠定时器，也不把图标留在半空', () => {
-    const { hud, tweenRuns } = createHud();
+    const { hud, tweenRuns, mgr } = createHud();
     hud.goldIcon.setPosition(11, 22, 0);
 
     const before = tweenRuns.length;

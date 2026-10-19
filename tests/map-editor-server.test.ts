@@ -104,49 +104,35 @@ test('地图编辑器服务端：/bg 背景图路由读游戏同源贴图，且�
     });
 });
 
-test('地图编辑器服务端：装饰值接受新格式 { art, span, offset }，坏 span / 压到陆地一律拒', async () => {
+test('地图编辑器服务端：校验并保存自由装饰，拒绝非法尺寸与翻转值', async () => {
     await withServer(async (base) => {
-        const probeIds = ['probe-multi-ok', 'probe-legacy', 'probe-oob', 'probe-land',
-            'probe-badspan', 'probe-empty-bg', 'probe-ok-bg'];
+        const probeIds = ['probe-free-ok', 'probe-size', 'probe-flip', 'probe-empty-bg', 'probe-ok-bg'];
         try {
-            // 多格对象落在虚空上 → 收下。
-            const multiOk = { ...basePreset('probe-multi-ok'), art: { tiles: {
-                '9,0': { art: 'image/decor/sea/reef', span: [[0, 0], [0, 1]], offset: [3, -2] },
-            } } };
-            const r1 = await putPreset(base, 'probe-multi-ok', multiOk);
-            assert.equal(r1.status, 200, '多格装饰应被接受：' + JSON.stringify(r1.body));
-            assert.deepEqual(r1.body.preset.art.tiles['9,0'].span, [[0, 0], [0, 1]], 'span 必须原样保存');
+            const valid = { ...basePreset('probe-free-ok'), art: { freeDecor: [{
+                id: 'rock', art: 'image/decor/sea/reef', x: 12, y: -8,
+                width: 240, height: 120, rotation: 15, flipX: true, flipY: false,
+            }] } };
+            const r1 = await putPreset(base, 'probe-free-ok', valid);
+            assert.equal(r1.status, 200, '自由装饰应被接受：' + JSON.stringify(r1.body));
+            assert.deepEqual(r1.body.preset.art.freeDecor, valid.art.freeDecor);
 
-            // 老字符串格式继续兼容（单格等价）。
-            const legacy = { ...basePreset('probe-legacy'), art: { tiles: { '9,0': 'image/decor/sea/reef' } } };
-            const r2 = await putPreset(base, 'probe-legacy', legacy);
-            assert.equal(r2.status, 200, '字符串格式必须继续被接受：' + JSON.stringify(r2.body));
+            const badSize = { ...basePreset('probe-size'), art: { freeDecor: [{
+                art: 'image/decor/sea/reef', x: 0, y: 0, width: 0, height: 100,
+            }] } };
+            assert.equal((await putPreset(base, 'probe-size', badSize)).status, 400);
 
-            // 多格 span 有一格越界 → 400（不是 500：这是输入问题，不是服务端崩了）。
-            const oob = { ...basePreset('probe-oob'), art: { tiles: {
-                '9,0': { art: 'image/decor/sea/reef', span: [[0, 0], [0, 100]] },
-            } } };
-            assert.equal((await putPreset(base, 'probe-oob', oob)).status, 400, '越界 span 应当 400');
-
-            // 多格 span 有一格压在可通行格上 → 400。
-            const onLand = { ...basePreset('probe-land'), art: { tiles: {
-                '9,0': { art: 'image/decor/sea/reef', span: [[0, 0], [0, 2]] },
-            } } };
-            assert.equal((await putPreset(base, 'probe-land', onLand)).status, 400, '压陆地 span 应当 400');
-
-            // 坏 span（[null, 1]）→ 400：不能因为 Number(null)===0 被悄悄收下。
-            const badSpan = { ...basePreset('probe-badspan'), art: { tiles: {
-                '9,0': { art: 'image/decor/sea/reef', span: [[null, 1]] },
-            } } };
-            assert.equal((await putPreset(base, 'probe-badspan', badSpan)).status, 400, '[null,1] span 应当 400');
+            const badFlip = { ...basePreset('probe-flip'), art: { freeDecor: [{
+                art: 'image/decor/sea/reef', x: 0, y: 0, width: 100, height: 100, flipX: 'yes',
+            }] } };
+            assert.equal((await putPreset(base, 'probe-flip', badFlip)).status, 400);
 
             // art.background 空串 → 400；合法 → 原样保留。
             const emptyBg = { ...basePreset('probe-empty-bg'), art: { background: '   ' } };
             assert.equal((await putPreset(base, 'probe-empty-bg', emptyBg)).status, 400, '空 background 应当 400');
             const okBg = { ...basePreset('probe-ok-bg'), art: { background: 'image/zdbg1' } };
-            const r3 = await putPreset(base, 'probe-ok-bg', okBg);
-            assert.equal(r3.status, 200);
-            assert.equal(r3.body.preset.art.background, 'image/zdbg1', 'background 必须原样透传');
+            const r2 = await putPreset(base, 'probe-ok-bg', okBg);
+            assert.equal(r2.status, 200);
+            assert.equal(r2.body.preset.art.background, 'image/zdbg1', 'background 必须原样透传');
         } finally {
             // 失败用例也不能把探针预设留在仓库里污染预设库。
             for (const id of probeIds) {

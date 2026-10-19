@@ -1,6 +1,6 @@
 {
   "id": "zcds-map-v3-decor",
-  "name": "虚空装饰",
+  "name": "自由装饰",
   "version": 3,
   "rows": 20,
   "columns": 11,
@@ -40,23 +40,29 @@
     }
   ],
   "art": {
-    "tiles": {
-      "6,1": "image/decor/reef",
-      "6,2": "image/decor/reef",
-      "6,3": "image/decor/reef",
-      "6,7": "image/decor/reef",
-      "6,8": "image/decor/reef",
-      "6,9": "image/decor/reef",
-      "7,4": "image/decor/reef",
-      "7,6": "image/decor/reef",
-      "12,4": "image/decor/reef",
-      "12,6": "image/decor/reef",
-      "13,1": "image/decor/reef",
-      "13,2": "image/decor/reef",
-      "13,3": "image/decor/reef",
-      "13,7": "image/decor/reef",
-      "13,8": "image/decor/reef",
-      "13,9": "image/decor/reef"
-    }
+    "freeDecor": [
+      {
+        "id": "reef-left",
+        "art": "image/decor/reef",
+        "x": -320,
+        "y": 120,
+        "width": 280,
+        "height": 140,
+        "rotation": -8,
+        "flipX": false,
+        "flipY": false
+      },
+      {
+        "id": "reef-right",
+        "art": "image/decor/reef",
+        "x": 340,
+        "y": -90,
+        "width": 220,
+        "height": 110,
+        "rotation": 12,
+        "flipX": true,
+        "flipY": false
+      }
+    ]
   }
 }

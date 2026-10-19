@@ -22,9 +22,6 @@
       "footprint": [
         326
       ],
-      "configId": "fixedResource_326",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           367
@@ -33,7 +30,10 @@
         "silverCost": 15,
         "exploreSeconds": 1,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_326",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_2",
@@ -42,9 +42,6 @@
       "footprint": [
         347
       ],
-      "configId": "fixedResource_347",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           367
@@ -53,7 +50,10 @@
         "silverCost": 15,
         "exploreSeconds": 1,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_347",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_3",
@@ -62,9 +62,6 @@
       "footprint": [
         348
       ],
-      "configId": "fixedResource_348",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           367
@@ -73,7 +70,10 @@
         "silverCost": 15,
         "exploreSeconds": 1,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_348",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "stage_4",
@@ -82,8 +82,6 @@
       "footprint": [
         327
       ],
-      "configId": "10001",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           367
@@ -92,7 +90,9 @@
         "silverCost": 30,
         "exploreSeconds": 2,
         "staminaCost": 5
-      }
+      },
+      "configId": "10001",
+      "buildingId": ""
     },
     {
       "id": "stage_5",
@@ -101,8 +101,6 @@
       "footprint": [
         328
       ],
-      "configId": "10001",
-      "buildingId": "69004",
       "unlock": {
         "requiredCells": [
           347,
@@ -112,7 +110,9 @@
         "silverCost": 30,
         "exploreSeconds": 2,
         "staminaCost": 5
-      }
+      },
+      "configId": "10001",
+      "buildingId": "69004"
     },
     {
       "id": "stage_6",
@@ -121,8 +121,6 @@
       "footprint": [
         288
       ],
-      "configId": "10002",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           327
@@ -131,7 +129,9 @@
         "silverCost": 30,
         "exploreSeconds": 2,
         "staminaCost": 5
-      }
+      },
+      "configId": "10002",
+      "buildingId": ""
     },
     {
       "id": "stage_7",
@@ -140,8 +140,6 @@
       "footprint": [
         309
       ],
-      "configId": "10002",
-      "buildingId": "69004",
       "unlock": {
         "requiredCells": [
           308,
@@ -152,7 +150,9 @@
         "silverCost": 30,
         "exploreSeconds": 2,
         "staminaCost": 5
-      }
+      },
+      "configId": "10002",
+      "buildingId": "69004"
     },
     {
       "id": "stage_8",
@@ -161,8 +161,6 @@
       "footprint": [
         310
       ],
-      "configId": "10002",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           308,
@@ -173,7 +171,9 @@
         "silverCost": 30,
         "exploreSeconds": 2,
         "staminaCost": 5
-      }
+      },
+      "configId": "10002",
+      "buildingId": ""
     },
     {
       "id": "stage_9",
@@ -182,8 +182,6 @@
       "footprint": [
         269
       ],
-      "configId": "10003",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           288
@@ -192,7 +190,9 @@
         "silverCost": 30,
         "exploreSeconds": 2,
         "staminaCost": 5
-      }
+      },
+      "configId": "10003",
+      "buildingId": ""
     },
     {
       "id": "stage_10",
@@ -201,8 +201,6 @@
       "footprint": [
         270
       ],
-      "configId": "10003",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           268,
@@ -213,7 +211,9 @@
         "silverCost": 30,
         "exploreSeconds": 2,
         "staminaCost": 5
-      }
+      },
+      "configId": "10003",
+      "buildingId": ""
     },
     {
       "id": "stage_11",
@@ -222,8 +222,6 @@
       "footprint": [
         291
       ],
-      "configId": "10003",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           268,
@@ -234,7 +232,9 @@
         "silverCost": 30,
         "exploreSeconds": 2,
         "staminaCost": 5
-      }
+      },
+      "configId": "10003",
+      "buildingId": ""
     },
     {
       "id": "fixedResource_12",
@@ -243,9 +243,6 @@
       "footprint": [
         268
       ],
-      "configId": "fixedResource_268",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           288
@@ -254,7 +251,10 @@
         "silverCost": 10,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_268",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_14",
@@ -263,9 +263,6 @@
       "footprint": [
         314
       ],
-      "configId": "fixedResource_314",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           288
@@ -274,7 +271,10 @@
         "silverCost": 20,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_314",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_15",
@@ -283,9 +283,6 @@
       "footprint": [
         313
       ],
-      "configId": "fixedResource_313",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           288
@@ -294,7 +291,10 @@
         "silverCost": 20,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_313",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_16",
@@ -303,9 +303,6 @@
       "footprint": [
         266
       ],
-      "configId": "fixedResource_266",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           288
@@ -314,7 +311,10 @@
         "silverCost": 15,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_266",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_17",
@@ -323,9 +323,6 @@
       "footprint": [
         267
       ],
-      "configId": "fixedResource_267",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           288
@@ -334,7 +331,10 @@
         "silverCost": 20,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_267",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_18",
@@ -343,9 +343,6 @@
       "footprint": [
         292
       ],
-      "configId": "fixedResource_292",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           288
@@ -354,7 +351,10 @@
         "silverCost": 15,
         "exploreSeconds": 1,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_292",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "stage_19",
@@ -363,8 +363,6 @@
       "footprint": [
         252
       ],
-      "configId": "10004",
-      "buildingId": "69004",
       "unlock": {
         "requiredCells": [
           269
@@ -373,7 +371,9 @@
         "silverCost": 30,
         "exploreSeconds": 2,
         "staminaCost": 5
-      }
+      },
+      "configId": "10004",
+      "buildingId": "69004"
     },
     {
       "id": "fixedResource_26",
@@ -382,9 +382,6 @@
       "footprint": [
         173
       ],
-      "configId": "fixedResource_173",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           192
@@ -393,7 +390,10 @@
         "silverCost": 15,
         "exploreSeconds": 1,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_173",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_27",
@@ -402,9 +402,6 @@
       "footprint": [
         195
       ],
-      "configId": "fixedResource_173",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           192
@@ -413,7 +410,10 @@
         "silverCost": 15,
         "exploreSeconds": 1,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_173",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_28",
@@ -422,9 +422,6 @@
       "footprint": [
         174
       ],
-      "configId": "fixedResource_173",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           192
@@ -433,7 +430,10 @@
         "silverCost": 20,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_173",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_31",
@@ -442,9 +442,6 @@
       "footprint": [
         191
       ],
-      "configId": "fixedResource_191",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           192
@@ -453,7 +450,10 @@
         "silverCost": 15,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_191",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_25",
@@ -462,9 +462,6 @@
       "footprint": [
         231
       ],
-      "configId": "fixedResource_231",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           252
@@ -473,7 +470,10 @@
         "silverCost": 10,
         "exploreSeconds": 1,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_231",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "boss_28",
@@ -482,8 +482,6 @@
       "footprint": [
         213
       ],
-      "configId": "10005",
-      "buildingId": "69003",
       "unlock": {
         "requiredCells": [
           252
@@ -492,7 +490,9 @@
         "silverCost": 50,
         "exploreSeconds": 4,
         "staminaCost": 5
-      }
+      },
+      "configId": "10005",
+      "buildingId": "69003"
     },
     {
       "id": "boss_29",
@@ -501,8 +501,6 @@
       "footprint": [
         193
       ],
-      "configId": "10005",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           252,
@@ -514,7 +512,9 @@
         "silverCost": 50,
         "exploreSeconds": 4,
         "staminaCost": 5
-      }
+      },
+      "configId": "10005",
+      "buildingId": ""
     },
     {
       "id": "boss_30",
@@ -523,8 +523,6 @@
       "footprint": [
         194
       ],
-      "configId": "10005",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           252,
@@ -536,7 +534,9 @@
         "silverCost": 50,
         "exploreSeconds": 4,
         "staminaCost": 5
-      }
+      },
+      "configId": "10005",
+      "buildingId": ""
     },
     {
       "id": "boss_31",
@@ -545,8 +545,6 @@
       "footprint": [
         214
       ],
-      "configId": "10005",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           252,
@@ -558,7 +556,9 @@
         "silverCost": 50,
         "exploreSeconds": 4,
         "staminaCost": 5
-      }
+      },
+      "configId": "10005",
+      "buildingId": ""
     },
     {
       "id": "boss_32",
@@ -567,8 +567,6 @@
       "footprint": [
         233
       ],
-      "configId": "10005",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           252,
@@ -580,7 +578,9 @@
         "silverCost": 50,
         "exploreSeconds": 4,
         "staminaCost": 5
-      }
+      },
+      "configId": "10005",
+      "buildingId": ""
     },
     {
       "id": "boss_33",
@@ -589,8 +589,6 @@
       "footprint": [
         192
       ],
-      "configId": "10005",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           252,
@@ -602,7 +600,9 @@
         "silverCost": 50,
         "exploreSeconds": 4,
         "staminaCost": 5
-      }
+      },
+      "configId": "10005",
+      "buildingId": ""
     },
     {
       "id": "boss_34",
@@ -611,8 +611,6 @@
       "footprint": [
         212
       ],
-      "configId": "10005",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           252,
@@ -624,7 +622,9 @@
         "silverCost": 50,
         "exploreSeconds": 4,
         "staminaCost": 5
-      }
+      },
+      "configId": "10005",
+      "buildingId": ""
     },
     {
       "id": "fixedResource_33",
@@ -633,9 +633,6 @@
       "footprint": [
         232
       ],
-      "configId": "fixedResource_232",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           252
@@ -644,7 +641,10 @@
         "silverCost": 10,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_232",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_34",
@@ -653,9 +653,6 @@
       "footprint": [
         253
       ],
-      "configId": "fixedResource_253",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           252
@@ -664,7 +661,10 @@
         "silverCost": 10,
         "exploreSeconds": 1,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_253",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_35",
@@ -673,9 +673,6 @@
       "footprint": [
         206
       ],
-      "configId": "fixedResource_206",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           267
@@ -684,7 +681,10 @@
         "silverCost": 15,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_206",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_36",
@@ -693,9 +693,6 @@
       "footprint": [
         226
       ],
-      "configId": "fixedResource_226",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           267
@@ -704,7 +701,10 @@
         "silverCost": 15,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_226",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_37",
@@ -713,9 +713,6 @@
       "footprint": [
         246
       ],
-      "configId": "fixedResource_246",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           267
@@ -724,7 +721,10 @@
         "silverCost": 15,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_246",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_38",
@@ -733,9 +733,6 @@
       "footprint": [
         186
       ],
-      "configId": "fixedResource_186",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           190
@@ -744,7 +741,10 @@
         "silverCost": 15,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_186",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_39",
@@ -753,9 +753,6 @@
       "footprint": [
         308
       ],
-      "configId": "fixedResource_308",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           327
@@ -764,7 +761,10 @@
         "silverCost": 15,
         "exploreSeconds": 1,
         "staminaCost": 5
-      }
+      },
+      "configId": "fixedResource_308",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_40",
@@ -773,9 +773,6 @@
       "footprint": [
         329
       ],
-      "configId": "fixedResource_329",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           327
@@ -784,7 +781,10 @@
         "silverCost": 15,
         "exploreSeconds": 1,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_329",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_41",
@@ -793,9 +793,6 @@
       "footprint": [
         250
       ],
-      "configId": "fixedResource_250",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           269
@@ -804,7 +801,10 @@
         "silverCost": 10,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_250",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_42",
@@ -813,9 +813,6 @@
       "footprint": [
         271
       ],
-      "configId": "fixedResource_271",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           269
@@ -824,7 +821,10 @@
         "silverCost": 15,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_271",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_43",
@@ -833,9 +833,6 @@
       "footprint": [
         272
       ],
-      "configId": "fixedResource_272",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           269
@@ -844,7 +841,10 @@
         "silverCost": 15,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_272",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_44",
@@ -853,9 +853,6 @@
       "footprint": [
         249
       ],
-      "configId": "fixedResource_249",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           269
@@ -864,7 +861,10 @@
         "silverCost": 15,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_249",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_45",
@@ -873,9 +873,6 @@
       "footprint": [
         248
       ],
-      "configId": "fixedResource_248",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           269
@@ -884,7 +881,10 @@
         "silverCost": 10,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_248",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_46",
@@ -893,9 +893,6 @@
       "footprint": [
         154
       ],
-      "configId": "fixedResource_154",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           173,
@@ -905,7 +902,10 @@
         "silverCost": 20,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_154",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_47",
@@ -914,9 +914,6 @@
       "footprint": [
         175
       ],
-      "configId": "fixedResource_175",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           174,
@@ -926,7 +923,10 @@
         "silverCost": 15,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_175",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_49",
@@ -935,9 +935,6 @@
       "footprint": [
         176
       ],
-      "configId": "fixedResource_176",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           195
@@ -946,7 +943,10 @@
         "silverCost": 15,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_176",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_53",
@@ -955,9 +955,6 @@
       "footprint": [
         153
       ],
-      "configId": "fixedResource_153",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           173
@@ -966,7 +963,10 @@
         "silverCost": 15,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_153",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_57",
@@ -975,9 +975,6 @@
       "footprint": [
         234
       ],
-      "configId": "fixedResource_234",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           253
@@ -986,7 +983,10 @@
         "silverCost": 10,
         "exploreSeconds": 1,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_234",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_58",
@@ -995,9 +995,6 @@
       "footprint": [
         235
       ],
-      "configId": "fixedResource_235",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           234
@@ -1006,7 +1003,10 @@
         "silverCost": 10,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_235",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_59",
@@ -1015,9 +1015,6 @@
       "footprint": [
         138
       ],
-      "configId": "fixedResource_138",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           157
@@ -1026,7 +1023,10 @@
         "silverCost": 15,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_138",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_60",
@@ -1035,9 +1035,6 @@
       "footprint": [
         139
       ],
-      "configId": "fixedResource_139",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           138
@@ -1046,7 +1043,10 @@
         "silverCost": 15,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_139",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "stage_62",
@@ -1055,8 +1055,6 @@
       "footprint": [
         95
       ],
-      "configId": "10007",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           155
@@ -1065,7 +1063,9 @@
         "silverCost": 30,
         "exploreSeconds": 2,
         "staminaCost": 5
-      }
+      },
+      "configId": "10007",
+      "buildingId": ""
     },
     {
       "id": "stage_63",
@@ -1074,8 +1074,6 @@
       "footprint": [
         94
       ],
-      "configId": "10007",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           112,
@@ -1085,7 +1083,9 @@
         "silverCost": 30,
         "exploreSeconds": 2,
         "staminaCost": 5
-      }
+      },
+      "configId": "10007",
+      "buildingId": ""
     },
     {
       "id": "stage_64",
@@ -1094,8 +1094,6 @@
       "footprint": [
         113
       ],
-      "configId": "10007",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           112,
@@ -1105,7 +1103,9 @@
         "silverCost": 30,
         "exploreSeconds": 2,
         "staminaCost": 5
-      }
+      },
+      "configId": "10007",
+      "buildingId": ""
     },
     {
       "id": "stage_65",
@@ -1114,8 +1114,6 @@
       "footprint": [
         70
       ],
-      "configId": "10008",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           95
@@ -1124,7 +1122,9 @@
         "silverCost": 30,
         "exploreSeconds": 2,
         "staminaCost": 5
-      }
+      },
+      "configId": "10008",
+      "buildingId": ""
     },
     {
       "id": "stage_66",
@@ -1133,8 +1133,6 @@
       "footprint": [
         90
       ],
-      "configId": "10008",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           52,
@@ -1145,7 +1143,9 @@
         "silverCost": 30,
         "exploreSeconds": 2,
         "staminaCost": 5
-      }
+      },
+      "configId": "10008",
+      "buildingId": ""
     },
     {
       "id": "stage_67",
@@ -1154,8 +1154,6 @@
       "footprint": [
         110
       ],
-      "configId": "10008",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           52,
@@ -1166,7 +1164,9 @@
         "silverCost": 30,
         "exploreSeconds": 2,
         "staminaCost": 5
-      }
+      },
+      "configId": "10008",
+      "buildingId": ""
     },
     {
       "id": "fixedResource_79",
@@ -1175,9 +1175,6 @@
       "footprint": [
         55
       ],
-      "configId": "fixedResource_55",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           94
@@ -1186,7 +1183,10 @@
         "silverCost": 10,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_55",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_86",
@@ -1195,9 +1195,6 @@
       "footprint": [
         131
       ],
-      "configId": "fixedResource_131",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           134
@@ -1206,7 +1203,10 @@
         "silverCost": 15,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_131",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_87",
@@ -1215,9 +1215,6 @@
       "footprint": [
         112
       ],
-      "configId": "fixedResource_112",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           134
@@ -1226,7 +1223,10 @@
         "silverCost": 15,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_112",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "asyncPvp_89",
@@ -1235,8 +1235,6 @@
       "footprint": [
         373
       ],
-      "configId": "20001",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           313,
@@ -1246,7 +1244,9 @@
         "silverCost": 100,
         "exploreSeconds": 5,
         "staminaCost": 5
-      }
+      },
+      "configId": "20001",
+      "buildingId": ""
     },
     {
       "id": "asyncPvp_94",
@@ -1255,8 +1255,6 @@
       "footprint": [
         198
       ],
-      "configId": "20003",
-      "buildingId": "69002",
       "unlock": {
         "requiredCells": [
           176
@@ -1265,7 +1263,9 @@
         "silverCost": 100,
         "exploreSeconds": 7,
         "staminaCost": 5
-      }
+      },
+      "configId": "20003",
+      "buildingId": "69002"
     },
     {
       "id": "asyncPvp_95",
@@ -1274,8 +1274,6 @@
       "footprint": [
         178
       ],
-      "configId": "20003",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           176
@@ -1284,7 +1282,9 @@
         "silverCost": 10,
         "exploreSeconds": 7,
         "staminaCost": 5
-      }
+      },
+      "configId": "20003",
+      "buildingId": ""
     },
     {
       "id": "asyncPvp_99",
@@ -1293,8 +1293,6 @@
       "footprint": [
         197
       ],
-      "configId": "20003",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           176
@@ -1303,7 +1301,9 @@
         "silverCost": 100,
         "exploreSeconds": 7,
         "staminaCost": 5
-      }
+      },
+      "configId": "20003",
+      "buildingId": ""
     },
     {
       "id": "asyncPvp_100",
@@ -1312,8 +1312,6 @@
       "footprint": [
         217
       ],
-      "configId": "20003",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           176
@@ -1322,7 +1320,9 @@
         "silverCost": 100,
         "exploreSeconds": 7,
         "staminaCost": 5
-      }
+      },
+      "configId": "20003",
+      "buildingId": ""
     },
     {
       "id": "asyncPvp_91",
@@ -1331,8 +1331,6 @@
       "footprint": [
         142
       ],
-      "configId": "20004",
-      "buildingId": "69002",
       "unlock": {
         "requiredCells": [
           124,
@@ -1343,7 +1341,9 @@
         "silverCost": 10,
         "exploreSeconds": 8,
         "staminaCost": 5
-      }
+      },
+      "configId": "20004",
+      "buildingId": "69002"
     },
     {
       "id": "asyncPvp_92",
@@ -1352,8 +1352,6 @@
       "footprint": [
         122
       ],
-      "configId": "20004",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           124,
@@ -1364,7 +1362,9 @@
         "silverCost": 10,
         "exploreSeconds": 8,
         "staminaCost": 5
-      }
+      },
+      "configId": "20004",
+      "buildingId": ""
     },
     {
       "id": "asyncPvp_93",
@@ -1373,8 +1373,6 @@
       "footprint": [
         143
       ],
-      "configId": "20004",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           124,
@@ -1385,7 +1383,9 @@
         "silverCost": 10,
         "exploreSeconds": 8,
         "staminaCost": 5
-      }
+      },
+      "configId": "20004",
+      "buildingId": ""
     },
     {
       "id": "fixedResource_98",
@@ -1394,9 +1394,6 @@
       "footprint": [
         182
       ],
-      "configId": "fixedResource_182",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           163,
@@ -1407,7 +1404,10 @@
         "silverCost": 20,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_182",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_99",
@@ -1416,9 +1416,6 @@
       "footprint": [
         181
       ],
-      "configId": "fixedResource_181",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           163,
@@ -1429,7 +1426,10 @@
         "silverCost": 20,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_181",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_100",
@@ -1438,9 +1438,6 @@
       "footprint": [
         160
       ],
-      "configId": "fixedResource_160",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           163,
@@ -1451,7 +1448,10 @@
         "silverCost": 20,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_160",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_101",
@@ -1460,9 +1460,6 @@
       "footprint": [
         180
       ],
-      "configId": "fixedResource_180",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           160,
@@ -1472,7 +1469,10 @@
         "silverCost": 20,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_180",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_102",
@@ -1481,9 +1481,6 @@
       "footprint": [
         200
       ],
-      "configId": "fixedResource_200",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           180,
@@ -1493,7 +1490,10 @@
         "silverCost": 20,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_200",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_103",
@@ -1502,9 +1502,6 @@
       "footprint": [
         201
       ],
-      "configId": "fixedResource_201",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           181,
@@ -1514,7 +1511,10 @@
         "silverCost": 20,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_201",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_104",
@@ -1523,9 +1523,6 @@
       "footprint": [
         202
       ],
-      "configId": "fixedResource_202",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           182
@@ -1534,7 +1531,10 @@
         "silverCost": 10,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_202",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "boss_105",
@@ -1543,8 +1543,6 @@
       "footprint": [
         105
       ],
-      "configId": "10010",
-      "buildingId": "69003",
       "unlock": {
         "requiredCells": [
           8
@@ -1553,7 +1551,9 @@
         "silverCost": 35,
         "exploreSeconds": 4,
         "staminaCost": 5
-      }
+      },
+      "configId": "10010",
+      "buildingId": "69003"
     },
     {
       "id": "boss_106",
@@ -1562,8 +1562,6 @@
       "footprint": [
         85
       ],
-      "configId": "10010",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           107,
@@ -1575,7 +1573,9 @@
         "silverCost": 35,
         "exploreSeconds": 4,
         "staminaCost": 5
-      }
+      },
+      "configId": "10010",
+      "buildingId": ""
     },
     {
       "id": "boss_107",
@@ -1584,8 +1584,6 @@
       "footprint": [
         86
       ],
-      "configId": "10010",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           107,
@@ -1597,7 +1595,9 @@
         "silverCost": 35,
         "exploreSeconds": 4,
         "staminaCost": 5
-      }
+      },
+      "configId": "10010",
+      "buildingId": ""
     },
     {
       "id": "boss_108",
@@ -1606,8 +1606,6 @@
       "footprint": [
         106
       ],
-      "configId": "10010",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           107,
@@ -1619,7 +1617,9 @@
         "silverCost": 35,
         "exploreSeconds": 4,
         "staminaCost": 5
-      }
+      },
+      "configId": "10010",
+      "buildingId": ""
     },
     {
       "id": "boss_109",
@@ -1628,8 +1628,6 @@
       "footprint": [
         125
       ],
-      "configId": "10010",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           107,
@@ -1641,7 +1639,9 @@
         "silverCost": 35,
         "exploreSeconds": 4,
         "staminaCost": 5
-      }
+      },
+      "configId": "10010",
+      "buildingId": ""
     },
     {
       "id": "boss_110",
@@ -1650,8 +1650,6 @@
       "footprint": [
         84
       ],
-      "configId": "10010",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           107,
@@ -1663,7 +1661,9 @@
         "silverCost": 35,
         "exploreSeconds": 4,
         "staminaCost": 5
-      }
+      },
+      "configId": "10010",
+      "buildingId": ""
     },
     {
       "id": "boss_111",
@@ -1672,8 +1672,6 @@
       "footprint": [
         104
       ],
-      "configId": "10010",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           107,
@@ -1685,7 +1683,9 @@
         "silverCost": 35,
         "exploreSeconds": 4,
         "staminaCost": 5
-      }
+      },
+      "configId": "10010",
+      "buildingId": ""
     },
     {
       "id": "asyncPvp_112",
@@ -1694,8 +1694,6 @@
       "footprint": [
         148
       ],
-      "configId": "20002",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           189,
@@ -1705,7 +1703,9 @@
         "silverCost": 10,
         "exploreSeconds": 7,
         "staminaCost": 5
-      }
+      },
+      "configId": "20002",
+      "buildingId": ""
     },
     {
       "id": "asyncPvp_113",
@@ -1714,8 +1714,6 @@
       "footprint": [
         167
       ],
-      "configId": "20002",
-      "buildingId": "69002",
       "unlock": {
         "requiredCells": [
           189,
@@ -1725,7 +1723,9 @@
         "silverCost": 10,
         "exploreSeconds": 7,
         "staminaCost": 5
-      }
+      },
+      "configId": "20002",
+      "buildingId": "69002"
     },
     {
       "id": "fixedResource_111",
@@ -1734,9 +1734,6 @@
       "footprint": [
         393
       ],
-      "configId": "fixedResource_393",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           373,
@@ -1747,7 +1744,10 @@
         "silverCost": 15,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_393",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_112",
@@ -1756,9 +1756,6 @@
       "footprint": [
         374
       ],
-      "configId": "fixedResource_374",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           373,
@@ -1769,7 +1766,10 @@
         "silverCost": 15,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_374",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_113",
@@ -1778,9 +1778,6 @@
       "footprint": [
         394
       ],
-      "configId": "fixedResource_394",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           373,
@@ -1791,7 +1788,10 @@
         "silverCost": 20,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_394",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_114",
@@ -1800,9 +1800,6 @@
       "footprint": [
         354
       ],
-      "configId": "fixedResource_354",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           373,
@@ -1813,7 +1810,10 @@
         "silverCost": 20,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_354",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "asyncPvp_109",
@@ -1822,8 +1822,6 @@
       "footprint": [
         372
       ],
-      "configId": "20001",
-      "buildingId": "69002",
       "unlock": {
         "requiredCells": [
           313,
@@ -1833,7 +1831,9 @@
         "silverCost": 100,
         "exploreSeconds": 5,
         "staminaCost": 5
-      }
+      },
+      "configId": "20001",
+      "buildingId": "69002"
     },
     {
       "id": "asyncPvp_110",
@@ -1842,8 +1842,6 @@
       "footprint": [
         392
       ],
-      "configId": "20001",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           313,
@@ -1853,7 +1851,9 @@
         "silverCost": 100,
         "exploreSeconds": 5,
         "staminaCost": 5
-      }
+      },
+      "configId": "20001",
+      "buildingId": ""
     },
     {
       "id": "asyncPvp_111",
@@ -1862,8 +1862,6 @@
       "footprint": [
         141
       ],
-      "configId": "20004",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           124,
@@ -1874,7 +1872,9 @@
         "silverCost": 10,
         "exploreSeconds": 8,
         "staminaCost": 5
-      }
+      },
+      "configId": "20004",
+      "buildingId": ""
     },
     {
       "id": "asyncPvp_114",
@@ -1883,8 +1883,6 @@
       "footprint": [
         163
       ],
-      "configId": "20004",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           124,
@@ -1895,7 +1893,9 @@
         "silverCost": 10,
         "exploreSeconds": 8,
         "staminaCost": 5
-      }
+      },
+      "configId": "20004",
+      "buildingId": ""
     },
     {
       "id": "stage_113",
@@ -1904,8 +1904,6 @@
       "footprint": [
         8
       ],
-      "configId": "10009",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           70
@@ -1914,7 +1912,9 @@
         "silverCost": 10,
         "exploreSeconds": 2,
         "staminaCost": 5
-      }
+      },
+      "configId": "10009",
+      "buildingId": ""
     },
     {
       "id": "stage_114",
@@ -1923,8 +1923,6 @@
       "footprint": [
         28
       ],
-      "configId": "10009",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           109,
@@ -1937,7 +1935,9 @@
         "silverCost": 10,
         "exploreSeconds": 2,
         "staminaCost": 5
-      }
+      },
+      "configId": "10009",
+      "buildingId": ""
     },
     {
       "id": "stage_115",
@@ -1946,8 +1946,6 @@
       "footprint": [
         48
       ],
-      "configId": "10009",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           109,
@@ -1960,7 +1958,9 @@
         "silverCost": 10,
         "exploreSeconds": 2,
         "staminaCost": 5
-      }
+      },
+      "configId": "10009",
+      "buildingId": ""
     },
     {
       "id": "boss_117",
@@ -1969,8 +1969,6 @@
       "footprint": [
         65
       ],
-      "configId": "10010",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           107,
@@ -1982,7 +1980,9 @@
         "silverCost": 35,
         "exploreSeconds": 4,
         "staminaCost": 5
-      }
+      },
+      "configId": "10010",
+      "buildingId": ""
     },
     {
       "id": "boss_118",
@@ -1991,8 +1991,6 @@
       "footprint": [
         64
       ],
-      "configId": "10010",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           107,
@@ -2004,7 +2002,9 @@
         "silverCost": 35,
         "exploreSeconds": 4,
         "staminaCost": 5
-      }
+      },
+      "configId": "10010",
+      "buildingId": ""
     },
     {
       "id": "boss_119",
@@ -2013,8 +2013,6 @@
       "footprint": [
         83
       ],
-      "configId": "10010",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           107,
@@ -2026,7 +2024,9 @@
         "silverCost": 35,
         "exploreSeconds": 4,
         "staminaCost": 5
-      }
+      },
+      "configId": "10010",
+      "buildingId": ""
     },
     {
       "id": "boss_120",
@@ -2035,8 +2035,6 @@
       "footprint": [
         63
       ],
-      "configId": "10010",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           107,
@@ -2048,7 +2046,9 @@
         "silverCost": 35,
         "exploreSeconds": 4,
         "staminaCost": 5
-      }
+      },
+      "configId": "10010",
+      "buildingId": ""
     },
     {
       "id": "stage_117",
@@ -2057,8 +2057,6 @@
       "footprint": [
         111
       ],
-      "configId": "10008",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           52,
@@ -2069,7 +2067,9 @@
         "silverCost": 30,
         "exploreSeconds": 2,
         "staminaCost": 5
-      }
+      },
+      "configId": "10008",
+      "buildingId": ""
     },
     {
       "id": "stage_118",
@@ -2078,8 +2078,6 @@
       "footprint": [
         91
       ],
-      "configId": "10008",
-      "buildingId": "69004",
       "unlock": {
         "requiredCells": [
           52,
@@ -2090,7 +2088,9 @@
         "silverCost": 30,
         "exploreSeconds": 2,
         "staminaCost": 5
-      }
+      },
+      "configId": "10008",
+      "buildingId": "69004"
     },
     {
       "id": "stage_119",
@@ -2099,8 +2099,6 @@
       "footprint": [
         71
       ],
-      "configId": "10008",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           52,
@@ -2111,7 +2109,9 @@
         "silverCost": 30,
         "exploreSeconds": 2,
         "staminaCost": 5
-      }
+      },
+      "configId": "10008",
+      "buildingId": ""
     },
     {
       "id": "stage_120",
@@ -2120,8 +2120,6 @@
       "footprint": [
         50
       ],
-      "configId": "10008",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           52,
@@ -2132,7 +2130,9 @@
         "silverCost": 30,
         "exploreSeconds": 2,
         "staminaCost": 5
-      }
+      },
+      "configId": "10008",
+      "buildingId": ""
     },
     {
       "id": "stage_122",
@@ -2141,8 +2141,6 @@
       "footprint": [
         68
       ],
-      "configId": "10009",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           109,
@@ -2155,7 +2153,9 @@
         "silverCost": 10,
         "exploreSeconds": 2,
         "staminaCost": 5
-      }
+      },
+      "configId": "10009",
+      "buildingId": ""
     },
     {
       "id": "stage_124",
@@ -2164,8 +2164,6 @@
       "footprint": [
         67
       ],
-      "configId": "10009",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           109,
@@ -2178,7 +2176,9 @@
         "silverCost": 10,
         "exploreSeconds": 2,
         "staminaCost": 5
-      }
+      },
+      "configId": "10009",
+      "buildingId": ""
     },
     {
       "id": "stage_125",
@@ -2187,8 +2187,6 @@
       "footprint": [
         47
       ],
-      "configId": "10009",
-      "buildingId": "69004",
       "unlock": {
         "requiredCells": [
           109,
@@ -2201,7 +2199,9 @@
         "silverCost": 10,
         "exploreSeconds": 2,
         "staminaCost": 5
-      }
+      },
+      "configId": "10009",
+      "buildingId": "69004"
     },
     {
       "id": "stage_126",
@@ -2210,8 +2210,6 @@
       "footprint": [
         27
       ],
-      "configId": "10009",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           109,
@@ -2224,7 +2222,9 @@
         "silverCost": 10,
         "exploreSeconds": 2,
         "staminaCost": 5
-      }
+      },
+      "configId": "10009",
+      "buildingId": ""
     },
     {
       "id": "stage_127",
@@ -2233,8 +2233,6 @@
       "footprint": [
         26
       ],
-      "configId": "10009",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           109,
@@ -2247,7 +2245,9 @@
         "silverCost": 10,
         "exploreSeconds": 2,
         "staminaCost": 5
-      }
+      },
+      "configId": "10009",
+      "buildingId": ""
     },
     {
       "id": "fixedResource_126",
@@ -2256,9 +2256,6 @@
       "footprint": [
         89
       ],
-      "configId": "fixedResource_89",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           50
@@ -2267,7 +2264,10 @@
         "silverCost": 15,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_89",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_127",
@@ -2276,9 +2276,6 @@
       "footprint": [
         69
       ],
-      "configId": "fixedResource_69",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           50
@@ -2287,7 +2284,10 @@
         "silverCost": 10,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_69",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_128",
@@ -2296,9 +2296,6 @@
       "footprint": [
         49
       ],
-      "configId": "fixedResource_49",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           50
@@ -2307,7 +2304,10 @@
         "silverCost": 15,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_49",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_129",
@@ -2316,9 +2316,6 @@
       "footprint": [
         29
       ],
-      "configId": "fixedResource_29",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           49
@@ -2327,7 +2324,10 @@
         "silverCost": 15,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_29",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_130",
@@ -2336,9 +2336,6 @@
       "footprint": [
         109
       ],
-      "configId": "fixedResource_109",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           50
@@ -2347,7 +2344,10 @@
         "silverCost": 20,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_109",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_132",
@@ -2356,9 +2356,6 @@
       "footprint": [
         46
       ],
-      "configId": "fixedResource_46",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           26
@@ -2367,7 +2364,10 @@
         "silverCost": 10,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_46",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_133",
@@ -2376,9 +2376,6 @@
       "footprint": [
         66
       ],
-      "configId": "fixedResource_66",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           26
@@ -2387,7 +2384,10 @@
         "silverCost": 10,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_66",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_134",
@@ -2396,9 +2396,6 @@
       "footprint": [
         87
       ],
-      "configId": "fixedResource_87",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           26
@@ -2407,7 +2404,10 @@
         "silverCost": 10,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_87",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_135",
@@ -2416,9 +2416,6 @@
       "footprint": [
         107
       ],
-      "configId": "fixedResource_107",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           26
@@ -2427,7 +2424,10 @@
         "silverCost": 10,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_107",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "stage_133",
@@ -2436,8 +2436,6 @@
       "footprint": [
         75
       ],
-      "configId": "10007",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           112,
@@ -2447,7 +2445,9 @@
         "silverCost": 30,
         "exploreSeconds": 2,
         "staminaCost": 5
-      }
+      },
+      "configId": "10007",
+      "buildingId": ""
     },
     {
       "id": "stage_134",
@@ -2456,8 +2456,6 @@
       "footprint": [
         74
       ],
-      "configId": "10007",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           112,
@@ -2467,7 +2465,9 @@
         "silverCost": 30,
         "exploreSeconds": 2,
         "staminaCost": 5
-      }
+      },
+      "configId": "10007",
+      "buildingId": ""
     },
     {
       "id": "stage_135",
@@ -2476,8 +2476,6 @@
       "footprint": [
         93
       ],
-      "configId": "10007",
-      "buildingId": "69004",
       "unlock": {
         "requiredCells": [
           112,
@@ -2487,7 +2485,9 @@
         "silverCost": 30,
         "exploreSeconds": 2,
         "staminaCost": 5
-      }
+      },
+      "configId": "10007",
+      "buildingId": "69004"
     },
     {
       "id": "asyncPvp_136",
@@ -2496,8 +2496,6 @@
       "footprint": [
         168
       ],
-      "configId": "20002",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           189,
@@ -2507,7 +2505,9 @@
         "silverCost": 10,
         "exploreSeconds": 7,
         "staminaCost": 5
-      }
+      },
+      "configId": "20002",
+      "buildingId": ""
     },
     {
       "id": "fixedResource_137",
@@ -2516,9 +2516,6 @@
       "footprint": [
         114
       ],
-      "configId": "fixedResource_114",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           134
@@ -2527,7 +2524,10 @@
         "silverCost": 20,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_114",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_138",
@@ -2536,9 +2536,6 @@
       "footprint": [
         115
       ],
-      "configId": "fixedResource_115",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           134
@@ -2547,7 +2544,10 @@
         "silverCost": 20,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_115",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_142",
@@ -2556,9 +2556,6 @@
       "footprint": [
         92
       ],
-      "configId": "fixedResource_92",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           112
@@ -2567,7 +2564,10 @@
         "silverCost": 15,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_92",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_143",
@@ -2576,9 +2576,6 @@
       "footprint": [
         72
       ],
-      "configId": "fixedResource_72",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           92
@@ -2587,7 +2584,10 @@
         "silverCost": 15,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_72",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_144",
@@ -2596,9 +2596,6 @@
       "footprint": [
         73
       ],
-      "configId": "fixedResource_73",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           74
@@ -2607,7 +2604,10 @@
         "silverCost": 15,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_73",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_145",
@@ -2616,9 +2616,6 @@
       "footprint": [
         53
       ],
-      "configId": "fixedResource_53",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           54
@@ -2627,7 +2624,10 @@
         "silverCost": 15,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_53",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_146",
@@ -2636,9 +2636,6 @@
       "footprint": [
         52
       ],
-      "configId": "fixedResource_52",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           72
@@ -2647,7 +2644,10 @@
         "silverCost": 10,
         "exploreSeconds": 2,
         "staminaCost": 5
-      }
+      },
+      "configId": "fixedResource_52",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_147",
@@ -2656,9 +2656,6 @@
       "footprint": [
         32
       ],
-      "configId": "fixedResource_32",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           52
@@ -2667,7 +2664,10 @@
         "silverCost": 20,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_32",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_148",
@@ -2676,9 +2676,6 @@
       "footprint": [
         51
       ],
-      "configId": "fixedResource_51",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           52,
@@ -2688,7 +2685,10 @@
         "silverCost": 15,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_51",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_149",
@@ -2697,9 +2697,6 @@
       "footprint": [
         12
       ],
-      "configId": "fixedResource_12",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           32
@@ -2708,7 +2705,10 @@
         "silverCost": 15,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_12",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_150",
@@ -2717,9 +2717,6 @@
       "footprint": [
         124
       ],
-      "configId": "fixedResource_124",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           83
@@ -2728,7 +2725,10 @@
         "silverCost": 20,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_124",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_151",
@@ -2737,9 +2737,6 @@
       "footprint": [
         123
       ],
-      "configId": "fixedResource_123",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           83
@@ -2748,7 +2745,10 @@
         "silverCost": 10,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_123",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_152",
@@ -2757,9 +2757,6 @@
       "footprint": [
         103
       ],
-      "configId": "fixedResource_103",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           83
@@ -2768,7 +2765,10 @@
         "silverCost": 15,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_103",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_153",
@@ -2777,9 +2777,6 @@
       "footprint": [
         102
       ],
-      "configId": "fixedResource_102",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           103
@@ -2788,7 +2785,10 @@
         "silverCost": 20,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_102",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_154",
@@ -2797,9 +2797,6 @@
       "footprint": [
         101
       ],
-      "configId": "fixedResource_101",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           102
@@ -2808,7 +2805,10 @@
         "silverCost": 15,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_101",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_155",
@@ -2817,9 +2817,6 @@
       "footprint": [
         100
       ],
-      "configId": "fixedResource_100",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           101
@@ -2828,7 +2825,10 @@
         "silverCost": 15,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_100",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_157",
@@ -2837,9 +2837,6 @@
       "footprint": [
         127
       ],
-      "configId": "fixedResource_127",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           109
@@ -2848,7 +2845,10 @@
         "silverCost": 15,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_127",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_158",
@@ -2857,9 +2857,6 @@
       "footprint": [
         128
       ],
-      "configId": "fixedResource_128",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           109
@@ -2868,7 +2865,10 @@
         "silverCost": 20,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_128",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "stage_150",
@@ -2877,8 +2877,6 @@
       "footprint": [
         155
       ],
-      "configId": "10006",
-      "buildingId": "69004",
       "unlock": {
         "requiredCells": [
           153,
@@ -2890,7 +2888,9 @@
         "silverCost": 30,
         "exploreSeconds": 2,
         "staminaCost": 5
-      }
+      },
+      "configId": "10006",
+      "buildingId": "69004"
     },
     {
       "id": "stage_151",
@@ -2899,8 +2899,6 @@
       "footprint": [
         156
       ],
-      "configId": "10006",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           153,
@@ -2912,7 +2910,9 @@
         "silverCost": 30,
         "exploreSeconds": 2,
         "staminaCost": 5
-      }
+      },
+      "configId": "10006",
+      "buildingId": ""
     },
     {
       "id": "stage_152",
@@ -2921,8 +2921,6 @@
       "footprint": [
         136
       ],
-      "configId": "10006",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           153,
@@ -2934,7 +2932,9 @@
         "silverCost": 30,
         "exploreSeconds": 2,
         "staminaCost": 5
-      }
+      },
+      "configId": "10006",
+      "buildingId": ""
     },
     {
       "id": "stage_153",
@@ -2943,8 +2943,6 @@
       "footprint": [
         135
       ],
-      "configId": "10006",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           153,
@@ -2956,7 +2954,9 @@
         "silverCost": 30,
         "exploreSeconds": 2,
         "staminaCost": 5
-      }
+      },
+      "configId": "10006",
+      "buildingId": ""
     },
     {
       "id": "stage_154",
@@ -2965,8 +2965,6 @@
       "footprint": [
         134
       ],
-      "configId": "10006",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           153,
@@ -2978,7 +2976,9 @@
         "silverCost": 30,
         "exploreSeconds": 2,
         "staminaCost": 5
-      }
+      },
+      "configId": "10006",
+      "buildingId": ""
     },
     {
       "id": "stage_155",
@@ -2987,8 +2987,6 @@
       "footprint": [
         54
       ],
-      "configId": "10007",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           112,
@@ -2998,7 +2996,9 @@
         "silverCost": 30,
         "exploreSeconds": 2,
         "staminaCost": 5
-      }
+      },
+      "configId": "10007",
+      "buildingId": ""
     },
     {
       "id": "fixedResource_156",
@@ -3007,9 +3007,6 @@
       "footprint": [
         157
       ],
-      "configId": "fixedResource_157",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           134
@@ -3018,7 +3015,10 @@
         "silverCost": 15,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_157",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_200",
@@ -3027,9 +3027,6 @@
       "footprint": [
         96
       ],
-      "configId": "fixedResource_77",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           134
@@ -3038,7 +3035,10 @@
         "silverCost": 20,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_77",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_201",
@@ -3047,9 +3047,6 @@
       "footprint": [
         97
       ],
-      "configId": "fixedResource_77",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           134
@@ -3058,7 +3055,10 @@
         "silverCost": 20,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_77",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_202",
@@ -3067,9 +3067,6 @@
       "footprint": [
         77
       ],
-      "configId": "fixedResource_77",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           134
@@ -3078,7 +3075,10 @@
         "silverCost": 20,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_77",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_188",
@@ -3087,9 +3087,6 @@
       "footprint": [
         190
       ],
-      "configId": "fixedResource_190",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           231
@@ -3098,7 +3095,10 @@
         "silverCost": 15,
         "exploreSeconds": 1,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_190",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "fixedResource_189",
@@ -3107,9 +3107,6 @@
       "footprint": [
         189
       ],
-      "configId": "fixedResource_189",
-      "buildingId": "",
-      "rewardId": 1011,
       "unlock": {
         "requiredCells": [
           231
@@ -3118,7 +3115,10 @@
         "silverCost": 15,
         "exploreSeconds": 2,
         "staminaCost": 1
-      }
+      },
+      "configId": "fixedResource_189",
+      "buildingId": "",
+      "rewardId": 1011
     },
     {
       "id": "asyncPvp_155",
@@ -3127,8 +3127,6 @@
       "footprint": [
         166
       ],
-      "configId": "20002",
-      "buildingId": "",
       "unlock": {
         "requiredCells": [
           189,
@@ -3138,7 +3136,9 @@
         "silverCost": 10,
         "exploreSeconds": 7,
         "staminaCost": 5
-      }
+      },
+      "configId": "20002",
+      "buildingId": ""
     }
   ],
   "randomSites": {

@@ -6,9 +6,6 @@ import re
 
 ID_PATTERN = re.compile(r"[A-Za-z0-9_-]+")
 
-# 虚空装饰在 art.tiles 里的键：`"行,列"`（按格覆盖）；其余键是分区贴图，原样透传。
-CELL_KEY_PATTERN = re.compile(r"(\d+),(\d+)")
-
 # 各版本字符画允许的 token；`#` / `-` / `N` 是 v1/v2 的分区别名。
 TOKEN_PATTERN = {
     1: re.compile(r"[^.#-]"),
@@ -102,38 +99,30 @@ def validate_preset(data, preset_id):
             raise ValueError("主城坐标不在地图内")
         homes.append({"row": home["row"], "column": home["column"]})
 
-    # 虚空装饰：art.tiles 的 "行,列" 键必须落在虚空格上 —— 与编辑器 app.js、网页服务
-    # server.mjs 同一个口径。判"这格是不是虚空"要展开镜像，跟 ascii 的读法一致，
-    # 否则半场图上整张判据会错位。分区贴图键（"1"~"4" / neutral / void）不在这里管。
     art = data.get("art")
-    tiles = art.get("tiles") if isinstance(art, dict) else None
-    if isinstance(tiles, dict):
-        row_offset = rows - expected_rows
-        half = math.ceil(columns / 2) if (version >= 3 and mirror_horizontal) else columns
+    free_decor = art.get("freeDecor") if isinstance(art, dict) else None
+    if free_decor is not None:
+        if not isinstance(free_decor, list):
+            raise ValueError("art.freeDecor 必须是数组")
 
-        def is_void(row, column):
-            if mirror_180:
-                lower = row >= rows / 2
-                source_row = rows - 1 - row if lower else row
-                source_column = columns - 1 - column if lower else column
-            else:
-                source_row = (rows - 1 - row - row_offset
-                              if (mirror_vertical and row < row_offset) else row - row_offset)
-                source_column = (columns - 1 - column
-                                 if (version >= 3 and mirror_horizontal and column >= half) else column)
-            return ascii_rows[source_row][source_column] == "."
+        def finite_number(value):
+            return not isinstance(value, bool) and isinstance(value, (int, float)) and math.isfinite(value)
 
-        for key, value in tiles.items():
-            matched = CELL_KEY_PATTERN.fullmatch(key) if isinstance(key, str) else None
-            if matched is None:
-                continue
-            decor_row, decor_column = int(matched.group(1)), int(matched.group(2))
-            if not (0 <= decor_row < rows and 0 <= decor_column < columns):
-                raise ValueError(f"装饰 {key} 不在 {columns}×{rows} 的地图内")
-            if not is_void(decor_row, decor_column):
-                raise ValueError(f"装饰 {key} 必须落在虚空格上（当前不是虚空）")
-            if not isinstance(value, str) or not value:
-                raise ValueError(f"装饰 {key} 的资源名必须是非空字符串")
+        for index, item in enumerate(free_decor):
+            if not isinstance(item, dict):
+                raise ValueError(f"自由装饰 {index} 必须是对象")
+            if not isinstance(item.get("art"), str) or not item["art"].strip():
+                raise ValueError(f"自由装饰 {index} 缺少资源名")
+            if not finite_number(item.get("x")) or not finite_number(item.get("y")):
+                raise ValueError(f"自由装饰 {index} 坐标无效")
+            if (not finite_number(item.get("width")) or item["width"] <= 0
+                    or not finite_number(item.get("height")) or item["height"] <= 0):
+                raise ValueError(f"自由装饰 {index} 尺寸无效")
+            if "rotation" in item and not finite_number(item["rotation"]):
+                raise ValueError(f"自由装饰 {index} 角度无效")
+            if (("flipX" in item and not isinstance(item["flipX"], bool))
+                    or ("flipY" in item and not isinstance(item["flipY"], bool))):
+                raise ValueError(f"自由装饰 {index} 翻转值无效")
 
     name = data.get("name")
     preset = {

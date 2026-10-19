@@ -4,7 +4,8 @@ import { PopupCloseReason } from '../../../framework/ui/PopupDef';
 import { VirtualScrollView } from '../../../vscrollview/VScrollView';
 import { GoodsBox } from '../../itemdetail/GoodsBox';
 import { loadIdArtByRel } from '../../itemdetail/ItemDetailArtLoader';
-import { ZCDC_LOG_WARNINGS } from '../ZCDCLogSwitch';
+import { ZCGameUiEvent } from '../view/ZCGameHudEvents';
+import { EventMgr } from '../../../framework/event/EventMgr';
 
 const { ccclass, property } = _decorator;
 
@@ -48,13 +49,9 @@ export interface IZCSettlementOptions {
     readonly onDoubleReward?: () => void;
     /** 变强途径三个入口。**本期没有接线**：不给就整组收起 `Panel/Grow`（见 {@link onOpen}）。 */
     readonly onGrowEntry?: (entry: ZCSettlementGrowEntry) => void;
-    /**
-     * 确定/关闭 —— **必填**：结算页没有「取消」语义，关闭动作必须由调用方给出
-     * （回主界面 / 换流程）。少了它页面无处可去，兜底成 `close()` 就是「页面关了、
-     * 人还留在对局里」—— 2026-10-14 探针逮到过；何况 `openSettlement` 已把
-     * `settlementOpened` 置死，页面一关这局就再也弹不出结算页（卡死）。
-     */
-    readonly onConfirm: () => void;
+    //  确定/关闭**不走回调**：页面只 `EventMgr.instance.emit(ZCGameUiEvent.SettlementConfirm)`，
+    // 「回主界面 / 换流程」由控制器订阅后处理（契约见 `view/ZCGameHudEvents.ts`）。原先的 `onConfirm`
+    // 必填字段要求调用方把流程入口塞进视图，还得给「没拿到回调」写一条告警兜底 —— 现在都不需要了。
 }
 
 /**
@@ -76,7 +73,7 @@ export interface IZCSettlementOptions {
  *
  * ## 两条不可绕过的收尾约定
  *
- *  ① **关闭只走 `onConfirm`（必填）**，页面自己不关、也**禁止空白关闭**
+ *  ① **关闭只走 `ZCGameUiEvent.SettlementConfirm` 事件**（页面自己不关、也不改流程），且**禁止空白关闭**
  *  （`canCloseOnBlank()` 覆写为 `false`）。结算页一关，`ZCGame.openSettlement` 置死的
  *  `settlementOpened` 就让它再也弹不出来 ⇒ 「关页」等价于「卡死」，不能当退路。
  *  ② **没接线的功能整组收起**：`onDoubleReward` / `onGrowEntry` 不给就收起 `BtnDouble`
@@ -145,7 +142,10 @@ export class ZCSettlementPage extends PopupBase {
 
     protected onInit(): void {
         // 虚拟列表的回调只在初始化时接**一次**（槽位节点被反复复用，回调里再挂事件会越滚越多）。
-        this.rewardList.renderItemFn = (node, index) => this.renderReward(node, index);
+        //  赋**具名方法 + `.bind(this)`**（规范 §7.5 配套第 3 条）：`VScrollView` 侧是
+        // `this.renderItemFn(node, i)` 的**方法调用**语法，不绑的话函数里 `this` 会是 VScrollView
+        // ⇒ `this.rewards` 读到 undefined 直接崩。
+        this.rewardList.renderItemFn = this.renderReward.bind(this);
         // 按钮只在实例生命周期内绑一次（`PopupBase` 保证首次打开前调一次），
         // 节点失活 / 池化复用不会掉监听，补绑会叠出多份。
         // 监听一律**具名方法 + this 作 target**（范本 `GameRunAway.onInit`）：调用栈里能看到是谁点的，
@@ -206,23 +206,16 @@ export class ZCSettlementPage extends PopupBase {
     }
 
     /**
-     * 确定：**只走调用方的收尾**，页面自己不关。
+     * 确定：只**派发意图事件**，页面自己不关、也不改流程（收尾归控制器）。
      *
-     *  - `onConfirm` 是必填字段，正常一定拿得到；
-     *  - 万一拿到 `undefined`（外部手搓 userData）：**告警 + 不关页面**。
-     *    绝不能退化成 `close()` —— 那正是本段注释记的「页面关了、人还留在对局里」那个坑
-     *    （2026-10-14 探针逮到过），何况对局侧已置死 `settlementOpened`，
-     *    关了就是卡死。停在页面上 + 一条 `console.error` 才归因得到。
+     *  绝不能退化成 `close()` —— 那正是「页面关了、人还留在对局里」那个坑（2026-10-14 探针逮到过），
+     * 何况对局侧已置死 `settlementOpened`，关了就是卡死。
+     *  `confirming` 保留：连点两下只派发一次（收尾多半是切流程，重复等于 navigate 两次）。
      */
     private onConfirmClicked(): void {
         if (this.confirming) return;
-        const onConfirm = this.options?.onConfirm;
-        if (!onConfirm) {
-            if (ZCDC_LOG_WARNINGS) console.error('[ZCSettlementPage] 确定按钮没有收尾回调（onConfirm），页面不会关闭');
-            return;
-        }
         this.confirming = true;
-        onConfirm();
+        EventMgr.instance.emit(ZCGameUiEvent.SettlementConfirm);
     }
 
     // 渲染
@@ -278,17 +271,17 @@ export class ZCSettlementPage extends PopupBase {
     }
 
     /**
-     * 「双倍奖励」与「变强途径」：**没给回调就整组收起**（口径与 `renderRank` 的 `hasRank` 同一套）。
+     * 「双倍奖励」与「变强途径」的口径（`renderRank` 的 `hasRank` 同一套思路）：
      *
-     *  为什么不留四个「点了没反应」的死按钮：这两个功能本期还没接线（`onDoubleReward` /
-     *  `onGrowEntry` 全工程零调用方），按钮可点但回调是 `undefined` ⇒ 玩家点了毫无反馈、
-     *  还不报错。露出它们等于交付一组假交互；收起则「本期没有这个功能」一眼可见。
-     *
-     *  ⚠️ 变强途径收的是**整个 `Panel/Grow`**（底板 + 标题「变强途径」+ 三个入口）而不是三个入口 ——
-     *  只收入口会剩一个空标题框，比死按钮更奇怪。
+     *  - **双倍奖励按钮常显**：它在设计稿里是奖励区中间那一段（两侧 `RewardLineL/R` 接过去），
+     *    藏掉会中间断一截、左右不对称 ⇒ 一律显示（层片归 prefab，代码不碰美术）；
+     *    但**没接线时 `interactable = false`** —— 看得到、点不动，不做「点了没反应」的假交互。
+     *  - **变强途径**没接线时**整组收起**：它是一整块（底板 + 标题 + 三个入口），
+     *    只收入口会剩一个空标题框，比死按钮更奇怪；收整组则「本期没有这个功能」一眼可见。
      */
     private renderEntryGroups(data: IZCSettlementOptions): void {
-        this.doubleButton.node.active = Boolean(data.onDoubleReward);
+        this.doubleButton.node.active = true;
+        this.doubleButton.interactable = Boolean(data.onDoubleReward);
         this.growGroup.active = Boolean(data.onGrowEntry);
     }
 }

@@ -2,6 +2,7 @@ import { _decorator, Color, Component, Label, Sprite, SpriteFrame, UIOpacity } f
 import type { ZCBuildingType, ZCCardReveal } from '../model/ZCGameTypes';
 import type { ZCOwner } from '../model/ZCMapConfig';
 import { ZC_CARD_FADE_START_PROGRESS } from '../model/ZCBattlePresentationQueue';
+import { ProcedureGame } from '../../procedure/ProcedureGame';
 import { ZCDC_LOG_WARNINGS } from '../ZCDCLogSwitch';
 import { elasticPopScale, mapToViewX, mapToViewY, POP_FROM_SCALE } from './ZCGameViewUtil';
 
@@ -105,28 +106,13 @@ export class ZCCardRevealView extends Component {
      */
     private luckOpacityComp: UIOpacity | null = null;
     /**
-     * 卡牌 id → 角色卡牌静态图（卡表 `headIcon` → `icons/cardHead/**`，与卡牌阵容同一张）。
-     * 不做成 `@property`：卡表几十条 `headIcon`，由渲染层整局一次注入。
+     * 卡面图 / 建筑帧都**不再由渲染层注入闭包**：按 id 现取控制器的只读出口
+     * （`ProcedureGame.current?.resolveCardArt / resolveBuildingFrame`）—— 数据本来就在控制器手里
+     * （`legendCardArtFrames` / `preparedResources.buildingFrames`），少一层逐实例闭包。
      */
-    private cardArtResolver: ((cardId: string) => SpriteFrame | null) | null = null;
-    /** 卡牌 id / 建筑类型 -> 卡表 buildIcon 对应的建筑帧；取不到卡面图时的兜底。 */
-    private buildingFrameResolver: ((cardId: string, building: ZCBuildingType, owner: ZCOwner) => SpriteFrame | null) | null = null;
-
-    /**
-     * 注入角色卡面图解析（渲染层拿到本局卡组的卡面图后调一次；池里复用回来的视图保留同一个）。
-     *
-     *  没注入 / 解析不到时卡面回退建筑图，只是少一层信息，不影响对局。
-     */
-    setCardArtResolver(resolver: ((cardId: string) => SpriteFrame | null) | undefined): void {
-        this.cardArtResolver = resolver ?? null;
+    invalidateArt(): void {
         // 卡面图是异步加载的，可能晚于小卡牌弹出才到 —— 不作废内容键，那条卡会一直停在建筑图上。
         this.contentKey = '';
-    }
-
-    setBuildingFrameResolver(
-        resolver: ((cardId: string, building: ZCBuildingType, owner: ZCOwner) => SpriteFrame | null) | undefined,
-    ): void {
-        this.buildingFrameResolver = resolver ?? null;
     }
 
     render(reveal: Readonly<ZCCardReveal>, now: number): void {
@@ -257,7 +243,7 @@ export class ZCCardRevealView extends Component {
      * 且是「卡表 headIcon 没配」的唯一线索，关掉就归因不到了。
      */
     private frameForArt(reveal: Readonly<ZCCardReveal>): SpriteFrame | null {
-        const cardArt = this.cardArtResolver?.(reveal.cardId) ?? null;
+        const cardArt = ProcedureGame.current?.resolveCardArt(reveal.cardId) ?? null;
         if (cardArt) return cardArt;
         if (ZCDC_LOG_WARNINGS) {
             console.warn(
@@ -265,7 +251,7 @@ export class ZCCardRevealView extends Component {
                 + '；请检查卡表 headIcon 是否配置、或图片是否已进包',
             );
         }
-        const configured = this.buildingFrameResolver?.(reveal.cardId, reveal.building, reveal.owner);
+        const configured = ProcedureGame.current?.resolveBuildingFrame(reveal.cardId, reveal.building) ?? null;
         return configured ?? this.frameForBuilding(reveal.building, reveal.owner);
     }
 

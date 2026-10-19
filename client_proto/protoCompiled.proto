@@ -4500,7 +4500,7 @@ message CmdChapterBattleResultInfo {
 message CmdBattleFrameInfo {
   required uint32 frameId = 1;//帧id
   required uint32 unitId  = 2;//单元id
-  required uint32 op      = 3;//操作 1翻格(参数为格子id) 2释放技能(参数为释放技能位置,如无不用传) 3聊天(参数为聊天id)
+  required uint32 op      = 3;//操作 1翻格(参数为格子id) 2释放技能(参数为释放技能位置,如无不用传) 3聊天(参数为聊天id) 4出生点(参数为格子id)
   repeated uint32 params  = 4;//操作参数格子坐标
 }
 

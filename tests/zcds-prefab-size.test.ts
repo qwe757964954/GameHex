@@ -69,9 +69,16 @@ function parsePrefabSizeOf(row: Record<string, unknown>): number {
  * `ZCUnitView` 的桩：补齐 prefab 上全部必填引用（口径同 `zcds-progress` 的 `stubUnitView`）。
  * `bar()` 造的节点带 `position` / `setScale`，够读回实际写入的缩放。
  */
+/** 驱动 `initialize(definition)` 用：视图只读 `unitId`（拿去向控制器取 prefab）与 `prefabSize`。 */
+function unitDefinition(prefabSize: number): any {
+    return { unitId: '90001', prefabSize };
+}
+
 function stubUnitView(load: (name: string) => any, bar: () => any): any {
     const view = new (load('./ZCUnitView').ZCUnitView)();
     const node = bar().node;
+    //  引擎侧 `Component.node`：spine 美术挂载会往它上面写 `layer`（帧图那条路径不碰）。
+    view.node = node;
     view.rootTransform = { setContentSize: () => {} };
     view.visualRoot = bar().node;
     view.sprite = { enabled: true, spriteFrame: null };
@@ -145,30 +152,33 @@ test('C3 解析层：建筑卡（无单位预设）整行跳过，不因缺 pref
 // ==================== 视图层 ====================
 
 test('V1 视图层：prefabSize 真的乘进了节点的实际缩放', () => {
-    const { load, bar, FakeNode } = loadViews();
+    const { load, bar, FakeNode, procedureGame } = loadViews();
     const view = stubUnitView(load, bar);
-    view.initialize(framePrefab(FakeNode), 1);
+    procedureGame.current = { resolveUnitPrefab: () => framePrefab(FakeNode) };
+    view.initialize(unitDefinition(1));
     assert.equal(view.visualNode.scale.x, 1, '系数 1 ⇒ 原样');
 
     // 换一个池化复用节点：同一 prefab、不同体型，走 initialize 的「复用美术子树」早退分支。
-    view.initialize(framePrefab(FakeNode), 1.2);
+    view.initialize(unitDefinition(1.2));
     assert.equal(view.visualNode.scale.x, 1.2, '复用同 prefab 时也必须按新体型缩放');
     assert.equal(view.visualNode.scale.y, 1.2);
-    view.initialize(framePrefab(FakeNode), 0.8);
+    view.initialize(unitDefinition(0.8));
     assert.equal(view.visualNode.scale.x, 0.8, '反向缩小同样生效');
 });
 
 test('V2 视图层：与 spine 的 canvas 归一**相乘**，不是互相覆盖', () => {
-    const { load, bar, FakeNode } = loadViews();
+    const { load, bar, FakeNode, procedureGame } = loadViews();
     // 基准：SPINE_CANVAS_TARGET_HEIGHT = 69.4（ZCUnitView 模块常量），canvas 高 916.29
     // ⇒ 归一系数 ≈ 0.07574。prefabSize=1.2 应该在它之上再乘 1.2，而不是把它顶掉。
     const canvasHeight = 916.29;
     const base = 69.4 / canvasHeight;
 
+    //  prefab 由视图向控制器现取（`ProcedureGame.current`），这里把它钉成同一个 spine prefab。
+    procedureGame.current = { resolveUnitPrefab: () => spinePrefab(FakeNode, canvasHeight) };
     const plain = stubUnitView(load, bar);
-    plain.initialize(spinePrefab(FakeNode, canvasHeight), 1);
+    plain.initialize(unitDefinition(1));
     const withSize = stubUnitView(load, bar);
-    withSize.initialize(spinePrefab(FakeNode, canvasHeight), 1.2);
+    withSize.initialize(unitDefinition(1.2));
 
     const ratio = withSize.visualNode.scale.y / plain.visualNode.scale.y;
     assert.ok(Math.abs(ratio - 1.2) < 1e-6, `spine 归一之上还要再乘 prefabSize，实际比值 ${ratio}`);
@@ -177,19 +187,20 @@ test('V2 视图层：与 spine 的 canvas 归一**相乘**，不是互相覆盖'
 });
 
 test('V3 视图层：血条 Y 跟着体型走（不缩的话 1.2 倍的兵血条会陷进头顶）', () => {
-    const { load, bar, FakeNode } = loadViews();
+    const { load, bar, FakeNode, procedureGame } = loadViews();
     const presentation = () => ({
         unit: { hp: 100, maxHp: 100, battleState: 'idle', facingRadians: 0, completedAttackCount: 0, owner: 'player' },
         definition: { hero: false, attackRange: 50, prefabSize: 1 },
         x: 0, y: 0, now: 0,
     });
 
+    procedureGame.current = { resolveUnitPrefab: () => framePrefab(FakeNode) };
     const big = stubUnitView(load, bar);
-    big.initialize(framePrefab(FakeNode), 1.2);
+    big.initialize(unitDefinition(1.2));
     big.render(presentation() as any);
 
     const normal = stubUnitView(load, bar);
-    normal.initialize(framePrefab(FakeNode), 1);
+    normal.initialize(unitDefinition(1));
     normal.render(presentation() as any);
 
     const ratio = big.healthBar.node.position.y / normal.healthBar.node.position.y;

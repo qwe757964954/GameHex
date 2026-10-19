@@ -63,6 +63,23 @@ export class ZCEffectPool {
     private readonly deathFxNodes: DeathFxEntry[] = [];
     /** 阵亡去重：单位在快照里消失后 renderUnitSystem 还会再走几帧，不去重会连播好几个。 */
     private readonly deadFxPending = new Set<number>();
+    /**
+     * 受击去重：**已经播过的**那几条 fx（存**对象引用**，不存 `fx.id`）。
+     *
+     * 🔴 不去重会**停顿**（2026-10-16 山猫「受击会停顿在角色上」）：模型层的 `hitFxQueue` 会保留到
+     * `startedAt + HIT_FX_SECONDS(0.8s)`，而渲染世界每帧把**整条队列**送进来 ⇒ 每帧对同一个 fx
+     * `animation.play()` 一次，而 `play()` **无条件把动画 seek 回 0**（真引擎实测：每 tick 重播 ⇒
+     * 8 帧只出现第 0 帧；只播一次 ⇒ 8 帧全出）⇒ 动画被钉死在起始帧，看着就是一坨静止的特效。
+     *
+     * 两个约束：
+     *  - 记录必须**保留到 fx 从模型队列消失**（不是到动画播完）：动画只有 0.4444s、队列有 0.8s，
+     *    若跟着 `hitFxNodes` 一起删，剩下的 0.36s 里还会被重新播一次；
+     *  - 用**对象引用**而不是 `fx.id`：模型层 `nextHitFxId` 换局会**从 1 重新开始**，存 id 会让
+     *    新局第一个特效被上一局的记录挡掉（见 `ZCBattlePresentationQueue.reset`）。
+     */
+    private readonly hitFxPlayed = new Set<Readonly<ZCHitFx>>();
+    /** `syncHitFx` 的暂存：本帧模型队列里还活着的 fx（用来摘掉 `hitFxPlayed` 里的过期项）。 */
+    private readonly hitFxAlive = new Set<Readonly<ZCHitFx>>();
 
     constructor(private readonly deps: IZCEffectPoolDeps) {}
 
@@ -76,8 +93,31 @@ export class ZCEffectPool {
     }
 
     /**
+     * 播放本帧仍然存活的受击特效 —— **幂等**：同一个 `fx.id` 只播一次。
+     *
+     * 渲染世界每帧把模型层的**整条存活队列**送进来（队列保留 `HIT_FX_SECONDS`），所以去重必须在
+     * 这一层做。见 `hitFxPlayed` 的注释：不去重 = 每帧 `play()` 把动画钉死在第 0 帧。
+     */
+    syncHitFx(fxs: readonly Readonly<ZCHitFx>[], now: number): void {
+        this.hitFxAlive.clear();
+        for (const fx of fxs) this.hitFxAlive.add(fx);
+        // 模型队列里已经没有的 ⇒ 这个 fx 彻底结束，从去重表摘掉（否则这 Set 只增不减）。
+        for (const fx of this.hitFxPlayed) {
+            if (!this.hitFxAlive.has(fx)) this.hitFxPlayed.delete(fx);
+        }
+        for (const fx of fxs) {
+            if (this.hitFxPlayed.has(fx)) continue;
+            this.hitFxPlayed.add(fx);
+            this.playHitFx(fx, now);
+        }
+    }
+
+    /**
      * 播放受击闪白特效。
      * 挂 mapLayer 而不挂被打单位：被打的单位可能在同一帧被击杀移除，挂宿主会跟着一起没了。
+     *
+     * ⚠️ **渲染循环里别直接调它** —— 同一个 fx 会跨很多帧一直躺在模型队列里，逐个直接调会让
+     * 动画每帧被 seek 回 0。走 `syncHitFx`。
      */
     playHitFx(fx: Readonly<ZCHitFx>, now: number): void {
         const prefabs = this.deps.hitFxPrefabs;
@@ -201,6 +241,9 @@ export class ZCEffectPool {
         }
         this.deathFxNodes.length = 0;
         this.deadFxPending.clear();
+        // 去重表显式清掉：换局后模型层推的是全新的 fx 对象，旧局的没必要继续被这两个 Set 持有。
+        this.hitFxPlayed.clear();
+        this.hitFxAlive.clear();
     }
 
     /**

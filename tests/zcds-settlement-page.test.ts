@@ -423,7 +423,9 @@ test('页面逻辑：整组显隐 / 虚拟列表喂条数 + 按下标现取 / �
     // 段位：没数据整组收起（别留一行空框）
     assert.match(code, /this\.rankRow\.active = hasRank/);
     // 奖励：**只喂条数**，格内容在 renderItemFn 里按下标现取
-    assert.match(code, /this\.rewardList\.renderItemFn = \(node, index\) => this\.renderReward\(node, index\)/,
+    // 赋**具名方法 + `.bind(this)`**（规范 §7.5 配套第 3 条）：`VScrollView` 是 `this.renderItemFn(node, i)`
+    // 的方法调用语法，不绑的话 `this` 会是 VScrollView、`this.rewards` 读成 undefined。
+    assert.match(code, /this\.rewardList\.renderItemFn = this\.renderReward\.bind\(this\)/,
         '回调只在 onInit 接一次（槽位复用，重复接会越滚越多）');
     assert.match(code, /this\.rewards = rewards/);
     assert.match(code, /this\.rewardList\.setTotalCount\(rewards\.length\)/);
@@ -443,17 +445,19 @@ test('页面逻辑：整组显隐 / 虚拟列表喂条数 + 按下标现取 / �
     assert.match(code, /Button\.EventType\.CLICK/);
 });
 
-test('🔴 确定按钮：走收尾回调、不退化成 close、且防重复提交（2026-10-15）', () => {
+test('🔴 确定按钮：派发 Confirm 事件、不退化成 close、且防重复提交（2026-10-16 事件化）', () => {
     const code = stripComments(pageSource);
-    // ① `onConfirm` 必填（去掉 `?`）—— 结算页没有「取消」语义，关闭动作必须由调用方给出。
-    assert.match(code, /readonly onConfirm: \(\) => void;/, 'onConfirm 必须必填');
-    assert.doesNotMatch(code, /readonly onConfirm\?:/, 'onConfirm 不许再是可选');
-    // ② 兜底分支**不许** close()：拿不到回调就告警 + 停在页面上。
-    //    页面一关，`openSettlement` 置死的 `settlementOpened` 就让它再也弹不出结算页 ⇒ 卡死。
-    assert.doesNotMatch(code, /else this\.close\(\)/, '确定不许退化成只 close()');
-    assert.match(code, /if \(ZCDC_LOG_WARNINGS\) console\.error\('\[ZCSettlementPage\] 确定按钮没有收尾回调/,
-        '拿不到收尾回调要告警（zcdc 日志开关强制要求）');
-    // ③ 防重复提交（§7.2）：连点两下只发一次收尾（收尾多半是切流程，重复发等于 navigate 两次）。
+    // ① 确定**只派发意图事件**：页面不认识「回主界面 / 换流程」，那是控制器的事
+    //   （旧口径是 `userData.onConfirm` 必填回调 + 拿不到就告警的兜底分支，已删）。
+    assert.match(code, /EventMgr\.instance\.emit\(ZCGameUiEvent\.SettlementConfirm\);/, '确定必须派发 ZCGameUiEvent.SettlementConfirm');
+    // 总线**不再从 userData 传**：监听由事件中控（`EventMgr.instance`）统一管理。
+    assert.doesNotMatch(code, /userData\.events/, '不再往 userData 塞总线');
+    assert.doesNotMatch(code, /EventBus/, '页面不该持有总线实例');
+    assert.doesNotMatch(code, /onConfirm\b/, '页面不该再持有收尾回调 —— 意图一律走事件');
+    // ② 绝不能退化成 close()：页面一关，`openSettlement` 置死的 `settlementOpened`
+    //    就让它再也弹不出结算页 ⇒ 卡死。
+    assert.doesNotMatch(code, /this\.close\(/, '确定不许退化成只 close()');
+    // ③ 防重复提交（§7.2）：连点两下只派发一次（收尾多半是切流程，重复发等于 navigate 两次）。
     assert.match(code, /private confirming = false/);
     assert.match(code, /if \(this\.confirming\) return;/);
     assert.match(code, /this\.confirming = true;/);
@@ -463,11 +467,15 @@ test('🔴 确定按钮：走收尾回调、不退化成 close、且防重复提
         '结算页必须覆写 canCloseOnBlank 返回 false');
 });
 
-test('🔴 未接线的入口整组收起，不留点了没反应的死按钮（2026-10-15）', () => {
+test('🔴 双倍奖励常显（只展示、未接线不可点）；变强途径未接线整组收起（2026-10-16 调整）', () => {
     const code = stripComments(pageSource);
-    // 口径与 `renderRank` 的 `hasRank` 同一套：没给回调 ⇒ 整组收起。
+    // 双倍奖励在设计稿里是奖励区中间那一段（两侧 `RewardLineL/R` 接过去）⇒ **常显**：
+    // 藏掉会中间断一截、左右不对称。但没接线只能「看得到、点不动」（`interactable = false`），
+    // 不做点了没反应的假交互。
     assert.match(code, /private renderEntryGroups\(data: IZCSettlementOptions\)/);
-    assert.match(code, /this\.doubleButton\.node\.active = Boolean\(data\.onDoubleReward\)/);
+    assert.match(code, /this\.doubleButton\.node\.active = true;/, '双倍奖励按钮必须常显');
+    assert.match(code, /this\.doubleButton\.interactable = Boolean\(data\.onDoubleReward\)/,
+        '★没接线 ⇒ 不可点（展示位，不是假交互）');
     // ⚠️ 收的是 `Panel/Grow` **整组**（底板 + 标题 + 三个入口）而不是三个入口 ——
     // 只收入口会剩一个空标题框，比死按钮更奇怪。
     assert.match(code, /this\.growGroup\.active = Boolean\(data\.onGrowEntry\)/);
@@ -484,10 +492,20 @@ test('ZCGame：对局结束改弹 ZCSettlementPage（伤害统计仍走 GameRunA
     const code = stripComments(gameSource);
     assert.match(code, /import \{ ZCSettlementPage \} from '\.\/ui\/ZCSettlementPage'/);
     // 弹页搬进 `showSettlement`（章节局要**先等结算广播**再弹），所以断言落在调用点上。
-    assert.match(code, /void this\.showSettlement\(!retreated && state\.status === 'victory'\)/, '胜负口径：撤退算失败');
-    assert.match(code, /private async showSettlement\(victory: boolean\): Promise<void>/);
+    //  胜负口径要连着两步看：先算 `localVictory`（**撤退算失败**），再把胜负与章节等待器一起交给弹页
+    //（章节局要先等 `CmdBattleResultBroMsg` 才弹，见 ZCGame.showSettlement 的签名）。
+    assert.match(code, /const localVictory = !retreated && state\.status === 'victory'/, '胜负口径：撤退算失败');
+    assert.match(code, /void this\.showSettlement\(localVictory, chapterResult\)/, '胜负与章节等待器一起交给弹页');
+    //  签名是多行的（`victory` + 章节等待器 `chapterResult`）⇒ 用 `\s*` 兼容换行。
+    assert.match(code, /private async showSettlement\(\s*localVictory: boolean,/);
     assert.match(code, /ZCSettlementPage\.open\(\{/);
-    assert.match(code, /onConfirm: \(\) => \{/, '确定回主界面');
+    // 确定**不再走 userData 回调**：结算页派发 `ZCGameUiEvent.SettlementConfirm`，控制器订阅后收尾。
+    assert.match(code, /import \{ ZCGameUiEvent \} from '\.\/view\/ZCGameHudEvents'/);
+    assert.match(code, /EventMgr\.instance\.on\(ZCGameUiEvent\.SettlementConfirm, this\.onSettlementConfirm, this\)/,
+        '★ZCGame 必须订阅结算页的确定事件 —— 漏了就「点了没反应」（页面自己不会关）');
+    assert.match(code, /private onSettlementConfirm\(\): void \{\s*if \(!this\.leaving\) this\.returnToMain\(\);/,
+        '确定 = 回主界面（离场后不许再导航）');
+    assert.doesNotMatch(code, /onConfirm: \(\)/, '不该再往结算页塞收尾回调');
     assert.match(code, /private settlementPopup: ZCSettlementPage \| null = null/);
     // 伤害统计弹窗没被顺手删掉（HUD 的伤害按钮还在用它）
     assert.match(code, /GameRunAway\.open\(\{/);

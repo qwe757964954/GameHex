@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "cocos-mcp": {
+      "url": "http://127.0.0.1:3000/mcp"
+    },
+    "lanhu-mcp": {
+      "command": "D:\\City1001\\tools\\lanhu-mcp\\venv\\Scripts\\python.exe",
+      "args": [
+        "D:\\City1001\\tools\\lanhu-mcp\\lanhu_mcp_server.py"
+      ],
+      "env": {
+        "MCP_TRANSPORT": "stdio"
+      }
+    }
+  }
+}

@@ -67,7 +67,6 @@ import {
 } from './ZCGameViewUtil';
 
 const { ccclass, property } = _decorator;
-const COLORS = ZC_CLIENT_COLORS;
 const BUILDING_SYMBOLS: Readonly<Record<ZCBuildingType, string>> = {
     none: '', hq: '城', mine: '金', barracks: '兵', tower: '塔',
 };
@@ -79,15 +78,7 @@ const NEUTRAL_RESOURCE_LABELS: Readonly<Record<string, string>> = {
     chest: '宝箱', gold: '金币', mine: '金矿', unit_cap: '兵力', artifact_charge: '神器',
 };
 // 三个「格内图标落点」下面的 y 都是 **BuildingLayer 内的局部坐标**。
-//
-// ⚠️ BuildingLayer 在 prefab 上挂着一个 `cc.Widget`（`_alignMode = ALWAYS`、`_verticalCenter = 15.101`），
-// 运行时它的局部 y 就被这个 Widget 钉在 **15.101**。换算成「格节点局部坐标」要 +15.101：
-//   · 地块**格面（可见六边形台面）中心**在格内 y = 12.5（见 `ZC_LAND_TOP_CENTER_LIFT`）
-//   · 资源点 / 敌方可开发图标的 -2.342 → 格内 12.759 ≈ 格面中心 ⇒ 这就是它们「居中」的实现方式
-//   · 地块类型图标 = `DEFAULT_TILE_ICON_POS`，主动落在格面中心**上方**，与底部价格行配对
-//
-// 早期注释写的「BuildingLayer 在 y=2.342」是过期值（大概是 Widget 生效前的手调值），
-// 当时凑出的 -2.342 恰好仍对得上格面中心，所以没被肉眼发现 —— 别再按那个 2.342 推算新落点。
+// 详见 docs/ZCHexView设计决策.md §1。
 
 /**
  * 资源图标的目标边长（对齐格子的 128×128）。
@@ -115,30 +106,11 @@ const TILE_ICON_SCALE = 0.8;
 /**
  * 激活表现的时间分段（`progress` 是**激活轴**占比，总长 = `ZC_HEX_ACTIVATION_SECONDS` = **1.856s**
  * = `ZC_CARD_START_SECONDS`（点击动画 0.7）+ `ZC_CARD_REVEAL_SECONDS`（卡牌 1.156））：
- *
- *  ①② 点击动画段 `[0, ZC_CARD_START_SECONDS)` —— **脉冲与缩没并发**（2026-10-15 row13 用户口径
- *     「② 缩没段和 ① 脉冲段 同步播放」；先前的「脉冲播完才缩」是串行，已废弃）：
- *     · **① 脉冲**：中间层播美术给的水波纹序列帧（`image/effects/hex_pulse`，30 帧一轮 =
- *       一个周期 `HEX_PULSE_CYCLE_SECONDS` = 0.7s），波纹层**向外扩散 + 外缘虚化**
- *       （2026-10-15 row16 用户口径：「从缩小改成向外扩散消失，最大扩散 1.25 个单位格子大小，
- *       扩散的部分虚化」）—— 写的是**波纹层节点**的缩放 / 着色器虚化强度，**完全不碰格根**；
- *     · **② 缩没**：整格**原地等比缩到 `HEX_SHRINK_MIN_SCALE`**（`hexShrinkFx`，零位移、只缩不压扁），
- *       跨度取 `ZC_HEX_SHRINK_SECONDS`（= 脉冲段长）⇒ 0.7s 末**格子收干净**，不留空窗。
- *     · 只有缩没写格根（`tileScale`）⇒ `hexPulseShrinkFx` 就是「照抄脉冲那份、把格根缩放换成缩没的」；
- *       `tileLift` 恒 0（不抬起 ⇒ 底部开口序列帧光自然熄灭），`buildingPopScale = 0`
- *       （建筑还没长出来，格子仍按**开发前**的可开发外观渲染，图标 + 价格数字跟着一起缩）。
- *     🔴 缩没曾因 SVN 冲突整个丢失（用户报「点击地块收缩替换的动画丢失」）—— 别删；
- *     也别把 `tileLift` 填回非零（需求要的是「保持图片中心点坐标不变、原地缩小」）。
- *  ③ 卡牌段 `[ZC_CARD_START_SECONDS, +ZC_CARD_REVEAL_SECONDS)`（1.156s，点击动画一结束就接棒）
- *     · 卡牌进度 [0, 0.62)   整格隐藏（卡牌独占视线；这段里格子按开发后外观换图，为建筑段备图）
- *     · 卡牌进度 [0.62, 1)   卡牌淡出：地块**原尺寸回场**，建筑从 0.15 **由小变大**
- *       （与淡出**同拍重叠**，卡牌淡完时建筑已长起来，中间没有空窗）
- *
- * ⚠️ 建筑生成**不单开一段**：它在卡牌淡出窗（最后 38%）内长完 ⇒ 总长 = 点击动画 + 卡牌段。
- * ⚠️ 分段一律**按秒**算，不按占比相乘：谁改都不会把另外一段带偏。
+ * 🔴 缩没段曾因 SVN 冲突整个丢失 —— 别删；`tileLift` 别填非零（要求原地缩小、中心点不动）。
+ * 详见 docs/ZCHexView设计决策.md §2。
  */
 /** 卡牌独占视线：整格不渲染（卡牌是独立节点，不受影响）。只读复用，别改字段。 */
-const HEX_ACT_HIDDEN: Readonly<IZCHexActivationFx> = {
+const HEX_ACT_HIDDEN: Readonly<IZCHexFlipFx> = {
     hidden: true, tileLift: 0, tileFlip: 1, tileScale: 1, buildingPopScale: 0, glowRadius: 0, glowAlpha: 0,
 };
 /**
@@ -157,16 +129,20 @@ const HEX_ACT_GLOW_RADIUS_MAX = 56;
 
 /**
  * 脉冲段水波纹的**按格子类型染色**（山猫 2026-10-15：「兵营的颜色，金矿和绿色平级」）。
- *
- * 序列帧是白色水纹 ⇒ 靠 `Sprite.color` 乘色出彩，所以这里只给**色相**。
- * 「平级」的落点是：两个类型共用同一个 alpha，既不把金矿压淡成次级，也不给兵营额外亮度；
- * 剩下的明暗起伏交给美术帧自带的淡入淡出。
- *
- * 🔴 只认**台面上真会出现的两类可开发格**；没单独配色的类型（随机 `AllRandom` 等）
- * 落回兵营色 —— 与 `frameForTileType` 同一口径（不认识的按兵营走）。
+ * 🔴 只认两类可开发格；未配色类型（随机 `AllRandom` 等）落回兵营色 —— 与 `frameForTileType` 同口径。
+ * 详见 docs/ZCHexView设计决策.md §3。
  */
 const PULSE_TINT_BARRACKS = new Color(136, 140, 255, 255);  // #888CFF：录屏里兵营格那一套蓝紫
 const PULSE_TINT_MINE = new Color(90, 226, 138, 255);       // #5AE28A：金矿绿
+
+/**
+ * `applyPulseFade` 写 uniform 的差值阈值：与上一次写进材质的值差在这个数以内就跳过。
+ *
+ * `applyPulseFade` 是**每帧**被调的（脉冲段），不设阈值会每帧一次 `setProperty`。
+ * 取 `1e-4`：虚化强度是 [0,1] 的归一化值，这个精度下肉眼分辨不出、但足以挡住
+ * 「同一段里值几乎不变」的重复写。与 `HEX_ACT_SECONDS_EPSILON` 同族的一类「比较容差」常量。
+ */
+const PULSE_FADE_EPSILON = 1e-4;
 
 /**
  * 地块类型 → 脉冲水波纹的染色（纯函数，便于单测）。
@@ -183,44 +159,23 @@ export function pulseTintForTileType(type: ZCHexState['tileType']): Color {
     }
 }
 
-/**
- * 激活表现的每帧参数；`hidden` 为真时整格不渲染（卡牌是独立节点，不受影响）。
- *
- * 与领地地图翻格共用同一份结构 ⇒ 直接复用 `core/hex/HexFlipPresentation` 的 `IZCHexFlipFx`
- * （字段口径写在那边的定义上，别在这里再抄一遍）。
- */
-export type IZCHexActivationFx = IZCHexFlipFx;
 
 /**
  * 激活进度 → 表现参数（纯函数，便于单测）。
- *
- * 按进度插值而不是 tween：与 `ZCCardRevealView` 同一套惯例，切流程 / 暂停 /
- * 快照回放不会留下补间残影。`progress` 会被 clamp 到 [0,1]。
- *
- * @param hasCardReveal 本次开发有没有跟着卡牌揭示（`ZCHexActivation.hasCardReveal`）。
- *   `true`（缺省）= 缩没段后整格隐藏、卡牌独占视线，卡牌淡出时地块回场、建筑同拍由小变大。
- *   `false` = 没有卡牌可接棒 ⇒ 缩没段播完**直接回常规定格**，
- *   绝不进入隐藏段，否则那段时间格子里什么都没有、直接露出棋盘底色。
+ * 详见 docs/ZCHexView设计决策.md §4。
  */
 /**
  * **点击动画段**（① 脉冲 ∥ ② 缩没）的合成表现（纯函数）。
- *
- * 🔴 2026-10-15 row16 起**两条曲线不再相乘**：脉冲把自己的动作全写在**波纹层**上
- * （`pulseScale` 扩散 / `pulseFade` 外缘虚化），格根的 `tileScale` 恒 1 ⇒ 点击动画段整格的缩放
- * **只剩缩没那一份**（1 → `HEX_SHRINK_MIN_SCALE`，单调收）。所以这里就是「照抄脉冲那份、
- * 把格根缩放换成缩没的」。
- *
- * 其余字段直接取脉冲那一份：`pulsePhase`（选帧 + 按类型染色）、`pulseScale` / `pulseFade`
- * （波纹层扩散与虚化）、`tileLift` 0（不抬起）、`tileFlip` 1（不压扁）、`buildingPopScale` 0
- * （建筑还没长出来）。
+ * 🔴 两条曲线**不相乘**：点击动画段整格缩放只剩缩没那一份（`tileScale` 1 → `HEX_SHRINK_MIN_SCALE`，单调收）。
+ * 详见 docs/ZCHexView设计决策.md §5。
  */
-function hexPulseShrinkFx(seconds: number): IZCHexActivationFx {
+function hexPulseShrinkFx(seconds: number): IZCHexFlipFx {
     const pulse = hexPulseFx(seconds);
     const shrink = hexShrinkFx(clamp01(seconds / ZC_HEX_SHRINK_SECONDS));
     return { ...pulse, tileScale: shrink.tileScale };
 }
 
-export function hexActivationFx(progress: number, hasCardReveal = true): IZCHexActivationFx {
+export function hexActivationFx(progress: number, hasCardReveal = true): IZCHexFlipFx {
     // 无激活事件（progress < 0，= 未开始 / 已过期）→ 常规定格：建筑可见。
     // 不能交给下面的 `clamp01` 折成 0（那会得到「脉冲起点、建筑还没长出来」的 buildingPopScale 0，
     // `applyActivationFx` 会误判成激活中，把正常渲染里的建筑藏起来）。
@@ -286,7 +241,7 @@ type IZCBuildingFrameResolver = (
     owner: ZCHexState['owner'],
 ) => SpriteFrame | null;
 
-export interface IZCHexPresentation {
+interface IZCHexPresentation {
     state: Readonly<ZCHexState>;
     canDevelop: boolean;
     /** 我方当前金币，用于把买不起的开发价格标红。 */
@@ -302,7 +257,7 @@ export interface IZCHexPresentation {
     activation?: Readonly<ZCHexActivation> | null;
 }
 
-export interface IZCSpawnHexPresentation {
+interface IZCSpawnHexPresentation {
     sectionOwner: ZCFaction;
     selectedBy: ZCOwner | null;
     confirmed: boolean;
@@ -331,25 +286,13 @@ export class ZCHexView extends Component {
      */
     /**
      * 格子填充 = **半透明（约 60%）**。
-     *
-     * 🔴 2026-10-14 山猫按效果图要求「外轮廓绘制加回来」：`ZCOutlineLayer` 的外轮廓
-     * 用的是**同一个 `zcFactionColor`**，填充一旦 100% 不透明，那条 6px 粗线就被同色
-     * 填充**完全吃掉** —— 整盘只剩「跨阵营处两色相接」才看得出地界，效果图里
-     * 「城墙外那条醒目的阵营色边线」就没了。
-     * 降到 60% 后：填充透出棋盘底色、外轮廓保持 100% 饱和 ⇒ 线自然浮出来，
-     * 也正是 `ZCTheme` 注释里记的老口径（「领地填充统一 60% 透明度，同色外轮廓 100%」）。
+     * 🔴 填充若 100% 不透明，同色外轮廓会被完全吃掉 —— 必须留半透明（约 60%）。
+     * 详见 docs/ZCHexView设计决策.md §6。
      */
     private static readonly TERRITORY_FILL_ALPHA = 150;
     /**
      * 选点阶段「基地相邻 6 格」的高亮填充：需求指定的深蓝 `#1D24C8`。
-     *
-     * 仍走半透明（不是需求给的十六进制原样 100% 不透明）：那 6 格若整块实心，
-     * 地块贴图被盖没后会读成「凭空多出 6 块蓝板」而不是「基地周围这 6 格被点亮了」，
-     * 也和全篇填充口径（`TERRITORY_FILL_ALPHA`）不一致。取 170 比领地的 150 略实，
-     * 与普通半区色拉开「这是高亮」的差别，同时阵营外轮廓仍压得住。
-     *
-     * 深蓝 `#1D24C8` 与玩家色 `#7e82ff` 是两个色：那 6 格要高亮成**需求指定的蓝**，
-     * 不能沿用玩家色（`zcFactionColor('player')`），否则"高亮"与"己方半区"看起来一样。
+     * 详见 docs/ZCHexView设计决策.md §7。
      */
     private static readonly SPAWN_BASE_NEIGHBOR_FILL = new Color(0x1D, 0x24, 0xC8, 170);
     /**
@@ -361,9 +304,15 @@ export class ZCHexView extends Component {
      */
     private static readonly HINT_OUTLINE_LINE_WIDTH = 7;
     private static readonly HINT_OUTLINE_COLOR = ZC_CLIENT_COLORS.gold;
-    /** 中立格填充 alpha：比领地更淡（"无主"要读起来像素地），但仍铺地块图以免格子整片消失。 */
-    private static readonly NEUTRAL_FILL_ALPHA = 110;
-    /** 中立填充的色相：贴近去色后的灰白地块，让"无主"读起来是素地而不是某一方。 */
+    /**
+     * 中立格填充 alpha：**`0` = 这一格不做任何显示**（2026-10-16 口径「局内地图中立没有任何显示」）。
+     *
+     * `setSprite` 见 0 就停用那张 Sprite ⇒ 棋盘底图直接透出来，格子感交给
+     * `OutlineLayer` 的矢量格线（内网格线不受影响）。
+     * 🔴 别再把它调回可见值：那不是"更淡"，而是把底图重新盖住。
+     */
+    private static readonly NEUTRAL_FILL_ALPHA = 0;
+    /** 中立填充的色相：只在"以中立为一端"的过渡色里参与混色（扩散波），常规渲染拿到的 alpha 恒为 0。 */
     private static readonly NEUTRAL_FILL_RGB = { r: 236, g: 232, b: 224 } as const;
     /** 金币不足时的价格/提示色。 */
     private static readonly INSUFFICIENT_GOLD_COLOR = new Color(255, 91, 91, 255);
@@ -381,16 +330,7 @@ export class ZCHexView extends Component {
     private static readonly ENEMY_DEVELOP_ICON_POS = { x: 0, y: -2.342, z: 0 } as const;
     /**
      * 地块类型图标（`icon_jk` / `icon_by` / `icon_wh`）的落点：压在底部价格行正上方，两者读成一组。
-     *
-     * ## 为什么是 4（2026-10-14 从 12.628 下移）
-     * 12.628 时图标贴在格面上半部，与格面底部的「金币图标 + 数字」之间空出小半格，
-     * 眼睛会把它们读成两组互不相干的东西。下移到 4 后图标底边紧挨金币图标顶边
-     * （按图标节点 128×0.8、字形约占节点 1/3 的实测比例，留出约 2~3px 视觉间隙）。
-     *
-     * ## 可调范围（改这一个数即可，别再只改 prefab —— `renderContent` 是唯一写入口）
-     *  - 下界 `y ≥ 1.4`：再小图标字形就会压到金币图标上（`y = 1.4` 时两者刚好相切）。
-     *    `PriceIcon` 在 BuildingLayer 局部 y = -26.38、缩放 0.65；图标节点中心 = 15.101 + y。
-     *  - 上界：回到 12.628 就退化成「上半部 / 下半部」两段式；再往上会顶到上一条格边。
+     * 详见 docs/ZCHexView设计决策.md §8。
      */
     private static readonly DEFAULT_TILE_ICON_POS = { x: -4.801, y: 4, z: 0 } as const;
     /**
@@ -579,13 +519,7 @@ export class ZCHexView extends Component {
     private sweepKey = '';
     /**
      * 开局「归属扩散」的临时覆盖：这一格正从**选点阶段的半区色**过渡到**战斗底色**。
-     *
-     * `null` = 不在波里，照 `state.owner` 正常渲染。归属与半区都是开局那一刻就定好的
-     * （`ZCSnapshotCodec.createInitialState` / `ZCSpawnSelection.regionOwnerOf`），这一层
-     * 只是把「整盘底色同一帧换过去」摊成「按波前逐格换过去」——所以它和 `sweepOwner` 一样
-     * **只写表现层、不回写模型**。
-     *
-     * ⚠️ 只挂在**中立格**上：开局就归属的格（主城 + 其 6 邻格）不入波，走常规渲染一帧到位。
+     * 详见 docs/ZCHexView设计决策.md §9。
      */
     private claimWave: { from: ZCFaction; to: ZCFaction; progress: number } | null = null;
     /**
@@ -597,17 +531,8 @@ export class ZCHexView extends Component {
     private pulseFrames: readonly SpriteFrame[] = [];
     /**
      * 脉冲水波纹专用材质的**原型**（渲染层注入，`shaders/hex-pulse.effect` 实例）。
-     *
-     * 只挂在本节点脉冲段那几帧上：把「灰度 → 色」的映射从纯乘法换成「保底亮度 + 乘法」，
-     * 让 `fkz_*` 的灰环（117）不再被乘成近黑（需求「脉冲效果的边缘颜色与整体颜色保持相近色系，
-     * 更亮一点」）；此外还提供**外缘虚化**的径向遮罩（row16）。
-     *
-     * 🔴 这里只存**原型**，真正挂上 Sprite 的是本视图**独占的一份克隆**（`ensurePulseMaterial`）：
-     * `pulseFade` 是每帧写的 uniform（见 `applyPulseFade`），而材质是**按实例**持有 uniform 的 ——
-     * 共用一份的话，两格同时在脉冲段时会互相盖掉对方的虚化强度。
-     *
-     * ⚠️ 非脉冲段**必须摘掉**：同一个 `GroundGlow` 节点在别的段装的是彩色开口光序列帧，
-     * 套着这份着色器会被再乘一次亮度而整体变暗（见 `applyPulseMaterial`）。
+     * 🔴 只存**原型**；真正挂 Sprite 的是本视图**独占克隆**（`pulseFade` 每帧写，共用会互相盖掉）。
+     * 详见 docs/ZCHexView设计决策.md §10。
      */
     private pulseMaterialSource: Material | null = null;
     /** 本视图独占的脉冲材质实例（按需克隆；`null` = 还没进过脉冲段 / 取不到 effect）。 */
@@ -629,7 +554,7 @@ export class ZCHexView extends Component {
      */
     private pulseTint: Color = PULSE_TINT_BARRACKS;
     /** 上一次应用到的表现参数；null = 不在激活期，用于复位检查。 */
-    private lastActivationFx: IZCHexActivationFx | null = null;
+    private lastActivationFx: IZCHexFlipFx | null = null;
     /**
      * 建筑「生成单位抖动」的起始时刻（秒）；null = 当前没在抖。
      *
@@ -688,15 +613,7 @@ export class ZCHexView extends Component {
     private homeSiblingIndex = 0;
     /**
      * 中立资源图标专用的**棋盘级**图层（`ZCGameBoard` 的 `ResourceLayer`）。渲染层注入。
-     *
-     * 为什么非有这一层不可：地块整图是 130×119，而格距只有 92.25×90 ⇒ **相邻格整图互相重叠**，
-     * 后画的整格会盖住先画的那一格（2.5D 那套「较近地块的顶面遮住较远地块的侧壁」就靠这个顺序）。
-     * 资源图标节点 128×128，比顶面 123×90 还高还宽 ⇒ 压在格节点里必然有一段伸进邻格范围，
-     * 于是被邻格整图沿它的**格边线**切掉 —— 肉眼看到的就是「图标被格子线切了一半」。
-     * 抬到这一层之后没有任何地块能盖住它。
-     *
-     * `null`（没注入）时维持原样、图标留在 `BuildingLayer`：单测桩与还没加这一层的棋盘
-     * prefab 都走这条兼容路径，不会因为缺层而崩或改表现。
+     * 详见 docs/ZCHexView设计决策.md §11。
      */
     private resourceIconLayer: Node | null = null;
     /** 资源图标当前是否被抬到 `resourceIconLayer`（false = 正常挂在 `BuildingLayer` 下）。 */
@@ -809,13 +726,7 @@ export class ZCHexView extends Component {
 
     /**
      * 抬升期把地块临时提到**整盘最顶**，落回后按原索引归位。
-     *
-     * 为什么必须提：`HexLayer` 之上还有轮廓 / 城墙 / 装饰 / 建筑 / 状态条五层，
-     * 地块往上抬 48px 会与上方那一格的城墙与建筑重叠，那些层压在下面就是「上升被遮挡」。
-     * 两层同坐标系（都是棋盘根的直接子层、位置与缩放都是默认值）⇒ `setParent` 默认
-     * 不保留世界变换，局部坐标不变，视觉不会跳。
-     *
-     * 幂等：每帧都会调（激活表现挂 `renderDynamic`），靠 `homeParent` 判「已抬过」。
+     * 详见 docs/ZCHexView设计决策.md §12。
      */
     private setRaised(raised: boolean): void {
         const layer = this.activationLayer;
@@ -840,15 +751,7 @@ export class ZCHexView extends Component {
 
     /**
      * 把**中立资源图标**在 `BuildingLayer` ↔ 棋盘级 `ResourceLayer` 之间搬一次（幂等）。
-     *
-     * 与 `setRaised` 同一套思路（抬 / 收回成对、靠状态位判重），差别只在于搬的是
-     * `iconSprite.node` 而不是整个格节点 —— 整格不能抬：它那张不透明整图会把邻格压掉。
-     *
-     * ⚠️ 本方法**只改父子关系，不写坐标**。坐标一律由 `applyIconPosition` 紧随其后写
-     * （唯一写入口），否则会出现「两个地方各写半截坐标」的静默错位。
-     *
-     * ⚠️ 视图是对象池复用的：`initialize` 会无条件把它收回 `BuildingLayer`（不看本层是否已注入），
-     * 免得上一局抬上去的图标跟着复用回来的格子继续飘在棋盘层。
+     * 详见 docs/ZCHexView设计决策.md §13。
      */
     private setResourceIconRaised(raised: boolean): void {
         const sprite = this.iconSprite;
@@ -908,13 +811,7 @@ export class ZCHexView extends Component {
 
     /**
      * 注入兵力资源点（`unit_cap`）格内要站的中立兵。
-     *
-     * `cardId` / `count` 来自 `neutralResource` 表（`rewardCardId` / `rewardUnitCount`），
-     * `prefab` 是该卡的骨骼外观（走首屏已加载的 `unitVisualPrefabs`，**不额外加载**）。
-     * 所以策划改表就能换格子上站几个兵、站哪个兵，**不用改 prefab 或本视图**。
-     *
-     * `prefab = null`（表里没配卡 / 该卡没单位 prefab）⇒ 退回中文「兵力」文字，
-     * 别留下「既没骨骼也没字」的空格。
+     * 详见 docs/ZCHexView设计决策.md §14。
      */
     setResourceUnits(cardId: string, prefab: Prefab | null, count: number): void {
         const nextCount = Math.max(0, Math.floor(count));
@@ -1007,15 +904,7 @@ export class ZCHexView extends Component {
     /**
      * 开局「点击金矿」提示：给这一格套一圈**整体描边闪烁**（需求 2026-10-15 row10 原文：
      * 「进入游戏初始时，给金矿图标所在的地块格子增加一个整体的描边闪烁，提示玩家点击金矿」）。
-     *
-     * `alpha` 是提示透明度（`0` = 关掉），由渲染层每帧喂 `ZCGameViewUtil.zcNeutralHintAlpha`。
-     *
-     * 为什么画在 `outlineGraphics`（那份 per-cell 的 `TerritoryOutline`）而不是共享轮廓层：
-     * 提示是**每帧都在变**的闪烁，而共享层是整盘一张画布 —— 想每帧只更新这一格就得把整盘
-     * 轮廓重建一遍（探针里只有它是脏的）。这份画布刚好"一格一画布"，重绘代价只有 6 条边。
-     *
-     * ⚠️ 所有权属轮廓仍**只由** `ZCOutlineLayer` 画，这里绝不画领地边 —— 否则会和共享层叠出双线。
-     * 幂等：`alpha <= 0` 就是"关掉"，重复调用只是空转；透明度变化 < 2% 时连 Graphics 都不碰。
+     * 详见 docs/ZCHexView设计决策.md §15。
      */
     renderHintOutline(alpha: number): void {
         const graphics = this.outlineGraphics;
@@ -1066,7 +955,22 @@ export class ZCHexView extends Component {
      * 不在激活期时把格根与建筑节点复位 —— 地块视图是对象池复用，
      * 不复位的话上一次的抬起 / 翻面 / 弹入会带到下一局。
      */
-    private applyActivationFx(fx: IZCHexActivationFx): void {
+    /**
+     * 激活表现的瞬时复位：位移 / 地块缩放 / 地面光 / 脉冲材质一次写回基准值。
+     *
+     * 这几项**必须同拍一起写**（漏一个就留残影：脉冲材质套在开口光序列帧上会再乘一次亮度、
+     * 地块停在最小缩放会让回场那一帧看见"从最小展开"）。建筑缩放由调用方按段决定：
+     * 激活期外落回基准值，隐藏段传 0（等卡牌淡出那段才一起长出来）。
+     */
+    private resetActivationVisuals(): void {
+        this.setRaised(false);
+        this.applyTileOffset(0, 1);
+        this.applyTileTransform(1, 1);
+        this.applyGroundGlow(0, 1);
+        this.applyPulseMaterial(false);
+    }
+
+    private applyActivationFx(fx: IZCHexFlipFx): void {
         const pulsing = fx.pulsePhase !== undefined;
         const active = fx.hidden || fx.tileFlip !== 1 || fx.tileScale !== 1 || fx.tileLift !== 0
             || fx.buildingPopScale !== 1 || fx.glowRadius > 0 || pulsing;
@@ -1101,11 +1005,7 @@ export class ZCHexView extends Component {
             // 隐藏段整格不可见：位移与缩放也复位（收场末停在 0.1 与最高点，
             // 不复位的话地块回场那一刻会先看到「从最小展开」的帧差）。
             // 建筑也保持隐藏（buildingPopScale 0）—— 它要等卡牌淡出那段才跟淡出同拍长出来。
-            this.setRaised(false);
-            this.applyTileOffset(0, 1);
-            this.applyTileTransform(1, 1);
-            this.applyGroundGlow(0, 1);
-            this.applyPulseMaterial(false);
+        this.resetActivationVisuals();
             this.applyBuildingScale(0);
             return;
         }
@@ -1144,13 +1044,7 @@ export class ZCHexView extends Component {
 
     /**
      * 地块收场（等比压扁 / 整格缩没）。**本方法是地块节点 `scale` 的唯一写入口**。
-     *
-     * 两个参数各管一轴、在任一时刻只有一个不是 1：
-     *  - `flip`：绕水平轴压扁（`scale.y`）—— 领地地图的随机资源格翻开走这条；
-     *  - `scale`：整格等比缩放（两轴同乘）—— 对局开发激活的「缩到 0.1 消失」走这条。
-     *
-     * 缩放写在**格根**上 ⇒ 格内图标 / 价格数字 / 血条 / 建筑跟着一起缩，
-     * 不需要逐个节点跟（需求原文：「连带着图标和数字UI一起缩小」）。
+     * 详见 docs/ZCHexView设计决策.md §16。
      */
     private applyTileTransform(flip: number, scale: number): void {
         const targetX = scale;
@@ -1161,18 +1055,7 @@ export class ZCHexView extends Component {
 
     /**
      * 底部发光（开口光）：地块抬起来之后，把原格开口那道光**用序列帧播一遍**。
-     *
-     * 节点是 `ZCGameHex/GroundGlow`（排在底图**之后**，避免被地块底图盖住），本方法负责：
-     *  - **抵消父节点的上移**，让光带下沿留在原位开口；
-     *  - 按**收场进度**切帧（`hexFlipFoldProgress` 由 lift + 塌陷轴反推，与抬升 / 收场同步）；
-     *  - `tileLift = 0`（复位 / 隐藏段）时整块关掉；
-     *  - 光带取本格蓝/红阵营色 —— 序列帧是白光图，靠 `sprite.color` 乘色。
-     *
-     * ⚠️ 序列帧**自带淡入淡出**，所以这里不再叠一层 `hexFlipGroundGlowStrength` 曲线
-     * （叠了会暗一档）；那个函数只用来判断「这一帧该不该亮」。
-     *
-     * ⚠️ `tileScale`（缩没段）没有 `tileFlip` 的变化，必须经 `hexCollapseProgress` 换出一个
-     * **等价 flip** 再喂给那两个 core 函数 —— 否则帧序会停在抬升结束那一张、亮灭也永远不衰减。
+     * 详见 docs/ZCHexView设计决策.md §17。
      */
     private applyGroundGlow(tileLift: number, tileFlip: number, tileScale = 1): void {
         const sprite = this.groundGlow;
@@ -1215,15 +1098,7 @@ export class ZCHexView extends Component {
 
     /**
      * 写建筑外观节点的缩放 / 显隐：`BUILDING_ICON_SCALE × multiplier`。
-     *
-     * 本方法是 `buildingSprite.node.scale` 与 `active` 的**唯一写入口** —— 激活表现、
-     * 选点阶段、常规 `renderContent` 都从这里过。新增写 scale 的路径前先确认不需要绕过它。
-     *
-     * `multiplier` 有两个语义档：
-     *  - `> 0`：正常渲染 / 生成动画中（`elasticPopScale` 的 0.2 ~ 1.2），按倍率缩放；
-     *  - `= 0`：**这一格还没有建筑**（卡牌还没消失的那段）。不是「缩到 0 显示」而是直接
-     *    关节点 —— 0 缩放的 Sprite 仍会占一次绘制、也容易留下 1px 残留。
-     *    ⚠️ 必须**绝对**赋值 `active`：节点来自对象池，复用回来时的 `false` 会残留。
+     * 详见 docs/ZCHexView设计决策.md §18。
      */
     private applyBuildingScale(multiplier = 1): void {
         const node = this.buildingSprite.node;
@@ -1278,22 +1153,8 @@ export class ZCHexView extends Component {
 
     /**
      * 「新点亮邻格」可开发外观的按住窗判定（需求 2026-10-15 row6）。
-     *
-     * 只在 `canDevelop` 由假变真的**那一拍**登记一个 `ZC_HEX_NEIGHBOR_HOLD_SECONDS` 的窗，
-     * 窗内返回 true ⇒ 调用方把该格压回「还没点亮」的外观。
-     *
-     * ⚠️ 三条边界：
-     *  - **首帧只记基线**（`developableBootstrapped`）：开局就亮着的购买位不能被按住，否则
-     *    一进对局满屏价格牌都要先藏一拍；
-     *  - **持续可开发不重登记**：否则玩家每帧都会重置窗口，价格牌永远不放出来；
-     *  - 不可开发时直接返回 false（本来就没内容可藏）。
-     *
-     * 🔴 2026-10-15 row9 起**渲染世界也会调它**（`ZCGameRenderWorld.renderHexSystem` 的
-     * `ownerForHex`）：轮廓与「点亮图标」必须同一拍出现，而轮廓是在地块视图之外单独画的，
-     * 只有问这里才能拿到同一个按住状态 —— 描边先冒出来、0.2s 后图标才跟上正是需求要修的现象。
-     *
-     * 同拍重复调用是安全的（幂等）：第二次进来 `lastCanDevelop` 已经是 `canDevelop`，
-     * 不会再重置窗口，返回值也一样。所以「谁先调」不影响结果。
+     * 🔴 row9 起**渲染世界也会调它**（`ZCGameRenderWorld.renderHexSystem`）—— 改口径要两边一起看。
+     * 详见 docs/ZCHexView设计决策.md §19。
      */
     resolveDevelopableHold(canDevelop: boolean, now: number): boolean {
         if (!this.developableBootstrapped) {
@@ -1378,7 +1239,7 @@ export class ZCHexView extends Component {
         const material = this.pulseMaterial;
         if (!material) return;
         const value = clamp01(fade);
-        if (Math.abs(value - this.pulseFadeWritten) <= 1e-4) return;
+        if (Math.abs(value - this.pulseFadeWritten) <= PULSE_FADE_EPSILON) return;
         this.pulseFadeWritten = value;
         this.pulseFadeParams.x = value;
         material.setProperty('pulseFade', this.pulseFadeParams);
@@ -1399,22 +1260,7 @@ export class ZCHexView extends Component {
     /**
      * 脉冲段：中间层播一道**向外扩散**的水波纹
      * （`phase` = 一个周期内的相位 `[0,1)`，一轮 = 一整组帧）。
-     *
-     * 四个口径：
-     *  - **选帧**：`floor(phase × 帧数)`（帧自带起波 → 扩散 → 收掉的 alpha 曲线，不再叠第二层曲线）；
-     *    取不到 / 没有帧 ⇒ 波纹不显示（降级不报错），缩没照走；
-     *  - **染色**：按地块类型（`pulseTintForTileType`）乘色，兵营蓝紫 / 金矿绿**同 alpha 平级**；
-     *  - **扩散**（2026-10-15 row16）：波纹要向外扩到 `expandScale` 个**格子大小**，而它是**格根的
-     *    子节点**、格根正被并发的缩没段一路收小 ⇒ 必须把父节点的缩放**抵消掉**（`÷ parentScale`），
-     *    写出去的才是**绝对**的格子倍率。不抵消的话波纹只会跟着地块一起缩 —— 那正是需求要改掉的
-     *    「缩小」。位置同理抵消：波纹中心钉在**原格的可见台面中心**（`ZC_LAND_TOP_CENTER_LIFT`），
-     *    不跟着格根一起沉向格心。
-     *  - **外缘虚化**：把强度（0→1）交给着色器做径向遮罩，越往外扩外缘越淡、中心保持较实
-     *    （见 `applyPulseFade`）。
-     *
-     * ⚠️ 与「抬升开口光」共用同一个中间层 Sprite（`GroundGlow`）：两者**互斥**
-     * （`applyActivationFx` 按 `pulsePhase` 有无二选一），互不覆盖；离开脉冲段时缩放由
-     * `restoreRippleScale` 归 1（池化复用不带走上一次的扩散）。
+     * 详见 docs/ZCHexView设计决策.md §20。
      */
     private applyPulseRipple(phase: number, expandScale = 1, fade = 0): void {
         const sprite = this.groundGlow;
@@ -1461,8 +1307,8 @@ export class ZCHexView extends Component {
             : presentation.blocked
                 ? ZCHexView.BLOCKED_FILL_COLOR
                 : this.territoryFill(owner);
-        // 中立格也铺地块图：不铺会露出棋盘橙底（2.5D 地块下是一大片醒目空缺）。
-        // 中立与有主的区分靠染色深浅，不靠"有没有格子"。
+        // 中立格不显示：`territoryFill('neutral')` 的 alpha 为 0，`setSprite` 会直接停用这张 Sprite，
+        // 棋盘底图透出来。格子边界靠 `OutlineLayer` 的矢量格线（那一层照常画）。
         this.setSprite(this.tileSprite, this.tileFrame, tint);
         // 领地轮廓由 `ZCGameRenderWorld.redrawSharedOutline` 统一画在 `OutlineLayer` 上，
         // 这一格不自己描（`outlineGraphics` 已在 `initialize` 里关掉）。
@@ -1520,7 +1366,7 @@ export class ZCHexView extends Component {
             ? ZCHexView.INSUFFICIENT_GOLD_COLOR
             : presentation.unlocksResource
                 ? ZCHexView.RESOURCE_RESOLVED_COLOR
-                : COLORS.white;
+                : ZC_CLIENT_COLORS.white;
         // 正式对局的首帧必须无条件重绘，不能复用选点阶段留下的 contentKey。
         this.contentKey = '';
     }
@@ -1540,17 +1386,7 @@ export class ZCHexView extends Component {
 
     /**
      * 结算扫场覆盖：把这一格画成 `owner`（null = 恢复正常按 `state.owner` 渲染）。
-     *
-     * `mix` 是**深色回正比例**（`0` = 深饱和色 = 刚铺上去，`1` = 该阵营当前色 = 已回正），
-     * 见 `sweepFill`。缺省 `0`：只铺不回的调用方（旧口径 / 测试）拿到的仍是「刚铺满」的样子。
-     *
-     * `shimmer` 是**铺场闪烁量**（2026-10-16 需求「铺场的颜色格子会闪烁，颜色在同色系偏白色的
-     * 范围内快速变化」）：把深色那一端往白里偏多少，`0` = 不闪。缺省 `0` ⇒ 不闪，
-     * 与旧调用方逐位同值。它**只管深色端**，所以 `mix = 1` 时完全不起作用。
-     *
-     * 覆盖值并进 `contentKey` 而不是靠 setter 强制重绘：`render()` 每帧都要比对
-     * 这个 key，落在 key 里才能保证「设了覆盖 → 下一帧必然重绘」且不产生多余的
-     * spriteFrame 赋值。
+     * 详见 docs/ZCHexView设计决策.md §21。
      */
     setSweepOwner(owner: ZCOwner | null, mix = 0, shimmer = 0): void {
         this.sweepOwner = owner;
@@ -1567,17 +1403,7 @@ export class ZCHexView extends Component {
 
     /**
      * 开局归属扩散波：把这一格从 `from`（选点阶段的半区色）过渡到 `to`（战斗底色）。
-     *
-     * `progress` `0` = 还没轮到它（仍是半区色），`1` = 已经是战斗底色；传 `null` 收工、
-     * 恢复按 `state.owner` 渲染（波播完 / 重开一局都要收）。
-     *
-     * 两端都由调用方给（`ZCClaimWave` 按 `ZCClaimWaveEntry` 原样转发），这里不自己推终点色 ——
-     * 「中立可开发格按可开发方染色」那条口径在 `territoryTintOwner` 里，只有一处实现。
-     *
-     * ⚠️ 这里是**唯一**不经过 `contentKey` 闸门的着色入口：扩散波挂在每帧的
-     * `renderDynamic` 上（0.1s 的过渡要逐帧刷，`renderHexSystem` 的 0.15s 节流
-     * 会把它压成一帧硬切），而 `renderTerrain` 那条静态路径只是**顺带**算出同一个颜色。
-     * 两边用同一个 `claimWaveTint`，所以谁先谁后写进去都是对的。
+     * 详见 docs/ZCHexView设计决策.md §22。
      */
     setClaimWave(wave: Readonly<{ from: ZCFaction; to: ZCFaction; progress: number }> | null): void {
         if (wave === null) {
@@ -1592,14 +1418,19 @@ export class ZCHexView extends Component {
         this.applyClaimWaveTint();
     }
 
-    /** 扩散波中途换色：只改色，不动 `spriteFrame`（这一格播的是同一张图）。 */
+    /**
+     * 扩散波中途换色：只改色，不动 `spriteFrame`（这一格播的是同一张图，`setSprite` 内部有守卫）。
+     *
+     * ⚠️ 必须走 `setSprite` 而不是直接写 `color` —— 波的末端可能就是中立色（alpha 0），
+     * 那一格要跟着**渐隐停用**，否则会出现「颜色已经透明、Sprite 还开着」的错位。
+     */
     private applyClaimWaveTint(): void {
         const wave = this.claimWave;
         if (!wave) return;
         const tint = this.claimWaveTint(wave.from, wave.to, wave.progress);
         this.terrainTintColor = tint;
         this.applyGroundGlowTint(tint);
-        if (this.tileSprite) this.tileSprite.color = tint;
+        this.setSprite(this.tileSprite, this.tileFrame, tint);
     }
 
     /**
@@ -1626,18 +1457,8 @@ export class ZCHexView extends Component {
         this.clickHandler = null;
         // 脉冲材质是本视图**运行时克隆**的（见 `ensurePulseMaterial`），`new Material()` 不归
         // 资源管理器管 ⇒ 这里必须 `destroy()`，否则整份跟着视图留在显存里。
-        //
-        // 🔴 **不要写 `this.groundGlow.customMaterial = null`**（规则 176 同族：`onDestroy` 里不碰
-        // 其它组件/节点）。`groundGlow` 挂在**子节点** `GroundGlow` 上，而引擎销毁序是
-        // 「先子节点的组件 → 再本节点的组件」（`node.ts::_onPreDestroyBase`）⇒ 轮到本视图的
-        // `onDestroy` 时，那个 Sprite 早已走完自己的 `UIRenderer.onDestroy`，
-        // `_renderEntity.setNode(null)` + `_destroyData()` 都做完了。此时再写它的
-        // `customMaterial` 会进 `UIRenderer.set customMaterial → updateMaterial →
-        // setSharedMaterial(mat, 0)`，读已释放的渲染状态 ⇒
-        // `TypeError: Cannot read properties of null (reading '0')`，整个对局销毁直接炸。
-        //
-        // 摘材质本来就是多余的：脉冲段结束（`applyPulseMaterial(false)`）与节点销毁由引擎自己
-        // 走 `setSharedMaterial(null, …)`，我们要做的只是**释放自己那份克隆**。
+        // 🔴 绝不要写 `this.groundGlow.customMaterial = null`（规则 176：销毁期不碰子节点组件，会炸整个对局销毁）。
+        // 详见 docs/ZCHexView设计决策.md §23。
         if (this.pulseMaterial) {
             this.pulseMaterial.destroy();
             this.pulseMaterial = null;
@@ -1671,14 +1492,7 @@ export class ZCHexView extends Component {
 
     /**
      * 一格一根血条，但一格上可能同时挂着城墙耐久和建筑耐久，按「当前能被打到的那样」取值：
-     *
-     *   - 墙还在（`wallHp > 0`）→ 显示城墙耐久。此时建筑根本打不到
-     *     （`damageBuilding` 要求 `wallHp <= 0`，索敌也只把暴露的墙当目标），
-     *     所以两者不会同时有意义，一根条就够。
-     *   - 墙破了（`wallHp === 0`）→ 显示建筑耐久。
-     *
-     * 「被攻击才有血条」是刚需而非装饰：每个已开发地块都带满耐久城墙，内部格子的墙
-     * 永远挨不到打，常显会让整片棋盘糊满血条。
+     * 详见 docs/ZCHexView设计决策.md §24。
      */
     private renderHealthBar(state: Readonly<ZCHexState>, now: number): void {
         const bar = this.healthBar;
@@ -1700,8 +1514,8 @@ export class ZCHexView extends Component {
     }
 
     private renderTerrain(state: Readonly<ZCHexState>, canDevelop: boolean): void {
-        // 中立格也铺地块图（理由同 `renderSpawnSelection`）：不铺会露出棋盘橙底。
         // 中立 → 可开发（点了相邻格亮出的购买位）按玩家色染色，与"纯中立"染色不同。
+        // 纯中立格 `tint.a` 为 0 ⇒ 这一格不显示（口径见 `NEUTRAL_FILL_ALPHA`）。
         const tint = this.territoryTint(state, canDevelop);
         // 缓存给抬升侧面的半透明涂抹用，避免光效再算一遍归属。
         this.terrainTintColor = tint;
@@ -1718,9 +1532,9 @@ export class ZCHexView extends Component {
         }
         if (state.state === 'ruins') {
             return new Color(
-                COLORS.ruins.r,
-                COLORS.ruins.g,
-                COLORS.ruins.b,
+                ZC_CLIENT_COLORS.ruins.r,
+                ZC_CLIENT_COLORS.ruins.g,
+                ZC_CLIENT_COLORS.ruins.b,
                 ZCHexView.TERRITORY_FILL_ALPHA);
         }
         return this.territoryFill(territoryTintOwner(state.owner, canDevelop));
@@ -1735,14 +1549,10 @@ export class ZCHexView extends Component {
         alpha: number = ZCHexView.TERRITORY_FILL_ALPHA,
         deep = false,
     ): Color {
-        // 中立铺地块图后不能再全透明（那会露出棋盘橙底）；色相保留灰白，只靠 alpha 与有主区分。
+        // 中立格**没有任何显示**（口径见 `NEUTRAL_FILL_ALPHA`）：alpha 恒 0，色相只在过渡色里参与混色。
         if (owner === 'neutral') {
             const shade = deep ? zcDeepFactionColor('neutral') : ZCHexView.NEUTRAL_FILL_RGB;
-            return new Color(
-                shade.r,
-                shade.g,
-                shade.b,
-                Math.min(alpha, ZCHexView.NEUTRAL_FILL_ALPHA));
+            return new Color(shade.r, shade.g, shade.b, ZCHexView.NEUTRAL_FILL_ALPHA);
         }
         const color = deep ? zcDeepFactionColor(owner) : zcFactionColor(owner);
         return new Color(color.r, color.g, color.b, alpha);
@@ -1751,16 +1561,7 @@ export class ZCHexView extends Component {
     /**
      * 扫场底色：`mix` `0` → **深饱和**阵营色（刚铺上），`1` → 阵营**当前色**（已回正），
      * 中间线性过渡（需求 row8「深色格子即将完成全部填充时，再从起始点开始逐渐过渡到对应阵营的当前颜色」）。
-     *
-     * `shimmer` 把**深色那一端**往白里偏（2026-10-16 需求「铺场的颜色格子会闪烁，颜色在同色系
-     * 偏白色的范围内快速变化」）。⚠️ 只偏深色端、**不动当前色端**，于是：
-     *  - `mix = 0`（刚铺上、还没轮到回正）⇒ 闪得最明显；
-     *  - `mix = 1`（回正完）⇒ 两端一样，闪烁**完全不参与**（这也是 `sweepKey` 敢在
-     *    `mix >= 1` 时把闪烁剔出指纹的依据）；
-     *  - 中间 ⇒ 闪烁按 `1 - mix` 自动淡出，不需要第二套「什么时候停闪」的规则。
-     *
-     * 两端都走 `territoryFill` 的同一个 alpha ⇒ `mix = 1` 时与常规渲染**逐位同值**：
-     * 扫场收工摘掉覆盖的那一刻不会跳色，也不会出现「回正到一半又闪一下」。
+     * 详见 docs/ZCHexView设计决策.md §25。
      */
     private sweepFill(owner: ZCFaction, mix: number, shimmer: number): Color {
         const deep = this.territoryFill(owner, ZCHexView.TERRITORY_FILL_ALPHA, true);
@@ -1856,23 +1657,16 @@ export class ZCHexView extends Component {
         if (state.neutralResourceId) {
             return state.developmentResolved
                 ? ZCHexView.RESOURCE_RESOLVED_COLOR
-                : COLORS.muted;
+                : ZC_CLIENT_COLORS.muted;
         }
         return canDevelop && !affordable
             ? ZCHexView.INSUFFICIENT_GOLD_COLOR
-            : COLORS.white;
+            : ZC_CLIENT_COLORS.white;
     }
 
     /**
      * 兵力资源点：按配置站 N 个中立待机兵。返回是否真的显示了骨骼。
-     *
-     * ⚠️ 只在「数量或兵种变了」时重建 —— `render` 每帧调，重建会不停`instantiate`。
-     * 骨架节点**挂在格子根下、不是 `buildingLayer`**：`buildingLayer` 的语义是
-     * 「可开发 / 有建筑」，资源点未领取时那一层必须关掉，骨骼不能跟着一起消失。
-     *
-     * 位置与缩放口径：按 canvas 高归一到 `RESOURCE_UNIT_TARGET_HEIGHT`（与 `ZCUnitView`
-     * 同源算法，是那里压到 69.4 的战场口径，这里要挤进 N 个所以更小），
-     * 多个沿 x 并排、脚底对齐格心偏下。
+     * 详见 docs/ZCHexView设计决策.md §26。
      */
     private rebuildResourceUnitsIfNeeded(): boolean {
         // 骨骼数量与兵种都来自配置（`rewardCardId` / `rewardUnitCount`），由渲染层注入。
@@ -1986,10 +1780,15 @@ export class ZCHexView extends Component {
         return Color.WHITE;
     }
 
-    /** 布局由 prefab 管理；只在资源变化时更新 SpriteFrame。 */
+    /**
+     * 布局由 prefab 管理；只在资源变化时更新 SpriteFrame。
+     *
+     * `color.a === 0` 时**连 Sprite 一起停用**（"不画"与"画一张全透明"在 DC 上是两回事）：
+     * 中立格走的就是这条 —— 见 `NEUTRAL_FILL_ALPHA`。
+     */
     private setSprite(sprite: Sprite, frame: SpriteFrame | null, color: Color = Color.WHITE): void {
         if (sprite.spriteFrame !== frame) sprite.spriteFrame = frame;
-        sprite.enabled = frame !== null;
+        sprite.enabled = frame !== null && color.a > 0;
         sprite.color = color;
     }
 

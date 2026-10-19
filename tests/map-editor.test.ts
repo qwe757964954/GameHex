@@ -1157,7 +1157,7 @@ test('region and home-candidate brush edits round-trip through layout export', (
     editor.paint(7, 1);
     editor.commitUndo(before);
 
-    assert.deepEqual(JSON.parse(JSON.stringify(editor.state().json.regions)), [{ section: 1, depth: 'front', cells: [84] }]);
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.state().json.regions)), [{ section: 1, depth: 'front', cells: [84], tendency: 'rush' }]);
     assert.deepEqual(JSON.parse(JSON.stringify(editor.state().json.homeCandidates)), [{ section: 1, cells: [85] }]);
     assert.match(editor.mapMetadataMarkup(), /前区/);
     assert.match(editor.mapMetadataMarkup(), /homeCandidateCell/);
@@ -1168,6 +1168,107 @@ test('region and home-candidate brush edits round-trip through layout export', (
     assert.equal(editor.redo(), true);
     assert.equal(editor.redo(), true);
     assert.equal(editor.state().json.homeCandidates[0].cells[0], 85);
+});
+
+test('region tendency defaults by depth and legacy region exports gain that default', () => {
+    const { editor } = createEditor();
+    editor.applyLayout({
+        version: 3,
+        rows: 8,
+        columns: 12,
+        playerCount: 2,
+        cityMode: 'select',
+        ascii: Array(8).fill('111111111111'),
+        regions: [
+            { section: 1, depth: 'front', cells: [84] },
+            { section: 1, depth: 'mid', cells: [85] },
+            { section: 1, depth: 'back', cells: [86] },
+        ],
+    });
+
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.buildJSON().regions)), [
+        { section: 1, depth: 'front', cells: [84], tendency: 'rush' },
+        { section: 1, depth: 'mid', cells: [85], tendency: 'control' },
+        { section: 1, depth: 'back', cells: [86], tendency: 'develop' },
+    ]);
+});
+
+test('unknown region tendency rejects import without replacing the current editor state', () => {
+    const { editor } = createEditor();
+    editor.applyLayout({
+        version: 3,
+        rows: 8,
+        columns: 12,
+        playerCount: 2,
+        cityMode: 'select',
+        ascii: Array(8).fill('111111111111'),
+        regions: [{ section: 1, depth: 'front', cells: [84], tendency: 'rush' }],
+    });
+    const before = JSON.parse(JSON.stringify(editor.state()));
+
+    assert.throws(() => editor.applyLayout({
+        version: 3,
+        rows: 8,
+        columns: 12,
+        playerCount: 2,
+        cityMode: 'select',
+        ascii: Array(8).fill('222222222222'),
+        regions: [{ section: 1, depth: 'front', cells: [84], tendency: 'unknown' }],
+    }), /倾向/);
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.state())), before);
+});
+
+test('changing current region tendency preserves its cells and supports undo, redo, and import', () => {
+    const { editor, element } = createEditor();
+    editor.applyLayout({
+        version: 3,
+        rows: 8,
+        columns: 12,
+        playerCount: 2,
+        cityMode: 'select',
+        ascii: Array(8).fill('111111111111'),
+        regions: [
+            { section: 1, depth: 'front', cells: [84, 85], tendency: 'rush' },
+            { section: 2, depth: 'front', cells: [86], tendency: 'control' },
+        ],
+    });
+    editor.setRegionBrush(1, 'front');
+
+    element('regionTendency').value = 'develop';
+    element('regionTendency').listeners.change.call(element('regionTendency'));
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.buildJSON().regions[0])), {
+        section: 1, depth: 'front', cells: [84, 85], tendency: 'develop',
+    });
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.buildJSON().regions[1])), {
+        section: 2, depth: 'front', cells: [86], tendency: 'control',
+    });
+    assert.equal(editor.undo(), true);
+    assert.equal(editor.buildJSON().regions[0].tendency, 'rush');
+    assert.equal(editor.redo(), true);
+    const exported = JSON.parse(JSON.stringify(editor.buildJSON()));
+    const imported = createEditor().editor;
+    imported.applyLayout(exported);
+    assert.equal(imported.buildJSON().regions[0].tendency, 'develop');
+    assert.equal(imported.buildJSON().regions[1].tendency, 'control');
+});
+
+test('region tendency selected before the first region is painted is used for the new region', () => {
+    const { editor } = createEditor();
+    editor.applyLayout({
+        version: 3,
+        rows: 8,
+        columns: 12,
+        playerCount: 2,
+        cityMode: 'select',
+        ascii: Array(8).fill('111111111111'),
+    });
+    editor.setRegionBrush(1, 'back');
+    editor.setRegionTendency('rush');
+    editor.paint(7, 0);
+
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.buildJSON().regions)), [
+        { section: 1, depth: 'back', cells: [84], tendency: 'rush' },
+    ]);
 });
 
 test('editor accepts every PVP neutral-resource pool id', () => {

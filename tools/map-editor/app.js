@@ -28,7 +28,7 @@
   var resourcePoints = [];
   var regions = [];
   var homeCandidates = [];
-  var regionBrush = { section: 1, depth: 'front' };
+  var regionBrush = { section: 1, depth: 'front', tendency: 'rush' };
   var homeCandidateBrushSection = 1;
   var RESOURCE_TYPES = [
     { id: 'chest', label: '宝箱', asset: 'image/map-resource/chest' },
@@ -143,10 +143,15 @@
   function cloneRegions(items) {
     return items.map(function (region) {
       var copy = { section: region.section, depth: region.depth, cells: region.cells.slice() };
-      if (region.tendency !== undefined) copy.tendency = region.tendency;
+      var tendency = region.tendency === undefined ? defaultRegionTendency(region.depth) : region.tendency;
+      if (['rush', 'control', 'develop'].indexOf(tendency) < 0) throw new Error('区域打法倾向必须是 rush / control / develop');
+      copy.tendency = tendency;
       if (region.text !== undefined) copy.text = region.text;
       return copy;
     });
+  }
+  function defaultRegionTendency(depth) {
+    return depth === 'front' ? 'rush' : depth === 'mid' ? 'control' : depth === 'back' ? 'develop' : null;
   }
   function cloneHomeCandidates(items) {
     return items.map(function (entry) { return { section: entry.section, cells: entry.cells.slice() }; });
@@ -219,8 +224,23 @@
   function setRegionBrush(section, depth) {
     if (!Number.isInteger(section) || section < 1 || section > PLAYER_COUNT ||
         ['front', 'mid', 'back'].indexOf(depth) < 0) throw new Error('区域配置无效');
-    regionBrush = { section: section, depth: depth };
+    var region = regions.find(function (entry) { return entry.section === section && entry.depth === depth; });
+    regionBrush = { section: section, depth: depth, tendency: region ? region.tendency : defaultRegionTendency(depth) };
     brush = 'region';
+    syncControls();
+  }
+  function setRegionTendency(tendency) {
+    if (['rush', 'control', 'develop'].indexOf(tendency) < 0) throw new Error('区域打法倾向必须是 rush / control / develop');
+    var before = snapshot();
+    regionBrush.tendency = tendency;
+    var region = regions.find(function (entry) {
+      return entry.section === regionBrush.section && entry.depth === regionBrush.depth;
+    });
+    if (region) {
+      region.tendency = tendency;
+      render();
+      commitUndo(before);
+    }
     syncControls();
   }
   function setHomeCandidateBrush(section) {
@@ -1129,6 +1149,12 @@
     if (data.ascii.length !== expectedRows || data.ascii.some(function (line) {
       return typeof line !== 'string' || line.length !== expectedCols || invalidToken.test(line);
     })) throw new Error('字符画行数或列数不匹配（应为 ' + expectedRows + ' 行 × ' + expectedCols + ' 列）');
+    if (data.regions !== undefined && !Array.isArray(data.regions)) throw new Error('前 / 中 / 后区配置必须是数组');
+    var importedRegions = data.regions || [];
+    if (importedRegions.some(function (region) { return !region || !Array.isArray(region.cells); })) {
+      throw new Error('前 / 中 / 后区格子配置无效');
+    }
+    var normalizedRegions = cloneRegions(importedRegions);
 
     PLAYER_COUNT = data.playerCount === 3 || data.playerCount === 4 ? data.playerCount : 2;
     CITY_MODE = data.cityMode === 'select' ? 'select' : 'fixed';
@@ -1173,12 +1199,11 @@
       grid.push(line);
     }
     resourcePoints = cloneResourcePoints(importedResourcePoints);
-    if (data.regions !== undefined && !Array.isArray(data.regions)) throw new Error('前 / 中 / 后区配置必须是数组');
-    var importedRegions = data.regions || [];
-    if (importedRegions.some(function (region) { return !region || !Array.isArray(region.cells); })) {
-      throw new Error('前 / 中 / 后区格子配置无效');
-    }
-    regions = cloneRegions(importedRegions);
+    regions = normalizedRegions;
+    var activeRegion = regions.find(function (region) {
+      return region.section === regionBrush.section && region.depth === regionBrush.depth;
+    });
+    regionBrush.tendency = activeRegion ? activeRegion.tendency : defaultRegionTendency(regionBrush.depth);
     if (data.homeCandidates !== undefined && !Array.isArray(data.homeCandidates)) throw new Error('主城可选格配置必须是数组');
     var importedHomeCandidates = data.homeCandidates || [];
     if (importedHomeCandidates.some(function (entry) { return !entry || !Array.isArray(entry.cells); })) {
@@ -1856,7 +1881,7 @@
             return region.section === regionBrush.section && region.depth === regionBrush.depth;
           });
           if (!targetRegion) {
-            targetRegion = { section: regionBrush.section, depth: regionBrush.depth, cells: [] };
+            targetRegion = { section: regionBrush.section, depth: regionBrush.depth, cells: [], tendency: regionBrush.tendency };
             regions.push(targetRegion);
           }
           targetRegion.cells.push(regionId);
@@ -2424,6 +2449,11 @@
     });
     $('regionSection').value = String(regionBrush.section);
     $('homeCandidateSection').value = String(homeCandidateBrushSection);
+    var selectedRegion = regions.find(function (region) {
+      return region.section === regionBrush.section && region.depth === regionBrush.depth;
+    });
+    if (selectedRegion) regionBrush.tendency = selectedRegion.tendency;
+    $('regionTendency').value = regionBrush.tendency || defaultRegionTendency(regionBrush.depth);
     Array.prototype.forEach.call(document.querySelectorAll('#segRegionDepth button'), function (button) {
       var active = button.dataset.depth === regionBrush.depth;
       if (button.classList.toggle) button.classList.toggle('on', active);
@@ -2853,6 +2883,9 @@
     $('regionSection').addEventListener('change', function () {
       setRegionBrush(Number(this.value), regionBrush.depth);
     });
+    $('regionTendency').addEventListener('change', function () {
+      setRegionTendency(this.value);
+    });
     Array.prototype.forEach.call(document.querySelectorAll('#segRegionDepth button'), function (button) {
       button.addEventListener('click', function () {
         setRegionBrush(Number($('regionSection').value), this.dataset.depth);
@@ -2895,7 +2928,7 @@
     freeDecorMarkup: freeDecorMarkup,
     rememberDecorName: rememberDecorName, groupDecorEntries: groupDecorEntries,
     setResourceBrush: setResourceBrush, setResourceWeight: setResourceWeight, resourceMarkup: resourceMarkup,
-    setRegionBrush: setRegionBrush, setHomeCandidateBrush: setHomeCandidateBrush,
+    setRegionBrush: setRegionBrush, setRegionTendency: setRegionTendency, setHomeCandidateBrush: setHomeCandidateBrush,
     mapMetadataMarkup: mapMetadataMarkup,
     addResourcePoint: addResourcePoint, removeResourcePoint: removeResourcePoint,
     // 视图矩形 / 背景图标记：判据要能断言「图盒 == viewBox」（见 viewportRect 的红字说明）。

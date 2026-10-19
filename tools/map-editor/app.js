@@ -1154,6 +1154,12 @@
     if (importedRegions.some(function (region) { return !region || !Array.isArray(region.cells); })) {
       throw new Error('前 / 中 / 后区格子配置无效');
     }
+    var importedRegionDepths = Object.create(null);
+    importedRegions.forEach(function (region) {
+      var key = String(region.section) + ':' + String(region.depth);
+      if (importedRegionDepths[key]) throw new Error('同一分区的纵深区域不能重复配置');
+      importedRegionDepths[key] = true;
+    });
     var normalizedRegions = cloneRegions(importedRegions);
 
     PLAYER_COUNT = data.playerCount === 3 || data.playerCount === 4 ? data.playerCount : 2;

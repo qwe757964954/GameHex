@@ -64,19 +64,37 @@ test('region bubble nodes reuse anchors, follow visibility, draw text, and clear
     const root = parent.children[0];
     const bubble = root.children[0];
     const label = bubble.children[0].getComponent(cc.Label);
+    const graphics = bubble.getComponent(cc.Graphics);
+    const backgroundCommands = graphics.commands;
+    let labelText = label.string;
+    let labelWrites = 0;
+    Object.defineProperty(label, 'string', {
+        configurable: true,
+        get: () => labelText,
+        set: (next: string) => { labelWrites += 1; labelText = next; },
+    });
     assert.equal(root.active, true);
     assert.deepEqual([bubble.position.x, bubble.position.y], [17, 32]);
-    assert.equal(label.string, '前区 · 速攻');
-    assert.ok(bubble.getComponent(cc.Graphics).commands.some((command: { kind: string }) => command.kind === 'roundRect'));
+    assert.equal(label.string, '\u524d\u533a \u00b7 \u901f\u653b');
+    assert.ok(backgroundCommands.some((command: { kind: string }) => command.kind === 'roundRect'));
 
     overlay.render([{ ...initial[0], x: -24, y: 8, label: '控场' }], true);
     assert.equal(root.children.length, 1, 're-render should reuse the existing bubble');
     assert.equal(root.children[0], bubble);
     assert.deepEqual([bubble.position.x, bubble.position.y], [-24, 8]);
-    assert.equal(label.string, '前区 · 控场');
+    assert.equal(label.string, '\u524d\u533a \u00b7 \u63a7\u573a');
+    assert.equal(labelWrites, 1, 'only changed label text should be written');
+    assert.equal(graphics.commands, backgroundCommands, 'static bubble background should not be redrawn');
 
-    overlay.render(initial, false);
+    overlay.render([{ ...initial[0], x: -24, y: 8, label: '控场' }], true);
+    assert.equal(labelWrites, 1, 'unchanged label text should not be written again');
+    assert.equal(graphics.commands, backgroundCommands, 'repeated visible frames should reuse the background');
+
+    overlay.render([{ ...initial[0], x: 100, y: 200, label: '隐藏更新' }], false);
     assert.equal(root.active, false);
+    assert.deepEqual([bubble.position.x, bubble.position.y], [-24, 8], 'hidden frames should not update anchors');
+    assert.equal(labelWrites, 1, 'hidden frames should not write labels');
+    assert.equal(graphics.commands, backgroundCommands, 'hidden frames should not redraw backgrounds');
     overlay.clear();
     assert.equal(parent.children.length, 0);
     assert.equal(root.isValid, false);

@@ -15,6 +15,8 @@ interface ISpawnRegionBubble {
     node: Node;
     label: Label;
     graphics: Graphics;
+    depth: IZCSpawnRegionHint['depth'] | null;
+    hintLabel: string | null;
 }
 
 /** Board-local, non-interactive region hints that sit above the hex layer. */
@@ -32,21 +34,24 @@ export class ZCSpawnRegionHintOverlay {
 
     render(hints: readonly IZCSpawnRegionHint[], visible: boolean): void {
         const count = Math.min(hints.length, 3);
-        this.root.active = visible && count > 0;
+        const shouldShow = visible && count > 0;
+        if (this.root.active !== shouldShow) this.root.active = shouldShow;
+        if (!shouldShow) return;
         for (let index = 0; index < count; index += 1) {
             const hint = hints[index];
             const bubble = this.ensureBubble(index);
-            bubble.node.active = visible;
-            bubble.node.setPosition(hint.x, hint.y, 0);
-            bubble.label.string = `${DEPTH_LABEL[hint.depth]} · ${hint.label}`;
-            bubble.label.color = BUBBLE_TEXT;
-            bubble.graphics.clear();
-            bubble.graphics.fillColor = BUBBLE_BACKGROUND;
-            bubble.graphics.roundRect(-BUBBLE_WIDTH / 2, -BUBBLE_HEIGHT / 2, BUBBLE_WIDTH, BUBBLE_HEIGHT, 10);
-            bubble.graphics.fill();
+            if (!bubble.node.active) bubble.node.active = true;
+            if (bubble.node.position.x !== hint.x || bubble.node.position.y !== hint.y) {
+                bubble.node.setPosition(hint.x, hint.y, 0);
+            }
+            if (bubble.depth !== hint.depth || bubble.hintLabel !== hint.label) {
+                bubble.label.string = `${DEPTH_LABEL[hint.depth]} · ${hint.label}`;
+                bubble.depth = hint.depth;
+                bubble.hintLabel = hint.label;
+            }
         }
         for (let index = count; index < this.bubbles.length; index += 1) {
-            this.bubbles[index].node.active = false;
+            if (this.bubbles[index].node.active) this.bubbles[index].node.active = false;
         }
     }
 
@@ -64,6 +69,9 @@ export class ZCSpawnRegionHintOverlay {
         const transform = node.addComponent(UITransform);
         transform.setContentSize(BUBBLE_WIDTH, BUBBLE_HEIGHT);
         const graphics = node.addComponent(Graphics);
+        graphics.fillColor = BUBBLE_BACKGROUND;
+        graphics.roundRect(-BUBBLE_WIDTH / 2, -BUBBLE_HEIGHT / 2, BUBBLE_WIDTH, BUBBLE_HEIGHT, 10);
+        graphics.fill();
 
         const labelNode = new Node('Label');
         labelNode.layer = this.root.layer;
@@ -78,7 +86,7 @@ export class ZCSpawnRegionHintOverlay {
         labelNode.setParent(node);
         node.setParent(this.root);
 
-        const bubble = { node, label, graphics };
+        const bubble = { node, label, graphics, depth: null, hintLabel: null };
         this.bubbles.push(bubble);
         return bubble;
     }

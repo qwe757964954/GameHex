@@ -1218,6 +1218,34 @@ test('unknown region tendency rejects import without replacing the current edito
     assert.deepEqual(JSON.parse(JSON.stringify(editor.state())), before);
 });
 
+test('duplicate section-depth regions reject import without replacing the current editor state', () => {
+    const { editor } = createEditor();
+    editor.applyLayout({
+        version: 3,
+        rows: 8,
+        columns: 12,
+        playerCount: 2,
+        cityMode: 'select',
+        ascii: Array(8).fill('111111111111'),
+        regions: [{ section: 1, depth: 'front', cells: [84], tendency: 'rush' }],
+    });
+    const before = JSON.parse(JSON.stringify(editor.state()));
+
+    assert.throws(() => editor.applyLayout({
+        version: 3,
+        rows: 8,
+        columns: 12,
+        playerCount: 2,
+        cityMode: 'select',
+        ascii: Array(8).fill('222222222222'),
+        regions: [
+            { section: 1, depth: 'front', cells: [84], tendency: 'rush' },
+            { section: 1, depth: 'front', cells: [85], tendency: 'control' },
+        ],
+    }), /区域/);
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.state())), before);
+});
+
 test('changing current region tendency preserves its cells and supports undo, redo, and import', () => {
     const { editor, element } = createEditor();
     editor.applyLayout({

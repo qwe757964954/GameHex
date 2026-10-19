@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { configureZCMap, type ZCMapLayout, type ZCMapRegion } from '../assets/script/app/zcds/model/ZCGameModel';
+import { configureZCMap, ZC_HEX_CONFIG, type ZCMapLayout, type ZCMapRegion } from '../assets/script/app/zcds/model/ZCGameModel';
 import { resolveZCSpawnRegionHints } from '../assets/script/app/zcds/model/ZCSpawnRegionHint';
 
 test('region hints use depth defaults, tendency overrides, own section, and mean cell positions', () => {
@@ -29,6 +29,28 @@ test('region hints use depth defaults, tendency overrides, own section, and mean
         { depth: 'back', label: '发育', x: -5, y: 15 },
         { depth: 'mid', label: '控场', x: 1, y: 2 },
     ]);
+});
+
+test('configureZCMap rejects inherited tendency property names', () => {
+    const source = JSON.parse(readFileSync('assets/resources/config/maps/select_river.json', 'utf8')) as ZCMapLayout;
+    for (const tendency of ['constructor', 'toString', '__proto__']) {
+        const layout = structuredClone(source);
+        assert.ok(layout.regions?.length);
+        layout.regions[0].tendency = tendency as ZCMapRegion['tendency'];
+        assert.throws(() => configureZCMap(layout), /rush \/ control \/ develop/, tendency);
+    }
+});
+
+test('configureZCMap rejects duplicate section and depth regions', () => {
+    const layout = JSON.parse(readFileSync('assets/resources/config/maps/select_river.json', 'utf8')) as ZCMapLayout;
+    assert.ok(layout.regions?.length);
+    const first = layout.regions[0];
+    configureZCMap(layout);
+    const usedCells = new Set(layout.regions.flatMap((region) => region.cells));
+    const otherPlayableCell = ZC_HEX_CONFIG.find((hex) => hex.playable && !usedCells.has(hex.id));
+    assert.ok(otherPlayableCell, 'fixture needs an unassigned playable cell');
+    layout.regions.push({ ...first, cells: [otherPlayableCell.id] });
+    assert.throws(() => configureZCMap(layout), /区域.*重复|重复.*区域/);
 });
 
 test('configureZCMap rejects unknown region tendency with the defined configuration error', () => {

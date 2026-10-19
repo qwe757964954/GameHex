@@ -32,7 +32,7 @@ export async function loadTerritoryCampaign(chapterId: number): Promise<{
         RefUtil.instance.getRefAllAsync('roleProperty'),
         RefUtil.instance.getRefAllAsync('gameConfig'),
     ]);
-    const resourceRows = [...asRows<TerritoryResourceRow>(items), ...asRows<TerritoryResourceRow>(roleProperties)];
+    const resourceRows = asRows<TerritoryResourceRow>(items).concat(asRows<TerritoryResourceRow>(roleProperties));
     return {
         ...buildTerritoryCampaign(
             asRows<TerritoryLevelRow>(levels),

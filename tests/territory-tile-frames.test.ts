@@ -101,9 +101,14 @@ function loadMapView() {
             };
             if (id === './TerritoryStationView') return { TerritoryStationView: class {} };
             if (id === './TerritoryResourceGainView') return { TerritoryResourceGainView: class {} };
+            // 喷发粒子（2026-10-16 row17）：夹具只关心地皮 / 格面框，给个空壳即可。
+            if (id === './TerritoryGainBurst') return {
+                TERRITORY_GAIN_BURST_NODE: 'GainBurst',
+                TerritoryGainBurst: class {},
+            };
             if (id.endsWith('/TerritoryResourceGain')) return {
                 TERRITORY_GAIN_STACK_GAP_PX: 40,
-                TERRITORY_GAIN_START_LIFT_PX: 30,
+                TERRITORY_GAIN_START_LIFT_PX: 40,
                 TERRITORY_SILVER_RES_ID: 7,
                 TERRITORY_STAMINA_RES_ID: 9,
             };
@@ -122,6 +127,9 @@ function loadMapView() {
                     danger: 'danger', exploring: 'exploring', available: 'available',
                     randomConditionText: 'red', randomAvailableText: 'white',
                 },
+                TERRITORY_STATION_STATE: {
+                    owned: 'owned', exploring: 'exploring', available: 'available', locked: 'locked',
+                },
                 territoryStationTint: () => 'gold',
                 territoryBossTint: () => 'danger',
                 territoryUnboundTint: () => 'async-brown',
@@ -130,6 +138,23 @@ function loadMapView() {
                 TERRITORY_TEXTS: { pendingConfig: '待配置', lockBadge: '锁' },
                 TERRITORY_UNBOUND_TYPE_NAMES: {
                     stage: '关卡', boss: '首领', asyncPvp: '异步', fixedResource: '资源据点', bonus: '奖励据点',
+                },
+            };
+            // 事件契约：纯常量表，给桩（与 `view/TerritoryEvents.ts` 同值）。
+            if (id === './TerritoryEvents') return {
+                TERRITORY_EVENTS: {
+                    STATION_CLICK: 'territory:station-click',
+                    PREVIOUS_CHAPTER: 'territory:previous-chapter',
+                    NEXT_CHAPTER: 'territory:next-chapter',
+                    DETAIL_CLOSE: 'territory:detail-close',
+                    DETAIL_START: 'territory:detail-start',
+                },
+            };
+            // MapView 按站点类型命名常量判定（2026-10-19 起），需运行时值桩。
+            if (id === '../model/TerritoryMapConfig') return {
+                TERRITORY_SITE_TYPE: {
+                    stage: 'stage', boss: 'boss', asyncPvp: 'asyncPvp',
+                    fixedResource: 'fixedResource', bonus: 'bonus',
                 },
             };
             throw new Error(`Unexpected dependency: ${id}`);

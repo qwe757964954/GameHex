@@ -10,6 +10,8 @@ import {
     ITerritoryPresenterPorts,
     TerritoryPresenter,
 } from '../assets/script/app/territory/application/TerritoryPresenter';
+import { EventMgr } from '../assets/script/framework/event/EventMgr';
+import { TERRITORY_PRESENTER_EVENTS } from '../assets/script/app/territory/view/TerritoryEvents';
 import type { TerritoryCampaignStage } from '../assets/script/app/territory/model/TerritoryCampaignConfig';
 import type {
     TerritoryChapterSave,
@@ -524,7 +526,8 @@ function createHarness(options: HarnessOptions = {}) {
         availableChapters: options.chapters ?? [1],
     };
     const presenter = new TerritoryPresenter(ports);
-    presenter.onStateChange = () => { stateChanges++; };
+    // 订阅挂在 `EventMgr` 全局中控上，target = presenter：`presenter.dispose()` 里 `offTarget(this)` 一并摘净。
+    EventMgr.instance.on(TERRITORY_PRESENTER_EVENTS.StateChange, () => { stateChanges++; }, presenter);
     return {
         presenter,
         stateChanges: () => stateChanges,

@@ -1,12 +1,7 @@
 import { _decorator, Button, Component, Label } from 'cc';
+import { TERRITORY_EVENTS } from './TerritoryEvents';
 
 const { ccclass, property } = _decorator;
-
-/** 弹窗上的动作（页面注入；监听只在 `initialize` 里绑一次）。 */
-export interface ITerritorySiteDetailActions {
-    readonly onClose: () => void;
-    readonly onStart: () => void;
-}
 
 /** 弹窗内容。`canStart=false` 时收起操作按钮。 */
 export interface ITerritorySiteDetailContent {
@@ -52,12 +47,26 @@ export class TerritorySiteDetailPanel extends Component {
     @property({ type: Label, group: '节点引用', tooltip: 'Panel/Start 的文案' })
     startLabel: Label = null!;
 
-    /** 绑一次点击（页面在 `onLoad` 里调）。 */
-    initialize(actions: ITerritorySiteDetailActions): void {
-        this.dimButton.node.on(Button.EventType.CLICK, actions.onClose, this);
-        this.closeButton.node.on(Button.EventType.CLICK, actions.onClose, this);
-        this.startButton.node.on(Button.EventType.CLICK, actions.onStart, this);
+    /**
+     * 绑一次点击（页面在 `onLoad` 里调）。
+     *
+     * 按钮点击在**本组件节点**上发事件（`DETAIL_CLOSE` / `DETAIL_START`），
+     * 页面在 `detailPanel.node` 上监听；监听随节点销毁自动清理。
+     * 监听回调必须是**命名 handler**（可 off、可 grep 追踪），严禁匿名闭包。
+     */
+    initialize(): void {
+        this.dimButton.node.on(Button.EventType.CLICK, this.handleClose, this);
+        this.closeButton.node.on(Button.EventType.CLICK, this.handleClose, this);
+        this.startButton.node.on(Button.EventType.CLICK, this.handleStart, this);
     }
+
+    private readonly handleClose = (): void => {
+        this.node.emit(TERRITORY_EVENTS.DETAIL_CLOSE);
+    };
+
+    private readonly handleStart = (): void => {
+        this.node.emit(TERRITORY_EVENTS.DETAIL_START);
+    };
 
     /** 打开并全量赋值。幂等：连续两次 `open` 与一次等价。 */
     open(content: ITerritorySiteDetailContent): void {

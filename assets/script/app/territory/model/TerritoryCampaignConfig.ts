@@ -236,19 +236,18 @@ export function buildTerritoryCampaign(
                         };
                     })
                 : [];
-            const projected = [
-                ...matchedTeams.flatMap((team) => team.npcCard.map((entry) => {
+            const projected = matchedTeams
+                .flatMap((team) => team.npcCard.map((entry) => {
                     const raw = typeof entry === 'number' ? { cardID: entry, level: 1 } : entry;
                     return projectCard(asNumber(raw.cardID), Math.max(1, asNumber(raw.level, 1)));
-                })),
-                ...waves.map((wave) => projectCard(wave.monsterId)),
-            ];
-            const enemies = [...projected.reduce((result, enemy) => {
+                }))
+                .concat(waves.map((wave) => projectCard(wave.monsterId)));
+            const enemies = Array.from(projected.reduce((result, enemy) => {
                 const key = enemy.pvpCardId ? `pvp:${enemy.pvpCardId}` : `monster:${enemy.cardId}`;
                 const old = result.get(key);
                 if (!old || enemy.level > old.level) result.set(key, enemy);
                 return result;
-            }, new Map<string, TerritoryCampaignEnemy>()).values()];
+            }, new Map<string, TerritoryCampaignEnemy>()).values());
             const enemyTeamIds = matchedTeams.map((team) => team.npcTeamId);
             const enemyTeamCardIds = matchedTeams.map((team) => Array.from(new Set(team.npcCard.flatMap((entry) => {
                 const raw = typeof entry === 'number' ? { cardID: entry } : entry;

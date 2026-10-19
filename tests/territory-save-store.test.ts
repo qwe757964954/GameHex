@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import * as idleRewards from '../assets/script/app/territory/model/TerritoryIdleReward';
+import * as battleStatus from '../assets/script/app/territory/model/TerritoryBattleStatus';
 import * as texts from '../assets/script/app/territory/application/TerritoryTexts';
 import type { TerritorySaveStore } from '../assets/script/app/territory/model/TerritorySaveStore';
 
@@ -26,6 +27,7 @@ function harness(unavailable = false) {
     } }).outputText, { exports, console: { warn() {} }, require: (name: string) => {
         if (name === 'cc') return { sys: { localStorage: storage } };
         if (name === './TerritoryIdleReward') return idleRewards;
+        if (name === './TerritoryBattleStatus') return battleStatus;
         if (name === '../application/TerritoryTexts') return texts;
         throw new Error(name);
     } });

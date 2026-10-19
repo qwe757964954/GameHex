@@ -20,7 +20,8 @@ import { RequestCityChapterInfo } from './RequestTerritoryChapterInfoMsg';
  *
  * 1. 登录成功 → {@link bindOwner}：按 `(serverId, roleId)` 切 namespace，从 localStorage 恢复上次的快照；
  * 2. 登录后并行 {@link refresh}：发 `CmdCityChapterInfoReqMsg`，回包覆盖内存 + 写盘；
- * 3. 服务端通关后主动推 `CmdCityChapterInfoBroMsg` → 本类收到后覆盖内存 + 写盘 + 通知订阅者；
+ * 3. 服务端通关后主动推 `CmdCityChapterInfoBroMsg` → 本类收到后覆盖内存 + 写盘
+ *    （冒险页下次打开读 `availableChapters` 即最新，无需实时订阅）；
  * 4. 冒险页（`TerritoryPage`）打开时读 {@link availableChapters}，决定底部章节切换按钮范围。
  *
  * ## 为什么必须持久化
@@ -42,8 +43,6 @@ export interface ITerritoryChapterInfo {
     readonly chapters: readonly number[];
 }
 
-type Listener = (info: ITerritoryChapterInfo) => void;
-
 /** 读超时：与单章格子 Req 同一档（5s）；登录后并行发，不阻塞主流程。 */
 const READ_TIMEOUT_MS = 5000;
 
@@ -63,7 +62,6 @@ export class TerritoryChapterInfoRepository {
     private namespace = 'preview:';
     private snapshot: ITerritoryChapterInfo | null = null;
     private broListener: object | null = null;
-    private readonly listeners = new Set<Listener>();
     /** refresh 在途标记：避免登录后并行触发两次 Req。 */
     private refreshing: Promise<void> | null = null;
 
@@ -82,7 +80,7 @@ export class TerritoryChapterInfoRepository {
     get availableChapters(): readonly number[] {
         const chapters = this.snapshot?.chapters;
         if (!chapters || chapters.length === 0) return FALLBACK_CHAPTERS;
-        return chapters.includes(1) ? chapters : [1, ...chapters];
+        return chapters.includes(1) ? chapters : [1].concat(chapters);
     }
 
     /**
@@ -119,16 +117,9 @@ export class TerritoryChapterInfoRepository {
         return this.refreshing;
     }
 
-    /** 订阅快照变化（refresh 回包 / Bro 到达都会触发）。返回取消函数。 */
-    subscribe(listener: Listener): () => void {
-        this.listeners.add(listener);
-        return () => this.listeners.delete(listener);
-    }
-
     /** 登出 / 切账号前清内存；不动 localStorage（新账号 bindOwner 会换 namespace）。 */
     clear(): void {
         this.snapshot = null;
-        this.listeners.clear();
     }
 
     // ============================================================
@@ -176,18 +167,8 @@ export class TerritoryChapterInfoRepository {
     }
 
     private applySnapshot(info: ITerritoryChapterInfo, persist: boolean): void {
-        const prev = this.snapshot;
         this.snapshot = info;
         if (persist) this.writePersisted(info);
-        // 内容没变就不通知，避免界面白白重渲染。
-        if (prev && prev.idleTime === info.idleTime
-            && prev.chapters.length === info.chapters.length
-            && prev.chapters.every((c, i) => c === info.chapters[i])) return;
-        for (const listener of this.listeners) {
-            try { listener(info); } catch (error) {
-                console.warn('[TerritoryChapterInfo] 订阅者回调异常', error);
-            }
-        }
     }
 
     private storageKey(): string {

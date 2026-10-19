@@ -39,6 +39,13 @@ function loadTheme(): IThemeExports {
         exports: exported,
         require: (id: string) => {
             if (id === 'cc') return { Color: FakeColor };
+            // Theme 按站点类型命名常量判色（2026-10-19 起），需运行时值桩。
+            if (id === '../model/TerritoryMapConfig') return {
+                TERRITORY_SITE_TYPE: {
+                    stage: 'stage', boss: 'boss', asyncPvp: 'asyncPvp',
+                    fixedResource: 'fixedResource', bonus: 'bonus',
+                },
+            };
             throw new Error(`Unexpected dependency: ${id}`);
         },
     });

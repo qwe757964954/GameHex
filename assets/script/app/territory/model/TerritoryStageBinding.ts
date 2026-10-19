@@ -1,5 +1,6 @@
 import type { TerritoryCampaignStage } from './TerritoryCampaignConfig';
 import type { TerritoryMapConfig, TerritorySite } from './TerritoryMapConfig';
+import { TERRITORY_SITE_TYPE } from './TerritoryMapConfig';
 
 export interface TerritoryStageBinding {
     site: TerritorySite;
@@ -32,7 +33,7 @@ export function bindTerritoryStages(
     sites: readonly TerritorySite[],
     stages: readonly TerritoryCampaignStage[],
 ): TerritoryStageBinding[] {
-    return bindStagesForSiteTypes(sites, stages, ['stage', 'boss']);
+    return bindStagesForSiteTypes(sites, stages, [TERRITORY_SITE_TYPE.stage, TERRITORY_SITE_TYPE.boss]);
 }
 
 /** Bind async PvP stations for battle lookup, while keeping them out of linear progression. */
@@ -40,7 +41,7 @@ export function bindTerritoryBattleStages(
     sites: readonly TerritorySite[],
     stages: readonly TerritoryCampaignStage[],
 ): TerritoryStageBinding[] {
-    return bindStagesForSiteTypes(sites, stages, ['stage', 'boss', 'asyncPvp']);
+    return bindStagesForSiteTypes(sites, stages, [TERRITORY_SITE_TYPE.stage, TERRITORY_SITE_TYPE.boss, TERRITORY_SITE_TYPE.asyncPvp]);
 }
 
 function bindStagesForSiteTypes(
@@ -97,7 +98,7 @@ export function expandBindingsToAreaSites(
     // 同区域的展示格在此补上同一个 stage ⇒ 它不再被当成「没配关卡」。
     for (const site of sites) {
         if (byCell.has(site.cellId)) continue;
-        if (site.type !== 'stage' && site.type !== 'boss' && site.type !== 'asyncPvp') continue;
+        if (site.type !== TERRITORY_SITE_TYPE.stage && site.type !== TERRITORY_SITE_TYPE.boss && site.type !== TERRITORY_SITE_TYPE.asyncPvp) continue;
         const levelId = Number(site.configId);
         if (!Number.isInteger(levelId)) continue;
         const stage = stageById.get(levelId);
@@ -116,7 +117,7 @@ export function applyTerritoryStageUnlocks(
     map: TerritoryMapConfig,
     bindings: readonly TerritoryStageBinding[],
 ): TerritoryMapConfig {
-    const ordered = [...bindings].sort((a, b) => a.stage.stage - b.stage.stage || a.stage.levelId - b.stage.levelId);
+    const ordered = Array.from(bindings).sort((a, b) => a.stage.stage - b.stage.stage || a.stage.levelId - b.stage.levelId);
     const requiredByCell = new Map<number, number>();
     for (const [index, binding] of ordered.entries()) {
         requiredByCell.set(binding.site.cellId, index === 0 ? map.startCellId : ordered[index - 1].site.cellId);

@@ -17,6 +17,7 @@ import {
 } from '../model/TerritoryCellBitSet';
 import { readTerritoryGrantedRewards } from '../model/TerritoryGrantedReward';
 import type { ITerritoryGrantedReward } from '../model/TerritoryGrantedReward';
+import { TERRITORY_REQUEST_STATUS, type TerritoryRequestFailure, type TerritoryRequestTransportFailure } from '../model/TerritoryRequestStatus';
 
 /**
  * 占城（领地）· 服务端数据端口。
@@ -50,17 +51,17 @@ import type { ITerritoryGrantedReward } from '../model/TerritoryGrantedReward';
 /** 拉取结果三态，调用方据此决定"用服务端数据 / 回落本地存档 / 提示重试"。 */
 export type TerritoryCellFetchResult =
     | { readonly ok: true; readonly state: ITerritoryCellState }
-    | { readonly ok: false; readonly reason: 'offline' | 'failed' | 'invalid'; readonly state: ITerritoryCellState };
+    | { readonly ok: false; readonly reason: TerritoryRequestTransportFailure; readonly state: ITerritoryCellState };
 
 /** 写操作结果：`rejected` 表示服务端明确回了 `succ = 0`（业务拒绝，不是网络问题）。 */
 export type TerritoryWriteResult =
     | { readonly ok: true; readonly unlockedCellIds?: readonly number[]; readonly rewards?: readonly ITerritoryGrantedReward[] }
-    | { readonly ok: false; readonly reason: 'offline' | 'failed' | 'rejected' | 'invalid' };
+    | { readonly ok: false; readonly reason: TerritoryRequestFailure };
 
 /** Boss 关开战（`CmdStartBattleReqMsg`）结果；`rejected` = 服务端拒绝（业务原因）。 */
 export type TerritoryStartBattleResult =
     | { readonly ok: true; readonly battle: ZCBattleStart }
-    | { readonly ok: false; readonly reason: 'offline' | 'failed' | 'rejected' | 'invalid' };
+    | { readonly ok: false; readonly reason: TerritoryRequestFailure };
 
 /** 读超时：与服务端断连时不能让领地页一直转圈。 */
 const READ_TIMEOUT_MS = 5000;
@@ -261,11 +262,11 @@ export class TerritoryCellRepository {
                 }),
                 '[TerritoryCell] 拉取章节格子信息失败',
             );
-            if (sent !== 'ok') return this.failFetch(sent, chapter);
+            if (sent !== TERRITORY_REQUEST_STATUS.ok) return this.failFetch(sent, chapter);
             // ⚠️ `ok` 只代表**包发出去了且没抛**，回调可能还没跑（超时兜底会先返回）。
             // 这里必须判null ⇒ invalid，而不是拿 `emptyCellState` 当正常结果 ——
             // 否则"回包没到"会表现成"服务端说这章一个格子都没有"。
-            if (!resolved) return this.failFetch('invalid', chapter);
+            if (!resolved) return this.failFetch(TERRITORY_REQUEST_STATUS.invalid, chapter);
             this.state = resolved;
             return { ok: true, state: resolved };
         } finally {
@@ -335,7 +336,7 @@ export class TerritoryCellRepository {
         caller?: unknown,
     ): Promise<TerritoryStartBattleResult> {
         const started = await requestStartBattle(battleType, battleParams, caller);
-        if (!started) return { ok: false, reason: 'failed' };
+        if (!started) return { ok: false, reason: TERRITORY_REQUEST_STATUS.failed };
         return { ok: true, battle: started };
     }
 
@@ -400,16 +401,16 @@ export class TerritoryCellRepository {
      * ⚠️ `withTimeout` 必加：`GameNet.send` 没有按请求的超时，服务端不回就永悬
      * ⇒ 界面卡在「加载中」再也不刷新（连线失败也一样）。
      */
-    private async send(build: () => unknown, label: string): Promise<'ok' | 'offline' | 'failed'> {
+    private async send(build: () => unknown, label: string): Promise<'ok' | TerritoryRequestTransportFailure> {
         const net = GameNet.instance;
         // ⚠️ 必须 early-return offline：连不上就发包会挂在 Promise 上，界面永远"加载中"。
-        if (!net?.isConnected) return 'offline';
+        if (!net?.isConnected) return TERRITORY_REQUEST_STATUS.offline;
         try {
             const sent = await withTimeout(net.send(build() as never, false), READ_TIMEOUT_MS, () => false);
-            return sent === true ? 'ok' : 'failed';
+            return sent === true ? TERRITORY_REQUEST_STATUS.ok : TERRITORY_REQUEST_STATUS.failed;
         } catch (error) {
             console.warn(label, error);
-            return 'failed';
+            return TERRITORY_REQUEST_STATUS.failed;
         }
     }
 
@@ -420,13 +421,13 @@ export class TerritoryCellRepository {
     ): Promise<TerritoryWriteResult> {
         let isSuccess = false;
         const sent = await this.send(() => build((success) => { isSuccess = success; }), label);
-        if (sent === 'offline') return { ok: false, reason: 'offline' };
-        if (sent === 'failed') return { ok: false, reason: 'failed' };
-        if (!isSuccess) return { ok: false, reason: 'rejected' };
+        if (sent === TERRITORY_REQUEST_STATUS.offline) return { ok: false, reason: TERRITORY_REQUEST_STATUS.offline };
+        if (sent === TERRITORY_REQUEST_STATUS.failed) return { ok: false, reason: TERRITORY_REQUEST_STATUS.failed };
+        if (!isSuccess) return { ok: false, reason: TERRITORY_REQUEST_STATUS.rejected };
         return { ok: true };
     }
 
-    private failFetch(reason: 'offline' | 'failed' | 'invalid', chapter: number): TerritoryCellFetchResult {
+    private failFetch(reason: TerritoryRequestTransportFailure, chapter: number): TerritoryCellFetchResult {
         return {
             ok: false,
             reason,

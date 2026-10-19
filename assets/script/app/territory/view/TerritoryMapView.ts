@@ -23,9 +23,11 @@ import {
     TERRITORY_STAMINA_RES_ID,
 } from '../model/TerritoryResourceGain';
 import { TerritoryResourceGainView } from './TerritoryResourceGainView';
+import { TerritoryGainBurst, TERRITORY_GAIN_BURST_NODE } from './TerritoryGainBurst';
 import type { TerritoryCampaignStage } from '../model/TerritoryCampaignConfig';
 import type { ITerritoryMapLayout, ITerritoryMapPoint } from '../model/TerritoryMapLayout';
 import type { TerritoryMapConfig, TerritorySite, TerritorySiteType } from '../model/TerritoryMapConfig';
+import { TERRITORY_SITE_TYPE } from '../model/TerritoryMapConfig';
 import type { TerritoryProgress } from '../model/TerritoryProgress';
 import type {
     ITerritoryStationLayers,
@@ -33,9 +35,11 @@ import type {
     TerritoryStationTarget,
 } from './TerritoryStationView';
 import { TerritoryStationView } from './TerritoryStationView';
-import { TerritoryHexFlip } from './TerritoryHexFlip';
+import { TERRITORY_EVENTS } from './TerritoryEvents';
+import { TERRITORY_HEX_REVEAL_NODE, TerritoryHexFlip } from './TerritoryHexFlip';
 import {
     TERRITORY_COLORS,
+    TERRITORY_STATION_STATE,
     territoryBossTint,
     territoryStationTint,
     territoryUnboundTint,
@@ -256,7 +260,6 @@ export class TerritoryMapView extends Component {
     private startView: TerritoryStationView | null = null;
     /** 上一次渲染的地图标识；变了才重建格子（同一章内每秒 tick 只更新站点状态）。 */
     private gridKey = '';
-    private onClick: ((site: TerritoryStationTarget) => void) | null = null;
     private stationLayers: ITerritoryStationLayers | null = null;
 
     /**
@@ -274,16 +277,52 @@ export class TerritoryMapView extends Component {
      */
     private hexFlipBootstrapped = false;
 
+    /**
+     * 「建筑展示要滞后到地块翻转结束」的待办格（需求 2026-10-16 row14）—— **key 存在 = 还在等**。
+     *
+     *  随机资源格翻开的那一帧，进度上已经是「已开启」，但地皮正在翻 ⇒ 建筑**先不出现**；
+     *  本格的 `hexFlip` 播完才由 {@link resolveBuildingReveal} 补上建筑并播一次生成抖动。
+     *
+     *  ⚠️ 没有翻格表现时（没注入 effect ⇒ `play` 返回 `false`）**不会**登记 ⇒ 建筑照旧立刻出现，
+     *    不会出现「格子不动、建筑也不出来」的静默丢失。
+     */
+    private readonly pendingBuildingReveal = new Set<number>();
+    /**
+     * 上面那些格子**这一帧**该用的站点数据 —— 由 `syncStations` 每次渲染刷新。
+     *
+     *  为什么要存下来：解除待办发生在 `update`（每帧），而站点数据只在 `renderMap` 里算得出，
+     *  两者不同拍。存的是**最新一版**（同一格在等待期间还会被每秒的 tick 重算）。
+     */
+    private readonly pendingBuildingRender = new Map<number, ITerritoryStationRender>();
+
     /** 飘字用的资源图标：`resId → 帧`（页面在资源就绪后注入，缺哪张只是那一条没图标）。 */
     private gainIcons = new Map<number, SpriteFrame | null>();
     /** 正在播的飘字。 */
     private readonly activeGains: TerritoryResourceGainView[] = [];
     /** 播完回收的飘字（有界复用池，不无限新建节点）。 */
     private readonly gainPool: TerritoryResourceGainView[] = [];
+    /**
+     * 喷发粒子的容器层：`GainLayer` 的**第一个子节点**（需求 2026-10-16 row17）。
+     *
+     *  ⚠️ 排第一是**顺序要求**，不是随手写：子节点顺序 = 渲染顺序，喷出来的图标要画在
+     *  「+N 读数」（`activeGains` 的节点，后建 ⇒ 排在后面）**之下**，
+     *  否则粒子飞过读数时会把数字盖掉。见 {@link ensureBurstRoot}。
+     */
+    private burstRoot: Node | null = null;
+    /** 正在喷的粒子组。 */
+    private readonly activeBursts: TerritoryGainBurst[] = [];
+    /** 喷完回收的粒子组（与 `gainPool` 同一套有界复用策略）。 */
+    private readonly burstPool: TerritoryGainBurst[] = [];
+    /**
+     * 喷发抖动种子（每次点击自增）。
+     *
+     *  ⚠️ 用自增计数而不是 `Math.random()`：纯函数对同一 seed 必须**可复现**
+     *  （单测验「倒圆锥」那条不等式就靠它），「每次不一样」由这里换 seed 提供。
+     */
+    private burstSeed = 0;
 
-    /** 绑一次站点点击（页面在 `onLoad` 里调）。 */
-    initialize(onSiteClick: (site: TerritoryStationTarget) => void): void {
-        this.onClick = onSiteClick;
+    /** 初始化共享层引用与喷发粒子层（页面在 `onLoad` 里调，只需一次）。 */
+    initialize(): void {
         this.stationLayers = {
             icon: this.stationIconLayer,
             caption: this.stationCaptionLayer,
@@ -291,6 +330,26 @@ export class TerritoryMapView extends Component {
             badge: this.stationBadgeLayer,
             hit: this.stationHitLayer,
         };
+        // 顺手建喷发粒子层：此刻飘字还没建过任何节点 ⇒ 它坐稳 `GainLayer` 的第一个子节点。
+        this.ensureBurstRoot();
+    }
+
+    /**
+     * 喷发粒子的容器层（懒建，幂等）。
+     *
+     *  ⚠️ 只在**第一次**建它时校正一次兄弟序，之后两个池都不再动兄弟序
+     *  （`acquireGain` / `acquireBurst` 复用节点时只改 `active`，不重新 `setParent`）
+     *  ⇒ 「粒子永远在读数之下」这条顺序从建层那一刻起就固定了。
+     */
+    private ensureBurstRoot(): Node {
+        if (!this.burstRoot) {
+            const root = new Node(TERRITORY_GAIN_BURST_NODE);
+            root.layer = this.gainLayer.layer;
+            root.setParent(this.gainLayer);
+            root.setSiblingIndex(0);
+            this.burstRoot = root;
+        }
+        return this.burstRoot;
     }
 
     /**
@@ -309,10 +368,42 @@ export class TerritoryMapView extends Component {
         this.hexFlip.setGroundGlowFrames(frames);
     }
 
-    /** 每帧推进翻格表现；没有在播的格子时开销只是一次长度判断。 */
+    /**
+     * 每帧推进翻格表现 + 补上「翻完才出现」的建筑；没有在播的格子时开销只是一次长度判断。
+     *
+     * ⚠️ 顺序不能换（判据钉的就是 `update` 第一句必须是 `hexFlip.step`）：
+     *  · 先 `step` ⇒ 本帧刚好播完的那一格，`isPlaying` 已经变成 false，
+     *    {@link resolveBuildingReveal} 同一帧就能补建筑（不会多等一帧）；
+     *  · 再补建筑 ⇒ 建筑与抖动的起点都落在「格子已经翻过来」之后。
+     */
     update(dt: number): void {
         this.hexFlip.step(dt);
+        this.resolveBuildingReveal();
         this.stepGains(dt);
+        this.stepBursts(dt);
+    }
+
+    /**
+     * 翻格播完 ⇒ 补上建筑 + 播一次生成抖动（需求 2026-10-16 row14）。
+     *
+     *  判据是「这一格的 `hexFlip` 里已经没有它了」，所以：
+     *  · 换章 / `reset()` 打断（`syncGrid` 会清空待办）不会留一个永远不出现的建筑；
+     *  · 格子被销毁 / 视图被回收时 `stationViews` 里已经查不到它 ⇒ 直接跳过。
+     */
+    private resolveBuildingReveal(): void {
+        if (!this.pendingBuildingReveal.size) return;
+        for (const cellId of this.pendingBuildingReveal) {
+            const node = this.hexNodes.get(cellId);
+            if (node && this.hexFlip.isPlaying(node)) continue;
+            this.pendingBuildingReveal.delete(cellId);
+            const content = this.pendingBuildingRender.get(cellId);
+            this.pendingBuildingRender.delete(cellId);
+            const view = this.stationViews.get(cellId);
+            if (!view || !content) continue;
+            view.render(content);
+            // 建筑「生成」的那一下：与对局 `ZCHexView.playBuildingShake` 同一条脉冲（120%）。
+            view.playBuildingShake();
+        }
     }
 
     /**
@@ -326,20 +417,24 @@ export class TerritoryMapView extends Component {
     }
 
     /**
-     * 在**指定格子上方**播一组资源飘字（icon + `+N` 升起、淡出）。
+     * 在**指定格子上方**播一组资源表现：格心**喷发**一把资源图标 + 图标与 `+N` 读数升起。
      *
-     * 用于「银币 / 体力不走奖励弹窗」那条口径（见 `TerritoryResourceGain`）：
-     * 资源点是玩家**刚点的那一格**，所以基准直接取格节点当前坐标（`hex.position` 就是布局格心，
+     * 用于「银币 / 体力不走奖励弹窗」那条口径（见 `TerritoryResourceGain`）。
+     * 资源点是玩家**刚点的那一格**，所以基准直接取格节点当前坐标（`hex.position` 就是布局点，
      * 见 `syncGrid`），不依赖额外的布局换算。
      *
-     * ⚠️ 这里的 `HEX_GRID_CONTENT_LIFT` 与「站点 / 起始格落点」**同源但不同值**：
-     *   站点落点（`cellCenter`）只加这一个 `HEX_GRID_CONTENT_LIFT`（贴台面中心）；
-     *   飘字要再叠 `TERRITORY_GAIN_START_LIFT_PX` 从台面**上方**升起，
-     *   落在台面中心会让半截字压在侧壁上。
-     *   判据见 `tests/territory-cell-center-align.test.ts` 的反向守卫。
+     * ## 落点分工（需求 2026-10-16 row17 的「喷发坐标点」与「上方 40px」）
+     *
+     *  · **喷发原点** = 点击地块的中心点 = `hex.position.y + HEX_GRID_CONTENT_LIFT`
+     *    （`HEX_GRID_CONTENT_LIFT` 就是「锚点 ≠ 人眼看到的台面中心」那 12.5px，见 `cellCenter`）；
+     *  · **图标 + 数字 ui** 在原点**上方 `TERRITORY_GAIN_START_LIFT_PX`(= 需求里的 40px)** 起飘。
+     *
+     *  ⚠️ 两处都加 `HEX_GRID_CONTENT_LIFT`，但**只加一次**：飘字不再是「格心 + 30px 经验值」，
+     *    而是「喷发原点 + 40px」。判据见 `tests/territory-cell-center-align.test.ts` 的反向守卫
+     *    与 `tests/territory-resource-gain.test.ts` 的落点换算。
      *
      * ⚠️ 多条（同时给银币 + 体力）**纵向错开** `TERRITORY_GAIN_STACK_GAP_PX`，
-     *  否则两条叠在一条线上互相压字。
+     *  否则两条叠在一条线上互相压字；喷发则只有**一次**（多个图标轮流取两条的图）。
      *
      * @param entries 已经过 `splitTerritoryRewards` 筛选的钱包类奖励
      */
@@ -347,14 +442,33 @@ export class TerritoryMapView extends Component {
         if (!entries.length) return;
         const hex = this.hexNodes.get(cellId);
         if (!hex) return;
-        const baseX = hex.position.x;
-        const baseY = hex.position.y + HEX_GRID_CONTENT_LIFT + TERRITORY_GAIN_START_LIFT_PX;
+        const originX = hex.position.x;
+        const originY = hex.position.y + HEX_GRID_CONTENT_LIFT;
+        const baseY = originY + TERRITORY_GAIN_START_LIFT_PX;
+        this.playGainBurst(originX, originY, entries);
         entries.forEach((entry, index) => {
             const view = this.acquireGain();
             // ⚠️ 起点必须先写：`play()` 以「节点当前 y」为基准，池化复用时不重设会越飘越高。
-            view.node.setPosition(baseX, baseY + index * TERRITORY_GAIN_STACK_GAP_PX, 0);
+            view.node.setPosition(originX, baseY + index * TERRITORY_GAIN_STACK_GAP_PX, 0);
             view.play(this.gainIcons.get(entry.resId) ?? null, entry.amount);
         });
+    }
+
+    /**
+     * 播一次「喷发」：从 `(originX, originY)` 喷出 `TERRITORY_GAIN_BURST_COUNT` 个资源图标。
+     *
+     *  图标按 `entries` **轮流取**（同时给银币 + 体力时两种图各喷一半）；
+     *  取不到图（资源还没加载好）只是那颗粒子是空的 —— 与飘字「缺图仍照常升」同一口径，
+     *  **不是**把整条喷发关掉。
+     */
+    private playGainBurst(
+        originX: number,
+        originY: number,
+        entries: readonly { resId: number }[],
+    ): void {
+        const frames = entries.map((entry) => this.gainIcons.get(entry.resId) ?? null);
+        this.burstSeed = (this.burstSeed + 1) | 0;
+        this.acquireBurst().play(originX, originY, this.burstSeed, frames);
     }
 
     /** 取一条飘字：池里有就复用，没有才 instantiate。 */
@@ -372,6 +486,18 @@ export class TerritoryMapView extends Component {
         return view;
     }
 
+    /** 取一喷粒子：池里有就复用，没有才现建（节点挂在 {@link ensureBurstRoot} 的层里）。 */
+    private acquireBurst(): TerritoryGainBurst {
+        const reused = this.burstPool.pop();
+        if (reused) {
+            this.activeBursts.push(reused);
+            return reused;
+        }
+        const burst = new TerritoryGainBurst(this.ensureBurstRoot());
+        this.activeBursts.push(burst);
+        return burst;
+    }
+
     /** 逐帧推进飘字，播完回池（节点不销毁，`active=false`）。 */
     private stepGains(dt: number): void {
         for (let index = this.activeGains.length - 1; index >= 0; index -= 1) {
@@ -382,24 +508,44 @@ export class TerritoryMapView extends Component {
         }
     }
 
-    /** 立刻收掉全部在播的飘字（换章 / 格子重建时调，免得飘在已经不存在的格子上）。 */
+    /** 逐帧推进喷发粒子，放完回池（与 `stepGains` 同一套；两者时长不同、各走各的）。 */
+    private stepBursts(dt: number): void {
+        for (let index = this.activeBursts.length - 1; index >= 0; index -= 1) {
+            const burst = this.activeBursts[index];
+            if (burst.step(dt)) continue;
+            this.activeBursts.splice(index, 1);
+            this.burstPool.push(burst);
+        }
+    }
+
+    /** 立刻收掉全部在播的飘字与喷发（换章 / 格子重建时调，免得飘在已经不存在的格子上）。 */
     private resetGains(): void {
         for (const view of this.activeGains) {
             view.stop();
             this.gainPool.push(view);
         }
         this.activeGains.length = 0;
+        for (const burst of this.activeBursts) {
+            burst.stop();
+            this.burstPool.push(burst);
+        }
+        this.activeBursts.length = 0;
     }
 
     /**
      * 全量渲染：几何 + 站点。幂等，可每帧调用（但页面只在换章 / 进度变化时调）。
+     *
+     * 🔴 **`syncFlip` 必须排在 `syncStations` 之前**（2026-10-16 row14）：
+     *  翻格那一帧「这一格要不要等翻转结束再出建筑」是由 `syncFlip` 决定的，
+     *  排在后面的话站点会先用「已开启」的样子画一帧 —— 表现为建筑**闪一下就消失**
+     *  （下一帧才被隐藏、要等 0.7s 再长出来）。
      */
     renderMap(input: ITerritoryMapRenderInput): void {
         this.syncContentSize(input.layout);
         this.syncBackground(input);
         this.syncGrid(input);
-        this.syncStations(input);
         this.syncFlip(input);
+        this.syncStations(input);
     }
 
     /**
@@ -424,7 +570,14 @@ export class TerritoryMapView extends Component {
             this.openedRandomCells.add(cellId);
             const node = this.hexNodes.get(cellId);
             const sprite = node?.getComponent(Sprite) ?? null;
-            if (node && sprite) this.hexFlip.play(node, sprite);
+            if (!node || !sprite) continue;
+            // 「旧 → 新」两张地皮一起给：点击这一帧 `paintHexes`（在本函数之前跑）已经把地皮
+            // 换成新的了 —— 不传旧的就等于「从新地皮开始翻」，读不出「翻开」这件事。
+            // ⚠️ 翻开成功才登记「建筑滞后」（需求 2026-10-16 row14）：没翻（没注入 effect）
+            //    就不该让建筑跟着等，否则会变成「格子不动、建筑也不出来」。
+            if (this.hexFlip.play(node, sprite, { from: input.art.tileLocked, to: input.art.tileCleared })) {
+                this.pendingBuildingReveal.add(cellId);
+            }
         }
     }
 
@@ -486,6 +639,9 @@ export class TerritoryMapView extends Component {
         this.resetGains();
         this.openedRandomCells.clear();
         this.hexFlipBootstrapped = false;
+        // 待办建筑跟着作废：格子节点会被重建，留着会让新图上的同名格「永远等一个不会播完的翻转」。
+        this.pendingBuildingReveal.clear();
+        this.pendingBuildingRender.clear();
         const seen = new Set<number>();
         for (const [cellId, point] of input.layout.points) {
             seen.add(cellId);
@@ -569,6 +725,18 @@ export class TerritoryMapView extends Component {
         const glowSprite = glowNode.addComponent(Sprite);
         glowSprite.trim = false;
         glowSprite.sizeMode = Sprite.SizeMode.RAW;
+        // 「新地皮」层（翻格**方案2**「原地快碎裂 → 新地皮从格心放大填充」用）：
+        // 作为最后一个子节点 ⇒ 长大的新地皮正好压在正在碎掉的旧地皮之上（其余时候收起）。
+        // ⚠️ `sizeMode = RAW`：尺寸跟帧走（与地皮同为 126×117），不用在这里写死；
+        //    放大倍率由 `TerritoryHexFlip.applyReveal` 每帧写，**不动格根**。
+        const revealNode = new Node(TERRITORY_HEX_REVEAL_NODE);
+        revealNode.layer = this.gridLayer.layer;
+        revealNode.setParent(node);
+        revealNode.active = false;
+        revealNode.addComponent(UITransform);
+        const revealSprite = revealNode.addComponent(Sprite);
+        revealSprite.trim = false;
+        revealSprite.sizeMode = Sprite.SizeMode.RAW;
         this.hexNodes.set(cellId, node);
         return node;
     }
@@ -617,7 +785,7 @@ export class TerritoryMapView extends Component {
         if (cellId === input.map.startCellId) return true;
         if (candidateCells.has(cellId)) return input.progress.isCellUnlocked(cellId);
         const site = siteByCell.get(cellId);
-        if (!site || site.type === 'fixedResource') return input.progress.isOwned(cellId);
+        if (!site || site.type === TERRITORY_SITE_TYPE.fixedResource) return input.progress.isOwned(cellId);
         return input.progress.isAreaPassed(cellId);
     }
 
@@ -747,7 +915,7 @@ export class TerritoryMapView extends Component {
             const openedFrame = isOpened && Number.isFinite(buildingId)
                 ? input.art.buildFrames?.get(buildingId) ?? null
                 : null;
-            view.render({
+            const content: ITerritoryStationRender = {
                 site: isOpened || isPending ? null : target,
                 // 没配 buildingId（或查不到帧）⇒ **不给建筑图**，只留绿色地块表现已开启。
                 icon: openedFrame,
@@ -766,7 +934,17 @@ export class TerritoryMapView extends Component {
                     : isOpenable ? TERRITORY_COLORS.gold : TERRITORY_COLORS.locked,
                 badge: '',
                 interactive: !isOpened && !isPending,
-            });
+            };
+            if (this.pendingBuildingReveal.has(cellId)) {
+                // 需求 2026-10-16 row14：**建筑展示滞后到地块翻转结束**。
+                // 数据上这一格已经是「已开启」，但地皮正在翻 ⇒ 先整站不显示，
+                // 等 `resolveBuildingReveal` 在翻转播完那一帧再把这同一份 content 交回去。
+                // ⚠️ 必须存下**这一份**：解除待办发生在 `update`，那时算不出 content。
+                this.pendingBuildingRender.set(cellId, content);
+                view.render({ ...content, hidden: true });
+            } else {
+                view.render(content);
+            }
         }
         for (const [cellId, view] of this.stationViews) {
             if (seen.has(cellId)) continue;
@@ -783,10 +961,18 @@ export class TerritoryMapView extends Component {
         node.name = 'kind' in site ? `RandomResource_${site.cellId}` : `Site_${site.id}`;
         // ⚠️ 视图在 prefab 上（`TerritoryStation.prefab` 挂了 `TerritoryStationView`）。
         const view = node.getComponent(TerritoryStationView)!;
-        view.initialize(this.getStationLayers(), (clicked) => this.onClick?.(clicked));
+        view.initialize(this.getStationLayers());
+        // 站点点击：监听挂在**站点节点**上（随节点销毁自动清理），收到后在 `mapView.node`
+        // 上转发给页面。起始格不建监听（`ensureStartView` 走 `clickable = false` 也不发）。
+        node.on(TERRITORY_EVENTS.STATION_CLICK, this.onStationClick, this);
         this.stationViews.set(site.cellId, view);
         return view;
     }
+
+    /** 站点点击转发：站点节点事件 → 地图容器节点事件（页面在 `mapView.node` 上收）。 */
+    private readonly onStationClick = (site: TerritoryStationTarget): void => {
+        this.node.emit(TERRITORY_EVENTS.STATION_CLICK, site);
+    };
 
     /** 起始格：唯一的固定实例（不可点、不池化），首次渲染时建。 */
     private ensureStartView(): TerritoryStationView {
@@ -796,7 +982,7 @@ export class TerritoryMapView extends Component {
         node.setParent(this.stationHitLayer);
         node.name = 'Start';
         const view = node.getComponent(TerritoryStationView)!;
-        view.initialize(this.getStationLayers());
+        view.initialize(this.getStationLayers(), false);
         this.startView = view;
         return view;
     }
@@ -839,7 +1025,7 @@ export class TerritoryMapView extends Component {
                 interactive: !isPending,
             };
         }
-        if (site.type === 'fixedResource') {
+        if (site.type === TERRITORY_SITE_TYPE.fixedResource) {
             const claimed = input.progress.isOwned(site.cellId);
             const pending = input.pendingFixedResourceCells.includes(site.cellId);
             // 🔴 **已领取的宝箱格彻底清空**（山猫2026-10-12：「已经获得宝箱格子，隐藏宝箱」）：
@@ -856,7 +1042,7 @@ export class TerritoryMapView extends Component {
                 isLoading: pending,
                 caption: pending || claimed ? '' : TERRITORY_UNBOUND_TYPE_NAMES.fixedResource,
                 // 已领取（已通关）的固定资源点不再显示解锁消耗，用「已通关」绿与「可领取」区分开。
-                tint: claimed ? TERRITORY_COLORS.cleared : territoryStationTint('available'),
+                tint: claimed ? TERRITORY_COLORS.cleared : territoryStationTint(TERRITORY_STATION_STATE.available),
                 badge: pending || claimed ? '' : TERRITORY_TEXTS.fixedResourceClaimReady,
                 interactive: !claimed && !pending,
             };
@@ -866,9 +1052,9 @@ export class TerritoryMapView extends Component {
         // 判定必须与 `TerritoryPresenter.selectSite` 的关卡分支**同口径**（都是站点类型），
         // 之前两边都写的是「两步式名单 [327,328] 或 isBoss」⇒ 只有关卡 1 会长这样、能点下有反应，
         // 其余关卡外观照旧却已经不可点 ⇒ 「外观说能打、点了没反应」。
-        if (site.type === 'stage' || site.type === 'boss' || site.type === 'asyncPvp') {
+        if (site.type === TERRITORY_SITE_TYPE.stage || site.type === TERRITORY_SITE_TYPE.boss || site.type === TERRITORY_SITE_TYPE.asyncPvp) {
             const boss = !!stage?.isBoss;
-            const isAsyncPvp = site.type === 'asyncPvp';
+            const isAsyncPvp = site.type === TERRITORY_SITE_TYPE.asyncPvp;
             if (isAsyncPvp && !stage) {
                 const isUnlocked = input.progress.isCellUnlocked(site.cellId);
                 const isOwned = input.progress.isOwned(site.cellId);
@@ -923,15 +1109,15 @@ export class TerritoryMapView extends Component {
             };
         }
         const state = this.stateOf(site, input);
-        const exploring = state === 'exploring';
+        const exploring = state === TERRITORY_STATION_STATE.exploring;
         return {
             site,
             icon: this.stationIconOf(site, stage, input.art),
             caption: exploring
                 ? TERRITORY_TEXTS.exploringShort
                 : stage.isBoss ? `首领 ${stage.stage}` : `关卡 ${stage.stage}`,
-            tint: stage.isBoss && state !== 'owned' ? territoryBossTint() : territoryStationTint(state),
-            badge: state === 'locked' ? TERRITORY_TEXTS.lockBadge : '',
+            tint: stage.isBoss && state !== TERRITORY_STATION_STATE.owned ? territoryBossTint() : territoryStationTint(state),
+            badge: state === TERRITORY_STATION_STATE.locked ? TERRITORY_TEXTS.lockBadge : '',
             interactive: true,
         };
     }
@@ -981,7 +1167,7 @@ export class TerritoryMapView extends Component {
         //   ⇒ `asyncPvp` 从「按 type 取图」并入本名单。chapter_01 的 16 个异步据点里只有 4 个配了
         //   `buildingId=69002` ⇒ 其余 12 个不再画建筑，只留格面框 + 「异步据点」文案。
         //   连带 `TerritorySiteType` 的 type 回退现在**只服务 `fixedResource` / `bonus`**。
-        if (site.type === 'stage' || site.type === 'boss' || site.type === 'asyncPvp') return null;
+        if (site.type === TERRITORY_SITE_TYPE.stage || site.type === TERRITORY_SITE_TYPE.boss || site.type === TERRITORY_SITE_TYPE.asyncPvp) return null;
         if (stage?.isBoss) return art.boss ?? art.stage;
         return art[TERRITORY_SITE_ART[site.type]] ?? art.stage;
     }
@@ -1002,10 +1188,12 @@ export class TerritoryMapView extends Component {
     }
 
     private stateOf(site: TerritorySite, input: ITerritoryMapRenderInput): TerritorySiteState {
-        if (input.progress.isOwned(site.cellId)) return 'owned';
-        if (input.progress.explorationAt(site.cellId)) return 'exploring';
+        if (input.progress.isOwned(site.cellId)) return TERRITORY_STATION_STATE.owned;
+        if (input.progress.explorationAt(site.cellId)) return TERRITORY_STATION_STATE.exploring;
         // 战力传 `MAX_SAFE_INTEGER`：地图上只区分「资源 / 前置够不够」，
         // 战力门槛留给点开详情后的开战按钮去判（与旧实现同一口径）。
-        return input.progress.checkUnlock(site.cellId, Number.MAX_SAFE_INTEGER).ok ? 'available' : 'locked';
+        return input.progress.checkUnlock(site.cellId, Number.MAX_SAFE_INTEGER).ok
+            ? TERRITORY_STATION_STATE.available
+            : TERRITORY_STATION_STATE.locked;
     }
 }

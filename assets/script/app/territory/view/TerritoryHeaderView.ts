@@ -1,13 +1,8 @@
 import { _decorator, Button, Component, Label, Node, Sprite } from 'cc';
+import { TERRITORY_EVENTS } from './TerritoryEvents';
 import { TERRITORY_COLORS } from './TerritoryTheme';
 
 const { ccclass, property } = _decorator;
-
-/** HUD 上的两个主动作（页面注入；按钮监听只在 `initialize` 里绑一次）。 */
-export interface ITerritoryHudActions {
-    readonly onPreviousChapter: () => void;
-    readonly onNextChapter: () => void;
-}
 
 /** 一次完整的 HUD 内容。视图**全量幂等赋值**：字段少一个就画不对，所以不设可选成员。 */
 export interface ITerritoryHudRender {
@@ -71,11 +66,25 @@ export class TerritoryHeaderView extends Component {
     @property({ type: Label, group: '节点引用', tooltip: 'HintLabel：底部提示文案' })
     hintLabel: Label = null!;
 
-    /** 绑一次按钮（页面在 `onLoad` 里调）。 */
-    initialize(actions: ITerritoryHudActions): void {
-        this.previousButton.node.on(Button.EventType.CLICK, actions.onPreviousChapter, this);
-        this.nextButton.node.on(Button.EventType.CLICK, actions.onNextChapter, this);
+    /**
+     * 绑一次按钮（页面在 `onLoad` 里调）。
+     *
+     * 按钮点击在**本组件节点**上发事件（`PREVIOUS_CHAPTER` / `NEXT_CHAPTER`），
+     * 页面在 `hudView.node` 上监听；监听随节点销毁自动清理。
+     * 监听回调必须是**命名 handler**（可 off、可 grep 追踪），严禁匿名闭包。
+     */
+    initialize(): void {
+        this.previousButton.node.on(Button.EventType.CLICK, this.handlePreviousChapter, this);
+        this.nextButton.node.on(Button.EventType.CLICK, this.handleNextChapter, this);
     }
+
+    private readonly handlePreviousChapter = (): void => {
+        this.node.emit(TERRITORY_EVENTS.PREVIOUS_CHAPTER);
+    };
+
+    private readonly handleNextChapter = (): void => {
+        this.node.emit(TERRITORY_EVENTS.NEXT_CHAPTER);
+    };
 
     render(state: ITerritoryHudRender): void {
         this.setLabel(this.chapterLabel, state.chapterText);

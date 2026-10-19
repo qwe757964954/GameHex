@@ -300,7 +300,10 @@ test('TerritoryPresenter.ts 是纯 TS：不 import cc / framework / 边界模块
         .replace(/import\s+type\s+[\s\S]*?;\s*$/gm, '');
 
     assert.equal(code.includes("from 'cc'"), false, 'Presenter 不能 import cc');
-    assert.equal(/framework/.test(code), false, 'Presenter 不能依赖 framework');
+    // 唯一例外：`framework/event/EventMgr`（纯 TS 事件中控，零依赖、可直接 require —— zcds 同款）。
+    const frameworkImports = code.split('\n')
+        .filter((line) => /framework/.test(line) && !line.includes('framework/event/EventMgr'));
+    assert.equal(frameworkImports.length, 0, 'Presenter 除纯 TS 的 EventMgr 外不能依赖 framework');
     for (const boundary of [
         'TerritoryPageAssets',
         'TerritoryCellRepository',

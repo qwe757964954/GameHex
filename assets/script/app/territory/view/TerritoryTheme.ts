@@ -1,5 +1,6 @@
 import { Color } from 'cc';
 import type { TerritorySiteType } from '../model/TerritoryMapConfig';
+import { TERRITORY_SITE_TYPE } from '../model/TerritoryMapConfig';
 
 /**
  * 领地模块的配色真源。
@@ -47,15 +48,28 @@ export const TERRITORY_COLORS = {
     mapLabelText: new Color(62, 43, 30, 255),
 } as const;
 
+/**
+ * 站点界面状态的命名常量（**唯一事实源**：`TerritorySiteState` 由它推导）。
+ *
+ * ⚠️ 禁止写 `'owned'` / `state === 'exploring'` 这类裸字面量——状态改名或拼错时
+ * 字面量比较会静默失配，走本表则编译期就暴露。
+ */
+export const TERRITORY_STATION_STATE = {
+    owned: 'owned',
+    exploring: 'exploring',
+    available: 'available',
+    locked: 'locked',
+} as const;
+
 /** 站点在界面上的四种状态（判定在渲染层，颜色只在这里映射）。 */
-export type TerritorySiteState = 'owned' | 'exploring' | 'available' | 'locked';
+export type TerritorySiteState = typeof TERRITORY_STATION_STATE[keyof typeof TERRITORY_STATION_STATE];
 
 /** 站点底条颜色。 */
 export function territoryStationTint(state: TerritorySiteState): Color {
     switch (state) {
-        case 'owned': return TERRITORY_COLORS.owned;
-        case 'exploring': return TERRITORY_COLORS.exploring;
-        case 'available': return TERRITORY_COLORS.available;
+        case TERRITORY_STATION_STATE.owned: return TERRITORY_COLORS.owned;
+        case TERRITORY_STATION_STATE.exploring: return TERRITORY_COLORS.exploring;
+        case TERRITORY_STATION_STATE.available: return TERRITORY_COLORS.available;
         default: return TERRITORY_COLORS.locked;
     }
 }
@@ -68,9 +82,9 @@ export function territoryBossTint(): Color {
 /** 「地图上有格子、但策划还没绑定关卡」的据点：按据点类型给色，好一眼认出是哪一类待补。 */
 export function territoryUnboundTint(type: TerritorySiteType): Color {
     switch (type) {
-        case 'asyncPvp': return new Color(148, 92, 60, 255);
-        case 'fixedResource': return new Color(167, 126, 46, 255);
-        case 'bonus': return new Color(190, 140, 70, 255);
+        case TERRITORY_SITE_TYPE.asyncPvp: return new Color(148, 92, 60, 255);
+        case TERRITORY_SITE_TYPE.fixedResource: return new Color(167, 126, 46, 255);
+        case TERRITORY_SITE_TYPE.bonus: return new Color(190, 140, 70, 255);
         default: return TERRITORY_COLORS.unbound;
     }
 }

@@ -3,8 +3,31 @@ import { hexGridNeighborIds } from '../../../core/hex/HexGridLayout';
 /** 章节领地静态地图协议；运行时进度不在这里。 */
 export const TERRITORY_MAP_KIND = 'territoryChapter' as const;
 export const TERRITORY_MAP_VERSION = 1 as const;
-export const TERRITORY_SITE_TYPES = ['stage', 'boss', 'asyncPvp', 'fixedResource', 'bonus'] as const;
-export type TerritorySiteType = typeof TERRITORY_SITE_TYPES[number];
+
+/**
+ * 站点类型**命名常量**（**唯一事实源**：`TerritorySiteType` 与 `TERRITORY_SITE_TYPES` 都由它推导）。
+ *
+ * ⚠️ 禁止在别处写 `'stage'` / `['stage', …] as const` 这类第二份字面量——
+ * 业务代码一律 `site.type === TERRITORY_SITE_TYPE.fixedResource` 判定（改名/拼错编译期即暴露）。
+ */
+export const TERRITORY_SITE_TYPE = {
+    stage: 'stage',
+    boss: 'boss',
+    asyncPvp: 'asyncPvp',
+    fixedResource: 'fixedResource',
+    bonus: 'bonus',
+} as const;
+
+export type TerritorySiteType = typeof TERRITORY_SITE_TYPE[keyof typeof TERRITORY_SITE_TYPE];
+
+/** 全量类型数组（配表解析校验用；顺序 = 表内声明顺序，由常量表推导，不是第二份字面量）。 */
+export const TERRITORY_SITE_TYPES: readonly TerritorySiteType[] = Object.values(TERRITORY_SITE_TYPE);
+
+/** 编译期守卫：每个键必须是合法类型值（防 `stage: 'boss'` 这类键值错位静默通过）。 */
+type Assert<T extends true> = T;
+type AssertSiteTypeKeysAreValues = Assert<
+    keyof typeof TERRITORY_SITE_TYPE extends TerritorySiteType ? true : false
+>;
 
 /**
  * 🔴 历史口径（**已废弃，2026-10-15**）：早先「先解锁、再点一下就打」的关卡是**按格子 id
@@ -297,7 +320,7 @@ function parseSite(
     if (typeof raw.configId === 'string' && raw.configId) site.configId = raw.configId;
     if (typeof raw.buildingId === 'string' && raw.buildingId) site.buildingId = raw.buildingId;
     if (raw.rewardId !== undefined) {
-        assert(site.type === 'fixedResource',
+        assert(site.type === TERRITORY_SITE_TYPE.fixedResource,
             `sites[${index}].rewardId is only valid for fixedResource sites`);
         const rewardId = nonNegative(raw.rewardId, `sites[${index}].rewardId`);
         assert(rewardId > 0, `sites[${index}].rewardId must be a positive integer`);

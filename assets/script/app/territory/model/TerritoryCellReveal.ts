@@ -14,7 +14,7 @@ export function territoryRevealedCells(
     map: TerritoryMapConfig,
     progress: TerritoryProgress,
 ): number[] {
-    const opened = new Set([...progress.ownedCells, ...progress.unlockedCells]);
+    const opened = new Set(progress.ownedCells.concat(progress.unlockedCells));
     const frontier = new Set<number>();
     for (const cellId of opened) {
         for (const neighbor of hexGridNeighborIds(cellId, map.rows, map.columns)) {

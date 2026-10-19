@@ -22,8 +22,8 @@ import { readFileSync } from 'node:fs';
 /** 关卡分支的起点（fixedResource 那段源码截取到它为止）。 */
 const STAGE_BRANCH_ANCHOR = '\n        if (site.type === ';
 
-/** Presenter / View 两侧必须**逐字相同**的关卡分支条件。 */
-const STAGE_BRANCH = "site.type === 'stage' || site.type === 'boss' || site.type === 'asyncPvp'";
+/** Presenter / View 两侧必须**逐字相同**的关卡分支条件（站点类型走命名常量，禁字面量）。 */
+const STAGE_BRANCH = "site.type === TERRITORY_SITE_TYPE.stage || site.type === TERRITORY_SITE_TYPE.boss || site.type === TERRITORY_SITE_TYPE.asyncPvp";
 
 const MAP_VIEW_SRC = readFileSync(
     'assets/script/app/territory/view/TerritoryMapView.ts', 'utf8');
@@ -118,7 +118,7 @@ test('stationRenderOf 让 Boss 关（stage.isBoss）走两步式分支：可开�
 test('stationRenderOf binds asyncPvp to the shared battle flow and turns unlocked cells red', () => {
     const renderAt = MAP_VIEW_SRC.indexOf('private stationRenderOf(');
     const body = MAP_VIEW_SRC.slice(renderAt, MAP_VIEW_SRC.indexOf('\n    private ', renderAt + 10));
-    assert.match(body, /const isAsyncPvp = site\.type === 'asyncPvp'/);
+    assert.match(body, /const isAsyncPvp = site\.type === TERRITORY_SITE_TYPE\.asyncPvp/);
     assert.match(body, /isAsyncPvp && input\.progress\.isCellUnlocked\(site\.cellId\)[\s\S]*?territoryBossTint\(\)/,
         'unlocked async PvP station should use the danger tint');
     assert.match(body, /bossBattleReady/, 'async battle station should show the ready state');
@@ -131,7 +131,7 @@ test('stationRenderOf binds asyncPvp to the shared battle flow and turns unlocke
 // ============================================================
 
 test('★★★已领取的 fixedResource 格必须同时清空 icon/caption/badge', () => {
-    const renderAt = MAP_VIEW_SRC.indexOf("if (site.type === 'fixedResource')");
+    const renderAt = MAP_VIEW_SRC.indexOf('if (site.type === TERRITORY_SITE_TYPE.fixedResource)');
     assert.ok(renderAt > 0, '要能定位 fixedResource 渲染分支');
     const body = MAP_VIEW_SRC.slice(renderAt, MAP_VIEW_SRC.indexOf(STAGE_BRANCH_ANCHOR, renderAt));
 
@@ -157,24 +157,27 @@ test('★★★「光把 icon 置 null」达不到彻底清空 —— render 会
         'render 的显隐判据是 icon 是否为 null（改动后仍须是这条，MapView 才能靠传空串控制）');
 
     // 三个节点都挂了 !hasBuilding ⇒ 所以 MapView 侧必须三处一起清。
+    // ⚠️ 2026-10-16 row14 又在它们**前面**加了一道 `!isHidden`（建筑展示滞后到地块翻转结束，
+    //    见 `ITerritoryStationRender.hidden`）—— 判据要把两道闸都写上，
+    //    只写 `!hasBuilding` 会退化成「对着旧文本判绿」。
     const dependents = [
-        /captionSprite\.node\.active = !isLoading && !hasBuilding/,
-        /captionLabel\.node\.active = !isLoading && !hasBuilding/,
-        /badgeLabel\.node\.active = !isLoading && !hasBuilding/,
+        /captionSprite\.node\.active = !isHidden && !isLoading && !hasBuilding/,
+        /captionLabel\.node\.active = !isHidden && !isLoading && !hasBuilding/,
+        /badgeLabel\.node\.active = !isHidden && !isLoading && !hasBuilding/,
     ];
     for (const re of dependents) {
         assert.match(view, re, '底条/文字/角标三者的 active 都受 hasBuilding 反向控制');
     }
 
     // 反向：claimed 分支不许再回落到 fixedResourceClaimed 文案。
-    const renderAt = MAP_VIEW_SRC.indexOf("if (site.type === 'fixedResource')");
+    const renderAt = MAP_VIEW_SRC.indexOf('if (site.type === TERRITORY_SITE_TYPE.fixedResource)');
     const body = MAP_VIEW_SRC.slice(renderAt, MAP_VIEW_SRC.indexOf(STAGE_BRANCH_ANCHOR, renderAt));
     assert.ok(!/TERRITORY_TEXTS\.fixedResourceClaimed/.test(body),
         '地图上不该再出现「已领取」角标（那是领取成功提示条用的，不在这条路径）');
 });
 
 test('★★未领取的宝箱格不受影响：仍有图、仍有「可领取」角标、仍可点', () => {
-    const renderAt = MAP_VIEW_SRC.indexOf("if (site.type === 'fixedResource')");
+    const renderAt = MAP_VIEW_SRC.indexOf('if (site.type === TERRITORY_SITE_TYPE.fixedResource)');
     const body = MAP_VIEW_SRC.slice(renderAt, MAP_VIEW_SRC.indexOf(STAGE_BRANCH_ANCHOR, renderAt));
     assert.match(body, /icon:\s*claimed \? null : this\.stationIconOf\(/,
         '未领取必须照常走 stationIconOf 取宝箱图');
@@ -247,7 +250,7 @@ test('★★isAreaPassed 只在查询态扩散，绝不把同区域格子写进 
     // areaPeers 的范围：stage/boss/asyncPvp 且 configId 相同的才算同区域。
     const peersAt = progress.indexOf('areaPeers(cellId: number)');
     const peers = progress.slice(peersAt, progress.indexOf('isAreaPassed(cellId: number)', peersAt));
-    assert.match(peers, /peer\.type === 'stage' \|\| peer\.type === 'boss' \|\| peer\.type === 'asyncPvp'/,
+    assert.match(peers, /peer\.type === TERRITORY_SITE_TYPE\.stage \|\| peer\.type === TERRITORY_SITE_TYPE\.boss \|\| peer\.type === TERRITORY_SITE_TYPE\.asyncPvp/,
         '只有战斗类站点参与同区域（fixedResource 同 configId 有 3 格，绝不能算一起）');
     assert.match(peers, /typeof configId !== 'string' \|\| !\/\^\\d\+\$\/\.test\(configId\)/,
         'configId 必须是非空数字串才算同一片区域');

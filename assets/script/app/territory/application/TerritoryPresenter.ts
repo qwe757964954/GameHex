@@ -1,3 +1,5 @@
+import { EventMgr } from '../../../framework/event/EventMgr';
+import { TERRITORY_PRESENTER_EVENTS } from '../view/TerritoryEvents';
 import type { ITerritoryBattleArt } from './TerritoryPageAssets';
 import type { TerritoryCellFetchResult, TerritoryStartBattleResult, TerritoryWriteResult } from './TerritoryCellRepository';
 import {
@@ -17,7 +19,8 @@ import type {
     TerritoryMapConfig,
     TerritorySite,
 } from '../model/TerritoryMapConfig';
-import { configureTerritoryMap } from '../model/TerritoryMapConfig';
+import { configureTerritoryMap, TERRITORY_SITE_TYPE } from '../model/TerritoryMapConfig';
+import { TERRITORY_REQUEST_STATUS } from '../model/TerritoryRequestStatus';
 import type { ITerritoryMapLayout } from '../model/TerritoryMapLayout';
 import { buildTerritoryMapLayout } from '../model/TerritoryMapLayout';
 import type { TerritoryProgressData } from '../model/TerritoryProgress';
@@ -42,6 +45,7 @@ import type {
     TerritoryIdleRewardSaveResult,
     TerritoryWallet,
 } from '../model/TerritorySaveStore';
+import { TERRITORY_BATTLE_STATUS } from '../model/TerritoryBattleStatus';
 import type { ITerritorySiteDetailContent } from '../view/TerritorySiteDetailPanel';
 import type { ITerritoryHudRender } from '../view/TerritoryHeaderView';
 import {
@@ -249,14 +253,17 @@ interface TerritoryStageView {
  * 领地页纯 TS 编排器。
  *
  *  持有地图配置 / 玩家进度 / 本地存档与服务端格子端口，对页面暴露 intent 方法和一个视图状态。
- *  **不 import cc / framework / 其他 app feature**：所有副作用（导航、提示、奖励弹层、存档落盘、
+ *  **不 import cc / 其他 app feature**：所有副作用（导航、提示、奖励弹层、存档落盘、
  *  资源加载、网络）都经端口进入，因此本类可以在 Node 下直接单测。
  *
- *  页内刷新只有一个回调：`onStateChange`（重渲染）——加载失败走 `outputs.showTip` 轻提示，
+ *  framework 只允许纯 TS 的事件中控 `EventMgr`（零依赖，可直接 require，zcds 同款）：
+ *  状态变更经 `EventMgr.instance.emit(TERRITORY_PRESENTER_EVENTS.StateChange)` 广播，
+ *  页面订阅后须在 `onDestroy` 里 `offTarget(this)` 摘干净（见 `TerritoryEvents.ts`）。
+ *
+ *  页内刷新只有这一个通知通道——加载失败走 `outputs.showTip` 轻提示，
  *  不再有整页 loading 面板（生产口径：本地存档先渲染、服务端状态后台合并、失败不锁屏）。
  */
 export class TerritoryPresenter {
-    onStateChange: (() => void) | null = null;
 
     private currentChapterId: number;
     private map: TerritoryMapConfig | null = null;
@@ -338,7 +345,9 @@ export class TerritoryPresenter {
         // 已dispose 的对象上回调，表现为「关页面后再进，格子莫名变已占领」。
         this.ports.gateway.unlistenPassCellsBro?.();
         this.ports.gateway.unlistenCellInfo?.();
-        this.onStateChange = null;
+        // 全局中控上的残留监听一并摘干净（zcds 的 `ZCGame.shutdown` 同款；
+        // 页面侧由 `TerritoryPage.onDestroy` 的 `offTarget(this)` 负责）。
+        EventMgr.instance.offTarget(this);
     }
 
     /** Boss 关最近一次开战请求成功返回的战斗信息；未开战过为 `null`。 */
@@ -353,7 +362,7 @@ export class TerritoryPresenter {
     selectSite(site: TerritorySite): void {
         if (this.disposed || !this.progress || !this.map
             || !territoryRevealedCells(this.map, this.progress).includes(site.cellId)) return;
-        if ((site.type === 'stage' || site.type === 'boss' || site.type === 'asyncPvp')
+        if ((site.type === TERRITORY_SITE_TYPE.stage || site.type === TERRITORY_SITE_TYPE.boss || site.type === TERRITORY_SITE_TYPE.asyncPvp)
             && this.progress.isCellUnlocked(site.cellId)
             && this.pendingFixedResourceCells.has(site.cellId)) return;
         this.cancelBattleRequest();
@@ -367,7 +376,7 @@ export class TerritoryPresenter {
         // ⚠️ 判据：**站点类型**决定走哪条路，`isBoss`（= `levelMod === 2`）与是否绑到 campaign
         // 都不是准入条件 —— 找不到战斗配置时走 `handleUnlockOnly`，不会发空请求。
         //（`stageByCell` 已把主线与 asyncPvp 的同区域格子都填上 stage，见 `loadChapter`。）
-        if (site.type === 'stage' || site.type === 'boss' || site.type === 'asyncPvp') {
+        if (site.type === TERRITORY_SITE_TYPE.stage || site.type === TERRITORY_SITE_TYPE.boss || site.type === TERRITORY_SITE_TYPE.asyncPvp) {
             const stage = this.stageByCell.get(site.cellId) ?? null;
             this.detailSite = null;
             this.detailStage = null;
@@ -384,7 +393,7 @@ export class TerritoryPresenter {
         // 只剩**资源点**走「解锁 → 通关」（`CmdCityChapterPassCellReqMsg`）。
         // 关卡（`stage` / `boss`）已在上面那条分支 return 掉 —— 给关卡发通关会被服务端
         // 回「章节格子非资源类型」（早期实机踩过），别把这两条路合并。
-        if (site.type === 'fixedResource') {
+        if (site.type === TERRITORY_SITE_TYPE.fixedResource) {
             this.detailSite = null;
             this.detailStage = null;
             this.emitStateChange();
@@ -657,7 +666,7 @@ export class TerritoryPresenter {
             rows: map.rows,
             columns: map.columns,
             candidateCells: map.randomSites.candidateCells,
-            openedCells: Array.from(new Set([...progress.ownedCells, ...progress.unlockedCells])),
+            openedCells: Array.from(new Set(progress.ownedCells.concat(progress.unlockedCells))),
             silver: wallet.silver,
             stamina: wallet.stamina,
             silverCost: map.randomSites.triggerSilver,
@@ -738,7 +747,7 @@ export class TerritoryPresenter {
         // ⚠️ await 后重新判活：等回包期间可能已关页 / 切章节 / dispose。
         if (loadId !== this.loadId || requestId !== this.battleRequestId || this.disposed) return;
         if ('reason' in unlock) {
-            if (unlock.reason === 'rejected') {
+            if (unlock.reason === TERRITORY_REQUEST_STATUS.rejected) {
                 this.startingBattle = false;
                 this.battleStartNotice = null;
                 this.ports.outputs.showTip(TERRITORY_TEXTS.unlockRejected);
@@ -925,7 +934,7 @@ export class TerritoryPresenter {
         console.info('[TerritoryRandomResource] 章节随机点', {
             chapterId: this.map.chapterId,
             candidateCount: this.map.randomSites?.candidateCells.length ?? 0,
-            activeCells: [...this.randomResourceCells],
+            activeCells: Array.from(this.randomResourceCells),
             savedSilver: this.saveState?.wallet.silver ?? 0,
         });
 
@@ -1038,8 +1047,7 @@ export class TerritoryPresenter {
         const config = map?.randomSites;
         if (!map || !progress || !save || !config) return false;
         const ownedCells = progress.ownedCells;
-        const occupiedCells = [map.startCellId, ...ownedCells,
-            ...map.sites.flatMap((site) => site.footprint)];
+        const occupiedCells = [map.startCellId].concat(ownedCells, map.sites.flatMap((site) => site.footprint));
         const occupied = new Set(occupiedCells);
         const candidates = new Set(config.candidateCells);
         const adjacentCandidates = new Set(config.candidateCells.filter((cell) =>
@@ -1067,7 +1075,7 @@ export class TerritoryPresenter {
         const changed = active.length !== this.randomResourceCells.length
             || active.some((cell, index) => cell !== this.randomResourceCells[index]);
         this.randomResourceCells = active;
-        this.saveState = { ...save, randomResourceCells: [...active] };
+        this.saveState = { ...save, randomResourceCells: Array.from(active) };
         return changed;
     }
 
@@ -1114,7 +1122,7 @@ export class TerritoryPresenter {
         // ⚠️ 战斗已有结果 ⇒ 清掉 `bossBattleStart`，否则这一格会被「已开过战」的防重**永久拒绝**。
         // 该字段只在 `loadChapter` 末尾被消费一次（战斗页读它拿 battleId/seed）。
         this.bossBattleStart = null;
-        if (battle.status === 'pending') {
+        if (battle.status === TERRITORY_BATTLE_STATUS.pending) {
             // 未收到结算确认时保留记录；下一次进入领地仍可用服务端格子快照核对。
             if (this.progress.isOwned(battle.cellId)) {
                 this.saveState = this.ports.store.clearBattle(this.map.chapterId, this.saveState);
@@ -1123,14 +1131,14 @@ export class TerritoryPresenter {
             }
             return;
         }
-        if (battle.status === 'victory') {
+        if (battle.status === TERRITORY_BATTLE_STATUS.victory) {
             const result = this.progress.startExplore(
                 battle.cellId,
                 Number.MAX_SAFE_INTEGER,
                 battle.resolvedAt ?? Date.now(),
             );
             this.resultNotice = result.ok ? TERRITORY_TEXTS.victory : TERRITORY_TEXTS.victoryNoExplore;
-        } else if (battle.status === 'defeat') {
+        } else if (battle.status === TERRITORY_BATTLE_STATUS.defeat) {
             this.resultNotice = TERRITORY_TEXTS.defeat;
         }
         this.saveState = this.ports.store.clearBattle(this.map.chapterId, this.saveState);
@@ -1254,8 +1262,8 @@ export class TerritoryPresenter {
             randomResourceCells: this.randomResourceCells,
             randomResourceOpenableCells: map?.randomSites?.candidateCells.filter((cellId) =>
                 this.randomResourceOpenCheck(cellId).ok) ?? [],
-            pendingRandomResourceCells: [...this.pendingRandomResourceCells],
-            pendingFixedResourceCells: [...this.pendingFixedResourceCells],
+            pendingRandomResourceCells: Array.from(this.pendingRandomResourceCells),
+            pendingFixedResourceCells: Array.from(this.pendingFixedResourceCells),
             hud: ready ? this.buildHud() : null,
             detail: {
                 open: this.detailSite !== null,
@@ -1411,6 +1419,6 @@ export class TerritoryPresenter {
     // ============================================================
 
     private emitStateChange(): void {
-        this.onStateChange?.();
+        EventMgr.instance.emit(TERRITORY_PRESENTER_EVENTS.StateChange);
     }
 }

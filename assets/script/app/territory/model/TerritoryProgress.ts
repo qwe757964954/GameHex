@@ -1,4 +1,4 @@
-import { TerritoryMapConfig, TerritorySite } from './TerritoryMapConfig';
+import { TerritoryMapConfig, TerritorySite, TERRITORY_SITE_TYPE } from './TerritoryMapConfig';
 import { TERRITORY_TEXTS } from '../application/TerritoryTexts';
 
 /** 发起探索前回给 UI 的报价。 */
@@ -163,7 +163,7 @@ export class TerritoryProgress {
     }
 
     get unlockedCells(): readonly number[] {
-        return [...this.unlockable].sort((a, b) => a - b);
+        return Array.from(this.unlockable).sort((a, b) => a - b);
     }
 
     /** 服务端格子状态是否已成功拉取过（用来区分"没解锁"与"还不知道"）。 */
@@ -292,12 +292,12 @@ export class TerritoryProgress {
     /** 同区域的其它格子（不含自己）。非战斗站点或configId 非数字 ⇒ 空数组。 */
     areaPeers(cellId: number): readonly number[] {
         const site = this.map.sites.find((candidate) => candidate.cellId === cellId);
-        if (!site || (site.type !== 'stage' && site.type !== 'boss' && site.type !== 'asyncPvp')) return [];
+        if (!site || (site.type !== TERRITORY_SITE_TYPE.stage && site.type !== TERRITORY_SITE_TYPE.boss && site.type !== TERRITORY_SITE_TYPE.asyncPvp)) return [];
         const configId = site.configId;
         if (typeof configId !== 'string' || !/^\d+$/.test(configId)) return [];
         return this.map.sites
             .filter((peer) => peer.cellId !== cellId
-                && (peer.type === 'stage' || peer.type === 'boss' || peer.type === 'asyncPvp')
+                && (peer.type === TERRITORY_SITE_TYPE.stage || peer.type === TERRITORY_SITE_TYPE.boss || peer.type === TERRITORY_SITE_TYPE.asyncPvp)
                 && peer.configId === configId)
             .map((peer) => peer.cellId);
     }
@@ -383,7 +383,7 @@ export class TerritoryProgress {
     /** 回收已完成的探索，返回本拍新占领的格子。 */
     settle(now = Date.now()): number[] {
         const claimed: number[] = [];
-        for (const [cellId, exploration] of [...this.explorations]) {
+        for (const [cellId, exploration] of Array.from(this.explorations)) {
             if (exploration.finishesAt > now) continue;
             this.explorations.delete(cellId);
             for (const cell of exploration.cells) {
@@ -399,13 +399,13 @@ export class TerritoryProgress {
 
     toJSON(): TerritoryProgressData {
         return {
-            ownedCells: [...this.ownedCells],
-            unlockedCells: [...this.unlockedCells],
-            disabledCells: [...this.disabledCells],
-            pendingPassCells: [...this.pendingPassCells],
+            ownedCells: Array.from(this.ownedCells),
+            unlockedCells: Array.from(this.unlockedCells),
+            disabledCells: Array.from(this.disabledCells),
+            pendingPassCells: Array.from(this.pendingPassCells),
             explorations: this.activeExplorations.map((item) => ({
                 ...item,
-                cells: [...item.cells],
+                cells: Array.from(item.cells),
             })),
         };
     }
@@ -418,8 +418,8 @@ export class TerritoryProgress {
         if (this.owned.has(cellId)) return true;
         const site = this.siteForCell(cellId);
         // 固定资源只进入 unlockCells，不进入 passCells；后继站点仍需把它视为已完成。
-        if (site?.type === 'fixedResource' && this.unlockable.has(site.cellId)) return true;
-        if (site && (site.type === 'stage' || site.type === 'boss' || site.type === 'asyncPvp')) {
+        if (site?.type === TERRITORY_SITE_TYPE.fixedResource && this.unlockable.has(site.cellId)) return true;
+        if (site && (site.type === TERRITORY_SITE_TYPE.stage || site.type === TERRITORY_SITE_TYPE.boss || site.type === TERRITORY_SITE_TYPE.asyncPvp)) {
             return this.isAreaPassed(site.cellId);
         }
         // 🔴 2026-10-15：关卡前置**改走区域口径**（同 `configId` 任一格 owned 即算完成），

@@ -1,6 +1,7 @@
 import type { TerritoryProgressData } from './TerritoryProgress';
-import { idleRewardDestinationOf, settleTerritoryIdleRewards } from './TerritoryIdleReward';
+import { idleRewardDestinationOf, settleTerritoryIdleRewards, TERRITORY_IDLE_REWARD_DESTINATION } from './TerritoryIdleReward';
 import type { TerritoryIdleRewardGain, TerritoryIdleRewardSource } from './TerritoryIdleReward';
+import { TERRITORY_BATTLE_STATUS, type TerritoryBattleStatus } from './TerritoryBattleStatus';
 import {
     TERRITORY_LAST_CHAPTER_KEY,
     TERRITORY_STORAGE_PREFIX,
@@ -26,7 +27,7 @@ export interface TerritoryBattleRecord {
     chapterId: number;
     cellId: number;
     levelId: number;
-    status: 'pending' | 'victory' | 'defeat';
+    status: TerritoryBattleStatus;
     startedAt: number;
     resolvedAt?: number;
 }
@@ -213,10 +214,10 @@ export class TerritorySaveStore {
         save.idleRewardAtByLevel = settlement.claimedAtByLevel;
         for (const reward of settlement.rewards) {
             switch (idleRewardDestinationOf(reward.resId)) {
-                case 'wallet.silver':
+                case TERRITORY_IDLE_REWARD_DESTINATION.walletSilver:
                     save.wallet.silver += reward.amount;
                     break;
-                case 'wallet.stamina':
+                case TERRITORY_IDLE_REWARD_DESTINATION.walletStamina:
                     save.wallet.stamina += reward.amount;
                     break;
                 default: {
@@ -250,7 +251,7 @@ export class TerritorySaveStore {
             chapterId,
             cellId: request.cellId,
             levelId: request.levelId,
-            status: 'pending',
+            status: TERRITORY_BATTLE_STATUS.pending,
             startedAt: Date.now(),
         };
         this.save(chapterId, save);
@@ -270,7 +271,7 @@ export class TerritorySaveStore {
             chapterId,
             cellId,
             levelId,
-            status: victory ? 'victory' : 'defeat',
+            status: victory ? TERRITORY_BATTLE_STATUS.victory : TERRITORY_BATTLE_STATUS.defeat,
             startedAt: current?.startedAt ?? Date.now(),
             resolvedAt: Date.now(),
         };

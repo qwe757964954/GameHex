@@ -140,7 +140,7 @@ export function decodeCellBitSet(words: readonly unknown[] | null | undefined, m
     const invalid: string[] = [];
     const cells: number[] = [];
     for (let index = 0; index < words.length; index += 1) {
-        cells.push(...wordToCells(words[index], index * BITS_PER_WORD, invalid, index));
+        for (const cell of wordToCells(words[index], index * BITS_PER_WORD, invalid, index)) cells.push(cell);
     }
     // ⚠️ 半截数据比全空更糟：领地页会按"缺格子"渲染 ⇒ 凭空吃掉玩家已通关的领地。
     if (invalid.length) return { cells: null, reason: invalid.join('；') };

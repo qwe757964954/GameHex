@@ -7,13 +7,27 @@ export const TERRITORY_SILVER_RES_ID = 7;
 /** roleProperty: end = 体力。 */
 export const TERRITORY_STAMINA_RES_ID = 9;
 
-export type TerritoryIdleRewardDestination = 'wallet.silver' | 'wallet.stamina' | 'inventory';
+/**
+ * 挂机奖励去向（**唯一事实源**：`TerritoryIdleRewardDestination` 由它推导，禁止写
+ * `'wallet.silver'` 这类裸字面量）。
+ *
+ * ⚠️ **键是合法标识符，值是存档里的真实路径**（`save.wallet.silver` / `save.wallet.stamina`）——
+ * `TerritorySaveStore` 的 switch 按**值**匹配，存档路径由值携带，改名只动键。
+ */
+export const TERRITORY_IDLE_REWARD_DESTINATION = {
+    walletSilver: 'wallet.silver',
+    walletStamina: 'wallet.stamina',
+    inventory: 'inventory',
+} as const;
 
-/** Silver and stamina go straight to the wallet; every other resource is a territory inventory item. */
+export type TerritoryIdleRewardDestination =
+    typeof TERRITORY_IDLE_REWARD_DESTINATION[keyof typeof TERRITORY_IDLE_REWARD_DESTINATION];
+
+/** 银币 / 体力直接进钱包，其余资源进领地背包。 */
 export function idleRewardDestinationOf(resId: number): TerritoryIdleRewardDestination {
-    if (resId === TERRITORY_SILVER_RES_ID) return 'wallet.silver';
-    if (resId === TERRITORY_STAMINA_RES_ID) return 'wallet.stamina';
-    return 'inventory';
+    if (resId === TERRITORY_SILVER_RES_ID) return TERRITORY_IDLE_REWARD_DESTINATION.walletSilver;
+    if (resId === TERRITORY_STAMINA_RES_ID) return TERRITORY_IDLE_REWARD_DESTINATION.walletStamina;
+    return TERRITORY_IDLE_REWARD_DESTINATION.inventory;
 }
 
 export interface TerritoryIdleRewardSource {

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
-import { configureTerritoryMap, territoryNeighbors } from '../assets/script/app/territory/model/TerritoryMapConfig';
+import { configureTerritoryMap, territoryNeighbors, TERRITORY_SITE_TYPE } from '../assets/script/app/territory/model/TerritoryMapConfig';
 
 const sample = JSON.parse(readFileSync(new URL('../assets/resources/config/territory-maps/chapter_01.json', import.meta.url), 'utf8'));
 const chapterTwo = JSON.parse(readFileSync(new URL('../assets/resources/config/territory-maps/chapter_02.json', import.meta.url), 'utf8'));
@@ -22,11 +22,11 @@ test('client territory config keeps runtime progress out of static map', () => {
 
 test('client territory config retains fixed resource reward IDs per site', () => {
     const input = structuredClone(sample);
-    const resources = input.sites.filter((site: { type: string }) => site.type === 'fixedResource');
+    const resources = input.sites.filter((site: { type: string }) => site.type === TERRITORY_SITE_TYPE.fixedResource);
     resources[0].rewardId = 101;
     resources[1].rewardId = 202;
     const config = configureTerritoryMap(input);
-    const output = config.sites.filter((site) => site.type === 'fixedResource');
+    const output = config.sites.filter((site) => site.type === TERRITORY_SITE_TYPE.fixedResource);
     assert.equal(output[0].rewardId, 101);
     assert.equal(output[1].rewardId, 202);
 });

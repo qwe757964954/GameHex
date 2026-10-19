@@ -770,6 +770,15 @@
     "badgeLabel": {
       "__id__": 23
     },
+    "iconTransform": {
+      "__id__": 3
+    },
+    "captionIconTransform": {
+      "__id__": 9
+    },
+    "captionTextTransform": {
+      "__id__": 15
+    },
     "_id": ""
   },
   {

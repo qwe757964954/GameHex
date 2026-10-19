@@ -15,6 +15,7 @@ import { HEX_GROUND_GLOW_ART_ROOT, RESOURCE_ICON_ART_ROOT, spriteFramePath } fro
 import { GameRoute } from '../../../core/runtime/GameRoute';
 import { ProcedureManager } from '../../../framework/procedure/ProcedureManager';
 import { FW } from '../../../framework/FW';
+import { EventMgr } from '../../../framework/event/EventMgr';
 import { readRoleRow } from '../../main/MainResBar';
 import { CacheMgr } from '../../net/CacheMgr';
 import { toCount, toIdString } from '../../net/RequestGuard';
@@ -41,6 +42,8 @@ import type { ITerritorySaveOwner, TerritoryWallet } from '../model/TerritorySav
 import { TerritorySiteDetailPanel } from '../view/TerritorySiteDetailPanel';
 import { TerritoryHeaderView } from '../view/TerritoryHeaderView';
 import { TerritoryMapView } from '../view/TerritoryMapView';
+import { TERRITORY_EVENTS, TERRITORY_PRESENTER_EVENTS } from './TerritoryEvents';
+import type { TerritoryStationTarget } from './TerritoryStationView';
 
 const { ccclass, property } = _decorator;
 /** 兜底章节：服务器章节汇总还没到时，冒险页至少能开第 1 章。 */
@@ -114,7 +117,8 @@ export class TerritoryPage extends Component {
                 showRewards: (rewards, originCellId) => this.presentRewards(rewards, originCellId),
             },
         });
-        this.presenter.onStateChange = () => this.renderAll();
+        // 状态变更通知走 `EventMgr` 全局中控（zcds 同款）：`onDestroy` 里 `offTarget(this)` 摘净。
+        EventMgr.instance.on(TERRITORY_PRESENTER_EVENTS.StateChange, this.onPresenterStateChange, this);
         void this.loadHexFlipAssets(assets);
         void this.loadResourceGainIcons(assets);
     }
@@ -177,20 +181,18 @@ export class TerritoryPage extends Component {
         detailNode.setParent(this.node);
         detailNode.setPosition(Vec3.ZERO);
         this.detailPanel = detailNode.getComponent(TerritorySiteDetailPanel)!;
-        this.detailPanel.initialize({
-            onClose: () => this.presenter?.closeDetail(),
-            onStart: () => this.presenter?.requestBattle(),
-        });
+        this.detailPanel.initialize();
         this.detailPanel.close();
+        // 视图间通知走节点事件（`TERRITORY_EVENTS` 契约）：监听挂组件自身节点，随节点销毁清理。
+        this.detailPanel.node.on(TERRITORY_EVENTS.DETAIL_CLOSE, this.onDetailClose, this);
+        this.detailPanel.node.on(TERRITORY_EVENTS.DETAIL_START, this.onDetailStart, this);
 
-        this.hudView.initialize({
-            onPreviousChapter: () => this.presenter?.switchChapter(-1),
-            onNextChapter: () => this.presenter?.switchChapter(1),
-        });
-        this.mapView.initialize((target) => {
-            if ('kind' in target) this.presenter?.selectRandomResource(target.cellId);
-            else this.presenter?.selectSite(target);
-        });
+        this.hudView.initialize();
+        this.hudView.node.on(TERRITORY_EVENTS.PREVIOUS_CHAPTER, this.onPreviousChapter, this);
+        this.hudView.node.on(TERRITORY_EVENTS.NEXT_CHAPTER, this.onNextChapter, this);
+
+        this.mapView.initialize();
+        this.mapView.node.on(TERRITORY_EVENTS.STATION_CLICK, this.onSiteClick, this);
 
         if (!this.presenter) {
             // 资源入口缺失是宿主注入错误（开发配置问题），不整页锁死：轻提示 + 留空页面。
@@ -205,6 +207,7 @@ export class TerritoryPage extends Component {
 
     onDestroy(): void {
         CacheMgr.instance.removeEventUpdate('CmdRole', this as unknown as destroyable, this.onRoleCacheUpdate);
+        EventMgr.instance.offTarget(this);
         this.presenter?.dispose();
         // ⚠️ 这里不再对子节点调 `off(...)`：`Node._onPreDestroyBase()` 先销毁子节点、
         // 再跑本函数，节点销毁时 EventTarget 已释放，监听不泄漏；引擎这版 `Node.off` 不判空，
@@ -214,6 +217,11 @@ export class TerritoryPage extends Component {
     // ============================================================
     // 渲染（Passive View：幂等全量赋值，不读上一次状态）
     // ============================================================
+
+    /** Presenter 状态变更（`TERRITORY_PRESENTER_EVENTS.StateChange`）：全量重渲染。 */
+    private onPresenterStateChange(): void {
+        this.renderAll();
+    }
 
     private renderAll(): void {
         const state = this.presenter?.state;
@@ -274,6 +282,19 @@ export class TerritoryPage extends Component {
 
     private readonly onRoleCacheUpdate = (): void => {
         if (this.isValid) this.presenter?.refreshWalletFromServer();
+    };
+
+    // ============================================================
+    // 视图事件处理（`TERRITORY_EVENTS` 契约，见 `TerritoryEvents.ts`）
+    // ============================================================
+
+    private readonly onDetailClose = (): void => { this.presenter?.closeDetail(); };
+    private readonly onDetailStart = (): void => { this.presenter?.requestBattle(); };
+    private readonly onPreviousChapter = (): void => { this.presenter?.switchChapter(-1); };
+    private readonly onNextChapter = (): void => { this.presenter?.switchChapter(1); };
+    private readonly onSiteClick = (target: TerritoryStationTarget): void => {
+        if ('kind' in target) this.presenter?.selectRandomResource(target.cellId);
+        else this.presenter?.selectSite(target);
     };
 
     /**

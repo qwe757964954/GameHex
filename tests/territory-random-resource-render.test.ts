@@ -27,10 +27,15 @@ test('locked sites show only the silver icon and amount, and random sites hide t
             // ⇒ 这里不需要再给 TerritoryMapConfig 打桩。
             if (id === './TerritoryStationView') return { TerritoryStationView: class {} };
             if (id === './TerritoryResourceGainView') return { TerritoryResourceGainView: class {} };
+            // 喷发粒子（2026-10-16 row17）：夹具只关心站点文案，给个空壳即可。
+            if (id === './TerritoryGainBurst') return {
+                TERRITORY_GAIN_BURST_NODE: 'GainBurst',
+                TerritoryGainBurst: class {},
+            };
             // 飘字分流常量（银币 7 / 体力 9）与落点间距：夹具只关心站点文案，给空壳即可。
             if (id.endsWith('/TerritoryResourceGain')) return {
                 TERRITORY_GAIN_STACK_GAP_PX: 40,
-                TERRITORY_GAIN_START_LIFT_PX: 30,
+                TERRITORY_GAIN_START_LIFT_PX: 40,
                 TERRITORY_SILVER_RES_ID: 7,
                 TERRITORY_STAMINA_RES_ID: 9,
             };
@@ -49,6 +54,9 @@ test('locked sites show only the silver icon and amount, and random sites hide t
                     gold: 'gold', locked: 'locked', cleared: 'cleared', danger: 'danger', randomConditionText: 'red',
                     randomAvailableText: 'white',
                 },
+                TERRITORY_STATION_STATE: {
+                    owned: 'owned', exploring: 'exploring', available: 'available', locked: 'locked',
+                },
                 territoryStationTint: () => 'gold',
                 territoryBossTint: () => 'danger',
                 territoryUnboundTint: () => 'async-brown',
@@ -59,6 +67,23 @@ test('locked sites show only the silver icon and amount, and random sites hide t
                     openCost: (silver: number, stamina: number) => `${silver}银 ${stamina}体`,
                 },
                 TERRITORY_UNBOUND_TYPE_NAMES: { fixedResource: '固定资源点' },
+            };
+            // 事件契约：纯常量表，给桩（与 `view/TerritoryEvents.ts` 同值）。
+            if (id === './TerritoryEvents') return {
+                TERRITORY_EVENTS: {
+                    STATION_CLICK: 'territory:station-click',
+                    PREVIOUS_CHAPTER: 'territory:previous-chapter',
+                    NEXT_CHAPTER: 'territory:next-chapter',
+                    DETAIL_CLOSE: 'territory:detail-close',
+                    DETAIL_START: 'territory:detail-start',
+                },
+            };
+            // MapView 按站点类型命名常量判定（2026-10-19 起），需运行时值桩。
+            if (id === '../model/TerritoryMapConfig') return {
+                TERRITORY_SITE_TYPE: {
+                    stage: 'stage', boss: 'boss', asyncPvp: 'asyncPvp',
+                    fixedResource: 'fixedResource', bonus: 'bonus',
+                },
             };
             throw new Error(`Unexpected dependency: ${id}`);
         },

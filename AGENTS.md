@@ -111,3 +111,10 @@ framework（通用 UI/流程机制）            -> core
 - 注释只说明业务原因、引擎陷阱、兼容性或不变量，不要复述代码；兼容分支注明删除条件。
 - 有规则、边界、取消、资源或回归风险的改动必须新增/更新测试；最少运行与改动相关的单测子集或检查命令，并报告实际结果。
 - 完成时说明：改了什么、关键架构边界、验证命令与结果、尚未验证的风险。不要把“应该能运行”当作验证。
+
+## 版本库（SVN 与 Git 并存）
+
+- 本仓库**双版本库**：SVN 工作副本根 `D:\City1001`（映射 `https://192.168.2.250:8440/svn/City1001/trunk/Demo3.8`）+ Git 仓库 `D:\City1001\Demo3.8\.git`（GitHub remote）。提交变更时**两库都提交**；SVN 在 `D:\City1001` 根下用 `svn commit Demo3.8 -m …`。
+- ⚠️ **SVN 中文日志编码坑（Windows）**：PowerShell 调 `svn.exe` 传中文参数会按 ANSI 解码、SVN 按 UTF-8 存储 ⇒ 日志乱码。**中文提交日志一律写 UTF-8 文件后用 `-F <file>` 提交**（如 `svn commit Demo3.8 -F .svn-msg.txt`），禁止命令行内联中文。
+- `svn:ignore`（`Demo3.8` 目录属性）已与 `.gitignore` 对齐：`.superpowers/.codegraph/.codex-artifacts/.codex-tmp/.creative-design/.skill_tmp/.workbuddy/data/outputs`。新增本地工具目录时两处同步。
+

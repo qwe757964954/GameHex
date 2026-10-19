@@ -267,7 +267,6 @@ interface IZCSpawnHexPresentation {
     /** 资源点的具体资源 id（选点阶段用资源图标，不再显示「资源/可解锁」文字）。 */
     resourceId?: string | null;
     unlocksResource: boolean;
-    regionText?: string;
     boundaryMask?: number;
     /**
      * 本格是否紧邻**我方基地**（选点阶段基地周围那 6 格）。
@@ -1358,7 +1357,6 @@ export class ZCHexView extends Component {
 
         let text = '';
         if (presentation.blocked) text = '×';
-        if (presentation.regionText && !text && !selectedOwner) text = presentation.regionText;
         if (selectedOwner) text = presentation.confirmed ? '锁' : '已选';
         // 站了骨骼的格子**一个字都不写**（与对局一致）：这一格的语义是「这里的兵」，
         // 不是「可开发 / 可点」；区名 / × / 锁 也都让位给兵。

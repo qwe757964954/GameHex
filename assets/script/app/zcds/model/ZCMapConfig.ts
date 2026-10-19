@@ -634,6 +634,7 @@ export function configureZCMap(layout: ZCMapLayout): void {
     // ---- 区域（5.4）------------------------------------------------------------
     const regions: ZCMapRegion[] = [];
     const regionDepthByCell = new Map<number, ZCDepth>();
+    const configuredRegionDepths = new Set<string>();
     if (layout.regions !== undefined) {
         if (!Array.isArray(layout.regions)) throw new Error('区域配置必须是数组');
         for (const region of layout.regions) {
@@ -642,9 +643,13 @@ export function configureZCMap(layout: ZCMapLayout): void {
             }
             if (ZC_DEPTH_ORDER.indexOf(region.depth) < 0) throw new Error('区域纵深必须是 front / mid / back');
             if (!Array.isArray(region.cells) || !region.cells.length) throw new Error('区域至少要圈进一格');
-            if (region.tendency !== undefined && !(region.tendency in ZC_TENDENCY_TEXT)) {
+            if (region.tendency !== undefined
+                && !Object.prototype.hasOwnProperty.call(ZC_TENDENCY_TEXT, region.tendency)) {
                 throw new Error('打法倾向必须是 rush / control / develop');
             }
+            const regionKey = `${region.section}:${region.depth}`;
+            if (configuredRegionDepths.has(regionKey)) throw new Error('同一分区的纵深区域不能重复配置');
+            configuredRegionDepths.add(regionKey);
             const cells: number[] = [];
             for (const cell of region.cells) {
                 if (!Number.isInteger(cell) || cell < 0 || cell >= rows * columns) throw new Error('区域包含地图外的格');

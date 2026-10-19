@@ -28,7 +28,7 @@
   var resourcePoints = [];
   var regions = [];
   var homeCandidates = [];
-  var regionBrush = { section: 1, depth: 'front' };
+  var regionBrush = { section: 1, depth: 'front', tendency: 'rush' };
   var homeCandidateBrushSection = 1;
   var RESOURCE_TYPES = [
     { id: 'chest', label: '宝箱', asset: 'image/map-resource/chest' },
@@ -143,10 +143,15 @@
   function cloneRegions(items) {
     return items.map(function (region) {
       var copy = { section: region.section, depth: region.depth, cells: region.cells.slice() };
-      if (region.tendency !== undefined) copy.tendency = region.tendency;
+      var tendency = region.tendency === undefined ? defaultRegionTendency(region.depth) : region.tendency;
+      if (['rush', 'control', 'develop'].indexOf(tendency) < 0) throw new Error('区域打法倾向必须是 rush / control / develop');
+      copy.tendency = tendency;
       if (region.text !== undefined) copy.text = region.text;
       return copy;
     });
+  }
+  function defaultRegionTendency(depth) {
+    return depth === 'front' ? 'rush' : depth === 'mid' ? 'control' : depth === 'back' ? 'develop' : null;
   }
   function cloneHomeCandidates(items) {
     return items.map(function (entry) { return { section: entry.section, cells: entry.cells.slice() }; });
@@ -219,8 +224,23 @@
   function setRegionBrush(section, depth) {
     if (!Number.isInteger(section) || section < 1 || section > PLAYER_COUNT ||
         ['front', 'mid', 'back'].indexOf(depth) < 0) throw new Error('区域配置无效');
-    regionBrush = { section: section, depth: depth };
+    var region = regions.find(function (entry) { return entry.section === section && entry.depth === depth; });
+    regionBrush = { section: section, depth: depth, tendency: region ? region.tendency : defaultRegionTendency(depth) };
     brush = 'region';
+    syncControls();
+  }
+  function setRegionTendency(tendency) {
+    if (['rush', 'control', 'develop'].indexOf(tendency) < 0) throw new Error('区域打法倾向必须是 rush / control / develop');
+    var before = snapshot();
+    regionBrush.tendency = tendency;
+    var region = regions.find(function (entry) {
+      return entry.section === regionBrush.section && entry.depth === regionBrush.depth;
+    });
+    if (region) {
+      region.tendency = tendency;
+      render();
+      commitUndo(before);
+    }
     syncControls();
   }
   function setHomeCandidateBrush(section) {
@@ -1129,6 +1149,18 @@
     if (data.ascii.length !== expectedRows || data.ascii.some(function (line) {
       return typeof line !== 'string' || line.length !== expectedCols || invalidToken.test(line);
     })) throw new Error('字符画行数或列数不匹配（应为 ' + expectedRows + ' 行 × ' + expectedCols + ' 列）');
+    if (data.regions !== undefined && !Array.isArray(data.regions)) throw new Error('前 / 中 / 后区配置必须是数组');
+    var importedRegions = data.regions || [];
+    if (importedRegions.some(function (region) { return !region || !Array.isArray(region.cells); })) {
+      throw new Error('前 / 中 / 后区格子配置无效');
+    }
+    var importedRegionDepths = Object.create(null);
+    importedRegions.forEach(function (region) {
+      var key = String(region.section) + ':' + String(region.depth);
+      if (importedRegionDepths[key]) throw new Error('同一分区的纵深区域不能重复配置');
+      importedRegionDepths[key] = true;
+    });
+    var normalizedRegions = cloneRegions(importedRegions);
 
     PLAYER_COUNT = data.playerCount === 3 || data.playerCount === 4 ? data.playerCount : 2;
     CITY_MODE = data.cityMode === 'select' ? 'select' : 'fixed';
@@ -1173,12 +1205,11 @@
       grid.push(line);
     }
     resourcePoints = cloneResourcePoints(importedResourcePoints);
-    if (data.regions !== undefined && !Array.isArray(data.regions)) throw new Error('前 / 中 / 后区配置必须是数组');
-    var importedRegions = data.regions || [];
-    if (importedRegions.some(function (region) { return !region || !Array.isArray(region.cells); })) {
-      throw new Error('前 / 中 / 后区格子配置无效');
-    }
-    regions = cloneRegions(importedRegions);
+    regions = normalizedRegions;
+    var activeRegion = regions.find(function (region) {
+      return region.section === regionBrush.section && region.depth === regionBrush.depth;
+    });
+    regionBrush.tendency = activeRegion ? activeRegion.tendency : defaultRegionTendency(regionBrush.depth);
     if (data.homeCandidates !== undefined && !Array.isArray(data.homeCandidates)) throw new Error('主城可选格配置必须是数组');
     var importedHomeCandidates = data.homeCandidates || [];
     if (importedHomeCandidates.some(function (entry) { return !entry || !Array.isArray(entry.cells); })) {
@@ -1288,12 +1319,48 @@
   }
 
   function clearGrid() {
+    if (!window.confirm('清空重画会重置地形、主城落点与自由装饰，并保留区域标记和中立资源点，是否继续？')) return false;
     var before = snapshot();
     newGrid();
     syncControls();
     render();
-    commitUndo(before);
+    var changed = commitUndo(before);
     flash('已清空为全中立底图：只保留各方主城盘（主城 + 6 邻格），其余全部是中立格。');
+    return changed;
+  }
+
+  function clearSelectedRegion() {
+    var current = regions.find(function (region) {
+      return region.section === regionBrush.section && region.depth === regionBrush.depth;
+    });
+    if (!current) return false;
+    var depthLabel = { front: '前区', mid: '中区', back: '后区' }[regionBrush.depth];
+    if (!window.confirm('清空当前分区的' + depthLabel + '区域？')) return false;
+    var before = snapshot();
+    regions = regions.filter(function (region) { return region !== current; });
+    render();
+    return commitUndo(before);
+  }
+
+  function clearFreeDecor() {
+    if (!freeDecor.length) return false;
+    if (!window.confirm('清空地图上的全部自由装饰？')) return false;
+    var before = snapshot();
+    freeDecor = [];
+    nextFreeDecorId = 1;
+    selectedFreeDecorId = null;
+    render();
+    syncFreeDecorInspector();
+    return commitUndo(before);
+  }
+
+  function clearResourcePoints() {
+    if (!resourcePoints.length) return false;
+    if (!window.confirm('清空地图上的全部中立资源点？')) return false;
+    var before = snapshot();
+    resourcePoints = [];
+    render();
+    return commitUndo(before);
   }
 
   // ---- 绘制 -------------------------------------------------------------------
@@ -1656,15 +1723,55 @@
     var parts = [];
     var depthLabels = { front: '前区', mid: '中区', back: '后区' };
     var depthColors = { front: '#ff5959', mid: '#7f73ff', back: '#39a8ff' };
+    var depthPatterns = {
+      front: { dash: 'none', linecap: 'butt' },
+      mid: { dash: '6 3', linecap: 'butt' },
+      back: { dash: '1 3', linecap: 'round' }
+    };
+    var tendencyLabels = { rush: '速攻', control: '控场', develop: '发育' };
     regions.forEach(function (region) {
-      region.cells.forEach(function (id, index) {
+      var centers = [];
+      region.cells.forEach(function (id) {
         var center = hexCenter(Math.floor(id / COLS), id % COLS);
+        centers.push({ id: id, center: center });
         var color = depthColors[region.depth] || '#ffffff';
+        var pattern = depthPatterns[region.depth] || depthPatterns.front;
         parts.push('<path class="regionCell region-' + esc(region.depth) + '" d="' + hexPathD(center.x, center.y) +
-          '" fill="' + color + '" fill-opacity="0.08" stroke="' + color + '" stroke-opacity="0.65" stroke-width="1.5" pointer-events="none"></path>');
-        if (index === 0) parts.push('<text class="regionLabel" x="' + center.x.toFixed(1) + '" y="' + (center.y + 4).toFixed(1) +
-          '" text-anchor="middle" pointer-events="none">' + depthLabels[region.depth] + '</text>');
+          '" fill="' + color + '" fill-opacity="0.16" stroke="' + color + '" stroke-opacity="0.9" stroke-width="2.5"' +
+          ' stroke-dasharray="' + pattern.dash + '" stroke-linecap="' + pattern.linecap + '" pointer-events="none"></path>');
       });
+      if (!centers.length) return;
+
+      var centroid = centers.reduce(function (total, item) {
+        total.x += item.center.x;
+        total.y += item.center.y;
+        return total;
+      }, { x: 0, y: 0 });
+      centroid.x /= centers.length;
+      centroid.y /= centers.length;
+      var representative = centers[0];
+      var representativeDistance = Infinity;
+      centers.forEach(function (item) {
+        var dx = item.center.x - centroid.x;
+        var dy = item.center.y - centroid.y;
+        var distance = dx * dx + dy * dy;
+        if (distance < representativeDistance) {
+          representative = item;
+          representativeDistance = distance;
+        }
+      });
+
+      var tendency = region.tendency || defaultRegionTendency(region.depth);
+      var tendencyLabel = tendencyLabels[tendency] || '';
+      if (!tendencyLabel) return;
+      var label = depthLabels[region.depth] + ' · ' + tendencyLabel;
+      var center = representative.center;
+      var color = depthColors[region.depth] || '#ffffff';
+      parts.push('<rect class="regionBadge regionBadge-' + esc(region.depth) + '" x="' + (center.x - 45).toFixed(1) +
+        '" y="' + (center.y - 13).toFixed(1) + '" width="90" height="26" rx="13" fill="#14213d" fill-opacity="0.96"' +
+        ' stroke="' + color + '" stroke-width="2" pointer-events="none"></rect>');
+      parts.push('<text class="regionLabel" x="' + center.x.toFixed(1) + '" y="' + (center.y + 5).toFixed(1) +
+        '" text-anchor="middle" font-size="14" font-weight="700" fill="#fff" pointer-events="none">' + esc(label) + '</text>');
     });
     homeCandidates.forEach(function (entry) {
       entry.cells.forEach(function (id) {
@@ -1856,7 +1963,7 @@
             return region.section === regionBrush.section && region.depth === regionBrush.depth;
           });
           if (!targetRegion) {
-            targetRegion = { section: regionBrush.section, depth: regionBrush.depth, cells: [] };
+            targetRegion = { section: regionBrush.section, depth: regionBrush.depth, cells: [], tendency: regionBrush.tendency };
             regions.push(targetRegion);
           }
           targetRegion.cells.push(regionId);
@@ -2424,6 +2531,11 @@
     });
     $('regionSection').value = String(regionBrush.section);
     $('homeCandidateSection').value = String(homeCandidateBrushSection);
+    var selectedRegion = regions.find(function (region) {
+      return region.section === regionBrush.section && region.depth === regionBrush.depth;
+    });
+    if (selectedRegion) regionBrush.tendency = selectedRegion.tendency;
+    $('regionTendency').value = regionBrush.tendency || defaultRegionTendency(regionBrush.depth);
     Array.prototype.forEach.call(document.querySelectorAll('#segRegionDepth button'), function (button) {
       var active = button.dataset.depth === regionBrush.depth;
       if (button.classList.toggle) button.classList.toggle('on', active);
@@ -2796,7 +2908,10 @@
     if ($('inZoomMax')) $('inZoomMax').addEventListener('change', function () { applyZoomInput('zoomMax', this.value); });
     $('mapId').addEventListener('input', function () { markDirty(); render(); });
     $('mapName').addEventListener('input', function () { markDirty(); render(); });
-    $('btnClear').addEventListener('click', clearGrid);
+    $('btnClearMap').addEventListener('click', clearGrid);
+    $('btnClearRegion').addEventListener('click', clearSelectedRegion);
+    $('btnClearDecorations').addEventListener('click', clearFreeDecor);
+    $('btnClearResources').addEventListener('click', clearResourcePoints);
     $('btnSavePreset').addEventListener('click', savePreset);
     $('openServer').addEventListener('click', function () {
       this.href = SERVER_URL + '#map=' + encodeURIComponent(JSON.stringify(buildJSON()));
@@ -2853,6 +2968,9 @@
     $('regionSection').addEventListener('change', function () {
       setRegionBrush(Number(this.value), regionBrush.depth);
     });
+    $('regionTendency').addEventListener('change', function () {
+      setRegionTendency(this.value);
+    });
     Array.prototype.forEach.call(document.querySelectorAll('#segRegionDepth button'), function (button) {
       button.addEventListener('click', function () {
         setRegionBrush(Number($('regionSection').value), this.dataset.depth);
@@ -2884,6 +3002,7 @@
     // 两者都暴露出来，探针/用例才能断言"默认开但不是强制"这件事本身，而不是只测副作用。
     forcedMirror: forcedMirror, defaultMirror: defaultMirror,
     applyLayout: applyLayout, clearGrid: clearGrid,
+    clearSelectedRegion: clearSelectedRegion, clearFreeDecor: clearFreeDecor, clearResourcePoints: clearResourcePoints,
     paint: paintCell, paintCells: paintCells, brushCells: brushCells, hexNeighbors: hexNeighbors,
     toLocal: toLocal, cellAtLocal: cellAtLocal, walkStroke: walkStroke, hexCenter: hexCenter,
     setBrushRadius: setBrushRadius, undo: undo, redo: redo, resetView: resetView, zoomAt: zoomAt,
@@ -2895,7 +3014,7 @@
     freeDecorMarkup: freeDecorMarkup,
     rememberDecorName: rememberDecorName, groupDecorEntries: groupDecorEntries,
     setResourceBrush: setResourceBrush, setResourceWeight: setResourceWeight, resourceMarkup: resourceMarkup,
-    setRegionBrush: setRegionBrush, setHomeCandidateBrush: setHomeCandidateBrush,
+    setRegionBrush: setRegionBrush, setRegionTendency: setRegionTendency, setHomeCandidateBrush: setHomeCandidateBrush,
     mapMetadataMarkup: mapMetadataMarkup,
     addResourcePoint: addResourcePoint, removeResourcePoint: removeResourcePoint,
     // 视图矩形 / 背景图标记：判据要能断言「图盒 == viewBox」（见 viewportRect 的红字说明）。

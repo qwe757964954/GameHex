@@ -12,6 +12,8 @@ import { ZCHexView } from './ZCHexView';
 import { ZCGameUiEvent } from './ZCGameHudEvents';
 import { EventMgr } from '../../../framework/event/EventMgr';
 import type { ZCSpawnSelection } from '../model/ZCSpawnSelection';
+import { resolveZCSpawnRegionHints } from '../model/ZCSpawnRegionHint';
+import type { IZCSpawnRegionHint } from '../model/ZCSpawnRegionHint';
 import type { ZCMatchMap } from '../model/ZCMatchConfig';
 import {
     type ZCCombatEvent,
@@ -47,6 +49,7 @@ import { ZCVictorySweep } from './ZCVictorySweep';
 import { ZCEffectPool } from './ZCEffectPool';
 import { ZCWallGeometry } from './ZCWallGeometry';
 import { ZCWallRenderer } from './ZCWallRenderer';
+import { ZCSpawnRegionHintOverlay } from './ZCSpawnRegionHintOverlay';
 
 type ZCRenderEntityKind = 'hex' | 'unit' | 'effect' | 'float' | 'cardReveal' | 'legendBanner';
 
@@ -223,6 +226,8 @@ export class ZCGameRenderWorld {
     private readonly identity = new Map<number, ZCIdentityComponent>();
     private readonly scene = new Map<number, ZCSceneComponent>();
     private readonly hexViews = new Map<number, ZCHexView>();
+    private spawnRegionHintOverlay: ZCSpawnRegionHintOverlay | null = null;
+    private spawnRegionHints: readonly IZCSpawnRegionHint[] = [];
     /**
      * 整盘共享的领地轮廓画布（`ZCGameBoard.prefab` 的 `OutlineLayer` 上那个 `cc.Graphics`）。
      *
@@ -381,6 +386,7 @@ export class ZCGameRenderWorld {
      * 正式战斗传入明确的地图配置，按该 map 建实体。
      */
     initialize(mapConfig: ZCMatchMap): void {
+        this.clearSpawnRegionHints();
         // 兵种帧一次算好：`unitVisualPrefabs` 整局不变 ⇒ 下面 `resolveUnitFrame` 必然命中，不必再判缓存。
         // ⚠️ prefab 里没有 `Sprite.spriteFrame` 的兵种查不到（保持和以前一样返回 null）。
         for (const [unitId, prefab] of this.options.unitVisualPrefabs) {
@@ -492,6 +498,7 @@ export class ZCGameRenderWorld {
         // 被墙线切一半比压住墙线难看得多；别为了「墙永远最上」把锚点改成 `ResourceLayer + 1`。
         this.attachBuildingOverlay(placed, this.boardLayer('BuildingOverlay'));
         this.attachCooldownOverlay(placed, this.boardLayer('CooldownOverlay'));
+        this.cacheSpawnRegionHints(mapConfig);
         // 提示通道是**每局一次**的：换局后重新开窗（窗口按新局的 `elapsedSeconds` 从 0 起算），
         // 上一局挂过的格（视图可能已经随地图重建销毁）也要松手。
         this.hintOutlineView = null;
@@ -609,7 +616,6 @@ export class ZCGameRenderWorld {
         const unlockedResources = new Set<number>(playerSelection === null
             ? []
             : selection.map.hexes[playerSelection]?.neighbors.filter((id) => selection.isResourcePoint(id)) ?? []);
-        const regionText = new Map<number, string>();
         // 半区归属 = 该席位的出生点可选范围（自选地图的「分区」）。地图自己画了分区就用地图的，
         // 没画（两张自选图当前全是中立格）按布局推导 —— 口径统一在 `ZCSpawnSelection` 里，
         // 这里只管着色，别再自己拼一份。
@@ -643,14 +649,12 @@ export class ZCGameRenderWorld {
             playerBaseId === null ? [] : selection.baseNeighborIds('player'),
         );
         this.redrawSharedOutline(selection.map.hexes, boundaryMasks, 'spawn', selectedHexId);
-        if (hintsVisible) {
-            const depthName = { front: '前区', mid: '中区', back: '后区' } as const;
-            for (const region of selection.map.regions ?? []) {
-                if (region.section !== 1) continue;
-                const anchor = region.cells.find((id) => !selection.isResourcePoint(id)) ?? region.cells[0];
-                if (anchor !== undefined) regionText.set(anchor, `${depthName[region.depth]}·${region.text ?? ''}`);
-            }
+        if (!this.spawnRegionHintOverlay) {
+            // ZCGameBoard.prefab declares CooldownOverlay last. All board layers share identity
+            // local transforms, so the cached hex positions remain board-local in this layer.
+            this.spawnRegionHintOverlay = new ZCSpawnRegionHintOverlay(this.boardLayer('CooldownOverlay'));
         }
+        this.spawnRegionHintOverlay.render(this.spawnRegionHints, hintsVisible);
         for (const config of selection.map.hexes) {
             const entityId = this.hexEntityBySource.get(config.id);
             if (!entityId) continue;
@@ -668,12 +672,17 @@ export class ZCGameRenderWorld {
                 resourcePoint: selection.isResourcePoint(config.id),
                 resourceId: selection.resourceIdAt(config.id),
                 unlocksResource: unlockedResources.has(config.id),
-                regionText: regionText.get(config.id),
                 boundaryMask: boundaryMasks.get(config.id) ?? 0,
                 homeHighlight: playerBaseNeighbors.has(config.id),
             });
         }
         this.renderSpawnConfirmButton(playerBaseId);
+    }
+
+    clearSpawnRegionHints(): void {
+        this.spawnRegionHintOverlay?.clear();
+        this.spawnRegionHintOverlay = null;
+        this.spawnRegionHints = [];
     }
 
     /**
@@ -761,6 +770,15 @@ export class ZCGameRenderWorld {
         const entityId = this.hexEntityBySource.get(hexId);
         if (entityId === undefined) return null;
         return this.hexViews.get(entityId) ?? null;
+    }
+
+    private cacheSpawnRegionHints(mapConfig: ZCMatchMap): void {
+        const cellPositions = new Map<number, { x: number; y: number }>();
+        for (const hex of mapConfig.hexes) {
+            const view = this.hexViewOf(hex.id);
+            if (view) cellPositions.set(hex.id, { x: view.node.position.x, y: view.node.position.y });
+        }
+        this.spawnRegionHints = resolveZCSpawnRegionHints(mapConfig.regions ?? [], cellPositions, 1);
     }
 
     /**
@@ -1125,6 +1143,7 @@ export class ZCGameRenderWorld {
     }
 
     destroy(): void {
+        this.clearSpawnRegionHints();
         this.sweep.clear();
         this.claimWave.clear();
         // 探针缓冲跨局残留会让下一局首帧沿用上一局的轮廓（内容恰好相同时直接 return）。

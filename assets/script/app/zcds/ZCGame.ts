@@ -764,6 +764,7 @@ export class ZCGame extends Component {
         const resolved = resolveZCSpawnMatchConfig(base, result);
         const matchConfig = this.spawnConfigWasStaged ? captureZCMatchConfig(resolved)
             : buildZCClientCombatConfig(resolved, null).config;
+        this.renderWorld.clearSpawnRegionHints();
         this.spawnSelection = null;
         this.spawnBaseConfig = null;
         this.restoreSpawnConfirmButton();

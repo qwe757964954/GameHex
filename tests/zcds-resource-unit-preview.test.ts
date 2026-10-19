@@ -191,7 +191,6 @@ test('★自选出生点阶段：兵力资源点与对局一致（站待机兵�
     view.renderSpawnSelection({
         sectionOwner: 'player', selectedBy: null, confirmed: false, blocked: false,
         resourcePoint: true, resourceId: 'unit_cap', unlocksResource: false,
-        regionText: '后区·发育',
     } as never);
 
     const nodes = (view as any).resourceUnitNodes as any[];

@@ -13,7 +13,7 @@ import {
     HEX_GRID_VIEW_ROW_SPACING,
 } from '../assets/script/core/hex/HexGridLayout';
 
-function createEditor(options: { hash?: string; fetch?: (path: string, options?: any) => Promise<any> } = {}) {
+function createEditor(options: { hash?: string; fetch?: (path: string, options?: any) => Promise<any>; confirm?: boolean } = {}) {
     const elements = new Map<string, any>();
     let paths: any[] = [];
     const element = (id: string): any => {
@@ -42,14 +42,129 @@ function createEditor(options: { hash?: string; fetch?: (path: string, options?:
     });
     board.querySelectorAll = () => paths;
     const document = { getElementById: element, querySelectorAll: () => [] };
-    const window: any = { addEventListener() {}, location: { hash: options.hash || '' } };
+    const confirmCalls: string[] = [];
+    const window: any = {
+        addEventListener() {}, location: { hash: options.hash || '' },
+        confirm(message: string) { confirmCalls.push(message); return options.confirm !== false; },
+    };
     const code = readFileSync('tools/map-editor/app.js', 'utf8');
     runInNewContext(code, {
         document, window, fetch: options.fetch || (() => new Promise(() => {})),
         setTimeout: () => 0, clearTimeout() {}, console,
     });
-    return { editor: window.__editor, element };
+    return { editor: window.__editor, element, confirmCalls };
 }
+
+test('区域清空只删除当前分区与纵深，确认后可撤销恢复倾向与其他区域', () => {
+    const { editor, element, confirmCalls } = createEditor();
+    editor.applyLayout({
+        version: 3, rows: 8, columns: 12, playerCount: 2, cityMode: 'select',
+        ascii: Array(8).fill('111111111111'),
+    });
+    editor.setRegionBrush(1, 'front');
+    editor.paint(7, 0, 'region');
+    editor.setRegionBrush(1, 'mid');
+    editor.setRegionTendency('develop');
+    editor.paint(7, 1, 'region');
+    editor.setRegionBrush(2, 'front');
+    editor.paint(7, 2, 'region');
+    editor.setRegionBrush(1, 'front');
+
+    element('btnClearRegion').listeners.click();
+
+    assert.equal(confirmCalls.length, 1);
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.state().regions)), [
+        { section: 1, depth: 'mid', cells: [85], tendency: 'develop' },
+        { section: 2, depth: 'front', cells: [86], tendency: 'rush' },
+    ]);
+    assert.equal(editor.undo(), true);
+    assert.equal(editor.state().regions.length, 3, '撤销恢复已清区域及其倾向');
+});
+
+test('装饰批量清空需确认、清除选择与检查器，并可撤销恢复全部装饰', () => {
+    const { editor, element, confirmCalls } = createEditor();
+    const first = editor.addFreeDecor('image/decor/rock/a', 10, 20);
+    editor.addFreeDecor('image/decor/rock/b', 30, 40);
+    editor.selectFreeDecor(first);
+
+    element('btnClearDecorations').listeners.click();
+
+    assert.equal(confirmCalls.length, 1);
+    assert.equal(editor.state().freeDecor.length, 0);
+    assert.equal(editor.state().selectedFreeDecorId, null);
+    assert.equal(element('freeDecorInspector').hidden, true);
+    assert.equal(editor.undo(), true);
+    assert.equal(editor.state().freeDecor.length, 2);
+});
+
+test('中立资源批量清空只移除资源点，取消确认不改动且不入撤销栈', () => {
+    const cancelled = createEditor({ confirm: false });
+    cancelled.editor.applyLayout({
+        version: 3, rows: 8, columns: 12, playerCount: 2, cityMode: 'select',
+        ascii: Array(8).fill('NNNNNNNNNNNN'),
+    });
+    cancelled.editor.addResourcePoint(2, 1, 'chest', 1);
+    cancelled.editor.addResourcePoint(2, 7, 'gold', 2);
+    const before = JSON.stringify(cancelled.editor.state().resourcePoints);
+    cancelled.element('btnClearResources').listeners.click();
+    assert.equal(cancelled.confirmCalls.length, 1);
+    assert.equal(JSON.stringify(cancelled.editor.state().resourcePoints), before);
+    assert.equal(cancelled.editor.undo(), true);
+    assert.equal(cancelled.editor.state().resourcePoints.length, 1,
+        '取消清空没有入历史；撤销只撤回此前最后一次资源点编辑');
+
+    const accepted = createEditor();
+    accepted.editor.applyLayout({
+        version: 3, rows: 8, columns: 12, playerCount: 2, cityMode: 'select',
+        ascii: Array(8).fill('NNNNNNNNNNNN'),
+    });
+    accepted.editor.addResourcePoint(2, 1, 'chest', 1);
+    accepted.editor.addResourcePoint(2, 7, 'gold', 2);
+    accepted.editor.setRegionBrush(1, 'front');
+    accepted.editor.paint(3, 3, 'region');
+    accepted.element('btnClearResources').listeners.click();
+    assert.equal(accepted.editor.state().resourcePoints.length, 0);
+    assert.equal(accepted.editor.state().regions.length, 1, '区域数据不受影响');
+    assert.equal(accepted.editor.undo(), true);
+    assert.equal(accepted.editor.state().resourcePoints.length, 2);
+});
+
+test('全图清空始终由可见地图操作按钮触发并在确认后可撤销', () => {
+    const { editor, element, confirmCalls } = createEditor();
+    editor.addFreeDecor('image/decor/rock/a', 10, 20);
+    element('btnClearMap').listeners.click();
+    assert.equal(confirmCalls.length, 1);
+    assert.match(confirmCalls[0], /重置地形、主城落点与自由装饰/);
+    assert.match(confirmCalls[0], /保留区域标记和中立资源点/);
+    assert.equal(editor.state().freeDecor.length, 0);
+    assert.equal(editor.undo(), true);
+    assert.equal(editor.state().freeDecor.length, 1);
+
+    const html = readFileSync('tools/map-editor/index.html', 'utf8');
+    assert.match(html, /id="btnClearMap"/);
+    assert.doesNotMatch(html, /id="btnClear"/);
+});
+
+test('空范围清空不弹确认、不创建撤销记录；各分类面板提供批量清空按钮', () => {
+    const { editor, element, confirmCalls } = createEditor();
+    assert.equal(editor.clearSelectedRegion(), false);
+    assert.equal(editor.clearFreeDecor(), false);
+    assert.equal(editor.clearResourcePoints(), false);
+    assert.equal(confirmCalls.length, 0);
+    assert.equal(editor.undo(), false);
+
+    const html = readFileSync('tools/map-editor/index.html', 'utf8');
+    assert.match(html, /id="btnClearRegion"/);
+    assert.match(html, /id="btnClearDecorations"/);
+    assert.match(html, /id="btnClearResources"/);
+    assert.match(html, /data-tool-category="decor"[^]*id="btnClearDecorations"/);
+    assert.match(html, /data-tool-category="resources"[^]*id="btnClearResources"/);
+    assert.match(html, /data-tool-category="regions"[^]*id="btnClearRegion"/);
+    assert.equal(typeof element('btnClearRegion').listeners.click, 'function');
+    assert.equal(typeof element('btnClearDecorations').listeners.click, 'function');
+    assert.equal(typeof element('btnClearResources').listeners.click, 'function');
+    assert.equal(typeof element('btnClearMap').listeners.click, 'function');
+});
 
 test('左栏长说明收纳为可点击的问号帮助气泡', () => {
     const html = readFileSync('tools/map-editor/index.html', 'utf8');
@@ -1157,7 +1272,7 @@ test('region and home-candidate brush edits round-trip through layout export', (
     editor.paint(7, 1);
     editor.commitUndo(before);
 
-    assert.deepEqual(JSON.parse(JSON.stringify(editor.state().json.regions)), [{ section: 1, depth: 'front', cells: [84] }]);
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.state().json.regions)), [{ section: 1, depth: 'front', cells: [84], tendency: 'rush' }]);
     assert.deepEqual(JSON.parse(JSON.stringify(editor.state().json.homeCandidates)), [{ section: 1, cells: [85] }]);
     assert.match(editor.mapMetadataMarkup(), /前区/);
     assert.match(editor.mapMetadataMarkup(), /homeCandidateCell/);
@@ -1168,6 +1283,189 @@ test('region and home-candidate brush edits round-trip through layout export', (
     assert.equal(editor.redo(), true);
     assert.equal(editor.redo(), true);
     assert.equal(editor.state().json.homeCandidates[0].cells[0], 85);
+});
+
+test('region tendency defaults by depth and legacy region exports gain that default', () => {
+    const { editor } = createEditor();
+    editor.applyLayout({
+        version: 3,
+        rows: 8,
+        columns: 12,
+        playerCount: 2,
+        cityMode: 'select',
+        ascii: Array(8).fill('111111111111'),
+        regions: [
+            { section: 1, depth: 'front', cells: [84] },
+            { section: 1, depth: 'mid', cells: [85] },
+            { section: 1, depth: 'back', cells: [86] },
+        ],
+    });
+
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.buildJSON().regions)), [
+        { section: 1, depth: 'front', cells: [84], tendency: 'rush' },
+        { section: 1, depth: 'mid', cells: [85], tendency: 'control' },
+        { section: 1, depth: 'back', cells: [86], tendency: 'develop' },
+    ]);
+});
+
+test('unknown region tendency rejects import without replacing the current editor state', () => {
+    const { editor } = createEditor();
+    editor.applyLayout({
+        version: 3,
+        rows: 8,
+        columns: 12,
+        playerCount: 2,
+        cityMode: 'select',
+        ascii: Array(8).fill('111111111111'),
+        regions: [{ section: 1, depth: 'front', cells: [84], tendency: 'rush' }],
+    });
+    const before = JSON.parse(JSON.stringify(editor.state()));
+
+    assert.throws(() => editor.applyLayout({
+        version: 3,
+        rows: 8,
+        columns: 12,
+        playerCount: 2,
+        cityMode: 'select',
+        ascii: Array(8).fill('222222222222'),
+        regions: [{ section: 1, depth: 'front', cells: [84], tendency: 'unknown' }],
+    }), /倾向/);
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.state())), before);
+});
+
+test('duplicate section-depth regions reject import without replacing the current editor state', () => {
+    const { editor } = createEditor();
+    editor.applyLayout({
+        version: 3,
+        rows: 8,
+        columns: 12,
+        playerCount: 2,
+        cityMode: 'select',
+        ascii: Array(8).fill('111111111111'),
+        regions: [{ section: 1, depth: 'front', cells: [84], tendency: 'rush' }],
+    });
+    const before = JSON.parse(JSON.stringify(editor.state()));
+
+    assert.throws(() => editor.applyLayout({
+        version: 3,
+        rows: 8,
+        columns: 12,
+        playerCount: 2,
+        cityMode: 'select',
+        ascii: Array(8).fill('222222222222'),
+        regions: [
+            { section: 1, depth: 'front', cells: [84], tendency: 'rush' },
+            { section: 1, depth: 'front', cells: [85], tendency: 'control' },
+        ],
+    }), /区域/);
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.state())), before);
+});
+
+test('changing current region tendency preserves its cells and supports undo, redo, and import', () => {
+    const { editor, element } = createEditor();
+    editor.applyLayout({
+        version: 3,
+        rows: 8,
+        columns: 12,
+        playerCount: 2,
+        cityMode: 'select',
+        ascii: Array(8).fill('111111111111'),
+        regions: [
+            { section: 1, depth: 'front', cells: [84, 85], tendency: 'rush' },
+            { section: 2, depth: 'front', cells: [86], tendency: 'control' },
+        ],
+    });
+    editor.setRegionBrush(1, 'front');
+
+    element('regionTendency').value = 'develop';
+    element('regionTendency').listeners.change.call(element('regionTendency'));
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.buildJSON().regions[0])), {
+        section: 1, depth: 'front', cells: [84, 85], tendency: 'develop',
+    });
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.buildJSON().regions[1])), {
+        section: 2, depth: 'front', cells: [86], tendency: 'control',
+    });
+    assert.equal(editor.undo(), true);
+    assert.equal(editor.buildJSON().regions[0].tendency, 'rush');
+    assert.equal(editor.redo(), true);
+    const exported = JSON.parse(JSON.stringify(editor.buildJSON()));
+    const imported = createEditor().editor;
+    imported.applyLayout(exported);
+    assert.equal(imported.buildJSON().regions[0].tendency, 'develop');
+    assert.equal(imported.buildJSON().regions[1].tendency, 'control');
+});
+
+test('region tendency selected before the first region is painted is used for the new region', () => {
+    const { editor } = createEditor();
+    editor.applyLayout({
+        version: 3,
+        rows: 8,
+        columns: 12,
+        playerCount: 2,
+        cityMode: 'select',
+        ascii: Array(8).fill('111111111111'),
+    });
+    editor.setRegionBrush(1, 'back');
+    editor.setRegionTendency('rush');
+    editor.paint(7, 0);
+
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.buildJSON().regions)), [
+        { section: 1, depth: 'back', cells: [84], tendency: 'rush' },
+    ]);
+});
+
+test('region map markup distinguishes each depth and labels the nearest in-region cell', () => {
+    const { editor } = createEditor();
+    const editorHtml = readFileSync('tools/map-editor/index.html', 'utf8');
+    const frontCells = [0, 84, 86];
+    editor.applyLayout({
+        version: 3,
+        rows: 8,
+        columns: 12,
+        playerCount: 2,
+        cityMode: 'select',
+        ascii: Array(8).fill('111111111111'),
+        regions: [
+            { section: 1, depth: 'front', cells: frontCells },
+            { section: 1, depth: 'mid', cells: [72, 73, 74], tendency: 'develop' },
+            { section: 1, depth: 'back', cells: [60, 61, 62], tendency: 'control' },
+            { section: 2, depth: 'front', cells: [87, 88], tendency: 'control' },
+        ],
+    });
+
+    const markup = editor.mapMetadataMarkup();
+    assert.match(markup, /region-front[^>]*fill-opacity="0\.16"[^>]*stroke-opacity="0\.9"[^>]*stroke-width="2\.5"[^>]*stroke-dasharray="none"/);
+    assert.match(markup, /region-mid[^>]*stroke-dasharray="6 3"/);
+    assert.match(markup, /region-back[^>]*stroke-dasharray="1 3"[^>]*stroke-linecap="round"/);
+    assert.match(markup, /class="regionBadge regionBadge-front"[^>]*fill="#14213d"[^>]*pointer-events="none"/);
+    assert.match(markup, /<text class="regionLabel"[^>]*font-size="14"[^>]*font-weight="700"[^>]*fill="#fff"[^>]*pointer-events="none">前区 · 速攻<\/text>/);
+    assert.match(markup, /<text class="regionLabel"[^>]*>中区 · 发育<\/text>/);
+    assert.match(markup, /<text class="regionLabel"[^>]*>后区 · 控场<\/text>/);
+    assert.equal((markup.match(/class="regionBadge regionBadge-front"/g) || []).length, 2,
+        'same-depth regions from separate sections both get badges');
+
+    const frontCenters = frontCells.map((id) => editor.hexCenter(Math.floor(id / 12), id % 12));
+    const centroid = frontCenters.reduce((sum, center) => ({ x: sum.x + center.x, y: sum.y + center.y }), { x: 0, y: 0 });
+    centroid.x /= frontCenters.length;
+    centroid.y /= frontCenters.length;
+    const nearestCenter = frontCenters.reduce((nearest, center) => {
+        const distance = (center.x - centroid.x) ** 2 + (center.y - centroid.y) ** 2;
+        const nearestDistance = (nearest.x - centroid.x) ** 2 + (nearest.y - centroid.y) ** 2;
+        return distance < nearestDistance ? center : nearest;
+    });
+    const badge = markup.match(/<rect class="regionBadge regionBadge-front" x="([^"]+)" y="([^"]+)" width="([^"]+)"/);
+    assert.ok(badge, 'front region has a badge');
+    const badgeWidth = Number(badge[3]);
+    assert.ok(badgeWidth <= editor.geometry.column, 'badge must fit within one cell pitch');
+    assert.deepEqual([
+        Number((Number(badge[1]) + badgeWidth / 2).toFixed(1)),
+        Number((Number(badge[2]) + 13).toFixed(1)),
+    ], [Number(nearestCenter.x.toFixed(1)), Number(nearestCenter.y.toFixed(1))],
+    'a disconnected region badge stays centered on its nearest actual region cell');
+    assert.match(markup, /class="regionBadge regionBadge-front"[^>]*width="90" height="26"/,
+        'the longest depth/tendency text stays within one cell pitch');
+    assert.match(editorHtml, /\.regionLabel\s*\{[^}]*font:\s*700 14px sans-serif/,
+        'the CSS class rule sets the winning font size instead of losing to presentation attributes');
 });
 
 test('editor accepts every PVP neutral-resource pool id', () => {

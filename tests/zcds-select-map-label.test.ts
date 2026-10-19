@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { loadViews } from './helpers/zcds-view-fixtures';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
@@ -11,7 +12,102 @@ import {
 
 const hexView = readFileSync('assets/script/app/zcds/view/ZCHexView.ts', 'utf8');
 const renderWorld = readFileSync('assets/script/app/zcds/view/ZCGameRenderWorld.ts', 'utf8');
-const hexPrefab = JSON.parse(readFileSync('assets/resources/ui/game/ZCGameHex.prefab', 'utf8')) as any[];
+const game = readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8');
+const hintOverlay = readFileSync('assets/script/app/zcds/view/ZCSpawnRegionHintOverlay.ts', 'utf8');
+const boardPrefab = JSON.parse(readFileSync('assets/resources/ui/game/ZCGameBoard.prefab', 'utf8')) as any[];
+
+test('spawn region hints render in a dedicated non-interactive overlay', () => {
+    assert.match(renderWorld, /spawnRegionHintOverlay = new ZCSpawnRegionHintOverlay\(this\.boardLayer\('CooldownOverlay'\)\)/);
+    assert.match(renderWorld, /spawnRegionHintOverlay\.render\([^;]*hintsVisible/s);
+    assert.doesNotMatch(renderWorld, /regionText/);
+    assert.doesNotMatch(hexView, /regionText/);
+    assert.match(hintOverlay, /class ZCSpawnRegionHintOverlay/);
+    assert.match(hintOverlay, /UITransform/);
+    assert.match(hintOverlay, /Graphics/);
+    assert.match(hintOverlay, /Label/);
+    assert.doesNotMatch(hintOverlay, /BlockInputEvents|Button|TOUCH_START|TOUCH_END|\.on\(/);
+    const root = boardPrefab.find((object) => object?.__type__ === 'cc.Node' && object._name === 'ZCGameBoard');
+    assert.ok(root, 'ZCGameBoard root exists');
+    const boardLayers = root._children.map((child: { __id__: number }) => boardPrefab[child.__id__]);
+    const layers = boardLayers.map((layer: { _name: string }) => layer._name);
+    assert.equal(layers.at(-1), 'CooldownOverlay', 'overlay parent is the highest board layer');
+    for (const name of ['HexLayer', 'CooldownOverlay']) {
+        const layer = boardLayers.find((candidate: { _name: string }) => candidate._name === name);
+        assert.deepEqual([layer._lpos.x, layer._lpos.y, layer._lpos.z], [0, 0, 0], `${name} stays at board origin`);
+        assert.deepEqual([layer._lscale.x, layer._lscale.y, layer._lscale.z], [1, 1, 1], `${name} keeps board scale`);
+    }
+});
+
+test('spawn hint descriptors are cached at map setup rather than rebuilt per selection frame', () => {
+    const renderSelection = renderWorld.match(/renderSpawnSelection\(selection:[\s\S]*?\n    clearSpawnRegionHints\(\)/)?.[0];
+    const initialize = renderWorld.match(/initialize\(mapConfig:[\s\S]*?\n    \}/)?.[0];
+    assert.ok(renderSelection, 'selection render method is present');
+    assert.ok(initialize, 'map initialization method is present');
+    assert.match(initialize, /cacheSpawnRegionHints\(mapConfig\)/);
+    assert.match(renderSelection, /spawnRegionHints/);
+    assert.doesNotMatch(renderSelection, /resolveZCSpawnRegionHints|new Map<number, \{ x: number; y: number \}>/);
+    assert.match(renderWorld, /private cacheSpawnRegionHints\(/);
+    assert.match(renderWorld, /clearSpawnRegionHints\(\): void \{[\s\S]*?spawnRegionHints = \[\]/);
+});
+
+test('region bubble nodes reuse anchors, follow visibility, draw text, and clear from the board layer', () => {
+    const { load, FakeNode, cc } = loadViews();
+    cc.UITransform = class { setContentSize() {} };
+    cc.Label.HorizontalAlign = { CENTER: 'center' };
+    cc.Label.VerticalAlign = { CENTER: 'center' };
+    const { ZCSpawnRegionHintOverlay } = load('./ZCSpawnRegionHintOverlay');
+    const parent = new FakeNode('CooldownOverlay');
+    const overlay = new ZCSpawnRegionHintOverlay(parent);
+    const initial = [{ depth: 'front', label: '速攻', x: 17, y: 32 }];
+
+    overlay.render(initial, true);
+    const root = parent.children[0];
+    const bubble = root.children[0];
+    const label = bubble.children[0].getComponent(cc.Label);
+    const graphics = bubble.getComponent(cc.Graphics);
+    const backgroundCommands = graphics.commands;
+    let labelText = label.string;
+    let labelWrites = 0;
+    Object.defineProperty(label, 'string', {
+        configurable: true,
+        get: () => labelText,
+        set: (next: string) => { labelWrites += 1; labelText = next; },
+    });
+    assert.equal(root.active, true);
+    assert.deepEqual([bubble.position.x, bubble.position.y], [17, 32]);
+    assert.equal(label.string, '\u524d\u533a \u00b7 \u901f\u653b');
+    assert.ok(backgroundCommands.some((command: { kind: string }) => command.kind === 'roundRect'));
+
+    overlay.render([{ ...initial[0], x: -24, y: 8, label: '控场' }], true);
+    assert.equal(root.children.length, 1, 're-render should reuse the existing bubble');
+    assert.equal(root.children[0], bubble);
+    assert.deepEqual([bubble.position.x, bubble.position.y], [-24, 8]);
+    assert.equal(label.string, '\u524d\u533a \u00b7 \u63a7\u573a');
+    assert.equal(labelWrites, 1, 'only changed label text should be written');
+    assert.equal(graphics.commands, backgroundCommands, 'static bubble background should not be redrawn');
+
+    overlay.render([{ ...initial[0], x: -24, y: 8, label: '控场' }], true);
+    assert.equal(labelWrites, 1, 'unchanged label text should not be written again');
+    assert.equal(graphics.commands, backgroundCommands, 'repeated visible frames should reuse the background');
+
+    overlay.render([{ ...initial[0], x: 100, y: 200, label: '隐藏更新' }], false);
+    assert.equal(root.active, false);
+    assert.deepEqual([bubble.position.x, bubble.position.y], [-24, 8], 'hidden frames should not update anchors');
+    assert.equal(labelWrites, 1, 'hidden frames should not write labels');
+    assert.equal(graphics.commands, backgroundCommands, 'hidden frames should not redraw backgrounds');
+    overlay.clear();
+    assert.equal(parent.children.length, 0);
+    assert.equal(root.isValid, false);
+});
+
+test('spawn region hint overlay clears after selection and on render-world teardown', () => {
+    assert.match(renderWorld, /clearSpawnRegionHints\(\): void/);
+    assert.match(renderWorld, /spawnRegionHintOverlay\?\.clear\(\)/);
+    assert.match(renderWorld, /destroy\(\): void[\s\S]*?clearSpawnRegionHints\(\)/);
+    assert.match(game, /finishSpawnSelection\(\): void[\s\S]*?clearSpawnRegionHints\(\)/);
+    assert.match(hintOverlay, /render\(hints: readonly IZCSpawnRegionHint\[\], visible: boolean\): void/);
+    assert.match(hintOverlay, /clear\(\): void/);
+});
 
 test('自选主城地图不在正式战斗地块上显示金币等资源文字', () => {
   assert.match(hexView, /hideNeutralResourceLabel\?: boolean/);
@@ -47,25 +143,8 @@ test('★select_river 的区域文案由 tendency 推导，落盘的 "???" 占�
     }
 });
 
-/**
- * 「前区·速攻」共 5 个字，而 `IconLabel` 原本只有 45×22（为 `25` / `锁` / `已选` 这种 1~2 字设计的），
- * 配上 `overflow=CLAMP` + 自动换行 ⇒ 6 个字的区域名被折成两行再裁切，糊成一团（实测截图里就是那块糊字）。
- * 修法 = 加宽节点 + 关掉自动换行；这里把两件事都钉住，防止又被改回去。
- */
-test('★区域名标签（IconLabel）要放得下最长的「前区·速攻」且不折行', () => {
-    const index = hexPrefab.findIndex((o) => o?.__type__ === 'cc.Node' && o._name === 'IconLabel');
-    assert.ok(index >= 0, 'ZCGameHex 里找不到 IconLabel 节点');
-    const comps = (hexPrefab[index]._components as any[]).map((ref) => hexPrefab[ref.__id__]);
-    const ui = comps.find((c) => c?.__type__ === 'cc.UITransform');
-    const label = comps.find((c) => c?.__type__ === 'cc.Label');
-    assert.ok(ui && label, 'IconLabel 上必须有 UITransform 与 Label');
-
-    // 最长区域名 = 「前区」2 字 + 「·」1 字 + 倾向词（速攻 / 控场 / 发育，各 2 字）
-    const longestTendency = Math.max(...Object.values(ZC_TENDENCY_TEXT).map((t) => t.length));
-    const required = (2 + 1 + longestTendency) * label._fontSize;
-    assert.ok(ui._contentSize.width >= required,
-        `IconLabel 宽 ${ui._contentSize.width} 放不下最长的区域名（需要 ${required}）—— 会被折行 + 裁切`);
-    assert.equal(label._enableWrapText, false,
-        'IconLabel 必须关掉自动换行：放不下时宁可裁一刀，也不能折成两行糊在一起（CLAMP 是裁切语义）');
-    assert.equal(label._overflow, 1, 'IconLabel 保持 CLAMP(1)，别改成 NONE —— NONE 会把文本实测尺寸写回 UITransform');
+test('region bubble layout leaves room for the longest label', () => {
+    assert.match(hintOverlay, /const BUBBLE_WIDTH = 150/);
+    assert.match(hintOverlay, /const BUBBLE_HEIGHT = 42/);
+    assert.match(hintOverlay, /setContentSize\(BUBBLE_WIDTH - 12, BUBBLE_HEIGHT\)/);
 });

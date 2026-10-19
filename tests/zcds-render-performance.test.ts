@@ -629,8 +629,8 @@ test('游戏每帧更新动态表现，地块和 HUD 保持 0.15 秒节奏', () 
     let ticks = 0, dynamic = 0, terrain = 0, hud = 0, drained = 0;
     const snapshot = { status: 'playing' };
     const event = { id: 1, hexId: 4 };
-    let pendingEvents = { buildingShakes: [event] };
-    const receivedEvents: Array<{ buildingShakes: typeof event[] }> = [];
+    let pendingEvents = { buildingShakes: [event], buildingDestructions: [] };
+    const receivedEvents: Array<{ buildingShakes: typeof event[]; buildingDestructions: unknown[] }> = [];
     game.model = {
         snapshot,
         tick: () => ticks++,
@@ -638,7 +638,7 @@ test('游戏每帧更新动态表现，地块和 HUD 保持 0.15 秒节奏', () 
         drainPresentationEvents: () => {
             drained++;
             const events = pendingEvents;
-            pendingEvents = { buildingShakes: [] };
+            pendingEvents = { buildingShakes: [], buildingDestructions: [] };
             return events;
         },
     };

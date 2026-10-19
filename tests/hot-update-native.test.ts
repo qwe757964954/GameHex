@@ -9,17 +9,17 @@ import {
     prependSearchPaths,
     resolveNativeStorageDirName,
 } from '../assets/script/core/update/HotUpdateNativePlan';
-import type { HotUpdateConfig, HotUpdatePlatform } from '../assets/script/core/update/HotUpdateTypes';
+import type { IHotUpdateConfig, HotUpdatePlatform } from '../assets/script/core/update/HotUpdateTypes';
 import type {
-    NativeAssetsManager,
-    NativeAssetsManagerEnvironment,
-    NativeAssetsManagerEvent,
-    NativeAssetsManagerManifest,
-    NativeHotUpdateHost,
+    INativeAssetsManager,
+    INativeAssetsManagerEnvironment,
+    INativeAssetsManagerEvent,
+    INativeAssetsManagerManifest,
+    INativeHotUpdateHost,
 } from '../assets/script/platform/hotupdate/NativeHotUpdateHost';
 import { NativeHotUpdateRuntime } from '../assets/script/platform/hotupdate/NativeHotUpdateRuntime';
 
-const ENVIRONMENT: NativeAssetsManagerEnvironment = {
+const ENVIRONMENT: INativeAssetsManagerEnvironment = {
     UNINITED: 0,
     ERROR_NO_LOCAL_MANIFEST: 1,
     ERROR_DOWNLOAD_MANIFEST: 2,
@@ -37,7 +37,7 @@ const ENVIRONMENT: NativeAssetsManagerEnvironment = {
 
 const BASE_URL = 'https://cdn.example.com/hotupdate';
 
-function config(overrides: Partial<HotUpdateConfig> = {}): HotUpdateConfig {
+function config(overrides: Partial<IHotUpdateConfig> = {}): IHotUpdateConfig {
     return {
         enabled: true,
         enabledPlatforms: ['android', 'ios'],
@@ -70,14 +70,14 @@ function planPayload(overrides: Record<string, unknown> = {}): Record<string, un
     };
 }
 
-function event(code: number, extra: Partial<NativeAssetsManagerEvent> = {}): NativeAssetsManagerEvent {
+function event(code: number, extra: Partial<INativeAssetsManagerEvent> = {}): INativeAssetsManagerEvent {
     return { getEventCode: () => code, ...extra };
 }
 
 type UpdateBehavior = 'up-to-date' | 'new-then-finish' | 'fail-then-finish' | 'always-fail';
 
-class FakeAssetsManager implements NativeAssetsManager {
-    callback: ((value: NativeAssetsManagerEvent) => void) | null = null;
+class FakeAssetsManager implements INativeAssetsManager {
+    callback: ((value: INativeAssetsManagerEvent) => void) | null = null;
     verifyCallback: ((path: string, asset: unknown) => boolean) | null = null;
     versionCompareHandle: ((left: string, right: string) => number) | undefined;
     maxConcurrentTask: number | undefined;
@@ -99,7 +99,7 @@ class FakeAssetsManager implements NativeAssetsManager {
         private readonly storagePathForManifest: string,
     ) { }
 
-    setEventCallback(callback: ((value: NativeAssetsManagerEvent) => void) | null): void {
+    setEventCallback(callback: ((value: INativeAssetsManagerEvent) => void) | null): void {
         this.callback = callback;
     }
 
@@ -121,7 +121,7 @@ class FakeAssetsManager implements NativeAssetsManager {
         return true;
     }
 
-    getLocalManifest(): NativeAssetsManagerManifest | null {
+    getLocalManifest(): INativeAssetsManagerManifest | null {
         return { isLoaded: () => true, getSearchPaths: () => [this.storagePathForManifest] };
     }
 
@@ -166,7 +166,7 @@ class FakeAssetsManager implements NativeAssetsManager {
     }
 }
 
-class FakeHost implements NativeHotUpdateHost {
+class FakeHost implements INativeHotUpdateHost {
     supported = true;
     readonly environment = ENVIRONMENT;
     readonly files = new Map<string, string>();
@@ -227,7 +227,7 @@ class FakeHost implements NativeHotUpdateHost {
         this.removed.push(path);
     }
 
-    createAssetsManager(storagePath: string, handle?: (left: string, right: string) => number): NativeAssetsManager {
+    createAssetsManager(storagePath: string, handle?: (left: string, right: string) => number): INativeAssetsManager {
         const manager = new FakeAssetsManager(this.behavior, storagePath);
         manager.versionCompareHandle = handle;
         this.managers.push(manager);

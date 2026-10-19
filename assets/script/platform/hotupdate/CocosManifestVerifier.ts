@@ -1,7 +1,7 @@
 import type {
-    HotUpdateManifest,
-    HotUpdateManifestVerifier,
-    HotUpdateReleasePointer,
+    IHotUpdateManifest,
+    IHotUpdateManifestVerifier,
+    IHotUpdateReleasePointer,
 } from '../../core/update/HotUpdateTypes';
 
 type VerifyHook = (payload: string, signature: string, keyId?: string) => boolean | Promise<boolean>;
@@ -12,10 +12,10 @@ type VerifyHook = (payload: string, signature: string, keyId?: string) => boolea
  * 正式环境把纯 JS/原生 Ed25519 实现挂到 `globalThis.__CITY1001_VERIFY_HOT_UPDATE__`。
  * 在没有验签器时，只有显式开启 allowUnsignedManifests 的本地环境可以继续。
  */
-export class CocosManifestVerifier implements HotUpdateManifestVerifier {
+export class CocosManifestVerifier implements IHotUpdateManifestVerifier {
     constructor(private readonly allowUnsignedManifests: boolean) { }
 
-    async verify(pointer: HotUpdateReleasePointer, manifest: HotUpdateManifest): Promise<boolean> {
+    async verify(pointer: IHotUpdateReleasePointer, manifest: IHotUpdateManifest): Promise<boolean> {
         if (!pointer.signature) return this.allowUnsignedManifests;
         const hook = (globalThis as any).__CITY1001_VERIFY_HOT_UPDATE__ as VerifyHook | undefined;
         if (!hook) return this.allowUnsignedManifests;

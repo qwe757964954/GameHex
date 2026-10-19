@@ -494,6 +494,7 @@ export class ZCGame extends Component {
             decorPrefab: prepared.decorPrefab,
             spawnFxPrefab: prepared.spawnFxPrefab,
             deathFxPrefab: prepared.deathFxPrefab,
+            buildingDestroyFxPrefab: prepared.buildingDestroyFxPrefab,
             hitFxPrefabs: prepared.hitFxPrefabs,
             wallPrefab: prepared.wallPrefab,
         });

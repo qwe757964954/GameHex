@@ -160,6 +160,14 @@ interface ZCRenderWorldOptions {
      */
     deathFxPrefab?: Prefab | null;
     /**
+     * 建筑**被拆掉**时的白烟雾爆炸（`units/effects/建筑死亡特效`，4 帧 @12fps）。
+     *
+     *  建筑 HP 归零那一步地块会直接转 `ruins`，快照里看不出「刚被打掉」——
+     *  所以由模型发一条一次性的 `buildingDestructions` 通知，这里按 hexId 取格心播一次。
+     *  缺失时为 `null`：建筑照常变废墟，只是少这团烟。
+     */
+    buildingDestroyFxPrefab?: Prefab | null;
+    /**
      * 受击特效 prefab，按**攻击方职业**索引（`units/effects/受击特效/<职业>受击`）。
      *
      *  挂在 `mapLayer` 上（不是宿主节点）：受击是"贴在被打者身上的一下闪白"，
@@ -354,6 +362,7 @@ export class ZCGameRenderWorld {
             mapLayer: options.mapLayer,
             spawnFxPrefab: options.spawnFxPrefab ?? null,
             deathFxPrefab: options.deathFxPrefab ?? null,
+            buildingDestroyFxPrefab: options.buildingDestroyFxPrefab ?? null,
             hitFxPrefabs: options.hitFxPrefabs ?? new Map(),
             mapToViewX,
             mapToViewY,
@@ -707,6 +716,7 @@ export class ZCGameRenderWorld {
         this.renderLegendBanners(frame);
         this.renderHexActivations(frame);
         this.renderBuildingShakes(frame, events);
+        this.renderBuildingDestructions(frame, events);
         this.renderTerritoryClaimWave(frame);
         this.renderNeutralHint(frame);
     }
@@ -792,6 +802,28 @@ export class ZCGameRenderWorld {
             const view = this.hexViewOf(hexId);
             // 视图没了（换图 / 换局）或抖动播完 ⇒ 出队。
             if (!view || !view.advanceBuildingShake(now)) this.buildingShakeHexes.delete(hexId);
+        }
+    }
+
+    /**
+     * 每帧推进建筑摧毁特效，并**取走**本帧模型攒下的「建筑被打掉」通知。
+     *
+     * 挂着 `renderDynamic`（与单位 / 卡牌同拍）：烟雾只活 `clip.duration`（4 帧 @12fps ≈ 0.33s），
+     * 走 `renderStatic` 的 0.15s 节流会漏掉帧、看着像掉帧爆炸。
+     *
+     * ⚠️ 回收必须写在「有无通知」的判空**之前** —— 不然没有新拆楼的那些帧就永远不回收，
+     * 播完的烟雾节点会一直挂在 mapLayer 上。
+     */
+    private renderBuildingDestructions(frame: ZCGameRenderFrame, events: ZCBattlePresentationEvents): void {
+        const now = this.visualTime(frame);
+        this.effectPool.recycleBuildingDestroyFx(now);
+        const destructions = events.buildingDestructions;
+        if (!destructions.length) return;
+        for (const event of destructions) {
+            const hex = this.map.find((item) => item.id === event.hexId);
+            if (!hex) continue;
+            this.effectPool.playBuildingDestroyFx(
+                mapToViewX(hex.x), mapToViewY(hex.y), event.hexId, now);
         }
     }
 

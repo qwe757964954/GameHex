@@ -1,0 +1,372 @@
+{
+  "id": "river_custom_new",
+  "name": "河道自选新",
+  "version": 3,
+  "rows": 20,
+  "columns": 11,
+  "playerCount": 2,
+  "cityMode": "select",
+  "mirrorVertical": true,
+  "mirrorHorizontal": false,
+  "mirror180": false,
+  "ascii": [
+    "..00...00..",
+    "..00...00..",
+    "..00...00..",
+    ".000...00..",
+    "00000000000",
+    "00000000000",
+    "00000000000",
+    "00000000000",
+    "00000000000",
+    "00000000000"
+  ],
+  "regions": [
+    {
+      "section": 1,
+      "depth": "back",
+      "cells": [
+        198,
+        199,
+        200,
+        201,
+        202,
+        203,
+        204,
+        205,
+        206,
+        207,
+        208,
+        209,
+        210,
+        211,
+        212,
+        213,
+        214,
+        215,
+        216,
+        217,
+        218,
+        219
+      ]
+    },
+    {
+      "section": 1,
+      "depth": "mid",
+      "cells": [
+        176,
+        177,
+        178,
+        179,
+        180,
+        181,
+        182,
+        183,
+        184,
+        185,
+        186,
+        187,
+        188,
+        189,
+        190,
+        191,
+        192,
+        193,
+        194,
+        195,
+        196,
+        197
+      ]
+    },
+    {
+      "section": 1,
+      "depth": "front",
+      "cells": [
+        154,
+        155,
+        156,
+        157,
+        158,
+        159,
+        160,
+        161,
+        162,
+        163,
+        164,
+        165,
+        166,
+        167,
+        168,
+        169,
+        170,
+        171,
+        172,
+        173,
+        174,
+        175
+      ]
+    },
+    {
+      "section": 2,
+      "depth": "back",
+      "cells": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21
+      ]
+    },
+    {
+      "section": 2,
+      "depth": "mid",
+      "cells": [
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43
+      ]
+    },
+    {
+      "section": 2,
+      "depth": "front",
+      "cells": [
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62,
+        63,
+        64,
+        65
+      ]
+    }
+  ],
+  "homeCandidates": [
+    {
+      "section": 1,
+      "cells": [
+        169,
+        170,
+        171,
+        180,
+        181,
+        182,
+        191,
+        193,
+        203
+      ]
+    },
+    {
+      "section": 2,
+      "cells": [
+        26,
+        27,
+        28,
+        37,
+        39,
+        48,
+        49,
+        50,
+        60
+      ]
+    }
+  ],
+  "resourcePoints": [
+    {
+      "row": 15,
+      "column": 2,
+      "pool": {
+        "chest": 1,
+        "unit_cap": 1,
+        "gold": 1
+      }
+    },
+    {
+      "row": 14,
+      "column": 9,
+      "pool": {
+        "gold": 1
+      }
+    },
+    {
+      "row": 5,
+      "column": 1,
+      "pool": {
+        "mine": 1,
+        "artifact_charge": 1,
+        "unit_cap": 1
+      }
+    },
+    {
+      "row": 5,
+      "column": 9,
+      "pool": {
+        "gold": 1,
+        "mine": 1,
+        "artifact_charge": 1
+      }
+    }
+  ],
+  "art": {
+    "freeDecor": [
+      {
+        "id": 1,
+        "art": "image/decor/wasteland/st3",
+        "x": 0,
+        "y": -157.5,
+        "width": 247,
+        "height": 201,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 2,
+        "art": "image/decor/wasteland/st3",
+        "x": 0,
+        "y": 112.5,
+        "width": 247,
+        "height": 201,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 3,
+        "art": "image/decor/wasteland/cao",
+        "x": -461.25,
+        "y": -202.5,
+        "width": 104,
+        "height": 93,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 4,
+        "art": "image/decor/wasteland/cao",
+        "x": -369,
+        "y": 22.5,
+        "width": 104,
+        "height": 93,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 5,
+        "art": "image/decor/wasteland/cao",
+        "x": -461.25,
+        "y": 247.5,
+        "width": 104,
+        "height": 93,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 6,
+        "art": "image/decor/wasteland/cao1",
+        "x": 461.25,
+        "y": -292.5,
+        "width": 111,
+        "height": 69,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 7,
+        "art": "image/decor/wasteland/cao1",
+        "x": 369,
+        "y": -67.5,
+        "width": 111,
+        "height": 69,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 8,
+        "art": "image/decor/wasteland/cao1",
+        "x": 461.25,
+        "y": 157.5,
+        "width": 111,
+        "height": 69,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 9,
+        "art": "image/decor/wasteland/st1",
+        "x": 461.25,
+        "y": -22.5,
+        "width": 177,
+        "height": 115,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      }
+    ]
+  }
+}

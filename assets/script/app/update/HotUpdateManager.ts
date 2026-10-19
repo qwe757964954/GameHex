@@ -7,21 +7,21 @@ import {
     parseReleasePointer,
 } from '../../core/update/HotUpdateManifest';
 import type {
-    HotUpdateBundleRuntime,
-    HotUpdateConfig,
-    HotUpdateManifest,
-    HotUpdateManifestVerifier,
+    IHotUpdateBundleRuntime,
+    IHotUpdateConfig,
+    IHotUpdateManifest,
+    IHotUpdateManifestVerifier,
     HotUpdatePlatform,
-    HotUpdateProgress,
-    HotUpdateResult,
-    HotUpdateStore,
+    IHotUpdateProgress,
+    IHotUpdateResult,
+    IHotUpdateStore,
 } from '../../core/update/HotUpdateTypes';
 
-export interface HotUpdateManagerDependencies {
+export interface IHotUpdateManagerDependencies {
     readonly network: NetworkTransport;
-    readonly store: HotUpdateStore;
-    readonly runtime: HotUpdateBundleRuntime;
-    readonly verifier: HotUpdateManifestVerifier;
+    readonly store: IHotUpdateStore;
+    readonly runtime: IHotUpdateBundleRuntime;
+    readonly verifier: IHotUpdateManifestVerifier;
     readonly platform: HotUpdatePlatform;
     readonly now?: () => number;
 }
@@ -35,15 +35,15 @@ export interface HotUpdateManagerDependencies {
 export class HotUpdateManager {
     private readonly now: () => number;
 
-    constructor(private readonly dependencies: HotUpdateManagerDependencies) {
+    constructor(private readonly dependencies: IHotUpdateManagerDependencies) {
         this.now = dependencies.now ?? (() => Date.now());
     }
 
     async run(
-        config: HotUpdateConfig,
-        onProgress?: (progress: HotUpdateProgress) => void,
-    ): Promise<HotUpdateResult> {
-        const emit = (progress: HotUpdateProgress) => onProgress?.(progress);
+        config: IHotUpdateConfig,
+        onProgress?: (progress: IHotUpdateProgress) => void,
+    ): Promise<IHotUpdateResult> {
+        const emit = (progress: IHotUpdateProgress) => onProgress?.(progress);
         const actualPlatform = this.dependencies.platform;
         const platform = config.platformOverride ?? actualPlatform;
         const isNativeRuntime = actualPlatform === 'android' || actualPlatform === 'ios';
@@ -147,20 +147,20 @@ export class HotUpdateManager {
     }
 
     private async activateFallback(
-        manifest: HotUpdateManifest | undefined,
-        config: HotUpdateConfig,
-        emit: (progress: HotUpdateProgress) => void,
+        manifest: IHotUpdateManifest | undefined,
+        config: IHotUpdateConfig,
+        emit: (progress: IHotUpdateProgress) => void,
     ): Promise<void> {
         if (!manifest) return;
         await this.dependencies.runtime.apply(manifest, config.startupBundles, emit);
     }
 
     private firstInstallFailure(
-        config: HotUpdateConfig,
+        config: IHotUpdateConfig,
         integrityFailure: boolean,
         error: unknown,
         fallbackError?: unknown,
-    ): HotUpdateResult {
+    ): IHotUpdateResult {
         const canContinue = !config.requireRemoteOnFirstInstall;
         return {
             status: integrityFailure ? 'fatal-integrity-error' : 'degraded',

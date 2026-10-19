@@ -1,9 +1,9 @@
-import {
-    HOT_UPDATE_SCHEMA_VERSION,
-    HotUpdateBundleDescriptor,
-    HotUpdateManifest,
+import { HOT_UPDATE_SCHEMA_VERSION } from './HotUpdateTypes';
+import type {
+    IHotUpdateBundleDescriptor,
+    IHotUpdateManifest,
     HotUpdatePlatform,
-    HotUpdateReleasePointer,
+    IHotUpdateReleasePointer,
 } from './HotUpdateTypes';
 
 const RELEASE_ID_PATTERN = /^[A-Za-z0-9._-]{1,96}$/;
@@ -42,7 +42,7 @@ export function assertRemoteUrl(value: string, name: string, allowHttpForLocalDe
 
 const assertHttpsUrl = assertRemoteUrl;
 
-export function parseReleasePointer(value: unknown, allowHttpForLocalDebug = false): HotUpdateReleasePointer {
+export function parseReleasePointer(value: unknown, allowHttpForLocalDebug = false): IHotUpdateReleasePointer {
     const input = requireObject(value, 'latest.json');
     if (input.schemaVersion !== HOT_UPDATE_SCHEMA_VERSION) {
         throw new Error(`latest.json schemaVersion 不支持：${String(input.schemaVersion)}`);
@@ -73,7 +73,7 @@ export function parseHotUpdateManifest(
     expectedPlatform: HotUpdatePlatform,
     expectedChannel: string,
     allowHttpForLocalDebug = false,
-): HotUpdateManifest {
+): IHotUpdateManifest {
     const input = requireObject(value, 'manifest.json');
     if (input.schemaVersion !== HOT_UPDATE_SCHEMA_VERSION) {
         throw new Error(`manifest schemaVersion 不支持：${String(input.schemaVersion)}`);
@@ -88,7 +88,7 @@ export function parseHotUpdateManifest(
     if (channel !== expectedChannel) throw new Error(`manifest 渠道不匹配：期望 ${expectedChannel}，实际 ${channel}`);
     const minClientVersion = requireString(input.minClientVersion, 'manifest.minClientVersion');
     const bundleInput = requireObject(input.bundles, 'manifest.bundles');
-    const bundles: Record<string, HotUpdateBundleDescriptor> = {};
+    const bundles: Record<string, IHotUpdateBundleDescriptor> = {};
 
     for (const [name, raw] of Object.entries(bundleInput)) {
         if (!BUNDLE_NAME_PATTERN.test(name)) throw new Error(`Bundle 名称非法：${name}`);
@@ -125,7 +125,7 @@ export function parseHotUpdateManifest(
 }
 
 export function resolveBundleLoadOrder(
-    bundles: Readonly<Record<string, HotUpdateBundleDescriptor>>,
+    bundles: Readonly<Record<string, IHotUpdateBundleDescriptor>>,
     roots: readonly string[],
 ): string[] {
     const order: string[] = [];
@@ -146,7 +146,7 @@ export function resolveBundleLoadOrder(
     return order;
 }
 
-function validateBundleDependencies(bundles: Readonly<Record<string, HotUpdateBundleDescriptor>>): void {
+function validateBundleDependencies(bundles: Readonly<Record<string, IHotUpdateBundleDescriptor>>): void {
     for (const [name, bundle] of Object.entries(bundles)) {
         for (const dependency of bundle.dependencies ?? []) {
             if (!bundles[dependency]) throw new Error(`Bundle ${name} 依赖不存在的 Bundle：${dependency}`);
@@ -171,13 +171,13 @@ export function compareVersion(left: string, right: string): number {
 }
 
 /** 灰度分桶只需要这三个字段，v1 的 ReleasePointer 与 v2 的 NativePlan 都天然满足。 */
-export interface RolloutDescriptor {
+export interface IRolloutDescriptor {
     readonly releaseId: string;
     readonly rolloutPercentage?: number;
     readonly rolloutSalt?: string;
 }
 
-export function isRolloutEligible(clientId: string, pointer: RolloutDescriptor): boolean {
+export function isRolloutEligible(clientId: string, pointer: IRolloutDescriptor): boolean {
     const percentage = pointer.rolloutPercentage ?? 100;
     if (percentage >= 100) return true;
     if (percentage <= 0) return false;

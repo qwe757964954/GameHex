@@ -1,0 +1,14 @@
+{
+  "ver": "1.1.50",
+  "importer": "prefab",
+  "imported": true,
+  "uuid": "cd8bf382-8c6f-4aaa-85e8-602b0cd8f506",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {},
+  "userData": {
+    "syncNodeName": "建筑死亡特效",
+    "hasIcon": false
+  }
+}

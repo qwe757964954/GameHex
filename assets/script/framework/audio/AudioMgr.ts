@@ -3,8 +3,9 @@
  *
  * ## 为什么不用 `cc.audioEngine`
  *
- * 老端 `CtrlAudio` 全篇用 `cc.audioEngine.*`；Demo3.8 里 `engine/ResourceMgr.ts` 的
- * `openMusic/openSound` 也是照抄过来的。但 **Creator 3.8 已经没有 `audioEngine` 了**：
+ * 老端 `CtrlAudio` 全篇用 `cc.audioEngine.*`；早期搬进 Demo3.8 的
+ * `engine/ResourceMgr.ts` 也曾照抄 `openMusic/openSound`，现已删除。
+ * **Creator 3.8 已经没有 `audioEngine` 了**：
  * 在 `…/3.8.8/resources/resources/3d/engine` 全源里搜，`audioEngine` 只出现在
  * `pal/audio/native/player.ts`、`pal/audio/minigame/*` 这些**模块内局部变量**
  * （`const audioEngine = jsb.AudioEngine`），`cocos/audio/index.ts` 只导出

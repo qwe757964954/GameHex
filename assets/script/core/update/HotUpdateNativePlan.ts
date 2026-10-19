@@ -1,6 +1,6 @@
-import {
-    HOT_UPDATE_NATIVE_SCHEMA_VERSION,
-    HotUpdateNativePlan,
+import { HOT_UPDATE_NATIVE_SCHEMA_VERSION } from './HotUpdateTypes';
+import type {
+    IHotUpdateNativePlan,
     HotUpdatePlatform,
     NativeVersionCompareMode,
 } from './HotUpdateTypes';
@@ -44,7 +44,7 @@ export function parseNativeHotUpdatePlan(
     expectedPlatform: HotUpdatePlatform,
     expectedChannel: string,
     allowHttpForLocalDebug = false,
-): HotUpdateNativePlan {
+): IHotUpdateNativePlan {
     const input = requireObject(value, 'latest.json');
     if (input.schemaVersion !== HOT_UPDATE_NATIVE_SCHEMA_VERSION) {
         throw new Error(

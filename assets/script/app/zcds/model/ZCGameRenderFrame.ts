@@ -4,6 +4,7 @@ import type { ZCOwner } from './ZCMapConfig';
 import type {
     DeepReadonly,
     ZCBuildingCooldownState,
+    ZCBuildingDestruction,
     ZCBuildingShake,
     ZCCardReveal,
     ZCFloatText,
@@ -41,4 +42,6 @@ export interface ZCGameRenderFrame {
 /** 一次性模型通知，必须由对局编排层显式取走并交给动态渲染。 */
 export interface ZCBattlePresentationEvents {
     readonly buildingShakes: readonly DeepReadonly<ZCBuildingShake>[];
+    /** 建筑被打掉（地块已转废墟，快照里再也看不出「刚被拆」）—— 渲染层播白烟雾爆炸。 */
+    readonly buildingDestructions: readonly DeepReadonly<ZCBuildingDestruction>[];
 }

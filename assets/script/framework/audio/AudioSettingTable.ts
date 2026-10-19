@@ -122,8 +122,8 @@ export function parseStoredVolume(raw: unknown): number | null {
  *
  * 老端 `CtrlAudio.data` 就是这个映射（`RefMgraudioConfig.getRefAll()` → `Map(key, value)`）。
  * `value` 形如 `resources://塔防/音效/点击音效` —— **`resources://` 前缀必须剥掉**：
- * 新工程 `ResourceMgr.handlePath()` 只做「去扩展名 + 子路径映射」，不认这个前缀，
- * 直接传进 `cc.resources.get` 会报 `Bundle resources doesn't contain ...`。
+ * 新工程 `ResourceMgr.handlePath()` 只做去扩展名，不认这个前缀，
+ * 直接传进 `resources.get` 会报 `Bundle resources doesn't contain ...`。
  */
 export function buildClipPathMap(rows?: readonly AudioConfigRow[] | null): Map<string, string> {
     const map = new Map<string, string>();

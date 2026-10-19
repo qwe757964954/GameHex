@@ -1,0 +1,71 @@
+{
+  "__type__": "cc.AnimationClip",
+  "_name": "建筑死亡特效",
+  "_objFlags": 0,
+  "_native": "",
+  "sample": 12,
+  "speed": 1,
+  "wrapMode": 1,
+  "events": [],
+  "_duration": 0.333333,
+  "_keys": [],
+  "_stepness": 0,
+  "curveDatas": {},
+  "_curves": [],
+  "_commonTargets": [],
+  "_hash": 0,
+  "_tracks": [
+    {
+      "__type__": "cc.animation.ObjectTrack",
+      "_binding": {
+        "__type__": "cc.animation.TrackBinding",
+        "path": {
+          "__type__": "cc.animation.TrackPath",
+          "_paths": [
+            {
+              "__type__": "cc.animation.ComponentPath",
+              "component": "cc.Sprite"
+            },
+            "spriteFrame"
+          ]
+        },
+        "proxy": null
+      },
+      "_channel": {
+        "__type__": "cc.animation.Channel",
+        "_curve": {
+          "__type__": "cc.ObjectCurve",
+          "_times": [
+            0.0,
+            0.083333333,
+            0.166666667,
+            0.25
+          ],
+          "_values": [
+            {
+              "__uuid__": "abf9b4fd-2c02-4e6c-ae32-0424ed9c4a27@f9941"
+            },
+            {
+              "__uuid__": "bf96af51-e5fd-4651-a3ff-33eb7a685a8a@f9941"
+            },
+            {
+              "__uuid__": "d567665e-a0a7-4837-a011-419eac4e3fb0@f9941"
+            },
+            {
+              "__uuid__": "39d4b5a6-784d-4665-822c-eb8703c9f106@f9941"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "_exoticAnimation": null,
+  "_events": [],
+  "_embeddedPlayers": [],
+  "_additiveSettings": {
+    "__type__": "cc.AnimationClipAdditiveSettings",
+    "enabled": false,
+    "refClip": null
+  },
+  "_auxiliaryCurveEntries": []
+}

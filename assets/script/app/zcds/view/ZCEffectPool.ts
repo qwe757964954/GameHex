@@ -11,6 +11,8 @@ export interface IZCEffectPoolDeps {
     readonly mapLayer: Node;
     readonly spawnFxPrefab: Prefab | null;
     readonly deathFxPrefab: Prefab | null;
+    /** 建筑被拆掉时那团白烟雾（`units/effects/建筑死亡特效`）。缺失则这层表现直接跳过。 */
+    readonly buildingDestroyFxPrefab: Prefab | null;
     readonly hitFxPrefabs: ReadonlyMap<ZCAttackTrait, Prefab>;
     /** 棋盘坐标 → 视图坐标换算（命中特效用）。 */
     mapToViewX: (x: number) => number;
@@ -37,6 +39,12 @@ interface DeathFxEntry {
     duration: number;
 }
 
+interface BuildingDestroyFxEntry {
+    node: Node;
+    startedAt: number;
+    duration: number;
+}
+
 /**
  * 出生特效拿不到 clip 时的兜底显示时长（秒）。
  * 正常路径时长从 `clip.duration` 读（出生特效 24 帧 @16fps = 1.5s），改美术帧率不受影响；
@@ -48,6 +56,11 @@ const SPAWN_FX_FALLBACK_DURATION = 1.5;
  * 正常路径从 `clip.duration` 读（死亡特效 13 帧 @12fps = 1.0833s）；仅在 prefab 损坏时兜底。
  */
 const DEATH_FX_FALLBACK_DURATION = 1.1;
+/**
+ * 建筑摧毁特效拿不到 clip 时的兜底时长（秒）。
+ * 正常路径从 `clip.duration` 读（4 帧 @12fps = 0.3333s）；仅在 prefab 损坏时兜底。
+ */
+const BUILDING_DESTROY_FX_FALLBACK_DURATION = 0.35;
 /**
  * 受击特效的**固定总时长**（秒）—— 2026-10-17 需求「所有职业受击效果总时长固定 0.15s」。
  *
@@ -76,6 +89,7 @@ export class ZCEffectPool {
     private readonly spawnFxNodes: SpawnFxEntry[] = [];
     private readonly hitFxNodes: HitFxEntry[] = [];
     private readonly deathFxNodes: DeathFxEntry[] = [];
+    private readonly buildingDestroyFxNodes: BuildingDestroyFxEntry[] = [];
     /** 阵亡去重：单位在快照里消失后 renderUnitSystem 还会再走几帧，不去重会连播好几个。 */
     private readonly deadFxPending = new Set<number>();
     /**
@@ -180,6 +194,37 @@ export class ZCEffectPool {
     }
 
     /**
+     * 播放建筑被拆掉的白烟雾爆炸。挂 mapLayer、坐标是该格中心（模型只给 hexId）。
+     *
+     * 从「废墟 spr 直接切过来」那一帧起补一层交代：建筑消失得有个爆点，否则就是凭空变废墟。
+     * 尺寸烘在 prefab 根的 `_lscale`（195×195 @ 0.5641 ⇒ 屏上 110px，与受击 / 出生同基准），
+     * 这里**不写 scale**，只写位置 —— 与 `playHitFx` 同一套口径（池化复用下写 scale 会逐次缩水）。
+     */
+    playBuildingDestroyFx(x: number, y: number, hexId: number, now: number): void {
+        const prefab = this.deps.buildingDestroyFxPrefab;
+        if (!prefab) return;
+        const node = this.deps.pool.acquire('buildingDestroyFx', () => instantiate(prefab));
+        node.setParent(this.deps.mapLayer);
+        node.setSiblingIndex(this.deps.mapLayer.children.length - 1);
+        node.layer = this.deps.mapLayer.layer;
+        node.active = true;
+        node.setPosition(x, y, 0);
+        node.name = `BuildingDestroyFx_${hexId}`;
+        const animation = node.getComponent(Animation);
+        const clip = animation?.defaultClip ?? null;
+        if (animation && clip) {
+            // 池里复用回来的节点停在上一轮末尾：先 stop 清残留状态，再从头播。
+            animation.stop();
+            animation.play(clip.name);
+        }
+        this.buildingDestroyFxNodes.push({
+            node,
+            startedAt: now,
+            duration: clip?.duration ?? BUILDING_DESTROY_FX_FALLBACK_DURATION,
+        });
+    }
+
+    /**
      * 播放阵亡特效。按 unitId 去重，同一次阵亡只播一次。
      * 挂 mapLayer、不挂宿主：宿主 0.45s 后就被移除，挂它身上会中途消失。
      *
@@ -274,6 +319,12 @@ export class ZCEffectPool {
             this.deps.pool.release('deathFx', entry.node);
         }
         this.deathFxNodes.length = 0;
+        for (const entry of this.buildingDestroyFxNodes) {
+            if (!entry.node.isValid) continue;
+            entry.node.removeFromParent();
+            this.deps.pool.release('buildingDestroyFx', entry.node);
+        }
+        this.buildingDestroyFxNodes.length = 0;
         this.deadFxPending.clear();
         // 去重表显式清掉：换局后模型层推的是全新的 fx 对象，旧局的没必要继续被这两个 Set 持有。
         this.hitFxPlayed.clear();
@@ -300,6 +351,10 @@ export class ZCEffectPool {
             if (entry.node.isValid) entry.node.destroy();
         }
         this.deathFxNodes.length = 0;
+        for (const entry of this.buildingDestroyFxNodes) {
+            if (entry.node.isValid) entry.node.destroy();
+        }
+        this.buildingDestroyFxNodes.length = 0;
         this.deadFxPending.clear();
     }
 
@@ -353,6 +408,21 @@ export class ZCEffectPool {
             entry.node.removeFromParent();
             this.deps.pool.release('deathFx', entry.node);
             this.deathFxNodes.splice(i, 1);
+        }
+    }
+
+    /** 回收播完的建筑摧毁特效（与 `recycleDeathFx` 同口径）。 */
+    recycleBuildingDestroyFx(now: number): void {
+        for (let i = this.buildingDestroyFxNodes.length - 1; i >= 0; i -= 1) {
+            const entry = this.buildingDestroyFxNodes[i];
+            if (!entry.node.isValid) {
+                this.buildingDestroyFxNodes.splice(i, 1);
+                continue;
+            }
+            if (now < entry.startedAt + entry.duration) continue;
+            entry.node.removeFromParent();
+            this.deps.pool.release('buildingDestroyFx', entry.node);
+            this.buildingDestroyFxNodes.splice(i, 1);
         }
     }
 }

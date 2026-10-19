@@ -12,7 +12,7 @@ export type HotUpdatePlatform = 'web' | 'wechat' | 'douyin' | 'android' | 'ios';
 
 export type BundleRequiredAt = 'startup' | 'login' | 'main' | 'battle' | 'onDemand';
 
-export interface HotUpdateBundleDescriptor {
+export interface IHotUpdateBundleDescriptor {
     /** Asset Bundle 根 URL，不包含 config.json。 */
     readonly url: string;
     /** Creator MD5 Cache 生成的 config 版本 Hash。 */
@@ -22,17 +22,17 @@ export interface HotUpdateBundleDescriptor {
     readonly size?: number;
 }
 
-export interface HotUpdateManifest {
+export interface IHotUpdateManifest {
     readonly schemaVersion: number;
     readonly releaseId: string;
     readonly platform: HotUpdatePlatform;
     readonly channel: string;
     readonly minClientVersion: string;
     readonly createdAt?: string;
-    readonly bundles: Readonly<Record<string, HotUpdateBundleDescriptor>>;
+    readonly bundles: Readonly<Record<string, IHotUpdateBundleDescriptor>>;
 }
 
-export interface HotUpdateReleasePointer {
+export interface IHotUpdateReleasePointer {
     readonly schemaVersion: number;
     readonly releaseId: string;
     readonly manifestUrl: string;
@@ -43,7 +43,7 @@ export interface HotUpdateReleasePointer {
     readonly rolloutSalt?: string;
 }
 
-export interface HotUpdateConfig {
+export interface IHotUpdateConfig {
     readonly enabled: boolean;
     readonly enabledPlatforms: readonly HotUpdatePlatform[];
     readonly channel: string;
@@ -74,9 +74,9 @@ export interface HotUpdateConfig {
 
 export type NativeVersionCompareMode = 'release-stamp' | 'strict';
 
-export interface HotUpdateStoredState {
-    readonly activeManifest?: HotUpdateManifest;
-    readonly previousManifest?: HotUpdateManifest;
+export interface IHotUpdateStoredState {
+    readonly activeManifest?: IHotUpdateManifest;
+    readonly previousManifest?: IHotUpdateManifest;
     readonly clientId: string;
 }
 
@@ -90,7 +90,7 @@ export type HotUpdatePhase =
     | 'done'
     | 'failed';
 
-export interface HotUpdateProgress {
+export interface IHotUpdateProgress {
     readonly phase: HotUpdatePhase;
     readonly message: string;
     readonly completed?: number;
@@ -107,7 +107,7 @@ export type HotUpdateResultStatus =
     | 'mandatory-client-update'
     | 'fatal-integrity-error';
 
-export interface HotUpdateResult {
+export interface IHotUpdateResult {
     readonly status: HotUpdateResultStatus;
     readonly canContinue: boolean;
     readonly message: string;
@@ -115,21 +115,21 @@ export interface HotUpdateResult {
     readonly error?: unknown;
 }
 
-export interface HotUpdateStore {
-    read(): HotUpdateStoredState;
-    commit(manifest: HotUpdateManifest): HotUpdateStoredState;
+export interface IHotUpdateStore {
+    read(): IHotUpdateStoredState;
+    commit(manifest: IHotUpdateManifest): IHotUpdateStoredState;
 }
 
-export interface HotUpdateBundleRuntime {
+export interface IHotUpdateBundleRuntime {
     apply(
-        manifest: HotUpdateManifest,
+        manifest: IHotUpdateManifest,
         startupBundles: readonly string[],
-        onProgress?: (progress: HotUpdateProgress) => void,
+        onProgress?: (progress: IHotUpdateProgress) => void,
     ): Promise<void>;
 }
 
-export interface HotUpdateManifestVerifier {
-    verify(pointer: HotUpdateReleasePointer, manifest: HotUpdateManifest): Promise<boolean>;
+export interface IHotUpdateManifestVerifier {
+    verify(pointer: IHotUpdateReleasePointer, manifest: IHotUpdateManifest): Promise<boolean>;
 }
 
 /**
@@ -140,7 +140,7 @@ export interface HotUpdateManifestVerifier {
  * 断点续传、失败重试全部交给引擎的 native.AssetsManager，客户端只做控制面：
  * 灰度、包内最低版本、签名策略、把远端地址覆盖到随包清单上。
  */
-export interface HotUpdateNativePlan {
+export interface IHotUpdateNativePlan {
     readonly schemaVersion: number;
     readonly releaseId: string;
     readonly platform: HotUpdatePlatform;
@@ -174,7 +174,7 @@ export type NativeHotUpdateStatus =
     /** 控制文件本身不合法（平台/渠道/地址/签名）。 */
     | 'integrity-error';
 
-export interface NativeHotUpdateResult {
+export interface INativeHotUpdateResult {
     readonly status: NativeHotUpdateStatus;
     readonly canContinue: boolean;
     readonly message: string;
@@ -184,7 +184,7 @@ export interface NativeHotUpdateResult {
 
 export type NativeHotUpdatePhase = 'checking' | 'validating' | 'downloading' | 'applying' | 'done' | 'failed';
 
-export interface NativeHotUpdateProgress {
+export interface INativeHotUpdateProgress {
     readonly phase: NativeHotUpdatePhase;
     readonly message: string;
     /** 字节进度 0~100（与官方 event.getPercent() 同为百分数）。 */

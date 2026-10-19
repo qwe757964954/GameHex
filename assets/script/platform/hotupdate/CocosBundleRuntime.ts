@@ -1,20 +1,20 @@
 import { assetManager, AssetManager } from 'cc';
 import { resolveBundleLoadOrder } from '../../core/update/HotUpdateManifest';
 import type {
-    HotUpdateBundleRuntime,
-    HotUpdateManifest,
-    HotUpdateProgress,
+    IHotUpdateBundleRuntime,
+    IHotUpdateManifest,
+    IHotUpdateProgress,
 } from '../../core/update/HotUpdateTypes';
 import { CocosBundleRegistry } from './CocosBundleRegistry';
 
 /** 使用 Creator 的远程 Bundle 管线统一覆盖小游戏和原生平台。 */
-export class CocosBundleRuntime implements HotUpdateBundleRuntime {
+export class CocosBundleRuntime implements IHotUpdateBundleRuntime {
     private readonly loadedVersions = new Map<string, string>();
 
     async apply(
-        manifest: HotUpdateManifest,
+        manifest: IHotUpdateManifest,
         startupBundles: readonly string[],
-        onProgress?: (progress: HotUpdateProgress) => void,
+        onProgress?: (progress: IHotUpdateProgress) => void,
     ): Promise<void> {
         const previous = CocosBundleRegistry.snapshot();
         const loadedThisAttempt: string[] = [];

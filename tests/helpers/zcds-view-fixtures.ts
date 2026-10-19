@@ -228,6 +228,7 @@ export function loadViews() {
         mapLayer?: any;
         spawnFxPrefab?: any;
         deathFxPrefab?: any;
+        buildingDestroyFxPrefab?: any;
         hitFxPrefabs?: Map<any, any>;
         mapToViewX?: (x: number) => number;
         mapToViewY?: (y: number) => number;
@@ -241,6 +242,7 @@ export function loadViews() {
             mapLayer,
             spawnFxPrefab: init?.spawnFxPrefab ?? null,
             deathFxPrefab: init?.deathFxPrefab ?? null,
+            buildingDestroyFxPrefab: init?.buildingDestroyFxPrefab ?? null,
             hitFxPrefabs: init?.hitFxPrefabs ?? new Map(),
             // 默认非恒等：棋盘坐标 (x,y) 加一个可辨识偏移，证明特效确实过了换算。
             mapToViewX: init?.mapToViewX ?? ((x: number) => x + 100),

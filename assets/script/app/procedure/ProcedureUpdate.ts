@@ -1,7 +1,7 @@
 import { Node, Prefab } from 'cc';
 import { GameRoute } from '../../core/runtime/GameRoute';
 import { isNativeHotUpdatePlatform } from '../../core/update/HotUpdateNativePlan';
-import type { HotUpdateConfig, HotUpdateProgress, NativeHotUpdateProgress } from '../../core/update/HotUpdateTypes';
+import type { IHotUpdateConfig, IHotUpdateProgress, INativeHotUpdateProgress } from '../../core/update/HotUpdateTypes';
 import { ProcedureBase } from '../../framework/procedure/ProcedureBase';
 import type { ProcedurePreloadContext } from '../../framework/procedure/ProcedureBase';
 import { createCocosHotUpdateManager, createNativeHotUpdateRuntime, detectHotUpdatePlatform } from '../../platform/hotupdate/CocosHotUpdateFactory';
@@ -35,7 +35,7 @@ export class ProcedureUpdate extends ProcedureBase {
     private running = false;
     private retryKind: RetryKind = 'none';
     private nativeRuntime: NativeHotUpdateRuntime | null = null;
-    private lastConfig: HotUpdateConfig | null = null;
+    private lastConfig: IHotUpdateConfig | null = null;
 
     /** 预加载首包启动进度页（不进远程热更 bundle，启动早期即可用）。 */
     async onPreload(_params?: unknown, context?: ProcedurePreloadContext): Promise<void> {
@@ -120,7 +120,7 @@ export class ProcedureUpdate extends ProcedureBase {
     }
 
     /** Android / iOS：官方原生全构建目录热更。 */
-    private async runNative(generation: number, config: HotUpdateConfig): Promise<void> {
+    private async runNative(generation: number, config: IHotUpdateConfig): Promise<void> {
         const runtime = createNativeHotUpdateRuntime(this.network, config);
         this.nativeRuntime = runtime;
         const result = await runtime.run(config, (progress) => this.onNativeProgress(generation, progress));
@@ -152,7 +152,7 @@ export class ProcedureUpdate extends ProcedureBase {
     }
 
     /** 其他平台：沿用远程 Bundle 收敛（不含脚本）。 */
-    private async runBundle(generation: number, config: HotUpdateConfig): Promise<void> {
+    private async runBundle(generation: number, config: IHotUpdateConfig): Promise<void> {
         const manager = createCocosHotUpdateManager(this.network, config);
         const result = await manager.run(config, (progress) => this.onProgress(generation, progress));
         if (generation !== this.generation) return;
@@ -206,7 +206,7 @@ export class ProcedureUpdate extends ProcedureBase {
         }
     }
 
-    private onProgress(generation: number, progress: HotUpdateProgress): void {
+    private onProgress(generation: number, progress: IHotUpdateProgress): void {
         if (generation !== this.generation) return;
         const suffix = progress.total
             ? `（${progress.completed ?? 0}/${progress.total}）`
@@ -219,7 +219,7 @@ export class ProcedureUpdate extends ProcedureBase {
             : null);
     }
 
-    private onNativeProgress(generation: number, progress: NativeHotUpdateProgress): void {
+    private onNativeProgress(generation: number, progress: INativeHotUpdateProgress): void {
         if (generation !== this.generation) return;
         if (progress.phase !== 'downloading') {
             this.setStatus(progress.message);

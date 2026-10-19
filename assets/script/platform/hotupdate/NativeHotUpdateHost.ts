@@ -6,7 +6,7 @@ export const HOT_UPDATE_SEARCH_PATHS_KEY = 'HotUpdateSearchPaths';
 export const HOT_UPDATE_CLIENT_VERSION_KEY = 'hotupdate.clientVersion';
 
 /** AssetsManager 事件（只列本模块用得到的字段，避免依赖引擎类型定义）。 */
-export interface NativeAssetsManagerEvent {
+export interface INativeAssetsManagerEvent {
     getEventCode(): number;
     getMessage?(): string;
     getAssetId?(): string;
@@ -18,13 +18,13 @@ export interface NativeAssetsManagerEvent {
     getTotalFiles?(): number;
 }
 
-export interface NativeAssetsManagerManifest {
+export interface INativeAssetsManagerManifest {
     isLoaded?(): boolean;
     getSearchPaths?(): string[];
 }
 
-export interface NativeAssetsManager {
-    setEventCallback(callback: ((event: NativeAssetsManagerEvent) => void) | null): void;
+export interface INativeAssetsManager {
+    setEventCallback(callback: ((event: INativeAssetsManagerEvent) => void) | null): void;
     setVerifyCallback(callback: ((path: string, asset: unknown) => boolean) | null): void;
     setVersionCompareHandle?(handle: ((left: string, right: string) => number) | null): void;
     setMaxConcurrentTask?(task: number): void;
@@ -41,7 +41,7 @@ export interface NativeAssetsManager {
      * 里给过，而引擎 `loadLocalManifest` 的第 1 步就是「Reset storage path」到该值。
      */
     loadLocalManifest(manifest: string): boolean;
-    getLocalManifest(): NativeAssetsManagerManifest | null;
+    getLocalManifest(): INativeAssetsManagerManifest | null;
     getState(): number;
     checkUpdate(): void;
     update(): void;
@@ -49,7 +49,7 @@ export interface NativeAssetsManager {
 }
 
 /** 引擎侧的常量表（jsb.EventAssetsManager / jsb.AssetsManager.State）。 */
-export interface NativeAssetsManagerEnvironment {
+export interface INativeAssetsManagerEnvironment {
     readonly UNINITED: number;
     readonly ERROR_NO_LOCAL_MANIFEST: number;
     readonly ERROR_DOWNLOAD_MANIFEST: number;
@@ -71,9 +71,9 @@ export interface NativeAssetsManagerEnvironment {
  * 把 jsb / localStorage / game.restart 全部挡在这个接口后面，业务编排
  * （`NativeHotUpdateRuntime`）才能在没有引擎的环境里被单测覆盖。
  */
-export interface NativeHotUpdateHost {
+export interface INativeHotUpdateHost {
     readonly supported: boolean;
-    readonly environment: NativeAssetsManagerEnvironment;
+    readonly environment: INativeAssetsManagerEnvironment;
     /** 应用可写目录下的热更缓存目录，**必须以 `/` 结尾**（与引擎的 `_temp/` 约定对齐）。 */
     resolveStoragePath(dirName: string): string;
     /** 定位随包 project.manifest；`override` 为配置里显式指定的绝对路径。 */
@@ -97,7 +97,7 @@ export interface NativeHotUpdateHost {
  * 详见 `HotUpdateNativePlan.ts` 里已删除的 `buildNativeVersionCompare` 处的说明。
  * 版本比较走引擎默认 `cmpVersion`，全序比较放在 JS 侧的 `compareReleaseVersion`。
  */
-createAssetsManager(storagePath: string): NativeAssetsManager | null;
+createAssetsManager(storagePath: string): INativeAssetsManager | null;
     restartGame(delayMs: number): void;
     info(message: string): void;
     warn(message: string, error?: unknown): void;
@@ -115,7 +115,7 @@ function getRuntime(): Record<string, any> | null {
  * 注意：注入到 main.js 的片段用的是 `window.jsb`，而 TS 里 `native` 命名空间只能 import，
  * 所以这里统一走 `globalThis.jsb`，两边指向同一份绑定。
  */
-export class CocosNativeHotUpdateHost implements NativeHotUpdateHost {
+export class CocosNativeHotUpdateHost implements INativeHotUpdateHost {
     private readonly jsb = getRuntime();
 
     get supported(): boolean {
@@ -141,7 +141,7 @@ export class CocosNativeHotUpdateHost implements NativeHotUpdateHost {
      * 现在：多路探测（`native` → `jsb` → `AssetsManager` 命名空间），
      * 且**取不到就抛错**，绝不猜。
      */
-    get environment(): NativeAssetsManagerEnvironment {
+    get environment(): INativeAssetsManagerEnvironment {
         const candidates: Record<string, unknown>[] = [];
         // ① 官方推荐路径：cc 导出的 native
         const nativeNS = (native as unknown as Record<string, unknown> | undefined)?.EventAssetsManager;
@@ -255,7 +255,7 @@ export class CocosNativeHotUpdateHost implements NativeHotUpdateHost {
         this.fileUtils()?.removeDirectory?.(path);
     }
 
-    createAssetsManager(storagePath: string): NativeAssetsManager | null {
+    createAssetsManager(storagePath: string): INativeAssetsManager | null {
         const AssetsManager = this.jsb?.AssetsManager;
         if (!AssetsManager) return null;
         try {

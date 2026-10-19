@@ -7,15 +7,15 @@ import { test } from 'node:test';
 import { HotUpdateManager } from '../assets/script/app/update/HotUpdateManager';
 import { compareVersion, parseHotUpdateManifest, parseReleasePointer, resolveBundleLoadOrder } from '../assets/script/core/update/HotUpdateManifest';
 import type {
-    HotUpdateBundleRuntime,
-    HotUpdateConfig,
-    HotUpdateManifest,
-    HotUpdateManifestVerifier,
-    HotUpdateStoredState,
-    HotUpdateStore,
+    IHotUpdateBundleRuntime,
+    IHotUpdateConfig,
+    IHotUpdateManifest,
+    IHotUpdateManifestVerifier,
+    IHotUpdateStoredState,
+    IHotUpdateStore,
 } from '../assets/script/core/update/HotUpdateTypes';
 
-const baseConfig: HotUpdateConfig = {
+const baseConfig: IHotUpdateConfig = {
     enabled: true,
     enabledPlatforms: ['android', 'ios'],
     channel: 'dev',
@@ -67,7 +67,7 @@ test('Web platform skips hot update before reading state or requesting network',
     assert.equal(requested, false);
 });
 
-function manifest(releaseId: string, minClientVersion = '1.0.0'): HotUpdateManifest {
+function manifest(releaseId: string, minClientVersion = '1.0.0'): IHotUpdateManifest {
     return {
         schemaVersion: 1,
         releaseId,
@@ -85,17 +85,17 @@ function manifest(releaseId: string, minClientVersion = '1.0.0'): HotUpdateManif
     };
 }
 
-function createHarness(target: HotUpdateManifest, initial?: HotUpdateManifest) {
-    let state: HotUpdateStoredState = { clientId: 'client-1', activeManifest: initial };
+function createHarness(target: IHotUpdateManifest, initial?: IHotUpdateManifest) {
+    let state: IHotUpdateStoredState = { clientId: 'client-1', activeManifest: initial };
     const applied: string[] = [];
-    const store: HotUpdateStore = {
+    const store: IHotUpdateStore = {
         read: () => state,
         commit: (value) => state = { clientId: state.clientId, activeManifest: value, previousManifest: state.activeManifest },
     };
-    const runtime: HotUpdateBundleRuntime = {
+    const runtime: IHotUpdateBundleRuntime = {
         apply: async (value) => { applied.push(value.releaseId); },
     };
-    const verifier: HotUpdateManifestVerifier = { verify: async () => true };
+    const verifier: IHotUpdateManifestVerifier = { verify: async () => true };
     let request = 0;
     const manager = new HotUpdateManager({
         platform: 'android',
@@ -190,7 +190,7 @@ test('首装要求远端资源时，网络失败会阻断', async () => {
 
 test('启动链先进入更新流程，测试配置仅启用 Android/iOS', () => {
     const bootstrap = readFileSync('assets/script/app/bootstrap/ProcedureBootstrap.ts', 'utf8');
-    const config = JSON.parse(readFileSync('assets/resources/config/hot_update.json', 'utf8')) as HotUpdateConfig;
+    const config = JSON.parse(readFileSync('assets/resources/config/hot_update.json', 'utf8')) as IHotUpdateConfig;
     assert.match(bootstrap, /registerRoute\(GameRoute\.Update, ProcedureUpdate\)/);
     assert.match(bootstrap, /navigate\(GameRoute\.Update\)/);
     assert.equal(config.enabled, true);
@@ -216,7 +216,7 @@ test('Manifest 生成器从 MD5 Bundle 产物生成可用的两级清单', () =>
             '--client-version', '1.0.0.0',
             '--base-url', 'https://cdn.example.com/hotupdate',
         ], { cwd: process.cwd() });
-        const generated = JSON.parse(readFileSync(join(output, 'manifest.json'), 'utf8')) as HotUpdateManifest;
+        const generated = JSON.parse(readFileSync(join(output, 'manifest.json'), 'utf8')) as IHotUpdateManifest;
         assert.equal(generated.bundles.remoteRef.version, 'abc123');
         assert.equal(generated.bundles.remoteRef.requiredAt, 'startup');
         assert.equal(generated.bundles.remoteRef.url, 'https://cdn.example.com/hotupdate/android/r1/remoteRef');

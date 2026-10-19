@@ -1,9 +1,9 @@
 import { JsonAsset, resources } from 'cc';
-import type { HotUpdateConfig, HotUpdatePlatform } from '../../core/update/HotUpdateTypes';
+import type { IHotUpdateConfig, HotUpdatePlatform } from '../../core/update/HotUpdateTypes';
 
 const CONFIG_PATH = 'config/hot_update';
 
-export const DEFAULT_HOT_UPDATE_CONFIG: HotUpdateConfig = {
+export const DEFAULT_HOT_UPDATE_CONFIG: IHotUpdateConfig = {
     enabled: false,
     enabledPlatforms: ['android', 'ios'],
     channel: 'dev',
@@ -20,7 +20,7 @@ export const DEFAULT_HOT_UPDATE_CONFIG: HotUpdateConfig = {
     nativeRestartDelayMs: 1_200,
 };
 
-export async function loadHotUpdateConfig(): Promise<HotUpdateConfig> {
+export async function loadHotUpdateConfig(): Promise<IHotUpdateConfig> {
     const json = await new Promise<Record<string, unknown> | null>((resolve) => {
         resources.load(CONFIG_PATH, JsonAsset, (error, asset) => {
             if (error || !asset?.json) {

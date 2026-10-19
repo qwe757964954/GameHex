@@ -386,6 +386,23 @@ export interface ZCBuildingShake {
     hexId: number;
 }
 
+/**
+ * 建筑**被摧毁**的一次性通知（表现层），2026-10-19 新增。
+ *
+ * 建筑 HP 归零那一步在 `ZCDamageResolutionSystem.damageBuilding` 里把这一格改成
+ * `state = 'ruins'`、`building = 'none'` —— 那之后渲染层只能看到「已经变成废墟」的快照，
+ * **没有任何一帧还能知道「刚刚被打掉」**。所以必须由模型在判定那一拍显式发一条通知，
+ * 渲染层才播得出白烟雾爆炸。
+ *
+ * 与 `ZCBuildingShake` 同型：**只带 hexId、不带时长也不带起点**。
+ * 一次性、取走即空（`drainBuildingDestructions`），不参与 `prune`。
+ */
+export interface ZCBuildingDestruction {
+    id: number;
+    /** 被摧毁建筑所在的那一格。 */
+    hexId: number;
+}
+
 
 /**
  * 建筑冷却条的相位：建造中 → 产金 / 产兵 / 攻击（后三者互斥，由建筑类型决定）。

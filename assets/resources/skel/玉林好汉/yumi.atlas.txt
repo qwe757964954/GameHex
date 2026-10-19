@@ -1,0 +1,153 @@
+
+yumi.png
+size: 300,300
+format: RGBA8888
+filter: Linear,Linear
+repeat: none
+qiang
+  rotate: false
+  xy: 217, 213
+  size: 70, 85
+  orig: 70, 85
+  offset: 0, 0
+  index: -1
+st
+  rotate: false
+  xy: 2, 57
+  size: 133, 241
+  orig: 133, 241
+  offset: 0, 0
+  index: -1
+tf
+  rotate: false
+  xy: 137, 60
+  size: 65, 41
+  orig: 65, 41
+  offset: 0, 0
+  index: -1
+toujin
+  rotate: false
+  xy: 2, 20
+  size: 119, 35
+  orig: 119, 35
+  offset: 0, 0
+  index: -1
+toujin1
+  rotate: false
+  xy: 179, 183
+  size: 36, 36
+  orig: 36, 36
+  offset: 0, 0
+  index: -1
+toujin2
+  rotate: true
+  xy: 137, 112
+  size: 38, 28
+  orig: 38, 28
+  offset: 0, 0
+  index: -1
+yiling
+  rotate: false
+  xy: 217, 152
+  size: 80, 59
+  orig: 80, 59
+  offset: 0, 0
+  index: -1
+yiling2
+  rotate: true
+  xy: 184, 221
+  size: 37, 29
+  orig: 37, 29
+  offset: 0, 0
+  index: -1
+yiling3
+  rotate: false
+  xy: 204, 59
+  size: 59, 42
+  orig: 59, 42
+  offset: 0, 0
+  index: -1
+yingzi
+  rotate: false
+  xy: 123, 14
+  size: 92, 41
+  orig: 92, 41
+  offset: 0, 0
+  index: -1
+yj
+  rotate: true
+  xy: 137, 152
+  size: 35, 36
+  orig: 35, 36
+  offset: 0, 0
+  index: -1
+yj2
+  rotate: false
+  xy: 137, 225
+  size: 45, 33
+  orig: 65, 33
+  offset: 0, 0
+  index: -1
+ymm
+  rotate: true
+  xy: 265, 60
+  size: 41, 33
+  orig: 41, 33
+  offset: 0, 0
+  index: -1
+ys
+  rotate: true
+  xy: 137, 260
+  size: 38, 53
+  orig: 38, 53
+  offset: 0, 0
+  index: -1
+ytk
+  rotate: true
+  xy: 2, 7
+  size: 11, 10
+  orig: 11, 10
+  offset: 0, 0
+  index: -1
+yz1
+  rotate: false
+  xy: 217, 103
+  size: 61, 47
+  orig: 61, 47
+  offset: 0, 0
+  index: -1
+yz2
+  rotate: false
+  xy: 217, 10
+  size: 61, 47
+  orig: 61, 47
+  offset: 0, 0
+  index: -1
+zj
+  rotate: false
+  xy: 175, 148
+  size: 38, 33
+  orig: 38, 33
+  offset: 0, 0
+  index: -1
+zmm
+  rotate: true
+  xy: 167, 112
+  size: 34, 27
+  orig: 34, 27
+  offset: 0, 0
+  index: -1
+zs
+  rotate: false
+  xy: 137, 189
+  size: 40, 34
+  orig: 40, 34
+  offset: 0, 0
+  index: -1
+ztk
+  rotate: true
+  xy: 14, 8
+  size: 10, 9
+  orig: 10, 9
+  offset: 0, 0
+  index: -1

@@ -1,6 +1,7 @@
 import type { ZCAttackTrait } from './ZCCombatCatalog';
 import type {
-    ZCBuildingShake, ZCBuildingType, ZCCardReveal, ZCFloatText, ZCFloatTextKind, ZCHexActivation, ZCHitFx,
+    ZCBuildingDestruction, ZCBuildingShake, ZCBuildingType, ZCCardReveal, ZCFloatText, ZCFloatTextKind,
+    ZCHexActivation, ZCHitFx,
 } from './ZCGameTypes';
 import type { ZCOwner } from './ZCMapConfig';
 import {
@@ -28,6 +29,15 @@ const HIT_FX_CAP = 64;
 const BUILDING_SHAKE_CAP = 32;
 /** 空抖动队列的共享实例（常态返回它 ⇒ 渲染层不必判 null，也不产生分配）。 */
 const EMPTY_BUILDING_SHAKES: readonly Readonly<ZCBuildingShake>[] = [];
+/**
+ * 建筑摧毁通知的上限。
+ *
+ * 与抖动同口径：一次性、取走即空；正常一帧最多攒下「同一拍被拆掉的建筑」那个数。
+ * 上限只兜「渲染层整段没在跑还一直拆楼」这种极端情况 —— 丢最旧的。
+ */
+const BUILDING_DESTRUCTION_CAP = 16;
+/** 空摧毁队列的共享实例（同上）。 */
+const EMPTY_BUILDING_DESTRUCTIONS: readonly Readonly<ZCBuildingDestruction>[] = [];
 
 /**
  * 地块**脉冲段**的时长（秒）—— 激活轴的第 ① 段：播一道美术水波纹。
@@ -195,11 +205,14 @@ export class ZCBattlePresentationQueue {
      * （交出去的必须是原来那条、调用方才能安全遍历，见那里的说明）。
      */
     private buildingShakeQueue: ZCBuildingShake[] = [];
+    /** 建筑摧毁通知队列（同抖动：取走即空，不能标 `readonly`）。 */
+    private buildingDestructionQueue: ZCBuildingDestruction[] = [];
     private nextFloatTextId = 1;
     private nextHitFxId = 1;
     private nextCardRevealId = 1;
     private nextHexActivationId = 1;
     private nextBuildingShakeId = 1;
+    private nextBuildingDestructionId = 1;
 
     get floatTexts(): readonly Readonly<ZCFloatText>[] { return this.floatingTexts; }
     get hitFxs(): readonly Readonly<ZCHitFx>[] { return this.hitFxQueue; }
@@ -318,6 +331,28 @@ export class ZCBattlePresentationQueue {
         if (!this.buildingShakeQueue.length) return EMPTY_BUILDING_SHAKES;
         const drained = this.buildingShakeQueue;
         this.buildingShakeQueue = [];
+        return drained;
+    }
+
+    /**
+     * 推一条「这一格的建筑被拆掉了」：`damageBuilding` 判定 HP 归零、把地块改成废墟的那一拍调。
+     *
+     * 同抖动：**不看时间、不设时长**，它是一条通知；起点由渲染层收走它那一帧落定。
+     */
+    pushBuildingDestruction(hexId: number): void {
+        if (!Number.isFinite(hexId)) return;
+        this.buildingDestructionQueue.push({ id: this.nextBuildingDestructionId++, hexId });
+        while (this.buildingDestructionQueue.length > BUILDING_DESTRUCTION_CAP) this.buildingDestructionQueue.shift();
+    }
+
+    /**
+     * **取走**全部待播的建筑摧毁通知（返回后队列即空）。理由同 `drainBuildingShakes`：
+     * 摧毁特效不幂等（同一条通知读两次 = 同一格播两团烟雾），读-清必须原子。
+     */
+    drainBuildingDestructions(): readonly Readonly<ZCBuildingDestruction>[] {
+        if (!this.buildingDestructionQueue.length) return EMPTY_BUILDING_DESTRUCTIONS;
+        const drained = this.buildingDestructionQueue;
+        this.buildingDestructionQueue = [];
         return drained;
     }
 

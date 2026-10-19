@@ -668,3 +668,120 @@ test('受击/阵亡/出生特效：destroy() 显式销毁全部在播节点，�
     assert.equal(hitNode.isValid, false, '受击特效节点必须被 destroy');
     assert.equal(mapLayer.children.length, 0, '销毁后 mapLayer 不应残留特效节点');
 });
+
+/**
+ * 建筑死亡特效（`units/effects/建筑死亡特效`，2026-10-19 接入）。
+ *
+ * 素材：`zarts/art/植物占领世界美术/特效/白烟雾爆炸/` 的 4 帧（195×195，`1_1 / 1_3 / 1_5 / 1_6`）。
+ * 用途：建筑 HP 归零、地块转 `ruins` 的那一拍补一团白烟雾 —— 否则建筑是「凭空变废墟」。
+ *
+ * 与其它特效同源的**静默失效**清单：layer 落 DEFAULT ⇒ 看不见；`sizeMode` 不是 RAW(2)
+ * 或 `trim=true` ⇒ 4 帧 trim 包围盒不同（156~189）⇒ 逐帧忽大忽小；`_defaultClip` 空 ⇒ 不播。
+ */
+const BUILDING_DESTROY_FX_ROOT = 'assets/resources/units/effects/建筑死亡特效';
+const BUILDING_DESTROY_FX_NAME = '建筑死亡特效';
+/** 屏上目标宽度：与受击 / 出生同基准 110px（建筑本体归一宽 70，烟雾要盖得住它）。 */
+const BUILDING_DESTROY_FX_SCREEN_WIDTH = 110;
+const BUILDING_DESTROY_FX_FRAMES = 4;
+const BUILDING_DESTROY_FX_SIZE = 195;
+
+test('建筑死亡特效：四件套齐全、4 帧原始尺寸、clip 逐帧引用盘上的图', () => {
+    const dir = BUILDING_DESTROY_FX_ROOT;
+    const frames = readdirSync(`${dir}/atlas`).filter((f) => f.endsWith('.png'));
+    assert.equal(frames.length, BUILDING_DESTROY_FX_FRAMES, `应有 4 帧，实际 ${frames.length}`);
+    for (const frame of frames) {
+        assert.ok(existsSync(`${dir}/atlas/${frame}.meta`), `${frame} 缺 .meta —— 没交资源是静默失效`);
+    }
+    // 图集漏配**不报错**（只是 drawcall 高），所以必须显式钉住。
+    assert.ok(existsSync(`${dir}/atlas/${BUILDING_DESTROY_FX_NAME}.pac`), '缺 auto-atlas.pac（漏配不报错）');
+    assert.ok(existsSync(`${dir}/atlas/${BUILDING_DESTROY_FX_NAME}.pac.meta`), '缺 .pac.meta');
+    assert.ok(existsSync(`${dir}/anim/${BUILDING_DESTROY_FX_NAME}.anim`), '缺 anim');
+    assert.ok(existsSync(`${dir}/anim/${BUILDING_DESTROY_FX_NAME}.anim.meta`), '缺 anim.meta');
+    assert.ok(existsSync(`${dir}/${BUILDING_DESTROY_FX_NAME}.prefab`), '缺 prefab');
+    assert.ok(existsSync(`${dir}/${BUILDING_DESTROY_FX_NAME}.prefab.meta`), '缺 prefab.meta');
+
+    const anim = JSON.parse(readFileSync(`${dir}/anim/${BUILDING_DESTROY_FX_NAME}.anim`, 'utf8'));
+    const curve = anim._tracks[0]._channel._curve;
+    assert.equal(curve._values.length, BUILDING_DESTROY_FX_FRAMES, 'clip 必须逐帧引用 4 张图');
+    assert.equal(anim.sample, FPS, `sample 应 = ${FPS}（与死亡特效同帧率）`);
+    assert.ok(Math.abs(anim._duration - BUILDING_DESTROY_FX_FRAMES / FPS) < 1e-6,
+        `时长应 = 4/${FPS} ≈ 0.3333s，实际 ${anim._duration}`);
+    // wrapMode Normal(1)：播一次停在末帧。Loop(2) 会让烟雾反复炸。
+    assert.equal(anim.wrapMode, 1, 'wrapMode 必须是 Normal(1)');
+    // 每一帧都必须能在盘上找到（引用写错是「静默不播」）。
+    const frameUuids = new Set(frames.map((frame) => {
+        const meta = JSON.parse(readFileSync(`${dir}/atlas/${frame}.meta`, 'utf8'));
+        return meta.subMetas.f9941.uuid;
+    }));
+    for (const value of curve._values) {
+        assert.ok(frameUuids.has(value.__uuid__), `clip 引用了盘上不存在的帧 ${value.__uuid__}`);
+        assert.equal((value.__uuid__.match(/@/g) ?? []).length, 1, '子资源 uuid 只能有一个 @ 后缀');
+    }
+});
+
+test('建筑死亡特效：prefab 是 RAW + 不裁边 + UI_2D，尺寸与 _lscale 是唯一缩放旋钮', () => {
+    const prefab = readPrefab(`${BUILDING_DESTROY_FX_ROOT}/${BUILDING_DESTROY_FX_NAME}.prefab`);
+    const root = prefab[prefab[0].data.__id__];
+    // 层错了 = UI_2D 相机下完全看不见（这里曾踩过：MCP 存盘把 layer 落回 DEFAULT）。
+    assert.equal(root._layer, 33554432, 'layer 必须是 UI_2D');
+    assert.equal(root._children.length, 0, '特效 prefab 只有根节点');
+
+    const ui = findType(prefab, 'cc.UITransform')!;
+    assert.equal(ui._contentSize.width, BUILDING_DESTROY_FX_SIZE);
+    assert.equal(ui._contentSize.height, BUILDING_DESTROY_FX_SIZE);
+    assert.equal(ui._anchorPoint.x, 0.5);
+    assert.equal(ui._anchorPoint.y, 0.5);
+
+    const sprite = findType(prefab, 'cc.Sprite')!;
+    // 4 帧 trim 各不相同（156×160 ~ 189×187）⇒ 只有 RAW 是按统一画布渲染，否则逐帧抖。
+    assert.equal(sprite._sizeMode, 2, 'sizeMode 必须是 RAW(2)');
+    assert.equal(sprite._isTrimmedMode, false, 'trim 必须关（CUSTOM/RAW 都不许按帧裁边）');
+    assert.ok(sprite._spriteFrame?.__uuid__, '首帧必须烘在 prefab 上');
+    assert.ok(!Array.isArray(sprite._spriteFrame), '_spriteFrame 不能是空对象');
+
+    const anim = findType(prefab, 'cc.Animation')!;
+    // 与死亡 / 受击同口径（`playOnLoad = true`）。不影响正式路径：`playBuildingDestroyFx`
+    // 里先 `stop()` 再 `play()`，池化复用时也会被重置到第 0 帧。
+    assert.equal(anim.playOnLoad, true, 'playOnLoad 应与既有特效一致');
+    assert.ok(anim._defaultClip?.__uuid__, 'defaultClip 必须绑 anim，否则 play(name) 找不到 clip');
+    assert.deepEqual(anim._clips.map((c: { __uuid__: string }) => c.__uuid__), [anim._defaultClip.__uuid__],
+        '_clips 必须与 defaultClip 同源');
+
+    const expectedScale = BUILDING_DESTROY_FX_SCREEN_WIDTH / BUILDING_DESTROY_FX_SIZE;
+    assert.ok(Math.abs(root._lscale.x - expectedScale) < 1e-9,
+        `_lscale.x 应 = 110/195 = ${expectedScale}，实际 ${root._lscale.x}`);
+    assert.equal(root._lscale.x, root._lscale.y, '等比缩放');
+});
+
+test('建筑死亡特效：挂 mapLayer 播在格心、时长从 clip 读、播完回池、destroy 显式销毁', () => {
+    const { FakeNode, makeEffectPool } = loadViews();
+    const { effectPool, mapLayer } = makeEffectPool({ buildingDestroyFxPrefab: {
+        make: () => Object.assign(new FakeNode('BuildingDestroyFx'), {
+            getComponent: ((type: { name?: string }) => (type?.name === 'Animation'
+                ? fakeAnimation('building-destroy', BUILDING_DESTROY_FX_FRAMES / FPS)
+                : null)) as never,
+        }),
+    } });
+
+    effectPool.playBuildingDestroyFx(120, -60, 7, 0);
+    assert.equal(mapLayer.children.length, 1, '拆掉建筑那一帧应当播一团烟');
+    const fx = mapLayer.children[0];
+    assert.equal(fx.parent, mapLayer, '摧毁特效挂 mapLayer：那格的视图节点可能同帧切废墟 / 换图');
+    assert.deepEqual({ x: fx.position.x, y: fx.position.y }, { x: 120, y: -60 },
+        '坐标应取格心的视图坐标（模型只给 hexId，换算在渲染层）');
+
+    // 没播完不回收。
+    effectPool.recycleBuildingDestroyFx(0.32);
+    assert.equal(mapLayer.children.length, 1, '0.32s < 0.3333s 不该回收');
+    // 过了 clip 时长就回收 —— 这条确认「时长真从 clip 读」，不是写死。
+    effectPool.recycleBuildingDestroyFx(0.34);
+    assert.equal(mapLayer.children.length, 0, '播完应回收');
+    assert.equal(fx.parent, null, '回池前必须 removeFromParent');
+
+    // destroy() 必须显式销毁在播节点（特效不进 ECS，遍历收不到）。
+    effectPool.playBuildingDestroyFx(0, 0, 9, 1);
+    const alive = mapLayer.children[0];
+    effectPool.destroy();
+    assert.equal(alive.isValid, false, 'destroy() 必须销毁在播的摧毁特效');
+    assert.equal(mapLayer.children.length, 0, '销毁后 mapLayer 不应残留特效节点');
+});

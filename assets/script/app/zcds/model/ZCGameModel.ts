@@ -580,7 +580,10 @@ export class ZCGameModel {
 
     /** 一次性表现通知的唯一消费入口；由对局编排层取走后交给动态渲染。 */
     drainPresentationEvents(): ZCBattlePresentationEvents {
-        return { buildingShakes: this.presentation.drainBuildingShakes() };
+        return {
+            buildingShakes: this.presentation.drainBuildingShakes(),
+            buildingDestructions: this.presentation.drainBuildingDestructions(),
+        };
     }
 
     get terrainRevision(): number { return this.topologyRevision; }
@@ -1215,6 +1218,9 @@ export class ZCGameModel {
         if (!result.killed) return;
         this.tileStatesDirty = true;
         this.invalidateTerrain();
+        // 建筑已转废墟 —— 快照里从这一帧起只剩 `state === 'ruins'`，「刚被拆掉」这件事
+        // 只有这里知道。发一条通知让渲染层补白烟雾爆炸（坐标由渲染层按格心算）。
+        this.presentation.pushBuildingDestruction(building.id);
         this.grantGold(unit.owner, this.rules.destroyBuildingGoldReward,
             center.x, center.y, FLOAT_TEXT_GOLD_SECONDS);
         this.refreshTileStates();

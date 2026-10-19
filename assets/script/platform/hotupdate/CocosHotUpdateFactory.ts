@@ -1,5 +1,5 @@
 import type { NetworkTransport } from '../../core/network/NetworkTransport';
-import type { HotUpdateConfig, HotUpdateNativePlan, HotUpdatePlatform } from '../../core/update/HotUpdateTypes';
+import type { IHotUpdateConfig, IHotUpdateNativePlan, HotUpdatePlatform } from '../../core/update/HotUpdateTypes';
 import { EngineMain } from '../../engine/EngineMain';
 import { HotUpdateManager } from '../../app/update/HotUpdateManager';
 import { CocosBundleRuntime } from './CocosBundleRuntime';
@@ -10,7 +10,7 @@ import { NativeHotUpdateRuntime } from './NativeHotUpdateRuntime';
 
 export function createCocosHotUpdateManager(
     network: NetworkTransport,
-    config: HotUpdateConfig,
+    config: IHotUpdateConfig,
 ): HotUpdateManager {
     return new HotUpdateManager({
         network,
@@ -29,7 +29,7 @@ export function createCocosHotUpdateManager(
  */
 export function createNativeHotUpdateRuntime(
     network: NetworkTransport,
-    config: HotUpdateConfig,
+    config: IHotUpdateConfig,
 ): NativeHotUpdateRuntime {
     const store = new CocosHotUpdateStore();
     return new NativeHotUpdateRuntime({
@@ -46,8 +46,8 @@ export function createNativeHotUpdateRuntime(
  * 原生方案的 project.manifest 由引擎自己拉，客户端不代管）。
  */
 function createSignatureVerifier(
-    config: HotUpdateConfig,
-): ((plan: HotUpdateNativePlan) => Promise<boolean>) | undefined {
+    config: IHotUpdateConfig,
+): ((plan: IHotUpdateNativePlan) => Promise<boolean>) | undefined {
     type VerifyHook = (payload: string, signature: string, keyId?: string) => boolean | Promise<boolean>;
     const hook = (globalThis as { __CITY1001_VERIFY_HOT_UPDATE__?: VerifyHook }).__CITY1001_VERIFY_HOT_UPDATE__;
     if (!hook) return undefined;

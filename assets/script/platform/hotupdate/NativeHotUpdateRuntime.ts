@@ -7,23 +7,23 @@ import {
     resolveNativeStorageDirName,
 } from '../../core/update/HotUpdateNativePlan';
 import type {
-    HotUpdateConfig,
-    HotUpdateNativePlan,
+    IHotUpdateConfig,
+    IHotUpdateNativePlan,
     HotUpdatePlatform,
-    NativeHotUpdateProgress,
-    NativeHotUpdateResult,
+    INativeHotUpdateProgress,
+    INativeHotUpdateResult,
 } from '../../core/update/HotUpdateTypes';
-import type { NativeAssetsManager, NativeAssetsManagerEvent, NativeHotUpdateHost } from './NativeHotUpdateHost';
+import type { INativeAssetsManager, INativeAssetsManagerEvent, INativeHotUpdateHost } from './NativeHotUpdateHost';
 
-export interface NativeHotUpdateDependencies {
+export interface INativeHotUpdateDependencies {
     readonly network: NetworkTransport;
-    readonly host: NativeHotUpdateHost;
+    readonly host: INativeHotUpdateHost;
     /** 已探测到的运行平台；由组合根注入，便于测试覆盖各分支。 */
     readonly platform: HotUpdatePlatform;
     /** 客户端稳定标识来源（灰度分桶用）。 */
     readonly clientId: () => string;
     /** 可选验签：返回 false 时拒绝该 release。 */
-    readonly verifySignature?: (plan: HotUpdateNativePlan) => Promise<boolean>;
+    readonly verifySignature?: (plan: IHotUpdateNativePlan) => Promise<boolean>;
     readonly now?: () => number;
 }
 
@@ -40,12 +40,12 @@ export interface NativeHotUpdateDependencies {
  */
 export class NativeHotUpdateRuntime {
     private readonly now: () => number;
-    private manager: NativeAssetsManager | null = null;
+    private manager: INativeAssetsManager | null = null;
     private storagePath = '';
-    private plan: HotUpdateNativePlan | null = null;
+    private plan: IHotUpdateNativePlan | null = null;
     private retryEnabled = false;
 
-    constructor(private readonly dependencies: NativeHotUpdateDependencies) {
+    constructor(private readonly dependencies: INativeHotUpdateDependencies) {
         this.now = dependencies.now ?? (() => Date.now());
     }
 
@@ -59,10 +59,10 @@ export class NativeHotUpdateRuntime {
     }
 
     async run(
-        config: HotUpdateConfig,
-        onProgress?: (progress: NativeHotUpdateProgress) => void,
-    ): Promise<NativeHotUpdateResult> {
-        const emit = (progress: NativeHotUpdateProgress) => onProgress?.(progress);
+        config: IHotUpdateConfig,
+        onProgress?: (progress: INativeHotUpdateProgress) => void,
+    ): Promise<INativeHotUpdateResult> {
+        const emit = (progress: INativeHotUpdateProgress) => onProgress?.(progress);
         const platform = this.dependencies.platform;
         if (!config.enabled) {
             emit({ phase: 'done', message: '资源热更新未启用，使用随包资源' });
@@ -137,10 +137,10 @@ export class NativeHotUpdateRuntime {
      * 只重下失败项，已完成的文件与临时 manifest 都不会重来。
      */
     async retryFailedAssets(
-        config: HotUpdateConfig,
-        onProgress?: (progress: NativeHotUpdateProgress) => void,
-    ): Promise<NativeHotUpdateResult> {
-        const emit = (progress: NativeHotUpdateProgress) => onProgress?.(progress);
+        config: IHotUpdateConfig,
+        onProgress?: (progress: INativeHotUpdateProgress) => void,
+    ): Promise<INativeHotUpdateResult> {
+        const emit = (progress: INativeHotUpdateProgress) => onProgress?.(progress);
         if (!this.canRetryFailedAssets) {
             return { status: 'failed', canContinue: true, message: '当前没有可续传的资源' };
         }
@@ -164,7 +164,7 @@ export class NativeHotUpdateRuntime {
     }
 
     /** 更新成功后：前置搜索路径 + 持久化 + 重启。 */
-    private finishUpdate(config: HotUpdateConfig, emit: (progress: NativeHotUpdateProgress) => void): NativeHotUpdateResult {
+    private finishUpdate(config: IHotUpdateConfig, emit: (progress: INativeHotUpdateProgress) => void): INativeHotUpdateResult {
         const host = this.dependencies.host;
         emit({ phase: 'applying', message: '正在应用资源更新' });
         const manager = this.manager;
@@ -194,11 +194,11 @@ export class NativeHotUpdateRuntime {
      * `plan: null` = 控制文件不可用但有随包清单可自举，继续走官方原生流程。
      */
     private async loadPlan(
-        config: HotUpdateConfig,
-        emit: (progress: NativeHotUpdateProgress) => void,
+        config: IHotUpdateConfig,
+        emit: (progress: INativeHotUpdateProgress) => void,
     ): Promise<PlanOutcome> {
         const platform = this.dependencies.platform;
-        let plan: HotUpdateNativePlan;
+        let plan: IHotUpdateNativePlan;
         try {
             const raw = await this.dependencies.network.requestJson<unknown>({
                 url: appendCacheBust(this.expandLatestUrl(config.latestUrlTemplate, platform, config.channel), this.now()),
@@ -265,7 +265,7 @@ export class NativeHotUpdateRuntime {
     }
 
     /** 准备 AssetsManager：随包清单 + 版本比较函数 + 校验回调。 */
-    private prepareManager(config: HotUpdateConfig): NativeHotUpdateResult | null {
+    private prepareManager(config: IHotUpdateConfig): INativeHotUpdateResult | null {
         const host = this.dependencies.host;
         const localManifestPath = host.resolveLocalManifestPath(config.localManifestPath);
         if (!localManifestPath) {
@@ -343,7 +343,7 @@ export class NativeHotUpdateRuntime {
      * 因为只有这样才能复用已下载文件、避免每次启动全量重下。这里做一次交叉核对，
      * 用来暴露"渠道清单没跟着 release 走"这类发布事故。
      */
-    private assertPlanMatchesLocalManifest(localManifestPath: string, plan: HotUpdateNativePlan): void {
+    private assertPlanMatchesLocalManifest(localManifestPath: string, plan: IHotUpdateNativePlan): void {
         const host = this.dependencies.host;
         const text = host.readTextFile(localManifestPath);
         if (!text) return;
@@ -369,7 +369,7 @@ export class NativeHotUpdateRuntime {
             // 引擎的 `_eventCallback` 是**裸指针**，且 `dispatchUpdateEvent` 在
             // **下载线程**上同步调用它（引擎 C++ 无主线程切换）⇒ 换/置 null 之后
             // 若后台线程仍在派发事件，就是解引用野指针 ⇒ SEGV_MAPERR。
-            manager.setEventCallback((event: NativeAssetsManagerEvent) => {
+            manager.setEventCallback((event: INativeAssetsManagerEvent) => {
                 const code = event.getEventCode();
                 if (code === environment.NEW_VERSION_FOUND) {
                     resolve('new');
@@ -403,13 +403,13 @@ export class NativeHotUpdateRuntime {
      * 监听器在成功后解除；失败时保留，好让 downloadFailedAssets 继续回同一处。
      */
     private runUpdatePhase(
-        onProgress: ((progress: NativeHotUpdateProgress) => void) | undefined,
+        onProgress: ((progress: INativeHotUpdateProgress) => void) | undefined,
         trigger: () => void,
     ): Promise<void> {
         const manager = this.manager!;
         const environment = this.dependencies.host.environment;
         return new Promise<void>((resolve, reject) => {
-            manager.setEventCallback((event: NativeAssetsManagerEvent) => {
+            manager.setEventCallback((event: INativeAssetsManagerEvent) => {
                 const code = event.getEventCode();
                 if (code === environment.UPDATE_PROGRESSION) {
                     // ⚠️ 这些事件方法用 `?.` 取，不要用 `!` 断言：引擎不同版本的
@@ -482,7 +482,7 @@ export class NativeHotUpdateRuntime {
      * 引擎/大版本更替时 `src/cocos-js/cc.js` 与 C++ 底层可能不匹配，官方建议整包更新；
      * 万一没有整包，至少别让旧缓存盖住新包。
      */
-    private resetCacheOnClientVersionChange(config: HotUpdateConfig): void {
+    private resetCacheOnClientVersionChange(config: IHotUpdateConfig): void {
         const host = this.dependencies.host;
         const previous = host.readPersistedClientVersion();
         if (previous && previous !== config.clientVersion) {
@@ -507,15 +507,15 @@ export class NativeHotUpdateRuntime {
     }
 }
 
-function disabled(message: string): NativeHotUpdateResult {
+function disabled(message: string): INativeHotUpdateResult {
     return { status: 'disabled', canContinue: true, message };
 }
 
 type PlanOutcome =
-    | { readonly kind: 'plan'; readonly plan: HotUpdateNativePlan | null }
-    | { readonly kind: 'stop'; readonly result: NativeHotUpdateResult };
+    | { readonly kind: 'plan'; readonly plan: IHotUpdateNativePlan | null }
+    | { readonly kind: 'stop'; readonly result: INativeHotUpdateResult };
 
-function describeEvent(event: NativeAssetsManagerEvent, fallback: string): string {
+function describeEvent(event: INativeAssetsManagerEvent, fallback: string): string {
     const message = event.getMessage?.();
     const assetId = event.getAssetId?.();
     if (assetId) return `${fallback}：${assetId}${message ? ` (${message})` : ''}`;

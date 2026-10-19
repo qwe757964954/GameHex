@@ -53,6 +53,14 @@ const SPAWN_FX_URL = 'units/effects/出生特效/出生特效';
  */
 const DEATH_FX_URL = 'units/effects/死亡特效/死亡特效';
 /**
+ * 建筑**被拆掉**的白烟雾爆炸（`units/effects/建筑死亡特效`）。
+ *
+ * 4 帧 @12fps（原始像素 195×195，`_lscale=110/195` ⇒ 屏上 110px，与受击 / 出生同基准），
+ * 同一套三段式（`anim/*.anim` + `atlas/<名>.pac` + `<名>.prefab`）。
+ * 缺失时为 `null` —— 建筑照常变废墟，只是少这团烟。
+ */
+const BUILDING_DESTROY_FX_URL = 'units/effects/建筑死亡特效/建筑死亡特效';
+/**
  * 受击特效的**目录**，按攻击方职业取子目录。
  *
  * 美术给了 5 组，但只有 4 组能当"职业受击"用：`射手/战士/法师/坦克` 与 `ZCAttackTrait`
@@ -189,6 +197,13 @@ export interface ZCGamePreparedResources {
      */
     deathFxPrefab: Prefab | null;
     /**
+     * 建筑**被拆掉**时的白烟雾爆炸（`units/effects/建筑死亡特效`，4 帧 @12fps）。
+     *
+     *  建筑一被打掉地块就转 `ruins`，快照里看不出「刚被拆」⇒ 模型发一次性通知
+     *  （`buildingDestructions`），渲染层按 hexId 取格心播这一下。缺失时为 `null`。
+     */
+    buildingDestroyFxPrefab: Prefab | null;
+    /**
      * 受击特效，按**攻击方职业**索引（`units/effects/受击特效/<职业>受击`）。
      *
      *   键是 `ZCAttackTrait`（卡表 `traits.attack` 的四个职业），**不是**美术的目录全集 ——
@@ -283,6 +298,7 @@ export class ZCGameLoader {
             bossPanelPrefab,
             spawnFxPrefab,
             deathFxPrefab,
+            buildingDestroyFxPrefab,
             hitFxPrefabs,
             visualPrefabs,
             buildingFrames,
@@ -311,6 +327,7 @@ export class ZCGameLoader {
             this.assets.load(BOSS_PANEL_URL, Prefab, { scope }),
             this.loadSpawnFxPrefab(scope),
             this.loadDeathFxPrefab(scope),
+            this.loadBuildingDestroyFxPrefab(scope),
             this.loadHitFxPrefabs(scope),
             this.loadVisualPrefabs(scope),
             this.loadBuildingFrames(scope),
@@ -344,6 +361,7 @@ export class ZCGameLoader {
             bossPanelPrefab,
             spawnFxPrefab,
             deathFxPrefab,
+            buildingDestroyFxPrefab,
             hitFxPrefabs,
             unitVisualPrefabs: visualPrefabs.units,
             effectVisualPrefabs: visualPrefabs.effects,
@@ -516,6 +534,21 @@ export class ZCGameLoader {
             return await this.assets.load(DEATH_FX_URL, Prefab, { scope });
         } catch (error) {
             if (ZCDC_LOG_WARNINGS) console.warn(`[ZCGameLoader] 阵亡特效加载失败：${DEATH_FX_URL}`, error);
+            return null;
+        }
+    }
+
+    /**
+     * 加载建筑摧毁特效 prefab。失败不阻断整局 —— 与出生 / 阵亡特效同一套容错理由：
+     * 纯表现件缺失时建筑照常变废墟，只是少一层交代。
+     */
+    private async loadBuildingDestroyFxPrefab(scope?: ResourceScope): Promise<Prefab | null> {
+        try {
+            return await this.assets.load(BUILDING_DESTROY_FX_URL, Prefab, { scope });
+        } catch (error) {
+            if (ZCDC_LOG_WARNINGS) {
+                console.warn(`[ZCGameLoader] 建筑死亡特效加载失败：${BUILDING_DESTROY_FX_URL}`, error);
+            }
             return null;
         }
     }

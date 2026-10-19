@@ -1,10 +1,12 @@
-import { _decorator, CCInteger, Component, instantiate, Node, Prefab, Vec3 } from 'cc';
+import { _decorator, CCInteger, Component, instantiate, Layers, Node, Prefab, UITransform, Vec3, Widget } from 'cc';
 import type { AssetService } from '../../core/asset/AssetService';
+import type { ConfigService } from '../../core/config/ConfigService';
 import { TabButton } from '../common/TabButton';
 import { cardLineupNavItem, loadNavArt } from '../card/CardLineupNav';
 import { CardLineupPage } from '../card/CardLineupPage';
 import { checkFirstRechargeOnEnterMain } from '../firstRecharge/FirstRechargeAutoOpen';
 import { TerritoryPage } from '../territory/view/TerritoryPage';
+import { BigMapEntryButton } from '../bigmap/view/BigMapEntryButton';
 
 const { ccclass, property } = _decorator;
 
@@ -110,9 +112,22 @@ export class MainTabHost extends Component {
      */
     private assets: AssetService | null = null;
 
+    /**
+     * 配置入口，由 `ProcedureMain` 注入。
+     *
+     * 目前只有大世界入口用它：`BigMap-*` 12 张表要在打开页面时解析成强类型配置，
+     * 而 tab 页是 `instantiate` 出来的 prefab，同样拿不到流程依赖。
+     */
+    private configs: ConfigService | null = null;
+
     /** 注入资源入口；必须在实例化并激活页面之前调用（`ProcedureMain.onEnter` 里就是这么做的）。 */
     setAssetService(assets: AssetService): void {
         this.assets = assets;
+    }
+
+    /** 注入配置入口（大世界用；同样要在 setParent 之前调用）。 */
+    setConfigService(configs: ConfigService): void {
+        this.configs = configs;
     }
 
     onLoad(): void {
@@ -139,6 +154,29 @@ export class MainTabHost extends Component {
         // 表现在弹窗「闪一下」或盖在不存在的页面上。`checkFirstRechargeOnEnterMain`
         // 内部全 catch、永不 reject，所以这里的 `then` 不会漏出 unhandled rejection。
         void this.switchTab(this.defaultTab).then(() => checkFirstRechargeOnEnterMain(this));
+
+        this.createBigMapEntry();
+    }
+
+    /**
+     * 挂一个「大地图」悬浮入口（右下角、导航条上方）。
+     *
+     * 底部六格是既有版式，加第七格要动 `CARD_LINEUP_NAV_GROUP` 与那排 TabButton 的 prefab；
+     * 大世界是新增玩法且美术未定，先用独立悬浮按钮，改版式时直接挪这个节点即可。
+     */
+    private createBigMapEntry(): void {
+        if (!this.configs) return;
+        if (this.node.getChildByName('BigMapEntry')) return;
+        const entry = new Node('BigMapEntry');
+        entry.layer = Layers.Enum.UI_2D;
+        entry.addComponent(UITransform).setContentSize(132, 46);
+        const widget = entry.addComponent(Widget);
+        widget.isAlignRight = true;
+        widget.isAlignBottom = true;
+        widget.right = 24;
+        widget.bottom = 118;
+        entry.setParent(this.node);
+        entry.addComponent(BigMapEntryButton).initialize(this.configs);
     }
 
     /**

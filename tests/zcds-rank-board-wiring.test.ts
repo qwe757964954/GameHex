@@ -42,19 +42,35 @@ test('★★RankBtn 必须真的接到 openRankBoard（视图 emit + 控制器�
         '★视图不该再有回调契约 —— `initialize({ openRank: () => … })` 那套已换成 `ZCHudEvent`',
     );
 
-    // 控制器侧：五个意图**逐个**订阅（少订阅一个 = 那个按钮点了没反应且零报错）。
+    // 控制器侧：六个意图**逐个**订阅（少订阅一个 = 那个按钮点了没反应且零报错）。
     for (const [event, handler] of [
         ['UseArtifact', 'onHudUseArtifact'],
         ['OpenGuide', 'onHudOpenGuide'],
         ['OpenDamageStats', 'onHudOpenDamageStats'],
         ['OpenRank', 'onHudOpenRank'],
         ['Retreat', 'onHudRetreat'],
+        // R22 相机：镜头一键复位。纯表现动作也走中控 —— 破了这条就会退回
+        // 「视图持有控制器回调」的老路，漏接一个按钮同样是点了没反应。
+        ['ResetCamera', 'onHudResetCamera'],
     ]) {
         assert.ok(
             new RegExp(`EventMgr\\.instance\\.on\\(ZCGameUiEvent\\.${event},\\s*this\\.${handler},\\s*this\\)`).test(GAME_SRC),
             `★ZCGame.bindHudEvents 必须订阅 ZCGameUiEvent.${event} → ${handler}`,
         );
     }
+    // R22 相机：两条新的「按钮 → handler → emit」都要在，缺一环就是点了没反应。
+    assert.ok(
+        /resetCameraButton\.node\.on\(Button\.EventType\.CLICK,\s*this\.onResetCameraClick,\s*this\)/.test(HUD_SRC),
+        '★resetCameraButton 必须绑到 onResetCameraClick —— 声明了不绑等于没这按钮',
+    );
+    assert.ok(
+        /private onResetCameraClick\(\): void \{\s*EventMgr\.instance\.emit\(ZCGameUiEvent\.ResetCamera\);/.test(HUD_SRC),
+        '★onResetCameraClick 必须 emit ZCGameUiEvent.ResetCamera',
+    );
+    assert.ok(
+        /private onHudResetCamera\(\): void \{\s*this\.hudView\.resetCamera\(\);/.test(GAME_SRC),
+        '★onHudResetCamera 必须转给 hudView.resetCamera() —— 订阅了不转等于白订',
+    );
     assert.ok(
         /private openRankBoard\(\)/.test(GAME_SRC),
         'openRankBoard 方法不该被删 —— 它是排行榜的入口',

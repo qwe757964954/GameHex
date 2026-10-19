@@ -135,8 +135,9 @@ export class ZCUnitView extends Component {
     @property({ type: ProgressBar, group: '状态条', tooltip: 'HealthBar：单位生命值' })
     healthBar: ProgressBar = null!;
 
-    // 血条填充图：按阵营各一张（蓝湖「多队伍」稿的三队配色 —— 我方蓝 / 敌红 / 敌2 黄）。
-    // 第 4 家（enemy3）与敌共用红色：稿子只给了三色，不单独配色，见 healthBarFillOf。
+    // 血条填充图：按阵营各一张 —— 我方蓝 / 敌红 / 敌2 黄 / 敌3 紫（R25「不同阵营区分不同的血条」）。
+    // 紫图取自项目里已有但一直没人用的 `buildings/jindutiao_p.png`，不需要新美术；
+    // 四家的取值口径见 `ZCGameViewUtil.pickHealthBarFill`。
     @property({ type: SpriteFrame, group: '状态条', tooltip: '血条填充：我方（蓝）' })
     barFillPlayer: SpriteFrame = null!;
 
@@ -145,6 +146,9 @@ export class ZCUnitView extends Component {
 
     @property({ type: SpriteFrame, group: '状态条', tooltip: '血条填充：敌方 2（黄）' })
     barFillEnemy2: SpriteFrame = null!;
+
+    @property({ type: SpriteFrame, group: '状态条', tooltip: '血条填充：敌方 3（紫）' })
+    barFillEnemy3: SpriteFrame = null!;
 
     // 兵种视觉 prefab 的画布统一是 256×256、节点 98×98，可见身体约 56~74 宽 × 69 高。
     // 单位根节点现在是逻辑脚点，VisualRoot 上移 45.7px 后，美术脚底正好落在原点；
@@ -213,7 +217,7 @@ export class ZCUnitView extends Component {
     private observedHp: number | null = null;
     private barAppliedHp: number | null = null;
     private barAppliedMaxHp: number | null = null;
-    private barAppliedOwner: ZCUnitState['owner'] | null = null;
+    private barAppliedOwner: ZCOwner | null = null;
     private barAppliedOffsetY = Number.NaN;
     /** 本兵最后一次实际扣血的表现时间；null = 还没挨过打，血条不显示。 */
     private lastDamagedAt: number | null = null;
@@ -594,7 +598,8 @@ export class ZCUnitView extends Component {
         if (unit.hp !== this.barAppliedHp || unit.maxHp !== this.barAppliedMaxHp
             || unit.owner !== this.barAppliedOwner) {
             updateHealthBar(this.healthBar, unit.hp, unit.maxHp,
-                pickHealthBarFill(unit.owner, this.barFillPlayer, this.barFillEnemy, this.barFillEnemy2));
+                pickHealthBarFill(unit.owner, this.barFillPlayer, this.barFillEnemy,
+                    this.barFillEnemy2, this.barFillEnemy3));
             this.barAppliedHp = unit.hp;
             this.barAppliedMaxHp = unit.maxHp;
             this.barAppliedOwner = unit.owner;

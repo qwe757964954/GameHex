@@ -141,3 +141,25 @@ test('地图编辑器服务端：校验并保存自由装饰，拒绝非法尺�
         }
     });
 });
+
+test('map editor server preserves weighted neutral-resource pools and home-candidate ranges', async () => {
+    await withServer(async (base) => {
+        const id = 'probe-map-metadata';
+        try {
+            const preset = {
+                ...basePreset(id),
+                cityMode: 'select',
+                mirrorVertical: false,
+                ascii: Array(20).fill('00000000000'),
+                homeCandidates: [{ section: 1, cells: [1, 2] }],
+                resourcePoints: [{ row: 2, column: 2, pool: { gold: 1, chest: 4, unit_cap: 2 } }],
+            };
+            const response = await putPreset(base, id, preset);
+            assert.equal(response.status, 200, JSON.stringify(response.body));
+            assert.deepEqual(response.body.preset.homeCandidates, preset.homeCandidates);
+            assert.deepEqual(response.body.preset.resourcePoints, preset.resourcePoints);
+        } finally {
+            await fetch(`${base}/api/presets/${id}`, { method: 'DELETE' }).catch(() => {});
+        }
+    });
+});

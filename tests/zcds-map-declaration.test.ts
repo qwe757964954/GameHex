@@ -6,6 +6,9 @@ import {
     ZC_MAP_PLAYER_COUNT, ZC_PLAYER_HOME_ID, ZCMapLayout,
 } from '../assets/script/app/zcds/model/ZCGameModel';
 import { captureZCMatchConfig } from '../assets/script/app/zcds/model/ZCMatchConfig';
+import {
+    resolveZCMapZoom, ZC_MAP_ZOOM_MAX, ZC_MAP_ZOOM_MIN,
+} from '../assets/script/app/zcds/model/ZCMapConfig';
 import { loadPvpTables, ZCPvpTables } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
 
 //  `captureZCMatchConfig()` 的默认分支会读全局 PVP 表，先按 tests/zcds-neutral-map.test.ts 的口径装载。
@@ -177,5 +180,58 @@ test('地图目录里的每一张都在声明层可用，缺省为 2 人 / 固�
         }
     } finally {
         configureZCMap(legacyLayout);
+    }
+});
+
+/**
+ * R22「【战斗】相机」第 1 条：`局内战斗的支持地图缩放（每个地图配置对应的最大和最小倍率`。
+ *
+ * 判据分三层：
+ *  ① `resolveZCMapZoom` 的缺省与纠错口径（缺省 0.6/1.2、只配一半另一半走默认、
+ *     越界 / 非数字 / 上下限颠倒**抛错不静默夹取**）；
+ *  ② `configureZCMap` 把区间写进运行时绑定，`captureZCMatchConfig` 再带进本局快照
+ *     —— 中间任何一环漏了，HUD 那边拿到的就是默认值，地图配的倍率静默失效；
+ *  ③ 地图目录里的每一张都能过这一关（配错了在这个用例里当场炸，而不是开局才炸）。
+ */
+test('★★地图自己的镜头倍率区间：缺省 0.6/1.2，越界就抛，并经单局快照交给相机', () => {
+    // ① 纯函数口径
+    assert.deepEqual(resolveZCMapZoom(undefined), { min: 0.6, max: 1.2 }, '没配就走缺省');
+    assert.deepEqual(resolveZCMapZoom({}), { min: 0.6, max: 1.2 });
+    assert.deepEqual(resolveZCMapZoom({ zoomMin: 0.4 }), { min: 0.4, max: 1.2 }, '只配一半，另一半走默认');
+    assert.deepEqual(resolveZCMapZoom({ zoomMax: 1.4 }), { min: 0.6, max: 1.4 });
+    assert.deepEqual(resolveZCMapZoom({ zoomMin: 0.3, zoomMax: 1.5 }), { min: 0.3, max: 1.5 }, '硬边界本身应放行');
+    // 越界 / 非数字 / 上下限颠倒：**抛**，不夹 —— 静默夹取会让"配错了"这件事从表现上看不出来。
+    assert.throws(() => resolveZCMapZoom({ zoomMin: 0.2 }), /zoomMin/, '低于硬下界应抛');
+    assert.throws(() => resolveZCMapZoom({ zoomMax: 1.6 }), /zoomMax/, '高于硬上界应抛');
+    assert.throws(() => resolveZCMapZoom({ zoomMin: '0.8' as unknown as number }), /必须是数字/, '字符串应抛');
+    assert.throws(() => resolveZCMapZoom({ zoomMin: NaN }), /必须是数字/, 'NaN 应抛');
+    assert.throws(() => resolveZCMapZoom({ zoomMin: Infinity }), /必须是数字/, 'Infinity 应抛');
+    assert.throws(() => resolveZCMapZoom({ zoomMin: 1.1, zoomMax: 0.9 }), /下限.*大于上限/, '上下限颠倒应抛');
+
+    // ② 真的配到地图上 → 写进运行时 → 进本局快照
+    configureZCMap(mapLayout({ zoomMin: 0.45, zoomMax: 1.35 }));
+    try {
+        assert.equal(ZC_MAP_ZOOM_MIN, 0.45);
+        assert.equal(ZC_MAP_ZOOM_MAX, 1.35);
+        const match = captureZCMatchConfig();
+        assert.equal(match.map.zoomMin, 0.45, '★快照必须带上地图自己的下限，否则 HUD 只会用默认值');
+        assert.equal(match.map.zoomMax, 1.35, '★快照必须带上地图自己的上限');
+    } finally {
+        configureZCMap(legacyLayout);
+    }
+    // 没配的地图落回缺省（不是上一张图的残留 —— `configureZCMap` 每次都重算）。
+    try {
+        const match = captureZCMatchConfig();
+        assert.equal(match.map.zoomMin, 0.6);
+        assert.equal(match.map.zoomMax, 1.2);
+    } finally {
+        configureZCMap(legacyLayout);
+    }
+
+    // ③ 地图目录里的每一张都过得了这一关
+    const directory = `assets/resources/${MAP_DIRECTORY}`;
+    for (const name of readdirSync(directory).filter((entry) => entry.endsWith('.json'))) {
+        const source = JSON.parse(readFileSync(`${directory}/${name}`, 'utf8')) as ZCMapLayout;
+        assert.doesNotThrow(() => resolveZCMapZoom(source), `${name} 的镜头倍率配置不合法`);
     }
 });

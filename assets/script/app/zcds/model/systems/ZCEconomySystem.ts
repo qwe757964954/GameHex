@@ -1,5 +1,6 @@
 import type { ZCDeckBonuses, ZCDeckCard, ZCUnitDefinition } from '../ZCCombatCatalog';
 import type { ZCRuntimeRules } from '../ZCGameRuntimeConfig';
+import { ZCBuildingPhase } from '../ZCGameTypes';
 import type { ZCBuildingCooldownState, ZCHexState, ZCSnapshot } from '../ZCGameTypes';
 import type { ZCOwner } from '../ZCMapConfig';
 import type { ZCUnitStatPatch } from '../ZCModifierRuntime';
@@ -147,7 +148,7 @@ export class ZCEconomySystem {
             const total = Math.max(0.001, hex.constructionTotalSeconds);
             const remaining = Math.min(total, hex.constructionRemainingSeconds);
             return {
-                phase: 'construction',
+                phase: ZCBuildingPhase.Construction,
                 progress: Math.max(0, Math.min(1, 1 - remaining / total)),
                 remainingSeconds: remaining,
                 totalSeconds: total,
@@ -155,9 +156,9 @@ export class ZCEconomySystem {
             };
         }
         if (hex.building !== 'hq' && !card) return null;
-        const phase = hex.building === 'hq' ? 'income'
-            : hex.building === 'mine' ? 'income'
-                : hex.building === 'barracks' ? 'spawn' : 'attack';
+        const phase = hex.building === 'hq' ? ZCBuildingPhase.Income
+            : hex.building === 'mine' ? ZCBuildingPhase.Income
+                : hex.building === 'barracks' ? ZCBuildingPhase.Spawn : ZCBuildingPhase.Attack;
         const total = Math.max(0.001, cycleSeconds);
         const clock = hex.building === 'hq'
             ? state.incomeClock

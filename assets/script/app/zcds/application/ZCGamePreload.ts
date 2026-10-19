@@ -4,6 +4,13 @@ import type { MatchPlayerData } from '../../matching/MatchTypes';
 import type { ZCGameLoader, ZCGamePreparedResources } from './ZCGameLoader';
 import type { ITerritorySaveOwner } from '../../territory/model/TerritorySaveStore';
 
+/** 对局入口模式：PVP 匹配 或 领地守城 PVE。 */
+export const ZCGamePreloadMode = {
+    Match: 'match',
+    Defence: 'defence',
+} as const;
+export type ZCGamePreloadMode = (typeof ZCGamePreloadMode)[keyof typeof ZCGamePreloadMode];
+
 export interface ZCGameEntryParams {
     opponent?: MatchPlayerData;
     /** 领地/冒险绕过 PVP 匹配，携带关卡数据直接进入本地 PVE。 */
@@ -14,7 +21,7 @@ export interface ZCGameEntryParams {
         territoryCellId: number;
         /** 捕获发起战斗时的存档归属，结算不读取可能已切换的当前角色。 */
         territorySaveOwner: ITerritorySaveOwner | null;
-        mode: 'match' | 'defence';
+        mode: ZCGamePreloadMode;
         enemyName: string;
         /** 关卡 NPC / 塔防波次投影出的 pvpCard ID；为空时沿用默认 AI 卡组。 */
         enemyCardIds: number[];

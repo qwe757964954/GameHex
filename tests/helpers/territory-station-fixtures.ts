@@ -65,8 +65,10 @@ export class FakeNode {
         return this.uiTransform;
     }
 
+    /** 幂等（与 cc `EventTarget.on` 同语义）：同 (event, callback, target) 只注册一份。 */
     on(event: string, callback: (...args: unknown[]) => void, target: unknown): void {
         const listeners = this.listeners.get(event) ?? [];
+        if (listeners.some((entry) => entry.callback === callback && entry.target === target)) return;
         listeners.push({ callback, target });
         this.listeners.set(event, listeners);
     }

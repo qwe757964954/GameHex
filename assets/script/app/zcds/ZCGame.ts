@@ -26,14 +26,14 @@ import { createSeededRandom } from './model/ZCSeededRandom';
 import { buildRankSeats, type IRankSeat, type IRankSeatProfile } from './model/ZCRankBoard';
 import { ZCGameRankBoard } from './view/ZCGameRankBoard';
 // `ZC_OWNER_ORDER` 是值（遍历本局全部 owner 的卡池），不是纯类型。
-import { ZC_OWNER_ORDER, type ZCOwner } from './model/ZCMapConfig';
+import { ZC_OWNER_ORDER, resolveZCMapZoom, type ZCOwner } from './model/ZCMapConfig';
 import { captureZCMatchConfig } from './model/ZCMatchConfig';
 import type { ZCMatchConfig, ZCMatchMap } from './model/ZCMatchConfig';
 import { resolveZCMapResources, resolveZCSpawnMatchConfig, ZCSpawnSelection } from './model/ZCSpawnSelection';
 import { ZCSpawnSelectionView } from './view/ZCSpawnSelectionView';
 import { ZCHudBossPanel } from './view/ZCHudBossPanel';
 import { buildZCClientCombatConfig } from './application/ZCClientCombatConfig';
-import { ZCBattlePhaseController } from './application/ZCBattlePhaseController';
+import { ZCBattlePhase, ZCBattlePhaseController } from './application/ZCBattlePhaseController';
 import { FW } from '../../framework/FW';
 import { GameRoute } from '../../core/runtime/GameRoute';
 import { ProcedureManager } from '../../framework/procedure/ProcedureManager';
@@ -147,7 +147,7 @@ export class ZCGame extends Component {
     private readonly bossNames: Map<string, string> = new Map();
 
     private get settlementOpened(): boolean {
-        return this.phase.current === 'settlement';
+        return this.phase.current === ZCBattlePhase.Settlement;
     }
 
     private get leaving(): boolean {
@@ -443,6 +443,11 @@ export class ZCGame extends Component {
         // 自选主城图此时还没有主城坐标（`playerHomeId = -1`），落点留空，
         // 由 `finishSpawnSelection` 在选点完成后补上。
         this.hudView.setMapFocus(buildPlayerHomeFocus(setupConfig.map));
+        // 本局地图自己的镜头倍率区间（地图 JSON 的 zoomMin / zoomMax，缺省 0.6~1.2）。
+        // 必须在 initialize 之前注入 —— 入场镜头的收尾倍率就是拿这个区间夹出来的。
+        const zoom = resolveZCMapZoom(setupConfig.map);
+        this.hudView.setMapZoomRange(zoom.min, zoom.max);
+
         const selectingSpawn = (setupConfig.map.cityMode ?? 'fixed') === 'select';
         // 视图只派发意图事件（`ZCGameUiEvent`，走中控）；订阅统一在 `bindUiEvents`。
         this.hudView.initialize({ deferMapIntro: selectingSpawn });
@@ -548,6 +553,7 @@ export class ZCGame extends Component {
         EventMgr.instance.on(ZCGameUiEvent.OpenDamageStats, this.onHudOpenDamageStats, this);
         EventMgr.instance.on(ZCGameUiEvent.OpenRank, this.onHudOpenRank, this);
         EventMgr.instance.on(ZCGameUiEvent.Retreat, this.onHudRetreat, this);
+        EventMgr.instance.on(ZCGameUiEvent.ResetCamera, this.onHudResetCamera, this);
         // 结算页：弹窗由 PopupManager 异步建，但订阅在中控上 ⇒ 这里注册一次就够，不必等 `open` 兑现
         EventMgr.instance.on(ZCGameUiEvent.SettlementConfirm, this.onSettlementConfirm, this);
         // 伤害统计弹窗的「返回主界面」（与结算页确定同一条收尾）
@@ -589,6 +595,16 @@ export class ZCGame extends Component {
 
     private onHudRetreat(): void {
         this.openSettlement(true);
+    }
+
+    /**
+     * 镜头一键复位。
+     *
+     * 纯表现动作，不碰模型与对局状态 —— 但仍然走事件中控：视图只派发意图这一条不能破
+     * （破了就会退回"视图持有控制器回调"的老路，漏接一个按钮 = 点了没反应且零报错）。
+     */
+    private onHudResetCamera(): void {
+        this.hudView.resetCamera();
     }
 
     private onHexClick(hexId: number): void {
@@ -755,8 +771,14 @@ export class ZCGame extends Component {
         // 选点定下来才拿得到我方主城坐标；`setSpawnSelectionMode(false)` 紧接着播入场镜头，
         // 落点必须在那之前注入，否则镜头又落回整盘中心。
         this.hudView.setMapFocus(buildPlayerHomeFocus(matchConfig.map));
+        // 自选主城图的区间同样在这里补一次：`createGame` 那次注入用的是入口快照，
+        // 而选点结束后重新解析过配置（这一份才是本局真正生效的）。
+        const zoom = resolveZCMapZoom(matchConfig.map);
+        this.hudView.setMapZoomRange(zoom.min, zoom.max);
         this.hudView.setSpawnSelectionMode(false);
+
         this.model = new ZCGameModel(null, this.matchRandom, matchConfig);
+        this.model.recordSpawnSelection();
         this.phase.startPlaying();
         const frame = this.model.createRenderFrame();
         this.renderWorld.render(frame, this.model.drainPresentationEvents());

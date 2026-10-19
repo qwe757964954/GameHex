@@ -11,6 +11,7 @@ import {
     HEX_GRID_VIEW_ROW_SPACING,
 } from '../../../core/hex/HexGridLayout';
 import type { ZCFaction, ZCOwner } from '../model/ZCMapConfig';
+import type { ZCNeutralResourceId } from '../model/ZCNeutralResourceReward';
 
 export const ZC_MAP_PRESENTATION_SCALE = 1;
 
@@ -128,18 +129,28 @@ export function isHealthBarVisible(lastDamagedAt: number | null, now: number): b
 }
 
 /**
- * 阵营 → 血条填充图。`enemy3` 与 `enemy` 共用同一张 ——
- * 蓝湖「多队伍」稿只给了三队配色（我方蓝 / 敌红 / 敌2 黄），第 4 家不单独出图。
+ * 阵营 → 血条填充图。四家各一张：我方蓝 / 敌红 / 敌2 黄 / 敌3 紫。
+ *
+ * R25「不同阵营区分不同的血条」：第 4 家原本与 `enemy` 共用红图（蓝湖「多队伍」稿只出了三色），
+ * 四家同场时两条红条分不清谁是谁。紫色取自项目里**已有但一直没用**的 `buildings/jindutiao_p.png`
+ * （实测 `#8b5af5`，与 `ZC_CLIENT_COLORS.enemy3Edge` 的 `#bd49fb` 同色相系），所以不需要新美术。
+ *
+ * 穷举写 `switch` 而不是 `if` 链：四个席位一眼能对完，新增席位时这行是唯一要动的地方。
+ * `default` 只兜 `neutral` 与未来可能出现的野怪席位 —— 它们没有「血条阵营色」这个概念，统一按敌方红。
  */
 export function pickHealthBarFill(
     owner: ZCFaction,
     player: SpriteFrame,
     enemy: SpriteFrame,
     enemy2: SpriteFrame,
+    enemy3: SpriteFrame,
 ): SpriteFrame {
-    if (owner === 'player') return player;
-    if (owner === 'enemy2') return enemy2;
-    return enemy;
+    switch (owner) {
+        case 'player': return player;
+        case 'enemy2': return enemy2;
+        case 'enemy3': return enemy3;
+        default: return enemy;
+    }
 }
 
 /** 血条按阵营换填充图（贴图自带颜色，不再走 `color` 染色），并刷新比例与可见性。 */
@@ -275,61 +286,23 @@ export function floatTextDrift(progress: number, entranceProgress: number = FLOA
 export const FLOAT_TEXT_DRIFT_DISTANCE = 7;
 
 
-// 生成单位抖动：「Y 拉 110% 回落 → X 拉 110% 回落」两段脉冲。
-//  - 单位出生抖动：`ZCUnitView.playSpawnShake`（新兵自己抖一下）；
-//  - 建筑生成抖动：`ZCHexView.playBuildingShake`（建筑模型自己抖一下，需求 2026-10-15）。
+// 生成单位抖动：「Y 拉 120% 回落 → X 拉 120% 回落」两段脉冲。
+//  - 单位出生抖动：`ZCUnitView.playSpawnShake`（新兵自己抖一下，110% 档）；
+//  - 建筑生成抖动：`ZCHexView.playBuildingShake`（建筑模型自己抖一下，需求 2026-10-15，120% 档）。
 // 两者共用同一条脉冲，只有「谁在抖」不同：单位抖的是单位节点，建筑抖的是 BuildingIcon。
-
-
-/** 出生抖动的拉伸量：110% = 1 + 0.1。**单位**自己出生那一下用它（建筑看 `BUILDING_SHAKE_STRETCH`）。 */
-export const SPAWN_SHAKE_STRETCH = 0.1;
-/**
- * **建筑**抖动的拉伸量：120% = 1 + 0.2（需求 2026-10-15 row12 原文：
- * 「同时优化【建筑生成动画】，**建筑模型放大比例从 110% 改成 120%**」）。
- *
- * 与 `SPAWN_SHAKE_STRETCH` 分开的理由：需求只让**建筑模型**放大，单位自己出生那一下
- * 仍按早先的口径 110%（`ZCUnitView.playSpawnShake` 走默认档）。
- *
- * 🔴 口径说明（免得后人以为这里写错了）：这条抖动最初是 110%（row5 的
- * 「建筑节点快速抖动：先是 Y 轴变成 1.1，回落到 1，再是 X 轴 1.1」），row12 明确把它抬到 120%。
- * 同一条需求里的「【建筑生成动画】」也可以读成「建筑由小长出来的那一段」
- * （`elasticPopScale`，峰值 `POP_PEAK_SCALE` **本来就是 1.2**）—— 两种读法下
- * 「建筑模型的放大比例 = 120%」这句都成立，所以这里只抬抖动这一处，`POP_PEAK_SCALE` 保持 1.2。
- */
-export const BUILDING_SHAKE_STRETCH = 0.2;
-/** 单段（Y 或 X）抖动的时长（秒）；Y 先 X 后，共两段。 */
-export const SPAWN_SHAKE_PHASE_SECONDS = 0.12;
-/** 单次抖动的**总时长**（秒）= Y 段 + X 段。过了它就该复位。 */
-export const SPAWN_SHAKE_TOTAL_SECONDS = SPAWN_SHAKE_PHASE_SECONDS * 2;
-
-/**
- * 单段抖动脉冲（纯函数）：`t ∈ [0,1]` 内 `1 → 1+stretch → 1`（正弦脉冲，出手顺滑无尖点）。
- * 两段顺序由调用方拼：先 Y（scaleX 恒 1）、后 X（scaleY 恒 1）。
- *
- * `stretch` 缺省是**单位**那档（110%）；建筑传 `BUILDING_SHAKE_STRETCH`（120%）——
- * 同一条脉冲只差"拉多少"，形状与相位完全一致。
- */
-export function spawnShakePulse(t: number, stretch: number = SPAWN_SHAKE_STRETCH): number {
-    const k = t < 0 ? 0 : t > 1 ? 1 : t;
-    return 1 + stretch * Math.sin(Math.PI * k);
-}
-
-/**
- * 生成抖动在「已用时（秒）」下的 **Y 轴**缩放因子（纯函数）：**先拉 Y**（前段 `0~PHASE`），
- * 之后恒 1。与 `spawnShakeScaleX` 拼出需求要的「先 Y 后 X」两段。
- */
-export function spawnShakeScaleY(elapsedSeconds: number, stretch: number = SPAWN_SHAKE_STRETCH): number {
-    return spawnShakePulse(elapsedSeconds / SPAWN_SHAKE_PHASE_SECONDS, stretch);
-}
-
-/**
- * 生成抖动在「已用时（秒）」下的 **X 轴**缩放因子（纯函数）：**后拉 X**（后段 `PHASE~2PHASE`），
- * 前段恒 1。与 `spawnShakeScaleY` 同源，只差一个相位平移。
- */
-export function spawnShakeScaleX(elapsedSeconds: number, stretch: number = SPAWN_SHAKE_STRETCH): number {
-    return spawnShakePulse(
-        (elapsedSeconds - SPAWN_SHAKE_PHASE_SECONDS) / SPAWN_SHAKE_PHASE_SECONDS, stretch);
-}
+//
+// 🔴 **曲线本身已挪到 `core/hex/ShakePresentation`**（2026-10-16 row14：领地冒险也要播同一条
+//    建筑抖动，而 `app/territory` 不许反向依赖 `app/zcds`）。这里**原样转发**，
+//    对局侧既有的 `from './ZCGameViewUtil'` 写法与数值全部不变；真源只有 core 那一处。
+export {
+    BUILDING_SHAKE_STRETCH,
+    SPAWN_SHAKE_PHASE_SECONDS,
+    SPAWN_SHAKE_STRETCH,
+    SPAWN_SHAKE_TOTAL_SECONDS,
+    spawnShakePulse,
+    spawnShakeScaleX,
+    spawnShakeScaleY,
+} from '../../../core/hex/ShakePresentation';
 
 
 // 选择基地：跟随基地的【确认位置】按钮落点。
@@ -367,7 +340,7 @@ export function spawnBaseConfirmPoint(base: { x: number; y: number }): { x: numb
  * 提示的目标资源 id —— 需求原文「给**金矿**图标所在的地块格子增加一个整体的描边闪烁，
  * 提示玩家点击金矿」。`mine` 是中立资源表里「金矿」的 id（见 `ZCNeutralResourceReward`）。
  */
-export const ZC_NEUTRAL_HINT_RESOURCE_ID = 'mine';
+export const ZC_NEUTRAL_HINT_RESOURCE_ID: ZCNeutralResourceId = 'mine';
 /** 闪烁一个完整周期的时长（秒）。约 1.1s ⇒ 读起来是「一呼一吸」，不是频闪。 */
 export const ZC_NEUTRAL_HINT_CYCLE_SECONDS = 1.1;
 /** 闪几个周期。4 个周期足够被看见，又不会一直分散注意力。 */

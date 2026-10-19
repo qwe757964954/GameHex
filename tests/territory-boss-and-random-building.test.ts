@@ -135,13 +135,13 @@ test('★★所有战斗站点（stage/boss/asyncPvp）都走开战流程，绝�
     //    不剥 ⇒ 旧口径被注释复活成**假绿**（规则 104 的同款陷阱）。
     const code = codeOf(select);
     // 新口径：站点类型 = stage / boss / asyncPvp ⇒ 两步式（解锁 → 再点开战）。
-    assert.match(code, /if \(site\.type === 'stage' \|\| site\.type === 'boss' \|\| site\.type === 'asyncPvp'\)/,
+    assert.match(code, /if \(site\.type === TERRITORY_SITE_TYPE\.stage \|\| site\.type === TERRITORY_SITE_TYPE\.boss \|\| site\.type === TERRITORY_SITE_TYPE\.asyncPvp\)/,
         '战斗站点必须按类型分流，不再认 cellId 名单');
     assert.ok(!/isTerritoryTwoStepCell/.test(code),
         '不许再按格子 id 名单判定（每加一关改一次代码，漏改的症状是「点了没反应」且零报错）');
     assert.ok(!/bossStage\?\.isBoss/.test(code),
         'isBoss 不再当准入条件（levelMod=1 的普通关卡照样要能打）');
-    const stageAt = code.indexOf("site.type === 'stage'");
+    const stageAt = code.indexOf('site.type === TERRITORY_SITE_TYPE.stage');
     const battleAt = code.indexOf('handleBattleStationStart');
     assert.ok(stageAt >= 0 && battleAt > stageAt,
         '关卡分支必须通向 handleBattleStationStart（走 CmdStartBattleReqMsg）');
@@ -236,11 +236,11 @@ test('★★★★关卡/首领/异步据点没配buildingId 必须 return null�
     //    视觉上仍是「一片区域到处是建筑」，且零报错。
     // 🔴 2026-10-16 山猫「异步战点也要跟 Boss 一样，通关 / 解锁都是有建筑 id 才显示建筑」
     //    ⇒ `asyncPvp` 并入本名单（chapter_01 的 16 个异步据点只有 4 个配了 69002）。
-    assert.match(code, /if\s*\(site\.type === 'stage' \|\| site\.type === 'boss' \|\| site\.type === 'asyncPvp'\) return null;/,
+    assert.match(code, /if\s*\(site\.type === TERRITORY_SITE_TYPE\.stage \|\| site\.type === TERRITORY_SITE_TYPE\.boss \|\| site\.type === TERRITORY_SITE_TYPE\.asyncPvp\) return null;/,
         'stage/boss/asyncPvp 没配 buildingId 时必须直接 return null（不能落到 TERRITORY_SITE_ART 回退）');
     // 反向守卫：`asyncPvp` **不许**从这条早退里掉队 —— 掉了就是「异步据点又回到按 type 取图」，
     // 症状是没配 id 的 12 个异步据点全部长成同一个敌方主城外观（零报错）。
-    assert.doesNotMatch(code, /site\.type === 'stage' \|\| site\.type === 'boss'\) return null;/,
+    assert.doesNotMatch(code, /site\.type === TERRITORY_SITE_TYPE\.stage \|\| site\.type === TERRITORY_SITE_TYPE\.boss\) return null;/,
         'asyncPvp 必须在这条早退里，别被"精简"回 stage/boss 两条');
 
     // 反向：type 回退仍保留，但只能服务于 fixedResource / bonus。
@@ -248,7 +248,7 @@ test('★★★★关卡/首领/异步据点没配buildingId 必须 return null�
     assert.match(code, /TERRITORY_SITE_ART\[site\.type\]/,
         '非战斗类站点仍按 type 取图（fixedResource/bonus 没配 buildingId 也得有图）');
     // 🔴 早退必须**在** type 回退**之前**，否则等于没改。
-    assert.ok(code.indexOf("site.type === 'stage'") < code.indexOf('TERRITORY_SITE_ART'),
+    assert.ok(code.indexOf('site.type === TERRITORY_SITE_TYPE.stage') < code.indexOf('TERRITORY_SITE_ART'),
         '三类战斗站点的 null 早退必须排在 TERRITORY_SITE_ART 回退之前');
 });
 

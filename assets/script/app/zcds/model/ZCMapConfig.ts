@@ -1,5 +1,7 @@
 /** 地图 JSON 校验、分区 / 镜像配对与六边形棋盘构建；不依赖对局规则。 */
 import { hexGridLogicalPoint } from '../../../core/hex/HexGridLayout';
+import { isZCNeutralResourceId } from './ZCNeutralResourceReward';
+import type { ZCNeutralResourceId } from './ZCNeutralResourceReward';
 
 export const ZC_OWNER_ORDER = ['player', 'enemy', 'enemy2', 'enemy3'] as const;
 export type ZCOwner = typeof ZC_OWNER_ORDER[number];
@@ -87,6 +89,11 @@ export interface ZCMapRegion {
     text?: string;
 }
 
+export interface ZCMapHomeCandidates {
+    section: number;
+    cells: number[];
+}
+
 /** 中立资源点位：开局据此抽取生成中立资源的固定格。 */
 export interface ZCMapResourcePoint {
     row: number;
@@ -104,7 +111,7 @@ export interface ZCMapResolvedResource {
     hexId: number;
     section: number;
     depth?: ZCDepth;
-    resourceId: string;
+    resourceId: ZCNeutralResourceId;
 }
 
 /** 可调间距参数（六边形最短路径，单位＝格）。 */
@@ -191,12 +198,23 @@ export interface ZCMapLayout {
     homes?: ZCMapHome[];
     /** v3：各分区的前 / 中 / 后区域；未圈画时省略。 */
     regions?: ZCMapRegion[];
+    homeCandidates?: ZCMapHomeCandidates[];
     /** v3：中立格资源点位；无点位时省略。 */
     resourcePoints?: ZCMapResourcePoint[];
     /** v3：可调间距参数。 */
     spacing?: ZCMapSpacing;
     /** v3：美术配置。 */
     art?: ZCMapArt;
+    /**
+     * v3：局内镜头的**最小 / 最大倍率**（R22 相机：「每个地图配置对应的最大和最小倍率」）。
+     *
+     *  ⚠️ 这是**同一对**参数的两半，只配一半时另一半走默认值（不是「不生效」）——
+     *  见 `resolveZCMapZoom`。缺省 `0.6 / 1.2`（旧工程 `NodeMoveScale` 的手感）。
+     *  改字段要连 `tools/map-editor/app.js` 的 passthrough 白名单一起改，
+     *  否则编辑器另存一次就把这两个键**静默丢掉**。
+     */
+    zoomMin?: number;
+    zoomMax?: number;
 }
 
 /**
@@ -236,6 +254,55 @@ export const ZC_DEFAULT_HOME_MIN_DISTANCE = 2;
 export const ZC_DEFAULT_RESOURCE_MIN_DISTANCE = 3;
 /** 点位最小间距的下限：不足 3 格时两点位会存在共同相邻格。 */
 export const ZC_RESOURCE_MIN_DISTANCE_FLOOR = 3;
+/**
+ * 地图没写 `zoomMin` / `zoomMax` 时的兜底倍率（R22 相机）。
+ *
+ *  取 `0.6 / 1.2` 是有意的：旧工程 `NodeMoveScale` 就是「最小 0.6、最大 1.2」的手感，
+ *  老玩家对这个范围的肌肉记忆可以直接沿用；`1`（`ZC_MAP_PRESENTATION_SCALE`）是默认机位。
+ */
+export const ZC_MAP_ZOOM_MIN_DEFAULT = 0.6;
+export const ZC_MAP_ZOOM_MAX_DEFAULT = 1.2;
+/**
+ * 倍率的**硬**边界：任何地图都不许配到范围外。
+ *
+ *  下界 `0.3`：再小就连整盘都糊成一片（且小于多数地图的全景倍率，没有意义）；
+ *  上界 `1.5`：地块贴图按 1 倍出图，放到 1.5 已经能看出像素块。
+ */
+export const ZC_MAP_ZOOM_HARD_MIN = 0.3;
+export const ZC_MAP_ZOOM_HARD_MAX = 1.5;
+
+/** 一局地图的镜头倍率范围（已补默认值、已过校验）。 */
+export interface IZCMapZoom {
+    readonly min: number;
+    readonly max: number;
+}
+
+/**
+ * 解析地图声明的镜头倍率范围 —— **只此一处**，`configureZCMap` 与地图编辑器共用同一口径。
+ *
+ *  规则：缺省整个走默认；只配一半时另一半走默认（不是「不生效」）；
+ *  越界（含 NaN / 非数字 / 上下限颠倒）**直接抛**，不静默夹取 ——
+ *  静默夹取会让「地图配错了」表现成「缩放偶尔不动」，排查成本极高。
+ */
+export function resolveZCMapZoom(
+    layout: { zoomMin?: unknown; zoomMax?: unknown } | null | undefined,
+): IZCMapZoom {
+    const pick = (value: unknown, fallback: number, label: string): number => {
+        if (value === undefined || value === null) return fallback;
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
+            throw new Error(`地图镜头倍率 ${label} 必须是数字`);
+        }
+        if (value < ZC_MAP_ZOOM_HARD_MIN || value > ZC_MAP_ZOOM_HARD_MAX) {
+            throw new Error(`地图镜头倍率 ${label} 必须在 ${ZC_MAP_ZOOM_HARD_MIN} ~ ${ZC_MAP_ZOOM_HARD_MAX} 之间`);
+        }
+        return value;
+    };
+    const min = pick(layout?.zoomMin, ZC_MAP_ZOOM_MIN_DEFAULT, 'zoomMin');
+    const max = pick(layout?.zoomMax, ZC_MAP_ZOOM_MAX_DEFAULT, 'zoomMax');
+    if (min > max) throw new Error(`地图镜头倍率下限（${min}）不能大于上限（${max}）`);
+    return { min, max };
+}
+
 export const ZC_DEPTH_ORDER: readonly ZCDepth[] = ['front', 'mid', 'back'];
 /** 纵深 → 默认打法倾向（前区速攻、中区控场、后区发育）。 */
 export const ZC_DEPTH_TENDENCY: Readonly<Record<ZCDepth, ZCTendency>> = {
@@ -256,6 +323,7 @@ export let ZC_MAP_SECTIONS: readonly ZCSection[] = [];
 export let ZC_MAP_HOMES: readonly number[] = [];
 /** 各方前 / 中 / 后区域；未圈画时为空数组。 */
 export let ZC_MAP_REGIONS: readonly ZCMapRegion[] = [];
+export let ZC_MAP_HOME_CANDIDATES: readonly ZCMapHomeCandidates[] = [];
 /** 资源点位；无点位时为空数组。 */
 export let ZC_MAP_RESOURCE_POINTS: readonly ZCMapResourcePoint[] = [];
 /** 可调间距参数（已补默认值）。 */
@@ -366,6 +434,9 @@ export let ZC_ENEMY_HOME_ID = -1;
 export let ZC_MAP_PLAYER_COUNT: ZCPlayerCount = 2;
 /** 本局地图的主城模式；缺省 'fixed'。 */
 export let ZC_MAP_CITY_MODE: ZCCityMode = 'fixed';
+/** 本局地图的镜头倍率范围（R22 相机）；缺省 `0.6 / 1.2`。 */
+export let ZC_MAP_ZOOM_MIN = ZC_MAP_ZOOM_MIN_DEFAULT;
+export let ZC_MAP_ZOOM_MAX = ZC_MAP_ZOOM_MAX_DEFAULT;
 
 /** 载入编辑器地图；格子 id 仍按 row * columns + column，虚空保留 id 但不可通行。 */
 export function configureZCMap(layout: ZCMapLayout): void {
@@ -390,6 +461,8 @@ export function configureZCMap(layout: ZCMapLayout): void {
     if (cityMode !== 'fixed' && cityMode !== 'select') {
         throw new Error('地图主城模式必须是 fixed（固定主城）或 select（自选主城）');
     }
+    // 镜头倍率范围：越界 / 非数字 / 上下限颠倒都在这里抛（口径见 resolveZCMapZoom）。
+    const zoom = resolveZCMapZoom(layout);
     /** 自选主城模式不产出主城坐标：主城由选点结果决定。 */
     const hasHome = cityMode === 'fixed';
     const mirror180 = layout.mirror180 === true;
@@ -597,6 +670,32 @@ export function configureZCMap(layout: ZCMapLayout): void {
     }
 
     // ---- 资源点位（5.3 / 7.1）--------------------------------------------------
+    const homeCandidates: ZCMapHomeCandidates[] = [];
+    if (layout.homeCandidates !== undefined) {
+        if (!Array.isArray(layout.homeCandidates)) throw new Error('主城可选格配置必须是数组');
+        const configuredSections = new Set<number>();
+        for (const entry of layout.homeCandidates) {
+            if (!entry || !Number.isInteger(entry.section) || entry.section < 1 || entry.section > playerCount) {
+                throw new Error(`主城候选范围必须属于 1~${playerCount} 区`);
+            }
+            if (configuredSections.has(entry.section)) throw new Error(`第 ${entry.section} 区主城候选范围重复`);
+            if (!Array.isArray(entry.cells) || !entry.cells.length) throw new Error('主城候选范围至少要包含一格');
+            configuredSections.add(entry.section);
+            const seen = new Set<number>();
+            const cells = entry.cells.map((cell) => {
+                if (!Number.isInteger(cell) || cell < 0 || cell >= rows * columns) throw new Error('主城候选范围包含地图外的格');
+                if (!playable[cell]) throw new Error('主城候选范围不能包含虚空格');
+                if (cityMode !== 'select' && sections[cell] !== entry.section) {
+                    throw new Error(`第 ${entry.section} 区主城候选范围不能包含别区格`);
+                }
+                if (seen.has(cell)) throw new Error('主城候选范围不能重复包含同一格');
+                seen.add(cell);
+                return cell;
+            });
+            homeCandidates.push({ section: entry.section, cells });
+        }
+    }
+
     const resourcePoints: ZCMapResourcePoint[] = [];
     if (layout.resourcePoints !== undefined) {
         if (!Array.isArray(layout.resourcePoints)) throw new Error('资源点位必须是数组');
@@ -618,6 +717,7 @@ export function configureZCMap(layout: ZCMapLayout): void {
             const pool: Record<string, number> = {};
             let total = 0;
             for (const [resource, weight] of Object.entries(point.pool)) {
+                if (!isZCNeutralResourceId(resource)) throw new Error(`资源池包含未知资源 id：${resource}`);
                 if (typeof weight !== 'number' || !Number.isFinite(weight) || weight < 0) {
                     throw new Error('资源权重必须是非负数');
                 }
@@ -837,9 +937,12 @@ export function configureZCMap(layout: ZCMapLayout): void {
     ZC_MAP_ID = typeof layout.id === 'string' && layout.id ? layout.id : 'custom';
     ZC_MAP_PLAYER_COUNT = playerCount;
     ZC_MAP_CITY_MODE = cityMode;
+    ZC_MAP_ZOOM_MIN = zoom.min;
+    ZC_MAP_ZOOM_MAX = zoom.max;
     ZC_MAP_SECTIONS = sections;
     ZC_MAP_HOMES = homes;
     ZC_MAP_REGIONS = regions;
+    ZC_MAP_HOME_CANDIDATES = homeCandidates;
     ZC_MAP_RESOURCE_POINTS = resourcePoints;
     ZC_MAP_SPACING = { homeMinDistance, resourceMinDistance };
     ZC_MAP_ART = art;

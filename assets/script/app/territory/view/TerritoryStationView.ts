@@ -166,26 +166,16 @@ export class TerritoryStationView extends Component {
     @property({ type: Label, group: '节点引用', tooltip: 'BadgeLabel：缺少建筑图时显示角标' })
     badgeLabel: Label = null!;
 
-    /**
-     * `Icon` 节点的 `UITransform`（**面板拖拽绑定**，不要在代码里 `getComponent` 现取）。
-     *
-     * 尺寸是 prefab 里拖好的固定值（128×128）——`applyIconPlacement` 的「可见宽度归一」按它算，
-     * 与 `_lscale` 无关（那是另一套「由代码唯一写入」的缩放，见 AGENTS.md）。
-     */
-    @property({ type: UITransform, group: '节点引用', tooltip: 'Icon 节点的 UITransform（面板拖拽绑定；尺寸决定建筑可见宽度归一）' })
+    /** `Icon` 的 `UITransform`（面板拖拽绑定，勿 `getComponent`）：固定 128×128，供可见宽度归一。 */
+    @property({ type: UITransform, group: '尺寸绑定', tooltip: 'Icon 的 UITransform（128×128）' })
     iconTransform: UITransform = null!;
 
-    /** `CaptionBg`（银币图标）的 `UITransform` —— 条件格排布要用它的宽（prefab 里 40×40）。 */
-    @property({ type: UITransform, group: '节点引用', tooltip: 'CaptionBg 的 UITransform（面板拖拽绑定；条件格银币图标宽）' })
+    /** `CaptionBg`（银币图标）的 `UITransform`：条件格排布读宽（40×40）。 */
+    @property({ type: UITransform, group: '尺寸绑定', tooltip: 'CaptionBg 的 UITransform（40×40）' })
     captionIconTransform: UITransform = null!;
 
-    /**
-     * `CaptionLabel`（数值）的 `UITransform`。
-     *
-     * 条件模式下 `overflow = NONE` ⇒ 引擎把 `contentSize` 重写成**实测文本尺寸**，这里读的就是它
-     * （见 `readConditionValueWidth`）。名称底条模式下它是 prefab 的固定 92×28，不参与排布。
-     */
-    @property({ type: UITransform, group: '节点引用', tooltip: 'CaptionLabel 的 UITransform（面板拖拽绑定；条件格数值的实测文本宽）' })
+    /** `CaptionLabel`（数值）的 `UITransform`：条件模式读实测文本宽（`readConditionValueWidth`）；名称底条模式 92×28。 */
+    @property({ type: UITransform, group: '尺寸绑定', tooltip: 'CaptionLabel 的 UITransform（条件格实测文本宽）' })
     captionTextTransform: UITransform = null!;
 
     /** 当前节点代表的站点；点击时读它，不读闭包。起始格为 `null`。 */
@@ -203,7 +193,6 @@ export class TerritoryStationView extends Component {
     /** `CaptionLabel` 的出厂 `overflow`（`initialize` 里抄下来，退出条件模式时要还回去）。 */
     private defaultCaptionOverflow = 0;
     private defaultCaptionTextColor: Color | null = null;
-    private isInitialized = false;
     private isDisposed = false;
     /** 地图格心（`TerritoryMapView.cellCenter` 的返回值）；建筑图标要对着它居中，故存在这里。 */
     private mapX = 0;
@@ -253,8 +242,7 @@ export class TerritoryStationView extends Component {
      */
     initialize(layers: ITerritoryStationLayers, clickable = true): void {
         this.clickable = clickable;
-        if (this.isInitialized || this.isDisposed) return;
-        this.isInitialized = true;
+        if (this.isDisposed) return;
         this.localOffsets = {
             icon: this.iconSprite.node.position.clone(),
             caption: this.captionSprite.node.position.clone(),
@@ -591,7 +579,7 @@ export class TerritoryStationView extends Component {
         this.buildingShakeElapsed = -1;
         this.buildingShakeX = 1;
         this.buildingShakeY = 1;
-        if (this.isInitialized) this.button.node.off(Button.EventType.CLICK, this.handleClick, this);
+        this.button.node.off(Button.EventType.CLICK, this.handleClick, this);
         for (const visual of [
             this.iconSprite.node,
             this.captionSprite.node,

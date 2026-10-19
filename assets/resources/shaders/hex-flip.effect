@@ -1,20 +1,38 @@
-// Cocos Creator 3.8 Sprite shader —— 地块「抬起 + 翻面」的透视变形与开口补光。
+// Cocos Creator 3.8 Sprite shader —— 领地「翻开随机资源格」的**原地快碎裂**。
 //
-// 三件事：
-//  1. 真透视变形：2D UI 走正交投影，绕水平轴旋转在数学上只有 `y *= cos`（= 等比压扁），
-//     没有「近大远小」就只剩「被拍扁」。这里在顶点上做一套**简化 3D 旋转 + 透视除法**：
-//     先把顶点统一到世界空间、以格心为原点，绕水平轴旋转得到「竖直位置 ry」与「深度 depth」
-//     （地块顶部向后倒、depth 为负 = 远离观察者），再让 x 与 y **同时**乘一个由深度决定的
-//     透视因子 q（远端收缩、近端温和放大）⇒ 上半部收成梯形、且高度方向也近大远小，
-//     这才是立体翻面；早先版本只对 x 做线性缩放、y 纯压扁，读起来像扇形而不是翻面。
-//  2. 体积明暗：片元按「旋转后深度」对向后倒的远端（顶部）压暗、对近端（底部）轻微提亮，
-//     明暗随翻转角增强 —— 压扁本身没有体积感，这道随翻转出现的明暗交界才让面「转得起来」。
-//  3. 轻微补光：只落在正面开口附近与贴图真实轮廓；侧面主体由 GroundGlow 绘制。
-// `flipPerspective = 0` / `glowStrength = 0` 时退化成「无透视的原样渲染」，便于对照。
+// 2026-10-16 用户口径：两个方案里**只保留「地块破碎」那套** ⇒ 本材质只剩片元级的碎块腐蚀 +
+// 起手白闪。原先服务另一套方案（抬起后绕水平轴垂直翻转 360°）的东西已全部删除，它们在
+// `core/hex/HexFlipPresentation` 里也一并删了（`hexTurnFx` 等，见那边的模块头注释）：
+//   · 顶点层：绕格心的真 3D 旋转 + 透视除法（`flipCos` / `flipSin` / `flipPerspective`）；
+//   · 片元层：按旋转深度的体积明暗（`vDepth` / `vTurn`）；
+//   · 收尾层：接近侧视时整格淡出（`turnParams.x` / `vCos`）；
+//   · 补光层：正面开口的轻微补光（`glowStrength` / `vLocalY`）。
+// 🔴 这些删除都是**逐像素等价**的，因为碎裂曲线全程 `tileFlip(cos) = 1` 且 `tileLift = 0`：
+//    旋转角 0 ⇒ 透视因子 `q ≡ 1`（顶点不动）；`abs(sin) = 0` ⇒ `mix(1, shade, 0) ≡ 1`；
+//    补光强度由 `tileLift` 归一化 ⇒ 恒 0；`smoothstep(0, t, |cos|) ≡ 1` ⇒ 不淡。
+//    ⚠️ 别只把曲线补回来（顶点/片元这几段已经不在了，翻整圈会退化成纯压扁）；
+//       要回看旧实现走版本历史（SVN）。
 //
-// ⚠️ 适用范围（2026-10-14 起）：**只剩领地地图的随机资源格翻开在用**（`TerritoryHexFlip`）。
-//    对局地块的收场已改成「原地等比缩到 0.1」（`hexShrinkFx`），既不压扁、也不再挂这份材质。
-//    别把它接回 `ZCHexView` —— 对局地块是合批的，挂上自定义材质会整格退出合批。
+// ## 碎裂怎么做的
+// 整格只有 **4 个顶点**，按碎块分别位移做不到（那需要每块自己的四边形），所以碎裂全在**片元**做：
+//  · **碎块划分**：把格内归一化坐标 `vQuad`（-1..1）映射到 `shardGrid` 的网格里，用经典
+//    Voronoi 取「最近的抖动种子」（3×3 邻域），碎块因此大小 / 朝向都不规则（不抖动会像瓷砖）；
+//    ⚠️ `vQuad` 必须由**世界坐标 ÷ 实际半尺寸**得到，**不能用 `a_texCoord`**
+//    （SpriteFrame 可能是裁剪过 / 打进图集的，UV 只覆盖裁剪框）；
+//  · **腐蚀**：`border = 到第二近种子的距离 - 到最近种子的距离`，就是「离碎块边界多远」；
+//    进度越大要求的 `border` 越大 ⇒ 碎块**从边缘往中心缩没**。每个碎块按自己的哈希取延迟
+//    ⇒ 错峰碎裂（不是整体一起化掉）；
+//  · **裂缝**：`|border - 阈值|` 很小的一薄圈提亮 —— 先看到裂缝，再看到块消失；
+//  · **白闪**：起手 `flashParams.x` 把整格朝白推一下（曲线给的是 0 → 峰值 → 0）。
+// `shatterParams.x = 0` 时整段跳过 ⇒ 逐像素等价于「没有碎裂」（起手那几帧与静止态都走这条）。
+//
+// ⚠️ 碎块遮罩在**片元最后**统一乘上去：补光 / 明暗那几段（已删）原本是加法项，
+//    先加后乘才不会在「已经碎掉」的位置留下残亮；裂缝亮线是唯一**乘完再加**的，
+//    否则它自己会被碎块遮罩抹掉（它就长在遮罩的边缘上）。
+//
+// ⚠️ 适用范围（2026-10-16 起）：**只剩领地地图的随机资源格翻开在用**（`TerritoryHexFlip`）。
+//    别把它接回 `ZCHexView` —— 对局地块是合批的，挂上自定义材质会整格退出合批；
+//    对局的收场是「原地脉冲呼吸 + 原地缩没」，不挂这份材质。
 CCEffect %{
   techniques:
   - passes:
@@ -33,12 +51,12 @@ CCEffect %{
       rasterizerState:
         cullMode: none
       properties:
-        flipCos: { value: 1.0 }
-        flipSin: { value: 0.0 }
-        flipPerspective: { value: 0.32 }
         flipCenter: { value: [0.0, 0.0] }
         flipHalfHeight: { value: 59.5 }
-        glowStrength: { value: 0.0 }
+        flipHalfWidth: { value: 63.0 }
+        flashParams: { value: [0, 0, 0, 0] }
+        shatterParams: { value: [0, 0, 0, 0] }
+        shardGrid: { value: [4, 4, 0, 0] }
 }%
 
 CCProgram hex-flip-vs %{
@@ -52,20 +70,16 @@ CCProgram hex-flip-vs %{
   in vec4 a_color;
   out vec2 frameUV;
   out vec4 color;
-  // 发光强度 / 深度 / 翻转角 / 贴图自身高度用 varying 送片元 —— 避免片元再声明同名 UBO
-  // （两边 layout 必须逐字一致，容易踩）。
-  out float glowPulse;
-  out float vDepth;  // 旋转后归一化深度（以半高为单位）：负 = 顶部向后（远），正 = 底部向前（近）
-  out float vTurn;   // 翻转角的 sin：0 = 正面，1 = 侧视（驱动明暗 / 棱光随翻转出现）
-  out float vLocalY; // 地块自身的高度；图集 UV 不能用来判断上缘和下缘
+  out vec2 vQuad;    // 格内归一化坐标（-1..1）：碎裂的碎块划分用它，**不能用 a_texCoord**
+                     // （SpriteFrame 可能是裁剪过 / 打进图集的，UV 只覆盖裁剪框）
 
   uniform HexFlip {
     vec2 flipCenter;       // 格心世界坐标（渲染层每帧写）
-    float flipCos;         // 绕水平轴旋转的 cos：1 = 正面，0 = 侧视
-    float flipSin;         // 同上的 sin：0 = 正面，1 = 侧视
-    float flipPerspective; // 透视强度：0 = 纯压扁（对照），越大远端收缩 / 近端放大越强
-    float flipHalfHeight;  // 地块半高，用来把 y 归一化到 -1..1
-    float glowStrength;    // 开口补光强度 0~1（翻面/抬起期间由渲染层写）
+    float flipHalfHeight;  // 地块半高（**世界单位**，由格子的实际 UITransform 尺寸派生）
+    float flipHalfWidth;   // 地块半宽（同上，世界单位）
+    vec4 flashParams;      // x = 起手白闪强度 0~1
+    vec4 shatterParams;    // x = 碎裂开关(0/1) y = 进度 0~1 z = 随机种子 w = 碎块中心抖动
+    vec4 shardGrid;        // x = 碎块列数 y = 行数（zw 保留）
   };
 
   vec4 vert () {
@@ -73,32 +87,18 @@ CCProgram hex-flip-vs %{
     #if USE_LOCAL
       pos = cc_matWorld * pos;
     #endif
-    // 先统一到世界空间，再绕**格心**做变形（直接改 pos.y 会绕世界原点缩放）。
+    // 顶点**不做任何形变**（碎裂是「原地」的）：这里只把顶点换算到「以格心为原点、按实际半尺寸
+    // 归一化」的格内坐标系，送给片元去划分碎块。
     float lx = pos.x - flipCenter.x;
     float ly = pos.y - flipCenter.y;
     float hh = max(flipHalfHeight, 0.0001);
-    float u = clamp(ly / hh, -1.0, 1.0);  // 相对转轴的归一化高度：顶部 +1、底部 -1
-
-    // ① 绕水平轴（X）旋转：顶部向后倒（远离观察者）。
-    float ry = ly * flipCos;          // 旋转后的竖直坐标
-    float depth = -u * flipSin;       // 归一化深度：顶部 u>0 ⇒ 负（远），底部 ⇒ 正（近）
-
-    // ② 透视除法：上缘明显退远，下缘只轻微靠近，读出倾斜的厚地块。
-    float p = clamp(flipPerspective, 0.0, 0.8);
-    float qFar = 1.0 / (1.0 + p * 3.1 * max(0.0, -depth));  // 远端收窄，侧视时仍看出梯形
-    float qNear = 1.0 / (1.0 - p * 0.45 * max(0.0, depth)); // 近端克制，避免底边鼓起
-    float q = qFar * qNear;
-    // x、y **同时**乘透视因子：远端不仅变窄，也更贴近转轴（近大远小），才有真实梯形。
-    pos.x = flipCenter.x + lx * q;
-    pos.y = flipCenter.y + ry * q;
+    float hw = max(flipHalfWidth, 0.0001);
+    float u = clamp(ly / hh, -1.0, 1.0);  // 归一化高度：顶部 +1、底部 -1
 
     pos = cc_matViewProj * pos;
     frameUV = a_texCoord;
     color = a_color;
-    glowPulse = glowStrength;
-    vDepth = depth;
-    vTurn = flipSin;
-    vLocalY = u;
+    vQuad = vec2(clamp(lx / hw, -1.0, 1.0), u);
     return pos;
   }
 }%
@@ -108,12 +108,23 @@ CCProgram hex-flip-fs %{
   #include <builtin/internal/embedded-alpha>
   in vec2 frameUV;
   in vec4 color;
-  in float glowPulse;
-  in float vDepth;
-  in float vTurn;
-  in float vLocalY;
+  in vec2 vQuad;
   #pragma builtin(local)
   layout(set = 2, binding = 12) uniform sampler2D cc_spriteTexture;
+
+  uniform HexFlip {
+    vec2 flipCenter;       // 格心世界坐标（渲染层每帧写）
+    float flipHalfHeight;  // 地块半高（**世界单位**，由格子的实际 UITransform 尺寸派生）
+    float flipHalfWidth;   // 地块半宽（同上，世界单位）
+    vec4 flashParams;      // x = 起手白闪强度 0~1
+    vec4 shatterParams;    // x = 碎裂开关(0/1) y = 进度 0~1 z = 随机种子 w = 碎块中心抖动
+    vec4 shardGrid;        // x = 碎块列数 y = 行数（zw 保留）
+  };
+
+  /** 一维哈希（碎块种子 / 延迟）：输入同一个格子索引必须得到同一个值。 */
+  float shardHash (vec2 cell) {
+    return fract(sin(dot(cell, vec2(127.1, 311.7))) * 43758.5453123);
+  }
 
   vec4 frag () {
     vec4 texel = CCSampleWithAlphaSeparated(cc_spriteTexture, frameUV);
@@ -121,19 +132,50 @@ CCProgram hex-flip-fs %{
     // 与内置 sprite 同口径：sprite.color 照常参与（地块的阵营染色 / 去色图都靠它）。
     result *= color;
 
-    // ---- 体积明暗：向后倒的远端（顶部）压暗、向前的近端（底部）轻微提亮；随翻转角增强 ----
-    // 正面（vTurn=0）时 mix 系数为 0，原样渲染；越翻到侧面，明暗交界越明显 ⇒ 面「转得起来」。
-    float shade = 1.0 - 0.70 * max(0.0, -vDepth) + 0.18 * max(0.0, vDepth);
-    result.rgb *= mix(1.0, shade, vTurn);
+    // ---- 起手白闪：整格朝白推一下再退掉；曲线给的就是 0 → 峰值 → 0 ----
+    float flash = clamp(flashParams.x, 0.0, 1.0);
+    result.rgb = mix(result.rgb, vec3(1.0), flash);
+    result.a = min(1.0, result.a + flash * texel.a * 0.35);
 
-    // 阵营色的 alpha 约为 0.6；轮廓必须用贴图原始 alpha，否则整张正面都会被当成亮边。
-    float rim = texel.a * (1.0 - texel.a) * 4.0;
-    // 正面开口约在图中心下方 30px（vLocalY≈-0.5）；薄薄补一层，避免出现转轴横条。
-    float lowerMask = 1.0 - smoothstep(-0.55, -0.30, vLocalY);
-    float frontEdge = exp(-pow((vLocalY + 0.5) / 0.07, 2.0));
-    float glow = glowPulse * lowerMask * (0.08 + rim * 0.35 + frontEdge * 0.18);
-    result.rgb += color.rgb * glow;
-    result.a = min(1.0, result.a + lowerMask * glowPulse * rim * 0.15);
+    // ---- 原地碎裂（碎块腐蚀 + 裂缝）----
+    // `shatterParams.x = 0` 时整段不生效 ⇒ 逐像素等价于「没有碎裂」。
+    float shardMask = 1.0;
+    float seam = 0.0;
+    if (shatterParams.x > 0.5) {
+      vec2 grid = max(shardGrid.xy, vec2(1.0));
+      vec2 cell = (vQuad * 0.5 + 0.5) * grid;
+      vec2 base = floor(cell);
+      // Voronoi：3×3 邻域里找最近 / 次近的抖动种子。`border` = 到碎块边界的距离。
+      float d1 = 8.0;
+      float d2 = 8.0;
+      vec2 owner = base;
+      for (int oy = -1; oy <= 1; oy += 1) {
+        for (int ox = -1; ox <= 1; ox += 1) {
+          vec2 idx = base + vec2(float(ox), float(oy));
+          vec2 seed = idx + 0.5 + (vec2(shardHash(idx + shatterParams.z),
+                                        shardHash(idx + shatterParams.z + 19.19)) - 0.5) * shatterParams.w;
+          float d = distance(cell, seed);
+          if (d < d1) { d2 = d1; d1 = d; owner = idx; }
+          else if (d < d2) { d2 = d; }
+        }
+      }
+      float border = d2 - d1;
+      // 每个碎块自己的延迟（0~0.5）⇒ 错峰碎裂；进度按「剩下多少时间」归一化，保证最后一块也碎完。
+      float delay = shardHash(owner + shatterParams.z + 37.7) * 0.5;
+      float p = clamp((shatterParams.y - delay) / max(0.05, 1.0 - delay), 0.0, 1.0);
+      p = p * p * (3.0 - 2.0 * p);
+      // 阈值随进度往块心推：`1.3` 保证进度到 1 时连块心（border 最小处）也盖过去。
+      float edge = border - p * 1.3;
+      shardMask = smoothstep(0.0, 0.06, edge);
+      seam = 1.0 - smoothstep(0.0, 0.10, abs(edge));
+    }
+
+    // ---- 统一收尾：先乘遮罩，再加裂缝亮线 ----
+    result *= shardMask;
+    // 裂缝：`border ≈ 阈值` 的薄圈提亮，必须**乘完遮罩之后**加（它就长在遮罩边缘上，
+    // 先加会被自己那圈 `shardMask < 1` 抹掉）。用贴图原始 alpha 兜住轮廓，避免溢到格形之外。
+    result.rgb += mix(color.rgb, vec3(1.0), 0.65) * seam;
+    result.a = min(1.0, result.a + seam * texel.a * 0.6);
     return result;
   }
 }%

@@ -349,9 +349,12 @@ test('★★★leftPanel 必须挪到右上（Widget TOP|RIGHT + 摘掉 Layout�
     const ui = uiOf(lp!);
     // 2026-10-09：`RunAwayBtn` 从顶栏挪进本面板 ⇒ 3 按钮 → 4 按钮，
     // 面板由 zd_di_02 的 226 向下延伸 72（四个按钮沿 y 等距 72）。
+    // 2026-10-16（R22 相机）：再 +`ResetCameraBtn`（镜头一键复位）⇒ 4 按钮 → 5 按钮，
+    // 面板**继续向下**延伸一个 72 ⇒ 226 + 2×72 = 370（Widget 的 TOP 不动，四个旧按钮的
+    // 屏幕位置因此一点都不变，`_lpos.y` 各 +36 只是抵消面板中心下移的 36）。
     assert.deepEqual(
         { w: ui._contentSize.width, h: ui._contentSize.height },
-        { w: 72, h: 298 }, '★leftPanel 应为 72×298（226 + 一个按钮的间隔 72）',
+        { w: 72, h: 370 }, '★leftPanel 应为 72×370（226 + 两个按钮的间隔 72）',
     );
     const w = compsOf(lp!).find((c) => c.__type__ === 'cc.Widget');
     assert.ok(w, 'leftPanel 缺 cc.Widget');
@@ -363,14 +366,15 @@ test('★★★leftPanel 必须挪到右上（Widget TOP|RIGHT + 摘掉 Layout�
         compsOf(lp!).some((c) => c.__type__ === 'cc.Layout'), false,
         '★leftPanel 必须摘掉 cc.Layout（否则它会把按钮重排回旧位置）',
     );
-    // 四个按钮沿 y 等距 72、尺寸**各自跟贴图走**（四个 Sprite 都是 `sizeMode=TRIMMED`，
-    // 节点尺寸 = 该图自己的裁剪矩形：排行 40×43 / 指南 45×46 / 伤害 40×47 / 逃跑 36×37），
+    // 五个按钮沿 y 等距 72、尺寸**各自跟贴图走**（Sprite 都是 `sizeMode=TRIMMED`，
+    // 节点尺寸 = 该图自己的裁剪矩形：排行 40×43 / 指南 45×46 / 伤害 40×47 / 逃跑 36×37 / 复位 64×64），
     // 所以这里钉的是「每张图的实际落值」，不是统一的 50×50。
     const BTN = [
-        { name: 'RankBtn', x: 1, y: 108, w: 40, h: 43 },
-        { name: 'ZhiNanBtn', x: 2, y: 36, w: 45, h: 46 },
-        { name: 'HurtBtn', x: 0, y: -36, w: 40, h: 47 },
-        { name: 'RunAwayBtn', x: 0, y: -108, w: 36, h: 37 },
+        { name: 'RankBtn', x: 1, y: 144, w: 40, h: 43 },
+        { name: 'ZhiNanBtn', x: 2, y: 72, w: 45, h: 46 },
+        { name: 'HurtBtn', x: 0, y: 0, w: 40, h: 47 },
+        { name: 'RunAwayBtn', x: 0, y: -72, w: 36, h: 37 },
+        { name: 'ResetCameraBtn', x: 0, y: -144, w: 64, h: 64 },
     ];
     for (const b of BTN) {
         const n = nodeNamed(b.name)!;
@@ -381,6 +385,19 @@ test('★★★leftPanel 必须挪到右上（Widget TOP|RIGHT + 摘掉 Layout�
             `★${b.name} 应为 ${b.w}×${b.h} @ (${b.x},${b.y})`,
         );
     }
+    // 复位按钮的图（主城 `zjm_icon01_ZhuCheng`）是 64×64，比另外四张（36~47）大一圈；
+    // 不缩一下会顶满 72 宽的面板、在按钮列里显得是个异类 ⇒ 用节点缩放压到 ~45，
+    // 与四邻对齐。`sizeMode=TRIMMED` 会按帧矩形覆写 `_contentSize`，所以**只能**靠 `_lscale` 收。
+    const reset = nodeNamed('ResetCameraBtn')!;
+    assert.equal(reset._lscale.x, 0.7, '★ResetCameraBtn 应缩到 0.7（64 × 0.7 ≈ 45，与四邻同量级）');
+    assert.equal(reset._lscale.y, 0.7, '★缩放要等比，否则图标会扁');
+    // 图本身：主城图标 —— 「回到初始点位」语义上最贴切的既有图（本阶段没有专门的"复位视角"美术）。
+    const resetSprite = compsOf(reset).find((c) => c.__type__ === 'cc.Sprite')!;
+    assert.equal(
+        (resetSprite._spriteFrame as TObj).__uuid__, '976be054-a9f7-47ea-b9c3-809c16b48e6b@f9941',
+        '★ResetCameraBtn 应使用 icons/main/zjm_icon01_ZhuCheng 的帧',
+    );
+    assert.equal(resetSprite._sizeMode, 1, '★与其他四个按钮一致：sizeMode = TRIMMED');
 });
 
 test('★★★RunAwayBtn 必须还在（挪进右侧按钮面板），不能丢', () => {

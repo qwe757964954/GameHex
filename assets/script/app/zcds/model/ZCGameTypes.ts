@@ -1,5 +1,8 @@
-import type { ZCCardType, ZCUnitId, ZCAttackTrait } from './ZCCombatCatalog';
+import type { ZCAttackTrait, ZCCardType, ZCCombatEventType, ZCUnitId } from './ZCCombatCatalog';
+//  真源在 `ZCCombatCatalog`（攻击档案的领域），这里转出以保持既有 `from './ZCGameTypes'` 的取用路径。
+export type { ZCCombatEventType };
 import type { ZCFaction, ZCOwner } from './ZCMapConfig';
+import type { ZCNeutralResourceId } from './ZCNeutralResourceReward';
 import type { ZCPvpTileType } from './ZCPvpTileRules';
 import type { ZCStatusSystemSnapshot } from './ZCStatusEffect';
 import type { ZCLegacyBuffApplication } from './ZCLegacySkillEffect';
@@ -9,9 +12,17 @@ export type DeepReadonly<T> = T extends object
     ? { readonly [K in keyof T]: DeepReadonly<T[K]> }
     : T;
 
+/** 伤害来源种类：单位 / 建筑 / 神器（建筑与神器没有 `unitId`，见 `ZCDamageSource.attackerTrait`）。 */
+export const ZCDamageSourceKind = {
+    Unit: 'unit',
+    Building: 'building',
+    Artifact: 'artifact',
+} as const;
+export type ZCDamageSourceKind = (typeof ZCDamageSourceKind)[keyof typeof ZCDamageSourceKind];
+
 export interface ZCDamageSource {
     owner: ZCOwner;
-    kind: 'unit' | 'building' | 'artifact';
+    kind: ZCDamageSourceKind;
     unitId?: number;
     /** Old Client battle-text classification carried from cast to actual hit. */
     floatTextKind?: ZCCombatFloatTextKind;
@@ -27,13 +38,68 @@ export interface ZCDamageSource {
     attackerTrait?: ZCAttackTrait;
 }
 
-export type ZCGameStatus = 'playing' | 'victory' | 'defeat' | 'draw';
-export type ZCBuildingType = 'none' | 'hq' | 'mine' | 'barracks' | 'tower';
-export type ZCTileState = 'occupied' | 'occupiable' | 'developable' | 'developed' | 'ruins';
-export type ZCUnitBattleState = 'born' | 'target' | 'moveForward' | 'move' | 'waitAttack' | 'attack' | 'idle' | 'dead';
-export type ZCCombatEventType = 'melee' | 'projectile' | 'area';
+/**
+ * 状态取值真源：`as const` 对象 + 同名派生类型（与 `ZCCardType` 同一范式）。
+ *
+ * 值与类型共用一份定义：`ZCGameStatus.Playing` 是值，`ZCGameStatus` 是类型；
+ * `Object.values(ZCGameStatus)` 直接就是运行时校验集合 —— 新增一个取值只改这里，
+ * 「忘了同步校验集合」的坑不会再出现。值仍是字符串（原样进快照 / 配置 / 协议）。
+ */
+export const ZCGameStatus = {
+    Playing: 'playing',
+    Victory: 'victory',
+    Defeat: 'defeat',
+    Draw: 'draw',
+} as const;
+export type ZCGameStatus = (typeof ZCGameStatus)[keyof typeof ZCGameStatus];
+
+export const ZCBuildingType = {
+    None: 'none',
+    Hq: 'hq',
+    Mine: 'mine',
+    Barracks: 'barracks',
+    Tower: 'tower',
+} as const;
+export type ZCBuildingType = (typeof ZCBuildingType)[keyof typeof ZCBuildingType];
+
+export const ZCTileState = {
+    Occupied: 'occupied',
+    Occupiable: 'occupiable',
+    Developable: 'developable',
+    Developed: 'developed',
+    Ruins: 'ruins',
+} as const;
+export type ZCTileState = (typeof ZCTileState)[keyof typeof ZCTileState];
+
+export const ZCUnitBattleState = {
+    Born: 'born',
+    Target: 'target',
+    MoveForward: 'moveForward',
+    Move: 'move',
+    WaitAttack: 'waitAttack',
+    Attack: 'attack',
+    Idle: 'idle',
+    Dead: 'dead',
+} as const;
+export type ZCUnitBattleState = (typeof ZCUnitBattleState)[keyof typeof ZCUnitBattleState];
+
+/** 攻击目标种类：单位 / 城墙 / 建筑（`ZCTargetingSystem` 与 `ZCCombatTarget` 共用）。 */
+export const ZCCombatTargetKind = {
+    Unit: 'unit',
+    Wall: 'wall',
+    Building: 'building',
+} as const;
+export type ZCCombatTargetKind = (typeof ZCCombatTargetKind)[keyof typeof ZCCombatTargetKind];
+
 /** Old Client `DamageTextType` variants that represent hostile damage. */
-export type ZCCombatFloatTextKind = 'damage' | 'critical' | 'restraint' | 'resisted' | 'execute';
+export const ZCCombatFloatTextKind = {
+    Damage: 'damage',
+    Critical: 'critical',
+    Restraint: 'restraint',
+    Resisted: 'resisted',
+    Execute: 'execute',
+} as const;
+export type ZCCombatFloatTextKind = (typeof ZCCombatFloatTextKind)[keyof typeof ZCCombatFloatTextKind];
 /** Transient battle text. `miss` is supported for the later dodge pipeline as in Old Client. */
 export type ZCFloatTextKind = ZCCombatFloatTextKind | 'heal' | 'miss' | 'gold';
 
@@ -57,7 +123,7 @@ export interface ZCHexState {
     developmentResolved: boolean;
     cardId: string | null;
     /** 自选出生点阶段从固定点位资源池抽出的本局中立资源。 */
-    neutralResourceId?: string | null;
+    neutralResourceId?: ZCNeutralResourceId | null;
     /** 大于 0 时建筑仍在建造，不能产金、产兵或攻击。 */
     constructionRemainingSeconds: number;
     constructionTotalSeconds: number;
@@ -142,7 +208,7 @@ export interface ZCCombatEvent {
 /** 在途弹道属于可恢复的战斗状态，碰撞后才产生伤害。坐标均为棋盘逻辑坐标。 */
 export interface ZCProjectileState extends ZCCombatEvent {
     type: 'projectile';
-    targetKind: ZCCombatTarget['kind'];
+    targetKind: ZCCombatTargetKind;
     targetId: number;
     sourceCardId: string;
     /** 出手时的攻击属性；克制系数在命中实际目标时计算。 */
@@ -321,8 +387,21 @@ export interface ZCBuildingShake {
 }
 
 
+/**
+ * 建筑冷却条的相位：建造中 → 产金 / 产兵 / 攻击（后三者互斥，由建筑类型决定）。
+ *
+ * 视图只用它挑进度条颜色与文案，规则侧不读；因此纯表现，不进快照。
+ */
+export const ZCBuildingPhase = {
+    Construction: 'construction',
+    Income: 'income',
+    Spawn: 'spawn',
+    Attack: 'attack',
+} as const;
+export type ZCBuildingPhase = (typeof ZCBuildingPhase)[keyof typeof ZCBuildingPhase];
+
 export interface ZCBuildingCooldownState {
-    phase: 'construction' | 'income' | 'spawn' | 'attack';
+    phase: ZCBuildingPhase;
     progress: number;
     remainingSeconds: number;
     totalSeconds: number;
@@ -333,7 +412,7 @@ export type OwnerNumberRecord = Record<ZCOwner, number>;
 type OwnerTypeRecord = Record<ZCOwner, Record<ZCCardType, number>>;
 
 export interface ZCCombatTarget {
-    kind: 'unit' | 'wall' | 'building';
+    kind: ZCCombatTargetKind;
     id: number;
     x: number;
     y: number;

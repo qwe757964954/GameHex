@@ -20,6 +20,7 @@ import {
     type ZCProjectileState,
     type ZCUnitState,
 } from '../model/ZCGameTypes';
+import { ZC_OWNER_ORDER } from '../model/ZCMapConfig';
 import type { ZCFaction, ZCHexConfig, ZCOwner } from '../model/ZCMapConfig';
 import type { ZCBattlePresentationEvents, ZCGameRenderFrame } from '../model/ZCGameRenderFrame';
 import { ZCUnitView } from './ZCUnitView';
@@ -590,7 +591,7 @@ export class ZCGameRenderWorld {
     renderSpawnSelection(selection: ZCSpawnSelection, hintsVisible: boolean): void {
         const snapshot = selection.snapshot;
         const selectedByHex = new Map<number, { owner: ZCOwner; confirmed: boolean }>();
-        for (const owner of ['player', 'enemy', 'enemy2', 'enemy3'] as const) {
+        for (const owner of ZC_OWNER_ORDER) {
             const state = snapshot.selections[owner];
             if (!state || state.selectedHexId === null) continue;
             selectedByHex.set(state.selectedHexId, { owner, confirmed: state.confirmedHexId !== null });
@@ -611,7 +612,7 @@ export class ZCGameRenderWorld {
         // 不再是「基地邻格」的表现来源 —— 需求 1 要的那 6 格深蓝高亮是下面单独一位
         // （`homeHighlight`），而且只给我方，不给 AI 的基地（三方同为深蓝会分不清是谁的圈）。
         const homeNeighborOwner = new Map<number, ZCOwner>();
-        for (const owner of ['player', 'enemy', 'enemy2', 'enemy3'] as const) {
+        for (const owner of ZC_OWNER_ORDER) {
             const state = snapshot.selections[owner];
             if (!state || state.selectedHexId === null) continue;
             for (const neighborId of selection.map.hexes[state.selectedHexId]?.neighbors ?? []) {
@@ -1077,8 +1078,8 @@ export class ZCGameRenderWorld {
     /**
      * 受击特效：与飘字同一套「按 id 对齐、新增即建、过期即回收」的池化写法。
      *
-     *  必须**每帧**刷（不能跟棋盘重建的 0.15s 节流）：受击最长的才 1.2s，
-     * 一卡一卡会看到「闪一下、消失、再闪一下」。
+     *  必须**每帧**刷（不能跟棋盘重建的 0.15s 节流）：受击总共只有 0.15s，
+     *  一卡一卡会看到「闪一下、消失、再闪一下」。
      *
      * 播放 / 回收 / 挂点（挂 mapLayer、不挂被打单位）/ 棋盘坐标换算都在 `ZCEffectPool` 内。
      */
@@ -1086,7 +1087,7 @@ export class ZCGameRenderWorld {
         const now = this.visualTime(frame);
         this.effectPool.recycleHitFx(now);
         // 🔴 走 `syncHitFx` 而不是逐个 `playHitFx`：`frame.hitFxs` 是模型层**整条存活队列**
-        // （保留 HIT_FX_SECONDS = 0.8s），逐帧重新 `play()` 会把动画 seek 回第 0 帧
+        // （0.15s 内每帧都在），逐帧重新 `play()` 会把动画 seek 回第 0 帧
         // ⇒ 受击特效「停顿在角色身上、播不动」（2026-10-16 山猫反馈）。
         this.effectPool.syncHitFx(frame.hitFxs, now);
     }

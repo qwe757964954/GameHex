@@ -5,7 +5,7 @@ import {
     ZCSkillTrigger,
 } from './ZCCombatCatalog';
 import type {
-    ZCBondEffectType, ZCBondRule, ZCCardRarity, ZCCardTraits,
+    ZCAttackTrait, ZCBondEffectType, ZCBondRule, ZCCampTrait, ZCCardRarity, ZCCardTraits,
     ZCCounterRule, ZCDeckCard, ZCAttackProfile, ZCUnitDefinition, ZCUnitId,
 } from './ZCCombatCatalog';
 import {
@@ -99,8 +99,8 @@ function parseTraits(value: unknown): ZCCardTraits | undefined {
     if (value === null || value === undefined) return undefined;
     const raw = object(value, 'cards[].traits');
     return {
-        attack: text(raw.attack, 'cards[].traits.attack') as ZCCardTraits['attack'],
-        camp: text(raw.camp, 'cards[].traits.camp') as ZCCardTraits['camp'],
+        attack: text(raw.attack, 'cards[].traits.attack') as ZCAttackTrait,
+        camp: text(raw.camp, 'cards[].traits.camp') as ZCCampTrait,
     };
 }
 

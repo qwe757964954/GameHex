@@ -7,10 +7,14 @@ import {
 const { ccclass, property } = _decorator;
 
 /**
- * 领地「资源获得」飘字 —— **icon + 数字从格心升起、边升边淡出**。
+ * 领地「资源获得」读数 —— **icon + 数字从起点升起、边升边淡出**。
  *
  *  挂在 `ui/territory/TerritoryResourceGain.prefab` 的根上，由 `TerritoryMapView` 池化复用：
- *  每次 `play()` 前调用方先 `setPosition` 定好起点（格心上方），本类只负责从起点往上飘。
+ *  每次 `play()` 前调用方先 `setPosition` 定好起点，本类只负责从起点往上飘。
+ *
+ *  ⚠️ 起点**不是格心**：2026-10-16 row17 起它是「**喷发原点**（= 点击地块的中心点）
+ *  往上 `TERRITORY_GAIN_START_LIFT_PX`(40px)」—— 需求原话「图标和数字 ui 增加上移的动画
+ *  放在例子效果坐标点的上方间隔 40px」。喷发那半句在同目录 `TerritoryGainBurst`。
  *
  *  表现参数全部在 `model/TerritoryResourceGain`（纯函数、零 cc），本文件只做**逐帧写节点**，
  *  不自己算曲线 —— 与 `TerritoryHexFlip` 同一套路（真源单一，单测直接测纯函数）。

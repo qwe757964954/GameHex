@@ -75,6 +75,7 @@ export {
     ZC_MAP_ID,
     ZC_MAP_PLAYER_COUNT,
     ZC_MAP_REGIONS,
+    ZC_MAP_HOME_CANDIDATES,
     ZC_MAP_RESOURCE_POINTS,
     ZC_MAP_ROWS,
     ZC_MAP_SECTIONS,
@@ -85,7 +86,7 @@ export {
 } from './ZCMapConfig';
 export type {
     ZCCityMode, ZCDepth, ZCFaction, ZCHexConfig, ZCMapArt, ZCMapHome, ZCMapLayout,
-    ZCMapRegion, ZCMapResolvedResource, ZCMapResourcePoint, ZCMapSpacing, ZCOwner, ZCPlayerCount, ZCSection, ZCTendency,
+    ZCMapRegion, ZCMapHomeCandidates, ZCMapResolvedResource, ZCMapResourcePoint, ZCMapSpacing, ZCOwner, ZCPlayerCount, ZCSection, ZCTendency,
 } from './ZCMapConfig';
 
 import type {
@@ -137,11 +138,12 @@ export type {
 
 export const ZC_UNIT_CAP = 100;
 /**
- * 上报的帧事件操作码（协议 `CmdBattleFrameInfo.op`）：1=翻格、2=释放技能。
+ * 上报的帧事件操作码（协议 `CmdBattleFrameInfo.op`）：1=翻格、2=释放技能、4=出生点。
  * （协议还有 3=聊天，客户端没有战斗内聊天，不采集。）
  */
 const FRAME_OP_DEVELOP = 1;
 const FRAME_OP_SKILL = 2;
+const FRAME_OP_SPAWN = 4;
 /** 城墙耐久来自本局规则的 wallMaxHp（PVP-全局表）。 */
 
 /** 城墙/建筑占据一格，近战单位可从相邻格继续靠近并攻击其边缘。 */
@@ -152,20 +154,22 @@ const HEX_STEP = HEX_GRID_LOGICAL_ROW_STEP;
 const FLOAT_TEXT_DAMAGE_SECONDS = 0.85;
 const FLOAT_TEXT_GOLD_SECONDS = 1.1;
 /**
- * 受击特效的存活时长（秒）—— 模型侧的**兜底**回收依据。
+ * 受击特效的存活时长（秒）= **表现总时长**。
  *
- * 🔴 正常路径**不用它**：渲染层 `renderHitFxs` 优先从 `AnimationClip` 读 `clip.duration`
- * （美术改帧率立刻生效）。这里只是 clip 拿不到时的兜底。
+ * 2026-10-17 山猫「所有职业受击效果总时长固定 0.15s」后重定：**0.8 → 0.15**。
+ * 这个数同时决定两件事，两边必须同值：
+ *  - **队列保留时长**：`hitFxQueue` 到点就出队（视图层的「已播过」去重记录也跟着清）；
+ *  - **拿不到 clip 时的兜底**：prefab 被改坏、连 `defaultClip` 都没有时按它回收。
  *
- * 2026-10-15 山猫反馈「受击效果太久了」后重定：
- *  - 原值 1.2 = 当时按「法师 14 帧 @12fps = 1.167s」取的上限；
- *  - 现在五组 anim 已统一 **18fps 且去掉末帧**，最长那组（法师 13 帧）= **0.722s**；
- *  - 取 0.8 留余量，**别再往上抬** —— 这个值只兜底，抬高等于凭空多留一会儿。
+ * 正常路径的播放时长**由视图层锁定**：`ZCEffectPool.HIT_FX_TARGET_SECONDS = 0.15`
+ * 用 `AnimationState.speed = clip.duration / 0.15` 把整段 clip 压进 0.15s
+ * （美术真值仍是「帧数/18fps」：射手 0.4444s、法师 0.7222s）。
  *
- * 顺带说明：为什么不把口径统一到两边（模型一个数、渲染一个 clip）—— 各存一份就必然漂移，
- * 所以**渲染层优先读 clip、模型层只兜底**是这里的最优解。
+ * 🔴 **改这个数必须同步改 `HIT_FX_TARGET_SECONDS`**（`tests/zcds-hit-fx.test.ts` 有断言钉住两者）。
+ * 历史上这里写过 1.2 / 0.8 两版「留余量」的值 —— 现在两边同值，不需要余量了：
+ * 队列比动画长出来的那一段，就是「播完了还杵着」的空窗。
  */
-const HIT_FX_SECONDS = 0.8;
+const HIT_FX_SECONDS = 0.15;
 /**
  * 出兵落点相对兵营中心的偏移半径（逻辑单位）。
  *
@@ -203,7 +207,7 @@ export interface ZCDefenceWaveProgress {
 
 export class ZCGameModel {
     private state: ZCSnapshot;
-    /** 服务端完成战斗接口需要的关键帧；PVE 不上报，但与 PVP 共用产兵/死亡路径。 */
+    /** 服务端完成战斗接口需要的操作记录，随结算 commands 一起上报。 */
     readonly frameEvents: Array<{ frameId: number; unitId: number; op: number; params: number[] }> = [];
     private readonly config: ZCMatchConfig;
     private readonly activeOwners: readonly ZCOwner[];
@@ -1234,12 +1238,18 @@ export class ZCGameModel {
         }
     }
 
+    /** 选点结束、正式模型建立后记录我方最终出生格；重复通知不重复入队。 */
+    recordSpawnSelection(): void {
+        if (this.frameEvents.some((event) => event.op === FRAME_OP_SPAWN)) return;
+        this.pushFrameEvent(FRAME_OP_SPAWN, [this.homeId('player')]);
+    }
+
     /**
      * 记一条战斗帧事件（随 `CmdFinishBattleReqMsg.commands` 上报，供服务端校验 / 回放）。
      *
      * `op` 口径由协议 `CmdBattleFrameInfo` 定死：**1=翻格（`params`=[格子 id]）、
-     * 2=释放技能（`params`=[技能位置]，无位置就不传）**。
-     * `unitId` 恒 0 —— 这两类都是「某一方的操作」，不对应任何单位；协议里是 required 字段，只能用 0 占位
+     * 2=释放技能（`params`=[技能位置]，无位置就不传）、4=出生点（`params`=[格子 id]）**。
+     * `unitId` 恒 0 —— 这些都是「某一方的操作」，不对应任何单位；协议里是 required 字段，只能用 0 占位
      * （与 `ZCGame.buildStatistics` 的 `unitId: 0` 同一约定）。
      * `frameId` 沿用毫秒时间戳的既有口径（协议注释写「帧 id」，但那会改变已经在上报的格式，未动）。
      */

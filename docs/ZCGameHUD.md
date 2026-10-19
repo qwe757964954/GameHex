@@ -10,6 +10,7 @@
 | MapScrollView | mapScrollView | 地图容器；对局中停止原生滚动，统一由 HUD 处理二维拖动 |
 | MapScrollView/view | mapViewport | 裁切区域、触摸监听、实际视口尺寸 |
 | MapScrollView/view/content | mapLayer | 地块、单位、城墙与特效挂载点 |
+| MapScrollView/view/content/Background | mapBackground | 铺底大图；按全景倍率 `cover` 铺满（**不再 `getChildByName('Background')`**） |
 | TopInfoPanel/LeftPlayer | leftPlayer | GamePlayerItem：我方昵称、头像、存活兵力 / unitCap |
 | TopInfoPanel/RightPlayer | rightPlayer | GamePlayerItem：敌方昵称、头像、存活兵力 / unitCap |
 | TopInfoPanel/GameVS | gameVS | GameVS：双方领地数量；暂按领地语义接入 |
@@ -23,6 +24,7 @@
 | leftPanel/ZhiNanBtn | guideButton | 派发 openGuide 回调 |
 | leftPanel/HurtBtn | damageButton | 派发 openDamageStats 回调 |
 | leftPanel/RunAwayBtn | retreatButton | 派发 retreat 回调，仅对局进行中可用 |
+| leftPanel/ResetCameraBtn | resetCameraButton | 派发 `ResetCamera` 意图事件（`ZCGame` 订阅后调 `hudView.resetCamera()`）；**不判 `playing`**，与排行榜 / 指南一致 |
 
 ## 对外接口
 
@@ -50,11 +52,54 @@ hud.render(model, lastHint);
 - 引用在 prefab 中持久化；三个嵌套组件采用 Cocos 的 TargetOverrideInfo 绑定。
 - 各显示区域独立刷新。缺少某个 Label 不会阻止玩家、金币、计时或 GameVS 更新。缺少地图核心节点时，ZCGame 输出明确错误并停止创建棋盘。
 - 兵力不计入 `battleState === 'dead'` 的单位；领地数直接来自模型，GameVS 根据双方数量计算占比。
-- 地图沿用 2.15 倍显示缩放及原有初始偏移。拖动边界使用 view 的实际尺寸；移动超过 10 UI 像素标记为拖动，等触摸结束事件派发完成后再清标记，避免误点地块。
+- 地图停靠机位是 `ZC_MAP_PRESENTATION_SCALE = 1`（见下「战斗相机」）；拖动边界使用 view 的实际尺寸；移动超过 10 UI 像素标记为拖动，等触摸结束事件派发完成后再清标记，避免误点地块。
 - 重复初始化先解绑旧监听；禁用或销毁 HUD 时清理按钮、触摸与尺寸监听，并恢复 ScrollView 原先的 enabled 状态。
 - 删除旧 `statLabel`、`hintLabel`、`artifactLabel`、`resetButton` 依赖；不再显示“点击右上角重开”的过期提示。
 
-## 结算演出（镜头拉远看全局 → 逐格归色）
+## 战斗相机（缩放 / 一键复位）
+
+对应需求 R22「【战斗】相机」，四条分工：①「局内支持地图缩放，每个地图配对应的最大最小倍率」与 ③「镜头一键复位，回到初始点位，主城位于中心点下方 100px」为**新做**；②「开场推镜头」由既有 `playMapIntro` 承担、④「结算拉高镜头看占据格子变化」由既有 `startSettlementOverview` 承担，本轮只把两者的**收尾倍率**统一成 `mapSettleScale`。
+
+### 倍率真源只有一份
+
+| 环节 | 位置 | 说明 |
+| --- | --- | --- |
+| 原始配置 | 地图 JSON `zoomMin` / `zoomMax` | 缺省 `0.6 / 1.2`，硬边界 `0.3 ~ 1.5` |
+| 解析 | `ZCMapConfig.resolveZCMapZoom(layout)` | **越界 / 非数字 / 上下限颠倒一律抛错，不夹取**；正常返回夹在硬边界内的区间 |
+| 运行时 | 模块级 `ZC_MAP_ZOOM_MIN` / `ZC_MAP_ZOOM_MAX` · `captureZCMatchConfig` 的 `map.zoomMin/zoomMax` | 由 `configureZCMap` 写入 |
+| 视图 | `ZCGameHUDView.setMapZoomRange(min, max)` | 内部取 `Math.min/max` 兜底顺序；**HUD 侧不写第二份默认值** |
+
+`ZCGame` 在 `createGame` 与 `finishSpawnSelection` 两处 `setMapFocus(...)` 之后各注入一次（选点后会重解析那份配置）。
+
+> ⚠️ 地图编辑器 `tools/map-editor/app.js` 的 `buildJSON()` 是**白名单式重写**：加地图字段必须**同时**改它的导入白名单（`applyLayout`）与导出白名单，只改一处字段就会被静默吃掉。
+
+### 两条输入路径共用一套夹取
+
+- **触摸双指**：`beginPinch` 在**落指当帧**就记好参照（指间距 + 当时的倍率），`stepPinch` 按「当前指间距 ÷ 参照间距」算目标倍率 —— 这样第一帧 `move` 就能缩放，不用等第二次移动。
+  **必须用 `EventTouch.getAllTouches()`**：`getTouches()` 在"第一根手指按住不动、第二根刚落下"时只报第二根，拿不到指间距。`stepPinch` 里保留「没参照就补记参照、本帧不缩」的兜底分支，防上层吞掉第二根手指的 `TOUCH_START`。
+- **桌面滚轮**：`Node.EventType.MOUSE_WHEEL`，每格 `× (1 ± ZC_MAP_ZOOM_WHEEL_STEP = 0.12)`。
+- 两条路径最终都走 `applyMapZoom(scale, anchor?)`：`clampMapZoom` 夹取后**锚点钉住** `offset' = anchor - (anchor - offset) / scale · scale'`，再 `applyMapOffset` 收尾（偏移本身仍要受 `clampMapOffset` 边界约束）。
+- 锚点必须经 `UITransform.convertToNodeSpaceAR` 换算 —— `getUILocation()` 给的是 UI 世界坐标，窄长屏带黑边时会整体偏移。
+- 双指进行期间**不算棋盘拖动**（先判 `mapCameraBusy`，再 `beginPinch` / `stepPinch`，最后才考虑拖动）。
+- 单指不再缩放（早期版本的「单指拖动顺便缩放」已移除）。
+
+### 一键复位 = 秒回，刻意不做补间
+
+`resetCamera()` = `pinchStartDistance = 0` + `resetMapPosition()`，**直接复用开下一局的那条路径**（同一份初始点位、同一套背景铺底），不写 `tween`。
+
+- 复位点位：`mapRestCenterAtScale(focus, scale)` 返回 `{ x: -focus.x · scale, y: -focus.y · scale - ZC_MAP_HOME_CENTER_OFFSET_Y(100) }`。**屏幕 Y 轴向上为正**，所以需求原话「主城位于中心点**下方** 100px」落在 `-100`。
+- 复位必须**同时清掉 `settlementOverviewRequested` / `settlementOverviewDone`** —— 否则 `mapCameraBusy` 会一直挂着，棋盘拖不动。
+- 入口是左侧面板 `ResetCameraBtn` → `EventMgr` 的 `ZCGameUiEvent.ResetCamera` → `ZCGame.onHudResetCamera()` → `hudView.resetCamera()`。按钮**不判 `playing`**（与排行榜 / 指南一致），对局结束后也能把镜头拉回来。
+
+### 全景 / 结算镜头不受玩家区间约束
+
+`mapOverviewScale`（全景，封顶 `ZC_MAP_PRESENTATION_SCALE`）与 `mapSettleScale`（= `clampMapZoom(1)`）是**脚本演出**用的机位，**不夹进玩家可缩放区间**。否则 `zoomMin` 配到 0.6 的地图就再也看不到整盘了。
+
+### 视口组件只查一次
+
+`MapScrollView/view` 的 `UITransform` 全类只有一处 `getComponent`：`mapViewportTransform` 缓存 getter（`initialize()` 里清缓存以保证换局重取）。本工程**禁「按名找节点」**，原先 `getChildByName('Background')` 已改成 `@property mapBackground`。
+
+
 
 胜负判出后、结算弹窗弹出前播一段演出，**两拍**，全程用**现有地块资源**（`.prefab` 里已绑的
 `playerTileFrame` / `enemyTileFrame` / `playerSelectionFrame` / `enemySelectionFrame` 复用，不新增美术）：
@@ -137,7 +182,7 @@ hud.render(model, lastHint);
 
 ## 验收
 
-1. 打开 HUD prefab，16 个脚本引用指向对应节点或组件；玩家条目的六个内部引用完整。
+1. 打开 HUD prefab，25 个脚本引用指向对应节点或组件；玩家条目的六个内部引用完整。
 2. 双方兵力只统计存活单位；时间和金币单独显示；GameVS 跟随领地变化。
 3. 神器未充满、冷却中或对局结束时不可点击；就绪后一次点击只调用一次动作。
 4. 未接入的左侧按钮禁用；提供回调后各自独立触发。
@@ -148,3 +193,7 @@ hud.render(model, lastHint);
    模型 200 格归属与状态零改动；收起覆盖后立刻回到真实归属。
    真引擎验收 `tmp/_victory_sweep_probe.mjs`（**20 条断言全绿**），
    单测 `tests/zcds-progress.test.ts` 末三条。
+7. 战斗相机：地图 JSON 少配 / 只配一半时落缺省 `0.6 / 1.2`，越界 / 非数字 / 颠倒时 `resolveZCMapZoom` **抛错**；
+   `setMapZoomRange` 注入后双指与滚轮都夹在区间内、锚点不动；点 `ResetCameraBtn` 秒回初始点位
+   （主城落在中心点下方 100px、倍率回默认机位）且能重新拖动棋盘。判据 `tests/zcds-map-declaration.test.ts` /
+   `zcds-hud.test.ts` / `zcds-hud-multiteam.test.ts` / `zcds-rank-board-wiring.test.ts`。

@@ -14,8 +14,11 @@
  *   「伤害+80%，每层+10%」的叠加语义一致），由结算方在读取属性时调用；
  * - **行为钩子**：连击 / 周期效果等行为型状态通过 behavior 声明，由战斗事件流触发。
  *
- * 本文件只依赖 TS 标准库，不依赖 Cocos API，可独立单测。
+ * 本文件运行期只依赖 TS 标准库，不依赖 Cocos API，可独立单测
+ * （`ZCOwner` 是 `import type`，编译后不产生 require 边）。
  */
+
+import type { ZCOwner } from './ZCMapConfig';
 
 
 // 数值修正：映射到占城单位属性（ZCUnitDefinition）
@@ -52,7 +55,28 @@ export interface ZCStatusStatMods {
 }
 
 /** 硬控类别：受控单位不能移动/攻击/施放，差异主要在视觉表现（详见 ZCUnitSystem 受控闸门）。 */
-export type ZCControlKind = 'stun' | 'freeze' | 'paralysis' | 'blind';
+export const ZCControlKind = {
+    Stun: 'stun',
+    Freeze: 'freeze',
+    Paralysis: 'paralysis',
+    Blind: 'blind',
+} as const;
+export type ZCControlKind = (typeof ZCControlKind)[keyof typeof ZCControlKind];
+
+
+/** 周期效果的结算方式：伤害 / 治疗。 */
+export const ZCStatusEffectKind = {
+    Damage: 'damage',
+    Heal: 'heal',
+} as const;
+export type ZCStatusEffectKind = (typeof ZCStatusEffectKind)[keyof typeof ZCStatusEffectKind];
+
+/** 周期结算基准：目标最大生命 或 施加者攻击力。 */
+export const ZCStatusBasis = {
+    TargetMaxHp: 'targetMaxHp',
+    SenderAttack: 'senderAttack',
+} as const;
+export type ZCStatusBasis = (typeof ZCStatusBasis)[keyof typeof ZCStatusBasis];
 
 
 // 行为钩子（行为型 buff）
@@ -71,11 +95,11 @@ export type ZCStatusBehavior =
     | {
         kind: 'periodic';
         intervalSeconds: number;
-        effect: 'damage' | 'heal';
+        effect: ZCStatusEffectKind;
         /** 每周期百分比数值（1 = 1%）。 */
         amountPct: number;
         /** 结算基准：目标最大生命 或 施加者攻击力。 */
-        basis: 'targetMaxHp' | 'senderAttack';
+        basis: ZCStatusBasis;
         /** 单次结算封顶 = 施加者攻击力 × 该倍数；缺省不封顶。 */
         capAttackMultiplier?: number;
     }
@@ -97,7 +121,7 @@ export type ZCStatusRuntimeBehavior =
         targetMaxHpPctPerStack: number;
         capAttackMultiplier?: number;
         senderAttack: number;
-        sourceOwner: 'player' | 'enemy' | 'enemy2' | 'enemy3';
+        sourceOwner: ZCOwner;
         /** Old bleed blood-explosion: add this flat damage every N periodic ticks. */
         extraEveryTicks?: number;
         extraFlatDamage?: number;
@@ -112,6 +136,19 @@ export type ZCStatusRuntimeBehavior =
 
 // 定义与实例
 
+/**
+ * 重复施加时的刷新策略取值真源。
+ *
+ * 与 `ZCSkillStateMode` 同样处理：`as const` 数组 + 派生类型，给配置表校验用同一份集合，
+ * 别在 `ZCStatSchema` 里再手写 `['refresh','extend','keep']`。
+ */
+export const ZCStatusRefreshPolicy = {
+    Refresh: 'refresh',
+    Extend: 'extend',
+    Keep: 'keep',
+} as const;
+export type ZCStatusRefreshPolicy = (typeof ZCStatusRefreshPolicy)[keyof typeof ZCStatusRefreshPolicy];
+
 
 export interface ZCStatusEffectDef {
     /** 稳定 id：旧表按 buff 名（如 '弓兵攻击相同目标伤害增加'）或 buffid 数字；占城新表自定。 */
@@ -125,7 +162,7 @@ export interface ZCStatusEffectDef {
     /** 重复施加时是否刷新剩余时间（默认 true）。 */
     refreshOnReapply?: boolean;
     /** 新表优先使用的刷新策略；兼容字段 refreshOnReapply 仍可读取。 */
-    refreshPolicy?: 'refresh' | 'extend' | 'keep';
+    refreshPolicy?: ZCStatusRefreshPolicy;
     statMods?: ZCStatusStatMods;
     behavior?: ZCStatusBehavior;
     /** 硬控类别；非空时单位进入受控（停止一切行动），由单位状态机闸门处理。 */
@@ -198,16 +235,16 @@ export interface ZCPeriodicEvent {
     defId: string;
     sourceUnitId?: string;
     stacks: number;
-    effect: 'damage' | 'heal';
+    effect: ZCStatusEffectKind;
     amountPct: number;
-    basis: 'targetMaxHp' | 'senderAttack';
+    basis: ZCStatusBasis;
     capAttackMultiplier?: number;
     /** Legacy DOT direct damage per stack, already frozen against cast-time attack. */
     flatDamagePerStack?: number;
     senderAttack?: number;
     /** Extra flat damage fired on the configured bleed tick. */
     extraFlatDamage?: number;
-    sourceOwner?: 'player' | 'enemy' | 'enemy2' | 'enemy3';
+    sourceOwner?: ZCOwner;
 }
 
 /**
@@ -372,8 +409,8 @@ export class ZCStatusSystem {
                             ? behavior.extraFlatDamage : undefined;
                         events.push({
                             targetId: unitId, defId: inst.defId, sourceUnitId: inst.sourceUnitId,
-                            stacks: inst.stacks, effect: 'damage',
-                            amountPct: behavior.targetMaxHpPctPerStack, basis: 'targetMaxHp',
+                            stacks: inst.stacks, effect: ZCStatusEffectKind.Damage,
+                            amountPct: behavior.targetMaxHpPctPerStack, basis: ZCStatusBasis.TargetMaxHp,
                             capAttackMultiplier: behavior.capAttackMultiplier,
                             flatDamagePerStack: behavior.flatDamagePerStack,
                             senderAttack: behavior.senderAttack,

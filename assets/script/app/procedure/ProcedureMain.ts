@@ -59,6 +59,8 @@ export class ProcedureMain extends ProcedureBase {
         // 资源入口转交给 tab 宿主：tab 页是它实例化出来的 prefab，拿不到流程依赖
         // （领地页的地图 JSON 与美术走 `AssetService`）。必须在 setParent 之前 —— 那会触发页面的 onLoad。
         tabHost?.setAssetService(this.assets);
+        // 配置入口也给一份：大世界入口要读 `BigMap-*` 表（同样必须在 setParent 之前）。
+        tabHost?.setConfigService(this.configs);
         if (tabHost && params?.initialTab !== undefined) {
             tabHost.defaultTab = params.initialTab === 'adventure' ? MainTab.Adventure : params.initialTab;
         }

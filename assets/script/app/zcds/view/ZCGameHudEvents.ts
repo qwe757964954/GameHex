@@ -36,6 +36,8 @@ export enum ZCGameUiEvent {
     OpenRank = 'zcgame-ui-open-rank',
     /** HUD：撤退（走二次确认 / 结算）。 */
     Retreat = 'zcgame-ui-retreat',
+    /** HUD：镜头一键复位（回到初始点位，主城落在中心点下方 100px）。 */
+    ResetCamera = 'zcgame-ui-reset-camera',
     /** 结算页：点「确定」—— 结算页唯一的收尾动作。 */
     SettlementConfirm = 'zcgame-ui-settlement-confirm',
     /** 选点：绿勾「确认位置」（失效态也派发，由选点模型给原因文案）。 */

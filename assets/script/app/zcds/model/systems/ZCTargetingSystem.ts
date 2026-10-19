@@ -1,8 +1,8 @@
 import type { ZCUnitDefinition } from '../ZCCombatCatalog';
-import type { ZCHexState, ZCUnitState } from '../ZCGameTypes';
+import type { ZCCombatTargetKind, ZCHexState, ZCUnitState } from '../ZCGameTypes';
 
 export interface ZCPoint { readonly x: number; readonly y: number }
-export interface ZCTargetSelection { readonly kind: 'unit' | 'wall' | 'building'; readonly id: number }
+export interface ZCTargetSelection { readonly kind: ZCCombatTargetKind; readonly id: number }
 
 export interface ZCTargetingContext {
     readonly now: number;
@@ -49,7 +49,7 @@ export class ZCTargetingSystem {
         const candidatePosition = { x: 0, y: 0 };
         let best: ZCTargetSelection | null = null;
         let bestDistance = Infinity;
-        const consider = (kind: ZCTargetSelection['kind'], id: number, point: ZCPoint): void => {
+        const consider = (kind: ZCCombatTargetKind, id: number, point: ZCPoint): void => {
             const dx = from.x - point.x;
             const dy = from.y - point.y;
             const distanceSquared = dx * dx + dy * dy;

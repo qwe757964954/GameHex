@@ -31,14 +31,37 @@
       "column": 5
     }
   ],
-  "resourcePoints": [
+  "homeCandidates": [
     {
-      "row": 15,
-      "column": 2,
-      "pool": {
-        "artifact_charge": 1
-      }
+      "section": 1,
+      "cells": [
+        169,
+        170,
+        171,
+        180,
+        181,
+        182,
+        191,
+        193,
+        203
+      ]
     },
+    {
+      "section": 2,
+      "cells": [
+        26,
+        27,
+        28,
+        37,
+        39,
+        48,
+        49,
+        50,
+        60
+      ]
+    }
+  ],
+  "resourcePoints": [
     {
       "row": 14,
       "column": 8,
@@ -121,6 +144,16 @@
       "column": 7,
       "pool": {
         "artifact_charge": 1
+      }
+    },
+    {
+      "row": 15,
+      "column": 2,
+      "pool": {
+        "unit_cap": 1,
+        "artifact_charge": 2,
+        "mine": 3,
+        "chest": 4
       }
     }
   ],
@@ -229,6 +262,18 @@
         "y": 290.22247314453125,
         "width": 276.75,
         "height": 90,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 26,
+        "art": "image/decor/wasteland/server",
+        "x": -7.146392345428467,
+        "y": -122.89051818847656,
+        "width": 218.89848082145056,
+        "height": 194.99577314554506,
         "rotation": 0,
         "flipX": false,
         "flipY": false,

@@ -35,6 +35,18 @@
   }
   .left { width: 226px; border-right: 1px solid #E4E3DC; }
   .right { width: 340px; border-left: 1px solid #E4E3DC; display: flex; flex-direction: column; }
+  .toolCategoryNav { display: grid; gap: 4px; margin: 0 0 10px; }
+  .toolCategoryTab {
+    display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 9px;
+    border: 1px solid transparent; border-radius: 7px; background: transparent; cursor: pointer;
+    color: #5F5E5A; font: inherit; text-align: left;
+  }
+  .toolCategoryTab:hover { background: #FAFAF8; }
+  .toolCategoryTab.on { border-color: #C8DDF2; background: #E6F1FB; color: #185FA5; font-weight: 600; }
+  .toolCategoryTab .categoryIcon { width: 20px; text-align: center; font-size: 15px; }
+  .toolStatusCard { padding: 8px 9px; margin-bottom: 12px; border: 1px solid #E4E3DC; border-radius: 7px; background: #FAFAF8; }
+  .toolStatusCard .statusLabel { display: block; margin-bottom: 2px; color: #888780; font-size: 10px; }
+  .group[hidden] { display: none; }
 
   .stage {
     flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center;
@@ -93,6 +105,9 @@
   .resourceFallback { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; background: #F1EFE8; color: #888780; font-weight: 700; }
   .resourceName { max-width: 100%; font-size: 10px; line-height: 1.35; color: #888780; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .resourceItem.on .resourceName { color: #2C2C2A; }
+  .resourceChoiceCount { font: 700 13px sans-serif; fill: #fff; stroke: #111827; stroke-width: 3px; paint-order: stroke; }
+  .regionLabel { font: 700 12px sans-serif; fill: #fff; stroke: #111827; stroke-width: 3px; paint-order: stroke; }
+  .homeCandidateCell { pointer-events: none; }
 
   /* 场景装饰：按地图坐标自由摆放，画在网格之上。 */
   /* 选择器做成"按主题分组的缩略图网格"：35 张 128×128 缩到 44px，一屏能扫到一大片。 */
@@ -324,6 +339,12 @@
   .left, .right { background:var(--panel); border-color:var(--line); }
   .left { width:238px; padding:12px; }
   .right { width:320px; padding:12px; }
+  .toolCategoryTab { color:var(--muted); }
+  .toolCategoryTab:hover { background:#1e293b; }
+  .toolCategoryTab.on { background:#172554; border-color:#1d4ed8; color:#bfdbfe; }
+  .toolStatusCard { background:#111827; border-color:var(--line); }
+  .toolStatusCard .statusLabel { color:var(--muted); }
+  .group[hidden] { display:none; }
   .stage { padding:14px; background:#0b1220; }
   h2, .panelTitle { color:#cbd5e1; }
   .helpTip summary { border-color:var(--line-soft); color:var(--muted); }
@@ -402,9 +423,17 @@
 
   <div class="body">
     <aside class="left">
-      <div class="group">
+      <div class="toolCategoryNav" role="tablist" aria-label="编辑工具分类">
+        <button class="toolCategoryTab on" id="categoryTerrain" type="button" role="tab" aria-selected="true"><span class="categoryIcon">▦</span>地图地形</button>
+        <button class="toolCategoryTab" id="categoryRegions" type="button" role="tab" aria-selected="false"><span class="categoryIcon">▤</span>前 / 中 / 后区</button>
+        <button class="toolCategoryTab" id="categoryResources" type="button" role="tab" aria-selected="false"><span class="categoryIcon">⌂</span>主城与资源</button>
+        <button class="toolCategoryTab" id="categoryDecor" type="button" role="tab" aria-selected="false"><span class="categoryIcon">✧</span>场景装饰</button>
+        <button class="toolCategoryTab" id="categoryAdvanced" type="button" role="tab" aria-selected="false"><span class="categoryIcon">⚙</span>高级设置</button>
+      </div>
+      <div class="toolStatusCard"><span class="statusLabel">当前工具</span><span id="toolStatus">分区 1 · 笔刷 1 格</span></div>
+
+      <div class="group" id="groupTerrain" data-tool-category="terrain">
         <h2>笔刷</h2>
-        <p class="toolStatus" id="toolStatus">当前工具：分区 1 · 笔刷 1 格</p>
         <button class="brush on" data-brush="1">
           <span class="sw s1"></span>
           <span>1 区<small>分区范围 = 该方出生点可选格</small></span>
@@ -435,7 +464,7 @@
         </button>
       </div>
 
-      <div class="group">
+      <div class="group" id="groupDecor" data-tool-category="decor" hidden>
         <div class="groupHeading"><h2>场景装饰</h2><details class="helpTip"><summary aria-label="查看场景装饰说明">?</summary><div class="helpBubble">装饰按地图坐标自由摆放，不占格、不影响玩法。选中后可在画布拖动，角点缩放，顶部手柄旋转；方向键微调。</div></details></div>
         <div id="freeDecorControls">
           <label class="row"><input type="checkbox" id="freeDecorSnap"><span class="txt">吸附到最近格心<small>只辅助对齐，不限制装饰位置</small></span></label>
@@ -461,7 +490,7 @@
         <p class="hint" style="margin:6px 0 0" id="decorHint"></p>
       </div>
 
-      <div class="group">
+      <div class="group" id="groupBrushSize" data-tool-category="terrain">
         <div class="groupHeading"><h2>笔刷大小</h2><details class="helpTip"><summary aria-label="查看笔刷大小说明">?</summary><div class="helpBubble">选择一次点击或 7 / 19 格范围。快捷键 <code>[</code> 调小、<code>]</code> 调大；鼠标悬停可预览覆盖范围。</div></details></div>
         <div class="seg" id="segBrush">
           <button data-radius="0" class="on">1 格</button>
@@ -470,12 +499,33 @@
         </div>
       </div>
 
-      <div class="group">
-        <div class="groupHeading"><h2>中立资源</h2><details class="helpTip"><summary aria-label="查看中立资源说明">?</summary><div class="helpBubble">宝箱、金币、金矿属于地图本身，所有地图都可配置。选图标后点击<b>中立格</b>放置，右键删除；每格一个资源，点位间距至少 3 格。</div></details></div>
+      <div class="group" id="groupResources" data-tool-category="resources" hidden>
+        <div class="groupHeading"><h2>中立资源</h2><details class="helpTip"><summary aria-label="查看中立资源说明">?</summary><div class="helpBubble">每格可配置多个资源候选，开局按权重随机抽取。选择资源后依次点击同一格添加，右键删除整组资源；资源点间距至少 3 格。</div></details></div>
         <div class="resourceList" id="resourceList"></div>
+        <label class="row">抽取权重 <input id="resourceWeight" type="number" min="0.01" step="0.1" value="1"></label>
       </div>
 
-      <div class="group">
+      <div class="group" id="groupRegions" data-tool-category="regions" hidden>
+        <div class="groupHeading"><h2>战区纵深</h2></div>
+        <label class="row">所属分区
+          <select id="regionSection"><option value="1">1 区</option><option value="2">2 区</option><option value="3">3 区</option><option value="4">4 区</option></select>
+        </label>
+        <div class="seg" id="segRegionDepth">
+          <button data-depth="front" class="on">前区</button><button data-depth="mid">中区</button><button data-depth="back">后区</button>
+        </div>
+        <p class="hint">选纵深后点击地图标记区域；右键清除该格标记。格面颜色与地图导出保持同步。</p>
+      </div>
+
+      <div class="group" id="groupHomeCandidates" data-tool-category="resources" hidden>
+        <div class="groupHeading"><h2>主城可选格</h2></div>
+        <label class="row">所属分区
+          <select id="homeCandidateSection"><option value="1">1 区</option><option value="2">2 区</option><option value="3">3 区</option><option value="4">4 区</option></select>
+        </label>
+        <button class="btn small" id="btnHomeCandidates">编辑主城候选格</button>
+        <p class="hint">开启后点击地图添加该区主城候选格，右键移除。未配置的分区沿用旧选点规则。</p>
+      </div>
+
+      <div class="group" id="groupHistory">
         <div class="groupHeading"><h2>历史</h2><details class="helpTip"><summary aria-label="查看撤销说明">?</summary><div class="helpBubble"><code>Ctrl+Z</code> 撤销，<code>Ctrl+Shift+Z</code> 重做。一次连续笔画算一步，最多保留 80 步。</div></details></div>
         <div class="librow">
           <button class="btn small" id="btnUndo" disabled>撤销</button>
@@ -484,7 +534,7 @@
         </div>
       </div>
 
-      <div class="group">
+      <div class="group" id="groupAdvancedMirror" data-tool-category="advanced" hidden>
         <div class="groupHeading"><h2>镜像与主城模式</h2><details class="helpTip"><summary aria-label="查看镜像说明">?</summary><div class="helpBubble">上下镜像只编辑 1 区一侧，对侧自动生成；2 人默认开启但可关闭。左右镜像仅用于 4 人四象限。自选主城地图不会写入主城坐标。</div></details></div>
         <label class="row">
           <input type="checkbox" id="optMirrorV" checked>
@@ -512,7 +562,7 @@
         </p>
       </div>
 
-      <div class="group">
+      <div class="group" id="groupPresets" data-tool-category="advanced" hidden>
         <div class="groupHeading"><h2>预设文件</h2><details class="helpTip"><summary aria-label="查看预设说明">?</summary><div class="helpBubble">清空后得到全中立底图，仅保留主城盘。预设保存在 <code>tools/map-editor/presets</code>；需要同步到游戏资源时运行 <code>copy-maps.bat</code>。</div></details></div>
         <div class="customs" id="customList"></div>
         <button class="btn" id="btnSavePreset" style="width:100%">保存当前为预设</button>
@@ -523,7 +573,7 @@
         <a class="btn" id="openServer" href="http://127.0.0.1:8787/" hidden>在本地服务中继续编辑当前地图</a>
       </div>
 
-      <div class="group">
+      <div class="group" id="groupMapSize" data-tool-category="advanced" hidden>
         <div class="groupHeading"><h2>行列个数</h2><details class="helpTip"><summary aria-label="查看地图尺寸说明">?</summary><div class="helpBubble">行列可设为 4~60 的整数。镜像开启时只保存可编辑的一侧；奇数行的中线会镜像到自身。</div></details></div>
         <div class="sizeRow">
           <label>列<input type="number" id="inCols" value="11" min="4" max="60" step="1"></label>
@@ -533,7 +583,16 @@
         <p class="hint warn" id="sizeWarn" hidden></p>
       </div>
 
-      <div class="group">
+      <div class="group" id="groupZoom" data-tool-category="advanced" hidden>
+        <div class="groupHeading"><h2>镜头倍率</h2><details class="helpTip"><summary aria-label="查看镜头倍率说明">?</summary><div class="helpBubble">局内战斗的镜头缩放区间，写进地图 JSON 的 <code>zoomMin</code> / <code>zoomMax</code>。<b>留空</b>即用客户端默认 <code>0.6 / 1.2</code>；取值范围 <code>0.3 ~ 1.5</code>，下限不能大于上限 —— 越界的图客户端会拒绝加载（<code>resolveZCMapZoom</code> 是抛错口径）。开局入场镜头结束时的机位也会被夹进这个区间。</div></details></div>
+        <div class="sizeRow">
+          <label>最小<input type="number" id="inZoomMin" min="0.3" max="1.5" step="0.05" placeholder="0.6"></label>
+          <label>最大<input type="number" id="inZoomMax" min="0.3" max="1.5" step="0.05" placeholder="1.2"></label>
+        </div>
+        <p class="hint" style="margin:6px 0 0">留空 = 默认 0.6（缩到最小）/ 1.2（放到最大）。</p>
+      </div>
+
+      <div class="group" id="groupDisplay" data-tool-category="advanced" hidden>
         <div class="groupHeading"><h2>显示</h2><details class="helpTip"><summary aria-label="查看显示说明">?</summary><div class="helpBubble">开启完整网格后，虚空格也会显示虚线轮廓，便于定位与编辑。背景图来自 <code>art.background</code>（默认 <code>image/zdbg1</code>），铺在棋盘之下、用 SVG 等比 cover 渲染。</div></details></div>
         <label class="row">
           <input type="checkbox" id="optBackground" checked>
@@ -549,7 +608,7 @@
         </label>
       </div>
 
-      <div class="group">
+      <div class="group" id="groupOperation" data-tool-category="advanced" hidden>
         <div class="groupHeading"><h2>操作</h2><details class="helpTip"><summary aria-label="查看操作说明">?</summary><div class="helpBubble"><b>左键拖动</b>连续涂色，右键擦除当前笔刷内容。滚轮缩放；中键或 <code>空格</code> + 左键平移；<code>0</code> 适应窗口。镜像开启时，点击对侧会改写对应的存储侧。</div></details></div>
       </div>
     </aside>

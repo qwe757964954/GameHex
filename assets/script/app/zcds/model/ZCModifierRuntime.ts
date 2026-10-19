@@ -18,6 +18,8 @@ import {
     type ZCModifierAdapterTables,
     type ZCModifierSourceKind,
     type ZCStatBreakdown,
+    type ZCStatId,
+    type ZCStatOperation,
     type ZCTextAttackModifier,
     type ZCTypedModifier,
     type ZCSkillPlanRecord,
@@ -78,8 +80,15 @@ export interface ZCUnitStatPatch {
     recruitMaxNumFlat?: number;
 }
 
+/** 旧表属性操作方式：覆盖 或 累加。 */
+export const ZCLegacyOperationMode = {
+    Add: 'add',
+    Replace: 'replace',
+} as const;
+export type ZCLegacyOperationMode = (typeof ZCLegacyOperationMode)[keyof typeof ZCLegacyOperationMode];
+
 export interface ZCLegacyAttributeOperation {
-    mode: 'add' | 'replace';
+    mode: ZCLegacyOperationMode;
     values: Readonly<Record<string, unknown>>;
 }
 
@@ -405,7 +414,7 @@ function compileGrowthLoadout(
     const unit = assertUnit(unitId, units);
     const row = catalogs.adapters.growth.get(`${unitId}:${level}`);
     if (!row || !row.enabled) throw new Error(`[ZCModifierRuntime] PVP 成长不存在或未启用：${unitId}:${level}`);
-    const values: Array<[ZCTypedModifier['statId'], ZCTypedModifier['operation'], number]> = [
+    const values: Array<[ZCStatId, ZCStatOperation, number]> = [
         ['attack', 'add', row.attackFlat],
         ['attack', 'addRate', row.attackRate],
         ['maxHp', 'add', row.maxHpFlat],

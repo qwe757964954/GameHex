@@ -29,14 +29,21 @@ import { loadViews } from './helpers/zcds-view-fixtures';
  * （漏了**不报错**，是静默失效），`filterUnused:true` 会自动把超限帧排除、按独立
  * SpriteFrame 走 —— 运行时正常，只是不进合并图集。
  *
- * ## 缩放口径（山猫 2026-10-15 拍板「压到与出生特效同量级」）
- * 出生特效 266×330 @ `_lscale=0.4144` ⇒ 屏上 110.2×136.8。**基准 = 屏上宽 110px**。
+ * ## 缩放口径（山猫 2026-10-15 拍板「压到与出生特效同量级」→ 2026-10-17 统一 ×0.7）
+ * 出生特效 266×330 @ `_lscale=0.4144` ⇒ 屏上 110.2×136.8。**原始基准 = 屏上宽 110px**。
  * ⚠️ 不要重采样成显示尺寸 —— 保留原始像素零插值损失，改显示大小只动 `_lscale` 一个数。
  *
  *  🔴 **阵亡特效是唯一不守 110px 的特效**（2026-10-16 反馈「死亡特效节点，整体缩小成 0.8」）：
  *  `0.2056 × 0.8 = 0.16448` ⇒ 屏上 **88×179.6**。它原先是按 110px 对齐的，现在故意比
  *  受击/出生小一圈 —— 它是「脚下一团爆开」，110px 会和单位本体抢视觉重心。
  *  **别顺手把它改回 110px**（别"统一口径"），那是把反馈又改回去了。
+ *
+ * ## 2026-10-17 受击三连改（山猫）
+ *  1. **不要定格**：动画压到 0.15s 后，**回收点也必须跟着提前** —— 还按 `clip.duration`
+ *     回收就是「闪完了还剩一坨末帧杵在角色身上」（Normal 只播一遍 ⇒ 停在末帧）；
+ *  2. **总时长固定 0.15s**：`AnimationState.speed = clip.duration / 0.15`。资产**不动**
+ *     （仍是 18fps 的美术真值 0.4444/0.7222s），走 `speed` 才是加速而不是截断；
+ *  3. **尺寸统一 ×0.7**：屏上宽 110→**77**、战士 88→**61.6**（`_lscale` 直接乘，不在代码里 setScale）。
  */
 
 /** 受击特效根目录（美术源 `0通用-受击` 的五个子目录）。 */
@@ -45,11 +52,30 @@ const HIT_FX_ROOT = 'assets/resources/units/effects/受击特效';
 const DEATH_FX_ROOT = 'assets/resources/units/effects/死亡特效';
 
 /**
- * 受击特效的**基准**显示宽度（px，见文件头「缩放口径」）。
+ * 受击特效的**原始基准**显示宽度（px，见文件头「缩放口径」）。
  *
- *  = `contentSize.width × _lscale`。各组的实际期望值 = 本基准 × `sizeFactor`（缺省 1）。
+ *  各组的实际期望值 = 本基准 × `HIT_FX_SIZE_FACTOR` × `sizeFactor`（缺省 1）。
  */
 const HIT_FX_BASELINE_WIDTH = 110;
+
+/**
+ * 受击特效的整体缩放倍数 —— 2026-10-17 反馈「统一缩小为当前大小 ×0.7」。
+ *
+ *  只掰这一个数，所有受击（含尚未接入的「中毒受击」）等比跟着变：
+ *  `_lscale` 是唯一旋钮，乘在美术烘焙值上，不在运行时代码里 `setScale`
+ *  （会覆盖烘焙值 + 池化复用逐次缩水，见 `ZCEffectPool.playHitFx` 的注释）。
+ */
+const HIT_FX_SIZE_FACTOR = 0.7;
+
+/**
+ * 受击特效的**固定总时长**（秒）—— 2026-10-17 反馈「所有职业固定 0.15s」。
+ *
+ * 与 `ZCEffectPool.HIT_FX_TARGET_SECONDS` / `ZCGameModel.HIT_FX_SECONDS` 必须**同值**：
+ * 前者决定播放加速（`speed = clip.duration / 0.15`），后者决定模型队列何时出队。
+ * 两处都写 0.15 是刻意的（一个在视图层、一个在模型层，模块间不互相 import），
+ * 所以这里用**源码级断言**把它们钉在一起，改一边不改另一边就会红。
+ */
+const HIT_FX_TARGET_SECONDS = 0.15;
 
 /**
  * 参与"职业受击"的四组 —— 必须与卡表 `traits.attack`（= `ZCAttackTrait`）一一对应。
@@ -66,15 +92,16 @@ const HIT_FX_GROUPS: ReadonlyArray<{
     /** 相对 `HIT_FX_BASELINE_WIDTH` 的显示倍率，缺省 1。**目前只有战士受击不是 1**。 */
     sizeFactor?: number;
 }> = [
-    { name: '射手受击', frames: 9, width: 620, height: 583, scale: 0.1774 },
+    { name: '射手受击', frames: 9, width: 620, height: 583, scale: 0.12418 },
     // 🔴 2026-10-16 二次调整（山猫「动画改小一点」）：换上 `vfx_bullet_cloud` 后**图内容占比 70%→99%**，
     // 在同一个 `_lscale` 口径下屏上**视觉内容**从 77px 涨到 108px（比旧版大 40%）⇒ 取 0.8 倍压回 88px。
     // ⚠️ 别把这一条"统一"回 110px：那是把反馈改回去了。
-    { name: '战士受击', frames: 9, width: 210, height: 239, scale: 0.41904761904761904, sizeFactor: 0.8 },
-    { name: '法师受击', frames: 14, width: 1377, height: 1377, scale: 0.0799 },
-    { name: '坦克受击', frames: 9, width: 1085, height: 910, scale: 0.1014 },
-    // 中毒那组只验资源在盘上（美术已交），但不进职业映射。
-    { name: '中毒受击', frames: 6, width: 1085, height: 910, scale: 0.1014 },
+    // 2026-10-17 再整体 ×0.7 ⇒ 0.41904761904761906 → 0.2933333333333333（屏上 88 → 61.6）。
+    { name: '战士受击', frames: 9, width: 210, height: 239, scale: 0.2933333333333333, sizeFactor: 0.8 },
+    { name: '法师受击', frames: 14, width: 1377, height: 1377, scale: 0.05593 },
+    { name: '坦克受击', frames: 9, width: 1085, height: 910, scale: 0.07098 },
+    // 中毒那组只验资源在盘上（美术已交），但不进职业映射。缩放跟着一起 ×0.7，将来接上才不突兀。
+    { name: '中毒受击', frames: 6, width: 1085, height: 910, scale: 0.07098 },
 ];
 
 /**
@@ -111,6 +138,24 @@ function readPrefab(path: string): Record<string, any>[] {
 
 function findType(prefab: Record<string, any>[], type: string): Record<string, any> | null {
     return prefab.find((o) => o.__type__ === type) ?? null;
+}
+
+/**
+ * 假 `cc.Animation` 组件 —— `ZCEffectPool` 只用到 `defaultClip` / `play` / `stop` / `getState`。
+ *
+ * `getState` 返回的 state 桩可经 `onState` 捕获，用来观测 `speed`（= 加速倍数）被设成了多少。
+ * 与真引擎等价的部分：`AnimationState.speed` 只在 `initialize()` 里从 `clip.speed` 取一次，
+ * `play()` / `stop()` 都不重置它（`animation-state.ts:218-223 / 357`）。
+ */
+function fakeAnimation(name: string, duration: number, onState?: (state: { speed: number }) => void) {
+    const state = { speed: 1 };
+    onState?.(state);
+    return {
+        defaultClip: { name, duration },
+        stop() {},
+        play() {},
+        getState: () => state,
+    };
 }
 
 test('受击特效：五组的帧、pac、anim、prefab 四件套齐全，且帧都是原始尺寸', () => {
@@ -193,17 +238,23 @@ test('受击特效 prefab：layer=UI_2D、sizeMode=RAW、trim 关（抖动三连
     }
 });
 
-test('受击特效 prefab：_lscale 把屏上宽度压到约 110px（与出生特效同量级）', () => {
+test('受击特效 prefab：_lscale = 110px 基准 × 0.7（并等比，不是单轴压扁）', () => {
     for (const group of HIT_FX_GROUPS) {
         const prefab = readPrefab(`${HIT_FX_ROOT}/${group.name}/${group.name}.prefab`);
         const node = findType(prefab, 'cc.Node')!;
         const ui = findType(prefab, 'cc.UITransform')!;
         const scale = node._lscale.x as number;
         const onScreenWidth = ui._contentSize.width * scale;
-        const expectedWidth = HIT_FX_BASELINE_WIDTH * (group.sizeFactor ?? 1);
+        const expectedWidth = HIT_FX_BASELINE_WIDTH * HIT_FX_SIZE_FACTOR * (group.sizeFactor ?? 1);
         assert.ok(Math.abs(onScreenWidth - expectedWidth) <= 1,
-            `${group.name} 屏上宽 ${onScreenWidth.toFixed(1)}px，应约 ${expectedWidth.toFixed(0)}px`
-            + `（基准 ${HIT_FX_BASELINE_WIDTH} × ${group.sizeFactor ?? 1}）`);
+            `${group.name} 屏上宽 ${onScreenWidth.toFixed(1)}px，应约 ${expectedWidth.toFixed(1)}px`
+            + `（基准 ${HIT_FX_BASELINE_WIDTH} × ${HIT_FX_SIZE_FACTOR} × ${group.sizeFactor ?? 1}）`);
+        // 同时钉住 `_lscale` 本身：只钉算出来的屏上宽，基数被改坏（contentSize 变了）查不出来。
+        assert.ok(Math.abs(scale - group.scale) < 1e-9,
+            `${group.name} 的 _lscale.x 应是 ${group.scale}，实际 ${scale}`);
+        // x/y 必须等比：「统一缩小 0.7」是整体缩放，不是压扁。
+        assert.ok(Math.abs(node._lscale.y - scale) < 1e-9,
+            `${group.name} 的 _lscale 必须等比（x=${scale}, y=${node._lscale.y}）`);
         assert.equal(ui._contentSize.width, group.width,
             `${group.name} 的 contentSize 应是帧的原始像素宽 ${group.width}`);
         assert.equal(ui._contentSize.height, group.height,
@@ -320,8 +371,39 @@ test('受击特效：模型按攻击方职业推事件 + 渲染层播放/回收�
     // 回收/播放逻辑已抽到 ZCEffectPool，渲染世界只负责委托。
     const pool = readFileSync('assets/script/app/zcds/view/ZCEffectPool.ts', 'utf8');
     assert.ok(pool.includes('recycleHitFx'), '缺回收入口 —— 受击特效会永久留在场上');
-    // 回收判据走 clip 时长，不写死常量（改美术帧率不该让特效提前消失）
-    assert.ok(pool.includes('clip.duration'), '受击特效时长应从 AnimationClip 读');
+});
+
+/**
+ * 🔴 2026-10-17「总时长固定 0.15s」的**双源同值**守卫。
+ *
+ * 时长现在分居两处、各管一头，且模块间不互相 import（视图层不依赖模型层常量）：
+ *  - `ZCEffectPool.HIT_FX_TARGET_SECONDS` —— 播放侧：`state.speed = clip.duration / 0.15` + 回收点；
+ *  - `ZCGameModel.HIT_FX_SECONDS` —— 模型侧：`hitFxQueue` 的保留时长 / 拿不到 clip 的兜底。
+ *
+ * 两边不等会出现两种真 bug：
+ *  - 池子更短 ⇒ 动画还没播完节点就回池，受击"闪一半就没了"；
+ *  - 池子更长 ⇒ 动画播完到回收之间那段，Normal(只播一遍) 把**末帧定住**
+ *    = 「闪完了还剩一坨东西杵在角色身上」。
+ */
+test('受击特效：总时长 0.15s —— 池子与模型两处常量必须同值（不同值就会定格/半截消失）', () => {
+    const pool = readFileSync('assets/script/app/zcds/view/ZCEffectPool.ts', 'utf8');
+    const model = readFileSync('assets/script/app/zcds/model/ZCGameModel.ts', 'utf8');
+
+    const poolSeconds = Number(/const HIT_FX_TARGET_SECONDS = ([0-9.]+);/.exec(pool)?.[1]);
+    const modelSeconds = Number(/const HIT_FX_SECONDS = ([0-9.]+);/.exec(model)?.[1]);
+    assert.equal(poolSeconds, HIT_FX_TARGET_SECONDS,
+        `池子的 HIT_FX_TARGET_SECONDS 应 = ${HIT_FX_TARGET_SECONDS}，实际 ${poolSeconds}`);
+    assert.equal(modelSeconds, HIT_FX_TARGET_SECONDS,
+        `模型的 HIT_FX_SECONDS 应 = ${HIT_FX_TARGET_SECONDS}（两处同值），实际 ${modelSeconds}`);
+
+    // 美术真值仍是「帧数/18fps」—— 0.15s 是**加速**出来的，不是把 clip 改短。
+    // 最长那组（法师 13 帧引用）0.7222s ÷ 0.15 = 4.81 倍，仍是个可播的倍率（不是几千倍的荒谬值）。
+    for (const group of ['射手受击', '战士受击', '法师受击', '坦克受击']) {
+        const anim = JSON.parse(readFileSync(`${HIT_FX_ROOT}/${group}/anim/${group}.anim`, 'utf8'));
+        const speed = anim._duration / HIT_FX_TARGET_SECONDS;
+        assert.ok(speed > 1 && speed < 10,
+            `${group} 压到 0.15s 需要 ${speed.toFixed(2)} 倍速，超出 1~10 的合理区间 —— 帧数或 fps 被改坏了`);
+    }
 });
 
 /**
@@ -366,7 +448,7 @@ test('受击特效：setPosition 必须过 mapToViewX/Y（不换算就飞出屏�
         make: () => {
             const node = new FakeNode('HitFx');
             node.getComponent = ((type: { name?: string }) => (type?.name === 'Animation'
-                ? { defaultClip: { name: 'hit', duration: 0.75 }, stop() {}, play() {} }
+                ? fakeAnimation('hit', 0.75)
                 : null)) as never;
             return node;
         },
@@ -389,7 +471,7 @@ test('受击特效：这个职业没交 prefab 时跳过，不崩也不借用别
         make: () => {
             const node = new FakeNode('HitFx');
             node.getComponent = ((type: { name?: string }) => (type?.name === 'Animation'
-                ? { defaultClip: { name: 'hit', duration: 0.75 }, stop() {}, play() {} }
+                ? fakeAnimation('hit', 0.75)
                 : null)) as never;
             return node;
         },
@@ -410,12 +492,17 @@ test('受击特效：这个职业没交 prefab 时跳过，不崩也不借用别
 /**
  * 🔴 2026-10-16 山猫「受击会停顿在角色上」的真因与判据。
  *
- * 模型层 `hitFxQueue` 保留到 `startedAt + HIT_FX_SECONDS(0.8s)`，而渲染世界每帧把**整条队列**
- * 送进特效池。若逐个直接 `playHitFx`，同一个 fx 在 0.8s 内会被 `animation.play()` 约 48 次，
- * 而 `play()` **无条件把动画 seek 回 0**（真引擎实测：每 tick 重播 ⇒ 8 帧里只出现第 0 帧；
- * 只播一次 ⇒ 8 帧全出）⇒ 动画被钉死在起始帧 = 一坨静止的特效杵在角色身上。
+ * 模型层 `hitFxQueue` 是**按帧**判过期的，渲染世界每帧把**整条队列**送进特效池 ⇒ 同一个 fx
+ * 至少在池子里被"喂"两帧。若逐个直接 `playHitFx`，每一帧都会 `animation.play()` 一次，
+ * 而 `play()` → `AnimationState.onPlay()` → `setTime(0)` **无条件把动画 seek 回 0**
+ * （真引擎实测：每 tick 重播 ⇒ 8 帧里只出现第 0 帧；只播一次 ⇒ 8 帧全出）
+ * ⇒ 动画被钉死在起始帧 = 一坨静止的特效杵在角色身上。
  *
  * 修法 = `syncHitFx` 按 fx（**对象引用**）去重，记录保留到 fx 离队并自我清理。
+ *
+ * ⚠️ 这里 fixture 的 `durationSeconds` 仍用 **0.8s**（比现在的 0.15s 长）是**故意的**：
+ * 队列入队/出队与动画时长相同时，仍可能出现"播完了但这一帧还在队列里"的边界，
+ * 用更长的队列把这条边界钉死 —— 去重不能只靠"两边时长相等"来省掉。
  */
 test('受击特效：同一个 fx 跨多帧只播一次（不去重会把动画钉死在第 0 帧 = 停在角色上）', () => {
     const { FakeNode, makeEffectPool } = loadViews();
@@ -423,7 +510,7 @@ test('受击特效：同一个 fx 跨多帧只播一次（不去重会把动画�
         make: () => {
             const node = new FakeNode('HitFx');
             node.getComponent = ((type: { name?: string }) => (type?.name === 'Animation'
-                ? { defaultClip: { name: 'hit', duration: 0.4444 }, stop() {}, play() {} }
+                ? fakeAnimation('hit', 0.4444)
                 : null)) as never;
             return node;
         },
@@ -436,18 +523,66 @@ test('受击特效：同一个 fx 跨多帧只播一次（不去重会把动画�
     assert.equal(mapLayer.children.length, 1,
         '同一个 fx 只应建 1 个节点；建出多个 = 每帧都重新 play()，动画会被 seek 回第 0 帧 ⇒ 停住不动');
 
-    // 动画（0.4444s）播完 ⇒ 节点回池；但 fx 还在队列里，**不能**被重新播一次。
+    // 动画已在 0.15s 播完 ⇒ 节点回池；但 fx 还在队列里，**不能**被重新播一次。
     effectPool.recycleHitFx(0.5);
     assert.equal(mapLayer.children.length, 0, '动画播完应回池');
     effectPool.syncHitFx([fx], 0.5);
     assert.equal(mapLayer.children.length, 0,
-        '同一 fx 播完后不得重播（动画 0.4444s < 队列 0.8s，剩下那段会被"重播一次"）');
+        '同一 fx 播完后不得重播（动画 0.15s < 队列 0.8s，剩下那段会被"重播一次"）');
 
     // fx 离队 ⇒ 去重记录自我清理（否则 Set 只增不减）；随后新的受击必须还能播。
     effectPool.syncHitFx([], 0.9);
     const next = { id: 2, trait: '法师', owner: 'enemy', x: 10, y: 20, startedAt: 0.95, durationSeconds: 0.8 } as never;
     effectPool.syncHitFx([next], 0.95);
     assert.equal(mapLayer.children.length, 1, 'fx 离队后新受击必须能播（去重表要自我清理）');
+});
+
+/**
+ * 🔴 2026-10-17 需求①②的行为判据：**加速**到位 + **回收点跟着加速后的时长走**。
+ *
+ * 两件事必须同时成立，缺一个就还是"定格"：
+ *  1. `state.speed = clip.duration / 0.15` —— 0.4444s 的 clip 用 2.96 倍速，0.15s 播完；
+ *  2. 回收点 = 0.15（不是 0.4444）—— 否则动画播完到节点回池之间那 0.29s，
+ *     Normal(只播一遍) 会把**末帧定住**，看着就是"闪完了还剩一坨东西杵在角色身上"。
+ */
+test('受击特效：总时长锁 0.15s —— 用 state.speed 加速，且回收点跟着 0.15 提前', () => {
+    const { FakeNode, makeEffectPool } = loadViews();
+    const cases = [
+        { trait: '射手', duration: 0.444444, speed: 0.444444 / HIT_FX_TARGET_SECONDS },
+        { trait: '战士', duration: 0.4444444444, speed: 0.4444444444 / HIT_FX_TARGET_SECONDS },
+        { trait: '法师', duration: 0.722222, speed: 0.722222 / HIT_FX_TARGET_SECONDS },
+        { trait: '坦克', duration: 0.444444, speed: 0.444444 / HIT_FX_TARGET_SECONDS },
+    ] as const;
+
+    for (const item of cases) {
+        let state: { speed: number } | null = null;
+        const prefab = {
+            make: () => {
+                const node = new FakeNode('HitFx');
+                node.getComponent = ((type: { name?: string }) => (type?.name === 'Animation'
+                    ? fakeAnimation('hit', item.duration, (created) => { state = created; })
+                    : null)) as never;
+                return node;
+            },
+        };
+        const { effectPool, mapLayer } = makeEffectPool({ hitFxPrefabs: new Map([[item.trait, prefab]]) });
+        effectPool.playHitFx(
+            { id: 1, trait: item.trait, owner: 'enemy', x: 10, y: 20, startedAt: 0, durationSeconds: 0.15 } as never,
+            0,
+        );
+        assert.equal(mapLayer.children.length, 1, `${item.trait} 应播一条`);
+        assert.ok(state, `${item.trait} 没拿到 AnimationState —— 加速没生效`);
+        assert.ok(Math.abs(state!.speed - item.speed) < 1e-9,
+            `${item.trait} 的 speed 应是 clip.duration/0.15 = ${item.speed.toFixed(3)}，实际 ${state!.speed}`
+            + `（speed 恒为 1 = 没加速，0.44s 的 clip 还是按原速播）`);
+
+        // 回收点：0.149s 还在，0.15s 必须回池（用 clip 的 0.4444 就会留到 0.44s ⇒ 末帧定格）
+        effectPool.recycleHitFx(0.149);
+        assert.equal(mapLayer.children.length, 1, `${item.trait} 未到 0.15s 不该回收`);
+        effectPool.recycleHitFx(0.15);
+        assert.equal(mapLayer.children.length, 0,
+            `${item.trait} 到 0.15s 必须回池 —— 还按 clip.duration(${item.duration}) 回收 = 末帧被 Normal 定住`);
+    }
 });
 
 /**
@@ -466,7 +601,7 @@ test('阵亡特效：挂 mapLayer 不挂宿主（宿主 0.45s 就没了）、判
         make: () => {
             const node = new FakeNode('DeathFx');
             node.getComponent = ((type: { name?: string }) => (type?.name === 'Animation'
-                ? { defaultClip: { name: 'death', duration: 1.0833 }, stop() {}, play() {} }
+                ? fakeAnimation('death', 1.0833)
                 : null)) as never;
             return node;
         },
@@ -506,7 +641,7 @@ test('阵亡特效：挂 mapLayer 不挂宿主（宿主 0.45s 就没了）、判
 test('受击/阵亡/出生特效：destroy() 显式销毁全部在播节点，不靠 ECS 遍历', () => {
     const { FakeNode, makeEffectPool } = loadViews();
     const clip = (name: string, duration: number) => ((type: { name?: string }) => (type?.name === 'Animation'
-        ? { defaultClip: { name, duration }, stop() {}, play() {} }
+        ? fakeAnimation(name, duration)
         : null)) as never;
     const { effectPool, mapLayer } = makeEffectPool({
         spawnFxPrefab: { make: () => Object.assign(new FakeNode('SpawnFx'), { getComponent: clip('spawn', 1.5) }) },

@@ -5,7 +5,26 @@
  * `{gold: 5, unit_cap: 3, artifact_charge: 2}`），这边是「抽到该 id 后发什么」。
  * 两边必须一起改，否则会出现「池里抽得到、这边发不出」或反之。
  */
-export type ZCNeutralResourceId = 'gold' | 'mine' | 'chest' | 'unit_cap' | 'artifact_charge';
+export const ZCNeutralResourceId = {
+    Gold: 'gold',
+    Mine: 'mine',
+    Chest: 'chest',
+    UnitCap: 'unit_cap',
+    ArtifactCharge: 'artifact_charge',
+} as const;
+export type ZCNeutralResourceId = (typeof ZCNeutralResourceId)[keyof typeof ZCNeutralResourceId];
+
+const ZC_NEUTRAL_RESOURCE_ID_SET: ReadonlySet<string> = new Set(Object.values(ZCNeutralResourceId));
+
+/**
+ * 外部数据（地图 JSON 的资源池 key、快照）里的 id 是否合法。
+ *
+ * 声明侧统一用 `ZCNeutralResourceId`，只有不可信的输入才走这里收窄 ——
+ * 别再 `resourceId as ZCNeutralResourceId` 强转把配置错误放进来。
+ */
+export function isZCNeutralResourceId(value: unknown): value is ZCNeutralResourceId {
+    return typeof value === 'string' && ZC_NEUTRAL_RESOURCE_ID_SET.has(value);
+}
 
 /**
  * 一份奖励：金币 + 神器充能 + 直接产出的兵。
@@ -55,11 +74,15 @@ const NO_REWARD: ZCNeutralResourceReward = {
     gold: 0, artifactCharge: 0, rewardCardId: null, rewardUnitCount: 0,
 };
 
-/** 取奖励；`resourceId` 不认识时返回 0 奖励（而不是 undefined，调用侧不必判空）。 */
+/**
+ * 取奖励；`resourceId` 不认识时返回 0 奖励（而不是 undefined，调用侧不必判空）。
+ *
+ * 入参保持 `string`：快照 / 地图配置是外部数据，未知 id 是**运行时可能发生**的情况，
+ * 契约是兜底为 0（见 `tests/zcds-neutral-resource-reward.test.ts`）；用守卫收窄，
+ * 不用 `as` 强转硬塞进索引签名。
+ */
 export function neutralResourceRewardOf(resourceId: string | null | undefined): ZCNeutralResourceReward {
-    if (!resourceId) return NO_REWARD;
-    const reward = ZC_NEUTRAL_RESOURCE_REWARDS[resourceId as ZCNeutralResourceId];
-    return reward ?? NO_REWARD;
+    return resourceId && isZCNeutralResourceId(resourceId) ? ZC_NEUTRAL_RESOURCE_REWARDS[resourceId] : NO_REWARD;
 }
 
 /**

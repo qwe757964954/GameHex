@@ -1921,6 +1921,10 @@
       "__uuid__": "166a019a-e6fd-43e0-b0b1-8714a54718fc@f9941",
       "__expectedType__": "cc.SpriteFrame"
     },
+    "barFillEnemy3": {
+      "__uuid__": "c377fbe7-4ff2-4b6f-b044-f1c9b9d25d4e@f9941",
+      "__expectedType__": "cc.SpriteFrame"
+    },
     "cooldownBar": {
       "__id__": 61
     },

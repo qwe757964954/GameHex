@@ -51,6 +51,7 @@ function setupView(load: (name: string) => any, bar: any, FakeNode: any) {
     view.barFillPlayer = { name: 'player' };
     view.barFillEnemy = { name: 'enemy' };
     view.barFillEnemy2 = { name: 'enemy2' };
+    view.barFillEnemy3 = { name: 'enemy3' };
     return { view };
 }
 

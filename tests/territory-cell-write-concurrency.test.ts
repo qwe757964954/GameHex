@@ -34,6 +34,12 @@ test('overlapping unlock responses keep their own succ results', async () => {
         };
         if (id === '../model/TerritoryCellBitSet') return {};
         if (id === '../model/TerritoryGrantedReward') return { readTerritoryGrantedRewards: () => [] };
+        if (id === '../model/TerritoryRequestStatus') return {
+            TERRITORY_REQUEST_STATUS: {
+                ok: 'ok', offline: 'offline', failed: 'failed',
+                rejected: 'rejected', invalid: 'invalid',
+            },
+        };
         throw new Error(id);
     } });
     const Repository = exported.TerritoryCellRepository as new () => {

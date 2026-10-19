@@ -592,10 +592,18 @@ test('底部发光改用序列帧：不再加载 hex-ground-glow.effect，视图
     assert.match(view, /setGroundGlowFrames/, '视图应提供序列帧的注入入口');
 });
 
-test('翻转亮边按贴图轮廓计算，不能把半透明整张格子误判成亮边', () => {
+/**
+ * ⚠️ 2026-10-16 口径变更：用户拍板领地翻格**只保留「原地快碎裂」**那套 ⇒ `hex-flip.effect` 里
+ * 服务另一套（翻整圈）的顶点 3D 旋转 / 透视除法 / 体积明暗 / 侧视淡出 / 正面开口补光已全部
+ * 删除，补光用的 `rim`（贴图轮廓亮边）随之消失。这条不变量本身还在，只是换了落点：
+ * **按贴图原始 alpha 算透明度** —— 阵营染色的 alpha 约 0.6，用它会把半透明的整张格子
+ * 误判成亮边 / 把亮度溢出到格形之外。现在的现役落点是碎裂的裂缝。
+ */
+test('碎裂裂缝的透明度按贴图轮廓给，不能用阵营染色的 alpha（否则整张格子都亮）', () => {
     const effect = readFileSync('assets/resources/shaders/hex-flip.effect', 'utf8');
-    assert.match(effect, /float rim = texel\.a \* \(1\.0 - texel\.a\) \* 4\.0;/,
-        '阵营染色的 alpha 约为 0.6，不能用于计算边缘亮度');
+    assert.match(effect, /result\.a = min\(1\.0, result\.a \+ seam \* texel\.a \* 0\.6\);/,
+        '裂缝要乘 texel.a（贴图原始 alpha）；用 color.a 会把格外的透明区一起提亮');
+    // 顶点 3D 段已删，`vEdge`（转轴亮带）不该被写回来 —— 它会在格子正面形成整条横向白纹。
     assert.doesNotMatch(effect, /exp\(-abs\(vEdge\)/,
         '转轴亮带会在格子正面形成整条横向白纹');
 });

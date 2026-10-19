@@ -31,54 +31,31 @@
       "column": 5
     }
   ],
-  "regions": [
+  "homeCandidates": [
     {
       "section": 1,
-      "depth": "front",
       "cells": [
-        113
-      ],
-      "tendency": "rush"
-    },
-    {
-      "section": 1,
-      "depth": "mid",
-      "cells": [
-        159
-      ],
-      "tendency": "control"
-    },
-    {
-      "section": 1,
-      "depth": "back",
-      "cells": [
-        201
-      ],
-      "tendency": "develop"
-    },
-    {
-      "section": 2,
-      "depth": "front",
-      "cells": [
-        102
-      ],
-      "tendency": "rush"
-    },
-    {
-      "section": 2,
-      "depth": "mid",
-      "cells": [
-        60
-      ],
-      "tendency": "control"
-    },
-    {
-      "section": 2,
-      "depth": "back",
-      "cells": [
-        18
-      ],
-      "tendency": "develop"
+        15,
+        16,
+        17,
+        26,
+        27,
+        28,
+        37,
+        39,
+        48,
+        49,
+        50,
+        169,
+        170,
+        171,
+        180,
+        182,
+        191,
+        192,
+        193,
+        203
+      ]
     }
   ],
   "resourcePoints": [
@@ -100,7 +77,9 @@
       "row": 15,
       "column": 2,
       "pool": {
-        "unit_cap": 1
+        "unit_cap": 1,
+        "artifact_charge": 1,
+        "mine": 1
       }
     },
     {

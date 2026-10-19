@@ -30,6 +30,7 @@ import { ZC_CLIENT_COLORS, zcDeepFactionColor, zcFactionColor, zcTowardWhite } f
 // 自己抄一份顶点迟早会和轮廓错开半个像素。
 import { OWNED_OUTLINE_INSET_SCALE, ZC_OUTLINE_HEX_POINTS } from './ZCOutlineLayer';
 import { ZCPvpTileType } from '../model/ZCPvpTileRules';
+import type { ZCNeutralResourceId } from '../model/ZCNeutralResourceReward';
 import {
     ZC_CARD_FADE_START_PROGRESS,
     ZC_CARD_REVEAL_SECONDS,
@@ -74,7 +75,7 @@ const BUILDING_SYMBOLS: Readonly<Record<ZCBuildingType, string>> = {
  * 中立资源点 → 文字兜底。有 `resourceFrame` 的走图标（见 `frameForResource`），
  * 只有还没出美术图的这两类（`unit_cap` / `artifact_charge`）才落到这里。
  */
-const NEUTRAL_RESOURCE_LABELS: Readonly<Record<string, string>> = {
+const NEUTRAL_RESOURCE_LABELS: Readonly<Record<ZCNeutralResourceId, string>> = {
     chest: '宝箱', gold: '金币', mine: '金矿', unit_cap: '兵力', artifact_charge: '神器',
 };
 // 三个「格内图标落点」下面的 y 都是 **BuildingLayer 内的局部坐标**。
@@ -149,7 +150,7 @@ const PULSE_FADE_EPSILON = 1e-4;
  *
  * @returns 共享的只读色；调用方只许读、`set` 到自己的实例里，别改它的分量。
  */
-export function pulseTintForTileType(type: ZCHexState['tileType']): Color {
+export function pulseTintForTileType(type: ZCPvpTileType | null): Color {
     switch (type) {
         case ZCPvpTileType.Mine: return PULSE_TINT_MINE;
         case ZCPvpTileType.BarracksCommon:
@@ -238,7 +239,7 @@ export function resourceIconScale(frame: SpriteFrame | null | undefined): number
 type IZCBuildingFrameResolver = (
     cardId: string | null,
     building: ZCBuildingType,
-    owner: ZCHexState['owner'],
+    owner: ZCFaction,
 ) => SpriteFrame | null;
 
 interface IZCHexPresentation {
@@ -440,8 +441,8 @@ export class ZCHexView extends Component {
     @property({ type: ProgressBar, group: '状态条', tooltip: 'HealthBar：建筑生命值' })
     healthBar: ProgressBar = null!;
 
-    // 血条填充图：按阵营各一张，与 ZCGameUnit 同一套（蓝湖「多队伍」稿的三队配色）。
-    // 第 4 家（enemy3）与敌共用红色，见 pickHealthBarFill。
+    // 血条填充图：按阵营各一张，与 ZCGameUnit 同一套（我方蓝 / 敌红 / 敌2 黄 / 敌3 紫）。
+    // 第 4 家的紫图取自项目里已有但一直没人用的 `buildings/jindutiao_p.png`，见 pickHealthBarFill。
     @property({ type: SpriteFrame, group: '状态条', tooltip: '血条填充：我方（蓝）' })
     barFillPlayer: SpriteFrame = null!;
 
@@ -450,6 +451,9 @@ export class ZCHexView extends Component {
 
     @property({ type: SpriteFrame, group: '状态条', tooltip: '血条填充：敌方 2（黄）' })
     barFillEnemy2: SpriteFrame = null!;
+
+    @property({ type: SpriteFrame, group: '状态条', tooltip: '血条填充：敌方 3（紫）' })
+    barFillEnemy3: SpriteFrame = null!;
 
     @property({ type: ProgressBar, group: '状态条', tooltip: 'Cooldown：内置建筑建造/工作周期圆环' })
     cooldownBar: ProgressBar = null!;
@@ -1501,7 +1505,8 @@ export class ZCHexView extends Component {
         const wallMaxHp = Number.isFinite(state.wallMaxHp) ? state.wallMaxHp : 0;
         const hasWall = wallHp > 0 && wallMaxHp > 0;
         updateHealthBar(bar, hasWall ? wallHp : state.hp, hasWall ? wallMaxHp : state.maxHp,
-            pickHealthBarFill(state.owner, this.barFillPlayer, this.barFillEnemy, this.barFillEnemy2));
+            pickHealthBarFill(state.owner, this.barFillPlayer, this.barFillEnemy,
+                this.barFillEnemy2, this.barFillEnemy3));
         // 血量比上一帧少 = 这一帧挨了打。第一次渲染只记基线：格子视图是随地图
         // 一次建好的，若不记基线，开局第一帧就会把「满血」当成「刚被打」。
         const damaged = (this.observedHp !== null && state.hp < this.observedHp)
@@ -1807,7 +1812,7 @@ export class ZCHexView extends Component {
         }
     }
 
-    private frameForTileType(type: ZCHexState['tileType']): SpriteFrame | null {
+    private frameForTileType(type: ZCPvpTileType | null): SpriteFrame | null {
         switch (type) {
             case ZCPvpTileType.Mine: return this.mineIconFrame;
             case ZCPvpTileType.BarracksCommon:

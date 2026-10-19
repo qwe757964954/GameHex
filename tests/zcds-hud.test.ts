@@ -80,14 +80,17 @@ function createHud(
         delay: number; duration: number;
     }> = [];
     class FakeNode {
-        static EventType = { TOUCH_START: 'start', TOUCH_MOVE: 'move', TOUCH_END: 'end', TOUCH_CANCEL: 'cancel', SIZE_CHANGED: 'size' };
+        static EventType = { TOUCH_START: 'start', TOUCH_MOVE: 'move', TOUCH_END: 'end', TOUCH_CANCEL: 'cancel', MOUSE_WHEEL: 'mouse-wheel', SIZE_CHANGED: 'size' };
         listeners: Array<{ event: string; callback: Function; target: unknown; capture: boolean }> = [];
         position = { x: 0, y: 0, z: 0 };
         scale = { x: 1, y: 1, z: 1 };
         //  `UITransform` 桩要够 `fitMapBackground` 用：它读 width/height 并回写 setContentSize。
+        //  `convertToNodeSpaceAR` 是双指 / 滚轮缩放的锚点换算（规则里视口局部坐标），
+        //  夹具里视口恒等于屏幕、原点也重合 ⇒ 恒等映射就够，别在这里模拟相机矩阵。
         transform = {
             width: 720, height: 1280,
             setContentSize(width: number, height: number) { this.width = width; this.height = height; },
+            convertToNodeSpaceAR(point: { x: number; y: number }) { return { x: point.x, y: point.y }; },
         };
         getComponent() { return this.transform; }
         getChildByPath() { return null; }
@@ -177,6 +180,9 @@ function createHud(
         '../../HeadArt': { HeadArt: { loadHeadFrame: async () => headFrameResult } },
         '../model/ZCCombatCatalog': { getPlayerDeck: () => [{ name: '测试卡' }] },
         '../model/ZCGameModel': { ZC_HEX_CONFIG: hexes },
+        // R22 相机：HUD 的倍率**默认值**直接从模型层取（`ZC_MAP_ZOOM_*_DEFAULT`），
+        // 所以这是**值导入**、不是 `import type`，夹具必须给（不给会在 require 期断言炸掉）。
+        '../model/ZCMapConfig': loadPureModule('assets/script/app/zcds/model/ZCMapConfig.ts'),
         './ZCGameViewUtil': view,
         './ZCGameHudEvents': events,
         '../../../framework/event/EventMgr': managerModule,
@@ -188,11 +194,15 @@ function createHud(
     const hud = new context.exports.ZCGameHUDView();
     hud.mapViewport = new FakeNode();
     hud.mapLayer = new FakeNode();
+    // 铺底大图：`fitMapBackground` 现在走 prefab 绑定的 `mapBackground`（不再按名找子节点）。
+    hud.mapBackground = new FakeNode();
     hud.mapScrollView = { enabled: true, stopAutoScroll() {} };
     // 三块「按模式收起」的面板：`render()` 现在会按「是否守城局」开关 `topInfoPanel`
     // （守城局顶部信息带整个收起），夹具必须把节点给上，否则第一帧就炸在 `.active` 上。
     for (const key of ['topInfoPanel', 'bottomInfoPanel', 'leftPanel']) hud[key] = new FakeNode();
-    for (const key of ['artifactButton', 'rankButton', 'guideButton', 'damageButton', 'retreatButton']) hud[key] = new FakeButton();
+    for (const key of ['artifactButton', 'rankButton', 'guideButton', 'damageButton', 'retreatButton', 'resetCameraButton']) {
+        hud[key] = new FakeButton();
+    }
     for (const key of ['timeLabel', 'goldLabel', 'logLabel', 'deckLabel']) hud[key] = { string: '' };
     // 金币不足时跳动的那个图标（`BottomInfoPanel/CoinPanel/coin`）：`flashInsufficientGold` 会读它的
     // position / scale，缺了就是运行期崩 —— 与 prefab 上「必填引用」同一口径。
@@ -523,14 +533,14 @@ test('神器三态与进度同步；不可充能时按钮仍可点，只有结�
     assert.equal(uses, 4);
 });
 
-test('五个按钮各自派发对应意图事件（视图不再持有任何回调）', () => {
+test('六个按钮各自派发对应意图事件（视图不再持有任何回调）', () => {
     // 事件化之后视图**不知道**上层有没有接：点一下就必须派发。
     // 「漏接」的风险从视图侧搬到了控制器侧（`ZCGame.bindHudEvents`），由 wiring 用例钉住。
     const { hud, model, events, mgr } = createHud();
     hud.onLoad();
     const seen: string[] = [];
-    // 契约是**全界面共用**的（还含结算页 / 选点的意图），这里只取 HUD 那 5 个来对表。
-    const hudEvents = ['UseArtifact', 'OpenGuide', 'OpenDamageStats', 'OpenRank', 'Retreat'] as const;
+    // 契约是**全界面共用**的（还含结算页 / 选点的意图），这里只取 HUD 那 6 个来对表。
+    const hudEvents = ['UseArtifact', 'OpenGuide', 'OpenDamageStats', 'OpenRank', 'Retreat', 'ResetCamera'] as const;
     for (const key of hudEvents) {
         mgr.on(events.ZCGameUiEvent[key], () => seen.push(events.ZCGameUiEvent[key]));
     }
@@ -541,10 +551,11 @@ test('五个按钮各自派发对应意图事件（视图不再持有任何回�
     hud.damageButton.node.emit('click');
     hud.artifactButton.node.emit('click');
     hud.retreatButton.node.emit('click');
+    hud.resetCameraButton.node.emit('click');
     assert.deepEqual(
         [...seen].sort(),
         hudEvents.map((key) => events.ZCGameUiEvent[key]).sort(),
-        '★五个按钮必须各自派发自己的意图事件 —— 少一个就是那个按钮点了没反应',
+        '★六个按钮必须各自派发自己的意图事件 —— 少一个就是那个按钮点了没反应',
     );
 });
 
@@ -564,19 +575,25 @@ test('神器 / 撤退在非对局进行中不派发（按钮也置灰）', () =>
     assert.deepEqual(seen, [], '结算后神器与撤退都不该再派发');
 });
 
-test('视口组件由 prefab 保证：两处都直写不再判空', () => {
+test('视口组件由 prefab 保证：全类只在缓存 getter 里查一次，且直写不再判空', () => {
     const HUD_SRC = readFileSync('assets/script/app/zcds/view/ZCGameHUDView.ts', 'utf8');
     // MapScrollView/view 在 ZCGameHUD.prefab 上静态挂着 UITransform，且全工程无人给 mapViewport 赋值
     // ⇒取不到就是 prefab 错误，应当场爆，不需要降级分支。
+    // 2026-10-16（R22 相机）：`mapOverviewScale` / `fitMapBackground` / `clampMapOffset` 各查一遍，
+    // 再加双指缩放的锚点换算就是四处 ⇒ 收敛成 `mapViewportTransform` 一处缓存。
+    // 不收敛的话，每多一个调用点就多一次「顺手判个空」的机会，这条用例也就守不住了。
     const probes = HUD_SRC.match(/mapViewport\.getComponent\(UITransform\)/g) ?? [];
-    assert.equal(probes.length, 2, `应恰好 2 处（mapOverviewScale / clampMapOffset），实际 ${probes.length} 处`);
-    // 两处都是 `!`：判空不赚功力、只多一次 getComponent，且不留「判了不用」的死代码。
-    assert.equal((HUD_SRC.match(/getComponent\(UITransform\)!/g) ?? []).length, 2, '两处都应写 `!`');
+    assert.equal(probes.length, 1, `只该有 1 处（mapViewportTransform getter），实际 ${probes.length} 处`);
+    // 唯一那一处必须是 `!`：判空不赚功力、只多一次 getComponent，且不留「判了不用」的死代码。
+    assert.equal((HUD_SRC.match(/mapViewport\.getComponent\(UITransform\)!/g) ?? []).length, 1, '这一处应写 `!`');
+    assert.match(
+        HUD_SRC, /private get mapViewportTransform\(\): UITransform/,
+        '视口查询要收在 mapViewportTransform getter 里（缓存 + 唯一入口）',
+    );
     assert.ok(!/getComponent\(UITransform\);\s*\n\s*if \(!viewport/.test(HUD_SRC), '不应再有「取到不去就退回」的判空分支');
     // 视口尺寸由 Widget 四边拉伸 + ON_WINDOW_RESIZE 决定，恒等于窗口宽高 ⇒ 不可能是 0，
     // 所以 mapOverviewScale 里不应存在 `width > 0` 尺寸兜底。
     assert.ok(!/viewport\.width > 0/.test(HUD_SRC), '不应再有「视口宽高为 0」的尺寸兜底');
-    assert.ok(!/getComponent\(UITransform\);\s*\n\s*if \(!viewport/.test(HUD_SRC), '不应再有「取到不去就退回」的判空分支');
     // 正常路径不受影响：视口有尺寸时照常走下去。
     const { hud, model, mgr } = createHud();
     hud.onLoad();
@@ -587,28 +604,28 @@ test('视口组件由 prefab 保证：两处都直写不再判空', () => {
     assert.equal(hud.mapLayer.scale.x > 0, true, '镜头应正常带一个正缩放');
 });
 
-test('视口只在真正用它的两处查（playMapIntro / applyMapOffset 不多查）', () => {
+test('视口只查一次：缓存之后每帧（applyMapOffset）不再 getComponent', () => {
     const { hud, mgr } = createHud();
-    // `applyMapOffset` 原来也判了一次，但判完的 viewport 根本没用上，紧接着 `clampMapOffset`
-    // 又 getComponent 判一次 ⇒ 多余的一次查询 + 一条“已判空”的错觉。
-    // 按调用计数钉住：一趟 applyMapOffset 只能查一次视口。
+    // `applyMapOffset` 每次拖动都跑，`fitMapBackground` 还要再问一次全景倍率 ——
+    // 缓存之前这几条路径各查一遍视口；缓存之后整个生命周期只查一次。
     let probes = 0;
     // 必须在 onLoad 之前替换：SIZE_CHANGED 正是 onLoad 里绑到 applyMapOffset 的。
-    // createHud 里的 mapViewport 本身就是会真派发的 FakeNode，只在 getComponent 上包一层计数。
     const viewport = hud.mapViewport as unknown as { getComponent: () => unknown };
     viewport.getComponent = () => { probes += 1; return { width: 720, height: 1280 }; };
     hud.onLoad();
     hud.initialize();
+    assert.equal(probes, 1, `initialize 期间应恰好查 1 次视口（缓存），实际 ${probes} 次`);
     probes = 0; // 跳过 initialize 期间的查询，只算运行期的
     hud.mapViewport.emit('size');
-    assert.equal(probes, 1, `applyMapOffset 应只查 1 次视口，实际 ${probes} 次`);
+    assert.equal(probes, 0, `applyMapOffset 应完全走缓存、一次都不再查视口，实际 ${probes} 次`);
+    //  换一局要重新取：`initialize` 把缓存清掉（同一个 HUD 实例复用、万一换了视口节点）。
+    hud.initialize();
+    assert.equal(probes, 1, '重新 initialize 应重新取一次视口（缓存不跨局复用）');
 
-    // 整个类里真正读 `viewport.width/height` 的只有 mapOverviewScale 与 clampMapOffset 两处；
-    // `playMapIntro` 曾多查一次（判完就丢），`applyMapOffset` 也曾多查一次 —— 都被删了。
-    // 这条按源码形状钉：任何地方再往 mapViewport 上加 getComponent 都会红。
+    // 整个类里只该有 getter 那一处查询。任何地方再往 mapViewport 上加 getComponent 都会红。
     const HUD_SRC = readFileSync('assets/script/app/zcds/view/ZCGameHUDView.ts', 'utf8');
     const probesInSrc = (HUD_SRC.match(/mapViewport\.getComponent\(UITransform\)/g) ?? []).length;
-    assert.equal(probesInSrc, 2, `mapViewport.getComponent 只该有 2 处（mapOverviewScale / clampMapOffset），实际 ${probesInSrc} 处`);
+    assert.equal(probesInSrc, 1, `mapViewport.getComponent 只该有 1 处（mapViewportTransform），实际 ${probesInSrc} 处`);
 });
 
 test('头像异步到货：HUD 已销毁时不刷行（CCObject.isValid 不能删）', async () => {
@@ -666,7 +683,8 @@ test('绑定只在 onLoad 完成一次；重复 initialize 不重复注册；onD
     hud.rankButton.node.emit('click');
     assert.equal(ranks, 2);
     assert.equal(hud.mapScrollView.enabled, false);
-    assert.equal(hud.mapViewport.listeners.length, 5, '棋盘触摸监听仍只在 onLoad 绑一次');
+    // 6 = 三条触摸 + 一条 TOUCH_CANCEL + 滚轮缩放（R22）+ SIZE_CHANGED；只在 onLoad 绑一次。
+    assert.equal(hud.mapViewport.listeners.length, 6, '棋盘触摸/滚轮监听仍只在 onLoad 绑一次');
     assert.equal(hud.rankButton.node.listeners.length, 1, '按钮点击监听不被 initialize 重复注册');
     //  `onDestroy` 现在**不碰任何业务状态**（视图没有回调可清）⇒ 只要不抛就算过。
     //  ⚠️ 别拿"销毁后再 emit 一次，看 ranks 变不变"当判据：真引擎里监听随节点销毁回收，
@@ -696,7 +714,10 @@ test('HUD prefab 的直接引用与嵌套组件引用完整且没有旧字段', 
     const data = read('ZCGameHUD');
     const component = data.find((o: any) => o.mapViewport && o.mapLayer && o.artifactButton);
     for (const key of ['statLabel', 'hintLabel', 'artifactLabel', 'resetButton']) assert.ok(!(key in component));
-    for (const key of ['mapScrollView', 'mapViewport', 'mapLayer', 'timeLabel', 'goldLabel', 'artifactButton', 'artifactIcon', 'artifactProgress', 'artifactCountLabel', 'rankButton', 'guideButton', 'damageButton', 'retreatButton', 'topInfoPanel', 'bottomInfoPanel', 'leftPanel']) {
+    // ⚠️ `resetButton` 是**旧字段黑名单**里的名字（历史遗留），和 R22 新加的 `resetCameraButton`
+    // 是两回事 —— 别因为名字像就被顺手并进黑名单，那样会把真的绑定当成残留删掉。
+    assert.ok('resetCameraButton' in component, '★R22 相机：一键复位按钮必须绑上');
+    for (const key of ['mapScrollView', 'mapViewport', 'mapLayer', 'mapBackground', 'timeLabel', 'goldLabel', 'artifactButton', 'artifactIcon', 'artifactProgress', 'artifactCountLabel', 'rankButton', 'guideButton', 'damageButton', 'retreatButton', 'resetCameraButton', 'topInfoPanel', 'bottomInfoPanel', 'leftPanel']) {
         const target = data[component[key].__id__];
         assert.ok(target, key);
         if (target.__type__ !== 'cc.Node') assert.ok(target.node && data[target.node.__id__], key);
@@ -730,17 +751,20 @@ test('HUD prefab 的直接引用与嵌套组件引用完整且没有旧字段', 
     );
 });
 
-test('ZCGameHUDView 的 23 个引用全部声明为 null! 且不再运行时按名找节点', () => {
+test('ZCGameHUDView 的 25 个引用全部声明为 null! 且不再运行时按名找节点', () => {
     const source = readFileSync('assets/script/app/zcds/view/ZCGameHUDView.ts', 'utf8');
     // 反例断言先剥注释（规则 104）：类注释里会讲旧实现
     const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
     // 「多队伍 + 虚拟列表」后：左侧四行不再是四个静态引用，改成**一个** `playerList`（虚拟列表）。
-    const refs = ['mapScrollView', 'mapViewport', 'mapLayer',
+    // 2026-10-16（R22 相机）：+`mapBackground`（背景改为 prefab 绑定、不再按名找）、
+    //   +`resetCameraButton`（镜头一键复位）⇒ 23 → 25。
+    const refs = ['mapScrollView', 'mapViewport', 'mapLayer', 'mapBackground',
         'scoreLayout', 'scoreSlot1', 'scoreSlot2', 'scoreSlot3', 'scoreSlot4',
         'playerList', 'timeLabel',
         'goldIcon', 'goldLabel', 'artifactButton', 'artifactIcon', 'artifactProgress', 'artifactCountLabel',
-        'rankButton', 'guideButton', 'damageButton', 'retreatButton',
+        'rankButton', 'guideButton', 'damageButton', 'retreatButton', 'resetCameraButton',
         'topInfoPanel', 'bottomInfoPanel', 'leftPanel'];
+    assert.equal(refs.length, 25, '引用清单应与本条用例的标题同步');
     for (const key of refs) {
         assert.match(code, new RegExp(`${key}: [A-Za-z]+ = null!;`), `${key} 应声明为 null!`);
         assert.doesNotMatch(code, new RegExp(`this\\.${key}\\?\\.`), `${key} 是必填引用，不该有 ?.`);
@@ -875,3 +899,142 @@ test('HUD 销毁期不许碰子节点：onDestroy 只调 cancelGoldDenyFx，禁�
         'stopGoldDenyFx 必须保留复位逻辑（重复初始化 / 重置时用，节点还活着）');
 });
 
+
+/**
+ * ────────────────────────────── R22「【战斗】相机」相机行为 ──────────────────────────────
+ *
+ * 需求原文（`v0.1战斗DEMO` 第 22 行，功能/低）：
+ *   1. 局内战斗的支持地图缩放（每个地图配置对应的最大和最小倍率
+ *   2. 开场动画：进入战场推镜头（展示全地图，推进放大到默认的相机高度
+ *   3. 镜头一键复位，回到初始点位，主城位于中心点下方100px
+ *   4. 结算拉高镜头看占据格子变化动画
+ *
+ * 第 2、4 条是既有的 `playMapIntro` / `startSettlementOverview`（另有用例钉住），
+ * 这里补的是第 1、3 条：**倍率区间**与**一键复位**。
+ */
+
+/** 滚轮事件桩：`getUILocation` 给锚点位置（夹具里视口原点与屏幕中心重合）。 */
+function wheelEvent(scrollY: number, x = 0, y = 0) {
+    return { getScrollY: () => scrollY, getUILocation: () => ({ x, y }) };
+}
+
+/** 触点桩（只需要 `getAllTouches` 里元素的 `getID` / `getUILocation`）。 */
+function touchAt(x: number, y: number) {
+    return { getID: () => 1, getUILocation: () => ({ x, y }) };
+}
+
+/** 双指事件桩：两根触点对称摆在 `±half` 上 ⇒ 中点恒为视口原点、指间距 = 2×half。 */
+function pinchEvent(half: number, extra: Record<string, unknown> = {}) {
+    return { getAllTouches: () => [touchAt(-half, 0), touchAt(half, 0)], ...extra };
+}
+
+test('★镜头一键复位：回到开局初始点位，主城落在视口中心点下方 100px', () => {
+    const { hud, view } = createHud();
+    hud.onLoad();
+    // 主城取**整盘正中那一格**：这样"不设偏移"时镜头就停在 (0,0)，
+    // 断言 -100 才是在测那个偏移本身，而不是在测"主城本来就不居中"。
+    hud.setMapFocus({
+        x: (view.mapToViewX(-500) + view.mapToViewX(500)) / 2,
+        y: (view.mapToViewY(-700) + view.mapToViewY(700)) / 2,
+    });
+    hud.initialize();
+    assert.equal(Math.round(hud.mapLayer.position.x), 0);
+    assert.equal(Math.round(hud.mapLayer.position.y), -100, '★主城应落在中心点下方 100px（屏幕 y 向上为正）');
+    const initial = { x: hud.mapLayer.position.x, y: hud.mapLayer.position.y };
+
+    // 拖走 + 滚轮缩一下，再一键复位。
+    hud.mapViewport.emit('start');
+    hud.mapViewport.emit('move', { getUIDelta: () => ({ x: 137, y: 89 }) });
+    hud.mapViewport.emit('end');
+    hud.mapViewport.emit('mouse-wheel', wheelEvent(1));
+    assert.notEqual(hud.mapLayer.scale.x, 1, '滚一下应当真的缩放了');
+    assert.notDeepEqual({ x: hud.mapLayer.position.x, y: hud.mapLayer.position.y }, initial, '拖动+缩放后不该还在原点');
+
+    hud.resetCamera();
+    assert.deepEqual(
+        { x: hud.mapLayer.position.x, y: hud.mapLayer.position.y }, initial,
+        '★一键复位必须回到开局那一帧的初始点位（同一个公式，不是另算一个）',
+    );
+    assert.equal(hud.mapLayer.scale.x, 1, '★复位也要把倍率放回默认机位');
+});
+
+test('★局内缩放夹在本图倍率区间内：滚轮与双指同一套约束', () => {
+    const { hud } = createHud();
+    hud.onLoad();
+    // 一张"只能小幅缩放"的地图：区间 0.8~0.9，不含默认机位 1。
+    hud.setMapZoomRange(0.8, 0.9);
+    hud.initialize();
+    assert.equal(
+        hud.mapLayer.scale.x, 0.9,
+        '★默认机位 1 落在区间外 ⇒ 入场收尾应停在 zoomMax，而不是硬停 1（否则开局第一帧就捏不动）',
+    );
+    for (let i = 0; i < 12; i += 1) hud.mapViewport.emit('mouse-wheel', wheelEvent(1));
+    assert.equal(hud.mapLayer.scale.x, 0.9, '放到顶就停在 zoomMax');
+    for (let i = 0; i < 24; i += 1) hud.mapViewport.emit('mouse-wheel', wheelEvent(-1));
+    assert.equal(hud.mapLayer.scale.x, 0.8, '缩到底就停在 zoomMin');
+
+    // 双指猛张同样只能到 zoomMax（两条输入路径共用一个 clamp）。
+    hud.mapViewport.emit('start', pinchEvent(40));
+    hud.mapViewport.emit('move', pinchEvent(4000));
+    assert.equal(hud.mapLayer.scale.x, 0.9, '★双指猛张也只能到 zoomMax');
+});
+
+test('★双指缩放钉住两指中点，且不算棋盘拖动（松手不会被当成点选地块）', () => {
+    const { hud } = createHud();
+    hud.onLoad();
+    hud.initialize();
+    // 视口原点处的棋盘坐标 —— 锚点就是两指中点（夹具里 = 视口原点），缩放前后它必须不动。
+    const anchorBefore = hud.mapLayer.position.y / hud.mapLayer.scale.y;
+
+    hud.mapViewport.emit('start', pinchEvent(50));
+    assert.equal(hud.dragMoved, true, '★双指落下就应标记"已移动"，否则松手会被当成点选地块');
+    hud.mapViewport.emit('move', pinchEvent(100)); // 指间距翻倍 ⇒ 目标 ×2，被夹到默认上限 1.2
+    assert.equal(hud.mapLayer.scale.x, 1.2, '指间距翻倍应放大（并被夹到默认 zoomMax 1.2）');
+    assert.ok(
+        Math.abs(hud.mapLayer.position.y / hud.mapLayer.scale.y - anchorBefore) < 1e-6,
+        '★锚点处的棋盘坐标必须不动 —— 不钉锚点的缩放会变成"缩放 + 平移"混合，手感是地图被推了一下',
+    );
+
+    // 抬掉一根手指：剩下的单指只能拖动，不许再缩放。
+    hud.mapViewport.emit('end', { getAllTouches: () => [touchAt(-100, 0)] });
+    hud.mapViewport.emit('move', {
+        getAllTouches: () => [touchAt(-100, 0)],
+        getUIDelta: () => ({ x: 0, y: 0 }),
+    });
+    assert.equal(hud.mapLayer.scale.x, 1.2, '★只剩一根手指就不该再缩放');
+});
+
+test('★一键复位同时收掉结算镜头（否则复位完又被结算拉走）', () => {
+    const { hud, model, mgr } = createHud();
+    hud.onLoad();
+    hud.initialize();
+    hud.render(model);
+    hud.startSettlementOverview();
+    assert.equal(hud.settlementOverviewSettled, true, '夹具的假 tween 是同步落地的');
+    hud.resetCamera();
+    assert.equal(hud.settlementOverviewSettled, false, '★复位后不该还停在"结算已拉远"的状态上');
+    // 也不能还留着"结算镜头正在跑"的忙标记 —— 否则复位后棋盘直接拖不动。
+    const before = hud.mapLayer.position.x;
+    hud.mapViewport.emit('move', { getUIDelta: () => ({ x: 60, y: 0 }) });
+    assert.notEqual(hud.mapLayer.position.x, before, '复位后棋盘必须能拖动（忙标记已清）');
+});
+
+test('倍率区间注入顺序颠倒不炸整局（模型层已拦，视图只做就地纠正）', () => {
+    const { hud } = createHud();
+    hud.setMapZoomRange(1.1, 0.9);
+    hud.initialize();
+    assert.equal(hud.mapLayer.scale.x, 1, '区间写成 1.1~0.9 时按 0.9~1.1 理解，默认机位 1 仍在区间内');
+});
+
+test('没注入倍率区间时走模型层的缺省 0.6/1.2（不写死第二份默认值）', () => {
+    const { hud, hudModule } = createHud();
+    hud.onLoad();
+    hud.initialize();
+    for (let i = 0; i < 40; i += 1) hud.mapViewport.emit('mouse-wheel', wheelEvent(1));
+    // 缺省上限取自 `ZCMapConfig.ZC_MAP_ZOOM_MAX_DEFAULT`（HUD 侧不重复写 1.2）。
+    assert.equal(hud.mapLayer.scale.x, 1.2, '缺省上限应为模型层的 ZC_MAP_ZOOM_MAX_DEFAULT');
+    assert.equal(
+        hudModule.ZC_MAP_HOME_CENTER_OFFSET_Y, 100,
+        '「主城位于中心点下方100px」的偏移量导出给用例读，别把 100 钉进断言里',
+    );
+});

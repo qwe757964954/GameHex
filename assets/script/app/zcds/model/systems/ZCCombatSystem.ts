@@ -1,4 +1,4 @@
-import { ZCSkillTrigger } from '../ZCCombatCatalog';
+import { ZCCombatEventType, ZCSkillTrigger } from '../ZCCombatCatalog';
 import type { ZCAttackProfile, ZCDeckBonuses, ZCUnitDefinition } from '../ZCCombatCatalog';
 import type { ZCRuntimeRules } from '../ZCGameRuntimeConfig';
 import type { ZCUnitBattleState, ZCUnitState } from '../ZCGameTypes';
@@ -73,8 +73,8 @@ export class ZCCombatSystem {
         return before - target.hp;
     }
 
-    static attackTravelSeconds(mode: 'melee' | 'projectile' | 'area', distance: number, projectileSpeed?: number): number {
-        return mode === 'projectile'
+    static attackTravelSeconds(mode: ZCCombatEventType, distance: number, projectileSpeed?: number): number {
+        return mode === ZCCombatEventType.Projectile
             ? Math.max(1e-6, distance / (projectileSpeed || 500))
             : 0.32;
     }

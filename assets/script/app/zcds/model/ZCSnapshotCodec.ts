@@ -1,5 +1,9 @@
 import { ZCCardType } from './ZCCombatCatalog';
-import type { OwnerNumberRecord, DeepReadonly, ZCBuildingType, ZCHexState, ZCSnapshot, ZCUnitState } from './ZCGameTypes';
+import {
+    ZCBuildingType, ZCCombatFloatTextKind, ZCCombatTargetKind,
+    ZCGameStatus, ZCTileState, ZCUnitBattleState,
+} from './ZCGameTypes';
+import type { OwnerNumberRecord, DeepReadonly, ZCHexState, ZCSnapshot, ZCUnitState } from './ZCGameTypes';
 import type { ZCMatchConfig } from './ZCMatchConfig';
 import { resolveZCUnitDefinition } from './ZCModifierRuntime';
 import { createPvpTileTypes } from './ZCPvpTileRules';
@@ -7,6 +11,7 @@ import { ZCPvpTileType } from './ZCPvpTileRules';
 import { ZCArtifactSystem } from './systems/ZCArtifactSystem';
 import { ZCEconomySystem } from './systems/ZCEconomySystem';
 import { ZCStatusSystem } from './ZCStatusEffect';
+import { ZCNeutralResourceId } from './ZCNeutralResourceReward';
 import { ownersForPlayerCount, type ZCFaction, type ZCOwner } from './ZCMapConfig';
 
 export type ZCSnapshotLoadResult =
@@ -30,6 +35,16 @@ function ownerNumbers(owners: readonly ZCOwner[], value = 0): OwnerNumberRecord 
 
 function ownerTypeCounts(owners: readonly ZCOwner[]): ZCSnapshot['builtTypeCounts'] {
     return Object.fromEntries(owners.map((owner) => [owner, createTypeCounts()])) as ZCSnapshot['builtTypeCounts'];
+}
+
+/**
+ * 外部快照字段是否落在取值真源里。
+ *
+ * `value` 是 `unknown`（快照来自存档 / 网络，不可信），所以不带类型收窄、只做布尔判定；
+ * 取值集合一律来自 `ZCGameTypes` 的 `as const` 数组，别在调用处再手写一份字面量数组。
+ */
+function oneOf(values: readonly string[], value: unknown): boolean {
+    return typeof value === 'string' && values.includes(value);
 }
 
 export class ZCSnapshotCodec {
@@ -149,7 +164,7 @@ export class ZCSnapshotCodec {
         const data = value;
         const owners = ownersForPlayerCount(config.map.playerCount ?? 2);
         const ownerSet = new Set<string>(owners);
-        const combatFloatTextKinds = new Set(['damage', 'critical', 'restraint', 'resisted', 'execute']);
+        const combatFloatTextKinds = new Set<string>(Object.values(ZCCombatFloatTextKind));
         check(data.version === 4, 'version');
         check(data.mapId === config.map.id, 'mapId');
         check(data.configHash === undefined || data.configHash === (config.configHash ?? 'legacy'), 'configHash');
@@ -160,7 +175,7 @@ export class ZCSnapshotCodec {
             && owners.every((owner) => nonnegative(data.goldByOwner[owner])), 'goldByOwner');
         check(nonnegative(data.durationSeconds) && data.durationSeconds > 0, 'durationSeconds');
         check(optional(data.pendingSeconds, nonnegative), 'pendingSeconds');
-        check(['playing', 'victory', 'defeat', 'draw'].includes(data.status), 'status');
+        check(oneOf(Object.values(ZCGameStatus), data.status), 'status');
         check(typeof data.resultReason === 'string', 'resultReason');
         check(record(data.spawnClocks) && Object.entries(data.spawnClocks).every(([key, clock]) => (
             /^(?:(?:mine|barracks|tower|hq):)?[0-9]+$/.test(key)
@@ -181,8 +196,8 @@ export class ZCSnapshotCodec {
             if (!record(hex)) { errors.push(path); return; }
             check(hex.id === index, `${path}.id`);
             check(hex.owner === 'neutral' || ownerSet.has(hex.owner), `${path}.owner`);
-            check(['occupied', 'occupiable', 'developable', 'developed', 'ruins'].includes(hex.state), `${path}.state`);
-            check(['none', 'hq', 'mine', 'barracks', 'tower'].includes(hex.building), `${path}.building`);
+            check(oneOf(Object.values(ZCTileState), hex.state), `${path}.state`);
+            check(oneOf(Object.values(ZCBuildingType), hex.building), `${path}.building`);
             check(integer(hex.tier), `${path}.tier`);
             for (const key of ['hp', 'maxHp', 'developmentCost']) check(nonnegative(hex[key]), `${path}.${key}`);
             for (const key of ['wallHp', 'wallMaxHp', 'constructionRemainingSeconds', 'constructionTotalSeconds']) {
@@ -195,7 +210,7 @@ export class ZCSnapshotCodec {
             check(optional(hex.captureSeconds, v => nonnegative(v) && v <= captureMax), `${path}.captureSeconds`);
             if (nonnegative(hex.captureSeconds) && hex.captureSeconds > 0) check(typeof hex.captureOwner === 'string' && ownerSet.has(hex.captureOwner), `${path}.captureOwner`);
             check(hex.cardId === null || typeof hex.cardId === 'string', `${path}.cardId`);
-            check(optional(hex.neutralResourceId, (v) => v === null || typeof v === 'string'), `${path}.neutralResourceId`);
+            check(optional(hex.neutralResourceId, (v) => v === null || oneOf(Object.values(ZCNeutralResourceId), v)), `${path}.neutralResourceId`);
             check(optional(hex.tileType, (v) => v === null || typeof v === 'number' && Object.prototype.hasOwnProperty.call(config.tiles, v)), `${path}.tileType`);
             const mapHex = config.map.hexes[index];
             if (!mapHex.playable) {
@@ -226,7 +241,7 @@ export class ZCSnapshotCodec {
             check(optional(unit.attackMultiplier, (value) => typeof value === 'number' && Number.isFinite(value) && value > 0), `${path}.attackMultiplier`);
             check(optional(unit.shield, nonnegative), `${path}.shield`);
             check(unit.progress <= 1, `${path}.progress`);
-            check(optional(unit.battleState, (v) => ['born', 'target', 'moveForward', 'move', 'waitAttack', 'attack', 'idle', 'dead'].includes(v as string)), `${path}.battleState`);
+            check(optional(unit.battleState, (v) => oneOf(Object.values(ZCUnitBattleState), v)), `${path}.battleState`);
             for (const key of ['targetWallHexId', 'targetBuildingHexId']) check(optional(unit[key], reference), `${path}.${key}`);
             for (const key of ['targetUnitId', 'hatredUnitId']) check(optional(unit[key], (v) => v === null || integer(v) && (v as number) > 0), `${path}.${key}`);
             for (const key of ['stateTime', 'nextAttackAt', 'waitUntil', 'hatredUntil', 'deathRemoveAt', 'completedAttackCount', 'empoweredReadyAt']) {
@@ -250,7 +265,7 @@ export class ZCSnapshotCodec {
             check(ownerSet.has(projectile.owner), `${path}.owner`);
             check(integer(projectile.sourceUnitId) && projectile.sourceUnitId > 0 && projectile.sourceUnitId < data.nextUnitId, `${path}.sourceUnitId`);
             check(typeof projectile.sourceCardId === 'string', `${path}.sourceCardId`);
-            check(['unit', 'wall', 'building'].includes(projectile.targetKind), `${path}.targetKind`);
+            check(oneOf(Object.values(ZCCombatTargetKind), projectile.targetKind), `${path}.targetKind`);
             check(projectile.targetKind === 'unit'
                 ? integer(projectile.targetId) && projectile.targetId > 0 && projectile.targetId < data.nextUnitId
                 : validHexId(projectile.targetId), `${path}.targetId`);

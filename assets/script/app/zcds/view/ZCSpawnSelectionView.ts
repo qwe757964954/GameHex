@@ -9,15 +9,17 @@ const { ccclass, property } = _decorator;
 const COUNTDOWN_SECONDS = 10;
 
 /**
- * 顶栏文案的**两个** y（设计稿两帧各一个）：
- * 选择态标题在顶栏上部（标题 / 倒计时 / 进度条三段），等待态只剩一行、**垂直居中**。
+ * 顶栏文案的**两个** y（同一 prefab 的两态）：
+ * 选择态是**三行式**（① 倒计时数字 ② 标题 ③ 进度条），标题落在第二行；
+ * 等待态数字与进度条都收掉、只剩这一行字，回到**垂直居中**。
  */
-export const SPAWN_HINT_OFFSET_Y = 35.5;
+export const SPAWN_HINT_PICKING_Y = -9;
 export const SPAWN_HINT_CENTER_Y = 0;
 
 /**
  * 视图只**派发意图事件**（{@link ZCGameUiEvent}，在 {@link events} 上 `emit`）：
  * 「确认落点」「切换提示显隐」由控制器 `ZCGame` 订阅后处理。
+ */
 
 /**
  * 自选主城（落点选择）阶段的常驻 HUD：顶部信息带 + 绿勾 + 左下「收回提示」+ 吐司。
@@ -30,8 +32,10 @@ export const SPAWN_HINT_CENTER_Y = 0;
  *
  * | | 选择态（落点选择） | 等待态（落点选择2） |
  * |---|---|---|
- * | 标题 | 「选择己方主城位置」@ +35.5 | 「等待其他玩家」@ 0（居中） |
- * | 倒计时 / 进度条 / 绿勾 | 显示 | **全部隐藏**（设计稿那一帧没有） |
+ * | 倒计时数字（第一行，48 号） | 显示 @ +35 | **隐藏** |
+ * | 标题（第二行，30 号） | 「选择己方主城位置」@ -9 | 「等待其他玩家」@ 0（居中） |
+ * | 进度条（第三行） | 显示 @ -46 | **隐藏** |
+ * | 绿勾 | 显示 | **隐藏** |
  * | 左下「收回提示」 | 显示 | 显示 |
  */
 @ccclass('ZCSpawnSelectionView')
@@ -123,8 +127,8 @@ export class ZCSpawnSelectionView extends Component {
         this.hintLabel.string = waiting
             ? ZCSpawnSelectionView.SPAWN_HINT_TEXTS.waiting
             : ZCSpawnSelectionView.SPAWN_HINT_TEXTS.picking;
-        // 等待态只剩一行字，按设计稿垂直居中；选择态回到「标题在顶上」的三段式布局。
-        this.hintLabel.node.setPosition(0, waiting ? SPAWN_HINT_CENTER_Y : SPAWN_HINT_OFFSET_Y, 0);
+        // 等待态只剩一行字，按设计稿垂直居中；选择态落在三行式的第二行（数字在上、进度条在下）。
+        this.hintLabel.node.setPosition(0, waiting ? SPAWN_HINT_CENTER_Y : SPAWN_HINT_PICKING_Y, 0);
 
         const urgent = !waiting && snapshot.remainingSeconds <= ZCSpawnSelectionView.SPAWN_URGENT_SECONDS;
         this.clockLabel.node.active = !waiting;

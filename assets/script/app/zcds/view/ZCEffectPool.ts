@@ -48,6 +48,21 @@ const SPAWN_FX_FALLBACK_DURATION = 1.5;
  * 正常路径从 `clip.duration` 读（死亡特效 13 帧 @12fps = 1.0833s）；仅在 prefab 损坏时兜底。
  */
 const DEATH_FX_FALLBACK_DURATION = 1.1;
+/**
+ * 受击特效的**固定总时长**（秒）—— 2026-10-17 需求「所有职业受击效果总时长固定 0.15s」。
+ *
+ * 🔴 **加速只动 `AnimationState.speed`，不改资产**：四条 anim 的 `_duration` 仍是
+ * 「帧数 / 18fps」的美术真值（射手 0.4444s、法师 0.7222s），播放时把 speed 设成
+ * `clip.duration / 0.15` 把整段压进 0.15s。美术以后改帧数/帧率，总时长照样锁死，
+ * 不用回头改这里；反过来若把 0.4444 改到 anim 里，那是**截断**不是加速 ——
+ * 曲线关键帧的时间戳按原 clip 长度排布，缩短 duration 等于把后半段帧直接丢掉。
+ *
+ * 为什么不改 `state.duration` / `clip.duration`：同上，关键帧时间戳不会跟着重排。
+ * 为什么不走 `play(name, startTime)`：3.8.8 的签名只有 `play(name?)`，没有第二参。
+ * `speed` 只在 `AnimationState.initialize()` 里从 `clip.speed` 取一次，`play()` / `stop()`
+ * 都不重置它 ⇒ 每次播放重算同一个值是安全且幂等的（节点池化复用也不会累乘）。
+ */
+const HIT_FX_TARGET_SECONDS = 0.15;
 
 /**
  * 对局特效池：受击闪白、阵亡特效、出生光柱。
@@ -66,14 +81,19 @@ export class ZCEffectPool {
     /**
      * 受击去重：**已经播过的**那几条 fx（存**对象引用**，不存 `fx.id`）。
      *
-     * 🔴 不去重会**停顿**（2026-10-16 山猫「受击会停顿在角色上」）：模型层的 `hitFxQueue` 会保留到
-     * `startedAt + HIT_FX_SECONDS(0.8s)`，而渲染世界每帧把**整条队列**送进来 ⇒ 每帧对同一个 fx
-     * `animation.play()` 一次，而 `play()` **无条件把动画 seek 回 0**（真引擎实测：每 tick 重播 ⇒
-     * 8 帧只出现第 0 帧；只播一次 ⇒ 8 帧全出）⇒ 动画被钉死在起始帧，看着就是一坨静止的特效。
+     * 🔴 不去重会**停顿**（2026-10-16 山猫「受击会停顿在角色上」）：模型层的 `hitFxQueue` 是
+     * **按帧判定过期**的（`now >= startedAt + durationSeconds` 才出队），而渲染世界每帧把
+     * **整条队列**送进来 ⇒ 同一个 fx 至少在队列里出现两帧。每帧对它 `animation.play()` 一次，
+     * 而 `play()` → `AnimationState.onPlay()` → `setTime(0)` **无条件把动画 seek 回 0**
+     * （真引擎实测：每 tick 重播 ⇒ 8 帧只出现第 0 帧；只播一次 ⇒ 8 帧全出）⇒ 动画被钉死在
+     * 起始帧，看着就是一坨静止的特效。
+     *
+     * 🔴 **2026-10-17 起队列与动画同为 0.15s，去重依然必需**：0.15s 在 60fps 下是 9 帧、
+     * 30fps 下也有 4~5 帧，同一个 fx 一定被推进来好几帧。别因为"两边时长相等"就把这一层删掉。
      *
      * 两个约束：
-     *  - 记录必须**保留到 fx 从模型队列消失**（不是到动画播完）：动画只有 0.4444s、队列有 0.8s，
-     *    若跟着 `hitFxNodes` 一起删，剩下的 0.36s 里还会被重新播一次；
+     *  - 记录必须**保留到 fx 从模型队列消失**（不是到动画播完）：否则"已播完但还在队列"的那几帧
+     *    会把它**重播一次**（快闪两下）；
      *  - 用**对象引用**而不是 `fx.id`：模型层 `nextHitFxId` 换局会**从 1 重新开始**，存 id 会让
      *    新局第一个特效被上一局的记录挡掉（见 `ZCBattlePresentationQueue.reset`）。
      */
@@ -93,10 +113,10 @@ export class ZCEffectPool {
     }
 
     /**
-     * 播放本帧仍然存活的受击特效 —— **幂等**：同一个 `fx.id` 只播一次。
+     * 播放本帧仍然存活的受击特效 —— **幂等**：同一个 fx 对象只播一次。
      *
-     * 渲染世界每帧把模型层的**整条存活队列**送进来（队列保留 `HIT_FX_SECONDS`），所以去重必须在
-     * 这一层做。见 `hitFxPlayed` 的注释：不去重 = 每帧 `play()` 把动画钉死在第 0 帧。
+     * 渲染世界每帧把模型层的**整条存活队列**送进来（队列按 `durationSeconds` 逐帧判过期），
+     * 所以去重必须在这一层做。见 `hitFxPlayed` 的注释：不去重 = 每帧 `play()` 把动画钉死在第 0 帧。
      */
     syncHitFx(fxs: readonly Readonly<ZCHitFx>[], now: number): void {
         this.hitFxAlive.clear();
@@ -118,6 +138,9 @@ export class ZCEffectPool {
      *
      * ⚠️ **渲染循环里别直接调它** —— 同一个 fx 会跨很多帧一直躺在模型队列里，逐个直接调会让
      * 动画每帧被 seek 回 0。走 `syncHitFx`。
+     *
+     * 尺寸（需求「统一缩小 0.7」）**不在这里改**：烘在 prefab 根的 `_lscale` 里。同 `playDeathFx`
+     * 的坑 —— 这里 `setScale` 会 ① 覆盖美术烘焙值 ② 池化复用每次乘一遍会逐次缩水。
      */
     playHitFx(fx: Readonly<ZCHitFx>, now: number): void {
         const prefabs = this.deps.hitFxPrefabs;
@@ -135,13 +158,24 @@ export class ZCEffectPool {
         node.name = `HitFx_${fx.trait}_${fx.id}`;
         const animation = node.getComponent(Animation);
         const clip = animation?.defaultClip ?? null;
-        // 池里复用回来的节点停在上一轮末帧，必须 stop/play 一遍，否则会先闪一帧旧画面。
-        if (animation && clip) animation.play(clip.name);
+        if (animation && clip) {
+            // 池里复用回来的节点停在上一轮末端。`play()` 内部走 `crossFade(name, 0)`
+            // ⇒ 先 `clear()`（stop 掉残留状态）再 `state.play()` ⇒ `setTime(0)` 从第 0 帧重走，
+            // 不会先闪一帧旧画面。（不用额外 `stop()`：duration 为 0 时 crossFade 必定 clear。）
+            animation.play(clip.name);
+            // 🔴 统一压到 0.15s：把整段 clip 的播放速率抬到 `clip.duration / 0.15`。
+            const state = animation.getState(clip.name);
+            if (state) state.speed = clip.duration / HIT_FX_TARGET_SECONDS;
+        }
         this.hitFxNodes.push({
             node,
             prefabKey: key,
             startedAt: now,
-            duration: clip?.duration ?? fx.durationSeconds,
+            // 🔴 回收点必须跟着**加速后**的时长走，不能再用 `clip.duration`：
+            // 动画已被压到 0.15s，却还按 0.4444s 回收 ⇒ 后 0.29s 是 Normal(只播一遍) 定住的末帧，
+            // 看着就是「闪完了还剩一坨东西杵在角色身上」—— 正是需求①要消掉的定格。
+            // 拿不到 clip（prefab 损坏）时才退回模型层给的兜底时长。
+            duration: clip ? HIT_FX_TARGET_SECONDS : fx.durationSeconds,
         });
     }
 

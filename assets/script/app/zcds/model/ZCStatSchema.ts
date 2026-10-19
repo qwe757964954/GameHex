@@ -1,6 +1,7 @@
+import { ZCCombatEventType } from './ZCCombatCatalog';
 import type { ZCUnitDefinition } from './ZCCombatCatalog';
 import type { ZCModifierRecord } from './ZCModifierEngine';
-import type { ZCControlKind } from './ZCStatusEffect';
+import { ZCControlKind, ZCStatusRefreshPolicy } from './ZCStatusEffect';
 //  `import type`：纯编译期依赖，运行时不产生 require 边 ⇒ 不会与 `ZCModifierRuntime` 形成环
 //  （那边本来就 import 本文件）。字段定义在那边，这里只用来标注 statPatch 的形状。
 import type { ZCUnitStatPatch } from './ZCModifierRuntime';
@@ -43,12 +44,61 @@ export type ZCStatId =
     | 'singleRecruitNum'
     | 'singleRecruitLegionCount';
 
-export type ZCTextStatId = 'type' | 'model' | 'attackType';
+//  取值真源 = `as const` 对象 + 同名派生类型（同 `ZCCardType`）：
+//  `Object.values(X)` 就是运行时校验集合，新增一个取值只改这里。
+export const ZCTextStatId = {
+    Type: 'type',
+    Model: 'model',
+    AttackType: 'attackType',
+} as const;
+export type ZCTextStatId = (typeof ZCTextStatId)[keyof typeof ZCTextStatId];
 
-export type ZCModifierDomain = 'unit' | 'skill' | 'building' | 'economy' | 'status';
-export type ZCStatOperation = 'add' | 'addRate' | 'multiply' | 'override';
-export type ZCSourceUnit = 'flat' | 'percent' | 'basisPoint' | 'millisecond' | 'second' | 'ratio' | 'count' | 'text';
-export type ZCModifierSourceKind = 'generalStar' | 'equipment' | 'gem' | 'skill' | 'growth' | 'status';
+export const ZCModifierDomain = {
+    Unit: 'unit',
+    Skill: 'skill',
+    Building: 'building',
+    Economy: 'economy',
+    Status: 'status',
+} as const;
+export type ZCModifierDomain = (typeof ZCModifierDomain)[keyof typeof ZCModifierDomain];
+
+export const ZCStatOperation = {
+    Add: 'add',
+    AddRate: 'addRate',
+    Multiply: 'multiply',
+    Override: 'override',
+} as const;
+export type ZCStatOperation = (typeof ZCStatOperation)[keyof typeof ZCStatOperation];
+
+export const ZCSourceUnit = {
+    Flat: 'flat',
+    Percent: 'percent',
+    BasisPoint: 'basisPoint',
+    Millisecond: 'millisecond',
+    Second: 'second',
+    Ratio: 'ratio',
+    Count: 'count',
+    Text: 'text',
+} as const;
+export type ZCSourceUnit = (typeof ZCSourceUnit)[keyof typeof ZCSourceUnit];
+
+export const ZCModifierSourceKind = {
+    GeneralStar: 'generalStar',
+    Equipment: 'equipment',
+    Gem: 'gem',
+    Skill: 'skill',
+    Growth: 'growth',
+    Status: 'status',
+} as const;
+export type ZCModifierSourceKind = (typeof ZCModifierSourceKind)[keyof typeof ZCModifierSourceKind];
+
+/** 技能状态机模式：`ZCSkillBinding` 与 `ZCSkillRuntime` 共用的唯一真源。 */
+export const ZCSkillStateMode = {
+    None: 'none',
+    Counter: 'counter',
+    CastFsm: 'cast-fsm',
+} as const;
+export type ZCSkillStateMode = (typeof ZCSkillStateMode)[keyof typeof ZCSkillStateMode];
 
 export interface ZCAttributeMapping {
     legacyKey: string;
@@ -127,13 +177,18 @@ export interface ZCSkillBinding {
     targetUnitId: string;
     behaviorKey: string;
     trigger: string;
-    stateMode: 'none' | 'counter' | 'cast-fsm';
+    stateMode: ZCSkillStateMode;
     parameterKey?: string;
     parameterStatId?: ZCStatId;
     enabled: boolean;
 }
 
-export type ZCSkillProgressionMode = 'replace' | 'accumulate' | 'branch';
+export const ZCSkillProgressionMode = {
+    Replace: 'replace',
+    Accumulate: 'accumulate',
+    Branch: 'branch',
+} as const;
+export type ZCSkillProgressionMode = (typeof ZCSkillProgressionMode)[keyof typeof ZCSkillProgressionMode];
 
 /** J-技能表/PVP技能配置的一行。它既可提供被动数值，也可声明命中状态等行为参数。 */
 export interface ZCSkillPlanRecord {
@@ -150,7 +205,7 @@ export interface ZCSkillPlanRecord {
     value?: number;
     behaviorKey?: string;
     triggerEvent?: string;
-    stateMode: ZCSkillBinding['stateMode'];
+    stateMode: ZCSkillStateMode;
     targetSelector?: string;
     statusId?: string;
     statusStatMods?: Readonly<Record<string, number>>;
@@ -168,7 +223,7 @@ export interface ZCStatusConfigRecord {
     durationSeconds: number;
     intervalSeconds: number;
     maxStacks: number;
-    refreshPolicy: 'refresh' | 'extend' | 'keep';
+    refreshPolicy: ZCStatusRefreshPolicy;
     handlerKey: string;
     statMods: Readonly<Record<string, number>>;
     enabled: boolean;
@@ -234,11 +289,13 @@ export interface ZCModifierAdapterTables {
     pvpSkillPlan?: readonly Record<string, unknown>[];
 }
 
-const DOMAINS = new Set<ZCModifierDomain>(['unit', 'skill', 'building', 'economy', 'status']);
-const OPERATIONS = new Set<ZCStatOperation>(['add', 'addRate', 'multiply', 'override']);
-const SOURCE_UNITS = new Set<ZCSourceUnit>(['flat', 'percent', 'basisPoint', 'millisecond', 'second', 'ratio', 'count', 'text']);
-const TEXT_STAT_IDS = new Set<ZCTextStatId>(['type', 'model', 'attackType']);
-const SOURCE_KINDS = new Set<ZCModifierSourceKind>(['generalStar', 'equipment', 'gem', 'skill', 'growth', 'status']);
+const DOMAINS = new Set<ZCModifierDomain>(Object.values(ZCModifierDomain));
+const OPERATIONS = new Set<ZCStatOperation>(Object.values(ZCStatOperation));
+const SOURCE_UNITS = new Set<ZCSourceUnit>(Object.values(ZCSourceUnit));
+const TEXT_STAT_IDS = new Set<ZCTextStatId>(Object.values(ZCTextStatId));
+const SOURCE_KINDS = new Set<ZCModifierSourceKind>(Object.values(ZCModifierSourceKind));
+const SKILL_STATES = new Set<ZCSkillStateMode>(Object.values(ZCSkillStateMode));
+const REFRESH_POLICIES = new Set<ZCStatusRefreshPolicy>(Object.values(ZCStatusRefreshPolicy));
 const STAT_IDS = new Set<ZCStatId>([
     'attack', 'maxHp', 'moveSpeed', 'attackRange', 'attackInterval', 'attackSpeed',
     'attackDuration', 'attackHitTime', 'projectileCount', 'damageRate', 'pierceCount',
@@ -254,8 +311,8 @@ const STATUS_HANDLERS = new Set([
     'legacy_dot', 'legacy_knockback', 'legacy_traction',
 ]);
 const PERIODIC_BASES = new Set(['targetMaxHp', 'senderAttack']);
-const CONTROL_KINDS = new Set<ZCControlKind>(['stun', 'freeze', 'paralysis', 'blind']);
-const PROGRESSION_MODES = new Set<ZCSkillProgressionMode>(['replace', 'accumulate', 'branch']);
+const CONTROL_KINDS = new Set<ZCControlKind>(Object.values(ZCControlKind));
+const PROGRESSION_MODES = new Set<ZCSkillProgressionMode>(Object.values(ZCSkillProgressionMode));
 
 function bool(value: unknown): boolean {
     return value === true || value === 1 || value === '1';
@@ -268,7 +325,9 @@ function text(value: unknown, path: string): string {
 
 export function isZCTextAttackValue(statId: ZCTextStatId, value: unknown): value is string {
     if (typeof value !== 'string' || !value.trim() || value !== value.trim()) return false;
-    if (statId !== 'model') return value === 'melee' || value === 'projectile' || value === 'area';
+    if (statId !== 'model') {
+        return (Object.values(ZCCombatEventType) as readonly string[]).includes(value);
+    }
     const segments = value.split('/');
     return segments.length >= 2 && !value.includes('\\') && !/\.[A-Za-z0-9]+$/.test(value)
         && segments.every((segment) => segment !== '' && segment !== '.' && segment !== '..');
@@ -651,8 +710,8 @@ export function parseZCModifierAdapterCatalogs(
         const path = `pvpSkillBinding[${index}]`;
         const behaviorKey = text(row.behaviorKey, `${path}.behaviorKey`);
         if (!SKILL_BEHAVIORS.has(behaviorKey)) throw new Error(`[ZCStatSchema] 未注册 behaviorKey：${behaviorKey}`);
-        const stateMode = text(row.stateMode, `${path}.stateMode`) as ZCSkillBinding['stateMode'];
-        if (!['none', 'counter', 'cast-fsm'].includes(stateMode)) throw new Error(`[ZCStatSchema] 非法 stateMode：${stateMode}`);
+        const stateMode = text(row.stateMode, `${path}.stateMode`) as ZCSkillStateMode;
+        if (!SKILL_STATES.has(stateMode)) throw new Error(`[ZCStatSchema] 非法 stateMode：${stateMode}`);
         const record: ZCSkillBinding = {
             legacySkillId: number(row.legacySkillId, `${path}.legacySkillId`),
             pvpSkillId: number(row.pvpSkillId, `${path}.pvpSkillId`),
@@ -692,7 +751,7 @@ export function parseZCModifierAdapterCatalogs(
             throw new Error(`[ZCStatSchema] ${path}.statJson 必须是数字对象 JSON`);
         }
         const refreshPolicy = text(row.refreshPolicy, `${path}.refreshPolicy`) as ZCStatusConfigRecord['refreshPolicy'];
-        if (!['refresh', 'extend', 'keep'].includes(refreshPolicy)) throw new Error(`[ZCStatSchema] 非法 refreshPolicy：${refreshPolicy}`);
+        if (!REFRESH_POLICIES.has(refreshPolicy)) throw new Error(`[ZCStatSchema] 非法 refreshPolicy：${refreshPolicy}`);
         const durationSeconds = number(row.durationSeconds, `${path}.durationSeconds`, 0);
         const intervalSeconds = number(row.intervalSeconds, `${path}.intervalSeconds`, 0);
         const maxStacks = number(row.maxStacks, `${path}.maxStacks`, 1);

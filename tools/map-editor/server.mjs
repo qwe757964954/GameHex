@@ -372,9 +372,9 @@ function validatePreset(data, id) {
     ascii: data.ascii,
   };
   if (cityMode === 'fixed' || homes.length) preset.homes = homes;
-  // 玩法配置先原样透传（regions / resourcePoints / spacing / art），合法性由游戏侧校验，
+  // 玩法配置先原样透传（regions / homeCandidates / resourcePoints / spacing / art），合法性由游戏侧校验，
   // 编辑器只保证结构不被写坏。
-  for (const key of ['regions', 'resourcePoints', 'spacing', 'art']) {
+  for (const key of ['regions', 'homeCandidates', 'resourcePoints', 'spacing', 'art']) {
     if (data[key] !== undefined) preset[key] = data[key];
   }
   return preset;

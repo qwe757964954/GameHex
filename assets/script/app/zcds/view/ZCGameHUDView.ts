@@ -1,4 +1,4 @@
-﻿import { _decorator, Button, Color, Component, EventTouch, Label, Layout, Node, ScrollView, Sprite, SpriteFrame, UITransform, Vec3 } from 'cc';
+﻿import { _decorator, Button, Color, Component, EventMouse, EventTouch, Label, Layout, Node, ScrollView, Sprite, SpriteFrame, UITransform, Vec3 } from 'cc';
 import { tween, type Tween } from 'cc';
 import { Widget } from 'cc';
 import { ZCGameHudScoreSlot } from './ZCGameHudScoreSlot';
@@ -7,6 +7,9 @@ import { VirtualScrollView } from '../../../vscrollview/VScrollView';
 import { HeadArt } from '../../HeadArt';
 import type { IRankSeatProfile } from '../model/ZCRankBoard';
 import type { ZCOwner } from '../model/ZCMapConfig';
+// 倍率区间的**缺省口径**只有模型层一份（`ZCMapConfig`）：HUD 侧再抄一遍 0.6 / 1.2，
+// 迟早有一天两边对不上，而"哪边是对的"从表现上看不出来。
+import { ZC_MAP_ZOOM_MAX_DEFAULT, ZC_MAP_ZOOM_MIN_DEFAULT } from '../model/ZCMapConfig';
 import { getPlayerDeck } from '../model/ZCCombatCatalog';
 import { ZCGameModel, ZC_HEX_CONFIG } from '../model/ZCGameModel';
 import { mapToViewX, mapToViewY, ZC_HEX_VIEW_WIDTH, ZC_HEX_VIEW_HEIGHT, ZC_MAP_PRESENTATION_SCALE } from './ZCGameViewUtil';
@@ -45,6 +48,24 @@ export const ZC_GOLD_DENY_FLASH_STEP_SECONDS = 0.06;
 const ZC_GOLD_DENY_LABEL_COLOR = new Color(255, 91, 91, 255);
 
 /**
+ * 「镜头一键复位」后，我方主城相对**视口中心**的下移量（px）。
+ *
+ * 需求原文（`v0.1战斗DEMO` 第 22 行「【战斗】相机」第 3 条）：
+ * 「镜头一键复位，回到初始点位，主城位于中心点下方100px」。
+ * 屏幕 y 轴**向上**为正 ⇒ 「下方 100px」= 主城落在 `(0, -100)`。
+ * 单位是**屏幕像素**、不乘镜头倍率 —— 否则放大时主城会越推越往下，越放大越找不着家。
+ */
+export const ZC_MAP_HOME_CENTER_OFFSET_Y = 100;
+
+/**
+ * 滚轮缩放每格踩下去的倍率增量（新倍率 = 当前倍率 × (1 ± STEP)）。
+ *
+ * 触摸端走双指缩放；这一支专供**桌面预览 / PC 端** —— 没有它，
+ * 编辑器里验证「每个地图自己的最大 / 最小倍率」只能靠改代码。
+ */
+export const ZC_MAP_ZOOM_WHEEL_STEP = 0.12;
+
+/**
  * HUD 只**派发意图事件**（{@link ZCGameUiEvent}，在 {@link events} 上 `emit`）；
  * 页面打开、撤退确认与对局结算一律由控制器 `ZCGame` 订阅后处理。
  */
@@ -72,6 +93,16 @@ export class ZCGameHUDView extends Component {
     mapViewport: Node = null!;
     @property({ type: Node, group: '地图', tooltip: 'MapScrollView/view/content：地块、单位和城墙挂载点' })
     mapLayer: Node = null!;
+    /**
+     * `MapScrollView/view/content/Background` 那张铺底图。
+     *
+     * 原来在 `fitMapBackground` 里按名字 `getChildByName('Background')` 取 —— 那是个**每帧**都要跑
+     * 的路径（`applyMapOffset` 每次拖动都会调），字符串查表 + 找不到就抛；而且"按名找节点"
+     * 这条本工程早就禁掉了（名字写错 / 改名 = 静默失效）。改成 prefab 绑定后
+     * 取不到就是 prefab 错，在绑定层就炸。
+     */
+    @property({ type: Node, group: '地图', tooltip: 'MapScrollView/view/content/Background：铺底大图，按全景倍率 cover 铺满' })
+    mapBackground: Node = null!;
 
     // 顶部四格（设计稿「多队伍」）：逐席位显示地块数；**地块数 = 0 视为该玩家已战斗结束** ⇒ 显示红 X。
     //  用四个独立 `@property` 而不是 `[ZCGameHudScoreSlot]` 数组 —— MCP 设不了数组属性
@@ -116,6 +147,8 @@ export class ZCGameHUDView extends Component {
     damageButton: Button = null!;
     @property({ type: Button, group: '左侧功能', tooltip: 'leftPanel/RunAwayBtn：不等同于重开' })
     retreatButton: Button = null!;
+    @property({ type: Button, group: '左侧功能', tooltip: 'leftPanel/ResetCameraBtn：镜头一键复位到初始点位' })
+    resetCameraButton: Button = null!;
 
     // 选点阶段要整体收起的三个面板。原来按名字 `getChildByName` 找 —— 名字写错或节点改名
     // 会静默什么都不发生（面板照样盖在棋盘上），改成 prefab 绑定后缺一个就尽早炸。
@@ -151,6 +184,20 @@ export class ZCGameHUDView extends Component {
      * 走 `ZCGameViewUtil.buildPlayerHomeFocus` 从本局地图配置取，人数多少都取 `homes[0]`。
      */
     private mapFocus: { x: number; y: number } | null = null;
+    /**
+     * 本局地图配置的镜头倍率区间（由 `ZCGame` 用 `setMapZoomRange` 注入）。
+     *
+     * 缺省口径取模型层的 `ZC_MAP_ZOOM_*_DEFAULT`（= 没有 `zoomMin / zoomMax` 的地图用什么倍率），
+     * 所以这里**不写死 0.6 / 1.2**。
+     */
+    private mapZoomMin = ZC_MAP_ZOOM_MIN_DEFAULT;
+    private mapZoomMax = ZC_MAP_ZOOM_MAX_DEFAULT;
+    /** 双指缩放的参照指间距（px）；0 = 还没成对（单指 / 收指了）。 */
+    private pinchStartDistance = 0;
+    /** 双指刚成对那一刻的倍率（缩放基准）。用"落指时的倍率"而不是"上一帧倍率"：后者会累积漂移。 */
+    private pinchStartScale = ZC_MAP_PRESENTATION_SCALE;
+    /** 视口 `UITransform` 的缓存，见 `mapViewportTransform`。 */
+    private viewportTransform: UITransform | null = null;
     private mapDragDistance = 0;
     private mapDragMoved = false;
     private mapIntroPlayed = false;
@@ -193,6 +240,37 @@ export class ZCGameHUDView extends Component {
     }
 
     /**
+     * 注入本局地图配置的镜头倍率区间（需求：「每个地图配置对应的最大和最小倍率」）。
+     *
+     * 由 `ZCGame` 从 `ZCMapConfig.resolveZCMapZoom` 的结果取（真源是地图 JSON 的
+     * `zoomMin / zoomMax`），HUD 侧只当**相机约束**用，不进模型。
+     * 与 `setMapFocus` 一样要在 `initialize` 之前给 —— 入场镜头的收尾倍率 `mapSettleScale`
+     * 就是拿这个区间夹出来的。
+     *
+     * 上下限颠倒时**当成"用户写反了"就地纠正**（不抛）：模型层的
+     * `resolveZCMapZoom` 已经把这件事在配置期拦死了，走到这里的只可能是注入顺序问题，
+     * 为了一个顺序问题让整局崩掉不划算。
+     */
+    setMapZoomRange(min: number, max: number): void {
+        this.mapZoomMin = Math.min(min, max);
+        this.mapZoomMax = Math.max(min, max);
+        // 上一局的倍率（或默认机位 1）可能落在本图区间之外，注入时立刻夹回来。
+        this.applyMapZoom(Math.abs(this.mapLayer.scale.x) || ZC_MAP_PRESENTATION_SCALE);
+    }
+
+    /**
+     * 镜头一键复位（需求：「镜头一键复位，回到初始点位，主城位于中心点下方100px」）。
+     *
+     * **刻意不做补间**：「一键复位」要的是秒回；补间的话又得多一个忙标记去和入场 / 结算镜头
+     * 抢 `mapLayer`，收益只是 0.2 秒的顺滑。所以直接停掉在跑的镜头 tween，一次性写到位。
+     */
+    resetCamera(): void {
+        // 复位时手指可能还按着，把双指参照清掉，免得松手前的那点位移立刻又缩一次。
+        this.pinchStartDistance = 0;
+        this.resetMapPosition();
+    }
+
+    /**
      * 支持重复初始化（重复调用只重设渲染状态与镜头）。
      *
      * 事件监听**不**在这里绑：视图侧的按钮监听在 `onLoad` 一次性完成（规范 7.2）—— `cc.Node`
@@ -205,6 +283,9 @@ export class ZCGameHUDView extends Component {
         this.stopGoldDenyFx();
         this.goldDenyIconRestPos = null;
         this.goldDenyLabelRestColor = null;
+        // 同一个 HUD 实例复用开下一局：视口是同一套 prefab 节点，但缓存留到下局没有意义
+        // （而且万一换了视口节点，缓存里的旧 `UITransform` 会让全景倍率算在旧尺寸上）。
+        this.viewportTransform = null;
         // 条目数据回填只设一次（重复赋值同一函数幂等）；它不是事件监听，不参与 7.2 的绑定时机约束。
         //  必须 `.bind(this)`：`VScrollView` 侧是 `this.renderItemFn(node, i)` 的**方法调用**语法
         //    ⇒ 不绑的话函数内 `this` 会是 VScrollView，`this.rowOwners` 读到 undefined 直接崩。
@@ -563,6 +644,13 @@ private fillPlayerRow(node: Node, index: number): void {
         this.goldDenyFlashStep = 0;
     }
 
+    /**
+     * 把所有镜头状态复位到「刚开局、还没播入场动画」的样子。
+     *
+     * 停 tween、清入场 / 结算旗标、清拖动累积，再把 `mapLayer` 与 `mapOffset*` 一次性写到位。
+     * `initialize`（开下一局）与 {@link resetCamera}（一键复位按钮）共用这一支
+     * —— 两条路径要的"初始点位"必须是同一个，否则玩家一键复位后的构图会和开局第一帧对不上。
+     */
     resetMapPosition(): void {
         this.mapIntroTween?.stop();
         this.mapIntroTween = null;
@@ -571,9 +659,10 @@ private fillPlayerRow(node: Node, index: number): void {
         this.settlementOverviewTween = null;
         this.settlementOverviewRequested = false;
         this.settlementOverviewDone = false;
-        // 重置回对局视角的停靠点 = 我方主城（没给落点时是整盘中心）。
-        const rest = this.mapRestCenterAtScale(ZC_MAP_PRESENTATION_SCALE);
-        this.mapLayer.setScale(ZC_MAP_PRESENTATION_SCALE, ZC_MAP_PRESENTATION_SCALE, 1);
+        // 重置回对局视角的停靠点 = 我方主城（没给落点时是整盘中心），再往下让 100px。
+        const settleScale = this.mapSettleScale;
+        const rest = this.mapRestCenterAtScale(settleScale);
+        this.mapLayer.setScale(settleScale, settleScale, 1);
         this.mapOffsetX = rest.x;
         this.mapOffsetY = rest.y;
         this.clearDrag();
@@ -628,7 +717,7 @@ private fillPlayerRow(node: Node, index: number): void {
         // interactable=false，Cocos 的 Button 便**不再派发 CLICK**，点击被整段吞掉，
         // 连「神器尚未充满」这句文案都生成不出来，表现为「点了没反应」。
         // 置灰交给 artifactIcon / artifactProgress 的 grayscale 表达，不靠 interactable。
-        // 神器与撤退只在对局进行中可点（结束后没有意义）；排行榜 / 指南 / 统计整局都能点，
+        // 神器与撤退只在对局进行中可点（结束后没有意义）；排行榜 / 指南 / 统计 / 复位视角整局都能点，
         // 保持 prefab 默认的 `interactable = true`（事件化之后视图不再知道"上层有没有接"）。
         this.artifactButton.interactable = this.playing;
         this.retreatButton.interactable = this.playing;
@@ -657,6 +746,16 @@ private fillPlayerRow(node: Node, index: number): void {
         EventMgr.instance.emit(ZCGameUiEvent.Retreat);
     }
 
+    /**
+     * 镜头一键复位。
+     *
+     *  和排行榜 / 指南一样**不判 `playing`**：结算期间"看不见自己家"同样是玩家会遇到的状况
+     * （结算镜头自己会拉远，但玩家中途拖走过），复位永远有意义。
+     */
+    private onResetCameraClick(): void {
+        EventMgr.instance.emit(ZCGameUiEvent.ResetCamera);
+    }
+
     private bindEvents(): void {
         // 保留既有二维棋盘拖动逻辑，避免 ScrollView 同时修改 content 位置。
         this.mapScrollView.stopAutoScroll();
@@ -666,11 +765,15 @@ private fillPlayerRow(node: Node, index: number): void {
         this.guideButton.node.on(Button.EventType.CLICK, this.onGuideClick, this);
         this.damageButton.node.on(Button.EventType.CLICK, this.onDamageClick, this);
         this.retreatButton.node.on(Button.EventType.CLICK, this.onRetreatClick, this);
+        this.resetCameraButton.node.on(Button.EventType.CLICK, this.onResetCameraClick, this);
         // 事件监听随节点销毁自动清理，无需手动解绑；`onLoad` 每实例只跑一次 ⇒ 不会重复注册。
         this.mapViewport.on(Node.EventType.TOUCH_START, this.onMapTouchStart, this, true);
         this.mapViewport.on(Node.EventType.TOUCH_MOVE, this.onMapTouchMove, this, true);
         this.mapViewport.on(Node.EventType.TOUCH_END, this.onMapTouchEnd, this, true);
         this.mapViewport.on(Node.EventType.TOUCH_CANCEL, this.onMapTouchEnd, this, true);
+        // 滚轮缩放：触摸端走双指（上面那三条），桌面端只有滚轮 —— 缺了它，
+        // 编辑器预览里就验证不了「每个地图自己的最小 / 最大倍率」。
+        this.mapViewport.on(Node.EventType.MOUSE_WHEEL, this.onMapMouseWheel, this, true);
         this.mapViewport.on(Node.EventType.SIZE_CHANGED, this.applyMapOffset, this);
     }
 
@@ -679,7 +782,14 @@ private fillPlayerRow(node: Node, index: number): void {
         this.mapDragMoved = false;
     }
 
-    private onMapTouchStart(): void {
+    /**
+     * 落指。
+     *
+     * `event` 是**可选**的：`TOUCH_*` 的派发方一定是引擎（必带 event），但这一支也允许被
+     * 单测直接调（夹具只 `emit('start')` 不带参数）—— 拿不到 event 就按"单指拖动"走，
+     * 不做双指判断，比抛异常或一律当成缩放都更接近真实行为。
+     */
+    private onMapTouchStart(event?: EventTouch): void {
         this.unschedule(this.clearDrag);
         if (this.mapCameraBusy) {
             // 镜头动画期间吞掉棋盘操作，避免缩放尚未结束时就误点地块或拖偏中心。
@@ -687,11 +797,18 @@ private fillPlayerRow(node: Node, index: number): void {
             this.mapDragMoved = true;
             return;
         }
+        if (event && this.beginPinch(event)) {
+            // 双指：这一下不算拖动，标记成"已移动"免得松手时被当成点选地块。
+            this.mapDragMoved = true;
+            return;
+        }
         this.clearDrag();
     }
 
-    private onMapTouchMove(event: EventTouch): void {
+    private onMapTouchMove(event?: EventTouch): void {
         if (this.mapCameraBusy) return;
+        if (event && this.stepPinch(event)) return;
+        if (!event) return;
         const delta = event.getUIDelta();
         this.mapDragDistance += Math.abs(delta.x) + Math.abs(delta.y);
         if (this.mapDragDistance > 10) this.mapDragMoved = true;
@@ -700,23 +817,26 @@ private fillPlayerRow(node: Node, index: number): void {
         this.applyMapOffset();
     }
 
-    private onMapTouchEnd(): void {
+    private onMapTouchEnd(event?: EventTouch): void {
+        if (event) this.endPinch(event);
         // 等地块 TOUCH_END 处理结束后再清标记，防止拖动被当成点选。
         this.scheduleOnce(this.clearDrag, 0);
     }
 
     /**
-     * 开局先完整展示棋盘，短暂停留后放大到游戏原始倍率。
+     * 开局先完整展示棋盘，短暂停留后放大到游戏机位（`mapSettleScale`，正常即原始倍率）。
      *
      * 全景环节仍以**整盘包围盒中心**为基准（那样才看得见完整棋盘），收尾落点改成
-     * `mapRestCenterAtScale` —— 我方主城那一格，3 / 4 人图上不再停在几块领地之间的中立空白处。
+     * `mapRestCenterAtScale` —— 我方主城那一格再往下让 100px，3 / 4 人图上不再停在
+     * 几块领地之间的中立空白处，2 人图上也不再让主城压在正中。
      */
     private playMapIntro(): void {
         this.mapIntroPlayed = true;
+        const settleScale = this.mapSettleScale;
         const overviewScale = this.mapOverviewScale;
         const overviewCenter = this.mapCenterAtScale(overviewScale);
-        const restPoint = this.mapRestCenterAtScale(ZC_MAP_PRESENTATION_SCALE);
-        const rest = this.clampMapOffset(restPoint.x, restPoint.y, ZC_MAP_PRESENTATION_SCALE);
+        const restPoint = this.mapRestCenterAtScale(settleScale);
+        const rest = this.clampMapOffset(restPoint.x, restPoint.y, settleScale);
 
         this.mapLayer.setScale(overviewScale, overviewScale, 1);
         this.mapLayer.setPosition(overviewCenter.x, overviewCenter.y, 0);
@@ -726,7 +846,7 @@ private fillPlayerRow(node: Node, index: number): void {
         this.mapIntroTween = tween(this.mapLayer)
             .delay(ZCGameHUDView.MAP_OVERVIEW_HOLD_SECONDS)
             .to(ZCGameHUDView.MAP_ZOOM_DURATION_SECONDS, {
-                scale: new Vec3(ZC_MAP_PRESENTATION_SCALE, ZC_MAP_PRESENTATION_SCALE, 1),
+                scale: new Vec3(settleScale, settleScale, 1),
                 position: new Vec3(rest.x, rest.y, 0),
             }, { easing: 'quadInOut' })
             .call(() => {
@@ -740,19 +860,49 @@ private fillPlayerRow(node: Node, index: number): void {
     }
 
     /**
+     * 视口（`MapScrollView/view`）的 `UITransform`。
+     *
+     *  prefab 上静态挂着它，且全工程无人给 `mapViewport` 赋值 ⇒ 取不到就是 prefab 错，
+     * 直接 `!` 爆掉，不留「取不到就退回」的降级分支（降级会把 prefab 错误伪装成"镜头有点怪"）。
+     *
+     *  缓存：视口节点的尺寸由 Widget 四边拉伸 + `ON_WINDOW_RESIZE` 决定，`UITransform` 实例本身
+     * 不换，所以**全类只查一次**。这不是过早优化 —— 全景倍率、背景铺满、拖动约束、双指缩放的
+     * 锚点换算四处都要它，每多一个调用点就多一次"顺手写个判空"的机会；收敛成一处之后，
+     * 用例可以按「源码里只出现一次 `mapViewport.getComponent`」把这条钉死。
+     */
+    private get mapViewportTransform(): UITransform {
+        if (!this.viewportTransform) this.viewportTransform = this.mapViewport.getComponent(UITransform)!;
+        return this.viewportTransform;
+    }
+
+    /**
      * 整盘刚好装进视口、四周留出 `MAP_OVERVIEW_PADDING` 的缩放。开局入场与结算镜头共用。
      *
      * 视口尺寸由 `MapScrollView/view` 的 `cc.Widget`（四边拉伸 + `ON_WINDOW_RESIZE`）决定，
      * 恒等于窗口宽高，不会是 0。
+     *
+     * ⚠️ 全景 / 结算镜头是**脚本演出**，不受玩家缩放区间（`mapZoomMin/Max`）约束：
+     * 地图可能把 `zoomMin` 配到 0.6，而"看清整盘"需要 0.35 —— 夹进去就看不到全图了。
      */
     private get mapOverviewScale(): number {
-        const viewport = this.mapViewport.getComponent(UITransform)!;
+        const viewport = this.mapViewportTransform;
         const bounds = this.mapBounds;
         return Math.min(
             ZC_MAP_PRESENTATION_SCALE,
             Math.max(1, viewport.width - ZCGameHUDView.MAP_OVERVIEW_PADDING * 2) / Math.max(1, bounds.maxX - bounds.minX),
             Math.max(1, viewport.height - ZCGameHUDView.MAP_OVERVIEW_PADDING * 2) / Math.max(1, bounds.maxY - bounds.minY),
         );
+    }
+
+    /**
+     * 对局停靠倍率：默认机位（`ZC_MAP_PRESENTATION_SCALE`）夹进本图倍率区间。
+     *
+     * 正常情况下就是 1；只有当某张图把区间配到不包含 1（例如 `zoomMax = 0.8`）时，
+     * 入场收尾 / 一键复位 / 重开一局才该落到区间边缘而不是硬停在 1
+     * —— 否则开局第一帧就处在"玩家自己捏不到"的倍率上，接着一捏就跳一下。
+     */
+    private get mapSettleScale(): number {
+        return this.clampMapZoom(ZC_MAP_PRESENTATION_SCALE);
     }
 
     /**
@@ -764,14 +914,15 @@ private fillPlayerRow(node: Node, index: number): void {
      * 对齐地图包围盒，并按全景缩放下的视口尺寸 + 最大地图拖动范围等比 cover。
      */
     private fitMapBackground(): void {
-        const background = this.mapLayer.getChildByName('Background');
-        if (!background) throw new Error('ZCGameHUD.prefab 的 MapLayer/content 缺少 Background');
+        // 由 prefab 绑定（曾按名 `getChildByName('Background')` 取 —— 每帧字符串查表，
+        // 而且名字一改就静默失效）。缺绑定应在绑定层就暴露，这里不再兜底。
+        const background = this.mapBackground;
         const transform = background.getComponent(UITransform)!;
         const sprite = background.getComponent(Sprite)!;
         const widget = background.getComponent(Widget);
         if (widget) widget.enabled = false;
 
-        const viewport = this.mapViewport.getComponent(UITransform)!;
+        const viewport = this.mapViewportTransform;
         const bounds = this.mapBounds;
         const mapWidth = Math.max(1, bounds.maxX - bounds.minX);
         const mapHeight = Math.max(1, bounds.maxY - bounds.minY);
@@ -816,11 +967,141 @@ private fillPlayerRow(node: Node, index: number): void {
      *
      * 没给落点时退回整盘中心（2 人图上两者差别不大，3 / 4 人图上差别是"自己家"与"中立空白"）。
      * 拖动边界仍按整盘算（`applyMapOffset`），所以停在自家主城也不会把棋盘拖出可视区。
+     *
+     * 给了落点时再按需求把主城**从正中往下让 100px**（`ZC_MAP_HOME_CENTER_OFFSET_Y`）：
+     * 镜头中心比主城高 100px ⇒ 主城上方多露出 100px，出征方向看得见。
+     * 屏幕 y 向上为正 ⇒ 让主城落在 `(0, -100)` 等价于让镜头中心落在 `focus + 100`，
+     * 即 `mapOffsetY = -(focus.y * scale) - 100`。
      */
     private mapRestCenterAtScale(scale: number): { x: number; y: number } {
         const focus = this.mapFocus;
         if (!focus) return this.mapCenterAtScale(scale);
-        return { x: -focus.x * scale || 0, y: -focus.y * scale || 0 };
+        // `|| 0` 只为了把 `-0` 归成 `0`（`-0 === 0` 为真但序列化 / 断言里是两种东西）。
+        const x = -focus.x * scale;
+        const y = -focus.y * scale - ZC_MAP_HOME_CENTER_OFFSET_Y;
+        return { x: x || 0, y: y || 0 };
+    }
+
+    /**
+     * 把倍率夹进本局区间。
+     *
+     * 非有限数（NaN / Infinity，只可能来自外部注入）一律退回默认机位：镜头倍率是乘法链，
+     * 一个 NaN 会把 `mapLayer` 的 scale 与 position 一起污染成 NaN，地图整块消失且零报错。
+     */
+    private clampMapZoom(scale: number): number {
+        const value = Number.isFinite(scale) ? scale : ZC_MAP_PRESENTATION_SCALE;
+        return Math.min(this.mapZoomMax, Math.max(this.mapZoomMin, value));
+    }
+
+    /**
+     * 按新倍率缩放棋盘；给了 `anchor` 就**钉住锚点在视口里的位置**（双指 / 滚轮缩放的锚点）。
+     *
+     * 锚点用**视口局部坐标**：设锚点处的棋盘坐标 `p = (anchor - offset) / scale`
+     * （它是跟着棋盘走的那个点），缩放后令 `p` 仍落在 `anchor` 上 ⇒ `offset' = anchor - p * scale'`。
+     * 不做这一步的话每次缩放都把地图整体"推"一下，双指捏合的手感会变成"缩放 + 平移"混合。
+     *
+     * 收尾一律走 `applyMapOffset`：夹回拖动范围 + 重铺背景，和拖动是同一条出口。
+     */
+    private applyMapZoom(scale: number, anchor?: { x: number; y: number }): void {
+        const next = this.clampMapZoom(scale);
+        const current = Math.abs(this.mapLayer.scale.x) || ZC_MAP_PRESENTATION_SCALE;
+        // 已经顶在区间边界上（捏到头了）：什么都不用做，连 `fitMapBackground` 都不必重跑。
+        if (next === current) return;
+        const pinned = anchor ? { x: (anchor.x - this.mapOffsetX) / current, y: (anchor.y - this.mapOffsetY) / current } : null;
+        this.mapLayer.setScale(next, next, 1);
+        if (anchor && pinned) {
+            this.mapOffsetX = anchor.x - pinned.x * next;
+            this.mapOffsetY = anchor.y - pinned.y * next;
+        }
+        this.applyMapOffset();
+    }
+
+    /**
+     * UI 世界坐标 → 视口（`MapScrollView/view`）的**局部**坐标。
+     *
+     *  不能把 `getUILocation()` 直接当局部坐标用：它给的是 UI 世界坐标，
+     * 原点在设计分辨率的左下角，宽高比和设计稿不一致的机型上还带黑边偏移
+     * ⇒ 直接拿来当锚点会让"捏哪儿缩哪儿"在窄长屏上偏掉一大截。
+     */
+    private toViewportLocal(uiX: number, uiY: number): { x: number; y: number } {
+        const local = this.mapViewportTransform.convertToNodeSpaceAR(new Vec3(uiX, uiY, 0));
+        return { x: local.x, y: local.y };
+    }
+
+    /**
+     * 双指缩放：把**两指间距的变化**换算成倍率，锚点是两指中点。
+     *
+     *  必须用 `getAllTouches()` 而不是 `getTouches()`：后者的口径是"这一帧有变动的触点"，
+     * 第一根手指按住不动、第二根刚落下时它**只报第二根** ⇒ 拿不到指间距，永远起不了缩放。
+     *  返回 true = 这一帧由缩放接管，调用方不要再走棋盘拖动（否则捏合会顺带把地图拖走）。
+     *
+     * 参照（指间距与倍率）在 {@link beginPinch} 落指时就记好了，所以**第一帧 move 就能缩放**
+     * —— 不在中途"吃一帧"记参照，否则双指一捏会先呆一下才动，手感是"卡了一下"。
+     */
+    private stepPinch(event: EventTouch): boolean {
+        const touches = typeof event.getAllTouches === 'function' ? event.getAllTouches() : [];
+        if (touches.length < 2) {
+            this.pinchStartDistance = 0;
+            return false;
+        }
+        const first = touches[0].getUILocation();
+        const second = touches[1].getUILocation();
+        const distance = Math.hypot(first.x - second.x, first.y - second.y);
+        if (!(this.pinchStartDistance > 0)) {
+            // 兜底：`beginPinch` 没跑到（第二根手指的 TOUCH_START 被上层吞了）或两指重叠。
+            // 这时只能拿当前帧当参照，本帧不缩放。
+            this.pinchStartDistance = distance;
+            this.pinchStartScale = Math.abs(this.mapLayer.scale.x) || ZC_MAP_PRESENTATION_SCALE;
+            return true;
+        }
+        if (distance > 0) {
+            const anchor = this.toViewportLocal((first.x + second.x) / 2, (first.y + second.y) / 2);
+            this.applyMapZoom(this.pinchStartScale * (distance / this.pinchStartDistance), anchor);
+        }
+        return true;
+    }
+
+    /**
+     * 第二根手指落下：把这一瞬间的**指间距**与**当前倍率**记成缩放参照，并清掉已累积的拖动量。
+     *
+     * 返回 true = 判定为双指缩放（调用方不要再把它当棋盘拖动）。
+     * 参照记在"落指那一刻"才是正确的：两指刚成对的间距就是 1× 的基准。
+     */
+    private beginPinch(event: EventTouch): boolean {
+        const touches = typeof event.getAllTouches === 'function' ? event.getAllTouches() : [];
+        if (touches.length < 2) return false;
+        const first = touches[0].getUILocation();
+        const second = touches[1].getUILocation();
+        this.pinchStartDistance = Math.hypot(first.x - second.x, first.y - second.y);
+        this.pinchStartScale = Math.abs(this.mapLayer.scale.x) || ZC_MAP_PRESENTATION_SCALE;
+        this.clearDrag();
+        return true;
+    }
+
+    /**
+     * 抬指：剩不到两根就结束这次缩放。
+     *
+     * ⚠️ `TOUCH_END` 时 `getAllTouches()` **不含**刚抬起的那根（引擎注释："如果手指行为是 touch end，
+     * 这个时候列表是没有该手指信息的"），所以这里数出来的一定是"还按着的"根数。
+     */
+    private endPinch(event: EventTouch): void {
+        const remaining = typeof event.getAllTouches === 'function' ? event.getAllTouches().length : 0;
+        if (remaining < 2) this.pinchStartDistance = 0;
+    }
+
+    /**
+     * 滚轮缩放（桌面预览 / PC 端）：一格一个固定增量，不带惯性、不跟滚轮速度挂钩。
+     *
+     *  锚点取鼠标位置，"滚哪儿缩哪儿"，与双指缩放同一套 `applyMapZoom`。
+     */
+    private onMapMouseWheel(event: EventMouse): void {
+        if (this.mapCameraBusy) return;
+        const delta = event.getScrollY();
+        if (!delta) return;
+        const current = Math.abs(this.mapLayer.scale.x) || ZC_MAP_PRESENTATION_SCALE;
+        const step = delta > 0 ? ZC_MAP_ZOOM_WHEEL_STEP : -ZC_MAP_ZOOM_WHEEL_STEP;
+        const position = event.getUILocation();
+        this.applyMapZoom(current * (1 + step), this.toViewportLocal(position.x, position.y));
     }
 
     /**
@@ -830,7 +1111,7 @@ private fillPlayerRow(node: Node, index: number): void {
      * 镜头会停在拖动范围之外，下一次 `SIZE_CHANGED` 把它弹回去，玩家看到镜头自己跳一下。
      */
     private clampMapOffset(x: number, y: number, scale: number): { x: number; y: number } {
-        const viewport = this.mapViewport.getComponent(UITransform)!;
+        const viewport = this.mapViewportTransform;
         const bounds = this.mapBounds;
         const center = this.mapCenterAtScale(scale);
         const halfMapWidth = (bounds.maxX - bounds.minX) * scale / 2;

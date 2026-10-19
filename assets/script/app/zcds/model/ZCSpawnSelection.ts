@@ -1,4 +1,6 @@
 import type { ZCMatchConfig, ZCMatchMap } from './ZCMatchConfig';
+import { isZCNeutralResourceId } from './ZCNeutralResourceReward';
+import type { ZCNeutralResourceId } from './ZCNeutralResourceReward';
 import {
     defaultZCSectionAt,
     ownersForPlayerCount,
@@ -130,16 +132,15 @@ export class ZCSpawnSelection {
     }
 
     /** 资源点的代表资源 id（权重最高者；通常只配一个），选点阶段用它显示资源图标。 */
-    resourceIdAt(hexId: number): string | null {
+    resourceIdAt(hexId: number): ZCNeutralResourceId | null {
         const point = this.resourceByHex.get(hexId);
         if (!point) return null;
-        const entries = Object.entries(point.pool).filter(([, weight]) => weight > 0);
-        if (!entries.length) return null;
-        let best = entries[0];
-        for (const entry of entries) {
-            if (entry[1] > best[1]) best = entry;
+        let best: [ZCNeutralResourceId, number] | null = null;
+        for (const [id, weight] of Object.entries(point.pool)) {
+            if (weight <= 0 || !isZCNeutralResourceId(id)) continue;
+            if (!best || weight > best[1]) best = [id, weight];
         }
-        return best[0];
+        return best ? best[0] : null;
     }
 
     /**
@@ -178,6 +179,9 @@ export class ZCSpawnSelection {
         if (!hex?.playable) return '该位置不可通行';
         if (this.resourceByHex.has(hexId)) return '资源点位所在格不可放置主城';
         if (this.outsideOwnRegion(owner, hexId)) return '不能放置到对方的区域';
+        const section = this.owners.indexOf(owner) + 1;
+        const candidates = this.map.homeCandidates?.find((entry) => entry.section === section)?.cells;
+        if (candidates && !candidates.includes(hexId)) return '该位置不在主城候选范围内';
         for (const other of this.owners) {
             if (other === owner) continue;
             const confirmed = this.states[other].confirmedHexId;
@@ -285,6 +289,9 @@ export class ZCSpawnSelection {
         if (!hex?.playable) return '该位置不可通行';
         if (this.resourceByHex.has(hexId)) return '资源点位不可选';
         if (this.outsideOwnRegion(owner, hexId)) return '不能放置到对方的区域';
+        const section = this.owners.indexOf(owner) + 1;
+        const candidates = this.map.homeCandidates?.find((entry) => entry.section === section)?.cells;
+        if (candidates && !candidates.includes(hexId)) return '该位置不在主城候选范围内';
         return null;
     }
 
@@ -367,8 +374,14 @@ export class ZCSpawnSelection {
  * 在对局开始时冻结地图资源点的抽取结果。固定主城和自选主城共用，避免资源点只在选点流程中生效。
  */
 export function resolveZCMapResources(map: ZCMatchMap, random: () => number): ZCMapResolvedResource[] {
-    return (map.resourcePoints ?? []).map((point) => {
-        const entries = Object.entries(point.pool).filter(([, weight]) => weight > 0);
+    const resolved: ZCMapResolvedResource[] = [];
+    for (const point of map.resourcePoints ?? []) {
+        // 池 key 来自地图 JSON（不可信）：不认识的一律剔除，正常路径上 `ZCMapConfig` 校验已拒绝，
+        // 这里只保证运行时不会把非法 id 写进快照。
+        const entries = Object.entries(point.pool).filter(
+            (entry): entry is [ZCNeutralResourceId, number] => entry[1] > 0 && isZCNeutralResourceId(entry[0]),
+        );
+        if (!entries.length) continue;
         const total = entries.reduce((sum, [, weight]) => sum + weight, 0);
         let cursor = clampedZCResourceRandom(random) * total;
         let resourceId = entries[entries.length - 1][0];
@@ -378,13 +391,14 @@ export function resolveZCMapResources(map: ZCMatchMap, random: () => number): ZC
         }
         const hexId = point.row * map.columns + point.column;
         const depth = point.depth ?? depthForZCResource(map, hexId);
-        return {
+        resolved.push({
             hexId,
             section: point.section ?? sectionForZCResource(map, hexId),
             ...(depth === undefined ? {} : { depth }),
             resourceId,
-        };
-    });
+        });
+    }
+    return resolved;
 }
 
 function sectionForZCResource(map: ZCMatchMap, hexId: number): number {

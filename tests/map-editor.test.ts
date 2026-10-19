@@ -58,6 +58,25 @@ test('左栏长说明收纳为可点击的问号帮助气泡', () => {
     assert.match(html, /查看操作说明/);
     assert.match(html, /\.helpBubble/);
 });
+
+test('左侧分类工具箱切换面板并保持地图画布常驻', () => {
+    const { editor, element } = createEditor();
+    assert.equal(element('groupTerrain').hidden, false);
+    assert.equal(element('groupRegions').hidden, true);
+    assert.equal(element('stage').hidden, false);
+
+    element('categoryRegions').listeners.click();
+
+    assert.equal(element('groupTerrain').hidden, true);
+    assert.equal(element('groupRegions').hidden, false);
+    assert.equal(element('categoryRegions').className.includes('on'), true);
+    assert.equal(element('stage').hidden, false);
+
+    element('categoryAdvanced').listeners.click();
+    assert.equal(element('groupRegions').hidden, true);
+    assert.equal(element('groupZoom').hidden, false);
+    assert.equal(element('categoryAdvanced').className.includes('on'), true);
+});
 /** 内部格子编码：-1 = 虚空、0 = 中立（可通行、无分区）、1~4 = 分区号。 */
 test('分区、中立和虚空笔刷立即上下镜像，行列都不再强制偶数', () => {
     const { editor, element } = createEditor();
@@ -1105,4 +1124,56 @@ test('画布元素比例 = viewBox 比例：背景铺满画布，四周不露深
     const before = `${board.style.width} ${board.style.height}`;
     editor.fitCanvas();
     assert.equal(`${board.style.width} ${board.style.height}`, before, '同值不应重设');
+});
+
+test('same neutral cell accumulates weighted resource choices and preserves them in undo/export', () => {
+    const { editor } = createEditor();
+    editor.addResourcePoint(12, 1, 'gold', 2);
+    editor.addResourcePoint(12, 1, 'chest', 3);
+
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.state().json.resourcePoints[0].pool)), { gold: 2, chest: 3 });
+    assert.match(editor.resourceMarkup(), /resourceChoiceCount/);
+    assert.equal(editor.undo(), true);
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.state().json.resourcePoints[0].pool)), { gold: 2 });
+});
+
+test('region and home-candidate brush edits round-trip through layout export', () => {
+    const { editor } = createEditor();
+    editor.applyLayout({
+        version: 3,
+        rows: 8,
+        columns: 12,
+        playerCount: 2,
+        cityMode: 'select',
+        ascii: Array(8).fill('111111111111'),
+    });
+
+    let before = editor.snapshot();
+    editor.setRegionBrush(1, 'front');
+    editor.paint(7, 0);
+    editor.commitUndo(before);
+    before = editor.snapshot();
+    editor.setHomeCandidateBrush(1);
+    editor.paint(7, 1);
+    editor.commitUndo(before);
+
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.state().json.regions)), [{ section: 1, depth: 'front', cells: [84] }]);
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.state().json.homeCandidates)), [{ section: 1, cells: [85] }]);
+    assert.match(editor.mapMetadataMarkup(), /前区/);
+    assert.match(editor.mapMetadataMarkup(), /homeCandidateCell/);
+    assert.equal(editor.undo(), true);
+    assert.equal(editor.state().json.homeCandidates, undefined);
+    assert.equal(editor.undo(), true);
+    assert.equal(editor.state().json.regions, undefined);
+    assert.equal(editor.redo(), true);
+    assert.equal(editor.redo(), true);
+    assert.equal(editor.state().json.homeCandidates[0].cells[0], 85);
+});
+
+test('editor accepts every PVP neutral-resource pool id', () => {
+    const { editor } = createEditor();
+    for (const id of ['gold', 'mine', 'chest', 'unit_cap', 'artifact_charge']) {
+        editor.setResourceBrush(id);
+        assert.equal(editor.state().resourceBrush, id);
+    }
 });

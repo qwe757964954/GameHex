@@ -140,9 +140,9 @@ def validate_preset(data, preset_id):
     }
     if city_mode == "fixed" or homes:
         preset["homes"] = homes
-    # 玩法配置先原样透传（regions / resourcePoints / spacing / art）；合法性以游戏侧校验为准，
+    # 玩法配置先原样透传（regions / homeCandidates / resourcePoints / spacing / art）；合法性以游戏侧校验为准，
     # 编辑器只保证结构不被写坏。
-    for key in ("regions", "resourcePoints", "spacing", "art"):
+    for key in ("regions", "homeCandidates", "resourcePoints", "spacing", "art"):
         if key in data:
             preset[key] = data[key]
     return preset

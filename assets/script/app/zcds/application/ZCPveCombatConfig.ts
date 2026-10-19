@@ -1,6 +1,8 @@
 import type { ZCDeckCard } from '../model/ZCCombatCatalog';
+import type { ZCOwner } from '../model/ZCMapConfig';
 
-type ZCPveEnemyOwner = 'enemy' | 'enemy2' | 'enemy3';
+/** 领地 NPC 只占敌方席位（`player` 永远留给本机玩家）。 */
+type ZCPveEnemyOwner = Exclude<ZCOwner, 'player'>;
 
 const ENEMY_OWNERS: readonly ZCPveEnemyOwner[] = ['enemy', 'enemy2', 'enemy3'];
 

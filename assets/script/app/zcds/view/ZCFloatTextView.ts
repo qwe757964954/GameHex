@@ -60,6 +60,19 @@ export class ZCFloatTextView extends Component {
     /** 暴击 / 秒杀的大字号；其余普通字号。 */
     private static readonly EMPHASIS_FONT_SIZE = 34;
     private static readonly DEFAULT_FONT_SIZE = 30;
+    /**
+     * 前缀（暴击 / 克制 / 抵抗 / 秒杀）字号 = 数字字号 × 该比例。
+     *
+     * 需求「【克制】大约只有数字一半高」：数字是阿拉伯数字、只占 0.72em 的大写高，
+     * 前缀是汉字、占 0.95em，所以按**字号**取半（30 → 15）后，视觉高度是 21.6 : 14.25 ≈ 0.66。
+     * 要真正贴着「一半高」再往下压，把这里改成 0.4（30 → 12）即可，只此一处。
+     */
+    private static readonly PREFIX_FONT_RATIO = 0.5;
+    /**
+     * 前缀与数字之间的水平间距（像素）。取 6 而不是 4：前缀带 1px 描边，视觉上会再各吃掉 1px，
+     * 4 时两个字几乎贴着数字（实测像一整个「克制31」）。
+     */
+    private static readonly PREFIX_GAP = 6;
     /** 连续伤害的三行轨道：行距、每行额外的下坠量、中心/两侧摇摆幅度。 */
     private static readonly DAMAGE_ROW_STEP = 30;
     private static readonly DAMAGE_ROW_DROP_EXTRA = 6;
@@ -94,23 +107,33 @@ export class ZCFloatTextView extends Component {
         return String(rounded);
     }
 
-    /** 飘字内容：数值压缩 + 按 kind 拼文案（暴击/克制/抵抗/秒杀/MISS/金币/治疗）。 */
-    private static battleText(text: Readonly<ZCFloatText>): string {
+    /** 飘字文案拆成「前缀 + 数值」两段（前缀单独一条小字号 Label，见 `renderPrefix`）。 */
+    private static battleText(text: Readonly<ZCFloatText>): { prefix: string; value: string } {
         const value = ZCFloatTextView.compactBattleNumber(text.value);
         switch (text.kind) {
+            // 正向收益保留 `+`：它标的是「加」这一个语义，与伤害的正负无关。
             case 'gold':
-            case 'heal': return `+${value}`;
-            case 'miss': return 'MISS';
-            case 'critical': return `暴击 -${value}`;
-            case 'restraint': return `克制 -${value}`;
-            case 'resisted': return `抵抗 -${value}`;
-            case 'execute': return `秒杀 -${value}`;
-            default: return `-${value}`;
+            case 'heal': return { prefix: '', value: `+${value}` };
+            case 'miss': return { prefix: '', value: 'MISS' };
+            // 伤害类**不再带负号**（2026-10-17 需求）：飘字本来就在挨打的目标身上，
+            // 负号只增加一个字符宽度、和前缀挤在一起还容易读成「克制 -31」一个整体。
+            case 'critical': return { prefix: '暴击', value };
+            case 'restraint': return { prefix: '克制', value };
+            case 'resisted': return { prefix: '抵抗', value };
+            case 'execute': return { prefix: '秒杀', value };
+            default: return { prefix: '', value };
         }
     }
 
     @property({ type: Label, group: '节点引用', tooltip: 'Text：显示数值的 Label（必填）' })
     textLabel: Label = null!;
+
+    @property({
+        type: Label,
+        group: '节点引用',
+        tooltip: 'Text/Prefix：暴击 / 克制 / 抵抗 / 秒杀 的小字号前缀（只在这四种飘字显示）',
+    })
+    prefixLabel: Label | null = null;
 
     @property({ type: Sprite, group: '节点引用', tooltip: 'GoldIcon：金币飘字左侧的金币图标（挂在 Text 下自动跟随上浮；只有 gold 飘字显示）' })
     goldIcon: Sprite | null = null;
@@ -171,15 +194,19 @@ export class ZCFloatTextView extends Component {
         const duration = Math.max(0.001, text.durationSeconds);
         const progress = Math.max(0, Math.min(1, (now - text.startedAt) / duration));
 
-        this.textLabel.string = ZCFloatTextView.battleText(text);
-        this.textLabel.fontSize = text.kind === 'critical' || text.kind === 'execute'
+        const parts = ZCFloatTextView.battleText(text);
+        this.textLabel.string = parts.value;
+        const fontSize = text.kind === 'critical' || text.kind === 'execute'
             ? ZCFloatTextView.EMPHASIS_FONT_SIZE : ZCFloatTextView.DEFAULT_FONT_SIZE;
+        this.textLabel.fontSize = fontSize;
         // 「快进慢出」：入场进度（位移 / 缩放 / 图标自转共用）在前 `entranceProgress` 段走完，
         // 之后恒 1；淡出覆盖剩下的整段，并叠一段像素级同向漂移做收尾。
         // 三条都走 `ZCGameViewUtil` 的纯函数，别在视图里再算一遍。
         const enter = floatTextEntrance(progress, this.entranceProgress);
         const drift = floatTextDrift(progress, this.entranceProgress);
         const fade = this.applyColor(text, progress);
+        // 前缀必须排在 `applyColor` 之后：它借用同一条染色缓存（同色同透明度）。
+        this.renderPrefix(parts.prefix, fontSize, fade);
         // 世界定位一律由**根节点**承担（和 ZCUnitView / ZCCombatEffectView 同惯例），
         // Text 子节点只负责「基准上移 + 随进度上浮」的局部偏移。
         //  两处都写绝对坐标会让实际位置翻倍（子节点坐标是相对根节点的），
@@ -216,6 +243,39 @@ export class ZCFloatTextView extends Component {
         // 起手弹出：入场段内从 popScale 收回到 1，之后保持 1（与位移同一根轴）。
         const scale = 1 + (this.popScale - 1) * (1 - enter);
         this.textLabel.node.setScale(scale, scale, 1);
+    }
+
+    /**
+     * 前缀（暴击 / 克制 / 抵抗 / 秒杀）：**单独一条小字号 Label**，字号取数字的一半。
+     *
+     * 为什么要拆成两条：`cc.Label` 一条字符串只有**一个**字号，`克制` 与 `31` 写在同一句里
+     * 就只能同号 —— 需求「【克制】只有数字一半高」在单 Label 上无解，除非换 `RichText`
+     * （那会连带改锚点/自适应宽度的行为，收益不值）。拆开后前缀挂在 `Text` 之下 ⇒
+     * 位置、弹出缩放、上下散落全部自动继承，这里只补一个水平偏移与字号。
+     *
+     * 水平位置同样按数字**实际宽度**反推（`-(数字宽/2 + 间距 + 前缀半宽)`），与金币图标同一套算法：
+     * `31` 与 `1.2K` 宽度差一倍，固定偏移会让前缀时而压字、时而飘太远。
+     * 前缀恒为 2 个汉字，宽度直接按「字数 × 字号」算，不读 `UITransform`（那条路有一帧延迟）。
+     *
+     * 每帧**绝对赋值** `active`：节点来自对象池，复用回来时上一条的可见性会残留
+     * （只表现为「普通伤害旁边贴着一个『克制』」）。
+     */
+    private renderPrefix(prefix: string, fontSize: number, fade: number): void {
+        const label = this.prefixLabel;
+        if (!label) return;
+        const show = prefix.length > 0;
+        label.node.active = show;
+        label.enabled = show && fade > 0;
+        if (!show) return;
+        const prefixSize = Math.max(1, Math.round(fontSize * ZCFloatTextView.PREFIX_FONT_RATIO));
+        label.string = prefix;
+        label.fontSize = prefixSize;
+        // 与数字同色同透明度（`applyColor` 刚写好的缓存，克制就是那支红）。
+        label.color = this.tint;
+        const textWidth = this.readTextWidth();
+        const prefixWidth = prefix.length * prefixSize;
+        label.node.setPosition(
+            -(textWidth * 0.5 + ZCFloatTextView.PREFIX_GAP + prefixWidth * 0.5), 0, 0);
     }
 
     /**

@@ -1,6 +1,7 @@
 import type { ZCUnitDefinition } from '../ZCCombatCatalog';
 import type { ZCDamageSource, ZCSnapshot, ZCUnitState } from '../ZCGameTypes';
 import type { ZCOwner } from '../ZCMapConfig';
+import { ZCStatusBasis, ZCStatusEffectKind } from '../ZCStatusEffect';
 import type { ZCPeriodicEvent, ZCStatusSystem } from '../ZCStatusEffect';
 
 export interface IZCStatusResolutionContext {
@@ -56,7 +57,7 @@ export class ZCStatusResolutionSystem {
                 ? Math.min(hpDamage, capAttack * event.capAttackMultiplier)
                 : hpDamage;
             amount = event.flatDamagePerStack * event.stacks + cappedHpDamage + (event.extraFlatDamage ?? 0);
-        } else if (event.basis === 'targetMaxHp') {
+        } else if (event.basis === ZCStatusBasis.TargetMaxHp) {
             amount = target.maxHp * event.amountPct / 100 * event.stacks;
             if (sourceUnit && event.capAttackMultiplier != null) {
                 amount = Math.min(
@@ -75,7 +76,7 @@ export class ZCStatusResolutionSystem {
             }
         }
         if (!(amount > 0)) return;
-        if (event.effect === 'damage') {
+        if (event.effect === ZCStatusEffectKind.Damage) {
             context.damageUnit(target, amount, {
                 owner: event.sourceOwner ?? sourceUnit?.owner
                     ?? context.owners.find((owner) => owner !== target.owner) ?? 'player',

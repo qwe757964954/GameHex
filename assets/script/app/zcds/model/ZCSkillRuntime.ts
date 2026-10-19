@@ -1,6 +1,4 @@
-import type { ZCSkillBinding, ZCTypedModifier } from './ZCStatSchema';
-
-export type ZCSkillStateMode = 'none' | 'counter' | 'cast-fsm';
+import type { ZCSkillBinding, ZCSkillStateMode, ZCTypedModifier } from './ZCStatSchema';
 
 export interface ZCSkillRuntimeDefinition {
     unitId: string;

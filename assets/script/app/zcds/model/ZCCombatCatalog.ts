@@ -16,11 +16,19 @@ export const ZCSkillTrigger = {
 } as const;
 export type ZCSkillTrigger = typeof ZCSkillTrigger[keyof typeof ZCSkillTrigger];
 
+/** 出手方式 / 战斗事件类型：近战 · 弹道 · 范围（`ZCAttackProfile.mode` 与 `ZCCombatEvent.type` 共用）。 */
+export const ZCCombatEventType = {
+    Melee: 'melee',
+    Projectile: 'projectile',
+    Area: 'area',
+} as const;
+export type ZCCombatEventType = typeof ZCCombatEventType[keyof typeof ZCCombatEventType];
+
 /** 普攻档案。逻辑层消费技能 id/命中/强化计数，表现层消费特效 Prefab。 */
 export interface ZCAttackProfile {
     skillId: number;
     name: string;
-    mode: 'melee' | 'projectile' | 'area';
+    mode: ZCCombatEventType;
     effectKey?: string;
     projectileKey?: string;
     projectileSpeed?: number;

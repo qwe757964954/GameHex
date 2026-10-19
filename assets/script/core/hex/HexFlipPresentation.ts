@@ -1,26 +1,61 @@
 /**
- * 六边形地块「抬起 → 收掉 / 翻面」的动作曲线（**纯函数，零 `cc`**）。
+ * 六边形地块「抬起 → 收掉 / 碎裂」的动作曲线（**纯函数，零 `cc`**）。
  *
- * 两条收场曲线，各自服务的场景不同：
- *  - `hexFlipFoldFx` / `hexFlipUnfoldFx`：抬起后**绕水平轴压扁**（领地地图的随机资源格翻开）；
- *  - `hexShrinkFx` / `hexShrinkBackFx`：**原地缩到最小**（对局的开发激活，2026-10-14 起；
- *    2026-10-15 起**不带任何位移** —— 见那边的说明）。
+ * ## 领地随机资源格翻开：**只剩「原地快碎裂」**（2026-10-16 用户口径）
  *
- * ⚠️ **时长仍然是两边共用的**（`HEX_FLIP_SECONDS` / `HEX_FLIP_RISE_RATIO` / `HEX_FLIP_LIFT_PIXELS`
- * 与底部光那套强度曲线）：两处「抬手 → 收场 → 落回」的**节奏**由此保持一致，只是收场的
- * 形状不一样。各自的后续接线（对局接卡牌揭示 + 建筑生成 / 领地接奖励弹窗）留在各自视图里。
+ * 需求原文：「地块反转动画优化，两种方案都做，点击后随机播放，让我根据播放的结果判断
+ * 只保留哪一种方案」⇒ 用户看完两套后拍板「**只保留地块破碎效果的方案**」。两套曾是：
+ *  - **方案2**（**保留**）：`hexShatterFx` —— **原地快碎裂** → 新地块**从格心放大填充**；
+ *  - **方案1**（**已整条删除**）：抬起后绕水平轴垂直翻转 360°。随它一起删掉的还有它独占的
+ *    `hexTurnFx` / `HEX_TURN_SECONDS` / `HEX_TURN_FACE_SWAP` / `HEX_TURN_EDGE_FADE_COS`、
+ *    随机点将 `pickHexFlipVariant`（及 `ZCHexFlipVariant`）、顶点层透视除法要用的
+ *    `HEX_FLIP_PERSPECTIVE`、正面开口补光要用的 `hexFlipBodyGlow`，以及
+ *    `IZCHexFlipFx.tileSin`（只有整圈翻转需要**有符号**的 sin）。
+ *    `shaders/hex-flip.effect` 里对应删掉的四段（顶点 3D 旋转 + 透视除法 / 体积明暗 /
+ *    侧视淡出 / 补光）都是**逐像素等价**的：`hexShatterFx` 全程 `tileFlip(cos) = 1`
+ *    且 `tileLift = 0` ⇒ 旋转角 0（`q ≡ 1`）、`abs(sin) = 0`（`mix(1, shade, 0) ≡ 1`）、
+ *    `glowStrength ≡ 0`、`smoothstep(0, t, |cos|) ≡ 1`。
+ *
+ * ⚠️ 别把方案1 的「半套」捡回来（曲线在了但着色器的 3D 段没了 ⇒ 会退化成纯压扁）。
+ *    要回看旧实现走版本历史（SVN）。
+ *
+ * ## 对局的收场是另一条路
+ *
+ *  `hexShrinkFx` / `hexShrinkBackFx`（原地缩到最小，2026-10-15 起**零位移**）、
+ *  `hexPulseFx`（原地脉冲呼吸）—— 见各自的说明。
+ *
+ * ## 仍然**共用**的东西
+ *
+ *  `HEX_FLIP_LIFT_PIXELS` / `HEX_FLIP_PIVOT_LIFT`、以及底部开口光那套强度与帧序推导
+ *  （`hexFlipGroundGlowStrength` / `hexFlipFoldProgress`）—— 两个视图的**写口**共用一份，
+ *  改一处两处一起变（⚠️ 但两条曲线现在都恒 `tileLift = 0` ⇒ 这道光两侧都不再点亮，
+ *  见 `hexShrinkFx` 的连带影响说明；消费方保留，别当成「有东西会抬起」）。
+ *
+ *  ⚠️ 但 **`HEX_FLIP_SECONDS` 不是两边共用的时长**：领地按 `HEX_SHATTER_SECONDS` 计时，
+ *  对局侧原样保留 0.384s（`ZCBattlePresentationQueue` 的 `ZC_HEX_FLIP_SECONDS`）。改它只影响对局。
  *
  * 为什么单拆成模块：两条路径分属两个 app feature，按 AGENTS.md 的依赖方向
  * （feature 之间禁止互相 import）不能互相引用，只能落到 `core`；顺带也让它成为
  * 「不需要 cc 就能单测」的地块动作真源。
  */
 
-/** 翻面段地块抬起的像素高度（格子整图 130×119 ⇒ 抬约 3/8 格）。 */
+/**
+ * 抬起段的像素高度（格子整图 130×119 ⇒ 抬约 3/8 格）。
+ *
+ * ⚠️ 现在**没有任何曲线产出非零抬升**（方案1 的上抛弧删除后，剩下的碎裂 / 缩没 / 脉冲都是
+ * 「原地」）。它只剩「把 `tileLift` 归一化」这一个作用 —— 被 `hexFlipFoldProgress` /
+ * `hexFlipGroundGlowStrength` 的强度式子引用，**别删**（那两条式子在两个视图的写口上共用；
+ * 删了这个分母会让式子含义变形）。
+ */
 export const HEX_FLIP_LIFT_PIXELS = 48;
 
 /**
  * 翻转轴心相对**整图中心**的上移量（像素）。
  * 默认 `0` = 绕整图中心翻；给成 12.5（= 顶面中心）观感会变成「从顶部翻出去」。
+ *
+ * ⚠️ 消费方是 `ZCHexView.applyTileOffset` 的轴心补偿项 `HEX_FLIP_PIVOT_LIFT × (1 - flip)`；
+ * 而现在**没有任何曲线产出 `flip ≠ 1`**（方案1 删除后只剩「原地」两条）⇒ 该项恒 `0`。
+ * 保留为「压扁收场绕哪条轴心」的旋钮，别在 flip 恒 1 的前提下以为它在起作用。
  */
 export const HEX_FLIP_PIVOT_LIFT = 0;
 
@@ -28,33 +63,23 @@ export const HEX_FLIP_PIVOT_LIFT = 0;
  * 翻面段内部「**先抬起、再原地翻面**」的分界比例。
  *
  * 两者必须串行：同步线性时轴心会跟着地块一起往上跑，视觉上读不出「绕固定的一条中心线翻」。
+ *
+ * ⚠️ 2026-10-16 起没有曲线按这个比例切段了（领地的两套方案 → 只剩「原地碎裂」），它现在只被
+ * `hexFlipFoldProgress` 用来把「抬升量 / 等价 flip」反推成底光帧序 —— **别删**，
+ * 对局的缩没段（`tileLift` 恒 0）也走那条推导。
  */
 export const HEX_FLIP_RISE_RATIO = 0.45;
 
 /**
- * **翻面段时长（秒）**：「抬起 + 原地压扁」。
+ * **对局侧翻面段时长（秒）**：「抬起 + 原地压扁」。
  *
- * 对局（开发激活）与领地地图（随机资源格翻开）共用这 0.384s —— 两处翻格的**节奏**才一致。
- * 对局的卡牌揭示要把起点推到这一刻（`ZCCardReveal.startedAt = now + 本值`）。
+ * 对局的卡牌揭示要把起点推到这一刻（`ZCCardReveal.startedAt = now + 本值`），
+ * `ZCBattlePresentationQueue.ZC_HEX_FLIP_SECONDS` 直接取本值 ⇒ **改它会改对局的分段**。
+ *
+ * ⚠️ 领地**不消费它**：随机资源格翻开按 `HEX_SHATTER_SECONDS` 计时 —— 别把它当成
+ * 「两边共用的节奏」。
  */
 export const HEX_FLIP_SECONDS = 0.384;
-
-/**
- * **没有卡牌接棒**时，收场段之后把地块**复原**的时长（秒）。
- *
- * 对局的卡牌独占段、领地的奖励弹窗都不需要它 ⇒ 取 0.05s（3 帧@60fps，只看得见「回」
- * 这一下的方向，不再是一段动画）。设 `0` = 收场段结束那一帧就复位。
- * 两处的方向不同：领地是**合回去**（反向压扁），对局是**缩回来**（放大回原尺寸）。
- */
-export const HEX_FLIP_FOLD_SECONDS = 0.05;
-
-/**
- * 绕水平轴翻转的**透视强度**（真 3D 透视除法的近大远小系数；`0` = 纯压扁）。
- * 只在视图拿到 `shaders/hex-flip.effect` 时生效；拿不到就退回等比压扁。
- *
- * `0.42` 配合材质里的非对称系数 ⇒ 侧视那一瞬远端约收至 `0.43`、近端约放至 `1.23`。
- */
-export const HEX_FLIP_PERSPECTIVE = 0.42;
 
 /** 地块收场的每帧参数。 */
 export interface IZCHexFlipFx {
@@ -63,13 +88,35 @@ export interface IZCHexFlipFx {
     /**
      * 整格 Y 上移像素（0 = 布局原位）。
      *
-     *  ⚠️ 只有**翻面**那两条曲线（`hexFlipFoldFx` / `hexFlipUnfoldFx`）会给出非零值 ——
-     *  它们要靠抬起让压扁绕一条固定的中心线走。缩没那两条（`hexShrinkFx` / `hexShrinkBackFx`）
-     *  自 2026-10-15 起恒 `0`：需求要的是「原地缩小」，中心点不许动（见 `hexShrinkFx` 的说明）。
+     * ⚠️ **2026-10-16 起所有曲线都恒 `0`**：方案1（`hexTurnFx` 的上抛弧）删除后，领地的碎裂
+     *  与对局的缩没都要求「**原地**」，谁也不许位移。字段与两个消费方
+     *  （`ZCHexView.applyTileOffset` / 底光强度）保留成共用写口 —— 但它现在是个**恒定 0 的轴**，
+     *  别再拿它当「有东西会抬起」的信号（`ZCHexView.setRaised` 因此永远不抬升，底光也不再点亮）。
      */
     tileLift: number;
-    /** 绕水平轴的 2D 翻面比例：`1` = 正面朝上，`0` = 压扁成侧视。缩没段恒 `1`。 */
+    /**
+     * 绕水平轴的 **cos**：`1` = 正面朝上，`0` = 压扁成侧视。
+     *
+     * ⚠️ **2026-10-16 起所有曲线都恒 `1`**（不旋转）：方案1（整圈 360°，cos 会走负半轴）删除后
+     *  只剩「原地碎裂」与「原地缩没」。留着是因为对局的压扁收场仍按它算 `y *= flip`
+     *  （`ZCHexView.applyTileTransform`）与底光的「等价 flip」推导。
+     */
     tileFlip: number;
+    /**
+     * **原地碎裂进度** `[0,1]`（喂 `shaders/hex-flip.effect` 的 `shatterParams.y`）：
+     * `0` = 完好，`1` = 碎到底。`undefined` / 缺省 = 这一帧不碎裂。
+     */
+    shatter?: number;
+    /**
+     * **新地块的放大倍率**：`0` = 还没出现，`1` = 铺满格子（末尾会略微过冲再收回）。
+     *
+     * ⚠️ 写在**子节点 `Reveal`** 上，**不是**格根 —— 格根的缩放归对局的缩没段，领地恒 1；
+     * 这里只放大「新地皮」那张图，格面框 / 底光 / 建筑都不跟着动。
+     * `undefined` / 缺省 = 不放大（`Reveal` 收起）。
+     */
+    revealScale?: number;
+    /** 起手那一下白闪强度 `[0,1]`（喂材质的 `flashStrength`）。 */
+    flash?: number;
     /**
      * 整格等比缩放（`1` = 原尺寸，`HEX_SHRINK_MIN_SCALE` = 缩到最小）。
      *
@@ -120,12 +167,6 @@ export function clamp01(value: number): number {
     return value < 0 ? 0 : (value > 1 ? 1 : value);
 }
 
-function makeFoldFx(tileLift: number, tileFlip: number): IZCHexFlipFx {
-    return {
-        hidden: false, tileLift, tileFlip, tileScale: 1, buildingPopScale: 1, glowRadius: 0, glowAlpha: 0,
-    };
-}
-
 function makeShrinkFx(tileLift: number, tileScale: number): IZCHexFlipFx {
     return {
         // 缩没段格子还该显示「开发前」的图标+价格数字，建筑要等卡牌淡出那段才换上来 ——
@@ -134,28 +175,102 @@ function makeShrinkFx(tileLift: number, tileScale: number): IZCHexFlipFx {
     };
 }
 
+// ── 领地随机资源格「翻开」：只剩「原地快碎裂」（2026-10-16 用户口径） ──────────────
+//
+// 🔴 方案1（抬起后绕水平轴垂直翻转 360°）连同它的随机点将已**整条删除**：用户看完两套后
+//    拍板「只保留地块破碎效果的方案」。删掉的东西（实现真源）：
+//      · 曲线 `hexTurnFx` / `makeTurnFx`；时长 `HEX_TURN_SECONDS = 0.72s`；
+//      · 换脸点 `HEX_TURN_FACE_SWAP = 0.75`、侧视淡出阈值 `HEX_TURN_EDGE_FADE_COS = 0.32`；
+//      · 随机点将 `pickHexFlipVariant` + 类型 `ZCHexFlipVariant`（视图侧对应
+//        `variant` / `lastVariant` / `totalSecondsOf`，也已清掉）；
+//      · `IZCHexFlipFx.tileSin`（只有整圈翻转需要**有符号**的 sin）；
+//      · `HEX_FLIP_PERSPECTIVE`（顶点层透视除法）与 `hexFlipBodyGlow`（正面开口补光）。
+//    对应 `shaders/hex-flip.effect` 删掉的四段（顶点 3D 旋转 + 透视除法 / 体积明暗 /
+//    侧视淡出 / 补光）都是**逐像素等价**的 —— 理由见模块头注释。
+//    ⚠️ 别只把曲线补回来：着色器里那几段已经不在了，翻整圈会退化成纯压扁。
+
+/** 方案的总时长（秒）：碎裂段 + 新地块放大段（「快」碎裂，比原先方案1 的 0.72s 短）。 */
+export const HEX_SHATTER_SECONDS = 0.68;
+
 /**
- * **翻面段**：`k ∈ [0,1]`（`0` = 布局原位正面朝上，`1` = 压扁成侧视、停在最高点）。
+ * 碎裂段的结束比例（`0.55`）：到这里**旧地块已经碎没**，同一帧换脸。
  *
- * `k < RISE_RATIO` 只往上送、形状不变；之后位置**停在最高点不动**，只压扁
- * ⇒ 轴心是一条**固定**的中心线（位置与形状分两段走，是这套观感的关键）。
+ * 🔴 碎裂进度到这里**停在 1**（不是回到 0）：旧地块要一直保持「碎没了」的状态，
+ * 否则新地块放大到一半时会从碎片底下露出一块旧地皮。
  */
-export function hexFlipFoldFx(k: number): IZCHexFlipFx {
-    const t = clamp01(k);
-    if (t < HEX_FLIP_RISE_RATIO) {
-        return makeFoldFx(HEX_FLIP_LIFT_PIXELS * (t / HEX_FLIP_RISE_RATIO), 1);
-    }
-    return makeFoldFx(HEX_FLIP_LIFT_PIXELS, 1 - (t - HEX_FLIP_RISE_RATIO) / (1 - HEX_FLIP_RISE_RATIO));
+export const HEX_SHATTER_ERODE_END = 0.55;
+
+/**
+ * 新地块开始放大的比例（`0.42`，**早于**碎裂结束）。
+ *
+ * 留一小段重叠：`[0.42, 0.55]` 之间「碎片还在往外腐蚀、新地块已经从格心顶上来」，
+ * 比「碎光了再长出新的」连贯；重叠期新地块还很小（约 5%），不会盖住碎片的观感。
+ */
+export const HEX_SHATTER_REVEAL_START = 0.42;
+
+/** 碎裂片数（列 × 行）。`4×4` = 16 片：更少会读成「裂成几块」，更多在这个尺寸（126×117）下就糊了。 */
+export const HEX_SHATTER_GRID_X = 4;
+export const HEX_SHATTER_GRID_Y = 4;
+
+/** 碎片中心抖动（单位 = 一个网格）：`0.7` ⇒ 碎块大小 / 朝向明显不规则（否则像瓷砖）。 */
+export const HEX_SHATTER_JITTER = 0.7;
+
+/** 起手「啪」那一下的白闪：峰值强度与窗口（进度比例，`0 ~ 0.16` 冲上去再退掉）。 */
+export const HEX_SHATTER_FLASH = 0.7;
+export const HEX_SHATTER_FLASH_WINDOW = 0.16;
+
+/** 新地块落位的回弹余量：`0.06` ⇒ 长到约 `1.04` 再收回 `1`（「填充」那一下的手感）。 */
+export const HEX_REVEAL_POP = 0.06;
+
+/** easeInOutCubic：起手慢、中段快、落位慢 —— 新地块「填充」的手感。 */
+function easeInOutCubic(t: number): number {
+    if (t < 0.5) return 4 * t * t * t;
+    const p = -2 * t + 2;
+    return 1 - (p * p * p) / 2;
 }
 
 /**
- * **合回段**：`k ∈ [0,1]`（`0` = 压扁停在最高点，`1` = 落回原位、正面朝上）。
+ * 新地块的放大倍率：`0` → `1`，末尾**轻微过冲**再收回。
  *
- * 就是翻面段的反向播：翻回一半时也落回一半，读起来是「合回去」而不是「原地展开」。
+ * 过冲项 `6.75 × t³(1−t)` 在 `t = 0.75` 处归一化到 1 ⇒ 峰值出现在落位前一刻
+ * （落在中段会读成「弹了一下又缩回去」）。
  */
-export function hexFlipUnfoldFx(k: number): IZCHexFlipFx {
+function revealScaleAt(u: number): number {
+    const t = clamp01(u);
+    return easeInOutCubic(t) + HEX_REVEAL_POP * 6.75 * t * t * t * (1 - t);
+}
+
+/**
+ * 领地随机资源格「翻开」的**唯一**曲线：`k ∈ [0,1]` → 「原地快碎裂 → 新地块从格心放大填充」。
+ *
+ *  · **不抬起、不旋转、不缩整格**（`tileLift` / `tileScale` 恒 0、`tileFlip` 恒 1）：
+ *    需求原文是「**原地**快碎裂」，所以格心坐标与格根缩放全程不动，碎裂完全由材质做
+ *    （片元级的碎片腐蚀，见 `shaders/hex-flip.effect`）；格根不动 ⇒ 不会挪到邻格头上；
+ *    🔴 这三个「恒」也是着色器能删掉顶点 3D 段的前提（详见模块头注释）；
+ *  · `shatter` = 碎裂进度（喂材质 `shatterParams.y`）：`0` = 完好，`0.55` 起**恒 1**（理由见
+ *    `HEX_SHATTER_ERODE_END`）；
+ *  · `flash` = 起手那一下白闪（喂材质 `flashParams.x`）；
+ *  · `revealScale` = 新地块的放大倍率（视图写在**子节点 `Reveal`** 上，不动格根）。
+ */
+export function hexShatterFx(k: number): IZCHexFlipFx {
     const t = clamp01(k);
-    return makeFoldFx(HEX_FLIP_LIFT_PIXELS * (1 - t), t);
+    const erode = HEX_SHATTER_ERODE_END;
+    return {
+        hidden: false,
+        tileLift: 0,
+        tileFlip: 1,
+        tileScale: 1,
+        buildingPopScale: 1,
+        glowRadius: 0,
+        glowAlpha: 0,
+        shatter: t >= erode ? 1 : t / erode,
+        revealScale: t <= HEX_SHATTER_REVEAL_START
+            ? 0
+            : revealScaleAt((t - HEX_SHATTER_REVEAL_START) / (1 - HEX_SHATTER_REVEAL_START)),
+        flash: t < HEX_SHATTER_FLASH_WINDOW
+            ? HEX_SHATTER_FLASH * Math.sin(Math.PI * (t / HEX_SHATTER_FLASH_WINDOW))
+            : 0,
+    };
 }
 
 // ── 收场第二条路：「原地缩到最小」（2026-10-14 对局的开发激活改用它） ──────────────
@@ -246,7 +361,8 @@ export const HEX_PULSE_MAX_SCALE = 1.25;
  *
  * 🔴 **不再产出 `glowRadius` / `glowAlpha`**（原先那个居中圆环 2026-10-15 由序列帧取代，
  * 山猫：「中间有个圆圆的圈圈影响视觉」）。这两个字段仍留在 `IZCHexFlipFx` 里是因为
- * 领地侧共用同一份结构、以及折叠 / 缩没两条曲线还在产出它们。
+ * **建筑生成那一段还在消费**（`ZCHexView.hexActivationFx` 的 `HEX_ACT_GLOW_*`），
+ * 以及领地翻格与对局共用同一份结构 —— 不是给收场曲线留的。
  *
  * ⚠️ 与缩没段的区别：**不抬起**（`tileLift = 0`，底部序列帧光因此自然熄灭）、
  * 不缩格、建筑仍隐藏（`buildingPopScale = 0`，格子按开发前外观渲染）。
@@ -285,15 +401,17 @@ export function hexCollapseProgress(tileFlip: number, tileScale: number): number
 }
 
 /**
- * **反推收场进度**：由每帧拿到的 `tileLift / tileFlip` 还原出 `k ∈ [0,1]`
- * （`hexFlipFoldFx` 的逆）。
+ * **反推收场进度**：由每帧拿到的 `tileLift / tileFlip` 还原出「收场走到哪儿了」`∈ [0,1]`。
  *
- * 用在「底光序列帧」这类**没有自己时间轴**的播放上：`applyActivationFx` 是幂等的每帧调用，
- * 视图不能在里面存播放进度，只能从当前表现参数反推 —— 分段与 `hexFlipFoldFx` 一一对应：
- * 抬升段按 `tileLift` 走，压扁段按 `tileFlip` 走。
+ * 用在「底光序列帧」这类**没有自己时间轴**的播放上：视图不能在里面存播放进度，
+ * 只能从当前表现参数反推 —— 抬升段按 `tileLift` 走，压扁段按 `tileFlip` 走。
  *
  * ⚠️ 缩没段（对局）**没有 flip 变化**，调用方要把 `hexCollapseProgress` 换出来的
  * 「等价 flip」传进来（见那边的说明），否则帧序会停在抬升结束那一张不动。
+ *
+ * ⚠️ 里头的 `tileFlip < 1` 分支现在只被**对局的缩没段**（传等价 flip）走到；领地的碎裂
+ * 传进来的 `tileFlip` 恒 `1` ⇒ 走抬升分支、而 `tileLift` 也恒 `0` ⇒ 恒得第 0 帧（这道光
+ * 在领地本来就不点亮，见 `hexShrinkFx` 的连带影响说明）。
  */
 export function hexFlipFoldProgress(tileLift: number, tileFlip: number): number {
     if (tileFlip >= 1) return HEX_FLIP_RISE_RATIO * clamp01(tileLift / HEX_FLIP_LIFT_PIXELS);
@@ -301,14 +419,6 @@ export function hexFlipFoldProgress(tileLift: number, tileFlip: number): number 
 }
 
 // ── 开口补光 / 地面光斑（对局与领地共用的观感参数） ───────────────────────────
-
-/**
- * 正面开口边的轻微补光强度（侧面主体由地面光斑的贴边光绘制）。
- *
- * 写进 `hex-flip.effect` 的 `glowStrength`：**只剩领地翻格在消费** —— 对局自 2026-10-14
- * 改成「抬起后缩没」后不再压扁，也就不再挂那份透视材质（见 `hexFlipBodyGlow`）。
- */
-export const HEX_FLIP_BODY_GLOW = 0.3;
 
 /** 开口光峰值强度；改用序列帧后只剩「是否 > 0（总开关）」这一个作用，不再写任何 uniform。`0` = 关掉。 */
 export const HEX_FLIP_GROUND_GLOW = 0.9;
@@ -326,14 +436,6 @@ export const HEX_FLIP_GLOW_MASK_OFFSET_Y = 24;
 export const HEX_FLIP_GROUND_GLOW_ALPHA = 235;
 
 /**
- * 正面开口补光强度：随抬升量线性亮起（`tileLift = 0` 时不补光）。
- * 写进 `hex-flip.effect` 的 `glowStrength`；**目前只剩领地翻格在消费**（对局不再压扁）。
- */
-export function hexFlipBodyGlow(tileLift: number): number {
-    return HEX_FLIP_BODY_GLOW * clamp01(tileLift / HEX_FLIP_LIFT_PIXELS);
-}
-
-/**
  * 地面光斑（三面侧体 + 贴边光）强度：随抬升量亮起，并在**收到底之前**平滑退场。
  *
  * 退场用 smoothstep：塌陷轴（`1 - collapseFlip`）涨到 `1 - FADE_COS` 以上时归零 ——
@@ -342,6 +444,8 @@ export function hexFlipBodyGlow(tileLift: number): number {
  * `collapseFlip` = **等价 flip**（`1 - hexCollapseProgress(...)`）：压扁收场直接传 `tileFlip`，
  * 缩没收场传由缩放换出来的那个值 —— 两种收场因此共用同一条亮灭曲线。
  *
+ * ⚠️ 现在**两边都传不出非零强度**（方案1 删除后 `tileLift` 恒 `0`，连对局的缩没段也是
+ * 「不抬就没有开口」）—— 这道光如今全程熄灭，是本方案的**自洽结果**，不是漏接线。
  * ⚠️ 两个视图都必须走这个函数（别各自手写一遍），否则一处改了另一处不会跟。
  */
 export function hexFlipGroundGlowStrength(tileLift: number, collapseFlip: number): number {

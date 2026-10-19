@@ -40,19 +40,33 @@ function stripComments(source: string): string {
 /**
  * 设计稿量测表（蓝湖「落点选择」稿，画布 720×1610，与工程美术 1:1）——**手抄**，别由 prefab 反推。
  * cocosY = 805 − 设计y（y 反向）；子树坐标 = 子中心 − 父中心。顶栏/按钮另有 Widget 钉边。
+ *
+ * 2026-10-17 按线框图重排顶栏为**三行式**（倒计时数字 / 标题 / 进度条）：
+ *   · 数字 30 → **48** 号、从中间挪到**第一行** `+35`，仍是水平居中；
+ *   · 标题 28 → **25** 号（用户 2026-10-17 手定；行高同步 38 → 32，框仍 300×38 不触发 SHRINK），下移到第二行 `-9`；
+ *   · 字号不能只比数字小、还要「**看着**小」：汉字满字高 ≈ 0.95em、数字只有大写高 ≈ 0.72em ——
+ *     46 号数字 × 0.72 ≈ 33 与 34 号汉字 × 0.95 ≈ 32 几乎一样高（旧 28 号 vs 30 号更是**字比数大**），
+ *     所以数字给到 48、标题压到 30，视觉高度 34.6 : 28.5 ≈ 0.82 才是「略小」；
+ *   · 标题框 221 → **300** 宽 —— 旧的 221 装不下 8 个字 × 28 号，`SHRINK` 把实际字号压到了 22
+ *     （prefab 里 `_actualFontSize: 22` 就是证据），不放宽等于「把字号调大也没用」；
+ *   · 进度条先按需求**长度 −35%、高度 −5%**（398×32 → 259×30），随后用户两次手定为 **230×23** → **200×23**
+ *     （填充 194×16），以最后一次手定值为准。
  */
 const DESIGN = {
     band: { w: 663, h: 130, top: 78 },
-    hint: { w: 221, h: 27, y: 35.5, fontSize: 28 },
-    clock: { w: 60, h: 28, y: 0, fontSize: 30 },
-    progress: { w: 398, h: 32, x: 0.5, y: -34 },
-    fill: { w: 387, h: 21, x: -0.5, y: -0.5 },
+    hint: { w: 300, h: 38, y: -9, fontSize: 25 },
+    clock: { w: 120, h: 56, y: 35, fontSize: 48 },
+    progress: { w: 200, h: 23, x: 0.5, y: -46 },
+    fill: { w: 194, h: 16, x: -0.5, y: -0.5 },
     confirm: { w: 80, h: 82, bottom: 200, centerX: 28 },
     toggle: { w: 194, h: 69, left: 9, bottom: 114 },
     toggleLabel: { w: 109, h: 27, x: -20.5, y: 0, fontSize: 28 },
     arrow: { w: 32, h: 22, x: 60, y: -0.5 },
     toast: { w: 520, h: 64 },
 };
+
+/** 上一版进度条（398×32 / 填充 387×21）——本次缩到「长度 −35%、高度 −5%」。 */
+const PREV_PROGRESS = { w: 398, h: 32, fillW: 387, fillH: 21 };
 
 const nodes = objects.filter((o) => o.__type__ === 'cc.Node');
 const nodeNamed = (name: string, parentName?: string) => nodes.find((node) => {
@@ -142,6 +156,70 @@ test('字号取自渲染图墨迹实测（设计稿 textLayer 没有 raw_style�
         assert.equal(label._horizontalAlign, 1);
         assert.equal(label._verticalAlign, 1);
     }
+});
+
+test('顶栏三行式：数字第一行居中 / 标题第二行略小 / 进度条 200×23（2026-10-17 线框图）', () => {
+    const clock = nodeNamed('Clock', 'SpawnInfoBand')!;
+    const hint = nodeNamed('Hint', 'SpawnInfoBand')!;
+    const progress = nodeNamed('Progress', 'SpawnInfoBand')!;
+    const clockLabel = labelOf(clock)!;
+    const hintLabel = labelOf(hint)!;
+
+    // ① 第一行 = 倒计时数字：三个子节点里 y 最大，且水平居中（x=0 + 锚点 0.5 + 居中对齐）
+    const ys = [clock, hint, progress].map((node) => positionOf(node)[1]);
+    assert.equal(Math.max(...ys), positionOf(clock)[1], '倒计时数字必须在第一行（最上）');
+    assert.deepEqual(positionOf(clock), [0, DESIGN.clock.y], '数字水平居中（x = 0）');
+    assert.equal(clockLabel._horizontalAlign, 1, '数字居中对齐');
+    assert.ok(positionOf(clock)[1] > positionOf(hint)[1], '标题落在数字下方');
+    assert.ok(positionOf(hint)[1] > positionOf(progress)[1], '进度条落在标题下方');
+
+    // ② 文字比数字略小 —— 判**视觉高度**而不是字号：
+    //    汉字满字高 ≈ 0.95em，阿拉伯数字只有大写高 ≈ 0.72em（无降部）。
+    //    所以「数字 30 / 文字 28」实际是文字看着更大（28×0.95=26.6 > 30×0.72=21.6），
+    //    屏幕上那个「7 比标题还小」就是这么来的；只比 fontSize 的判据拦不住这种错。
+    //    现配比 48 : 25 ⇒ 34.56 : 23.75 ≈ 0.69（用户手定 25 号后从 0.82 再往下走了一档）。
+    const visualClock = clockLabel._fontSize * 0.72;
+    const visualHint = hintLabel._fontSize * 0.95;
+    assert.ok(visualHint < visualClock, '文字的视觉高度必须小于数字');
+    assert.ok(visualHint >= visualClock * 0.6, '「略小」不是砍半：文字视觉高度不低于数字的 60%');
+
+    // ③ 三行都在 130 高的信息带内（不越界 / 不压边）
+    const half = DESIGN.band.h / 2;
+    assert.ok(positionOf(clock)[1] + clockLabel._lineHeight / 2 <= half, '数字行不得溢出带顶');
+    assert.ok(positionOf(progress)[1] - DESIGN.progress.h / 2 >= -half, '进度条不得溢出带底');
+
+    // ④ SHRINK 的几何闸门：框高 < 行高、或框宽装不下整句 ⇒ 引擎静默把字缩回去。
+    //    旧版标题框 221 宽装不下 8 字 × 28 号，prefab 里 `_actualFontSize` 实测被压到 22 —— 调大字号等于白调。
+    assert.ok(sizeOf(clock)[1] >= clockLabel._lineHeight, '数字框高必须 ≥ 行高，否则 SHRINK 会缩字');
+    assert.ok(sizeOf(hint)[1] >= hintLabel._lineHeight, '标题框高必须 ≥ 行高，否则 SHRINK 会缩字');
+    assert.ok(sizeOf(hint)[0] >= '选择己方主城位置'.length * hintLabel._fontSize,
+        '标题框宽必须装得下 8 个字，否则 SHRINK 把字号压回旧值');
+
+    // ⑤ 进度条：用户 2026-10-17 直接定尺寸，几版手调依次是 259×30（−35% / −5%）→ 230×23 → **200×23**，
+    //    现以最后一版为准；下面留一条可复算的历史记录。填充 194×16 = 左右各留 3、上下各留 3.5。
+    assert.equal(DESIGN.progress.w, 200);
+    assert.equal(DESIGN.progress.h, 23);
+    assert.equal(Math.round(PREV_PROGRESS.w * 0.65), 259, '历史值：−35% 那一版是 259');
+    assert.equal(Math.round(PREV_PROGRESS.h * 0.95), 30, '历史值：−5% 那一版是 30');
+    assert.deepEqual(sizeOf(progress), [DESIGN.progress.w, DESIGN.progress.h]);
+    const fill = nodeNamed('ProgressFill', 'Progress')!;
+    assert.deepEqual(sizeOf(fill), [DESIGN.fill.w, DESIGN.fill.h]);
+
+    // ⑤′ 填充必须**整块落在条内**且四边留 2~6px（留白太小会盖住条的黑边、太大露底）：
+    //     这条挡的是「改条尺寸忘了改填充」——那种错不报错，只是填充溢出/缩成一条线。
+    const [bw, bh] = sizeOf(progress);
+    const [fw, fh] = sizeOf(fill);
+    const insetX = (bw - fw) / 2;
+    const insetY = (bh - fh) / 2;
+    assert.ok(fw < bw && fh < bh, '填充必须小于条（否则盖住黑边）');
+    for (const [name, inset] of [['左右', insetX], ['上下', insetY]] as const) {
+        assert.ok(inset >= 2 && inset <= 6, `${name}留白应在 2~6px，实测 ${inset}`);
+    }
+
+    // ⑥ 倒计时数字**加粗**（2026-10-17 用户口径），标题保持常规字重 ——
+    //    两边都加粗会把「数字 / 标题」的层级抹平，所以这是一条成对判据。
+    assert.equal(clockLabel._isBold, true, '倒计时数字必须加粗');
+    assert.equal(hintLabel._isBold, false, '标题不加粗（否则与数字的层级被抹平）');
 });
 
 test('ZCSpawnSelection.prefab：Toast 出厂隐藏，layer 全 UI_2D，Widget 位掩码对得上', () => {
@@ -270,8 +348,9 @@ test('两态口径：文案只有两条、等待态收掉倒计时/进度/绿勾
     assert.match(code, /waiting: '等待其他玩家'/);
     assert.match(code, /picking: '选择己方主城位置'/);
     assert.doesNotMatch(code, /已确认|对方已锁定|最后 3 秒/, '文案只照设计稿的两条');
-    assert.match(code, /SPAWN_HINT_OFFSET_Y = 35\.5/, '选择态标题带在顶栏上部（设计稿 y94，带宽 130）');
+    assert.match(code, /SPAWN_HINT_PICKING_Y = -9/, '选择态标题落在三行式的第二行（数字 +35 / 标题 -9 / 进度条 -46）');
     assert.match(code, /SPAWN_HINT_CENTER_Y = 0/, '等待态只剩一行 ⇒ 垂直居中（设计稿「落点选择2」）');
+    assert.doesNotMatch(code, /SPAWN_HINT_OFFSET_Y/, '顶栏改成三行式后旧常量名（上部 +35.5）必须删干净');
     // 等待态 = 已确认；三处显隐必须成对（规则：显隐要成对复位，否则复用到下一局会残留）
     assert.match(code, /const waiting = mine\.confirmedHexId !== null/);
     for (const key of ['clockLabel.node', 'progressNode', 'confirmButton']) {

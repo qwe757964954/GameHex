@@ -5,10 +5,11 @@ import {
 import { getPvpRuntimeRules, getZCLegacySkillEffectConfig, ZCRuntimeRules } from './ZCGameRuntimeConfig';
 import type { ZCLegacySkillEffectConfig } from './ZCLegacySkillEffect';
 import {
-    getZCMapOwner, getZCMapSection, ZCCityMode, ZCFaction, ZCHexConfig, ZCMapArt, ZCMapRegion,
+    getZCMapOwner, getZCMapSection, ZCCityMode, ZCFaction, ZCHexConfig, ZCMapArt, ZCMapHomeCandidates, ZCMapRegion,
     ZCMapResolvedResource, ZCMapResourcePoint, ZCMapSpacing, ZCOwner, ZCPlayerCount, ZCSection, ZC_HEX_CONFIG,
     ZC_MAP_ART, ZC_MAP_CITY_MODE, ZC_MAP_COLUMNS, ZC_MAP_HOMES, ZC_MAP_PLAYER_COUNT, ZC_MAP_REGIONS,
-    ZC_MAP_RESOURCE_POINTS, ZC_MAP_ROWS, ZC_MAP_SPACING, ZC_MAP_ID,
+    ZC_MAP_RESOURCE_POINTS, ZC_MAP_HOME_CANDIDATES, ZC_MAP_ROWS, ZC_MAP_SPACING, ZC_MAP_ID,
+    ZC_MAP_ZOOM_MIN, ZC_MAP_ZOOM_MAX,
     ZC_PLAYER_HOME_ID, ZC_ENEMY_HOME_ID, ZC_OWNER_ORDER,
 } from './ZCMapConfig';
 import {
@@ -42,8 +43,9 @@ export interface ZCMatchMap {
     sections?: readonly ZCSection[];
     /** 固定主城模式下各方主城格 id（下标 0 = 1 区）；自选主城模式为空。 */
     homes?: readonly number[];
-    /** 各方前 / 中 / 后区域；未圈画时为空。 */
-    regions?: readonly ZCMapRegion[];
+    /** 各方前 / 中 / 后区域；未圈画时为空。 */    regions?: readonly ZCMapRegion[];
+    /** 自选主城候选格；某分区未声明时按旧规则选点。 */
+    homeCandidates?: readonly ZCMapHomeCandidates[];
     /** 资源点位（开局据此抽中立资源）；无点位时为空。 */
     resourcePoints?: readonly ZCMapResourcePoint[];
     /** 选点结束后从各点位资源池抽出的本局结果。 */
@@ -52,6 +54,14 @@ export interface ZCMatchMap {
     spacing?: Readonly<Required<ZCMapSpacing>>;
     /** 美术配置。 */
     art?: Readonly<ZCMapArt>;
+    /**
+     * 局内镜头的倍率范围（R22 相机：「每个地图配置对应的最大和最小倍率」）。
+     *
+     *  真源是地图 JSON 的 `zoomMin` / `zoomMax`，经 `resolveZCMapZoom` 补默认值后带到这里，
+     *  由 `ZCGame` 交给 HUD。缺省 `0.6 / 1.2`。
+     */
+    zoomMin?: number;
+    zoomMax?: number;
 }
 
 /** 领地塔防的确定性出怪计划；由关卡表投影，随本局配置一起冻结。 */
@@ -135,8 +145,10 @@ export function captureZCMatchConfig(
             playerHomeId: ZC_PLAYER_HOME_ID, enemyHomeId: ZC_ENEMY_HOME_ID,
             playerCount: ZC_MAP_PLAYER_COUNT, cityMode: ZC_MAP_CITY_MODE,
             sections: ZC_HEX_CONFIG.map((hex) => getZCMapSection(hex.id)),
-            homes: ZC_MAP_HOMES, regions: ZC_MAP_REGIONS, resourcePoints: ZC_MAP_RESOURCE_POINTS,
+            homes: ZC_MAP_HOMES, regions: ZC_MAP_REGIONS, homeCandidates: ZC_MAP_HOME_CANDIDATES,
+            resourcePoints: ZC_MAP_RESOURCE_POINTS,
             spacing: ZC_MAP_SPACING, art: ZC_MAP_ART,
+            zoomMin: ZC_MAP_ZOOM_MIN, zoomMax: ZC_MAP_ZOOM_MAX,
             hexes: ZC_HEX_CONFIG, owners: ZC_HEX_CONFIG.map((hex) => getZCMapOwner(hex.id)),
         },
         rules: getPvpRuntimeRules(), playerDeck: getPlayerDeck(), enemyDeck: getEnemyDeck(),

@@ -347,21 +347,27 @@ test('血条使用 ProgressBar，裁切非法比例并按阵营换填充图', ()
     const { load, bar } = loadViews();
     const { updateHealthBar, pickHealthBarFill } = load('./ZCGameViewUtil');
     const health = bar();
-    // 三张填充图用可辨识的占位对象替代（渲染层只做「是不是同一张」的比较）。
+    // 四张填充图用可辨识的占位对象替代（渲染层只做「是不是同一张」的比较）。
     const fillPlayer = { name: 'jindutiao_b' } as any;
     const fillEnemy = { name: 'jindutiao_r' } as any;
     const fillEnemy2 = { name: 'jindutiao_y' } as any;
+    const fillEnemy3 = { name: 'jindutiao_p' } as any;
     for (const [hp, maxHp, expected, visible] of [[100, 100, 1, true], [150, 100, 1, true], [-5, 100, 0, true], [50, 0, 0, false], [NaN, 100, 0, true], [50, Infinity, 0, false]]) {
         updateHealthBar(health, hp, maxHp, fillPlayer);
         assert.equal(health.progress, expected);
         assert.equal(health.node.active, visible);
     }
-    // 阵营 → 图：我方蓝、敌红、敌2 黄；第 4 家（enemy3）复用红（蓝湖稿只有三色）。
-    assert.equal(pickHealthBarFill('player', fillPlayer, fillEnemy, fillEnemy2), fillPlayer);
-    assert.equal(pickHealthBarFill('enemy', fillPlayer, fillEnemy, fillEnemy2), fillEnemy);
-    assert.equal(pickHealthBarFill('enemy2', fillPlayer, fillEnemy, fillEnemy2), fillEnemy2);
-    assert.equal(pickHealthBarFill('enemy3', fillPlayer, fillEnemy, fillEnemy2), fillEnemy,
-        'enemy3 复用敌方的红色填充（稿子只给了三队配色）');
+    // 阵营 → 图：我方蓝、敌红、敌2 黄、敌3 紫（R25「不同阵营区分不同的血条」四项各不相同）。
+    const four = [fillPlayer, fillEnemy, fillEnemy2, fillEnemy3];
+    const of = (owner: string) => pickHealthBarFill(owner, fillPlayer, fillEnemy, fillEnemy2, fillEnemy3);
+    assert.equal(of('player'), fillPlayer);
+    assert.equal(of('enemy'), fillEnemy);
+    assert.equal(of('enemy2'), fillEnemy2);
+    assert.equal(of('enemy3'), fillEnemy3,
+        '第 4 家要拿到自己的紫条，不能再和敌方共用红色');
+    assert.equal(new Set(four.map((fill) => fill.name)).size, 4, '四家的血条图必须两两不同');
+    // neutral（以及未来新增的非玩家席位）没有阵营色，兜底走敌方红。
+    assert.equal(of('neutral'), fillEnemy);
     // 换阵营真的写进了填充条（不再走 color 染色）。
     updateHealthBar(health, 50, 100, fillEnemy2);
     assert.equal(health.barSprite.spriteFrame, fillEnemy2, '阵营变了要换填充图');
@@ -379,7 +385,9 @@ test('Old Client 战斗飘字按轨道下落，金币保持上浮', () => {
     const base = { id: 1, kind: 'damage', owner: 'player', value: 25, x: 126, y: 117, startedAt: 10, durationSeconds: 1 };
 
     view.render(base, 10);
-    assert.equal(view.textLabel.string, '-25');
+    // 2026-10-17：伤害数值**不再带负号**（`-25` → `25`）—— 飘字就在挨打的目标身上，
+    // 负号只是多占一个字符宽度，和「克制」前缀挤在一起还会被读成一整串。
+    assert.equal(view.textLabel.string, '25');
     assert.deepEqual([view.textLabel.color.r, view.textLabel.color.g, view.textLabel.color.b, view.textLabel.color.a], [255, 255, 255, 255]);
     // 目标坐标只写在根节点上；子节点写的是局部偏移（两处都写绝对坐标 → 实际位置翻倍）。
     assert.equal(root.position.x, mapToView.mapToViewX(126));
@@ -481,22 +489,37 @@ test('Old Client 技能飘字覆盖暴击、回复、MISS、秒杀、克制和�
     const { load, bar } = loadViews();
     const view = new (load('./ZCFloatTextView').ZCFloatTextView)();
     const node = bar().node;
+    // 2026-10-17：前缀（暴击 / 克制 / 抵抗 / 秒杀）拆成**独立的小字号 Label**，
+    // 数值 Label 只留数字本身、且不带负号。
+    const prefixNode = bar().node;
     view.textLabel = { node, string: '', enabled: true, color: null as any, fontSize: 30 };
+    view.prefixLabel = { node: prefixNode, string: '', enabled: true, color: null as any, fontSize: 15 };
     const base = { id: 1, owner: 'player', value: 25, x: 0, y: 0, startedAt: 0, durationSeconds: 1 };
     const cases = [
-        ['critical', '暴击 -25', [255, 198, 45], 34],
-        ['heal', '+25', [91, 255, 49], 30],
-        ['miss', 'MISS', [120, 205, 255], 30],
-        ['execute', '秒杀 -25', [255, 105, 72], 34],
-        ['restraint', '克制 -25', [255, 72, 62], 30],
-        ['resisted', '抵抗 -25', [150, 150, 150], 30],
+        ['critical', '暴击', '25', [255, 198, 45], 34],
+        ['heal', '', '+25', [91, 255, 49], 30],
+        ['miss', '', 'MISS', [120, 205, 255], 30],
+        ['execute', '秒杀', '25', [255, 105, 72], 34],
+        ['restraint', '克制', '25', [255, 72, 62], 30],
+        ['resisted', '抵抗', '25', [150, 150, 150], 30],
     ] as const;
-    for (const [kind, expected, color, fontSize] of cases) {
+    for (const [kind, prefix, expected, color, fontSize] of cases) {
         view.render({ ...base, kind, value: kind === 'miss' ? 0 : 25 }, 0);
-        assert.equal(view.textLabel.string, expected);
+        assert.equal(view.textLabel.string, expected, `${kind} 的数值文案`);
         assert.deepEqual([view.textLabel.color.r, view.textLabel.color.g, view.textLabel.color.b], color);
         assert.equal(view.textLabel.fontSize, fontSize);
         assert.ok(node.position.y > view.offsetY, `${kind} 应从目标头顶的战斗文字轨道开始`);
+
+        // 前缀：只有这四种有；字号取数字的一半（34 → 17、30 → 15）。
+        assert.equal(prefixNode.active, prefix.length > 0, `${kind} 的前缀显隐`);
+        if (prefix.length === 0) continue;
+        assert.equal(view.prefixLabel.string, prefix);
+        assert.equal(view.prefixLabel.fontSize, Math.round(fontSize * 0.5), '前缀字号 = 数字字号的一半');
+        assert.deepEqual([view.prefixLabel.color.r, view.prefixLabel.color.g, view.prefixLabel.color.b],
+            color, '前缀与数字同色（克制就是那支红）');
+        // 位置按数字实际宽度反推；桩里读不到 UITransform ⇒ 走兜底宽 40。
+        assert.equal(prefixNode.position.x, -((40 / 2) + 6 + (prefix.length * view.prefixLabel.fontSize) / 2),
+            '前缀整块落在数字左侧，不压字');
     }
 });
 
@@ -1805,4 +1828,29 @@ test('★闪烁只偏深色那一端：mix = 1 时与不闪逐位同值，中间
     view.setSweepOwner(null);
     render();
     assert.ok(view.tileSprite.color.b < 240, '收起覆盖后应回到真实归属的颜色');
+});
+
+test('血条四色在 prefab 上绑齐：敌3 用紫色 jindutiao_p，四张两两不同', () => {
+    const uuidOf = (pngPath: string): string => {
+        const meta = JSON.parse(readFileSync(`${pngPath}.meta`, 'utf8')) as { uuid: string };
+        return meta.uuid;
+    };
+    const expected: Record<string, string> = {
+        barFillPlayer: uuidOf('assets/resources/image/gameui/jindutiao_b.png'),
+        barFillEnemy: uuidOf('assets/resources/image/gameui/jindutiao_r.png'),
+        barFillEnemy2: uuidOf('assets/resources/image/gameui/jindutiao_y.png'),
+        barFillEnemy3: uuidOf('assets/resources/image/buildings/jindutiao_p.png'),
+    };
+    assert.equal(new Set(Object.values(expected)).size, 4, '四家的填充图必须两两不同');
+    for (const prefab of ['ZCGameUnit', 'ZCGameHex']) {
+        const data = JSON.parse(
+            readFileSync(`assets/resources/ui/game/${prefab}.prefab`, 'utf8'),
+        ) as Array<Record<string, unknown>>;
+        const holder = data.find((row) => row !== null && typeof row === 'object' && 'barFillEnemy3' in row);
+        assert.ok(holder, `${prefab}.prefab 必须绑 barFillEnemy3`);
+        for (const [key, uuid] of Object.entries(expected)) {
+            const frame = holder[key] as { __uuid__?: string } | undefined;
+            assert.equal(frame?.__uuid__, `${uuid}@f9941`, `${prefab}.prefab 的 ${key} 应指向 ${uuid}`);
+        }
+    }
 });

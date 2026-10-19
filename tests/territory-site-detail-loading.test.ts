@@ -42,6 +42,14 @@ test('detail hides the start label and disables the button while loading, then r
     runInNewContext(code, {
         exports: moduleExports,
         require: (id: string) => {
+            if (id === './TerritoryEvents') {
+                return {
+                    TERRITORY_EVENTS: {
+                        DETAIL_CLOSE: 'territory:detail-close',
+                        DETAIL_START: 'territory:detail-start',
+                    },
+                };
+            }
             if (id !== 'cc') throw new Error(`Unexpected dependency: ${id}`);
             return {
                 _decorator: { ccclass: () => (value: unknown) => value, property: () => () => undefined },

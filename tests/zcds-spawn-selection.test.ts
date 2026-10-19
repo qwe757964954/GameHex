@@ -9,6 +9,7 @@ import {
     ZC_MAP_ID,
     ZC_MAP_PLAYER_COUNT,
     ZC_MAP_REGIONS,
+    ZC_MAP_HOME_CANDIDATES,
     ZC_MAP_RESOURCE_POINTS,
     ZC_MAP_ROWS,
     ZC_MAP_SPACING,
@@ -34,8 +35,8 @@ const SELECT_LAYOUT: ZCMapLayout = {
         '11111111', '11111111', '10111111', '11111111',
     ],
     resourcePoints: [
-        { row: 6, column: 1, pool: { wood: 1, ore: 3 } },
-        { row: 1, column: 6, pool: { food: 2 } },
+        { row: 6, column: 1, pool: { gold: 1, chest: 3 } },
+        { row: 1, column: 6, pool: { mine: 2 } },
     ],
     spacing: { homeMinDistance: 2, resourceMinDistance: 3 },
 };
@@ -55,6 +56,7 @@ function makeMap(layout: ZCMapLayout = SELECT_LAYOUT): ZCMatchMap {
         owners: ZC_HEX_CONFIG.map((hex) => getZCMapOwner(hex.id)),
         sections: ZC_HEX_CONFIG.map((hex) => getZCMapSection(hex.id)),
         regions: ZC_MAP_REGIONS,
+        homeCandidates: ZC_MAP_HOME_CANDIDATES,
         resourcePoints: ZC_MAP_RESOURCE_POINTS,
         spacing: ZC_MAP_SPACING,
     };
@@ -81,8 +83,8 @@ test('玩家确认会把全局窗口压到 3 秒，AI 在 1 秒后跟随确认',
     assert.equal(selection.result?.homes.player, playerHex);
     assert.ok(selection.result?.homes.enemy !== undefined);
     assert.equal(selection.result?.resolvedResources.length, 2);
-    assert.equal(selection.result?.resolvedResources[0].resourceId, 'ore');
-    assert.equal(selection.result?.resolvedResources[1].resourceId, 'food');
+    assert.equal(selection.result?.resolvedResources[0].resourceId, 'chest');
+    assert.equal(selection.result?.resolvedResources[1].resourceId, 'mine');
 });
 
 test('后确认方必须与已确认主城之间留下至少 N 个空格', () => {
@@ -134,7 +136,7 @@ test('资源点生成后固定为中立格且开局一律未消费（相邻自�
         enemyHomeId: enemyHome,
         resolvedResources: [
             { hexId: playerResourceId, section: 0, resourceId: 'gold' },
-            { hexId: enemyResourceId, section: 0, resourceId: 'food' },
+            { hexId: enemyResourceId, section: 0, resourceId: 'mine' },
         ],
     };
     const config = {
@@ -164,7 +166,42 @@ test('固定主城地图也在开局冻结资源点，不依赖自选主城流�
     const map = makeMap();
     const resolved = resolveZCMapResources({ ...map, cityMode: 'fixed' }, sequence(0.9, 0));
     assert.deepEqual(resolved, [
-        { hexId: 6 * 8 + 1, section: 0, resourceId: 'ore' },
-        { hexId: 1 * 8 + 6, section: 0, resourceId: 'food' },
+        { hexId: 6 * 8 + 1, section: 0, resourceId: 'chest' },
+        { hexId: 1 * 8 + 6, section: 0, resourceId: 'mine' },
     ]);
+});
+
+test('configured home candidate cells restrict manual, default, and automatic spawn choices', () => {
+    const playerHome = 7 * 8;
+    const enemyHome = 0;
+    const layout: ZCMapLayout = {
+        ...SELECT_LAYOUT,
+        homeCandidates: [
+            { section: 1, cells: [playerHome] },
+            { section: 2, cells: [enemyHome] },
+        ],
+    };
+    const selection = new ZCSpawnSelection(makeMap(layout), sequence(0.99));
+    assert.deepEqual(selection['map'].homeCandidates, layout.homeCandidates);
+    const disallowedPlayerCell = playerHome + 1;
+
+    assert.equal(selection.snapshot.selections.player.selectedHexId, playerHome);
+    assert.match(selection.invalidReason('player', disallowedPlayerCell) ?? '', /候选/);
+    assert.equal(selection.select('player', disallowedPlayerCell).ok, false);
+    selection.tick(10);
+    assert.equal(selection.result?.homes.player, playerHome);
+    assert.equal(selection.result?.homes.enemy, enemyHome);
+});
+
+test('PVP neutral-resource ids are valid weighted choices in one map resource point', () => {
+    const resourceIds = ['gold', 'mine', 'chest', 'unit_cap', 'artifact_charge'] as const;
+    const pool = Object.fromEntries(resourceIds.map((id, index) => [id, index + 1]));
+    const layout: ZCMapLayout = {
+        ...SELECT_LAYOUT,
+        resourcePoints: [{ row: 6, column: 1, pool }],
+    };
+    const map = makeMap(layout);
+    const draws = [0, 1.5 / 15, 4 / 15, 8 / 15, 12 / 15]
+        .map((roll) => resolveZCMapResources(map, () => roll)[0].resourceId);
+    assert.deepEqual(new Set(draws), new Set(resourceIds));
 });

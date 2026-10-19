@@ -81,6 +81,33 @@
       "tendency": "develop"
     }
   ],
+  "homeCandidates": [
+    {
+      "section": 1,
+      "cells": [
+        15,
+        16,
+        17,
+        26,
+        27,
+        28,
+        37,
+        39,
+        48,
+        49,
+        50,
+        169,
+        170,
+        171,
+        180,
+        182,
+        191,
+        192,
+        193,
+        203
+      ]
+    }
+  ],
   "resourcePoints": [
     {
       "row": 5,
@@ -100,7 +127,9 @@
       "row": 15,
       "column": 2,
       "pool": {
-        "unit_cap": 1
+        "unit_cap": 1,
+        "artifact_charge": 1,
+        "mine": 1
       }
     },
     {

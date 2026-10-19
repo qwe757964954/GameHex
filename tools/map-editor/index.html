@@ -418,6 +418,7 @@
     <input type="text" id="mapName" value="双岸河道" placeholder="地图名称">
     <input type="text" id="mapId" value="river" placeholder="map-id">
     <button class="btn" id="btnImport">导入 JSON</button>
+    <button class="btn small" id="btnClearMap" type="button">清空地图</button>
     <input type="file" id="fileInput" accept=".json,application/json" hidden>
   </header>
 
@@ -482,6 +483,7 @@
           </div>
           <p class="hint" style="margin:6px 0 0">选中画布上的装饰后可编辑位置、尺寸和角度；锁定后仍可选中，但不会拖动。</p>
         </div>
+        <button class="btn small" id="btnClearDecorations" type="button" style="margin-top:7px">清空全部装饰</button>
         <div class="decorList" id="decorList"></div>
         <div class="librow" style="margin-top:7px">
           <input type="text" id="inDecor" placeholder="自定义资源名" style="flex:1;min-width:0">
@@ -503,6 +505,7 @@
         <div class="groupHeading"><h2>中立资源</h2><details class="helpTip"><summary aria-label="查看中立资源说明">?</summary><div class="helpBubble">每格可配置多个资源候选，开局按权重随机抽取。选择资源后依次点击同一格添加，右键删除整组资源；资源点间距至少 3 格。</div></details></div>
         <div class="resourceList" id="resourceList"></div>
         <label class="row">抽取权重 <input id="resourceWeight" type="number" min="0.01" step="0.1" value="1"></label>
+        <button class="btn small" id="btnClearResources" type="button" style="margin-top:7px">清空全部资源点</button>
       </div>
 
       <div class="group" id="groupRegions" data-tool-category="regions" hidden>
@@ -517,6 +520,7 @@
           <select id="regionTendency"><option value="rush">速攻</option><option value="control">控场</option><option value="develop">发育</option></select>
         </label>
         <p class="hint">选纵深后点击地图标记区域；右键清除该格标记。格面颜色与地图导出保持同步。</p>
+        <button class="btn small" id="btnClearRegion" type="button">清空当前分区与纵深</button>
       </div>
 
       <div class="group" id="groupHomeCandidates" data-tool-category="resources" hidden>
@@ -569,9 +573,6 @@
         <div class="groupHeading"><h2>预设文件</h2><details class="helpTip"><summary aria-label="查看预设说明">?</summary><div class="helpBubble">清空后得到全中立底图，仅保留主城盘。预设保存在 <code>tools/map-editor/presets</code>；需要同步到游戏资源时运行 <code>copy-maps.bat</code>。</div></details></div>
         <div class="customs" id="customList"></div>
         <button class="btn" id="btnSavePreset" style="width:100%">保存当前为预设</button>
-        <div class="librow">
-          <button class="btn small" id="btnClear">清空重画</button>
-        </div>
         <p class="flash" id="libFlash"></p>
         <a class="btn" id="openServer" href="http://127.0.0.1:8787/" hidden>在本地服务中继续编辑当前地图</a>
       </div>

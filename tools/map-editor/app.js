@@ -1319,12 +1319,48 @@
   }
 
   function clearGrid() {
+    if (!window.confirm('清空重画会重置当前地图地形与自由装饰，是否继续？')) return false;
     var before = snapshot();
     newGrid();
     syncControls();
     render();
-    commitUndo(before);
+    var changed = commitUndo(before);
     flash('已清空为全中立底图：只保留各方主城盘（主城 + 6 邻格），其余全部是中立格。');
+    return changed;
+  }
+
+  function clearSelectedRegion() {
+    var current = regions.find(function (region) {
+      return region.section === regionBrush.section && region.depth === regionBrush.depth;
+    });
+    if (!current) return false;
+    var depthLabel = { front: '前区', mid: '中区', back: '后区' }[regionBrush.depth];
+    if (!window.confirm('清空当前分区的' + depthLabel + '区域？')) return false;
+    var before = snapshot();
+    regions = regions.filter(function (region) { return region !== current; });
+    render();
+    return commitUndo(before);
+  }
+
+  function clearFreeDecor() {
+    if (!freeDecor.length) return false;
+    if (!window.confirm('清空地图上的全部自由装饰？')) return false;
+    var before = snapshot();
+    freeDecor = [];
+    nextFreeDecorId = 1;
+    selectedFreeDecorId = null;
+    render();
+    syncFreeDecorInspector();
+    return commitUndo(before);
+  }
+
+  function clearResourcePoints() {
+    if (!resourcePoints.length) return false;
+    if (!window.confirm('清空地图上的全部中立资源点？')) return false;
+    var before = snapshot();
+    resourcePoints = [];
+    render();
+    return commitUndo(before);
   }
 
   // ---- 绘制 -------------------------------------------------------------------
@@ -2872,7 +2908,10 @@
     if ($('inZoomMax')) $('inZoomMax').addEventListener('change', function () { applyZoomInput('zoomMax', this.value); });
     $('mapId').addEventListener('input', function () { markDirty(); render(); });
     $('mapName').addEventListener('input', function () { markDirty(); render(); });
-    $('btnClear').addEventListener('click', clearGrid);
+    $('btnClearMap').addEventListener('click', clearGrid);
+    $('btnClearRegion').addEventListener('click', clearSelectedRegion);
+    $('btnClearDecorations').addEventListener('click', clearFreeDecor);
+    $('btnClearResources').addEventListener('click', clearResourcePoints);
     $('btnSavePreset').addEventListener('click', savePreset);
     $('openServer').addEventListener('click', function () {
       this.href = SERVER_URL + '#map=' + encodeURIComponent(JSON.stringify(buildJSON()));
@@ -2963,6 +3002,7 @@
     // 两者都暴露出来，探针/用例才能断言"默认开但不是强制"这件事本身，而不是只测副作用。
     forcedMirror: forcedMirror, defaultMirror: defaultMirror,
     applyLayout: applyLayout, clearGrid: clearGrid,
+    clearSelectedRegion: clearSelectedRegion, clearFreeDecor: clearFreeDecor, clearResourcePoints: clearResourcePoints,
     paint: paintCell, paintCells: paintCells, brushCells: brushCells, hexNeighbors: hexNeighbors,
     toLocal: toLocal, cellAtLocal: cellAtLocal, walkStroke: walkStroke, hexCenter: hexCenter,
     setBrushRadius: setBrushRadius, undo: undo, redo: redo, resetView: resetView, zoomAt: zoomAt,

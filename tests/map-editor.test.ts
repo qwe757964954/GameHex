@@ -13,7 +13,7 @@ import {
     HEX_GRID_VIEW_ROW_SPACING,
 } from '../assets/script/core/hex/HexGridLayout';
 
-function createEditor(options: { hash?: string; fetch?: (path: string, options?: any) => Promise<any> } = {}) {
+function createEditor(options: { hash?: string; fetch?: (path: string, options?: any) => Promise<any>; confirm?: boolean } = {}) {
     const elements = new Map<string, any>();
     let paths: any[] = [];
     const element = (id: string): any => {
@@ -42,14 +42,127 @@ function createEditor(options: { hash?: string; fetch?: (path: string, options?:
     });
     board.querySelectorAll = () => paths;
     const document = { getElementById: element, querySelectorAll: () => [] };
-    const window: any = { addEventListener() {}, location: { hash: options.hash || '' } };
+    const confirmCalls: string[] = [];
+    const window: any = {
+        addEventListener() {}, location: { hash: options.hash || '' },
+        confirm(message: string) { confirmCalls.push(message); return options.confirm !== false; },
+    };
     const code = readFileSync('tools/map-editor/app.js', 'utf8');
     runInNewContext(code, {
         document, window, fetch: options.fetch || (() => new Promise(() => {})),
         setTimeout: () => 0, clearTimeout() {}, console,
     });
-    return { editor: window.__editor, element };
+    return { editor: window.__editor, element, confirmCalls };
 }
+
+test('区域清空只删除当前分区与纵深，确认后可撤销恢复倾向与其他区域', () => {
+    const { editor, element, confirmCalls } = createEditor();
+    editor.applyLayout({
+        version: 3, rows: 8, columns: 12, playerCount: 2, cityMode: 'select',
+        ascii: Array(8).fill('111111111111'),
+    });
+    editor.setRegionBrush(1, 'front');
+    editor.paint(7, 0, 'region');
+    editor.setRegionBrush(1, 'mid');
+    editor.setRegionTendency('develop');
+    editor.paint(7, 1, 'region');
+    editor.setRegionBrush(2, 'front');
+    editor.paint(7, 2, 'region');
+    editor.setRegionBrush(1, 'front');
+
+    element('btnClearRegion').listeners.click();
+
+    assert.equal(confirmCalls.length, 1);
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.state().regions)), [
+        { section: 1, depth: 'mid', cells: [85], tendency: 'develop' },
+        { section: 2, depth: 'front', cells: [86], tendency: 'rush' },
+    ]);
+    assert.equal(editor.undo(), true);
+    assert.equal(editor.state().regions.length, 3, '撤销恢复已清区域及其倾向');
+});
+
+test('装饰批量清空需确认、清除选择与检查器，并可撤销恢复全部装饰', () => {
+    const { editor, element, confirmCalls } = createEditor();
+    const first = editor.addFreeDecor('image/decor/rock/a', 10, 20);
+    editor.addFreeDecor('image/decor/rock/b', 30, 40);
+    editor.selectFreeDecor(first);
+
+    element('btnClearDecorations').listeners.click();
+
+    assert.equal(confirmCalls.length, 1);
+    assert.equal(editor.state().freeDecor.length, 0);
+    assert.equal(editor.state().selectedFreeDecorId, null);
+    assert.equal(element('freeDecorInspector').hidden, true);
+    assert.equal(editor.undo(), true);
+    assert.equal(editor.state().freeDecor.length, 2);
+});
+
+test('中立资源批量清空只移除资源点，取消确认不改动且不入撤销栈', () => {
+    const cancelled = createEditor({ confirm: false });
+    cancelled.editor.applyLayout({
+        version: 3, rows: 8, columns: 12, playerCount: 2, cityMode: 'select',
+        ascii: Array(8).fill('NNNNNNNNNNNN'),
+    });
+    cancelled.editor.addResourcePoint(2, 1, 'chest', 1);
+    cancelled.editor.addResourcePoint(2, 7, 'gold', 2);
+    const before = JSON.stringify(cancelled.editor.state().resourcePoints);
+    cancelled.element('btnClearResources').listeners.click();
+    assert.equal(cancelled.confirmCalls.length, 1);
+    assert.equal(JSON.stringify(cancelled.editor.state().resourcePoints), before);
+    assert.equal(cancelled.editor.undo(), true);
+    assert.equal(cancelled.editor.state().resourcePoints.length, 1,
+        '取消清空没有入历史；撤销只撤回此前最后一次资源点编辑');
+
+    const accepted = createEditor();
+    accepted.editor.applyLayout({
+        version: 3, rows: 8, columns: 12, playerCount: 2, cityMode: 'select',
+        ascii: Array(8).fill('NNNNNNNNNNNN'),
+    });
+    accepted.editor.addResourcePoint(2, 1, 'chest', 1);
+    accepted.editor.addResourcePoint(2, 7, 'gold', 2);
+    accepted.editor.setRegionBrush(1, 'front');
+    accepted.editor.paint(3, 3, 'region');
+    accepted.element('btnClearResources').listeners.click();
+    assert.equal(accepted.editor.state().resourcePoints.length, 0);
+    assert.equal(accepted.editor.state().regions.length, 1, '区域数据不受影响');
+    assert.equal(accepted.editor.undo(), true);
+    assert.equal(accepted.editor.state().resourcePoints.length, 2);
+});
+
+test('全图清空始终由可见地图操作按钮触发并在确认后可撤销', () => {
+    const { editor, element, confirmCalls } = createEditor();
+    editor.addFreeDecor('image/decor/rock/a', 10, 20);
+    element('btnClearMap').listeners.click();
+    assert.equal(confirmCalls.length, 1);
+    assert.equal(editor.state().freeDecor.length, 0);
+    assert.equal(editor.undo(), true);
+    assert.equal(editor.state().freeDecor.length, 1);
+
+    const html = readFileSync('tools/map-editor/index.html', 'utf8');
+    assert.match(html, /id="btnClearMap"/);
+    assert.doesNotMatch(html, /id="btnClear"/);
+});
+
+test('空范围清空不弹确认、不创建撤销记录；各分类面板提供批量清空按钮', () => {
+    const { editor, element, confirmCalls } = createEditor();
+    assert.equal(editor.clearSelectedRegion(), false);
+    assert.equal(editor.clearFreeDecor(), false);
+    assert.equal(editor.clearResourcePoints(), false);
+    assert.equal(confirmCalls.length, 0);
+    assert.equal(editor.undo(), false);
+
+    const html = readFileSync('tools/map-editor/index.html', 'utf8');
+    assert.match(html, /id="btnClearRegion"/);
+    assert.match(html, /id="btnClearDecorations"/);
+    assert.match(html, /id="btnClearResources"/);
+    assert.match(html, /data-tool-category="decor"[^]*id="btnClearDecorations"/);
+    assert.match(html, /data-tool-category="resources"[^]*id="btnClearResources"/);
+    assert.match(html, /data-tool-category="regions"[^]*id="btnClearRegion"/);
+    assert.equal(typeof element('btnClearRegion').listeners.click, 'function');
+    assert.equal(typeof element('btnClearDecorations').listeners.click, 'function');
+    assert.equal(typeof element('btnClearResources').listeners.click, 'function');
+    assert.equal(typeof element('btnClearMap').listeners.click, 'function');
+});
 
 test('左栏长说明收纳为可点击的问号帮助气泡', () => {
     const html = readFileSync('tools/map-editor/index.html', 'utf8');

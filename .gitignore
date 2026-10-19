@@ -32,6 +32,7 @@ node_modules/
 .skill_tmp/
 .superpowers/
 .workbuddy/
+.worktrees/
 data/
 outputs/
 tmp/

@@ -11,7 +11,29 @@ import {
 
 const hexView = readFileSync('assets/script/app/zcds/view/ZCHexView.ts', 'utf8');
 const renderWorld = readFileSync('assets/script/app/zcds/view/ZCGameRenderWorld.ts', 'utf8');
-const hexPrefab = JSON.parse(readFileSync('assets/resources/ui/game/ZCGameHex.prefab', 'utf8')) as any[];
+const game = readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8');
+const hintOverlay = readFileSync('assets/script/app/zcds/view/ZCSpawnRegionHintOverlay.ts', 'utf8');
+
+test('spawn region hints render in a dedicated non-interactive overlay', () => {
+    assert.match(renderWorld, /resolveZCSpawnRegionHints\(/);
+    assert.match(renderWorld, /spawnRegionHintOverlay\.render\([^;]*hintsVisible/s);
+    assert.doesNotMatch(renderWorld, /regionText/);
+    assert.doesNotMatch(hexView, /regionText/);
+    assert.match(hintOverlay, /class ZCSpawnRegionHintOverlay/);
+    assert.match(hintOverlay, /UITransform/);
+    assert.match(hintOverlay, /Graphics/);
+    assert.match(hintOverlay, /Label/);
+    assert.doesNotMatch(hintOverlay, /BlockInputEvents|TOUCH_START|TOUCH_END/);
+});
+
+test('spawn region hint overlay clears after selection and on render-world teardown', () => {
+    assert.match(renderWorld, /clearSpawnRegionHints\(\): void/);
+    assert.match(renderWorld, /spawnRegionHintOverlay\?\.clear\(\)/);
+    assert.match(renderWorld, /destroy\(\): void[\s\S]*?clearSpawnRegionHints\(\)/);
+    assert.match(game, /finishSpawnSelection\(\): void[\s\S]*?clearSpawnRegionHints\(\)/);
+    assert.match(hintOverlay, /render\(hints: readonly IZCSpawnRegionHint\[\], visible: boolean\): void/);
+    assert.match(hintOverlay, /clear\(\): void/);
+});
 
 test('自选主城地图不在正式战斗地块上显示金币等资源文字', () => {
   assert.match(hexView, /hideNeutralResourceLabel\?: boolean/);
@@ -47,25 +69,8 @@ test('★select_river 的区域文案由 tendency 推导，落盘的 "???" 占�
     }
 });
 
-/**
- * 「前区·速攻」共 5 个字，而 `IconLabel` 原本只有 45×22（为 `25` / `锁` / `已选` 这种 1~2 字设计的），
- * 配上 `overflow=CLAMP` + 自动换行 ⇒ 6 个字的区域名被折成两行再裁切，糊成一团（实测截图里就是那块糊字）。
- * 修法 = 加宽节点 + 关掉自动换行；这里把两件事都钉住，防止又被改回去。
- */
-test('★区域名标签（IconLabel）要放得下最长的「前区·速攻」且不折行', () => {
-    const index = hexPrefab.findIndex((o) => o?.__type__ === 'cc.Node' && o._name === 'IconLabel');
-    assert.ok(index >= 0, 'ZCGameHex 里找不到 IconLabel 节点');
-    const comps = (hexPrefab[index]._components as any[]).map((ref) => hexPrefab[ref.__id__]);
-    const ui = comps.find((c) => c?.__type__ === 'cc.UITransform');
-    const label = comps.find((c) => c?.__type__ === 'cc.Label');
-    assert.ok(ui && label, 'IconLabel 上必须有 UITransform 与 Label');
-
-    // 最长区域名 = 「前区」2 字 + 「·」1 字 + 倾向词（速攻 / 控场 / 发育，各 2 字）
-    const longestTendency = Math.max(...Object.values(ZC_TENDENCY_TEXT).map((t) => t.length));
-    const required = (2 + 1 + longestTendency) * label._fontSize;
-    assert.ok(ui._contentSize.width >= required,
-        `IconLabel 宽 ${ui._contentSize.width} 放不下最长的区域名（需要 ${required}）—— 会被折行 + 裁切`);
-    assert.equal(label._enableWrapText, false,
-        'IconLabel 必须关掉自动换行：放不下时宁可裁一刀，也不能折成两行糊在一起（CLAMP 是裁切语义）');
-    assert.equal(label._overflow, 1, 'IconLabel 保持 CLAMP(1)，别改成 NONE —— NONE 会把文本实测尺寸写回 UITransform');
+test('region bubble layout leaves room for the longest label', () => {
+    assert.match(hintOverlay, /const BUBBLE_WIDTH = 150/);
+    assert.match(hintOverlay, /const BUBBLE_HEIGHT = 42/);
+    assert.match(hintOverlay, /setContentSize\(BUBBLE_WIDTH - 12, BUBBLE_HEIGHT\)/);
 });

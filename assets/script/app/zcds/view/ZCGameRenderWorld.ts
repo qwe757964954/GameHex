@@ -12,6 +12,7 @@ import { ZCHexView } from './ZCHexView';
 import { ZCGameUiEvent } from './ZCGameHudEvents';
 import { EventMgr } from '../../../framework/event/EventMgr';
 import type { ZCSpawnSelection } from '../model/ZCSpawnSelection';
+import { resolveZCSpawnRegionHints } from '../model/ZCSpawnRegionHint';
 import type { ZCMatchMap } from '../model/ZCMatchConfig';
 import {
     type ZCCombatEvent,
@@ -47,6 +48,7 @@ import { ZCVictorySweep } from './ZCVictorySweep';
 import { ZCEffectPool } from './ZCEffectPool';
 import { ZCWallGeometry } from './ZCWallGeometry';
 import { ZCWallRenderer } from './ZCWallRenderer';
+import { ZCSpawnRegionHintOverlay } from './ZCSpawnRegionHintOverlay';
 
 type ZCRenderEntityKind = 'hex' | 'unit' | 'effect' | 'float' | 'cardReveal' | 'legendBanner';
 
@@ -215,6 +217,7 @@ export class ZCGameRenderWorld {
     private readonly identity = new Map<number, ZCIdentityComponent>();
     private readonly scene = new Map<number, ZCSceneComponent>();
     private readonly hexViews = new Map<number, ZCHexView>();
+    private spawnRegionHintOverlay: ZCSpawnRegionHintOverlay | null = null;
     /**
      * 整盘共享的领地轮廓画布（`ZCGameBoard.prefab` 的 `OutlineLayer` 上那个 `cc.Graphics`）。
      *
@@ -600,7 +603,6 @@ export class ZCGameRenderWorld {
         const unlockedResources = new Set<number>(playerSelection === null
             ? []
             : selection.map.hexes[playerSelection]?.neighbors.filter((id) => selection.isResourcePoint(id)) ?? []);
-        const regionText = new Map<number, string>();
         // 半区归属 = 该席位的出生点可选范围（自选地图的「分区」）。地图自己画了分区就用地图的，
         // 没画（两张自选图当前全是中立格）按布局推导 —— 口径统一在 `ZCSpawnSelection` 里，
         // 这里只管着色，别再自己拼一份。
@@ -634,14 +636,16 @@ export class ZCGameRenderWorld {
             playerBaseId === null ? [] : selection.baseNeighborIds('player'),
         );
         this.redrawSharedOutline(selection.map.hexes, boundaryMasks, 'spawn', selectedHexId);
-        if (hintsVisible) {
-            const depthName = { front: '前区', mid: '中区', back: '后区' } as const;
-            for (const region of selection.map.regions ?? []) {
-                if (region.section !== 1) continue;
-                const anchor = region.cells.find((id) => !selection.isResourcePoint(id)) ?? region.cells[0];
-                if (anchor !== undefined) regionText.set(anchor, `${depthName[region.depth]}·${region.text ?? ''}`);
-            }
+        const cellPositions = new Map<number, { x: number; y: number }>();
+        for (const config of selection.map.hexes) {
+            const view = this.hexViewOf(config.id);
+            if (view) cellPositions.set(config.id, { x: view.node.position.x, y: view.node.position.y });
         }
+        const hints = resolveZCSpawnRegionHints(selection.map.regions ?? [], cellPositions, 1);
+        if (!this.spawnRegionHintOverlay) {
+            this.spawnRegionHintOverlay = new ZCSpawnRegionHintOverlay(this.boardLayer('HexLayer'));
+        }
+        this.spawnRegionHintOverlay.render(hints, hintsVisible);
         for (const config of selection.map.hexes) {
             const entityId = this.hexEntityBySource.get(config.id);
             if (!entityId) continue;
@@ -659,12 +663,16 @@ export class ZCGameRenderWorld {
                 resourcePoint: selection.isResourcePoint(config.id),
                 resourceId: selection.resourceIdAt(config.id),
                 unlocksResource: unlockedResources.has(config.id),
-                regionText: regionText.get(config.id),
                 boundaryMask: boundaryMasks.get(config.id) ?? 0,
                 homeHighlight: playerBaseNeighbors.has(config.id),
             });
         }
         this.renderSpawnConfirmButton(playerBaseId);
+    }
+
+    clearSpawnRegionHints(): void {
+        this.spawnRegionHintOverlay?.clear();
+        this.spawnRegionHintOverlay = null;
     }
 
     /**
@@ -1093,6 +1101,7 @@ export class ZCGameRenderWorld {
     }
 
     destroy(): void {
+        this.clearSpawnRegionHints();
         this.sweep.clear();
         this.claimWave.clear();
         // 探针缓冲跨局残留会让下一局首帧沿用上一局的轮廓（内容恰好相同时直接 return）。

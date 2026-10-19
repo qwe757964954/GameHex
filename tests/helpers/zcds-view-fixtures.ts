@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import { ZC_HEX_CONFIG, ZC_OWNER_ORDER, ownersForPlayerCount } from '../../assets/script/app/zcds/model/ZCMapConfig';
+import { resolveZCSpawnRegionHints } from '../../assets/script/app/zcds/model/ZCSpawnRegionHint';
 
 export function loadViews() {
     class Color {
@@ -168,6 +169,7 @@ export function loadViews() {
         // 这种同层相对名，`../model/ZCMapConfig` 会落到 `zcds/ui/` 那个兜底分支去读不存在的文件，
         // 所以这里显式挂真源 —— 与文件顶部已经 import 的 `ZC_HEX_CONFIG` 同一个来源。
         '../model/ZCMapConfig': { ZC_OWNER_ORDER, ownersForPlayerCount },
+        '../model/ZCSpawnRegionHint': { resolveZCSpawnRegionHints },
         //  视图会值导入 `ProcedureGame`（卡面图 / 建筑帧改由控制器按 id 现取，2026-10-16）—— 夹具给一个
         //  **可写的假控制器**：用例按需 `ProcedureGame.current = fakeController`，缺省 null（视图回退建筑图）。
         '../../procedure/ProcedureGame': { ProcedureGame: procedureGameStub },

@@ -1,0 +1,39 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import test from 'node:test';
+import { configureZCMap, type ZCMapLayout, type ZCMapRegion } from '../assets/script/app/zcds/model/ZCGameModel';
+import { resolveZCSpawnRegionHints } from '../assets/script/app/zcds/model/ZCSpawnRegionHint';
+
+test('region hints use depth defaults, tendency overrides, own section, and mean cell positions', () => {
+    const regions: ZCMapRegion[] = [
+        { section: 1, depth: 'front', cells: [1, 2] },
+        { section: 1, depth: 'mid', cells: [3], tendency: 'develop' },
+        { section: 1, depth: 'back', cells: [4] },
+        { section: 2, depth: 'front', cells: [5] },
+        { section: 1, depth: 'front', cells: [] },
+        { section: 1, depth: 'mid', cells: [6, 7] },
+        { section: 1, depth: 'mid', cells: [8] },
+    ];
+    const positions = new Map([
+        [1, { x: 10, y: 20 }],
+        [2, { x: 30, y: 60 }],
+        [3, { x: 100, y: 200 }],
+        [4, { x: -5, y: 15 }],
+        [5, { x: 500, y: 500 }],
+        [6, { x: 1, y: 2 }],
+    ]);
+
+    assert.deepEqual(resolveZCSpawnRegionHints(regions, positions, 1), [
+        { depth: 'front', label: '速攻', x: 20, y: 40 },
+        { depth: 'mid', label: '发育', x: 100, y: 200 },
+        { depth: 'back', label: '发育', x: -5, y: 15 },
+        { depth: 'mid', label: '控场', x: 1, y: 2 },
+    ]);
+});
+
+test('configureZCMap rejects unknown region tendency with the defined configuration error', () => {
+    const layout = JSON.parse(readFileSync('assets/resources/config/maps/select_river.json', 'utf8')) as ZCMapLayout;
+    assert.ok(layout.regions?.length, 'select_river must include regions');
+    layout.regions[0].tendency = 'unknown' as ZCMapRegion['tendency'];
+    assert.throws(() => configureZCMap(layout), /打法倾向必须是 rush \/ control \/ develop/);
+});

@@ -47,14 +47,18 @@ const DEFAULT_PARAMS: Readonly<ZCGuideParams> = {
  * 对 tower 直接返回 null）；表里当前也没有防御塔条目，故整条移除。
  * 日后要在表里加防御塔，先让美术往 `image/buildings/` 补图再登记回来。
  */
-const GUIDE_ICON_PATHS: Readonly<Record<string, string>> = {
+const GUIDE_ICON_PATHS = {
     金矿: spriteFramePath(BUILDING_ART_ROOT, 'mine'),
     兵营: spriteFramePath(BUILDING_ART_ROOT, 'barracks-default'),
     问号: spriteFramePath(GAMEUI_ART_ROOT, 'icon_question'),
-};
+} as const;
+
+/** 表里登记过的 icon 键；调用方与测试都用它做收窄，写错键名会直接编译不过。 */
+export type ZCGuideIconKey = keyof typeof GUIDE_ICON_PATHS;
 
 export function getGuideIconPath(icon: string): string | null {
-    return GUIDE_ICON_PATHS[icon] ?? null;
+    // 键来自 remoteRef/zcGuide.json 的 icon 列，运行时是任意字符串，先判存在再索引。
+    return icon in GUIDE_ICON_PATHS ? GUIDE_ICON_PATHS[icon as ZCGuideIconKey] : null;
 }
 
 export function parseGuideEntries(rows: readonly unknown[]): ZCGuideEntry[] {

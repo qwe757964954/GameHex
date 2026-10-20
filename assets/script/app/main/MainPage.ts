@@ -2,57 +2,25 @@ import { _decorator, Button, Component, Node } from 'cc';
 import { GameRoute } from '../../core/runtime/GameRoute';
 import { ProcedureManager } from '../../framework/procedure/ProcedureManager';
 import { FW } from '../../framework/FW';
-import { ChestBar, ChestSlotAction, ChestSlotState, IChestSlotData } from './ChestBar';
+import { ChestBar } from './ChestBar';
+import { CHEST_EMPTY_SLOT_STAMINA_COST, CHEST_SLOT_COUNT, ChestSlotAction, ChestSlotState } from './ChestTypes';
+import type { IChestSlotData } from './ChestTypes';
+import { NewTreasureRepository } from './NewTreasureRepository';
 
 const { ccclass, property } = _decorator;
 
-/**
- * 主城底部宝箱栏的**占位数据**（协议未接）。
- *
- * 形态完全照蓝湖「塔防主界面-2」的四格：
- * `蓝(24h) / 空槽位(⚡50 开始战斗) / 金(开启) / 蓝(04:11:05 加速)`。
- * 接协议后整块替换成服务端队列数据，`ChestBar` / `ChestSlotView` 不用动。
- */
-const CHEST_PLACEHOLDER: readonly IChestSlotData[] = [
-    {
-        state: ChestSlotState.Counting,
-        name: '宝箱名字',
-        remainSeconds: 24 * 3600,
-        totalSeconds: 24 * 3600,
-        action: ChestSlotAction.Open,
-        cost: 0,
-    },
-    {
-        state: ChestSlotState.Empty,
-        name: '',
-        remainSeconds: 0,
-        totalSeconds: 0,
-        action: ChestSlotAction.Battle,
-        cost: 50,
-    },
-    {
-        state: ChestSlotState.Ready,
-        name: '宝箱名字',
-        remainSeconds: 0,
-        totalSeconds: 0,
-        action: ChestSlotAction.Open,
-        cost: 0,
-    },
-    {
-        state: ChestSlotState.Counting,
-        name: '宝箱名字',
-        remainSeconds: 4 * 3600 + 11 * 60 + 5,
-        totalSeconds: 24 * 3600,
-        action: ChestSlotAction.SpeedUp,
-        cost: 0,
-    },
-];
+const MAIN_PAGE_TEXTS = {
+    treasureUnavailable: '宝箱数据暂不可用',
+    treasureLoadFailed: '宝箱数据加载失败',
+    networkUnavailable: '网络未连接',
+    actionFailed: '操作失败，请稍后重试',
+    openProtocolMissing: '开箱协议消息号未配置',
+} as const;
 
 /**
- * 主城页组件：交互入口。
+ * 主城页交互入口。
  *
- * 2026-10-19 起 `ui/main/ArenaRoot` 是**主城页**（领地主 tab，内嵌六边格领地图）；
- * 底部宝箱栏（`ChestBar`）按需展开，占位数据见 `CHEST_PLACEHOLDER`。
+ * 领地主 tab 内嵌在主界面；底部宝箱状态从服务端读取并由协议广播刷新。
  */
 @ccclass('MainPage')
 export class MainPage extends Component {
@@ -65,20 +33,47 @@ export class MainPage extends Component {
     @property({ type: ChestBar, tooltip: 'ChestBar：底部宝箱栏（4 格，蓝湖「塔防主界面-2」）' })
     chestBar: ChestBar = null!;
 
+    private readonly treasureRepository = new NewTreasureRepository();
+    private readonly emptyChestSlots: readonly IChestSlotData[] = Array.from({ length: CHEST_SLOT_COUNT }, (_, index) => ({
+        index,
+        state: ChestSlotState.Empty,
+        name: '',
+        remainSeconds: 0,
+        totalSeconds: 0,
+        action: ChestSlotAction.Battle,
+        cost: CHEST_EMPTY_SLOT_STAMINA_COST,
+    }));
+
     onLoad(): void {
         this.startButton.on(Button.EventType.CLICK, this.onStartGame, this);
         this.chestToggle.on(Button.EventType.CLICK, this.onToggleChestPanel, this);
         this.chestBar.bindCollapse(() => this.setChestPanelOpen(false));
     }
 
-    /**
-     * ⚠️ 宝箱栏放到 `start()`：`onLoad` 是父先子后，`MainPage` 挂在页根，
-     * 在 `onLoad` 里铺宝箱会在 `ChestBar` 装配槽位之前跑（实测 4 格停在 prefab 默认态）。
-     */
     start(): void {
-        this.renderChests();
+        this.renderChests(this.emptyChestSlots);
         this.chestBar.setOpen(false, false);
         this.startButton.active = true;
+        void this.loadTreasureQueue();
+    }
+
+    onEnable(): void {
+        this.schedule(this.refreshTreasureDisplay, 1);
+    }
+
+    onDisable(): void {
+        this.unschedule(this.refreshTreasureDisplay);
+    }
+
+    onDestroy(): void {
+        this.treasureRepository.dispose();
+    }
+
+    private async loadTreasureQueue(): Promise<void> {
+        const result = await this.treasureRepository.load(this, (slots) => this.renderChests(slots));
+        if (!this.isValid) return;
+        if (result === 'offline') FW.showTip(MAIN_PAGE_TEXTS.treasureUnavailable);
+        else if (result === 'failed') FW.showTip(MAIN_PAGE_TEXTS.treasureLoadFailed);
     }
 
     private onToggleChestPanel(): void {
@@ -96,20 +91,32 @@ export class MainPage extends Component {
         ProcedureManager.navigate(GameRoute.Matching);
     }
 
-    /**
-     * 铺宝箱栏。
-     *
-     * ⚠️ 现在是**占位数据**：宝箱队列协议（开启 / 开始战斗 / 加速）还没接，
-     * 先把 UI 落地；接协议时把 `CHEST_PLACEHOLDER` 换成服务端下发的列表即可。
-     */
-    private renderChests(): void {
+    private renderChests(data: readonly IChestSlotData[]): void {
         if (!this.chestBar) return;
-        this.chestBar.render(CHEST_PLACEHOLDER, (index) => {
-            const item = CHEST_PLACEHOLDER[index];
-            if (!item) return;
-            const text = item.action === ChestSlotAction.Battle ? '宝箱队列还没接服务器'
-                : (item.action === ChestSlotAction.SpeedUp ? '加速还没接服务器' : '开启还没接服务器');
-            FW.showTip(text);
-        });
+        this.chestBar.render(data, (slot) => { void this.onChestAction(slot); });
+    }
+
+    private readonly refreshTreasureDisplay = (): void => {
+        this.renderChests(this.treasureRepository.slots);
+    };
+
+    private async onChestAction(slot: number): Promise<void> {
+        const item = this.treasureRepository.slots[slot];
+        if (!item) return;
+        if (item.action === ChestSlotAction.Battle) {
+            this.onStartGame();
+            return;
+        }
+
+        const result = item.action === ChestSlotAction.Activate
+            ? await this.treasureRepository.activate(item.index)
+            : (item.action === ChestSlotAction.SpeedUp
+                ? await this.treasureRepository.fastOpen(item.index)
+                : await this.treasureRepository.open(item.index));
+        if (!this.isValid) return;
+        if (result === 'busy' || result === 'ok') return;
+        if (result === 'offline') FW.showTip(MAIN_PAGE_TEXTS.networkUnavailable);
+        else if (result === 'failed') FW.showTip(MAIN_PAGE_TEXTS.actionFailed);
+        else if (result === 'protocol-missing') FW.showTip(MAIN_PAGE_TEXTS.openProtocolMissing);
     }
 }

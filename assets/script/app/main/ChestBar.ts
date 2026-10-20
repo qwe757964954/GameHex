@@ -1,6 +1,7 @@
 import { _decorator, Button, Component, Node, SpriteFrame, UITransform } from 'cc';
 import { ChestSlotView } from './ChestSlotView';
 import { resolveChestPanelX } from './MainHudMotion';
+import type { IChestSlotData } from './ChestTypes';
 
 const { ccclass, property } = _decorator;
 const CHEST_PANEL_SLIDE_SECONDS = 0.28;
@@ -211,43 +212,3 @@ export class ChestBar extends Component {
     }
 }
 
-/**
- * 宝箱格的状态（规则 302：`as const` 对象 + 同名派生类型，不用 `enum`）。
- */
-export const ChestSlotState = {
-    /** 空槽位：花体力开新宝箱。 */
-    Empty: 'empty',
-    /** 宝箱倒计时中。 */
-    Counting: 'counting',
-    /** 倒计时结束，可以开启。 */
-    Ready: 'ready',
-    /** 未解锁（等级 / 前置条件不够）。 */
-    Locked: 'locked',
-} as const;
-export type ChestSlotState = (typeof ChestSlotState)[keyof typeof ChestSlotState];
-
-/** 格子上那颗按钮要做什么。 */
-export const ChestSlotAction = {
-    /** 开启宝箱（金色按钮）。 */
-    Open: 'open',
-    /** 开始战斗（蓝色按钮，空槽位）。 */
-    Battle: 'battle',
-    /** 加速 30 分钟（绿色按钮）。 */
-    SpeedUp: 'speedUp',
-} as const;
-export type ChestSlotAction = (typeof ChestSlotAction)[keyof typeof ChestSlotAction];
-
-/** 一格的数据。 */
-export interface IChestSlotData {
-    state: ChestSlotState;
-    /** 「宝箱名字」；空槽位不用。 */
-    name: string;
-    /** 剩余秒数（`Counting` 画进度与文本）。 */
-    remainSeconds: number;
-    /** 总秒数（进度条分母，`<= 0` 视为没有进度）。 */
-    totalSeconds: number;
-    /** 按钮行为。 */
-    action: ChestSlotAction;
-    /** 空槽位的体力消耗（`Battle` 才显示闪电 + 数字）。 */
-    cost: number;
-}

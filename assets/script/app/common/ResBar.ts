@@ -1,7 +1,7 @@
 import { _decorator, CCInteger, Component } from 'cc';
 import { RefUtil } from '../../framework/ref/RefUtil';
 import { CacheMgr } from '../net/CacheMgr';
-import { readRoleRow } from '../main/MainResBar';
+import { readRoleRow } from '../main/MainRoleRow';
 import { MainResBarSlot } from '../main/MainResBarSlot';
 import { buildResBarSlots, buildResBarView } from '../main/MainResBarTypes';
 import {

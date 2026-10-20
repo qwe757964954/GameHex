@@ -1,5 +1,5 @@
 import { _decorator, Component, Label, Node, Sprite, SpriteFrame } from 'cc';
-import { ChestSlotAction, ChestSlotState, IChestSlotData } from './ChestBar';
+import { ChestSlotAction, ChestSlotState, IChestSlotData } from './ChestTypes';
 
 const { ccclass, property } = _decorator;
 
@@ -102,6 +102,7 @@ export class ChestSlotView extends Component {
         if (!empty) this.nameLabel.string = data.name;
         if (this.costLabel) this.costLabel.string = String(data.cost);
         this.btnLabel.string = ChestSlotView.actionText(data);
+        this.btnLabel.isBold = data.action === ChestSlotAction.Battle || data.action === ChestSlotAction.SpeedUp;
 
         // 计时：进度 = 剩余 / 总时长；文本 = HH:MM:SS
         if (this.timer.active) {
@@ -115,6 +116,7 @@ export class ChestSlotView extends Component {
     private static actionText(data: IChestSlotData): string {
         if (data.action === ChestSlotAction.Battle) return '开始战斗';
         if (data.action === ChestSlotAction.SpeedUp) return '-30分钟';
+        if (data.action === ChestSlotAction.Activate) return '开启';
         return '开启';
     }
 

@@ -16,7 +16,7 @@ import { GameRoute } from '../../core/runtime/GameRoute';
 import { ProcedureManager } from '../../framework/procedure/ProcedureManager';
 import { FW } from '../../framework/FW';
 import { EventMgr } from '../../framework/event/EventMgr';
-import { readRoleRow } from './MainResBar';
+import { readRoleRow } from './MainRoleRow';
 import { CacheMgr } from '../net/CacheMgr';
 import { toCount, toIdString } from '../net/RequestGuard';
 import { TerritoryChapterLoader } from '../territory/application/TerritoryChapterLoader';

@@ -1,13 +1,14 @@
 import { director, Layers, Node, UITransform, view, Widget } from 'cc';
 import type { AssetService } from '../../../core/asset/AssetService';
 import type { ConfigService } from '../../../core/config/ConfigService';
-import { readRoleRow } from '../../main/MainResBar';
+import { readRoleRow } from '../../main/MainRoleRow';
 import { toIdString } from '../../net/RequestGuard';
 import { TerritoryChapterInfoRepository } from '../../territory/application/TerritoryChapterInfoRepository';
 import { createTerritorySaveStore } from '../../territory/application/TerritorySaveStoreAdapter';
 import type { ITerritorySaveOwner } from '../../territory/model/TerritorySaveStore';
 import { loadBigMapConfig } from './BigMapConfigLoader';
 import { loadBigMapLayout } from './BigMapLayoutLoader';
+import { NpcBigMapRankProvider } from './NpcBigMapRankProvider';
 import { BigMapPresenter } from './BigMapPresenter';
 import { BIGMAP_SAVE_KEY } from './BigMapSaveKeys';
 import { createBigMapStorage } from './BigMapStorage';
@@ -20,7 +21,7 @@ import type { IBigMapConfig } from '../model/BigMapTypes';
  *
  * 为什么单独放一层：`view/BigMapPage` 只认 `BigMapPresenter`，不知道配置从哪来、冒险进度
  * 存在哪。这里做三件脏活：
- * 1. 用 `ConfigService` 读 12 张 `BigMap-*` 表并解析成强类型配置；
+ * 1. 用 `ConfigService` 读 12 张 `bigmap*` 表并解析成强类型配置；
  * 2. 用领地存档（`TerritorySaveStore`）取「冒险已通关章节」——用户要求建筑解锁**只**来自它；
  * 3. 建一个全屏节点把 `BigMapPage` 挂上去，并把「关掉自己」的回调交回去。
  *
@@ -94,6 +95,8 @@ export class BigMapEntry {
                 // 每次取实时值：玩家在冒险里推了一章，回到大世界立刻能看到新解锁的建筑。
                 adventureChapter: () => this.readAdventureChapter(),
                 now: () => Math.floor(Date.now() / 1000),
+                // 单机档：NPC 模拟榜。联机版换成走服务器的 provider，这里一行不改。
+                rankProvider: new NpcBigMapRankProvider(config),
             });
 
             const page = root.addComponent(BigMapPage);

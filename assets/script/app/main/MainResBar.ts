@@ -52,6 +52,7 @@ import { RefUtil } from '../../framework/ref/RefUtil';
 import { CacheMgr } from '../net/CacheMgr';
 import { HeadArt } from '../HeadArt';
 import { PlayerInfoPage } from '../playerinfo/PlayerInfoPage';
+import { readRoleRow } from './MainRoleRow';
 import { buildResBarView, LevelRow, ResBarView } from './MainResBarTypes';
 
 const { ccclass, property } = _decorator;
@@ -198,24 +199,5 @@ export class MainResBar extends Component {
         const frame = await HeadArt.loadHeadFrame(avatarId);
         if (!this.isValid || !frame) return;
         this.avatarIcon.spriteFrame = frame;
-    }
-}
-
-/**
- * 从 `CmdRole` 缓存里取本机那一行（多行时取第一条，正常情况下只有自己）。
- *
- *  缓存没初始化（`FW.CacheMgr` / `protoCache.json` 未加载）时**不抛**，返回 `null`
- *  交给调用方走占位分支 —— 与 `MatchSelfProfile.readFromRoleCache` 同一口径。
- */
-export function readRoleRow(): CmdRole | null {
-    try {
-        const rows = CacheMgr.instance.getTlCmdRole() ?? [];
-        for (const row of rows) {
-            if (row) return row;
-        }
-        return null;
-    } catch (error) {
-        console.warn('[MainResBar] CmdRole 缓存不可用', error);
-        return null;
     }
 }

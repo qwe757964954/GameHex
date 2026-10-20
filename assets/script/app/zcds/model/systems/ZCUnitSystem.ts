@@ -1,3 +1,4 @@
+import type { IZCModelServices } from './ZCModelServices';
 import type { ZCUnitDefinition } from '../ZCCombatCatalog';
 import type { ZCCombatTarget, ZCUnitState } from '../ZCGameTypes';
 import { ZCCombatSystem } from './ZCCombatSystem';
@@ -18,12 +19,10 @@ export interface IZCUnitMovement {
     advanceMarch(unit: ZCUnitState, dt: number): void;
 }
 
-export interface IZCUnitContext {
+export interface IZCUnitContext extends Pick<IZCModelServices, 'effectiveDefinition' | 'random'> {
     now(): number;
-    effectiveDefinition(unit: ZCUnitState): ZCUnitDefinition;
     /** 当前硬控（无则 null）；受控单位由状态机闸门冻结一切行动。 */
     controlOf(unit: ZCUnitState): { kind: string; defId: string } | null;
-    random(): number;
     readonly unitById: ReadonlyMap<number, ZCUnitState>;
     readonly targeting: IZCUnitTargeting;
     readonly movement: IZCUnitMovement;
@@ -150,3 +149,4 @@ export class ZCUnitSystem {
         }
     }
 }
+

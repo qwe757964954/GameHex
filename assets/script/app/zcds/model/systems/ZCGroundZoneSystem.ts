@@ -1,12 +1,11 @@
-import type { ZCDamageSource, ZCGroundZoneState, ZCSnapshot, ZCUnitState } from '../ZCGameTypes';
+import type { ZCGroundZoneState, ZCSnapshot, ZCUnitState } from '../ZCGameTypes';
 import type { ZCStatusApplyOptions, ZCStatusSystemSnapshot } from '../ZCStatusEffect';
+import type { IZCModelServices } from './ZCModelServices';
 
-export interface IZCGroundZoneContext {
+export interface IZCGroundZoneContext extends Pick<IZCModelServices, 'unitPosition' | 'damageUnit'> {
     readonly hexStep: number;
     hexIdAt(x: number, y: number): number | null;
     unitsInRadius(hexId: number, radiusHex: number): ZCUnitState[];
-    unitPosition(unit: ZCUnitState): { x: number; y: number };
-    damageUnit(unit: ZCUnitState, damage: number, source: ZCDamageSource): void;
     ensureSlowStatus(id: string, speedPct: number, durationSeconds: number): void;
     applyStatus(unit: ZCUnitState, id: string, options: ZCStatusApplyOptions): void;
     exportStatusEffects(): ZCStatusSystemSnapshot | undefined;
@@ -98,3 +97,4 @@ export class ZCGroundZoneSystem {
         state.statusEffects = context.exportStatusEffects();
     }
 }
+

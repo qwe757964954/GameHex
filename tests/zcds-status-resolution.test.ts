@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ZCStatusSystem } from '../assets/script/app/zcds/model/ZCStatusEffect';
 import { ZCStatusResolutionSystem, type IZCStatusResolutionContext } from '../assets/script/app/zcds/model/systems/ZCStatusResolutionSystem';
+import type { ZCUnitDefinition } from '../assets/script/app/zcds/model/ZCCombatCatalog';
 import type { ZCSnapshot, ZCUnitState } from '../assets/script/app/zcds/model/ZCGameTypes';
 
 function unit(id: number, owner: 'player' | 'enemy', x: number, hp = 100): ZCUnitState {
@@ -21,16 +22,20 @@ function setup(units: ZCUnitState[]) {
         unitById: new Map(units.map((entry) => [entry.id, entry])),
         owners: ['player', 'enemy'],
         combatDistanceScale: 1,
-        effectiveUnitDefinition: (entry) => ({
+        // 接口取的是 IZCModelServices.effectiveDefinition（完整定义），本替身只关心
+        // attack / maxHp 两项 —— 与上面 `unit()` 的 `as ZCUnitState` 同一种替身写法。
+        effectiveDefinition: (entry) => ({
             attack: 30,
             maxHp: 100 * (1 + (statusSystem.statModsOf(String(entry.id)).maxHpPct ?? 0) / 100),
-        }),
+        } as ZCUnitDefinition),
         unitPosition: (entry) => ({ x: entry.freeX, y: entry.freeY }),
         displaceUnit: (entry, dx, dy) => { entry.freeX += dx; entry.freeY += dy; },
         damageUnit: (entry, amount, source) => {
             events.push(`damage:${amount}`);
             damageOwners.push(source.owner);
             entry.hp -= amount;
+            // 接口取的是 IZCModelServices.damageUnit（返回飘字或 null），替身不需要飘字。
+            return null;
         },
         presentHeal: (_entry, amount) => { events.push(`heal:${amount}`); },
     };

@@ -1,35 +1,26 @@
-import { cardCounterMultiplier, type ZCDeckBonuses, type ZCDeckCard, type ZCCounterRule, type ZCUnitDefinition } from '../ZCCombatCatalog';
-import type { ZCUnitStatPatch } from '../ZCModifierRuntime';
-import type { ZCRuntimeRules } from '../ZCGameRuntimeConfig';
-import type { ZCSkillRuntimeDefinition } from '../ZCSkillRuntime';
+import { HEX_GRID_LOGICAL_ROW_STEP } from '../../../../core/hex/HexGridLayout';
+import { cardCounterMultiplier, type ZCCounterRule, type ZCDeckBonuses, type ZCDeckCard } from '../ZCCombatCatalog';
+import type {
+    ZCCombatEvent, ZCCombatFloatTextKind, ZCCombatTarget, ZCFloatText,
+    ZCHexState, ZCProjectileState, ZCSnapshot, ZCUnitState
+} from '../ZCGameTypes';
 import type { ZCLegacyBuffApplication, ZCLegacySkillEvaluation } from '../ZCLegacySkillEffect';
 import type { ZCOwner } from '../ZCMapConfig';
-import type {
-    ZCCombatEvent, ZCCombatFloatTextKind, ZCCombatTarget, ZCDamageSource, ZCFloatText,
-    ZCHexState, ZCProjectileState, ZCSnapshot, ZCUnitState,
-} from '../ZCGameTypes';
-import { HEX_GRID_LOGICAL_ROW_STEP } from '../../../../core/hex/HexGridLayout';
-import type { ZCMapGeometry } from '../ZCMapGeometry';
-import type { ZCStatusSystem } from '../ZCStatusEffect';
+import type { ZCUnitStatPatch } from '../ZCModifierRuntime';
+import type { ZCSkillRuntimeDefinition } from '../ZCSkillRuntime';
 import { ZCCombatSystem } from './ZCCombatSystem';
+import type { IZCModelServices } from './ZCModelServices';
 
-export interface IZCAttackResolutionContext {
-    readonly rules: Readonly<ZCRuntimeRules>;
+export interface IZCAttackResolutionContext extends Pick<IZCModelServices, 'rules' | 'statusSystem' | 'geometry' | 'random' | 'effectiveDefinition' | 'unitPosition' | 'damageUnit'> {
     readonly counters: readonly ZCCounterRule[];
     readonly cards: Readonly<Record<ZCOwner, ReadonlyMap<string, ZCDeckCard>>>;
     readonly skillRuntime: Readonly<Record<ZCOwner, ReadonlyMap<string, ZCSkillRuntimeDefinition>>>;
     readonly statPatches: Readonly<Partial<Record<ZCOwner, ReadonlyMap<string, ZCUnitStatPatch>>>>;
     readonly deckBonuses: Readonly<Record<ZCOwner, ZCDeckBonuses>>;
     readonly unitById: ReadonlyMap<number, ZCUnitState>;
-    readonly geometry: ZCMapGeometry;
-    readonly statusSystem: ZCStatusSystem;
-    random(): number;
     currentTarget(unit: ZCUnitState): ZCCombatTarget | null;
-    effectiveUnitDefinition(unit: ZCUnitState): ZCUnitDefinition;
     evaluateLegacySkill(source: ZCUnitState, keys: readonly string[], target: ZCCombatTarget, critical: boolean): ZCLegacySkillEvaluation;
     applyLegacySelfBuffs(source: ZCUnitState, buffs: readonly ZCLegacyBuffApplication[]): readonly ZCLegacyBuffApplication[];
-    unitPosition(unit: ZCUnitState): { x: number; y: number };
-    damageUnit(target: ZCUnitState, damage: number, source: ZCDamageSource): ZCFloatText | null;
     tryExecuteUnit(target: ZCUnitState, chance: number | undefined, owner: ZCOwner, sourceId: number, precedingText?: ZCFloatText | null): void;
     applyHitStatus(target: ZCUnitState, statusId: string | undefined, sourceId?: number): void;
     applyLegacyBuffs(target: ZCUnitState, buffs: readonly ZCLegacyBuffApplication[], sourceId?: number): void;
@@ -79,7 +70,7 @@ export class ZCAttackResolutionSystem {
 
     private static unitDamage(context: IZCAttackResolutionContext, unit: ZCUnitState,
         targetOwner: ZCOwner, targetCardId: string | null, skillDamageRate = 1): number {
-        const definition = context.effectiveUnitDefinition(unit);
+        const definition = context.effectiveDefinition(unit);
         const bonuses = context.deckBonuses[unit.owner];
         const attackerCard = this.cardById(context, unit.owner, unit.cardId);
         const targetCard = targetCardId ? this.cardById(context, targetOwner, targetCardId) : undefined;
@@ -114,7 +105,7 @@ export class ZCAttackResolutionSystem {
                 const along = dx * ux + dy * uy;
                 const perpendicular = Math.abs(dx * uy - dy * ux);
                 hit = along >= 0 && perpendicular <= corridor
-                    + context.effectiveUnitDefinition(target).bodyRadius * context.rules.combatDistanceScale;
+                    + context.effectiveDefinition(target).bodyRadius * context.rules.combatDistanceScale;
             }
             if (!hit) continue;
             context.damageUnit(target, damage, {
@@ -186,7 +177,7 @@ export class ZCAttackResolutionSystem {
         unit.attackHitDone = true;
         const target = context.currentTarget(unit);
         if (!target) return;
-        const definition = context.effectiveUnitDefinition(unit);
+        const definition = context.effectiveDefinition(unit);
         const patch = this.unitStatPatchOf(unit, context);
         const profile = definition.attackProfile;
         const empowered = ZCCombatSystem.consumeEmpoweredAttack(unit, profile, state.elapsedSeconds);
@@ -501,3 +492,4 @@ export class ZCAttackResolutionSystem {
         }
     }
 }
+

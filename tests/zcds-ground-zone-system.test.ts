@@ -16,7 +16,7 @@ test('持续区域按绝对时刻结算多波，并在到期后只结算一次�
         hexIdAt: () => 0,
         unitsInRadius: () => [target],
         unitPosition: () => ({ x: 0, y: 0 }),
-        damageUnit: (unit: ZCUnitState, damage: number) => { unit.hp -= damage; },
+        damageUnit: (unit: ZCUnitState, damage: number) => { unit.hp -= damage; return null; },
         ensureSlowStatus: () => {},
         applyStatus: () => {},
         exportStatusEffects: () => undefined,

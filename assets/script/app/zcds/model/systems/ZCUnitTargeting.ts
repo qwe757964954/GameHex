@@ -1,3 +1,4 @@
+import type { IZCModelServices } from './ZCModelServices';
 import type { ZCUnitDefinition } from '../ZCCombatCatalog';
 import type { ZCCombatTarget, ZCHexState, ZCUnitState } from '../ZCGameTypes';
 import type { ZCMatchMap } from '../ZCMatchConfig';
@@ -7,17 +8,12 @@ import type { IZCUnitTargeting } from './ZCUnitSystem';
 
 const STRUCTURE_TARGET_BODY_RADIUS = 80;
 
-export interface IZCUnitTargetingContext {
+export interface IZCUnitTargetingContext extends Pick<IZCModelServices, 'geometry' | 'effectiveDefinition' | 'unitPosition' | 'hex' | 'hasExposedWall'> {
     readonly map: ZCMatchMap;
-    readonly geometry: ZCMapGeometry;
     readonly units: ReadonlyMap<number, ZCUnitState>;
     readonly targeting: ZCTargetingContext;
     readonly combatDistanceScale: number;
     baseDefinition(id: string): ZCUnitDefinition;
-    effectiveDefinition(unit: ZCUnitState): ZCUnitDefinition;
-    unitPosition(unit: ZCUnitState): { x: number; y: number };
-    hex(id: number): ZCHexState | null;
-    hasExposedWall(hex: ZCHexState): boolean;
 }
 
 /** 每局独占的单位索敌、射程和寻路缓存。 */
@@ -155,3 +151,4 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
         });
     }
 }
+

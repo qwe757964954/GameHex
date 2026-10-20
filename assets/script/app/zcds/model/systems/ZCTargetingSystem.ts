@@ -1,18 +1,16 @@
+import type { IZCModelServices } from './ZCModelServices';
 import type { ZCUnitDefinition } from '../ZCCombatCatalog';
 import type { ZCCombatTargetKind, ZCHexState, ZCUnitState } from '../ZCGameTypes';
 
 export interface ZCPoint { readonly x: number; readonly y: number }
 export interface ZCTargetSelection { readonly kind: ZCCombatTargetKind; readonly id: number }
 
-export interface ZCTargetingContext {
+export interface ZCTargetingContext extends Pick<IZCModelServices, 'unitPosition' | 'effectiveDefinition' | 'hasExposedWall'> {
     readonly now: number;
     readonly units: readonly ZCUnitState[];
     readonly hexes: readonly ZCHexState[];
     readonly unitById: (id: number) => ZCUnitState | null;
-    readonly unitPosition: (unit: ZCUnitState, result?: { x: number; y: number }) => ZCPoint;
     readonly hexPosition: (hexId: number) => ZCPoint;
-    readonly effectiveDefinition: (unit: ZCUnitState) => ZCUnitDefinition;
-    readonly hasExposedWall: (hex: ZCHexState) => boolean;
 }
 
 /** 每局独占的 BFS 工作区；访问标记避免每次创建 Set/Map。 */
@@ -153,3 +151,4 @@ export class ZCTargetingSystem {
         return step;
     }
 }
+

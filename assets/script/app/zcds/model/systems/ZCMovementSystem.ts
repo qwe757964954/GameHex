@@ -1,20 +1,12 @@
-import type { ZCDeckBonuses, ZCUnitDefinition } from '../ZCCombatCatalog';
-import type { ZCRuntimeRules } from '../ZCGameRuntimeConfig';
-import type { ZCHexState, ZCUnitState } from '../ZCGameTypes';
-import type { ZCMatchMap } from '../ZCMatchConfig';
+import type { ZCUnitState } from '../ZCGameTypes';
 import type { ZCOwner } from '../ZCMapConfig';
-import type { ZCMapGeometry } from '../ZCMapGeometry';
+import type { ZCMatchMap } from '../ZCMatchConfig';
+import type { IZCModelServices } from './ZCModelServices';
 
-export interface ZCMovementContext {
+export interface ZCMovementContext extends Pick<IZCModelServices, 'rules' | 'geometry' | 'effectiveDefinition' | 'bonuses' | 'hex' | 'hasExposedWall'> {
     map: ZCMatchMap;
-    rules: Readonly<ZCRuntimeRules>;
-    geometry: ZCMapGeometry;
-    effectiveDefinition(unit: ZCUnitState): ZCUnitDefinition;
-    bonuses(owner: ZCOwner): ZCDeckBonuses;
     goalHomeId(owner: ZCOwner, fromHexId: number): number;
     frozenSeconds(): number;
-    hex(id: number): ZCHexState | null;
-    hasExposedWall(hex: ZCHexState): boolean;
     moveUnitToHex(unit: ZCUnitState, id: number): void;
 }
 
@@ -124,3 +116,4 @@ export class ZCMovementSystem {
 function distance(x: number, y: number, tx: number, ty: number): number {
     return Math.hypot(tx - x, ty - y);
 }
+

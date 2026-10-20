@@ -1,24 +1,21 @@
 import type { ZCDeckBonuses, ZCDeckCard, ZCUnitDefinition } from '../ZCCombatCatalog';
 import type { ZCRuntimeRules } from '../ZCGameRuntimeConfig';
-import { ZCBuildingPhase } from '../ZCGameTypes';
 import type { ZCBuildingCooldownState, ZCHexState, ZCSnapshot } from '../ZCGameTypes';
+import { ZCBuildingPhase } from '../ZCGameTypes';
 import type { ZCOwner } from '../ZCMapConfig';
 import type { ZCUnitStatPatch } from '../ZCModifierRuntime';
+import type { IZCModelServices } from './ZCModelServices';
 
 export type ZCUnitDefinitionResolver = (unitId: string) => ZCUnitDefinition;
 export type ZCCardResolver = (owner: ZCOwner, cardId: string) => ZCDeckCard | undefined;
 
-export interface ZCEconomyContext {
-    rules: Readonly<ZCRuntimeRules>;
+export interface ZCEconomyContext extends Pick<IZCModelServices, 'rules' | 'bonuses' | 'unitCount' | 'spawnUnit'> {
     owners: readonly ZCOwner[];
     homeId(owner: ZCOwner): number;
-    bonuses(owner: ZCOwner): ZCDeckBonuses;
     cardById: ZCCardResolver;
     cycleSeconds(hex: ZCHexState, card: ZCDeckCard): number;
     grantGold(owner: ZCOwner, amount: number, hexId: number): void;
     constructionComplete(hex: ZCHexState): void;
-    unitCount(owner: ZCOwner): number;
-    spawnUnit(owner: ZCOwner, card: ZCDeckCard, tier: number, hexId: number): void;
     recruitPatch?(owner: ZCOwner, card: ZCDeckCard): Readonly<ZCUnitStatPatch>;
 }
 
@@ -190,3 +187,4 @@ export class ZCEconomySystem {
             }, 0);
     }
 }
+

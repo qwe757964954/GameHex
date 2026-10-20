@@ -1,21 +1,37 @@
-import { captureZCMatchConfig, ZCMatchConfig, ZCPveDefenceConfig } from './ZCMatchConfig';
-import { ZCSnapshotCodec } from './ZCSnapshotCodec';
-import type { ZCBattlePresentationEvents, ZCGameRenderFrame, ZCGameRenderHex } from './ZCGameRenderFrame';
-import { ZCMapGeometry } from './ZCMapGeometry';
 import { HEX_GRID_LOGICAL_ROW_STEP } from '../../../core/hex/HexGridLayout';
+import { ZCCaptureSystem } from './systems/ZCCaptureSystem';
+import type { IZCModelServices } from './systems/ZCModelServices';
+import { ZCMovementSystem } from './systems/ZCMovementSystem';
+import { ZCProjectileContext, ZCProjectileSystem } from './systems/ZCProjectileSystem';
+import { ZCTileSystem } from './systems/ZCTileSystem';
 import { ZCUnitRegistry } from './systems/ZCUnitRegistry';
 import { ZCUnitSystem, type IZCUnitContext } from './systems/ZCUnitSystem';
 import { ZCUnitTargeting } from './systems/ZCUnitTargeting';
-import { ZCMovementSystem } from './systems/ZCMovementSystem';
-import { ZCTileSystem } from './systems/ZCTileSystem';
-import { ZCProjectileSystem, ZCProjectileContext } from './systems/ZCProjectileSystem';
-import { ZCCaptureSystem } from './systems/ZCCaptureSystem';
+import type { ZCBattlePresentationEvents, ZCGameRenderFrame, ZCGameRenderHex } from './ZCGameRenderFrame';
+import { ZCMapGeometry } from './ZCMapGeometry';
+import { captureZCMatchConfig, ZCMatchConfig, ZCPveDefenceConfig } from './ZCMatchConfig';
+import { ZCSnapshotCodec } from './ZCSnapshotCodec';
 
 /** 20 Hz 固定逻辑步长；每次最多接受 5 秒，限制后台恢复时的主线程阻塞。 */
 export const ZC_SIMULATION_STEP_SECONDS = 0.05;
 export const ZC_MAX_TICK_SECONDS = 5;
 const EMPTY_CONNECTED_DEVELOPED_HEXES: readonly number[] = [];
 
+import { ZCArtifactSystem } from './systems/ZCArtifactSystem';
+import { ZCAttackResolutionSystem, type IZCAttackResolutionContext } from './systems/ZCAttackResolutionSystem';
+import { ZCDamageResolutionSystem, type IZCDamageResolutionContext } from './systems/ZCDamageResolutionSystem';
+import { ZCDevelopmentSystem, type IZCDevelopmentContext } from './systems/ZCDevelopmentSystem';
+import { ZCEconomyContext, ZCEconomySystem } from './systems/ZCEconomySystem';
+import { ZCGroundZoneSystem, type IZCGroundZoneContext } from './systems/ZCGroundZoneSystem';
+import { ZCLegacyCombatSystem, type IZCLegacyCombatContext } from './systems/ZCLegacyCombatSystem';
+import { ZCOutcomeSystem, type IZCOutcomeContext } from './systems/ZCOutcomeSystem';
+import { ZCStatusResolutionSystem, type IZCStatusResolutionContext } from './systems/ZCStatusResolutionSystem';
+import type { ZCTargetingContext } from './systems/ZCTargetingSystem';
+import {
+    ZC_CARD_START_SECONDS,
+    ZCBattlePresentationQueue,
+    type IZCCardRevealOptions, type IZCFloatTextOptions,
+} from './ZCBattlePresentationQueue';
 import {
     cardCounterMultiplier,
     luckTextOfTier,
@@ -26,92 +42,20 @@ import {
     ZCDeckCard,
     ZCUnitDefinition,
 } from './ZCCombatCatalog';
-import type { ZCUnitStatPatch } from './ZCModifierRuntime';
-import { ZCPvpTileType } from './ZCPvpTileRules';
 import type { ZCRuntimeRules } from './ZCGameRuntimeConfig';
-import { ZCArtifactSystem } from './systems/ZCArtifactSystem';
-import { ZCAttackResolutionSystem, type IZCAttackResolutionContext } from './systems/ZCAttackResolutionSystem';
-import { ZCLegacyCombatSystem, type IZCLegacyCombatContext } from './systems/ZCLegacyCombatSystem';
-import {
-    ZCBattlePresentationQueue, ZC_CARD_START_SECONDS, type IZCCardRevealOptions, type IZCFloatTextOptions,
-} from './ZCBattlePresentationQueue';
-import { ZCOutcomeSystem, type IZCOutcomeContext } from './systems/ZCOutcomeSystem';
-import { ZCGroundZoneSystem, type IZCGroundZoneContext } from './systems/ZCGroundZoneSystem';
-import { ZCStatusResolutionSystem, type IZCStatusResolutionContext } from './systems/ZCStatusResolutionSystem';
-import { ZCDamageResolutionSystem, type IZCDamageResolutionContext } from './systems/ZCDamageResolutionSystem';
-import { ZCDevelopmentSystem, type IZCDevelopmentContext } from './systems/ZCDevelopmentSystem';
-import { ZCEconomySystem, ZCEconomyContext } from './systems/ZCEconomySystem';
-import type { ZCTargetingContext } from './systems/ZCTargetingSystem';
-import { ZCStatusSystem } from './ZCStatusEffect';
-import type { ZCSkillRuntimeDefinition } from './ZCSkillRuntime';
-import { compileZCMatchRuntime } from './ZCMatchRuntimeCompiler';
 import {
     ZCLegacySkillEffectRuntime,
     type ZCLegacyBuffApplication,
     type ZCLegacySkillEvaluation,
 } from './ZCLegacySkillEffect';
+import { compileZCMatchRuntime } from './ZCMatchRuntimeCompiler';
+import type { ZCUnitStatPatch } from './ZCModifierRuntime';
+import { ZCPvpTileType } from './ZCPvpTileRules';
+import type { ZCSkillRuntimeDefinition } from './ZCSkillRuntime';
+import { ZCStatusSystem } from './ZCStatusEffect';
 
 import { ownersForPlayerCount, ZC_OWNER_ORDER, type ZCOwner } from './ZCMapConfig';
 import { ZCNeutralResourceId, type ZCNeutralResourceReward } from './ZCNeutralResourceReward';
-export {
-    configureZCMap,
-    defaultZCSectionAt,
-    getZCMapOwner,
-    getZCMapSection,
-    getZCLocalPlayerCountOverride,
-    isRandomMapCandidate,
-    ownerForSection,
-    ownersForPlayerCount,
-    ZC_OWNER_ORDER,
-    ZC_DEFAULT_HOME_MIN_DISTANCE,
-    ZC_DEFAULT_RESOURCE_MIN_DISTANCE,
-    ZC_DEPTH_ORDER,
-    ZC_DEPTH_TENDENCY,
-    ZC_ENEMY_HOME_ID,
-    ZC_HEX_CONFIG,
-    ZC_INITIAL_TERRITORY,
-    ZC_MAP_ART,
-    ZC_MAP_CITY_MODE,
-    ZC_MAP_COLUMNS,
-    ZC_MAP_HOMES,
-    ZC_MAP_ID,
-    ZC_MAP_PLAYER_COUNT,
-    ZC_MAP_REGIONS,
-    ZC_MAP_HOME_CANDIDATES,
-    ZC_MAP_RESOURCE_POINTS,
-    ZC_MAP_ROWS,
-    ZC_MAP_SECTIONS,
-    ZC_MAP_SPACING,
-    ZC_PLAYER_HOME_ID,
-    ZC_RESOURCE_MIN_DISTANCE_FLOOR,
-    ZC_TENDENCY_TEXT,
-} from './ZCMapConfig';
-export type {
-    ZCCityMode, ZCDepth, ZCFaction, ZCHexConfig, ZCMapArt, ZCMapHome, ZCMapLayout,
-    ZCMapRegion, ZCMapHomeCandidates, ZCMapResolvedResource, ZCMapResourcePoint, ZCMapSpacing, ZCOwner, ZCPlayerCount, ZCSection, ZCTendency,
-} from './ZCMapConfig';
-
-import type {
-    DeepReadonly,
-    ZCDamageSource,
-    ZCActionFailureReason,
-    ZCActionResult,
-    ZCBuildingCooldownState,
-    ZCBuildingType,
-    ZCBuildingShake,
-    ZCCardReveal,
-    ZCCombatTarget,
-    ZCFloatText,
-    ZCFloatTextKind,
-    ZCGameStatus,
-    ZCHexActivation,
-    ZCHexState,
-    ZCHitFx,
-    ZCScoreBreakdown,
-    ZCSnapshot,
-    ZCUnitState,
-    ZCProjectileState,
-} from './ZCGameTypes';
 export type {
     ZCActionFailureReason,
     ZCActionResult,
@@ -125,13 +69,56 @@ export type {
     ZCFloatTextKind,
     ZCGameStatus,
     ZCHexActivation,
-    ZCHexState,
-    ZCScoreBreakdown,
+    ZCHexState, ZCProjectileState, ZCScoreBreakdown,
     ZCSnapshot,
     ZCTileState,
     ZCUnitBattleState,
-    ZCUnitState,
+    ZCUnitState
+} from './ZCGameTypes';
+export {
+    configureZCMap,
+    defaultZCSectionAt, getZCLocalPlayerCountOverride, getZCMapOwner,
+    getZCMapSection, isRandomMapCandidate,
+    ownerForSection,
+    ownersForPlayerCount, ZC_DEFAULT_HOME_MIN_DISTANCE,
+    ZC_DEFAULT_RESOURCE_MIN_DISTANCE,
+    ZC_DEPTH_ORDER,
+    ZC_DEPTH_TENDENCY,
+    ZC_ENEMY_HOME_ID,
+    ZC_HEX_CONFIG,
+    ZC_INITIAL_TERRITORY,
+    ZC_MAP_ART,
+    ZC_MAP_CITY_MODE,
+    ZC_MAP_COLUMNS, ZC_MAP_HOME_CANDIDATES, ZC_MAP_HOMES,
+    ZC_MAP_ID,
+    ZC_MAP_PLAYER_COUNT,
+    ZC_MAP_REGIONS, ZC_MAP_RESOURCE_POINTS,
+    ZC_MAP_ROWS,
+    ZC_MAP_SECTIONS,
+    ZC_MAP_SPACING, ZC_OWNER_ORDER, ZC_PLAYER_HOME_ID,
+    ZC_RESOURCE_MIN_DISTANCE_FLOOR,
+    ZC_TENDENCY_TEXT
+} from './ZCMapConfig';
+export type {
+    ZCCityMode, ZCDepth, ZCFaction, ZCHexConfig, ZCMapArt, ZCMapHome, ZCMapHomeCandidates, ZCMapLayout,
+    ZCMapRegion, ZCMapResolvedResource, ZCMapResourcePoint, ZCMapSpacing, ZCOwner, ZCPlayerCount, ZCSection, ZCTendency
+} from './ZCMapConfig';
+
+import type {
+    DeepReadonly,
+    ZCActionFailureReason,
+    ZCActionResult,
+    ZCBuildingCooldownState, ZCCardReveal,
+    ZCCombatTarget,
+    ZCDamageSource,
+    ZCFloatText, ZCGameStatus,
+    ZCHexActivation,
+    ZCHexState,
+    ZCHitFx,
     ZCProjectileState,
+    ZCScoreBreakdown,
+    ZCSnapshot,
+    ZCUnitState
 } from './ZCGameTypes';
 
 /** 《占城大师》PVE 对局纯逻辑层，不依赖 Cocos API。
@@ -215,6 +202,8 @@ export class ZCGameModel {
     private readonly activeOwners: readonly ZCOwner[];
     private readonly geometry: ZCMapGeometry;
     private readonly captureSystem: ZCCaptureSystem;
+    /** 模型能力表：各系统 context 从这里取子集，见 `IZCModelServices`。 */
+    private readonly services: IZCModelServices;
     private readonly movement: ZCMovementSystem;
     private readonly economyContext: ZCEconomyContext;
     private readonly definitions: ReadonlyMap<string, ZCUnitDefinition>;
@@ -240,38 +229,29 @@ export class ZCGameModel {
     private topologyRevision = 0;
     private readonly connectedDevelopedCache = new Map<number, readonly number[]>();
     private readonly unitContext: IZCUnitContext;
-    private readonly groundZoneContext: IZCGroundZoneContext = {
-        hexStep: HEX_STEP,
-        hexIdAt: (x, y) => this.geometry.hexIdAt(x, y),
-        unitsInRadius: (hexId, radiusHex) => this.unitsInRadius(hexId, radiusHex),
-        unitPosition: (unit) => this.unitPosition(unit),
-        damageUnit: (unit, damage, source) => this.damageUnit(unit, damage, source),
-        ensureSlowStatus: (id, speedPct, duration) => this.ensureMoveSpeedStatus(id, speedPct, duration),
-        applyStatus: (unit, id, options) => this.statusSystem.apply(String(unit.id), id, options),
-        exportStatusEffects: () => this.statusSystem.exportSnapshot(),
-    };
+    private readonly groundZoneContext: IZCGroundZoneContext;
     private readonly attackResolutionContext: IZCAttackResolutionContext;
     private readonly statusResolutionContext: IZCStatusResolutionContext;
     private readonly damageResolutionContext: IZCDamageResolutionContext;
     private readonly developmentContext: IZCDevelopmentContext;
     private createAttackResolutionContext(): IZCAttackResolutionContext {
         return {
-            rules: this.rules,
+            rules: this.services.rules,
             counters: this.config.counters,
             cards: this.cards,
             skillRuntime: this.skillRuntime,
             statPatches: this.unitStatPatches,
             deckBonuses: this.deckBonuses,
             unitById: this.units.byId,
-            geometry: this.geometry,
-            statusSystem: this.statusSystem,
-            random: this.random,
+            geometry: this.services.geometry,
+            statusSystem: this.services.statusSystem,
+            random: this.services.random,
             currentTarget: (unit) => this.unitTargeting.current(unit),
-            effectiveUnitDefinition: (unit) => this.effectiveUnitDefinition(unit),
+            effectiveDefinition: this.services.effectiveDefinition,
             evaluateLegacySkill: (unit, keys, target, critical) => this.evaluateLegacySkill(unit, keys, target, critical),
             applyLegacySelfBuffs: (unit, buffs) => this.applyLegacySelfBuffs(unit, buffs),
-            unitPosition: (unit) => this.unitPosition(unit),
-            damageUnit: (unit, damage, source) => this.damageUnit(unit, damage, source),
+            unitPosition: this.services.unitPosition,
+            damageUnit: this.services.damageUnit,
             tryExecuteUnit: (unit, chance, owner, sourceId, text) => this.tryExecuteUnit(unit, chance, owner, sourceId, text),
             applyHitStatus: (unit, id, sourceId) => this.applyHitStatus(unit, id, sourceId),
             applyLegacyBuffs: (unit, buffs, sourceId) => this.applyLegacyBuffs(unit, buffs, sourceId),
@@ -346,6 +326,8 @@ export class ZCGameModel {
         };
         this.geometry = new ZCMapGeometry(this.config.map);
         this.captureSystem = new ZCCaptureSystem(this.geometry, this.config.map, this.rules);
+        this.services = this.buildServices();
+        this.groundZoneContext = this.buildGroundZoneContext();
         this.targetingContext = this.buildTargetingContext();
         this.projectileContext = this.buildProjectileContext();
         const compiled = compileZCMatchRuntime(this.config);
@@ -382,6 +364,38 @@ export class ZCGameModel {
     //     在 DamageResolution 是 ZCUnitRegistry —— 三种视图各服务不同遍历方式。
     // 合并成一套签名会让系统看到它不该依赖的字段，把「这个系统能改什么」的边界放大。
 
+    // 用箭头函数而不是方法引用：这些回调会在系统内部的任意时刻被调用，
+    // 必须把 this 绑死在组合根上，不能依赖调用方的 this。
+    private buildServices(): IZCModelServices {
+        return {
+            rules: this.rules,
+            statusSystem: this.statusSystem,
+            geometry: this.geometry,
+            random: () => this.random(),
+            unitPosition: (unit, result) => this.unitPosition(unit, result),
+            effectiveDefinition: (unit) => this.effectiveUnitDefinition(unit),
+            damageUnit: (unit, damage, source) => this.damageUnit(unit, damage, source),
+            hex: (id) => this.hex(id),
+            hasExposedWall: (hex) => this.hasExposedWall(hex),
+            unitCount: (owner) => this.unitCount(owner),
+            spawnUnit: (owner, card, tier, hexId) => this.spawnUnit(owner, card, tier, hexId),
+            bonuses: (owner) => this.bonusesFor(owner),
+        };
+    }
+
+    private buildGroundZoneContext(): IZCGroundZoneContext {
+        return {
+            hexStep: HEX_STEP,
+            hexIdAt: (x, y) => this.geometry.hexIdAt(x, y),
+            unitsInRadius: (hexId, radiusHex) => this.unitsInRadius(hexId, radiusHex),
+            unitPosition: this.services.unitPosition,
+            damageUnit: this.services.damageUnit,
+            ensureSlowStatus: (id, speedPct, duration) => this.ensureMoveSpeedStatus(id, speedPct, duration),
+            applyStatus: (unit, id, options) => this.statusSystem.apply(String(unit.id), id, options),
+            exportStatusEffects: () => this.statusSystem.exportSnapshot(),
+        };
+    }
+
     private buildTargetingContext(): ZCTargetingContext {
         const model = this;
         return {
@@ -389,10 +403,10 @@ export class ZCGameModel {
             get units() { return model.state.units; },
             get hexes() { model.refreshTargetHexes(); return model.targetHexes; },
             unitById: (id) => this.units.byId.get(id) ?? null,
-            unitPosition: (candidate, result) => this.unitPosition(candidate, result),
+            unitPosition: this.services.unitPosition,
             hexPosition: (id) => this.config.map.hexes[id],
-            effectiveDefinition: (candidate) => this.effectiveUnitDefinition(candidate),
-            hasExposedWall: (hex) => this.hasExposedWall(hex),
+            effectiveDefinition: this.services.effectiveDefinition,
+            hasExposedWall: this.services.hasExposedWall,
         };
     }
 
@@ -402,7 +416,7 @@ export class ZCGameModel {
             get now() { return model.state.elapsedSeconds; },
             get units() { return model.state.units; },
             distanceScale: this.rules.combatDistanceScale,
-            effectiveDefinition: (unit) => this.effectiveUnitDefinition(unit),
+            effectiveDefinition: this.services.effectiveDefinition,
             structureTarget: (projectile) => this.projectileStructureTarget(projectile),
             hit: (projectile, target) => this.resolveProjectileHit(projectile, target),
         };
@@ -419,11 +433,11 @@ export class ZCGameModel {
 
     private buildDevelopmentContext(): IZCDevelopmentContext {
         return {
-            rules: this.rules,
+            rules: this.services.rules,
             goldOf: (owner) => this.goldOf(owner),
             setGold: (owner, amount) => this.setGold(owner, amount),
-            unitCount: (owner) => this.unitCount(owner),
-            spawnUnit: (owner, card, tier, hexId) => this.spawnUnit(owner, card, tier, hexId),
+            unitCount: this.services.unitCount,
+            spawnUnit: this.services.spawnUnit,
             onNeutralReward: (hexId, resourceId, owner, reward) => {
                 this.pushNeutralReward(hexId, resourceId, owner, reward);
             },
@@ -432,14 +446,14 @@ export class ZCGameModel {
 
     private buildStatusResolutionContext(): IZCStatusResolutionContext {
         return {
-            statusSystem: this.statusSystem,
+            statusSystem: this.services.statusSystem,
             unitById: this.units.byId,
             owners: this.activeOwners,
             combatDistanceScale: this.rules.combatDistanceScale,
-            effectiveUnitDefinition: (unit) => this.effectiveUnitDefinition(unit),
-            unitPosition: (unit) => this.unitPosition(unit),
+            effectiveDefinition: this.services.effectiveDefinition,
+            unitPosition: this.services.unitPosition,
             displaceUnit: (unit, dx, dy) => this.displaceUnit(unit, dx, dy),
-            damageUnit: (unit, damage, source) => this.damageUnit(unit, damage, source),
+            damageUnit: this.services.damageUnit,
             presentHeal: (unit, amount) => {
                 const position = this.unitPosition(unit);
                 this.pushFloatText({
@@ -482,9 +496,9 @@ export class ZCGameModel {
 
     private buildEconomyContext(): ZCEconomyContext {
         return {
-            rules: this.rules, owners: this.activeOwners,
+            rules: this.services.rules, owners: this.activeOwners,
             homeId: (owner) => this.homeId(owner),
-            bonuses: (owner) => this.bonusesFor(owner),
+            bonuses: this.services.bonuses,
             cardById: (owner, id) => this.cardById(owner, id),
             cycleSeconds: (hex, card) => this.buildingCycleSeconds(hex, card),
             grantGold: (owner, amount, hexId) => {
@@ -508,8 +522,8 @@ export class ZCGameModel {
                 // 建成那一刻水波纹还没扩完 ⇒ 兵不能顶着波纹站上来。
                 this.scheduleFirstBarracksUnit(hex.id);
             },
-            unitCount: (owner) => this.unitCount(owner),
-            spawnUnit: (owner, card, tier, hexId) => this.spawnUnit(owner, card, tier, hexId),
+            unitCount: this.services.unitCount,
+            spawnUnit: this.services.spawnUnit,
             //  产兵四项修正（`pvpAttrMap` 的 recruitCd/recruitMaxNum/singleRecruitNum/
             //  singleRecruitLegionCount，2026-10-13）。建筑按卡的 `unitId` 找所属单位。
             recruitPatch: (owner, card) => (card.unitId
@@ -521,11 +535,11 @@ export class ZCGameModel {
     private buildMovement(): ZCMovementSystem {
         return new ZCMovementSystem({
             map: this.config.map, rules: this.rules, geometry: this.geometry,
-            effectiveDefinition: (unit) => this.effectiveUnitDefinition(unit),
-            bonuses: (owner) => this.bonusesFor(owner),
+            effectiveDefinition: this.services.effectiveDefinition,
+            bonuses: this.services.bonuses,
             goalHomeId: (owner, fromHexId) => this.goalHomeId(owner, fromHexId),
             frozenSeconds: () => this.state.enemyFrozenSeconds,
-            hex: (id) => this.hex(id), hasExposedWall: (hex) => this.hasExposedWall(hex),
+            hex: this.services.hex, hasExposedWall: this.services.hasExposedWall,
             moveUnitToHex: (unit, id) => this.moveUnitToHex(unit, id),
         });
     }
@@ -538,19 +552,19 @@ export class ZCGameModel {
             targeting: this.targetingContext,
             combatDistanceScale: this.rules.combatDistanceScale,
             baseDefinition: (id) => this.unitDefinition(id),
-            effectiveDefinition: (unit) => this.effectiveUnitDefinition(unit),
-            unitPosition: (unit) => this.unitPosition(unit),
-            hex: (id) => this.hex(id),
-            hasExposedWall: (hex) => this.hasExposedWall(hex),
+            effectiveDefinition: this.services.effectiveDefinition,
+            unitPosition: this.services.unitPosition,
+            hex: this.services.hex,
+            hasExposedWall: this.services.hasExposedWall,
         });
     }
 
     private buildUnitContext(): IZCUnitContext {
         return {
             now: () => this.state.elapsedSeconds,
-            effectiveDefinition: (unit) => this.effectiveUnitDefinition(unit),
+            effectiveDefinition: this.services.effectiveDefinition,
             controlOf: (unit) => this.statusSystem.controlOf(String(unit.id)),
-            random: this.random,
+            random: this.services.random,
             unitById: this.units.byId,
             targeting: this.unitTargeting,
             movement: this.movement,

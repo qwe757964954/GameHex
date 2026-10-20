@@ -1,23 +1,20 @@
-import { cardTypeToBuilding, findCatalogCard, type ZCDeckCard, ZC_RARITY_RANK } from '../ZCCombatCatalog';
-import type { ZCMatchConfig, ZCMatchMap } from '../ZCMatchConfig';
-import type { ZCRuntimeRules } from '../ZCGameRuntimeConfig';
+import { cardTypeToBuilding, findCatalogCard, ZC_RARITY_RANK, type ZCDeckCard } from '../ZCCombatCatalog';
 import type { ZCBuildingType, ZCHexState, ZCSnapshot } from '../ZCGameTypes';
 import type { ZCOwner } from '../ZCMapConfig';
+import type { ZCMatchConfig, ZCMatchMap } from '../ZCMatchConfig';
 import {
     hasNeutralResourceReward, isZCNeutralResourceId, neutralResourceRewardOf,
     type ZCNeutralResourceId, type ZCNeutralResourceReward,
 } from '../ZCNeutralResourceReward';
 import { drawPvpTile, type ZCPvpTileType } from '../ZCPvpTileRules';
 import { tileTypeFromLegacyHex } from '../ZCSnapshotCodec';
-import { ZCEconomySystem } from './ZCEconomySystem';
 import { ZCArtifactSystem } from './ZCArtifactSystem';
+import { ZCEconomySystem } from './ZCEconomySystem';
+import type { IZCModelServices } from './ZCModelServices';
 
-export interface IZCDevelopmentContext {
-    readonly rules: Readonly<ZCRuntimeRules>;
+export interface IZCDevelopmentContext extends Pick<IZCModelServices, 'rules' | 'unitCount' | 'spawnUnit'> {
     goldOf(owner: ZCOwner): number;
     setGold(owner: ZCOwner, amount: number): void;
-    unitCount(owner: ZCOwner): number;
-    spawnUnit(owner: ZCOwner, card: ZCDeckCard, tier: number, hexId: number): void;
     /**
      * 中立资源奖励**已入袋**那一拍的表现通知（金币 / 充能 / 产兵任一发生即回调一次）。
      *
@@ -147,3 +144,4 @@ export class ZCDevelopmentSystem {
         }
     }
 }
+

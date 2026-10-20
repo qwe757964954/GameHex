@@ -561,7 +561,8 @@ export type ZCActionFailureReason = 'insufficientGold';
 
 export interface ZCActionResult {
     ok: boolean;
-    message: string;
+    /** 仅供主动点击类操作（神器按钮等）弹吐司；棋盘开格路径只读 `reason`，不构造文案。 */
+    message?: string;
     /** 失败原因；`ok === true` 或原因未分类时为 `undefined`。 */
     reason?: ZCActionFailureReason;
 }

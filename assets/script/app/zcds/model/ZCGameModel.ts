@@ -35,7 +35,6 @@ import {
 import {
     cardCounterMultiplier,
     luckTextOfTier,
-    ZC_CARD_TYPE_NAMES,
     ZC_RARITY_RANK,
     ZCAttackTrait,
     ZCDeckBonuses,
@@ -1370,12 +1369,12 @@ export class ZCGameModel {
         this.pushHexActivation(hex.id, result.building !== null, result.card ? ZC_RARITY_RANK[result.card.rarity] : 0);
         if (!result.card) {
             this.refreshTileStates();
-            return this.success(`${owner === 'player' ? '你' : '敌方'}花费 ${hex.developmentCost} 金币，本次未抽到卡牌。`);
+            return this.success();
         }
         const card = result.card;
         if (!result.building) {
             this.refreshTileStates();
-            return this.success(`${owner === 'player' ? '你' : '敌方'}花费 ${hex.developmentCost} 金币，抽到【${card.name}】，但${ZC_CARD_TYPE_NAMES[card.type]}不能建在格子上。`);
+            return this.success();
         }
         const building = result.building;
         const tier = result.tier;
@@ -1392,8 +1391,7 @@ export class ZCGameModel {
         this.refreshTileStates();
         // 首批兵推到「翻面段」播完再出（见 `deferredBarracksSpawns`）。
         if (hex.constructionRemainingSeconds <= 0) this.scheduleFirstBarracksUnit(hex.id);
-        const countdown = hex.constructionTotalSeconds > 0 ? `，建造需 ${hex.constructionTotalSeconds.toFixed(1)} 秒` : '';
-        return this.success(`${owner === 'player' ? '你' : '敌方'}花费 ${hex.developmentCost} 金币，${result.pityTriggered ? '触发保底，' : ''}抽到${card.rarity}卡【${card.name}】${countdown}。`);
+        return this.success(`抽到${card.rarity}卡【${card.name}】`);
     }
 
     private spawnFirstBarracksUnit(hex: ZCHexState): void {
@@ -1763,7 +1761,7 @@ export class ZCGameModel {
         return this.state.hexes[id] || null;
     }
 
-    private success(message: string): ZCActionResult {
+    private success(message?: string): ZCActionResult {
         return { ok: true, message };
     }
 

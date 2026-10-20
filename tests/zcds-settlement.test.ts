@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { ZCOwner } from '../assets/script/app/zcds/model/ZCMapConfig';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 
@@ -83,7 +84,7 @@ function gameFixture(status = 'playing') {
         // 沙箱 require 白名单缺它整份文件在 require 阶段就起不来。
         './ZCDCLogSwitch': { ZCDC_LOG_WARNINGS: true, ZCDC_LOG_DIAGNOSTICS: false },
         // 以下同属「require 白名单」：`ZCGame.ts` 的值 import，缺一个整文件就起不来。
-        './model/ZCMapConfig': { ZC_OWNER_ORDER: ['player', 'enemy'] },
+        './model/ZCMapConfig': { ZC_OWNER_ORDER: ['player', 'enemy'], ZCOwner },
         './model/ZCMatchConfig': { captureZCMatchConfig: () => ({}) },
         './model/ZCSpawnSelection': {}, './view/ZCSpawnSelectionView': {},
         './view/ZCHudBossPanel': {}, './application/ZCClientCombatConfig': {},

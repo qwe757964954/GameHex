@@ -85,7 +85,7 @@ export class ZCGameHudPlayerRow extends Component {
         // 圆盘：图与尺寸都按席位换。
         const frame = this.discOf(data.owner);
         if (frame) this.headFrame.spriteFrame = frame;
-        const isSelf = data.owner === 'player';
+        const isSelf = data.owner === ZCOwner.Player;
         const discSize = isSelf
             ? ZCGameHudPlayerRow.SELF_DISC_SIZE : ZCGameHudPlayerRow.OTHER_DISC_SIZE;
         const headSize = isSelf
@@ -116,9 +116,9 @@ export class ZCGameHudPlayerRow extends Component {
 
     /** 席位 → 圆盘图。 */
     private discOf(owner: ZCOwner): SpriteFrame | null {
-        if (owner === 'player') return this.disc01;
+        if (owner === ZCOwner.Player) return this.disc01;
         if (owner === ZCOwner.Enemy) return this.disc02;
-        if (owner === 'enemy2') return this.disc03;
+        if (owner === ZCOwner.Enemy2) return this.disc03;
         return this.disc04;
     }
 }

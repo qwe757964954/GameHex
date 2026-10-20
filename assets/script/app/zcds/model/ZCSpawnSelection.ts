@@ -7,7 +7,7 @@ import {
     type ZCDepth,
     type ZCMapResolvedResource,
     type ZCMapResourcePoint,
-    type ZCOwner,
+    ZCOwner,
     type ZCPlayerCount,
     type ZCSection,
 } from './ZCMapConfig';
@@ -103,7 +103,7 @@ export class ZCSpawnSelection {
         // 所以这里直接把落点预置到默认位置 —— 不是"没选"，而是"已预选默认位置"。
         //  只预置**玩家**：给 AI 也预置会让 `autoConfirm` 不再摇随机格，
         // 从而错开整局唯一那条随机源的消耗次序（AI 确认时机 / 资源点抽取全部跟着漂）。
-        this.states.player.selectedHexId = this.defaultHexFor('player');
+        this.states.player.selectedHexId = this.defaultHexFor(ZCOwner.Player);
     }
 
     get snapshot(): ZCSpawnSelectionSnapshot {
@@ -230,7 +230,7 @@ export class ZCSpawnSelection {
         state.confirmedHexId = state.selectedHexId;
         state.invalidReason = null;
         if (firstConfirmation) this.remaining = Math.min(this.remaining, ZC_SPAWN_COMPRESSED_SECONDS);
-        if (owner === 'player') {
+        if (owner === ZCOwner.Player) {
             for (const ai of this.owners.slice(1)) {
                 if (this.states[ai].confirmedHexId === null) {
                     this.aiConfirmAt.set(ai, Math.min(

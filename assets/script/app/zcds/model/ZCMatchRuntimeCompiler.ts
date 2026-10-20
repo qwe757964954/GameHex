@@ -1,6 +1,6 @@
 import type { ZCDeckBonuses, ZCDeckCard, ZCUnitDefinition } from './ZCCombatCatalog';
 import { calculateDeckBonuses } from './ZCCombatCatalog';
-import type { ZCOwner } from './ZCMapConfig';
+import { ZCOwner } from './ZCMapConfig';
 import { ZC_OWNER_ORDER } from './ZCMapConfig';
 import type { ZCMatchConfig } from './ZCMatchConfig';
 import type { ZCCompiledModifierLoadout, ZCUnitStatPatch } from './ZCModifierRuntime';
@@ -25,9 +25,9 @@ export interface IZCMatchRuntime {
 /** 本局静态目录只从已冻结配置派生，不读取全局表也不消费随机数。 */
 export function compileZCMatchRuntime(config: Readonly<ZCMatchConfig>): IZCMatchRuntime {
     const deckFor = (owner: ZCOwner): readonly ZCDeckCard[] => config.ownerDecks?.[owner]
-        ?? (owner === 'player' ? config.playerDeck : config.enemyDeck);
+        ?? (owner === ZCOwner.Player ? config.playerDeck : config.enemyDeck);
     const loadoutsFor = (owner: ZCOwner): readonly ZCCompiledModifierLoadout[] => config.modifiers?.[owner]
-        ?? (owner === 'player' ? [] : config.modifiers?.enemy ?? []);
+        ?? (owner === ZCOwner.Player ? [] : config.modifiers?.enemy ?? []);
     const definitions = new Map(config.units.map((unit) => [unit.unitId, unit]));
     const effectiveDefinitions = {} as Record<ZCOwner, ReadonlyMap<string, ZCUnitDefinition>>;
     const unitStatPatches = {} as Record<ZCOwner, ReadonlyMap<string, ZCUnitStatPatch>>;

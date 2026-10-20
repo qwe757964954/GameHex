@@ -2,7 +2,7 @@ import type { ZCDeckBonuses, ZCUnitDefinition } from '../ZCCombatCatalog';
 import type { ZCRuntimeRules } from '../ZCGameRuntimeConfig';
 import type { ZCCombatTarget, ZCHexState, ZCSnapshot, ZCUnitState } from '../ZCGameTypes';
 import type { ZCLegacyBuffApplication, ZCLegacySkillEffectRuntime, ZCLegacySkillEvaluation } from '../ZCLegacySkillEffect';
-import type { ZCOwner } from '../ZCMapConfig';
+import { ZCOwner } from '../ZCMapConfig';
 import type { ZCMatchConfig } from '../ZCMatchConfig';
 import type { ZCStatusApplyOptions, ZCStatusRuntimeBehavior, ZCStatusSystem } from '../ZCStatusEffect';
 import { ZCCombatSystem } from './ZCCombatSystem';
@@ -96,7 +96,7 @@ export class ZCLegacyCombatSystem {
                 options.runtimeBehavior = this.dotBehavior(
                     buff,
                     legacyType,
-                    source?.owner ?? 'player',
+                    source?.owner ?? ZCOwner.Player,
                     source ? context.effectiveUnitDefinition(source).attack * (source.attackMultiplier ?? 1) : 0,
                 );
                 options.independentStackDuration = true;

@@ -5,7 +5,7 @@ import type {
     ZCHexState, ZCProjectileState, ZCSnapshot, ZCUnitState
 } from '../ZCGameTypes';
 import type { ZCLegacyBuffApplication, ZCLegacySkillEvaluation } from '../ZCLegacySkillEffect';
-import type { ZCOwner } from '../ZCMapConfig';
+import { ZCOwner } from '../ZCMapConfig';
 import type { ZCUnitStatPatch } from '../ZCModifierRuntime';
 import type { ZCSkillRuntimeDefinition } from '../ZCSkillRuntime';
 import { ZCCombatSystem } from './ZCCombatSystem';
@@ -59,9 +59,9 @@ export class ZCAttackResolutionSystem {
     }
 
     private static targetOwner(state: ZCSnapshot, target: ZCCombatTarget, context: IZCAttackResolutionContext): ZCOwner {
-        if (target.kind === 'unit') return context.unitById.get(target.id)?.owner ?? 'enemy';
+        if (target.kind === 'unit') return context.unitById.get(target.id)?.owner ?? ZCOwner.Enemy;
         const owner = this.hex(state, target.id)?.owner;
-        return owner && owner !== 'neutral' ? owner : 'enemy';
+        return owner && owner !== 'neutral' ? owner : ZCOwner.Enemy;
     }
 
     private static hex(state: ZCSnapshot, id: number): ZCHexState | null {

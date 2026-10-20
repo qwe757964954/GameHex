@@ -10,7 +10,7 @@ import {
     HEX_GRID_VIEW_COLUMN_SPACING,
     HEX_GRID_VIEW_ROW_SPACING,
 } from '../../../core/hex/HexGridLayout';
-import type { ZCFaction, ZCOwner } from '../model/ZCMapConfig';
+import { ZCFaction, ZCOwner } from '../model/ZCMapConfig';
 import type { ZCNeutralResourceId } from '../model/ZCNeutralResourceReward';
 
 export const ZC_MAP_PRESENTATION_SCALE = 1;
@@ -37,7 +37,7 @@ export function mapToViewY(y: number): number { return y * ZC_MAP_SCALE_Y; }
 /**
  * 开局镜头的落点：**我方主城**那一格的视图坐标；地图还没定主城时为 `null`。
  *
- * 口径与 `ZCGameModel.homeId('player')` 一致：`homes[0]` 优先、缺省退回 `playerHomeId`。
+ * 口径与 `ZCGameModel.homeId(ZCOwner.Player)` 一致：`homes[0]` 优先、缺省退回 `playerHomeId`。
  * **与人数无关** —— 3 / 4 人图上 `homes[0]` 仍然是我方（第 1 席）主城。
  * `cityMode === 'select'` 一律返回 `null`：那种图的 `homes` 只是给玩家看的**默认建议**，
  * 真正的主城要等选点确认（`ZCGame.finishSpawnSelection`）才知道，提前拿去当镜头落点会停在错的格子上。
@@ -150,9 +150,9 @@ export function pickHealthBarFill(
     enemy3: SpriteFrame,
 ): SpriteFrame {
     switch (owner) {
-        case 'player': return player;
-        case 'enemy2': return enemy2;
-        case 'enemy3': return enemy3;
+        case ZCOwner.Player: return player;
+        case ZCOwner.Enemy2: return enemy2;
+        case ZCOwner.Enemy3: return enemy3;
         default: return enemy;
     }
 }
@@ -516,7 +516,7 @@ export interface ZCVictorySweepPlan {
  *  - 胜利方是**我方** ⇒ 起点在最下方那行，往上推（`maxRow - row`）；
  *  - 胜利方是**其他玩家** ⇒ 起点在最上方那行，往下推（`row - minRow`）。
  *
- * ⚠️ 判据必须是 `winner === 'player'`（而不是旧版 `winner === 'enemy'`）：四人局里的
+ * ⚠️ 判据必须是 `winner === ZCOwner.Player`（而不是旧版 `winner === ZCOwner.Enemy`）：四人局里的
  * `enemy2` / `enemy3` 也是「其他玩家」，旧写法会把它们当成我方、从下往上推 —— 需求明确
  * 「其他玩家从最上方的格子往下填充」。
  */
@@ -530,7 +530,7 @@ export function buildVictorySweepPlan(
     const minRow = Math.min(...rows);
     const maxRow = Math.max(...rows);
     // row 越大越靠下（`minRow` = 最上方那行）—— 与 `HEX_GRID_VIEW_ROW_SPACING` 的取号方向一致。
-    const layerOf = (row: number): number => (winner === 'player' ? maxRow - row : row - minRow);
+    const layerOf = (row: number): number => (winner === ZCOwner.Player ? maxRow - row : row - minRow);
     // 按行分组：同一 layer（=同一行）的所有格共用一个步号。
     const layerSet = new Set(playable.map((hex) => layerOf(hex.row)));
     const layerList = Array.from(layerSet).sort((a, b) => a - b);
@@ -752,7 +752,7 @@ export const ZC_CLAIM_WAVE_ACCEL_POWER = 0.65;
  * 与开局扩散波的**终点色**（`ZCClaimWaveCallbacks.tintOwnerOf`）。
  */
 export function territoryTintOwner(owner: ZCFaction, canDevelop: boolean): ZCFaction {
-    return owner === 'neutral' && canDevelop ? 'player' : owner;
+    return owner === 'neutral' && canDevelop ? ZCOwner.Player : owner;
 }
 
 export interface ZCClaimWaveEntry {

@@ -1,4 +1,5 @@
 import { Color, instantiate, Material, Node, Prefab, Sprite, SpriteFrame, UITransform, Vec3, Vec4 } from 'cc';
+import { ZCOwner } from '../model/ZCMapConfig';
 import type { ZCGameRenderFrame } from '../model/ZCGameRenderFrame';
 import {
     shouldRenderWallEdge,
@@ -172,7 +173,7 @@ export class ZCWallRenderer {
                 const rightJoined = isLocalRightAtEnd ? endJoined : startJoined;
                 joinMask = (leftJoined ? 1 : 0) | (rightJoined ? 2 : 0);
             }
-            const isEnemyWall = wallState.owner !== 'player' && wallState.owner !== 'neutral';
+            const isEnemyWall = wallState.owner !== ZCOwner.Player && wallState.owner !== 'neutral';
             const greenBlue = isEnemyWall ? 190 : 255;
             sprite.color = new Color(255, greenBlue, wallMaterial
                 ? wallFrameIndex * WALL_JOIN_ALPHA_STEP

@@ -23,7 +23,7 @@ import {
     type ZCUnitState,
 } from '../model/ZCGameTypes';
 import { ZC_OWNER_ORDER } from '../model/ZCMapConfig';
-import type { ZCFaction, ZCHexConfig, ZCOwner } from '../model/ZCMapConfig';
+import { ZCFaction, ZCHexConfig, ZCOwner } from '../model/ZCMapConfig';
 import type { ZCBattlePresentationEvents, ZCGameRenderFrame } from '../model/ZCGameRenderFrame';
 import { ZCUnitView } from './ZCUnitView';
 import { ZCUnitRenderInterpolator } from './ZCUnitRenderInterpolator';
@@ -202,7 +202,7 @@ export class ZCGameRenderWorld {
      * 阵营的稳定序号 —— 只用于共享轮廓的「内容探针」（把 `ZCFaction` 压成一个数字好比对）。
      *  顺序变了会导致探针数值错位；追加新阵营时**只许往后加**。
      */
-    private static readonly FACTION_ORDER: readonly ZCFaction[] = ['neutral', 'player', 'enemy', 'enemy2', 'enemy3'];
+    private static readonly FACTION_ORDER: readonly ZCFaction[] = ['neutral', ZCOwner.Player, ZCOwner.Enemy, ZCOwner.Enemy2, ZCOwner.Enemy3];
 
     /**
      * 触发传说卡出场横幅的品级。`ZC_RARITY_BY_RANK` 的 `4 = 金`（`rarityNameOfTier` 叫「传说」），
@@ -684,16 +684,16 @@ export class ZCGameRenderWorld {
         const boundaryMasks = buildTerritoryBoundaryMasks(
             selection.map.hexes, this.spawnOwnerForHex, this.spawnBoundaryMasks);
         const selectedHexId = playerSelection !== null
-            && selection.invalidReason('player', playerSelection) === null ? playerSelection : null;
+            && selection.invalidReason(ZCOwner.Player, playerSelection) === null ? playerSelection : null;
         // 我方基地的 6 格高亮：**只在「我方还在选点」期间**给。`isPlacing` 一转 false（玩家点了
         // 【确认位置】）高亮就没了、按钮也收起来 —— 需求 4「基地落定，高亮消失」。注意整体阶段
         // 此时可能还没结束（要等 AI 确认），所以判据用 `isPlacing` 而不是 `snapshot.finished`。
         // 邻格取法统一在 `ZCSpawnSelection.baseNeighborIds` 里（自己别再拼一份 neighbors）。
-        const playerBaseId = selection.isPlacing('player') ? playerSelection : null;
+        const playerBaseId = selection.isPlacing(ZCOwner.Player) ? playerSelection : null;
         const playerBaseNeighbors = this.spawnPlayerBaseNeighbors;
         playerBaseNeighbors.clear();
         if (playerBaseId !== null) {
-            for (const id of selection.baseNeighborIds('player')) playerBaseNeighbors.add(id);
+            for (const id of selection.baseNeighborIds(ZCOwner.Player)) playerBaseNeighbors.add(id);
         }
         this.redrawSharedOutline(selection.map.hexes, boundaryMasks, 'spawn', selectedHexId);
         if (!this.spawnRegionHintOverlay) {
@@ -712,9 +712,9 @@ export class ZCGameRenderWorld {
             const homeOwner = homeNeighborOwner.get(config.id);
             const sectionOwner = homeOwner ?? sectionOwnerByHex.get(config.id) ?? 'neutral';
             const chosen = selectedByHex.get(config.id);
-            const blocked = sectionOwner === 'player'
+            const blocked = sectionOwner === ZCOwner.Player
                 && !selection.isResourcePoint(config.id)
-                && selection.invalidReason('player', config.id) !== null;
+                && selection.invalidReason(ZCOwner.Player, config.id) !== null;
             this.hexViews.get(entityId)?.renderSpawnSelection({
                 sectionOwner,
                 selectedBy: chosen?.owner ?? null,
@@ -742,7 +742,7 @@ export class ZCGameRenderWorld {
      *  坐标口径与地块完全一致（`mapToViewX/Y` 的棋盘层局部坐标）—— 按钮已被 `ZCGame` 改挂到
      *  `mapLayer` 下，和基地建筑同层同缩放，所以「2 格间距」在世界坐标里恒成立，不随地图缩放漂移。
      *
-     *  只有**我方正在选点**时才显示：玩家一确认（`isPlacing('player')` 转 false，尽管整体阶段
+     *  只有**我方正在选点**时才显示：玩家一确认（`isPlacing(ZCOwner.Player)` 转 false，尽管整体阶段
      *  要等我方与 AI 都确认才结束）按钮就收起来 —— 需求 4「点击【确认位置】后退出选基地模式」。
      *  显隐之外的一切（绿勾染色、点击回调）仍归 `ZCSpawnSelectionView`，这里**不**重复管，
      *  避免同一个按钮出现两套判据。
@@ -1345,7 +1345,7 @@ export class ZCGameRenderWorld {
             const hex = frame.hexesById.get(activation.hexId);
             if (!hex) continue;
             const state = hex.state;
-            const owner: ZCFaction = state.owner === 'neutral' && hex.canDevelop ? 'player' : state.owner;
+            const owner: ZCFaction = state.owner === 'neutral' && hex.canDevelop ? ZCOwner.Player : state.owner;
             this.hexViews.get(entityId)?.renderActivation(activation, now, owner);
         }
     }

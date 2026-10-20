@@ -6,7 +6,7 @@ import {
     ZCBuildingType, ZCCombatFloatTextKind, ZCCombatTargetKind,
     ZCGameStatus, ZCTileState, ZCUnitBattleState,
 } from './ZCGameTypes';
-import { ownersForPlayerCount, type ZCFaction, type ZCOwner } from './ZCMapConfig';
+import { ownersForPlayerCount, type ZCFaction, ZCOwner } from './ZCMapConfig';
 import type { ZCMatchConfig } from './ZCMatchConfig';
 import { resolveZCUnitDefinition } from './ZCModifierRuntime';
 import { ZCNeutralResourceId } from './ZCNeutralResourceReward';
@@ -361,7 +361,7 @@ export class ZCSnapshotCodec {
             if (typeof data.attackHitDone !== 'boolean') data.attackHitDone = false;
             if (data.hatredUnitId === undefined) data.hatredUnitId = null;
             if (!Number.isFinite(data.hatredUntil)) data.hatredUntil = 0;
-            if (!Number.isFinite(data.facingRadians)) data.facingRadians = unit.owner === 'player' ? Math.PI / 2 : -Math.PI / 2;
+            if (!Number.isFinite(data.facingRadians)) data.facingRadians = unit.owner === ZCOwner.Player ? Math.PI / 2 : -Math.PI / 2;
             if (!Number.isFinite(data.deathRemoveAt)) data.deathRemoveAt = 0;
             //  旧 version 4 快照用 `attackCount`（已完成的普攻次数）——2026-10-13 改名 `completedAttackCount`，
             //  该名字现在归「一次普攻打几段」所有。读侧两种都认，写侧只写新名。

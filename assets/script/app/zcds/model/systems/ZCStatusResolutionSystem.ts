@@ -1,9 +1,8 @@
-import type { IZCModelServices } from './ZCModelServices';
-import type { ZCUnitDefinition } from '../ZCCombatCatalog';
-import type { ZCDamageSource, ZCSnapshot, ZCUnitState } from '../ZCGameTypes';
-import type { ZCOwner } from '../ZCMapConfig';
+import type { ZCSnapshot, ZCUnitState } from '../ZCGameTypes';
+import { ZCOwner } from '../ZCMapConfig';
+import type { ZCPeriodicEvent } from '../ZCStatusEffect';
 import { ZCStatusBasis, ZCStatusEffectKind } from '../ZCStatusEffect';
-import type { ZCPeriodicEvent, ZCStatusSystem } from '../ZCStatusEffect';
+import type { IZCModelServices } from './ZCModelServices';
 
 export interface IZCStatusResolutionContext extends Pick<IZCModelServices, 'statusSystem' | 'effectiveDefinition' | 'unitPosition' | 'damageUnit'> {
     readonly unitById: ReadonlyMap<number, ZCUnitState>;
@@ -76,7 +75,7 @@ export class ZCStatusResolutionSystem {
         if (event.effect === ZCStatusEffectKind.Damage) {
             context.damageUnit(target, amount, {
                 owner: event.sourceOwner ?? sourceUnit?.owner
-                    ?? context.owners.find((owner) => owner !== target.owner) ?? 'player',
+                    ?? context.owners.find((owner) => owner !== target.owner) ?? ZCOwner.Player,
                 kind: 'unit',
                 unitId: sourceUnit?.id,
             });

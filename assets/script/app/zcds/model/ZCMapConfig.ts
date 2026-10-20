@@ -853,7 +853,7 @@ export function configureZCMap(layout: ZCMapLayout): void {
     const playableCount = playable.filter(Boolean).length;
     if (visited.size !== playableCount) throw new Error('地图可用格必须全部连通');
 
-    const playerIds = owners.flatMap((owner, id) => owner === 'player' ? [id] : []);
+    const playerIds = owners.flatMap((owner, id) => owner === ZCOwner.Player ? [id] : []);
     const enemyIds = owners.flatMap((owner, id) => owner === ZCOwner.Enemy ? [id] : []);
 
     const mirrorIds = Array.from({ length: owners.length }, (_, id) => id);
@@ -888,7 +888,7 @@ export function configureZCMap(layout: ZCMapLayout): void {
         } else if (hasHome) {
             pair(enemyHomeId, playerHomeId);
             const enemyNeighbors = neighborsOf(enemyHomeId).filter((id) => owners[id] === ZCOwner.Enemy).sort((a, b) => a % columns - b % columns);
-            const playerNeighbors = neighborsOf(playerHomeId).filter((id) => owners[id] === 'player').sort((a, b) => a % columns - b % columns);
+            const playerNeighbors = neighborsOf(playerHomeId).filter((id) => owners[id] === ZCOwner.Player).sort((a, b) => a % columns - b % columns);
             if (enemyNeighbors.length !== playerNeighbors.length) throw new Error('双方主城的相邻地块数必须相同');
             for (let index = 0; index < enemyNeighbors.length; index += 1) pair(enemyNeighbors[index], playerNeighbors[index]);
             // `freeEnemy` / `freePlayer` 是 Set：release 构建会把 `[...set]` 降级成

@@ -18,6 +18,7 @@
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { ZCOwner } from '../assets/script/app/zcds/model/ZCMapConfig';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
@@ -241,7 +242,7 @@ function loadZCGameClass(): { ZCGame: any; Widget: unknown } {
         './model/ZCCombatCatalog': {}, './view/ZCGameHUDView': {}, './model/ZCGameModel': {},
         './model/ZCRankBoard': { buildRankSeats: () => [] },
         './view/ZCGameRankBoard': { ZCGameRankBoard: class {} },
-        './model/ZCMapConfig': { ZC_OWNER_ORDER: ['player', 'enemy'] },
+        './model/ZCMapConfig': { ZC_OWNER_ORDER: ['player', 'enemy'], ZCOwner },
         './model/ZCMatchConfig': { captureZCMatchConfig: () => ({}) },
         './model/ZCSpawnSelection': {}, './view/ZCSpawnSelectionView': {},
         './view/ZCHudBossPanel': {}, './application/ZCClientCombatConfig': {},

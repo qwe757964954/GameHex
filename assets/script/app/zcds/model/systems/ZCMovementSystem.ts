@@ -1,5 +1,5 @@
 import type { ZCUnitState } from '../ZCGameTypes';
-import type { ZCOwner } from '../ZCMapConfig';
+import { ZCOwner } from '../ZCMapConfig';
 import type { ZCMatchMap } from '../ZCMatchConfig';
 import type { IZCModelServices } from './ZCModelServices';
 
@@ -40,7 +40,7 @@ export class ZCMovementSystem {
         if (unit.marchAngle === null) return;
         const definition = this.context.effectiveDefinition(unit);
         const bonuses = this.context.bonuses(unit.owner);
-        const frozenMultiplier = unit.owner !== 'player' && this.context.frozenSeconds() > 0
+        const frozenMultiplier = unit.owner !== ZCOwner.Player && this.context.frozenSeconds() > 0
             ? this.context.rules.artifactEnemySpeedMultiplier : 1;
         const step = definition.moveSpeed * bonuses.moveSpeedMultiplier * frozenMultiplier * dt;
         const nx = unit.freeX + Math.cos(unit.marchAngle) * step;
@@ -66,7 +66,7 @@ export class ZCMovementSystem {
         const current = this.position(unit);
         const definition = this.context.effectiveDefinition(unit);
         const bonuses = this.context.bonuses(unit.owner);
-        const frozenMultiplier = unit.owner !== 'player' && this.context.frozenSeconds() > 0
+        const frozenMultiplier = unit.owner !== ZCOwner.Player && this.context.frozenSeconds() > 0
             ? this.context.rules.artifactEnemySpeedMultiplier : 1;
         const remaining = distance(current.x, current.y, target.x, target.y);
         const step = definition.moveSpeed * bonuses.moveSpeedMultiplier * frozenMultiplier * dt;
@@ -92,7 +92,7 @@ export class ZCMovementSystem {
         const remaining = distance(current.x, current.y, destination.x, destination.y);
         const definition = this.context.effectiveDefinition(unit);
         const bonuses = this.context.bonuses(unit.owner);
-        const frozenMultiplier = unit.owner !== 'player' && this.context.frozenSeconds() > 0
+        const frozenMultiplier = unit.owner !== ZCOwner.Player && this.context.frozenSeconds() > 0
             ? this.context.rules.artifactEnemySpeedMultiplier : 1;
         const step = Math.min(remaining, definition.moveSpeed * bonuses.moveSpeedMultiplier * frozenMultiplier * dt);
         unit.targetHexId = null;

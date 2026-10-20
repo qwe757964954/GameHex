@@ -1,6 +1,6 @@
 import type { ZCBattleHero, ZCBattleStart, ZCBattleUnit } from '../../battle/BattleStartModel';
 import type { ZCDeckCard } from '../model/ZCCombatCatalog';
-import type { ZCOwner, ZCPlayerCount } from '../model/ZCMapConfig';
+import { ZCOwner, ZCPlayerCount } from '../model/ZCMapConfig';
 import { ownersForPlayerCount } from '../model/ZCMapConfig';
 import { captureZCMatchConfig, type ZCMatchConfig } from '../model/ZCMatchConfig';
 import type { ZCCompiledModifierLoadout } from '../model/ZCModifierRuntime';
@@ -127,7 +127,7 @@ function clientHeroIdsForOwner(
 }
 
 function defaultHeroIds(config: ZCMatchConfig, owner: ZCOwner): number[] {
-    const deck = config.ownerDecks?.[owner] ?? (owner === 'player' ? config.playerDeck : config.enemyDeck);
+    const deck = config.ownerDecks?.[owner] ?? (owner === ZCOwner.Player ? config.playerDeck : config.enemyDeck);
     return uniqueHeroIds(deck
         .map((card) => Number(card.unitId))
         .filter((unitId) => Number.isSafeInteger(unitId) && unitId > 0));
@@ -213,7 +213,7 @@ export function buildZCClientCombatConfig(
     }
     const ownerDecks: Partial<Record<ZCOwner, readonly ZCDeckCard[]>> = {};
     for (const owner of owners) {
-        const sourceDeck = config.ownerDecks?.[owner] ?? (owner === 'player' ? config.playerDeck : config.enemyDeck);
+        const sourceDeck = config.ownerDecks?.[owner] ?? (owner === ZCOwner.Player ? config.playerDeck : config.enemyDeck);
         ownerDecks[owner] = hasRemoteHeroes(battleUnits[owner])
             ? buildBattleDeck(sourceDeck, roster[owner] ?? [])
             : sourceDeck;

@@ -1,10 +1,10 @@
 import type { ZCDeckCard } from '../model/ZCCombatCatalog';
-import type { ZCOwner } from '../model/ZCMapConfig';
+import { ZCOwner } from '../model/ZCMapConfig';
 
 /** 领地 NPC 只占敌方席位（`player` 永远留给本机玩家）。 */
 type ZCPveEnemyOwner = Exclude<ZCOwner, 'player'>;
 
-const ENEMY_OWNERS: readonly ZCPveEnemyOwner[] = ['enemy', 'enemy2', 'enemy3'];
+const ENEMY_OWNERS: readonly ZCPveEnemyOwner[] = [ZCOwner.Enemy, ZCOwner.Enemy2, ZCOwner.Enemy3];
 
 /** Keeps each territory NPC team's playable cards on its own AI seat. */
 export function buildZCPveEnemyDecks(

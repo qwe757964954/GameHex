@@ -1,4 +1,5 @@
 import { Color, Label, Node, Sprite, SpriteFrame, UIOpacity, UITransform } from 'cc';
+import { ZCOwner } from '../model/ZCMapConfig';
 import {
     ZC_NEUTRAL_REWARD_COIN_COUNT,
     ZC_NEUTRAL_REWARD_COIN_STAGGER,
@@ -244,7 +245,7 @@ export class ZCNeutralRewardFx {
         }
         for (const event of events) {
             // 非玩家领取不播飞行：金币 / 神器目标都在**玩家自己的** HUD 上（2026-10-20 口径）。
-            if (event.owner !== 'player') continue;
+            if (event.owner !== ZCOwner.Player) continue;
             const kind = this.kindOf(event.resourceId);
             if (!kind) continue;
             let entry = this.entries.get(event.id);

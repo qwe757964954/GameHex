@@ -1,7 +1,7 @@
 import { ZCDC_LOG_DIAGNOSTICS } from '../../ZCDCLogSwitch';
 import type { ZCRuntimeRules } from '../ZCGameRuntimeConfig';
 import type { ZCHexState, ZCSnapshot, ZCUnitState } from '../ZCGameTypes';
-import { ZC_OWNER_ORDER, type ZCOwner } from '../ZCMapConfig';
+import { ZC_OWNER_ORDER, ZCOwner } from '../ZCMapConfig';
 import type { ZCMapGeometry } from '../ZCMapGeometry';
 import type { ZCMatchMap } from '../ZCMatchConfig';
 
@@ -118,7 +118,7 @@ export class ZCCaptureSystem {
         this.diagStep += 1;
         if (this.diagStep % 60 !== 0) return;
         for (const hex of state.hexes) {
-            if (hex.owner === 'player') continue;
+            if (hex.owner === ZCOwner.Player) continue;
             const occupants = this.occupants.get(hex.id);
             if (!occupants?.player) continue;
             const reasons: string[] = [];
@@ -132,7 +132,7 @@ export class ZCCaptureSystem {
                 reasons.push(`争夺(${present.map((entry) => `${entry.owner}:${entry.count}`).join(',')})`);
             }
             if (this.rules.captureRequireSupply) {
-                const supplied = this.suppliedHexes(state, 'player');
+                const supplied = this.suppliedHexes(state, ZCOwner.Player);
                 const ok = this.map.hexes[hex.id].neighbors.some((id) => supplied.has(id));
                 if (!ok) {
                     const near = this.map.hexes[hex.id].neighbors
@@ -140,7 +140,7 @@ export class ZCCaptureSystem {
                     reasons.push(`无补给(邻格 ${near})`);
                 }
             }
-            if (hex.captureOwner && hex.captureOwner !== 'player') {
+            if (hex.captureOwner && hex.captureOwner !== ZCOwner.Player) {
                 reasons.push(`换手中(captureOwner=${hex.captureOwner})`);
             }
             console.warn(`[ZCCapture] hex=${hex.id} 有我方兵但未占领：owner=${hex.owner} state=${hex.state} `
@@ -187,7 +187,7 @@ export class ZCCaptureSystem {
     private suppliedHexes(state: ZCSnapshot, owner: ZCOwner): Set<number> {
         const ownerIndex = ZC_OWNER_ORDER.indexOf(owner);
         const homeId = this.map.homes?.[ownerIndex]
-            ?? (owner === 'player' ? this.map.playerHomeId : this.map.enemyHomeId);
+            ?? (owner === ZCOwner.Player ? this.map.playerHomeId : this.map.enemyHomeId);
         if (state.hexes[homeId]?.owner !== owner) return new Set<number>();
         const supplied = new Set<number>([homeId]);
         const queue = [homeId];

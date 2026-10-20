@@ -1581,7 +1581,7 @@ export class ZCHexView extends Component {
         hideNeutralResourceLabel: boolean,
         showDevelopable = false,
     ): void {
-        const enemyCanDevelop = state.owner !== 'player' && state.owner !== 'neutral' && state.state === 'developable'
+        const enemyCanDevelop = state.owner !== ZCOwner.Player && state.owner !== 'neutral' && state.state === 'developable'
             && state.building === 'none' && !state.developmentResolved;
         const ruins = state.state === 'ruins';
         const hasBuilding = !canDevelop && !ruins && state.building !== 'none';
@@ -1773,7 +1773,7 @@ export class ZCHexView extends Component {
     private buildingTint(state: Readonly<ZCHexState>, ruins: boolean): Color {
         if (ruins) return Color.WHITE;
         if (state.owner === ZCOwner.Enemy) return ZCHexView.ENEMY_BUILDING_COLOR;
-        if (state.owner === 'enemy2' || state.owner === 'enemy3') return zcFactionColor(state.owner);
+        if (state.owner === ZCOwner.Enemy2 || state.owner === ZCOwner.Enemy3) return zcFactionColor(state.owner);
         return Color.WHITE;
     }
 

@@ -459,10 +459,10 @@ export class ZCUnitView extends Component {
             const attackRestarted = attacking && (unit.completedAttackCount ?? 0) !== this.lastAttackCount;
             this.playClip(clip, attackRestarted);
             this.lastAttackCount = unit.completedAttackCount ?? 0;
-            // 「其他玩家」= 非我方席位，与领地染色 / 城墙敌我判定同一个口径（`owner !== 'player'`）。
+            // 「其他玩家」= 非我方席位，与领地染色 / 城墙敌我判定同一个口径（`owner !== ZCOwner.Player`）。
             // 优先级：阵亡 > 其他玩家 > 原色 —— 阵亡那条 alpha 190 已经在表达状态，再叠一层灰没有额外信息。
             this.applyVisualTint(unit.battleState === 'dead' ? ZCUnitView.TINT_DEAD
-                : unit.owner === 'player' ? ZCUnitView.TINT_WHITE : ZCUnitView.TINT_OTHER_PLAYER);
+                : unit.owner === ZCOwner.Player ? ZCUnitView.TINT_WHITE : ZCUnitView.TINT_OTHER_PLAYER);
         }
 
         this.renderOutline(unit);
@@ -479,7 +479,7 @@ export class ZCUnitView extends Component {
         const skeleton = this.outlineCopySkeleton;
         if (!copy || !skeleton) return;
         const isVisible = this.outlineCopyMaterial !== null && this.visualSkeleton !== null
-            && unit.owner !== 'player' && unit.battleState !== 'dead';
+            && unit.owner !== ZCOwner.Player && unit.battleState !== 'dead';
         if (copy.active !== isVisible) {
             copy.active = isVisible;
             // 从隐藏恢复显示时强制重对齐一次动画与轨道时间（防止隐藏期间未 update 导致相位脱节）。

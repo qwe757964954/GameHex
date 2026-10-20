@@ -26,7 +26,7 @@ import { createSeededRandom } from './model/ZCSeededRandom';
 import { buildRankSeats, type IRankSeat, type IRankSeatProfile } from './model/ZCRankBoard';
 import { ZCGameRankBoard } from './view/ZCGameRankBoard';
 // `ZC_OWNER_ORDER` 是值（遍历本局全部 owner 的卡池），不是纯类型。
-import { ZC_OWNER_ORDER, resolveZCMapZoom, type ZCOwner } from './model/ZCMapConfig';
+import { ZC_OWNER_ORDER, resolveZCMapZoom, ZCOwner } from './model/ZCMapConfig';
 import { captureZCMatchConfig } from './model/ZCMatchConfig';
 import type { ZCMatchConfig, ZCMatchMap } from './model/ZCMatchConfig';
 import { resolveZCMapResources, resolveZCSpawnMatchConfig, ZCSpawnSelection } from './model/ZCSpawnSelection';
@@ -235,7 +235,7 @@ export class ZCGame extends Component {
     private beginVictorySweep(frame: ZCGameRenderFrame): boolean {
         const status = frame.snapshot.status;
         if (status !== 'victory' && status !== 'defeat') return false;
-        const winner = status === 'victory' ? 'player' : 'enemy';
+        const winner = status === 'victory' ? ZCOwner.Player : ZCOwner.Enemy;
         return this.renderWorld.startVictorySweep(frame, winner);
     }
 
@@ -312,8 +312,8 @@ export class ZCGame extends Component {
             if (!player && !enemy) return;
             // 头像帧落在控制器上（横幅按 owner 现取）；这里只通知渲染世界补刷**已经弹出来**的横幅。
             const portraits = new Map<string, SpriteFrame>();
-            if (player) portraits.set('player', player);
-            if (enemy) portraits.set('enemy', enemy);
+            if (player) portraits.set(ZCOwner.Player, player);
+            if (enemy) portraits.set(ZCOwner.Enemy, enemy);
             this.legendPortraitFrames = portraits;
             this.renderWorld.refreshLegendCardArt();
         });
@@ -340,7 +340,7 @@ export class ZCGame extends Component {
         const config = this.matchConfig;
         const decks: ReadonlyArray<readonly ZCDeckCard[]> = [
             ...(config ? ZC_OWNER_ORDER.map((owner) => (
-                config.ownerDecks?.[owner] ?? (owner === 'player' ? config.playerDeck : config.enemyDeck)
+                config.ownerDecks?.[owner] ?? (owner === ZCOwner.Player ? config.playerDeck : config.enemyDeck)
             )) : []),
             getPlayerDeck(),
             getEnemyDeck(),
@@ -615,7 +615,7 @@ export class ZCGame extends Component {
         if (this.settlementOpened) return;
         if (this.hudView.dragMoved) return;
         if (this.spawnSelection) {
-            const result = this.spawnSelection.select('player', hexId);
+            const result = this.spawnSelection.select(ZCOwner.Player, hexId);
             if (!result.ok) this.spawnSelectionView?.flash(result.message);
             this.renderSpawnSelection();
             return;
@@ -683,7 +683,7 @@ export class ZCGame extends Component {
 
     private confirmSpawnSelection(): void {
         if (!this.spawnSelection) return;
-        const result = this.spawnSelection.confirm('player');
+        const result = this.spawnSelection.confirm(ZCOwner.Player);
         if (!result.ok) this.spawnSelectionView?.flash(result.message);
         this.renderSpawnSelection();
         if (this.spawnSelection.snapshot.finished) this.finishSpawnSelection();
@@ -910,7 +910,7 @@ export class ZCGame extends Component {
     /** 把本局伤害汇总转成 CmdBattleStatisticsInfo 上报给服务端。 */
     private buildStatistics(): CmdBattleStatisticsInfo[] {
         const stats = this.model.damageStats;
-        const opponents = Object.entries(stats).filter(([owner]) => owner !== 'player');
+        const opponents = Object.entries(stats).filter(([owner]) => owner !== ZCOwner.Player);
         const enemyDealt = opponents.reduce((total, [, v]) => total + v.dealt, 0);
         const enemyTaken = opponents.reduce((total, [, v]) => total + v.taken, 0);
         return [
@@ -920,17 +920,17 @@ export class ZCGame extends Component {
 
     private damageSummary() {
         const stats = this.model.damageStats;
-        const opponents = Object.entries(stats).filter(([owner]) => owner !== 'player');
+        const opponents = Object.entries(stats).filter(([owner]) => owner !== ZCOwner.Player);
         return {
             mine: {
                 // 昵称取席位档案（HUD 的两方版 `leftPlayer.nameLabel` 已在「多队伍」改造中移除；
                 // 左侧玩家行接入后这里也是同一份数据源，不会漂）。
-                name: this.seatProfiles.get('player')?.name || '我方',
+                name: this.seatProfiles.get(ZCOwner.Player)?.name || '我方',
                 damage: stats.player.dealt,
                 damageTaken: stats.player.taken,
             },
             enemy: {
-                name: this.seatProfiles.get('enemy')?.name || '敌方',
+                name: this.seatProfiles.get(ZCOwner.Enemy)?.name || '敌方',
                 damage: opponents.reduce((total, [, value]) => total + value.dealt, 0),
                 damageTaken: opponents.reduce((total, [, value]) => total + value.taken, 0),
             },

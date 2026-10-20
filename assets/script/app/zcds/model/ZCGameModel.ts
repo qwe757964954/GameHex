@@ -775,7 +775,7 @@ export class ZCGameModel {
                 ? Math.max(0, next.showAtSeconds - this.state.elapsedSeconds)
                 : null,
             aliveEnemies: this.state.units.reduce((count, unit) => (
-                unit.owner !== 'player' && unit.battleState !== 'dead' ? count + 1 : count
+                unit.owner !== ZCOwner.Player && unit.battleState !== 'dead' ? count + 1 : count
             ), 0),
             currentWaveHp,
             currentWaveMaxHp: ledger?.maxHp ?? 0,
@@ -785,7 +785,7 @@ export class ZCGameModel {
     }
 
     get playerTerritoryCount(): number {
-        return this.territoryCount('player');
+        return this.territoryCount(ZCOwner.Player);
     }
 
     /**
@@ -807,7 +807,7 @@ export class ZCGameModel {
     }
 
     get playerDevelopedCount(): number {
-        return this.developedCount('player');
+        return this.developedCount(ZCOwner.Player);
     }
 
     get enemyDevelopedCount(): number {
@@ -816,12 +816,12 @@ export class ZCGameModel {
 
     get playerIncomePerSecond(): number {
         return this.rules.hqIncomeAmount / this.rules.hqIncomeIntervalSeconds
-            + this.bonusesFor('player').incomeBonus
-            + this.mineIncome('player');
+            + this.bonusesFor(ZCOwner.Player).incomeBonus
+            + this.mineIncome(ZCOwner.Player);
     }
 
     get playerBonds(): readonly string[] {
-        return this.bonusesFor('player').activeBonds;
+        return this.bonusesFor(ZCOwner.Player).activeBonds;
     }
 
     get unitCap(): number {
@@ -844,7 +844,7 @@ export class ZCGameModel {
     }
 
     get playerScore(): ZCScoreBreakdown {
-        return ZCOutcomeSystem.scoreFor(this.state, 'player', this.homeId('player'));
+        return ZCOutcomeSystem.scoreFor(this.state, ZCOwner.Player, this.homeId(ZCOwner.Player));
     }
 
     /** 从指定已开发格出发，返回同阵营六方向相邻的完整连通块；抽空格也算已开发。 */
@@ -877,7 +877,7 @@ export class ZCGameModel {
     }
 
     canPlayerDevelop(hexId: number): boolean {
-        return this.canDevelopFor('player', hexId);
+        return this.canDevelopFor(ZCOwner.Player, hexId);
     }
 
     /**
@@ -897,12 +897,12 @@ export class ZCGameModel {
         if (!this.canPlayerDevelop(hexId)) return this.fail('该地块当前不可开发。');
         // 这一条带结构化原因：棋盘上给不出「钱不够」的可见反馈（那格的图标与价格照旧），
         // 只能由 HUD 的金币栏表达 ⇒ 表现层要看 `reason` 而不是这段中文。
-        if (this.goldOf('player') < hex.developmentCost) {
+        if (this.goldOf(ZCOwner.Player) < hex.developmentCost) {
             return this.fail(`金币不足，需要 ${hex.developmentCost}。`, 'insufficientGold');
         }
-        this.setGold('player', this.goldOf('player') - hex.developmentCost);
+        this.setGold(ZCOwner.Player, this.goldOf(ZCOwner.Player) - hex.developmentCost);
         this.chargeArtifactFromDevelopment();
-        return this.developFor('player', hex);
+        return this.developFor(ZCOwner.Player, hex);
     }
 
     useArtifact(): ZCActionResult {
@@ -912,7 +912,7 @@ export class ZCGameModel {
             return this.fail(activation.reason === 'cooldown' ? '神器正在冷却。' : '神器尚未充满。');
         }
         for (const unit of this.state.units) {
-            if (unit.owner !== 'player' && unit.battleState !== 'dead') this.damageUnit(unit, this.rules.artifactDamage, { owner: 'player', kind: 'artifact' });
+            if (unit.owner !== ZCOwner.Player && unit.battleState !== 'dead') this.damageUnit(unit, this.rules.artifactDamage, { owner: ZCOwner.Player, kind: 'artifact' });
         }
         this.removeDeadUnits();
         // 释放技能：神器是全局技，没有落点 ⇒ `params` 不传（协议注明「如无不用传」）。
@@ -1334,7 +1334,7 @@ export class ZCGameModel {
     /** 选点结束、正式模型建立后记录我方最终出生格；重复通知不重复入队。 */
     recordSpawnSelection(): void {
         if (this.frameEvents.some((event) => event.op === FRAME_OP_SPAWN)) return;
-        this.pushFrameEvent(FRAME_OP_SPAWN, [this.homeId('player')]);
+        this.pushFrameEvent(FRAME_OP_SPAWN, [this.homeId(ZCOwner.Player)]);
     }
 
     /**
@@ -1526,13 +1526,13 @@ export class ZCGameModel {
             // 先占位再生成：波序与账本下标必须**逐位对齐**，中途 `continue` 也不能错位。
             const ledger = { ids: [] as number[], maxHp: 0 };
             this.defenceWaveLedger[this.nextDefenceWaveIndex - 1] = ledger;
-            const card = this.cardById('enemy', wave.cardId);
+            const card = this.cardById(ZCOwner.Enemy, wave.cardId);
             if (!card?.unitId) {
                 continue;
             }
             const count = Math.max(0, Math.floor(wave.monsterCount));
             for (let index = 0; index < count; index += 1) {
-                const unit = this.spawnUnit('enemy', card, Math.max(1, Math.floor(wave.tier)), this.homeId('enemy'), {
+                const unit = this.spawnUnit(ZCOwner.Enemy, card, Math.max(1, Math.floor(wave.tier)), this.homeId(ZCOwner.Enemy), {
                     hpRate: wave.hpRate,
                     attackRate: wave.attackRate,
                 });
@@ -1600,17 +1600,17 @@ export class ZCGameModel {
 
     private deckFor(owner: ZCOwner): readonly ZCDeckCard[] {
         return this.config.ownerDecks?.[owner]
-            ?? (owner === 'player' ? this.config.playerDeck : this.config.enemyDeck);
+            ?? (owner === ZCOwner.Player ? this.config.playerDeck : this.config.enemyDeck);
     }
 
     private homeId(owner: ZCOwner): number {
         const index = ZC_OWNER_ORDER.indexOf(owner);
         return this.config.map.homes?.[index]
-            ?? (owner === 'player' ? this.config.map.playerHomeId : this.config.map.enemyHomeId);
+            ?? (owner === ZCOwner.Player ? this.config.map.playerHomeId : this.config.map.enemyHomeId);
     }
 
     private goldOf(owner: ZCOwner): number {
-        if (owner === 'player') return this.state.playerGold;
+        if (owner === ZCOwner.Player) return this.state.playerGold;
         if (owner === ZCOwner.Enemy) return this.state.enemyGold;
         return this.state.goldByOwner?.[owner] ?? 0;
     }
@@ -1621,7 +1621,7 @@ export class ZCGameModel {
             this.state.goldByOwner = { player: this.state.playerGold, enemy: this.state.enemyGold, enemy2: 0, enemy3: 0 };
         }
         this.state.goldByOwner[owner] = normalized;
-        if (owner === 'player') this.state.playerGold = normalized;
+        if (owner === ZCOwner.Player) this.state.playerGold = normalized;
         else if (owner === ZCOwner.Enemy) this.state.enemyGold = normalized;
     }
 
@@ -1638,7 +1638,7 @@ export class ZCGameModel {
     private facingTowardGoal(owner: ZCOwner, fromHexId: number): number {
         const from = this.config.map.hexes[fromHexId];
         const goal = this.config.map.hexes[this.goalHomeId(owner, fromHexId)];
-        return goal ? Math.atan2(goal.y - from.y, goal.x - from.x) : (owner === 'player' ? Math.PI / 2 : -Math.PI / 2);
+        return goal ? Math.atan2(goal.y - from.y, goal.x - from.x) : (owner === ZCOwner.Player ? Math.PI / 2 : -Math.PI / 2);
     }
 
     private chargeArtifactFromDevelopment(): void {

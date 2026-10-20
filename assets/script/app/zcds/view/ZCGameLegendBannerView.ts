@@ -1,6 +1,6 @@
 import { _decorator, Color, Component, Label, Node, Sprite, SpriteFrame, UIOpacity, UITransform } from 'cc';
 import type { ZCCardReveal } from '../model/ZCGameTypes';
-import { ZC_OWNER_ORDER, type ZCOwner } from '../model/ZCMapConfig';
+import { ZC_OWNER_ORDER, ZCOwner } from '../model/ZCMapConfig';
 
 const { ccclass, property } = _decorator;
 
@@ -355,18 +355,18 @@ export class ZCGameLegendBannerView extends Component {
      */
     private bannerFor(owner: ZCOwner): SpriteFrame | null {
         switch (owner) {
-            case 'player': return this.bannerPlayer;
-            case 'enemy': return this.bannerEnemy;
-            case 'enemy2': return this.bannerEnemy2;
+            case ZCOwner.Player: return this.bannerPlayer;
+            case ZCOwner.Enemy: return this.bannerEnemy;
+            case ZCOwner.Enemy2: return this.bannerEnemy2;
             default: return this.bannerEnemy3;
         }
     }
 
     private ringFor(owner: ZCOwner): SpriteFrame | null {
         switch (owner) {
-            case 'player': return this.ringPlayer;
-            case 'enemy': return this.ringEnemy;
-            case 'enemy2': return this.ringEnemy2;
+            case ZCOwner.Player: return this.ringPlayer;
+            case ZCOwner.Enemy: return this.ringEnemy;
+            case ZCOwner.Enemy2: return this.ringEnemy2;
             default: return this.ringEnemy3;
         }
     }

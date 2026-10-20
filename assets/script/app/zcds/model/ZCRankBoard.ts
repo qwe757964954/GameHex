@@ -31,7 +31,7 @@
  * 规则 78：**禁 import `cc`**，因此本文件可在 Node 下直接单测。
  */
 
-import type { ZCOwner } from './ZCMapConfig';
+import { ZCOwner } from './ZCMapConfig';
 import { ownerForSection } from './ZCMapConfig';
 
 /** 一条排行数据。 */
@@ -86,7 +86,7 @@ export function compareRankSeats(a: IRankSeat, b: IRankSeat): number {
  * 而 `zcds-view-fixtures` 的 `load` 只认 `./X`，跨到 `../model/…` 的值导入会落进
  * 兜底分支报 ENOENT（规则 167）。这里复制一份并在单测里断言两者一致。
  */
-export const RANK_SEAT_ORDER: readonly ZCOwner[] = ['player', 'enemy', 'enemy2', 'enemy3'];
+export const RANK_SEAT_ORDER: readonly ZCOwner[] = [ZCOwner.Player, ZCOwner.Enemy, ZCOwner.Enemy2, ZCOwner.Enemy3];
 
 /**
  * 排出本局排行榜。
@@ -166,7 +166,7 @@ export function buildSeatProfiles(
     const selfUnit = selfRoleId ? sorted.find((unit) => unit.roleId === selfRoleId) : undefined;
     const rest = selfUnit ? sorted.filter((unit) => unit !== selfUnit) : sorted;
     if (selfUnit) {
-        profiles.set('player', {
+        profiles.set(ZCOwner.Player, {
             name: selfUnit.name || RANK_FALLBACK_NAMES.player,
             headKey: selfUnit.avatarId || '',
         });

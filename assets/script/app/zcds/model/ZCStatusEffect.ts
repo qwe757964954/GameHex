@@ -18,7 +18,7 @@
  * （`ZCOwner` 是 `import type`，编译后不产生 require 边）。
  */
 
-import type { ZCOwner } from './ZCMapConfig';
+import { ZC_OWNER_ORDER, ZCOwner } from './ZCMapConfig';
 
 
 // 数值修正：映射到占城单位属性（ZCUnitDefinition）
@@ -602,7 +602,7 @@ function validRuntimeBehavior(value: unknown): value is ZCStatusRuntimeBehavior 
         || !finiteNonNegative(record.flatDamagePerStack)
         || !finiteNonNegative(record.targetMaxHpPctPerStack)
         || !finiteNonNegative(record.senderAttack)
-        || !['player', 'enemy', 'enemy2', 'enemy3'].includes(String(record.sourceOwner))) return false;
+        || !ZC_OWNER_ORDER.some((owner) => owner === record.sourceOwner)) return false;
     if (record.capAttackMultiplier != null && !finiteNonNegative(record.capAttackMultiplier)) return false;
     if (record.extraEveryTicks != null
         && (!Number.isSafeInteger(record.extraEveryTicks) || Number(record.extraEveryTicks) < 1)) return false;

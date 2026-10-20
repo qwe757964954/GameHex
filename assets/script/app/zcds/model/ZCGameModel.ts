@@ -346,25 +346,8 @@ export class ZCGameModel {
         };
         this.geometry = new ZCMapGeometry(this.config.map);
         this.captureSystem = new ZCCaptureSystem(this.geometry, this.config.map, this.rules);
-        const model = this;
-        this.targetingContext = {
-            get now() { return model.state.elapsedSeconds; },
-            get units() { return model.state.units; },
-            get hexes() { model.refreshTargetHexes(); return model.targetHexes; },
-            unitById: (id) => this.units.byId.get(id) ?? null,
-            unitPosition: (candidate, result) => this.unitPosition(candidate, result),
-            hexPosition: (id) => this.config.map.hexes[id],
-            unitDefinition: (candidate) => this.effectiveUnitDefinition(candidate),
-            hasExposedWall: (hex) => this.hasExposedWall(hex),
-        };
-        this.projectileContext = {
-            get now() { return model.state.elapsedSeconds; },
-            get units() { return model.state.units; },
-            distanceScale: this.rules.combatDistanceScale,
-            definition: (unit) => this.effectiveUnitDefinition(unit),
-            structureTarget: (projectile) => this.projectileStructureTarget(projectile),
-            hit: (projectile, target) => this.resolveProjectileHit(projectile, target),
-        };
+        this.targetingContext = this.buildTargetingContext();
+        this.projectileContext = this.buildProjectileContext();
         const compiled = compileZCMatchRuntime(this.config);
         this.definitions = compiled.definitions;
         this.effectiveDefinitions = compiled.effectiveDefinitions;
@@ -377,13 +360,56 @@ export class ZCGameModel {
             enemy2: compiled.cards, enemy3: compiled.cards,
         };
         this.attackResolutionContext = this.createAttackResolutionContext();
-        this.damageResolutionContext = {
+        this.damageResolutionContext = this.buildDamageResolutionContext();
+        this.developmentContext = this.buildDevelopmentContext();
+        this.statusResolutionContext = this.buildStatusResolutionContext();
+        this.registerRuntimeStatuses();
+        this.economyContext = this.buildEconomyContext();
+        this.movement = this.buildMovement();
+        this.unitTargeting = this.buildUnitTargeting();
+        this.unitContext = this.buildUnitContext();
+        this.restoreOrCreateState(snapshot);
+    }
+
+    // 构造期装配：目标字段均为 readonly，只能在 constructor 内赋值，故此处返回后由调用方装配。
+
+    private buildTargetingContext(): ZCTargetingContext {
+        const model = this;
+        return {
+            get now() { return model.state.elapsedSeconds; },
+            get units() { return model.state.units; },
+            get hexes() { model.refreshTargetHexes(); return model.targetHexes; },
+            unitById: (id) => this.units.byId.get(id) ?? null,
+            unitPosition: (candidate, result) => this.unitPosition(candidate, result),
+            hexPosition: (id) => this.config.map.hexes[id],
+            unitDefinition: (candidate) => this.effectiveUnitDefinition(candidate),
+            hasExposedWall: (hex) => this.hasExposedWall(hex),
+        };
+    }
+
+    private buildProjectileContext(): ZCProjectileContext {
+        const model = this;
+        return {
+            get now() { return model.state.elapsedSeconds; },
+            get units() { return model.state.units; },
+            distanceScale: this.rules.combatDistanceScale,
+            definition: (unit) => this.effectiveUnitDefinition(unit),
+            structureTarget: (projectile) => this.projectileStructureTarget(projectile),
+            hit: (projectile, target) => this.resolveProjectileHit(projectile, target),
+        };
+    }
+
+    private buildDamageResolutionContext(): IZCDamageResolutionContext {
+        return {
             statusSystem: this.statusSystem,
             units: this.units,
             damageDealt: this.damageDealt,
             damageTaken: this.damageTaken,
         };
-        this.developmentContext = {
+    }
+
+    private buildDevelopmentContext(): IZCDevelopmentContext {
+        return {
             rules: this.rules,
             goldOf: (owner) => this.goldOf(owner),
             setGold: (owner, amount) => this.setGold(owner, amount),
@@ -393,7 +419,10 @@ export class ZCGameModel {
                 this.pushNeutralReward(hexId, resourceId, owner, reward);
             },
         };
-        this.statusResolutionContext = {
+    }
+
+    private buildStatusResolutionContext(): IZCStatusResolutionContext {
+        return {
             statusSystem: this.statusSystem,
             unitById: this.units.byId,
             owners: this.activeOwners,
@@ -410,6 +439,9 @@ export class ZCGameModel {
                 });
             },
         };
+    }
+
+    private registerRuntimeStatuses(): void {
         // 收集所有技能行上的减速比例，注册成临时 status def（暴雪/冰环类持续区域用）。
         for (const definition of this.definitions.values()) {
             for (const p of [definition.attackProfile, definition.empoweredProfile]) {
@@ -437,7 +469,10 @@ export class ZCGameModel {
                 if (bannerRate > 0) this.ensureBannerStatus(bannerRate);
             }
         }
-        this.economyContext = {
+    }
+
+    private buildEconomyContext(): ZCEconomyContext {
+        return {
             rules: this.rules, owners: this.activeOwners,
             homeId: (owner) => this.homeId(owner),
             bonuses: (owner) => this.bonusesFor(owner),
@@ -472,7 +507,10 @@ export class ZCGameModel {
                 ? this.unitStatPatches[owner]?.get(card.unitId) ?? {}
                 : {}),
         };
-        this.movement = new ZCMovementSystem({
+    }
+
+    private buildMovement(): ZCMovementSystem {
+        return new ZCMovementSystem({
             map: this.config.map, rules: this.rules, geometry: this.geometry,
             definition: (unit) => this.effectiveUnitDefinition(unit),
             bonuses: (owner) => this.bonusesFor(owner),
@@ -481,7 +519,10 @@ export class ZCGameModel {
             hex: (id) => this.hex(id), hasExposedWall: (hex) => this.hasExposedWall(hex),
             moveUnitToHex: (unit, id) => this.moveUnitToHex(unit, id),
         });
-        this.unitTargeting = new ZCUnitTargeting({
+    }
+
+    private buildUnitTargeting(): ZCUnitTargeting {
+        return new ZCUnitTargeting({
             map: this.config.map,
             geometry: this.geometry,
             units: this.units.byId,
@@ -493,7 +534,10 @@ export class ZCGameModel {
             hex: (id) => this.hex(id),
             hasExposedWall: (hex) => this.hasExposedWall(hex),
         });
-        this.unitContext = {
+    }
+
+    private buildUnitContext(): IZCUnitContext {
+        return {
             now: () => this.state.elapsedSeconds,
             definition: (unit) => this.effectiveUnitDefinition(unit),
             controlOf: (unit) => this.statusSystem.controlOf(String(unit.id)),
@@ -503,6 +547,9 @@ export class ZCGameModel {
             movement: this.movement,
             sendAttack: (unit) => ZCAttackResolutionSystem.sendAttack(this.state, unit, this.attackResolutionContext),
         };
+    }
+
+    private restoreOrCreateState(snapshot?: ZCSnapshot | null): void {
         if (snapshot != null) {
             const restored = ZCSnapshotCodec.decode(snapshot, this.config);
             if (restored.ok === false) throw new Error(`无效对局快照：${restored.errors.join(', ')}`);
@@ -521,6 +568,7 @@ export class ZCGameModel {
         this.refreshTileStates();
         this.checkOutcome();
     }
+
 
     // 快照创建、校验与对外查询。
     static createInitialState(random: () => number = Math.random, config?: ZCMatchConfig): ZCSnapshot {

@@ -115,12 +115,12 @@ framework（通用 UI/流程机制）            -> core
 
 ## 版本库（SVN 与 Git 并存）
 
-- 本仓库**双版本库**：SVN 工作副本根 `D:\City1001`（映射 `https://192.168.2.250:8440/svn/City1001/trunk/Demo3.8`）+ Git 仓库 `D:\City1001\Demo3.8\.git`（GitHub remote）。提交变更时**两库都提交**；SVN 在 `D:\City1001` 根下用 `svn commit Demo3.8 -m …`。
-- ⚠️ **SVN 日志：禁止中英混排（实测 2026-10-19 / 2026-10-20）**：
-  - 命令行 `svn.exe`（1.14.5）把输入字节按 **Latin-1 逐字节映射** ⇒ **英文正文里夹一个中文词，只有中文那段变乱码**（r706 实测：一句英文里夹「阵营判断」，提交后变成 `so��Ӫ�� reads`），比整条中文更难排查；命令行内联、`-F` UTF-8 文件、宽字符 argv 三条通道实测都救不回来（r662–r665）。
-  - **要么纯中文**：必须走 TortoiseProc GUI 通道（宽字符参数）：`"C:\Program Files\TortoiseSVN\bin\TortoiseProc.exe" /command:commit /path:"D:\City1001\Demo3.8" /logmsg:"中文日志" /closeonend:2`。
-  - **要么纯 ASCII 英文**：命令行 `-m` 可用，但正文里**一个非 ASCII 字符都不许有** —— 包括中文标点、全角括号、箭头、破折号。
-  - 🔴 **乱码不可补救**：本项目服务器**未开 `pre-revprop-change` hook**，`svn propset --revprop -r N svn:log` 一律被拒（`svn: E175008`）⇒ 一旦经命令行写进历史就**永久留着乱码，改不回来**。所以不是「写错再修」，是「一次都不能错」。
-  - 自动化/脚本无法走 GUI 确认时 ⇒ 用**纯 ASCII 英文**日志。`git commit` 无此限制（UTF-8 正常，中文可写；但建议两库用同一条日志，便于对照）。
+- 本仓库**双版本库**：SVN 工作副本根 `D:\City1001`（映射 `https://192.168.2.250:8440/svn/City1001/trunk/Demo3.8`）+ Git 仓库 `D:\City1001\Demo3.8\.git`（GitHub remote）。提交变更时**两库都提交**；SVN 一律走 TortoiseProc 图形通道（见下条），**不要用命令行 `svn commit`**。
+- 🔴 **SVN 提交日志：必须纯中文（2026-10-20 定）**：
+  - 日志**一律写中文**，不写英文、不中英混排。英文正文里夹一个中文词，只有中文那段会烂掉（r706 实测：英文句子里夹「阵营判断」，提交后变成 `so��Ӫ�� reads`），比整条中文更难排查。
+  - 命令行 `svn.exe`（1.14.5）把输入字节按 **Latin-1 逐字节映射** ⇒ **禁止 `svn commit -m 中文`**。命令行内联、`-F` UTF-8 文件、宽字符 argv 三条通道实测全乱码（r662–r665），没有一条可用。
+  - **唯一通道 = TortoiseProc GUI**：`"C:\Program Files\TortoiseSVN\bin\TortoiseProc.exe" /command:commit /path:"<待提交文件或目录>" /logmsg:"中文日志" /closeonend:2` —— 会预填日志与文件列表，但**提交按钮必须人工点**（AI 无法代点、也拿不到返回值）。所以 AI 交付时应给出这条命令并说明「窗口已弹出，请点确认」。
+  - 🔴 **乱码不可补救**：本项目服务器**未开 `pre-revprop-change` hook**，`svn propset --revprop -r N svn:log` 一律被拒（`svn: E175008`）⇒ 一旦写进历史就永久留着乱码。不是「写错再修」，是「一次都不能错」。
+  - `git commit` 不受此限（UTF-8 正常），但**日志与 SVN 侧用同一条中文**，便于两库对照。
 - `svn:ignore`（`Demo3.8` 目录属性）已与 `.gitignore` 对齐：`.superpowers/.codegraph/.codex-artifacts/.codex-tmp/.creative-design/.skill_tmp/.workbuddy/data/outputs`。新增本地工具目录时两处同步。
 

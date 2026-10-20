@@ -158,8 +158,9 @@ function makeUnit(id: number, owner: 'player' | 'enemy', sourceHexId: number): Z
     return {
         id,
         owner,
-        unitId: player ? '66014' : '60016',
-        cardId: player ? '66001' : '60010',
+        // 真实 id（66014/60016 是旧夹具里的假 id，快照校验会因 config.units 查不到而拒收）
+        unitId: player ? '68023' : '68001',
+        cardId: player ? '68023' : '68001',
         tier: 1,
         sourceHexId,
         targetHexId: null,

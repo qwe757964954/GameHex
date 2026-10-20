@@ -98,14 +98,6 @@ export const ZC_HEX_PULSE_SECONDS = 0.7;
  */
 export const ZC_HEX_SHRINK_SECONDS = ZC_HEX_PULSE_SECONDS;
 /**
- * core 的「抬手 → 收场」共用时长（秒）—— **只剩领地地图的随机资源格翻面在消费**。
- *
- * 对局自 2026-10-15 起改用 `ZC_HEX_SHRINK_SECONDS`（与脉冲段并发），**不再消费本值**；
- * 保留导出只为「对局侧要引用 core 这个常量时有个带说明的入口」，并提醒：
- * 改 core 的 `HEX_FLIP_SECONDS` 会同时影响领地翻格的节奏。
- */
-export const ZC_HEX_FLIP_SECONDS = HEX_FLIP_SECONDS;
-/**
  * **建筑生成段**（秒）：卡牌开始淡出的那一刻衔接播，**与卡牌淡出重叠**。
  *
  * 为什么是「跟卡牌淡出重叠」而不是排在卡牌之后：卡牌最后一段淡出时，格子如果还空着

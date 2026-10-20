@@ -166,9 +166,7 @@ export function updateHealthBar(bar: ProgressBar | null, hp: number, maxHp: numb
     if (bar.barSprite && bar.barSprite.spriteFrame !== fill) bar.barSprite.spriteFrame = fill;
 }
 
-
 // 生成动画（「由小变大」）：卡牌揭示与建筑生成共用同一条弹性曲线。
-
 
 /** 生成动画的起手缩放（`1` = 不弹；卡牌从这一档放大出来）。 */
 export const POP_FROM_SCALE = 0.2;
@@ -211,9 +209,7 @@ export function elasticPopScale(t: number, from: number = POP_FROM_SCALE): numbe
     return POP_DIP_SCALE + (1 - POP_DIP_SCALE) * eased;
 }
 
-
 // 飘字「快进慢出」：前 45% 完成入场（位移 + 缩放 + 金币图标自转），后 55% 缓慢淡出。
-
 
 /**
  * 飘字入场段占整条时长的比例（**默认值**；真源是 `ZCFloatTextView.entranceProgress` 这个 property，
@@ -287,7 +283,6 @@ export function floatTextDrift(progress: number, entranceProgress: number = FLOA
  */
 export const FLOAT_TEXT_DRIFT_DISTANCE = 7;
 
-
 // 生成单位抖动：「Y 拉 120% 回落 → X 拉 120% 回落」两段脉冲。
 //  - 单位出生抖动：`ZCUnitView.playSpawnShake`（新兵自己抖一下，110% 档）；
 //  - 建筑生成抖动：`ZCHexView.playBuildingShake`（建筑模型自己抖一下，需求 2026-10-15，120% 档）。
@@ -306,9 +301,7 @@ export {
     spawnShakeScaleY,
 } from '../../../core/hex/ShakePresentation';
 
-
 // 选择基地：跟随基地的【确认位置】按钮落点。
-
 
 /**
  * 按钮与基地之间的**格子单位数**（需求原文：「按钮与基地之间保持 2 个格子单位的间距」）。
@@ -334,9 +327,7 @@ export function spawnBaseConfirmPoint(base: { x: number; y: number }): { x: numb
     return { x: base.x, y: base.y + spawnBaseConfirmOffsetY() };
 }
 
-
 // 开局「点这里」提示：给金矿那一格套一圈整体描边、按正弦脉冲闪几下（需求 2026-10-15 row10）。
-
 
 /**
  * 提示的目标资源 id —— 需求原文「给**金矿**图标所在的地块格子增加一个整体的描边闪烁，
@@ -377,7 +368,6 @@ export function zcNeutralHintAlpha(elapsed: number): number {
     return pulse * remaining * remaining;
 }
 
-
 // 结算扫场：从胜利方那一侧起，整行同时铺**深饱和**阵营色（一行接一行），
 // 铺满前再从**起点**整行推回去、把深色回正成阵营**当前色**（需求 2026-10-15 row8）。
 //
@@ -394,7 +384,6 @@ export function zcNeutralHintAlpha(elapsed: number): number {
 //  3. ① 期间已铺上的格子**闪烁**：颜色在同色系的**偏白**一端快速来回（`SHIMMER_*`），2026-10-16 新增。
 //  4. ② 收手后 ③ 亮的是**地块轮廓线**（不是底色）：③ 期间全盘已归胜利方、底色不再变，
 //     唯一还在动的就是这条线 —— 见 `ZCOutlineLayer.appendHexPulseOutlineSegments`。
-
 
 /** 填充段每一步（= 一整行）的时长。 */
 export const ZC_VICTORY_SWEEP_STEP_SECONDS = 0.06;
@@ -484,20 +473,6 @@ export const ZC_VICTORY_SWEEP_PULSE_BAND_ROWS = 1;
  * 档数再高收益递减：波带扫得快（0.035s/行），屏幕上根本分不出更多灰阶。
  */
 export const ZC_VICTORY_SWEEP_PULSE_LEVELS = 4;
-/**
- * 最亮那一档往**白**里偏多少（`0` = 不偏、`1` = 纯白）。
- *
- * 0.55 ⇒ 我方 `#7e82ff → #c9cbff`：明显「发亮」但仍认得出是这一方的颜色
- * （需求选的是「胜利方阵营色·偏亮」，不是纯白高光）。
- */
-export const ZC_VICTORY_SWEEP_PULSE_MAX_MIX = 0.55;
-/**
- * 脉冲亮线的线宽（px）。
- *
- * 比领地轮廓的 `OWNED_OUTLINE_LINE_WIDTH = 6` 粗 1px：更粗 + 更亮，一眼就是「有东西在扫」。
- * 不再往上加 —— 亮线会盖住相邻格的图标边缘。
- */
-export const ZC_VICTORY_SWEEP_PULSE_LINE_WIDTH = 7;
 
 export interface ZCVictorySweepPlan {
     /** hexId → 步号（0 = 最靠起点那一行）。同一行所有格同一步号。只含可玩格。 */
@@ -705,7 +680,6 @@ export function victorySweepShimmerTick(elapsed: number): number {
     return Math.floor(elapsed / ZC_VICTORY_SWEEP_SHIMMER_CYCLE_SECONDS * ZC_VICTORY_SWEEP_SHIMMER_STEPS);
 }
 
-
 // 开局「归属扩散」：两座主城各自为圆心，把选点阶段铺的**半区色**逐个换成战斗底色。
 //
 // 需求（2026-10-15 row15）：「红色框，归属格子的颜色直接切换；绿色框，中立格子的颜色则是
@@ -863,7 +837,6 @@ export function claimWaveProgress(now: number, startSeconds: number, startedAt: 
     return raw <= 0 ? 0 : (raw >= 1 ? 1 : raw);
 }
 
-
 // 场景装饰不占格，按棋盘局部坐标铺在独立装饰层。
 
 export interface ZCDecorPlacement {
@@ -888,19 +861,6 @@ export interface ZCMapFreeDecorLike {
     rotation?: number;
     flipX?: boolean;
     flipY?: boolean;
-}
-
-/** 装饰贴进格面的等比系数：装得下就行，只缩不拉伸。 */
-export function decorFitScale(
-    imageWidth: number,
-    imageHeight: number,
-    // 默认框 = **顶面**（123×90），不是整图（130×119）。
-    // 立体地块的可见"台面"只有顶面，装饰贴整图会有一截陷进侧壁里。
-    boxWidth = ZC_LAND_TOP_HALF_WIDTH * 2,
-    boxHeight = ZC_LAND_TOP_HALF_HEIGHT * 2,
-): number {
-    if (!(imageWidth > 0) || !(imageHeight > 0)) return 0;
-    return Math.min(boxWidth / imageWidth, boxHeight / imageHeight);
 }
 
 /**
@@ -938,13 +898,3 @@ export function buildDecorPlacements(
     return placements;
 }
 
-export function drawFlatTopHex(graphics: Graphics, radius: number): void {
-    for (let index = 0; index < 6; index += 1) {
-        const angle = Math.PI / 180 * (60 * index);
-        const x = radius * Math.cos(angle);
-        const y = radius * Math.sin(angle);
-        if (index === 0) graphics.moveTo(x, y);
-        else graphics.lineTo(x, y);
-    }
-    graphics.close();
-}

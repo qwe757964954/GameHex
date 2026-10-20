@@ -37,11 +37,3 @@ export function validateZCModifierConfiguration(
     return { ok: errors.length === 0, errors, warnings };
 }
 
-export function assertZCModifierConfiguration(
-    catalogs: ZCModifierCatalogs,
-    units: readonly ZCUnitDefinition[],
-    builds: readonly ZCCombatBuildSelection[] = [],
-): void {
-    const report = validateZCModifierConfiguration(catalogs, units, builds);
-    if (!report.ok) throw new Error(`[ZCConfigValidator] ${report.errors.join('; ')}`);
-}

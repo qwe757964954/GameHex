@@ -189,20 +189,6 @@ export function captureZCMatchConfig(
     return freezeData(JSON.parse(JSON.stringify(normalized)) as ZCMatchConfig);
 }
 
-/** client/server 构筑接入入口：等级、升星、装备、宝石统一在此编译后冻结。 */
-export function withZCCombatBuildSelections(
-    source: ZCMatchConfig,
-    selections: Partial<Record<ZCOwner, readonly ZCCombatBuildSelection[]>>,
-): ZCMatchConfig {
-    const config = captureZCMatchConfig(source);
-    const compile = (owner: ZCOwner) => (selections[owner] ?? [])
-        .flatMap((selection) => compileZCCombatBuild(selection, config.units));
-    return captureZCMatchConfig({
-        ...config,
-        modifiers: Object.fromEntries(ZC_OWNER_ORDER.map((owner) => [owner, compile(owner)])),
-    });
-}
-
 /** 客户端组装开局参数的唯一入口：只传武将 id/星级，不直接拼 modifier id。 */
 export function withZCGeneralStarSelections(
     source: ZCMatchConfig,

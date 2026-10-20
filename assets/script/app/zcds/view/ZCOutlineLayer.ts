@@ -248,11 +248,6 @@ export function outlineSegmentCount(): number {
     return segmentCount;
 }
 
-/** 取第 i 条线段（供绘制遍历；不复制）。 */
-export function outlineSegmentAt(i: number): ZCOutlineSegment {
-    return segmentPool[i];
-}
-
 /**
  * 按「同色同宽」分桶画到 graphics：`cc.Graphics` 每次 `stroke()` 提交一个 subModel，
  * 同色同宽的线段必须攒成一段连续路径只 stroke 一次，否则 N 格 × 3 种线就是 3N 个

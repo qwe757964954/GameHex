@@ -137,15 +137,6 @@ function defaultHeroes(config: ZCMatchConfig, owner: ZCOwner): ZCBattleHero[] {
     return defaultHeroIds(config, owner).map((heroId) => ({ heroId, level: 1 }));
 }
 
-export function clientHeroesByOwner(
-    config: ZCMatchConfig,
-    battle: ZCBattleStart | null | undefined,
-    selfRoleId?: string,
-): Readonly<Partial<Record<ZCOwner, readonly ZCBattleHero[]>>> {
-    const context = buildClientBattleRosterContext(config, battle, selfRoleId);
-    return mapClientRosterOwners(context, (owner, unit) => clientHeroesForOwner(config, owner, unit));
-}
-
 /**
  * 将开始战斗回包中的多方单元映射到本地四个 owner。玩家优先按 roleId 识别；
  * 未命中时退回 campId 最小者。服务端没有给满 3/4 方时，空席位继续使用本地 PVE 卡组。

@@ -55,8 +55,6 @@ export interface ZCGameEntryParams {
     preload?: ZCGamePreload;
 }
 
-export type ZCPveEntry = NonNullable<ZCGameEntryParams['pve']>;
-
 /** 匹配期间启动一次加载，成功进入对局时移交资源所有权。 */
 export class ZCGamePreload {
     readonly ready: Promise<ZCGamePreparedResources>;

@@ -1,18 +1,17 @@
+import { ZCArtifactSystem } from './systems/ZCArtifactSystem';
+import { ZCEconomySystem } from './systems/ZCEconomySystem';
 import { ZCCardType } from './ZCCombatCatalog';
+import type { DeepReadonly, OwnerNumberRecord, ZCHexState, ZCSnapshot, ZCUnitState } from './ZCGameTypes';
 import {
     ZCBuildingType, ZCCombatFloatTextKind, ZCCombatTargetKind,
     ZCGameStatus, ZCTileState, ZCUnitBattleState,
 } from './ZCGameTypes';
-import type { OwnerNumberRecord, DeepReadonly, ZCHexState, ZCSnapshot, ZCUnitState } from './ZCGameTypes';
+import { ownersForPlayerCount, type ZCFaction, type ZCOwner } from './ZCMapConfig';
 import type { ZCMatchConfig } from './ZCMatchConfig';
 import { resolveZCUnitDefinition } from './ZCModifierRuntime';
-import { createPvpTileTypes } from './ZCPvpTileRules';
-import { ZCPvpTileType } from './ZCPvpTileRules';
-import { ZCArtifactSystem } from './systems/ZCArtifactSystem';
-import { ZCEconomySystem } from './systems/ZCEconomySystem';
-import { ZCStatusSystem } from './ZCStatusEffect';
 import { ZCNeutralResourceId } from './ZCNeutralResourceReward';
-import { ownersForPlayerCount, type ZCFaction, type ZCOwner } from './ZCMapConfig';
+import { createPvpTileTypes, ZCPvpTileType } from './ZCPvpTileRules';
+import { ZCStatusSystem } from './ZCStatusEffect';
 
 export type ZCSnapshotLoadResult =
     | { ok: true; snapshot: ZCSnapshot }

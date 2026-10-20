@@ -83,6 +83,15 @@
   var showBackground = true;
   // 上一次写进 backgroundLayer 的 markup —— 同值就不再重写（重写会重建 <image>、大图要重新解码）。
   var backgroundMarkupCache = null;
+  // 另外三层同理：`innerHTML =` 一旦执行，整层节点（含装饰贴图那几十个 <image>）就全部销毁重建。
+  // 这三层每次落笔都会走到，而绝大多数落笔只改一个格子 —— markup 没变就没必要付这个代价。
+  // 缓存按"字符串全等"作废，所以任何真实变化（含选中态、缩放后的坐标）都会自动重画。
+  var freeDecorMarkupCache = null;
+  var resourceMarkupCache = null;
+  var mapMetadataMarkupCache = null;
+  // 每个 hex 上一次写进去的 class（内存比较，省掉全量 `setAttribute`）。
+  // `buildBoard` 重建棋盘时清空 —— 那时 `paths` 全换了新节点，缓存必须跟着作废。
+  var hexClassCache = [];
   var BRUSH_RADIUS_MAX = 2;
   // 镜头倍率区间（地图 JSON 的 zoomMin / zoomMax，见《zcds 表现层规范》与 ZCMapConfig.resolveZCMapZoom）。
   // 默认值与客户端的 ZC_MAP_ZOOM_*_DEFAULT 同口径；硬边界同 ZC_MAP_ZOOM_HARD_MIN/MAX ——
@@ -1587,6 +1596,10 @@
       '<g class="mapMetadataLayer"></g><g class="freeDecorLayer"></g><g class="resourceLayer"></g>';
     // 整块 svg 换了 ⇒ 背景层是全新的空 <g>，同值守卫的缓存必须作废（否则新层永远不被写入）。
     backgroundMarkupCache = null;
+    freeDecorMarkupCache = null;
+    resourceMarkupCache = null;
+    mapMetadataMarkupCache = null;
+    hexClassCache = [];
     paths = Array.prototype.slice.call(svg.querySelectorAll('path.hex'));
     buildCursorLayer();
     applyView();
@@ -1657,7 +1670,13 @@
   }
   function drawFreeDecor() {
     var layers = svg.querySelectorAll ? svg.querySelectorAll('g.freeDecorLayer') : null;
-    if (layers && layers.length) layers[0].innerHTML = freeDecorMarkup();
+    if (!layers || !layers.length) return;
+    var next = freeDecorMarkup();
+    // 同值守卫（同 drawBackground）：一笔落下去，装饰层 markup 通常没变 —— 重写会把 87 个
+    // `<image>` 全部销毁重建，贴图得重新光栅化。选中态变化时 markup 本身会变，不会误跳过。
+    if (next === freeDecorMarkupCache) return;
+    freeDecorMarkupCache = next;
+    layers[0].innerHTML = next;
   }
   /**
    * 背景图层：把 `art.background`（默认 image/zdbg1）铺在棋盘下，**与棋盘一体缩放平移**。
@@ -1725,7 +1744,12 @@
   }
   function drawResources() {
     var layers = svg.querySelectorAll ? svg.querySelectorAll('g.resourceLayer') : null;
-    if (layers && layers.length) layers[0].innerHTML = resourceMarkup();
+    if (!layers || !layers.length) return;
+    var next = resourceMarkup();
+    // 同值守卫：资源点少但也带 `<image>`，且这一层每次落笔都会被调到。
+    if (next === resourceMarkupCache) return;
+    resourceMarkupCache = next;
+    layers[0].innerHTML = next;
   }
   function mapMetadataMarkup() {
     var parts = [];
@@ -1785,7 +1809,11 @@
   }
   function drawMapMetadata() {
     var layers = svg.querySelectorAll ? svg.querySelectorAll('g.mapMetadataLayer') : null;
-    if (layers && layers.length) layers[0].innerHTML = mapMetadataMarkup();
+    if (!layers || !layers.length) return;
+    var next = mapMetadataMarkup();
+    if (next === mapMetadataMarkupCache) return;
+    mapMetadataMarkupCache = next;
+    layers[0].innerHTML = next;
   }
 
   // ---- 写入与撤销 -------------------------------------------------------------
@@ -2326,6 +2354,29 @@
     return !!modal && !modal.hidden;
   }
 
+  // ---- 输出面板（ASCII / JSON） ------------------------------------------------
+  /**
+   * 笔画进行中**不刷**这两块文本。
+   *
+   * 拖动时每个采样都会走 `render()`，而这两行每帧都要 `JSON.stringify(buildJSON(), null, 2)`
+   * 再写进 `<pre>` —— 中间态没人看，却要付「序列化整张图 + 大段文本重新排版」的代价。
+   * 松手（`endStroke`）时补一次完整结果即可；非笔画路径（点按钮、改表单、撤销）照旧同步刷新，
+   * 所以界面上看到的内容永远是最新的。
+   */
+  var outputsPending = false;
+  function flushOutputs() {
+    outputsPending = false;
+    $('asciiOut').textContent = asciiLines().join('\n');
+    $('jsonOut').textContent = JSON.stringify(buildJSON(), null, 2);
+  }
+  function syncOutputs() {
+    if (stroke) { outputsPending = true; return; }
+    flushOutputs();
+  }
+  function flushPendingOutputs() {
+    if (outputsPending) flushOutputs();
+  }
+
   function render() {
     for (var row = 0; row < ROWS; row += 1) {
       for (var column = 0; column < COLS; column += 1) {
@@ -2338,7 +2389,13 @@
         var cls = home ? 'hex' + home
           : value === VOID ? 'hex ' + (showGrid ? 'void' : 'void-plain')
             : value === NEUTRAL ? 'hex neutral' : 'hex section-' + value;
-        paths[index].setAttribute('class', cls);
+        // 值没变就别写（同 territory 的 render）。拖动时每帧真正的变化通常只有 1~2 格，
+        // 剩下 1598 次是纯浪费：`setAttribute('class')` 会让该格重新匹配 CSS 并弄脏渲染树，
+        // 全量刷一遍在 40×40 上是实打实的掉帧源。缓存放内存里比回读 `getAttribute` 更省。
+        if (hexClassCache[index] !== cls) {
+          hexClassCache[index] = cls;
+          paths[index].setAttribute('class', cls);
+        }
       }
     }
     var report = validate();
@@ -2363,8 +2420,7 @@
       var mark = item[0] === 'ok' ? '✓' : item[0] === 'err' ? '!' : '·';
       return '<li><span class="tag ' + item[0] + '">' + mark + '</span><span>' + esc(item[1]) + '</span></li>';
     }).join('');
-    $('asciiOut').textContent = asciiLines().join('\n');
-    $('jsonOut').textContent = JSON.stringify(buildJSON(), null, 2);
+    syncOutputs();
     updateSaveButton();
     if (hover) drawCursor(brushCells(hover.row, hover.column, brushRadius));
     updateReadout();
@@ -2644,9 +2700,12 @@
       panning = null;
       markPanning(false);
       stopPaintLoop();
-      if (!stroke) return;
-      if (commit) commitUndo(stroke.before);
-      stroke = null;
+      if (stroke) {
+        if (commit) commitUndo(stroke.before);
+        stroke = null;
+      }
+      // 笔画期间挂起的输出面板在这里补一次（没挂起时是空操作）。
+      flushPendingOutputs();
     }
     var freeDecorDrag = null;
     function endFreeDecorDrag(commit) {
@@ -2731,7 +2790,12 @@
         stopPaintLoop();
         var tick = function () {
           if (!stroke) return;
-          var local = pointerLocal(lastPointerEvent);
+          // `lastPointerEvent` 的初值是 null，而按下这一下就排了第一帧 —— 不守空会在第一个 rAF 上
+          // 抛 `Cannot read properties of null (reading 'clientX')`；异常打断 tick 后，末尾的
+          // `paintLoop = requestAnimationFrame(tick)` 根本执行不到 ⇒ 循环死掉，「按住不放连续
+          // 铺色」静默失效（页面报错但画面看起来只是"不连刷"）。按下点已经 paintAt 过了，
+          // 第一帧拿不到指针就跳过即可，循环照常续。
+          var local = lastPointerEvent ? pointerLocal(lastPointerEvent) : null;
           if (local) {
             var c = cellAtLocal(local.x, local.y);
             if (c) paintAt(c.row, c.column, autoPaintMode);

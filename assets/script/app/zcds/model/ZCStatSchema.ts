@@ -1,5 +1,5 @@
-import { ZCCombatEventType } from './ZCCombatCatalog';
 import type { ZCUnitDefinition } from './ZCCombatCatalog';
+import { ZCCombatEventType } from './ZCCombatCatalog';
 import type { ZCModifierRecord } from './ZCModifierEngine';
 import { ZCControlKind, ZCStatusRefreshPolicy } from './ZCStatusEffect';
 //  `import type`：纯编译期依赖，运行时不产生 require 边 ⇒ 不会与 `ZCModifierRuntime` 形成环

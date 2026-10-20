@@ -137,10 +137,11 @@ export class MainTabHost extends Component {
         for (let index = 0; index < this.navItems.length; index += 1) {
             const button = this.navItems[index];
             const type = button.tabType;
-            button.setEnabled(type !== MainTab.Challenge);
+            const isLocked = type === MainTab.Challenge || type === MainTab.World;
+            button.setEnabled(!isLocked);
             // 点击：`TabButton` 内部已经挂了 CLICK（`ensureInit()` 幂等），宿主只交出「点我切哪一页」。
             // 事件监听随节点销毁由引擎自动清理，按项目约定不手动 off。
-            button.bindSelect(type === MainTab.Challenge ? null : () => { void this.switchTab(type); });
+            button.bindSelect(isLocked ? null : () => { void this.switchTab(type); });
             // 红点：后端推送 → 变量标脏 → 表达式重算 → `RedDot.setRedDot`，全程不用宿主干预。
             // `rdExpr` 现在七格都是空的（见 `IMainTabItem.rdExpr`）⇒ 红点恒收起，
             // 但通路已就绪：`open.json` 登记好口径后填上即亮，本文件不用改。

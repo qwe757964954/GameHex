@@ -1,9 +1,10 @@
-import { _decorator, Component, Node, SpriteFrame, UITransform } from 'cc';
+import { _decorator, Button, Component, Node, SpriteFrame, UITransform } from 'cc';
 import { ChestSlotView } from './ChestSlotView';
 import { resolveChestPanelX } from './MainHudMotion';
 
 const { ccclass, property } = _decorator;
 const CHEST_PANEL_SLIDE_SECONDS = 0.28;
+const CHEST_COLLAPSE_HIT_AREA_SIZE = { width: 96, height: 180 };
 
 /**
  * 主城底部**宝箱栏**（2026-10-19 蓝湖「塔防主界面-2」）。
@@ -60,6 +61,8 @@ export class ChestBar extends Component {
 
     /** 翻页回调（`-1` 上一页 / `+1` 下一页）；由宿主接。 */
     private onPage: ((delta: number) => void) | null = null;
+    /** 展开状态下左箭头收起侧栏。 */
+    private onCollapse: (() => void) | null = null;
     private openX: number | null = null;
     private isOpen = false;
     private motionFromX = 0;
@@ -74,6 +77,7 @@ export class ChestBar extends Component {
         this.ensureSlots();
         this.prevButton?.on(Node.EventType.TOUCH_END, this.onPrev, this);
         this.nextButton?.on(Node.EventType.TOUCH_END, this.onNext, this);
+        this.createCollapseHitArea();
     }
 
     /** 设置展开状态；关闭时整栏从左侧滑出视口。 */
@@ -122,6 +126,21 @@ export class ChestBar extends Component {
         return this.openX! - width;
     }
 
+    /** 额外放大左箭头的点击范围，箭头 Sprite 自身尺寸保持原样。 */
+    private createCollapseHitArea(): void {
+        const hitArea = new Node('ChestCollapseHitArea');
+        hitArea.layer = this.node.layer;
+        hitArea.addComponent(UITransform).setContentSize(
+            CHEST_COLLAPSE_HIT_AREA_SIZE.width,
+            CHEST_COLLAPSE_HIT_AREA_SIZE.height,
+        );
+        const button = hitArea.addComponent(Button);
+        button.target = hitArea;
+        hitArea.setPosition(this.prevButton.position);
+        hitArea.setParent(this.node);
+        hitArea.on(Node.EventType.TOUCH_END, this.onPrev, this);
+    }
+
     /**
      * 惰性装配槽位 + 美术。
      *
@@ -147,7 +166,16 @@ export class ChestBar extends Component {
         this.onPage = handler;
     }
 
+    /** 接收关闭回调；展开时左侧大热区优先执行收起。 */
+    bindCollapse(handler: (() => void) | null): void {
+        this.onCollapse = handler;
+    }
+
     private onPrev(): void {
+        if (this.isOpen) {
+            this.onCollapse?.();
+            return;
+        }
         this.onPage?.(-1);
     }
 

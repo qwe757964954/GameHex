@@ -1,6 +1,6 @@
 import { createServer, get } from 'node:http';
 import { spawn } from 'node:child_process';
-import { mkdir, open, readFile, readdir, stat, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { normalizeTerritoryMap, TerritoryValidationError } from './formats/territory-format.js';
@@ -45,6 +45,50 @@ const decorNamesFile = join(root, 'decor-library.json');
 const port = Number(process.env.MAP_EDITOR_PORT || 8787);
 const address = `http://127.0.0.1:${port}/`;
 const idPattern = /^[a-zA-Z0-9_-]+$/;
+
+/**
+ * 客户端输入校验失败 ⇒ 400。
+ *
+ * 以前是靠 `message.includes('必须') || ('地图') || ('预设') || ('自由装饰')` 猜：
+ * 新写一句报错文案只要没带这几个字，就会被当成 500，前端提示变成"服务不可用"，
+ * 查起来是"明明只是填错了一个数"（这种坑留过一次就够了）。现在按**类型**判。
+ */
+class RequestError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'RequestError';
+    this.statusCode = 400;
+  }
+}
+
+/**
+ * 原子写 JSON：先写 `<target>.writing`，再 rename 覆盖。
+ *
+ * `writeFile` 是「截断 → 写入」两步：中途崩了 / 断电 / 进程被杀，留下的是**半截 JSON**，
+ * 编辑器再打开直接 parse 错，那一版图就没了（SVN 能 revert，但丢的是刚刚那次编辑）。
+ * 同分区 rename 是原子的 —— 要么旧文件完好，要么新文件完整，不会有中间态。
+ */
+async function writeJsonAtomic(target, value) {
+  const temp = `${target}.writing`;
+  const text = JSON.stringify(value, null, 2) + '\n';
+  await writeFile(temp, text, 'utf8');
+  try {
+    await rename(temp, target);
+  } catch (error) {
+    // Windows 上目标被占用（编辑器预览 / 杀软扫描）时 rename 会 EPERM/EBUSY，等一下重试一次。
+    if (error.code !== 'EPERM' && error.code !== 'EBUSY') {
+      await unlink(temp).catch(() => {});
+      throw error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    try {
+      await rename(temp, target);
+    } catch (again) {
+      await unlink(temp).catch(() => {});
+      throw again;
+    }
+  }
+}
 const shouldOpen = process.argv.includes('--open');
 // 三个编辑器共用一个服务，用启动参数决定打开哪个页面（各自的 .cmd 里带这个开关）。
 const launchPath = process.argv.includes('--bigmap') ? 'bigmap.html'
@@ -236,7 +280,7 @@ async function readDecorNames() {
 async function addDecorName(name) {
   const names = await readDecorNames();
   if (names.indexOf(name) < 0) names.push(name);
-  await writeFile(decorNamesFile, JSON.stringify({ decor: names }, null, 2) + '\n', 'utf8');
+  await writeJsonAtomic(decorNamesFile, { decor: names });
   return names;
 }
 
@@ -262,11 +306,11 @@ async function publishTerritoryPreset(id) {
   const { map, warnings } = await readTerritoryPreset(id);
   await mkdir(territoryResourceDir, { recursive: true });
   const target = join(territoryResourceDir, `${id}.json`);
-  await writeFile(target, JSON.stringify(map, null, 2) + '\n', 'utf8');
+  await writeJsonAtomic(target, map);
   const meta = `${target}.meta`;
   try { await stat(meta); }
   catch {
-    await writeFile(meta, JSON.stringify({ ver: '1.1.2', importer: 'json', imported: true, uuid: '', files: {} }, null, 2) + '\n', 'utf8');
+    await writeJsonAtomic(meta, { ver: '1.1.2', importer: 'json', imported: true, uuid: '', files: {} });
   }
   return { map, warnings, target: 'assets/resources/config/territory-maps' };
 }
@@ -323,33 +367,33 @@ async function publishBigmapPreset(id) {
 
   await mkdir(bigmapResourceDir, { recursive: true });
   const target = join(bigmapResourceDir, `${id}.json`);
-  await writeFile(target, JSON.stringify(layout, null, 2) + '\n', 'utf8');
+  await writeJsonAtomic(target, layout);
   const meta = `${target}.meta`;
   try { await stat(meta); }
   catch {
-    await writeFile(meta, JSON.stringify({ ver: '1.1.2', importer: 'json', imported: true, uuid: '', files: {} }, null, 2) + '\n', 'utf8');
+    await writeJsonAtomic(meta, { ver: '1.1.2', importer: 'json', imported: true, uuid: '', files: {} });
   }
   return { layout, warnings, target: 'assets/resources/config/bigmap-maps' };
 }
 
 function validatePreset(data, id) {
-  if (!data || typeof data !== 'object' || Array.isArray(data) || data.id !== id) throw new Error('地图 id 与文件名不一致');
+  if (!data || typeof data !== 'object' || Array.isArray(data) || data.id !== id) throw new RequestError('地图 id 与文件名不一致');
   const version = data.version == null ? 1 : data.version;
-  if (version !== 1 && version !== 2 && version !== 3) throw new Error('地图版本只支持 1、2 或 3');
+  if (version !== 1 && version !== 2 && version !== 3) throw new RequestError('地图版本只支持 1、2 或 3');
   const rows = data.rows, columns = data.columns;
   const maxColumns = version >= 3 ? 60 : 30;
   if (!Number.isInteger(rows) || rows < 4 || rows > 60 || (version <= 2 && rows % 2) ||
       !Number.isInteger(columns) || columns < 4 || columns > maxColumns) {
-    throw new Error(version >= 3 ? '地图尺寸必须为 4~60 列、4~60 行' : '地图尺寸必须为 4~30 列、4~60 偶数行');
+    throw new RequestError(version >= 3 ? '地图尺寸必须为 4~60 列、4~60 行' : '地图尺寸必须为 4~30 列、4~60 偶数行');
   }
   const playerCount = data.playerCount == null ? 2 : data.playerCount;
-  if (playerCount !== 2 && playerCount !== 3 && playerCount !== 4) throw new Error('对局人数必须是 2、3 或 4');
+  if (playerCount !== 2 && playerCount !== 3 && playerCount !== 4) throw new RequestError('对局人数必须是 2、3 或 4');
   const cityMode = data.cityMode == null ? 'fixed' : data.cityMode;
-  if (cityMode !== 'fixed' && cityMode !== 'select') throw new Error('主城模式必须是 fixed（固定主城）或 select（自选主城）');
+  if (cityMode !== 'fixed' && cityMode !== 'select') throw new RequestError('主城模式必须是 fixed（固定主城）或 select（自选主城）');
   const mirrorVertical = data.mirrorVertical === true;
   const mirrorHorizontal = data.mirrorHorizontal === true;
   if (data.mirror180 === true && (mirrorVertical || mirrorHorizontal)) {
-    throw new Error('不能同时使用 180° 旋转镜像与上下 / 左右镜像');
+    throw new RequestError('不能同时使用 180° 旋转镜像与上下 / 左右镜像');
   }
   // 3 人必须不镜像。与编辑器 app.js 的 forcedMirror 同口径 —— 这条约束在编辑器、网页服务、
   // 预设生成三处都要守，否则绕开编辑器就能塞进不合规的图。
@@ -358,11 +402,11 @@ function validatePreset(data, id) {
   const forcedMirror = playerCount === 3 ? { vertical: false, horizontal: false } : null;
   if (forcedMirror && (mirrorVertical !== forcedMirror.vertical
       || mirrorHorizontal !== forcedMirror.horizontal || data.mirror180 === true)) {
-    throw new Error('3 人地图必须关闭镜像（3 是奇数，翻转配不出第三块分区）');
+    throw new RequestError('3 人地图必须关闭镜像（3 是奇数，翻转配不出第三块分区）');
   }
   // 2 人的 180° 与"锁不锁镜像"无关，单独拦：它把 1 区转到对角，不是上下对折。
   if (playerCount === 2 && data.mirror180 === true) {
-    throw new Error('2 人地图不能用 180° 旋转镜像（会把 1 区转到对角，要用就用上下镜像）');
+    throw new RequestError('2 人地图不能用 180° 旋转镜像（会把 1 区转到对角，要用就用上下镜像）');
   }
   const invalidToken = version <= 1 ? /[^.#-]/ : version === 2 ? /[^.#N-]/ : /[^.#N01234-]/;
   const allowedText = version <= 1 ? '.#-' : version === 2 ? '.#N-' : '.01234（# / - / N 为别名）';
@@ -371,7 +415,7 @@ function validatePreset(data, id) {
   const expectedColumns = version >= 3 && mirrorHorizontal ? Math.ceil(columns / 2) : columns;
   if (!Array.isArray(data.ascii) || data.ascii.length !== expectedRows ||
       data.ascii.some((line) => typeof line !== 'string' || line.length !== expectedColumns || invalidToken.test(line))) {
-    throw new Error(`字符画必须是 ${expectedRows} 行 × ${expectedColumns} 列的 ${allowedText}`);
+    throw new RequestError(`字符画必须是 ${expectedRows} 行 × ${expectedColumns} 列的 ${allowedText}`);
   }
   const tokenAt = (row, column) => {
     const rowOffset = rows - expectedRows;
@@ -388,34 +432,34 @@ function validatePreset(data, id) {
     return data.ascii[sourceRow]?.[sourceColumn];
   };
   if (data.resourcePoints !== undefined) {
-    if (!Array.isArray(data.resourcePoints)) throw new Error('资源点位必须是数组');
+    if (!Array.isArray(data.resourcePoints)) throw new RequestError('资源点位必须是数组');
     for (const point of data.resourcePoints) {
       if (!point || !Number.isInteger(point.row) || !Number.isInteger(point.column) ||
           point.row < 0 || point.row >= rows || point.column < 0 || point.column >= columns) {
-        throw new Error('资源点位坐标不在地图内');
+        throw new RequestError('资源点位坐标不在地图内');
       }
       if (tokenAt(point.row, point.column) !== '0' && tokenAt(point.row, point.column) !== 'N') {
-        throw new Error('资源点位只能落在中立格上');
+        throw new RequestError('资源点位只能落在中立格上');
       }
-      if (point.section !== undefined && point.section !== 0) throw new Error('中立资源点的分区必须为 0');
+      if (point.section !== undefined && point.section !== 0) throw new RequestError('中立资源点的分区必须为 0');
     }
   }
   const art = data.art;
   const freeDecor = art && typeof art === 'object' && !Array.isArray(art) ? art.freeDecor : undefined;
   if (freeDecor !== undefined) {
-    if (!Array.isArray(freeDecor)) throw new Error('art.freeDecor 必须是数组');
+    if (!Array.isArray(freeDecor)) throw new RequestError('art.freeDecor 必须是数组');
     for (let index = 0; index < freeDecor.length; index += 1) {
       const item = freeDecor[index];
-      if (!item || typeof item !== 'object' || Array.isArray(item)) throw new Error(`自由装饰 ${index} 必须是对象`);
-      if (typeof item.art !== 'string' || !item.art.trim()) throw new Error(`自由装饰 ${index} 缺少资源名`);
-      if (!Number.isFinite(item.x) || !Number.isFinite(item.y)) throw new Error(`自由装饰 ${index} 坐标无效`);
+      if (!item || typeof item !== 'object' || Array.isArray(item)) throw new RequestError(`自由装饰 ${index} 必须是对象`);
+      if (typeof item.art !== 'string' || !item.art.trim()) throw new RequestError(`自由装饰 ${index} 缺少资源名`);
+      if (!Number.isFinite(item.x) || !Number.isFinite(item.y)) throw new RequestError(`自由装饰 ${index} 坐标无效`);
       if (!Number.isFinite(item.width) || item.width <= 0 || !Number.isFinite(item.height) || item.height <= 0) {
-        throw new Error(`自由装饰 ${index} 尺寸无效`);
+        throw new RequestError(`自由装饰 ${index} 尺寸无效`);
       }
-      if (item.rotation !== undefined && !Number.isFinite(item.rotation)) throw new Error(`自由装饰 ${index} 角度无效`);
+      if (item.rotation !== undefined && !Number.isFinite(item.rotation)) throw new RequestError(`自由装饰 ${index} 角度无效`);
       if ((item.flipX !== undefined && typeof item.flipX !== 'boolean') ||
           (item.flipY !== undefined && typeof item.flipY !== 'boolean')) {
-        throw new Error(`自由装饰 ${index} 翻转值无效`);
+        throw new RequestError(`自由装饰 ${index} 翻转值无效`);
       }
     }
   }
@@ -423,7 +467,7 @@ function validatePreset(data, id) {
   // 文件在不在由客户端 `resources.load` 决定 —— 与装饰同口径。
   if (art && typeof art === 'object' && !Array.isArray(art) && art.background !== undefined) {
     if (typeof art.background !== 'string' || !art.background.trim()) {
-      throw new Error('art.background 必须是非空字符串（背景图资源名）');
+      throw new RequestError('art.background 必须是非空字符串（背景图资源名）');
     }
   }
   let homes = [];
@@ -431,23 +475,23 @@ function validatePreset(data, id) {
     ? data.homes
     : (data.playerHome && data.enemyHome ? [data.playerHome, data.enemyHome] : []);
   if (cityMode === 'fixed' && list.length !== playerCount) {
-    throw new Error(`固定主城模式每方恰好一座主城，本图应为 ${playerCount} 座`);
+    throw new RequestError(`固定主城模式每方恰好一座主城，本图应为 ${playerCount} 座`);
   }
   // select 模式下 homes 是可选的默认主城（0 或 playerCount 座）。
   if (cityMode === 'select' && list.length !== 0 && list.length !== playerCount) {
-    throw new Error(`自选主城模式的默认主城应为 ${playerCount} 座（或留空）`);
+    throw new RequestError(`自选主城模式的默认主城应为 ${playerCount} 座（或留空）`);
   }
   // select 模式下保留 null 占位，下标对应分区；fixed 模式必须全部有坐标。
   for (let i = 0; i < list.length; i += 1) {
     const home = list[i];
     if (home === null) {
-      if (cityMode === 'fixed') throw new Error('主城坐标不在地图内');
+      if (cityMode === 'fixed') throw new RequestError('主城坐标不在地图内');
       homes.push(null);
       continue;
     }
     if (!home || !Number.isInteger(home.row) || !Number.isInteger(home.column) ||
         home.row < 0 || home.row >= rows || home.column < 0 || home.column >= columns) {
-      throw new Error('主城坐标不在地图内');
+      throw new RequestError('主城坐标不在地图内');
     }
     homes.push({ row: home.row, column: home.column });
   }
@@ -471,7 +515,7 @@ async function readBody(req) {
   for await (const chunk of req) {
     body += chunk;
     // 大地图 100×100 + 74 座城 + 势力范围格子，体积远大于领地那 20×20 的图，上限放到 2MB。
-    if (body.length > 2000000) throw new Error('地图文件过大');
+    if (body.length > 2000000) throw new RequestError('地图文件过大');
   }
   return JSON.parse(body);
 }
@@ -538,7 +582,7 @@ const server = createServer(async (req, res) => {
       }
       if (req.method === 'PUT') {
         const result = normalizeTerritoryMap(await readBody(req), id);
-        await writeFile(path, JSON.stringify(result.map, null, 2) + '\n', 'utf8');
+        await writeJsonAtomic(path, result.map);
         json(res, 200, { preset: result.map, warnings: result.warnings });
         return;
       }
@@ -596,7 +640,7 @@ const server = createServer(async (req, res) => {
       }
       if (req.method === 'PUT') {
         const { layout, warnings } = normalizeBigmapLayout(await readBody(req));
-        await writeFile(path, JSON.stringify(layout, null, 2) + '\n', 'utf8');
+        await writeJsonAtomic(path, layout);
         json(res, 200, { preset: { ...layout, id }, warnings });
         return;
       }
@@ -645,7 +689,7 @@ const server = createServer(async (req, res) => {
       if (req.method === 'POST') {
         const body = await readBody(req);
         const name = body && typeof body.name === 'string' ? body.name.trim() : '';
-        if (!name) throw new Error('装饰资源名必须是非空字符串');
+        if (!name) throw new RequestError('装饰资源名必须是非空字符串');
         json(res, 200, { custom: await addDecorName(name) });
         return;
       }
@@ -701,7 +745,7 @@ const server = createServer(async (req, res) => {
     const path = join(presetDir, id + '.json');
     if (req.method === 'PUT') {
       const preset = validatePreset(await readBody(req), id);
-      await writeFile(path, JSON.stringify(preset, null, 2) + '\n', 'utf8');
+      await writeJsonAtomic(path, preset);
       json(res, 200, { preset });
     } else if (req.method === 'DELETE') {
       try { await unlink(path); }
@@ -714,9 +758,14 @@ const server = createServer(async (req, res) => {
       json(res, 405, { error: '不支持此操作' });
     }
   } catch (error) {
-    const message = String(error.message || '');
-    const badRequest = error instanceof SyntaxError || error instanceof TerritoryValidationError || error.statusCode === 400 ||
-      message.includes('必须') || message.includes('地图') || message.includes('预设') || message.includes('自由装饰');
+    // 400 只看类型，不看文案：`RequestError`（本文件校验）、两份 format 的校验错误、
+    // 以及 `JSON.parse` 的 SyntaxError（请求体不是合法 JSON）。其余一律 500，别把内部故障
+    // 伪装成"你填错了"。
+    const badRequest = error instanceof RequestError
+      || error instanceof TerritoryValidationError
+      || error instanceof BigmapValidationError
+      || error instanceof SyntaxError
+      || error.statusCode === 400;
     json(res, badRequest ? 400 : 500, { error: error.message });
   }
 });

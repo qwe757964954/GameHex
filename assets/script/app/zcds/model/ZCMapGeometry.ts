@@ -1,9 +1,9 @@
-import type { ZCMatchMap } from './ZCMatchConfig';
 import {
     HEX_GRID_LOGICAL_COLUMN_PHASE,
     HEX_GRID_LOGICAL_COLUMN_STEP,
     HEX_GRID_LOGICAL_ROW_STEP,
 } from '../../../core/hex/HexGridLayout';
+import type { ZCMatchMap } from './ZCMatchConfig';
 
 /** 对局蜂窝的列相位（相邻奇偶列垂直错位的一半）。 */
 export const ZC_HEX_COLUMN_PHASE = HEX_GRID_LOGICAL_COLUMN_PHASE;

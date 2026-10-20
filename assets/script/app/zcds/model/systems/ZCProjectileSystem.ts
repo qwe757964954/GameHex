@@ -1,12 +1,11 @@
 import type { ZCCombatTarget, ZCProjectileState, ZCUnitState } from '../ZCGameTypes';
-import type { ZCUnitDefinition } from '../ZCCombatCatalog';
+import type { IZCModelServices } from './ZCModelServices';
 
 interface Point { x: number; y: number }
-export interface ZCProjectileContext {
+export interface ZCProjectileContext extends Pick<IZCModelServices, 'effectiveDefinition'> {
     now: number;
     units: readonly ZCUnitState[];
     distanceScale: number;
-    effectiveDefinition(unit: ZCUnitState): ZCUnitDefinition;
     structureTarget(projectile: ZCProjectileState): ZCCombatTarget | null;
     hit(projectile: ZCProjectileState, target: ZCCombatTarget): void;
 }

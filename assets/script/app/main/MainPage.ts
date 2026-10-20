@@ -68,6 +68,7 @@ export class MainPage extends Component {
     onLoad(): void {
         this.startButton.on(Button.EventType.CLICK, this.onStartGame, this);
         this.chestToggle.on(Button.EventType.CLICK, this.onToggleChestPanel, this);
+        this.chestBar.bindCollapse(() => this.setChestPanelOpen(false));
     }
 
     /**

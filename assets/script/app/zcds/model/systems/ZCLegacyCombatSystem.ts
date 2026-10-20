@@ -1,9 +1,9 @@
 import type { ZCDeckBonuses, ZCUnitDefinition } from '../ZCCombatCatalog';
-import type { ZCMatchConfig } from '../ZCMatchConfig';
 import type { ZCRuntimeRules } from '../ZCGameRuntimeConfig';
 import type { ZCCombatTarget, ZCHexState, ZCSnapshot, ZCUnitState } from '../ZCGameTypes';
+import type { ZCLegacyBuffApplication, ZCLegacySkillEffectRuntime, ZCLegacySkillEvaluation } from '../ZCLegacySkillEffect';
 import type { ZCOwner } from '../ZCMapConfig';
-import type { ZCLegacyBuffApplication, ZCLegacySkillEvaluation, ZCLegacySkillEffectRuntime } from '../ZCLegacySkillEffect';
+import type { ZCMatchConfig } from '../ZCMatchConfig';
 import type { ZCStatusApplyOptions, ZCStatusRuntimeBehavior, ZCStatusSystem } from '../ZCStatusEffect';
 import { ZCCombatSystem } from './ZCCombatSystem';
 

@@ -1,9 +1,9 @@
 import { ZCDC_LOG_DIAGNOSTICS } from '../../ZCDCLogSwitch';
 import type { ZCRuntimeRules } from '../ZCGameRuntimeConfig';
 import type { ZCHexState, ZCSnapshot, ZCUnitState } from '../ZCGameTypes';
-import type { ZCMatchMap } from '../ZCMatchConfig';
 import { ZC_OWNER_ORDER, type ZCOwner } from '../ZCMapConfig';
 import type { ZCMapGeometry } from '../ZCMapGeometry';
+import type { ZCMatchMap } from '../ZCMatchConfig';
 
 type Occupants = Partial<Record<ZCOwner, number>>;
 

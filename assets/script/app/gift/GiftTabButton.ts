@@ -25,6 +25,9 @@ export class GiftTabButton extends Component {
     @property({ type: Button, tooltip: 'Button：本节点上的 cc.Button' })
     button: Button = null!;
 
+    @property({ type: SpriteFrame, tooltip: '选中态底板（主页同款 city/nav_sel）' })
+    selectedFrame: SpriteFrame = null!;
+
     private index = 0;
 
     private clickHandler: ((index: number) => void) | null = null;
@@ -43,10 +46,9 @@ export class GiftTabButton extends Component {
     }
 
     /** 文案 + 主页同款选中态；空文案保留 prefab 上的静态名称。 */
-    render(text: string, selected: boolean, frameOff: SpriteFrame | null, frameOn: SpriteFrame | null): void {
+    render(text: string, selected: boolean): void {
         if (text && this.label) this.label.string = text;
-        const target = selected ? frameOn : frameOff;
-        this.bg.spriteFrame = target;
+        this.bg.spriteFrame = selected ? this.selectedFrame : null;
         this.bg.color = BACKGROUND_COLOR;
         if (this.label) this.label.color = selected ? LABEL_COLOR_ON : LABEL_COLOR_OFF;
     }

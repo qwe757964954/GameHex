@@ -16,6 +16,8 @@ import {
 function createEditor(options: { hash?: string; fetch?: (path: string, options?: any) => Promise<any>; confirm?: boolean } = {}) {
     const elements = new Map<string, any>();
     let paths: any[] = [];
+    // 统计 hex 上的 `setAttribute` 次数 —— 用来咬住"每次落笔都全量重写 class"这类退化。
+    let attributeWrites = 0;
     const element = (id: string): any => {
         if (!elements.has(id)) elements.set(id, {
             value: id === 'mapId' ? 'river' : id === 'mapName' ? '双岸河道' : '',
@@ -36,13 +38,22 @@ function createEditor(options: { hash?: string; fetch?: (path: string, options?:
             const expression = /<path d="[^"]*" data-r="(\d+)" data-c="(\d+)" class="hex"\/>/g;
             let match;
             while ((match = expression.exec(value))) {
-                paths.push({ row: Number(match[1]), column: Number(match[2]), setAttribute() {} });
+                paths.push({
+                    row: Number(match[1]), column: Number(match[2]),
+                    setAttribute(name: string, value: string) {
+                        attributeWrites += 1;
+                        this.attributes = { ...(this.attributes || {}), [name]: value };
+                    },
+                });
             }
         },
     });
     board.querySelectorAll = () => paths;
     const document = { getElementById: element, querySelectorAll: () => [] };
     const confirmCalls: string[] = [];
+    // `requestAnimationFrame` 在桩里只入队、不自己执行 —— 由用例手动"跑一帧"，
+    // 这样才测得到「按下之后那一帧到底做了什么」（自动铺色循环就是挂在它上面的）。
+    const frames: Array<() => void> = [];
     const window: any = {
         addEventListener() {}, location: { hash: options.hash || '' },
         confirm(message: string) { confirmCalls.push(message); return options.confirm !== false; },
@@ -51,8 +62,10 @@ function createEditor(options: { hash?: string; fetch?: (path: string, options?:
     runInNewContext(code, {
         document, window, fetch: options.fetch || (() => new Promise(() => {})),
         setTimeout: () => 0, clearTimeout() {}, console,
+        requestAnimationFrame(handler: () => void) { frames.push(handler); return frames.length; },
+        cancelAnimationFrame(id: number) { frames[id - 1] = () => {}; },
     });
-    return { editor: window.__editor, element, confirmCalls };
+    return { editor: window.__editor, element, confirmCalls, board, frames, attributeWrites: () => attributeWrites };
 }
 
 test('区域清空只删除当前分区与纵深，确认后可撤销恢复倾向与其他区域', () => {
@@ -1533,4 +1546,56 @@ test('editor accepts every PVP neutral-resource pool id', () => {
         editor.setResourceBrush(id);
         assert.equal(editor.state().resourceBrush, id);
     }
+});
+
+// 按住不放的自动铺色循环挂在 requestAnimationFrame 上：`pointerdown` 一按下就排了第一帧，
+// 而那时 `pointermove` 还没发生、`lastPointerEvent` 仍是 null。曾经这里直接把它喂给
+// `pointerLocal()`，首帧必抛 `Cannot read properties of null (reading 'clientX')`；
+// 异常打断 tick 后，末尾那句 `paintLoop = requestAnimationFrame(tick)` 执行不到，
+// 循环就死了 —— 表面现象只是「按住不放不再连刷」，不翻控制台根本发现不了。
+test('按下之后的第一帧不会因为没有 pointermove 而中断自动铺色循环', () => {
+    const { editor, board, frames } = createEditor();
+    editor.applyLayout({
+        version: 3, rows: 8, columns: 12, playerCount: 2, cityMode: 'select',
+        ascii: Array(8).fill('111111111111'),
+    });
+    const center = editor.hexCenter(3, 4);
+    assert.equal(frames.length, 0, '布局阶段不该排帧');
+
+    board.listeners.pointerdown({
+        button: 0, clientX: center.x, clientY: center.y, pointerId: 1,
+        preventDefault() {}, target: board,
+    });
+    assert.equal(frames.length, 1, '按下后应排一帧自动铺色');
+
+    // 首帧：此时还没有任何 pointermove ⇒ 拿指针的位置必须是"空转一帧"，不能抛错
+    assert.doesNotThrow(() => frames[0](), '首帧拿不到指针事件时应跳过，而不是抛 TypeError');
+
+    // 真判据：跑完首帧必须**继续排下一帧**。抛错会让末尾的 rAF 执行不到，队列就停止增长。
+    assert.equal(frames.length, 2, '首帧跑完必须续上下一帧，否则「按住不放连续铺色」静默失效');
+    assert.doesNotThrow(() => frames[1](), '后续帧同样不应抛错');
+    assert.equal(frames.length, 3, '循环应一直续帧，直到 pointerup 或 tick 发现 stroke 已结束');
+});
+
+// 落笔时全量重写 `setAttribute('class')` 是纯浪费：拖动时每帧真正变的通常只有 1~2 格，
+// 剩下的是 200+ 次无意义的 DOM 写（每写一次都会让该格重新匹配 CSS）。这条用例把
+// 「只写变化的格」钉住 —— 回退成全量写会直接红。
+test('刷一格只重写真正变化的 hex，不做全量 setAttribute', () => {
+    const { editor, attributeWrites } = createEditor();
+    editor.applyLayout({
+        version: 3, rows: 8, columns: 12, playerCount: 2, cityMode: 'select',
+        ascii: Array(8).fill('111111111111'),
+    });
+    const total = 8 * 12;
+    const base = attributeWrites();
+    assert.ok(base >= total, `首次渲染应逐格写一遍（判据前提），实测 ${base} 次`);
+
+    editor.paint(3, 4, 'void');
+    const once = attributeWrites() - base;
+    assert.ok(once <= 4, `刷一格只该写变化的格子（含镜像格），实测 ${once} 次；全量写会是 ${total} 次`);
+
+    // 同一格再刷一次 void：值没变，就不该再产生任何 DOM 写入
+    const settled = attributeWrites();
+    editor.paint(3, 4, 'void');
+    assert.equal(attributeWrites() - settled, 0, '值没变就不该再写 DOM');
 });

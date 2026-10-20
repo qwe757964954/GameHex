@@ -1,6 +1,7 @@
 """把 `tools/map-editor/presets/bigmap/*.json` 发布到客户端资源目录与策划 JSON 目录。
 
-与 `copy_territory_maps.py` 同一条链路，差别只有两点：
+与 `copy_territory_maps.py` 同一条链路（写盘 / `.meta` / 批处理骨架都在 `presets_io.py`），
+差别只有两点：
 
 1. **校验不在这里做**：规则只有一份权威实现（`BigMapLayout.parseBigMapLayout`），
    本脚本 `subprocess` 调 `npx tsx tools/map-editor/validate_bigmap_layout.ts` 跑它。
@@ -15,34 +16,19 @@
 
 from __future__ import annotations
 
-import argparse
 import json
 import shutil
 import subprocess
 from pathlib import Path
 
+import presets_io
+
 ROOT = Path(__file__).resolve().parent
-PROJECT = ROOT.parents[1]
-SOURCE = ROOT / "presets" / "bigmap"
-TARGET = PROJECT / "assets" / "resources" / "config" / "bigmap-maps"
-VALIDATOR = ROOT / "validate_bigmap_layout.ts"
+SOURCE = presets_io.ROOT / "presets" / "bigmap"
+TARGET = presets_io.PROJECT / "assets" / "resources" / "config" / "bigmap-maps"
+VALIDATOR = presets_io.ROOT / "validate_bigmap_layout.ts"
 
-# 策划侧两份 JSON（在 Demo3.8 之外，与 `export_tafang.mjs` 同一套口径）。
-# ⚠️ `sever` 是仓库既有拼写，改名会打断转表链路。
-DOC_JSON_ROOT = PROJECT.parents[0] / "doc" / "塔防数据配置" / "json"
-DOC_TARGETS: tuple[Path, ...] = (DOC_JSON_ROOT / "sever", DOC_JSON_ROOT / "client")
-
-META_PAYLOAD = {"ver": "1.1.2", "importer": "json", "imported": True, "uuid": "", "files": {}}
-
-
-def _write(target: Path, payload: str, with_meta: bool) -> None:
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(payload, encoding="utf-8")
-    if not with_meta:
-        return
-    meta = target.with_suffix(target.suffix + ".meta")
-    if not meta.exists():
-        meta.write_text(json.dumps(META_PAYLOAD, indent=2) + "\n", encoding="utf-8")
+DOC_TARGETS: tuple[Path, ...] = presets_io.DOC_TARGETS
 
 
 def _node_command() -> list[str] | None:
@@ -67,7 +53,7 @@ def validate(path: Path) -> tuple[dict | None, list[str], list[str]]:
         text=True,
         encoding="utf-8",
         errors="replace",
-        cwd=str(PROJECT),
+        cwd=str(presets_io.PROJECT),
     )
     stdout = (result.stdout or "").strip()
     if not stdout:
@@ -89,43 +75,20 @@ def copy_one(path: Path, dry_run: bool) -> tuple[list[Path], list[str]]:
     payload = json.dumps(layout, ensure_ascii=False, indent=2) + "\n"
     targets = [TARGET / f"{path.stem}.json", *(directory / f"{path.stem}.json" for directory in DOC_TARGETS)]
     if not dry_run:
-        _write(targets[0], payload, with_meta=True)
-        for target in targets[1:]:
-            _write(target, payload, with_meta=False)
+        presets_io.publish(targets, payload)
     return targets, warnings
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Publish bigmap layouts to Cocos resources and planner JSON")
-    parser.add_argument("--id", action="append", dest="ids", help="publish only this preset id (repeatable)")
-    parser.add_argument("--dry-run", action="store_true")
-    args = parser.parse_args()
-
-    if args.ids:
-        files = [SOURCE / f"{item}.json" for item in args.ids]
-    else:
-        # `_` 开头的是临时档（探针/试验），不参与默认批量发布；显式 --id 时不过滤。
-        files = [path for path in sorted(SOURCE.glob("*.json")) if not path.stem.startswith("_")]
-    if not files:
-        print("no bigmap presets found")
-        return 1
-
-    failed = 0
-    for path in files:
-        if not path.exists():
-            print(f"missing preset: {path}")
-            failed += 1
-            continue
-        try:
-            targets, warnings = copy_one(path, args.dry_run)
-        except ValueError as error:
-            print(f"invalid {path.name}: {error}")
-            failed += 1
-            continue
-        print(f"{'would publish' if args.dry_run else 'published'} {path.name} -> " + ", ".join(str(item) for item in targets))
-        for warning in warnings:
-            print(f"warning: {warning}")
-    return 1 if failed else 0
+    args = presets_io.parse_args("Publish bigmap layouts to Cocos resources and planner JSON")
+    return presets_io.run_batch(
+        source=SOURCE,
+        ids=args.ids,
+        dry_run=args.dry_run,
+        copy_one=copy_one,
+        empty_message="no bigmap presets found",
+        skip_underscore=True,
+    )
 
 
 if __name__ == "__main__":

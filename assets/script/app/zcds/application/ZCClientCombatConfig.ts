@@ -3,8 +3,8 @@ import type { ZCDeckCard } from '../model/ZCCombatCatalog';
 import type { ZCOwner, ZCPlayerCount } from '../model/ZCMapConfig';
 import { ownersForPlayerCount } from '../model/ZCMapConfig';
 import { captureZCMatchConfig, type ZCMatchConfig } from '../model/ZCMatchConfig';
-import { compileZCCombatBuild, getZCModifierCatalogs } from '../model/ZCModifierRuntime';
 import type { ZCCompiledModifierLoadout } from '../model/ZCModifierRuntime';
+import { compileZCCombatBuild, getZCModifierCatalogs } from '../model/ZCModifierRuntime';
 
 export interface ZCClientCombatConfigResult {
     readonly config: ZCMatchConfig;

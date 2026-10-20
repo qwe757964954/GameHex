@@ -1,5 +1,5 @@
-import { ZC_OWNER_ORDER, type ZCOwner } from '../ZCMapConfig';
 import type { ZCUnitState } from '../ZCGameTypes';
+import { ZC_OWNER_ORDER, type ZCOwner } from '../ZCMapConfig';
 
 /** 所有单位生命周期操作同时维护 ID、所在格和存活数量索引。 */
 export class ZCUnitRegistry {

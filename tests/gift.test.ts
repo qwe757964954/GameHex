@@ -68,7 +68,6 @@ import {
     GIFT_ART_ROOT,
     GIFT_RES_ICON_ART,
     GIFT_SUB_TAB_ART,
-    GIFT_TAB_ART,
     giftArtPath,
     giftCurrencyIconRef,
     giftResIconRef,
@@ -357,8 +356,16 @@ test('B2 `giftArtPath` 未知键返回 null（不拼出半个路径去 load）',
     assert.ok(path!.endsWith('/spriteFrame'), `装配路径必须以 /spriteFrame 结尾：${path}`);
 });
 
-test('B3 大页签复用主页的金色选中底板，未选中态不铺独立底图', () => {
-    assert.deepEqual(GIFT_TAB_ART, { off: '', on: 'city/nav_sel' });
+test('B3 大页签在 prefab 上绑定主页同款金色选中底板', () => {
+    const prefab = JSON.parse(readFileSync('assets/resources/ui/Gift/Gift.prefab', 'utf8')) as Array<Record<string, unknown>>;
+    const tabs = prefab.filter((item) => Object.prototype.hasOwnProperty.call(item, 'selectedFrame'));
+    assert.equal(tabs.length, 3, '三个大页签都要绑定选中资源');
+    for (const tab of tabs) {
+        assert.deepEqual(tab.selectedFrame, {
+            __uuid__: '5aa83ea4-4ad3-4935-9da7-c6081617404f@f9941',
+            __expectedType__: 'cc.SpriteFrame',
+        });
+    }
 });
 
 test('B4 ⚠️ `roleProperty` 货币档的图标：五档都有图（`8` 洗炼石 2026-09-29 补上）', () => {

@@ -7,11 +7,11 @@
  */
 
 import { _decorator, Button, Label, SpriteFrame } from 'cc';
-import { PopupBase } from '../../../framework/ui/PopupBase';
-import { ZCGameUiEvent } from '../view/ZCGameHudEvents';
 import { EventMgr } from '../../../framework/event/EventMgr';
+import { PopupBase } from '../../../framework/ui/PopupBase';
 import { PopupCloseReason } from '../../../framework/ui/PopupDef';
-import { RunAwayPlayerItem, RunAwayPlayerInfo } from './RunAwayPlayerItem';
+import { ZCGameUiEvent } from '../view/ZCGameHudEvents';
+import { RunAwayPlayerInfo, RunAwayPlayerItem } from './RunAwayPlayerItem';
 
 const { ccclass, property } = _decorator;
 

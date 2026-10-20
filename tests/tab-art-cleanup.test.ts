@@ -44,9 +44,14 @@ test('主页页签改版后删除旧 tab_bg 资源和所有代码、Prefab 引�
 
 test('礼包、首充、限时活动和共用页签都接主页金色选中底板', () => {
     const navSelUuid = '5aa83ea4-4ad3-4935-9da7-c6081617404f@f9941';
-    const giftArt = readFileSync(join(PROJECT_ROOT, 'assets/script/app/gift/GiftArt.ts'), 'utf8');
-    assert.match(giftArt, /on:\s*'city\/nav_sel'/);
-    assert.match(giftArt, /off:\s*''/);
+    const gift = JSON.parse(readFileSync(
+        join(PROJECT_ROOT, 'assets/resources/ui/Gift/Gift.prefab'), 'utf8',
+    )) as Array<Record<string, unknown>>;
+    const giftBindings = gift.filter((item) => Object.prototype.hasOwnProperty.call(item, 'selectedFrame'));
+    assert.equal(giftBindings.length, 3, '礼包三个大页签都要接主页选中图');
+    for (const binding of giftBindings) {
+        assert.deepEqual(binding.selectedFrame, { __uuid__: navSelUuid, __expectedType__: 'cc.SpriteFrame' });
+    }
 
     const firstRecharge = JSON.parse(readFileSync(
         join(PROJECT_ROOT, 'assets/resources/ui/FirstRecharge/FirstRecharge.prefab'), 'utf8',

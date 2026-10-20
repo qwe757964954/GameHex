@@ -1,15 +1,27 @@
+import type { ZCAttackProfile, ZCBondRule, ZCCounterRule, ZCDeckCard, ZCUnitDefinition, ZCUnitId } from './ZCCombatCatalog';
 import type { ZCPvpTables, ZCRuntimeRules } from './ZCGameRuntimeConfig';
-import { parseZCModifierCatalogs } from './ZCModifierRuntime';
 import { parseZCLegacySkillEffectConfig, parseZCLegacySkillViewBindings } from './ZCLegacySkillEffect';
-import type { ZCAttackProfile, ZCDeckCard, ZCUnitDefinition, ZCUnitId, ZCCounterRule, ZCBondRule } from './ZCCombatCatalog';
-import { ZCPvpTileType } from './ZCPvpTileRules';
-import type { ZCPvpTileConfig, ZCPvpTileTypeWeight } from './ZCPvpTileRules';
+import { parseZCModifierCatalogs } from './ZCModifierRuntime';
 import {
-    object, number, text, globalNumber, globalNumberOr, parseCard, parseAttackProfiles,
-    parseUnits, parseTileConfigs, parseBaseTeamWeights, parseTileWeights,
-    parseCounterRules, parseBondRules, isHqCard, normalizeCardRow,
-    refBool, refNullable, kvToObject,
+    globalNumber, globalNumberOr,
+    isHqCard,
+    kvToObject,
+    normalizeCardRow,
+    number,
+    object,
+    parseAttackProfiles,
+    parseBaseTeamWeights,
+    parseBondRules,
+    parseCard,
+    parseCounterRules,
+    parseTileConfigs,
+    parseTileWeights,
+    parseUnits,
+    refBool, refNullable,
+    text,
 } from './ZCPvpTableParser';
+import type { ZCPvpTileConfig, ZCPvpTileTypeWeight } from './ZCPvpTileRules';
+import { ZCPvpTileType } from './ZCPvpTileRules';
 
 export interface IZCPvpCompiledConfig {
     readonly cards: readonly (ZCDeckCard & { enabled: boolean })[];

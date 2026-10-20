@@ -1,5 +1,5 @@
-import { ZCCombatEventType, ZCSkillTrigger } from '../ZCCombatCatalog';
 import type { ZCAttackProfile, ZCDeckBonuses, ZCUnitDefinition } from '../ZCCombatCatalog';
+import { ZCCombatEventType, ZCSkillTrigger } from '../ZCCombatCatalog';
 import type { ZCRuntimeRules } from '../ZCGameRuntimeConfig';
 import type { ZCUnitBattleState, ZCUnitState } from '../ZCGameTypes';
 

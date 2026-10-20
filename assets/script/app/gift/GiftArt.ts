@@ -15,7 +15,7 @@
  * 礼包组件**没有任何九宫**（XML 里 `scale9grid` 一个都没出现），`trim` 也一律关。
  */
 
-import { FRAME_ART_ROOT, MAIN_ART_ROOT, spriteFramePath } from '../ArtPaths';
+import { FRAME_ART_ROOT, spriteFramePath } from '../ArtPaths';
 import { resIconRoot } from '../common/ResTypes';
 
 /** 礼包美术目录（运行时时相对 `resources` 的路径）。 */
@@ -113,21 +113,6 @@ export function giftCurrencyIconRef(): { readonly root: string; readonly name: s
     const name = GIFT_RES_ICON_ART[10];
     return { root: resIconRoot(name), name };
 }
-
-/**
- * 底部**大页签**选中底板（主页 `TabButton` 同款金色 `nav_sel`）。
- *
- * 未选中态不铺独立底图，名称保持主页未选中态的白色。
- *
- * 主页的图标仍由主城各 tab prefab 实例配置；礼包这里保留自己的文案和点击业务。
- */
-export const GIFT_TAB_ART = {
-    off: '',
-    on: 'city/nav_sel',
-} as const;
-
-/** 底部大页签底图的根目录。 */
-export const GIFT_TAB_ART_ROOT = MAIN_ART_ROOT;
 
 /** 品质框（奖励格用，与七日狂欢共用同一套 `image/frame/`）。 */
 export const QUALITY_FRAME_LEVELS = 4;

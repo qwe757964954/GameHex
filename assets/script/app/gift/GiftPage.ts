@@ -5,8 +5,6 @@ import {
     GIFT_ART_NAMES,
     GIFT_ART_ROOT,
     GIFT_SUB_TAB_ART,
-    GIFT_TAB_ART,
-    GIFT_TAB_ART_ROOT,
     QUALITY_FRAME_NAMES,
     qualityFrameName,
     resolveGiftIconRef,
@@ -49,11 +47,6 @@ import { GIFT_TEXTS, RECHARGE_TEXTS } from './GiftTexts';
 const { ccclass, property } = _decorator;
 
 /** 底部大页签的两张底图（首次加载后缓存在实例上；两张图不会变）。 */
-interface IGiftMainTabFrames {
-    readonly off: SpriteFrame | null;
-    readonly on: SpriteFrame | null;
-}
-
 /**
  * 「礼包」弹窗（`LayerGift`，`assets/resources/ui/Gift/Gift.prefab`）。
  *
@@ -155,9 +148,6 @@ export class GiftPage extends PopupBase {
 
     /** 子页签底图 + 标题图（固定几张），首次用到后缓存。 */
     private subTabFrames: IGiftSubTabFrames | null = null;
-
-    /** 底部大页签底图，首次用到后缓存。 */
-    private mainTabFrames: IGiftMainTabFrames | null = null;
 
     /** `resId` → 图标（道具图标 + 货币图标共用一张表）。 */
     private readonly iconFrames = new Map<number, SpriteFrame>();
@@ -700,12 +690,11 @@ export class GiftPage extends PopupBase {
     // 图与文案
     // ============================================================
 
-    /** 固定几张图（品质框 / 子页签 / 大页签底 / 灵玉按钮底）；首次之后走缓存。 */
+    /** 固定几张图（品质框 / 子页签 / 灵玉按钮底）；首次之后走缓存。 */
     private async preloadStaticFrames(): Promise<void> {
         await Promise.all([
             this.loadQualityFrames(),
             this.loadSubTabFrames(),
-            this.loadMainTabFrames(),
             this.loadLingYuButtonFrame(),
         ]);
     }
@@ -741,18 +730,6 @@ export class GiftPage extends PopupBase {
 
         const frames: IGiftSubTabFrames = { off: loaded[0], on: loaded[1], titles };
         this.subTabFrames = frames;
-        return frames;
-    }
-
-    private async loadMainTabFrames(): Promise<IGiftMainTabFrames> {
-        const cached = this.mainTabFrames;
-        if (cached) return cached;
-        const [off, on] = await Promise.all([
-            GIFT_TAB_ART.off ? loadArt(GIFT_TAB_ART.off, GIFT_TAB_ART_ROOT) : Promise.resolve(null),
-            loadArt(GIFT_TAB_ART.on, GIFT_TAB_ART_ROOT),
-        ]);
-        const frames: IGiftMainTabFrames = { off, on };
-        this.mainTabFrames = frames;
         return frames;
     }
 
@@ -810,7 +787,6 @@ export class GiftPage extends PopupBase {
     }
 
     private presentTabButtons(): void {
-        const frames = this.mainTabFrames;
         const tabs = this.tabButtons;
         for (let index = 0; index < tabs.length; index++) {
             const def = GIFT_MAIN_TABS[index];
@@ -819,12 +795,7 @@ export class GiftPage extends PopupBase {
                 continue;
             }
             tabs[index].node.active = true;
-            tabs[index].render(
-                '',
-                def.key === this.selectedTab,
-                frames?.off ?? null,
-                frames?.on ?? null,
-            );
+            tabs[index].render('', def.key === this.selectedTab);
         }
     }
 

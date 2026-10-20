@@ -1,17 +1,19 @@
+import type {
+    ZCAttackProfile,
+    ZCAttackTrait, ZCBondEffectType, ZCBondRule, ZCCampTrait, ZCCardRarity, ZCCardTraits,
+    ZCCounterRule, ZCDeckCard,
+    ZCUnitDefinition, ZCUnitId,
+} from './ZCCombatCatalog';
 import {
     isZCCardType,
     ZC_CARD_TYPE_NAMES,
     ZCCardType,
     ZCSkillTrigger,
 } from './ZCCombatCatalog';
-import type {
-    ZCAttackTrait, ZCBondEffectType, ZCBondRule, ZCCampTrait, ZCCardRarity, ZCCardTraits,
-    ZCCounterRule, ZCDeckCard, ZCAttackProfile, ZCUnitDefinition, ZCUnitId,
-} from './ZCCombatCatalog';
+import type { ZCPvpTileConfig, ZCPvpTileType, ZCPvpTileTypeWeight } from './ZCPvpTileRules';
 import {
     ZC_PVP_TILE_TYPES,
 } from './ZCPvpTileRules';
-import type { ZCPvpTileConfig, ZCPvpTileType, ZCPvpTileTypeWeight } from './ZCPvpTileRules';
 
 
 

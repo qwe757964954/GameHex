@@ -9,6 +9,13 @@
     * { box-sizing:border-box } body { margin:0; background:var(--bg); color:#e5e7eb; height:100vh; overflow:hidden }
     header { height:54px; display:flex; align-items:center; gap:10px; padding:8px 14px; border-bottom:1px solid var(--line); background:#0f172a }
     header h1 { margin:0 18px 0 0; font-size:17px } button, input, select, textarea { color:inherit; background:#111827; border:1px solid #4b5563; border-radius:5px; padding:6px 8px }
+    /* <select> 单独补一刀：系统箭头不跟主题走（Windows 是白色实心三角、macOS 又是另一个样），
+       而且各平台控件高度不一致。改成 appearance:none + 自绘细线箭头，与 index.html 同一口径。 */
+    select { padding-right:24px; cursor:pointer; appearance:none; -webkit-appearance:none;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2394a3b8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      background-repeat:no-repeat; background-position:right 8px center }
+    select:focus { outline:none; border-color:var(--accent) }
+    select option { background:#111827; color:#e5e7eb }
     .dirtyBadge { padding:3px 7px; border:1px solid #92400e; border-radius:999px; background:#451a03; color:#fbbf24; font-size:11px }
     button { cursor:pointer } button:hover { border-color:var(--accent) } .layout { height:calc(100vh - 54px); display:grid; grid-template-columns:230px 1fr 300px }
     aside { padding:12px; overflow:auto; border-right:1px solid var(--line); background:var(--panel) } aside.right { border-left:1px solid var(--line); border-right:0 }

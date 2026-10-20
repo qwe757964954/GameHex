@@ -1,6 +1,4 @@
-import type { ZCMatchMap } from './ZCMatchConfig';
 import type { ZCUnitDefinition } from './ZCCombatCatalog';
-import type { ZCOwner } from './ZCMapConfig';
 import type {
     DeepReadonly,
     ZCBuildingCooldownState,
@@ -14,6 +12,8 @@ import type {
     ZCNeutralReward,
     ZCSnapshot,
 } from './ZCGameTypes';
+import type { ZCOwner } from './ZCMapConfig';
+import type { ZCMatchMap } from './ZCMatchConfig';
 
 /** 地块在本帧的规则派生表现数据；视图不再向模型逐格发起规则查询。 */
 export interface ZCGameRenderHex {

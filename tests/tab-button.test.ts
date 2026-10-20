@@ -286,10 +286,12 @@ test('C3 红点回路：`TabButton` 持 `RdExprBinding`，销毁时**必须**解
     assert.match(code, /ensureInit\(\): void/, '初始化要幂等（宿主 active=false ⇒ onLoad 会晚跑）');
 });
 
-test('C4 挑战 tab 禁用后保持可见并使用灰态', () => {
+test('C4 挑战与世界 tab 禁用后保持可见、使用灰态并拒绝切页点击', () => {
     const host = stripComments(readFileSync('assets/script/app/main/MainTabHost.ts', 'utf8'));
     const tab = stripComments(readFileSync('assets/script/app/common/TabButton.ts', 'utf8'));
-    assert.match(host, /button\.setEnabled\(type !== MainTab\.Challenge\)/);
+    assert.match(host, /const isLocked = type === MainTab\.Challenge \|\| type === MainTab\.World/);
+    assert.match(host, /button\.setEnabled\(!isLocked\)/);
+    assert.match(host, /button\.bindSelect\(isLocked \? null/);
     assert.match(tab, /setEnabled\(enabled: boolean\): void/);
     assert.match(tab, /if \(!this\.isEnabled\) return/);
     assert.match(tab, /const tint = this\.isEnabled \? TAB_ENABLED_TINT : TAB_DISABLED_TINT/);

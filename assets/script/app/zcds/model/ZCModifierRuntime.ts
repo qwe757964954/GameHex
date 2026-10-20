@@ -17,12 +17,12 @@ import {
     type ZCModifierAdapterCatalogs,
     type ZCModifierAdapterTables,
     type ZCModifierSourceKind,
+    type ZCSkillPlanRecord,
     type ZCStatBreakdown,
     type ZCStatId,
     type ZCStatOperation,
     type ZCTextAttackModifier,
     type ZCTypedModifier,
-    type ZCSkillPlanRecord,
 } from './ZCStatSchema';
 
 /** 客户端只需提供武将和星级；旧表的具体 modifier id 不向普通业务层泄漏。 */

@@ -4,6 +4,7 @@ import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import { configureZCMap, isRandomMapCandidate, ZC_MAP_ID } from '../assets/script/app/zcds/model/ZCGameModel';
+import * as artPaths from '../assets/script/app/ArtPaths';
 
 const GAME_SOURCE = 'assets/script/app/zcds/ZCGame.ts';
 const LOADER_SOURCE = 'assets/script/app/zcds/application/ZCGameLoader.ts';
@@ -45,6 +46,8 @@ function makeGame(
             isRandomMapCandidate,
         },
         '../model/ZCGameRuntimeConfig': {},
+        // ZCGameLoader 从 ArtPaths 取资源目录常量；不映射会解构出 undefined.HEX_GROUND_GLOW_ART_ROOT
+        '../../ArtPaths': artPaths,
     };
     const context = { exports: {} as { ZCGameLoader: new (assets: unknown, configs: unknown, mapDirectory: string, random: () => number, playerCountOverride?: 2 | 3 | 4) => { loadRandomMap(): Promise<boolean> } },
         require: (name: string) => dependencies[name],

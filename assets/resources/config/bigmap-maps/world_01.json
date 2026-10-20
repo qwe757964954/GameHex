@@ -19,7 +19,15 @@
         1121
       ],
       "ring": 18,
-      "rangeHex": [],
+      "rangeHex": [
+        1122,
+        1082,
+        1162,
+        1121,
+        1161,
+        1123,
+        1163
+      ],
       "adjacentCityIds": [],
       "label": "101"
     },
@@ -33,7 +41,15 @@
         760
       ],
       "ring": 18,
-      "rangeHex": [],
+      "rangeHex": [
+        761,
+        721,
+        801,
+        760,
+        720,
+        762,
+        722
+      ],
       "adjacentCityIds": [],
       "label": "102"
     },
@@ -47,7 +63,15 @@
         323
       ],
       "ring": 18,
-      "rangeHex": [],
+      "rangeHex": [
+        324,
+        284,
+        364,
+        323,
+        363,
+        325,
+        365
+      ],
       "adjacentCityIds": [],
       "label": "103"
     },
@@ -61,7 +85,15 @@
         172
       ],
       "ring": 18,
-      "rangeHex": [],
+      "rangeHex": [
+        173,
+        133,
+        213,
+        172,
+        132,
+        174,
+        134
+      ],
       "adjacentCityIds": [],
       "label": "104"
     },
@@ -75,7 +107,15 @@
         142
       ],
       "ring": 18,
-      "rangeHex": [],
+      "rangeHex": [
+        143,
+        103,
+        183,
+        142,
+        102,
+        144,
+        104
+      ],
       "adjacentCityIds": [],
       "label": "105"
     },
@@ -89,7 +129,15 @@
         311
       ],
       "ring": 18,
-      "rangeHex": [],
+      "rangeHex": [
+        312,
+        272,
+        352,
+        311,
+        351,
+        313,
+        353
+      ],
       "adjacentCityIds": [],
       "label": "106"
     },
@@ -103,7 +151,15 @@
         596
       ],
       "ring": 18,
-      "rangeHex": [],
+      "rangeHex": [
+        597,
+        557,
+        637,
+        596,
+        556,
+        598,
+        558
+      ],
       "adjacentCityIds": [],
       "label": "107"
     },
@@ -117,7 +173,15 @@
         956
       ],
       "ring": 18,
-      "rangeHex": [],
+      "rangeHex": [
+        957,
+        917,
+        997,
+        956,
+        916,
+        958,
+        918
+      ],
       "adjacentCityIds": [],
       "label": "108"
     },
@@ -131,7 +195,15 @@
         1232
       ],
       "ring": 18,
-      "rangeHex": [],
+      "rangeHex": [
+        1233,
+        1193,
+        1273,
+        1232,
+        1192,
+        1234,
+        1194
+      ],
       "adjacentCityIds": [],
       "label": "109"
     },
@@ -145,7 +217,15 @@
         1384
       ],
       "ring": 18,
-      "rangeHex": [],
+      "rangeHex": [
+        1385,
+        1345,
+        1425,
+        1384,
+        1344,
+        1386,
+        1346
+      ],
       "adjacentCityIds": [],
       "label": "110"
     },
@@ -159,7 +239,15 @@
         1456
       ],
       "ring": 18,
-      "rangeHex": [],
+      "rangeHex": [
+        1457,
+        1417,
+        1497,
+        1456,
+        1416,
+        1458,
+        1418
+      ],
       "adjacentCityIds": [],
       "label": "111"
     },
@@ -173,7 +261,15 @@
         1289
       ],
       "ring": 18,
-      "rangeHex": [],
+      "rangeHex": [
+        1290,
+        1250,
+        1330,
+        1289,
+        1329,
+        1291,
+        1331
+      ],
       "adjacentCityIds": [],
       "label": "112"
     },
@@ -187,7 +283,15 @@
         1007
       ],
       "ring": 12,
-      "rangeHex": [],
+      "rangeHex": [
+        1008,
+        968,
+        1048,
+        1007,
+        1047,
+        1009,
+        1049
+      ],
       "adjacentCityIds": [],
       "label": "200"
     },
@@ -201,7 +305,15 @@
         646
       ],
       "ring": 12,
-      "rangeHex": [],
+      "rangeHex": [
+        647,
+        607,
+        687,
+        646,
+        606,
+        648,
+        608
+      ],
       "adjacentCityIds": [],
       "label": "201"
     },
@@ -215,7 +327,15 @@
         374
       ],
       "ring": 12,
-      "rangeHex": [],
+      "rangeHex": [
+        375,
+        335,
+        415,
+        374,
+        334,
+        376,
+        336
+      ],
       "adjacentCityIds": [],
       "label": "202"
     },
@@ -229,7 +349,15 @@
         424
       ],
       "ring": 12,
-      "rangeHex": [],
+      "rangeHex": [
+        425,
+        385,
+        465,
+        424,
+        384,
+        426,
+        386
+      ],
       "adjacentCityIds": [],
       "label": "203"
     },
@@ -243,7 +371,15 @@
         670
       ],
       "ring": 12,
-      "rangeHex": [],
+      "rangeHex": [
+        671,
+        631,
+        711,
+        670,
+        630,
+        672,
+        632
+      ],
       "adjacentCityIds": [],
       "label": "204"
     },
@@ -257,7 +393,15 @@
         1030
       ],
       "ring": 12,
-      "rangeHex": [],
+      "rangeHex": [
+        1031,
+        991,
+        1071,
+        1030,
+        990,
+        1032,
+        992
+      ],
       "adjacentCityIds": [],
       "label": "205"
     },
@@ -271,7 +415,15 @@
         1182
       ],
       "ring": 12,
-      "rangeHex": [],
+      "rangeHex": [
+        1183,
+        1143,
+        1223,
+        1182,
+        1142,
+        1184,
+        1144
+      ],
       "adjacentCityIds": [],
       "label": "206"
     },
@@ -285,7 +437,15 @@
         1174
       ],
       "ring": 12,
-      "rangeHex": [],
+      "rangeHex": [
+        1175,
+        1135,
+        1215,
+        1174,
+        1134,
+        1176,
+        1136
+      ],
       "adjacentCityIds": [],
       "label": "207"
     },
@@ -299,7 +459,15 @@
         893
       ],
       "ring": 6,
-      "rangeHex": [],
+      "rangeHex": [
+        894,
+        854,
+        934,
+        893,
+        933,
+        895,
+        935
+      ],
       "adjacentCityIds": [],
       "label": "300"
     },
@@ -313,7 +481,15 @@
         575
       ],
       "ring": 6,
-      "rangeHex": [],
+      "rangeHex": [
+        576,
+        536,
+        616,
+        575,
+        615,
+        577,
+        617
+      ],
       "adjacentCityIds": [],
       "label": "301"
     },
@@ -327,7 +503,15 @@
         664
       ],
       "ring": 6,
-      "rangeHex": [],
+      "rangeHex": [
+        665,
+        625,
+        705,
+        664,
+        624,
+        666,
+        626
+      ],
       "adjacentCityIds": [],
       "label": "302"
     },
@@ -341,7 +525,15 @@
         941
       ],
       "ring": 6,
-      "rangeHex": [],
+      "rangeHex": [
+        942,
+        902,
+        982,
+        941,
+        981,
+        943,
+        983
+      ],
       "adjacentCityIds": [],
       "label": "303"
     },
@@ -357,7 +549,15 @@
         780
       ],
       "ring": 0,
-      "rangeHex": [],
+      "rangeHex": [
+        779,
+        739,
+        819,
+        778,
+        738,
+        780,
+        740
+      ],
       "adjacentCityIds": [],
       "label": "401"
     }
@@ -697,6 +897,15 @@
   ],
   "blocked": [],
   "spawnZones": [],
-  "points": [],
+  "points": [
+    {
+      "pointId": 1,
+      "pointType": 3,
+      "hexIds": [
+        492
+      ],
+      "openCron": ""
+    }
+  ],
   "background": ""
 }

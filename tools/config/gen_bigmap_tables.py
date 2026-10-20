@@ -200,7 +200,12 @@ def write(name, key, rows):
         if len(row) != len(key):
             raise ValueError(f"{name} 第 {index + 1} 行有 {len(row)} 个值，但表头有 {len(key)} 个字段：{row}")
     path = os.path.join(OUT_DIR, name + ".json")
-    payload = {"k": key, "v": rows}
+    # `"c": 1` 是项目压缩表契约位，**不能省**：
+    # RefUtil.compressKeyRefDataFix 只在 data.c === 1 时把 {k,v} 解压成对象数组，
+    # 缺了它 RefUtil 会原样返回 {k,v} 对象 → RefConfigService.getTable 的 Array.isArray 判假
+    # → 返回 [] → 运行时抛「[BigMap] 配置表缺失或为空」（2026-10-20 实际炸过一轮）。
+    # 真值口径见 tools/ref/ref_compress_json.py（官方压缩器同样写 c=1）。
+    payload = {"k": key, "v": rows, "c": 1}
     with open(path, "w", encoding="utf-8", newline="\n") as handle:
         json.dump(payload, handle, ensure_ascii=False, indent=0, separators=(",", ":"))
         handle.write("\n")

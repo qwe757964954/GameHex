@@ -224,7 +224,7 @@ test('小兵一拍内从弹道上方穿到下方，双方相对运动仍检测�
     enemy.freeY = 50;
     const shots = [projectile()];
     const hits: ZCCombatTarget[] = [];
-    system.update(shots, .05, { now: .05, units: [enemy], distanceScale: 1, definition: () => definition, structureTarget: () => null, hit: (_shot, target) => hits.push(target) });
+    system.update(shots, .05, { now: .05, units: [enemy], distanceScale: 1, effectiveDefinition: () => definition, structureTarget: () => null, hit: (_shot, target) => hits.push(target) });
     assert.equal(hits.length, 1);
     assert.equal(hits[0].id, 2);
     assert.equal(shots.length, 0);
@@ -237,7 +237,7 @@ test('空气攻击过滤和同位置 ID 平局稳定，已死单位不能阻挡�
     const run = (canHitAir: boolean) => {
         const system = new ZCProjectileSystem(); system.beginStep(units);
         const shots = [projectile({ canHitAir })]; let id: number | null = null;
-        system.update(shots, .05, { now: .05, units, distanceScale: 1, definition: unit => ({ ...definition, flying: unit.id === 2 }), structureTarget: () => null, hit: (_shot, target) => { id = target.id; } });
+        system.update(shots, .05, { now: .05, units, distanceScale: 1, effectiveDefinition: unit => ({ ...definition, flying: unit.id === 2 }), structureTarget: () => null, hit: (_shot, target) => { id = target.id; } });
         return id;
     };
     assert.equal(run(false), 4);
@@ -251,7 +251,7 @@ test('piercing projectile hits distinct enemies in deterministic order and survi
     const shots = [projectile({ durationSeconds: .15, remainingPierces: 1, hitUnitIds: [] })];
     const hits: number[] = [];
     const context = {
-        now: .05, units: [second, first], distanceScale: 1, definition: () => definition,
+        now: .05, units: [second, first], distanceScale: 1, effectiveDefinition: () => definition,
         structureTarget: () => null,
         hit: (_shot: ZCProjectileState, target: ZCCombatTarget) => hits.push(target.id),
     };
@@ -346,7 +346,7 @@ test('短于一拍的弹道停在射程终点，超长扫掠回退候选查询�
     const system = new ZCProjectileSystem(); system.beginStep([enemy]);
     const shot = projectile({ velocityX: 10000, durationSeconds: .01 });
     const shots = [shot]; let hits = 0;
-    const context = { now: .05, units: [enemy], distanceScale: 1, definition: () => definition, structureTarget: () => null, hit: () => hits++ };
+    const context = { now: .05, units: [enemy], distanceScale: 1, effectiveDefinition: () => definition, structureTarget: () => null, hit: () => hits++ };
     system.update(shots, .05, context);
     assert.equal(hits, 0); assert.equal(shots.length, 0); assert.equal(shot.x, 100);
     enemy.freeX = 500000;

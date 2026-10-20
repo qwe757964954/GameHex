@@ -9,7 +9,7 @@ export interface ZCMovementContext {
     map: ZCMatchMap;
     rules: Readonly<ZCRuntimeRules>;
     geometry: ZCMapGeometry;
-    definition(unit: ZCUnitState): ZCUnitDefinition;
+    effectiveDefinition(unit: ZCUnitState): ZCUnitDefinition;
     bonuses(owner: ZCOwner): ZCDeckBonuses;
     goalHomeId(owner: ZCOwner, fromHexId: number): number;
     frozenSeconds(): number;
@@ -46,7 +46,7 @@ export class ZCMovementSystem {
     /** 自由直线移动推进：跨格更新索引，撞敌方建筑或出界即停。 */
     advanceMarch(unit: ZCUnitState, dt: number): void {
         if (unit.marchAngle === null) return;
-        const definition = this.context.definition(unit);
+        const definition = this.context.effectiveDefinition(unit);
         const bonuses = this.context.bonuses(unit.owner);
         const frozenMultiplier = unit.owner !== 'player' && this.context.frozenSeconds() > 0
             ? this.context.rules.artifactEnemySpeedMultiplier : 1;
@@ -72,7 +72,7 @@ export class ZCMovementSystem {
         if (unit.targetHexId === null) return;
         const target = this.context.map.hexes[unit.targetHexId];
         const current = this.position(unit);
-        const definition = this.context.definition(unit);
+        const definition = this.context.effectiveDefinition(unit);
         const bonuses = this.context.bonuses(unit.owner);
         const frozenMultiplier = unit.owner !== 'player' && this.context.frozenSeconds() > 0
             ? this.context.rules.artifactEnemySpeedMultiplier : 1;
@@ -98,7 +98,7 @@ export class ZCMovementSystem {
         const current = this.position(unit);
         const destination = this.position(target);
         const remaining = distance(current.x, current.y, destination.x, destination.y);
-        const definition = this.context.definition(unit);
+        const definition = this.context.effectiveDefinition(unit);
         const bonuses = this.context.bonuses(unit.owner);
         const frozenMultiplier = unit.owner !== 'player' && this.context.frozenSeconds() > 0
             ? this.context.rules.artifactEnemySpeedMultiplier : 1;

@@ -28,7 +28,7 @@ function context(units: ReadonlyMap<number, ZCUnitState>, options: {
     const target = options.target ?? null;
     return {
         now: () => options.now ?? 1,
-        definition: () => ({ attackHitTime: 0.2, attackDuration: 0.4, attackInterval: 1 } as ZCUnitDefinition),
+        effectiveDefinition: () => ({ attackHitTime: 0.2, attackDuration: 0.4, attackInterval: 1 } as ZCUnitDefinition),
         controlOf: () => options.controlled ? { kind: 'stun', defId: 'stun' } : null,
         random: () => 0.5,
         unitById: units,
@@ -136,7 +136,7 @@ test('单位索敌保留射程滞回，目标死亡后立即失效', () => {
             now: 1, units: [soldier, enemy], hexes: [],
             unitById: (id) => units.get(id) ?? null,
             unitPosition, hexPosition: () => ({ x: 0, y: 0 }),
-            unitDefinition: () => definition,
+            effectiveDefinition: () => definition,
             hasExposedWall: () => false,
         },
         baseDefinition: () => definition,

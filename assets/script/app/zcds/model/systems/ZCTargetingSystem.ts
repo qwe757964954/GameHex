@@ -11,7 +11,7 @@ export interface ZCTargetingContext {
     readonly unitById: (id: number) => ZCUnitState | null;
     readonly unitPosition: (unit: ZCUnitState, result?: { x: number; y: number }) => ZCPoint;
     readonly hexPosition: (hexId: number) => ZCPoint;
-    readonly unitDefinition: (unit: ZCUnitState) => ZCUnitDefinition;
+    readonly effectiveDefinition: (unit: ZCUnitState) => ZCUnitDefinition;
     readonly hasExposedWall: (hex: ZCHexState) => boolean;
 }
 
@@ -44,7 +44,7 @@ export interface IZCPathStepOptions {
 /** 索敌排序、射程和通用 BFS；不持有对局状态。 */
 export class ZCTargetingSystem {
     static acquire(unit: ZCUnitState, context: ZCTargetingContext): ZCTargetSelection | null {
-        const definition = context.unitDefinition(unit);
+        const definition = context.effectiveDefinition(unit);
         const from = context.unitPosition(unit);
         const candidatePosition = { x: 0, y: 0 };
         let best: ZCTargetSelection | null = null;
@@ -62,14 +62,14 @@ export class ZCTargetingSystem {
         if (unit.hatredUnitId !== null && context.now <= unit.hatredUntil) {
             const hater = context.unitById(unit.hatredUnitId);
             if (hater && hater.battleState !== 'dead' && hater.hp > 0 && hater.owner !== unit.owner
-                && (definition.canAttackAir || !context.unitDefinition(hater).flying)) {
+                && (definition.canAttackAir || !context.effectiveDefinition(hater).flying)) {
                 // 仇恨目标进入同一候选池；保留旧逻辑的距离排序语义。
                 consider('unit', hater.id, context.unitPosition(hater, candidatePosition));
             }
         }
         for (const candidate of context.units) {
             if (candidate.id === unit.id || candidate.battleState === 'dead' || candidate.hp <= 0 || candidate.owner === unit.owner) continue;
-            if (!definition.canAttackAir && context.unitDefinition(candidate).flying) continue;
+            if (!definition.canAttackAir && context.effectiveDefinition(candidate).flying) continue;
             consider('unit', candidate.id, context.unitPosition(candidate, candidatePosition));
         }
         for (const hex of context.hexes) {

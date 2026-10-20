@@ -20,7 +20,7 @@ export interface IZCUnitMovement {
 
 export interface IZCUnitContext {
     now(): number;
-    definition(unit: ZCUnitState): ZCUnitDefinition;
+    effectiveDefinition(unit: ZCUnitState): ZCUnitDefinition;
     /** 当前硬控（无则 null）；受控单位由状态机闸门冻结一切行动。 */
     controlOf(unit: ZCUnitState): { kind: string; defId: string } | null;
     random(): number;
@@ -55,7 +55,7 @@ export class ZCUnitSystem {
         context.targeting.face(unit);
         ZCCombatSystem.switchState(unit, 'attack');
         unit.attackHitDone = false;
-        unit.nextAttackAt = context.now() + context.definition(unit).attackInterval;
+        unit.nextAttackAt = context.now() + context.effectiveDefinition(unit).attackInterval;
     }
 
     private static updateUnit(unit: ZCUnitState, dt: number, context: IZCUnitContext): void {
@@ -64,7 +64,7 @@ export class ZCUnitSystem {
         // 单位原地保持，表现层按 controlOf().kind 播放眩晕/冻结/麻痹/致盲。
         if (context.controlOf(unit)) return;
         unit.stateTime = Math.round((unit.stateTime + dt) * 1e9) / 1e9;
-        const definition = context.definition(unit);
+        const definition = context.effectiveDefinition(unit);
 
         if (unit.battleState === 'born') {
             if (unit.stateTime >= BORN_SECONDS) ZCCombatSystem.switchState(unit, 'target');

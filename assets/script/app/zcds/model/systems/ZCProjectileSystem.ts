@@ -6,7 +6,7 @@ export interface ZCProjectileContext {
     now: number;
     units: readonly ZCUnitState[];
     distanceScale: number;
-    definition(unit: ZCUnitState): ZCUnitDefinition;
+    effectiveDefinition(unit: ZCUnitState): ZCUnitDefinition;
     structureTarget(projectile: ZCProjectileState): ZCCombatTarget | null;
     hit(projectile: ZCProjectileState, target: ZCCombatTarget): void;
 }
@@ -52,7 +52,7 @@ export class ZCProjectileSystem {
         for (const unit of context.units) {
             if (unit.hp <= 0 || unit.battleState === 'dead') continue;
             const start = this.starts.get(unit.id) ?? { x: unit.freeX, y: unit.freeY };
-            const radius = context.definition(unit).bodyRadius * context.distanceScale;
+            const radius = context.effectiveDefinition(unit).bodyRadius * context.distanceScale;
             const indexed = this.visitCells(start.x, start.y, unit.freeX, unit.freeY, radius, key => {
                 let bucket = this.cells.get(key);
                 if (!bucket) { bucket = []; this.cells.set(key, bucket); }
@@ -79,7 +79,7 @@ export class ZCProjectileSystem {
             for (const unit of this.candidates) {
                 if (unit.owner === projectile.owner || unit.hp <= 0 || unit.battleState === 'dead') continue;
                 if (hitUnitIds.has(unit.id)) continue;
-                const definition = context.definition(unit);
+                const definition = context.effectiveDefinition(unit);
                 if (definition.flying && !projectile.canHitAir) continue;
                 const start = this.starts.get(unit.id) ?? { x: unit.freeX, y: unit.freeY };
                 const fraction = travelDt / dt;

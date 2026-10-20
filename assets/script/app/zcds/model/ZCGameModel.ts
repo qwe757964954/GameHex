@@ -245,9 +245,9 @@ export class ZCGameModel {
         hexIdAt: (x, y) => this.geometry.hexIdAt(x, y),
         unitsInRadius: (hexId, radiusHex) => this.unitsInRadius(hexId, radiusHex),
         unitPosition: (unit) => this.unitPosition(unit),
-        damageUnit: (unit, damage, source) => { this.damageUnit(unit, damage, source); },
+        damageUnit: (unit, damage, source) => this.damageUnit(unit, damage, source),
         ensureSlowStatus: (id, speedPct, duration) => this.ensureMoveSpeedStatus(id, speedPct, duration),
-        applyStatus: (unit, id, options) => { this.statusSystem.apply(String(unit.id), id, options); },
+        applyStatus: (unit, id, options) => this.statusSystem.apply(String(unit.id), id, options),
         exportStatusEffects: () => this.statusSystem.exportSnapshot(),
     };
     private readonly attackResolutionContext: IZCAttackResolutionContext;
@@ -382,7 +382,7 @@ export class ZCGameModel {
             unitById: (id) => this.units.byId.get(id) ?? null,
             unitPosition: (candidate, result) => this.unitPosition(candidate, result),
             hexPosition: (id) => this.config.map.hexes[id],
-            unitDefinition: (candidate) => this.effectiveUnitDefinition(candidate),
+            effectiveDefinition: (candidate) => this.effectiveUnitDefinition(candidate),
             hasExposedWall: (hex) => this.hasExposedWall(hex),
         };
     }
@@ -393,7 +393,7 @@ export class ZCGameModel {
             get now() { return model.state.elapsedSeconds; },
             get units() { return model.state.units; },
             distanceScale: this.rules.combatDistanceScale,
-            definition: (unit) => this.effectiveUnitDefinition(unit),
+            effectiveDefinition: (unit) => this.effectiveUnitDefinition(unit),
             structureTarget: (projectile) => this.projectileStructureTarget(projectile),
             hit: (projectile, target) => this.resolveProjectileHit(projectile, target),
         };
@@ -414,7 +414,7 @@ export class ZCGameModel {
             goldOf: (owner) => this.goldOf(owner),
             setGold: (owner, amount) => this.setGold(owner, amount),
             unitCount: (owner) => this.unitCount(owner),
-            spawnUnit: (owner, card, tier, hexId) => { this.spawnUnit(owner, card, tier, hexId); },
+            spawnUnit: (owner, card, tier, hexId) => this.spawnUnit(owner, card, tier, hexId),
             onNeutralReward: (hexId, resourceId, owner, reward) => {
                 this.pushNeutralReward(hexId, resourceId, owner, reward);
             },
@@ -430,7 +430,7 @@ export class ZCGameModel {
             effectiveUnitDefinition: (unit) => this.effectiveUnitDefinition(unit),
             unitPosition: (unit) => this.unitPosition(unit),
             displaceUnit: (unit, dx, dy) => this.displaceUnit(unit, dx, dy),
-            damageUnit: (unit, damage, source) => { this.damageUnit(unit, damage, source); },
+            damageUnit: (unit, damage, source) => this.damageUnit(unit, damage, source),
             presentHeal: (unit, amount) => {
                 const position = this.unitPosition(unit);
                 this.pushFloatText({
@@ -512,7 +512,7 @@ export class ZCGameModel {
     private buildMovement(): ZCMovementSystem {
         return new ZCMovementSystem({
             map: this.config.map, rules: this.rules, geometry: this.geometry,
-            definition: (unit) => this.effectiveUnitDefinition(unit),
+            effectiveDefinition: (unit) => this.effectiveUnitDefinition(unit),
             bonuses: (owner) => this.bonusesFor(owner),
             goalHomeId: (owner, fromHexId) => this.goalHomeId(owner, fromHexId),
             frozenSeconds: () => this.state.enemyFrozenSeconds,
@@ -539,7 +539,7 @@ export class ZCGameModel {
     private buildUnitContext(): IZCUnitContext {
         return {
             now: () => this.state.elapsedSeconds,
-            definition: (unit) => this.effectiveUnitDefinition(unit),
+            effectiveDefinition: (unit) => this.effectiveUnitDefinition(unit),
             controlOf: (unit) => this.statusSystem.controlOf(String(unit.id)),
             random: this.random,
             unitById: this.units.byId,

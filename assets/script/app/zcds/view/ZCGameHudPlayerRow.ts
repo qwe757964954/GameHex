@@ -1,6 +1,6 @@
 import { _decorator, Color, Component, Label, Sprite, SpriteFrame, UITransform } from 'cc';
 import { zcFactionColor } from './ZCTheme';
-import type { ZCOwner } from '../model/ZCMapConfig';
+import { ZCOwner } from '../model/ZCMapConfig';
 
 /**
  * 对局 HUD 左侧的玩家行（设计稿条目 308×88）。
@@ -117,7 +117,7 @@ export class ZCGameHudPlayerRow extends Component {
     /** 席位 → 圆盘图。 */
     private discOf(owner: ZCOwner): SpriteFrame | null {
         if (owner === 'player') return this.disc01;
-        if (owner === 'enemy') return this.disc02;
+        if (owner === ZCOwner.Enemy) return this.disc02;
         if (owner === 'enemy2') return this.disc03;
         return this.disc04;
     }

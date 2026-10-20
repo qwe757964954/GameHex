@@ -5,6 +5,14 @@ import type { ZCNeutralResourceId } from './ZCNeutralResourceReward';
 
 export const ZC_OWNER_ORDER = ['player', 'enemy', 'enemy2', 'enemy3'] as const;
 export type ZCOwner = typeof ZC_OWNER_ORDER[number];
+/** 阵营取值的具名常量：业务里比较阵营一律写 `ZCOwner.Player` 这类具名成员，不写裸字符串
+ *  —— 与 `ZCCardType` 同一套约定（常量对象 + 同名派生类型）。 */
+export const ZCOwner = {
+    Player: ZC_OWNER_ORDER[0],
+    Enemy: ZC_OWNER_ORDER[1],
+    Enemy2: ZC_OWNER_ORDER[2],
+    Enemy3: ZC_OWNER_ORDER[3],
+} as const;
 export type ZCFaction = ZCOwner | 'neutral';
 
 /** 地图席位号（1~4）与运行时阵营 id 的唯一映射。 */
@@ -846,7 +854,7 @@ export function configureZCMap(layout: ZCMapLayout): void {
     if (visited.size !== playableCount) throw new Error('地图可用格必须全部连通');
 
     const playerIds = owners.flatMap((owner, id) => owner === 'player' ? [id] : []);
-    const enemyIds = owners.flatMap((owner, id) => owner === 'enemy' ? [id] : []);
+    const enemyIds = owners.flatMap((owner, id) => owner === ZCOwner.Enemy ? [id] : []);
 
     const mirrorIds = Array.from({ length: owners.length }, (_, id) => id);
     const mirrorCellId = (row: number, column: number): number => {
@@ -879,7 +887,7 @@ export function configureZCMap(layout: ZCMapLayout): void {
             if (hasHome && mirrorIds[enemyHomeId] !== playerHomeId) throw new Error('双方主城必须互为 180° 镜像');
         } else if (hasHome) {
             pair(enemyHomeId, playerHomeId);
-            const enemyNeighbors = neighborsOf(enemyHomeId).filter((id) => owners[id] === 'enemy').sort((a, b) => a % columns - b % columns);
+            const enemyNeighbors = neighborsOf(enemyHomeId).filter((id) => owners[id] === ZCOwner.Enemy).sort((a, b) => a % columns - b % columns);
             const playerNeighbors = neighborsOf(playerHomeId).filter((id) => owners[id] === 'player').sort((a, b) => a % columns - b % columns);
             if (enemyNeighbors.length !== playerNeighbors.length) throw new Error('双方主城的相邻地块数必须相同');
             for (let index = 0; index < enemyNeighbors.length; index += 1) pair(enemyNeighbors[index], playerNeighbors[index]);

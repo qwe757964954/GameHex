@@ -53,7 +53,7 @@ import { ZCPvpTileType } from './ZCPvpTileRules';
 import type { ZCSkillRuntimeDefinition } from './ZCSkillRuntime';
 import { ZCStatusSystem } from './ZCStatusEffect';
 
-import { ownersForPlayerCount, ZC_OWNER_ORDER, type ZCOwner } from './ZCMapConfig';
+import { ownersForPlayerCount, ZC_OWNER_ORDER, ZCOwner } from './ZCMapConfig';
 import { ZCNeutralResourceId, type ZCNeutralResourceReward } from './ZCNeutralResourceReward';
 export type {
     ZCActionFailureReason,
@@ -1611,7 +1611,7 @@ export class ZCGameModel {
 
     private goldOf(owner: ZCOwner): number {
         if (owner === 'player') return this.state.playerGold;
-        if (owner === 'enemy') return this.state.enemyGold;
+        if (owner === ZCOwner.Enemy) return this.state.enemyGold;
         return this.state.goldByOwner?.[owner] ?? 0;
     }
 
@@ -1622,7 +1622,7 @@ export class ZCGameModel {
         }
         this.state.goldByOwner[owner] = normalized;
         if (owner === 'player') this.state.playerGold = normalized;
-        else if (owner === 'enemy') this.state.enemyGold = normalized;
+        else if (owner === ZCOwner.Enemy) this.state.enemyGold = normalized;
     }
 
     /** 从当前位置选择最近的仍在局内的敌方主城，供 3/4 人单位自由行军。 */

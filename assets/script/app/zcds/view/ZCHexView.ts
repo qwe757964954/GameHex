@@ -21,13 +21,13 @@ import type {
     ZCFaction,
     ZCHexActivation,
     ZCHexState,
-    ZCOwner,
 } from '../model/ZCGameModel';
 import { ZC_CLIENT_COLORS, zcDeepFactionColor, zcFactionColor, zcTowardWhite } from './ZCTheme';
 // 提示描边与领地轮廓共用同一份顶面顶点口径与内缩比例：这条线也要"贴着台面边缘"，
 // 自己抄一份顶点迟早会和轮廓错开半个像素。
 import { OWNED_OUTLINE_INSET_SCALE, ZC_OUTLINE_HEX_POINTS } from './ZCOutlineLayer';
 import { ZCPvpTileType } from '../model/ZCPvpTileRules';
+import { ZCOwner } from '../model/ZCMapConfig';
 import {
     ZC_CARD_FADE_START_PROGRESS,
     ZC_CARD_REVEAL_SECONDS,
@@ -1772,7 +1772,7 @@ export class ZCHexView extends Component {
     /** 建筑染色：废墟保持原色；敌方针红、多人席位按阵营色；我方纯白。 */
     private buildingTint(state: Readonly<ZCHexState>, ruins: boolean): Color {
         if (ruins) return Color.WHITE;
-        if (state.owner === 'enemy') return ZCHexView.ENEMY_BUILDING_COLOR;
+        if (state.owner === ZCOwner.Enemy) return ZCHexView.ENEMY_BUILDING_COLOR;
         if (state.owner === 'enemy2' || state.owner === 'enemy3') return zcFactionColor(state.owner);
         return Color.WHITE;
     }

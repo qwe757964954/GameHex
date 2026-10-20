@@ -1,7 +1,7 @@
 import { _decorator, Animation, Color, Component, Graphics, instantiate, Label, Material, Node, Prefab, ProgressBar, sp, Sprite, SpriteFrame, UITransform, Vec3 } from 'cc';
 import type { ZCUnitDefinition } from '../model/ZCCombatCatalog';
 import type { ZCUnitState } from '../model/ZCGameModel';
-import type { ZCOwner } from '../model/ZCMapConfig';
+import { ZCOwner } from '../model/ZCMapConfig';
 import { ZC_CLIENT_COLORS } from './ZCTheme';
 import { isHealthBarVisible, pickHealthBarFill, spawnShakePulse, SPAWN_SHAKE_PHASE_SECONDS, updateHealthBar } from './ZCGameViewUtil';
 import { ProcedureGame } from '../../procedure/ProcedureGame';
@@ -624,7 +624,7 @@ export class ZCUnitView extends Component {
         // `${a}|${b}|${c}` 每次都新建一个字符串（46 单位 × 60 帧 ≈ 2800 个/秒），
         // 而它只是拿来判"要不要重画"。四个因子各占一位，够用且零分配。
         const key = (this.visualNode ? 1 : 0)
-            | (unit.owner === 'player' ? 2 : unit.owner === 'enemy' ? 4 : unit.owner === 'enemy2' ? 8 : 16)
+            | (unit.owner === ZCOwner.Player ? 2 : unit.owner === ZCOwner.Enemy ? 4 : unit.owner === ZCOwner.Enemy2 ? 8 : 16)
             | (definition.hero ? 32 : 0)
             | (definition.attackRange > 100 ? 64 : 0);
         if (key === this.fallbackKey) return;

@@ -60,8 +60,6 @@ export function buildPlayerHomeFocus(
     return home ? { x: mapToViewX(home.x), y: mapToViewY(home.y) } : null;
 }
 
-export type ZCTerritoryOwner = 'player' | 'enemy' | 'enemy2' | 'enemy3' | 'neutral';
-
 /**
  * 计算每格需要绘制的六边，保证每条边只由一个格子画（避免两边叠线颜色加深）。
  *
@@ -76,7 +74,7 @@ export type ZCTerritoryOwner = 'player' | 'enemy' | 'enemy2' | 'enemy3' | 'neutr
  */
 export function buildTerritoryBoundaryMasks(
     map: ReadonlyArray<Readonly<{ id: number; playable: boolean; x: number; y: number; neighbors: readonly number[] }>>,
-    ownerForHex: (hexId: number) => ZCTerritoryOwner,
+    ownerForHex: (hexId: number) => ZCFaction,
     out?: Map<number, number>,
 ): ReadonlyMap<number, number> {
     const masks = out ?? new Map<number, number>();

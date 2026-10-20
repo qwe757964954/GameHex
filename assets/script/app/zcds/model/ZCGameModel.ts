@@ -597,6 +597,28 @@ export class ZCGameModel {
 
     /** 生成本帧供表现层读取的投影；规则派生值在模型边界一次性计算。 */
     createRenderFrame(): ZCGameRenderFrame {
+        return {
+            snapshot: this.state,
+            mapConfig: this.config.map,
+            terrainRevision: this.topologyRevision,
+            simulationStepSeconds: ZC_SIMULATION_STEP_SECONDS,
+            interpolationAlpha: this.state.status === 'playing'
+                ? Math.max(0, Math.min(1, (this.state.pendingSeconds ?? 0) / ZC_SIMULATION_STEP_SECONDS))
+                : 1,
+            owners: this.activeOwners,
+            hexesById: this.buildHexRenderMap(),
+            unitDefinitionsById: this.buildUnitDefinitionMap(),
+            floatTexts: this.presentation.floatTexts,
+            hitFxs: this.presentation.hitFxs,
+            cardReveals: this.presentation.cardReveals,
+            hexActivations: this.presentation.hexActivations,
+            neutralRewards: this.presentation.neutralRewards,
+        };
+    }
+
+    // 每帧渲染帧的两张查找表：格子状态与单位定义。逐格/逐兵查询都在这两张表上做，
+    // 所以必须每帧重建（`canDevelop` / `cooldown` / `activation` 都随 tick 变化）。
+    private buildHexRenderMap(): Map<number, ZCGameRenderHex> {
         const hexesById = new Map<number, ZCGameRenderHex>();
         for (const state of this.state.hexes) {
             hexesById.set(state.id, {
@@ -607,29 +629,18 @@ export class ZCGameModel {
                 connectedDevelopedHexIds: this.connectedDevelopedHexIds(state.id),
             });
         }
+        return hexesById;
+    }
+
+    // 按 unitId 去重：同一兵种场上多个单位只查一次定义表。
+    private buildUnitDefinitionMap(): Map<string, ZCUnitDefinition> {
         const unitDefinitionsById = new Map<string, ZCUnitDefinition>();
         for (const unit of this.state.units) {
             if (!unitDefinitionsById.has(unit.unitId)) {
                 unitDefinitionsById.set(unit.unitId, this.definitionForUnit(unit.unitId));
             }
         }
-        return {
-            snapshot: this.state,
-            mapConfig: this.config.map,
-            terrainRevision: this.topologyRevision,
-            simulationStepSeconds: ZC_SIMULATION_STEP_SECONDS,
-            interpolationAlpha: this.state.status === 'playing'
-                ? Math.max(0, Math.min(1, (this.state.pendingSeconds ?? 0) / ZC_SIMULATION_STEP_SECONDS))
-                : 1,
-            owners: this.activeOwners,
-            hexesById,
-            unitDefinitionsById,
-            floatTexts: this.presentation.floatTexts,
-            hitFxs: this.presentation.hitFxs,
-            cardReveals: this.presentation.cardReveals,
-            hexActivations: this.presentation.hexActivations,
-            neutralRewards: this.presentation.neutralRewards,
-        };
+        return unitDefinitionsById;
     }
 
     /** 一次性表现通知的唯一消费入口；由对局编排层取走后交给动态渲染。 */

@@ -43,6 +43,18 @@ export function getCachedPvpHeroInfos(): readonly PvpHeroInfo[] | null {
 }
 
 /**
+ * 取单个英雄（含技能等级表）。
+ *
+ * 技能升级响应只回**那一条**英雄信息，所以技能面板不必为了刷新再发一次列表请求 ——
+ * 缓存已经被 `applyPvpHeroSkillLevel` 写回，这里读到的就是服务端刚确认的值。
+ * 缓存为空（从未成功拉过列表）返回 `null`，调用方按「没有后端数据」处理。
+ */
+export function getCachedPvpHeroInfo(heroId: number): PvpHeroInfo | null {
+    if (!cachedInfos) return null;
+    return cachedInfos.find((info) => info.heroId === heroId) ?? null;
+}
+
+/**
  * 把「刚升级成功」的新等级写回本地缓存。
  *
  * 升级响应（`CmdPvpHeroUpLevelRspMsg`）只回一条 `CmdPvpHeroInfo`，

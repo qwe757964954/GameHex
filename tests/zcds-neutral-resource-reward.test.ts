@@ -10,6 +10,7 @@ import type { ZCHexState } from '../assets/script/app/zcds/model/ZCGameTypes';
 import {
     hasNeutralResourceReward, neutralResourceRewardOf, ZC_NEUTRAL_RESOURCE_REWARDS,
 } from '../assets/script/app/zcds/model/ZCNeutralResourceReward';
+import { ZC_NEUTRAL_REWARD_TOTAL_SECONDS } from '../assets/script/app/zcds/model/ZCBattlePresentationQueue';
 
 //  `pvpUnit` 已于 2026-09-20 并入 `pvpCard`（单位列内联、加 `unit` 前缀），表已下线。
 const tableNames = [
@@ -434,5 +435,93 @@ test('奖励卡不在本局卡组里也照样产兵（取卡不能走 cardById�
         assert.equal(game.snapshot.hexes[hexId].owner, 'player');
         assert.equal(spawned.length, 3, `卡组不含 68001 时也应产 3 个兵，实际 ${spawned.length}`);
         for (const unit of spawned) assert.equal(unit.cardId, '68001');
+    });
+});
+
+// ============================================================
+// 中立资源获取**表现事件**（2026-10-20 需求）：
+//   · 金矿 = 只播「建筑被开发」激活（脉冲 ∥ 缩没），不播金币飞行；
+//   · 金币堆 / 宝箱 = 入队金币飞行事件（飞向金币栏 + 上飘 +N）；
+//   · 神器充能 = 入队神器飞行事件（飞向神器按钮）；
+//   · 兵力 = 直接产兵、走出生表现，无飞行事件；
+//   · 非玩家领取同样入队，由视图自行决定只对玩家播飞行。
+// ============================================================
+
+test('金币堆领取：入队一条金币飞行事件（金额 50、时长=飞行+错峰+上飘）', () => {
+    withRiverMap((match) => {
+        forceResourceType(match, 'gold');
+        const { game, hexId } = resourceScene(match, 'player');
+        const rewards = game.createRenderFrame().neutralRewards;
+        assert.equal(rewards.length, 1, '金币堆只发一条事件');
+        const reward = rewards[0];
+        assert.equal(reward.hexId, hexId);
+        assert.equal(reward.resourceId, 'gold');
+        assert.equal(reward.owner, 'player');
+        assert.equal(reward.gold, 50);
+        assert.equal(reward.artifactCharge, 0);
+        assert.equal(reward.durationSeconds, ZC_NEUTRAL_REWARD_TOTAL_SECONDS);
+        assert.equal(game.createRenderFrame().hexActivations.length, 0, '金币堆不播建筑激活');
+    });
+});
+
+test('宝箱领取：沿用金币飞行（+N 按宝箱的金币数 100 播，不单独播神器）', () => {
+    withRiverMap((match) => {
+        forceResourceType(match, 'chest');
+        const { game, hexId } = resourceScene(match, 'player');
+        const rewards = game.createRenderFrame().neutralRewards;
+        assert.equal(rewards.length, 1);
+        const reward = rewards[0];
+        assert.equal(reward.hexId, hexId);
+        assert.equal(reward.resourceId, 'chest');
+        assert.equal(reward.owner, 'player');
+        // 宝箱奖励 = 100 金币 + 1 神器充能，但表现**只播金币飞行**（视图按 resourceId 归类）。
+        assert.equal(reward.gold, 100);
+        assert.equal(reward.artifactCharge, 1);
+    });
+});
+
+test('神器充能领取：入队一条神器飞行事件（充能 1，无金币）', () => {
+    withRiverMap((match) => {
+        forceResourceType(match, 'artifact_charge');
+        const { game, hexId } = resourceScene(match, 'player');
+        const rewards = game.createRenderFrame().neutralRewards;
+        assert.equal(rewards.length, 1);
+        const reward = rewards[0];
+        assert.equal(reward.hexId, hexId);
+        assert.equal(reward.resourceId, 'artifact_charge');
+        assert.equal(reward.artifactCharge, 1);
+        assert.equal(reward.gold, 0);
+    });
+});
+
+test('金矿领取：只播「建筑被开发」激活，不播金币飞行', () => {
+    withRiverMap((match) => {
+        forceResourceType(match, 'mine');
+        const { game, hexId } = resourceScene(match, 'player');
+        assert.equal(game.createRenderFrame().neutralRewards.length, 0, '金矿不进飞行队列');
+        const activations = game.createRenderFrame().hexActivations;
+        assert.equal(activations.length, 1, '金矿应推一条激活动画');
+        assert.equal(activations[0].hexId, hexId);
+        assert.equal(activations[0].hasCardReveal, false, '金矿不弹卡牌，只有点击动画');
+    });
+});
+
+test('兵力资源点领取：直接产兵、无飞行事件（也不播激活）', () => {
+    withRiverMap((match) => {
+        forceResourceType(match, 'unit_cap');
+        const { game } = resourceScene(match, 'player');
+        assert.equal(game.createRenderFrame().neutralRewards.length, 0, '兵力不走飞行队列');
+        assert.equal(game.createRenderFrame().hexActivations.length, 0, '兵力不播激活动画');
+    });
+});
+
+test('非玩家领取：事件照常入队（owner=领取方），视图再决定只对玩家播飞行', () => {
+    withRiverMap((match) => {
+        forceResourceType(match, 'gold');
+        const { game } = resourceScene(match, 'enemy');
+        const rewards = game.createRenderFrame().neutralRewards;
+        assert.equal(rewards.length, 1);
+        assert.equal(rewards[0].owner, 'enemy');
+        assert.equal(rewards[0].gold, 50);
     });
 });

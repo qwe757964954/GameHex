@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <!-- 空 favicon：不写这行浏览器会去要 /favicon.ico，服务端 404 在控制台留一条红色报错。 -->
+  <link rel="icon" href="data:,">
+  <title>大地图布局编辑器</title>
+  <style>
+    :root { color-scheme: dark; font: 14px system-ui, sans-serif; --bg:#111827; --panel:#1f2937; --line:#374151; --accent:#60a5fa; }
+    * { box-sizing:border-box } body { margin:0; background:var(--bg); color:#e5e7eb; height:100vh; overflow:hidden }
+    header { height:54px; display:flex; align-items:center; gap:8px; padding:8px 14px; border-bottom:1px solid var(--line); background:#0f172a }
+    header h1 { margin:0 14px 0 0; font-size:16px; white-space:nowrap }
+    button, input, select, textarea { color:inherit; background:#111827; border:1px solid #4b5563; border-radius:5px; padding:5px 8px }
+    button { cursor:pointer } button:hover { border-color:var(--accent) } button:disabled { opacity:.45; cursor:not-allowed }
+    .dirtyBadge { padding:3px 7px; border:1px solid #92400e; border-radius:999px; background:#451a03; color:#fbbf24; font-size:11px }
+    .layout { height:calc(100vh - 54px); display:grid; grid-template-columns:236px 1fr 300px }
+    aside { padding:11px; overflow:auto; border-right:1px solid var(--line); background:var(--panel) } aside.right { border-left:1px solid var(--line); border-right:0 }
+    label { display:block; margin:8px 0 3px; color:#cbd5e1; font-size:12px } input, select { width:100% }
+    .row { display:flex; gap:6px } .row > * { flex:1 }
+    .tools { display:grid; grid-template-columns:1fr 1fr; gap:5px }
+    .tools button.active { background:#1d4ed8; border-color:#93c5fd }
+    .toolStatus { margin:0 0 8px; padding:6px 8px; border:1px solid #1d4ed8; border-radius:6px; background:#172554; color:#bfdbfe; font-size:12px }
+    .stage { position:relative; overflow:auto; background:#0b1220 }
+    svg { display:block; touch-action:none; user-select:none; margin:0 auto }
+    .cell { stroke:#475569; stroke-width:.6; cursor:crosshair } .cell:hover { stroke:#f8fafc; stroke-width:1.6 }
+    .c-plain { fill:#1b2537 } .c-forest { fill:#16301f } .c-rock { fill:#2b2b31 } .c-water { fill:#123047 }
+    .c-blocked { fill:#3f1d1d }
+    .range { fill:#38bdf8; fill-opacity:.16; stroke:#38bdf8; stroke-width:.8; stroke-opacity:.6; pointer-events:none }
+    .zone { fill:#f472b6; fill-opacity:.12; stroke:#f472b6; stroke-width:.8; stroke-opacity:.5; pointer-events:none }
+    .sel { fill:none; stroke:#fde047; stroke-width:2.4; pointer-events:none }
+    .ent { cursor:pointer }
+    .ent text { pointer-events:none; font:700 11px system-ui,sans-serif; text-anchor:middle; paint-order:stroke; stroke:#0b1220; stroke-width:2.5 }
+    .ent-city { fill:#2563eb; stroke:#93c5fd; stroke-width:1.2 }
+    .ent-city.locked { fill:#334155; stroke:#64748b }
+    .ent-monster { fill:#dc2626; stroke:#fca5a5; stroke-width:1.2 }
+    .ent-base { fill:#0d9488; stroke:#5eead4; stroke-width:1.2 }
+    .ent-base.me { fill:#facc15; stroke:#fef08a }
+    .ent-point { fill:#a855f7; stroke:#d8b4fe; stroke-width:1.2 }
+    .validation { margin:8px 0; padding:8px; border:1px solid #475569; border-radius:5px; white-space:pre-wrap; font-size:12px; line-height:1.5; max-height:280px; overflow:auto }
+    .validation.ok { border-color:#166534; background:#052e16; color:#bbf7d0 }
+    .validation.warn { border-color:#92400e; background:#451a03; color:#fde68a }
+    .validation.error { border-color:#991b1b; background:#450a0a; color:#fecaca }
+    .muted { color:#94a3b8; font-size:12px; line-height:1.5 }
+    .kv { display:grid; grid-template-columns:auto 1fr; gap:2px 8px; font-size:12px; margin:4px 0 }
+    .kv b { color:#94a3b8; font-weight:400 }
+    section { border-top:1px solid var(--line); margin-top:10px; padding-top:8px } section:first-child { border-top:0; margin-top:0; padding-top:0 }
+    h3 { margin:0 0 6px; font-size:13px; color:#e2e8f0 }
+    #message { position:absolute; left:14px; bottom:10px; padding:6px 10px; background:#111827ee; border:1px solid var(--line); border-radius:5px; font-size:12px; max-width:70% }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>大地图布局编辑器</h1>
+    <span id="dirtyBadge" class="dirtyBadge" hidden>未保存</span>
+    <select id="presetSelect" title="选择预设" style="width:180px"><option value="">选择预设</option></select>
+    <button id="load">加载</button>
+    <button id="save" title="Ctrl+S">保存</button>
+    <button id="validate">校验</button>
+    <button id="publish">发布到客户端</button>
+    <button id="export">导出 JSON</button>
+    <button id="snapshot" title="导出当前视图 PNG（2×）">截图</button>
+    <button id="csv" title="导出城池清单 CSV">CSV</button>
+    <button id="import">导入 JSON</button>
+    <button id="undo">撤销</button>
+    <button id="redo">重做</button>
+    <span class="muted">缩放</span>
+    <input id="zoom" type="range" min="30" max="220" value="100" style="width:110px">
+    <span id="zoomInfo" class="muted">100%</span>
+    <input id="file" type="file" accept=".json,application/json" hidden>
+  </header>
+  <div class="layout">
+    <aside>
+      <section>
+        <h3>地图</h3>
+        <div class="kv" id="mapInfo"></div>
+        <label>预设 ID</label><input id="mapId" placeholder="world_01">
+      </section>
+      <section>
+        <h3>工具</h3>
+        <p id="toolStatus" class="toolStatus">当前：选择</p>
+        <div class="tools" id="tools">
+          <button data-mode="select" class="active">选择</button>
+          <button data-mode="city">城池</button>
+          <button data-mode="monster">野怪</button>
+          <button data-mode="base">基地</button>
+          <button data-mode="point">据点</button>
+          <button data-mode="zone">出生区块</button>
+          <button data-mode="blocked">障碍</button>
+          <button data-mode="terrain">地形</button>
+          <button data-mode="range">势力范围</button>
+          <button data-mode="erase">擦除</button>
+        </div>
+        <label>地形（地形工具用）</label>
+        <select id="terrainPick">
+          <option value="plain">平地</option><option value="forest">林地</option>
+          <option value="rock">岩石</option><option value="water">水域</option>
+        </select>
+        <label>城池（城池工具用，只列未放的）</label>
+        <select id="cityPick"></select>
+        <label>野怪（野怪工具用）</label>
+        <select id="monsterPick"></select>
+        <label>据点类型（据点工具用）</label>
+        <select id="pointPick">
+          <option value="2">挂机资源田</option><option value="3">地图 BOSS</option>
+        </select>
+      </section>
+      <section>
+        <h3>显示</h3>
+        <label><input type="checkbox" id="showRange" checked style="width:auto"> 势力范围</label>
+        <label><input type="checkbox" id="showZone" checked style="width:auto"> 出生区块</label>
+        <label><input type="checkbox" id="showPoisson" checked style="width:auto"> 泊松撒点</label>
+        <label><input type="checkbox" id="showLabel" checked style="width:auto"> 城池编号</label>
+        <label><input type="checkbox" id="showGrid" checked style="width:auto"> 网格线</label>
+        <label><input type="checkbox" id="showRing" style="width:auto"> 环号</label>
+        <label>背景图（相对 resources，不带扩展名）</label>
+        <div class="row"><input id="background" placeholder="image/bigmap/world_01"><button id="applyBackground">应用</button></div>
+      </section>
+      <section>
+        <h3>批量</h3>
+        <label>所有城池按此半径铺范围</label>
+        <div class="row"><input id="bulkRadius" type="number" min="1" max="12" value="3"><button id="bulkRange">一键铺</button></div>
+        <button id="deriveAdjacent" style="margin-top:6px;width:100%">按范围推导相邻关系</button>
+        <label>出生点最小间距（格）</label>
+        <div class="row"><input id="spawnGap" type="number" min="1" max="6" value="2"><button id="bulkPoisson">算全图容量</button></div>
+        <p class="muted">推导会覆盖现有 adjacentCityIds；不写回配置表，只存在布局里。</p>
+      </section>
+    </aside>
+    <main class="stage" id="stage"><svg id="map" xmlns="http://www.w3.org/2000/svg"></svg><div id="message">就绪</div></main>
+    <aside class="right">
+      <section>
+        <h3>选中</h3>
+        <div id="cellInfo" class="muted">点击地图格子或实体</div>
+      </section>
+      <section id="cityPanel" hidden>
+        <h3>城池属性</h3>
+        <div class="kv" id="cityInfo"></div>
+        <label>编号 label</label><input id="cityLabel">
+        <label>势力范围半径（格子）</label>
+        <div class="row"><input id="rangeRadius" type="number" min="1" max="12" value="3"><button id="applyRange">铺范围</button></div>
+        <div class="row" style="margin-top:6px"><button id="clearRange">清空范围</button><button id="deleteCity">删除城池</button></div>
+        <p class="muted">势力范围只是布局标注：现在游戏里判定仍走 radiateCapacity 距离，P1 才接进规则。</p>
+      </section>
+      <section id="monsterPanel" hidden>
+        <h3>野怪属性</h3>
+        <div class="kv" id="monsterInfo"></div>
+        <button id="deleteMonster" style="width:100%">删除野怪</button>
+      </section>
+      <section id="basePanel" hidden>
+        <h3>基地属性</h3>
+        <div class="kv" id="baseInfo"></div>
+        <label>显示名</label><input id="baseName">
+        <button id="deleteBase" style="margin-top:6px;width:100%">删除基地</button>
+      </section>
+      <section id="zonePanel" hidden>
+        <h3>出生区块</h3>
+        <div class="kv" id="zoneInfo"></div>
+        <label>归属城池（0 = 不绑定）</label><input id="zoneCity" type="number" min="0" step="1">
+        <label>计划容量</label><input id="zoneCapacity" type="number" min="0" step="1">
+        <label>最小间距（格）</label>
+        <div class="row"><input id="zoneGap" type="number" min="1" max="6" value="2"><button id="zonePreview">算能放几个</button></div>
+        <button id="deleteZone" style="margin-top:6px;width:100%">删除区块</button>
+        <p class="muted">「算能放几个」= 在区块内按最小间距撒基地点（六边格独立集，上界是格数 / 3）。它只预览，不改布局。</p>
+      </section>
+      <section>
+        <h3>校验</h3>
+        <button id="validateRight" style="width:100%">重新校验</button>
+        <div id="validation" class="validation" hidden></div>
+      </section>
+    </aside>
+  </div>
+  <script type="module" src="/bigmap-app.js"></script>
+</body>
+</html>

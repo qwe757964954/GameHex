@@ -2,12 +2,12 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const UI = 'assets/resources/ui/territory';
+const UI = 'assets/resources/ui/main';
 const PATHS = {
-    page: `${UI}/TerritoryPage.prefab`,
-    station: `${UI}/TerritoryStation.prefab`,
-    detail: `${UI}/TerritorySiteDetail.prefab`,
-    pageScript: 'assets/script/app/territory/view/TerritoryPage.ts',
+    page: `${UI}/MainTerritoryMap.prefab`,
+    station: 'assets/resources/ui/territory/TerritoryStation.prefab',
+    detail: 'assets/resources/ui/territory/TerritorySiteDetail.prefab',
+    pageScript: 'assets/script/app/main/MainTerritoryMap.ts',
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -69,9 +69,9 @@ const flagsOf = (objects: Raw[], nodeIndex: number): number =>
     componentOf(objects, nodeIndex, 'cc.Widget')._alignFlags;
 
 // ── 页面骨架 ─────────────────────────────────────────────────────────────
-test('TerritoryPage.prefab：地图区是 ScrollView + 内容层，HUD 在另一支，弹窗走独立 prefab', () => {
+test('MainTerritoryMap.prefab：主城只嵌地图视图，HUD 已移除，弹窗走独立 prefab', () => {
     const objects = load(PATHS.page);
-    const script = scriptOf(objects, cidOf('assets/script/app/territory/view/TerritoryPage.ts'));
+    const script = scriptOf(objects, cidOf(PATHS.pageScript));
 
     // 旧字段必须彻底消失（脚本里已删，prefab 里留着就是孤儿）。
     for (const stale of ['mapViewport', 'mapLayer', 'hudLayer']) {
@@ -126,41 +126,20 @@ test('TerritoryPage.prefab：地图区是 ScrollView + 内容层，HUD 在另一
         'MapBackground must stay first (背景在下、格子在上)，其余同类渲染层保持连续以合批',
     );
 
-    // ③ HUD 层：常态元素全在 Content 下（加载态只切这一个节点）。
-    const hudView = scriptOf(objects, cidOf('assets/script/app/territory/view/TerritoryHeaderView.ts'));
-    assert.equal(objects[hudView.node.__id__]._name, 'HudLayer');
-    expectRef(objects, hudView, 'contentLayer', 'Content', 'cc.Node');
-    expectRef(objects, hudView, 'headerSprite', 'HeaderPanel', 'cc.Sprite');
-    expectRef(objects, hudView, 'titleLabel', 'Title', 'cc.Label');
-    expectRef(objects, hudView, 'chapterLabel', 'ChapterLabel', 'cc.Label');
-    expectRef(objects, hudView, 'walletLabel', 'WalletLabel', 'cc.Label');
-    expectRef(objects, hudView, 'inventoryLabel', 'InventoryLabel', 'cc.Label');
-    expectRef(objects, hudView, 'previousButton', 'PrevChapter', 'cc.Button');
-    expectRef(objects, hudView, 'nextButton', 'NextChapter', 'cc.Button');
-    expectRef(objects, hudView, 'hintPanel', 'HintPanel', 'cc.Node');
-    expectRef(objects, hudView, 'hintLabel', 'HintLabel', 'cc.Label');
-
-    const content = nodeIndexOf(objects, 'Content');
-    assert.deepEqual(
-        (objects[content]._children ?? []).map((ref: { __id__: number }) => objects[ref.__id__]._name).sort(),
-        // 常态 HUD 的九个元素（顺序 = 渲染序，这里只关心集合）。
-        ['ChapterLabel', 'HeaderPanel', 'HintLabel', 'HintPanel', 'InventoryLabel',
-            'NextChapter', 'PrevChapter', 'Title', 'WalletLabel'],
-    );
-    // 出厂状态：常态 HUD 常驻可见（2026-10-12 起不再有整页 LoadingPanel，加载态不锁屏）。
-    assert.equal(objects[content]._active, true);
+    // ③ 主城地图页只负责地图；章节 HUD 由 ArenaRoot 的主城顶栏负责。
+    assert.equal(objects.some((item) => item.__type__ === 'cc.Node' && item._name === 'HudLayer'), false,
+        'MainTerritoryMap 不应保留重复的 HudLayer');
+    assert.equal(objects
+        .filter((item) => item.__type__ === 'cc.Node')
+        .some((node) => (node._components as Array<{ __id__: number }> ?? [])
+            .some((ref) => objects[ref.__id__]?.__type__ === '80381uIvhxMLIEYihfDKHSK')),
+    false, 'MainTerritoryMap 不应有节点挂载 TerritoryHeaderView');
+    assert.equal('hudView' in script, false, 'MainTerritoryMap 不应保留 HUD 引用');
 
     // ④ 弹窗是独立 prefab（运行时 instantiate），不是页面的嵌套实例。
     assert.ok((script.detailPrefab as Raw).__uuid__, 'detailPrefab 没绑');
 
-    // ⑤ 定位靠 Widget：顶部一排 TOP+CENTER(17)，提示条 BOT+CENTER(20)。
-    assert.equal(flagsOf(objects, nodeIndexOf(objects, 'HeaderPanel')), 17);
-    assert.equal(flagsOf(objects, nodeIndexOf(objects, 'HintPanel')), 20);
-    // 距顶的数值就是旧实现 `hudSize.height / 2 - N` 里的 N 折算（长屏不再跟着屏幕中心跑）。
-    assert.equal(componentOf(objects, nodeIndexOf(objects, 'HeaderPanel'), 'cc.Widget')._top, 10);
-    assert.equal(componentOf(objects, nodeIndexOf(objects, 'HintPanel'), 'cc.Widget')._bottom, 116);
-
-    assertUiLayers(objects, 'TerritoryPage');
+    assertUiLayers(objects, 'MainTerritoryMap');
 });
 
 // ── 站点条目 ─────────────────────────────────────────────────────────────
@@ -245,7 +224,7 @@ test('TerritorySiteDetail.prefab：全屏暗底 + 面板，根与暗底都四边
 });
 
 // ── 源码守卫：这一轮要消灭的写法不许回流 ─────────────────────────────────
-test('TerritoryPage.ts 不再自己搭 UI、不再直调 resources.load、不再手写拖拽', () => {
+test('MainTerritoryMap.ts 不再自己搭 UI、不再直调 resources.load、不再手写拖拽', () => {
     const source = readFileSync(PATHS.pageScript, 'utf8');
     // 先剥注释再断言（规则 104：反向断言必须先剥注释，否则注释里的说明会误报）。
     const code = source
@@ -261,12 +240,12 @@ test('TerritoryPage.ts 不再自己搭 UI、不再直调 resources.load、不再
     }
     // 但注入点与视图接线必须在。
     assert.ok(code.includes('this.mapView.renderMap('), '页面应驱动地图渲染层');
-    assert.ok(code.includes('this.hudView.render('), '页面应驱动 HUD');
+    assert.equal(code.includes('this.hudView'), false, '主城地图页面不应保留 HUD 接线');
     assert.ok(code.includes('this.detailPanel.open('), '页面应驱动详情弹窗');
 });
 
 // ── 源码守卫：Presenter 重构后，业务编排不许留在 Page ─────────────────────
-test('TerritoryPage.ts 不再做配置/战役/存档/进度编排，只接线与渲染', () => {
+test('MainTerritoryMap.ts 不再做配置/战役/存档/进度编排，只接线与渲染', () => {
     const code = readFileSync(PATHS.pageScript, 'utf8')
         .replace(/\/\*[\s\S]*?\*\//g, '')
         .replace(/^\s*\/\/.*$/gm, '');
@@ -282,9 +261,9 @@ test('TerritoryPage.ts 不再做配置/战役/存档/进度编排，只接线与
         assert.equal(code.includes(banned), false,
             `源码里仍有 ${banned}（业务已迁到 TerritoryPresenter）`);
     }
-    // 页面仍驱动三个视图（Passive View 的渲染入口）。
+    // 主城页面仍驱动地图和详情视图（Passive View 的渲染入口）。
     assert.ok(code.includes('this.mapView.renderMap('), '页面应驱动地图渲染层');
-    assert.ok(code.includes('this.hudView.render('), '页面应驱动 HUD');
+    assert.equal(code.includes('this.hudView'), false, 'HUD 已由主城页面顶栏承载');
     assert.ok(code.includes('this.detailPanel.open('), '页面应驱动详情弹窗');
 });
 

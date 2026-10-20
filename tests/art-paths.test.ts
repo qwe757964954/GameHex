@@ -20,7 +20,7 @@ import {
     FRAME_ART_ROOT,
     ICON_ART_ROOT,
     GAMEUI_ART_ROOT,
-    MAIN_ART_ROOT,
+    MAIN_CITY_ART_ROOT,
     MATCH_ART_ROOT,
     MATCH_ICON_ART_ROOT,
     BUILDING_ART_ROOT,
@@ -99,52 +99,61 @@ test('卡牌阵容 / 布阵的每张图都在它自己的根目录下', () => {
     }
 });
 
-/** 用 stub 掉 `cc` 的方式拿到 `CardLineupNav` 的配置组（本组件拉了 cc，Node 里 import 不了）。 */
-function readNavGroup(): Array<{ name: string; on: string; off: string }> {
-    const code = ts.transpileModule(readFileSync('assets/script/app/card/CardLineupNav.ts', 'utf8'), {
+/** 用 vm 读取主城底栏文案配置，避免加载 Cocos runtime。 */
+function readNavGroup(): Array<{ name: string }> {
+    const code = ts.transpileModule(readFileSync('assets/script/app/main/MainTabItems.ts', 'utf8'), {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
     }).outputText;
-    const cc = {
-        _decorator: { ccclass: () => (value: unknown) => value, property: () => () => {} },
-        Component: class {}, Label: class {}, Sprite: class {}, SpriteFrame: class {},
-    };
     const dependencies: Record<string, unknown> = {
-        cc,
-        '../ArtPaths': ArtPaths,
-        './CardLineupIcons': { loadArt: () => Promise.resolve(null) },
         './CardLineupTexts': { CARD_LINEUP_TEXTS },
+        '../card/CardLineupTexts': { CARD_LINEUP_TEXTS },
     };
     const context = {
-        exports: {} as { CARD_LINEUP_NAV_GROUP: Array<{ name: string; on: string; off: string }> },
+        exports: {} as { MAIN_TAB_ITEMS: Array<{ name: string }> },
         require: (name: string) => dependencies[name],
         console,
     };
     runInNewContext(code, context);
-    return context.exports.CARD_LINEUP_NAV_GROUP;
+    return context.exports.MAIN_TAB_ITEMS;
 }
 
-test('底部六格导航的配置组住在 CardLineupNav，图标都在 image/main 下', () => {
+test('主城七格文案配置与 prefab 绑定的新图标资源齐全', () => {
     const group = readNavGroup();
-    assert.equal(group.length, 6, '设计稿是六格：商店 / 角色 / 竞技 / 领地 / 冒险 / 联盟');
+    assert.equal(group.length, 7, '蓝湖「塔防主界面-1」是七格：商店 / 英雄 / 角色 / 领地 / 挑战 / 联盟 / 世界');
 
     // 顺序与 CARD_LINEUP_TEXTS 里的名称一一对应，MainTabHost 的 MainTab 下标才有意义
     //  配置组来自另一个 vm realm，必须用 Array.from 在本 realm 重建数组，
     // 否则 deepStrictEqual 会因为 Array 原型不同而误报不等。
     assert.deepEqual(Array.from(group, (entry) => entry.name), [
-        CARD_LINEUP_TEXTS.navShops, CARD_LINEUP_TEXTS.navRoles, CARD_LINEUP_TEXTS.navArena,
-        CARD_LINEUP_TEXTS.navTerritory, CARD_LINEUP_TEXTS.navAdventure, CARD_LINEUP_TEXTS.navAlliance,
+        CARD_LINEUP_TEXTS.navShops, CARD_LINEUP_TEXTS.navHero, CARD_LINEUP_TEXTS.navRoles,
+        CARD_LINEUP_TEXTS.navTerritory, CARD_LINEUP_TEXTS.navChallenge, CARD_LINEUP_TEXTS.navAlliance,
+        CARD_LINEUP_TEXTS.navWorld,
     ]);
 
-    for (const entry of group) {
-        assertSpriteExists(MAIN_ART_ROOT, entry.on, `${entry.name} 选中态`);
-        assertSpriteExists(MAIN_ART_ROOT, entry.off, `${entry.name} 未选中态`);
-        assert.notEqual(entry.on, entry.off, `${entry.name} 的选中 / 未选中必须是两张图`);
+    for (const icon of ['nav_shop', 'nav_hero', 'nav_role', 'nav_territory', 'nav_challenge', 'nav_alliance', 'nav_world']) {
+        assertSpriteExists(MAIN_CITY_ART_ROOT, icon, `${icon} 由 TabButton prefab 实例绑定`);
     }
+    for (const oldIcon of [
+        'btm_arena_n', 'btm_arena_s', 'btm_char_n', 'btm_char_s', 'btm_shop_n', 'btm_shop_s',
+        'btn_adventure_n', 'btn_adventure_s', 'btn_alliance_n', 'btn_alliance_s', 'btn_territory_n', 'btn_territory_s',
+    ]) {
+        assert.equal(existsSync(`assets/resources/image/main/${oldIcon}.png`), false, `${oldIcon} 旧底栏资源应已删除`);
+        assert.equal(existsSync(`assets/resources/image/main/${oldIcon}.png.meta`), false, `${oldIcon} 旧资源 meta 应随资源删除`);
+    }
+    assert.equal(existsSync('assets/resources/ui/card/CardLineupNav.prefab'), false,
+        '旧主城导航 prefab 应已由共用 TabButton 取代');
+    assert.equal(existsSync('assets/script/app/card/CardLineupNav.ts'), false,
+        '旧私有导航视图类应已移除，主城只保留文案配置');
+
+    // 选中底板与底条也必须在盘上
+    assertSpriteExists(MAIN_CITY_ART_ROOT, 'nav_sel', '选中底板（tab_02）');
+    assertSpriteExists(MAIN_CITY_ART_ROOT, 'nav_bg', '底栏底条（bg_01）');
 
     // 配置组只有一份：老的 CARD_LINEUP_NAV_ART 副本必须已经删掉
     const texts = readFileSync('assets/script/app/card/CardLineupTexts.ts', 'utf8');
-    assert.ok(!texts.includes('CARD_LINEUP_NAV_ART'), '六格图标名不要再在 CardLineupTexts 里留第二份');
-    assertUsesArtPaths(readFileSync('assets/script/app/card/CardLineupNav.ts', 'utf8'), 'CardLineupNav');
+    assert.ok(!texts.includes('CARD_LINEUP_NAV_ART'), '七格图标名不要再在 CardLineupTexts 里留第二份');
+    assert.match(readFileSync('assets/script/app/main/MainTabItems.ts', 'utf8'), /MainRoot\.prefab/,
+        'tab 图标与类型应由主城 prefab 实例维护');
 });
 
 test('匹配页图标按「页面大图 / 信息条小图标」分两个根目录', () => {

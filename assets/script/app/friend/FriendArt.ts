@@ -11,7 +11,7 @@
  *
  * 12 张是从老端 FGUI `好友` 包引用的**公共图**里拷出来的（来源见 `tmp/_copy_friend_art.py`）。
  * 不直接复用新端已有的 `activity/act_row_bg.png` / `gameui/img_Touxiang_01.png` /
- * `main/tab_bg_01.png` 这类同名图：**md5 全不一样**（是别的版本的美术），而好友的几何是按
+ * `main/city/nav_sel.png` 这类同名图：**md5 全不一样**（是别的版本的美术），而好友的几何是按
  * FGUI 原稿算的，换图会让九宫格拉伸后的边框宽度对不上。
  *
  * 只有 3 张 md5 与新端完全一致、**且导入设置不需要改**的图直接复用（`FRIEND_SHARED_*`）：

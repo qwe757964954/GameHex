@@ -10,6 +10,7 @@ import {
     ZC_MAP_COLUMNS,
     ZC_MAP_ID,
     ZC_MAP_PLAYER_COUNT,
+    ZC_MAP_HOME_CANDIDATES,
     ZC_MAP_REGIONS,
     ZC_MAP_RESOURCE_POINTS,
     ZC_MAP_ROWS,
@@ -41,6 +42,10 @@ const NEUTRAL_LAYOUT: ZCMapLayout = {
         '00000000', '00000000', '00000000', '00000000',
         '00000000', '00000000', '00000000', '00000000',
     ],
+    homeCandidates: [
+        { section: 1, cells: Array.from({ length: 32 }, (_, index) => index + 32) },
+        { section: 2, cells: Array.from({ length: 32 }, (_, index) => index) },
+    ],
     resourcePoints: [
         { row: 6, column: 1, pool: { gold: 1, chest: 3 } },
         { row: 1, column: 6, pool: { mine: 2 } },
@@ -60,6 +65,10 @@ const PAINTED_LAYOUT: ZCMapLayout = {
         '11111111', '11111111', '11111111', '11111111',
         '22222222', '22222222', '22222222', '22222222',
     ],
+    homeCandidates: [
+        { section: 1, cells: Array.from({ length: 32 }, (_, index) => index) },
+        { section: 2, cells: Array.from({ length: 32 }, (_, index) => index + 32) },
+    ],
 };
 
 function makeMap(layout: ZCMapLayout): ZCMatchMap {
@@ -77,6 +86,7 @@ function makeMap(layout: ZCMapLayout): ZCMatchMap {
         owners: ZC_HEX_CONFIG.map((hex) => getZCMapOwner(hex.id)),
         sections: ZC_HEX_CONFIG.map((hex) => getZCMapSection(hex.id)),
         regions: ZC_MAP_REGIONS,
+        homeCandidates: ZC_MAP_HOME_CANDIDATES,
         resourcePoints: ZC_MAP_RESOURCE_POINTS,
         spacing: ZC_MAP_SPACING,
     };

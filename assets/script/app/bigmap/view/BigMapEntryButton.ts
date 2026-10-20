@@ -9,7 +9,7 @@ const { ccclass } = _decorator;
  * 主界面上的「大地图」悬浮入口按钮。
  *
  * 为什么用悬浮按钮而不是塞进底部六格：底部六格是既有版式（商店/角色/竞技/领地/冒险/联盟），
- * 加第七格会动到 `CARD_LINEUP_NAV_GROUP` 与那排 `TabButton` 的 prefab；
+ * 加第七格会动到主城 tab 配置与那排 `TabButton` 的 prefab；
  * 大世界本期是新增玩法、美术也未定，先用一个独立的悬浮按钮挂上，改版式时直接挪。
  */
 @ccclass('BigMapEntryButton')

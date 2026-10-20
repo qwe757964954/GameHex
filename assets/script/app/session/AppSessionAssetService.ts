@@ -2,7 +2,6 @@ import type { ConfigService } from '../../core/config/ConfigService';
 import type { AssetService } from '../../core/asset/AssetService';
 import type { SessionAssetService, SessionLoadProgress } from '../../core/asset/SessionAssetService';
 import { ResourceScope } from '../../core/asset/ResourceScope';
-import { CARD_LINEUP_NAV_GROUP, loadNavArt } from '../card/CardLineupNav';
 import { loadCommonArt, releaseArtCache } from '../card/CardLineupIcons';
 import { MAP_DIRECTORY } from '../zcds/ZCGame';
 import { ZCGameLoader } from '../zcds/application/ZCGameLoader';
@@ -49,7 +48,6 @@ export class AppSessionAssetService implements SessionAssetService {
         scope.defer(releaseArtCache);
         this.scope = scope;
 
-        const navNames = Array.from(new Set(CARD_LINEUP_NAV_GROUP.flatMap((entry) => [entry.on, entry.off])));
         const tasks: LoadTask[] = [
             { message: '正在初始化基础配置', run: () => this.configs.initialize() },
             {
@@ -57,11 +55,6 @@ export class AppSessionAssetService implements SessionAssetService {
                 run: () => this.prepareBattleResources(),
                 validate: Boolean,
             },
-            ...navNames.map((name): LoadTask => ({
-                message: `正在准备主界面图标 ${name}`,
-                run: () => loadNavArt(name),
-                validate: Boolean,
-            })),
             ...COMMON_ART.map((name): LoadTask => ({
                 message: `正在准备通用界面资源 ${name}`,
                 run: () => loadCommonArt(name),

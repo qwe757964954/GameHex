@@ -1,3 +1,12 @@
+import { cellCoords, hexIdAt, hexNeighbors } from './hex-grid.js';
+
+// 几何统一到 `hex-grid.js`（与客户端 `hexGridNeighborIds` 逐格一致）。
+// ⚠️ 这里原来有一套**自己的** offsets，与客户端 400/400 格全不一致 —— 表现为
+// 「编辑器刷的笔刷是另一组格子」「编辑器校验说的连通和 python 发布校验说的不一样」。
+export { cellCoords, hexNeighbors } from './hex-grid.js';
+/** 旧名保留：`cellIdAt` 与 `hexIdAt` 是同一个实现，改名只为三套编辑器同名。 */
+export const cellIdAt = hexIdAt;
+
 export const TERRITORY_MAP_KIND = 'territoryChapter';
 export const TERRITORY_VERSION = 1;
 export const TERRITORY_SITE_TYPES = Object.freeze(['stage', 'boss', 'asyncPvp', 'fixedResource', 'bonus']);
@@ -17,24 +26,6 @@ export class TerritoryValidationError extends Error {
 
 export function cellCount(rows, columns) {
   return rows * columns;
-}
-
-export function cellCoords(cellId, columns) {
-  return { row: Math.floor(cellId / columns), column: cellId % columns };
-}
-
-export function cellIdAt(row, column, rows, columns) {
-  if (!Number.isInteger(row) || !Number.isInteger(column) || row < 0 || column < 0 || row >= rows || column >= columns) return -1;
-  return row * columns + column;
-}
-
-// Odd-column offset neighbours. The editor and runtime use flat-top hexes with alternating column Y offsets.
-export function hexNeighbors(cellId, rows, columns) {
-  const { row, column } = cellCoords(cellId, columns);
-  const offsets = column % 2 === 0
-    ? [[-1, -1], [0, -1], [-1, 0], [1, 0], [-1, 1], [0, 1]]
-    : [[0, -1], [1, -1], [-1, 0], [1, 0], [0, 1], [1, 1]];
-  return offsets.map(([dr, dc]) => cellIdAt(row + dr, column + dc, rows, columns)).filter((id) => id >= 0);
 }
 
 function isRecord(value) {

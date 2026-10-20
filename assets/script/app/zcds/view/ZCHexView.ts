@@ -6,7 +6,6 @@ import {
     Graphics,
     instantiate,
     Label,
-    Material,
     Node,
     Prefab,
     ProgressBar,
@@ -15,7 +14,6 @@ import {
     SpriteFrame,
     UITransform,
     Vec3,
-    Vec4,
 } from 'cc';
 import type {
     ZCBuildingCooldownState,
@@ -30,7 +28,6 @@ import { ZC_CLIENT_COLORS, zcDeepFactionColor, zcFactionColor, zcTowardWhite } f
 // 自己抄一份顶点迟早会和轮廓错开半个像素。
 import { OWNED_OUTLINE_INSET_SCALE, ZC_OUTLINE_HEX_POINTS } from './ZCOutlineLayer';
 import { ZCPvpTileType } from '../model/ZCPvpTileRules';
-import type { ZCNeutralResourceId } from '../model/ZCNeutralResourceReward';
 import {
     ZC_CARD_FADE_START_PROGRESS,
     ZC_CARD_REVEAL_SECONDS,
@@ -46,6 +43,9 @@ import {
     HEX_FLIP_GROUND_GLOW_ALPHA,
     HEX_FLIP_IDLE_FX,
     HEX_FLIP_PIVOT_LIFT,
+    HEX_PULSE_FRAME_COUNT,
+    HEX_PULSE_FRAME_HIDDEN,
+    HEX_PULSE_FRAME_SECONDS,
     hexCollapseProgress,
     hexFlipFoldProgress,
     hexFlipGroundGlowStrength,
@@ -53,6 +53,7 @@ import {
     hexShrinkFx,
 } from '../../../core/hex/HexFlipPresentation';
 import type { IZCHexFlipFx } from '../../../core/hex/HexFlipPresentation';
+import { HEX_GRID_FACE_HEIGHT, HEX_GRID_FACE_WIDTH } from '../../../core/hex/HexGridLayout';
 import {
     BUILDING_POP_FROM_SCALE,
     BUILDING_SHAKE_STRETCH,
@@ -75,7 +76,7 @@ const BUILDING_SYMBOLS: Readonly<Record<ZCBuildingType, string>> = {
  * 中立资源点 → 文字兜底。有 `resourceFrame` 的走图标（见 `frameForResource`），
  * 只有还没出美术图的这两类（`unit_cap` / `artifact_charge`）才落到这里。
  */
-const NEUTRAL_RESOURCE_LABELS: Readonly<Record<ZCNeutralResourceId, string>> = {
+const NEUTRAL_RESOURCE_LABELS: Readonly<Record<string, string>> = {
     chest: '宝箱', gold: '金币', mine: '金矿', unit_cap: '兵力', artifact_charge: '神器',
 };
 // 三个「格内图标落点」下面的 y 都是 **BuildingLayer 内的局部坐标**。
@@ -129,35 +130,65 @@ const HEX_ACT_GLOW_RADIUS_MIN = 20;
 const HEX_ACT_GLOW_RADIUS_MAX = 56;
 
 /**
- * 脉冲段水波纹的**按格子类型染色**（山猫 2026-10-15：「兵营的颜色，金矿和绿色平级」）。
- * 🔴 只认两类可开发格；未配色类型（随机 `AllRandom` 等）落回兵营色 —— 与 `frameForTileType` 同口径。
+ * 脉冲序列帧的**按卡牌品阶染色**（用户 2026-10-19 口径）。
+ *
+ * 「脉冲效果图片的整体颜色根据对应获得的卡牌品阶，1 绿 / 2 蓝 / 3 紫 / 4 金，
+ *  **没有获得卡牌 → 绿**」⇒ 索引就是品阶，下标 0 与下标 1 同色。
+ *
+ * 🔴 与旧口径的差别：2026-10-15 那版按**格子类型**上色（兵营蓝紫 / 金矿绿），
+ * 现在颜色只表达「你抽到了什么品阶」—— 点下去的那一刻就能从波的颜色读出结果。
  * 详见 docs/ZCHexView设计决策.md §3。
  */
-const PULSE_TINT_BARRACKS = new Color(136, 140, 255, 255);  // #888CFF：录屏里兵营格那一套蓝紫
-const PULSE_TINT_MINE = new Color(90, 226, 138, 255);       // #5AE28A：金矿绿
+/** 1 档（绿）。0 档与它**共用同一个实例** —— 用户口径就是「没获得卡牌 = 绿色」，不是另给一档。 */
+const PULSE_TINT_GREEN = new Color(90, 226, 138, 255);   // #5AE28A
+const PULSE_TINT_BY_RARITY: readonly Color[] = [
+    PULSE_TINT_GREEN,                // 0 = 没抽到卡 ⇒ 绿（与 1 同色同实例）
+    PULSE_TINT_GREEN,                // 1 绿
+    new Color(72, 148, 255, 255),    // 2 蓝 #4894FF
+    new Color(178, 108, 255, 255),   // 3 紫 #B26CFF
+    new Color(255, 196, 60, 255),    // 4 金 #FFC43C
+];
+/** 缺省染色（没抽到卡 / 品阶越界）—— 绿。 */
+const PULSE_TINT_DEFAULT = PULSE_TINT_GREEN;
 
 /**
- * `applyPulseFade` 写 uniform 的差值阈值：与上一次写进材质的值差在这个数以内就跳过。
+ * 脉冲序列帧（`effects/hex_pulse_seq`，320×320 画布）里**本体六边形**的像素尺寸。
  *
- * `applyPulseFade` 是**每帧**被调的（脉冲段），不设阈值会每帧一次 `setProperty`。
- * 取 `1e-4`：虚化强度是 [0,1] 的归一化值，这个精度下肉眼分辨不出、但足以挡住
- * 「同一段里值几乎不变」的重复写。与 `HEX_ACT_SECONDS_EPSILON` 同族的一类「比较容差」常量。
+ * 美术口径（需求文档 §三）：平顶六边形，本体基准 **164 × 142**，波最大时约 292 × 253，
+ * 5 帧中心逐像素对齐在画布正中。视图拿这组数把「图上 1.0 倍的本体」对齐到格面
+ * （`HEX_GRID_FACE_WIDTH/HEIGHT` = 123×90）—— 一次算好写成常量，别每帧再除。
  */
-const PULSE_FADE_EPSILON = 1e-4;
+const HEX_PULSE_ART_BODY_WIDTH = 164;
+const HEX_PULSE_ART_BODY_HEIGHT = 142;
+/**
+ * 脉冲波节点相对 320 画布的**静态缩放**（x / y 分开：本项目格面 123:90 = 1.367，
+ * 比正六边形 1.155 更扁，等比缩放会让波和格子对不上边）。
+ *
+ * ⚠️ 这是「把美术图摊到格子上」的**一次性**换算，不是动画 —— 波自己的放大已经烘焙在图里，
+ * 5 帧共用这一个缩放（需求 §七.7：节点上不许再叠 scale 动画）。
+ */
+const HEX_PULSE_SCALE_X = HEX_GRID_FACE_WIDTH / HEX_PULSE_ART_BODY_WIDTH;
+const HEX_PULSE_SCALE_Y = HEX_GRID_FACE_HEIGHT / HEX_PULSE_ART_BODY_HEIGHT;
+/**
+ * 脉冲序列帧的**画布边长**（320×320，5 帧同尺寸）。
+ *
+ * 节点 contentSize 必须按这张整画布给，而不是按格面 —— 波最后会扩到约 292×253，
+ * 只给 123×90 的话 Sprite 会把整张图压进格子、波形被挤扁（`_sizeMode` 是 `CUSTOM`，
+ * 引擎不会替你改尺寸）。换美术图要同步改这里。
+ */
+const HEX_PULSE_CANVAS_SIZE = 320;
 
 /**
- * 地块类型 → 脉冲水波纹的染色（纯函数，便于单测）。
+ * 卡牌品阶 → 脉冲染色（纯函数，便于单测）。
  *
+ * @param rarity 1 绿 / 2 蓝 / 3 紫 / 4 金；`0` / 越界 / 非数字 = 没抽到卡 ⇒ 绿。
  * @returns 共享的只读色；调用方只许读、`set` 到自己的实例里，别改它的分量。
  */
-export function pulseTintForTileType(type: ZCPvpTileType | null): Color {
-    switch (type) {
-        case ZCPvpTileType.Mine: return PULSE_TINT_MINE;
-        case ZCPvpTileType.BarracksCommon:
-        case ZCPvpTileType.BarracksMedium:
-        case ZCPvpTileType.BarracksAdvanced: return PULSE_TINT_BARRACKS;
-        default: return PULSE_TINT_BARRACKS;
-    }
+export function pulseTintForRarity(rarity: number): Color {
+    if (!Number.isFinite(rarity)) return PULSE_TINT_DEFAULT;
+    const index = Math.round(rarity);
+    if (index <= 0 || index >= PULSE_TINT_BY_RARITY.length) return PULSE_TINT_DEFAULT;
+    return PULSE_TINT_BY_RARITY[index];
 }
 
 
@@ -166,13 +197,34 @@ export function pulseTintForTileType(type: ZCPvpTileType | null): Color {
  * 详见 docs/ZCHexView设计决策.md §4。
  */
 /**
- * **点击动画段**（① 脉冲 ∥ ② 缩没）的合成表现（纯函数）。
- * 🔴 两条曲线**不相乘**：点击动画段整格缩放只剩缩没那一份（`tileScale` 1 → `HEX_SHRINK_MIN_SCALE`，单调收）。
- * 详见 docs/ZCHexView设计决策.md §5。
+ * 阶段 2（缩没）的起点：**脉冲播到中间帧那一刻**（用户 2026-10-19 口径）。
+ *
+ * 5 帧索引 `0..4`，「中间帧」= 帧 `2`，它从 `0.2s` 开始 ⇒ 阶段 1 只有 `0..0.2s`
+ * （脉冲前两帧 + 格子带 UI 原样不动），阶段 2 从 `0.2s` 起把格子缩掉、0.7s 收干净。
+ *
+ * ⚠️ 别把它写成 `HEX_PULSE_WAVE_SECONDS / 2`（0.25s）：那是「波走到一半的时间」，
+ * 而用户说的是「播放**到**中间帧」，两件事差半帧（0.05s）。
+ */
+const HEX_PULSE_SHRINK_START_SECONDS = HEX_PULSE_FRAME_SECONDS * Math.floor(HEX_PULSE_FRAME_COUNT / 2);
+
+/**
+ * **点击动画段 = 阶段 1 脉冲 + 阶段 2 缩没**（纯函数）。详见 docs/ZCHexView设计决策.md §5。
+ *
+ * 🔴 两段是**先后**关系，不再并发（2026-10-19 用户口径）：
+ *   ① `[0, 0.2s)` 只有脉冲 —— 格子（含图标 + 价格数字）**原样不动**，`tileScale` 恒 1；
+ *   ② `[0.2s, 0.7s]` 脉冲继续播（0.5s 处自然退场），格子同时原地缩到 `HEX_SHRINK_MIN_SCALE`。
+ *
+ * 缩没的**跨度跟着变短**（0.5s 而不是 0.7s），但**总段长不变**（仍是 `ZC_HEX_SHRINK_SECONDS` = 0.7s）——
+ * 卡牌弹出时刻 / 首批兵 / 邻格按住窗都锚在这个段长上，不能因为改节奏就整体后移。
+ * 曲线还是 `hexShrinkFx` 的 easeInCubic（前半几乎不动、末段迅速收），现在起点往后挪、末段更利落。
  */
 function hexPulseShrinkFx(seconds: number): IZCHexFlipFx {
     const pulse = hexPulseFx(seconds);
-    const shrink = hexShrinkFx(clamp01(seconds / ZC_HEX_SHRINK_SECONDS));
+    const elapsed = seconds - HEX_PULSE_SHRINK_START_SECONDS;
+    // 阶段 1：格子与 UI 全都不动，只有波在长。
+    if (elapsed <= 0) return { ...pulse, tileScale: 1 };
+    const span = ZC_HEX_SHRINK_SECONDS - HEX_PULSE_SHRINK_START_SECONDS;
+    const shrink = hexShrinkFx(span > 0 ? clamp01(elapsed / span) : 1);
     return { ...pulse, tileScale: shrink.tileScale };
 }
 
@@ -239,7 +291,7 @@ export function resourceIconScale(frame: SpriteFrame | null | undefined): number
 type IZCBuildingFrameResolver = (
     cardId: string | null,
     building: ZCBuildingType,
-    owner: ZCFaction,
+    owner: ZCHexState['owner'],
 ) => SpriteFrame | null;
 
 interface IZCHexPresentation {
@@ -267,6 +319,7 @@ interface IZCSpawnHexPresentation {
     /** 资源点的具体资源 id（选点阶段用资源图标，不再显示「资源/可解锁」文字）。 */
     resourceId?: string | null;
     unlocksResource: boolean;
+    regionText?: string;
     boundaryMask?: number;
     /**
      * 本格是否紧邻**我方基地**（选点阶段基地周围那 6 格）。
@@ -421,7 +474,7 @@ export class ZCHexView extends Component {
 
     /**
      * 中立资源点图标（`neutralResourceId` → 图），复用 `iconSprite` 节点，位置居中。
-     * 三张图统一在 `assets/resources/image/map-resource/`（同一套 128×128 画布，别换别处的同名图）；
+     * 三张图统一在 `assets/resources/image/map-resource/`（同一套 212×212 画布，别换别处的同名图）；
      * `artifact_charge` 不在这里绑（玩家携带、随配置变），由 `ZCGameLoader` 预加载后经 `setArtifactChargeFrame` 注入；
      * `unit_cap` 暂无美术图，走 `NEUTRAL_RESOURCE_LABELS` 文字兜底。
      */
@@ -526,36 +579,31 @@ export class ZCHexView extends Component {
      */
     private claimWave: { from: ZCFaction; to: ZCFaction; progress: number } | null = null;
     /**
-     * 脉冲段「水波纹」的序列帧（渲染层注入，来自 `image/effects/hex_pulse`，30 帧一轮）。
+     * 脉冲段「脉冲波」的序列帧（渲染层注入，来自 `image/effects/hex_pulse_seq`，**5 帧**）。
      *
-     * 帧自带「起波 → 扩散 → 收掉」的 alpha 曲线，视图只按 `pulsePhase` 选帧 + 按格子类型染色，
-     * 不额外叠强度曲线（叠了会暗一档）。空数组 / 注入失败 ⇒ 波纹不显示，格子照常渲染（缩没照走）。
+     * 2026-10-19 换美术：放大与不透明度**全部烘焙在图上**，视图只按 `pulseFrame` 换
+     * `spriteFrame`，绝不往节点上再叠 scale / opacity 动画（叠了就是二次放大、二次虚化）。
+     * 空数组 / 注入失败 ⇒ 波不显示，格子照常渲染（缩没照走）。
      */
     private pulseFrames: readonly SpriteFrame[] = [];
     /**
-     * 脉冲水波纹专用材质的**原型**（渲染层注入，`shaders/hex-pulse.effect` 实例）。
-     * 🔴 只存**原型**；真正挂 Sprite 的是本视图**独占克隆**（`pulseFade` 每帧写，共用会互相盖掉）。
-     * 详见 docs/ZCHexView设计决策.md §10。
+     * `GroundGlow` 节点**非脉冲段**的原始 contentSize（`initialize` 时从 prefab 读一次）。
+     *
+     * 脉冲帧是 320×320 的大画布（整张含波的扩散余量），而开口光序列帧是 130×239 的竖条，
+     * 两者共用同一个 Sprite 节点 ⇒ 谁在场谁写尺寸，离开脉冲段必须写回这一份，
+     * 否则下一次抬升开口光会被拉成 320×320 的一整块。
      */
-    private pulseMaterialSource: Material | null = null;
-    /** 本视图独占的脉冲材质实例（按需克隆；`null` = 还没进过脉冲段 / 取不到 effect）。 */
-    private pulseMaterial: Material | null = null;
-    /** 当前 `GroundGlow` 上挂着的是不是 `pulseMaterial`（避免每帧重复写 `customMaterial`）。 */
-    private pulseMaterialApplied = false;
-    /** `pulseFade` uniform 的复用实例（避免每帧分配；`.yzw` 恒 0，着色器不用）。 */
-    private readonly pulseFadeParams = new Vec4(0, 0, 0, 0);
-    /** 上一次写进材质的虚化强度（NaN = 还没写过）。每帧都会调 `applyPulseFade`，值没变就跳过。 */
-    private pulseFadeWritten = Number.NaN;
-    /** 波纹的染色（每帧从 `pulseTintForTileType` 拷进来，复用实例避免每帧分配）。 */
+    private groundGlowBaseSize: { width: number; height: number } | null = null;
+    /** 脉冲的染色（每帧从 `pulseTintForRarity` 拷进来，复用实例避免每帧分配）。 */
     private readonly pulseTintColor = new Color(255, 255, 255, 255);
     /**
-     * 本格水波纹要染的**色**（按地块类型，见 `pulseTintForTileType`）。
+     * 本格脉冲要染的**色**（按抽到的卡牌品阶，见 `pulseTintForRarity`）。
      *
-     * 由每帧的波纹播放器读（`renderActivation` 拿不到 `ZCHexState`），在静态刷新的 `render`
-     * 里按 `state.tileType` 更新 —— 地块类型是**整局不变**的静态数据，0.15s 一拍足够，
-     * 不需要把 `state` 一路传到每帧那条路径上。缺省兵营色（新视图还没渲染过时的安全值）。
+     * 由 `renderActivation` **每帧**从激活事件里取（`activation.cardRarity`）重写 ——
+     * 品阶是「这一次开发」的结果，不是格子的静态属性，所以不能像旧版那样在 0.15s 的
+     * `render` 里按 `state.tileType` 缓存。缺省绿（= 没抽到卡）。
      */
-    private pulseTint: Color = PULSE_TINT_BARRACKS;
+    private pulseTint: Color = PULSE_TINT_DEFAULT;
     /** 上一次应用到的表现参数；null = 不在激活期，用于复位检查。 */
     private lastActivationFx: IZCHexFlipFx | null = null;
     /**
@@ -651,6 +699,12 @@ export class ZCHexView extends Component {
         // 这里捕一份基准给翻面动效用；顺手清掉上一局的补间状态。
         this.basePosition = this.node.position.clone();
         this.lastActivationFx = null;
+        // 脉冲层与开口光共用 `GroundGlow`：这里把 prefab 的原始画布尺寸存一份，
+        // 离开脉冲段时按它写回（见 `restorePulseLayer`）。
+        const groundGlowTransform = this.groundGlow?.node.getComponent(UITransform);
+        this.groundGlowBaseSize = groundGlowTransform
+            ? { width: groundGlowTransform.contentSize.width, height: groundGlowTransform.contentSize.height }
+            : null;
         // 抖动 / 按住窗都是**每局一次**的表现状态，对象池复用会带着上一局的值回来：
         // 不复位的话新格可能一上来就停在「被拉长的姿态」或「按住不放」。
         this.buildingShakeStartedAt = null;
@@ -672,10 +726,9 @@ export class ZCHexView extends Component {
         this.sweepMix = 0;
         this.sweepShimmer = 0;
         this.sweepKey = '';
-        // 材质是注入的（下一行后面由 `setHexPulseMaterial` 重新喂），但「当前挂没挂」这个
-        // 缓存必须清掉 —— 复用回来的 Sprite 可能还带着上一局脉冲段的材质，
-        // 不清就会让本局第一次走开口光时套着脉冲着色器渲染（整体偏暗）。
-        this.pulseMaterialApplied = false;
+        // 脉冲层与开口光共用这个 Sprite 节点：复用回来的视图可能还停在「320×320 画布 +
+        // 对齐缩放」上，不清就会让本局第一次抬升时把光带画成一大块（见 `restorePulseLayer`）。
+        this.restorePulseLayer();
         this.contentKey = '';
         this.terrainTintColor = null;
         this.groundGlowTintColor.r = 255;
@@ -861,8 +914,8 @@ export class ZCHexView extends Component {
         // `renderActivation`（挂 `renderDynamic`）。留着它是为了「激活事件已过期」时
         // 即使动态层那一帧没赶上，也能在一拍内把地块复位。
         const fx = hexActivationFx(progress, hasCardReveal);
-        // 水波纹按地块类型染色（`state` 只在这条静态路径上有，每帧那条读这份缓存）。
-        this.pulseTint = pulseTintForTileType(state.tileType);
+        // 脉冲染色只跟**卡牌品阶**走（2026-10-19），由 `renderActivation` 每帧从激活事件里取；
+        // 这条 0.15s 兜底路径拿不到品阶就不动它 —— 用 `state.tileType` 去猜会把颜色改错。
         this.applyActivationFx(fx);
         this.renderHealthBar(state, presentation.now);
         this.renderCooldown(
@@ -946,6 +999,9 @@ export class ZCHexView extends Component {
             this.terrainTintColor = tint;
             this.applyGroundGlowTint(tint);
         }
+        // 脉冲染色跟着**抽到的卡牌品阶**走（用户 2026-10-19）：0 = 没抽到卡 ⇒ 绿。
+        // 必须在 `applyActivationFx` 之前写 —— 它每帧读这份缓存去刷 Sprite 的颜色。
+        this.pulseTint = pulseTintForRarity(activation?.cardRarity ?? 0);
         this.applyActivationFx(
             hexActivationFx(ZCHexView.activationProgress(activation, now), activation?.hasCardReveal ?? true),
         );
@@ -970,7 +1026,6 @@ export class ZCHexView extends Component {
         this.applyTileOffset(0, 1);
         this.applyTileTransform(1, 1);
         this.applyGroundGlow(0, 1);
-        this.applyPulseMaterial(false);
     }
 
     private applyActivationFx(fx: IZCHexFlipFx): void {
@@ -988,9 +1043,6 @@ export class ZCHexView extends Component {
             this.applyTileOffset(0, 1);
             this.applyTileTransform(1, 1);
             this.applyGroundGlow(0, 1);
-            // 脉冲段挂上的专用材质也要摘掉：它只在脉冲段可用（非脉冲段这个节点装的是开口光
-            // 序列帧，套着会被再乘一次亮度而变暗）。
-            this.applyPulseMaterial(false);
             this.applyBuildingScale();
             // 激活期结束：抬到棋盘层的资源图标要跟着回显（隐藏段可能把它关掉过）。
             // 只在「抬层中 + 当前是关的」这一种情况下写，常规帧零开销。
@@ -1016,15 +1068,13 @@ export class ZCHexView extends Component {
         this.setRaised(fx.tileLift > 0);
         this.applyTileOffset(fx.tileLift, fx.tileFlip);
         this.applyTileTransform(fx.tileFlip, fx.tileScale);
-        // 脉冲段的**水波纹**与「抬升开口光」抢同一个中间层节点（`ZCGameHex/GroundGlow`）：
-        // 谁在场谁写 —— 脉冲段由 `pulsePhase` 驱动选帧 + 按类型染色，其余走开口光那条老路径。
+        // 脉冲段的**序列帧**与「抬升开口光」抢同一个中间层节点（`ZCGameHex/GroundGlow`）：
+        // 谁在场谁写 —— 脉冲段由 `pulsePhase` 决定「这一段归脉冲管」，具体第几帧看 `pulseFrame`
+        // （`-1` = 波已走完，整层关掉等缩没段收干净），其余走开口光那条老路径。
         // （同一个节点而不是新加一层：它就是 prefab 里唯一排在「底图之上、图标之下」的层。）
-        const pulsePhase = fx.pulsePhase;
-        if (pulsePhase !== undefined) {
-            this.applyPulseMaterial(true);
-            this.applyPulseRipple(pulsePhase, fx.pulseScale ?? 1, fx.pulseFade ?? 0);
+        if (fx.pulsePhase !== undefined) {
+            this.applyPulseRipple(fx.pulseFrame ?? HEX_PULSE_FRAME_HIDDEN);
         } else {
-            this.applyPulseMaterial(false);
             this.applyGroundGlow(fx.tileLift, fx.tileFlip, fx.tileScale);
         }
         this.applyBuildingScale(fx.buildingPopScale);
@@ -1063,9 +1113,9 @@ export class ZCHexView extends Component {
     private applyGroundGlow(tileLift: number, tileFlip: number, tileScale = 1): void {
         const sprite = this.groundGlow;
         if (!sprite) return;
-        // 非脉冲段这条路径接管同一个节点 ⇒ 先把脉冲段写在它上面的扩散缩放归 1
-        // （池化复用/分段切换时不归位，会留下「光带莫名其妙放大」的残影）。
-        this.restoreRippleScale();
+        // 非脉冲段这条路径接管同一个节点 ⇒ 先把脉冲段写在它上面的画布尺寸 / 对齐缩放归位
+        // （池化复用/分段切换时不归位，开口光会被画成 320×320 的一大块）。
+        this.restorePulseLayer();
         const node = sprite.node;
         const frames = this.groundGlowFrames;
         const collapseFlip = 1 - hexCollapseProgress(tileFlip, tileScale);
@@ -1173,128 +1223,76 @@ export class ZCHexView extends Component {
     }
 
     /**
-     * 注入脉冲段水波纹的序列帧（按帧序）。新建地块视图时由渲染层喂一次。
-     * 传空数组 / 加载失败时波纹不显示，其余表现（缩没、扩散）不受影响。
+     * 注入脉冲段的序列帧（按帧序 0→4）。新建地块视图时由渲染层喂一次。
+     * 传空数组 / 加载失败时波不显示，其余表现（缩没）不受影响。
      */
     setHexPulseFrames(frames: readonly SpriteFrame[]): void {
         this.pulseFrames = frames ?? [];
     }
 
     /**
-     * 注入脉冲水波纹的专用材质**原型**（`shaders/hex-pulse.effect`），新建地块视图时由渲染层喂一次。
-     * 传 `null` / 加载失败 ⇒ 退回默认 Sprite 材质，脉冲照播、只是边缘偏暗且不虚化。
+     * 脉冲层（`GroundGlow`）的尺寸 / 缩放归位 —— **离开脉冲段时必调**。
      *
-     * ⚠️ 只存原型，实际挂上去的是本视图**独占的克隆** —— 理由见 `pulseMaterialSource`。
+     * 脉冲段把这个节点改成了「320×320 画布 + 静态对齐缩放」（`applyPulseRipple`），
+     * 而它是和抬升开口光**共用**的，地块视图又是**对象池复用**的 ⇒ 不复位的话下一次
+     * 开口光会按 320×320 × 0.75/0.63 的位置和尺寸画出来，整条光带偏掉。
      */
-    setHexPulseMaterial(material: Material | null): void {
-        this.pulseMaterialSource = material ?? null;
-        this.pulseMaterial = null;
-        // 材质换了就重挂一次：下一次 `applyPulseMaterial` 必须真的写进 Sprite，不能吃缓存。
-        this.pulseMaterialApplied = false;
-        this.pulseFadeWritten = Number.NaN;
-    }
-
-    /**
-     * 本视图**独占**的脉冲材质（按需从原型克隆，同一个 effect、一份干净的 uniform）。
-     *
-     * 为什么必须独占：`pulseFade` 是**每帧写的 uniform**（见 `applyPulseFade`），而材质是**按实例**
-     * 持有 uniform 的 —— 两格同时在脉冲段时，共用一份的话后写的那格会盖掉前一格的外缘虚化。
-     * 克隆是**懒建**的：只有真的进过脉冲段的格子才建一份（没被点过的格子零开销）。
-     *
-     * 取不到 effect（加载失败 / 测试桩没有）⇒ 返回 `null`，脉冲退化成默认材质（不虚化、边缘偏暗）。
-     */
-    private ensurePulseMaterial(): Material | null {
-        if (this.pulseMaterial || !this.pulseMaterialSource) return this.pulseMaterial;
-        const effect = this.pulseMaterialSource.effectAsset;
-        if (!effect) return null;
-        const own = new Material();
-        own.initialize({ effectAsset: effect });
-        this.pulseMaterial = own;
-        return own;
-    }
-
-    /**
-     * 按脉冲段在场与否切换 `GroundGlow` 的材质。
-     *
-     * 🔴 **只在脉冲段挂专用材质**：非脉冲段这个节点装的是彩色开口光序列帧，
-     * 套上脉冲着色器会被再乘一次亮度而整体变暗。所以两条路各自负责自己的材质，
-     * 靠 `pulseMaterialApplied` 记住当前状态，值没变就一次也不碰 Sprite。
-     */
-    private applyPulseMaterial(on: boolean): void {
-        const sprite = this.groundGlow;
-        if (!sprite) return;
-        const material = on ? this.ensurePulseMaterial() : null;
-        if (this.pulseMaterialApplied === !!material && sprite.customMaterial === material) return;
-        this.pulseMaterialApplied = !!material;
-        sprite.customMaterial = material;
-    }
-
-    /**
-     * 把「外缘虚化强度」写进脉冲专用着色器的径向遮罩（`shaders/hex-pulse.effect` 的 `pulseFade.x`）。
-     *
-     * 取不到材质（加载失败 / 还没注入）⇒ 什么都不做：波纹照播、只是外缘不虚化（降级不报错）。
-     * 值没变不重复写（`pulseFadeWritten` 缓存）—— 这个方法是**每帧**被调的。
-     *
-     * ⚠️ 只写 `x`：虚化起始半径（`pulseShape.x`）与径向归一化尺寸（`pulseShape.yz`）都是
-     * 着色器里的只读默认值，运行时不动它们（`.yzw` 恒 0，着色器不读）。
-     */
-    private applyPulseFade(fade: number): void {
-        const material = this.pulseMaterial;
-        if (!material) return;
-        const value = clamp01(fade);
-        if (Math.abs(value - this.pulseFadeWritten) <= PULSE_FADE_EPSILON) return;
-        this.pulseFadeWritten = value;
-        this.pulseFadeParams.x = value;
-        material.setProperty('pulseFade', this.pulseFadeParams);
-    }
-
-    /**
-     * 波纹层节点的缩放归 1（离开脉冲段时用）。
-     *
-     * 脉冲段把**扩散**写在波纹层节点上（`applyPulseRipple`），而地块视图是**对象池复用**的 ⇒
-     * 不复位的话下一次常规渲染（开口光序列帧 / 复位帧）会带着上一格的扩散倍数。
-     */
-    private restoreRippleScale(): void {
+    private restorePulseLayer(): void {
         const node = this.groundGlow?.node;
         if (!node) return;
         if (node.scale.x !== 1 || node.scale.y !== 1) node.setScale(1, 1, 1);
+        const base = this.groundGlowBaseSize;
+        const ui = node.getComponent(UITransform);
+        if (base && ui && (ui.contentSize.width !== base.width || ui.contentSize.height !== base.height)) {
+            ui.setContentSize(base.width, base.height);
+        }
     }
 
     /**
-     * 脉冲段：中间层播一道**向外扩散**的水波纹
-     * （`phase` = 一个周期内的相位 `[0,1)`，一轮 = 一整组帧）。
+     * 脉冲段：中间层播**一道**美术序列帧（`frame` = 该显示第几张，`-1` = 波已走完、退场）。
      * 详见 docs/ZCHexView设计决策.md §20。
+     *
+     * 🔴 **只换图**：需求（2026-10-19）明确「缩放与透明度已烘焙进图，节点上不要再做
+     * scale / opacity 动画」。这里写的 scale 是**一次性的对齐换算**（把图上 164×142 的本体
+     * 摊成格面 123×90），5 帧全程同一个值，不随帧走。
+     *
+     * ⚠️ 除 `parentScale`：格根此刻正被缩没段往 0.1 收（`applyTileTransform` 已在本帧早些
+     * 时候写过），波是它的子节点 ⇒ 不除回去波会跟着一起缩，读起来是「波也被吸进去了」。
      */
-    private applyPulseRipple(phase: number, expandScale = 1, fade = 0): void {
+    private applyPulseRipple(frame: number): void {
         const sprite = this.groundGlow;
         if (!sprite) return;
         const node = sprite.node;
         const frames = this.pulseFrames;
-        if (!frames.length) {
+        // 没有帧 / 波已走完 / 帧号越界 ⇒ 整层关掉（不是「显示第 0 帧」，那会留一圈亮边）。
+        if (!frames.length || frame < 0 || frame >= frames.length) {
             if (node.active) node.active = false;
-            this.restoreRippleScale();
+            this.restorePulseLayer();
             return;
         }
         if (!node.active) node.active = true;
-        // 格根此刻的缩放 = 缩没段的进度（`applyTileTransform` 已在本帧早些时候写过）；
-        // 波纹是它的子节点，要把这一份除回去才是「以格子为单位」的绝对倍率。
+        // 320×320 的整张画布（含波的扩散余量）铺进来；锚点 0.5 ⇒ 画布中心 = 节点原点。
+        const ui = node.getComponent(UITransform);
+        if (ui && (ui.contentSize.width !== HEX_PULSE_CANVAS_SIZE
+            || ui.contentSize.height !== HEX_PULSE_CANVAS_SIZE)) {
+            ui.setContentSize(HEX_PULSE_CANVAS_SIZE, HEX_PULSE_CANVAS_SIZE);
+        }
         const parentScale = this.node.scale.x > 0 ? this.node.scale.x : 1;
         const y = ZC_LAND_TOP_CENTER_LIFT / parentScale;
         if (node.position.y !== y) node.setPosition(0, y, 0);
-        const scale = expandScale / parentScale;
-        if (node.scale.x !== scale || node.scale.y !== scale) node.setScale(scale, scale, 1);
-        const index = Math.min(frames.length - 1, Math.floor(clamp01(phase) * frames.length));
-        const frame = frames[index];
-        if (frame && sprite.spriteFrame !== frame) sprite.spriteFrame = frame;
+        const scaleX = HEX_PULSE_SCALE_X / parentScale;
+        const scaleY = HEX_PULSE_SCALE_Y / parentScale;
+        if (node.scale.x !== scaleX || node.scale.y !== scaleY) node.setScale(scaleX, scaleY, 1);
+        const next = frames[frame];
+        if (next && sprite.spriteFrame !== next) sprite.spriteFrame = next;
         // 🔴 类型色必须**每帧都判一次**：同一调用里 `renderActivation` 已经先把阵营 tint
         // 写进这张 Sprite 了（`applyGroundGlowTint`），只按「类型没变」缓存的话会被它压住。
         const tint = this.pulseTint;
         const color = sprite.color;
-        if (color.r !== tint.r || color.g !== tint.g || color.b !== tint.b) {
+        if (color.r !== tint.r || color.g !== tint.g || color.b !== tint.b || color.a !== 255) {
             this.pulseTintColor.set(tint.r, tint.g, tint.b, 255);
             sprite.color = this.pulseTintColor;
         }
-        this.applyPulseFade(fade);
     }
 
     /** 选点阶段不创建战斗快照，直接用地图声明绘制格子状态。 */
@@ -1357,6 +1355,7 @@ export class ZCHexView extends Component {
 
         let text = '';
         if (presentation.blocked) text = '×';
+        if (presentation.regionText && !text && !selectedOwner) text = presentation.regionText;
         if (selectedOwner) text = presentation.confirmed ? '锁' : '已选';
         // 站了骨骼的格子**一个字都不写**（与对局一致）：这一格的语义是「这里的兵」，
         // 不是「可开发 / 可点」；区名 / × / 锁 也都让位给兵。
@@ -1457,16 +1456,11 @@ export class ZCHexView extends Component {
     onDestroy(): void {
         this.node.off(Node.EventType.TOUCH_END, this.onTouchEnd, this);
         this.clickHandler = null;
-        // 脉冲材质是本视图**运行时克隆**的（见 `ensurePulseMaterial`），`new Material()` 不归
-        // 资源管理器管 ⇒ 这里必须 `destroy()`，否则整份跟着视图留在显存里。
-        // 🔴 绝不要写 `this.groundGlow.customMaterial = null`（规则 176：销毁期不碰子节点组件，会炸整个对局销毁）。
+        // 脉冲段 2026-10-19 起只换 `spriteFrame`，不再有运行时克隆的材质要销毁
+        // （原 `ensurePulseMaterial` / `new Material()` 那条链已随 30 帧旧美术一起退役）。
+        // 🔴 仍然别在销毁期碰子节点组件（规则 176）：`groundGlow.customMaterial = null` 之类会炸整个对局销毁。
         // 详见 docs/ZCHexView设计决策.md §23。
-        if (this.pulseMaterial) {
-            this.pulseMaterial.destroy();
-            this.pulseMaterial = null;
-        }
-        this.pulseMaterialSource = null;
-        this.pulseMaterialApplied = false;
+        this.groundGlowBaseSize = null;
     }
 
     private onTouchEnd(): void {
@@ -1810,7 +1804,7 @@ export class ZCHexView extends Component {
         }
     }
 
-    private frameForTileType(type: ZCPvpTileType | null): SpriteFrame | null {
+    private frameForTileType(type: ZCHexState['tileType']): SpriteFrame | null {
         switch (type) {
             case ZCPvpTileType.Mine: return this.mineIconFrame;
             case ZCPvpTileType.BarracksCommon:

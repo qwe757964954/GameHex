@@ -16,10 +16,6 @@
 export const TERRITORY_EVENTS = {
     /** 站点 / 随机资源格被点击。载荷：`TerritoryStationTarget`（`TerritorySite` 或随机格 target）。 */
     STATION_CLICK: 'territory:station-click',
-    /** HUD「上一章」被点击。无载荷。 */
-    PREVIOUS_CHAPTER: 'territory:previous-chapter',
-    /** HUD「下一章」被点击。无载荷。 */
-    NEXT_CHAPTER: 'territory:next-chapter',
     /** 详情弹窗关闭（暗底 / 关闭按钮）。无载荷。 */
     DETAIL_CLOSE: 'territory:detail-close',
     /** 详情弹窗开战按钮。无载荷。 */

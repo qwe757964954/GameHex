@@ -6,7 +6,7 @@ import { TERRITORY_SITE_TYPE } from '../model/TerritoryMapConfig';
  * 领地模块的配色真源。
  *
  *  原先散在 `TerritoryPage` 顶部的 `COLORS` 里，页面瘦身后由 `TerritoryMapView` /
- *  `TerritoryStationView` / `TerritoryHeaderView` / 详情弹窗共用 —— 放在一处，改色只改这里。
+ *  `TerritoryStationView` / 详情弹窗共用 —— 放在一处，改色只改这里。
  *  （纯常量 + 纯映射函数；不持有任何节点，也不参与状态判定。）
  */
 

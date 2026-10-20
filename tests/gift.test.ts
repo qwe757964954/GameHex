@@ -357,8 +357,8 @@ test('B2 `giftArtPath` 未知键返回 null（不拼出半个路径去 load）',
     assert.ok(path!.endsWith('/spriteFrame'), `装配路径必须以 /spriteFrame 结尾：${path}`);
 });
 
-test('B3 大页签底图复用 `image/main/tab_bg_01|02`（与首充档位页签同一对图）', () => {
-    assert.deepEqual(GIFT_TAB_ART, { off: 'tab_bg_01', on: 'tab_bg_02' });
+test('B3 大页签复用主页的金色选中底板，未选中态不铺独立底图', () => {
+    assert.deepEqual(GIFT_TAB_ART, { off: '', on: 'city/nav_sel' });
 });
 
 test('B4 ⚠️ `roleProperty` 货币档的图标：五档都有图（`8` 洗炼石 2026-09-29 补上）', () => {

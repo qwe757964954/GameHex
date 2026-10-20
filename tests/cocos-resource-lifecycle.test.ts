@@ -46,29 +46,12 @@ test('应用图标缓存持有 Cocos 引用，返回主界面复用有效帧，�
         cc: { SpriteFrame: Asset, resources: { load: (_path: string, _type: unknown, done: Function) => { calls++; done(null, frame); } } },
         '../ArtPaths': ArtPaths, '../HeadArt': { HeadArt: {} },
     });
-    assert.equal(await loadArt('btm_arena_s', 'image/main'), frame); assert.equal(frame.refs, 1);
+    assert.equal(await loadArt('nav_shop', 'image/main/city'), frame); assert.equal(frame.refs, 1);
     frame.addRef(); frame.decRef();
-    assert.equal(await loadArt('btm_arena_s', 'image/main'), frame); assert.equal(calls, 1);
+    assert.equal(await loadArt('nav_shop', 'image/main/city'), frame); assert.equal(calls, 1);
     frame.isValid = false; const replacement = new Asset(); frame = replacement;
-    assert.equal(await loadArt('btm_arena_s', 'image/main'), replacement); assert.equal(calls, 2);
+    assert.equal(await loadArt('nav_shop', 'image/main/city'), replacement); assert.equal(calls, 2);
     assert.equal(replacement.refs, 1);
-});
-
-test('导航图片加载结束后不触碰已销毁 UI，连续切换只应用最新结果', async () => {
-    const pending: Array<(frame: Asset) => void> = [];
-    class Component { isValid = true; node = { isValid: true, active: true }; }
-    const { CardLineupNav } = load('assets/script/app/card/CardLineupNav.ts', {
-        cc: { Component, _decorator: { ccclass: () => (x: unknown) => x, property: () => () => {} }, Label: class {}, Sprite: class {} },
-        '../ArtPaths': ArtPaths, './CardLineupTexts': { CARD_LINEUP_TEXTS: {} },
-        './CardLineupIcons': { loadArt: () => new Promise(resolve => pending.push(resolve)) },
-    });
-    const nav = new CardLineupNav(), rendered: Asset[] = [];
-    nav.render = (_name: string, frame: Asset) => rendered.push(frame);
-    const old = nav.renderAt(2, false), current = nav.renderAt(2, true);
-    const selected = new Asset(); pending[1](selected); await current;
-    pending[0](new Asset()); await old; assert.deepEqual(rendered, [selected]);
-    const leaving = nav.renderAt(2, false); nav.isValid = false; nav.node.isValid = false;
-    pending[2](new Asset()); await leaving; assert.equal(rendered.length, 1);
 });
 
 test('战斗流程先关闭视图再销毁组件和释放作用域，不等待 Cocos onDestroy', () => {

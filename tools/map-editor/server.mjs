@@ -4,13 +4,18 @@ import { mkdir, open, readFile, readdir, stat, unlink, writeFile } from 'node:fs
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { normalizeTerritoryMap, TerritoryValidationError } from './formats/territory-format.js';
+import { BigmapValidationError, normalizeBigmapLayout } from './formats/bigmap-format.js';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const presetDir = join(root, 'presets');
 const territoryPresetDir = join(root, 'presets', 'territory');
+// 大地图布局预设（编辑器保存到这里；发布时才写 assets）。
+const bigmapPresetDir = join(root, 'presets', 'bigmap');
 // 场景装饰贴图目录（相对游戏 resources）：资源名写进 art.freeDecor[].art。
 const resourcesDir = join(root, '..', '..', 'assets', 'resources');
 const territoryResourceDir = join(resourcesDir, 'config', 'territory-maps');
+const bigmapResourceDir = join(resourcesDir, 'config', 'bigmap-maps');
+const remoteRefDir = join(root, '..', '..', 'assets', 'remoteRef');
 const territoryAssetDir = join(resourcesDir, 'image', 'territory');
 const decorDir = join(resourcesDir, 'image', 'decor');
 const mapResourceDir = join(resourcesDir, 'image', 'map-resource');
@@ -41,7 +46,9 @@ const port = Number(process.env.MAP_EDITOR_PORT || 8787);
 const address = `http://127.0.0.1:${port}/`;
 const idPattern = /^[a-zA-Z0-9_-]+$/;
 const shouldOpen = process.argv.includes('--open');
-const launchPath = process.argv.includes('--territory') ? 'territory.html' : '';
+// 三个编辑器共用一个服务，用启动参数决定打开哪个页面（各自的 .cmd 里带这个开关）。
+const launchPath = process.argv.includes('--bigmap') ? 'bigmap.html'
+  : process.argv.includes('--territory') ? 'territory.html' : '';
 
 function openBrowser() {
   if (!shouldOpen || process.platform !== 'win32') return;
@@ -62,6 +69,24 @@ function runningEditor() {
       });
     });
     request.on('timeout', () => request.destroy());
+    request.on('error', () => resolve(false));
+  });
+}
+
+/**
+ * 端口上那个服务认不认这个页面。
+ *
+ * 光判断「有人在监听」不够：端口上可能是**加这个页面之前**的旧进程，
+ * 它会把 `/bigmap.html` 走到兜底返回 `{"error":"页面或预设不存在"}` ——
+ * 用户看到的是一个 JSON 报错，而终端只写「已在运行」，根本查不到原因。
+ */
+function servesPage(page) {
+  return new Promise((resolve) => {
+    const request = get(address + page, { timeout: 2000 }, (response) => {
+      response.resume();
+      resolve(response.statusCode === 200);
+    });
+    request.on('timeout', () => { request.destroy(); resolve(false); });
     request.on('error', () => resolve(false));
   });
 }
@@ -246,6 +271,67 @@ async function publishTerritoryPreset(id) {
   return { map, warnings, target: 'assets/resources/config/territory-maps' };
 }
 
+/** 读 remoteRef 配置表里的某个 id 列（`{k,v}` 压缩格式）；读不到返回 null（对账降级为跳过）。 */
+async function readRefIdSet(tableName, idField) {
+  try {
+    const raw = JSON.parse(await readFile(join(remoteRefDir, `${tableName}.json`), 'utf8'));
+    const keys = Array.isArray(raw?.k) ? raw.k : [];
+    const index = keys.indexOf(idField);
+    if (index < 0 || !Array.isArray(raw?.v)) return null;
+    return new Set(raw.v.map((row) => Number(row[index])));
+  } catch { return null; }
+}
+
+/** 把 `{k,v}` 压缩表解成对象数组；读不到返回 null。编辑器靠它拉城池/野怪清单。 */
+async function readRefRows(tableName) {
+  try {
+    const raw = JSON.parse(await readFile(join(remoteRefDir, `${tableName}.json`), 'utf8'));
+    const keys = Array.isArray(raw?.k) ? raw.k : [];
+    if (!Array.isArray(raw?.v)) return null;
+    return raw.v.map((row) => Object.fromEntries(keys.map((key, index) => [key, row[index]])));
+  } catch { return null; }
+}
+
+async function readBigmapPreset(id) {
+  return normalizeBigmapLayout(JSON.parse(await readFile(join(bigmapPresetDir, `${id}.json`), 'utf8')));
+}
+
+/**
+ * 大地图布局发布到客户端资源目录。
+ *
+ * 比领地多一道**与配置表对账**：布局里的城/怪必须在 `BigMap-*` 表里存在。
+ * 少了这步，进游戏就是「图上有城、表里没数值」或「表里加了城、图上没有」，两边都不报错。
+ */
+async function publishBigmapPreset(id) {
+  const { layout, warnings } = await readBigmapPreset(id);
+
+  const cityIds = await readRefIdSet('BigMap-城池配置', 'cityId');
+  if (cityIds) {
+    const missing = layout.cities.map((city) => city.cityId).filter((cityId) => !cityIds.has(cityId));
+    if (missing.length > 0) {
+      throw new BigmapValidationError(`布局里的城池 ${missing.join(',')} 不在 BigMap-城池配置 中`);
+    }
+  }
+  const monsterIds = await readRefIdSet('BigMap-野怪配置', 'monsterId');
+  if (monsterIds) {
+    const missing = [...new Set(layout.monsters.map((monster) => monster.monsterId))]
+      .filter((monsterId) => !monsterIds.has(monsterId));
+    if (missing.length > 0) {
+      throw new BigmapValidationError(`布局里的野怪 ${missing.join(',')} 不在 BigMap-野怪配置 中`);
+    }
+  }
+
+  await mkdir(bigmapResourceDir, { recursive: true });
+  const target = join(bigmapResourceDir, `${id}.json`);
+  await writeFile(target, JSON.stringify(layout, null, 2) + '\n', 'utf8');
+  const meta = `${target}.meta`;
+  try { await stat(meta); }
+  catch {
+    await writeFile(meta, JSON.stringify({ ver: '1.1.2', importer: 'json', imported: true, uuid: '', files: {} }, null, 2) + '\n', 'utf8');
+  }
+  return { layout, warnings, target: 'assets/resources/config/bigmap-maps' };
+}
+
 function validatePreset(data, id) {
   if (!data || typeof data !== 'object' || Array.isArray(data) || data.id !== id) throw new Error('地图 id 与文件名不一致');
   const version = data.version == null ? 1 : data.version;
@@ -384,13 +470,15 @@ async function readBody(req) {
   let body = '';
   for await (const chunk of req) {
     body += chunk;
-    if (body.length > 200000) throw new Error('地图文件过大');
+    // 大地图 100×100 + 74 座城 + 势力范围格子，体积远大于领地那 20×20 的图，上限放到 2MB。
+    if (body.length > 2000000) throw new Error('地图文件过大');
   }
   return JSON.parse(body);
 }
 
 await mkdir(presetDir, { recursive: true });
 await mkdir(territoryPresetDir, { recursive: true });
+await mkdir(bigmapPresetDir, { recursive: true });
 
 const server = createServer(async (req, res) => {
   try {
@@ -400,12 +488,20 @@ const server = createServer(async (req, res) => {
     // ⇒ window.__territoryEditor 都不存在，看起来像「编辑器坏了」）。
     // 正则只允许 [a-z0-9-].js，不含 `..` / `/`，不会越出 formats/。
     const formatModule = /^\/formats\/([a-z0-9-]+\.js)$/.exec(url.pathname);
-    if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html' || url.pathname === '/app.js' || url.pathname === '/territory.html' || url.pathname === '/territory-app.js' || formatModule)) {
-      const filename = url.pathname === '/app.js' ? 'app.js'
-        : url.pathname === '/territory.html' ? 'territory.html'
-          : url.pathname === '/territory-app.js' ? 'territory-app.js'
-            : formatModule ? `formats/${formatModule[1]}` : 'index.html';
-      const content = await readFile(join(root, filename));
+    // 根目录静态文件改成「后缀白名单 + 文件名不许带路径分隔符」，不再逐字枚举。
+    // 之前是硬编码 /app.js、/territory.html…，每加一个页面都要改这一行；忘了就 404，
+    // 而服务端**零报错**，看起来像「编辑器坏了」（2026-09-29 加 territory-issue-cells.js 踩过）。
+    const pageFile = /^\/([A-Za-z0-9_-]+\.(?:html|js))$/.exec(url.pathname);
+    if (req.method === 'GET' && (url.pathname === '/' || formatModule || pageFile)) {
+      const filename = url.pathname === '/' ? 'index.html'
+        : formatModule ? `formats/${formatModule[1]}`
+          : pageFile[1];
+      let content;
+      try { content = await readFile(join(root, filename)); }
+      catch (error) {
+        if (error.code === 'ENOENT') { json(res, 404, { error: `静态文件不存在：${filename}` }); return; }
+        throw error;
+      }
       res.writeHead(200, { 'Content-Type': filename.endsWith('.js') ? 'text/javascript; charset=utf-8' : 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
       res.end(content);
       return;
@@ -462,6 +558,65 @@ const server = createServer(async (req, res) => {
       const assets = [];
       await listTerritoryAssets(territoryAssetDir, 'image/territory/', assets);
       json(res, 200, { assets: assets.sort(), dir: 'assets/resources/image/territory' });
+      return;
+    }
+    if (req.method === 'GET' && url.pathname === '/api/bigmap-config') {
+      // 编辑器要拉「有哪些城池 / 野怪可选」，以及地图尺寸与种子上限。
+      // 只读 remoteRef，不改表 —— 配置真源仍是导表链路。
+      const world = (await readRefRows('BigMap-世界地图配置'))?.[0] ?? null;
+      const cities = (await readRefRows('BigMap-城池配置')) ?? [];
+      const monsters = (await readRefRows('BigMap-野怪配置')) ?? [];
+      json(res, 200, { world, cities, monsters });
+      return;
+    }
+    if (req.method === 'GET' && url.pathname === '/api/bigmap-presets') {
+      const names = (await readdir(bigmapPresetDir)).filter((name) => name.endsWith('.json') && idPattern.test(name.slice(0, -5)));
+      const presets = [];
+      for (const name of names.sort()) {
+        const id = name.slice(0, -5);
+        try {
+          const { layout, warnings } = await readBigmapPreset(id);
+          presets.push({ ...layout, id, warnings });
+        } catch (error) {
+          // 单份坏档不该拖垮列表页：把错误挂在这条上，界面自己标红。
+          presets.push({ id, error: error.message });
+        }
+      }
+      json(res, 200, { presets });
+      return;
+    }
+    const bigmapMatch = /^\/api\/bigmap-presets\/([^/]+)$/.exec(url.pathname);
+    if (bigmapMatch && idPattern.test(bigmapMatch[1])) {
+      const id = bigmapMatch[1];
+      const path = join(bigmapPresetDir, `${id}.json`);
+      if (req.method === 'GET') {
+        const { layout, warnings } = await readBigmapPreset(id);
+        json(res, 200, { preset: { ...layout, id }, warnings });
+        return;
+      }
+      if (req.method === 'PUT') {
+        const { layout, warnings } = normalizeBigmapLayout(await readBody(req));
+        await writeFile(path, JSON.stringify(layout, null, 2) + '\n', 'utf8');
+        json(res, 200, { preset: { ...layout, id }, warnings });
+        return;
+      }
+      if (req.method === 'DELETE') {
+        try { await unlink(path); }
+        catch (error) {
+          if (error.code === 'ENOENT') { json(res, 404, { error: '大地图预设不存在' }); return; }
+          throw error;
+        }
+        json(res, 200, { deleted: id });
+        return;
+      }
+      json(res, 405, { error: '不支持此操作' });
+      return;
+    }
+    const bigmapPublishMatch = /^\/api\/bigmap-publish\/([^/]+)$/.exec(url.pathname);
+    if (req.method === 'POST' && bigmapPublishMatch && idPattern.test(bigmapPublishMatch[1])) {
+      const id = bigmapPublishMatch[1];
+      const result = await publishBigmapPreset(id);
+      json(res, 200, { ...result, preset: { ...result.layout, id } });
       return;
     }
     const publishMatch = /^\/api\/territory-publish\/([^/]+)$/.exec(url.pathname);
@@ -568,8 +723,17 @@ const server = createServer(async (req, res) => {
 
 server.on('error', async (error) => {
   if (error.code === 'EADDRINUSE' && await runningEditor()) {
-    console.log(`地图编辑器已在运行：${address}`);
-    openBrowser();
+    const page = launchPath || 'index.html';
+    if (await servesPage(page)) {
+      console.log(`地图编辑器已在运行：${address}`);
+      openBrowser();
+      return;
+    }
+    // 端口被占，但那个服务不认这个页面 ⇒ 是旧版进程（多半是上次没关的 cmd 窗口）。
+    console.error(`端口 ${port} 上运行的是**旧版**编辑器服务，它没有 ${page}。`);
+    console.error('请关掉之前那个编辑器窗口（或结束占用该端口的 node 进程），然后重新打开本脚本。');
+    console.error(`（也可以换端口：set MAP_EDITOR_PORT=8788 后重试）`);
+    process.exitCode = 1;
     return;
   }
   console.error(`地图编辑器启动失败：${error.message}`);

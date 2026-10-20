@@ -1,11 +1,12 @@
 import type { ZCAttackTrait } from './ZCCombatCatalog';
 import type {
     ZCBuildingDestruction, ZCBuildingShake, ZCBuildingType, ZCCardReveal, ZCFloatText, ZCFloatTextKind,
-    ZCHexActivation, ZCHitFx,
+    ZCHexActivation, ZCHitFx, ZCNeutralReward,
 } from './ZCGameTypes';
+import type { ZCNeutralResourceId } from './ZCNeutralResourceReward';
 import type { ZCOwner } from './ZCMapConfig';
 import {
-    HEX_FLIP_SECONDS, HEX_PULSE_CYCLE_SECONDS,
+    HEX_FLIP_SECONDS,
 } from '../../../core/hex/HexFlipPresentation';
 
 const FLOAT_TEXT_CAP = 96;
@@ -38,20 +39,51 @@ const EMPTY_BUILDING_SHAKES: readonly Readonly<ZCBuildingShake>[] = [];
 const BUILDING_DESTRUCTION_CAP = 16;
 /** 空摧毁队列的共享实例（同上）。 */
 const EMPTY_BUILDING_DESTRUCTIONS: readonly Readonly<ZCBuildingDestruction>[] = [];
+/**
+ * 中立资源领取通知队列的上限。
+ *
+ * 比飘字小：一局里「同时段被领的中立资源」撑死个位数（`claimAdjacentNeutralResources`
+ * 一轮最多领一圈邻格），上限只兜「渲染层整段没在跑还持续领」的极端情况 —— 丢最旧。
+ */
+const NEUTRAL_REWARD_CAP = 16;
 
 /**
- * 地块**脉冲段**的时长（秒）—— 激活轴的第 ① 段：播一道美术水波纹。
+ * 中立资源获取表现的**时长口径**（秒）—— 队列生命周期与视图动画共用的真源。
  *
- * 山猫口径（2026-10-15 v3：「播放改成一次」）：只播 **1 道**美术水波纹
- * （`HEX_PULSE_CYCLE_SECONDS = 0.7s`，一段就是一道）。
- * 曲线与选帧都在 `core/hex/HexFlipPresentation.hexPulseFx`。
+ * 轴的顺序（2026-10-20 需求「从格子飞到金币栏，再往上升一个加多少」）：
+ *   ① 飞行段 `ZC_NEUTRAL_REWARD_FLY_SECONDS`：金币 / 神器从格子飞向目标栏；
+ *   ② 错峰尾 `STAGGER × (COUNT-1)`：金币逐颗错峰出发，最后一颗落地后；
+ *   ③ 上飘段 `ZC_NEUTRAL_REWARD_RISE_SECONDS`：「+N」从目标栏原地升起并淡出。
+ * 总长 = ①②③ 之和（事件在总长之后由 `prune` 摘掉，视图同时收节点）。
+ */
+export const ZC_NEUTRAL_REWARD_FLY_SECONDS = 0.6;
+export const ZC_NEUTRAL_REWARD_RISE_SECONDS = 0.6;
+/** 金币逐颗出发的错峰（秒）；也决定「+N」上飘的起点（最后一颗落地之后）。 */
+export const ZC_NEUTRAL_REWARD_COIN_STAGGER = 0.04;
+/** 金币堆 / 宝箱共用的一把飞行金币数。 */
+export const ZC_NEUTRAL_REWARD_COIN_COUNT = 6;
+export const ZC_NEUTRAL_REWARD_TOTAL_SECONDS =
+    ZC_NEUTRAL_REWARD_FLY_SECONDS
+    + ZC_NEUTRAL_REWARD_COIN_STAGGER * (ZC_NEUTRAL_REWARD_COIN_COUNT - 1)
+    + ZC_NEUTRAL_REWARD_RISE_SECONDS;
+
+/**
+ * 地块**脉冲段**的时长（秒）—— 激活轴的第 ① 段（点击动画）：播一道美术脉冲序列帧。
+ *
+ * 2026-10-19 起 **段长与「波多长」解耦**：
+ *   · 段长 = 本值 **0.7s** —— 它决定**卡牌什么时候弹**（`ZC_CARD_START_SECONDS`）、
+ *     首批兵什么时候能站上来、邻格按住窗多长，是整条时间轴的锚，不跟着换美术动；
+ *   · 波 = `HEX_PULSE_WAVE_SECONDS` **0.5s**（5 帧 × 10fps）—— 一段里**只播一道**，
+ *     播完直接消失，段内剩下的 0.2s 只剩缩没段在收格子。
+ *   · 缩没（阶段 2）从 `HEX_PULSE_SHRINK_START_SECONDS`（脉冲中间帧）才开始，见 `ZCHexView`。
+ *
+ * 所以别再把本值写成 `HEX_PULSE_WAVE_SECONDS`：那会把卡牌提前到 0.5s、
+ * 总长从 1.856s 缩到 1.656s —— 用户 2026-10-15 选的是 1.856s，换美术不该顺带改节奏。
  *
  *  首批兵的推迟时刻（`ZCGameModel.scheduleFirstBarracksUnit`）也跟这一段走 ——
  * 单位是实体、没有「未开始」态，波纹还在扩的时候不能让兵提前站上来。
- *
- *  想改「几道波」只改这个乘数（1 = 一道）；波纹速度只改 core 的 `HEX_PULSE_CYCLE_SECONDS`。
  */
-export const ZC_HEX_PULSE_SECONDS = HEX_PULSE_CYCLE_SECONDS;
+export const ZC_HEX_PULSE_SECONDS = 0.7;
 /**
  * 地块**缩没段**的时长（秒）—— 激活轴的 ②：整格**原地等比缩到 `HEX_SHRINK_MIN_SCALE`**。
  *
@@ -194,6 +226,16 @@ export interface IZCCardRevealOptions {
     readonly y: number;
 }
 
+/** 中立资源领取通知入参（金额/充能由模型按奖励表现取，不在视图猜）。 */
+export interface IZCNeutralRewardOptions {
+    readonly now: number;
+    readonly hexId: number;
+    readonly resourceId: ZCNeutralResourceId;
+    readonly owner: ZCOwner;
+    readonly gold: number;
+    readonly artifactCharge: number;
+}
+
 /** 每局的可视化表现事件；这些队列刻意不进对局快照。 */
 export class ZCBattlePresentationQueue {
     private readonly floatingTexts: ZCFloatText[] = [];
@@ -207,17 +249,20 @@ export class ZCBattlePresentationQueue {
     private buildingShakeQueue: ZCBuildingShake[] = [];
     /** 建筑摧毁通知队列（同抖动：取走即空，不能标 `readonly`）。 */
     private buildingDestructionQueue: ZCBuildingDestruction[] = [];
+    private neutralRewardQueue: ZCNeutralReward[] = [];
     private nextFloatTextId = 1;
     private nextHitFxId = 1;
     private nextCardRevealId = 1;
     private nextHexActivationId = 1;
     private nextBuildingShakeId = 1;
     private nextBuildingDestructionId = 1;
+    private nextNeutralRewardId = 1;
 
     get floatTexts(): readonly Readonly<ZCFloatText>[] { return this.floatingTexts; }
     get hitFxs(): readonly Readonly<ZCHitFx>[] { return this.hitFxQueue; }
     get cardReveals(): readonly Readonly<ZCCardReveal>[] { return this.cardRevealQueue; }
     get hexActivations(): readonly Readonly<ZCHexActivation>[] { return this.hexActivationQueue; }
+    get neutralRewards(): readonly Readonly<ZCNeutralReward>[] { return this.neutralRewardQueue; }
 
     pushFloatText(input: Readonly<IZCFloatTextOptions>): ZCFloatText | null {
         if (!Number.isFinite(input.value) || (input.value <= 0 && input.kind !== 'miss')) return null;
@@ -290,16 +335,45 @@ export class ZCBattlePresentationQueue {
         while (this.cardRevealQueue.length > CARD_REVEAL_CAP) this.cardRevealQueue.shift();
     }
 
-    pushHexActivation(now: number, hexId: number, hasCardReveal: boolean): void {
+    pushHexActivation(now: number, hexId: number, hasCardReveal: boolean, cardRarity = 0): void {
         this.hexActivationQueue.push({
             id: this.nextHexActivationId++,
             hexId,
             hasCardReveal,
+            // 0 = 没抽到卡（脉冲按绿走，见 `ZCHexView.pulseTintForRarity`）
+            cardRarity: Number.isFinite(cardRarity) ? cardRarity : 0,
             startedAt: now,
             // 含并发的脉冲段 + 缩没段、随后的卡牌段、末尾的建筑生成段（见 `ZC_HEX_ACTIVATION_SECONDS`）。
             durationSeconds: ZC_HEX_ACTIVATION_SECONDS,
         });
         while (this.hexActivationQueue.length > HEX_ACTIVATION_CAP) this.hexActivationQueue.shift();
+    }
+
+    /**
+     * 推一条「中立资源被领取」的通知：`grantNeutralResourceReward` 发奖那一拍调。
+     *
+     * 与 `ZCFloatText` 同型：**带起点、带时长**、参与 `prune`（幂等，可重复读）。
+     * 视图按 `startedAt + durationSeconds` 播「金币飞向金币栏 → 上飘 +N」等动画；
+     * 非玩家领取（AI 拿到资源）同样入队，由视图自行决定是否只对玩家播飞行。
+     *
+     * 金额 / 充能**非有限或为负**一律拒收 —— 数值会直接变成「+N」文案，不能脏。
+     */
+    pushNeutralReward(input: Readonly<IZCNeutralRewardOptions>): ZCNeutralReward | null {
+        if (!Number.isFinite(input.gold) || input.gold < 0) return null;
+        if (!Number.isFinite(input.artifactCharge) || input.artifactCharge < 0) return null;
+        const reward: ZCNeutralReward = {
+            id: this.nextNeutralRewardId++,
+            hexId: input.hexId,
+            resourceId: input.resourceId,
+            owner: input.owner,
+            gold: Math.round(input.gold),
+            artifactCharge: Math.round(input.artifactCharge),
+            startedAt: input.now,
+            durationSeconds: ZC_NEUTRAL_REWARD_TOTAL_SECONDS,
+        };
+        this.neutralRewardQueue.push(reward);
+        while (this.neutralRewardQueue.length > NEUTRAL_REWARD_CAP) this.neutralRewardQueue.shift();
+        return reward;
     }
 
     /**
@@ -381,6 +455,10 @@ export class ZCBattlePresentationQueue {
             const activation = this.hexActivationQueue[index];
             if (now >= activation.startedAt + activation.durationSeconds) this.hexActivationQueue.splice(index, 1);
         }
+        for (let index = this.neutralRewardQueue.length - 1; index >= 0; index -= 1) {
+            const reward = this.neutralRewardQueue[index];
+            if (now >= reward.startedAt + reward.durationSeconds) this.neutralRewardQueue.splice(index, 1);
+        }
     }
 
     reset(): void {
@@ -389,10 +467,17 @@ export class ZCBattlePresentationQueue {
         this.cardRevealQueue.length = 0;
         this.hexActivationQueue.length = 0;
         this.buildingShakeQueue.length = 0;
+        // 建筑摧毁队列也要清：它是 2026-10-19 新增的那条通知，别漏在这份 reset 之外
+        // （漏了的表现是「换局后第一发摧毁通知的 id 接着上一局往下编」，判据见
+        // `tests/zcds-battle-presentation-queue.test.ts`）。
+        this.buildingDestructionQueue.length = 0;
+        this.neutralRewardQueue.length = 0;
         this.nextFloatTextId = 1;
         this.nextHitFxId = 1;
         this.nextCardRevealId = 1;
         this.nextHexActivationId = 1;
         this.nextBuildingShakeId = 1;
+        this.nextBuildingDestructionId = 1;
+        this.nextNeutralRewardId = 1;
     }
 }

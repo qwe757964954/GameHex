@@ -182,13 +182,13 @@ export interface ITerritoryMapRenderInput {
 }
 
 /**
- * 领地地图的**数据渲染层**，挂在 `TerritoryPage.prefab` 的 `MapLayer`（滚动内容节点）上。
+ * 领地地图的**数据渲染层**，挂在 `MainTerritoryMap.prefab` 的 `MapLayer`（滚动内容节点）上。
  *
  *  它只做两件事，别的一概不碰：
  *  1. 按 `ITerritoryMapLayout` 摆六边格（`GridLayer`）；
  *  2. 把「站点 + 进度」算成 `ITerritoryStationRender` 喂给池化复用的 `TerritoryStationView`。
  *
- *  **不负责**：拖拽（归 `cc.ScrollView`）、HUD 文案（归 `TerritoryHeaderView`）、
+ *  **不负责**：拖拽（归 `cc.ScrollView`）、主城 HUD 文案（归 `MainPage`）、
  *  弹窗（归 `TerritorySiteDetailPanel`）、数据加载与存档（归页面）。
  *
  *  站点之间的**解锁连线已去掉**（2026-10-01）—— 原来由 `RouteLayer` 的 `Graphics`

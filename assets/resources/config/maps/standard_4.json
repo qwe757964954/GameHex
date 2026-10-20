@@ -51,81 +51,620 @@
   ],
   "resourcePoints": [
     {
-      "row": 10,
-      "column": 4,
-      "pool": {
-        "gold": 1
-      }
-    },
-    {
-      "row": 10,
-      "column": 7,
-      "pool": {
-        "gold": 1
-      }
-    },
-    {
-      "row": 7,
-      "column": 6,
-      "pool": {
-        "chest": 1
-      }
-    },
-    {
       "row": 7,
       "column": 3,
       "pool": {
-        "chest": 1
+        "chest": 1,
+        "gold": 1,
+        "mine": 1
       }
     },
     {
-      "row": 7,
-      "column": 10,
+      "row": 13,
+      "column": 3,
       "pool": {
-        "chest": 1
+        "chest": 1,
+        "artifact_charge": 1,
+        "unit_cap": 1
       }
     },
     {
-      "row": 5,
+      "row": 6,
       "column": 8,
       "pool": {
-        "chest": 1
+        "chest": 1,
+        "unit_cap": 1,
+        "gold": 1
       }
     },
     {
-      "row": 13,
-      "column": 5,
+      "row": 12,
+      "column": 8,
       "pool": {
-        "chest": 1
-      }
-    },
-    {
-      "row": 13,
-      "column": 2,
-      "pool": {
-        "chest": 1
-      }
-    },
-    {
-      "row": 14,
-      "column": 9,
-      "pool": {
-        "chest": 1
-      }
-    },
-    {
-      "row": 11,
-      "column": 10,
-      "pool": {
-        "chest": 1
-      }
-    },
-    {
-      "row": 10,
-      "column": 1,
-      "pool": {
+        "chest": 1,
+        "unit_cap": 1,
         "gold": 1
       }
     }
-  ]
+  ],
+  "art": {
+    "freeDecor": [
+      {
+        "id": 1,
+        "art": "image/decor/wasteland/st1",
+        "x": -672.0799560546875,
+        "y": 1258.630859375,
+        "width": 177,
+        "height": 115,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 2,
+        "art": "image/decor/wasteland/st1",
+        "x": 24.600522994995117,
+        "y": 1233.7493896484375,
+        "width": 177,
+        "height": 115,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 3,
+        "art": "image/decor/wasteland/st1",
+        "x": 397.82220458984375,
+        "y": 1171.5457763671875,
+        "width": 177,
+        "height": 115,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 4,
+        "art": "image/decor/wasteland/st1",
+        "x": 737.86865234375,
+        "y": 798.3240356445312,
+        "width": 177,
+        "height": 115,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 5,
+        "art": "image/decor/wasteland/st1",
+        "x": 771.0438842773438,
+        "y": -122.28946685791016,
+        "width": 177,
+        "height": 115,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 6,
+        "art": "image/decor/wasteland/st1",
+        "x": 779.3377075195312,
+        "y": -682.1220092773438,
+        "width": 177,
+        "height": 115,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 7,
+        "art": "image/decor/wasteland/st1",
+        "x": 571.9923706054688,
+        "y": -1051.19677734375,
+        "width": 177,
+        "height": 115,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 8,
+        "art": "image/decor/wasteland/st1",
+        "x": 95.09795379638672,
+        "y": -1138.2818603515625,
+        "width": 177,
+        "height": 115,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 9,
+        "art": "image/decor/wasteland/st1",
+        "x": -456.4407653808594,
+        "y": -1142.4287109375,
+        "width": 177,
+        "height": 115,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 10,
+        "art": "image/decor/wasteland/st1",
+        "x": -717.6959838867188,
+        "y": -910.201904296875,
+        "width": 177,
+        "height": 115,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 11,
+        "art": "image/decor/wasteland/st1",
+        "x": -788.193359375,
+        "y": -557.7147827148438,
+        "width": 177,
+        "height": 115,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 12,
+        "art": "image/decor/wasteland/st1",
+        "x": -779.8995971679688,
+        "y": -180.34617614746094,
+        "width": 177,
+        "height": 115,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 13,
+        "art": "image/decor/wasteland/st1",
+        "x": -800.6340942382812,
+        "y": 197.02243041992188,
+        "width": 177,
+        "height": 115,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 14,
+        "art": "image/decor/wasteland/st1",
+        "x": -817.2217407226562,
+        "y": 615.860107421875,
+        "width": 177,
+        "height": 115,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 15,
+        "art": "image/decor/wasteland/cao",
+        "x": -879.4253540039062,
+        "y": 1005.66943359375,
+        "width": 104,
+        "height": 93,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 16,
+        "art": "image/decor/wasteland/cao",
+        "x": -829.6624755859375,
+        "y": 383.6332702636719,
+        "width": 104,
+        "height": 93,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 17,
+        "art": "image/decor/wasteland/cao",
+        "x": -705.2552490234375,
+        "y": 14.558490753173828,
+        "width": 104,
+        "height": 93,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 18,
+        "art": "image/decor/wasteland/cao",
+        "x": -871.1315307617188,
+        "y": -72.52657318115234,
+        "width": 104,
+        "height": 93,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 19,
+        "art": "image/decor/wasteland/cao",
+        "x": -821.36865234375,
+        "y": -491.3642578125,
+        "width": 104,
+        "height": 93,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 20,
+        "art": "image/decor/wasteland/cao",
+        "x": -622.3170776367188,
+        "y": -333.7817687988281,
+        "width": 104,
+        "height": 93,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 21,
+        "art": "image/decor/wasteland/cao",
+        "x": -916.7474975585938,
+        "y": -843.8513793945312,
+        "width": 104,
+        "height": 93,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 22,
+        "art": "image/decor/wasteland/cao",
+        "x": -829.6624755859375,
+        "y": -897.76123046875,
+        "width": 104,
+        "height": 93,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 23,
+        "art": "image/decor/wasteland/cao",
+        "x": -688.6676025390625,
+        "y": -765.0601806640625,
+        "width": 104,
+        "height": 93,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 24,
+        "art": "image/decor/wasteland/cao",
+        "x": -601.58251953125,
+        "y": -1076.0782470703125,
+        "width": 104,
+        "height": 93,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 25,
+        "art": "image/decor/wasteland/cao",
+        "x": -199.33248901367188,
+        "y": -1092.6658935546875,
+        "width": 104,
+        "height": 93,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 26,
+        "art": "image/decor/wasteland/cao",
+        "x": -50.04381561279297,
+        "y": -1042.9029541015625,
+        "width": 104,
+        "height": 93,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 27,
+        "art": "image/decor/wasteland/cao",
+        "x": 323.1778869628906,
+        "y": -1076.0782470703125,
+        "width": 132.97589703788913,
+        "height": 118.91113869734318,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 28,
+        "art": "image/decor/wasteland/cao",
+        "x": 783.484619140625,
+        "y": -1055.34375,
+        "width": 104,
+        "height": 93,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 29,
+        "art": "image/decor/wasteland/cao",
+        "x": 717.1340942382812,
+        "y": -744.3256225585938,
+        "width": 104,
+        "height": 93,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 30,
+        "art": "image/decor/wasteland/cao",
+        "x": 766.89697265625,
+        "y": -279.8719482421875,
+        "width": 104,
+        "height": 93,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 31,
+        "art": "image/decor/wasteland/cao",
+        "x": 970.095458984375,
+        "y": -250.84359741210938,
+        "width": 104,
+        "height": 93,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 32,
+        "art": "image/decor/wasteland/cao",
+        "x": 845.688232421875,
+        "y": 234.3446044921875,
+        "width": 104,
+        "height": 93,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 33,
+        "art": "image/decor/wasteland/cao",
+        "x": 795.9253540039062,
+        "y": 441.6899719238281,
+        "width": 104,
+        "height": 93,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 34,
+        "art": "image/decor/wasteland/cao",
+        "x": 762.7501220703125,
+        "y": 711.239013671875,
+        "width": 104,
+        "height": 93,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 35,
+        "art": "image/decor/wasteland/cao",
+        "x": 912.0387573242188,
+        "y": 964.2003784179688,
+        "width": 104,
+        "height": 93,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 36,
+        "art": "image/decor/wasteland/cao",
+        "x": 750.3093872070312,
+        "y": 1130.07666015625,
+        "width": 104,
+        "height": 93,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 37,
+        "art": "image/decor/wasteland/cao",
+        "x": 638.3428344726562,
+        "y": 989.081787109375,
+        "width": 104,
+        "height": 93,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 38,
+        "art": "image/decor/wasteland/cao",
+        "x": 484.90728759765625,
+        "y": 997.3756103515625,
+        "width": 104,
+        "height": 93,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 39,
+        "art": "image/decor/wasteland/cao",
+        "x": 115.83248901367188,
+        "y": 1569.64892578125,
+        "width": 104,
+        "height": 93,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 40,
+        "art": "image/decor/wasteland/cao",
+        "x": -419.11859130859375,
+        "y": 1362.303466796875,
+        "width": 104,
+        "height": 93,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 41,
+        "art": "image/decor/wasteland/cao",
+        "x": -460.5876770019531,
+        "y": 1055.432373046875,
+        "width": 104,
+        "height": 93,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 42,
+        "art": "image/decor/wasteland/cao",
+        "x": -145.42269897460938,
+        "y": 1088.6075439453125,
+        "width": 104,
+        "height": 93,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 43,
+        "art": "image/decor/wasteland/server",
+        "x": -307.152099609375,
+        "y": 1275.2183837890625,
+        "width": 174,
+        "height": 155,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 44,
+        "art": "image/decor/wasteland/cannon",
+        "x": -792.3402709960938,
+        "y": 819.05859375,
+        "width": 163,
+        "height": 179,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 45,
+        "art": "image/decor/wasteland/barricade",
+        "x": -808.9279174804688,
+        "y": -1042.9029541015625,
+        "width": 168,
+        "height": 147,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 46,
+        "art": "image/decor/wasteland/jeep",
+        "x": 609.3145141601562,
+        "y": 1287.6591796875,
+        "width": 262,
+        "height": 228,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 47,
+        "art": "image/decor/wasteland/tires",
+        "x": 712.9871826171875,
+        "y": 105.79045867919922,
+        "width": 147,
+        "height": 145,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 48,
+        "art": "image/decor/wasteland/tires",
+        "x": 410.262939453125,
+        "y": -1196.3385009765625,
+        "width": 147,
+        "height": 145,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      }
+    ]
+  }
 }

@@ -10,6 +10,11 @@ import { BigMapPresenter } from '../assets/script/app/bigmap/application/BigMapP
 import { createMemoryBigMapStorage, BIGMAP_SAVE_KEY } from '../assets/script/app/bigmap/application/BigMapSaveKeys';
 import type { IBigMapStorage } from '../assets/script/app/bigmap/application/BigMapPresenter';
 import { bigMapPlotHexId } from '../assets/script/app/bigmap/model/BigMapBase';
+import {
+    exportBigMapLayout,
+    type IBigMapLayout,
+} from '../assets/script/app/bigmap/model/BigMapLayout';
+import { buildBigMapWorld } from '../assets/script/app/bigmap/model/BigMapWorld';
 import { loadBigMapConfig } from './helpers/bigmap-fixtures';
 
 const config = loadBigMapConfig();
@@ -20,10 +25,16 @@ interface IHarness {
     clock: { now: number; chapter: number };
 }
 
-function makeHarness(chapter = 3, storage = createMemoryBigMapStorage(), now = 1_000_000): IHarness {
+function makeHarness(
+    chapter = 3,
+    storage = createMemoryBigMapStorage(),
+    now = 1_000_000,
+    layout: IBigMapLayout | null = null,
+): IHarness {
     const clock = { now, chapter };
     const presenter = new BigMapPresenter({
         config,
+        layout,
         storage,
         saveKey: BIGMAP_SAVE_KEY,
         adventureChapter: () => clock.chapter,
@@ -31,6 +42,33 @@ function makeHarness(chapter = 3, storage = createMemoryBigMapStorage(), now = 1
     });
     return { presenter, storage, clock };
 }
+
+test('注入 layout 后世界按布局落位；不注入就按种子生成', () => {
+    const seeded = buildBigMapWorld(config);
+    const layout = exportBigMapLayout(seeded);
+    const target = layout.cities[0];
+    // 把第一座城整行下移（占格块一起平移），保证仍是合法连通块。
+    const moved: IBigMapLayout = {
+        ...layout,
+        cities: layout.cities.map((city, index) => (index === 0
+            ? { ...city, anchorHexId: city.anchorHexId + 40, hexIds: city.hexIds.map((id) => id + 40) }
+            : city)),
+    };
+
+    const withLayout = makeHarness(3, createMemoryBigMapStorage(), 1_000_000, moved);
+    assert.equal(
+        withLayout.presenter.world.cities.get(target.cityId)!.anchorHexId,
+        target.anchorHexId + 40,
+        '注入的布局没生效',
+    );
+
+    const withoutLayout = makeHarness();
+    assert.equal(
+        withoutLayout.presenter.world.cities.get(target.cityId)!.anchorHexId,
+        target.anchorHexId,
+        '没注入布局时应该按种子生成',
+    );
+});
 
 test('资源栏：5 种资源、带名称与上限；新档有货币和行动力', () => {
     const { presenter } = makeHarness();

@@ -1,13 +1,21 @@
-import { _decorator, Color, Component, Label, Sprite, SpriteFrame, UIOpacity, UITransform } from 'cc';
+import { _decorator, Color, Component, Label, Node, Sprite, SpriteFrame, UIOpacity, UITransform } from 'cc';
 import type { ZCCardReveal } from '../model/ZCGameTypes';
 import { ZC_OWNER_ORDER, type ZCOwner } from '../model/ZCMapConfig';
 
 const { ccclass, property } = _decorator;
 
-/** 横幅画布尺寸，按四方共用的设计稿规格。 */
+/** 横幅画布高度，按四方共用的设计稿规格。 */
 const BANNER_HEIGHT = 417;
 
-/** 横幅铺满竖屏宽度，因此统一水平居中。 */
+/**
+ * 横幅的**设计稿宽度**（= 工程 `designResolution` 的 720，也是 4 张底图的原始宽度）。
+ *
+ * 只在拿不到「屏幕宽度」时兜底；正常情况下宽度由 `setLayout` 注入的 `viewWidth` 决定，
+ * 见 `bannerWidth()`。
+ */
+const DESIGN_WIDTH = 720;
+
+/** 横幅铺满屏幕宽度，因此统一水平居中。 */
 const BANNER_X = 0;
 
 /** HUD 根节点尺寸暂不可用时使用设计分辨率。 */
@@ -90,14 +98,11 @@ export function legendRoleEase(progress: number): number {
 @ccclass('ZCGameLegendBannerView')
 export class ZCGameLegendBannerView extends Component {
 
-    /** 横幅宽。等于蓝湖「出场横幅」设计稿单组宽（720，四组同构）。 */
-    private static readonly BANNER_WIDTH = 720;
-
     /**
      * 落位用的视口宽兜底（prefab 设计稿 = 工程 `designResolution` 720×1280）。
      * 真源是横幅所在全屏层（HUD 根）的 `UITransform`，由渲染层注入；只有拿不到时才回退。
      */
-    private static readonly FALLBACK_VIEW_WIDTH = 720;
+    private static readonly FALLBACK_VIEW_WIDTH = DESIGN_WIDTH;
 
     /** 入场：从屏幕外一整个横幅宽度滑到落位，「出场」感来自这一段。 */
     private static readonly SLIDE_PROGRESS = 0.18;
@@ -164,8 +169,15 @@ export class ZCGameLegendBannerView extends Component {
     private playerCount = 2;
     private viewWidth = ZCGameLegendBannerView.FALLBACK_VIEW_WIDTH;
     private viewHeight = FALLBACK_VIEW_HEIGHT;
-    /** 已写到节点上的横幅高度；变了才重设（`setContentSize` 会置引擎变换脏标记）。 */
+    /** 已写到节点上的横幅**宽 / 高**；变了才重设（`setContentSize` 会置引擎变换脏标记）。 */
+    private appliedWidth = -1;
     private appliedHeight = -1;
+    /**
+     * 底板（`Banner`）的**原生高度**（prefab 的 417），第一次用到时从节点上读一次。
+     *
+     * 底板只跟屏幕宽度走，高度永远是它自己的设计值 —— 见 `applyLayout` 里的说明。
+     */
+    private plateHeight: number | null = null;
     /**
      * Role 节点的**静止位 y**（prefab 里写的那个值），生成动画是相对它做偏移。
      *
@@ -182,10 +194,10 @@ export class ZCGameLegendBannerView extends Component {
     /**
      * 注入落位上下文。**渲染层每帧都会调一次**（`renderLegendBanners` 在循环里对每条
      * 已存在的横幅重算落位上下文，好让人数变化时立刻重排），所以这里
-     *  **绝不能顺手作废 `appliedHeight`** —— 那会让 `applyHeight` 每帧都判定"高度变了"，
+     *  **绝不能顺手作废 `appliedWidth` / `appliedHeight`** —— 那会让 `applyLayout` 每帧都判定"尺寸变了"，
      * 每帧 `setContentSize`，等于把引擎变换脏标记按帧置满（AGENTS.md 禁update 路径的无谓写入）。
      *
-     * 高度是否真变了由 `applyHeight` 自己按数值比对决定，人数变化时它自然会发现。
+     * 尺寸是否真变了由 `applyLayout` 自己按数值比对决定，人数 / 屏幕宽度变化时它自然会发现。
      *
      * 不用作废内容键 —— 落位上下文不影响选图选字。
      */
@@ -218,14 +230,14 @@ export class ZCGameLegendBannerView extends Component {
         const duration = Math.max(0.001, reveal.durationSeconds);
         const progress = Math.max(0, Math.min(1, (now - reveal.startedAt) / duration));
         this.renderContent(reveal);
-        // 高度先定：位置（滑入起止点）与立绘缩放都依赖它。
-        this.applyHeight();
+        // 尺寸先定：位置（滑入起止点）依赖它。
+        this.applyLayout();
         // ── 扇形入场：**恒从屏幕外左侧**滑到落位（需求 2026-10-15 row11 原文
         //「预制体从屏幕外生成，**从左往右**快速扇入屏幕」）──
         // 从屏幕外一整个横幅宽度滑到落位（左缘贴左屏缘外）⇒ 无论屏幕多宽，横幅整个宽度
         // 都经历完整滑入。**不因为落位是竖排就换成上下滑入。**
         // ⚠️ 旧口径是「我方从左、敌方从右」，2026-10-15 row11 明确改成「一律从左往右」。
-        const bannerHalfWidth = ZCGameLegendBannerView.BANNER_WIDTH / 2;
+        const bannerHalfWidth = this.bannerWidth() / 2;
         const startX = -this.viewWidth / 2 - bannerHalfWidth;
         const slide = Math.min(1, progress / ZCGameLegendBannerView.SLIDE_PROGRESS);
         const eased = 1 - (1 - slide) ** 3;
@@ -264,13 +276,55 @@ export class ZCGameLegendBannerView extends Component {
         sprite.color = this.roleColorScratch;
     }
 
-    /** 仅调整底板；立绘保持原尺寸。跳过重复写入以避免每帧标脏 UITransform。 */
-    private applyHeight(): void {
+    /**
+     * 横幅当前应占的宽度 = **屏幕宽度**。
+     *
+     * 用户 2026-10-19 反馈：「传说牌弹出的 UI 提示应该对齐屏幕的宽度」——
+     * 之前是固定 720（设计稿宽），且底板在 prefab 里整体左移 62.6 ⇒ 左边贴边、右边空一截。
+     * `setLayout` 已把非法值兜成设计稿宽，这里直接用；单独抽一个方法是为了让
+     * 「滑入起点」和「实际尺寸」读同一个数（两处各写一个 720 迟早对不上）。
+     */
+    private bannerWidth(): number {
+        return this.viewWidth > 0 ? this.viewWidth : DESIGN_WIDTH;
+    }
+
+    /**
+     * 把宽 / 高落到节点上：**根节点与底板同时铺满屏幕宽度**，立绘等其他子节点保持原尺寸。
+     *
+     * 🔴 底板必须跟着改宽：底图是 `_sizeMode = CUSTOM` 的 720×417 图，只改根不改底板的话
+     * 图片仍是 720 宽、右边留一条缝 —— 那正是本次反馈的画面。
+     * 🔴 底板必须回到 `x = 0`：它曾在 prefab 里被整体左移 62.6（连同标题 / 头像 / 卡名）。
+     * prefab 已改回设计位，这里再兜一次，免得哪天又被挪回去。
+     *
+     * 跳过重复写入：`render` 每帧都调，`setContentSize` 会置引擎变换脏标记。
+     */
+    private applyLayout(): void {
+        const width = this.bannerWidth();
         const height = bannerHeightOf(this.viewHeight, this.playerCount);
-        if (Math.abs(height - this.appliedHeight) < 0.5) return;
+        if (Math.abs(width - this.appliedWidth) < 0.5 && Math.abs(height - this.appliedHeight) < 0.5) return;
+        this.appliedWidth = width;
         this.appliedHeight = height;
-        const transform = this.node.getComponent(UITransform);
-        if (transform) transform.setContentSize(ZCGameLegendBannerView.BANNER_WIDTH, height);
+        // 根节点是**布局格子**：高 = 屏高 / 人数，落位（`layoutYOf`）按它算。
+        this.writeSize(this.node, width, height);
+        const plate = this.bannerSprite?.node;
+        if (!plate) return;
+        // 🔴 底板只跟着**改宽**，高度必须保持 prefab 的 417：
+        // 「格子高」是多人分屏用的，2 人局是 640 —— 把底板也拉到 640，横幅会平白长高一截、
+        // 底边掉到屏幕中间去（2026-10-19 反馈「横幅底部的高度被修改了」就是这个）。
+        if (this.plateHeight === null) {
+            const transform = plate.getComponent(UITransform);
+            this.plateHeight = transform ? transform.contentSize.height : BANNER_HEIGHT;
+        }
+        this.writeSize(plate, width, this.plateHeight);
+        if (Math.abs(plate.position.x - BANNER_X) > 0.01) {
+            plate.setPosition(BANNER_X, plate.position.y, plate.position.z);
+        }
+    }
+
+    /** 写 `UITransform.contentSize`；取不到组件就跳过（测试桩 / prefab 损坏都不该抛）。 */
+    private writeSize(node: Node | null, width: number, height: number): void {
+        const transform = node?.getComponent(UITransform);
+        if (transform) transform.setContentSize(width, height);
     }
 
     /** 底板 / 环 / 立绘 / 头像 / 卡名只在换卡时写一次；每帧只动位置与透明度。 */

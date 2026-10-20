@@ -7,6 +7,7 @@ import { upgradeButtonText } from './CardUpgradeCost';
 import type { ZCUpgradeStatus } from './CardUpgradeCost';
 import { applyCardHeadArt } from './CardHeadView';
 import { CardUpgradePresenter } from './CardPresenters';
+import { CardSkillPage } from './CardSkillPage';
 import type {
     CardUpgradePhase,
     CardUpgradePresentation,
@@ -46,6 +47,8 @@ const { ccclass, property } = _decorator;
 export class CardUpgradePage extends PopupBase {
     private readonly presenter = new CardUpgradePresenter(cardRepository);
     private artRevision = 0;
+    /** 本次打开的卡牌 id（「技能」按钮用它打开技能面板）。 */
+    private cardIdForSkills = '';
 
     /**
      * `CloseBtn` / `BtnUpgrade` 上的 `cc.Button`。
@@ -112,8 +115,15 @@ export class CardUpgradePage extends PopupBase {
     @property({ type: Label, tooltip: 'BtnUpgrade/Label：按钮文案' })
     upgradeLabel: Label = null!;
 
-    @property({ tooltip: '卡牌页没给出等级时的兜底值' })
-    fallbackLevel = 1;
+    /**
+     * 「技能」按钮：打开独立的技能面板弹窗。
+     *
+     * 技能列表**不塞进本弹窗**：本弹窗纵向已被卡面 / 信息 / 消耗 / 经验 / 提示 /
+     * 升级按钮占满（背景 651×982），硬塞会与「卡牌」「经验」两行文字重叠。
+     * 允许为空 —— 没配这个按钮时技能入口就只从卡牌页走。
+     */
+    @property({ type: Node, tooltip: 'BtnSkill：打开技能面板的按钮（挂 cc.Button，可留空）' })
+    skillButton: Node | null = null;
 
     @property({ type: Color, tooltip: '材料已满足时的文字颜色（样式放 Inspector，代码不写死）' })
     enoughColor: Color = new Color(104, 218, 59, 255);
@@ -138,11 +148,30 @@ export class CardUpgradePage extends PopupBase {
         this.upgradeAction = this.upgradeButton.getComponent(Button)!;
         this.closeAction.node.on(Button.EventType.CLICK, this.onCloseClick, this);
         this.upgradeAction.node.on(Button.EventType.CLICK, this.onUpgradeClick, this);
+        this.skillButton?.getComponent(Button)?.node.on(Button.EventType.CLICK, this.onSkillClick, this);
     }
 
     protected onOpen(userData?: ICardUpgradeOpenData): void | Promise<void> {
         if (!userData) return;
+        this.cardIdForSkills = userData.cardId;
         return this.presenter.open(userData, this.presenterView());
+    }
+
+    /**
+     * 打开技能面板（独立弹窗，带 heroId + 卡名）。
+     *
+     * **先关掉本弹窗**再开技能面板：两者都是 660 宽、居中的全屏面板，同时存在时
+     * 背景板完全重合，下层的卡面 / 文字会从上层边缘透出来（实测就是「界面串了」）。
+     * 关掉后再开，界面永远只有一层。
+     */
+    private onSkillClick(): void {
+        if (!this.alive) return;
+        const heroId = Number(this.cardIdForSkills);
+        //  卡 id 不是数字（主城 / 金矿这类非英雄卡）就没有技能可升，直接忽略点击。
+        if (!Number.isSafeInteger(heroId) || heroId <= 0) return;
+        const cardName = this.nameLabel.string;
+        void CardSkillPage.open({ userData: { heroId, cardName } });
+        this.close();
     }
 
     private presenterView() {
@@ -152,6 +181,7 @@ export class CardUpgradePage extends PopupBase {
         };
     }
 
+    /** 唯一的写 UI 入口：卡面 → 升级状态。 */
     private presentUpgrade(data: CardUpgradePresentation): void {
         this.nameLabel.string = data.data.card?.name ?? data.cardId;
         this.renderCardFace(data);

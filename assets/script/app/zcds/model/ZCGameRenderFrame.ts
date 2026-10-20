@@ -11,6 +11,7 @@ import type {
     ZCHexActivation,
     ZCHexState,
     ZCHitFx,
+    ZCNeutralReward,
     ZCSnapshot,
 } from './ZCGameTypes';
 
@@ -37,6 +38,7 @@ export interface ZCGameRenderFrame {
     readonly hitFxs: readonly DeepReadonly<ZCHitFx>[];
     readonly cardReveals: readonly DeepReadonly<ZCCardReveal>[];
     readonly hexActivations: readonly DeepReadonly<ZCHexActivation>[];
+    readonly neutralRewards: readonly DeepReadonly<ZCNeutralReward>[];
 }
 
 /** 一次性模型通知，必须由对局编排层显式取走并交给动态渲染。 */

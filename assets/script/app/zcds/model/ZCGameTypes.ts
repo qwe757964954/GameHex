@@ -341,8 +341,8 @@ export interface ZCCardReveal {
  * 开发成功时的「地块激活表现」事件（纯表现，不进快照，口径同 `ZCCardReveal`）。
  *
  * 点击可开发地块后，模型立即落地建筑并同时入队一条激活事件；视图据此播放
- * 「地块脉冲水波纹 ∥ 原地缩没 → 卡牌弹出（`ZCCardReveal` 已有）→
- * 卡牌淡出时地块回场、建筑同拍由小变大 + 光效」的表现。进度按 `startedAt / durationSeconds`
+ * 「阶段 1 脉冲（格子带 UI 原样不动）→ 脉冲到中间帧起 阶段 2 格子原地缩没 →
+ * 卡牌弹出（`ZCCardReveal` 已有）→ 卡牌淡出时地块回场、建筑同拍由小变大 + 光效」的表现。进度按 `startedAt / durationSeconds`
  * 每帧计算，不引入 tween，切流程 / 暂停 / 快照回放都不会留下补间残影。
  *
  * ⚠️ 时长 = `ZC_CARD_START_SECONDS`（点击动画：脉冲 **∥** 缩没，取两者较长者 0.7s）
@@ -363,6 +363,14 @@ export interface ZCHexActivation {
      * 全类型随机问号格的 `empty` 权重是 0.7（七成空手），所以这条路走得很多。
      */
     hasCardReveal: boolean;
+    /**
+     * 本次开发**抽到的卡牌品阶**（1 绿 / 2 蓝 / 3 紫 / 4 金；`0` = 没抽到卡）。
+     *
+     * 2026-10-19 用户口径：脉冲序列帧「整体颜色根据对应获得的卡牌品阶」上色，
+     * 没抽到卡时按绿（1 档）走。它只影响脉冲那一层的染色，与「有没有卡牌揭示」是两件事：
+     * 抽到卡但**建不上**（`!result.building`）时仍有品阶、没有揭示。
+     */
+    cardRarity: number;
     startedAt: number;
     durationSeconds: number;
 }
@@ -401,6 +409,36 @@ export interface ZCBuildingDestruction {
     id: number;
     /** 被摧毁建筑所在的那一格。 */
     hexId: number;
+}
+
+/**
+ * 中立资源被领取的一次性表现通知（2026-10-20 新增）。
+ *
+ * 领取发生在 `ZCDevelopmentSystem.claimAdjacentNeutralResources`（相邻自动领取）或
+ * `develop`（AI 开发中立格）里 —— 那之后快照里 `neutralResourceId` 已被清空，渲染层
+ * **没有任何一帧还能知道「刚刚领了哪一格、领了多少」**，所以由模型在发奖那一拍显式发一条。
+ *
+ * 与 `ZCFloatText` 同一套口径：**刻意不写进 ZCSnapshot**（瞬时表现，不进存档）。
+ * 模型只维护队列 + 过期清理；视图按 `startedAt / durationSeconds` 算进度，
+ * 且**只给玩家自己的领取播飞行特效**（金币 / 神器目标都在玩家 HUD 上）。
+ *
+ * 时长口径（`durationSeconds`）与视图动画共用 `ZC_NEUTRAL_REWARD_*` 常量，
+ * 真源在 `ZCBattlePresentationQueue`。
+ */
+export interface ZCNeutralReward {
+    id: number;
+    /** 被领取的那一格。 */
+    hexId: number;
+    /** 领取的资源 id（金币堆 / 金矿 / 宝箱 / 神器充能 / 兵力）。 */
+    resourceId: ZCNeutralResourceId;
+    /** 领取的一方；非玩家领取不播「飞向 HUD」的特效（目标不在玩家界面上）。 */
+    owner: ZCOwner;
+    /** 实际入账的金币；> 0 时视图播「金币飞向金币栏 + 上飘 +N」。 */
+    gold: number;
+    /** 实际入账的神器充能；> 0 时视图播「神器飞向神器栏」。 */
+    artifactCharge: number;
+    startedAt: number;
+    durationSeconds: number;
 }
 
 

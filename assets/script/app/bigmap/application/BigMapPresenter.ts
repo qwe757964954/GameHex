@@ -51,6 +51,7 @@ import {
     type IBigMapUnlockContext,
 } from '../model/BigMapUnlock';
 import { bigMapHexDistance, buildBigMapWorld } from '../model/BigMapWorld';
+import { buildBigMapWorldFromLayout, type IBigMapLayout } from '../model/BigMapLayout';
 import { parseBigMapSave, serializeBigMapSave, type IBigMapSaveData } from '../model/BigMapSaveData';
 
 /** 存储端口（`sys.localStorage` 由 application 适配器注入，Presenter 不 import 引擎）。 */
@@ -70,6 +71,32 @@ export interface IBigMapPresenterDeps {
     readonly seed?: number;
     /** 开服天数，缺省 0（单机版恒 0）。 */
     readonly openDay?: number;
+    /**
+     * 策划布局（`BigMapLayoutLoader` 产出）。缺省 / `null` = 按种子生成世界。
+     * 传了就**布局优先**：城池/野怪/基地的落位全部以它为准。
+     */
+    readonly layout?: IBigMapLayout | null;
+}
+
+/**
+ * 世界实例：**布局优先，种子兜底**。
+ *
+ * `resolveBigMapLayout` 已经做过解析与尺寸校验，这里再 try/catch 一次是给「绕过 loader
+ * 直接塞进来」的调用方（单测、调试台）兜底 —— 建世界失败不该让大世界白屏。
+ */
+function createBigMapWorldInstance(
+    config: IBigMapConfig,
+    seed: number | undefined,
+    layout: IBigMapLayout | null | undefined,
+): IBigMapWorld {
+    if (layout) {
+        try {
+            return buildBigMapWorldFromLayout(config, layout);
+        } catch (error) {
+            console.warn('[BigMapPresenter] 用布局建世界失败，回退种子生成', error);
+        }
+    }
+    return buildBigMapWorld(config, seed);
 }
 
 // ------------------------------------------------------------------ 视图数据
@@ -174,7 +201,7 @@ export class BigMapPresenter {
     constructor(deps: IBigMapPresenterDeps) {
         this.deps = deps;
         this.config = deps.config;
-        this.worldInstance = buildBigMapWorld(deps.config, deps.seed);
+        this.worldInstance = createBigMapWorldInstance(deps.config, deps.seed, deps.layout);
         this.data = parseBigMapSave(deps.storage.read(deps.saveKey), deps.config, deps.now()).save;
         // 进页面先补一次离线结算，再落盘（否则「离线 8 小时」要等第一次操作才生效）。
         this.tick(false);

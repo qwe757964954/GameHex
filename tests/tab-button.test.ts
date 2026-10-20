@@ -92,6 +92,25 @@ function overrideValue(slot: Slot, key: string, prefab: Entry[]): unknown {
     return hits.length ? hits.at(-1)!.value : undefined;
 }
 
+/**
+ * 取**实例根节点**上的覆盖值。
+ *
+ * 2026-10-19 起 TabButton 的 `Icon` / `NameLabel` / `SelBg` 也各自带 `_lpos` 覆盖，
+ * `overrideValue` 只按属性名取「最后一条」会取到子节点的值（实测拿到 0）。
+ * 根的 `_lpos` 用 `targetInfo.localID === 实例 PrefabInfo.fileId`（= 源 prefab 根节点的 fileId）区分。
+ */
+function rootOverrideValue(slot: Slot, key: string, prefab: Entry[]): unknown {
+    const rootFileId = (slot.info as { fileId?: string }).fileId;
+    const hits = ((slot.instance.propertyOverrides ?? []) as unknown[])
+        .map((r) => resolve(prefab, r))
+        .filter((ov) => (ov?.propertyPath as unknown[])?.[0] === key)
+        .filter((ov) => {
+            const info = resolve(prefab, ov?.targetInfo);
+            return !!rootFileId && (info?.localID as unknown[])?.[0] === rootFileId;
+        });
+    return hits.length ? hits.at(-1)!.value : undefined;
+}
+
 /** 某组件在 `RedDot.prefab` 里的 `CompPrefabInfo.fileId`（`targetOverrides.localID` 用它）。 */
 function componentFileId(prefab: Entry[], cid: string): string {
     const index = prefab.findIndex((e) => e?.__type__ === cid);
@@ -101,58 +120,60 @@ function componentFileId(prefab: Entry[], cid: string): string {
     return info!.fileId as string;
 }
 
-const MAIN_NAV: ReadonlyArray<readonly [string, number, number]> = [
-    // [实例名, 相对 BottomNav 的 x, 画布中心 x]  —— 画布 720 宽，BottomNav 中心在 360
-    ['Shop', -300, 60],
-    ['Role', -180, 180],
-    ['Arena', -60, 300],
-    ['Territory', 60, 420],
-    ['Adventure', 180, 540],
-    ['Alliance', 300, 660],
+const MAIN_NAV: ReadonlyArray<readonly [string, number]> = [
+    // [实例名, 相对 BottomNav 的 x] —— 画布 720 宽、BottomNav 中心在 360
+    // ⚠️ 2026-10-19 蓝湖「塔防主界面-1」改版：**7 格**，pitch 100.33（不是旧版 6 格 / 120）；
+    //    设计稿实测格中心 = 59 / 157 / 256.5 / 358 / 459 / 562 / 663，等距取整后即下表。
+    ['Shop', -301],
+    ['Hero', -200.67],
+    ['Role', -100.33],
+    ['Territory', 0],
+    ['Challenge', 100.33],
+    ['Alliance', 200.67],
+    ['World', 301],
 ];
 
 // ============================================================
 // A. 主界面六格 = 共用实例
 // ============================================================
 
-test('A1 主界面 `BottomNav` 六格全部换成 `ui/common/TabButton` 实例', () => {
+test('A1 主界面 `BottomNav` 七格全部换成 `ui/common/TabButton` 实例', () => {
     const bottomNav = MAINROOT.find((e) => e?.__type__ === 'cc.Node' && e._name === 'BottomNav');
     assert.ok(bottomNav, 'MainRoot.prefab 里没有 BottomNav');
     const kids = ((bottomNav!._children ?? []) as unknown[]).map((r) => resolve(MAINROOT, r));
-    // 只该有「底图条 + 六格」（历史上这里挂 6 个 CardLineupNav，另有一个 Bg03 底图）
-    assert.equal(kids.length, 7, 'BottomNav 子节点数变了 —— 先确认是不是又多挂了一格');
-    assert.deepEqual(kids.map((k) => k?._name).filter(Boolean), ['Bg03']);
+    // 只该有「底图条 + 七格」（2026-10-19 蓝湖改版：底图条叫 NavBg，不再是 Bg03）
+    assert.equal(kids.length, 8, 'BottomNav 子节点数变了 —— 先确认是不是又多挂了一格');
+    assert.deepEqual(kids.map((k) => k?._name).filter(Boolean), ['NavBg']);
 
     const slots = instancesOf(MAINROOT);
-    assert.equal(slots.length, 6, '六格应当是 6 个嵌套实例');
+    assert.equal(slots.length, 7, '七格应当是 7 个嵌套实例');
     for (const slot of slots) {
         assert.equal((slot.info.asset as { __uuid__?: string })?.__uuid__, TABBUTTON_UUID,
             `${slot.name} 没指向共用 TabButton.prefab`);
-        // 六格用的是运行时 `loadNavArt` 喂图 ⇒ 实例上不写两态帧（写了会覆盖掉异步加载）
-        assert.equal(overrideValue(slot, 'offIcon', MAINROOT), undefined, `${slot.name} 不该写 offIcon`);
-        assert.equal(overrideValue(slot, 'onIcon', MAINROOT), undefined, `${slot.name} 不该写 onIcon`);
-        assert.equal(overrideValue(slot, 'tabType', MAINROOT), undefined, `${slot.name} 不按业务类型号切页`);
+        assert.ok(overrideValue(slot, 'offIcon', MAINROOT), `${slot.name} 未绑定未选中图标`);
+        assert.ok(overrideValue(slot, 'onIcon', MAINROOT), `${slot.name} 未绑定选中图标`);
+        assert.equal(typeof overrideValue(slot, 'tabType', MAINROOT), 'number', `${slot.name} 未声明业务类型`);
     }
 });
 
-test('A2 六格坐标：x = −300..300 间距 120，画布中心 60 / 180 / … / 660（与 FGUI 六格对齐）', () => {
+test('A2 七格坐标：x = −301..301 间距 100.33（蓝湖七格等距）', () => {
     const slots = instancesOf(MAINROOT);
     const byName = new Map(slots.map((s) => [s.name, s]));
-    for (const [name, x, canvasX] of MAIN_NAV) {
+    for (const [name, x] of MAIN_NAV) {
         const slot = byName.get(name);
-        assert.ok(slot, `六格里没有 ${name}`);
-        assert.deepEqual(overrideValue(slot!, '_lpos', MAINROOT),
-            { __type__: 'cc.Vec3', x, y: 0, z: 0 }, `${name} 的 _lpos`);
-        // 画布中心 = 360（画布半宽）+ BottomNav 自身的 0 + x
-        assert.equal(360 + x, canvasX, `${name} 的画布中心 x`);
+        assert.ok(slot, `七格里没有 ${name}`);
+        const pos = rootOverrideValue(slot!, '_lpos', MAINROOT) as { x: number; y: number };
+        assert.ok(Math.abs(pos.x - x) < 0.01, `${name} 的 _lpos.x 期望 ${x}，实际 ${pos.x}`);
+        assert.equal(pos.y, 0, `${name} 的 _lpos.y`);
     }
-    // 相邻间距恒 = 120
+    // 相邻间距恒 = 100.33（设计稿 720/7 等分：首格 −301、末格 301）
     for (let i = 1; i < MAIN_NAV.length; i++) {
-        assert.equal(MAIN_NAV[i]![1] - MAIN_NAV[i - 1]![1], 120);
+        assert.ok(Math.abs((MAIN_NAV[i]![1] - MAIN_NAV[i - 1]![1]) - 100.33) < 0.01,
+            `第 ${i} 格间距应为 100.33`);
     }
 });
 
-test('A3 六格各自带红点：实例的 `targetOverrides` 指向共用 `RedDot.prefab` 的组件', () => {
+test('A3 七格各自带红点：实例的 `targetOverrides` 指向共用 `RedDot.prefab` 的组件', () => {
     const redDotFileId = componentFileId(REDDOT, scriptCid('assets/script/app/common/RedDot.ts'));
     for (const slot of instancesOf(MAINROOT)) {
         const targets = ((slot.info.targetOverrides ?? []) as unknown[]).map((r) => resolve(MAINROOT, r));
@@ -160,8 +181,22 @@ test('A3 六格各自带红点：实例的 `targetOverrides` 指向共用 `RedDo
         assert.ok(bound, `${slot.name} 没绑 redDot`);
         assert.deepEqual(resolve(MAINROOT, bound!.targetInfo)?.localID, [redDotFileId],
             `${slot.name} 的 redDot 没指到 RedDot.prefab 里的组件`);
-        // 6 格必须**各带一颗**，不能 6 个引用指同一个节点（那样只会亮一个）
-        assert.equal((slot.info.targetOverrides as unknown[]).length, 1, `${slot.name} 的 targetOverrides 条数异常`);
+        // ⚠️ 只断「redDot 那条指向 RedDot.prefab」，**不断言 targetOverrides 总条数**：
+        //    编辑器在 save 时会把实例内部的 bg / icon / nameLabel 也写成 override —— 都是合法形态。
+    }
+    // 选中底板（2026-10-19 蓝湖七格）是**跨 prefab 引用**：写在 MainRoot 根 `PrefabInfo.targetOverrides`，
+    // 不在实例自己的 `targetOverrides` 里 —— 那 7 条必须都在，且都指向 TabButton.prefab 内的 SelBg。
+    const mainRootNodeForSelBg = MAINROOT.find((e) => e?.__type__ === 'cc.Node' && e._name === 'MainRoot')!;
+    const mainRootInfoForSelBg = resolve(MAINROOT, mainRootNodeForSelBg._prefab)!;
+    const selBgFileId = (resolve(TABBUTTON, TABBUTTON.find((e) => e?.__type__ === 'cc.Node' && e._name === 'SelBg')!._prefab) as { fileId?: string }).fileId;
+    assert.equal(typeof selBgFileId, 'string', 'TabButton.prefab 里 SelBg 节点没有 fileId');
+    const selBgTargets = ((mainRootInfoForSelBg.targetOverrides ?? []) as unknown[])
+        .map((r) => resolve(MAINROOT, r))
+        .filter((t) => (t?.propertyPath as unknown[])?.[0] === 'selectBg');
+    assert.equal(selBgTargets.length, 7, '七格都该绑 selectBg（金色选中底板）');
+    for (const target of selBgTargets) {
+        assert.deepEqual(resolve(MAINROOT, target!.targetInfo)?.localID, [selBgFileId],
+            'selectBg 没指到 TabButton.prefab 里的 SelBg');
     }
     // 根 PrefabInfo 要把 6 个实例登记成「嵌套实例根」，否则覆盖解析不生效（本项目踩过）
     // ⚠️ `cc.PrefabInfo.root` 在每一份 PrefabInfo 上都写的是**同一个**根节点
@@ -174,15 +209,15 @@ test('A3 六格各自带红点：实例的 `targetOverrides` 指向共用 `RedDo
     const bottomNav = MAINROOT.find((e) => e?.__type__ === 'cc.Node' && e._name === 'BottomNav')!;
     const stubs = ((bottomNav._children ?? []) as Array<{ __id__: number }>)
         .map((r) => r.__id__).filter((i) => !MAINROOT[i]?._name).sort((a, b) => a - b);
-    assert.equal(stubs.length, 6, 'BottomNav 下的空壳实例根应当正好 6 个');
-    assert.deepEqual(registered, stubs, '注册的嵌套实例根必须正好是 BottomNav 下那 6 个实例');
+    assert.equal(stubs.length, 7, 'BottomNav 下的空壳实例根应当正好 7 个');
+    assert.deepEqual(registered, stubs, '注册的嵌套实例根必须正好是 BottomNav 下那 7 个实例');
 });
 
 // ============================================================
 // B. 两处消费者 + 旧件归零
 // ============================================================
 
-test('B1 主界面六格与战令四格用的是**同一个** `TabButton.prefab`', () => {
+test('B1 主城七格与战令四格用的是**同一个** `TabButton.prefab`', () => {
     const main = new Set(instancesOf(MAINROOT).map((s) => (s.info.asset as { __uuid__?: string }).__uuid__));
     const battle = new Set(instancesOf(BATTLETOKEN)
         .filter((s) => (s.info.asset as { __uuid__?: string }).__uuid__ === TABBUTTON_UUID)
@@ -193,7 +228,6 @@ test('B1 主界面六格与战令四格用的是**同一个** `TabButton.prefab`
 
 test('B2 两个旧的私有页签组件已从 prefab 里彻底退场（防 cid 抄错成 MissingScript）', () => {
     const oldCids = [
-        scriptCid('assets/script/app/card/CardLineupNav.ts'),          // 主界面旧件
         scriptCid('assets/script/app/battletoken/BattleTokenTabButton.ts'), // 战令旧件
     ];
     for (const [path, prefab] of [[MAINROOT_PATH, MAINROOT], [BATTLETOKEN_PATH, BATTLETOKEN]] as const) {
@@ -227,8 +261,8 @@ test('C1 `MainTabHost`：按 x 排序收集 `TabButton`，点击走 `bindSelect`
     assert.ok(!/getComponentsInChildren\(CardLineupNav\)/.test(code), '还在收集旧的 CardLineupNav');
     assert.ok(!/new CardLineupNav\b/.test(code), '还在 new 旧的 CardLineupNav');
     assert.ok(!/Button\.EventType\.CLICK/.test(code), '宿主不该自己挂 CLICK —— TabButton 内部已挂（幂等）');
-    // 名称仍由槽位表驱动（唯一真源在 `card/CardLineupNav.ts`），不写死在宿主
-    assert.match(code, /cardLineupNavItem\(index\)/, '名称/两态图必须查槽位表');
+    // 名称仍由主城文案表驱动，不写死在宿主
+    assert.match(code, /mainTabItem\(type\)/, '名称/红点配置必须按 prefab 业务类型查表');
 });
 
 test('C2 `BattleTokenPage`：运行时从 `tabBar` 收集共用页签，不再吃 Inspector 数组', () => {
@@ -250,4 +284,16 @@ test('C3 红点回路：`TabButton` 持 `RdExprBinding`，销毁时**必须**解
         '别直接改 redDot 节点显隐 —— `count <= 0` 的收起由 RedDot.setRedDot 统一处理');
     assert.match(code, /setSelected\(selected: boolean\)/, '选中态要绝对赋值（两态都写）');
     assert.match(code, /ensureInit\(\): void/, '初始化要幂等（宿主 active=false ⇒ onLoad 会晚跑）');
+});
+
+test('C4 挑战 tab 禁用后保持可见并使用灰态', () => {
+    const host = stripComments(readFileSync('assets/script/app/main/MainTabHost.ts', 'utf8'));
+    const tab = stripComments(readFileSync('assets/script/app/common/TabButton.ts', 'utf8'));
+    assert.match(host, /button\.setEnabled\(type !== MainTab\.Challenge\)/);
+    assert.match(tab, /setEnabled\(enabled: boolean\): void/);
+    assert.match(tab, /if \(!this\.isEnabled\) return/);
+    assert.match(tab, /const tint = this\.isEnabled \? TAB_ENABLED_TINT : TAB_DISABLED_TINT/);
+    assert.match(tab, /this\.icon\.color = tint/);
+    assert.match(tab, /this\.bg\.color = tint/);
+    assert.match(tab, /this\.nameLabel\.color = this\.isEnabled \?/);
 });

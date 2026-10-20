@@ -112,7 +112,7 @@ test('★row14 建筑抖动 = 120% 拉伸、「先 Y 后 X」，段外恒 1（�
 
 test('★row14 抖动乘在归一化基准缩放上（不覆盖），播完复位，没在抖时 update 是空转', () => {
     const { view, iconSprite, icon } = makeStationView();
-    // 先让 `applyIconPlacement` 算出一个**非 1** 的基准缩放：128×128 无留白帧 ⇒ 70 / 128。
+    // 先让 `applyIconPlacement` 算出一个**非 1** 的基准缩放：128×128 无留白帧 ⇒ 84 / 128。
     view.render({
         site: {}, icon: ICON_FRAME, caption: '', tint: iconSprite.color, badge: '', interactive: true,
     });

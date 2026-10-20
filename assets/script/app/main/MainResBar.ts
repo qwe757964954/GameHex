@@ -71,7 +71,7 @@ export class MainResBar extends Component {
     levelLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'Uid：`uid:{角色 id}`' })
-    uidLabel: Label = null!;
+    uidLabel: Label | null = null;
 
     @property({ type: Sprite, tooltip: 'ExpFill：经验条（FILLED / HORIZONTAL，代码只改 fillRange）' })
     expFill: Sprite = null!;
@@ -183,7 +183,7 @@ export class MainResBar extends Component {
     private applyView(view: ResBarView): void {
         this.nameLabel.string = view.name;
         this.levelLabel.string = view.levelText;
-        this.uidLabel.string = view.uidText;
+        if (this.uidLabel) this.uidLabel.string = view.uidText;
         this.expFill.fillRange = view.expRatio;
     }
 

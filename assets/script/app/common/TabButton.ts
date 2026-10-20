@@ -1,8 +1,10 @@
-import { _decorator, Button, CCFloat, CCInteger, Component, Label, Sprite, SpriteFrame } from 'cc';
+import { _decorator, Button, CCFloat, CCInteger, Color, Component, Label, Node, Sprite, SpriteFrame } from 'cc';
 import { RdExprBinding } from '../rd/RedDotBinding';
 import { RedDot } from './RedDot';
 
 const { ccclass, property } = _decorator;
+const TAB_ENABLED_TINT = new Color(255, 255, 255, 255);
+const TAB_DISABLED_TINT = new Color(140, 140, 140, 255);
 
 /**
  * 通用页签按钮 —— **主界面底栏六格**与**战令页内四格**共用这一个组件。
@@ -17,7 +19,7 @@ const { ccclass, property } = _decorator;
  * ## 两处实例的差异靠 Inspector 参数表达，不靠两套代码
  * | | 主界面底栏六格 | 战令页内四格 |
  * |---|---|---|
- * | 图标两态 | 无（按槽位异步加载后 `setIconFrame`） | `offIcon` / `onIcon` 写在实例覆盖上 |
+ * | 图标两态 | `offIcon` / `onIcon` 绑定在主城 prefab 实例（通常是同一张图） | `offIcon` / `onIcon` 写在实例覆盖上 |
  * | 图标底边 y | 继承共用件的 −34 | 实例覆盖成 −42.5（图高不同 ⇒ 底边要更低） |
  * | 选中时图标上移 | 0（沿用本端既有行为，老端其实会抬 31） | 26 |
  * | 名称 | 「商店」…（`NameLabel`，运行时 `setLabel`） | 无（图内已含文字 ⇒ 实例里把 `NameLabel` 置 `active=false`） |
@@ -81,7 +83,7 @@ export class TabButton extends Component {
     @property({ type: SpriteFrame, tooltip: '底图·选中（留空 = 不换底图）' })
     onBgFrame: SpriteFrame = null!;
 
-    @property({ type: SpriteFrame, tooltip: '图标·未选中（留空 = 不换图标，交给 setIconFrame 喂）' })
+    @property({ type: SpriteFrame, tooltip: '图标·未选中（留空 = 保留 prefab 的 Icon SpriteFrame）' })
     offIcon: SpriteFrame = null!;
 
     @property({ type: SpriteFrame, tooltip: '图标·选中（留空 = 不换图标）' })
@@ -91,10 +93,22 @@ export class TabButton extends Component {
     redDot: RedDot = null!;
 
     @property({
-        type: CCInteger,
-        tooltip: '本格的业务类型号：战令 = CmdBattleTokenType（1通行证/2七日登录/3等级基金/4过关令）；主界面留 0 = 按槽位下标',
+        type: Node,
+        tooltip: 'SelectBg：选中底板（主城七格的金色圆角块 nav_sel，压在图标下面）；留空 = 本格没有底板',
     })
-    tabType = 0;
+    selectBg: Node | null = null;
+
+    @property({ type: Color, tooltip: '名称·未选中颜色（主城七格 = 白色）' })
+    offLabelColor: Color = new Color(255, 255, 255, 255);
+
+    @property({ type: Color, tooltip: '名称·选中颜色（主城七格 = 黑色，压在金色底板上）' })
+    onLabelColor: Color = new Color(255, 255, 255, 255);
+
+    @property({
+        type: CCInteger,
+        tooltip: '业务页签类型：主界面按 MainTab 识别；战令按 CmdBattleTokenType 识别',
+    })
+    tabType = -1;
 
     @property({ type: CCFloat, tooltip: '选中时图标额外上移的量（战令 26；主界面 0 = 不动）' })
     iconRaiseY = 0;
@@ -104,6 +118,8 @@ export class TabButton extends Component {
     private rdBinding: RdExprBinding | null = null;
     private onSelect: (() => void) | null = null;
     private inited = false;
+    private isEnabled = true;
+    private isSelected = false;
 
     protected onLoad(): void {
         this.ensureInit();
@@ -117,6 +133,7 @@ export class TabButton extends Component {
     }
 
     private handleClick(): void {
+        if (!this.isEnabled) return;
         if (this.onSelect) this.onSelect();
     }
 
@@ -136,8 +153,17 @@ export class TabButton extends Component {
         this.nameLabel.string = text;
     }
 
+    /** 禁用时保留页签外观但压暗，并阻止宿主回调。 */
+    setEnabled(enabled: boolean): void {
+        this.isEnabled = enabled;
+        const tint = this.isEnabled ? TAB_ENABLED_TINT : TAB_DISABLED_TINT;
+        this.icon.color = tint;
+        this.bg.color = tint;
+        this.nameLabel.color = this.isEnabled ? (this.isSelected ? this.onLabelColor : this.offLabelColor) : tint;
+    }
+
     /**
-     * 直接指定图标帧 —— 主界面底栏按槽位**异步加载**后调用（`loadNavArt`）。
+     * 直接指定图标帧 —— 供确实需要运行时换图的场景使用；主城导航资源由 prefab 实例绑定。
      *
      * @param frame `null` = 保留现有图（加载失败时不抹成空白，与 `RedDot` 同一口径）
      */
@@ -145,13 +171,23 @@ export class TabButton extends Component {
         if (frame) this.icon.spriteFrame = frame;
     }
 
-    /** 选中态：底图 / 图标 / 图标位移**两态都绝对赋值**（只写一半会多个同时高亮）。 */
+    /** 选中态：底图 / 图标 / 图标位移 / 选中底板 / 文字颜色**两态都绝对赋值**（只写一半会多个同时高亮）。 */
     setSelected(selected: boolean): void {
+        this.isSelected = selected;
         const bgFrame = selected ? this.onBgFrame : this.offBgFrame;
         if (bgFrame) this.bg.spriteFrame = bgFrame;
 
         const iconFrame = selected ? this.onIcon : this.offIcon;
         if (iconFrame) this.icon.spriteFrame = iconFrame;
+
+        // 主城七格：选中态是**一块金色底板**（不是换图）⇒ 逐格切换底板显隐。
+        // 未绑底板的实例（战令四格 / 旧六格）走 `if` 直接跳过，行为零变化。
+        if (this.selectBg) this.selectBg.active = selected;
+
+        // 名称颜色：同样两态都写（战令实例的 NameLabel 是隐藏的，写了不显示）。
+        this.nameLabel.color = this.isEnabled
+            ? (selected ? this.onLabelColor : this.offLabelColor)
+            : TAB_DISABLED_TINT;
 
         // ⚠️ 基准 y 取 **prefab 现值**，只叠加偏移 —— 坐标声明跟 prefab 走，不在代码里写死。
         //    惰性读且只读一次：`onLoad` 可能因为宿主初始 `active=false` 而晚跑。

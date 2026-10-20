@@ -71,12 +71,16 @@ export type ZCTerritoryOwner = 'player' | 'enemy' | 'enemy2' | 'enemy3' | 'neutr
  *   - bit 8..13 = internal（同阵营内部线）：邻居与自己同阵营，按 id 小的画细线。
  *
  * edge 顺序与六边顶点一致：右上、上、左上、左下、下、右下。
+ *
+ * 传入 `out` 时复用该 Map（先 clear 再重填），供高频路径消除每帧分配。
  */
 export function buildTerritoryBoundaryMasks(
     map: ReadonlyArray<Readonly<{ id: number; playable: boolean; x: number; y: number; neighbors: readonly number[] }>>,
     ownerForHex: (hexId: number) => ZCTerritoryOwner,
+    out?: Map<number, number>,
 ): ReadonlyMap<number, number> {
-    const masks = new Map<number, number>();
+    const masks = out ?? new Map<number, number>();
+    masks.clear();
     for (const hex of map) {
         if (!hex.playable) continue;
         const owner = ownerForHex(hex.id);

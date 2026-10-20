@@ -29,8 +29,12 @@ const BUILDING_DIR = 'assets/resources/image/territory/buildings';
 /** `Icon` 节点在 prefab 里写死的尺寸 + `sizeMode`（`CUSTOM(0)`）。 */
 const ICON_NODE_SIZE = 128;
 
-/** 代码里的目标可见宽度，与 `TerritoryStationView` 的常量必须一致。 */
-const TARGET_VISIBLE_WIDTH = 70;
+/**
+ * 代码里的目标可见宽度，与 `TerritoryStationView` 的常量必须一致。
+ *
+ * 2026-10-19：用户要求「当前尺寸调大 120%」⇒ 70 × 1.2 = **84**。
+ */
+const TARGET_VISIBLE_WIDTH = 84;
 
 /** 地块可见台面高（`HEX_GRID_FACE_HEIGHT`）。 */
 const FACE_HEIGHT = 90;
@@ -45,9 +49,12 @@ const FACE_WIDTH = 123;
  * 于是 `TARGET_VISIBLE_WIDTH = 100`（可见高 78~89、几乎与台面等高）**顺利通过**，
  * 而截图上读作「建筑顶满格子 / 偏下」。真正的毛病是尺寸不是居中，判据却没拦住。
  *
- * 取 0.75 ⇒ 建筑在台面内上下各留约 1/8 高度，读作「站在格子里」而不是「撑满格子」。
+ * 取值：`0.75`（2026-10-15，可见宽 70，最高 62.5）→ **0.85**（2026-10-19 放大到 84，
+ * 最高的 `async_pvp` 75.0 = 台面高的 83.4%，0.75 会挡住）。
+ * ⚠️ 0.85 是**跟着这次放大走的上限**，不是新基准：再往上加尺寸请先看截图，
+ * 越过 1.0 就又回到「顶满格子」的老毛病。
  */
-const MAX_VISIBLE_HEIGHT_RATIO = 0.75;
+const MAX_VISIBLE_HEIGHT_RATIO = 0.85;
 
 interface MetaTrim {
     readonly rawWidth: number;

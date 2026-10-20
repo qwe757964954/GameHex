@@ -305,14 +305,29 @@ function npcBaseName(index: number): string {
     return NPC_BASE_NAMES[index % NPC_BASE_NAMES.length];
 }
 
+/** 地形覆盖表：`hexId → terrain`。策划在编辑器里手改过的格子走这里，其余仍由种子决定。 */
+export type BigMapTerrainOverride = ReadonlyMap<number, BigMapTerrain>;
+
+/** 格子层的构建产物（世界生成与布局重建共用）。 */
+export interface IBigMapTileLayer {
+    readonly tiles: readonly IBigMapWorldTile[];
+    readonly tileById: Map<number, IBigMapWorldTile>;
+    readonly ringCounts: number[];
+    readonly centerHexId: number;
+}
+
 /**
- * 生成整张大地图。**纯函数**：同一 `config + seed` 必得同一结果，可在测试里反复断言。
+ * 只造格子层（地形 + 环号）。
+ *
+ * 抽出来的唯一理由：世界有**两条**构建入口（种子生成 / 布局文件），地形算法只能有一份。
+ * 两处各写一遍，改一处忘一处就是「编辑器里是水、游戏里是平地」这种查半天的漂移。
  */
-export function buildBigMapWorld(config: IBigMapConfig, seed = DEFAULT_BIGMAP_WORLD_SEED): IBigMapWorld {
-    const world = config.world;
-    const rows = world.rows;
-    const cols = world.cols;
-    const total = rows * cols;
+export function buildBigMapTiles(
+    rows: number,
+    cols: number,
+    seed: number,
+    overrides?: BigMapTerrainOverride,
+): IBigMapTileLayer {
     const centerRow = Math.floor((rows - 1) / 2);
     const centerCol = Math.floor((cols - 1) / 2);
     const centerHexId = centerRow * cols + centerCol;
@@ -323,11 +338,32 @@ export function buildBigMapWorld(config: IBigMapConfig, seed = DEFAULT_BIGMAP_WO
         for (let col = 0; col < cols; col += 1) {
             const id = row * cols + col;
             const ring = bigMapHexDistance(rows, cols, centerHexId, id);
-            const tile: IBigMapWorldTile = { id, row, column: col, ring, terrain: terrainAt(seed, id, ring) };
+            const terrain = overrides?.get(id) ?? terrainAt(seed, id, ring);
+            const tile: IBigMapWorldTile = { id, row, column: col, ring, terrain };
             tiles.push(tile);
             tileById.set(id, tile);
         }
     }
+
+    const ringCounts: number[] = [];
+    for (const tile of tiles) {
+        ringCounts[tile.ring] = (ringCounts[tile.ring] ?? 0) + 1;
+    }
+    return { tiles, tileById, ringCounts, centerHexId };
+}
+
+/**
+ * 生成整张大地图。**纯函数**：同一 `config + seed` 必得同一结果，可在测试里反复断言。
+ *
+ * 这是「没有布局文件时」的兜底路径：离线调试档、单测夹具、以及 M1 之前的老存档都走它。
+ * 有布局文件时请用 `BigMapLayout.buildBigMapWorldFromLayout`。
+ */
+export function buildBigMapWorld(config: IBigMapConfig, seed = DEFAULT_BIGMAP_WORLD_SEED): IBigMapWorld {
+    const world = config.world;
+    const rows = world.rows;
+    const cols = world.cols;
+    const centerHexId = Math.floor((rows - 1) / 2) * cols + Math.floor((cols - 1) / 2);
+    const { tiles, tileById, ringCounts } = buildBigMapTiles(rows, cols, seed);
     const ringOf = (hexId: number): number => tileById.get(hexId)?.ring ?? Number.POSITIVE_INFINITY;
     const taken = new Set<number>();
     const context: IPlacementContext = { rows, cols, taken, ringOf };
@@ -337,11 +373,6 @@ export function buildBigMapWorld(config: IBigMapConfig, seed = DEFAULT_BIGMAP_WO
     const monsterPlacement = placeMonsters(config, context, seed);
     const bases = placeBases(config, context, seed);
     const playerBase = bases.find((site) => site.isPlayer);
-
-    const ringCounts: number[] = [];
-    for (const tile of tiles) {
-        ringCounts[tile.ring] = (ringCounts[tile.ring] ?? 0) + 1;
-    }
 
     return {
         worldId: world.worldId,

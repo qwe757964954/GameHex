@@ -12,6 +12,21 @@ export const ART_ROOT = 'image';
 export const MAIN_ART_ROOT = `${ART_ROOT}/main`;
 
 /**
+ * **主城底栏（2026-10-19 蓝湖改版）** —— 七格的图标 + 选中底板 + 底条。
+ *
+ * 与 `MAIN_ART_ROOT` 下那批 `btm_*` / `btn_*`（旧六格，选中/未选中各一张）是**两套**：
+ * 新版蓝湖稿每格只有**一张**图标（`zjm_icon_*`），选中态靠底板 `nav_sel`（金色圆角块）表达，
+ * 底条是 `nav_bg`（720×152，贴屏幕底）。
+ *
+ * 文件对应（切图名 → 工程名）：
+ * `bg_01` → `nav_bg` ｜ `tab_02` → `nav_sel` ｜
+ * `zjm_icon_sd/yx/ld/tz/lm/sj` → `nav_shop/hero/territory/challenge/alliance/world`。
+ *
+ * 角色格图标已归一到 `nav_role`，不再复用旧六格切图。
+ */
+export const MAIN_CITY_ART_ROOT = `${MAIN_ART_ROOT}/city`;
+
+/**
  * 主界面顶部资源栏的**专用件**：头像框（`zjm_Headicon_bg`）、货币格底（`zjm_huobi_bg`）、
  * 血条/经验条（`zjm_hp_bar_fg`）、补货加号（`公用_按钮_加号`）。
  *
@@ -79,6 +94,14 @@ export const MATCH_SLOT_FRAMES: readonly string[] = ['frame_01', 'frame_02', 'fr
  */
 export const ARTIFACT_ART_ROOT = `${ART_ROOT}/artifact`;
 
+/**
+ * 中立资源点图标：`image/map-resource`（`gold` / `mine` / `chest`，同一套 212×212 画布）。
+ *
+ * 格子内图标由 `ZCGameHex.prefab` 硬绑；这里提供装配常量给「运行时按名加载」的场景
+ * （金币飞行特效的贴图 = `gold`，与格子图标同一张，见 `ZCGameLoader.loadGoldCoinFrame`）。
+ */
+export const MAP_RESOURCE_ART_ROOT = `${ART_ROOT}/map-resource`;
+
 /** 玩家头像。 */
 export const HEAD_ART_ROOT = `icons/head`;
 
@@ -116,12 +139,22 @@ export const TERRITORY_UI_ART_ROOT = `${ART_ROOT}/territory/ui`;
 export const HEX_GROUND_GLOW_ART_ROOT = `${ART_ROOT}/effects/hex_ground_glow`;
 
 /**
- * 翻格「脉冲呼吸」序列帧（30 帧 `fkz_00..29`，155×144 白图，靠 `sprite.color` 乘色）。
+ * 翻格「脉冲」序列帧（**5 帧** `hex_pulse_0..4`，320×320 透明底，靠 `sprite.color` 乘色）。
  *
- * 2026-10-15 山猫口径：翻格动作的前置段由这组帧播（水波扩散观感），**按格子类型染色**
- * （兵营蓝紫 / 金矿绿），替换此前手画的 Graphics 描边 + 白闪。只有对局在用。
+ * 2026-10-19 换成美术给的新一套：**缩放与不透明度全部烘焙进图**（1.00→1.78 倍、70%→15%），
+ * 视图只按 10fps 选帧，不许在节点上再叠 scale / opacity 动画。只有对局在用（`ZCHexView`）。
+ *
+ * 🔴 落地的图**被处理过**：美术原稿中心那块六边形是**实心**的（画的是「地块本体」参考色），
+ * 直接盖到地块上会把整块地皮盖成淡紫。`tools/gen_hex_pulse_layer.py` 把本体压到
+ * **35% 不透明度**（`BODY_ALPHA`）—— 比彻底挖空更实一点、又能透出地块的阵营色与图标，
+ * 外圈的波原样保留。帧数与 320 画布不变 ⇒ 换图时**要么**用同款处理后的图，
+ * **要么**把本路径指回去再改视图。
+ *
+ * 🔴 旧的那套 30 帧 `effects/hex_pulse/fkz_00..29`（155×144，配 `shaders/hex-pulse.effect`
+ * 做径向虚化）**已退役**：文件还留在盘上做对照，但代码不再加载 —— 别把新帧混进那个目录，
+ * 那个目录的加载器是「扫全目录按名排序」，混进去会变成 35 帧。
  */
-export const HEX_FLIP_PULSE_ART_ROOT = `${ART_ROOT}/effects/hex_pulse`;
+export const HEX_FLIP_PULSE_ART_ROOT = `${ART_ROOT}/effects/hex_pulse_seq`;
 
 /** 月卡礼包美术。 */
 export const MONTHCARD_ART_ROOT = `${ART_ROOT}/monthcard`;

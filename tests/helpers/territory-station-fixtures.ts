@@ -317,5 +317,10 @@ export function makeStationView(): {
     return { view, root, icon, caption, text, badge, iconSprite, captionSprite, captionLabel, badgeLabel, layers };
 }
 
-/** 建筑图标按 128×128 画布铺满时的归一化基准缩放（`BUILDING_VISIBLE_WIDTH / 可见宽`）。 */
-export const STATION_ICON_BASE_SCALE = 70 / 128;
+/**
+ * 建筑图标按 128×128 画布铺满时的归一化基准缩放（`BUILDING_VISIBLE_WIDTH / 可见宽`）。
+ *
+ * 2026-10-19：目标可见宽从 70 提到 **84**（用户要求「当前尺寸调大 120%」）⇒ 84 / 128。
+ * 与 `TerritoryStationView.BUILDING_VISIBLE_WIDTH` 必须同值（那边是唯一真源）。
+ */
+export const STATION_ICON_BASE_SCALE = 84 / 128;

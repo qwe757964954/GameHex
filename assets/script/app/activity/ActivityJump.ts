@@ -69,8 +69,9 @@ const ACTIVITY_JUMP_OPENERS: Readonly<Record<ActivityJumpTarget, () => void>> = 
     // 老端 `LayerMainMenu` 的 `case JUMP_TYPE.HERO: switchTab2(TabRoleMain)`。
     // 本端「角色主界面」就是领地 tab（`ui/Role/Role`），与 `open.json` 的 `TabRoleMain` 同一条路。
     roleMain: () => { findTabHost()?.switchToRoleMain(); },
-    // 老端 `case JUMP_TYPE.FIGHT: switchTab2(TabFight)`。本端对应格是竞技 tab（`ArenaRoot`）。
-    arenaTab: () => { findTabHost()?.switchToTab(MainTab.Arena); },
+    // 老端 `case JUMP_TYPE.FIGHT: switchTab2(TabFight)`。本端对应格是「挑战」（`ArenaRoot`，
+    // 2026-10-19 蓝湖七格改版前叫「竞技」，下标从 2 移到 4）。
+    arenaTab: () => { findTabHost()?.switchToTab(MainTab.Challenge); },
     // 本端唯一的战斗流程；同主界面「开始游戏」按钮（`MainPage.onStartGame`）。
     matching: () => { ProcedureManager.navigate(GameRoute.Matching); },
     hang: () => { void HangPage.open({}); },

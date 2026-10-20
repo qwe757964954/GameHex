@@ -44,7 +44,7 @@ export interface ZCMatchMap {
     /** 固定主城模式下各方主城格 id（下标 0 = 1 区）；自选主城模式为空。 */
     homes?: readonly number[];
     /** 各方前 / 中 / 后区域；未圈画时为空。 */    regions?: readonly ZCMapRegion[];
-    /** 自选主城候选格；某分区未声明时按旧规则选点。 */
+    /** 旧版自选主城候选格；仅在地图没有前 / 中 / 后区域时用于兼容读取。 */
     homeCandidates?: readonly ZCMapHomeCandidates[];
     /** 资源点位（开局据此抽中立资源）；无点位时为空。 */
     resourcePoints?: readonly ZCMapResourcePoint[];

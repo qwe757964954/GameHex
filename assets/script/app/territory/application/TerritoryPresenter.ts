@@ -47,7 +47,6 @@ import type {
 } from '../model/TerritorySaveStore';
 import { TERRITORY_BATTLE_STATUS } from '../model/TerritoryBattleStatus';
 import type { ITerritorySiteDetailContent } from '../view/TerritorySiteDetailPanel';
-import type { ITerritoryHudRender } from '../view/TerritoryHeaderView';
 import {
     canOpenTerritoryRandomCell,
     canClaimTerritoryRandomResource,
@@ -225,7 +224,18 @@ export interface ITerritoryDetailState {
     readonly content: ITerritorySiteDetailContent | null;
 }
 
-/** 一次完整的页面状态：地图渲染输入 + HUD + 弹窗。 */
+/** 领地章节 HUD 的纯呈现数据；主城地图宿主不渲染这组字段。 */
+export interface ITerritoryHudRender {
+    readonly chapterText: string;
+    readonly walletText: string;
+    readonly walletHighlight: boolean;
+    readonly inventoryText: string;
+    readonly hintText: string;
+    readonly previousEnabled: boolean;
+    readonly nextEnabled: boolean;
+    readonly nextCaption: string;
+}
+
 export interface ITerritoryViewState {
     readonly ready: boolean;
     readonly chapterId: number;
@@ -346,7 +356,7 @@ export class TerritoryPresenter {
         this.ports.gateway.unlistenPassCellsBro?.();
         this.ports.gateway.unlistenCellInfo?.();
         // 全局中控上的残留监听一并摘干净（zcds 的 `ZCGame.shutdown` 同款；
-        // 页面侧由 `TerritoryPage.onDestroy` 的 `offTarget(this)` 负责）。
+        // 页面侧由 `MainTerritoryMap.onDestroy` 的 `offTarget(this)` 负责）。
         EventMgr.instance.offTarget(this);
     }
 

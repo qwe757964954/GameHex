@@ -1283,8 +1283,14 @@ test('D11 ⚠️ 主界面入口按钮：点开 `ChatPage`，红点占位但**�
     assert.ok(mainRedDot, 'ArenaRoot 里必须有 RedDot 占位节点');
     assert.equal(mainRedDot!._active, false, '红点本轮不接 ⇒ 必须保持隐藏');
     const chatEntry = main.find((e) => e && e.__type__ === 'cc.Node' && e._name === 'ChatEntry') as { _active: boolean } | undefined;
-    assert.ok(chatEntry, 'ArenaRoot 里必须有 ChatEntry 节点');
-    assert.equal(chatEntry!._active, true, '聊天入口按钮默认显示');
+    assert.ok(chatEntry, 'ArenaRoot 里必须有 ChatEntry 节点（保留结构，脚本仍挂在上面）');
+    // 🔴 2026-10-19：按蓝湖「塔防主界面-1」效果图，右下圆钮撤掉、聊天入口改成**底部聊天条**
+    //    ⇒ `ChatEntry` 烘 `_active=false`（节点留着，`ChatEntryButton` 脚本还在，随时可复用）；
+    //    可见性判据挪到 `BottomHud/ChatBar`。
+    assert.equal(chatEntry!._active, false, '右下聊天圆钮已撤（效果图改底部聊天条）');
+    const chatBar = main.find((e) => e && e.__type__ === 'cc.Node' && e._name === 'ChatBar') as { _active: boolean } | undefined;
+    assert.ok(chatBar, 'ArenaRoot 里必须有底部聊天条 ChatBar（新的聊天入口）');
+    assert.equal(chatBar!._active, true, '聊天入口（底部条）默认显示');
 });
 
 test('D12 判定与文案分层：`ChatTable` 零 import（保住「文案 / 美术 / 引擎」都不进判定层）', () => {

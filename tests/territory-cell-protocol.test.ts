@@ -139,7 +139,7 @@ const REPO_SRC = readFileSync(
     'assets/script/app/territory/application/TerritoryCellRepository.ts',
     'utf8',
 );
-const PAGE_SRC = readFileSync('assets/script/app/territory/view/TerritoryPage.ts', 'utf8');
+const PAGE_SRC = readFileSync('assets/script/app/main/MainTerritoryMap.ts', 'utf8');
 // 2026-10-09 抽 Presenter 后：编排与调用方断言的真源换到 TerritoryPresenter（纯 TS，可直接读文本）。
 const PRESENTER_SRC = readFileSync(
     'assets/script/app/territory/application/TerritoryPresenter.ts',

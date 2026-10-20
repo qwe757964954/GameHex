@@ -481,7 +481,6 @@ export class ZCGame extends Component {
             unitOutlineCopyEffect: prepared.unitOutlineCopyEffect,
             hexGroundGlowFrames: prepared.hexGroundGlowFrames,
             hexPulseFrames: prepared.hexPulseFrames,
-            hexPulseMaterial: prepared.hexPulseMaterial,
             effectPrefab: prepared.effectPrefab,
             effectVisualPrefabs: prepared.effectVisualPrefabs,
             floatTextPrefab: prepared.floatTextPrefab,
@@ -491,6 +490,10 @@ export class ZCGame extends Component {
             overlayLayer: this.hudView.node,
             // 中立资源点「神器充能」格显示玩家携带的那件神器（整局一张，逐个地块视图注入）。
             artifactIconFrame: prepared.artifactIconFrame,
+            // 中立资源获取特效：金币 / 神器从格子飞向 HUD 的对应栏位。
+            goldCoinFrame: prepared.goldCoinFrame,
+            goldCounterNode: this.hudView.goldIcon,
+            artifactButtonNode: this.hudView.artifactButton.node,
             decorPrefab: prepared.decorPrefab,
             spawnFxPrefab: prepared.spawnFxPrefab,
             deathFxPrefab: prepared.deathFxPrefab,
@@ -898,7 +901,7 @@ export class ZCGame extends Component {
 
     private returnToMain(): void {
         if (this.pveContext) {
-            ProcedureManager.navigate(GameRoute.Main, { initialTab: 'adventure' });
+            ProcedureManager.navigate(GameRoute.Main, { initialTab: 'territory' });
             return;
         }
         ProcedureManager.navigate(GameRoute.Main);

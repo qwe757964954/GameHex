@@ -11,12 +11,12 @@ const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf
 //   HUD      → view/TerritoryHeaderView.ts      资源     → application/TerritoryPageAssets.ts
 //   滚动容器 → prefab 上的 cc.ScrollView         站点条目 → TerritoryStation.prefab
 // 断言跟着真源走，别再去 TerritoryPage.ts 里找 —— 那里的职责只剩流程编排。
-const page = read('../assets/script/app/territory/view/TerritoryPage.ts');
+const page = read('../assets/script/app/main/MainTerritoryMap.ts');
 const presenter = read('../assets/script/app/territory/application/TerritoryPresenter.ts');
 const mapView = read('../assets/script/app/territory/view/TerritoryMapView.ts');
 const assets = read('../assets/script/app/territory/application/TerritoryPageAssets.ts');
 const texts = read('../assets/script/app/territory/application/TerritoryTexts.ts');
-const prefab = JSON.parse(read('../assets/resources/ui/territory/TerritoryPage.prefab')) as Array<Record<string, unknown>>;
+const prefab = JSON.parse(read('../assets/resources/ui/main/MainTerritoryMap.prefab')) as Array<Record<string, unknown>>;
 const stationPrefab = JSON.parse(read('../assets/resources/ui/territory/TerritoryStation.prefab')) as Array<Record<string, unknown>>;
 
 function prefabNode(objects: Array<Record<string, unknown>>, name: string): Record<string, unknown> {
@@ -88,53 +88,35 @@ test('territory stations use dedicated 128px transparent building cuts instead o
         { __type__: 'cc.Size', width: 128, height: 128 });
 });
 
-test('territory HUD uses common commercial artwork above a full-screen map', () => {
-    // 领地页 HUD 实际复用通用商业美术（标题条 / 两个按钮），不另做 territory 专属 UI 图。
-    for (const art of ['cu_title_brown', 'cu_ty_btn09', 'cu_ty_btn13']) {
-        assert.match(assets, new RegExp(`spriteFramePath\\(COMMON_ART_ROOT, '${art}'\\)`));
+test('main territory map prefab contains no duplicate chapter HUD', () => {
+    for (const name of ['HudLayer', 'HeaderPanel', 'ChapterLabel', 'WalletLabel', 'PrevChapter', 'NextChapter', 'HintPanel']) {
+        assert.equal(prefab.some((node) => node.__type__ === 'cc.Node' && node._name === name), false,
+            `map-only prefab should not contain ${name}`);
     }
-    // 章节按钮是 SCALE 过渡的 `cc.Button`，且底图用商业图（旧的 `spriteButton()` 工厂已删）。
-    for (const name of ['PrevChapter', 'NextChapter']) {
-        const node = prefabNode(prefab, name);
-        const button = componentOf(prefab, node, 'cc.Button');
-        assert.equal(button._transition, 3, `${name} 的过渡应是 SCALE`);
-        assert.ok(componentOf(prefab, node, 'cc.Graphics'), `${name} 缺底图`);
-    }
-    // 顶部信息带用商业图，且 HUD 元素全在 `Content` 下（加载态只切这一个节点）。
-    const header = prefabNode(prefab, 'HeaderPanel');
-    assert.ok(componentOf(prefab, header, 'cc.Sprite'));
-    const content = prefabNode(prefab, 'Content');
-    assert.equal((content._children as unknown[]).length, 9);
-    assert.equal(componentOf(prefab, content, 'cc.Widget')._alignFlags, 45);
+    assert.match(page, /@ccclass\('MainTerritoryMap'\)/);
+    assert.doesNotMatch(page, /TerritoryHeaderView|hudView|setHudVisible/);
 });
 
-test('territory prefab stretches root/HUD full-screen while the map viewport clears the header and hint', () => {
-    const root = prefabNode(prefab, 'TerritoryPage');
+test('main territory map prefab stretches the map viewport around the main HUD overlays', () => {
+    const root = prefabNode(prefab, 'MainTerritoryMap');
     const viewport = prefabNode(prefab, 'MapViewport');
-    const hud = prefabNode(prefab, 'HudLayer');
-    for (const node of [root, hud]) {
-        const widget = componentOf(prefab, node, 'cc.Widget');
-        assert.equal(widget._alignFlags, 45, `${String(node._name)} must stretch on all four edges`);
-        assert.equal(widget._top, 0);
-        assert.equal(widget._bottom, 0);
-        assert.equal(widget._left, 0);
-        assert.equal(widget._right, 0);
-    }
-    // 地图视口四边拉伸，但顶部避开标题条（HeaderPanel 顶距 10 + 高 164 ⇒ 178）、
-    // 底部避开提示条（HintPanel 底距 116 + 高 48 ⇒ 168），地图不再被 HUD 遮挡。
+    const widget = componentOf(prefab, root, 'cc.Widget');
+    assert.equal(widget._alignFlags, 45);
+    assert.equal(widget._top, 0);
+    assert.equal(widget._bottom, 0);
+    assert.equal(widget._left, 0);
+    assert.equal(widget._right, 0);
+
+    // The map viewport still clears ArenaRoot's top bar and bottom navigation overlays.
     const viewportWidget = componentOf(prefab, viewport, 'cc.Widget');
     assert.equal(viewportWidget._alignFlags, 45, 'MapViewport must stretch on all four edges');
     assert.equal(viewportWidget._left, 0);
     assert.equal(viewportWidget._right, 0);
     assert.equal(viewportWidget._top, 178);
     assert.equal(viewportWidget._bottom, 168);
-    // 页面脚本的 HUD 引用必须落在 HudLayer 上（拆分后字段名是 `hudView`）。
-    const controller = (root._components as Array<{ __id__: number }>)
-        .map((ref) => prefab[ref.__id__])
-        .find((entry) => 'hudView' in entry);
-    assert.ok(controller, '缺 TerritoryPage 组件');
-    const hudViewComponent = prefab[(controller.hudView as { __id__: number }).__id__];
-    assert.equal(prefab[(hudViewComponent.node as { __id__: number }).__id__]._name, 'HudLayer');
+    const controller = (root._components as Array<{ __id__: number }>).map((ref) => prefab[ref.__id__]);
+    assert.ok(controller.some((entry) => entry.__type__ === 'db11eTDMkRLYYWMYrCVH0E9'),
+        'MainTerritoryMap script must remain attached to the root');
 });
 
 test('layout consumes every current JSON site', () => {
@@ -152,8 +134,8 @@ test('presenter exposes missing random-pool state safely', () => {
     const mapViewCode = mapView.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
     assert.doesNotMatch(mapViewCode, /drawRoutes|routeGraphics|RouteLayer/);
     // 随机名额池还没发布时，HUD 要把「有几个候选格」如实说出来（Presenter 侧）。
-    assert.match(presenter, /random\.candidateCells\.length/);
-    assert.match(presenter, /尚未发布/);
+    assert.match(presenter, /random\?\.candidateCells\.length/);
+    assert.match(presenter, /TERRITORY_TEXTS\.randomCostHint/);
 });
 
 test('★★地图底图随格子一起滑动，且格子画在背景上', () => {

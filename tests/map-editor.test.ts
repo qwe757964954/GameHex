@@ -166,6 +166,28 @@ test('空范围清空不弹确认、不创建撤销记录；各分类面板提�
     assert.equal(typeof element('btnClearMap').listeners.click, 'function');
 });
 
+test('清空当前区域时，无匹配标记和清空成功都会给出可见反馈', () => {
+    const empty = createEditor();
+    empty.editor.applyLayout({
+        version: 3, rows: 8, columns: 12, playerCount: 2, cityMode: 'select',
+        ascii: Array(8).fill('111111111111'),
+    });
+    empty.editor.setRegionBrush(1, 'front');
+    empty.element('btnClearRegion').listeners.click();
+    assert.match(empty.element('libFlash').textContent, /前区.*没有区域标记/);
+    assert.equal(empty.confirmCalls.length, 0);
+
+    const populated = createEditor();
+    populated.editor.applyLayout({
+        version: 3, rows: 8, columns: 12, playerCount: 2, cityMode: 'select',
+        ascii: Array(8).fill('111111111111'),
+    });
+    populated.editor.setRegionBrush(1, 'front');
+    populated.editor.paint(7, 0, 'region');
+    populated.element('btnClearRegion').listeners.click();
+    assert.match(populated.element('libFlash').textContent, /已清空.*前区/);
+});
+
 test('左栏长说明收纳为可点击的问号帮助气泡', () => {
     const html = readFileSync('tools/map-editor/index.html', 'utf8');
     assert.match(html, /<details class="helpTip">/);
@@ -1252,7 +1274,7 @@ test('same neutral cell accumulates weighted resource choices and preserves them
     assert.deepEqual(JSON.parse(JSON.stringify(editor.state().json.resourcePoints[0].pool)), { gold: 2 });
 });
 
-test('region and home-candidate brush edits round-trip through layout export', () => {
+test('region brush edits round-trip through layout export and undo', () => {
     const { editor } = createEditor();
     editor.applyLayout({
         version: 3,
@@ -1267,22 +1289,59 @@ test('region and home-candidate brush edits round-trip through layout export', (
     editor.setRegionBrush(1, 'front');
     editor.paint(7, 0);
     editor.commitUndo(before);
-    before = editor.snapshot();
-    editor.setHomeCandidateBrush(1);
-    editor.paint(7, 1);
-    editor.commitUndo(before);
 
     assert.deepEqual(JSON.parse(JSON.stringify(editor.state().json.regions)), [{ section: 1, depth: 'front', cells: [84], tendency: 'rush' }]);
-    assert.deepEqual(JSON.parse(JSON.stringify(editor.state().json.homeCandidates)), [{ section: 1, cells: [85] }]);
     assert.match(editor.mapMetadataMarkup(), /前区/);
-    assert.match(editor.mapMetadataMarkup(), /homeCandidateCell/);
-    assert.equal(editor.undo(), true);
-    assert.equal(editor.state().json.homeCandidates, undefined);
     assert.equal(editor.undo(), true);
     assert.equal(editor.state().json.regions, undefined);
     assert.equal(editor.redo(), true);
-    assert.equal(editor.redo(), true);
-    assert.equal(editor.state().json.homeCandidates[0].cells[0], 85);
+    assert.equal(editor.state().json.regions[0].cells[0], 84);
+});
+
+test('镜像控件位于顶栏且自选主城范围由纵深区域定义', () => {
+    const html = readFileSync('tools/map-editor/index.html', 'utf8');
+    const headerStart = html.indexOf('<header>');
+    const headerEnd = html.indexOf('</header>', headerStart);
+    const header = html.slice(headerStart, headerEnd);
+    const advancedStart = html.indexOf('id="groupAdvancedMirror"');
+    const advancedEnd = html.indexOf('</div>', advancedStart);
+    assert.match(header, /id="optMirrorV"/);
+    assert.match(header, /id="optMirrorH"/);
+    assert.ok(advancedStart < 0 || advancedStart >= headerEnd, '高级设置中不应再放镜像控件');
+    assert.doesNotMatch(html, /homeCandidateSection|btnHomeCandidates|groupHomeCandidates/);
+    assert.ok(advancedEnd < 0 || !html.slice(advancedStart, advancedEnd).includes('optMirrorV'));
+
+    const { editor } = createEditor();
+    editor.applyLayout({
+        version: 3, rows: 8, columns: 12, playerCount: 2, cityMode: 'select',
+        ascii: Array(8).fill('111111111111'),
+        regions: [{ section: 1, depth: 'front', cells: [84] }],
+        homeCandidates: [{ section: 1, cells: [85] }],
+    });
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.buildJSON().regions)), [
+        { section: 1, depth: 'front', cells: [84], tendency: 'rush' },
+    ]);
+    assert.equal(editor.buildJSON().homeCandidates, undefined, '旧字段可导入，但编辑器不再导出独立主城范围');
+});
+
+test('自选模式编辑默认主城时只允许放在对应分区的前中后区格', () => {
+    const { editor } = createEditor();
+    editor.applyLayout({
+        version: 3, rows: 8, columns: 12, playerCount: 2, cityMode: 'select',
+        ascii: Array(8).fill('111111111111'),
+        regions: [
+            { section: 1, depth: 'front', cells: [84, 85] },
+            { section: 2, depth: 'back', cells: [0, 1] },
+        ],
+    });
+    editor.paint(7, 2, 'home');
+    assert.equal(editor.state().homes[0], null, '区域以外的默认主城落点不应写入');
+    editor.paint(7, 1, 'home');
+    assert.equal(editor.state().homes[0].row, 7);
+    assert.equal(editor.state().homes[0].column, 1);
+    editor.paint(0, 0, 'home');
+    assert.equal(editor.state().homes[1].row, 0);
+    assert.equal(editor.state().homes[1].column, 0);
 });
 
 test('region tendency defaults by depth and legacy region exports gain that default', () => {

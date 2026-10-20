@@ -3,7 +3,10 @@ import type { ZCMatchConfig, ZCMatchMap } from '../ZCMatchConfig';
 import type { ZCRuntimeRules } from '../ZCGameRuntimeConfig';
 import type { ZCBuildingType, ZCHexState, ZCSnapshot } from '../ZCGameTypes';
 import type { ZCOwner } from '../ZCMapConfig';
-import { hasNeutralResourceReward, neutralResourceRewardOf } from '../ZCNeutralResourceReward';
+import {
+    hasNeutralResourceReward, isZCNeutralResourceId, neutralResourceRewardOf,
+    type ZCNeutralResourceId, type ZCNeutralResourceReward,
+} from '../ZCNeutralResourceReward';
 import { drawPvpTile, type ZCPvpTileType } from '../ZCPvpTileRules';
 import { tileTypeFromLegacyHex } from '../ZCSnapshotCodec';
 import { ZCEconomySystem } from './ZCEconomySystem';
@@ -15,6 +18,14 @@ export interface IZCDevelopmentContext {
     setGold(owner: ZCOwner, amount: number): void;
     unitCount(owner: ZCOwner): number;
     spawnUnit(owner: ZCOwner, card: ZCDeckCard, tier: number, hexId: number): void;
+    /**
+     * 中立资源奖励**已入袋**那一拍的表现通知（金币 / 充能 / 产兵任一发生即回调一次）。
+     *
+     * 通知发生在 `neutralResourceId` 被清空**之前**（`grantNeutralResourceReward` 内部），
+     * 快照里那一格还是「带资源的格子」—— 渲染层要靠 hexId + resourceId 播飞行特效，
+     * 而领取后的快照里这两个信息都不在了，所以必须在发奖拍补齐。
+     */
+    onNeutralReward?(hexId: number, resourceId: ZCNeutralResourceId, owner: ZCOwner, reward: ZCNeutralResourceReward): void;
 }
 
 export interface IZCDevelopmentResult {
@@ -85,7 +96,8 @@ export class ZCDevelopmentSystem {
     }
 
     static claimAdjacentNeutralResources(state: ZCSnapshot, map: ZCMatchMap,
-        owners: readonly ZCOwner[], context: IZCDevelopmentContext, onClaim: () => void): void {
+        owners: readonly ZCOwner[], context: IZCDevelopmentContext,
+        onClaim: (hexId: number, resourceId: ZCNeutralResourceId) => void): void {
         for (const hex of state.hexes) {
             if (!hex.neutralResourceId || hex.developmentResolved) continue;
             const config = map.hexes[hex.id];
@@ -103,8 +115,10 @@ export class ZCDevelopmentSystem {
             hex.wallBreachedEdge = null;
             this.grantNeutralResourceReward(state, claimant, hex, context);
             // Clearing the marker is the single-use guard and hides the resource icon.
+            // resourceId 先于清空捕获：回调（模型）要靠它决定表现（金矿的「建筑被开发」）。
+            const resourceId = hex.neutralResourceId;
             hex.neutralResourceId = null;
-            onClaim();
+            onClaim(hex.id, resourceId);
         }
     }
 
@@ -112,6 +126,12 @@ export class ZCDevelopmentSystem {
         hex: ZCHexState, context: IZCDevelopmentContext): void {
         const reward = neutralResourceRewardOf(hex.neutralResourceId);
         if (!hasNeutralResourceReward(reward)) return;
+        // 表现通知先于「清空标记」发出：`onNeutralReward` 的消费方（模型）要靠 hexId +
+        // resourceId 对齐视图，领取后的快照里这两样都不在了。
+        const resourceId = hex.neutralResourceId;
+        if (resourceId && isZCNeutralResourceId(resourceId)) {
+            context.onNeutralReward?.(hex.id, resourceId, owner, reward);
+        }
         if (reward.gold > 0) context.setGold(owner, context.goldOf(owner) + reward.gold);
         if (reward.artifactCharge > 0) {
             state.artifactCharge = Math.max(0, state.artifactCharge) + reward.artifactCharge;

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
     configureZCMap,
@@ -34,6 +35,10 @@ const SELECT_LAYOUT: ZCMapLayout = {
         '22222222', '22222202', '22222222', '22222222',
         '11111111', '11111111', '10111111', '11111111',
     ],
+    homeCandidates: [
+        { section: 1, cells: Array.from({ length: 32 }, (_, index) => index + 32) },
+        { section: 2, cells: Array.from({ length: 32 }, (_, index) => index) },
+    ],
     resourcePoints: [
         { row: 6, column: 1, pool: { gold: 1, chest: 3 } },
         { row: 1, column: 6, pool: { mine: 2 } },
@@ -65,6 +70,69 @@ function makeMap(layout: ZCMapLayout = SELECT_LAYOUT): ZCMatchMap {
 function sequence(...values: number[]): () => number {
     return () => values.shift() ?? 0;
 }
+
+test('select maps require candidate cells for every player section', () => {
+    const partialLayout = { ...SELECT_LAYOUT, homeCandidates: [{ section: 2, cells: [0] }] };
+    assert.throws(
+        () => configureZCMap(partialLayout),
+        /主城候选范围必须覆盖所有分区/,
+    );
+    assert.throws(
+        () => new ZCSpawnSelection({ ...makeMap(), homeCandidates: partialLayout.homeCandidates }, sequence(0)),
+        /player 未配置可选主城区域/,
+    );
+});
+
+test('三张河道自选主城地图都按各自前中后区并集限制游戏内落点', () => {
+    for (const file of ['river_custom.json', 'river_custom_new.json', 'select_river.json']) {
+        const layout = JSON.parse(readFileSync(`assets/resources/config/maps/${file}`, 'utf8')) as ZCMapLayout;
+        const selection = new ZCSpawnSelection(makeMap(layout), sequence(0));
+        for (const [owner, section] of [['player', 1], ['enemy', 2]] as const) {
+            const zoneCells = layout.regions?.filter((region) => region.section === section)
+                .flatMap((region) => region.cells) ?? [];
+            assert.ok(zoneCells.length, `${file} 缺少 ${section} 区前 / 中 / 后区域`);
+            const resourceCells = new Set((layout.resourcePoints ?? []).map((point) => point.row * layout.columns + point.column));
+            const expected = zoneCells.filter((id) => !resourceCells.has(id)).sort((a, b) => a - b);
+            assert.deepEqual(
+                selection.legalHexes(owner, false).sort((a, b) => a - b),
+                expected,
+                `${file} ${section} 区应允许所有未被资源占用的前 / 中 / 后区域格`,
+            );
+            const selectedHexId = selection.snapshot.selections[owner].selectedHexId;
+            if (selectedHexId !== null) {
+                assert.ok(expected.includes(selectedHexId), `${file} ${section} 区的预置主城必须落在纵深区域内`);
+            }
+        }
+    }
+});
+
+test('配置了前中后区时主城候选范围取区域并集并覆盖旧 homeCandidates 字段', () => {
+    const layout: ZCMapLayout = {
+        ...SELECT_LAYOUT,
+        regions: [
+            { section: 1, depth: 'front', cells: [55] },
+            { section: 1, depth: 'back', cells: [56] },
+            { section: 2, depth: 'mid', cells: [0, 1] },
+        ],
+        homeCandidates: [
+            { section: 1, cells: [56] },
+            { section: 2, cells: [0] },
+        ],
+    };
+    const selection = new ZCSpawnSelection(makeMap(layout), sequence(0));
+
+    assert.deepEqual(selection.legalHexes('player', false).sort((a, b) => a - b), [55, 56]);
+    assert.match(selection.invalidReason('player', 57) ?? '', /前.?中.?后|区域/);
+    assert.equal(selection.select('player', 55).ok, true, '不在旧候选列表里的区域格仍可选');
+});
+
+test('自选主城地图没有纵深区域或旧候选配置时拒绝进入选点', () => {
+    const map = makeMap();
+    assert.throws(
+        () => new ZCSpawnSelection({ ...map, regions: [], homeCandidates: [] }, sequence(0)),
+        /player 未配置可选主城区域/,
+    );
+});
 
 test('玩家确认会把全局窗口压到 3 秒，AI 在 1 秒后跟随确认', () => {
     const selection = new ZCSpawnSelection(makeMap(), sequence(0.9, 0.25, 0.8, 0));

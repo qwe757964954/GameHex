@@ -1,7 +1,9 @@
 // 收场表现的共用参数真源（core 无 cc，用例可直连）；以前是从 ZCHexView 的别名读的。
 import {
-    HEX_PULSE_CYCLE_SECONDS,
-    HEX_PULSE_MAX_SCALE,
+    HEX_PULSE_FRAME_COUNT,
+    HEX_PULSE_FRAME_HIDDEN,
+    HEX_PULSE_FRAME_SECONDS,
+    HEX_PULSE_WAVE_SECONDS,
     HEX_SHRINK_MIN_SCALE,
     hexPulseFx,
 } from '../assets/script/core/hex/HexFlipPresentation';
@@ -220,53 +222,68 @@ const atCard = (card: number): number =>
  */
 const atCardBoundary = (card: number): number => atCard(card) + 1e-9;
 
-test('hexActivationFx：点击动画段「波纹向外扩散 ∥ 原地缩没」——相位随秒线性走、格根缩放单调收下去，不抬起、不再有圆环', () => {
+test('hexActivationFx：点击动画段「阶段 1 只脉冲（格子带 UI 不动）→ 阶段 2 才缩没」——5 帧按 10fps 推进、播完退场，不抬起、不再有圆环', () => {
     const mod = loadViews().load('./ZCHexView');
     const fx = mod.hexActivationFx as (progress: number) => any;
-    // 周期与终值是观感调参 ⇒ 从模块读，不把数值钉死在断言里。
-    assert.ok(HEX_PULSE_CYCLE_SECONDS > 0 && HEX_PULSE_CYCLE_SECONDS <= ZC_HEX_PULSE_SECONDS,
-        '点击动画段至少要装得下一道波纹（口径已定成「只播一次」⇒ 正好等于）');
-    // 🔴 row16：「脉冲效果从缩小改成向外扩散消失，最大扩散 1.25 个单位格子大小」⇒ 峰值必须**往外扩**
-    // （> 1）。哪天有人把它改回「比 1 小的下探收缩」，这条立刻红。
-    assert.ok(HEX_PULSE_MAX_SCALE > 1 && HEX_PULSE_MAX_SCALE <= 1.5,
-        `扩散峰值必须是往外扩的倍数，实际 ${HEX_PULSE_MAX_SCALE}`);
+    // 波必须装得进点击动画段（段长 0.7s、波 0.5s）；装不下就会被段末硬切（一道波没播完就没了）。
+    assert.ok(HEX_PULSE_WAVE_SECONDS > 0 && HEX_PULSE_WAVE_SECONDS <= ZC_HEX_PULSE_SECONDS,
+        `一道波（${HEX_PULSE_WAVE_SECONDS}s）必须装得进点击动画段（${ZC_HEX_PULSE_SECONDS}s）`);
     // 负进度（= 无激活 / 未开始 / 已过期）：常规定格，建筑可见。
     assertIdleFx(fx(-1));
-    // 起拍相位 0：波纹从头开始（帧号 0）—— 原位、原尺寸、不虚化，建筑还没长出来。
+    // 起拍：第 0 帧（波贴在本体边缘），建筑还没长出来。
     const start = fx(0);
     assert.equal(start.hidden, false);
     assert.equal(start.tileLift, 0, '点击动画不抬起');
     assert.equal(start.tileFlip, 1);
     assert.equal(start.tileScale, 1);
     assert.equal(start.buildingPopScale, 0, '刚起拍建筑还没长出来');
-    assert.equal(start.pulsePhase, 0, '起拍相位 0 = 序列帧第一张');
-    assert.equal(start.pulseScale, 1, '🔴 起拍还没扩散：波纹就是原尺寸（= 1 个格子大小）');
-    assert.equal(start.pulseFade, 0, '🔴 起拍外缘还不虚化');
+    assert.equal(start.pulsePhase, 0, '起拍进度 0');
+    assert.equal(start.pulseFrame, 0, '起拍 = 序列帧第一张');
+    // 🔴 2026-10-19 新美术口径：放大与淡出**烘焙在图里**，曲线层不许再算一遍
+    // （算两遍就是二次放大、二次虚化）。这两个字段已从 `IZCHexFlipFx` 删掉。
+    assert.equal('pulseScale' in start, false, '扩散已烘焙进图，曲线层不再产出 pulseScale');
+    assert.equal('pulseFade' in start, false, '虚化已烘焙进图，曲线层不再产出 pulseFade');
     // 🔴 山猫「中间有个圆圆的圈圈影响视觉」（2026-10-15）：脉冲段**不许再产出圆环**。
     assert.equal(start.glowRadius, 0, '脉冲段不再有 glow 圆环');
     assert.equal(start.glowAlpha, 0);
 
-    // 周期中点：波纹已扩出去、外缘开始虚化；位置不动。
-    const peak = fx(atClick(HEX_PULSE_CYCLE_SECONDS / 2));
-    assert.equal(peak.tileLift, 0, '点击动画全程不抬起');
-    assert.equal(peak.hidden, false);
-    assert.ok(Math.abs(peak.pulsePhase - 0.5) < 1e-6, `周期中点相位应为 0.5，实际 ${peak.pulsePhase}`);
-    // 🔴 格根的缩放**只剩缩没那一份**（脉冲不再缩格）：半轮时 = `shrinkScaleAt(0.5)`。
-    assert.ok(peak.tileScale < 1 && peak.tileScale > HEX_SHRINK_MIN_SCALE,
-        `点击动画段整格的收小只由缩没负责，应落在 (${HEX_SHRINK_MIN_SCALE}, 1)，实际 ${peak.tileScale}`);
-    assert.ok(peak.pulseScale > 1, `🔴 半轮时波纹应已向外扩散，实际 ${peak.pulseScale}`);
-    assert.ok(peak.pulseFade > 0, `🔴 半轮时外缘应已开始虚化，实际 ${peak.pulseFade}`);
+    // 逐帧推进：0.1s/帧，帧号严格按拍走（不是按进度连续插值 —— 图只有 5 张）。
+    for (let index = 0; index < HEX_PULSE_FRAME_COUNT; index += 1) {
+        const seconds = index * HEX_PULSE_FRAME_SECONDS + HEX_PULSE_FRAME_SECONDS / 2;
+        const sample = fx(atClick(seconds));
+        assert.equal(sample.pulseFrame, index,
+            `t=${seconds.toFixed(2)}s 应播第 ${index} 帧（10fps），实际 ${sample.pulseFrame}`);
+        // 整格全程在缩（缩没与脉冲并发），但**只缩不抬**。
+        assert.equal(sample.tileLift, 0, '点击动画全程不抬起');
+        assert.equal(sample.hidden, false);
+    }
 
-    // 位置恒等于布局原位（不抬起 = y 不动），相位线性跟秒走。
-    const a = fx(atClick(HEX_PULSE_CYCLE_SECONDS * 0.3));
-    const b = fx(atClick(HEX_PULSE_CYCLE_SECONDS * 0.7));
-    assert.equal(a.tileLift, 0);
-    assert.equal(b.tileLift, 0);
-    assert.ok(Math.abs(a.pulsePhase - 0.3) < 1e-6, `相位必须线性跟秒走，实际 ${a.pulsePhase}`);
-    assert.ok(Math.abs(b.pulsePhase - 0.7) < 1e-6, `相位必须线性跟秒走，实际 ${b.pulsePhase}`);
+    // 第五帧之后（0.5s 起）波**直接消失**：不是继续举着末帧当静止波（需求 §七.3）。
+    const afterWave = fx(atClick(HEX_PULSE_WAVE_SECONDS));
+    assert.equal(afterWave.pulseFrame, HEX_PULSE_FRAME_HIDDEN, '波走完就该退场，不许停在末帧');
+    assert.equal(afterWave.pulsePhase, 1, '退场后进度钉在 1（这一段仍归脉冲管，视图据此不再走开口光）');
+    // 退场只关「波」，格子还在缩 —— 点击动画段要到 `ZC_HEX_PULSE_SECONDS` 才收干净。
+    assert.ok(afterWave.tileScale < 1 && afterWave.tileScale > HEX_SHRINK_MIN_SCALE,
+        `波退场时缩没还没走完，应落在 (${HEX_SHRINK_MIN_SCALE}, 1)，实际 ${afterWave.tileScale}`);
 
-    // 🔴 「同步播放」的判据：整段**格根**缩放**单调收下去**。若哪天退回串行（先脉冲、再缩没），
-    // 这条会红：那时前半段的 `tileScale` 会停在 1 不动（缩没还没起）。
+    // 🔴 两阶段的判据（2026-10-19 用户口径）：
+    //   阶段 1 `[0, 阶段 2 起点)` —— 格子连 UI **原样不动**（`tileScale` 恒 1），只有波在长；
+    //   阶段 2 起点之后 —— 才开始缩。起点 = 脉冲**中间帧**（第 2 帧）的开始时刻 0.2s。
+    const shrinkStart = 0.2;
+    for (const seconds of [0, 0.05, 0.1, 0.15, shrinkStart - 1e-6]) {
+        assert.equal(fx(atClick(seconds)).tileScale, 1,
+            `阶段 1（t=${seconds}s）格子必须原尺寸不动 —— 带 UI 的格子要留给玩家看清楚`);
+    }
+    // 刚进阶段 2 那一刻还基本是原尺寸（easeInCubic 起手很慢），随后明显缩下去。
+    assert.ok(fx(atClick(shrinkStart)).tileScale > 0.995,
+        '阶段 2 起点应几乎还没缩（曲线起手慢），实际 ' + fx(atClick(shrinkStart)).tileScale);
+    // ⚠️ 别用 0.1s 就要求「明显缩」：`hexShrinkFx` 是 easeInCubic（前半几乎不动），
+    // 跨度 0.5s 时 t=0.1s 才收到 0.9928。0.15s 才看得出（0.9757）。
+    assert.ok(fx(atClick(shrinkStart + 0.15)).tileScale < 0.99,
+        `阶段 2 开始 0.15s 后必须看得见在缩，实际 ${fx(atClick(shrinkStart + 0.15)).tileScale}`);
+
+    // 🔴 整段**格根**缩放**单调不增**；若哪天退回「两段并发」，阶段 1 那截就会从头开始缩，
+    // 上面那组「恒 1」立刻红。
     let previous = Infinity;
     for (const ratio of [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.999]) {
         const scale = fx(atClick(ZC_HEX_PULSE_SECONDS * ratio)).tileScale;
@@ -275,76 +292,74 @@ test('hexActivationFx：点击动画段「波纹向外扩散 ∥ 原地缩没」
         previous = scale;
     }
 
-    // 🔴 扩散判据（row16）：`pulseScale` 与 `pulseFade` **都单调增**（1 → 1.25、0 → 1）。
-    // 这两项写的是**波纹层**，格根的 `tileScale` 一根手指都不许碰 —— 脉冲一旦回退成「缩格根」，
-    // 上面那条单调性就会跟着变形。
-    let lastScale = -Infinity;
-    let lastFade = -Infinity;
-    for (const ratio of [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.999]) {
-        const sample = fx(atClick(ZC_HEX_PULSE_SECONDS * ratio));
-        assert.ok(sample.pulseScale >= lastScale - 1e-9,
-            `波纹扩散必须单调不缩（t = 段长的 ${ratio} 倍），实际 ${sample.pulseScale} < ${lastScale}`);
-        assert.ok(sample.pulseFade >= lastFade - 1e-9,
-            `外缘虚化必须单调加深（t = 段长的 ${ratio} 倍），实际 ${sample.pulseFade} < ${lastFade}`);
-        lastScale = sample.pulseScale;
-        lastFade = sample.pulseFade;
-    }
-
-    // 段末：缩没走完了 ⇒ 整格收到 `HEX_SHRINK_MIN_SCALE`（两段同起同收的落点），波纹扩散到峰值、
-    // 外缘最虚；但**仍是可见的** —— 进入隐藏段要等卡牌段（见下一条用例）。
+    // 段末：缩没走完了 ⇒ 整格收到 `HEX_SHRINK_MIN_SCALE`（两段同起同收的落点），波早已退场；
+    // 但**格子仍是可见的** —— 进入隐藏段要等卡牌段（见下一条用例）。
     const end = fx(atClick(ZC_HEX_PULSE_SECONDS * 0.999));
     assert.equal(end.hidden, false, '段末还不隐藏，隐藏要等卡牌段');
-    assert.ok(end.pulsePhase > 0.9, `段末相位应逼近 1（播到最后一帧），实际 ${end.pulsePhase}`);
     assert.ok(Math.abs(end.tileScale - HEX_SHRINK_MIN_SCALE) < 0.02,
         `段末应已收到 ${HEX_SHRINK_MIN_SCALE}（缩没与脉冲同时收干净），实际 ${end.tileScale}`);
-    assert.ok(Math.abs(end.pulseScale - HEX_PULSE_MAX_SCALE) < 0.01,
-        `段末波纹应扩到峰值 ${HEX_PULSE_MAX_SCALE}，实际 ${end.pulseScale}`);
-    assert.ok(end.pulseFade > 0.99, `段末外缘应最虚，实际 ${end.pulseFade}`);
+    assert.equal(end.pulseFrame, HEX_PULSE_FRAME_HIDDEN, '段末波一直保持退场（不退回去举着末帧）');
 });
 
 /**
- * 「只播一次」下**段内不再有周期边界**（原来 2 道波时 `t = 周期` 会回绕到下一道）。
+ * 曲线层：**5 帧等宽推进**（每帧 0.1s），走完就退场，且**永不写格根缩放**。
  *
- * 相位回绕本身仍是 `hexPulseFx` 的固有行为（给「以后要几道波」留的），
- * 所以在**曲线层**钉一条：整数周期处相位回到 0（扩散与虚化也跟着回到起点）。
- *
- * 🔴 同时钉死 row16 的核心改动：**脉冲曲线一根手指都不许碰格根**（`tileScale` 恒 1）——
- * 整格的收小归缩没段，需求「其他阶段的动画保持不变」就落在这一条上。
+ * 三条都是「换美术之后最容易悄悄改坏」的地方：
+ *   · 帧宽写成非等宽（比如按 `round` 取帧）⇒ 第 0 帧只占半拍，起波那一下会读成闪一下；
+ *   · 播完不回退场 ⇒ 段内剩下 0.2s 举着一张 15% 的末帧当「静止波」；
+ *   · 曲线顺手把 `tileScale` 写成 0.92 之类的「呼吸」⇒ 格根缩放和缩没段打架（row16 明令禁止）。
  */
-test('hexPulseFx：相位按周期回绕（整数周期 = 相位 0、扩散回到原尺寸），且永不写格根缩放', () => {
+test('hexPulseFx：5 帧按帧宽等宽推进、0.5s 后波退场，且永不写格根缩放', () => {
     const fx = hexPulseFx as (seconds: number) => any;
-    assert.ok(Math.abs(fx(0).pulsePhase) < 1e-9, '起点相位 0');
-    const boundary = fx(HEX_PULSE_CYCLE_SECONDS);
-    assert.ok(boundary.pulsePhase < 1e-6 || boundary.pulsePhase > 1 - 1e-6,
-        `整数周期处相位必须回绕，实际 ${boundary.pulsePhase}`);
-    assert.ok(Math.abs(boundary.pulseScale - 1) < 1e-6, `整数周期处扩散回到原尺寸，实际 ${boundary.pulseScale}`);
-    assert.ok(Math.abs(boundary.pulseFade) < 1e-6, `整数周期处外缘回到不虚化，实际 ${boundary.pulseFade}`);
-    // 相位在 [0,1) 之间扫一遍（含周期回绕的前后），格根缩放必须恒 1。
-    for (let seconds = 0; seconds < HEX_PULSE_CYCLE_SECONDS * 2; seconds += 0.013) {
+    assert.equal(fx(0).pulseFrame, 0, '起点 = 第 0 帧');
+    // 每帧正中与每帧边界各验一次（边界取「刚好进去」，用 1e-6 避开浮点尾差）。
+    for (let index = 0; index < HEX_PULSE_FRAME_COUNT; index += 1) {
+        const middle = (index + 0.5) * HEX_PULSE_FRAME_SECONDS;
+        assert.equal(fx(middle).pulseFrame, index,
+            `t=${middle.toFixed(3)}s 应落在第 ${index} 帧，实际 ${fx(middle).pulseFrame}`);
+        const edge = index * HEX_PULSE_FRAME_SECONDS + 1e-6;
+        assert.equal(fx(edge).pulseFrame, index,
+            `帧边界 t=${edge.toFixed(6)}s 应已进入第 ${index} 帧，实际 ${fx(edge).pulseFrame}`);
+    }
+    // 一道波 = 帧数 × 帧宽（需求 §六：5 × 0.1s）。
+    assert.ok(Math.abs(HEX_PULSE_WAVE_SECONDS - HEX_PULSE_FRAME_COUNT * HEX_PULSE_FRAME_SECONDS) < 1e-9,
+        `一道波必须等于 帧数 × 帧宽，实际 ${HEX_PULSE_WAVE_SECONDS}`);
+    // 帧宽落在需求给的微调区间内（0.08~0.12s；10fps = 0.1）。
+    assert.ok(HEX_PULSE_FRAME_SECONDS >= 0.08 && HEX_PULSE_FRAME_SECONDS <= 0.12,
+        `帧宽必须落在 0.08~0.12s（美术按 10fps 出的图），实际 ${HEX_PULSE_FRAME_SECONDS}`);
+
+    // 走完就退场，且**不回到第 0 帧**（回去就是「循环」而不是「点击反馈播一次」）。
+    assert.equal(fx(HEX_PULSE_WAVE_SECONDS).pulseFrame, HEX_PULSE_FRAME_HIDDEN, '波走完必须退场');
+    assert.equal(fx(HEX_PULSE_WAVE_SECONDS * 3).pulseFrame, HEX_PULSE_FRAME_HIDDEN,
+        '段内剩下的时间里不许再把波放出来（一次性，不是循环）');
+
+    // 全程：格根缩放恒 1、不产出圆环、帧号只允许单调不增地走到退场。
+    let lastFrame = 0;
+    for (let seconds = 0; seconds < ZC_HEX_PULSE_SECONDS; seconds += 0.01) {
         const sample = fx(seconds);
         assert.equal(sample.tileScale, 1,
             `脉冲曲线不许缩格根（t=${seconds.toFixed(3)}s 得到 ${sample.tileScale}）—— 收小由缩没段负责`);
-        assert.ok(sample.pulseScale >= 1 && sample.pulseScale <= HEX_PULSE_MAX_SCALE + 1e-9,
-            `扩散倍率必须落在 [1, ${HEX_PULSE_MAX_SCALE}]，实际 ${sample.pulseScale}`);
-        assert.ok(sample.pulseFade >= 0 && sample.pulseFade <= 1,
-            `虚化强度必须落在 [0,1]，实际 ${sample.pulseFade}`);
+        assert.equal(sample.glowRadius, 0, '脉冲段不画圆环');
+        const frame = sample.pulseFrame;
+        assert.ok(frame === HEX_PULSE_FRAME_HIDDEN || frame >= lastFrame,
+            `帧号只能往前走（t=${seconds.toFixed(3)}s 得到 ${frame}，上一拍 ${lastFrame}）`);
+        if (frame !== HEX_PULSE_FRAME_HIDDEN) lastFrame = frame;
     }
 });
 
 /**
- * 🔴 口径（2026-10-15 v3「播放改成一次」+ v4「脉冲 + 缩没两段都要」+ row13「两段同步播放」）：
- * 点击动画 = **恰好 1 道完整的波纹**（`HEX_PULSE_CYCLE_SECONDS` = 0.7s / 30 帧 ≈ 43fps）
- * **同时**把整格原地缩没，两者同起同收 ⇒ 点击动画就是 0.7s；之后接卡牌段 1.156s，
- * 总长 = **1.856s**。
- * 卡牌 / 首批兵都锚在 `ZC_CARD_START_SECONDS`（= 点击动画结束）上 ⇒ 改「几道波 / 多快」
- * 只动 `HEX_PULSE_CYCLE_SECONDS`（段长与缩没跨度都跟着它）。
+ * 🔴 口径（2026-10-15 row13「脉冲 ∥ 缩没 同步播放」+ 2026-10-19「换 5 帧美术」）：
+ * 点击动画段长 **0.7s 不变** —— 它决定卡牌什么时候弹、首批兵什么时候站上来，是时间轴的锚；
+ * 换美术只换「段里那道波」（0.5s / 5 帧 / 10fps），不改段长。
+ * ⇒ 卡牌段 1.156s 接在 0.7s 后，总长仍是 **1.856s**。
  */
-test('hexActivationFx：点击动画 = 1 个波纹周期（只播一次），且比旧的 1s 周期更快', () => {
-    assert.ok(HEX_PULSE_CYCLE_SECONDS < 1, `山猫要「稍微加快」，周期必须短于旧的 1s，实际 ${HEX_PULSE_CYCLE_SECONDS}`);
-    assert.equal(ZC_HEX_PULSE_SECONDS, HEX_PULSE_CYCLE_SECONDS,
-        '🔴 山猫口径「播放改成一次」：点击动画 = 1 道波纹，不多不少');
-    // 🔴 row13「同步播放」：缩没跨度必须跟着脉冲走 —— 收得比波快会长出「格子没了、波还在扩」的空窗。
-    assert.equal(ZC_HEX_SHRINK_SECONDS, ZC_HEX_PULSE_SECONDS, '缩没与脉冲同起同收');
+test('hexActivationFx：点击动画段长恒 0.7s（波 0.5s 装在里面），总长仍是 1.856s', () => {
+    assert.ok(Math.abs(ZC_HEX_PULSE_SECONDS - 0.7) < 1e-9,
+        `点击动画段长必须保持 0.7s（卡牌的锚），实际 ${ZC_HEX_PULSE_SECONDS}`);
+    assert.ok(HEX_PULSE_WAVE_SECONDS < ZC_HEX_PULSE_SECONDS,
+        `波（${HEX_PULSE_WAVE_SECONDS}s）比段短 ⇒ 段尾那截只剩缩没，不许把段改短`);
+    // 🔴 row13「同步播放」：缩没跨度必须跟着**段长**走（不是跟波走）—— 否则会长出「格子没了、波还在扩」的空窗。
+    assert.equal(ZC_HEX_SHRINK_SECONDS, ZC_HEX_PULSE_SECONDS, '缩没与脉冲段同起同收');
     assert.equal(ZC_CARD_START_SECONDS, ZC_HEX_PULSE_SECONDS, '卡牌在点击动画结束那一刻接棒');
     assert.ok(Math.abs(ZC_HEX_ACTIVATION_SECONDS - 1.856) <= 1e-9,
         `需求口径：卡牌淡出结束 = 点击动画 0.7 + 卡牌 1.156 = 1.856s，实际 ${ZC_HEX_ACTIVATION_SECONDS}`);
@@ -395,7 +410,7 @@ test('hexActivationFx：没有卡牌时点击动画播完直接回常规定格�
     const fx = mod.hexActivationFx as (progress: number, hasCardReveal?: boolean) => any;
 
     // 点击动画中段：仍然可见（脉冲 ∥ 缩没都在跑），建筑未长出。
-    const mid = fx(atClick(HEX_PULSE_CYCLE_SECONDS / 2), false);
+    const mid = fx(atClick(HEX_PULSE_WAVE_SECONDS / 2), false);
     assert.equal(mid.hidden, false);
     assert.ok(mid.tileScale < 1, '无卡时点击动画照样要缩（两段都要）');
     assert.equal(mid.buildingPopScale, 0, '点击动画里建筑还没长出来');
@@ -463,7 +478,7 @@ test('renderActivation：点击动画位置恒在布局原位、只有缩放在�
     const activation = { id: 1, hexId: 7, startedAt: 10, durationSeconds: ZC_HEX_ACTIVATION_SECONDS };
 
     // 点击动画中段：位置完全不动（不抬起），只有缩放在收（脉冲 ∥ 缩没两条曲线的乘积）。
-    view.renderActivation(activation, 10 + HEX_PULSE_CYCLE_SECONDS / 2);
+    view.renderActivation(activation, 10 + HEX_PULSE_WAVE_SECONDS / 2);
     assert.equal(view.node.position.y, 500, '点击动画不抬起，y 必须留在布局位置');
     assert.equal(view.node.position.x, 300, '点击动画也不动 x');
     assert.ok(view.node.scale.x < 1 && view.node.scale.x > HEX_SHRINK_MIN_SCALE,
@@ -536,7 +551,7 @@ test('对局全程不挂翻转材质：底图 customMaterial 恒为 null，视�
 
     const moments = [
         0,
-        HEX_PULSE_CYCLE_SECONDS / 2,
+        HEX_PULSE_WAVE_SECONDS / 2,
         ZC_HEX_PULSE_SECONDS * 0.999,
         ZC_HEX_PULSE_SECONDS + ZC_CARD_REVEAL_SECONDS,
         ZC_HEX_ACTIVATION_SECONDS,
@@ -635,8 +650,8 @@ test('底部发光：脉冲段全程熄灭（不抬起 ⇒ 光带永不点亮）
     const activation = { id: 1, hexId: 7, startedAt: 0, durationSeconds: ZC_HEX_ACTIVATION_SECONDS };
 
     // 点击动画段（脉冲 ∥ 缩没，同起同收）取多点（含呼吸峰值）：整段都不抬起 ⇒ 底部光必须全程熄灭。
-    const moments = [0, HEX_PULSE_CYCLE_SECONDS * 0.25, HEX_PULSE_CYCLE_SECONDS / 2,
-        HEX_PULSE_CYCLE_SECONDS * 0.75, ZC_HEX_PULSE_SECONDS * 0.999];
+    const moments = [0, HEX_PULSE_WAVE_SECONDS * 0.25, HEX_PULSE_WAVE_SECONDS / 2,
+        HEX_PULSE_WAVE_SECONDS * 0.75, ZC_HEX_PULSE_SECONDS * 0.999];
     for (const seconds of moments) {
         view.renderActivation(activation, seconds);
         assert.equal(glowNode.active, false, `t=${seconds}s 不抬起，底部光不许点亮`);
@@ -649,13 +664,19 @@ test('底部发光：脉冲段全程熄灭（不抬起 ⇒ 光带永不点亮）
 
     // 没拿到序列帧时整块关掉（注入入口还在，防御路径不回退）。
     view.setGroundGlowFrames([]);
-    view.renderActivation(activation, HEX_PULSE_CYCLE_SECONDS / 2);
+    view.renderActivation(activation, HEX_PULSE_WAVE_SECONDS / 2);
     assert.equal(glowNode.active, false, '没拿到序列帧时整块关掉，不能露出一张半截的图');
 });
 
-// ── 脉冲段的水波纹（2026-10-15 v2 / row16）：中间层播序列帧 + 按类型染色 + 向外扩散虚化 ──
+// ── 脉冲段的序列帧（2026-10-19 换 5 帧美术）：中间层换帧 + 按类型染色 + 一次性播完退场 ──
 
-test('脉冲水波纹：注入序列帧后按相位选帧，没帧时降级为只剩缩没（不报错、不残留）', () => {
+/** 脉冲美术图里「本体六边形」的像素宽高（美术口径 §三），用来算「摊到格面上」的对齐缩放。 */
+const PULSE_ART_BODY_WIDTH = 164;
+const PULSE_ART_BODY_HEIGHT = 142;
+/** 脉冲画布边长（5 帧都是 320×320）。 */
+const PULSE_CANVAS = 320;
+
+test('脉冲序列帧：按 pulseFrame 选帧、播完退场，没帧时降级为只剩缩没（不报错、不残留）', () => {
     const { load, FakeNode } = loadViews();
     const mod = load('./ZCHexView');
     const view = new mod.ZCHexView();
@@ -669,48 +690,66 @@ test('脉冲水波纹：注入序列帧后按相位选帧，没帧时降级为�
         color: { r: 255, g: 255, b: 255, a: 255 },
     };
     view.groundGlow = rippleSprite;
-    // 美术帧 `fkz_00..29`， loader 已按文件名排好序。
-    const frames = Array.from({ length: 30 }, (_, index) => ({ name: `fkz_${String(index).padStart(2, '0')}` }));
+    // 美术帧 `hex_pulse_0..4`，loader 已按文件名排好序。
+    const frames = Array.from({ length: HEX_PULSE_FRAME_COUNT }, (_, index) => ({ name: `hex_pulse_${index}` }));
     view.setHexPulseFrames(frames);
     const activation = { id: 1, hexId: 7, startedAt: 0, durationSeconds: ZC_HEX_ACTIVATION_SECONDS };
 
     view.renderActivation(activation, 0);
     assert.equal(rippleNode.active, true, '脉冲段必须点亮中间层');
-    assert.equal(rippleSprite.spriteFrame, frames[0], '相位 0 = 第一帧');
-    // 一轮下来帧号**单调推进**并走遍首尾：30 帧也正是这么被播完的。
-    const indices: number[] = [0, 0.25, 0.5, 0.75, 0.999].map((ratio) => {
-        view.renderActivation(activation, HEX_PULSE_CYCLE_SECONDS * ratio);
-        return frames.indexOf(rippleSprite.spriteFrame);
-    });
-    assert.ok(indices.every((index, i) => i === 0 || index >= indices[i - 1]),
-        `帧号必须随相位单调推进，实际 ${indices.join(',')}`);
-    // ⚠️ 「周期 → 秒 → 相位」两步反推会留 ~1e-15 尾差（0.5 那拍算出来可能是 0.49999…），
-    // 帧号又走 floor ⇒ 允许比「正中」少一帧，别用裸相等（rule 244：假红先怀疑判据）。
-    assert.ok(Math.abs(indices[2] - Math.floor(frames.length / 2)) <= 1,
-        `半轮应落在正中那一帧 ±1 内，实际 ${indices[2]}`);
-    assert.equal(indices[4], frames.length - 1, '相位逼近 1 = 最后一帧');
-    // 波纹落点钉在**可见台面中心**：写 0 会整道偏到格底（台面中心不在格节点原点）。
-    // 🔴 row16：波纹挂在**格根**上、而格根正被缩没收小 ⇒ 局部 y 要按格根缩放**反补**，
+    assert.equal(rippleSprite.spriteFrame, frames[0], '第 0 拍 = 第一帧');
+
+    // 逐拍推进：帧号严格跟着 10fps 走（0/0.1/0.2/0.3/0.4 各一张），且全程只有**一张**在显示。
+    for (let index = 0; index < HEX_PULSE_FRAME_COUNT; index += 1) {
+        view.renderActivation(activation, (index + 0.5) * HEX_PULSE_FRAME_SECONDS);
+        assert.equal(rippleSprite.spriteFrame, frames[index],
+            `t=${((index + 0.5) * HEX_PULSE_FRAME_SECONDS).toFixed(2)}s 应显示第 ${index} 帧`);
+        assert.equal(rippleNode.active, true, '波还在播时中间层必须亮着');
+    }
+
+    // 波落点钉在**可见台面中心**：写 0 会整道偏到格底（台面中心不在格节点原点）。
+    // 🔴 波挂在**格根**上、而格根正被缩没收小 ⇒ 局部 y 要按格根缩放**反补**，
     // 世界落点才恒等于台面中心（判据用「局部 y × 格根缩放」而不是裸的局部 y）。
     assert.ok(Math.abs(rippleNode.position.y * view.node.scale.x - ZC_LAND_TOP_CENTER_LIFT) < 1e-6,
-        `波纹世界落点必须钉在台面中心，实际 ${rippleNode.position.y * view.node.scale.x}`);
+        `波的落点必须钉在台面中心，实际 ${rippleNode.position.y * view.node.scale.x}`);
 
-    // 🔴 2026-10-15 v3/v4 + row13：点击动画 = **1 道波 ∥ 原地缩没**（同起同收）⇒ 段内没有周期边界
-    // 可回绕，段末那一拍播的是最后一帧；波纹与缩没一起收干净，之后才进卡牌段的整格隐藏。
-    view.renderActivation(activation, ZC_HEX_PULSE_SECONDS * 0.5);
-    assert.equal(rippleNode.active, true, '点击动画段内波纹全程在播（与缩没并发）');
-    assert.ok(view.node.scale.x < 1, `缩没与脉冲并发 ⇒ 中段整格已在缩，实际 ${view.node.scale.x}`);
-    view.renderActivation(activation, ZC_HEX_PULSE_SECONDS * 0.999);
-    assert.equal(rippleSprite.spriteFrame, frames[frames.length - 1], '段末播到最后一帧');
-    // 点击动画播完 → 卡牌段：波纹退场 + 整格隐藏（缩没已把格子收干净）。
+    // 🔴 对齐缩放：把图上 164×142 的本体摊成格面 123×90，x / y 分开算（本项目格面比正六边形扁）。
+    // 判据取「有效缩放（局部 × 格根）」—— 这样即使缩没在收，读出来的仍是图到格面的固定换算。
+    const effectiveX = (): number => rippleNode.scale.x * view.node.scale.x;
+    const effectiveY = (): number => rippleNode.scale.y * view.node.scale.y;
+    assert.ok(Math.abs(effectiveX() - 123 / PULSE_ART_BODY_WIDTH) < 1e-6,
+        `x 向必须把 164px 的本体摊成格面宽 123，实际 ${effectiveX()}`);
+    assert.ok(Math.abs(effectiveY() - 90 / PULSE_ART_BODY_HEIGHT) < 1e-6,
+        `y 向必须把 142px 的本体摊成格面高 90，实际 ${effectiveY()}`);
+    // 需求 §七.7：节点上不额外叠 scale 动画 ⇒ 5 帧全程同一个缩放（图里已经放大了）。
+    const sx = effectiveX();
+    const sy = effectiveY();
+    view.renderActivation(activation, HEX_PULSE_WAVE_SECONDS * 0.7);
+    assert.ok(Math.abs(effectiveX() - sx) < 1e-6 && Math.abs(effectiveY() - sy) < 1e-6,
+        '对齐缩放必须恒定，不许随帧再放大一次（放大了两遍）');
+
+    // 节点 contentSize 按整张 320 画布给：只给格面尺寸会把波挤扁。
+    assert.equal(rippleNode.size.width, PULSE_CANVAS, '脉冲层画布宽 = 320');
+    assert.equal(rippleNode.size.height, PULSE_CANVAS, '脉冲层画布高 = 320');
+
+    // 🔴 波走完（0.5s）就退场：中间层关掉，但**格子还在缩**（缩没要到 0.7s 才收干净）。
+    view.renderActivation(activation, HEX_PULSE_WAVE_SECONDS);
+    assert.equal(rippleNode.active, false, '波走完必须直接消失（不举着末帧当静止波）');
+    assert.ok(view.node.scale.x < 1, `缩没与脉冲并发 ⇒ 此刻整格已在缩，实际 ${view.node.scale.x}`);
+
+    // 点击动画播完 → 卡牌段：整格隐藏，脉冲层保持关；离开脉冲段后尺寸 / 缩放归位。
+    view.groundGlowBaseSize = { width: 130, height: 239 };
     view.renderActivation(activation, ZC_CARD_START_SECONDS + 0.01);
-    assert.equal(rippleNode.active, false, '卡牌段波纹退场（只有点击动画那一道波）');
-    assert.equal(rippleNode.scale.x, 1, '离开脉冲段波纹层缩放必须归 1（池化复用不留残影）');
+    assert.equal(rippleNode.active, false, '卡牌段脉冲层保持关闭');
+    assert.equal(rippleNode.scale.x, 1, '离开脉冲段缩放必须归 1（池化复用不留残影）');
+    assert.equal(rippleNode.scale.y, 1);
+    assert.equal(rippleNode.size.width, 130, '离开脉冲段 contentSize 要写回开口光的画布');
+    assert.equal(rippleNode.size.height, 239);
     assert.equal(view.node.active, false, '点击动画结束即切卡牌段：整格隐藏');
 
-    // 没拿到帧：波纹不显示，但缩没照旧（降级不能把整段带走）。
+    // 没拿到帧：中间层不显示，但缩没照旧（降级不能把整段带走）。
     view.setHexPulseFrames([]);
-    view.renderActivation(activation, HEX_PULSE_CYCLE_SECONDS / 2);
+    view.renderActivation(activation, HEX_PULSE_WAVE_SECONDS / 2);
     assert.equal(rippleNode.active, false, '没帧时中间层熄灭');
     assert.ok(view.node.scale.x < 1, '没帧也要继续缩没');
 
@@ -720,186 +759,48 @@ test('脉冲水波纹：注入序列帧后按相位选帧，没帧时降级为�
     assert.equal(rippleNode.position.y, 24);
 });
 
-/**
- * 🔴 row16 需求：「脉冲效果从缩小改成向外扩散消失，最大扩散 1.25 个单位格子大小，扩散的部分虚化，
- * 其他阶段的动画保持不变」。
- *
- * 这一组钉的是**波纹层**（`GroundGlow`）的三件事：
- *  1. **向外扩散**：节点缩放 = `pulseScale / 格根缩放` ⇒ **有效**倍率（×格根缩放）恒等于
- *     `pulseScale`（1 → `HEX_PULSE_MAX_SCALE`）。不抵消父缩放的话，波纹会跟着缩没一起缩 ——
- *     那正是需求要改掉的「缩小」。
- *  2. **外缘虚化**：强度写进脉冲专用材质的 `pulseFade` uniform（径向遮罩在着色器里）。
- *  3. **不打扰其他阶段**：离开脉冲段后波纹层缩放归 1（对象池复用不留残影）。
- */
-test('脉冲水波纹向外扩散：波纹层有效倍率 1 → 1.25 格（抵消缩没）、外缘虚化随扩散加深', () => {
+test('脉冲按卡牌品阶染色：1 绿 / 2 蓝 / 3 紫 / 4 金，没抽到卡（0）也走绿', () => {
     const { load, FakeNode } = loadViews();
     const mod = load('./ZCHexView');
-    const view = new mod.ZCHexView();
-    view.buildingSprite = { node: new FakeNode() };
-    view.node.setPosition(300, 500, 0);
-    const rippleNode = new FakeNode('GroundGlow');
-    rippleNode.active = false;
-    const rippleSprite: any = {
-        node: rippleNode, enabled: true, spriteFrame: null,
-        color: { r: 255, g: 255, b: 255, a: 255 }, customMaterial: null,
-    };
-    view.groundGlow = rippleSprite;
-    view.setHexPulseFrames(Array.from({ length: 30 }, (_, index) => ({ name: `fkz_${index}` })));
-    const activation = { id: 1, hexId: 7, startedAt: 0, durationSeconds: ZC_HEX_ACTIVATION_SECONDS };
+    const tintFor = mod.pulseTintForRarity as (rarity: number) => any;
+    const green = tintFor(1);
+    const blue = tintFor(2);
+    const purple = tintFor(3);
+    const gold = tintFor(4);
+    // 四档必须**两两可分**（否则「按品阶染色」等于没做）。
+    const colors = [green, blue, purple, gold].map((c) => `${c.r},${c.g},${c.b}`);
+    assert.equal(new Set(colors).size, 4, `四档颜色必须互不相同，实际 ${colors.join(' | ')}`);
+    // 色相方向逐个钉：绿要 G 最大、蓝要 B 最大、紫要 R/B 大于 G、金要 R 最大且 G 次之。
+    assert.ok(green.g > green.r && green.g > green.b, `1 档要走绿，实际 ${JSON.stringify(green)}`);
+    assert.ok(blue.b > blue.r && blue.b > blue.g, `2 档要走蓝，实际 ${JSON.stringify(blue)}`);
+    assert.ok(purple.b > purple.g && purple.r > purple.g, `3 档要走紫，实际 ${JSON.stringify(purple)}`);
+    assert.ok(gold.r > gold.g && gold.g > gold.b, `4 档要走金，实际 ${JSON.stringify(gold)}`);
+    // 🔴 用户口径「没有获得卡牌 - 绿色」：0 档与 1 档**同色**（不是另给一套灰）。
+    assert.equal(tintFor(0), green, '没抽到卡必须落绿，且与 1 档是同一份色');
+    // 防御：非数字 / 越界都落绿，不许把 Sprite 染成 NaN 黑。
+    assert.equal(tintFor(Number.NaN), green, 'NaN 落绿');
+    assert.equal(tintFor(99), green, '越界落绿');
 
-    /** 波纹层**有效**倍率（= 局部缩放 × 格根缩放）：需求说的「多少个格子大小」就是这个量。 */
-    const effectiveScale = (): number => rippleNode.scale.x * view.node.scale.x;
-
-    view.renderActivation(activation, 0);
-    assert.ok(Math.abs(effectiveScale() - 1) < 1e-6,
-        `起拍波纹应是原尺寸（1 个格子大小），实际 ${effectiveScale()}`);
-
-    // 逐拍推进：有效倍率单调增、段末抵达 `HEX_PULSE_MAX_SCALE`；同时格根本身在收（缩没照走）。
-    let previous = 0;
-    for (const ratio of [0, 0.2, 0.4, 0.6, 0.8, 0.999]) {
-        view.renderActivation(activation, ZC_HEX_PULSE_SECONDS * ratio);
-        const effective = effectiveScale();
-        assert.ok(effective >= previous - 1e-9,
-            `波纹必须**向外**扩（t=${ratio}×段长），实际 ${effective} < ${previous}`);
-        assert.ok(effective >= 1 - 1e-9 && effective <= HEX_PULSE_MAX_SCALE + 1e-9,
-            `有效倍率必须落在 [1, ${HEX_PULSE_MAX_SCALE}]，实际 ${effective}`);
-        previous = effective;
-    }
-    assert.ok(Math.abs(effectiveScale() - HEX_PULSE_MAX_SCALE) < 0.01,
-        `段末波纹应扩到 ${HEX_PULSE_MAX_SCALE} 个格子大小，实际 ${effectiveScale()}`);
-    // 🔴 「其他阶段的动画保持不变」：格根此刻仍由缩没收到 `HEX_SHRINK_MIN_SCALE`。
-    assert.ok(Math.abs(view.node.scale.x - HEX_SHRINK_MIN_SCALE) < 0.02,
-        `缩没不受影响（段末仍收到 ${HEX_SHRINK_MIN_SCALE}），实际 ${view.node.scale.x}`);
-
-    // 离开脉冲段（卡牌段 / 复位）：波纹层缩放必须回到 1。
-    view.renderActivation(activation, ZC_CARD_START_SECONDS + 0.01);
-    assert.equal(rippleNode.scale.x, 1, '卡牌段波纹层缩放归 1');
-    assert.equal(rippleNode.scale.y, 1);
-    view.renderActivation(null, 99);
-    assert.equal(rippleNode.scale.x, 1, '复位后波纹层缩放仍归 1（池化复用不留残影）');
-});
-
-test('脉冲外缘虚化：强度每帧写进脉冲材质的 pulseFade，各格独占一份材质不互相覆盖', () => {
-    const { load, FakeNode, cc } = loadViews();
-    const mod = load('./ZCHexView');
-    const effect = { name: 'hex-pulse' };
-
-    const makeView = () => {
-        const view = new mod.ZCHexView();
-        view.buildingSprite = { node: new FakeNode() };
-        view.node.setPosition(300, 500, 0);
-        const node = new FakeNode('GroundGlow');
-        node.active = false;
-        const sprite: any = {
-            node, enabled: true, spriteFrame: null,
-            color: { r: 255, g: 255, b: 255, a: 255 }, customMaterial: null,
-        };
-        view.groundGlow = sprite;
-        view.setHexPulseFrames([{ name: 'fkz_00' }]);
-        // 原型材质（渲染层注入的那一份）；`effectAsset` 由桩的 `initialize` 记下来。
-        const prototype = new cc.Material();
-        prototype.initialize({ effectAsset: effect });
-        view.setHexPulseMaterial(prototype);
-        return { view, sprite, prototype };
-    };
-
-    const activation = { id: 1, hexId: 7, startedAt: 0, durationSeconds: ZC_HEX_ACTIVATION_SECONDS };
-    const a = makeView();
-    const b = makeView();
-    /** 当前写进材质的虚化强度（未挂材质 ⇒ NaN）。 */
-    const fadeOf = (target: { sprite: any }): number =>
-        target.sprite.customMaterial?.properties.get('pulseFade')?.x ?? Number.NaN;
-
-    // 起拍：虚化强度 0。
-    a.view.renderActivation(activation, 0);
-    assert.equal(fadeOf(a), 0, '起拍不虚化');
-    // 走到半轮：强度应等于相位（0.5）。
-    a.view.renderActivation(activation, HEX_PULSE_CYCLE_SECONDS / 2);
-    assert.ok(Math.abs(fadeOf(a) - 0.5) < 1e-3, `虚化强度应随相位推进（半轮 ≈ 0.5），实际 ${fadeOf(a)}`);
-
-    // 🔴 各格**独占**一份材质：两个视图写各自的强度，谁也不许盖掉谁。
-    assert.notEqual(a.sprite.customMaterial, b.sprite.customMaterial,
-        '每格必须克隆一份脉冲材质 —— 共用一份时 `pulseFade` 会被后写的那格盖掉');
-    assert.notEqual(a.sprite.customMaterial, a.prototype, '原型只作样式来源，不直接挂上去');
-    b.view.renderActivation(activation, HEX_PULSE_CYCLE_SECONDS * 0.25);
-    assert.ok(Math.abs(fadeOf(a) - 0.5) < 1e-3, 'b 格写自己的强度不该动到 a 格');
-    assert.ok(Math.abs(fadeOf(b) - 0.25) < 1e-3, `b 格应写自己的相位强度，实际 ${fadeOf(b)}`);
-
-    // 离开脉冲段（复位回常规定格）必须摘掉材质：非脉冲段这个节点装的是开口光序列帧。
-    a.view.renderActivation(null, 99);
-    assert.equal(a.sprite.customMaterial, null, '离开脉冲段要摘掉脉冲材质');
-
-    // 视图销毁时必须释放这份克隆材质（`new Material()` 不归资源管理器管，漏了就是显存泄漏）。
-    const owned = b.sprite.customMaterial;
-    assert.ok(owned, 'b 格此刻应挂着自己那份脉冲材质');
-    b.view.onDestroy();
-    assert.equal(owned.isValid, false, '销毁视图要释放它独占的脉冲材质');
-});
-
-test('脉冲专用着色器的外缘虚化：径向遮罩 + 原图半尺寸与美术图一致', () => {
-    // ⚠️ 先剥注释（rule 104）：GLSL 注释里也会写出同样的算式，不剥的话「算式被删」时断言静默通过。
-    const strip = (text: string): string => text
-        .replace(/\/\*[\s\S]*?\*\//g, '')
-        .split('\n').filter((line) => !line.trim().startsWith('//')).join('\n');
-    const effectSource = readFileSync('assets/resources/shaders/hex-pulse.effect', 'utf8');
-    const effect = strip(effectSource);
-
-    // 径向遮罩：半径必须由**顶点局部坐标**算（SpriteFrame 被裁过，UV 不覆盖原图）。
-    assert.match(effect, /out vec2 localPos;/, '顶点着色器要传出局部坐标（半径的唯一可靠来源）');
-    assert.match(effect, /localPos = a_position\.xy;/, '局部坐标必须从 a_position 取（不是 a_texCoord）');
-    assert.match(effect, /float radius = length\(localPos \/ halfSize\);/,
-        '半径必须按原图半尺寸归一化（0 = 中心，1 = 原图边缘）');
-    assert.match(effect, /float edge = smoothstep\(clamp\(pulseShape\.x, 0\.0, 1\.0\), 1\.0, radius\);/,
-        '虚化必须是「起始半径之外才生效」的径向遮罩，中心保持较实');
-    assert.match(effect, /float alpha = tex\.a \* \(1\.0 - clamp\(pulseFade\.x, 0\.0, 1\.0\) \* edge\);/,
-        '虚化强度必须按 pulseFade.x 乘进 alpha（视图每帧写它）');
-    // 既有口径不许被这轮改动带跑（填充恒等映射 + 回退开关）。
-    assert.match(effect, /float k = mix\(clamp\(pulseParams\.x, 0\.0, 1\.0\), 1\.0, lum\);/);
-    assert.match(effectSource, /pulseParams: \{ value: \[0\.72, 0, 0, 0\] \}/);
-
-    // 🔴 `pulseShape.yz` 是**美术图的原始半尺寸**，写错会让整个虚化圈缩放错位 ⇒ 与 PNG 实测对齐。
-    const shape = /pulseShape: \{ value: \[([^\]]+)\] \}/.exec(effectSource);
-    assert.ok(shape, 'effect 必须声明 pulseShape（虚化起始半径 + 原图半尺寸）');
-    const [startRadius, halfWidth, halfHeight] = shape![1].split(',').map((value) => Number(value));
-    assert.ok(startRadius > 0 && startRadius < 1, `虚化起始半径必须落在 (0,1)，实际 ${startRadius}`);
-    const header = readFileSync('assets/resources/image/effects/hex_pulse/fkz_00.png').subarray(16, 24);
-    const width = header.readUInt32BE(0);
-    const height = header.readUInt32BE(4);
-    assert.ok(Math.abs(halfWidth - width / 2) < 1,
-        `pulseShape.y 必须等于 fkz_*.png 的半宽（${width / 2}），实际 ${halfWidth}`);
-    assert.ok(Math.abs(halfHeight - height / 2) < 1,
-        `pulseShape.z 必须等于 fkz_*.png 的半高（${height / 2}），实际 ${halfHeight}`);
-});
-
-test('脉冲水波纹按地块类型染色：兵营蓝紫 / 金矿绿，两者同 alpha 平级', () => {
-    const { load, FakeNode } = loadViews();
-    const mod = load('./ZCHexView');
-    const tintFor = mod.pulseTintForTileType as (type: number) => any;
-    const barracks = tintFor(ZCPvpTileType.BarracksCommon);
-    const mine = tintFor(ZCPvpTileType.Mine);
-    assert.notDeepEqual([barracks.r, barracks.g, barracks.b], [mine.r, mine.g, mine.b],
-        '兵营与金矿必须看得出色相差（否则「按类型染色」等于没做）');
-    assert.ok(mine.g > mine.r && mine.g > mine.b, `金矿要走绿，实际 ${JSON.stringify(mine)}`);
-    assert.equal(barracks.a, mine.a,
-        '🔴 山猫口径「金矿和绿色平级」：两类同一个 alpha，不许把金矿压淡成次级');
-    // 三级兵营与没单独配色的类型都落同一套色（与 `frameForTileType` 同口径）。
-    assert.equal(tintFor(ZCPvpTileType.BarracksMedium), barracks);
-    assert.equal(tintFor(ZCPvpTileType.BarracksAdvanced), barracks);
-    assert.equal(tintFor(ZCPvpTileType.AllRandom), barracks);
-
-    // 真正写到 Sprite 上：类型色必须**压过** `renderActivation` 里先写的阵营色。
+    // 真正写到 Sprite 上：品阶色必须**压过** `renderActivation` 里先写的阵营色。
     const view = new mod.ZCHexView();
     view.buildingSprite = { node: new FakeNode() };
     const node = new FakeNode('GroundGlow');
     const sprite: any = { node, enabled: true, spriteFrame: null, color: { r: 255, g: 255, b: 255, a: 255 } };
     view.groundGlow = sprite;
-    view.setHexPulseFrames([{ name: 'fkz_00' }]);
-    const activation = { id: 1, hexId: 7, startedAt: 0, durationSeconds: ZC_HEX_ACTIVATION_SECONDS };
-    // `pulseTint` 由静态刷新的 `render()` 按 `state.tileType` 写（每帧那条路径没有 state）。
-    view.pulseTint = mine;
-    view.renderActivation(activation, HEX_PULSE_CYCLE_SECONDS / 2, 'player');
-    assert.deepEqual([sprite.color.r, sprite.color.g, sprite.color.b], [mine.r, mine.g, mine.b],
-        '波纹 Sprite 必须按地块类型上色，而不是被阵营 tint 覆写');
+    // 注入满 5 帧：`pulseFrame` 越界会被当成「波已退场」，只给 1 帧的话半轮就查不到第 2 帧了。
+    view.setHexPulseFrames(Array.from({ length: HEX_PULSE_FRAME_COUNT }, (_, index) => ({ name: `hex_pulse_${index}` })));
+    const base = { id: 1, hexId: 7, startedAt: 0, durationSeconds: ZC_HEX_ACTIVATION_SECONDS, hasCardReveal: true };
+    view.renderActivation({ ...base, cardRarity: 4 }, HEX_PULSE_WAVE_SECONDS / 2, 'player');
+    assert.deepEqual([sprite.color.r, sprite.color.g, sprite.color.b], [gold.r, gold.g, gold.b],
+        '脉冲 Sprite 必须按**抽到的卡牌品阶**上色，而不是被阵营 tint 覆写');
+    // 换个品阶再点一次：颜色要跟着变（缓存不许把它粘住）。
+    view.renderActivation({ ...base, cardRarity: 2, id: 2 }, HEX_PULSE_WAVE_SECONDS / 2, 'player');
+    assert.deepEqual([sprite.color.r, sprite.color.g, sprite.color.b], [blue.r, blue.g, blue.b],
+        '同一格换品阶必须换色');
+    // 没抽到卡（0 / 字段缺省）⇒ 绿。
+    view.renderActivation(base, HEX_PULSE_WAVE_SECONDS / 2, 'player');
+    assert.deepEqual([sprite.color.r, sprite.color.g, sprite.color.b], [green.r, green.g, green.b],
+        '没有 cardRarity 的激活事件按「没抽到卡」走绿');
 });
 
 test('脉冲段不再画 Graphics 圆环（圆圈影响视觉），改走中间层序列帧', () => {
@@ -912,50 +813,36 @@ test('脉冲段不再画 Graphics 圆环（圆圈影响视觉），改走中间�
     // 取代它的是序列帧：注入入口 / 选帧 / 染色三步都得在。
     assert.match(view, /setHexPulseFrames/, '视图应提供水波纹序列帧的注入入口');
     assert.match(view, /applyPulseRipple/, '要有按相位播波纹的出口');
-    assert.match(view, /pulseTintForTileType/, '要有按地块类型染色的出口');
+    assert.match(view, /pulseTintForRarity/, '要有按卡牌品阶染色的出口');
     // 加载器 → ArtPaths 真源 → 渲染层注入，三步都得接通。
     const loader = strip('assets/script/app/zcds/application/ZCGameLoader.ts');
     assert.match(loader, /HEX_FLIP_PULSE_ART_ROOT/, '序列帧目录必须走 ArtPaths 的唯一真源');
     assert.match(readFileSync('assets/script/app/ArtPaths.ts', 'utf8'),
-        /HEX_FLIP_PULSE_ART_ROOT = `\$\{ART_ROOT\}\/effects\/hex_pulse`/);
+        /HEX_FLIP_PULSE_ART_ROOT = `\$\{ART_ROOT\}\/effects\/hex_pulse_seq`/);
     assert.match(strip('assets/script/app/zcds/view/ZCGameRenderWorld.ts'),
         /setHexPulseFrames\(this\.options\.hexPulseFrames/, '渲染层要真的把帧喂给每个地块视图');
 });
 
-// ── 脉冲专用着色器（row13 第 1 条）：把灰度帧的黑边抬亮，且不碰填充色 ──────────────
+// ── 旧脉冲着色器已退役：新美术把虚化烘焙进图，不许再把 `hex-pulse.effect` 接回来 ──────
 
-test('脉冲黑边靠专用着色器抬亮：保底乘算式 + 材质只挂脉冲分支 + 全链接通', () => {
-    // ⚠️ 先剥注释（rule 104）：GLSL 注释里也会写出同样的算式，不剥的话「算式被删」时断言静默通过。
+test('旧脉冲着色器退役：视图不再有材质入口，加载器也不再加载 hex-pulse.effect', () => {
     const stripJs = (path: string): string => readFileSync(path, 'utf8')
         .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
-    const effect = readFileSync('assets/resources/shaders/hex-pulse.effect', 'utf8')
-        .replace(/\/\/[^\n]*/g, '');
-    // 保底乘的判别式：填充（lum = 1）必须是恒等映射，否则「改边缘」会连带改掉本来正常的填充色。
-    assert.match(effect, /float lum = clamp\(max\(max\(tex\.r, tex\.g\), tex\.b\), 0\.0, 1\.0\);/,
-        '亮度必须取灰度帧的 max 通道（加权和会把纯色边读歪）');
-    assert.match(effect, /float k = mix\(clamp\(pulseParams\.x, 0\.0, 1\.0\), 1\.0, lum\);/,
-        '保底乘算式不能改：lum = 1 ⇒ k = 1（不碰填充），暗部抬到 pulseParams.x');
-    assert.match(effect, /pulseParams: \{ value: \[0\.72, 0, 0, 0\] \}/,
-        '默认保底亮度 0.72 要留在 properties 里（= 0 是退回旧观感的开关）');
-    assert.doesNotMatch(effect, /exp\(-abs\(/,
-        '别退回领地那套「转轴亮带」写法：会在正面形成整条横向白纹');
-
-    // 视图：入口 + **只挂脉冲分支**（GroundGlow 与底光序列帧共用，整段挂着会把底光一起抬亮）。
     const view = stripJs('assets/script/app/zcds/view/ZCHexView.ts');
-    assert.match(view, /setHexPulseMaterial/, '视图应提供脉冲材质注入入口');
-    assert.match(view, /applyPulseMaterial\(true\)/, '进脉冲分支要挂材质');
-    assert.match(view, /applyPulseMaterial\(false\)/, '离开脉冲分支要摘材质');
-    assert.match(view, /private pulseMaterialApplied = false;/, '材质状态要有字段去重（每帧都会调）');
+    // 2026-10-19：5 帧新美术自带「放大 + 淡出」，再叠一层径向虚化就是虚两次。
+    assert.doesNotMatch(view, /setHexPulseMaterial/, '视图不许再有脉冲材质入口');
+    assert.doesNotMatch(view, /applyPulseMaterial|applyPulseFade|ensurePulseMaterial/,
+        '脉冲材质那条链（挂材质 / 写 pulseFade uniform / 克隆）应整条删除');
+    // 视图侧只剩「换帧」这一件事。
+    assert.match(view, /sprite\.spriteFrame = next/, '脉冲段只换 SpriteFrame，不写 scale / opacity 动画');
 
-    // 加载链：effect 走 assets.load + 运行时 new Material，不新增 *.mtl 文件。
     const loader = stripJs('assets/script/app/zcds/application/ZCGameLoader.ts');
-    assert.match(loader, /HEX_PULSE_EFFECT_URL = 'shaders\/hex-pulse'/, 'effect 路径真源在加载器常量里');
-    assert.match(loader, /loadHexPulseMaterial/, '要有专门的材质构建方法');
-    assert.match(loader, /material\.initialize\(\{ effectAsset: effect \}\)/, '材质运行时初始化，不依赖 *.mtl');
-    assert.match(stripJs('assets/script/app/zcds/ZCGame.ts'), /hexPulseMaterial: prepared\.hexPulseMaterial/,
-        'ZCGame 要把材质从 prepared 透传给渲染层');
-    assert.match(stripJs('assets/script/app/zcds/view/ZCGameRenderWorld.ts'),
-        /setHexPulseMaterial\(this\.options\.hexPulseMaterial/, '渲染层要真的把材质喂给每个地块视图');
+    assert.doesNotMatch(loader, /HEX_PULSE_EFFECT_URL|loadHexPulseMaterial/,
+        '加载器不该再加载 hex-pulse.effect（旧 30 帧那套专用）');
+    assert.doesNotMatch(stripJs('assets/script/app/zcds/ZCGame.ts'), /hexPulseMaterial/,
+        'ZCGame 不该再透传脉冲材质');
+    assert.doesNotMatch(stripJs('assets/script/app/zcds/view/ZCGameRenderWorld.ts'), /hexPulseMaterial/,
+        '渲染层不该再注入脉冲材质');
 });
 
 // ── 层级：脉冲段不抬起 ⇒ 不置顶、不换父（置顶机制只服务 tileLift > 0 的路径） ────
@@ -986,8 +873,8 @@ test('脉冲段不置顶：地块始终留在 HexLayer 原索引，事件过期�
     // （置顶只随 tileLift > 0 触发）。
     const moments = [
         10,
-        10 + HEX_PULSE_CYCLE_SECONDS / 2,
-        10 + HEX_PULSE_CYCLE_SECONDS * 0.75,
+        10 + HEX_PULSE_WAVE_SECONDS / 2,
+        10 + HEX_PULSE_WAVE_SECONDS * 0.75,
         10 + ZC_HEX_PULSE_SECONDS * 0.999,
     ];
     for (const now of moments) {
@@ -1010,17 +897,20 @@ test('脉冲段不置顶：地块始终留在 HexLayer 原索引，事件过期�
 
 test('接线：地块激活表现挂在 renderDynamic（每帧），并保留静态兜底复位', () => {
     const source = readFileSync('assets/script/app/zcds/view/ZCGameRenderWorld.ts', 'utf8');
-    const start = source.indexOf('renderDynamic(model: ZCGameModel): void {');
+    // ⚠️ 签名跟着渲染层走过一次重构（`model` → `frame, events`）：这里按**当前**签名定位，
+    // 别再钉旧形参名 —— 钉旧名会让这条断言在「接线还在」时也永远红着。
+    const start = source.indexOf('renderDynamic(frame: ZCGameRenderFrame, events: ZCBattlePresentationEvents): void {');
     assert.ok(start > 0, 'renderDynamic 必须存在');
-    // ⚠️ 先剥注释再匹配：把调用注释掉（`// this.renderHexActivations(model);`）照样含这个串，
+    // ⚠️ 先剥注释再匹配：把调用注释掉（`// this.renderHexActivations(frame);`）照样含这个串，
     // 不剥的话这条接线断言会在「接线被删」时静默通过（rule 104）。
     const body = source.slice(start, source.indexOf('\n    }', start))
         .split('\n')
         .filter((line) => !line.trim().startsWith('//'))
         .join('\n');
-    assert.ok(body.includes('renderHexActivations(model)'), 'renderDynamic 必须每帧推进地块激活表现');
+    assert.ok(body.includes('renderHexActivations(frame)'), 'renderDynamic 必须每帧推进地块激活表现');
     // 静态刷新那条兜底仍在（激活事件过期后 ≤0.15s 内把地块复位）。
-    assert.ok(source.includes('activation: model.activationOf(state.id)'));
+    assert.ok(source.includes('activation: hex.activation'),
+        '静态刷新要按当前快照喂激活事件（过期后兜底复位）');
 });
 
 test('ground glow takes the active faction tint before the throttled terrain refresh', () => {
@@ -1035,7 +925,7 @@ test('ground glow takes the active faction tint before the throttled terrain ref
     view.setGroundGlowFrames([{ name: 'hex_ground_glow_01' }]);
     const activation = { id: 1, hexId: 7, startedAt: 0, durationSeconds: ZC_HEX_ACTIVATION_SECONDS };
     // 脉冲段内（染色与抬升解耦：renderActivation 在脉冲段也必须先把归属色写上）。
-    const now = HEX_PULSE_CYCLE_SECONDS * 0.25;
+    const now = HEX_PULSE_WAVE_SECONDS * 0.25;
 
     view.renderActivation(activation, now, 'player');
     assert.deepEqual(
@@ -1054,7 +944,7 @@ test('ground glow takes the active faction tint before the throttled terrain ref
 
 // ── 销毁期：onDestroy 里不碰子节点的 Sprite（引擎销毁序 = 先子后父组件） ────
 
-test('onDestroy 只释放自己克隆的脉冲材质，不去写子节点 Sprite 的材质', () => {
+test('onDestroy 不写子节点 Sprite 的材质（引擎销毁序 = 先子后父组件）', () => {
     const { load, FakeNode } = loadViews();
     const mod = load('./ZCHexView');
     const node = new FakeNode('ZCGameHex');
@@ -1070,15 +960,8 @@ test('onDestroy 只释放自己克隆的脉冲材质，不去写子节点 Sprite
         get customMaterial() { return null; },
         set customMaterial(_value: unknown) { writes += 1; },
     };
-    // 挂一份克隆材质（`new Material()` 不归资源管理器管，必须由视图自己 destroy）。
-    const clone = { isValid: true, destroy() { clone.isValid = false; } };
-    view.pulseMaterial = clone;
-    view.pulseMaterialSource = { effectAsset: {} };
-    view.pulseMaterialApplied = true;
     view.onDestroy();
 
-    assert.equal(clone.isValid, false, '视图必须释放自己克隆的脉冲材质（否则显存泄漏）');
-    assert.equal(view.pulseMaterial, null);
     assert.equal(writes, 0,
         'onDestroy 不得写 groundGlow.customMaterial —— 那是子节点的 Sprite，引擎已先销毁它，'
         + '再写会进 setSharedMaterial 读已释放的渲染状态抛 "Cannot read properties of null"');
@@ -1098,6 +981,8 @@ test('销毁期禁令钉在源码上：onDestroy 里不出现对 groundGlow 的�
         'onDestroy 里不许写 groundGlow.customMaterial（规则 176 同族：销毁期不碰其它组件）');
     assert.doesNotMatch(body, /groundGlow\s*\.\s*\w+\s*\(/,
         'onDestroy 里不许调 groundGlow 的任何方法');
-    assert.match(body, /this\.pulseMaterial\.destroy\(\)/,
-        '克隆材质的释放必须留着（new Material() 不归资源管理器管）');
+    // 2026-10-19 起脉冲段没有克隆材质了（只换帧），这里不再要求 `pulseMaterial.destroy()`；
+    // 但「不碰子节点」这条禁令一直有效。
+    assert.doesNotMatch(body, /Material/,
+        'onDestroy 不该再碰任何材质（脉冲材质那条链已退役）');
 });

@@ -174,6 +174,14 @@ export interface ZCDeckCard {
      * 兵营/主城的专属外观；留空由视图按建筑类型回退通用图。
      */
     buildIcon?: string;
+    /**
+     * 该卡的技能编号列表（`pvpCard.skillList`，顺序即 UI 顺序）。
+     *
+     * 编号与后端 `CmdPvpHeroSkillInfo.id` / 技能升级请求体的 `skillId` 同一套，
+     * 技能名与各档解锁等级在 `armySkillLevelUp`（见 `card/CardSkillList`）。
+     * 留空 = 这张卡没有技能（主城 / 金矿），**不是**"还没加载"。
+     */
+    skillIds?: readonly number[];
 }
 
 /** 本地 PVP 卡牌目录；正式对局会按后端阵容收窄英雄卡，并保留系统卡。 */

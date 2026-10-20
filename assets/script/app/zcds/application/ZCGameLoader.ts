@@ -11,7 +11,7 @@ import type { ZCPvpTables } from '../model/ZCGameRuntimeConfig';
 import { getZCModifierCatalogs } from '../model/ZCModifierRuntime';
 import { captureZCMatchConfig } from '../model/ZCMatchConfig';
 import type { ZCMatchConfig } from '../model/ZCMatchConfig';
-import { decorFramePath, HEX_FLIP_PULSE_ART_ROOT, HEX_GROUND_GLOW_ART_ROOT, spriteFramePath } from '../../ArtPaths';
+import { decorFramePath, HEX_FLIP_PULSE_ART_ROOT, HEX_GROUND_GLOW_ART_ROOT, MAP_RESOURCE_ART_ROOT, spriteFramePath } from '../../ArtPaths';
 import { ZCDC_LOG_WARNINGS } from '../ZCDCLogSwitch';
 import { ZCGuideLoader } from './ZCGuideLoader';
 import type { ZCGuidePreparedContent } from './ZCGuideLoader';
@@ -99,19 +99,6 @@ const WALL_TILE_EFFECT_URL = 'shaders/wall-tile';
  */
 const UNIT_OUTLINE_COPY_EFFECT_URL = 'shaders/unit-outline-copy';
 /**
- * 地块点击**脉冲水波纹**的专用 shader（`shaders/hex-pulse.effect`，需求 2026-10-15 row13）。
- *
- * 起因：脉冲帧 `fkz_*.png` 的填充是纯白、外圈边缘是灰（117,117,117），而 Sprite 的 `color`
- * 是**乘性**的 ⇒ 边缘只拿到 45.9%、渲出来近黑。纯乘性染色在数学上做不到「边缘变亮而填充不变」
- * （要求颜色 > 2×，填充会过曝 / 掉饱和），所以必须换 shader。
- *
- * ⚠️ 只给**脉冲段**挂（`ZCHexView.applyPulseMaterial`）：`GroundGlow` 这个中间层节点与底光
- * 序列帧共用，整段挂着会把底光也一起抬亮。
- * ⚠️ 这里是**原型**，每个地块视图会各自克隆一份（`pulseFade` 是每帧写的 uniform，共用会互相盖）。
- * 加载失败只 `console.warn` 落回 `null`、**不抛** —— 视图回退内置 Sprite 材质，对局照常。
- */
-const HEX_PULSE_EFFECT_URL = 'shaders/hex-pulse';
-/**
  * 地块抬起后**原位开口**的底部发光序列帧目录（8 帧，文件名 `hex_ground_glow_01..08`）。
  *
  * 2026-10-14 由 `shaders/hex-ground-glow.effect`（shader 实时投影三个侧面）换成美术给的成品序列帧：
@@ -119,10 +106,12 @@ const HEX_PULSE_EFFECT_URL = 'shaders/hex-pulse';
  */
 const HEX_GROUND_GLOW_DIRECTORY = HEX_GROUND_GLOW_ART_ROOT;
 /**
- * 翻格**脉冲呼吸序列帧**目录（30 帧，文件名 `fkz_00..29`，155×144 白图）。
+ * 翻格**脉冲序列帧**目录（5 帧，文件名 `hex_pulse_0..4`，320×320 透明底）。
  *
- * 2026-10-15 山猫口径：翻格的前置段播这组帧做「水波纹扩散」，**按格子类型染色**
- * （兵营 / 金矿两套色，平级）；替换此前手画的 Graphics 描边 + 白闪 + 圆环。只有对局在用。
+ * 2026-10-19 换美术：放大与不透明度**烘焙在图里**（1.00→1.78 倍、70%→15%），
+ * 视图只按 10fps 换帧、不再叠 scale / opacity，也**不再需要**旧那套 `hex-pulse.effect`
+ * 的径向虚化（虚化已经画在图上了）。仍然**按卡牌品阶染色**（1 绿 / 2 蓝 / 3 紫 / 4 金，
+ * 没抽到卡也走绿）。只有对局在用。
  */
 const HEX_FLIP_PULSE_DIRECTORY = HEX_FLIP_PULSE_ART_ROOT;
 /**
@@ -229,6 +218,13 @@ export interface ZCGamePreparedResources {
      *  拿不到时为 `null` —— 视图回退到文字兜底（`NEUTRAL_RESOURCE_LABELS`），不崩不空。
      */
     artifactIconFrame: SpriteFrame | null;
+    /**
+     * 中立资源「金币」图标帧（`image/map-resource/gold`）—— 金币飞行特效的贴图。
+     *
+     * 与格子内金币图标**同一张**（换图两边一起变）。拿不到时为 `null` —— 金币仍照常飞
+     * （透明图），不崩不空。
+     */
+    goldCoinFrame: SpriteFrame | null;
     /** image/buildings 下的建筑外观帧（按图片名索引）。 */
     buildingFrames: ReadonlyMap<string, SpriteFrame>;
     /** image/walls 下的城墙砖帧（up/down/rightUp/rightDown）。 */
@@ -239,18 +235,11 @@ export interface ZCGamePreparedResources {
      * 加载失败时为 `null` —— 视图回退默认材质，不影响对局。
      */
     wallMaterial: Material | null;
-    /**
-     * 地块点击**脉冲水波纹**的专用材质原型（`shaders/hex-pulse.effect` 实例）。
-     *
-     *  地块视图按实例克隆后再挂（`ZCHexView.ensurePulseMaterial`），所以这份只是**原型**；
-     *  加载失败时为 `null` —— 视图回退内置 Sprite 材质，只是边缘仍偏暗，不影响对局。
-     */
-    hexPulseMaterial: Material | null;
     /** 非己方 Spine 的**整体外轮廓**（放大副本）shader；缺失时只关闭该表现。 */
     unitOutlineCopyEffect: EffectAsset | null;
     /** 地块抬起后的**底部发光序列帧**（已按帧序排好；空数组 ⇒ 不画光）。 */
     hexGroundGlowFrames: readonly SpriteFrame[];
-    /** 翻格**脉冲呼吸序列帧**（已按帧序排好；空数组 ⇒ 脉冲段退化为原地静止呼吸）。 */
+    /** 翻格**脉冲序列帧（5 帧）**（已按帧序排好；空数组 ⇒ 脉冲段退化为只剩缩没，不报错）。 */
     hexPulseFrames: readonly SpriteFrame[];
     /** 本局地图使用的静态装饰帧，随流程 ResourceScope 释放。 */
     decorFrames: ReadonlyMap<string, SpriteFrame>;
@@ -304,12 +293,12 @@ export class ZCGameLoader {
             buildingFrames,
             wallFrames,
             wallMaterial,
-            hexPulseMaterial,
             unitOutlineCopyEffect,
             hexGroundGlowFrames,
             hexPulseFrames,
             decorFrames,
             artifactIconFrame,
+            goldCoinFrame,
             guide,
         ] = await Promise.all([
             this.assets.load(HUD_URL, Prefab, { scope }),
@@ -333,12 +322,12 @@ export class ZCGameLoader {
             this.loadBuildingFrames(scope),
             this.loadWallFrames(scope),
             this.loadWallMaterial(scope),
-            this.loadHexPulseMaterial(scope),
             this.loadUnitOutlineCopyEffect(scope),
             this.loadHexGroundGlowFrames(scope),
             this.loadHexPulseFrames(scope),
             this.loadDecorFrames(scope),
             this.loadArtifactIconFrame(scope),
+            this.loadGoldCoinFrame(scope),
             new ZCGuideLoader(this.assets, this.configs).prepare(scope),
         ]);
         this.checkActive(scope);
@@ -346,6 +335,7 @@ export class ZCGameLoader {
         return {
             baseMatchConfig,
             artifactIconFrame,
+            goldCoinFrame,
             hudPrefab,
             boardPrefab,
             hexPrefab,
@@ -368,7 +358,6 @@ export class ZCGameLoader {
             buildingFrames,
             wallFrames,
             wallMaterial,
-            hexPulseMaterial,
             unitOutlineCopyEffect,
             hexGroundGlowFrames,
             hexPulseFrames,
@@ -513,6 +502,20 @@ export class ZCGameLoader {
     }
 
     /**
+     * 金币飞行特效的贴图：`image/map-resource/gold`（与中立资源点「金币」格同一张）。
+     *
+     * 失败不阻断整局：返回 `null`，金币飞行仍照常播（透明图 + 上飘数字照旧）。
+     */
+    private async loadGoldCoinFrame(scope?: ResourceScope): Promise<SpriteFrame | null> {
+        try {
+            return await this.assets.load(spriteFramePath(MAP_RESOURCE_ART_ROOT, 'gold'), SpriteFrame, { scope });
+        } catch (error) {
+            if (ZCDC_LOG_WARNINGS) console.warn('[ZCGameLoader] 金币图标加载失败（金币飞行特效将透明），', error);
+            return null;
+        }
+    }
+
+    /**
      * 加载单位出生特效 prefab。失败不阻断整局：单位照样正常出现，只是少一层出生表现。
      *
      *  与神��图标同理走容错 —— 出生特效是纯表现件，不该因为它没交/ 路径写错就让整局开不起来。
@@ -609,26 +612,6 @@ export class ZCGameLoader {
             return material;
         } catch (error) {
             if (ZCDC_LOG_WARNINGS) console.warn(`[ZCGameLoader] 城墙砖接缝材质加载失败：${WALL_TILE_EFFECT_URL}`, error);
-            return null;
-        }
-    }
-
-    /**
-     * 加载地块点击脉冲水波纹的专用材质（`shaders/hex-pulse.effect`）。
-     *
-     * 与 `loadWallMaterial` 同形：**失败不阻断对局**，返回 `null` ⇒ 视图回退内置 Sprite 材质，
-     * 只是脉冲外圈仍偏暗。这里给的是**原型**，地块视图各自 `clone()` 一份再挂
-     * （`ZCHexView.ensurePulseMaterial`）—— `pulseFade` 是每帧写的 uniform，共用会互相盖。
-     */
-    private async loadHexPulseMaterial(scope?: ResourceScope): Promise<Material | null> {
-        try {
-            const effect = await this.assets.load(HEX_PULSE_EFFECT_URL, EffectAsset, { scope });
-            if (!effect) return null;
-            const material = new Material();
-            material.initialize({ effectAsset: effect });
-            return material;
-        } catch (error) {
-            if (ZCDC_LOG_WARNINGS) console.warn(`[ZCGameLoader] 脉冲水波纹材质加载失败：${HEX_PULSE_EFFECT_URL}`, error);
             return null;
         }
     }

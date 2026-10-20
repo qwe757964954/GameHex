@@ -1,4 +1,5 @@
 import { director, Layers, Node, UITransform, view, Widget } from 'cc';
+import type { AssetService } from '../../../core/asset/AssetService';
 import type { ConfigService } from '../../../core/config/ConfigService';
 import { readRoleRow } from '../../main/MainResBar';
 import { toIdString } from '../../net/RequestGuard';
@@ -6,10 +7,12 @@ import { TerritoryChapterInfoRepository } from '../../territory/application/Terr
 import { createTerritorySaveStore } from '../../territory/application/TerritorySaveStoreAdapter';
 import type { ITerritorySaveOwner } from '../../territory/model/TerritorySaveStore';
 import { loadBigMapConfig } from './BigMapConfigLoader';
+import { loadBigMapLayout } from './BigMapLayoutLoader';
 import { BigMapPresenter } from './BigMapPresenter';
 import { BIGMAP_SAVE_KEY } from './BigMapSaveKeys';
 import { createBigMapStorage } from './BigMapStorage';
 import { BigMapPage } from '../view/BigMapPage';
+import type { IBigMapLayout } from '../model/BigMapLayout';
 import type { IBigMapConfig } from '../model/BigMapTypes';
 
 /**
@@ -30,11 +33,25 @@ export class BigMapEntry {
     private root: Node | null = null;
     private presenter: BigMapPresenter | null = null;
     private configCache: IBigMapConfig | null = null;
+    /** `undefined` = 还没加载过；`null` = 加载过但没有可用布局。两者必须区分，否则会反复读盘。 */
+    private layoutCache: IBigMapLayout | null | undefined = undefined;
+    private assets: AssetService | null = null;
     private opening = false;
 
     static shared(): BigMapEntry {
         if (!BigMapEntry.instance) BigMapEntry.instance = new BigMapEntry();
         return BigMapEntry.instance;
+    }
+
+    /**
+     * 由组合根（`ProcedureBootstrap`）注入资源入口。
+     *
+     * 不注入也能玩：布局加载降级为「按种子生成世界」。这样入口按钮那条链
+     * （`MainTabHost → BigMapEntryButton`）不用为了接布局改签名。
+     */
+    setAssetService(assets: AssetService | null): void {
+        this.assets = assets;
+        this.layoutCache = undefined;
     }
 
     get isOpen(): boolean {
@@ -47,6 +64,7 @@ export class BigMapEntry {
         this.opening = true;
         try {
             const config = await this.ensureConfig(configs);
+            const layout = await this.ensureLayout(config);
             const canvas = this.findCanvas();
             if (!canvas) {
                 console.warn('[BigMapEntry] 找不到 Canvas，无法打开大世界');
@@ -70,6 +88,7 @@ export class BigMapEntry {
 
             const presenter = new BigMapPresenter({
                 config,
+                layout,
                 storage: createBigMapStorage(),
                 saveKey: BIGMAP_SAVE_KEY,
                 // 每次取实时值：玩家在冒险里推了一章，回到大世界立刻能看到新解锁的建筑。
@@ -96,6 +115,23 @@ export class BigMapEntry {
     private async ensureConfig(configs: ConfigService): Promise<IBigMapConfig> {
         if (!this.configCache) this.configCache = await loadBigMapConfig(configs);
         return this.configCache;
+    }
+
+    /**
+     * 策划布局：**有就用，没有就 null**（Presenter 那边回退种子生成）。
+     *
+     * 结果缓存到会话结束：布局跟客户端版本一起发（`assets/resources/config/bigmap-maps/`），
+     * 不会在运行期变，不必每次开页面都读一遍。
+     */
+    private async ensureLayout(config: IBigMapConfig): Promise<IBigMapLayout | null> {
+        if (this.layoutCache !== undefined) return this.layoutCache;
+        if (!this.assets) {
+            console.warn('[BigMapEntry] 没有注入 AssetService，跳过布局文件，按种子生成世界');
+            this.layoutCache = null;
+            return null;
+        }
+        this.layoutCache = await loadBigMapLayout(this.assets, config);
+        return this.layoutCache;
     }
 
     /**

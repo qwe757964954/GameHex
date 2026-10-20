@@ -27,9 +27,7 @@
   // 每个点位可配多种资源和权重，开局时按权重抽取一种。
   var resourcePoints = [];
   var regions = [];
-  var homeCandidates = [];
   var regionBrush = { section: 1, depth: 'front', tendency: 'rush' };
-  var homeCandidateBrushSection = 1;
   var RESOURCE_TYPES = [
     { id: 'chest', label: '宝箱', asset: 'image/map-resource/chest' },
     { id: 'gold', label: '金币', asset: 'image/map-resource/gold' },
@@ -44,6 +42,39 @@
   var resourceImages = {};
   var passthrough = {};
   var brush = 1, showGrid = false, flashTimer = 0, dirty = false;
+  /**
+   * 编辑器说明内容（左侧「说明」弹窗的 6 个主题）。
+   *
+   * 原来这 6 段是铺在「高级设置」侧栏里的，占了半屏常驻空间；改成按需查看后侧栏只留控件。
+   * 新增一组 = 往这个数组里加一条，tab 与正文自动出来。
+   */
+  var EDITOR_HELP =   [
+    {
+      "title": "地图规则说明",
+      "html": "镜像开关位于顶部栏。上下镜像只编辑 1 区一侧，对侧自动生成；左右镜像仅用于 4 人四象限。自选主城范围由该方标记的前 / 中 / 后区合并决定。"
+    },
+    {
+      "title": "预设文件",
+      "html": "清空后得到全中立底图，仅保留主城盘。预设保存在 <code>tools/map-editor/presets</code>；需要同步到游戏资源时运行 <code>copy-maps.bat</code>。"
+    },
+    {
+      "title": "行列个数",
+      "html": "行列可设为 4~60 的整数。镜像开启时只保存可编辑的一侧；奇数行的中线会镜像到自身。"
+    },
+    {
+      "title": "镜头倍率",
+      "html": "局内战斗的镜头缩放区间，写进地图 JSON 的 <code>zoomMin</code> / <code>zoomMax</code>。<b>留空</b>即用客户端默认 <code>0.6 / 1.2</code>；取值范围 <code>0.3 ~ 1.5</code>，下限不能大于上限 —— 越界的图客户端会拒绝加载（<code>resolveZCMapZoom</code> 是抛错口径）。开局入场镜头结束时的机位也会被夹进这个区间。"
+    },
+    {
+      "title": "显示",
+      "html": "开启完整网格后，虚空格也会显示虚线轮廓，便于定位与编辑。背景图来自 <code>art.background</code>（默认 <code>image/zdbg1</code>），铺在棋盘之下、用 SVG 等比 cover 渲染。"
+    },
+    {
+      "title": "操作",
+      "html": "<b>左键拖动</b>连续涂色，右键擦除当前笔刷内容。滚轮缩放；中键或 <code>空格</code> + 左键平移；<code>0</code> 适应窗口。镜像开启时，点击对侧会改写对应的存储侧。"
+    }
+  ];
+  var helpActive = 0;
   // 背景图：读 art.background（无则默认 image/zdbg1，最常用的海岛沙地）。
   // 渲染规则与游戏 TerritoryMapView.syncBackground 同口径 —— scale = max(W/图W, H/图H)，
   // 等比 cover（**不拉伸**）、溢出部分由 SVG 的 preserveAspectRatio 切掉。
@@ -124,7 +155,6 @@
     if (brush === 'freeDecor') return decorBrush ? '自由装饰：' + decorBrush : '自由装饰';
     if (brush === 'resource') return resourceBrush ? '资源：' + (RESOURCE_LABELS[resourceBrush] || resourceBrush) : '资源';
     if (brush === 'region') return '区域：' + regionBrush.section + ' 区 · ' + regionBrush.depth;
-    if (brush === 'homeCandidate') return '主城候选：' + homeCandidateBrushSection + ' 区';
     if (brush === 'home') return '主城';
     if (brush === 'neutral') return '中立格';
     if (brush === 'void') return '虚空';
@@ -152,9 +182,6 @@
   }
   function defaultRegionTendency(depth) {
     return depth === 'front' ? 'rush' : depth === 'mid' ? 'control' : depth === 'back' ? 'develop' : null;
-  }
-  function cloneHomeCandidates(items) {
-    return items.map(function (entry) { return { section: entry.section, cells: entry.cells.slice() }; });
   }
   function resourceLabel(point) {
     var pool = point && point.pool ? point.pool : {};
@@ -241,12 +268,6 @@
       render();
       commitUndo(before);
     }
-    syncControls();
-  }
-  function setHomeCandidateBrush(section) {
-    if (!Number.isInteger(section) || section < 1 || section > PLAYER_COUNT) throw new Error('主城可选区域无效');
-    homeCandidateBrushSection = section;
-    brush = 'homeCandidate';
     syncControls();
   }
   function addResourcePoint(row, column, resourceId, weight) {
@@ -842,14 +863,6 @@
       });
     });
     regions = regions.filter(function (region) { return region.cells.length > 0; });
-    homeCandidates.forEach(function (entry) {
-      if (entry.section > PLAYER_COUNT) { entry.cells = []; return; }
-      entry.cells = entry.cells.filter(function (id) {
-        var row = Math.floor(id / COLS), column = id % COLS;
-        return grid[row] && grid[row][column] !== VOID && (CITY_MODE === 'select' || grid[row][column] === entry.section);
-      });
-    });
-    homeCandidates = homeCandidates.filter(function (entry) { return entry.cells.length > 0; });
   }
 
   /** 主城格被改成虚空 / 别的分区时，该主城作废。 */
@@ -861,9 +874,12 @@
         homes[index] = null;
         continue;
       }
-      // select 模式主城可放任意格（含中立格），只校验坐标在地图内；
-      // fixed 模式主城必须落在自己分区格上。
-      if (CITY_MODE !== 'select' && grid[home.row][home.column] !== index + 1) {
+      var homeId = home.row * COLS + home.column;
+      var homeRegion = CITY_MODE === 'select' && regions.length
+        ? regions.find(function (region) { return region.section === index + 1 && region.cells.indexOf(homeId) >= 0; })
+        : null;
+      if ((CITY_MODE === 'select' && regions.length && !homeRegion) ||
+          (CITY_MODE !== 'select' && grid[home.row][home.column] !== index + 1)) {
         homes[index] = null;
       }
     }
@@ -958,7 +974,7 @@
   var TOOL_CATEGORY_GROUPS = {
     terrain: ['groupTerrain', 'groupBrushSize'],
     regions: ['groupRegions'],
-    resources: ['groupResources', 'groupHomeCandidates'],
+    resources: ['groupResources'],
     decor: ['groupDecor'],
     advanced: ['groupAdvancedMirror', 'groupPresets', 'groupMapSize', 'groupZoom', 'groupDisplay', 'groupOperation'],
   };
@@ -1069,7 +1085,6 @@
     // 新主城大多压在中立格上（底图默认全中立），必须补上主城盘的分区色，主城才立得住。
     seedHomeCells();
     regionBrush.section = Math.min(regionBrush.section, PLAYER_COUNT);
-    homeCandidateBrushSection = Math.min(homeCandidateBrushSection, PLAYER_COUNT);
     pruneMapMetadata();
     syncControls();
     applyMirror();
@@ -1210,12 +1225,6 @@
       return region.section === regionBrush.section && region.depth === regionBrush.depth;
     });
     regionBrush.tendency = activeRegion ? activeRegion.tendency : defaultRegionTendency(regionBrush.depth);
-    if (data.homeCandidates !== undefined && !Array.isArray(data.homeCandidates)) throw new Error('主城可选格配置必须是数组');
-    var importedHomeCandidates = data.homeCandidates || [];
-    if (importedHomeCandidates.some(function (entry) { return !entry || !Array.isArray(entry.cells); })) {
-      throw new Error('主城可选格配置无效');
-    }
-    homeCandidates = cloneHomeCandidates(importedHomeCandidates);
     for (var resourceIndex = 0; resourceIndex < resourcePoints.length; resourceIndex += 1) {
       var resourcePoint = resourcePoints[resourceIndex];
       if (!Number.isInteger(resourcePoint.row) || !Number.isInteger(resourcePoint.column) ||
@@ -1241,25 +1250,6 @@
         if (CITY_MODE !== 'select' && grid[Math.floor(id / columns)][id % columns] !== region.section) {
           throw new Error('区域只能标记对应分区的格子');
         }
-      });
-    });
-    var importedCandidateSections = {};
-    homeCandidates.forEach(function (entry) {
-      if (!Number.isInteger(entry.section) || entry.section < 1 || entry.section > PLAYER_COUNT || !Array.isArray(entry.cells)) {
-        throw new Error('主城可选格配置无效');
-      }
-      if (importedCandidateSections[String(entry.section)]) throw new Error('每个分区只能配置一组主城候选格');
-      importedCandidateSections[String(entry.section)] = true;
-      var seenCandidates = {};
-      entry.cells.forEach(function (id) {
-        if (!Number.isInteger(id) || id < 0 || id >= rows * columns || grid[Math.floor(id / columns)][id % columns] === VOID) {
-          throw new Error('主城可选格只能标记可通行格');
-        }
-        if (CITY_MODE !== 'select' && grid[Math.floor(id / columns)][id % columns] !== entry.section) {
-          throw new Error('主城可选格只能位于对应分区');
-        }
-        if (seenCandidates[String(id)]) throw new Error('主城候选格不能重复');
-        seenCandidates[String(id)] = true;
       });
     });
 
@@ -1333,12 +1323,16 @@
     var current = regions.find(function (region) {
       return region.section === regionBrush.section && region.depth === regionBrush.depth;
     });
-    if (!current) return false;
     var depthLabel = { front: '前区', mid: '中区', back: '后区' }[regionBrush.depth];
+    if (!current) {
+      flash('当前分区的' + depthLabel + '还没有区域标记', 'warn');
+      return false;
+    }
     if (!window.confirm('清空当前分区的' + depthLabel + '区域？')) return false;
     var before = snapshot();
     regions = regions.filter(function (region) { return region !== current; });
     render();
+    flash('已清空当前分区的' + depthLabel + '区域，可撤销', 'ok');
     return commitUndo(before);
   }
 
@@ -1476,6 +1470,10 @@
     return { x: panX - halfW, y: panY - halfH, width: halfW * 2, height: halfH * 2 };
   }
   function applyView() {
+    // 滑块跟着实时走（滚轮 / 适应窗口 / 键盘都要同步，否则控件与画面脱节）
+    var slider = $('zoomSlider');
+    var percent = String(Math.round(zoom * 100));
+    if (slider && slider.value !== percent) slider.value = percent;
     var rect = viewportRect();
     svg.setAttribute('viewBox', rect.x.toFixed(1) + ' ' + rect.y.toFixed(1) + ' ' +
       rect.width.toFixed(1) + ' ' + rect.height.toFixed(1));
@@ -1506,8 +1504,13 @@
     svg.style.height = nextH;
   }
   function resetView() { zoom = 1; panX = 0; panY = 0; applyView(); }
-  function zoomAt(clientX, clientY, factor) {
-    var next = Math.max(0.4, Math.min(6, zoom * factor));
+  /**
+   * 设到指定缩放，并让 `(clientX, clientY)` 这个屏幕点底下的格子在缩放前后不动。
+   *
+   * 滚轮传光标位置；滑块传画布中心 —— 混用一个锚点是这类编辑器最常见的手感问题。
+   */
+  function zoomTo(target, clientX, clientY) {
+    var next = Math.max(0.4, Math.min(6, target));
     if (next === zoom) return;
     var before = toLocal(clientX, clientY);
     zoom = next;
@@ -1516,6 +1519,11 @@
     panX += before.x - after.x;
     panY += before.y - after.y;
     applyView();
+  }
+
+  /** 滚轮：以光标为中心缩放。 */
+  function zoomAt(clientX, clientY, factor) {
+    zoomTo(zoom * factor, clientX, clientY);
   }
 
   // ---- 光标预览 ---------------------------------------------------------------
@@ -1773,14 +1781,6 @@
       parts.push('<text class="regionLabel" x="' + center.x.toFixed(1) + '" y="' + (center.y + 5).toFixed(1) +
         '" text-anchor="middle" font-size="14" font-weight="700" fill="#fff" pointer-events="none">' + esc(label) + '</text>');
     });
-    homeCandidates.forEach(function (entry) {
-      entry.cells.forEach(function (id) {
-        var center = hexCenter(Math.floor(id / COLS), id % COLS);
-        parts.push('<path class="homeCandidateCell" d="' + hexPathD(center.x, center.y) +
-          '" fill="none" stroke="#ffe45c" stroke-width="2.5" stroke-dasharray="5 3" pointer-events="none"><title>主城候选格：' +
-          entry.section + ' 区</title></path>');
-      });
-    });
     return parts.join('');
   }
   function drawMapMetadata() {
@@ -1797,7 +1797,6 @@
       freeDecor: cloneFreeDecor(freeDecor),
       resourcePoints: cloneResourcePoints(resourcePoints),
       regions: cloneRegions(regions),
-      homeCandidates: cloneHomeCandidates(homeCandidates),
       homes: homes.map(function (home) { return home ? { row: home.row, column: home.column } : null; })
     };
   }
@@ -1818,7 +1817,6 @@
     if (JSON.stringify(a.freeDecor || []) !== JSON.stringify(b.freeDecor || [])) return false;
     if (JSON.stringify(a.resourcePoints || []) !== JSON.stringify(b.resourcePoints || [])) return false;
     if (JSON.stringify(a.regions || []) !== JSON.stringify(b.regions || [])) return false;
-    if (JSON.stringify(a.homeCandidates || []) !== JSON.stringify(b.homeCandidates || [])) return false;
     return true;
   }
   function syncUndoButtons() {
@@ -1854,7 +1852,6 @@
     if (!freeDecorById(selectedFreeDecorId)) selectedFreeDecorId = null;
     resourcePoints = cloneResourcePoints(state.resourcePoints || []);
     regions = cloneRegions(state.regions || []);
-    homeCandidates = cloneHomeCandidates(state.homeCandidates || []);
     homes = state.homes.map(function (home) { return home ? { row: home.row, column: home.column } : null; });
     while (homes.length < MAX_SECTIONS) homes.push(null);
     syncControls();
@@ -1927,7 +1924,15 @@
             changed = true;
           }
         } else {
-          // select 模式：任意可通行格；点击位置已有某方 home 则更新该方，否则放第一个空 slot。
+          // 自选模式的默认主城也必须落在所属分区已标记的纵深区域中。
+          var homeId = homeRow * COLS + homeColumn;
+          var homeRegion = regions.length
+            ? regions.find(function (region) { return region.cells.indexOf(homeId) >= 0; })
+            : null;
+          if (regions.length && !homeRegion) {
+            flash('自选主城只能放在已标记的前 / 中 / 后区格中', 'err');
+            continue;
+          }
           var existingSlot = -1;
           for (var slot = 0; slot < PLAYER_COUNT; slot += 1) {
             if (homes[slot] && homes[slot].row === homeRow && homes[slot].column === homeColumn) {
@@ -1935,9 +1940,15 @@
             }
           }
           if (existingSlot >= 0) continue;
-          var emptySlot = -1;
-          for (slot = 0; slot < PLAYER_COUNT; slot += 1) {
-            if (!homes[slot]) { emptySlot = slot; break; }
+          var emptySlot = homeRegion ? homeRegion.section - 1 : -1;
+          if (emptySlot >= 0 && homes[emptySlot]) {
+            flash('该分区主城已放置，先右键清除再移动', 'err');
+            continue;
+          }
+          if (emptySlot < 0) {
+            for (slot = 0; slot < PLAYER_COUNT; slot += 1) {
+              if (!homes[slot]) { emptySlot = slot; break; }
+            }
           }
           if (emptySlot < 0) {
             flash('每方主城都已放置，先右键清除再移动', 'err');
@@ -1970,29 +1981,6 @@
           targetRegion.cells.sort(function (a, b) { return a - b; });
           changed = true;
         } else if (hadRegion) changed = true;
-      } else if (mode === 'homeCandidate' || mode === 'homeCandidate-clear') {
-        var candidateId = row * COLS + column;
-        if (mode === 'homeCandidate' && grid[row][column] === VOID) { blocked += 1; continue; }
-        if (mode === 'homeCandidate' && CITY_MODE !== 'select' && grid[row][column] !== homeCandidateBrushSection) {
-          blocked += 1; continue;
-        }
-        var candidateGroup = homeCandidates.find(function (entry) { return entry.section === homeCandidateBrushSection; });
-        if (!candidateGroup && mode === 'homeCandidate') {
-          candidateGroup = { section: homeCandidateBrushSection, cells: [] };
-          homeCandidates.push(candidateGroup);
-        }
-        if (candidateGroup) {
-          var candidateIndex = candidateGroup.cells.indexOf(candidateId);
-          if (mode === 'homeCandidate' && candidateIndex < 0) {
-            candidateGroup.cells.push(candidateId);
-            candidateGroup.cells.sort(function (a, b) { return a - b; });
-            changed = true;
-          } else if (mode === 'homeCandidate-clear' && candidateIndex >= 0) {
-            candidateGroup.cells.splice(candidateIndex, 1);
-            changed = true;
-          }
-        }
-        homeCandidates = homeCandidates.filter(function (entry) { return entry.cells.length > 0; });
       } else if (mode === 'resource' || mode === 'resource-clear') {
         // 资源点是中立玩法数据，不随分区格镜像：用用户实际点击的坐标，不做 sourceCell 翻转。
         var pointRow = row, pointColumn = column;
@@ -2308,11 +2296,34 @@
     });
     if (resourcePoints.length) data.resourcePoints = cloneResourcePoints(resourcePoints);
     if (regions.length) data.regions = cloneRegions(regions);
-    if (homeCandidates.length) data.homeCandidates = cloneHomeCandidates(homeCandidates);
     // 场景装饰统一写进 art.freeDecor，不参与格子字符画。
     var art = artOut();
     if (art) data.art = art;
     return data;
+  }
+
+  // ---- 帮助弹窗 -------------------------------------------------------------
+  function renderHelp() {
+    var tabs = $('helpTabs'), content = $('helpContent');
+    if (!tabs || !content) return;
+    tabs.innerHTML = EDITOR_HELP.map(function (item, index) {
+      return '<button class="helpTab' + (index === helpActive ? ' on' : '') + '" data-help-index="' + index + '">' + esc(item.title) + '</button>';
+    }).join('');
+    var active = EDITOR_HELP[helpActive];
+    content.innerHTML = active ? '<h4>' + esc(active.title) + '</h4><div class="helpText">' + active.html + '</div>' : '';
+  }
+  function openHelp(index) {
+    helpActive = Math.max(0, Math.min(EDITOR_HELP.length - 1, Number(index) || 0));
+    renderHelp();
+    $('helpModal').hidden = false;
+  }
+  function closeHelp() {
+    var modal = $('helpModal');
+    if (modal) modal.hidden = true;
+  }
+  function helpOpen() {
+    var modal = $('helpModal');
+    return !!modal && !modal.hidden;
   }
 
   function render() {
@@ -2473,6 +2484,26 @@
         '" title="删除预设">×</button></div>';
     }).join('') : '<p class="empty">还没有预设文件，保存当前地图即可创建。</p>';
     updateSaveButton();
+    renderPresetPicker();
+  }
+
+  /**
+   * 顶部「预设」下拉：选中即加载。
+   *
+   * 高级设置里的卡片**继续保留**（删除 / 覆盖 / 另存为都在那），这里只解决「每次都要切到
+   * 高级设置才能换个图看」的问题。一个预设都没有时整个下拉隐藏，不占 header 位置。
+   */
+  function renderPresetPicker() {
+    var box = $('presetPick');
+    if (!box) return;
+    var keys = Object.keys(library).sort();
+    var current = $('mapId').value.trim();
+    var html = '<option value="">预设…</option>';
+    html += keys.map(function (key) {
+      return '<option value="' + esc(key) + '"' + (key === current ? ' selected' : '') + '>' + esc(key) + '</option>';
+    }).join('');
+    box.innerHTML = html;
+    box.hidden = keys.length === 0;
   }
   function updateSaveButton() {
     var id = $('mapId').value.trim();
@@ -2523,14 +2554,11 @@
     Array.prototype.forEach.call(document.querySelectorAll('.resourceItem'), function (button) {
       button.classList.toggle('on', brush === 'resource' && resourceBrush === (button.dataset.resource || ''));
     });
-    ['regionSection', 'homeCandidateSection'].forEach(function (id) {
-      var select = $(id);
-      Array.prototype.forEach.call(select.options || [], function (option) {
-        option.hidden = Number(option.value) > PLAYER_COUNT;
-      });
+    var regionSection = $('regionSection');
+    Array.prototype.forEach.call(regionSection.options || [], function (option) {
+      option.hidden = Number(option.value) > PLAYER_COUNT;
     });
     $('regionSection').value = String(regionBrush.section);
-    $('homeCandidateSection').value = String(homeCandidateBrushSection);
     var selectedRegion = regions.find(function (region) {
       return region.section === regionBrush.section && region.depth === regionBrush.depth;
     });
@@ -2542,10 +2570,6 @@
       else if (active) button.classList.add('on');
       else button.classList.remove('on');
     });
-    var homeCandidateButton = $('btnHomeCandidates');
-    if (homeCandidateButton.classList.toggle) homeCandidateButton.classList.toggle('on', brush === 'homeCandidate');
-    else if (brush === 'homeCandidate') homeCandidateButton.classList.add('on');
-    else homeCandidateButton.classList.remove('on');
     // 3 人锁"关"：disabled 比"点了弹错再自己回勾"清楚，也堵住键盘可达性绕过。
     // 2 人**不锁** —— 上下镜像默认勾上（`defaultMirror`），但用户可以取消，好摆非对称装饰。
     var locked = forcedMirror(PLAYER_COUNT) !== null;
@@ -2556,7 +2580,7 @@
     $('optBackground').checked = showBackground;
     $('hint2').hidden = PLAYER_COUNT !== 2;
     $('hint3').hidden = PLAYER_COUNT !== 3;
-    $('hintHome').hidden = CITY_MODE !== 'fixed';
+    $('hintHome').hidden = CITY_MODE !== 'select';
     Array.prototype.forEach.call(document.querySelectorAll('#segBrush button'), function (button) {
       button.classList.toggle('on', Number(button.dataset.radius) === brushRadius);
     });
@@ -2690,7 +2714,7 @@
       var eraseMode = brush === 'resource' && resourceBrush ? 'resource-clear'
         : brush === 'home' ? 'home-clear'
           : brush === 'region' ? 'region-clear'
-            : brush === 'homeCandidate' ? 'homeCandidate-clear' : 'void';
+            : 'void';
       stroke = {
         before: snapshot(), last: local, erase: eraseMode,
         mode: event.button === 2 ? eraseMode : undefined
@@ -2788,6 +2812,10 @@
       zoomAt(event.clientX, event.clientY, event.deltaY < 0 ? 1.15 : 1 / 1.15);
     }, { passive: false });
     window.addEventListener('resize', function () { fitCanvas(); });
+    $('zoomSlider').addEventListener('input', function () {
+      var stageRect = $('stage').getBoundingClientRect();
+      zoomTo(Number(this.value) / 100, stageRect.left + stageRect.width / 2, stageRect.top + stageRect.height / 2);
+    });
     window.addEventListener('pointerup', function () { endStroke(true); endFreeDecorDrag(true); });
     window.addEventListener('blur', function () { endStroke(true); endFreeDecorDrag(true); });
     window.addEventListener('keydown', function (event) {
@@ -2799,6 +2827,23 @@
         return;
       }
       if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+      // 1~5 切左侧分类（与另外两套编辑器的数字键语义一致：切工具组）
+      if (/^[1-5]$/.test(key)) {
+        setToolCategory(['terrain', 'regions', 'resources', 'decor', 'advanced'][Number(key) - 1]);
+        return;
+      }
+      // Esc：弹窗开着先关弹窗；否则取消装饰选中，再否则回到「地图地形」分类
+      if (key === 'Escape') {
+        if (event.preventDefault) event.preventDefault();
+        if (helpOpen()) { closeHelp(); return; }
+        if (selectedFreeDecorId !== null) {
+          selectedFreeDecorId = null;
+          render();
+        } else {
+          setToolCategory('terrain');
+        }
+        return;
+      }
       if (key === ' ') {
         spaceDown = true;
         if (event.preventDefault) event.preventDefault();
@@ -2907,6 +2952,35 @@
     if ($('inZoomMin')) $('inZoomMin').addEventListener('change', function () { applyZoomInput('zoomMin', this.value); });
     if ($('inZoomMax')) $('inZoomMax').addEventListener('change', function () { applyZoomInput('zoomMax', this.value); });
     $('mapId').addEventListener('input', function () { markDirty(); render(); });
+    // 守卫：这几个节点在 header/弹窗里，万一把弹窗挪到 <script> 之后，
+    // 裸的 addEventListener 会让整个 wireEvents 崩掉（2026-10-20 踩过）。
+    var helpBtn = $('btnHelp'), helpCloseBtn = $('helpClose'), helpTabBox = $('helpTabs'), helpModalBox = $('helpModal');
+    if (helpBtn) helpBtn.addEventListener('click', function () { openHelp(0); });
+    if (helpCloseBtn) helpCloseBtn.addEventListener('click', closeHelp);
+    if (helpTabBox) helpTabBox.addEventListener('click', function (event) {
+      var tab = event.target.closest('[data-help-index]');
+      if (!tab) return;
+      openHelp(Number(tab.dataset.helpIndex));
+    });
+    if (helpModalBox) helpModalBox.addEventListener('click', function (event) {
+      if (event.target === this) closeHelp();   // 点遮罩关闭（点面板不关）
+    });
+    $('presetPick').addEventListener('change', function () {
+      var id = $('presetPick').value;
+      if (!id || !library[id]) { $('presetPick').value = ''; return; }
+      if (dirty && !confirm('加载预设「' + id + '」会丢掉当前未保存的改动，继续？')) {
+        $('presetPick').value = '';
+        return;
+      }
+      applyLayout(library[id], true);
+      // 载入预设属于「打开文件」，不进撤销栈（与 loadLibrary 一致）
+      undoStack.length = 0;
+      redoStack.length = 0;
+      syncUndoButtons();
+      render();
+      renderPresetPicker();
+      flash('已加载预设 ' + id, 'ok');
+    });
     $('mapName').addEventListener('input', function () { markDirty(); render(); });
     $('btnClearMap').addEventListener('click', clearGrid);
     $('btnClearRegion').addEventListener('click', clearSelectedRegion);
@@ -2976,12 +3050,6 @@
         setRegionBrush(Number($('regionSection').value), this.dataset.depth);
       });
     });
-    $('homeCandidateSection').addEventListener('change', function () {
-      setHomeCandidateBrush(Number(this.value));
-    });
-    $('btnHomeCandidates').addEventListener('click', function () {
-      setHomeCandidateBrush(Number($('homeCandidateSection').value));
-    });
   }
 
   newGrid();
@@ -3014,7 +3082,7 @@
     freeDecorMarkup: freeDecorMarkup,
     rememberDecorName: rememberDecorName, groupDecorEntries: groupDecorEntries,
     setResourceBrush: setResourceBrush, setResourceWeight: setResourceWeight, resourceMarkup: resourceMarkup,
-    setRegionBrush: setRegionBrush, setRegionTendency: setRegionTendency, setHomeCandidateBrush: setHomeCandidateBrush,
+    setRegionBrush: setRegionBrush, setRegionTendency: setRegionTendency,
     mapMetadataMarkup: mapMetadataMarkup,
     addResourcePoint: addResourcePoint, removeResourcePoint: removeResourcePoint,
     // 视图矩形 / 背景图标记：判据要能断言「图盒 == viewBox」（见 viewportRect 的红字说明）。
@@ -3048,7 +3116,7 @@
         decorRememberSupported: decorRememberSupported,
         resourceBrush: resourceBrush, resourceImages: Object.keys(resourceImages).sort(),
         resourcePoints: cloneResourcePoints(resourcePoints),
-        regions: cloneRegions(regions), homeCandidates: cloneHomeCandidates(homeCandidates),
+        regions: cloneRegions(regions),
         homes: homes.slice(0, MAX_SECTIONS), paths: paths.length, json: buildJSON()
       };
     }

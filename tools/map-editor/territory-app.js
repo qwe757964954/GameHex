@@ -1,12 +1,20 @@
-﻿import { normalizeTerritoryMap, validateTerritoryMap, cellCoords } from './formats/territory-format.js';
+﻿import {
+  normalizeTerritoryMap, validateTerritoryMap, cellCoords,
+} from './formats/territory-format.js';
+import { bindZoomSlider, setDirtyBadge, syncZoomSlider } from './formats/ui-kit.js';
+import {
+  circleHexes, hexNeighbors as hexNeighborsOf,
+  HEX_COLUMN_STEP, HEX_ROW_STEP,
+} from './formats/hex-grid.js';
 import { issueCells, issuesToCellMarkers } from './formats/territory-issue-cells.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const R = 24;
-const X = 1.5 * R;
-const Y = Math.sqrt(3) * R;
-const DIR_EVEN = [[0, -1], [1, 0], [1, 1], [0, 1], [-1, 0], [-1, 1]];
-const DIR_ODD = [[0, -1], [1, -1], [1, 0], [0, 1], [-1, -1], [-1, 0]];
+/** 列距 / 行距：与客户端 `hexGridLogicalPoint`（36 / 42）一致。
+ *  原先 `Y = √3R ≈ 41.57` 比客户端差 1%，20 行累计偏 8px —— 编辑器摆的格和游戏里的格
+ *  会差一点点，改图时看着对、进游戏偏一线。 */
+const X = HEX_COLUMN_STEP;
+const Y = HEX_ROW_STEP;
 const $ = (id) => document.getElementById(id);
 let mode = 'select';
 let selectedCell = null;
@@ -63,7 +71,7 @@ function inferChapterId(id, fallback = 1) {
 }
 
 function snapshot() { return JSON.parse(JSON.stringify(map)); }
-function setDirty(value) { dirty = value === true; $('dirtyBadge').hidden = !dirty; }
+function setDirty(value) { dirty = value === true; setDirtyBadge($('dirtyBadge'), dirty); }
 function commit() { history.push(snapshot()); if (history.length > 80) history.shift(); future = []; setDirty(true); }
 function restore(value) { map = value; selectedCell = null; lastFormCell = null; markErrorsStale(); syncForm(); render(); }
 function cellId(event) {
@@ -124,7 +132,7 @@ function walkStroke(from, to, emit) {
     const t = i / steps;
     const hit = cellAtLocal(from.x + dx * t, from.y + dy * t);
     if (!hit) continue;
-    const cells = brushRadius > 0 ? neighborCells(hit.row, hit.col, brushRadius) : [hit.row * Number(map.columns) + hit.col];
+    const cells = brushCellsForCell(hit.row * Number(map.columns) + hit.col);
     for (const c of cells) emit(c);
   }
 }
@@ -172,6 +180,8 @@ function applyView() {
   }
   const info = `${Math.round(zoom * 100)}%`;
   if ($('zoomInfo').textContent !== info) $('zoomInfo').textContent = info;
+  // 滑块跟着实时走（滚轮 / 适应窗口 / 代码设缩放都要同步，否则滑块会跟画面脱节）
+  syncZoomSlider($('zoomSlider'), zoom * 100);
 }
 
 function resetView() {
@@ -190,19 +200,29 @@ function pointerWorld(event) {
   };
 }
 
-function zoomAt(event, factor) {
+/**
+ * 设到指定缩放。
+ *
+ * `anchorClient` 为 null 时以**视口中心**为锚（拖滑块用）；给坐标时以该点为锚（滚轮用，
+ * 让光标底下的格子不动）。两种锚点混用是这类编辑器最常见的手感问题。
+ */
+function zoomTo(nextZoom, anchorClient) {
   const rect = svgRect();
   if (!rect.width || !rect.height) return;
-  const before = pointerWorld(event);
-  zoom = Math.max(0.5, Math.min(4, zoom * factor));
+  const anchor = anchorClient ?? { clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 };
+  const before = pointerWorld(anchor);
+  zoom = Math.max(0.5, Math.min(4, nextZoom));
   const { width, height } = baseSize();
-  const viewWidth = width / zoom;
-  const viewHeight = height / zoom;
-  const rx = (event.clientX - rect.left) / rect.width;
-  const ry = (event.clientY - rect.top) / rect.height;
-  viewX = before.x - rx * viewWidth;
-  viewY = before.y - ry * viewHeight;
+  const rx = (anchor.clientX - rect.left) / rect.width;
+  const ry = (anchor.clientY - rect.top) / rect.height;
+  viewX = before.x - rx * (width / zoom);
+  viewY = before.y - ry * (height / zoom);
   applyView();
+}
+
+/** 滚轮：以光标为中心缩放。 */
+function zoomAt(event, factor) {
+  zoomTo(zoom * factor, { clientX: event.clientX, clientY: event.clientY });
 }
 
 function iconColor(type) {
@@ -453,7 +473,12 @@ function render() {
     errorMarkers = collectErrorMarkers();
     if (previous && !errorMarkers.length) showValidation('ok', '格子上的 error 标签已全部消除。');
   }
-  const siteByCell = new Map(map.sites.map((site) => [site.cellId, site]));
+  const siteByCell = new Map();
+  for (const site of map.sites) {
+    for (const id of site.footprint || [site.cellId]) siteByCell.set(id, site);
+  }
+  // 同一战斗 id 的分组（选中任意一格 ⇒ 整组框出来）
+  const groupCells = new Set(selectedCell == null ? [] : siteGroupCells(selectedCell));
   const candidates = new Set(map.randomSites?.candidateCells || []);
   const decorations = new Set((map.decorations || []).map((item) => item.cellId));
   // ① 格子：只改真的变了的属性（拖拽时每帧通常只有 1~2 格变，其余 399 次是字符串比较）
@@ -466,9 +491,11 @@ function render() {
     if (site) classes.push(`site-${site.type}`);
     if (candidates.has(id)) classes.push('candidate');
     if (decorations.has(id)) classes.push('decor');
+    if (groupCells.has(id)) classes.push('site-group');
     const nextClass = classes.join(' ');
     if (cell.path.getAttribute('class') !== nextClass) cell.path.setAttribute('class', nextClass);
-    const nextStroke = id === selectedCell ? '#fff' : '';
+    // 描边走内联（class 里的 stroke 会被它盖掉），所以分组色也只能在这里定。
+    const nextStroke = id === selectedCell ? '#fff' : groupCells.has(id) ? '#22d3ee' : '';
     if (cell.path.style.stroke !== nextStroke) cell.path.style.stroke = nextStroke;
     const nextText = site ? site.id.replace(/^(stage_|boss_)/, '') : String(id);
     if (cell.label.textContent !== nextText) cell.label.textContent = nextText;
@@ -550,7 +577,7 @@ function syncRewardField(type) {
 }
 
 function applyRewardIdFromForm() {
-  const site = map.sites.find((item) => item.cellId === selectedCell);
+  const site = siteAtCell(selectedCell);
   if (!site || site.type !== 'fixedResource') return true;
   const rewardText = $('rewardId').value.trim();
   const rewardId = rewardText === '' ? null : Number(rewardText);
@@ -610,6 +637,49 @@ function applyRandomBuildingIdFromForm() {
   return true;
 }
 
+/** 按索引切工具（1~9 快捷键），点一下左侧按钮复用同一份状态。 */
+function pickTool(index) {
+  const button = [...document.querySelectorAll('#tools button')][index];
+  if (button) button.click();
+}
+
+/** Delete：删掉选中格上的站点；没站点就走「擦除」工具那一套（候选格 / 装饰）。 */
+function deleteSelected() {
+  if (selectedCell == null) return;
+  if (siteAtCell(selectedCell)) { $('removeSite').click(); return; }
+  const saved = mode;
+  mode = 'erase';
+  paint(selectedCell, {});
+  mode = saved;
+}
+
+/** 按 cellId 找站点：**含 footprint** —— 多格站点被点到非锚点格子时也要认得。 */
+function siteAtCell(cell) {
+  if (cell == null) return null;
+  return (map.sites || []).find((item) => (item.footprint || [item.cellId]).includes(cell)) || null;
+}
+
+/**
+ * 同一「战斗 id」的全部格子。
+ *
+ * 地图数据是**每格一条 site 记录**，同一关卡用相同的 `configId` 串起来
+ * （chapter_01 里 `configId=10005` 就有 7 条）。所以「这个关卡占了哪几格」
+ * = 同 configId 的所有 footprint 并集 —— 只亮被点的那一格是看不出形状的。
+ *
+ * `configId` 为空时退回 `site.id`（组里只有自己，行为与以前一致）。
+ */
+function siteGroupCells(cell) {
+  const site = siteAtCell(cell);
+  if (!site) return [];
+  const key = site.configId || site.id;
+  const cells = new Set();
+  for (const item of map.sites || []) {
+    if ((item.configId || item.id) !== key) continue;
+    for (const id of item.footprint || [item.cellId]) cells.add(id);
+  }
+  return [...cells];
+}
+
 function syncForm() {
   const presetSelect = $('presetSelect');
   if (presetSelect && map.id && ![...presetSelect.options].some((option) => option.value === map.id)) presetSelect.appendChild(new Option(`${map.id} · ${map.name || map.id} · ${map.sites?.length || 0} 站点`, map.id));
@@ -617,7 +687,7 @@ function syncForm() {
   setField('mapId', map.id); setField('chapterId', map.chapterId); setField('mapName', map.name); setField('rows', map.rows); setField('columns', map.columns); setField('background', map.background || '');
   const random = map.randomSites || { triggerSilver: 1000, rewardPoolId: 'territory_random_01', candidateCells: [], maxActive: 1 };
   setField('triggerSilver', random.triggerSilver); setField('rewardPoolId', random.rewardPoolId); setField('maxActive', random.maxActive);
-  const site = map.sites.find((item) => item.cellId === selectedCell);
+  const site = siteAtCell(selectedCell);
   const editor = $('siteEditor');
   if (editor.hidden !== !site) editor.hidden = !site;
   // 随机据点编辑区只在「选中的确实是候选格」时出现（与 siteEditor 互斥：一格只能有一个功能身份）。
@@ -632,8 +702,9 @@ function syncForm() {
     lastFormCell = selectedCell;
     setField('randomBuildingId', isCandidate ? (map.randomSites?.buildingIds?.[selectedCell] ?? '') : '');
   }
+  const groupSize = site ? siteGroupCells(selectedCell).length : 0;
   const info = selectedCell == null ? '点击地图格子'
-    : `cellId ${selectedCell}${site ? ` · ${site.id}` : isCandidate ? ' · 随机据点' : ''}`;
+    : `cellId ${selectedCell}${site ? ` · ${site.id}${groupSize > 1 ? ` · 同战斗 id 共 ${groupSize} 格` : ''}` : isCandidate ? ' · 随机据点' : ''}`;
   if ($('cellInfo').textContent !== info) $('cellInfo').textContent = info;
   if (!site) return;
   setField('siteId', site.id); setField('siteType', site.type); setField('configId', site.configId || ''); setField('buildingId', site.buildingId || '');
@@ -707,38 +778,43 @@ function applyFormatToCell(cell, source) {
   syncForm();
 }
 
+/** 六邻居：统一走 `hex-grid.js`（与客户端 `hexGridNeighborIds` 逐格一致）。 */
 function hexNeighbors(row, col) {
-  const dirs = col & 1 ? DIR_ODD : DIR_EVEN;
-  const out = [];
-  for (const [dc, dr] of dirs) {
-    const nr = row + dr, nc = col + dc;
-    if (nr >= 0 && nr < Number(map.rows) && nc >= 0 && nc < Number(map.columns)) out.push({ row: nr, column: nc });
-  }
-  return out;
+  const cols = Number(map.columns);
+  return hexNeighborsOf(row * cols + col, Number(map.rows), cols)
+    .map((id) => ({ row: Math.floor(id / cols), column: id % cols }));
 }
 function neighborCells(row, col, radius) {
-  if (!radius) return [row * map.columns + col];
+  const cols = Number(map.columns), rows = Number(map.rows);
+  const cellId = row * cols + col;
+  if (!radius) return [cellId];
   if (radius === 3) {
-    const cols = Number(map.columns), rows = Number(map.rows);
-    const out = [row * cols + col];
+    // 「上下 3 格」是老笔刷的专门一档，不是圆，保留原义
+    const out = [cellId];
     if (row - 1 >= 0) out.push((row - 1) * cols + col);
     if (row + 1 < rows) out.push((row + 1) * cols + col);
     return out;
   }
-  const seen = new Set([row * map.columns + col]);
-  let frontier = [{ row, column: col }];
-  for (let step = 0; step < radius; step += 1) {
-    const next = [];
-    for (const cell of frontier) {
-      for (const n of hexNeighbors(cell.row, cell.column)) {
-        const key = n.row * map.columns + n.column;
-        if (seen.has(key)) continue;
-        seen.add(key); next.push(n);
-      }
-    }
-    frontier = next;
-  }
-  return [...seen];
+  return circleHexes(cellId, radius, rows, cols);
+}
+
+/**
+ * 落笔取格。
+ *
+ * 「半径环数」优先（与大地图 `circleHexes` 同一口径：半径 2 = 19 格），没填才退回老的四档笔刷
+ * （1 / 上下3 / 7 / 19）。两条路都走 `hex-grid.js` —— 编辑器刷出来的格子与游戏里算作相邻的
+ * 格子必然是同一批。
+ */
+function radiusFromInput() {
+  return Math.max(0, Math.floor(Number($('rangeRadius')?.value) || 0));
+}
+
+/** 半径优先（与大地图 `circleHexes` 同口径），没填才退回老四档笔刷。 */
+function brushCellsForCell(cellIdValue) {
+  const cols = Number(map.columns);
+  const radius = radiusFromInput();
+  if (radius > 0) return circleHexes(cellIdValue, radius, Number(map.rows), cols);
+  return neighborCells(Math.floor(cellIdValue / cols), cellIdValue % cols, brushRadius);
 }
 function paint(cell, { skipCommit = false, skipRender = false } = {}) {
   if (cell < 0) return;
@@ -863,12 +939,14 @@ function beginDrag(event) {
   drag = { visited: new Set(), pointerId: event.pointerId, erase, last: clientToLocal(event.clientX, event.clientY) };
   commit();
   drag.visited.add(cell);
+  // 填了「半径环数」时，**单点**也铺一片（与大地图一致）；没填保持原行为（单点 1 格）。
+  const firstCells = radiusFromInput() > 0 ? brushCellsForCell(cell) : [cell];
   if (erase) {
     const saved = mode; mode = 'erase';
-    paint(cell, { skipCommit: true, skipRender: true });
+    for (const id of firstCells) { drag.visited.add(id); paint(id, { skipCommit: true, skipRender: true }); }
     mode = saved;
   } else {
-    paint(cell, { skipCommit: true, skipRender: true });
+    for (const id of firstCells) { drag.visited.add(id); paint(id, { skipCommit: true, skipRender: true }); }
   }
   render();
   event.currentTarget.setPointerCapture?.(event.pointerId);
@@ -920,6 +998,7 @@ $('map').addEventListener('pointerup', endDrag);
 $('map').addEventListener('pointercancel', endDrag);
 $('map').addEventListener('wheel', (event) => { event.preventDefault(); zoomAt(event, event.deltaY < 0 ? 1.15 : 1 / 1.15); }, { passive: false });
 $('fit').addEventListener('click', resetView);
+bindZoomSlider($('zoomSlider'), (percent) => zoomTo(percent / 100));
 document.querySelectorAll('input[name="brushRadius"]').forEach((radio) => radio.addEventListener('change', () => { brushRadius = Number(radio.value); }));
     $('tools').addEventListener('click', (event) => { const button = event.target.closest('button'); if (!button) return; mode = button.dataset.mode; if (mode !== 'format') formatSource = null; document.querySelectorAll('#tools button').forEach((item) => item.classList.toggle('active', item === button)); $('toolStatus').textContent = `当前工具：${button.textContent}`; });
 $('siteType').addEventListener('change', () => syncRewardField($('siteType').value));
@@ -927,7 +1006,7 @@ $('rewardId').addEventListener('change', applyRewardIdFromForm);
 $('randomBuildingId').addEventListener('change', () => { if (applyRandomBuildingIdFromForm()) { render(); message(selectedCell == null ? '' : `已设置格子 ${selectedCell} 的建筑 ID，按 Ctrl+S 保存`); } });
 $('applyBatchRewardId').addEventListener('click', applyBatchRewardId);
 $('applySite').addEventListener('click', () => {
-  const site = map.sites.find((item) => item.cellId === selectedCell);
+  const site = siteAtCell(selectedCell);
   if (!site) return;
   const type = $('siteType').value;
   const rewardText = $('rewardId').value.trim();
@@ -948,7 +1027,15 @@ $('applySite').addEventListener('click', () => {
   markErrorsStale();
   render();
 });
-$('removeSite').addEventListener('click', () => { if (selectedCell == null) return; commit(); map.sites = map.sites.filter((site) => site.cellId !== selectedCell); selectedCell = null; markErrorsStale(); render(); });
+$('removeSite').addEventListener('click', () => {
+  if (selectedCell == null) return;
+  commit();
+  // 按 footprint 删：多格站点被点到的可能不是锚点格
+  map.sites = map.sites.filter((site) => !(site.footprint || [site.cellId]).includes(selectedCell));
+  selectedCell = null;
+  markErrorsStale();
+  render();
+});
 function updateMapField(id) {
   if (id === 'mapId') {
     map.id = $(id).value.trim();
@@ -983,8 +1070,20 @@ $('redo').addEventListener('click', () => { if (!future.length) return; history.
 
 window.addEventListener('keydown', (event) => {
   const key = event.key.toLowerCase();
-  if (event.key === 'Escape' && mode === 'format') { formatSource = null; message('格式刷已取消'); render(); return; }
-  if (!(event.ctrlKey || event.metaKey)) return;
+  const ctrl = event.ctrlKey || event.metaKey;
+  // Esc 三级退出：格式刷 → 清选中 → 回「选择」工具
+  if (event.key === 'Escape') {
+    if (mode === 'format') { formatSource = null; message('格式刷已取消'); render(); return; }
+    if (selectedCell != null) { selectedCell = null; syncForm(); render(); return; }
+    if (mode !== 'select') { pickTool(0); return; }
+    return;
+  }
+  // 输入框里按数字/删除不该动编辑器
+  const tag = document.activeElement?.tagName ?? '';
+  if (!ctrl && (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA')) return;
+  if (!ctrl && (event.key === 'Delete' || event.key === 'Backspace')) { event.preventDefault(); deleteSelected(); return; }
+  if (!ctrl && /^[1-9]$/.test(event.key)) { pickTool(Number(event.key) - 1); return; }
+  if (!ctrl) return;
   if (key === 's') { event.preventDefault(); save().catch((error) => message(error.message)); }
   else if (key === 'z' && !event.shiftKey) { event.preventDefault(); if (!history.length) return; future.push(snapshot()); restore(history.pop()); setDirty(true); }
   else if (key === 'y' || (key === 'z' && event.shiftKey)) { event.preventDefault(); if (!future.length) return; history.push(snapshot()); restore(future.pop()); setDirty(true); }

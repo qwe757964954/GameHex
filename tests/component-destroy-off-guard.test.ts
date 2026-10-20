@@ -83,7 +83,7 @@ test('onDestroy 里只允许对 this.node / 全局 input 摘监听，别的节�
     assert.ok(checked.length > 0, '至少要扫到几处 off（否则说明扫描逻辑失效了）');
     assert.deepEqual(offenders, [], `onDestroy 里摘监听的写法不合规：\n  ${offenders.join('\n  ')}`);
     // 反向确认：`TerritoryPage` 那处（子节点 MapViewport）已经删掉了
-    const page = stripComments(readFileSync('assets/script/app/territory/view/TerritoryPage.ts', 'utf8'));
+    const page = stripComments(readFileSync('assets/script/app/main/MainTerritoryMap.ts', 'utf8'));
     assert.ok(
         !/mapViewport\.off\(/.test(page),
         'TerritoryPage.onDestroy 不能再对子节点 mapViewport 调 off（会抛 reading \'off\'）',

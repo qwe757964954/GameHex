@@ -257,7 +257,7 @@ const saveStoreSrc = readFileSync(
     'utf8',
 );
 const pageSrc = readFileSync(
-    new URL('../assets/script/app/territory/view/TerritoryPage.ts', import.meta.url),
+    new URL('../assets/script/app/main/MainTerritoryMap.ts', import.meta.url),
     'utf8',
 );
 const presenterSrc = readFileSync(

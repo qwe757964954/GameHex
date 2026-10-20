@@ -14,6 +14,8 @@ test('瞬时表现按时间过期、按格读取最新事件，重开清空并�
     // `hasCardReveal` 要原样透传：视图靠它决定「翻面段之后」是整格隐藏（有卡牌接棒）
     // 还是原地翻回来（抽空 —— 隐藏段会露出棋盘底）。
     assert.equal(queue.activationOf(7)?.hasCardReveal, false);
+    queue.pushHexActivation(1.2, 9, true, 4);
+    assert.equal(queue.activationOf(9)?.cardRarity, 4, '激活事件需把抽到卡牌的品阶传到渲染层');
     queue.prune(1.6);
     assert.equal(queue.floatTexts.length, 0);
     assert.equal(queue.cardReveals.length, 1);

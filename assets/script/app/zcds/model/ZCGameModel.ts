@@ -20,6 +20,7 @@ import {
     cardCounterMultiplier,
     luckTextOfTier,
     ZC_CARD_TYPE_NAMES,
+    ZC_RARITY_RANK,
     ZCAttackTrait,
     ZCDeckBonuses,
     ZCDeckCard,
@@ -51,6 +52,7 @@ import {
 } from './ZCLegacySkillEffect';
 
 import { ownersForPlayerCount, ZC_OWNER_ORDER, type ZCOwner } from './ZCMapConfig';
+import { ZCNeutralResourceId, type ZCNeutralResourceReward } from './ZCNeutralResourceReward';
 export {
     configureZCMap,
     defaultZCSectionAt,
@@ -387,6 +389,9 @@ export class ZCGameModel {
             setGold: (owner, amount) => this.setGold(owner, amount),
             unitCount: (owner) => this.unitCount(owner),
             spawnUnit: (owner, card, tier, hexId) => { this.spawnUnit(owner, card, tier, hexId); },
+            onNeutralReward: (hexId, resourceId, owner, reward) => {
+                this.pushNeutralReward(hexId, resourceId, owner, reward);
+            },
         };
         this.statusResolutionContext = {
             statusSystem: this.statusSystem,
@@ -575,6 +580,7 @@ export class ZCGameModel {
             hitFxs: this.presentation.hitFxs,
             cardReveals: this.presentation.cardReveals,
             hexActivations: this.presentation.hexActivations,
+            neutralRewards: this.presentation.neutralRewards,
         };
     }
 
@@ -645,8 +651,8 @@ export class ZCGameModel {
         this.presentation.pushCardReveal({ now: this.state.elapsedSeconds, x: center.x, y: center.y, ...input });
     }
 
-    private pushHexActivation(hexId: number, hasCardReveal: boolean): void {
-        this.presentation.pushHexActivation(this.state.elapsedSeconds, hexId, hasCardReveal);
+    private pushHexActivation(hexId: number, hasCardReveal: boolean, cardRarity: number): void {
+        this.presentation.pushHexActivation(this.state.elapsedSeconds, hexId, hasCardReveal, cardRarity);
     }
 
     /** 给某一方加金币（含飘字），矿区产出与击杀奖励共用。 */
@@ -1276,7 +1282,10 @@ export class ZCGameModel {
         // 口径：`develop` 一旦置真 `developmentResolved`（这次开发真的落地了）就必须播。
         // `hasCardReveal` 决定收场段之后怎么接 —— 没有卡牌时视图把「整格隐藏」换成原地缩回来
         // （隐藏段是给卡牌独占视线的，没卡牌就会露出棋盘底）。
-        this.pushHexActivation(hex.id, result.building !== null);
+        // 脉冲染色跟着「抽到的卡」走（2026-10-19）：没抽到卡时传 0（视图按绿处理）。
+        // ⚠️ 抽到卡但建不上（`!result.building`）时仍有品阶 —— 用户要的是「对应获得的卡牌品阶」，
+        // 与 `hasCardReveal`（有没有卡牌揭示）不是同一个判据。
+        this.pushHexActivation(hex.id, result.building !== null, result.card ? ZC_RARITY_RANK[result.card.rarity] : 0);
         if (!result.card) {
             this.refreshTileStates();
             return this.success(`${owner === 'player' ? '你' : '敌方'}花费 ${hex.developmentCost} 金币，本次未抽到卡牌。`);
@@ -1567,10 +1576,38 @@ export class ZCGameModel {
 
     private claimAdjacentNeutralResources(): void {
         ZCDevelopmentSystem.claimAdjacentNeutralResources(
-            this.state, this.config.map, this.activeOwners, this.developmentContext, () => {
+            this.state, this.config.map, this.activeOwners, this.developmentContext, (hexId, resourceId) => {
                 this.tileStatesDirty = true;
                 this.invalidateTerrain();
+                // 金矿「被开发」：领取金矿走「建筑被开发」的点击动画（脉冲 ∥ 缩没、无卡牌），
+                // 与「开出一块地」同一种观感（2026-10-20 需求）。
+                if (resourceId === ZCNeutralResourceId.Mine) this.pushHexActivation(hexId, false, 0);
             });
+    }
+
+    /**
+     * 中立资源奖励入袋的表现通知入口（`onNeutralReward` 的落地实现）。
+     *
+     * 按需求把「哪种资源播什么效果」收敛在模型这一处：
+     *   · `mine`（金矿）→ **只播「建筑被开发」激活**（见 `claimAdjacentNeutralResources`），
+     *     不播金币飞行 —— 需求口径「金矿沿用建筑被开发效果」；
+     *   · `gold` / `chest`（金币堆 / 宝箱）→ 入队金币飞行事件（视图播「飞向金币栏 + 上飘 +N」）；
+     *   · `artifact_charge`（神器充能）→ 入队神器飞行事件（视图播「飞向神器栏」）；
+     *   · `unit_cap`（兵力）→ 直接产兵、走出生表现，无飞行事件。
+     * 其余（无实际入账金额）一律不入队，避免空特效。
+     */
+    private pushNeutralReward(hexId: number, resourceId: ZCNeutralResourceId, owner: ZCOwner,
+        reward: ZCNeutralResourceReward): void {
+        if (resourceId === ZCNeutralResourceId.Mine) return;
+        if (reward.gold <= 0 && reward.artifactCharge <= 0) return;
+        this.presentation.pushNeutralReward({
+            now: this.state.elapsedSeconds,
+            hexId,
+            resourceId,
+            owner,
+            gold: reward.gold,
+            artifactCharge: reward.artifactCharge,
+        });
     }
 
     private checkOutcome(): void {

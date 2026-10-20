@@ -1608,7 +1608,7 @@ test('chapter start forwards the complete server battle to navigation', async ()
 });
 
 test('territory page passes battle and current role to the game route', () => {
-    const page = readFileSync('assets/script/app/territory/view/TerritoryPage.ts', 'utf8');
+    const page = readFileSync('assets/script/app/main/MainTerritoryMap.ts', 'utf8');
     assert.match(page, /navigateToBattle: \(pve, battle\) =>[\s\S]*?ProcedureManager\.navigate\(GameRoute\.Battle, \{[\s\S]*?battle,[\s\S]*?selfRoleId: saveOwner\?\.roleId/);
 });
 

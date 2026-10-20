@@ -2,21 +2,36 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 
-test('adventure tab opens the independent interactive territory page', () => {
+test('challenge tab stays visible but cannot open the old adventure page', () => {
     const source = readFileSync(new URL('../assets/script/app/main/MainTabHost.ts', import.meta.url), 'utf8');
-    // 冒险 tab = 独立 prefab（`ui/territory/TerritoryPage`），与角色页一样走整页替换；
-    // 页面上的 `TerritoryPage` 组件由 prefab 自带，宿主只负责注入资源入口。
-    assert.match(source, /adventurePage: Prefab = null!/);
-    assert.match(source, /if \(index === MainTab\.Adventure\) return this\.adventurePage;/);
-    assert.match(source, /getComponent\(TerritoryPage\)/);
+    // 旧挑战入口仍保留在底栏，但不再绑定切页回调或章节地图 prefab。
+    assert.match(source, /button\.bindSelect\(type === MainTab\.Challenge \? null : \(\) => \{ void this\.switchTab\(type\); \}\);/);
+    assert.doesNotMatch(source, /if \(index === MainTab\.Challenge\) return this\.adventurePage;/);
+    assert.doesNotMatch(source, /adventurePage/, '旧章节地图 prefab 入口应移除');
+    const mainRoot = readFileSync(new URL('../assets/resources/ui/main/MainRoot.prefab', import.meta.url), 'utf8');
+    assert.doesNotMatch(mainRoot, /adventurePage|1a6ca85d-9a57-444a-abb7-0c7915f07dc0/,
+        'MainRoot 不得残留失效的 TerritoryPage prefab 引用');
+    assert.match(source, /getComponentInChildren\(MainTerritoryMap\)/);
     assert.doesNotMatch(source, /if \(index === MainTab\.Adventure\) return this\.roleMainPage;/);
 });
 
+test('领地格 = 主城页（内嵌领地图），章节 HUD 由主城顶栏替代', () => {
+    const source = readFileSync(new URL('../assets/script/app/main/MainTabHost.ts', import.meta.url), 'utf8');
+    // 「领地之后就是主城」：领地格加载主城页 `ArenaRoot`（里面嵌了 MainTerritoryMap 实例）。
+    assert.match(source, /if \(index === MainTab\.Territory\) return this\.arenaPage;/);
+    // 主城嵌入 map-only 页面，并在激活前注入资源。
+    assert.match(source, /getComponentInChildren\(MainTerritoryMap\)/);
+    assert.match(source, /mainTerritoryMap\.initialize\(this\.assets\)/);
+    assert.ok(source.indexOf('mainTerritoryMap.initialize(this.assets)') < source.indexOf('page.setParent(this.content)'),
+        'AssetService 必须在页面激活前注入');
+    assert.doesNotMatch(source, /setHudVisible/);
+});
+
 test('territory stations open details and start a table-driven local PVE battle', () => {
-    const page = readFileSync(new URL('../assets/script/app/territory/view/TerritoryPage.ts', import.meta.url), 'utf8');
+    const page = readFileSync(new URL('../assets/script/app/main/MainTerritoryMap.ts', import.meta.url), 'utf8');
     // 2026-10-09 抽 Presenter 后：状态与编排（含开战、切章、开战导航组装）在纯 TS 的
     // TerritoryPresenter；存档调用在 SaveStoreAdapter；章节加载在 ChapterLoader；
-    // Page 只剩引擎接线（持有 Repository、弹窗、导航、定时器）。
+    // Map host 只剩引擎接线（持有 Repository、弹窗、导航、定时器）。
     const presenter = readFileSync(new URL('../assets/script/app/territory/application/TerritoryPresenter.ts', import.meta.url), 'utf8');
     const adapter = readFileSync(new URL('../assets/script/app/territory/application/TerritorySaveStoreAdapter.ts', import.meta.url), 'utf8');
     const loader = readFileSync(new URL('../assets/script/app/territory/application/TerritoryChapterLoader.ts', import.meta.url), 'utf8');
@@ -25,7 +40,7 @@ test('territory stations open details and start a table-driven local PVE battle'
     const game = readFileSync(new URL('../assets/script/app/procedure/ProcedureGame.ts', import.meta.url), 'utf8');
     // 章节战役由 ChapterLoader 加载（Page 不再直接调）。
     assert.match(loader, /loadTerritoryCampaign\(chapterId\)/);
-    assert.match(page, /TERRITORY_CHAPTERS = \[1\]/);
+    assert.match(page, /FALLBACK_CHAPTERS = \[1\]/);
     assert.match(presenter, /switchChapter/);
     assert.match(presenter, /territoryChapterCompletion/);
     // 按钮可用性改由 HUD 渲染数据表达（原来是直接写 `next.interactable`）。
@@ -34,8 +49,8 @@ test('territory stations open details and start a table-driven local PVE battle'
     const texts = readFileSync(new URL('../assets/script/app/territory/application/TerritoryTexts.ts', import.meta.url), 'utf8');
     assert.match(texts, /请先占领本章全部站点/);
     // 章节记忆走 store 端口（委托断言读适配器）。
-    assert.match(adapter, /TerritorySaveStore\.loadLastChapter/);
-    assert.match(adapter, /TerritorySaveStore\.saveLastChapter/);
+    assert.match(adapter, /this\.store\.loadLastChapter/);
+    assert.match(adapter, /this\.store\.saveLastChapter/);
     // 站点详情改由独立弹窗承载（Presenter 的 intent 是 selectSite）。
     assert.match(presenter, /selectSite\(site: TerritorySite\)/);
     assert.match(page, /this\.detailPanel\.open\(/);
@@ -47,7 +62,7 @@ test('territory stations open details and start a table-driven local PVE battle'
     assert.match(presenter, /mode: stage\.mode/);
     assert.match(presenter, /waves: stage\.waves\.flatMap/);
     assert.match(presenter, /territoryCellId: site\.cellId/);
-    assert.match(adapter, /TerritorySaveStore\.beginBattle/);
+    assert.match(adapter, /this\.store\.beginBattle/);
     assert.match(presenter, /progress\.startExplore/);
     // 地图 JSON 背景缺省时（chapter_01~04 的background 都是空串）回落到默认图 zdbg1。
     // ⚠️ zdbg1 在 `image/` **根目录**、不在 `image/territory/` ⇒ 必须走 `ART_ROOT`；
@@ -57,7 +72,7 @@ test('territory stations open details and start a table-driven local PVE battle'
     assert.match(assets, /const DEFAULT_TERRITORY_BG_NAME = 'zdbg1'/);
     assert.ok(existsSync(new URL('../assets/resources/image/zdbg1.jpg', import.meta.url)),
         '★默认底图 zdbg1 必须在 image/ 根目录（ART_ROOT）下');
-    assert.match(assets, /spriteFramePath\(BUILDING_ART_ROOT, 'hex_nor'\)/);
+    assert.match(assets, /spriteFramePath\(BUILDING_ART_ROOT, 'img_land_02'\)/);
     assert.match(game, /requestedEnemyCards/);
     assert.match(game, /baseConfig\.enemyDeck\.filter/);
     assert.match(game, /maxHpPct: \(pve\.hpRate - 1\) \* 100/);
@@ -72,14 +87,9 @@ test('territory stations open details and start a table-driven local PVE battle'
     assert.ok(existsSync(new URL('../assets/resources/image/buildings/hex_nor.png', import.meta.url)));
 });
 
-test('PVE settlement records territory result and returns to adventure', () => {
+test('PVE settlement returns to the territory main tab', () => {
     const game = readFileSync(new URL('../assets/script/app/zcds/ZCGame.ts', import.meta.url), 'utf8');
-    const procedure = readFileSync(new URL('../assets/script/app/procedure/ProcedureGame.ts', import.meta.url), 'utf8');
     const main = readFileSync(new URL('../assets/script/app/procedure/ProcedureMain.ts', import.meta.url), 'utf8');
-    assert.match(game, /this\.recordPveResult\(!retreated && state\.status === 'victory'\)/);
-    assert.match(game, /if \(!retreated && !this\.pveContext\)/);
-    assert.match(game, /pve\.onResult\(victory\)/);
-    assert.match(game, /initialTab: 'adventure'/);
-    assert.match(procedure, /TerritorySaveStore\.resolveBattle/);
-    assert.match(main, /params\.initialTab === 'adventure' \? MainTab\.Adventure/);
+    assert.match(game, /ProcedureManager\.navigate\(GameRoute\.Main, \{ initialTab: 'territory' \}\)/);
+    assert.match(main, /params\.initialTab === 'territory' \? MainTab\.Territory/);
 });

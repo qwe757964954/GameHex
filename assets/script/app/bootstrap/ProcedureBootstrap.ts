@@ -8,6 +8,7 @@ import { CocosAssetService } from '../../platform/cocos/CocosAssetService';
 import { RefConfigService } from '../../platform/config/RefConfigService';
 import { FetchNetworkTransport } from '../../platform/network/FetchNetworkTransport';
 import { CenterPaymentService } from '../../platform/payment/CenterPaymentService';
+import { BigMapEntry } from '../bigmap/application/BigMapEntry';
 import { ProcedureGame } from '../procedure/ProcedureGame';
 import { ProcedureLogin } from '../procedure/ProcedureLogin';
 import { ProcedureMain } from '../procedure/ProcedureMain';
@@ -79,6 +80,9 @@ export class ProcedureBootstrap extends Component {
 
         const manager = this.getComponent(ProcedureManager) ?? this.addComponent(ProcedureManager);
         const assets = new CocosAssetService();
+        // 大世界布局从 `config/bigmap-maps/` 读（走 AssetService，不直调 resources.load）。
+        // 不注入也能玩：`BigMapEntry` 会降级成「按种子生成世界」，所以入口按钮那条链不用传参。
+        BigMapEntry.shared().setAssetService(assets);
         const configs = new RefConfigService();
         PopupManager.inst?.initialize(assets);
         manager.configure({

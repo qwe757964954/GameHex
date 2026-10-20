@@ -5,6 +5,7 @@ import { GameNet } from '../net/GameNet';
 import {
     currentDeckBonuses,
     ensureLineupDecks,
+    loadArmySkillLevelUpRows,
     loadCardLevelUpRows,
     loadPvpCatalogCards,
     loadPvpHeroCards,
@@ -12,6 +13,8 @@ import {
 } from './CardLineupDecks';
 import { buildCardLevelUpTable, evaluateUpgrade } from './CardUpgradeCost';
 import type { ZCUpgradeStatus } from './CardUpgradeCost';
+import { buildArmySkillTable } from './CardSkillList';
+import type { ZCArmySkillTable } from './CardSkillList';
 import { fetchFormations, saveFormation } from './FormationService';
 import type { FormationSaveResult, ZCFormation } from './FormationService';
 import { createItemCounter } from './ItemBag';
@@ -20,6 +23,7 @@ import {
     applyPvpHeroLevel,
     applyPvpHeroSkillLevel,
     fetchPvpHeroInfos,
+    getCachedPvpHeroInfo,
     getCachedPvpHeroInfos,
     normalizePvpHeroInfos,
 } from './PvpHeroService';
@@ -47,6 +51,18 @@ export interface LineupBoardData {
     readonly formations: readonly ZCFormation[] | null;
 }
 
+/** 技能面板一次取数要的东西：卡表里的技能顺序 + 技能表 + 该英雄的技能等级。 */
+export interface CardSkillListData {
+    /** 卡牌配置里的技能 id 顺序（`pvpCard.skillList`）；没配置时为空。 */
+    readonly skillIds: readonly number[];
+    /** `armySkillLevelUp` 聚合后的技能表。 */
+    readonly table: ZCArmySkillTable;
+    /** 该英雄的技能等级（后端 `CmdPvpHeroInfo.skills`）；没有后端数据时为空。 */
+    readonly levels: readonly PvpHeroSkillLevel[];
+    /** 该英雄的等级（用于判「下一档解锁没有」）。 */
+    readonly heroLevel: number;
+}
+
 export type UpgradeHeroResult =
     | { readonly kind: 'success'; readonly heroId: number; readonly level: number }
     | { readonly kind: 'offline' }
@@ -71,6 +87,8 @@ export interface ICardRepository {
     loadUpgradeStatus(cardId: string, level: number): Promise<ZCUpgradeStatus>;
     upgradeHero(heroId: number, caller?: unknown): Promise<UpgradeHeroResult>;
     upgradeHeroSkill(heroId: number, skillId: number, caller?: unknown): Promise<UpgradeHeroSkillResult>;
+    /** 技能面板取数（卡表技能顺序 + `armySkillLevelUp` + 该英雄技能等级）。 */
+    loadSkillList(heroId: number): Promise<CardSkillListData>;
     applyHeroLevel(heroId: number, level: number): void;
     /** 覆盖保存一个阵型；结果里带回服务端确认后的阵型。 */
     saveFormation(formationId: number, heroIds: readonly number[], caller?: unknown): Promise<FormationSaveResult>;
@@ -139,6 +157,47 @@ export class RuntimeCardRepository implements ICardRepository {
     async loadUpgradeStatus(cardId: string, level: number): Promise<ZCUpgradeStatus> {
         const rows = await loadCardLevelUpRows();
         return evaluateUpgrade(buildCardLevelUpTable(rows), cardId, level, createItemCounter());
+    }
+
+    /**
+     * 技能面板取数。
+     *
+     * 三份数据各有各的权威源：
+     *   - **有哪些技能、什么顺序** ← `pvpCard.skillList`（卡表，缺省时退回 `armySkillLevelUp` 里该英雄的行）；
+     *   - **技能名 / 每档解锁等级 / 每档描述** ← `armySkillLevelUp`；
+     *   - **已升到第几档** ← 后端 `CmdPvpHeroInfo.skills`（缓存）。**不猜 `level + 1`** ——
+     *     服务端可能因条件不满足只升半档，猜出来的数字点两下就跟服务端对不上。
+     *
+     * 技能等级一律从 `PvpHeroService` 的缓存读：技能升级响应回来后
+     * `upgradeHeroSkill` 已经把新值写回缓存，所以「收到响应 → 重刷」天然拿到最新值，
+     * 不需要再发一次英雄列表请求。
+     */
+    async loadSkillList(heroId: number): Promise<CardSkillListData> {
+        const table = buildArmySkillTable(await loadArmySkillLevelUpRows());
+        const info = getCachedPvpHeroInfo(heroId);
+        const fallbackIds = Array.from(table.keys());
+        return {
+            skillIds: await this.skillIdsOf(heroId, fallbackIds),
+            table,
+            levels: info?.skills ?? [],
+            heroLevel: info?.level ?? 0,
+        };
+    }
+
+    /**
+     * 卡表里这张卡的技能顺序。
+     *
+     * 卡表那一行存在但 `skillList` 为空，是策划**明确不给技能**（主城、金矿），返回空数组、不兜底；
+     * 卡表里根本找不到这张卡（表缺失 / id 对不上）才退回 `fallbackIds`（技能表全部技能）——
+     * 宁可多列几行也别让面板空着。
+     */
+    private async skillIdsOf(heroId: number, fallbackIds: readonly number[]): Promise<readonly number[]> {
+        const cards = await loadPvpCatalogCards();
+        for (const card of cards) {
+            if (card.id !== String(heroId)) continue;
+            return card.skillIds ?? [];
+        }
+        return fallbackIds;
     }
 
     async upgradeHero(heroId: number, caller?: unknown): Promise<UpgradeHeroResult> {

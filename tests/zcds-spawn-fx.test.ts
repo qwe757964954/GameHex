@@ -22,9 +22,10 @@ import { loadViews } from './helpers/zcds-view-fixtures';
  *    第 25 张是第 24 帧的**重复副本**，只为保持「文件数 25 + 帧号连续」稳定，`clip` 不用它；
  *  - 旧口径（老端 `sc` 那套 208×376 / 16 帧）的整目录备份在 `tmp/_spawnfx_bak/`。
  *
- * 落到 Demo 的口径（`playSpawnFx` 拿 `clip.duration` 当存活时长）：
- * **24 帧全用、sample 12、wrapMode 1(once)、`_duration = 2.0`** ⇒ 24/12 = 2.0s，
- * 与上一版（16 帧 @ sample 8 = 2.0s）**总时长一致**，所以渲染层一行都不用改。
+ * 落到 Demo 的口径：
+ * **24 帧全用、sample 12、wrapMode 1(once)、`_duration = 2.0`** ⇒ 24/12 = 2.0s。
+ * 🔴 2026-10-19 起**播放时锁总时长 1.25s**（`SPAWN_FX_TARGET_SECONDS`，speed = 2.0/1.25 = 1.6×），
+ * 存活时长同步按 1.25s 算 —— 资产的 `_duration` 仍是美术原速 2.0，别去改它（改了是截断不是加速）。
  *
  * ## 尺寸为什么是「帧 266×330 + `_lscale 0.4144`」
  * 帧按**原始像素**落地，显示尺寸交给 `_lscale` ⇒ 屏上 **110.2×136.8**。这个值被两条既有约束夹出来
@@ -301,13 +302,18 @@ test('出生特效：垂直落位全归 prefab（anchorPoint + _lpos），渲染
     // 造一个初始就带 prefab 落位（_lpos=(0,-28.2)、_lscale=0.4144）的特效节点，播放后必须原样保留。
     const { load, FakeNode, makeEffectPool } = loadViews();
     const host = new FakeNode('ZCGameUnit');
+    /** 用来观测 `AnimationState.speed`（加速倍数）—— 加速就是靠这一个字段实现的。 */
+    const spawnState: { speed: number } = { speed: 1 };
     const { effectPool } = makeEffectPool({ spawnFxPrefab: {
         make: () => {
             const fx = new FakeNode('SpawnFx');
             fx.setPosition(0, -28.2, 0);   // 模拟 prefab 的 _lpos
             fx.setScale(0.4144, 0.4144, 1); // 模拟 prefab 的 _lscale
             fx.getComponent = ((type: { name?: string }) => (type?.name === 'Animation'
-                ? { defaultClip: { name: 'spawn', duration: 2.0 }, stop() {}, play() {} }
+                ? {
+                    defaultClip: { name: 'spawn', duration: 2.0 }, stop() {}, play() {},
+                    getState: () => spawnState,
+                }
                 : null)) as never;
             return fx;
         },
@@ -319,6 +325,10 @@ test('出生特效：垂直落位全归 prefab（anchorPoint + _lpos），渲染
         'playSpawnFx 不得写 setPosition —— 否则 prefab 的 _lpos(-28.2) 被 (0,0) 覆盖，表现为「改 prefab 没效果」');
     assert.ok(Math.abs(spawned.scale.x - 0.4144) < 1e-9,
         `playSpawnFx 不得写 setScale —— 否则 prefab 的 _lscale(0.4144) 被覆盖，实际 ${spawned.scale.x}`);
+    // 2026-10-19 用户口径两改：「总时长缩短成 80%」→「再加速，1.6s → 1.25s」。
+    // 锁的是**总时长 1.25s**，倍速由 clip 反推：2.0 / 1.25 = 1.6。
+    assert.ok(Math.abs(spawnState.speed - 1.6) < 1e-9,
+        `出生特效必须把 2.0s 的 clip 压进 1.25s（speed 1.6×），实际 speed=${spawnState.speed}`);
 });
 
 test('出生特效：加载器容错加载 + 渲染层播放，两端都接上了', () => {
@@ -352,7 +362,10 @@ test('出生特效：挂在单位节点下跟随移动，播完/宿主消失都�
         make: () => {
             const node = new FakeNode('SpawnFx');
             node.getComponent = ((type: { name?: string }) => (type?.name === 'Animation'
-                ? { defaultClip: { name: 'spawn', duration: 1.5 }, stop() {}, play() {} }
+                ? {
+                    defaultClip: { name: 'spawn', duration: 1.5 }, stop() {}, play() {},
+                    getState: () => ({ speed: 1 }),
+                }
                 : null)) as never;
             return node;
         },
@@ -378,10 +391,13 @@ test('出生特效：挂在单位节点下跟随移动，播完/宿主消失都�
 
     // ③ 播完回收：**先 removeFromParent 再回池**。不摘的话光柱留在单位子树里，
     //    而单位节点自己也进池 ⇒ 复用时光柱挂到无关单位身上。
-    effectPool.recycleSpawnFx(1.4);
-    assert.equal(unitNode.children.length, 1, '1.4s < clip.duration 1.5s，不该提前回收');
-    effectPool.recycleSpawnFx(1.5);
-    assert.equal(unitNode.children.length, 0, '播完必须回收');
+    // 🔴 回收点按**目标总时长 1.25s**，与 clip 原速（这里是 1.5s）无关：
+    // wrapMode 是 once，动画播完会停在末帧，多留一截就是冻住不动的残影。
+    effectPool.recycleSpawnFx(1.2);
+    assert.equal(unitNode.children.length, 1, '1.2s < 目标 1.25s，不该提前回收');
+    // 加 1e-6 只为压过 1.25 这种「整秒边界」的尾差，实际时钟按帧走不会正好落在边界上。
+    effectPool.recycleSpawnFx(1.25 + 1e-6);
+    assert.equal(unitNode.children.length, 0, '到目标时长 1.25s 必须回收');
     assert.equal(fx.parent, null, '回池前必须 removeFromParent —— 留在原宿主子树里会被池带到别的单位身上');
 
     // ④ 宿主单位先没了（阵亡/被移除）⇒ 立刻摘掉，不等 1.5s。

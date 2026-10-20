@@ -1,4 +1,4 @@
-import { _decorator, Button, Label, Node } from 'cc';
+import { _decorator, Button, Color, Label, Node, Sprite, SpriteFrame } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { FW } from '../../framework/FW';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
@@ -22,6 +22,8 @@ import { LIMIT_TIME_TEXTS } from './LimitTimeActTexts';
 import { LimitTimeActItem } from './LimitTimeActItem';
 
 const { ccclass, property } = _decorator;
+const TAB_LABEL_COLOR_ON = new Color(48, 38, 24, 255);
+const TAB_LABEL_COLOR_OFF = new Color(255, 255, 255, 255);
 
 /** 页签节点名 → tab id（prefab 既有节点名 = 真源）。 */
 const TAB_NODES: ReadonlyArray<readonly [string, LimitTimeTab]> = [
@@ -65,6 +67,9 @@ export class LimitTimeActPage extends PopupBase {
     @property({ type: Label, tooltip: 'HintLabel：提示行（未开 / 离线 / 失败）' })
     hintLabel: Label = null!;
 
+    @property({ type: SpriteFrame, tooltip: '页签选中底板（主页同款 city/nav_sel）' })
+    selectedTabFrame: SpriteFrame = null!;
+
     /** 数据端口；测试可替换。 */
     private repo: ILimitTimeActRepository = limitTimeActRepository;
 
@@ -92,6 +97,7 @@ export class LimitTimeActPage extends PopupBase {
     protected async onOpen(): Promise<void> {
         this.busy = false;
         this.activeTab = LimitTimeTab.Task;
+        this.renderTabSelection();
         this.setHint('');
         this.titleLabel.string = '限时活动';
         this.updateTime();
@@ -263,7 +269,22 @@ export class LimitTimeActPage extends PopupBase {
     private onClickTab(tab: LimitTimeTab): void {
         if (this.activeTab === tab) return;
         this.activeTab = tab;
+        this.renderTabSelection();
         void this.presentTab();
+    }
+
+    /** 页签只显示主页同款金色选中底板，未选中态保持透明。 */
+    private renderTabSelection(): void {
+        for (const [name, tab] of TAB_NODES) {
+            const node = this.node.getChildByName(name);
+            if (!node) continue;
+            const selected = tab === this.activeTab;
+            const background = node.getComponent(Sprite);
+            if (background) background.spriteFrame = selected ? this.selectedTabFrame : null;
+            for (const label of node.getComponentsInChildren(Label)) {
+                label.color = selected ? TAB_LABEL_COLOR_ON : TAB_LABEL_COLOR_OFF;
+            }
+        }
     }
 
     private tabDescOf(tab: LimitTimeTab): string {

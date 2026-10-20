@@ -80,13 +80,6 @@ test('会话基础资源合并并发 prepare，完成后可统一释放', async 
         exports: {} as { AppSessionAssetService: new (configs: any) => any },
         require: (name: string) => {
             if (name === '../../core/asset/ResourceScope') return { ResourceScope };
-            if (name === '../card/CardLineupNav') return {
-                CARD_LINEUP_NAV_GROUP: [
-                    { on: 'shop_s', off: 'shop_n' },
-                    { on: 'role_s', off: 'role_n' },
-                ],
-                loadNavArt: async (asset: string) => { loaded.push(asset); return { asset }; },
-            };
             if (name === '../card/CardLineupIcons') return {
                 loadCommonArt: async (asset: string) => { loaded.push(asset); return { asset }; },
                 releaseArtCache: () => { releaseCalls += 1; },
@@ -110,7 +103,7 @@ test('会话基础资源合并并发 prepare，完成后可统一释放', async 
     ]);
 
     assert.equal(configCalls, 1);
-    assert.equal(loaded.length, 7);
+    assert.equal(loaded.length, 3, '导航图标已经序列化在 TabButton prefab 实例，不应加入登录动态加载队列');
     assert.equal(ratios.at(-1), 1);
     assert.equal(service.ready, true);
     const battlePreload = service.takeBattlePreload();

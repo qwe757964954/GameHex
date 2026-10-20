@@ -115,18 +115,15 @@ export function giftCurrencyIconRef(): { readonly root: string; readonly name: s
 }
 
 /**
- * 底部**大页签**底图（`image/main/tab_bg_01` 未选 / `tab_bg_02` 选中）。
+ * 底部**大页签**选中底板（主页 `TabButton` 同款金色 `nav_sel`）。
  *
- * 与首充弹窗的档位页签（`FirstRechargeTierTab`）**是同一对图**，口径直接沿用。
- * 原图 122×96，prefab 里按 FGUI 声明的 120×111 拉（首充那边也拉到 148×75，拉伸是既定做法）。
+ * 未选中态不铺独立底图，名称保持主页未选中态的白色。
  *
- * ⚠️ FGUI 主界面底部页签用的是 `组件/底菜单/按钮_首页_菜单.xml` —— 那是个靠 `类型` 控制器
- *   在 **27 个 page 之间切一整套主界面图标**的组件。礼包面板只有两个页签，为它引一整套
- *   主界面图标包不划算（`GiftTabButton` 的文件头也写了这条），所以只取底图 + Label 文案。
+ * 主页的图标仍由主城各 tab prefab 实例配置；礼包这里保留自己的文案和点击业务。
  */
 export const GIFT_TAB_ART = {
-    off: 'tab_bg_01',
-    on: 'tab_bg_02',
+    off: '',
+    on: 'city/nav_sel',
 } as const;
 
 /** 底部大页签底图的根目录。 */

@@ -56,6 +56,8 @@ export class ZCSpawnSelection {
     private readonly resourceByHex = new Map<number, ZCMapResourcePoint>();
     private readonly states: Record<ZCOwner, ZCSpawnOwnerSelection>;
     private readonly aiConfirmAt = new Map<ZCOwner, number>();
+    private readonly homeRegionCells = new Map<number, Set<number>>();
+    private readonly usesDepthRegionsForHomeSelection: boolean;
     /** 地图自己画了分区（`sections` 出现非 0）时以地图为准，没画才按布局推导半区。 */
     private readonly hasPaintedSections: boolean;
     private elapsed = 0;
@@ -70,6 +72,15 @@ export class ZCSpawnSelection {
         if ((map.cityMode ?? 'fixed') !== 'select') throw new Error('只有自选主城地图才能进入选点阶段');
         this.owners = ownersForPlayerCount(map.playerCount ?? 2);
         this.hasPaintedSections = (map.sections ?? []).some((section) => section > 0);
+        this.usesDepthRegionsForHomeSelection = !!map.regions?.length;
+        for (const region of map.regions ?? []) {
+            const cells = this.homeRegionCells.get(region.section);
+            if (cells) {
+                region.cells.forEach((cell) => cells.add(cell));
+            } else {
+                this.homeRegionCells.set(region.section, new Set(region.cells));
+            }
+        }
         this.states = Object.fromEntries(this.owners.map((owner) => [owner, {
             selectedHexId: null,
             confirmedHexId: null,
@@ -78,6 +89,8 @@ export class ZCSpawnSelection {
         for (const point of map.resourcePoints ?? []) {
             this.resourceByHex.set(point.row * map.columns + point.column, point);
         }
+        const ownerWithoutSpawnCells = this.owners.find((owner) => this.legalHexes(owner, false).length === 0);
+        if (ownerWithoutSpawnCells) throw new Error(`${ownerWithoutSpawnCells} 未配置可选主城区域`);
         for (const owner of this.owners.slice(1)) {
             const delay = ZC_SPAWN_AI_MIN_DELAY_SECONDS
                 + this.clampedRandom() * (ZC_SPAWN_AI_MAX_DELAY_SECONDS - ZC_SPAWN_AI_MIN_DELAY_SECONDS);
@@ -144,11 +157,8 @@ export class ZCSpawnSelection {
     }
 
     /**
-     * 该格属于哪个分区（1 ~ playerCount）。自选地图的「半区」= 该玩家的**出生点可选范围**
-     * （《自选出生点-需求文档》3.2 / 4.1：玩家只能在自己所属的半区内选主城）。
-     *
-     * 地图自己画了分区就以地图为准；两张自选图当前全是中立格（`sections` 全 0），于是退回
-     * 按布局推导（`defaultZCSectionAt`，与地图编辑器同口径）。返回 0 = 不属于任何分区。
+     * 该格属于哪个分区（1 ~ playerCount）。地图自己画了分区就以地图为准；没有画时按布局
+     * 推导半区（`defaultZCSectionAt`，与地图编辑器同口径）。返回 0 = 不属于任何分区。
      */
     regionSectionOf(hexId: number): ZCSection {
         const painted = this.map.sections?.[hexId] ?? 0;
@@ -180,8 +190,8 @@ export class ZCSpawnSelection {
         if (this.resourceByHex.has(hexId)) return '资源点位所在格不可放置主城';
         if (this.outsideOwnRegion(owner, hexId)) return '不能放置到对方的区域';
         const section = this.owners.indexOf(owner) + 1;
-        const candidates = this.map.homeCandidates?.find((entry) => entry.section === section)?.cells;
-        if (candidates && !candidates.includes(hexId)) return '该位置不在主城候选范围内';
+        const regionReason = this.homeRegionInvalidReason(section, hexId);
+        if (regionReason) return regionReason;
         for (const other of this.owners) {
             if (other === owner) continue;
             const confirmed = this.states[other].confirmedHexId;
@@ -290,9 +300,20 @@ export class ZCSpawnSelection {
         if (this.resourceByHex.has(hexId)) return '资源点位不可选';
         if (this.outsideOwnRegion(owner, hexId)) return '不能放置到对方的区域';
         const section = this.owners.indexOf(owner) + 1;
-        const candidates = this.map.homeCandidates?.find((entry) => entry.section === section)?.cells;
-        if (candidates && !candidates.includes(hexId)) return '该位置不在主城候选范围内';
-        return null;
+        return this.homeRegionInvalidReason(section, hexId);
+    }
+
+    private homeRegionInvalidReason(section: number, hexId: number): string | null {
+        if (this.usesDepthRegionsForHomeSelection) {
+            const candidates = this.homeRegionCells.get(section);
+            if (!candidates?.size) return '本区未配置前 / 中 / 后区域';
+            return candidates.has(hexId) ? null : '该位置不在本方前 / 中 / 后区域内';
+        }
+        const legacyGroups = this.map.homeCandidates;
+        const legacyCandidates = legacyGroups?.find((entry) => entry.section === section)?.cells;
+        if (legacyGroups?.length && !legacyCandidates) return '本区未配置主城候选范围';
+        if (!legacyCandidates) return '本区未配置前 / 中 / 后区域';
+        return !legacyCandidates.includes(hexId) ? '该位置不在主城候选范围内' : null;
     }
 
     private autoConfirm(owner: ZCOwner): void {

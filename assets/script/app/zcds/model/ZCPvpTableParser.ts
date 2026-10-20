@@ -152,6 +152,30 @@ function parseCardCycleSeconds(raw: Record<string, unknown>, type: ZCCardType): 
     throw new Error('cards[].cycleSeconds 缺失且无 fallback 列可用');
 }
 
+/**
+ * `pvpCard.skillList`：该卡的技能编号列表（顺序即 UI 顺序）。
+ *
+ * 留空 / null ⇒ 空数组（主城、金矿这种没有技能的卡）；**非法项跳过而不抛错** ——
+ * 技能号是展示用数据，一个脏 id 不该让整张卡（乃至整个卡表）解析失败。
+ */
+function parseSkillIds(value: unknown, field: string): number[] {
+    if (value === null || value === undefined || value === '') return [];
+    if (!Array.isArray(value)) {
+        console.warn(`${field} 不是数组，按空技能表处理：${JSON.stringify(value)}`);
+        return [];
+    }
+    const ids: number[] = [];
+    for (const entry of value) {
+        const skillId = Number(entry);
+        if (!Number.isSafeInteger(skillId) || skillId <= 0) {
+            console.warn(`${field} 里有非法技能编号，已跳过：${JSON.stringify(entry)}`);
+            continue;
+        }
+        ids.push(skillId);
+    }
+    return ids;
+}
+
 function parseCardTypeList(value: unknown, field: string): ZCCardType[] {
     if (value === null || value === undefined || value === '') return [];
     return array(value, field).map((entry) => {
@@ -205,6 +229,8 @@ export function parseCard(value: unknown): ZCDeckCard & { enabled: boolean } {
         headIcon: optionalText(raw.headIcon, 'cards[].headIcon'),
         // 建筑外观图名（image/buildings 下图片名），留空合法，视图按建筑类型回退。
         buildIcon: optionalText(raw.buildIcon, 'cards[].buildIcon'),
+        // 该卡的技能编号（顺序即 UI 顺序）；空数组合法 —— 主城/金矿没有技能。
+        skillIds: parseSkillIds(raw.skillList, 'cards[].skillList'),
     };
 }
 

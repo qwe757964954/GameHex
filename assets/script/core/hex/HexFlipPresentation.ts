@@ -131,27 +131,22 @@ export interface IZCHexFlipFx {
     /** 光圈透明度 0~255。 */
     glowAlpha: number;
     /**
-     * 脉冲段的**周期内相位** `[0,1)`（对局**脉冲段**专用，2026-10-15；领地不消费）。
+     * 脉冲段的**进度** `[0,1]`（对局**脉冲段**专用；领地不消费）。
      *
-     * 视图拿它去给水波纹序列帧选帧：一个相位 = 一道完整波纹，段内有几个周期就是几道波。
-     * `undefined` / 缺省 = 不在脉冲段 —— 其余几条曲线都不产出它，视图据此切换回常规做法。
+     * `undefined` / 缺省 = 不在脉冲段 —— 其余几条曲线都不产出它，视图据此切换回常规做法
+     * （中间层节点留给「抬升开口光」）。有值 = **这一段里归脉冲管**，至于这个时刻还有没有波，
+     * 看 `pulseFrame`。
      */
     pulsePhase?: number;
     /**
-     * 脉冲段**波纹层的扩散倍率**（`1` = 波纹原尺寸 = 1 个格子大小，`HEX_PULSE_MAX_SCALE` = 最大扩散）。
+     * 当前该显示**序列帧的哪一张**（`0..HEX_PULSE_FRAME_COUNT-1`；`HEX_PULSE_FRAME_HIDDEN` = 波已退场）。
      *
-     * ⚠️ 写的是**波纹层节点**（`ZCHexView.applyPulseRipple`），**不是格根** —— 地块本体的收场归
-     * 缩没段（`tileScale`）。两件事分开之后 `hexPulseFx` 的 `tileScale` 恒 `1`。
-     * `undefined` / 缺省 = 不在脉冲段。
+     * 2026-10-19 起脉冲改用美术的 5 帧烘焙序列（`effects/hex_pulse_seq`）：**放大与淡出全在图上**，
+     * 视图只做「换 SpriteFrame」这一件事，不再往节点上写 scale / opacity。
+     * 🔴 `-1` 不是「第 0 帧」：一道波 0.5s 走完就**直接消失**（需求原文：「最大帧后波直接消失，
+     * 无缩小、无残留」），而点击动画段有 0.7s ⇒ 最后 0.2s 是「没有波」的，不能继续举着末帧当静止波。
      */
-    pulseScale?: number;
-    /**
-     * 脉冲段**外缘虚化强度** `[0,1]`（`0` = 不虚化，`1` = 外缘虚到全透）。
-     *
-     * 随扩散推进单调增 ⇒ 波纹越往外扩、外缘越淡、中心保持较实（冲击波观感）。
-     * 消费方是脉冲专用着色器的径向遮罩（`shaders/hex-pulse.effect` 的 `pulseFade.x`）。
-     */
-    pulseFade?: number;
+    pulseFrame?: number;
 }
 
 /**
@@ -324,67 +319,71 @@ export function hexShrinkBackFx(k: number): IZCHexFlipFx {
     return makeShrinkFx(0, shrinkScaleAt(1 - clamp01(k)));
 }
 
-// ── 收场第三条路：原地「脉冲呼吸」（2026-10-15 对局的开发激活改用它） ──────────────
+// ── 收场第三条路：原地「脉冲」（2026-10-15 起对局的开发激活改用它） ──────────────────
+//
+// 2026-10-19 换美术口径（用户给的《六边形脉冲序列帧需求》）：脉冲改成**5 帧烘焙序列**
+// （`effects/hex_pulse_seq/hex_pulse_0..4.png`，320×320）。
+//   · 放大与不透明度**全部烘焙进图**（1.00→1.78 倍、70%→56%→43%→29%→15%）；
+//   · 视图只按 10fps 选帧，**不再往节点上写 scale / opacity 动画**；
+//   · 一道波 0.5s（5 × 0.1s）走完**直接消失**，接着由缩没段把格子收干净。
+// 旧口径（30 帧 `fkz_*` + `shaders/hex-pulse.effect` 的径向虚化 + 波纹层 1→1.25 倍扩散）
+// 整条退役：那套的 `pulseScale` / `pulseFade` 两个字段也随之一并删除 —— 现在「扩多大、多透」
+// 是美术图里的事，曲线层再算一遍就是重复叠加（虚化会虚两次、扩散会扩两次）。
+
+/** 脉冲序列帧的**帧数**（美术给几张就是几张，改图必须同步改这里）。 */
+export const HEX_PULSE_FRAME_COUNT = 5;
+/** 每帧停留时长（秒）—— 美术按 **10fps** 出的图（需求文档 §六，允许 0.08~0.12 微调）。 */
+export const HEX_PULSE_FRAME_SECONDS = 0.1;
+/**
+ * **一道波的时长**（秒）= 5 帧 × 0.1s = `0.5`。
+ *
+ * 🔴 它**不等于**点击动画段的长度：段长是 `ZC_HEX_PULSE_SECONDS`（0.7s，与缩没段同起同收，
+ * 决定卡牌什么时候弹），波只占前 0.5s。别为了「填满段」去拉长帧时长 —— 超过 0.12s/帧
+ * 5 张图会明显读成卡顿（需求 §六明确给了微调区间）。
+ */
+export const HEX_PULSE_WAVE_SECONDS = HEX_PULSE_FRAME_COUNT * HEX_PULSE_FRAME_SECONDS;
+/** `pulseFrame` 的「**没有波**」哨兵值（波已走完 / 段内剩下的时间）。不是帧号，别拿去索引数组。 */
+export const HEX_PULSE_FRAME_HIDDEN = -1;
 
 /**
- * **单次脉冲的周期（秒）** = 一道水波纹从起波到收完的时间。
+ * **脉冲段**：`seconds` = 段内已过秒数（从点击那一刻起算，**不 clamp 到段长**）。
  *
- * 2026-10-15 山猫口径：换用美术的「翻格子」30 帧序列帧（`image/effects/hex_pulse`）
- * 之后，**一个周期正好播完一整轮 30 帧** ⇒ 周期长度直接决定波纹速度：
- * `0.7s / 30 帧 ≈ 43fps`，比美术原稿的播放节奏略快一点（"稍微加快一些"）。
- * 想更慢 / 更快只改这里，视图不用动（帧号由 `pulsePhase` 反推）。
- */
-export const HEX_PULSE_CYCLE_SECONDS = 0.7;
-/**
- * 脉冲段**波纹层的最大扩散倍率**（2026-10-15 row16 用户口径：「脉冲效果从缩小改成向外扩散消失，
- * 最大扩散 1.25 个单位格子大小，扩散的部分虚化」）。
+ * 一个周期内（0.5s）波从小到大走完 5 帧，之后 `pulseFrame` 落 `HEX_PULSE_FRAME_HIDDEN`：
+ * 波「最大帧后直接消失」，段内剩下的 0.2s 只有缩没段在收格子。
  *
- * 口径：波纹本体原尺寸 = **1 个格子大小**，峰值 `1.25` ⇒ 波纹向外扩到 1.25 格。
- * 🔴 这块缩放只写**波纹层节点**（`GroundGlow`），**不写格根**：地块本体的收场由**缩没段**负责，
- * 需求明确「其他阶段的动画保持不变」。早先那版写的是格根 `tileScale` 缩到 0.92 的「原地呼吸」，
- * 已被本口径取代（`HEX_PULSE_MIN_SCALE` 随之删除）。
- */
-export const HEX_PULSE_MAX_SCALE = 1.25;
-
-/**
- * **脉冲段**：`seconds` = 段内已过秒数（不 clamp 到 [0,1]，按周期取相位循环）。
+ * 🔴 **不写 `tileScale`**（恒 `1`）：脉冲不缩整格，整格的收小全部归缩没段
+ * （`hexShrinkFx`）；视图侧的合成函数 `hexPulseShrinkFx` 因此只是「照抄脉冲那份、
+ * 把格根缩放换成缩没的」。
  *
- * 2026-10-15 row16 用户口径（v5：由「缩小」改成「向外扩散消失」） —— 一个周期内：
- *  · **水波纹序列帧**：由 `pulsePhase` 驱动，一轮 30 帧美术帧从中心扩散到边缘；
- *  · **向外扩散**：`pulseScale` 由 `1` 单调涨到 `HEX_PULSE_MAX_SCALE`（1.25 格）——
- *    写在**波纹层节点**上（视图会先把格根的缩放抵消掉，见 `ZCHexView.applyPulseRipple`）；
- *  · **外缘虚化**：`pulseFade` 由 `0` 单调涨到 `1`，喂给脉冲专用着色器的径向遮罩。
+ * 🔴 **不产出 `glowRadius` / `glowAlpha`**（原先那个居中圆环 2026-10-15 由序列帧取代）。
+ * 这两个字段仍留在 `IZCHexFlipFx` 里是因为**建筑生成那一段还在消费**
+ * （`ZCHexView.hexActivationFx` 的 `HEX_ACT_GLOW_*`），不是给收场曲线留的。
  *
- * 🔴 **不再写 `tileScale`**（恒 `1`）：脉冲**不再缩整格**。视图侧的合成函数 `hexPulseShrinkFx`
- * 因此只是「照抄脉冲那份、把格根缩放换成缩没的」；点击动画段整格的收小**全部由缩没段负责**，
- * 需求「其他阶段的动画保持不变」就落在这里。
- *
- * 🔴 **不再产出 `glowRadius` / `glowAlpha`**（原先那个居中圆环 2026-10-15 由序列帧取代，
- * 山猫：「中间有个圆圆的圈圈影响视觉」）。这两个字段仍留在 `IZCHexFlipFx` 里是因为
- * **建筑生成那一段还在消费**（`ZCHexView.hexActivationFx` 的 `HEX_ACT_GLOW_*`），
- * 以及领地翻格与对局共用同一份结构 —— 不是给收场曲线留的。
- *
- * ⚠️ 与缩没段的区别：**不抬起**（`tileLift = 0`，底部序列帧光因此自然熄灭）、
+ * ⚠️ 与缩没段的区别：**不抬起**（`tileLift = 0`，底部开口光因此不点亮）、
  * 不缩格、建筑仍隐藏（`buildingPopScale = 0`，格子按开发前外观渲染）。
- * 段末不在此收口 —— `hexActivationFx` 按秒切段：脉冲播完接**缩没段**
- * （`hexShrinkFx`，对局 2026-10-15 起两段都要），再往后才是卡牌段 / 常规定格。
+ * 段末不在此收口 —— `hexActivationFx` 按秒切段：脉冲段播完接**缩没段**（两段并发，
+ * 见 `hexPulseShrinkFx`），再往后才是卡牌段 / 常规定格。
  */
 export function hexPulseFx(seconds: number): IZCHexFlipFx {
-    const phase = (((seconds % HEX_PULSE_CYCLE_SECONDS) + HEX_PULSE_CYCLE_SECONDS)
-        % HEX_PULSE_CYCLE_SECONDS) / HEX_PULSE_CYCLE_SECONDS;
+    const elapsed = seconds > 0 ? seconds : 0;
+    const progress = Math.min(1, elapsed / HEX_PULSE_WAVE_SECONDS);
+    // 逐帧取整：`[0, 0.1) → 0`、…、`[0.4, 0.5) → 4`；0.5s 起波已经走完 ⇒ 退场。
+    // 用 `floor(progress × 帧数)` 而不是 `round`：需求是「每帧停留 0.1s」的等宽节拍，
+    // round 会让第 0 帧只占半拍（起波那一下会读成「闪了一下」）。
+    const frame = progress >= 1
+        ? HEX_PULSE_FRAME_HIDDEN
+        : Math.min(HEX_PULSE_FRAME_COUNT - 1, Math.floor(progress * HEX_PULSE_FRAME_COUNT));
     return {
         hidden: false,
         tileLift: 0,
         tileFlip: 1,
-        // 🔴 恒 1：脉冲不缩整格（row16）。缩没段照旧把格根收到 `HEX_SHRINK_MIN_SCALE`。
+        // 🔴 恒 1：脉冲不缩整格。缩没段照旧把格根收到 `HEX_SHRINK_MIN_SCALE`。
         tileScale: 1,
         buildingPopScale: 0,
         glowRadius: 0,
         glowAlpha: 0,
-        pulsePhase: phase,
-        // 扩散与虚化都随相位线性推进：起手「原尺寸 + 不虚化」，段末「1.25 格 + 外缘全虚」。
-        pulseScale: 1 + (HEX_PULSE_MAX_SCALE - 1) * phase,
-        pulseFade: phase,
+        pulsePhase: progress,
+        pulseFrame: frame,
     };
 }
 

@@ -22,10 +22,11 @@ const OWNER_ART = [
  */
 const LAYOUT: Record<string, { pos: [number, number]; size: [number, number] }> = {
     Banner: { pos: [0, 0], size: [720, 417] },
-    // ⚠️ `Role.y = -28.24` 是 r461 修正后的值（此前是 -164.5）。
-    // 立绘 256 高 + 底边锚点，站在 417 高的底板上时中心该在 `y ≈ -417/2 + 256/2 ≈ -80`
-    // 附近（美术按底板实际留白定的 -28.24）；`-164.5` 会让立绘掉出画布外。
-    Role: { pos: [-192, -28.24], size: [256, 256] },
+    // ⚠️ `Role.y = -21.798` 是**美术最后一次微调后**的 prefab 真值（早前是 -28.24、再早 -164.5）。
+    // 立绘 256 高 + 中心锚点，站在 417 高的底板上时中心该在 `y ≈ -417/2 + 256/2 ≈ -80` 附近
+    // （美术按底板实际留白定的值）；`-164.5` 会让立绘掉出画布外。
+    // 判据口径：**此处跟随 prefab**，不是反过来要求美术改回旧值。
+    Role: { pos: [-192, -21.798], size: [256, 256] },
     Title: { pos: [191.5, 28.5], size: [253, 90] },
     Portrait: { pos: [321, 141.5], size: [76, 76] },
     Head: { pos: [0, 0], size: [66, 66] },
@@ -460,7 +461,16 @@ test('横幅高度真的写进了节点 UITransform，且立绘跟着同一个�
             Math.abs(view.node.size.height - expected) < 1e-6,
             n + ' 人：节点高度应被设成 ' + expected + '，实际 ' + view.node.size.height,
         );
-        assert.equal(view.node.size.width, 720, n + ' 人：宽度恒为 720（满宽，不缩放）');
+        // 宽度 = 注入的屏幕宽（这里 720），不再固定设计稿宽 —— 见 `applyLayout`。
+        assert.equal(view.node.size.width, 720, n + ' 人：宽度 = 屏幕宽 720');
+        // 🔴 底板必须同步铺满并且回到中心：只改根不改底板 ⇒ 图片仍是 720 宽、右边留缝
+        //（这正是 2026-10-19 反馈的画面）。
+        assert.equal(view.bannerSprite.node.size.width, 720, n + ' 人：底板宽度要跟根节点一致');
+        assert.equal(view.bannerSprite.node.position.x, 0, n + ' 人：底板必须横向居中（不许残留左移偏移）');
+        // 🔴 底板高度**恒为 prefab 的 417**：格子高（640 / 426 / 320）只决定落位中心，
+        // 不许把底板也拉伸 —— 拉过之后底边会掉到屏幕中间（2026-10-19 的反馈）。
+        assert.equal(view.bannerSprite.node.size.height, 417,
+            n + ' 人：底板高度必须保持 prefab 的 417，实际 ' + view.bannerSprite.node.size.height);
         // 立绘**恒为 256 原生**，不随横幅高度变（2026-10-10 口径「不用放大了，就用 256×256」）。
         //
         // 曾经的旧口径是「立绘 = 横幅高 × 333/417 等比缩放」（2 人局放到 511 高），已删。
@@ -520,6 +530,19 @@ test('横幅高度真的写进了节点 UITransform，且立绘跟着同一个�
         Math.abs(view.node.size.height - 800) < 1e-6,
         '层高 1600、2 人 ⇒ 每格 800，实际 ' + view.node.size.height,
     );
+
+    // 🔴 宽度不再是常量 720：跟着注入的屏幕宽走（用户 2026-10-19「应该对齐屏幕的宽度」）。
+    // 这条是整个改动的主判据 —— 只改根不改底板时，`bannerSprite.node` 会留在 720 宽，右边留缝。
+    view.setLayout({ playerCount: 2, viewWidth: 960, viewHeight: VH });
+    view.render(reveal('player'), 2.6);
+    assert.equal(view.node.size.width, 960, '宽屏：根节点宽度 = 注入的屏幕宽 960');
+    assert.equal(view.bannerSprite.node.size.width, 960, '宽屏：底板必须同步铺满，否则右边留缝');
+    assert.equal(view.bannerSprite.node.size.height, 417, '宽屏：底板高度仍保持 417（只改宽）');
+    assert.equal(view.bannerSprite.node.position.x, 0, '宽屏：底板仍居中');
+    // 滑入起点也必须用同一个宽度：`startedAt=0` 时看第一帧 ⇒ x = -(屏宽/2) - 底板半宽 = -960。
+    view.render(reveal('player'), 0);
+    assert.ok(Math.abs(view.node.position.x + 960) < 1e-6,
+        '滑入起点要按实际宽度算（-960），实际 ' + view.node.position.x);
 });
 
 test('渲染层把本局人数与全屏层宽高注入横幅，落位按人数重排', () => {
@@ -576,6 +599,10 @@ function buildView(view: Raw, FakeNode: new (name?: string) => Raw): Raw {
     const sprite = (): Raw => ({ enabled: true, spriteFrame: null, node: new FakeNode('s') });
     view.bannerOpacity = { opacity: 255 };
     view.bannerSprite = sprite();
+    // 底板在 prefab 里是 720×417（`_sizeMode = CUSTOM` ⇒ 尺寸就是设计稿尺寸）。
+    // 视图只按屏幕**改宽**，高度必须留在 417 —— 这里先把桩设成 prefab 真值，
+    // 否则 `applyLayout` 会按桩的默认 24×4 去"保持"。
+    view.bannerSprite.node.size = { width: 720, height: 417 };
     view.roleSprite = sprite();
     view.titleSprite = sprite();
     view.ringSprite = sprite();

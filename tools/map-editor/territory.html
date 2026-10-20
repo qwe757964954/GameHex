@@ -16,6 +16,8 @@
     .tools { display:grid; grid-template-columns:1fr 1fr; gap:6px } .tools button.active { background:#1d4ed8; border-color:#93c5fd } .toolStatus { margin:0 0 8px; padding:6px 8px; border:1px solid #1d4ed8; border-radius:6px; background:#172554; color:#bfdbfe }
     .stage { position:relative; overflow:auto; background:#0b1220; text-align:center } .stage.dragging, .stage.dragging svg, .stage.dragging .cell { cursor:grabbing !important } svg { display:block; margin:18px auto; background:#0b1220; touch-action:none; user-select:none } .cell { stroke:#64748b; stroke-width:1; cursor:crosshair } .cell:hover { stroke:#f8fafc; stroke-width:2 }
     .cell.start { fill:#16a34a } .cell.site-stage { fill:#2563eb } .cell.site-boss { fill:#dc2626 } .cell.site-asyncPvp { fill:#9333ea } .cell.site-fixedResource { fill:#ca8a04 } .cell.site-bonus { fill:#0891b2 } .cell.candidate { stroke:#fbbf24; stroke-width:4 }
+    /* 同一「战斗 id」的分组：连同被占用的格子一起框出来（描边色由 JS 内联给，这里只管线型）。 */
+    .cell.site-group { stroke-width:2.6; stroke-dasharray:6 4 }
     .cell.format-src { stroke:#c4b5fd; stroke-width:4; } .cell.format-hover { stroke:#c4b5fd; stroke-width:2; stroke-dasharray:4 3; }
     .cell.decor { stroke:#f472b6; stroke-width:3 } text { pointer-events:none; user-select:none } .muted { color:#94a3b8 } .row { display:flex; gap:6px; align-items:center } .row > * { flex:1 }
     .siteIcon { pointer-events:none; filter:drop-shadow(0 1px 2px #0008) }
@@ -42,7 +44,7 @@
 </head>
 <body>
   <header>
-    <h1>章节领地地图编辑器</h1><span id="dirtyBadge" class="dirtyBadge" hidden>未保存</span><select id="presetSelect" title="选择领地预设"><option value="">选择预设</option></select><button id="load">加载预设</button><button id="save">保存</button><button id="validate">校验</button><button id="publish">发布到客户端</button><button id="export">导出 JSON</button><button id="import">导入 JSON</button><button id="undo">撤销</button><button id="redo">重做</button><button id="fit">适应窗口</button><span id="zoomInfo" class="muted">100%</span>
+    <h1>章节领地地图编辑器</h1><span id="dirtyBadge" class="dirtyBadge" hidden>未保存</span><select id="presetSelect" title="选择领地预设"><option value="">选择预设</option></select><button id="load">加载预设</button><button id="save">保存</button><button id="validate">校验</button><button id="publish">发布到客户端</button><button id="export">导出 JSON</button><button id="import">导入 JSON</button><button id="undo">撤销</button><button id="redo">重做</button><button id="fit">适应窗口</button><span class="muted">缩放</span><input id="zoomSlider" type="range" min="50" max="400" step="10" value="100" style="width:120px" title="50% ~ 400%（滚轮也能缩，以光标为中心）"><span id="zoomInfo" class="muted">100%</span>
     <input id="file" type="file" accept=".json,application/json" hidden>
   </header>
   <div class="layout">
@@ -53,6 +55,7 @@
       <div class="row"><div><label>行</label><input id="rows" type="number" min="4" max="60" value="20"></div><div><label>列</label><input id="columns" type="number" min="4" max="60" value="20"></div></div>
       <label>编辑工具</label><p id="toolStatus" class="toolStatus">当前工具：选择</p><div class="tools" id="tools"><button data-mode="select" class="active">选择</button><button data-mode="start">初始格</button><button data-mode="stage">关卡</button><button data-mode="boss">BOSS</button><button data-mode="asyncPvp">异步据点</button><button data-mode="fixedResource">固定资源</button><button data-mode="bonus">奖励据点</button><button data-mode="candidate">随机候选</button><button data-mode="decor">背景装饰</button><button data-mode="format">格式刷</button><button data-mode="erase">擦除</button></div>
       <label>笔刷大小</label><div class="row"><div><label>1 格</label><input type="radio" name="brushRadius" value="0" checked></div><div><label>3 格</label><input type="radio" name="brushRadius" value="3"></div><div><label>7 格</label><input type="radio" name="brushRadius" value="1"></div><div><label>19 格</label><input type="radio" name="brushRadius" value="2"></div></div>
+      <label>按半径刷（环数，0 = 用上面的笔刷）</label><input id="rangeRadius" type="number" min="0" max="6" step="1" value="0" title="与大地图同一个 circleHexes 口径：半径 1 = 7 格，2 = 19 格">
       <label>显示</label><div class="row"><div><label>依赖连线</label><input type="checkbox" id="showLinks" checked></div></div>
       <label>背景资源</label><input id="background" placeholder="image/territory/chapter_01">
       <p class="muted">领地地图不设置对局人数、主城镜像或 void 格。所有格子均可开启；点击格子后在右侧填写站点配置。</p>

@@ -16,7 +16,7 @@ const { ccclass, property } = _decorator;
  */
 @ccclass('BattleTokenTabButton')
 export class BattleTokenTabButton extends Component {
-    @property({ type: Sprite, tooltip: '底图（未选 tab_bg_01 / 选中 tab_bg_02）' })
+    @property({ type: Sprite, tooltip: '页签底图（由 prefab 声明）' })
     bg: Sprite = null!;
 
     @property({ type: Sprite, tooltip: '页签图标（图内已含文字）' })

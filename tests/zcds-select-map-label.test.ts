@@ -19,6 +19,7 @@ const boardPrefab = JSON.parse(readFileSync('assets/resources/ui/game/ZCGameBoar
 test('spawn region hints render in a dedicated non-interactive overlay', () => {
     assert.match(renderWorld, /spawnRegionHintOverlay = new ZCSpawnRegionHintOverlay\(this\.boardLayer\('CooldownOverlay'\)\)/);
     assert.match(renderWorld, /spawnRegionHintOverlay\.render\([^;]*hintsVisible/s);
+    assert.match(renderWorld, /spawnRegionHintOverlay\.render\(\s*this\.spawnRegionHints,\s*hintsVisible,\s*Math\.abs\(this\.options\.mapLayer\.scale\.x\) \|\| 1,/);
     assert.doesNotMatch(renderWorld, /regionText/);
     assert.doesNotMatch(hexView, /regionText/);
     assert.match(hintOverlay, /class ZCSpawnRegionHintOverlay/);
@@ -60,7 +61,7 @@ test('region bubble nodes reuse anchors, follow visibility, draw text, and clear
     const overlay = new ZCSpawnRegionHintOverlay(parent);
     const initial = [{ depth: 'front', label: '速攻', x: 17, y: 32 }];
 
-    overlay.render(initial, true);
+    overlay.render(initial, true, 0.5);
     const root = parent.children[0];
     const bubble = root.children[0];
     const label = bubble.children[0].getComponent(cc.Label);
@@ -75,22 +76,24 @@ test('region bubble nodes reuse anchors, follow visibility, draw text, and clear
     });
     assert.equal(root.active, true);
     assert.deepEqual([bubble.position.x, bubble.position.y], [17, 32]);
+    assert.deepEqual([bubble.scale.x, bubble.scale.y], [2, 2], 'bubble cancels the current map zoom');
     assert.equal(label.string, '\u524d\u533a \u00b7 \u901f\u653b');
     assert.ok(backgroundCommands.some((command: { kind: string }) => command.kind === 'roundRect'));
 
-    overlay.render([{ ...initial[0], x: -24, y: 8, label: '控场' }], true);
+    overlay.render([{ ...initial[0], x: -24, y: 8, label: '控场' }], true, 0.25);
     assert.equal(root.children.length, 1, 're-render should reuse the existing bubble');
     assert.equal(root.children[0], bubble);
     assert.deepEqual([bubble.position.x, bubble.position.y], [-24, 8]);
+    assert.deepEqual([bubble.scale.x, bubble.scale.y], [4, 4], 'bubble size remains constant as the map zooms out');
     assert.equal(label.string, '\u524d\u533a \u00b7 \u63a7\u573a');
     assert.equal(labelWrites, 1, 'only changed label text should be written');
     assert.equal(graphics.commands, backgroundCommands, 'static bubble background should not be redrawn');
 
-    overlay.render([{ ...initial[0], x: -24, y: 8, label: '控场' }], true);
+    overlay.render([{ ...initial[0], x: -24, y: 8, label: '控场' }], true, 0.25);
     assert.equal(labelWrites, 1, 'unchanged label text should not be written again');
     assert.equal(graphics.commands, backgroundCommands, 'repeated visible frames should reuse the background');
 
-    overlay.render([{ ...initial[0], x: 100, y: 200, label: '隐藏更新' }], false);
+    overlay.render([{ ...initial[0], x: 100, y: 200, label: '隐藏更新' }], false, 0.1);
     assert.equal(root.active, false);
     assert.deepEqual([bubble.position.x, bubble.position.y], [-24, 8], 'hidden frames should not update anchors');
     assert.equal(labelWrites, 1, 'hidden frames should not write labels');
@@ -105,7 +108,7 @@ test('spawn region hint overlay clears after selection and on render-world teard
     assert.match(renderWorld, /spawnRegionHintOverlay\?\.clear\(\)/);
     assert.match(renderWorld, /destroy\(\): void[\s\S]*?clearSpawnRegionHints\(\)/);
     assert.match(game, /finishSpawnSelection\(\): void[\s\S]*?clearSpawnRegionHints\(\)/);
-    assert.match(hintOverlay, /render\(hints: readonly IZCSpawnRegionHint\[\], visible: boolean\): void/);
+    assert.match(hintOverlay, /render\(hints: readonly IZCSpawnRegionHint\[\], visible: boolean, mapScale: number\): void/);
     assert.match(hintOverlay, /clear\(\): void/);
 });
 

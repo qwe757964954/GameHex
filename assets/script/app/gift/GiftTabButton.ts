@@ -2,8 +2,9 @@ import { _decorator, Button, Color, Component, Label, Sprite, SpriteFrame } from
 
 const { ccclass, property } = _decorator;
 
-const COLOR_ON = new Color(255, 255, 255, 255);
-const COLOR_OFF = new Color(140, 140, 140, 255);
+const LABEL_COLOR_ON = new Color(48, 38, 24, 255);
+const LABEL_COLOR_OFF = new Color(255, 255, 255, 255);
+const BACKGROUND_COLOR = new Color(255, 255, 255, 255);
 
 /**
  * 礼包面板底部的**大页签按钮**（120×111，照着 FGUI `共用组件/组件/底菜单/按钮_首页_菜单.xml` 的尺寸）。
@@ -11,7 +12,7 @@ const COLOR_OFF = new Color(140, 140, 140, 255);
  * 简化点（与新项目「面板内自绘」的既有范式一致，见 `SevenDayPageTab`）：
  *   - FGUI 那个组件靠 `类型` 控制器的 `gearIcon` 切一整套主界面底菜单图标；这里**不用图标**，
  *     只用底图 + Label 文案 —— 礼包面板里只有两个页签，再引一套主界面图标包不划算。
- *   - 选中态靠两张底图切换（`bgOn` / `bgOff` 由宿主预加载后传入）。
+ *   - 选中态复用主页的金色 `nav_sel`，未选中不铺独立底板；宿主通过资源帧传入。
  */
 @ccclass('GiftTabButton')
 export class GiftTabButton extends Component {
@@ -41,15 +42,13 @@ export class GiftTabButton extends Component {
         this.clickHandler = clickHandler;
     }
 
-    /** 文案 + 选中态。文案为空时保留上一帧（模板复用时会串页签名）。 */
+    /** 文案 + 主页同款选中态；空文案保留 prefab 上的静态名称。 */
     render(text: string, selected: boolean, frameOff: SpriteFrame | null, frameOn: SpriteFrame | null): void {
         if (text && this.label) this.label.string = text;
         const target = selected ? frameOn : frameOff;
-        if (target) {
-            this.bg.spriteFrame = target;
-        } else {
-            this.bg.color = selected ? COLOR_ON : COLOR_OFF;
-        }
+        this.bg.spriteFrame = target;
+        this.bg.color = BACKGROUND_COLOR;
+        if (this.label) this.label.color = selected ? LABEL_COLOR_ON : LABEL_COLOR_OFF;
     }
 
     private emitClick(): void {

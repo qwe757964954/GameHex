@@ -32,17 +32,21 @@ export class ZCSpawnRegionHintOverlay {
         this.root.active = false;
     }
 
-    render(hints: readonly IZCSpawnRegionHint[], visible: boolean): void {
+    render(hints: readonly IZCSpawnRegionHint[], visible: boolean, mapScale: number): void {
         const count = Math.min(hints.length, 3);
         const shouldShow = visible && count > 0;
         if (this.root.active !== shouldShow) this.root.active = shouldShow;
         if (!shouldShow) return;
+        const counterScale = Number.isFinite(mapScale) && mapScale > 0 ? 1 / mapScale : 1;
         for (let index = 0; index < count; index += 1) {
             const hint = hints[index];
             const bubble = this.ensureBubble(index);
             if (!bubble.node.active) bubble.node.active = true;
             if (bubble.node.position.x !== hint.x || bubble.node.position.y !== hint.y) {
                 bubble.node.setPosition(hint.x, hint.y, 0);
+            }
+            if (bubble.node.scale.x !== counterScale || bubble.node.scale.y !== counterScale) {
+                bubble.node.setScale(counterScale, counterScale, 1);
             }
             if (bubble.depth !== hint.depth || bubble.hintLabel !== hint.label) {
                 bubble.label.string = `${DEPTH_LABEL[hint.depth]} · ${hint.label}`;

@@ -184,6 +184,15 @@ export async function loadCardLevelUpRows(): Promise<readonly unknown[]> {
     return readRows('cardLevelUp');
 }
 
+/**
+ * 读 `armySkillLevelUp` 的**原始行**（技能级的等级/解锁/描述都在这一张表里）。
+ *
+ * 与 `loadCardLevelUpRows` 同口径：只负责取数，聚合与判定在 `CardSkillList`（无引擎依赖、可单测）。
+ */
+export async function loadArmySkillLevelUpRows(): Promise<readonly unknown[]> {
+    return readRows('armySkillLevelUp');
+}
+
 /** 当前阵容的羁绊加成（供加成条展示）。deck 为空时返回中性值。 */
 export function currentDeckBonuses(deck: readonly ZCDeckCard[]): ZCDeckBonuses {
     return calculateDeckBonuses(deck);

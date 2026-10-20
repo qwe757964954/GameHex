@@ -46,11 +46,19 @@ interface BuildingDestroyFxEntry {
 }
 
 /**
- * 出生特效拿不到 clip 时的兜底显示时长（秒）。
- * 正常路径时长从 `clip.duration` 读（出生特效 24 帧 @16fps = 1.5s），改美术帧率不受影响；
- * 只在 prefab 被改坏、连 `defaultClip` 都没有时兜底。
+ * 出生特效的**目标总时长**（秒）—— 2026-10-19 用户口径两改：
+ * 先是「播放速度加快，动画总时长缩短成 80%」（2.0s → 1.6s），紧接着「再加速，1.6s → **1.25s**」。
+ *
+ * 🔴 与受击特效的 `HIT_FX_TARGET_SECONDS` 同一套做法：**锁总时长**，播放倍速由
+ * `clip.duration / 目标时长` 反推（美术原速 2.0s ⇒ speed **1.6×**；24 帧 / sample 12 = 2.0s）。
+ * 只动 `AnimationState.speed`，**不改资产的 `_duration`** —— 那是「帧数 / sample」的美术真值，
+ * 改它等于把后半段关键帧直接丢掉（曲线时间戳不会跟着重排）。
+ *
+ * ⚠️ 回收点必须用**加速后**的时长（= 本值）：wrapMode 是 once，动画播完 `Normal` 会停在末帧，
+ * 仍按 2.0s 回收就多出 0.75s 冻在最后一帧的残影。
+ * ⚠️ 拿不到 clip 时（prefab 被改坏）也按本值挂着 —— 那种情况下没有动画可播，只是个占位时长。
  */
-const SPAWN_FX_FALLBACK_DURATION = 1.5;
+const SPAWN_FX_TARGET_SECONDS = 1.25;
 /**
  * 阵亡特效拿不到 clip 时的兜底显示时长（秒）。
  * 正常路径从 `clip.duration` 读（死亡特效 13 帧 @12fps = 1.0833s）；仅在 prefab 损坏时兜底。
@@ -263,6 +271,9 @@ export class ZCEffectPool {
      *  **刻意不写 `setPosition`/`setScale`**：垂直落位与缩放都烘在 prefab 的 `_lpos`/`_lscale`
      * 里（美术对着真机调的，比如把光柱重心从头顶压到胸口）。这里 `setPosition(0,0,0)` 会直接
      * 覆盖掉它，表现为「改了 prefab 完全没效果」且不报错。池化复用天然保留上一次的 `_lpos`。
+     *
+     *  **播放速度**：整段 clip 压进 `SPAWN_FX_TARGET_SECONDS`（1.25s，speed = 1.6×），
+     * 存活时长同步用这个目标值。
      */
     playSpawnFx(host: Node, now: number): void {
         const prefab = this.deps.spawnFxPrefab;
@@ -277,11 +288,28 @@ export class ZCEffectPool {
         if (animation && clip) {
             animation.stop();
             animation.play(clip.name);
-            this.spawnFxNodes.push({ node, host, startedAt: now, duration: clip.duration });
+            // 加速：把整段 clip 压进 `SPAWN_FX_TARGET_SECONDS`（2.0s → 1.25s ⇒ speed 1.6×）。
+            // `speed` 只在 `AnimationState.initialize()` 里从 `clip.speed` 取一次，
+            // `play()` / `stop()` 都不重置它 ⇒ 每次播放重算同一个值是幂等的，
+            // 节点池化复用也不会累乘（同 `playHitFx` 的口径）。
+            const state = animation.getState(clip.name);
+            if (state) state.speed = clip.duration / SPAWN_FX_TARGET_SECONDS;
+            this.spawnFxNodes.push({
+                node,
+                host,
+                startedAt: now,
+                // 🔴 回收点 = 加速后的总时长（不是 clip 原速，见 `SPAWN_FX_TARGET_SECONDS` 的说明）。
+                duration: SPAWN_FX_TARGET_SECONDS,
+            });
             return;
         }
-        // 拿不到 clip（prefab 被改坏）：按兜底时长。
-        this.spawnFxNodes.push({ node, host, startedAt: now, duration: SPAWN_FX_FALLBACK_DURATION });
+        // 拿不到 clip（prefab 被改坏）：没有动画可播，只按目标时长占位。
+        this.spawnFxNodes.push({
+            node,
+            host,
+            startedAt: now,
+            duration: SPAWN_FX_TARGET_SECONDS,
+        });
     }
 
     /**

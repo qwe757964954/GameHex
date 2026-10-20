@@ -198,6 +198,7 @@ export interface ZCMapLayout {
     homes?: ZCMapHome[];
     /** v3：各分区的前 / 中 / 后区域；未圈画时省略。 */
     regions?: ZCMapRegion[];
+    /** 旧版自选主城候选格；仅在地图没有前 / 中 / 后区域时用作兼容范围。 */
     homeCandidates?: ZCMapHomeCandidates[];
     /** v3：中立格资源点位；无点位时省略。 */
     resourcePoints?: ZCMapResourcePoint[];
@@ -676,16 +677,16 @@ export function configureZCMap(layout: ZCMapLayout): void {
 
     // ---- 资源点位（5.3 / 7.1）--------------------------------------------------
     const homeCandidates: ZCMapHomeCandidates[] = [];
+    const configuredHomeCandidateSections = new Set<number>();
     if (layout.homeCandidates !== undefined) {
         if (!Array.isArray(layout.homeCandidates)) throw new Error('主城可选格配置必须是数组');
-        const configuredSections = new Set<number>();
         for (const entry of layout.homeCandidates) {
             if (!entry || !Number.isInteger(entry.section) || entry.section < 1 || entry.section > playerCount) {
                 throw new Error(`主城候选范围必须属于 1~${playerCount} 区`);
             }
-            if (configuredSections.has(entry.section)) throw new Error(`第 ${entry.section} 区主城候选范围重复`);
+            if (configuredHomeCandidateSections.has(entry.section)) throw new Error(`第 ${entry.section} 区主城候选范围重复`);
             if (!Array.isArray(entry.cells) || !entry.cells.length) throw new Error('主城候选范围至少要包含一格');
-            configuredSections.add(entry.section);
+            configuredHomeCandidateSections.add(entry.section);
             const seen = new Set<number>();
             const cells = entry.cells.map((cell) => {
                 if (!Number.isInteger(cell) || cell < 0 || cell >= rows * columns) throw new Error('主城候选范围包含地图外的格');
@@ -699,6 +700,9 @@ export function configureZCMap(layout: ZCMapLayout): void {
             });
             homeCandidates.push({ section: entry.section, cells });
         }
+    }
+    if (homeCandidates.length > 0 && configuredHomeCandidateSections.size !== playerCount) {
+        throw new Error('主城候选范围必须覆盖所有分区');
     }
 
     const resourcePoints: ZCMapResourcePoint[] = [];

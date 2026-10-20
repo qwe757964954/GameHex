@@ -110,7 +110,7 @@ test('升起：入场段弹出到峰值缩放，淡出段回落并淡到全透�
 // ── prefab 结构（离线读盘，不需要引擎） ──────────────────────────────────
 
 const GAIN_PREFAB = 'assets/resources/ui/territory/TerritoryResourceGain.prefab';
-const PAGE_PREFAB = 'assets/resources/ui/territory/TerritoryPage.prefab';
+const PAGE_PREFAB = 'assets/resources/ui/main/MainTerritoryMap.prefab';
 
 interface IPrefabObject { __type__?: string; _name?: string; [key: string]: unknown }
 const load = (path: string): IPrefabObject[] => JSON.parse(read(path)) as IPrefabObject[];
@@ -208,7 +208,7 @@ test('领地页 prefab：MapView 绑到 GainLayer，且 GainLayer 是 MapLayer �
 
 test('页面只对「非钱包类」奖励弹窗：全是 7/9 时整批跳过 ShowReward', () => {
     // 反例断言先剥注释（规则 104）—— 类注释里提到旧写法是合法的。
-    const src = read('assets/script/app/territory/view/TerritoryPage.ts')
+    const src = read('assets/script/app/main/MainTerritoryMap.ts')
         .replace(/\/\*[\s\S]*?\*\//g, '')
         .replace(/\/\/[^\n]*/g, '');
     assert.match(src, /const \{ gains, popup \} = splitTerritoryRewards\(rewards\)/);
@@ -761,7 +761,7 @@ test('接线：喷发粒子不用 prefab（贴图由页面注入），飘字 pre
     assert.doesNotMatch(src, /Prefab|instantiate/, '粒子组不该去 instantiate 任何 prefab');
     assert.doesNotMatch(src, /tween/i, '池化节点上不许挂 tween（规则 106 / 247），逐帧 step 由 MapView 推');
 
-    const page = stripComments(read('assets/script/app/territory/view/TerritoryPage.ts'));
+    const page = stripComments(read('assets/script/app/main/MainTerritoryMap.ts'));
     assert.match(page, /setGainIcons\(/, '页面只注入一次图标表，喷发与飘字共用');
 });
 

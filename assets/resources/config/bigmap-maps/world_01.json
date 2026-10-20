@@ -1,0 +1,702 @@
+{
+  "kind": "bigmapWorld",
+  "version": 1,
+  "layoutVersion": 1,
+  "worldId": 1,
+  "worldName": "植物大地图",
+  "rows": 40,
+  "columns": 40,
+  "terrainSeed": 20261017,
+  "terrainOverrides": [],
+  "cities": [
+    {
+      "cityId": 101,
+      "anchorHexId": 1122,
+      "hexIds": [
+        1122,
+        1082,
+        1162,
+        1121
+      ],
+      "ring": 18,
+      "rangeHex": [],
+      "adjacentCityIds": [],
+      "label": "101"
+    },
+    {
+      "cityId": 102,
+      "anchorHexId": 761,
+      "hexIds": [
+        761,
+        721,
+        801,
+        760
+      ],
+      "ring": 18,
+      "rangeHex": [],
+      "adjacentCityIds": [],
+      "label": "102"
+    },
+    {
+      "cityId": 103,
+      "anchorHexId": 324,
+      "hexIds": [
+        324,
+        284,
+        364,
+        323
+      ],
+      "ring": 18,
+      "rangeHex": [],
+      "adjacentCityIds": [],
+      "label": "103"
+    },
+    {
+      "cityId": 104,
+      "anchorHexId": 173,
+      "hexIds": [
+        173,
+        133,
+        213,
+        172
+      ],
+      "ring": 18,
+      "rangeHex": [],
+      "adjacentCityIds": [],
+      "label": "104"
+    },
+    {
+      "cityId": 105,
+      "anchorHexId": 143,
+      "hexIds": [
+        143,
+        103,
+        183,
+        142
+      ],
+      "ring": 18,
+      "rangeHex": [],
+      "adjacentCityIds": [],
+      "label": "105"
+    },
+    {
+      "cityId": 106,
+      "anchorHexId": 312,
+      "hexIds": [
+        312,
+        272,
+        352,
+        311
+      ],
+      "ring": 18,
+      "rangeHex": [],
+      "adjacentCityIds": [],
+      "label": "106"
+    },
+    {
+      "cityId": 107,
+      "anchorHexId": 597,
+      "hexIds": [
+        597,
+        557,
+        637,
+        596
+      ],
+      "ring": 18,
+      "rangeHex": [],
+      "adjacentCityIds": [],
+      "label": "107"
+    },
+    {
+      "cityId": 108,
+      "anchorHexId": 957,
+      "hexIds": [
+        957,
+        917,
+        997,
+        956
+      ],
+      "ring": 18,
+      "rangeHex": [],
+      "adjacentCityIds": [],
+      "label": "108"
+    },
+    {
+      "cityId": 109,
+      "anchorHexId": 1233,
+      "hexIds": [
+        1233,
+        1193,
+        1273,
+        1232
+      ],
+      "ring": 18,
+      "rangeHex": [],
+      "adjacentCityIds": [],
+      "label": "109"
+    },
+    {
+      "cityId": 110,
+      "anchorHexId": 1385,
+      "hexIds": [
+        1385,
+        1345,
+        1425,
+        1384
+      ],
+      "ring": 18,
+      "rangeHex": [],
+      "adjacentCityIds": [],
+      "label": "110"
+    },
+    {
+      "cityId": 111,
+      "anchorHexId": 1457,
+      "hexIds": [
+        1457,
+        1417,
+        1497,
+        1456
+      ],
+      "ring": 18,
+      "rangeHex": [],
+      "adjacentCityIds": [],
+      "label": "111"
+    },
+    {
+      "cityId": 112,
+      "anchorHexId": 1290,
+      "hexIds": [
+        1290,
+        1250,
+        1330,
+        1289
+      ],
+      "ring": 18,
+      "rangeHex": [],
+      "adjacentCityIds": [],
+      "label": "112"
+    },
+    {
+      "cityId": 200,
+      "anchorHexId": 1008,
+      "hexIds": [
+        1008,
+        968,
+        1048,
+        1007
+      ],
+      "ring": 12,
+      "rangeHex": [],
+      "adjacentCityIds": [],
+      "label": "200"
+    },
+    {
+      "cityId": 201,
+      "anchorHexId": 647,
+      "hexIds": [
+        647,
+        607,
+        687,
+        646
+      ],
+      "ring": 12,
+      "rangeHex": [],
+      "adjacentCityIds": [],
+      "label": "201"
+    },
+    {
+      "cityId": 202,
+      "anchorHexId": 375,
+      "hexIds": [
+        375,
+        335,
+        415,
+        374
+      ],
+      "ring": 12,
+      "rangeHex": [],
+      "adjacentCityIds": [],
+      "label": "202"
+    },
+    {
+      "cityId": 203,
+      "anchorHexId": 425,
+      "hexIds": [
+        425,
+        385,
+        465,
+        424
+      ],
+      "ring": 12,
+      "rangeHex": [],
+      "adjacentCityIds": [],
+      "label": "203"
+    },
+    {
+      "cityId": 204,
+      "anchorHexId": 671,
+      "hexIds": [
+        671,
+        631,
+        711,
+        670
+      ],
+      "ring": 12,
+      "rangeHex": [],
+      "adjacentCityIds": [],
+      "label": "204"
+    },
+    {
+      "cityId": 205,
+      "anchorHexId": 1031,
+      "hexIds": [
+        1031,
+        991,
+        1071,
+        1030
+      ],
+      "ring": 12,
+      "rangeHex": [],
+      "adjacentCityIds": [],
+      "label": "205"
+    },
+    {
+      "cityId": 206,
+      "anchorHexId": 1183,
+      "hexIds": [
+        1183,
+        1143,
+        1223,
+        1182
+      ],
+      "ring": 12,
+      "rangeHex": [],
+      "adjacentCityIds": [],
+      "label": "206"
+    },
+    {
+      "cityId": 207,
+      "anchorHexId": 1175,
+      "hexIds": [
+        1175,
+        1135,
+        1215,
+        1174
+      ],
+      "ring": 12,
+      "rangeHex": [],
+      "adjacentCityIds": [],
+      "label": "207"
+    },
+    {
+      "cityId": 300,
+      "anchorHexId": 894,
+      "hexIds": [
+        894,
+        854,
+        934,
+        893
+      ],
+      "ring": 6,
+      "rangeHex": [],
+      "adjacentCityIds": [],
+      "label": "300"
+    },
+    {
+      "cityId": 301,
+      "anchorHexId": 576,
+      "hexIds": [
+        576,
+        536,
+        616,
+        575
+      ],
+      "ring": 6,
+      "rangeHex": [],
+      "adjacentCityIds": [],
+      "label": "301"
+    },
+    {
+      "cityId": 302,
+      "anchorHexId": 665,
+      "hexIds": [
+        665,
+        625,
+        705,
+        664
+      ],
+      "ring": 6,
+      "rangeHex": [],
+      "adjacentCityIds": [],
+      "label": "302"
+    },
+    {
+      "cityId": 303,
+      "anchorHexId": 942,
+      "hexIds": [
+        942,
+        902,
+        982,
+        941
+      ],
+      "ring": 6,
+      "rangeHex": [],
+      "adjacentCityIds": [],
+      "label": "303"
+    },
+    {
+      "cityId": 401,
+      "anchorHexId": 779,
+      "hexIds": [
+        779,
+        739,
+        819,
+        778,
+        738,
+        780
+      ],
+      "ring": 0,
+      "rangeHex": [],
+      "adjacentCityIds": [],
+      "label": "401"
+    }
+  ],
+  "monsters": [
+    {
+      "instanceId": 1,
+      "monsterId": 8001,
+      "level": 1,
+      "anchorHexId": 824,
+      "hexIds": [
+        824
+      ]
+    },
+    {
+      "instanceId": 2,
+      "monsterId": 8002,
+      "level": 1,
+      "anchorHexId": 814,
+      "hexIds": [
+        814
+      ]
+    },
+    {
+      "instanceId": 3,
+      "monsterId": 8003,
+      "level": 1,
+      "anchorHexId": 901,
+      "hexIds": [
+        901
+      ]
+    },
+    {
+      "instanceId": 4,
+      "monsterId": 8004,
+      "level": 1,
+      "anchorHexId": 703,
+      "hexIds": [
+        703
+      ]
+    },
+    {
+      "instanceId": 5,
+      "monsterId": 8005,
+      "level": 1,
+      "anchorHexId": 783,
+      "hexIds": [
+        783
+      ]
+    },
+    {
+      "instanceId": 6,
+      "monsterId": 8006,
+      "level": 1,
+      "anchorHexId": 773,
+      "hexIds": [
+        773
+      ]
+    },
+    {
+      "instanceId": 7,
+      "monsterId": 8007,
+      "level": 2,
+      "anchorHexId": 582,
+      "hexIds": [
+        582
+      ]
+    },
+    {
+      "instanceId": 8,
+      "monsterId": 8008,
+      "level": 2,
+      "anchorHexId": 978,
+      "hexIds": [
+        978
+      ]
+    },
+    {
+      "instanceId": 9,
+      "monsterId": 8009,
+      "level": 2,
+      "anchorHexId": 734,
+      "hexIds": [
+        734
+      ]
+    },
+    {
+      "instanceId": 10,
+      "monsterId": 8010,
+      "level": 2,
+      "anchorHexId": 980,
+      "hexIds": [
+        980
+      ]
+    },
+    {
+      "instanceId": 11,
+      "monsterId": 8011,
+      "level": 2,
+      "anchorHexId": 704,
+      "hexIds": [
+        704
+      ]
+    },
+    {
+      "instanceId": 12,
+      "monsterId": 8012,
+      "level": 3,
+      "anchorHexId": 539,
+      "hexIds": [
+        539,
+        499
+      ]
+    },
+    {
+      "instanceId": 13,
+      "monsterId": 8013,
+      "level": 3,
+      "anchorHexId": 787,
+      "hexIds": [
+        787,
+        747
+      ]
+    },
+    {
+      "instanceId": 14,
+      "monsterId": 8014,
+      "level": 3,
+      "anchorHexId": 615,
+      "hexIds": [
+        615,
+        655
+      ]
+    },
+    {
+      "instanceId": 15,
+      "monsterId": 8015,
+      "level": 3,
+      "anchorHexId": 1059,
+      "hexIds": [
+        1059,
+        1019
+      ]
+    },
+    {
+      "instanceId": 16,
+      "monsterId": 8016,
+      "level": 4,
+      "anchorHexId": 731,
+      "hexIds": [
+        731,
+        691
+      ]
+    },
+    {
+      "instanceId": 17,
+      "monsterId": 8017,
+      "level": 4,
+      "anchorHexId": 1097,
+      "hexIds": [
+        1097,
+        1057
+      ]
+    },
+    {
+      "instanceId": 18,
+      "monsterId": 8018,
+      "level": 4,
+      "anchorHexId": 1100,
+      "hexIds": [
+        1100,
+        1060
+      ]
+    },
+    {
+      "instanceId": 19,
+      "monsterId": 8019,
+      "level": 5,
+      "anchorHexId": 1098,
+      "hexIds": [
+        1098,
+        1058,
+        1138,
+        1137
+      ]
+    },
+    {
+      "instanceId": 20,
+      "monsterId": 8020,
+      "level": 5,
+      "anchorHexId": 586,
+      "hexIds": [
+        586,
+        546,
+        626,
+        585
+      ]
+    }
+  ],
+  "bases": [
+    {
+      "baseId": "player",
+      "name": "我的基地",
+      "isPlayer": true,
+      "hexId": 909,
+      "ring": 10,
+      "power": 0
+    },
+    {
+      "baseId": "npc-01",
+      "name": "藤蔓占星师",
+      "isPlayer": false,
+      "hexId": 475,
+      "ring": 16,
+      "power": 600
+    },
+    {
+      "baseId": "npc-02",
+      "name": "苔藓骑士",
+      "isPlayer": false,
+      "hexId": 186,
+      "ring": 18,
+      "power": 780
+    },
+    {
+      "baseId": "npc-03",
+      "name": "双头向日葵",
+      "isPlayer": false,
+      "hexId": 1217,
+      "ring": 12,
+      "power": 960
+    },
+    {
+      "baseId": "npc-04",
+      "name": "铁壳蜗牛",
+      "isPlayer": false,
+      "hexId": 258,
+      "ring": 13,
+      "power": 1140
+    },
+    {
+      "baseId": "npc-05",
+      "name": "酸浆射手",
+      "isPlayer": false,
+      "hexId": 961,
+      "ring": 18,
+      "power": 1320
+    },
+    {
+      "baseId": "npc-06",
+      "name": "孢子祭司",
+      "isPlayer": false,
+      "hexId": 1084,
+      "ring": 16,
+      "power": 1500
+    },
+    {
+      "baseId": "npc-07",
+      "name": "枯枝游侠",
+      "isPlayer": false,
+      "hexId": 1172,
+      "ring": 14,
+      "power": 1680
+    },
+    {
+      "baseId": "npc-08",
+      "name": "泥沼守卫",
+      "isPlayer": false,
+      "hexId": 512,
+      "ring": 13,
+      "power": 1860
+    },
+    {
+      "baseId": "npc-09",
+      "name": "夜灯萤群",
+      "isPlayer": false,
+      "hexId": 1037,
+      "ring": 18,
+      "power": 2040
+    },
+    {
+      "baseId": "npc-10",
+      "name": "刺藤斗士",
+      "isPlayer": false,
+      "hexId": 301,
+      "ring": 13,
+      "power": 2220
+    },
+    {
+      "baseId": "npc-11",
+      "name": "露水侍女",
+      "isPlayer": false,
+      "hexId": 371,
+      "ring": 14,
+      "power": 2400
+    },
+    {
+      "baseId": "npc-12",
+      "name": "朽木君王",
+      "isPlayer": false,
+      "hexId": 442,
+      "ring": 17,
+      "power": 2580
+    },
+    {
+      "baseId": "npc-13",
+      "name": "落果学徒",
+      "isPlayer": false,
+      "hexId": 215,
+      "ring": 16,
+      "power": 2760
+    },
+    {
+      "baseId": "npc-14",
+      "name": "腐叶猎手",
+      "isPlayer": false,
+      "hexId": 1081,
+      "ring": 18,
+      "power": 2940
+    },
+    {
+      "baseId": "npc-15",
+      "name": "霜叶哨兵",
+      "isPlayer": false,
+      "hexId": 309,
+      "ring": 17,
+      "power": 3120
+    },
+    {
+      "baseId": "npc-16",
+      "name": "光合教徒",
+      "isPlayer": false,
+      "hexId": 549,
+      "ring": 11,
+      "power": 3300
+    }
+  ],
+  "blocked": [],
+  "spawnZones": [],
+  "points": [],
+  "background": ""
+}

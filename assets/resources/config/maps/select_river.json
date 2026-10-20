@@ -13,8 +13,8 @@
     "..00...00..",
     "..00...00..",
     "..00...00..",
-    ".000...0000",
-    ".000000000.",
+    "..00...00..",
+    "00000000000",
     "00000000000",
     "00000000000",
     "00000000000",
@@ -23,75 +23,19 @@
   ],
   "homes": [
     {
-      "row": 16,
+      "row": 17,
       "column": 5
     },
     {
-      "row": 3,
+      "row": 2,
       "column": 5
     }
   ],
   "regions": [
     {
       "section": 1,
-      "depth": "front",
-      "cells": [
-        145,
-        151,
-        155,
-        156,
-        157,
-        158,
-        159,
-        160,
-        161,
-        162,
-        163,
-        165,
-        166,
-        167,
-        168,
-        169,
-        170,
-        171,
-        172,
-        174
-      ]
-    },
-    {
-      "section": 1,
-      "depth": "mid",
-      "cells": [
-        173,
-        175,
-        176,
-        177,
-        178,
-        179,
-        180,
-        181,
-        182,
-        183,
-        184,
-        185,
-        186,
-        187,
-        188,
-        189,
-        190,
-        191,
-        192,
-        193,
-        194,
-        196
-      ]
-    },
-    {
-      "section": 1,
       "depth": "back",
       "cells": [
-        195,
-        197,
         198,
         199,
         200,
@@ -114,7 +58,66 @@
         217,
         218,
         219
-      ]
+      ],
+      "tendency": "develop"
+    },
+    {
+      "section": 1,
+      "depth": "mid",
+      "cells": [
+        176,
+        177,
+        178,
+        179,
+        180,
+        181,
+        182,
+        183,
+        184,
+        185,
+        186,
+        187,
+        188,
+        189,
+        190,
+        191,
+        192,
+        193,
+        194,
+        195,
+        196,
+        197
+      ],
+      "tendency": "control"
+    },
+    {
+      "section": 1,
+      "depth": "front",
+      "cells": [
+        154,
+        155,
+        156,
+        157,
+        158,
+        159,
+        160,
+        161,
+        162,
+        163,
+        164,
+        165,
+        166,
+        167,
+        168,
+        169,
+        170,
+        171,
+        172,
+        173,
+        174,
+        175
+      ],
+      "tendency": "rush"
     },
     {
       "section": 2,
@@ -133,20 +136,22 @@
         10,
         11,
         12,
+        13,
         14,
+        15,
         16,
+        17,
         18,
+        19,
         20,
         21
-      ]
+      ],
+      "tendency": "develop"
     },
     {
       "section": 2,
       "depth": "mid",
       "cells": [
-        13,
-        15,
-        19,
         22,
         23,
         24,
@@ -160,109 +165,82 @@
         32,
         33,
         34,
+        35,
         36,
+        37,
+        38,
+        39,
         40,
+        41,
         42,
         43
-      ]
+      ],
+      "tendency": "control"
     },
     {
       "section": 2,
       "depth": "front",
       "cells": [
-        35,
-        37,
-        38,
-        39,
-        41,
         44,
         45,
         46,
         47,
         48,
-        49,
         50,
         51,
         52,
         53,
         54,
+        55,
         56,
+        57,
         58,
+        59,
+        60,
+        61,
         62,
-        64
-      ]
-    }
-  ],
-  "homeCandidates": [
-    {
-      "section": 1,
-      "cells": [
-        15,
-        16,
-        17,
-        26,
-        27,
-        28,
-        37,
-        39,
-        48,
-        49,
-        50,
-        169,
-        170,
-        171,
-        180,
-        182,
-        191,
-        192,
-        193,
-        203
-      ]
+        63,
+        64,
+        65
+      ],
+      "tendency": "rush"
     }
   ],
   "resourcePoints": [
     {
-      "row": 5,
-      "column": 3,
+      "row": 15,
+      "column": 1,
       "pool": {
+        "chest": 1,
+        "artifact_charge": 1,
+        "unit_cap": 1
+      }
+    },
+    {
+      "row": 14,
+      "column": 10,
+      "pool": {
+        "mine": 1,
+        "artifact_charge": 1,
+        "unit_cap": 1
+      }
+    },
+    {
+      "row": 3,
+      "column": 0,
+      "pool": {
+        "gold": 1,
+        "unit_cap": 1,
         "chest": 1
       }
     },
     {
-      "row": 5,
-      "column": 7,
+      "row": 4,
+      "column": 9,
       "pool": {
-        "gold": 1
-      }
-    },
-    {
-      "row": 15,
-      "column": 2,
-      "pool": {
-        "unit_cap": 1,
         "artifact_charge": 1,
-        "mine": 1
-      }
-    },
-    {
-      "row": 13,
-      "column": 8,
-      "pool": {
+        "mine": 1,
         "gold": 1
-      }
-    },
-    {
-      "row": 9,
-      "column": 8,
-      "pool": {
-        "artifact_charge": 1
-      }
-    },
-    {
-      "row": 9,
-      "column": 2,
-      "pool": {
-        "artifact_charge": 1
       }
     }
   ],
@@ -273,12 +251,36 @@
   "art": {
     "freeDecor": [
       {
+        "id": 3,
+        "art": "image/decor/wasteland/helmet",
+        "x": 5.002618789672852,
+        "y": -121.33396911621094,
+        "width": 221,
+        "height": 147,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 7,
+        "art": "image/decor/wasteland/cao",
+        "x": -457.2100524902344,
+        "y": -206.52952575683594,
+        "width": 104,
+        "height": 93,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
         "id": 8,
-        "art": "image/decor/wasteland/st1",
-        "x": -423.3550720214844,
-        "y": -198.6476287841797,
-        "width": 276.75,
-        "height": 90,
+        "art": "image/decor/wasteland/cao",
+        "x": -450.5374755859375,
+        "y": -59.7327995300293,
+        "width": 104,
+        "height": 93,
         "rotation": 0,
         "flipX": false,
         "flipY": false,
@@ -286,11 +288,11 @@
       },
       {
         "id": 9,
-        "art": "image/decor/wasteland/st1",
-        "x": -457.293212890625,
-        "y": 19.12150001525879,
-        "width": 276.75,
-        "height": 90,
+        "art": "image/decor/wasteland/cao",
+        "x": -440.5285949707031,
+        "y": 113.75424194335938,
+        "width": 104,
+        "height": 93,
         "rotation": 0,
         "flipX": false,
         "flipY": false,
@@ -298,11 +300,11 @@
       },
       {
         "id": 10,
-        "art": "image/decor/wasteland/st1",
-        "x": -437.49603271484375,
-        "y": 166.1863250732422,
-        "width": 276.75,
-        "height": 90,
+        "art": "image/decor/wasteland/cao",
+        "x": -61.84716033935547,
+        "y": 18.581762313842773,
+        "width": 126.92455539246771,
+        "height": 113.49984280287977,
         "rotation": 0,
         "flipX": false,
         "flipY": false,
@@ -310,23 +312,11 @@
       },
       {
         "id": 11,
-        "art": "image/decor/wasteland/st1",
-        "x": -511.0283508300781,
-        "y": 330.22021484375,
-        "width": 276.75,
-        "height": 90,
-        "rotation": 0,
-        "flipX": false,
-        "flipY": false,
-        "locked": false
-      },
-      {
-        "id": 12,
-        "art": "image/decor/wasteland/st3",
-        "x": 37.63656997680664,
-        "y": -243.89833068847656,
-        "width": 276.75,
-        "height": 90,
+        "art": "image/decor/wasteland/cao",
+        "x": 43.68504524230957,
+        "y": 252.29849243164062,
+        "width": 104,
+        "height": 93,
         "rotation": 0,
         "flipX": false,
         "flipY": false,
@@ -334,11 +324,11 @@
       },
       {
         "id": 13,
-        "art": "image/decor/wasteland/st3",
-        "x": 29.15211296081543,
-        "y": 10.636886596679688,
-        "width": 276.75,
-        "height": 90,
+        "art": "image/decor/wasteland/cao1",
+        "x": 463.6058044433594,
+        "y": -219.87469482421875,
+        "width": 111,
+        "height": 69,
         "rotation": 0,
         "flipX": false,
         "flipY": false,
@@ -346,11 +336,11 @@
       },
       {
         "id": 14,
-        "art": "image/decor/wasteland/st3",
-        "x": -7.614131450653076,
-        "y": 245.37501525878906,
-        "width": 276.75,
-        "height": 90,
+        "art": "image/decor/wasteland/cao1",
+        "x": 466.94207763671875,
+        "y": -13.024749755859375,
+        "width": 111,
+        "height": 69,
         "rotation": 0,
         "flipX": false,
         "flipY": false,
@@ -358,11 +348,11 @@
       },
       {
         "id": 15,
-        "art": "image/decor/wasteland/st2",
-        "x": 492.97198486328125,
-        "y": -136.4279327392578,
-        "width": 276.75,
-        "height": 90,
+        "art": "image/decor/wasteland/cao1",
+        "x": 530.33154296875,
+        "y": -106.44084930419922,
+        "width": 111,
+        "height": 69,
         "rotation": 0,
         "flipX": false,
         "flipY": false,
@@ -370,11 +360,11 @@
       },
       {
         "id": 16,
-        "art": "image/decor/wasteland/st2",
-        "x": 473.1746826171875,
-        "y": 41.74677276611328,
-        "width": 276.75,
-        "height": 90,
+        "art": "image/decor/wasteland/cao1",
+        "x": -497.2455139160156,
+        "y": 237.1969451904297,
+        "width": 111,
+        "height": 69,
         "rotation": 0,
         "flipX": false,
         "flipY": false,
@@ -382,11 +372,11 @@
       },
       {
         "id": 17,
-        "art": "image/decor/wasteland/st2",
-        "x": 538.2225341796875,
-        "y": 236.8905487060547,
-        "width": 276.75,
-        "height": 90,
+        "art": "image/decor/wasteland/cao1",
+        "x": -500.5818176269531,
+        "y": 13.665564775466919,
+        "width": 111,
+        "height": 69,
         "rotation": 0,
         "flipX": false,
         "flipY": false,
@@ -394,11 +384,131 @@
       },
       {
         "id": 18,
-        "art": "image/decor/wasteland/st2",
-        "x": 608.9269409179688,
-        "y": 395.2680969238281,
-        "width": 276.75,
-        "height": 90,
+        "art": "image/decor/wasteland/cao1",
+        "x": -537.281005859375,
+        "y": -123.12229919433594,
+        "width": 111,
+        "height": 69,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 19,
+        "art": "image/decor/wasteland/cao1",
+        "x": -417.1745910644531,
+        "y": -146.476318359375,
+        "width": 111,
+        "height": 69,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 20,
+        "art": "image/decor/wasteland/cao1",
+        "x": -36.83759689331055,
+        "y": -273.25531005859375,
+        "width": 111,
+        "height": 69,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 21,
+        "art": "image/decor/wasteland/cao1",
+        "x": 56.5785026550293,
+        "y": -239.89242553710938,
+        "width": 111,
+        "height": 69,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 22,
+        "art": "image/decor/wasteland/cao1",
+        "x": 433.5791931152344,
+        "y": -89.75940704345703,
+        "width": 111,
+        "height": 69,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 23,
+        "art": "image/decor/wasteland/cao1",
+        "x": 540.3404541015625,
+        "y": 147.1171417236328,
+        "width": 111,
+        "height": 69,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 24,
+        "art": "image/decor/wasteland/cao1",
+        "x": 440.25177001953125,
+        "y": 203.8340606689453,
+        "width": 111,
+        "height": 69,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 25,
+        "art": "image/decor/wasteland/st1",
+        "x": -60.21683120727539,
+        "y": 216.4774932861328,
+        "width": 177,
+        "height": 115,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 26,
+        "art": "image/decor/wasteland/st1",
+        "x": 583.7121887207031,
+        "y": 27.010723114013672,
+        "width": 177,
+        "height": 115,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 27,
+        "art": "image/decor/wasteland/st1",
+        "x": -423.84716796875,
+        "y": -273.25531005859375,
+        "width": 177,
+        "height": 115,
+        "rotation": 0,
+        "flipX": false,
+        "flipY": false,
+        "locked": false
+      },
+      {
+        "id": 28,
+        "art": "image/decor/wasteland/tires",
+        "x": 43.634674072265625,
+        "y": 100.50994110107422,
+        "width": 147,
+        "height": 145,
         "rotation": 0,
         "flipX": false,
         "flipY": false,

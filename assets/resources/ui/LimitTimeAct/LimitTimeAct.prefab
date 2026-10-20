@@ -85,11 +85,11 @@
         "__id__": 274
       },
       {
-        "__id__": 277
+        "__id__": 276
       }
     ],
     "_prefab": {
-      "__id__": 276
+      "__id__": 278
     },
     "_lpos": {
       "__type__": "cc.Vec3",
@@ -2383,7 +2383,7 @@
       "a": 255
     },
     "_spriteFrame": {
-      "__uuid__": "b09f13ff-cf09-410b-988e-cc4ee0391fad@f9941",
+      "__uuid__": "5aa83ea4-4ad3-4935-9da7-c6081617404f@f9941",
       "__expectedType__": "cc.SpriteFrame"
     },
     "_type": 0,
@@ -2741,7 +2741,7 @@
       "a": 255
     },
     "_spriteFrame": {
-      "__uuid__": "01160154-423b-4b28-93b5-7464bbb81174@f9941",
+      "__uuid__": "5aa83ea4-4ad3-4935-9da7-c6081617404f@f9941",
       "__expectedType__": "cc.SpriteFrame"
     },
     "_type": 0,
@@ -3099,7 +3099,7 @@
       "a": 255
     },
     "_spriteFrame": {
-      "__uuid__": "01160154-423b-4b28-93b5-7464bbb81174@f9941",
+      "__uuid__": "5aa83ea4-4ad3-4935-9da7-c6081617404f@f9941",
       "__expectedType__": "cc.SpriteFrame"
     },
     "_type": 0,
@@ -6419,6 +6419,7 @@
     "loadMoreMaxOffset": 150,
     "pullDampingRate": 0.5,
     "pixelAlign": true,
+    "interactive": true,
     "enableItemClickEffect": true,
     "disableBounce": false,
     "blockParentScroll": true,
@@ -6709,23 +6710,15 @@
     "hintLabel": {
       "__id__": 83
     },
+    "selectedTabFrame": {
+      "__uuid__": "5aa83ea4-4ad3-4935-9da7-c6081617404f@f9941",
+      "__expectedType__": "cc.SpriteFrame"
+    },
     "_id": ""
   },
   {
     "__type__": "cc.CompPrefabInfo",
     "fileId": "WxTlrHiWXaC0ZA2FJVASWx"
-  },
-  {
-    "__type__": "cc.PrefabInfo",
-    "root": {
-      "__id__": 1
-    },
-    "asset": {
-      "__id__": 0
-    },
-    "fileId": "LvM3WXlRMjvl2l2N3x5QLv",
-    "instance": null,
-    "targetOverrides": null
   },
   {
     "__type__": "cc.Widget",
@@ -6737,7 +6730,7 @@
     },
     "_enabled": true,
     "__prefab": {
-      "__id__": 278
+      "__id__": 277
     },
     "_alignFlags": 45,
     "_target": null,
@@ -6762,5 +6755,17 @@
   {
     "__type__": "cc.CompPrefabInfo",
     "fileId": "pADB5RhKP/UJEFkXBTdI/6"
+  },
+  {
+    "__type__": "cc.PrefabInfo",
+    "root": {
+      "__id__": 1
+    },
+    "asset": {
+      "__id__": 0
+    },
+    "fileId": "LvM3WXlRMjvl2l2N3x5QLv",
+    "instance": null,
+    "targetOverrides": null
   }
 ]

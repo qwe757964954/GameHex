@@ -748,7 +748,7 @@ export class GiftPage extends PopupBase {
         const cached = this.mainTabFrames;
         if (cached) return cached;
         const [off, on] = await Promise.all([
-            loadArt(GIFT_TAB_ART.off, GIFT_TAB_ART_ROOT),
+            GIFT_TAB_ART.off ? loadArt(GIFT_TAB_ART.off, GIFT_TAB_ART_ROOT) : Promise.resolve(null),
             loadArt(GIFT_TAB_ART.on, GIFT_TAB_ART_ROOT),
         ]);
         const frames: IGiftMainTabFrames = { off, on };
@@ -822,8 +822,8 @@ export class GiftPage extends PopupBase {
             tabs[index].render(
                 '',
                 def.key === this.selectedTab,
-                null,
-                null,
+                frames?.off ?? null,
+                frames?.on ?? null,
             );
         }
     }

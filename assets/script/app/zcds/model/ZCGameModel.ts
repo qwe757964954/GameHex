@@ -372,6 +372,15 @@ export class ZCGameModel {
     }
 
     // 构造期装配：目标字段均为 readonly，只能在 constructor 内赋值，故此处返回后由调用方装配。
+    //
+    // ⚠️ 各 context 会重复声明 unitPosition / effectiveDefinition / units 等能力，**不要合并成统一能力表**。
+    // 重复是有意的类型收窄，彼此并不等价：
+    //   · `IZCStatusResolutionContext.effectiveUnitDefinition` 只返回 Pick<ZCUnitDefinition,'attack'|'maxHp'>
+    //     （状态系统只读这两个字段，实测只出现 attack×3 / maxHp×2）；其 `damageUnit` 返回 void（不产生飘字）。
+    //   · `IZCAttackResolutionContext.damageUnit` 返回 ZCFloatText | null（攻击系统要拿飘字做命中数字）。
+    //   · `units` 在 Target/Projectile 是 readonly ZCUnitState[]、在 UnitTargeting 是 ReadonlyMap、
+    //     在 DamageResolution 是 ZCUnitRegistry —— 三种视图各服务不同遍历方式。
+    // 合并成一套签名会让系统看到它不该依赖的字段，把「这个系统能改什么」的边界放大。
 
     private buildTargetingContext(): ZCTargetingContext {
         const model = this;

@@ -45,7 +45,6 @@ import {
     territoryUnboundTint,
 } from './TerritoryTheme';
 import type { TerritorySiteState } from './TerritoryTheme';
-import { TERRITORY_TEXTS, TERRITORY_UNBOUND_TYPE_NAMES } from '../application/TerritoryTexts';
 
 const { ccclass, property } = _decorator;
 
@@ -879,7 +878,7 @@ export class TerritoryMapView extends Component {
             view.render({
                 site: null,
                 icon: input.art.start,
-                caption: `${input.map.chapterId}-1`,
+                caption: '',
                 tint: TERRITORY_COLORS.owned,
                 badge: '',
                 interactive: false,
@@ -1009,13 +1008,25 @@ export class TerritoryMapView extends Component {
         if (!isOpened) {
             const isOpenable = input.siteOpenableCells.includes(site.cellId);
             const isPending = input.pendingFixedResourceCells.includes(site.cellId);
+            // 🔴 前置宝箱（fixedResource）已解锁但没领取 ⇒ 后继格银币数字用**红色**提示
+            // （山猫 2026-10-21：前置格没有通关状态 = 还没 passCell 领取）。服务端对固定资源
+            // 的 completed 记在 unlockCells（`isPrerequisiteComplete` 的固定资源特例正是镜像它），
+            // 所以这里**只改视觉不动解锁**：未领取只把数字染红，点击解锁照常可进行 ——
+            // 领取后（owned）数字回白。
+            //（`input.map?.` 全链可选：防御沙箱测试的宽松输入，真实渲染 input.map 必有；
+            //  `requiredCells ?? []` 同理 —— 配置归一后恒有，裸对象沙箱可能缺。）
+            const unclaimedFixedPrereq = (site.unlock.requiredCells ?? []).some((cell) =>
+                input.progress.isCellUnlocked(cell)
+                && !input.progress.isOwned(cell)
+                && (input.map?.sites?.find((s) => s.footprint.includes(cell))?.type
+                    === TERRITORY_SITE_TYPE.fixedResource));
             return {
                 site,
                 icon: null,
                 isCondition: true,
                 isLoading: isPending,
                 conditionIcon: input.art.randomSilverIcon,
-                conditionTextColor: isOpenable
+                conditionTextColor: isOpenable && !unclaimedFixedPrereq
                     ? TERRITORY_COLORS.randomAvailableText : TERRITORY_COLORS.randomConditionText,
                 caption: isPending
                     ? ''
@@ -1028,22 +1039,15 @@ export class TerritoryMapView extends Component {
         if (site.type === TERRITORY_SITE_TYPE.fixedResource) {
             const claimed = input.progress.isOwned(site.cellId);
             const pending = input.pendingFixedResourceCells.includes(site.cellId);
-            // 🔴 **已领取的宝箱格彻底清空**（山猫2026-10-12：「已经获得宝箱格子，隐藏宝箱」）：
-            //   icon / caption / badge 三者全空⇒ 只剩 `tint` 的绿色地块（与随机格「已开启」同口径）。
-            //
-            // ⚠️ **光把 icon 置 null 达不到「彻底」** ——
-            //   `TerritoryStationView.render` 里 `hasBuilding = icon !== null`，
-            //   icon 为 null 会让 `captionSprite` / `captionLabel` / `badgeLabel`
-            //   **三者的 active 全变 true** ⇒ 反而多出「资源据点」底条 + 「已领取」角标。
-            //   所以 caption 与 badge 必须**同时**清空。
+            // 领取后清除宝箱图，状态只由地块颜色表达。
             return {
                 site,
                 icon: claimed ? null : this.stationIconOf(site, null, input.art),
                 isLoading: pending,
-                caption: pending || claimed ? '' : TERRITORY_UNBOUND_TYPE_NAMES.fixedResource,
+                caption: '',
                 // 已领取（已通关）的固定资源点不再显示解锁消耗，用「已通关」绿与「可领取」区分开。
                 tint: claimed ? TERRITORY_COLORS.cleared : territoryStationTint(TERRITORY_STATION_STATE.available),
-                badge: pending || claimed ? '' : TERRITORY_TEXTS.fixedResourceClaimReady,
+                badge: '',
                 interactive: !claimed && !pending,
             };
         }
@@ -1053,7 +1057,6 @@ export class TerritoryMapView extends Component {
         // 之前两边都写的是「两步式名单 [327,328] 或 isBoss」⇒ 只有关卡 1 会长这样、能点下有反应，
         // 其余关卡外观照旧却已经不可点 ⇒ 「外观说能打、点了没反应」。
         if (site.type === TERRITORY_SITE_TYPE.stage || site.type === TERRITORY_SITE_TYPE.boss || site.type === TERRITORY_SITE_TYPE.asyncPvp) {
-            const boss = !!stage?.isBoss;
             const isAsyncPvp = site.type === TERRITORY_SITE_TYPE.asyncPvp;
             if (isAsyncPvp && !stage) {
                 const isUnlocked = input.progress.isCellUnlocked(site.cellId);
@@ -1061,10 +1064,10 @@ export class TerritoryMapView extends Component {
                 return {
                     site,
                     icon: this.stationIconOf(site, null, input.art),
-                    caption: TERRITORY_UNBOUND_TYPE_NAMES.asyncPvp,
+                    caption: '',
                     tint: isUnlocked ? territoryBossTint()
                         : isOwned ? TERRITORY_COLORS.owned : territoryStationTint(this.stateOf(site, input)),
-                    badge: TERRITORY_TEXTS.pendingConfig,
+                    badge: '',
                     interactive: !isUnlocked && !isOwned,
                 };
             }
@@ -1073,26 +1076,16 @@ export class TerritoryMapView extends Component {
             //   只查查询态、不动 `owned` 存储 —— 见 `TerritoryProgress.isAreaPassed` 注释。
             const claimed = input.progress.isAreaPassed(site.cellId);
             const pending = input.pendingFixedResourceCells.includes(site.cellId);
-            // 🔴 **无建筑的两步式格（327）不显示任何文案**（山猫「关卡 可 通关」去掉）：
-            //   它和 328 是一片，未通关时 328 已经有建筑可点，327 再挂「关卡 / 可通关」
-            //   角标既冗余又误导（点它并不代表这里有东西可拿）。
-            //   ⚠️ 与 `fixedResource` 已领取分支同一条规律：`icon === null` 会让
-            //   底条/文字/角标**全亮**（`hasBuilding` 反向控制），所以要显式清空。
-            const isPlainTwoStep = !boss && !isAsyncPvp && !this.hasBuildingArt(site, stage, input.art);
             return {
                 site,
                 icon: this.stationIconOf(site, stage, input.art),
                 isLoading: pending,
-                caption: pending || isPlainTwoStep ? '' : isAsyncPvp
-                    ? TERRITORY_UNBOUND_TYPE_NAMES.asyncPvp
-                    : boss ? `首领 ${stage.stage}` : TERRITORY_UNBOUND_TYPE_NAMES.stage,
+                caption: '',
                 // 已通关不再显示解锁消耗，用「已通关」绿区分开（与 fixedResource 同口径）。
                 tint: claimed ? TERRITORY_COLORS.cleared
                     : isAsyncPvp && input.progress.isCellUnlocked(site.cellId)
                         ? territoryBossTint() : territoryStationTint(this.stateOf(site, input)),
-                badge: pending || isPlainTwoStep ? '' : claimed
-                    ? (boss || isAsyncPvp ? TERRITORY_TEXTS.bossBattleClaimed : TERRITORY_TEXTS.stagePassClaimed)
-                    : (boss || isAsyncPvp ? TERRITORY_TEXTS.bossBattleReady : TERRITORY_TEXTS.stagePassClaimReady),
+                badge: '',
                 // 已通关：主线 stage/boss 不可再点（打完即通关）；**asyncPvp 可重复挑战 ⇒ 仍可点**。
                 // 请求在途（pending）一律不可点（防连点，loading 遮挡是主防线）。
                 interactive: (claimed ? isAsyncPvp : true) && !pending,
@@ -1102,24 +1095,21 @@ export class TerritoryMapView extends Component {
             return {
                 site,
                 icon: this.stationIconOf(site, null, input.art),
-                caption: TERRITORY_UNBOUND_TYPE_NAMES[site.type],
+                caption: '',
                 tint: input.progress.isOwned(site.cellId)
                     ? TERRITORY_COLORS.owned
                     : territoryUnboundTint(site.type),
-                badge: TERRITORY_TEXTS.pendingConfig,
+                badge: '',
                 interactive: true,
             };
         }
         const state = this.stateOf(site, input);
-        const exploring = state === TERRITORY_STATION_STATE.exploring;
         return {
             site,
             icon: this.stationIconOf(site, stage, input.art),
-            caption: exploring
-                ? TERRITORY_TEXTS.exploringShort
-                : stage.isBoss ? `首领 ${stage.stage}` : `关卡 ${stage.stage}`,
+            caption: '',
             tint: stage.isBoss && state !== TERRITORY_STATION_STATE.owned ? territoryBossTint() : territoryStationTint(state),
-            badge: state === TERRITORY_STATION_STATE.locked ? TERRITORY_TEXTS.lockBadge : '',
+            badge: '',
             interactive: true,
         };
     }
@@ -1172,21 +1162,6 @@ export class TerritoryMapView extends Component {
         if (site.type === TERRITORY_SITE_TYPE.stage || site.type === TERRITORY_SITE_TYPE.boss || site.type === TERRITORY_SITE_TYPE.asyncPvp) return null;
         if (stage?.isBoss) return art.boss ?? art.stage;
         return art[TERRITORY_SITE_ART[site.type]] ?? art.stage;
-    }
-
-    /**
-     * 这一格**最终有没有图**—— 与 {@link stationIconOf} 同一判据，供「要不要挂文案」用。
-     *
-     * 为什么要单独一个方法：调用方常需要「先知道有没有图，才决定 caption/badge 填什么」
-     *（例如无建筑的两步式格要彻底清空文案）。若改成调两次 `stationIconOf()` 判两次，
-     * 两处判据一旦漂移就会出现「判有图、实际画null」的错位 —— 所以单一真源，这里只做转发。
-     */
-    private hasBuildingArt(
-        site: TerritorySite,
-        stage: TerritoryCampaignStage | null,
-        art: ITerritoryMapArt,
-    ): boolean {
-        return this.stationIconOf(site, stage, art) !== null;
     }
 
     private stateOf(site: TerritorySite, input: ITerritoryMapRenderInput): TerritorySiteState {

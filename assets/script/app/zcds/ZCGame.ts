@@ -197,6 +197,7 @@ export class ZCGame extends Component {
             if (this.renderClock < STATIC_RENDER_INTERVAL_SECONDS) return;
             this.renderClock = 0;
             this.hudView.render(this.model);
+            this.renderBossPanel(this.model);
             this.renderWorld.renderStatic(frame);
             return;
         }

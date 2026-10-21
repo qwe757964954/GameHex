@@ -349,19 +349,19 @@ async function readBigmapPreset(id) {
 async function publishBigmapPreset(id) {
   const { layout, warnings } = await readBigmapPreset(id);
 
-  const cityIds = await readRefIdSet('BigMap-城池配置', 'cityId');
+  const cityIds = await readRefIdSet('bigmapCity', 'cityId');
   if (cityIds) {
     const missing = layout.cities.map((city) => city.cityId).filter((cityId) => !cityIds.has(cityId));
     if (missing.length > 0) {
-      throw new BigmapValidationError(`布局里的城池 ${missing.join(',')} 不在 BigMap-城池配置 中`);
+      throw new BigmapValidationError(`布局里的城池 ${missing.join(',')} 不在 bigmapCity 中`);
     }
   }
-  const monsterIds = await readRefIdSet('BigMap-野怪配置', 'monsterId');
+  const monsterIds = await readRefIdSet('bigmapMonster', 'monsterId');
   if (monsterIds) {
     const missing = [...new Set(layout.monsters.map((monster) => monster.monsterId))]
       .filter((monsterId) => !monsterIds.has(monsterId));
     if (missing.length > 0) {
-      throw new BigmapValidationError(`布局里的野怪 ${missing.join(',')} 不在 BigMap-野怪配置 中`);
+      throw new BigmapValidationError(`布局里的野怪 ${missing.join(',')} 不在 bigmapMonster 中`);
     }
   }
 
@@ -607,9 +607,12 @@ const server = createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/bigmap-config') {
       // 编辑器要拉「有哪些城池 / 野怪可选」，以及地图尺寸与种子上限。
       // 只读 remoteRef，不改表 —— 配置真源仍是导表链路。
-      const world = (await readRefRows('BigMap-世界地图配置'))?.[0] ?? null;
-      const cities = (await readRefRows('BigMap-城池配置')) ?? [];
-      const monsters = (await readRefRows('BigMap-野怪配置')) ?? [];
+      // 表名跟着转表链路走：`doc/塔防数据配置/DM-*.xlsx` 导出的就是英文 camelCase 表名
+      // （`bigmapCity` 那套，见 MEMORY 规则 313）。写成旧的中文表名会读不到文件，
+      // 而 `readRefRows` / `readRefIdSet` 读不到时返回 null ⇒ 对账**静默跳过**，看起来一切正常。
+      const world = (await readRefRows('bigmapWorld'))?.[0] ?? null;
+      const cities = (await readRefRows('bigmapCity')) ?? [];
+      const monsters = (await readRefRows('bigmapMonster')) ?? [];
       json(res, 200, { world, cities, monsters });
       return;
     }

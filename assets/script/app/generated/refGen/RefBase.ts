@@ -27,9 +27,8 @@ protected _RefMgrbfUnionRankAward:RefMgrbfUnionRankAwardBase<IRefbfUnionRankAwar
 protected _RefMgrbigmapBuilding:RefMgrbigmapBuildingBase<IRefbigmapBuilding>;
 protected _RefMgrbigmapBuildingLevel:RefMgrbigmapBuildingLevelBase<IRefbigmapBuildingLevel>;
 protected _RefMgrbigmapBuildingProduce:RefMgrbigmapBuildingProduceBase<IRefbigmapBuildingProduce>;
-protected _RefMgrbigmapCity:RefMgrbigmapCityBase<IRefbigmapCity>;
+protected _RefMgrbigMapCamp:RefMgrbigMapCampBase<IRefbigMapCamp>;
 protected _RefMgrbigmapCityLevel:RefMgrbigmapCityLevelBase<IRefbigmapCityLevel>;
-protected _RefMgrbigmapMonster:RefMgrbigmapMonsterBase<IRefbigmapMonster>;
 protected _RefMgrbigmapQueue:RefMgrbigmapQueueBase<IRefbigmapQueue>;
 protected _RefMgrbigmapRank:RefMgrbigmapRankBase<IRefbigmapRank>;
 protected _RefMgrbigmapResource:RefMgrbigmapResourceBase<IRefbigmapResource>;
@@ -126,7 +125,6 @@ protected _RefMgrmonsterCard:RefMgrmonsterCardBase<IRefmonsterCard>;
 protected _RefMgrmonsterSkillType:RefMgrmonsterSkillTypeBase<IRefmonsterSkillType>;
 protected _RefMgrmonthCardActPlan:RefMgrmonthCardActPlanBase<IRefmonthCardActPlan>;
 protected _RefMgrneutralResource:RefMgrneutralResourceBase<IRefneutralResource>;
-protected _RefMgrnewTreasureBoxCardPool:RefMgrnewTreasureBoxCardPoolBase<IRefnewTreasureBoxCardPool>;
 protected _RefMgrnewTreasureBoxConfig:RefMgrnewTreasureBoxConfigBase<IRefnewTreasureBoxConfig>;
 protected _RefMgrnewTreasureBoxQueueConfig:RefMgrnewTreasureBoxQueueConfigBase<IRefnewTreasureBoxQueueConfig>;
 protected _RefMgrnpcTeam:RefMgrnpcTeamBase<IRefnpcTeam>;
@@ -239,9 +237,8 @@ get RefMgrbfUnionRankAward(){if(!this._RefMgrbfUnionRankAward){this._RefMgrbfUni
 get RefMgrbigmapBuilding(){if(!this._RefMgrbigmapBuilding){this._RefMgrbigmapBuilding=new RefMgrbigmapBuildingBase<IRefbigmapBuilding>()}return this._RefMgrbigmapBuilding}
 get RefMgrbigmapBuildingLevel(){if(!this._RefMgrbigmapBuildingLevel){this._RefMgrbigmapBuildingLevel=new RefMgrbigmapBuildingLevelBase<IRefbigmapBuildingLevel>()}return this._RefMgrbigmapBuildingLevel}
 get RefMgrbigmapBuildingProduce(){if(!this._RefMgrbigmapBuildingProduce){this._RefMgrbigmapBuildingProduce=new RefMgrbigmapBuildingProduceBase<IRefbigmapBuildingProduce>()}return this._RefMgrbigmapBuildingProduce}
-get RefMgrbigmapCity(){if(!this._RefMgrbigmapCity){this._RefMgrbigmapCity=new RefMgrbigmapCityBase<IRefbigmapCity>()}return this._RefMgrbigmapCity}
+get RefMgrbigMapCamp(){if(!this._RefMgrbigMapCamp){this._RefMgrbigMapCamp=new RefMgrbigMapCampBase<IRefbigMapCamp>()}return this._RefMgrbigMapCamp}
 get RefMgrbigmapCityLevel(){if(!this._RefMgrbigmapCityLevel){this._RefMgrbigmapCityLevel=new RefMgrbigmapCityLevelBase<IRefbigmapCityLevel>()}return this._RefMgrbigmapCityLevel}
-get RefMgrbigmapMonster(){if(!this._RefMgrbigmapMonster){this._RefMgrbigmapMonster=new RefMgrbigmapMonsterBase<IRefbigmapMonster>()}return this._RefMgrbigmapMonster}
 get RefMgrbigmapQueue(){if(!this._RefMgrbigmapQueue){this._RefMgrbigmapQueue=new RefMgrbigmapQueueBase<IRefbigmapQueue>()}return this._RefMgrbigmapQueue}
 get RefMgrbigmapRank(){if(!this._RefMgrbigmapRank){this._RefMgrbigmapRank=new RefMgrbigmapRankBase<IRefbigmapRank>()}return this._RefMgrbigmapRank}
 get RefMgrbigmapResource(){if(!this._RefMgrbigmapResource){this._RefMgrbigmapResource=new RefMgrbigmapResourceBase<IRefbigmapResource>()}return this._RefMgrbigmapResource}
@@ -338,7 +335,6 @@ get RefMgrmonsterCard(){if(!this._RefMgrmonsterCard){this._RefMgrmonsterCard=new
 get RefMgrmonsterSkillType(){if(!this._RefMgrmonsterSkillType){this._RefMgrmonsterSkillType=new RefMgrmonsterSkillTypeBase<IRefmonsterSkillType>()}return this._RefMgrmonsterSkillType}
 get RefMgrmonthCardActPlan(){if(!this._RefMgrmonthCardActPlan){this._RefMgrmonthCardActPlan=new RefMgrmonthCardActPlanBase<IRefmonthCardActPlan>()}return this._RefMgrmonthCardActPlan}
 get RefMgrneutralResource(){if(!this._RefMgrneutralResource){this._RefMgrneutralResource=new RefMgrneutralResourceBase<IRefneutralResource>()}return this._RefMgrneutralResource}
-get RefMgrnewTreasureBoxCardPool(){if(!this._RefMgrnewTreasureBoxCardPool){this._RefMgrnewTreasureBoxCardPool=new RefMgrnewTreasureBoxCardPoolBase<IRefnewTreasureBoxCardPool>()}return this._RefMgrnewTreasureBoxCardPool}
 get RefMgrnewTreasureBoxConfig(){if(!this._RefMgrnewTreasureBoxConfig){this._RefMgrnewTreasureBoxConfig=new RefMgrnewTreasureBoxConfigBase<IRefnewTreasureBoxConfig>()}return this._RefMgrnewTreasureBoxConfig}
 get RefMgrnewTreasureBoxQueueConfig(){if(!this._RefMgrnewTreasureBoxQueueConfig){this._RefMgrnewTreasureBoxQueueConfig=new RefMgrnewTreasureBoxQueueConfigBase<IRefnewTreasureBoxQueueConfig>()}return this._RefMgrnewTreasureBoxQueueConfig}
 get RefMgrnpcTeam(){if(!this._RefMgrnpcTeam){this._RefMgrnpcTeam=new RefMgrnpcTeamBase<IRefnpcTeam>()}return this._RefMgrnpcTeam}
@@ -453,9 +449,8 @@ export class RefMgrbfUnionRankAwardBase<T extends IRefBase> extends RefMgrBase<T
 export class RefMgrbigmapBuildingBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("bigmapBuilding")}}
 export class RefMgrbigmapBuildingLevelBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("bigmapBuildingLevel")}}
 export class RefMgrbigmapBuildingProduceBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("bigmapBuildingProduce")}}
-export class RefMgrbigmapCityBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("bigmapCity")}}
+export class RefMgrbigMapCampBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("bigMapCamp")}}
 export class RefMgrbigmapCityLevelBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("bigmapCityLevel")}}
-export class RefMgrbigmapMonsterBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("bigmapMonster")}}
 export class RefMgrbigmapQueueBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("bigmapQueue")}}
 export class RefMgrbigmapRankBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("bigmapRank")}}
 export class RefMgrbigmapResourceBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("bigmapResource")}}
@@ -552,7 +547,6 @@ export class RefMgrmonsterCardBase<T extends IRefBase> extends RefMgrBase<T>{con
 export class RefMgrmonsterSkillTypeBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("monsterSkillType")}}
 export class RefMgrmonthCardActPlanBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("monthCardActPlan")}}
 export class RefMgrneutralResourceBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("neutralResource")}}
-export class RefMgrnewTreasureBoxCardPoolBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("newTreasureBoxCardPool")}}
 export class RefMgrnewTreasureBoxConfigBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("newTreasureBoxConfig")}}
 export class RefMgrnewTreasureBoxQueueConfigBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("newTreasureBoxQueueConfig")}}
 export class RefMgrnpcTeamBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("npcTeam")}}

@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
+import { runInNewContext } from 'node:vm';
+import { ZCBattlePhase, ZCBattlePhaseController } from '../assets/script/app/zcds/application/ZCBattlePhaseController';
 
 /**
  * 守城（塔防）HUD 首领条那两块文字的格式口径。
@@ -81,4 +83,45 @@ test('血量倍率徽标：整数不带小数点，非法值退回 X1', () => {
     assert.equal(panel.formatZCDefenceHpRate(0), 'X1');
     assert.equal(panel.formatZCDefenceHpRate(-3), 'X1');
     assert.equal(panel.formatZCDefenceHpRate(Number.NaN), 'X1');
+});
+
+test('战斗主循环按 HUD 节奏刷新首领血条，受伤清零和换波都更新面板', () => {
+    const exports: { ZCGame?: typeof import('../assets/script/app/zcds/ZCGame').ZCGame } = {};
+    const code = ts.transpileModule(readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8'), {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
+    }).outputText;
+    runInNewContext(code, { exports, require: (name: string) => {
+        if (name === 'cc') return STUB_CC;
+        if (name === './application/ZCBattlePhaseController') return { ZCBattlePhase, ZCBattlePhaseController };
+        return {};
+    } });
+    assert.ok(exports.ZCGame);
+    const game = new exports.ZCGame();
+    const boss = new panel.ZCHudBossPanel();
+    const hpFill = { fillRange: 1 };
+    const waveLabel = { string: '' };
+    const rateLabel = { string: '' };
+    Object.assign(boss, { hpFill, waveLabel, rateLabel, nameLabel: { string: '' }, portraitIcon: {} });
+    const progress = { totalWaves: 8, spawnedWaves: 1, currentWaveId: 1, nextWaveId: 2,
+        secondsUntilNextWave: 1, aliveEnemies: 2, currentWaveHp: 50, currentWaveMaxHp: 100,
+        currentWaveHpRate: 4, currentWaveCardId: '68010' };
+    const model = { snapshot: { status: 'playing' }, defenceWaveProgress: progress, tick() {},
+        createRenderFrame: () => ({}), drainPresentationEvents: () => ({}) };
+    let hudRenders = 0;
+    Object.assign(game, { model, bossPanel: boss, hudView: { render() { hudRenders++; } },
+        renderWorld: { renderDynamic() {}, renderStatic() {} } });
+    game.update(0.1);
+    assert.equal(hpFill.fillRange, 1, '节流窗口内不额外刷新 HUD');
+    game.update(0.05);
+    assert.equal(hudRenders, 1);
+    assert.equal(hpFill.fillRange, 0.5, '受伤后血条必须随普通 HUD 同步刷新');
+    progress.currentWaveHp = 0;
+    game.update(0.15);
+    assert.equal(hpFill.fillRange, 0, '当前波死亡后显示空条');
+    Object.assign(progress, { spawnedWaves: 2, currentWaveId: 2, currentWaveHp: 900,
+        currentWaveMaxHp: 900, currentWaveHpRate: 8 });
+    game.update(0.15);
+    assert.equal(hpFill.fillRange, 1, '新波次恢复为该波真实血量');
+    assert.equal(waveLabel.string, '第2/8波');
+    assert.equal(rateLabel.string, 'X8');
 });

@@ -17,6 +17,7 @@ import {
     FakeSprite,
     attach,
     loadTerritoryStationView,
+    makeStationView,
     withTransform,
     type StationLayers,
     type StationView,
@@ -115,8 +116,8 @@ test('station visuals move into contiguous global render layers and preserve pre
     view.render({ site: {}, icon: null, caption: '待配置', tint, badge: '', interactive: true });
     assert.equal(captionSprite.spriteFrame, captionFrame, 'reused caption must regain its normal frame');
     assert.equal(captionSprite.type, FakeSprite.Type.SLICED);
-    assert.equal(caption.active, true, 'missing art retains the text fallback');
-    assert.equal(text.active, true, 'missing art retains the text fallback');
+    assert.equal(caption.active, false, 'missing art must not show a name background');
+    assert.equal(text.active, false, 'missing art must not show fallback names');
     assert.deepEqual([caption.position.x, caption.position.y], [100, 252]);
     assert.deepEqual([text.position.x, text.position.y], [100, 252]);
     // 池化复用的硬要求：退出条件模式必须把「放大」与「overflow = NONE」都还给 prefab 原值，
@@ -133,6 +134,33 @@ test('station visuals move into contiguous global render layers and preserve pre
     assert.equal(root.listenerCount(FakeButton.EventType.CLICK), 0);
     for (const node of [icon, caption, text, badge]) assert.equal(node.destroyCount, 1);
     assert.equal(root.destroyCount, 0, 'owner destroys the station hit root');
+});
+
+test('地图不显示关卡名称及状态文字，复用后仍保留银币条件和站点交互', () => {
+    const { view, icon, caption, text, badge, captionLabel, root } = makeStationView();
+    const tint = new FakeColor(255, 255, 255, 255);
+    let clicked = 0;
+    root.on('territory:station-click', () => { clicked++; }, null);
+    for (const frame of [null, { name: 'building' }, null]) {
+        view.render({ site: {}, icon: frame, caption: '首领 5', tint, badge: '已通关', interactive: true });
+        assert.equal(caption.active, false);
+        assert.equal(text.active, false);
+        assert.equal(badge.active, false);
+        assert.equal(view.button.interactable, true);
+        assert.equal(view.iconSprite.enabled, frame !== null);
+        root.emit(FakeButton.EventType.CLICK);
+    }
+    assert.equal(clicked, 3, '隐藏文字不影响站点点击事件');
+    view.render({ site: {}, icon: null, caption: '399', isCondition: true,
+        conditionIcon: { name: 'silver' }, tint, badge: '', interactive: true });
+    assert.equal(caption.active, true);
+    assert.equal(text.active, true);
+    assert.equal(captionLabel.string, '399');
+    assert.equal(badge.active, false);
+    view.render({ site: {}, icon: null, caption: '关卡', tint, badge: '可开战', interactive: true });
+    assert.equal(text.active, false);
+    assert.equal(badge.active, false);
+    assert.equal(icon.active, true);
 });
 
 /**

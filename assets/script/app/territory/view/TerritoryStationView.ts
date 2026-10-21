@@ -94,7 +94,7 @@ export interface ITerritoryStationRender {
      * 传 `null` —— 它也不可点，视图不会去读。
      */
     readonly site: TerritoryStationTarget | null;
-    /** 站点建筑图标；有图时隐藏名称底条、名称和角标。 */
+    /** 站点建筑图标；地图不显示建筑名称及状态角标。 */
     readonly icon: SpriteFrame | null;
     /**
      * 未解锁格在格心显示消耗条件（银币图标 + 数值），复用底条 Sprite 与文字节点。
@@ -106,10 +106,11 @@ export interface ITerritoryStationRender {
     readonly isCondition?: boolean;
     readonly conditionIcon?: SpriteFrame | null;
     readonly conditionTextColor?: Color;
+    /** 仅条件模式显示银币消耗数值。 */
     readonly caption: string;
-    /** 名称底条的颜色：状态色（已占领 / 可挑战 / 探索中 / 未解锁）。 */
+    /** 站点状态色。 */
     readonly tint: Color;
-    /** 角标文案：未解锁给「锁」、策划没配关卡的据点给「待配置」；空串表示不显示。 */
+    /** 站点角标已停用，调用方传空串。 */
     readonly badge: string;
     readonly interactive: boolean;
     readonly isLoading?: boolean;
@@ -119,10 +120,6 @@ export interface ITerritoryStationRender {
      * 需求（2026-10-16 row14）：「建筑展示的时间需要**滞后**，等待地块反转结束」
      * —— 随机资源格翻开的**那一帧**数据上就已经是「已开启」，但地块还在翻转；
      * 建筑必须等翻转播完才冒出来（何时解除由 `TerritoryMapView` 决定）。
-     *
-     * ⚠️ **不能靠「`icon` 传 `null`」来隐藏**：`render` 里 `hasBuilding = icon !== null`，
-     *  `icon` 为空会让名称底条 / 名称 / 角标**三者全亮**（反而多出一条底条）。
-     *  这正是 `TerritoryMapView.stationRenderOf` 里宝箱「已领取」分支踩过的坑。
      *
      * ⚠️ 也不能靠 `this.node.active = false`：四个视觉节点在 `initialize` 里被
      *  **reparent 到共享 layer** 上了（站点根节点只剩命中区），关根节点只关掉点击、
@@ -529,7 +526,6 @@ export class TerritoryStationView extends Component {
         // ⚠️ 只写四个视觉节点的 active：它们在 `initialize` 里已被 reparent 到共享 layer，
         //   关站点根节点只会关掉命中区，视觉照旧留在屏幕上。
         const isHidden = content.hidden === true;
-        const hasBuilding = !isCondition && content.icon !== null;
         this.site = content.site;
         this.conditionMode = isCondition;
         this.setIcon(content.icon);
@@ -541,7 +537,7 @@ export class TerritoryStationView extends Component {
         const captionFrame = isCondition ? content.conditionIcon ?? null : this.defaultCaptionFrame;
         if (this.captionSprite.spriteFrame !== captionFrame) this.captionSprite.spriteFrame = captionFrame;
         this.captionSprite.enabled = captionFrame !== null;
-        this.captionSprite.node.active = !isHidden && !isLoading && !hasBuilding && captionFrame !== null;
+        this.captionSprite.node.active = !isHidden && !isLoading && isCondition && captionFrame !== null;
         const captionType = isCondition ? Sprite.Type.SIMPLE : this.defaultCaptionType;
         if (this.captionSprite.type !== captionType) this.captionSprite.type = captionType;
         const captionTint = isCondition ? Color.WHITE : content.tint;
@@ -551,11 +547,11 @@ export class TerritoryStationView extends Component {
         // 反过来的话这一帧量到的还是上一个字符串的宽度，整对图标会先错一拍。
         if (this.captionLabel.string !== content.caption) this.captionLabel.string = content.caption;
         this.applyCaptionPlacement();
-        this.captionLabel.node.active = !isHidden && !isLoading && !hasBuilding;
+        this.captionLabel.node.active = !isHidden && !isLoading && isCondition;
         const textColor = isCondition ? content.conditionTextColor ?? defaultTextColor : defaultTextColor;
         if (!this.captionLabel.color.equals(textColor)) this.captionLabel.color = textColor;
-        if (this.badgeLabel.string !== content.badge) this.badgeLabel.string = content.badge;
-        this.badgeLabel.node.active = !isHidden && !isLoading && !hasBuilding && content.badge !== '';
+        this.badgeLabel.string = '';
+        this.badgeLabel.node.active = false;
         this.button.interactable = content.interactive && !isLoading && !isHidden;
     }
 

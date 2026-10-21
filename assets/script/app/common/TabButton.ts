@@ -98,6 +98,9 @@ export class TabButton extends Component {
     })
     selectBg: Node | null = null;
 
+    @property({ type: Node, tooltip: 'LockIcon：禁用时显示的右上角锁；无锁样式的页签可留空' })
+    lockIcon: Node | null = null;
+
     @property({ type: Color, tooltip: '名称·未选中颜色（主城七格 = 白色）' })
     offLabelColor: Color = new Color(255, 255, 255, 255);
 
@@ -156,6 +159,7 @@ export class TabButton extends Component {
     /** 禁用时保留页签外观但压暗，并阻止宿主回调。 */
     setEnabled(enabled: boolean): void {
         this.isEnabled = enabled;
+        if (this.lockIcon) this.lockIcon.active = !enabled;
         const tint = this.isEnabled ? TAB_ENABLED_TINT : TAB_DISABLED_TINT;
         this.icon.color = tint;
         this.bg.color = tint;

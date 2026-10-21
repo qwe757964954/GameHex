@@ -129,7 +129,7 @@ export class ChestSlotView extends Component {
         if (!empty) this.nameLabel.string = data.name;
         if (this.costLabel) this.costLabel.string = String(data.cost);
         this.btnLabel.string = ChestSlotView.actionText(data);
-        this.btnLabel.isBold = data.action === ChestSlotAction.Battle || data.action === ChestSlotAction.SpeedUp;
+        this.btnLabel.isBold = true;
         this.btnLabel.node.setPosition(isSpeedUp ? CHEST_SPEED_UP_TEXT_X : 0, 0, 0);
         this.btnLabel.spacingX = isSpeedUp ? CHEST_SPEED_UP_TEXT_SPACING : 0;
 

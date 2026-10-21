@@ -224,6 +224,38 @@ test('locked sites show only the silver icon and amount, and random sites hide t
     assert.equal(passed.caption, '', '已领取 ⇒ 名称底条文字也要清空（只清 icon 会让它冒出来）');
     assert.equal(passed.badge, '', '已领取 ⇒ 不再有「已领取」角标');
 
+    // 🔴 前置宝箱未领取 ⇒ 后继格银币数字用**红色**提示（山猫 2026-10-21：
+    // 前置格没有通关状态 = 还没 passCell 领取）。服务端 completed 记在 unlockCells
+    // （`isPrerequisiteComplete` 固定资源特例的镜像），所以这里**只改视觉、解锁照常可进行**；
+    // 前置领取后（owned）数字回白。
+    const dependentOnFixed = { id: 'bonus-2', type: 'bonus', cellId: 2, footprint: [2],
+        unlock: { requiredCells: [1], silverCost: 20, staminaCost: 1 } };
+    const prereqFixedMap = {
+        startCellId: 0,
+        sites: [{ ...fixedSite, footprint: [1] }],  // 前置宝箱格（真实配置 footprint 恒有）
+        defaults: { staminaCost: 5 },
+        randomSites: { candidateCells: [], triggerSilver: 0 },
+    };
+    const renderDependent = (mapView as unknown as {
+        stationRenderOf: (site: unknown, input: unknown) => Record<string, unknown>;
+    }).stationRenderOf.bind(mapView);
+    const prereqInput = {
+        map: prereqFixedMap, stageByCell: new Map(), siteOpenableCells: [2],
+        pendingFixedResourceCells: [], art: fixedArt,
+    };
+    const beforeClaim = renderDependent(dependentOnFixed, {
+        ...prereqInput,
+        progress: { isCellUnlocked: (cell: number) => cell === 1, isOwned: () => false },
+    });
+    assert.equal(beforeClaim.conditionTextColor, 'red',
+        '前置宝箱已解锁未领取 ⇒ 后继格数字红字（前置没有通关状态）');
+    assert.equal(beforeClaim.interactive, true, '红字只是视觉提示，解锁照常可点');
+    const afterClaim = renderDependent(dependentOnFixed, {
+        ...prereqInput,
+        progress: { isCellUnlocked: (cell: number) => cell === 1, isOwned: (cell: number) => cell === 1 },
+    });
+    assert.equal(afterClaim.conditionTextColor, 'white', '前置宝箱已领取 ⇒ 后继格数字回白');
+
     const asyncSite = { id: 'asyncPvp_372', type: 'asyncPvp', cellId: 372,
         configId: '20001', unlock: { silverCost: 10, staminaCost: 1 } };
     const asyncArt = { asyncPvp: { name: 'async pvp building' } };
@@ -239,6 +271,21 @@ test('locked sites show only the silver icon and amount, and random sites hide t
     assert.equal(asyncLocked.tint, 'locked', '未解锁异步据点沿用现有条件红色');
     assert.equal(asyncUnlocked.tint, 'danger', '已解锁异步据点使用与 Boss 相同的红色');
     assert.equal(asyncUnlocked.interactive, true, '已解锁状态仍保留据点交互');
+    for (const content of [unlocked, asyncUnlocked]) {
+        assert.equal(content.caption, '', '已解锁站点不显示名称');
+        assert.equal(content.badge, '', '已解锁站点不显示状态角标');
+    }
+    for (const type of ['stage', 'boss']) {
+        const content = renderFixed({ ...asyncSite, type }, {
+            stageByCell: new Map([[372, { isBoss: type === 'boss', stage: 5 }]]),
+            pendingFixedResourceCells: [], art: asyncArt,
+            progress: { isCellUnlocked: () => true, isOwned: () => false, isAreaPassed: () => false,
+                explorationAt: () => 0, checkUnlock: () => ({ ok: true }) },
+        });
+        assert.equal(content.caption, '', `${type} 无建筑时不显示兜底名称`);
+        assert.equal(content.badge, '', `${type} 无建筑时不显示状态角标`);
+        assert.equal(content.interactive, true, `${type} 保留点击功能`);
+    }
 
     // 🔴 2026-10-16 山猫「异步战点也要跟 Boss 一样，通关 / 解锁都是有建筑 id 才显示建筑」：
     // 没配 buildingId 的异步据点**不再画建筑**（此前会回退到 `art.asyncPvp` 那张 type 图，

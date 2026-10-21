@@ -313,3 +313,16 @@ test('激活倒计时固定两位时分秒，超过一天累计小时', () => {
         assert.equal(formatter.formatCountdown(seconds), expected);
     }
 });
+
+test('开启与开始战斗使用相同加粗字形，槽位状态切换后不退回细字重描边', () => {
+    const view = createChestSlotView();
+    const slot = {
+        index: 1, state: chestTypes.ChestSlotState.Ready, name: '宝箱',
+        remainSeconds: 0, totalSeconds: 30, action: chestTypes.ChestSlotAction.Open, cost: 0,
+    };
+    for (const action of [chestTypes.ChestSlotAction.Battle, chestTypes.ChestSlotAction.Open,
+        chestTypes.ChestSlotAction.SpeedUp, chestTypes.ChestSlotAction.Activate]) {
+        view.render({ ...slot, action });
+        assert.equal(view.btnLabel.isBold, true, `${action} 应保持与开始战斗一致的加粗字形`);
+    }
+});

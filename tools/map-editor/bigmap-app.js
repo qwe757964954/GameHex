@@ -39,17 +39,25 @@ const stage = $('stage');
  * 内嵌到 `<svg>` 里的样式副本。
  *
  * 页面样式在 `<head>`，导出 SVG/截图时**带不走** —— 没有这份，导出的图就是一片没上色的黑块。
- * 与 head 里的规则重复定义无害（同一份值）。
+ *
+ * 🔴 **这份会被 append 进 `<svg>`，文档顺序在 `<head>` 之后 ⇒ 同 specificity 时它赢**。
+ * 所以改外观要**两处一起改**（`bigmap.html` 的 `<style>` + 这里），只改 head 是不生效的；
+ * 反过来只改这里，页面上看得到、导出也一致，但 head 那份就变成骗人的死代码。
+ * 已经踩过两次：`.range`/`.zone` 改名成 `.rangeFill`/`.zoneFill` 时漏了这里（导出是黑块）、
+ * `.ent text` 补 `fill` 时也漏了（页面上还是 11px 黑字）。
  */
 const SVG_STYLE = `
 .cell { stroke:#475569; stroke-width:.6 }
 .c-plain { fill:#1b2537 } .c-forest { fill:#16301f } .c-rock { fill:#2b2b31 } .c-water { fill:#123047 }
 .c-blocked { fill:#3f1d1d }
-.range { fill:#38bdf8; fill-opacity:.16; stroke:#38bdf8; stroke-width:.8; stroke-opacity:.6 }
-.zone { fill:#f472b6; fill-opacity:.12; stroke:#f472b6; stroke-width:.8; stroke-opacity:.5 }
+.rangeFill { fill:#e2e8f0; fill-opacity:.07; stroke:none; pointer-events:none }
+.rangeEdge { fill:none; stroke-width:1.7; stroke-opacity:.95; stroke-linejoin:round; stroke-linecap:round; pointer-events:none }
+.rangeConflict { fill:#f97316; fill-opacity:.35; stroke:#fb923c; stroke-width:1.2; pointer-events:none }
+.zoneFill { fill:#f472b6; fill-opacity:.08; stroke:none; pointer-events:none }
+.zoneEdge { fill:none; stroke-width:1.5; stroke-opacity:.9; stroke-linejoin:round; stroke-linecap:round; pointer-events:none }
 .sel { fill:none; stroke:#fde047; stroke-width:2.4 }
 .poisson { fill:#facc15; fill-opacity:.92; stroke:#111827; stroke-width:.9 }
-.ent text { font:700 11px system-ui,sans-serif; text-anchor:middle; paint-order:stroke; stroke:#0b1220; stroke-width:2.5 }
+.ent text { fill:#f8fafc; font:700 12px ui-monospace, ui-sans-serif, system-ui, sans-serif; text-anchor:middle; font-variant-numeric:tabular-nums; paint-order:stroke; stroke:#0b1220; stroke-width:3; stroke-linejoin:round; stroke-linecap:round }
 .ent-city { fill:#2563eb; stroke:#93c5fd; stroke-width:1.2 }
 .ent-city.locked { fill:#334155; stroke:#64748b }
 .ent-monster { fill:#dc2626; stroke:#fca5a5; stroke-width:1.2 }
@@ -592,8 +600,10 @@ function renderEntities() {
     shape.setAttribute('rx', '3');
     shape.setAttribute('class', `ent-city${locked ? ' locked' : ''}`);
     group.appendChild(shape);
-    if (showLabel) group.appendChild(entityLabel(city.label || String(city.cityId), center));
-    group.appendChild(entityLabel(`L${def ? def.cityLevel : '?'}`, center, 13));
+    // 编号放方块**上方**、等级放下方：`8-1` 这种 3 字符比 17px 的方块还宽，
+    // 叠在方块中心会把方块和字一起糊掉。
+    if (showLabel) group.appendChild(entityLabel(city.label || String(city.cityId), center, -12));
+    group.appendChild(entityLabel(`L${def ? def.cityLevel : '?'}`, center, 15));
     layer.appendChild(group);
   }
 

@@ -21,6 +21,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { runInNewContext } from 'node:vm';
+import ts from 'typescript';
 
 type Entry = Record<string, unknown>;
 
@@ -298,4 +300,63 @@ test('C4 挑战与世界 tab 禁用后保持可见、使用灰态并拒绝切页
     assert.match(tab, /this\.icon\.color = tint/);
     assert.match(tab, /this\.bg\.color = tint/);
     assert.match(tab, /this\.nameLabel\.color = this\.isEnabled \?/);
+});
+
+test('D1 共用页签绑定右上角白色锁图，默认隐藏并处于 UI_2D 层', () => {
+    const lock = TABBUTTON.find((entry) => entry.__type__ === 'cc.Node' && entry._name === 'LockIcon');
+    assert.ok(lock, '缺少 LockIcon');
+    assert.equal(lock._active, false);
+    assert.equal(lock._layer, 33554432);
+    const position = lock._lpos as { x: number; y: number };
+    assert.ok(position.x > 0 && position.y > 0, '锁应位于页签右上方');
+    const components = (lock._components as unknown[]).map((ref) => resolve(TABBUTTON, ref));
+    assert.ok(components.some((component) => component?.__type__ === 'cc.UITransform'));
+    const sprite = components.find((component) => component?.__type__ === 'cc.Sprite');
+    assert.equal((sprite?._spriteFrame as { __uuid__: string }).__uuid__,
+        `${assetUuid('assets/resources/image/main/chest/chest_lock.png')}@f9941`);
+    assert.equal(sprite?._isTrimmedMode, false);
+    const tab = TABBUTTON.find((entry) => entry.__type__ === scriptCid('assets/script/app/common/TabButton.ts'))!;
+    assert.equal(resolve(TABBUTTON, tab.lockIcon), lock, 'TabButton.lockIcon 未绑定到锁节点');
+});
+
+test('D2 页签禁用时显示锁并阻止点击，切换选中态不丢锁，恢复可用时隐藏', () => {
+    interface ITabTestView {
+        lockIcon: { active: boolean };
+        bindSelect(handler: () => void): void;
+        setEnabled(enabled: boolean): void;
+        setSelected(selected: boolean): void;
+    }
+    const exports: Record<string, new () => ITabTestView> = {};
+    const source = readFileSync('assets/script/app/common/TabButton.ts', 'utf8');
+    const code = ts.transpileModule(source, { compilerOptions: {
+        module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true,
+    } }).outputText;
+    runInNewContext(code, { exports, require: (name: string) => {
+        if (name === 'cc') return {
+            _decorator: { ccclass: () => (type: unknown) => type, property: () => () => {} },
+            Component: class {}, Color: class {}, Button: { EventType: { CLICK: 'click' } },
+        };
+        if (name === '../rd/RedDotBinding') return {};
+        if (name === './RedDot') return {};
+        throw new Error(`Unexpected import: ${name}`);
+    } });
+    const view = new exports.TabButton();
+    let click = () => {};
+    Object.assign(view, { lockIcon: { active: false }, icon: {}, bg: {}, nameLabel: {}, node: {
+        on(_event: string, handler: () => void, caller: unknown) { click = () => handler.call(caller); },
+    } });
+    let clicks = 0;
+    view.bindSelect(() => { clicks++; });
+    view.setEnabled(false);
+    assert.equal(view.lockIcon.active, true);
+    view.setSelected(false);
+    assert.equal(view.lockIcon.active, true);
+    click();
+    assert.equal(clicks, 0);
+    view.setEnabled(true);
+    assert.equal(view.lockIcon.active, false);
+    click();
+    assert.equal(clicks, 1);
+    view.setEnabled(false);
+    assert.equal(view.lockIcon.active, true);
 });

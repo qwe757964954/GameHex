@@ -45,7 +45,13 @@
     .zoneEdge { fill:none; stroke-width:1.5; stroke-opacity:.9; stroke-linejoin:round; stroke-linecap:round; pointer-events:none }
     .sel { fill:none; stroke:#fde047; stroke-width:2.4; pointer-events:none }
     .ent { cursor:pointer }
-    .ent text { pointer-events:none; font:700 11px system-ui,sans-serif; text-anchor:middle; paint-order:stroke; stroke:#0b1220; stroke-width:2.5 }
+    /* 实体上的编号：白字 + 深色描边（paint-order:stroke 让描边垫在字下面），
+       这样压在蓝色城池方块上、压在深色地形上都读得出来。
+       🔴 以前漏了 `fill` ⇒ 字默认是黑的，而 stroke 也是深色（#0b1220）⇒ 黑字描黑边，
+       在 100% 缩放下就是一团糊（截图里那个"看不清的字"就是这个）。 */
+    .ent text { pointer-events:none; fill:#f8fafc; font:700 12px ui-monospace, ui-sans-serif, system-ui, sans-serif;
+      text-anchor:middle; font-variant-numeric:tabular-nums; paint-order:stroke;
+      stroke:#0b1220; stroke-width:3; stroke-linejoin:round; stroke-linecap:round }
     .ent-city { fill:#2563eb; stroke:#93c5fd; stroke-width:1.2 }
     .ent-city.locked { fill:#334155; stroke:#64748b }
     .ent-monster { fill:#dc2626; stroke:#fca5a5; stroke-width:1.2 }

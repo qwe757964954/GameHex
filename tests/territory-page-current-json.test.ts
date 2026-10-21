@@ -36,9 +36,8 @@ test('territory page renders every site from the current map JSON, not only boun
     // 每个 site 都要出节点 —— 与有没有绑定关卡无关（绑定只影响文案与颜色）。
     assert.match(mapView, /for \(const site of input\.map\.sites\)/);
     assert.match(mapView, /const stage = input\.stageByCell\.get\(site\.cellId\) \?\? null;/);
-    // 没绑定的走「待配置」分支，并给出类型名。
-    assert.match(mapView, /TERRITORY_UNBOUND_TYPE_NAMES\[site\.type\]/);
-    assert.match(mapView, /badge: TERRITORY_TEXTS\.pendingConfig/);
+    // 未绑定站点同样保留命中区，但地图不再显示类型名或「待配置」角标。
+    assert.doesNotMatch(mapView, /TERRITORY_UNBOUND_TYPE_NAMES|TERRITORY_TEXTS\.pendingConfig/);
     // 点开它的详情是另一条文案（unboundStatus）：字面文案在 TerritoryTexts，Presenter 引用它。
     assert.match(texts, /仅展示地图站点，不扣资源、不进入战斗/);
     assert.match(presenter, /TERRITORY_TEXTS\.unboundStatus/);

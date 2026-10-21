@@ -90,11 +90,7 @@ test('stationRenderOf 为关卡保留"解锁后展示建筑、通关后变绿"�
     // 分支本体：按**站点类型**命中，不是按 cellId 名单。
     assert.match(body, new RegExp(`if \\(${STAGE_BRANCH}\\)`),
         '渲染层必须按站点类型判定关卡分支');
-    // 已解锁未通关：角标给「可通关」，颜色走 available（与 fixedResource「可领取」同口径）。
-    assert.match(body, /stagePassClaimReady/, '解锁后要显示「可通关」角标');
-    // 已通关：角标变「已通关」、颜色变 cleared（绿）。交互上主线 stage/boss 不可再点，
-    // 但 **asyncPvp 可重复挑战 ⇒ 仍可点**（2026-10-21 口径）。
-    assert.match(body, /stagePassClaimed/, '通关后要显示「已通关」角标');
+    assert.doesNotMatch(body, /stagePassClaimReady|stagePassClaimed/, '地图不再叠加状态文字');
     assert.match(body, /TERRITORY_COLORS\.cleared/, '通关后要用「已通关」绿');
     assert.match(body, /interactive: \(claimed \? isAsyncPvp : true\) && !pending/,
         '已通关：asyncPvp 可重复挑战仍可点；主线 stage/boss 与请求中不可再点');
@@ -103,18 +99,13 @@ test('stationRenderOf 为关卡保留"解锁后展示建筑、通关后变绿"�
         '解锁请求进行中要复用 pending 转圈通道');
 });
 
-test('stationRenderOf 让 Boss 关（stage.isBoss）走两步式分支：可开战 / 已通关，不发通关角标', () => {
+test('首领站点保留建筑渲染及共享战斗流程，不生成首领序号和状态文字', () => {
     const renderAt = MAP_VIEW_SRC.indexOf('private stationRenderOf(');
     assert.ok(renderAt > 0, '找不到 stationRenderOf');
     const body = MAP_VIEW_SRC.slice(renderAt, MAP_VIEW_SRC.indexOf('\n    private ', renderAt + 10));
-    // Boss 关（isBoss）与两步式关卡共用"先解锁展示建筑"分支，按 stage.isBoss 并入。
-    assert.match(body, /stage\?\.isBoss/, '渲染层必须按 stage.isBoss 把首领关并入两步式分支');
-    // 已解锁未通关：角标给「可开战」（Boss 关不发通关请求，改发 CmdStartBattleReqMsg）。
-    assert.match(body, /bossBattleReady/, '解锁后要显示「可开战」角标');
-    // 已通关：角标给「已通关」、颜色变 cleared（绿）。
-    assert.match(body, /bossBattleClaimed/, '通关后要显示「已通关」角标');
-    // 首领关文案：caption 显示「首领 N」（沿用普通首领关口径）。
-    assert.match(body, /首领 \$\{stage\.stage\}/, 'Boss 关 caption 要显示首领序号');
+    assert.match(body, new RegExp(`if \\(${STAGE_BRANCH}\\)`));
+    assert.match(body, /icon: this\.stationIconOf\(site, stage, input\.art\)/);
+    assert.doesNotMatch(body, /bossBattleReady|bossBattleClaimed|首领 \$\{stage\.stage\}/);
 });
 
 test('stationRenderOf binds asyncPvp to the shared battle flow and turns unlocked cells red', () => {
@@ -123,9 +114,8 @@ test('stationRenderOf binds asyncPvp to the shared battle flow and turns unlocke
     assert.match(body, /const isAsyncPvp = site\.type === TERRITORY_SITE_TYPE\.asyncPvp/);
     assert.match(body, /isAsyncPvp && input\.progress\.isCellUnlocked\(site\.cellId\)[\s\S]*?territoryBossTint\(\)/,
         'unlocked async PvP station should use the danger tint');
-    assert.match(body, /bossBattleReady/, 'async battle station should show the ready state');
-    assert.match(body, /if \(isAsyncPvp && !stage\)[\s\S]*?TERRITORY_TEXTS\.pendingConfig/,
-        'if a future table drops the binding, do not advertise an unstartable battle');
+    assert.match(body, /if \(isAsyncPvp && !stage\)[\s\S]*?interactive: !isUnlocked && !isOwned/,
+        '缺失战斗配置时仍保留交互限制');
 });
 
 // ============================================================
@@ -140,35 +130,21 @@ test('★★★已领取的 fixedResource 格必须同时清空 icon/caption/bad
     //🔴 三个必须**都**被 claimed 清掉，缺一个就不算「彻底」：
     assert.match(body, /icon:\s*claimed \? null :/,
         '已领取 ⇒ icon 必须为 null（宝箱图要藏掉）');
-    assert.match(body, /caption:\s*pending \|\| claimed \? '' :/,
+    assert.match(body, /caption:\s*''/,
         '已领取 ⇒ caption 必须为空串');
-    assert.match(body, /badge:\s*pending \|\| claimed \? '' :/,
+    assert.match(body, /badge:\s*''/,
         '已领取 ⇒ badge 必须为空串');
 });
 
-test('★★★「光把 icon 置 null」达不到彻底清空 —— render 会把底条/文字/角标全点亮', () => {
-    // 这是本条最容易踩的坑：`TerritoryStationView.render` 里
-    //   hasBuilding = !isCondition && content.icon !== null
-    // icon 一旦为 null，hasBuilding=false ⇒下面三行 active 全部变 true：
-    //   captionSprite.node.active = !isLoading && !hasBuilding && captionFrame !== null
-    //   captionLabel.node.active  = !isLoading && !hasBuilding
-    //   badgeLabel.node.active    = !isLoading && !hasBuilding && content.badge !== ''
-    // ⇒ 图是没了，却**多出**「资源据点」底条 + 「已领取」角标 —— 比改之前更糟。
+test('无建筑图标时不再启用兜底文字，只有未解锁条件可以显示银币图标与数值', () => {
     const view = readFileSync('assets/script/app/territory/view/TerritoryStationView.ts', 'utf8');
-    assert.match(view, /const hasBuilding = !isCondition && content\.icon !== null;/,
-        'render 的显隐判据是 icon 是否为 null（改动后仍须是这条，MapView 才能靠传空串控制）');
-
-    // 三个节点都挂了 !hasBuilding ⇒ 所以 MapView 侧必须三处一起清。
-    // ⚠️ 2026-10-16 row14 又在它们**前面**加了一道 `!isHidden`（建筑展示滞后到地块翻转结束，
-    //    见 `ITerritoryStationRender.hidden`）—— 判据要把两道闸都写上，
-    //    只写 `!hasBuilding` 会退化成「对着旧文本判绿」。
     const dependents = [
-        /captionSprite\.node\.active = !isHidden && !isLoading && !hasBuilding/,
-        /captionLabel\.node\.active = !isHidden && !isLoading && !hasBuilding/,
-        /badgeLabel\.node\.active = !isHidden && !isLoading && !hasBuilding/,
+        /captionSprite\.node\.active = !isHidden && !isLoading && isCondition/,
+        /captionLabel\.node\.active = !isHidden && !isLoading && isCondition/,
+        /badgeLabel\.node\.active = false/,
     ];
     for (const re of dependents) {
-        assert.match(view, re, '底条/文字/角标三者的 active 都受 hasBuilding 反向控制');
+        assert.match(view, re);
     }
 
     // 反向：claimed 分支不许再回落到 fixedResourceClaimed 文案。
@@ -178,13 +154,12 @@ test('★★★「光把 icon 置 null」达不到彻底清空 —— render 会
         '地图上不该再出现「已领取」角标（那是领取成功提示条用的，不在这条路径）');
 });
 
-test('★★未领取的宝箱格不受影响：仍有图、仍有「可领取」角标、仍可点', () => {
+test('未领取的宝箱格保留图标和交互，地图上不显示「可领取」文字', () => {
     const renderAt = MAP_VIEW_SRC.indexOf('if (site.type === TERRITORY_SITE_TYPE.fixedResource)');
     const body = MAP_VIEW_SRC.slice(renderAt, MAP_VIEW_SRC.indexOf(STAGE_BRANCH_ANCHOR, renderAt));
     assert.match(body, /icon:\s*claimed \? null : this\.stationIconOf\(/,
         '未领取必须照常走 stationIconOf 取宝箱图');
-    assert.match(body, /badge:\s*pending \|\| claimed \? '' : TERRITORY_TEXTS\.fixedResourceClaimReady/,
-        '未领取要给「可领取」角标');
+    assert.match(body, /badge:\s*''/, '不再生成状态角标');
     assert.match(body, /interactive:\s*!claimed && !pending/,
         '已领取不可点（否则会重复发通关请求）');
     assert.match(body, /tint:\s*claimed \? TERRITORY_COLORS\.cleared/,
@@ -201,28 +176,21 @@ test('★★★无建筑的关卡格（327）必须清空 caption 与 badge', ()
     assert.ok(renderAt > 0, '要能定位关卡渲染分支');
     const body = MAP_VIEW_SRC.slice(renderAt, MAP_VIEW_SRC.indexOf('\n        if (!stage)', renderAt));
 
-    // 判据 = 「这一格最终有没有图」，不是 type、不是 configId。
-    assert.match(body, /const isPlainTwoStep = !boss && !isAsyncPvp && !this\.hasBuildingArt\(/,
-        '必须按「最终有没有图」判定（与 stationIconOf 同一判据），不能按 type 硬判');
-    assert.match(body, /caption:\s*pending \|\| isPlainTwoStep \? '' :/,
+    assert.match(body, /caption:\s*''/,
         '无建筑格必须清空 caption（「关卡」底条要消失）');
-    assert.match(body, /badge:\s*pending \|\| isPlainTwoStep \? '' :/,
+    assert.match(body, /badge:\s*''/,
         '无建筑格必须清空 badge（「可通关」角标要消失）');
     // 🔴 图照画：有建筑的（328）不受这条影响。
     assert.match(body, /icon:\s*this\.stationIconOf\(site, stage, input\.art\),/,
         'icon 仍走 stationIconOf —— 有建筑的两步式格要保留建筑图');
 });
 
-test('★★★hasBuildingArt 必须是 stationIconOf 的薄转发（单一判据源）', () => {
+test('建筑图仍由 stationIconOf 决定，移除仅为兜底文字使用的判断方法', () => {
     const src = MAP_VIEW_SRC;
-    const helperAt = src.indexOf('private hasBuildingArt(');
-    assert.ok(helperAt > 0, '要有 hasBuildingArt');
-    const helper = src.slice(helperAt, src.indexOf('\n    private ', helperAt + 10));
-    assert.match(helper, /return this\.stationIconOf\(site, stage, art\) !== null;/,
-        '必须转发 stationIconOf —— 两处各判一次会漂移出「判有图、实际画 null」的错位');
+    assert.doesNotMatch(src, /hasBuildingArt|isPlainTwoStep/);
     // 单一真源：stationIconOf 里没有第二个「返回 null」的早退。
     const iconAt = src.indexOf('private stationIconOf(');
-    const iconFn = src.slice(iconAt, src.indexOf('private hasBuildingArt(', iconAt));
+    const iconFn = src.slice(iconAt, src.indexOf('private stateOf(', iconAt));
     assert.equal((iconFn.match(/return null;/g) ?? []).length, 1,
         'stationIconOf 只应有一个「不画图」的早退（stage/boss 无 buildingId）');
 });

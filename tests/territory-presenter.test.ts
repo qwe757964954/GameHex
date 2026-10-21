@@ -1631,7 +1631,10 @@ test('asyncPvp sites sharing configId unlock independently then start their conf
     await flush();
     assert.equal(h.gatewayCalls.unlock, 3, '已解锁的异步格再次点击不重复请求解锁');
     assert.equal(h.gatewayCalls.startBattle, 1, '已解锁异步据点应走章节战斗请求');
-    assert.deepEqual(h.gatewayCalls.battleParamsList, [['1', '1', '372']]);
+    // 🔴 asyncPvp = **宝箱战斗子类型**（battleParams[0] = 2，`chapterTreasureBattleParams`）；
+    // 主线 stage/boss 才是格子战斗子类型 1（山猫 2026-10-15「1002 里嵌子类型」，
+    // 实机：asyncPvp 发子类型 1 被服务端按已通关主线关卡拒绝「开始战斗失败」）。
+    assert.deepEqual(h.gatewayCalls.battleParamsList, [['2', '1', '372']]);
     assert.equal(h.storeCalls.beginBattle, 1);
     assert.equal(h.nav[0]?.levelId, 20001, '开战应使用 levelInfo.json 中的 20001');
     assert.equal(h.nav[0]?.territoryCellId, 372);
@@ -1914,12 +1917,17 @@ test('★asyncPvp 已通关可重复挑战：再次点击重新发开战请求�
     await flush();
     assert.equal(h.gatewayCalls.unlock, 0, '已通关格不重复发解锁');
     assert.equal(h.gatewayCalls.startBattle, 1, '★已通关 asyncPvp 可再次开战');
+    // asyncPvp = 宝箱战斗子类型（battleParams[0] = 2），不是主线的格子战斗子类型 1。
+    assert.deepEqual(h.gatewayCalls.battleParamsList, [['2', '1', '372']],
+        'asyncPvp 用宝箱战斗子类型（服务端按 battleParams[0] 分流）');
     assert.equal(h.nav.length, 1, '开战成功进入战斗');
     assert.equal(h.busy.length, 2, '开战请求全程 loading 遮挡（true → false）');
     // 返回领地后再点（模拟上一局已结算、battleId 已清）⇒ 可无限重复挑战。
     h.presenter.selectSite(site);
     await flush();
     assert.equal(h.gatewayCalls.startBattle, 2, '★重复挑战：第二次点击再次发开战请求');
+    assert.deepEqual(h.gatewayCalls.battleParamsList,
+        [['2', '1', '372'], ['2', '1', '372']], '重复挑战每次都用同一组宝箱战斗参数');
     assert.equal(h.nav.length, 2, '再次进入战斗');
     assert.equal(h.gatewayCalls.unlock, 0, '重复挑战不夹带解锁请求');
 });

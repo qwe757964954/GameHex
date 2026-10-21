@@ -1164,8 +1164,9 @@ test('普攻 / 技能双链：真表名单 —— 火法师走次数、冰法师
     // 由 `pvpSkill.trigger` 单列分流。这是真实表里**第一次**出现两套并存的分配，
     // 所以这条直接读**真表**来守（不像上一条那样注入桩）——
     // 只要有人把表再改回「一刀切」，这条就会红。
-    const fire = resolveUnitDefinition('68003').attackProfile;   // 火法师
-    assert.equal(fire.skillId, 30181);
+    const fire = resolveUnitDefinition('68003').attackProfile;   // 火焰树妖（历史名「火法师」）
+    // 2026-10-21：火焰树妖 30181 → 30711（独立行，参数整行复制 30181，只换特效预设）。
+    assert.equal(fire.skillId, 30711);
     assert.equal(fire.trigger, 'every_n_attacks');
     assert.equal(fire.empoweredEvery, 10);          // 走次数 → 第 10 次普攻
     assert.equal(fire.empoweredSkillId, 36181);
@@ -1187,7 +1188,39 @@ test('普攻 / 技能双链：真表名单 —— 火法师走次数、冰法师
     assert.deepEqual(Array.from(new Set(events.filter((event) => event.empowered).map((event) => event.skillId))),
         [36181], '强化那一击必须换用武将技行的 skillId');
     assert.deepEqual(Array.from(new Set(events.filter((event) => !event.empowered).map((event) => event.skillId))),
-        [30181], '非强化击必须仍用普攻行的 skillId');
+        [30711], '非强化击必须仍用普攻行的 skillId');
+});
+
+test('植物占领世界普攻特效接入：每张卡用自己的独立行，源职业行不再被劫持', () => {
+    // 美术目录 `zarts/.../特效/<角色>/普攻` 是**逐角色一套**序列帧，所以接入口径是
+    // 「每张植物卡一行独立 pvpSkill」：整行复制源职业行、只换 `effectPrefabPath`，
+    // 同时把源职业行的特效预设回退成 r340 原值。
+    // 不这么拆的代价是**静默**的：源行被植物卡劫持后，同职业的老卡（凯尔萨斯 / 血蹄 /
+    // 镭射飞龙 / 阿尔萨斯…）会跟着播植物特效，表照样能跑、没有任何报错，只有肉眼看得出。
+    const skillRows = new Map(readPvpRef('pvpSkill').map((row) => [Number(row.skillId), row]));
+    const cases: Array<[string, number, number, string]> = [
+        ['68003', 30711, 30181, '火法师_新子弹'],   // 火焰树妖
+        ['68007', 30712, 30221, '长戟兵_撕裂'],     // 吞噬大嘴花
+        ['68033', 30713, 30241, '重骑兵_践踏'],     // 运动霸（美术名「消灭学霸」）
+        ['68020', 30714, 30251, '风法师_绿风'],     // 三叶小丑
+    ];
+    for (const [cardId, ownSkillId, baseSkillId, basePrefab] of cases) {
+        assert.equal(resolveUnitDefinition(cardId).attackProfile.skillId, ownSkillId,
+            `${cardId} 必须走自己的独立行 ${ownSkillId}`);
+        const own = skillRows.get(ownSkillId);
+        const base = skillRows.get(baseSkillId);
+        assert.ok(own, `${ownSkillId} 行必须存在`);
+        assert.ok(base, `${baseSkillId} 行必须存在`);
+        // 独立行 = 整行复制，只有特效预设不同 → 战斗参数逐项一致（否则等于偷偷改了数值）
+        for (const field of ['mode', 'projectileKey', 'projectileSpeed', 'areaRadius', 'empoweredEvery',
+            'empoweredSkillId', 'trigger', 'cooldown', 'effectKey', 'onHitStatusId']) {
+            assert.deepEqual(own![field] ?? null, base![field] ?? null,
+                `${ownSkillId}.${field} 必须与源行 ${baseSkillId} 一致（独立行只是换特效）`);
+        }
+        assert.notEqual(own!.effectPrefabPath, base!.effectPrefabPath, '两行不能共用同一个特效预设');
+        assert.match(String(base!.effectPrefabPath), new RegExp(`/${basePrefab}/${basePrefab}$`),
+            `${baseSkillId} 的特效预设必须回退成 ${basePrefab}，不能留着植物卡的特效`);
+    }
 });
 
 test('普攻 / 技能双链：trigger 只认两个枚举值，拼错当场抛错', () => {

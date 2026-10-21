@@ -4,6 +4,7 @@ import type { ITerritoryBattleArt } from './TerritoryPageAssets';
 import type { TerritoryCellFetchResult, TerritoryStartBattleResult, TerritoryWriteResult } from './TerritoryCellRepository';
 import {
     chapterCellBattleParams,
+    chapterTreasureBattleParams,
     ZC_BATTLE_TYPE_CHAPTER,
 } from '../../battle/BattleStartModel';
 import type { ZCBattleStart } from '../../battle/BattleStartModel';
@@ -587,9 +588,18 @@ export class TerritoryPresenter {
         this.emitStateChange();
         const exitBusy = this.enterBusy(TERRITORY_TEXTS.busyBattle);
         try {
+            // 🔴 asyncPvp（异步据点）用**宝箱战斗子类型**（`battleParams[0] = 2`，
+            // `chapterTreasureBattleParams`），主线 stage/boss 用格子战斗子类型（1）——
+            // 服务端按 `battleParams[0]` 分流（山猫 2026-10-15「1002 里嵌子类型」）。
+            // 实机：已通关 asyncPvp 发子类型 1 ⇒ 服务端按主线关卡判定「已通关」拒绝，
+            // CmdTips「开始战斗失败」；换子类型 2（宝箱战斗，`BattleStartModel` 里「暂未接线」
+            // 的调用点正是这里）才能重复挑战。
+            const battleParams = site.type === TERRITORY_SITE_TYPE.asyncPvp
+                ? chapterTreasureBattleParams(map.chapterId, site.cellId)
+                : chapterCellBattleParams(map.chapterId, site.cellId);
             const result = await this.ports.gateway.startBattle(
                 ZC_BATTLE_TYPE_CHAPTER,
-                chapterCellBattleParams(map.chapterId, site.cellId),
+                battleParams,
                 this.ports.lifecycleHost,
             );
             if (this.disposed || loadId !== this.loadId || requestId !== this.battleRequestId) return;

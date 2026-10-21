@@ -1,3 +1,10 @@
+/** 匹配流程的开战参数；未传入时沿用普通 PVP 匹配。 */
+export interface IMatchingEntryParams {
+    readonly battleType: number;
+    /** 协议 repeated string，入口必须将数字参数转成字符串。 */
+    readonly battleParams: readonly string[];
+}
+
 /** 匹配界面小图标统计（图标资源名 + 数值）。 */
 export interface MatchStat {
     /** 资源名；根目录固定 MATCH_ICON_ART_ROOT。 */

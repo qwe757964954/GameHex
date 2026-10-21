@@ -131,7 +131,8 @@ export function buildResBarView(
     }));
     return {
         name: typeof role.name === 'string' ? role.name : '',
-        levelText: `LV${toCount(role.lv)}`,
+        // 2026-10-20 起只显示等级数字（原为 `LV12`，需求要求去掉 `LV` 前缀）。
+        levelText: `${toCount(role.lv)}`,
         uidText: `uid:${toIdString(role.id)}`,
         avatarId: toIdString(role.img),
         expRatio: computeExpRatio(role.lv, role.exp, levelRows),

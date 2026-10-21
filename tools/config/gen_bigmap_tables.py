@@ -6,7 +6,9 @@
 本机没有 `D:/City1001/doc/塔防数据配置`，所以这里用脚本把**推算数值**一次性写成
 项目统一的 `{"k":[字段...],"v":[[值...]]}` 压缩格式，落到 remoteRef，供客户端 RefUtil 读取。
 
-- 表名规则（用户 2026-10-17 指定）：`BigMap-<中文表名>`，12 张全部同前缀。
+- 表名规则：**英文 camelCase + `bigmap` 前缀**（`bigmapCity` / `bigmapBuildingLevel`…），
+  与全仓 `pvpCard.json` / `mapTerrian.json` 一致 —— 中文表名会让 eSon 导出中文文件名，
+  用户 2026-10-20 明确要求不要。中文只留在 Excel 的 sheet 名与 `TITLES` 里给策划看。
 - 字段名 camelCase，端标记沿用原稿：1=服务端与客户端都读，3=仅客户端读，0=策划备注。
 - 数值口径见 `docs/bigmap-系统实现说明.md` §2「数值推算」，改公式重跑本脚本即可。
 - 重跑是**幂等覆盖**；已被策划改动过的表请先备份，或把该表从 TABLES 里摘掉。
@@ -18,6 +20,28 @@ import os
 
 OUT_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "assets", "remoteRef")
 
+# 最近一次 write() 写出的全部表：json 名 → {title, keys, rows}。
+# `gen_bigmap_esheets.py`（策划配表 Excel）与 `gen_bigmap_doc.py`（字段说明）都读它，
+# 保证「游戏内 JSON」「策划 Excel」「字段说明文档」永远是同一套数据，不存在两处维护。
+TABLES = {}
+
+# json 名 → Excel sheet 名 / 文档标题用的中文名（**只给人看，不进文件名**）
+TITLES = {
+    'bigmapWorld': '世界地图配置',
+    'bigmapSchedule': '攻城日程',
+    'bigmapBuilding': '建筑配置',
+    'bigmapBuildingLevel': '建筑升级',
+    'bigmapBuildingProduce': '建筑产出',
+    'bigmapResource': '资源定义',
+    'bigmapQueue': '队列配置',
+    'bigmapCity': '城池配置',
+    'bigmapCityLevel': '城池等级',
+    'bigmapRank': '名次系数',
+    'bigmapScoreRule': '积分规则',
+    'bigmapMonster': '野怪配置',
+    'bigmapStamina': '行动力配置',
+}
+
 # ---------------------------------------------------------------- 建筑
 
 BUILDINGS = [
@@ -28,7 +52,9 @@ BUILDINGS = [
     (71004, "铁矿田", 2, 1, 3, 2, 1, 12, "产出建造资源：铁矿"),
     (71005, "货币田", 3, 1, 1, 3, 1, 20, "产出大地图专用货币"),
     (71006, "科技树", 4, 1, 1, 4, 1, 30, "提供科技研发入口（本期只做建筑本体与属性加成）"),
-    (71007, "建造队列", 5, 1, 1, 5, 1, 40, "提升可同时进行的建造队列数量"),
+    # 🔴 文档口径：队列靠**货币解锁**（`queueUnlockCost2/3`），不来自建筑。
+    # 这座建筑保留（美术/布局/升级链已引用 71007），但不再提供队列数量。
+    (71007, "建造队列", 5, 1, 1, 5, 1, 40, "基地功能建筑；建造队列数量由货币解锁，不随本建筑增加"),
     (71008, "装饰雕像", 6, 1, 2, 6, 1, 50, "装饰建筑，提供微弱经济加成"),
 ]
 
@@ -192,6 +218,30 @@ SCORE_RULES = [[1, 3000, 3, 30, 0.5, 0.5, 20, 0.3]]
 # 行动力 240 = 12 次攻城：Demo 里一次会话能连下 2~3 座城，不会刚上手就被卡住。
 STAMINA = [[1, 240, 360, 3, 50, 1]]
 
+# 攻城日程：一天里的四个切换时点。**时间写成 "HH:MM"**，策划改表最直观；
+# 客户端 parseSchedule 再折成当日秒（`22:00` → 79200），折错了会当场抛错。
+# 字段顺序 = scheduleId, utcOffsetHours, openTime, lockTime, settleTime, snapshotTime
+#   open   09:00 开放宣战/攻城
+#   lock   21:00 锁榜（停止计分，但仍可攻城）
+#   settle 21:10 归属结算
+#   snapshot 22:00 快照发奖，之后到次日 09:00 为休战
+SCHEDULE = [[1, 8, "09:00", "21:00", "21:10", "22:00"]]
+
+
+def _normalize_numbers(value):
+    """把「整数值的 float」写成 int（`2.0` → `2`）。
+
+    eSon 导表产物里整数就是整数，而我们脚本里 `warScoreRate = 2.0` 这种值是 float。
+    不归一化的话，每次重跑都会在表里刷出 `-2 / +2.0` 这种假 diff（2026-10-20 实际踩到）。
+    """
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, list):
+        return [_normalize_numbers(item) for item in value]
+    if isinstance(value, tuple):
+        return [_normalize_numbers(item) for item in value]
+    return value
+
 
 def write(name, key, rows):
     # 字段数与值个数不一致 → 解压后整行错位，客户端会读到「字段名对、值串行」的脏数据。
@@ -205,65 +255,78 @@ def write(name, key, rows):
     # 缺了它 RefUtil 会原样返回 {k,v} 对象 → RefConfigService.getTable 的 Array.isArray 判假
     # → 返回 [] → 运行时抛「[BigMap] 配置表缺失或为空」（2026-10-20 实际炸过一轮）。
     # 真值口径见 tools/ref/ref_compress_json.py（官方压缩器同样写 c=1）。
-    payload = {"k": key, "v": rows, "c": 1}
-    with open(path, "w", encoding="utf-8", newline="\n") as handle:
-        json.dump(payload, handle, ensure_ascii=False, indent=0, separators=(",", ":"))
-        handle.write("\n")
+    payload = {"k": key, "v": _normalize_numbers(rows), "c": 1}
+    text = json.dumps(payload, ensure_ascii=False, indent=0, separators=(",", ":"))
+    # 换行**跟随已有文件**：同事用 TortoiseSVN 提交后这些文件是 CRLF，我们固定写 LF 会让
+    # svn diff 变成「整个文件替换」，真实改动完全看不见（2026-10-20 实际踩到：1000 行噪音）。
+    use_crlf = False
+    if os.path.exists(path):
+        with open(path, "rb") as probe:
+            use_crlf = b"\r\n" in probe.read(2048)
+    if use_crlf:
+        text = text.replace("\n", "\r\n")
+    with open(path, "w", encoding="utf-8", newline="") as handle:
+        handle.write(text)   # 仓库里的表末尾**不带换行**（跟 BASE 保持一致，否则又是整文件 diff）
+    TABLES[name] = {'title': TITLES.get(name, name), 'keys': list(key), 'rows': rows}
     print(f"{name}.json  {len(rows)} 行")
 
 
 def main():
-    write("BigMap-世界地图配置",
+    write("bigmapSchedule",
+          ["scheduleId", "utcOffsetHours", "openTime", "lockTime", "settleTime", "snapshotTime"],
+          SCHEDULE)
+
+    write("bigmapWorld",
           ["worldId", "worldName", "rows", "cols", "cityRing1", "cityRing2",
            "baseRadiusMin", "baseRadiusMax", "npcBaseCount", "monsterRingMax"], WORLD_MAP)
 
-    write("BigMap-建筑配置",
+    write("bigmapBuilding",
           ["id", "baseBuildName", "baseBuildType", "occupyHex", "maxOwnNum",
            "unlockChapter", "queueType", "sort", "baseBuildInfo"],
           [[b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8]] for b in BUILDINGS])
 
-    write("BigMap-建筑升级",
+    write("bigmapBuildingLevel",
           ["id", "buildLevel", "costGrain", "costWood", "costIron", "instantCost",
            "preBuildId", "preBuildLevel", "buildTime", "maxOtherLevel", "resCap", "attrBonus"],
           building_levels())
 
-    write("BigMap-建筑产出",
+    write("bigmapBuildingProduce",
           ["id", "buildLevel", "resType", "producePerHour", "produceCap", "techGroup"],
           building_produce())
 
-    write("BigMap-资源定义",
+    write("bigmapResource",
           ["resType", "resName", "icon", "startAmount", "showInBar"], RESOURCES)
 
-    write("BigMap-队列配置",
+    write("bigmapQueue",
           ["id", "maxBuildQueue", "initBuildQueue", "queueUnlockCost2", "queueUnlockCost3",
            "cancelReturnRate", "offlineMaxHours", "upgradeUnlockChapter", "plotRows", "plotCols"],
           QUEUE)
 
-    write("BigMap-城池配置",
+    write("bigmapCity",
           ["cityId", "cityName", "layer", "available", "cityLevel", "exclusive",
            "unlockChapter", "openDay", "staminaCost", "defenseHp", "radiateCapacity", "cityLevelCoeff",
            "prevCityId", "rewardCoin", "cityDesc", "slot", "slotCount"],
           cities())
 
-    write("BigMap-城池等级",
+    write("bigmapCityLevel",
           ["cityLevel", "warScoreRate", "occupyScore", "powerThreshold", "cityLevelCoeff",
            "staminaCost", "minOccupyWarScore", "defenseHp"],
           [[lv, *CITY_LEVEL[lv]] for lv in sorted(CITY_LEVEL)])
 
-    write("BigMap-名次系数", ["rank", "coeffPct"], RANKS)
+    write("bigmapRank", ["rank", "coeffPct"], RANKS)
 
-    write("BigMap-积分规则",
+    write("bigmapScoreRule",
           ["scoreRuleId", "marginalDamageCap", "rankExtendStepPct", "rankExtendMinPct",
            "crowdBase", "crowdK", "offRangeDamageCutPct", "npcScoreRatio"],
           SCORE_RULES)
 
-    write("BigMap-野怪配置",
+    write("bigmapMonster",
           ["monsterId", "monsterName", "monsterLevel", "occupyHex", "preLevel",
            "staminaCost", "warScore", "defenseHp", "respawnSeconds",
            "rewardGrain", "rewardWood", "rewardIron", "rewardCoin"],
           monsters())
 
-    write("BigMap-行动力配置",
+    write("bigmapStamina",
           ["configId", "staminaMax", "recoverInterval", "buyTimesDaily", "buyCost", "overflowKeep"],
           STAMINA)
 

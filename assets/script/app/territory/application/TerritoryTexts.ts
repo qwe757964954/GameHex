@@ -10,6 +10,8 @@
 export const TERRITORY_TEXTS = {
     // 加载态（2026-10-12 起不再有整页 LoadingPanel：本地存档先渲染、失败只 toast）
     loadingResourceMissing: '领地资源未就绪',
+    loadingChapter: '领地数据加载中，请稍候',
+    noBossTarget: '暂无可定位的 Boss 关卡',
     loadFailed: '领地数据加载失败\n请检查关卡与怪物卡牌配置',
 
     // 站点详情 - 状态
@@ -21,6 +23,7 @@ export const TERRITORY_TEXTS = {
 
     // 站点详情 - 文案
     startBattle: '开战',
+    unlockBattle: '解锁',
     /** 服务端明确回 `succ=0`：这一格现在不能解锁，停止开战。 */
     unlockRejected: '该格暂不可解锁',
     /** 通关上报（`CmdCityChapterPassCellReqMsg`）被服务端拒绝。 */
@@ -102,6 +105,12 @@ export const TERRITORY_TEXTS = {
 
     // 开战兜底
     resourceNotEnoughFallback: '资源不足',
+
+    // 请求进行中（全屏 loading 遮挡文案，防快速点击重复请求）
+    busyUnlock: '解锁中…',
+    busyPass: '通关中…',
+    busyBattle: '开战中…',
+    busyOpen: '开启中…',
 } as const;
 
 /** 未绑定关卡的据点类型名（地图上的"类型"标签）。 */

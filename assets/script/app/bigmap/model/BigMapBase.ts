@@ -152,14 +152,51 @@ function occupyCells(
  * 而「你建了几座队列建筑」永远和界面显示一致，推出来不会漂。
  * 本期唯一的功能建筑就是「建造队列」(71007)，按 `kind = Function` 匹配，换 id 不用改代码。
  */
-export function bigMapQueueCapacity(
+export function bigMapClampQueueUnlocked(config: IBigMapConfig, value: unknown): number {
+    const parsed = Math.round(Number(value));
+    if (!Number.isFinite(parsed)) return config.queue.initBuildQueue;
+    return Math.min(config.queue.maxBuildQueue, Math.max(config.queue.initBuildQueue, parsed));
+}
+
+export interface IBigMapUnlockQueueResult {
+    readonly ok: boolean;
+    readonly reason: string;
+    readonly cost: number;
+    readonly state: IBigMapBaseState | null;
+}
+
+/**
+ * 花货币解锁下一条建造队列（1→2 收 `queueUnlockCost2`，2→3 收 `queueUnlockCost3`）。
+ *
+ * 🔴 文档口径（`docs/bigmap-系统落地方案.md` §2「建造 · 队列」）：3 队列、**付费解锁**。
+ * 所以队列数量**不来自建筑** —— 历史上是「建成 71007 建造队列就 +1」，与文档冲突，已移除；
+ * 存档 `queueUnlocked` 是唯一真源，只由这里改。
+ */
+export function bigMapUnlockQueue(
     config: IBigMapConfig,
-    buildings: readonly IBigMapBuildingInstance[],
-): number {
-    const extra = buildings.filter((item) => (
-        config.buildings.get(item.buildingId)?.kind === BigMapBuildingKind.Function
-    )).length;
-    return Math.min(config.queue.maxBuildQueue, config.queue.initBuildQueue + extra);
+    state: IBigMapBaseState,
+): IBigMapUnlockQueueResult {
+    const current = bigMapClampQueueUnlocked(config, state.queueUnlocked);
+    if (current >= config.queue.maxBuildQueue) {
+        return { ok: false, reason: '建造队列已满', cost: 0, state: null };
+    }
+    const cost = current <= 1 ? config.queue.queueUnlockCost2 : config.queue.queueUnlockCost3;
+    if (!Number.isFinite(cost) || cost <= 0) {
+        return { ok: false, reason: '下一条队列未配置价格', cost: 0, state: null };
+    }
+    if (state.res.coin < cost) {
+        return { ok: false, reason: `货币不足（需要 ${Math.round(cost)}）`, cost, state: null };
+    }
+    return {
+        ok: true,
+        reason: '',
+        cost,
+        state: {
+            ...state,
+            queueUnlocked: current + 1,
+            res: { ...state.res, coin: state.res.coin - cost },
+        },
+    };
 }
 
 /** 建造区占位检查：返回被占用的格（含自己，升级时用 `ignoreInstanceId` 排除）。 */
@@ -468,9 +505,6 @@ export function bigMapTick(
         ...next,
         buildings: fields,
         queues,
-        // 队列容量随「建造队列」建筑落地而增加：这里必须重算，否则建完队列建筑还要等存档
-        // 再读一次才生效（玩家会以为白建了）。
-        queueUnlocked: bigMapQueueCapacity(config, fields),
         instanceSeq,
         stamina,
         staminaAt,

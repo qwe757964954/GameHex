@@ -3,6 +3,8 @@ import type { BigMapPresenter } from '../application/BigMapPresenter';
 import { BIGMAP_COLORS, createButton, createLabel, createUiNode, drawPanel, type IBigMapButton } from './BigMapTheme';
 import { BigMapWorldView } from './BigMapWorldView';
 import { BigMapBaseView } from './BigMapBaseView';
+import { BIGMAP_CITY_PHASE_LABEL } from '../model/BigMapCitySchedule';
+import { sortSnapshotScores } from '../model/BigMapSnapshot';
 
 const { ccclass } = _decorator;
 
@@ -10,6 +12,9 @@ type BigMapMode = 'world' | 'base';
 
 const HEADER_HEIGHT = 62;
 const SIDE_PANEL_WIDTH = 300;
+
+/** 建造列表末尾「解锁队列」伪行的 id（真实建筑 id 都是 7 开头）。 */
+const QUEUE_ROW_ID = -1;
 const INFO_PANEL_WIDTH = 330;
 
 /**
@@ -175,7 +180,7 @@ export class BigMapPage extends Component {
     }
 
     private buildBuildPanel(width: number, _height: number): void {
-        const panelHeight = 8 * 56 + 52;
+        const panelHeight = 9 * 56 + 52;
         const panel = createUiNode('BuildPanel', this.node, SIDE_PANEL_WIDTH, panelHeight);
         panel.setPosition(new Vec3(-width / 2 + SIDE_PANEL_WIDTH / 2 + 12, -40, 0));
         drawPanel(panel.addComponent(Graphics), SIDE_PANEL_WIDTH, panelHeight, BIGMAP_COLORS.panel, BIGMAP_COLORS.border);
@@ -197,6 +202,24 @@ export class BigMapPage extends Component {
             detail.node.setPosition(new Vec3(0, -11, 0));
             row.on(Node.EventType.TOUCH_END, () => this.onBuildRowClick(entry.buildingId));
             this.buildRows.push({ node: row, background, name, detail, buildingId: entry.buildingId });
+        });
+
+        // 队列付费解锁是一条**动作**而不是建筑，但在 UI 上和建筑同属「花钱变强」，所以放在列表末尾。
+        const queueRow = createUiNode('BuildRow_Queue', panel, SIDE_PANEL_WIDTH - 24, 50);
+        queueRow.setPosition(new Vec3(0, panelHeight / 2 - 62 - menu.length * 56, 0));
+        const queueBackground = queueRow.addComponent(Graphics);
+        drawPanel(queueBackground, SIDE_PANEL_WIDTH - 24, 50, BIGMAP_COLORS.panelLight, BIGMAP_COLORS.border, 6);
+        const queueName = createLabel(queueRow, '解锁建造队列', 17, BIGMAP_COLORS.text, SIDE_PANEL_WIDTH - 40, 22);
+        queueName.node.setPosition(new Vec3(0, 10, 0));
+        const queueDetail = createLabel(queueRow, '', 13, BIGMAP_COLORS.muted, SIDE_PANEL_WIDTH - 40, 18);
+        queueDetail.node.setPosition(new Vec3(0, -11, 0));
+        queueRow.on(Node.EventType.TOUCH_END, () => this.onBuildRowClick(QUEUE_ROW_ID));
+        this.buildRows.push({
+            node: queueRow,
+            background: queueBackground,
+            name: queueName,
+            detail: queueDetail,
+            buildingId: QUEUE_ROW_ID,
         });
     }
 
@@ -259,6 +282,8 @@ export class BigMapPage extends Component {
             this.selectedMonsterId = 0;
             this.selectedPlotHexId = -1;
             this.refreshInfo();
+            // 榜单异步拉一次（拿回来 presenter 会 emit，页面自己重绘）。
+            void presenter.refreshCityRank(occupant.cityId);
             return;
         }
         if (occupant.kind === 'monster') {
@@ -304,6 +329,12 @@ export class BigMapPage extends Component {
     }
 
     private onBuildRowClick(buildingId: number): void {
+        if (buildingId === QUEUE_ROW_ID) {
+            const feedback = this.presenter!.unlockBuildQueue();
+            this.feedback(feedback);
+            this.refreshAll();
+            return;
+        }
         const entry = this.presenter!.buildMenu().find((item) => item.buildingId === buildingId);
         if (!entry) return;
         if (!entry.unlocked) {
@@ -381,7 +412,21 @@ export class BigMapPage extends Component {
 
     private refreshBuildRows(): void {
         const menu = this.presenter!.buildMenu();
+        const queueInfo = this.presenter!.queueUnlockInfo();
         for (const row of this.buildRows) {
+            if (row.buildingId === QUEUE_ROW_ID) {
+                drawPanel(
+                    row.background, SIDE_PANEL_WIDTH - 24, 50, BIGMAP_COLORS.panelLight,
+                    queueInfo.canUnlock ? BIGMAP_COLORS.border : BIGMAP_COLORS.muted, 6,
+                );
+                row.name.string = `解锁建造队列  ${queueInfo.current}/${queueInfo.max}`;
+                row.name.color = queueInfo.canUnlock ? BIGMAP_COLORS.text : BIGMAP_COLORS.muted;
+                row.detail.string = queueInfo.canUnlock
+                    ? `货币 ${Math.round(queueInfo.cost)} · 点击解锁第 ${queueInfo.current + 1} 条`
+                    : queueInfo.reason;
+                row.detail.color = queueInfo.canUnlock ? BIGMAP_COLORS.muted : BIGMAP_COLORS.danger;
+                continue;
+            }
             const entry = menu.find((item) => item.buildingId === row.buildingId);
             if (!entry) continue;
             const selected = this.pendingBuildingId === row.buildingId;
@@ -429,8 +474,10 @@ export class BigMapPage extends Component {
             const lines = [
                 `状态：${stateText[city.state] ?? city.state}`,
                 city.state === 'locked' ? `条件：${city.reason}` : '',
+                `日程：${BIGMAP_CITY_PHASE_LABEL[city.phase]}${city.canAttack ? '' : ` · ${city.attackReason}`}`,
                 `距离：${Math.round(city.distance)} 格${city.inRange ? '' : `（超出势力范围，伤害 -${city.damageCutPct}%）`}`,
                 `城防：${Math.round(city.hpRatio * 100)}%   本轮战功：${city.warScore}/${city.minWarScore}`,
+                `名次：第 ${city.playerRank} 名   同场 ${city.attackerCount} 人`,
                 `消耗行动力：${city.staminaCost}`,
                 city.state === 'open'
                     ? `预计伤害 ${city.previewDamage} · 战功 +${city.previewWarScore}`
@@ -440,10 +487,10 @@ export class BigMapPage extends Component {
                 city.desc,
             ];
             this.infoBody.string = lines.filter((line) => line !== '').join('\n');
-            const canAttack = city.state === 'open';
+            // 按钮跟随日程：休战/结算期即使城池开放也要灰掉，否则「亮着但点了才报错」。
             this.primaryButton.node.active = true;
-            this.primaryButton.setText(city.state === 'open' ? '攻打' : '不可攻打');
-            this.primaryButton.setEnabled(canAttack);
+            this.primaryButton.setText(city.canAttack ? '攻打' : '不可攻打');
+            this.primaryButton.setEnabled(city.canAttack);
             this.secondaryButton.setText('定位');
             return;
         }
@@ -486,9 +533,26 @@ export class BigMapPage extends Component {
                 '· 小方块 → 其他玩家的基地（本期只看）',
                 '',
                 '城池解锁是「章节 + 开服天数 + 前置城池已占领」三重条件。',
-            ].join('\n');
+            ].join('\n') + this.daySnapshotLines();
         this.primaryButton.node.active = false;
         this.secondaryButton.node.active = false;
+    }
+
+    /**
+     * 「昨日战绩」——22:00 快照，只显示战功最高的三座城。
+     *
+     * 没有快照（新号 / 还没过过 22:00）就返回空串，不占版面也不显示「暂无」这种噪音。
+     */
+    private daySnapshotLines(): string {
+        const presenter = this.presenter;
+        const snapshot = presenter?.daySnapshot();
+        if (!presenter || !snapshot) return '';
+        const top = sortSnapshotScores(snapshot).slice(0, 3);
+        if (top.length === 0) return '';
+        const lines = top.map(([cityId, score]) => (
+            `· ${presenter.cityView(cityId)?.name ?? cityId}　第 ${score.rank} 名　战功 ${score.warScore}`
+        ));
+        return ['', `昨日战绩（累计积分 ${snapshot.totalWarScore}）`, ...lines].join('\n');
     }
 
     private feedback(feedback: { ok: boolean; message: string }): void {

@@ -105,7 +105,10 @@ export class NativeHotUpdateRuntime {
         if (prepared) return prepared;
 
         try {
-            const check = await this.checkForNewVersion();
+            const check = await this.checkForNewVersion(emit);
+            if (check === 'updated') {
+                return this.finishUpdate(config, emit);
+            }
             if (check === 'up-to-date') {
                 emit({ phase: 'done', message: '资源已经是最新版本' });
                 return {
@@ -360,19 +363,38 @@ export class NativeHotUpdateRuntime {
     }
 
     /** checkUpdate 的异步结果靠事件回调拿，这里包成 Promise。 */
-    private checkForNewVersion(): Promise<'new' | 'up-to-date'> {
+    private checkForNewVersion(emit: (progress: INativeHotUpdateProgress) => void): Promise<'new' | 'up-to-date' | 'updated'> {
         const manager = this.manager!;
         const environment = this.dependencies.host.environment;
         const host = this.dependencies.host;
-        return new Promise<'new' | 'up-to-date'>((resolve, reject) => {
-            // 🔴 回调必须**常驻**到本阶段真正结束，不能每阶段换一个。
-            // 引擎的 `_eventCallback` 是**裸指针**，且 `dispatchUpdateEvent` 在
-            // **下载线程**上同步调用它（引擎 C++ 无主线程切换）⇒ 换/置 null 之后
-            // 若后台线程仍在派发事件，就是解引用野指针 ⇒ SEGV_MAPERR。
+        return new Promise<'new' | 'up-to-date' | 'updated'>((resolve, reject) => {
+            // 首次安装没有资源差异时，原生准备阶段会直接完成；检查任务也必须处理这个终态。
             manager.setEventCallback((event: INativeAssetsManagerEvent) => {
                 const code = event.getEventCode();
+                if (code === environment.UPDATE_PROGRESSION) {
+                    // 检查阶段也要下载 620KB 完整清单（5073 条 assets），首次安装实测约 27 秒。
+                    // 这段时间过去完全没有反馈，看起来就是卡死 —— 这里把字节数写进文案。
+                    // 注意进度条走不通：原生层的 percent/bytes 不会传到 IHotUpdateProgress
+                    // （那边只认 completed/total），所以只能体现在文字上。
+                    const downloaded = event.getDownloadedBytes?.() ?? 0;
+                    const total = event.getTotalBytes?.() ?? 0;
+                    if (total > 0) {
+                        emit({
+                            phase: 'validating',
+                            message: `正在获取更新信息 ${formatKb(downloaded)} / ${formatKb(total)}`,
+                        });
+                    }
+                    return;
+                }
                 if (code === environment.NEW_VERSION_FOUND) {
                     resolve('new');
+                    return;
+                }
+                if (code === environment.UPDATE_FINISHED) {
+                    // 原生空差异修复会在检查阶段直接完成更新，仍需保存搜索路径并重启。
+                    // 不再调用 update()：此时引擎已经处于 UP_TO_DATE。
+                    host.info('检查阶段已完成更新，准备保存搜索路径并重启');
+                    resolve('updated');
                     return;
                 }
                 if (code === environment.ALREADY_UP_TO_DATE) {
@@ -520,4 +542,9 @@ function describeEvent(event: INativeAssetsManagerEvent, fallback: string): stri
     const assetId = event.getAssetId?.();
     if (assetId) return `${fallback}：${assetId}${message ? ` (${message})` : ''}`;
     return message ? `${fallback}：${message}` : fallback;
+}
+
+/** 检查阶段的 manifest 下载进度文案用；小于 1KB 也显示成 0KB，不出现小数。 */
+function formatKb(bytes: number): string {
+    return `${Math.round(bytes / 1024)}KB`;
 }

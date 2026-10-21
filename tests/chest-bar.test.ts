@@ -49,15 +49,20 @@ test('C2 每个节点都是 UI_2D —— DEFAULT 层的子节点在 2D 相机下
     assert.deepEqual(offenders, [], '这些节点 layer 不是 UI_2D（prefab_lifecycle create 的默认坑）');
 });
 
-test('C3 宝箱单格挂 ChestSlotView，且 11 个 @property 全绑上（漏一个就是静默留白）', () => {
+test('C3 宝箱单格挂 ChestSlotView，且 15 个 @property 全绑上（漏一个就是静默留白）', () => {
     const slot = node(SLOT, 'ChestSlot')!;
     const comps = ((slot._components ?? []) as Array<{ __id__: number }>).map((r) => SLOT[r.__id__]);
     // ⚠️ 自定义组件的 `__type__` 存的是 **cid**（`f536cnjD+…`），不是类名 ⇒ 按「有没有 card 字段」认。
     const view = comps.find((c) => !!c && typeof c === 'object' && 'card' in (c as Record<string, unknown>));
     assert.ok(view, '根节点没有 ChestSlotView 组件');
-    for (const key of ['card', 'timer', 'timeFill', 'timeText', 'box', 'nameLabel', 'emptyLabel', 'cost', 'costLabel', 'btn', 'btnLabel']) {
+    for (const key of ['card', 'timer', 'timeBg', 'clock', 'timeFill', 'timeText', 'timeTextTransform', 'box', 'nameLabel', 'emptyLabel', 'cost', 'costLabel', 'btn', 'btnLabel', 'speedUpIcon']) {
         assert.ok(view![key], `ChestSlotView.${key} 没绑 —— 运行时该处会静默不显示`);
     }
+    assert.equal(SLOT[(view!.timeBg as { __id__: number }).__id__], node(SLOT, 'TimeBg'));
+    assert.equal(SLOT[(view!.clock as { __id__: number }).__id__], node(SLOT, 'Clock'));
+    const textTransform = SLOT[(view!.timeTextTransform as { __id__: number }).__id__];
+    assert.equal(textTransform.__type__, 'cc.UITransform');
+    assert.equal(SLOT[(textTransform.node as { __id__: number }).__id__], node(SLOT, 'TimeText'));
 });
 
 test('C4 主城页有 ChestBar：底图 720×317、4 个 ChestSlot 实例、箭头就位', () => {
@@ -87,23 +92,41 @@ test('C4 主城页有 ChestBar：底图 720×317、4 个 ChestSlot 实例、箭�
     assert.equal(bgSize.height, 317);
 });
 
-test('C5 `ChestBar.render` 必须先 `ensureSlots()` —— 父 onLoad 先跑时 slots 还是空的', () => {
+test('C5 `ChestBar.render` 必须先 `ensureSlots()` —— 主城 start 先绘制明确的空槽数据', () => {
     const src = readFileSync('assets/script/app/main/ChestBar.ts', 'utf8');
     const body = src.slice(src.indexOf('render(data: readonly IChestSlotData[]'));
     assert.match(body.slice(0, 220), /const slots = this\.ensureSlots\(\);/, 'render 没先装配槽位');
     const page = readFileSync('assets/script/app/main/MainPage.ts', 'utf8');
-    assert.match(page, /start\(\): void \{\s*this\.renderChests\(\);/, '宝箱栏要在 start() 铺，不能在 onLoad');
+    assert.match(page, /start\(\): void \{\s*this\.renderChests\(this\.emptyChestSlots\);/, '宝箱栏要在 start() 铺明确的初始空槽');
 });
 
-test('C6 计时文本两种形态：整点小时 `Nh` / 非整点 `HH:MM:SS`', () => {
+test('C6 计时文本使用紧凑英文 h m s 单位', () => {
     const src = readFileSync('assets/script/app/main/ChestSlotView.ts', 'utf8');
-    assert.match(src, /if \(total >= 3600 && total % 3600 === 0\) return `\$\{total \/ 3600\}h`;/,
-        '整点小时应显示 `24h`（设计稿卡1）');
-    assert.match(src, /return `\$\{pad\(h\)\}:\$\{pad\(m\)\}:\$\{pad\(s\)\}`;/,
-        '非整点应显示 HH:MM:SS（设计稿卡4 的 04:11:05）');
+    assert.match(src, /parts\.push\(`\$\{hours\}h`\)/);
+    assert.match(src, /parts\.push\(`\$\{minutes\}m`\)/);
+    assert.match(src, /parts\.push\(`\$\{secondsRemaining\}s`\)/);
+    assert.match(src, /return parts\.join\(' '\)/);
 });
 
-test('C7 宝箱入口展开宝箱栏时隐藏快速寻敌按钮，收起时恢复', () => {
+test('C7 蓝卡计时条保留时钟图标，时间文字与图标同排', () => {
+    const timer = node(SLOT, 'Timer');
+    assert.ok(timer, 'ChestSlot.prefab 缺少 Timer 节点');
+    const timerChildren = childNames(SLOT, timer!);
+    assert.ok(timerChildren.includes('Clock'), '蓝湖计时样式需要时钟图标');
+    assert.ok(timerChildren.includes('TimeText'), 'Timer 下缺少时间文字');
+
+    const clock = node(SLOT, 'Clock')!;
+    const clockSprite = ((clock._components ?? []) as Array<{ __id__: number }>)
+        .map((ref) => SLOT[ref.__id__]).find((entry) => entry?.__type__ === 'cc.Sprite') as Entry | undefined;
+    assert.deepEqual([ (clock._lpos as { x: number; y: number }).x, (clock._lpos as { x: number; y: number }).y ], [-24, 0]);
+    assert.equal((clockSprite?._spriteFrame as { __uuid__?: string })?.__uuid__,
+        'b022a368-7f62-4ac9-9e61-152a2328b86c@f9941');
+
+    const timeText = node(SLOT, 'TimeText')!;
+    assert.deepEqual([ (timeText._lpos as { x: number; y: number }).x, (timeText._lpos as { x: number; y: number }).y ], [16, 0]);
+});
+
+test('C8 宝箱入口展开宝箱栏时隐藏快速寻敌按钮，收起时恢复', () => {
     const page = readFileSync('assets/script/app/main/MainPage.ts', 'utf8');
     assert.match(page, /chestToggle: Node = null!/);
     assert.match(page, /this\.chestToggle\.on\(Button\.EventType\.CLICK, this\.onToggleChestPanel, this\)/);

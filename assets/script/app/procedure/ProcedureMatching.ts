@@ -19,6 +19,7 @@ import { loadMatchProfileLookup } from '../matching/MatchProfileConfig';
 import { SelfIdentity, buildSelfPlayerData, readSelfIdentity } from '../matching/MatchSelfProfile';
 import { loadMatchTips } from '../matching/MatchTipsConfig';
 import { MatchPlayerData } from '../matching/MatchTypes';
+import type { IMatchingEntryParams } from '../matching/MatchTypes';
 import type { BattlePreloadProvider } from '../session/AppSessionAssetService';
 import { MAP_DIRECTORY } from '../zcds/ZCGame';
 import { ZCGameLoader } from '../zcds/application/ZCGameLoader';
@@ -162,7 +163,7 @@ export class ProcedureMatching extends ProcedureBase {
         if (context.cancelled) return;
     }
 
-    onEnter(_params?: any): void {
+    onEnter(params?: IMatchingEntryParams): void {
         if (!this.matchingPrefab) {
             this.error('MatchingRoot 尚未预加载，无法进入匹配流程');
             return;
@@ -190,7 +191,10 @@ export class ProcedureMatching extends ProcedureBase {
         //  请求与下面的匹配动画**并行**跑（服务端内网应答是毫秒级），所以不拖慢开局手感；
         //  它自带硬超时且不 reject，拿不到就整条退回本地对手池，匹配流程不会因此失败。
         clearLastBattleStart();
-        const battleStartTask = startBattle(ZC_BATTLE_TYPE_PVP);
+        const battleStartTask = startBattle(
+            params?.battleType ?? ZC_BATTLE_TYPE_PVP,
+            params?.battleParams ?? [],
+        );
         this.battleStartTask = battleStartTask;
 
         // 我方信息条的起始数据：本机昵称 / 头像（`CmdRole` 缓存）+ 本地占位。

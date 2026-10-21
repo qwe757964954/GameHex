@@ -92,10 +92,12 @@ test('stationRenderOf 为关卡保留"解锁后展示建筑、通关后变绿"�
         '渲染层必须按站点类型判定关卡分支');
     // 已解锁未通关：角标给「可通关」，颜色走 available（与 fixedResource「可领取」同口径）。
     assert.match(body, /stagePassClaimReady/, '解锁后要显示「可通关」角标');
-    // 已通关：角标变「已通关」、颜色变 cleared（绿）、不可再点。
+    // 已通关：角标变「已通关」、颜色变 cleared（绿）。交互上主线 stage/boss 不可再点，
+    // 但 **asyncPvp 可重复挑战 ⇒ 仍可点**（2026-10-21 口径）。
     assert.match(body, /stagePassClaimed/, '通关后要显示「已通关」角标');
     assert.match(body, /TERRITORY_COLORS\.cleared/, '通关后要用「已通关」绿');
-    assert.match(body, /interactive: !claimed && !pending/, '已通关/请求中不可再点');
+    assert.match(body, /interactive: \(claimed \? isAsyncPvp : true\) && !pending/,
+        '已通关：asyncPvp 可重复挑战仍可点；主线 stage/boss 与请求中不可再点');
     // 解锁中（pendingFixedResourceCells）与 fixedResource 同一转圈通道。
     assert.match(body, /pendingFixedResourceCells\.includes\(site\.cellId\)/,
         '解锁请求进行中要复用 pending 转圈通道');

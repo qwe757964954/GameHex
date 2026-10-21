@@ -38,11 +38,13 @@ import {
     TERRITORY_STAMINA_RES_ID,
 } from '../territory/model/TerritoryResourceGain';
 import { territoryMapOffsetForCell } from '../territory/model/TerritoryMapLayout';
+import type { ITerritoryMapLayout } from '../territory/model/TerritoryMapLayout';
 import type { ITerritorySaveOwner, TerritoryWallet } from '../territory/model/TerritorySaveStore';
 import { TerritorySiteDetailPanel } from '../territory/view/TerritorySiteDetailPanel';
 import { TerritoryMapView } from '../territory/view/TerritoryMapView';
 import { TERRITORY_EVENTS, TERRITORY_PRESENTER_EVENTS } from '../territory/view/TerritoryEvents';
 import type { TerritoryStationTarget } from '../territory/view/TerritoryStationView';
+import { LoadingPopup } from '../common/LoadingPopup';
 
 const { ccclass, property } = _decorator;
 /** 兜底章节：服务器章节汇总还没到时，冒险页至少能开第 1 章。 */
@@ -110,6 +112,12 @@ export class MainTerritoryMap extends Component {
                     }),
                 showTip: (text) => FW.showTip(text),
                 showRewards: (rewards, originCellId) => this.presentRewards(rewards, originCellId),
+                // 写请求在途 = 全屏 loading 遮挡（引用计数，多个并发请求只显一层）：
+                // 请求期间玩家点不到地图/按钮，从源头防「服务端还没响应就快速连点」。
+                setBusy: (busy, text) => {
+                    if (busy) LoadingPopup.show(text);
+                    else LoadingPopup.hide();
+                },
             },
         });
         // 状态变更通知走 `EventMgr` 全局中控（zcds 同款）：`onDestroy` 里 `offTarget(this)` 摘净。
@@ -196,6 +204,17 @@ export class MainTerritoryMap extends Component {
         this.presenter?.start();
     }
 
+    /** 主城快速寻敌：打开当前 Boss 详情，并将地图移到同一个格子。 */
+    focusCurrentBoss(): void {
+        const presenter = this.presenter;
+        if (!presenter) {
+            FW.showTip(TERRITORY_TEXTS.loadingResourceMissing);
+            return;
+        }
+        const cellId = presenter.focusCurrentBoss();
+        if (cellId !== null) this.scrollToCell(cellId, presenter.state.layout);
+    }
+
     onDestroy(): void {
         CacheMgr.instance.removeEventUpdate('CmdRole', this as unknown as destroyable, this.onRoleCacheUpdate);
         EventMgr.instance.offTarget(this);
@@ -235,17 +254,21 @@ export class MainTerritoryMap extends Component {
             pendingFixedResourceCells: state.pendingFixedResourceCells,
         });
         if (resetScroll) {
-            const viewport = this.mapScrollView.node.getComponent(UITransform);
-            if (!viewport) throw new Error('领地地图视口缺少 UITransform');
-            const offset = territoryMapOffsetForCell(
-                state.layout, state.map.startCellId, viewport.contentSize);
-            this.mapScrollView.scrollToOffset(new Vec2(offset.x, offset.y), 0);
+            this.scrollToCell(state.map.startCellId, state.layout);
         }
         if (state.detail.open && state.detail.content) {
             this.detailPanel.open(state.detail.content);
         } else if (!state.detail.open && this.detailPanel.isOpen) {
             this.detailPanel.close();
         }
+    }
+
+    private scrollToCell(cellId: number, layout: ITerritoryMapLayout): void {
+        const viewport = this.mapScrollView.node.getComponent(UITransform);
+        if (!viewport) throw new Error('领地地图视口缺少 UITransform');
+        const offset = territoryMapOffsetForCell(layout, cellId, viewport.contentSize);
+        this.mapScrollView.stopAutoScroll();
+        this.mapScrollView.scrollToOffset(new Vec2(offset.x, offset.y), 0);
     }
 
     /** tick 定时器：首次渲染成功后挂一次（加载态不再停/启，Presenter 内部对未就绪状态判空）。 */

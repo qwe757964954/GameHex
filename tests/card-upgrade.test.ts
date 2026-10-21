@@ -316,3 +316,21 @@ test('按钮文案只有一个来源：页面不得自己拼「升级」', () =>
     assert.equal(CARD_LINEUP_TEXTS.upgradeUnlocking, '解锁中…');
     assert.equal(CARD_LINEUP_TEXTS.upgradeConfirm, '升级');
 });
+
+test('升级期间必须用工程通用 loading 遮挡（show/hide 配对，防频繁点击）', () => {
+    const page = readFileSync('assets/script/app/card/CardUpgradePage.ts', 'utf8');
+    assert.match(page, /import \{ LoadingPopup \} from '\.\.\/common\/LoadingPopup'/);
+    assert.match(page, /LoadingPopup\.show\(/);
+    assert.match(page, /LoadingPopup\.hide\(\);/);
+
+    // 只抽查 onUpgradeClick 的块：show 必须在 try 之前、hide 必须在 finally 里，
+    // 弹窗中途被关 / 请求失败 / 离线也会收回遮挡，不会残留全屏 loading。
+    const block = page.match(/private async onUpgradeClick[\s\S]*?\n    \}/)?.[0] ?? '';
+    assert.ok(block, '找不到 onUpgradeClick 实现，检查是否被改名');
+    assert.match(block, /try \{/);
+    assert.match(block, /finally \{/);
+    assert.ok(block.indexOf('LoadingPopup.show(') < block.indexOf('LoadingPopup.hide()'));
+    // 文案与按钮同源：0 级「解锁中…」/ 1 级以上「升级中…」，不写死单一文案
+    assert.match(block, /upgradeUnlocking/);
+    assert.match(block, /upgradeSending/);
+});

@@ -17,7 +17,9 @@ const hintOverlay = readFileSync('assets/script/app/zcds/view/ZCSpawnRegionHintO
 const boardPrefab = JSON.parse(readFileSync('assets/resources/ui/game/ZCGameBoard.prefab', 'utf8')) as any[];
 
 test('spawn region hints render in a dedicated non-interactive overlay', () => {
-    assert.match(renderWorld, /spawnRegionHintOverlay = new ZCSpawnRegionHintOverlay\(this\.boardLayer\('CooldownOverlay'\)\)/);
+    assert.match(renderWorld, /spawnRegionHintOverlay = new ZCSpawnRegionHintOverlay\(/);
+    assert.match(renderWorld, /this\.boardLayer\('CooldownOverlay'\)/);
+    assert.match(renderWorld, /this\.options\.spawnRegionFrames \?\? null/);
     assert.match(renderWorld, /spawnRegionHintOverlay\.render\([^;]*hintsVisible/s);
     assert.match(renderWorld, /spawnRegionHintOverlay\.render\(\s*this\.spawnRegionHints,\s*hintsVisible,\s*Math\.abs\(this\.options\.mapLayer\.scale\.x\) \|\| 1,/);
     assert.doesNotMatch(renderWorld, /regionText/);
@@ -26,6 +28,7 @@ test('spawn region hints render in a dedicated non-interactive overlay', () => {
     assert.match(hintOverlay, /UITransform/);
     assert.match(hintOverlay, /Graphics/);
     assert.match(hintOverlay, /Label/);
+    assert.match(hintOverlay, /Sprite\.Type\.SLICED/);
     assert.doesNotMatch(hintOverlay, /BlockInputEvents|Button|TOUCH_START|TOUCH_END|\.on\(/);
     const root = boardPrefab.find((object) => object?.__type__ === 'cc.Node' && object._name === 'ZCGameBoard');
     assert.ok(root, 'ZCGameBoard root exists');
@@ -56,6 +59,7 @@ test('region bubble nodes reuse anchors, follow visibility, draw text, and clear
     cc.UITransform = class { setContentSize() {} };
     cc.Label.HorizontalAlign = { CENTER: 'center' };
     cc.Label.VerticalAlign = { CENTER: 'center' };
+    cc.Label.Overflow = { NONE: 0, SHRINK: 1, CLAMP: 2, RESIZE_HEIGHT: 3 };
     const { ZCSpawnRegionHintOverlay } = load('./ZCSpawnRegionHintOverlay');
     const parent = new FakeNode('CooldownOverlay');
     const overlay = new ZCSpawnRegionHintOverlay(parent);
@@ -101,6 +105,66 @@ test('region bubble nodes reuse anchors, follow visibility, draw text, and clear
     overlay.clear();
     assert.equal(parent.children.length, 0);
     assert.equal(root.isValid, false);
+});
+
+test('region bubbles use frame_02 red for front and frame_01 green for mid/back when frames are provided', () => {
+    const { load, FakeNode, cc } = loadViews();
+    cc.UITransform = class { setContentSize() {} };
+    cc.Label.HorizontalAlign = { CENTER: 'center' };
+    cc.Label.VerticalAlign = { CENTER: 'center' };
+    cc.Label.Overflow = { NONE: 0, SHRINK: 1, CLAMP: 2, RESIZE_HEIGHT: 3 };
+    const { ZCSpawnRegionHintOverlay } = load('./ZCSpawnRegionHintOverlay');
+    const parent = new FakeNode('CooldownOverlay');
+    const frame01 = new cc.SpriteFrame();
+    const frame02 = new cc.SpriteFrame();
+    const overlay = new ZCSpawnRegionHintOverlay(parent, { front: frame02, mid: frame01, back: frame01 });
+    const hints = [
+        { depth: 'front', label: '速攻', x: 10, y: 20 },
+        { depth: 'mid', label: '控场', x: -10, y: 40 },
+        { depth: 'back', label: '发育', x: 30, y: -5 },
+    ];
+
+    overlay.render(hints, true, 0.5);
+    const root = parent.children[0];
+    const frontSprite = root.children[0].getComponent(cc.Sprite);
+    const midSprite = root.children[1].getComponent(cc.Sprite);
+    const backSprite = root.children[2].getComponent(cc.Sprite);
+    assert.ok(frontSprite && midSprite && backSprite, '气泡底应为 Sprite（九宫格）而不是 Graphics 色块');
+    assert.equal(root.children[0].getComponent(cc.Graphics), null, '有切图时不再画 Graphics 色块');
+    assert.equal(frontSprite.spriteFrame, frame02, '前区（速攻）用红色 frame_02');
+    assert.equal(midSprite.spriteFrame, frame01, '中区（控场）用绿色 frame_01');
+    assert.equal(backSprite.spriteFrame, frame01, '后区（发育）用绿色 frame_01');
+    for (const sprite of [frontSprite, midSprite, backSprite]) {
+        assert.equal(sprite.type, cc.Sprite.Type.SLICED, '九宫格拉伸');
+        assert.equal(sprite.sizeMode, cc.Sprite.SizeMode.CUSTOM);
+        assert.equal(sprite.trim, false);
+    }
+    const label = root.children[0].children[0].getComponent(cc.Label);
+    assert.equal(label.overflow, cc.Label.Overflow.SHRINK, '文字必须走对齐框（NONE 时 verticalAlign 不生效）');
+    assert.equal(root.children[0].children[0].position.y, 5, '文字中心上移对齐气泡主体（补偿右下角尾巴占高）');
+
+    // 顺序 / 文案变化时复用节点，只按 depth 换帧。
+    overlay.render([{ ...hints[2], x: 1, y: 2 }, { ...hints[0], x: 3, y: 4 }, { ...hints[1], x: 5, y: 6 }], true, 0.25);
+    assert.equal(root.children.length, 3, 're-render should reuse existing bubbles');
+    assert.equal(root.children[0].getComponent(cc.Sprite).spriteFrame, frame01);
+    assert.equal(root.children[1].getComponent(cc.Sprite).spriteFrame, frame02);
+    assert.equal(root.children[2].getComponent(cc.Sprite).spriteFrame, frame01);
+});
+
+test('spawn region hint frames tolerate partial / missing frames and fall back to graphics', () => {
+    const { load, FakeNode, cc } = loadViews();
+    cc.UITransform = class { setContentSize() {} };
+    cc.Label.HorizontalAlign = { CENTER: 'center' };
+    cc.Label.VerticalAlign = { CENTER: 'center' };
+    cc.Label.Overflow = { NONE: 0, SHRINK: 1, CLAMP: 2, RESIZE_HEIGHT: 3 };
+    const { ZCSpawnRegionHintOverlay } = load('./ZCSpawnRegionHintOverlay');
+    const parent = new FakeNode('CooldownOverlay');
+    const overlay = new ZCSpawnRegionHintOverlay(parent, { front: null, mid: null, back: null });
+    overlay.render([{ depth: 'front', label: '速攻', x: 5, y: 6 }], true, 0.5);
+    const bubble = parent.children[0].children[0];
+    assert.ok(bubble.getComponent(cc.Graphics), '空帧对象（全 null）应回退 Graphics 色块');
+    const commands = bubble.getComponent(cc.Graphics).commands;
+    assert.ok(commands.some((command: { kind: string }) => command.kind === 'roundRect'));
 });
 
 test('spawn region hint overlay clears after selection and on render-world teardown', () => {

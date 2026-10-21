@@ -68,7 +68,7 @@ export class MainResBar extends Component {
     @property({ type: Label, tooltip: 'Name：昵称' })
     nameLabel: Label = null!;
 
-    @property({ type: Label, tooltip: 'Level：`LV{等级}`' })
+    @property({ type: Label, tooltip: 'Level：`{等级}`（纯数字，不带 LV 前缀）' })
     levelLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'Uid：`uid:{角色 id}`' })

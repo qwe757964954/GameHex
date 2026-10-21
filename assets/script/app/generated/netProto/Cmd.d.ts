@@ -6051,6 +6051,7 @@
         CmdNewTreasureInfoListRspMsg = 2011197980,
         CmdNewTreasureActivateRspMsg = 399007957,
         CmdNewTreasureFastOpenRspMsg = 291587262,
+        CmdNewTreasureOpenRspMsg = 1903704638,
         CmdTakeOathAllianceRewardRspMsg = 271053488,
         CmdPvpHeroInfoListRspMsg = 1516169721,
         CmdPvpHeroUpLevelRspMsg = 937856670,

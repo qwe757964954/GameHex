@@ -95,12 +95,22 @@ export const MATCH_SLOT_FRAMES: readonly string[] = ['frame_01', 'frame_02', 'fr
 export const ARTIFACT_ART_ROOT = `${ART_ROOT}/artifact`;
 
 /**
- * 中立资源点图标：`image/map-resource`（`gold` / `mine` / `chest`，同一套 212×212 画布）。
+ * 中立资源点图标：`image/map-resource`（`gold` / `mine` / `chest`，同一套 212×212 画布；
+ * 另含 `coin_icon` = **单枚金币 icon**，金币飞行特效的贴图）。
  *
  * 格子内图标由 `ZCGameHex.prefab` 硬绑；这里提供装配常量给「运行时按名加载」的场景
- * （金币飞行特效的贴图 = `gold`，与格子图标同一张，见 `ZCGameLoader.loadGoldCoinFrame`）。
+ * （金币飞行特效 = `coin_icon`，与 HUD 金币栏 / 格子金币图标同款，见
+ * `ZCGameLoader.loadGoldCoinFrame`；**不是** `gold.png` 那张金币堆+钱袋装饰插画）。
  */
 export const MAP_RESOURCE_ART_ROOT = `${ART_ROOT}/map-resource`;
+
+/**
+ * 自选主城「区域提示气泡」切图：`image/spawn-region`（`frame_01` 绿 / `frame_02` 红）。
+ *
+ * ⚠️ 九宫格底图**刻意不建 auto-atlas.pac**（合图会丢 border，SLICED 拉伸就坏了），
+ * 两帧 meta 均为 `packable: false`。换图/加帧时别往这个目录补 pac。
+ */
+export const SPAWN_REGION_ART_ROOT = `${ART_ROOT}/spawn-region`;
 
 /** 玩家头像。 */
 export const HEAD_ART_ROOT = `icons/head`;

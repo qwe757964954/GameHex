@@ -1599,3 +1599,78 @@ test('刷一格只重写真正变化的 hex，不做全量 setAttribute', () => 
     editor.paint(3, 4, 'void');
     assert.equal(attributeWrites() - settled, 0, '值没变就不该再写 DOM');
 });
+
+// 改尺寸时「不在 grid 里」的三类数据必须跟着地形一起走：装饰是**绝对坐标**、
+// 资源点是 `{row,column}`、区域 `cells` 存的是 `row*COLS+column` 的 id。
+// 以前 `setSize` 只迁 grid 和 homes，于是加一列就同时坏三样（实测 8×12→8×13）：
+// 装饰偏半格、资源点相对地形错位、区域标记 (3,4) 的 id=40 被反解成 (3,1)。
+test('改棋盘尺寸时装饰、资源点、区域标记跟着地形一起位移', () => {
+    const { editor } = createEditor();
+    // `state()` 返回的是沙箱里（另一个 realm）的对象，数组原型不同 ⇒ `deepStrictEqual` 会怎么比都不等。
+    // 统一先转成本地结构再断言。
+    const plain = (value: any) => JSON.parse(JSON.stringify(value));
+    const regionCells = () => {
+        const s: any = editor.state();
+        return plain(s.regions.flatMap((group: any) => group.cells))
+            .map((id: number) => [Math.floor(id / s.cols), id % s.cols]);
+    };
+    const decorCell = () => {
+        const s: any = editor.state();
+        const cell = editor.cellAtLocal(s.freeDecor[0].x, s.freeDecor[0].y);
+        return cell ? [cell.row, cell.column] : null;
+    };
+    const build = () => {
+        // 关掉镜像：镜像会把 2 区复制到对侧，「全图唯一的 2 区」这个参照就不成立了。
+        editor.applyLayout({
+            version: 3, rows: 8, columns: 12, playerCount: 2, cityMode: 'select',
+            mirrorVertical: false, mirrorHorizontal: false,
+            ascii: Array(8).fill('NNNNNNNNNNNN'),
+        });
+        editor.paint(2, 3, 2);                 // 地形参照：唯一的 2 区
+        editor.paint(3, 4, 1);                 // 区域标记只认「属于该分区」的格
+        editor.setRegionBrush(1, 'front');
+        editor.paint(3, 4, 'region');
+        editor.addResourcePoint(5, 7, 'chest', 1);                      // (5,7) 仍是中立格
+        const center = editor.hexCenter(2, 3);
+        editor.addFreeDecor('image/decor/rock/a', center.x, center.y);   // 正压在 2 区上
+    };
+    const expectShift = (rowShift: number, columnShift: number) => {
+        const s: any = editor.state();
+        assert.deepEqual(
+            plain(s.resourcePoints).map((p: any) => [p.row, p.column]),
+            [[5 + rowShift, 7 + columnShift]], '资源点跟着格走');
+        assert.deepEqual(regionCells(), [[3 + rowShift, 4 + columnShift]], '区域标记的 id 按新列数重编');
+        assert.deepEqual(decorCell(), [2 + rowShift, 3 + columnShift], '装饰仍压在原来那块地形上');
+        // 地形本身也搬了同样的位移 —— 这是上面三条的参照系
+        let terrain: number[] | null = null;
+        s.grid.forEach((line: number[], row: number) => {
+            const column = line.indexOf(2);
+            if (column >= 0) terrain = [row, column];
+        });
+        assert.deepEqual(terrain, [2 + rowShift, 3 + columnShift], '地形参照格');
+    };
+
+    build();
+    assert.deepEqual(regionCells(), [[3, 4]], '铺场检查：区域标记在 (3,4)');
+
+    // 12 → 14 列：floor(14/2) - floor(12/2) = 1
+    editor.setSize(8, 14);
+    expectShift(0, 1);
+
+    // 8 → 10 行：floor(10/2) - floor(8/2) = 1
+    build();
+    editor.setSize(10, 12);
+    expectShift(1, 0);
+
+    // 缩小 12 → 10 列：columnShift = -1
+    build();
+    editor.setSize(8, 10);
+    expectShift(0, -1);
+
+    // 改尺寸是一步可撤销的历史
+    editor.undo();
+    const restored: any = editor.state();
+    assert.deepEqual([restored.rows, restored.cols], [8, 12], '一次撤销回到改尺寸前');
+    assert.deepEqual(plain(restored.resourcePoints).map((p: any) => [p.row, p.column]), [[5, 7]]);
+    assert.deepEqual(regionCells(), [[3, 4]]);
+});

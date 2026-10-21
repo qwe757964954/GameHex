@@ -1,29 +1,7 @@
 /**
- * 主界面右下角「聊天」入口按钮（`assets/resources/ui/main/ArenaRoot.prefab`（竞技页）根下 `ChatEntry`）。
- *
- * ⚠️ 2026-09-24：入口按钮连同资源栏、左右入口列一起从 `MainRoot.prefab`（主界面外壳）
- * **搬到 `ArenaRoot`**，归为「竞技页自己的常驻 HUD」—— 切到角色页时随 ArenaRoot 一起销毁，
- * 表现就是「只在竞技页显示」。
- *
- * 版面真源 = 老端 FGUI `战斗_主界面/组件/战斗_主界面.xml` 的 `聊天` 组件：
- * 外层 100×100、内层按钮 90×100（`xy=(5,0)`，在 100 宽里水平居中）、
- * 图标 `zjm_icon03_LiaoTian`（已落 `image/chat/ct_main_chat.png`，实测 90×100，非九宫）、
- * 红点 `com_rd` 在 `xy=(69,1)`（30×30 组件 ⇒ 中心相对外框中心 = `(+34, +34)`）。
- *
- * ## 为什么不是 `open.json` 的数据驱动入口
- *
- * 策划表里 `refId=13` 那行是 `belond = 0`（左列 2 / 右列 3 之外），
- * 老端就是因为它是「右下角固定悬浮按钮」才不放进左右两列的。
- * 所以这里**手挂**一个按钮，而不是去改表 —— 改表会把它塞进左/右列，位置就错了。
- *
- * 位置用 `cc.Widget` 的 `alignFlags = RIGHT | BOTTOM` + `right = 15 / bottom = 152`
- * 表达（与老端 `sidePair="bottom-bottom"` 同义）：换机型高度变化时贴着右下角走，
- * 不要写成固定 `position` —— 那样在更高的机型上会飘到屏幕中间。
- *
- * ## 红点
- *
- * 按既定口径「红点统一后面做」：`RedDot` 节点在 prefab 里**保持隐藏**，
- * 本类只把引用留好（`setRedDot`），不主动点亮，也不在 `onLoad` 里强改它的 `active`。
+ * 主界面底部聊天条的点击入口（ArenaRoot/BottomHud/ChatBar）。
+ * 通过 PopupManager 打开聊天页，复用同类弹窗单实例规则。
+ * 红点由宿主按需提供；当前底部聊天条没有红点节点。
  */
 
 import { _decorator, Button, Component, Node } from 'cc';
@@ -36,9 +14,9 @@ const { ccclass, property } = _decorator;
 export class ChatEntryButton extends Component {
     @property({
         type: Node,
-        tooltip: 'RedDot：红点占位（本轮不接，节点在 prefab 里保持隐藏）。接红点时用 setRedDot() 显隐。',
+        tooltip: 'Optional notification dot supplied by the host',
     })
-    redDot: Node = null!;
+    redDot: Node | null = null;
 
     onLoad(): void {
         const button = this.node.getComponent(Button);

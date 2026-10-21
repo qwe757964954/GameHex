@@ -10,7 +10,6 @@ type Result = 'ok' | 'offline' | 'failed' | 'protocol-missing' | 'busy';
 type TreasureInfo = CmdNewTreasureInfo;
 type ChestChangeListener = (slots: readonly IChestSlotData[]) => void;
 
-const SECONDS_PER_MINUTE = 60;
 const BOX_NAME_PREFIX = '宝箱';
 const READ_TIMEOUT_MS = 3000;
 const WRITE_TIMEOUT_MS = 5000;
@@ -34,13 +33,20 @@ class RequestNewTreasureOpen extends RequestMsg<CmdNewTreasureOpenReqMsg, CmdNew
 
 interface IBoxConfig {
     readonly cardBoxID: number;
+    /** 激活后的等待时长，单位为秒。 */
     readonly cardBoxOpenTime: number;
+}
+
+interface IBoxItemConfig {
+    readonly resId: number;
+    readonly name: string;
 }
 
 /** 新宝箱服务端状态和旧版 ChestBar 之间的适配层。 */
 export class NewTreasureRepository {
     private readonly infos = new Map<number, TreasureInfo>();
     private readonly configs = new Map<number, IBoxConfig>();
+    private readonly names = new Map<number, string>();
     private readonly eventCaller = {};
     private readonly pendingActions = new Set<string>();
     private changeListener: ChestChangeListener | null = null;
@@ -50,10 +56,12 @@ export class NewTreasureRepository {
     get slots(): readonly IChestSlotData[] {
         const nowSeconds = Math.floor(Date.now() / 1000);
         return Array.from({ length: CHEST_SLOT_COUNT }, (_, slot) => {
-            const info = this.infos.get(slot);
+            // 界面数组为 0～3，协议槽位固定为 1～4；出站请求始终保留服务端下标。
+            const index = slot + 1;
+            const info = this.infos.get(index);
             if (!info || info.cardBoxID <= 0) {
                 return {
-                    index: slot,
+                    index,
                     state: ChestSlotState.Empty,
                     name: '',
                     remainSeconds: 0,
@@ -64,13 +72,14 @@ export class NewTreasureRepository {
             }
 
             const config = this.configs.get(info.cardBoxID);
-            const durationSeconds = Math.max(0, (config?.cardBoxOpenTime ?? 0) * SECONDS_PER_MINUTE);
+            const durationSeconds = Math.max(0, config?.cardBoxOpenTime ?? 0);
+            const name = this.names.get(info.cardBoxID) ?? `${BOX_NAME_PREFIX}${info.cardBoxID}`;
             if (info.openTime <= 0) {
                 return {
                     index: info.index,
                     state: ChestSlotState.Ready,
-                    name: `${BOX_NAME_PREFIX}${info.cardBoxID}`,
-                    remainSeconds: 0,
+                    name,
+                    remainSeconds: durationSeconds,
                     totalSeconds: durationSeconds,
                     action: ChestSlotAction.Activate,
                     cost: 0,
@@ -81,7 +90,7 @@ export class NewTreasureRepository {
             return {
                 index: info.index,
                 state: remainSeconds > 0 ? ChestSlotState.Counting : ChestSlotState.Ready,
-                name: `${BOX_NAME_PREFIX}${info.cardBoxID}`,
+                name,
                 remainSeconds,
                 totalSeconds: durationSeconds,
                 action: remainSeconds > 0 ? ChestSlotAction.SpeedUp : ChestSlotAction.Open,
@@ -157,9 +166,10 @@ export class NewTreasureRepository {
 
     async open(index: number): Promise<Result> {
         if (!this.isValidIndex(index)) return 'failed';
-        const protoMgr = GameNet.instance.protoMgr;
-        if (protoMgr?.getMessageId('CmdNewTreasureOpenReqMsg') == null) return 'protocol-missing';
         if (!GameNet.instance.isConnected) return 'offline';
+        const protoMgr = GameNet.instance.protoMgr;
+        // 请求号由响应枚举建立映射；未提供开箱响应号时不发送无法匹配的请求。
+        if (protoMgr?.getMessageId('CmdNewTreasureOpenReqMsg') == null) return 'protocol-missing';
         return this.withPendingAction(index, 'open', async () => {
             let succeeded = false;
             const result = await this.send(
@@ -206,10 +216,18 @@ export class NewTreasureRepository {
 
     private async loadConfig(): Promise<void> {
         if (this.configs.size > 0) return;
-        const rows = await RefUtil.instance.getRefAllAsync('newTreasureBoxConfig') as IBoxConfig[] | null;
+        const [rows, items] = await Promise.all([
+            RefUtil.instance.getRefAllAsync('newTreasureBoxConfig') as Promise<IBoxConfig[] | null>,
+            RefUtil.instance.getRefAllAsync('item') as Promise<IBoxItemConfig[] | null>,
+        ]);
         for (const row of rows ?? []) {
             if (Number.isSafeInteger(row.cardBoxID) && row.cardBoxID > 0) {
                 this.configs.set(row.cardBoxID, row);
+            }
+        }
+        for (const item of items ?? []) {
+            if (this.configs.has(item.resId) && typeof item.name === 'string' && item.name.trim()) {
+                this.names.set(item.resId, item.name.trim());
             }
         }
     }
@@ -234,7 +252,7 @@ export class NewTreasureRepository {
     }
 
     private isValidIndex(index: number): boolean {
-        return Number.isSafeInteger(index) && index >= 0 && index < CHEST_SLOT_COUNT;
+        return Number.isSafeInteger(index) && index >= 1 && index <= CHEST_SLOT_COUNT;
     }
 
     private isValidInfo(info: TreasureInfo): boolean {

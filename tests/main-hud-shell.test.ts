@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { resolveChestPanelX } from '../assets/script/app/main/MainHudMotion';
@@ -45,6 +46,9 @@ test('MainRoot 底部导航实例按 tabType 绑定类型与自身两态图标',
     });
     const navItems = instances;
     assert.equal(navItems.length, 7);
+    const sharedLabel = load('assets/resources/ui/common/TabButton.prefab')
+        .find((entry) => entry.__type__ === 'cc.Label');
+    assert.ok(sharedLabel, '共用页签必须提供名称 Label');
     const expected: Record<string, { type: number; icon: string }> = {
         Shop: { type: 0, icon: 'nav_shop' },
         Hero: { type: 1, icon: 'nav_hero' },
@@ -59,6 +63,15 @@ test('MainRoot 底部导航实例按 tabType 绑定类型与自身两态图标',
         const specification = expected[name];
         assert.ok(specification, `未知主城 tab 实例 ${name}`);
         assert.equal(overrideOf(item, MAIN_ROOT, 'tabType'), specification.type, `${name} 的 tabType`);
+        assert.deepEqual(overrideOf(item, MAIN_ROOT, 'onLabelColor'),
+            { __type__: 'cc.Color', r: 255, g: 255, b: 255, a: 255 }, `${name} 选中后保留白字`);
+        assert.equal(overrideOf(item, MAIN_ROOT, 'iconRaiseY'), 12, `${name} 选中后图标上抬 12px`);
+        assert.equal(overrideOf(item, MAIN_ROOT, '_isBold') ?? sharedLabel._isBold,
+            true, `${name} 名称使用粗体`);
+        assert.equal(overrideOf(item, MAIN_ROOT, '_enableOutline') ?? sharedLabel._enableOutline,
+            true, `${name} 名称使用描边`);
+        assert.equal(overrideOf(item, MAIN_ROOT, '_outlineWidth') ?? sharedLabel._outlineWidth,
+            3, `${name} 名称描边宽度`);
         const iconMeta = JSON.parse(readFileSync(`assets/resources/image/main/city/${specification.icon}.png.meta`, 'utf8')) as { uuid: string };
         const expectedFrame = `${iconMeta.uuid}@f9941`;
         for (const property of ['offIcon', 'onIcon']) {
@@ -69,6 +82,13 @@ test('MainRoot 底部导航实例按 tabType 绑定类型与自身两态图标',
     const host = readFileSync('assets/script/app/main/MainTabHost.ts', 'utf8');
     assert.match(host, /button\.tabType/);
     assert.doesNotMatch(host, /loadNavArt/);
+});
+
+test('角色使用蓝湖蓝色建筑切图，不能把旧头盔改名后继续使用', () => {
+    const icon = readFileSync('assets/resources/image/main/city/nav_role.png');
+    // 用户提供的 zjm_icon_sj.png 原图；角色与世界复用建筑外观，锁定状态由页签控制。
+    assert.equal(createHash('sha256').update(icon).digest('hex'),
+        '1077f09508803f8966e2e7da382749b664310d8eeb2cccbf9407ff713b258f96');
 });
 
 test('TopHud 接上主界面玩家数据渲染组件', () => {

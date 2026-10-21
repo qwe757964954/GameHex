@@ -8,52 +8,14 @@ import { MAIN_TASK_TEXTS } from './MainTaskTexts';
 const { ccclass, property } = _decorator;
 
 /**
- * 主界面「主线任务」入口 —— 老端 FGUI `主界面_战斗/组件/关卡/组件_战斗_主线任务.xml`
- * （本体 225×84，实例在 `组件_战斗_章节选择` 里被覆写成 **231×84**）。
- *
- * 装配代码与「10级领取」在**同一个方法**里（`GObjChapterSelect.onMainTaskChange()`），
- * 一前一后：
- *
- * ```js
- * let first = ModelVO.VOMainTaskBag.GetFirstVO();            // ← 本组件
- * com_mainTask.tm("lab_task").setText(`${first.GetTitle()}\n(${first.GetValue()}/${first.GetMaxValue()})`)
- * com_mainTask.setClick(() => {
- *     if (first.CanBeReward()) { CtrlMainTask.RequestReward(first.GetCmd().resId) }  // 可领 ⇒ 直接领
- *     else { CtrlMainTask.OpenTaskDetail() }                                        // 否则 ⇒ 弹详情
- * }, this)
- * reddot.OnRDUpdate(canReward ? 1 : 0)                       // 只有可领才亮
- * com_mainTask.visible = true / false
- *
- * let heroTaskVo = ModelVO.VOMainTaskBag.GetHeroVO();        // ← 「10级领取」（GetHeroEntry）
- * ```
- *
- * ## 与「10级领取」的三点区别（别把两个组件混成一个）
- *
- * | | 本组件 | `GetHeroEntry`（10级领取） |
- * |---|---|---|
- * | 数据源 | `GetFirstVO()` —— 排除 `targetType = 99`、按 `preResId` 升序 | `GetHeroVO()` —— **只要** `targetType = 99` |
- * | 缓存缺失时 | 选不出来 ⇒ **整块隐藏** | 兜底 `EMPTY_TASK_STATE` ⇒ 显示 `(0/10)` |
- * | 点击 | 可领 ⇒ 领奖；否则 ⇒ **弹详情弹窗** | 可领 ⇒ 领奖；否则 ⇒ 弹**奖励物品**详情 |
- *
- * ## ⚠️ 显隐归属（别加 `onEnable` 自动刷新）
- *
- * 与 `GetHeroEntry` / `ChatEntryButton` / `HangEntryButton` / `OSRankEntryButton` 同一口径：
- * 宿主 `ArenaRoot`（竞技页）由 `MainTabHost.showPage()` **整页实例化 / 销毁**
- * （`MainTabHost.ts:112`）⇒ 每次切回竞技 tab，`onLoad` 都会重跑一次 `refresh()`。
- * 本组件**自己**写 `node.active`（`applySnapshot` 里无条件写，规则 82/86）；
- * 若在 `onEnable` 里再调 `refresh()` 会形成互相触发，而且**隐藏之后就再也没人把它点亮**
- * （`applySnapshot` 在 inactive 时不执行）。
- *
- * ## prefab 上的两条硬约束
- *
- * · 本节点 `_active` **必须烘 `true`**（规则 86）：`onLoad` 只在激活时跑，而 `refresh()`
- *   就在 `onLoad` 里 —— 烘 `false` = 永不刷新的死锁，且一条错都不报。
- * · 根节点是 FGUI `<component extention="Button">` ⇒ 迁过来**有** `cc.Button`；
- *   但代码仍按「有没有 `cc.Button`」分流（规则 81b），`<loader>` 型节点换过来也不会踩死按钮。
+ * 主界面左侧任务入口，挂在 BottomHud 下随底部安全区域布局。
+ * 可领取时直接领奖，否则打开详情；红点与显隐继续由任务快照驱动。
+ * 根节点必须初始激活，让 onLoad 能加载快照；不在 onEnable 重复刷新，
+ * 避免 applySnapshot 的显隐赋值反复触发加载。
  */
 @ccclass('MainTaskEntry')
 export class MainTaskEntry extends Component {
-    @property({ type: Label, tooltip: 'Label：两行文案「任务名\\n(x/y)」（老端 `lab_task`）' })
+    @property({ type: Label, tooltip: 'Label: task entry title' })
     label: Label = null!;
 
     @property({ type: Node, tooltip: 'RedDot：可领取红点（只有 `FINISH` 才亮）' })
@@ -95,8 +57,8 @@ export class MainTaskEntry extends Component {
      */
     applySnapshot(snapshot: IMainTaskSnapshot): void {
         this.node.active = snapshot.visible;
-        // 无条件写（规则 82）：入口只有两行文案，`string` 赋值零成本。
-        if (this.label) this.label.string = snapshot.configured ? snapshot.entryLabel : '';
+        // 入口固定显示短标题，任务名与进度由详情弹窗展示。
+        if (this.label) this.label.string = snapshot.configured ? MAIN_TASK_TEXTS.entryLabel : '';
         if (this.redDot) this.redDot.active = snapshot.showRedDot;
     }
 

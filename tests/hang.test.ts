@@ -16,10 +16,8 @@
  *   D. **数据管道接线**（源码文本）—— 四条协议名 + `MessageId`、缓存读法、超时兜底、
  *      入口 / 弹窗口径、`CacheMgr` 生成的 `getTl*` 方法名。
  *   E. **文案表**。
- *   F. **主界面「征收」入口（HUD）** —— 挂在 `ui/main/ArenaRoot.prefab` 上、**不**走
- *      `open.url` 白名单。守三件「改错了不报错」的事：`_active` 必须烘 `true`（否则
- *      `onLoad` 死锁）、`_children` 序 = FGUI displayList 序、`Btn` 是 `scaleFree`
- *      缩出来的 100×90.27（不是 100×100）。
+ *   F. **主城金币车入口（HUD）** —— 复用原挂机组件，守卫新入口点击接线、
+ *      累计时长、整体命中范围、视觉位置与旧 HangEntry 节点删除。
  *
  * ## ⚠️ 为什么判定必须在 `HangTable` 里（而不是 `HangRepository`）
  *
@@ -2025,29 +2023,16 @@ test('文案表的键集合稳定（增删键要让每条用途都还有人用�
 // F. 主界面「征收」入口（HUD，**不是** open.json 入口）
 // ============================================================
 //
-// 这个入口长在**主界面**（老端 `组件_战斗_章节选择` 里的 `快速扫荡` 节点），点下去才开
-// `HangPage`。它和 `ChatEntry` 是同一类「竞技页常驻 HUD」⇒ 挂在
-// `assets/resources/ui/main/ArenaRoot.prefab` 根下，靠 `cc.Widget(LEFT|BOT)` 定位，
-// **不**走 `open.url` 白名单（理由见 D 段「征收不走 open.url 路由」那条）。
-//
-// 版面真源是**三级嵌套**，缺一级就偏：
-//   主界面 720×1280 → `组件_章节选择` `xy=(0,196) size=720×1000` → `快速扫荡`
-//   `xy=(17,800) size=100×131` + `<gearDisplay controller="有无扫荡" pages="1"/>`
-// ⇒ 屏上 `left = 17`、`bottom = 1280 − (196 + 800 + 131) = 153`（与 `ChatEntry` 的 152 同一条底线）。
-// ⚠️ 别只看本体 `组件_战斗_快速扫荡.xml` 的 `size=100,120` —— 它被实例覆写成 100×131。
+// 主城 BottomHud 左下角金币车复用原挂机入口组件。
+// 此处守卫打开接线、整体命中区、原视觉位置、累计时长，以及旧节点确实被删除。
 
 const ARENA_PATH = 'assets/resources/ui/main/ArenaRoot.prefab';
 
 /** `HangEntryButton.ts.meta` 的 uuid 压缩出来的 cid（`compressUuid` 定义在 C 段）。 */
 const ENTRY_CID = '10ef5PuHu1JN556yrBvqD60';
 
-/**
- * 入口子树的根路径。
- *
- * ⚠️ 节点表的 key **带根名**（与 Hang 那边的 `Hang/PopBg` 同一口径）—— 写成裸 `HangEntry`
- * 会「一层都没匹配上」，症状是每条用例都报「里没有节点 HangEntry」。
- */
-const ENTRY = 'ArenaRoot/HangEntry';
+/** 节点表使用包含 ArenaRoot 根名的完整路径。 */
+const ENTRY = 'ArenaRoot/BottomHud/HangRewardEntry';
 
 /** `ENTRY` 下的子节点路径。 */
 function entryChild(name: string): string {
@@ -2096,10 +2081,6 @@ function aCompOfType(path: string, type: string): Record<string, unknown> {
     return hit!;
 }
 
-function aHasCompType(path: string, type: string): boolean {
-    return aCompsOf(path).some((comp) => comp && comp.__type__ === type);
-}
-
 function aSizeOf(path: string): { w: number; h: number } {
     const size = aCompOfType(path, 'cc.UITransform')._contentSize as { width: number; height: number };
     return { w: size.width, h: size.height };
@@ -2110,166 +2091,71 @@ function sameNum(a: number, b: number): boolean {
     return Math.abs(a - b) < 1e-9;
 }
 
-test('⚠️ 入口挂在 `ArenaRoot` 根下，且是**最后一个**子节点（`_children` 序 = 渲染序）', () => {
-    const kids = ((aNode('ArenaRoot')._children as Array<{ __id__: number }>) ?? []).map(
-        (ref) => String(ARENA[ref.__id__]!._name),
-    );
-    assert.ok(kids.includes('HangEntry'), `ArenaRoot 根下应有 HangEntry，实际：${kids.join(', ')}`);
-    assert.equal(kids[kids.length - 1], 'HangEntry', '入口要压在既有 HUD 之上（渲染最上层）');
-    // 它和 `ChatEntry` 同类：都是竞技页常驻 HUD、都在根下；`EntranceLayer` 才是数据驱动的入口列
-    assert.ok(kids.includes('ChatEntry'), '`ChatEntry` 是同类 HUD，应当也还在根下');
-    assert.equal(kids.includes('EntranceLayer'), true, '`EntranceLayer` 不能被改动');
-
-    // ⚠️ 层序 = FGUI `组件_战斗_快速扫荡` 的 displayList 序
-    //    （`按钮 → n61(底板) → 文本 → com_rd`）。写反了**不报错**：
-    //    `Bg` 提前会把图标下沿盖住、`TimeText` 提前会被底板盖住。
+test('金币车接管挂机奖励入口，旧 HangEntry 节点与重复组件被移除', () => {
+    assert.equal(ARENA_NODES.some((node) => node._name === 'HangEntry'), false);
+    assert.equal(ARENA.filter((entry) => entry.__type__ === ENTRY_CID).length, 1);
     assert.deepEqual(
-        ((aNode(ENTRY)._children as Array<{ __id__: number }>) ?? []).map((ref) => String(ARENA[ref.__id__]!._name)),
-        ['Btn', 'Bg', 'TimeText', 'RedDot'],
+        ((aNode(ENTRY)._children as Array<{ __id__: number }>)).map((ref) => ARENA[ref.__id__]!._name),
+        ['HangIcon', 'HangBg', 'HangTime', 'RedDot'],
     );
+    assert.equal(aNode(ENTRY)._active, true, '初始激活才能执行 onLoad 并判断挂机解锁状态');
+    assert.equal(aNode(entryChild('RedDot'))._active, false);
 });
 
-test('⚠️ 入口子树：全 UI_2D、组件序固定、脚本 cid 双向可反解（防 `MissingScript`）', () => {
-    for (const path of [ENTRY, entryChild('Btn'), entryChild('Bg'), entryChild('TimeText'), entryChild('RedDot')]) {
-        assert.equal(aNode(path)._layer, 33554432, `${path} 的 layer 不是 UI_2D ⇒ 整棵子树不渲染`);
+test('金币车整体有按钮与挂机入口组件，图标和时间共享点击区', () => {
+    const meta = JSON.parse(readFileSync('assets/script/app/hang/HangEntryButton.ts.meta', 'utf8')) as { uuid: string };
+    assert.equal(compressUuid(meta.uuid), ENTRY_CID);
+    assert.deepEqual(aCompsOf(ENTRY).map((component) => component.__type__), [
+        'cc.UITransform', 'cc.Button', ENTRY_CID,
+    ]);
+    assert.deepEqual(aSizeOf(ENTRY), { w: 150, h: 160 });
+    assert.equal(aCompOfType(ENTRY, 'cc.Button')._interactable, true);
+    for (const name of ['HangIcon', 'HangBg', 'HangTime', 'RedDot']) {
+        assert.equal(aNode(entryChild(name))._layer, 33554432);
     }
-    assert.deepEqual(
-        aCompsOf(ENTRY).map((comp) => comp.__type__),
-        ['cc.UITransform', 'cc.Widget', 'cc.Button', ENTRY_CID],
-        '先布局（UITransform/Widget）再交互（Button），脚本最后',
-    );
-    assert.deepEqual(aCompsOf(entryChild('Btn')).map((c) => c.__type__), ['cc.UITransform', 'cc.Sprite']);
-    assert.deepEqual(aCompsOf(entryChild('Bg')).map((c) => c.__type__), ['cc.UITransform', 'cc.Sprite']);
-    assert.deepEqual(aCompsOf(entryChild('TimeText')).map((c) => c.__type__), ['cc.UITransform', 'cc.Label']);
-    assert.deepEqual(aCompsOf(entryChild('RedDot')).map((c) => c.__type__), ['cc.UITransform', 'cc.Sprite']);
-
-    // ⚠️ `__scriptAsset` 是编辑器注入的运行时属性、**不落盘** ⇒ 唯一能证明「脚本接对了」的判据
-    //    就是 cid ↔ `.ts.meta.uuid` 互相反解。
-    const metaUuid = (JSON.parse(readFileSync('assets/script/app/hang/HangEntryButton.ts.meta', 'utf8')) as {
-        uuid: string;
-    }).uuid;
-    assert.equal(compressUuid(metaUuid), ENTRY_CID, '`ENTRY_CID` 与 `.ts.meta` 反解值必须一致（抄错就是 MissingScript）');
-    assert.equal(
-        ARENA.some((entry) => entry && String(entry.__type__).includes('Missing')),
-        false,
-        '出现了 `cc.MissingScript`',
-    );
+    assert.equal(aNode(ENTRY)._layer, 33554432);
+    assert.equal(ARENA.some((entry) => String(entry.__type__).includes('Missing')), false);
 });
 
-test('⚠️ 几何：`HangEntry` 100×131 + `Widget(LEFT|BOT)` 17 / 153（三级嵌套反解）', () => {
-    assert.deepEqual(aSizeOf(ENTRY), { w: 100, h: 131 }, '实例把本体声明的 100×120 覆写成 100×131');
-    const widget = aCompOfType(ENTRY, 'cc.Widget');
-    // AlignFlags: TOP=1 / MID=2 / BOT=4 / LEFT=8 / CENTER=16 / RIGHT=32 ⇒ 8|4 = 12
-    assert.equal(widget._alignFlags, 12, 'LEFT(8) | BOT(4)');
-    assert.equal(widget._left, 17, 'FGUI `xy=(17,800)` 的 x —— 参照系是 720 宽的 `组件_章节选择`，正好等于左距');
-    // 1280 − (196 + 800 + 131) = 153；⚠️ 别把 800 直接当屏坐标
-    assert.equal(widget._bottom, 153, '底边距屏底 = 153（与 `ChatEntry` 的 152 同一条底线）');
-    assert.equal(widget._alignMode, 2, 'ALWAYS —— 切分辨率立刻重算');
-    assert.equal(widget._target, null, '对齐父节点');
-
-    // 存盘位置也要对：`Widget` 只在运行时覆盖，存盘值错会让「没跑 Widget 的预览」偏位
-    const pos = aNode(ENTRY)._lpos as { x: number; y: number; z: number };
-    assert.ok(sameNum(pos.x, 17 + 50 - 360), `lpos.x 应为 left + 半宽 − 半画布 = −293，实际 ${pos.x}`);
-    assert.ok(sameNum(pos.y, 153 + 65.5 - 640), `lpos.y 应为 bottom + 半高 − 半画布 = −421.5，实际 ${pos.y}`);
-    assert.equal(pos.z, 0);
-});
-
-test('⚠️ 子树几何逐条反解回 FGUI XML 原值（局部系 100×131、y 向下）', () => {
-    // FGUI `组件_战斗_快速扫荡.xml` displayList 的 `xy` + `size` ⇒ 换算 `lpos = (中心x − 50, 65.5 − 中心y)`
-    const kids: ReadonlyArray<readonly [string, number, number, number, number, number, number]> = [
-        // 节点, lposX, lposY, 宽, 高, FGUI 中心x, FGUI 中心y
-        ['Btn', 0, -11.5, 100, 102 * 100 / 113, 50, 77],
-        ['Bg', -0.5, -48.5, 163, 30, 49.5, 114],
-        ['TimeText', 0, -48.5, 107, 29, 50, 114],
-        ['RedDot', 36, 49.5, 30, 30, 86, 16],
+test('分组后金币车、底板与时间保持蓝湖位置，并完整落在按钮范围内', () => {
+    const root = aNode(ENTRY)._lpos as { x: number; y: number };
+    const expected: ReadonlyArray<readonly [string, number, number, number, number]> = [
+        ['HangIcon', -279.5, 156.5, 125, 111],
+        ['HangBg', -280, 100.5, 122, 23],
+        ['HangTime', -281, 104, 110, 30],
     ];
-    for (const [name, lx, ly, w, h, cx, cy] of kids) {
-        const path = entryChild(name);
-        const pos = aNode(path)._lpos as { x: number; y: number };
-        assert.ok(sameNum(pos.x, lx) && sameNum(pos.y, ly), `${path} 的 _lpos 应为 (${lx}, ${ly})，实际 (${pos.x}, ${pos.y})`);
-        const size = aSizeOf(path);
-        assert.ok(sameNum(size.w, w) && sameNum(size.h, h), `${path} 的尺寸应为 ${w}×${h}，实际 ${size.w}×${size.h}`);
-        // ⚠️ 反解回 FGUI 中心才是「没偏」的硬判据 —— 只比 `lpos` 会被「自己也抄错一次」骗过
-        assert.ok(
-            sameNum(pos.x + 100 / 2, cx) && sameNum(131 / 2 - pos.y, cy),
-            `${path} 反解回 FGUI 局部中心应为 (${cx}, ${cy})，实际 (${pos.x + 50}, ${65.5 - pos.y})`,
-        );
-        const anchor = aCompOfType(path, 'cc.UITransform')._anchorPoint as { x: number; y: number };
-        assert.deepEqual([anchor.x, anchor.y], [0.5, 0.5], `${path} 的 anchor 不是中心`);
+    for (const [name, x, y, width, height] of expected) {
+        const position = aNode(entryChild(name))._lpos as { x: number; y: number };
+        assert.ok(sameNum(root.x + position.x, x), `${name} 横向位置变化`);
+        assert.ok(sameNum(root.y + position.y, y), `${name} 纵向位置变化`);
+        assert.deepEqual(aSizeOf(entryChild(name)), { w: width, h: height });
+        assert.ok(Math.abs(position.x) + width / 2 <= 75, `${name} 超出横向点击范围`);
+        assert.ok(Math.abs(position.y) + height / 2 <= 80, `${name} 超出纵向点击范围`);
     }
-    // ⚠️ `Btn` 的高是 `scaleFree`(contain) 算出来的：容器 100×100、贴图 113×102 ⇒ 100/113×102
-    //    写 100×100 会让图标纵向拉伸 11%（而这是**不报错**的）
-    assert.ok(
-        sameNum(aSizeOf(entryChild('Btn')).h, 102 * 100 / 113),
-        `Btn 高应为 90.2655，实际 ${aSizeOf(entryChild('Btn')).h}`,
-    );
-});
-
-test('⚠️ 入口三张图：uuid / `_type` / `_sizeMode` 全对上（底板必须是九宫）', () => {
-    const uuidAt = (path: string): string => {
-        const sprite = aCompOfType(path, 'cc.Sprite');
-        const ref = sprite._spriteFrame as { __uuid__?: string } | null;
-        assert.ok(ref && ref.__uuid__, `${path} 没有 spriteFrame`);
-        return ref.__uuid__!;
-    };
-    // 按钮脸：`zjm_icon03_ZhengShou`（**非**九宫，别照抄信息底）
-    assert.equal(uuidAt(entryChild('Btn')), spriteMeta(HJ_ART_DIR, HJ_ART_NAMES.entryIcon).uuid);
-    assert.equal(aCompOfType(entryChild('Btn'), 'cc.Sprite')._type, 0, '按钮脸不是九宫');
-    // 文案底板：`战斗选关_九宫_信息底01`（九宫 20,7,20,9）—— `_type` 漏写只是「整张被拉伸」，不报错
-    assert.equal(uuidAt(entryChild('Bg')), spriteMeta(HJ_ART_DIR, HJ_ART_NAMES.entryBg).uuid);
-    assert.equal(aCompOfType(entryChild('Bg'), 'cc.Sprite')._type, 1, '底板必须 SLICED');
-    // 红点：照抄 `ChatEntry/RedDot` —— 同一张 30×30 占位图，**不是**嵌套 `ui/common/RedDot.prefab` 实例
-    assert.equal(uuidAt(entryChild('RedDot')), uuidAt('ArenaRoot/ChatEntry/RedDot'), '红点占位图应与 ChatEntry 同一张');
-    assert.equal(uuidAt(entryChild('RedDot')), spriteMeta('assets/resources/image/common', 'cm_red_dot').uuid);
-    assert.equal(aCompOfType(entryChild('RedDot'), 'cc.Sprite')._type, 0);
-    assert.equal(aHasCompType(entryChild('RedDot'), 'cc.Button'), false, '红点不是按钮');
-    for (const name of ['Btn', 'Bg', 'RedDot']) {
-        assert.equal(aCompOfType(entryChild(name), 'cc.Sprite')._sizeMode, 0, `${name} 的 _sizeMode 必须是 CUSTOM(0)`);
+    for (const name of ['HangIcon', 'HangBg']) {
+        const sprite = aCompOfType(entryChild(name), 'cc.Sprite');
+        assert.ok(sprite._spriteFrame, `${name} 必须保留现有主界面美术`);
+        assert.equal(sprite._isTrimmedMode, false);
     }
 });
 
-test('⚠️ 时长文案 Label 7 项口径（FGUI `文本_快速扫荡章节` 20 号白字居中）', () => {
-    const label = aCompOfType(entryChild('TimeText'), 'cc.Label');
-    // ⚠️ 初值就是 `00:00:00`：FGUI 里那个 `第{zhang=1}章第{guan=1}关` 是**废弃模板**，
-    //    老端 `onTimeLoop()` 真正写进去的是「累计挂机时长」（见 `HangEntryButton` 文件头）。
-    assert.equal(label._string, '00:00:00');
-    assert.equal(label._fontSize, 20);
-    assert.deepEqual(label._color, { __type__: 'cc.Color', r: 255, g: 255, b: 255, a: 255 }, '白字');
-    assert.equal(label._horizontalAlign, 1, 'CENTER');
-    assert.equal(label._verticalAlign, 1, 'CENTER');
-    assert.equal(label._overflow, 2, 'SHRINK —— 8 位数刚好塞进 107 宽');
-    assert.equal(label._enableWrapText, false, 'SHRINK + 折行会挤成两行');
-});
-
-test('⚠️ `@property` 接线：`shakeNode` / `redDot` 指向**节点**、`timeLabel` 指向 **cc.Label 组件**', () => {
-    const script = aCompsOf(ENTRY).find((comp) => comp.__type__ === ENTRY_CID);
-    assert.ok(script, '`HangEntry` 上没有 `HangEntryButton`');
+test('挂机组件绑定新金币车与计时 Label，预留红点仍由原组件管理', () => {
+    const script = aCompOfType(ENTRY, ENTRY_CID);
     const deref = (value: unknown): Record<string, unknown> => ARENA[(value as { __id__: number }).__id__]!;
-
-    const shake = deref(script!.shakeNode);
-    assert.equal(shake.__type__, 'cc.Node');
-    assert.equal(shake._name, 'Btn', '摇摆对象是 FGUI `按钮_快速扫荡`（`t0` 转的就是它），不是根节点');
-
-    const dot = deref(script!.redDot);
-    assert.equal(dot.__type__, 'cc.Node');
-    assert.equal(dot._name, 'RedDot');
-
-    // ⚠️ 组件引用必须指向**组件**本身：指向节点时 tsc 会红，但手改 JSON 就会**静默失效**
-    const time = deref(script!.timeLabel);
-    assert.equal(time.__type__, 'cc.Label');
-    assert.equal(deref(time.node)._name, 'TimeText');
+    assert.equal(deref(script.shakeNode), aNode(entryChild('HangIcon')));
+    assert.equal(deref(script.redDot), aNode(entryChild('RedDot')));
+    const label = deref(script.timeLabel);
+    assert.equal(label.__type__, 'cc.Label', '必须绑定组件，不能误绑定到节点');
+    assert.equal(deref(label.node), aNode(entryChild('HangTime')));
 });
 
-test('🔴 `HangEntry._active` 必须烘 `true`（烘 `false` ⇒ `onLoad` 永不执行 ⇒ 入口永不显示）', () => {
-    // `Component.onLoad` **只在节点被激活时才跑**，而 `refresh()` 在 `onLoad` 里 ⇒
-    // 照 FGUI 设计期默认页（「无」）烘 `false` 就是死锁：哪怕 `sweetLevel` 真有值也不会显示。
-    // 烘 `true` 后由 `applySnapshot()` 每趟**无条件**改写（规则 82）—— 见下一个用例。
-    assert.equal(aNode(ENTRY)._active, true, '烘 false 会让 onLoad 死锁');
-    assert.equal(aNode(entryChild('RedDot'))._active, false, '红点占位保持隐藏（老端从不点亮）');
-    assert.equal(aNode('ArenaRoot/ChatEntry/RedDot')._active, false, '既有口径：`ChatEntry/RedDot` 也是 `_active=false`');
-    for (const name of ['Btn', 'Bg', 'TimeText']) {
-        assert.equal(aNode(entryChild(name))._active, true, `${name} 要可见`);
-    }
+test('新入口累计时长使用黄色 24 号字，保持单行并从零初始化', () => {
+    const label = aCompOfType(entryChild('HangTime'), 'cc.Label');
+    assert.equal(label._string, '00:00:00');
+    assert.equal(label._fontSize, 24);
+    assert.deepEqual(label._color, { __type__: 'cc.Color', r: 234, g: 195, b: 37, a: 255 });
+    assert.equal(label._overflow, 2);
+    assert.equal(label._enableWrapText, false);
 });
 
 test('⚠️ `HangEntryButton` 源码口径（它 import `cc` ⇒ 只能读文本）', () => {
@@ -2289,7 +2175,7 @@ test('⚠️ `HangEntryButton` 源码口径（它 import `cc` ⇒ 只能读文�
     assert.match(code, /this\.node\.active = visible;/);
     assert.equal(/this\._visible\b/.test(code), false, '不许引入「上一次的可见性」缓存字段 —— 那就是「只在翻转时写」');
 
-    // ---- ② 点击：挂在**根节点**的 `cc.Button` 上（点击区 100×131 > `Btn` 的 100×90.27）----
+    // ---- ② 点击：挂在金币车容器的 cc.Button 上，覆盖图标和时间 ----
     assert.match(code, /this\.node\.getComponent\(Button\)/);
     assert.match(code, /button\.node\.on\(Button\.EventType\.CLICK, this\.onClick, this\);/);
     assert.match(code, /void HangPage\.open\(\);/);

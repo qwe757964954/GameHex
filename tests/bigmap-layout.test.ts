@@ -174,7 +174,7 @@ test('脏布局当场抛：越界 / 重复 / 重叠 / 外键不存在', () => {
             { cityId: 99999, anchorHexId: 0, hexIds: [0], ring: 0, rangeHex: [], adjacentCityIds: [], label: '99999' },
         ],
     };
-    assert.throws(() => buildBigMapWorldFromLayout(config, orphan), /不在 BigMap-城池配置 中/);
+    assert.throws(() => buildBigMapWorldFromLayout(config, orphan), /不在 bigmapCity 中/);
 });
 
 test('底稿透传：势力范围 / 相邻 / 编号 / 障碍 / 出生区块 / 据点不会被一次导出抹掉', () => {

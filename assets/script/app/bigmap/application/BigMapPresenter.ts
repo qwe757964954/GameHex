@@ -20,6 +20,7 @@ import {
     bigMapCanAfford,
     bigMapCanPlace,
     bigMapCancelQueue,
+    bigMapClampQueueUnlocked,
     bigMapHarvest,
     bigMapHarvestAll,
     bigMapMainBuilding,
@@ -30,6 +31,7 @@ import {
     bigMapStartBuild,
     bigMapStartUpgrade,
     bigMapTick,
+    bigMapUnlockQueue,
 } from '../model/BigMapBase';
 import {
     bigMapAttackCity,
@@ -53,6 +55,23 @@ import {
 import { bigMapHexDistance, buildBigMapWorld } from '../model/BigMapWorld';
 import { buildBigMapWorldFromLayout, type IBigMapLayout } from '../model/BigMapLayout';
 import { parseBigMapSave, serializeBigMapSave, type IBigMapSaveData } from '../model/BigMapSaveData';
+import {
+    bigMapCityAttackGate,
+    bigMapCityTimeline,
+    type BigMapCityPhase,
+    type IBigMapCityTimeline,
+} from '../model/BigMapCitySchedule';
+import {
+    buildBigMapCityRankBoard,
+    buildSoloRankBoard,
+    type IBigMapCityRankBoard,
+    type IBigMapRankProvider,
+} from '../model/BigMapRank';
+import {
+    bigMapSnapshotDue,
+    buildBigMapDaySnapshot,
+    type IBigMapDaySnapshot,
+} from '../model/BigMapSnapshot';
 
 /** 存储端口（`sys.localStorage` 由 application 适配器注入，Presenter 不 import 引擎）。 */
 export interface IBigMapStorage {
@@ -76,6 +95,8 @@ export interface IBigMapPresenterDeps {
      * 传了就**布局优先**：城池/野怪/基地的落位全部以它为准。
      */
     readonly layout?: IBigMapLayout | null;
+    /** 城池榜单来源（联机 = 服务器；缺省 = 本地 NPC 模拟）。 */
+    readonly rankProvider?: IBigMapRankProvider;
 }
 
 /**
@@ -169,6 +190,16 @@ export interface IBigMapCityView {
     readonly previewWarScore: number;
     readonly inRange: boolean;
     readonly damageCutPct: number;
+    /** 当前攻城日程阶段（顶栏/详情面板显示「可攻打 / 已锁榜 / 休战」）。 */
+    readonly phase: BigMapCityPhase;
+    /** 现在能不能打（= 已开放 + 日程放行）；`attackReason` 是打不了的具体原因。 */
+    readonly canAttack: boolean;
+    readonly attackReason: string;
+    /** 玩家在这座城的当前名次（喂名次系数；没刷新过榜单时按「独自一人」算 = 1）。 */
+    readonly playerRank: number;
+    /** 同时在打的人数（喂拥挤系数）。 */
+    readonly attackerCount: number;
+    readonly topWarScore: number;
 }
 
 export interface IBigMapMonsterView {
@@ -184,6 +215,16 @@ export interface IBigMapMonsterView {
     readonly respawnInSeconds: number;
 }
 
+/** 建造队列解锁状态（给 UI 显示「解锁第 2 条 · 货币 120」）。 */
+export interface IBigMapQueueUnlockInfo {
+    readonly current: number;
+    readonly max: number;
+    /** 下一条的价格（已满时为 0）。 */
+    readonly cost: number;
+    readonly canUnlock: boolean;
+    readonly reason: string;
+}
+
 /** 动作结果：`message` 直接丢给 toast，`ok=false` 时是失败原因。 */
 export interface IBigMapActionFeedback {
     readonly ok: boolean;
@@ -196,6 +237,8 @@ export class BigMapPresenter {
     private data: IBigMapSaveData;
     private version = 0;
     private readonly listeners = new Set<() => void>();
+    /** 城池榜单缓存：`cityId → board`。只在 `refreshCityRank` 里写，视图同步读。 */
+    private readonly rankBoards = new Map<number, IBigMapCityRankBoard>();
     private readonly deps: IBigMapPresenterDeps;
 
     constructor(deps: IBigMapPresenterDeps) {
@@ -274,12 +317,45 @@ export class BigMapPresenter {
 
     // -------------------------------------------------------------- 时间推进
 
-    /** 结算时间差（产出 / 队列 / 行动力）。`notify=false` 用于构造函数里那次静默结算。 */
+    /** 结算时间差（产出 / 队列 / 行动力）并顺手补当日快照。 */
     tick(notify = true): void {
         const result = bigMapTick(this.config, this.data.base, this.deps.now());
         this.applyBase(result.state);
-        if (result.completed.length > 0) this.persist();
-        if (notify) this.emit();
+        const snapshotted = this.refreshDaySnapshot();
+        if (result.completed.length > 0 || snapshotted) this.persist();
+        // 快照是「玩家没操作也会发生」的状态变化，必须自己触发重绘。
+        if (notify || snapshotted) this.emit();
+    }
+
+    /**
+     * 过了 22:00（或次日开战前）就定格一份当日战绩快照；同一天只出一份。
+     *
+     * 只用**确定性**的输入（战功 + 榜单名次 + 日程），所以离线补算与在线结算结果一致。
+     */
+    private refreshDaySnapshot(): boolean {
+        const now = this.deps.now();
+        if (!bigMapSnapshotDue(this.config.schedule, now, this.data.snapshot)) return false;
+        const snapshot = buildBigMapDaySnapshot(
+            this.config.schedule,
+            now,
+            this.data.battle,
+            (cityId) => {
+                // 当刻现算，不依赖「玩家是否点开过这座城」——否则名次会随点没点过而变。
+                try {
+                    return buildBigMapCityRankBoard(this.config, cityId, this.data.battle.cityWarScore[cityId] ?? 0)
+                        .playerRank;
+                } catch {
+                    return 1;
+                }
+            },
+        );
+        this.data = { ...this.data, snapshot };
+        return true;
+    }
+
+    /** 最近一次当日战绩快照（没出过就是 `null`）。 */
+    daySnapshot(): IBigMapDaySnapshot | null {
+        return this.data.snapshot;
     }
 
     // -------------------------------------------------------------- 资源栏
@@ -301,8 +377,42 @@ export class BigMapPresenter {
         }));
     }
 
-    mainLevel(): number {
-        return bigMapMainLevel(this.config, this.data.base);
+    /**
+     * 建造队列的解锁状态。
+     *
+     * 🔴 文档口径（`docs/bigmap-系统落地方案.md` §2「建造 · 队列」）：3 队列、**付费解锁** ——
+     * 所以队列数量只看存档 `queueUnlocked`，与建了哪些建筑无关。
+     */
+    queueUnlockInfo(): IBigMapQueueUnlockInfo {
+        const current = bigMapClampQueueUnlocked(this.config, this.data.base.queueUnlocked);
+        const max = this.config.queue.maxBuildQueue;
+        if (current >= max) {
+            return { current, max, cost: 0, canUnlock: false, reason: '建造队列已满' };
+        }
+        const cost = current <= 1
+            ? this.config.queue.queueUnlockCost2
+            : this.config.queue.queueUnlockCost3;
+        const affordable = Number.isFinite(cost) && cost > 0 && this.data.base.res.coin >= cost;
+        return {
+            current,
+            max,
+            cost: affordable || Number.isFinite(cost) ? cost : 0,
+            canUnlock: affordable,
+            reason: affordable ? '' : `货币不足（需要 ${Math.round(cost || 0)}）`,
+        };
+    }
+
+    /** 花货币解锁下一条建造队列。 */
+    unlockBuildQueue(): IBigMapActionFeedback {
+        const result = bigMapUnlockQueue(this.config, this.data.base);
+        if (!result.ok || !result.state) return { ok: false, message: result.reason };
+        this.applyBase(result.state);
+        this.persist();
+        this.emit();
+        return { ok: true, message: `建造队列 +1（消耗货币 ${Math.round(result.cost)}）` };
+    }
+
+    mainLevel(): number {        return bigMapMainLevel(this.config, this.data.base);
     }
 
     attackPower(): number {
@@ -453,6 +563,43 @@ export class BigMapPresenter {
 
     // -------------------------------------------------------------- 动作：战斗
 
+    /**
+     * 当前攻城日程 —— 视图每帧直接读它（幂等），不自己算时间。
+     *
+     * 日程来自 `bigmapSchedule` 表（`config.schedule`），代码里不写 `21:00` 这种字面量；
+     * 时钟走 `deps.now()` 端口（联机版换服务器校准秒即可），所以这里不出现 `Date.now()`。
+     */
+    cityTimeline(): IBigMapCityTimeline {
+        return bigMapCityTimeline(this.config.schedule, this.deps.now());
+    }
+
+    /** 某座城当前的榜单（未刷新过就是「只有你」的兜底榜，绝不返回 null）。 */
+    cityRankBoard(cityId: number): IBigMapCityRankBoard {
+        const cached = this.rankBoards.get(cityId);
+        if (cached) return cached;
+        return buildSoloRankBoard(cityId, this.data.battle.cityWarScore[cityId] ?? 0);
+    }
+
+    /**
+     * 刷新某座城的榜单 —— 进详情/进排行页时调，拿回来缓存住并通知重绘。
+     *
+     * 端口失败不抛给界面（与「存档损坏退回新档」同一口径）：回退到本地 NPC 榜。
+     */
+    async refreshCityRank(cityId: number): Promise<void> {
+        if (!this.config.cities.has(cityId)) return;
+        const warScore = this.data.battle.cityWarScore[cityId] ?? 0;
+        let board: IBigMapCityRankBoard;
+        try {
+            board = this.deps.rankProvider
+                ? await this.deps.rankProvider.fetchCityRank(cityId, warScore)
+                : buildBigMapCityRankBoard(this.config, cityId, warScore);
+        } catch {
+            board = buildBigMapCityRankBoard(this.config, cityId, warScore);
+        }
+        this.rankBoards.set(cityId, board);
+        this.emit();
+    }
+
     cityView(cityId: number): IBigMapCityView | null {
         const city = this.config.cities.get(cityId);
         const site = this.worldInstance.cities.get(cityId);
@@ -460,12 +607,18 @@ export class BigMapPresenter {
         const context = this.unlockContext;
         const state = bigMapCityState(city, context);
         const reason = bigMapCityUnlock(city, context).reason;
+        const timeline = this.cityTimeline();
+        const gate = bigMapCityAttackGate(state, timeline);
+        const board = this.cityRankBoard(cityId);
         const distance = bigMapHexDistance(
             this.worldInstance.rows, this.worldInstance.cols,
             this.worldInstance.playerBase.hexId, site.anchorHexId,
         );
         const preview = state === 'open'
-            ? bigMapCityAttackPreview(this.config, this.data.base, city, distance)
+            ? bigMapCityAttackPreview(
+                this.config, this.data.base, city, distance,
+                board.attackerCount, board.playerRank,
+            )
             : null;
         return {
             cityId: city.cityId,
@@ -486,6 +639,12 @@ export class BigMapPresenter {
             previewWarScore: preview?.warScore ?? 0,
             inRange: preview?.inRange ?? false,
             damageCutPct: preview?.damageCutPct ?? 0,
+            phase: timeline.phase,
+            canAttack: gate.canAttack,
+            attackReason: gate.reason,
+            playerRank: board.playerRank,
+            attackerCount: board.attackerCount,
+            topWarScore: board.topWarScore,
         };
     }
 
@@ -520,9 +679,17 @@ export class BigMapPresenter {
         const city = this.config.cities.get(cityId);
         const view = this.cityView(cityId);
         if (!city || !view) return { ok: false, message: '城池不存在' };
+        // 日程是**唯一入口**：休战/结算期即使城池开放也不许打，否则「锁榜后还能刷战功」。
+        if (!view.canAttack) return { ok: false, message: view.attackReason || '当前无法攻城' };
         const outcome = bigMapAttackCity(
             this.config, this.data.base, this.data.battle, city, view.distance,
-            { adventureChapter: this.deps.adventureChapter(), openDay: this.deps.openDay ?? 0 },
+            {
+                adventureChapter: this.deps.adventureChapter(),
+                openDay: this.deps.openDay ?? 0,
+                // 名次 / 拥挤系数用当前榜单的真值，不再恒等于 1。
+                attackers: view.attackerCount,
+                rank: view.playerRank,
+            },
         );
         if (!outcome.ok || !outcome.base || !outcome.progress) {
             return { ok: false, message: outcome.reason };
@@ -530,6 +697,12 @@ export class BigMapPresenter {
         this.applyBase(outcome.base);
         this.applyBattle(outcome.progress);
         this.persist();
+        // 战功变了名次就变：同步重算一次本地榜（联机时再让 provider 覆盖成服务器真值）。
+        this.rankBoards.set(
+            cityId,
+            buildBigMapCityRankBoard(this.config, cityId, this.data.battle.cityWarScore[cityId] ?? 0),
+        );
+        if (this.deps.rankProvider) void this.refreshCityRank(cityId);
         this.emit();
         if (outcome.occupied) return { ok: true, message: `占领 ${city.name}！货币 +${city.rewardCoin}` };
         if (outcome.breached) return { ok: true, message: `${city.name} 城防已破，继续积累战功` };

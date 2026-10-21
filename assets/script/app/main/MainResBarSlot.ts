@@ -1,4 +1,4 @@
-import { _decorator, Component, Label, Node, Sprite } from 'cc';
+import { _decorator, Component, Label, Node, Sprite, SpriteFrame } from 'cc';
 import type { ResBarSlot } from './MainResBarTypes';
 import { loadResBarSprite } from './MainResBarArt';
 
@@ -24,6 +24,12 @@ export class MainResBarSlot extends Component {
     @property({ type: Node, tooltip: 'Plus：补货加号（只有可补货的格子才有，如体力格；没有就留空）' })
     plus: Node | null = null;
 
+    @property({ type: SpriteFrame, tooltip: 'Optional icon supplied by the host prefab; otherwise use the resource table icon' })
+    iconOverride: SpriteFrame | null = null;
+
+    @property({ tooltip: 'Keep the add affordance visible for this host appearance' })
+    alwaysShowPlus = false;
+
     /** 防串图令牌：异步回调回来时数据可能已换。 */
     private token = 0;
 
@@ -40,9 +46,13 @@ export class MainResBarSlot extends Component {
         }
         this.node.active = true;
         this.valueLabel.string = slot.valueText;
-        if (this.plus) this.plus.active = slot.showPlus;
+        if (this.plus) this.plus.active = this.alwaysShowPlus || slot.showPlus;
 
         const current = ++this.token;
+        if (this.iconOverride) {
+            this.icon.spriteFrame = this.iconOverride;
+            return;
+        }
         if (!slot.iconArt) {
             this.icon.spriteFrame = null;
             return;

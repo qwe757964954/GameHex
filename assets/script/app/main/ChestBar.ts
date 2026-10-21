@@ -1,6 +1,7 @@
 import { _decorator, Button, Component, Node, SpriteFrame, UITransform } from 'cc';
 import { ChestSlotView } from './ChestSlotView';
 import { resolveChestPanelX } from './MainHudMotion';
+import { ChestSlotState } from './ChestTypes';
 import type { IChestSlotData } from './ChestTypes';
 
 const { ccclass, property } = _decorator;
@@ -192,16 +193,21 @@ export class ChestBar extends Component {
      */
     render(data: readonly IChestSlotData[], onClick?: (index: number) => void): void {
         const slots = this.ensureSlots();
+        let hasBattleEntry = false;
         for (let index = 0; index < slots.length; index += 1) {
             const slot = slots[index];
             const item = data[index];
             if (!item) {
                 slot.node.active = false;
+                slot.bindAction(null);
                 continue;
             }
+            const isEmpty = item.state === ChestSlotState.Empty;
+            const showBattleEntry = isEmpty && !hasBattleEntry;
+            if (showBattleEntry) hasBattleEntry = true;
             slot.node.active = true;
-            slot.render(item);
-            slot.bindAction(onClick ? () => onClick(index) : null);
+            slot.render(item, showBattleEntry);
+            slot.bindAction(onClick && (!isEmpty || showBattleEntry) ? () => onClick(index) : null);
         }
     }
 

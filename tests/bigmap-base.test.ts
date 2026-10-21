@@ -18,7 +18,7 @@ import {
     bigMapPlotCenterHexId,
     bigMapPlotHexId,
     bigMapProducePerHour,
-    bigMapQueueCapacity,
+    bigMapUnlockQueue,
     bigMapResCap,
     bigMapStartBuild,
     bigMapStartUpgrade,
@@ -251,23 +251,36 @@ test('建造数量上限生效（粮食田最多 3 个）', () => {
     assert.equal(state.buildings.filter((item) => item.buildingId === GRAIN_FIELD).length, 3);
 });
 
-test('建成「建造队列」建筑后队列容量 +1（容量由建筑反推）', () => {
+test('建造队列靠货币解锁，不来自建筑（文档口径）', () => {
     const unlock = makeUnlockContext({ adventureChapter: 5 });
     let state = createBigMapBaseState(config, NOW);
     assert.equal(state.queueUnlocked, config.queue.initBuildQueue);
 
-    const queueBuilding = 71007;
-    const cost = config.levels.get(queueBuilding)!.get(1)!;
-    const started = bigMapStartBuild(config, state, unlock, queueBuilding, bigMapPlotHexId(1, 1, 5), NOW);
-    assert.equal(started.ok, true, started.reason);
-    state = started.state!;
-    // 还在队列里 ⇒ 容量不变（别让玩家排队的瞬间就多一条槽）。
-    assert.equal(state.queueUnlocked, config.queue.initBuildQueue);
+    // 货币不足不许解锁，且不扣任何东西
+    const poor = bigMapUnlockQueue(config, { ...state, res: { ...state.res, coin: 0 } });
+    assert.equal(poor.ok, false);
+    assert.match(poor.reason, /货币不足/);
+    assert.equal(poor.state, null);
 
-    state = bigMapTick(config, state, NOW + cost.buildTime + 1).state;
-    assert.equal(state.queueUnlocked, config.queue.initBuildQueue + 1);
-    assert.equal(bigMapQueueCapacity(config, state.buildings), config.queue.initBuildQueue + 1);
-    // 真的有两条能同时开工。
+    // 1 → 2 收 queueUnlockCost2
+    state = { ...state, res: { ...state.res, coin: 99999 } };
+    const coinBefore = state.res.coin;
+    const first = bigMapUnlockQueue(config, state);
+    assert.equal(first.ok, true, first.reason);
+    assert.equal(first.cost, config.queue.queueUnlockCost2);
+    state = first.state!;
+    assert.equal(state.queueUnlocked, 2);
+    assert.equal(state.res.coin, coinBefore - config.queue.queueUnlockCost2);
+
+    // 2 → 3 收 queueUnlockCost3；到上限后再解锁被拒
+    const second = bigMapUnlockQueue(config, state);
+    assert.equal(second.cost, config.queue.queueUnlockCost3);
+    state = second.state!;
+    assert.equal(state.queueUnlocked, config.queue.maxBuildQueue);
+    assert.equal(bigMapUnlockQueue(config, state).ok, false, '已到上限');
+    assert.match(bigMapUnlockQueue(config, state).reason, /已满/);
+
+    // 真有两条能同时开工
     state = { ...state, res: { ...state.res, grain: 9999, wood: 9999, iron: 9999 } };
     state = bigMapStartBuild(config, state, unlock, GRAIN_FIELD, bigMapPlotHexId(0, 0, 5), NOW + 100).state!;
     const parallel = bigMapStartBuild(config, state, unlock, WOOD_FIELD, bigMapPlotHexId(0, 1, 5), NOW + 100);

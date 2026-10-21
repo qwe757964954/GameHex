@@ -113,6 +113,7 @@ export class LoginRoot {
             this.selectedServerId = selectRecommendedServer(this.servers);
             return { ok: true, servers: this.servers };
         } catch (error) {
+            console.warn('[LoginRoot] 获取登录配置或服务器列表失败', error);
             this.gameConfig = null;
             this.servers = [];
             this.selectedServerId = null;

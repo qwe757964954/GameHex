@@ -6,6 +6,7 @@ import { mainTabItem } from './MainTabItems';
 import { CardLineupPage } from '../card/CardLineupPage';
 import { checkFirstRechargeOnEnterMain } from '../firstRecharge/FirstRechargeAutoOpen';
 import { MainTerritoryMap } from './MainTerritoryMap';
+import { MainPage } from './MainPage';
 import { BigMapEntryButton } from '../bigmap/view/BigMapEntryButton';
 
 const { ccclass, property } = _decorator;
@@ -245,6 +246,10 @@ export class MainTabHost extends Component {
         // 依赖注入必须发生在 `setParent`（页面 onLoad / start）之前。
         const mainTerritoryMap = page.getComponentInChildren(MainTerritoryMap);
         if (mainTerritoryMap && this.assets) mainTerritoryMap.initialize(this.assets);
+        const mainPage = page.getComponent(MainPage);
+        if (mainPage && mainTerritoryMap) {
+            mainPage.bindFindCurrentBoss(() => mainTerritoryMap.focusCurrentBoss());
+        }
         const lineup = page.getComponent(CardLineupPage);
         if (lineup && this.assets) lineup.initialize(this.assets);
         this.currentPage = page;

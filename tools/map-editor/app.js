@@ -1028,18 +1028,93 @@
     for (var seat = 0; seat < PLAYER_COUNT; seat += 1) homes[seat] = defaultHome(seat + 1);
   }
 
+  /**
+   * 最近的格心，**不判棋盘外**。
+   *
+   * 不能直接用 `cellAtLocal` —— 它对"落在格子外框之外"返回 null，而装饰经常摆到棋盘外
+   * （海面、边缘留白）。改尺寸时这些装饰一样要跟着坐标系挪，所以这里要一个不限边界的版本。
+   */
+  function nearestCenterCell(x, y) {
+    var best = null, bestDistance = Infinity;
+    for (var index = 0; index < centers.length; index += 1) {
+      var dx = x - centers[index].x, dy = y - centers[index].y;
+      var distance = dx * dx + dy * dy;
+      if (distance < bestDistance) { bestDistance = distance; best = centers[index]; }
+    }
+    return best;
+  }
+
+  /**
+   * 改尺寸时搬运「不在 grid 里」的三种数据。
+   *
+   * 它们的参照系都会随 ROWS/COLS 变：装饰是**绝对坐标**、资源点是 `{row,column}`、
+   * 区域 `cells` 存的是 `row*COLS+column` 的 id。以前 `setSize` 只迁了 grid 和 homes，
+   * 于是加一列就同时坏三样（实测 8×12→8×13）：装饰偏半格（格子移 46.1px、装饰不动）、
+   * 资源点相对地形错位一列、区域标记 (3,4) 的 id=40 被反解成 **(3,1)**。
+   *
+   * 搬运口径 = 与地形同一条位移（`rowShift` / `columnShift`），所以「装饰压在哪块地形上、
+   * 资源点长在哪块中立地上、哪几格标了前区」这些关系逐格不变。
+   */
+  function relocateSideData(decorAnchors, oldCols, rowShift, columnShift) {
+    // ① 装饰：落到「它原来锚定的那格」在新坐标系里的位置，保留相对格心的偏移
+    //    （旋转 / 缩放 / 手摆的微调都不动）。
+    decorAnchors.forEach(function (anchor) {
+      if (!anchor) return;
+      var row = anchor.row + rowShift, column = anchor.column + columnShift;
+      // 锚定格被裁掉了（改小尺寸）：原地留着，不替策划删他的东西。
+      if (row < 0 || row >= ROWS || column < 0 || column >= COLS) return;
+      var center = hexCenter(row, column);
+      anchor.item.x = center.x + anchor.dx;
+      anchor.item.y = center.y + anchor.dy;
+    });
+
+    // ② 资源点：行列索引跟着格走，越界的丢掉（缩小尺寸时贴边的那圈）。
+    resourcePoints = resourcePoints.filter(function (point) {
+      point.row += rowShift;
+      point.column += columnShift;
+      return point.row >= 0 && point.row < ROWS && point.column >= 0 && point.column < COLS;
+    });
+
+    // ③ 区域标记：id 必须按**旧**列数反解、加位移、再按**新**列数编回去。
+    //    直接用旧 id 的话，同一个数字在新棋盘上指向完全另一格。
+    regions.forEach(function (region) {
+      var next = [];
+      region.cells.forEach(function (id) {
+        if (!Number.isFinite(id) || id < 0) return;
+        var row = Math.floor(id / oldCols) + rowShift;
+        var column = (id % oldCols) + columnShift;
+        if (row < 0 || row >= ROWS || column < 0 || column >= COLS) return;
+        next.push(row * COLS + column);
+      });
+      region.cells = next;
+    });
+  }
+
   function setSize(rows, columns) {
     var r = clampInt(rows, MIN_ROWS, MAX_ROWS);
     var c = clampInt(columns, MIN_COLS, MAX_COLS);
     if (r === ROWS && c === COLS) { syncSizeInputs(); return; }
     var before = snapshot();
     var oldRows = ROWS, oldCols = COLS, oldGrid = grid, oldHomes = homes.slice();
+    // 装饰先锚到「最近的格 + 相对格心偏移」上。**必须在改 ROWS/COLS 之前算** ——
+    // 尺寸一变，同一个 (x,y) 就归属另一个格心，事后再反算回不来。
+    var decorAnchors = freeDecor.map(function (item) {
+      var cell = nearestCenterCell(item.x, item.y);
+      if (!cell) return null;
+      var center = hexCenter(cell.row, cell.column);
+      return { item: item, row: cell.row, column: cell.column, dx: item.x - center.x, dy: item.y - center.y };
+    });
     ROWS = r;
     COLS = c;
+    // 位移量要在 ROWS/COLS 更新之后算 —— 用的是新旧**索引**的中点差，与 hexCenter 的
+    // 原点口径一致（原点都锚在棋盘中心）。
+    var rowShift = Math.floor(ROWS / 2) - Math.floor(oldRows / 2);
+    var columnShift = Math.floor(COLS / 2) - Math.floor(oldCols / 2);
     // 三人的分区与主城完全由棋盘尺寸决定（等边三点），改尺寸就整体重建，不做平移保留 ——
     // 平移会留下贴边主城和大片虚空，且等边关系一定被破坏。
     if (PLAYER_COUNT === 3) {
-      newGrid();
+      newGrid();   // 它会清掉 grid / homes / 装饰
+      relocateSideData(decorAnchors, oldCols, rowShift, columnShift);   // 资源点 / 区域仍要搬
       syncSizeInputs();
       buildBoard();
       render();
@@ -1047,8 +1122,6 @@
       return;
     }
     // 行列变更以中线为基准保留已有内容（《地图编辑器需求文档》3.2）。
-    var rowShift = Math.floor(ROWS / 2) - Math.floor(oldRows / 2);
-    var columnShift = Math.floor(COLS / 2) - Math.floor(oldCols / 2);
     grid = [];
     for (var row = 0; row < ROWS; row += 1) {
       var line = [];
@@ -1064,6 +1137,9 @@
     });
     while (homes.length < MAX_SECTIONS) homes.push(null);
     clampHomes();
+    // 地形与主城搬完之后，把装饰 / 资源点 / 区域一起搬到同一个新位置（网格已就位，
+    // 后面 `applyMirrorAndPrune` 的 prune 才会用**新**的 COLS 去判 id。
+    relocateSideData(decorAnchors, oldCols, rowShift, columnShift);
     // 主城是"平移保留"来的，落点可能已经被平移到虚空或别人的分区上，这里必须过一遍失效检查。
     applyMirrorAndPrune();
     syncSizeInputs();

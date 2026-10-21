@@ -52830,6 +52830,7 @@ values[valuesById[1031509406] = "CmdMonsterManualGetRewardRspMsg"] = 1031509406;
 values[valuesById[2011197980] = "CmdNewTreasureInfoListRspMsg"] = 2011197980;
 values[valuesById[399007957] = "CmdNewTreasureActivateRspMsg"] = 399007957;
 values[valuesById[291587262] = "CmdNewTreasureFastOpenRspMsg"] = 291587262;
+values[valuesById[1903704638] = "CmdNewTreasureOpenRspMsg"] = 1903704638;
 values[valuesById[271053488] = "CmdTakeOathAllianceRewardRspMsg"] = 271053488;
 values[valuesById[1516169721] = "CmdPvpHeroInfoListRspMsg"] = 1516169721;
 values[valuesById[937856670] = "CmdPvpHeroUpLevelRspMsg"] = 937856670;

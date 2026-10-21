@@ -492,6 +492,8 @@ export class ZCGame extends Component {
             artifactIconFrame: prepared.artifactIconFrame,
             // 中立资源获取特效：金币 / 神器从格子飞向 HUD 的对应栏位。
             goldCoinFrame: prepared.goldCoinFrame,
+            // 自选主城区域气泡底图（frame_01 绿 / frame_02 红，九宫格）。
+            spawnRegionFrames: prepared.spawnRegionFrames,
             goldCounterNode: this.hudView.goldIcon,
             artifactButtonNode: this.hudView.artifactButton.node,
             decorPrefab: prepared.decorPrefab,

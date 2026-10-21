@@ -7,6 +7,7 @@ import {
     ITerritoryChapterBundle,
     ITerritoryChapterLoader,
     ITerritoryChapterStore,
+    ITerritoryPresenterOutputs,
     ITerritoryPresenterPorts,
     TerritoryPresenter,
 } from '../assets/script/app/territory/application/TerritoryPresenter';
@@ -87,6 +88,7 @@ const nullArt = {
     header: null,
     navButton: null,
     actionButton: null,
+    buildFrames: new Map(),
 };
 
 const bundle: ITerritoryChapterBundle = {
@@ -94,6 +96,94 @@ const bundle: ITerritoryChapterBundle = {
     campaign: { stages: [stage], playerCardCount: 3, idleRewardMaxHours: 8 },
     art: nullArt,
 };
+
+function createBossFindLoader() {
+    return createFakeLoader({
+        ...bundle,
+        mapJson: JSON.parse(readFileSync('assets/remoteRef/chapter_01.json', 'utf8')),
+        campaign: {
+            ...bundle.campaign,
+            stages: [
+                { ...stage, levelId: 10004, stage: 4 },
+                { ...stage, levelId: 10005, stage: 5, isBoss: true, mode: 'defence' },
+                { ...stage, levelId: 10010, stage: 10, isBoss: true, mode: 'defence' },
+            ],
+        },
+    });
+}
+
+test('quick find opens current Boss detail without unlocking, charging, or starting battle', async () => {
+    const h = createHarness({ loader: createBossFindLoader(), gateway: createFakeGateway({ fetch: {
+        ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [367, 213], passCells: [367] },
+    } }) });
+    h.presenter.start();
+    await flush();
+    assert.equal(h.presenter.focusCurrentBoss(), 213);
+    assert.equal(h.presenter.state.detail.open, true);
+    assert.equal(h.presenter.state.detail.content?.title, '首领关卡  5');
+    assert.equal(h.presenter.state.detail.content?.startEnabled, true, 'server-unlocked Boss remains challengeable');
+    assert.equal(h.gatewayCalls.unlock, 0);
+    assert.equal(h.gatewayCalls.startBattle, 0);
+    assert.equal(h.gatewayCalls.pass, 0);
+    assert.equal(h.storeCalls.beginBattle, 0);
+    assert.equal(h.nav.length, 0);
+    h.presenter.requestBattle();
+    h.presenter.requestBattle();
+    await flush();
+    assert.equal(h.gatewayCalls.startBattle, 1, 'only the detail button starts a single server battle');
+    assert.deepEqual(h.gatewayCalls.battleParamsList, [['1', '1', '213']]);
+    assert.equal(h.nav.length, 1);
+    h.presenter.dispose();
+});
+
+test('locked Boss detail uses the existing unlock-then-start flow and cannot cancel an in-flight request', async () => {
+    const h = createHarness({ loader: createBossFindLoader(), gateway: createFakeGateway({ fetch: {
+        ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [367, 252], passCells: [367, 252] },
+    } }) });
+    h.presenter.start();
+    await flush();
+    assert.equal(h.presenter.focusCurrentBoss(), 213);
+    assert.equal(h.presenter.state.detail.content?.startCaption, '解锁');
+    h.presenter.requestBattle();
+    assert.equal(h.presenter.focusCurrentBoss(), null, 'quick find must not invalidate a pending write');
+    await flush();
+    assert.equal(h.gatewayCalls.unlock, 1);
+    assert.equal(h.gatewayCalls.startBattle, 0);
+    assert.equal(h.presenter.state.detail.open, true);
+    assert.equal(h.presenter.state.detail.content?.startCaption, '开战');
+    h.presenter.requestBattle();
+    await flush();
+    assert.equal(h.gatewayCalls.startBattle, 1);
+    assert.equal(h.nav.length, 1);
+    h.presenter.dispose();
+});
+
+test('quick find uses server area progress and reports no target after all Boss areas are passed', async () => {
+    const h = createHarness({ loader: createBossFindLoader(), gateway: createFakeGateway({ fetch: {
+        ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [367], passCells: [367, 193] },
+    } }) });
+    h.presenter.start();
+    await flush();
+    assert.equal(h.presenter.focusCurrentBoss(), 105);
+    assert.equal(h.presenter.state.detail.content?.title, '首领关卡  10');
+    h.presenter.state.progress!.markCellPassed(85);
+    assert.equal(h.presenter.focusCurrentBoss(), null);
+    assert.equal(h.tips.at(-1), '暂无可定位的 Boss 关卡');
+    assert.equal(h.presenter.state.detail.open, false);
+    h.presenter.dispose();
+});
+
+test('quick find handles loading and disposed maps without requests or navigation', () => {
+    const h = createHarness({ loader: createBossFindLoader() });
+    assert.equal(h.presenter.focusCurrentBoss(), null);
+    assert.equal(h.tips.at(-1), '领地数据加载中，请稍候');
+    h.presenter.dispose();
+    const tipCount = h.tips.length;
+    assert.equal(h.presenter.focusCurrentBoss(), null);
+    assert.equal(h.tips.length, tipCount);
+    assert.equal(h.gatewayCalls.startBattle, 0);
+    assert.equal(h.nav.length, 0);
+});
 
 async function flush(ticks = 6): Promise<void> {
     for (let i = 0; i < ticks; i++) await new Promise((r) => setTimeout(r, 0));
@@ -484,7 +574,8 @@ function createOutputs() {
     const rewardOrigins: (number | null | undefined)[] = [];
     const nav: ITerritoryBattleNavParams[] = [];
     const battles: (ZCBattleStart | undefined)[] = [];
-    const outputs = {
+    const busy: Array<{ busy: boolean; text?: string }> = [];
+    const outputs: ITerritoryPresenterOutputs = {
         navigateToBattle: (pve: ITerritoryBattleNavParams, battle?: ZCBattleStart) => {
             nav.push(pve);
             battles.push(battle);
@@ -497,8 +588,10 @@ function createOutputs() {
             rewards.push(gains.map((g) => ({ ...g })));
             rewardOrigins.push(originCellId);
         },
+        // 默认记录 busy 开关序列；断言「请求在途 ⇒ 全屏 loading 遮挡」直接用 `h.busy`。
+        setBusy: (busyFlag, text) => { busy.push({ busy: busyFlag, text }); },
     };
-    return { outputs, tips, rewards, rewardOrigins, nav, battles };
+    return { outputs, tips, rewards, rewardOrigins, nav, battles, busy };
 }
 
 interface HarnessOptions {
@@ -1132,13 +1225,13 @@ test('two-step stage 327 unlocks first, shows the building, then starts battle o
         'battleParams = [子类型(1=格子战斗), 章节id, cellId]');
     assert.equal(h.presenter.state.progress?.isCellUnlocked(327), true);
     assert.equal(h.presenter.state.progress?.isCellUnlocked(327), true);
-    // 第三步：战斗已发起 → 再点不再发任何请求。
-    // ⚠️ `startBattle` 之后 Presenter 就进了战斗态（`beginBattle`），本地进度**不会**变成 owned
-    // —— 通关要等战斗结算回报。所以这里只钉「不发重复请求」。
+    // 第三步：战斗已发起（fake 不真切场景）⇒ 再点 = 战斗未结算返回重打。
+    // 🔴 2026-10-21 口径：`bossBattleStart` 不再参与防连点（防连点 = pending 判重 + loading），
+    // **未通关**格允许再次开战（打输 / 未打完可重打）；已通关 stage/boss 才被 isOwned 守卫挡。
     h.presenter.selectSite(site);
     await flush();
-    assert.equal(h.gatewayCalls.unlock, 1);
-    assert.equal(h.gatewayCalls.startBattle, 1, '开战请求只发一次，不重复');
+    assert.equal(h.gatewayCalls.unlock, 1, '重打不夹带解锁请求');
+    assert.equal(h.gatewayCalls.startBattle, 2, '开战后未通关可重打（再次发开战请求）');
     assert.deepEqual(h.gatewayCalls.passedCells, [], '关卡流程里永远没有通关请求');
 });
 
@@ -1728,4 +1821,122 @@ test('★★★★真机口径：只打通 328，点 309 必须发解锁协议�
         '★必须发 CmdCityChapterPassCellReqMsg 类解锁请求 —— 曾经这里是 0 次请求');
     assert.ok(!h.tips.includes('前置领地尚未占领'), '不能再被前置判定挡住');
     assert.equal(h.tips[h.tips.length - 1], '已解锁，点击开战');
+});
+
+// ── 全屏 loading 遮挡（防「服务端还没响应就快速连点」）───────────────────
+
+test('解锁请求在途：loading 在网关调用前显示，回包处理后关闭', async () => {
+    const pending: Array<(value: TerritoryWriteResult) => void> = [];
+    const gateway = createFakeGateway({ fetch: {
+        ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [0], passCells: [0] },
+    } });
+    let unlockCount = 0;
+    gateway.gateway.unlockCell = () => {
+        unlockCount++;
+        return new Promise((resolve) => pending.push(resolve));
+    };
+    const h = createHarness({ gateway });
+    h.presenter.start();
+    await flush();
+    h.presenter.selectSite(h.presenter.state.map!.sites[0]);
+    // selectSite 同步走到「确认要发请求」⇒ 网关调用前 setBusy(true) 已同步执行。
+    assert.equal(h.busy.length, 1, '请求在途只显示一层 loading');
+    assert.equal(h.busy[0].busy, true, '请求在途 ⇒ busy=true');
+    assert.equal(h.busy[0].text, '解锁中…', '解锁请求用「解锁中…」文案');
+    pending[0]({ ok: true, unlockedCellIds: [1] });
+    await flush();
+    assert.equal(h.busy.length, 2, '回包处理完 ⇒ 关闭 loading');
+    assert.equal(h.busy[1].busy, false, '请求结束 ⇒ busy=false');
+    assert.equal(unlockCount, 1, '全程只发一次解锁请求');
+});
+
+test('校验失败（银币不足）不发请求：不弹 loading 不闪屏', async () => {
+    const gateway = createFakeGateway({ fetch: {
+        ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [0], passCells: [0] },
+    } });
+    const h = createHarness({
+        gateway,
+        store: createFakeStore({ silver: 0 }),
+    });
+    h.presenter.start();
+    await flush();
+    h.presenter.selectSite(h.presenter.state.map!.sites[0]);
+    await flush();
+    assert.equal(h.busy.length, 0, '校验失败不发请求 ⇒ 不弹 loading');
+    assert.equal(h.gatewayCalls.unlock, 0, '银币不足 ⇒ 未发解锁请求');
+    assert.ok(h.tips.some((tip) => tip.includes('银币不足')), '只给轻提示');
+});
+
+// ── asyncPvp 可重复挑战（2026-10-21 口径）────────────────────────────────
+
+const asyncRepeatStage: TerritoryCampaignStage = { ...stage, levelId: 20001, stage: 4 };
+const asyncRepeatMap = {
+    ...mapJson,
+    rows: 20,
+    columns: 20,
+    startCellId: 367,
+    sites: [372].map((cellId) => ({
+        id: `asyncPvp_${cellId}`,
+        type: 'asyncPvp' as const,
+        cellId,
+        footprint: [cellId],
+        configId: '20001',
+        unlock: { requiredCells: [367], silverCost: 10, staminaCost: 1 },
+    })),
+};
+
+function createAsyncRepeatHarness(state: {
+    unlockCells: number[];
+    passCells: number[];
+}) {
+    return createHarness({
+        loader: createFakeLoader({
+            ...bundle,
+            mapJson: asyncRepeatMap,
+            campaign: { stages: [stage, asyncRepeatStage], playerCardCount: 3, idleRewardMaxHours: 8 },
+        }),
+        gateway: createFakeGateway({ fetch: {
+            ok: true, state: { levelChapter: 1, rewardState: 0, ...state },
+        } }),
+    });
+}
+
+test('★asyncPvp 已通关可重复挑战：再次点击重新发开战请求，不重复解锁', async () => {
+    const h = createAsyncRepeatHarness({
+        unlockCells: [367, 372], // 已通关且服务端仍标已解锁（快照常态）
+        passCells: [367, 372],
+    });
+    h.presenter.start();
+    await flush();
+    const site = h.presenter.state.map!.sites[0];
+    assert.equal(h.presenter.state.progress?.isOwned(372), true, '372 已通关');
+    h.presenter.selectSite(site);
+    await flush();
+    assert.equal(h.gatewayCalls.unlock, 0, '已通关格不重复发解锁');
+    assert.equal(h.gatewayCalls.startBattle, 1, '★已通关 asyncPvp 可再次开战');
+    assert.equal(h.nav.length, 1, '开战成功进入战斗');
+    assert.equal(h.busy.length, 2, '开战请求全程 loading 遮挡（true → false）');
+    // 返回领地后再点（模拟上一局已结算、battleId 已清）⇒ 可无限重复挑战。
+    h.presenter.selectSite(site);
+    await flush();
+    assert.equal(h.gatewayCalls.startBattle, 2, '★重复挑战：第二次点击再次发开战请求');
+    assert.equal(h.nav.length, 2, '再次进入战斗');
+    assert.equal(h.gatewayCalls.unlock, 0, '重复挑战不夹带解锁请求');
+});
+
+test('★asyncPvp 已通关但快照没给 unlockCells：点击跳过解锁直接开战', async () => {
+    const h = createAsyncRepeatHarness({
+        unlockCells: [367], // 服务端只给 passCells、没给该格 unlockCells 的兜底
+        passCells: [367, 372],
+    });
+    h.presenter.start();
+    await flush();
+    const site = h.presenter.state.map!.sites[0];
+    assert.equal(h.presenter.state.progress?.isOwned(372), true, '372 已通关');
+    assert.equal(h.presenter.state.progress?.isCellUnlocked(372), false, '但本地 unlockable 里没有它');
+    h.presenter.selectSite(site);
+    await flush();
+    assert.equal(h.gatewayCalls.unlock, 0, '不因缺 unlockable 发解锁请求');
+    assert.equal(h.gatewayCalls.startBattle, 1, '已通关 asyncPvp 直接开战');
+    assert.equal(h.nav.length, 1);
 });

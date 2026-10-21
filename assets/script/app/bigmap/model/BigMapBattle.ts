@@ -11,7 +11,7 @@
  * ```
  *
  * 所有公式都写成**可复现的纯函数**并在 `docs/bigmap-系统实现说明.md` §2 记了推算口径，
- * 改数值只需改 `BigMap-城池等级` / `BigMap-积分规则`，不用动代码。
+ * 改数值只需改 `bigmapCityLevel` / `bigmapScoreRule`，不用动代码。
  */
 import {
     BigMapQueueState,
@@ -103,7 +103,7 @@ export function bigMapMarginalWarScore(damage: number, cap: number): number {
     return safeCap * (1 - Math.exp(-damage / safeCap));
 }
 
-/** 名次系数：1..10 取 `BigMap-名次系数`，第 11 名起每降一名扣 `rankExtendStepPct`，有下限。 */
+/** 名次系数：1..10 取 `bigmapRank`，第 11 名起每降一名扣 `rankExtendStepPct`，有下限。 */
 export function bigMapRankCoeff(config: IBigMapConfig, rank: number): number {
     const table = config.ranks;
     const index = Math.max(1, Math.round(rank));
@@ -200,7 +200,7 @@ function addRes(
  * 攻打城池。
  *
  * 一轮打完（`defenseHp <= 0`）时**不会自动占领**：还要战功达到
- * `BigMap-城池等级.minOccupyWarScore`，对应文档里「打穿只是第一步，站住才算占领」。
+ * `bigmapCityLevel.minOccupyWarScore`，对应文档里「打穿只是第一步，站住才算占领」。
  *
  * ⚠️ 这里刻意**不接 `IBigMapUnlockContext`**：解锁上下文里的 `occupiedCityIds` 必须与
  * `progress` 完全一致，两处各自维护迟早会不一致（前置城池判定就会错）。所以只接

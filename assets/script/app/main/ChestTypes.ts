@@ -42,7 +42,7 @@ export type ChestSlotAction = (typeof ChestSlotAction)[keyof typeof ChestSlotAct
 
 /** 一格的数据。 */
 export interface IChestSlotData {
-    /** 服务端槽位下标；空槽位使用本地下标。 */
+    /** 服务端槽位下标，固定为 1～4；界面数组下标为 0～3。 */
     index: number;
     state: ChestSlotState;
     /** 「宝箱名字」；空槽位不用。 */

@@ -8,11 +8,10 @@
  *
  * ## 哪些是自有、哪些是复用（约定：同图不另存第二份）
  *
- * 自有（51 张，见 `tmp/_copy_chat_art.py` / `tmp/_chat_meta_patch.py` / `tmp/_chat_meta_patch2.py`）：
+ * 自有（52 张，含 44 张表情与 8 张界面用图）：
  *   `ct_emoji_0..43`（44 张表情）、`ct_at_btn`、`ct_bq_btn`、`ct_black_box`（输入条底）、
  *   `ct_recruit_bg`（招募项底）、`ct_bubble_bg`（左右气泡底）、
- *   `ct_join_btn`（招募项「点击加入」底图）、`ct_close_02`（私聊项「删除」按钮）、
- *   `ct_main_chat`（主界面入口按钮图标）。
+ *   `ct_join_btn`（招募项「点击加入」底图）、`ct_close_02`（私聊项「删除」按钮）。
  *
  * 复用（md5 与已有图一致，直接引别的目录）：
  *   `image/friend/fd_row_bg`（= FGUI `frame_Zhikuang06`，聊天里作**私聊头像框 / 艾特项底**）
@@ -57,8 +56,6 @@ export const CHAT_ART_BQ_BTN = 'ct_bq_btn';
 export const CHAT_ART_JOIN_BTN = 'ct_join_btn';
 /** 私聊项「删除」按钮（FGUI `按钮_公共_详情` 的 `type,1(关闭)` = `公用_按钮_关闭02`）。 */
 export const CHAT_ART_CLOSE_02 = 'ct_close_02';
-/** 主界面右侧「聊天」入口按钮图标（FGUI `zjm_icon03_LiaoTian`）。 */
-export const CHAT_ART_MAIN_CHAT = 'ct_main_chat';
 
 /** 复用外模块的图（各自目录 + 图名）。 */
 export const CHAT_SHARED_HEAD_BOX_ROOT = 'image/friend';
@@ -118,7 +115,7 @@ export const CHAT_SHARED_SEND_NAME = 'fd_btn_gold';
  *   `fd_btn_gold`(复用)   ← `TY_btn06`              （好友轮已落档）  → LRTB (14,11,66,54)
  *   `title_brown`(复用)   ← `title_brown`           `171,20,16,40`   → LRTB (171,16,20,40)
  *
- * 非九宫：44 张 emoji、`ct_at_btn`、`ct_bq_btn`、`ct_close_02`、`ct_main_chat`、`img_Touxiang_01`。
+ * 非九宫：44 张 emoji、`ct_at_btn`、`ct_bq_btn`、`ct_close_02`、`img_Touxiang_01`。
  */
 export const CHAT_ART_SLICED: ReadonlySet<string> = new Set<string>([
     CHAT_ART_BUBBLE_BG,

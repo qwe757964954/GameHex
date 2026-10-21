@@ -206,7 +206,7 @@ interface IZCNeutralRewardFxEntry {
 
 /** 事件 id → 表现条目；事件被模型 `prune` 摘掉那一帧，条目节点销毁。 */
 export class ZCNeutralRewardFx {
-    private readonly entries = new Map<number, ZCNeutralRewardFxEntry>();
+    private readonly entries = new Map<number, IZCNeutralRewardFxEntry>();
     /** 本帧存活事件 id 的复用集合（`render` 逐帧对齐用，见 `renderFloatTexts` 同口径）。 */
     private readonly activeIds = new Set<number>();
 
@@ -282,7 +282,7 @@ export class ZCNeutralRewardFx {
         kind: 'gold' | 'artifact',
         start: Readonly<{ x: number; y: number }>,
         target: Readonly<{ x: number; y: number }>,
-    ): ZCNeutralRewardFxEntry | null {
+    ): IZCNeutralRewardFxEntry | null {
         const root = new Node(`NeutralReward_${event.id}`);
         root.setParent(this.host!);
         root.layer = this.host!.layer;
@@ -371,7 +371,7 @@ export class ZCNeutralRewardFx {
         return { node, label, opacity };
     }
 
-    private stepEntry(entry: ZCNeutralRewardFxEntry, now: number): void {
+    private stepEntry(entry: IZCNeutralRewardFxEntry, now: number): void {
         if (entry.kind === 'gold') {
             let anyVisible = false;
             for (const coin of entry.coins) {

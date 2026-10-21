@@ -16,26 +16,35 @@ import {
     type IBigMapStaminaConfig,
     type IBigMapWorldConfig,
 } from './BigMapTypes';
+import {
+    parseBigMapClockTime,
+    validateBigMapCitySchedule,
+    type IBigMapCitySchedule,
+} from './BigMapCitySchedule';
 
 /**
- * 配置表名 —— 与 `assets/remoteRef/BigMap-*.json` 的文件名**逐字一致**。
+ * 配置表名 —— 与 `assets/remoteRef/<名字>.json` 的文件名**逐字一致**。
  *
- * 用户 2026-10-17 规定：涉及本玩法的表格统一叫 `BigMap-<中文表名>`，
+ * 命名照全仓规范（`pvpCard.json` / `mapTerrian.json` 那一套）：英文 camelCase + `bigmap` 前缀。
+ * 中文名只留在策划 Excel 的 sheet 名与 `tools/config/gen_bigmap_tables.TITLES` 里给人看
+ * —— 表名写中文会让 eSon 导出中文文件名（用户 2026-10-20 明确要求不要）。
+ *
  * 格式沿用项目既有的 `{"k":[字段...],"v":[[值...]]}` 压缩表（`RefUtil` 解压成对象数组）。
  */
 export const BIGMAP_TABLE = {
-    world: 'BigMap-世界地图配置',
-    building: 'BigMap-建筑配置',
-    buildingLevel: 'BigMap-建筑升级',
-    produce: 'BigMap-建筑产出',
-    resource: 'BigMap-资源定义',
-    queue: 'BigMap-队列配置',
-    city: 'BigMap-城池配置',
-    cityLevel: 'BigMap-城池等级',
-    rank: 'BigMap-名次系数',
-    scoreRule: 'BigMap-积分规则',
-    monster: 'BigMap-野怪配置',
-    stamina: 'BigMap-行动力配置',
+    world: 'bigmapWorld',
+    schedule: 'bigmapSchedule',
+    building: 'bigmapBuilding',
+    buildingLevel: 'bigmapBuildingLevel',
+    produce: 'bigmapBuildingProduce',
+    resource: 'bigmapResource',
+    queue: 'bigmapQueue',
+    city: 'bigmapCity',
+    cityLevel: 'bigmapCityLevel',
+    rank: 'bigmapRank',
+    scoreRule: 'bigmapScoreRule',
+    monster: 'bigmapMonster',
+    stamina: 'bigmapStamina',
 } as const;
 
 export type BigMapTableName = typeof BIGMAP_TABLE[keyof typeof BIGMAP_TABLE];
@@ -115,6 +124,7 @@ function resType(row: BigMapRow): BigMapResType {
  */
 export function parseBigMapConfig(tables: BigMapRawTables): IBigMapConfig {
     const world = parseWorld(table(tables, BIGMAP_TABLE.world)[0]);
+    const schedule = parseSchedule(table(tables, BIGMAP_TABLE.schedule)[0]);
     const buildingRows = table(tables, BIGMAP_TABLE.building);
     const buildings = new Map<number, IBigMapBuildingConfig>();
     let mainBuildingId = 0;
@@ -177,9 +187,27 @@ export function parseBigMapConfig(tables: BigMapRawTables): IBigMapConfig {
     const stamina = parseStamina(table(tables, BIGMAP_TABLE.stamina)[0]);
 
     return {
-        world, buildings, levels, produce, resources, queue,
+        world, schedule, buildings, levels, produce, resources, queue,
         cities, cityLevels, ranks, scoreRule, monsters, stamina, mainBuildingId,
     };
+}
+
+/**
+ * 攻城日程：表里写 `"09:00"` 这种人类可读格式，这里折成当日秒并**复用同一套校验**。
+ *
+ * 解析与校验放同一条链上（`parseBigMapClockTime` → `validateBigMapCitySchedule`），
+ * 保证「表写错」和「代码里手写常量写错」炸在同一个地方。
+ */
+function parseSchedule(row: BigMapRow): IBigMapCitySchedule {
+    const schedule: IBigMapCitySchedule = {
+        utcOffsetSeconds: num(row, 'utcOffsetHours') * 3600,
+        openAt: parseBigMapClockTime(text(row, 'openTime'), 'openTime'),
+        lockAt: parseBigMapClockTime(text(row, 'lockTime'), 'lockTime'),
+        settleAt: parseBigMapClockTime(text(row, 'settleTime'), 'settleTime'),
+        snapshotAt: parseBigMapClockTime(text(row, 'snapshotTime'), 'snapshotTime'),
+    };
+    validateBigMapCitySchedule(schedule);
+    return schedule;
 }
 
 function parseWorld(row: BigMapRow): IBigMapWorldConfig {

@@ -1,6 +1,7 @@
 import type { TerritoryCampaignStage } from './TerritoryCampaignConfig';
 import type { TerritoryMapConfig, TerritorySite } from './TerritoryMapConfig';
 import { TERRITORY_SITE_TYPE } from './TerritoryMapConfig';
+import type { TerritoryProgress } from './TerritoryProgress';
 
 export interface TerritoryStageBinding {
     site: TerritorySite;
@@ -11,6 +12,25 @@ export interface TerritoryChapterCompletion {
     occupied: number;
     total: number;
     complete: boolean;
+}
+
+/** 按关卡进度找尚未通关的最近 Boss，同区域优先定位建筑格。 */
+export function findCurrentTerritoryBoss(
+    sites: readonly TerritorySite[],
+    stageByCell: ReadonlyMap<number, TerritoryCampaignStage>,
+    progress: TerritoryProgress,
+): TerritoryStageBinding | null {
+    const candidates: TerritoryStageBinding[] = [];
+    for (const site of sites) {
+        const stage = stageByCell.get(site.cellId);
+        if (!stage || (site.type !== TERRITORY_SITE_TYPE.boss
+            && !(site.type === TERRITORY_SITE_TYPE.stage && stage.isBoss))) continue;
+        if (progress.isAreaPassed(site.cellId) || progress.isDisabled(site.cellId)) continue;
+        candidates.push({ site, stage });
+    }
+    candidates.sort((a, b) => a.stage.stage - b.stage.stage || a.stage.levelId - b.stage.levelId
+        || Number(!!b.site.buildingId) - Number(!!a.site.buildingId) || a.site.cellId - b.site.cellId);
+    return candidates[0] ?? null;
 }
 
 /** Current map stations are the completion authority; unbound table rows do not block a chapter. */

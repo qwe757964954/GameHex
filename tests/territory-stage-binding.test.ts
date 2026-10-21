@@ -9,6 +9,7 @@ import {
     bindTerritoryBattleStages,
     bindTerritoryStages,
     expandBindingsToAreaSites,
+    findCurrentTerritoryBoss,
     territoryChapterCompletion,
 } from '../assets/script/app/territory/model/TerritoryStageBinding';
 
@@ -36,6 +37,21 @@ function chapter(number: number) {
         'utf8',
     )));
 }
+
+test('quick find follows unpassed Boss progression and locates the building in its shared area', () => {
+    const map = chapter(1);
+    const byCell = expandBindingsToAreaSites(map.sites, bindTerritoryBattleStages(map.sites, campaign(1).stages));
+    const progress = new TerritoryProgress(map);
+    const sites = [...map.sites].reverse();
+    assert.equal(findCurrentTerritoryBoss(sites, byCell, progress)?.site.cellId, 213);
+    progress.markCellPassed(193);
+    assert.equal(findCurrentTerritoryBoss(sites, byCell, progress)?.site.cellId, 105,
+        'passing any peer clears the entire Boss area');
+    progress.markCellPassed(85);
+    assert.equal(findCurrentTerritoryBoss(sites, byCell, progress), null);
+    assert.equal(findCurrentTerritoryBoss(sites, new Map(), new TerritoryProgress(map)), null,
+        'unbound Boss stations must not open an empty battle detail');
+});
 
 test('chapter one has exactly ten explicit playable level bindings', () => {
     const map = chapter(1);

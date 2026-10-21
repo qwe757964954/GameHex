@@ -5,7 +5,8 @@ import { existsSync, readFileSync } from 'node:fs';
 test('challenge tab stays visible but cannot open the old adventure page', () => {
     const source = readFileSync(new URL('../assets/script/app/main/MainTabHost.ts', import.meta.url), 'utf8');
     // 旧挑战入口仍保留在底栏，但不再绑定切页回调或章节地图 prefab。
-    assert.match(source, /button\.bindSelect\(type === MainTab\.Challenge \? null : \(\) => \{ void this\.switchTab\(type\); \}\);/);
+    assert.match(source, /const isLocked = type === MainTab\.Challenge \|\| type === MainTab\.World;/);
+    assert.match(source, /button\.bindSelect\(isLocked \? null : \(\) => \{ void this\.switchTab\(type\); \}\);/);
     assert.doesNotMatch(source, /if \(index === MainTab\.Challenge\) return this\.adventurePage;/);
     assert.doesNotMatch(source, /adventurePage/, '旧章节地图 prefab 入口应移除');
     const mainRoot = readFileSync(new URL('../assets/resources/ui/main/MainRoot.prefab', import.meta.url), 'utf8');

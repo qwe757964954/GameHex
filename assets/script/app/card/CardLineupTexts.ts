@@ -41,7 +41,11 @@ export const CARD_LINEUP_TEXTS = {
     upgradeFailed: '升级失败，请稍后再试',
     upgradeNoConfig: '该卡暂无升级配置',
     skillTitle: '技能',
-    skillLevelPrefix: 'Lv.',
+    /**
+     * 技能等级前缀。**留空**：2026-10-20 起需求是「显示等级就好」，不再带 `Lv.` 前缀
+     * （渲染成 `2` / `2/3` / `3（满级）`）。
+     */
+    skillLevelPrefix: '',
     /** 技能列表空的说法（主城 / 金矿这类没配技能的卡）。 */
     skillEmpty: '该卡没有技能',
     /** 「↓」按钮文案（往回看一档，纯本地预览，不发包）。 */

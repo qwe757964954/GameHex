@@ -8,7 +8,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { BigMapPresenter } from '../assets/script/app/bigmap/application/BigMapPresenter';
 import { createMemoryBigMapStorage, BIGMAP_SAVE_KEY } from '../assets/script/app/bigmap/application/BigMapSaveKeys';
-import type { IBigMapStorage } from '../assets/script/app/bigmap/application/BigMapPresenter';
+import type { IBigMapStorage, IBigMapPresenterDeps } from '../assets/script/app/bigmap/application/BigMapPresenter';
+import type { IBigMapCityRankBoard } from '../assets/script/app/bigmap/model/BigMapRank';
+import type { IBigMapConfig } from '../assets/script/app/bigmap/model/BigMapTypes';
 import { bigMapPlotHexId } from '../assets/script/app/bigmap/model/BigMapBase';
 import {
     exportBigMapLayout,
@@ -19,6 +21,21 @@ import { loadBigMapConfig } from './helpers/bigmap-fixtures';
 
 const config = loadBigMapConfig();
 
+/**
+ * 夹具时钟：本地 10:00（UTC 02:00）。
+ *
+ * 🔴 必须落在攻城日程的 `prepare` 段。原来的 `1_000_000` 折成本地 21:46，
+ * 正好在 `settling`（21:10–22:00）—— 那时候 `attackCity` 会被日程拦住，
+ * 攻城用例会以「结算中，无法攻城」失败。日程本身另有 `bigmap-city-schedule` 覆盖。
+ */
+const CLOCK_PREPARE = 957_600;
+
+/** 本地 03:00 —— 落在 `closed`（休战）段，用来验证攻城入口真的被日程拦住。 */
+const CLOCK_CLOSED = 68_400;
+
+/** 本地 22:05 —— 已过 22:00 快照点，用来验证 tick 会自动定格当日战绩。 */
+const CLOCK_SNAPSHOT = 50_700;
+
 interface IHarness {
     presenter: BigMapPresenter;
     storage: IBigMapStorage;
@@ -28,8 +45,9 @@ interface IHarness {
 function makeHarness(
     chapter = 3,
     storage = createMemoryBigMapStorage(),
-    now = 1_000_000,
+    now = CLOCK_PREPARE,
     layout: IBigMapLayout | null = null,
+    extra: Partial<IBigMapPresenterDeps> = {},
 ): IHarness {
     const clock = { now, chapter };
     const presenter = new BigMapPresenter({
@@ -39,6 +57,7 @@ function makeHarness(
         saveKey: BIGMAP_SAVE_KEY,
         adventureChapter: () => clock.chapter,
         now: () => clock.now,
+        ...extra,
     });
     return { presenter, storage, clock };
 }
@@ -192,6 +211,159 @@ test('连打 4 次占领首城，并把占领结果写进存档', () => {
     assert.deepEqual(reloaded.battle.occupiedCityIds, [101]);
 });
 
+test('休战期攻城被日程拦住，且不落下任何状态', () => {
+    const { presenter } = makeHarness(3, createMemoryBigMapStorage(), CLOCK_CLOSED);
+    const view = presenter.cityView(101)!;
+    assert.equal(view.state, 'open', '城池本身是开放的');
+    assert.equal(view.phase, 'closed');
+    assert.equal(view.canAttack, false);
+    assert.match(view.attackReason, /休战/);
+
+    const staminaBefore = presenter.base.res.stamina;
+    const feedback = presenter.attackCity(101);
+    assert.equal(feedback.ok, false);
+    assert.match(feedback.message, /休战/);
+    // 被拦的攻打不能动城池状态，也不能扣行动力。
+    assert.equal(presenter.cityView(101)!.state, 'open');
+    assert.equal(presenter.base.res.stamina, staminaBefore);
+});
+
+test('注入榜单端口：名次与同场人数进视图，战功预览随之下降', async () => {
+    const alone = makeHarness(3);
+    const soloScore = alone.presenter.cityView(101)!.previewWarScore;
+
+    // 一个「全服都在抢」的榜：玩家第 11 名、同场 10 人。
+    const crowdedBoard: IBigMapCityRankBoard = {
+        cityId: 101,
+        entries: [
+            { rank: 1, warScore: 99999, isPlayer: false },
+            { rank: 11, warScore: 10, isPlayer: true },
+        ],
+        playerRank: 11,
+        attackerCount: 10,
+        topWarScore: 99999,
+    };
+    const crowded = makeHarness(3, createMemoryBigMapStorage(), CLOCK_PREPARE, null, {
+        rankProvider: { fetchCityRank: async () => crowdedBoard },
+    });
+    await crowded.presenter.refreshCityRank(101);
+
+    const view = crowded.presenter.cityView(101)!;
+    assert.equal(view.playerRank, 11);
+    assert.equal(view.attackerCount, 10);
+    assert.ok(view.previewWarScore < soloScore, '名次靠后 + 人多，单次战功必须低于独狼');
+    assert.deepEqual(crowded.presenter.cityRankBoard(101), crowdedBoard);
+});
+
+test('榜单端口抛错不炸界面：回退本地 NPC 榜', async () => {
+    const broken = makeHarness(3, createMemoryBigMapStorage(), CLOCK_PREPARE, null, {
+        rankProvider: { fetchCityRank: async () => { throw new Error('网络断了'); } },
+    });
+    await broken.presenter.refreshCityRank(101);
+    const board = broken.presenter.cityRankBoard(101);
+    assert.equal(board.entries.some((entry) => entry.isPlayer), true, '回退后仍要有玩家自己');
+    assert.ok(board.entries.length > 1, '回退的是 NPC 榜，不是单人兜底');
+});
+
+test('打城之后名次会跟着战功变（榜单重算）', async () => {
+    const { presenter } = makeHarness(3);
+    // 先刷一次拿真实 NPC 榜：不刷新时读到的是「兜底榜 = 独自一人第一名」，
+    // 那是「没人抢」的假设，拿它当基准比会得到假结论。
+    await presenter.refreshCityRank(101);
+    const before = presenter.cityRankBoard(101).playerRank;
+    const scoreBefore = presenter.cityRankBoard(101).entries.find((entry) => entry.isPlayer)!.warScore;
+    presenter.attackCity(101);
+    const after = presenter.cityRankBoard(101).playerRank;
+    const scoreAfter = presenter.cityRankBoard(101).entries.find((entry) => entry.isPlayer)!.warScore;
+    assert.ok(scoreAfter > scoreBefore, '战功必须累加');
+    assert.ok(after <= before, `战功涨了名次不该退：${before} → ${after}`);
+});
+
+test('日程来自配置表：把开战时间推到 23:00，同一时刻就打不了', () => {
+    const lateConfig: IBigMapConfig = {
+        ...config,
+        schedule: {
+            ...config.schedule,
+            openAt: 23 * 3600,
+            lockAt: 23 * 3600 + 60,
+            settleAt: 23 * 3600 + 120,
+            snapshotAt: 23 * 3600 + 180,
+        },
+    };
+    const late = new BigMapPresenter({
+        config: lateConfig,
+        storage: createMemoryBigMapStorage(),
+        saveKey: BIGMAP_SAVE_KEY,
+        adventureChapter: () => 3,
+        now: () => CLOCK_PREPARE,
+    });
+    const view = late.cityView(101)!;
+    assert.equal(view.phase, 'closed', '本地 10:00 落在改过之后的休战段');
+    assert.equal(view.canAttack, false);
+
+    // 对照：默认配置（09:00 开战）同一时刻是可打的，说明差异只来自配置。
+    const normal = makeHarness(3).presenter.cityView(101)!;
+    assert.equal(normal.phase, 'prepare');
+    assert.equal(normal.canAttack, true);
+});
+
+test('22:05 tick 出当日快照：一天只出一份，且能写进存档', () => {
+    const { presenter, storage, clock } = makeHarness(3);
+    presenter.attackCity(101);
+    const warScore = Math.round(presenter.battle.cityWarScore[101] ?? 0);
+    assert.ok(warScore > 0, '先打出战功，快照才有内容');
+
+    clock.now = CLOCK_SNAPSHOT;   // 推到 22:05
+    presenter.tick();
+    const snapshot = presenter.daySnapshot();
+    assert.ok(snapshot, '过了快照点必须出快照');
+    assert.equal(snapshot!.cities['101'].warScore, warScore);
+    assert.ok(snapshot!.cities['101'].rank >= 1);
+
+    // 幂等：同一天再 tick 不重算
+    clock.now += 300;
+    presenter.tick();
+    assert.deepEqual(presenter.daySnapshot(), snapshot);
+
+    // 持久化：关掉重进页面，昨天那份还在
+    const reloaded = new BigMapPresenter({
+        config, storage, saveKey: BIGMAP_SAVE_KEY,
+        adventureChapter: () => 3, now: () => CLOCK_SNAPSHOT + 300,
+    });
+    assert.deepEqual(reloaded.daySnapshot(), snapshot);
+});
+
+test('白天 tick 不出快照（09:00~22:00 之间）', () => {
+    const { presenter } = makeHarness(3);   // 本地 10:00
+    presenter.attackCity(101);
+    presenter.tick();
+    assert.equal(presenter.daySnapshot(), null);
+});
+
+test('建造队列靠货币解锁：第一次成功、第二次货币不足', () => {
+    const { presenter } = makeHarness(3);
+    const startCoin = presenter.base.res.coin;
+    assert.equal(startCoin, 200, '新档初始货币 200');
+    assert.equal(presenter.queueUnlockInfo().current, config.queue.initBuildQueue);
+    assert.equal(presenter.queueUnlockInfo().canUnlock, true);
+
+    const first = presenter.unlockBuildQueue();
+    assert.equal(first.ok, true, first.message);
+    assert.match(first.message, /队列 \+1/);
+    assert.equal(presenter.base.queueUnlocked, config.queue.initBuildQueue + 1);
+    assert.equal(presenter.base.res.coin, startCoin - config.queue.queueUnlockCost2);
+
+    // 第 3 条要 360，此时只剩 80 ⇒ 拒绝但要说清原因
+    const info = presenter.queueUnlockInfo();
+    assert.equal(info.current, config.queue.initBuildQueue + 1);
+    assert.equal(info.canUnlock, false);
+    assert.match(info.reason, /货币不足/);
+    const second = presenter.unlockBuildQueue();
+    assert.equal(second.ok, false);
+    assert.match(second.message, /货币不足/);
+    assert.equal(presenter.base.queueUnlocked, config.queue.initBuildQueue + 1, '失败不能改状态');
+});
+
 test('野怪：可打、击杀后进 CD，视图给出倒计时', () => {
     const { presenter, clock } = makeHarness(3);
     const monster = presenter.world.monsters.find((item) => item.level === 1)!;
@@ -251,9 +423,9 @@ test('脏存档里的非法建筑会被丢掉，主城缺失时自动补回', ()
     assert.equal(buildings.some((item) => item.buildingId === 99999), false);
     assert.equal(buildings.some((item) => item.buildingId === config.mainBuildingId), true);
     assert.equal(buildings.find((item) => item.buildingId === 71002)!.level, 5);
-    // 队列容量由建筑反推（没建「建造队列」⇒ 只有初始 1 条），脏队列被清成空闲。
-    assert.equal(presenter.queues().length, config.queue.initBuildQueue);
-    assert.equal(presenter.queues()[0].busy, false);
+    // 队列数量是**存档权威**（文档口径：付费解锁，不来自建筑），越界的 9 被夹到上限。
+    assert.equal(presenter.queues().length, config.queue.maxBuildQueue);
+    assert.equal(presenter.queues()[0].busy, false, '脏队列被清成空闲');
     // 只保留配置里存在的城池；等级不会为负。
     assert.deepEqual(presenter.battle.occupiedCityIds, [101]);
     assert.equal(presenter.battle.clearedMonsterLevel, 0);

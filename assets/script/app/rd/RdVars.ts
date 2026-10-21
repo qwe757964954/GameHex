@@ -48,7 +48,7 @@
  * （或挂 `ui/common/RedDot.prefab`）。目前这些位置还是「故意没建空节点」的状态：
  * - 礼包：`GiftSubTab`（子页签）、`RechargeDailyView` / `RechargeTotalView`（页内）、`RechargeChest`；
  * - 邮件：`MailRow`（`com_rd`）；
- * - 聊天：`ChatPrivateHead`（`com_rd`）、主界面 `ChatEntry`（现在是个占位 Sprite）。
+ * - 聊天：`ChatPrivateHead`（`com_rd`）；主界面底部聊天条暂不接红点。
  *
  * ⚠️ 礼包子页签那四个（413 每日 / 414 周常 / 415 月度 / 416 终身）变量**值都等于整页聚合**，
  * 见上面 `RDGiftDaily` 的注释 —— 要接子页签红点得先按 plan 周期拆判据，否则四个页签一起亮。

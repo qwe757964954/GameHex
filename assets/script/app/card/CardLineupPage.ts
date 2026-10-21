@@ -240,6 +240,11 @@ export class CardLineupPage extends Component {
             return;
         }
 
+        // TEMP-DIAG（定位 heroLevels 为 null 后删除）
+        if (!(data.heroLevels instanceof Map)) {
+            console.error('[CardLineupPage] heroLevels 异常:', data.heroLevels,
+                'keys=' + Object.keys(data).join(','), 'valid=' + this.node.isValid);
+        }
         this.heroListKnown = data.heroListKnown;
         this.heroLevels = data.heroLevels;
         this.heroLevelCaps = data.heroLevelCaps;

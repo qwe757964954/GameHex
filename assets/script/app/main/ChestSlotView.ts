@@ -1,7 +1,16 @@
-import { _decorator, Component, Label, Node, Sprite, SpriteFrame } from 'cc';
+import { _decorator, Button, Component, Label, Node, Sprite, SpriteFrame, UITransform } from 'cc';
 import { ChestSlotAction, ChestSlotState, IChestSlotData } from './ChestTypes';
 
 const { ccclass, property } = _decorator;
+const CHEST_SPEED_UP_TEXT_X = 16;
+const CHEST_SPEED_UP_TEXT_SPACING = 2;
+const CHEST_CLOCK_WIDTH = 26;
+const CHEST_TIMER_GAP = 4;
+const CHEST_TIME_TEXT_MAX_WIDTH = 107;
+const CHEST_TIME_TEXT_HEIGHT = 24;
+const CHEST_PROGRESS_X = 15;
+const CHEST_COUNTING_CLOCK_X = -57;
+const CHEST_PROGRESS_SCALE_X = 0.78;
 
 /**
  * 宝箱**单格**（`ui/main/ChestSlot.prefab`）。
@@ -21,11 +30,20 @@ export class ChestSlotView extends Component {
     @property({ type: Node, tooltip: 'Timer：顶部计时条容器' })
     timer: Node = null!;
 
+    @property({ type: Node, tooltip: 'Timer/TimeBg：仅激活倒计时中显示的进度条' })
+    timeBg: Node = null!;
+
+    @property({ type: Node, tooltip: 'Timer/Clock：闹钟图标' })
+    clock: Node = null!;
+
     @property({ type: Sprite, tooltip: 'Timer/TimeBg/TimeFill：进度填充（FILLED）' })
     timeFill: Sprite = null!;
 
     @property({ type: Label, tooltip: 'Timer/TimeText：剩余时间文本' })
     timeText: Label = null!;
+
+    @property({ type: UITransform, tooltip: 'Timer/TimeText：时间文本布局' })
+    timeTextTransform: UITransform = null!;
 
     @property({ type: Sprite, tooltip: 'Box：宝箱图' })
     box: Sprite = null!;
@@ -48,6 +66,9 @@ export class ChestSlotView extends Component {
     @property({ type: Label, tooltip: 'Btn/BtnLabel：按钮文案' })
     btnLabel: Label = null!;
 
+    @property({ type: Node, tooltip: 'Btn/SpeedUpIcon：加速按钮的视频图标' })
+    speedUpIcon: Node = null!;
+
     /** 三张卡底 + 三张按钮底，由 `ChestBar` 在装配时灌进来。 */
     private static cardFrames: { blue: SpriteFrame | null; gold: SpriteFrame | null; empty: SpriteFrame | null } =
         { blue: null, gold: null, empty: null };
@@ -66,7 +87,8 @@ export class ChestSlotView extends Component {
     }
 
     onLoad(): void {
-        this.node.on(Node.EventType.TOUCH_END, this.handleAction, this);
+        // cc.Button 会停止触摸事件冒泡，必须监听实际按钮的 CLICK。
+        this.btn.node.on(Button.EventType.CLICK, this.handleAction, this);
     }
 
     bindAction(handler: (() => void) | null): void {
@@ -77,14 +99,16 @@ export class ChestSlotView extends Component {
         this.onAction?.();
     }
 
-    /** 全量赋值（幂等）。 */
-    render(data: IChestSlotData): void {
+    /** 全量赋值；空槽仅在被宝箱栏选为战斗入口时显示按钮及消耗。 */
+    render(data: IChestSlotData, showBattleEntry = true): void {
         const empty = data.state === ChestSlotState.Empty;
+        const isUnactivated = data.action === ChestSlotAction.Activate;
+        const isCounting = data.state === ChestSlotState.Counting;
+        const isSpeedUp = data.action === ChestSlotAction.SpeedUp;
 
-        // 卡片 / 按钮底：两态都绝对赋值
-        //  空槽 → 空槽卡；倒计时中 → 蓝卡；其余（可开启 / 未解锁）→ 金卡。设计稿「塔防主界面-2」口径。
+        // 蓝卡表示尚未完成等待（未激活或倒计时中），金卡表示等待结束可开。
         const cardFrame = empty ? ChestSlotView.cardFrames.empty
-            : (data.state === ChestSlotState.Counting ? ChestSlotView.cardFrames.blue : ChestSlotView.cardFrames.gold);
+            : (isUnactivated || isCounting ? ChestSlotView.cardFrames.blue : ChestSlotView.cardFrames.gold);
         if (cardFrame) this.card.spriteFrame = cardFrame;
 
         const btnFrame = data.action === ChestSlotAction.Battle ? ChestSlotView.btnFrames.blue
@@ -94,22 +118,41 @@ export class ChestSlotView extends Component {
         // 显隐
         this.box.node.active = !empty;
         this.nameLabel.node.active = !empty;
-        this.timer.active = !empty && data.state === ChestSlotState.Counting;
+        this.timer.active = !empty && (isUnactivated || isCounting);
+        this.timeBg.active = !empty && isCounting;
+        this.speedUpIcon.active = isSpeedUp;
+        this.btn.node.active = !empty || showBattleEntry;
         if (this.emptyLabel) this.emptyLabel.node.active = empty;
-        if (this.cost) this.cost.active = empty && data.cost > 0;
+        if (this.cost) this.cost.active = empty && showBattleEntry && data.cost > 0;
 
         // 文案
         if (!empty) this.nameLabel.string = data.name;
         if (this.costLabel) this.costLabel.string = String(data.cost);
         this.btnLabel.string = ChestSlotView.actionText(data);
         this.btnLabel.isBold = data.action === ChestSlotAction.Battle || data.action === ChestSlotAction.SpeedUp;
+        this.btnLabel.node.setPosition(isSpeedUp ? CHEST_SPEED_UP_TEXT_X : 0, 0, 0);
+        this.btnLabel.spacingX = isSpeedUp ? CHEST_SPEED_UP_TEXT_SPACING : 0;
 
-        // 计时：进度 = 剩余 / 总时长；文本 = HH:MM:SS
+        this.timeBg.setPosition(CHEST_PROGRESS_X, 0, 0);
+        this.timeBg.setScale(CHEST_PROGRESS_SCALE_X, 1, 1);
         if (this.timer.active) {
             const total = data.totalSeconds > 0 ? data.totalSeconds : 1;
-            const ratio = Math.max(0, Math.min(1, data.remainSeconds / total));
-            if (this.timeFill) this.timeFill.fillRange = ratio;
-            if (this.timeText) this.timeText.string = ChestSlotView.formatRemain(data.remainSeconds);
+            const ratio = Math.max(0, Math.min(1, 1 - data.remainSeconds / total));
+            this.timeFill.fillRange = isCounting ? ratio : 0;
+            this.timeText.string = isCounting
+                ? ChestSlotView.formatCountdown(data.remainSeconds)
+                : ChestSlotView.formatRemain(data.totalSeconds);
+            let textWidth = CHEST_TIME_TEXT_MAX_WIDTH;
+            if (isUnactivated) {
+                // h/m/s 文本长短不同，按本帧真实字宽将图标和文字整体居中。
+                this.timeText.overflow = Label.Overflow.NONE;
+                this.timeText.updateRenderData(true);
+                textWidth = Math.min(this.timeTextTransform.width, CHEST_TIME_TEXT_MAX_WIDTH);
+            }
+            this.timeText.overflow = Label.Overflow.SHRINK;
+            this.timeTextTransform.setContentSize(textWidth, CHEST_TIME_TEXT_HEIGHT);
+            this.clock.setPosition(isCounting ? CHEST_COUNTING_CLOCK_X : -(textWidth + CHEST_TIMER_GAP) / 2, 0, 0);
+            this.timeText.node.setPosition(isCounting ? CHEST_PROGRESS_X : (CHEST_CLOCK_WIDTH + CHEST_TIMER_GAP) / 2, 0, 0);
         }
     }
 
@@ -120,19 +163,23 @@ export class ChestSlotView extends Component {
         return '开启';
     }
 
-    /**
-     * 秒 → 计时文本。
-     *
-     * 设计稿口径：**整小时显示 `24h`**（卡1 那颗），非整点才走 `HH:MM:SS`（卡4 的 `04:11:05`）；
-     * 超过 24h 也照常进位，不显示天数。
-     */
+    /** 秒 → 紧凑英文时长；省略为零的单位，超过 24 小时继续累计小时。 */
     static formatRemain(seconds: number): string {
-        const total = Math.max(0, Math.floor(seconds));
-        if (total >= 3600 && total % 3600 === 0) return `${total / 3600}h`;
-        const h = Math.floor(total / 3600);
-        const m = Math.floor((total % 3600) / 60);
-        const s = total % 60;
-        const pad = (value: number): string => (value < 10 ? `0${value}` : String(value));
-        return `${pad(h)}:${pad(m)}:${pad(s)}`;
+        const total = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
+        const hours = Math.floor(total / 3600);
+        const minutes = Math.floor((total % 3600) / 60);
+        const secondsRemaining = total % 60;
+        const parts: string[] = [];
+        if (hours > 0) parts.push(`${hours}h`);
+        if (minutes > 0) parts.push(`${minutes}m`);
+        if (secondsRemaining > 0 || parts.length === 0) parts.push(`${secondsRemaining}s`);
+        return parts.join(' ');
+    }
+
+    /** 激活后的剩余时间固定时分秒，超过一天累计小时。 */
+    static formatCountdown(seconds: number): string {
+        const total = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
+        return [Math.floor(total / 3600), Math.floor((total % 3600) / 60), total % 60]
+            .map((part) => String(part).padStart(2, '0')).join(':');
     }
 }

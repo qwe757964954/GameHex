@@ -247,6 +247,10 @@ name?:string
 desc?:string
 unlockarmylevel:number
 skilllevel:number
+costCoinID:number
+costCoinNum:number
+costArmySkillLevelID:number
+costArmySkillLevelNum:number
 armySkillType:number
 modfiy:any[]
 }
@@ -255,6 +259,10 @@ type IRefarmySkillLevelUp_name=string
 type IRefarmySkillLevelUp_desc=string
 type IRefarmySkillLevelUp_unlockarmylevel=number
 type IRefarmySkillLevelUp_skilllevel=number
+type IRefarmySkillLevelUp_costCoinID=number
+type IRefarmySkillLevelUp_costCoinNum=number
+type IRefarmySkillLevelUp_costArmySkillLevelID=number
+type IRefarmySkillLevelUp_costArmySkillLevelNum=number
 type IRefarmySkillLevelUp_armySkillType=number
 type IRefarmySkillLevelUp_modfiy=any[]
 
@@ -467,6 +475,321 @@ type IRefbfUnionRankAward_rank=any[]
 type IRefbfUnionRankAward_reward=any[]
 
 interface refGen{bfUnionRankAward:IRefbfUnionRankAward}
+
+
+interface IRefbigmapBuilding extends IRefBase
+{
+id:number
+baseBuildName:string
+baseBuildType:number
+occupyHex:number
+maxOwnNum:number
+unlockChapter:number
+queueType:number
+sort:number
+baseBuildInfo:string
+}
+type IRefbigmapBuilding_id=number
+type IRefbigmapBuilding_baseBuildName=string
+type IRefbigmapBuilding_baseBuildType=number
+type IRefbigmapBuilding_occupyHex=number
+type IRefbigmapBuilding_maxOwnNum=number
+type IRefbigmapBuilding_unlockChapter=number
+type IRefbigmapBuilding_queueType=number
+type IRefbigmapBuilding_sort=number
+type IRefbigmapBuilding_baseBuildInfo=string
+
+interface refGen{bigmapBuilding:IRefbigmapBuilding}
+
+
+interface IRefbigmapBuildingLevel extends IRefBase
+{
+id:number
+buildLevel:number
+costGrain:number
+costWood:number
+costIron:number
+instantCost:number
+preBuildId:number
+preBuildLevel:number
+buildTime:number
+maxOtherLevel:number
+resCap:number
+attrBonus:number
+}
+type IRefbigmapBuildingLevel_id=number
+type IRefbigmapBuildingLevel_buildLevel=number
+type IRefbigmapBuildingLevel_costGrain=number
+type IRefbigmapBuildingLevel_costWood=number
+type IRefbigmapBuildingLevel_costIron=number
+type IRefbigmapBuildingLevel_instantCost=number
+type IRefbigmapBuildingLevel_preBuildId=number
+type IRefbigmapBuildingLevel_preBuildLevel=number
+type IRefbigmapBuildingLevel_buildTime=number
+type IRefbigmapBuildingLevel_maxOtherLevel=number
+type IRefbigmapBuildingLevel_resCap=number
+type IRefbigmapBuildingLevel_attrBonus=number
+
+interface refGen{bigmapBuildingLevel:IRefbigmapBuildingLevel}
+
+
+interface IRefbigmapBuildingProduce extends IRefBase
+{
+id:number
+buildLevel:number
+resType:string
+producePerHour:number
+produceCap:number
+techGroup:string
+}
+type IRefbigmapBuildingProduce_id=number
+type IRefbigmapBuildingProduce_buildLevel=number
+type IRefbigmapBuildingProduce_resType=string
+type IRefbigmapBuildingProduce_producePerHour=number
+type IRefbigmapBuildingProduce_produceCap=number
+type IRefbigmapBuildingProduce_techGroup=string
+
+interface refGen{bigmapBuildingProduce:IRefbigmapBuildingProduce}
+
+
+interface IRefbigmapCity extends IRefBase
+{
+cityId:number
+cityName:string
+layer:number
+available:number
+cityLevel:number
+exclusive:number
+unlockChapter:number
+openDay:number
+staminaCost:number
+defenseHp:number
+radiateCapacity:number
+cityLevelCoeff:number
+prevCityId:number
+rewardCoin:number
+cityDesc:string
+slot:number
+slotCount:number
+}
+type IRefbigmapCity_cityId=number
+type IRefbigmapCity_cityName=string
+type IRefbigmapCity_layer=number
+type IRefbigmapCity_available=number
+type IRefbigmapCity_cityLevel=number
+type IRefbigmapCity_exclusive=number
+type IRefbigmapCity_unlockChapter=number
+type IRefbigmapCity_openDay=number
+type IRefbigmapCity_staminaCost=number
+type IRefbigmapCity_defenseHp=number
+type IRefbigmapCity_radiateCapacity=number
+type IRefbigmapCity_cityLevelCoeff=number
+type IRefbigmapCity_prevCityId=number
+type IRefbigmapCity_rewardCoin=number
+type IRefbigmapCity_cityDesc=string
+type IRefbigmapCity_slot=number
+type IRefbigmapCity_slotCount=number
+
+interface refGen{bigmapCity:IRefbigmapCity}
+
+
+interface IRefbigmapCityLevel extends IRefBase
+{
+cityLevel:number
+warScoreRate:number
+occupyScore:number
+powerThreshold:number
+cityLevelCoeff:number
+staminaCost:number
+minOccupyWarScore:number
+defenseHp:number
+}
+type IRefbigmapCityLevel_cityLevel=number
+type IRefbigmapCityLevel_warScoreRate=number
+type IRefbigmapCityLevel_occupyScore=number
+type IRefbigmapCityLevel_powerThreshold=number
+type IRefbigmapCityLevel_cityLevelCoeff=number
+type IRefbigmapCityLevel_staminaCost=number
+type IRefbigmapCityLevel_minOccupyWarScore=number
+type IRefbigmapCityLevel_defenseHp=number
+
+interface refGen{bigmapCityLevel:IRefbigmapCityLevel}
+
+
+interface IRefbigmapMonster extends IRefBase
+{
+monsterId:number
+monsterName:string
+monsterLevel:number
+occupyHex:number
+preLevel:number
+staminaCost:number
+warScore:number
+defenseHp:number
+respawnSeconds:number
+rewardGrain:number
+rewardWood:number
+rewardIron:number
+rewardCoin:number
+}
+type IRefbigmapMonster_monsterId=number
+type IRefbigmapMonster_monsterName=string
+type IRefbigmapMonster_monsterLevel=number
+type IRefbigmapMonster_occupyHex=number
+type IRefbigmapMonster_preLevel=number
+type IRefbigmapMonster_staminaCost=number
+type IRefbigmapMonster_warScore=number
+type IRefbigmapMonster_defenseHp=number
+type IRefbigmapMonster_respawnSeconds=number
+type IRefbigmapMonster_rewardGrain=number
+type IRefbigmapMonster_rewardWood=number
+type IRefbigmapMonster_rewardIron=number
+type IRefbigmapMonster_rewardCoin=number
+
+interface refGen{bigmapMonster:IRefbigmapMonster}
+
+
+interface IRefbigmapQueue extends IRefBase
+{
+id:number
+maxBuildQueue:number
+initBuildQueue:number
+queueUnlockCost2:number
+queueUnlockCost3:number
+cancelReturnRate:number
+offlineMaxHours:number
+upgradeUnlockChapter:number
+plotRows:number
+plotCols:number
+}
+type IRefbigmapQueue_id=number
+type IRefbigmapQueue_maxBuildQueue=number
+type IRefbigmapQueue_initBuildQueue=number
+type IRefbigmapQueue_queueUnlockCost2=number
+type IRefbigmapQueue_queueUnlockCost3=number
+type IRefbigmapQueue_cancelReturnRate=number
+type IRefbigmapQueue_offlineMaxHours=number
+type IRefbigmapQueue_upgradeUnlockChapter=number
+type IRefbigmapQueue_plotRows=number
+type IRefbigmapQueue_plotCols=number
+
+interface refGen{bigmapQueue:IRefbigmapQueue}
+
+
+interface IRefbigmapRank extends IRefBase
+{
+rank:number
+coeffPct:number
+}
+type IRefbigmapRank_rank=number
+type IRefbigmapRank_coeffPct=number
+
+interface refGen{bigmapRank:IRefbigmapRank}
+
+
+interface IRefbigmapResource extends IRefBase
+{
+resType:string
+resName:string
+icon:string
+startAmount:number
+showInBar:number
+}
+type IRefbigmapResource_resType=string
+type IRefbigmapResource_resName=string
+type IRefbigmapResource_icon=string
+type IRefbigmapResource_startAmount=number
+type IRefbigmapResource_showInBar=number
+
+interface refGen{bigmapResource:IRefbigmapResource}
+
+
+interface IRefbigmapSchedule extends IRefBase
+{
+scheduleId:number
+utcOffsetHours:number
+openTime:string
+lockTime:string
+settleTime:string
+snapshotTime:string
+}
+type IRefbigmapSchedule_scheduleId=number
+type IRefbigmapSchedule_utcOffsetHours=number
+type IRefbigmapSchedule_openTime=string
+type IRefbigmapSchedule_lockTime=string
+type IRefbigmapSchedule_settleTime=string
+type IRefbigmapSchedule_snapshotTime=string
+
+interface refGen{bigmapSchedule:IRefbigmapSchedule}
+
+
+interface IRefbigmapScoreRule extends IRefBase
+{
+scoreRuleId:number
+marginalDamageCap:number
+rankExtendStepPct:number
+rankExtendMinPct:number
+crowdBase:number
+crowdK:number
+offRangeDamageCutPct:number
+npcScoreRatio:number
+}
+type IRefbigmapScoreRule_scoreRuleId=number
+type IRefbigmapScoreRule_marginalDamageCap=number
+type IRefbigmapScoreRule_rankExtendStepPct=number
+type IRefbigmapScoreRule_rankExtendMinPct=number
+type IRefbigmapScoreRule_crowdBase=number
+type IRefbigmapScoreRule_crowdK=number
+type IRefbigmapScoreRule_offRangeDamageCutPct=number
+type IRefbigmapScoreRule_npcScoreRatio=number
+
+interface refGen{bigmapScoreRule:IRefbigmapScoreRule}
+
+
+interface IRefbigmapStamina extends IRefBase
+{
+configId:number
+staminaMax:number
+recoverInterval:number
+buyTimesDaily:number
+buyCost:number
+overflowKeep:number
+}
+type IRefbigmapStamina_configId=number
+type IRefbigmapStamina_staminaMax=number
+type IRefbigmapStamina_recoverInterval=number
+type IRefbigmapStamina_buyTimesDaily=number
+type IRefbigmapStamina_buyCost=number
+type IRefbigmapStamina_overflowKeep=number
+
+interface refGen{bigmapStamina:IRefbigmapStamina}
+
+
+interface IRefbigmapWorld extends IRefBase
+{
+worldId:number
+worldName:string
+rows:number
+cols:number
+cityRing1:number
+cityRing2:number
+baseRadiusMin:number
+baseRadiusMax:number
+npcBaseCount:number
+monsterRingMax:number
+}
+type IRefbigmapWorld_worldId=number
+type IRefbigmapWorld_worldName=string
+type IRefbigmapWorld_rows=number
+type IRefbigmapWorld_cols=number
+type IRefbigmapWorld_cityRing1=number
+type IRefbigmapWorld_cityRing2=number
+type IRefbigmapWorld_baseRadiusMin=number
+type IRefbigmapWorld_baseRadiusMax=number
+type IRefbigmapWorld_npcBaseCount=number
+type IRefbigmapWorld_monsterRingMax=number
+
+interface refGen{bigmapWorld:IRefbigmapWorld}
 
 
 interface IRefbigNum extends IRefBase
@@ -2494,6 +2817,25 @@ type IRefneutralResource_rewardCardId=string
 interface refGen{neutralResource:IRefneutralResource}
 
 
+interface IRefnewTreasureBoxCardPool extends IRefBase
+{
+cardBoxID:number
+poolType:number
+cardBoxItemID:any[]
+heroNumRange:string
+heroDrawMax:number
+heroWeight:number
+}
+type IRefnewTreasureBoxCardPool_cardBoxID=number
+type IRefnewTreasureBoxCardPool_poolType=number
+type IRefnewTreasureBoxCardPool_cardBoxItemID=any[]
+type IRefnewTreasureBoxCardPool_heroNumRange=string
+type IRefnewTreasureBoxCardPool_heroDrawMax=number
+type IRefnewTreasureBoxCardPool_heroWeight=number
+
+interface refGen{newTreasureBoxCardPool:IRefnewTreasureBoxCardPool}
+
+
 interface IRefnewTreasureBoxConfig extends IRefBase
 {
 cardBoxID:number
@@ -4390,7 +4732,7 @@ type IRefzcGuideParams_key=string
 type IRefzcGuideParams_value=string
 
 interface refGen{zcGuideParams:IRefzcGuideParams}
-type TRefName="activity.json"|"activityOpen.json"|"activityTab.json"|"ad.json"|"advisor.json"|"advisorStar.json"|"apprentice.json"|"apprenticeLevel.json"|"army.json"|"armyLevel.json"|"armySkillLevelUp.json"|"armySkin.json"|"armySkinStar.json"|"artifact.json"|"artifactLevel.json"|"artifactStar.json"|"audioConfig.json"|"battleModel.json"|"battleTokenConfig.json"|"battleTokenPlan.json"|"battleTokenReward.json"|"bfPersonRankAward.json"|"bfUnionRankAward.json"|"bigNum.json"|"build.json"|"buySta.json"|"cardLevelUp.json"|"celebrationConfig.json"|"celebrationRank.json"|"celebrationShop.json"|"celebrationTarget.json"|"chapterAttrAddition.json"|"chapterRankAward.json"|"ciFu.json"|"dayChallengeActTask.json"|"dayChallengeActTaskProgress.json"|"defenceModWave.json"|"defenceWaveReward.json"|"equip.json"|"equipLevel.json"|"equipLib.json"|"equipRank.json"|"equipResonance.json"|"equipType.json"|"firstRechargeNew.json"|"firstRechargeShop.json"|"fundPlan.json"|"fundReward.json"|"gameCircleConfig.json"|"gameConfig.json"|"gem.json"|"gemAttribute.json"|"gemBox.json"|"gemQuality.json"|"gemShop.json"|"general.json"|"generalStar.json"|"giftShop.json"|"goldShop.json"|"grade.json"|"guanka.json"|"guanka1.json"|"guankaChapter.json"|"guankaFBconfig.json"|"guankaFbType.json"|"guankaGift.json"|"guankaHitLv.json"|"guankaLV.json"|"guankaMarch.json"|"guankaReward.json"|"guankaReward1.json"|"guankaReward2.json"|"guankaSkillLevelUp.json"|"guankaStar.json"|"guards.json"|"guardsLevel.json"|"guardsRank.json"|"guoGuanZJConfig.json"|"head.json"|"heroSkill.json"|"heroSkillLevel.json"|"icon.json"|"idConfig.json"|"interactReward.json"|"item.json"|"itemBox.json"|"itemBoxPro.json"|"itemCraft.json"|"itemType.json"|"level.json"|"levelInfo.json"|"levelMapGrideReward.json"|"limitedTimeBundle.json"|"limitTimeCard.json"|"lockMonsterLevel.json"|"lockMonsterRefreshCost.json"|"lottery.json"|"lotteryshop1.json"|"lotteryshop2.json"|"lotteryshop3.json"|"lotteryshop4.json"|"lotterytask.json"|"mapconfig.json"|"mapTerrian.json"|"matchTips.json"|"mL.json"|"modelRef.json"|"monster.json"|"monsterCard.json"|"monsterSkillType.json"|"monthCardActPlan.json"|"neutralResource.json"|"newTreasureBoxConfig.json"|"newTreasureBoxQueueConfig.json"|"npcTeam.json"|"open.json"|"openGridReward.json"|"payChannel.json"|"plotCard.json"|"plotDialogue.json"|"plotGuanka.json"|"privilegeMonthCardInfo.json"|"proDesc.json"|"pvpArtifact.json"|"pvpArtifactAscend.json"|"pvpAttrMap.json"|"pvpBaseTeamWeight.json"|"pvpBond.json"|"pvpCard.json"|"pvpCounter.json"|"pvpGlobal.json"|"pvpModifierOverride.json"|"pvpPity.json"|"pvpSkill.json"|"pvpSkillBinding.json"|"pvpSkillPlan.json"|"pvpStatus.json"|"pvpTile.json"|"pvpTileGen.json"|"pvpTileGenParams.json"|"pvpUnitGrowth.json"|"qingShen.json"|"rechargeContinuityGift.json"|"rechargeDaily.json"|"rechargeGiftActPlan.json"|"refToCodeEnum.json"|"resourceShop.json"|"rewardClientPool.json"|"roleProperty.json"|"secretRealmAttr.json"|"secretRealmLevel.json"|"secretRealmRefreshCost.json"|"serverRank.json"|"sevenDayPoint.json"|"sevenDayShop.json"|"sevenDayTask.json"|"share.json"|"shiMengBattleConfig.json"|"signinTask.json"|"skillAdditionBuff.json"|"skillAttr.json"|"skillAttrModifier.json"|"skillBook.json"|"skillBookLevel.json"|"skillBuff.json"|"skillEffect.json"|"skillEffectDamageType.json"|"skillEffectShow.json"|"skillLevelUP.json"|"skillType.json"|"skillView.json"|"skin.json"|"spiritAnimal.json"|"spiritAnimalBox.json"|"spiritAnimalLevel.json"|"spiritAnimalStep.json"|"spiritAnimalType.json"|"ssjjRankAward.json"|"swjjShop.json"|"systemDesc.json"|"taskMain.json"|"taskType.json"|"taskUnion.json"|"taskUnionProgress.json"|"unionDiscount.json"|"unionLevel.json"|"unionOfficial.json"|"unionShop.json"|"valuableMonthCardInfo.json"|"viewtype.json"|"wall.json"|"wallSkillLevel.json"|"wallType.json"|"waveReward.json"|"workShop.json"|"workShopLevel.json"|"zcGuide.json"|"zcGuideParams.json"
+type TRefName="activity.json"|"activityOpen.json"|"activityTab.json"|"ad.json"|"advisor.json"|"advisorStar.json"|"apprentice.json"|"apprenticeLevel.json"|"army.json"|"armyLevel.json"|"armySkillLevelUp.json"|"armySkin.json"|"armySkinStar.json"|"artifact.json"|"artifactLevel.json"|"artifactStar.json"|"audioConfig.json"|"battleModel.json"|"battleTokenConfig.json"|"battleTokenPlan.json"|"battleTokenReward.json"|"bfPersonRankAward.json"|"bfUnionRankAward.json"|"bigmapBuilding.json"|"bigmapBuildingLevel.json"|"bigmapBuildingProduce.json"|"bigmapCity.json"|"bigmapCityLevel.json"|"bigmapMonster.json"|"bigmapQueue.json"|"bigmapRank.json"|"bigmapResource.json"|"bigmapSchedule.json"|"bigmapScoreRule.json"|"bigmapStamina.json"|"bigmapWorld.json"|"bigNum.json"|"build.json"|"buySta.json"|"cardLevelUp.json"|"celebrationConfig.json"|"celebrationRank.json"|"celebrationShop.json"|"celebrationTarget.json"|"chapterAttrAddition.json"|"chapterRankAward.json"|"ciFu.json"|"dayChallengeActTask.json"|"dayChallengeActTaskProgress.json"|"defenceModWave.json"|"defenceWaveReward.json"|"equip.json"|"equipLevel.json"|"equipLib.json"|"equipRank.json"|"equipResonance.json"|"equipType.json"|"firstRechargeNew.json"|"firstRechargeShop.json"|"fundPlan.json"|"fundReward.json"|"gameCircleConfig.json"|"gameConfig.json"|"gem.json"|"gemAttribute.json"|"gemBox.json"|"gemQuality.json"|"gemShop.json"|"general.json"|"generalStar.json"|"giftShop.json"|"goldShop.json"|"grade.json"|"guanka.json"|"guanka1.json"|"guankaChapter.json"|"guankaFBconfig.json"|"guankaFbType.json"|"guankaGift.json"|"guankaHitLv.json"|"guankaLV.json"|"guankaMarch.json"|"guankaReward.json"|"guankaReward1.json"|"guankaReward2.json"|"guankaSkillLevelUp.json"|"guankaStar.json"|"guards.json"|"guardsLevel.json"|"guardsRank.json"|"guoGuanZJConfig.json"|"head.json"|"heroSkill.json"|"heroSkillLevel.json"|"icon.json"|"idConfig.json"|"interactReward.json"|"item.json"|"itemBox.json"|"itemBoxPro.json"|"itemCraft.json"|"itemType.json"|"level.json"|"levelInfo.json"|"levelMapGrideReward.json"|"limitedTimeBundle.json"|"limitTimeCard.json"|"lockMonsterLevel.json"|"lockMonsterRefreshCost.json"|"lottery.json"|"lotteryshop1.json"|"lotteryshop2.json"|"lotteryshop3.json"|"lotteryshop4.json"|"lotterytask.json"|"mapconfig.json"|"mapTerrian.json"|"matchTips.json"|"mL.json"|"modelRef.json"|"monster.json"|"monsterCard.json"|"monsterSkillType.json"|"monthCardActPlan.json"|"neutralResource.json"|"newTreasureBoxCardPool.json"|"newTreasureBoxConfig.json"|"newTreasureBoxQueueConfig.json"|"npcTeam.json"|"open.json"|"openGridReward.json"|"payChannel.json"|"plotCard.json"|"plotDialogue.json"|"plotGuanka.json"|"privilegeMonthCardInfo.json"|"proDesc.json"|"pvpArtifact.json"|"pvpArtifactAscend.json"|"pvpAttrMap.json"|"pvpBaseTeamWeight.json"|"pvpBond.json"|"pvpCard.json"|"pvpCounter.json"|"pvpGlobal.json"|"pvpModifierOverride.json"|"pvpPity.json"|"pvpSkill.json"|"pvpSkillBinding.json"|"pvpSkillPlan.json"|"pvpStatus.json"|"pvpTile.json"|"pvpTileGen.json"|"pvpTileGenParams.json"|"pvpUnitGrowth.json"|"qingShen.json"|"rechargeContinuityGift.json"|"rechargeDaily.json"|"rechargeGiftActPlan.json"|"refToCodeEnum.json"|"resourceShop.json"|"rewardClientPool.json"|"roleProperty.json"|"secretRealmAttr.json"|"secretRealmLevel.json"|"secretRealmRefreshCost.json"|"serverRank.json"|"sevenDayPoint.json"|"sevenDayShop.json"|"sevenDayTask.json"|"share.json"|"shiMengBattleConfig.json"|"signinTask.json"|"skillAdditionBuff.json"|"skillAttr.json"|"skillAttrModifier.json"|"skillBook.json"|"skillBookLevel.json"|"skillBuff.json"|"skillEffect.json"|"skillEffectDamageType.json"|"skillEffectShow.json"|"skillLevelUP.json"|"skillType.json"|"skillView.json"|"skin.json"|"spiritAnimal.json"|"spiritAnimalBox.json"|"spiritAnimalLevel.json"|"spiritAnimalStep.json"|"spiritAnimalType.json"|"ssjjRankAward.json"|"swjjShop.json"|"systemDesc.json"|"taskMain.json"|"taskType.json"|"taskUnion.json"|"taskUnionProgress.json"|"unionDiscount.json"|"unionLevel.json"|"unionOfficial.json"|"unionShop.json"|"valuableMonthCardInfo.json"|"viewtype.json"|"wall.json"|"wallSkillLevel.json"|"wallType.json"|"waveReward.json"|"workShop.json"|"workShopLevel.json"|"zcGuide.json"|"zcGuideParams.json"
 
-type TRefName2="activity"|"activityOpen"|"activityTab"|"ad"|"advisor"|"advisorStar"|"apprentice"|"apprenticeLevel"|"army"|"armyLevel"|"armySkillLevelUp"|"armySkin"|"armySkinStar"|"artifact"|"artifactLevel"|"artifactStar"|"audioConfig"|"battleModel"|"battleTokenConfig"|"battleTokenPlan"|"battleTokenReward"|"bfPersonRankAward"|"bfUnionRankAward"|"bigNum"|"build"|"buySta"|"cardLevelUp"|"celebrationConfig"|"celebrationRank"|"celebrationShop"|"celebrationTarget"|"chapterAttrAddition"|"chapterRankAward"|"ciFu"|"dayChallengeActTask"|"dayChallengeActTaskProgress"|"defenceModWave"|"defenceWaveReward"|"equip"|"equipLevel"|"equipLib"|"equipRank"|"equipResonance"|"equipType"|"firstRechargeNew"|"firstRechargeShop"|"fundPlan"|"fundReward"|"gameCircleConfig"|"gameConfig"|"gem"|"gemAttribute"|"gemBox"|"gemQuality"|"gemShop"|"general"|"generalStar"|"giftShop"|"goldShop"|"grade"|"guanka"|"guanka1"|"guankaChapter"|"guankaFBconfig"|"guankaFbType"|"guankaGift"|"guankaHitLv"|"guankaLV"|"guankaMarch"|"guankaReward"|"guankaReward1"|"guankaReward2"|"guankaSkillLevelUp"|"guankaStar"|"guards"|"guardsLevel"|"guardsRank"|"guoGuanZJConfig"|"head"|"heroSkill"|"heroSkillLevel"|"icon"|"idConfig"|"interactReward"|"item"|"itemBox"|"itemBoxPro"|"itemCraft"|"itemType"|"level"|"levelInfo"|"levelMapGrideReward"|"limitedTimeBundle"|"limitTimeCard"|"lockMonsterLevel"|"lockMonsterRefreshCost"|"lottery"|"lotteryshop1"|"lotteryshop2"|"lotteryshop3"|"lotteryshop4"|"lotterytask"|"mapconfig"|"mapTerrian"|"matchTips"|"mL"|"modelRef"|"monster"|"monsterCard"|"monsterSkillType"|"monthCardActPlan"|"neutralResource"|"newTreasureBoxConfig"|"newTreasureBoxQueueConfig"|"npcTeam"|"open"|"openGridReward"|"payChannel"|"plotCard"|"plotDialogue"|"plotGuanka"|"privilegeMonthCardInfo"|"proDesc"|"pvpArtifact"|"pvpArtifactAscend"|"pvpAttrMap"|"pvpBaseTeamWeight"|"pvpBond"|"pvpCard"|"pvpCounter"|"pvpGlobal"|"pvpModifierOverride"|"pvpPity"|"pvpSkill"|"pvpSkillBinding"|"pvpSkillPlan"|"pvpStatus"|"pvpTile"|"pvpTileGen"|"pvpTileGenParams"|"pvpUnitGrowth"|"qingShen"|"rechargeContinuityGift"|"rechargeDaily"|"rechargeGiftActPlan"|"refToCodeEnum"|"resourceShop"|"rewardClientPool"|"roleProperty"|"secretRealmAttr"|"secretRealmLevel"|"secretRealmRefreshCost"|"serverRank"|"sevenDayPoint"|"sevenDayShop"|"sevenDayTask"|"share"|"shiMengBattleConfig"|"signinTask"|"skillAdditionBuff"|"skillAttr"|"skillAttrModifier"|"skillBook"|"skillBookLevel"|"skillBuff"|"skillEffect"|"skillEffectDamageType"|"skillEffectShow"|"skillLevelUP"|"skillType"|"skillView"|"skin"|"spiritAnimal"|"spiritAnimalBox"|"spiritAnimalLevel"|"spiritAnimalStep"|"spiritAnimalType"|"ssjjRankAward"|"swjjShop"|"systemDesc"|"taskMain"|"taskType"|"taskUnion"|"taskUnionProgress"|"unionDiscount"|"unionLevel"|"unionOfficial"|"unionShop"|"valuableMonthCardInfo"|"viewtype"|"wall"|"wallSkillLevel"|"wallType"|"waveReward"|"workShop"|"workShopLevel"|"zcGuide"|"zcGuideParams"
+type TRefName2="activity"|"activityOpen"|"activityTab"|"ad"|"advisor"|"advisorStar"|"apprentice"|"apprenticeLevel"|"army"|"armyLevel"|"armySkillLevelUp"|"armySkin"|"armySkinStar"|"artifact"|"artifactLevel"|"artifactStar"|"audioConfig"|"battleModel"|"battleTokenConfig"|"battleTokenPlan"|"battleTokenReward"|"bfPersonRankAward"|"bfUnionRankAward"|"bigmapBuilding"|"bigmapBuildingLevel"|"bigmapBuildingProduce"|"bigmapCity"|"bigmapCityLevel"|"bigmapMonster"|"bigmapQueue"|"bigmapRank"|"bigmapResource"|"bigmapSchedule"|"bigmapScoreRule"|"bigmapStamina"|"bigmapWorld"|"bigNum"|"build"|"buySta"|"cardLevelUp"|"celebrationConfig"|"celebrationRank"|"celebrationShop"|"celebrationTarget"|"chapterAttrAddition"|"chapterRankAward"|"ciFu"|"dayChallengeActTask"|"dayChallengeActTaskProgress"|"defenceModWave"|"defenceWaveReward"|"equip"|"equipLevel"|"equipLib"|"equipRank"|"equipResonance"|"equipType"|"firstRechargeNew"|"firstRechargeShop"|"fundPlan"|"fundReward"|"gameCircleConfig"|"gameConfig"|"gem"|"gemAttribute"|"gemBox"|"gemQuality"|"gemShop"|"general"|"generalStar"|"giftShop"|"goldShop"|"grade"|"guanka"|"guanka1"|"guankaChapter"|"guankaFBconfig"|"guankaFbType"|"guankaGift"|"guankaHitLv"|"guankaLV"|"guankaMarch"|"guankaReward"|"guankaReward1"|"guankaReward2"|"guankaSkillLevelUp"|"guankaStar"|"guards"|"guardsLevel"|"guardsRank"|"guoGuanZJConfig"|"head"|"heroSkill"|"heroSkillLevel"|"icon"|"idConfig"|"interactReward"|"item"|"itemBox"|"itemBoxPro"|"itemCraft"|"itemType"|"level"|"levelInfo"|"levelMapGrideReward"|"limitedTimeBundle"|"limitTimeCard"|"lockMonsterLevel"|"lockMonsterRefreshCost"|"lottery"|"lotteryshop1"|"lotteryshop2"|"lotteryshop3"|"lotteryshop4"|"lotterytask"|"mapconfig"|"mapTerrian"|"matchTips"|"mL"|"modelRef"|"monster"|"monsterCard"|"monsterSkillType"|"monthCardActPlan"|"neutralResource"|"newTreasureBoxCardPool"|"newTreasureBoxConfig"|"newTreasureBoxQueueConfig"|"npcTeam"|"open"|"openGridReward"|"payChannel"|"plotCard"|"plotDialogue"|"plotGuanka"|"privilegeMonthCardInfo"|"proDesc"|"pvpArtifact"|"pvpArtifactAscend"|"pvpAttrMap"|"pvpBaseTeamWeight"|"pvpBond"|"pvpCard"|"pvpCounter"|"pvpGlobal"|"pvpModifierOverride"|"pvpPity"|"pvpSkill"|"pvpSkillBinding"|"pvpSkillPlan"|"pvpStatus"|"pvpTile"|"pvpTileGen"|"pvpTileGenParams"|"pvpUnitGrowth"|"qingShen"|"rechargeContinuityGift"|"rechargeDaily"|"rechargeGiftActPlan"|"refToCodeEnum"|"resourceShop"|"rewardClientPool"|"roleProperty"|"secretRealmAttr"|"secretRealmLevel"|"secretRealmRefreshCost"|"serverRank"|"sevenDayPoint"|"sevenDayShop"|"sevenDayTask"|"share"|"shiMengBattleConfig"|"signinTask"|"skillAdditionBuff"|"skillAttr"|"skillAttrModifier"|"skillBook"|"skillBookLevel"|"skillBuff"|"skillEffect"|"skillEffectDamageType"|"skillEffectShow"|"skillLevelUP"|"skillType"|"skillView"|"skin"|"spiritAnimal"|"spiritAnimalBox"|"spiritAnimalLevel"|"spiritAnimalStep"|"spiritAnimalType"|"ssjjRankAward"|"swjjShop"|"systemDesc"|"taskMain"|"taskType"|"taskUnion"|"taskUnionProgress"|"unionDiscount"|"unionLevel"|"unionOfficial"|"unionShop"|"valuableMonthCardInfo"|"viewtype"|"wall"|"wallSkillLevel"|"wallType"|"waveReward"|"workShop"|"workShopLevel"|"zcGuide"|"zcGuideParams"
 

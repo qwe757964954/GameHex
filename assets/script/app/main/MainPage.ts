@@ -1,7 +1,9 @@
-import { _decorator, Button, Component, Node } from 'cc';
+import { _decorator, Button, Component, Node, Sprite, SpriteFrame } from 'cc';
 import { GameRoute } from '../../core/runtime/GameRoute';
 import { ProcedureManager } from '../../framework/procedure/ProcedureManager';
 import { FW } from '../../framework/FW';
+import { ZC_BATTLE_TYPE_CHAPTER, ZC_CHAPTER_BATTLE_SUB_TREASURE } from '../battle/BattleStartModel';
+import type { IMatchingEntryParams } from '../matching/MatchTypes';
 import { ChestBar } from './ChestBar';
 import { CHEST_EMPTY_SLOT_STAMINA_COST, CHEST_SLOT_COUNT, ChestSlotAction, ChestSlotState } from './ChestTypes';
 import type { IChestSlotData } from './ChestTypes';
@@ -15,6 +17,7 @@ const MAIN_PAGE_TEXTS = {
     networkUnavailable: '网络未连接',
     actionFailed: '操作失败，请稍后重试',
     openProtocolMissing: '开箱协议消息号未配置',
+    bossMapUnavailable: '关卡地图未就绪',
 } as const;
 
 /**
@@ -30,12 +33,31 @@ export class MainPage extends Component {
     @property({ type: Node, tooltip: 'ChestEntry：打开 / 收起底部宝箱栏' })
     chestToggle: Node = null!;
 
+    @property({ type: Sprite, tooltip: 'BottomHud/Cell0：第一个宝箱数量格' })
+    chestCell0: Sprite = null!;
+
+    @property({ type: Sprite, tooltip: 'BottomHud/Cell1：第二个宝箱数量格' })
+    chestCell1: Sprite = null!;
+
+    @property({ type: Sprite, tooltip: 'BottomHud/Cell2：第三个宝箱数量格' })
+    chestCell2: Sprite = null!;
+
+    @property({ type: Sprite, tooltip: 'BottomHud/Cell3：第四个宝箱数量格' })
+    chestCell3: Sprite = null!;
+
+    @property({ type: SpriteFrame, tooltip: '宝箱数量格：已占用（绿色）' })
+    chestCellFilled: SpriteFrame = null!;
+
+    @property({ type: SpriteFrame, tooltip: '宝箱数量格：空闲（灰色）' })
+    chestCellEmpty: SpriteFrame = null!;
+
     @property({ type: ChestBar, tooltip: 'ChestBar：底部宝箱栏（4 格，蓝湖「塔防主界面-2」）' })
     chestBar: ChestBar = null!;
 
+    private findCurrentBoss: (() => void) | null = null;
     private readonly treasureRepository = new NewTreasureRepository();
     private readonly emptyChestSlots: readonly IChestSlotData[] = Array.from({ length: CHEST_SLOT_COUNT }, (_, index) => ({
-        index,
+        index: index + 1,
         state: ChestSlotState.Empty,
         name: '',
         remainSeconds: 0,
@@ -48,6 +70,11 @@ export class MainPage extends Component {
         this.startButton.on(Button.EventType.CLICK, this.onStartGame, this);
         this.chestToggle.on(Button.EventType.CLICK, this.onToggleChestPanel, this);
         this.chestBar.bindCollapse(() => this.setChestPanelOpen(false));
+    }
+
+    /** 由主界面宿主接入同页地图，避免快速寻敌另开战斗流程。 */
+    bindFindCurrentBoss(handler: () => void): void {
+        this.findCurrentBoss = handler;
     }
 
     start(): void {
@@ -66,6 +93,7 @@ export class MainPage extends Component {
     }
 
     onDestroy(): void {
+        this.findCurrentBoss = null;
         this.treasureRepository.dispose();
     }
 
@@ -88,10 +116,19 @@ export class MainPage extends Component {
     }
 
     private onStartGame(): void {
-        ProcedureManager.navigate(GameRoute.Matching);
+        if (!this.findCurrentBoss) {
+            FW.showTip(MAIN_PAGE_TEXTS.bossMapUnavailable);
+            return;
+        }
+        this.findCurrentBoss();
     }
 
     private renderChests(data: readonly IChestSlotData[]): void {
+        const count = data.reduce((total, slot) => total + Number(slot.state !== ChestSlotState.Empty), 0);
+        const cells = [this.chestCell0, this.chestCell1, this.chestCell2, this.chestCell3];
+        for (let index = 0; index < cells.length; index++) {
+            cells[index].spriteFrame = index < count ? this.chestCellFilled : this.chestCellEmpty;
+        }
         if (!this.chestBar) return;
         this.chestBar.render(data, (slot) => { void this.onChestAction(slot); });
     }
@@ -104,7 +141,11 @@ export class MainPage extends Component {
         const item = this.treasureRepository.slots[slot];
         if (!item) return;
         if (item.action === ChestSlotAction.Battle) {
-            this.onStartGame();
+            const entry: IMatchingEntryParams = {
+                battleType: ZC_BATTLE_TYPE_CHAPTER,
+                battleParams: [String(ZC_CHAPTER_BATTLE_SUB_TREASURE)],
+            };
+            ProcedureManager.navigate(GameRoute.Matching, entry);
             return;
         }
 

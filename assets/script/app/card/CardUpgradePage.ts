@@ -2,6 +2,7 @@ import { _decorator, Button, Color, Label, Node, Sprite } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { cardArtProvider } from './CardArtProvider';
 import { cardRepository } from './CardRepository';
+import { LoadingPopup } from '../common/LoadingPopup';
 import { CARD_LINEUP_TEXTS } from './CardLineupTexts';
 import { upgradeButtonText } from './CardUpgradeCost';
 import type { ZCUpgradeStatus } from './CardUpgradeCost';
@@ -49,6 +50,8 @@ export class CardUpgradePage extends PopupBase {
     private artRevision = 0;
     /** 本次打开的卡牌 id（「技能」按钮用它打开技能面板）。 */
     private cardIdForSkills = '';
+    /** 当前卡牌等级（升级点击时用它决定 loading 文案：「解锁中…」/「升级中…」）。 */
+    private currentLevel = 0;
 
     /**
      * `CloseBtn` / `BtnUpgrade` 上的 `cc.Button`。
@@ -183,6 +186,7 @@ export class CardUpgradePage extends PopupBase {
 
     /** 唯一的写 UI 入口：卡面 → 升级状态。 */
     private presentUpgrade(data: CardUpgradePresentation): void {
+        this.currentLevel = data.level;
         this.nameLabel.string = data.data.card?.name ?? data.cardId;
         this.renderCardFace(data);
         if (data.status) {
@@ -190,7 +194,9 @@ export class CardUpgradePage extends PopupBase {
             return;
         }
         this.upgradeAction.interactable = false;
-        this.upgradeLabel.string = upgradeButtonText(data.level, data.phase === 'submitting');
+        //  提交中按钮文案保持常态（「升级」/「解锁」）：进行中的状态提示由通用 loading 全屏承担，
+        //  按钮不再显示「升级中…」，避免 loading 遮罩下按钮文案与 loading 文字重复。
+        this.upgradeLabel.string = upgradeButtonText(data.level, false);
         this.hintLabel.string = '';
     }
 
@@ -267,7 +273,9 @@ export class CardUpgradePage extends PopupBase {
             return;
         }
         const submitting = phase === 'submitting';
-        this.upgradeLabel.string = upgradeButtonText(status.level, submitting);
+        //  提交中按钮文案保持常态（与上面 presentUpgrade 同一口径）：进行中由通用 loading 提示，
+        //  不显示「升级中…」（`submitting` 仍用于按钮置灰与提示分支）。
+        this.upgradeLabel.string = upgradeButtonText(status.level, false);
         if (phase === 'offline' || phase === 'failed') {
             this.hintLabel.string = phase === 'offline' ? texts.upgradeOffline : texts.upgradeFailed;
             this.hintLabel.color = this.lackColor;
@@ -293,7 +301,19 @@ export class CardUpgradePage extends PopupBase {
      * 所以重刷时必须重新读一次表与背包，不能复用进入时的快照）。
      */
     private async onUpgradeClick(): Promise<void> {
-        await this.presenter.submit(this, this.presenterView());
+        //  升级期间用工程通用 loading 全屏遮挡（`LoadingPopup` 引用计数，show/hide 配对），
+        //  防止玩家在请求往返期间反复点击重复发 `CmdPvpHeroUpLevelReqMsg`。
+        //  文案与按钮同源：0 级档叫「解锁中…」，1 级以上叫「升级中…」。
+        LoadingPopup.show(
+            this.currentLevel === 0
+                ? CARD_LINEUP_TEXTS.upgradeUnlocking
+                : CARD_LINEUP_TEXTS.upgradeSending,
+        );
+        try {
+            await this.presenter.submit(this, this.presenterView());
+        } finally {
+            LoadingPopup.hide();
+        }
     }
 
     onDestroy(): void {

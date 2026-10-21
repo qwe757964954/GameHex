@@ -1093,7 +1093,9 @@ export class TerritoryMapView extends Component {
                 badge: pending || isPlainTwoStep ? '' : claimed
                     ? (boss || isAsyncPvp ? TERRITORY_TEXTS.bossBattleClaimed : TERRITORY_TEXTS.stagePassClaimed)
                     : (boss || isAsyncPvp ? TERRITORY_TEXTS.bossBattleReady : TERRITORY_TEXTS.stagePassClaimReady),
-                interactive: !claimed && !pending,
+                // 已通关：主线 stage/boss 不可再点（打完即通关）；**asyncPvp 可重复挑战 ⇒ 仍可点**。
+                // 请求在途（pending）一律不可点（防连点，loading 遮挡是主防线）。
+                interactive: (claimed ? isAsyncPvp : true) && !pending,
             };
         }
         if (!stage) {

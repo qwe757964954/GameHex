@@ -49,7 +49,7 @@ import { ZCVictorySweep } from './ZCVictorySweep';
 import { ZCEffectPool } from './ZCEffectPool';
 import { ZCWallGeometry } from './ZCWallGeometry';
 import { ZCWallRenderer } from './ZCWallRenderer';
-import { ZCSpawnRegionHintOverlay } from './ZCSpawnRegionHintOverlay';
+import { ZCSpawnRegionHintOverlay, type IZCSpawnRegionHintFrames } from './ZCSpawnRegionHintOverlay';
 import { ZCNeutralRewardFx } from './ZCNeutralRewardFx';
 
 type ZCRenderEntityKind = 'hex' | 'unit' | 'effect' | 'float' | 'cardReveal' | 'legendBanner';
@@ -145,6 +145,11 @@ interface ZCRenderWorldOptions {
     artifactIconFrame?: SpriteFrame | null;
     /** 金币飞行特效的贴图（`image/map-resource/gold`）；缺省 ⇒ 金币仍照常飞（透明图）。 */
     goldCoinFrame?: SpriteFrame | null;
+    /**
+     * 自选主城区域气泡底图（`image/spawn-region/frame_01` 绿 / `frame_02` 红，九宫格）。
+     * 缺省 ⇒ 气泡回退 Graphics 色块（旧样式），不影响选点。
+     */
+    spawnRegionFrames?: IZCSpawnRegionHintFrames | null;
     /**
      * HUD 金币栏图标（`BottomInfoPanel/CoinPanel/coin`）：金币飞行的目标挂点。
      * 缺省 ⇒ 不播金币飞行（领地 / 测试环境没有金币栏时静默跳过）。
@@ -699,7 +704,10 @@ export class ZCGameRenderWorld {
         if (!this.spawnRegionHintOverlay) {
             // ZCGameBoard.prefab declares CooldownOverlay last. All board layers share identity
             // local transforms, so the cached hex positions remain board-local in this layer.
-            this.spawnRegionHintOverlay = new ZCSpawnRegionHintOverlay(this.boardLayer('CooldownOverlay'));
+            this.spawnRegionHintOverlay = new ZCSpawnRegionHintOverlay(
+                this.boardLayer('CooldownOverlay'),
+                this.options.spawnRegionFrames ?? null,
+            );
         }
         this.spawnRegionHintOverlay.render(
             this.spawnRegionHints,

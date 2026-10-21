@@ -73,13 +73,19 @@ export class LoginPage extends Component {
     }
 
     onLoad(): void {
+        console.info('[LoginPage] 开始装配登录页');
         this.disposed = false;
         this.repairStatusLabelBinding();
         this.bindButtons();
         const { account, password } = this.rootLogic.restoreAccount();
         this.accountInput.string = account;
         this.passwordInput.string = password;
-        void this.initialize();
+        console.info('[LoginPage] 输入框和按钮装配完成');
+        void this.initialize().catch((error: unknown) => {
+            if (this.disposed) return;
+            console.error('[LoginPage] 登录页初始化异常', error);
+            this.showProblem('登录页初始化失败，请重新启动后重试');
+        });
     }
 
     onDestroy(): void {
@@ -102,14 +108,17 @@ export class LoginPage extends Component {
 
     private async initialize(): Promise<void> {
         // 读版本配置
+        console.info('[LoginPage] 开始读取包内版本配置');
         const versionConfig = await this.loadVersionConfig();
         if (this.disposed) return;
+        console.info('[LoginPage] 包内版本配置已就绪');
 
         if (this.versionLabel) this.versionLabel.string = `客户端 v${versionConfig.version}`;
         this.setStatus('正在获取服务器列表…');
 
         const result = await this.rootLogic.bootstrap(versionConfig);
         if (this.disposed) return;
+        console.info(`[LoginPage] 服务器列表初始化结束：${result.ok ? '成功' : '失败'}，${result.servers.length} 个服务器`);
 
         if (!result.ok) {
             this.updateServerButton();

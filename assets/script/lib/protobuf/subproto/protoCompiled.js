@@ -113183,6 +113183,7 @@ $root.com = (function() {
                  * @property {number} CmdNewTreasureInfoListRspMsg=2011197980 CmdNewTreasureInfoListRspMsg value
                  * @property {number} CmdNewTreasureActivateRspMsg=399007957 CmdNewTreasureActivateRspMsg value
                  * @property {number} CmdNewTreasureFastOpenRspMsg=291587262 CmdNewTreasureFastOpenRspMsg value
+                 * @property {number} CmdNewTreasureOpenRspMsg=1903704638 CmdNewTreasureOpenRspMsg value
                  * @property {number} CmdTakeOathAllianceRewardRspMsg=271053488 CmdTakeOathAllianceRewardRspMsg value
                  * @property {number} CmdPvpHeroInfoListRspMsg=1516169721 CmdPvpHeroInfoListRspMsg value
                  * @property {number} CmdPvpHeroUpLevelRspMsg=937856670 CmdPvpHeroUpLevelRspMsg value
@@ -113495,6 +113496,7 @@ $root.com = (function() {
                     values[valuesById[2011197980] = "CmdNewTreasureInfoListRspMsg"] = 2011197980;
                     values[valuesById[399007957] = "CmdNewTreasureActivateRspMsg"] = 399007957;
                     values[valuesById[291587262] = "CmdNewTreasureFastOpenRspMsg"] = 291587262;
+                    values[valuesById[1903704638] = "CmdNewTreasureOpenRspMsg"] = 1903704638;
                     values[valuesById[271053488] = "CmdTakeOathAllianceRewardRspMsg"] = 271053488;
                     values[valuesById[1516169721] = "CmdPvpHeroInfoListRspMsg"] = 1516169721;
                     values[valuesById[937856670] = "CmdPvpHeroUpLevelRspMsg"] = 937856670;

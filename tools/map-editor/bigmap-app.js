@@ -372,41 +372,192 @@ function renderTerrainClasses() {
   }
 }
 
+// 六边形 6 个顶点相对格心的单位偏移（与 `hexPath` 同一套几何，改一处必须一起改）。
+const HEX_VERTEX_UNITS = [[-1, 0], [-0.5, -1], [0.5, -1], [1, 0], [0.5, 1], [-0.5, 1]];
+
+/** 城池轮廓色：黄金角散色相 —— 相邻序号至少差 137°，同色要隔 3 座城才出现。 */
+function rangeColor(index) {
+  return `hsl(${((index * 137.508) % 360).toFixed(0)} 88% 62%)`;
+}
+
+let rangeSignature = null;
+
+/** 范围数据签名：城数 + 总格数 + id 之和 + id 列表。只改一格也会让 sum 变。 */
+function rangesSignature() {
+  let count = 0, sum = 0;
+  const ids = [];
+  for (const city of map.cities) {
+    ids.push(city.cityId);
+    for (const hexId of city.rangeHex ?? []) { count += 1; sum += hexId; }
+  }
+  return `${map.cities.length}|${count}|${sum}|${ids.join(',')}`;
+}
+
+/**
+ * 势力范围：每座城一条填充 + 一条**只走外边界**的轮廓。
+ *
+ * 以前是「每格一个 `<path class="range">`」、所有城同一个颜色、每格各自描 0.8px 边。
+ * 实测 `dadi_tuchugao`（81 城 / 6560 格，占全图 65%）铺下来：同城相邻格的内边全画出来了，
+ * 视觉上是一层噪声网格，城的轮廓反而消失 —— 就是"看不清势力范围"。
+ *
+ * 现在：**同城的内边不画**，只画「邻居不属于本城」的那条边；颜色按城散开，轮廓才是辨识依据。
+ * 节点数顺带从 6560 个降到「每城 2 条」。
+ */
 function renderRanges() {
   const layer = svg.querySelector('#ranges');
-  layer.replaceChildren();
-  if (!$('showRange').checked) return;
-  const paint = (cells, className) => {
-    for (const hexId of cells) {
-      const row = Math.floor(hexId / cols());
-      const column = hexId % cols();
-      const center = cellCenter(row, column);
-      const path = document.createElementNS(NS, 'path');
-      path.setAttribute('d', hexPath(center.x, center.y));
-      path.setAttribute('class', className);
-      layer.appendChild(path);
-    }
-  };
-  for (const city of map.cities) {
-    if (city.rangeHex?.length) paint(city.rangeHex, 'range');
+  if (!$('showRange').checked) {
+    if (rangeSignature !== '') { layer.replaceChildren(); rangeSignature = ''; }
+    return;
   }
+  // `render()` 在选中 / 缩放 / 每次编辑后都会走到这里，而轮廓要遍历 6560 格 × 6 邻居。
+  // 范围没变就整段跳过。
+  const signature = rangesSignature();
+  if (signature === rangeSignature) return;
+  rangeSignature = signature;
+  layer.replaceChildren();
+  if (!map.cities.length) return;
+
+  const columns = cols(), rowCount = rows(), hh = Y / 2;
+  // 归属先到先得；被两座城同时圈住的格单独记下来 —— 那是要人肉裁决的冲突，不替策划挑一边。
+  const owner = new Map();
+  const contested = new Set();
+  map.cities.forEach((city, index) => {
+    for (const hexId of city.rangeHex ?? []) {
+      if (owner.has(hexId)) contested.add(hexId);
+      else owner.set(hexId, index);
+    }
+  });
+
+  const byCity = new Map();
+  for (const [hexId, index] of owner) {
+    if (!byCity.has(index)) byCity.set(index, []);
+    byCity.get(index).push(hexId);
+  }
+
+  for (const [index, hexIds] of byCity) {
+    const inside = new Set(hexIds);
+    const fillParts = [];
+    const edgeParts = [];
+    for (const hexId of hexIds) {
+      const row = Math.floor(hexId / columns);
+      const column = hexId % columns;
+      const center = cellCenter(row, column);
+      fillParts.push(hexPath(center.x, center.y));
+      for (const neighbor of hexNeighbors(hexId, rowCount, columns)) {
+        if (inside.has(neighbor)) continue;       // 同城的内边：不画（这条是"看得清"的关键）
+        const other = cellCenter(Math.floor(neighbor / columns), neighbor % columns);
+        // 共边的两个端点 = 本格 6 个顶点里离邻居中心最近的那两个。
+        // 这样写不用维护"边 ↔ 邻居方向"的映射表 —— 那张表依赖奇偶列相位，写错就整片错位。
+        let first = null, second = null, firstDistance = Infinity, secondDistance = Infinity;
+        for (const [ux, uy] of HEX_VERTEX_UNITS) {
+          const x = center.x + ux * R, y = center.y + uy * hh;
+          const distance = (x - other.x) ** 2 + (y - other.y) ** 2;
+          if (distance < firstDistance) {
+            second = first; secondDistance = firstDistance;
+            first = [x, y]; firstDistance = distance;
+          } else if (distance < secondDistance) {
+            second = [x, y]; secondDistance = distance;
+          }
+        }
+        edgeParts.push(`M${first[0].toFixed(1)},${first[1].toFixed(1)}L${second[0].toFixed(1)},${second[1].toFixed(1)}`);
+      }
+    }
+    const fill = document.createElementNS(NS, 'path');
+    fill.setAttribute('d', fillParts.join(''));
+    fill.setAttribute('class', 'rangeFill');
+    layer.appendChild(fill);
+    if (edgeParts.length) {
+      const edge = document.createElementNS(NS, 'path');
+      edge.setAttribute('d', edgeParts.join(''));
+      edge.setAttribute('class', 'rangeEdge');
+      edge.setAttribute('stroke', rangeColor(index));
+      layer.appendChild(edge);
+    }
+  }
+
+  if (contested.size) {
+    const parts = [];
+    for (const hexId of contested) {
+      const center = cellCenter(Math.floor(hexId / columns), hexId % columns);
+      parts.push(hexPath(center.x, center.y));
+    }
+    const conflict = document.createElementNS(NS, 'path');
+    conflict.setAttribute('d', parts.join(''));
+    conflict.setAttribute('class', 'rangeConflict');
+    layer.appendChild(conflict);
+  }
+}
+
+/**
+ * 出生区块：与势力范围同一套画法（每区块一条填充 + 一条只走外边界的轮廓）。
+ *
+ * 原来也是「每格一个 path」—— 区块一多（比如给每座城各铺一圈出生区）就会和势力范围一样
+ * 糊成一片，看不出每个区块自己的形状。
+ */
+let zoneSignature = null;
+
+function zonesSignature() {
+  let count = 0, sum = 0;
+  for (const zone of map.spawnZones ?? []) {
+    for (const hexId of zone.cells ?? []) { count += 1; sum += hexId; }
+  }
+  return `${(map.spawnZones ?? []).length}|${count}|${sum}`;
 }
 
 function renderZones() {
   const layer = svg.querySelector('#zones');
-  layer.replaceChildren();
-  if (!$('showZone').checked) return;
-  for (const zone of map.spawnZones ?? []) {
-    for (const hexId of zone.cells) {
-      const row = Math.floor(hexId / cols());
-      const column = hexId % cols();
-      const center = cellCenter(row, column);
-      const path = document.createElementNS(NS, 'path');
-      path.setAttribute('d', hexPath(center.x, center.y));
-      path.setAttribute('class', 'zone');
-      layer.appendChild(path);
-    }
+  if (!$('showZone').checked) {
+    if (zoneSignature !== '') { layer.replaceChildren(); zoneSignature = ''; }
+    return;
   }
+  const signature = zonesSignature();
+  if (signature === zoneSignature) return;
+  zoneSignature = signature;
+  layer.replaceChildren();
+  const zones = map.spawnZones ?? [];
+  if (!zones.length) return;
+
+  const columns = cols(), rowCount = rows(), hh = Y / 2;
+  zones.forEach((zone, index) => {
+    const cells = zone.cells ?? [];
+    if (!cells.length) return;
+    const inside = new Set(cells);
+    const fillParts = [];
+    const edgeParts = [];
+    for (const hexId of cells) {
+      const row = Math.floor(hexId / columns);
+      const column = hexId % columns;
+      const center = cellCenter(row, column);
+      fillParts.push(hexPath(center.x, center.y));
+      for (const neighbor of hexNeighbors(hexId, rowCount, columns)) {
+        if (inside.has(neighbor)) continue;
+        const other = cellCenter(Math.floor(neighbor / columns), neighbor % columns);
+        let first = null, second = null, firstDistance = Infinity, secondDistance = Infinity;
+        for (const [ux, uy] of HEX_VERTEX_UNITS) {
+          const x = center.x + ux * R, y = center.y + uy * hh;
+          const distance = (x - other.x) ** 2 + (y - other.y) ** 2;
+          if (distance < firstDistance) {
+            second = first; secondDistance = firstDistance;
+            first = [x, y]; firstDistance = distance;
+          } else if (distance < secondDistance) {
+            second = [x, y]; secondDistance = distance;
+          }
+        }
+        edgeParts.push(`M${first[0].toFixed(1)},${first[1].toFixed(1)}L${second[0].toFixed(1)},${second[1].toFixed(1)}`);
+      }
+    }
+    const fill = document.createElementNS(NS, 'path');
+    fill.setAttribute('d', fillParts.join(''));
+    fill.setAttribute('class', 'zoneFill');
+    layer.appendChild(fill);
+    if (edgeParts.length) {
+      const edge = document.createElementNS(NS, 'path');
+      edge.setAttribute('d', edgeParts.join(''));
+      edge.setAttribute('class', 'zoneEdge');
+      edge.setAttribute('stroke', `hsl(${((index * 137.508 + 300) % 360).toFixed(0)} 85% 66%)`);
+      layer.appendChild(edge);
+    }
+  });
 }
 
 function entityLabel(text, center, dy = 0) {

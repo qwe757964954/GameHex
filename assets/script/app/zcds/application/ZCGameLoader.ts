@@ -11,10 +11,11 @@ import type { ZCPvpTables } from '../model/ZCGameRuntimeConfig';
 import { getZCModifierCatalogs } from '../model/ZCModifierRuntime';
 import { captureZCMatchConfig } from '../model/ZCMatchConfig';
 import type { ZCMatchConfig } from '../model/ZCMatchConfig';
-import { decorFramePath, HEX_FLIP_PULSE_ART_ROOT, HEX_GROUND_GLOW_ART_ROOT, MAP_RESOURCE_ART_ROOT, spriteFramePath } from '../../ArtPaths';
+import { decorFramePath, HEX_FLIP_PULSE_ART_ROOT, HEX_GROUND_GLOW_ART_ROOT, MAP_RESOURCE_ART_ROOT, SPAWN_REGION_ART_ROOT, spriteFramePath } from '../../ArtPaths';
 import { ZCDC_LOG_WARNINGS } from '../ZCDCLogSwitch';
 import { ZCGuideLoader } from './ZCGuideLoader';
 import type { ZCGuidePreparedContent } from './ZCGuideLoader';
+import type { IZCSpawnRegionHintFrames } from '../view/ZCSpawnRegionHintOverlay';
 
 const HUD_URL = 'ui/game/ZCGameHUD';
 /** 棋盘图层容器。`MapWater / HexLayer / DecorLayer / BuildingOverlay / CooldownOverlay`
@@ -225,6 +226,12 @@ export interface ZCGamePreparedResources {
      * （透明图），不崩不空。
      */
     goldCoinFrame: SpriteFrame | null;
+    /**
+     * 自选主城区域气泡底图（`image/spawn-region/frame_01` 绿 / `frame_02` 红，九宫格）。
+     *
+     * 拿不到时为 `null` —— 气泡回退 Graphics 色块（旧样式），不阻断选点。
+     */
+    spawnRegionFrames: IZCSpawnRegionHintFrames | null;
     /** image/buildings 下的建筑外观帧（按图片名索引）。 */
     buildingFrames: ReadonlyMap<string, SpriteFrame>;
     /** image/walls 下的城墙砖帧（up/down/rightUp/rightDown）。 */
@@ -299,6 +306,7 @@ export class ZCGameLoader {
             decorFrames,
             artifactIconFrame,
             goldCoinFrame,
+            spawnRegionFrames,
             guide,
         ] = await Promise.all([
             this.assets.load(HUD_URL, Prefab, { scope }),
@@ -328,6 +336,7 @@ export class ZCGameLoader {
             this.loadDecorFrames(scope),
             this.loadArtifactIconFrame(scope),
             this.loadGoldCoinFrame(scope),
+            this.loadSpawnRegionFrames(scope),
             new ZCGuideLoader(this.assets, this.configs).prepare(scope),
         ]);
         this.checkActive(scope);
@@ -336,6 +345,7 @@ export class ZCGameLoader {
             baseMatchConfig,
             artifactIconFrame,
             goldCoinFrame,
+            spawnRegionFrames,
             hudPrefab,
             boardPrefab,
             hexPrefab,
@@ -502,15 +512,43 @@ export class ZCGameLoader {
     }
 
     /**
-     * 金币飞行特效的贴图：`image/map-resource/gold`（与中立资源点「金币」格同一张）。
+     * 金币飞行特效的贴图：`image/map-resource/coin_icon`（**单枚金币 icon**，与 HUD 金币栏 /
+     * 格子金币资源图标同款视觉）。
+     *
+     * ⚠️ **别用 `image/map-resource/gold`** —— 那是一张「金币堆 + 钱袋」的装饰插画，
+     * 一颗颗飞过去像在飞装饰。2026-10-20 已切到 `coin_icon`。
      *
      * 失败不阻断整局：返回 `null`，金币飞行仍照常播（透明图 + 上飘数字照旧）。
      */
     private async loadGoldCoinFrame(scope?: ResourceScope): Promise<SpriteFrame | null> {
         try {
-            return await this.assets.load(spriteFramePath(MAP_RESOURCE_ART_ROOT, 'gold'), SpriteFrame, { scope });
+            return await this.assets.load(spriteFramePath(MAP_RESOURCE_ART_ROOT, 'coin_icon'), SpriteFrame, { scope });
         } catch (error) {
             if (ZCDC_LOG_WARNINGS) console.warn('[ZCGameLoader] 金币图标加载失败（金币飞行特效将透明），', error);
+            return null;
+        }
+    }
+
+    /**
+     * 自选主城区域气泡底图：`image/spawn-region/frame_01`（绿 = 中/后区）、`frame_02`（红 = 前区）。
+     *
+     * 缺任何一张只掉对应纵深的气泡（回退 Graphics 色块）；两张全缺返回 `null`。
+     * 失败不阻断选点流程。
+     */
+    private async loadSpawnRegionFrames(scope?: ResourceScope): Promise<IZCSpawnRegionHintFrames | null> {
+        const [frame01, frame02] = await Promise.all([
+            this.loadSpawnRegionFrame('frame_01', scope),
+            this.loadSpawnRegionFrame('frame_02', scope),
+        ]);
+        if (!frame01 && !frame02) return null;
+        return { front: frame02, mid: frame01, back: frame01 };
+    }
+
+    private async loadSpawnRegionFrame(name: 'frame_01' | 'frame_02', scope?: ResourceScope): Promise<SpriteFrame | null> {
+        try {
+            return await this.assets.load(spriteFramePath(SPAWN_REGION_ART_ROOT, name), SpriteFrame, { scope });
+        } catch (error) {
+            if (ZCDC_LOG_WARNINGS) console.warn(`[ZCGameLoader] 区域气泡切图加载失败：${name}`, error);
             return null;
         }
     }

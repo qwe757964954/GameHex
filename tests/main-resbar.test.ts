@@ -103,7 +103,7 @@ test('buildResBarView：三格顺序取自 RES_BAR_KEYS，只有体力格带「+
     const view = buildResBarView(role, LEVEL_ROWS);
     assert.ok(view, '有角色行时必须产出视图数据');
     assert.equal(view!.name, '雨晴冰轮');
-    assert.equal(view!.levelText, 'LV1');
+    assert.equal(view!.levelText, '1', '等级只显示数字，不带 LV 前缀（2026-10-20 需求）');
     assert.equal(view!.uidText, 'uid:10129');
     assert.equal(view!.avatarId, '70001');
     assert.equal(view!.expRatio, 0.8);   // 4 / level[2].exp = 5

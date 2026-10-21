@@ -4,7 +4,7 @@
  * 背景（2026-10-20 线上炸点）：`RefConfigService.getTable()` 只从 `RefUtil` 取数，
  * 而 `RefUtil.compressKeyRefDataFix()` **只在 `data.c === 1` 时**才把 `{k,v}` 解压成对象数组；
  * 没有 `c` 的表会原样返回 `{k,v}` 对象 → `getTable` 的 `Array.isArray()` 判假 → 返回 `[]`
- * → `parseBigMapConfig` 抛「配置表缺失或为空：BigMap-世界地图配置」。
+ * → `parseBigMapConfig` 抛「配置表缺失或为空：bigmapWorld」。
  *
  * 为什么原来的单测逮不住：`helpers/bigmap-fixtures.ts` 直接读盘上的 `{k,v}` 喂给
  * `decompressBigMapRows`，**绕过了 `c==1` 这个门槛** —— 测的绿，真机照炸。

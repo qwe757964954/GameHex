@@ -21,7 +21,7 @@ const TAB_DISABLED_TINT = new Color(140, 140, 140, 255);
  * |---|---|---|
  * | 图标两态 | `offIcon` / `onIcon` 绑定在主城 prefab 实例（通常是同一张图） | `offIcon` / `onIcon` 写在实例覆盖上 |
  * | 图标底边 y | 继承共用件的 −34 | 实例覆盖成 −42.5（图高不同 ⇒ 底边要更低） |
- * | 选中时图标上移 | 0（沿用本端既有行为，老端其实会抬 31） | 26 |
+ * | 选中时图标上移 | 主城实例绑定 12 | 26 |
  * | 名称 | 「商店」…（`NameLabel`，运行时 `setLabel`） | 无（图内已含文字 ⇒ 实例里把 `NameLabel` 置 `active=false`） |
  * | 红点 | `open.json` 的 `RDExpr` + `tlRDResId` 聚合（六格口径还没登记 ⇒ 当前恒收起） | `[RDBattleToken:<tabType>]` |
  *
@@ -101,7 +101,7 @@ export class TabButton extends Component {
     @property({ type: Color, tooltip: '名称·未选中颜色（主城七格 = 白色）' })
     offLabelColor: Color = new Color(255, 255, 255, 255);
 
-    @property({ type: Color, tooltip: '名称·选中颜色（主城七格 = 黑色，压在金色底板上）' })
+    @property({ type: Color, tooltip: '名称·选中颜色（主城七格 = 白色，Label 自带深色描边）' })
     onLabelColor: Color = new Color(255, 255, 255, 255);
 
     @property({
@@ -110,7 +110,7 @@ export class TabButton extends Component {
     })
     tabType = -1;
 
-    @property({ type: CCFloat, tooltip: '选中时图标额外上移的量（战令 26；主界面 0 = 不动）' })
+    @property({ type: CCFloat, tooltip: '选中时图标额外上移的量（战令 26；主城实例 12）' })
     iconRaiseY = 0;
 
     /** 未选中态图标的 y（惰性读 prefab 现值，只读一次）。 */

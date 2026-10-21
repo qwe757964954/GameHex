@@ -38,7 +38,7 @@ export class CardSkillSlotView extends Component {
     @property({ type: Node, tooltip: 'NameLabel：技能名节点（挂 Label）' })
     nameNode: Node = null!;
 
-    @property({ type: Node, tooltip: 'LevelLabel：写成「Lv.2/3」的节点（挂 Label）' })
+    @property({ type: Node, tooltip: 'LevelLabel：写成「2/3」的节点（挂 Label）' })
     levelNode: Node = null!;
 
     @property({ type: Node, tooltip: 'DescLabel：该档效果描述的节点（挂 Label）' })
@@ -91,7 +91,7 @@ export class CardSkillSlotView extends Component {
         // 表里 `name` / `desc` 可能为空（狼骑兵四个技能就是全空），空了给占位文案，
         // 否则整个格子只剩编号，看起来像没加载出来。
         setLabel(this.nameNode, skill.name || `${texts.skillNameFallback}${skill.skillId}`);
-        //  满级直接写「Lv.3（满级）」，比只写 3/3 更明确 —— 玩家不会去猜还有没有下一档。
+        //  满级直接写「3（满级）」，比只写 3/3 更明确 —— 玩家不会去猜还有没有下一档。
         setLabel(
             this.levelNode,
             maxed

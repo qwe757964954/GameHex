@@ -322,23 +322,28 @@ test('★★TerritoryMapConfig 解析 randomSites.buildingIds（逐格数字键�
         '非法形态必须报错（静默吞掉会让配了id 却读不出来）');
 });
 
-test('★★★开战后本地不变 owned，必须靠 battleId 防连点；且切章节/战斗结算要清它', () => {
+test('★★★开战后本地不变 owned：防连点靠 pending 判重；asyncPvp 已通关可重复挑战；切章节/结算清 battleId', () => {
     const src = readFileSync(PRESENTER_PATH, 'utf8');
 
-    // ⚠️ 防重**不能只靠** isOwned —— 开战期间本地根本不会 owned（通关等战斗结算回报），
-    // 光有开头那个 `isOwned → return` 拦不住连点。所以 `bossBattleStart` 那一处必须在。
-    // （开头 isOwned 早退本身是对的：已通关的格不该再开战。）
+    // ⚠️ 防连点**不能只靠** isOwned —— 开战期间本地根本不会 owned（通关等战斗结算回报），
+    // 光有开头那个 `isOwned → return` 拦不住连点。原判据 `bossBattleStart` 是**全局单值**：
+    // navigate 后不清则整章永久拒绝开战，且与「asyncPvp 已通关可重复挑战」（2026-10-21 口径）
+    // 冲突 ⇒ 已改为**按格 pending 判重**（与第一步解锁同款）。
     const boss = memberOf(src, 'private async handleBattleStationStart');
-    const ownedAt = boss.indexOf('progress.isOwned(site.cellId)');
-    const guardAt = boss.indexOf('if (this.bossBattleStart) {');
-    assert.ok(guardAt > 0, '第二次点击必须被 bossBattleStart 拦下（否则连点连发开战请求）');
-    assert.ok(ownedAt >= 0 && guardAt > ownedAt,
-        'bossBattleStart 的检查必须排在 isOwned 早退之后（两者都要：已通关的不打、在打的别连发）');
+    const pendingGuard = 'if (this.pendingFixedResourceCells.has(site.cellId)) return;';
+    assert.ok(boss.split(pendingGuard).length - 1 >= 2,
+        '第一步解锁 + 第二步开战都必须按 pending 判重防连点（同一格请求在飞 ⇒ 不重发）');
+    // 已通关（owned）的 stage/boss 不再开战；asyncPvp 例外（可重复挑战，不被 isOwned 挡）。
+    assert.match(boss, /progress\.isOwned\(site\.cellId\)/,
+        '已通关格要有守卫（主线打完即通关）');
+    assert.match(boss, /site\.type !== TERRITORY_SITE_TYPE\.asyncPvp/,
+        'asyncPvp 已通关可重复挑战 —— isOwned 守卫必须放行 asyncPvp');
 
-    //⚠️ 清理点必须有两处，否则换章 / 打完再来一次会被「已经开过战」永久拒绝。
+    // ⚠️ 清理点必须有两处，否则换章 / 打完再来一次会被「已经开过战」永久拒绝。
+    //（`bossBattleStart` 只留作 `lastBossBattleStart` 的最近开战记录，不再参与防连点。）
     const loadChapter = memberOf(src, 'private async loadChapter');
     assert.match(loadChapter, /this\.bossBattleStart = null;/,
-        '切章节必须清 bossBattleStart（它是防重判据，不清则换章后永远拒绝开战）');
+        '切章节必须清 bossBattleStart（它是 battleId 一次性记录，不清则换章后永远拒绝开战）');
     const stored = memberOf(src, 'private applyStoredBattleResult');
     assert.match(stored, /this\.bossBattleStart = null;/,
         '战斗有结果时必须清 bossBattleStart（打完一次后要能再开）');

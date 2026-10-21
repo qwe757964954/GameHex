@@ -31,6 +31,7 @@ import {
     bindTerritoryBattleStages,
     bindTerritoryStages,
     expandBindingsToAreaSites,
+    findCurrentTerritoryBoss,
     territoryChapterCompletion,
 } from '../model/TerritoryStageBinding';
 import type { ITerritoryCellState } from '../model/TerritoryCellBitSet';
@@ -184,6 +185,15 @@ export interface ITerritoryPresenterOutputs {
         rewards: readonly (TerritoryIdleRewardGain | ITerritoryGrantedReward)[],
         originCellId?: number | null,
     ) => void;
+    /**
+     * 与服务端通信中的全屏遮挡开关（解锁 / 通关 / 开战 / 随机格开启的写请求在途时
+     * `busy=true`，全部结束后 `busy=false`）。页面用工程通用 `LoadingPopup` 实现：
+     * 请求期间玩家无法点击，从源头防快速点击重复发包。
+     *
+     * 标成**可选**：测试与部分注入的桩 outputs 没实现它时，业务照常走，只是少了遮挡。
+     * 文案由 Presenter 按操作类型给出（`TERRITORY_TEXTS.busy*`）。
+     */
+    readonly setBusy?: (busy: boolean, text?: string) => void;
 }
 
 export interface ITerritoryPresenterPorts {
@@ -312,6 +322,8 @@ export class TerritoryPresenter {
     private pendingFixedResourceCells = new Set<number>();
     private pendingRandomResourceCells = new Set<number>();
     private battleRequestId = 0;
+    /** 玩家写请求在途数；> 0 时全屏 loading 遮挡（引用计数，多请求并发只显一层）。 */
+    private busyCount = 0;
     private reportingLoadId: number | null = null;
     private loadId = 0;
     private resultNotice = '';
@@ -368,6 +380,26 @@ export class TerritoryPresenter {
     // ============================================================
     // intents
     // ============================================================
+
+    /** 快速寻敌只选中详情并返回定位格，不调用点击站点的解锁 / 开战流程。 */
+    focusCurrentBoss(): number | null {
+        if (this.disposed || this.startingBattle || this.busyCount > 0) return null;
+        if (!this.map || !this.progress || this.map.chapterId !== this.currentChapterId) {
+            this.ports.outputs.showTip(TERRITORY_TEXTS.loadingChapter);
+            return null;
+        }
+        const target = findCurrentTerritoryBoss(this.map.sites, this.stageByCell, this.progress);
+        if (!target) {
+            this.closeDetail();
+            this.ports.outputs.showTip(TERRITORY_TEXTS.noBossTarget);
+            return null;
+        }
+        this.cancelBattleRequest();
+        this.detailSite = target.site;
+        this.detailStage = target.stage;
+        this.emitStateChange();
+        return target.site.cellId;
+    }
 
     selectSite(site: TerritorySite): void {
         if (this.disposed || !this.progress || !this.map
@@ -440,8 +472,15 @@ export class TerritoryPresenter {
         const stage = this.detailStage;
         if (this.disposed || !site || !this.map || !this.saveState || !this.progress) return;
         if (!stage || this.startingBattle) return;
-        if (!this.progress.isOwned(site.cellId)
+        if (!this.progress.isOwned(site.cellId) && !this.progress.isCellUnlocked(site.cellId)
             && !this.progress.checkUnlock(site.cellId, Number.MAX_SAFE_INTEGER).ok) return;
+        if (!this.progress.isOwned(site.cellId)
+            && (site.type === TERRITORY_SITE_TYPE.boss || site.type === TERRITORY_SITE_TYPE.stage
+                || site.type === TERRITORY_SITE_TYPE.asyncPvp)) {
+            if (this.pendingFixedResourceCells.has(site.cellId)) return;
+            void this.handleBattleStationStart(site, stage);
+            return;
+        }
         void this.startBattle(site, stage);
     }
 
@@ -463,12 +502,19 @@ export class TerritoryPresenter {
     ): Promise<void> {
         const progress = this.progress;
         const map = this.map;
-        if (!progress || !map || progress.isOwned(site.cellId)) return;
+        if (!progress || !map) return;
+        // 🔴 已通关（owned）的关卡 / 首领不再开战（主线打完即通关，旧口径）；
+        // **异步据点（asyncPvp）例外 —— 可重复挑战**：它是异步 PVP 玩法，通关后还能再打
+        // （`TERRITORY_TEXTS.owned = '已占领，可重复挑战'`）。owned 的 asyncPvp 通常同时
+        // 在服务端 `unlockCells` 里 ⇒ 落到下面的第二步直接开战；即使不在，也跳过解锁直接开战。
+        const isOwned = progress.isOwned(site.cellId);
+        if (isOwned && site.type !== TERRITORY_SITE_TYPE.asyncPvp) return;
         // 🔴 `selectSite` 开头已经 `cancelBattleRequest()` 递增过 ⇒ 记下这一次的号，回包到了先核对。
         // 「上一次点击的解锁回包迟到 ⇒ 把界面解锁」是**必须**挡住的：关卡现在是所有关卡型站点的
         // 通例，连点比只有两格特例（327/328）时常见得多。
         const requestId = this.battleRequestId;
-        if (!progress.isCellUnlocked(site.cellId)) {
+        if (!progress.isCellUnlocked(site.cellId)
+            && !(isOwned && site.type === TERRITORY_SITE_TYPE.asyncPvp)) {
             // 第一步：解锁并展示建筑（与两步式同一口径），不发战斗请求。
             if (!territoryRevealedCells(map, progress).includes(site.cellId)) return;
             // 同一格的解锁还在飞 ⇒ 别再发一次（否则连点会连发解锁、回包到了重复弹提示）
@@ -492,24 +538,29 @@ export class TerritoryPresenter {
             const loadId = this.loadId;
             pending.add(site.cellId);
             this.emitStateChange();
-            const result = await this.ports.gateway.unlockCell(
-                map.chapterId, site.cellId, this.ports.lifecycleHost,
-            );
-            pending.delete(site.cellId);
-            // ⚠️ requestId 变了 = 期间又点过别的地方 ⇒ 这次的结果已经不属于当前交互，直接丢。
-            if (this.disposed || loadId !== this.loadId
-                || requestId !== this.battleRequestId) return;
-            if (result.ok) {
-                // 🔴 按**回包给的数组**逐格记账：服务端一次解锁整片区域（请求 327 → 回 [327,328]），
-                // 只记请求那一格 ⇒ 同区域其余格界面上仍是锁态。
-                progress.markCellsUnlocked(result.unlockedCellIds ?? [site.cellId]);
-                this.persistProgress();
-                this.refreshWalletFromServer(false);
-                this.ports.outputs.showTip(TERRITORY_TEXTS.bossUnlocked);
-            } else {
-                this.ports.outputs.showTip(TERRITORY_TEXTS.bossUnlockFailed);
+            const exitBusy = this.enterBusy(TERRITORY_TEXTS.busyUnlock);
+            try {
+                const result = await this.ports.gateway.unlockCell(
+                    map.chapterId, site.cellId, this.ports.lifecycleHost,
+                );
+                // ⚠️ requestId 变了 = 期间又点过别的地方 ⇒ 这次的结果已经不属于当前交互，直接丢。
+                if (this.disposed || loadId !== this.loadId
+                    || requestId !== this.battleRequestId) return;
+                if (result.ok) {
+                    // 🔴 按**回包给的数组**逐格记账：服务端一次解锁整片区域（请求 327 → 回 [327,328]），
+                    // 只记请求那一格 ⇒ 同区域其余格界面上仍是锁态。
+                    progress.markCellsUnlocked(result.unlockedCellIds ?? [site.cellId]);
+                    this.persistProgress();
+                    this.refreshWalletFromServer(false);
+                    this.ports.outputs.showTip(TERRITORY_TEXTS.bossUnlocked);
+                } else {
+                    this.ports.outputs.showTip(TERRITORY_TEXTS.bossUnlockFailed);
+                }
+                this.emitStateChange();
+            } finally {
+                pending.delete(site.cellId);
+                exitBusy();
             }
-            this.emitStateChange();
             return;
         }
         // 第二步：已解锁 → `CmdStartBattleReqMsg`，成功才进入战斗。
@@ -522,31 +573,37 @@ export class TerritoryPresenter {
         // ⚠️ 也不做 `configId` 整数校验了：它已不参与这条请求，缺了不该拦住开战
         //（缺的是 `cellId`，而那来自站点本身，一定有）。
         //
-        // ⚠️ 防重：**开战后本地不会变成 owned**（通关要等战斗结算回报），
-        // 所以不能用 `isOwned` 拦第三次点击，否则连点会连发开战请求。
-        // 判据用「这一格已经拿到 battleId」，由 `loadChapter` / `cancelBattleRequest` 清空。
-        if (this.bossBattleStart) {
-            this.ports.outputs.showTip(TERRITORY_TEXTS.bossBattleReady);
-            return;
-        }
+        // ⚠️ 防连点：同一格**开战请求还在飞** ⇒ 别再发一次（与第一步解锁的 `pending` 判重同款；
+        // 全屏 loading 是主防线，这里是代码层第二道）。
+        //
+        // 🔴 不再用「这一格已经拿到 battleId」（`bossBattleStart`）当判据：那是**上一次开战**的
+        // 全局单值记录，navigate 后已消费并清空（见 `beginBattle`），拿它拦重复点击会把
+        // 已通关格（asyncPvp 可重复挑战）在本章节里**永久锁死**；也不能用 `isOwned` 拦
+        // （开战后到结算回报前本地不是 owned，拦不住连点，见下）。
+        if (this.pendingFixedResourceCells.has(site.cellId)) return;
         const pending = this.pendingFixedResourceCells;
         const loadId = this.loadId;
         pending.add(site.cellId);
         this.emitStateChange();
-        const result = await this.ports.gateway.startBattle(
-            ZC_BATTLE_TYPE_CHAPTER,
-            chapterCellBattleParams(map.chapterId, site.cellId),
-            this.ports.lifecycleHost,
-        );
-        pending.delete(site.cellId);
-        if (this.disposed || loadId !== this.loadId || requestId !== this.battleRequestId) return;
-        if (!result.ok) {
-            this.ports.outputs.showTip(TERRITORY_TEXTS.bossBattleStartFailed);
-            this.emitStateChange();
-            return;
+        const exitBusy = this.enterBusy(TERRITORY_TEXTS.busyBattle);
+        try {
+            const result = await this.ports.gateway.startBattle(
+                ZC_BATTLE_TYPE_CHAPTER,
+                chapterCellBattleParams(map.chapterId, site.cellId),
+                this.ports.lifecycleHost,
+            );
+            if (this.disposed || loadId !== this.loadId || requestId !== this.battleRequestId) return;
+            if (!result.ok) {
+                this.ports.outputs.showTip(TERRITORY_TEXTS.bossBattleStartFailed);
+                this.emitStateChange();
+                return;
+            }
+            this.bossBattleStart = { battleId: result.battle.battleId, seed: result.battle.seed };
+            this.beginBattle(site, stage, result.battle);
+        } finally {
+            pending.delete(site.cellId);
+            exitBusy();
         }
-        this.bossBattleStart = { battleId: result.battle.battleId, seed: result.battle.seed };
-        this.beginBattle(site, stage, result.battle);
     }
 
     /**
@@ -590,18 +647,23 @@ export class TerritoryPresenter {
         const loadId = this.loadId;
         pending.add(site.cellId);
         this.emitStateChange();
-        const result = await this.ports.gateway.unlockCell(map.chapterId, site.cellId, this.ports.lifecycleHost);
-        pending.delete(site.cellId);
-        if (this.disposed || loadId !== this.loadId) return;
-        if (result.ok) {
-            progress.markCellsUnlocked(result.unlockedCellIds ?? [site.cellId]);
-            this.persistProgress();
-            this.refreshWalletFromServer(false);
-            this.ports.outputs.showTip(unlockedText);
-        } else {
-            this.ports.outputs.showTip(TERRITORY_TEXTS.bossUnlockFailed);
+        const exitBusy = this.enterBusy(TERRITORY_TEXTS.busyUnlock);
+        try {
+            const result = await this.ports.gateway.unlockCell(map.chapterId, site.cellId, this.ports.lifecycleHost);
+            if (this.disposed || loadId !== this.loadId) return;
+            if (result.ok) {
+                progress.markCellsUnlocked(result.unlockedCellIds ?? [site.cellId]);
+                this.persistProgress();
+                this.refreshWalletFromServer(false);
+                this.ports.outputs.showTip(unlockedText);
+            } else {
+                this.ports.outputs.showTip(TERRITORY_TEXTS.bossUnlockFailed);
+            }
+            this.emitStateChange();
+        } finally {
+            pending.delete(site.cellId);
+            exitBusy();
         }
-        this.emitStateChange();
     }
 
     /**
@@ -642,26 +704,31 @@ export class TerritoryPresenter {
         const loadId = this.loadId;
         pending.add(site.cellId);
         this.emitStateChange();
-        const result = isUnlocked
-            ? await this.ports.gateway.passCell(map.chapterId, site.cellId, this.ports.lifecycleHost)
-            : await this.ports.gateway.unlockCell(map.chapterId, site.cellId, this.ports.lifecycleHost);
-        pending.delete(site.cellId);
-        if (this.disposed || loadId !== this.loadId) return;
-        if (result.ok) {
-            if (isUnlocked) progress.markCellPassed(site.cellId);
-            else progress.markCellsUnlocked(result.unlockedCellIds ?? [site.cellId]);
-            this.persistProgress();
-            this.refreshWalletFromServer(false);
-            this.ports.outputs.showTip(isUnlocked
-                ? texts.claimed : texts.unlocked);
-            if (isUnlocked && result.rewards?.length) {
-                this.ports.outputs.showRewards(result.rewards, site.cellId);
+        const exitBusy = this.enterBusy(isUnlocked ? TERRITORY_TEXTS.busyPass : TERRITORY_TEXTS.busyUnlock);
+        try {
+            const result = isUnlocked
+                ? await this.ports.gateway.passCell(map.chapterId, site.cellId, this.ports.lifecycleHost)
+                : await this.ports.gateway.unlockCell(map.chapterId, site.cellId, this.ports.lifecycleHost);
+            if (this.disposed || loadId !== this.loadId) return;
+            if (result.ok) {
+                if (isUnlocked) progress.markCellPassed(site.cellId);
+                else progress.markCellsUnlocked(result.unlockedCellIds ?? [site.cellId]);
+                this.persistProgress();
+                this.refreshWalletFromServer(false);
+                this.ports.outputs.showTip(isUnlocked
+                    ? texts.claimed : texts.unlocked);
+                if (isUnlocked && result.rewards?.length) {
+                    this.ports.outputs.showRewards(result.rewards, site.cellId);
+                }
+            } else {
+                this.ports.outputs.showTip(isUnlocked
+                    ? texts.claimFailed : texts.unlockFailed);
             }
-        } else {
-            this.ports.outputs.showTip(isUnlocked
-                ? texts.claimFailed : texts.unlockFailed);
+            this.emitStateChange();
+        } finally {
+            pending.delete(site.cellId);
+            exitBusy();
         }
-        this.emitStateChange();
     }
 
     private randomResourceOpenCheck(cellId: number): TerritoryRandomCellOpenCheck {
@@ -702,27 +769,48 @@ export class TerritoryPresenter {
         const loadId = this.loadId;
         pending.add(cellId);
         this.emitStateChange();
-        const result = await this.ports.gateway.unlockCell(map.chapterId, cellId, this.ports.lifecycleHost);
-        pending.delete(cellId);
-        if (this.disposed || loadId !== this.loadId) return;
-        if (result.ok) {
-            // 🔴 随机格「解锁即通关」：服务端在解锁回包时已发奖，没有通关请求。
-            // 只记 unlockable ⇒ 地图底色仍是泥地（未通关）；必须同时记 owned，
-            // 地块才会立即变草地（`img_land_01`），与已领取的固定资源点同口径。
-            // 注意不进 pendingPasses —— 随机格永不发 CmdCityChapterPassCellReqMsg。
-            const openedCellIds = result.unlockedCellIds ?? [cellId];
-            progress.markCellsUnlocked(openedCellIds);
-            progress.markCellsPassed(openedCellIds);
-            this.persistProgress();
-            this.refreshWalletFromServer(false);
-            // ⚠️ 不补「已开启」轻提示：随机格是解锁即发奖，奖励弹窗已经承担了这次操作的反馈，
-            // 再弹一句轻提示会和奖励窗同时出现（两条 UI 抢同一时刻）。
-            // 失败分支的轻提示保留（那时没有奖励窗）。
-            if (result.rewards?.length) this.ports.outputs.showRewards(result.rewards, cellId);
-        } else {
-            this.ports.outputs.showTip(TERRITORY_TEXTS.randomOpenFailed);
+        const exitBusy = this.enterBusy(TERRITORY_TEXTS.busyOpen);
+        try {
+            const result = await this.ports.gateway.unlockCell(map.chapterId, cellId, this.ports.lifecycleHost);
+            if (this.disposed || loadId !== this.loadId) return;
+            if (result.ok) {
+                // 🔴 随机格「解锁即通关」：服务端在解锁回包时已发奖，没有通关请求。
+                // 只记 unlockable ⇒ 地图底色仍是泥地（未通关）；必须同时记 owned，
+                // 地块才会立即变草地（`img_land_01`），与已领取的固定资源点同口径。
+                // 注意不进 pendingPasses —— 随机格永不发 CmdCityChapterPassCellReqMsg。
+                const openedCellIds = result.unlockedCellIds ?? [cellId];
+                progress.markCellsUnlocked(openedCellIds);
+                progress.markCellsPassed(openedCellIds);
+                this.persistProgress();
+                this.refreshWalletFromServer(false);
+                // ⚠️ 不补「已开启」轻提示：随机格是解锁即发奖，奖励弹窗已经承担了这次操作的反馈，
+                // 再弹一句轻提示会和奖励窗同时出现（两条 UI 抢同一时刻）。
+                // 失败分支的轻提示保留（那时没有奖励窗）。
+                if (result.rewards?.length) this.ports.outputs.showRewards(result.rewards, cellId);
+            } else {
+                this.ports.outputs.showTip(TERRITORY_TEXTS.randomOpenFailed);
+            }
+            this.emitStateChange();
+        } finally {
+            pending.delete(cellId);
+            exitBusy();
         }
-        this.emitStateChange();
+    }
+
+    /**
+     * 进入「玩家发起的服务端写请求」时段：全屏 loading 遮挡防连点，直到退出函数被调用。
+     *
+     * ⚠️ 必须在 **await 之前、所有前置校验通过之后** 调用 —— 校验失败（资源不足 / 不可解锁）不发
+     * 请求就不弹遮挡；同一帧内 enter 后立即 exit（校验分支 return）时 loading 来不及渲染，玩家无感。
+     * 返回的退出函数幂等，引用计数让「两步式的一次操作」全程只显一层 loading。
+     */
+    private enterBusy(text: string): () => void {
+        this.busyCount += 1;
+        this.ports.outputs.setBusy?.(true, text);
+        return () => {
+            this.busyCount = Math.max(0, this.busyCount - 1);
+            if (this.busyCount === 0) this.ports.outputs.setBusy?.(false);
+        };
     }
 
     private cancelBattleRequest(): void {
@@ -752,25 +840,30 @@ export class TerritoryPresenter {
             return;
         }
 
-        const unlock = await this.ports.gateway.unlockCell(
-            map.chapterId, site.cellId, this.ports.lifecycleHost);
-        // ⚠️ await 后重新判活：等回包期间可能已关页 / 切章节 / dispose。
-        if (loadId !== this.loadId || requestId !== this.battleRequestId || this.disposed) return;
-        if ('reason' in unlock) {
-            if (unlock.reason === TERRITORY_REQUEST_STATUS.rejected) {
-                this.startingBattle = false;
-                this.battleStartNotice = null;
-                this.ports.outputs.showTip(TERRITORY_TEXTS.unlockRejected);
-                this.emitStateChange();
-                return;
+        const exitBusy = this.enterBusy(TERRITORY_TEXTS.busyBattle);
+        try {
+            const unlock = await this.ports.gateway.unlockCell(
+                map.chapterId, site.cellId, this.ports.lifecycleHost);
+            // ⚠️ await 后重新判活：等回包期间可能已关页 / 切章节 / dispose。
+            if (loadId !== this.loadId || requestId !== this.battleRequestId || this.disposed) return;
+            if ('reason' in unlock) {
+                if (unlock.reason === TERRITORY_REQUEST_STATUS.rejected) {
+                    this.startingBattle = false;
+                    this.battleStartNotice = null;
+                    this.ports.outputs.showTip(TERRITORY_TEXTS.unlockRejected);
+                    this.emitStateChange();
+                    return;
+                }
+                console.warn(
+                    `[TerritoryPresenter] 第 ${map.chapterId} 章格子 ${site.cellId} 解锁请求未确认（${unlock.reason}），按本地继续`,
+                );
             }
-            console.warn(
-                `[TerritoryPresenter] 第 ${map.chapterId} 章格子 ${site.cellId} 解锁请求未确认（${unlock.reason}），按本地继续`,
-            );
-        }
-        if (unlock.ok) this.progress?.markCellsUnlocked(unlock.unlockedCellIds ?? [site.cellId]);
+            if (unlock.ok) this.progress?.markCellsUnlocked(unlock.unlockedCellIds ?? [site.cellId]);
 
-        this.beginBattle(site, stage);
+            this.beginBattle(site, stage);
+        } finally {
+            exitBusy();
+        }
     }
 
     /** 解锁已确认（或网络不可用决定放行）之后，真正扣资源 + 进战斗。 */
@@ -1328,7 +1421,7 @@ export class TerritoryPresenter {
         const owned = progress.isOwned(site.cellId);
         const exploration = progress.explorationAt(site.cellId);
         const check = progress.checkUnlock(site.cellId, Number.MAX_SAFE_INTEGER);
-        const canStart = owned || (!exploration && check.ok);
+        const canStart = owned || (!exploration && (progress.isCellUnlocked(site.cellId) || check.ok));
         const remainSeconds = exploration
             ? Math.max(0, Math.ceil((exploration.finishesAt - Date.now()) / 1000))
             : 0;
@@ -1336,7 +1429,7 @@ export class TerritoryPresenter {
             ? TERRITORY_TEXTS.owned
             : exploration
                 ? TERRITORY_TEXTS.exploring(remainSeconds)
-                : check.ok
+                : canStart
                     ? TERRITORY_TEXTS.available
                     : 'reason' in check ? check.reason : TERRITORY_TEXTS.notUnlocked;
         const enemyLimit = TERRITORY_ENEMY_DISPLAY_LIMIT;
@@ -1355,9 +1448,10 @@ export class TerritoryPresenter {
                 .map((reward) => `${reward.name}×${reward.amount}${reward.probability < 10000 ? `(${reward.probability / 100}%)` : ''}`)
                 .join('、')
             : TERRITORY_TEXTS.noReward;
-        const startCaption = this.startingBattle ? '' : (this.battleStartNotice
+        const isLoading = this.startingBattle || this.pendingFixedResourceCells.has(site.cellId);
+        const startCaption = isLoading ? '' : (this.battleStartNotice
             ?? (canStart
-                ? TERRITORY_TEXTS.startBattle
+                ? (progress.isCellUnlocked(site.cellId) || owned ? TERRITORY_TEXTS.startBattle : TERRITORY_TEXTS.unlockBattle)
                 : exploration ? TERRITORY_TEXTS.exploringShort : TERRITORY_TEXTS.notUnlocked));
         return {
             title: stage.isBoss ? `首领关卡  ${stage.stage}` : `领地关卡  ${stage.stage}`,
@@ -1379,8 +1473,8 @@ export class TerritoryPresenter {
             ].join('\n\n'),
             canStart: true,
             startCaption,
-            startEnabled: canStart && !this.startingBattle && this.battleStartNotice === null,
-            isLoading: this.startingBattle,
+            startEnabled: canStart && !isLoading && this.battleStartNotice === null,
+            isLoading,
         };
     }
 

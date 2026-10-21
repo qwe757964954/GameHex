@@ -43,6 +43,8 @@ export const GET_HERO_TEXTS = {
  * 同一种失败分类），别在两处各写一遍 —— 改一处漏一处必然分叉。
  */
 export const MAIN_TASK_TEXTS = {
+    /** 主界面左侧任务按钮。 */
+    entryLabel: '任务',
     /** 弹窗标题（FGUI `popBg` 的 `title`）。 */
     detailTitle: '任务详情',
     /** 「前往」按钮文字（FGUI `btn_go` 的 `Button title`）。 */

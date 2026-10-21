@@ -14,11 +14,12 @@ import {
     type IBigMapConfig,
     type IBigMapQueueSlot,
 } from './BigMapTypes';
-import { bigMapPlotCenterHexId, bigMapQueueCapacity, createBigMapBaseState } from './BigMapBase';
+import { bigMapClampQueueUnlocked, bigMapPlotCenterHexId, createBigMapBaseState } from './BigMapBase';
 import { createBigMapBattleProgress, type IBigMapBattleProgress } from './BigMapBattle';
+import type { IBigMapCityDayScore, IBigMapDaySnapshot } from './BigMapSnapshot';
 
-/** 存档版本：结构变更时 +1，`normalize` 里按版本补字段。 */
-export const BIGMAP_SAVE_VERSION = 1;
+/** 存档版本：结构变更时 +1，`normalize` 里按版本补字段（v2 加当日快照）。 */
+export const BIGMAP_SAVE_VERSION = 2;
 
 export interface IBigMapSaveData {
     readonly version: number;
@@ -26,6 +27,8 @@ export interface IBigMapSaveData {
     readonly battle: IBigMapBattleProgress;
     /** 上次保存的逻辑秒（离线产出按它算）。 */
     readonly savedAt: number;
+    /** 最近一次当日战绩快照（22:00 定格）；没出过就是 `null`。 */
+    readonly snapshot: IBigMapDaySnapshot | null;
 }
 
 export function createBigMapSave(config: IBigMapConfig, now: number): IBigMapSaveData {
@@ -34,8 +37,38 @@ export function createBigMapSave(config: IBigMapConfig, now: number): IBigMapSav
         base: createBigMapBaseState(config, now),
         battle: createBigMapBattleProgress(),
         savedAt: now,
+        snapshot: null,
     };
 }
+
+/**
+ * 快照清洗：结构不对就整份丢掉（快照只是展示用，丢了不影响玩法进度）。
+ *
+ * 注意别「部分保留」：半份快照会让「昨日战绩」出现缺城或名次错位，比没有更容易误导。
+ */
+function sanitizeSnapshot(raw: unknown): IBigMapDaySnapshot | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const item = raw as Partial<IBigMapDaySnapshot>;
+    const day = Number(item.day);
+    const at = Number(item.at);
+    const totalWarScore = Number(item.totalWarScore);
+    if (!Number.isFinite(day) || !Number.isFinite(at) || !Number.isFinite(totalWarScore)) return null;
+    const rawCities = item.cities;
+    if (!rawCities || typeof rawCities !== 'object') return null;
+    const cities: Record<string, IBigMapCityDayScore> = {};
+    for (const [key, value] of Object.entries(rawCities as Record<string, unknown>)) {
+        if (!value || typeof value !== 'object') continue;
+        const score = value as Partial<IBigMapCityDayScore>;
+        const rank = Number(score.rank);
+        const warScore = Number(score.warScore);
+        if (!Number.isFinite(rank) || !Number.isFinite(warScore)) continue;
+        if (!Number.isFinite(Number(key))) continue;
+        cities[key] = { rank: Math.max(1, Math.round(rank)), warScore: Math.round(warScore) };
+    }
+    return { day: Math.round(day), at, totalWarScore: Math.max(0, Math.round(totalWarScore)), cities };
+}
+
+
 
 function clampInt(value: unknown, min: number, max: number, fallback: number): number {
     const parsed = Number(value);
@@ -151,9 +184,8 @@ export function normalizeBigMapSave(
         instanceSeq,
         buildings,
         queues,
-        // 队列容量由建筑反推（`bigMapQueueCapacity`），不信存档字段：
-        // 存档里的 queueUnlocked 一旦被写坏，会出现「有 3 个槽但只显示 1 条」的死状态。
-        queueUnlocked: bigMapQueueCapacity(config, buildings),
+        // 队列数量是**存档权威**（文档口径：付费解锁，不来自建筑），只夹到合法区间。
+        queueUnlocked: bigMapClampQueueUnlocked(config, baseRaw.queueUnlocked),
         res,
         stamina: clampInt(baseRaw.stamina, 0, config.stamina.staminaMax, config.stamina.staminaMax),
         staminaAt: Number.isFinite(Number(baseRaw.staminaAt)) ? Number(baseRaw.staminaAt) : now,
@@ -179,6 +211,7 @@ export function normalizeBigMapSave(
         base,
         battle,
         savedAt: Number.isFinite(Number(source.savedAt)) ? Number(source.savedAt) : now,
+        snapshot: sanitizeSnapshot((source as Partial<IBigMapSaveData>).snapshot),
     };
 }
 
@@ -213,6 +246,7 @@ export function serializeBigMapSave(save: IBigMapSaveData): string {
             })),
         },
         battle: save.battle,
+        snapshot: save.snapshot,
     });
 }
 

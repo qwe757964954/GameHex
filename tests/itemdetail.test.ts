@@ -891,10 +891,8 @@ test('物品 D9｜ArenaRoot 里的 GetHeroEntry 是**嵌套 prefab 实例** + `R
 test('物品 D10｜ArenaRoot 的 GetHeroEntry 与既有 HUD **不重叠**（右侧一列）', () => {
     const prefab = loadPrefab(ARENA_PREFAB);
     const rects = collectRects(prefab);
-    // 既有两个右列 HUD（普通节点，直接可读）
-    const chat = rects.get('ChatEntry')!;
+    // 既有右列 HUD（普通节点，直接可读）
     const osRank = rects.get('OSRankEntry')!;
-    assert.equal(chat.r, osRank.r, '两者右边线应重合（right=15）');
     // 新 HUD：节点 120×120；视觉外扩（FGUI 子节点超出组件框）
     const cx = 263;
     const cy = -196;

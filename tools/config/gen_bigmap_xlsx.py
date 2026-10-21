@@ -19,7 +19,7 @@
   · 野怪：lxo54t9l(monsterConfig) / lkurz918(3 张存档表)
   · 基地：iiimv6ks(3 张配置 + 3 张存档)
 
-数据行来源：与 `gen_bigmap_tables.py`（运行时 `BigMap-*` 配置表）**同一套数值**，
+数据行来源：与 `gen_bigmap_tables.py`（运行时 `bigmap*` 配置表）**同一套数值**，
 避免「文档配表」和「游戏内表」两套数字打架。
 
 用法：

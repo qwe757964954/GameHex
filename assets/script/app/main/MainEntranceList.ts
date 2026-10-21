@@ -78,7 +78,7 @@ export class MainEntranceList extends Component {
         // 邮件（open.json refId=301 / url=LayerMail）——邮件列表容器。
         mail: MailPage,
         // 聊天（open.json refId=13 / url=LayerChat）。⚠️ 表里 `belond = 0` ⇒ 左右列收不到它，
-        // 主界面上的入口是右下角固定按钮 `ChatEntry`（`ChatEntryButton`）；这里登记只为白名单一致。
+        // 主界面入口在 BottomHud/ChatBar；这里登记只为白名单一致。
         chat: ChatPage,
         // 角色主界面（open.json refId=2 / url=TabRoleMain）——**主界面 tab 页**，不是弹窗
         // （2026-09-26 山猫定：「应该类似 CardLineup，不是弹窗」）⇒ 不在 POPUP_CLASSES 里，

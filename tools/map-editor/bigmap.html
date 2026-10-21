@@ -33,8 +33,16 @@
     .cell { stroke:#475569; stroke-width:.6; cursor:crosshair } .cell:hover { stroke:#f8fafc; stroke-width:1.6 }
     .c-plain { fill:#1b2537 } .c-forest { fill:#16301f } .c-rock { fill:#2b2b31 } .c-water { fill:#123047 }
     .c-blocked { fill:#3f1d1d }
-    .range { fill:#38bdf8; fill-opacity:.16; stroke:#38bdf8; stroke-width:.8; stroke-opacity:.6; pointer-events:none }
-    .zone { fill:#f472b6; fill-opacity:.12; stroke:#f472b6; stroke-width:.8; stroke-opacity:.5; pointer-events:none }
+    /* 势力范围：填充只表示「这片有范围」，**辨识靠每座城的外轮廓**（各城不同色）。
+       fill 一律中性淡色 —— 81 座城 6560 格铺满 65% 面积，要是每城都灌自己的色相，
+       整张图会糊成彩色雾，比原来还看不清。 */
+    .rangeFill { fill:#e2e8f0; fill-opacity:.07; stroke:none; pointer-events:none }
+    .rangeEdge { fill:none; stroke-width:1.7; stroke-opacity:.95; stroke-linejoin:round; stroke-linecap:round; pointer-events:none }
+    /* 被两座城同时圈住的格：不替策划裁决，标成橙色让人自己改。 */
+    .rangeConflict { fill:#f97316; fill-opacity:.35; stroke:#fb923c; stroke-width:1.2; pointer-events:none }
+    /* 出生区块：与势力范围同一套（淡填充 + 只走外边界），区块之间才分得开。 */
+    .zoneFill { fill:#f472b6; fill-opacity:.08; stroke:none; pointer-events:none }
+    .zoneEdge { fill:none; stroke-width:1.5; stroke-opacity:.9; stroke-linejoin:round; stroke-linecap:round; pointer-events:none }
     .sel { fill:none; stroke:#fde047; stroke-width:2.4; pointer-events:none }
     .ent { cursor:pointer }
     .ent text { pointer-events:none; font:700 11px system-ui,sans-serif; text-anchor:middle; paint-order:stroke; stroke:#0b1220; stroke-width:2.5 }

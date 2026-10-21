@@ -40,8 +40,7 @@ const POPUP_URLS: Readonly<Record<string, EntrancePopupKey>> = {
     // `visibleCondition = [battleLevel(resId=5)]`，`RDExpr = "[RDChat]"`）。
     // 弹窗类 = `ChatPage`（`static prefabPath = 'ui/Chat/Chat'`）。
     //
-    // ⚠️ 表里 `belond = 0` ⇒ **不会被左右入口列表收集**：主界面上它是右下角的**固定悬浮按钮**
-    //    （`ArenaRoot.prefab`（竞技页）的 `ChatEntry`，位置照老端 `xy = 605,1028`，按钮脚本 `ChatEntryButton`）。
+    // 表里 `belond = 0` ⇒ 不会被左右入口列表收集；主界面由 BottomHud/ChatBar 承接聊天入口。
     //    这里登记是为了守住「入口白名单只两处」这条约定，并让表改成 belond 2/3 时能直接生效；
     //    按钮本身**不走**这条路由（它直接 `PopupManager.openAsync(ChatPage)`）。
     LayerChat: 'chat',

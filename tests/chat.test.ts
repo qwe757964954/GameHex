@@ -92,7 +92,6 @@ import {
     CHAT_ART_BUBBLE_BG,
     CHAT_ART_DIRS,
     CHAT_ART_INPUT_BG,
-    CHAT_ART_MAIN_CHAT,
     CHAT_ART_ROOT,
     CHAT_ART_SLICED,
     CHAT_EMOJI_PREFIX,
@@ -478,17 +477,16 @@ const CHAT_OWN_ART: readonly string[] = [
     'ct_bq_btn',
     'ct_join_btn',
     'ct_close_02',
-    CHAT_ART_MAIN_CHAT,
 ];
 
-test('B1 chat 自有美术 9 张 + 44 张表情齐（少一张就是一个白框，且**不报错**）', () => {
+test('B1 chat 自有美术 8 张 + 44 张表情齐（少一张就是一个白框，且**不报错**）', () => {
     assert.equal(CHAT_ART_ROOT, 'image/chat', 'loadArt 的 root 不能带 `resources/` 前缀');
     assert.equal(CHAT_EMOJI_PREFIX, 'ct_emoji_');
-    assert.equal(CHAT_OWN_ART.length, 9);
-    assert.equal(new Set(CHAT_OWN_ART).size, 9, '图名不能重复');
+    assert.equal(CHAT_OWN_ART.length, 8);
+    assert.equal(new Set(CHAT_OWN_ART).size, 8, '图名不能重复');
 
     const all = [...CHAT_OWN_ART, ...emojiTags().map((t) => emojiArtName(Number(t)))];
-    assert.equal(all.length, 53, '9 张自有单图 + 44 张表情');
+    assert.equal(all.length, 52, '8 张自有单图 + 44 张表情');
 
     const missing = all.filter((name) => !existsSync(`${ART_DIR}/${name}.png`));
     assert.deepEqual(missing, [], `缺图：${missing.join(', ')}`);
@@ -535,7 +533,7 @@ test('B3 ⚠️ `chatSpriteType`：9 张给 1(SLICED)，其余给 0(SIMPLE)，�
     assert.equal(CHAT_SPRITE_SIMPLE, 0);
     assert.equal(CHAT_SPRITE_SLICED, 1);
     for (const name of CHAT_ART_SLICED) assert.equal(chatSpriteType(name), 1, `${name} 必须是 SLICED`);
-    for (const name of [CHAT_ART_MAIN_CHAT, 'ct_at_btn', 'ct_bq_btn', 'ct_close_02', 'ct_emoji_0', CHAT_HEAD_ART.frame]) {
+    for (const name of ['ct_at_btn', 'ct_bq_btn', 'ct_close_02', 'ct_emoji_0', CHAT_HEAD_ART.frame]) {
         assert.equal(chatSpriteType(name), 0, `${name} 是原尺寸图，不该拉伸`);
     }
     assert.equal(chatSpriteType('不存在的图'), 0);
@@ -584,20 +582,11 @@ test('B6 `chatTint`：灰度用 tint 近似（Cocos 无内置灰度滤镜，口�
     assert.deepEqual([...chatTint(false)], [...CHAT_TINT_NORMAL]);
 });
 
-test('B7 ⚠️ 主界面入口图标 = `ct_main_chat`，且 `ArenaRoot` 的 `ChatEntry/Btn` 引的正是它', () => {
-    assert.equal(CHAT_ART_MAIN_CHAT, 'ct_main_chat');
-    const meta = JSON.parse(readFileSync(`${ART_DIR}/ct_main_chat.png.meta`, 'utf8')) as { uuid: string };
-    assert.ok(meta.uuid, 'ct_main_chat 必须有 uuid');
-    assert.equal(chatSpriteType(CHAT_ART_MAIN_CHAT), 0, '入口图标不是九宫格');
-
+test('B7 主界面旧聊天浮钮与专用图片已移除', () => {
+    assert.equal(existsSync(`${ART_DIR}/ct_main_chat.png`), false);
+    assert.equal(existsSync(`${ART_DIR}/ct_main_chat.png.meta`), false);
     const mainRoot = JSON.parse(readFileSync('assets/resources/ui/main/ArenaRoot.prefab', 'utf8')) as Record<string, unknown>[];
-    const hits = mainRoot.filter((entry) => {
-        const frame = (entry as { _spriteFrame?: { __uuid__?: string } })._spriteFrame;
-        return !!frame?.__uuid__ && frame.__uuid__.replace('@f9941', '') === meta.uuid;
-    });
-    assert.equal(hits.length, 1, 'ArenaRoot 里应当**恰好一处**引用入口图标');
-    assert.equal((hits[0] as { _type: number })._type, 0, '入口图标按原图渲染');
-    assert.equal((hits[0] as { _sizeMode: number })._sizeMode, 0, '必须 CUSTOM（RAW 会被渲染组件回写尺寸）');
+    assert.ok(!mainRoot.some((entry) => entry.__type__ === 'cc.Node' && entry._name === 'ChatEntry'));
 });
 
 // ============================================================
@@ -1283,14 +1272,13 @@ test('D11 ⚠️ 主界面入口按钮：点开 `ChatPage`，红点占位但**�
     assert.ok(mainRedDot, 'ArenaRoot 里必须有 RedDot 占位节点');
     assert.equal(mainRedDot!._active, false, '红点本轮不接 ⇒ 必须保持隐藏');
     const chatEntry = main.find((e) => e && e.__type__ === 'cc.Node' && e._name === 'ChatEntry') as { _active: boolean } | undefined;
-    assert.ok(chatEntry, 'ArenaRoot 里必须有 ChatEntry 节点（保留结构，脚本仍挂在上面）');
-    // 🔴 2026-10-19：按蓝湖「塔防主界面-1」效果图，右下圆钮撤掉、聊天入口改成**底部聊天条**
-    //    ⇒ `ChatEntry` 烘 `_active=false`（节点留着，`ChatEntryButton` 脚本还在，随时可复用）；
-    //    可见性判据挪到 `BottomHud/ChatBar`。
-    assert.equal(chatEntry!._active, false, '右下聊天圆钮已撤（效果图改底部聊天条）');
+    assert.equal(chatEntry, undefined, '旧聊天浮钮必须删除');
     const chatBar = main.find((e) => e && e.__type__ === 'cc.Node' && e._name === 'ChatBar') as { _active: boolean } | undefined;
     assert.ok(chatBar, 'ArenaRoot 里必须有底部聊天条 ChatBar（新的聊天入口）');
     assert.equal(chatBar!._active, true, '聊天入口（底部条）默认显示');
+    const entryCid = compressUuid(JSON.parse(readFileSync(`${CHAT_DIR}/ChatEntryButton.ts.meta`, 'utf8')).uuid);
+    const components = (chatBar as { _components?: { __id__: number }[] })._components ?? [];
+    assert.ok(components.some((ref) => main[ref.__id__].__type__ === entryCid), '底部聊天条必须接上打开聊天的逻辑');
 });
 
 test('D12 判定与文案分层：`ChatTable` 零 import（保住「文案 / 美术 / 引擎」都不进判定层）', () => {

@@ -143,7 +143,7 @@ export function loadViews() {
     const cc = {
         _decorator: { ccclass: () => (value: unknown) => value, property: () => () => {}, disallowMultiple: (value: unknown) => value },
         Color, Component: class { node = new FakeNode(); }, Animation: class {}, sp: { Skeleton: class {} }, Graphics, ProgressBar: class {},
-        Sprite: class { static SizeMode = { CUSTOM: 0, TRIMMED: 1, RAW: 2 }; },
+        Sprite: class { static SizeMode = { CUSTOM: 0, TRIMMED: 1, RAW: 2 }; static Type = { SLICED: 0, TILED: 1, FILLED: 2, SIMPLE: 3 }; },
         SpriteFrame: class {}, UITransform: class {}, Label: class {}, Material, Prefab: class {}, Node: FakeNode, Vec4, Vec2,
         /** 局部透明度（卡牌评语延迟出现 / 金币图标淡出都会懒挂它）。 */
         UIOpacity: class { opacity = 255; },

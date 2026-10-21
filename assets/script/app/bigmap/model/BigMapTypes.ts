@@ -3,7 +3,11 @@
  *
  * 分层约定（见 `AGENTS.md` 架构硬约束）：规则全部落在 `model/`，`view/` 只做渲染编排，
  * `application/` 负责把配置、存档、冒险进度接进来。所以这里不 import 任何引擎/框架模块。
+ *
+ * 唯一的模块依赖是 `./BigMapCitySchedule` 的**类型**（日程是配置的一部分，两者互相需要），
+ * 方向单向、且 BigMapCitySchedule 不反向 import 本文件。
  */
+import type { IBigMapCitySchedule } from './BigMapCitySchedule';
 
 /** 大地图资源。`stamina` 是行动力，与建造资源同表配置但不进资源栏上限。 */
 export type BigMapResType = 'grain' | 'wood' | 'iron' | 'coin' | 'stamina';
@@ -14,7 +18,7 @@ export const BIGMAP_RES_ORDER: readonly BigMapResType[] = ['grain', 'wood', 'iro
 /** 建造资源（可被主城 `resCap` 卡上限的那三种）。 */
 export const BIGMAP_BUILD_RES: readonly BigMapResType[] = ['grain', 'wood', 'iron'];
 
-/** 建筑类型枚举，对应 `BigMap-建筑配置.baseBuildType`。 */
+/** 建筑类型枚举，对应 `bigmapBuilding.baseBuildType`。 */
 export const enum BigMapBuildingKind {
     Main = 1,
     ResourceField = 2,
@@ -203,6 +207,8 @@ export interface IBigMapStaminaConfig {
 /** 全部配置的只读快照。构造后不再变化，可安全跨帧复用。 */
 export interface IBigMapConfig {
     readonly world: IBigMapWorldConfig;
+    /** 攻城日程（`bigmapSchedule` 表）：四个切换时点 + 时区偏移。 */
+    readonly schedule: IBigMapCitySchedule;
     readonly buildings: ReadonlyMap<number, IBigMapBuildingConfig>;
     readonly levels: ReadonlyMap<number, ReadonlyMap<number, IBigMapBuildingLevelConfig>>;
     readonly produce: ReadonlyMap<number, ReadonlyMap<number, IBigMapProduceConfig>>;

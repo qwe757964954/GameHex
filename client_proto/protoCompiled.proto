@@ -4796,6 +4796,7 @@ enum MessageId {
     CmdNewTreasureInfoListRspMsg = 2011197980; //新宝箱请求列表
     CmdNewTreasureActivateRspMsg = 399007957; //新宝箱请求激活
     CmdNewTreasureFastOpenRspMsg = 291587262; //新宝箱请求快速开启	
+    CmdNewTreasureOpenRspMsg = 1903704638; //新宝箱请求开启
 	CmdTakeOathAllianceRewardRspMsg = 271053488; //领取誓盟之战每日奖励
     CmdPvpHeroInfoListRspMsg = 1516169721; //请求pvp英雄列表
     CmdPvpHeroUpLevelRspMsg = 937856670; //请求pvp英雄升级

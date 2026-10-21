@@ -20,8 +20,8 @@
  *
  * ## 与配置表的分工
  *
- * 布局决定「东西在哪」，`BigMap-*` 配置表决定「东西值多少」。
- * 城池坐标**只在布局里**：若同时写进 `BigMap-城池配置.hexPos`，跑一次 eSon 导表就会把
+ * 布局决定「东西在哪」，`bigmap*` 配置表决定「东西值多少」。
+ * 城池坐标**只在布局里**：若同时写进 `bigmapCity.hexPos`，跑一次 eSon 导表就会把
  * 编辑器成果静默覆盖回去（`MEMORY` 303 条踩过的同类坑）。
  */
 
@@ -517,7 +517,7 @@ export function buildBigMapWorldFromLayout(config: IBigMapConfig, layout: IBigMa
     const cityByHex = new Map<number, number>();
     for (const city of layout.cities) {
         if (!config.cities.has(city.cityId)) {
-            throw new Error(`BigMap 布局里的城池 ${city.cityId} 不在 BigMap-城池配置 中（配置与布局不同步）`);
+            throw new Error(`BigMap 布局里的城池 ${city.cityId} 不在 bigmapCity 中（配置与布局不同步）`);
         }
         const site: IBigMapCitySite = {
             cityId: city.cityId,
@@ -531,7 +531,7 @@ export function buildBigMapWorldFromLayout(config: IBigMapConfig, layout: IBigMa
 
     const monsters: IBigMapMonsterSite[] = layout.monsters.map((monster) => {
         if (!config.monsters.has(monster.monsterId)) {
-            throw new Error(`BigMap 布局里的野怪 ${monster.monsterId} 不在 BigMap-野怪配置 中（配置与布局不同步）`);
+            throw new Error(`BigMap 布局里的野怪 ${monster.monsterId} 不在 bigmapMonster 中（配置与布局不同步）`);
         }
         return {
             instanceId: monster.instanceId,

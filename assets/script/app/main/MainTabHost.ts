@@ -1,4 +1,4 @@
-import { _decorator, CCInteger, Component, instantiate, Layers, Node, Prefab, UITransform, Vec3, Widget } from 'cc';
+import { _decorator, CCInteger, Component, instantiate, Node, Prefab, Vec3 } from 'cc';
 import type { AssetService } from '../../core/asset/AssetService';
 import type { ConfigService } from '../../core/config/ConfigService';
 import { TabButton } from '../common/TabButton';
@@ -7,7 +7,7 @@ import { CardLineupPage } from '../card/CardLineupPage';
 import { checkFirstRechargeOnEnterMain } from '../firstRecharge/FirstRechargeAutoOpen';
 import { MainTerritoryMap } from './MainTerritoryMap';
 import { MainPage } from './MainPage';
-import { BigMapEntryButton } from '../bigmap/view/BigMapEntryButton';
+import { BigMapEntry } from '../bigmap/application/BigMapEntry';
 
 const { ccclass, property } = _decorator;
 
@@ -138,7 +138,17 @@ export class MainTabHost extends Component {
         for (let index = 0; index < this.navItems.length; index += 1) {
             const button = this.navItems[index];
             const type = button.tabType;
-            const isLocked = type === MainTab.Challenge || type === MainTab.World;
+
+            // 「世界」= 大世界（大地图）入口：点它直接开全屏覆盖页，**不是** tab 页。
+            // 2026-10-21 起大地图不再有单独的悬浮按钮，就挂在这一格上（见 `openBigMap`）。
+            if (type === MainTab.World) {
+                button.setEnabled(true);
+                button.bindSelect(() => this.openBigMap());
+                button.bindRedDotExpr(mainTabItem(type)?.rdExpr);
+                continue;
+            }
+
+            const isLocked = type === MainTab.Challenge;
             button.setEnabled(!isLocked);
             // 点击：`TabButton` 内部已经挂了 CLICK（`ensureInit()` 幂等），宿主只交出「点我切哪一页」。
             // 事件监听随节点销毁由引擎自动清理，按项目约定不手动 off。
@@ -155,29 +165,31 @@ export class MainTabHost extends Component {
         // 表现在弹窗「闪一下」或盖在不存在的页面上。`checkFirstRechargeOnEnterMain`
         // 内部全 catch、永不 reject，所以这里的 `then` 不会漏出 unhandled rejection。
         void this.switchTab(this.defaultTab).then(() => checkFirstRechargeOnEnterMain(this));
-
-        this.createBigMapEntry();
     }
 
     /**
-     * 挂一个「大地图」悬浮入口（右下角、导航条上方）。
+     * 打开大世界（大地图）。
      *
-     * 底部七格是既有版式，大世界额外使用独立悬浮按钮；
-     * 大世界是新增玩法且美术未定，先用独立悬浮按钮，改版式时直接挪这个节点即可。
+     * 保留当前底页，只临时把底栏高亮切到「世界」，关掉时回调恢复 `currentTab`。
      */
-    private createBigMapEntry(): void {
-        if (!this.configs) return;
-        if (this.node.getChildByName('BigMapEntry')) return;
-        const entry = new Node('BigMapEntry');
-        entry.layer = Layers.Enum.UI_2D;
-        entry.addComponent(UITransform).setContentSize(132, 46);
-        const widget = entry.addComponent(Widget);
-        widget.isAlignRight = true;
-        widget.isAlignBottom = true;
-        widget.right = 24;
-        widget.bottom = 118;
-        entry.setParent(this.node);
-        entry.addComponent(BigMapEntryButton).initialize(this.configs);
+    private openBigMap(): void {
+        if (!this.configs) {
+            console.warn('[MainTabHost] 还没注入 ConfigService，无法打开大世界');
+            return;
+        }
+        if (BigMapEntry.shared().isOpen) return;
+        void (async () => {
+            this.renderNav(MainTab.World);
+            await BigMapEntry.shared().open(this.configs, {
+                navigation: this.navBar,
+                onClose: () => this.renderNav(this.currentTab),
+            });
+        })();
+    }
+
+    /** 关掉大世界（切 tab 前一律先关，否则它会一直压在旧页面上）。 */
+    private closeBigMap(): void {
+        BigMapEntry.shared().close();
     }
 
     /**
@@ -187,6 +199,12 @@ export class MainTabHost extends Component {
      * 底部高亮和实际内容对不上。
      */
     async switchTab(index: number): Promise<void> {
+        // 「世界」不是 tab 页而是压在页面上的大世界：外部跳转（`switchToTab(6)` / 活动路由）也走这里。
+        if (index === MainTab.World) {
+            this.openBigMap();
+            return;
+        }
+        this.closeBigMap();
         if (index === this.currentTab) return;
 
         const prefab = this.pagePrefab(index);
@@ -235,7 +253,7 @@ export class MainTabHost extends Component {
         if (index === MainTab.Territory) return this.arenaPage;
         // 挑战暂不开放：保留底栏位置与视觉，但拒绝页面切换；旧章节地图已并入领地主城页。
         if (index === MainTab.Alliance) return this.alliancePage;
-        // 世界：页面未落地（蓝湖稿里带锁角标，本来就是锁定态）
+        // 世界：没有 tab 页 —— 它是全屏覆盖页，走 `openBigMap()`（`switchTab` 开头已拦截）。
         return null;
     }
 
@@ -245,7 +263,7 @@ export class MainTabHost extends Component {
         const page = instantiate(prefab);
         // 依赖注入必须发生在 `setParent`（页面 onLoad / start）之前。
         const mainTerritoryMap = page.getComponentInChildren(MainTerritoryMap);
-        if (mainTerritoryMap && this.assets) mainTerritoryMap.initialize(this.assets);
+        if (mainTerritoryMap && this.assets) mainTerritoryMap.initialize(this.assets, this.configs);
         const mainPage = page.getComponent(MainPage);
         if (mainPage && mainTerritoryMap) {
             mainPage.bindFindCurrentBoss(() => mainTerritoryMap.focusCurrentBoss());

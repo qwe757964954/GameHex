@@ -9,7 +9,13 @@ import {
     HEX_GRID_VIEW_COLUMN_SPACING,
     HEX_GRID_VIEW_ROW_SPACING,
 } from '../assets/script/core/hex/HexGridLayout';
-import { buildTerritoryMapLayout, territoryMapOffsetForCell } from '../assets/script/app/territory/model/TerritoryMapLayout';
+import {
+    buildTerritoryMapLayout,
+    TERRITORY_MAP_CONTENT_PADDING,
+    TERRITORY_MAP_VIEW_LIFT,
+    territoryMapContentSize,
+    territoryMapOffsetForCell,
+} from '../assets/script/app/territory/model/TerritoryMapLayout';
 import { configureTerritoryMap, territoryCellCoords } from '../assets/script/app/territory/model/TerritoryMapConfig';
 
 const MAP_PATH = 'assets/resources/config/territory-maps/chapter_01.json';
@@ -110,15 +116,81 @@ test('布局换算是纯函数：同一份地图算两次结果完全一致（�
 test('首次滚动到随机点时，第一章起始格附近目标落在视口内', () => {
     const layout = buildTerritoryMapLayout(readMap());
     const viewport = { width: 720, height: 1280 };
+    const content = territoryMapContentSize(layout);
     const cellId = 366;
     const target = layout.points.get(cellId)!;
     const offset = territoryMapOffsetForCell(layout, cellId, viewport);
     assert.ok(offset.x > 0 && offset.y > 0, '不能继续停在地图左上角');
     assert.ok(offset.x <= layout.width - viewport.width);
-    assert.ok(offset.y <= layout.height - viewport.height);
+    assert.ok(offset.y <= content.height - viewport.height);
     const centerX = -layout.width / 2 + viewport.width / 2 + offset.x;
-    const centerY = layout.height / 2 - viewport.height / 2 - offset.y;
+    const centerY = content.height / 2 - viewport.height / 2 - offset.y;
     assert.ok(Math.abs(target.x - centerX) <= viewport.width / 2);
     assert.ok(Math.abs(target.y - centerY) <= viewport.height / 2);
     assert.deepEqual(territoryMapOffsetForCell(layout, -1, viewport), { x: 0, y: 0 });
 });
+
+/**
+ * 「整体一起上移」的回归 —— 用户 2026-10-21 截图：第一章起始格（第 18 行）附近的地块
+ * 被主城页底部的【快速寻敌】按钮压住了。
+ *
+ * 根因不是抬升量不够，是 `cc.ScrollView` 的**滚动范围被内容层尺寸钳死**：
+ * 内容层原来 ≡ 地图包围盒，贴到下边缘的目标格根本没有可滚的余量
+ * （理想偏移 1312.5 / 上限 940，差 372.5）。所以断言的不是「偏移量是多少」，
+ * 而是**地图底边到视口底部的净空**必须 ≥ 内容层留白 —— 这才是"没被按钮遮挡"的可测形式。
+ */
+test('滚到地图最底部时，底边仍在视口底部之上留白那么多（不会被快速寻敌压住）', () => {
+    const layout = buildTerritoryMapLayout(readMap());
+    const content = territoryMapContentSize(layout);
+    // 主城页真实视口：`MainTerritoryMap.prefab` 的 MapViewport = 720×934。
+    const viewport = { width: 720, height: 934 };
+    assert.equal(content.width, layout.width, '横向不留白');
+    assert.equal(content.height, layout.height + TERRITORY_MAP_CONTENT_PADDING * 2);
+
+    const bottomCellId = bottomMostCellId(layout);
+    const offset = territoryMapOffsetForCell(layout, bottomCellId, viewport);
+    // 屏幕坐标（相对视口中心）：格心 → 视口；地图底边 = 包围盒下沿。
+    const mapBottomOnScreen = -viewport.height / 2 + (content.height / 2 + layout.height / 2) - offset.y;
+    const clearance = viewport.height / 2 - mapBottomOnScreen;
+    assert.ok(
+        clearance >= TERRITORY_MAP_CONTENT_PADDING - 1e-6,
+        `地图底边离视口底部只有 ${clearance.toFixed(1)}px，需要 ≥ ${TERRITORY_MAP_CONTENT_PADDING}`,
+    );
+    // 遮挡物（快速寻敌 + 任务挂件）实测约 150~200px，留白必须比它大。
+    assert.ok(clearance > 200, '净空要盖过底部按钮高度');
+    // 相机确实滚到了底（否则「净空」是假的，只是没滚下去）。
+    assert.equal(offset.y, content.height - viewport.height);
+});
+
+test('内容层留白不会把地图坐标带偏：格心仍是共享布局那一套', () => {
+    const layout = buildTerritoryMapLayout(readMap());
+    const content = territoryMapContentSize(layout);
+    // 地图整体居中在内容层里：内容层中心 == 包围盒中心。
+    assert.equal(content.height / 2 - layout.height / 2, TERRITORY_MAP_CONTENT_PADDING);
+    // 目标格只要不在边缘，仍然被停在「视口中心偏上 lift」。
+    const cellId = 366;
+    const viewport = { width: 720, height: 480 };
+    const point = layout.points.get(cellId)!;
+    const offset = territoryMapOffsetForCell(layout, cellId, viewport);
+    assert.ok(offset.y < content.height - viewport.height, '这一档不能撞到滚动上限，否则测的是钳制不是定心');
+    // 屏幕坐标向上为负 ⇒ 「停在视口中心上方 lift」= 屏幕 y 等于 -lift。
+    const screenY = -viewport.height / 2 + (content.height / 2 - point.y) - offset.y;
+    assert.ok(
+        Math.abs(screenY + TERRITORY_MAP_VIEW_LIFT) < 1e-6,
+        `目标格应停在视口中心上方 ${TERRITORY_MAP_VIEW_LIFT}px，实际 ${screenY.toFixed(2)}`,
+    );
+});
+
+/** 包围盒里 y 最小的格心（地图最下面那一行）。 */
+function bottomMostCellId(layout: ReturnType<typeof buildTerritoryMapLayout>): number {
+    let best = -1;
+    let bestY = Number.POSITIVE_INFINITY;
+    for (const [cellId, point] of layout.points) {
+        if (point.y < bestY) {
+            bestY = point.y;
+            best = cellId;
+        }
+    }
+    assert.ok(best >= 0, '布局里没有任何格子');
+    return best;
+}

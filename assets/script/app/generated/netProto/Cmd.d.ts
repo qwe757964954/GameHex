@@ -5737,6 +5737,12 @@
 
     
 
+    declare class CmdSlgMonsterBattleResultInfo {
+        cmdGoods?: (CmdGoods[]|null);
+    }
+
+    
+
     declare class CmdBattleFrameInfo {
         frameId: number;
         unitId: number;
@@ -5887,6 +5893,196 @@
         rewardState: number;
         unlockCells?: (Long[]|null);
         passCells?: (Long[]|null);
+    }
+
+    
+
+    declare class SlgGameActionInfo {
+        nextRevertTime: number;
+    }
+
+    
+
+    declare class SlgCampSimpleInfo {
+        campId: number;
+        opType: number;
+        state: number;
+    }
+
+    
+
+    declare class SlgCampInfo {
+        campId: number;
+        opType: number;
+        state: number;
+    }
+
+    
+
+    declare class SlgBuildInfo {
+        buildInstId: number;
+        buildingId: number;
+        position: number;
+        level: number;
+        state: number;
+        finishTime?: (number|null);
+    }
+
+    
+
+    declare class SlgBuildQueueInfo {
+        queueId: number;
+        type: number;
+        buildInstId: number;
+    }
+
+    
+
+    declare class SlgBuildGameInfo {
+        builds?: (SlgBuildInfo[]|null);
+        queues?: (SlgBuildQueueInfo[]|null);
+        unlockQueue: number;
+    }
+
+    
+
+    declare class CmdSlgCampSimpleInfoReqMsg {
+        campIds?: (number[]|null);
+    }
+
+    
+
+    declare class CmdSlgCampSimpleInfoRspMsg {
+        infos?: (SlgCampSimpleInfo[]|null);
+    }
+
+    
+
+    declare class CmdSlgCampInfoReqMsg {
+        campIds?: (number[]|null);
+    }
+
+    
+
+    declare class CmdSlgCampInfoRspMsg {
+        infos?: (SlgCampInfo[]|null);
+    }
+
+    
+
+    declare class CmdSlgActionUpdateReqMsg {
+    }
+
+    
+
+    declare class CmdSlgActionUpdateRspMsg {
+        info: SlgGameActionInfo;
+    }
+
+    
+
+    declare class CmdSlgGameInfoReqMsg {
+    }
+
+    
+
+    declare class CmdSlgGameInfoRspMsg {
+    }
+
+    
+
+    declare class CmdSlgGameInfoBroMsg {
+    }
+
+    
+
+    declare class CmdSlgBuildInfoReqMsg {
+    }
+
+    
+
+    declare class CmdSlgBuildReqMsg {
+        buildingId: number;
+        position: number;
+        instant?: (number|null);
+    }
+
+    
+
+    declare class CmdSlgBuildRspMsg {
+        build: SlgBuildInfo;
+        queue: SlgBuildQueueInfo;
+    }
+
+    
+
+    declare class CmdSlgBuildUpgradeReqMsg {
+        buildInstId: number;
+        instant?: (number|null);
+    }
+
+    
+
+    declare class CmdSlgBuildUpgradeRspMsg {
+        build: SlgBuildInfo;
+        queue: SlgBuildQueueInfo;
+    }
+
+    
+
+    declare class CmdSlgBuildCancelReqMsg {
+        buildInstId: number;
+    }
+
+    
+
+    declare class CmdSlgBuildCancelRspMsg {
+        buildInstId: number;
+        build?: (SlgBuildInfo|null);
+        queue?: (SlgBuildQueueInfo|null);
+    }
+
+    
+
+    declare class CmdSlgBuildMoveReqMsg {
+        buildInstId: number;
+        position: number;
+    }
+
+    
+
+    declare class CmdSlgBuildMoveRspMsg {
+        build: SlgBuildInfo;
+    }
+
+    
+
+    declare class CmdSlgBuildCollectReqMsg {
+        buildInstIds?: (number[]|null);
+    }
+
+    
+
+    declare class CmdSlgBuildCollectRspMsg {
+        builds?: (SlgBuildInfo[]|null);
+        tlCmdGoods?: (CmdGoods[]|null);
+    }
+
+    
+
+    declare class CmdSlgBuildUnlockQueueReqMsg {
+        queueId: number;
+    }
+
+    
+
+    declare class CmdSlgBuildUnlockQueueRspMsg {
+        unlockQueue: number;
+    }
+
+    
+
+    declare class CmdSlgBuildInfoBroMsg {
     }
 
     
@@ -6105,6 +6301,17 @@
         CmdContinuityGiftFinishRewardRspMsg = 402025121,
         CmdTakeSpiritAnimalBoxRspMsg = 923167072,
         CmdChangeUsedSkinRspMsg = 1911316089,
+        CmdSlgCampSimpleInfoRspMsg = 1631409176,
+        CmdSlgCampInfoRspMsg = 1665140602,
+        CmdSlgActionUpdateRspMsg = 196069974,
+        CmdSlgGameInfoRspMsg = 1100779337,
+        CmdSlgBuildInfoRspMsg = 1414628085,
+        CmdSlgBuildRspMsg = 455496637,
+        CmdSlgBuildUpgradeRspMsg = 1255226437,
+        CmdSlgBuildCancelRspMsg = 1606383447,
+        CmdSlgBuildMoveRspMsg = 2116890094,
+        CmdSlgBuildCollectRspMsg = 1353318189,
+        CmdSlgBuildUnlockQueueRspMsg = 1478251158,
         CmdSpiritAnimalLevelUpRspMsg = 2051518427,
         CmdSpiritAnimalStepUpRspMsg = 1991681903,
         CmdSpiritAnimalBattleRspMsg = 1439043070,
@@ -6189,6 +6396,8 @@
         CmdCelebrationBuyShopGoodsBroMsg = 1919419092,
         CmdRechargeDailyUpdateBroMsg = 161909789,
         CmdGuanKaGiftBroMsg = 915823971,
+        CmdSlgGameInfoBroMsg = 1546899562,
+        CmdSlgBuildInfoBroMsg = 1860748310,
         CmdTeamDetailBroMsg = 1366910774,
         CmdTeamDisbandBroMsg = 2097470162,
         CmdTeamInviteBroMsg = 1608465022,
@@ -7117,6 +7326,7 @@ declare type MessageProtoName =
 | "CmdStartBattleInfo"
 | "CmdPveBattleResultInfo"
 | "CmdChapterBattleResultInfo"
+| "CmdSlgMonsterBattleResultInfo"
 | "CmdBattleFrameInfo"
 | "CmdStartBattleReqMsg"
 | "CmdStartBattleRspMsg"
@@ -7138,6 +7348,35 @@ declare type MessageProtoName =
 | "CmdCityChapterInfoBroMsg"
 | "CmdCityChapterCellInfoReqMsg"
 | "CmdCityChapterCellInfoRspMsg"
+| "SlgGameActionInfo"
+| "SlgCampSimpleInfo"
+| "SlgCampInfo"
+| "SlgBuildInfo"
+| "SlgBuildQueueInfo"
+| "SlgBuildGameInfo"
+| "CmdSlgCampSimpleInfoReqMsg"
+| "CmdSlgCampSimpleInfoRspMsg"
+| "CmdSlgCampInfoReqMsg"
+| "CmdSlgCampInfoRspMsg"
+| "CmdSlgActionUpdateReqMsg"
+| "CmdSlgActionUpdateRspMsg"
+| "CmdSlgGameInfoReqMsg"
+| "CmdSlgGameInfoRspMsg"
+| "CmdSlgGameInfoBroMsg"
+| "CmdSlgBuildInfoReqMsg"
+| "CmdSlgBuildReqMsg"
+| "CmdSlgBuildRspMsg"
+| "CmdSlgBuildUpgradeReqMsg"
+| "CmdSlgBuildUpgradeRspMsg"
+| "CmdSlgBuildCancelReqMsg"
+| "CmdSlgBuildCancelRspMsg"
+| "CmdSlgBuildMoveReqMsg"
+| "CmdSlgBuildMoveRspMsg"
+| "CmdSlgBuildCollectReqMsg"
+| "CmdSlgBuildCollectRspMsg"
+| "CmdSlgBuildUnlockQueueReqMsg"
+| "CmdSlgBuildUnlockQueueRspMsg"
+| "CmdSlgBuildInfoBroMsg"
 | "ClientCmdData"
 | "CmdCache"
 | "CmdCacheField"
@@ -7411,6 +7650,17 @@ declare type ReqMsgProtoName =
 | "CmdCityChapterUnlockCellReqMsg"
 | "CmdCityChapterPassCellReqMsg"
 | "CmdCityChapterCellInfoReqMsg"
+| "CmdSlgCampSimpleInfoReqMsg"
+| "CmdSlgCampInfoReqMsg"
+| "CmdSlgActionUpdateReqMsg"
+| "CmdSlgGameInfoReqMsg"
+| "CmdSlgBuildInfoReqMsg"
+| "CmdSlgBuildReqMsg"
+| "CmdSlgBuildUpgradeReqMsg"
+| "CmdSlgBuildCancelReqMsg"
+| "CmdSlgBuildMoveReqMsg"
+| "CmdSlgBuildCollectReqMsg"
+| "CmdSlgBuildUnlockQueueReqMsg"
 
 declare interface protoCacheGen{CmdActivity:{c:CmdActivity, c_k:CmdActivity_Key}
 CmdRole:{c:CmdRole, c_k:CmdRole_Key}

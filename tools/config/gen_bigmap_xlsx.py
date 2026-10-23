@@ -636,6 +636,152 @@ for _json, _title, _fields, _data in BASE_SAVE_TABLES:
     system(_json, _title, _fields, _data)
 
 
+# ── 五、大地图世界 / 城池（100×100 初稿口径，2026-10-20）────────────────────────
+# 这三张表是**运行时表**（`assets/remoteRef/bigmap*.json`）的策划配表版：
+# 列顺序与运行时表的 `k` 完全一致，多出来的 `cityCount / rangeMin / rangeMax` 是
+# 用户 2026-10-20 那张「城池等级-数量-势力范围」表带来的新字段（原来散在布局里）。
+#
+# 城池 id 从 2001 起、按「等级从高到低」分配，与 `tools/map-editor/gen_bigmap_draft.ts`
+# 生成的 `presets/bigmap/dadi_tuchugao.json` **逐座对齐**（改一边就要改另一边）。
+#
+# 🔴 文件名叫「大地图XX」而不是「城池配置 / 城池等级」：文档派生的 `cityConfig.json` /
+# `cityLevelConfig.json` 已经占了「D-城池配置」「D-城池等级」两个名字（那是策划设计表，
+# 42 列 / 8 列，和这里 17 列 / 11 列的运行时表不是一回事）。
+
+WORLD_ROWS = [
+    {
+        'worldId': 1,
+        'worldName': '植物大地图',
+        'rows': 100,
+        'cols': 100,
+        # 种子生成（没有布局文件时的兜底）用的环带：个人层外环 / 内层环 / 基地半径带。
+        'cityRing1': 26,
+        'cityRing2': 12,
+        'baseRadiusMin': 16,
+        'baseRadiusMax': 30,
+        'npcBaseCount': 40,
+        'monsterRingMax': 20,
+    },
+]
+
+CITY_LEVEL_ROWS = [
+    # level, 数量, 范围 min, max, 战功倍率, 占领积分, 战力门槛, 等级系数, 行动力, 最低占领战功, 城防
+    (1, 22, 25, 35, 1.5, 300, 800, 1.1, 20, 800, 1600),
+    (2, 15, 25, 35, 2.0, 600, 1500, 1.2, 30, 1600, 2600),
+    (3, 13, 20, 30, 3.0, 1200, 2600, 1.3, 45, 3200, 4200),
+    (4, 9, 20, 30, 5.0, 2400, 4200, 1.4, 60, 6400, 7000),
+    (5, 8, 20, 30, 8.0, 4800, 6000, 1.5, 80, 12000, 11000),
+    # 6~8 级为 2026-10-20 新补（原来只有 1~5 级）：按 5 级的斜率外推。
+    (6, 7, 20, 30, 12.0, 7200, 9000, 1.6, 100, 24000, 16000),
+    (7, 6, 17, 23, 18.0, 10800, 14000, 1.7, 120, 48000, 24000),
+    (8, 1, 17, 23, 25.0, 20000, 20000, 2.0, 150, 70000, 40000),
+]
+
+CITY_NAME_POOL = {
+    8: '王座',
+    7: '战盟王城',
+    6: '战盟要塞',
+    5: '联盟壁垒',
+    4: '联盟哨站',
+    3: '军团营地',
+    2: '荒野驿站',
+    1: '前哨营地',
+}
+CN_NUMERALS = '一二三四五六七八九十'
+
+
+def cn_number(value: int) -> str:
+    """1..99 的中文数字（配表里给城名加序号用）。"""
+    if value <= 10:
+        return CN_NUMERALS[value - 1]
+    if value < 20:
+        return '十' + CN_NUMERALS[value - 11]
+    tens, ones = divmod(value, 10)
+    return CN_NUMERALS[tens - 1] + '十' + (CN_NUMERALS[ones - 1] if ones else '')
+
+
+def city_rows() -> list[list]:
+    """81 座城：等级从高到低、id 2001 起，与地图初稿逐座对齐。"""
+    rows: list[list] = []
+    next_id = 2001
+    for level, count, _min, _max, war, _occupy, _power, coeff, stamina, _min_war, hp in sorted(
+        CITY_LEVEL_ROWS, reverse=True
+    ):
+        layer = 4 if level >= 8 else 3 if level >= 5 else 2 if level >= 3 else 1
+        for index in range(count):
+            name = CITY_NAME_POOL[level] if count == 1 else f'{CITY_NAME_POOL[level]}·{cn_number(index + 1)}'
+            rows.append([
+                next_id, name, layer,
+                # 本期只开放个人层（`BigMapConfig` 里有硬约束：available=1 时 layer 必须是 1）
+                1 if layer == 1 else 0,
+                level,
+                0 if level <= 2 else 1,
+                1 + level,                       # unlockChapter
+                (level - 1) * 3,                 # openDay
+                stamina, hp,
+                12 if level <= 2 else 10 if level <= 4 else 8,
+                coeff,
+                0,                               # prevCityId：不做链式依赖，相邻关系由地图布局给
+                level * 240,                     # rewardCoin
+                f'{name}：占领后资源产出 +{round((coeff - 1) * 100)}%，战功倍率 ×{war}',
+                index, count,
+            ])
+            next_id += 1
+    return rows
+
+
+system('bigmapWorld.json', '大地图世界', [
+    F('worldId', '世界ID', '大世界 id，对应 `config/bigmap-maps/world_<两位>.json`'),
+    F('worldName', '世界名称', '世界名称（编辑器标题显示这个）', 3, 'string'),
+    F('rows', '行数', '地图行数（六边格）'),
+    F('cols', '列数', '地图列数（六边格）'),
+    F('cityRing1', '个人层城池环', '种子生成时个人层城池落的环号（有布局文件时不用）'),
+    F('cityRing2', '内层城池环', '种子生成时军团/战盟层的环号'),
+    F('baseRadiusMin', '基地半径下限', '种子生成时基地落点的最小环号'),
+    F('baseRadiusMax', '基地半径上限', '种子生成时基地落点的最大环号'),
+    F('npcBaseCount', 'NPC基地数量', '种子生成时撒的 NPC 基地个数'),
+    F('monsterRingMax', '野怪最大环', '种子生成时野怪不超出这个环号'),
+], [[
+    WORLD_ROWS[0]['worldId'], WORLD_ROWS[0]['worldName'], WORLD_ROWS[0]['rows'], WORLD_ROWS[0]['cols'],
+    WORLD_ROWS[0]['cityRing1'], WORLD_ROWS[0]['cityRing2'], WORLD_ROWS[0]['baseRadiusMin'],
+    WORLD_ROWS[0]['baseRadiusMax'], WORLD_ROWS[0]['npcBaseCount'], WORLD_ROWS[0]['monsterRingMax'],
+]])
+
+system('bigmapCityLevel.json', '大地图城池等级', [
+    F('cityLevel', '城池等级', '城池等级 1~8，越大越靠地图中心'),
+    F('cityCount', '该等级城池数', '本等级要摆多少座城（100×100 初稿：22/15/13/9/8/7/6/1）'),
+    F('rangeMin', '势力范围格数下限', '势力范围最少占多少格（布局生成时按 [下限,上限] 随机）'),
+    F('rangeMax', '势力范围格数上限', '势力范围最多占多少格'),
+    F('warScoreRate', '战功积分倍率', '战功积分倍率', 1, 'float'),
+    F('occupyScore', '占领积分', '占领后获得的城池积分'),
+    F('powerThreshold', '上榜战力门槛', '上榜战力门槛（挑战前明示）', 1, 'long'),
+    F('cityLevelCoeff', '城池等级系数', '收益公式第三乘数', 1, 'float'),
+    F('staminaCost', '单次行动力消耗', '单次攻打消耗的行动力'),
+    F('minOccupyWarScore', '最低占领战功', '占领所需的最低本轮战功'),
+    F('defenseHp', '城防耐久', '城防 / 防线耐久'),
+], [list(row) for row in CITY_LEVEL_ROWS])
+
+system('bigmapCity.json', '大地图城池', [
+    F('cityId', '城池ID', '城池 id（2001 起，等级从高到低依次编号）'),
+    F('cityName', '城池名称', '城池名称，如「王座」「前哨营地·三」', 3, 'string'),
+    F('layer', '层级', '1=个人（外围） 2=联盟 3=战盟 4=王座'),
+    F('available', '本期是否开放', '1=开放 0=仅占位；⚠️ 硬约束：available=1 时 layer 必须是 1'),
+    F('cityLevel', '城池等级', '关联 bigmapCityLevel.cityLevel'),
+    F('exclusive', '是否排他占领', '0=外围非排他（辐射） 1=联盟层起排他'),
+    F('unlockChapter', '解锁章节', '冒险章节进度解锁'),
+    F('openDay', '开放开服天数', '开服第几天开放'),
+    F('staminaCost', '单次行动力消耗', '单次攻打消耗的行动力'),
+    F('defenseHp', '城防耐久', '城防 / 防线耐久'),
+    F('radiateCapacity', '可辐射基地数', '每城可辐射的基地数上限'),
+    F('cityLevelCoeff', '城池等级系数', '冗余自 bigmapCityLevel，便于战报直接读', 1, 'float'),
+    F('prevCityId', '前置城池ID', '链式解锁的前置城（0=无前置）'),
+    F('rewardCoin', '占领奖励金币', '首占发放的金币'),
+    F('cityDesc', '城池说明', '城池说明（增益效果描述）', 3, 'string'),
+    F('slot', '环上槽位', '种子生成时的槽位序号（同等级内 0 起）'),
+    F('slotCount', '环上槽位总数', '该等级城池总数（槽位等分弧长用）'),
+], city_rows())
+
+
 def main() -> None:
     out_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(r'D:/Alan/占城玩法/策划文档/大地图/配表')
     out_dir.mkdir(parents=True, exist_ok=True)

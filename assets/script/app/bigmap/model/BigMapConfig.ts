@@ -8,6 +8,7 @@ import {
     type IBigMapCityLevelConfig,
     type IBigMapConfig,
     type IBigMapMonsterConfig,
+    type IBigMapMonsterDrop,
     type IBigMapProduceConfig,
     type IBigMapQueueConfig,
     type IBigMapRankConfig,
@@ -314,6 +315,18 @@ function parseResource(row: BigMapRow): IBigMapResConfig {
     };
 }
 
+// 新版队列表不再提供这三列；保留现有预览时长与建造区布局，联机结算仍走服务端。
+const BIGMAP_QUEUE_CLIENT_DEFAULTS = { offlineMaxHours: 8, plotRows: 5, plotCols: 5 } as const;
+
+function queueClientInt(row: BigMapRow, field: keyof typeof BIGMAP_QUEUE_CLIENT_DEFAULTS): number {
+    if (!(field in row)) return BIGMAP_QUEUE_CLIENT_DEFAULTS[field];
+    const value = row[field];
+    if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
+        throw new Error(`[BigMap] 字段 ${field} 不是有效的非负整数：${JSON.stringify(row)}`);
+    }
+    return value;
+}
+
 function parseQueue(row: BigMapRow): IBigMapQueueConfig {
     const queue: IBigMapQueueConfig = {
         maxBuildQueue: Math.max(1, int(row, 'maxBuildQueue')),
@@ -321,10 +334,10 @@ function parseQueue(row: BigMapRow): IBigMapQueueConfig {
         queueUnlockCost2: Math.max(0, int(row, 'queueUnlockCost2')),
         queueUnlockCost3: Math.max(0, int(row, 'queueUnlockCost3')),
         cancelReturnRate: Math.min(1, Math.max(0, num(row, 'cancelReturnRate'))),
-        offlineMaxHours: Math.max(0, int(row, 'offlineMaxHours')),
+        offlineMaxHours: queueClientInt(row, 'offlineMaxHours'),
         upgradeUnlockChapter: Math.max(1, int(row, 'upgradeUnlockChapter')),
-        plotRows: Math.max(3, int(row, 'plotRows')),
-        plotCols: Math.max(3, int(row, 'plotCols')),
+        plotRows: Math.max(3, queueClientInt(row, 'plotRows')),
+        plotCols: Math.max(3, queueClientInt(row, 'plotCols')),
     };
     if (queue.initBuildQueue > queue.maxBuildQueue) throw new Error('[BigMap] 初始队列数大于上限');
     if (queue.plotRows % 2 === 0 || queue.plotCols % 2 === 0) {
@@ -404,21 +417,71 @@ function parseScoreRule(row: BigMapRow): IBigMapScoreRuleConfig {
 }
 
 function parseMonster(row: BigMapRow): IBigMapMonsterConfig {
-    return {
+    const common = {
         id: int(row, 'monsterId'),
         name: text(row, 'monsterName'),
         level: int(row, 'monsterLevel'),
-        occupyHex: Math.max(1, int(row, 'occupyHex')),
-        preLevel: Math.max(0, int(row, 'preLevel')),
         staminaCost: Math.max(0, int(row, 'staminaCost')),
-        warScore: Math.max(0, int(row, 'warScore')),
-        defenseHp: Math.max(1, int(row, 'defenseHp')),
-        respawnSeconds: Math.max(0, int(row, 'respawnSeconds')),
-        rewardGrain: Math.max(0, int(row, 'rewardGrain')),
-        rewardWood: Math.max(0, int(row, 'rewardWood')),
-        rewardIron: Math.max(0, int(row, 'rewardIron')),
-        rewardCoin: Math.max(0, int(row, 'rewardCoin')),
     };
+    if ('monsterBattle' in row || 'monsterSize' in row) {
+        return {
+            ...common,
+            occupyHex: monsterInt(row, 'monsterSize', 1),
+            battle: {
+                battleId: monsterInt(row, 'monsterBattle', 1),
+                recommendAttack: monsterInt(row, 'recommendAttack', 0),
+                unlockType: monsterInt(row, 'unlockType', 0),
+                unlockValue: monsterInt(row, 'unlockValue', 0),
+                rallyOpen: monsterInt(row, 'rallyOpen', 0, 1) === 1,
+                rallyNum: monsterInt(row, 'rallyNum', 0),
+                firstKillDrops: parseMonsterDrops(row, 'firstKillDropId'),
+                normalDrops: parseMonsterDrops(row, 'normalDropId'),
+                iconPath: text(row, 'monsterHeaIcon'),
+                modelPath: text(row, 'monsterModel'),
+            },
+            offlineBattle: null,
+        };
+    }
+    // 兼容旧版离线配置；等离线模拟与对应存档退役后删除，不为新版表补造旧战斗数值。
+    return {
+        ...common,
+        occupyHex: Math.max(1, int(row, 'occupyHex')),
+        battle: null,
+        offlineBattle: {
+            preLevel: Math.max(0, int(row, 'preLevel')),
+            warScore: Math.max(0, int(row, 'warScore')),
+            defenseHp: Math.max(1, int(row, 'defenseHp')),
+            respawnSeconds: Math.max(0, int(row, 'respawnSeconds')),
+            rewardGrain: Math.max(0, int(row, 'rewardGrain')),
+            rewardWood: Math.max(0, int(row, 'rewardWood')),
+            rewardIron: Math.max(0, int(row, 'rewardIron')),
+            rewardCoin: Math.max(0, int(row, 'rewardCoin')),
+        },
+    };
+}
+
+function monsterInt(row: BigMapRow, field: string, min: number, max = Number.MAX_SAFE_INTEGER, prefix = ''): number {
+    const value = row[field];
+    if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < min || value > max) {
+        throw new Error(`[BigMap] 野怪字段 ${prefix}${field} 必须为 ${min}~${max} 的整数：${JSON.stringify(row)}`);
+    }
+    return value;
+}
+
+function parseMonsterDrops(row: BigMapRow, field: string): readonly IBigMapMonsterDrop[] {
+    const drops = row[field];
+    if (!Array.isArray(drops)) throw new Error(`[BigMap] 野怪字段 ${field} 必须为掉落数组`);
+    return drops.map((drop: unknown) => {
+        if (!drop || typeof drop !== 'object' || Array.isArray(drop)) {
+            throw new Error(`[BigMap] 野怪字段 ${field} 存在非法掉落`);
+        }
+        const item = drop as BigMapRow;
+        return {
+            resId: monsterInt(item, 'resId', 1, Number.MAX_SAFE_INTEGER, `${field}.`),
+            number: monsterInt(item, 'number', 0, Number.MAX_SAFE_INTEGER, `${field}.`),
+            pro: monsterInt(item, 'pro', 0, 10000, `${field}.`),
+        };
+    });
 }
 
 function parseStamina(row: BigMapRow): IBigMapStaminaConfig {

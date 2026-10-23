@@ -70,6 +70,13 @@ export const TERRITORY_TEXTS = {
     fixedResourceUnlocked: '已解锁，点击宝箱领取',
     fixedResourceUnlockFailed: '解锁失败，请稍后重试',
     fixedResourceClaimReady: '可领取',
+    /**
+     * 领取成功的轻提示。
+     *
+     * ⚠️ 2026-10-22 起**页面上不再弹**（`TERRITORY_TWO_STEP_TEXTS.fixedResource.claimed` 改空串）：
+     * 那条深色提示条正压在地图中央，把刚开的宝箱和地块全盖住，而同样的信息开箱表演已经表达过了。
+     * 文案留着是为了地图角标等其它用途要复用时不必再造一句。
+     */
     fixedResourceClaimed: '已领取',
     fixedResourceClaimFailed: '领取失败，请稍后重试',
 

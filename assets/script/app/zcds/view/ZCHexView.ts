@@ -487,6 +487,36 @@ export class ZCHexView extends Component {
     @property({ type: SpriteFrame, group: '资源点图标', tooltip: '中立资源点·宝箱：map-resource/chest' })
     chestResourceFrame: SpriteFrame | null = null;
 
+    /**
+     * 中立资源神器点（`artifact_charge`）的 Spine 动画：蓝色发光六边形格子底。
+     *
+     *  与上面三个 prefab 硬绑的 SpriteFrame 不同：这是 Spine 动画，不是静态图。
+     *  在 prefab 里挂到 `BuildingLayer` 下、与 `iconSprite` 同级；`null` = 未挂载，
+     *  回退到旧逻辑（显示 `artifactChargeFrame` 静态神器图标）。
+     *  资源：`skel/neutral_hex/neutral_hex`，动画名 `animation`。
+     */
+    @property({ type: sp.Skeleton, group: '资源点图标', tooltip: '神器点 Spine：六边形格子底（skel/neutral_hex）' })
+    artifactHexSpine: sp.Skeleton | null = null;
+
+    /**
+     * 中立资源神器点（`artifact_charge`）的 Spine 动画：浮动问号指示器（NPC marker）。
+     *
+     *  资源：`skel/neutral_question/neutral_question`，动画名 `ui_indicatorNPC`。
+     *  与六边形底一起挂在 `artifactSpineRoot` 容器下。
+     */
+    @property({ type: sp.Skeleton, group: '资源点图标', tooltip: '神器点 Spine：问号指示器（skel/neutral_question）' })
+    artifactQuestionSpine: sp.Skeleton | null = null;
+
+    /**
+     * 神器点两个 Spine 的**容器节点**（prefab 里 `BuildingLayer/ArtifactSpineRoot`）。
+     *
+     *  六边形底 + 问号指示器都挂在它下面。神器点显示时这个容器会被抬到棋盘级
+     *  `ResourceLayer`（和 `iconSprite` 同口径），避免浮动问号 / 光晕被邻格裁切；
+     *  不显示时搬回 `BuildingLayer`。`null` = 未挂 Spine，回退旧逻辑。
+     */
+    @property({ type: Node, group: '资源点图标', tooltip: '神器点 Spine 容器（BuildingLayer/ArtifactSpineRoot）' })
+    artifactSpineRoot: Node | null = null;
+
     @property({ type: Label, group: '节点引用' })
     iconLabel: Label = null!;
 
@@ -745,6 +775,14 @@ export class ZCHexView extends Component {
         if (this.buildingLayer && this.iconSprite && this.iconSprite.node.parent !== this.buildingLayer) {
             this.iconSprite.node.setParent(this.buildingLayer);
         }
+        // 神器点 Spine 容器同口径无条件收回 BuildingLayer 并隐藏（resourceIconLayer 此刻
+        // 可能尚未注入，不能走 setResourceIconRaised(false) 的早退分支）。
+        if (this.artifactSpineRoot) {
+            if (this.buildingLayer && this.artifactSpineRoot.parent !== this.buildingLayer) {
+                this.artifactSpineRoot.setParent(this.buildingLayer);
+            }
+            this.artifactSpineRoot.active = false;
+        }
         this.applyTileOffset(0, 1);
         this.applyTileTransform(1, 1);
         this.applyGroundGlow(0, 1);
@@ -806,8 +844,12 @@ export class ZCHexView extends Component {
     }
 
     /**
-     * 把**中立资源图标**在 `BuildingLayer` ↔ 棋盘级 `ResourceLayer` 之间搬一次（幂等）。
-     * 详见 docs/ZCHexView设计决策.md §13。
+     * 把**中立资源图标**（含神器点 Spine 容器）在 `BuildingLayer` ↔ 棋盘级 `ResourceLayer`
+     * 之间搬一次（幂等）。详见 docs/ZCHexView设计决策.md §13。
+     *
+     *  `iconSprite` 与 `artifactSpineRoot` 同一拍搬：二者在同一格上不会同时显示
+     * （神器点走 Spine 时 `resourceFrame` 为 null），但共用一层 / 一个补偿坐标，
+     *  分开搬反而容易让其中一个留在错误的父节点上。
      */
     private setResourceIconRaised(raised: boolean): void {
         const sprite = this.iconSprite;
@@ -816,26 +858,33 @@ export class ZCHexView extends Component {
             this.resourceIconRaised = false;
             return;
         }
-        const node = sprite.node;
         const target = raised ? layer : this.buildingLayer;
         if (!target) {
             this.resourceIconRaised = false;
             return;
         }
-        if (raised === this.resourceIconRaised && node.parent === target) return;
+        const iconNode = sprite.node;
+        if (raised === this.resourceIconRaised && iconNode.parent === target) return;
         this.resourceIconRaised = raised;
-        node.setParent(target);
+        iconNode.setParent(target);
         // 抬层期间可能被激活表现的「隐藏段」关掉过，搬回来时统一恢复。
         // 只在**真的换过父**时写，所以不会和 `applyActivationFx` 的隐藏段打架。
-        node.active = true;
+        iconNode.active = true;
+        // 神器点 Spine 容器同口径搬（prefab 没挂则跳过）。
+        const spineRoot = this.artifactSpineRoot;
+        if (spineRoot && spineRoot.parent !== target) {
+            spineRoot.setParent(target);
+        }
     }
 
     /**
-     * 写 `iconSprite.node` 的坐标（**唯一写入口**，与 `applyTileOffset` / `applyBuildingScale` 同款）。
+     * 写中立资源图标（`iconSprite`）与神器点 Spine 容器的坐标（**唯一写入口**，
+     * 与 `applyTileOffset` / `applyBuildingScale` 同款）。
      *
      * `local` 是 **BuildingLayer 内的局部坐标** —— 三个落点常量都是这个口径。
-     * 图标被抬到棋盘级 `ResourceLayer` 时，局部坐标不再共享同一个父节点，得自己把
+     * 节点被抬到棋盘级 `ResourceLayer` 时，局部坐标不再共享同一个父节点，得自己把
      * 「格节点位置 + BuildingLayer 偏移」补回去；否则图标会跑到棋盘原点附近。
+     * Spine 容器的落点恒为 `RESOURCE_ICON_POS`，所以抬层时按它单独补偿，不随 `local` 走。
      */
     private applyIconPosition(local: Readonly<{ x: number; y: number; z: number }>): void {
         const sprite = this.iconSprite;
@@ -845,10 +894,15 @@ export class ZCHexView extends Component {
             return;
         }
         const base = this.buildingLayer?.position;
-        sprite.node.setPosition(
-            this.node.position.x + (base?.x ?? 0) + local.x,
-            this.node.position.y + (base?.y ?? 0) + local.y,
-            local.z);
+        const worldX = this.node.position.x + (base?.x ?? 0);
+        const worldY = this.node.position.y + (base?.y ?? 0);
+        sprite.node.setPosition(worldX + local.x, worldY + local.y, local.z);
+        // Spine 容器抬到 ResourceLayer 后按资源图标落点 RESOURCE_ICON_POS 补偿。
+        const spineRoot = this.artifactSpineRoot;
+        if (spineRoot) {
+            const rp = ZCHexView.RESOURCE_ICON_POS;
+            spineRoot.setPosition(worldX + rp.x, worldY + rp.y, rp.z);
+        }
     }
 
     /**
@@ -1352,6 +1406,8 @@ export class ZCHexView extends Component {
             this.iconSprite.node.setScale(TILE_ICON_SCALE, TILE_ICON_SCALE, 1);
         }
         this.priceIcon.enabled = false;
+        // 选点阶段不出现神器点 Spine；对象池复用时显式收掉，避免上一局的 Spine 残留在选点场景。
+        this.applyArtifactSpineVisible(false);
 
         let text = '';
         if (presentation.blocked) text = '×';
@@ -1602,10 +1658,17 @@ export class ZCHexView extends Component {
         const resourceUnits = wantsResourceUnits
             ? this.rebuildResourceUnitsIfNeeded()
             : this.hideResourceUnits();
-        const resourceFrame = state.neutralResourceId && !hideNeutralResourceLabel
+        // 神器充能点（`artifact_charge`）：若 prefab 已挂 Spine 动画（六边形底 + 问号指示器），
+        // 走 Spine 分支——不显示静态神器图标、也不写中文兜底。`null`（prefab 未挂 Spine）
+        // 时回退到旧逻辑（`artifactChargeFrame` 静态图 / 文字兜底）。
+        const useArtifactSpine = state.neutralResourceId === 'artifact_charge'
+            && !hideNeutralResourceLabel && !!this.artifactHexSpine;
+        const resourceFrame = state.neutralResourceId && !hideNeutralResourceLabel && !useArtifactSpine
             ? this.frameForResource(state.neutralResourceId) : null;
         this.setSprite(this.iconSprite,
             resourceFrame ?? (enemyCanDevelop ? this.enemyDevelopFrame : effectiveCanDevelop ? this.frameForTileType(state.tileType) : null));
+        // 神器点 Spine 显隐与动画：六边形底播 `animation`（循环），问号指示器播 `ui_indicatorNPC`（循环）。
+        this.applyArtifactSpineVisible(useArtifactSpine);
         // 资源点图标居中；敌方可开发时没有价格/数字，也居中；我方可开发时图标压在地块上半部、价格在底部配对。
         const iconPos = resourceFrame
             ? ZCHexView.RESOURCE_ICON_POS
@@ -1615,8 +1678,9 @@ export class ZCHexView extends Component {
         // ⚠️ 必须先抬层、再写坐标：`applyIconPosition` 会按「图标当前挂在谁下面」决定
         // 要不要补 BuildingLayer 偏移（见它的注释），顺序反了坐标就按错的父节点算。
         // 只有**资源点图标**需要抬 —— 地块类型图标字形只占节点中段（约 33×33），
-        // 落在顶面 123×90 之内，不会被邻格整图切到。
-        this.setResourceIconRaised(resourceFrame !== null);
+        // 落在顶面 123×90 之内，不会被邻格整图切到。神器点 Spine 容器（浮动问号 / 光晕
+        // 会超出格子顶面）走同一层，一并抬。
+        this.setResourceIconRaised(resourceFrame !== null || useArtifactSpine);
         this.applyIconPosition(iconPos);
         // ⚠️ 两条分支都**显式**写缩放，因为两者共用 `iconSprite` 一个节点，而节点随对象池复用：
         // 资源点图标按图尺寸缩到格子边长；地块类型图标（icon_jk/by/wh/em）回到基准 `TILE_ICON_SCALE`。
@@ -1631,8 +1695,8 @@ export class ZCHexView extends Component {
         this.priceIcon.enabled = effectiveCanDevelop && !!this.priceIcon.spriteFrame;
 
         let text = '';
-        if (state.neutralResourceId && !hideNeutralResourceLabel && !resourceFrame && !resourceUnits) {
-            // 有图标走图标（chest / gold / mine）；`artifact_charge` 无美术图时走文字；
+        if (state.neutralResourceId && !hideNeutralResourceLabel && !resourceFrame && !resourceUnits && !useArtifactSpine) {
+            // 有图标走图标（chest / gold / mine）；`artifact_charge` 挂了 Spine 时走 Spine、不写文字；
             // `unit_cap` 有骨骼（`resourceUnits`）⇒ 这里不会再落到中文「兵力」。
             text = NEUTRAL_RESOURCE_LABELS[state.neutralResourceId] ?? state.neutralResourceId;
         } else if (effectiveCanDevelop) text = String(state.developmentCost);
@@ -1642,9 +1706,10 @@ export class ZCHexView extends Component {
             text = state.building === 'hq' ? symbol : `${symbol}\n${state.tier}`;
         }
         // 骨骼挂在 `buildingLayer` 之外（根下），关掉它不影响骨骼；骨骼模式下建筑/价格层
-        // 不该继续亮着（那是「可开发」的语义，与本格无关）。
+        // 不该继续亮着（那是「可开发」的语义，与本格无关）。神器点 Spine 也挂在 BuildingLayer
+        // 下，所以 Spine 显示时 BuildingLayer 必须 active。
         this.buildingLayer.active = resourceUnits ? false
-            : enemyCanDevelop || effectiveCanDevelop || text !== '' || resourceFrame !== null;
+            : enemyCanDevelop || effectiveCanDevelop || text !== '' || resourceFrame !== null || useArtifactSpine;
         this.iconLabel.enabled = text !== '';
         if (this.iconLabel.string !== text) this.iconLabel.string = text;
         this.iconLabel.color = this.contentTextColor(state, effectiveCanDevelop, affordable);
@@ -1659,6 +1724,32 @@ export class ZCHexView extends Component {
         return canDevelop && !affordable
             ? ZCHexView.INSUFFICIENT_GOLD_COLOR
             : ZC_CLIENT_COLORS.white;
+    }
+
+    /**
+     * 神器充能点 Spine 动画的显隐与播放控制。
+     *
+     *  `show = true`：容器激活，六边形底播 `animation`（循环），问号指示器播 `ui_indicatorNPC`（循环）；
+     *  `show = false`：容器隐藏（对象池复用时不残留上一局的 Spine）。
+     *
+     *  显隐走容器 `artifactSpineRoot`（同时控制两个 Spine 子节点）；抬层 / 坐标补偿由
+     *  `setResourceIconRaised` / `applyIconPosition` 在 `renderContent` 里统一处理。
+     *  若 prefab 未挂 Spine（`null`），本方法直接返回，视图回退到旧的静态神器图标逻辑。
+     */
+    private applyArtifactSpineVisible(show: boolean): void {
+        if (this.artifactSpineRoot) {
+            this.artifactSpineRoot.active = show;
+        }
+        if (this.artifactHexSpine) {
+            if (show && this.artifactHexSpine.animation !== 'animation') {
+                this.artifactHexSpine.setAnimation(0, 'animation', true);
+            }
+        }
+        if (this.artifactQuestionSpine) {
+            if (show && this.artifactQuestionSpine.animation !== 'ui_indicatorNPC') {
+                this.artifactQuestionSpine.setAnimation(0, 'ui_indicatorNPC', true);
+            }
+        }
     }
 
     /**

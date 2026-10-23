@@ -5,6 +5,7 @@ import { ZCCombatSystem } from './ZCCombatSystem';
 
 export interface IZCUnitTargeting {
     acquire(unit: ZCUnitState): void;
+    refreshPriorityTarget?(unit: ZCUnitState): boolean;
     current(unit: ZCUnitState): ZCCombatTarget | null;
     isInAttackRange(unit: ZCUnitState): boolean;
     isOutOfAttackRange(unit: ZCUnitState): boolean;
@@ -68,6 +69,9 @@ export class ZCUnitSystem {
         if (unit.battleState === 'born') {
             if (unit.stateTime >= BORN_SECONDS) ZCCombatSystem.switchState(unit, 'target');
             return;
+        }
+        if (context.targeting.refreshPriorityTarget?.(unit)) {
+            ZCCombatSystem.switchState(unit, 'target');
         }
         if (unit.battleState === 'attack') {
             if (!unit.attackHitDone && unit.stateTime >= definition.attackHitTime) context.sendAttack(unit);

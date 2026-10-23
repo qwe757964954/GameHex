@@ -1,0 +1,14 @@
+{
+  "ver": "1.1.50",
+  "importer": "prefab",
+  "imported": true,
+  "uuid": "8fd97366-761f-4817-91d7-c8cd85a0b2f9",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {},
+  "userData": {
+    "syncNodeName": "BigMapLevelTipPanel",
+    "hasIcon": false
+  }
+}

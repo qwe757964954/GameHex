@@ -36,7 +36,7 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
         this.stepCache.delete(id);
     }
 
-    /** 全图最近索敌；距离相同时优先 id 较小的目标。 */
+    /** 按当前模式索敌；同类候选距离相同时优先 id 较小的目标。 */
     acquire(unit: ZCUnitState): void {
         const target = ZCTargetingSystem.acquire(unit, this.context.targeting);
         unit.targetUnitId = null;
@@ -45,6 +45,18 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
         if (target?.kind === 'unit') unit.targetUnitId = target.id;
         else if (target?.kind === 'wall') unit.targetWallHexId = target.id;
         else if (target?.kind === 'building') unit.targetBuildingHexId = target.id;
+    }
+
+    /** 波次出怪可打断建筑锁定；已有单位目标仍沿用原来的锁敌规则。 */
+    refreshPriorityTarget(unit: ZCUnitState): boolean {
+        if (!this.context.targeting.preferUnitTargets?.(unit)
+            || (unit.targetWallHexId === null && unit.targetBuildingHexId === null)) return false;
+        const target = ZCTargetingSystem.acquire(unit, this.context.targeting, true);
+        if (!target) return false;
+        unit.targetUnitId = target.id;
+        unit.targetWallHexId = null;
+        unit.targetBuildingHexId = null;
+        return true;
     }
 
     current(unit: ZCUnitState): ZCCombatTarget | null {

@@ -18,6 +18,8 @@ protected _RefMgrartifact:RefMgrartifactBase<IRefartifact>;
 protected _RefMgrartifactLevel:RefMgrartifactLevelBase<IRefartifactLevel>;
 protected _RefMgrartifactStar:RefMgrartifactStarBase<IRefartifactStar>;
 protected _RefMgraudioConfig:RefMgraudioConfigBase<IRefaudioConfig>;
+protected _RefMgrbaseBuilding:RefMgrbaseBuildingBase<IRefbaseBuilding>;
+protected _RefMgrbaseBuildingLevel:RefMgrbaseBuildingLevelBase<IRefbaseBuildingLevel>;
 protected _RefMgrbattleModel:RefMgrbattleModelBase<IRefbattleModel>;
 protected _RefMgrbattleTokenConfig:RefMgrbattleTokenConfigBase<IRefbattleTokenConfig>;
 protected _RefMgrbattleTokenPlan:RefMgrbattleTokenPlanBase<IRefbattleTokenPlan>;
@@ -28,7 +30,9 @@ protected _RefMgrbigmapBuilding:RefMgrbigmapBuildingBase<IRefbigmapBuilding>;
 protected _RefMgrbigmapBuildingLevel:RefMgrbigmapBuildingLevelBase<IRefbigmapBuildingLevel>;
 protected _RefMgrbigmapBuildingProduce:RefMgrbigmapBuildingProduceBase<IRefbigmapBuildingProduce>;
 protected _RefMgrbigMapCamp:RefMgrbigMapCampBase<IRefbigMapCamp>;
+protected _RefMgrbigmapCity:RefMgrbigmapCityBase<IRefbigmapCity>;
 protected _RefMgrbigmapCityLevel:RefMgrbigmapCityLevelBase<IRefbigmapCityLevel>;
+protected _RefMgrbigmapMonster:RefMgrbigmapMonsterBase<IRefbigmapMonster>;
 protected _RefMgrbigmapQueue:RefMgrbigmapQueueBase<IRefbigmapQueue>;
 protected _RefMgrbigmapRank:RefMgrbigmapRankBase<IRefbigmapRank>;
 protected _RefMgrbigmapResource:RefMgrbigmapResourceBase<IRefbigmapResource>;
@@ -125,6 +129,7 @@ protected _RefMgrmonsterCard:RefMgrmonsterCardBase<IRefmonsterCard>;
 protected _RefMgrmonsterSkillType:RefMgrmonsterSkillTypeBase<IRefmonsterSkillType>;
 protected _RefMgrmonthCardActPlan:RefMgrmonthCardActPlanBase<IRefmonthCardActPlan>;
 protected _RefMgrneutralResource:RefMgrneutralResourceBase<IRefneutralResource>;
+protected _RefMgrnewTreasureBoxCardPool:RefMgrnewTreasureBoxCardPoolBase<IRefnewTreasureBoxCardPool>;
 protected _RefMgrnewTreasureBoxConfig:RefMgrnewTreasureBoxConfigBase<IRefnewTreasureBoxConfig>;
 protected _RefMgrnewTreasureBoxQueueConfig:RefMgrnewTreasureBoxQueueConfigBase<IRefnewTreasureBoxQueueConfig>;
 protected _RefMgrnpcTeam:RefMgrnpcTeamBase<IRefnpcTeam>;
@@ -228,6 +233,8 @@ get RefMgrartifact(){if(!this._RefMgrartifact){this._RefMgrartifact=new RefMgrar
 get RefMgrartifactLevel(){if(!this._RefMgrartifactLevel){this._RefMgrartifactLevel=new RefMgrartifactLevelBase<IRefartifactLevel>()}return this._RefMgrartifactLevel}
 get RefMgrartifactStar(){if(!this._RefMgrartifactStar){this._RefMgrartifactStar=new RefMgrartifactStarBase<IRefartifactStar>()}return this._RefMgrartifactStar}
 get RefMgraudioConfig(){if(!this._RefMgraudioConfig){this._RefMgraudioConfig=new RefMgraudioConfigBase<IRefaudioConfig>()}return this._RefMgraudioConfig}
+get RefMgrbaseBuilding(){if(!this._RefMgrbaseBuilding){this._RefMgrbaseBuilding=new RefMgrbaseBuildingBase<IRefbaseBuilding>()}return this._RefMgrbaseBuilding}
+get RefMgrbaseBuildingLevel(){if(!this._RefMgrbaseBuildingLevel){this._RefMgrbaseBuildingLevel=new RefMgrbaseBuildingLevelBase<IRefbaseBuildingLevel>()}return this._RefMgrbaseBuildingLevel}
 get RefMgrbattleModel(){if(!this._RefMgrbattleModel){this._RefMgrbattleModel=new RefMgrbattleModelBase<IRefbattleModel>()}return this._RefMgrbattleModel}
 get RefMgrbattleTokenConfig(){if(!this._RefMgrbattleTokenConfig){this._RefMgrbattleTokenConfig=new RefMgrbattleTokenConfigBase<IRefbattleTokenConfig>()}return this._RefMgrbattleTokenConfig}
 get RefMgrbattleTokenPlan(){if(!this._RefMgrbattleTokenPlan){this._RefMgrbattleTokenPlan=new RefMgrbattleTokenPlanBase<IRefbattleTokenPlan>()}return this._RefMgrbattleTokenPlan}
@@ -238,7 +245,9 @@ get RefMgrbigmapBuilding(){if(!this._RefMgrbigmapBuilding){this._RefMgrbigmapBui
 get RefMgrbigmapBuildingLevel(){if(!this._RefMgrbigmapBuildingLevel){this._RefMgrbigmapBuildingLevel=new RefMgrbigmapBuildingLevelBase<IRefbigmapBuildingLevel>()}return this._RefMgrbigmapBuildingLevel}
 get RefMgrbigmapBuildingProduce(){if(!this._RefMgrbigmapBuildingProduce){this._RefMgrbigmapBuildingProduce=new RefMgrbigmapBuildingProduceBase<IRefbigmapBuildingProduce>()}return this._RefMgrbigmapBuildingProduce}
 get RefMgrbigMapCamp(){if(!this._RefMgrbigMapCamp){this._RefMgrbigMapCamp=new RefMgrbigMapCampBase<IRefbigMapCamp>()}return this._RefMgrbigMapCamp}
+get RefMgrbigmapCity(){if(!this._RefMgrbigmapCity){this._RefMgrbigmapCity=new RefMgrbigmapCityBase<IRefbigmapCity>()}return this._RefMgrbigmapCity}
 get RefMgrbigmapCityLevel(){if(!this._RefMgrbigmapCityLevel){this._RefMgrbigmapCityLevel=new RefMgrbigmapCityLevelBase<IRefbigmapCityLevel>()}return this._RefMgrbigmapCityLevel}
+get RefMgrbigmapMonster(){if(!this._RefMgrbigmapMonster){this._RefMgrbigmapMonster=new RefMgrbigmapMonsterBase<IRefbigmapMonster>()}return this._RefMgrbigmapMonster}
 get RefMgrbigmapQueue(){if(!this._RefMgrbigmapQueue){this._RefMgrbigmapQueue=new RefMgrbigmapQueueBase<IRefbigmapQueue>()}return this._RefMgrbigmapQueue}
 get RefMgrbigmapRank(){if(!this._RefMgrbigmapRank){this._RefMgrbigmapRank=new RefMgrbigmapRankBase<IRefbigmapRank>()}return this._RefMgrbigmapRank}
 get RefMgrbigmapResource(){if(!this._RefMgrbigmapResource){this._RefMgrbigmapResource=new RefMgrbigmapResourceBase<IRefbigmapResource>()}return this._RefMgrbigmapResource}
@@ -335,6 +344,7 @@ get RefMgrmonsterCard(){if(!this._RefMgrmonsterCard){this._RefMgrmonsterCard=new
 get RefMgrmonsterSkillType(){if(!this._RefMgrmonsterSkillType){this._RefMgrmonsterSkillType=new RefMgrmonsterSkillTypeBase<IRefmonsterSkillType>()}return this._RefMgrmonsterSkillType}
 get RefMgrmonthCardActPlan(){if(!this._RefMgrmonthCardActPlan){this._RefMgrmonthCardActPlan=new RefMgrmonthCardActPlanBase<IRefmonthCardActPlan>()}return this._RefMgrmonthCardActPlan}
 get RefMgrneutralResource(){if(!this._RefMgrneutralResource){this._RefMgrneutralResource=new RefMgrneutralResourceBase<IRefneutralResource>()}return this._RefMgrneutralResource}
+get RefMgrnewTreasureBoxCardPool(){if(!this._RefMgrnewTreasureBoxCardPool){this._RefMgrnewTreasureBoxCardPool=new RefMgrnewTreasureBoxCardPoolBase<IRefnewTreasureBoxCardPool>()}return this._RefMgrnewTreasureBoxCardPool}
 get RefMgrnewTreasureBoxConfig(){if(!this._RefMgrnewTreasureBoxConfig){this._RefMgrnewTreasureBoxConfig=new RefMgrnewTreasureBoxConfigBase<IRefnewTreasureBoxConfig>()}return this._RefMgrnewTreasureBoxConfig}
 get RefMgrnewTreasureBoxQueueConfig(){if(!this._RefMgrnewTreasureBoxQueueConfig){this._RefMgrnewTreasureBoxQueueConfig=new RefMgrnewTreasureBoxQueueConfigBase<IRefnewTreasureBoxQueueConfig>()}return this._RefMgrnewTreasureBoxQueueConfig}
 get RefMgrnpcTeam(){if(!this._RefMgrnpcTeam){this._RefMgrnpcTeam=new RefMgrnpcTeamBase<IRefnpcTeam>()}return this._RefMgrnpcTeam}
@@ -440,6 +450,8 @@ export class RefMgrartifactBase<T extends IRefBase> extends RefMgrBase<T>{constr
 export class RefMgrartifactLevelBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("artifactLevel")}}
 export class RefMgrartifactStarBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("artifactStar")}}
 export class RefMgraudioConfigBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("audioConfig")}}
+export class RefMgrbaseBuildingBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("baseBuilding")}}
+export class RefMgrbaseBuildingLevelBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("baseBuildingLevel")}}
 export class RefMgrbattleModelBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("battleModel")}}
 export class RefMgrbattleTokenConfigBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("battleTokenConfig")}}
 export class RefMgrbattleTokenPlanBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("battleTokenPlan")}}
@@ -450,7 +462,9 @@ export class RefMgrbigmapBuildingBase<T extends IRefBase> extends RefMgrBase<T>{
 export class RefMgrbigmapBuildingLevelBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("bigmapBuildingLevel")}}
 export class RefMgrbigmapBuildingProduceBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("bigmapBuildingProduce")}}
 export class RefMgrbigMapCampBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("bigMapCamp")}}
+export class RefMgrbigmapCityBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("bigmapCity")}}
 export class RefMgrbigmapCityLevelBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("bigmapCityLevel")}}
+export class RefMgrbigmapMonsterBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("bigmapMonster")}}
 export class RefMgrbigmapQueueBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("bigmapQueue")}}
 export class RefMgrbigmapRankBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("bigmapRank")}}
 export class RefMgrbigmapResourceBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("bigmapResource")}}
@@ -547,6 +561,7 @@ export class RefMgrmonsterCardBase<T extends IRefBase> extends RefMgrBase<T>{con
 export class RefMgrmonsterSkillTypeBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("monsterSkillType")}}
 export class RefMgrmonthCardActPlanBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("monthCardActPlan")}}
 export class RefMgrneutralResourceBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("neutralResource")}}
+export class RefMgrnewTreasureBoxCardPoolBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("newTreasureBoxCardPool")}}
 export class RefMgrnewTreasureBoxConfigBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("newTreasureBoxConfig")}}
 export class RefMgrnewTreasureBoxQueueConfigBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("newTreasureBoxQueueConfig")}}
 export class RefMgrnpcTeamBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("npcTeam")}}

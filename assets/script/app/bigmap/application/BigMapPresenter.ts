@@ -14,11 +14,13 @@ import {
     type IBigMapConfig,
     type IBigMapBaseState,
     type IBigMapWorld,
+    type IBigMapMonsterBattleConfig,
 } from '../model/BigMapTypes';
 import {
     bigMapBuildingCountWithQueue,
     bigMapCanAfford,
     bigMapCanPlace,
+    bigMapCanUpgrade,
     bigMapCancelQueue,
     bigMapClampQueueUnlocked,
     bigMapHarvest,
@@ -39,9 +41,9 @@ import {
     bigMapAttackPower,
     bigMapCityAttackPreview,
     bigMapCityHpRatio,
-    bigMapMonsterAttackPreview,
     bigMapMonsterHpRatio,
     bigMapUnlockContextOf,
+    BIGMAP_MONSTER_BATTLE_UNAVAILABLE,
     type IBigMapBattleProgress,
 } from '../model/BigMapBattle';
 import {
@@ -54,6 +56,12 @@ import {
 } from '../model/BigMapUnlock';
 import { bigMapHexDistance, buildBigMapWorld } from '../model/BigMapWorld';
 import { buildBigMapWorldFromLayout, type IBigMapLayout } from '../model/BigMapLayout';
+import type { ITerritoryColorRegion } from '../model/BigMapTerritoryColor';
+import type { IBigMapCampInfo } from '../model/BigMapCampInfo';
+import { BIGMAP_CAMP_QUERY_TEXT } from '../model/BigMapCampInfo';
+import type { BigMapCampRepository } from './BigMapCampRepository';
+import type { BigMapSlgRepository } from './BigMapSlgRepository';
+import { projectBigMapServerBase } from '../model/BigMapServerState';
 import { parseBigMapSave, serializeBigMapSave, type IBigMapSaveData } from '../model/BigMapSaveData';
 import {
     bigMapCityAttackGate,
@@ -97,6 +105,8 @@ export interface IBigMapPresenterDeps {
     readonly layout?: IBigMapLayout | null;
     /** 城池榜单来源（联机 = 服务器；缺省 = 本地 NPC 模拟）。 */
     readonly rankProvider?: IBigMapRankProvider;
+    readonly campRepository?: BigMapCampRepository;
+    readonly slgRepository?: BigMapSlgRepository;
 }
 
 /**
@@ -123,6 +133,7 @@ function createBigMapWorldInstance(
 // ------------------------------------------------------------------ 视图数据
 
 export interface IBigMapResourceView {
+    readonly amountKnown?: boolean;
     readonly type: BigMapResType;
     readonly name: string;
     readonly amount: number;
@@ -142,6 +153,25 @@ export interface IBigMapPlotCellView {
     readonly stored: number;
     /** 站位预览色：空闲 / 已占 / 正在建造。 */
     readonly slot: 'empty' | 'building' | 'constructing';
+    readonly remainSeconds: number;
+}
+
+export interface IBigMapPlotDetailView {
+    readonly name: string;
+    readonly buildingId: number;
+    readonly instanceId: number;
+    readonly level: number;
+    readonly targetLevel: number;
+    readonly stored: number;
+    readonly costGrain: number;
+    readonly costWood: number;
+    readonly costIron: number;
+    readonly buildTime: number;
+    readonly canUpgrade: boolean;
+    readonly reason: string;
+    readonly queueSlotIndex: number;
+    readonly remainSeconds: number;
+    readonly progress: number;
 }
 
 export interface IBigMapBuildEntryView {
@@ -200,6 +230,10 @@ export interface IBigMapCityView {
     /** 同时在打的人数（喂拥挤系数）。 */
     readonly attackerCount: number;
     readonly topWarScore: number;
+    /** 只有联机入口注入 Repository；预览与旧离线测试保留原有数据链路。 */
+    readonly isServerCamp: boolean;
+    readonly campInfo: IBigMapCampInfo | null;
+    readonly campDetailStatus: 'idle' | 'loading' | 'ready' | 'failed';
 }
 
 export interface IBigMapMonsterView {
@@ -210,9 +244,12 @@ export interface IBigMapMonsterView {
     readonly hexId: number;
     readonly unlocked: boolean;
     readonly reason: string;
-    readonly hpRatio: number;
+    readonly hpRatio: number | null;
     readonly staminaCost: number;
     readonly respawnInSeconds: number;
+    readonly battle: IBigMapMonsterBattleConfig | null;
+    readonly canAttack: boolean;
+    readonly attackReason: string;
 }
 
 /** 建造队列解锁状态（给 UI 显示「解锁第 2 条 · 货币 120」）。 */
@@ -240,12 +277,35 @@ export class BigMapPresenter {
     /** 城池榜单缓存：`cityId → board`。只在 `refreshCityRank` 里写，视图同步读。 */
     private readonly rankBoards = new Map<number, IBigMapCityRankBoard>();
     private readonly deps: IBigMapPresenterDeps;
+    private readonly territories: readonly ITerritoryColorRegion[];
+    private isDisposed = false;
+    private readonly campDetailStatuses = new Map<number, IBigMapCityView['campDetailStatus']>();
+    private unsubscribeSlg: (() => void) | null = null;
 
     constructor(deps: IBigMapPresenterDeps) {
         this.deps = deps;
         this.config = deps.config;
         this.worldInstance = createBigMapWorldInstance(deps.config, deps.seed, deps.layout);
-        this.data = parseBigMapSave(deps.storage.read(deps.saveKey), deps.config, deps.now()).save;
+        this.territories = [...this.worldInstance.cities.values()].map((site) => {
+            const annotation = deps.layout?.cities.find((city) => city.cityId === site.cityId);
+            const hexIds = [...new Set([...site.hexIds, ...(annotation?.rangeHex ?? [])])]
+                .filter((hexId) => this.worldInstance.tileById.has(hexId));
+            return { id: site.cityId, hexIds };
+        });
+        this.data = parseBigMapSave(deps.slgRepository ? null : deps.storage.read(deps.saveKey), deps.config, deps.now()).save;
+        if (deps.slgRepository) {
+            const empty = projectBigMapServerBase({ builds: [], queues: [], unlockQueue: deps.config.queue.initBuildQueue },
+                deps.config, deps.now());
+            if (!empty) throw new Error('[SLG] 基地配置不可用');
+            this.applyBase(empty);
+            this.unsubscribeSlg = deps.slgRepository.onChanged(() => {
+                const base = deps.slgRepository?.projectBase();
+                if (this.isDisposed || !base) return;
+                this.applyBase(base);
+                this.emit();
+            });
+            return;
+        }
         // 进页面先补一次离线结算，再落盘（否则「离线 8 小时」要等第一次操作才生效）。
         this.tick(false);
         this.persist();
@@ -255,6 +315,10 @@ export class BigMapPresenter {
 
     get world(): IBigMapWorld {
         return this.worldInstance;
+    }
+
+    territoryRegions(): readonly ITerritoryColorRegion[] {
+        return this.territories;
     }
 
     get battle(): IBigMapBattleProgress {
@@ -279,6 +343,18 @@ export class BigMapPresenter {
         return this.data.base;
     }
 
+    get isServerBase(): boolean { return !!this.deps.slgRepository; }
+    get serverBaseReady(): boolean { return this.deps.slgRepository?.ready ?? true; }
+    get actionRecoverSeconds(): number | null { return this.deps.slgRepository?.actionRemainingSeconds ?? null; }
+    get canHarvest(): boolean {
+        return this.isServerBase ? this.serverBaseReady && this.data.base.buildings.some((build) => this.isResourceBuilding(build.buildingId))
+            : this.resourceBar().some((item) => item.pending > 0);
+    }
+
+    initializeSlg(): Promise<boolean> {
+        return this.deps.slgRepository?.initialize() ?? Promise.resolve(true);
+    }
+
     /** 视图订阅用：任何会改变显示结果的操作都会 +1。 */
     get refreshVersion(): number {
         return this.version;
@@ -298,11 +374,13 @@ export class BigMapPresenter {
     }
 
     private emit(): void {
+        if (this.isDisposed) return;
         this.version += 1;
         for (const listener of this.listeners) listener();
     }
 
     private persist(): void {
+        if (this.isServerBase || this.isDisposed) return;
         this.data = { ...this.data, savedAt: this.deps.now() };
         this.deps.storage.write(this.deps.saveKey, serializeBigMapSave(this.data));
     }
@@ -319,6 +397,11 @@ export class BigMapPresenter {
 
     /** 结算时间差（产出 / 队列 / 行动力）并顺手补当日快照。 */
     tick(notify = true): void {
+        if (this.isServerBase) {
+            this.deps.slgRepository?.tick();
+            if (notify) this.emit();
+            return;
+        }
         const result = bigMapTick(this.config, this.data.base, this.deps.now());
         this.applyBase(result.state);
         const snapshotted = this.refreshDaySnapshot();
@@ -364,6 +447,7 @@ export class BigMapPresenter {
         const pending = bigMapPendingHarvest(this.config, this.data.base);
         const perHour = bigMapProducePerHour(this.config, this.data.base);
         return BIGMAP_RES_ORDER.map((type) => ({
+            amountKnown: !this.isServerBase,
             type,
             name: this.config.resources.get(type)?.name ?? type,
             // ⚠️ 行动力走 `base.stamina`（会随攻打消耗、随时间恢复），不是资源包里的
@@ -392,7 +476,7 @@ export class BigMapPresenter {
         const cost = current <= 1
             ? this.config.queue.queueUnlockCost2
             : this.config.queue.queueUnlockCost3;
-        const affordable = Number.isFinite(cost) && cost > 0 && this.data.base.res.coin >= cost;
+        const affordable = Number.isFinite(cost) && cost > 0 && (this.isServerBase || this.data.base.res.coin >= cost);
         return {
             current,
             max,
@@ -404,6 +488,7 @@ export class BigMapPresenter {
 
     /** 花货币解锁下一条建造队列。 */
     unlockBuildQueue(): IBigMapActionFeedback {
+        if (this.isServerBase) return { ok: false, message: '请通过服务端提交操作' };
         const result = bigMapUnlockQueue(this.config, this.data.base);
         if (!result.ok || !result.state) return { ok: false, message: result.reason };
         this.applyBase(result.state);
@@ -429,10 +514,9 @@ export class BigMapPresenter {
             for (let column = 0; column < cols; column += 1) {
                 const hexId = row * cols + column;
                 const instance = this.data.base.buildings.find((item) => item.hexId === hexId);
-                const constructing = this.data.base.queues.some((slot) => (
+                const queue = this.data.base.queues.find((slot) => (
                     slot.state === BigMapQueueState.Building
-                    && slot.instanceId === 0
-                    && slot.anchorHexId === hexId
+                    && (instance ? slot.instanceId === instance.instanceId : slot.anchorHexId === hexId)
                 ));
                 views.push({
                     hexId,
@@ -443,11 +527,36 @@ export class BigMapPresenter {
                     name: instance ? (this.config.buildings.get(instance.buildingId)?.name ?? '') : '',
                     level: instance?.level ?? 0,
                     stored: Math.floor(instance?.stored ?? 0),
-                    slot: constructing ? 'constructing' : instance ? 'building' : 'empty',
+                    slot: queue && !instance ? 'constructing' : instance ? 'building' : 'empty',
+                    remainSeconds: queue ? Math.max(0, Math.ceil(queue.finishAt - this.deps.now())) : 0,
                 });
             }
         }
         return views;
+    }
+
+    plotDetail(hexId: number): IBigMapPlotDetailView | null {
+        const instance = this.data.base.buildings.find((building) => building.hexId === hexId);
+        const queue = this.data.base.queues.find((slot) => slot.state === BigMapQueueState.Building
+            && (instance ? slot.instanceId === instance.instanceId : slot.anchorHexId === hexId));
+        const buildingId = instance?.buildingId ?? queue?.buildingId;
+        if (buildingId === undefined) return null;
+        const level = instance?.level ?? 0;
+        const targetLevel = queue?.targetLevel ?? level + 1;
+        const cost = this.config.levels.get(buildingId)?.get(targetLevel);
+        const now = this.deps.now();
+        const preview = instance
+            ? bigMapCanUpgrade(this.config, this.data.base, this.unlockContext, instance.instanceId, !this.isServerBase)
+            : { ok: false, reason: '建造中' };
+        const remainSeconds = queue ? Math.max(0, Math.ceil(queue.finishAt - now)) : 0;
+        return {
+            name: this.config.buildings.get(buildingId)?.name ?? '', buildingId,
+            instanceId: instance?.instanceId ?? 0, level, targetLevel, stored: Math.floor(instance?.stored ?? 0),
+            costGrain: cost?.costGrain ?? 0, costWood: cost?.costWood ?? 0, costIron: cost?.costIron ?? 0,
+            buildTime: cost?.buildTime ?? 0, canUpgrade: !queue && preview.ok,
+            reason: queue ? '建造中' : preview.reason, queueSlotIndex: queue?.slotIndex ?? -1,
+            remainSeconds, progress: queue ? Math.max(0, Math.min(1, 1 - remainSeconds / Math.max(1, queue.finishAt - queue.startAt))) : 0,
+        };
     }
 
     buildMenu(): readonly IBigMapBuildEntryView[] {
@@ -470,7 +579,7 @@ export class BigMapPresenter {
                     costWood: cost?.costWood ?? 0,
                     costIron: cost?.costIron ?? 0,
                     buildTime: cost?.buildTime ?? 0,
-                    affordable: cost ? bigMapCanAfford(this.data.base, cost) : false,
+                    affordable: cost ? this.isServerBase || bigMapCanAfford(this.data.base, cost) : false,
                 };
             });
     }
@@ -501,6 +610,7 @@ export class BigMapPresenter {
     // -------------------------------------------------------------- 动作：建造
 
     startBuild(hexId: number, buildingId: number): IBigMapActionFeedback {
+        if (this.isServerBase) return { ok: false, message: '请通过服务端提交操作' };
         const result = bigMapStartBuild(this.config, this.data.base, this.unlockContext, buildingId, hexId, this.deps.now());
         if (!result.ok || !result.state) return { ok: false, message: result.reason };
         this.applyBase(result.state);
@@ -510,6 +620,7 @@ export class BigMapPresenter {
     }
 
     startUpgrade(instanceId: number): IBigMapActionFeedback {
+        if (this.isServerBase) return { ok: false, message: '请通过服务端提交操作' };
         const result = bigMapStartUpgrade(this.config, this.data.base, this.unlockContext, instanceId, this.deps.now());
         if (!result.ok || !result.state) return { ok: false, message: result.reason };
         this.applyBase(result.state);
@@ -519,6 +630,7 @@ export class BigMapPresenter {
     }
 
     cancelQueue(slotIndex: number): IBigMapActionFeedback {
+        if (this.isServerBase) return { ok: false, message: '请通过服务端提交操作' };
         const result = bigMapCancelQueue(this.config, this.data.base, slotIndex);
         if (!result.ok || !result.state) return { ok: false, message: result.reason };
         this.applyBase(result.state);
@@ -528,6 +640,7 @@ export class BigMapPresenter {
     }
 
     harvest(instanceId: number): IBigMapActionFeedback {
+        if (this.isServerBase) return { ok: false, message: '请通过服务端提交操作' };
         const result = bigMapHarvest(this.config, this.data.base, instanceId);
         if (!result.resType) return { ok: false, message: '暂无可收取资源' };
         if (result.amount <= 0) return { ok: false, message: '仓库已满，先花掉一些资源' };
@@ -539,6 +652,7 @@ export class BigMapPresenter {
     }
 
     harvestAll(): IBigMapActionFeedback {
+        if (this.isServerBase) return { ok: false, message: '请通过服务端提交操作' };
         const result = bigMapHarvestAll(this.config, this.data.base);
         const parts = BIGMAP_RES_ORDER
             .filter((type) => result.gained[type] > 0)
@@ -549,6 +663,62 @@ export class BigMapPresenter {
         this.emit();
         return { ok: true, message: parts.join('，') };
     }
+
+    async requestBuild(hexId: number, buildingId: number): Promise<IBigMapActionFeedback> {
+        const repository = this.deps.slgRepository;
+        if (!repository) return this.startBuild(hexId, buildingId);
+        const check = bigMapCanPlace(this.config, this.base, this.unlockContext, buildingId, hexId, false);
+        if (!check.ok) return { ok: false, message: check.reason };
+        return repository.build(buildingId, hexId);
+    }
+
+    async requestUpgrade(instanceId: number): Promise<IBigMapActionFeedback> {
+        const repository = this.deps.slgRepository;
+        if (!repository) return this.startUpgrade(instanceId);
+        const check = bigMapCanUpgrade(this.config, this.base, this.unlockContext, instanceId, false);
+        if (!check.ok) return { ok: false, message: check.reason };
+        const id = repository.serverInstanceId(instanceId);
+        return id ? repository.upgrade(id) : { ok: false, message: '建筑尚未同步' };
+    }
+
+    async requestCancelQueue(slotIndex: number): Promise<IBigMapActionFeedback> {
+        const repository = this.deps.slgRepository;
+        if (!repository) return this.cancelQueue(slotIndex);
+        const id = repository.queueInstanceId(slotIndex);
+        return id ? repository.cancel(id) : { ok: false, message: '队列尚未同步' };
+    }
+
+    async requestMove(instanceId: number, hexId: number): Promise<IBigMapActionFeedback> {
+        const repository = this.deps.slgRepository;
+        const id = repository?.serverInstanceId(instanceId);
+        return repository && id ? repository.move(id, hexId) : { ok: false, message: '建筑尚未同步' };
+    }
+
+    async requestHarvest(instanceId: number): Promise<IBigMapActionFeedback> {
+        const repository = this.deps.slgRepository;
+        if (!repository) return this.harvest(instanceId);
+        const id = repository.serverInstanceId(instanceId);
+        if (!id) return { ok: false, message: '建筑尚未同步' };
+        return repository.collect([id]);
+    }
+
+    async requestHarvestAll(): Promise<IBigMapActionFeedback> {
+        if (!this.isServerBase) return this.harvestAll();
+        const repository = this.deps.slgRepository;
+        if (!repository) return { ok: false, message: '建筑尚未同步' };
+        const ids = this.base.buildings.filter((build) => this.isResourceBuilding(build.buildingId)).map((build) => build.instanceId);
+        if (ids.length === 0) return { ok: false, message: '暂无可收取建筑' };
+        // 协议已支持批量领取，一次结算，避免逐栋串行写请求。
+        return repository.collect(ids);
+    }
+
+    async requestUnlockBuildQueue(): Promise<IBigMapActionFeedback> {
+        const repository = this.deps.slgRepository;
+        return repository ? repository.unlockQueue(this.base.queueUnlocked + 1) : this.unlockBuildQueue();
+    }
+
+    canCollectBuilding(buildingId: number): boolean { return this.isServerBase && this.serverBaseReady && this.isResourceBuilding(buildingId); }
+    private isResourceBuilding(buildingId: number): boolean { return !!this.config.produce.get(buildingId)?.size; }
 
     /** 点击建造区某格：建造中 → 取消；已建 → 升级；空 → 返回空（让界面进入摆放模式）。 */
     tapPlotCell(hexId: number): IBigMapActionFeedback {
@@ -562,6 +732,34 @@ export class BigMapPresenter {
     }
 
     // -------------------------------------------------------------- 动作：战斗
+
+    async refreshVisibleCamps(campIds: readonly number[]): Promise<void> {
+        if (this.isDisposed || !this.deps.campRepository) return;
+        const ids = campIds.filter((id) => this.worldInstance.cities.has(id));
+        if (await this.deps.campRepository.refreshSimple(ids)) this.emit();
+    }
+
+    async refreshCampDetail(campId: number): Promise<void> {
+        const repository = this.deps.campRepository;
+        if (this.isDisposed || !repository || !this.worldInstance.cities.has(campId)
+            || this.campDetailStatuses.get(campId) === 'loading') return;
+        this.campDetailStatuses.set(campId, 'loading');
+        this.emit();
+        const loaded = await repository.refreshDetail([campId]);
+        if (this.isDisposed) return;
+        this.campDetailStatuses.set(campId, loaded ? 'ready' : 'failed');
+        this.emit();
+    }
+
+    dispose(): void {
+        this.isDisposed = true;
+        this.listeners.clear();
+        this.campDetailStatuses.clear();
+        this.deps.campRepository?.dispose();
+        this.unsubscribeSlg?.();
+        this.unsubscribeSlg = null;
+        this.deps.slgRepository?.dispose();
+    }
 
     /**
      * 当前攻城日程 —— 视图每帧直接读它（幂等），不自己算时间。
@@ -605,7 +803,10 @@ export class BigMapPresenter {
         const site = this.worldInstance.cities.get(cityId);
         if (!city || !site) return null;
         const context = this.unlockContext;
-        const state = bigMapCityState(city, context);
+        const campInfo = this.deps.campRepository?.get(cityId) ?? null;
+        const state = campInfo
+            ? (campInfo.opType === 1 ? 'occupied' : campInfo.state === 0 ? 'unavailable' : 'open')
+            : bigMapCityState(city, context);
         const reason = bigMapCityUnlock(city, context).reason;
         const timeline = this.cityTimeline();
         const gate = bigMapCityAttackGate(state, timeline);
@@ -640,11 +841,14 @@ export class BigMapPresenter {
             inRange: preview?.inRange ?? false,
             damageCutPct: preview?.damageCutPct ?? 0,
             phase: timeline.phase,
-            canAttack: gate.canAttack,
-            attackReason: gate.reason,
+            canAttack: !this.deps.campRepository && gate.canAttack,
+            attackReason: this.deps.campRepository ? BIGMAP_CAMP_QUERY_TEXT.attackUnavailable : gate.reason,
             playerRank: board.playerRank,
             attackerCount: board.attackerCount,
             topWarScore: board.topWarScore,
+            isServerCamp: !!this.deps.campRepository,
+            campInfo,
+            campDetailStatus: this.campDetailStatuses.get(cityId) ?? 'idle',
         };
     }
 
@@ -660,7 +864,8 @@ export class BigMapPresenter {
         const monster = this.config.monsters.get(site.monsterId);
         if (!monster) return null;
         const unlock = bigMapMonsterUnlock(monster, this.unlockContext);
-        const respawnAt = this.data.battle.monsterRespawnAt[instanceId] ?? 0;
+        const respawnAt = monster.offlineBattle ? this.data.battle.monsterRespawnAt[instanceId] ?? 0 : 0;
+        const respawnInSeconds = Math.max(0, Math.ceil(respawnAt - this.deps.now()));
         return {
             instanceId,
             monsterId: site.monsterId,
@@ -670,12 +875,17 @@ export class BigMapPresenter {
             unlocked: unlock.unlocked,
             reason: unlock.reason,
             hpRatio: bigMapMonsterHpRatio(this.config, this.data.battle, site),
-            staminaCost: bigMapMonsterAttackPreview(this.config, this.data.base, site).staminaCost,
-            respawnInSeconds: Math.max(0, Math.ceil(respawnAt - this.deps.now())),
+            staminaCost: monster.staminaCost,
+            respawnInSeconds,
+            battle: monster.battle,
+            canAttack: !!monster.offlineBattle && unlock.unlocked && respawnInSeconds === 0,
+            attackReason: monster.battle ? BIGMAP_MONSTER_BATTLE_UNAVAILABLE : unlock.reason,
         };
     }
 
     attackCity(cityId: number): IBigMapActionFeedback {
+        // 当前协议只有查询，不能用本地结算冒充服务器攻城成功。
+        if (this.deps.campRepository) return { ok: false, message: BIGMAP_CAMP_QUERY_TEXT.attackUnavailable };
         const city = this.config.cities.get(cityId);
         const view = this.cityView(cityId);
         if (!city || !view) return { ok: false, message: '城池不存在' };
@@ -743,6 +953,7 @@ export class BigMapPresenter {
 
     /** 重置存档（调试面板用；正式版不给玩家入口）。 */
     resetSave(): IBigMapActionFeedback {
+        if (this.isServerBase) return { ok: false, message: '联机基地不能重置本地存档' };
         const fresh = parseBigMapSave(null, this.config, this.deps.now()).save;
         this.data = fresh;
         this.persist();

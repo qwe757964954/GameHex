@@ -65,6 +65,14 @@ export interface ITerritoryBattleArt {
      *  没配 / 查不到才回退到按 `site.type` 取图。
      */
     readonly buildFrames: ReadonlyMap<number, SpriteFrame | null>;
+    /**
+     * `buildId → buildSize`（表里的「模型大小」，缺省 1）。
+     *
+     *  与 `buildFrames` **分开**而不是塞进同一个 value：`buildFrames` 的契约是
+     *  「`stationIconOf` 直接返回一张帧」，改成对象会牵连类型回退与所有夹具；
+     *  而倍率只在下游乘进缩放，独立查一次最省。查不到 = 1（旧行为）。
+     */
+    readonly buildScales: ReadonlyMap<number, number>;
 }
 
 /**
@@ -81,6 +89,14 @@ export interface ITerritoryBuildRow {
     readonly buildType: number;
     /** `resources` 相对路径（无扩展名、无 `/spriteFrame`），如 `image/territory/buildings/territory_boss_v1`。 */
     readonly buildresource: string;
+    /**
+     * 模型大小倍率（表的「模型大小」列，缺省 1）。
+     *
+     *  由 `TerritoryStationView.applyIconPlacement` 乘在「可见宽度归一」系数之上 ——
+     *  归一负责所有建筑等宽，这个值负责「这张图本身要更大 / 更小」。≤0 与非数字一律当 1
+     *  （0 倍 = 建筑凭空消失，且不报错，所以必须在这里夹掉）。
+     */
+    readonly buildSize: number;
 }
 
 /** 建筑表名（`remoteRef` bundle 里的表名，等于文件名 `build.json` 的 `build`）。 */
@@ -150,10 +166,13 @@ export function parseTerritoryBuildTable(raw: unknown): TerritoryBuildTable {
         // 查表时统一按 Number 归一，否则 `'69003'` 永远查不到 `69003`。
         const buildId = Number(row.buildId);
         if (!Number.isFinite(buildId) || typeof row.buildresource !== 'string' || !row.buildresource) continue;
+        const rawSize = Number(row.buildSize);
         table.set(buildId, {
             buildId,
             buildType: Number(row.buildType) || 0,
             buildresource: row.buildresource,
+            // ≤0 / NaN 夹到 1：倍率 0 会让建筑凭空消失且零报错。
+            buildSize: Number.isFinite(rawSize) && rawSize > 0 ? rawSize : 1,
         });
     }
     return table;
@@ -198,7 +217,7 @@ export async function loadTerritoryBattleArt(
     assets: AssetService,
     backgroundPath: string,
 ): Promise<ITerritoryBattleArt> {
-    const [background, tileLocked, tileCleared, frameBoss, frameStage, frameAsyncPvp, frameChest, start, stage, boss, asyncPvp, fixedResource, randomResource, randomSilverIcon, bonus, header, navButton, actionButton, buildFrames] = await Promise.all([
+    const [background, tileLocked, tileCleared, frameBoss, frameStage, frameAsyncPvp, frameChest, start, stage, boss, asyncPvp, fixedResource, randomResource, randomSilverIcon, bonus, header, navButton, actionButton, buildAssets] = await Promise.all([
         // 地图 JSON 有 background 就按它走（spriteFramePathOf 对已带后缀的路径幂等），否则用默认背景。
         // ⚠️ 默认图 zdbg1 在 `image/` **根目录**（不在 `image/territory/`）⇒ 走 `spriteFramePath(ART_ROOT, …)`；
         //    用 `spriteFramePathOf(TERRITORY_ART_ROOT/…)` 拼会在 bundle 索引里查不到
@@ -232,9 +251,9 @@ export async function loadTerritoryBattleArt(
         loadFrame(assets, spriteFramePath(COMMON_ART_ROOT, 'cu_title_brown')),
         loadFrame(assets, spriteFramePath(COMMON_ART_ROOT, 'cu_ty_btn09')),
         loadFrame(assets, spriteFramePath(COMMON_ART_ROOT, 'cu_ty_btn13')),
-        loadBuildFrames(assets),
+        loadBuildAssets(assets),
     ]);
-    return { background, tileLocked, tileCleared, frameBoss, frameStage, frameAsyncPvp, frameChest, start, stage, boss, asyncPvp, fixedResource, randomResource, randomSilverIcon, bonus, header, navButton, actionButton, buildFrames };
+    return { background, tileLocked, tileCleared, frameBoss, frameStage, frameAsyncPvp, frameChest, start, stage, boss, asyncPvp, fixedResource, randomResource, randomSilverIcon, bonus, header, navButton, actionButton, buildFrames: buildAssets.frames, buildScales: buildAssets.scales };
 }
 
 /**
@@ -247,13 +266,19 @@ export async function loadTerritoryBattleArt(
  *
  *  单行失败只让**那一格**退回按type 取图，不影响其它建筑（逐行 `loadFrame` 自己吞异常）。
  */
-async function loadBuildFrames(assets: AssetService): Promise<ReadonlyMap<number, SpriteFrame | null>> {
+async function loadBuildAssets(assets: AssetService): Promise<{
+    frames: ReadonlyMap<number, SpriteFrame | null>;
+    scales: ReadonlyMap<number, number>;
+}> {
     const table = await loadTerritoryBuildTable();
     const frames = new Map<number, SpriteFrame | null>();
+    const scales = new Map<number, number>();
     await Promise.all(Array.from(table.values()).map(async (row) => {
+        // 倍率与帧同源同表，一起收；帧失败也保留倍率（那格本来就不画建筑，倍率无害）。
+        scales.set(row.buildId, row.buildSize);
         frames.set(row.buildId, await loadFrame(assets, spriteFramePathOf(row.buildresource)));
     }));
-    return frames;
+    return { frames, scales };
 }
 
 async function loadFrame(assets: AssetService, path: string): Promise<SpriteFrame | null> {

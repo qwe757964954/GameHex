@@ -283,6 +283,36 @@ function makeMapView() {
                     fixedResource: 'fixedResource', bonus: 'bonus',
                 },
             };
+            // 内容层留白（2026-10-21）：`syncContentSize` 现在把「地图包围盒 + 四周留白」写进
+            // 内容层，留白归 `TerritoryMapLayout` 统一算。本用例不校验尺寸，桩只保证宽度高度可用。
+            if (id.endsWith('/TerritoryMapLayout')) return {
+                territoryMapContentSize: (layout: { width: number; height: number }) => ({
+                    width: layout.width,
+                    height: layout.height,
+                }),
+            };
+            // 开箱表演 / 点击反馈（2026-10-22）：`TerritoryMapView` 新增的两个表现层，
+            // 与本用例关注的渲染分支无关 ⇒ 给空壳（它们的曲线在 `territory-chest-animation`
+            // / `territory-tap-feedback` 里单独测）。
+            if (id === './TerritoryChestView') return { TerritoryChestView: class {} };
+            if (id === './TerritoryTapFeedback') return { TerritoryTapFeedback: class {} };
+            // 新地块生成（2026-10-22）：`TerritoryMapView` 又多了第三个表现层。本用例只跑
+            // `syncStations` 的抖动分支，进场曲线与本例无关 ⇒ 空壳，且必须把 MapView 真正
+            // 调到的六个成员都补齐（`step` / `reset` / `stop` / `isPlaying` / `play` / `opacityOf`）。
+            if (id === './TerritoryHexSpawn') return {
+                TerritoryHexSpawn: class {
+                    isPlaying() { return false; }
+                    play() { return false; }
+                    opacityOf() { return null; }
+                    stop() {}
+                    reset() {}
+                    step() { return false; }
+                },
+            };
+            if (id === '../model/TerritoryHexSpawn') return {
+                territoryHexSpawnDelays: () => new Map<number, number>(),
+                territoryHexSpawnBatchSeconds: () => 0,
+            };
             throw new Error(`Unexpected dependency: ${id}`);
         },
     });
@@ -407,9 +437,25 @@ test('★row14 换章 / 重建格子时必须清空待办（否则永远等一�
     assert.equal(mapView.pendingBuildingReveal.size, 1);
 
     // 判据钉在代码里：`syncGrid` 的换图分支必须清两张表（顺序在 `hexFlip.reset()` 附近）。
-    assert.match(stripComments(MAP_VIEW_SRC),
-        /this\.hexFlip\.reset\(\);[\s\S]{0,400}?this\.pendingBuildingReveal\.clear\(\);[\s\S]{0,120}?this\.pendingBuildingRender\.clear\(\);/,
-        'syncGrid 换图分支必须清空待办（两张表都要清）');
+    // 2026-10-22 改成「按分支切片比下标」而不是「400 字内」：新地块生成又往这个分支里插了
+    // `hexSpawn.reset()` 等三行，距离判据会随无关语句的增长而假红；真正的不变量是
+    // 「同一个换图分支内、`hexFlip.reset()` 之后、两张表都要清、且两张表仍相邻」。
+    const branchSource = stripComments(MAP_VIEW_SRC);
+    const branchStart = branchSource.indexOf('this.gridKey = key;');
+    assert.ok(branchStart > 0, '没读到 syncGrid 的换图分支');
+    const branchEnd = branchSource.indexOf('const seen = new Set<number>();', branchStart);
+    assert.ok(branchEnd > branchStart, '没读到换图分支的结尾');
+    const branch = branchSource.slice(branchStart, branchEnd);
+    const flipResetAt = branch.indexOf('this.hexFlip.reset();');
+    const revealClearAt = branch.indexOf('this.pendingBuildingReveal.clear();');
+    const renderClearAt = branch.indexOf('this.pendingBuildingRender.clear();');
+    assert.ok(flipResetAt > 0, '换图分支必须先复位在播的翻格');
+    assert.ok(revealClearAt > flipResetAt, '待办建筑要在翻格复位之后清（同一个换图分支里）');
+    assert.ok(renderClearAt > revealClearAt, '两张待办表都要清，且先清 reveal 再清 render');
+    assert.ok(
+        branch.slice(revealClearAt, renderClearAt).split('\n').filter((line) => line.trim()).length <= 2,
+        '两张待办表要挨着清（中间插了别的语句说明有人把清表拆散了）',
+    );
 });
 
 test('★row14 syncFlip 必须排在 syncStations 之前（否则建筑会闪一帧再消失）', () => {
@@ -421,7 +467,45 @@ test('★row14 syncFlip 必须排在 syncStations 之前（否则建筑会闪一
     assert.ok(flipAt < stationAt, 'syncFlip 必须在 syncStations 之前（决定权先于绘制）');
     // 每帧推进：`update` 第一句仍是 hexFlip.step（判据见 territory-hex-flip.test.ts），
     // 且紧接着要解除待办 —— 顺序反了会多等一帧才出现建筑。
-    assert.match(MAP_VIEW_SRC,
-        /update\(dt: number\): void \{\s*this\.hexFlip\.step\(dt\);\s*this\.resolveBuildingReveal\(\);/,
+    // 2026-10-22：`hexSpawn.step(dt)` 合法地夹在这两句之间（生成动画与翻格同帧序），
+    // 所以判据从「两句紧邻」改成「第一句仍是 hexFlip、两个 step 之后**立刻**解除待办」。
+    const updateBody = /update\(dt: number\): void \{([\s\S]*?)\n    \}/.exec(
+        stripComments(MAP_VIEW_SRC),
+    );
+    assert.ok(updateBody, '没读到 update');
+    const updateSource = updateBody![1];
+    const flipStepAt = updateSource.indexOf('this.hexFlip.step(dt);');
+    const spawnStepAt = updateSource.indexOf('this.hexSpawn.step(dt);');
+    const revealAt = updateSource.indexOf('this.resolveBuildingReveal();');
+    assert.ok(flipStepAt >= 0 && revealAt > 0, 'update 必须调 hexFlip.step 与 resolveBuildingReveal');
+    assert.equal(updateSource.slice(0, flipStepAt).trim(), '',
+        'update 的第一句必须是 hexFlip.step（先推进翻格再谈绘制）');
+    assert.ok(spawnStepAt > flipStepAt, '生成动画的 step 排在翻格之后（同格撞车时翻格先写）');
+    assert.ok(revealAt > spawnStepAt, '解除待办排在两个 step 之后');
+    assert.equal(updateSource.slice(spawnStepAt + 'this.hexSpawn.step(dt);'.length, revealAt).trim(), '',
         'update 里 step 之后要立刻解除待办');
+});
+
+// ============================================================
+// `buildSize`（表「模型大小」）的数据链路：build.json → buildScales → 渲染入参
+// ============================================================
+
+test('★★★buildSize 按 buildId 传到渲染入参（查不到一律 1，不能是 undefined）', () => {
+    // 1) 表里配了倍率 ⇒ 原样传下去（乘不乘进缩放由 station view 的判据钉）。
+    const withScale = flipInput(true) as { art: { buildScales?: Map<number, number> } };
+    withScale.art.buildScales = new Map([[69006, 1.5]]);
+    const a = makeMapView();
+    a.syncFlip(withScale);
+    a.syncStations(withScale);
+    assert.equal(a.rendered[a.rendered.length - 1].iconScale, 1.5,
+        'buildSize=1.5 必须传到站点的 iconScale');
+
+    // 2) 旧数据没有 buildScales ⇒ 1。**不能留 undefined** —— 乘进缩放会得到 NaN，
+    //    症状是建筑凭空消失，且控制台零报错。
+    const b = makeMapView();
+    const noScale = flipInput(true);
+    b.syncFlip(noScale);
+    b.syncStations(noScale);
+    assert.equal(b.rendered[b.rendered.length - 1].iconScale, 1,
+        '查不到倍率必须兜底成 1');
 });

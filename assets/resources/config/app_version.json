@@ -1,5 +1,5 @@
 {
     "index": "tafang-internal",
-    "url": "https://cosfate-1254042967.cos.ap-guangzhou.myqcloud.com/city/city-internal.json",
+    "url": "http://192.168.2.179/tafang-internal.json",
     "version": "0.6.0.0"
 }

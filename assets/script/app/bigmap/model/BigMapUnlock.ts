@@ -118,8 +118,14 @@ export function bigMapMonsterUnlock(
     monster: IBigMapMonsterConfig,
     context: IBigMapUnlockContext,
 ): IBigMapUnlockResult {
-    if (monster.preLevel > context.maxClearedMonsterLevel) {
-        return bigMapLocked(`需先通关 ${monster.preLevel} 级野怪`);
+    if (monster.battle) {
+        if (monster.battle.unlockType === 0) return OK;
+        return bigMapLocked('野怪解锁条件待服务端确认');
+    }
+    const offline = monster.offlineBattle;
+    if (!offline) return bigMapLocked('野怪配置缺少战斗信息');
+    if (offline.preLevel > context.maxClearedMonsterLevel) {
+        return bigMapLocked(`需先通关 ${offline.preLevel} 级野怪`);
     }
     return OK;
 }

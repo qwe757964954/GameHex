@@ -34,7 +34,7 @@ test('12 张 BigMap 表全部解析成功且关键字段对得上', () => {
     assert.equal(config.world.npcBaseCount, 16);
     assert.equal(config.buildings.size, 8);
     assert.equal(config.cities.size, 25);
-    assert.equal(config.monsters.size, 20);
+    assert.equal(config.monsters.size, 34);
     assert.equal(config.mainBuildingId, 71001);
     assert.equal(config.queue.plotRows, 5);
     assert.equal(config.queue.plotCols, 5);
@@ -249,15 +249,11 @@ test('下一个攻略目标：优先等级最低的已开放城池', () => {
     assert.equal(bigMapNextTargetCity(config, makeUnlockContext({ adventureChapter: 0 })), null);
 });
 
-test('野怪必须逐级解锁', () => {
+test('新版野怪按 unlockType 开放，不附加旧表的逐级解锁限制', () => {
     const levelOne = [...config.monsters.values()].find((monster) => monster.level === 1)!;
     const levelFive = [...config.monsters.values()].find((monster) => monster.level === 5)!;
     assert.equal(bigMapMonsterUnlock(levelOne, makeUnlockContext()).unlocked, true);
-    assert.equal(bigMapMonsterUnlock(levelFive, makeUnlockContext({ maxClearedMonsterLevel: 3 })).unlocked, false);
-    assert.match(
-        bigMapMonsterUnlock(levelFive, makeUnlockContext({ maxClearedMonsterLevel: 3 })).reason,
-        /4 级野怪/,
-    );
+    assert.equal(bigMapMonsterUnlock(levelFive, makeUnlockContext({ maxClearedMonsterLevel: 3 })).unlocked, true);
     assert.equal(bigMapMonsterUnlock(levelFive, makeUnlockContext({ maxClearedMonsterLevel: 4 })).unlocked, true);
 });
 

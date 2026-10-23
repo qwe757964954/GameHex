@@ -5,14 +5,18 @@ import { readRoleRow } from '../../main/MainRoleRow';
 import { toIdString } from '../../net/RequestGuard';
 import { TerritoryChapterInfoRepository } from '../../territory/application/TerritoryChapterInfoRepository';
 import { createTerritorySaveStore } from '../../territory/application/TerritorySaveStoreAdapter';
-import type { ITerritorySaveOwner } from '../../territory/model/TerritorySaveStore';
 import { loadBigMapConfig } from './BigMapConfigLoader';
 import { loadBigMapLayout } from './BigMapLayoutLoader';
 import { NpcBigMapRankProvider } from './NpcBigMapRankProvider';
 import { BigMapPresenter } from './BigMapPresenter';
-import { BIGMAP_SAVE_KEY } from './BigMapSaveKeys';
+import { BIGMAP_SAVE_KEY, type IBigMapSaveOwner } from './BigMapSaveKeys';
 import { createBigMapStorage } from './BigMapStorage';
+import { BigMapCampRepository } from './BigMapCampRepository';
+import { GameNetBigMapCampGateway } from './GameNetBigMapCampGateway';
+import { BigMapSlgRepository } from './BigMapSlgRepository';
+import { GameNetBigMapSlgGateway } from './GameNetBigMapSlgGateway';
 import { BigMapPage } from '../view/BigMapPage';
+import { mountBigMapNavigation } from '../view/BigMapNavigation';
 import type { IBigMapLayout } from '../model/BigMapLayout';
 import type { IBigMapConfig } from '../model/BigMapTypes';
 
@@ -33,11 +37,18 @@ export class BigMapEntry {
 
     private root: Node | null = null;
     private presenter: BigMapPresenter | null = null;
+    private saveOwner: IBigMapSaveOwner | null = null;
     private configCache: IBigMapConfig | null = null;
     /** `undefined` = 还没加载过；`null` = 加载过但没有可用布局。两者必须区分，否则会反复读盘。 */
     private layoutCache: IBigMapLayout | null | undefined = undefined;
     private assets: AssetService | null = null;
     private opening = false;
+    private openRevision = 0;
+    private navigationRestore: (() => void) | null = null;
+    /** 关闭回调（宿主注入；`close()` 时回调一次，用于把底栏高亮切回去）。 */
+    private onCloseCallback: (() => void) | null = null;
+    /** 挂进宿主页时临时把 TopHud 提到最上层，关掉时还原它原来的兄弟序号。 */
+    private hudRestore: { node: Node; index: number } | null = null;
 
     static shared(): BigMapEntry {
         if (!BigMapEntry.instance) BigMapEntry.instance = new BigMapEntry();
@@ -47,8 +58,8 @@ export class BigMapEntry {
     /**
      * 由组合根（`ProcedureBootstrap`）注入资源入口。
      *
-     * 不注入也能玩：布局加载降级为「按种子生成世界」。这样入口按钮那条链
-     * （`MainTabHost → BigMapEntryButton`）不用为了接布局改签名。
+     * 不注入也能玩：布局加载降级为「按种子生成世界」。这样入口那条链
+     * （`MainTabHost` 的「世界」格 → 本类）不用为了接布局改签名。
      */
     setAssetService(assets: AssetService | null): void {
         this.assets = assets;
@@ -59,15 +70,36 @@ export class BigMapEntry {
         return !!this.root && this.root.isValid;
     }
 
-    /** 打开大世界覆盖页。重复调用不会叠两层。 */
-    async open(configs: ConfigService): Promise<void> {
+    /**
+     * 打开大世界页面。重复调用不会叠两层。
+     *
+     * 两种挂法：
+     * - **不给 `parent`**：挂 Canvas 下做全屏覆盖页（老行为，切 tab 不销毁）；
+     * - **给 `parent`**：挂在宿主页里，并让出底部 `bottomInset`（2026-10-21 起主界面用它把大世界
+     *   压在主城页上 —— 这样顶部 HUD 与底部菜单栏都是主界面的**真件**，不用另画一套；
+     *   用户截图要求「底部沿用图片 2 的菜单栏」）。
+     */
+    async open(configs: ConfigService, options?: {
+        parent?: Node | null;
+        topInset?: number;
+        bottomInset?: number;
+        navigation?: Node | null;
+        onClose?: (() => void) | null;
+    }): Promise<void> {
+        const owner = this.readSaveOwner();
+        if ((this.isOpen || this.opening) && !this.isSaveOwnerCurrent(this.saveOwner)) this.close();
         if (this.isOpen || this.opening) return;
         this.opening = true;
+        this.saveOwner = owner;
+        const revision = ++this.openRevision;
         try {
             const config = await this.ensureConfig(configs);
+            if (revision !== this.openRevision || !this.isSaveOwnerCurrent(owner)) return;
             const layout = await this.ensureLayout(config);
-            const canvas = this.findCanvas();
-            if (!canvas) {
+            if (revision !== this.openRevision || !this.isSaveOwnerCurrent(owner)) return;
+            const host = options?.parent && options.parent.isValid ? options.parent : null;
+            const canvas = host ? null : this.findCanvas();
+            if (!host && !canvas) {
                 console.warn('[BigMapEntry] 找不到 Canvas，无法打开大世界');
                 return;
             }
@@ -75,43 +107,100 @@ export class BigMapEntry {
             const root = new Node('BigMapPage');
             root.layer = Layers.Enum.UI_2D;
             const transform = root.addComponent(UITransform);
-            transform.setContentSize(size.width, size.height);
-            const widget = root.addComponent(Widget);
-            widget.isAlignTop = true;
-            widget.isAlignBottom = true;
-            widget.isAlignLeft = true;
-            widget.isAlignRight = true;
-            widget.top = 0;
-            widget.bottom = 0;
-            widget.left = 0;
-            widget.right = 0;
-            root.setParent(canvas);
+            if (host) {
+                // 宿主页里：宽度占满，顶部让出主界面 HUD、底部让出菜单栏，剩下的中间区域给地图。
+                const hostSize = host.getComponent(UITransform)?.contentSize;
+                const hostHeight = hostSize?.height || size.height;
+                const hudNode = host.getChildByName('TopHud');
+                const hudHeight = hudNode?.getComponent(UITransform)?.height ?? 0;
+                // HUD 是「顶部对齐」的一块：它的下沿到画布顶的距离就是必须让出的高度。
+                const hudBottom = hudNode ? hudNode.position.y - hudHeight / 2 : hostHeight / 2;
+                const top = Math.max(Math.max(0, options?.topInset ?? 0), Math.max(0, hostHeight / 2 - hudBottom));
+                const bottom = Math.max(0, options?.bottomInset ?? 0);
+                const width = hostSize?.width || size.width;
+                const height = Math.max(1, hostHeight - top - bottom);
+                transform.setContentSize(width, height);
+                root.setPosition(0, (bottom - top) / 2, 0);
+                root.setParent(host);
+                // 大世界要盖住主城页里的地图/入口列/宝箱栏，但**不能盖住顶部 HUD**：
+                // 新节点默认是最后一个（最上层），所以把 TopHud 提到最上层，关掉时还原。
+                if (hudNode) {
+                    this.hudRestore = { node: hudNode, index: hudNode.getSiblingIndex() };
+                    hudNode.setSiblingIndex(host.children.length - 1);
+                }
+            } else {
+                transform.setContentSize(size.width, size.height);
+                const widget = root.addComponent(Widget);
+                widget.isAlignTop = true;
+                widget.isAlignBottom = true;
+                widget.isAlignLeft = true;
+                widget.isAlignRight = true;
+                widget.top = 0;
+                widget.bottom = 0;
+                widget.left = 0;
+                widget.right = 0;
+                root.setParent(canvas!);
+            }
 
             const presenter = new BigMapPresenter({
                 config,
                 layout,
-                storage: createBigMapStorage(),
+                storage: createBigMapStorage(owner),
                 saveKey: BIGMAP_SAVE_KEY,
                 // 每次取实时值：玩家在冒险里推了一章，回到大世界立刻能看到新解锁的建筑。
-                adventureChapter: () => this.readAdventureChapter(),
+                adventureChapter: () => this.readAdventureChapter(owner),
                 now: () => Math.floor(Date.now() / 1000),
                 // 单机档：NPC 模拟榜。联机版换成走服务器的 provider，这里一行不改。
                 rankProvider: new NpcBigMapRankProvider(config),
+                campRepository: new BigMapCampRepository(new GameNetBigMapCampGateway()),
+                slgRepository: owner ? new BigMapSlgRepository(
+                    new GameNetBigMapSlgGateway(() => revision === this.openRevision && this.isSaveOwnerCurrent(owner)),
+                    config, () => Math.floor(Date.now() / 1000),
+                ) : undefined,
             });
 
             const page = root.addComponent(BigMapPage);
-            page.initialize(presenter, () => this.close());
+            root.active = false;
+            const navigation = options?.navigation;
+            const navigationHeight = navigation?.isValid ? navigation.getComponent(UITransform)?.height ?? 0 : 0;
             this.root = root;
             this.presenter = presenter;
+            this.onCloseCallback = options?.onClose ?? null;
+            await page.initialize(presenter, () => this.close(), this.assets, layout?.background ?? '', navigationHeight);
+            if (revision !== this.openRevision || !root.isValid) return;
+            await presenter.initializeSlg();
+            if (revision !== this.openRevision || !root.isValid) return;
+            if (!this.isSaveOwnerCurrent(owner)) {
+                this.close();
+                return;
+            }
+            if (navigation?.isValid) this.navigationRestore = mountBigMapNavigation(navigation, root).restore;
+            root.active = true;
+        } catch (error) {
+            if (revision === this.openRevision) this.close();
+            throw error;
         } finally {
-            this.opening = false;
+            if (revision === this.openRevision) this.opening = false;
         }
     }
 
     close(): void {
+        this.openRevision += 1;
+        this.opening = false;
+        this.navigationRestore?.();
+        this.navigationRestore = null;
+        this.presenter?.dispose();
         if (this.root?.isValid) this.root.destroy();
         this.root = null;
         this.presenter = null;
+        this.saveOwner = null;
+        const hud = this.hudRestore;
+        this.hudRestore = null;
+        if (hud && hud.node.isValid) hud.node.setSiblingIndex(hud.index);
+        // 关掉后通知宿主（主界面用它把底栏高亮切回真正的 tab）。
+        const callback = this.onCloseCallback;
+        this.onCloseCallback = null;
+        callback?.();
     }
 
     /** 配置解析一次就够（12 张表 + 世界生成都挺贵），后续开关复用。 */
@@ -144,13 +233,8 @@ export class BigMapEntry {
      * 「已通关到第 N 章」——新号是 1，正好对上「第 1 章解锁主城」。
      * 任何异常都退回 1，绝不让大世界因为读存档失败打不开。
      */
-    private readAdventureChapter(): number {
+    private readAdventureChapter(owner: IBigMapSaveOwner | null): number {
         try {
-            const role = readRoleRow();
-            const owner: ITerritorySaveOwner | null = role ? {
-                roleId: toIdString(role.id),
-                serverId: toIdString(role.selectServerId),
-            } : null;
             const chapters = TerritoryChapterInfoRepository.instance.availableChapters;
             const store = createTerritorySaveStore(owner);
             return Math.max(1, store.loadLastChapter(chapters, chapters[0] ?? 1));
@@ -158,6 +242,19 @@ export class BigMapEntry {
             console.warn('[BigMapEntry] 读取冒险进度失败，按第 1 章处理', error);
             return 1;
         }
+    }
+
+    private readSaveOwner(): IBigMapSaveOwner | null {
+        const role = readRoleRow();
+        if (!role) return null;
+        const roleId = toIdString(role.id).trim();
+        const serverId = toIdString(role.selectServerId).trim();
+        return roleId && serverId && roleId !== '0' && serverId !== '0' ? { roleId, serverId } : null;
+    }
+
+    private isSaveOwnerCurrent(owner: IBigMapSaveOwner | null): boolean {
+        const current = this.readSaveOwner();
+        return owner?.roleId === current?.roleId && owner?.serverId === current?.serverId;
     }
 
     private findCanvas(): Node | null {

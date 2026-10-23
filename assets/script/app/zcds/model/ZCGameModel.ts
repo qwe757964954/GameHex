@@ -404,6 +404,7 @@ export class ZCGameModel {
             unitById: (id) => this.units.byId.get(id) ?? null,
             unitPosition: this.services.unitPosition,
             hexPosition: (id) => this.config.map.hexes[id],
+            preferUnitTargets: (unit) => !!this.pveDefence && unit.owner === ZCOwner.Player,
             effectiveDefinition: this.services.effectiveDefinition,
             hasExposedWall: this.services.hasExposedWall,
         };
@@ -1286,6 +1287,8 @@ export class ZCGameModel {
     }
 
     private damageWall(unit: Pick<ZCUnitState, 'owner' | 'freeX' | 'freeY'>, wall: ZCHexState, damage: number): void {
+        // 波次间保留敌方墙体作为集结目标，不能破墙后继续拆城。
+        if (this.pveDefence && wall.owner !== ZCOwner.Player) return;
         const center = this.hexCenter(wall.id);
         const result = ZCDamageResolutionSystem.damageWall(
             wall, damage, unit, this.hasExposedWall(wall), center, this.damageResolutionContext);
@@ -1296,6 +1299,7 @@ export class ZCGameModel {
     }
 
     private damageBuilding(unit: Pick<ZCUnitState, 'owner'>, building: ZCHexState, damage: number): void {
+        if (this.pveDefence && building.owner !== ZCOwner.Player && building.building === 'hq') return;
         const result = ZCDamageResolutionSystem.damageBuilding(
             this.state, building, damage, unit, this.damageResolutionContext);
         if (!result) return;

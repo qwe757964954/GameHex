@@ -7,6 +7,7 @@ import {
     Prefab,
     Sprite,
     UITransform,
+    Vec3,
 } from 'cc';
 import type { EffectAsset, SpriteFrame } from 'cc';
 import {
@@ -21,11 +22,16 @@ import {
     TERRITORY_GAIN_START_LIFT_PX,
     TERRITORY_SILVER_RES_ID,
     TERRITORY_STAMINA_RES_ID,
+    territoryBurstCountForTotal,
 } from '../model/TerritoryResourceGain';
 import { TerritoryResourceGainView } from './TerritoryResourceGainView';
 import { TerritoryGainBurst, TERRITORY_GAIN_BURST_NODE } from './TerritoryGainBurst';
+import { TerritoryChestView, type ITerritoryChestIconEntry } from './TerritoryChestView';
+import { TerritoryTapFeedback } from './TerritoryTapFeedback';
+import type { TerritoryChestTier } from '../model/TerritoryChestTier';
 import type { TerritoryCampaignStage } from '../model/TerritoryCampaignConfig';
 import type { ITerritoryMapLayout, ITerritoryMapPoint } from '../model/TerritoryMapLayout';
+import { territoryMapContentSize } from '../model/TerritoryMapLayout';
 import type { TerritoryMapConfig, TerritorySite, TerritorySiteType } from '../model/TerritoryMapConfig';
 import { TERRITORY_SITE_TYPE } from '../model/TerritoryMapConfig';
 import type { TerritoryProgress } from '../model/TerritoryProgress';
@@ -37,6 +43,8 @@ import type {
 import { TerritoryStationView } from './TerritoryStationView';
 import { TERRITORY_EVENTS } from './TerritoryEvents';
 import { TERRITORY_HEX_REVEAL_NODE, TerritoryHexFlip } from './TerritoryHexFlip';
+import { TerritoryHexSpawn } from './TerritoryHexSpawn';
+import { territoryHexSpawnDelays } from '../model/TerritoryHexSpawn';
 import {
     TERRITORY_COLORS,
     TERRITORY_STATION_STATE,
@@ -109,6 +117,13 @@ export interface ITerritoryMapArt {
      *  查不到 / 没配 id 才回退到 `TERRITORY_SITE_ART` 那套。
      */
     readonly buildFrames?: ReadonlyMap<number, SpriteFrame | null>;
+    /**
+     * `buildId → buildSize`（表的「模型大小」，缺省 1）。
+     *
+     *  与 {@link buildFrames} 分开查：帧负责「画哪张图」，倍率负责「这张图多大」。
+     *  查不到 / 缺省一律按 1 —— 与引入该字段之前的表现完全一致。
+     */
+    readonly buildScales?: ReadonlyMap<number, number>;
 }
 
 /**
@@ -164,6 +179,17 @@ type TerritoryFrameKey = 'frameBoss' | 'frameStage' | 'frameAsyncPvp' | 'frameCh
 
 /** 格面高亮框的节点名（`createHex` 建、`applyHexFrame` 换帧）。 */
 const HEX_FRAME_NODE_NAME = 'Frame';
+
+/**
+ * 宝箱「生成」抖动比地块那一下**晚多少秒**（需求 2026-10-22 §3：
+ * 「宝箱生成动画需要比地块生成动画稍晚展示」）。
+ *
+ *  · 地块（地皮换色 / 翻转）在**这一帧**就发生，宝箱是叠在同一个格子上的次级元素；
+ *    同一帧一起动会读成「整格整体弹了一下」，读不出"格子上长出一只宝箱"。
+ *  · `0.22s` ≈ 地块动效的第一段收势，此时再抖宝箱，前后关系清楚、又不会让人等。
+ *  ⚠️ 别调到 0.4s 以上：`syncStations` 每秒才全量走一遍，太晚会被下一轮渲染盖掉节奏感。
+ */
+const CHEST_SPAWN_SHAKE_DELAY_SECONDS = 0.22;
 
 /** 一次完整的地图渲染输入（纯数据 + 只读状态查询）。 */
 export interface ITerritoryMapRenderInput {
@@ -277,6 +303,27 @@ export class TerritoryMapView extends Component {
     private hexFlipBootstrapped = false;
 
     /**
+     * 「新地块生成」表现（2026-10-22）：整格透明渐显 + 由小变大，多格按簇心错峰。
+     *
+     *  与 `hexFlip` 的分工见 `model/TerritoryHexSpawn` 的模块注释：翻格是**玩家点开某一格**，
+     *  生成是**进度推进后新露出的一批格**。同一格两件事撞上时以翻格优先。
+     */
+    private readonly hexSpawn = new TerritoryHexSpawn();
+    /**
+     * 上一帧**已露出**的格子集合 —— 生成本身就是「这一帧有、上一帧没有」的 diff。
+     *
+     *  ⚠️ 只在 `paintHexes` 里维护；换章 / 布局重建时必须清空（否则新图上的格子会被判成"新增"）。
+     */
+    private readonly revealedSnapshot = new Set<number>();
+    /**
+     * 是否已经用首帧做过一次「已露出」快照。
+     *
+     * 🔴 与 `hexFlipBootstrapped` 同一个理由：少了它，进页面 / 换章的首帧会把**整张图**的格子
+     * 都当成"刚生成"，上百格一起淡入 —— 表现为"进页面地图闪一下才出来"。
+     */
+    private spawnBootstrapped = false;
+
+    /**
      * 「建筑展示要滞后到地块翻转结束」的待办格（需求 2026-10-16 row14）—— **key 存在 = 还在等**。
      *
      *  随机资源格翻开的那一帧，进度上已经是「已开启」，但地皮正在翻 ⇒ 建筑**先不出现**；
@@ -320,6 +367,64 @@ export class TerritoryMapView extends Component {
      */
     private burstSeed = 0;
 
+    /** 页面坐标系覆盖层宿主（点击反馈 + 开箱表演都挂它上面）。 */
+    private overlayHost: Node | null = null;
+    /** 开箱表演（懒建在覆盖层上；三档参数走 `model/TerritoryChestAnimation`）。 */
+    private chestView: TerritoryChestView | null = null;
+    /** 点击反馈（按压回弹 + 绿色光圈 + 蓝色圆环）。 */
+    private tapFeedback: TerritoryTapFeedback | null = null;
+    /**
+     * 宝箱**补帧序列**（`image/territory/chest/chest_seq_0 … chest_seq_N-1`）。
+     *
+     *  第 0 张闭合、最后一张全开（`zw_0005`），中间帧由 `tools/gen_chest_open_frames.py` 烘焙。
+     *  空数组 = 只播光效、没有箱体（与「资源缺失静默降级」同口径）。
+     */
+    private chestArt: readonly (SpriteFrame | null)[] = [];
+    /**
+     * 上一轮渲染时**摆着宝箱**的格子（固定资源格，需求 2026-10-22 §1）。
+     *
+     *  判「刚生成宝箱」只能靠 diff：`syncStations` 每秒全量走一遍，没有「新增」事件可用。
+     */
+    private readonly chestCells = new Set<number>();
+    /**
+     * 是否已经用首帧做过一次「摆着宝箱」快照。
+     *
+     *  🔴 少了它，进页面 / 换章的首帧会把**所有**固定资源格都当成「刚生成」，
+     *  一屏几十个宝箱同时抖一下。
+     */
+    private stationsReady = false;
+    /**
+     * 「再等几秒就抖一下」的宝箱格（`cellId → 剩余秒`）。
+     *
+     *  为什么不直接 `playBuildingShake()`：需求要求宝箱比**地块**晚一点动（见
+     *  `CHEST_SPAWN_SHAKE_DELAY_SECONDS`），而 `playBuildingShake` 是"立刻开始"的。
+     *  与全工程一致，不建 tween/定时器 —— 在 `update` 里扣时间，扣到 0 再播
+     *  （节点销毁时 Map 一起走，没有悬空回调）。
+     */
+    private readonly chestSpawnDelay = new Map<number, number>();
+    /**
+     * 正在播开箱表演的格子（`null` = 没在播）。
+     *
+     *  表演用的是**覆盖层**里那只宝箱，地图格子上那只还在（进度没变）—— 两只叠在一起时
+     *  看不出问题，但收尾淡出会把覆盖层那只淡掉，**底下那只就露出来了**，
+     *  读作「宝箱没消失」（需求 2026-10-22 §2「奖励光效和宝箱消失同步关闭」）。
+     *  所以表演期间把地图上那一格的宝箱图摘掉，等结算后进度变成"已领取"，它本来也不再出现。
+     */
+    private chestPlayingCell: number | null = null;
+    /**
+     * 表演期间的输入锁（需求 2026-10-22 §4）。
+     *
+     *  只挡**输入**，不挡渲染：开箱时地图照常画，只是拖不动、点不了下一格。
+     */
+    private inputLocked = false;
+    /**
+     * 锁滚动容器的端口（页面注入）：`locked = true` 时关掉 `ScrollView`。
+     *
+     *  为什么不让地图视图自己拿 `ScrollView`：`MapLayer` 是 ScrollView 的 content，
+     *  但滚动容器是页面 prefab 上的一个独立节点 —— 视图不该反向依赖页面结构。
+     */
+    scrollLock: ((locked: boolean) => void) | null = null;
+
     /** 初始化共享层引用与喷发粒子层（页面在 `onLoad` 里调，只需一次）。 */
     initialize(): void {
         this.stationLayers = {
@@ -331,6 +436,151 @@ export class TerritoryMapView extends Component {
         };
         // 顺手建喷发粒子层：此刻飘字还没建过任何节点 ⇒ 它坐稳 `GainLayer` 的第一个子节点。
         this.ensureBurstRoot();
+    }
+
+    /**
+     * **页面坐标系覆盖层**（点击反馈 + 开箱表演）的宿主节点（懒建，幂等）。
+     *
+     * ## 为什么不能挂在 `this.node`（`MapLayer`）下
+     *
+     *  `MapLayer` 是 `cc.ScrollView` 的 **content**：挂在那里 ⇒ 光圈/宝箱会随地图滑动、
+     *  还会被视口 `Mask` 裁掉（镜头推近时光柱直接被裁成方块）。
+     *  规格里的光柱是「贯穿屏幕」、暗角是「全屏」的，必须活在**页面坐标系**里。
+     *
+     *  所以往上跳两级：`MapLayer` → `MapViewport`（ScrollView 节点）→ 页面根，
+     *  覆盖层挂到页面根、并 `setSiblingIndex(最后)` 保证画在地图之上。
+     *  ⚠️ 页面根拿不到（prefab 结构被改）时退回 `MapViewport` 的父节点，仍在地图之上 ——
+     *  宁可少一层遮蔽，也不要这套表现在运行时静默消失。
+     */
+    private ensureOverlayHost(): Node {
+        if (this.overlayHost?.isValid) return this.overlayHost;
+        const page = this.node.parent?.parent ?? this.node.parent ?? this.node;
+        const host = new Node('TerritoryOverlay');
+        host.layer = page.layer;
+        host.setParent(page);
+        host.addComponent(UITransform);
+        host.setSiblingIndex(page.children.length - 1);
+        this.overlayHost = host;
+        const size = this.readViewportSize();
+        this.chestView = new TerritoryChestView(host, size);
+        this.chestView.setArt({ frames: this.chestArt });
+        this.tapFeedback = new TerritoryTapFeedback(host);
+        this.chestView.setCatchPoint(0, size.height / 2 - 46);
+        return host;
+    }
+
+    /** 视口尺寸（覆盖层 / 光柱都要按它画）；拿不到时给一个不会产出 NaN 的兜底。 */
+    private readViewportSize(): { width: number; height: number } {
+        const viewport = this.node.parent?.getComponent(UITransform);
+        const width = viewport?.contentSize.width ?? 0;
+        const height = viewport?.contentSize.height ?? 0;
+        return {
+            width: width > 0 ? width : 1080,
+            height: height > 0 ? height : 1920,
+        };
+    }
+
+    /**
+     * 格心（台面中心）→ **覆盖层局部坐标**。
+     *
+     * 走 `convertToWorldSpaceAR` → `convertToNodeSpaceAR` 而不是自己算偏移：
+     * 地图在 ScrollView 里滚动、章节之间布局尺寸也不同，只有引擎的矩阵是权威。
+     * 拿不到节点 / 变换时返回 `null`（调用方直接跳过这次表现，不猜一个坐标）。
+     */
+    private cellPointInOverlay(cellId: number): Vec3 | null {
+        const hex = this.hexNodes.get(cellId);
+        if (!hex?.isValid) return null;
+        const hexTransform = hex.getComponent(UITransform);
+        const host = this.ensureOverlayHost();
+        const hostTransform = host.getComponent(UITransform);
+        if (!hexTransform || !hostTransform) return null;
+        // `HEX_GRID_CONTENT_LIFT` = 锚点与"人眼看到的台面中心"的差（见 `cellCenter`）。
+        const world = hexTransform.convertToWorldSpaceAR(new Vec3(0, HEX_GRID_CONTENT_LIFT, 0));
+        return hostTransform.convertToNodeSpaceAR(world, new Vec3());
+    }
+
+    /**
+     * 注入宝箱**补帧序列**（页面在资源就绪后调；不注入 / 全空 = 只播光效、没有箱体）。
+     *
+     *  ⚠️ 传的是「按 0…N-1 排好的帧数组」而不是单张图：开盖这件事现在是**换帧**演出来的
+     *  （需求 2026-10-22 §2），单张图只能演「一直是开盖态」，读不出「正在打开」。
+     */
+    setChestArt(frames: readonly (SpriteFrame | null)[]): void {
+        this.chestArt = frames;
+        this.chestView?.setArt({ frames });
+    }
+
+    /** 飞向的落点（覆盖层坐标）；页面能拿到真实资源栏时调这个接口。 */
+    setRewardCatchPoint(x: number, y: number): void {
+        this.ensureOverlayHost();
+        this.chestView?.setCatchPoint(x, y);
+    }
+
+    /**
+     * 播一次**开箱表演**（三档由 `territoryChestTierOfRewards` 判，本方法只负责演）。
+     *
+     * @returns `true` = 真的开播了（页面据此决定"奖励弹窗等它播完再弹"）；
+     *          `false` = 没播（格子不在视口内 / 还没建覆盖层），页面应按原逻辑立刻发奖。
+     */
+    playChestOpen(
+        cellId: number,
+        tier: TerritoryChestTier,
+        rewards: readonly ITerritoryChestIconEntry[],
+        onDone?: () => void,
+    ): boolean {
+        const point = this.cellPointInOverlay(cellId);
+        if (!point) return false;
+        this.ensureOverlayHost();
+        this.chestView?.play(tier, point, rewards, onDone);
+        const started = this.chestView?.isPlaying === true;
+        // 开演即锁输入（需求 2026-10-22 §4）：表演挂在**页面坐标**上，而地图是 ScrollView content，
+        // 播放期间拖动一次地图，宝箱就会和地块错位（实机 screenshot-3）。
+        if (started) {
+            this.setInputLocked(true);
+            // 摘掉地图上那只（见 `chestPlayingCell`：不摘会在收尾淡出时透出来）。
+            this.chestPlayingCell = cellId;
+        }
+        return started;
+    }
+
+    /** 开箱表演是否在播（页面据此避免同时弹奖励窗）。 */
+    get isChestPlaying(): boolean {
+        return this.chestView?.isPlaying === true;
+    }
+
+    /** 立刻收掉开箱表演（换章 / 页面销毁前）。同时解锁输入（打断也要放开，否则页面点不动）。 */
+    stopChestPlay(): void {
+        this.chestView?.stop();
+        this.setInputLocked(false);
+        // 地图上那只宝箱要还回来：被打断时进度没变，格子还是"可领取"。
+        this.chestPlayingCell = null;
+    }
+
+    /**
+     * 表演期间的输入锁（需求 2026-10-22 §4）。
+     *
+     * 两层一起关：
+     *  1. **站点点击**：{@link onStationClick} 开头直接吞掉（避免连点再发一次解锁/领取请求）；
+     *  2. **地图拖动**：通过 {@link scrollLock} 交给页面关 `ScrollView`（视图自己不认识滚动容器）。
+     *
+     * 用「标志位 + 一个回调」而不是 `node.active` 之类：锁只影响输入，地图与 UI 必须照常渲染。
+     */
+    setInputLocked(locked: boolean): void {
+        if (this.inputLocked === locked) return;
+        this.inputLocked = locked;
+        this.scrollLock?.(locked);
+    }
+
+    /** 是否处于动画输入锁（页面/测试可读）。 */
+    get isInputLocked(): boolean {
+        return this.inputLocked;
+    }
+
+    /** 点击反馈：压一下被点的地块 + 绿色光圈 + 蓝色圆环（规格 §1）。 */
+    playTapFeedback(cellId: number): void {
+        const point = this.cellPointInOverlay(cellId);
+        if (!point) return;
+        this.tapFeedback?.play(point, this.hexNodes.get(cellId) ?? null);
     }
 
     /**
@@ -377,9 +627,24 @@ export class TerritoryMapView extends Component {
      */
     update(dt: number): void {
         this.hexFlip.step(dt);
+        // 新地块生成：与翻格同一帧序，排在 `hexFlip.step` 之后（同格撞车时翻格先写、
+        // 这里再写会把缩放掰回生成曲线 —— 所以 `syncFlip` 起播时会 `stop` 掉同格的生成动画，
+        // 走到这里就不存在两套缩放抢同一格的情况）。
+        this.hexSpawn.step(dt);
         this.resolveBuildingReveal();
+        this.stepChestSpawnDelays(dt);
         this.stepGains(dt);
         this.stepBursts(dt);
+        // 页面坐标系的两套表现：点击反馈（0.3s）与开箱表演（2.3~3.2s）。
+        // 都是「时钟置 -1 即空闲」的池化契约，没在播时开销只是一次数值比较。
+        this.tapFeedback?.step(dt);
+        this.chestView?.step(dt);
+        // 开箱播完（或被 `stop()` 收掉）⇒ 立刻放开输入。放在 `step` 之后而不是 `onDone` 里：
+        // `stop()` 不走 `onDone`，锁必须由「还在不在播」这个状态来释放，才不会有漏放的路径。
+        if (this.inputLocked && !this.chestView?.isPlaying) this.setInputLocked(false);
+        // 表演结束 ⇒ 解开"摘掉地图宝箱"的标记（结算已经把进度改成已领取，格子自然不再画宝箱；
+        // 若是被打断/降级导致没结算，这里也让宝箱回到格子上）。
+        if (this.chestPlayingCell !== null && !this.chestView?.isPlaying) this.chestPlayingCell = null;
     }
 
     /**
@@ -444,7 +709,9 @@ export class TerritoryMapView extends Component {
         const originX = hex.position.x;
         const originY = hex.position.y + HEX_GRID_CONTENT_LIFT;
         const baseY = originY + TERRITORY_GAIN_START_LIFT_PX;
-        this.playGainBurst(originX, originY, entries);
+        // 喷几颗看**这一批的总量**（需求 2026-10-22）：小奖励稀疏、大奖励满喷。
+        const total = entries.reduce((sum, entry) => sum + (Number(entry.amount) > 0 ? Number(entry.amount) : 0), 0);
+        this.playGainBurst(originX, originY, entries, total);
         entries.forEach((entry, index) => {
             const view = this.acquireGain();
             // ⚠️ 起点必须先写：`play()` 以「节点当前 y」为基准，池化复用时不重设会越飘越高。
@@ -454,20 +721,23 @@ export class TerritoryMapView extends Component {
     }
 
     /**
-     * 播一次「喷发」：从 `(originX, originY)` 喷出 `TERRITORY_GAIN_BURST_COUNT` 个资源图标。
+     * 播一次「喷发」：从 `(originX, originY)` 喷出若干资源图标（个数按奖励总量分级）。
      *
      *  图标按 `entries` **轮流取**（同时给银币 + 体力时两种图各喷一半）；
      *  取不到图（资源还没加载好）只是那颗粒子是空的 —— 与飘字「缺图仍照常升」同一口径，
      *  **不是**把整条喷发关掉。
+     *
+     * @param total 这一批奖励的总数量 —— 决定喷几颗（`territoryBurstCountForTotal`）。
      */
     private playGainBurst(
         originX: number,
         originY: number,
         entries: readonly { resId: number }[],
+        total: number,
     ): void {
         const frames = entries.map((entry) => this.gainIcons.get(entry.resId) ?? null);
         this.burstSeed = (this.burstSeed + 1) | 0;
-        this.acquireBurst().play(originX, originY, this.burstSeed, frames);
+        this.acquireBurst().play(originX, originY, this.burstSeed, frames, territoryBurstCountForTotal(total));
     }
 
     /** 取一条飘字：池里有就复用，没有才 instantiate。 */
@@ -575,31 +845,44 @@ export class TerritoryMapView extends Component {
             // ⚠️ 翻开成功才登记「建筑滞后」（需求 2026-10-16 row14）：没翻（没注入 effect）
             //    就不该让建筑跟着等，否则会变成「格子不动、建筑也不出来」。
             if (this.hexFlip.play(node, sprite, { from: input.art.tileLocked, to: input.art.tileCleared })) {
+                // 同一格刚被判成「新生成」时，把淡入掐掉：翻格全程把格根缩放写死为 1，
+                // 两层缩放会互相掰（而且翻格自带"新地皮放大填充"，淡入是多余的）。
+                this.hexSpawn.stop(node);
                 this.pendingBuildingReveal.add(cellId);
             }
         }
     }
 
-    /** 内容层尺寸 = 地图包围盒：`cc.ScrollView` 靠它算可滚范围。 */
+    /**
+     * 内容层尺寸 = 地图包围盒 + 四周留白：`cc.ScrollView` 靠它算可滚范围。
+     *
+     * 留白不是装饰，是**可滚范围**：`TERRITORY_MAP_CONTENT_PADDING` 让相机能在贴到地图下边缘时
+     * 继续往上滚，从而把底部那几排地块抬到【快速寻敌】按钮之上（用户口径「整体一起上移」）。
+     * 格心坐标一个都不动 —— 见 `territoryMapContentSize` 的注释。
+     */
     private syncContentSize(layout: ITerritoryMapLayout): void {
-        this.node.getComponent(UITransform)!.setContentSize(layout.width, layout.height);
+        const content = territoryMapContentSize(layout);
+        this.node.getComponent(UITransform)!.setContentSize(content.width, content.height);
     }
 
     /**
-     * 底图：换帧 + 按「地图包围盒」等比铺满。
+     * 底图：换帧 + 按「内容层尺寸」等比铺满。
      *
      * ## 为什么尺寸要跟地图走，而不是撑满视口
      *
      *  背景在 `MapLayer`（= ScrollView 的 content）里，滑到底时内容会整体移出视口；
-     *  若背景只按视口尺寸铺，滑到边缘就会露出空白。**按包围盒铺**才能保证任意滚动位置下
-     *  视口内始终是图（`layout.width/height` 已经是「格心包围盒 + 一格图的外接尺寸」，
+     *  若背景只按视口尺寸铺，滑到边缘就会露出空白。**按内容层铺**才能保证任意滚动位置下
+     *  视口内始终是图（`content` 已经是「格心包围盒 + 一格图的外接尺寸 + 四周留白」，
      *  比格心范围大一整格图，刚好盖住边角那半格）。
+     *
+     *  ⚠️ 必须用 `territoryMapContentSize` 而不是 `layout.width/height`：
+     *  留白那 2×300px 也在内容层里，按包围盒铺就会在滚到底时露出上下两条空白。
      *
      * ## 等比 cover，不拉伸
      *
      *  底图是美术给的成品（如 `zdbg1` 1660×2916），非等比拉伸会把沙漠纹理压扁。
-     *  取 `max(包围盒宽/图宽, 包围盒高/图高)` ⇒ 两边都不留白、比例不变，
-     *  节点尺寸 = `图尺寸 × 该系数`（可超出包围盒，超出部分被 `Mask` 裁掉，正是想要的）。
+     *  取 `max(内容宽/图宽, 内容高/图高)` ⇒ 两边都不留白、比例不变，
+     *  节点尺寸 = `图尺寸 × 该系数`（可超出内容层，超出部分被 `Mask` 裁掉，正是想要的）。
      */
     private syncBackground(input: ITerritoryMapRenderInput): void {
         const sprite = this.mapBackground;
@@ -609,7 +892,7 @@ export class TerritoryMapView extends Component {
         const { width: artWidth, height: artHeight } = frame.originalSize;
         // 图尺寸未就绪（0/NaN）时不要把节点写成 0×0 —— 那会让整块底图消失且不报错。
         if (!(artWidth > 0) || !(artHeight > 0)) return;
-        const { width, height } = input.layout;
+        const { width, height } = territoryMapContentSize(input.layout);
         if (!(width > 0) || !(height > 0)) return;
         const scale = Math.max(width / artWidth, height / artHeight);
         this.mapBackground.node.getComponent(UITransform)!
@@ -635,9 +918,23 @@ export class TerritoryMapView extends Component {
         // 换图（换章 / 改布局）：格子节点会被重建 ⇒ 先把在播的翻格复位，并重新做一次
         // 「已开启」快照，免得新图的首帧把历史已开启格全当成刚翻开。
         this.hexFlip.reset();
+        // 生成动画同理：格子节点要重建，按压缩放 / 半透明留在旧节点上会「烂掉一格」；
+        // 快照一并作废 ⇒ 新图首帧只做快照，不会把整张图当成"刚生成"。
+        this.hexSpawn.reset();
+        this.revealedSnapshot.clear();
+        this.spawnBootstrapped = false;
         this.resetGains();
+        // 覆盖层那两套也要收：格子节点会被重建 / 复用，按压缩放留在旧节点上就会「烂掉一格」。
+        this.chestView?.stop();
+        this.tapFeedback?.stop();
         this.openedRandomCells.clear();
         this.hexFlipBootstrapped = false;
+        // 宝箱「刚生成」的快照同理作废：换章后新图上**本来**就摆着宝箱的格子不算「刚生成」，
+        // 不清会把它们全当成新增、一格抖一下。
+        this.chestCells.clear();
+        this.stationsReady = false;
+        // 还没抖的宝箱排队也作废（格子节点会被重建，留着会抖到别人身上）。
+        this.chestSpawnDelay.clear();
         // 待办建筑跟着作废：格子节点会被重建，留着会让新图上的同名格「永远等一个不会播完的翻转」。
         this.pendingBuildingReveal.clear();
         this.pendingBuildingRender.clear();
@@ -763,7 +1060,50 @@ export class TerritoryMapView extends Component {
             this.applyTileFrame(node, passed ? input.art.tileCleared : input.art.tileLocked);
             this.applyHexFrame(cellId, this.hexFrameOf(cellId, input, siteByCell, passed));
         }
+        this.syncHexSpawn(input, revealed);
     }
+
+    /**
+     * 「新地块生成」：本帧 `revealedCells` 里**上一帧还没有**的格子整批进场。
+     *
+     * 触发靠 **diff**（与 `syncFlip` 同一个套路）：不要求 Presenter 额外传「刚解锁」字段，
+     * 换章 / 重进页面也不会漏 —— 首帧只做快照。
+     *
+     * ⚠️ 必须排在 `paintHexes` 的末尾、且**在 `syncFlip` 之前**（`renderMap` 的调用顺序）：
+     *  · 末尾 ⇒ 格子的 `active` 已经置好，`play` 写起手帧时节点是可见的；
+     *  · 在 `syncFlip` 之前 ⇒ 同格如果紧接着要翻格，`syncFlip` 里的 `hexSpawn.stop()` 能立刻掐掉
+     *    这层淡入（翻格自己有"新地皮放大填充"，两层叠在一起会糊成一团）。
+     */
+    private syncHexSpawn(input: ITerritoryMapRenderInput, revealed: ReadonlySet<number>): void {
+        if (!this.spawnBootstrapped) {
+            this.revealedSnapshot.clear();
+            for (const cellId of revealed) this.revealedSnapshot.add(cellId);
+            this.spawnBootstrapped = true;
+            return;
+        }
+        const fresh: { cellId: number; x: number; y: number; node: Node }[] = [];
+        for (const cellId of revealed) {
+            if (this.revealedSnapshot.has(cellId)) continue;
+            const node = this.hexNodes.get(cellId);
+            if (!node) continue;
+            // 正在翻的格子让给翻格（那条动画自带"新地皮从格心放大"）。
+            if (this.hexFlip.isPlaying(node)) continue;
+            const point = input.layout.points.get(cellId);
+            fresh.push({ cellId, node, x: point?.x ?? 0, y: point?.y ?? 0 });
+        }
+        this.revealedSnapshot.clear();
+        for (const cellId of revealed) this.revealedSnapshot.add(cellId);
+        if (fresh.length === 0) return;
+        // 错峰只在**这一批**内部算（簇心 = 这批新格的包围盒中心），与场上其它格子无关。
+        const delays = territoryHexSpawnDelays(fresh);
+        for (const cell of fresh) {
+            // 地形节点自己会淡（`UIOpacity` 挂在格节点上，子节点跟着淡）；
+            // 站点那四块在别的层里，只能靠回调把同一档透明度递过去。
+            this.hexSpawn.play(cell.node, delays.get(cell.cellId) ?? 0,
+                (opacity) => this.stationViews.get(cell.cellId)?.setSpawnOpacity(opacity));
+        }
+    }
+
 
     /**
      * 这一格**是否已通关 / 已占领**（决定用草地块还是泥土块）。
@@ -867,9 +1207,25 @@ export class TerritoryMapView extends Component {
         transform.setContentSize(width, height);
     }
 
+    /**
+     * 站点视图**追赶**「新地块生成」的当前进度。
+     *
+     *  `renderMap` 的顺序是「格子 → 翻格 → 站点」：新格子的站点视图是在**同一次 render 的后半段**
+     *  才 `render` 出来的，它错过了 `hexSpawn.play()` 那一次起手帧 ⇒ 不补这一下，
+     *  站点图标/银币数字会先以全不透明闪一帧，下一帧才跟地块一起淡入。
+     */
+    private applyHexSpawnFade(cellId: number, view: TerritoryStationView): void {
+        const node = this.hexNodes.get(cellId);
+        if (!node) return;
+        const opacity = this.hexSpawn.opacityOf(node);
+        if (opacity !== null) view.setSpawnOpacity(opacity);
+    }
+
     /** 站点：按 cellId diff 复用，逐个全量赋值（同一章内每秒都会走一遍）。 */
     private syncStations(input: ITerritoryMapRenderInput): void {
         const revealed = new Set(input.revealedCells);
+        // 首轮只做快照、不播任何「刚生成」的动效（见 `syncChestSpawnView`）。
+        const firstPass = !this.stationsReady;
         const startPoint = input.layout.points.get(input.map.startCellId);
         if (startPoint) {
             const view = this.ensureStartView();
@@ -893,7 +1249,21 @@ export class TerritoryMapView extends Component {
             const view = this.stationViews.get(site.cellId) ?? this.createStation(site);
             const center = this.cellCenter(point);
             view.setMapPosition(center.x, center.y, 0);
-            view.render(this.stationRenderOf(site, input));
+            // 建筑体量倍率（表「模型大小」）在这里统一补：stationRenderOf 有 5 个 return 分支，
+            // 逐个加字段容易漏；包一层只动一个点，且 site 本来就在手边。
+            const base = this.stationRenderOf(site, input);
+            const performing = this.chestPlayingCell === site.cellId;
+            const content = {
+                ...base,
+                iconScale: this.buildScaleOf(site, input.art),
+                // 开箱表演期间摘掉地图上那只（见 `chestPlayingCell`：不摘会在收尾淡出时透出来）。
+                icon: performing ? null : base.icon,
+            };
+            view.render(content);
+            // 站点比格节点晚一拍建出来 ⇒ 补写一次当前的生成进度，免得先以全不透明闪一帧。
+            this.applyHexSpawnFade(site.cellId, view);
+            // 固定资源格的「生成宝箱」反馈要按 diff 判（需求 2026-10-22 §1）。
+            this.syncChestSpawnView(site, content, firstPass);
         }
         for (const cellId of input.map.randomSites?.candidateCells ?? []) {
             if (!revealed.has(cellId)) continue;
@@ -918,6 +1288,9 @@ export class TerritoryMapView extends Component {
                 site: isOpened || isPending ? null : target,
                 // 没配 buildingId（或查不到帧）⇒ **不给建筑图**，只留绿色地块表现已开启。
                 icon: openedFrame,
+                iconScale: isOpened && Number.isFinite(buildingId)
+                    ? input.art.buildScales?.get(buildingId) ?? 1
+                    : 1,
                 isCondition: !isOpened,
                 isLoading: isPending,
                 conditionIcon: input.art.randomSilverIcon,
@@ -944,12 +1317,80 @@ export class TerritoryMapView extends Component {
             } else {
                 view.render(content);
             }
+            // 同上：随机格也会是新露出的格子，补写一次当前的生成进度。
+            this.applyHexSpawnFade(cellId, view);
         }
         for (const [cellId, view] of this.stationViews) {
             if (seen.has(cellId)) continue;
             this.stationViews.delete(cellId);
             view.dispose();
             view.node.destroy();
+        }
+        // 首轮快照到此为止：从下一轮起「上一轮有没有宝箱」才有意义。
+        this.stationsReady = true;
+    }
+
+    /**
+     * 固定资源格「**生成宝箱**」的那一下（需求 2026-10-22 §1：「增加固定资源生成宝箱的动画反馈，
+     * 类似装饰建筑的动效」）。
+     *
+     * ## 判据
+     *
+     *  ① 只看 `fixedResource` 格 —— 其它站点有自己的解锁/翻格表现，不该跟着抖；
+     *  ② 「摆着宝箱」= 这一轮渲染出来**有宝箱图**（`content.icon != null`）。
+     *     领取后 `stationRenderOf` 会给 `icon: null`（宝箱从地图上消失），所以领完再解锁一次
+     *     也会重新抖一下 —— 这正是「又生成了一个宝箱」的观感；
+     *  ③ 触发 = 「上一轮没有、这一轮有」，与 `syncStations` 每秒全量渲染的节奏对齐。
+     *
+     * ## 为什么首轮不播
+     *
+     *  进页面 / 换章的首帧上，所有已解锁的宝箱都是「这一轮有」；不做快照就会一屏几十个
+     *  宝箱同时抖一下，读作「整章刚刷新」。`stationsReady` + `syncGrid` 的复位就是这道闸。
+     *
+     * ## 动效复用
+     *
+     *  直接借装饰建筑的那条脉冲（`TerritoryStationView.playBuildingShake` →
+     *  `core/hex/ShakePresentation`，与随机格揭示建筑同一份曲线），不新造一套参数。
+     */
+    private syncChestSpawnView(
+        site: TerritorySite,
+        content: ITerritoryStationRender,
+        firstPass: boolean,
+    ): void {
+        if (site.type !== TERRITORY_SITE_TYPE.fixedResource) {
+            this.chestCells.delete(site.cellId);
+            return;
+        }
+        // 这一格正在演开箱：宝箱图是我们自己摘掉的（≠ 真的没了），快照不动，免得演完又抖一次。
+        if (this.chestPlayingCell === site.cellId) return;
+        // 还在等翻格 ⇒ 这一轮根本看不见它，先不记快照，等可见那一轮再判（否则抖动会被吞掉）。
+        if (content.hidden) return;
+        const hasChest = content.icon !== null && content.icon !== undefined;
+        const had = this.chestCells.has(site.cellId);
+        if (hasChest) this.chestCells.add(site.cellId);
+        else this.chestCells.delete(site.cellId);
+        if (firstPass || !hasChest || had) return;
+        // 不立刻抖：排进延迟表，由 `stepChestSpawnDelays` 在 `update` 里扣到 0 再播
+        // （需求：宝箱要比地块那一下稍晚，见 `CHEST_SPAWN_SHAKE_DELAY_SECONDS`）。
+        this.chestSpawnDelay.set(site.cellId, CHEST_SPAWN_SHAKE_DELAY_SECONDS);
+    }
+
+    /**
+     * 推进「宝箱生成抖动」的延迟队列（每帧扣时间，扣到 0 的那一帧播脉冲）。
+     *
+     *  一次性队列：播完即删，同一格不会被抖第二次（下一次抖动由 `syncChestSpawnView` 重新排）。
+     */
+    private stepChestSpawnDelays(dt: number): void {
+        if (!this.chestSpawnDelay.size) return;
+        for (const [cellId, remain] of this.chestSpawnDelay) {
+            const next = remain - dt;
+            if (next > 0) {
+                this.chestSpawnDelay.set(cellId, next);
+                continue;
+            }
+            this.chestSpawnDelay.delete(cellId);
+            // 格子可能已经被换章销毁 / 领取后站点被复用 ⇒ 查不到就跳过，不补播。
+            this.stationViews.get(cellId)?.playBuildingShake();
         }
     }
 
@@ -970,6 +1411,11 @@ export class TerritoryMapView extends Component {
 
     /** 站点点击转发：站点节点事件 → 地图容器节点事件（页面在 `mapView.node` 上收）。 */
     private readonly onStationClick = (site: TerritoryStationTarget): void => {
+        // 表演期间的输入锁：直接吞掉（连点会再发一次解锁/领取请求，且动画位置会被刷新打断）。
+        if (this.inputLocked) return;
+        // 点击反馈必须在**转发之前**播：页面收到事件会发请求，请求期间有全屏 loading 遮挡，
+        // 反馈若排在后面就永远被挡住（等于没做）—— 规格要求「按下 0.1s 内看到反馈」。
+        this.playTapFeedback(site.cellId);
         this.node.emit(TERRITORY_EVENTS.STATION_CLICK, site);
     };
 
@@ -1162,6 +1608,20 @@ export class TerritoryMapView extends Component {
         if (site.type === TERRITORY_SITE_TYPE.stage || site.type === TERRITORY_SITE_TYPE.boss || site.type === TERRITORY_SITE_TYPE.asyncPvp) return null;
         if (stage?.isBoss) return art.boss ?? art.stage;
         return art[TERRITORY_SITE_ART[site.type]] ?? art.stage;
+    }
+
+    /**
+     * 建筑体量倍率（表 `build.json` 的 `buildSize`，缺省 1）。
+     *
+     *  查表键与 `stationIconOf` 同一套口径：地图 JSON 的 `buildingId` 是**字符串**（`"69003"`），
+     *  不 `Number(...)` 归一就永远查不到，表现是「配了 buildSize 但外观没变」，零报错。
+     *  非法值（NaN / ≤0）一律按 1 —— 倍率 0 会让建筑凭空消失，也不报错。
+     */
+    private buildScaleOf(site: TerritorySite, art: ITerritoryMapArt): number {
+        const buildingId = Number(site.buildingId);
+        if (!Number.isFinite(buildingId) || !site.buildingId) return 1;
+        const scale = art.buildScales?.get(buildingId);
+        return Number.isFinite(scale) && (scale as number) > 0 ? (scale as number) : 1;
     }
 
     private stateOf(site: TerritorySite, input: ITerritoryMapRenderInput): TerritorySiteState {

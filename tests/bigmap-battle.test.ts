@@ -166,6 +166,8 @@ test('行动力不够时打不了，且不改任何状态', () => {
 });
 
 test('打野怪：击杀发奖、记通关等级、进入刷新 CD', () => {
+    const config = loadBigMapConfig(true);
+    const world = buildBigMapWorld(config);
     const base = freshBase();
     let progress = createBigMapBattleProgress();
     const site = world.monsters.find((item) => item.level === 1)!;
@@ -195,6 +197,8 @@ test('打野怪：击杀发奖、记通关等级、进入刷新 CD', () => {
 });
 
 test('野怪逐级解锁：没打过 4 级不能碰 5 级', () => {
+    const config = loadBigMapConfig(true);
+    const world = buildBigMapWorld(config);
     const base = freshBase();
     const progress = { ...createBigMapBattleProgress(), clearedMonsterLevel: 3 };
     const boss = world.monsters.find((item) => item.level === 5)!;

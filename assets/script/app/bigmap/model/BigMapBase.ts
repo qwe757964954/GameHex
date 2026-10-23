@@ -231,6 +231,7 @@ export function bigMapCanPlace(
     unlock: IBigMapUnlockContext,
     buildingId: number,
     hexId: number,
+    checkResources = true,
 ): IBigMapActionResult {
     const building = config.buildings.get(buildingId);
     if (!building) return { ok: false, reason: `建筑 ${buildingId} 不存在` };
@@ -248,7 +249,7 @@ export function bigMapCanPlace(
     if (!bigMapFreeQueueSlot(state)) return { ok: false, reason: '建造队列已满' };
     const cost = config.levels.get(buildingId)?.get(1);
     if (!cost) return { ok: false, reason: '缺少 1 级建造配置' };
-    const lack = bigMapMissingRes(state, cost);
+    const lack = checkResources ? bigMapMissingRes(state, cost) : '';
     if (lack) return { ok: false, reason: `资源不足：${lack}` };
     return { ok: true, reason: '' };
 }
@@ -283,6 +284,7 @@ export function bigMapCanUpgrade(
     state: IBigMapBaseState,
     unlock: IBigMapUnlockContext,
     instanceId: number,
+    checkResources = true,
 ): IBigMapActionResult {
     const feature = bigMapUpgradeUnlock(config, unlock);
     if (!feature.unlocked) return { ok: false, reason: feature.reason };
@@ -309,7 +311,7 @@ export function bigMapCanUpgrade(
         }
     }
     if (!bigMapFreeQueueSlot(state)) return { ok: false, reason: '建造队列已满' };
-    const lack = bigMapMissingRes(state, next);
+    const lack = checkResources ? bigMapMissingRes(state, next) : '';
     if (lack) return { ok: false, reason: `资源不足：${lack}` };
     return { ok: true, reason: '' };
 }

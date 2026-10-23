@@ -82,9 +82,8 @@ export interface IBigMapLayoutCity {
     /**
      * 势力范围格子（透明色区）。
      *
-     * ⚠️ `IBigMapWorld` **不承载**它：现在的势力范围判定走 `radiateCapacity` 距离
-     * （`bigMapWithinCityRange`），这套格子要到 P1 联盟层做「势力范围染色 + 进入/离开增益」
-     * 才进规则。在此之前它只是编辑器维护、随布局保存的标注 —— 别以为改了它游戏里就生效。
+     * 由 Presenter 提供给地图染色与外轮廓；不进入存档或战斗规则。
+     * 战斗范围增益仍只走 `radiateCapacity` 距离判定。
      */
     readonly rangeHex: readonly number[];
     /** 相邻城池 id（编辑器按范围邻接自动推导，允许手改）。双向一致性由校验保证。 */
@@ -524,6 +523,10 @@ export function buildBigMapWorldFromLayout(config: IBigMapConfig, layout: IBigMa
             anchorHexId: city.anchorHexId,
             hexIds: city.hexIds,
             ring: city.ring,
+            // 势力范围与邻接是**表现层染色**的真源（2026-10-22 用户要求「范围内所有地块都上色」）。
+            // 规则层仍然走 `radiateCapacity` 距离，别把这两份数据当判定用。
+            rangeHex: city.rangeHex.length > 0 ? city.rangeHex : city.hexIds,
+            adjacentCityIds: city.adjacentCityIds,
         };
         cities.set(city.cityId, site);
         for (const hexId of city.hexIds) cityByHex.set(hexId, city.cityId);

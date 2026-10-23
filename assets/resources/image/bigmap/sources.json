@@ -1,0 +1,51 @@
+{
+  "designId": "c395b1cf-fafb-4730-869f-598aa118670b",
+  "designName": "塔防主界面-1",
+  "assets": [
+    {
+      "file": "wasteland_background.png",
+      "assetId": 2591,
+      "source": "https://lanhu-oss-proxy.lanhuapp.com/max_2061809180a6ac0b1f679be4b0d0d4a8",
+      "size": "720x1610"
+    }
+  ],
+  "groundSource": "C:\\Users\\hedao\\Downloads\\地块_slices\\mipmap-xhdpi",
+  "grounds": [
+    {
+      "file": "grounds/ground_01.png",
+      "original": "01.png",
+      "sha256": "5b35a6e19802f7bf9aaaa40a77736340f98a43cdab9e326047e9704aa940dd7d",
+      "size": "147x96"
+    },
+    {
+      "file": "grounds/ground_02.png",
+      "original": "02.png",
+      "sha256": "d234ce6deff9960f66cacf574b43d70a6b9151b16260b39b6c866984a9e96087",
+      "size": "147x96"
+    },
+    {
+      "file": "grounds/ground_03.png",
+      "original": "03.png",
+      "sha256": "4224e20d69a619d73f97684edb5c477f6ebcfb130c6c181d4c7b0a26671b6f68",
+      "size": "147x96"
+    },
+    {
+      "file": "grounds/ground_04.png",
+      "original": "04.png",
+      "sha256": "4c39e9a8170709259e96a5b4682cf89f3005f712b28989f805f1f7517b062736",
+      "size": "147x96"
+    },
+    {
+      "file": "grounds/ground_05.png",
+      "original": "05.png",
+      "sha256": "4886b95d7c6114e0bdc6967dcc77515359dce7e98d54bae801450b6b19012040",
+      "size": "147x96"
+    },
+    {
+      "file": "grounds/ground_06.png",
+      "original": "06.png",
+      "sha256": "0687206a5cccc1ace1e4f751bca47b126b40153bbf490cc37e928449dd5994cc",
+      "size": "147x96"
+    }
+  ]
+}

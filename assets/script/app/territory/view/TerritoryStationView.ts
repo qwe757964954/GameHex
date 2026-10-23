@@ -1,4 +1,4 @@
-import { _decorator, Button, Color, Component, Label, Sprite, UITransform } from 'cc';
+import { _decorator, Button, Color, Component, Label, Sprite, UIOpacity, UITransform } from 'cc';
 import type { Node, SpriteFrame, Vec3 } from 'cc';
 import {
     BUILDING_SHAKE_STRETCH,
@@ -77,8 +77,11 @@ const CONDITION_ICON_WIDTH_FALLBACK = 40;
  * ⚠️ **判据钉的是「归一后可见宽 = 本常量」且「可见高 ≤ 台面高的 0.85」**
  * （护栏随 84 从 0.75 上调，见 `tests/territory-cell-center-align.test.ts`），
  * 换美术图只要重新量 `.meta` 的 `trimX/width` 即可，代码不用改。
+ *
+ * ⚠️ **导出**：开箱表演（`TerritoryChestView`）按同一个宽归一它的补帧美术 ——
+ *   那是「表演里那只箱子要与地图上静止的那只同大」的唯一做法。改这里 = 同时改两处，是刻意的。
  */
-const BUILDING_VISIBLE_WIDTH = 84;
+export const BUILDING_VISIBLE_WIDTH = 84;
 
 /** 站点名称底条的圆角半径（设计稿口径）。 */
 
@@ -96,6 +99,14 @@ export interface ITerritoryStationRender {
     readonly site: TerritoryStationTarget | null;
     /** 站点建筑图标；地图不显示建筑名称及状态角标。 */
     readonly icon: SpriteFrame | null;
+    /**
+     * 建筑表 `buildSize` 的大小倍率（缺省 / ≤0 一律当 1）。
+     *
+     *  乘在「可见宽度归一」系数**之上**，所以它只改这一张建筑相对其它建筑的体量，
+     *  不影响归一化本身（`buildSize = 1` 与旧行为完全一致）。
+     *  🔴 与「抖动倍率」是两个独立因子：抖动只在自己那 0.24s 内非 1，两者相乘写进节点缩放。
+     */
+    readonly iconScale?: number;
     /**
      * 未解锁格在格心显示消耗条件（银币图标 + 数值），复用底条 Sprite 与文字节点。
      *
@@ -214,6 +225,13 @@ export class TerritoryStationView extends Component {
      */
     private iconBaseScale = 1;
     /**
+     * 建筑表 `buildSize` 的大小倍率（`render` 每帧从 `content.iconScale` 写入，缺省 1）。
+     *
+     *  乘进 {@link iconBaseScale}（`applyIconScale` 的入参），所以在抖动与归一化之外，
+     *  只表达「这个建筑本身该比标准大/小多少」。
+     */
+    private iconSizeScale = 1;
+    /**
      * 建筑生成抖动对缩放的**倍率**（x / y 分开）—— 需求要「先 Y 后 X」两段，所以不能合成一个数。
      *
      *  非抖动期恒 1（写出来的就是纯基准缩放）。曲线真源见 `core/hex/ShakePresentation`
@@ -230,6 +248,12 @@ export class TerritoryStationView extends Component {
      *  `presentation.now`，也没必要为了一个 0.24s 的抖动再引一条时钟。
      */
     private buildingShakeElapsed = -1;
+
+    /**
+     * 「新地块生成」期间整站乘透明度用的四个 `UIOpacity`（`Icon` / `CaptionBg` / `CaptionLabel` /
+     * `Badge`）。惰性创建：只有真播过生成动画的格子才会有，没播过的格子零开销。
+     */
+    private spawnOpacities: UIOpacity[] | null = null;
 
     /**
      * 绑一次点击（`TerritoryMapView` 在借出节点时调；起始格不传 `clickable`）。
@@ -271,6 +295,32 @@ export class TerritoryStationView extends Component {
         this.applyIconPlacement();
         this.applyCaptionPlacement();
         this.badgeLabel.node.setPosition(x + offsets.badge.x, y + offsets.badge.y, z + offsets.badge.z);
+    }
+
+    /**
+     * 整站统一透明度（`0 ~ 1`）—— 给「新地块生成」动画用（2026-10-22）。
+     *
+     * 为什么不能靠格节点上的 `UIOpacity`：这四个视觉节点在 `initialize` 里被挂到了
+     * **四个不同的层**（`StationIconLayer` / `CaptionLayer` / `TextLayer` / `BadgeLayer`），
+     * 都不在格节点底下 ⇒ 格节点淡多少都管不到它们。而层节点是**多格共享**的容器，
+     * 也不能在层上写透明度（会连累同层其它站点）。
+     * 所以只能一格一份：四个节点各自懒加一个 `UIOpacity`（一格最多 4 个，且只有
+     * 真正播过生成动画的格子才会有）。
+     *
+     * ⚠️ 与 `render` 的显隐（`active`）正交：不透明度管「淡」，`active` 管「有没有」，
+     *    两者互不覆盖，所以每秒一次的全量 `render` 不会把淡入状态顶掉。
+     */
+    setSpawnOpacity(value: number): void {
+        if (this.isDisposed) return;
+        const raw = Number.isFinite(value) ? value : 1;
+        const target = Math.round((raw > 1 ? 1 : raw < 0 ? 0 : raw) * 255);
+        const nodes = [this.iconSprite.node, this.captionSprite.node, this.captionLabel.node, this.badgeLabel.node];
+        if (!this.spawnOpacities) {
+            this.spawnOpacities = nodes.map((node) => node.getComponent(UIOpacity) ?? node.addComponent(UIOpacity));
+        }
+        for (const opacity of this.spawnOpacities) {
+            if (opacity.opacity !== target) opacity.opacity = target;
+        }
     }
 
     /**
@@ -322,7 +372,9 @@ export class TerritoryStationView extends Component {
         const canvasScaleX = nodeSize.width / canvas.width;
         const canvasScaleY = nodeSize.height / canvas.height;
         const visibleWidth = trimmed.width * canvasScaleX;
-        const scale = visibleWidth > 0 ? BUILDING_VISIBLE_WIDTH / visibleWidth : 1;
+        // 归一系数（所有建筑可见宽一致）× `buildSize`（表里「模型大小」，这张图本身的体量倍率）。
+        // 两者相乘：`buildSize = 1` 时与旧行为逐像素一致，>1 变大、<1 变小。
+        const scale = (visibleWidth > 0 ? BUILDING_VISIBLE_WIDTH / visibleWidth : 1) * this.iconSizeScale;
         // 抵消 trim 偏移：可见区中心 = 节点中心 + offset * canvasScale * k
         const shiftX = frame.offset.x * canvasScaleX * scale;
         const shiftY = frame.offset.y * canvasScaleY * scale;
@@ -528,6 +580,8 @@ export class TerritoryStationView extends Component {
         const isHidden = content.hidden === true;
         this.site = content.site;
         this.conditionMode = isCondition;
+        // `buildSize` 必须在 `applyIconPlacement` 之前写进来 —— 它是归一系数的第二个因子。
+        this.iconSizeScale = content.iconScale && content.iconScale > 0 ? content.iconScale : 1;
         this.setIcon(content.icon);
         if (this.iconSprite.node.active === isHidden) this.iconSprite.node.active = !isHidden;
         // 🔴 换帧后必须重算：不同建筑的 trim 偏移与画布尺寸都不同（见 applyIconPlacement），

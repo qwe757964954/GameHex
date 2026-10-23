@@ -5,6 +5,9 @@ import { ZCGameModel } from '../assets/script/app/zcds/model/ZCGameModel';
 import { loadPvpTables, type ZCPvpTables } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
 import { configureZCMap } from '../assets/script/app/zcds/model/ZCMapConfig';
 import { captureZCMatchConfig, type ZCMatchConfig, type ZCPveDefenceWave } from '../assets/script/app/zcds/model/ZCMatchConfig';
+import type { ZCHexState, ZCUnitState } from '../assets/script/app/zcds/model/ZCGameTypes';
+import type { ZCDeckCard } from '../assets/script/app/zcds/model/ZCCombatCatalog';
+import type { ZCUnitTargeting } from '../assets/script/app/zcds/model/systems/ZCUnitTargeting';
 
 function rows(name: string): Array<Record<string, unknown>> {
     const source = JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8')) as
@@ -159,4 +162,146 @@ test('territory defence settles victory after the final live monster and defeat 
     const defeat = new ZCGameModel(brokenBase, () => .1, config);
     assert.equal(defeat.snapshot.status, 'defeat');
     assert.match(defeat.snapshot.resultReason, /主城领地已失守/);
+});
+
+interface ICombatHarness {
+    damageWall(source: Pick<ZCUnitState, 'owner' | 'freeX' | 'freeY'>, wall: ZCHexState, damage: number): void;
+    damageBuilding(source: Pick<ZCUnitState, 'owner'>, building: ZCHexState, damage: number): void;
+    hasExposedWall(wall: ZCHexState): boolean;
+    spawnUnit(owner: ZCUnitState['owner'], card: ZCDeckCard, tier: number, hexId: number): ZCUnitState | null;
+    readonly unitTargeting: ZCUnitTargeting;
+}
+
+function waitingWaveConfig(): ZCMatchConfig {
+    return defenceConfig([
+        { waveId: 1, showAtSeconds: 999, cardId: '', monsterCount: 1, tier: 1, hpRate: 1, attackRate: 1 },
+    ]);
+}
+
+test('波次战斗敌方主城无敌：不扣血、不易主、不发拆城奖励或虚假伤害', () => {
+    const config = waitingWaveConfig();
+    const model = new ZCGameModel(null, () => .25, config);
+    const combat = model as unknown as ICombatHarness;
+    const home = model.snapshot.hexes[config.map.enemyHomeId];
+    Object.assign(home, { wallHp: 0 });
+    const before = JSON.stringify(model.exportSnapshot());
+    combat.damageBuilding({ owner: 'player' }, home, home.hp * 100);
+    assert.equal(JSON.stringify(model.exportSnapshot()), before);
+    assert.equal(model.damageStats.player.dealt, 0);
+    assert.equal(model.floatTexts.length, 0);
+});
+
+test('波次战斗敌方城墙无敌，连续攻击不破墙、不改缺口或伤害统计', () => {
+    const model = new ZCGameModel(null, () => .25, waitingWaveConfig());
+    const combat = model as unknown as ICombatHarness;
+    const wall = model.snapshot.hexes.find((hex) => hex.owner === 'enemy' && combat.hasExposedWall(hex));
+    assert.ok(wall, '需要一段实际可攻击的敌方外墙');
+    const before = JSON.stringify(wall);
+    const source = { owner: 'player' as const, freeX: 0, freeY: 0 };
+    combat.damageWall(source, wall, wall.wallHp * 100);
+    combat.damageWall(source, wall, wall.wallHp * 100);
+    assert.equal(JSON.stringify(wall), before);
+    assert.equal(model.damageStats.player.dealt, 0);
+    assert.equal(model.floatTexts.length, 0);
+});
+
+test('波次模式保留向敌方城墙集结和攻击新怪的索敌能力', () => {
+    const config = waitingWaveConfig();
+    const model = new ZCGameModel(null, () => .25, config);
+    const combat = model as unknown as ICombatHarness;
+    const wall = model.snapshot.hexes.find((hex) => hex.owner === 'enemy' && combat.hasExposedWall(hex));
+    const card = config.playerDeck.find((entry) => entry.unitId);
+    assert.ok(wall && card);
+    const soldier = combat.spawnUnit('player', card, 1, wall.id);
+    assert.ok(soldier);
+    const point = config.map.hexes[wall.id];
+    Object.assign(soldier, { freeX: point.x + 1, freeY: point.y });
+    combat.unitTargeting.acquire(soldier);
+    assert.equal(combat.unitTargeting.current(soldier)?.kind, 'wall');
+    const beforeHp = wall.wallHp;
+    for (let i = 0; i < 80; i++) model.tick(.05);
+    assert.equal(wall.wallHp, beforeHp, '等待下一波期间不能拆墙');
+    const monster = combat.spawnUnit('enemy', card, 1, wall.id);
+    assert.ok(monster);
+    Object.assign(monster, { freeX: soldier.freeX, freeY: soldier.freeY });
+    combat.unitTargeting.acquire(soldier);
+    assert.equal(combat.unitTargeting.current(soldier)?.id, monster.id);
+    assert.equal(combat.unitTargeting.current(soldier)?.kind, 'unit');
+});
+
+for (const structure of ['wall', 'building'] as const) {
+    for (const state of ['idle', 'waitAttack', 'attack', 'move'] as const) {
+        test(`波次新怪比${structure}远时，${state}状态及时离开建筑目标迎怪`, () => {
+            const config = waitingWaveConfig();
+            const model = new ZCGameModel(null, () => .25, config);
+            const combat = model as unknown as ICombatHarness;
+            const home = model.snapshot.hexes[config.map.enemyHomeId];
+            if (structure === 'building') Object.assign(home, { wallHp: 0 });
+            const card = config.playerDeck.find((entry) => entry.unitId);
+            assert.ok(card);
+            const soldier = combat.spawnUnit('player', card, 1, home.id);
+            assert.ok(soldier);
+            const point = config.map.hexes[home.id];
+            Object.assign(soldier, { freeX: point.x + 1, freeY: point.y });
+            combat.unitTargeting.acquire(soldier);
+            assert.equal(combat.unitTargeting.current(soldier)?.kind, structure);
+            Object.assign(soldier, { battleState: state, stateTime: 0, nextAttackAt: 10, waitUntil: 10 });
+            const monster = combat.spawnUnit('enemy', card, 1, home.id);
+            assert.ok(monster);
+            Object.assign(monster, { freeX: point.x + 350, freeY: point.y });
+            model.tick(.05);
+            assert.equal(soldier.targetUnitId, monster.id, '怪物比建筑远也必须优先');
+            assert.equal(soldier.targetWallHexId, null);
+            assert.equal(soldier.targetBuildingHexId, null);
+            assert.equal(soldier.battleState, 'move', '不等旧建筑攻击冷却结束才追怪');
+            Object.assign(monster, { battleState: 'dead', hp: 0 });
+            combat.unitTargeting.acquire(soldier);
+            assert.equal(combat.unitTargeting.current(soldier)?.kind, structure, '怪物清完恢复原有集结目标');
+        });
+    }
+}
+
+test('普通对战仍按距离索敌，不因波次优先规则放弃更近的城墙', () => {
+    const config = captureZCMatchConfig({ ...waitingWaveConfig(), pveDefence: undefined });
+    const model = new ZCGameModel(null, () => .25, config);
+    const combat = model as unknown as ICombatHarness;
+    const home = model.snapshot.hexes[config.map.enemyHomeId];
+    const card = config.playerDeck.find((entry) => entry.unitId);
+    assert.ok(card);
+    const soldier = combat.spawnUnit('player', card, 1, home.id);
+    const monster = combat.spawnUnit('enemy', card, 1, home.id);
+    assert.ok(soldier && monster);
+    const point = config.map.hexes[home.id];
+    Object.assign(soldier, { freeX: point.x + 1, freeY: point.y });
+    Object.assign(monster, { freeX: point.x + 350, freeY: point.y });
+    combat.unitTargeting.acquire(soldier);
+    assert.equal(combat.unitTargeting.current(soldier)?.kind, 'wall');
+});
+
+test('波次模式我方建筑仍可受伤，普通对战敌方主城和城墙仍可被拆毁', () => {
+    const config = waitingWaveConfig();
+    const defence = new ZCGameModel(null, () => .25, config);
+    const defenceCombat = defence as unknown as ICombatHarness;
+    const playerWall = defence.snapshot.hexes.find((hex) => hex.owner === 'player' && defenceCombat.hasExposedWall(hex));
+    assert.ok(playerWall);
+    const playerWallHp = playerWall.wallHp;
+    defenceCombat.damageWall({ owner: 'enemy', freeX: 0, freeY: 0 }, playerWall, 1);
+    assert.equal(playerWall.wallHp, playerWallHp - 1);
+    const playerHome = defence.snapshot.hexes[config.map.playerHomeId];
+    Object.assign(playerHome, { wallHp: 0 });
+    const playerHp = playerHome.hp;
+    (defence as unknown as ICombatHarness).damageBuilding({ owner: 'enemy' }, playerHome, 1);
+    assert.equal(playerHome.hp, playerHp - 1);
+
+    const normal = new ZCGameModel(null, () => .25, captureZCMatchConfig({ ...config, pveDefence: undefined }));
+    const combat = normal as unknown as ICombatHarness;
+    const wall = normal.snapshot.hexes.find((hex) => hex.owner === 'enemy' && combat.hasExposedWall(hex));
+    assert.ok(wall);
+    combat.damageWall({ owner: 'player', freeX: 0, freeY: 0 }, wall, wall.wallHp * 2);
+    assert.equal(wall.wallHp, 0);
+    const home = normal.snapshot.hexes[config.map.enemyHomeId];
+    Object.assign(home, { wallHp: 0 });
+    combat.damageBuilding({ owner: 'player' }, home, home.hp * 2);
+    assert.equal(home.building, 'none');
+    assert.equal(home.owner, 'player');
 });

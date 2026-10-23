@@ -138,6 +138,15 @@ export const TERRITORY_BUILDING_ART_ROOT = `${ART_ROOT}/territory/buildings`;
 /** 章节领地页面大图：背景等根目录资源。 */
 export const TERRITORY_ART_ROOT = `${ART_ROOT}/territory`;
 
+/**
+ * 章节宝箱（开箱表演用）。
+ *
+ *  ⚠️ 与 `TERRITORY_BUILDING_ART_ROOT` 分开：宝箱是**表演道具**，不是地图建筑 ——
+ *  早先借用「固定资源」站点那张建筑图当箱子，切开后接缝落在建筑屋顶上（实机很难看），
+ *  现在改用独立的开盖宝箱图（`zw_0005`）。
+ */
+export const TERRITORY_CHEST_ART_ROOT = `${ART_ROOT}/territory/chest`;
+
 /** 章节领地专用 HUD：标题框与章节按钮。 */
 export const TERRITORY_UI_ART_ROOT = `${ART_ROOT}/territory/ui`;
 /**

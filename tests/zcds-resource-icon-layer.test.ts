@@ -39,6 +39,9 @@ function stubHexView(load: (name: string) => any, cc: any, bar: () => any): any 
     const view = new (load('./ZCHexView').ZCHexView)();
     const sprite = () => ({ node: new cc.Node(), enabled: true, spriteFrame: null, color: null });
     for (const key of ['tileSprite', 'buildingSprite', 'iconSprite', 'priceIcon']) view[key] = sprite();
+    // groundGlow 在 renderTerrain 里被无条件 applyGroundGlowTint（读 color.r/g/b/a），
+    // 桩里缺它会让用例在到达资源图标抬层断言前就空指针崩掉。
+    view.groundGlow = { node: new cc.Node(), enabled: true, spriteFrame: null, color: new cc.Color(255, 255, 255, 255) };
     for (const key of ['tileFrame', 'mineIconFrame', 'barracksIconFrame', 'mysteryFrame',
         'mineFrame', 'ruinsFrame', 'enemyDevelopFrame',
         'goldResourceFrame', 'mineResourceFrame', 'chestResourceFrame']) view[key] = { name: key };
@@ -197,4 +200,111 @@ test('地块类型图标落点下移：压在底部金币行上方，不再停�
     const oldGap = (BUILDING_LAYER_Y + OLD_TILE_ICON_Y) - (BUILDING_LAYER_Y + PRICE_ICON_Y);
     assert.ok(gap < oldGap, `间距要收窄：新 ${gap} vs 旧 ${oldGap}`);
     assert.ok(near(gap, TILE_ICON_Y - PRICE_ICON_Y), `间距应等于落点差，实际 ${gap}`);
+});
+
+/** 中立神器充能点（`artifact_charge`）presentation：图标位走 Spine 而非静态 PNG。 */
+function artifactPresentation(): any {
+    return {
+        state: {
+            id: 7, owner: 'neutral', state: 'occupiable', building: 'none', tier: 0,
+            hp: 0, maxHp: 0, wallHp: 0, wallMaxHp: 0, wallBreachedEdge: null,
+            developmentCost: 25, tileType: null, developmentResolved: false,
+            neutralResourceId: 'artifact_charge', cardId: null,
+        },
+        canDevelop: false,
+        playerGold: 0,
+        cooldown: null,
+        now: 0,
+    };
+}
+
+/**
+ * 给桩视图挂上神器点 Spine 容器（模拟 prefab 已绑的 `ArtifactSpineRoot` + 两个子 `sp.Skeleton`）。
+ * 返回容器 / 两个子节点与 `setAnimation` 调用记录，便于断言抬层与播放。
+ */
+function attachArtifactSpine(view: any, cc: any) {
+    const root = new cc.Node('ArtifactSpineRoot');
+    const hexNode = new cc.Node('ArtifactHexSpine');
+    const questionNode = new cc.Node('ArtifactQuestionSpine');
+    root.addChild(hexNode);
+    root.addChild(questionNode);
+    root.active = false;
+    const played: Array<{ who: string; name: string; track: number; loop: boolean }> = [];
+    const makeSkeleton = (who: string, node: any) => ({
+        node,
+        // 模拟编辑器外的初始态：序列化默认动画名还没同步进来，由视图在 show 时主动 setAnimation 兜底。
+        animation: '',
+        setAnimation: (track: number, name: string, loop: boolean) => { played.push({ who, name, track, loop }); },
+    });
+    view.artifactSpineRoot = root;
+    view.artifactHexSpine = makeSkeleton('hex', hexNode);
+    view.artifactQuestionSpine = makeSkeleton('question', questionNode);
+    view.buildingLayer.addChild(root);
+    return { root, hexNode, questionNode, played };
+}
+
+test('神器点：Spine 容器与资源图标同口径抬到 ResourceLayer，坐标补偿到格心，并播放两段循环动画', () => {
+    const { load, cc, bar } = loadViews();
+    const view = stubHexView(load, cc, bar);
+    const spine = attachArtifactSpine(view, cc);
+    const layer = new cc.Node('ResourceLayer');
+    view.setResourceIconLayer(layer);
+
+    view.render(artifactPresentation());
+
+    assert.equal(view.iconSprite.spriteFrame, null, '神器点走 Spine ⇒ 静态神器图标不显示');
+    assert.equal(spine.root.parent, layer,
+        'Spine 容器必须抬到 ResourceLayer（浮动问号 / 光晕超出格子顶面，留在格节点会被邻格整图切掉）');
+    assert.equal(spine.root.active, true, '神器点 Spine 容器要显示');
+    // 容器落点恒为 RESOURCE_ICON_POS (0,-2.342)，抬层后补「格心 + BuildingLayer 偏移」。
+    assert.ok(near(spine.root.position.x, 300), `容器 x 要补格心，实际 ${spine.root.position.x}`);
+    assert.ok(near(spine.root.position.y, 200 + BUILDING_LAYER_Y - 2.342),
+        `容器 y 要补格心与 BuildingLayer 偏移，实际 ${spine.root.position.y}`);
+    // 六边形底播 animation、问号播 ui_indicatorNPC，均循环。
+    assert.deepEqual(spine.played.map((p) => [p.who, p.name, p.track, p.loop]),
+        [['hex', 'animation', 0, true], ['question', 'ui_indicatorNPC', 0, true]]);
+});
+
+test('神器点切回地块类型格：Spine 容器收回 BuildingLayer 并隐藏', () => {
+    const { load, cc, bar } = loadViews();
+    const view = stubHexView(load, cc, bar);
+    const spine = attachArtifactSpine(view, cc);
+    const layer = new cc.Node('ResourceLayer');
+    view.setResourceIconLayer(layer);
+    view.render(artifactPresentation());
+    assert.equal(spine.root.parent, layer, '判据前提：神器点这一轮已抬层');
+
+    view.render(tileTypePresentation());
+
+    assert.equal(spine.root.parent, view.buildingLayer, '不再是神器点 ⇒ 容器收回 BuildingLayer');
+    assert.equal(spine.root.active, false, '容器必须隐藏，对象池复用时不残留上一局的问号');
+});
+
+test('对象池复用：initialize 把抬上去的 Spine 容器无条件收回 BuildingLayer 并隐藏', () => {
+    const { load, cc, bar } = loadViews();
+    const view = stubHexView(load, cc, bar);
+    const spine = attachArtifactSpine(view, cc);
+    const layer = new cc.Node('ResourceLayer');
+    view.setResourceIconLayer(layer);
+    view.render(artifactPresentation());
+    assert.equal(spine.root.parent, layer, '判据前提：神器点这一轮已抬层');
+
+    // initialize 时 resourceIconLayer 尚未注入，不能指望 setResourceIconRaised(false) 收。
+    view.initialize(() => {});
+
+    assert.equal(spine.root.parent, view.buildingLayer,
+        '上一局抬上去的 Spine 容器不能跟着复用回来的格子继续飘在 ResourceLayer');
+    assert.equal(spine.root.active, false);
+});
+
+test('prefab 未绑 Spine（artifactHexSpine 为 null）：神器点回退静态图标/文字兜底，不抛错', () => {
+    const { load, cc, bar } = loadViews();
+    const view = stubHexView(load, cc, bar);
+    // 刻意不挂任何 artifactSpine* —— 模拟旧 prefab / 未绑定引用。
+    assert.equal(view.artifactSpineRoot, null);
+    assert.equal(view.artifactHexSpine, null);
+
+    assert.doesNotThrow(() => view.render(artifactPresentation()));
+    // 不抬层（没 Spine 且无静态神器帧 ⇒ resourceFrame 为 null），容器引用仍为空。
+    assert.equal(view.artifactSpineRoot, null);
 });

@@ -1,0 +1,174 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { runInNewContext } from 'node:vm';
+import test from 'node:test';
+import ts from 'typescript';
+import * as geometry from '../assets/script/app/bigmap/view/BigMapWorldLayout';
+import * as campModel from '../assets/script/app/bigmap/model/BigMapCampInfo';
+import { BIGMAP_CAMP_REFRESH_SECONDS } from '../assets/script/app/bigmap/application/BigMapCampRepository';
+
+function loadModule(path: string, require: (name: string) => unknown, globals: object = {}) {
+    const source = readFileSync(path, 'utf8');
+    const code = ts.transpileModule(source, { compilerOptions: {
+        target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, experimentalDecorators: true,
+    } }).outputText;
+    const exports: Record<string, unknown> = {};
+    runInNewContext(code, { exports, require, ...globals });
+    return exports;
+}
+
+test('真实 GameNet 适配器发送两种请求及 campIds，无连接与发送失败均返回空', async () => {
+    class RequestMsg {
+        constructor(public cmdReqMsg: object, public caller: unknown, public fCallback: (rsp: unknown) => void) {}
+    }
+    const requests = loadModule('assets/script/app/bigmap/application/RequestBigMapCampMsg.ts', () => ({ RequestMsg }));
+    const sent: { name: string; ids: number[]; loading: boolean }[] = [];
+    const net = { isConnected: true, ok: true,
+        async send(request: RequestMsg & { getReqMsgProtoName(): string }, loading: boolean) {
+            sent.push({ name: request.getReqMsgProtoName(), ids: Array.from((request.cmdReqMsg as { campIds: number[] }).campIds), loading });
+            request.fCallback({ infos: [{ campId: 101, opType: 1, state: 2 }] });
+            return this.ok;
+        },
+    };
+    const exports = loadModule('assets/script/app/bigmap/application/GameNetBigMapCampGateway.ts', (name) =>
+        name.endsWith('/GameNet') ? { GameNet: { instance: net } } : requests);
+    const Gateway = exports.GameNetBigMapCampGateway as new () => {
+        fetchSimple(ids: number[]): Promise<unknown>; fetchDetail(ids: number[]): Promise<unknown>;
+    };
+    const gateway = new Gateway();
+    assert.ok(await gateway.fetchSimple([101, 102]));
+    assert.ok(await gateway.fetchDetail([101]));
+    assert.deepEqual(sent, [
+        { name: 'CmdSlgCampSimpleInfoReqMsg', ids: [101, 102], loading: false },
+        { name: 'CmdSlgCampInfoReqMsg', ids: [101], loading: false },
+    ]);
+    net.isConnected = false;
+    assert.equal(await gateway.fetchSimple([101]), null);
+    assert.equal(await gateway.fetchDetail([101]), null);
+    assert.equal(sent.length, 2);
+    net.isConnected = true;
+    net.ok = false;
+    assert.equal(await gateway.fetchDetail([101]), null);
+});
+
+function makeWorldView() {
+    const timers = new Map<number, () => void>();
+    let timerId = 0;
+    const colors = { campOccupied: { color: 'red' }, campUnoccupied: { color: 'yellow' }, locked: { color: 'gray' } };
+    class Color {}
+    class Component {
+        isValid = true;
+        node = { activeInHierarchy: true };
+        scheduled: (() => void) | null = null;
+        schedule(callback: () => void) { this.scheduled = callback; }
+        unschedule() { this.scheduled = null; }
+    }
+    const exports = loadModule('assets/script/app/bigmap/view/BigMapWorldView.ts', (name) => {
+        if (name === 'cc') return { _decorator: { ccclass: () => (value: unknown) => value, property: () => () => undefined }, Color, Component };
+        if (name === './BigMapWorldLayout') return geometry;
+        if (name === './BigMapTheme') return { BIGMAP_COLORS: colors };
+        if (name.endsWith('/BigMapCampRepository')) return { BIGMAP_CAMP_REFRESH_SECONDS };
+        return {};
+    }, {
+        setTimeout: (callback: () => void) => { const id = ++timerId; timers.set(id, callback); return id; },
+        clearTimeout: (id: number) => timers.delete(id),
+    });
+    interface IMarker { kind: string; id: number; node: { active: boolean; position: { x: number; y: number } }; icon: object }
+    interface IView extends Component {
+        presenter: object; viewportTransform: object; content: object; markers: IMarker[];
+        markerLayer: object; applyMarker: (...args: unknown[]) => void;
+        applyCamera(scale: number, x: number, y: number): void; refresh(): void;
+        onEnable(): void; onDisable(): void; onDestroy(): void;
+    }
+    const View = exports.BigMapWorldView as new () => IView;
+    const view = new View();
+    view.viewportTransform = { width: 200, height: 200 };
+    view.content = { position: { x: 0, y: 0 }, setScale() {}, setPosition(x: number, y: number) { this.position = { x, y }; } };
+    view.markers = [
+        { kind: 'city', id: 101, node: { active: true, position: { x: 0, y: 0 } }, icon: {} },
+        { kind: 'city', id: 102, node: { active: true, position: { x: 2000, y: 0 } }, icon: {} },
+        { kind: 'monster', id: 7, node: { active: true, position: { x: 0, y: 0 } }, icon: {} },
+    ];
+    return { view, timers, colors, flush: () => {
+        const callbacks = [...timers.values()]; timers.clear(); callbacks.forEach((callback) => callback());
+    } };
+}
+
+test('相机变化合并查询，只传实际可见据点；停用地图取消定时刷新', () => {
+    const h = makeWorldView();
+    const calls: number[][] = [];
+    h.view.presenter = { world: {}, refreshVisibleCamps: (ids: number[]) => { calls.push(Array.from(ids)); } };
+    h.view.onEnable();
+    h.view.applyCamera(1, 0, 0);
+    h.view.applyCamera(1, 1, 0);
+    assert.equal(h.timers.size, 1);
+    h.flush();
+    assert.deepEqual(calls, [[101]]);
+    h.view.applyCamera(1, -2000, 0);
+    h.flush();
+    assert.deepEqual(calls, [[101], [102]]);
+    h.view.applyCamera(1, 0, 0);
+    h.view.onDisable();
+    assert.equal(h.timers.size, 0);
+    assert.equal(h.view.scheduled, null);
+    h.view.onDestroy();
+});
+
+test('据点角标按 opType 红黄显示，状态相同时变更占领仍会重绘', () => {
+    const h = makeWorldView();
+    let opType = 0;
+    let state = 1;
+    const tints: unknown[] = [];
+    h.view.markers = [h.view.markers[0]];
+    h.view.presenter = { world: { monsters: [] }, territoryRegions: () => [],
+        allCityViews: () => [{ cityId: 101, name: '营地', state: 'open', level: 1, isServerCamp: true,
+            campInfo: { campId: 101, opType, state } }],
+    };
+    h.view.markerLayer = { clear() {} };
+    h.view.applyMarker = (_marker, _frame, _title, tint) => { tints.push(tint); };
+    h.view.refresh();
+    assert.equal(tints[0], h.colors.campUnoccupied);
+    h.view.refresh();
+    assert.equal(tints.length, 1);
+    opType = 1;
+    h.view.refresh();
+    assert.equal(tints[1], h.colors.campOccupied);
+    state = 3;
+    h.view.refresh();
+    assert.equal(tints[2], h.colors.campOccupied, '结算中不改变占领颜色');
+});
+
+test('点击据点调用详情入口，弹窗显示两种独立状态，保留定位操作', () => {
+    class Component {}
+    const exports = loadModule('assets/script/app/bigmap/view/BigMapPage.ts', (name) => {
+        if (name === 'cc') return { _decorator: { ccclass: () => (value: unknown) => value }, Component };
+        if (name.endsWith('/ResourceScope')) return { ResourceScope: class {} };
+        if (name.endsWith('/BigMapCampInfo')) return campModel;
+        return {};
+    });
+    interface IPage {
+        presenter: object; worldView: object; infoThumbnail: object; infoBody: { string: string };
+        infoTitle: object; primaryButton: { node: { active: boolean } }; secondaryButton: object;
+        setInfoVisible(value: boolean): void; refreshInfo(): void; onWorldTap(hexId: number): void;
+    }
+    const Page = exports.BigMapPage as new () => IPage;
+    const page = new Page();
+    Object.defineProperty(page, 'size', { value: { width: 500, height: 1000 } });
+    const calls: number[] = [];
+    page.presenter = { cityView: () => ({ name: '营地', level: 1, desc: '简介', isServerCamp: true,
+        campInfo: { campId: 101, opType: 1, state: 3 }, campDetailStatus: 'ready' }),
+        refreshCampDetail: (id: number) => { calls.push(id); },
+    };
+    page.worldView = { occupantAt: () => ({ kind: 'city', cityId: 101 }) };
+    page.infoThumbnail = { node: { active: false } };
+    page.infoTitle = {};
+    page.infoBody = { string: '' };
+    page.primaryButton = { node: { active: true } };
+    page.secondaryButton = { node: { active: true }, setText() {} };
+    page.setInfoVisible = () => undefined;
+    page.onWorldTap(1);
+    assert.deepEqual(calls, [101]);
+    assert.match(page.infoBody.string, /占领状态：已占领/);
+    assert.match(page.infoBody.string, /据点状态：结算中/);
+    assert.equal(page.primaryButton.node.active, false);
+});

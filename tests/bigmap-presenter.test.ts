@@ -341,9 +341,14 @@ test('白天 tick 不出快照（09:00~22:00 之间）', () => {
 });
 
 test('建造队列靠货币解锁：第一次成功、第二次货币不足', () => {
-    const { presenter } = makeHarness(3);
+    const resources = new Map(config.resources);
+    const coin = resources.get('coin');
+    assert.ok(coin);
+    resources.set('coin', { ...coin, startAmount: config.queue.queueUnlockCost2 });
+    const { presenter } = makeHarness(3, createMemoryBigMapStorage(), CLOCK_PREPARE, null,
+        { config: { ...config, resources } });
     const startCoin = presenter.base.res.coin;
-    assert.equal(startCoin, 200, '新档初始货币 200');
+    assert.equal(startCoin, config.queue.queueUnlockCost2, '测试预算只够解锁下一条队列');
     assert.equal(presenter.queueUnlockInfo().current, config.queue.initBuildQueue);
     assert.equal(presenter.queueUnlockInfo().canUnlock, true);
 
@@ -353,7 +358,7 @@ test('建造队列靠货币解锁：第一次成功、第二次货币不足', ()
     assert.equal(presenter.base.queueUnlocked, config.queue.initBuildQueue + 1);
     assert.equal(presenter.base.res.coin, startCoin - config.queue.queueUnlockCost2);
 
-    // 第 3 条要 360，此时只剩 80 ⇒ 拒绝但要说清原因
+    // 首次费用全部扣完，再解锁下一条必须拒绝且不修改状态。
     const info = presenter.queueUnlockInfo();
     assert.equal(info.current, config.queue.initBuildQueue + 1);
     assert.equal(info.canUnlock, false);
@@ -365,7 +370,7 @@ test('建造队列靠货币解锁：第一次成功、第二次货币不足', ()
 });
 
 test('野怪：可打、击杀后进 CD，视图给出倒计时', () => {
-    const { presenter, clock } = makeHarness(3);
+    const { presenter, clock } = makeHarness(3, undefined, undefined, null, { config: loadBigMapConfig(true) });
     const monster = presenter.world.monsters.find((item) => item.level === 1)!;
     const view = presenter.monsterView(monster.instanceId)!;
     assert.equal(view.unlocked, true);

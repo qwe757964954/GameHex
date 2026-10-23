@@ -161,8 +161,44 @@ export function territoryGainFx(elapsed: number): ITerritoryGainFx | null {
 // ⚠️ 与上面那条「升起曲线」是**两条独立的时间线**：升起的飘字 1.15s、喷发粒子最长 1.54s，
 //   两者同时开始、各自结束（喷发只负责「喷出来的图标」，飘字负责「+N 读数」）。
 
-/** 一次喷发吐出多少个图标（需求口径：12）。 */
+/** 一次喷发吐出多少个图标（需求口径：12；**满喷**的上限，实际个数按奖励量分级）。 */
 export const TERRITORY_GAIN_BURST_COUNT = 12;
+
+/**
+ * 粒子数**按奖励总量分级**（需求 2026-10-22）：
+ *
+ *   > 「沿用宝箱获得资源中级别的粒子喷射动画，**减少粒子个数来区分奖励**，
+ *   >   资源奖励数**小于 50 时粒子数量很稀疏**」
+ *
+ * | 奖励总量 | 粒子数 | 读感 |
+ * | --- | --- | --- |
+ * | `< 50` | 5（`SPARSE`） | 稀疏 —— 一眼看出是小奖励 |
+ * | `50 ~ 200`（含） | 9（`MEDIUM`） | 中等 |
+ * | `> 200` | 12（满喷 `COUNT`） | 密 —— 大奖励才给满 |
+ *
+ * ⚠️ 分级只看**总量**，与「哪个资源」无关（与宝箱分档同一口径：不加权、不按种类）。
+ * ⚠️ 稀疏档也**不是 0**：一次点击必须有反馈，5 颗已经能读成「喷了一下」，0 颗等于没做。
+ */
+export const TERRITORY_GAIN_BURST_COUNT_SPARSE = 5;
+export const TERRITORY_GAIN_BURST_COUNT_MEDIUM = 9;
+/** 稀疏档的上界（不含）：总量 `< 50` ⇒ 稀疏。 */
+export const TERRITORY_GAIN_BURST_SPARSE_BELOW = 50;
+/** 中档的上界（含）：总量 `> 200` ⇒ 满喷。 */
+export const TERRITORY_GAIN_BURST_DENSE_ABOVE = 200;
+
+/**
+ * 奖励总量 → 喷发粒子数（见上面那张表）。
+ *
+ * 非有限值（`NaN` / `±Infinity`）按**稀疏**处理：脏数据最多是"喷得少"，
+ * 绝不能因为一个 NaN 喷满屏。负数 / 0 同样是稀疏档。
+ */
+export function territoryBurstCountForTotal(total: number): number {
+    if (!Number.isFinite(total) || total < TERRITORY_GAIN_BURST_SPARSE_BELOW) {
+        return TERRITORY_GAIN_BURST_COUNT_SPARSE;
+    }
+    if (total <= TERRITORY_GAIN_BURST_DENSE_ABOVE) return TERRITORY_GAIN_BURST_COUNT_MEDIUM;
+    return TERRITORY_GAIN_BURST_COUNT;
+}
 
 /**
  * 倒锥的**半顶角**（度）：出射方向与屏幕竖直轴的夹角上限（需求默认 26°）。
@@ -221,10 +257,20 @@ export const TERRITORY_GAIN_BURST_FLIP_MAX_HZ = 4;
  *
  *  只是给视图兜底用的硬上限（防止某颗因为脏数据一直不消失）；实际收尾更早 ——
  *  视图逐帧看「还有没有活着的粒子」。
+ *
+ *  ⚠️ 粒子数现在是**可变**的（见 `territoryBurstCountForTotal`），所以真正的上限
+ *  要按本次实际个数算：`territoryBurstTotalSeconds(count)`。下面这个常量只是
+ *  **满喷（12 颗）**时的值，留给默认参数与单测用。
  */
-export const TERRITORY_GAIN_BURST_TOTAL_SECONDS =
-    (TERRITORY_GAIN_BURST_COUNT - 1) * TERRITORY_GAIN_BURST_STAGGER_SECONDS
+export const TERRITORY_GAIN_BURST_TOTAL_SECONDS = (TERRITORY_GAIN_BURST_COUNT - 1) * TERRITORY_GAIN_BURST_STAGGER_SECONDS
     + TERRITORY_GAIN_BURST_LIFE_SECONDS * (1 + TERRITORY_GAIN_BURST_LIFE_JITTER);
+
+/** 按**本次粒子数**算整喷上限（粒子少 ⇒ 错峰铺开的尾巴也短）。 */
+export function territoryBurstTotalSeconds(count: number = TERRITORY_GAIN_BURST_COUNT): number {
+    const safe = Number.isFinite(count) ? Math.max(1, Math.floor(count)) : TERRITORY_GAIN_BURST_COUNT;
+    return (safe - 1) * TERRITORY_GAIN_BURST_STAGGER_SECONDS
+        + TERRITORY_GAIN_BURST_LIFE_SECONDS * (1 + TERRITORY_GAIN_BURST_LIFE_JITTER);
+}
 
 /**
  * 确定性哈希 → `[0, 1)`：给「同一 index 每次喷发长得不一样」的抖动取值用。
@@ -267,9 +313,15 @@ export interface ITerritoryBurstLaunch {
  * 第 `index` 颗粒子的出射参数（确定性：同一 `(seed, index)` 恒等）。
  *
  *  `index` 越界 / 非整数 ⇒ `null`（调用方少配了粒子引用时，多余那颗就该「不存在」）。
+ *
+ *  @param count 本次喷发的粒子数（默认满喷 12）—— 由 `territoryBurstCountForTotal` 按奖励量给。
  */
-export function territoryBurstLaunch(seed: number, index: number): ITerritoryBurstLaunch | null {
-    if (!Number.isInteger(index) || index < 0 || index >= TERRITORY_GAIN_BURST_COUNT) return null;
+export function territoryBurstLaunch(
+    seed: number,
+    index: number,
+    count: number = TERRITORY_GAIN_BURST_COUNT,
+): ITerritoryBurstLaunch | null {
+    if (!Number.isInteger(index) || index < 0 || index >= count) return null;
     const halfAngle = (TERRITORY_GAIN_BURST_HALF_ANGLE_DEG * Math.PI) / 180;
     // 需求原式：`phi = random(-1, 1) * coneHalfAngle`
     const phi = (burstNoise(seed, index, 0) * 2 - 1) * halfAngle;
@@ -330,9 +382,10 @@ export function territoryBurstParticle(
     seed: number,
     index: number,
     elapsed: number,
+    count: number = TERRITORY_GAIN_BURST_COUNT,
 ): ITerritoryBurstParticle | null {
     if (!Number.isFinite(elapsed) || elapsed < 0) return null;
-    const launch = territoryBurstLaunch(seed, index);
+    const launch = territoryBurstLaunch(seed, index, count);
     if (!launch) return null;
 
     const local = elapsed - index * TERRITORY_GAIN_BURST_STAGGER_SECONDS;

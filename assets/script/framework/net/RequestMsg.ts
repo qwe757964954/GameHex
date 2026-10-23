@@ -10,6 +10,10 @@ export class RequestMsg<CmdReqMsg, CmdRspMsg> extends ScriptObject {
     public fErrorCallback: Function;
     /**请求协议 */
     public cmdReqMsg: CmdReqMsg;
+    /** 非幂等写操作可关闭超时重发及重连恢复；默认保留旧行为。 */
+    public allowRetry = true;
+    /** 实际出队前检查请求所属会话与有效期。 */
+    public canSend: (() => boolean) | null = null;
     constructor(cmdReqMsg: CmdReqMsg, caller?: destroyable, fCallback?: (rsp: CmdRspMsg) => void, fErrorCallback?: Function) {
         super();
         this.cmdReqMsg = cmdReqMsg
@@ -22,6 +26,7 @@ export class RequestMsg<CmdReqMsg, CmdRspMsg> extends ScriptObject {
         this.fCallback = null;
         this.fErrorCallback = null;
         this.cmdReqMsg = null;
+        this.canSend = null;
         super.destroy();
     }
     getReqMsgProtoName(): string {

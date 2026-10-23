@@ -10332,6 +10332,15 @@
                         }
                       }
                     },
+                    "CmdSlgMonsterBattleResultInfo": {
+                      "fields": {
+                        "cmdGoods": {
+                          "rule": "repeated",
+                          "type": "CmdGoods",
+                          "id": 1
+                        }
+                      }
+                    },
                     "CmdBattleFrameInfo": {
                       "fields": {
                         "frameId": {
@@ -10658,6 +10667,336 @@
                         }
                       }
                     },
+                    "SlgGameActionInfo": {
+                      "fields": {
+                        "nextRevertTime": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 1
+                        }
+                      }
+                    },
+                    "SlgCampSimpleInfo": {
+                      "fields": {
+                        "campId": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 1
+                        },
+                        "opType": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 2
+                        },
+                        "state": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 3
+                        }
+                      }
+                    },
+                    "SlgCampInfo": {
+                      "fields": {
+                        "campId": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 1
+                        },
+                        "opType": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 2
+                        },
+                        "state": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 3
+                        }
+                      }
+                    },
+                    "SlgBuildInfo": {
+                      "fields": {
+                        "buildInstId": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 1
+                        },
+                        "buildingId": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 2
+                        },
+                        "position": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 3
+                        },
+                        "level": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 4
+                        },
+                        "state": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 5
+                        },
+                        "finishTime": {
+                          "type": "uint32",
+                          "id": 6
+                        }
+                      }
+                    },
+                    "SlgBuildQueueInfo": {
+                      "fields": {
+                        "queueId": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 1
+                        },
+                        "type": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 2
+                        },
+                        "buildInstId": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 3
+                        }
+                      }
+                    },
+                    "SlgBuildGameInfo": {
+                      "fields": {
+                        "builds": {
+                          "rule": "repeated",
+                          "type": "SlgBuildInfo",
+                          "id": 1
+                        },
+                        "queues": {
+                          "rule": "repeated",
+                          "type": "SlgBuildQueueInfo",
+                          "id": 2
+                        },
+                        "unlockQueue": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 3
+                        }
+                      }
+                    },
+                    "CmdSlgCampSimpleInfoReqMsg": {
+                      "fields": {
+                        "campIds": {
+                          "rule": "repeated",
+                          "type": "uint32",
+                          "id": 1
+                        }
+                      }
+                    },
+                    "CmdSlgCampSimpleInfoRspMsg": {
+                      "fields": {
+                        "infos": {
+                          "rule": "repeated",
+                          "type": "SlgCampSimpleInfo",
+                          "id": 1
+                        }
+                      }
+                    },
+                    "CmdSlgCampInfoReqMsg": {
+                      "fields": {
+                        "campIds": {
+                          "rule": "repeated",
+                          "type": "uint32",
+                          "id": 1
+                        }
+                      }
+                    },
+                    "CmdSlgCampInfoRspMsg": {
+                      "fields": {
+                        "infos": {
+                          "rule": "repeated",
+                          "type": "SlgCampInfo",
+                          "id": 1
+                        }
+                      }
+                    },
+                    "CmdSlgActionUpdateReqMsg": {
+                      "fields": {}
+                    },
+                    "CmdSlgActionUpdateRspMsg": {
+                      "fields": {
+                        "info": {
+                          "rule": "required",
+                          "type": "SlgGameActionInfo",
+                          "id": 1
+                        }
+                      }
+                    },
+                    "CmdSlgGameInfoReqMsg": {
+                      "fields": {}
+                    },
+                    "CmdSlgGameInfoRspMsg": {
+                      "fields": {}
+                    },
+                    "CmdSlgGameInfoBroMsg": {
+                      "fields": {}
+                    },
+                    "CmdSlgBuildInfoReqMsg": {
+                      "fields": {}
+                    },
+                    "CmdSlgBuildReqMsg": {
+                      "fields": {
+                        "buildingId": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 1
+                        },
+                        "position": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 2
+                        },
+                        "instant": {
+                          "type": "uint32",
+                          "id": 3
+                        }
+                      }
+                    },
+                    "CmdSlgBuildRspMsg": {
+                      "fields": {
+                        "build": {
+                          "rule": "required",
+                          "type": "SlgBuildInfo",
+                          "id": 1
+                        },
+                        "queue": {
+                          "rule": "required",
+                          "type": "SlgBuildQueueInfo",
+                          "id": 2
+                        }
+                      }
+                    },
+                    "CmdSlgBuildUpgradeReqMsg": {
+                      "fields": {
+                        "buildInstId": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 1
+                        },
+                        "instant": {
+                          "type": "uint32",
+                          "id": 2
+                        }
+                      }
+                    },
+                    "CmdSlgBuildUpgradeRspMsg": {
+                      "fields": {
+                        "build": {
+                          "rule": "required",
+                          "type": "SlgBuildInfo",
+                          "id": 1
+                        },
+                        "queue": {
+                          "rule": "required",
+                          "type": "SlgBuildQueueInfo",
+                          "id": 2
+                        }
+                      }
+                    },
+                    "CmdSlgBuildCancelReqMsg": {
+                      "fields": {
+                        "buildInstId": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 1
+                        }
+                      }
+                    },
+                    "CmdSlgBuildCancelRspMsg": {
+                      "fields": {
+                        "buildInstId": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 1
+                        },
+                        "build": {
+                          "type": "SlgBuildInfo",
+                          "id": 2
+                        },
+                        "queue": {
+                          "type": "SlgBuildQueueInfo",
+                          "id": 3
+                        }
+                      }
+                    },
+                    "CmdSlgBuildMoveReqMsg": {
+                      "fields": {
+                        "buildInstId": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 1
+                        },
+                        "position": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 2
+                        }
+                      }
+                    },
+                    "CmdSlgBuildMoveRspMsg": {
+                      "fields": {
+                        "build": {
+                          "rule": "required",
+                          "type": "SlgBuildInfo",
+                          "id": 1
+                        }
+                      }
+                    },
+                    "CmdSlgBuildCollectReqMsg": {
+                      "fields": {
+                        "buildInstIds": {
+                          "rule": "repeated",
+                          "type": "uint32",
+                          "id": 1
+                        }
+                      }
+                    },
+                    "CmdSlgBuildCollectRspMsg": {
+                      "fields": {
+                        "builds": {
+                          "rule": "repeated",
+                          "type": "SlgBuildInfo",
+                          "id": 1
+                        },
+                        "tlCmdGoods": {
+                          "rule": "repeated",
+                          "type": "CmdGoods",
+                          "id": 2
+                        }
+                      }
+                    },
+                    "CmdSlgBuildUnlockQueueReqMsg": {
+                      "fields": {
+                        "queueId": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 1
+                        }
+                      }
+                    },
+                    "CmdSlgBuildUnlockQueueRspMsg": {
+                      "fields": {
+                        "unlockQueue": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 1
+                        }
+                      }
+                    },
+                    "CmdSlgBuildInfoBroMsg": {
+                      "fields": {}
+                    },
                     "MessageId": {
                       "values": {
                         "CmdTakeDayChallengeActRewardRspMsg": 1731012380,
@@ -10873,6 +11212,17 @@
                         "CmdContinuityGiftFinishRewardRspMsg": 402025121,
                         "CmdTakeSpiritAnimalBoxRspMsg": 923167072,
                         "CmdChangeUsedSkinRspMsg": 1911316089,
+                        "CmdSlgCampSimpleInfoRspMsg": 1631409176,
+                        "CmdSlgCampInfoRspMsg": 1665140602,
+                        "CmdSlgActionUpdateRspMsg": 196069974,
+                        "CmdSlgGameInfoRspMsg": 1100779337,
+                        "CmdSlgBuildInfoRspMsg": 1414628085,
+                        "CmdSlgBuildRspMsg": 455496637,
+                        "CmdSlgBuildUpgradeRspMsg": 1255226437,
+                        "CmdSlgBuildCancelRspMsg": 1606383447,
+                        "CmdSlgBuildMoveRspMsg": 2116890094,
+                        "CmdSlgBuildCollectRspMsg": 1353318189,
+                        "CmdSlgBuildUnlockQueueRspMsg": 1478251158,
                         "CmdSpiritAnimalLevelUpRspMsg": 2051518427,
                         "CmdSpiritAnimalStepUpRspMsg": 1991681903,
                         "CmdSpiritAnimalBattleRspMsg": 1439043070,
@@ -10957,6 +11307,8 @@
                         "CmdCelebrationBuyShopGoodsBroMsg": 1919419092,
                         "CmdRechargeDailyUpdateBroMsg": 161909789,
                         "CmdGuanKaGiftBroMsg": 915823971,
+                        "CmdSlgGameInfoBroMsg": 1546899562,
+                        "CmdSlgBuildInfoBroMsg": 1860748310,
                         "CmdTeamDetailBroMsg": 1366910774,
                         "CmdTeamDisbandBroMsg": 2097470162,
                         "CmdTeamInviteBroMsg": 1608465022,

@@ -100,12 +100,13 @@ function claimFootprint(
     rows: number,
     cols: number,
     taken: Set<number>,
+    canClaim?: (hexId: number) => boolean,
 ): number[] {
     const claimed: number[] = [];
     const queue: number[] = [anchorHexId];
     while (queue.length > 0 && claimed.length < size) {
         const hexId = queue.shift()!;
-        if (taken.has(hexId)) continue;
+        if (taken.has(hexId) || (canClaim && !canClaim(hexId))) continue;
         taken.add(hexId);
         claimed.push(hexId);
         for (const neighbor of hexGridNeighborIds(hexId, rows, cols)) {
@@ -193,7 +194,8 @@ function placeMonsters(
     for (const monster of monsters) {
         const anchor = pickMonsterAnchor(monster, config, context, seed, sites.length);
         if (anchor < 0) continue;
-        const hexIds = claimFootprint(anchor, Math.max(1, monster.occupyHex), context.rows, context.cols, context.taken);
+        const hexIds = claimFootprint(anchor, Math.max(1, monster.occupyHex), context.rows, context.cols, context.taken,
+            (hexId) => context.ringOf(hexId) <= config.world.monsterRingMax);
         const site: IBigMapMonsterSite = {
             instanceId: sites.length + 1,
             monsterId: monster.id,
@@ -229,10 +231,10 @@ function pickMonsterAnchor(
     for (let step = 0; step < candidates.length; step += 1) {
         const hexId = candidates[(start + step) % candidates.length];
         const free = hexGridNeighborIds(hexId, context.rows, context.cols)
-            .filter((neighbor) => !context.taken.has(neighbor)).length;
+            .filter((neighbor) => !context.taken.has(neighbor) && context.ringOf(neighbor) <= config.world.monsterRingMax).length;
         if (free >= monster.occupyHex - 1) return hexId;
     }
-    return candidates[start];
+    return -1;
 }
 
 function placeBases(

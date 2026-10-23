@@ -186,9 +186,34 @@ export interface IBigMapMonsterConfig {
     readonly name: string;
     readonly level: number;
     readonly occupyHex: number;
+    readonly staminaCost: number;
+    readonly battle: IBigMapMonsterBattleConfig | null;
+    /** 仅旧版离线配置提供；新版的战斗与掉落由战斗配置和服务端结算。 */
+    readonly offlineBattle: IBigMapMonsterOfflineBattle | null;
+}
+
+export interface IBigMapMonsterDrop {
+    readonly resId: number;
+    readonly number: number;
+    readonly pro: number;
+}
+
+export interface IBigMapMonsterBattleConfig {
+    readonly battleId: number;
+    readonly recommendAttack: number;
+    readonly unlockType: number;
+    readonly unlockValue: number;
+    readonly rallyOpen: boolean;
+    readonly rallyNum: number;
+    readonly firstKillDrops: readonly IBigMapMonsterDrop[];
+    readonly normalDrops: readonly IBigMapMonsterDrop[];
+    readonly iconPath: string;
+    readonly modelPath: string;
+}
+
+export interface IBigMapMonsterOfflineBattle {
     /** 需要先通关的等级（0 = 无门槛）。 */
     readonly preLevel: number;
-    readonly staminaCost: number;
     readonly warScore: number;
     readonly defenseHp: number;
     readonly respawnSeconds: number;
@@ -240,8 +265,35 @@ export interface IBigMapWorldTile {
 export interface IBigMapCitySite {
     readonly cityId: number;
     readonly anchorHexId: number;
+    /**
+     * 城池**实际占据**的格子（4~6 格）。
+     *
+     * 只用来做「点哪一格算点到这座城」（`cityByHex` / `bigMapOccupantOf`）。
+     * **染色不要用它** —— 染色用下面的 `rangeHex`。
+     */
     readonly hexIds: readonly number[];
     readonly ring: number;
+    /**
+     * 势力范围格（布局里的 `rangeHex`，编辑器按「范围笔刷」刷出来的那一片）。
+     *
+     * 2026-10-22 用户口径：*「根据 dadi_tuchugao 中每个城池的势力范围，给对应城池势力范围内的
+     * 所有地块都上色，现在只有城池所在的地块上了色」* —— 染色必须铺满这一片，不是只染 4 格。
+     *
+     * ⚠️ 三个口径：
+     * 1. **不进规则**：现在「是否在势力范围内」仍走 `radiateCapacity` 距离（`bigMapWithinCityRange`），
+     *    这份格子目前只服务表现层；哪天要用它判规则，得先改 `BigMapUnlock` 并在文档里写清优先级。
+     * 2. **只读快照**：`buildBigMapWorldFromLayout` 直接引用布局数组（布局本身只读）。
+     * 3. **种子世界为空**：没有布局文件时没有范围数据，表现层要回退到 `hexIds`（见 `BigMapWorldView`）。
+     */
+    readonly rangeHex?: readonly number[];
+    /**
+     * 相邻城池 id（编辑器按范围邻接自动推导，双向一致）。
+     *
+     * 势力染色的**唯一邻接真源**：用它才谈得上「相邻两片不同色」，靠距离猜不准 ——
+     * 范围形状不规则，两片贴在一起时锚点可能隔着 6 格以上。
+     * 种子世界没有这份数据，表现层回退成距离判定。
+     */
+    readonly adjacentCityIds?: readonly number[];
 }
 
 /** 野怪实例落位。`instanceId` 与 `monsterId`（配置 id）区分：同一配置可刷多只。 */

@@ -57,8 +57,12 @@ test('territory map keeps battle-scale cells and supports two-axis drag within i
     assert.equal(scroll.horizontal, true);
     assert.equal(scroll.vertical, true);
     assert.equal(scroll._content.__id__, prefab.indexOf(prefabNode(prefab, 'MapLayer')));
-    // 内容层尺寸 = 地图包围盒（可滚范围由它和视口尺寸推出）。
-    assert.match(mapView, /setContentSize\(layout\.width, layout\.height\)/);
+    // 内容层尺寸 = 地图包围盒 + 四周留白（可滚范围由它和视口尺寸推出）。
+    // ⚠️ 2026-10-21 起**不再**是裸包围盒：留白（`TERRITORY_MAP_CONTENT_PADDING`）就是
+    // 「相机多出来的可滚余量」，没它的话贴到地图下边缘的目标格永远抬不到【快速寻敌】之上
+    // （用户口径「整体一起上移」）。尺寸口径由 `territoryMapContentSize` 统一出口。
+    assert.match(mapView, /territoryMapContentSize\(layout\)/);
+    assert.match(mapView, /setContentSize\(content\.width, content\.height\)/);
 });
 
 test('territory stations use dedicated 128px transparent building cuts instead of oversized concept slices', () => {

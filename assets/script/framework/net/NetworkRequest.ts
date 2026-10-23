@@ -24,6 +24,8 @@ export class NetworkRequest<CmdReqMsg, CmdRspMsg> extends ScriptObject {
     // private reqMsg: RequestMsg<CmdReqMsg, CmdRspMsg>;
 
     needLoading = true;
+    allowRetry = true;
+    canSend: (() => boolean) | null = null;
 
     destroy() {
         // this.messageName = null;
@@ -36,6 +38,7 @@ export class NetworkRequest<CmdReqMsg, CmdRspMsg> extends ScriptObject {
         this.resolve = null;
         this.reject = null;
         this.needLoading = null
+        this.canSend = null;
         // this.reqMsg = null
     }
 
@@ -46,6 +49,8 @@ export class NetworkRequest<CmdReqMsg, CmdRspMsg> extends ScriptObject {
         t.index = index;
         t.data = data;
         t.isInUse = true;
+        t.allowRetry = reqMsg.allowRetry;
+        t.canSend = reqMsg.canSend;
         // t.reqMsg = reqMsg;
         // let win = window
         let logData = null

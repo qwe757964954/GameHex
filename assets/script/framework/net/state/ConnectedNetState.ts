@@ -207,6 +207,10 @@ export class ConnectedNetState extends BaseNetState {
 
     addNetworkRequest(request: NetworkRequest<any, any>, isSendNow: boolean = false) {
         let t = this;
+        if (request.canSend && !request.canSend()) {
+            request.onReject('cancelled');
+            return false;
+        }
         if (t.isSwitchFinish) {
             t.requestMap.set(request.index, request);
             t.requestMapState.set(request, isSendNow)
@@ -215,7 +219,7 @@ export class ConnectedNetState extends BaseNetState {
             // return t.socket.sendData(request.data);
             let isOK = t.socket.sendRequest(request);
             if (!isOK) {
-                if (request?.messageName == NetSocket.heartbeatMsgName) {
+                if (request?.messageName == NetSocket.heartbeatMsgName || request.allowRetry === false) {
                     t.requestMap.delete(request.index);
                     t.requestMapState.delete(request)
                     t._tmTryReSend.delete(request)
@@ -232,6 +236,10 @@ export class ConnectedNetState extends BaseNetState {
     }
 
     tryNetworkRequest(request: NetworkRequest<any, any>) {
+        if (request.allowRetry === false || (request.canSend && !request.canSend())) {
+            this.rejectRequest(request, 'cancelled');
+            return;
+        }
         request.timeStamp = this.timeStamp
         let times: number = this._tmTryReSend.get(request) + 1
         this._tmTryReSend.set(request, times)
@@ -260,6 +268,12 @@ export class ConnectedNetState extends BaseNetState {
 
 
     private _tmTryReSend: Map<NetworkRequest<any, any>, number> = new Map()
+    private rejectRequest(request: NetworkRequest<any, any>, reason: string): void {
+        this.requestMap.delete(request.index);
+        this.requestMapState.delete(request);
+        this._tmTryReSend.delete(request);
+        request.onReject(reason);
+    }
     update(p1?: any, p2?: any, p3?: any) {
         let t = this;
         if (t.isSwitchFinish) {
@@ -276,7 +290,15 @@ export class ConnectedNetState extends BaseNetState {
                     console.error("update request.data null:", request?.messageName)
                     continue
                 }
+                if (request.canSend && !request.canSend()) {
+                    this.rejectRequest(request, 'cancelled');
+                    continue;
+                }
                 if (now - request.timeStamp > requestTimeout) {
+                    if (request.allowRetry === false) {
+                        this.rejectRequest(request, 'timeout');
+                        continue;
+                    }
                     this.error("协议超时", request.messageName, request.index);
                     let sendTime = t._tmTryReSend.get(request)
                     if (sendTime == null || sendTime >= 1) {
@@ -350,7 +372,8 @@ export class ConnectedNetState extends BaseNetState {
             let len = tlRequestData.length
             for (let i = 0; i < len; i++) {
                 let networkRequest_ = tlRequestData[i].networkRequest
-                if (requestMapState.get(networkRequest_)) {
+                if (networkRequest_.allowRetry === false || (networkRequest_.canSend && !networkRequest_.canSend())
+                    || requestMapState.get(networkRequest_)) {
                     networkRequest_.onReject(null)
                 } else {
                     // 协议按顺序发送，上个协议回来才会继续从队列拿出其他协议继续发送，所以这里理论上只有一个

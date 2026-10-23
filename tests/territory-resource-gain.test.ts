@@ -6,8 +6,10 @@ import ts from 'typescript';
 import {
     isTerritoryWalletResId,
     splitTerritoryRewards,
+    territoryBurstCountForTotal,
     territoryBurstLaunch,
     territoryBurstParticle,
+    territoryBurstTotalSeconds,
     territoryGainFx,
     TERRITORY_GAIN_BURST_COUNT,
     TERRITORY_GAIN_BURST_FADE_SECONDS,
@@ -561,7 +563,8 @@ class FakeUIOpacity extends FakeComponent {
 
 interface IBurstLike {
     node: FakeNode;
-    play(originX: number, originY: number, seed: number, frames: readonly unknown[]): void;
+    /** 第 5 参（2026-10-22）：本次吐几颗 —— 按奖励总量分级，缺省满喷。 */
+    play(originX: number, originY: number, seed: number, frames: readonly unknown[], count?: number): void;
     step(dt: number): boolean;
     stop(): void;
 }
@@ -592,13 +595,31 @@ function loadBurstModule(): Record<string, unknown> {
                 };
             }
             // 曲线用**真模块**（不是抄一份常量）：模型改了这里立刻跟着变。
+            // 只导出视图真用到的三个（2026-10-22：`TOTAL_SECONDS` 常量换成按本次个数算的
+            // `territoryBurstTotalSeconds`，视图靠它判收尾；多给 `territoryBurstCountForTotal`
+            // 是因为 `TerritoryMapView` 也是从这条路径取分级）。
             if (id.endsWith('/TerritoryResourceGain')) {
                 return {
                     TERRITORY_GAIN_BURST_COUNT,
                     TERRITORY_GAIN_BURST_TOTAL_SECONDS,
+                    territoryBurstCountForTotal,
                     territoryBurstParticle,
+                    territoryBurstTotalSeconds,
                 };
             }
+            // 内容层留白（2026-10-21）：`syncContentSize` 现在把「地图包围盒 + 四周留白」写进
+            // 内容层，留白归 `TerritoryMapLayout` 统一算。本用例不校验尺寸，桩只保证宽度高度可用。
+            if (id.endsWith('/TerritoryMapLayout')) return {
+                territoryMapContentSize: (layout: { width: number; height: number }) => ({
+                    width: layout.width,
+                    height: layout.height,
+                }),
+            };
+            // 开箱表演 / 点击反馈（2026-10-22）：`TerritoryMapView` 新增的两个表现层，
+            // 与本用例关注的渲染分支无关 ⇒ 给空壳（它们的曲线在 `territory-chest-animation`
+            // / `territory-tap-feedback` 里单独测）。
+            if (id === './TerritoryChestView') return { TerritoryChestView: class {} };
+            if (id === './TerritoryTapFeedback') return { TerritoryTapFeedback: class {} };
             throw new Error(`Unexpected dependency: ${id}`);
         },
     });
@@ -738,7 +759,8 @@ test('接线：喷发原点取「点击地块的中心点」，图标 + 数字 u
     assert.equal(TERRITORY_GAIN_STACK_GAP_PX, 40);
 
     // 喷发只有**一次**（多条奖励轮流取图），而且排在飘字之前 —— 粒子先出来，读数随后升。
-    const burstAt = src.indexOf('this.playGainBurst(originX, originY, entries)');
+    // 第 4 参 `total` 是 2026-10-22 的分级输入：同一个调用点决定「喷几颗」，喷发依旧只有一处。
+    const burstAt = src.indexOf('this.playGainBurst(originX, originY, entries, total)');
     const loopAt = src.indexOf('entries.forEach((entry, index)');
     assert.ok(burstAt > 0, 'playResourceGain 必须真的播喷发');
     assert.ok(loopAt > burstAt, '喷发要排在飘字之前（且只有一次，不是每条奖励各喷一次）');

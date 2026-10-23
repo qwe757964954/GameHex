@@ -157,6 +157,36 @@ function loadMapView() {
                     fixedResource: 'fixedResource', bonus: 'bonus',
                 },
             };
+            // 内容层留白（2026-10-21）：`syncContentSize` 现在把「地图包围盒 + 四周留白」写进
+            // 内容层，留白归 `TerritoryMapLayout` 统一算。本用例不校验尺寸，桩只保证宽度高度可用。
+            if (id.endsWith('/TerritoryMapLayout')) return {
+                territoryMapContentSize: (layout: { width: number; height: number }) => ({
+                    width: layout.width,
+                    height: layout.height,
+                }),
+            };
+            // 开箱表演 / 点击反馈（2026-10-22）：`TerritoryMapView` 新增的两个表现层，
+            // 与本用例关注的渲染分支无关 ⇒ 给空壳（它们的曲线在 `territory-chest-animation`
+            // / `territory-tap-feedback` 里单独测）。
+            if (id === './TerritoryChestView') return { TerritoryChestView: class {} };
+            if (id === './TerritoryTapFeedback') return { TerritoryTapFeedback: class {} };
+            // 新地块生成（2026-10-22）：只影响地皮的**透明度与缩放**，不改地皮 / 格面框的
+            // 选图判据 ⇒ 空壳（曲线在 `territory-hex-spawn` 里单独测）。六个成员都要在，
+            // 因为 `TerritoryMapView` 的 `syncGrid` / `syncFlip` / `applyHexSpawnFade` 都会调。
+            if (id === './TerritoryHexSpawn') return {
+                TerritoryHexSpawn: class {
+                    isPlaying() { return false; }
+                    play() { return false; }
+                    opacityOf() { return null; }
+                    stop() {}
+                    reset() {}
+                    step() { return false; }
+                },
+            };
+            if (id === '../model/TerritoryHexSpawn') return {
+                territoryHexSpawnDelays: () => new Map<number, number>(),
+                territoryHexSpawnBatchSeconds: () => 0,
+            };
             throw new Error(`Unexpected dependency: ${id}`);
         },
     });

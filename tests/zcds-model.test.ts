@@ -969,8 +969,12 @@ test('PVP 技能表驱动近战刀光、远程弹道、范围技与强化计数'
     assert.deepEqual([militia.skillId, militia.effectKey, militia.empoweredEvery], [30216, '塔防_技能_民兵普攻_刀光', 6]);
     // 68001 豌豆游侠 2026-10-10 起走**自己的独立行 30701**（「植物占领世界」普攻特效接入时，
     // 三组「两张植物卡抢同一职业 skillId」各拆了独立行 —— 30151 留给希尔瓦娜斯等非植物卡）。
-    // 独立行是**整行复制**源职业行的，所以 mode / projectileKey / empoweredEvery 必须与原来一致。
-    assert.deepEqual([archer.skillId, archer.mode, archer.projectileKey, archer.empoweredEvery], [30701, 'projectile', '塔防_技能_弓兵普攻_子弹', 12]);
+    // 独立行是**整行复制**源职业行的，所以 mode / empoweredEvery 必须与原来一致。
+    // ⚠️ 2026-10-21：`projectileKey` 是例外 —— 这 15 行植物卡行的旧技能事件 key **全部清空**
+    // （新素材在 skillEffect / skillView 里没有对应事件，继承只会指向别人的弹道资源；
+    // 该列无人消费，最终只写进 combatEvent 当 null）。详见「植物占领世界普攻特效接入」用例。
+    assert.deepEqual([archer.skillId, archer.mode, archer.empoweredEvery], [30701, 'projectile', 12]);
+    assert.ok(!archer.projectileKey, '30701 的 projectileKey 必须为空（不继承 30151 的旧事件 key）');
     const basketball = resolveUnitDefinition('68030').attackProfile;
     assert.equal(basketball.skillId, 30702, '68030 篮球天才用自己的独立行 30702（不再与 68001 共用）');
     assert.notEqual(basketball.skillId, archer.skillId, '同职业的两张植物卡必须各用各的 skillId');
@@ -1199,10 +1203,11 @@ test('植物占领世界普攻特效接入：每张卡用自己的独立行，�
     // 镭射飞龙 / 阿尔萨斯…）会跟着播植物特效，表照样能跑、没有任何报错，只有肉眼看得出。
     const skillRows = new Map(readPvpRef('pvpSkill').map((row) => [Number(row.skillId), row]));
     const cases: Array<[string, number, number, string]> = [
-        ['68003', 30711, 30181, '火法师_新子弹'],   // 火焰树妖
-        ['68007', 30712, 30221, '长戟兵_撕裂'],     // 吞噬大嘴花
-        ['68033', 30713, 30241, '重骑兵_践踏'],     // 运动霸（美术名「消灭学霸」）
-        ['68020', 30714, 30251, '风法师_绿风'],     // 三叶小丑
+        ['68003', 30711, 30181, '火法师_新子弹/火法师_新子弹'],   // 火焰树妖
+        ['68007', 30712, 30221, '长戟兵_撕裂/长戟兵_撕裂'],       // 吞噬大嘴花
+        ['68033', 30713, 30241, '重骑兵_践踏/重骑兵_践踏'],       // 运动霸（美术名「消灭学霸」）
+        ['68020', 30714, 30251, '风法师_绿风/风法师_绿风'],       // 三叶小丑
+        ['68004', 30715, 30681, '子弹_新怪物/女猎手'],           // 玉米射手（卡名「玉林好汉」）
     ];
     for (const [cardId, ownSkillId, baseSkillId, basePrefab] of cases) {
         assert.equal(resolveUnitDefinition(cardId).attackProfile.skillId, ownSkillId,
@@ -1211,15 +1216,27 @@ test('植物占领世界普攻特效接入：每张卡用自己的独立行，�
         const base = skillRows.get(baseSkillId);
         assert.ok(own, `${ownSkillId} 行必须存在`);
         assert.ok(base, `${baseSkillId} 行必须存在`);
-        // 独立行 = 整行复制，只有特效预设不同 → 战斗参数逐项一致（否则等于偷偷改了数值）
-        for (const field of ['mode', 'projectileKey', 'projectileSpeed', 'areaRadius', 'empoweredEvery',
-            'empoweredSkillId', 'trigger', 'cooldown', 'effectKey', 'onHitStatusId']) {
+        // 独立行 = 整行复制，只有特效预设不同 → 战斗参数逐项一致（否则等于偷偷改了数值）。
+        // `projectileKey` / `effectKey` 不在这里比 —— 它们由下面那条「15 行必须为空」统一管。
+        for (const field of ['mode', 'projectileSpeed', 'areaRadius', 'empoweredEvery',
+            'empoweredSkillId', 'trigger', 'cooldown', 'onHitStatusId']) {
             assert.deepEqual(own![field] ?? null, base![field] ?? null,
                 `${ownSkillId}.${field} 必须与源行 ${baseSkillId} 一致（独立行只是换特效）`);
         }
         assert.notEqual(own!.effectPrefabPath, base!.effectPrefabPath, '两行不能共用同一个特效预设');
-        assert.match(String(base!.effectPrefabPath), new RegExp(`/${basePrefab}/${basePrefab}$`),
+        assert.ok(String(base!.effectPrefabPath).endsWith(basePrefab),
             `${baseSkillId} 的特效预设必须回退成 ${basePrefab}，不能留着植物卡的特效`);
+    }
+    // `projectileKey` / `effectKey` 是**老客户端**的技能事件标识，指向 skillEffect / skillView 里的资源。
+    // 30701–30715 是这批新素材，旧表里根本没有对应事件（grep 三张旧表全 0）——所以复制源行时
+    // 这两个字段必须清空。留着的代价是**静默**的：值照样能跑、表现层也没人读这列
+    // （只在 model → profile → snapshot 流转），但语义上指向了别人的弹道资源。
+    for (let skillId = 30701; skillId <= 30715; skillId += 1) {
+        const row = skillRows.get(skillId);
+        assert.ok(row, `${skillId} 行必须存在`);
+        assert.ok(!row!.projectileKey,
+            `${skillId} 的 projectileKey 必须为空（新素材没有旧技能事件，不能继承源行的 key）`);
+        assert.ok(!row!.effectKey, `${skillId} 的 effectKey 必须为空`);
     }
 });
 

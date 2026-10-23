@@ -185,6 +185,7 @@ export interface ITerritoryPresenterOutputs {
     readonly showRewards: (
         rewards: readonly (TerritoryIdleRewardGain | ITerritoryGrantedReward)[],
         originCellId?: number | null,
+        options?: ITerritoryRewardPresentation,
     ) => void;
     /**
      * 与服务端通信中的全屏遮挡开关（解锁 / 通关 / 开战 / 随机格开启的写请求在途时
@@ -195,6 +196,20 @@ export interface ITerritoryPresenterOutputs {
      * 文案由 Presenter 按操作类型给出（`TERRITORY_TEXTS.busy*`）。
      */
     readonly setBusy?: (busy: boolean, text?: string) => void;
+}
+
+/**
+ * 发奖时**用哪套表现**（需求 2026-10-22 §1）。
+ *
+ *  · `chest`（默认）：资源点 / 宝箱类格子 —— 先播开箱表演，播完再结算；
+ *  · `burst`：**随机资源格** —— 不播开箱，直接在格子上喷一把资源图标
+ *    （沿用宝箱中档的粒子喷射表现，个数按奖励量分级，见 `territoryBurstCountForTotal`）。
+ *
+ *  为什么要由 Presenter 指定而不是页面自己判：**这是玩法口径**（哪种格子该放全屏表演），
+ *  页面只该负责"怎么演"。将来多一种格子，也在这里加一个枚举值即可。
+ */
+export interface ITerritoryRewardPresentation {
+    readonly chest?: boolean;
 }
 
 export interface ITerritoryPresenterPorts {
@@ -219,9 +234,15 @@ export interface ITerritoryPresenterPorts {
  */
 const TERRITORY_TWO_STEP_TEXTS = {
     fixedResource: {
-        unlocked: TERRITORY_TEXTS.fixedResourceUnlocked,
+        // 解锁成功**不再提示**（需求 2026-10-22 §3：关掉「已解锁，点击宝箱领取」那条 UI）。
+        // 留空串而不是删字段：`handleUnlockThenPass` 的 texts 契约里 `unlocked` 是必填，
+        // 删了要动签名，而"这次要不要提示"本来就是文案层的决定。
+        unlocked: '',
         unlockFailed: TERRITORY_TEXTS.fixedResourceUnlockFailed,
-        claimed: TERRITORY_TEXTS.fixedResourceClaimed,
+        // 领取成功**也不再提示**（2026-10-22 追加：实机截图里那条「已领取」深色条正压在地图中央，
+        // 把刚开的宝箱和地块都盖住了；结果是"领取成功"这件事已经由开箱表演 + 奖励飘字表达，
+        // 再叠一条躺在屏幕中间的文字纯属抢画面）。同样用空串静音，不加开关。
+        claimed: '',
         claimFailed: TERRITORY_TEXTS.fixedResourceClaimFailed,
     },
 } as const;
@@ -316,6 +337,8 @@ export class TerritoryPresenter {
         actionButton: null,
         // 空表 = 一个建筑 id 都查不到⇒ 视图全部退回按 `site.type` 取图（旧行为）。
         buildFrames: new Map(),
+        // 空表 = 所有建筑倍率按 1（与引入 buildSize 之前完全一致）。
+        buildScales: new Map(),
     };
     private playerCardCount = 0;
     private idleRewardMaxHours = TERRITORY_IDLE_REWARD_MAX_HOURS_FALLBACK;
@@ -364,6 +387,13 @@ export class TerritoryPresenter {
     dispose(): void {
         this.disposed = true;
         this.cancelBattleRequest();
+        // 🔴 写请求在途时页面被销毁 ⇒ 撤掉本页面贡献的每层 loading（enterBusy 的 show
+        // 与这里逐次 hide 配对）。不清理会留下全屏遮罩：`LoadingPopup` 引用计数不为 0
+        // 永不关闭，遮罩上的 `BlockInputEvents` 常驻吞点击，其他页面「点不动」。
+        while (this.busyCount > 0) {
+            this.busyCount -= 1;
+            this.ports.outputs.setBusy?.(false);
+        }
         // 必须退订：Bro 监听挂在 `GameNet` 上（进程级），Presenter 销毁后还在监听会往
         // 已dispose 的对象上回调，表现为「关页面后再进，格子莫名变已占领」。
         this.ports.gateway.unlistenPassCellsBro?.();
@@ -557,11 +587,13 @@ export class TerritoryPresenter {
                 } else {
                     this.ports.outputs.showTip(TERRITORY_TEXTS.bossUnlockFailed);
                 }
-                this.emitStateChange();
             } finally {
                 pending.delete(site.cellId);
                 exitBusy();
             }
+            // 渲染最终态（pending 已清）：try 内渲染的是「请求在途」帧（Button 禁用），
+            // finally 删掉 pending 后必须再渲染一次，否则解锁成功站点仍停留禁用帧。
+            this.emitStateChange();
             return;
         }
         // 第二步：已解锁 → `CmdStartBattleReqMsg`，成功才进入战斗。
@@ -588,14 +620,17 @@ export class TerritoryPresenter {
         this.emitStateChange();
         const exitBusy = this.enterBusy(TERRITORY_TEXTS.busyBattle);
         try {
-            // 🔴 asyncPvp（异步据点）用**宝箱战斗子类型**（`battleParams[0] = 2`，
-            // `chapterTreasureBattleParams`），主线 stage/boss 用格子战斗子类型（1）——
-            // 服务端按 `battleParams[0]` 分流（山猫 2026-10-15「1002 里嵌子类型」）。
-            // 实机：已通关 asyncPvp 发子类型 1 ⇒ 服务端按主线关卡判定「已通关」拒绝，
-            // CmdTips「开始战斗失败」；换子类型 2（宝箱战斗，`BattleStartModel` 里「暂未接线」
-            // 的调用点正是这里）才能重复挑战。
+            // 🔴 asyncPvp（异步据点）的子类型按**服务端确认的通关状态**分流（山猫 2026-10-21 细化）：
+            //  未通关（首次挑战）→ 子类型 1（格子战斗 `chapterCellBattleParams`）；
+            //  已通关（重复挑战）→ 子类型 2（宝箱战斗 `chapterTreasureBattleParams`）。
+            //  判据必须用 `isServerOwned`（快照 `passCells` 权威）而非 `isOwned`：本地旧档残留 /
+            //  离线结算未上报会让 owned 领先服务端 ⇒ 没打过的格也传 2，服务端回「配置错误」；
+            //  而「一律传 1」又会把已通关格按主线关卡判定拒掉。两个方向都实测踩过。
+            // （主线 stage/boss 恒为格子战斗子类型 1，不参与这个分流。）
             const battleParams = site.type === TERRITORY_SITE_TYPE.asyncPvp
-                ? chapterTreasureBattleParams(map.chapterId, site.cellId)
+                ? (progress.isServerOwned(site.cellId)
+                    ? chapterTreasureBattleParams(map.chapterId, site.cellId)
+                    : chapterCellBattleParams(map.chapterId, site.cellId))
                 : chapterCellBattleParams(map.chapterId, site.cellId);
             const result = await this.ports.gateway.startBattle(
                 ZC_BATTLE_TYPE_CHAPTER,
@@ -605,15 +640,16 @@ export class TerritoryPresenter {
             if (this.disposed || loadId !== this.loadId || requestId !== this.battleRequestId) return;
             if (!result.ok) {
                 this.ports.outputs.showTip(TERRITORY_TEXTS.bossBattleStartFailed);
-                this.emitStateChange();
-                return;
+            } else {
+                this.bossBattleStart = { battleId: result.battle.battleId, seed: result.battle.seed };
+                this.beginBattle(site, stage, result.battle);
             }
-            this.bossBattleStart = { battleId: result.battle.battleId, seed: result.battle.seed };
-            this.beginBattle(site, stage, result.battle);
         } finally {
             pending.delete(site.cellId);
             exitBusy();
         }
+        // 失败也要渲染最终态（pending 已清 → 按钮恢复可点）；成功已 navigate，此处 emit 无害。
+        this.emitStateChange();
     }
 
     /**
@@ -669,11 +705,12 @@ export class TerritoryPresenter {
             } else {
                 this.ports.outputs.showTip(TERRITORY_TEXTS.bossUnlockFailed);
             }
-            this.emitStateChange();
         } finally {
             pending.delete(site.cellId);
             exitBusy();
         }
+        // 渲染最终态（pending 已清）：try 内渲染的是「请求在途」帧（Button 禁用）。
+        this.emitStateChange();
     }
 
     /**
@@ -725,8 +762,9 @@ export class TerritoryPresenter {
                 else progress.markCellsUnlocked(result.unlockedCellIds ?? [site.cellId]);
                 this.persistProgress();
                 this.refreshWalletFromServer(false);
-                this.ports.outputs.showTip(isUnlocked
-                    ? texts.claimed : texts.unlocked);
+                // 空串 = 这次不提示（资源点解锁不再弹「已解锁，点击宝箱领取」，见 §3）。
+                const tip = isUnlocked ? texts.claimed : texts.unlocked;
+                if (tip) this.ports.outputs.showTip(tip);
                 if (isUnlocked && result.rewards?.length) {
                     this.ports.outputs.showRewards(result.rewards, site.cellId);
                 }
@@ -734,11 +772,17 @@ export class TerritoryPresenter {
                 this.ports.outputs.showTip(isUnlocked
                     ? texts.claimFailed : texts.unlockFailed);
             }
-            this.emitStateChange();
         } finally {
             pending.delete(site.cellId);
             exitBusy();
         }
+        // 🔴 渲染必须发生在 pending 清空之后：视图的 `isLoading` 由 `pendingFixedResourceCells`
+        // 驱动（`TerritoryStationView.render`：`interactable = interactive && !isLoading`），
+        // try 内的 `emitStateChange` 渲染的是「请求在途」帧（Button 禁用）。此前 finally 删掉
+        // pending 后不再渲染 ⇒ 页面停留在在途帧：宝箱已解锁、图标可领取外观，但点击被禁用
+        // ⇒ 实机「弹出已解锁宝箱可领取，再次点击领不了」。
+        //（`disposed / loadId` 变化在 try 内已 return，到不了这里 —— 旧结果不渲染。）
+        this.emitStateChange();
     }
 
     private randomResourceOpenCheck(cellId: number): TerritoryRandomCellOpenCheck {
@@ -796,15 +840,21 @@ export class TerritoryPresenter {
                 // ⚠️ 不补「已开启」轻提示：随机格是解锁即发奖，奖励弹窗已经承担了这次操作的反馈，
                 // 再弹一句轻提示会和奖励窗同时出现（两条 UI 抢同一时刻）。
                 // 失败分支的轻提示保留（那时没有奖励窗）。
-                if (result.rewards?.length) this.ports.outputs.showRewards(result.rewards, cellId);
+                // 随机格是**解锁即发奖**，没有"开箱"这一步：直接喷资源图标（需求 2026-10-22 §1）。
+                // 粒子个数由页面按奖励总量分级（< 50 很稀疏），不在这里算。
+                if (result.rewards?.length) {
+                    this.ports.outputs.showRewards(result.rewards, cellId, { chest: false });
+                }
             } else {
                 this.ports.outputs.showTip(TERRITORY_TEXTS.randomOpenFailed);
             }
-            this.emitStateChange();
         } finally {
             pending.delete(cellId);
             exitBusy();
         }
+        // 渲染最终态（pending 已清）：try 内渲染的是「请求在途」帧（Button 禁用），
+        // finally 删掉 pending 后必须再渲染一次，否则开完的随机格停留禁用帧点不动。
+        this.emitStateChange();
     }
 
     /**
@@ -818,8 +868,16 @@ export class TerritoryPresenter {
         this.busyCount += 1;
         this.ports.outputs.setBusy?.(true, text);
         return () => {
+            // dispose 已统一撤回在途 loading（见 `dispose`），这里再退就是重复 hide，
+            // 会把**其他页面**贡献的 loading 也关掉。
+            if (this.disposed) return;
             this.busyCount = Math.max(0, this.busyCount - 1);
-            if (this.busyCount === 0) this.ports.outputs.setBusy?.(false);
+            // 🔴 每次 exit 都 hide（与 enterBusy 的 show 严格配对）：`LoadingPopup` 自身是
+            // 全局引用计数（show +1 / hide -1、归零才关）。「归零才 hide」在**两个写请求并发**
+            // 时（A show 后 B show ⇒ _refCount=2，A exit 不 hide，B exit 归零只 hide 一次 ⇒
+            // 残留 1）会让全屏遮罩常驻 —— 遮罩上的 `BlockInputEvents` 会吞掉地图所有点击，
+            // 表现为「刚解锁的宝箱再点没反应」。每次 hide 配对后：并发 ⇒ 2→1→0 正常关闭。
+            this.ports.outputs.setBusy?.(false);
         };
     }
 

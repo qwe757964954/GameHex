@@ -1,8 +1,8 @@
 import { Node, Sprite, UIOpacity, UITransform, type SpriteFrame } from 'cc';
 import {
     TERRITORY_GAIN_BURST_COUNT,
-    TERRITORY_GAIN_BURST_TOTAL_SECONDS,
     territoryBurstParticle,
+    territoryBurstTotalSeconds,
 } from '../model/TerritoryResourceGain';
 
 /**
@@ -67,6 +67,8 @@ export class TerritoryGainBurst {
 
     private readonly particles: ITerritoryBurstParticleNode[] = [];
     private seed = 0;
+    /** 本次喷发的粒子数（`play` 传入；池里节点按**满喷**建好，多出来的收起来）。 */
+    private count = TERRITORY_GAIN_BURST_COUNT;
     /** < 0 = 空闲（可被复用）。 */
     private elapsed = -1;
 
@@ -76,6 +78,8 @@ export class TerritoryGainBurst {
         this.node.setParent(layer);
         this.node.active = false;
         this.node.addComponent(UITransform);
+        // ⚠️ 按**满喷**预建：粒子数按奖励量分级（5 / 9 / 12），池化节点不能每次重建，
+        //   所以统一建满、`play` 时只亮前 `count` 颗。多建的 7 颗只是几个空节点，代价可忽略。
         for (let index = 0; index < TERRITORY_GAIN_BURST_COUNT; index += 1) {
             this.particles.push(this.createParticle(index));
         }
@@ -87,21 +91,27 @@ export class TerritoryGainBurst {
      * @param frames 本次喷发要用的图，按粒子序**轮流取**（同时给银币 + 体力时两种图各喷一半）。
      *   空数组 = 图还没加载出来 ⇒ 粒子是空的（不闪不报错），与飘字「缺图仍照常升」同一口径。
      * @param seed   抖动种子：调用方每次点击换一个 ⇒ 同一格连点两次图案不同（纯函数可复现）。
+     * @param count  本次吐几颗（按奖励总量分级，见 `territoryBurstCountForTotal`）；
+     *   缺省满喷。超出池容量的值按满喷算，绝不越界。
      */
     play(
         originX: number,
         originY: number,
         seed: number,
         frames: readonly (SpriteFrame | null)[],
+        count: number = TERRITORY_GAIN_BURST_COUNT,
     ): void {
         this.node.setPosition(originX, originY, 0);
         this.node.active = true;
         this.seed = Math.floor(seed) | 0;
+        this.count = Math.max(1, Math.min(this.particles.length, Math.floor(count) || 1));
         this.elapsed = 0;
         for (let index = 0; index < this.particles.length; index += 1) {
-            const frame = frames.length ? frames[index % frames.length] ?? null : null;
-            const sprite = this.particles[index].sprite;
-            if (sprite.spriteFrame !== frame) sprite.spriteFrame = frame;
+            const particle = this.particles[index];
+            // 超出本次个数的槽位：图也清掉，免得下次少喷时留着上一喷的残影。
+            const frame = index < this.count && frames.length ? frames[index % frames.length] ?? null : null;
+            if (particle.sprite.spriteFrame !== frame) particle.sprite.spriteFrame = frame;
+            if (index >= this.count && particle.node.active) particle.node.active = false;
         }
         this.apply(0);
     }
@@ -117,7 +127,7 @@ export class TerritoryGainBurst {
     step(dt: number): boolean {
         if (this.elapsed < 0) return false;
         this.elapsed += dt;
-        if (this.elapsed >= TERRITORY_GAIN_BURST_TOTAL_SECONDS) {
+        if (this.elapsed >= territoryBurstTotalSeconds(this.count)) {
             this.stop();
             return false;
         }
@@ -162,7 +172,8 @@ export class TerritoryGainBurst {
         let alive = false;
         for (let index = 0; index < this.particles.length; index += 1) {
             const { node, opacity } = this.particles[index];
-            const fx = territoryBurstParticle(this.seed, index, elapsed);
+            // 本次没打算喷这么多颗 ⇒ 这一槽一律收起（不参与「还活着吗」的判定）。
+            const fx = index < this.count ? territoryBurstParticle(this.seed, index, elapsed, this.count) : null;
             // null = 这颗还没出发（错峰）或已经消失 ⇒ 直接收起，别让它停在上一帧的位置上。
             if (!fx) {
                 if (node.active) node.active = false;

@@ -237,7 +237,7 @@ BigMapEntry.open()
 3. **`worldId` 一变，文件名就变**（`world_01` → `world_02`），天然不会读到上一张图。
 
 `ProcedureBootstrap` 里 `BigMapEntry.shared().setAssetService(assets)` 是唯一注入点；
-没注入也能玩（降级种子），所以 `MainTabHost → BigMapEntryButton` 那条链一行没动。
+没注入也能玩（降级种子），所以 `MainTabHost（「世界」格）→ BigMapEntry` 那条链一行没动。
 
 ### 发布后自检
 

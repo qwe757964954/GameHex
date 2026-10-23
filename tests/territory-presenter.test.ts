@@ -999,6 +999,9 @@ test('fixed resource shows only rewards from a successful claim, after the secon
     h.presenter.selectSite(site);
     await flush();
     assert.deepEqual(h.rewards, [[{ resId: 9, amount: 5 }]]);
+    // 2026-10-22 追加口径：领取成功**不再弹**「已领取」轻提示 —— 那条深色提示条压在屏幕中央，
+    // 正好盖住刚开的宝箱和它周围的地块，而"领取成功"已经由开箱表演 + 奖励飘字表达。
+    assert.deepEqual(h.tips, [], '领取成功不该再弹「已领取」提示条');
     h.presenter.selectSite(site);
     await flush();
     assert.equal(h.rewards.length, 1, '已领取的格子不能重复弹奖');
@@ -1631,10 +1634,10 @@ test('asyncPvp sites sharing configId unlock independently then start their conf
     await flush();
     assert.equal(h.gatewayCalls.unlock, 3, '已解锁的异步格再次点击不重复请求解锁');
     assert.equal(h.gatewayCalls.startBattle, 1, '已解锁异步据点应走章节战斗请求');
-    // 🔴 asyncPvp = **宝箱战斗子类型**（battleParams[0] = 2，`chapterTreasureBattleParams`）；
-    // 主线 stage/boss 才是格子战斗子类型 1（山猫 2026-10-15「1002 里嵌子类型」，
-    // 实机：asyncPvp 发子类型 1 被服务端按已通关主线关卡拒绝「开始战斗失败」）。
-    assert.deepEqual(h.gatewayCalls.battleParamsList, [['2', '1', '372']]);
+    // 🔴 asyncPvp 子类型按**通关状态**分流（山猫 2026-10-21 细化）：未通关首次挑战 = 格子
+    // 战斗子类型 1（`chapterCellBattleParams`）；已通关重复挑战才切宝箱战斗子类型 2。
+    // 372 在这里只解锁没通关 ⇒ 子类型 1（服务端按 0 位分流，打过的格传 2 会回「配置错误」）。
+    assert.deepEqual(h.gatewayCalls.battleParamsList, [['1', '1', '372']]);
     assert.equal(h.storeCalls.beginBattle, 1);
     assert.equal(h.nav[0]?.levelId, 20001, '开战应使用 levelInfo.json 中的 20001');
     assert.equal(h.nav[0]?.territoryCellId, 372);
@@ -1853,6 +1856,102 @@ test('解锁请求在途：loading 在网关调用前显示，回包处理后关
     assert.equal(unlockCount, 1, '全程只发一次解锁请求');
 });
 
+// 🔴 两个写请求**并发**时 loading 必须严格配对（show 几次就 hide 几次）：
+// 此前「归零才 hide」会让 LoadingPopup 全局引用计数残留 1 ⇒ 全屏遮罩（含本轮新增的
+// `BlockInputEvents` 拦截）常驻 ⇒ 地图所有点击被吞，表现为「刚解锁的宝箱再点没反应」。
+test('two concurrent write requests pair their loading layers (no leftover mask)', async () => {
+    const fixedBundle: ITerritoryChapterBundle = {
+        ...bundle,
+        mapJson: { ...mapJson, sites: [...mapJson.sites,
+            { id: 'fixed_4', type: 'fixedResource', cellId: 4, footprint: [4], rewardId: 1011,
+                unlock: { requiredCells: [0], combatPower: 0, silverCost: 0, staminaCost: 0, exploreSeconds: 1 } },
+            { id: 'fixed_5', type: 'fixedResource', cellId: 5, footprint: [5], rewardId: 1011,
+                unlock: { requiredCells: [0], combatPower: 0, silverCost: 0, staminaCost: 0, exploreSeconds: 1 } }] },
+    };
+    const pending: Array<(value: TerritoryWriteResult) => void> = [];
+    const gateway = createFakeGateway({ fetch: {
+        ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [0], passCells: [0] },
+    } });
+    let unlockCount = 0;
+    gateway.gateway.unlockCell = () => {
+        unlockCount++;
+        return new Promise((resolve) => pending.push(resolve));
+    };
+    const h = createHarness({ loader: createFakeLoader(fixedBundle), gateway });
+    h.presenter.start();
+    await flush();
+    const site4 = h.presenter.state.map!.sites.find((s) => s.cellId === 4)!;
+    const site5 = h.presenter.state.map!.sites.find((s) => s.cellId === 5)!;
+    // 同一 tick 同步进两个解锁流程（selectSite 同步执行到网关调用前）⇒ 两层 loading 都弹出。
+    h.presenter.selectSite(site4);
+    h.presenter.selectSite(site5);
+    assert.equal(h.busy.length, 2, '并发两个写请求 ⇒ 两层 loading（busy=true）');
+    pending[0]({ ok: true, unlockedCellIds: [4] });
+    pending[1]({ ok: true, unlockedCellIds: [5] });
+    await flush();
+    assert.equal(h.busy.length, 4, '两次 exit 各 hide 一次 ⇒ 严格配对（修复前残留只给 3 条）');
+    assert.equal(h.busy[2].busy, false, '第一个请求结束即 hide 一层');
+    assert.equal(h.busy[3].busy, false, '第二个请求结束再 hide 一层，引用计数归零');
+    assert.equal(unlockCount, 2, '两个格各发一次解锁');
+});
+
+// 🔴 页面销毁时在途写请求必须撤回其 loading：否则 LoadingPopup 引用计数残留，
+// 全屏遮罩（BlockInputEvents）常驻，回到其他页面「点不动」。
+test('dispose retracts in-flight loading layers and later exits do not double-hide', async () => {
+    const fixedBundle: ITerritoryChapterBundle = {
+        ...bundle,
+        mapJson: { ...mapJson, sites: [...mapJson.sites,
+            { id: 'fixed_4', type: 'fixedResource', cellId: 4, footprint: [4], rewardId: 1011,
+                unlock: { requiredCells: [0], combatPower: 0, silverCost: 0, staminaCost: 0, exploreSeconds: 1 } }] },
+    };
+    const pending: Array<(value: TerritoryWriteResult) => void> = [];
+    const gateway = createFakeGateway({ fetch: {
+        ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [0], passCells: [0] },
+    } });
+    gateway.gateway.unlockCell = () => new Promise((resolve) => pending.push(resolve));
+    const h = createHarness({ loader: createFakeLoader(fixedBundle), gateway });
+    h.presenter.start();
+    await flush();
+    h.presenter.selectSite(h.presenter.state.map!.sites.find((s) => s.cellId === 4)!);
+    assert.equal(h.busy.length, 1, '请求在途 ⇒ loading 已弹出');
+    h.presenter.dispose();
+    assert.equal(h.busy.length, 2, 'dispose 撤回在途 loading');
+    assert.equal(h.busy[1].busy, false, '撤回的是 hide');
+    pending[0]({ ok: true, unlockedCellIds: [4] });
+    await flush();
+    assert.equal(h.busy.length, 2, 'dispose 后 finally 的 exitBusy 幂等，不重复 hide');
+});
+
+// 🔴 解锁成功后的**最终一次渲染**必须发生在 pending 清空之后：视图 `isLoading` 由
+// `pendingFixedResourceCells` 驱动（`TerritoryStationView.render`：`interactable = interactive
+// && !isLoading`）。若最后渲染的是「请求在途」帧（Button 禁用）⇒ 宝箱看着可领取却点不动
+// （用户实机：「弹出已解锁宝箱可领取，再次点击还是领取不了」）。
+test('unlock success renders its final frame after pending clears (station clickable)', async () => {
+    const fixedBundle: ITerritoryChapterBundle = {
+        ...bundle,
+        mapJson: { ...mapJson, sites: [...mapJson.sites,
+            { id: 'fixed_4', type: 'fixedResource', cellId: 4, footprint: [4], rewardId: 1011,
+                unlock: { requiredCells: [0], combatPower: 0, silverCost: 0, staminaCost: 0, exploreSeconds: 1 } }] },
+    };
+    const pending: Array<(value: TerritoryWriteResult) => void> = [];
+    const gateway = createFakeGateway({ fetch: {
+        ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [0], passCells: [0] },
+    } });
+    gateway.gateway.unlockCell = () => new Promise((resolve) => pending.push(resolve));
+    const h = createHarness({ loader: createFakeLoader(fixedBundle), gateway });
+    const pendingAtRender: boolean[] = [];
+    EventMgr.instance.on(TERRITORY_PRESENTER_EVENTS.StateChange,
+        () => { pendingAtRender.push(h.presenter.state.pendingFixedResourceCells.includes(4)); }, h.presenter);
+    h.presenter.start();
+    await flush();
+    h.presenter.selectSite(h.presenter.state.map!.sites.find((s) => s.cellId === 4)!);
+    pending[0]({ ok: true, unlockedCellIds: [4] });
+    await flush();
+    assert.equal(h.presenter.state.pendingFixedResourceCells.includes(4), false, 'pending 最终为空');
+    assert.equal(pendingAtRender[pendingAtRender.length - 1], false,
+        '最后一次渲染发生在 pending 清空后 ⇒ 站点按钮恢复可点（修复前最后一条是 true）');
+});
+
 test('校验失败（银币不足）不发请求：不弹 loading 不闪屏', async () => {
     const gateway = createFakeGateway({ fetch: {
         ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [0], passCells: [0] },
@@ -1946,5 +2045,57 @@ test('★asyncPvp 已通关但快照没给 unlockCells：点击跳过解锁直�
     await flush();
     assert.equal(h.gatewayCalls.unlock, 0, '不因缺 unlockable 发解锁请求');
     assert.equal(h.gatewayCalls.startBattle, 1, '已通关 asyncPvp 直接开战');
+    assert.deepEqual(h.gatewayCalls.battleParamsList, [['2', '1', '372']],
+        '已通关 asyncPvp 用宝箱战斗子类型 2');
+    assert.equal(h.nav.length, 1);
+});
+
+test('★asyncPvp 未通关：首次挑战用格子战斗子类型 1（通关后才切宝箱子类型 2）', async () => {
+    const h = createAsyncRepeatHarness({
+        unlockCells: [367], // 372 未解锁、未通关
+        passCells: [367],
+    });
+    h.presenter.start();
+    await flush();
+    const site = h.presenter.state.map!.sites[0];
+    assert.equal(h.presenter.state.progress?.isOwned(372), false, '372 未通关');
+    assert.equal(h.presenter.state.progress?.isCellUnlocked(372), false, '372 未解锁');
+    h.presenter.selectSite(site); // 第一次点击：解锁步
+    await flush();
+    assert.equal(h.gatewayCalls.unlock, 1, '未通关 asyncPvp 先发解锁');
+    assert.equal(h.gatewayCalls.startBattle, 0, '解锁步不发战斗请求');
+    h.presenter.selectSite(site); // 解锁后再点：开战步
+    await flush();
+    assert.equal(h.gatewayCalls.startBattle, 1, '解锁后可开战');
+    assert.deepEqual(h.gatewayCalls.battleParamsList, [['1', '1', '372']],
+        '未通关 asyncPvp 用格子战斗子类型 1（服务端对没打过的格按格子战斗分流）');
+    assert.equal(h.nav.length, 1);
+});
+
+test('★asyncPvp 本地旧档残留通关但服务端未确认：子类型按服务端判据传 1', async () => {
+    const h = createHarness({
+        loader: createFakeLoader({
+            ...bundle,
+            mapJson: asyncRepeatMap,
+            campaign: { stages: [stage, asyncRepeatStage], playerCardCount: 3, idleRewardMaxHours: 8 },
+        }),
+        // 服务端：372 未解锁未通关（玩家确实没打过）
+        gateway: createFakeGateway({ fetch: {
+            ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [367], passCells: [367] },
+        } }),
+        // 本地旧档残留：ownedCells 含 372（历史档/未上报结算）⇒ `isOwned` 误判已通关
+        store: createFakeStore({ ownedCells: [367, 372] }),
+    });
+    h.presenter.start();
+    await flush();
+    const site = h.presenter.state.map!.sites[0];
+    assert.equal(h.presenter.state.progress?.isOwned(372), true, '旧档残留：本地 owned 有 372');
+    assert.equal(h.presenter.state.progress?.isServerOwned(372), false, '但服务端未确认通关');
+    h.presenter.selectSite(site);
+    await flush();
+    // isServerOwned=false ⇒ 首次挑战 ⇒ 子类型 1（修复前用 isOwned ⇒ 传 2 ⇒ 服务端「配置错误」）
+    assert.equal(h.gatewayCalls.startBattle, 1);
+    assert.deepEqual(h.gatewayCalls.battleParamsList, [['1', '1', '372']],
+        '旧档残留不算通关：asyncPvp 按服务端确认分流，未确认传格子战斗子类型 1');
     assert.equal(h.nav.length, 1);
 });

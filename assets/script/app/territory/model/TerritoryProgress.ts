@@ -40,6 +40,17 @@ export type TerritoryExploreCheck =
  */
 export class TerritoryProgress {
     private readonly owned = new Set<number>();
+    /**
+     * **服务端快照确认**的通关格（`passCells` 原样），不含本地结算 / 旧档残留。
+     *
+     * 与 {@link owned} 的区别：`owned` 是「本地认为已占领」（快照 + 本地结算 + 存档合并，
+     * 可能比服务端领先 —— 离线胜利未上报 / 旧档残留时服务端其实没记录）；
+     * 这个集合**只由 `applyServerState` 的 `passCells` 写入**，是「服务端已确认通关」的权威。
+     * asyncPvp 重复挑战的子类型分流用 `isServerOwned`（已通关传宝箱子类型 2，未通关传 1）：
+     * 用 `isOwned` 会被本地旧档残留误判 ⇒ 没打过的格也传 2，服务端回「配置错误」。
+     * 不落档（会话内由快照填充），切章 / 重进重新按快照建立。
+     */
+    private readonly serverOwned = new Set<number>();
     private readonly disabled = new Set<number>();
     private readonly explorations = new Map<number, TerritoryExploration>();
     private readonly pendingPasses = new Set<number>();
@@ -133,7 +144,10 @@ export class TerritoryProgress {
         const added: number[] = [];
         for (const cell of state.passCells ?? []) {
             this.pendingPasses.delete(cell);
-            if (!validCell(cell) || this.owned.has(cell)) continue;
+            if (!validCell(cell)) continue;
+            // 服务端确认通关的，无条件记入权威集合（本地是否已 owned 都算确认过）。
+            this.serverOwned.add(cell);
+            if (this.owned.has(cell)) continue;
             // 服务端说通关了 ⇒ 本地视为已占领（探索中的那格直接被占，无需等settle）。
             this.explorations.delete(cell);
             this.disabled.delete(cell);
@@ -303,6 +317,14 @@ export class TerritoryProgress {
     }
 
     isOwned(cellId: number): boolean { return this.owned.has(cellId); }
+
+    /**
+     * 服务端快照是否**确认过**这格通关（`passCells` 权威，不含本地结算 / 旧档残留）。
+     *
+     * asyncPvp 子类型分流用它：本地旧档残留的 owned 会让 `isOwned` 误判「已通关」，
+     * 未打过的格也会发宝箱战斗子类型 2 ⇒ 服务端「配置错误」。
+     */
+    isServerOwned(cellId: number): boolean { return this.serverOwned.has(cellId); }
     isDisabled(cellId: number): boolean { return this.disabled.has(cellId); }
     explorationAt(cellId: number): TerritoryExploration | null {
         return this.explorations.get(cellId) ?? null;

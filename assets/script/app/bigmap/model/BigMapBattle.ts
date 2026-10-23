@@ -28,6 +28,7 @@ import { bigMapResCap } from './BigMapBase';
 /** 主城 1 级的基础攻城伤害；每升 1 级 +180（主城等级是唯一的「战力」来源）。 */
 export const BIGMAP_BASE_ATTACK = 420;
 export const BIGMAP_ATTACK_PER_MAIN_LEVEL = 180;
+export const BIGMAP_MONSTER_BATTLE_UNAVAILABLE = '野怪战斗尚未接入';
 
 /** 玩家在大地图上的战斗进度（存档的一部分，与基地状态分开存，互不干扰）。 */
 export interface IBigMapBattleProgress {
@@ -301,6 +302,8 @@ export function bigMapAttackMonster(
 ): IBigMapAttackOutcome {
     const monster = config.monsters.get(site.monsterId);
     if (!monster) return fail('野怪配置不存在');
+    const offline = monster.offlineBattle;
+    if (!offline) return fail(BIGMAP_MONSTER_BATTLE_UNAVAILABLE);
     const unlock = bigMapMonsterUnlock(monster, {
         adventureChapter: 0,
         openDay: 0,
@@ -315,17 +318,17 @@ export function bigMapAttackMonster(
     const nextBase = spendStamina(base, preview.staminaCost);
     if (!nextBase) return fail(`行动力不足（需要 ${preview.staminaCost}）`, preview);
 
-    const hpBefore = progress.monsterHp[site.instanceId] ?? monster.defenseHp;
+    const hpBefore = progress.monsterHp[site.instanceId] ?? offline.defenseHp;
     const hpAfter = Math.max(0, hpBefore - preview.damage);
     const killed = hpAfter <= 0;
     const warScoreTotal = (progress.monsterWarScore[site.instanceId] ?? 0) + preview.warScore;
 
     const reward: Partial<Record<BigMapResType, number>> = killed
         ? {
-            grain: monster.rewardGrain,
-            wood: monster.rewardWood,
-            iron: monster.rewardIron,
-            coin: monster.rewardCoin,
+            grain: offline.rewardGrain,
+            wood: offline.rewardWood,
+            iron: offline.rewardIron,
+            coin: offline.rewardCoin,
         }
         : {};
 
@@ -336,15 +339,15 @@ export function bigMapAttackMonster(
         base: killed ? addRes(config, nextBase, reward) : nextBase,
         progress: {
             ...progress,
-            monsterHp: { ...progress.monsterHp, [site.instanceId]: killed ? monster.defenseHp : hpAfter },
+            monsterHp: { ...progress.monsterHp, [site.instanceId]: killed ? offline.defenseHp : hpAfter },
             monsterRespawnAt: killed
-                ? { ...progress.monsterRespawnAt, [site.instanceId]: now + monster.respawnSeconds }
+                ? { ...progress.monsterRespawnAt, [site.instanceId]: now + offline.respawnSeconds }
                 : progress.monsterRespawnAt,
             monsterWarScore: { ...progress.monsterWarScore, [site.instanceId]: killed ? 0 : warScoreTotal },
             clearedMonsterLevel: killed
                 ? Math.max(progress.clearedMonsterLevel, monster.level)
                 : progress.clearedMonsterLevel,
-            totalWarScore: progress.totalWarScore + preview.warScore + (killed ? monster.warScore : 0),
+            totalWarScore: progress.totalWarScore + preview.warScore + (killed ? offline.warScore : 0),
         },
         breached: killed,
         occupied: false,
@@ -366,11 +369,13 @@ export function bigMapMonsterHpRatio(
     config: IBigMapConfig,
     progress: IBigMapBattleProgress,
     site: IBigMapMonsterSite,
-): number {
+): number | null {
     const monster = config.monsters.get(site.monsterId);
     if (!monster) return 0;
-    const hp = progress.monsterHp[site.instanceId] ?? monster.defenseHp;
-    return Math.max(0, Math.min(1, hp / Math.max(1, monster.defenseHp)));
+    const offline = monster.offlineBattle;
+    if (!offline) return null;
+    const hp = progress.monsterHp[site.instanceId] ?? offline.defenseHp;
+    return Math.max(0, Math.min(1, hp / Math.max(1, offline.defenseHp)));
 }
 
 /** 建造队列是否空闲（攻城与建造互不阻塞，这里只给界面做「有队列正在跑」的角标）。 */

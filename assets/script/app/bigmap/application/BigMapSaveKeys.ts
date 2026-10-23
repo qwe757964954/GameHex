@@ -6,6 +6,11 @@ import type { IBigMapStorage } from './BigMapPresenter';
  */
 export const BIGMAP_SAVE_KEY = 'zhancheng.bigmap.save';
 
+export interface IBigMapSaveOwner {
+    readonly roleId: string;
+    readonly serverId: string;
+}
+
 /**
  * 内存存储：单测 / 编辑器预览用，不进磁盘。
  *

@@ -1,0 +1,14 @@
+{
+  "ver": "1.1.50",
+  "importer": "prefab",
+  "imported": true,
+  "uuid": "ad431db3-dd21-4013-b8ba-5b411c62b503",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {},
+  "userData": {
+    "syncNodeName": "BigMapWorldTemplates",
+    "hasIcon": false
+  }
+}

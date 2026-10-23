@@ -232,12 +232,17 @@ export class NetSocket extends NetSocketBase {
                 console.error("sendData request.data null:", request?.messageName)
                 continue
             }
+            if (request.canSend && !request.canSend()) {
+                request.onReject('cancelled');
+                continue;
+            }
             state = this.getState()
             if (!(state instanceof ConnectedNetState)) {
                 break
             }
             let isOk = state.addNetworkRequest(request)
             if (!isOk) {
+                if (!request.data || request.isInUse === false) continue;
                 if (request?.messageName == NetSocket.heartbeatMsgName) {
                     request.onReject("send fail")
                 } else {

@@ -1,0 +1,14 @@
+{
+  "ver": "1.1.50",
+  "importer": "prefab",
+  "imported": true,
+  "uuid": "3a686f59-db77-4e34-a43a-6fa0e251306c",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {},
+  "userData": {
+    "syncNodeName": "BigMapPlayerLevelPanel",
+    "hasIcon": false
+  }
+}

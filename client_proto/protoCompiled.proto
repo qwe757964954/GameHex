@@ -4496,6 +4496,11 @@ message CmdChapterBattleResultInfo {
   optional uint32 treasureId  = 2;//宝箱id
 }
 
+// slg野怪战斗结果信息(1003)
+message CmdSlgMonsterBattleResultInfo {
+  repeated CmdGoods cmdGoods = 1;//道具奖励
+}
+
 // 战斗帧信息
 message CmdBattleFrameInfo {
   required uint32 frameId = 1;//帧id
@@ -4633,6 +4638,172 @@ message CmdCityChapterCellInfoRspMsg {
    required uint32 rewardState  = 2;//奖励状态,0尚未领取,1已领取
    repeated uint64 unlockCells  = 3;//解锁的格子(bitSet)
    repeated uint64 passCells    = 4;//通关的格子集合(bitSet)
+}
+
+//slg玩法 行动力信息
+message SlgGameActionInfo {
+  required uint32 nextRevertTime = 1;  // 下次回复剩余秒数
+}
+
+// 据点简略信息（大地图缩略视角展示，红=已占领 黄=未占领）
+message SlgCampSimpleInfo {
+  required uint32 campId = 1;      // 据点id
+  required uint32 opType = 2;      // 占领状态: 0=尚未占领(黄色) 1=已占领(红色)
+  required uint32 state = 3;       // 据点状态: 0=未开放 1=开放 2=攻城中 3=结算中
+}
+
+// 据点详细信息（点击据点弹窗展示）
+message SlgCampInfo {
+  required uint32 campId = 1;            // 据点id
+  required uint32 opType = 2;            // 占领状态: 0=尚未占领(黄色) 1=已占领(红色)
+  required uint32 state = 3;             // 据点状态: 0=未开放 1=开放 2=攻城中 3=结算中
+}
+
+// 单个建筑信息
+message SlgBuildInfo {
+  required uint32 buildInstId = 1;   // 建筑实例id
+  required uint32 buildingId = 2;   // 建筑id
+  required uint32 position = 3;     // 位置
+  required uint32 level = 4;        // 当前等级
+  required uint32 state = 5;        // 状态 0=空闲 1=建造中 2=升级中
+  optional uint32 finishTime = 6;   // 完成时间戳(建造/升级中有效)
+}
+
+// 单个建造队列信息
+message SlgBuildQueueInfo {
+  required uint32 queueId = 1;      // 队列编号
+  required uint32 type = 2;         // 任务类型 1=建造 2=升级
+  required uint32 buildInstId = 3;   // 建筑实例id
+}
+
+// 建造玩法信息
+message SlgBuildGameInfo {
+  repeated SlgBuildInfo builds = 1;        // 已建造建筑列表
+  repeated SlgBuildQueueInfo queues = 2;   // 建造队列列表
+  required uint32 unlockQueue = 3;         // 已解锁队列数
+}
+
+// 大地图 请求据点简略图
+message CmdSlgCampSimpleInfoReqMsg {
+  repeated uint32 campIds = 1; // 据点id集合(前端只传可见范围,减少数据量)
+}
+
+// 大地图 响应据点简略图
+message CmdSlgCampSimpleInfoRspMsg {
+  repeated SlgCampSimpleInfo infos = 1; // 据点简略信息列表
+}
+
+// 大地图 请求据点信息
+message CmdSlgCampInfoReqMsg {
+  repeated uint32 campIds = 1; // 据点id集合
+}
+
+// 大地图 响应据点信息
+message CmdSlgCampInfoRspMsg {
+  repeated SlgCampInfo infos = 1; // 据点详细信息列表
+}
+
+// 大地图 请求行动力更新
+message CmdSlgActionUpdateReqMsg {
+
+}
+
+// 大地图 响应行动力更新
+message CmdSlgActionUpdateRspMsg {
+    required SlgGameActionInfo info = 1;//slg玩法信息
+}
+
+//大地图 请求slg玩法信息
+message CmdSlgGameInfoReqMsg {
+
+}
+
+//大地图 响应slg玩法信息
+message CmdSlgGameInfoRspMsg {
+}
+
+//大地图 广播slg玩法信息
+message CmdSlgGameInfoBroMsg {
+}
+
+// ==================== 大地图(SLG) 建造系统协议 ====================
+
+// 大地图 请求建造信息
+message CmdSlgBuildInfoReqMsg {
+}
+
+// 大地图 建造建筑
+message CmdSlgBuildReqMsg {
+  required uint32 buildingId = 1;   // 建筑id
+  required uint32 position = 2;     // 目标位置
+  optional uint32 instant = 3;      // 是否立即完成 0=否 1=是
+}
+
+// 大地图 响应建造建筑
+message CmdSlgBuildRspMsg {
+  required SlgBuildInfo build = 1;        // 建筑信息
+  required SlgBuildQueueInfo queue = 2;   // 建造队列
+}
+
+// 大地图 升级建筑
+message CmdSlgBuildUpgradeReqMsg {
+  required uint32 buildInstId = 1;  // 建筑实例id
+  optional uint32 instant = 2;      // 是否立即完成 0=否 1=是
+}
+
+// 大地图 响应升级建筑
+message CmdSlgBuildUpgradeRspMsg {
+  required SlgBuildInfo build = 1;        // 建筑信息
+  required SlgBuildQueueInfo queue = 2;   // 建造队列
+}
+
+// 大地图 取消建造/升级
+message CmdSlgBuildCancelReqMsg {
+  required uint32 buildInstId = 1;   // 建筑实例id
+}
+
+// 大地图 响应取消建造/升级
+message CmdSlgBuildCancelRspMsg {
+  required uint32 buildInstId = 1;         // 建筑实例id
+  optional SlgBuildInfo build = 2;        // 建筑信息
+  optional SlgBuildQueueInfo queue = 3;   // 建造队列
+}
+
+// 大地图 移动建筑
+message CmdSlgBuildMoveReqMsg {
+  required uint32 buildInstId = 1;   // 建筑实例id
+  required uint32 position = 2;     // 新位置
+}
+
+// 大地图 响应移动建筑
+message CmdSlgBuildMoveRspMsg {
+  required SlgBuildInfo build = 1;        // 移动后的建筑信息
+}
+
+// 大地图 领取资源产出
+message CmdSlgBuildCollectReqMsg {
+  repeated uint32 buildInstIds = 1;   // 建筑实例id
+}
+
+// 大地图 响应领取资源产出
+message CmdSlgBuildCollectRspMsg {
+  repeated SlgBuildInfo builds = 1;  // 建筑信息
+  repeated CmdGoods tlCmdGoods = 2; // 物品列表
+}
+
+// 大地图 解锁建造队列
+message CmdSlgBuildUnlockQueueReqMsg {
+  required uint32 queueId = 1;      // 队列编号
+}
+
+// 大地图 响应解锁建造队列
+message CmdSlgBuildUnlockQueueRspMsg {
+  required uint32 unlockQueue = 1;// 已解锁队列数
+}
+
+// 大地图 广播建造信息
+message CmdSlgBuildInfoBroMsg {
+
 }
 
 // 游戏接口ID类型枚举
@@ -4850,6 +5021,17 @@ enum MessageId {
 	CmdContinuityGiftFinishRewardRspMsg = 402025121; //连续礼包完成奖励
 	CmdTakeSpiritAnimalBoxRspMsg = 923167072; // 领取灵兽进度宝箱奖励
 	CmdChangeUsedSkinRspMsg = 1911316089; //切换皮肤
+    CmdSlgCampSimpleInfoRspMsg = 1631409176; //大地图 请求据点简略图
+    CmdSlgCampInfoRspMsg = 1665140602; //大地图 请求据点信息	
+    CmdSlgActionUpdateRspMsg = 196069974; //大地图 请求行动力更新
+    CmdSlgGameInfoRspMsg = 1100779337; //大地图 请求slg玩法信息	
+    CmdSlgBuildInfoRspMsg = 1414628085; //大地图 请求建造信息
+    CmdSlgBuildRspMsg = 455496637; //大地图 建造建筑
+    CmdSlgBuildUpgradeRspMsg = 1255226437; //大地图 升级建筑
+    CmdSlgBuildCancelRspMsg = 1606383447; //大地图 取消建造/升级
+    CmdSlgBuildMoveRspMsg = 2116890094; //大地图 移动建筑
+    CmdSlgBuildCollectRspMsg = 1353318189; //大地图 领取资源产出
+    CmdSlgBuildUnlockQueueRspMsg = 1478251158; //大地图 解锁建造队列	
 	CmdSpiritAnimalLevelUpRspMsg = 2051518427; //灵兽升级
 	CmdSpiritAnimalStepUpRspMsg = 1991681903; //灵兽升阶
 	CmdSpiritAnimalBattleRspMsg = 1439043070; //灵兽上阵
@@ -4934,6 +5116,8 @@ enum MessageId {
 	CmdCelebrationBuyShopGoodsBroMsg = 1919419092; //购买开服庆典购买特惠礼包广播
 	CmdRechargeDailyUpdateBroMsg = 161909789; //每日充值数据刷新
 	CmdGuanKaGiftBroMsg = 915823971; //限时礼包
+    CmdSlgGameInfoBroMsg = 1546899562; //大地图 广播slg玩法信息
+    CmdSlgBuildInfoBroMsg = 1860748310; //大地图 广播建造信息
 	CmdTeamDetailBroMsg = 1366910774; //队伍详情广播
 	CmdTeamDisbandBroMsg = 2097470162; //队伍解散广播
 	CmdTeamInviteBroMsg = 1608465022; //邀请组队

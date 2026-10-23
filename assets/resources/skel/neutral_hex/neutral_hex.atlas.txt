@@ -1,0 +1,13 @@
+
+neutral_hex.png
+size: 128,128
+format: RGBA8888
+filter: Linear,Linear
+repeat: none
+images/1
+  rotate: false
+  xy: 2, 2
+  size: 122, 122
+  orig: 139, 140
+  offset: 8, 8
+  index: -1

@@ -285,3 +285,32 @@ test('★★trim 偏移补偿量必须与 meta 实测一致（防止公式被改
             `${name} 补偿后仍有 ${residual} 的纵向残差`);
     }
 });
+
+// ============================================================
+// 第四层：`buildSize`（表「模型大小」）作为体量倍率
+// ============================================================
+//
+//  表里的 `buildSize` 一度是死字段（r2 端标记为空 ⇒ 根本没导进 build.json）。
+//  2026-10-22 接通后它必须是**乘在归一系数之上**的倍率，而不是替换归一 ——
+//  前者保持「所有建筑等宽」的对齐前提，后者会让同一格里的建筑忽大忽小。
+
+test('★★★buildSize 必须乘进缩放（不是替换归一系数）', () => {
+    const at = STATION_SRC.indexOf('private applyIconPlacement(');
+    const body = STATION_SRC.slice(at, STATION_SRC.indexOf('\n    private applyIconScale(', at));
+    assert.match(body, /BUILDING_VISIBLE_WIDTH \/ visibleWidth : 1\) \* this\.iconSizeScale/,
+        'scale 必须是「归一系数 × iconSizeScale」—— 少了乘号，表里的 buildSize 就不生效');
+});
+
+test('★★★体量倍率必须在算落点之前写入（否则池化复用时用上一格的倍率）', () => {
+    const renderAt = STATION_SRC.indexOf('render(content:');
+    assert.ok(renderAt > 0, 'TerritoryStationView 要有 render');
+    const body = STATION_SRC.slice(renderAt, STATION_SRC.indexOf('\n    private ', renderAt));
+    const assignAt = body.indexOf('this.iconSizeScale =');
+    const applyAt = body.indexOf('this.applyIconPlacement()');
+    assert.ok(assignAt > 0, 'render 里要写 this.iconSizeScale');
+    assert.ok(applyAt > 0, 'render 里要调 applyIconPlacement');
+    assert.ok(assignAt < applyAt, '先写倍率再算落点 —— 顺序反了会拿上一格的倍率画这一帧');
+    // 倍率字段本身也要有默认 1（否则首次 render 之前就是 undefined，乘出来 NaN）。
+    assert.match(STATION_SRC, /private iconSizeScale = 1;/,
+        'iconSizeScale 初值必须是 1');
+});

@@ -1,0 +1,389 @@
+{
+  "version": 1,
+  "source": "废土远征与我的基地效果图分层重建",
+  "assets": [
+    {
+      "path": "sprites/headquarters.png",
+      "size": [
+        439,
+        425
+      ],
+      "cell": 0,
+      "sourceRect": [
+        0,
+        0,
+        444,
+        444
+      ],
+      "sha256": "489b8cadb12758a9cbbd9e007b9228192986a87686e108cadf1bcc9fe7af8657"
+    },
+    {
+      "path": "sprites/farm.png",
+      "size": [
+        426,
+        358
+      ],
+      "cell": 1,
+      "sourceRect": [
+        444,
+        0,
+        887,
+        444
+      ],
+      "sha256": "b940688833e0c9683c6c7caa2ec40a4e6e867911bc638cc49f95a2b4cca587f0"
+    },
+    {
+      "path": "sprites/sawmill.png",
+      "size": [
+        425,
+        336
+      ],
+      "cell": 2,
+      "sourceRect": [
+        887,
+        0,
+        1330,
+        444
+      ],
+      "sha256": "31c6141da64cb911970a7acbf6d0d125652543430fd6ee9bb3aeb08e15d3d300"
+    },
+    {
+      "path": "sprites/barracks.png",
+      "size": [
+        436,
+        360
+      ],
+      "cell": 3,
+      "sourceRect": [
+        1330,
+        0,
+        1774,
+        444
+      ],
+      "sha256": "e596e812bca20861be46b3a8853a1f5ed3c4a7d204f0ab607fd47caf7f27e878"
+    },
+    {
+      "path": "sprites/ironworks.png",
+      "size": [
+        433,
+        413
+      ],
+      "cell": 4,
+      "sourceRect": [
+        0,
+        444,
+        444,
+        887
+      ],
+      "sha256": "e111894546315f2a784a07d7c756bff7f74d4e976b3744137f767ad757175bfa"
+    },
+    {
+      "path": "sprites/warehouse.png",
+      "size": [
+        438,
+        289
+      ],
+      "cell": 5,
+      "sourceRect": [
+        444,
+        444,
+        887,
+        887
+      ],
+      "sha256": "bf0b79f7081f927907100303253b6eec7d34fb656c2750fca79ecfdfc7352a56"
+    },
+    {
+      "path": "sprites/construction.png",
+      "size": [
+        429,
+        385
+      ],
+      "cell": 6,
+      "sourceRect": [
+        887,
+        444,
+        1330,
+        887
+      ],
+      "sha256": "2472c6849bceb3e4efdaec4daf012ebb3c7eba6e0016807dcd44cef3ea386aa2"
+    },
+    {
+      "path": "sprites/fortress.png",
+      "size": [
+        431,
+        415
+      ],
+      "cell": 7,
+      "sourceRect": [
+        1330,
+        444,
+        1774,
+        887
+      ],
+      "sha256": "2c99bcd04c49873bfca82826d737f8e182475a7ab6f588ce6fe8e0e82e792b4c"
+    },
+    {
+      "path": "sprites/mutant_camp.png",
+      "size": [
+        430,
+        404
+      ],
+      "cell": 0,
+      "sourceRect": [
+        0,
+        0,
+        444,
+        444
+      ],
+      "sha256": "22004b6c0bc434807eec4064f9e4137086b911da0c5bc92c3e5f7049a4685c4d"
+    },
+    {
+      "path": "sprites/water_tower.png",
+      "size": [
+        396,
+        416
+      ],
+      "cell": 1,
+      "sourceRect": [
+        444,
+        0,
+        887,
+        444
+      ],
+      "sha256": "5b18ca92026d2dd1385dddbd98ddac5697a9d634dfce4008a7b2688b2d77b8a5"
+    },
+    {
+      "path": "sprites/rocks.png",
+      "size": [
+        378,
+        333
+      ],
+      "cell": 2,
+      "sourceRect": [
+        887,
+        0,
+        1330,
+        444
+      ],
+      "sha256": "81dbf9c64baa32b1e8fe1e4df8de2251a22d6fa52d73244313313ff3711652b7"
+    },
+    {
+      "path": "sprites/grass.png",
+      "size": [
+        378,
+        310
+      ],
+      "cell": 3,
+      "sourceRect": [
+        1330,
+        0,
+        1774,
+        444
+      ],
+      "sha256": "c9c5ec4afaa53c5b035f55afc53b3a8a397f27b18a2808fcd1e422d904c16497"
+    },
+    {
+      "path": "sprites/grain.png",
+      "size": [
+        411,
+        371
+      ],
+      "cell": 4,
+      "sourceRect": [
+        0,
+        444,
+        444,
+        887
+      ],
+      "sha256": "57a59ea028bef5fbcd14bdf55904c9cee1c4c53550de6288c7910fd9f3ee9529"
+    },
+    {
+      "path": "sprites/wood.png",
+      "size": [
+        411,
+        345
+      ],
+      "cell": 5,
+      "sourceRect": [
+        444,
+        444,
+        887,
+        887
+      ],
+      "sha256": "57d744085590e917b6ac9b4cef44957846932e3f9d8d4f08d16f9b685e9325a9"
+    },
+    {
+      "path": "sprites/iron.png",
+      "size": [
+        395,
+        313
+      ],
+      "cell": 6,
+      "sourceRect": [
+        887,
+        444,
+        1330,
+        887
+      ],
+      "sha256": "2c84869a65e0d2ce7a5e9f6aba86e4557e5b9ce7ce2415406132e9278ef81149"
+    },
+    {
+      "path": "sprites/coin.png",
+      "size": [
+        376,
+        283
+      ],
+      "cell": 7,
+      "sourceRect": [
+        1330,
+        444,
+        1774,
+        887
+      ],
+      "sha256": "14a27a622cfd2a7c8a632ceb67e00e984d2adbcfc32b6b125d1ab4ee832978e6"
+    },
+    {
+      "path": "ui/header.png",
+      "size": [
+        405,
+        134
+      ],
+      "cell": 0,
+      "sourceRect": [
+        0,
+        0,
+        418,
+        418
+      ],
+      "sha256": "c33e1bdbe5e3daace4898bed72df1f9ec347281e47b1ba40bd43fd7c2f8c7f56"
+    },
+    {
+      "path": "ui/detail.png",
+      "size": [
+        408,
+        256
+      ],
+      "cell": 1,
+      "sourceRect": [
+        418,
+        0,
+        836,
+        418
+      ],
+      "sha256": "1390c281ee621013b09a0049a187cb3cbf38a4e6c1a4c124b32803dde4c24376"
+    },
+    {
+      "path": "ui/button.png",
+      "size": [
+        391,
+        158
+      ],
+      "cell": 2,
+      "sourceRect": [
+        836,
+        0,
+        1254,
+        418
+      ],
+      "sha256": "1841161c6df868e4f0fb59ff8617c6f2dc2e1c9bfb20dbab86af2f82c484cd35"
+    },
+    {
+      "path": "ui/tab_idle.png",
+      "size": [
+        404,
+        161
+      ],
+      "cell": 3,
+      "sourceRect": [
+        0,
+        418,
+        418,
+        836
+      ],
+      "sha256": "223bce280eeb7926b0917f774dbcdf40e85e016faaf3c8a0a4e1f399010f9cb5"
+    },
+    {
+      "path": "ui/tab_active.png",
+      "size": [
+        405,
+        161
+      ],
+      "cell": 4,
+      "sourceRect": [
+        418,
+        418,
+        836,
+        836
+      ],
+      "sha256": "7a289121603b28ba2aa9bd0cfaf4ada73fcd7665637f4ef100b3f0422407b72e"
+    },
+    {
+      "path": "ui/badge.png",
+      "size": [
+        392,
+        119
+      ],
+      "cell": 5,
+      "sourceRect": [
+        836,
+        418,
+        1254,
+        836
+      ],
+      "sha256": "875080f6edabdb2de25b09c002b7a5a6a45a23fc5275e2ed60603077b83215b5"
+    },
+    {
+      "path": "ui/plot.png",
+      "size": [
+        405,
+        309
+      ],
+      "cell": 6,
+      "sourceRect": [
+        0,
+        836,
+        418,
+        1254
+      ],
+      "sha256": "1265aa934a7383041211052938a2c4d8c569825e5efaacdf6e4d625b4171153a"
+    },
+    {
+      "path": "ui/stamina.png",
+      "size": [
+        349,
+        331
+      ],
+      "cell": 7,
+      "sourceRect": [
+        418,
+        836,
+        836,
+        1254
+      ],
+      "sha256": "26dc6fc04b02ba027be3200e281740b4ad99d851e16b0229c7f3dea28c0975b4"
+    },
+    {
+      "path": "ui/home.png",
+      "size": [
+        304,
+        276
+      ],
+      "cell": 8,
+      "sourceRect": [
+        836,
+        836,
+        1254,
+        1254
+      ],
+      "sha256": "52a3fc6a8bb00de9ef2a5826b0c30c7c4f122e65d6fe9901184cc7a9d34f3a53"
+    },
+    {
+      "path": "base_ground.png",
+      "size": [
+        900,
+        1599
+      ],
+      "sha256": "e2dbe0013d2052d10a9fc4e95860ef1dd65dcf60f98e49516f3ccb6ff0b3c2af"
+    }
+  ]
+}

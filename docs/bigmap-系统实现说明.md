@@ -19,7 +19,8 @@
 | 界面 | 全代码线框图：顶栏资源 / 大地图 / 建造区 / 建造列表 / 详情面板 / 队列条 | ✅（示意稿） |
 | 未做 | 商店、赛季、联盟、战盟、托管战斗、战斗加速、攻打玩家基地、实时排名 | 按用户要求排除 |
 
-> **入口**：主界面右下角（导航条上方）的「大地图」悬浮按钮。打开后是一层覆盖页，切 tab 不会销毁。
+> **入口**：主界面底栏第 7 格「世界」（`MainTab.World`）—— 2026-10-21 起大地图不再有单独的悬浮按钮，
+> 点格子直接 `BigMapEntry.open`。打开后是一层覆盖页，切 tab 不会销毁。
 
 ---
 
@@ -136,6 +137,7 @@ assets/script/app/bigmap/
 │   ├── BigMapUnlock.ts          # 三条解锁链（建筑 / 城池 / 野怪），返回人话原因
 │   ├── BigMapBase.ts            # 摆放 / 队列 / 升级 / 产出 / 收获 / tick
 │   ├── BigMapBattle.ts          # 攻城 / 野怪结算、战功公式、占领判定
+│   ├── BigMapTerritoryColor.ts  # 势力配色（图着色，保证相邻不同色）
 │   └── BigMapSaveData.ts        # 存档序列化 + 脏档修复
 ├── application/                 # 时序、持久化、把规则翻译成视图数据
 │   ├── BigMapPresenter.ts       # 唯一的门面：视图只认它
@@ -144,11 +146,11 @@ assets/script/app/bigmap/
 │   ├── BigMapSaveKeys.ts        # 存档键 + 内存存储（import cc 之外，给单测用）
 │   └── BigMapEntry.ts           # 配置 / 存档 / 冒险进度 / 页面 的唯一接线处
 └── view/                        # 只管画与输入
-    ├── BigMapTheme.ts           # 线框配色 + Graphics 画板/按钮工具
-    ├── BigMapWorldView.ts       # 大地图（地形层一次画、标记层按需重画、拖拽缩放拾取）
+    ├── BigMapTheme.ts           # 线框配色 + 势力色板 + Graphics 画板/按钮工具
+    ├── BigMapWorldView.ts       # 大地图（地形层一次画、势力范围层一次画、标记层按需重画、拖拽缩放拾取）
     ├── BigMapBaseView.ts        # 5×5 建造区
-    ├── BigMapPage.ts            # 页面装配（顶栏 / 面板 / 模式切换 / 心跳）
-    └── BigMapEntryButton.ts     # 主界面悬浮入口
+    ├── BigMapPage.ts            # 页面装配（顶栏资源带 / 面板 / 模式切换 / 心跳）
+    └── (入口在 `main/MainTabHost` 的「世界」格，不再有独立的悬浮按钮)
 ```
 
 依赖方向严格遵守 `AGENTS.md`：`bootstrap → procedure | view → core`，`model` 不 import 任何上层。
@@ -200,7 +202,7 @@ assets/script/app/bigmap/
 
 | 操作 | 结果 |
 | --- | --- |
-| 顶栏「大地图 / 基地建造」 | 切换两个视图 |
+| 底部「基地建造 / 大地图」 | 互斥切换两个视图（按钮文案 = **点下去会去哪**，屏幕上永远只有一个） |
 | 地图拖动 / 滚轮 / ± 按钮 | 平移与缩放；「回家」把镜头对准自己的基地 |
 | 点菱形块 | 选中城池 → 右侧显示状态 / 距离 / 城防 / 战功 / 预计伤害 → 「攻打」 |
 | 点小圆点 | 选中野怪 → 「攻打」（未解锁时显示需先通关几级） |
@@ -208,8 +210,130 @@ assets/script/app/bigmap/
 | 左侧建造列表点一行 | 进入摆放模式 → 点空地放置；再点一次同一行取消 |
 | 点已建成的建筑 | 升级（第 3 章解锁；主城等级不够会拒绝并说明原因） |
 | 点建造中的格子 | 取消建造并按 `cancelReturnRate` 返还 |
-| 顶栏「收取」 | 一键收获所有资源田（受仓库上限截断） |
-| 顶栏「重置」 | 清空存档（调试用，正式版不给入口） |
+| 点已建成建筑时右下的「收取 N」 | 收这一块的产出（受仓库上限截断） |
+| 切底部页签 | 关掉大地图并回到目标页（页面内不再有「返回」按钮） |
+
+> 2026-10-21 用户口径：删掉顶栏的「返回」「植物大世界」标题「一键收取」三样，
+> 顶栏只留五个货币胶囊（`HEADER_HEIGHT` 128 → 88），高度还给地图。
+
+### 5.1 配色口径（地块 / 势力范围）
+
+| 元素 | 规则 | 实现 |
+| --- | --- | --- |
+| 地块默认色 | **一律沙地本色** `#CFAF8C`，地形只保留极轻冷暖差 | `BigMapWorldView` 的 `TERRAIN_TINT`（**乘算**，只能压暗） |
+| 势力范围 | **整片势力范围**（布局里的 `rangeHex`，线上 30~88 格/城）逐格填势力色，填充半透明（α≈40%），地块纹理透上来 | `paintTerritory` + `BIGMAP_TERRITORY_COLORS` |
+| 相邻势力 | **不同色**；邻接取布局的 `adjacentCityIds`（编辑器按范围实际咬合推导），没有布局时按 10 格距离兜底 | `assignTerritoryColorSlotsFromAdjacency` / `assignTerritoryColorSlots`（DSATUR 图着色，`model/BigMapTerritoryColor.ts`） |
+| 城池状态 | 走**角标**颜色（可打/已占领/未解锁），不占用地块颜色 | `cityTint` |
+
+**「范围」和「占格」是两份数据，别混用**（2026-10-22 用户口径：「范围内所有地块都上色，
+现在只有城池所在的地块上了色」）：
+
+| 字段 | 内容 | 消费方 |
+| --- | --- | --- |
+| `IBigMapCitySite.hexIds` | 城池本体，4~6 格 | **点击命中 / 占位互斥**（`cityByHex`、`bigMapOccupantOf`） |
+| `IBigMapCitySite.rangeHex` | 势力范围，线上 30~88 格 | **染色**（`paintTerritory`）|
+| `IBigMapCitySite.adjacentCityIds` | 范围真实相接的邻城 | **配色邻接图**（保证相邻不同色）|
+
+颜色的两个坑：
+
+- `Sprite.color` 与地形色是**乘算**，只能把地块压暗。想要"偏蓝"得把 RGB 里另外两个通道压下去，
+  所以地形色一旦取得太浓，整张图会花成迷彩 —— 颜色让给势力染色，地形退成近看才分得出的细节。
+- 势力色**不能**用 `cityId % 色板长度`：城池按环上槽位排布，取模必然让环上相邻两座城撞色，
+  换一座城的 id 还会整片错位。图着色是唯一稳的做法。
+- `rangeHex` 如果是「城池本体 + 半圈」（7 格）这种退化数据，代码改得再对，屏幕上也几乎看不出变化 ——
+  这类数据用 `tools/map-editor/gen_bigmap_ranges.ts` 补算（加权 Voronoi + 连通性修补 + 邻接推导）。
+  线上 `world_01` 已用它重算：25 座城、1445/1600 格有主、每城 30~88 格、全部单块、邻接度 3~7。
+
+![势力染色改前改后对比](bigmap-territory-color-preview.png)
+
+补算势力范围（改完布局记得跑一次 `verify_bigmap_world` 确认没碰坏别的东西）：
+
+```
+npx tsx tools/map-editor/gen_bigmap_ranges.ts                    # 处理线上 world_01 并写回
+npx tsx tools/map-editor/gen_bigmap_ranges.ts path/to.json --dry # 只算不写
+npx tsx tools/map-editor/verify_bigmap_world.ts                  # 校验布局仍与种子世界一致
+```
+
+### 5.2 UI 皮肤：领地页 HUD 那套（2026-10-22 第二轮）
+
+用户口径：*「将世界玩法的 UI 风格改成领地玩法的 ui 风格，按钮的样式，题头底板的样式，弹窗样式 /
+删除植物大地图的文字」*。追问后确认：**走领地页顶部 HUD 那套深色卡，不是底部菜单栏的木牌**
+（第一轮曾按「和底部菜单栏保持统一」做过木牌，本轮整条替换）。
+
+改之前世界页贴的是 `image/bigmap/concept/ui/*.png` 那张**深色铁框 + 铆钉**概念图；现在照抄领地页语法：
+**地图顶到屏幕边，只有几张浮在上面的深色卡**（玩家卡 / 资源条），没有任何通栏底板。
+
+| 元素 | 用什么 | 出处 / 尺寸 |
+| --- | --- | --- |
+| 资源卡 / 详情弹窗 / 建造面板 / 队列条 | `drawBigMapCardPanel` 手画：近黑描边 2px → 卡面（各收 2px）→ 铜金细线 1px（再收 2px） | 色值取自 `hud_player_card.png`，见 `BIGMAP_HUD_COLORS` |
+| 题头 | **不要底板、不要文字**（用户要求删「植物大地图」） | 顶栏只留 `ResourceCard` + 收取钮；模式由切换木牌表达 |
+| 「基地 / 大地图」切换 | `cu_ty_btn13`（常态）/ `cu_ty_btn14`（当前所在模式），**122×96** | 底部菜单栏七格 `TabButton.offBgFrame/onBgFrame` 同款**同尺寸** |
+| 一键收取 / 建造 / 攻打 / 定位 | `btn_quick_fight`（领地页【快速寻敌】那颗 3D 金钮） | `image/main/city`，无九宫边，按宽度压 |
+| 弹窗 | 居中模态：全屏暗底 `scrim = 5,10,14,205` + 居中卡（标题金 / 正文米白 / 两颗钮并排） | 暗底与 `TerritorySiteDetail.prefab` 的 `Dim` **逐通道同值** |
+| 文字 | 米白正文 + 金色标题，一律 2px 近黑描边 | 压在深色卡/地图上都得有描边，否则字会被吃掉 |
+
+五个坑（都踩过，别重犯）：
+
+1. **`hud_player_card` 没有九宫边**（`.meta` 里 border 全 0），是给固定 335×122 用的；
+   面板从 62 高的资源条到 400 高的弹窗都有，SIMPLE 拉伸会把圆角和右上角那块小装饰一起拉糊 ⇒ 手画。
+2. **首轮的木牌不能混着留**：`BIGMAP_WOOD_COLORS` / `drawBigMapWoodPanel` / 缎带 `cu_title_brown` /
+   扁条 `cu_9g_bar_02` 已**整条退役**，`tests/bigmap-hud-skin.test.ts` 里有反向断言挡回流。
+3. **暗底与卡片必须同生同死**：只亮卡片就是一块浮在地图上的板，没有模态感；`setInfoVisible` 两行都要写。
+   暗底要挂 `BlockInputEvents` + 点它 `clearSelection()`（领地页同一个交互）。
+4. **标题字删了，`baseTitle` 也一起退役**：世界页不再有标题 Label，「当前在基地还是大地图」由那颗
+   两态木牌表达；`BIGMAP_PRESENTATION_TEXT.baseTitle` 已删并留注释。
+5. **颜色不许写第二份数值**：`BIGMAP_HUD_COLORS.card/rim` 必须等于 `hud_player_card` 的实测色，
+   `scrim` 必须等于领地弹窗 `Dim`（测试直接读 prefab JSON 比对），改一边另一边就会红。
+
+改前改后（① 深铁顶栏 ② HUD 卡＋金钮 ③ 弹窗居中模态）：
+
+![世界页 UI 换 HUD 皮肤](世界页HUD皮肤-改前改后.png)
+
+重新生成这张图（只出图，不动游戏代码）：
+
+```
+python tools/preview_world_ui_hud.py
+```
+
+### 5.3 详情弹窗「一条中线竖排」（2026-10-22 第九轮）
+
+用户口径：*「弹窗内的 icon 和描述以及标题 需要统一居中对齐」*。
+
+改之前三样各偏一边，根因是**用了视口宽当卡片坐标**：
+
+| 元素 | 改前 | 改后 |
+| --- | --- | --- |
+| 图标 | `fitBigMapSprite(.., -this.size.width / 2 + 80, ..)` ⇒ `-360 + 78 = -282`，**卡片左边界是 -280** ⇒ 压在正文上 | `x = 0`，与标题/正文同一条中线 |
+| 标题 | `textCenter = (panelWidth/2 - 24) - textWidth/2 = +86`，专门让开图标 | `x = 0` |
+| 正文 | `horizontalAlign = LEFT`，从图标底下起笔 | `CENTER` + `verticalAlign = CENTER` |
+
+排版算法搬到纯函数 `model/BigMapInfoLayout.ts`（零 `cc`，只有数字进出）：
+
+- 顺序是**先算文字、再分空间给图标、空间不够图标让位**（文字优先，不能让 `CLAMP` 静默截字）；
+- `titleY = H/2 - 46`；正文下沿 `= -H/2 + (有按钮 ? 78 : 30)`；正文上界 `= titleY - 34`；
+- 剩余空间 `room < 56` ⇒ `iconVisible = false`（9 行文案的城池详情就是这一档）；
+- `centerX` 恒 0 也照样往外吐 —— 留着是为了让「三样在同一条中线」**能被断言**，而不是靠肉眼；
+- 两颗按钮都亮时 `secondaryX / primaryX = ∓76`，只剩一颗时归 0（不再各偏一边）。
+
+三个坑：
+
+1. **卡片子节点一律用卡片局部坐标**。`this.size.width` 是视口 720，父节点 `InfoPanel` 只有 560；
+   这类错位编译不报错、只在实机穿帮。
+2. **`Label.verticalAlign` 默认 TOP**。正文框是「图标下沿 ~ 按钮上沿」，设了 `CENTER` 才不吃掉下方半框。
+3. **`refreshInfo` 必须拆两层**。内容方法里有 6 个提前 `return`，排版若不单独跑一轮，
+   空态/缺图态就是上一次的残留布局 ⇒ `refreshInfo() = refreshInfoContent() + applyInfoLayout()`。
+
+`tests/bigmap-info-layout.test.ts`（15 条）钉住：一条中线、不重叠不越界、不截字、图标让位、
+脏输入不出 NaN，外加源码反向守卫（禁 `this.size.width / 2 + 80`、禁 `fitBigMapSprite(this.infoThumbnail`、
+必须有 `verticalAlign = CENTER`、必须有 `refreshInfo` 拆分）。
+
+改前改后（① 老排法三样各偏 ② 据点 3 行 ③ 城池 9 行图标让位；橙虚线 = 卡片中线）：
+
+![世界页详情弹窗居中竖排](世界页详情弹窗-居中竖排-改前改后.png)
+
+```
+npx tsx tools/preview_bigmap_info_layout_curves.ts && python tools/preview_bigmap_info_layout.py
+```
 
 ---
 
@@ -220,6 +344,8 @@ npx tsx --test tests/bigmap-world.test.ts       # 14 条：世界生成 / 占位
 npx tsx --test tests/bigmap-base.test.ts        # 13 条：摆放 / 队列 / 产出 / 收获 / 升级 / 离线
 npx tsx --test tests/bigmap-battle.test.ts      # 12 条：伤害 / 战功 / 占领 / 野怪 CD
 npx tsx --test tests/bigmap-presenter.test.ts   # 10 条：整条链路 + 存档读写 + 脏档修复
+npx tsx --test tests/bigmap-territory-color.test.ts  # 16 条：势力配色（相邻不同色 / 范围非退化 / 无飞地 / 不重叠）
+npx tsx --test tests/bigmap-info-layout.test.ts     # 15 条：详情弹窗排版（一条中线 / 不重叠 / 不截字 / 图标让位）
 ```
 
 断言全部落到**具体数值**（例如「4 刀占领首城」「离线只结算 8 小时 = 320」），

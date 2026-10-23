@@ -11,6 +11,7 @@ export interface ZCTargetingContext extends Pick<IZCModelServices, 'unitPosition
     readonly hexes: readonly ZCHexState[];
     readonly unitById: (id: number) => ZCUnitState | null;
     readonly hexPosition: (hexId: number) => ZCPoint;
+    readonly preferUnitTargets?: (unit: ZCUnitState) => boolean;
 }
 
 /** 每局独占的 BFS 工作区；访问标记避免每次创建 Set/Map。 */
@@ -41,7 +42,7 @@ export interface IZCPathStepOptions {
 
 /** 索敌排序、射程和通用 BFS；不持有对局状态。 */
 export class ZCTargetingSystem {
-    static acquire(unit: ZCUnitState, context: ZCTargetingContext): ZCTargetSelection | null {
+    static acquire(unit: ZCUnitState, context: ZCTargetingContext, unitsOnly = false): ZCTargetSelection | null {
         const definition = context.effectiveDefinition(unit);
         const from = context.unitPosition(unit);
         const candidatePosition = { x: 0, y: 0 };
@@ -70,6 +71,7 @@ export class ZCTargetingSystem {
             if (!definition.canAttackAir && context.effectiveDefinition(candidate).flying) continue;
             consider('unit', candidate.id, context.unitPosition(candidate, candidatePosition));
         }
+        if (unitsOnly || (best && context.preferUnitTargets?.(unit))) return best;
         for (const hex of context.hexes) {
             if (hex.owner === 'neutral' || hex.owner === unit.owner) continue;
             const point = context.hexPosition(hex.id);

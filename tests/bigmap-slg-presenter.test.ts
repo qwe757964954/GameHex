@@ -13,7 +13,8 @@ function harness() {
     const home = { buildInstId: ID, buildingId: config.mainBuildingId, position: 0, level: 1, state: 0 };
     let reply: IBigMapSlgGateway['request'] = async (name) => name === 'CmdSlgBuildInfoReqMsg'
         ? { info: { builds: [home], queues: [], unlockQueue: 1 } }
-        : name === 'CmdSlgActionUpdateReqMsg' ? { info: { nextRevertTime: 20 } } : {};
+        : name === 'CmdSlgActionUpdateReqMsg' ? { info: { nextRevertTime: 20 } }
+            : name === 'CmdSlgGameInfoReqMsg' ? { info: { maxMonsterLevel: 0, toCampId: 0 } } : {};
     const gateway: IBigMapSlgGateway = {
         request(name, body) { calls.push({ name, body }); return reply(name, body); }, subscribe: () => () => {},
     };
@@ -35,6 +36,34 @@ test('联机基地只展示服务端建筑，不读写本地存档，不自动�
     h.advance();
     h.presenter.tick();
     assert.equal(h.presenter.base.res.grain, 0);
+    assert.equal(h.writes(), 0);
+    h.presenter.dispose();
+});
+
+test('世界先显示时，基地快照未就绪仍拒绝写入，回包后通知视图刷新', async () => {
+    const h = harness();
+    let finish: (value: unknown) => void = () => {};
+    const builds = new Promise((resolve) => { finish = resolve; });
+    h.setReply(async (name) => name === 'CmdSlgBuildInfoReqMsg' ? builds
+        : name === 'CmdSlgActionUpdateReqMsg' ? { info: { nextRevertTime: 20 } }
+            : name === 'CmdSlgGameInfoReqMsg' ? { info: { maxMonsterLevel: 0, toCampId: 0 } } : {});
+    let changes = 0;
+    h.presenter.onChanged(() => { changes += 1; });
+    const initializing = h.presenter.initializeSlg();
+    try {
+        assert.equal(h.presenter.serverBaseReady, false);
+        const field = Array.from(config.buildings.values()).find((item) => item.kind === 2);
+        assert.ok(field);
+        assert.equal((await h.presenter.requestBuild(2, field.id)).ok, false);
+        assert.equal(h.calls.filter((call) => call.name === 'CmdSlgBuildReqMsg').length, 0);
+        assert.equal(h.presenter.base.buildings.length, 0);
+    } finally {
+        finish({ info: { builds: [h.home], queues: [], unlockQueue: 1 } });
+        await initializing;
+    }
+    assert.equal(h.presenter.serverBaseReady, true);
+    assert.equal(h.presenter.base.buildings.length, 1);
+    assert.ok(changes > 0, '后台同步回包会通知已展示页面刷新');
     assert.equal(h.writes(), 0);
     h.presenter.dispose();
 });

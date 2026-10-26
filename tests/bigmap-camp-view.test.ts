@@ -73,7 +73,8 @@ function makeWorldView() {
         setTimeout: (callback: () => void) => { const id = ++timerId; timers.set(id, callback); return id; },
         clearTimeout: (id: number) => timers.delete(id),
     });
-    interface IMarker { kind: string; id: number; node: { active: boolean; position: { x: number; y: number } }; icon: object }
+    interface IMarker { kind: string; id: number; node: { active: boolean; position: { x: number; y: number } }; icon: object;
+        view: { hitArea: { badgeY: number; badgeHeight: number } } }
     interface IView extends Component {
         presenter: object; viewportTransform: object; content: object; markers: IMarker[];
         markerLayer: object; applyMarker: (...args: unknown[]) => void;
@@ -84,10 +85,11 @@ function makeWorldView() {
     const view = new View();
     view.viewportTransform = { width: 200, height: 200 };
     view.content = { position: { x: 0, y: 0 }, setScale() {}, setPosition(x: number, y: number) { this.position = { x, y }; } };
+    const markerView = { hitArea: { badgeY: 70, badgeHeight: 30 } };
     view.markers = [
-        { kind: 'city', id: 101, node: { active: true, position: { x: 0, y: 0 } }, icon: {} },
-        { kind: 'city', id: 102, node: { active: true, position: { x: 2000, y: 0 } }, icon: {} },
-        { kind: 'monster', id: 7, node: { active: true, position: { x: 0, y: 0 } }, icon: {} },
+        { kind: 'city', id: 101, node: { active: true, position: { x: 0, y: 0 } }, icon: {}, view: markerView },
+        { kind: 'city', id: 102, node: { active: true, position: { x: 2000, y: 0 } }, icon: {}, view: markerView },
+        { kind: 'monster', id: 7, node: { active: true, position: { x: 0, y: 0 } }, icon: {}, view: markerView },
     ];
     return { view, timers, colors, flush: () => {
         const callbacks = [...timers.values()]; timers.clear(); callbacks.forEach((callback) => callback());
@@ -112,6 +114,19 @@ test('相机变化合并查询，只传实际可见据点；停用地图取消�
     assert.equal(h.timers.size, 0);
     assert.equal(h.view.scheduled, null);
     h.view.onDestroy();
+});
+
+test('建筑根已离开视口但主城头像仍在屏内时保留标记，完全离屏后才隐藏', () => {
+    const h = makeWorldView();
+    h.view.presenter = { world: {}, refreshVisibleCamps: () => undefined };
+    const marker = h.view.markers[0];
+    marker.node.position.y = -380;
+    marker.view = { hitArea: { badgeY: 270, badgeHeight: 110 } };
+    h.view.applyCamera(1, 0, 0);
+    assert.equal(marker.node.active, true);
+    h.view.applyCamera(1, 0, -1000);
+    assert.equal(marker.node.active, false);
+    h.view.onDisable();
 });
 
 test('据点角标按 opType 红黄显示，状态相同时变更占领仍会重绘', () => {
@@ -148,27 +163,41 @@ test('点击据点调用详情入口，弹窗显示两种独立状态，保留�
     });
     interface IPage {
         presenter: object; worldView: object; infoThumbnail: object; infoBody: { string: string };
-        infoTitle: object; primaryButton: { node: { active: boolean } }; secondaryButton: object;
+        infoTitle: object; primaryButton: { node: { active: boolean }; setText(value: string): void; setEnabled(value: boolean): void }; secondaryButton: object;
         setInfoVisible(value: boolean): void; refreshInfo(): void; onWorldTap(hexId: number): void;
     }
     const Page = exports.BigMapPage as new () => IPage;
     const page = new Page();
     Object.defineProperty(page, 'size', { value: { width: 500, height: 1000 } });
     const calls: number[] = [];
-    page.presenter = { cityView: () => ({ name: '营地', level: 1, desc: '简介', isServerCamp: true,
-        campInfo: { campId: 101, opType: 1, state: 3 }, campDetailStatus: 'ready' }),
+    let canAttack = false;
+    let campInfo: { campId: number; opType: number; state: number } | null = { campId: 101, opType: 1, state: 3 };
+    let campDetailStatus = 'ready';
+    page.presenter = { cityView: () => ({ name: '营地', level: 1, desc: '简介', isServerCamp: true, canAttack, staminaCost: 20,
+        campInfo, campDetailStatus, attackReason: '' }),
         refreshCampDetail: (id: number) => { calls.push(id); },
     };
     page.worldView = { occupantAt: () => ({ kind: 'city', cityId: 101 }) };
     page.infoThumbnail = { node: { active: false } };
     page.infoTitle = {};
     page.infoBody = { string: '' };
-    page.primaryButton = { node: { active: true } };
+    let enabled = false;
+    page.primaryButton = { node: { active: true }, setText() {}, setEnabled(value) { enabled = value; } };
     page.secondaryButton = { node: { active: true }, setText() {} };
     page.setInfoVisible = () => undefined;
     page.onWorldTap(1);
     assert.deepEqual(calls, [101]);
     assert.match(page.infoBody.string, /占领状态：已占领/);
     assert.match(page.infoBody.string, /据点状态：结算中/);
-    assert.equal(page.primaryButton.node.active, false);
+    assert.equal(page.primaryButton.node.active, true);
+    assert.equal(enabled, false);
+    canAttack = true;
+    page.refreshInfo();
+    assert.equal(enabled, true, '服务端开放的据点必须能从主按钮进入战斗');
+    campInfo = null;
+    campDetailStatus = 'failed';
+    page.refreshInfo();
+    assert.equal(enabled, true);
+    assert.match(page.infoBody.string, /可尝试攻打/);
+    assert.doesNotMatch(page.infoBody.string, /加载中|重新选择/);
 });

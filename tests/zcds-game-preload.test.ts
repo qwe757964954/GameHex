@@ -1,20 +1,22 @@
+import * as resourcePlan from '../assets/script/app/zcds/model/ZCGameResourcePlan';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
-import { HEX_FLIP_PULSE_ART_ROOT, HEX_GROUND_GLOW_ART_ROOT } from '../assets/script/app/ArtPaths';
+import { HEX_FLIP_PULSE_ART_ROOT, HEX_GROUND_GLOW_ART_ROOT, MAP_RESOURCE_ART_ROOT, SPAWN_REGION_ART_ROOT, GAMEUI_ART_ROOT, NEUTRAL_RESOURCE_UNKNOWN_ICON_NAME } from '../assets/script/app/ArtPaths';
 
 test('建筑 prefab 不保留已删除的固定兵营/防御塔帧，城墙 prefab 使用现有墙砖', () => {
-    const revealPrefab = readFileSync('assets/resources/ui/game/ZCGameCardReveal.prefab', 'utf8');
-    const hexPrefab = readFileSync('assets/resources/ui/game/ZCGameHex.prefab', 'utf8');
+    const revealPrefab = readFileSync('assets/bundles/battle/ui/game/ZCGameCardReveal.prefab', 'utf8');
+    const hexPrefab = readFileSync('assets/bundles/battle/ui/game/ZCGameHex.prefab', 'utf8');
     for (const source of [revealPrefab, hexPrefab]) {
         assert.equal(source.includes('barracksFrame'), false);
         assert.equal(source.includes('towerFrame'), false);
     }
 
-    const wallPrefab = readFileSync('assets/resources/ui/game/ZCGameWall.prefab', 'utf8');
-    const downMeta = JSON.parse(readFileSync('assets/resources/image/walls/down.png.meta', 'utf8')) as { uuid: string };
+    const wallPrefab = readFileSync('assets/bundles/battle/ui/game/ZCGameWall.prefab', 'utf8');
+    // 墙砖目录已随 Loader 的 WALL_TILE_DIRECTORY 迁到 image/buildings/walls（旧 image/walls 从未入库）。
+    const downMeta = JSON.parse(readFileSync('assets/resources/image/buildings/walls/down.png.meta', 'utf8')) as { uuid: string };
     assert.ok(wallPrefab.includes(`${downMeta.uuid}@f9941`), 'ZCGameWall 应绑定现有 down 墙砖作为加载兜底');
 });
 
@@ -34,7 +36,6 @@ test('对局流程在进入前准备地图、配置和全部首屏 Prefab', asyn
     const loadedDirectories: string[] = [];
     const configuredMaps: string[] = [];
     let pvpTablesLoaded = false;
-    let deckUnitsChecked = false;
 
     class Prefab { constructor(public readonly path: string) {} }
     class SpriteFrame { constructor(public readonly name: string) {} }
@@ -72,7 +73,9 @@ test('对局流程在进入前准备地图、配置和全部首屏 Prefab', asyn
         getTable: async (name: string) => [{ name }],
     };
     const dependencies: Record<string, unknown> = {
+        '../model/ZCGameResourcePlan': resourcePlan,
         cc,
+        '../../../core/asset/BundleCatalog': { BATTLE_BUNDLE: 'battle' },
         '../../ArtPaths': {
             decorFramePath: (name: string) => `image/decor/${name}/spriteFrame`,
             // 神器图标走它拼 `image/artifact/<icon>/spriteFrame`（png 是 SpriteFrame 子资源）。
@@ -82,6 +85,12 @@ test('对局流程在进入前准备地图、配置和全部首屏 Prefab', asyn
             // 症状就是「多出一项 undefined」而不是报错，很难看出是桩缺符号（2026-10-14 修）。
             HEX_GROUND_GLOW_ART_ROOT,
             HEX_FLIP_PULSE_ART_ROOT,
+            // 金币/气泡/中立占位图三组同样透传真值：漏给时 `spriteFramePath` 拼出
+            // `undefined/xxx/spriteFrame`，loadedPrefabs 清单会多出带 `undefined` 的假路径。
+            MAP_RESOURCE_ART_ROOT,
+            SPAWN_REGION_ART_ROOT,
+            GAMEUI_ART_ROOT,
+            NEUTRAL_RESOURCE_UNKNOWN_ICON_NAME,
         },
         './ZCGuideLoader': {
             ZCGuideLoader: class {
@@ -111,11 +120,8 @@ test('对局流程在进入前准备地图、配置和全部首屏 Prefab', asyn
         },
         '../model/ZCGameRuntimeConfig': {
             loadPvpTables: () => { pvpTablesLoaded = true; },
-            // 跨表引用闸：必须在数值表注入之后跑（卡 → 单位 的完整性依赖已注入的卡组/单位目录）
-            assertDeckUnitsPlayable: () => {
-                assert.equal(pvpTablesLoaded, true, '引用了不可上场单位的检查必须在表注入之后');
-                deckUnitsChecked = true;
-            },
+            // 跨表引用闸（assertDeckUnitsPlayable / findUndeployableDeckCards）已整体移除，
+            // 改为构建期工具 tools/pvp_card_check.py 校验，预加载期不再做这条检查。
             // `loadArtifactIconFrame` 用它取神器图标名（真源 = `pvpArtifact` 第一行的 `icon`）。
             getPvpRuntimeRules: () => ({ artifactIcon: '霜封冰刃' }),
         },
@@ -124,7 +130,8 @@ test('对局流程在进入前准备地图、配置和全部首屏 Prefab', asyn
                 assert.equal(pvpTablesLoaded, true, '配置快照必须在 PVP 表注入后创建');
                 assert.equal(configuredMaps.at(-1), 'preloaded-map', '快照必须包含本次加载的地图');
                 assert.equal(options.allowUnresolvedSelect, true);
-                return { map: { id: 'preloaded-map', cityMode: 'fixed' }, configHash: 'loader-snapshot' };
+                // prepare 会展开 playerDeck / enemyDeck 计算本局阵容视觉依赖（离线空阵容）。
+                return { map: { id: 'preloaded-map', cityMode: 'fixed' }, configHash: 'loader-snapshot', playerDeck: [], enemyDeck: [] };
             },
         },
     };
@@ -145,16 +152,23 @@ test('对局流程在进入前准备地图、配置和全部首屏 Prefab', asyn
         [mapDirectory, buildingDirectory, wallDirectory, HEX_GROUND_GLOW_ART_ROOT, HEX_FLIP_PULSE_ART_ROOT].sort(),
     );
     assert.deepEqual(configuredMaps, ['preloaded-map']);
-    assert.equal(deckUnitsChecked, true, '预加载必须校验「卡引用的单位能上场」');
     assert.deepEqual(loadedPrefabs.sort(), [
         // 本局携带神器的图标（中立资源点「神器充能」格用，图名来自 pvpArtifact[].icon）。
         'image/artifact/霜封冰刃/spriteFrame',
+        // 中立资源占位问号 / 金币飞行贴图 / 自选主城区域气泡（三组后期新增的图标加载）。
+        'image/gameui/whh/spriteFrame',
+        'image/map-resource/coin_icon/spriteFrame',
+        'image/spawn-region/frame_01/spriteFrame',
+        'image/spawn-region/frame_02/spriteFrame',
         'effects/arrow',
         'effects/empowered',
         'effects/slash',
         // 城墙砖接缝 shader（重叠区边缘带暗色淡化）。
         'shaders/wall-tile',
+        // 兵种整体外轮廓（放大副本）shader。
+        'shaders/unit-outline-copy',
         'ui/game/ZCGameBoard',
+        'ui/game/ZCBossPanel',
         'ui/game/ZCGameCardReveal',
         'ui/game/ZCGameDecor',
         'ui/game/ZCGameEffect',
@@ -165,10 +179,16 @@ test('对局流程在进入前准备地图、配置和全部首屏 Prefab', asyn
         'ui/game/ZCGameUnit',
         'ui/game/ZCGameWall',
         'ui/game/ZCGameWallLayer',
-        'ui/game/ZCSpawnSelection',
         'units/archer',
         // 单位出生特效（24 帧光柱，loader 既有加载；expected 此前漏同步）。
         'units/effects/出生特效/出生特效',
+        // 阵亡 / 建筑摧毁 / 四职业受击特效（后期分批加入的纯表现件）。
+        'units/effects/死亡特效/死亡特效',
+        'units/effects/建筑死亡特效/建筑死亡特效',
+        'units/effects/受击特效/射手受击/射手受击',
+        'units/effects/受击特效/战士受击/战士受击',
+        'units/effects/受击特效/法师受击/法师受击',
+        'units/effects/受击特效/坦克受击/坦克受击',
         'units/militia',
     ].sort());
     assert.equal(prepared.unitVisualPrefabs.size, 2);
@@ -178,5 +198,5 @@ test('对局流程在进入前准备地图、配置和全部首屏 Prefab', asyn
     assert.equal(prepared.wallFrames.size, 4);
     assert.ok(prepared.wallFrames.has('rightUp'), '城墙砖帧按图片名索引');
     assert.ok(prepared.wallMaterial, '城墙砖接缝材质随对局资源预加载');
-    assert.deepEqual(prepared.guide.entries, [], '指南内容由应用层预加载后随对局资源一并移交');
+    assert.deepEqual((await prepared.loadGuide()).entries, [], '指南点击时加载，仍归属本局资源');
 });

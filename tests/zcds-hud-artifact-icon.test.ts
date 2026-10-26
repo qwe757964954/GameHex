@@ -37,8 +37,14 @@ test('HUD 神器图标不再用 prefab 硬绑的通用图，改吃本局携带�
     assert.ok(!code.includes('zd_faqi'), '代码里不该再按名字引用那张通用神器图');
 
     const game = readSource('assets/script/app/zcds/ZCGame.ts');
-    assert.match(game, /hudView\.setArtifactFrame\(this\.artifactIconFrame\)/,
-        'ZCGame 必须把已加载的神器帧喂给 HUD（与棋盘资源格同一份）');
+    // 🔴 2026-10-23 回退：HUD 神器按钮**任何局**都喂本局神器的帧。
+    // 首版错误地把自选地图局也换成 whh 问号 —— 那个按钮显示的是玩家自己的神器，
+    // 不是地图里随机的资源，遮蔽它没有意义。真正要遮蔽的是棋盘上的中立资源格
+    // （见 `zcds-neutral-resource-mask.test.ts`）。
+    assert.match(game, /hudView\.setArtifactFrame\(prepared\.artifactIconFrame\)/,
+        'ZCGame 必须把已加载的神器帧喂给 HUD（所有局同一口径，不因自选局换成问号）');
+    assert.ok(!/setArtifactFrame\(selectingSpawn/.test(game),
+        'HUD 神器按钮不许按 cityMode 分支（2026-10-23 已纠正）');
 });
 
 test('棋盘资源格与 HUD 共用同一份神器帧 —— 两者都由 artifactIconFrame 驱动', () => {
@@ -47,9 +53,13 @@ test('棋盘资源格与 HUD 共用同一份神器帧 —— 两者都由 artifa
     assert.match(world, /setArtifactChargeFrame\(this\.options\.artifactIconFrame/,
         '棋盘资源格必须吃同一份 artifactIconFrame');
     const game = readSource('assets/script/app/zcds/ZCGame.ts');
-    assert.match(game, /artifactIconFrame:\s*this\.artifactIconFrame/,
+    // ⚠️ 2026-10-23 对齐现状：`ZCGame` 不再把帧回写到自己字段（`this.artifactIconFrame` 已不存在，
+    // 这条断言此前一直是红的），而是直接把 `prepared.artifactIconFrame` 递给 HUD 与渲染层 ——
+    // 「同源」这条契约没变，只是路径短了一步。
+    assert.match(game, /artifactIconFrame:\s*prepared\.artifactIconFrame/,
         '渲染层 options 传的也是同一份');
-    assert.match(game, /this\.artifactIconFrame\s*=\s*prepared\.artifactIconFrame/,
+    const loader = readSource('assets/script/app/zcds/application/ZCGameLoader.ts');
+    assert.match(loader, /this\.loadArtifactIconFrame\(scope\)/,
         '这一份来自 ZCGameLoader 预加载 —— 不是各自去读表/各自硬绑');
 });
 

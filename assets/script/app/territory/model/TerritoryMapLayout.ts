@@ -34,7 +34,7 @@ export function buildTerritoryMapLayout(map: TerritoryMapConfig): ITerritoryMapL
 export const TERRITORY_MAP_VIEW_LIFT = 100;
 
 /**
- * 内容层四周额外留白（px）——**这是「整体一起上移」真正生效的地方**。
+ * 内容层**底部**留白（px）——**这是「整体一起上移」真正生效的地方**。
  *
  * ## 为什么光靠 `TERRITORY_MAP_VIEW_LIFT` 抬不动
  *
@@ -43,27 +43,56 @@ export const TERRITORY_MAP_VIEW_LIFT = 100;
  * 1312.5，可最大只能滚到 940 —— 差 372.5px，正好是截图里被【快速寻敌】压住的那一截。
  * 抬升量写多大都没用，因为它排在 `Math.min(maxY, …)` 里面。
  *
- * ## 解法：把内容层撑大（等于给相机多留可走的路）
+ * ## 解法：只在**底部**把内容层撑大
  *
- * 内容层高度 = 包围盒 + 2×留白，格心坐标**一个都不动**（地图仍然居中在内容层里）。
- * 效果：
+ * 内容层高度 = 包围盒 + 底部留白，地图**顶部与内容层顶部对齐**（见
+ * {@link territoryMapContentShiftY}）。效果：
  * - 滚到最底时，地图**底边仍在视口底部之上 300px** ⇒ 底部那几排永远不会被按钮压住；
- * - 不管目标格在哪，地图像素位移都只是「相机多滚了 300」，不需要动地块的初始坐标，
- *   也就不会破坏 `buildTerritoryMapLayout` 与共享格心对齐的契约（见 `tests/territory-map-layout.test.ts`）；
- * - 顶部同样多出 300px 可滚范围，靠边的目标格也能落在视口中间，不再一进页面就贴边。
+ * - 滚到最顶时，**第一排格子贴住视口顶**，不会露出没有格子的空底图；
+ * - 格心坐标一个都不动（对齐靠内容层偏移，不靠改 `buildTerritoryMapLayout`）。
+ *
+ * 🔴 2026-10-23 之前是「上下各 300」的对称留白 ⇒ 用户截图「格子没有铺到顶端」：
+ * 滚到顶时上方露出 300px 纯底图（既没格子也没云）。顶部留白改成 **0** 解决。
  *
  * 数值取 300：主城页底部叠着【快速寻敌】+【任务】挂件，实测遮挡高度约 150~200px，
  * 留 300 之后整排地块（行高 90）都能完整露出来。
  */
 export const TERRITORY_MAP_CONTENT_PADDING = 300;
 
-/** ScrollView 内容层尺寸 = 地图包围盒 + 四周留白（`cc.ScrollView` 靠它算可滚范围）。 */
+/**
+ * 内容层**顶部**留白（px）—— 恒 0。
+ *
+ * 单独留一个常量而不是直接写 0：`syncContentSize` / `territoryMapContentShiftY` /
+ * `territoryMapOffsetForCell` 三处都要读它，散着写 0 会让"以后想加一点顶部呼吸感"
+ * 变成改三个地方。真要加，只改这里，三处自动跟。
+ */
+export const TERRITORY_MAP_CONTENT_PADDING_TOP = 0;
+
+/**
+ * 地图内容层相对**内容层中心**的 y 偏移（px）。
+ *
+ * 顶部留白 0、底部留白 300 ⇒ 内容层比地图高 300，而地图顶部要贴内容层顶部
+ * ⇒ 地图中心必须比内容层中心**高**半个留白（`(底部 - 顶部) / 2 = 150`）。
+ *
+ * ⚠️ 这个偏移作用在**「与格子同坐标系的那几个层」**上（`GridLayer` / 云层 /
+ * 四个站点层 / `GainLayer`），由 `TerritoryMapView.initialize` 统一写一次；
+ * `MapBackground` 不参与（它是按内容层尺寸 cover 铺满的，跟着偏反而会露边）。
+ */
+export function territoryMapContentShiftY(): number {
+    const bottom = Number.isFinite(TERRITORY_MAP_CONTENT_PADDING) ? TERRITORY_MAP_CONTENT_PADDING : 0;
+    const top = Number.isFinite(TERRITORY_MAP_CONTENT_PADDING_TOP) ? TERRITORY_MAP_CONTENT_PADDING_TOP : 0;
+    return (bottom - top) / 2;
+}
+
+/** ScrollView 内容层尺寸 = 地图包围盒 + 顶部 / 底部留白（`cc.ScrollView` 靠它算可滚范围）。 */
 export function territoryMapContentSize(
     layout: ITerritoryMapLayout,
 ): { readonly width: number; readonly height: number } {
     return {
         width: layout.width,
-        height: layout.height > 0 ? layout.height + TERRITORY_MAP_CONTENT_PADDING * 2 : 0,
+        height: layout.height > 0
+            ? layout.height + TERRITORY_MAP_CONTENT_PADDING + TERRITORY_MAP_CONTENT_PADDING_TOP
+            : 0,
     };
 }
 
@@ -84,9 +113,12 @@ export function territoryMapOffsetForCell(
     const content = territoryMapContentSize(layout);
     const maxX = Math.max(0, layout.width - width);
     const maxY = Math.max(0, content.height - height);
+    // 地图在内容层里**不居中**（顶部留白 0、底部 300）⇒ 格心的 y 要减去内容层偏移，
+    // 否则算出来的偏移会整体多 150（表现为"滚过头，顶部又露出半格空"）。
+    const shift = territoryMapContentShiftY();
     return {
         x: Math.min(maxX, Math.max(0, point.x + layout.width / 2 - width / 2)),
         // 「+ lift」= 往下多滚 lift，画面里的地图就整体上移 lift（滚动偏移与画面位移相反）。
-        y: Math.min(maxY, Math.max(0, content.height / 2 - height / 2 - point.y + lift)),
+        y: Math.min(maxY, Math.max(0, content.height / 2 - shift - height / 2 - point.y + lift)),
     };
 }

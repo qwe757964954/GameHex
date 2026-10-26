@@ -1,4 +1,5 @@
-import { resources, SpriteFrame, JsonAsset } from "cc";
+import { assetManager, resources, SpriteFrame, JsonAsset } from "cc";
+import { bundleForPath } from "./BundleCatalog";
 
 /**
  * 图标管理器
@@ -198,13 +199,33 @@ export class IconManager {
 
     private static _loadSpriteFrame(resPath: string): Promise<SpriteFrame | null> {
         return new Promise((resolve) => {
-            resources.load(resPath, SpriteFrame, (err, sf) => {
-                if (err || !sf) {
-                    console.warn(`[IconManager] 加载图标失败: ${resPath}`, err?.message);
+            const bundleName = bundleForPath(resPath);
+            const load = (bundle: { load: (p: string, t: unknown, cb: (err: Error | null, a?: SpriteFrame) => void) => void }) => {
+                bundle.load(resPath, SpriteFrame, (err, sf) => {
+                    if (err || !sf) {
+                        console.warn(`[IconManager] 加载图标失败: ${resPath}`, err?.message);
+                        resolve(null);
+                        return;
+                    }
+                    resolve(sf);
+                });
+            };
+            if (!bundleName || bundleName === 'resources') {
+                load(resources);
+                return;
+            }
+            const cached = assetManager.getBundle(bundleName);
+            if (cached) {
+                load(cached as unknown as { load: (p: string, t: unknown, cb: (err: Error | null, a?: SpriteFrame) => void) => void });
+                return;
+            }
+            assetManager.loadBundle(bundleName, (err, bundle) => {
+                if (err || !bundle) {
+                    console.warn(`[IconManager] Bundle 加载失败: ${bundleName}（图标 ${resPath}）`, err?.message);
                     resolve(null);
                     return;
                 }
-                resolve(sf);
+                load(bundle as unknown as { load: (p: string, t: unknown, cb: (err: Error | null, a?: SpriteFrame) => void) => void });
             });
         });
     }

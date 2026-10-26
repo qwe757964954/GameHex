@@ -14,7 +14,7 @@ export interface TerritoryChapterCompletion {
     complete: boolean;
 }
 
-/** 按关卡进度找尚未通关的最近 Boss，同区域优先定位建筑格。 */
+/** 优先定位推进中的 Boss；全部通关后回到最高关卡，同区域优先定位建筑格。 */
 export function findCurrentTerritoryBoss(
     sites: readonly TerritorySite[],
     stageByCell: ReadonlyMap<number, TerritoryCampaignStage>,
@@ -25,12 +25,15 @@ export function findCurrentTerritoryBoss(
         const stage = stageByCell.get(site.cellId);
         if (!stage || (site.type !== TERRITORY_SITE_TYPE.boss
             && !(site.type === TERRITORY_SITE_TYPE.stage && stage.isBoss))) continue;
-        if (progress.isAreaPassed(site.cellId) || progress.isDisabled(site.cellId)) continue;
+        if (progress.isDisabled(site.cellId)) continue;
         candidates.push({ site, stage });
     }
-    candidates.sort((a, b) => a.stage.stage - b.stage.stage || a.stage.levelId - b.stage.levelId
+    const unpassed = candidates.filter(({ site }) => !progress.isAreaPassed(site.cellId));
+    const targets = unpassed.length ? unpassed : candidates;
+    const direction = unpassed.length ? 1 : -1;
+    targets.sort((a, b) => direction * (a.stage.stage - b.stage.stage || a.stage.levelId - b.stage.levelId)
         || Number(!!b.site.buildingId) - Number(!!a.site.buildingId) || a.site.cellId - b.site.cellId);
-    return candidates[0] ?? null;
+    return targets[0] ?? null;
 }
 
 /** Current map stations are the completion authority; unbound table rows do not block a chapter. */

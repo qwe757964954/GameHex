@@ -1,6 +1,9 @@
 import { _decorator, CCInteger, Component, instantiate, Node, Prefab, Vec3 } from 'cc';
 import type { AssetService } from '../../core/asset/AssetService';
 import type { ConfigService } from '../../core/config/ConfigService';
+import type { SessionAssetService } from '../../core/asset/SessionAssetService';
+import { ResourceScope } from '../../core/asset/ResourceScope';
+import { MAIN_PAGES_BUNDLE } from '../../core/asset/BundleCatalog';
 import { TabButton } from '../common/TabButton';
 import { mainTabItem } from './MainTabItems';
 import { CardLineupPage } from '../card/CardLineupPage';
@@ -38,7 +41,7 @@ export const enum MainTab {
  * 每个 tab 的真实内容各自是一个独立 prefab（竞技 = `ui/main/ArenaRoot`，
  * 角色 = `ui/card/CardLineup`），切 tab 时整页实例化 / 销毁。
  *
- *  七格的页面映射走 `@property`（Inspector 绑定），代码里不写死 URL。
+ * 页面映射使用资源路径，避免外壳 Prefab 强引用未打开的功能页。
  * 领地主城使用 `MainTerritoryMap` 承载地图；地图数据由 territory 模块从关卡/怪物/卡牌表加载。
  *
  *  商店 tab 的页面是 `ui/Store/Store`（商城）—— 真源 FGUI `组件/组件_商店_界面.xml`：
@@ -69,21 +72,6 @@ export class MainTabHost extends Component {
 
     @property({ type: Node, tooltip: 'Content：页面容器，切 tab 时把子页实例挂到这里' })
     content: Node = null!;
-
-    @property({ type: Prefab, tooltip: '主城页预制体（ui/main/ArenaRoot：玩家信息 + 入口列 + 内嵌六边格领地图）' })
-    arenaPage: Prefab = null!;
-
-    @property({ type: Prefab, tooltip: '英雄 tab 页预制体（ui/card/CardLineup 布阵页）' })
-    rolePage: Prefab = null!;
-
-    @property({ type: Prefab, tooltip: '角色 tab 页预制体（ui/Role/Role 角色主界面：背包 + 装备 + 立绘）' })
-    roleMainPage: Prefab = null!;
-
-    @property({ type: Prefab, tooltip: '联盟 tab 页预制体（ui/League/LeagueTab 容器页：按入没入盟二选一子页）' })
-    alliancePage: Prefab = null!;
-
-    @property({ type: Prefab, tooltip: '商店 tab 页预制体（ui/Store/Store 商城：NPC 背景 + 5 段长滚动）' })
-    shopPage: Prefab = null!;
 
     // ⚠️ 必须 `CCInteger`：Cocos 3.8 的 `@property` 不认裸 `Number`，prefab 每次加载都会
     // warn（`must be CCFloat or CCInteger, not Number`）。prefab 里存的是裸数字 `2`，换类型后原样保留。
@@ -117,6 +105,12 @@ export class MainTabHost extends Component {
      * 而 tab 页是 `instantiate` 出来的 prefab，同样拿不到流程依赖。
      */
     private configs: ConfigService | null = null;
+    private sessionAssets: SessionAssetService | null = null;
+    private pageScope: ResourceScope | null = null;
+    private readonly pendingPageScopes = new Set<ResourceScope>();
+    private pageRevision = 0;
+    private loadingTab = -1;
+    private pageLoadingTask: Promise<void> | null = null;
 
     /** 注入资源入口；必须在实例化并激活页面之前调用（`ProcedureMain.onEnter` 里就是这么做的）。 */
     setAssetService(assets: AssetService): void {
@@ -126,6 +120,10 @@ export class MainTabHost extends Component {
     /** 注入配置入口（大世界用；同样要在 setParent 之前调用）。 */
     setConfigService(configs: ConfigService): void {
         this.configs = configs;
+    }
+
+    setSessionAssetService(assets: SessionAssetService): void {
+        this.sessionAssets = assets;
     }
 
     onLoad(): void {
@@ -143,7 +141,7 @@ export class MainTabHost extends Component {
             // 2026-10-21 起大地图不再有单独的悬浮按钮，就挂在这一格上（见 `openBigMap`）。
             if (type === MainTab.World) {
                 button.setEnabled(true);
-                button.bindSelect(() => this.openBigMap());
+                button.bindSelect(() => this.switchTab(type));
                 button.bindRedDotExpr(mainTabItem(type)?.rdExpr);
                 continue;
             }
@@ -164,7 +162,19 @@ export class MainTabHost extends Component {
         // ⚠️ 必须等 `switchTab` 落定再调：否则活动弹窗会和页面实例化抢同一帧，
         // 表现在弹窗「闪一下」或盖在不存在的页面上。`checkFirstRechargeOnEnterMain`
         // 内部全 catch、永不 reject，所以这里的 `then` 不会漏出 unhandled rejection。
-        void this.switchTab(this.defaultTab).then(() => checkFirstRechargeOnEnterMain(this));
+        const initialPage = this.switchTab(this.defaultTab);
+        const initialRevision = this.pageRevision;
+        const canWarmup = (): boolean => this.isValid && this.pageRevision === initialRevision
+            && this.currentPage !== null && this.loadingTab === -1;
+        void initialPage.then(() => {
+            if (!canWarmup()) return;
+            void checkFirstRechargeOnEnterMain(this);
+            this.scheduleOnce(() => {
+                if (canWarmup()) void this.sessionAssets?.warmup?.().catch((error: unknown) => {
+                    console.warn('[MainTabHost] 公共资源预下载失败', error);
+                });
+            }, 0);
+        });
     }
 
     /**
@@ -172,19 +182,23 @@ export class MainTabHost extends Component {
      *
      * 保留当前底页，只临时把底栏高亮切到「世界」，关掉时回调恢复 `currentTab`。
      */
-    private openBigMap(): void {
+    private async openBigMap(): Promise<void> {
         if (!this.configs) {
             console.warn('[MainTabHost] 还没注入 ConfigService，无法打开大世界');
             return;
         }
         if (BigMapEntry.shared().isOpen) return;
-        void (async () => {
+        this.sessionAssets?.pauseWarmup?.();
+        try {
             this.renderNav(MainTab.World);
             await BigMapEntry.shared().open(this.configs, {
                 navigation: this.navBar,
                 onClose: () => this.renderNav(this.currentTab),
             });
-        })();
+        } catch (error) {
+            if (this.isValid) this.renderNav(this.currentTab);
+            console.warn('[MainTabHost] 世界页面加载失败', error);
+        }
     }
 
     /** 关掉大世界（切 tab 前一律先关，否则它会一直压在旧页面上）。 */
@@ -195,27 +209,76 @@ export class MainTabHost extends Component {
     /**
      * 切到第 `index` 个 tab：换页面 + 刷新七格的选中态。
      *
-     * 页面还没落地（`@property` 没绑）时**不改选中态**，避免点了个空 tab 后
+     * 页面未开放或加载失败时**不改选中态**，避免点了个空 tab 后
      * 底部高亮和实际内容对不上。
      */
     async switchTab(index: number): Promise<void> {
         // 「世界」不是 tab 页而是压在页面上的大世界：外部跳转（`switchToTab(6)` / 活动路由）也走这里。
         if (index === MainTab.World) {
-            this.openBigMap();
+            this.cancelPageLoading();
+            await this.openBigMap();
             return;
         }
+        if (this.loadingTab === index && this.pageLoadingTask) return this.pageLoadingTask;
+        this.cancelPageLoading();
         this.closeBigMap();
         if (index === this.currentTab) return;
 
-        const prefab = this.pagePrefab(index);
-        if (!prefab) {
+        const path = this.pagePath(index);
+        if (!path || !this.assets) {
             console.warn(`[MainTabHost] tab ${index}（${mainTabItem(index)?.name ?? '?'}）的页面还没落地，忽略切换`);
             return;
         }
 
-        this.currentTab = index;
-        this.showPage(prefab);
-        this.renderNav(index);
+        this.sessionAssets?.pauseWarmup?.();
+        const revision = this.pageRevision;
+        const scope = new ResourceScope(`main-tab:${index}`);
+        this.pendingPageScopes.add(scope);
+        this.loadingTab = index;
+        const task = this.loadPage(index, path, scope, revision);
+        this.pageLoadingTask = task;
+        await task;
+        if (this.pageLoadingTask === task) {
+            this.pageLoadingTask = null;
+            this.loadingTab = -1;
+        }
+    }
+
+    private async loadPage(index: number, path: string, scope: ResourceScope, revision: number): Promise<void> {
+        const assets = this.assets;
+        if (!assets) return;
+        let adopted = false;
+        try {
+            const prefab = await assets.load(path, Prefab, { scope, bundle: this.pageBundle(index) });
+            if (!this.isValid || revision !== this.pageRevision || scope.disposed) return;
+            this.showPage(prefab);
+            const previous = this.pageScope;
+            this.pageScope = scope;
+            adopted = true;
+            previous?.dispose();
+            this.currentTab = index;
+            this.renderNav(index);
+        } catch (error) {
+            if (revision === this.pageRevision && this.isValid) console.warn(`[MainTabHost] 页面加载失败：${path}`, error);
+        } finally {
+            this.pendingPageScopes.delete(scope);
+            if (!adopted) scope.dispose();
+        }
+    }
+
+    private cancelPageLoading(): void {
+        this.pageRevision += 1;
+        this.loadingTab = -1;
+        this.pageLoadingTask = null;
+        for (const scope of this.pendingPageScopes) scope.dispose();
+        this.pendingPageScopes.clear();
+    }
+
+    onDestroy(): void {
+        this.cancelPageLoading();
+        this.pageScope?.dispose();
+        this.pageScope = null;
+        this.sessionAssets?.pauseWarmup?.();
     }
 
     /**
@@ -235,44 +298,61 @@ export class MainTabHost extends Component {
      *
      * 与 {@link switchToRoleMain} 同一条路径，只是不写死目标 —— 老端 `CtrlJumpView.JumpType`
      * 对 `HERO` / `FIGHT` 就是「切到第几格」（`LayerMainMenu` 里 `switchTab2(TabRoleMain/TabFight)`）。
-     * 页面没落地（`@property` 没绑）时 `switchTab` 自己会 warn 并**不改选中态**，这里不重复判。
+     * 页面未开放或加载失败时保留原页与选中态。
      */
     switchToTab(index: number): void {
         void this.switchTab(index);
     }
 
-    /** tab 下标 → 页面预制体；未落地的返回 `null`。 */
-    private pagePrefab(index: number): Prefab | null {
-        if (index === MainTab.Shop) return this.shopPage;
+    /** tab 下标 → 页面资源路径；未开放的返回 `null`。 */
+    private pagePath(index: number): string | null {
+        if (index === MainTab.Shop) return 'ui/Store/Store';
         // 英雄 = 卡牌阵容（布阵 / 卡库），名称见配置组 `navHero`
-        if (index === MainTab.Hero) return this.rolePage;
+        if (index === MainTab.Hero) return 'ui/card/CardLineup';
         // 角色 = 角色主界面（背包 + 装备 + 立绘，`ui/Role/Role`）
-        if (index === MainTab.Role) return this.roleMainPage;
+        if (index === MainTab.Role) return 'ui/Role/Role';
         // 领地 = **主城**（2026-10-19 蓝湖改版：「地图直接嵌进主城页，领地之后就是主城」）——
         // 主城页 `ui/main/ArenaRoot` 里嵌了一张六边格领地图，挑战 tab 暂未开放。
-        if (index === MainTab.Territory) return this.arenaPage;
+        if (index === MainTab.Territory) return 'ui/main/ArenaRoot';
         // 挑战暂不开放：保留底栏位置与视觉，但拒绝页面切换；旧章节地图已并入领地主城页。
-        if (index === MainTab.Alliance) return this.alliancePage;
+        if (index === MainTab.Alliance) return 'ui/League/LeagueTab';
         // 世界：没有 tab 页 —— 它是全屏覆盖页，走 `openBigMap()`（`switchTab` 开头已拦截）。
         return null;
     }
 
+    /**
+     * tab 下标 → 页面资源所在 bundle；主城（Territory）在首包，其余功能页走 main-pages。
+     * 世界/挑战不经过 `loadPage`，这里不需要分支。
+     */
+    private pageBundle(index: number): string | undefined {
+        if (index === MainTab.Territory) return undefined;
+        return MAIN_PAGES_BUNDLE;
+    }
+
     /** 整页替换：销毁旧页，把新页实例挂到 Content 下并归位。 */
     private showPage(prefab: Prefab): void {
-        this.currentPage?.destroy();
         const page = instantiate(prefab);
-        // 依赖注入必须发生在 `setParent`（页面 onLoad / start）之前。
-        const mainTerritoryMap = page.getComponentInChildren(MainTerritoryMap);
-        if (mainTerritoryMap && this.assets) mainTerritoryMap.initialize(this.assets, this.configs);
-        const mainPage = page.getComponent(MainPage);
-        if (mainPage && mainTerritoryMap) {
-            mainPage.bindFindCurrentBoss(() => mainTerritoryMap.focusCurrentBoss());
+        try {
+            // 依赖注入必须发生在 `setParent`（页面 onLoad / start）之前。
+            const mainTerritoryMap = page.getComponentInChildren(MainTerritoryMap);
+            if (mainTerritoryMap && this.assets) {
+                mainTerritoryMap.setSessionAssetService(this.sessionAssets);
+                mainTerritoryMap.initialize(this.assets, this.configs);
+            }
+            const mainPage = page.getComponent(MainPage);
+            if (mainPage && mainTerritoryMap) {
+                mainPage.bindFindCurrentBoss(() => mainTerritoryMap.focusCurrentBoss());
+            }
+            const lineup = page.getComponent(CardLineupPage);
+            if (lineup && this.assets) lineup.initialize(this.assets);
+            page.setParent(this.content);
+            page.setPosition(Vec3.ZERO);
+        } catch (error) {
+            page.destroy();
+            throw error;
         }
-        const lineup = page.getComponent(CardLineupPage);
-        if (lineup && this.assets) lineup.initialize(this.assets);
+        this.currentPage?.destroy();
         this.currentPage = page;
-        page.setParent(this.content);
-        page.setPosition(Vec3.ZERO);
     }
 
     /**

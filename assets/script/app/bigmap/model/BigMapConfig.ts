@@ -5,6 +5,7 @@ import {
     type IBigMapBuildingConfig,
     type IBigMapBuildingLevelConfig,
     type IBigMapCityConfig,
+    type IBigMapCampConfig,
     type IBigMapCityLevelConfig,
     type IBigMapConfig,
     type IBigMapMonsterConfig,
@@ -41,6 +42,7 @@ export const BIGMAP_TABLE = {
     resource: 'bigmapResource',
     queue: 'bigmapQueue',
     city: 'bigmapCity',
+    camp: 'bigMapCamp',
     cityLevel: 'bigmapCityLevel',
     rank: 'bigmapRank',
     scoreRule: 'bigmapScoreRule',
@@ -185,11 +187,23 @@ export function parseBigMapConfig(tables: BigMapRawTables): IBigMapConfig {
         monsters.set(item.id, item);
     }
 
+    const camps = new Map<number, IBigMapCampConfig>();
+    for (const row of table(tables, BIGMAP_TABLE.camp)) {
+        const item: IBigMapCampConfig = {
+            campId: campInt(row, 'campId', 1),
+            battleId: campInt(row, 'campBattleId', 1),
+            name: text(row, 'campName'),
+            staminaCost: campInt(row, 'staminaCost', 0),
+            desc: text(row, 'campDesc'),
+        };
+        if (camps.has(item.campId)) throw new Error(`[BigMap] 据点 campId 重复：${item.campId}`);
+        camps.set(item.campId, item);
+    }
     const stamina = parseStamina(table(tables, BIGMAP_TABLE.stamina)[0]);
 
     return {
         world, schedule, buildings, levels, produce, resources, queue,
-        cities, cityLevels, ranks, scoreRule, monsters, stamina, mainBuildingId,
+        cities, camps, cityLevels, ranks, scoreRule, monsters, stamina, mainBuildingId,
     };
 }
 
@@ -414,6 +428,14 @@ function parseScoreRule(row: BigMapRow): IBigMapScoreRuleConfig {
     };
     if (rule.rankExtendMinPct > 100) throw new Error('[BigMap] 名次系数下限超过 100%');
     return rule;
+}
+
+function campInt(row: BigMapRow, field: string, min: number): number {
+    const value = row[field];
+    if (typeof value !== 'number' || !Number.isInteger(value) || value < min || value > 0xFFFFFFFF) {
+        throw new Error(`[BigMap] 据点字段 ${field} 必须为 ${min}~4294967295 的整数`);
+    }
+    return value;
 }
 
 function parseMonster(row: BigMapRow): IBigMapMonsterConfig {

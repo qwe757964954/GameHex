@@ -2264,7 +2264,8 @@
         CELEBRATION_LOCK_MONSTER_FULL_RANK = 49,
         CELEBRATION_LOCK_MONSTER_SERVER_RANK = 50,
         CELEBRATION_OATH_ALLIANCE_FULL_RANK = 51,
-        CELEBRATION_OATH_ALLIANCE_SERVER_RANK = 52
+        CELEBRATION_OATH_ALLIANCE_SERVER_RANK = 52,
+        SLG_CAMP_ROLE_HARM_RANK = 53
     }
 
     declare class CmdRecharge {
@@ -5743,6 +5744,13 @@
 
     
 
+    declare class CmdSlgCampBattleResultInfo {
+        warScore?: (number|null);
+        cmdGoods?: (CmdGoods[]|null);
+    }
+
+    
+
     declare class CmdBattleFrameInfo {
         frameId: number;
         unitId: number;
@@ -5897,6 +5905,13 @@
 
     
 
+    declare class SlgGameInfo {
+        maxMonsterLevel: number;
+        toCampId: number;
+    }
+
+    
+
     declare class SlgGameActionInfo {
         nextRevertTime: number;
     }
@@ -5987,16 +6002,24 @@
     
 
     declare class CmdSlgGameInfoRspMsg {
+        info: SlgGameInfo;
     }
 
     
 
     declare class CmdSlgGameInfoBroMsg {
+        info: SlgGameInfo;
     }
 
     
 
     declare class CmdSlgBuildInfoReqMsg {
+    }
+
+    
+
+    declare class CmdSlgBuildInfoRspMsg {
+        info: SlgBuildGameInfo;
     }
 
     
@@ -7327,6 +7350,7 @@ declare type MessageProtoName =
 | "CmdPveBattleResultInfo"
 | "CmdChapterBattleResultInfo"
 | "CmdSlgMonsterBattleResultInfo"
+| "CmdSlgCampBattleResultInfo"
 | "CmdBattleFrameInfo"
 | "CmdStartBattleReqMsg"
 | "CmdStartBattleRspMsg"
@@ -7348,6 +7372,7 @@ declare type MessageProtoName =
 | "CmdCityChapterInfoBroMsg"
 | "CmdCityChapterCellInfoReqMsg"
 | "CmdCityChapterCellInfoRspMsg"
+| "SlgGameInfo"
 | "SlgGameActionInfo"
 | "SlgCampSimpleInfo"
 | "SlgCampInfo"
@@ -7364,6 +7389,7 @@ declare type MessageProtoName =
 | "CmdSlgGameInfoRspMsg"
 | "CmdSlgGameInfoBroMsg"
 | "CmdSlgBuildInfoReqMsg"
+| "CmdSlgBuildInfoRspMsg"
 | "CmdSlgBuildReqMsg"
 | "CmdSlgBuildRspMsg"
 | "CmdSlgBuildUpgradeReqMsg"

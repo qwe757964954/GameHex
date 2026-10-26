@@ -10,6 +10,10 @@ import type { HeadArtResolver, HeadRow, IconRow } from '../HeadArtModel';
 /** PVP 匹配局 battleType（不能用 1，那撞老枚举 CHAPTER）。 */
 export const ZC_BATTLE_TYPE_PVP = 1001;
 
+export const ZC_BATTLE_TYPE_SLG_MONSTER = 1003;
+export const ZC_BATTLE_TYPE_SLG_CAMP = 1004;
+export type IZCSlgBattleType = typeof ZC_BATTLE_TYPE_SLG_MONSTER | typeof ZC_BATTLE_TYPE_SLG_CAMP;
+
 /**
  * 章节战斗（领地关卡 / Boss 关）的 battleType。
  *

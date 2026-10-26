@@ -12,7 +12,6 @@ import {
     territoryChestBeamAlpha,
     territoryChestBodyFx,
     territoryChestCameraFx,
-    territoryChestFlashAlpha,
     territoryChestOpenFrame,
     territoryChestRayFx,
     territoryChestRainbowFx,
@@ -39,7 +38,7 @@ for (const tier of [TERRITORY_CHEST_TIER.weak, TERRITORY_CHEST_TIER.medium, TERR
                 visible: body.visible,
                 // 开盖换帧（2026-10-22 起箱盖不再旋转）：0 = 闭合，openFrames-1 = 全开
                 frame: territoryChestOpenFrame(spec, t),
-                flash: territoryChestFlashAlpha(spec, t),
+                // ⚠️ 2026-10-23 起没有白光爆点（用户要求移除），预览图也不再画这一条曲线。
                 ray: (() => { const fx = territoryChestRayFx(spec, t); return fx ? fx.alpha : null; })(),
                 beam: territoryChestBeamAlpha(spec, t),
                 rainbow: (() => { const fx = territoryChestRainbowFx(spec, t); return fx ? fx.alpha : null; })(),

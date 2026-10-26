@@ -1,7 +1,8 @@
-import { _decorator, Button, Label, Node, ProgressBar, resources, SpriteFrame, UITransform } from 'cc';
+import { _decorator, Button, Label, Node, ProgressBar, SpriteFrame, UITransform } from 'cc';
 import { POPUP_BLANK_CATCHER, PopupBase } from '../../framework/ui/PopupBase';
 import { FW } from '../../framework/FW';
 import { CommonTips } from '../common/CommonTips';
+import { routedLoad } from '../common/RoutedResource';
 import { MonthCardGiftPage } from '../monthcard/MonthCardGiftPage';
 import { HJ_COST_ICON_PATH, hjSharedPath } from './HangArt';
 import {
@@ -534,7 +535,7 @@ export class HangPage extends PopupBase {
         return new Promise((resolve) => {
             // ⚠️ 必须带 `/spriteFrame`（规则 57）：裸路径会报
             //    `Bundle resources doesn't contain xxx`，且只是静默留白 + 一条 warn。
-            resources.load(path, SpriteFrame, (error, frame) => {
+            routedLoad(path, SpriteFrame, (error, frame) => {
                 if (error || !frame) {
                     console.warn('[Hang] 加载图失败', path, error);
                     this._frames.set(path, null);

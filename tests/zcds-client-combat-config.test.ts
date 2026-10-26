@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { runInNewContext } from 'node:vm';
+import ts from 'typescript';
 import type { ZCBattleStart } from '../assets/script/app/battle/BattleStartModel';
 import { buildZCClientCombatConfig, clientHeroIdsByOwner } from '../assets/script/app/zcds/application/ZCClientCombatConfig';
 import { buildZCPveEnemyDecks } from '../assets/script/app/zcds/application/ZCPveCombatConfig';
@@ -170,11 +172,80 @@ test('territory NPC teams retain separate cards and shared system cards', () => 
     }
 });
 
-test('正式回包未携带英雄阵容时保留本地卡池回退', () => {
+test('正式回包明确给空英雄阵容时只保留系统卡，不补本地英雄', () => {
     const source = prepare(4);
     const result = buildZCClientCombatConfig(source, battle([], []), 'self');
-    assert.deepEqual(result.config.playerDeck, source.playerDeck);
-    assert.deepEqual(result.config.enemyDeck, source.enemyDeck);
+    assert.deepEqual(result.config.playerDeck, source.playerDeck.filter((card) => card.unitId === undefined));
+    assert.deepEqual(result.config.enemyDeck, source.enemyDeck.filter((card) => card.unitId === undefined));
+    assert.deepEqual(result.config.modifiers?.player, []);
+    assert.deepEqual(result.config.modifiers?.enemy, []);
+    assert.deepEqual(clientHeroIdsByOwner(source, battle([], []), 'self').player, []);
+});
+
+test('heroInfos 归一化后的 heroes 优先于旧 heroIds，包括空数组', () => {
+    const source = prepare(4);
+    const original = battle([68001], [68001]);
+    const remote = { ...original, units: original.units.map((unit) => ({
+        ...unit, heroes: unit.roleId === 'self' ? [] : [{ heroId: 68002, level: 3 }],
+    })) };
+    const result = buildZCClientCombatConfig(source, remote, 'self');
+    assert.deepEqual(result.config.playerDeck.filter((card) => card.unitId !== undefined), []);
+    assert.deepEqual(result.config.enemyDeck.filter((card) => card.unitId !== undefined).map((card) => Number(card.unitId)), [68002]);
+    assert.deepEqual(clientHeroIdsByOwner(source, remote, 'self').enemy, [68002]);
+});
+
+test('服务端未提供的额外席位不补本地英雄阵容', () => {
+    const source = prepare(4);
+    const original = battle();
+    const remote = { ...original, units: original.units.slice(0, 2) };
+    const result = buildZCClientCombatConfig(source, remote, 'self');
+    for (const owner of ['enemy2', 'enemy3'] as const) {
+        assert.deepEqual(result.config.ownerDecks?.[owner]?.filter((card) => card.unitId !== undefined), []);
+        assert.deepEqual(result.config.modifiers?.[owner], []);
+        assert.deepEqual(clientHeroIdsByOwner(source, remote, 'self')[owner], []);
+    }
+});
+
+test('SLG 守军八张卡按实际回包 id 和顺序构筑，不使用默认英雄', () => {
+    const source = prepare(4);
+    const ids = [68019, 68012, 68002, 68030, 68003, 68022, 68023, 68033];
+    const original = battle([68001], ids);
+    const remote = { ...original, units: original.units.map((unit) => unit.campId !== 1 ? unit : {
+        ...unit, roleId: '0', name: '', heroes: ids.map((heroId) => ({ heroId, level: heroId === 68023 ? 1 : 3 })),
+    }) };
+    const result = buildZCClientCombatConfig(source, remote, 'self');
+    assert.deepEqual(result.config.enemyDeck.filter((card) => card.unitId !== undefined).map((card) => Number(card.unitId)), ids);
+});
+
+test('服务端章节战斗阵容不再受本地关卡敌方卡牌名单裁剪', () => {
+    const source = prepare(4);
+    const exports: Record<string, unknown> = {};
+    let initialized: { matchConfig: typeof source } | null = null;
+    class Base {
+        host = { addComponent: () => ({ initialize: (entry: { matchConfig: typeof source }) => { initialized = entry; } }) };
+        log(): void {} error(): void {}
+    }
+    runInNewContext(ts.transpileModule(readFileSync('assets/script/app/procedure/ProcedureGame.ts', 'utf8'), {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+    }).outputText, { exports, console, require(name: string) {
+        if (name.endsWith('/ProcedureBase')) return { ProcedureBase: Base };
+        if (name.endsWith('/ZCClientCombatConfig')) return { buildZCClientCombatConfig };
+        if (name.endsWith('/ZCPveCombatConfig')) return { buildZCPveEnemyDecks };
+        if (name.endsWith('/ZCMatchConfig')) return { captureZCMatchConfig };
+        if (name.endsWith('/ZCRankBoard')) return { buildSeatProfiles: () => new Map() };
+        if (name.endsWith('/ZCGame')) return { ZCGame: class {} };
+        return {};
+    } });
+    const Procedure = exports.ProcedureGame as new () => { preparedResources: object; onEnter(params: object): void };
+    const procedure = new Procedure();
+    procedure.preparedResources = { baseMatchConfig: source };
+    procedure.onEnter({ battle: battle([68001], [68002]), selfRoleId: 'self', pve: {
+        mode: 'match', chapterId: 1, levelId: 1, territoryCellId: 327, hpRate: 1, attackRate: 1,
+        enemyCardIds: [68001], enemyTeamCardIds: [[68001], [68001], [68001]], waves: [], playerCount: 4,
+    } });
+    assert.ok(initialized);
+    assert.deepEqual((initialized as { matchConfig: typeof source }).matchConfig.enemyDeck
+        .filter((card) => card.unitId !== undefined).map((card) => Number(card.unitId)), [68002]);
 });
 
 test('自选主城配置可在显式预备模式下完成客户端构筑', () => {

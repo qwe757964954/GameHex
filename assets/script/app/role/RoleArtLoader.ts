@@ -12,7 +12,8 @@
  * `Simple.updateUVs: Cannot read properties of null (reading '0')`
  * （只在重新渲染那一刻炸，看着像别的模块的锅）。
  */
-import { resources, SpriteFrame } from 'cc';
+import { SpriteFrame } from 'cc';
+import { routedLoad } from '../common/RoutedResource';
 import { spriteFramePathOf } from '../ArtPaths';
 import { loadItemIconArt, loadQualityFrameArt } from '../itemdetail/ItemDetailArtLoader';
 import { qualityFrameSuffixOf } from '../itemdetail/ItemDetailTable';
@@ -54,7 +55,7 @@ export function loadRoleArt(key: string): Promise<SpriteFrame | null> {
 
     const mark = generation;
     const task = new Promise<SpriteFrame | null>((resolve) => {
-        resources.load(path, SpriteFrame, (error, frame) => {
+        routedLoad(path, SpriteFrame, (error, frame) => {
             if (error || !frame || !frame.isValid) {
                 console.warn(`[RoleArt] 加载失败：${path}`, error);
                 resolve(null);
@@ -150,7 +151,7 @@ export function loadRoleBagIconSprite(
     if (running) return running;
 
     const task = new Promise<SpriteFrame | null>((resolve) => {
-        resources.load(spriteFramePathOf(key), SpriteFrame, (error, frame) => {
+        routedLoad(spriteFramePathOf(key), SpriteFrame, (error, frame) => {
             if (error || !frame || !frame.isValid) {
                 // 图确实缺（美术未导）⇒ 这条 warn 是**正确路径**的缺图提示，不是拼错目录。
                 console.warn(`[RoleArt] 背包图标缺失：${key}`, error);

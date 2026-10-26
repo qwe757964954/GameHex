@@ -1,5 +1,6 @@
 import { ResourceScope } from '../../../core/asset/ResourceScope';
 import type { ZCBattleStart } from '../../battle/BattleStartModel';
+import type { IZCSlgBattleType } from '../../battle/BattleStartModel';
 import type { MatchPlayerData } from '../../matching/MatchTypes';
 import type { ZCGameLoader, ZCGamePreparedResources } from './ZCGameLoader';
 import type { ITerritorySaveOwner } from '../../territory/model/TerritorySaveStore';
@@ -12,6 +13,7 @@ export const ZCGamePreloadMode = {
 export type ZCGamePreloadMode = (typeof ZCGamePreloadMode)[keyof typeof ZCGamePreloadMode];
 
 export interface ZCGameEntryParams {
+    slgBattleType?: IZCSlgBattleType;
     opponent?: MatchPlayerData;
     /** 领地/冒险绕过 PVP 匹配，携带关卡数据直接进入本地 PVE。 */
     pve?: {
@@ -61,8 +63,11 @@ export class ZCGamePreload {
     private readonly resources = new ResourceScope('battle:matching-preload');
     private transferred = false;
 
-    constructor(loader: Pick<ZCGameLoader, 'prepare'>) {
-        this.ready = loader.prepare(this.resources);
+    constructor(loader: Pick<ZCGameLoader, 'prepare'>, battle?: Promise<ZCBattleStart | null>, waveCardIds: readonly number[] = []) {
+        this.ready = battle ? battle.then((data) => {
+            if (this.resources.disposed) throw new Error('对局预加载已取消');
+            return loader.prepare(this.resources, data, waveCardIds);
+        }) : loader.prepare(this.resources);
         // 后台加载可能在匹配回调前失败，立即释放已加载资源并处理拒绝。
         void this.ready.catch(() => this.resources.dispose());
     }

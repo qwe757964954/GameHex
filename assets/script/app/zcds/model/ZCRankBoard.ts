@@ -177,7 +177,8 @@ export function buildSeatProfiles(
         while (cursor < RANK_SEAT_ORDER.length && profiles.has(RANK_SEAT_ORDER[cursor])) cursor += 1;
         const owner = RANK_SEAT_ORDER[cursor];
         if (!owner) continue;
-        profiles.set(owner, { name: unit.name || '', headKey: unit.avatarId || '' });
+        // SLG 守军仍是完整参战席位，但 showInfo.name 可为空；名称沿用阵营兜底，避免 HUD 出现空行。
+        profiles.set(owner, { name: unit.name || RANK_FALLBACK_NAMES[owner], headKey: unit.avatarId || '' });
     }
     return profiles;
 }

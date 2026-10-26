@@ -1,19 +1,32 @@
 import { Asset, assetManager, AssetManager, Director, director, resources } from 'cc';
 import type { AssetLoadOptions, AssetService, AssetType } from '../../core/asset/AssetService';
+import { bundleForPath } from '../../core/asset/BundleCatalog';
 import { CocosBundleRegistry } from '../hotupdate/CocosBundleRegistry';
 
 const RESOURCES_BUNDLE = 'resources';
+
+/** 未显式指定 bundle 时按路径前缀路由（命中分包表走对应 bundle，否则首包 resources）。 */
+const resolveBundle = (path: string, options: AssetLoadOptions): string | undefined =>
+    options.bundle ?? bundleForPath(path);
 
 /** Creator 3.8 AssetManager 的唯一业务适配入口。 */
 export class CocosAssetService implements AssetService {
     private pendingReleases: Asset[] = [];
     private releaseScheduled = false;
+    async preload(path: string, options: AssetLoadOptions = {}): Promise<void> {
+        if (options.scope?.disposed) return;
+        const bundle = await this.getBundle(resolveBundle(path, options));
+        if (options.scope?.disposed) return;
+        await new Promise<void>((resolve, reject) => {
+            assetManager.preloadAny({ path, bundle: bundle.name, priority: -1 }, (error: Error | null) => error ? reject(error) : resolve());
+        });
+    }
     async load<T>(path: string, type: AssetType<T>, options: AssetLoadOptions = {}): Promise<T> {
-        const bundle = await this.getBundle(options.bundle);
+        const bundle = await this.getBundle(resolveBundle(path, options));
         const asset = await new Promise<T>((resolve, reject) => {
             (bundle.load as any)(path, type, (error: Error | null, value: T) => {
                 if (error || !value) {
-                    reject(error || new Error(`资源加载失败：${options.bundle ?? RESOURCES_BUNDLE}://${path}`));
+                    reject(error || new Error(`资源加载失败：${resolveBundle(path, options) ?? RESOURCES_BUNDLE}://${path}`));
                     return;
                 }
                 resolve(value);
@@ -24,7 +37,7 @@ export class CocosAssetService implements AssetService {
     }
 
     async has<T>(path: string, type: AssetType<T>, options: AssetLoadOptions = {}): Promise<boolean> {
-        const bundle = await this.getBundle(options.bundle);
+        const bundle = await this.getBundle(resolveBundle(path, options));
         try {
             // getInfoWithPath 查 bundle 构建索引（config.json 的 paths），不触发实际下载/反序列化。
             // Creator 3.8 的 Bundle 标准方法；防御性调用，方法缺失/异常时放行给 load 报真实错误。
@@ -39,7 +52,7 @@ export class CocosAssetService implements AssetService {
     }
 
     async loadDir<T>(path: string, type: AssetType<T>, options: AssetLoadOptions = {}): Promise<T[]> {
-        const bundle = await this.getBundle(options.bundle);
+        const bundle = await this.getBundle(resolveBundle(path, options));
         const assets = await new Promise<T[]>((resolve, reject) => {
             (bundle.loadDir as any)(path, type, (error: Error | null, values: T[]) => {
                 if (error) {

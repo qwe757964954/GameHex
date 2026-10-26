@@ -9,6 +9,7 @@ export const BIGMAP_CAMP_OCCUPATION_TEXT = ['未占领', '已占领'] as const;
 export const BIGMAP_CAMP_QUERY_TEXT = {
     pending: '据点信息加载中',
     failed: '据点信息获取失败，请重新选择据点重试',
+    failedCanAttack: '暂未获取据点状态，可尝试攻打',
     attackUnavailable: '攻城操作暂未接入服务器',
 } as const;
 

@@ -92,6 +92,13 @@ function buildFixture() {
         /** 引擎默认 NONE：会把文本实测尺寸回写进 UITransform。 */
         overflow = Label.Overflow.NONE;
         enableWrapText = true;
+        // 样式字段：`_applyTextStyle` 会往里写，用例拿它们和聊天条对值。
+        fontSize = 40;
+        lineHeight = 40;
+        color: { r: number; g: number; b: number; a: number } | null = null;
+        isBold = false;
+        spacingX = 0;
+        fontFamily = 'Arial';
         node: any = null;
     }
     class UITransform {
@@ -239,26 +246,26 @@ test('Toast 按队列依次播放，放空后自行关闭，再来消息能重�
     assert.equal(first.isPopupOpen, true);
     // 吐司不抢输入：不接受点空白关闭
     assert.equal(first.closeOnBlank, false);
-    // onInit 已按 @property 摆好底条与文字框（430×100 / 430−2×48）
-    assert.deepEqual(barTransform.contentSize, { width: 430, height: 100 });
+    // onInit 已按 @property 摆好底条与文字框（430×56 / 430−2×48）
+    assert.deepEqual(barTransform.contentSize, { width: 430, height: 56 });
     assert.deepEqual(
         labelNode.getComponent(UITransform)!.contentSize,
-        { width: 334, height: 100 },
+        { width: 334, height: 56 },
         '文字可用宽度 = 底条宽 − 2×内边距',
     );
     // 铁律：先切 SHRINK + 关折行，再设 contentSize；顺序反了尺寸会被文本实测值覆盖
     assert.equal(probe.overflowWhenLabelResized, Label.Overflow.SHRINK);
     assert.equal(probe.wrapWhenLabelResized, false, '吐司不折行，只缩字');
     assert.equal(label.overflow, Label.Overflow.SHRINK);
-    // 底条填充色 = 设计稿主色 #1D313F
+    // 底条 = 聊天条同款「60% 黑」：`rgba(0,0,0,153)`（hud_chat_bar.png 实测像素）
     assert.deepEqual(
-        { r: graphics.fillColor!.r, g: graphics.fillColor!.g, b: graphics.fillColor!.b },
-        { r: 29, g: 49, b: 63 },
-        '底条填充色应为 #1D313F',
+        { r: graphics.fillColor!.r, g: graphics.fillColor!.g, b: graphics.fillColor!.b, a: graphics.fillColor!.a },
+        { r: 0, g: 0, b: 0, a: 153 },
+        '底条应为 60% 黑的半透明底框（对齐聊天条）',
     );
     // 圆角底条按参数画了一次
     assert.equal(graphics.calls[0], 'clear');
-    assert.ok(graphics.calls.includes('roundRect(-215,-50,430,100,12)'), graphics.calls.join(' | '));
+    assert.ok(graphics.calls.includes('roundRect(-215,-28,430,56,12)'), graphics.calls.join(' | '));
     assert.equal(graphics.calls[graphics.calls.length - 1], 'fill');
 
     // 连着来两条：不该开第二个实例，而是排队
@@ -289,6 +296,74 @@ test('Toast 按队列依次播放，放空后自行关闭，再来消息能重�
     assert.equal(state.created, 2);
     assert.notEqual(state.live, first);
     assert.equal(state.live.currentText, '第四条');
+});
+
+test('样式口径：吐司与主界面聊天条（BottomHud/ChatBar/ChatMsg）是同一套字 + 同一块黑底', async () => {
+    const { Toast, state, label } = buildFixture();
+    Toast.show('对齐聊天条');
+    await flushMicrotasks();
+    const toast = state.live;
+    assert.ok(toast, '实例没起来');
+
+    // 聊天条上的消息正文：ArenaRoot/BottomHud/ChatMsg（HUD 上唯一的"黑底说明文字"）
+    const arena = JSON.parse(readFileSync('assets/resources/ui/main/ArenaRoot.prefab', 'utf8')) as any[];
+    const chat = arena.find((item) => item.__type__ === 'cc.Label'
+        && typeof item._string === 'string' && item._string.indexOf('空空如也') >= 0);
+    assert.ok(chat, '聊天条消息 Label 改文案了？找不到 "空空如也消息~"');
+
+    const toastText = {
+        r: toast.fontColor.r,
+        g: toast.fontColor.g,
+        b: toast.fontColor.b,
+        a: toast.fontColor.a,
+    };
+    const chatText = { r: chat._color.r, g: chat._color.g, b: chat._color.b, a: chat._color.a };
+    assert.equal(toast.fontSize, chat._fontSize, '字号要和聊天条一致');
+    assert.equal(toast.lineHeight, chat._lineHeight, '行高要和聊天条一致');
+    assert.equal(toast.letterSpacing, chat._spacingX, '字距要和聊天条一致');
+    assert.equal(toast.fontFamily, chat._fontFamily, '字体族要和聊天条一致');
+    assert.deepEqual(toastText, chatText, '字色（含 alpha 145 ≈ 57% 白）要和聊天条一致');
+    assert.equal(chat._isBold, true, '聊天条正文是加粗的；下面那条断言就是在核这个前提');
+
+    // 真正生效的是运行时写进 Label 的那份（prefab 里的值会被 `_applyTextStyle` 覆盖）
+    assert.equal(label.fontSize, chat._fontSize);
+    assert.equal(label.lineHeight, chat._lineHeight);
+    assert.equal(label.spacingX, chat._spacingX);
+    assert.equal(label.fontFamily, chat._fontFamily);
+    assert.equal(label.isBold, true, '吐司文字跟着聊天条加粗');
+    assert.deepEqual(
+        { r: label.color!.r, g: label.color!.g, b: label.color!.b, a: label.color!.a },
+        chatText,
+    );
+
+    // 底条 60% 黑：取自聊天条底图 `image/main/hud/hud_chat_bar.png` 的实测像素 rgba(0,0,0,153)
+    assert.deepEqual(
+        { r: toast.barColor.r, g: toast.barColor.g, b: toast.barColor.b, a: toast.barColor.a },
+        { r: 0, g: 0, b: 0, a: 153 },
+        '底条必须是聊天条同款 60% 黑',
+    );
+});
+
+test('Toast.prefab 里序列化的样式与脚本 @property 默认值一致（编辑器预览 = 运行时）', () => {
+    const prefab = JSON.parse(readFileSync('assets/resources/ui/common/Toast.prefab', 'utf8')) as any[];
+    // 自定义组件的 __type__ 是脚本 uuid 的压缩串，不是 cc.* —— 全文件只有这一个。
+    const comp = prefab.find((item) => typeof item.__type__ === 'string' && !item.__type__.startsWith('cc.'));
+    assert.ok(comp, 'Toast.prefab 里找不到 Toast 组件');
+    const label = prefab.find((item) => item.__type__ === 'cc.Label');
+    assert.ok(label, 'Toast.prefab 里找不到 Label');
+
+    assert.equal(comp.barWidth, 430);
+    assert.equal(comp.barHeight, 56, 'prefab 的底条高度要和脚本默认值一致');
+    assert.deepEqual(
+        { r: comp.barColor.r, g: comp.barColor.g, b: comp.barColor.b, a: comp.barColor.a },
+        { r: 0, g: 0, b: 0, a: 153 },
+        'prefab 里的底条色不能还是老的 #1D313F 不透明',
+    );
+    assert.equal(comp.fontSize, label._fontSize, 'prefab 的 fontSize 与 Label 对不上');
+    assert.equal(comp.lineHeight, label._lineHeight, 'prefab 的 lineHeight 与 Label 对不上');
+    assert.equal(label._color.a, comp.fontColor.a, 'prefab 的 Label 字色 alpha 与 @property 对不上');
+    assert.equal(label._spacingX, comp.letterSpacing);
+    assert.equal(label._fontFamily, comp.fontFamily);
 });
 
 test('Toast 忽略非字符串与空白串（FW.G_W 未落地时会传进 undefined）', async () => {

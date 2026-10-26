@@ -85,9 +85,11 @@ export class ProcedureBootstrap extends Component {
         BigMapEntry.shared().setAssetService(assets);
         const configs = new RefConfigService();
         PopupManager.inst?.initialize(assets);
+        const sessionAssets = new AppSessionAssetService(assets, configs);
+        BigMapEntry.shared().setSessionAssetService(sessionAssets);
         manager.configure({
             assets,
-            sessionAssets: new AppSessionAssetService(assets, configs),
+            sessionAssets,
             configs,
             network: new FetchNetworkTransport(),
         });

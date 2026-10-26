@@ -5,8 +5,9 @@
  * const frame = await HeadArt.loadHeadFrame(avatarId);
  * if (frame) sprite.spriteFrame = frame;
  */
-import { resources, SpriteFrame } from 'cc';
+import { SpriteFrame } from 'cc';
 import { HEAD_ART_ROOT, artKey, spriteFramePath } from './ArtPaths';
+import { routedLoad } from './common/RoutedResource';
 import type { ConfigService } from '../core/config/ConfigService';
 import { RefUtil } from '../framework/ref/RefUtil';
 import {
@@ -42,7 +43,7 @@ export class HeadArt {
         const cached = HeadArt.spriteCache.get(key);
         if (cached) return Promise.resolve(cached);
         return new Promise<SpriteFrame | null>((resolve) => {
-            resources.load(spriteFramePath(root, name), SpriteFrame, (error, frame) => {
+            routedLoad(spriteFramePath(root, name), SpriteFrame, (error, frame) => {
                 if (error || !frame) {
                     console.warn(`[HeadArt] 头像加载失败：${key}`, error);
                     resolve(null);

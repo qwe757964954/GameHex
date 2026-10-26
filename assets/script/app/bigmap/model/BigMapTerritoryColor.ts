@@ -20,6 +20,26 @@ export interface ITerritoryColorRegion {
 }
 
 /**
+ * 玩家基地该用哪一块势力色 —— 服务器 `SlgGameInfo.toCampId` 指向的城池**就是**基地所属势力。
+ *
+ * 口径（2026-10-23 山猫）：*「染成所属城池的势力色，后端给城池 id，城池 id 在配置表，
+ * 地图会配置城池 id，从地图查找到，那个就是大地图的基地。」*
+ * 所以这里不自己算距离、不猜最近城，只做「拿 id 去色槽表里查」这一件事。
+ *
+ * @param campId 我所处的城池 id（0 = 未收到包 / 服务端明确未归属）
+ * @param slots  城池 id → 色板下标（`assignTerritoryColorSlots*` 的产物）
+ * @returns 色板下标；`null` = 没有归属（或该城不在地图上），调用方回退兜底色
+ */
+export function bigMapPlayerBaseColorSlot(
+    campId: number,
+    slots: ReadonlyMap<number, number>,
+): number | null {
+    if (!Number.isInteger(campId) || campId <= 0) return null;
+    const slot = slots.get(campId);
+    return slot === undefined ? null : slot;
+}
+
+/**
  * 给每个势力分配一个色板下标（**靠距离猜邻接**，种子世界的兜底）。
  *
  * @param regions      势力集合（顺序无关，结果只跟几何关系有关）。

@@ -101,6 +101,7 @@ export class ProcedureMatching extends ProcedureBase {
     private battleStartTask: Promise<ZCBattleStart | null> | null = null;
 
     async onPreload(_params?: any, context?: ProcedurePreloadContext): Promise<void> {
+        this.sessionAssets?.pauseWarmup?.();
         if (!context) throw new Error('匹配流程缺少 ProcedurePreloadContext');
         if (!this.matchingPrefab) {
             const prefab = await this.assets.load(MATCHING_ROOT_URL, Prefab, { scope: context.resources });
@@ -178,15 +179,6 @@ export class ProcedureMatching extends ProcedureBase {
             this.error('MatchingRoot 组件或匹配内容服务缺失，匹配界面无法启动');
             return;
         }
-        //  用 beginMatch 而不是 start：start 是 Cocos 组件的生命周期回调，会被引擎无参调用。
-        const provider = this.sessionAssets as unknown as Partial<BattlePreloadProvider>;
-        // 正常路径直接接管登录后已经完成的加载；未经过登录流程时保留直接进入的兜底。
-        const preload = provider.takeBattlePreload?.()
-            ?? new ZCGamePreload(new ZCGameLoader(this.assets, this.configs, MAP_DIRECTORY));
-        this.battlePreload = preload;
-        void preload.ready.catch((error) => {
-            if (this.battlePreload === preload) this.error(`对局资源预加载失败：${error}`);
-        });
         //  「开始游戏」的服务端语义就在这一步：点主界面按钮进到匹配流程 = 请求开一局。
         //  请求与下面的匹配动画**并行**跑（服务端内网应答是毫秒级），所以不拖慢开局手感；
         //  它自带硬超时且不 reject，拿不到就整条退回本地对手池，匹配流程不会因此失败。
@@ -196,6 +188,14 @@ export class ProcedureMatching extends ProcedureBase {
             params?.battleParams ?? [],
         );
         this.battleStartTask = battleStartTask;
+        const provider = this.sessionAssets as unknown as Partial<BattlePreloadProvider>;
+        // 等回包人数和阵容确定后选图、加载本局表现；公共资源已由会话预下载。
+        const preload = provider.takeBattlePreload?.()
+            ?? new ZCGamePreload(new ZCGameLoader(this.sessionAssets?.reusableAssets ?? this.assets, this.configs, MAP_DIRECTORY), battleStartTask);
+        this.battlePreload = preload;
+        void preload.ready.catch((error) => {
+            if (this.battlePreload === preload) this.error(`对局资源预加载失败：${error}`);
+        });
 
         // 我方信息条的起始数据：本机昵称 / 头像（`CmdRole` 缓存）+ 本地占位。
         //  底下的段位/奖杯在服务端数据到达前是假的（`MatchPool.LOCAL_PLAYER` 的占位值），

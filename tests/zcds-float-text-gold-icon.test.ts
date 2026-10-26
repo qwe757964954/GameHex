@@ -5,15 +5,19 @@ import ts from 'typescript';
 import { loadViews } from './helpers/zcds-view-fixtures';
 
 /**
- * 金币飘字左侧的金币图标（2026-10-14）。
+ * 金币飘字的金币图标（2026-10-14 起，2026-10-23 两次改口径）。
  *
  * 口径：
  * · 只有 `gold` 飘字显示图标；伤害 / 治疗等一律隐藏（节点来自对象池，必须**每帧绝对赋值**，
  *   否则复用回来会残留上一条的可见状态）；
- * · 图标挂在 `Text` 节点下 ⇒ 位置与弹出缩放自动跟随数字一起上浮；
- * · 水平位置由数字**实际宽度**反推（`-(文字宽/2 + 间距 + 图标半宽)`），不用固定偏移 ——
- *   `+5` 与 `+1.2K` 宽度差一倍，固定偏移会让图标时而压在数字上、时而飘太远；
- * · 上升途中绕自身旋转（屏幕平面内 `rotation.z`），整条飘字正好 1 圈。
+ * · 图标挂在 `Text` 节点下 ⇒ 位置与缩放自动跟随数字一起动；
+ * · **图标居中压在落点上**（`x = y = 0`）—— 2026-10-23 起金币没有数字与加号了，
+ *   没有文字可对齐，再按文字宽度往左偏只会让硬币凭空偏左；
+ * · 自转在**掉落段**内转满一圈（屏幕平面内 `rotation.z`），落地即停。
+ *
+ * 2026-10-23 口径变更（同一天两轮）：
+ *  ① 金币飘字从「上升 + 淡出」改成「掉落原地 + 迅速缩小消失」（`ZCGameViewUtil.floatTextGoldDrop`）；
+ *  ② 移除金币的加号与数字 UI，落点改到**角色中心点**（`goldCenterY`）。
  */
 
 const VIEW_PATH = 'assets/script/app/zcds/view/ZCFloatTextView.ts';
@@ -106,51 +110,69 @@ test('只有金币飘字显示图标；伤害飘字一律隐藏（池复用不�
     assert.equal(enabled(), true);
 });
 
-test('图标落在数字左侧，间距随数字宽度走（不是固定偏移）', () => {
+test('图标居中压在落点上：没有数字可对齐，x/y 恒为 0（2026-10-23）', () => {
     const { view, iconPositions, uitClass } = createView();
     view.render(floatText('gold', 0.2), 0);
     const first = iconPositions[iconPositions.length - 1];
-    // -(40/2 + 4 + 15) = -39：直径 30 的图标整块落在文字左边缘之外。
-    assert.equal(first.x, -39, '图标应在数字左侧（负 x）且不压住文字');
-    assert.equal(first.y, 0, '垂直与数字居中（上浮由父节点 Text 承担）');
+    // 数字与加号都移除了 ⇒ 硬币就是这条飘字的全部视觉，必须落在中心点上。
+    assert.equal(first.x, 0, '硬币居中（原来按文字宽度推到左侧，现在没有文字可对齐）');
+    assert.equal(first.y, 0, '垂直与落点对齐（下落由父节点 Text 承担）');
 
-    // 文字变宽（+1234.5K）时图标同步左移。
+    // 文字宽度变化**不再**影响图标位置（以前 `-(宽/2 + 间距 + 半宽)` 会跟着跳）。
     (view.textLabel as unknown as { node: { getComponent: unknown } }).node.getComponent = (type: unknown) =>
         (type === uitClass ? { width: 120 } : null);
     view.render(floatText('gold', 0.2), 0);
     const wider = iconPositions[iconPositions.length - 1];
-    assert.ok(wider.x < first.x, `文字更宽时图标要更靠左（${wider.x} < ${first.x}）`);
-    assert.equal(wider.x, -(120 / 2 + 4 + 15));
+    assert.equal(wider.x, 0, '图标位置与数字宽度脱钩');
 });
 
-test('上升途中绕自身旋转：入场段内（前 45%）转满一圈，之后停住', () => {
-    const { view, iconAngles, entrance } = createView();
+test('金币没有文字：加号与数字都不显示，且池复用后伤害数字能回来（2026-10-23）', () => {
+    const { view } = createView();
+    const label = view.textLabel as unknown as { string: string; enabled: boolean };
+
+    view.render(floatText('gold', 0.2), 0);
+    assert.equal(label.string, '', '金币不再拼「+」与数值');
+    assert.equal(label.enabled, false, '数字 Label 必须关掉 —— 不能只把 alpha 压低');
+
+    // 复用回伤害：文字与可见性都要恢复（对象池里上一帧的 false 不能残留）。
+    view.render(floatText('damage', 0.2), 0);
+    assert.equal(label.enabled, true, '伤害数字必须重新可见');
+    assert.equal(label.string, '16', '伤害数字的文案照旧');
+});
+
+test('掉落途中绕自身旋转：掉落段（前 30%）转满一圈，落地后停住', () => {
+    const { view, iconAngles, util } = createView();
+    const span = util.FLOAT_TEXT_GOLD_DROP_SPAN as number;
     const angle = () => iconAngles[iconAngles.length - 1];
     view.render(floatText('gold', 0), 0);
     assert.equal(angle(), 0, '起步不预转');
-    // 入场进度 = easeOutCubic(progress / entranceProgress)：半程处已走了 87.5%。
-    view.render(floatText('gold', entrance * 0.5), 0);
-    assert.equal(angle(), 315);
-    view.render(floatText('gold', entrance), 0);
-    assert.equal(angle(), 360, '入场段一结束就转满一圈（与上浮同步收住）');
-    // 🔴 之后必须**停住**：上浮收进前 45%，自转若还铺满整条时长就会「数字停住、金币自己转」。
-    for (const elapsed of [entrance + 0.1, 0.8, 1]) {
+    // 自转进度就是掉落进度（线性）：半程 180°。
+    view.render(floatText('gold', span * 0.5), 0);
+    assert.equal(angle(), 180);
+    view.render(floatText('gold', span), 0);
+    assert.equal(angle(), 360, '落地那一刻正好转满一圈');
+    // 🔴 落地后必须**停住**：金币已经停在原地缩没了，图标还在转就是两个动作。
+    for (const elapsed of [span + 0.05, span + 0.1, 1]) {
         view.render(floatText('gold', elapsed), 0);
-        assert.equal(angle(), 360, `入场结束后（t=${elapsed}）不该再转`);
+        assert.equal(angle(), 360, `落地之后（t=${elapsed}）不该再转`);
     }
 });
 
 test('图标淡出与数字同步（Label 的 color.a 管不到独立 Sprite）', () => {
-    const { view, iconNode, entrance, util } = createView();
+    const { view, iconNode, util } = createView();
     const opacity = () => iconNode.components[0].opacity as number;
-    // 入场段恒满，之后在剩下的时长里线性淡出（判据跟着 entrance 走，别写死 0.45/0.55）。
-    view.render(floatText('gold', entrance), 0);
-    assert.equal(opacity(), 255, '入场段不许同时变淡');
-    // 期望值按真曲线算，不写死 128 —— `255 × 0.5` 的取整会随浮点尾数在 127/128 之间跳。
-    const mid = entrance + (1 - entrance) * 0.5;
-    view.render(floatText('gold', mid), 0);
-    assert.equal(opacity(), Math.round(255 * util.floatTextFade(mid, entrance)), '慢出段中点约半透明（线性淡出）');
-    assert.ok(opacity() > 0 && opacity() < 255, '尾段应与数字一起淡');
+    // 掉落 + 停住这两段恒满，只有在缩小段才跟着数字一起淡（判据取真曲线，不写死秒数）。
+    const frame = (p: number) => util.floatTextGoldDrop(p);
+    view.render(floatText('gold', 0.1), 0);
+    assert.equal(opacity(), 255, '掉落途中不许变淡');
+    view.render(floatText('gold', 0.4), 0);
+    assert.equal(opacity(), 255, '落地停住那一段仍是全不透明');
+    for (const progress of [0.6, 0.8, 0.95]) {
+        view.render(floatText('gold', progress), 0);
+        assert.equal(opacity(), Math.round(255 * frame(progress).fade),
+            `t=${progress} 的透明度应等于缩小段的 fade`);
+    }
+    assert.ok(opacity() > 0, '缩小段中途还看得见（是"缩没"不是"提前透明"）');
     view.render(floatText('gold', 1), 0);
     assert.equal(opacity(), 0, '结束时淡到 0，不能比数字多留一帧');
 });

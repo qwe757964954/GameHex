@@ -42,6 +42,7 @@ import { finishBattle, BATTLE_RESULT_WIN, BATTLE_RESULT_LOSE } from '../battle/B
 // 章节战斗的结算奖励走服务端广播（`CmdBattleResultBroMsg` 1002），不在 `finishBattle` 回包里。
 import { BattleResultService } from '../battle/BattleResultService';
 import type { IZCChapterBattleOutcome } from '../battle/BattleResultService';
+import type { IZCSlgBattleType } from '../battle/BattleStartModel';
 import { resolveCmdGoodsFrames } from '../showReward/RewardFrames';
 import { itemNumberTextOf } from '../itemdetail/ItemDetailTable';
 import type { IZCSettlementReward } from './ui/ZCSettlementPage';
@@ -93,6 +94,7 @@ export class ZCGame extends Component {
     private playerAvatars: Readonly<{ player: string; enemy: string }> | null = null;
     private seatProfiles: Map<ZCOwner, IRankSeatProfile> = new Map();
     private pveContext: IZCGamePveContext | null = null;
+    private slgBattleType: IZCSlgBattleType | null = null;
     private initialized = false;
     private readonly phase = new ZCBattlePhaseController();
     private pveResultRecorded = false;
@@ -151,7 +153,8 @@ export class ZCGame extends Component {
     }
 
     private get leaving(): boolean {
-        return this.phase.isLeaving;
+        // Cocos 销毁后会清空引用字段；迟到的图标/弹窗回调先按组件生命周期退出。
+        return !this.isValid || this.phase.isLeaving;
     }
 
     onLoad(): void {
@@ -165,6 +168,7 @@ export class ZCGame extends Component {
         this.matchConfig = entry.matchConfig;
         this.seatProfiles = new Map(entry.seatProfiles);
         this.pveContext = entry.pveContext;
+        this.slgBattleType = entry.slgBattleType ?? null;
         this.playerAvatars = entry.playerAvatars;
         this.preparedResources = entry.resources;
         try {
@@ -287,6 +291,7 @@ export class ZCGame extends Component {
         this.matchConfig = null;
         this.playerAvatars = null;
         this.pveContext = null;
+        this.slgBattleType = null;
         this.seatProfiles.clear();
     }
 
@@ -438,6 +443,8 @@ export class ZCGame extends Component {
         this.hudView = hud.getComponent(ZCGameHUDView)!;
         // HUD 的神器按钮原先显示 prefab 硬绑的通用图（`image/gameui/zd_faqi.png`），
         // 与本局携带的神器无关 ⇒ 棋盘显示剑、HUD 显示石锤。这里喂同一份已加载的帧。
+        // ⚠️ 自选地图局**不遮蔽这个按钮**：它显示的是玩家自己的神器，不是地图里的随机资源
+        //   （2026-10-23 首次改错成"自选局用问号"，已回退）。
         this.hudView.setArtifactFrame(prepared.artifactIconFrame);
         // 开局镜头停在我方主城那一格，而不是整盘中心（3 / 4 人图的整盘中心落在几块领地
         // 之间的中立空白处）。必须在 initialize 之前给 —— 入场镜头在 initialize 里就播完了。
@@ -491,6 +498,8 @@ export class ZCGame extends Component {
             overlayLayer: this.hudView.node,
             // 中立资源点「神器充能」格显示玩家携带的那件神器（整局一张，逐个地块视图注入）。
             artifactIconFrame: prepared.artifactIconFrame,
+            // 自选地图局的中立资源格盖成问号（资源进游戏才随机，别剧透是箱子还是金矿）。
+            unknownResourceFrame: prepared.unknownResourceFrame,
             // 中立资源获取特效：金币 / 神器从格子飞向 HUD 的对应栏位。
             goldCoinFrame: prepared.goldCoinFrame,
             // 自选主城区域气泡底图（frame_01 绿 / frame_02 红，九宫格）。
@@ -575,21 +584,19 @@ export class ZCGame extends Component {
         this.applyResult(this.model.useArtifact(), { toast: true });
     }
 
-    /** 战斗指南：内容是本局预加载好的（`prepared.guide`），对局进行中直接打开。 */
-    private onHudOpenGuide(): void {
+    /** 指南首次打开时准备内容，离场或换局后不显示迟到弹窗。 */
+    private async onHudOpenGuide(): Promise<void> {
         const prepared = this.preparedResources;
-        //  同族简化：`preparedResources` 只在 `shutdown()` 里清空（另一次赋值在 initialize，早于 createGame）
-        // ⇒ 与 `leaving` 恒等，判据取 phase。
-        if (this.leaving) return;
-        //  不再自判「正在打开 / 已打开」：`PopupManager` 按 `prefabPath` 做单实例去重
-        //（`_openingByPath` 返回同一次 Promise、已打开时返回现有实例），而弹窗一开全屏空白接收层
-        // 就吃掉了后续点击 ⇒ 重入只可能发生在加载窗口里，框架已兜住。
-        ZCGuidePanel.open({ userData: { content: prepared.guide } }).then((popup) => {
-            if (this.leaving) popup?.close(PopupCloseReason.Force);
+        if (this.leaving || !prepared) return;
+        try {
+            const content = await prepared.loadGuide();
+            if (this.leaving || !this.isValid || this.preparedResources !== prepared) return;
+            const popup = await ZCGuidePanel.open({ userData: { content } });
+            if (this.leaving || !this.isValid || this.preparedResources !== prepared) popup?.close(PopupCloseReason.Force);
             else this.guidePopup = popup;
-        }).catch((error) => {
-            if (ZCDC_LOG_WARNINGS) console.error('[ZCGame] 打开战斗指南失败', error);
-        });
+        } catch (error) {
+            if (!this.leaving && ZCDC_LOG_WARNINGS) console.error('[ZCGame] 打开战斗指南失败', error);
+        }
     }
 
     private onHudOpenDamageStats(): void {
@@ -661,6 +668,7 @@ export class ZCGame extends Component {
         this.spawnHintsVisible = true;
         this.hudView.setSpawnSelectionMode(true);
         // 节点树、尺寸与全部 @property 都在 `ZCSpawnSelection.prefab` 上（以前是 new Node 现搭 12 个节点）。
+        if (!prepared.spawnSelectionPrefab) throw new Error('自选主城缺少选点界面资源');
         const node = instantiate(prepared.spawnSelectionPrefab);
         node.layer = this.hudView.node.layer;
         node.setParent(this.hudView.node);
@@ -814,6 +822,8 @@ export class ZCGame extends Component {
         const localVictory = !retreated && state.status === 'victory';
         // 先建立等待器，再发结束请求；否则快速广播会被服务丢弃。
         const chapterResult = this.pveContext ? BattleResultService.waitForChapterResult() : null;
+        const battleResult = this.slgBattleType
+            ? BattleResultService.waitForBattleResult(this.slgBattleType) : chapterResult;
         // 结算即上报完成战斗，撤退按失败上报。失败不阻塞结算弹窗。
         //
         //  章节局（`pveContext`）**也必须发**：它是用 `CmdStartBattleReqMsg(1002)` 开的局
@@ -825,7 +835,7 @@ export class ZCGame extends Component {
         const result = localVictory ? BATTLE_RESULT_WIN : BATTLE_RESULT_LOSE;
         const commands = this.model.frameEvents.map((e) => ({ frameId: e.frameId, unitId: e.unitId, op: e.op, params: e.params }));
         void finishBattle(state.elapsedSeconds, result, commands, this.buildStatistics(), this.node);
-        void this.showSettlement(localVictory, chapterResult);
+        void this.showSettlement(localVictory, battleResult);
     }
 
     /**
@@ -860,6 +870,12 @@ export class ZCGame extends Component {
             userData: {
                 victory: result ? result.code === BATTLE_RESULT_WIN : localVictory,
                 rewards,
+                ...(result?.warScore !== undefined ? {
+                    rankName: '战功',
+                    scoreText: String(result.warScore),
+                    addScoreText: `+${result.warScore}`,
+                    rankHint: `本次战斗获得 ${result.warScore} 战功`,
+                } : {}),
             },
         }).then((popup) => {
             if (this.leaving) popup?.close(PopupCloseReason.Force);
@@ -903,6 +919,10 @@ export class ZCGame extends Component {
     }
 
     private returnToMain(): void {
+        if (this.slgBattleType) {
+            ProcedureManager.navigate(GameRoute.Main, { initialTab: 'world' });
+            return;
+        }
         if (this.pveContext) {
             ProcedureManager.navigate(GameRoute.Main, { initialTab: 'territory' });
             return;
@@ -1024,6 +1044,7 @@ export class ZCGame extends Component {
             //  同族简化：`preparedResources` 只在 `shutdown()` 里清空 ⇒ 与 `leaving` 恒等。
             if (this.leaving) return;
             const hud = this.hudView.node;
+            if (!prepared.bossPanelPrefab) throw new Error('守城战斗缺少首领面板资源');
             const node = instantiate(prepared.bossPanelPrefab);
             node.layer = hud.layer;
             node.setParent(hud);

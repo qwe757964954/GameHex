@@ -27,7 +27,8 @@
  * 看着像别处的锅）。
  */
 
-import { resources, SpriteFrame } from 'cc';
+import { SpriteFrame } from 'cc';
+import { routedLoad } from '../common/RoutedResource';
 import { celebrationNeededArtPaths, osArtPath, OS_TAB_ART_KEYS, osQualityFramePath, osSharedPath } from './CelebrationArt';
 import { goodsOf, rewardIconRefOf, rewardQualityOf } from './CelebrationRepository';
 import type { ICelebrationSnapshot } from './CelebrationRepository';
@@ -67,7 +68,7 @@ export class CelebrationFrames {
         if (this._frames.has(path)) return Promise.resolve(this._frames.get(path)!);
         this._requested.add(path);
         return new Promise((resolve) => {
-            resources.load(path, SpriteFrame, (error, frame) => {
+            routedLoad(path, SpriteFrame, (error, frame) => {
                 if (error || !frame) {
                     console.warn('[Celebration] 加载图失败', path, error);
                     this._frames.set(path, null);

@@ -25,6 +25,7 @@ test('流程资源引用保留到延迟节点销毁和绘制结束，批量释�
     const { CocosAssetService } = load('assets/script/platform/cocos/CocosAssetService.ts', {
         cc: { Asset, resources: { load: (_path: string, _type: unknown, done: Function) => done(null, frame) },
             Director: { EVENT_AFTER_DRAW: 'after-draw' }, director: { once: (event: string, fn: () => void) => { assert.equal(event, 'after-draw'); events.push(fn); } } },
+        '../../core/asset/BundleCatalog': { bundleForPath: () => undefined },
         '../hotupdate/CocosBundleRegistry': {},
     });
     const service = new CocosAssetService(), scope = new ResourceScope('battle');
@@ -45,6 +46,7 @@ test('应用图标缓存持有 Cocos 引用，返回主界面复用有效帧，�
     const { loadArt } = load('assets/script/app/card/CardLineupIcons.ts', {
         cc: { SpriteFrame: Asset, resources: { load: (_path: string, _type: unknown, done: Function) => { calls++; done(null, frame); } } },
         '../ArtPaths': ArtPaths, '../HeadArt': { HeadArt: {} },
+        '../common/RoutedResource': { routedLoad: (_path: string, _type: unknown, done: Function) => { calls++; done(null, frame); } },
     });
     assert.equal(await loadArt('nav_shop', 'image/main/city'), frame); assert.equal(frame.refs, 1);
     frame.addRef(); frame.decRef();
@@ -118,4 +120,22 @@ test('流程管理器能拿到对局控制器（只读出口）；不在对局�
     manager.instance = { currentProcedure: procedure };
     procedure.onLeave();
     assert.equal(ProcedureGame.current, null);
+});
+
+
+test('公共预下载只发低优先级下载请求，不解析或持有资产；取消后不派发', async () => {
+    const requests: unknown[] = [];
+    const { CocosAssetService } = load('assets/script/platform/cocos/CocosAssetService.ts', {
+        cc: { resources: { name: 'resources', load() { throw new Error('不能解析'); } },
+            assetManager: { preloadAny: (request: unknown, done: Function) => { requests.push(request); done(null, []); } } },
+        '../../core/asset/BundleCatalog': { bundleForPath: () => undefined },
+        '../hotupdate/CocosBundleRegistry': {},
+    });
+    const service = new CocosAssetService();
+    const scope = new ResourceScope('warm');
+    await service.preload('ui/game/ZCGameHUD', { scope });
+    assert.deepEqual(JSON.parse(JSON.stringify(requests)), [{ path: 'ui/game/ZCGameHUD', bundle: 'resources', priority: -1 }]);
+    scope.dispose();
+    await service.preload('late', { scope });
+    assert.equal(requests.length, 1);
 });

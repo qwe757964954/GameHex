@@ -138,9 +138,17 @@ const FRAME_OP_SPAWN = 4;
 const STRUCTURE_TARGET_BODY_RADIUS = 80;
 /** 平顶六边形相邻格中心距（视觉步长，与 hexDistance 归一单位一致）。 */
 const HEX_STEP = HEX_GRID_LOGICAL_ROW_STEP;
-/** 伤害飘字存活时长（秒）。金币飘字稍长，便于看清收入节奏。 */
+/** 伤害飘字存活时长（秒）。 */
 const FLOAT_TEXT_DAMAGE_SECONDS = 0.85;
-const FLOAT_TEXT_GOLD_SECONDS = 1.1;
+/**
+ * 金币飘字存活时长（秒）。
+ *
+ * 2026-10-23 由 **1.1 → 0.62**：金币不再是"慢慢往上飘 1.1 秒"，而是「落到地上 → 停一下 →
+ * 迅速缩小消失」（曲线见 `ZCGameViewUtil.floatTextGoldDrop`，三段比例 30% / 15% / 55%）。
+ * 1.1s 摊到"缩小"这一段只剩 0.6s，读起来是"慢慢缩小"；0.62s 才配得上用户要的"迅速消失"。
+ * 三段实秒数：掉落 0.19s、停住 0.09s、缩没 0.34s。
+ */
+const FLOAT_TEXT_GOLD_SECONDS = 0.62;
 /**
  * 受击特效的存活时长（秒）= **表现总时长**。
  *

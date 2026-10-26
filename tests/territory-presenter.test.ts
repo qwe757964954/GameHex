@@ -158,7 +158,7 @@ test('locked Boss detail uses the existing unlock-then-start flow and cannot can
     h.presenter.dispose();
 });
 
-test('quick find uses server area progress and reports no target after all Boss areas are passed', async () => {
+test('quick find falls back to the latest cleared Boss and starts a server battle without unlocking again', async () => {
     const h = createHarness({ loader: createBossFindLoader(), gateway: createFakeGateway({ fetch: {
         ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [367], passCells: [367, 193] },
     } }) });
@@ -167,9 +167,16 @@ test('quick find uses server area progress and reports no target after all Boss 
     assert.equal(h.presenter.focusCurrentBoss(), 105);
     assert.equal(h.presenter.state.detail.content?.title, '首领关卡  10');
     h.presenter.state.progress!.markCellPassed(85);
-    assert.equal(h.presenter.focusCurrentBoss(), null);
-    assert.equal(h.tips.at(-1), '暂无可定位的 Boss 关卡');
-    assert.equal(h.presenter.state.detail.open, false);
+    assert.equal(h.presenter.focusCurrentBoss(), 105);
+    assert.equal(h.presenter.state.detail.open, true);
+    assert.equal(h.presenter.state.detail.content?.startEnabled, true);
+    h.presenter.requestBattle();
+    h.presenter.requestBattle();
+    await flush();
+    assert.deepEqual(h.gatewayCalls.battleParamsList, [['1', '1', '105']]);
+    assert.equal(h.gatewayCalls.unlock, 0);
+    assert.equal(h.gatewayCalls.pass, 0);
+    assert.equal(h.nav.length, 1);
     h.presenter.dispose();
 });
 
@@ -1230,7 +1237,7 @@ test('two-step stage 327 unlocks first, shows the building, then starts battle o
     assert.equal(h.presenter.state.progress?.isCellUnlocked(327), true);
     // 第三步：战斗已发起（fake 不真切场景）⇒ 再点 = 战斗未结算返回重打。
     // 🔴 2026-10-21 口径：`bossBattleStart` 不再参与防连点（防连点 = pending 判重 + loading），
-    // **未通关**格允许再次开战（打输 / 未打完可重打）；已通关 stage/boss 才被 isOwned 守卫挡。
+    // 未通关格允许再次开战（打输 / 未打完可重打）。
     h.presenter.selectSite(site);
     await flush();
     assert.equal(h.gatewayCalls.unlock, 1, '重打不夹带解锁请求');
@@ -1577,13 +1584,46 @@ test('boss site unlocks first, then clicking again sends CmdStartBattleReqMsg in
     assert.equal(h.presenter.lastBossBattleStart?.battleId, 'b-10005');
     assert.equal(h.presenter.lastBossBattleStart?.seed, '42');
     assert.equal(h.presenter.state.progress?.isOwned(2), false, '开战不改变占领态');
-    // 第三步：已通关 → 点击不再发任何请求。
+    // 第三步：已通关仍可重复挑战，不重新解锁。
     h.presenter.state.progress?.markCellPassed(2);
     h.presenter.selectSite(site);
     await flush();
-    assert.equal(h.gatewayCalls.startBattle, 1);
+    assert.equal(h.gatewayCalls.startBattle, 2);
     assert.equal(h.gatewayCalls.unlock, 1);
 });
+
+for (const [siteType, isBoss, mode] of [
+    ['boss', false, 'match'],
+    ['stage', true, 'defence'],
+] as const) {
+    test(`已通关 ${siteType}/${mode} 缺少 unlockCells 时仍可重复挑战，连点只发一次服务端开战`, async () => {
+        const h = createHarness({
+            loader: createFakeLoader({
+                ...bundle,
+                mapJson: { ...mapJson, sites: [{ id: 'replay', type: siteType, cellId: 1, configId: '1001' }] },
+                campaign: { ...bundle.campaign, stages: [{ ...stage, isBoss, mode }] },
+            }),
+            gateway: createFakeGateway({ fetch: {
+                ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [0], passCells: [0, 1] },
+            } }),
+        });
+        h.presenter.start();
+        await flush();
+        const site = h.presenter.state.map!.sites[0];
+        h.presenter.selectSite(site);
+        h.presenter.selectSite(site);
+        await flush();
+        assert.deepEqual(h.gatewayCalls.battleParamsList, [['1', '1', '1']]);
+        assert.equal(h.gatewayCalls.unlock, 0);
+        assert.equal(h.gatewayCalls.pass, 0);
+        assert.equal(h.nav.length, 1, '重复点击不得取消正在请求的战斗');
+        h.presenter.selectSite(site);
+        await flush();
+        assert.equal(h.gatewayCalls.startBattle, 2, '返回后再次挑战仍请求服务端');
+        assert.equal(h.nav.length, 2);
+        h.presenter.dispose();
+    });
+}
 
 test('asyncPvp sites sharing configId unlock independently then start their configured battle', async () => {
     const asyncStage: TerritoryCampaignStage = { ...stage, levelId: 20001, stage: 4 };

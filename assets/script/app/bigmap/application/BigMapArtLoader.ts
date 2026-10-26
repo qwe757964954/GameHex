@@ -1,6 +1,7 @@
 import { SpriteFrame } from 'cc';
 import type { AssetService } from '../../../core/asset/AssetService';
 import type { ResourceScope } from '../../../core/asset/ResourceScope';
+import { bundleForPath } from '../../../core/asset/BundleCatalog';
 import type { BigMapResType } from '../model/BigMapTypes';
 import {
     BIGMAP_BUILDING_ART, BIGMAP_CONCEPT_ROOT, BIGMAP_HUD_UI_FILES, BIGMAP_HUD_UI_KEYS, BIGMAP_UI_KEYS,
@@ -30,8 +31,9 @@ export async function loadBigMapArt(assets: AssetService, scope: ResourceScope, 
     const fetchFrame = async (path: string): Promise<SpriteFrame | null> => {
         try {
             const framePath = `${path}/spriteFrame`;
-            if (scope.disposed || !(await assets.has(framePath, SpriteFrame)) || scope.disposed) return null;
-            const frame = await assets.load(framePath, SpriteFrame, { scope });
+            const options = { scope, bundle: bundleForPath(path) };
+            if (scope.disposed || !(await assets.has(framePath, SpriteFrame, options)) || scope.disposed) return null;
+            const frame = await assets.load(framePath, SpriteFrame, options);
             return scope.disposed ? null : frame;
         } catch (error) {
             console.warn(`[BigMap] 美术加载失败，保留地形和标记兜底：${path}`, error);
@@ -47,7 +49,7 @@ export async function loadBigMapArt(assets: AssetService, scope: ResourceScope, 
         requests.set(path, request);
         return request;
     };
-    const [backdrop, groundVariants, home, city, monster, rock, grass] = await Promise.all([
+    const terrainTask = Promise.all([
         load(background || 'image/bigmap/wasteland_background'),
         Promise.all([1, 2, 3, 4, 5, 6].map((index) => load(`image/bigmap/grounds/ground_${String(index).padStart(2, '0')}`))),
         load('image/buildings/hq-base'),
@@ -57,10 +59,10 @@ export async function loadBigMapArt(assets: AssetService, scope: ResourceScope, 
         load('image/decor/wasteland/cao'),
     ]);
     const sprite = (name: string): Promise<SpriteFrame | null> => load(`${BIGMAP_CONCEPT_ROOT}/sprites/${name}`);
-    const buildingEntries = await Promise.all(Object.entries(BIGMAP_BUILDING_ART).map(async ([id, name]) => (
+    const buildingTask = Promise.all(Object.entries(BIGMAP_BUILDING_ART).map(async ([id, name]) => (
         [Number(id), await sprite(name)] as const
     )));
-    const uiEntries = await Promise.all(BIGMAP_UI_KEYS.map(async (key) => {
+    const uiTask = Promise.all(BIGMAP_UI_KEYS.map(async (key) => {
         const frame = await load(`${BIGMAP_CONCEPT_ROOT}/ui/${key}`);
         if (frame && key !== 'plot' && key !== 'stamina' && key !== 'home') {
             frame.insetLeft = 28;
@@ -70,22 +72,25 @@ export async function loadBigMapArt(assets: AssetService, scope: ResourceScope, 
         }
         return [key, frame] as const;
     }));
-    const hudEntries = await Promise.all(BIGMAP_HUD_UI_KEYS.map(async (key) => {
+    const hudTask = Promise.all(BIGMAP_HUD_UI_KEYS.map(async (key) => {
         // 按钮的九宫边 / 圆角走各自 `.png.meta` 的导入设置，不在这里覆写 ——
         // 覆写会和导入设置打架，改一次图就错一次（`btn_quick_fight` 本来就没有九宫边）。
         const frame = await load(BIGMAP_HUD_UI_FILES[key]);
         return [key, frame] as const;
     }));
-    const resourceEntries = await Promise.all((['grain', 'wood', 'iron', 'coin', 'stamina'] as const).map(async (key) => (
-        [key, key === 'stamina' ? uiEntries.find(([name]) => name === 'stamina')?.[1] ?? null : await sprite(key)] as const
+    const resourceTask = Promise.all((['grain', 'wood', 'iron', 'coin', 'stamina'] as const).map(async (key) => (
+        [key, key === 'stamina' ? (await uiTask).find(([name]) => name === 'stamina')?.[1] ?? null : await sprite(key)] as const
     )));
-    const [baseBackground, construction, fortress, mutantCamp, conceptRock, conceptGrass] = await Promise.all([
+    const baseTask = Promise.all([
         load(`${BIGMAP_CONCEPT_ROOT}/base_ground`), sprite('construction'), sprite('fortress'),
         sprite('mutant_camp'), sprite('rocks'), sprite('grass'),
     ]);
+    const [[backdrop, groundVariants, home, city, monster, rock, grass], buildingEntries, uiEntries,
+        hudEntries, resourceEntries, [baseBackground, construction, fortress, mutantCamp, conceptRock, conceptGrass]] =
+        await Promise.all([terrainTask, buildingTask, uiTask, hudTask, resourceTask, baseTask]);
     const buildings = new Map(buildingEntries);
     return { background: backdrop, ground: groundVariants.find((frame) => frame !== null) ?? null,
-        groundVariants, home: buildings.get(71001) ?? home, city: fortress ?? city, monster: mutantCamp ?? monster,
+        groundVariants, home: home ?? buildings.get(71001) ?? null, city: city ?? fortress, monster: monster ?? mutantCamp,
         rock: conceptRock ?? rock, grass: conceptGrass ?? grass,
         baseBackground, construction, buildings, ui: new Map(uiEntries), hud: new Map(hudEntries),
         resources: new Map(resourceEntries) };

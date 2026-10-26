@@ -1,4 +1,5 @@
-import { resources, SpriteFrame } from 'cc';
+import { SpriteFrame } from 'cc';
+import { routedLoad } from '../common/RoutedResource';
 import { spriteFramePathOf } from '../ArtPaths';
 
 /**
@@ -42,7 +43,7 @@ export function loadStoreIcon(artPath: string): Promise<SpriteFrame | null> {
     const framePath = spriteFramePathOf(artPath);
 
     const task = new Promise<SpriteFrame | null>((resolve) => {
-        resources.load(framePath, SpriteFrame, (error, frame) => {
+        routedLoad(framePath, SpriteFrame, (error, frame) => {
             if (error || !frame || !frame.isValid) {
                 console.warn(`[StoreArt] 图标加载失败：${framePath}`, error);
                 resolve(null);

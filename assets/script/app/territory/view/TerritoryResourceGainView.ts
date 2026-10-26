@@ -1,5 +1,6 @@
-import { _decorator, Component, Label, Sprite, UIOpacity, type SpriteFrame } from 'cc';
+import { _decorator, Component, Label, Sprite, UIOpacity, UITransform, type SpriteFrame } from 'cc';
 import {
+    territoryGainContentX,
     territoryGainFx,
     type ITerritoryGainFx,
 } from '../model/TerritoryResourceGain';
@@ -51,7 +52,37 @@ export class TerritoryResourceGainView extends Component {
         if (this.iconSprite.spriteFrame !== frame) this.iconSprite.spriteFrame = frame;
         const text = `+${Math.max(0, Math.round(amount))}`;
         if (this.amountLabel.string !== text) this.amountLabel.string = text;
+        this.layoutContent();
         this.apply(territoryGainFx(0) as ITerritoryGainFx);
+    }
+
+    /**
+     * 按**本次文本的实测宽度**把 icon + 数字整组重新居中（组中心恒在节点原点）。
+     *
+     * 几何全在 `territoryGainContentX`（纯函数，单测直接测）；这里只负责读两个宽度、
+     * 逼一次 Label 排版、把结果写回节点。每次 `play()` 都重算，任何位数都居中。
+     *
+     * ⚠️ 必须先 `updateRenderData(true)`：`overflow = NONE` 时 Label 是**延迟**把实测尺寸
+     * 写回 `UITransform` 的，不逼一下读到的是上一句的宽度（看着像"数字跳到一半"）。
+     */
+    private layoutContent(): void {
+        const icon = this.iconSprite?.node;
+        const amount = this.amountLabel?.node;
+        if (!icon || !amount) return;
+        const iconSize = icon.getComponent(UITransform);
+        const amountSize = amount.getComponent(UITransform);
+        if (!iconSize || !amountSize) return;
+        this.amountLabel.updateRenderData(true);
+        // 宽度为 0 / NaN（首帧还没排版）⇒ 返回 null，保持 prefab 摆位，别把整组甩到左边。
+        const x = territoryGainContentX(
+            iconSize.width,
+            amountSize.width,
+            iconSize.anchorX,
+            amountSize.anchorX,
+        );
+        if (!x) return;
+        icon.setPosition(x.iconX, icon.position.y, 0);
+        amount.setPosition(x.textX, amount.position.y, 0);
     }
 
     /** 每帧推进。@returns 是否还在播（false = 已播完，调用方可回收）。 */

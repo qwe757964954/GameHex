@@ -76,13 +76,10 @@ function limitBattleHeroes(values: readonly ZCBattleHero[]): readonly ZCBattleHe
     return result;
 }
 
-function hasRemoteHeroes(unit: ZCBattleUnit | undefined): boolean {
-    return (unit?.heroes?.length ?? 0) > 0 || (unit?.heroIds.length ?? 0) > 0;
-}
-
 interface IZCClientBattleRosterContext {
     readonly owners: readonly ZCOwner[];
     readonly unitsByOwner: Readonly<Partial<Record<ZCOwner, ZCBattleUnit>>>;
+    readonly usesServerRoster: boolean;
 }
 
 function buildClientBattleRosterContext(
@@ -94,6 +91,7 @@ function buildClientBattleRosterContext(
     return {
         owners: ownersForPlayerCount(playerCount),
         unitsByOwner: battleUnitsByOwner(playerCount, battle, selfRoleId),
+        usesServerRoster: battle != null,
     };
 }
 
@@ -110,20 +108,20 @@ function clientHeroesForOwner(
     config: ZCMatchConfig,
     owner: ZCOwner,
     unit: ZCBattleUnit | undefined,
+    usesServerRoster: boolean,
 ): readonly ZCBattleHero[] {
-    if (unit?.heroes?.length) return limitBattleHeroes(unit.heroes);
-    if (unit?.heroIds.length) return limitBattleHeroes(unit.heroIds.map((heroId) => ({ heroId, level: 1 })));
-    return defaultHeroes(config, owner);
+    // 已有服务端席位时，空 heroInfos 也是权威阵容，不能补成本地默认英雄。
+    if (unit) return limitBattleHeroes(unit.heroes ?? unit.heroIds.map((heroId) => ({ heroId, level: 1 })));
+    return usesServerRoster ? [] : defaultHeroes(config, owner);
 }
 
 function clientHeroIdsForOwner(
     config: ZCMatchConfig,
     owner: ZCOwner,
     unit: ZCBattleUnit | undefined,
+    usesServerRoster: boolean,
 ): readonly number[] {
-    return unit?.heroIds.length
-        ? uniqueHeroIds(unit.heroIds).slice(0, ZC_MAX_BATTLE_HERO_CARDS)
-        : defaultHeroIds(config, owner);
+    return clientHeroesForOwner(config, owner, unit, usesServerRoster).map((hero) => hero.heroId);
 }
 
 function defaultHeroIds(config: ZCMatchConfig, owner: ZCOwner): number[] {
@@ -139,7 +137,7 @@ function defaultHeroes(config: ZCMatchConfig, owner: ZCOwner): ZCBattleHero[] {
 
 /**
  * 将开始战斗回包中的多方单元映射到本地四个 owner。玩家优先按 roleId 识别；
- * 未命中时退回 campId 最小者。服务端没有给满 3/4 方时，空席位继续使用本地 PVE 卡组。
+ * 未命中时退回 campId 最小者。只有无服务端对局的本地模式使用默认卡组，空阵容与缺席位均不补英雄。
  */
 export function clientHeroIdsByOwner(
     config: ZCMatchConfig,
@@ -147,7 +145,7 @@ export function clientHeroIdsByOwner(
     selfRoleId?: string,
 ): Readonly<Partial<Record<ZCOwner, readonly number[]>>> {
     const context = buildClientBattleRosterContext(config, battle, selfRoleId);
-    return mapClientRosterOwners(context, (owner, unit) => clientHeroIdsForOwner(config, owner, unit));
+    return mapClientRosterOwners(context, (owner, unit) => clientHeroIdsForOwner(config, owner, unit, context.usesServerRoster));
 }
 
 function compileOwnerLoadouts(
@@ -193,9 +191,8 @@ export function buildZCClientCombatConfig(
     const rosterContext = buildClientBattleRosterContext(config, battle, selfRoleId);
     const roster = mapClientRosterOwners(
         rosterContext,
-        (owner, unit) => clientHeroesForOwner(config, owner, unit),
+        (owner, unit) => clientHeroesForOwner(config, owner, unit, rosterContext.usesServerRoster),
     );
-    const battleUnits = rosterContext.unitsByOwner;
     const owners = rosterContext.owners;
     const skipped: Array<{ owner: ZCOwner; generalId: number; reason: string }> = [];
     const modifiers: Partial<Record<ZCOwner, readonly ZCCompiledModifierLoadout[]>> = {};
@@ -205,7 +202,7 @@ export function buildZCClientCombatConfig(
     const ownerDecks: Partial<Record<ZCOwner, readonly ZCDeckCard[]>> = {};
     for (const owner of owners) {
         const sourceDeck = config.ownerDecks?.[owner] ?? (owner === ZCOwner.Player ? config.playerDeck : config.enemyDeck);
-        ownerDecks[owner] = hasRemoteHeroes(battleUnits[owner])
+        ownerDecks[owner] = rosterContext.usesServerRoster
             ? buildBattleDeck(sourceDeck, roster[owner] ?? [])
             : sourceDeck;
     }

@@ -29,6 +29,18 @@
  * 全部是 @property，可在 Inspector 上直接调。要换成美术图（9 宫格）时，
  * 把 `panelGraphics` 换成 `cc.Sprite` 并去掉 `_drawPanel()` 的调用即可，其余逻辑不用动。
  *
+ * 样式口径（2026-10-23 起）：**与主界面底部聊天条（`ArenaRoot/BottomHud/ChatBar`）一致**。
+ * 那一条是主 HUD 上唯一的"浮在黑底上的说明文字"，用户要求吐司跟它统一，取值都是量出来的：
+ *
+ * | 项 | 值 | 来源 |
+ * | --- | --- | --- |
+ * | 底条填充 | `rgba(0,0,0,153)`（60% 黑） | `image/main/hud/hud_chat_bar.png` 实测像素 |
+ * | 圆角 | 12（聊天条 8 / 41 ≈ 0.2 × 高，56 高 → 11.2） | 按同比例换算 |
+ * | 文字 | 微软雅黑 / 24 / 行高 31 / **粗** / 字距 0.24 / 白 **alpha 145** | `ChatBar/ChatMsg` 的 Label |
+ *
+ * ⚠️ 字色 alpha 是 **145 不是 255**：聊天条里的消息正文本来就是 57% 白（旁边的「世界」角标才是
+ * 纯白），吐司跟着它走才对得上。要调亮就改 `fontColor.a`，别在 prefab 里零散改 —— 运行时会覆盖。
+ *
  * 文字固定单行：`overflow = SHRINK`（超宽只缩字）+ `enableWrapText = false`（绝不折行），
  * 所以换成美术底图后文字也不会把底条撑变形。
  *
@@ -147,20 +159,42 @@ export class Toast extends PopupBase {
     @property({ group: '吐司', tooltip: '底条宽度（设计像素，固定宽；文字在其中居中）' })
     barWidth = 430;
 
-    @property({ group: '吐司', tooltip: '底条高度（设计像素）' })
-    barHeight = 100;
+    @property({ group: '吐司', tooltip: '底条高度（设计像素）。对齐聊天条比例：24 号字塞在 56 高里' })
+    barHeight = 56;
 
     @property({ group: '吐司', tooltip: '圆角半径（会被自动收敛到 min(宽,高)/2 以内）' })
     cornerRadius = 12;
 
-    @property({ group: '吐司', tooltip: '底条填充色（默认深藏青 #1D313F，取自设计稿截图主色）' })
-    barColor: Color = new Color(29, 49, 63, 255);
+    @property({
+        group: '吐司',
+        tooltip: '底条填充色。默认 60% 黑（= 聊天条 hud_chat_bar.png 的实测像素 rgba(0,0,0,153)）',
+    })
+    barColor: Color = new Color(0, 0, 0, 153);
 
     @property({
         group: '吐司',
         tooltip: '左右内边距：文字可用宽度 = 底条宽 − 2×该值；超出只缩字不折行',
     })
     paddingX = 48;
+
+    // ------------------------------------------------------------
+    // 文字样式（对齐聊天条 `ChatBar/ChatMsg`，运行时由 `_applyTextStyle` 写进 Label）
+    // ------------------------------------------------------------
+
+    @property({ group: '吐司·文字', tooltip: '字号（聊天条消息正文同为 24）' })
+    fontSize = 24;
+
+    @property({ group: '吐司·文字', tooltip: '行高（聊天条同为 31，比字号松一点才好读）' })
+    lineHeight = 31;
+
+    @property({ group: '吐司·文字', tooltip: '字色：白 @ alpha 145（聊天条消息正文同款，不是纯白）' })
+    fontColor: Color = new Color(255, 255, 255, 145);
+
+    @property({ group: '吐司·文字', tooltip: '字距（聊天条同为 0.24）' })
+    letterSpacing = 0.24;
+
+    @property({ group: '吐司·文字', tooltip: '字体族（聊天条同为微软雅黑）' })
+    fontFamily = 'Microsoft YaHei';
 
     @property({ group: '吐司', tooltip: '单条停留时长（秒）' })
     duration = 2;
@@ -259,11 +293,30 @@ export class Toast extends PopupBase {
 
         this.label.overflow = Label.Overflow.SHRINK;
         this.label.enableWrapText = false;
+        this._applyTextStyle();
 
         const labelSize = this.label.node.getComponent(UITransform);
         if (labelSize) labelSize.setContentSize(Math.max(1, width - paddingX * 2), height);
 
         this._drawPanel(width, height, radius);
+    }
+
+    /**
+     * 把文字样式写进 Label —— 与主 HUD 底部聊天条（`ChatBar/ChatMsg`）同一套口径。
+     *
+     * 为什么在代码里写、而不是只配 prefab：prefab 只决定"编辑器里长什么样"，
+     * 运行时一旦有人改宽高/换字号，两处就会打架。这里让 **@property 是唯一真源**，
+     * prefab 只是同一组值的副本（改口径只改这一处，单测也钉在这里）。
+     */
+    private _applyTextStyle(): void {
+        const label = this.label;
+        label.fontSize = Math.max(1, this.fontSize);
+        label.lineHeight = Math.max(1, this.lineHeight);
+        label.color = this.fontColor;
+        // 聊天条的消息正文是**加粗**的（旁边「世界」角标反倒不加粗），跟着走。
+        label.isBold = true;
+        label.spacingX = this.letterSpacing;
+        if (this.fontFamily) label.fontFamily = this.fontFamily;
     }
 
     /** 画深色圆角底条（local 坐标原点 = 节点锚点，故从 −w/2, −h/2 起画）。 */

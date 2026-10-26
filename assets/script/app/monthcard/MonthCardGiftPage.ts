@@ -1,4 +1,5 @@
-import { _decorator, Label, Node, Prefab, SpriteFrame, instantiate, resources } from 'cc';
+import { _decorator, Label, Node, Prefab, SpriteFrame, instantiate } from 'cc';
+import { routedLoad } from '../common/RoutedResource';
 import { MONTHCARD_ART_ROOT, spriteFramePathOf } from '../ArtPaths';
 import { resIconRoot } from '../common/ResTypes';
 import { FW } from '../../framework/FW';
@@ -158,7 +159,7 @@ export class MonthCardGiftPage extends PopupBase {
                 // 否则 resources bundle 索引里查不到裸路径（见 `spriteFramePathOf`）。
                 const framePath = spriteFramePathOf(iconArt);
                 frame = await new Promise<SpriteFrame | null>((resolve) => {
-                    resources.load(framePath, SpriteFrame, (err, sf) => {
+                    routedLoad(framePath, SpriteFrame, (err, sf) => {
                         if (err) {
                             console.warn('[MonthCardGift] 物品图标加载失败', framePath, err.message);
                             resolve(null);
@@ -207,7 +208,7 @@ export class MonthCardGiftPage extends PopupBase {
 
     private loadEntryPrefab(): Promise<Prefab | null> {
         return new Promise<Prefab | null>((resolve) => {
-            resources.load(MONTHCARD_ENTRY_PREFAB_PATH, Prefab, (error, asset) => {
+            routedLoad(MONTHCARD_ENTRY_PREFAB_PATH, Prefab, (error, asset) => {
                 if (error || !asset) {
                     console.warn('[MonthCardGift] 条目预制体加载失败', MONTHCARD_ENTRY_PREFAB_PATH, error);
                     resolve(null);

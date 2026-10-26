@@ -374,7 +374,7 @@ test('血条使用 ProgressBar，裁切非法比例并按阵营换填充图', ()
     assert.doesNotThrow(() => updateHealthBar(null, 1, 1, fillPlayer));
 });
 
-test('Old Client 战斗飘字按轨道下落，金币保持上浮', () => {
+test('Old Client 战斗飘字按轨道下落，金币掉落原地（不再上飘）', () => {
     const { load, bar } = loadViews();
     const util = load('./ZCGameViewUtil');
     const mapToView = util;
@@ -435,16 +435,27 @@ test('Old Client 战斗飘字按轨道下落，金币保持上浮', () => {
     assert.equal(view.textLabel.color.a, 0);
     assert.equal(view.textLabel.enabled, false);
 
-    // Old Client 普通伤害使用白色位图字，不按阵营换色；金币固定用金色并带 + 号。
+    // Old Client 普通伤害使用白色位图字，不按阵营换色；金币固定用金色。
     view.render({ ...base, owner: 'enemy' }, 10);
     assert.deepEqual([view.textLabel.color.r, view.textLabel.color.g, view.textLabel.color.b], [255, 255, 255]);
     view.render({ ...base, kind: 'gold', value: 7, owner: 'enemy' }, 10);
-    assert.equal(view.textLabel.string, '+7');
+    // 2026-10-23 起金币**没有文字**（用户：「移除金币的加号和数字 UI」）：加号、数字都不拼，
+    // 数字 Label 每帧置 false —— 屏幕上只剩那枚硬币。
+    assert.equal(view.textLabel.string, '', '金币不该再拼 + 号与数值');
+    assert.equal(view.textLabel.enabled, false, '金币的数字 Label 必须关掉（不是靠透明度藏着）');
     assert.deepEqual([view.textLabel.color.r, view.textLabel.color.g, view.textLabel.color.b], [255, 198, 45]);
-    assert.equal(node.position.y, view.offsetY);
+    // 金币 2026-10-23 起**掉落在角色中心点**：起手在中心上方 18px，之后只往下走。
+    const centerY = view.damageTargetSize * 0.5;
+    assert.equal(node.position.y, centerY + util.floatTextGoldDrop(0).drop,
+        '金币起手必须在角色中心上方 18px');
+    assert.ok(node.position.y > centerY,
+        `起手必须高于角色中心（实际 ${node.position.y} ≤ ${centerY} ⇒ 又变成原地起飘了）`);
+    // 落到中心点之后就不再动（既不上浮也没有收尾漂移）。
+    view.render({ ...base, kind: 'gold', value: 7, owner: 'enemy' }, 10 + util.FLOAT_TEXT_GOLD_DROP_SPAN);
+    assert.equal(node.position.y, centerY, '落地即停在角色中心点');
 });
 
-test('慢出段带 5~10px 同向收尾漂移：伤害继续下沉、金币继续上飘（2026-10-15）', () => {
+test('慢出段带 5~10px 同向收尾漂移：伤害继续下沉，金币落地后不再漂移（2026-10-23）', () => {
     const { load, bar } = loadViews();
     const util = load('./ZCGameViewUtil');
     const view = new (load('./ZCFloatTextView').ZCFloatTextView)();
@@ -476,13 +487,16 @@ test('慢出段带 5~10px 同向收尾漂移：伤害继续下沉、金币继续
     assert.ok(yHalf - yEnd < yStart - yHalf,
         '后半程比前半程走得少 —— 越飘越慢，不是匀速');
 
-    // 金币：慢出段沿**相反方向**（继续上飘）收尾，与伤害的下沉同量反向。
+    // 金币：2026-10-23 起**不参加漂移**，落地后位置冻在角色中心点，靠"迅速缩小"收场。
     const gold = { ...base, kind: 'gold', value: 7 };
-    view.render(gold, entrance);
-    const gStart = node.position.y;
-    view.render(gold, 1);
-    assert.ok(Math.abs((node.position.y - gStart) - view.driftDistance) < 1e-6,
-        `金币慢出段应继续上飘 ${view.driftDistance}px（实际 ${(node.position.y - gStart).toFixed(4)}）`);
+    view.render(gold, util.FLOAT_TEXT_GOLD_DROP_SPAN);
+    const gLanded = node.position.y;
+    assert.equal(gLanded, view.damageTargetSize * 0.5, '落地应停在角色中心点');
+    for (const p of [entrance, 0.7, 1]) {
+        view.render(gold, p);
+        assert.equal(node.position.y, gLanded, `金币落地后不该再移动（p=${p}）—— 它已经不参加漂移曲线`);
+    }
+    assert.ok(Math.abs(node.scale.x) < 1e-9, `末尾必须缩到 0（实际 ${node.scale.x}）`);
 });
 
 test('Old Client 技能飘字覆盖暴击、回复、MISS、秒杀、克制和抵抗', () => {
@@ -508,7 +522,7 @@ test('Old Client 技能飘字覆盖暴击、回复、MISS、秒杀、克制和�
         assert.equal(view.textLabel.string, expected, `${kind} 的数值文案`);
         assert.deepEqual([view.textLabel.color.r, view.textLabel.color.g, view.textLabel.color.b], color);
         assert.equal(view.textLabel.fontSize, fontSize);
-        assert.ok(node.position.y > view.offsetY, `${kind} 应从目标头顶的战斗文字轨道开始`);
+        assert.ok(node.position.y > view.damageTargetSize * 0.5, `${kind} 应从目标头顶的战斗文字轨道开始`);
 
         // 前缀：只有这四种有；字号取数字的一半（34 → 17、30 → 15）。
         assert.equal(prefixNode.active, prefix.length > 0, `${kind} 的前缀显隐`);
@@ -638,7 +652,13 @@ test('飘字整链：节点世界位置就是目标格坐标，不因子节点�
     assert.equal(node.position.x, mapToView.mapToViewX(126));
     assert.equal(node.position.y, mapToView.mapToViewY(117));
     assert.equal(label.position.x, 0, '子节点不能再写一遍世界 x，否则飘字落在两倍远处');
-    assert.equal(label.position.y, 26, '子节点只负责基准上移');
+    // 金币从**角色中心上方 18px** 处开始下落（2026-10-23：不再叠 `offsetY`，落点就是角色中心）：
+    // 兵种画布中心（98 / 2 = 49）+ FLOAT_TEXT_GOLD_DROP_PX(18) = 67。
+    const view = node.getComponent();
+    const centerY = view.damageTargetSize * 0.5;
+    const goldStartY = mapToView.floatTextGoldDrop(0).drop + centerY;
+    assert.equal(label.position.y, goldStartY, '子节点只负责「角色中心基准 + 掉落位移」');
+    assert.equal(goldStartY, 67, '49（角色中心）+ 18（掉落起点高度）= 67');
 });
 
 test('建筑圆环沿用建筑冷却，建造/工作周期切换，废墟和空地隐藏', () => {

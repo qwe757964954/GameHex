@@ -36,6 +36,21 @@ test('同一作用域中的重复建筑资源仅加载一次，布局指定背�
     assert.equal(art.ui.size, 9);
 });
 
+test('基础贴图未完成时其他资源组已经发起，不串行等待六批资源', async () => {
+    const paths: string[] = [];
+    let finish: () => void = () => {};
+    const ready = new Promise<void>((resolve) => { finish = resolve; });
+    const loading = artLoader()({ has: async () => true, load: async (path: string) => {
+        paths.push(path); await ready; return { path };
+    } }, { disposed: false });
+    await new Promise((resolve) => setImmediate(resolve));
+    try {
+        for (const path of ['concept/sprites/farm', 'concept/ui/stamina', 'concept/base_ground', 'main/city/btn_quick_fight']) {
+            assert.ok(paths.some((entry) => entry.endsWith(`${path}/spriteFrame`)), `${path} 不应等待其他资源组`);
+        }
+    } finally { finish(); await loading; }
+});
+
 test('页面加载前关闭不会发起资源请求，加载途中关闭不会发布迟到的美术引用', async () => {
     let requests = 0;
     const scope = { disposed: true };
@@ -63,4 +78,12 @@ test('资源缺失走既有建筑兜底，缺失美术不会改变规则配置',
     assert.equal(art.home.path, 'image/buildings/hq-base/spriteFrame');
     assert.equal(art.city.path, 'image/buildings/barracks-default/spriteFrame');
     assert.equal(art.baseBackground, null);
+});
+
+ test('世界标记优先使用现有植物建筑，概念图仅用于基地生产建筑', async () => {
+    const art = await artLoader()({ has: async () => true, load: async (path: string) => ({ path }) }, { disposed: false });
+    assert.equal(art.home.path, 'image/buildings/hq-base/spriteFrame');
+    assert.equal(art.city.path, 'image/buildings/barracks-default/spriteFrame');
+    assert.equal(art.monster.path, 'image/territory/buildings/territory_boss_v1/spriteFrame');
+    assert.equal(art.buildings.get(71002).path, 'image/bigmap/concept/sprites/farm/spriteFrame');
 });

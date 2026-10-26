@@ -19,12 +19,13 @@ test('页面初始化的完成信号必须等待美术加载，而不是仅完�
         return {};
     } });
     const Page = exports.BigMapPage as new () => {
-        buildUi(): void; refreshAll(): void; loadArt(): Promise<void>; loadWorldView(): Promise<void>; isValid: boolean;
+        buildUi(): void; refreshAll(): void; loadArt(): Promise<void>; loadWorldView(): Promise<void>; loadTargetPanels(): Promise<void>; isValid: boolean;
         initialize(presenter: object, onClose: null, assets: object): Promise<void>;
     };
     const page = new Page();
     page.isValid = true;
     page.loadWorldView = async () => undefined;
+    page.loadTargetPanels = async () => undefined;
     page.buildUi = () => undefined;
     page.refreshAll = () => undefined;
     page.loadArt = () => artReady;
@@ -35,6 +36,39 @@ test('页面初始化的完成信号必须等待美术加载，而不是仅完�
     try { assert.equal(finished, false); }
     finally { finishArt(); await initialization; }
     assert.equal(finished, true);
+});
+
+test('世界地图、弹窗与美术并行准备，完整美术就绪前不绘制备用地形', async () => {
+    const started: string[] = [];
+    let finish: () => void = () => {};
+    const ready = new Promise<void>((resolve) => { finish = resolve; });
+    const exports: Record<string, unknown> = {};
+    runInNewContext(ts.transpileModule(readFileSync('assets/script/app/bigmap/view/BigMapPage.ts', 'utf8'), {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
+    }).outputText, { exports, require(name: string) {
+        if (name === 'cc') return { _decorator: { ccclass: () => (value: unknown) => value }, Component: class { isValid = true; } };
+        if (name.endsWith('/ResourceScope')) return { ResourceScope };
+        return {};
+    } });
+    const Page = exports.BigMapPage as new () => {
+        initialize(presenter: object, close: null, assets: object): Promise<void>;
+        loadWorldView(): Promise<void>; loadTargetPanels(): Promise<void>; loadArt(): Promise<void>;
+        buildUi(): void; refreshAll(): void;
+    };
+    const page = new Page();
+    for (const [method, label] of [['loadWorldView', 'world'], ['loadTargetPanels', 'panels'], ['loadArt', 'art']] as const) {
+        page[method] = async () => { started.push(label); await ready; };
+    }
+    let builds = 0;
+    page.buildUi = () => { builds += 1; };
+    page.refreshAll = () => {};
+    const opening = page.initialize({ onChanged: () => () => {} }, null, {});
+    await new Promise((resolve) => setImmediate(resolve));
+    try {
+        assert.deepEqual(started, ['world', 'panels', 'art']);
+        assert.equal(builds, 0, '资源就绪前不创建完整备用地形');
+    } finally { finish(); await opening; }
+    assert.equal(builds, 1);
 });
 
 for (const fails of [false, true]) test(`地图预制体加载期间关闭页面，迟到${fails ? '失败' : '资源'}不实例化节点或搭建页面`, async () => {
@@ -55,14 +89,16 @@ for (const fails of [false, true]) test(`地图预制体加载期间关闭页面
     } });
     const Page = exports.BigMapPage as new () => {
         isValid: boolean; artScope: ResourceScope; buildUi(): void;
+        loadArt(): Promise<void>;
         initialize(presenter: object, close: null, assets: object): Promise<void>;
     };
     const page = new Page();
+    page.loadArt = async () => {};
     let built = false;
     page.buildUi = () => { built = true; };
     const paths: string[] = [];
     const opening = page.initialize({}, null, { load: (path: string) => { paths.push(path); return prefabReady; } });
-    assert.deepEqual(paths, ['ui/bigmap/BigMapWorldView']);
+    assert.deepEqual(paths, ['ui/bigmap/BigMapWorldView', 'ui/bigmap/BigMapLevelInfoPanel', 'ui/bigmap/BigMapPlayerLevelPanel']);
     page.isValid = false;
     page.artScope.dispose();
     if (fails) failPrefab(new Error('load failed after close'));
@@ -70,6 +106,35 @@ for (const fails of [false, true]) test(`地图预制体加载期间关闭页面
     await opening;
     assert.equal(instances, 0);
     assert.equal(built, false);
+});
+
+for (const fails of [false, true]) test(`目标弹窗加载期间关闭页面，迟到${fails ? '失败' : '资源'}不创建弹窗也不抛出异常`, async () => {
+    let finish: (value: object) => void = () => undefined;
+    let fail: (reason: Error) => void = () => undefined;
+    const ready = new Promise<object>((resolve, reject) => { finish = resolve; fail = reject; });
+    let instances = 0;
+    const exports: Record<string, unknown> = {};
+    const code = ts.transpileModule(readFileSync('assets/script/app/bigmap/view/BigMapPage.ts', 'utf8'), {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
+    }).outputText;
+    runInNewContext(code, { exports, require: (name: string) => {
+        if (name === 'cc') return { _decorator: { ccclass: () => (value: unknown) => value },
+            Component: class { isValid = true; }, Prefab: class {}, instantiate: () => { instances++; } };
+        if (name.endsWith('/ResourceScope')) return { ResourceScope };
+        return {};
+    } });
+    const Page = exports.BigMapPage as new () => {
+        isValid: boolean; artScope: ResourceScope;
+        loadTargetPanels(assets: object): Promise<void>;
+    };
+    const page = new Page();
+    const opening = page.loadTargetPanels({ load: () => ready });
+    page.isValid = false;
+    page.artScope.dispose();
+    if (fails) fail(new Error('closed'));
+    else finish({});
+    await assert.doesNotReject(opening);
+    assert.equal(instances, 0);
 });
 
 function createEntryHarness() {

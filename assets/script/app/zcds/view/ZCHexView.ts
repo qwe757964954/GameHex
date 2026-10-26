@@ -89,6 +89,18 @@ const NEUTRAL_RESOURCE_LABELS: Readonly<Record<string, string>> = {
 const RESOURCE_ICON_TARGET_SIZE = 128;
 
 /**
+ * 自选阶段的中立资源**占位图**（`image/gameui/whh`）额外乘的缩放。
+ *
+ * 为什么不能和其它资源图走同一个系数：`resourceIconScale` 是按**最长边**归一到 128，
+ * 但三张资源图（212×212 画布）的内容只占约 67%，而 `whh`（118×138）的内容几乎占满画布
+ * ⇒ 同一系数下问号会明显大一圈（实测 110×128 vs 宝箱 85×81，读起来像"问号格子更大"）。
+ *
+ * 0.7 是把它压回和宝箱同一视觉体量（85×99 外框、可见高约 85）。
+ * ⚠️ 换占位图（`ArtPaths.NEUTRAL_RESOURCE_UNKNOWN_ICON_NAME`）时要重新标定这个值。
+ */
+const UNKNOWN_RESOURCE_ICON_RATIO = 0.7;
+
+/**
  * 已建建筑外观图（`buildingSprite`）的基准缩放。
  * 必须落在代码而非 prefab：`applyActivationFx` 会覆写激活格的 scale，只改 prefab
  * 会出现「激活过的格子 1.0、没激活的 0.72」的静默偏差。`applyBuildingScale` 是唯一写入口。
@@ -552,6 +564,14 @@ export class ZCHexView extends Component {
      */
     private artifactChargeFrame: SpriteFrame | null = null;
     /**
+     * 自选地图局的**中立资源占位图**（问号）—— 由渲染层注入，见 `setUnknownResourceFrame`。
+     *
+     *  `null` = 没有占位图 ⇒ 自选局的中立资源格退回"只显示地块图标"（遮蔽之前的旧表现）。
+     *  ⚠️ 它不是 prefab 上的 `@property`：这张图只服务"自选局遮蔽"这一种表现，
+     *  和 `artifactChargeFrame` 一样按运行时注入，避免在三个中立资源图旁边再多一个手工绑定项。
+     */
+    private unknownResourceFrame: SpriteFrame | null = null;
+    /**
      * 兵力资源点表里配的**卡 id**（`rewardCardId`，如 `'68001'`）与**要站几个**
      * （`rewardUnitCount`），都由渲染层注入 —— 视图不读表，与 `setBuildingFrameResolver` 同款口径。
      */
@@ -916,6 +936,21 @@ export class ZCHexView extends Component {
      */
     setArtifactChargeFrame(frame: SpriteFrame | null): void {
         this.artifactChargeFrame = frame;
+        this.contentKey = '';
+    }
+
+    /**
+     * 注入「自选地图局的中立资源占位图」（`image/gameui/whh` 金色问号）。
+     *
+     *  `cityMode: 'select'` 时整盘的中立资源是进游戏才随机的 ⇒ 选点阶段所有资源格都盖这张，
+     *  不让玩家提前看出哪格是宝箱 / 金矿 / 金币 / 神器点（见 `renderContent` 的
+     *  `hideNeutralResourceLabel` 分支）。`null` = 没有占位图 ⇒ 退回"只显示地块图标"。
+     *
+     *  ⚠️ 与 `setArtifactChargeFrame` 同款：注入后必须作废 `contentKey`，
+     *  否则帧晚到时那一格会一直空着（池化复用的格子已经渲染过了）。
+     */
+    setUnknownResourceFrame(frame: SpriteFrame | null): void {
+        this.unknownResourceFrame = frame;
         this.contentKey = '';
     }
 
@@ -1383,21 +1418,33 @@ export class ZCHexView extends Component {
         //  · 兵力资源点（`unit_cap`）站表里配的那几个兵的**待机**骨骼（不用兵营图标、不写文字）；
         //  · 其余（金矿 / 金币 / 宝箱 / 神器）照常走图标。
         //
+        // 🔴 2026-10-23 山猫口径：*「自选的时候，中立资源，使用这个图标，不让玩家看到箱子是什么，
+        // 因为中立资源是进游戏根据随机」* ⇒ 选点阶段**所有**资源点一律盖问号占位
+        // （`setUnknownResourceFrame` 注入 `image/gameui/whh`），连兵力的待机骨骼也不摆
+        // —— 骨骼同样是"这一格是兵力资源"的剧透。没有注入占位图时退回原行为（显真图）。
+        const maskResource = presentation.resourcePoint && !!presentation.resourceId
+            && !!this.unknownResourceFrame;
         // 骨骼数据在建视图时就已经由 `ZCGameRenderWorld.injectResourceUnits` 喂进来，这里只是把
         // `renderContent` 那条分支搬过来用 —— 兵种/数量没变时 `rebuildResourceUnitsIfNeeded` 只做
         // 显隐，零 `instantiate`（`renderSpawnSelection` 也是每帧调的）。
-        const unitPoint = presentation.resourcePoint && presentation.resourceId === 'unit_cap';
+        const unitPoint = !maskResource && presentation.resourcePoint && presentation.resourceId === 'unit_cap';
         const resourceUnits = unitPoint ? this.rebuildResourceUnitsIfNeeded() : this.hideResourceUnits();
         // 骨骼没建出来（表里没配卡 / 没单位 prefab）时才退回兵营图标兜底，别留一格空白。
-        const resourceFrame = presentation.resourcePoint && presentation.resourceId && !(unitPoint && resourceUnits)
-            ? this.frameForSpawnResource(presentation.resourceId) : null;
+        const resourceFrame = maskResource
+            ? this.unknownResourceFrame
+            : presentation.resourcePoint && presentation.resourceId && !(unitPoint && resourceUnits)
+                ? this.frameForSpawnResource(presentation.resourceId) : null;
         this.setSprite(this.iconSprite, resourceFrame);
         // 与正式对局同一套落点/抬层口径（见 `renderContent` 那段）：选点阶段的地块同样互相重叠，
         // 资源图标不抬层照样会被邻格整图沿格边线切掉。
         this.setResourceIconRaised(resourceFrame !== null);
         if (resourceFrame) {
             this.applyIconPosition(ZCHexView.RESOURCE_ICON_POS);
-            const resourceScale = resourceIconScale(resourceFrame);
+            const base = resourceIconScale(resourceFrame);
+            // 占位图内容占比比资源图大 ⇒ 乘一个系数压回同一视觉体量（理由见常量注释）。
+            const resourceScale = resourceFrame === this.unknownResourceFrame
+                ? base * UNKNOWN_RESOURCE_ICON_RATIO
+                : base;
             this.iconSprite.node.setScale(resourceScale, resourceScale, 1);
         } else {
             // 选点阶段不画地块类型图标（只可能是「没有图标」或资源点图标），但这个节点与对局共用，

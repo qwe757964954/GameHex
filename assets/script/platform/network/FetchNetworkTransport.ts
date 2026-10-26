@@ -8,6 +8,9 @@ export interface FetchNetworkTransportOptions {
 /** 运行时实际可用的 HTTP 能力。 */
 type HttpCapability = 'fetch' | 'xhr' | 'none';
 
+/** fetch 尚未收到响应即被网络/CORS 拒绝；响应体错误不得触发代理重发。 */
+class FetchConnectionError extends Error {}
+
 /**
  * 平台层网络实现：**fetch 优先，没有 fetch 就回落 XMLHttpRequest**。
  *
@@ -49,6 +52,14 @@ export class FetchNetworkTransport implements NetworkTransport {
         }
 
         if (this.shouldUseLocalProxy(request, capability)) {
+            let directError: unknown;
+            try {
+                return await this.requestJsonOnce<T>(request, capability);
+            } catch (error) {
+                // 只有浏览器网络/CORS 拒绝才尝试代理；已收到 HTTP 响应、解析错误或超时不重发。
+                if (!(error instanceof FetchConnectionError)) throw error;
+                directError = error;
+            }
             const proxiedRequest: NetworkRequest = {
                 ...request,
                 url: `${this.localProxyOrigin}/proxy?url=${encodeURIComponent(request.url)}`,
@@ -56,16 +67,12 @@ export class FetchNetworkTransport implements NetworkTransport {
             try {
                 return await this.requestJsonOnce<T>(proxiedRequest, capability);
             } catch (proxyError) {
-                try {
-                    return await this.requestJsonOnce<T>(request, capability);
-                } catch (directError) {
                     throw new Error(
                         `网络请求失败：直连 ${this.errorMessage(directError)}，`
                         + `本地调试代理亦不可用（${this.errorMessage(proxyError)}）。`
                         + `浏览器预览被 CORS 拦截时，请在项目根目录执行 npm run proxy 启动 ${this.localProxyOrigin} 后重试。`
                         + `（${describeRequest(request)}）`,
                     );
-                }
             }
         }
 
@@ -96,12 +103,18 @@ export class FetchNetworkTransport implements NetworkTransport {
     }
 
     private async readFetchJson(request: NetworkRequest, controller?: AbortController): Promise<unknown> {
-        const response = await fetch(request.url, {
-            method: request.method ?? 'GET',
-            headers: request.headers,
-            body: request.body,
-            signal: controller?.signal,
-        });
+        let response: Response;
+        try {
+            response = await fetch(request.url, {
+                method: request.method ?? 'GET',
+                headers: request.headers,
+                body: request.body,
+                signal: controller?.signal,
+            });
+        } catch (error) {
+            if (error instanceof TypeError) throw new FetchConnectionError(error.message);
+            throw error;
+        }
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         // 用 text() 而不是 json()：原生 polyfill 的 json() 就是 text().then(JSON.parse)，
         // 但直接 JSON.parse 抛出来的话错误原因只剩一句 SyntaxError，拿不到响应体内容。
@@ -211,8 +224,11 @@ export class FetchNetworkTransport implements NetworkTransport {
      */
     private shouldUseLocalProxy(request: NetworkRequest, capability: HttpCapability): boolean {
         if (capability !== 'fetch') return false;
+        if (request.method && request.method !== 'GET') return false;
         if (!/^https?:\/\//i.test(request.url)) return false;
         if (request.url.startsWith(this.localProxyOrigin)) return false;
+        const origin = globalThis.location?.origin;
+        if (origin && new URL(request.url).origin === origin) return false;
         return this.isLocalDebugEnvironment();
     }
 

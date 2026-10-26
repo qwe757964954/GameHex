@@ -333,11 +333,7 @@ test('★★★开战后本地不变 owned：防连点靠 pending 判重；async
     const pendingGuard = 'if (this.pendingFixedResourceCells.has(site.cellId)) return;';
     assert.ok(boss.split(pendingGuard).length - 1 >= 2,
         '第一步解锁 + 第二步开战都必须按 pending 判重防连点（同一格请求在飞 ⇒ 不重发）');
-    // 已通关（owned）的 stage/boss 不再开战；asyncPvp 例外（可重复挑战，不被 isOwned 挡）。
-    assert.match(boss, /progress\.isOwned\(site\.cellId\)/,
-        '已通关格要有守卫（主线打完即通关）');
-    assert.match(boss, /site\.type !== TERRITORY_SITE_TYPE\.asyncPvp/,
-        'asyncPvp 已通关可重复挑战 —— isOwned 守卫必须放行 asyncPvp');
+    // Boss / 首领 / asyncPvp 的重复挑战行为由 territory-presenter 的运行测试覆盖。
 
     // ⚠️ 清理点必须有两处，否则换章 / 打完再来一次会被「已经开过战」永久拒绝。
     //（`bossBattleStart` 只留作 `lastBossBattleStart` 的最近开战记录，不再参与防连点。）

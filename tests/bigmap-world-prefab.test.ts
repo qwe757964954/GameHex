@@ -54,9 +54,15 @@ test('世界视图只引用独立模板资产，层级中不含 Templates 或模
     for (const node of templates.filter((item) => item.__type__ === 'cc.Node')) {
         assert.equal(node._layer, 33554432, node._name);
         assert.ok(node._components.some((ref) => templates[ref.__id__].__type__ === 'cc.UITransform'));
+        assert.ok(node._components.filter((ref) => ['cc.Sprite', 'cc.Graphics', 'cc.Label'].includes(templates[ref.__id__].__type__)).length <= 1,
+            `${node._name} 不可同时挂两个渲染组件，否则 Cocos 会静默拒绝后一个组件`);
     }
     const marker = templates.find((item) => 'icon' in item && 'badge' in item);
     assert.ok(marker);
+    for (const field of ['badgeBackground', 'portraitRoot', 'portrait', 'portraitBackground']) {
+        const ref = marker[field] as IPrefabRef;
+        assert.ok(ref && templates[ref.__id__], `地图标记未绑定：${field}`);
+    }
     for (const field of ['icon', 'badge', 'label']) {
         const ref = marker[field] as IPrefabRef;
         assert.ok(ref && templates[ref.__id__], `模板内未绑定：${field}`);

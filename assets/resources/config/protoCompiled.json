@@ -4056,7 +4056,8 @@
                         "CELEBRATION_LOCK_MONSTER_FULL_RANK": 49,
                         "CELEBRATION_LOCK_MONSTER_SERVER_RANK": 50,
                         "CELEBRATION_OATH_ALLIANCE_FULL_RANK": 51,
-                        "CELEBRATION_OATH_ALLIANCE_SERVER_RANK": 52
+                        "CELEBRATION_OATH_ALLIANCE_SERVER_RANK": 52,
+                        "SLG_CAMP_ROLE_HARM_RANK": 53
                       }
                     },
                     "CmdRecharge": {
@@ -10341,6 +10342,19 @@
                         }
                       }
                     },
+                    "CmdSlgCampBattleResultInfo": {
+                      "fields": {
+                        "warScore": {
+                          "type": "uint32",
+                          "id": 1
+                        },
+                        "cmdGoods": {
+                          "rule": "repeated",
+                          "type": "CmdGoods",
+                          "id": 2
+                        }
+                      }
+                    },
                     "CmdBattleFrameInfo": {
                       "fields": {
                         "frameId": {
@@ -10667,6 +10681,20 @@
                         }
                       }
                     },
+                    "SlgGameInfo": {
+                      "fields": {
+                        "maxMonsterLevel": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 1
+                        },
+                        "toCampId": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 2
+                        }
+                      }
+                    },
                     "SlgGameActionInfo": {
                       "fields": {
                         "nextRevertTime": {
@@ -10837,13 +10865,34 @@
                       "fields": {}
                     },
                     "CmdSlgGameInfoRspMsg": {
-                      "fields": {}
+                      "fields": {
+                        "info": {
+                          "rule": "required",
+                          "type": "SlgGameInfo",
+                          "id": 1
+                        }
+                      }
                     },
                     "CmdSlgGameInfoBroMsg": {
-                      "fields": {}
+                      "fields": {
+                        "info": {
+                          "rule": "required",
+                          "type": "SlgGameInfo",
+                          "id": 1
+                        }
+                      }
                     },
                     "CmdSlgBuildInfoReqMsg": {
                       "fields": {}
+                    },
+                    "CmdSlgBuildInfoRspMsg": {
+                      "fields": {
+                        "info": {
+                          "rule": "required",
+                          "type": "SlgBuildGameInfo",
+                          "id": 1
+                        }
+                      }
                     },
                     "CmdSlgBuildReqMsg": {
                       "fields": {

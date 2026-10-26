@@ -21,27 +21,22 @@
   // 先乐观置真，`loadDecorLibrary` 拿到结果后再定；只影响提示文案，不影响画图。
   var decorRememberSupported = true;
   var PLAYER_COUNT = 2, CITY_MODE = 'fixed';
-  var MIRROR_VERTICAL = true, MIRROR_HORIZONTAL = false;
+  var MIRROR_VERTICAL = false, MIRROR_HORIZONTAL = false;
   var homes = [null, null, null, null];
   // 资源点是地图玩法配置，不隶属于主城模式；固定主城和自选主城地图共用这份数据。
-  // 每个点位可配多种资源和权重，开局时按权重抽取一种。
+  // 新点位只保存组合 ID；候选奖励与权重由中立资源配置表管理。旧 pool 仅兼容读取。
   var resourcePoints = [];
   var regions = [];
   var regionBrush = { section: 1, depth: 'front', tendency: 'rush' };
-  var RESOURCE_TYPES = [
-    { id: 'chest', label: '宝箱', asset: 'image/map-resource/chest' },
-    { id: 'gold', label: '金币', asset: 'image/map-resource/gold' },
-    { id: 'mine', label: '金矿', asset: 'image/map-resource/mine' },
-    { id: 'unit_cap', label: '兵力', asset: 'image/map-resource/unit_cap' },
-    { id: 'artifact_charge', label: '神器', asset: 'image/map-resource/artifact_charge' }
-  ];
+  var partitionDepth = 'none';
   var RESOURCE_LABELS = { chest: '宝箱', gold: '金币', mine: '金矿', unit_cap: '兵力', artifact_charge: '神器' };
   var RESOURCE_ASSETS = { chest: 'image/map-resource/chest', gold: 'image/map-resource/gold', mine: 'image/map-resource/mine', unit_cap: 'image/map-resource/unit_cap', artifact_charge: 'image/map-resource/artifact_charge' };
   var resourceBrush = '';
+  var resourceGroupId = null;
   var resourceWeight = 1;
   var resourceImages = {};
   var passthrough = {};
-  var brush = 1, showGrid = false, flashTimer = 0, dirty = false;
+  var brush = 'partition', showGrid = true, flashTimer = 0, dirty = false;
   /**
    * 编辑器说明内容（左侧「说明」弹窗的 6 个主题）。
    *
@@ -71,7 +66,7 @@
     },
     {
       "title": "操作",
-      "html": "<b>左键拖动</b>连续涂色，右键擦除当前笔刷内容。滚轮缩放；中键或 <code>空格</code> + 左键平移；<code>0</code> 适应窗口。镜像开启时，点击对侧会改写对应的存储侧。"
+      "html": "<b>左键拖动</b>连续涂色，右键擦除当前笔刷内容。滚轮缩放；中键或 <code>空格</code> + 左键平移；<code>0</code> 适应窗口。<code>1</code> / <code>2</code> / <code>3</code> 切换 1 / 7 / 19 格刷头；<code>B</code> 画笔，<code>E</code> 擦除（输入文字时不触发）。右上缩略图可点击或拖动定位，聚焦后方向键移动视口、<code>Home</code> 适应全图。格子过小时自动隐藏区域文字、资源组合编号和候选数量，放大恢复。画布四边标尺以左下角为起点，列向右、行向上均从1开始；悬停高亮当前格，左右行刻度按当前列的六边格交错位置对齐。镜像开启时，点击对侧会改写对应的存储侧。资源点按实际点击坐标放置，不随镜像复制。"
     }
   ];
   var helpActive = 0;
@@ -81,6 +76,12 @@
   var DEFAULT_BACKGROUND = 'image/zdbg1';
   var backgroundName = DEFAULT_BACKGROUND;
   var showBackground = true;
+  var hideArtwork = false;
+  // 游戏设计视口与 ZCGameHUDView 全景/拖动边距；桌面工作区扩宽不能改变手机地图美术比例。
+  // tests/map-editor.test.ts 直接执行游戏的 fitMapBackground 对拍这些参数和输出。
+  var BACKGROUND_VIEW_WIDTH = 720, BACKGROUND_VIEW_HEIGHT = 1280;
+  var BACKGROUND_OVERVIEW_PADDING = 36, BACKGROUND_EDGE_X = 80, BACKGROUND_EDGE_Y = 230;
+  var backgroundSourceSizes = {};
   // 上一次写进 backgroundLayer 的 markup —— 同值就不再重写（重写会重建 <image>、大图要重新解码）。
   var backgroundMarkupCache = null;
   // 另外三层同理：`innerHTML =` 一旦执行，整层节点（含装饰贴图那几十个 <image>）就全部销毁重建。
@@ -89,6 +90,10 @@
   var freeDecorMarkupCache = null;
   var resourceMarkupCache = null;
   var mapMetadataMarkupCache = null;
+  var miniMapMarkupCache = null;
+  var rulerSignature = null;
+  var eraseBrush = false;
+  var DETAIL_MIN_CELL_PIXELS = 42;
   // 每个 hex 上一次写进去的 class（内存比较，省掉全量 `setAttribute`）。
   // `buildBoard` 重建棋盘时清空 —— 那时 `paths` 全换了新节点，缓存必须跟着作废。
   var hexClassCache = [];
@@ -160,24 +165,69 @@
     syncDirtyUI();
   }
   function markDirty() { if (!dirty) setDirty(true); }
+  function syncToolStatus() {
+    var toolStatus = $('toolStatus');
+    if (brush === 'none') { if (toolStatus) toolStatus.textContent = '当前工具：浏览（未启用画笔）'; return; }
+    if (toolStatus) toolStatus.textContent = (eraseBrush ? '当前工具：擦除 · ' : '当前工具：') + activeBrushLabel() + ' · 笔刷 ' + (brushRadius === 0 ? '1 格' : brushRadius === 1 ? '7 格' : '19 格');
+  }
+  function setPaintMode(erase) {
+    eraseBrush = erase === true;
+    syncControls();
+    if (hover) drawCursor(brushCells(hover.row, hover.column, brushRadius));
+  }
   function activeBrushLabel() {
     if (brush === 'freeDecor') return decorBrush ? '自由装饰：' + decorBrush : '自由装饰';
-    if (brush === 'resource') return resourceBrush ? '资源：' + (RESOURCE_LABELS[resourceBrush] || resourceBrush) : '资源';
+    if (brush === 'resource') return resourceGroupId !== null ? '资源组合：' + resourceGroupId : resourceBrush ? '旧资源池：' + (RESOURCE_LABELS[resourceBrush] || resourceBrush) : '资源点（请填组合 ID）';
+    if (brush === 'partition') return regionBrush.section + ' 区 · ' + ({ none: '仅分区', front: '前区', mid: '中区', back: '后区' }[partitionDepth]);
     if (brush === 'region') return '区域：' + regionBrush.section + ' 区 · ' + regionBrush.depth;
     if (brush === 'home') return '主城';
     if (brush === 'neutral') return '中立格';
     if (brush === 'void') return '虚空';
     return '分区 ' + brush;
   }
+  function setArtworkHidden(hidden) {
+    hideArtwork = hidden === true;
+    if (hideArtwork) selectedFreeDecorId = null;
+    if (svg.classList) {
+      if (hideArtwork) svg.classList.add('artHidden');
+      else svg.classList.remove('artHidden');
+    }
+    syncControls();
+    render();
+  }
   function cloneResourcePoints(points) {
     return points.map(function (point) {
-      var pool = {};
-      Object.keys(point.pool || {}).forEach(function (key) { pool[key] = point.pool[key]; });
-      var copy = { row: point.row, column: point.column, pool: pool };
-      if (Number.isInteger(point.section)) copy.section = point.section;
-      if (typeof point.depth === 'string') copy.depth = point.depth;
-      return copy;
+      if (Object.prototype.hasOwnProperty.call(point, 'groupId')) {
+        return { row: point.row, column: point.column, groupId: point.groupId };
+      }
+      return JSON.parse(JSON.stringify(point));
     });
+  }
+  function validResourceGroupId(value) {
+    return Number.isInteger(value) && value > 0 && value <= 2147483647;
+  }
+  function resourceDefinitionError(point) {
+    if (!point || typeof point !== 'object' || Array.isArray(point)) return '资源点配置必须是对象';
+    var hasGroup = Object.prototype.hasOwnProperty.call(point, 'groupId');
+    var hasPool = Object.prototype.hasOwnProperty.call(point, 'pool');
+    if (hasGroup && hasPool) return '同一资源点不能同时配置 groupId 和旧 pool';
+    if (hasGroup) return validResourceGroupId(point.groupId) ? '' : '资源组合 ID 必须为 1～2147483647 的整数';
+    var pool = point.pool;
+    if (!hasPool || !pool || typeof pool !== 'object' || Array.isArray(pool)) return '资源点缺少组合 ID 或有效旧资源池';
+    var ids = Object.keys(pool);
+    var valid = ids.length > 0 && ids.every(function (id) {
+      return Object.prototype.hasOwnProperty.call(RESOURCE_ASSETS, id) && typeof pool[id] === 'number' && Number.isFinite(pool[id]) && pool[id] >= 0;
+    }) && ids.some(function (id) { return pool[id] > 0; });
+    return valid ? '' : '旧资源池至少需要一种正权重资源，权重不能为负数';
+  }
+  function resourcePositionError(row, column, exceptIndex) {
+    if (!Number.isInteger(row) || !Number.isInteger(column) || row < 0 || row >= ROWS || column < 0 || column >= COLS) return '资源点坐标不在当前地图内';
+    if (!Number.isInteger(grid[row][column]) || grid[row][column] < NEUTRAL || grid[row][column] > PLAYER_COUNT) return '资源点只能放在可通行格上，不能放在虚空格';
+    if (homes.some(function (home) { return home && home.row === row && home.column === column; })) return '资源点不能与主城重叠';
+    if (resourcePoints.some(function (point, index) {
+      return index !== exceptIndex && resourcePointDistance({ row: row, column: column }, point, resourceMinDistance()) < resourceMinDistance();
+    })) return '资源点之间至少相距 ' + resourceMinDistance() + ' 格';
+    return '';
   }
   function cloneRegions(items) {
     return items.map(function (region) {
@@ -193,10 +243,11 @@
     return depth === 'front' ? 'rush' : depth === 'mid' ? 'control' : depth === 'back' ? 'develop' : null;
   }
   function resourceLabel(point) {
+    if (point && point.groupId !== undefined) return '资源组合 ' + point.groupId;
     var pool = point && point.pool ? point.pool : {};
     var ids = Object.keys(pool);
     if (!ids.length) return '未配置资源';
-    return ids.map(function (id) { return (RESOURCE_LABELS[id] || id) + ' ×' + pool[id]; }).join(' / ');
+    return '旧资源池：' + ids.map(function (id) { return (RESOURCE_LABELS[id] || id) + ' ×' + pool[id]; }).join(' / ');
   }
   function resourceIdAt(point) {
     var pool = point && point.pool ? point.pool : {};
@@ -209,13 +260,15 @@
     var asset = RESOURCE_ASSETS[resourceId];
     return asset ? '/map-resource/' + encodeURIComponent(asset) : '';
   }
-  function resourcePointDistance(from, to) {
+  function resourcePointDistance(from, to, limit) {
     if (from.row === to.row && from.column === to.column) return 0;
     var seen = {};
     var queue = [{ row: from.row, column: from.column, distance: 0 }];
     seen[from.row * COLS + from.column] = true;
     for (var head = 0; head < queue.length; head += 1) {
       var current = queue[head];
+      // 校验只关心小于最小间距的点，避免每次渲染为远处资源遍历整张图。
+      if (limit !== undefined && current.distance >= limit - 1) continue;
       var adjacent = neighbors(current.row, current.column);
       for (var i = 0; i < adjacent.length; i += 1) {
         var key = adjacent[i][0] * COLS + adjacent[i][1];
@@ -232,22 +285,42 @@
     return Number.isFinite(configured) ? Math.max(3, configured) : 3;
   }
   function renderResourcePanel() {
-    var list = $('resourceList');
-    if (!list) return;
-    list.innerHTML = RESOURCE_TYPES.map(function (type) {
-      var hasImage = resourceImages[type.asset] === true;
-      var visual = hasImage
-        ? '<img class="resourceThumb" src="' + esc(resourceImageUrl(type.id)) + '" alt="">'
-        : '<span class="resourceFallback">' + esc(type.label.charAt(0)) + '</span>';
-      return '<button class="resourceItem' + (brush === 'resource' && resourceBrush === type.id ? ' on' : '') +
-        '" data-resource="' + esc(type.id) + '" title="选择' + esc(type.label) + '">' + visual +
-        '<span class="resourceName">' + esc(type.label) + '</span></button>';
-    }).join('');
+    var button = $('btnResourcePlace');
+    var active = brush === 'resource' && resourceGroupId !== null && !eraseBrush;
+    if (button) {
+      button.className = 'btn' + (active ? ' on' : '');
+      button.textContent = active ? '取消放置资源点' : '放置资源点';
+      button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    }
+    var status = $('resourceGroupStatus');
+    if (status) status.textContent = resourceGroupId === null ? '填写配置表中的组合 ID，再点击放置。'
+      : active ? '当前组合：' + resourceGroupId + ' · 点击格子放置，右键删除。'
+        : '当前组合：' + resourceGroupId + ' · 已暂停，点击“放置资源点”继续。';
+    var legacy = $('legacyResourceNotice');
+    if (legacy) {
+      var count = resourcePoints.filter(function (point) { return point.groupId === undefined; }).length;
+      legacy.hidden = !count;
+      legacy.textContent = '含 ' + count + ' 个旧资源池点位。继续保留；在该格放置组合可替换。';
+    }
+  }
+  function setResourceGroup(value) {
+    var groupId = typeof value === 'string' && value.trim() ? Number(value) : value;
+    if (!validResourceGroupId(groupId)) throw new Error('资源组合 ID 必须为 1～2147483647 的整数');
+    resourceGroupId = groupId;
+    resourceBrush = '';
+    $('resourceGroupId').value = String(groupId);
+    brush = 'resource';
+    eraseBrush = false;
+    syncControls();
+    renderResourcePanel();
+    if (hover) drawCursor(brushCells(hover.row, hover.column, brushRadius));
   }
   function setResourceBrush(resourceId) {
     if (!RESOURCE_ASSETS[resourceId]) return;
     resourceBrush = resourceId;
+    resourceGroupId = null;
     brush = 'resource';
+    eraseBrush = false;
     renderResourcePanel();
     syncControls();
     if (hover) drawCursor(brushCells(hover.row, hover.column, brushRadius));
@@ -263,7 +336,20 @@
     var region = regions.find(function (entry) { return entry.section === section && entry.depth === depth; });
     regionBrush = { section: section, depth: depth, tendency: region ? region.tendency : defaultRegionTendency(depth) };
     brush = 'region';
+    eraseBrush = false;
     syncControls();
+  }
+  function setPartitionBrush(section, depth) {
+    if (!Number.isInteger(section) || section < 1 || section > PLAYER_COUNT ||
+        ['none', 'front', 'mid', 'back'].indexOf(depth) < 0) throw new Error('分区画笔配置无效');
+    partitionDepth = depth;
+    if (depth !== 'none') setRegionBrush(section, depth);
+    else regionBrush.section = section;
+    brush = 'partition';
+    eraseBrush = false;
+    $('partitionNotice').hidden = true;
+    syncControls();
+    if (hover) drawCursor(brushCells(hover.row, hover.column, brushRadius));
   }
   function setRegionTendency(tendency) {
     if (['rush', 'control', 'develop'].indexOf(tendency) < 0) throw new Error('区域打法倾向必须是 rush / control / develop');
@@ -279,27 +365,48 @@
     }
     syncControls();
   }
+  function setRegionText(value) {
+    var region = regions.find(function (entry) {
+      return entry.section === regionBrush.section && entry.depth === regionBrush.depth;
+    });
+    if (!region) return;
+    var input = String(value == null ? '' : value);
+    if (input === (typeof region.text === 'string' ? region.text : '')) return;
+    var before = snapshot();
+    var text = input.trim();
+    if (text) region.text = text;
+    else delete region.text;
+    render();
+    commitUndo(before);
+    syncControls();
+  }
   function addResourcePoint(row, column, resourceId, weight) {
     var pointRow = Number(row), pointColumn = Number(column), pointWeight = Number(weight);
-    if (!Number.isInteger(pointRow) || !Number.isInteger(pointColumn) || pointRow < 0 || pointRow >= ROWS || pointColumn < 0 || pointColumn >= COLS) {
-      throw new Error('资源点坐标不在当前地图内');
-    }
-    if (grid[pointRow][pointColumn] !== NEUTRAL) throw new Error('资源点只能放在中立格上');
-    if (typeof resourceId !== 'string' || !resourceId) throw new Error('请选择资源类型');
+    if (!Object.prototype.hasOwnProperty.call(RESOURCE_ASSETS, resourceId)) throw new Error('请选择资源类型');
     if (!Number.isFinite(pointWeight) || pointWeight <= 0) throw new Error('资源权重必须大于 0');
     var before = snapshot();
     var index = resourcePoints.findIndex(function (point) { return point.row === pointRow && point.column === pointColumn; });
-    var nearest = resourcePoints.filter(function (_, currentIndex) { return currentIndex !== index; }).some(function (point) {
-      return resourcePointDistance({ row: pointRow, column: pointColumn }, point) < resourceMinDistance();
-    });
-    if (nearest) throw new Error('资源点之间至少相距 ' + resourceMinDistance() + ' 格');
-    var point = index >= 0 ? cloneResourcePoints([resourcePoints[index]])[0]
+    var error = resourcePositionError(pointRow, pointColumn, index);
+    if (error) throw new Error(error);
+    var point = index >= 0 && resourcePoints[index].pool ? cloneResourcePoints([resourcePoints[index]])[0]
       : { row: pointRow, column: pointColumn, pool: {} };
     point.pool[resourceId] = pointWeight;
     if (index >= 0) resourcePoints[index] = point;
     else resourcePoints.push(point);
     render();
     commitUndo(before);
+  }
+  function addResourceGroupPoint(row, column, groupId) {
+    if (!validResourceGroupId(groupId)) throw new Error('资源组合 ID 必须为 1～2147483647 的整数');
+    var index = resourcePoints.findIndex(function (point) { return point.row === row && point.column === column; });
+    var error = resourcePositionError(row, column, index);
+    if (error) throw new Error(error);
+    var before = snapshot();
+    var point = { row: row, column: column, groupId: groupId };
+    if (index >= 0) resourcePoints[index] = point;
+    else resourcePoints.push(point);
+    render();
+    return commitUndo(before);
   }
   function removeResourcePoint(index) {
     if (!Number.isInteger(index) || index < 0 || index >= resourcePoints.length) return false;
@@ -358,7 +465,7 @@
    * 各人数下**唯一合法**的镜像组合（锁死项）—— 单一口径，UI 开关 / API / 载入校验都从这里取，
    * 免得"3 人必须关"散成几处判断、日后各改一半（改尺寸那次就是这么漏的）。
    *
-   *   2 人：**不锁**（返回 null）。上下镜像给「默认开」，但策划能自己关掉 —— 放装饰时要摆
+   *   2 人：**不锁**（返回 null）。上下镜像默认关闭，策划可主动开启 —— 放装饰时要摆
    *         非对称点缀（礁石、沉船扎堆），对折生成的对侧装饰会跟着一起长出来，很碍事。
    *         ⚠️ 关掉之后 1 区的格数**不再等于**该方开局领地（`ZC_INITIAL_TERRITORY`）：
    *         两家一样多这件事从"镜像保证"变成"策划自己保证"，`validate()` 只报 warn 不拦。
@@ -377,11 +484,7 @@
    * 改人数**不能**在这里判合法性，那是 forcedMirror 的活。
    */
   function defaultMirror(playerCount) {
-    if (playerCount === 3) return { vertical: false, horizontal: false };
-    // 4 人：四象限，上下 + 左右都开，只画左下 1/4。
-    if (playerCount === 4) return { vertical: true, horizontal: true };
-    // 2 人：上下开（1 区在下、2 区在上，对折生成上半场）。
-    return { vertical: true, horizontal: false };
+    return { vertical: false, horizontal: false };
   }
   function mirrorHomeOf(home, section) {
     var bits = section - 1;
@@ -501,7 +604,8 @@
     var before = resourcePoints.length;
     resourcePoints = resourcePoints.filter(function (point) {
       return point.row >= 0 && point.row < ROWS && point.column >= 0 && point.column < COLS &&
-        grid[point.row][point.column] === NEUTRAL;
+        grid[point.row][point.column] >= NEUTRAL && grid[point.row][point.column] <= PLAYER_COUNT &&
+        !homes.some(function (home) { return home && home.row === point.row && home.column === point.column; });
     });
     return before - resourcePoints.length;
   }
@@ -613,6 +717,7 @@
     decorBrush = String(name == null ? '' : name).trim();
     if (decorBrush && decorLibrary.indexOf(decorBrush) < 0) decorLibrary.push(decorBrush);
     brush = 'freeDecor';
+    eraseBrush = false;
     renderDecorPanel();
     syncControls();
     if (hover) drawCursor(brushCells(hover.row, hover.column, brushRadius));
@@ -621,6 +726,7 @@
   function setDecorKind(kind) {
     decorKind = 'free';
     brush = 'freeDecor';
+    eraseBrush = false;
     syncControls();
     renderDecorPanel();
   }
@@ -645,6 +751,7 @@
   function setFreeDecorBrush(name) {
     setDecorBrush(name);
     brush = 'freeDecor';
+    eraseBrush = false;
     syncControls();
   }
   function nearestHexCenter(x, y) {
@@ -674,6 +781,7 @@
     freeDecor.push(item);
     selectedFreeDecorId = item.id;
     brush = 'freeDecor';
+    eraseBrush = false;
     renderDecorPanel();
     render();
     commitUndo(before);
@@ -858,9 +966,9 @@
   /** 用户手工编辑后的收尾：先镜像，再让无效资源点和主城失效。 */
   function applyMirrorAndPrune() {
     applyMirror();
+    dropStaleHomes();
     pruneResourcePoints();
     pruneMapMetadata();
-    dropStaleHomes();
   }
 
   function pruneMapMetadata() {
@@ -966,8 +1074,7 @@
       (CITY_MODE === 'fixed' ? '固定主城' : '自选主城') + ' · ' +
       (mirrored() ? ((MIRROR_VERTICAL ? '上下' : '') + (MIRROR_HORIZONTAL ? '左右' : '') + '镜像') : '无镜像');
     syncDirtyUI();
-    var toolStatus = $('toolStatus');
-    if (toolStatus) toolStatus.textContent = '当前工具：' + activeBrushLabel() + ' · 笔刷 ' + (brushRadius === 0 ? '1 格' : brushRadius === 1 ? '7 格' : '19 格');
+    syncToolStatus();
     $('sizeHint').textContent = '列数 ' + MIN_COLS + '~' + MAX_COLS + '、行数 ' + MIN_ROWS + '~' + MAX_ROWS +
       ' 任意整数；行数为奇数时中线行镜像到自身。';
     var warnings = [];
@@ -981,21 +1088,20 @@
   }
 
   var TOOL_CATEGORY_GROUPS = {
-    terrain: ['groupTerrain', 'groupBrushSize'],
-    regions: ['groupRegions'],
+    terrain: ['groupTerrain', 'groupRegions', 'groupBrushSize'],
     resources: ['groupResources'],
     decor: ['groupDecor'],
-    advanced: ['groupAdvancedMirror', 'groupPresets', 'groupMapSize', 'groupZoom', 'groupDisplay', 'groupOperation'],
+    advanced: ['groupAdvancedMirror', 'groupPresets', 'groupZoom', 'groupOperation'],
   };
   var TOOL_CATEGORY_BUTTONS = {
     terrain: 'categoryTerrain',
-    regions: 'categoryRegions',
     resources: 'categoryResources',
     decor: 'categoryDecor',
     advanced: 'categoryAdvanced',
   };
 
   function setToolCategory(category) {
+    if (category === 'regions') category = 'terrain';
     var selected = Object.prototype.hasOwnProperty.call(TOOL_CATEGORY_GROUPS, category) ? category : 'terrain';
     Object.keys(TOOL_CATEGORY_GROUPS).forEach(function (name) {
       TOOL_CATEGORY_GROUPS[name].forEach(function (id) {
@@ -1115,6 +1221,7 @@
     if (PLAYER_COUNT === 3) {
       newGrid();   // 它会清掉 grid / homes / 装饰
       relocateSideData(decorAnchors, oldCols, rowShift, columnShift);   // 资源点 / 区域仍要搬
+      applyMirrorAndPrune();
       syncSizeInputs();
       buildBoard();
       render();
@@ -1156,11 +1263,7 @@
     // 旧盘才算真的消失，因为镜像侧是派生物、不跟着逐格退），最后才改镜像位。
     unseedHomeCells();
     applyMirror();
-    // 切到 2 人时若原来没开上下镜像（从 3 / 4 人图切过来），对侧内容会按下半场重算 —— 得先说一声，
-    // 否则策划只会看到"我上半场画的东西没了"。
-    var turnedOnVertical = PLAYER_COUNT === 2 && !MIRROR_VERTICAL;
-    // 切人数落到该人数的**默认**镜像组合：4 人四象限（上下 + 左右）、3 人无镜像、2 人上下开。
-    // ⚠️ 这里是「默认」不是「强制」—— 2 人不再锁死，切过去之后用户还能自己取消勾选。
+    // 切换人数从无镜像开始；需要对称绘制时由用户主动开启。
     var preset = defaultMirror(PLAYER_COUNT);
     MIRROR_VERTICAL = preset.vertical;
     MIRROR_HORIZONTAL = preset.horizontal;
@@ -1173,10 +1276,10 @@
     pruneMapMetadata();
     syncControls();
     applyMirror();
+    pruneResourcePoints();
     syncSizeInputs();
     buildBoard();
     render();
-    if (turnedOnVertical) flash('已按 2 人默认开启上下镜像，对侧内容按下半场重算（要摆非对称装饰可以再关掉）', 'warn');
     commitUndo(before);
   }
 
@@ -1193,6 +1296,7 @@
     // 收回主城盘后，非存储侧必须从存储侧重算一次 —— 否则镜像出来的那几格会留在图上
     // （切到自选主城时尤其明显：存储侧退干净了，对侧还剩两块）。
     applyMirror();
+    pruneResourcePoints();
     syncControls();
     syncSizeInputs();
     render();
@@ -1202,7 +1306,7 @@
   function setMirror(vertical, horizontal) {
     // 3 人一律关镜像：UI 上那个勾已经 disabled，但 API（__editor.setMirror）和载入路径照样会
     // 走到这里，所以强制收在 forcedMirror 这一处，别只堵 UI。
-    // 2 人**不锁** —— 上下镜像「默认开」是 defaultMirror() 的事，这里必须让用户能真的关掉。
+    // 2 人**不锁** —— 默认关闭，上下镜像仍允许用户主动开启。
     var forced = forcedMirror(PLAYER_COUNT);
     var nextV = forced ? forced.vertical : vertical === true;
     // 左右镜像只对 4 人的四象限有意义；1v1 与 3 人没有左右方向的分区伙伴。
@@ -1218,6 +1322,24 @@
   }
 
   function applyLayout(data, clean) {
+    // 导入失败不能留下半张新地图；尤其不能吞掉非法组合 ID 后继续保存。
+    var before = snapshot(), previousPassthrough = passthrough, previousBackground = backgroundName;
+    var previousDirty = dirty, previousMapId = $('mapId').value, previousMapName = $('mapName').value;
+    var previousSelectedDecor = selectedFreeDecorId, previousRegionBrush = Object.assign({}, regionBrush);
+    try { return applyLayoutData(data, clean); }
+    catch (error) {
+      passthrough = previousPassthrough;
+      backgroundName = previousBackground;
+      $('mapId').value = previousMapId;
+      $('mapName').value = previousMapName;
+      selectedFreeDecorId = previousSelectedDecor;
+      regionBrush = previousRegionBrush;
+      restoreSnapshot(before);
+      setDirty(previousDirty);
+      throw error;
+    }
+  }
+  function applyLayoutData(data, clean) {
     if (!data || typeof data !== 'object') throw new Error('不是地图 JSON');
     var before = snapshot();
     var version = data.version == null ? 1 : data.version;
@@ -1261,6 +1383,12 @@
       importedRegionDepths[key] = true;
     });
     var normalizedRegions = cloneRegions(importedRegions);
+    if (data.resourcePoints !== undefined && !Array.isArray(data.resourcePoints)) throw new Error('资源点配置必须是数组');
+    var importedResourcePoints = data.resourcePoints || [];
+    importedResourcePoints.forEach(function (point) {
+      var error = resourceDefinitionError(point);
+      if (error) throw new Error(error);
+    });
 
     PLAYER_COUNT = data.playerCount === 3 || data.playerCount === 4 ? data.playerCount : 2;
     CITY_MODE = data.cityMode === 'select' ? 'select' : 'fixed';
@@ -1272,7 +1400,6 @@
     ['resourcePoints', 'spacing', 'art', 'zoomMin', 'zoomMax'].forEach(function (key) {
       if (data[key] !== undefined) passthrough[key] = data[key];
     });
-    var importedResourcePoints = Array.isArray(data.resourcePoints) ? data.resourcePoints : [];
     resourcePoints = [];
     delete passthrough.resourcePoints;
 
@@ -1310,15 +1437,6 @@
       return region.section === regionBrush.section && region.depth === regionBrush.depth;
     });
     regionBrush.tendency = activeRegion ? activeRegion.tendency : defaultRegionTendency(regionBrush.depth);
-    for (var resourceIndex = 0; resourceIndex < resourcePoints.length; resourceIndex += 1) {
-      var resourcePoint = resourcePoints[resourceIndex];
-      if (!Number.isInteger(resourcePoint.row) || !Number.isInteger(resourcePoint.column) ||
-          resourcePoint.row < 0 || resourcePoint.row >= rows || resourcePoint.column < 0 || resourcePoint.column >= columns ||
-          grid[resourcePoint.row][resourcePoint.column] !== NEUTRAL ||
-          (resourcePoint.section !== undefined && resourcePoint.section !== 0)) {
-        throw new Error('资源点只能落在中立格上，且分区必须为 0');
-      }
-    }
     var importedRegionCells = {};
     regions.forEach(function (region) {
       if (!Number.isInteger(region.section) || region.section < 1 || region.section > PLAYER_COUNT ||
@@ -1350,6 +1468,11 @@
       if (!home || !Number.isInteger(home.row) || !Number.isInteger(home.column)) continue;
       if (home.row < 0 || home.row >= rows || home.column < 0 || home.column >= columns) continue;
       homes[index] = { row: home.row, column: home.column };
+    }
+    for (var resourceIndex = 0; resourceIndex < resourcePoints.length; resourceIndex += 1) {
+      var resourcePoint = resourcePoints[resourceIndex];
+      var resourceError = resourcePositionError(resourcePoint.row, resourcePoint.column, resourceIndex);
+      if (resourceError) throw new Error(resourceError);
     }
     var importedFreeDecor = data.art && typeof data.art === 'object' && !Array.isArray(data.art)
       && Array.isArray(data.art.freeDecor) ? data.art.freeDecor : [];
@@ -1397,6 +1520,7 @@
     if (!window.confirm('清空重画会重置地形、主城落点与自由装饰，并保留区域标记和中立资源点，是否继续？')) return false;
     var before = snapshot();
     newGrid();
+    pruneResourcePoints();
     syncControls();
     render();
     var changed = commitUndo(before);
@@ -1544,14 +1668,17 @@
 
   // ---- 视图（滚轮缩放 / 中键或空格平移）----------------------------------------
   /**
-   * 当前视口矩形 —— `viewBox` 与背景图盒的**唯一写入口**。
-   *
-   * 🔴 两处必须是同一个盒子：背景图靠 `preserveAspectRatio="xMidYMid slice"` 做等比 cover
-   * 铺满视口，图盒一旦偏离 viewBox，可见区域就只剩图盒与视口的交集（曾多减了一个 halfW/halfH ⇒
-   * 右侧与下侧各空半屏，全链路零报错）。共用本函数后这类漂移在结构上不可能发生。
+   * 100% 时完整容纳棋盘，另一轴扩展到工作区边缘；缩放只改变可见世界范围。
+   * 视口比例由工作区决定，不能沿用棋盘比例，否则竖图放大后仍被裁在中央窄条里。
    */
   function viewportRect() {
     var halfW = baseHalfW / zoom, halfH = baseHalfH / zoom;
+    var stage = svg.parentElement;
+    if (stage && stage.clientWidth > 0 && stage.clientHeight > 0) {
+      var worldPerPixel = Math.max(baseHalfW * 2 / stage.clientWidth, baseHalfH * 2 / stage.clientHeight) / zoom;
+      halfW = stage.clientWidth * worldPerPixel / 2;
+      halfH = stage.clientHeight * worldPerPixel / 2;
+    }
     return { x: panX - halfW, y: panY - halfH, width: halfW * 2, height: halfH * 2 };
   }
   function applyView() {
@@ -1562,28 +1689,22 @@
     var rect = viewportRect();
     svg.setAttribute('viewBox', rect.x.toFixed(1) + ' ' + rect.y.toFixed(1) + ' ' +
       rect.width.toFixed(1) + ' ' + rect.height.toFixed(1));
-    // 背景图占满 viewBox，缩放 / 平移变了必须重画。
+    // 底图保持地图坐标；视口变宽不应改变它与格子、装饰的相对位置。
     drawBackground();
     fitCanvas();
+    syncViewDetails();
+    syncMiniMapView();
+    drawRulers();
   }
   /**
-   * 画布元素尺寸保持 = viewBox 比例（contain 到 `.stage` 容器）。
-   *
-   * SVG 默认 `preserveAspectRatio="xMidYMid meet"`：元素比例一旦偏离 viewBox（CSS 里
-   * `height:100%` + `max-width:100%` 会把画布拉成任意形状），棋盘与背景只铺在中间一块、
-   * 四周露出深色底 —— 用户看到的"棋盘周围一圈黑"。比例对齐后 viewBox 内容恰好铺满画布，
-   * 背景**始终全景可见**，平移 / 缩放时与棋盘一起走。
+   * 画布铺满工作区；viewportRect 同步使用相同比例，避免拉伸与内部留边。
    */
   function fitCanvas() {
     var stage = svg.parentElement;
     if (!stage) return;
     var availW = stage.clientWidth, availH = stage.clientHeight;
     if (!(availW > 0) || !(availH > 0)) return;
-    var rect = viewportRect();
-    if (!(rect.width > 0) || !(rect.height > 0)) return;
-    // zoom 只改 viewBox 世界尺寸、不改比例 ⇒ 算出的像素尺寸不变，同值守卫直接跳过。
-    var scale = Math.min(availW / rect.width, availH / rect.height);
-    var next = rect.width * scale + 'px', nextH = rect.height * scale + 'px';
+    var next = availW + 'px', nextH = availH + 'px';
     if (svg.style.width === next && svg.style.height === nextH) return;
     svg.style.width = next;
     svg.style.height = nextH;
@@ -1611,6 +1732,177 @@
     zoomTo(zoom * factor, clientX, clientY);
   }
 
+  function rulerLabelStep(spacing) {
+    var steps = [1, 2, 5, 10, 20, 50, 100];
+    for (var i = 0; i < steps.length; i += 1) {
+      if (steps[i] * spacing >= 28) return steps[i];
+    }
+    return steps[steps.length - 1];
+  }
+  function rulerLayout() {
+    var viewport = svg.parentElement;
+    if (!viewport || !(viewport.clientWidth > 0 && viewport.clientHeight > 0)) return null;
+    var width = viewport.clientWidth, height = viewport.clientHeight, view = viewportRect();
+    // Match the actual SVG viewBox rounding so ticks align at large zoom as well.
+    ['x', 'y', 'width', 'height'].forEach(function (key) { view[key] = Number(view[key].toFixed(1)); });
+    var activeColumn = hover && hover.column >= 0 && hover.column < COLS ? hover.column : -1;
+    var activeRow = hover && hover.row >= 0 && hover.row < ROWS ? hover.row : -1;
+    var referenceColumn = activeColumn >= 0 ? activeColumn : 0;
+    var columnStep = rulerLabelStep(HEX_COL * width / view.width);
+    var rowStep = rulerLabelStep(HEX_ROW * height / view.height);
+    var activeX = activeColumn < 0 ? null : (hexCenter(0, activeColumn).x - view.x) * width / view.width;
+    var activeY = activeRow < 0 ? null : (hexCenter(activeRow, referenceColumn).y - HEX_TOP_LIFT - view.y) * height / view.height;
+    var horizontal = [], vertical = [];
+    var centerColumns = [Math.floor((COLS - 1) / 2), Math.ceil((COLS - 1) / 2)];
+    var centerRows = [Math.floor((ROWS - 1) / 2), Math.ceil((ROWS - 1) / 2)];
+    function nearCenter(pixel, indices, isColumn) {
+      return indices.some(function (index) {
+        var center = hexCenter(isColumn ? 0 : index, isColumn ? index : referenceColumn);
+        var projected = isColumn ? (center.x - view.x) * width / view.width
+          : (center.y - HEX_TOP_LIFT - view.y) * height / view.height;
+        return Math.abs(pixel - projected) < 24;
+      });
+    }
+    for (var column = 0; column < COLS; column += 1) {
+      var x = (hexCenter(0, column).x - view.x) * width / view.width;
+      if (x < 0 || x > width) continue;
+      var centerColumn = centerColumns.indexOf(column) >= 0;
+      horizontal.push({ center: centerColumn, index: column, value: column + 1, pixel: x, active: column === activeColumn,
+        label: centerColumn || column === activeColumn || (column % columnStep === 0 && !nearCenter(x, centerColumns, true) && (activeX === null || Math.abs(x - activeX) >= 24)) });
+    }
+    for (var row = 0; row < ROWS; row += 1) {
+      var y = (hexCenter(row, referenceColumn).y - HEX_TOP_LIFT - view.y) * height / view.height;
+      if (y < 0 || y > height) continue;
+      var centerRow = centerRows.indexOf(row) >= 0;
+      vertical.push({ center: centerRow, index: row, value: ROWS - row, pixel: y, active: row === activeRow,
+        label: centerRow || row === activeRow || ((ROWS - 1 - row) % rowStep === 0 && !nearCenter(y, centerRows, false) && (activeY === null || Math.abs(y - activeY) >= 24)) });
+    }
+    return { width: width, height: height, view: view, horizontal: horizontal, vertical: vertical,
+      activeColumn: activeColumn, activeRow: activeRow, referenceColumn: referenceColumn };
+  }
+  function drawRulers() {
+    var viewport = svg.parentElement;
+    if (!viewport || !(viewport.clientWidth > 0 && viewport.clientHeight > 0)) return;
+    var view = viewportRect();
+    var signature = [ROWS, COLS, viewport.clientWidth, viewport.clientHeight, view.x, view.y, view.width, view.height,
+      hover ? hover.row : -1, hover ? hover.column : -1].join(':');
+    if (signature === rulerSignature) return;
+    rulerSignature = signature;
+    var layout = rulerLayout();
+    ['Top', 'Bottom', 'Left', 'Right'].forEach(function (side) {
+      var ruler = $('ruler' + side);
+      if (!ruler) return;
+      var horizontal = side === 'Top' || side === 'Bottom';
+      var near = side === 'Top' || side === 'Left';
+      var length = horizontal ? layout.width : layout.height;
+      ruler.setAttribute('viewBox', horizontal ? '0 0 ' + length + ' 28' : '0 0 28 ' + length);
+      var parts = [], ticks = horizontal ? layout.horizontal : layout.vertical;
+      var centers = ticks.filter(function (tick) { return tick.center; });
+      var mergeCenters = centers.length === 2 && Math.abs(centers[0].pixel - centers[1].pixel) < 24;
+      ticks.forEach(function (tick) {
+        var p = tick.pixel.toFixed(2), color = tick.active ? '#fbbf24' : (tick.center ? '#67e8f9' : '#94a3b8');
+        var start = near ? (tick.label ? 18 : 23) : 0;
+        var end = near ? 28 : (tick.label ? 10 : 5);
+        parts.push('<line x1="' + (horizontal ? p : start) + '" y1="' + (horizontal ? start : p) +
+          '" x2="' + (horizontal ? p : end) + '" y2="' + (horizontal ? end : p) + '" stroke="' + color + '"></line>');
+        if (tick.label && !(mergeCenters && tick.center && tick !== centers[0])) {
+          var labelPixel = mergeCenters && tick.center ? (centers[0].pixel + centers[1].pixel) / 2 : tick.pixel;
+          var label = mergeCenters && tick.center ? Math.min(centers[0].value, centers[1].value) + '/' + Math.max(centers[0].value, centers[1].value) : tick.value;
+          var labelColor = mergeCenters && tick.center ? '#67e8f9' : color;
+          parts.push('<text' + (tick.center ? ' class="rulerCenter"' : '') + ' x="' + (horizontal ? labelPixel.toFixed(2) : (near ? 11 : 17)) + '" y="' +
+            (horizontal ? (near ? 12 : 22) : (labelPixel + 3.5).toFixed(2)) +
+            '" text-anchor="middle" fill="' + labelColor + '"' + (String(label).length > 3 ? ' textLength="25" lengthAdjust="spacingAndGlyphs"' : '') + '>' + label + '</text>');
+        }
+        if (tick.active) {
+          var a = (tick.pixel - 4).toFixed(2), b = (tick.pixel + 4).toFixed(2);
+          var path = horizontal ? ('M' + a + ' ' + (near ? 20 : 8) + 'L' + b + ' ' + (near ? 20 : 8) + 'L' + p + ' ' + (near ? 28 : 0))
+            : ('M' + (near ? 20 : 8) + ' ' + a + 'L' + (near ? 20 : 8) + ' ' + b + 'L' + (near ? 28 : 0) + ' ' + p);
+          parts.push('<path d="' + path + 'Z" fill="#fbbf24"></path>');
+        }
+      });
+      ruler.innerHTML = parts.join('');
+    });
+  }
+
+  function miniMapBounds() {
+    return { x: -baseHalfW, y: -baseHalfH, width: baseHalfW * 2, height: baseHalfH * 2 };
+  }
+  function miniMapViewRect() {
+    var bounds = miniMapBounds(), view = viewportRect();
+    var x = Math.max(bounds.x, view.x), y = Math.max(bounds.y, view.y);
+    var right = Math.min(bounds.x + bounds.width, view.x + view.width);
+    var bottom = Math.min(bounds.y + bounds.height, view.y + view.height);
+    return { x: x, y: y, width: Math.max(0, right - x), height: Math.max(0, bottom - y) };
+  }
+  function miniMapMarkup() {
+    var colors = { '-1': '#111827', 0: '#64748b', 1: '#2563eb', 2: '#dc2626', 3: '#16a34a', 4: '#d97706' };
+    var parts = [];
+    for (var row = 0; row < ROWS; row += 1) {
+      for (var column = 0; column < COLS; column += 1) {
+        if (grid[row][column] === VOID) continue;
+        var center = hexCenter(row, column);
+        parts.push('<path d="' + hexPathD(center.x, center.y) + '" fill="' + colors[grid[row][column]] + '"></path>');
+      }
+    }
+    resourcePoints.forEach(function (point) {
+      var center = hexCenter(point.row, point.column);
+      parts.push('<circle class="miniResource" cx="' + center.x + '" cy="' + center.y + '" r="22" fill="#fbbf24"></circle>');
+    });
+    homes.forEach(function (home, index) {
+      if (!home) return;
+      var center = hexCenter(home.row, home.column);
+      parts.push('<circle class="miniHome" cx="' + center.x + '" cy="' + center.y + '" r="36" fill="' + colors[index + 1] + '" stroke="#fff" stroke-width="12"></circle>');
+    });
+    return parts.join('');
+  }
+  function drawMiniMap() {
+    var miniMap = $('miniMap'), layer = $('miniMapTiles');
+    if (!miniMap || !layer) return;
+    var bounds = miniMapBounds();
+    miniMap.setAttribute('viewBox', [bounds.x, bounds.y, bounds.width, bounds.height].join(' '));
+    var markup = miniMapMarkup();
+    if (markup !== miniMapMarkupCache) {
+      miniMapMarkupCache = markup;
+      layer.innerHTML = markup;
+    }
+    syncMiniMapView();
+  }
+  function syncMiniMapView() {
+    var frame = $('miniMapView');
+    if (!frame) return;
+    var rect = miniMapViewRect();
+    ['x', 'y', 'width', 'height'].forEach(function (key) { frame.setAttribute(key, String(rect[key])); });
+    frame.setAttribute('visibility', rect.width > 0 && rect.height > 0 ? 'visible' : 'hidden');
+    var label = $('miniMapZoom');
+    if (label) label.textContent = Math.round(zoom * 100) + '%';
+  }
+  function navigateMiniMap(clientX, clientY) {
+    var miniMap = $('miniMap');
+    if (!miniMap || !miniMap.getBoundingClientRect) return false;
+    var screen = miniMap.getBoundingClientRect(), bounds = miniMapBounds();
+    if (!(screen.width > 0 && screen.height > 0)) return false;
+    // SVG uses xMidYMid meet: account for the letterbox on either axis.
+    var scale = Math.min(screen.width / bounds.width, screen.height / bounds.height);
+    panX = Math.max(bounds.x, Math.min(-bounds.x, (clientX - screen.left - screen.width / 2) / scale));
+    panY = Math.max(bounds.y, Math.min(-bounds.y, (clientY - screen.top - screen.height / 2) / scale));
+    applyView();
+    return true;
+  }
+  function detailsReduced() {
+    var stage = svg.parentElement;
+    return !!stage && stage.clientHeight > 0 &&
+      HEX_TOP_HALF_H * 2 * stage.clientHeight / viewportRect().height < DETAIL_MIN_CELL_PIXELS;
+  }
+  function syncViewDetails() {
+    var reduced = detailsReduced();
+    if (svg.classList) {
+      if (reduced) svg.classList.add('labelsReduced');
+      else svg.classList.remove('labelsReduced');
+    }
+    var hint = $('detailHint');
+    if (hint) hint.hidden = !reduced;
+  }
+
   // ---- 光标预览 ---------------------------------------------------------------
   function buildCursorLayer() {
     cursorLayer = null;
@@ -1623,6 +1915,7 @@
   }
   function drawCursor(cells) {
     if (!cursorLayer) return;
+    if (brush === 'none') cells = [];
     while (cursorPaths.length < cells.length) {
       var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       path.setAttribute('class', 'cursorCell');
@@ -1633,7 +1926,7 @@
       if (i >= cells.length) { cursorPaths[i].setAttribute('d', ''); continue; }
       var center = hexCenter(cells[i].row, cells[i].column);
       cursorPaths[i].setAttribute('d', hexPathD(center.x, center.y));
-      cursorPaths[i].setAttribute('class', 'cursorCell' + (grid[cells[i].row][cells[i].column] === VOID ? ' on-void' : ''));
+      cursorPaths[i].setAttribute('class', 'cursorCell' + (eraseBrush ? ' erasing' : '') + (grid[cells[i].row][cells[i].column] === VOID ? ' on-void' : ''));
     }
   }
   function updateHover(local) {
@@ -1642,15 +1935,15 @@
     updateReadout();
   }
   function updateReadout() {
+    drawRulers();
     var box = $('cursorInfo');
     if (!box) return;
     var size = brushRadius === 0 ? '1×1' : brushRadius === 1 ? '7 格' : '19 格';
     if (!hover) { box.textContent = '指针在棋盘外 · 笔刷 ' + size; return; }
     var value = grid[hover.row][hover.column];
     var resourcePoint = resourcePointAt(hover.row, hover.column);
-    var resourceId = resourceIdAt(resourcePoint);
-    box.textContent = '(' + hover.row + ', ' + hover.column + ') · ' + sectionLabel(value) +
-      (resourceId ? ' · ' + (RESOURCE_LABELS[resourceId] || resourceId) : '') + ' · 笔刷 ' + size;
+    box.textContent = '列 ' + (hover.column + 1) + ' · 行 ' + (ROWS - hover.row) + ' · ' + sectionLabel(value) +
+      (resourcePoint ? ' · ' + resourceLabel(resourcePoint) : '') + ' · 笔刷 ' + size;
   }
   function buildBoard() {
     var pad = 3;
@@ -1758,28 +2051,49 @@
    * 背景图层：把 `art.background`（默认 image/zdbg1）铺在棋盘下，**与棋盘一体缩放平移**。
    *
    * 背景中心**锚定棋盘中心 (0,0)**：平移时 viewBox 移动、背景自动跟随（markup 不变，不重画）。
-   * 尺寸取 `max(棋盘包围盒, 当前 viewBox)`：
-   *   - 放大（viewBox ≤ 包围盒）：背景 = 包围盒，随格子**同比例放大** —— 格子稳稳"在背景上"；
-   *   - 缩小（viewBox > 包围盒）：背景 = viewBox，**始终铺满视野** —— 全景可见、无黑边。
-   * 溢出由 `preserveAspectRatio="xMidYMid slice"` 切掉（绝不拉伸）。
+   * 按游戏全景范围加拖动边距等比铺底，保留整张原图，不能裁成棋盘形状。
+   * 底图范围不依赖编辑器当前镜头倍率或桌面工作区尺寸。
    * 关闭背景（`showBackground=false`）或名字为空时清空图层，不占绘制。
    */
-  /**
-   * 背景图标记（纯函数）：图盒中心 (0,0)，宽高 = max(viewBox, 棋盘包围盒)。
-   * 包围盒与 `buildBoard` 的 baseHalfW/H 同源（去掉 pad）。
-   * 关掉背景或没名字时返回空串。
-   */
+  function backgroundSourceSize() {
+    var name = backgroundName;
+    if (!backgroundSourceSizes[name]) {
+      // 默认 zdbg1.jpg 的实际原图尺寸；其他底图加载完成后按各自 naturalWidth/Height 重算。
+      var size = { width: 2304, height: 2560 };
+      backgroundSourceSizes[name] = size;
+      if (typeof Image === 'function') {
+        var image = new Image();
+        image.onload = function () {
+          if (!(image.naturalWidth > 0) || !(image.naturalHeight > 0)) return;
+          size.width = image.naturalWidth;
+          size.height = image.naturalHeight;
+          if (backgroundName === name) drawBackground();
+        };
+        image.src = '/bg/' + name;
+      }
+    }
+    return backgroundSourceSizes[name];
+  }
+  function backgroundBounds() {
+    var mapWidth = (COLS - 1) * HEX_COL + 2 * HEX_R;
+    var mapHeight = (ROWS - 1) * HEX_ROW + 2 * HEX_HALF_H + 2 * HEX_PHASE;
+    var overview = Math.max(0.001, Math.min(1,
+      (BACKGROUND_VIEW_WIDTH - 2 * BACKGROUND_OVERVIEW_PADDING) / mapWidth,
+      (BACKGROUND_VIEW_HEIGHT - 2 * BACKGROUND_OVERVIEW_PADDING) / mapHeight));
+    var requiredWidth = Math.max(BACKGROUND_VIEW_WIDTH / overview, mapWidth + 2 * BACKGROUND_EDGE_X / overview);
+    var requiredHeight = Math.max(BACKGROUND_VIEW_HEIGHT / overview, mapHeight + 2 * BACKGROUND_EDGE_Y / overview);
+    var size = backgroundSourceSize();
+    var scale = Math.max(requiredWidth / size.width, requiredHeight / size.height);
+    return { width: size.width * scale, height: size.height * scale };
+  }
   function backgroundMarkup() {
     if (!backgroundName || !showBackground) return '';
-    var rect = viewportRect();
-    var boardWidth = (COLS - 1) * HEX_COL + 2 * HEX_R;
-    var boardHeight = (ROWS - 1) * HEX_ROW + 2 * HEX_HALF_H + 2 * HEX_PHASE;
-    var width = Math.max(rect.width, boardWidth);
-    var height = Math.max(rect.height, boardHeight);
+    var bounds = backgroundBounds();
+    var width = bounds.width, height = bounds.height;
     return '<image class="backgroundImage" href="' + esc('/bg/' + backgroundName) +
       '" x="' + (-width / 2).toFixed(1) + '" y="' + (-height / 2).toFixed(1) +
       '" width="' + width.toFixed(2) + '" height="' + height.toFixed(2) +
-      '" preserveAspectRatio="xMidYMid slice"></image>';
+      '" preserveAspectRatio="xMidYMid meet"></image>';
   }
   function drawBackground() {
     var layers = svg.querySelectorAll ? svg.querySelectorAll('g.backgroundLayer') : null;
@@ -1796,9 +2110,19 @@
     var parts = [];
     for (var index = 0; index < resourcePoints.length; index += 1) {
       var point = resourcePoints[index];
+      var center = hexCenter(point.row, point.column);
+      if (point.groupId !== undefined) {
+        var labelWidth = Math.max(48, String(point.groupId).length * 7.5 + 12);
+        // 统一资源箱仅作编辑定位标记，实际奖励仍由 groupId 对应的配置表决定。
+        parts.push('<g class="resourceGroupMarker"><title>' + esc(resourceLabel(point)) + '</title>' +
+          '<image class="resourceGroupImage" href="' + esc(resourceImageUrl('chest')) + '" x="' + (center.x - 39).toFixed(1) +
+          '" y="' + (center.y - 53).toFixed(1) + '" width="78" height="78" preserveAspectRatio="xMidYMid meet"></image>' +
+          '<rect class="resourceGroupLabel" x="' + (center.x - labelWidth / 2).toFixed(1) + '" y="' + (center.y + 17).toFixed(1) + '" width="' + labelWidth + '" height="22" rx="5" fill="#111827" stroke="#fbbf24"></rect>' +
+          '<text class="resourceGroupLabel" x="' + center.x.toFixed(1) + '" y="' + (center.y + 32).toFixed(1) + '" text-anchor="middle" font-size="13" font-weight="700" fill="#fde68a">' + point.groupId + '</text></g>');
+        continue;
+      }
       var resourceId = resourceIdAt(point);
       if (!resourceId) continue;
-      var center = hexCenter(point.row, point.column);
       var label = RESOURCE_LABELS[resourceId] || resourceId;
       var hasImage = resourceImages[RESOURCE_ASSETS[resourceId]] === true;
       if (hasImage) {
@@ -1872,11 +2196,12 @@
       var tendency = region.tendency || defaultRegionTendency(region.depth);
       var tendencyLabel = tendencyLabels[tendency] || '';
       if (!tendencyLabel) return;
-      var label = depthLabels[region.depth] + ' · ' + tendencyLabel;
+      var label = depthLabels[region.depth] + ' · ' + (region.text || tendencyLabel);
+      var badgeWidth = region.text ? Math.max(90, label.length * 14 + 20) : 90;
       var center = representative.center;
       var color = depthColors[region.depth] || '#ffffff';
-      parts.push('<rect class="regionBadge regionBadge-' + esc(region.depth) + '" x="' + (center.x - 45).toFixed(1) +
-        '" y="' + (center.y - 13).toFixed(1) + '" width="90" height="26" rx="13" fill="#14213d" fill-opacity="0.96"' +
+      parts.push('<rect class="regionBadge regionBadge-' + esc(region.depth) + '" x="' + (center.x - badgeWidth / 2).toFixed(1) +
+        '" y="' + (center.y - 13).toFixed(1) + '" width="' + badgeWidth + '" height="26" rx="13" fill="#14213d" fill-opacity="0.96"' +
         ' stroke="' + color + '" stroke-width="2" pointer-events="none"></rect>');
       parts.push('<text class="regionLabel" x="' + center.x.toFixed(1) + '" y="' + (center.y + 5).toFixed(1) +
         '" text-anchor="middle" font-size="14" font-weight="700" fill="#fff" pointer-events="none">' + esc(label) + '</text>');
@@ -1993,8 +2318,83 @@
    * 拖动时每帧只走这里，不用按格重复 applyMirror / render。
    * selected 省略 = 当前笔刷；返回是否真的改了东西。
    */
+  // One stroke edits the existing ownership and region fields together; serialization stays shared.
+  function paintPartitionCells(cells, erase) {
+    var changed = false, blocked = 0, visited = {};
+    function editRegion(row, column, section, depth) {
+      var id = row * COLS + column;
+      var target = depth ? regions.find(function (region) { return region.section === section && region.depth === depth; }) : null;
+      regions.forEach(function (region) {
+        if (region === target) return;
+        if (erase && region.section !== section) return;
+        var index = region.cells.indexOf(id);
+        if (index >= 0 && (depth || erase || region.section !== section)) {
+          region.cells.splice(index, 1);
+          changed = true;
+        }
+      });
+      if (!depth) return;
+      if (!target) {
+        target = { section: section, depth: depth, cells: [], tendency: regionBrush.tendency };
+        regions.push(target);
+      }
+      if (target.cells.indexOf(id) < 0) {
+        target.cells.push(id);
+        target.cells.sort(function (a, b) { return a - b; });
+        changed = true;
+      }
+    }
+    cells.forEach(function (cell) {
+      var row = cell.row, column = cell.column;
+      if (!Number.isInteger(row) || !Number.isInteger(column) || row < 0 || row >= ROWS || column < 0 || column >= COLS) return;
+      var source = sourceCell(row, column), sourceId = source.row * COLS + source.column;
+      if (visited[sourceId]) return;
+      visited[sourceId] = true;
+      // Selecting a player refers to the cell under the pointer, including the mirrored side.
+      var sourceSection = sectionAfterFlip(regionBrush.section, flipBits(row, column));
+      var orbit = [], seen = {};
+      [source.row, MIRROR_VERTICAL ? ROWS - 1 - source.row : source.row].forEach(function (r) {
+        [source.column, MIRROR_HORIZONTAL ? COLS - 1 - source.column : source.column].forEach(function (c) {
+          var id = r * COLS + c;
+          if (seen[id]) return;
+          seen[id] = true;
+          orbit.push({ row: r, column: c, section: sectionAfterFlip(sourceSection, flipBits(r, c)) });
+        });
+      });
+      if (orbit.some(function (point) {
+        var value = grid[point.row][point.column];
+        return value === VOID || (value > NEUTRAL && value !== point.section);
+      })) { blocked += 1; return; }
+      orbit.forEach(function (point) {
+        var value = grid[point.row][point.column];
+        if (erase) {
+          // Depth erasing keeps ownership; ownership erasing restores a playable neutral cell.
+          editRegion(point.row, point.column, point.section, null);
+          if (partitionDepth === 'none' && value === point.section) {
+            grid[point.row][point.column] = NEUTRAL;
+            changed = true;
+          }
+        } else {
+          if (value !== point.section) { grid[point.row][point.column] = point.section; changed = true; }
+          editRegion(point.row, point.column, point.section, partitionDepth === 'none' ? null : partitionDepth);
+        }
+      });
+    });
+    if (changed) {
+      regions = regions.filter(function (region) { return region.cells.length > 0; });
+      applyMirrorAndPrune();
+      render();
+      syncControls();
+    }
+    var notice = $('partitionNotice');
+    notice.hidden = !blocked;
+    notice.textContent = blocked ? '已跳过 ' + blocked + ' 组受保护格（虚空／其他玩家）。' : '';
+    return changed;
+  }
   function paintCells(cells, selected) {
     var mode = selected === undefined ? brush : selected;
+    if (mode === 'none') return false;
+    if (mode === 'partition' || mode === 'partition-clear') return paintPartitionCells(cells, mode === 'partition-clear');
     var changed = false;
     var blocked = 0;
     for (var i = 0; i < cells.length; i += 1) {
@@ -2018,10 +2418,25 @@
         if (grid[homeRow][homeColumn] === VOID) {
           flash('主城不能放在虚空格上', 'err'); continue;
         }
+        if (resourcePointAt(homeRow, homeColumn)) {
+          flash('主城不能与资源点重叠，请先删除该资源点', 'err'); continue;
+        }
         if (CITY_MODE === 'fixed') {
           // fixed 模式：必须落在自己分区格上。
           var fixedSection = grid[homeRow][homeColumn];
           if (fixedSection <= NEUTRAL) { flash('主城只能落在某一分区的可通行格上', 'err'); continue; }
+          // 1 区主城移动会由 applyMirror 连带移动其他方主城，先检查全部目标，
+          // 否则收尾清理会把对侧资源静默删除。
+          var mirroredHomeConflict = false;
+          if (mirrored() && fixedSection === 1) {
+            for (var mirrorSlot = 1; mirrorSlot < PLAYER_COUNT; mirrorSlot += 1) {
+              var homeTarget = mirrorHomeOf({ row: homeRow, column: homeColumn }, mirrorSlot + 1);
+              if (resourcePointAt(homeTarget.row, homeTarget.column)) { mirroredHomeConflict = true; break; }
+            }
+          }
+          if (mirroredHomeConflict) {
+            flash('镜像后的主城会与资源点重叠，请先移开该资源点', 'err'); continue;
+          }
           if (!homes[fixedSection - 1] ||
               homes[fixedSection - 1].row !== homeRow || homes[fixedSection - 1].column !== homeColumn) {
             homes[fixedSection - 1] = { row: homeRow, column: homeColumn };
@@ -2096,24 +2511,20 @@
             resourcePoints.splice(resourceIndex, 1);
             changed = true;
           }
-        } else if (!resourceBrush) {
-          flash('请先选择宝箱、金币或金矿图标', 'err');
-        } else if (grid[pointRow][pointColumn] !== NEUTRAL) {
-          blocked += 1;
+        } else if (resourceGroupId === null && !resourceBrush) {
+          flash('请先填写组合 ID，再点击“放置资源点”', 'err');
         } else {
           var existingIndex = resourcePoints.findIndex(function (entry) {
             return entry.row === pointRow && entry.column === pointColumn;
           });
-          var point = existingIndex >= 0 ? cloneResourcePoints([resourcePoints[existingIndex]])[0]
-            : { row: pointRow, column: pointColumn, pool: {} };
-          point.pool[resourceBrush] = resourceWeight;
-          var tooClose = resourcePoints.some(function (entry, entryIndex) {
-            return entryIndex !== existingIndex && resourcePointDistance(point, entry) < resourceMinDistance();
-          });
-          if (tooClose) {
+          var point = resourceGroupId !== null ? { row: pointRow, column: pointColumn, groupId: resourceGroupId }
+            : existingIndex >= 0 && resourcePoints[existingIndex].pool ? cloneResourcePoints([resourcePoints[existingIndex]])[0]
+              : { row: pointRow, column: pointColumn, pool: {} };
+          if (resourceGroupId === null) point.pool[resourceBrush] = resourceWeight;
+          if (resourcePositionError(pointRow, pointColumn, existingIndex)) {
             blocked += 1;
           } else if (existingIndex >= 0) {
-            if (resourcePoints[existingIndex].pool[resourceBrush] !== resourceWeight) {
+            if (JSON.stringify(resourcePoints[existingIndex]) !== JSON.stringify(point)) {
               resourcePoints[existingIndex] = point;
               changed = true;
             }
@@ -2136,13 +2547,13 @@
       }
     }
     if (!changed) {
-      if (blocked) flash('资源只能放在与其他资源相距至少 ' + resourceMinDistance() + ' 格的中立格；已跳过 ' + blocked + ' 格', 'err');
+      if (blocked) flash('资源需放在可通行格，避开主城且与其他资源相距至少 ' + resourceMinDistance() + ' 格；已跳过 ' + blocked + ' 格', 'err');
       return false;
     }
     // 用户这一笔可能涂掉主城格或资源点宿主格，所以编辑路径要连带失效检查。
     applyMirrorAndPrune();
     render();
-    if (blocked) flash('资源只能放在与其他资源相距至少 ' + resourceMinDistance() + ' 格的中立格；已跳过 ' + blocked + ' 格', 'err');
+    if (blocked) flash('资源需放在可通行格，避开主城且与其他资源相距至少 ' + resourceMinDistance() + ' 格；已跳过 ' + blocked + ' 格', 'err');
     return true;
   }
   /** 单格写入：脚本与测试的稳定入口，不扩散笔刷半径。 */
@@ -2227,23 +2638,17 @@
     for (var resourceIndex = 0; resourceIndex < resourcePoints.length; resourceIndex += 1) {
       var resourcePoint = resourcePoints[resourceIndex];
       var resourceKey = resourcePoint.row + ',' + resourcePoint.column;
-      var resourcePool = resourcePoint.pool || {};
-      var resourceIds = Object.keys(resourcePool);
-      var validPool = resourceIds.length > 0 && resourceIds.every(function (id) {
-        return Object.prototype.hasOwnProperty.call(RESOURCE_ASSETS, id)
-          && typeof resourcePool[id] === 'number' && Number.isFinite(resourcePool[id]) && resourcePool[id] >= 0;
-      }) && resourceIds.some(function (id) { return resourcePool[id] > 0; });
-      if (!Number.isInteger(resourcePoint.row) || !Number.isInteger(resourcePoint.column) ||
-          resourcePoint.row < 0 || resourcePoint.row >= ROWS || resourcePoint.column < 0 || resourcePoint.column >= COLS ||
-          grid[resourcePoint.row][resourcePoint.column] !== NEUTRAL || resourceCells[resourceKey] || !validPool) {
-        invalidResources.push(resourceKey);
+      var resourceError = resourceDefinitionError(resourcePoint) || resourcePositionError(resourcePoint.row, resourcePoint.column, resourceIndex);
+      if (resourceCells[resourceKey] || resourceError) {
+        invalidResources.push(resourceKey + (resourceError ? '（' + resourceError + '）' : '（重复点位）'));
       }
       resourceCells[resourceKey] = true;
     }
     if (invalidResources.length) {
-      checks.push(['err', '资源点必须位于唯一的中立格且至少配置一种正权重资源：' + invalidResources.join(' / ')]);
+      checks.push(['err', '资源点配置无效：' + invalidResources.join(' / ')]);
     } else if (resourcePoints.length) {
-      checks.push(['ok', '资源点：' + resourcePoints.length + ' 个（固定主城与自选主城地图均可配置）']);
+      var groups = resourcePoints.filter(function (point) { return point.groupId !== undefined; }).length;
+      checks.push(['ok', '资源点：' + resourcePoints.length + ' 个（组合 ' + groups + ' / 旧资源池 ' + (resourcePoints.length - groups) + '）']);
     }
 
     if (CITY_MODE === 'select') {
@@ -2481,6 +2886,7 @@
     // 场景装饰在 hex 之上，格子上色之后再画。
     drawFreeDecor();
     drawResources();
+    drawMiniMap();
     for (var section = 1; section <= MAX_SECTIONS; section += 1) {
       var cell = $('statS' + section);
       if (!cell) continue;
@@ -2664,6 +3070,14 @@
   }
 
   function syncControls() {
+    syncToolStatus();
+    ['btnPaintMode', 'btnEraseMode'].forEach(function (id, index) {
+      var button = $(id);
+      if (!button) return;
+      var active = brush !== 'none' && eraseBrush === (index === 1);
+      button.className = active ? 'on' : '';
+      button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
     Array.prototype.forEach.call(document.querySelectorAll('#segCount button'), function (button) {
       button.classList.toggle('on', Number(button.dataset.count) === PLAYER_COUNT);
     });
@@ -2683,33 +3097,41 @@
     });
     var freeControls = $('freeDecorControls');
     if (freeControls) freeControls.hidden = false;
-    Array.prototype.forEach.call(document.querySelectorAll('.resourceItem'), function (button) {
-      button.classList.toggle('on', brush === 'resource' && resourceBrush === (button.dataset.resource || ''));
+    renderResourcePanel();
+    Array.prototype.forEach.call(document.querySelectorAll('#regionSection button'), function (button) {
+      var section = Number(button.dataset.section);
+      var active = section === regionBrush.section;
+      button.hidden = section > PLAYER_COUNT;
+      button.disabled = section > PLAYER_COUNT;
+      button.classList.toggle('on', active);
+      button.setAttribute('aria-pressed', active ? 'true' : 'false');
     });
-    var regionSection = $('regionSection');
-    Array.prototype.forEach.call(regionSection.options || [], function (option) {
-      option.hidden = Number(option.value) > PLAYER_COUNT;
-    });
-    $('regionSection').value = String(regionBrush.section);
     var selectedRegion = regions.find(function (region) {
       return region.section === regionBrush.section && region.depth === regionBrush.depth;
     });
     if (selectedRegion) regionBrush.tendency = selectedRegion.tendency;
     $('regionTendency').value = regionBrush.tendency || defaultRegionTendency(regionBrush.depth);
+    $('regionText').value = selectedRegion && typeof selectedRegion.text === 'string' ? selectedRegion.text : '';
+    $('regionText').disabled = !selectedRegion;
+    $('regionOptions').hidden = brush !== 'region' && partitionDepth === 'none';
+    $('btnClearRegion').disabled = brush !== 'region' && partitionDepth === 'none';
+    $('btnClearRegion').hidden = brush !== 'region' && partitionDepth === 'none';
     Array.prototype.forEach.call(document.querySelectorAll('#segRegionDepth button'), function (button) {
-      var active = button.dataset.depth === regionBrush.depth;
+      var active = button.dataset.depth === (brush === 'region' ? regionBrush.depth : partitionDepth);
       if (button.classList.toggle) button.classList.toggle('on', active);
       else if (active) button.classList.add('on');
       else button.classList.remove('on');
     });
     // 3 人锁"关"：disabled 比"点了弹错再自己回勾"清楚，也堵住键盘可达性绕过。
-    // 2 人**不锁** —— 上下镜像默认勾上（`defaultMirror`），但用户可以取消，好摆非对称装饰。
+    // 2 人**不锁** —— 上下镜像默认关闭（`defaultMirror`），用户可以主动开启。
     var locked = forcedMirror(PLAYER_COUNT) !== null;
     $('optMirrorV').checked = MIRROR_VERTICAL;
     $('optMirrorV').disabled = locked;
     $('optMirrorH').checked = MIRROR_HORIZONTAL;
     $('optMirrorH').disabled = PLAYER_COUNT <= 3;
     $('optBackground').checked = showBackground;
+    $('optGrid').checked = showGrid;
+    $('optShowArt').checked = !hideArtwork;
     $('hint2').hidden = PLAYER_COUNT !== 2;
     $('hint3').hidden = PLAYER_COUNT !== 3;
     $('hintHome').hidden = CITY_MODE !== 'select';
@@ -2754,6 +3176,39 @@
   }
 
   function wireEvents() {
+    var miniMap = $('miniMap'), miniMapDragging = false;
+    if (miniMap) {
+      miniMap.addEventListener('pointerdown', function (event) {
+        if (event.button !== 0 || event.isPrimary === false) return;
+        miniMapDragging = true;
+        navigateMiniMap(event.clientX, event.clientY);
+        if (miniMap.setPointerCapture && event.pointerId !== undefined) {
+          try { miniMap.setPointerCapture(event.pointerId); } catch (error) { /* synthetic pointer */ }
+        }
+        event.preventDefault();
+      });
+      miniMap.addEventListener('pointermove', function (event) {
+        if (miniMapDragging) navigateMiniMap(event.clientX, event.clientY);
+      });
+      ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function (type) {
+        miniMap.addEventListener(type, function () { miniMapDragging = false; });
+      });
+      window.addEventListener('pointerup', function () { miniMapDragging = false; });
+      window.addEventListener('blur', function () { miniMapDragging = false; });
+      miniMap.addEventListener('keydown', function (event) {
+        var key = event.key || '', rect = viewportRect();
+        if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home'].indexOf(key) < 0) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (key === 'Home') { resetView(); return; }
+        var bounds = miniMapBounds();
+        panX = Math.max(bounds.x, Math.min(-bounds.x, panX + (key === 'ArrowLeft' ? -rect.width / 4 : key === 'ArrowRight' ? rect.width / 4 : 0)));
+        panY = Math.max(bounds.y, Math.min(-bounds.y, panY + (key === 'ArrowUp' ? -rect.height / 4 : key === 'ArrowDown' ? rect.height / 4 : 0)));
+        applyView();
+      });
+    }
+    $('btnPaintMode').addEventListener('click', function () { setPaintMode(false); });
+    $('btnEraseMode').addEventListener('click', function () { setPaintMode(true); });
     Object.keys(TOOL_CATEGORY_BUTTONS).forEach(function (category) {
       var button = $(TOOL_CATEGORY_BUTTONS[category]);
       if (button) button.addEventListener('click', function () { setToolCategory(category); });
@@ -2809,11 +3264,19 @@
       if (event.button !== 0 && event.button !== 2) return;
       var local = pointerLocal(event);
       if (!local) return;
+      updateHover(local);
+      if (brush === 'none') return;
       var target = event.target && event.target.closest ? event.target.closest('[data-free-decor-id]') : null;
       if (target) {
         var targetId = Number(target.dataset.freeDecorId);
         var targetItem = freeDecorById(targetId);
         if (targetItem) {
+          if (eraseBrush && event.button === 0) {
+            if (targetItem.locked) flash('装饰已锁定，请先解锁再擦除', 'err');
+            else deleteFreeDecor(targetId);
+            event.preventDefault();
+            return;
+          }
           selectFreeDecor(targetId);
           if (event.button === 0 && !targetItem.locked) {
             var handle = target.dataset.handle || '';
@@ -2837,6 +3300,8 @@
       }
       // 自由装饰按地图坐标摆放，空白处即使不在任何格子上也能放置。
       if (decorKind === 'free' && brush === 'freeDecor') {
+        if (hideArtwork) { flash('请先显示美术资源，再摆放装饰', 'warn'); event.preventDefault(); return; }
+        if (eraseBrush) { event.preventDefault(); return; }
         if (event.button === 0 && decorBrush) addFreeDecor(decorBrush, local.x, local.y);
         else if (event.button === 0 && selectedFreeDecorId !== null) { selectedFreeDecorId = null; render(); }
         event.preventDefault();
@@ -2846,13 +3311,14 @@
       if (!cell) return;
       // 一次按下到抬起 = 一个撤销步；笔画期间只记起点快照。
       // 右键：资源笔刷删除资源点，其余格子笔刷擦成虚空。
-      var eraseMode = brush === 'resource' && resourceBrush ? 'resource-clear'
+      var eraseMode = brush === 'resource' ? 'resource-clear'
         : brush === 'home' ? 'home-clear'
+          : brush === 'partition' ? 'partition-clear'
           : brush === 'region' ? 'region-clear'
             : 'void';
       stroke = {
         before: snapshot(), last: local, erase: eraseMode,
-        mode: event.button === 2 ? eraseMode : undefined
+        mode: event.button === 2 || eraseBrush ? eraseMode : undefined
       };
       if (svg.setPointerCapture && event.pointerId !== undefined) {
         try { svg.setPointerCapture(event.pointerId); } catch (error) { /* 合成事件没有真实 pointerId */ }
@@ -2891,6 +3357,7 @@
         panX = panning.panX + (origin.x - local.x);
         panY = panning.panY + (origin.y - local.y);
         applyView();
+        updateHover(toLocal(event.clientX, event.clientY));
         return;
       }
       if (freeDecorDrag) {
@@ -2932,6 +3399,7 @@
       }
       if (!local) return;
       if (!stroke) { updateHover(local); return; }
+      updateHover(local);
       // 沿上一采样点到当前点补齐沿途所有格 —— 快速拖动不掉格。
       var mode = (event.buttons & 2) ? (stroke.erase || 'void') : stroke.mode;
       var batch = [], seen = {};
@@ -2951,7 +3419,10 @@
       event.preventDefault();
       zoomAt(event.clientX, event.clientY, event.deltaY < 0 ? 1.15 : 1 / 1.15);
     }, { passive: false });
-    window.addEventListener('resize', function () { fitCanvas(); });
+    window.addEventListener('resize', applyView);
+    if (typeof ResizeObserver === 'function' && svg.parentElement) {
+      new ResizeObserver(applyView).observe(svg.parentElement);
+    }
     $('zoomSlider').addEventListener('input', function () {
       var stageRect = $('stage').getBoundingClientRect();
       zoomTo(Number(this.value) / 100, stageRect.left + stageRect.width / 2, stageRect.top + stageRect.height / 2);
@@ -2963,12 +3434,21 @@
       var key = event.key || '';
       if ((event.ctrlKey || event.metaKey) && key.toLowerCase() === 's') {
         if (event.preventDefault) event.preventDefault();
+        if (event.target && event.target.id === 'regionText') setRegionText(event.target.value);
         savePreset();
         return;
       }
-      if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
-      // 1~5 切左侧分类（与另外两套编辑器的数字键语义一致：切工具组）
-      if (/^[1-5]$/.test(key)) {
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || event.isComposing ||
+          (event.target && event.target.isContentEditable)) return;
+      // 1 / 2 / 3 直接切换单格、7 格、19 格刷头，不切换当前工具分类。
+      if (/^[1-3]$/.test(key) && !event.ctrlKey && !event.metaKey && !event.altKey && !helpOpen()) {
+        if (stroke || freeDecorDrag || panning) return;
+        if (event.preventDefault) event.preventDefault();
+        setBrushRadius(Number(key) - 1);
+        return;
+      }
+      // 其余数字分类快捷键沿用。
+      if (/^[4-5]$/.test(key) && !event.ctrlKey && !event.metaKey && !event.altKey && !helpOpen()) {
         setToolCategory(['terrain', 'regions', 'resources', 'decor', 'advanced'][Number(key) - 1]);
         return;
       }
@@ -3003,6 +3483,12 @@
         }
         return;
       }
+      if (!event.altKey && !helpOpen() && (key.toLowerCase() === 'b' || key.toLowerCase() === 'e')) {
+        if (stroke || freeDecorDrag || panning) return;
+        if (event.preventDefault) event.preventDefault();
+        setPaintMode(key.toLowerCase() === 'e');
+        return;
+      }
       if (decorKind === 'free' && selectedFreeDecorId !== null && (key === 'Delete' || key === 'Backspace')) {
         if (event.preventDefault) event.preventDefault();
         deleteSelectedFreeDecor();
@@ -3034,6 +3520,7 @@
       brushes[i].addEventListener('click', function () {
         var value = this.dataset.brush;
         brush = isNaN(Number(value)) ? value : Number(value);
+        eraseBrush = false;
         syncControls();
       });
     }
@@ -3082,6 +3569,7 @@
     });
     $('optGrid').addEventListener('change', function () { showGrid = this.checked; render(); });
     $('optBackground').addEventListener('change', function () { showBackground = this.checked; render(); });
+    $('optShowArt').addEventListener('change', function () { setArtworkHidden(!this.checked); });
     // 2 人必开 / 3 人必关的强制收在 setMirror 里（唯一入口）；这里只把用户的勾传下去。
     $('optMirrorV').addEventListener('change', function () {
       setMirror(this.checked, MIRROR_HORIZONTAL);
@@ -3168,26 +3656,53 @@
       if (input) input.value = '';
       flash('已选中装饰「' + name + '」：点击画布放置，可拖动和调整大小', 'ok');
     });
-    $('resourceList').addEventListener('click', function (event) {
-      var target = event.target;
-      while (target && (!target.dataset || !target.dataset.resource)) target = target.parentNode;
-      if (!target || !target.dataset || !target.dataset.resource) return;
-      setResourceBrush(target.dataset.resource);
-      flash('已选择' + (RESOURCE_LABELS[target.dataset.resource] || target.dataset.resource) + '：点击中立格放置，右键删除', 'ok');
+    function chooseResourceGroup() {
+      try {
+        setResourceGroup($('resourceGroupId').value);
+        flash('已选择资源组合 ' + resourceGroupId + '：点击可通行格放置，右键删除', 'ok');
+      } catch (error) { flash(error.message, 'err'); }
+    }
+    $('btnResourcePlace').addEventListener('click', function () {
+      if (brush === 'resource' && resourceGroupId !== null && !eraseBrush) {
+        brush = 'none';
+        eraseBrush = false;
+        syncControls();
+        drawCursor([]);
+        updateReadout();
+        flash('已取消资源点放置', 'ok');
+        return;
+      }
+      chooseResourceGroup();
     });
-    $('resourceWeight').addEventListener('change', function () {
-      try { setResourceWeight(this.value); }
-      catch (error) { this.value = String(resourceWeight); flash(error.message, 'err'); }
+    $('resourceGroupId').addEventListener('input', function () {
+      // 编辑输入时暂停旧组合，避免尚未确认的新 ID 把上一组合写到地图。
+      resourceGroupId = null;
+      resourceBrush = '';
+      syncControls();
     });
-    $('regionSection').addEventListener('change', function () {
-      setRegionBrush(Number(this.value), regionBrush.depth);
+    $('resourceGroupId').addEventListener('keydown', function (event) {
+      if (event.key === 'Enter') { event.preventDefault(); chooseResourceGroup(); }
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('#regionSection button'), function (button) {
+      button.addEventListener('click', function () {
+        setPartitionBrush(Number(this.dataset.section), partitionDepth);
+      });
     });
     $('regionTendency').addEventListener('change', function () {
       setRegionTendency(this.value);
     });
+    $('regionText').addEventListener('change', function () {
+      setRegionText(this.value);
+    });
+    $('regionText').addEventListener('keydown', function (event) {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        setRegionText(this.value);
+      }
+    });
     Array.prototype.forEach.call(document.querySelectorAll('#segRegionDepth button'), function (button) {
       button.addEventListener('click', function () {
-        setRegionBrush(Number($('regionSection').value), this.dataset.depth);
+        setPartitionBrush(regionBrush.section, this.dataset.depth);
       });
     });
   }
@@ -3207,13 +3722,16 @@
     setToolCategory: setToolCategory,
     setSize: setSize, setPlayerCount: setPlayerCount, setCityMode: setCityMode, setMirror: setMirror,
     // 镜像策略：`forcedMirror` = 锁死项（非 null 才不可改），`defaultMirror` = 切人数时的默认值。
-    // 两者都暴露出来，探针/用例才能断言"默认开但不是强制"这件事本身，而不是只测副作用。
+    // 两者都暴露出来，探针/用例才能断言"默认关闭且可手动开启"这件事本身，而不是只测副作用。
     forcedMirror: forcedMirror, defaultMirror: defaultMirror,
     applyLayout: applyLayout, clearGrid: clearGrid,
     clearSelectedRegion: clearSelectedRegion, clearFreeDecor: clearFreeDecor, clearResourcePoints: clearResourcePoints,
     paint: paintCell, paintCells: paintCells, brushCells: brushCells, hexNeighbors: hexNeighbors,
     toLocal: toLocal, cellAtLocal: cellAtLocal, walkStroke: walkStroke, hexCenter: hexCenter,
-    setBrushRadius: setBrushRadius, undo: undo, redo: redo, resetView: resetView, zoomAt: zoomAt,
+    setBrushRadius: setBrushRadius, setPaintMode: setPaintMode, undo: undo, redo: redo, resetView: resetView, zoomAt: zoomAt,
+    setArtworkHidden: setArtworkHidden,
+    rulerLayout: rulerLayout,
+    miniMapBounds: miniMapBounds, miniMapViewRect: miniMapViewRect, miniMapMarkup: miniMapMarkup, navigateMiniMap: navigateMiniMap, detailsReduced: detailsReduced,
     setDecorBrush: setDecorBrush, setDecorLibrary: setDecorLibrary,
     setDecorKind: setDecorKind, addFreeDecor: addFreeDecor, selectFreeDecor: selectFreeDecor,
     moveSelectedFreeDecor: moveSelectedFreeDecor, updateSelectedFreeDecor: updateSelectedFreeDecor,
@@ -3222,11 +3740,12 @@
     freeDecorMarkup: freeDecorMarkup,
     rememberDecorName: rememberDecorName, groupDecorEntries: groupDecorEntries,
     setResourceBrush: setResourceBrush, setResourceWeight: setResourceWeight, resourceMarkup: resourceMarkup,
-    setRegionBrush: setRegionBrush, setRegionTendency: setRegionTendency,
+    setResourceGroup: setResourceGroup, addResourceGroupPoint: addResourceGroupPoint,
+    setPartitionBrush: setPartitionBrush, setRegionBrush: setRegionBrush, setRegionTendency: setRegionTendency, setRegionText: setRegionText,
     mapMetadataMarkup: mapMetadataMarkup,
     addResourcePoint: addResourcePoint, removeResourcePoint: removeResourcePoint,
-    // 视图矩形 / 背景图标记：判据要能断言「图盒 == viewBox」（见 viewportRect 的红字说明）。
-    viewportRect: viewportRect, backgroundMarkup: backgroundMarkup, fitCanvas: fitCanvas,
+    // 分别验证工作区视口和地图底图，避免扩宽视口时连带改变美术位置。
+    viewportRect: viewportRect, backgroundMarkup: backgroundMarkup, backgroundBounds: backgroundBounds, fitCanvas: fitCanvas,
     snapshot: snapshot, commitUndo: commitUndo,
     buildJSON: buildJSON, validate: validate,
     // 画布几何：与工程渲染间距 1:1（来源 ZCGameViewUtil）。探针与用例都靠它断言，
@@ -3243,7 +3762,7 @@
     state: function () {
       return {
         rows: ROWS, cols: COLS, playerCount: PLAYER_COUNT, cityMode: CITY_MODE,
-        brush: brush,
+        brush: brush, eraseBrush: eraseBrush, partitionDepth: partitionDepth,
         mirrorVertical: MIRROR_VERTICAL, mirrorHorizontal: MIRROR_HORIZONTAL,
         brushRadius: brushRadius, zoom: zoom, panX: panX, panY: panY,
         undoDepth: undoStack.length, redoDepth: redoStack.length,
@@ -3254,7 +3773,7 @@
         decorImages: Object.keys(decorImages).sort(),
         decorSizes: decorSizes,
         decorRememberSupported: decorRememberSupported,
-        resourceBrush: resourceBrush, resourceImages: Object.keys(resourceImages).sort(),
+        resourceBrush: resourceBrush, resourceGroupId: resourceGroupId, resourceImages: Object.keys(resourceImages).sort(),
         resourcePoints: cloneResourcePoints(resourcePoints),
         regions: cloneRegions(regions),
         homes: homes.slice(0, MAX_SECTIONS), paths: paths.length, json: buildJSON()

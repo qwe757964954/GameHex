@@ -313,6 +313,44 @@ function makeMapView() {
                 territoryHexSpawnDelays: () => new Map<number, number>(),
                 territoryHexSpawnBatchSeconds: () => 0,
             };
+            // 未解锁云（2026-10-23）：`TerritoryMapView` 又多了一条表现层依赖。本用例关注的
+            // 渲染分支与云无关（云的层序 / 帧序 / 消散在 `territory-cloud` 里单独测）⇒ 空壳，
+            // 成员按 MapView 实际调用面补齐（`attach` / `setFrames` / `sync` / `step` / `reset`）。
+            if (id === './TerritoryCloudView') return {
+                TERRITORY_CLOUD_LAYER_NODE: 'CloudLayer',
+                TerritoryCloudView: class {
+                    attach(): void {}
+                    setFrames(): void {}
+                    sync(): void {}
+                    step(): void {}
+                    reset(): void {}
+                },
+            };
+            // 未解锁云的**格位集合**（2026-10-23）：MapView 多了一条来自 model 的**值导入**
+            // （`territoryCloudCells`），不只是 class。本用例的判据与云无关 ⇒ 给空集合
+            // （视图那边全是空壳，没人读这些常量）。
+            if (id === '../model/TerritoryCloud') return {
+                territoryCloudCells: () => [],
+                TERRITORY_CLOUD_SCALE: 1,
+                TERRITORY_CLOUD_ART_OFFSET_Y: -21,
+            };
+            // 通关换色（2026-10-23 第三轮）：MapView 的又一条表现层依赖，与本用例关注的
+            // 「建筑抖一次」无关 ⇒ 空壳（曲线在 `territory-hex-recolor` 里单独测）。
+            if (id === './TerritoryHexRecolor') return {
+                TERRITORY_HEX_RECOLOR_NEW_NODE: 'HexRecolorNew',
+                TERRITORY_HEX_RECOLOR_OLD_NODE: 'HexRecolorOld',
+                TerritoryHexRecolor: class {
+                    step(): void {}
+                    stop(): void {}
+                    reset(): void {}
+                    isPlaying() { return false; }
+                    play(): void {}
+                    hideGround(): void {}
+                },
+            };
+            if (id === '../model/TerritoryHexRecolor') return {
+                territoryHexRecolorDelays: () => new Map<number, number>(),
+            };
             throw new Error(`Unexpected dependency: ${id}`);
         },
     });

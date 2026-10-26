@@ -143,6 +143,14 @@ interface ZCRenderWorldOptions {
      *  由 `ZCGameLoader` 预加载、随 `ZCGamePreparedResources` 一路传进来。
      */
     artifactIconFrame?: SpriteFrame | null;
+    /**
+     * **自选地图局**中立资源格的占位图（`image/gameui/whh`，金色问号）。
+     *
+     *  `cityMode: 'select'` 时这盘的中立资源是进游戏才随机的 ⇒ 选点阶段不能让玩家
+     *  看出哪格是宝箱 / 金矿 / 金币 / 神器点，一律盖问号（见 `ZCHexView` 的
+     * `hideNeutralResourceLabel` 分支）。缺省 ⇒ 退回"只显示地块图标"（旧表现）。
+     */
+    unknownResourceFrame?: SpriteFrame | null;
     /** 金币飞行特效的贴图（`image/map-resource/gold`）；缺省 ⇒ 金币仍照常飞（透明图）。 */
     goldCoinFrame?: SpriteFrame | null;
     /**
@@ -494,6 +502,9 @@ export class ZCGameRenderWorld {
             view.ensureRuinsFrame(this.options.buildingFrames);
             // 中立资源点「神器充能」格显示玩家携带的那件神器：整局一张，逐个视图喂同一份。
             view.setArtifactChargeFrame(this.options.artifactIconFrame ?? null);
+            // 自选地图局的中立资源格盖问号（资源进游戏才随机，别剧透）。非自选局视图根本不会
+            // 用这张帧（`hideNeutralResourceLabel` 为假），喂进去也无副作用。
+            view.setUnknownResourceFrame(this.options.unknownResourceFrame ?? null);
             // 兵力资源点（`unit_cap`）按配置站N 个中立待机兵：卡 id + 数量都来自
             // `neutralResource` 表（经渲染层转成骨骼 prefab），逐个视图喂同一份。
             this.injectResourceUnits(view);

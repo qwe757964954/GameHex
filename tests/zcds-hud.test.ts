@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
+import { buildSeatProfiles, RANK_FALLBACK_NAMES } from '../assets/script/app/zcds/model/ZCRankBoard';
 
 /**
  * ZCGameViewUtil 在**模块作用域**就 `new Color(...)` 建了四个血表配色常量，
@@ -626,6 +627,27 @@ test('视口只查一次：缓存之后每帧（applyMapOffset）不再 getCompo
     const HUD_SRC = readFileSync('assets/script/app/zcds/view/ZCGameHUDView.ts', 'utf8');
     const probesInSrc = (HUD_SRC.match(/mapViewport\.getComponent\(UITransform\)/g) ?? []).length;
     assert.equal(probesInSrc, 1, `mapViewport.getComponent 只该有 1 处（mapViewportTransform），实际 ${probesInSrc} 处`);
+});
+
+test('SLG 空名字 NPC 在选点阶段和正式战斗均显示第二行敌方信息', async () => {
+    const { hud, model } = createHud();
+    hud.onLoad();
+    hud.initialize();
+    const profiles = buildSeatProfiles([
+        { campId: 1, roleId: '22211', name: '指挥官:22211', avatarId: '10001' },
+        { campId: 2, roleId: '0', name: '', avatarId: '0' },
+    ], '22211');
+    hud.setSeatProfiles(profiles);
+    assert.equal(hud.playerList.totalCount, 2);
+    assert.equal(hud.rowCalls[1].name, RANK_FALLBACK_NAMES.enemy);
+    hud.rowCalls.length = 0;
+    hud.render(model);
+    assert.equal(hud.rowCalls[1].owner, 'enemy');
+    assert.equal(hud.rowCalls[1].name, RANK_FALLBACK_NAMES.enemy);
+    assert.equal(hud.rowCalls[1].unitText, '2/100');
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.equal(hud.playerList.totalCount, 2, '空头像异步返回不能删除 NPC 行');
 });
 
 test('头像异步到货：HUD 已销毁时不刷行（CCObject.isValid 不能删）', async () => {

@@ -2,6 +2,7 @@ import type { ZCGamePreparedResources } from './ZCGameLoader';
 import type { ZCMatchConfig } from '../model/ZCMatchConfig';
 import type { IRankSeatProfile } from '../model/ZCRankBoard';
 import type { ZCOwner } from '../model/ZCMapConfig';
+import type { IZCSlgBattleType } from '../../battle/BattleStartModel';
 
 export interface IZCGamePveContext {
     readonly chapterId: number;
@@ -18,4 +19,5 @@ export interface IZCGameEntry {
     readonly playerAvatars: Readonly<{ player: string; enemy: string }> | null;
     readonly seatProfiles: readonly (readonly [ZCOwner, IRankSeatProfile])[];
     readonly pveContext: IZCGamePveContext | null;
+    readonly slgBattleType?: IZCSlgBattleType | null;
 }

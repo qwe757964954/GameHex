@@ -1,4 +1,5 @@
-import { resources, SpriteFrame } from 'cc';
+import { SpriteFrame } from 'cc';
+import { routedLoad } from '../common/RoutedResource';
 import {
     artKey,
     CARD_ART_ROOT,
@@ -42,7 +43,7 @@ export function loadArt(name: string, root: string): Promise<SpriteFrame | null>
     const generation = cacheGeneration;
 
     const task = new Promise<SpriteFrame | null>((resolve) => {
-        resources.load(spriteFramePath(root, name), SpriteFrame, (error, frame) => {
+        routedLoad(spriteFramePath(root, name), SpriteFrame, (error, frame) => {
             if (error || !frame || !frame.isValid) {
                 console.warn(`[ArtIcons] 图标加载失败：${key}`, error);
                 resolve(null);
@@ -100,7 +101,7 @@ export function loadIconByArtPath(artPath: string): Promise<SpriteFrame | null> 
 
     const framePath = spriteFramePathOf(artPath);
     const task = new Promise<SpriteFrame | null>((resolve) => {
-        resources.load(framePath, SpriteFrame, (error, frame) => {
+        routedLoad(framePath, SpriteFrame, (error, frame) => {
             if (error || !frame || !frame.isValid) {
                 console.warn(`[ArtIcons] 图标加载失败：${framePath}`, error);
                 resolve(null);

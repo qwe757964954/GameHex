@@ -134,10 +134,20 @@ export function bigMapMonsterUnlock(
  * 攻打城池前的「势力范围」检查 —— 文档规定：
  * 基地不在城池势力范围内时，攻城伤害 −{offRangeDamageCutPct}%。
  *
+ * **判据（2026-10-23 后端补 `SlgGameInfo.toCampId` 后改口径）**：
+ * - 有服务器下发的 `toCampId`（`> 0`）时，**它就是唯一真源** —— 在不在范围内 = 是不是我这座城；
+ *   不再用几何距离近似（`radiateCapacity` 是配置半径，与服务器实际划的势力范围不是一回事）。
+ * - `toCampId === 0` 表示「还没收到包 / 尚未归属」，此时才回退 `radiateCapacity` 距离判定。
+ *
  * 这里只回答「在不在范围内」，削减数值由战斗模型取配置；
  * 这样界面能分开展示「距离过远，伤害 -20%」，而不是把这个惩罚藏在伤害数字里。
  */
-export function bigMapWithinCityRange(city: IBigMapCityConfig, hexDistance: number): boolean {
+export function bigMapWithinCityRange(
+    city: IBigMapCityConfig,
+    hexDistance: number,
+    playerCampId = 0,
+): boolean {
+    if (playerCampId > 0) return city.cityId === playerCampId;
     return hexDistance <= city.radiateCapacity;
 }
 

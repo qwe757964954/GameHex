@@ -266,6 +266,17 @@ test('F: 名字/头像缺失 ⇒ 兜底名 + 空头像键（视图据此保留 p
     assert.equal(profiles.get('player')?.headKey, '');
 });
 
+test('F: SLG 两方回包中的 NPC 名字为空时保留敌方席位并补齐名称', () => {
+    const profiles = buildSeatProfiles(seats(
+        { campId: 1, roleId: '22211', name: '指挥官:22211', avatarId: '10001' },
+        { campId: 2, roleId: '0', name: '', avatarId: '0' },
+    ), '22211');
+    assert.equal(profiles.size, 2);
+    assert.equal(profiles.get('player')?.name, '指挥官:22211');
+    assert.equal(profiles.get('enemy')?.name, RANK_FALLBACK_NAMES.enemy);
+    assert.equal(profiles.get('enemy')?.headKey, '0', '不伪造服务端未给出的头像');
+});
+
 test('F: selfRoleId 为 null（观战 / 未匹配到）⇒ 按 campId 顺序占槽，不硬塞 player', () => {
     const profiles = buildSeatProfiles(
         seats(

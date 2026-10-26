@@ -46,7 +46,6 @@ const rows = Object.values(TERRITORY_CHEST_TIER).map((tier) => {
         openEnd: spec.lidStart + spec.lidSeconds,
         lidStart: spec.lidStart,
         lidEnd: spec.lidStart + spec.lidSeconds,
-        flashAt: spec.flashStart,
         flyStart: spec.flyStart,
         flyEnd: lastReward,
         lastReward,

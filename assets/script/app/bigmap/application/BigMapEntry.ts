@@ -1,7 +1,13 @@
-import { director, Layers, Node, UITransform, view, Widget } from 'cc';
+import type { SessionAssetService } from '../../../core/asset/SessionAssetService';
+import { createZCBattlePreload } from '../../zcds/application/ZCBattlePreparation';
+import { director, Layers, Node, SpriteFrame, UITransform, view, Widget } from 'cc';
 import type { AssetService } from '../../../core/asset/AssetService';
 import type { ConfigService } from '../../../core/config/ConfigService';
+import { GameRoute } from '../../../core/runtime/GameRoute';
+import { ProcedureManager } from '../../../framework/procedure/ProcedureManager';
+import { startBattle } from '../../battle/BattleStartService';
 import { readRoleRow } from '../../main/MainRoleRow';
+import { HeadArt } from '../../HeadArt';
 import { toIdString } from '../../net/RequestGuard';
 import { TerritoryChapterInfoRepository } from '../../territory/application/TerritoryChapterInfoRepository';
 import { createTerritorySaveStore } from '../../territory/application/TerritorySaveStoreAdapter';
@@ -19,6 +25,7 @@ import { BigMapPage } from '../view/BigMapPage';
 import { mountBigMapNavigation } from '../view/BigMapNavigation';
 import type { IBigMapLayout } from '../model/BigMapLayout';
 import type { IBigMapConfig } from '../model/BigMapTypes';
+import { BIGMAP_BATTLE_TEXT } from '../model/BigMapBattle';
 
 /**
  * 大世界入口（**唯一一处**把「配置 / 存档 / 冒险进度 / 页面」接起来的地方）。
@@ -61,6 +68,9 @@ export class BigMapEntry {
      * 不注入也能玩：布局加载降级为「按种子生成世界」。这样入口那条链
      * （`MainTabHost` 的「世界」格 → 本类）不用为了接布局改签名。
      */
+    private sessionAssets: SessionAssetService | null = null;
+    setSessionAssetService(service: SessionAssetService): void { this.sessionAssets = service; }
+
     setAssetService(assets: AssetService | null): void {
         this.assets = assets;
         this.layoutCache = undefined;
@@ -153,6 +163,25 @@ export class BigMapEntry {
                 // 单机档：NPC 模拟榜。联机版换成走服务器的 provider，这里一行不改。
                 rankProvider: new NpcBigMapRankProvider(config),
                 campRepository: new BigMapCampRepository(new GameNetBigMapCampGateway()),
+                startBattle: owner ? async (battleType, targetConfigId, isPresenterCurrent) => {
+                    const isCurrent = (): boolean => revision === this.openRevision && root.isValid
+                        && this.isSaveOwnerCurrent(owner) && isPresenterCurrent();
+                    if (!isCurrent()) return { ok: false, message: BIGMAP_BATTLE_TEXT.closed };
+                    void this.sessionAssets?.warmupBattle?.();
+                    const battle = await startBattle(battleType, [String(targetConfigId)], root, isCurrent);
+                    if (!isCurrent()) return { ok: false, message: BIGMAP_BATTLE_TEXT.closed };
+                    if (!battle) return { ok: false, message: BIGMAP_BATTLE_TEXT.failed };
+                    const preload = this.assets ? createZCBattlePreload(this.sessionAssets?.reusableAssets ?? this.assets,
+                        configs, Promise.resolve(battle)) : undefined;
+                    ProcedureManager.navigate(GameRoute.Battle, {
+                        battle,
+                        slgBattleType: battleType,
+                        preload,
+                        selfRoleId: owner.roleId,
+                    });
+                    this.close();
+                    return { ok: true, message: '' };
+                } : undefined,
                 slgRepository: owner ? new BigMapSlgRepository(
                     new GameNetBigMapSlgGateway(() => revision === this.openRevision && this.isSaveOwnerCurrent(owner)),
                     config, () => Math.floor(Date.now() / 1000),
@@ -166,9 +195,25 @@ export class BigMapEntry {
             this.root = root;
             this.presenter = presenter;
             this.onCloseCallback = options?.onClose ?? null;
-            await page.initialize(presenter, () => this.close(), this.assets, layout?.background ?? '', navigationHeight);
-            if (revision !== this.openRevision || !root.isValid) return;
-            await presenter.initializeSlg();
+            // 基地写操作由 serverBaseReady 拦截；同步回包不应挡住世界浏览，更不能等到缺包超时才亮页。
+            void presenter.initializeSlg().catch((error: unknown) => {
+                if (revision === this.openRevision && root.isValid && this.isSaveOwnerCurrent(owner)) {
+                    console.warn('[BigMapEntry] 基地信息同步失败', error);
+                }
+            });
+            await page.initialize(presenter, () => this.close(), this.assets, layout?.background ?? '', navigationHeight, async (scope) => {
+                const role = readRoleRow();
+                if (!role || scope.disposed) return null;
+                const resolver = await HeadArt.loadHeadArtResolver(configs);
+                if (scope.disposed) return null;
+                return HeadArt.loadHeadFrame(toIdString(role.img), (name, root) => (
+                    this.assets.load(`${root}/${name}/spriteFrame`, SpriteFrame, { scope })
+                ), resolver);
+            }, (isOpen) => {
+                if (revision !== this.openRevision || !root.isValid) return;
+                if (isOpen) void this.sessionAssets?.warmupBattle?.();
+                else this.sessionAssets?.pauseWarmup?.();
+            });
             if (revision !== this.openRevision || !root.isValid) return;
             if (!this.isSaveOwnerCurrent(owner)) {
                 this.close();
@@ -185,6 +230,7 @@ export class BigMapEntry {
     }
 
     close(): void {
+        this.sessionAssets?.pauseWarmup?.();
         this.openRevision += 1;
         this.opening = false;
         this.navigationRestore?.();

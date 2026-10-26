@@ -29,7 +29,7 @@ test('九组新增 SLG 请求可编码，响应与两组广播可按真实消息
     const queue = { queueId: 1, type: 1, buildInstId: instanceId };
     const cases = [
         ['CmdSlgActionUpdate', {}, { info: { nextRevertTime: 20 } }],
-        ['CmdSlgGameInfo', {}, {}],
+        ['CmdSlgGameInfo', {}, { info: { maxMonsterLevel: 13 } }],
         ['CmdSlgBuildInfo', {}, { info: { builds: [build], queues: [queue], unlockQueue: 1 } }],
         ['CmdSlgBuild', { buildingId: 71002, position: 0, instant: 0 }, { build, queue }],
         ['CmdSlgBuildUpgrade', { buildInstId: instanceId, instant: 0 }, { build, queue }],
@@ -53,7 +53,27 @@ test('九组新增 SLG 请求可编码，响应与两组广播可按真实消息
     for (const [name, id] of [['CmdSlgGameInfoBroMsg', 1546899562], ['CmdSlgBuildInfoBroMsg', 1860748310]] as const) {
         assert.equal(coder.isBro(id), true);
         assert.equal(coder.getRspNameById(id), name);
-        assert.ok(coder.decodeDataById(id, new Uint8Array()));
+        const value = name === 'CmdSlgGameInfoBroMsg' ? { info: { maxMonsterLevel: 13 } } : {};
+        const bytes = root.lookupType(`com.xkhy.tafang.cmd.${name}`).encode(value).finish();
+        assert.ok(coder.decodeDataById(id, bytes));
+    }
+});
+
+test('r826 玩法响应与广播包含最高击杀野怪等级，并同步据点角色伤害排行枚举', async () => {
+    assert.equal(messages.SlgGameInfo.fields.maxMonsterLevel.type, 'uint32');
+    assert.equal(messages.CmdSlgGameInfoRspMsg.fields.info.rule, 'required');
+    assert.equal(messages.CmdSlgGameInfoBroMsg.fields.info.rule, 'required');
+    assert.equal(messages.CmdRankType.values.SLG_CAMP_ROLE_HARM_RANK, 53);
+    assert.equal(protobufRoot.com.xkhy.tafang.cmd.CmdRankType.SLG_CAMP_ROLE_HARM_RANK, 53);
+    const coder = new ProtoCoder();
+    await coder.init();
+    for (const level of [0, 13]) {
+        for (const name of ['CmdSlgGameInfoRspMsg', 'CmdSlgGameInfoBroMsg']) {
+            const type = root.lookupType(`com.xkhy.tafang.cmd.${name}`);
+            const bytes = type.encode({ info: { maxMonsterLevel: level } }).finish();
+            const decoded = coder.decodeDataByName(name, bytes);
+            assert.equal(decoded.info.maxMonsterLevel, level);
+        }
     }
 });
 

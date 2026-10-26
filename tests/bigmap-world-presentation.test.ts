@@ -2,6 +2,23 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as geometry from '../assets/script/app/bigmap/view/BigMapWorldLayout';
 
+test('植物建筑按脚底落格，顶部编号牌不压建筑且可准确点击', () => {
+    assert.equal(typeof geometry.bigMapMarkerLayout, 'function');
+    const marker = geometry.bigMapMarkerLayout(120, 160);
+    assert.equal(marker.iconY - marker.height / 2, -16);
+    assert.equal(marker.badgeY - geometry.BIGMAP_MARKER_BADGE_HEIGHT / 2, 147);
+    const layout = geometry.buildBigMapWorldLayout(1, 1);
+    assert.equal(geometry.pickBigMapMarker(layout, [{ hexId: 0, ...marker }], 0, 162), 0);
+    assert.equal(geometry.pickBigMapMarker(layout, [{ hexId: 0, ...marker }], 0, 230), -1);
+});
+
+test('主城头像气泡的完整高度参与点击判定，不沿用矮编号牌的范围', () => {
+    const layout = geometry.buildBigMapWorldLayout(1, 1);
+    const marker = { hexId: 0, width: 120, height: 160, iconY: 64, badgeY: 210, badgeHeight: 110 };
+    assert.equal(geometry.pickBigMapMarker(layout, [marker], 0, 260), 0);
+    assert.equal(geometry.pickBigMapMarker(layout, [marker], 0, 266), -1);
+});
+
 test('原稿地块按 147×96 等比铺合，邻列共边且点击落在新台面内', () => {
     assert.equal(typeof geometry.buildBigMapWorldLayout, 'function');
     const layout = geometry.buildBigMapWorldLayout(3, 3);

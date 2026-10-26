@@ -8,7 +8,7 @@ const MAIN_ROOT_URL = 'ui/main/MainRoot';
 interface MainEntryParams {
     readonly onProgress?: (ratio: number, message: string) => void;
     readonly onError?: (message: string) => void;
-    readonly initialTab?: number | 'territory';
+    readonly initialTab?: number | 'territory' | 'world';
 }
 
 /**
@@ -61,9 +61,11 @@ export class ProcedureMain extends ProcedureBase {
         tabHost?.setAssetService(this.assets);
         // 配置入口也给一份：大世界入口要读 `BigMap-*` 表（同样必须在 setParent 之前）。
         tabHost?.setConfigService(this.configs);
+        tabHost?.setSessionAssetService(this.sessionAssets);
         if (tabHost && params?.initialTab !== undefined) {
             // 章节战斗结束回到主城地图；领地已成为底部主 tab。
-            tabHost.defaultTab = params.initialTab === 'territory' ? MainTab.Territory : params.initialTab;
+            tabHost.defaultTab = params.initialTab === 'territory' ? MainTab.Territory
+                : params.initialTab === 'world' ? MainTab.World : params.initialTab;
         }
         this.mainNode.setParent(this.host);
         this.mainNode.setPosition(Vec3.ZERO);

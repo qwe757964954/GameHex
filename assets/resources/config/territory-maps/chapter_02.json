@@ -1,9 +1,9 @@
 {
   "version": 1,
   "mapKind": "territoryChapter",
-  "id": "chapter_smile",
+  "id": "chapter_02",
   "name": "笑脸章",
-  "chapterId": 5,
+  "chapterId": 2,
   "rows": 20,
   "columns": 20,
   "startCellId": 369,

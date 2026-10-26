@@ -147,6 +147,18 @@ export const TERRITORY_ART_ROOT = `${ART_ROOT}/territory`;
  */
 export const TERRITORY_CHEST_ART_ROOT = `${ART_ROOT}/territory/chest`;
 
+/**
+ * 章节地图的**未解锁云**（覆盖没露出来的格位）。
+ *
+ *  两套图同目录、按前缀区分，**别混着 loadDir 一把取**：
+ *  · `cloud_idle_0..4` = 未解锁的**静止**图（2026-10-23 起只用第 0 张，1~4 暂时不用）；
+ *  · `cloud_dissolve_0..1` = 解锁消散（2 帧：裂成环 → 几乎散尽），**唯一会播的序列**。
+ *
+ *  ⚠️ 图在 `image/territory/` 这棵树的**同一份** `auto-atlas.pac` 覆盖范围内（子目录不放 pac），
+ *  所以这几张被打进同一张图集，同帧的云能合批。
+ */
+export const TERRITORY_CLOUD_ART_ROOT = `${ART_ROOT}/territory/cloud`;
+
 /** 章节领地专用 HUD：标题框与章节按钮。 */
 export const TERRITORY_UI_ART_ROOT = `${ART_ROOT}/territory/ui`;
 /**
@@ -180,6 +192,20 @@ export const MONTHCARD_ART_ROOT = `${ART_ROOT}/monthcard`;
 
 /** 通用 UI 图：问号、血条、进度条等。 */
 export const GAMEUI_ART_ROOT = `${ART_ROOT}/gameui`;
+
+/**
+ * **自选地图局**里中立资源格的占位图：`image/gameui/whh`（118×138 的金色问号）。
+ *
+ * 🔴 2026-10-23 山猫口径：*「自选的时候，中立资源，使用这个图标，不让玩家看到箱子是什么，
+ * 因为中立资源是进游戏根据随机」*。
+ *
+ * `cityMode: 'select'` 的对局在**选点阶段**还不能让玩家看出哪格是宝箱 / 金矿 / 金币 / 神器点
+ * （资源是进游戏才随机的）⇒ 一律盖这张问号，选完点开始打时才露出真图。
+ *
+ * ⚠️ 与 `image/gameui/zd_faqi`（91×94）无关：那张是 HUD 神器按钮的通用图。
+ * 也与 HUD 底部神器按钮**无关** —— 那个显示的是玩家自己的神器，不遮蔽（2026-10-23 首版改错过一次）。
+ */
+export const NEUTRAL_RESOURCE_UNKNOWN_ICON_NAME = 'whh';
 
 /**
  * 「对局内排行榜」美术（蓝湖「排行榜」设计稿，11 张切图）。

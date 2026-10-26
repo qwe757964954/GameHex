@@ -65,16 +65,16 @@ function load(file: string, dependencies: Record<string, unknown>): any {
 }
 
 /** 装一个 Service，返回它 + 拿到广播回调的句柄。 */
-function serviceFixture(decoder?: (bytes: unknown) => unknown) {
+function serviceFixture(decoder?: (bytes: unknown, name: string) => unknown) {
     const added: Array<{ name: string; fire: (msg: unknown) => void }> = [];
     let decodeCalls = 0;
     let decodeResult: unknown = null;
     let decodeThrows = false;
     const service = load(SERVICE, {
         '../../framework/net/ProtoMgr': {
-            ProtoMgr: { get: () => ({ decodeDataByName: (_name: string, bytes: unknown) => {
+            ProtoMgr: { get: () => ({ decodeDataByName: (name: string, bytes: unknown) => {
                 decodeCalls += 1;
-                if (decoder) return decoder(bytes);
+                if (decoder) return decoder(bytes, name);
                 if (decodeThrows) throw new Error('decode 炸了');
                 return decodeResult;
             } }) },
@@ -86,6 +86,7 @@ function serviceFixture(decoder?: (bytes: unknown) => unknown) {
         },
         '../net/RequestGuard': { toCount },
         './BattleResultTable': BattleResultTable,
+        './BattleStartModel': { ZC_BATTLE_TYPE_CHAPTER },
     });
     return {
         BattleResultService: service.BattleResultService,
@@ -346,6 +347,63 @@ test('C5 章节局也要发完成上报（`CmdFinishBattleReqMsg`）—— 漏�
         '等待器必须先于完成上报建立，避免快速广播丢失');
     assert.ok(open.indexOf('finishBattle') < open.indexOf('showSettlement('),
         '先发上报、再等广播；顺序反了就是等一个没被触发的广播');
+});
+
+test('SLG 两种结果按对应协议解码：1003 奖励，1004 战功与奖励，其他类型不能唤醒等待器', async () => {
+    for (const [battleType, messageName] of [[1003, 'CmdSlgMonsterBattleResultInfo'], [1004, 'CmdSlgCampBattleResultInfo']] as const) {
+        const decodedNames: string[] = [];
+        const f = serviceFixture((bytes, name) => {
+            decodedNames.push(name);
+            return cmd[name].decode(bytes);
+        });
+        f.BattleResultService.ensureListening();
+        const waiting = f.BattleResultService.waitForBattleResult(battleType, 1000);
+        f.added[0].fire({ battleType: battleType === 1003 ? 1004 : 1003, code: 1, dataBytes: new Uint8Array([1]) });
+        assert.equal(f.countDecode(), 0);
+        const bytes = cmd[messageName].encode(cmd[messageName].create({
+            cmdGoods: [{ resId: 18003, number: '7' }], warScore: 1234,
+        })).finish();
+        f.added[0].fire({ battleType, code: 2, dataBytes: bytes });
+        const result = await waiting;
+        assert.equal(result.code, 2);
+        assert.equal(result.goods[0].resId, 18003);
+        assert.equal(result.goods[0].number, 7);
+        assert.equal(result.treasureId, 0);
+        assert.equal(result.warScore, battleType === 1004 ? 1234 : undefined);
+        assert.deepEqual(decodedNames, [messageName]);
+    }
+});
+
+test('SLG 无奖励/零战功、超时、重复等待与取消不会串进下一场章节结算', async () => {
+    const f = serviceFixture();
+    f.BattleResultService.ensureListening();
+    const first = f.BattleResultService.waitForBattleResult(1004, 1000);
+    const second = f.BattleResultService.waitForBattleResult(1003, 20);
+    assert.equal(await first, null);
+    assert.equal(await second, null);
+    const empty = f.BattleResultService.waitForBattleResult(1004, 1000);
+    f.added[0].fire({ battleType: 1004, code: 1, dataBytes: new Uint8Array() });
+    assert.equal((await empty).warScore, undefined, '未下发战功时保持未知，不补造 0');
+    f.setDecode({ warScore: 0, cmdGoods: [] });
+    const zero = f.BattleResultService.waitForBattleResult(1004, 1000);
+    f.added[0].fire({ battleType: 1004, code: 1, dataBytes: new Uint8Array([1]) });
+    assert.equal((await zero).warScore, 0);
+    const chapter = f.BattleResultService.waitForChapterResult(20);
+    f.added[0].fire({ battleType: 1004, code: 1, dataBytes: new Uint8Array([1]) });
+    assert.equal(await chapter, null);
+});
+
+test('据点结算真实字节未携带 optional warScore 时，不把 protobuf 原型默认零当成已下发', async () => {
+    const f = serviceFixture((bytes, name) => cmd[name].decode(bytes));
+    f.BattleResultService.ensureListening();
+    const waiting = f.BattleResultService.waitForBattleResult(1004, 1000);
+    const bytes = cmd.CmdSlgCampBattleResultInfo.encode(cmd.CmdSlgCampBattleResultInfo.create({
+        cmdGoods: [{ resId: 18003, number: '1' }],
+    })).finish();
+    f.added[0].fire({ battleType: 1004, code: 1, dataBytes: bytes });
+    const result = await waiting;
+    assert.equal(result.goods.length, 1);
+    assert.equal(result.warScore, undefined);
 });
 
 test('C6 领地进度只在收到服务端章节胜负后回写', () => {

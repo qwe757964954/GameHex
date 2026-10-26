@@ -3,18 +3,16 @@ import { GameNet } from '../net/GameNet';
 import { toCount } from '../net/RequestGuard';
 import {
     BATTLE_RESULT_WAIT_MS,
-    chapterBattleResultOf,
-    isChapterBattleResult,
+    battleResultOf,
+    battleResultMessageName,
 } from './BattleResultTable';
 import type { IZCChapterBattleResult } from './BattleResultTable';
+import { ZC_BATTLE_TYPE_CHAPTER } from './BattleStartModel';
 
 export interface IZCChapterBattleOutcome extends IZCChapterBattleResult {
     /** CmdBattleResultBroMsg.code: 1 胜，2 负。 */
     readonly code: 1 | 2;
 }
-
-/** 章节战斗结算信息在 proto 里的类名（`CmdBattleResultBroMsg.dataBytes` 按它解）。 */
-const CHAPTER_RESULT_TYPE = 'CmdChapterBattleResultInfo';
 
 /** 广播消息名（`CmdBattleResultBroMsg`，MessageId `921618703`）。 */
 const BATTLE_RESULT_BRO = 'CmdBattleResultBroMsg';
@@ -45,6 +43,7 @@ class BattleResultServiceClass {
 
     /** 当前等待者；同一时刻只允许一个（新的会先把旧的按「没等到」兑现）。 */
     private waiter: ((result: IZCChapterBattleOutcome | null) => void) | null = null;
+    private waiterBattleType: number | null = null;
 
     /** 超时定时器。 */
     private timer: ReturnType<typeof setTimeout> | null = null;
@@ -67,26 +66,35 @@ class BattleResultServiceClass {
      * 永远兑现、不 reject：广播到了给结果，超时给 `null`（调用方两种都按「照常弹页」处理）。
      */
     waitForChapterResult(timeoutMs: number = BATTLE_RESULT_WAIT_MS): Promise<IZCChapterBattleOutcome | null> {
+        return this.waitForBattleResult(ZC_BATTLE_TYPE_CHAPTER, timeoutMs);
+    }
+
+    waitForBattleResult(battleType: number, timeoutMs: number = BATTLE_RESULT_WAIT_MS): Promise<IZCChapterBattleOutcome | null> {
         // 上一轮的等待器先作废（否则它永远悬着，调用方 await 卡死）。
         this.finish(null);
+        if (!battleResultMessageName(battleType)) return Promise.resolve(null);
+        this.waiterBattleType = battleType;
         return new Promise<IZCChapterBattleOutcome | null>((resolve) => {
             this.waiter = resolve;
             this.timer = setTimeout(() => {
-                console.warn(`[BattleResult] 等章节战斗结算广播超时（${timeoutMs}ms），按无奖励结算`);
+                console.warn(`[BattleResult] 等 ${battleType} 结算广播超时（${timeoutMs}ms），按无奖励结算`);
                 this.finish(null);
             }, Math.max(0, timeoutMs));
         });
     }
 
-    /** 广播落地：认 battleType，1002 解 `CmdChapterBattleResultInfo` 喂等待器。 */
+    /** 广播只能唤醒正在等待同一种战斗的对局；不缓存历史结果。 */
     private onBroadcast(msg: unknown): void {
         const row = (msg ?? {}) as { battleType?: unknown; code?: unknown; dataBytes?: unknown };
-        if (!isChapterBattleResult(toCount(row.battleType))) return;
+        const battleType = toCount(row.battleType);
+        if (!this.waiter || battleType !== this.waiterBattleType) return;
+        const messageName = battleResultMessageName(battleType);
+        if (!messageName) return;
         const code = toCount(row.code);
         if (code !== 1 && code !== 2) return;
 
-        const result = chapterBattleResultOf(this.decodeChapterData(row.dataBytes));
-        console.log(`[BattleResult] 章节战斗结算广播到达：奖励 ${result.goods.length} 条、宝箱 ${result.treasureId}`);
+        const result = battleResultOf(battleType, this.decodeResultData(messageName, row.dataBytes));
+        console.log(`[BattleResult] ${battleType} 结算广播到达：奖励 ${result.goods.length} 条`);
         this.finish({ ...result, code });
     }
 
@@ -99,13 +107,13 @@ class BattleResultServiceClass {
      * 不写 `instanceof Uint8Array`：跨 realm（Node 用例 / 不同 JS 上下文）会假阴性，
      * 而「拿不到内容」这件事 `length` + 解码本身就能判 —— 形状真不对时 decode 会抛，照样兜住。
      */
-    private decodeChapterData(data: unknown): unknown {
+    private decodeResultData(messageName: string, data: unknown): unknown {
         const bytes = data as Uint8Array | null | undefined;
         if (!bytes || typeof bytes.length !== 'number' || bytes.length === 0) return null;
         try {
-            return ProtoMgr.get().decodeDataByName(CHAPTER_RESULT_TYPE, bytes);
+            return ProtoMgr.get().decodeDataByName(messageName, bytes);
         } catch (error) {
-            console.warn('[BattleResult] 章节战斗结算 dataBytes 解码失败', error);
+            console.warn(`[BattleResult] ${messageName} dataBytes 解码失败`, error);
             return null;
         }
     }
@@ -118,6 +126,7 @@ class BattleResultServiceClass {
         }
         const waiter = this.waiter;
         this.waiter = null;
+        this.waiterBattleType = null;
         if (waiter) waiter(result);
     }
 }

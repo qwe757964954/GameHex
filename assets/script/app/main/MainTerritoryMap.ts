@@ -1,3 +1,5 @@
+import type { SessionAssetService } from '../../core/asset/SessionAssetService';
+import { createZCBattlePreload } from '../zcds/application/ZCBattlePreparation';
 import {
     _decorator,
     Component,
@@ -17,8 +19,10 @@ import {
     RESOURCE_ICON_ART_ROOT,
     spriteFramePath,
     TERRITORY_CHEST_ART_ROOT,
+    TERRITORY_CLOUD_ART_ROOT,
 } from '../ArtPaths';
 import { GameRoute } from '../../core/runtime/GameRoute';
+import type { ZCBattleStart } from '../battle/BattleStartModel';
 import { ProcedureManager } from '../../framework/procedure/ProcedureManager';
 import { FW } from '../../framework/FW';
 import { EventMgr } from '../../framework/event/EventMgr';
@@ -36,9 +40,7 @@ import {
 } from '../territory/application/TerritoryTexts';
 import { TerritoryPresenter } from '../territory/application/TerritoryPresenter';
 import type { ITerritoryRewardPresentation } from '../territory/application/TerritoryPresenter';
-import { ZCGameLoader } from '../zcds/application/ZCGameLoader';
-import { ZCGamePreload } from '../zcds/application/ZCGamePreload';
-import { MAP_DIRECTORY } from '../zcds/ZCGame';
+import type { ZCGamePreload } from '../zcds/application/ZCGamePreload';
 import type {
     TerritoryIdleRewardGain,
 } from '../territory/model/TerritoryIdleReward';
@@ -117,6 +119,8 @@ export class MainTerritoryMap extends Component {
      * 回包后 navigate 直接复用 —— 消除「服务端已回 `CmdStartBattleRspMsg` 还要等
      * 资源加载才进游戏」的延迟。navigate 后置空（资源已移交战斗页），下次开战重建。
      */
+    private sessionAssets: SessionAssetService | null = null;
+    private wasBattleDetailOpen = false;
     private battlePreload: ZCGamePreload | null = null;
     /** 预加载失败标记：失败时 navigate 不带 preload，战斗页按原逻辑当场加载（不回退阻塞）。 */
     private battlePreloadFailed = false;
@@ -127,6 +131,8 @@ export class MainTerritoryMap extends Component {
      *  一次开箱最多 3~5 种，加载完就留在表里，下次同种资源直接命中。
      */
     private readonly rewardIcons = new Map<number, SpriteFrame | null>();
+
+    setSessionAssetService(service: SessionAssetService | null): void { this.sessionAssets = service; }
 
     /** 由 `MainTabHost` 注入资源入口（setParent 触发 onLoad 之前）。 */
     initialize(assets: AssetService, configs?: ConfigService): void {
@@ -150,6 +156,7 @@ export class MainTerritoryMap extends Component {
             readServerWallet: () => this.readServerWallet(),
             outputs: {
                 navigateToBattle: (pve, battle) => {
+                    this.ensureBattlePreload(battle, pve.waves.map((wave) => wave.pvpCardId));
                     const preload = this.battlePreloadFailed ? undefined : this.battlePreload;
                     // 无论移交成功与否，本次都用掉了：下次开战按 `busyBattle` 重建。
                     this.battlePreload = null;
@@ -169,9 +176,6 @@ export class MainTerritoryMap extends Component {
                 setBusy: (busy, text) => {
                     if (busy) {
                         LoadingPopup.show(text);
-                        // 🔴 开战请求在途 ⇒ **并行**预加载对局资源：服务端回包前资源已在加载，
-                        // 回包后 navigate 直接复用，不再出现「CmdStartBattleRspMsg 已回、还等一会才进游戏」。
-                        if (text === TERRITORY_TEXTS.busyBattle) this.ensureBattlePreload();
                     } else {
                         LoadingPopup.hide();
                     }
@@ -183,6 +187,42 @@ export class MainTerritoryMap extends Component {
         void this.loadHexFlipAssets(assets);
         void this.loadResourceGainIcons(assets);
         void this.loadChestArt(assets);
+        void this.loadCloudArt(assets);
+    }
+
+    /**
+     * 「未解锁云」的两套序列帧：`image/territory/cloud/` 下按前缀分两组。
+     *
+     * · `cloud_idle_0..4` = 待机飘动（5 帧循环）；
+     * · `cloud_dissolve_0..1` = 解锁消散（2 帧）。
+     *
+     * ⚠️ **必须按前缀分开、各自按文件名排序**：`loadDir` 返回顺序不保证（同族坑见
+     * `loadHexFlipAssets`），而两套混在一个数组里按名排序会让 `cloud_dissolve_*` 排到
+     * `cloud_idle_*` 之前（`d < i`），帧序就整体错位了。
+     *
+     * 一张都取不到 ⇒ 整条表现关闭（地图照常渲染），并打一条 warn —— 刚加的图忘了
+     * 刷新资源库时能一眼看到原因，而不是"云神秘消失"。
+     */
+    private async loadCloudArt(assets: AssetService): Promise<void> {
+        const groups = { idle: 'cloud_idle_', dissolve: 'cloud_dissolve_' } as const;
+        let frames: SpriteFrame[] = [];
+        try {
+            frames = (await assets.loadDir(TERRITORY_CLOUD_ART_ROOT, SpriteFrame) ?? [])
+                .filter((frame) => !!frame?.name);
+        } catch {
+            // 目录整个没导入 ⇒ 下面统一按"全是空数组"降级。
+        }
+        const pick = (prefix: string): SpriteFrame[] => frames
+            .filter((frame) => frame.name.startsWith(prefix))
+            .sort((a, b) => a.name.localeCompare(b.name));
+        const idle = pick(groups.idle);
+        const dissolve = pick(groups.dissolve);
+        if (!this.isValid) return;
+        if (!idle.length) {
+            console.warn('[MainTerritoryMap] 未解锁云序列帧缺失（image/territory/cloud/'
+                + 'cloud_idle_0…4），章节地图不盖云；若是刚加的图，请在资源管理器里刷新一次让编辑器导入');
+        }
+        this.mapView.setCloudFrames(idle, dissolve);
     }
 
     /**
@@ -330,18 +370,15 @@ export class MainTerritoryMap extends Component {
     }
 
     /**
-     * 对局资源预加载（与匹配页 `ZCGamePreload` 同款）：点击开战（busy 回调 `busyBattle`）
-     * 时与网络请求**并行**启动 `ZCGameLoader.prepare`，回包后 `navigateToBattle` 把
-     * `preload` 交给 `ProcedureGame` 复用 —— 资源在请求期间已就绪，进游戏不再等加载。
+     * 回包后按实际阵容和本关波次准备资源，将同一个 preload 移交战斗流程。
      * 失败静默回退：标记失败后 navigate 不带 preload，战斗页按原逻辑当场加载。
      */
-    private ensureBattlePreload(): void {
+    private ensureBattlePreload(battle: ZCBattleStart | null, waveCardIds: readonly number[]): void {
         if (!this.configs || !this.assets) return;
         if (this.battlePreload && !this.battlePreloadFailed) return;
         this.battlePreloadFailed = false;
-        const preload = new ZCGamePreload(new ZCGameLoader(
-            this.assets, this.configs, MAP_DIRECTORY, Math.random, TERRITORY_DEFAULT_PLAYER_COUNT,
-        ));
+        const preload = createZCBattlePreload(this.sessionAssets?.reusableAssets ?? this.assets, this.configs,
+            Promise.resolve(battle), { playerCount: TERRITORY_DEFAULT_PLAYER_COUNT, waveCardIds });
         void preload.ready.catch(() => {
             if (this.battlePreload === preload) this.battlePreloadFailed = true;
         });
@@ -381,10 +418,12 @@ export class MainTerritoryMap extends Component {
             this.scrollToCell(state.map.startCellId, state.layout);
         }
         if (state.detail.open && state.detail.content) {
+            if (!this.wasBattleDetailOpen) void this.sessionAssets?.warmupBattle?.();
             this.detailPanel.open(state.detail.content);
         } else if (!state.detail.open && this.detailPanel.isOpen) {
             this.detailPanel.close();
         }
+        this.wasBattleDetailOpen = state.detail.open;
     }
 
     private scrollToCell(cellId: number, layout: ITerritoryMapLayout): void {
@@ -424,8 +463,8 @@ export class MainTerritoryMap extends Component {
     // 视图事件处理（`TERRITORY_EVENTS` 契约，见 `TerritoryEvents.ts`）
     // ============================================================
 
-    private readonly onDetailClose = (): void => { this.presenter?.closeDetail(); };
-    private readonly onDetailStart = (): void => { this.presenter?.requestBattle(); };
+    private readonly onDetailClose = (): void => { this.sessionAssets?.pauseWarmup?.(); this.presenter?.closeDetail(); };
+    private readonly onDetailStart = (): void => { void this.sessionAssets?.warmupBattle?.(); this.presenter?.requestBattle(); };
     private readonly onSiteClick = (target: TerritoryStationTarget): void => {
         if ('kind' in target) this.presenter?.selectRandomResource(target.cellId);
         else this.presenter?.selectSite(target);

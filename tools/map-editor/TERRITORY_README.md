@@ -103,3 +103,47 @@ tools\map-editor\copy-territory-maps.bat --id chapter_02
 
 顺带修了一处：找站点原来只比对 `site.cellId`（锚点），**多格 footprint 的站点被点到非锚点格子时会当成空格**。
 现在统一走 `siteAtCell()`（按 footprint 反查），渲染索引也把 footprint 里每一格都登记了。
+
+---
+
+## 批量生成章节图：`gen_territory_shapes.py`（2026-10-23）
+
+`presets/territory/chapter_03 … chapter_07` 这五张图不是手画的，由脚本按「图形」生成：
+
+```text
+python tools/map-editor/gen_territory_shapes.py            # 生成全部 5 张（含预览 PNG）
+python tools/map-editor/gen_territory_shapes.py --only 04  # 只重做十字章
+python tools/map-editor/gen_territory_shapes.py --check    # 只校验已落盘的 5 份 JSON
+```
+
+| id | 章节 | 图形 |
+| --- | --- | --- |
+| `chapter_03` | 3 | 飞机章（尖机头 + 后掠主翼 + 窄尾翼） |
+| `chapter_04` | 4 | 十字章 |
+| `chapter_05` | 5 | 盾牌章（平顶 + 下尖） |
+| `chapter_06` | 6 | 菱形章 |
+| `chapter_07` | 7 | 心形章（两个圆瓣 + V 形凹口） |
+
+五张图**逐项同配额**（需求要求"每种类型笔刷数量一致"）：
+
+| 项 | 数量 |
+| --- | --- |
+| 涂色格 | 160（且**恒定 1 块连通**） |
+| `fixedResource` | 51（含 9 道门） |
+| `randomSites.candidateCells` | 52 |
+| `asyncPvp` | 3 × 4 格 |
+| `stage` / `boss` | 8 / 2，合计 44 格 |
+| 出生点 | 1（不占 site） |
+
+关卡顺序照 `chapter_02` 的口径：`configId` `10011…10020` 按链序递增，第 5、10 个是 BOSS；
+相邻两关地块之间恒隔 2 格，中间那格就是门（`fixedResource`，自己也挂在上一关下）。
+
+脚本里写死了三处**踩过的坑**（改之前先读注释）：
+
+1. 锚点必须自动取椭圆环（`choose_chain` 扫半径）—— 链间距对锚点极度敏感，
+   手摆 50 个坐标改一次形状就得重摆一遍；
+2. 链间距只能用"平移"收敛（`shape_chain`）—— 加减格子会让 44 这个总数漂，配额跟着错；
+3. 异步据点必须等链和门都定好之后再种 —— 预占三个圈（≈36 格）在细长图形里会封死走道。
+
+生成完是**本地文件**，还没发布到 `assets/` 与策划表；要上线在编辑器里打开对应章节点发布
+（或跑 `copy_territory_maps.py --id chapter_03`）。

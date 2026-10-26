@@ -1,3 +1,4 @@
+import * as resourcePlan from '../assets/script/app/zcds/model/ZCGameResourcePlan';
 ﻿import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -64,6 +65,19 @@ test('后台预加载提前失败时释放资源，之后对局仍能收到原�
     await assert.rejects(preload.ready, /missing battle asset/);
 });
 
+test('回包前不准备地图和表现，回包后将阵容原样交给加载器；取消后不再启动', async () => {
+    const response=deferred<ZCBattleStart | null>();let calls=0;let received:unknown;
+    const preload=new ZCGamePreload({prepare:async (_scope,battle)=>{calls++;received=battle;return prepared;}},response.promise);
+    assert.equal(calls,0);
+    const battle={battleId:'id',seed:'1',version:'1',units:[]} as ZCBattleStart;
+    response.resolve(battle);await preload.ready;assert.equal(calls,1);assert.equal(received,battle);
+    preload.releaseFromMatching();
+    const late=deferred<ZCBattleStart | null>();
+    const cancelled=new ZCGamePreload({prepare:async()=>{calls++;return prepared;}},late.promise);
+    cancelled.releaseFromMatching();late.resolve(battle);
+    await assert.rejects(cancelled.ready,/取消/);assert.equal(calls,1);
+});
+
 function procedures(sessionPreload: ZCGamePreload | null = null) {
     const loads: Array<ReturnType<typeof deferred<ZCGamePreparedResources>>> = [];
     const scopes: ResourceScope[] = [];
@@ -110,6 +124,7 @@ function procedures(sessionPreload: ZCGamePreload | null = null) {
         onDestroy() { this.releaseResourceScope(); }
     }
     const dependencies: Record<string, unknown> = {
+        '../model/ZCGameResourcePlan': resourcePlan,
         cc: { Prefab: class {}, Node: class {}, Vec3: { ZERO: {} }, instantiate: () => ({ setParent() {}, setPosition() {}, getComponent: () => page, destroy: () => destroyed++ }) },
         '../../core/runtime/GameRoute': { GameRoute: { Battle: 'battle' } },
         '../../framework/procedure/ProcedureBase': { ProcedureBase: Base },
@@ -205,6 +220,7 @@ function procedures(sessionPreload: ZCGamePreload | null = null) {
         // 抛掉，整个文件的所有用例一起红（这正是"新增 import 不补依赖"那个坑）。
         // 返回空表即可：那两处只用于日志与"没推送就留空占位"。
         '../net/CacheMgr': { CacheMgr: { instance: { getTlCmdArtifact: () => [], getTlCmdRole: () => [] } } },
+        '../../framework/procedure/ProcedureManager': { ProcedureManager: { instance: null } },
         '../zcds/ZCGame': { MAP_DIRECTORY: 'config/maps', ZCGame: class ZCGame {} },
         '../zcds/application/ZCGameLoader': { ZCGameLoader: Loader },
         '../zcds/application/ZCGamePreload': { ZCGamePreload },
@@ -243,9 +259,11 @@ test('匹配开始即加载，对局等待同一 Promise，界面退出后战斗
         'onPreload 必须预取本机头像（名字经 head+icon 解出、根目录 image/icon/head）',
     );
     fixture.matching._adoptResourceScope(matchingScope); fixture.matching.onEnter();
-    assert.equal(fixture.options.length, 1); assert.equal(fixture.loads.length, 1);
+    assert.equal(fixture.options.length, 1);
+    await flush();
+    assert.equal(fixture.loads.length, 1);
     const opponent = { name: 'enemy', power: 100 };
-    fixture.options[0].onMatched(opponent);
+    fixture.options[0].onMatched([opponent]);
     const params = fixture.navigations[0].params;
     assert.equal(params.opponent, opponent);
     const scope = new ResourceScope('battle');
@@ -256,7 +274,7 @@ test('匹配开始即加载，对局等待同一 Promise，界面退出后战斗
     assert.equal(fixture.loads.length, 1, '切到对局时不能重新加载');
     fixture.matching.onLeave(); assert.equal(fixture.destroyed, 1); assert.equal(fixture.released, 0);
     fixture.battle._adoptResourceScope(scope); fixture.battle.onEnter();
-    assert.equal(fixture.staged, prepared);
+    assert.equal(fixture.staged.resources, prepared);
     fixture.battle.onLeave(); assert.equal(fixture.released, 1);
 });
 
@@ -276,7 +294,7 @@ test('匹配直接接管登录后完成的对局预加载，不再启动第二�
     fixture.matching.onEnter();
     assert.equal(fixture.loads.length, 0, '登录后已准备资源时不能再调用 ZCGameLoader');
 
-    fixture.options[0].onMatched({ name: 'enemy', power: 100 });
+    fixture.options[0].onMatched([{ name: 'enemy', power: 100 }]);
     const battleScope = new ResourceScope('battle');
     await fixture.battle.onPreload(fixture.navigations[0].params, { resources: battleScope, cancelled: false });
     fixture.matching.onLeave();
@@ -287,25 +305,26 @@ test('匹配直接接管登录后完成的对局预加载，不再启动第二�
     assert.equal(released, 1);
 });
 
-test('等待战斗资源期间取消导航，不移交资源或进入对局，匹配离开负责释放', async () => {
+test('等待战斗资源期间取消导航，流程立即释放未移交资源且匹配离开幂等', async () => {
     const fixture = procedures();
     await fixture.matching.onPreload(undefined, { resources: new ResourceScope('matching'), cancelled: false });
-    fixture.matching.onEnter(); fixture.options[0].onMatched({ name: 'enemy' });
+    fixture.matching.onEnter(); fixture.options[0].onMatched([{ name: 'enemy' }]);
+    await flush();
     const context = { resources: new ResourceScope('battle'), cancelled: false };
     const ready = fixture.battle.onPreload(fixture.navigations[0].params, context);
     context.cancelled = true; context.resources.dispose(); fixture.battle.onPreloadCancelled();
     fixture.loads[0].resolve(prepared); await ready;
     assert.equal(fixture.battle.preparedResources, null); assert.equal(fixture.staged, undefined);
-    assert.equal(fixture.released, 0);
+    assert.equal(fixture.released, 1, '取消不能依赖来源页面稍后离开，否则大地图预加载没有释放者');
     fixture.matching.onLeave(); assert.equal(fixture.released, 1);
 });
 
 test('旧匹配回调不能启动新战局，重新匹配创建新预加载，直接进入战斗保留加载入口', async () => {
     const fixture = procedures();
-    const enter = async () => { await fixture.matching.onPreload(undefined, { resources: new ResourceScope('matching'), cancelled: false }); fixture.matching.onEnter(); };
+    const enter = async () => { await fixture.matching.onPreload(undefined, { resources: new ResourceScope('matching'), cancelled: false }); fixture.matching.onEnter(); await flush(); };
     await enter(); fixture.matching.onLeave(); await enter();
-    fixture.options[0].onMatched({ name: 'stale' }); assert.equal(fixture.navigations.length, 0);
-    fixture.options[1].onMatched({ name: 'current' }); assert.equal(fixture.navigations.length, 1);
+    fixture.options[0].onMatched([{ name: 'stale' }]); assert.equal(fixture.navigations.length, 0);
+    fixture.options[1].onMatched([{ name: 'current' }]); assert.equal(fixture.navigations.length, 1);
     assert.equal(fixture.loads.length, 2);
     fixture.matching.onLeave();
     fixture.loads[0].resolve(prepared); fixture.loads[1].resolve(prepared); await flush();
@@ -322,11 +341,12 @@ test('管理器销毁匹配流程时释放后台资源，迟到回调不能进�
     const scope = new ResourceScope('matching');
     await fixture.matching.onPreload(undefined, { resources: scope, cancelled: false });
     fixture.matching._adoptResourceScope(scope); fixture.matching.onEnter();
+    await flush();
     fixture.matching.onDestroy();
     assert.equal(fixture.released, 1); assert.equal(fixture.destroyed, 1);
     assert.equal(scope.disposed, true);
     fixture.loads[0].resolve(prepared); await flush();
-    fixture.options[0].onMatched({ name: 'late' });
+    fixture.options[0].onMatched([{ name: 'late' }]);
     assert.equal(fixture.navigations.length, 0);
 });
 
@@ -380,7 +400,7 @@ test('开始游戏：服务端下发对局数据时，选对手用敌方单元�
     const picked = options.pickOpponents()[0];
     assert.equal(picked.name, '服务端对手', '昵称取服务端敌方单元');
     assert.equal(picked.power, 8888, '战力取服务端敌方单元');
-    assert.equal(picked.rank, '本地段位', '表里没有这个 gradeId → 保留本地兜底值，不能清成空');
+    assert.equal(picked.rank, '', '表里没有这个 gradeId → gradeName 查空即不覆盖 base，保留空占位（旧「本地假段位」兜底已退役，见 pickOpponents）');
 
     options.onMatched([picked]);
     const params = fixture.navigations[0].params;
@@ -393,7 +413,7 @@ test('开始游戏：服务端下发对局数据时，选对手用敌方单元�
     assert.equal(fixture.lastBattleStart, null);
 });
 
-test('开始游戏：服务端没数据（未连接/超时/协议没通）时退回本地对手池，对局照常进', async () => {
+test('开始游戏：服务端没数据（未连接/超时/协议没通）时用空占位对手，对局照常进', async () => {
     const fixture = procedures();
     await fixture.matching.onPreload(undefined, { resources: new ResourceScope('matching'), cancelled: false });
     fixture.matching.onEnter();
@@ -408,7 +428,7 @@ test('开始游戏：服务端没数据（未连接/超时/协议没通）时退
     await flush();
     assert.equal(fixture.mineUpdates.length, 0, '没有服务端数据就不刷新我方条（保持本机资料，别清空）');
     const picked = options.pickOpponents()[0];
-    assert.equal(picked.name, 'enemy', '退回 MatchPool 的本地对手');
+    assert.equal(picked.name, '无对手', '拿不到服务端数据时用空占位对手（旧 MatchPool 本地对手兜底已退役，见 pickOpponents）');
 
     options.onMatched([picked]);
     assert.equal(fixture.navigations[0].params.battle, null, '降级时 battle 为 null，对局不能因此被拦');
@@ -418,9 +438,8 @@ test('开始游戏：服务端没数据（未连接/超时/协议没通）时退
  * 「开始游戏」的随机种子必须**真的交到对局**（`ZCGameModel.random` 的播种入口），
  * 不能只停在 `params` 与日志里 —— 否则"接了种子"只是文档上的一句话。
  *
- *  这里**不经过 `pickOpponents()`**：它当前有独立的既有偏差（见上一条用例：
- *  `pickOpponents` 的兜底底数从本地对手池换成了硬编码空值，而用例期望没跟上），
- *  那条红不该拖住本用例的判定。`onMatched` 只要求"匹配成功 → 带着本局数据 navigate"，
+ *  这里**不经过 `pickOpponents()`**：对手选取的契约（服务端数据 / 空占位兜底）
+ *  由上方两条专项用例覆盖；`onMatched` 只要求"匹配成功 → 带着本局数据 navigate"，
  *  所以直接给一个对手即可，种子链路照样走完整。
  */
 test('对局随机种子：有服务端数据时随 battle 交给 ZCGame entry，降级时显式为 null', async () => {
@@ -503,6 +522,11 @@ test('PVP 信息与「开始游戏」回包并行到达时叠加，不互相整�
 function loaderFixture(assets: any, configs = { initialize: async () => {}, getTable: async (_name: string) => [] }) {
     let configured = 0, injected = 0;
     const dependencies: Record<string, unknown> = {
+        '../model/ZCGameResourcePlan': resourcePlan,
+        '../../../core/asset/BundleCatalog': { BATTLE_BUNDLE: 'battle' },
+        '../model/ZCMatchConfig': { captureZCMatchConfig: () => ({ map: {}, playerDeck: [], enemyDeck: [] }) },
+        '../model/ZCModifierRuntime': { getZCModifierCatalogs: () => ({ adapters: { textOverrides: new Map(), skillPlans: [] } }) },
+        '../ZCDCLogSwitch': { ZCDC_LOG_WARNINGS: false },
         cc: { JsonAsset: class {}, Prefab: class {} },
         '../../ArtPaths': {
             decorFramePath: (name: string) => `decor/${name}`,
@@ -559,7 +583,7 @@ test('配置就绪后单位和特效与首屏 Prefab 并行加载，不等待外
     );
     // 19 = 上面逐项 includes 过的那批 + 4 个只参与计数、没单列 includes 的路径
     // （`shaders/unit-outline-copy`、`ui/game/ZCBossPanel`、桩里的 `visual/unit` 与 `visual/effect`）。
-    assert.equal(paths.length, 19);
+    assert.equal(paths.length, 28);
     shell.resolve({});
     const result = await ready;
     assert.equal(result.unitVisualPrefabs.size, 1); assert.equal(result.effectVisualPrefabs.size, 1);

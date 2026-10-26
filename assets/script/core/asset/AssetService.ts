@@ -14,6 +14,8 @@ export interface AssetLoadOptions {
 
 /** 引擎无关的资源入口；业务层不再直接调用 resources.load。 */
 export interface AssetService {
+    /** 可选的后台预下载能力；不解析资源、不获取资产所有权。 */
+    preload?(path: string, options?: AssetLoadOptions): Promise<void>;
     load<T>(path: string, type: AssetType<T>, options?: AssetLoadOptions): Promise<T>;
     loadDir<T>(path: string, type: AssetType<T>, options?: AssetLoadOptions): Promise<T[]>;
     /**

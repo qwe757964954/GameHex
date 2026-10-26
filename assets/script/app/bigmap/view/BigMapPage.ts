@@ -1,11 +1,13 @@
 import { _decorator, BlockInputEvents, Color, Component, Graphics, instantiate, Label, Node, Prefab, Sprite, SpriteFrame, UITransform, Vec3, view } from 'cc';
 import type { AssetService } from '../../../core/asset/AssetService';
 import { ResourceScope } from '../../../core/asset/ResourceScope';
+import { BIGMAP_BUNDLE } from '../../../core/asset/BundleCatalog';
 import { loadBigMapArt, type IBigMapArt } from '../application/BigMapArtLoader';
 import type { BigMapPresenter, IBigMapActionFeedback } from '../application/BigMapPresenter';
 import { BIGMAP_COLORS, createButton, createLabel, createUiNode, drawPanel, type IBigMapButton } from './BigMapTheme';
 import { BigMapWorldView } from './BigMapWorldView';
 import { BigMapBaseView } from './BigMapBaseView';
+import { BigMapTargetPanel } from './BigMapTargetPanel';
 import { BIGMAP_CITY_PHASE_LABEL } from '../model/BigMapCitySchedule';
 import { sortSnapshotScores } from '../model/BigMapSnapshot';
 import {
@@ -96,17 +98,30 @@ export class BigMapPage extends Component {
     private selectedPlotHexId = -1;
     private pendingBuildingId = 0;
     private baseActionPending = false;
+    private selectedBaseHexId = -1;
+    private readonly targetPanels = new Map<'level' | 'player', BigMapTargetPanel>();
+    private playerPortraitLoader: ((scope: ResourceScope) => Promise<SpriteFrame | null>) | null = null;
+    private battleWarmup: ((isOpen: boolean) => void) | null = null;
+    private playerPortrait: SpriteFrame | null = null;
 
     /** 由入口注入 Presenter（单独注入而非在页面里 new，便于单测与后续联机版替换实现）。 */
-    async initialize(presenter: BigMapPresenter, _onClose: (() => void) | null = null, assets: AssetService | null = null, background = '', navigationHeight = FOOTER_HEIGHT): Promise<void> {
+    async initialize(presenter: BigMapPresenter, _onClose: (() => void) | null = null, assets: AssetService | null = null, background = '', navigationHeight = FOOTER_HEIGHT,
+        playerPortraitLoader: ((scope: ResourceScope) => Promise<SpriteFrame | null>) | null = null,
+        battleWarmup: ((isOpen: boolean) => void) | null = null): Promise<void> {
         this.presenter = presenter;
+        this.battleWarmup = battleWarmup;
         this.navigationHeight = navigationHeight;
-        await this.loadWorldView(assets);
+        this.playerPortraitLoader = playerPortraitLoader;
+        await Promise.all([
+            this.loadWorldView(assets),
+            this.loadTargetPanels(assets),
+            assets ? this.loadArt(assets, background) : Promise.resolve(),
+        ]);
         if (!this.isValid || this.artScope.disposed) return;
         this.buildUi();
+        this.applyArt();
         this.unsubscribe = presenter.onChanged(() => this.refreshAll());
         this.refreshAll();
-        if (assets) await this.loadArt(assets, background);
     }
 
     private async loadWorldView(assets: AssetService | null): Promise<void> {
@@ -131,10 +146,23 @@ export class BigMapPage extends Component {
     }
 
     private async loadArt(assets: AssetService, background: string): Promise<void> {
-        const art = await loadBigMapArt(assets, this.artScope, background);
+        const [art, portrait] = await Promise.all([
+            loadBigMapArt(assets, this.artScope, background),
+            this.playerPortraitLoader ? this.playerPortraitLoader(this.artScope).catch((error: unknown) => {
+                console.warn('[BigMapPage] 玩家头像加载失败', error);
+                return null;
+            }) : Promise.resolve(null),
+        ]);
         if (!this.isValid || this.artScope.disposed) return;
         this.art = art;
+        this.playerPortrait = portrait;
+    }
+
+    private applyArt(): void {
+        const art = this.art;
+        if (!art) return;
         this.worldView.setArt(art);
+        this.worldView.setPlayerPortrait(this.playerPortrait);
         this.baseView.setArt(art);
         // 顶栏 / 详情 / 建造 / 队列**不贴 `concept/ui/*` 那张深铁概念图**：
         // 它们在 `buildUi` 里已经是手画的领地页 HUD 卡（`paintBigMapCardPanel`），贴上去反而盖住。
@@ -147,7 +175,31 @@ export class BigMapPage extends Component {
                 27, icon.node.position.x, icon.node.position.y);
         }
         this.applyMode();
-        this.refreshAll();
+    }
+
+    private async loadTargetPanels(assets: AssetService | null): Promise<void> {
+        if (!assets) throw new Error('[BigMapPage] 弹窗预制体需要 AssetService');
+        const entries = await Promise.all(([
+            ['level', 'BigMapLevelInfoPanel'], ['player', 'BigMapPlayerLevelPanel'],
+        ] as const).map(async ([key, name]) => [key, await assets.load(`ui/bigmap/${name}`, Prefab, { scope: this.artScope, bundle: BIGMAP_BUNDLE })] as const))
+            .catch((error: unknown) => {
+                if (!this.isValid || this.artScope.disposed) return [];
+                throw error;
+            });
+        if (!this.isValid || this.artScope.disposed) return;
+        for (const [key, prefab] of entries) {
+            const root = instantiate(prefab);
+            root.active = false;
+            root.setParent(this.node);
+            const panel = root.getComponent(BigMapTargetPanel);
+            if (!panel) {
+                root.destroy();
+                throw new Error('[BigMapPage] 目标弹窗缺少 BigMapTargetPanel');
+            }
+            panel.initialize(this.size.width, this.size.height, () => this.onPrimaryAction(),
+                () => { this.onSecondaryAction(); this.clearSelection(); }, () => this.clearSelection());
+            this.targetPanels.set(key, panel);
+        }
     }
 
     // -------------------------------------------------------------- 构建
@@ -247,6 +299,8 @@ export class BigMapPage extends Component {
         const node = this.worldView.node;
         node.setSiblingIndex(this.node.children.length - 1);
         node.setPosition(new Vec3(rect.x, rect.y, 0));
+        // 先交付已加载的贴图，避免 build 把整张世界逐格画成 Graphics 后又立即清空重画。
+        if (this.art) this.worldView.setArt(this.art);
         this.worldView.build(this.presenter!, rect.width, rect.height);
         this.worldView.onTap = (hexId) => this.onWorldTap(hexId);
     }
@@ -521,6 +575,8 @@ export class BigMapPage extends Component {
         const presenter = this.presenter!;
         const occupant = this.worldView.occupantAt(hexId);
         if (occupant.kind === 'city') {
+            this.battleWarmup?.(true);
+            this.selectedBaseHexId = -1;
             this.selectedCityId = occupant.cityId;
             this.selectedMonsterId = 0;
             this.selectedPlotHexId = -1;
@@ -531,6 +587,8 @@ export class BigMapPage extends Component {
             return;
         }
         if (occupant.kind === 'monster') {
+            this.battleWarmup?.(true);
+            this.selectedBaseHexId = -1;
             this.selectedMonsterId = occupant.instanceId;
             this.selectedCityId = 0;
             this.selectedPlotHexId = -1;
@@ -543,12 +601,8 @@ export class BigMapPage extends Component {
                 this.feedback({ ok: true, message: '回到自己的基地' });
             } else {
                 this.clearSelection();
-                this.setInfoVisible(true);
-                this.infoTitle.string = occupant.base.name;
-                this.infoBody.string = `其他玩家的基地\n\n战力：${occupant.base.power}\n距离：${Math.round(presenter.distanceFromBase(hexId))} 格`;
-                this.primaryButton.setEnabled(false);
-                this.primaryButton.setText('暂不可攻打');
-                this.secondaryButton.node.active = false;
+                this.selectedBaseHexId = hexId;
+                this.refreshInfo();
             }
             return;
         }
@@ -601,15 +655,11 @@ export class BigMapPage extends Component {
             return;
         }
         if (this.selectedCityId !== 0) {
-            const feedback = presenter.attackCity(this.selectedCityId);
-            this.feedback(feedback);
-            this.refreshAll();
+            void this.runBaseAction(() => presenter.requestAttackCity(this.selectedCityId));
             return;
         }
         if (this.selectedMonsterId !== 0) {
-            const feedback = presenter.attackMonster(this.selectedMonsterId);
-            this.feedback(feedback);
-            this.refreshAll();
+            void this.runBaseAction(() => presenter.requestAttackMonster(this.selectedMonsterId));
             return;
         }
         this.feedback({ ok: false, message: '先在地图上选一座城池或一只野怪' });
@@ -630,9 +680,12 @@ export class BigMapPage extends Component {
             const view = presenter.monsterView(this.selectedMonsterId);
             if (view) this.worldView.focusOn(view.hexId);
         }
+        if (this.selectedBaseHexId >= 0) this.worldView.focusOn(this.selectedBaseHexId);
     }
 
     private clearSelection(): void {
+        this.battleWarmup?.(false);
+        this.selectedBaseHexId = -1;
         this.selectedCityId = 0;
         this.selectedMonsterId = 0;
         this.selectedPlotHexId = -1;
@@ -734,6 +787,43 @@ export class BigMapPage extends Component {
     private refreshInfo(): void {
         this.refreshInfoContent();
         this.applyInfoLayout();
+        this.refreshTargetPanel();
+    }
+
+    private refreshTargetPanel(): void {
+        for (const [key, panel] of this.targetPanels) {
+            if (this.mode !== 'world' || (key === 'player' ? this.selectedBaseHexId < 0
+                : this.selectedCityId === 0 && this.selectedMonsterId === 0)) panel.hide();
+        }
+        const presenter = this.presenter;
+        if (!presenter || this.mode !== 'world') return;
+        if (this.selectedBaseHexId >= 0) {
+            const base = presenter.world.baseByHex.get(this.selectedBaseHexId);
+            const panel = this.targetPanels.get('player');
+            if (!base || !panel) return;
+            this.setInfoVisible(false);
+            panel.render({
+                title: base.name, headings: ['基地信息', '交互说明'],
+                sections: [`战力：${base.power}\n距离：${Math.round(presenter.distanceFromBase(base.hexId))} 格`,
+                    '其他玩家的基地\n当前暂未开放攻打\n可定位查看基地所在位置'],
+                tip: '', primaryCaption: '暂不可攻打', primaryEnabled: false, staminaCost: 0, staminaIcon: null,
+            });
+            return;
+        }
+        const city = this.selectedCityId ? presenter.cityView(this.selectedCityId) : null;
+        const monster = this.selectedMonsterId ? presenter.monsterView(this.selectedMonsterId) : null;
+        const panel = this.targetPanels.get('level');
+        if ((!city && !monster) || !panel) return;
+        const lines = this.infoBody.string.split('\n').filter((line) => line !== '');
+        this.setInfoVisible(false);
+        panel.render({
+            title: this.infoTitle.string, headings: ['目标状态', '挑战信息', '目标说明'],
+            sections: [lines.slice(0, 2).join('\n'), lines.slice(2, 5).join('\n'), lines.slice(5).join('\n')],
+            tip: '消耗行动力挑战目标，奖励以战斗结算为准',
+            primaryCaption: this.primaryButton.label.string, primaryEnabled: city?.canAttack ?? monster?.canAttack ?? false,
+            staminaCost: city?.staminaCost ?? monster?.staminaCost ?? 0,
+            staminaIcon: this.art?.resources.get('stamina') ?? null,
+        });
     }
 
     private refreshInfoContent(): void {
@@ -773,10 +863,15 @@ export class BigMapPage extends Component {
                     info ? `据点状态：${BIGMAP_CAMP_STATE_TEXT[info.state]}` : '',
                     city.campDetailStatus === 'loading' || !info && city.campDetailStatus === 'idle'
                         ? BIGMAP_CAMP_QUERY_TEXT.pending : '',
-                    city.campDetailStatus === 'failed' ? BIGMAP_CAMP_QUERY_TEXT.failed : '',
+                    city.campDetailStatus === 'failed'
+                        ? city.canAttack && !info ? BIGMAP_CAMP_QUERY_TEXT.failedCanAttack : BIGMAP_CAMP_QUERY_TEXT.failed : '',
+                    `消耗行动力：${city.staminaCost}`,
+                    city.attackReason,
                     city.desc,
                 ].filter((line) => line !== '').join('\n');
-                this.primaryButton.node.active = false;
+                this.primaryButton.node.active = true;
+                this.primaryButton.setText(city.canAttack ? '攻打' : '不可攻打');
+                this.primaryButton.setEnabled(city.canAttack);
                 this.secondaryButton.setText('定位');
                 return;
             }
@@ -787,7 +882,9 @@ export class BigMapPage extends Component {
                 `状态：${stateText[city.state] ?? city.state}`,
                 city.state === 'locked' ? `条件：${city.reason}` : '',
                 `日程：${BIGMAP_CITY_PHASE_LABEL[city.phase]}${city.canAttack ? '' : ` · ${city.attackReason}`}`,
-                `距离：${Math.round(city.distance)} 格${city.inRange ? '' : `（超出势力范围，伤害 -${city.damageCutPct}%）`}`,
+                // 「在不在势力范围内」现在只认服务器的 `toCampId`（见 `bigMapWithinCityRange`），
+                // 所以文案不能再写「超出距离」，避免和判据口径对不上。
+                `距离：${Math.round(city.distance)} 格${city.isPlayerCamp ? '（所处城池）' : city.inRange ? '' : `（不在势力范围内，伤害 -${city.damageCutPct}%）`}`,
                 `城防：${Math.round(city.hpRatio * 100)}%   本轮战功：${city.warScore}/${city.minWarScore}`,
                 `名次：第 ${city.playerRank} 名   同场 ${city.attackerCount} 人`,
                 `消耗行动力：${city.staminaCost}`,
@@ -814,7 +911,7 @@ export class BigMapPage extends Component {
             if (this.art && this.size.width >= 600) this.setInfoIcon(this.art.monster, 112);
             this.infoBody.string = formatBigMapMonsterDetail(monster);
             this.primaryButton.node.active = true;
-            this.primaryButton.setText(monster.battle ? '暂不可挑战' : monster.respawnInSeconds > 0 ? '等待刷新' : '攻打');
+            this.primaryButton.setText(monster.canAttack ? '攻打' : monster.respawnInSeconds > 0 ? '等待刷新' : '暂不可挑战');
             this.primaryButton.setEnabled(monster.canAttack);
             this.secondaryButton.setText('定位');
             return;
@@ -883,6 +980,7 @@ export class BigMapPage extends Component {
         this.toastLabel.color = feedback.ok ? BIGMAP_COLORS.gold : BIGMAP_COLORS.danger;
         this.toastUntil = Date.now() + 2600;
         this.toastLabel.node.active = true;
+        this.toastLabel.node.setSiblingIndex(this.node.children.length - 1);
     }
 
     private refreshToast(): void {
@@ -890,6 +988,8 @@ export class BigMapPage extends Component {
         if (Date.now() > this.toastUntil) {
             this.toastUntil = 0;
             this.toastLabel.node.active = false;
+        } else {
+            this.toastLabel.node.setSiblingIndex(this.node.children.length - 1);
         }
     }
 

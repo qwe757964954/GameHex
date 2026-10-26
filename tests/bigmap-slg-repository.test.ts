@@ -17,6 +17,7 @@ class Gateway implements IBigMapSlgGateway {
     reply: (name: IBigMapSlgRequestName, body: IBigMapSlgRequestBody) => Promise<unknown> = async (name) => {
         if (name === 'CmdSlgBuildInfoReqMsg') return snapshot();
         if (name === 'CmdSlgActionUpdateReqMsg') return { info: { nextRevertTime: 20 } };
+        if (name === 'CmdSlgGameInfoReqMsg') return { info: { maxMonsterLevel: 0, toCampId: 0 } };
         return {};
     };
     request(name: IBigMapSlgRequestName, body: IBigMapSlgRequestBody): Promise<unknown> {

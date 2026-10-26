@@ -400,11 +400,15 @@ export function buildBigMapWorld(config: IBigMapConfig, seed = DEFAULT_BIGMAP_WO
 }
 
 /** 格上有什么（建造/攻打/渲染拾取共用）。 */
-export function bigMapOccupantOf(world: IBigMapWorld, hexId: number):
+export function bigMapOccupantOf(world: IBigMapWorld, hexId: number, playerBaseHexId?: number):
     | { readonly kind: 'city'; readonly cityId: number }
     | { readonly kind: 'monster'; readonly instanceId: number }
     | { readonly kind: 'base'; readonly base: IBigMapBaseSite }
     | { readonly kind: 'empty' } {
+    // 玩家基地钉在服务器 `toCampId` 那座城的锚点上，会与城占格重叠 —— 这一格必须先按「基地」响应，
+    // 否则城占格优先，「点自己的基地回基地」永远走不到。缺省仍取布局档的玩家基地格（离线档行为不变）。
+    const baseHexId = playerBaseHexId ?? world.playerBase.hexId;
+    if (hexId === baseHexId) return { kind: 'base', base: world.baseByHex.get(hexId) ?? world.playerBase };
     const cityId = world.cityByHex.get(hexId);
     if (cityId !== undefined) return { kind: 'city', cityId };
     const instanceId = world.monsterByHex.get(hexId);

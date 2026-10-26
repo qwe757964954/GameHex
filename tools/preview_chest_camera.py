@@ -1,15 +1,16 @@
 # -*- coding: utf-8 -*-
-"""画「开箱镜头轻微推进」对照图（离线验收用，不参与运行时）。
+"""画「开箱镜头推进」对照图（离线验收用，不参与运行时）。
 
 用法（在仓库根目录）：
     "C:/Users/Administrator/.workbuddy/binaries/python/envs/default/Scripts/python.exe" tools/preview_chest_camera.py
 
-为什么要这张图（2026-10-22）：用户说「宝箱打开时，增加镜头轻微推进动画效果」。
-"轻微"是个幅度问题 —— 6% / 10% 到底长什么样、什么时候推、什么时候拉回来，文字说不清。
-所以上图是**曲线**（幅度 + 时机），下图是 **1:1 像素**的真实大小对比（虚线 = 静止态原大小）。
+为什么要这张图（2026-10-22，2026-10-23 改口径）：用户先要「镜头轻微推进」，再要「倍率按奖励资源的
+数量分弱中强三档（1.08 / 1.35 / 2.3）」。倍率是个幅度问题，文字说不清 ——
+所以上图是**曲线**（幅度 + 时机），下图是 **1:1 像素**的真实大小对比（红虚线 = 静止态原大小）。
 
-⚠️ 实现口径：镜头倍率乘在「镜头层」（Stage：宝箱 + 光效）上，绕**箱口**缩放；
-   地图层不跟着动。所以下图里地块固定、只有宝箱变大 —— 与运行时一致。
+⚠️ 实现口径：倍率乘在「镜头层」（Stage：宝箱 + 光效）上并绕**箱口**缩放，
+   同时 `focus` 把视角中心从格心挪到屏幕中心（地图那半由 `TerritoryMapView` 同帧跟上）。
+   下图只画宝箱那半（地块固定）—— 是为了让"放大了多少"看得清，不是运行时就这样。
 
 流程：`npx tsx tools/preview_chest_camera_curves.ts` 从 model 逐帧采样
       → 这里只画，不重算缓动。
@@ -76,13 +77,13 @@ def draw_curve_panel(image, box, row, color):
     """一块「倍率 ~ 时间」小图：曲线 + 开盖/收尾的竖线 + 峰值标注。"""
     left, top, right, bottom = box
     draw = ImageDraw.Draw(image)
-    pad_l, pad_r, pad_t, pad_b = 44, 16, 34, 26
+    pad_l, pad_r, pad_t, pad_b = 44, 16, 48, 26
     px0, px1 = left + pad_l, right - pad_r
     py0, py1 = top + pad_t, bottom - pad_b
 
     end = row['end']
     peak = row['peak']
-    # Y 轴范围：每档自己的量程（弱档 1.06 与强档 2.3 放同一把尺子会把轻档压成直线）
+    # Y 轴范围：每档按自己的峰值留余量（2026-10-23 起三档都是 2.3×，但保留这条算法不影响）
     y_max = peak + (peak - 1) * 0.35 + 0.002
 
     def sx(t):
@@ -120,10 +121,10 @@ def draw_curve_panel(image, box, row, color):
     draw.text((px0, py1 + 6), '0', font=F_AXIS, fill=MUTED)
     draw.text((px1, py1 + 20), '整段 %.2fs' % end, font=F_AXIS, fill=MUTED, anchor='ra')
 
-    # 面板标题
-    draw.text((left + 2, top + 4), row['name'], font=F_PANEL, fill=INK)
-    detail = '峰值 %.2f×　暗角 %s' % (peak, ('%.2f' % row['vignetteAlpha']) if row['vignetteAlpha'] else '无')
-    draw.text((left + 2 + 52, top + 6), detail, font=F_ROW, fill=color)
+    # 面板标题：第一行是"总量落在哪一档"，第二行才是峰值/尺寸（名字变长了，不能并排写）
+    draw.text((left + 2, top + 2), row['name'], font=F_PANEL, fill=INK)
+    detail = '峰值 %.2f×　宝箱 %.0fpx' % (peak, row['chestWidthAtPeak'])
+    draw.text((left + 2, top + 24), detail, font=F_ROW, fill=color)
 
 
 def draw_chest_panel(image, box, label, zoom, note, color, chest, land):
@@ -166,11 +167,12 @@ def main():
     image = Image.new('RGB', (W, height), BG)
     draw = ImageDraw.Draw(image)
 
-    draw.text((MARGIN, 22), '开箱镜头推进：三档都推，轻档只推 6% / 10%', font=F_TITLE, fill=INK)
+    draw.text((MARGIN, 22), '开箱镜头推进：推多近看「拿了多少」，不看档位', font=F_TITLE, fill=INK)
     for index, line in enumerate([
-        '口径：「宝箱打开时，增加镜头轻微推进动画效果」。镜头倍率乘在**镜头层**（宝箱 + 光效）上并',
-        '绕「箱口」缩放，地图层不动；起点恒 1.00（点下去那一帧与地图上静止的宝箱同样大，不会"突然弹大"）。',
-        '推近从**开盖**那一刻起步、与开盖同长；拉回与收尾淡出同起同落 —— 镜头回到 1.00 的那一帧宝箱正好淡完。',
+        '口径（2026-10-23 最终）：「推进的倍率根据奖励资源的数量区分弱中强三档 …… 强 2.3、中 1.35、弱 1.08」。',
+        '三条曲线共用同一份时间轴（弱档），差别只剩倍数本身；起点恒 1.00，推近从开盖那一刻起步、'
+        '与开盖同长，拉回与收尾淡出同起同落。',
+        'focus = (scale-1)/(本次倍率-1) 恒到 1，任何倍数推到头时宝箱都精确落在屏幕中心 (0,0)。',
     ]):
         draw.text((MARGIN, 58 + index * 21), line.replace('**', ''), font=F_SUB, fill=MUTED)
 
@@ -186,17 +188,20 @@ def main():
     # ── 1:1 大小对比 ──────────────────────────────────────────
     draw.line([(MARGIN, section_top - 6), (W - MARGIN, section_top - 6)], fill=LINE, width=1)
     draw.text((MARGIN, section_top + 2),
-              '峰值那一帧的真实大小（1:1 像素，红虚线框 = 静止态 84px 宽；地块固定不动，只有宝箱变大）',
+              '峰值那一帧的真实大小（1:1 像素，红虚线框 = 静止态 84px 宽；为看清倍数，地块画成固定不动）',
               font=F_ROW, fill=MUTED)
 
     chest = Image.open(CHEST_PNG).convert('RGBA')
     land = Image.open(LAND_PNG).convert('RGBA')
     boxes = [
         ('改前：不推镜', 1.0, '84px（与静止态一致）', C_BEFORE),
-        ('弱档：1.06×', rows[0]['cameraZoom'], f"{round(84 * rows[0]['cameraZoom'])}px（+6%）", C_WEAK),
-        ('中档：1.10×', rows[1]['cameraZoom'], f"{round(84 * rows[1]['cameraZoom'])}px（+10%）", C_MEDIUM),
-        ('强档：2.30×（原有效果，未改）', rows[2]['cameraZoom'],
-         f"{round(84 * rows[2]['cameraZoom'])}px（+130%）", C_STRONG),
+        # 2026-10-23 最终口径：倍率由奖励总量给（≤50 / ≤500 / >500 ⇒ 1.08 / 1.35 / 2.3）
+        ('弱：%.2f×' % rows[0]['cameraZoom'], rows[0]['cameraZoom'],
+         '%dpx' % round(84 * rows[0]['cameraZoom']), C_WEAK),
+        ('中：%.2f×' % rows[1]['cameraZoom'], rows[1]['cameraZoom'],
+         '%dpx' % round(84 * rows[1]['cameraZoom']), C_MEDIUM),
+        ('强：%.2f×' % rows[2]['cameraZoom'], rows[2]['cameraZoom'],
+         '%dpx' % round(84 * rows[2]['cameraZoom']), C_STRONG),
     ]
     panel_w2 = (W - MARGIN * 2 - 20 * 3) // 4
     for index, (label, zoom, note, color) in enumerate(boxes):

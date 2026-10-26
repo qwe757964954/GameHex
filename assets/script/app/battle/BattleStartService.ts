@@ -2,7 +2,7 @@ import { RequestStartBattle, RequestFinishBattle } from '../generated/requestMsg
 import { GameNet } from '../net/GameNet';
 import { withTimeout } from '../net/RequestGuard';
 import { toCount } from '../net/RequestGuard';
-import { ZC_BATTLE_TYPE_PVP, normalizeBattleStart } from './BattleStartModel';
+import { ZC_BATTLE_TYPE_PVP, ZC_BATTLE_TYPE_SLG_CAMP, ZC_BATTLE_TYPE_SLG_MONSTER, normalizeBattleStart } from './BattleStartModel';
 import type { ZCBattleStart } from './BattleStartModel';
 
 /**
@@ -27,15 +27,17 @@ export function startBattle(
     battleType: number = ZC_BATTLE_TYPE_PVP,
     battleParams: readonly string[] = [],
     caller?: unknown,
+    isCurrent?: () => boolean,
 ): Promise<ZCBattleStart | null> {
+    if (isCurrent && !isCurrent()) return Promise.resolve(null);
     const requestKey = JSON.stringify([battleType, battleParams]);
     if (pendingRequest) {
-        if (pendingRequestKey === requestKey) return pendingRequest;
+        if (pendingRequestKey === requestKey && !isCurrent) return pendingRequest;
         console.warn('[BattleStartService] 另一种战斗的开战请求尚未结束');
         return Promise.resolve(null);
     }
     pendingRequestKey = requestKey;
-    pendingRequest = requestStartBattle(battleType, battleParams, caller).finally(() => {
+    pendingRequest = requestStartBattle(battleType, battleParams, caller, isCurrent).finally(() => {
         pendingRequest = null;
         pendingRequestKey = null;
     });
@@ -56,6 +58,7 @@ async function requestStartBattle(
     battleType: number,
     battleParams: readonly string[],
     caller?: unknown,
+    isCurrent?: () => boolean,
 ): Promise<ZCBattleStart | null> {
     const net = GameNet.instance;
     if (!net.isConnected) {
@@ -63,32 +66,51 @@ async function requestStartBattle(
         return null;
     }
 
-    return withTimeout(sendStartBattle(battleType, battleParams, caller), BATTLE_START_TIMEOUT_MS, () => {
-        console.info(`[BattleStartService] 开始战斗 ${BATTLE_START_TIMEOUT_MS}ms 无响应，无法进入对局`);
-        return null;
-    });
+    let active = true;
+    const canSend = (): boolean => active && (!isCurrent || isCurrent());
+    try {
+        return await withTimeout(sendStartBattle(battleType, battleParams, caller, canSend), BATTLE_START_TIMEOUT_MS, () => {
+            active = false;
+            console.info(`[BattleStartService] 开始战斗 ${BATTLE_START_TIMEOUT_MS}ms 无响应，无法进入对局`);
+            return null;
+        });
+    } finally {
+        active = false;
+    }
 }
 
 async function sendStartBattle(
     battleType: number,
     battleParams: readonly string[],
     caller?: unknown,
+    isCurrent: () => boolean = () => true,
 ): Promise<ZCBattleStart | null> {
     let response: CmdStartBattleRspMsg | null = null;
+    const isSlg = battleType === ZC_BATTLE_TYPE_SLG_CAMP || battleType === ZC_BATTLE_TYPE_SLG_MONSTER;
     try {
-        const ok = await GameNet.instance.send(new RequestStartBattle(
+        const request = new RequestStartBattle(
             { startBattleInfo: { battleType, battleParams: Array.from(battleParams) }, version: '1.0.1' },
             caller as destroyable,
-            (rsp) => { response = rsp; },
-        ), false);
-        if (!ok || !response) return null;
+            (rsp) => { if (isCurrent()) response = rsp; },
+        );
+        if (isSlg) {
+            request.allowRetry = false;
+            request.canSend = isCurrent;
+        }
+        const ok = await GameNet.instance.send(request, false);
+        if (!ok || !response || !isCurrent()) return null;
     } catch (error) {
         console.warn('[BattleStartService] 开始战斗请求失败，走本地数据', error);
         return null;
     }
 
+    if (isSlg) {
+        const info = response.startBattleInfo;
+        if (!info || info.battleType !== battleType || JSON.stringify(info.battleParams) !== JSON.stringify(battleParams)) return null;
+    }
     const result = normalizeBattleStart(response);
-    if (result) lastResult = result;
+    // SLG 只随 entry params 交接，不能被后续 PVP 匹配消费。
+    if (result && !isSlg) lastResult = result;
     return result;
 }
 

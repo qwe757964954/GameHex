@@ -1,3 +1,4 @@
+import * as resourcePlan from '../assets/script/app/zcds/model/ZCGameResourcePlan';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import test from 'node:test';
@@ -37,6 +38,8 @@ function makeGame(
     };
     const cc = { JsonAsset: class {}, Prefab: class {} };
     const dependencies: Record<string, unknown> = {
+        '../model/ZCGameResourcePlan': resourcePlan,
+        '../ZCDCLogSwitch': { ZCDC_LOG_WARNINGS: false },
         cc,
         '../model/ZCCombatCatalog': {},
         // 沙箱直接复用真实候选判据，避免测试替身与 2/3/4 人随机规则漂移。

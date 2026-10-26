@@ -43279,6 +43279,7 @@ $root.com = (function() {
                  * @property {number} CELEBRATION_LOCK_MONSTER_SERVER_RANK=50 CELEBRATION_LOCK_MONSTER_SERVER_RANK value
                  * @property {number} CELEBRATION_OATH_ALLIANCE_FULL_RANK=51 CELEBRATION_OATH_ALLIANCE_FULL_RANK value
                  * @property {number} CELEBRATION_OATH_ALLIANCE_SERVER_RANK=52 CELEBRATION_OATH_ALLIANCE_SERVER_RANK value
+                 * @property {number} SLG_CAMP_ROLE_HARM_RANK=53 SLG_CAMP_ROLE_HARM_RANK value
                  */
                 cmd.CmdRankType = (function() {
                     var valuesById = {}, values = Object.create(valuesById);
@@ -43318,6 +43319,7 @@ $root.com = (function() {
                     values[valuesById[50] = "CELEBRATION_LOCK_MONSTER_SERVER_RANK"] = 50;
                     values[valuesById[51] = "CELEBRATION_OATH_ALLIANCE_FULL_RANK"] = 51;
                     values[valuesById[52] = "CELEBRATION_OATH_ALLIANCE_SERVER_RANK"] = 52;
+                    values[valuesById[53] = "SLG_CAMP_ROLE_HARM_RANK"] = 53;
                     return values;
                 })();
 
@@ -110107,6 +110109,144 @@ $root.com = (function() {
                     return CmdSlgMonsterBattleResultInfo;
                 })();
 
+                cmd.CmdSlgCampBattleResultInfo = (function() {
+
+                    /**
+                     * Properties of a CmdSlgCampBattleResultInfo.
+                     * @memberof com.xkhy.tafang.cmd
+                     * @interface ICmdSlgCampBattleResultInfo
+                     * @property {number|null} [warScore] CmdSlgCampBattleResultInfo warScore
+                     * @property {Array.<com.xkhy.tafang.cmd.CmdGoods>|null} [cmdGoods] CmdSlgCampBattleResultInfo cmdGoods
+                     */
+
+                    /**
+                     * Constructs a new CmdSlgCampBattleResultInfo.
+                     * @memberof com.xkhy.tafang.cmd
+                     * @classdesc Represents a CmdSlgCampBattleResultInfo.
+                     * @implements ICmdSlgCampBattleResultInfo
+                     * @constructor
+                     * @param {com.xkhy.tafang.cmd.ICmdSlgCampBattleResultInfo=} [properties] Properties to set
+                     */
+                    function CmdSlgCampBattleResultInfo(properties) {
+                        this.cmdGoods = [];
+                        if (properties)
+                            for (var keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                                if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                                    this[keys[i]] = properties[keys[i]];
+                    }
+
+                    /**
+                     * CmdSlgCampBattleResultInfo warScore.
+                     * @member {number} warScore
+                     * @memberof com.xkhy.tafang.cmd.CmdSlgCampBattleResultInfo
+                     * @instance
+                     */
+                    CmdSlgCampBattleResultInfo.prototype.warScore = 0;
+
+                    /**
+                     * CmdSlgCampBattleResultInfo cmdGoods.
+                     * @member {Array.<com.xkhy.tafang.cmd.CmdGoods>} cmdGoods
+                     * @memberof com.xkhy.tafang.cmd.CmdSlgCampBattleResultInfo
+                     * @instance
+                     */
+                    CmdSlgCampBattleResultInfo.prototype.cmdGoods = $util.emptyArray;
+
+                    /**
+                     * Creates a new CmdSlgCampBattleResultInfo instance using the specified properties.
+                     * @function create
+                     * @memberof com.xkhy.tafang.cmd.CmdSlgCampBattleResultInfo
+                     * @static
+                     * @param {com.xkhy.tafang.cmd.ICmdSlgCampBattleResultInfo=} [properties] Properties to set
+                     * @returns {com.xkhy.tafang.cmd.CmdSlgCampBattleResultInfo} CmdSlgCampBattleResultInfo instance
+                     */
+                    CmdSlgCampBattleResultInfo.create = function create(properties) {
+                        return new CmdSlgCampBattleResultInfo(properties);
+                    };
+
+                    /**
+                     * Encodes the specified CmdSlgCampBattleResultInfo message. Does not implicitly {@link com.xkhy.tafang.cmd.CmdSlgCampBattleResultInfo.verify|verify} messages.
+                     * @function encode
+                     * @memberof com.xkhy.tafang.cmd.CmdSlgCampBattleResultInfo
+                     * @static
+                     * @param {com.xkhy.tafang.cmd.CmdSlgCampBattleResultInfo} message CmdSlgCampBattleResultInfo message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    CmdSlgCampBattleResultInfo.encode = function encode(message, writer, q) {
+                        if (!writer)
+                            writer = $Writer.create();
+                        if (q === undefined)
+                            q = 0;
+                        if (q > $util.recursionLimit)
+                            throw Error("max depth exceeded");
+                        if (message.warScore != null && Object.hasOwnProperty.call(message, "warScore"))
+                            writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.warScore);
+                        if (message.cmdGoods != null && message.cmdGoods.length)
+                            for (var i = 0; i < message.cmdGoods.length; ++i)
+                                $root.com.xkhy.tafang.cmd.CmdGoods.encode(message.cmdGoods[i], writer.uint32(/* id 2, wireType 2 =*/18).fork(), q + 1).ldelim();
+                        return writer;
+                    };
+
+                    /**
+                     * Decodes a CmdSlgCampBattleResultInfo message from the specified reader or buffer.
+                     * @function decode
+                     * @memberof com.xkhy.tafang.cmd.CmdSlgCampBattleResultInfo
+                     * @static
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {com.xkhy.tafang.cmd.CmdSlgCampBattleResultInfo} CmdSlgCampBattleResultInfo
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    CmdSlgCampBattleResultInfo.decode = function decode(reader, length, error, long) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader.create(reader);
+                        if (long === undefined)
+                            long = 0;
+                        if (long > $Reader.recursionLimit)
+                            throw Error("maximum nesting depth exceeded");
+                        var end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdSlgCampBattleResultInfo();
+                        while (reader.pos < end) {
+                            var tag = reader.uint32();
+                            if (tag === error)
+                                break;
+                            switch (tag >>> 3) {
+                            case 1: {
+                                    message.warScore = reader.uint32();
+                                    break;
+                                }
+                            case 2: {
+                                    if (!(message.cmdGoods && message.cmdGoods.length))
+                                        message.cmdGoods = [];
+                                    message.cmdGoods.push($root.com.xkhy.tafang.cmd.CmdGoods.decode(reader, reader.uint32(), undefined, long + 1));
+                                    break;
+                                }
+                            default:
+                                reader.skipType(tag & 7, long);
+                                break;
+                            }
+                        }
+                        return message;
+                    };
+
+                    /**
+                     * Gets the default type url for CmdSlgCampBattleResultInfo
+                     * @function getTypeUrl
+                     * @memberof com.xkhy.tafang.cmd.CmdSlgCampBattleResultInfo
+                     * @static
+                     * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+                     * @returns {string} The default type url
+                     */
+                    CmdSlgCampBattleResultInfo.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                        if (typeUrlPrefix === undefined) {
+                            typeUrlPrefix = "type.googleapis.com";
+                        }
+                        return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdSlgCampBattleResultInfo";
+                    };
+
+                    return CmdSlgCampBattleResultInfo;
+                })();
+
                 cmd.CmdBattleFrameInfo = (function() {
 
                     /**
@@ -113143,6 +113283,142 @@ $root.com = (function() {
                     return CmdCityChapterCellInfoRspMsg;
                 })();
 
+                cmd.SlgGameInfo = (function() {
+
+                    /**
+                     * Properties of a SlgGameInfo.
+                     * @memberof com.xkhy.tafang.cmd
+                     * @interface ISlgGameInfo
+                     * @property {number} maxMonsterLevel SlgGameInfo maxMonsterLevel
+                     * @property {number} toCampId SlgGameInfo toCampId
+                     */
+
+                    /**
+                     * Constructs a new SlgGameInfo.
+                     * @memberof com.xkhy.tafang.cmd
+                     * @classdesc Represents a SlgGameInfo.
+                     * @implements ISlgGameInfo
+                     * @constructor
+                     * @param {com.xkhy.tafang.cmd.ISlgGameInfo=} [properties] Properties to set
+                     */
+                    function SlgGameInfo(properties) {
+                        if (properties)
+                            for (var keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                                if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                                    this[keys[i]] = properties[keys[i]];
+                    }
+
+                    /**
+                     * SlgGameInfo maxMonsterLevel.
+                     * @member {number} maxMonsterLevel
+                     * @memberof com.xkhy.tafang.cmd.SlgGameInfo
+                     * @instance
+                     */
+                    SlgGameInfo.prototype.maxMonsterLevel = 0;
+
+                    /**
+                     * SlgGameInfo toCampId.
+                     * @member {number} toCampId
+                     * @memberof com.xkhy.tafang.cmd.SlgGameInfo
+                     * @instance
+                     */
+                    SlgGameInfo.prototype.toCampId = 0;
+
+                    /**
+                     * Creates a new SlgGameInfo instance using the specified properties.
+                     * @function create
+                     * @memberof com.xkhy.tafang.cmd.SlgGameInfo
+                     * @static
+                     * @param {com.xkhy.tafang.cmd.ISlgGameInfo=} [properties] Properties to set
+                     * @returns {com.xkhy.tafang.cmd.SlgGameInfo} SlgGameInfo instance
+                     */
+                    SlgGameInfo.create = function create(properties) {
+                        return new SlgGameInfo(properties);
+                    };
+
+                    /**
+                     * Encodes the specified SlgGameInfo message. Does not implicitly {@link com.xkhy.tafang.cmd.SlgGameInfo.verify|verify} messages.
+                     * @function encode
+                     * @memberof com.xkhy.tafang.cmd.SlgGameInfo
+                     * @static
+                     * @param {com.xkhy.tafang.cmd.SlgGameInfo} message SlgGameInfo message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    SlgGameInfo.encode = function encode(message, writer, q) {
+                        if (!writer)
+                            writer = $Writer.create();
+                        if (q === undefined)
+                            q = 0;
+                        if (q > $util.recursionLimit)
+                            throw Error("max depth exceeded");
+                        writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.maxMonsterLevel);
+                        writer.uint32(/* id 2, wireType 0 =*/16).uint32(message.toCampId);
+                        return writer;
+                    };
+
+                    /**
+                     * Decodes a SlgGameInfo message from the specified reader or buffer.
+                     * @function decode
+                     * @memberof com.xkhy.tafang.cmd.SlgGameInfo
+                     * @static
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {com.xkhy.tafang.cmd.SlgGameInfo} SlgGameInfo
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    SlgGameInfo.decode = function decode(reader, length, error, long) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader.create(reader);
+                        if (long === undefined)
+                            long = 0;
+                        if (long > $Reader.recursionLimit)
+                            throw Error("maximum nesting depth exceeded");
+                        var end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.SlgGameInfo();
+                        while (reader.pos < end) {
+                            var tag = reader.uint32();
+                            if (tag === error)
+                                break;
+                            switch (tag >>> 3) {
+                            case 1: {
+                                    message.maxMonsterLevel = reader.uint32();
+                                    break;
+                                }
+                            case 2: {
+                                    message.toCampId = reader.uint32();
+                                    break;
+                                }
+                            default:
+                                reader.skipType(tag & 7, long);
+                                break;
+                            }
+                        }
+                        if (!message.hasOwnProperty("maxMonsterLevel"))
+                            throw $util.ProtocolError("missing required 'maxMonsterLevel'", { instance: message });
+                        if (!message.hasOwnProperty("toCampId"))
+                            throw $util.ProtocolError("missing required 'toCampId'", { instance: message });
+                        return message;
+                    };
+
+                    /**
+                     * Gets the default type url for SlgGameInfo
+                     * @function getTypeUrl
+                     * @memberof com.xkhy.tafang.cmd.SlgGameInfo
+                     * @static
+                     * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+                     * @returns {string} The default type url
+                     */
+                    SlgGameInfo.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                        if (typeUrlPrefix === undefined) {
+                            typeUrlPrefix = "type.googleapis.com";
+                        }
+                        return typeUrlPrefix + "/com.xkhy.tafang.cmd.SlgGameInfo";
+                    };
+
+                    return SlgGameInfo;
+                })();
+
                 cmd.SlgGameActionInfo = (function() {
 
                     /**
@@ -114912,6 +115188,7 @@ $root.com = (function() {
                      * Properties of a CmdSlgGameInfoRspMsg.
                      * @memberof com.xkhy.tafang.cmd
                      * @interface ICmdSlgGameInfoRspMsg
+                     * @property {com.xkhy.tafang.cmd.SlgGameInfo} info CmdSlgGameInfoRspMsg info
                      */
 
                     /**
@@ -114928,6 +115205,14 @@ $root.com = (function() {
                                 if (properties[keys[i]] != null && keys[i] !== "__proto__")
                                     this[keys[i]] = properties[keys[i]];
                     }
+
+                    /**
+                     * CmdSlgGameInfoRspMsg info.
+                     * @member {com.xkhy.tafang.cmd.SlgGameInfo} info
+                     * @memberof com.xkhy.tafang.cmd.CmdSlgGameInfoRspMsg
+                     * @instance
+                     */
+                    CmdSlgGameInfoRspMsg.prototype.info = null;
 
                     /**
                      * Creates a new CmdSlgGameInfoRspMsg instance using the specified properties.
@@ -114957,6 +115242,7 @@ $root.com = (function() {
                             q = 0;
                         if (q > $util.recursionLimit)
                             throw Error("max depth exceeded");
+                        $root.com.xkhy.tafang.cmd.SlgGameInfo.encode(message.info, writer.uint32(/* id 1, wireType 2 =*/10).fork(), q + 1).ldelim();
                         return writer;
                     };
 
@@ -114984,11 +115270,17 @@ $root.com = (function() {
                             if (tag === error)
                                 break;
                             switch (tag >>> 3) {
+                            case 1: {
+                                    message.info = $root.com.xkhy.tafang.cmd.SlgGameInfo.decode(reader, reader.uint32(), undefined, long + 1);
+                                    break;
+                                }
                             default:
                                 reader.skipType(tag & 7, long);
                                 break;
                             }
                         }
+                        if (!message.hasOwnProperty("info"))
+                            throw $util.ProtocolError("missing required 'info'", { instance: message });
                         return message;
                     };
 
@@ -115016,6 +115308,7 @@ $root.com = (function() {
                      * Properties of a CmdSlgGameInfoBroMsg.
                      * @memberof com.xkhy.tafang.cmd
                      * @interface ICmdSlgGameInfoBroMsg
+                     * @property {com.xkhy.tafang.cmd.SlgGameInfo} info CmdSlgGameInfoBroMsg info
                      */
 
                     /**
@@ -115032,6 +115325,14 @@ $root.com = (function() {
                                 if (properties[keys[i]] != null && keys[i] !== "__proto__")
                                     this[keys[i]] = properties[keys[i]];
                     }
+
+                    /**
+                     * CmdSlgGameInfoBroMsg info.
+                     * @member {com.xkhy.tafang.cmd.SlgGameInfo} info
+                     * @memberof com.xkhy.tafang.cmd.CmdSlgGameInfoBroMsg
+                     * @instance
+                     */
+                    CmdSlgGameInfoBroMsg.prototype.info = null;
 
                     /**
                      * Creates a new CmdSlgGameInfoBroMsg instance using the specified properties.
@@ -115061,6 +115362,7 @@ $root.com = (function() {
                             q = 0;
                         if (q > $util.recursionLimit)
                             throw Error("max depth exceeded");
+                        $root.com.xkhy.tafang.cmd.SlgGameInfo.encode(message.info, writer.uint32(/* id 1, wireType 2 =*/10).fork(), q + 1).ldelim();
                         return writer;
                     };
 
@@ -115088,11 +115390,17 @@ $root.com = (function() {
                             if (tag === error)
                                 break;
                             switch (tag >>> 3) {
+                            case 1: {
+                                    message.info = $root.com.xkhy.tafang.cmd.SlgGameInfo.decode(reader, reader.uint32(), undefined, long + 1);
+                                    break;
+                                }
                             default:
                                 reader.skipType(tag & 7, long);
                                 break;
                             }
                         }
+                        if (!message.hasOwnProperty("info"))
+                            throw $util.ProtocolError("missing required 'info'", { instance: message });
                         return message;
                     };
 
@@ -115216,6 +115524,126 @@ $root.com = (function() {
                     };
 
                     return CmdSlgBuildInfoReqMsg;
+                })();
+
+                cmd.CmdSlgBuildInfoRspMsg = (function() {
+
+                    /**
+                     * Properties of a CmdSlgBuildInfoRspMsg.
+                     * @memberof com.xkhy.tafang.cmd
+                     * @interface ICmdSlgBuildInfoRspMsg
+                     * @property {com.xkhy.tafang.cmd.SlgBuildGameInfo} info CmdSlgBuildInfoRspMsg info
+                     */
+
+                    /**
+                     * Constructs a new CmdSlgBuildInfoRspMsg.
+                     * @memberof com.xkhy.tafang.cmd
+                     * @classdesc Represents a CmdSlgBuildInfoRspMsg.
+                     * @implements ICmdSlgBuildInfoRspMsg
+                     * @constructor
+                     * @param {com.xkhy.tafang.cmd.ICmdSlgBuildInfoRspMsg=} [properties] Properties to set
+                     */
+                    function CmdSlgBuildInfoRspMsg(properties) {
+                        if (properties)
+                            for (var keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                                if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                                    this[keys[i]] = properties[keys[i]];
+                    }
+
+                    /**
+                     * CmdSlgBuildInfoRspMsg info.
+                     * @member {com.xkhy.tafang.cmd.SlgBuildGameInfo} info
+                     * @memberof com.xkhy.tafang.cmd.CmdSlgBuildInfoRspMsg
+                     * @instance
+                     */
+                    CmdSlgBuildInfoRspMsg.prototype.info = null;
+
+                    /**
+                     * Creates a new CmdSlgBuildInfoRspMsg instance using the specified properties.
+                     * @function create
+                     * @memberof com.xkhy.tafang.cmd.CmdSlgBuildInfoRspMsg
+                     * @static
+                     * @param {com.xkhy.tafang.cmd.ICmdSlgBuildInfoRspMsg=} [properties] Properties to set
+                     * @returns {com.xkhy.tafang.cmd.CmdSlgBuildInfoRspMsg} CmdSlgBuildInfoRspMsg instance
+                     */
+                    CmdSlgBuildInfoRspMsg.create = function create(properties) {
+                        return new CmdSlgBuildInfoRspMsg(properties);
+                    };
+
+                    /**
+                     * Encodes the specified CmdSlgBuildInfoRspMsg message. Does not implicitly {@link com.xkhy.tafang.cmd.CmdSlgBuildInfoRspMsg.verify|verify} messages.
+                     * @function encode
+                     * @memberof com.xkhy.tafang.cmd.CmdSlgBuildInfoRspMsg
+                     * @static
+                     * @param {com.xkhy.tafang.cmd.CmdSlgBuildInfoRspMsg} message CmdSlgBuildInfoRspMsg message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    CmdSlgBuildInfoRspMsg.encode = function encode(message, writer, q) {
+                        if (!writer)
+                            writer = $Writer.create();
+                        if (q === undefined)
+                            q = 0;
+                        if (q > $util.recursionLimit)
+                            throw Error("max depth exceeded");
+                        $root.com.xkhy.tafang.cmd.SlgBuildGameInfo.encode(message.info, writer.uint32(/* id 1, wireType 2 =*/10).fork(), q + 1).ldelim();
+                        return writer;
+                    };
+
+                    /**
+                     * Decodes a CmdSlgBuildInfoRspMsg message from the specified reader or buffer.
+                     * @function decode
+                     * @memberof com.xkhy.tafang.cmd.CmdSlgBuildInfoRspMsg
+                     * @static
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {com.xkhy.tafang.cmd.CmdSlgBuildInfoRspMsg} CmdSlgBuildInfoRspMsg
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    CmdSlgBuildInfoRspMsg.decode = function decode(reader, length, error, long) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader.create(reader);
+                        if (long === undefined)
+                            long = 0;
+                        if (long > $Reader.recursionLimit)
+                            throw Error("maximum nesting depth exceeded");
+                        var end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdSlgBuildInfoRspMsg();
+                        while (reader.pos < end) {
+                            var tag = reader.uint32();
+                            if (tag === error)
+                                break;
+                            switch (tag >>> 3) {
+                            case 1: {
+                                    message.info = $root.com.xkhy.tafang.cmd.SlgBuildGameInfo.decode(reader, reader.uint32(), undefined, long + 1);
+                                    break;
+                                }
+                            default:
+                                reader.skipType(tag & 7, long);
+                                break;
+                            }
+                        }
+                        if (!message.hasOwnProperty("info"))
+                            throw $util.ProtocolError("missing required 'info'", { instance: message });
+                        return message;
+                    };
+
+                    /**
+                     * Gets the default type url for CmdSlgBuildInfoRspMsg
+                     * @function getTypeUrl
+                     * @memberof com.xkhy.tafang.cmd.CmdSlgBuildInfoRspMsg
+                     * @static
+                     * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+                     * @returns {string} The default type url
+                     */
+                    CmdSlgBuildInfoRspMsg.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                        if (typeUrlPrefix === undefined) {
+                            typeUrlPrefix = "type.googleapis.com";
+                        }
+                        return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdSlgBuildInfoRspMsg";
+                    };
+
+                    return CmdSlgBuildInfoRspMsg;
                 })();
 
                 cmd.CmdSlgBuildReqMsg = (function() {

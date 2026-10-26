@@ -13,7 +13,8 @@
  *    旧框架下线后前缀常量就地定义，本文件现在**只依赖 cc**。
  * ------------------------------------------------------------------
  */
-import { Prefab, resources } from 'cc';
+import { assetManager, Prefab, resources } from 'cc';
+import { bundleForPath } from '../../core/asset/BundleCatalog';
 
 /** UI prefab 在 resources/ 下的统一根目录。 */
 export const UI_RESOURCE_ROOT = 'ui';
@@ -38,13 +39,30 @@ export class UIResources {
             return;
         }
 
-        resources.load(url, Prefab, (err, asset) => {
+        const bundleName = bundleForPath(url);
+        const onLoaded = (err: Error | null, asset: Prefab | null) => {
             if (err || !asset) {
                 cb(err || new Error(`UIResources: ${url} 加载结果为空`), null);
                 return;
             }
-            this._cache.set(url, asset as Prefab);
-            cb(null, asset as Prefab);
+            this._cache.set(url, asset);
+            cb(null, asset);
+        };
+        if (!bundleName || bundleName === 'resources') {
+            resources.load(url, Prefab, onLoaded);
+            return;
+        }
+        const bundled = assetManager.getBundle(bundleName);
+        if (bundled) {
+            (bundled.load as any)(url, Prefab, onLoaded);
+            return;
+        }
+        assetManager.loadBundle(bundleName, (error, bundle) => {
+            if (error || !bundle) {
+                cb(error || new Error(`UIResources: Bundle ${bundleName} 加载失败`), null);
+                return;
+            }
+            (bundle.load as any)(url, Prefab, onLoaded);
         });
     }
 

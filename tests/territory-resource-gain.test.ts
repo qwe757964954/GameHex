@@ -10,7 +10,9 @@ import {
     territoryBurstLaunch,
     territoryBurstParticle,
     territoryBurstTotalSeconds,
+    territoryGainContentX,
     territoryGainFx,
+    TERRITORY_GAIN_ICON_TEXT_GAP_PX,
     TERRITORY_GAIN_BURST_COUNT,
     TERRITORY_GAIN_BURST_FADE_SECONDS,
     TERRITORY_GAIN_BURST_FLIP_MAX_HZ,
@@ -186,6 +188,58 @@ test('飘字 prefab：icon + 数字整体居中（按中心摆，不能共用左
     const center = (Math.min(iconLeft, textLeft) + Math.max(iconRight, textRight)) / 2;
     assert.ok(Math.abs(center) <= 1,
         `飘字内容没居中：整体中心 ${center.toFixed(2)}（root anchor 0.5 ⇒ 应 ≈ 0）`);
+});
+
+test('飘字布局：icon + 数字按**实测宽度**整组居中，位数多少都不偏', () => {
+    // 几何真源在这里，视图只负责读宽度 + 写回节点（`layoutContent`）。
+    const ICON = 40;
+    const span = (iconWidth: number, textWidth: number): [number, number] => {
+        const x = territoryGainContentX(iconWidth, textWidth)!;
+        // icon 锚点 0.5、Amount 锚点 0（与 prefab 一致）
+        const iconLeft = x.iconX - iconWidth / 2;
+        const textRight = x.textX + textWidth;
+        return [iconLeft, textRight];
+    };
+
+    // ① 三种位数都居中（中心 ≈ 0）—— 这正是 `+1` / `+100` / `+100000` 的差别。
+    for (const textWidth of [24, 80.58, 168]) {
+        const [left, right] = span(ICON, textWidth);
+        assert.ok(Math.abs((left + right) / 2) < 1e-9, `数字宽 ${textWidth} 时整组没居中`);
+    }
+    // ② 间隙恒为 6（不随位数变），不然长数字看着"贴着图标"。
+    for (const textWidth of [24, 80.58, 168]) {
+        const x = territoryGainContentX(ICON, textWidth)!;
+        const gap = x.textX - (x.iconX + ICON / 2);
+        assert.ok(Math.abs(gap - TERRITORY_GAIN_ICON_TEXT_GAP_PX) < 1e-9, `数字宽 ${textWidth} 时间隙成了 ${gap}`);
+    }
+    // ③ 数字越宽，整组左边界越左（整组跟着长，不是只往右长）。
+    const [leftShort] = span(ICON, 24);
+    const [leftLong] = span(ICON, 168);
+    assert.ok(leftLong < leftShort, '长数字没把整组往左撑开 ⇒ 只往右长了');
+
+    // ④ 读不到宽度（首帧没排版 / NaN）⇒ null，调用方保持 prefab 摆位。
+    assert.equal(territoryGainContentX(0, 80), null);
+    assert.equal(territoryGainContentX(ICON, 0), null);
+    assert.equal(territoryGainContentX(Number.NaN, 80), null);
+    assert.equal(territoryGainContentX(ICON, Number.POSITIVE_INFINITY), null);
+
+    // ⑤ prefab 里存的样张必须和这条公式算出来的一致（否则编辑器里看到的与实机不同）。
+    const data = load(GAIN_PREFAB);
+    const nodeByName = (name: string): IPrefabObject =>
+        data.find((o) => o.__type__ === 'cc.Node' && o._name === name)!;
+    const transformOf = (node: IPrefabObject): IPrefabObject => {
+        const ids = (node._components as { __id__: number }[]).map((c) => c.__id__);
+        return data[ids.find((id) => data[id].__type__ === 'cc.UITransform')!];
+    };
+    const icon = nodeByName('Icon');
+    const amount = nodeByName('Amount');
+    const iconSize = transformOf(icon)._contentSize as { width: number };
+    const textSize = transformOf(amount)._contentSize as { width: number };
+    const expected = territoryGainContentX(iconSize.width, textSize.width)!;
+    assert.ok(Math.abs((icon._lpos as { x: number }).x - expected.iconX) < 0.02,
+        `prefab Icon.x 与公式差 ${((icon._lpos as { x: number }).x - expected.iconX).toFixed(3)}`);
+    assert.ok(Math.abs((amount._lpos as { x: number }).x - expected.textX) < 0.02,
+        `prefab Amount.x 与公式差 ${((amount._lpos as { x: number }).x - expected.textX).toFixed(3)}`);
 });
 
 test('领地页 prefab：MapView 绑到 GainLayer，且 GainLayer 是 MapLayer 最后一个子节点', () => {
@@ -620,6 +674,14 @@ function loadBurstModule(): Record<string, unknown> {
             // / `territory-tap-feedback` 里单独测）。
             if (id === './TerritoryChestView') return { TerritoryChestView: class {} };
             if (id === './TerritoryTapFeedback') return { TerritoryTapFeedback: class {} };
+            // 未解锁云的**格位集合**（2026-10-23）：MapView 多了一条来自 model 的**值导入**
+            // （`territoryCloudCells`），不只是 class。本用例的判据与云无关 ⇒ 给空集合
+            // （视图那边全是空壳，没人读这些常量）。
+            if (id === '../model/TerritoryCloud') return {
+                territoryCloudCells: () => [],
+                TERRITORY_CLOUD_SCALE: 1,
+                TERRITORY_CLOUD_ART_OFFSET_Y: -21,
+            };
             throw new Error(`Unexpected dependency: ${id}`);
         },
     });

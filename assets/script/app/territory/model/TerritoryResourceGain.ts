@@ -85,6 +85,50 @@ export const TERRITORY_GAIN_STACK_GAP_PX = 40;
  */
 export const TERRITORY_GAIN_START_LIFT_PX = 40;
 
+/**
+ * 图标与数字之间的间隙（px）。prefab 里的样张（`+100`）也是按这个值摆的。
+ */
+export const TERRITORY_GAIN_ICON_TEXT_GAP_PX = 6;
+
+/** {@link territoryGainContentX} 的结果：两个子节点的 `x`（相对飘字节点原点）。 */
+export interface ITerritoryGainContentX {
+    readonly iconX: number;
+    readonly textX: number;
+}
+
+/**
+ * 把「图标 + 数字」整组**按中心摆正**：组中心恒在 `0`。
+ *
+ * 为什么不能只靠 prefab 摆：
+ *  `Amount` 的锚点在左边（x = 0），数字一变宽就只往右长，整组跟着偏 ——
+ *  `+1` 偏左、`+100000` 偏右，而 prefab 里只看得到样张那一句，永远"看着是居中的"。
+ *
+ * 算法：总宽 = 图标宽 + 间隙 + 数字宽；左边界 `left = -总宽 / 2`；
+ * 再按**各自的锚点**换算出要写的 `x`（锚点 0.5 = 写中心，锚点 0 = 写左边缘）。
+ *
+ * @param iconWidth 图标宽（像素）。
+ * @param textWidth 数字**实测**宽（像素，`overflow = NONE` 下由 Label 排版得到）。
+ * @param iconAnchorX 图标锚点 x（prefab 里是 0.5）。
+ * @param textAnchorX 数字锚点 x（prefab 里是 0）。
+ * @returns 任一宽度读不到（非正 / NaN）时返回 `null` —— 调用方应保持 prefab 原摆位，
+ *          别把整组甩到左边（首帧 Label 还没排版就会这样）。
+ */
+export function territoryGainContentX(
+    iconWidth: number,
+    textWidth: number,
+    iconAnchorX = 0.5,
+    textAnchorX = 0,
+): ITerritoryGainContentX | null {
+    // `Number.isFinite` 一并挡掉 NaN / ±Infinity：只要不是有限正数就当"没读到"。
+    if (!(Number.isFinite(iconWidth) && iconWidth > 0)) return null;
+    if (!(Number.isFinite(textWidth) && textWidth > 0)) return null;
+    const left = -(iconWidth + TERRITORY_GAIN_ICON_TEXT_GAP_PX + textWidth) / 2;
+    return {
+        iconX: left + iconWidth * iconAnchorX,
+        textX: left + iconWidth + TERRITORY_GAIN_ICON_TEXT_GAP_PX + textWidth * textAnchorX,
+    };
+}
+
 export interface ITerritoryGainFx {
     /** 相对起点的纵向位移（像素，向上为正）。 */
     readonly offsetY: number;

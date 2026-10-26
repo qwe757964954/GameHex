@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { normalizeTerritoryMap, TerritoryValidationError } from './formats/territory-format.js';
 import { BigmapValidationError, normalizeBigmapLayout } from './formats/bigmap-format.js';
+import { hexNeighbors } from './formats/hex-grid.js';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const presetDir = join(root, 'presets');
@@ -431,17 +432,57 @@ function validatePreset(data, id) {
     }
     return data.ascii[sourceRow]?.[sourceColumn];
   };
+  const isWalkable = (row, column) => {
+    const token = tokenAt(row, column);
+    const section = token === '#' ? 1 : token === '-' ? 2 : token === 'N' ? 0 : Number(token);
+    return token !== '.' && token !== undefined && Number.isInteger(section) && section >= 0 && section <= playerCount;
+  };
+  let resourcePoints;
   if (data.resourcePoints !== undefined) {
     if (!Array.isArray(data.resourcePoints)) throw new RequestError('资源点位必须是数组');
+    resourcePoints = [];
+    const occupied = new Set();
+    const configuredDistance = Number(data.spacing?.resourceMinDistance);
+    const minimumDistance = Number.isFinite(configuredDistance) ? Math.max(3, configuredDistance) : 3;
     for (const point of data.resourcePoints) {
       if (!point || !Number.isInteger(point.row) || !Number.isInteger(point.column) ||
           point.row < 0 || point.row >= rows || point.column < 0 || point.column >= columns) {
         throw new RequestError('资源点位坐标不在地图内');
       }
-      if (tokenAt(point.row, point.column) !== '0' && tokenAt(point.row, point.column) !== 'N') {
-        throw new RequestError('资源点位只能落在中立格上');
+      if (!isWalkable(point.row, point.column)) {
+        throw new RequestError('资源点位必须落在可通行格上，不能放在虚空');
       }
-      if (point.section !== undefined && point.section !== 0) throw new RequestError('中立资源点的分区必须为 0');
+      const hasGroup = Object.prototype.hasOwnProperty.call(point, 'groupId');
+      if (hasGroup) {
+        if (!Number.isInteger(point.groupId) || point.groupId <= 0 || point.groupId > 2147483647) {
+          throw new RequestError('资源组合 ID 必须是 1～2147483647 的整数');
+        }
+        if (point.pool !== undefined) throw new RequestError('同一资源点不能同时配置组合 ID 和旧资源池');
+      } else {
+        const pool = point.pool;
+        if (!pool || typeof pool !== 'object' || Array.isArray(pool) || !Object.keys(pool).length ||
+            Object.entries(pool).some(([key, weight]) => !['chest', 'gold', 'mine', 'unit_cap', 'artifact_charge'].includes(key) ||
+              typeof weight !== 'number' || !Number.isFinite(weight) || weight < 0) ||
+            !Object.values(pool).some((weight) => weight > 0)) {
+          throw new RequestError('资源点缺少有效组合 ID 或旧资源池');
+        }
+      }
+      const cell = point.row * columns + point.column;
+      if (occupied.has(cell)) throw new RequestError('同一格不能重复配置资源点');
+      // 与前端一致，间距按可通行格的最短路径计算，虚空不能作为捷径。
+      const queue = [[cell, 0]], visited = new Set([cell]);
+      for (let head = 0; head < queue.length; head += 1) {
+        const [current, distance] = queue[head];
+        if (distance >= minimumDistance) continue;
+        if (occupied.has(current)) throw new RequestError(`资源点之间至少相距 ${minimumDistance} 格`);
+        for (const adjacent of hexNeighbors(current, rows, columns)) {
+          if (visited.has(adjacent) || !isWalkable(Math.floor(adjacent / columns), adjacent % columns)) continue;
+          visited.add(adjacent);
+          queue.push([adjacent, distance + 1]);
+        }
+      }
+      occupied.add(cell);
+      resourcePoints.push(hasGroup ? { row: point.row, column: point.column, groupId: point.groupId } : point);
     }
   }
   const art = data.art;
@@ -495,6 +536,9 @@ function validatePreset(data, id) {
     }
     homes.push({ row: home.row, column: home.column });
   }
+  if (resourcePoints?.some((point) => homes.some((home) => home && home.row === point.row && home.column === point.column))) {
+    throw new RequestError('资源点不能与主城重叠');
+  }
   const preset = {
     id, name: typeof data.name === 'string' && data.name.trim() ? data.name.trim() : id,
     version: 3, rows, columns, playerCount, cityMode,
@@ -502,11 +546,11 @@ function validatePreset(data, id) {
     ascii: data.ascii,
   };
   if (cityMode === 'fixed' || homes.length) preset.homes = homes;
-  // 玩法配置先原样透传（regions / homeCandidates / resourcePoints / spacing / art），合法性由游戏侧校验，
-  // 编辑器只保证结构不被写坏。
-  for (const key of ['regions', 'homeCandidates', 'resourcePoints', 'spacing', 'art']) {
+  // 其余玩法配置原样透传；资源点的坐标、组合和间距已在上面校验。
+  for (const key of ['regions', 'homeCandidates', 'spacing', 'art']) {
     if (data[key] !== undefined) preset[key] = data[key];
   }
+  if (resourcePoints !== undefined) preset.resourcePoints = resourcePoints;
   return preset;
 }
 

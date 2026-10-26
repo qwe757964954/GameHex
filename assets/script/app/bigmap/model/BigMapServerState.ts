@@ -21,6 +21,29 @@ export interface IBigMapServerBuildInfo {
     readonly unlockQueue: number;
 }
 
+/**
+ * 游戏信息（`CmdSlgGameInfoRspMsg.info` / `SlgGameInfo`）—— **服务器权威的玩家宏观状态**。
+ *
+ * 2026-10-23 后端补的字段，客户端不再自己算：
+ * - `campId`（协议 `toCampId`）：**我所处的城池 id**。0 = 尚未归属任何城池。
+ *   「基地在不在城池势力范围内」以后只认它，不再用 `radiateCapacity` 距离猜。
+ * - `monsterLevel`（协议 `maxMonsterLevel`）：已击杀的最高野怪等级，喂野怪逐级解锁。
+ */
+export interface IBigMapServerGameInfo {
+    readonly maxMonsterLevel: number;
+    readonly campId: number;
+}
+
+/** 边界归一化：两个字段都是 `required uint32`，缺一个就整包作废（不回退成 0 冒充成功）。 */
+export function normalizeBigMapGameInfo(value: unknown): IBigMapServerGameInfo | null {
+    const row = bigMapServerRecord(value);
+    if (!row) return null;
+    const maxMonsterLevel = bigMapServerUint(row.maxMonsterLevel);
+    const campId = bigMapServerUint(row.toCampId);
+    if (maxMonsterLevel === null || campId === null) return null;
+    return { maxMonsterLevel, campId };
+}
+
 export function bigMapServerRecord(value: unknown): Record<string, unknown> | null {
     return value && typeof value === 'object' ? value as Record<string, unknown> : null;
 }

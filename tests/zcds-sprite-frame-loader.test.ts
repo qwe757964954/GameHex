@@ -1,3 +1,4 @@
+import * as resourcePlan from '../assets/script/app/zcds/model/ZCGameResourcePlan';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -12,6 +13,8 @@ function createLoader(assets: unknown, warnings: unknown[][] = []) {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
     }).outputText;
     const dependencies: Record<string, unknown> = {
+        '../model/ZCGameResourcePlan': resourcePlan,
+        '../../../core/asset/BundleCatalog': { BATTLE_BUNDLE: 'battle' },
         cc: {
             EffectAsset: class {},
             JsonAsset: class {},

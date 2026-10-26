@@ -1,3 +1,5 @@
+import { ScopedAssetCache } from '../assets/script/core/asset/ScopedAssetCache';
+import * as resourcePlan from '../assets/script/app/zcds/model/ZCGameResourcePlan';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -71,15 +73,21 @@ test('会话基础资源合并并发 prepare，完成后可统一释放', async 
     let configCalls = 0;
     let releaseCalls = 0;
     let battleReleaseCalls = 0;
+    let battleLoads = 0;
     const loaded: string[] = [];
     class BattlePreload {
+        constructor() { battleLoads += 1; }
         readonly ready = Promise.resolve({ prepared: true });
         releaseFromMatching() { battleReleaseCalls += 1; }
     }
     const context = {
         exports: {} as { AppSessionAssetService: new (configs: any) => any },
         require: (name: string) => {
+            if (name === 'cc') return { Prefab: class {} };
+            if (name.endsWith('/ScopedAssetCache')) return { ScopedAssetCache };
+            if (name.endsWith('/ZCGameResourcePlan')) return resourcePlan;
             if (name === '../../core/asset/ResourceScope') return { ResourceScope };
+            if (name === '../../core/asset/BundleCatalog') return { BATTLE_BUNDLE: 'battle' };
             if (name === '../card/CardLineupIcons') return {
                 loadCommonArt: async (asset: string) => { loaded.push(asset); return { asset }; },
                 releaseArtCache: () => { releaseCalls += 1; },
@@ -89,7 +97,7 @@ test('会话基础资源合并并发 prepare，完成后可统一释放', async 
             if (name === '../zcds/application/ZCGamePreload') return { ZCGamePreload: BattlePreload };
             throw new Error(`unexpected dependency: ${name}`);
         },
-        console,
+        console, setTimeout, clearTimeout,
     };
     runInNewContext(code, context);
 
@@ -106,15 +114,14 @@ test('会话基础资源合并并发 prepare，完成后可统一释放', async 
     assert.equal(loaded.length, 3, '导航图标已经序列化在 TabButton prefab 实例，不应加入登录动态加载队列');
     assert.equal(ratios.at(-1), 1);
     assert.equal(service.ready, true);
-    const battlePreload = service.takeBattlePreload();
-    assert.ok(battlePreload, '登录后加载应产出可由匹配流程接管的对局预加载');
+    assert.equal(battleLoads, 0, '登录只准备基础资源，不选地图或构筑战斗');
+    assert.equal(service.takeBattlePreload(), null);
     service.clear();
     service.clear();
     assert.equal(service.ready, false);
     assert.equal(releaseCalls, 1);
     assert.equal(battleReleaseCalls, 0, '接管后不再由会话服务释放');
-    battlePreload.releaseFromMatching();
-    assert.equal(battleReleaseCalls, 1);
+    assert.equal(battleReleaseCalls, 0);
 });
 
 test('角色登录成功后先进入 PostLogin，由加载流程复用启动 UI 续走进度到 Main', () => {

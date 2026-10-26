@@ -100,7 +100,7 @@ test('main territory map prefab contains no duplicate chapter HUD', () => {
     assert.doesNotMatch(page, /TerritoryHeaderView|hudView|setHudVisible/);
 });
 
-test('main territory map prefab stretches the map viewport around the main HUD overlays', () => {
+test('main territory map viewport reaches the page top behind the HUD and keeps the bottom navigation inset', () => {
     const root = prefabNode(prefab, 'MainTerritoryMap');
     const viewport = prefabNode(prefab, 'MapViewport');
     const widget = componentOf(prefab, root, 'cc.Widget');
@@ -110,13 +110,26 @@ test('main territory map prefab stretches the map viewport around the main HUD o
     assert.equal(widget._left, 0);
     assert.equal(widget._right, 0);
 
-    // The map viewport still clears ArenaRoot's top bar and bottom navigation overlays.
+    // 云和地块延伸到顶部，HUD 由 ArenaRoot 的上层节点绘制与接收点击。
     const viewportWidget = componentOf(prefab, viewport, 'cc.Widget');
     assert.equal(viewportWidget._alignFlags, 45, 'MapViewport must stretch on all four edges');
     assert.equal(viewportWidget._left, 0);
     assert.equal(viewportWidget._right, 0);
-    assert.equal(viewportWidget._top, 178);
+    assert.equal(viewportWidget._top, 0);
     assert.equal(viewportWidget._bottom, 168);
+    const rootSize = componentOf(prefab, root, 'cc.UITransform')._contentSize as { height: number };
+    const viewportSize = componentOf(prefab, viewport, 'cc.UITransform')._contentSize as { height: number };
+    const viewportPosition = viewport._lpos as { y: number };
+    assert.equal(viewportPosition.y + viewportSize.height / 2, rootSize.height / 2,
+        'serialized viewport must also reach the page top before Widget alignment');
+    assert.equal(viewportPosition.y - viewportSize.height / 2, -rootSize.height / 2 + 168);
+    const arena = JSON.parse(read('../assets/resources/ui/main/ArenaRoot.prefab')) as Array<Record<string, unknown>>;
+    const arenaRoot = prefabNode(arena, 'ArenaRoot');
+    const children = (arenaRoot._children as Array<{ __id__: number }>).map((ref) => arena[ref.__id__]._name);
+    assert.ok(children.indexOf('MapRoot') >= 0);
+    for (const hud of ['TopHud', 'BottomHud']) {
+        assert.ok(children.indexOf(hud) > children.indexOf('MapRoot'), `${hud} must stay above the map`);
+    }
     const controller = (root._components as Array<{ __id__: number }>).map((ref) => prefab[ref.__id__]);
     assert.ok(controller.some((entry) => entry.__type__ === 'db11eTDMkRLYYWMYrCVH0E9'),
         'MainTerritoryMap script must remain attached to the root');

@@ -48,9 +48,21 @@ test('quick find follows unpassed Boss progression and locates the building in i
     assert.equal(findCurrentTerritoryBoss(sites, byCell, progress)?.site.cellId, 105,
         'passing any peer clears the entire Boss area');
     progress.markCellPassed(85);
-    assert.equal(findCurrentTerritoryBoss(sites, byCell, progress), null);
+    assert.equal(findCurrentTerritoryBoss(sites, byCell, progress)?.site.cellId, 105,
+        'all Boss areas passed: replay the highest stage and prefer its building cell');
     assert.equal(findCurrentTerritoryBoss(sites, new Map(), new TerritoryProgress(map)), null,
         'unbound Boss stations must not open an empty battle detail');
+});
+
+test('quick find skips disabled Boss cells when falling back to cleared stages', () => {
+    const map = chapter(1);
+    const byCell = expandBindingsToAreaSites(map.sites, bindTerritoryBattleStages(map.sites, campaign(1).stages));
+    const progress = new TerritoryProgress(map, {
+        ownedCells: [367, 193, 85],
+        disabledCells: map.sites.filter((site) => byCell.get(site.cellId)?.stage === 10).map((site) => site.cellId),
+    });
+    assert.equal(findCurrentTerritoryBoss(map.sites, byCell, progress)?.site.cellId, 213);
+    assert.equal(findCurrentTerritoryBoss([], byCell, progress), null);
 });
 
 test('chapter one has exactly ten explicit playable level bindings', () => {

@@ -3,7 +3,7 @@ import { BIGMAP_TABLE, parseBigMapConfig, type BigMapRawTables } from '../model/
 import type { IBigMapConfig } from '../model/BigMapTypes';
 
 /**
- * 从 `ConfigService` 把 12 张 BigMap 表读出来并解析成强类型配置。
+ * 从 `ConfigService` 读取 BigMap 表（含联机据点 bigMapCamp）并解析成强类型配置。
  *
  * 读取走项目统一的 `getTable(name)`（运行时是 `RefUtil` 解压后的对象数组），
  * 解析统一走 `parseBigMapConfig`（与单测同一条路径），所以「表改了但没重启」这类问题

@@ -436,7 +436,7 @@ export class TerritoryPresenter {
         if (this.disposed || !this.progress || !this.map
             || !territoryRevealedCells(this.map, this.progress).includes(site.cellId)) return;
         if ((site.type === TERRITORY_SITE_TYPE.stage || site.type === TERRITORY_SITE_TYPE.boss || site.type === TERRITORY_SITE_TYPE.asyncPvp)
-            && this.progress.isCellUnlocked(site.cellId)
+            && (this.progress.isCellUnlocked(site.cellId) || this.progress.isAreaPassed(site.cellId))
             && this.pendingFixedResourceCells.has(site.cellId)) return;
         this.cancelBattleRequest();
         // 可开战站点（`stage` / `boss` / `asyncPvp`）统一走「两步式」：先解锁展示建筑；已解锁再次点击
@@ -503,11 +503,10 @@ export class TerritoryPresenter {
         const stage = this.detailStage;
         if (this.disposed || !site || !this.map || !this.saveState || !this.progress) return;
         if (!stage || this.startingBattle) return;
-        if (!this.progress.isOwned(site.cellId) && !this.progress.isCellUnlocked(site.cellId)
+        if (!this.progress.isAreaPassed(site.cellId) && !this.progress.isCellUnlocked(site.cellId)
             && !this.progress.checkUnlock(site.cellId, Number.MAX_SAFE_INTEGER).ok) return;
-        if (!this.progress.isOwned(site.cellId)
-            && (site.type === TERRITORY_SITE_TYPE.boss || site.type === TERRITORY_SITE_TYPE.stage
-                || site.type === TERRITORY_SITE_TYPE.asyncPvp)) {
+        if (site.type === TERRITORY_SITE_TYPE.boss || site.type === TERRITORY_SITE_TYPE.stage
+            || site.type === TERRITORY_SITE_TYPE.asyncPvp) {
             if (this.pendingFixedResourceCells.has(site.cellId)) return;
             void this.handleBattleStationStart(site, stage);
             return;
@@ -534,18 +533,14 @@ export class TerritoryPresenter {
         const progress = this.progress;
         const map = this.map;
         if (!progress || !map) return;
-        // 🔴 已通关（owned）的关卡 / 首领不再开战（主线打完即通关，旧口径）；
-        // **异步据点（asyncPvp）例外 —— 可重复挑战**：它是异步 PVP 玩法，通关后还能再打
-        // （`TERRITORY_TEXTS.owned = '已占领，可重复挑战'`）。owned 的 asyncPvp 通常同时
-        // 在服务端 `unlockCells` 里 ⇒ 落到下面的第二步直接开战；即使不在，也跳过解锁直接开战。
-        const isOwned = progress.isOwned(site.cellId);
-        if (isOwned && site.type !== TERRITORY_SITE_TYPE.asyncPvp) return;
+        // Boss、首领波次和异步据点可重复挑战；已通关时不要求快照同时包含 unlockCells。
+        const isAreaPassed = progress.isAreaPassed(site.cellId);
+        if (isAreaPassed && site.type === TERRITORY_SITE_TYPE.stage && !stage.isBoss) return;
         // 🔴 `selectSite` 开头已经 `cancelBattleRequest()` 递增过 ⇒ 记下这一次的号，回包到了先核对。
         // 「上一次点击的解锁回包迟到 ⇒ 把界面解锁」是**必须**挡住的：关卡现在是所有关卡型站点的
         // 通例，连点比只有两格特例（327/328）时常见得多。
         const requestId = this.battleRequestId;
-        if (!progress.isCellUnlocked(site.cellId)
-            && !(isOwned && site.type === TERRITORY_SITE_TYPE.asyncPvp)) {
+        if (!progress.isCellUnlocked(site.cellId) && !isAreaPassed) {
             // 第一步：解锁并展示建筑（与两步式同一口径），不发战斗请求。
             if (!territoryRevealedCells(map, progress).includes(site.cellId)) return;
             // 同一格的解锁还在飞 ⇒ 别再发一次（否则连点会连发解锁、回包到了重复弹提示）
@@ -1486,7 +1481,7 @@ export class TerritoryPresenter {
                 startCaption: '', startEnabled: false, isLoading: false,
             };
         }
-        const owned = progress.isOwned(site.cellId);
+        const owned = progress.isAreaPassed(site.cellId);
         const exploration = progress.explorationAt(site.cellId);
         const check = progress.checkUnlock(site.cellId, Number.MAX_SAFE_INTEGER);
         const canStart = owned || (!exploration && (progress.isCellUnlocked(site.cellId) || check.ok));

@@ -1,8 +1,8 @@
 import { toCount, withTimeout } from '../../net/RequestGuard';
 import {
     bigMapServerInstanceId, bigMapServerRecord, bigMapServerUint, normalizeBigMapBuild,
-    normalizeBigMapBuildInfo, normalizeBigMapBuildQueue, projectBigMapServerBase,
-    type IBigMapServerBuild, type IBigMapServerBuildInfo,
+    normalizeBigMapBuildInfo, normalizeBigMapBuildQueue, normalizeBigMapGameInfo, projectBigMapServerBase,
+    type IBigMapServerBuild, type IBigMapServerBuildInfo, type IBigMapServerGameInfo,
 } from '../model/BigMapServerState';
 import type { IBigMapBaseState, IBigMapConfig } from '../model/BigMapTypes';
 
@@ -34,11 +34,13 @@ const SLG_TEXT = {
 /** 页级服务端状态。超时不重试写请求，不本地结算资源或完成队列。 */
 export class BigMapSlgRepository {
     private info: IBigMapServerBuildInfo | null = null;
+    private game: IBigMapServerGameInfo | null = null;
     private base: IBigMapBaseState | null = null;
     private readonly listeners = new Set<() => void>();
     private readonly unsubscribe: () => void;
     private buildTask: Promise<boolean> | null = null;
     private actionTask: Promise<boolean> | null = null;
+    private gameTask: Promise<boolean> | null = null;
     private refreshAgain = false;
     private refreshAfterWrite = false;
     private revision = 0;
@@ -55,7 +57,11 @@ export class BigMapSlgRepository {
             this.revision += 1;
             if (this.isWriting) this.refreshAfterWrite = true;
             else void this.refreshBuildInfo(true);
-            if (kind === 'game') void this.refreshAction();
+            if (kind === 'game') {
+                // 广播还带游戏信息（所处城池会变），不能只刷行动力。
+                void this.refreshGame();
+                void this.refreshAction();
+            }
         });
     }
 
@@ -63,6 +69,15 @@ export class BigMapSlgRepository {
     get actionRemainingSeconds(): number | null {
         return this.actionRecoverAt === null ? null : Math.max(0, Math.ceil(this.actionRecoverAt - this.now()));
     }
+    /**
+     * 我所处的城池 id（协议 `SlgGameInfo.toCampId`，0 = 未归属）。
+     *
+     * 收到 game 包之前是 0 —— 调用方必须把 0 当「未知」而不是「没有城」，
+     * 「在不在势力范围内」的判定为此保留距离回退（见 `bigMapWithinCityRange`）。
+     */
+    get campId(): number { return this.game?.campId ?? 0; }
+    /** 已击杀的最高野怪等级（协议 `SlgGameInfo.maxMonsterLevel`）。 */
+    get maxClearedMonsterLevel(): number { return this.game?.maxMonsterLevel ?? 0; }
     projectBase(): IBigMapBaseState | null { return this.base; }
     serverInstanceId(id: number): number | null { return this.hasInstance(id) ? id : null; }
     queueInstanceId(slotIndex: number): number | null {
@@ -75,9 +90,32 @@ export class BigMapSlgRepository {
 
     async initialize(): Promise<boolean> {
         const [game, builds, action] = await Promise.all([
-            this.request('CmdSlgGameInfoReqMsg', {}), this.refreshBuildInfo(), this.refreshAction(),
+            this.refreshGame(), this.refreshBuildInfo(), this.refreshAction(),
         ]);
-        return !this.isDisposed && game !== null && builds && action;
+        return !this.isDisposed && game && builds && action;
+    }
+
+    /**
+     * 拉游戏信息（所处城池 / 最高野怪等级）。
+     *
+     * 解析失败**不清空**已有值：坏回包只会让这次刷新返回 false，
+     * 否则一次超时就能把「我在哪座城」从界面上抹掉。
+     */
+    refreshGame(): Promise<boolean> {
+        if (this.isDisposed) return Promise.resolve(false);
+        if (this.gameTask) return this.gameTask;
+        this.gameTask = this.loadGame().finally(() => { this.gameTask = null; });
+        return this.gameTask;
+    }
+
+    private async loadGame(): Promise<boolean> {
+        const response = bigMapServerRecord(await this.request('CmdSlgGameInfoReqMsg', {}));
+        if (this.isDisposed) return false;
+        const info = normalizeBigMapGameInfo(response?.info);
+        if (!info) return false;
+        this.game = info;
+        this.emit();
+        return true;
     }
 
     refreshBuildInfo(invalidated = false): Promise<boolean> {

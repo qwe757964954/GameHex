@@ -14,14 +14,14 @@
  *  · 纯函数可以**单测**：三档时长、镜头倍率、光柱只在中档出现…这些是产品口径，
  *    不该只靠"看一遍动画"验收。
  *
- * 所以：模型给「t=1.23s 时宝箱第 3 帧、白光 0.31、光柱 0.9、收尾系数 1」这样的**结果**，
+ * 所以：模型给「t=1.23s 时宝箱第 3 帧、光条 0.6、光柱 0.9、收尾系数 1」这样的**结果**，
  * 视图逐帧写节点；节点被复用/回收时把 `elapsed` 置 -1 即可，没有要销毁的定时器。
  *
  * ## 三档的一句话差异（规格 §3.4）
  *
  * | 维度 | 弱 | 中 | 强 |
  * | --- | --- | --- | --- |
- * | 镜头 | 开盖时轻推 **1.06×**（无暗角） | 开盖时轻推 **1.10×**（无暗角） | 入场即推 2.3× + 暗角，结束拉回 |
+ * | 镜头 | **2.3×**（无暗角） | **2.3×**（无暗角） | 入场即推 2.3× + 暗角，结束拉回 |
  * | 全屏光柱 | 无 | 有（贯穿屏幕） | 无直柱，改彩虹旋转光束 |
  * | 粒子 | 无 | 金币喷泉 + 彩色星光 | 更密 + 拖尾 + twinkle |
  * | 时长 | 2.26s | 2.38s | 3.23s |
@@ -32,10 +32,20 @@
  *   0.67 / 0.30 / 0.83s 的「开着的空箱子静置」，播放起来读作卡顿。想找回原节奏只调
  *   `settleSeconds`（一个数），别再去改 `totalSeconds`：那会重新引入空转。
  *
- * ⚠️ 弱档的禁止项是「**全屏遮罩 + 粒子雨 + 2.3× 怼脸推镜**」，不是「镜头不许动」——
- *   2026-10-22 用户要求「宝箱打开时，增加镜头轻微推进动画效果」，弱 / 中档因此各加了
- *   6% / 10% 的轻推进（暗角仍为 0）。单测钉的是**幅度上限**（≤1.12）与**无暗角**，
- *   以及光柱 / 彩虹 / 粒子仍然恒 `null`。
+ * ⚠️ **推镜倍率由「这一批奖励的总量」决定，不看档位**（2026-10-23 用户最终口径：
+ *   「推进的倍率根据奖励资源的数量区分弱中强三档，弱小于 50、中 51-500、强 1000+；
+ *    强推进倍率 = 2.3、中推近 = 1.35、弱推进 = 1.08」）。
+ *   真源是 {@link territoryChestCameraZoomOf}，参数表里的 `cameraZoom`（三档都是 2.3）
+ *   退化成**上限 / 兜底**（不传总量时按它算）。
+ *
+ *   ⚠️ 同日更早那条「三档统一 2.3×」由此作废：那条只活了半天，是"轻推读不出差别"的临时修法；
+ *     现在**按档位写死倍率**是错的 —— 拿得多才推得近，与"热闹到什么程度"（档位）是两件事。
+ *
+ * ⚠️ **没有「白光爆点」这一层**（2026-10-23 用户：「移除宝箱打开的圆形闪光特效」）：
+ *   原来盖开瞬间会有一发 12 层同心圆的径向白闪，峰值半径 204px。它连同
+ *   `flashStart / flashSeconds / flashPeak` 与 `territoryChestFlashAlpha` 一起删掉了 ——
+ *   开箱的"亮"现在由放射光条 + 箱口光晕 + 星光承担。
+ *   时序锚点也随之从 `flashStart` 改挂到 `lidStart + lidSeconds`（两者原本就在同一帧）。
  */
 
 import { TERRITORY_CHEST_TIER, type TerritoryChestTier } from './TerritoryChestTier';
@@ -166,10 +176,8 @@ export interface ITerritoryChestSpec {
     readonly openFrames: number;
 
     // ── 开箱光效 ──────────────────────────────────────────
-    /** 白光爆闪的起点 / 时长 / 峰值不透明度。 */
-    readonly flashStart: number;
-    readonly flashSeconds: number;
-    readonly flashPeak: number;
+    // ⚠️ 2026-10-23 起这里**没有** `flashStart / flashSeconds / flashPeak`：
+    //   白光爆点（12 层同心圆的径向白闪）已按用户要求整层移除，别再加回来。
     /** 金色放射光条的起点 / 时长 / 条数。 */
     readonly rayStart: number;
     readonly raySeconds: number;
@@ -187,20 +195,28 @@ export interface ITerritoryChestSpec {
     /** 彩虹整体转速（度/秒）。 */
     readonly rainbowSpinDegPerSecond: number;
     /**
-     * 镜头推近倍率；`1` ⇒ 不推镜。
+     * 镜头推近倍率的**上限 / 兜底**；`1` ⇒ 不推镜。
      *
-     * ## 三档都有，只是幅度不同（2026-10-22 用户：「宝箱打开时，增加镜头轻微推进动画效果」）
+     * ## 运行时倍率不取这个字段，取 `territoryChestCameraZoomOf(奖励总量)`
      *
-     * | 档 | `cameraZoom` | 起手 | 到位 |
-     * | --- | --- | --- | --- |
-     * | 弱 | **1.06** | 开盖瞬间（`lidStart`） | 开盖结束（+`lidSeconds`） |
-     * | 中 | **1.10** | 同上 | 同上 |
-     * | 强 | 2.3 | 入场即推（0s） | 0.30s |
+     * 2026-10-23 用户最终口径：「推进的倍率根据奖励资源的数量区分弱中强三档，
+     * 弱小于 50、中 51-500、强 1000+；强推进倍率 = 2.3、中推近 = 1.35、弱推进 = 1.08」。
      *
-     * 弱 / 中的推进**刻意只做 6% / 10%**：弱档没有全屏遮罩、也没有粒子承担"重点"，纯靠镜头上一点
-     * 就能把"这一下是开箱"读出来；幅度再大就会让人觉得视野在抖（那正是规格把"弱档推镜"列为
-     * 禁止项的原因 —— 禁的是**强档那种 2.3× 怼脸 + 压暗**，不是"镜头完全不能动"）。
-     * 暗角仍然是 0：轻推进 + 无遮罩，观感仍是"地块原位完成"。
+     * | 这一批奖励总量 | 运行时倍率 |
+     * | --- | --- |
+     * | `≤ 50` | **1.08** |
+     * | `51 ~ 500` | **1.35** |
+     * | `≥ 501` | **2.3** |
+     *
+     * ⇒ 本字段只剩两个用途：
+     *  ① 调用方不传倍率时（单测 / 离线预览 / 没有奖励总量的场合）的默认值；
+     *  ② 给后来的人一个"最多推到 2.3"的天花板。
+     *
+     *  ⚠️ **别再按档位把它改成 1.08 / 1.35**（同日更早的写法）：倍率与档位已经是两件事 ——
+     *    档位管"演多大"（光柱 / 彩虹 / 粒子雨 / 暗角），倍率管"拿了多少"。
+     *
+     * 起手时刻 / 推近时长**仍按档位走**（弱 / 中跟开盖同长 0.42s、强档 0.30s），
+     * 暗角**仍只有强档** —— 推得近不等于要压暗。
      */
     readonly cameraZoom: number;
     /**
@@ -249,7 +265,7 @@ export interface ITerritoryChestSpec {
      *  「奖励光效和宝箱消失同步关闭」）。
      *
      *  ⚠️ 为什么必须统一乘一个系数，而不是各自窗口到点就消失：
-     *   放射光条 / 白光 / 光柱 / 喷泉的窗口长短不一，宝箱却要留到最后 ——
+     *   放射光条 / 光柱 / 光晕 / 喷泉的窗口长短不一，宝箱却要留到最后 ——
      *   不统一收尾就会出现「光都没了，一只宝箱还杵在那儿」或者相反的「宝箱先没了、光还在」。
      *   一个乘子把两者钉在同一条时间线上。
      */
@@ -291,7 +307,7 @@ export interface ITerritoryChestSpec {
  *   屏幕上就多出一段「开着的空箱子静置」（2026-10-22 用户：「停止的时间太长了」）。
  */
 export const TERRITORY_CHEST_SPECS: Readonly<Record<TerritoryChestTier, ITerritoryChestSpec>> = {
-    /** 弱档：地块原位完成，≈2.3s，镜头轻推 1.06×，**无全屏遮罩 / 无粒子雨**。 */
+    /** 弱档：地块原位完成，≈2.3s，镜头 2.3× 推近（**无全屏遮罩 / 无粒子雨**）。 */
     [TERRITORY_CHEST_TIER.weak]: {
         tier: TERRITORY_CHEST_TIER.weak,
         // 末枚落袋 1.78 + 0.16 + 0.32（老值 3.0：末枚落袋后还静置 0.67s 才动手）
@@ -307,10 +323,6 @@ export const TERRITORY_CHEST_SPECS: Readonly<Record<TerritoryChestTier, ITerrito
         lidStart: 0.35,
         lidSeconds: 0.42,
         openFrames: TERRITORY_CHEST_OPEN_FRAMES,
-        // 白光落在**箱盖张开的瞬间**（= lid 结束），与开盖同一帧炸开。
-        flashStart: 0.77,
-        flashSeconds: 0.10,
-        flashPeak: 0.9,
         rayStart: 0.35,
         raySeconds: 0.55,
         rayCount: 10,
@@ -321,16 +333,17 @@ export const TERRITORY_CHEST_SPECS: Readonly<Record<TerritoryChestTier, ITerrito
         rainbowStart: 0,
         rainbowEnd: 0,
         rainbowSpinDegPerSecond: 0,
-        // 轻微推进：只在「开盖」这一段做 6%，与箱盖同步到位（2026-10-22 用户要求）。
-        // 暗角仍为 0 —— 弱档不许有全屏遮罩，禁的是"怼脸 + 压暗"，不是"镜头不能动"。
-        cameraZoom: 1.06,
+        // 上限 2.3；**运行时倍率按奖励总量给 1.08 / 1.35 / 2.3**（`territoryChestCameraZoomOf`）。
+        // 起手与开盖同步、0.42s 推到位。
+        // 暗角仍为 0 —— 弱档不许全屏遮罩，压暗是强档的独占项（推得近 ≠ 要压暗）。
+        cameraZoom: 2.3,
         cameraInStart: 0.35,
         cameraInSeconds: 0.42,
         cameraOutStart: 1.94,
         cameraOutSeconds: 0.32,
         vignetteAlpha: 0,
         vignetteSeconds: 0,
-        // 弱档不许有粒子（禁止项）：「奖励生成动画」由飞出的 4 枚图标承担，紧跟白光。
+        // 弱档不许有粒子（禁止项）：「奖励生成动画」由飞出的 4 枚图标承担，紧跟开盖。
         fountainStart: 0,
         fountainSeconds: 0,
         fountainCount: 0,
@@ -343,7 +356,7 @@ export const TERRITORY_CHEST_SPECS: Readonly<Record<TerritoryChestTier, ITerrito
         fadeOutSeconds: 0.32,
         settleSeconds: 0.16,
     },
-    /** 中档：光柱贯穿屏幕 + 白光中爆点 + 金币喷泉 + 彩色星光，≈2.4s，镜头轻推 1.10×。 */
+    /** 中档：光柱贯穿屏幕 + 金币喷泉 + 彩色星光，≈2.4s，镜头 2.3×。 */
     [TERRITORY_CHEST_TIER.medium]: {
         tier: TERRITORY_CHEST_TIER.medium,
         // 末枚落袋 1.90 + 0.18 + 0.30（老值 2.6：静置 0.30s）
@@ -357,9 +370,6 @@ export const TERRITORY_CHEST_SPECS: Readonly<Record<TerritoryChestTier, ITerrito
         lidStart: 0.45,
         lidSeconds: 0.42,
         openFrames: TERRITORY_CHEST_OPEN_FRAMES,
-        flashStart: 0.87,
-        flashSeconds: 0.15,
-        flashPeak: 1,
         rayStart: 0.45,
         raySeconds: 0.45,
         rayCount: 12,
@@ -370,9 +380,9 @@ export const TERRITORY_CHEST_SPECS: Readonly<Record<TerritoryChestTier, ITerrito
         rainbowStart: 0,
         rainbowEnd: 0,
         rainbowSpinDegPerSecond: 0,
-        // 同上，幅度稍大一档（10%）：中档有光柱，镜头跟一点会让光柱显得更"打下来"。
-        // 仍然没有暗角 —— 全屏压暗是强档的独占项。
-        cameraZoom: 1.10,
+        // 与弱档同口径：表中的 2.3 是上限，实际倍数看拿到的量（1.08 / 1.35 / 2.3）。
+        // 中档有光柱，镜头跟上会让光柱更"打下来"。仍然没有暗角 —— 全屏压暗是强档的独占项。
+        cameraZoom: 2.3,
         cameraInStart: 0.45,
         cameraInSeconds: 0.42,
         cameraOutStart: 2.08,
@@ -409,9 +419,6 @@ export const TERRITORY_CHEST_SPECS: Readonly<Record<TerritoryChestTier, ITerrito
         lidStart: 0.70,
         lidSeconds: 0.48,
         openFrames: TERRITORY_CHEST_OPEN_FRAMES,
-        flashStart: 1.18,
-        flashSeconds: 0.12,
-        flashPeak: 1,
         rayStart: 0.70,
         raySeconds: 0.50,
         rayCount: 16,
@@ -453,10 +460,102 @@ export const TERRITORY_CHEST_SPECS: Readonly<Record<TerritoryChestTier, ITerrito
 /**
  * 奖励飞行的错峰间隔（秒）：第 `i` 枚比第 0 枚晚 `i × 这个值` 起飞。
  *
- *  `territoryChestFlyFx` 用它排起飞时刻，{@link territoryChestLastRewardAt} 用它算末枚落地
- *  —— 两处必须是同一个数，所以抽成常量（以前是两处各写一个 `0.06`）。
+ *  ⚠️ 这是**标准错峰**，不是每枚实际用的值 —— 枚数多时会被 {@link territoryChestFlyStagger}
+ *  压小（见那里的说明）。需要用"第 i 枚何时起飞"的地方一律走那个函数，别再直接乘本常量。
  */
 export const TERRITORY_CHEST_FLY_STAGGER = 0.06;
+
+/**
+ * **起飞窗口上限**（秒）：不管飞多少枚，最后一枚都要在 `flyStart` 之后这么久之内起飞。
+ *
+ *  取 `0.42` = 强档标准排布（8 枚 × 0.06 错峰）的跨度 —— 也就是说
+ *  「标准档位下的手感一个像素都没动」，只有枚数超过 8 时才开始压缩。
+ *
+ *  为什么必须封顶（2026-10-23，奖励粒子数按总量给到 5 / 15 / 30 之后）：
+ *  30 枚 × 0.06 = 1.74s，加上 `flySeconds` 与收尾，弱档总时长会从 2.26s 涨到 3.8s ——
+ *  用户上一轮刚说过「停止的时间太长了」。**多给粒子应该是"更密"，不是"更久"**。
+ */
+export const TERRITORY_CHEST_FLY_SPREAD = 0.42;
+
+/**
+ * 本次实际用的**起飞错峰**（秒）。
+ *
+ *  `min(标准 0.06, 窗口上限 ÷ (枚数 - 1))`：
+ *  · ≤ 8 枚 ⇒ 就是 0.06（弱 4 / 中 6 / 强 8 三档手感与改动前完全一致）；
+ *  · 15 枚 ⇒ 0.030s；30 枚 ⇒ 0.0145s —— 挤在 0.42s 里形成一道"流"。
+ */
+export function territoryChestFlyStagger(flyCount: number): number {
+    if (!(flyCount > 1)) return 0;
+    return Math.min(TERRITORY_CHEST_FLY_STAGGER, TERRITORY_CHEST_FLY_SPREAD / (flyCount - 1));
+}
+
+/**
+ * **奖励总量 → 飞向资源栏的粒子数**（2026-10-23 用户三档口径）。
+ *
+ * > 「根据奖励数量匹配对应的粒子数量，分成三档：资源数量 50 以下的播放 5 个粒子飞行，
+ * >   51-500 的播放 15 个，501 以上的播放 30 个」
+ *
+ * | 总量 | 粒子数 |
+ * | --- | --- |
+ * | `0`（没有奖励） | **0**（不飞，别凭空飞出一串没有意义的图标） |
+ * | `≤ 50` | **5** |
+ * | `51 ~ 500` | **15** |
+ * | `≥ 501` | **30** |
+ *
+ * ⚠️ 粒子数只由**这一批奖励的总量**决定，与档位（弱 / 中 / 强）无关：
+ *   档位管的是"演多大"（光柱 / 彩虹 / 粒子雨），粒子数管的是"拿了多少"。
+ *   参数表里的 `flyCount`（4 / 6 / 8）现在只是**没有总量时的兜底**（各函数的默认参数）。
+ */
+export function territoryChestFlyCount(totalAmount: number): number {
+    if (!Number.isFinite(totalAmount) || totalAmount <= 0) return 0;
+    if (totalAmount <= 50) return 5;
+    if (totalAmount <= 500) return 15;
+    return 30;
+}
+
+/**
+ * 镜头推近倍率的**三档取值**（2026-10-23 用户最终口径）。
+ *
+ * > 「强推进倍率 = 2.3、中推近 = 1.35、弱推进 = 1.08」
+ *
+ * ⚠️ 这是**幅度**，与档位（弱 / 中 / 强，管光柱 / 彩虹 / 暗角）不是同一个东西 ——
+ *   {@link territoryChestTierOf} 的边界是 100 / 1000，而这里是 50 / 500，
+ *   **两套阈值不能互相复用**，所以宁可各写一份。
+ */
+export const TERRITORY_CHEST_CAMERA_ZOOM_WEAK = 1.08;
+export const TERRITORY_CHEST_CAMERA_ZOOM_MEDIUM = 1.35;
+export const TERRITORY_CHEST_CAMERA_ZOOM_STRONG = 2.3;
+
+/**
+ * **奖励总量 → 本次镜头推近倍率**（2026-10-23 用户最终口径）。
+ *
+ * > 「推进的倍率根据奖励资源的数量区分弱中强三档，弱小于 50、中 51-500、强 1000+；
+ * >   强推进倍率 = 2.3、中推近 = 1.35、弱推进 = 1.08」
+ *
+ * | 总量 | 倍率 | 观感 |
+ * | --- | --- | --- |
+ * | `0`（没有奖励） | **1.08** | 按"弱"处理：轻微的凑近，不至于点了没反应 |
+ * | `≤ 50` | **1.08** | 弱：几乎只是"凑一下"，地块与宝箱同倍放大 |
+ * | `51 ~ 500` | **1.35** | 中：明确推进了一截 |
+ * | `≥ 501` | **2.3** | 强：一把怼到近景（与改动前的统一倍率一致） |
+ *
+ * 脏数据（`NaN` / `±Infinity` / 负数）一律落弱档 —— 与 `territoryChestFlyCount` 那边
+ * 「脏数据不飞」的态度一致：宁可少推，也不要推一个离谱的倍数。
+ *
+ * ⚠️ **500 ~ 1000 之间怎么算**：用户原话写的是「强 1000+」，字面上 501~999 无人认领。
+ *   这里按**他自己给的粒子数分档（501 以上 = 30 枚）保持一致**处理 ⇒ `> 500` 直接进强档。
+ *   若以后确认真要 1000 才进强档，只改这一行（`<= 500` 之后补一条 `<= 1000 → 1.35`），
+ *   视图与单测都不用动。
+ *
+ * ⚠️ 与 {@link territoryChestFlyCount} **各自独立判定**（虽然都是 50 / 500 这套阈值）：
+ *   枚数是"屏幕上飞几个"，倍率是"镜头推多近"，将来任一侧单独调档都不该牵连另一侧。
+ */
+export function territoryChestCameraZoomOf(totalAmount: number): number {
+    if (!Number.isFinite(totalAmount) || totalAmount <= 0) return TERRITORY_CHEST_CAMERA_ZOOM_WEAK;
+    if (totalAmount <= 50) return TERRITORY_CHEST_CAMERA_ZOOM_WEAK;
+    if (totalAmount <= 500) return TERRITORY_CHEST_CAMERA_ZOOM_MEDIUM;
+    return TERRITORY_CHEST_CAMERA_ZOOM_STRONG;
+}
 
 /**
  * **最后一枚奖励落袋的时刻**（秒）。
@@ -464,15 +563,18 @@ export const TERRITORY_CHEST_FLY_STAGGER = 0.06;
  *  这就是「获取奖励」这个事件在时间轴上的位置，也是收尾唯一的锚点：
  *  玩家看到最后一枚图标飞走之后，屏幕上还能留多久，全部由它决定。
  *
+ * @param flyCount 本次实际飞行粒子数（由 {@link territoryChestFlyCount} 按奖励总量算）。
+ *   缺省用参数表的 `spec.flyCount` —— 兼容「只看标准档」的调用与单测。
+ *
  *  ⚠️ 没有奖励飞行（`flyCount = 0` / 飞行为 0 时长）时退化成「总时长减去尾巴」：
  *   那种档位没有"落袋"这一刻，收尾只能照旧从末尾倒推。
  */
-export function territoryChestLastRewardAt(spec: ITerritoryChestSpec): number {
-    if (!(spec.flyCount > 0) || !(spec.flySeconds > 0)) {
+export function territoryChestLastRewardAt(spec: ITerritoryChestSpec, flyCount = spec.flyCount): number {
+    if (!(flyCount > 0) || !(spec.flySeconds > 0)) {
         return Math.max(0, spec.totalSeconds - spec.fadeOutSeconds - spec.settleSeconds);
     }
-    // 第 `count-1` 枚的起飞时刻 + 它飞完所用的时间
-    return spec.flyStart + TERRITORY_CHEST_FLY_STAGGER * (spec.flyCount - 1) + spec.flySeconds;
+    // 第 `count-1` 枚的起飞时刻 + 它飞完所用的时间（错峰走 `territoryChestFlyStagger`，被封过顶）
+    return spec.flyStart + territoryChestFlyStagger(flyCount) * (flyCount - 1) + spec.flySeconds;
 }
 
 /**
@@ -481,12 +583,20 @@ export function territoryChestLastRewardAt(spec: ITerritoryChestSpec): number {
  *  ⚠️ 与 `totalSeconds` 取小是**保险**不是主逻辑：参数表若被人把 `totalSeconds` 调大
  *   （想"多演一会"），收尾仍然会贴着奖励走 —— 多出来的那段时间没人看见，
  *   因为 {@link territoryChestEndSeconds} 也跟着缩了。想真的拖长，调 `settleSeconds`。
+ *
+ *  ⚠️ 但**运行时粒子数超过档位标准值**时（2026-10-23 起按奖励总量给 5 / 15 / 30），
+ *   这个上限必须让路：否则 30 枚图标里后面的会被收尾硬切掉。此时 `totalSeconds`
+ *   只是"标准档"的时长，真实结束时刻按 `末枚落袋 + settle + fade` 算。
+ *
+ *   让路后并不会拖长多少 —— 起飞窗口被 {@link TERRITORY_CHEST_FLY_SPREAD} 封在 0.42s 内
+ *   （30 枚 = 更密，不是更久）：实测 30 枚时弱档 +0.24s、中档 +0.12s、强档 ±0
+ *   （强档标准排布本来就是 8 枚 × 0.06 = 0.42s 的跨度）。
  */
-export function territoryChestFadeStart(spec: ITerritoryChestSpec): number {
+export function territoryChestFadeStart(spec: ITerritoryChestSpec, flyCount = spec.flyCount): number {
     if (!(spec.fadeOutSeconds > 0)) return spec.totalSeconds;
-    const want = territoryChestLastRewardAt(spec) + Math.max(0, spec.settleSeconds);
+    const want = territoryChestLastRewardAt(spec, flyCount) + Math.max(0, spec.settleSeconds);
     const cap = spec.totalSeconds - spec.fadeOutSeconds;
-    const start = Math.min(want, cap);
+    const start = flyCount > spec.flyCount ? want : Math.min(want, cap);
     return Number.isFinite(start) ? Math.max(0, start) : 0;
 }
 
@@ -498,10 +608,12 @@ export function territoryChestFadeStart(spec: ITerritoryChestSpec): number {
  *  等式的意义在于：**屏幕上永远不会有「奖励已经拿完、箱子还开着杵在那儿」的空白**，
  *  2026-10-22 用户反馈的「停止的时间太长了」就是这段空白（老弱档 0.67s / 强档 0.83s）。
  */
-export function territoryChestEndSeconds(spec: ITerritoryChestSpec): number {
+export function territoryChestEndSeconds(spec: ITerritoryChestSpec, flyCount = spec.flyCount): number {
     if (!(spec.fadeOutSeconds > 0)) return spec.totalSeconds;
-    const end = territoryChestFadeStart(spec) + spec.fadeOutSeconds;
-    return Number.isFinite(end) ? Math.min(spec.totalSeconds, end) : spec.totalSeconds;
+    const end = territoryChestFadeStart(spec, flyCount) + spec.fadeOutSeconds;
+    if (!Number.isFinite(end)) return spec.totalSeconds;
+    // 粒子数被抬到档位标准值之上时（按奖励总量给 30），`totalSeconds` 不再是上限。
+    return flyCount > spec.flyCount ? end : Math.min(spec.totalSeconds, end);
 }
 
 // ============================================================
@@ -519,7 +631,7 @@ function clamp01(value: number): number {
  *
  * `0.47 - 0.37` 在 IEEE754 下是 `0.09999999999999998`，除以 0.1 得 `0.9999999999999998` ——
  * 于是「窗口最后一帧」会落在区间**内**，收尾值变成 `2e-16` 而不是 0：
- * 白光会留一丝白、飞行图标会多播一帧、`stop()` 前多写一次位置。
+ * 放射光条会留一丝亮、飞行图标会多播一帧、`stop()` 前多写一次位置。
  * 这类残值肉眼看不见，但单测没法钉（`assert.equal(x, 0)` 直接挂），
  * 所以端点判定统一走这个容差 —— 窗口末尾一律当成 `1` / 已结束。
  */
@@ -632,7 +744,7 @@ export function territoryChestOpenFrame(spec: ITerritoryChestSpec, t: number): n
  * `totalSeconds - fadeOutSeconds`。以前那样写，奖励飞完到收尾之间会留下一段
  * 「开着的空箱子静置」，2026-10-22 用户读作「停止的时间太长了」。
  *
- * 宝箱本体、光柱、彩虹、放射光条、白光、箱口光晕、喷泉 / 星光、飞出图标**全部**乘这个系数
+ * 宝箱本体、光柱、彩虹、放射光条、箱口光晕、喷泉 / 星光、飞出图标**全部**乘这个系数
  * —— 这样整段表演只可能「一起亮、一起灭」，不会出现
  * 「光效窗口走完了、宝箱还杵着」（需求 2026-10-22 §2「奖励光效和宝箱消失同步关闭」）。
  *
@@ -655,13 +767,9 @@ export function territoryChestTailFade(spec: ITerritoryChestSpec, t: number): nu
 // 开箱光效
 // ============================================================
 
-/** 白光爆闪的不透明度（`0` = 不画）。 */
-export function territoryChestFlashAlpha(spec: ITerritoryChestSpec, t: number): number {
-    const local = phase(t, spec.flashStart, spec.flashSeconds);
-    if (local === null) return 0;
-    // 起手就是峰值（爆闪要「炸」出来），然后线性收到 0。
-    return spec.flashPeak * (1 - local);
-}
+// ⚠️ 原来这里有一个 `territoryChestFlashAlpha`（白光爆点的时间轴）。
+//   2026-10-23 用户「移除宝箱打开的圆形闪光特效」⇒ 连同参数表里的三个字段一起删掉。
+//   留一个恒 0 的曲线等于留一个"以后被人顺手改回来"的口子，所以整段移除。
 
 /** 金色放射光条的缩放与不透明度；`null` = 这一帧不画。 */
 export interface ITerritoryChestRayFx {
@@ -728,41 +836,85 @@ export interface ITerritoryChestCameraFx {
     readonly scale: number;
     /** 全屏暗角不透明度（`0` = 不压暗）。 */
     readonly vignette: number;
+    /**
+     * **对焦进度**（`0` = 宝箱在原格上，`1` = 宝箱已移到屏幕中央）。
+     *
+     * 2026-10-23 用户：「相机推进的实际效果应该是地块和宝箱同时放大……且放大的同时需要保证
+     * 宝箱的坐标点在屏幕的中央」。镜头推近的同时要把**视角中心**从格心挪到屏幕中心，
+     * 于是宝箱在屏幕上的位置按下式走：
+     *
+     * ```
+     * 宝箱页面坐标 = 格心页面坐标 × (1 - focus)     // focus 0 → 格心原处，1 → 屏幕中心
+     * ```
+     *
+     * 直接由 `scale` 归一化得到（`(scale - 1) / (本次倍率 - 1)`），不另起一条曲线 ——
+     * 两条曲线稍有相位差，观感就是「地图像被拽了一下才追上宝箱」。
+     *
+     * ⚠️ 分母是**本次真正推到的倍率**（`1.08 / 1.35 / 2.3`），不是参数表里的 2.3：
+     *   否则弱档推到头也只有 0.06，宝箱挪不到屏幕中央。
+     */
+    readonly focus: number;
 }
 
 /**
- * 镜头推拉 + 暗角。**三档都会推镜，只是幅度与起手时刻不同**（`cameraZoom` 见字段注释）。
+ * 镜头推拉 + 暗角。
  *
- *  · 弱 / 中：`cameraInStart`（= 开盖那一刻）起，`cameraInSeconds`（= 开盖时长）内推到
- *    `1.06 / 1.10`（`EaseOutCubic`，前快后慢 ⇒ "凑近"的手感），**暗角恒 0**；
- *  · 强：`0 ~ 0.3s` 直接推到 `2.3` 并压暗；
+ * ## 倍率（第三参数 `cameraZoom`）
+ *
+ * 由**这一批奖励的总量**决定（2026-10-23 用户最终口径，见 {@link territoryChestCameraZoomOf}）：
+ * `≤50 → 1.08`、`51~500 → 1.35`、`>500 → 2.3`。
+ * 参数表里的 `cameraZoom`（三档都是 2.3）只是**不传倍率时的兜底**；
+ * 视图每帧都把 `play()` 时算好的倍率传进来。
+ *
+ * ## 时序（仍按档位走，与倍率无关）
+ *
+ *  · 弱 / 中：`cameraInStart`（= 开盖那一刻）起，`cameraInSeconds`（= 开盖时长）内推到目标倍率
+ *    （`EaseOutCubic`，前快后慢 ⇒ "凑近"的手感），**暗角恒 0**；
+ *  · 强：`0 ~ 0.3s` 一把推到位并压暗；
  *  · 三档都到 `cameraOutStart` 起、`cameraOutSeconds` 内用 `EaseInQuad` 拉回 1。
  *
  * `cameraOutStart` 一律与**收尾起点**（{@link territoryChestFadeStart}）对齐、`cameraOutSeconds`
  * 等于 `fadeOutSeconds`：镜头回到 1.0 的那一帧宝箱正好淡完，不会出现「镜头还怼着、箱子已经没了」
  * 或者「箱子淡完了还在原地推拉」。
  *
+ * ## 对焦（`focus`）
+ *
+ * `focus` 由 `scale` 归一化推出 ⇒ **分母必须用本次真正推到的倍率**。若仍拿参数表的 2.3 当分母，
+ * 弱档（1.08）推到头也只有 `0.08 / 1.3 ≈ 0.06`，宝箱永远挪不到屏幕中央 ——
+ * 用户要的是「放大的同时需要保证宝箱的坐标点在屏幕的中央」，**弱档同样成立**。
+ *
  * ⚠️ 推近**从 1 开始**（`t = 0` 时恒为 1）：点击那一瞬间的画面必须与地图上静止那只**逐像素同大**，
  *   否则会读作「点一下箱子突然弹大一圈」（2026-10-22 上一轮就修过这个问题）。
- *   要改幅度只动 `cameraZoom`，别把 `scale` 的起点抬起来。
+ *   要改幅度只动第三参数（或 {@link territoryChestCameraZoomOf} 的档位值），别把 `scale` 的起点抬起来。
  */
-export function territoryChestCameraFx(spec: ITerritoryChestSpec, t: number): ITerritoryChestCameraFx {
-    const idle: ITerritoryChestCameraFx = { scale: 1, vignette: 0 };
-    if (spec.cameraZoom === 1 && spec.vignetteAlpha === 0) return idle;
+export function territoryChestCameraFx(
+    spec: ITerritoryChestSpec,
+    t: number,
+    cameraZoom = spec.cameraZoom,
+): ITerritoryChestCameraFx {
+    // 倍率由调用方给（`territoryChestCameraZoomOf(奖励总量)`）；脏值退回参数表的上限。
+    const zoom = Number.isFinite(cameraZoom) && cameraZoom > 0 ? cameraZoom : spec.cameraZoom;
+    const idle: ITerritoryChestCameraFx = { scale: 1, vignette: 0, focus: 0 };
+    if (zoom === 1 && spec.vignetteAlpha === 0) return idle;
     if (!Number.isFinite(t) || t < 0) return idle;
 
     let scale = 1;
-    if (spec.cameraZoom !== 1 && spec.cameraInSeconds > 0) {
+    if (zoom !== 1 && spec.cameraInSeconds > 0) {
         const zoomIn = phase(t, spec.cameraInStart, spec.cameraInSeconds);
         if (zoomIn !== null && t < spec.cameraOutStart) {
-            scale = 1 + (spec.cameraZoom - 1) * easeOutCubic(zoomIn);
+            scale = 1 + (zoom - 1) * easeOutCubic(zoomIn);
         } else {
             const zoomOut = phase(t, spec.cameraOutStart, spec.cameraOutSeconds);
             scale = zoomOut === null
                 ? 1
-                : spec.cameraZoom + (1 - spec.cameraZoom) * easeInQuad(zoomOut);
+                : zoom + (1 - zoom) * easeInQuad(zoomOut);
         }
     }
+
+    // 对焦进度 = 推镜进度的归一化（分母 = 本次倍率，见函数注释）。
+    // `zoom = 1`（不推镜）时恒 0：没有放大就不该挪视角，否则宝箱会"自己飘到屏幕中央"再飘回去。
+    const span = zoom - 1;
+    const focus = span > 1e-6 ? clamp01((scale - 1) / span) : 0;
 
     let vignette = 0;
     if (spec.vignetteAlpha > 0) {
@@ -772,7 +924,7 @@ export function territoryChestCameraFx(spec: ITerritoryChestSpec, t: number): IT
             ? spec.vignetteAlpha * (fadeIn < 1 ? fadeIn : 1)
             : spec.vignetteAlpha * (1 - fadeOut);
     }
-    return { scale, vignette: Math.max(0, Math.min(1, vignette)) };
+    return { scale, vignette: Math.max(0, Math.min(1, vignette)), focus };
 }
 
 // ============================================================
@@ -918,17 +1070,19 @@ export const TERRITORY_CHEST_FLY_ARC_RATIO = 0.55;
 /**
  * 第 `index` 枚奖励图标在 `t` 秒时的飞行状态。
  *
- * 错峰 `0.06s`；飞行 `EaseOutCubic`；到终点前 `12%` 做「被吸入」的缩放收小
+ * 错峰走 {@link territoryChestFlyStagger}（≤8 枚时是 0.06s，30 枚时压到 0.0145s）；
+ * 飞行 `EaseOutCubic`；到终点前 `12%` 做「被吸入」的缩放收小
  * （规格 §0.3「到达：图标在终点处 scale 1→0.3」）。
  */
 export function territoryChestFlyFx(
     spec: ITerritoryChestSpec,
     index: number,
     t: number,
+    flyCount = spec.flyCount,
 ): ITerritoryChestFlyFx | null {
-    if (!(spec.flyCount > 0) || !(spec.flySeconds > 0)) return null;
-    if (!Number.isInteger(index) || index < 0 || index >= spec.flyCount) return null;
-    const local = t - (spec.flyStart + index * TERRITORY_CHEST_FLY_STAGGER);
+    if (!(flyCount > 0) || !(spec.flySeconds > 0)) return null;
+    if (!Number.isInteger(index) || index < 0 || index >= flyCount) return null;
+    const local = t - (spec.flyStart + index * territoryChestFlyStagger(flyCount));
     const progress = local / spec.flySeconds;
     // 端点用容差判（见 `PHASE_EPSILON`）：窗口末帧不该再返回一个 `opacity≈1e-15` 的残影。
     if (local < 0 || progress >= 1 - PHASE_EPSILON) return null;

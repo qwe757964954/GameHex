@@ -182,7 +182,7 @@
     "_contentSize": {
       "__type__": "cc.Size",
       "width": 334,
-      "height": 30.240000000000002
+      "height": 56
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -215,20 +215,20 @@
       "r": 255,
       "g": 255,
       "b": 255,
-      "a": 255
+      "a": 145
     },
     "_string": "提示",
     "_horizontalAlign": 1,
     "_verticalAlign": 1,
     "_actualFontSize": 24,
     "_fontSize": 24,
-    "_fontFamily": "Arial",
-    "_lineHeight": 24,
+    "_fontFamily": "Microsoft YaHei",
+    "_lineHeight": 31,
     "_overflow": 2,
     "_enableWrapText": false,
     "_font": null,
     "_isSystemFontUsed": true,
-    "_spacingX": 0,
+    "_spacingX": 0.24,
     "_isItalic": false,
     "_isBold": true,
     "_isUnderline": false,
@@ -291,7 +291,7 @@
     "_contentSize": {
       "__type__": "cc.Size",
       "width": 430,
-      "height": 100
+      "height": 56
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -416,18 +416,29 @@
       "__id__": 6
     },
     "barWidth": 430,
-    "barHeight": 100,
+    "barHeight": 56,
     "cornerRadius": 12,
     "barColor": {
       "__type__": "cc.Color",
-      "r": 29,
-      "g": 49,
-      "b": 63,
-      "a": 255
+      "r": 0,
+      "g": 0,
+      "b": 0,
+      "a": 153
     },
     "paddingX": 48,
     "duration": 2,
-    "_id": ""
+    "_id": "",
+    "fontSize": 24,
+    "lineHeight": 31,
+    "fontColor": {
+      "__type__": "cc.Color",
+      "r": 255,
+      "g": 255,
+      "b": 255,
+      "a": 145
+    },
+    "letterSpacing": 0.24,
+    "fontFamily": "Microsoft YaHei"
   },
   {
     "__type__": "cc.CompPrefabInfo",

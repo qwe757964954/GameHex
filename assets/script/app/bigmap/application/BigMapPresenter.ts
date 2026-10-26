@@ -44,6 +44,7 @@ import {
     bigMapMonsterHpRatio,
     bigMapUnlockContextOf,
     BIGMAP_MONSTER_BATTLE_UNAVAILABLE,
+    BIGMAP_BATTLE_TEXT,
     type IBigMapBattleProgress,
 } from '../model/BigMapBattle';
 import {
@@ -62,6 +63,8 @@ import { BIGMAP_CAMP_QUERY_TEXT } from '../model/BigMapCampInfo';
 import type { BigMapCampRepository } from './BigMapCampRepository';
 import type { BigMapSlgRepository } from './BigMapSlgRepository';
 import { projectBigMapServerBase } from '../model/BigMapServerState';
+import { ZC_BATTLE_TYPE_SLG_CAMP, ZC_BATTLE_TYPE_SLG_MONSTER } from '../../battle/BattleStartModel';
+import type { IZCSlgBattleType } from '../../battle/BattleStartModel';
 import { parseBigMapSave, serializeBigMapSave, type IBigMapSaveData } from '../model/BigMapSaveData';
 import {
     bigMapCityAttackGate,
@@ -107,6 +110,8 @@ export interface IBigMapPresenterDeps {
     readonly rankProvider?: IBigMapRankProvider;
     readonly campRepository?: BigMapCampRepository;
     readonly slgRepository?: BigMapSlgRepository;
+    /** 发起服务端战斗并通过 GameRoute 导航；不得回退本地结算。 */
+    readonly startBattle?: (battleType: IZCSlgBattleType, targetConfigId: number, isCurrent: () => boolean) => Promise<IBigMapActionFeedback>;
 }
 
 /**
@@ -220,6 +225,12 @@ export interface IBigMapCityView {
     readonly previewWarScore: number;
     readonly inRange: boolean;
     readonly damageCutPct: number;
+    /**
+     * 这座城就是我**所处**的城（服务器 `SlgGameInfo.toCampId`）。
+     *
+     * 与 `isServerCamp`（这座城有没有接服务器据点协议）不是一回事，别混。
+     */
+    readonly isPlayerCamp: boolean;
     /** 当前攻城日程阶段（顶栏/详情面板显示「可攻打 / 已锁榜 / 休战」）。 */
     readonly phase: BigMapCityPhase;
     /** 现在能不能打（= 已开放 + 日程放行）；`attackReason` 是打不了的具体原因。 */
@@ -279,6 +290,7 @@ export class BigMapPresenter {
     private readonly deps: IBigMapPresenterDeps;
     private readonly territories: readonly ITerritoryColorRegion[];
     private isDisposed = false;
+    private isStartingBattle = false;
     private readonly campDetailStatuses = new Map<number, IBigMapCityView['campDetailStatus']>();
     private unsubscribeSlg: (() => void) | null = null;
 
@@ -366,7 +378,40 @@ export class BigMapPresenter {
     }
 
     get unlockContext(): IBigMapUnlockContext {
-        return bigMapUnlockContextOf(this.data.battle, this.deps.adventureChapter(), this.deps.openDay ?? 0);
+        const context = bigMapUnlockContextOf(this.data.battle, this.deps.adventureChapter(), this.deps.openDay ?? 0);
+        const server = this.deps.slgRepository;
+        if (!server) return context;
+        // 联机版的击杀进度在服务器（`SlgGameInfo.maxMonsterLevel`），本地存档是空的；
+        // 不覆盖会把野外怪全部锁死（`preLevel > 0` 一律不放行）。
+        return {
+            ...context,
+            maxClearedMonsterLevel: Math.max(context.maxClearedMonsterLevel, server.maxClearedMonsterLevel),
+        };
+    }
+
+    /**
+     * 我所处的城池 id（服务器 `SlgGameInfo.toCampId`，0 = 未知 / 未归属）。
+     *
+     * 势力范围判定只认它（见 `bigMapWithinCityRange`）；离线档恒 0 ⇒ 仍走距离，行为不变。
+     */
+    get playerCampId(): number {
+        return this.deps.slgRepository?.campId ?? 0;
+    }
+
+    /**
+     * 玩家基地在大地图上的格 —— **服务器 `toCampId` 那座城的锚点**。
+     *
+     * 口径（2026-10-23 山猫确认）：*「玩家基地就固定在 `toCampId` 那座城的锚点上」*。
+     * 所以位置也认服务器，不再用布局档里的 `bases[].isPlayer` 那格当唯一真源 ——
+     * 布局档只在「还没收到包 / 未归属 / 该城不在地图上」时兜底。
+     *
+     * ⚠️ 城锚点同时是城池的占格（`cityByHex`），基地钉上去后与城图标同格；
+     * 点击仍按 `bigMapOccupantOf` 的「城优先」返回城池详情，基地入口走模式木牌。
+     */
+    get playerBaseHexId(): number {
+        const campId = this.playerCampId;
+        const city = campId > 0 ? this.worldInstance.cities.get(campId) : undefined;
+        return city ? city.anchorHexId : this.worldInstance.playerBase.hexId;
     }
 
     get adventureChapter(): number {
@@ -798,12 +843,27 @@ export class BigMapPresenter {
         this.emit();
     }
 
+    private resolveCampAttackReason(campId: number, info: IBigMapCampInfo | null): string {
+        if (this.isDisposed) return BIGMAP_BATTLE_TEXT.closed;
+        if (this.isStartingBattle) return BIGMAP_BATTLE_TEXT.pending;
+        if (!this.config.camps.has(campId)) return BIGMAP_BATTLE_TEXT.campMissing;
+        if (!this.deps.startBattle) return BIGMAP_CAMP_QUERY_TEXT.attackUnavailable;
+        if (!info) {
+            // 详情查询与开战是独立协议；查询失败不能让开战入口永久不可用，资格以开战回包为准。
+            return this.campDetailStatuses.get(campId) === 'failed' ? '' : BIGMAP_CAMP_QUERY_TEXT.pending;
+        }
+        return info.opType === 0 && (info.state === 1 || info.state === 2) ? '' : BIGMAP_BATTLE_TEXT.campUnavailable;
+    }
+
     cityView(cityId: number): IBigMapCityView | null {
         const city = this.config.cities.get(cityId);
         const site = this.worldInstance.cities.get(cityId);
         if (!city || !site) return null;
         const context = this.unlockContext;
+        const playerCampId = this.playerCampId;
         const campInfo = this.deps.campRepository?.get(cityId) ?? null;
+        const camp = this.config.camps.get(cityId);
+        const campAttackReason = this.resolveCampAttackReason(cityId, campInfo);
         const state = campInfo
             ? (campInfo.opType === 1 ? 'occupied' : campInfo.state === 0 ? 'unavailable' : 'open')
             : bigMapCityState(city, context);
@@ -813,17 +873,17 @@ export class BigMapPresenter {
         const board = this.cityRankBoard(cityId);
         const distance = bigMapHexDistance(
             this.worldInstance.rows, this.worldInstance.cols,
-            this.worldInstance.playerBase.hexId, site.anchorHexId,
+            this.playerBaseHexId, site.anchorHexId,
         );
         const preview = state === 'open'
             ? bigMapCityAttackPreview(
                 this.config, this.data.base, city, distance,
-                board.attackerCount, board.playerRank,
+                board.attackerCount, board.playerRank, playerCampId,
             )
             : null;
         return {
             cityId: city.cityId,
-            name: city.name,
+            name: this.deps.campRepository && camp ? camp.name : city.name,
             layer: city.layer,
             level: city.cityLevel,
             state,
@@ -831,18 +891,19 @@ export class BigMapPresenter {
             hpRatio: bigMapCityHpRatio(this.data.battle, city),
             warScore: Math.round(this.data.battle.cityWarScore[city.cityId] ?? 0),
             minWarScore: this.config.cityLevels.get(city.cityLevel)?.minOccupyWarScore ?? 0,
-            staminaCost: city.staminaCost,
+            staminaCost: this.deps.campRepository && camp ? camp.staminaCost : city.staminaCost,
             rewardCoin: city.rewardCoin,
-            desc: city.desc,
+            desc: this.deps.campRepository && camp ? camp.desc : city.desc,
             hexId: site.anchorHexId,
             distance,
             previewDamage: preview?.damage ?? 0,
             previewWarScore: preview?.warScore ?? 0,
             inRange: preview?.inRange ?? false,
             damageCutPct: preview?.damageCutPct ?? 0,
+            isPlayerCamp: playerCampId > 0 && cityId === playerCampId,
             phase: timeline.phase,
-            canAttack: !this.deps.campRepository && gate.canAttack,
-            attackReason: this.deps.campRepository ? BIGMAP_CAMP_QUERY_TEXT.attackUnavailable : gate.reason,
+            canAttack: this.deps.campRepository ? campAttackReason === '' : gate.canAttack,
+            attackReason: this.deps.campRepository ? campAttackReason : gate.reason,
             playerRank: board.playerRank,
             attackerCount: board.attackerCount,
             topWarScore: board.topWarScore,
@@ -878,9 +939,48 @@ export class BigMapPresenter {
             staminaCost: monster.staminaCost,
             respawnInSeconds,
             battle: monster.battle,
-            canAttack: !!monster.offlineBattle && unlock.unlocked && respawnInSeconds === 0,
-            attackReason: monster.battle ? BIGMAP_MONSTER_BATTLE_UNAVAILABLE : unlock.reason,
+            canAttack: (!!monster.offlineBattle || !!this.deps.startBattle && !!monster.battle)
+                && unlock.unlocked && respawnInSeconds === 0 && !this.isStartingBattle && !this.isDisposed,
+            attackReason: !unlock.unlocked ? unlock.reason : this.isStartingBattle ? BIGMAP_BATTLE_TEXT.pending
+                : monster.battle && !this.deps.startBattle ? BIGMAP_MONSTER_BATTLE_UNAVAILABLE : '',
         };
+    }
+
+    async requestAttackCity(cityId: number): Promise<IBigMapActionFeedback> {
+        if (this.isDisposed) return { ok: false, message: BIGMAP_BATTLE_TEXT.closed };
+        if (!this.deps.campRepository) return this.attackCity(cityId);
+        const view = this.cityView(cityId);
+        const camp = this.config.camps.get(cityId);
+        if (!view || !camp) return { ok: false, message: BIGMAP_BATTLE_TEXT.campMissing };
+        if (!view.canAttack) return { ok: false, message: view.attackReason };
+        return this.requestServerBattle(ZC_BATTLE_TYPE_SLG_CAMP, camp.campId);
+    }
+
+    async requestAttackMonster(instanceId: number): Promise<IBigMapActionFeedback> {
+        if (this.isDisposed) return { ok: false, message: BIGMAP_BATTLE_TEXT.closed };
+        const site = this.worldInstance.monsters.find((item) => item.instanceId === instanceId);
+        const monster = site ? this.config.monsters.get(site.monsterId) : null;
+        if (!monster) return { ok: false, message: BIGMAP_BATTLE_TEXT.monsterMissing };
+        if (!monster.battle) return this.attackMonster(instanceId);
+        const view = this.monsterView(instanceId);
+        if (!view?.canAttack) return { ok: false, message: view?.attackReason || BIGMAP_BATTLE_TEXT.monsterUnavailable };
+        return this.requestServerBattle(ZC_BATTLE_TYPE_SLG_MONSTER, monster.id);
+    }
+
+    private async requestServerBattle(battleType: IZCSlgBattleType, targetConfigId: number): Promise<IBigMapActionFeedback> {
+        const start = this.deps.startBattle;
+        if (!start || this.isStartingBattle || this.isDisposed) return { ok: false, message: BIGMAP_BATTLE_TEXT.unavailable };
+        this.isStartingBattle = true;
+        this.emit();
+        try {
+            const result = await start(battleType, targetConfigId, () => !this.isDisposed);
+            return this.isDisposed ? { ok: false, message: BIGMAP_BATTLE_TEXT.closed } : result;
+        } catch {
+            return { ok: false, message: BIGMAP_BATTLE_TEXT.failed };
+        } finally {
+            this.isStartingBattle = false;
+            this.emit();
+        }
     }
 
     attackCity(cityId: number): IBigMapActionFeedback {
@@ -899,6 +999,8 @@ export class BigMapPresenter {
                 // 名次 / 拥挤系数用当前榜单的真值，不再恒等于 1。
                 attackers: view.attackerCount,
                 rank: view.playerRank,
+                // 势力范围只认服务器下发的「所处城池」，与预览用同一判据。
+                playerCampId: this.playerCampId,
             },
         );
         if (!outcome.ok || !outcome.base || !outcome.progress) {
@@ -938,11 +1040,11 @@ export class BigMapPresenter {
 
     // -------------------------------------------------------------- 便捷查询
 
-    /** 玩家基地到某格的距离（界面显示「距离 x 格」）。 */
+    /** 玩家基地到某格的距离（界面显示「距离 x 格」）。基地位置见 `playerBaseHexId`。 */
     distanceFromBase(hexId: number): number {
         return bigMapHexDistance(
             this.worldInstance.rows, this.worldInstance.cols,
-            this.worldInstance.playerBase.hexId, hexId,
+            this.playerBaseHexId, hexId,
         );
     }
 

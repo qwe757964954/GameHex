@@ -93,6 +93,7 @@ test('main tab host binds quick find to the embedded map before the page becomes
     let bound: (() => void) | undefined;
     let focusCount = 0;
     class MapStub {
+        setSessionAssetService() {}
         initialize() {}
         focusCurrentBoss() { focusCount++; }
     }

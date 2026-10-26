@@ -1809,6 +1809,7 @@ enum CmdRankType {
 	CELEBRATION_LOCK_MONSTER_SERVER_RANK = 50; // 开服庆典-九层妖塔分服排行榜
 	CELEBRATION_OATH_ALLIANCE_FULL_RANK = 51; // 开服庆典-道友协战全服排行榜
 	CELEBRATION_OATH_ALLIANCE_SERVER_RANK = 52; // 开服庆典-道友协战分服排行榜
+	SLG_CAMP_ROLE_HARM_RANK = 53; // SLG 城池角色伤害排行榜
 }
 
 message CmdRecharge {
@@ -4501,6 +4502,12 @@ message CmdSlgMonsterBattleResultInfo {
   repeated CmdGoods cmdGoods = 1;//道具奖励
 }
 
+// slg城池据点战斗结果信息(1004)
+message CmdSlgCampBattleResultInfo {
+  optional uint32 warScore = 1;//本次获得的战功积分
+  repeated CmdGoods cmdGoods = 2;//道具奖励
+}
+
 // 战斗帧信息
 message CmdBattleFrameInfo {
   required uint32 frameId = 1;//帧id
@@ -4640,6 +4647,12 @@ message CmdCityChapterCellInfoRspMsg {
    repeated uint64 passCells    = 4;//通关的格子集合(bitSet)
 }
 
+//slg玩法 游戏信息
+message SlgGameInfo {
+  required uint32 maxMonsterLevel = 1;//最大击杀的野怪等级
+  required uint32 toCampId = 2;//所处的城池id
+}
+
 //slg玩法 行动力信息
 message SlgGameActionInfo {
   required uint32 nextRevertTime = 1;  // 下次回复剩余秒数
@@ -4720,16 +4733,26 @@ message CmdSlgGameInfoReqMsg {
 
 //大地图 响应slg玩法信息
 message CmdSlgGameInfoRspMsg {
+   required SlgGameInfo info = 1;
 }
 
 //大地图 广播slg玩法信息
 message CmdSlgGameInfoBroMsg {
+   required SlgGameInfo info = 1;
 }
 
 // ==================== 大地图(SLG) 建造系统协议 ====================
 
 // 大地图 请求建造信息
 message CmdSlgBuildInfoReqMsg {
+}
+
+// 大地图 响应建造信息
+// 客户端补回：r804 拆「建造/升级」时该 message 被误删，但 MessageId(1414628085) 与
+// SlgBuildGameInfo 结构都还在，服务端也仍在按这个 id 返回建造全量，缺定义会让客户端整包解不出来。
+// 服务端真源需同步补回同一定义，否则下次下发 proto 会再次丢失。
+message CmdSlgBuildInfoRspMsg {
+  required SlgBuildGameInfo info = 1; // 建造玩法信息
 }
 
 // 大地图 建造建筑

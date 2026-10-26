@@ -11,7 +11,8 @@
  * `Simple.updateUVs: Cannot read properties of null (reading '0')`
  * （只在重新渲染那一刻炸，看着像别的模块的锅）。
  */
-import { resources, SpriteFrame } from 'cc';
+import { SpriteFrame } from 'cc';
+import { routedLoad } from '../common/RoutedResource';
 import { spriteFramePathOf } from '../ArtPaths';
 import { ID_ART_NAMES, qualityFrameArtPath, titleArtPathOf } from './ItemDetailArt';
 
@@ -42,7 +43,7 @@ function loadByPath(key: string, path: string): Promise<SpriteFrame | null> {
 
     const mark = generation;
     const task = new Promise<SpriteFrame | null>((resolve) => {
-        resources.load(path, SpriteFrame, (error, frame) => {
+        routedLoad(path, SpriteFrame, (error, frame) => {
             if (error || !frame || !frame.isValid) {
                 console.warn(`[ItemDetailArt] 加载失败：${path}`, error);
                 resolve(null);

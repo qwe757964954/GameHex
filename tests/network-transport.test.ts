@@ -218,7 +218,7 @@ test('微信开发者工具里 location 泄露成 127.0.0.1，也不会去绕本
     );
 });
 
-test('浏览器本地预览（有 fetch + localhost）仍然优先走调试代理', async () => {
+test('浏览器本地预览直连成功不探测调试代理', async () => {
     const fetched: string[] = [];
     await withGlobals(
         {
@@ -232,15 +232,39 @@ test('浏览器本地预览（有 fetch + localhost）仍然优先走调试代�
         async () => {
             const transport = new FetchNetworkTransport({ defaultTimeoutMs: 500 });
             const result = await transport.requestJson<{ via: string }>({ url: 'https://cdn.example.com/a.json' });
-            assert.equal(result.via, 'proxy');
+            assert.equal(result.via, 'direct');
         },
     );
 
     assert.equal(fetched.length, 1);
     assert.ok(
-        fetched[0].startsWith('http://127.0.0.1:8099/proxy?url='),
-        `本地调试代理这条能力不能被改丢，实际请求：${fetched[0]}`,
+        fetched.length === 1 && !fetched[0].includes('/proxy?url='),
+        `直连可用时不应绕代理，实际请求：${fetched[0]}`,
     );
+});
+
+test('浏览器跨域网络失败只对读取请求回退一次代理', async () => {
+    const calls:string[]=[];
+    await withGlobals({location:{hostname:'localhost'},fetch:async(url:string)=>{
+        calls.push(String(url));if(!String(url).includes('/proxy?url='))throw new TypeError('Failed to fetch');
+        return {ok:true,status:200,text:async()=>'{}'};
+    }},async()=>{await new FetchNetworkTransport().requestJson({url:'https://game.example.com/list.json'});});
+    assert.equal(calls.length,2);assert.ok(calls[1].includes('/proxy?url='));
+});
+
+test('HTTP 业务失败、JSON 错误、超时与写请求不通过代理重复发送', async () => {
+    for(const failure of ['http','json','timeout','post']){
+        let calls=0;
+        await withGlobals({location:{hostname:'localhost'},fetch:async()=>{
+            calls++;
+            if(failure==='post')throw new TypeError('Failed to fetch');
+            if(failure==='timeout')return new Promise(()=>{});
+            return {ok:failure!=='http',status:failure==='http'?401:200,text:async()=>'<html>'};
+        }},async()=>{
+            await assert.rejects(new FetchNetworkTransport({defaultTimeoutMs:5}).requestJson({url:'https://game.example.com/action',method:failure==='post'?'POST':'GET'}));
+        });
+        assert.equal(calls,1,failure);
+    }
 });
 
 test('平台层源码：超时不得再挂在 AbortController 上，且必须保留 XHR 回落', () => {
@@ -277,3 +301,17 @@ function stripComments(source: string): string {
     }
     return out;
 }
+
+
+test('已收到 HTTP 响应后 body 解码 TypeError 只报错，不再次请求代理', async () => {
+    const calls: string[] = [];
+    await withGlobals({ location: { hostname: 'localhost', origin: 'http://localhost:7456' },
+        fetch: async (url: string) => {
+            calls.push(url);
+            return { ok: true, status: 200, text: async () => { throw new TypeError('Error decoding response body'); } };
+        },
+    }, async () => {
+        await assert.rejects(new FetchNetworkTransport().requestJson({ url: 'https://cdn.example.com/data.json' }), /Error decoding response body/);
+        assert.deepEqual(calls, ['https://cdn.example.com/data.json']);
+    });
+});

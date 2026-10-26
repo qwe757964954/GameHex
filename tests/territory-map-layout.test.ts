@@ -12,7 +12,9 @@ import {
 import {
     buildTerritoryMapLayout,
     TERRITORY_MAP_CONTENT_PADDING,
+    TERRITORY_MAP_CONTENT_PADDING_TOP,
     TERRITORY_MAP_VIEW_LIFT,
+    territoryMapContentShiftY,
     territoryMapContentSize,
     territoryMapOffsetForCell,
 } from '../assets/script/app/territory/model/TerritoryMapLayout';
@@ -124,7 +126,8 @@ test('首次滚动到随机点时，第一章起始格附近目标落在视口�
     assert.ok(offset.x <= layout.width - viewport.width);
     assert.ok(offset.y <= content.height - viewport.height);
     const centerX = -layout.width / 2 + viewport.width / 2 + offset.x;
-    const centerY = content.height / 2 - viewport.height / 2 - offset.y;
+    // 地图不居中（顶部留白 0 / 底部 300）⇒ 格心相对内容层要减掉 shift（见 territoryMapContentShiftY）。
+    const centerY = content.height / 2 - territoryMapContentShiftY() - viewport.height / 2 - offset.y;
     assert.ok(Math.abs(target.x - centerX) <= viewport.width / 2);
     assert.ok(Math.abs(target.y - centerY) <= viewport.height / 2);
     assert.deepEqual(territoryMapOffsetForCell(layout, -1, viewport), { x: 0, y: 0 });
@@ -145,12 +148,14 @@ test('滚到地图最底部时，底边仍在视口底部之上留白那么多�
     // 主城页真实视口：`MainTerritoryMap.prefab` 的 MapViewport = 720×934。
     const viewport = { width: 720, height: 934 };
     assert.equal(content.width, layout.width, '横向不留白');
-    assert.equal(content.height, layout.height + TERRITORY_MAP_CONTENT_PADDING * 2);
+    assert.equal(content.height,
+        layout.height + TERRITORY_MAP_CONTENT_PADDING + TERRITORY_MAP_CONTENT_PADDING_TOP);
 
     const bottomCellId = bottomMostCellId(layout);
     const offset = territoryMapOffsetForCell(layout, bottomCellId, viewport);
     // 屏幕坐标（相对视口中心）：格心 → 视口；地图底边 = 包围盒下沿。
-    const mapBottomOnScreen = -viewport.height / 2 + (content.height / 2 + layout.height / 2) - offset.y;
+    const mapBottomOnScreen = -viewport.height / 2
+        + (content.height / 2 - territoryMapContentShiftY() + layout.height / 2) - offset.y;
     const clearance = viewport.height / 2 - mapBottomOnScreen;
     assert.ok(
         clearance >= TERRITORY_MAP_CONTENT_PADDING - 1e-6,
@@ -162,11 +167,33 @@ test('滚到地图最底部时，底边仍在视口底部之上留白那么多�
     assert.equal(offset.y, content.height - viewport.height);
 });
 
+test('滚到地图最顶端时，第一排格子贴住视口顶（不再露出没有格子的空底图）', () => {
+    const layout = buildTerritoryMapLayout(readMap());
+    const content = territoryMapContentSize(layout);
+    const viewport = { width: 720, height: 934 };
+    let topY = Number.NEGATIVE_INFINITY;
+    for (const point of layout.points.values()) if (point.y > topY) topY = point.y;
+
+    // 滚到最顶 = 偏移 0。格心距视口顶的向下距离 = 内容层顶到该格心的距离。
+    const distanceFromContentTop = content.height / 2 - (topY + territoryMapContentShiftY());
+    // 判据：格心必须在「半格高」之内 ⇒ 格子顶边贴住或越过视口顶，中间没有空带。
+    const halfCell = HEX_GRID_IMAGE_HEIGHT / 2;
+    assert.ok(distanceFromContentTop <= halfCell + 1e-6,
+        `第一排格心距视口顶 ${distanceFromContentTop.toFixed(1)}px，超过半格高 ${halfCell}px `
+        + '⇒ 滚到顶会露出一条没有格子的空底图（2026-10-23 用户截图）');
+    // 反过来也不能"过头"：格心不该跑到视口顶之上（那会把第一排裁掉一半以上）。
+    assert.ok(distanceFromContentTop >= 0,
+        `第一排格心在视口顶之上 ${(-distanceFromContentTop).toFixed(1)}px ⇒ 顶部那排被裁掉了`);
+});
+
 test('内容层留白不会把地图坐标带偏：格心仍是共享布局那一套', () => {
     const layout = buildTerritoryMapLayout(readMap());
     const content = territoryMapContentSize(layout);
-    // 地图整体居中在内容层里：内容层中心 == 包围盒中心。
-    assert.equal(content.height / 2 - layout.height / 2, TERRITORY_MAP_CONTENT_PADDING);
+    // 🔴 2026-10-23 改口径：地图**不再**居中，而是顶部贴内容层顶部（底部留白全在下面）。
+    // 判据 = 「内容层顶到地图顶的距离 == 顶部留白」。
+    assert.equal(content.height / 2 - layout.height / 2 - territoryMapContentShiftY(),
+        TERRITORY_MAP_CONTENT_PADDING_TOP);
+    assert.equal(TERRITORY_MAP_CONTENT_PADDING_TOP, 0, '顶部留白必须是 0，否则滚到顶会露出没有格子的空底图');
     // 目标格只要不在边缘，仍然被停在「视口中心偏上 lift」。
     const cellId = 366;
     const viewport = { width: 720, height: 480 };
@@ -174,7 +201,8 @@ test('内容层留白不会把地图坐标带偏：格心仍是共享布局那�
     const offset = territoryMapOffsetForCell(layout, cellId, viewport);
     assert.ok(offset.y < content.height - viewport.height, '这一档不能撞到滚动上限，否则测的是钳制不是定心');
     // 屏幕坐标向上为负 ⇒ 「停在视口中心上方 lift」= 屏幕 y 等于 -lift。
-    const screenY = -viewport.height / 2 + (content.height / 2 - point.y) - offset.y;
+    const screenY = -viewport.height / 2
+        + (content.height / 2 - territoryMapContentShiftY() - point.y) - offset.y;
     assert.ok(
         Math.abs(screenY + TERRITORY_MAP_VIEW_LIFT) < 1e-6,
         `目标格应停在视口中心上方 ${TERRITORY_MAP_VIEW_LIFT}px，实际 ${screenY.toFixed(2)}`,

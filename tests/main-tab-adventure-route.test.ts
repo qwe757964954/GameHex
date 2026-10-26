@@ -20,11 +20,11 @@ test('challenge tab stays visible but cannot open the old adventure page', () =>
 test('领地格 = 主城页（内嵌领地图），章节 HUD 由主城顶栏替代', () => {
     const source = readFileSync(new URL('../assets/script/app/main/MainTabHost.ts', import.meta.url), 'utf8');
     // 「领地之后就是主城」：领地格加载主城页 `ArenaRoot`（里面嵌了 MainTerritoryMap 实例）。
-    assert.match(source, /if \(index === MainTab\.Territory\) return this\.arenaPage;/);
+    assert.match(source, /if \(index === MainTab\.Territory\) return 'ui\/main\/ArenaRoot';/);
     // 主城嵌入 map-only 页面，并在激活前注入资源。
     assert.match(source, /getComponentInChildren\(MainTerritoryMap\)/);
-    assert.match(source, /mainTerritoryMap\.initialize\(this\.assets\)/);
-    assert.ok(source.indexOf('mainTerritoryMap.initialize(this.assets)') < source.indexOf('page.setParent(this.content)'),
+    assert.match(source, /mainTerritoryMap\.initialize\(this\.assets, this\.configs\)/);
+    assert.ok(source.indexOf('mainTerritoryMap.initialize(this.assets, this.configs)') < source.indexOf('page.setParent(this.content)'),
         'AssetService 必须在页面激活前注入');
     assert.doesNotMatch(source, /setHudVisible/);
 });
@@ -85,7 +85,7 @@ test('territory stations open details and start a table-driven local PVE battle'
     assert.match(game, /pveDefence\?\.waves\.length/);
     assert.match(presenter, /playerCount: TERRITORY_DEFAULT_PLAYER_COUNT/);
     assert.match(game, /params\?\.pve\?\.playerCount/);
-    assert.ok(existsSync(new URL('../assets/resources/image/gameui/bg_03.png', import.meta.url)));
+    assert.ok(existsSync(new URL('../assets/bundles/battle/image/gameui/bg_03.png', import.meta.url)));
     assert.ok(existsSync(new URL('../assets/resources/image/buildings/hex_nor.png', import.meta.url)));
 });
 

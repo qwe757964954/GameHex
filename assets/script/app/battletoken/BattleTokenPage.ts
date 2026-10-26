@@ -1,6 +1,7 @@
-import { _decorator, Label, Node, resources, Sprite, SpriteFrame, UITransform } from 'cc';
+import { _decorator, Label, Node, Sprite, SpriteFrame, UITransform } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
+import { routedLoad } from '../common/RoutedResource';
 import {
     BT_QUALITY_FRAME_NAMES,
     BT_QUALITY_FRAME_ROOT,
@@ -626,7 +627,7 @@ export class BattleTokenPage extends PopupBase {
         return new Promise((resolve) => {
             // ⚠️ 必须带 `/spriteFrame`（规则 57）：裸路径会报
             //    `Bundle resources doesn't contain xxx`，且只是静默留白 + 一条 warn。
-            resources.load(path, SpriteFrame, (error, frame) => {
+            routedLoad(path, SpriteFrame, (error, frame) => {
                 if (error || !frame) {
                     console.warn('[BattleToken] 加载图失败', path, error);
                     resolve(null);

@@ -163,3 +163,75 @@ test('map editor server preserves weighted neutral-resource pools and home-candi
         }
     });
 });
+
+function resourcePreset(id: string, resourcePoints: unknown[]) {
+    return {
+        id, name: id, version: 3, rows: 10, columns: 12, playerCount: 4,
+        cityMode: 'select', mirrorVertical: false, mirrorHorizontal: false,
+        ascii: Array(10).fill('012340123401'), resourcePoints,
+    };
+}
+
+test('组合资源点可保存到玩家分区，读取保留坐标和组合ID，旧池保持原样', async () => {
+    await withServer(async (base) => {
+        const id = 'probe-resource-groups';
+        const points = [
+            { row: 0, column: 1, groupId: 13001 },
+            { row: 4, column: 2, groupId: 13002 },
+            { row: 9, column: 3, pool: { chest: 0, gold: 1 } },
+        ];
+        try {
+            const response = await putPreset(base, id, resourcePreset(id, points));
+            assert.equal(response.status, 200, JSON.stringify(response.body));
+            assert.deepEqual(response.body.preset.resourcePoints, points);
+            const saved = await (await fetch(`${base}/api/presets`)).json();
+            assert.deepEqual(saved.presets.find((preset: { id: string }) => preset.id === id).resourcePoints, points);
+        } finally {
+            await fetch(`${base}/api/presets/${id}`, { method: 'DELETE' });
+        }
+    });
+});
+
+test('保存拒绝非法组合ID、混合旧池、虚空、主城重叠和过近点位', async () => {
+    await withServer(async (base) => {
+        const id = 'probe-invalid-resource-group';
+        const cases: Array<{ name: string; body: ReturnType<typeof resourcePreset> }> = [];
+        for (const groupId of [0, -1, 1.2, '13001', 2147483648, null]) {
+            cases.push({ name: `groupId=${groupId}`, body: resourcePreset(id, [{ row: 1, column: 1, groupId }]) });
+        }
+        cases.push({ name: '混合旧池', body: resourcePreset(id, [{ row: 1, column: 1, groupId: 13001, pool: { chest: 1 } }]) });
+        cases.push({ name: '空点位', body: resourcePreset(id, [{ row: 1, column: 1 }]) });
+        cases.push({ name: '旧池全零', body: resourcePreset(id, [{ row: 1, column: 1, pool: { chest: 0, gold: 0 } }]) });
+        cases.push({ name: '重复点位', body: resourcePreset(id, [{ row: 1, column: 1, groupId: 13001 }, { row: 1, column: 1, groupId: 13002 }]) });
+        cases.push({ name: '距离不足', body: resourcePreset(id, [{ row: 1, column: 1, groupId: 13001 }, { row: 2, column: 1, groupId: 13002 }]) });
+        const voidMap = resourcePreset(id, [{ row: 0, column: 0, groupId: 13001 }]);
+        voidMap.ascii[0] = '.12340123401';
+        cases.push({ name: '虚空', body: voidMap });
+        try {
+            for (const entry of cases) assert.equal((await putPreset(base, id, entry.body)).status, 400, entry.name);
+            const homeMap = { ...resourcePreset(id, [{ row: 1, column: 1, groupId: 13001 }]), homes: [{ row: 1, column: 1 }, null, null, null] };
+            assert.equal((await putPreset(base, id, homeMap)).status, 400, '主城重叠');
+            const distant = resourcePreset(id, [{ row: 1, column: 1, groupId: 13001 }, { row: 4, column: 1, groupId: 13002 }]);
+            assert.equal((await putPreset(base, id, distant)).status, 200, '恰好三步可以放');
+            assert.equal((await putPreset(base, id, { ...distant, spacing: { resourceMinDistance: 4 } })).status, 400, '保留配置的更大间距');
+        } finally {
+            await fetch(`${base}/api/presets/${id}`, { method: 'DELETE' });
+        }
+    });
+});
+
+test('组合点位的间距沿可通行路径计算且镜像压缩图使用绝对坐标', async () => {
+    await withServer(async (base) => {
+        const id = 'probe-resource-mirror';
+        try {
+            const separated = { ...resourcePreset(id, [{ row: 2, column: 1, groupId: 13001 }, { row: 2, column: 3, groupId: 13002 }]), ascii: Array(10).fill('11.333333333') };
+            assert.equal((await putPreset(base, id, separated)).status, 200, '虚空隔断不能当作两步路径');
+            const mirrored = { ...basePreset(id), resourcePoints: [{ row: 0, column: 0, groupId: 13001 }, { row: 19, column: 0, groupId: 13002 }] };
+            const response = await putPreset(base, id, mirrored);
+            assert.equal(response.status, 200, JSON.stringify(response.body));
+            assert.deepEqual(response.body.preset.resourcePoints, mirrored.resourcePoints);
+        } finally {
+            await fetch(`${base}/api/presets/${id}`, { method: 'DELETE' });
+        }
+    });
+});

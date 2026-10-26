@@ -31,7 +31,7 @@ import { TerritoryTapFeedback } from './TerritoryTapFeedback';
 import type { TerritoryChestTier } from '../model/TerritoryChestTier';
 import type { TerritoryCampaignStage } from '../model/TerritoryCampaignConfig';
 import type { ITerritoryMapLayout, ITerritoryMapPoint } from '../model/TerritoryMapLayout';
-import { territoryMapContentSize } from '../model/TerritoryMapLayout';
+import { territoryMapContentSize, territoryMapContentShiftY } from '../model/TerritoryMapLayout';
 import type { TerritoryMapConfig, TerritorySite, TerritorySiteType } from '../model/TerritoryMapConfig';
 import { TERRITORY_SITE_TYPE } from '../model/TerritoryMapConfig';
 import type { TerritoryProgress } from '../model/TerritoryProgress';
@@ -45,6 +45,15 @@ import { TERRITORY_EVENTS } from './TerritoryEvents';
 import { TERRITORY_HEX_REVEAL_NODE, TerritoryHexFlip } from './TerritoryHexFlip';
 import { TerritoryHexSpawn } from './TerritoryHexSpawn';
 import { territoryHexSpawnDelays } from '../model/TerritoryHexSpawn';
+import { territoryCloudCells, type ITerritoryCloudCell } from '../model/TerritoryCloud';
+import {
+    TERRITORY_HEX_RECOLOR_NEW_NODE,
+    TERRITORY_HEX_RECOLOR_OLD_NODE,
+    TerritoryHexRecolor,
+} from './TerritoryHexRecolor';
+import { territoryHexRecolorDelays } from '../model/TerritoryHexRecolor';
+import { TerritoryCloudView, type ITerritoryCloudFrames } from './TerritoryCloudView';
+import { territoryCloudPocketCells } from '../model/TerritoryCloud';
 import {
     TERRITORY_COLORS,
     TERRITORY_STATION_STATE,
@@ -191,6 +200,37 @@ const HEX_FRAME_NODE_NAME = 'Frame';
  */
 const CHEST_SPAWN_SHAKE_DELAY_SECONDS = 0.22;
 
+/**
+ * 一格待播的「换色」：本帧地皮**帧 → 帧**真的变了，攒起来统一算错峰。
+ *
+ *  为什么不在 `paintHexes` 的循环里直接 `play`：错峰要按**这一批**的簇心排
+ *  （见 `territoryHexRecolorDelays`），循环里一格一格播就只能按扫描顺序，屏幕上读成乱序闪。
+ */
+interface ITerritoryHexRecolorPending {
+    readonly cellId: number;
+    readonly node: Node;
+    readonly from: SpriteFrame | null;
+    readonly to: SpriteFrame | null;
+    readonly x: number;
+    readonly y: number;
+}
+
+/**
+ * 开箱镜头「地图那一半」的基准（只在开演前量**一次**）。
+ *
+ *  · `origin`：被点格子的台面中心，**覆盖层坐标**；
+ *  · `layerOrigin`：`MapLayer` 的原点，同样换算到覆盖层坐标；
+ *  · `basePos` / `baseScale`：`MapLayer` 原始的 position / scale（收工要原样还回去）。
+ *
+ *  ⚠️ 每帧现量会把"已经挪过的位置"当成原点 ⇒ 镜头成了一条越推越远的加速曲线。
+ */
+interface ITerritoryChestCameraBase {
+    readonly origin: Vec3;
+    readonly layerOrigin: Vec3;
+    readonly basePos: Vec3;
+    readonly baseScale: Vec3;
+}
+
 /** 一次完整的地图渲染输入（纯数据 + 只读状态查询）。 */
 export interface ITerritoryMapRenderInput {
     readonly map: TerritoryMapConfig;
@@ -310,6 +350,33 @@ export class TerritoryMapView extends Component {
      */
     private readonly hexSpawn = new TerritoryHexSpawn();
     /**
+     * 「关卡通过后地皮换色」（2026-10-23）：旧地皮缩小淡出 + 新地皮放大淡入，多格按簇心错峰。
+     *
+     *  三方让位顺序 **翻格 > 生成 > 换色**：翻格起播时会 `hexRecolor.stop(node)`（翻格要靠
+     *  格根地皮演"旧 → 新"，而换色正把格根地皮藏着，两套一起跑必然打架）；生成与换色靠
+     *  `isPlaying` 判据互相避开。见 `view/TerritoryHexRecolor` 的类注释。
+     */
+    private readonly hexRecolor = new TerritoryHexRecolor();
+    /**
+     * 是否已经用首帧做过一次「换色」破冰。
+     *
+     *  🔴 与 `hexFlipBootstrapped` / `spawnBootstrapped` 同一个理由：进页面 / 换章的首帧，
+     *  整张图的地皮帧都会"从一开始的 null 变成正式帧"—— 不闸住就是**全屏一起换色**。
+     */
+    private recolorBootstrapped = false;
+    /**
+     * 「未解锁云」（2026-10-23）：没露出来的格位盖一朵循环飘动的云，那一格露出的那一帧
+     * 就地播一次消散并收掉。层序 / 落点 / 帧推进都在 `TerritoryCloudView` 里，这里只负责接线。
+     */
+    private readonly clouds = new TerritoryCloudView();
+    /**
+     * 云要盖的格位 —— **只有地图里配置过的那几十格**（站点 + 随机候选 + 起始格），
+     * 不是整张图的 400 个格位（口径见 `syncClouds`）。`cloudCellsKey` 变了才重建。
+     */
+    private readonly cloudCells: ITerritoryCloudCell[] = [];
+    /** 上面那份快照的指纹：`格位总数 | 站点数 | 随机候选格数 | 起始格`。 */
+    private cloudCellsKey = '';
+    /**
      * 上一帧**已露出**的格子集合 —— 生成本身就是「这一帧有、上一帧没有」的 diff。
      *
      *  ⚠️ 只在 `paintHexes` 里维护；换章 / 布局重建时必须清空（否则新图上的格子会被判成"新增"）。
@@ -424,6 +491,16 @@ export class TerritoryMapView extends Component {
      *  但滚动容器是页面 prefab 上的一个独立节点 —— 视图不该反向依赖页面结构。
      */
     scrollLock: ((locked: boolean) => void) | null = null;
+    /**
+     * 开箱镜头「地图那一半」的基准（`null` = 还没量过 / 已还原）。
+     *
+     *  为什么地图侧也要跟着推：只把倍率乘在覆盖层 `Stage` 上，`MapLayer` 一动不动 ⇒
+     *  观感是"宝箱凑近屏幕、地块不动"（2026-10-23 用户报的问题）。视图每帧把 `(scale, focus)`
+     *  经 `setCameraHook` 递过来，这里同帧缩 `MapLayer` 并平移，让**同一个格子**落回同一屏幕点。
+     */
+    private chestCamera: ITerritoryChestCameraBase | null = null;
+    /** 镜头是否正把地图挪离基准（`false` ⇒ `applyChestCamera` 直接不写，省掉每帧的无谓标脏）。 */
+    private chestCameraActive = false;
 
     /** 初始化共享层引用与喷发粒子层（页面在 `onLoad` 里调，只需一次）。 */
     initialize(): void {
@@ -436,6 +513,37 @@ export class TerritoryMapView extends Component {
         };
         // 顺手建喷发粒子层：此刻飘字还没建过任何节点 ⇒ 它坐稳 `GainLayer` 的第一个子节点。
         this.ensureBurstRoot();
+        // 云层：建在 `GridLayer` 的**后一位**（格子之上、站点层之下），只在第一次生效。
+        // ⚠️ 必须在 `initialize` 里建而不是懒建在 `sync` 里 —— 懒建会在第一次 sync 时才
+        //    插兄弟序，此时 `GridLayer` 的子节点已经排过 `paintOrder`，位置虽然不受影响，
+        //    但"云在格子之上、站点之下"这条就变成隐式依赖调用时机了。
+        this.clouds.attach(this.gridLayer);
+        // 内容层纵向偏移必须在云层建好之后跑（它要连 `CloudLayer` 一起挪）。
+        this.applyContentShift();
+    }
+
+    /**
+     * 把「与格子同坐标系的内容层」整体上移到 {@link territoryMapContentShiftY}。
+     *
+     * ## 为什么要挪
+     *
+     * 内容层高度 = 包围盒 + **底部**留白（顶部 0，见 `TerritoryMapLayout`）。`MapLayer`
+     * 锚点居中 ⇒ 内容层比地图高 300 时，上下各空 150 —— 滚到顶就会有一块没有格子的空底图
+     * （用户 2026-10-23 截图「格子没有铺到顶端」）。把内容层整体上移半个留白，地图顶部
+     * 正好贴住内容层顶部，滚到顶就是第一排格子贴视口顶。
+     *
+     * ## 谁不动
+     *
+     * `MapBackground` **不参与**：它是按内容层尺寸 cover 铺满的（`syncBackground`），
+     * 跟着偏反而会在顶部露边。它的 `pos` 恒为 `(0, 0)`。
+     */
+    private applyContentShift(): void {
+        const shift = territoryMapContentShiftY();
+        for (const child of this.node.children) {
+            if (child === this.mapBackground?.node) continue;
+            if (child.position.y === shift) continue;
+            child.setPosition(child.position.x, shift, child.position.z);
+        }
     }
 
     /**
@@ -464,6 +572,9 @@ export class TerritoryMapView extends Component {
         const size = this.readViewportSize();
         this.chestView = new TerritoryChestView(host, size);
         this.chestView.setArt({ frames: this.chestArt });
+        // 镜头**拆两半**（2026-10-23）：覆盖层那半由视图自己缩 `Stage`，地图这半在这里接上。
+        // 漏了这一句就是用户报的「只有宝箱放大、地块不动」。
+        this.chestView.setCameraHook((scale, focus) => this.applyChestCamera(scale, focus));
         this.tapFeedback = new TerritoryTapFeedback(host);
         this.chestView.setCatchPoint(0, size.height / 2 - 46);
         return host;
@@ -531,6 +642,9 @@ export class TerritoryMapView extends Component {
         const point = this.cellPointInOverlay(cellId);
         if (!point) return false;
         this.ensureOverlayHost();
+        // 基准必须在 `play()` **之前**量：`play` 里第一句 `apply(0)` 就会把镜头摆到
+        // 「k=1 / focus=0」那一帧 —— 先量，基准才是"没被推过"的地图。
+        this.captureChestCamera(point);
         this.chestView?.play(tier, point, rewards, onDone);
         const started = this.chestView?.isPlaying === true;
         // 开演即锁输入（需求 2026-10-22 §4）：表演挂在**页面坐标**上，而地图是 ScrollView content，
@@ -551,9 +665,92 @@ export class TerritoryMapView extends Component {
     /** 立刻收掉开箱表演（换章 / 页面销毁前）。同时解锁输入（打断也要放开，否则页面点不动）。 */
     stopChestPlay(): void {
         this.chestView?.stop();
+        // 🔴 还原地图**必须**在解锁滚动之前：`stop()` 以 `(1, 0)` 触发钩子只是"数值上回到原位"，
+        // 真正把 position / scale 写回基准的是这一句；带着放大 + 平移过的 content 去开 `ScrollView`，
+        // 之后的拖拽边界会按错的尺寸算（见 §3.1.1）。
+        this.restoreChestCamera();
         this.setInputLocked(false);
         // 地图上那只宝箱要还回来：被打断时进度没变，格子还是"可领取"。
         this.chestPlayingCell = null;
+    }
+
+    /**
+     * 量一次「地图那一半」的基准（`playChestOpen` 里、`play()` 之前调）。
+     *
+     * 记三样东西：格心 `origin`（覆盖层坐标）、`MapLayer` 原点在同一套坐标里的 `layerOrigin`、
+     * 以及 `MapLayer` 原始的 position / scale。后两者是"收工要还回去"的东西。
+     *
+     *  ⚠️ 覆盖层拿不到（prefab 结构被改）⇒ 基准置空，`applyChestCamera` 全程静默 ——
+     *    退化成"只有宝箱推进"，不是地图乱飞。
+     */
+    private captureChestCamera(origin: Vec3): void {
+        const host = this.overlayHost;
+        const hostTransform = host?.isValid ? host.getComponent(UITransform) : null;
+        if (!hostTransform || !this.node?.isValid) {
+            this.chestCamera = null;
+            this.chestCameraActive = false;
+            return;
+        }
+        // `MapLayer` 的"原点"就是它自己的 position（子节点坐标以它为基准），换算到覆盖层坐标即可。
+        const layerOrigin = hostTransform.convertToNodeSpaceAR(this.node.getWorldPosition(), new Vec3());
+        this.chestCamera = {
+            origin: new Vec3(origin.x, origin.y, 0),
+            layerOrigin,
+            basePos: this.node.position.clone(),
+            baseScale: this.node.scale.clone(),
+        };
+        this.chestCameraActive = true;
+    }
+
+    /**
+     * 把 `MapLayer` 摆到与覆盖层宝箱**同一帧**的位置（每帧被 `setCameraHook` 调一次）。
+     *
+     * 推导（全在覆盖层坐标系里，`L` = 格心相对 `MapLayer` 原点的偏移）：
+     *
+     * ```
+     * 格心屏幕位置 = layerOrigin' + k × L
+     * 要求         = origin × (1 - focus)          // focus 0 → 原位，1 → 屏幕中心
+     * ⇒ layerOrigin' = origin × (1 - focus) - k × L
+     * 校验：focus=0 / k=1 ⇒ layerOrigin' = layerOrigin（原样）
+     * ```
+     *
+     *  ⚠️ 这里**只吃 `(scale, focus)` 两个数** —— 不关心倍率是 1.08 还是 2.3，
+     *    换档次不用动本方法（它拿到 `focus` 就已经知道该把格心挪到哪）。
+     */
+    private applyChestCamera(scale: number, focus: number): void {
+        const base = this.chestCamera;
+        if (!base || !this.chestCameraActive || !this.node?.isValid) return;
+        // 脏值兜底：`k` 必须是正数（0 / 负数 / NaN 会让地图塌成一条线），`f` 夹到 [0, 1]。
+        const k = Number.isFinite(scale) && scale > 0 ? scale : 1;
+        const f = Number.isFinite(focus) ? Math.min(1, Math.max(0, focus)) : 0;
+        const node = this.node;
+        // 倍率乘在 **prefab 的基准缩放**上，不是直接写 k —— 地图节点本身可能带着非 1 的缩放。
+        node.setScale(base.baseScale.x * k, base.baseScale.y * k, 1);
+        const lx = base.origin.x - base.layerOrigin.x;
+        const ly = base.origin.y - base.layerOrigin.y;
+        const targetX = base.origin.x * (1 - f) - k * lx;
+        const targetY = base.origin.y * (1 - f) - k * ly;
+        // 三数值重载：帧循环里不 new Vec3（场景节点每次推镜都要摆位）。
+        node.setPosition(
+            base.basePos.x + (targetX - base.layerOrigin.x),
+            base.basePos.y + (targetY - base.layerOrigin.y),
+            base.basePos.z,
+        );
+    }
+
+    /**
+     * 把 `MapLayer` 原样还回去（收工 / 换章 / 页面销毁前）。
+     *
+     *  ⚠️ 必须在 `setInputLocked(false)` **之前**调：滚动容器要靠 content 的真实尺寸算拖拽边界。
+     *  幂等 —— 基准已经空了就直接返回（重复调不会把地图推到别处）。
+     */
+    private restoreChestCamera(): void {
+        this.chestCameraActive = false;
+        const base = this.chestCamera;
+        this.chestCamera = null;
+        if (!base || !this.node?.isValid) return;
+        this.node.setScale(base.baseScale.x, base.baseScale.y, base.baseScale.z);
+        this.node.setPosition(base.basePos);
     }
 
     /**
@@ -618,6 +815,18 @@ export class TerritoryMapView extends Component {
     }
 
     /**
+     * 注入「未解锁云」的四套图（页面在资源就绪后调一次）。
+     *
+     * 云体和影子是**两张独立图**（美术层离线拆的，不是运行时切 rect —— 三版就是那么翻车的），
+     * 具体字段见 `ITerritoryCloudFrames`。
+     *
+     * 全为空 ⇒ 整条表现关闭，地图照常渲染（只是没有云）。与领地其它美术同一降级口径。
+     */
+    setCloudFrames(frames: ITerritoryCloudFrames): void {
+        this.clouds.setFrames(frames);
+    }
+
+    /**
      * 每帧推进翻格表现 + 补上「翻完才出现」的建筑；没有在播的格子时开销只是一次长度判断。
      *
      * ⚠️ 顺序不能换（判据钉的就是 `update` 第一句必须是 `hexFlip.step`）：
@@ -632,6 +841,14 @@ export class TerritoryMapView extends Component {
         // 走到这里就不存在两套缩放抢同一格的情况）。
         this.hexSpawn.step(dt);
         this.resolveBuildingReveal();
+        // 未解锁云：待机换帧（每 tick 一批）+ 消散逐朵计时。它只动自己层里的云、不写任何格子
+        // 节点，所以**故意排在「解除建筑待办」之后** —— 那条链路的判据钉着
+        // 「两个 step 之后立刻 `resolveBuildingReveal`」（见 `territory-building-shake`），
+        // 夹进去会把它掰成"晚一帧出建筑"。
+        this.clouds.step(dt);
+        // 「关卡通过后地皮换色」同理排在 `resolveBuildingReveal` 之后（它只写两个临时子节点，
+        // 不碰格根、也不参与建筑待办那条链），免得把「两个 step 之后立刻补建筑」掰成晚一帧。
+        this.hexRecolor.step(dt);
         this.stepChestSpawnDelays(dt);
         this.stepGains(dt);
         this.stepBursts(dt);
@@ -639,6 +856,9 @@ export class TerritoryMapView extends Component {
         // 都是「时钟置 -1 即空闲」的池化契约，没在播时开销只是一次数值比较。
         this.tapFeedback?.step(dt);
         this.chestView?.step(dt);
+        // 镜头收工 ⇒ 地图还原。自然播完（`step` 内部走到终点会自己 `stop()`）与被打断
+        // 都走这一条，不会留下一个"还放大着、scroll 已解锁"的中间态。
+        if (this.chestCameraActive && !this.chestView?.isPlaying) this.restoreChestCamera();
         // 开箱播完（或被 `stop()` 收掉）⇒ 立刻放开输入。放在 `step` 之后而不是 `onDone` 里：
         // `stop()` 不走 `onDone`，锁必须由「还在不在播」这个状态来释放，才不会有漏放的路径。
         if (this.inputLocked && !this.chestView?.isPlaying) this.setInputLocked(false);
@@ -810,11 +1030,40 @@ export class TerritoryMapView extends Component {
      *  （下一帧才被隐藏、要等 0.7s 再长出来）。
      */
     renderMap(input: ITerritoryMapRenderInput): void {
-        this.syncContentSize(input.layout);
+        this.syncContentSize(input.layout, input.map.rows, input.map.columns);
         this.syncBackground(input);
         this.syncGrid(input);
+        // 未解锁云：排在格子之后（格子节点的 `active` 已定，两者互不影响，但顺序与"谁盖着谁"一致）。
+        this.syncClouds(input);
         this.syncFlip(input);
         this.syncStations(input);
+    }
+
+    /**
+     * 「未解锁云」：**只给地图里配置过的格位**盖云，刚露出来的播消散。
+     *
+     * 🔴 2026-10-23 山猫口径（*「地图编辑器那都没有随机格子，就不要云了，配置没有的地方」*）：
+     * 云不再是"整张图铺满"，而是 `sites` + `randomSites.candidateCells`（+ 起始格）这几格。
+     * 空白格位没有内容、也就永远不会解锁 ⇒ 盖上去的云永远散不掉，纯噪声。
+     * 集合口径的实现在 `territoryCloudCells`（纯函数，有用例钉）。
+     *
+     * ⚠️ 判断「露没露出来」用 `input.revealedCells`（= `territoryRevealedCells`：
+     * 已占领 / 已解锁 + 前沿可见格），**不是** `progress.isCellUnlocked` —— 后者只认
+     * "服务端允许点"，与格子层 `node.active` 不同口径，用错会「格子没画、云已经散了」。
+     */
+    private syncClouds(input: ITerritoryMapRenderInput): void {
+        const candidates = input.map.randomSites?.candidateCells.length ?? 0;
+        const key = `${input.layout.points.size}|${input.map.sites.length}|${candidates}|${input.map.startCellId}`;
+        if (key !== this.cloudCellsKey) {
+            this.cloudCellsKey = key;
+            this.cloudCells.length = 0;
+            this.cloudCells.push(...territoryCloudCells(input.map, input.layout.points));
+        }
+        const revealed = new Set(input.revealedCells);
+        // 「被地块包围」的未解锁小洞（2026-10-23 第二轮）：这些格子里的云**不吃挡云区的反向擦除**，
+        // 搬到页面顶层（压住 UI、不影响点击）。判定是纯函数，见 `territoryCloudPocketCells`。
+        const pockets = territoryCloudPocketCells(input.map.rows, input.map.columns, revealed);
+        this.clouds.sync(this.cloudCells, revealed, pockets);
     }
 
     /**
@@ -848,21 +1097,28 @@ export class TerritoryMapView extends Component {
                 // 同一格刚被判成「新生成」时，把淡入掐掉：翻格全程把格根缩放写死为 1，
                 // 两层缩放会互相掰（而且翻格自带"新地皮放大填充"，淡入是多余的）。
                 this.hexSpawn.stop(node);
+                // 换色一起掐掉：「三方让位顺序 = 翻格 > 生成 > 换色」。翻格要靠格根地皮演
+                // "旧 → 新"换脸，而换色正把格根地皮藏着 —— 两套一起跑必然是地皮一闪一闪。
+                this.hexRecolor.stop(node);
                 this.pendingBuildingReveal.add(cellId);
             }
         }
     }
 
     /**
-     * 内容层尺寸 = 地图包围盒 + 四周留白：`cc.ScrollView` 靠它算可滚范围。
+     * 内容层尺寸 = 地图包围盒 + **底部**留白：`cc.ScrollView` 靠它算可滚范围。
      *
      * 留白不是装饰，是**可滚范围**：`TERRITORY_MAP_CONTENT_PADDING` 让相机能在贴到地图下边缘时
      * 继续往上滚，从而把底部那几排地块抬到【快速寻敌】按钮之上（用户口径「整体一起上移」）。
-     * 格心坐标一个都不动 —— 见 `territoryMapContentSize` 的注释。
+     * 顶部留白恒 0（`TERRITORY_MAP_CONTENT_PADDING_TOP`）—— 滚到顶时第一排格子贴视口顶。
+     * 格心坐标一个都不动，对齐靠 {@link applyContentShift} 的内容层偏移。
      */
-    private syncContentSize(layout: ITerritoryMapLayout): void {
+    private syncContentSize(layout: ITerritoryMapLayout, rows: number, columns: number): void {
         const content = territoryMapContentSize(layout);
         this.node.getComponent(UITransform)!.setContentSize(content.width, content.height);
+        // 云要铺满**整块内容层**（不只格位）：内容层四周还留着 `TERRITORY_MAP_CONTENT_PADDING`
+        // 的空白，滚到边缘时那条空白会露出底图（用户 2026-10-23 截图 1 的红框）。
+        this.clouds.setFillArea(content.width, content.height, rows, columns);
     }
 
     /**
@@ -921,11 +1177,20 @@ export class TerritoryMapView extends Component {
         // 生成动画同理：格子节点要重建，按压缩放 / 半透明留在旧节点上会「烂掉一格」；
         // 快照一并作废 ⇒ 新图首帧只做快照，不会把整张图当成"刚生成"。
         this.hexSpawn.reset();
+        // 换色同理：两个临时层留在旧节点上会「烂掉一格」（藏起来的格根地皮也不会自己回来）；
+        // 破冰标志一并作废 ⇒ 新图首帧只做快照，不会把整张图当成"刚通关"。
+        this.hexRecolor.reset();
+        this.recolorBootstrapped = false;
+        // 云跟着重建：换章后 cellId 换了含义，留着旧图的云会飘在错误的格位上。
+        this.clouds.reset();
+        this.cloudCells.length = 0;
+        this.cloudCellsKey = '';
         this.revealedSnapshot.clear();
         this.spawnBootstrapped = false;
         this.resetGains();
         // 覆盖层那两套也要收：格子节点会被重建 / 复用，按压缩放留在旧节点上就会「烂掉一格」。
         this.chestView?.stop();
+        this.restoreChestCamera();
         this.tapFeedback?.stop();
         this.openedRandomCells.clear();
         this.hexFlipBootstrapped = false;
@@ -997,6 +1262,12 @@ export class TerritoryMapView extends Component {
         const sprite = node.addComponent(Sprite);
         sprite.trim = false;
         sprite.sizeMode = Sprite.SizeMode.CUSTOM;
+        // 「换色」的两个临时地皮层（2026-10-23）—— **格根的前两个子节点**。
+        // 先 `RecolorNew` 后 `RecolorOld`：子节点顺序 = 渲染序 ⇒ 旧地皮画在上面，
+        // 它缩小的过程里新地皮从身下露出来，读作"换了一张"，而不是"两张各淡各的"。
+        // ⚠️ 缩放 / 透明度只写在这两个节点上，**格根恒 1** ——「建筑保持原地不动」靠的就是它。
+        this.createRecolorLayer(node, TERRITORY_HEX_RECOLOR_NEW_NODE);
+        this.createRecolorLayer(node, TERRITORY_HEX_RECOLOR_OLD_NODE);
         // 格面高亮框（「已解锁未通关」才显示）：**必须排在 GroundGlow 之前**，
         // 让翻格底光压在框之上（两者不会同时出现，这个顺序只是观感兜底）。
         // 尺寸由 `applyHexFrame` 按帧写（现美术 124×92），落点与建筑同轴（`HEX_GRID_CONTENT_LIFT`）。
@@ -1038,6 +1309,24 @@ export class TerritoryMapView extends Component {
     }
 
     /**
+     * 建一个「换色」临时地皮层（`RecolorNew` / `RecolorOld`）。
+     *
+     *  · `sizeMode = RAW`：尺寸跟帧走（与格根地皮同一个 `originalSize`），不用在这里写死；
+     *    实际缩放由 `TerritoryHexRecolor` 每帧写，落点是格心（(0,0)，与格根地皮同锚点）。
+     *  · 默认收起：只有 `play` 那一刻才 `active`，池化复用时 `settle()` 会再收一次。
+     */
+    private createRecolorLayer(parent: Node, name: string): void {
+        const layerNode = new Node(name);
+        layerNode.layer = this.gridLayer.layer;
+        layerNode.setParent(parent);
+        layerNode.active = false;
+        layerNode.addComponent(UITransform);
+        const sprite = layerNode.addComponent(Sprite);
+        sprite.trim = false;
+        sprite.sizeMode = Sprite.SizeMode.RAW;
+    }
+
+    /**
      * 格子**地皮 + 格面框**：按 cellId 状态二选一地皮、四选一叠框。幂等，可重复调用。
      *
      *  🔴 2026-10-16 换口径（山猫）：
@@ -1053,14 +1342,81 @@ export class TerritoryMapView extends Component {
         const revealed = new Set(input.revealedCells);
         const siteByCell = new Map(input.map.sites.map((site) => [site.cellId, site]));
         const candidateCells = new Set(input.map.randomSites?.candidateCells ?? []);
+        const recolors: ITerritoryHexRecolorPending[] = [];
         for (const [cellId, node] of this.hexNodes) {
             node.active = revealed.has(cellId);
             if (!node.active) continue;
             const passed = this.isCellPassed(cellId, input, siteByCell, candidateCells);
-            this.applyTileFrame(node, passed ? input.art.tileCleared : input.art.tileLocked);
+            const nextFrame = passed ? input.art.tileCleared : input.art.tileLocked;
+            const ground = node.getComponent(Sprite);
+            // 换色判据要的是「**写之前**那一帧」—— `applyTileFrame` 一写就没有可 diff 的东西了。
+            const fromFrame = ground?.spriteFrame ?? null;
+            const recoloring = this.shouldRecolor(cellId, node, ground, nextFrame);
+            this.applyTileFrame(node, nextFrame);
+            if (recoloring) {
+                const point = input.layout.points.get(cellId);
+                recolors.push({
+                    cellId,
+                    node,
+                    from: fromFrame,
+                    to: nextFrame,
+                    x: point?.x ?? 0,
+                    y: point?.y ?? 0,
+                });
+            }
             this.applyHexFrame(cellId, this.hexFrameOf(cellId, input, siteByCell, passed));
         }
+        this.syncHexRecolor(recolors);
+        // 破冰：**首帧只做快照**（进页面 / 换章时整图的地皮帧都会"从 null 变成正式帧"）。
+        this.recolorBootstrapped = true;
         this.syncHexSpawn(input, revealed);
+    }
+
+    /**
+     * 这一格要不要播「换色」。
+     *
+     * 判据 = 地皮**帧 → 帧**真的变了，且这一格上一帧就看得见，且没被翻格 / 生成接管。
+     *
+     *  ⚠️ 刻意**不用** `passed` 翻转：「通关」在四类格上的口径各不相同（起始格 / 随机资源格 /
+     *    宝箱 / 战斗站点，见 {@link isCellPassed}），而"地皮换了"是它们的共同结果 ——
+     *    只要从泥块变草地就该放这段。
+     *  ⚠️ 两张帧都要非空：美术刚加载完的那一帧是「null → 正式帧」，那是**整屏误判**的经典来源。
+     */
+    private shouldRecolor(
+        cellId: number,
+        node: Node,
+        ground: Sprite | null,
+        nextFrame: SpriteFrame | null,
+    ): boolean {
+        if (!this.recolorBootstrapped) return false;
+        // 已经在播的格子不重入（`paintHexes` 每秒全量走一遍，而一段换色要 0.36s）。
+        if (this.hexRecolor.isPlaying(node)) return false;
+        return !!ground && !!nextFrame
+            && ground.spriteFrame !== nextFrame
+            && this.revealedSnapshot.has(cellId)
+            && !this.hexFlip.isPlaying(node)
+            && !this.hexSpawn.isPlaying(node);
+    }
+
+    /**
+     * 把本帧攒下的格子**整批**起播。
+     *
+     *  为什么先攒再播：错峰要按这一批的**簇心**排（见 `territoryHexRecolorDelays`）——
+     *  循环里一格一格播就只能按 `hexNodes` 的扫描顺序，屏幕上读成毫无方向的乱序闪烁。
+     */
+    private syncHexRecolor(pending: readonly ITerritoryHexRecolorPending[]): void {
+        if (pending.length === 0) return;
+        const delays = territoryHexRecolorDelays(pending);
+        for (const entry of pending) {
+            this.hexRecolor.play(entry.node, entry.from, entry.to, delays.get(entry.cellId) ?? 0);
+        }
+        // 🔴 写完帧要**同帧再藏一次**格根地皮：`applyTileFrame` 刚把满尺寸的新地皮写回格根、
+        // 并把 `enabled` 置回 true，而换色正把格根地皮藏着 —— 不补这一下，每秒一次的重绘
+        // 都会在"长大的新地皮"底下闪出一帧满尺寸的新地皮，读作"闪一下再长"。
+        for (const entry of pending) {
+            const node = entry.node;
+            if (this.hexRecolor.isPlaying(node)) this.hexRecolor.hideGround(node);
+        }
     }
 
     /**

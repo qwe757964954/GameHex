@@ -61,7 +61,6 @@ ROWS = [
     ('宝箱弹出', 'pop',     (232, 120, 62)),
     ('蓄力',     'charge',  (240, 172, 60)),
     ('开盖换帧', 'frame',   (198, 122, 226)),
-    ('白光爆点', 'flash',   (250, 206, 72)),
     ('放射光条', 'ray',     (246, 186, 80)),
     ('全屏光柱', 'beam',    (104, 176, 244)),
     ('彩虹光束', 'rainbow', (116, 206, 186)),
@@ -79,9 +78,10 @@ def blend(bg, fg, alpha):
     return tuple(int(round(lerp(bg[i], fg[i], max(0.0, min(1.0, alpha))))) for i in range(3))
 
 NOTES = {
-    'weak': '原位播完：无镜头、无全屏光柱、无粒子雨、无暗角',
-    'medium': '光柱贯穿屏幕 + 白光爆点 + 金币喷泉 / 彩色星光；镜头不动',
-    'strong': '镜头推近 2.3x + 暗角 + 彩虹旋转光束 + 高密度奖励（不短于 3.5s）',
+    # 2026-10-23：三档推镜倍率统一 2.3，白光爆点整层移除
+    'weak': '原位播完：2.3× 推镜、无全屏光柱、无粒子雨、无暗角',
+    'medium': '光柱贯穿屏幕 + 2.3× 推镜 + 金币喷泉 / 彩色星光；无暗角',
+    'strong': '2.3× 推镜 + 暗角 + 彩虹旋转光束 + 高密度奖励（不短于 3.5s）',
 }
 img = Image.new('RGB', (W, H), BG)
 d = ImageDraw.Draw(img)
@@ -133,15 +133,15 @@ for panel in DATA:
         elif key == 'frame':
             # 换帧只发生在 lid 窗口内；窗口外恒停最后一张（全开）。
             win = (spec['lidStart'], spec['lidStart'] + spec['lidSeconds'])
-        elif key in ('flash', 'ray', 'beam', 'rainbow'):
-            secs_key = {'flash': 'flashSeconds', 'ray': 'raySeconds',
+        elif key in ('ray', 'beam', 'rainbow'):
+            secs_key = {'ray': 'raySeconds',
                         'beam': 'beamDownSeconds', 'rainbow': 'rainbowEnd'}[key]
             start = spec[key + 'Start']
             length = spec[secs_key] if key != 'beam' else (
                 spec['beamDownSeconds'] + spec['beamHoldSeconds'] + spec['beamFadeSeconds'])
             if key == 'rainbow':
                 win = (start, spec['rainbowEnd'])
-            elif key == 'flash' or key == 'ray':
+            elif key == 'ray':
                 win = (start, start + length)
         elif key in ('fountain', 'star', 'fly'):
             if spec[key + 'Count'] > 0 and spec[key + 'Seconds'] > 0:
@@ -162,8 +162,6 @@ for panel in DATA:
                 # 帧号越靠后越深：一眼能看出「这一段在换帧、换到第几张」。
                 if win and win[0] <= s['t'] <= win[1]:
                     a = s['frame'] / max(1, spec['openFrames'] - 1)
-            elif key == 'flash':
-                a = s['flash']
             elif key == 'ray':
                 a = s['ray'] or 0.0
             elif key == 'beam':

@@ -73,12 +73,20 @@ export interface IBigMapMarkerHitArea {
     readonly hexId: number;
     readonly width: number;
     readonly height: number;
+    readonly iconY?: number;
+    readonly badgeY?: number;
+    readonly badgeHeight?: number;
 }
 
 export const BIGMAP_MARKER_ICON_LIFT = 24;
 export const BIGMAP_MARKER_BADGE_Y = 70;
-export const BIGMAP_MARKER_BADGE_WIDTH = 124;
+export const BIGMAP_MARKER_BADGE_WIDTH = 88;
 export const BIGMAP_MARKER_BADGE_HEIGHT = 30;
+
+/** 脚底固定在台面，编号牌随可见建筑高度上移，显示与点击共用坐标。 */
+export function bigMapMarkerLayout(width: number, height: number): Omit<IBigMapMarkerHitArea, 'hexId'> {
+    return { width, height, iconY: height / 2 - 16, badgeY: height - 16 + 18 };
+}
 
 export function pickBigMapMarker(layout: IHexGridLayout, markers: readonly IBigMapMarkerHitArea[], x: number, y: number): number {
     for (let index = markers.length - 1; index >= 0; index -= 1) {
@@ -88,9 +96,9 @@ export function pickBigMapMarker(layout: IHexGridLayout, markers: readonly IBigM
         const dx = Math.abs(x - point.x);
         const dy = y - point.y;
         if (dx <= BIGMAP_MARKER_BADGE_WIDTH / 2
-            && Math.abs(dy - BIGMAP_MARKER_BADGE_Y) <= BIGMAP_MARKER_BADGE_HEIGHT / 2) return marker.hexId;
+            && Math.abs(dy - (marker.badgeY ?? BIGMAP_MARKER_BADGE_Y)) <= (marker.badgeHeight ?? BIGMAP_MARKER_BADGE_HEIGHT) / 2) return marker.hexId;
         if (marker.width > 0 && marker.height > 0 && dx <= marker.width / 2
-            && Math.abs(dy - BIGMAP_MARKER_ICON_LIFT) <= marker.height / 2) return marker.hexId;
+            && Math.abs(dy - (marker.iconY ?? BIGMAP_MARKER_ICON_LIFT)) <= marker.height / 2) return marker.hexId;
     }
     return -1;
 }

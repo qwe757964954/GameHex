@@ -150,6 +150,15 @@ export interface IBigMapCityConfig {
     readonly slotCount: number;
 }
 
+/** 联机据点身份与开战参数；地图位置仍由布局中的 cityId/campId 决定。 */
+export interface IBigMapCampConfig {
+    readonly campId: number;
+    readonly battleId: number;
+    readonly name: string;
+    readonly staminaCost: number;
+    readonly desc: string;
+}
+
 export interface IBigMapCityLevelConfig {
     readonly level: number;
     readonly warScoreRate: number;
@@ -240,6 +249,7 @@ export interface IBigMapConfig {
     readonly resources: ReadonlyMap<BigMapResType, IBigMapResConfig>;
     readonly queue: IBigMapQueueConfig;
     readonly cities: ReadonlyMap<number, IBigMapCityConfig>;
+    readonly camps: ReadonlyMap<number, IBigMapCampConfig>;
     readonly cityLevels: ReadonlyMap<number, IBigMapCityLevelConfig>;
     readonly ranks: readonly IBigMapRankConfig[];
     readonly scoreRule: IBigMapScoreRuleConfig;

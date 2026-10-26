@@ -309,12 +309,12 @@ test('开始战斗请求兜硬超时、永不 reject、失败返回 null', () =>
         '本层不允许抛出：契约是"永远兑现、永远不 reject"');
 });
 
-test('匹配流程保留本地对手兜底，且选人只走一次', () => {
+test('匹配流程保留兜底对手分支，且选人只走一次', () => {
     const procedure = readFileSync('assets/script/app/procedure/ProcedureMatching.ts', 'utf8');
     assert.match(procedure, /private pickOpponents\(\)/, '拿不到服务端数据仍要提供兜底对手');
     assert.match(procedure, /if \(!enemy\)/, '服务端没有对手时必须走兜底分支');
     assert.match(procedure, /awaitReady:\s*\(\)\s*=>/, '选人前必须等一次在途请求（保证展示与进局是同一份数据）');
-    assert.match(procedure, /startBattle\(ZC_BATTLE_TYPE_PVP\)/, '「开始游戏」入口必须真的发这条协议');
+    assert.match(procedure, /startBattle\(\s*(?:params\?\.battleType\s*\?\?\s*)?ZC_BATTLE_TYPE_PVP\s*,/, '「开始游戏」入口必须真的发这条协议');
     assert.match(procedure, /clearLastBattleStart\(\)/, '离开匹配必须清缓存，免得下一局复用上一局 battleId');
 
     const page = readFileSync('assets/script/app/matching/MatchingPage.ts', 'utf8');
@@ -604,7 +604,7 @@ test('battleType 取值已定：PVP 匹配局 = 1001，且集中一处', () => {
     // 调用点不许再出现裸字面量（Service 文件头的日志原文里那个 `battleType: 1` 是历史记录，
     // 所以只盯 ProcedureMatching 这个真正的调用点，别把注释也算进来）
     const caller = readFileSync('assets/script/app/procedure/ProcedureMatching.ts', 'utf8');
-    assert.match(caller, /startBattle\(ZC_BATTLE_TYPE_PVP\)/, '发请求必须引用常量');
+    assert.match(caller, /startBattle\(\s*(?:params\?\.battleType\s*\?\?\s*)?ZC_BATTLE_TYPE_PVP\s*,/, '发请求必须引用常量');
     assert.doesNotMatch(caller, /battleType\s*[:=]\s*\d/, '调用点不要散落字面量');
     // Service 的默认参数同样引用常量
     assert.match(

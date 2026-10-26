@@ -283,6 +283,67 @@ export function floatTextDrift(progress: number, entranceProgress: number = FLOA
  */
 export const FLOAT_TEXT_DRIFT_DISTANCE = 7;
 
+// 金币飘字（击杀掉落 / 矿区产出）**不走「快进慢出」**：掉落原地 + 迅速缩小消失。
+//
+// 2026-10-23 用户口径：「战斗内击杀，掉落的金币动画修改 —— 从上升的动画改成掉落在原地，迅速缩小消失」。
+// 改前金币用的是和伤害同一套「上飘 + 淡出」：`y = offsetY + enter × riseDistance`（一路往上飘 46px），
+// 数字和金币图标一起爬升、最后被调透明度。读起来像"战利品飞走了"，而掉落应该**落在地上**。
+
+/** 金币飘字：掉落段的起点高度（像素，落点上方这么多 ⇒ 全程只往下走）。 */
+export const FLOAT_TEXT_GOLD_DROP_PX = 18;
+/** 金币飘字：掉落段占整条时长的比例（前 30% 落地）。 */
+export const FLOAT_TEXT_GOLD_DROP_SPAN = 0.3;
+/** 金币飘字：落地后停留多久（占整条时长）再开始缩没。 */
+export const FLOAT_TEXT_GOLD_HOLD_SPAN = 0.15;
+/** 金币飘字：起手弹出倍率（落地时收回 1）。 */
+export const FLOAT_TEXT_GOLD_POP = 1.18;
+
+/** 金币飘字某一刻的姿态。 */
+export interface IFloatTextGoldFrame {
+    /** 相对落点的纵向偏移（px）：**恒 `>= 0`**，掉落段从 `DROP_PX` 收到 0，之后一直是 0。 */
+    readonly drop: number;
+    readonly scale: number;
+    readonly fade: number;
+    /** 金币图标自转进度（0~1，只在掉落段走；落地后停住）。 */
+    readonly spin: number;
+}
+
+/**
+ * 金币飘字的**掉落曲线**（纯函数）：`掉落 → 停住 → 迅速缩小消失`。
+ *
+ * 三段（比例都相对整条飘字时长）：
+ *
+ * | 段 | 区间 | 表现 |
+ * | --- | --- | --- |
+ * | 掉落 | `0 ~ 30%` | 从落点上方 18px 加速落到落点（`k²` = 重力感），同时从 1.18 收回 1、图标转一圈 |
+ * | 停住 | `30% ~ 45%` | 完全静止（`drop = 0`、`scale = 1`）—— 就是用户说的"掉落在原地" |
+ * | 缩小消失 | `45% ~ 100%` | 边长按 `1 - k²` 加速缩到 0，同时 `1 - k²` 淡出 |
+ *
+ * ⚠️ `drop` 恒 `>= 0`（只向下）。这是与伤害飘字"下沉"、与旧金币"上飘"最本质的区别：
+ *   一旦出现负值就说明又飘起来了，单测直接按 `>= 0` 卡。
+ * ⚠️ 缩小段用 `k²`（加速）而不是线性：线性缩没读作"被拉小"，加速才像"一下收没了"。
+ */
+export function floatTextGoldDrop(progress: number): IFloatTextGoldFrame {
+    const p = progress <= 0 ? 0 : progress >= 1 ? 1 : (Number.isFinite(progress) ? progress : 1);
+    const dropSpan = FLOAT_TEXT_GOLD_DROP_SPAN > 0 ? FLOAT_TEXT_GOLD_DROP_SPAN : 1e-6;
+    const holdSpan = FLOAT_TEXT_GOLD_HOLD_SPAN > 0 ? FLOAT_TEXT_GOLD_HOLD_SPAN : 0;
+    const holdEnd = Math.min(1, dropSpan + holdSpan);
+    if (p <= dropSpan) {
+        const k = p / dropSpan;
+        const fall = k * k;
+        return {
+            drop: FLOAT_TEXT_GOLD_DROP_PX * (1 - fall),
+            scale: FLOAT_TEXT_GOLD_POP + (1 - FLOAT_TEXT_GOLD_POP) * fall,
+            fade: 1,
+            spin: k,
+        };
+    }
+    if (p <= holdEnd) return { drop: 0, scale: 1, fade: 1, spin: 1 };
+    const k = holdEnd >= 1 ? 1 : (p - holdEnd) / (1 - holdEnd);
+    const shrink = k * k;
+    return { drop: 0, scale: Math.max(0, 1 - shrink), fade: Math.max(0, 1 - shrink), spin: 1 };
+}
+
 // 生成单位抖动：「Y 拉 120% 回落 → X 拉 120% 回落」两段脉冲。
 //  - 单位出生抖动：`ZCUnitView.playSpawnShake`（新兵自己抖一下，110% 档）；
 //  - 建筑生成抖动：`ZCHexView.playBuildingShake`（建筑模型自己抖一下，需求 2026-10-15，120% 档）。

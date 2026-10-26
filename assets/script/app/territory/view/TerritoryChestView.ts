@@ -14,8 +14,9 @@ import {
     territoryChestBeamAlpha,
     territoryChestBodyFx,
     territoryChestCameraFx,
+    territoryChestCameraZoomOf,
     territoryChestEndSeconds,
-    territoryChestFlashAlpha,
+    territoryChestFlyCount,
     territoryChestFlyFx,
     territoryChestFountainFx,
     territoryChestOpenFrame,
@@ -47,18 +48,29 @@ import { BUILDING_VISIBLE_WIDTH } from './TerritoryStationView';
  *
  * ```
  * Root                      页面坐标系（不随地图滚动）
- * ├── Backdrop   暗角 / 压暗（只有强档会亮；轻档推镜但不压暗）
- * ├── Beam       光柱（只有中档）
- * ├── Rainbow    彩虹光束（只有强档）
- * ├── Stage      镜头层（三档都推：轻档 1.06 / 1.10，强档 2.3 ⇒ 推近不影响飞向栏位的图标）
- * │   ├── Stars   星光（Graphics 一批画完，不用 40 个节点）
- * │   ├── Rays    金色放射光条
- * │   ├── Glow    箱口光晕
- * │   ├── Chest   宝箱（Chest 收动画缩放 / ChestArt 收基准缩放，两张一张图换帧）
- * │   ├── Flash   白光爆点
+ * ├── Backdrop   暗角 / 压暗（只有强档会亮；弱 / 中档推镜但不压暗）
+ * ├── Stage      镜头层（倍率按奖励总量 1.08 / 1.35 / 2.3 ⇒ 推近不影响飞向栏位的图标）
+ * │   ├── Beam     光柱（只有中档）——2026-10-23 起放进镜头层，跟着一起放大
+ * │   ├── Rainbow  彩虹光束（只有强档）
+ * │   ├── Stars    星光（Graphics 一批画完，不用 40 个节点）
+ * │   ├── Rays     金色放射光条
+ * │   ├── Glow     箱口光晕
+ * │   ├── Chest    宝箱（Chest 收动画缩放 / ChestArt 收基准缩放，两张一张图换帧）
  * │   └── Fountain 喷泉图标（复用资源图，池化）
  * └── Fly        飞向顶部栏的奖励图标 + 数量（页面坐标系 ⇒ 不跟着镜头缩放）
  * ```
+ *
+ * ⚠️ 2026-10-23 起**镜头是"真镜头"**（用户：「相机推进的实际效果应该是地块和宝箱同时放大，
+ *   而不是只有宝箱放大，且放大的同时需要保证宝箱的坐标点在屏幕的中央」）：
+ *   · 本类只负责**覆盖层这一半**（缩放 + 把宝箱挪到屏幕中心，见 `applyCamera` 的 `focus`）；
+ *   · **地图那一半**由 `TerritoryMapView` 通过 `setCameraHook` 每帧收 `(scale, focus)`
+ *     自己缩放 `MapLayer` —— 两边必须同帧同值，否则地块和宝箱会"各走各的"；
+ *   · 光柱 / 彩虹因此必须挂在 `Stage` 下（挂 Root 的话宝箱挪到中央后，光柱还留在原格）。
+ *
+ * ⚠️ 2026-10-23 起**没有「白光爆点」这一层**（用户：「移除宝箱打开的圆形闪光特效」）：
+ *   原来的 `Flash` 是 12 个同心圆叠出来的径向白闪（峰值半径 204px，等于半个屏幕的白），
+ *   开箱的"亮"现在只由**放射光条 + 箱口光晕 + 星光**承担。
+ *   别再把它加回来 —— 单测 `territory-chest-animation` 有一条反向断言盯着视图里不许出现 `Flash`。
  *
  * ## 坐标
  *
@@ -91,6 +103,24 @@ import { BUILDING_VISIBLE_WIDTH } from './TerritoryStationView';
  *    由弹出过冲（`TERRITORY_CHEST_POP_OVERSHOOT = 1.15`）承担 —— 静止帧严格 1:1。
  */
 const CHEST_VISIBLE_WIDTH = BUILDING_VISIBLE_WIDTH;
+
+/**
+ * 飞向资源栏的粒子**基准边长**（像素，放大前）。
+ *
+ *  与下面的 `FLY_ICON_SCALE` 一起决定实际边长：`44 × 1.35 = 59.4`。
+ */
+const FLY_ICON_BASE_SIZE = 44;
+
+/**
+ * 飞行粒子的放大倍数 —— **1.35**（2026-10-23 用户：「奖励飞向资源栏：粒子大小放大 1.35 倍」）。
+ *
+ * ## 为什么只改 `setContentSize`、不改 `applyFly` 里的 `setScale`
+ *
+ *  `applyFly` 每帧写的是 `slot.node.setScale(fx.scale, fx.scale, 1)` —— 那是**飞行过程的**缩放
+ *  （起飞 1:1、到终点前收到 0.3 假装被吸入）。基准尺寸只能写在节点的 `UITransform` 上，
+ *  两者相乘才是屏幕上的真实大小；把 1.35 混进 `fx.scale` 里，飞行的"收小"就会被一起放大。
+ */
+const FLY_ICON_SCALE = 1.35;
 
 /** 金色放射光条的颜色（越靠外的条越淡，靠数量与 alpha 叠出体积感）。 */
 const RAY_COLOR = new Color(255, 226, 138);
@@ -173,7 +203,6 @@ export class TerritoryChestView {
     private readonly chestTransform: UITransform;
     /** 收尾淡出（与所有光效共用一个系数，见 `territoryChestTailFade`）。 */
     private readonly chestOpacity: UIOpacity;
-    private readonly flash: Graphics;
     private readonly fountain: Node;
     private readonly flyLayer: Node;
 
@@ -210,6 +239,38 @@ export class TerritoryChestView {
      * 而它每帧只算一次（`territoryChestTailFade`），传参会把 9 个签名都污染一遍。
      */
     private tailFade = 1;
+    /**
+     * 本帧的**对焦进度**（`0` = 宝箱在原格，`1` = 已到屏幕中央）。
+     *
+     * 只有 `Fly` 层用得到它：飞向资源栏的图标活在 Root（不跟镜头缩放），
+     * 起点得自己按宝箱当前屏幕位置算（`origin × (1 - cameraFocus)`）。
+     */
+    private cameraFocus = 0;
+    /**
+     * 镜头**地图侧**的出口（由 `TerritoryMapView` 注入）。
+     *
+     *  本类只管覆盖层这一半（宝箱 + 光效），地块归地图 —— 两边必须同帧同值，
+     *  否则就是 2026-10-23 用户看到的问题：「只有宝箱放大、地块不动」。
+     *  每帧 `applyCamera` 调一次；`stop()` 额外调 `(1, 0)` 把地图还原。
+     */
+    private cameraHook: ((scale: number, focus: number) => void) | null = null;
+    /**
+     * 本次表演实际飞行的粒子数（按**奖励总量**分三档：≤50 → 5、≤500 → 15、>500 → 30）。
+     *
+     * 真源是 `territoryChestFlyCount`；这里只存一份给逐帧渲染与停播判据用
+     * （`territoryChestEndSeconds` 必须收到同一个数，否则 30 枚里后面的会被硬切）。
+     */
+    private flyCount = 0;
+    /**
+     * 本次表演的**镜头推近倍率**（按奖励总量 1.08 / 1.35 / 2.3）。
+     *
+     * 真源是 `territoryChestCameraZoomOf`，在 `play()` 里与 `flyCount` 用**同一个 `total`** 算出来
+     * （两个函数各判各的档，但输入必须是同一个值 —— 分成两次累加迟早会飘）。
+     *
+     * ⚠️ 这不是参数表里的 `spec.cameraZoom`（那三档都是 2.3，现在只是上限 / 兜底）。
+     *   每帧必须把它传给 `territoryChestCameraFx` 的第三个参数，否则弱档也会按 2.3 推。
+     */
+    private cameraZoom = 1;
 
     constructor(layer: Node, size: { width: number; height: number }) {
         this.size = { width: Math.max(1, size.width), height: Math.max(1, size.height) };
@@ -220,9 +281,12 @@ export class TerritoryChestView {
         this.catchY = this.size.height / 2 - 40;
 
         this.backdrop = makeGraphics('Backdrop', this.node, this.size);
-        this.beam = makeGraphics('Beam', this.node, this.size);
-        this.rainbow = makeGraphics('Rainbow', this.node);
         this.stage = makeNode('Stage', this.node);
+        // 光柱 / 彩虹挂在**镜头层**里（2026-10-23）：镜头推近时宝箱会被挪到屏幕中央，
+        // 这两样要是留在 Root，就会与箱子脱开、杵在原格上。它们本来就是"从箱口射出来"的，
+        // 跟着箱子一起放大才对。
+        this.beam = makeGraphics('Beam', this.stage, this.size);
+        this.rainbow = makeGraphics('Rainbow', this.stage);
         this.stars = makeGraphics('Stars', this.stage);
         this.rays = makeGraphics('Rays', this.stage);
         this.glow = makeGraphics('Glow', this.stage);
@@ -242,7 +306,6 @@ export class TerritoryChestView {
         this.chestSprite.trim = false;
         this.chestSprite.sizeMode = Sprite.SizeMode.CUSTOM;
         this.chestTransform = this.chestArt.getComponent(UITransform)!;
-        this.flash = makeGraphics('Flash', this.stage);
         this.fountain = makeNode('Fountain', this.stage);
         this.flyLayer = makeNode('Fly', this.node);
     }
@@ -269,6 +332,22 @@ export class TerritoryChestView {
         return this.elapsed >= 0;
     }
 
+    /** 本次飞行粒子数（页面/单测可读；按奖励总量分档，见 `territoryChestFlyCount`）。 */
+    get flyingCount(): number {
+        return this.flyCount;
+    }
+
+    /**
+     * 注入**镜头地图侧**的出口（`TerritoryMapView` 在建本视图时调一次）。
+     *
+     *  每帧收到 `(scale, focus)`，收到就要把地图摆到与宝箱一致的位置 ——
+     *  具体怎么摆由地图自己决定（它才知道 ScrollView 与 `MapLayer` 的关系）。
+     *  传 `null` 解绑（页面销毁时）。
+     */
+    setCameraHook(hook: ((scale: number, focus: number) => void) | null): void {
+        this.cameraHook = hook;
+    }
+
     /**
      * 播一次开箱。
      *
@@ -285,6 +364,17 @@ export class TerritoryChestView {
     ): void {
         this.spec = TERRITORY_CHEST_SPECS[tier];
         this.rewards = rewards;
+        // 累计**这批奖励的总量**（脏值跳过），下面两条都只吃它：
+        //  · 飞行粒子数：≤50 → 5、≤500 → 15、>500 → 30（2026-10-23）
+        //  · 镜头推近倍率：≤50 → 1.08、≤500 → 1.35、>500 → 2.3（2026-10-23 同日追加）
+        // 两者与档位无关 —— 档位管"演多大"，这两个管"拿了多少"。
+        let total = 0;
+        for (const reward of rewards) {
+            const amount = reward?.amount;
+            if (Number.isFinite(amount) && amount > 0) total += amount;
+        }
+        this.flyCount = territoryChestFlyCount(total);
+        this.cameraZoom = territoryChestCameraZoomOf(total);
         this.origin = new Vec3(origin.x, origin.y, 0);
         this.seed = (this.seed + 1) | 0;
         this.elapsed = 0;
@@ -302,6 +392,10 @@ export class TerritoryChestView {
         if (this.node.active) this.node.active = false;
         for (const slot of this.fountainSlots) if (slot.node.active) slot.node.active = false;
         for (const slot of this.flySlots) if (slot.node.active) slot.node.active = false;
+        // 地图侧必须还原：中途打断时镜头还怼着、地图还是放大 + 平移过的，不还原就"定住了"。
+        this.cameraFocus = 0;
+        this.cameraZoom = 1;
+        this.cameraHook?.(1, 0);
     }
 
     /** 逐帧推进。由页面/地图视图的 `update` 调（本类不长在组件树上）。 */
@@ -313,7 +407,8 @@ export class TerritoryChestView {
         //   那个数 = 最后一枚奖励落袋 + settleSeconds + fadeOutSeconds。
         //   用 `totalSeconds` 的话，参数表一旦比这条线长，屏幕上就多一段
         //   「奖励拿完了、开着的空箱子还杵着」（2026-10-22 用户：停止的时间太长）。
-        if (this.elapsed >= territoryChestEndSeconds(spec)) {
+        //   ⚠️ 必须带上 `flyCount`：粒子数按奖励总量能到 30，用表里的 4/6/8 会把后面那串切掉。
+        if (this.elapsed >= territoryChestEndSeconds(spec, this.flyCount)) {
             const done = this.onDone;
             this.stop();
             done?.();
@@ -336,7 +431,6 @@ export class TerritoryChestView {
         this.applyBeam(spec, t);
         this.applyRainbow(spec, t);
         this.applyRays(spec, t);
-        this.applyFlash(spec, t);
         this.applyGlow(spec, t);
         this.applyFountain(spec, t);
         this.applyStars(spec, t);
@@ -374,11 +468,22 @@ export class TerritoryChestView {
     }
 
     private applyCamera(spec: ITerritoryChestSpec, t: number): void {
-        const fx = territoryChestCameraFx(spec, t);
-        // 缩放要绕「箱口」而不是屏幕中心，否则推镜时宝箱会漂走。
-        // 倍率由 model 给（三档都会推：轻档 1.06 / 1.10，强档 2.3）；这里只写节点。
+        // 第三参数是**本次的倍率**（按奖励总量 1.08 / 1.35 / 2.3）—— 不传就会按参数表的 2.3 推，
+        // 弱档那一份"轻微凑近"直接作废。`focus` 的分母也用的是这个值（见 model 里的说明）。
+        const fx = territoryChestCameraFx(spec, t, this.cameraZoom);
+        this.cameraFocus = fx.focus;
+        // 缩放要绕「箱口」而不是屏幕中心，否则推镜时宝箱会漂走；**同时**视角中心要从格心
+        // 挪到屏幕中心（2026-10-23 用户：「放大的同时需要保证宝箱的坐标点在屏幕的中央」）。
+        //
+        //  宝箱在 stage 里位于 `origin`，所以它的页面坐标 = `k × origin + stagePos`。
+        //  要求它等于 `origin × (1 - focus)`（focus 0 → 原位，1 → 屏幕中心 0,0），解得：
+        //      stagePos = origin × (1 - focus - k)
+        //  校验：focus=0/k=1 ⇒ stagePos=0（与改动前完全一致）；focus=1/k=本次倍率 ⇒ 宝箱落在 (0,0)。
+        const shift = 1 - fx.focus - fx.scale;
         this.stage.setScale(fx.scale, fx.scale, 1);
-        this.stage.setPosition(this.origin.x * (1 - fx.scale), this.origin.y * (1 - fx.scale), 0);
+        this.stage.setPosition(this.origin.x * shift, this.origin.y * shift, 0);
+        // 地图那一半交给 `TerritoryMapView`（同帧同值，否则地块和宝箱各走各的）。
+        this.cameraHook?.(fx.scale, fx.focus);
         this.drawVignette(fx.vignette * this.tailFade);
     }
 
@@ -472,22 +577,10 @@ export class TerritoryChestView {
         }
     }
 
-    private applyFlash(spec: ITerritoryChestSpec, t: number): void {
-        const alpha = territoryChestFlashAlpha(spec, t) * this.tailFade;
-        const g = this.flash;
-        g.clear();
-        if (alpha <= 0.004) return;
-        // 径向白光：画 12 个同心的圆，越靠外越淡 —— 没有渐变贴图也能读成"爆点"。
-        const mouthY = this.origin.y;
-        for (let step = 12; step >= 1; step -= 1) {
-            const radius = 12 + step * 16;
-            const layerAlpha = alpha * (1 - step / 14);
-            if (layerAlpha <= 0.004) continue;
-            g.fillColor = new Color(255, 255, 255, Math.round(layerAlpha * 255));
-            g.circle(this.origin.x, mouthY, radius);
-            g.fill();
-        }
-    }
+    // ⚠️ 原本这里还有一个 `applyFlash`（白光爆点：12 个同心白圆叠出的径向闪光）。
+    //   2026-10-23 用户「移除宝箱打开的圆形闪光特效」⇒ 整层摘掉，连同 model 的
+    //   `flashStart / flashSeconds / flashPeak` 与 `territoryChestFlashAlpha` 一起删了，
+    //   不是把 alpha 调 0（留个 0 的窗口以后一定会被人"顺手改回来"）。
 
     private applyGlow(spec: ITerritoryChestSpec, t: number): void {
         const g = this.glow;
@@ -566,24 +659,31 @@ export class TerritoryChestView {
     }
 
     private applyFly(spec: ITerritoryChestSpec, t: number): void {
-        const count = Math.min(spec.flyCount, this.rewards.length);
-        if (count <= 0) {
+        // 粒子数由 `play()` 按**奖励总量**算好（5 / 15 / 30），不再受 `rewards.length` 限制 ——
+        // 30 枚只有 2 种资源时按 `rewards` **轮流取**图标与数量（与喷泉同一口径）。
+        const count = this.flyCount;
+        if (count <= 0 || this.rewards.length === 0) {
             for (const slot of this.flySlots) if (slot.node.active) slot.node.active = false;
             return;
         }
         this.ensureFlySlots(count);
+        // 宝箱可能已被镜头挪到屏幕中央 ⇒ 飞行起点要跟着走（Fly 层不跟镜头缩放，
+        // 所以只能按 `origin × (1 - focus)` 自己算；否则 30 枚会从原来那格凭空冒出来）。
+        const originX = this.origin.x * (1 - this.cameraFocus);
+        const originY = this.origin.y * (1 - this.cameraFocus);
         for (let index = 0; index < this.flySlots.length; index += 1) {
             const slot = this.flySlots[index];
-            const fx = index < count ? territoryChestFlyFx(spec, index, t) : null;
+            const fx = index < count ? territoryChestFlyFx(spec, index, t, count) : null;
             if (!fx) {
                 if (slot.node.active) slot.node.active = false;
                 continue;
             }
             if (!slot.node.active) slot.node.active = true;
-            // 错峰让每枚的起点略微抖开，免得 4 枚从同一个点起跳（规格 §0.3 多枚错峰）。
-            const jitterX = (index % 2 === 0 ? -1 : 1) * (6 + index * 2.5);
-            const startX = this.origin.x + jitterX;
-            const startY = this.origin.y + 16 + index * 6;
+            // 错峰让每枚的起点略微抖开，免得几十枚从同一个点起跳（规格 §0.3 多枚错峰）。
+            // 抖动取模而不是按 index 线性增长：30 枚时线性会让起点飘到 170px 开外。
+            const jitterX = (index % 2 === 0 ? -1 : 1) * (6 + (index % 5) * 2.5);
+            const startX = originX + jitterX;
+            const startY = originY + 16 + (index % 6) * 5;
             // 二次贝塞尔：控制点 = 起点向上抬（拱高）× 朝终点方向偏 30%。
             const dx = this.catchX - startX;
             const dy = this.catchY - startY;
@@ -596,7 +696,8 @@ export class TerritoryChestView {
             slot.node.setScale(fx.scale, fx.scale, 1);
             const alpha = Math.round(Math.max(0, Math.min(1, fx.opacity * this.tailFade)) * 255);
             if (slot.opacity.opacity !== alpha) slot.opacity.opacity = alpha;
-            const text = `+${Math.max(0, Math.round(this.rewards[index]?.amount ?? 0))}`;
+            const amount = this.rewards[index % this.rewards.length]?.amount ?? 0;
+            const text = `+${Math.max(0, Math.round(amount))}`;
             if (slot.label.string !== text) slot.label.string = text;
         }
     }
@@ -680,17 +781,22 @@ export class TerritoryChestView {
     }
 
     private ensureFlySlots(count: number): void {
+        // 粒子边长 = 基准 × 1.35（2026-10-23 用户：「粒子大小放大 1.35 倍」）⇒ 44 → 59.4。
+        // 只写在这里（UITransform），不碰 `applyFly` 的 `setScale` —— 那是飞行过程的收小。
+        const size = FLY_ICON_BASE_SIZE * FLY_ICON_SCALE;
         while (this.flySlots.length < count) {
             const index = this.flySlots.length;
             const node = makeNode(`FlySlot_${index}`, this.flyLayer);
             node.active = false;
-            node.getComponent(UITransform)!.setContentSize(44, 44);
+            node.getComponent(UITransform)!.setContentSize(size, size);
             const sprite = node.addComponent(Sprite);
             sprite.trim = false;
             sprite.sizeMode = Sprite.SizeMode.CUSTOM;
             const labelNode = makeNode('Amount', node);
             labelNode.getComponent(UITransform)!.setContentSize(120, 26);
-            labelNode.setPosition(0, -30, 0);
+            // 数量文字挂在粒子**底边之下**：图标变大后（44 → 59.4）固定 -30 会被压住，
+            // 所以按当前边长推到 `size/2 + 12`，放大前后都留 12px 间隙。
+            labelNode.setPosition(0, -(size / 2 + 12), 0);
             const label = labelNode.addComponent(Label);
             label.fontSize = 20;
             label.lineHeight = 22;
@@ -707,8 +813,11 @@ export class TerritoryChestView {
                 label,
             });
         }
+        // 图标按奖励条目**轮流取**（与 `applyFly` / 喷发同一口径）：粒子数可能多于奖励条目数
+        // （三档最多 30 枚，而奖励往往只有 2 条），按下标直取会让大部分粒子变成空图标。
         for (let index = 0; index < this.flySlots.length; index += 1) {
-            const frame = this.rewards[index]?.frame ?? null;
+            const entry = this.rewards.length ? this.rewards[index % this.rewards.length] : null;
+            const frame = entry?.frame ?? null;
             const sprite = this.flySlots[index].sprite;
             if (sprite.spriteFrame !== frame) sprite.spriteFrame = frame;
         }

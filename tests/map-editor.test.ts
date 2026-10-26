@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
+import ts from 'typescript';
 import { ZC_HEX_COLUMN_PHASE } from '../assets/script/app/zcds/model/ZCMapGeometry';
 import {
     HEX_GRID_CONTENT_LIFT,
@@ -13,7 +14,7 @@ import {
     HEX_GRID_VIEW_ROW_SPACING,
 } from '../assets/script/core/hex/HexGridLayout';
 
-function createEditor(options: { hash?: string; fetch?: (path: string, options?: any) => Promise<any>; confirm?: boolean } = {}) {
+function createEditor(options: { hash?: string; fetch?: (path: string, options?: any) => Promise<any>; confirm?: boolean; imageSizes?: Record<string, { width: number; height: number }> } = {}) {
     const elements = new Map<string, any>();
     let paths: any[] = [];
     // 统计 hex 上的 `setAttribute` 次数 —— 用来咬住"每次落笔都全量重写 class"这类退化。
@@ -54,18 +55,33 @@ function createEditor(options: { hash?: string; fetch?: (path: string, options?:
     // `requestAnimationFrame` 在桩里只入队、不自己执行 —— 由用例手动"跑一帧"，
     // 这样才测得到「按下之后那一帧到底做了什么」（自动铺色循环就是挂在它上面的）。
     const frames: Array<() => void> = [];
+    const windowEvents: Record<string, Array<(event?: any) => void>> = {};
     const window: any = {
-        addEventListener() {}, location: { hash: options.hash || '' },
+        addEventListener(name: string, handler: (event?: any) => void) {
+            (windowEvents[name] ||= []).push(handler);
+        }, location: { hash: options.hash || '' },
         confirm(message: string) { confirmCalls.push(message); return options.confirm !== false; },
     };
     const code = readFileSync('tools/map-editor/app.js', 'utf8');
     runInNewContext(code, {
         document, window, fetch: options.fetch || (() => new Promise(() => {})),
+        Image: options.imageSizes ? class {
+            naturalWidth = 0;
+            naturalHeight = 0;
+            onload: (() => void) | null = null;
+            set src(url: string) {
+                const size = options.imageSizes![url];
+                if (!size) return;
+                this.naturalWidth = size.width;
+                this.naturalHeight = size.height;
+                this.onload?.();
+            }
+        } : undefined,
         setTimeout: () => 0, clearTimeout() {}, console,
         requestAnimationFrame(handler: () => void) { frames.push(handler); return frames.length; },
         cancelAnimationFrame(id: number) { frames[id - 1] = () => {}; },
     });
-    return { editor: window.__editor, element, confirmCalls, board, frames, attributeWrites: () => attributeWrites };
+    return { editor: window.__editor, element, confirmCalls, board, frames, windowEvents, attributeWrites: () => attributeWrites };
 }
 
 test('区域清空只删除当前分区与纵深，确认后可撤销恢复倾向与其他区域', () => {
@@ -172,7 +188,7 @@ test('空范围清空不弹确认、不创建撤销记录；各分类面板提�
     assert.match(html, /id="btnClearResources"/);
     assert.match(html, /data-tool-category="decor"[^]*id="btnClearDecorations"/);
     assert.match(html, /data-tool-category="resources"[^]*id="btnClearResources"/);
-    assert.match(html, /data-tool-category="regions"[^]*id="btnClearRegion"/);
+    assert.match(html, /data-tool-category="terrain"[^]*id="btnClearRegion"/);
     assert.equal(typeof element('btnClearRegion').listeners.click, 'function');
     assert.equal(typeof element('btnClearDecorations').listeners.click, 'function');
     assert.equal(typeof element('btnClearResources').listeners.click, 'function');
@@ -209,27 +225,26 @@ test('左栏长说明收纳为可点击的问号帮助气泡', () => {
     assert.match(html, /\.helpBubble/);
 });
 
-test('左侧分类工具箱切换面板并保持地图画布常驻', () => {
+test('玩家分区与纵深合并为同一工具箱，旧分类入口仍可定位且画布常驻', () => {
     const { editor, element } = createEditor();
     assert.equal(element('groupTerrain').hidden, false);
-    assert.equal(element('groupRegions').hidden, true);
-    assert.equal(element('stage').hidden, false);
-
-    element('categoryRegions').listeners.click();
-
-    assert.equal(element('groupTerrain').hidden, true);
     assert.equal(element('groupRegions').hidden, false);
-    assert.equal(element('categoryRegions').className.includes('on'), true);
+    editor.setToolCategory('regions');
+    assert.equal(element('groupTerrain').hidden, false);
+    assert.equal(element('groupRegions').hidden, false);
+    assert.equal(element('categoryTerrain').className.includes('on'), true);
     assert.equal(element('stage').hidden, false);
-
     element('categoryAdvanced').listeners.click();
     assert.equal(element('groupRegions').hidden, true);
     assert.equal(element('groupZoom').hidden, false);
-    assert.equal(element('categoryAdvanced').className.includes('on'), true);
+    const html = readFileSync('tools/map-editor/index.html', 'utf8');
+    assert.doesNotMatch(html, /id="categoryRegions"/);
+    assert.match(html, /data-depth="none"/);
 });
 /** 内部格子编码：-1 = 虚空、0 = 中立（可通行、无分区）、1~4 = 分区号。 */
 test('分区、中立和虚空笔刷立即上下镜像，行列都不再强制偶数', () => {
     const { editor, element } = createEditor();
+    editor.setMirror(true, false);
     editor.setSize(20, 11);
     editor.paint(12, 3, 'void');
     let state = editor.state();
@@ -265,49 +280,42 @@ test('分区、中立和虚空笔刷立即上下镜像，行列都不再强制�
     assert.equal(element('inRows').value, 19);
 });
 
-/**
- * 2 人图上下镜像的当前口径：**默认开、可自行关闭**（2026-09-22 从"强制开"改过来）。
- *
- * 早先锁死成"必开"，理由是 1 区格数 = 该方开局领地（`ZC_INITIAL_TERRITORY`），镜像一关两家就可能不等。
- * 但策划摆装饰时要能关 —— 对折生成会把对侧的装饰一起长出来，想摆非对称的礁石 / 沉船就碍事。
- * 于是把「默认」和「强制」拆成两个口径：`defaultMirror(2)` 给默认值、`forcedMirror(2)` 给锁定项（现在是 null）。
- *
- * ⚠️ 代价：关掉之后"两家一样多"由策划自己保证，`validate()` 里那处 `balanced` 只报 warn 不拦
- * （它本来就写着"（不强制相等）"）。
- * ⚠️ 180° 旋转镜像对 2 人**仍然不成立**（会把 1 区转到对角），这条与锁不锁镜像无关，单独拦。
- */
-test('2 人上下镜像：默认开着，但 UI 与 API 都能自己关掉', () => {
+test('2人默认关闭镜像，UI和API可手动开启并仍按原规则存半场', () => {
     const { editor, element } = createEditor();
-    const preset = editor.defaultMirror(2);
-    assert.equal(preset.vertical, true);
-    assert.equal(preset.horizontal, false);
-    assert.equal(editor.forcedMirror(2), null, '2 人不是"锁死"，只是"默认"');
-    // UI：勾上且**可点** —— 不再是 disabled
-    assert.equal(element('optMirrorV').disabled, false, '2 人时上下镜像勾选框必须可点');
-    assert.equal(element('optMirrorV').checked, true);
-    assert.equal(element('optMirrorH').disabled, true, '2 人没有左右方向的分区伙伴');
-
-    // API：能真的关掉，存档也从半场变整场
-    editor.setMirror(false, false);
-    let state = editor.state();
-    assert.equal(state.mirrorVertical, false, 'setMirror 必须能关掉 2 人的上下镜像');
-    assert.equal(state.mirrorHorizontal, false);
-    assert.equal(state.json.ascii.length, 20, '关掉镜像后存整场 20 行');
-    assert.equal(element('optMirrorV').checked, false, 'UI 勾选状态要跟着镜像走');
-
-    // 再开回来：回到半场
+    assert.equal(editor.defaultMirror(2).vertical, false);
+    assert.equal(editor.defaultMirror(2).horizontal, false);
+    assert.equal(editor.forcedMirror(2), null);
+    assert.equal(element('optMirrorV').disabled, false);
+    assert.equal(element('optMirrorV').checked, false);
+    assert.equal(element('optMirrorH').disabled, true);
+    assert.equal(editor.state().json.ascii.length, 20);
     editor.setMirror(true, false);
-    state = editor.state();
-    assert.equal(state.mirrorVertical, true);
-    assert.equal(state.json.ascii.length, 10, '开着镜像存半场 = 20 / 2');
+    assert.equal(element('optMirrorV').checked, true);
+    assert.equal(editor.state().json.ascii.length, 10);
+    editor.setMirror(false, false);
+    assert.equal(element('optMirrorV').checked, false);
+    assert.equal(editor.state().json.ascii.length, 20);
 });
 
-test('切到 2 人时落"默认开"（从 3 人切过来的场景）', () => {
-    const { editor } = createEditor();
-    editor.setPlayerCount(3);
-    assert.equal(editor.state().mirrorVertical, false, '3 人一律关');
-    editor.setPlayerCount(2);
-    assert.equal(editor.state().mirrorVertical, true, '切回 2 人自动落默认：上下开');
+test('切换人数默认关闭上下左右镜像，完整网格默认开启且不写入地图', () => {
+    const { editor, element } = createEditor();
+    assert.equal(element('optGrid').checked, true);
+    for (const count of [4, 3, 2]) {
+        editor.setPlayerCount(count);
+        assert.equal(editor.state().mirrorVertical, false);
+        assert.equal(editor.state().mirrorHorizontal, false);
+        assert.deepEqual(JSON.parse(JSON.stringify(editor.defaultMirror(count))), { vertical: false, horizontal: false });
+        assert.equal(element('optGrid').checked, true);
+        assert.equal(Object.hasOwn(editor.buildJSON(), 'showGrid'), false);
+        assert.equal(editor.buildJSON().ascii.length, editor.state().rows);
+    }
+    const before = JSON.stringify(editor.buildJSON());
+    element('optGrid').checked = false;
+    element('optGrid').listeners.change.call(element('optGrid'));
+    assert.equal(JSON.stringify(editor.buildJSON()), before);
+    const html = readFileSync('tools/map-editor/index.html', 'utf8');
+    assert.match(html, /id="optGrid" checked/);
+    assert.doesNotMatch(html, /id="optMirrorV" checked/);
 });
 
 test('3 人仍然锁死镜像：UI 置灰、API 绕不过、载入直接拒', () => {
@@ -363,7 +371,7 @@ test('服务连接失败时给出可迁移当前地图的链接', async () => {
     const link = element('openServer');
     link.listeners.click.call(link);
     const transferred = JSON.parse(decodeURIComponent(link.href.split('#map=')[1]));
-    assert.equal(transferred.ascii[2][3], '.');
+    assert.equal(transferred.ascii[12][3], '.');
 });
 
 test('从文件页转到服务页时保留当前地图', async () => {
@@ -423,6 +431,7 @@ test('切换人数保留 1 区内容并重建镜像，4 人镜像图存四分之
     editor.setSize(20, 12);
     editor.setCityMode('fixed');
     editor.setPlayerCount(4);
+    editor.setMirror(true, true);
     editor.clearGrid();
     let state = editor.state();
     assert.equal(state.playerCount, 4);
@@ -565,6 +574,7 @@ test('笔刷批量写入走镜像映射，1 区一笔产出四个象限', () => 
     const { editor } = createEditor();
     editor.setSize(20, 12);
     editor.setPlayerCount(4);
+    editor.setMirror(true, true);
     editor.clearGrid();
     assert.equal(editor.validate().empty, 0);
     editor.paintCells(editor.brushCells(18, 1, 1), 'void');
@@ -891,11 +901,11 @@ test('选中装饰后四角都有缩放柄：视觉小圆 + 更大的透明命�
     assert.ok(!editor.freeDecorMarkup().includes('data-handle="scale"'), '取消选中后手柄消失');
 });
 
-test('资源图标笔刷独立于主城模式：只能放中立格，固定与自选地图均可保存', () => {
+test('旧资源池笔刷兼容固定与自选地图保存，主城格仍不能放资源', () => {
   const { editor } = createEditor();
   editor.setSize(20, 11);
   editor.setResourceBrush('chest');
-  assert.equal(editor.paint(18, 1, 'resource'), false, '主城分区格不能放资源');
+  assert.equal(editor.paint(18, 1, 'resource'), false, '主城格不能放资源');
   assert.equal(editor.paint(12, 1, 'resource'), true);
   editor.setResourceBrush('gold');
   assert.equal(editor.paint(12, 5, 'resource'), true);
@@ -918,7 +928,7 @@ test('资源图标笔刷独立于主城模式：只能放中立格，固定与�
         { row: 12, column: 5, pool: { gold: 1 } },
         { row: 12, column: 9, pool: { mine: 1 } },
     ], '切换到自选主城不得丢失地图资源配置');
-    assert.match(editor.resourceMarkup(), /map-resource\/image%2Fmap-resource%2Fchest/);
+    assert.match(editor.resourceMarkup(), /旧资源池：宝箱/);
 
     editor.removeResourcePoint(1);
     assert.equal(editor.state().json.resourcePoints.length, 2);
@@ -926,14 +936,219 @@ test('资源图标笔刷独立于主城模式：只能放中立格，固定与�
     assert.equal(editor.state().json.resourcePoints.length, 3, '资源点删除应可撤销');
 });
 
-test('导入地图也拒绝落在分区格上的资源点', () => {
+test('导入地图接受玩家分区上的旧资源点且原样保留资源池', () => {
     const { editor } = createEditor();
-    assert.throws(() => editor.applyLayout({
-        version: 3, id: 'invalid-resource', rows: 8, columns: 8, playerCount: 2, cityMode: 'select',
+    editor.applyLayout({
+        version: 3, id: 'player-resource', rows: 8, columns: 8, playerCount: 2, cityMode: 'select',
         mirrorVertical: false, mirrorHorizontal: false,
         ascii: Array.from({ length: 8 }, () => '11111111'),
         resourcePoints: [{ row: 3, column: 3, pool: { chest: 1 } }],
-    }), /中立格/);
+    });
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.buildJSON().resourcePoints)), [{ row: 3, column: 3, pool: { chest: 1 } }]);
+});
+
+test('资源组合输入从空值开始，确认后显示统一资源图片和组合编号，数据只保存组合ID', () => {
+    const { editor, element } = createEditor();
+    editor.applyLayout({ version: 3, rows: 8, columns: 12, cityMode: 'select', ascii: Array(8).fill('000000000000') });
+    assert.equal(editor.state().resourceGroupId, null);
+    element('btnResourcePlace').listeners.click();
+    assert.match(element('libFlash').textContent, /组合 ID 必须/);
+    assert.equal(editor.paint(3, 3, 'resource'), false);
+    element('resourceGroupId').value = '13002';
+    element('btnResourcePlace').listeners.click();
+    assert.equal(editor.state().resourceGroupId, 13002);
+    assert.equal(editor.paint(3, 3), true);
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.buildJSON().resourcePoints)), [{ row: 3, column: 3, groupId: 13002 }]);
+    assert.match(editor.resourceMarkup(), /resourceGroupMarker/);
+    assert.match(editor.resourceMarkup(), /资源组合 13002/);
+    assert.match(editor.resourceMarkup(), /<image class="resourceGroupImage" href="\/map-resource\/image%2Fmap-resource%2Fchest"/);
+    assert.doesNotMatch(editor.resourceMarkup(), /<circle|宝箱|金币|pool/);
+    element('resourceGroupId').value = '0';
+    element('resourceGroupId').listeners.input();
+    assert.equal(editor.state().resourceGroupId, null);
+    assert.equal(editor.paint(6, 10), false, '输入尚未确认不能把上一组合误写到新点位');
+    const html = readFileSync('tools/map-editor/index.html', 'utf8');
+    assert.match(html, /id="resourceGroupId"[^>]*max="2147483647"/);
+    assert.match(html, /id="btnResourcePlace"/);
+    assert.doesNotMatch(html, /id="resourceWeight"|id="resourceList"|data-resource=/);
+    assert.match(html, /labelsReduced \.resourceGroupLabel/);
+});
+
+test('再次点击资源放置按钮取消工具，保留组合ID并阻止画布误放和误删，第三次点击可继续', () => {
+    const { editor, element, board, windowEvents } = createEditor();
+    editor.applyLayout({ version: 3, rows: 8, columns: 12, cityMode: 'select', ascii: Array(8).fill('000000000000') });
+    element('resourceGroupId').value = '13002';
+    element('btnResourcePlace').listeners.click();
+    editor.paint(3, 3);
+    const before = JSON.stringify(editor.buildJSON());
+    const undoDepth = editor.state().undoDepth;
+    element('btnResourcePlace').listeners.click();
+    assert.equal(editor.state().resourceGroupId, 13002);
+    assert.equal(element('resourceGroupId').value, '13002');
+    assert.equal(element('btnResourcePlace').textContent, '放置资源点');
+    assert.equal(element('btnResourcePlace').className, 'btn');
+    assert.match(element('resourceGroupStatus').textContent, /已暂停/);
+    assert.match(element('toolStatus').textContent, /浏览/);
+    assert.equal(editor.paint(7, 10), false);
+    for (const [button, row, column] of [[0, 7, 10], [2, 3, 3]]) {
+        const center = editor.hexCenter(row, column);
+        board.listeners.pointerdown({ button, clientX: center.x, clientY: center.y, preventDefault() {} });
+        windowEvents.pointerup.forEach(handler => handler());
+    }
+    assert.equal(JSON.stringify(editor.buildJSON()), before);
+    assert.equal(editor.state().undoDepth, undoDepth);
+    element('btnResourcePlace').listeners.click();
+    assert.equal(element('btnResourcePlace').textContent, '取消放置资源点');
+    assert.equal(editor.paint(7, 10), true);
+    assert.equal(editor.state().resourcePoints.length, 2);
+});
+
+test('组合点位在中立与四个玩家分区均可放置，保存重载不带资源池或权重', () => {
+    const { editor } = createEditor();
+    editor.applyLayout({ version: 3, rows: 10, columns: 12, playerCount: 4, cityMode: 'select', ascii: [
+        ...Array(2).fill('111111111111'), ...Array(2).fill('222222222222'),
+        ...Array(2).fill('333333333333'), ...Array(2).fill('444444444444'), ...Array(2).fill('000000000000'),
+    ] });
+    const points = [[0, 1], [2, 7], [4, 1], [6, 7], [8, 1]].map(([row, column], index) => ({ row, column, groupId: 13001 + index }));
+    points.forEach(point => editor.addResourceGroupPoint(point.row, point.column, point.groupId));
+    const json = JSON.parse(JSON.stringify(editor.buildJSON()));
+    assert.deepEqual(json.resourcePoints, points);
+    editor.applyLayout(json);
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.state().resourcePoints)), points);
+    assert.equal(editor.validate().checks.some(([kind, message]) => kind === 'err' && /资源点/.test(message)), false);
+    json.resourcePoints[0].weight = 10000;
+    json.resourcePoints[0].icon = 'chest';
+    json.resourcePoints[0].param = 50;
+    editor.applyLayout(json);
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.buildJSON().resourcePoints)), points, '组合点位统一只保存坐标与组合 ID');
+});
+
+test('非法组合、双格式、虚空、主城、重复点与不足间距均拒绝导入，原地图和历史保持完整', () => {
+    const { editor } = createEditor();
+    editor.applyLayout({ version: 3, id: 'keep-map', name: '保留地图', rows: 8, columns: 12, cityMode: 'select',
+        ascii: Array(8).fill('000000000000'), art: { background: 'image/keep-background' }, spacing: { resourceMinDistance: 5 },
+        resourcePoints: [{ row: 1, column: 1, groupId: 13001 }],
+    });
+    const before = JSON.stringify(editor.buildJSON()), history = editor.state().undoDepth;
+    const candidate = (points, extra = {}) => ({ version: 3, id: 'invalid', name: '无效', rows: 8, columns: 12, cityMode: 'select', ascii: Array(8).fill('000000000000'), resourcePoints: points, ...extra });
+    const invalid: any[] = [
+        ...[undefined, null, '', '13001', 0, -1, 1.5, 2147483648].map(groupId => candidate([{ row: 1, column: 1, groupId }])),
+        candidate([{ row: 1, column: 1, groupId: 13001, pool: { gold: 1 } }]),
+        candidate([{ row: 1, column: 1 }]),
+        candidate([{ row: 1, column: 1, groupId: 13001 }], { ascii: Array(8).fill('............') }),
+        candidate([{ row: 1, column: 1, groupId: 13001 }], { homes: [{ row: 1, column: 1 }] }),
+        candidate([{ row: 1, column: 1, groupId: 13001 }, { row: 1, column: 1, pool: { gold: 1 } }]),
+        candidate([{ row: 1, column: 1, groupId: 13001 }, { row: 2, column: 1, groupId: 13002 }]),
+        candidate([{ row: 1, column: 1, groupId: 13001 }, { row: 4, column: 1, groupId: 13002 }], { spacing: { resourceMinDistance: 4 } }),
+        candidate([{ row: -1, column: 1, groupId: 13001 }]),
+        candidate({ row: 1, column: 1, groupId: 13001 }),
+    ];
+    invalid.forEach(data => {
+        assert.throws(() => editor.applyLayout(data), /资源|组合/);
+        assert.equal(JSON.stringify(editor.buildJSON()), before);
+        assert.equal(editor.state().undoDepth, history);
+    });
+});
+
+test('编辑组合点位保留三步及地图更大间距，禁止虚空和主城；主城也不能覆盖资源', () => {
+    const { editor, element } = createEditor();
+    editor.applyLayout({ version: 3, rows: 10, columns: 12, cityMode: 'select', ascii: Array(10).fill('000000000000'), homes: [{ row: 9, column: 10 }], spacing: { resourceMinDistance: 4 } });
+    editor.addResourceGroupPoint(1, 1, 13001);
+    assert.throws(() => editor.addResourceGroupPoint(4, 1, 13002), /至少相距 4/);
+    editor.addResourceGroupPoint(5, 1, 13002);
+    assert.throws(() => editor.addResourceGroupPoint(9, 10, 13003), /主城/);
+    editor.paint(1, 10, 'void');
+    assert.throws(() => editor.addResourceGroupPoint(1, 10, 13003), /虚空/);
+    assert.equal(editor.paint(1, 1, 'home'), false);
+    assert.match(element('libFlash').textContent, /主城不能与资源点重叠/);
+    assert.equal(editor.state().resourcePoints.length, 2);
+    [0, -1, 1.5, 2147483648, NaN, Infinity].forEach(id => assert.throws(() => editor.addResourceGroupPoint(7, 10, id), /组合 ID/));
+});
+
+test('旧资源池完整保留含零权重与附带字段，替换成组合后撤销重做不混合两种格式', () => {
+    const { editor, element } = createEditor();
+    const oldPoint = { row: 2, column: 3, pool: { chest: 0, gold: 4 }, section: 0, depth: 'front', customNote: '保留' };
+    editor.applyLayout({ version: 3, rows: 8, columns: 12, cityMode: 'select', ascii: Array(8).fill('000000000000'), resourcePoints: [oldPoint] });
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.buildJSON().resourcePoints)), [oldPoint]);
+    assert.equal(element('legacyResourceNotice').hidden, false);
+    assert.match(editor.resourceMarkup(), /旧资源池/);
+    editor.addResourceGroupPoint(2, 3, 2147483647);
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.buildJSON().resourcePoints)), [{ row: 2, column: 3, groupId: 2147483647 }]);
+    assert.equal(element('legacyResourceNotice').hidden, true);
+    assert.equal(editor.undo(), true);
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.buildJSON().resourcePoints)), [oldPoint]);
+    assert.equal(editor.redo(), true);
+    assert.equal(editor.state().resourcePoints[0].groupId, 2147483647);
+});
+
+test('固定主城移动预检查所有镜像目标，遇资源冲突时整次阻止且不删除对侧资源', () => {
+    for (const count of [2, 4]) {
+        const { editor, element } = createEditor();
+        const resourceColumn = count === 2 ? 8 : 7;
+        const homeColumn = count === 2 ? 8 : 4;
+        editor.applyLayout({ version: 3, rows: 8, columns: 12, playerCount: count, cityMode: 'fixed',
+            mirrorVertical: true, mirrorHorizontal: count === 4, ascii: Array(4).fill('1'.repeat(count === 4 ? 6 : 12)),
+            homes: [{ row: 6, column: 2 }, { row: 1, column: 2 }, { row: 6, column: 9 }, { row: 1, column: 9 }].slice(0, count),
+            resourcePoints: [{ row: 1, column: resourceColumn, groupId: 13001 }],
+        });
+        const before = JSON.stringify(editor.buildJSON()), history = editor.state().undoDepth;
+        assert.equal(editor.paint(6, homeColumn, 'home'), false);
+        assert.match(element('libFlash').textContent, /镜像后的主城.*资源点重叠/);
+        assert.equal(JSON.stringify(editor.buildJSON()), before);
+        assert.equal(editor.state().undoDepth, history);
+    }
+});
+
+test('组合点位涂分区与纵深不丢失，涂虚空删除且整笔可撤销', () => {
+    const { editor } = createEditor();
+    editor.applyLayout({ version: 3, rows: 8, columns: 12, cityMode: 'select', ascii: Array(8).fill('000000000000'), resourcePoints: [{ row: 2, column: 3, groupId: 13001 }] });
+    editor.setPartitionBrush(1, 'front');
+    editor.paint(2, 3);
+    editor.setPartitionBrush(1, 'mid');
+    editor.paint(2, 3);
+    assert.equal(editor.state().grid[2][3], 1);
+    assert.equal(editor.state().regions[0].depth, 'mid');
+    assert.equal(editor.state().resourcePoints[0].groupId, 13001);
+    const before = editor.snapshot();
+    editor.paint(2, 3, 'void');
+    editor.commitUndo(before);
+    assert.equal(editor.state().resourcePoints.length, 0);
+    editor.undo();
+    assert.equal(editor.state().resourcePoints[0].groupId, 13001);
+    assert.equal(editor.state().grid[2][3], 1);
+});
+
+test('组合画笔真实点击与右键删除形成独立撤销步，悬停读数显示组合', () => {
+    const { editor, element, board, windowEvents } = createEditor();
+    editor.applyLayout({ version: 3, rows: 8, columns: 12, cityMode: 'select', ascii: Array(8).fill('000000000000') });
+    editor.setResourceGroup(13002);
+    const center = editor.hexCenter(3, 3);
+    const event = button => ({ button, clientX: center.x, clientY: center.y, preventDefault() {} });
+    board.listeners.pointerdown(event(0));
+    windowEvents.pointerup.forEach(handler => handler());
+    assert.equal(editor.state().resourcePoints[0].groupId, 13002);
+    board.listeners.pointermove(event(0));
+    assert.match(element('cursorInfo').textContent, /资源组合 13002/);
+    board.listeners.pointerdown(event(2));
+    windowEvents.pointerup.forEach(handler => handler());
+    assert.equal(editor.state().resourcePoints.length, 0);
+    assert.equal(editor.state().grid[3][3], 0);
+    editor.undo();
+    assert.equal(editor.state().resourcePoints[0].groupId, 13002);
+    editor.undo();
+    assert.equal(editor.state().resourcePoints.length, 0);
+});
+
+test('组合点位不跟随镜像复制，改尺寸跟随格子移动且可撤销', () => {
+    const { editor } = createEditor();
+    editor.applyLayout({ version: 3, rows: 8, columns: 12, playerCount: 4, cityMode: 'select', mirrorVertical: true, mirrorHorizontal: true, ascii: Array(4).fill('000000') });
+    editor.setResourceGroup(13002);
+    editor.paint(1, 8);
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.buildJSON().resourcePoints)), [{ row: 1, column: 8, groupId: 13002 }]);
+    editor.setSize(10, 14);
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.buildJSON().resourcePoints)), [{ row: 2, column: 9, groupId: 13002 }]);
+    editor.undo();
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.buildJSON().resourcePoints)), [{ row: 1, column: 8, groupId: 13002 }]);
 });
 
 test('装饰清单来自服务端扫描结果，也接受手填的资源名', () => {
@@ -1188,7 +1403,7 @@ test('载入旧地图时忽略 art.tiles 的按格装饰，保存后只保留地
     assert.equal(art.freeDecor[0].id, id);
 });
 
-test('背景图盒 = viewBox：始终全景铺满视口，平移时与棋盘一起拖动', () => {
+test('背景锚定地图中心，100% 时覆盖完整棋盘', () => {
     const { editor } = createEditor();
     const geometry = editor.geometry;
     const state = editor.state();
@@ -1212,49 +1427,139 @@ test('背景图盒 = viewBox：始终全景铺满视口，平移时与棋盘一�
     assert.ok(rect.x + rect.width >= baseHalfW - 1e-9, '图盒右边界应 ≥ 棋盘右边界（右侧不许露空）');
     assert.ok(rect.y + rect.height >= baseHalfH - 1e-9, '图盒下边界应 ≥ 棋盘下边界（下侧不许露空）');
 
-    // 落盘的 <image> 属性：默认（zoom=1, pan=0）背景 = max(viewBox, 包围盒) = viewBox，
-    // 中心锚定棋盘中心 —— 此时与 viewportRect 完全一致（drawBackground 不许另算一套）。
+    // 底图必须完整显示原图，并在棋盘外留出游戏要求的铺底范围。
     const markup = editor.backgroundMarkup();
     const attr = (name: string): number => {
         const matched = new RegExp(`\\b${name}="([-\\d.]+)"`).exec(markup);
         assert.ok(matched, `背景 <image> 缺 ${name} 属性：${markup}`);
         return Number(matched![1]);
     };
-    assert.equal(attr('x'), Number(rect.x.toFixed(1)), 'image.x 必须等于视口 x');
-    assert.equal(attr('y'), Number(rect.y.toFixed(1)), 'image.y 必须等于视口 y');
-    assert.equal(attr('width'), Number(rect.width.toFixed(2)), 'image.width 必须等于视口宽');
-    assert.equal(attr('height'), Number(rect.height.toFixed(2)), 'image.height 必须等于视口高');
-    // 背景随 viewBox 平移（中心锚定棋盘 ⇒ 与棋盘一起拖动），缩放时保持全景铺满不裁切。
+    assert.ok(Math.abs(attr('x') + attr('width') / 2) < 0.1);
+    assert.ok(Math.abs(attr('y') + attr('height') / 2) < 0.1);
+    assert.ok(attr('width') > baseHalfW * 2 && attr('height') > baseHalfH * 2);
+    // 地图坐标中的底图只由 viewBox 统一缩放、平移。
     assert.match(markup, /href="\/bg\/image\/zdbg1"/, '默认背景应请求 /bg/image/zdbg1');
-    assert.match(markup, /preserveAspectRatio="xMidYMid slice"/, '必须是等比 cover，不是拉伸');
+    assert.match(markup, /preserveAspectRatio="xMidYMid meet"/, '应保留整张原图，不能裁成棋盘长条');
 });
 
-test('放大后背景锚定棋盘包围盒：与格子一起缩放，格子稳稳在背景上', () => {
+function gameBackgroundBounds(mapWidth: number, mapHeight: number, sourceWidth: number, sourceHeight: number) {
+    // 运行游戏真实方法，不在测试里复制其计算公式。
+    const path = 'assets/script/app/zcds/view/ZCGameHUDView.ts';
+    const source = ts.createSourceFile(path, readFileSync(path, 'utf8'), ts.ScriptTarget.Latest, true);
+    const hud = source.statements.find((node) => ts.isClassDeclaration(node) && node.name?.text === 'ZCGameHUDView') as ts.ClassDeclaration;
+    const names = new Set(['MAP_EDGE_MARGIN_X', 'MAP_EDGE_MARGIN_Y', 'MAP_OVERVIEW_PADDING', 'mapOverviewScale', 'fitMapBackground']);
+    const members = hud.members.filter((node) => node.name && names.has(node.name.getText(source)));
+    assert.equal(members.length, names.size);
+    const code = ts.transpileModule(`class ZCGameHUDView { ${members.map((node) => node.getText(source)).join('\n')} } exports.Hud = ZCGameHUDView;`, {
+        compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS },
+    }).outputText;
+    const UITransform = class {};
+    const Sprite = class {};
+    const Widget = class {};
+    const context = { exports: {} as any, UITransform, Sprite, Widget, ZC_MAP_PRESENTATION_SCALE: 1 };
+    runInNewContext(code, context);
+    const instance = new context.exports.Hud();
+    const viewport = JSON.parse(readFileSync('settings/v2/packages/project.json', 'utf8')).general.designResolution;
+    Object.defineProperty(instance, 'mapViewportTransform', { value: viewport });
+    Object.defineProperty(instance, 'mapBounds', { value: { minX: -mapWidth / 2, maxX: mapWidth / 2, minY: -mapHeight / 2, maxY: mapHeight / 2 } });
+    const result = { width: 0, height: 0 };
+    instance.mapBackground = {
+        getComponent(type: unknown) {
+            if (type === UITransform) return { setContentSize(width: number, height: number) { result.width = width; result.height = height; } };
+            if (type === Sprite) return { spriteFrame: { originalSize: { width: sourceWidth, height: sourceHeight } } };
+            return { enabled: true };
+        },
+        setPosition() {},
+    };
+    instance.fitMapBackground();
+    return result;
+}
+
+test('底图范围和原图比例与游戏真实 fitMapBackground 对拍', () => {
+    const meta = JSON.parse(readFileSync('assets/resources/image/zdbg1.jpg.meta', 'utf8'));
+    const size = meta.subMetas.f9941.userData;
+    const { editor } = createEditor();
+    for (const [rows, columns] of [[20, 11], [4, 4], [40, 20], [11, 35]]) {
+        editor.setSize(rows, columns);
+        const g = editor.geometry;
+        const expected = gameBackgroundBounds((columns - 1) * g.column + g.imageWidth,
+            (rows - 1) * g.row + g.imageHeight + 2 * g.phase, size.rawWidth, size.rawHeight);
+        const actual = editor.backgroundBounds();
+        assert.ok(Math.abs(actual.width - expected.width) < 1e-6);
+        assert.ok(Math.abs(actual.height - expected.height) < 1e-6);
+        assert.ok(Math.abs(actual.width / actual.height - size.rawWidth / size.rawHeight) < 1e-6,
+            '底图必须保持原图比例');
+    }
+});
+
+test('自定义底图使用实际图片尺寸，按同一游戏规则等比铺底', () => {
+    const { editor } = createEditor({ imageSizes: { '/bg/image/test-wide': { width: 2000, height: 1000 } } });
+    const data = editor.buildJSON();
+    data.art = { background: 'image/test-wide' };
+    editor.applyLayout(data);
+    const g = editor.geometry, state = editor.state();
+    const expected = gameBackgroundBounds((state.cols - 1) * g.column + g.imageWidth,
+        (state.rows - 1) * g.row + g.imageHeight + 2 * g.phase, 2000, 1000);
+    const actual = editor.backgroundBounds();
+    assert.ok(Math.abs(actual.width - expected.width) < 1e-6);
+    assert.ok(Math.abs(actual.height - expected.height) < 1e-6);
+    assert.equal(actual.width / actual.height, 2);
+});
+
+test('放大后背景的地图坐标与尺寸保持不变', () => {
     const { editor } = createEditor();
     const geometry = editor.geometry;
     const state = editor.state();
     const boardWidth = (state.cols - 1) * geometry.column + geometry.imageWidth;
     const boardHeight = (state.rows - 1) * geometry.row + geometry.imageHeight + 2 * geometry.phase;
+    const initialBackground = editor.backgroundMarkup();
 
-    // 放大 2 倍 ⇒ viewBox 世界尺寸减半、小于包围盒 ⇒ 背景应锚定包围盒（随格子同比例放大）。
+    // 放大只改变镜头范围，不能修改底图本身的坐标或尺寸。
     editor.zoomAt(500, 500, 2);
     const rect = editor.viewportRect();
     assert.ok(rect.width < boardWidth, `放大后视口 ${rect.width} 应小于包围盒 ${boardWidth}`);
     const markup = editor.backgroundMarkup();
+    assert.equal(markup, initialBackground);
     const attr = (name: string): number => {
         const matched = new RegExp(`\\b${name}="([-\\d.]+)"`).exec(markup);
         assert.ok(matched, `背景 <image> 缺 ${name} 属性：${markup}`);
         return Number(matched![1]);
     };
-    assert.ok(Math.abs(attr('width') - boardWidth) < 0.05,
-        `背景宽应为包围盒 ${boardWidth}，实际 ${attr('width')}`);
-    assert.ok(Math.abs(attr('height') - boardHeight) < 0.05,
-        `背景高应为包围盒 ${boardHeight}，实际 ${attr('height')}`);
-    assert.ok(Math.abs(attr('x') - (-boardWidth / 2)) < 0.05,
-        `背景 x 应为 -包围盒/2（中心锚定棋盘），实际 ${attr('x')}`);
+    assert.ok(attr('width') >= boardWidth && attr('height') >= boardHeight);
+    assert.ok(Math.abs(attr('x') + attr('width') / 2) < 0.05, '底图中心必须留在地图原点');
 });
 
-test('画布元素比例 = viewBox 比例：背景铺满画布，四周不露深色底', () => {
+test('缩小到40%再放大到600%，底图不会相对格子和装饰重新缩放', () => {
+    const { editor, board, windowEvents } = createEditor();
+    const initialBackground = editor.backgroundMarkup();
+    const initialConfig = JSON.stringify(editor.buildJSON());
+    const initialUndoDepth = editor.state().undoDepth;
+    board.parentElement = { clientWidth: 1200, clientHeight: 700 };
+    board.style = {};
+    board.getScreenCTM = () => ({ inverse: () => ({}) });
+    board.createSVGPoint = () => ({
+        x: 0, y: 0,
+        matrixTransform() {
+            const rect = editor.viewportRect();
+            return { x: rect.x + this.x / 1200 * rect.width, y: rect.y + this.y / 700 * rect.height };
+        },
+    });
+    for (const zoom of [0.4, 0.6, 1, 2, 6, 0.4]) {
+        editor.zoomAt(240, 210, zoom / editor.state().zoom);
+        assert.ok(Math.abs(editor.state().zoom - zoom) < 1e-6);
+        assert.equal(editor.backgroundMarkup(), initialBackground, `${zoom * 100}% 时底图世界尺寸和位置必须固定`);
+    }
+    assert.notEqual(editor.state().panX, 0, '光标缩放同时产生平移，以覆盖非中心机位');
+    board.parentElement.clientWidth = 800;
+    windowEvents.resize.forEach((handler) => handler());
+    assert.equal(editor.backgroundMarkup(), initialBackground, '调整窗口不能重置底图范围');
+    editor.resetView();
+    assert.equal(editor.backgroundMarkup(), initialBackground);
+    assert.equal(JSON.stringify(editor.buildJSON()), initialConfig);
+    assert.equal(editor.state().undoDepth, initialUndoDepth, '镜头操作不产生地图编辑历史');
+});
+
+test('画布铺满工作区，竖地图放大后使用全部横向可视范围', () => {
     const { editor, element } = createEditor();
     const board = element('board');
     // 模拟真实 DOM：画布挂在 `.stage` 容器下（初始桩没有父节点 ⇒ fitCanvas 自动跳过，
@@ -1268,12 +1573,79 @@ test('画布元素比例 = viewBox 比例：背景铺满画布，四周不露深
     assert.ok(width > 0 && height > 0, `画布应有非零尺寸，实际 ${width}×${height}`);
     assert.ok(Math.abs(width / height - rect.width / rect.height) < 1e-6,
         `画布比例 ${(width / height).toFixed(4)} 应等于 viewBox 比例 ${(rect.width / rect.height).toFixed(4)}`);
-    // contain 语义：画布不超出容器（stage 是 flex 居中，尺寸超了会被截掉）。
-    assert.ok(width <= 900 + 1e-6 && height <= 700 + 1e-6, '画布必须 contained 在容器内');
+    assert.equal(width, 900, '不能按竖地图比例把画布收成窄条');
+    assert.equal(height, 700, '工作区高度必须全部用于显示');
+    const geometry = editor.geometry;
+    const state = editor.state();
+    const mapWidth = (state.cols - 1) * geometry.column + geometry.imageWidth;
+    const mapHeight = (state.rows - 1) * geometry.row + geometry.imageHeight + 2 * geometry.phase;
+    assert.ok(rect.width >= mapWidth && rect.height >= mapHeight, '100% 时地图必须完整可见');
+    assert.ok(rect.width > mapWidth * 2, '横向应展开显示地图两侧，而不是裁在地图宽度内');
+    editor.zoomAt(0, 0, 2);
+    const zoomed = editor.viewportRect();
+    assert.equal(Number.parseFloat(board.style.width), 900, '放大不能缩小可视窗口');
+    assert.ok(Math.abs(zoomed.width * 2 - rect.width) < 1e-6);
+    assert.ok(Math.abs(zoomed.height * 2 - rect.height) < 1e-6);
     // 同值守卫：重复调用不重设样式（避免每次 render 都触发重排）。
     const before = `${board.style.width} ${board.style.height}`;
     editor.fitCanvas();
     assert.equal(`${board.style.width} ${board.style.height}`, before, '同值不应重设');
+});
+
+test('工作区改变宽高后重算视口，底图和导出数据保持原样', () => {
+    const { editor, board, windowEvents } = createEditor();
+    const stage = { clientWidth: 1400, clientHeight: 700 };
+    const attributes: Record<string, string> = {};
+    board.parentElement = stage;
+    board.style = {};
+    board.setAttribute = (name: string, value: string) => { attributes[name] = value; };
+    const exported = JSON.stringify(editor.buildJSON());
+    const background = editor.backgroundMarkup();
+    for (const [width, height] of [[1400, 700], [500, 900], [1000, 500]]) {
+        stage.clientWidth = width;
+        stage.clientHeight = height;
+        windowEvents.resize.forEach((handler) => handler());
+        const actual = attributes.viewBox.split(' ').map(Number);
+        assert.ok(Math.abs(actual[2] / actual[3] - width / height) < 0.001,
+            '窗口变化必须同步 viewBox，不能只改变画布像素尺寸');
+        assert.equal(board.style.width, `${width}px`);
+        assert.equal(board.style.height, `${height}px`);
+        assert.equal(editor.backgroundMarkup(), background, '扩宽视口不能重新缩放或裁切底图');
+    }
+    editor.zoomAt(0, 0, 2);
+    editor.resetView();
+    assert.equal(editor.state().zoom, 1);
+    assert.equal(editor.state().panX, 0);
+    assert.equal(editor.state().panY, 0);
+    assert.equal(JSON.stringify(editor.buildJSON()), exported, '视图操作不得改变地图配置');
+});
+
+test('宽视口缩放围绕光标，屏幕坐标仍命中原格', () => {
+    const { editor, board } = createEditor();
+    board.parentElement = { clientWidth: 1200, clientHeight: 700 };
+    board.style = {};
+    board.getScreenCTM = () => ({ inverse: () => ({}) });
+    board.createSVGPoint = () => ({
+        x: 0, y: 0,
+        matrixTransform() {
+            const rect = editor.viewportRect();
+            return {
+                x: rect.x + (this.x - 100) / 1200 * rect.width,
+                y: rect.y + (this.y - 50) / 700 * rect.height,
+            };
+        },
+    });
+    editor.fitCanvas();
+    const center = editor.hexCenter(12, 5);
+    const rect = editor.viewportRect();
+    const clientX = 100 + (center.x - rect.x) / rect.width * 1200;
+    const clientY = 50 + (center.y - rect.y) / rect.height * 700;
+    const before = editor.toLocal(clientX, clientY);
+    editor.zoomAt(clientX, clientY, 2);
+    const after = editor.toLocal(clientX, clientY);
+    assert.ok(Math.abs(before.x - after.x) < 1e-6 && Math.abs(before.y - after.y) < 1e-6,
+        '缩放前后光标底下的地图位置必须不动');
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.cellAtLocal(after.x, after.y))), { row: 12, column: 5 });
 });
 
 test('same neutral cell accumulates weighted resource choices and preserves them in undo/export', () => {
@@ -1673,4 +2045,585 @@ test('改棋盘尺寸时装饰、资源点、区域标记跟着地形一起位�
     assert.deepEqual([restored.rows, restored.cols], [8, 12], '一次撤销回到改尺寸前');
     assert.deepEqual(plain(restored.resourcePoints).map((p: any) => [p.row, p.column]), [[5, 7]]);
     assert.deepEqual(regionCells(), [[3, 4]]);
+});
+
+
+test('气泡文案通过界面修改、转义预览并支持撤销重做和导入导出', () => {
+    const { editor, element } = createEditor();
+    editor.applyLayout({
+        version: 3, rows: 8, columns: 12, playerCount: 2, cityMode: 'select',
+        ascii: Array(8).fill('111111111111'),
+        regions: [
+            { section: 1, depth: 'front', cells: [84, 85], tendency: 'rush', text: '原提示' },
+            { section: 2, depth: 'front', cells: [86], tendency: 'control', text: '另一方' },
+        ],
+    });
+    editor.setRegionBrush(1, 'front');
+    assert.equal(element('regionText').value, '原提示');
+    element('regionText').value = '先拿矿 <守住> & 发育';
+    element('regionText').listeners.change.call(element('regionText'));
+    const output = JSON.parse(JSON.stringify(editor.buildJSON()));
+    assert.deepEqual(output.regions[0], { section: 1, depth: 'front', cells: [84, 85], tendency: 'rush', text: '先拿矿 <守住> & 发育' });
+    assert.equal(output.regions[1].text, '另一方');
+    assert.match(editor.mapMetadataMarkup(), /先拿矿 &lt;守住&gt; &amp; 发育/);
+    assert.doesNotMatch(editor.mapMetadataMarkup(), /<守住>/);
+    assert.equal(editor.undo(), true);
+    assert.equal(element('regionText').value, '原提示');
+    assert.equal(editor.redo(), true);
+    const imported = createEditor();
+    imported.editor.applyLayout(output);
+    imported.editor.setRegionBrush(1, 'front');
+    assert.equal(imported.element('regionText').value, '先拿矿 <守住> & 发育');
+    editor.setRegionBrush(2, 'front');
+    assert.equal(element('regionText').value, '另一方');
+});
+
+test('清空气泡文案恢复倾向默认文本，不影响区域和其他配置', () => {
+    const { editor, element } = createEditor();
+    editor.applyLayout({
+        version: 3, rows: 8, columns: 12, playerCount: 2, cityMode: 'select',
+        ascii: Array(8).fill('111111111111'),
+        regions: [{ section: 1, depth: 'mid', cells: [84], tendency: 'control', text: '自定义' }],
+    });
+    editor.setRegionBrush(1, 'mid');
+    editor.setRegionText('   ');
+    assert.equal(Object.hasOwn(editor.buildJSON().regions[0], 'text'), false);
+    assert.match(editor.mapMetadataMarkup(), /中区 · 控场/);
+    assert.equal(element('regionText').value, '');
+    assert.equal(editor.undo(), true);
+    assert.equal(element('regionText').value, '自定义');
+});
+
+test('未画区域不能写入气泡文案，已有文案不经编辑保持原样', () => {
+    const { editor, element } = createEditor();
+    editor.applyLayout({
+        version: 3, rows: 8, columns: 12, playerCount: 2, cityMode: 'select',
+        ascii: Array(8).fill('111111111111'),
+        regions: [{ section: 1, depth: 'front', cells: [84], text: ' 保持原样 ' }],
+    });
+    editor.setRegionBrush(1, 'back');
+    const before = JSON.stringify(editor.buildJSON());
+    assert.equal(element('regionText').disabled, true);
+    editor.setRegionText('不会生成空区域');
+    assert.equal(JSON.stringify(editor.buildJSON()), before);
+    editor.setRegionBrush(1, 'front');
+    assert.equal(element('regionText').disabled, false);
+    assert.equal(element('regionText').value, ' 保持原样 ');
+    editor.setRegionText(element('regionText').value);
+    assert.equal(JSON.stringify(editor.buildJSON()), before, '原样保存不清理既有文案的空白');
+});
+
+test('输入气泡文案时按回车应用，按Ctrl+S也先提交当前文案', () => {
+    const { editor, element, windowEvents } = createEditor();
+    editor.applyLayout({
+        version: 3, rows: 8, columns: 12, playerCount: 2, cityMode: 'select',
+        ascii: Array(8).fill('111111111111'),
+        regions: [{ section: 1, depth: 'front', cells: [84], tendency: 'rush' }],
+    });
+    editor.setRegionBrush(1, 'front');
+    element('regionText').value = '回车应用文案';
+    element('regionText').listeners.keydown.call(element('regionText'), { key: 'Enter', preventDefault() {} });
+    assert.equal(editor.buildJSON().regions[0].text, '回车应用文案');
+    element('regionText').value = '保存最新文案';
+    windowEvents.keydown.forEach(handler => handler({
+        key: 's', ctrlKey: true,
+        target: { tagName: 'INPUT', id: 'regionText', value: element('regionText').value },
+        preventDefault() {},
+    }));
+    assert.equal(editor.buildJSON().regions[0].text, '保存最新文案');
+});
+
+
+test('缩略图定位计算考虑留白，保留倍率、地图内容及撤销历史', () => {
+    const { editor, element, board } = createEditor();
+    board.parentElement = { clientWidth: 1000, clientHeight: 700 };
+    board.style = {};
+    const mini = element('miniMap');
+    mini.getBoundingClientRect = () => ({ left: 10, top: 20, width: 180, height: 140 });
+    editor.zoomAt(0, 0, 2);
+    const bounds = editor.miniMapBounds();
+    const scale = Math.min(180 / bounds.width, 140 / bounds.height);
+    const x = bounds.width / 4, y = -bounds.height / 4;
+    const before = JSON.stringify(editor.buildJSON()), undoDepth = editor.state().undoDepth;
+    let writes = 0, markup = element('miniMapTiles').innerHTML;
+    Object.defineProperty(element('miniMapTiles'), 'innerHTML', { get: () => markup, set: value => { writes++; markup = value; } });
+    assert.equal(editor.navigateMiniMap(10 + 90 + x * scale, 20 + 70 + y * scale), true);
+    assert.ok(Math.abs(editor.state().panX - x) < 1e-8);
+    assert.ok(Math.abs(editor.state().panY - y) < 1e-8);
+    assert.equal(editor.state().zoom, 2);
+    assert.equal(editor.state().undoDepth, undoDepth);
+    assert.equal(JSON.stringify(editor.buildJSON()), before);
+    assert.equal(writes, 0, '镜头移动只更新视口框，不重建缩略图图块');
+    const frame = editor.miniMapViewRect(), view = editor.viewportRect();
+    assert.ok(frame.x >= bounds.x && frame.y >= bounds.y);
+    assert.ok(frame.x + frame.width <= bounds.x + bounds.width + 1e-8);
+    assert.ok(frame.y + frame.height <= bounds.y + bounds.height + 1e-8);
+    assert.ok(frame.width <= view.width && frame.height <= view.height);
+    mini.listeners.keydown({ key: 'Home', preventDefault() {}, stopPropagation() {} });
+    assert.equal(editor.state().zoom, 1);
+    assert.equal(editor.state().panX, 0);
+    assert.equal(editor.state().panY, 0);
+});
+
+test('缩略图拖动只移动视口，松开后停止，并与绘制和撤销同步', () => {
+    const { editor, element, windowEvents } = createEditor();
+    const mini = element('miniMap');
+    mini.getBoundingClientRect = () => ({ left: 0, top: 0, width: 160, height: 140 });
+    const before = JSON.stringify(editor.buildJSON());
+    mini.listeners.pointerdown({ button: 0, clientX: 80, clientY: 30, preventDefault() {} });
+    mini.listeners.pointermove({ clientX: 80, clientY: 100 });
+    assert.ok(editor.state().panY > 0);
+    windowEvents.pointerup.forEach(handler => handler());
+    const panY = editor.state().panY;
+    mini.listeners.pointermove({ clientX: 80, clientY: 50 });
+    assert.equal(editor.state().panY, panY);
+    assert.equal(JSON.stringify(editor.buildJSON()), before);
+    const initial = editor.miniMapMarkup();
+    const snapshot = editor.snapshot();
+    editor.paint(19, 0, 'void');
+    editor.commitUndo(snapshot);
+    assert.notEqual(editor.miniMapMarkup(), initial);
+    assert.equal(element('miniMapTiles').innerHTML, editor.miniMapMarkup());
+    editor.undo();
+    assert.equal(editor.miniMapMarkup(), initial);
+    assert.equal(element('miniMapTiles').innerHTML, initial);
+});
+
+test('辅助标注按屏幕格子尺寸自动简化，放大和窗口变化时恢复且不修改配置', () => {
+    const { editor, board, element, windowEvents } = createEditor();
+    const stage = { clientWidth: 1000, clientHeight: 200 };
+    board.parentElement = stage;
+    board.style = {};
+    const before = JSON.stringify(editor.buildJSON());
+    windowEvents.resize.forEach(handler => handler());
+    assert.equal(editor.detailsReduced(), true);
+    assert.equal(element('detailHint').hidden, false);
+    editor.zoomAt(0, 0, 6);
+    assert.equal(editor.detailsReduced(), false);
+    assert.equal(element('detailHint').hidden, true);
+    editor.resetView();
+    stage.clientHeight = 900;
+    windowEvents.resize.forEach(handler => handler());
+    assert.equal(editor.detailsReduced(), false);
+    assert.equal(JSON.stringify(editor.buildJSON()), before);
+});
+
+test('B与E切换当前画笔的绘制和擦除，左键擦除可作为一步撤销', () => {
+    const { editor, element, board, windowEvents } = createEditor();
+    element('helpModal').hidden = true;
+    editor.applyLayout({ version: 3, rows: 8, columns: 12, playerCount: 2, cityMode: 'select', ascii: Array(8).fill('111111111111') });
+    const before = JSON.stringify(editor.buildJSON());
+    const key = value => windowEvents.keydown.forEach(handler => handler({ key: value, target: { tagName: 'DIV' }, preventDefault() {} }));
+    const initialUndoDepth = editor.state().undoDepth;
+    key('E');
+    assert.equal(editor.state().eraseBrush, true);
+    assert.match(element('toolStatus').textContent, /擦除/);
+    assert.equal(JSON.stringify(editor.buildJSON()), before, '切换工具不修改地图');
+    const center = editor.hexCenter(7, 0);
+    board.listeners.pointerdown({ button: 0, clientX: center.x, clientY: center.y, preventDefault() {} });
+    key('b');
+    assert.equal(editor.state().eraseBrush, true, '笔画未结束时不切换模式');
+    windowEvents.pointerup.forEach(handler => handler());
+    assert.equal(editor.state().grid[7][0], 0, '仅分区擦除恢复中立地形');
+    assert.equal(editor.state().undoDepth, initialUndoDepth + 1);
+    assert.equal(editor.undo(), true);
+    assert.equal(JSON.stringify(editor.buildJSON()), before);
+    key('b');
+    assert.equal(editor.state().eraseBrush, false);
+    assert.equal(editor.state().brush, 'partition', '恢复之前选择的画笔');
+});
+
+test('数字1、2、3切换刷头大小，保留当前工具分类、地图和撤销历史', () => {
+    const { editor, element, windowEvents } = createEditor();
+    element('helpModal').hidden = true;
+    editor.setToolCategory('resources');
+    const before = JSON.stringify(editor.buildJSON());
+    const undoDepth = editor.state().undoDepth;
+    for (const [key, radius] of [['3', 2], ['1', 0], ['2', 1]] as const) {
+        windowEvents.keydown.forEach(handler => handler({ key, target: { tagName: 'DIV' }, preventDefault() {} }));
+        assert.equal(editor.state().brushRadius, radius);
+        assert.equal(element('groupResources').hidden, false, '不切换左侧分类');
+        assert.equal(JSON.stringify(editor.buildJSON()), before);
+        assert.equal(editor.state().undoDepth, undoDepth);
+    }
+});
+
+test('文字编辑、输入法、修饰键和帮助弹窗不触发B、E或数字刷头快捷键', () => {
+    const { editor, element, windowEvents } = createEditor();
+    element('helpModal').hidden = true;
+    const dispatch = extra => ['e', '3'].forEach(key => windowEvents.keydown.forEach(handler => handler({ key, target: { tagName: 'DIV' }, preventDefault() {}, ...extra })));
+    for (const tagName of ['INPUT', 'TEXTAREA', 'SELECT']) dispatch({ target: { tagName } });
+    dispatch({ target: { tagName: 'SPAN', isContentEditable: true } });
+    dispatch({ isComposing: true });
+    dispatch({ ctrlKey: true });
+    dispatch({ metaKey: true });
+    dispatch({ altKey: true });
+    assert.equal(editor.state().eraseBrush, false);
+    assert.equal(editor.state().brushRadius, 0);
+    element('helpModal').hidden = false;
+    dispatch({});
+    assert.equal(editor.state().eraseBrush, false);
+    assert.equal(editor.state().brushRadius, 0);
+    element('helpModal').hidden = true;
+    dispatch({});
+    assert.equal(editor.state().eraseBrush, true);
+    assert.equal(editor.state().brushRadius, 2);
+});
+
+test('资源和区域擦除复用右键规则，不把底层地形擦成虚空', () => {
+    const { editor, board, windowEvents } = createEditor();
+    editor.applyLayout({ version: 3, rows: 8, columns: 12, playerCount: 2, cityMode: 'select', ascii: Array(8).fill('000000000000'), resourcePoints: [{ row: 7, column: 0, pool: { chest: 1 } }] });
+    editor.setResourceBrush('chest');
+    editor.setPaintMode(true);
+    const click = (row, column) => {
+        const center = editor.hexCenter(row, column);
+        board.listeners.pointerdown({ button: 0, clientX: center.x, clientY: center.y, preventDefault() {} });
+        windowEvents.pointerup.forEach(handler => handler());
+    };
+    click(7, 0);
+    assert.equal(editor.state().resourcePoints.length, 0);
+    assert.equal(editor.state().grid[7][0], 0);
+    assert.equal(editor.undo(), true);
+    assert.equal(editor.state().resourcePoints.length, 1);
+    editor.applyLayout({ version: 3, rows: 8, columns: 12, playerCount: 2, cityMode: 'select', ascii: Array(8).fill('111111111111'), regions: [{ section: 1, depth: 'front', cells: [84, 85], tendency: 'rush', text: '保留提示' }] });
+    editor.setRegionBrush(1, 'front');
+    assert.equal(editor.state().eraseBrush, false, '选择新画笔恢复绘制');
+    editor.setPaintMode(true);
+    click(7, 0);
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.state().regions[0].cells)), [85]);
+    assert.equal(editor.state().grid[7][0], 1);
+    assert.equal(editor.undo(), true);
+    assert.equal(editor.state().regions[0].text, '保留提示');
+});
+
+test('装饰擦除可撤销且不删除锁定装饰，空白处不会放置新装饰', () => {
+    const { editor, board, windowEvents } = createEditor();
+    editor.setDecorBrush('image/decor/test');
+    const first = editor.addFreeDecor('image/decor/test', 0, 0);
+    const locked = editor.addFreeDecor('image/decor/test', 50, 0);
+    editor.setFreeDecorLocked(locked, true);
+    editor.setPaintMode(true);
+    const click = id => {
+        board.listeners.pointerdown({ button: 0, clientX: 0, clientY: 0, target: { closest: () => ({ dataset: { freeDecorId: String(id) } }) }, preventDefault() {} });
+        windowEvents.pointerup.forEach(handler => handler());
+    };
+    click(locked);
+    assert.equal(editor.state().freeDecor.length, 2);
+    click(first);
+    assert.equal(editor.state().freeDecor.length, 1);
+    assert.equal(editor.undo(), true);
+    assert.equal(editor.state().freeDecor.length, 2);
+    board.listeners.pointerdown({ button: 0, clientX: 200, clientY: 200, preventDefault() {} });
+    assert.equal(editor.state().freeDecor.length, 2);
+});
+
+
+test('行列标尺从左下角1开始编号，按真实格心和实际视口投影', () => {
+    const { editor, board, windowEvents } = createEditor();
+    board.parentElement = { clientWidth: 1100, clientHeight: 700 };
+    board.style = {};
+    windowEvents.resize.forEach(handler => handler());
+    const layout = editor.rulerLayout();
+    assert.equal(layout.referenceColumn, 0);
+    assert.equal(layout.horizontal[0].index, 0);
+    assert.equal(layout.horizontal[0].value, 1);
+    assert.equal(layout.horizontal.at(-1).value, editor.state().cols);
+    assert.equal(layout.vertical[0].value, editor.state().rows);
+    assert.equal(layout.vertical.at(-1).value, 1);
+    for (const tick of layout.horizontal) {
+        const center = editor.hexCenter(0, tick.index);
+        assert.ok(Math.abs(tick.pixel - (center.x - layout.view.x) * layout.width / layout.view.width) < 1e-8);
+    }
+    for (const tick of layout.vertical) {
+        const faceY = editor.hexCenter(tick.index, 0).y - editor.geometry.topLift;
+        assert.ok(Math.abs(tick.pixel - (faceY - layout.view.y) * layout.height / layout.view.height) < 1e-8);
+    }
+    const initialStep = layout.horizontal[1].pixel - layout.horizontal[0].pixel;
+    editor.zoomAt(0, 0, 2);
+    const zoomed = editor.rulerLayout();
+    const step = zoomed.horizontal[1].pixel - zoomed.horizontal[0].pixel;
+    assert.ok(Math.abs(step / initialStep - 2) < 0.001);
+});
+
+test('悬停奇数列时行标尺正确错开半行，选中行列始终有编号且不改配置', () => {
+    const { editor, board, windowEvents } = createEditor();
+    board.parentElement = { clientWidth: 900, clientHeight: 500 };
+    board.style = {};
+    windowEvents.resize.forEach(handler => handler());
+    const before = JSON.stringify(editor.buildJSON()), history = editor.state().undoDepth;
+    const even = editor.rulerLayout();
+    const point = editor.hexCenter(5, 1);
+    board.listeners.pointermove({ clientX: point.x, clientY: point.y });
+    const odd = editor.rulerLayout();
+    assert.equal(odd.referenceColumn, 1);
+    assert.equal(odd.activeColumn, 1);
+    assert.equal(odd.activeRow, 5);
+    const beforeY = even.vertical.find(tick => tick.index === 5).pixel;
+    const afterY = odd.vertical.find(tick => tick.index === 5).pixel;
+    assert.ok(Math.abs((afterY - beforeY) + 2 * editor.geometry.phase * odd.height / odd.view.height) < 1e-8);
+    assert.equal(odd.horizontal.find(tick => tick.index === 1).label, true);
+    assert.equal(odd.vertical.find(tick => tick.index === 5).label, true);
+    assert.equal(JSON.stringify(editor.buildJSON()), before);
+    assert.equal(editor.state().undoDepth, history);
+    board.listeners.pointerleave();
+    assert.equal(editor.rulerLayout().activeColumn, -1);
+    assert.equal(editor.rulerLayout().referenceColumn, 0);
+});
+
+test('标尺随缩略图平移和窗口变化同步，小格减少编号并正确裁掉离屏刻度', () => {
+    const { editor, board, element, windowEvents } = createEditor();
+    const viewport = { clientWidth: 300, clientHeight: 250 };
+    board.parentElement = viewport;
+    board.style = {};
+    element('miniMap').getBoundingClientRect = () => ({ left: 0, top: 0, width: 160, height: 140 });
+    windowEvents.resize.forEach(handler => handler());
+    const small = editor.rulerLayout();
+    assert.ok(small.horizontal.filter(tick => tick.label).length < small.horizontal.length);
+    const before = JSON.stringify(editor.buildJSON());
+    editor.zoomAt(0, 0, 4);
+    editor.navigateMiniMap(80, 100);
+    const panned = editor.rulerLayout();
+    assert.notEqual(panned.view.y, small.view.y);
+    for (const tick of panned.horizontal) assert.ok(tick.pixel >= 0 && tick.pixel <= panned.width);
+    for (const tick of panned.vertical) assert.ok(tick.pixel >= 0 && tick.pixel <= panned.height);
+    viewport.clientWidth = 1000;
+    viewport.clientHeight = 800;
+    windowEvents.resize.forEach(handler => handler());
+    const resized = editor.rulerLayout();
+    assert.equal(resized.width, 1000);
+    assert.equal(resized.height, 800);
+    assert.equal(JSON.stringify(editor.buildJSON()), before);
+});
+
+test('鼠标在同一格内移动不重复重建四条标尺，移出后清除高亮', () => {
+    const { editor, board, element, windowEvents } = createEditor();
+    board.parentElement = { clientWidth: 1000, clientHeight: 700 };
+    board.style = {};
+    let writes = 0;
+    for (const side of ['Top', 'Bottom', 'Left', 'Right']) {
+        let markup = '';
+        Object.defineProperty(element('ruler' + side), 'innerHTML', { get: () => markup, set: value => { writes++; markup = value; } });
+    }
+    windowEvents.resize.forEach(handler => handler());
+    assert.equal(writes, 4);
+    const point = editor.hexCenter(4, 2);
+    board.listeners.pointermove({ clientX: point.x, clientY: point.y });
+    assert.equal(writes, 8);
+    board.listeners.pointermove({ clientX: point.x + 1, clientY: point.y + 1 });
+    assert.equal(writes, 8);
+    board.listeners.pointerleave();
+    assert.equal(writes, 12);
+    assert.doesNotMatch(element('rulerTop').innerHTML, /fill="#fbbf24"/);
+});
+
+
+test('左下为1列1行，右上为总列总行，鼠标读数与标尺一致且不改变内部坐标', () => {
+    const { editor, element, board } = createEditor();
+    editor.applyLayout({ version: 3, rows: 8, columns: 12, playerCount: 2, cityMode: 'select', ascii: Array(8).fill('111111111111') });
+    board.parentElement = { clientWidth: 1100, clientHeight: 900 };
+    board.style = {};
+    const before = JSON.stringify(editor.buildJSON());
+    for (const [row, column, shownRow, shownColumn] of [[7, 0, 1, 1], [0, 11, 8, 12], [3, 5, 5, 6]]) {
+        const point = editor.hexCenter(row, column);
+        board.listeners.pointermove({ clientX: point.x, clientY: point.y });
+        const layout = editor.rulerLayout();
+        assert.equal(layout.horizontal.find(tick => tick.active).value, shownColumn);
+        assert.equal(layout.vertical.find(tick => tick.active).value, shownRow);
+        assert.match(element('cursorInfo').textContent, new RegExp('列 ' + shownColumn + ' · 行 ' + shownRow + ' ·'));
+        assert.equal(layout.activeColumn, column);
+        assert.equal(layout.activeRow, row);
+    }
+    assert.equal(JSON.stringify(editor.buildJSON()), before);
+});
+
+test('标尺突出奇数中点和偶数中央两格，缩小时合并中央编号且配置不变', () => {
+    const { editor, board, element, windowEvents } = createEditor();
+    board.parentElement = { clientWidth: 1100, clientHeight: 900 };
+    board.style = {};
+    for (const [rows, columns] of [[9, 11], [8, 12]]) {
+        editor.applyLayout({ version: 3, rows, columns, playerCount: 2, cityMode: 'select', ascii: Array(rows).fill('1'.repeat(columns)) });
+        const before = JSON.stringify(editor.buildJSON());
+        windowEvents.resize.forEach(handler => handler());
+        const layout = editor.rulerLayout();
+        for (const [ticks, count] of [[layout.horizontal, columns], [layout.vertical, rows]]) {
+            const values = [...new Set([Math.floor((count + 1) / 2), Math.ceil((count + 1) / 2)])];
+            assert.deepEqual(Array.from(ticks.filter(tick => tick.center), tick => tick.value).sort((a, b) => a - b), values);
+            assert.ok(ticks.filter(tick => tick.center).every(tick => tick.label));
+        }
+        assert.match(element('rulerTop').innerHTML, /class="rulerCenter"/);
+        assert.equal(JSON.stringify(editor.buildJSON()), before);
+    }
+    board.parentElement.clientWidth = 80;
+    board.parentElement.clientHeight = 80;
+    windowEvents.resize.forEach(handler => handler());
+    assert.match(element('rulerTop').innerHTML, />6\/7<\/text>/);
+    assert.match(element('rulerLeft').innerHTML, />4\/5<\/text>/);
+});
+
+test('合并画笔一笔写入分区和纵深，整笔撤销重做并用现有字段往返', () => {
+    const { editor, board, windowEvents, element } = createEditor();
+    editor.applyLayout({ version: 3, rows: 8, columns: 12, playerCount: 2, cityMode: 'select', mirrorVertical: false, ascii: Array(8).fill('NNNNNNNNNNNN') });
+    editor.setPartitionBrush(1, 'front');
+    const before = JSON.stringify(editor.buildJSON()), history = editor.state().undoDepth;
+    const center = editor.hexCenter(6, 2);
+    board.listeners.pointerdown({ button: 0, clientX: center.x, clientY: center.y, preventDefault() {} });
+    editor.paintCells([{ row: 6, column: 3 }, { row: 6, column: 4 }]);
+    windowEvents.pointerup.forEach(handler => handler());
+    const output = JSON.parse(JSON.stringify(editor.buildJSON()));
+    assert.equal(editor.state().undoDepth, history + 1);
+    for (const c of [2, 3, 4]) assert.equal(editor.state().grid[6][c], 1);
+    assert.deepEqual(output.regions, [{ section: 1, depth: 'front', cells: [74, 75, 76], tendency: 'rush' }]);
+    assert.equal(element('regionText').disabled, false);
+    assert.equal(editor.undo(), true);
+    assert.equal(JSON.stringify(editor.buildJSON()), before);
+    assert.equal(editor.redo(), true);
+    const imported = createEditor().editor;
+    imported.applyLayout(output);
+    assert.deepEqual(JSON.parse(JSON.stringify(imported.buildJSON())), output);
+    assert.ok(!Object.hasOwn(output, 'partitionDepth'), '工具状态不写进配置');
+});
+
+test('仅分区可先铺归属再补纵深，重复涂刷保留文案倾向且不产生改动', () => {
+    const create = () => {
+        const { editor } = createEditor();
+        editor.applyLayout({ version: 3, rows: 8, columns: 12, playerCount: 2, cityMode: 'select', mirrorVertical: false, ascii: Array(8).fill('NNNNNNNNNNNN') });
+        return editor;
+    };
+    const first = create(), second = create();
+    first.setPartitionBrush(1, 'none');
+    first.paint(5, 4);
+    assert.equal(first.state().grid[5][4], 1);
+    assert.equal(first.buildJSON().regions, undefined);
+    first.setPartitionBrush(1, 'back');
+    first.paint(5, 4);
+    second.setPartitionBrush(1, 'back');
+    second.paint(5, 4);
+    assert.equal(JSON.stringify(first.buildJSON()), JSON.stringify(second.buildJSON()));
+    first.setRegionText('稳住发育');
+    first.setRegionTendency('control');
+    const before = JSON.stringify(first.buildJSON());
+    assert.equal(first.paint(5, 4), false);
+    assert.equal(JSON.stringify(first.buildJSON()), before);
+    first.setPartitionBrush(1, 'none');
+    assert.equal(first.paint(5, 4), false, '仅分区不清除同玩家已有纵深');
+    assert.equal(JSON.stringify(first.buildJSON()), before);
+    first.setPartitionBrush(1, 'mid');
+    first.paint(5, 4);
+    assert.deepEqual(JSON.parse(JSON.stringify(first.buildJSON().regions)), [{ section: 1, depth: 'mid', cells: [64], tendency: 'control' }]);
+});
+
+test('纵深擦除保留玩家归属，仅分区擦除还原中立且均可撤销', () => {
+    const { editor, board, windowEvents } = createEditor();
+    editor.applyLayout({ version: 3, rows: 8, columns: 12, playerCount: 2, cityMode: 'select', mirrorVertical: false, ascii: Array(8).fill('NNNNNNNNNNNN') });
+    editor.setPartitionBrush(1, 'front');
+    editor.paint(5, 3);
+    const before = JSON.stringify(editor.buildJSON());
+    const point = editor.hexCenter(5, 3);
+    editor.setPaintMode(true);
+    board.listeners.pointerdown({ button: 0, clientX: point.x, clientY: point.y, preventDefault() {} });
+    windowEvents.pointerup.forEach(handler => handler());
+    assert.equal(editor.state().grid[5][3], 1);
+    assert.equal(editor.buildJSON().regions, undefined);
+    editor.undo();
+    assert.equal(JSON.stringify(editor.buildJSON()), before);
+    editor.setPartitionBrush(1, 'none');
+    board.listeners.pointerdown({ button: 2, clientX: point.x, clientY: point.y, preventDefault() {} });
+    windowEvents.pointerup.forEach(handler => handler());
+    assert.equal(editor.state().grid[5][3], 0);
+    assert.equal(editor.buildJSON().regions, undefined);
+    editor.undo();
+    assert.equal(JSON.stringify(editor.buildJSON()), before);
+});
+
+test('合并画笔跳过虚空与其他玩家，涂资源格时保留资源及既有元数据', () => {
+    const { editor, element } = createEditor();
+    editor.applyLayout({ version: 3, rows: 8, columns: 12, playerCount: 2, cityMode: 'select', mirrorVertical: false, ascii: Array(8).fill('NNNNNNNNNNNN'), resourcePoints: [{ row: 2, column: 3, pool: { chest: 2 } }], regions: [{ section: 2, depth: 'front', cells: [28], text: '保留', tendency: 'rush' }] });
+    editor.paint(2, 1, 'void');
+    editor.paint(2, 2, 2);
+    editor.setPartitionBrush(1, 'front');
+    assert.equal(editor.paintCells([{ row: 2, column: 1 }, { row: 2, column: 2 }, { row: 2, column: 3 }]), true);
+    assert.equal(element('partitionNotice').hidden, false);
+    assert.match(element('partitionNotice').textContent, /已跳过 2 组/);
+    assert.equal(editor.state().grid[2][1], -1);
+    assert.equal(editor.state().grid[2][2], 2);
+    assert.equal(editor.state().grid[2][3], 1);
+    editor.paint(2, 4);
+    assert.equal(editor.state().grid[2][4], 1);
+    assert.equal(editor.state().regions.some(region => region.section === 2 && region.cells.includes(28)), false, '新归属清理该格旧的不匹配标记');
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.buildJSON().resourcePoints)), [{ row: 2, column: 3, pool: { chest: 2 } }]);
+});
+
+test('合并画笔沿用2与4人上下左右镜像，3人仅修改手工涂刷位置', () => {
+    for (const count of [2, 3, 4]) {
+        const { editor } = createEditor();
+        editor.applyLayout({ version: 3, rows: 8, columns: 12, playerCount: count, cityMode: 'select', mirrorVertical: count !== 3, mirrorHorizontal: count === 4, ascii: Array(count === 3 ? 8 : 4).fill('N'.repeat(count === 4 ? 6 : 12)) });
+        editor.setPartitionBrush(1, 'front');
+        assert.equal(editor.paint(6, 2), true);
+        const expected = count === 2 ? [[6, 2, 1], [1, 2, 2]] : count === 4 ? [[6, 2, 1], [1, 2, 2], [6, 9, 3], [1, 9, 4]] : [[6, 2, 1]];
+        for (const [row, column, section] of expected) {
+            assert.equal(editor.state().grid[row][column], section);
+            assert.ok(editor.state().regions.some(region => region.section === section && region.depth === 'front' && region.cells.includes(row * 12 + column)));
+        }
+        assert.equal(editor.state().regions.length, expected.length);
+        if (count === 3) assert.equal(editor.state().grid[1][2], 0);
+        else {
+            editor.setPartitionBrush(2, 'mid');
+            editor.paint(1, 2);
+            assert.ok(editor.state().regions.some(region => region.section === 2 && region.depth === 'mid' && region.cells.includes(14)));
+            assert.equal(editor.state().grid[6][2], 1);
+        }
+    }
+});
+
+test('镜像分区保留对应格资源，奇数中线不重复记录，固定主城模式也能一笔涂刷', () => {
+    const { editor } = createEditor();
+    editor.applyLayout({ version: 3, rows: 9, columns: 11, playerCount: 4, cityMode: 'select', mirrorVertical: true, mirrorHorizontal: true, ascii: Array(5).fill('NNNNNN'), resourcePoints: [{ row: 1, column: 8, pool: { gold: 1 } }] });
+    editor.setPartitionBrush(1, 'front');
+    assert.equal(editor.paint(7, 2), true);
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.buildJSON().resourcePoints)), [{ row: 1, column: 8, pool: { gold: 1 } }]);
+    editor.paint(4, 5);
+    assert.equal(editor.buildJSON().regions.filter(region => region.cells.includes(49)).length, 1);
+    const fixed = createEditor().editor;
+    fixed.setPartitionBrush(1, 'mid');
+    fixed.paint(14, 5);
+    assert.equal(fixed.state().grid[14][5], 1);
+    assert.ok(fixed.state().regions.some(region => region.section === 1 && region.depth === 'mid' && region.cells.includes(159)));
+});
+
+test('显示美术资源默认开启，关闭不隐藏背景图且不改地图与历史', () => {
+    const { editor, element, board } = createEditor();
+    const classes = new Set();
+    board.classList = { add: name => classes.add(name), remove: name => classes.delete(name) };
+    editor.addFreeDecor('rock', 10, 20);
+    editor.addResourcePoint(12, 3, 'chest', 1);
+    const before = JSON.stringify(editor.buildJSON()), history = editor.state().undoDepth;
+    assert.equal(element('optShowArt').checked, true);
+    element('optShowArt').checked = false;
+    element('optShowArt').listeners.change.call(element('optShowArt'));
+    assert.equal(classes.has('artHidden'), true);
+    assert.equal(element('optBackground').checked, true);
+    assert.equal(editor.state().selectedFreeDecorId, null);
+    assert.equal(JSON.stringify(editor.buildJSON()), before);
+    assert.equal(editor.state().undoDepth, history);
+    editor.setArtworkHidden(false);
+    assert.equal(classes.has('artHidden'), false);
+    assert.equal(element('optShowArt').checked, true);
+    assert.equal(JSON.stringify(editor.buildJSON()), before);
+    const html = readFileSync('tools/map-editor/index.html', 'utf8');
+    assert.match(html, /id="optShowArt" checked>显示美术资源/);
+    assert.match(html, /#board\.artHidden \.freeDecorLayer[^}]*\.resourceLayer[^}]*display:none/);
+    assert.doesNotMatch(html, /#board\.artHidden \.backgroundLayer/);
+});
+
+test('隐藏美术时不能误放不可见装饰，改尺寸后仍隐藏，恢复后可以继续摆放', () => {
+    const { editor, board, element } = createEditor();
+    editor.setDecorBrush('rock');
+    editor.setArtworkHidden(true);
+    board.listeners.pointerdown({ button: 0, clientX: 200, clientY: 200, preventDefault() {} });
+    assert.equal(editor.state().freeDecor.length, 0);
+    editor.setSize(22, 13);
+    assert.equal(element('optShowArt').checked, false);
+    editor.setArtworkHidden(false);
+    board.listeners.pointerdown({ button: 0, clientX: 200, clientY: 200, preventDefault() {} });
+    assert.equal(editor.state().freeDecor.length, 1);
 });

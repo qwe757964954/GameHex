@@ -204,6 +204,6 @@ test('不许再用「视口宽」算卡片内坐标（图标被推出卡片的�
 
 test('每一轮 refreshInfo 都必须重排（内容方法里有 6 个提前 return）', () => {
     const body = stripped(PAGE_SRC);
-    assert.match(body, /private refreshInfo\(\): void \{\s*this\.refreshInfoContent\(\);\s*this\.applyInfoLayout\(\);\s*\}/,
+    assert.match(body, /private refreshInfo\(\): void \{\s*this\.refreshInfoContent\(\);\s*this\.applyInfoLayout\(\);\s*this\.refreshTargetPanel\(\);\s*\}/,
         '排版要放在外层包装里，否则某个分支提前 return 就会留下上一轮的图标 / 按钮位置');
 });

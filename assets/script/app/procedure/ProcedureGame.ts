@@ -48,29 +48,39 @@ export class ProcedureGame extends ProcedureBase {
     private preparedResources: ZCGamePreparedResources | null = null;
 
     async onPreload(params?: ZCGameEntryParams, context?: ProcedurePreloadContext): Promise<void> {
+        this.sessionAssets?.pauseWarmup?.();
         if (params?.preload) {
             if (!context) throw new Error('移交匹配预加载资源需要流程资源作用域');
-            const prepared = await params.preload.ready;
-            if (context.cancelled) return;
-            params.preload.transferTo(context.resources);
+            const preload = params.preload;
+            context.resources.defer(() => preload.releaseFromMatching());
+            const prepared = await preload.ready;
+            if (context.cancelled || context.resources.disposed) return;
+            preload.transferTo(context.resources);
             this.preparedResources = prepared;
             this.log('复用匹配期间准备的对局资源');
             return;
         }
+        let playerCount: 2 | 3 | 4 | undefined = params?.pve?.playerCount;
+        if (params?.slgBattleType) {
+            const count = params.battle?.units.length;
+            if (count !== 2 && count !== 3 && count !== 4) throw new Error('SLG 开战数据缺少有效参战人数');
+            playerCount = count;
+        }
         const loader = new ZCGameLoader(
-            this.assets,
+            this.sessionAssets?.reusableAssets ?? this.assets,
             this.configs,
             MAP_DIRECTORY,
             Math.random,
-            params?.pve?.playerCount,
+            playerCount,
         );
-        const prepared = await loader.prepare(context?.resources);
+        const prepared = await loader.prepare(context?.resources, params?.battle, params?.pve?.waves.map((wave) => wave.pvpCardId));
         if (context?.cancelled) return;
         this.preparedResources = prepared;
         this.log('对局配置、地图与显示资源预加载完成');
     }
 
     onEnter(_params?: ZCGameEntryParams): void {
+        const sceneStartedAt = Date.now();
         if (!this.preparedResources) {
             this.error('对局资源尚未准备完成，拒绝进入空白对局');
             throw new Error('对局资源尚未准备完成，无法初始化 ZCGame');
@@ -91,7 +101,8 @@ export class ProcedureGame extends ProcedureBase {
         const captureOptions = { allowUnresolvedSelect: true } as const;
         const baseConfig = this.preparedResources.baseMatchConfig;
         const requestedEnemyCards = new Set((pve?.enemyCardIds ?? []).map(String));
-        const pveEnemyDeck = requestedEnemyCards.size > 0
+        // 本地关卡名单仅供离线使用；提前裁剪会让正式回包中的英雄在构筑前就被丢掉。
+        const pveEnemyDeck = !battle && requestedEnemyCards.size > 0
             ? baseConfig.enemyDeck.filter((card) => requestedEnemyCards.has(card.id))
             : baseConfig.enemyDeck;
         const pveUnitIds = Array.from(new Set(pveEnemyDeck.flatMap((card) => card.unitId ? [card.unitId] : [])));
@@ -131,7 +142,7 @@ export class ProcedureGame extends ProcedureBase {
             ? {
                 ...baseConfig,
                 ...(pveEnemyDeck.length > 0 ? { enemyDeck: pveEnemyDeck } : {}),
-                ...(pve.mode === 'match' && pve.enemyTeamCardIds.length > 0 ? {
+                ...(!battle && pve.mode === 'match' && pve.enemyTeamCardIds.length > 0 ? {
                     ownerDecks: buildZCPveEnemyDecks(baseConfig.enemyDeck, pve.enemyTeamCardIds),
                 } : {}),
                 ...(pveDefence?.waves.length ? { pveDefence } : {}),
@@ -196,11 +207,12 @@ export class ProcedureGame extends ProcedureBase {
             playerAvatars,
             seatProfiles,
             pveContext,
+            slgBattleType: entry?.slgBattleType ?? null,
         };
         this.game = this.host.addComponent(ZCGame);
         this.game.initialize(gameEntry);
         this.preparedResources = null;
-        this.log('进入对局流程');
+        this.log(`[BattleLoading] 场景创建完成 ${Math.max(0, Date.now() - sceneStartedAt)}ms`);
     }
 
     onPreloadCancelled(): void {

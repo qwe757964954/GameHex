@@ -20,6 +20,8 @@
   header h1 { font-size: 15px; font-weight: 500; margin: 0; }
   header .meta { color: #888780; font-size: 12px; }
   header .spacer { flex: 1; }
+  header .toolbarSwitches { display:flex; flex-direction:column; gap:4px; flex:none; }
+  header .toolbarSwitchRow { display:grid; grid-template-columns:92px 104px; align-items:center; column-gap:8px; }
   header input[type=text] {
     font: inherit; padding: 5px 9px; border: 1px solid #D3D1C7; border-radius: 6px;
     background: #fff; color: inherit;
@@ -50,10 +52,36 @@
   .group[hidden] { display: none; }
 
   .stage {
-    flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center;
-    padding: 14px; position: relative;
+    flex: 1; min-width: 0; min-height: 0; display:grid;
+    grid-template-columns:28px minmax(0,1fr) 28px; grid-template-rows:28px minmax(0,1fr) 28px;
+    padding:0; position:relative; overflow:hidden;
   }
-  #board { height: 100%; max-width: 100%; touch-action: none; display: block; background: #101826; }
+  .canvasViewport { grid-area:2 / 2 / 3 / 3; position:relative; min-width:0; min-height:0; overflow:hidden; display:flex; align-items:center; justify-content:center; }
+  .ruler { display:block; width:100%; height:100%; min-width:0; min-height:0; overflow:hidden; background:#111827; pointer-events:none; }
+  .ruler text { font:10px ui-monospace,Consolas,monospace; }
+  .ruler text.rulerCenter { font-size:12px; font-weight:700; paint-order:stroke; stroke:#111827; stroke-width:3px; }
+  .ruler line { stroke-width:1; }
+  .rulerTop { grid-area:1 / 2 / 2 / 3; box-shadow:inset 0 -1px 0 #334155; }
+  .rulerBottom { grid-area:3 / 2 / 4 / 3; box-shadow:inset 0 1px 0 #334155; }
+  .rulerLeft { grid-area:2 / 1 / 3 / 2; box-shadow:inset -1px 0 0 #334155; }
+  .rulerRight { grid-area:2 / 3 / 3 / 4; box-shadow:inset 1px 0 0 #334155; }
+  .rulerCorner { grid-area:3 / 1 / 4 / 2; display:grid; place-items:center; background:#111827; color:#94a3b8; font-size:8px; user-select:none; }
+  #board { width: 100%; height: 100%; min-width: 0; min-height: 0; touch-action: none; display: block; background: #101826; }
+  .minimap { position:absolute; z-index:2; right:12px; top:12px; box-sizing:border-box; width:168px; max-width:calc(100% - 24px); padding:8px; border:1px solid #475569; border-radius:8px; background:#111827ed; color:#cbd5e1; user-select:none; }
+  .minimapHeading { display:flex; justify-content:space-between; gap:4px; font-size:11px; }
+  #miniMap { display:block; width:100%; height:138px; margin:6px 0; background:#0b1220; border-radius:4px; touch-action:none; cursor:crosshair; }
+  #miniMap:focus-visible { outline:2px solid #60a5fa; outline-offset:2px; }
+  .miniMapView { fill:#93c5fd33; stroke:#f8fafc; stroke-width:1.5px; vector-effect:non-scaling-stroke; pointer-events:none; }
+  .minimap small { display:block; font-size:10px; color:#94a3b8; }
+  .detailHint { position:absolute; left:12px; top:12px; max-width:calc(100% - 208px); padding:4px 7px; border-radius:5px; font-size:11px; color:#94a3b8; background:#111827dd; pointer-events:none; }
+  .detailHint[hidden] { display:none; }
+  .labelsReduced .regionLabel, .labelsReduced .regionBadge, .labelsReduced .resourceChoiceCount, .labelsReduced .resourceGroupLabel { display:none; }
+  .resourceGroupImage { filter:drop-shadow(0 2px 2px #000b) drop-shadow(0 0 1px #fff); }
+  #board.artHidden .freeDecorLayer, #board.artHidden .resourceLayer { display:none; }
+  #board .cursorCell.erasing { fill:#f8717133; stroke:#fca5a5; }
+  #paintModeControls { margin-top:7px; }
+  #paintModeControls button { flex:1; padding:5px 3px; font-size:11px; }
+  @media (max-width:950px) { .detailHint { top:auto; bottom:56px; max-width:calc(100% - 24px); } }
 
   h2 { font-size: 12px; font-weight: 500; color: #888780; margin: 0 0 8px; letter-spacing: .04em; }
   .group { margin-bottom: 18px; }
@@ -181,8 +209,15 @@
   label.row { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; margin-bottom: 6px; }
   label.row input { margin: 3px 0 0; flex: none; }
   label.row .txt { flex: 1; }
+  .regionTextField { display:block; margin-bottom:8px; }
+  .regionTextField input { display:block; box-sizing:border-box; width:100%; margin-top:5px; padding:7px 8px; font:inherit; border:1px solid var(--line-soft); }
+  .regionTextField input:disabled { opacity:.5; cursor:not-allowed; }
   label.row small { color: #888780; font-size: 11px; display: block; }
   label.row input[disabled] + .txt { opacity: .5; }
+  label.row.resourceGroupField { flex-direction:column; align-items:stretch; gap:2px; }
+  .resourceGroupField input { width:100%; min-width:0; padding:7px 8px; font:inherit; }
+  #btnResourcePlace { width:100%; }
+  #btnResourcePlace.on { color:#dbeafe; background:#1d4ed833; border-color:#60a5fa; }
 
   .btn {
     font: inherit; padding: 7px 12px; border: 1px solid #D3D1C7; border-radius: 7px;
@@ -359,7 +394,8 @@
   header h1 { font-size:17px; font-weight:600; color:#f8fafc; }
   header .meta, header .field { color:var(--muted); }
   header .meta.dirty { color:#fbbf24; }
-  .dirtyBadge { padding:3px 7px; border:1px solid #92400e; border-radius:999px; background:#451a03; color:#fbbf24; font-size:11px; }
+  .dirtyBadge { display:inline-flex; align-items:center; justify-content:center; flex:0 0 54px; width:54px; box-sizing:border-box; white-space:nowrap; padding:3px 7px; border:1px solid #92400e; border-radius:999px; background:#451a03; color:#fbbf24; font-size:11px; line-height:16px; }
+  .dirtyBadge[hidden] { display:inline-flex; visibility:hidden; }
   header input[type=text], .sizeRow input, input[type=text], input[type=number] { background:#111827; color:var(--text); border-color:var(--line-soft); border-radius:5px; }
   header input[type=text]:focus, .sizeRow input:focus, input:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 2px #2563eb33; }
   /* 原生 <select> 不写样式就会跟着**系统控件**跑：直角缺圆角、边框取系统色、箭头各平台一个样，
@@ -386,7 +422,7 @@
   .toolStatusCard { background:#111827; border-color:var(--line); }
   .toolStatusCard .statusLabel { color:var(--muted); }
   .group[hidden] { display:none; }
-  .stage { padding:14px; background:#0b1220; }
+  .stage { padding:0; background:#0b1220; }
   h2, .panelTitle { color:#cbd5e1; }
   .helpTip summary { border-color:var(--line-soft); color:var(--muted); }
   .helpTip summary:hover, .helpTip[open] summary { border-color:var(--accent); color:#dbeafe; background:#1d4ed833; }
@@ -456,12 +492,23 @@
       <button data-mode="fixed" class="on">固定主城</button>
       <button data-mode="select">自选主城</button>
     </div>
-    <label class="field mirrorToggle" title="2 人默认上下镜像；4 人可开左右镜像。3 人不支持镜像。">
-      <input type="checkbox" id="optMirrorV" checked>上下镜像
+    <div class="toolbarSwitches" role="group" aria-label="镜像与显示">
+      <div class="toolbarSwitchRow">
+    <label class="field mirrorToggle" title="新建及切换人数默认关闭镜像；2 人可开上下，4 人可开上下／左右，3 人不支持镜像。">
+      <input type="checkbox" id="optMirrorV">上下镜像
     </label>
     <label class="field mirrorToggle" title="仅 4 人四象限地图可用。">
       <input type="checkbox" id="optMirrorH">左右镜像
     </label>
+      </div>
+    <div class="toolbarSwitchRow toolbarDisplay" id="groupDisplay" role="group" aria-label="地图显示设置">
+      <label class="field mirrorToggle" title="切换地图底图显示"><input type="checkbox" id="optBackground" checked>显示背景图</label>
+      <label class="field mirrorToggle" title="显示虚空格的网格轮廓，便于定位"><input type="checkbox" id="optGrid" checked>显示完整网格</label>
+    </div>
+    <div class="toolbarSwitchRow">
+      <label class="field mirrorToggle" title="显示场景装饰和资源图标；背景图由“显示背景图”单独控制，不修改地图数据" style="grid-column:1 / -1"><input type="checkbox" id="optShowArt" checked>显示美术资源</label>
+    </div>
+    </div>
     <input type="text" id="mapName" value="双岸河道" placeholder="地图名称">
     <input type="text" id="mapId" value="river" placeholder="map-id">
     <select id="presetPick" title="选择预设并立即加载" style="width:112px" hidden></select>
@@ -476,32 +523,51 @@
   <div class="body">
     <aside class="left">
       <div class="toolCategoryNav" role="tablist" aria-label="编辑工具分类">
-        <button class="toolCategoryTab on" id="categoryTerrain" type="button" role="tab" aria-selected="true"><span class="categoryIcon">▦</span>地图地形</button>
-        <button class="toolCategoryTab" id="categoryRegions" type="button" role="tab" aria-selected="false"><span class="categoryIcon">▤</span>前 / 中 / 后区</button>
+        <button class="toolCategoryTab on" id="categoryTerrain" type="button" role="tab" aria-selected="true"><span class="categoryIcon">▦</span>地图与分区</button>
         <button class="toolCategoryTab" id="categoryResources" type="button" role="tab" aria-selected="false"><span class="categoryIcon">⌂</span>主城与资源</button>
         <button class="toolCategoryTab" id="categoryDecor" type="button" role="tab" aria-selected="false"><span class="categoryIcon">✧</span>场景装饰</button>
         <button class="toolCategoryTab" id="categoryAdvanced" type="button" role="tab" aria-selected="false"><span class="categoryIcon">⚙</span>高级设置</button>
       </div>
-      <div class="toolStatusCard"><span class="statusLabel">当前工具</span><span id="toolStatus">分区 1 · 笔刷 1 格</span></div>
+      <div class="toolStatusCard"><span class="statusLabel">当前工具</span><span id="toolStatus">分区 1 · 笔刷 1 格</span>
+        <div class="seg" id="paintModeControls" role="group" aria-label="画笔与擦除">
+          <button id="btnPaintMode" type="button" class="on" aria-pressed="true">画笔 B</button><button id="btnEraseMode" type="button" aria-pressed="false">擦除 E</button>
+        </div>
+      </div>
+
+      <div class="group" id="groupRegions" data-tool-category="terrain">
+        <div class="groupHeading"><h2>玩家分区与纵深</h2><details class="helpTip"><summary aria-label="查看合并分区画笔说明">?</summary><div class="helpBubble">前／中／后区同时写入玩家归属；仅分区保留已有纵深。右键或 E 擦除纵深时保留归属，擦除仅分区时恢复中立格。跳过虚空、其他玩家分区；资源点保留。镜像开关生效时同步对应分区与纵深。</div></details></div>
+        <div class="hint" id="regionSectionLabel">所属分区</div>
+        <div class="seg" id="regionSection" role="group" aria-labelledby="regionSectionLabel" style="margin-bottom:8px">
+          <button type="button" data-section="1" class="on" aria-pressed="true">1 区</button><button type="button" data-section="2" aria-pressed="false">2 区</button><button type="button" data-section="3" aria-pressed="false" hidden>3 区</button><button type="button" data-section="4" aria-pressed="false" hidden>4 区</button>
+        </div>
+        <div class="seg" id="segRegionDepth" aria-label="分区涂刷方式">
+          <button data-depth="none" class="on">仅分区</button><button data-depth="front">前区</button><button data-depth="mid">中区</button><button data-depth="back">后区</button>
+        </div>
+        <p class="hint">先选玩家，再选范围；一次涂好归属和纵深。</p>
+        <p class="hint" id="partitionNotice" role="status" style="color:#fbbf24" hidden></p>
+        <div id="regionOptions" hidden>
+        <label class="row">打法倾向
+          <select id="regionTendency"><option value="rush">速攻</option><option value="control">控场</option><option value="develop">发育</option></select>
+        </label>
+        <label class="regionTextField" for="regionText">气泡文案
+          <input id="regionText" type="text" placeholder="留空使用打法倾向" aria-describedby="regionTextHint" disabled>
+        </label>
+        <p class="hint" id="regionTextHint">先在地图标记当前分区的前／中／后区，再填写简短提示；留空时使用打法倾向。修改后按回车或点击其他位置应用。</p>
+        </div>
+        <button class="btn small" id="btnClearRegion" type="button">清空当前纵深标记</button>
+      </div>
+
+      <div class="group" id="groupBrushSize" data-tool-category="terrain">
+        <div class="groupHeading"><h2>笔刷大小</h2><details class="helpTip"><summary aria-label="查看笔刷大小说明">?</summary><div class="helpBubble">数字键 <code>1</code> / <code>2</code> / <code>3</code> 切换 1 / 7 / 19 格刷头。<code>[</code> 调小、<code>]</code> 调大；鼠标悬停可预览覆盖范围。</div></details></div>
+        <div class="seg" id="segBrush">
+          <button data-radius="0" class="on" title="快捷键 1">1 格</button>
+          <button data-radius="1" title="快捷键 2">7 格</button>
+          <button data-radius="2" title="快捷键 3">19 格</button>
+        </div>
+      </div>
 
       <div class="group" id="groupTerrain" data-tool-category="terrain">
-        <h2>笔刷</h2>
-        <button class="brush on" data-brush="1">
-          <span class="sw s1"></span>
-          <span>1 区<small>分区范围 = 该方出生点可选格</small></span>
-        </button>
-        <button class="brush" data-brush="2">
-          <span class="sw s2"></span>
-          <span>2 区<small>镜像开启时自动生成</small></span>
-        </button>
-        <button class="brush" data-brush="3" hidden>
-          <span class="sw s3"></span>
-          <span>3 区<small>4 人时为右下象限</small></span>
-        </button>
-        <button class="brush" data-brush="4" hidden>
-          <span class="sw s4"></span>
-          <span>4 区<small>4 人时为右上象限</small></span>
-        </button>
+        <h2>地图地形</h2>
         <button class="brush" data-brush="home">
           <span class="sw home"></span>
           <span>主城<small>点在某一分区的格上</small></span>
@@ -543,35 +609,14 @@
         <p class="hint" style="margin:6px 0 0" id="decorHint"></p>
       </div>
 
-      <div class="group" id="groupBrushSize" data-tool-category="terrain">
-        <div class="groupHeading"><h2>笔刷大小</h2><details class="helpTip"><summary aria-label="查看笔刷大小说明">?</summary><div class="helpBubble">选择一次点击或 7 / 19 格范围。快捷键 <code>[</code> 调小、<code>]</code> 调大；鼠标悬停可预览覆盖范围。</div></details></div>
-        <div class="seg" id="segBrush">
-          <button data-radius="0" class="on">1 格</button>
-          <button data-radius="1">7 格</button>
-          <button data-radius="2">19 格</button>
-        </div>
-      </div>
-
       <div class="group" id="groupResources" data-tool-category="resources" hidden>
-        <div class="groupHeading"><h2>中立资源</h2><details class="helpTip"><summary aria-label="查看中立资源说明">?</summary><div class="helpBubble">每格可配置多个资源候选，开局按权重随机抽取。选择资源后依次点击同一格添加，右键删除整组资源；资源点间距至少 3 格。</div></details></div>
-        <div class="resourceList" id="resourceList"></div>
-        <label class="row">抽取权重 <input id="resourceWeight" type="number" min="0.01" step="0.1" value="1"></label>
+        <div class="groupHeading"><h2>中立资源</h2><details class="helpTip"><summary aria-label="查看中立资源说明">?</summary><div class="helpBubble">地图只配置点位与组合 ID。奖励内容、数量和抽取权重在中立资源配置表中管理。可放在中立格及玩家分区，不能放在虚空或主城上；资源点间距至少 3 格（地图要求更大间距时沿用）。右键删除点位，点击已有点位会替换组合，可撤销。组合 ID 是否存在由程序接表后校验。</div></details></div>
+        <label class="row resourceGroupField" for="resourceGroupId">组合 ID <input id="resourceGroupId" type="number" min="1" max="2147483647" step="1" placeholder="填写表中的组合 ID"></label>
+        <button class="btn" id="btnResourcePlace" type="button" aria-pressed="false">放置资源点</button>
+        <p class="hint" id="resourceGroupStatus" aria-live="polite">填写配置表中的组合 ID，再点击放置。</p>
+        <p class="hint">奖励与权重在中立资源配置表中配置。</p>
+        <p class="hint" id="legacyResourceNotice" hidden></p>
         <button class="btn small" id="btnClearResources" type="button" style="margin-top:7px">清空全部资源点</button>
-      </div>
-
-      <div class="group" id="groupRegions" data-tool-category="regions" hidden>
-        <div class="groupHeading"><h2>战区纵深</h2></div>
-        <label class="row">所属分区
-          <select id="regionSection"><option value="1">1 区</option><option value="2">2 区</option><option value="3">3 区</option><option value="4">4 区</option></select>
-        </label>
-        <div class="seg" id="segRegionDepth">
-          <button data-depth="front" class="on">前区</button><button data-depth="mid">中区</button><button data-depth="back">后区</button>
-        </div>
-        <label class="row">打法倾向
-          <select id="regionTendency"><option value="rush">速攻</option><option value="control">控场</option><option value="develop">发育</option></select>
-        </label>
-        <p class="hint">选纵深后点击地图标记区域；右键清除该格标记。格面颜色与地图导出保持同步。</p>
-        <button class="btn small" id="btnClearRegion" type="button">清空当前分区与纵深</button>
       </div>
 
       <div class="group" id="groupHistory">
@@ -586,8 +631,8 @@
       <div class="group" id="groupAdvancedMirror" data-tool-category="advanced" hidden>
         <div class="groupHeading"><h2>地图规则说明</h2></div>
         <p class="hint warn" id="hint2" hidden>
-          2 人地图：上下镜像<b>默认开启</b> —— 只画 1 区所在的下半场，上半场对折生成；
-          可以自行关闭，关掉后要连上半场一起画（存档也从半场变回整场）。
+          2 人地图：上下镜像<b>默认关闭</b>；开启后只画 1 区所在的下半场，上半场对折生成；
+          关闭镜像时手工画整场；载入已有地图时沿用其明确保存的镜像开关。
           ⚠️ 关掉之后两家 1 区格数不再由镜像保证相等，而 1 区格数 = 该方开局领地，
           摆非对称装饰时记得两边的格数对一下。
         </p>
@@ -607,16 +652,6 @@
         <a class="btn" id="openServer" href="http://127.0.0.1:8787/" hidden>在本地服务中继续编辑当前地图</a>
       </div>
 
-      <div class="group" id="groupMapSize" data-tool-category="advanced" hidden>
-        <div class="groupHeading"><h2>行列个数</h2></div>
-        <div class="sizeRow">
-          <label>列<input type="number" id="inCols" value="11" min="4" max="60" step="1"></label>
-          <label>行<input type="number" id="inRows" value="20" min="4" max="60" step="1"></label>
-        </div>
-        <p class="hint" style="margin:6px 0 0" id="sizeHint"></p>
-        <p class="hint warn" id="sizeWarn" hidden></p>
-      </div>
-
       <div class="group" id="groupZoom" data-tool-category="advanced" hidden>
         <div class="groupHeading"><h2>镜头倍率</h2></div>
         <div class="sizeRow">
@@ -626,33 +661,43 @@
         <p class="hint" style="margin:6px 0 0">留空 = 默认 0.6（缩到最小）/ 1.2（放到最大）。</p>
       </div>
 
-      <div class="group" id="groupDisplay" data-tool-category="advanced" hidden>
-        <div class="groupHeading"><h2>显示</h2></div>
-        <label class="row">
-          <input type="checkbox" id="optBackground" checked>
-          <span class="txt">显示背景图
-            <small>art.background —— 默认 image/zdbg1（最常用的海岛沙地）</small>
-          </span>
-        </label>
-        <label class="row">
-          <input type="checkbox" id="optGrid">
-          <span class="txt">显示完整网格
-            <small>虚空格也画虚线轮廓</small>
-          </span>
-        </label>
-      </div>
-
       <div class="group" id="groupOperation" data-tool-category="advanced" hidden>
         <div class="groupHeading"><h2>操作</h2></div>
       </div>
     </aside>
 
     <main class="stage" id="stage">
+      <span class="rulerCorner" title="左下角起算：列向右、行向上均从1开始；行刻度按鼠标所在列对齐">(1,1)</span>
+      <svg id="rulerTop" class="ruler rulerTop" aria-hidden="true"></svg>
+      <svg id="rulerBottom" class="ruler rulerBottom" aria-hidden="true"></svg>
+      <svg id="rulerLeft" class="ruler rulerLeft" aria-hidden="true"></svg>
+      <svg id="rulerRight" class="ruler rulerRight" aria-hidden="true"></svg>
+      <div class="canvasViewport" id="mapViewport">
       <svg id="board" viewBox="-525 -925.5 1050 1851" preserveAspectRatio="xMidYMid meet"></svg>
       <span class="readout" id="cursorInfo">指针在棋盘外 · 笔刷 1×1</span>
+      <span class="detailHint" id="detailHint" hidden>小格标注已隐藏</span>
+      <section class="minimap" aria-label="地图导航">
+        <div class="minimapHeading"><span>缩略图</span><span id="miniMapZoom">100%</span></div>
+        <svg id="miniMap" role="img" aria-label="地图缩略图，点击或拖动定位，方向键移动，Home适应全图" tabindex="0" preserveAspectRatio="xMidYMid meet">
+          <g id="miniMapTiles" pointer-events="none"></g><rect id="miniMapView" class="miniMapView"></rect>
+        </svg>
+        <small>点击／拖动定位</small>
+      </section>
+      </div>
     </main>
 
     <aside class="right">
+      <div class="group" id="groupMapSize">
+        <div class="groupHeading"><h2>行列个数</h2></div>
+        <div class="sizeRow">
+          <label>列<input type="number" id="inCols" value="11" min="4" max="60" step="1"></label>
+          <label>行<input type="number" id="inRows" value="20" min="4" max="60" step="1"></label>
+        </div>
+        <p class="hint" style="margin:6px 0 0" id="sizeHint"></p>
+        <p class="hint warn" id="sizeWarn" hidden></p>
+      </div>
+
+
       <div class="stat">
         <div><b id="statS1">0</b><span>1 区</span></div>
         <div><b id="statS2">0</b><span>2 区</span></div>

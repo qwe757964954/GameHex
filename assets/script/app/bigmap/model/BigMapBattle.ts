@@ -29,6 +29,16 @@ import { bigMapResCap } from './BigMapBase';
 export const BIGMAP_BASE_ATTACK = 420;
 export const BIGMAP_ATTACK_PER_MAIN_LEVEL = 180;
 export const BIGMAP_MONSTER_BATTLE_UNAVAILABLE = '野怪战斗尚未接入';
+export const BIGMAP_BATTLE_TEXT = {
+    closed: '页面已关闭',
+    failed: '开战失败，请重试',
+    pending: '正在进入战斗',
+    unavailable: '当前无法进入战斗',
+    campMissing: '据点未配置战斗',
+    campUnavailable: '当前据点不可攻打',
+    monsterMissing: '野怪不存在',
+    monsterUnavailable: '当前野怪不可挑战',
+} as const;
 
 /** 玩家在大地图上的战斗进度（存档的一部分，与基地状态分开存，互不干扰）。 */
 export interface IBigMapBattleProgress {
@@ -132,8 +142,9 @@ export function bigMapCityAttackPreview(
     distanceToCity: number,
     attackers = 1,
     rank = 1,
+    playerCampId = 0,
 ): IBigMapAttackPreview {
-    const inRange = bigMapWithinCityRange(city, distanceToCity);
+    const inRange = bigMapWithinCityRange(city, distanceToCity, playerCampId);
     const cutPct = inRange ? 0 : config.scoreRule.offRangeDamageCutPct;
     const damage = Math.max(1, Math.round(
         bigMapAttackPower(config, base) * (1 - cutPct / 100),
@@ -172,6 +183,8 @@ export interface IBigMapAttackOptions {
     readonly attackers?: number;
     /** 玩家当前名次，缺省 1。 */
     readonly rank?: number;
+    /** 我所处的城池 id（服务器 `SlgGameInfo.toCampId`，0 = 未知/未归属 ⇒ 回退距离判定）。 */
+    readonly playerCampId?: number;
 }
 
 function fail(reason: string, preview: IBigMapAttackPreview | null = null): IBigMapAttackOutcome {
@@ -227,7 +240,9 @@ export function bigMapAttackCity(
         return fail('需先占领前置城池');
     }
 
-    const preview = bigMapCityAttackPreview(config, base, city, distanceToCity, attackers, rank);
+    const preview = bigMapCityAttackPreview(
+        config, base, city, distanceToCity, attackers, rank, options.playerCampId ?? 0,
+    );
     const nextBase = spendStamina(base, preview.staminaCost);
     if (!nextBase) return fail(`行动力不足（需要 ${preview.staminaCost}）`, preview);
 

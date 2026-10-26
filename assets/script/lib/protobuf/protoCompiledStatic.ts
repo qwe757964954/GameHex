@@ -20189,6 +20189,7 @@ values[valuesById[49] = "CELEBRATION_LOCK_MONSTER_FULL_RANK"] = 49;
 values[valuesById[50] = "CELEBRATION_LOCK_MONSTER_SERVER_RANK"] = 50;
 values[valuesById[51] = "CELEBRATION_OATH_ALLIANCE_FULL_RANK"] = 51;
 values[valuesById[52] = "CELEBRATION_OATH_ALLIANCE_SERVER_RANK"] = 52;
+values[valuesById[53] = "SLG_CAMP_ROLE_HARM_RANK"] = 53;
 return values;
 })();
 cmd.CmdRecharge = (function() {
@@ -51280,6 +51281,71 @@ return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdSlgMonsterBattleResultInfo";
 };
 return CmdSlgMonsterBattleResultInfo;
 })();
+cmd.CmdSlgCampBattleResultInfo = (function() {
+function CmdSlgCampBattleResultInfo(properties) {
+this.cmdGoods = [];
+if (properties)
+for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+if (properties[keys[i]] != null && keys[i] !== "__proto__")
+this[keys[i]] = properties[keys[i]];
+}
+CmdSlgCampBattleResultInfo.prototype.warScore = 0;
+CmdSlgCampBattleResultInfo.prototype.cmdGoods = $util.emptyArray;
+CmdSlgCampBattleResultInfo.create = function create(properties) {
+return new CmdSlgCampBattleResultInfo(properties);
+};
+CmdSlgCampBattleResultInfo.encode = function encode(message, writer, q) {
+if (!writer)
+writer = $Writer.create();
+if (q === undefined)
+q = 0;
+if (q > $util.recursionLimit)
+throw Error("max depth exceeded");
+if (message.warScore != null && Object.hasOwnProperty.call(message, "warScore"))
+writer.uint32(  8).uint32(message.warScore);
+if (message.cmdGoods != null && message.cmdGoods.length)
+for (let i = 0; i < message.cmdGoods.length; ++i)
+$root.com.xkhy.tafang.cmd.CmdGoods.encode(message.cmdGoods[i], writer.uint32(  18).fork(), q + 1).ldelim();
+return writer;
+};
+CmdSlgCampBattleResultInfo.decode = function decode(reader, length, error, long) {
+if (!(reader instanceof $Reader))
+reader = $Reader.create(reader);
+if (long === undefined)
+long = 0;
+if (long > $Reader.recursionLimit)
+throw Error("maximum nesting depth exceeded");
+let end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdSlgCampBattleResultInfo();
+while (reader.pos < end) {
+let tag = reader.uint32();
+if (tag === error)
+break;
+switch (tag >>> 3) {
+case 1: {
+message.warScore = reader.uint32();
+break;
+}
+case 2: {
+if (!(message.cmdGoods && message.cmdGoods.length))
+message.cmdGoods = [];
+message.cmdGoods.push($root.com.xkhy.tafang.cmd.CmdGoods.decode(reader, reader.uint32(), undefined, long + 1));
+break;
+}
+default:
+reader.skipType(tag & 7, long);
+break;
+}
+}
+return message;
+};
+CmdSlgCampBattleResultInfo.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+if (typeUrlPrefix === undefined) {
+typeUrlPrefix = "type.googleapis.com";
+}
+return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdSlgCampBattleResultInfo";
+};
+return CmdSlgCampBattleResultInfo;
+})();
 cmd.CmdBattleFrameInfo = (function() {
 function CmdBattleFrameInfo(properties) {
 this.params = [];
@@ -52727,6 +52793,69 @@ return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdCityChapterCellInfoRspMsg";
 };
 return CmdCityChapterCellInfoRspMsg;
 })();
+cmd.SlgGameInfo = (function() {
+function SlgGameInfo(properties) {
+if (properties)
+for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+if (properties[keys[i]] != null && keys[i] !== "__proto__")
+this[keys[i]] = properties[keys[i]];
+}
+SlgGameInfo.prototype.maxMonsterLevel = 0;
+SlgGameInfo.prototype.toCampId = 0;
+SlgGameInfo.create = function create(properties) {
+return new SlgGameInfo(properties);
+};
+SlgGameInfo.encode = function encode(message, writer, q) {
+if (!writer)
+writer = $Writer.create();
+if (q === undefined)
+q = 0;
+if (q > $util.recursionLimit)
+throw Error("max depth exceeded");
+writer.uint32(  8).uint32(message.maxMonsterLevel);
+writer.uint32(  16).uint32(message.toCampId);
+return writer;
+};
+SlgGameInfo.decode = function decode(reader, length, error, long) {
+if (!(reader instanceof $Reader))
+reader = $Reader.create(reader);
+if (long === undefined)
+long = 0;
+if (long > $Reader.recursionLimit)
+throw Error("maximum nesting depth exceeded");
+let end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.SlgGameInfo();
+while (reader.pos < end) {
+let tag = reader.uint32();
+if (tag === error)
+break;
+switch (tag >>> 3) {
+case 1: {
+message.maxMonsterLevel = reader.uint32();
+break;
+}
+case 2: {
+message.toCampId = reader.uint32();
+break;
+}
+default:
+reader.skipType(tag & 7, long);
+break;
+}
+}
+if (!message.hasOwnProperty("maxMonsterLevel"))
+throw $util.ProtocolError("missing required 'maxMonsterLevel'", { instance: message });
+if (!message.hasOwnProperty("toCampId"))
+throw $util.ProtocolError("missing required 'toCampId'", { instance: message });
+return message;
+};
+SlgGameInfo.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+if (typeUrlPrefix === undefined) {
+typeUrlPrefix = "type.googleapis.com";
+}
+return typeUrlPrefix + "/com.xkhy.tafang.cmd.SlgGameInfo";
+};
+return SlgGameInfo;
+})();
 cmd.SlgGameActionInfo = (function() {
 function SlgGameActionInfo(properties) {
 if (properties)
@@ -53564,6 +53693,7 @@ for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
 if (properties[keys[i]] != null && keys[i] !== "__proto__")
 this[keys[i]] = properties[keys[i]];
 }
+CmdSlgGameInfoRspMsg.prototype.info = null;
 CmdSlgGameInfoRspMsg.create = function create(properties) {
 return new CmdSlgGameInfoRspMsg(properties);
 };
@@ -53574,6 +53704,7 @@ if (q === undefined)
 q = 0;
 if (q > $util.recursionLimit)
 throw Error("max depth exceeded");
+$root.com.xkhy.tafang.cmd.SlgGameInfo.encode(message.info, writer.uint32(  10).fork(), q + 1).ldelim();
 return writer;
 };
 CmdSlgGameInfoRspMsg.decode = function decode(reader, length, error, long) {
@@ -53589,11 +53720,17 @@ let tag = reader.uint32();
 if (tag === error)
 break;
 switch (tag >>> 3) {
+case 1: {
+message.info = $root.com.xkhy.tafang.cmd.SlgGameInfo.decode(reader, reader.uint32(), undefined, long + 1);
+break;
+}
 default:
 reader.skipType(tag & 7, long);
 break;
 }
 }
+if (!message.hasOwnProperty("info"))
+throw $util.ProtocolError("missing required 'info'", { instance: message });
 return message;
 };
 CmdSlgGameInfoRspMsg.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
@@ -53611,6 +53748,7 @@ for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
 if (properties[keys[i]] != null && keys[i] !== "__proto__")
 this[keys[i]] = properties[keys[i]];
 }
+CmdSlgGameInfoBroMsg.prototype.info = null;
 CmdSlgGameInfoBroMsg.create = function create(properties) {
 return new CmdSlgGameInfoBroMsg(properties);
 };
@@ -53621,6 +53759,7 @@ if (q === undefined)
 q = 0;
 if (q > $util.recursionLimit)
 throw Error("max depth exceeded");
+$root.com.xkhy.tafang.cmd.SlgGameInfo.encode(message.info, writer.uint32(  10).fork(), q + 1).ldelim();
 return writer;
 };
 CmdSlgGameInfoBroMsg.decode = function decode(reader, length, error, long) {
@@ -53636,11 +53775,17 @@ let tag = reader.uint32();
 if (tag === error)
 break;
 switch (tag >>> 3) {
+case 1: {
+message.info = $root.com.xkhy.tafang.cmd.SlgGameInfo.decode(reader, reader.uint32(), undefined, long + 1);
+break;
+}
 default:
 reader.skipType(tag & 7, long);
 break;
 }
 }
+if (!message.hasOwnProperty("info"))
+throw $util.ProtocolError("missing required 'info'", { instance: message });
 return message;
 };
 CmdSlgGameInfoBroMsg.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
@@ -53697,6 +53842,61 @@ typeUrlPrefix = "type.googleapis.com";
 return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdSlgBuildInfoReqMsg";
 };
 return CmdSlgBuildInfoReqMsg;
+})();
+cmd.CmdSlgBuildInfoRspMsg = (function() {
+function CmdSlgBuildInfoRspMsg(properties) {
+if (properties)
+for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+if (properties[keys[i]] != null && keys[i] !== "__proto__")
+this[keys[i]] = properties[keys[i]];
+}
+CmdSlgBuildInfoRspMsg.prototype.info = null;
+CmdSlgBuildInfoRspMsg.create = function create(properties) {
+return new CmdSlgBuildInfoRspMsg(properties);
+};
+CmdSlgBuildInfoRspMsg.encode = function encode(message, writer, q) {
+if (!writer)
+writer = $Writer.create();
+if (q === undefined)
+q = 0;
+if (q > $util.recursionLimit)
+throw Error("max depth exceeded");
+$root.com.xkhy.tafang.cmd.SlgBuildGameInfo.encode(message.info, writer.uint32(  10).fork(), q + 1).ldelim();
+return writer;
+};
+CmdSlgBuildInfoRspMsg.decode = function decode(reader, length, error, long) {
+if (!(reader instanceof $Reader))
+reader = $Reader.create(reader);
+if (long === undefined)
+long = 0;
+if (long > $Reader.recursionLimit)
+throw Error("maximum nesting depth exceeded");
+let end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdSlgBuildInfoRspMsg();
+while (reader.pos < end) {
+let tag = reader.uint32();
+if (tag === error)
+break;
+switch (tag >>> 3) {
+case 1: {
+message.info = $root.com.xkhy.tafang.cmd.SlgBuildGameInfo.decode(reader, reader.uint32(), undefined, long + 1);
+break;
+}
+default:
+reader.skipType(tag & 7, long);
+break;
+}
+}
+if (!message.hasOwnProperty("info"))
+throw $util.ProtocolError("missing required 'info'", { instance: message });
+return message;
+};
+CmdSlgBuildInfoRspMsg.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+if (typeUrlPrefix === undefined) {
+typeUrlPrefix = "type.googleapis.com";
+}
+return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdSlgBuildInfoRspMsg";
+};
+return CmdSlgBuildInfoRspMsg;
 })();
 cmd.CmdSlgBuildReqMsg = (function() {
 function CmdSlgBuildReqMsg(properties) {

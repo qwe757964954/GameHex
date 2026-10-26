@@ -195,6 +195,8 @@ mapLayer（= ZCGameHUD.prefab 的 content）
 
 ### 3.2 七条硬口径
 
+快速寻敌优先按当前推进顺序定位未通关 Boss；没有未通关目标时，定位当前章节关卡序号最高的已通关 Boss，同区域优先选建筑格。Boss 关卡、首领波次与异步据点允许重复挑战，区域已通关时跳过再次解锁；详情按钮与地图点击均请求服务端开战，保留在途判重与迟到回包校验。主线 Boss / 首领使用章节格子战斗参数；异步据点沿用服务端确认通关后切宝箱子类型的规则，奖励以服务端结算为准。
+
 1. **滚动用 `cc.ScrollView`**：禁止手写触摸拖拽或建多余 `view` 子节点；切章回中心调 `scrollToOffset(Vec2.ZERO, 0)`。
    - **内容层尺寸 = 地图包围盒 + 四周留白**（2026-10-21 用户口径「整体一起上移，不要被按钮遮挡」）。
      唯一出口 `model/TerritoryMapLayout.territoryMapContentSize()`（`TERRITORY_MAP_CONTENT_PADDING = 300`）。
@@ -209,7 +211,7 @@ mapLayer（= ZCGameHUD.prefab 的 content）
 
      ![领地上移示意](territory-map-shift-preview.png)
 2. **节点按 `cellId` diff 复用**：`tickProgress` 每秒重绘，严禁 `destroyAllChildren` 全量重建。
-3. **主城 HUD 与地图分层**：`MainTerritoryMap` 只保留地图与详情弹窗；主城顶部信息与导航由 `ArenaRoot` 承载，地图视口避开这些覆盖区域。进入地图先渲染本地存档，服务端状态后台单调合并，失败仅 `outputs.showTip`。
+3. **主城 HUD 与地图分层**：`MainTerritoryMap` 只保留地图与详情弹窗；主城顶部信息与导航由 `ArenaRoot` 承载。地图视口顶部贴页面顶边（`MapViewport.Widget.top = 0`），让格子云延伸到顶部 HUD 背后；底部仍预留 168px 导航区。`ArenaRoot` 的 `MapRoot` 排在 `TopHud` / `BottomHud` 前，确保 HUD 显示与按钮点击在地图之上，禁止再通过顶部视口留白裁掉云。进入地图先渲染本地存档，服务端状态后台单调合并，失败仅 `outputs.showTip`。
 4. **`@property` 引用区分**：`{type: Node}` 直接是节点本身，组件引用才访问 `.node`。
 5. **运行时不画站点解锁连线**：依赖连线仅存在于地图编辑器 `tools/map-editor/territory.html` 的 `g.layer-links` 开关。
 6. **Presenter 纯度与单通知通道**：页内只走 `presenter.subscribe()` 一个**本地订阅**通道（纯 TS、返回退订函数、`dispose` 清空），严禁接全局 `FWEventCenter`；视图间跨组件通知统一走**节点事件**（`node.on` / `node.emit` + `view/TerritoryEvents.ts` 的 `TERRITORY_EVENTS` 常量表），监听挂组件自身节点、随节点销毁自动清理；`TerritoryPresenter` 剥掉 `import type` 后严禁 import `cc`、`framework` 或具体边界实现类。
@@ -441,23 +443,27 @@ scaleY = baseScale · cos(2π · flipHz · t + phase)      flipHz ∈ [2, 4]，p
 
 ## 6. 战斗飘字「快进慢出」：前 45% 入场，后 55% 淡出
 
-总时长常量 `FLOAT_TEXT_DAMAGE_SECONDS = 0.85` / `FLOAT_TEXT_GOLD_SECONDS = 1.1` **保持不变**，由单旋钮 `entranceProgress = FLOAT_TEXT_ENTRANCE_PROGRESS = 0.45` 统一划分前后两段（三条纯函数均在 `ZCGameViewUtil.ts`）：
+⚠️ 这一节讲的是**伤害 / 治疗 / 暴击…**那一类飘字。**金币是唯一的例外**（2026-10-23 两次改口径，
+见 §6.3）：它既不「快进慢出」，也没有文字 —— 只剩一枚硬币掉到角色中心缩没。
 
-1. **前 45% 入场（`floatTextEntrance`）**：`progress / entranceProgress` 套 `easeOutCubic`，入场结束后恒为 `1`。**散落、下坠、摇摆、金币上浮、弹出缩放、金币图标 360° 自转一律喂 `enter`（严禁喂整条 `progress`）**。
+总时长常量 `FLOAT_TEXT_DAMAGE_SECONDS = 0.85`（金币另有 `FLOAT_TEXT_GOLD_SECONDS = 0.62`），
+由单旋钮 `entranceProgress = FLOAT_TEXT_ENTRANCE_PROGRESS = 0.45` 统一划分前后两段（三条纯函数均在 `ZCGameViewUtil.ts`）：
+
+1. **前 45% 入场（`floatTextEntrance`）**：`progress / entranceProgress` 套 `easeOutCubic`，入场结束后恒为 `1`。**散落、下坠、摇摆、弹出缩放一律喂 `enter`（严禁喂整条 `progress`）**。
 2. **后 55% 匀速淡出（`floatTextFade`）**：入场段恒为 `1`，之后在剩余 55% 时长内**线性**降到 `0`。
-3. **后 55% 同向收尾漂移（`floatTextDrift`）**：入场段恒为 `0`，之后按 `easeOutQuad` 沿入场同向（伤害继续下沉、金币继续上飘）再漂移 `driftDistance = 7`（落在 `5~10px` 护栏内），消除静止调透明度的生硬感。
+3. **后 55% 同向收尾漂移（`floatTextDrift`）**：入场段恒为 `0`，之后按 `easeOutQuad` 沿入场同向（伤害继续下沉）再漂移 `driftDistance = 7`（落在 `5~10px` 护栏内），消除静止调透明度的生硬感。
 4. **Prefab 序列化同步**：修改 `entranceProgress (0.45)` 或 `driftDistance (7)` 必须同步更新 `ZCGameFloatText.prefab` 上的序列化值。
-- **判据**：`tests/zcds-float-text-gold-icon.test.ts`、`tests/zcds-progress.test.ts`。
+- **判据**：`tests/zcds-float-text-gold-icon.test.ts`、`tests/zcds-float-text-gold-drop.test.ts`、`tests/zcds-progress.test.ts`。
 
-### 6.1 各阶段时间表（按 0.45 切分，单位秒）
+### 6.1 各阶段时间表（按 0.45 切分，伤害 `0.85s`）
 
-| 阶段 | 伤害飘字（`0.85s`） | 金币飘字（`1.1s`） | 该段里发生什么 |
-| --- | --- | --- | --- |
-| ① 出现 | `0.000` | `0.000` | 弹出缩放 **1.25**、`alpha 255`；伤害在头顶 `y=+55`、金币在 `y=+26` |
-| ② 入场段 | `0.000 → 0.3825` | `0.000 → 0.4950` | `easeOutCubic` 走完位移 + 缩放 1.25→1；金币图标同时转满 360° |
-| ③ 淡出段 | `0.3825 → 0.8500` | `0.4950 → 1.1000` | `alpha` 线性 255→0；位置**只**再沿同向漂 7px（`easeOutQuad`） |
-| ④ 回收 | `≥ 0.8500` | `≥ 1.1000` | 模型侧 `now >= startedAt + durationSeconds` 即摘除（`ZCBattlePresentationQueue`） |
-| 段长 | 入场 `0.3825` / 淡出 `0.4675` | 入场 `0.4950` / 淡出 `0.6050` | 淡出恒为总时长的 55% |
+| 阶段 | 伤害飘字（`0.85s`） | 该段里发生什么 |
+| --- | --- | --- |
+| ① 出现 | `0.000` | 弹出缩放 **1.25**、`alpha 255`；起点在头顶 `y=+55` |
+| ② 入场段 | `0.000 → 0.3825` | `easeOutCubic` 走完位移 + 缩放 1.25→1 |
+| ③ 淡出段 | `0.3825 → 0.8500` | `alpha` 线性 255→0；位置**只**再沿同向漂 7px（`easeOutQuad`） |
+| ④ 回收 | `≥ 0.8500` | 模型侧 `now >= startedAt + durationSeconds` 即摘除（`ZCBattlePresentationQueue`） |
+| 段长 | 入场 `0.3825` / 淡出 `0.4675` | 淡出恒为总时长的 55% |
 
 关键节点实测（伤害，`row 0` / 中轨）：
 
@@ -483,13 +489,33 @@ scaleY = baseScale · cos(2π · flipHz · t + phase)      flipHz ∈ [2, 4]，p
 | `restraint` | `25` | `克制` | 15（数字 30 的一半） |
 | `resisted` | `25` | `抵抗` | 15 |
 | `execute` | `25` | `秒杀` | 17 |
-| `heal` / `gold` | `+25` | —— | —— |
+| `heal` | `+25` | —— | —— |
+| `gold` | **（无文字）** | —— | —— |
 | `miss` | `MISS` | —— | —— |
 
 - **负号已删**（`-25` → `25`）：飘字本来就长在挨打的目标身上，负号只多占一个字宽。`+` 保留 —— 它标的是「加」这个语义。
+- **金币连 `+` 和数字一起去掉了**（2026-10-23 用户：「移除金币的加号和数字 UI」）：`battleText` 对 `gold` 返回空串，
+  `textLabel.enabled` 每帧置 `false`（**不是** `node.active = false` —— 金币图标是 `Text` 的子节点，关节点会把硬币一起关掉）。
 - **前缀为什么要拆**：`cc.Label` 一条字符串只有**一个**字号，「克制」与「31」写在一句里就只能同号；需求「前缀约只有数字一半高」在单 Label 上无解（换 `RichText` 会连带改锚点与自适应宽度的行为，不值）。
-- 前缀挂在 `Text` 之下 ⇒ 位置、弹出缩放、上下散落自动继承；水平位置按数字**实际宽度**反推（`-(数字宽/2 + 6 + 前缀宽/2)`，间距 6 是留了描边的余地），与金币图标同一套算法。前缀恒为 2 个汉字，宽度直接按「字数 × 字号」算（不读 `UITransform`，那条路有一帧延迟）。
+- 前缀挂在 `Text` 之下 ⇒ 位置、弹出缩放、上下散落自动继承；水平位置按数字**实际宽度**反推（`-(数字宽/2 + 6 + 前缀宽/2)`，间距 6 是留了描边的余地）。前缀恒为 2 个汉字，宽度直接按「字数 × 字号」算（不读 `UITransform`，那条路有一帧延迟）。
 - 字号真源 `ZCFloatTextView.PREFIX_FONT_RATIO = 0.5`：数字按 0.72em 的大写高、汉字按 0.95em 算，30 → 15 时视觉高度是 `21.6 : 14.25 ≈ 0.66`；要更贴「一半高」把它改成 `0.4`（30 → 12）即可，只此一处。
+
+### 6.3 金币飘字：只有硬币，从角色中心上方落到中心点缩没（2026-10-23）
+
+同一天两轮口径，最终形态：
+
+| 项 | 口径 |
+| --- | --- |
+| 文字 | **没有**：加号、数字都不显示（`battleText('gold')` 返回空串 + `textLabel.enabled = false`） |
+| 图标 | 唯一可见物：`GoldIcon` 挂在 `Text` 节点**原点**（`x = y = 0`），不再按文字宽度往左偏 |
+| 落点 | **角色中心**：`goldCenterY = damageTargetSize / 2 = 49`（单位根节点是**逻辑脚点**，画布中心在它上方 ≈ 45.7~49px） |
+| 起手 | 中心上方 `FLOAT_TEXT_GOLD_DROP_PX = 18`（即 `y = +67`），之后只往下走 |
+| 时长 | `FLOAT_TEXT_GOLD_SECONDS = 0.62s`（比伤害 0.85s 更快，"迅速消失"） |
+| 曲线 | `ZCGameViewUtil.floatTextGoldDrop`：掉落 30%（`k²` 加速）→ 停住 15% → 缩没 55%（`scale` 与 `fade` 同步 `1-k²`） |
+
+- ⚠️ **不是** `offsetY`：那个值（26）只到小腿/腰，读起来是「金币掉在脚边」；2026-10-23 后 `offsetY` 已废弃（仅留 prefab 序列化兼容）。
+- ⚠️ 建筑产出的金币也走这条路径（`grantGold` 传格心）⇒ `+49` 落在建筑中部，与「从建筑身上掉下来」的观感一致。
+- **判据**：`tests/zcds-float-text-gold-drop.test.ts`（9 条）、`tests/zcds-float-text-gold-icon.test.ts`（7 条）、`tests/zcds-progress.test.ts` 的「飘字整链 / 慢出段漂移」两条。
 
 ## 7. 开局归属扩散波：归属格直接切换、中立格逐个替换
 

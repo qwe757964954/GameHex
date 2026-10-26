@@ -3873,26 +3873,6 @@
     "content": {
       "__id__": 10
     },
-    "arenaPage": {
-      "__uuid__": "e9fbc7f2-f631-4dfc-9f0b-a78c1205fc79",
-      "__expectedType__": "cc.Prefab"
-    },
-    "rolePage": {
-      "__uuid__": "bade9966-2f00-4a69-a70d-f2e029843a7e",
-      "__expectedType__": "cc.Prefab"
-    },
-    "roleMainPage": {
-      "__uuid__": "9f981be5-a6ce-4158-9e65-6ef918651ac2",
-      "__expectedType__": "cc.Prefab"
-    },
-    "alliancePage": {
-      "__uuid__": "d030be67-3b71-43a3-bc1e-0aea2d106e9e",
-      "__expectedType__": "cc.Prefab"
-    },
-    "shopPage": {
-      "__uuid__": "0b720739-70e2-4b83-9a17-0e4ec7b11512",
-      "__expectedType__": "cc.Prefab"
-    },
     "defaultTab": 3,
     "_id": ""
   },

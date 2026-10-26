@@ -71,7 +71,7 @@
 | `anchorHexId` | int | 主格（点击选中的那一格），必须在自己的 `hexIds` 里 |
 | `hexIds` | int[] | 占格块，长度 ≈ `occupyHex`（普通城 4、王座 6） |
 | `ring` | int | 落位时选的环号。**不能由几何反推** —— 种子生成有「目标环被占满就退一环」的兜底，两者会不等 |
-| `rangeHex` | int[] | 势力范围格子（编辑器「铺范围 / 刷格」产出）。⚠️ `IBigMapWorld` **不承载**：游戏里的范围判定仍走 `radiateCapacity` 距离，P1 联盟层才接进规则 |
+| `rangeHex` | int[] | 势力范围格子（编辑器「铺范围 / 刷格」产出）。⚠️ `IBigMapWorld` **不承载**：它是**染色**真源，不进规则 —— 2026-10-23 起「在不在势力范围内」由服务器 `SlgGameInfo.toCampId` 判定（`bigMapWithinCityRange`），`toCampId = 0` 时才回退 `radiateCapacity` 距离 |
 | `adjacentCityIds` | int[] | 相邻城池（编辑器按范围邻接自动推导，可手改）。缺省空数组，去重 + 升序 |
 | `label` | string | 地图上显示的编号（如 `1-16`）。缺省 = `String(cityId)` |
 
@@ -92,7 +92,7 @@
 | `baseId` | string | `player` 或 `npc-01`…，全局唯一 |
 | `name` | string | 显示名 |
 | `isPlayer` | bool | 全场最多 1 个为 true |
-| `hexId` | int | 基地占 1 格 |
+| `hexId` | int | 基地占 1 格。⚠️ **联机版仅作兜底**：玩家基地位置以服务器 `SlgGameInfo.toCampId` 那座城的锚点为准（`BigMapPresenter.playerBaseHexId`），只有「未收到包 / 未归属 / 该城不在地图上」时才用这里的值 |
 | `ring` | int | 落位环号 |
 | `power` | int | 展示用战力，玩家基地填 0 |
 

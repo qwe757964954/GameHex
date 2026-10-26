@@ -4,6 +4,10 @@ import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import { ZC_HEX_CONFIG, ZC_OWNER_ORDER, ZCOwner, ownersForPlayerCount } from '../../assets/script/app/zcds/model/ZCMapConfig';
 import { resolveZCSpawnRegionHints } from '../../assets/script/app/zcds/model/ZCSpawnRegionHint';
+import {
+    neutralResourceVisualOf,
+    ZCNeutralResourceVisual,
+} from '../../assets/script/app/zcds/model/ZCNeutralResourceGroup';
 
 export function loadViews() {
     class Color {
@@ -170,6 +174,11 @@ export function loadViews() {
         // 所以这里显式挂真源 —— 与文件顶部已经 import 的 `ZC_HEX_CONFIG` 同一个来源。
         '../model/ZCMapConfig': { ZC_OWNER_ORDER, ZCOwner, ownersForPlayerCount },
         '../model/ZCSpawnRegionHint': { resolveZCSpawnRegionHints },
+        //  中立资源**必须挂真源**：`load()` 会把 `../model/X` 解析到 `zcds/model/X.ts`
+        //  并**另跑一份模块**，那份的 `catalog` 是空的 ⇒ 用例 `installZCNeutralTestCatalog()`
+        //  装进本进程目录的资源项，视图查不到（表现是资源格子退化成地块图标 / 0.8 缩放）。
+        //  与 `ZCMapConfig` 同款处理：挂同一个模块实例，读的就是同一份目录。
+        '../model/ZCNeutralResourceGroup': { neutralResourceVisualOf, ZCNeutralResourceVisual },
         //  视图会值导入 `ProcedureGame`（卡面图 / 建筑帧改由控制器按 id 现取，2026-10-16）—— 夹具给一个
         //  **可写的假控制器**：用例按需 `ProcedureGame.current = fakeController`，缺省 null（视图回退建筑图）。
         '../../procedure/ProcedureGame': { ProcedureGame: procedureGameStub },

@@ -743,6 +743,41 @@ const server = createServer(async (req, res) => {
       json(res, 405, { error: '不支持此操作' });
       return;
     }
+    /**
+     * 中立资源组合（`PVP-中立资源配置.xlsx / 中立资源组合` → `remoteRef/neutralResourceGroup.json`）。
+     *
+     *  编辑器只拿它做两件事：① 组合 ID 是否存在（阻止填错号）；② 显示组合名。
+     *  表还没打（文件缺失 / 未导出）时返回空清单 —— 编辑器退回「只校验正整数」，
+     *  别把"没打表"变成"编辑器不能用"。
+     */
+    if (req.method === 'GET' && url.pathname === '/api/neutral-resource-groups') {
+      try {
+        const source = JSON.parse(await readFile(join(remoteRefDir, 'neutralResourceGroup.json'), 'utf8'));
+        const rows = Array.isArray(source)
+          ? source
+          : source.v.map((values) => Object.fromEntries(source.k.map((key, index) => [key, values[index]])));
+        const groups = new Map();
+        for (const row of rows) {
+          const groupId = Number(row.groupId);
+          if (!Number.isInteger(groupId) || groupId <= 0) continue;
+          let group = groups.get(groupId);
+          if (!group) {
+            group = { groupId, name: typeof row.groupName === 'string' ? row.groupName : '', items: [] };
+            groups.set(groupId, group);
+          }
+          group.items.push({
+            id: Number(row.id),
+            resourceType: Number(row.resourceType),
+            weight: Number(row.weight) || 0,
+            icon: typeof row.icon === 'string' ? row.icon : null,
+          });
+        }
+        json(res, 200, { groups: Array.from(groups.values()).sort((a, b) => a.groupId - b.groupId) });
+      } catch {
+        json(res, 200, { groups: [] });
+      }
+      return;
+    }
     if (req.method === 'GET' && url.pathname === '/api/map-resources') {
       const assets = [];
       await listDecor(mapResourceDir, mapResourcePrefix, assets);

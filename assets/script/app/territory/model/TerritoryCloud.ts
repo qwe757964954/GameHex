@@ -40,7 +40,9 @@ import {
     HEX_GRID_VIEW_ROW_SPACING,
     hexGridNeighborIds,
     hexGridViewPoint,
+    type HexGridPoint,
 } from '../../../core/hex/HexGridLayout';
+import type { TerritoryMapConfig } from './TerritoryMapConfig';
 
 /**
  * 消散总时长（秒）：2 帧（裂成环 → 几乎散尽）走完再淡到透明。
@@ -358,4 +360,35 @@ export function territoryCloudPocketCells(
     }
     pockets.sort((a, b) => a - b);
     return pockets;
+}
+
+/**
+ * 要盖云的格：`sites` + `randomSites.candidateCells`（+ 起始格）。
+ *
+ * 2026-10-23 山猫口径（*「地图编辑器那都没有随机格子，就不要云了，配置没有的地方」*）：
+ * 云不再"整张图铺满"，只有**配了内容的格位**盖云 —— 空白格位没有内容、也就永远不会解锁，
+ * 盖上去的云永远散不掉，纯噪声。
+ *
+ * 每朵云只有格号与格心坐标（坐标 = 布局点，**未加 `HEX_GRID_CONTENT_LIFT`**，
+ * 视图侧在 `sync` 里统一加）；`points` 缺该格时跳过（防御：布局永远与地图同源）。
+ * 结果**去重 + 按 cellId 升序**（可复现；视图遍历顺序 = 渲染顺序）。
+ */
+export function territoryCloudCells(
+    map: Pick<TerritoryMapConfig, 'sites' | 'randomSites' | 'startCellId'>,
+    points: ReadonlyMap<number, HexGridPoint>,
+): ITerritoryCloudCell[] {
+    const out: ITerritoryCloudCell[] = [];
+    const seen = new Set<number>();
+    const add = (cellId: number): void => {
+        if (seen.has(cellId)) return;
+        const point = points.get(cellId);
+        if (!point) return;
+        seen.add(cellId);
+        out.push({ cellId, x: point.x, y: point.y });
+    };
+    for (const site of map.sites) add(site.cellId);
+    for (const cellId of map.randomSites?.candidateCells ?? []) add(cellId);
+    add(map.startCellId);
+    out.sort((a, b) => a.cellId - b.cellId);
+    return out;
 }

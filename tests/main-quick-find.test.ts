@@ -27,8 +27,40 @@ const cc = {
     _decorator: { ccclass: () => (type: unknown) => type, property: () => () => {} },
     Component: class {},
     Button: { EventType: { CLICK: 'click' } },
-    UITransform: class {},
+    UITransform: class { setContentSize(): void {} },
     Vec2: class { constructor(readonly x: number, readonly y: number) {} },
+    Color: class { constructor(public r = 0, public g = 0, public b = 0, public a = 255) {} },
+    Node: class {
+        public isValid = true;
+        public layer = 0;
+        private readonly comps: unknown[] = [];
+        constructor(public name = '') {}
+        addComponent<T>(component: new () => T): T {
+            const instance = new component();
+            this.comps.push(instance);
+            return instance;
+        }
+        setParent(): void {}
+        destroy(): void { this.isValid = false; }
+    },
+    Widget: class {
+        isAlignTop = false; isAlignBottom = false; isAlignLeft = false; isAlignRight = false;
+        top = 0; bottom = 0; left = 0; right = 0;
+    },
+    Graphics: class { fillColor: unknown; clear(): void {} rect(): void {} fill(): void {} },
+    BlockInputEvents: class {},
+    Layers: { Enum: { UI_2D: 33554432 } },
+    UIOpacity: class { opacity = 255; },
+    view: { getVisibleSize: () => ({ width: 480, height: 800 }) },
+    tween: () => {
+        const chain: { to(): typeof chain; call(fn: () => void): typeof chain; start(): void; fn: (() => void) | null } = {
+            to() { return chain; },
+            call(fn) { chain.fn = fn; return chain; },
+            start() { if (chain.fn) chain.fn(); },
+            fn: null,
+        };
+        return chain;
+    },
 };
 
 test('quick-find button invokes the injected map action without navigating to matching', () => {
@@ -95,6 +127,7 @@ test('main tab host binds quick find to the embedded map before the page becomes
     class MapStub {
         setSessionAssetService() {}
         initialize() {}
+        onFirstReady() {}
         focusCurrentBoss() { focusCount++; }
     }
     class PageStub {

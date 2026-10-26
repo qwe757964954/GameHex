@@ -23,6 +23,9 @@ import {
     resolveZCSpawnMatchConfig,
     ZCSpawnSelection,
 } from '../assets/script/app/zcds/model/ZCSpawnSelection';
+import { installZCNeutralTestCatalog, ZC_TEST_ITEM } from './helpers/zcds-neutral-catalog';
+
+installZCNeutralTestCatalog();
 
 const SELECT_LAYOUT: ZCMapLayout = {
     id: 'spawn-selection-test',
@@ -39,9 +42,10 @@ const SELECT_LAYOUT: ZCMapLayout = {
         { section: 1, cells: Array.from({ length: 32 }, (_, index) => index + 32) },
         { section: 2, cells: Array.from({ length: 32 }, (_, index) => index) },
     ],
+    // 2026-10-26：点位只写组合 ID —— 第一点走「混合资源」（金币/兵团/充能），第二点走「固定金矿」。
     resourcePoints: [
-        { row: 6, column: 1, pool: { gold: 1, chest: 3 } },
-        { row: 1, column: 6, pool: { mine: 2 } },
+        { row: 6, column: 1, groupId: 13002 },
+        { row: 1, column: 6, groupId: 13005 },
     ],
     spacing: { homeMinDistance: 2, resourceMinDistance: 3 },
 };
@@ -151,8 +155,12 @@ test('玩家确认会把全局窗口压到 3 秒，AI 在 1 秒后跟随确认',
     assert.equal(selection.result?.homes.player, playerHex);
     assert.ok(selection.result?.homes.enemy !== undefined);
     assert.equal(selection.result?.resolvedResources.length, 2);
-    assert.equal(selection.result?.resolvedResources[0].resourceId, 'chest');
-    assert.equal(selection.result?.resolvedResources[1].resourceId, 'mine');
+    // 第一个点位引用「混合资源」组（13002）⇒ 抽到的必然是组内三项之一；
+    // 第二个点位引用「固定金矿」（13005）⇒ 唯一项，恒为金矿项。
+    const mixedItems = [ZC_TEST_ITEM.MixedGold, ZC_TEST_ITEM.MixedUnit, ZC_TEST_ITEM.MixedCharge];
+    assert.ok(mixedItems.includes(selection.result!.resolvedResources[0].itemId),
+        `混合资源组抽到了组外资源项：${selection.result?.resolvedResources[0].itemId}`);
+    assert.equal(selection.result?.resolvedResources[1].itemId, ZC_TEST_ITEM.Mine);
 });
 
 test('后确认方必须与已确认主城之间留下至少 N 个空格', () => {
@@ -203,8 +211,8 @@ test('资源点生成后固定为中立格且开局一律未消费（相邻自�
         playerHomeId: adjacentHome,
         enemyHomeId: enemyHome,
         resolvedResources: [
-            { hexId: playerResourceId, section: 0, resourceId: 'gold' },
-            { hexId: enemyResourceId, section: 0, resourceId: 'mine' },
+            { hexId: playerResourceId, section: 0, itemId: ZC_TEST_ITEM.Gold },
+            { hexId: enemyResourceId, section: 0, itemId: ZC_TEST_ITEM.Mine },
         ],
     };
     const config = {
@@ -220,7 +228,7 @@ test('资源点生成后固定为中立格且开局一律未消费（相邻自�
 
     const snapshot = ZCSnapshotCodec.createInitialState(config, () => 0);
     assert.equal(snapshot.hexes[playerResourceId].owner, 'neutral');
-    assert.equal(snapshot.hexes[playerResourceId].neutralResourceId, 'gold');
+    assert.equal(snapshot.hexes[playerResourceId].neutralResourceId, ZC_TEST_ITEM.Gold);
     // ⚠️ 2026-10-08 起**不再**在这里按「与主城相邻」预置解锁。
     // 相邻即自动领取统一由 `ZCGameModel.claimAdjacentNeutralResources` 结算（挂在 refreshTileStates 里）——
     // 放在开局预置会让资源点被标成已消费却**一次奖励都不发**（那正是「翻了没获取」的成因）。
@@ -233,9 +241,11 @@ test('资源点生成后固定为中立格且开局一律未消费（相邻自�
 test('固定主城地图也在开局冻结资源点，不依赖自选主城流程', () => {
     const map = makeMap();
     const resolved = resolveZCMapResources({ ...map, cityMode: 'fixed' }, sequence(0.9, 0));
+    // 点位 1 = 混合资源（13002）：roll 0.9 落在充能段 [8000,10000) ⇒ 1300203；
+    // 点位 2 = 固定金矿（13005）：唯一项，无论 roll 都出 1300501。
     assert.deepEqual(resolved, [
-        { hexId: 6 * 8 + 1, section: 0, resourceId: 'chest' },
-        { hexId: 1 * 8 + 6, section: 0, resourceId: 'mine' },
+        { hexId: 6 * 8 + 1, section: 0, itemId: ZC_TEST_ITEM.MixedCharge },
+        { hexId: 1 * 8 + 6, section: 0, itemId: ZC_TEST_ITEM.Mine },
     ]);
 });
 
@@ -261,15 +271,20 @@ test('configured home candidate cells restrict manual, default, and automatic sp
     assert.equal(selection.result?.homes.enemy, enemyHome);
 });
 
-test('PVP neutral-resource ids are valid weighted choices in one map resource point', () => {
-    const resourceIds = ['gold', 'mine', 'chest', 'unit_cap', 'artifact_charge'] as const;
-    const pool = Object.fromEntries(resourceIds.map((id, index) => [id, index + 1]));
-    const layout: ZCMapLayout = {
-        ...SELECT_LAYOUT,
-        resourcePoints: [{ row: 6, column: 1, pool }],
-    };
-    const map = makeMap(layout);
-    const draws = [0, 1.5 / 15, 4 / 15, 8 / 15, 12 / 15]
-        .map((roll) => resolveZCMapResources(map, () => roll)[0].resourceId);
-    assert.deepEqual(new Set(draws), new Set(resourceIds));
+test('★资源点位只写组合 ID：组内按权重（万分比）抽一项，权重全 0 的草稿组不出资源', () => {
+    // 13002「混合资源」：1300201 金币 5000 / 1300202 兵团 3000 / 1300203 充能 2000。
+    const map = makeMap({ ...SELECT_LAYOUT, resourcePoints: [{ row: 6, column: 1, groupId: 13002 }] });
+    const draws = [0, 0.45, 0.55, 0.85]
+        .map((roll) => resolveZCMapResources(map, () => roll)[0].itemId);
+    assert.deepEqual(draws, [
+        ZC_TEST_ITEM.MixedGold, ZC_TEST_ITEM.MixedGold, ZC_TEST_ITEM.MixedUnit, ZC_TEST_ITEM.MixedCharge,
+    ], '抽签结果按组内累计权重切段：落到 [0,5000) 金币 / [5000,8000) 兵团 / [8000,10000) 充能');
+
+    // 13006「固定兵营」当前 weight = 0（表里标注草稿）⇒ 该点位本局没有资源，不写进快照。
+    const draft = makeMap({ ...SELECT_LAYOUT, resourcePoints: [{ row: 6, column: 1, groupId: 13006 }] });
+    assert.equal(resolveZCMapResources(draft, () => 0.1).length, 0, '全 0 权重的组合不该产出资源项');
+
+    // 组合 ID 不存在（策划填错号）⇒ 同样不出资源，而不是把报错抛到对局里。
+    const missing = makeMap({ ...SELECT_LAYOUT, resourcePoints: [{ row: 6, column: 1, groupId: 99999 }] });
+    assert.equal(resolveZCMapResources(missing, () => 0.1).length, 0);
 });

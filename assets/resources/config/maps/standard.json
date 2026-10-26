@@ -34,11 +34,7 @@
     {
       "row": 8,
       "column": 5,
-      "pool": {
-        "gold": 1,
-        "mine": 1,
-        "chest": 1
-      }
+      "groupId": 13002
     }
   ],
   "art": {

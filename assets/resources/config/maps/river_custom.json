@@ -211,38 +211,22 @@
     {
       "row": 14,
       "column": 2,
-      "pool": {
-        "chest": 1,
-        "unit_cap": 1,
-        "gold": 1
-      }
+      "groupId": 13002
     },
     {
       "row": 14,
       "column": 8,
-      "pool": {
-        "artifact_charge": 1,
-        "unit_cap": 1,
-        "gold": 1
-      }
+      "groupId": 13002
     },
     {
       "row": 5,
       "column": 3,
-      "pool": {
-        "mine": 1,
-        "gold": 1,
-        "unit_cap": 1
-      }
+      "groupId": 13002
     },
     {
       "row": 5,
       "column": 8,
-      "pool": {
-        "artifact_charge": 1,
-        "gold": 1,
-        "chest": 1
-      }
+      "groupId": 13002
     }
   ],
   "art": {

@@ -1,4 +1,12 @@
-import { _decorator, CCInteger, Component, instantiate, Node, Prefab, Vec3 } from 'cc';
+import {
+    _decorator,
+    CCInteger,
+    Component,
+    instantiate,
+    Node,
+    Prefab,
+    Vec3,
+} from 'cc';
 import type { AssetService } from '../../core/asset/AssetService';
 import type { ConfigService } from '../../core/config/ConfigService';
 import type { SessionAssetService } from '../../core/asset/SessionAssetService';
@@ -13,6 +21,9 @@ import { MainPage } from './MainPage';
 import { BigMapEntry } from '../bigmap/application/BigMapEntry';
 
 const { ccclass, property } = _decorator;
+
+/** 兜底：首屏 ready 信号丢失（章节加载失败等）时，最多等待此时长后强制结束，避免 onPreload 永久卡死。 */
+const FIRST_SCREEN_FALLBACK_SECONDS = 8;
 
 /**
  * 底部七格的业务类型（MainRoot.prefab 内联绑定），与 `MainTabItems` 文案表对应。
@@ -112,6 +123,15 @@ export class MainTabHost extends Component {
     private loadingTab = -1;
     private pageLoadingTask: Promise<void> | null = null;
 
+    /**
+     * 首屏（默认页）真实渲染就绪的 Promise：MainRoot 在登录预加载阶段提前挂载、在登录图下完成渲染后 resolve。
+     * ProcedureMain 在 onPreload 等待它，确保登录图移除时下面已是完整主城。
+     */
+    private firstScreenReadyResolve!: () => void;
+    private readonly firstScreenReady = new Promise<void>((resolve) => {
+        this.firstScreenReadyResolve = resolve;
+    });
+
     /** 注入资源入口；必须在实例化并激活页面之前调用（`ProcedureMain.onEnter` 里就是这么做的）。 */
     setAssetService(assets: AssetService): void {
         this.assets = assets;
@@ -126,7 +146,15 @@ export class MainTabHost extends Component {
         this.sessionAssets = assets;
     }
 
+    /** 首屏真实渲染就绪的等待（ProcedureMain 在登录预加载挂载后 await）。 */
+    get whenFirstScreenReady(): Promise<void> {
+        return this.firstScreenReady;
+    }
+
     onLoad(): void {
+        // 兜底：首屏 ready 信号丢失时强制结束等待，避免登录预加载永久卡死。
+        this.scheduleOnce(this.onFirstScreenFallback, FIRST_SCREEN_FALLBACK_SECONDS);
+
         this.navItems.length = 0;
         this.navItems.push(...this.navBar
             .getComponentsInChildren(TabButton)
@@ -162,11 +190,11 @@ export class MainTabHost extends Component {
         // ⚠️ 必须等 `switchTab` 落定再调：否则活动弹窗会和页面实例化抢同一帧，
         // 表现在弹窗「闪一下」或盖在不存在的页面上。`checkFirstRechargeOnEnterMain`
         // 内部全 catch、永不 reject，所以这里的 `then` 不会漏出 unhandled rejection。
-        const initialPage = this.switchTab(this.defaultTab);
+        const initialReady = this.switchTab(this.defaultTab);
         const initialRevision = this.pageRevision;
         const canWarmup = (): boolean => this.isValid && this.pageRevision === initialRevision
             && this.currentPage !== null && this.loadingTab === -1;
-        void initialPage.then(() => {
+        void initialReady.then(() => {
             if (!canWarmup()) return;
             void checkFirstRechargeOnEnterMain(this);
             this.scheduleOnce(() => {
@@ -176,6 +204,13 @@ export class MainTabHost extends Component {
             }, 0);
         });
     }
+
+    /**
+     * 兜底：首屏 ready 信号丢失（章节加载失败等）时强制结束等待，避免登录预加载永久卡死。
+     */
+    private onFirstScreenFallback = (): void => {
+        this.firstScreenReadyResolve();
+    };
 
     /**
      * 打开大世界（大地图）。
@@ -275,6 +310,7 @@ export class MainTabHost extends Component {
     }
 
     onDestroy(): void {
+        this.unschedule(this.onFirstScreenFallback);
         this.cancelPageLoading();
         this.pageScope?.dispose();
         this.pageScope = null;
@@ -338,6 +374,11 @@ export class MainTabHost extends Component {
             if (mainTerritoryMap && this.assets) {
                 mainTerritoryMap.setSessionAssetService(this.sessionAssets);
                 mainTerritoryMap.initialize(this.assets, this.configs);
+                // 章节首次就绪：下一帧（引擎已在登录图下完成一次真实渲染）再 resolve 首屏等待；
+                // 登录图移除时本页已完整显示。ready 信号丢失时由 onLoad 兜底超时处理。
+                mainTerritoryMap.onFirstReady(() => {
+                    this.scheduleOnce(() => this.firstScreenReadyResolve(), 0);
+                });
             }
             const mainPage = page.getComponent(MainPage);
             if (mainPage && mainTerritoryMap) {

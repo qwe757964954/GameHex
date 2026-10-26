@@ -11,7 +11,6 @@ import {
     HEX_GRID_VIEW_ROW_SPACING,
 } from '../../../core/hex/HexGridLayout';
 import { ZCFaction, ZCOwner } from '../model/ZCMapConfig';
-import type { ZCNeutralResourceId } from '../model/ZCNeutralResourceReward';
 
 export const ZC_MAP_PRESENTATION_SCALE = 1;
 
@@ -390,11 +389,6 @@ export function spawnBaseConfirmPoint(base: { x: number; y: number }): { x: numb
 
 // 开局「点这里」提示：给金矿那一格套一圈整体描边、按正弦脉冲闪几下（需求 2026-10-15 row10）。
 
-/**
- * 提示的目标资源 id —— 需求原文「给**金矿**图标所在的地块格子增加一个整体的描边闪烁，
- * 提示玩家点击金矿」。`mine` 是中立资源表里「金矿」的 id（见 `ZCNeutralResourceReward`）。
- */
-export const ZC_NEUTRAL_HINT_RESOURCE_ID: ZCNeutralResourceId = 'mine';
 /** 闪烁一个完整周期的时长（秒）。约 1.1s ⇒ 读起来是「一呼一吸」，不是频闪。 */
 export const ZC_NEUTRAL_HINT_CYCLE_SECONDS = 1.1;
 /** 闪几个周期。4 个周期足够被看见，又不会一直分散注意力。 */

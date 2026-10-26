@@ -21,11 +21,18 @@ import {
     ZC_NEUTRAL_HINT_CYCLE_SECONDS,
     ZC_NEUTRAL_HINT_CYCLES,
     ZC_NEUTRAL_HINT_MIN_ALPHA,
-    ZC_NEUTRAL_HINT_RESOURCE_ID,
     ZC_NEUTRAL_HINT_SECONDS,
 } from '../assets/script/app/zcds/view/ZCGameViewUtil';
+import {
+    neutralResourceVisualOf,
+    ZCNeutralResourceVisual,
+} from '../assets/script/app/zcds/model/ZCNeutralResourceGroup';
+import { installZCNeutralTestCatalog, ZC_TEST_ITEM } from './helpers/zcds-neutral-catalog';
 
 configureZCMap(JSON.parse(readFileSync('tests/fixtures/zcds-legacy-map.json', 'utf8')) as ZCMapLayout);
+installZCNeutralTestCatalog();
+/** 提示目标 = 金矿类资源项（组合 13005 / 资源项 1300501）。 */
+const ZC_NEUTRAL_HINT_ITEM_ID = ZC_TEST_ITEM.Mine;
 
 /** 与 `zcds-hex-neighbor-reveal-delay.test.ts` 同款：补齐 prefab 必填引用。 */
 function stubHexView(load: (name: string) => unknown, cc: any, bar: () => any): any {
@@ -49,11 +56,12 @@ const NEUTRAL_HEX_STATE = {
     id: 7, owner: 'neutral', state: 'occupiable', building: 'none', tier: 0,
     hp: 0, maxHp: 0, wallHp: 0, wallMaxHp: 0, wallBreachedEdge: null,
     developmentCost: 25, tileType: ZCPvpTileType.Mine, developmentResolved: false,
-    neutralResourceId: ZC_NEUTRAL_HINT_RESOURCE_ID, cardId: null,
+    neutralResourceId: ZC_NEUTRAL_HINT_ITEM_ID, cardId: null,
 };
 
 test('★提示曲线：窗口 = 周期 × 次数，进场即最亮，收尾淡出到 0，窗口外恒 0', () => {
-    assert.equal(ZC_NEUTRAL_HINT_RESOURCE_ID, 'mine', '提示对象是中立资源表里的「金矿」');
+    assert.equal(neutralResourceVisualOf(ZC_NEUTRAL_HINT_ITEM_ID), ZCNeutralResourceVisual.Mine,
+        '提示对象是中立资源组合里的「金矿」项');
     assert.equal(ZC_NEUTRAL_HINT_SECONDS, ZC_NEUTRAL_HINT_CYCLE_SECONDS * ZC_NEUTRAL_HINT_CYCLES);
 
     // ① 进场第一帧就是**最亮**（`cos` 相位）：玩家一进对局就看得见，而不是先暗一拍。
@@ -191,11 +199,11 @@ test('★通道：提示挂在金矿格上按脉冲推；金矿被领或窗口�
     const { load, cc } = loadViews();
     const { world, calls, modelFor } = makeHintWorld(load, cc, [{ id: 3 }, { id: 4 }]);
 
-    world.renderNeutralHint(modelFor(0, ZC_NEUTRAL_HINT_RESOURCE_ID));
+    world.renderNeutralHint(modelFor(0, ZC_NEUTRAL_HINT_ITEM_ID));
     assert.deepEqual(calls, [{ hexId: 3, alpha: 1 }], '进场第一帧就该给金矿格推最亮的描边');
 
     calls.length = 0;
-    world.renderNeutralHint(modelFor(ZC_NEUTRAL_HINT_CYCLE_SECONDS * 0.5, ZC_NEUTRAL_HINT_RESOURCE_ID));
+    world.renderNeutralHint(modelFor(ZC_NEUTRAL_HINT_CYCLE_SECONDS * 0.5, ZC_NEUTRAL_HINT_ITEM_ID));
     assert.equal(calls.length, 1);
     assert.equal(calls[0].hexId, 3);
     assert.ok(Math.abs(calls[0].alpha - ZC_NEUTRAL_HINT_MIN_ALPHA) < 1e-9, '半个周期后应该到谷值');
@@ -208,13 +216,13 @@ test('★通道：提示挂在金矿格上按脉冲推；金矿被领或窗口�
     // 窗口结束：收手 + 通道结账（之后不再每帧扫快照）。
     const { world: world2, calls: calls2, modelFor: modelFor2 } =
         makeHintWorld(load, cc, [{ id: 3 }]);
-    world2.renderNeutralHint(modelFor2(0, ZC_NEUTRAL_HINT_RESOURCE_ID));
+    world2.renderNeutralHint(modelFor2(0, ZC_NEUTRAL_HINT_ITEM_ID));
     calls2.length = 0;
-    world2.renderNeutralHint(modelFor2(ZC_NEUTRAL_HINT_SECONDS + 0.1, ZC_NEUTRAL_HINT_RESOURCE_ID));
+    world2.renderNeutralHint(modelFor2(ZC_NEUTRAL_HINT_SECONDS + 0.1, ZC_NEUTRAL_HINT_ITEM_ID));
     assert.deepEqual(calls2, [{ hexId: 3, alpha: 0 }], '窗口结束要收掉');
     assert.equal(world2.hintOutlineSettled, true, '窗口结束后通道应结账');
     calls2.length = 0;
-    world2.renderNeutralHint(modelFor2(ZC_NEUTRAL_HINT_SECONDS + 1, ZC_NEUTRAL_HINT_RESOURCE_ID));
+    world2.renderNeutralHint(modelFor2(ZC_NEUTRAL_HINT_SECONDS + 1, ZC_NEUTRAL_HINT_ITEM_ID));
     assert.deepEqual(calls2, [], '结账后不该再推任何一帧');
 
     // 没有金矿格：一格都不推（也不能因此把通道永久卡死在下一次换局的窗口里）。

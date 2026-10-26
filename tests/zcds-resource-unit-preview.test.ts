@@ -3,8 +3,10 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { loadViews } from './helpers/zcds-view-fixtures';
 import { configureZCMap, ZCMapLayout } from '../assets/script/app/zcds/model/ZCGameModel';
+import { installZCNeutralTestCatalog, ZC_TEST_ITEM } from './helpers/zcds-neutral-catalog';
 
 configureZCMap(JSON.parse(readFileSync('tests/fixtures/zcds-legacy-map.json', 'utf8')) as ZCMapLayout);
+installZCNeutralTestCatalog();
 
 /** 与 `zcds-progress.test.ts` 同款：补齐 prefab 必填引用。 */
 function stubHexView(load: (name: string) => any, cc: any, bar: () => any): any {
@@ -60,7 +62,7 @@ test('unit_cap 不再写中文「兵力」：按配置站N 个中立待机兵，
     view.setResourceUnits('68001', prefab as never, 3);
 
     view.render({
-        state: resourceHexState('unit_cap'),
+        state: resourceHexState(ZC_TEST_ITEM.Unit),
         canDevelop: false, playerGold: 0, cooldown: null, now: 0,
     });
 
@@ -99,7 +101,7 @@ test('领取后（neutralResourceId 清空）骨���收掉，不残留', ()
     const view = stubHexView(load, cc, bar);
     view.setResourceUnits('68001', spinePrefab(load, cc) as never, 3);
     view.render({
-        state: resourceHexState('unit_cap'),
+        state: resourceHexState(ZC_TEST_ITEM.Unit),
         canDevelop: false, playerGold: 0, cooldown: null, now: 0,
     });
     const nodes = (view as any).resourceUnitNodes as any[];
@@ -119,7 +121,7 @@ test('没注入骨骼 prefab 时退回中文兜底，不留空格', () => {
     // 表里 rewardCardId 为空、或该卡没单位 prefab ⇒ 渲染层会喂 null。
     view.setResourceUnits('', null, 3);
     view.render({
-        state: resourceHexState('unit_cap'),
+        state: resourceHexState(ZC_TEST_ITEM.Unit),
         canDevelop: false, playerGold: 0, cooldown: null, now: 0,
     });
     assert.equal(view.iconLabel.enabled, true, '兜底要显示文字');
@@ -133,7 +135,7 @@ test('同一个 prefab 每帧 render 不会反复重建节点（否则节点无�
     const prefab = spinePrefab(load, cc);
     view.setResourceUnits('68001', prefab as never, 2);
     const presentation = {
-        state: resourceHexState('unit_cap'),
+        state: resourceHexState(ZC_TEST_ITEM.Unit),
         canDevelop: false, playerGold: 0, cooldown: null, now: 0,
     };
     view.render(presentation);
@@ -149,12 +151,12 @@ test('换兵种（cardId / prefab 变了）必须重建节点', () => {
     const { load, cc, bar } = loadViews();
     const view = stubHexView(load, cc, bar);
     view.setResourceUnits('68001', spinePrefab(load, cc, '豌豆射手') as never, 2);
-    view.render({ state: resourceHexState('unit_cap'), canDevelop: false, playerGold: 0, cooldown: null, now: 0 });
+    view.render({ state: resourceHexState(ZC_TEST_ITEM.Unit), canDevelop: false, playerGold: 0, cooldown: null, now: 0 });
     const before = ((view as any).resourceUnitNodes as any[]).slice();
 
     const nutPrefab = spinePrefab(load, cc, '坚果');
     view.setResourceUnits('68002', nutPrefab as never, 2);
-    view.render({ state: resourceHexState('unit_cap'), canDevelop: false, playerGold: 0, cooldown: null, now: 0 });
+    view.render({ state: resourceHexState(ZC_TEST_ITEM.Unit), canDevelop: false, playerGold: 0, cooldown: null, now: 0 });
 
     const after = (view as any).resourceUnitNodes as any[];
     assert.equal(after.length, 2);
@@ -166,7 +168,7 @@ test('数量变化按配置走：改成 1 个只留 1 个可见', () => {
     const { load, cc, bar } = loadViews();
     const view = stubHexView(load, cc, bar);
     view.setResourceUnits('68001', spinePrefab(load, cc) as never, 3);
-    const presentation = { state: resourceHexState('unit_cap'), canDevelop: false, playerGold: 0, cooldown: null, now: 0 };
+    const presentation = { state: resourceHexState(ZC_TEST_ITEM.Unit), canDevelop: false, playerGold: 0, cooldown: null, now: 0 };
     view.render(presentation);
     assert.equal(((view as any).resourceUnitNodes as any[]).filter((n) => n.active).length, 3);
 
@@ -190,7 +192,7 @@ test('★自选出生点阶段：兵力资源点与对局一致（站待机兵�
     // 给一个区名，验「站了骨骼的格子一个字都不写」——包括本来会画上去的区名。
     view.renderSpawnSelection({
         sectionOwner: 'player', selectedBy: null, confirmed: false, blocked: false,
-        resourcePoint: true, resourceId: 'unit_cap', unlocksResource: false,
+        resourcePoint: true, resourceItemId: ZC_TEST_ITEM.Unit, unlocksResource: false,
     } as never);
 
     const nodes = (view as any).resourceUnitNodes as any[];
@@ -210,7 +212,7 @@ test('★自选出生点阶段：兵力资源点与对局一致（站待机兵�
     const fallback = stubHexView(load, cc, bar);
     fallback.renderSpawnSelection({
         sectionOwner: 'player', selectedBy: null, confirmed: false, blocked: false,
-        resourcePoint: true, resourceId: 'unit_cap', unlocksResource: false,
+        resourcePoint: true, resourceItemId: ZC_TEST_ITEM.Unit, unlocksResource: false,
     } as never);
     assert.equal((fallback as any).resourceUnitNodes.length, 0, '没喂骨骼时不该凭空造兵');
     assert.equal(fallback.iconSprite.spriteFrame, fallback.barracksIconFrame,

@@ -5710,6 +5710,7 @@
         artifactId: number;
         artifactLevel: number;
         unitId: number;
+        unitType?: (number|null);
     }
 
     

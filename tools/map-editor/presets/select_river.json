@@ -206,44 +206,6 @@
       "tendency": "rush"
     }
   ],
-  "resourcePoints": [
-    {
-      "row": 15,
-      "column": 1,
-      "pool": {
-        "chest": 1,
-        "artifact_charge": 1,
-        "unit_cap": 1
-      }
-    },
-    {
-      "row": 14,
-      "column": 10,
-      "pool": {
-        "mine": 1,
-        "artifact_charge": 1,
-        "unit_cap": 1
-      }
-    },
-    {
-      "row": 3,
-      "column": 0,
-      "pool": {
-        "gold": 1,
-        "unit_cap": 1,
-        "chest": 1
-      }
-    },
-    {
-      "row": 4,
-      "column": 9,
-      "pool": {
-        "artifact_charge": 1,
-        "mine": 1,
-        "gold": 1
-      }
-    }
-  ],
   "spacing": {
     "homeMinDistance": 2,
     "resourceMinDistance": 3

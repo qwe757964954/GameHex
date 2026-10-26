@@ -286,6 +286,62 @@ test('云洞判定：超过封顶的大片未探索区不当洞（不然半张�
 });
 
 // ============================================================
+// ⑥ 盖云格位：只盖「配了内容的格」（山猫口径）
+// ============================================================
+
+test('territoryCloudCells：只盖 sites + candidateCells + 起始格，空白格不盖（山猫口径）', () => {
+    const rows = 5;
+    const columns = 5;
+    const points = new Map<number, { x: number; y: number }>();
+    for (let cellId = 0; cellId < rows * columns; cellId += 1) {
+        const point = gridLayout.hexGridViewPoint(Math.floor(cellId / columns), cellId % columns, rows, columns);
+        points.set(cellId, point);
+    }
+    const cells = cloud.territoryCloudCells(
+        {
+            sites: [{ cellId: 1 }, { cellId: 7 }],
+            randomSites: { candidateCells: [11, 13] },
+            startCellId: 12,
+        },
+        points,
+    );
+    assert.deepEqual(
+        cells.map((cell) => cell.cellId),
+        [1, 7, 11, 12, 13],
+        '只盖配置格 + 起始格，且升序去重',
+    );
+    // 坐标 = 布局点（未加 HEX_GRID_CONTENT_LIFT，视图侧 sync 统一加）。
+    const p12 = points.get(12)!;
+    assert.equal(cells.find((cell) => cell.cellId === 12)!.x, p12.x);
+    assert.equal(cells.find((cell) => cell.cellId === 12)!.y, p12.y);
+    // 空白格（不在 sites / candidates / start）不盖 —— 盖了也永远散不掉，纯噪声。
+    assert.equal(cells.some((cell) => cell.cellId === 0), false);
+    assert.equal(cells.some((cell) => cell.cellId === 24), false);
+});
+
+test('territoryCloudCells：重复格只出一朵；points 缺格跳过不崩', () => {
+    const points = new Map([
+        [1, { x: 10, y: 20 }],
+        [2, { x: 30, y: 40 }],
+    ]);
+    const cells = cloud.territoryCloudCells(
+        {
+            sites: [{ cellId: 1 }, { cellId: 2 }],
+            randomSites: { candidateCells: [1] }, // 与 site 重复
+            startCellId: 2, // 与 site 重复
+        },
+        points,
+    );
+    assert.deepEqual(cells.map((cell) => cell.cellId), [1, 2], '去重后仍升序');
+    // points 里缺的格（防御：布局与地图不同源）⇒ 跳过，不产出 NaN 坐标；
+    // 有 point 的格照常盖（points 缺的是 startCellId 5，不是 site 99）。
+    const sparse = new Map([[99, { x: 1, y: 2 }]]);
+    const out = cloud.territoryCloudCells({ sites: [{ cellId: 99 }], startCellId: 5 }, sparse);
+    assert.deepEqual(out.map((cell) => cell.cellId), [99], '有 point 的 site 要盖，缺 point 的 start 跳过');
+    assert.ok(out.every((cell) => Number.isFinite(cell.x) && Number.isFinite(cell.y)), '不许产出 NaN 坐标');
+});
+
+// ============================================================
 // 视图接线（vm + cc 桩）
 // ============================================================
 

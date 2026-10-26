@@ -54,7 +54,10 @@ import type { ZCSkillRuntimeDefinition } from './ZCSkillRuntime';
 import { ZCStatusSystem } from './ZCStatusEffect';
 
 import { ownersForPlayerCount, ZC_OWNER_ORDER, ZCOwner } from './ZCMapConfig';
-import { ZCNeutralResourceId, type ZCNeutralResourceReward } from './ZCNeutralResourceReward';
+import {
+    isZCNeutralResourceBuilding, neutralResourceItemOf,
+    type ZCNeutralResourceItem,
+} from './ZCNeutralResourceGroup';
 export type {
     ZCActionFailureReason,
     ZCActionResult,
@@ -446,8 +449,8 @@ export class ZCGameModel {
             setGold: (owner, amount) => this.setGold(owner, amount),
             unitCount: this.services.unitCount,
             spawnUnit: this.services.spawnUnit,
-            onNeutralReward: (hexId, resourceId, owner, reward) => {
-                this.pushNeutralReward(hexId, resourceId, owner, reward);
+            onNeutralReward: (hexId, itemId, owner, item) => {
+                this.pushNeutralReward(hexId, itemId, owner, item);
             },
         };
     }
@@ -1668,12 +1671,14 @@ export class ZCGameModel {
 
     private claimAdjacentNeutralResources(): void {
         ZCDevelopmentSystem.claimAdjacentNeutralResources(
-            this.state, this.config.map, this.activeOwners, this.developmentContext, (hexId, resourceId) => {
+            this.state, this.config.map, this.activeOwners, this.developmentContext, (hexId, itemId) => {
                 this.tileStatesDirty = true;
                 this.invalidateTerrain();
-                // 金矿「被开发」：领取金矿走「建筑被开发」的点击动画（脉冲 ∥ 缩没、无卡牌），
-                // 与「开出一块地」同一种观感（2026-10-20 需求）。
-                if (resourceId === ZCNeutralResourceId.Mine) this.pushHexActivation(hexId, false, 0);
+                // 金矿 / 兵营「被开发」：这两类资源领取后原地立起一座建筑，走「建筑被开发」的
+                // 点击动画（脉冲 ∥ 缩没、无卡牌），与「开出一块地」同一种观感（2026-10-20 需求）。
+                if (isZCNeutralResourceBuilding(neutralResourceItemOf(itemId))) {
+                    this.pushHexActivation(hexId, false, 0);
+                }
             });
     }
 
@@ -1681,24 +1686,24 @@ export class ZCGameModel {
      * 中立资源奖励入袋的表现通知入口（`onNeutralReward` 的落地实现）。
      *
      * 按需求把「哪种资源播什么效果」收敛在模型这一处：
-     *   · `mine`（金矿）→ **只播「建筑被开发」激活**（见 `claimAdjacentNeutralResources`），
+     *   · 金矿 / 兵营 → **只播「建筑被开发」激活**（见 `claimAdjacentNeutralResources`），
      *     不播金币飞行 —— 需求口径「金矿沿用建筑被开发效果」；
-     *   · `gold` / `chest`（金币堆 / 宝箱）→ 入队金币飞行事件（视图播「飞向金币栏 + 上飘 +N」）；
-     *   · `artifact_charge`（神器充能）→ 入队神器飞行事件（视图播「飞向神器栏」）；
-     *   · `unit_cap`（兵力）→ 直接产兵、走出生表现，无飞行事件。
+     *   · 宝箱 / 金币类 → 入队金币飞行事件（视图播「飞向金币栏 + 上飘 +N」）；
+     *   · 神器充能 → 入队神器飞行事件（视图播「飞向神器栏」）；
+     *   · 兵团 → 直接产兵、走出生表现，无飞行事件。
      * 其余（无实际入账金额）一律不入队，避免空特效。
      */
-    private pushNeutralReward(hexId: number, resourceId: ZCNeutralResourceId, owner: ZCOwner,
-        reward: ZCNeutralResourceReward): void {
-        if (resourceId === ZCNeutralResourceId.Mine) return;
-        if (reward.gold <= 0 && reward.artifactCharge <= 0) return;
+    private pushNeutralReward(hexId: number, itemId: number, owner: ZCOwner,
+        item: ZCNeutralResourceItem): void {
+        if (isZCNeutralResourceBuilding(item)) return;
+        if (item.gold <= 0 && item.artifactCharge <= 0) return;
         this.presentation.pushNeutralReward({
             now: this.state.elapsedSeconds,
             hexId,
-            resourceId,
+            itemId,
             owner,
-            gold: reward.gold,
-            artifactCharge: reward.artifactCharge,
+            gold: item.gold,
+            artifactCharge: item.artifactCharge,
         });
     }
 

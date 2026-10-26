@@ -1,6 +1,5 @@
 import type { ZCMatchConfig, ZCMatchMap } from './ZCMatchConfig';
-import { isZCNeutralResourceId } from './ZCNeutralResourceReward';
-import type { ZCNeutralResourceId } from './ZCNeutralResourceReward';
+import { drawZCNeutralResourceItem, previewZCNeutralResourceItem } from './ZCNeutralResourceGroup';
 import {
     defaultZCSectionAt,
     ownersForPlayerCount,
@@ -144,16 +143,16 @@ export class ZCSpawnSelection {
             && state.confirmedHexId === null && state.selectedHexId !== null;
     }
 
-    /** 资源点的代表资源 id（权重最高者；通常只配一个），选点阶段用它显示资源图标。 */
-    resourceIdAt(hexId: number): ZCNeutralResourceId | null {
+    /**
+     * 资源点在选点阶段的**预览资源项 id**（组内权重最高者）。
+     *
+     *  选点阶段还没抽签（抽签在 `resolveZCMapResources` 一局只做一次），所以只能拿
+     *  「最可能的那个」显示图标；与旧实现「取池里权重最高的资源」同口径。
+     */
+    resourceItemIdAt(hexId: number): number | null {
         const point = this.resourceByHex.get(hexId);
         if (!point) return null;
-        let best: [ZCNeutralResourceId, number] | null = null;
-        for (const [id, weight] of Object.entries(point.pool)) {
-            if (weight <= 0 || !isZCNeutralResourceId(id)) continue;
-            if (!best || weight > best[1]) best = [id, weight];
-        }
-        return best ? best[0] : null;
+        return previewZCNeutralResourceItem(point.groupId)?.id ?? null;
     }
 
     /**
@@ -397,26 +396,17 @@ export class ZCSpawnSelection {
 export function resolveZCMapResources(map: ZCMatchMap, random: () => number): ZCMapResolvedResource[] {
     const resolved: ZCMapResolvedResource[] = [];
     for (const point of map.resourcePoints ?? []) {
-        // 池 key 来自地图 JSON（不可信）：不认识的一律剔除，正常路径上 `ZCMapConfig` 校验已拒绝，
-        // 这里只保证运行时不会把非法 id 写进快照。
-        const entries = Object.entries(point.pool).filter(
-            (entry): entry is [ZCNeutralResourceId, number] => entry[1] > 0 && isZCNeutralResourceId(entry[0]),
-        );
-        if (!entries.length) continue;
-        const total = entries.reduce((sum, [, weight]) => sum + weight, 0);
-        let cursor = clampedZCResourceRandom(random) * total;
-        let resourceId = entries[entries.length - 1][0];
-        for (const [candidate, weight] of entries) {
-            cursor -= weight;
-            if (cursor < 0) { resourceId = candidate; break; }
-        }
+        // 投签 = 组内按 `weight` 抽一个资源项（权重全 0 的草稿组合抽不到东西 ⇒ 该点位本局无资源，
+        // 不写进快照，格子上也就没有图标 —— 这不是错误，是配置里的「占位不投放」）。
+        const item = drawZCNeutralResourceItem(point.groupId, random);
+        if (!item) continue;
         const hexId = point.row * map.columns + point.column;
         const depth = point.depth ?? depthForZCResource(map, hexId);
         resolved.push({
             hexId,
             section: point.section ?? sectionForZCResource(map, hexId),
             ...(depth === undefined ? {} : { depth }),
-            resourceId,
+            itemId: item.id,
         });
     }
     return resolved;
@@ -434,10 +424,6 @@ function depthForZCResource(map: ZCMatchMap, hexId: number): ZCDepth | undefined
     return map.regions?.find((region) => region.cells.includes(hexId))?.depth;
 }
 
-function clampedZCResourceRandom(random: () => number): number {
-    const value = random();
-    return Number.isFinite(value) ? Math.max(0, Math.min(0.999999999999, value)) : 0;
-}
 
 /** 把选点结果冻结进正式对局配置；从这一刻起地图按 fixed 模式进入战斗模型。 */
 export function resolveZCSpawnMatchConfig(

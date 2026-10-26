@@ -14,8 +14,10 @@ import { readFileSync } from 'node:fs';
 import { loadViews } from './helpers/zcds-view-fixtures';
 import { configureZCMap, ZCMapLayout } from '../assets/script/app/zcds/model/ZCGameModel';
 import { ZCPvpTileType } from '../assets/script/app/zcds/model/ZCPvpTileRules';
+import { installZCNeutralTestCatalog, ZC_TEST_ITEM } from './helpers/zcds-neutral-catalog';
 
 configureZCMap(JSON.parse(readFileSync('tests/fixtures/zcds-legacy-map.json', 'utf8')) as ZCMapLayout);
+installZCNeutralTestCatalog();
 
 /** 需求值：地块类型图标缩到 80%。与 `ZCGameHex.prefab` 里的 `_lscale` 同值，但运行时真源是代码。 */
 const TILE_ICON_SCALE = 0.8;
@@ -32,6 +34,7 @@ function stubHexView(load: (name: string) => any, cc: any, bar: () => any): any 
     const view = new (load('./ZCHexView').ZCHexView)();
     const sprite = () => ({ node: bar().node, enabled: true, spriteFrame: null, color: null });
     for (const key of ['tileSprite', 'buildingSprite', 'iconSprite', 'priceIcon']) view[key] = sprite();
+    view.groundGlow = { ...sprite(), color: { r: 255, g: 255, b: 255, a: 180 }, customMaterial: null };
     for (const key of ['tileFrame', 'mineIconFrame', 'barracksIconFrame', 'mysteryFrame',
         'mineFrame', 'ruinsFrame', 'enemyDevelopFrame',
         'goldResourceFrame', 'mineResourceFrame', 'chestResourceFrame']) view[key] = { name: key };
@@ -131,7 +134,7 @@ test('地块类型图标缩放：资源点格仍按图缩到格子边长，不�
             id: 1, owner: 'neutral', state: 'occupiable', building: 'none', tier: 0,
             hp: 0, maxHp: 0, wallHp: 0, wallMaxHp: 0, wallBreachedEdge: null,
             developmentCost: 25, tileType: null, developmentResolved: false,
-            neutralResourceId: 'artifact_charge', cardId: null,
+            neutralResourceId: ZC_TEST_ITEM.MixedCharge, cardId: null,
         },
         canDevelop: false,
         playerGold: 0,

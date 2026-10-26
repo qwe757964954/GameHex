@@ -70,7 +70,9 @@ test('ZCHexView.renderSpawnSelection：选点阶段的中立资源格一律返�
     const end = hex.indexOf('private frameForSpawnResource');
     assert.ok(start > 0 && end > start, '没读到 renderSpawnSelection');
     const body = hex.slice(start, end);
-    assert.match(body, /const maskResource = presentation\.resourcePoint && !!presentation\.resourceId\s*&&\s*!!this\.unknownResourceFrame/,
+    assert.match(body, /const visual = neutralResourceVisualOf\(presentation\.resourceItemId\);/,
+        '选点阶段的表现键由资源项 id 查表得出（别再把 id 当字符串用）');
+    assert.match(body, /const maskResource = presentation\.resourcePoint && !!visual\s*&&\s*!!this\.unknownResourceFrame/,
         '遮蔽判据 = 有资源点 + 有占位图');
     assert.match(body, /maskResource\s*\? this\.unknownResourceFrame/,
         '遮蔽时要返回问号帧，不能返回具体资源图');
@@ -98,6 +100,6 @@ test('遮蔽开关的唯一来源：`cityMode === select`（自选主城局）',
     assert.equal(hits.length, 1, `自选判据只许一处（现有 ${hits.length} 处）—— 两处会漂移`);
     // 文字兜底也必须一起吃这个开关：自选局不许写出「宝箱 / 金矿」这类中文。
     const hex = stripComments(read('assets/script/app/zcds/view/ZCHexView.ts'));
-    assert.ok(/state\.neutralResourceId && !hideNeutralResourceLabel && !resourceFrame/.test(hex),
+    assert.ok(/resourceVisual && !hideNeutralResourceLabel && !resourceFrame/.test(hex),
         '文字兜底那条仍要保留 `!hideNeutralResourceLabel`（遮蔽时不许写资源名）');
 });

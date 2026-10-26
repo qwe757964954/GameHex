@@ -109332,6 +109332,7 @@ $root.com = (function() {
                      * @property {number} artifactId CmdBattleUnitInfo artifactId
                      * @property {number} artifactLevel CmdBattleUnitInfo artifactLevel
                      * @property {number} unitId CmdBattleUnitInfo unitId
+                     * @property {number|null} [unitType] CmdBattleUnitInfo unitType
                      */
 
                     /**
@@ -109399,6 +109400,14 @@ $root.com = (function() {
                     CmdBattleUnitInfo.prototype.unitId = 0;
 
                     /**
+                     * CmdBattleUnitInfo unitType.
+                     * @member {number} unitType
+                     * @memberof com.xkhy.tafang.cmd.CmdBattleUnitInfo
+                     * @instance
+                     */
+                    CmdBattleUnitInfo.prototype.unitType = 0;
+
+                    /**
                      * Creates a new CmdBattleUnitInfo instance using the specified properties.
                      * @function create
                      * @memberof com.xkhy.tafang.cmd.CmdBattleUnitInfo
@@ -109434,6 +109443,8 @@ $root.com = (function() {
                         writer.uint32(/* id 4, wireType 0 =*/32).uint32(message.artifactId);
                         writer.uint32(/* id 5, wireType 0 =*/40).uint32(message.artifactLevel);
                         writer.uint32(/* id 6, wireType 0 =*/48).uint32(message.unitId);
+                        if (message.unitType != null && Object.hasOwnProperty.call(message, "unitType"))
+                            writer.uint32(/* id 7, wireType 0 =*/56).uint32(message.unitType);
                         return writer;
                     };
 
@@ -109485,6 +109496,10 @@ $root.com = (function() {
                                 }
                             case 6: {
                                     message.unitId = reader.uint32();
+                                    break;
+                                }
+                            case 7: {
+                                    message.unitType = reader.uint32();
                                     break;
                                 }
                             default:

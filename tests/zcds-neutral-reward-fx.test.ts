@@ -9,6 +9,9 @@ import {
     ZC_NEUTRAL_REWARD_RISE_SECONDS,
     ZC_NEUTRAL_REWARD_TOTAL_SECONDS,
 } from '../assets/script/app/zcds/model/ZCBattlePresentationQueue';
+import { installZCNeutralTestCatalog, ZC_TEST_ITEM } from './helpers/zcds-neutral-catalog';
+
+installZCNeutralTestCatalog();
 
 // ============================================================
 // 一、队列：`pushNeutralReward` / `prune` / `reset` 的数值口径
@@ -17,12 +20,12 @@ import {
 test('队列：金币事件字段齐全、时长 = 飞行 + 错峰 + 上飘', () => {
     const queue = new ZCBattlePresentationQueue();
     const reward = queue.pushNeutralReward({
-        now: 1.5, hexId: 7, resourceId: 'gold', owner: 'player', gold: 50, artifactCharge: 0,
+        now: 1.5, hexId: 7, itemId: ZC_TEST_ITEM.Gold, owner: 'player', gold: 50, artifactCharge: 0,
     });
     assert.ok(reward);
     assert.equal(reward.id, 1);
     assert.equal(reward.hexId, 7);
-    assert.equal(reward.resourceId, 'gold');
+    assert.equal(reward.itemId, ZC_TEST_ITEM.Gold);
     assert.equal(reward.owner, 'player');
     assert.equal(reward.gold, 50);
     assert.equal(reward.artifactCharge, 0);
@@ -41,21 +44,21 @@ test('队列：金币事件字段齐全、时长 = 飞行 + 错峰 + 上飘', ()
 test('队列：金额取整，负数 / 非有限一律拒收（不进队列）', () => {
     const queue = new ZCBattlePresentationQueue();
     assert.equal(queue.pushNeutralReward({
-        now: 0, hexId: 1, resourceId: 'gold', owner: 'player', gold: 49.6, artifactCharge: 0,
+        now: 0, hexId: 1, itemId: ZC_TEST_ITEM.Gold, owner: 'player', gold: 49.6, artifactCharge: 0,
     })?.gold, 50, '金币四舍五入');
     assert.equal(queue.pushNeutralReward({
-        now: 0, hexId: 2, resourceId: 'chest', owner: 'player', gold: 100, artifactCharge: 0.6,
+        now: 0, hexId: 2, itemId: ZC_TEST_ITEM.BigChest, owner: 'player', gold: 100, artifactCharge: 0.6,
     })?.artifactCharge, 1, '充能四舍五入');
 
     // 拒收：数量不能脏（会直接变成「+N」文案）。
     for (const gold of [-1, Number.NaN, Number.POSITIVE_INFINITY]) {
         assert.equal(queue.pushNeutralReward({
-            now: 0, hexId: 3, resourceId: 'gold', owner: 'player', gold, artifactCharge: 0,
+            now: 0, hexId: 3, itemId: ZC_TEST_ITEM.Gold, owner: 'player', gold, artifactCharge: 0,
         }), null, `gold=${gold} 应拒收`);
     }
     for (const charge of [-1, Number.NaN, Number.POSITIVE_INFINITY]) {
         assert.equal(queue.pushNeutralReward({
-            now: 0, hexId: 4, resourceId: 'artifact_charge', owner: 'player', gold: 0, artifactCharge: charge,
+            now: 0, hexId: 4, itemId: ZC_TEST_ITEM.MixedCharge, owner: 'player', gold: 0, artifactCharge: charge,
         }), null, `artifactCharge=${charge} 应拒收`);
     }
     assert.equal(queue.neutralRewards.length, 2, '只有两次合法 push 入队');
@@ -64,7 +67,7 @@ test('队列：金额取整，负数 / 非有限一律拒收（不进队列）',
 test('队列：上限 16 丢最旧，不阻塞新事件', () => {
     const queue = new ZCBattlePresentationQueue();
     for (let i = 1; i <= 20; i += 1) {
-        queue.pushNeutralReward({ now: i, hexId: i, resourceId: 'gold', owner: 'player', gold: 10, artifactCharge: 0 });
+        queue.pushNeutralReward({ now: i, hexId: i, itemId: ZC_TEST_ITEM.Gold, owner: 'player', gold: 10, artifactCharge: 0 });
     }
     assert.equal(queue.neutralRewards.length, 16);
     assert.equal(queue.neutralRewards[0].id, 5, '丢的是最旧的 4 条');
@@ -73,7 +76,7 @@ test('队列：上限 16 丢最旧，不阻塞新事件', () => {
 
 test('队列：prune 到点摘除，reset 清空且 id 从 1 重新编号', () => {
     const queue = new ZCBattlePresentationQueue();
-    queue.pushNeutralReward({ now: 0, hexId: 1, resourceId: 'gold', owner: 'player', gold: 50, artifactCharge: 0 });
+    queue.pushNeutralReward({ now: 0, hexId: 1, itemId: ZC_TEST_ITEM.Gold, owner: 'player', gold: 50, artifactCharge: 0 });
     assert.equal(queue.neutralRewards.length, 1);
     // 与其它队列同口径：`now >= startedAt + durationSeconds` 即摘除（边界含）。
     queue.prune(ZC_NEUTRAL_REWARD_TOTAL_SECONDS - 0.001);
@@ -81,11 +84,11 @@ test('队列：prune 到点摘除，reset 清空且 id 从 1 重新编号', () =
     queue.prune(ZC_NEUTRAL_REWARD_TOTAL_SECONDS + 0.001);
     assert.equal(queue.neutralRewards.length, 0, '过期即摘除');
 
-    queue.pushNeutralReward({ now: 0, hexId: 2, resourceId: 'gold', owner: 'player', gold: 50, artifactCharge: 0 });
+    queue.pushNeutralReward({ now: 0, hexId: 2, itemId: ZC_TEST_ITEM.Gold, owner: 'player', gold: 50, artifactCharge: 0 });
     queue.reset();
     assert.equal(queue.neutralRewards.length, 0, 'reset 清空队列');
     assert.equal(queue.pushNeutralReward({
-        now: 0, hexId: 3, resourceId: 'gold', owner: 'player', gold: 50, artifactCharge: 0,
+        now: 0, hexId: 3, itemId: ZC_TEST_ITEM.Gold, owner: 'player', gold: 50, artifactCharge: 0,
     })?.id, 1, '换局后 id 重新从 1 开始（判据与其它队列 reset 同口径）');
 });
 
@@ -188,7 +191,7 @@ const resolveStart = () => START;
 
 function goldEvent(overrides: Record<string, unknown> = {}) {
     return {
-        id: 1, hexId: 3, resourceId: 'gold', owner: 'player', gold: 50, artifactCharge: 0,
+        id: 1, hexId: 3, itemId: ZC_TEST_ITEM.Gold, owner: 'player', gold: 50, artifactCharge: 0,
         startedAt: 0, durationSeconds: ZC_NEUTRAL_REWARD_TOTAL_SECONDS,
         ...overrides,
     };
@@ -227,17 +230,17 @@ test('金币事件：上飘段 label 升起、事件过期（队列 prune 后）
 test('资源归类：金矿 / 兵力不建特效；神器充能建单个神器节点；非玩家不播', () => {
     const { fx, host } = makeFx();
     // 金矿（mine）：需求口径走建筑激活，不进本类。
-    fx.render([goldEvent({ id: 1, resourceId: 'mine', gold: 250 })], 0.3, resolveStart, TARGETS);
+    fx.render([goldEvent({ id: 1, itemId: ZC_TEST_ITEM.Mine, gold: 250 })], 0.3, resolveStart, TARGETS);
     assert.equal(fx.size, 0, '金矿不播飞行');
     // 兵力（unit_cap）：直接产兵，不进本类。
-    fx.render([goldEvent({ id: 2, resourceId: 'unit_cap', gold: 0 })], 0.3, resolveStart, TARGETS);
+    fx.render([goldEvent({ id: 2, itemId: ZC_TEST_ITEM.Unit, gold: 0 })], 0.3, resolveStart, TARGETS);
     assert.equal(fx.size, 0, '兵力不播飞行');
     // 非玩家领取：目标在玩家 HUD 上，不给对方播。
     fx.render([goldEvent({ id: 3, owner: 'enemy' })], 0.3, resolveStart, TARGETS);
     assert.equal(fx.size, 0, '非玩家不播飞行');
 
     // 神器充能：单个神器图标飞向神器按钮。
-    fx.render([goldEvent({ id: 4, resourceId: 'artifact_charge', gold: 0, artifactCharge: 1 })], 0.3, resolveStart, TARGETS);
+    fx.render([goldEvent({ id: 4, itemId: ZC_TEST_ITEM.MixedCharge, gold: 0, artifactCharge: 1 })], 0.3, resolveStart, TARGETS);
     assert.equal(fx.size, 1);
     assert.equal(host.children.length, 1);
     assert.equal(host.children[0].children.length, 1, '神器只有 1 个子节点');
@@ -250,7 +253,7 @@ test('clear：销毁全部条目（换局清理），渲染空队列后不再重
     // 两个事件同帧渲染：渲染层按「本帧存活事件」对齐，分两次 render 会把旧事件当成已过期。
     fx.render([
         goldEvent(),
-        goldEvent({ id: 5, resourceId: 'artifact_charge', gold: 0, artifactCharge: 1 }),
+        goldEvent({ id: 5, itemId: ZC_TEST_ITEM.MixedCharge, gold: 0, artifactCharge: 1 }),
     ], 0.3, resolveStart, TARGETS);
     assert.equal(fx.size, 2);
     fx.clear();

@@ -2,7 +2,6 @@ import type { ZCAttackTrait, ZCCardType, ZCCombatEventType, ZCUnitId } from './Z
 //  真源在 `ZCCombatCatalog`（攻击档案的领域），这里转出以保持既有 `from './ZCGameTypes'` 的取用路径。
 export type { ZCCombatEventType };
 import type { ZCFaction, ZCOwner } from './ZCMapConfig';
-import type { ZCNeutralResourceId } from './ZCNeutralResourceReward';
 import type { ZCPvpTileType } from './ZCPvpTileRules';
 import type { ZCStatusSystemSnapshot } from './ZCStatusEffect';
 import type { ZCLegacyBuffApplication } from './ZCLegacySkillEffect';
@@ -122,8 +121,11 @@ export interface ZCHexState {
     /** 已支付并完成过本格抽取；抽空也会消耗地块，不能重复开发。 */
     developmentResolved: boolean;
     cardId: string | null;
-    /** 自选出生点阶段从固定点位资源池抽出的本局中立资源。 */
-    neutralResourceId?: ZCNeutralResourceId | null;
+    /**
+     * 本局从该点位所属**资源组合**里抽中的资源项 id（`neutralResourceGroup.id`）。
+     * `null` / 缺省 = 这格不是资源点，或资源已被领走（领取是**一次性**的，靠清空本字段判重）。
+     */
+    neutralResourceId?: number | null;
     /** 大于 0 时建筑仍在建造，不能产金、产兵或攻击。 */
     constructionRemainingSeconds: number;
     constructionTotalSeconds: number;
@@ -429,8 +431,8 @@ export interface ZCNeutralReward {
     id: number;
     /** 被领取的那一格。 */
     hexId: number;
-    /** 领取的资源 id（金币堆 / 金矿 / 宝箱 / 神器充能 / 兵力）。 */
-    resourceId: ZCNeutralResourceId;
+    /** 领取的资源项 id（`neutralResourceGroup.id`）；视图据此判「金币飞行 / 神器飞行 / 不出特效」。 */
+    itemId: number;
     /** 领取的一方；非玩家领取不播「飞向 HUD」的特效（目标不在玩家界面上）。 */
     owner: ZCOwner;
     /** 实际入账的金币；> 0 时视图播「金币飞向金币栏 + 上飘 +N」。 */

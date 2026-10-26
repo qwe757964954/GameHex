@@ -23,7 +23,7 @@ const NODE_NAME = 'LaunchProgress';
  * 节点挂在 `ProcedureManager` 的**常驻 host** 下，跨流程存活：
  * - `ProcedureUpdate.onEnter` → `ensure(host)` 复用或 `createFromPrefab` 创建并 `show()`；`onLeave` 只 `hide()` 不销毁；
  * - 登录页停留期间保持隐藏；
- * - `ProcedurePostLogin.onEnter` → `ensure(host)` 复用并 `show()`；`onLeave`（进入 Main）`release()` 销毁。
+ * - `ProcedurePostLogin.onEnter` → `ensure(host)` 复用并 `show()`；`onLeave`（进入 Main）保留节点，MainRoot 已在其下渲染就绪，由 `ProcedureMain.onEnter` 调 `release()` 销毁登录图。
  * 不是全局单例：实例由各流程字段持有，`ensure` 只按 host 下节点名复用。
  */
 export class LaunchProgressUI {
@@ -85,7 +85,7 @@ export class LaunchProgressUI {
         this.node.active = true;
     }
 
-    /** 使命结束（进入 Main）后销毁。 */
+    /** 使命结束（进入 Main）后销毁：登录图移除，露出其下已渲染好的 MainRoot。 */
     release(): void {
         this.node.destroy();
     }

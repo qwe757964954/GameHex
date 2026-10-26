@@ -127,7 +127,7 @@ test('小兵经过中立资源格后归属行军方，但不领取资源', () =>
     };
     const snapshot = ZCGameModel.createInitialState(() => .1, match);
     snapshot.hexes[resource.id].owner = 'neutral';
-    snapshot.hexes[resource.id].neutralResourceId = 'gold';
+    snapshot.hexes[resource.id].neutralResourceId = 1300101;
     snapshot.hexes[resource.id].developmentResolved = false;
     snapshot.hexes[resource.id].building = 'none';
     snapshot.hexes[resource.id].wallHp = 0;
@@ -144,6 +144,6 @@ test('小兵经过中立资源格后归属行军方，但不领取资源', () =>
     system.update(state, .05, (hex: any, owner: any) => (game as any).captureEmptyTile(hex, owner));
 
     assert.equal(state.hexes[resource.id].owner, 'player');
-    assert.equal(state.hexes[resource.id].neutralResourceId, 'gold', '经过只改归属，不领取资源');
+    assert.equal(state.hexes[resource.id].neutralResourceId, 1300101, '经过只改归属，不领取资源');
     assert.equal(state.hexes[resource.id].developmentResolved, false);
 });

@@ -8,14 +8,16 @@ import { captureZCMatchConfig, ZCMatchConfig } from '../assets/script/app/zcds/m
 import { resolveZCMapResources } from '../assets/script/app/zcds/model/ZCSpawnSelection';
 import type { ZCHexState } from '../assets/script/app/zcds/model/ZCGameTypes';
 import {
-    hasNeutralResourceReward, neutralResourceRewardOf, ZC_NEUTRAL_RESOURCE_REWARDS,
-} from '../assets/script/app/zcds/model/ZCNeutralResourceReward';
+    isZCNeutralResourceBuilding, neutralResourceItemOf,
+} from '../assets/script/app/zcds/model/ZCNeutralResourceGroup';
+import { ZC_TEST_ITEM } from './helpers/zcds-neutral-catalog';
 import { ZC_NEUTRAL_REWARD_TOTAL_SECONDS } from '../assets/script/app/zcds/model/ZCBattlePresentationQueue';
 
 //  `pvpUnit` 已于 2026-09-20 并入 `pvpCard`（单位列内联、加 `unit` 前缀），表已下线。
 const tableNames = [
     'pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond',
     'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams', 'pvpBaseTeamWeight',
+    'neutralResourceGroup',
 ] as const;
 const tables = Object.fromEntries(tableNames.map((name) => {
     const source = JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8'));
@@ -68,7 +70,7 @@ function withRiverMap(run: (match: ZCMatchConfig) => void, rules?: Partial<ZCMat
 }
 
 /**
- * 把第一个资源点的类型**直接改成 `resourceId`**。
+ * 把第一个资源点**直接改成指定的资源项**（`neutralResourceGroup.id`）。
  *
  *  ⚠️ 为什么要注入而不是等地图自然抽出来：`unit_cap` 只出现在 `select_river` 的资源点池里
  *  （`{gold:5, unit_cap:3, artifact_charge:2}`），而那张图是 **`cityMode: select` 自选主城局**，
@@ -79,13 +81,13 @@ function withRiverMap(run: (match: ZCMatchConfig) => void, rules?: Partial<ZCMat
  *  由 `ZCSnapshotCodec.createInitialState` 写入），被替换的只有「资源类型怎么抽到」那一步 ——
  *  那本来就不是测产兵要关心的东西。
  */
-function forceResourceType(match: ZCMatchConfig, resourceId: string): void {
+function forceResourceItem(match: ZCMatchConfig, itemId: number): void {
     const resolved = match.map.resolvedResources ?? [];
     const target = resolved[0];
     assert.ok(target, '这张图应该有资源点');
     match.map = {
         ...match.map,
-        resolvedResources: resolved.map((item) => (item.hexId === target.hexId ? { ...item, resourceId } : item)),
+        resolvedResources: resolved.map((item) => (item.hexId === target.hexId ? { ...item, itemId } : item)),
     };
 }
 
@@ -136,13 +138,13 @@ interface ZCSnapshotLike {
  *  @param wantResourceId 指定资源类型；省略时取第一个。`standard_3` 抽出来的是宝箱，
  *      要测兵力产兵必须显式要 `unit_cap`。
  */
-function resourceScene(match: ZCMatchConfig, owner: 'player' | 'enemy', wantResourceId?: string): {
-    game: ZCGameModel; hexId: number; resourceId: string;
+function resourceScene(match: ZCMatchConfig, owner: 'player' | 'enemy', wantItemId?: number): {
+    game: ZCGameModel; hexId: number; itemId: number;
 } {
     const resolved = match.map.resolvedResources ?? [];
     assert.ok(resolved.length > 0, '这张图应该有资源点');
-    const point = (wantResourceId ? resolved.find((item) => item.resourceId === wantResourceId) : resolved[0])
-    assert.ok(point, `这张图没有解析出 ${wantResourceId ?? '任意'} 资源点`);
+    const point = (wantItemId ? resolved.find((item) => item.itemId === wantItemId) : resolved[0])
+    assert.ok(point, `这张图没有解析出 ${wantItemId ?? '任意'} 资源项`);
     const snapshot = ZCGameModel.createInitialState(() => 0.1, match) as unknown as ZCSnapshotLike;
     snapshot.playerGold = 100_000;
     snapshot.enemyGold = 100_000;
@@ -152,7 +154,7 @@ function resourceScene(match: ZCMatchConfig, owner: 'player' | 'enemy', wantReso
     // 2026-10-08 新口径：**铺开即自动入袋**，不花钱开发、不点开。
     // `paveAround` 只改了快照，走一次 tick 让 refreshTileStates → claimAdjacentNeutralResources 结算。
     game.tick(0.1);
-    return { game, hexId: point.hexId, resourceId: point.resourceId };
+    return { game, hexId: point.hexId, itemId: point.itemId };
 }
 
 /**
@@ -161,59 +163,58 @@ function resourceScene(match: ZCMatchConfig, owner: 'player' | 'enemy', wantReso
  *  返回**快照本身而不是已构造的模型** —— 因为 `new ZCGameModel(snapshot)` 会深拷贝，
  * 调用方必须在这之前就把邻居铺好，事后改 `game.snapshot` 是改副本、不生效。
  */
-function bareScene(match: ZCMatchConfig, wantResourceId?: string): {
-    hexId: number; resourceId: string; snapshot: ZCSnapshotLike;
+function bareScene(match: ZCMatchConfig, wantItemId?: number): {
+    hexId: number; itemId: number; snapshot: ZCSnapshotLike;
 } {
     const resolved = match.map.resolvedResources ?? [];
     assert.ok(resolved.length > 0, '这张图应该有资源点');
-    const point = (wantResourceId ? resolved.find((item) => item.resourceId === wantResourceId) : resolved[0]);
-    assert.ok(point, `这张图没有解析出 ${wantResourceId ?? '任意'} 资源点`);
+    const point = (wantItemId ? resolved.find((item) => item.itemId === wantItemId) : resolved[0]);
+    assert.ok(point, `这张图没有解析出 ${wantItemId ?? '任意'} 资源项`);
     const snapshot = ZCGameModel.createInitialState(() => 0.1, match) as unknown as ZCSnapshotLike;
     snapshot.playerGold = 100_000;
     snapshot.enemyGold = 100_000;
     snapshot.goldByOwner = { player: 100_000, enemy: 100_000, enemy2: 0, enemy3: 0 };
-    return { hexId: point.hexId, resourceId: point.resourceId, snapshot };
+    return { hexId: point.hexId, itemId: point.itemId, snapshot };
 }
 
-const EMPTY_REWARD = { gold: 0, artifactCharge: 0, rewardCardId: null, rewardUnitCount: 0 };
+test('★资源项：按 resourceType 归一出奖励字段，未知 id 返回 null 而不是抛错', () => {
+    // 宝箱（type1）：param 就是金币数。
+    const gold = neutralResourceItemOf(ZC_TEST_ITEM.Gold);
+    assert.equal(gold?.gold, 50);
+    assert.equal(gold?.artifactCharge, 0);
+    assert.equal(gold?.cardId, null);
 
-test('资源点表：五种 id 都有登记项，未知 id 兜底为 0 而不是抛错', () => {
-    for (const id of ['gold', 'mine', 'chest', 'unit_cap', 'artifact_charge']) {
-        assert.deepEqual(
-            neutralResourceRewardOf(id),
-            ZC_NEUTRAL_RESOURCE_REWARDS[id as keyof typeof ZC_NEUTRAL_RESOURCE_REWARDS],
-            `${id} 的奖励应与表一致`,
-        );
+    // 神器充能（type4）：只有充能点。
+    const charge = neutralResourceItemOf(ZC_TEST_ITEM.MixedCharge);
+    assert.equal(charge?.artifactCharge, 1);
+    assert.equal(charge?.gold, 0);
+
+    // 兵团（type3）：resId + value ⇒ 产 3 个 68001，金币 / 充能都是 0。
+    const unit = neutralResourceItemOf(ZC_TEST_ITEM.Unit);
+    assert.equal(unit?.gold, 0);
+    assert.equal(unit?.artifactCharge, 0);
+    assert.equal(unit?.cardId, '68001');
+    assert.equal(unit?.unitCount, 3);
+    assert.equal(isZCNeutralResourceBuilding(unit), false, '兵团不是建筑，不该立建筑');
+
+    // 金矿（type2）/ 兵营（type5）：领取后要在该格立建筑。
+    const mine = neutralResourceItemOf(ZC_TEST_ITEM.Mine);
+    assert.equal(isZCNeutralResourceBuilding(mine), true);
+    assert.equal(isZCNeutralResourceBuilding(neutralResourceItemOf(ZC_TEST_ITEM.Barracks)), true);
+
+    // 未知 / 空 id：返回 null（调用方按「没资源」处理），不抛错。
+    for (const bad of [null, undefined, 0, -1, 99999999, 1.5]) {
+        assert.equal(neutralResourceItemOf(bad as number | null), null, `${String(bad)} 应当查不到`);
     }
-    // 地图 JSON 里出现没登记的资源 id：发 0，不让整局对局崩在这里。
-    assert.deepEqual(neutralResourceRewardOf('brand_new_kind'), EMPTY_REWARD);
-    assert.deepEqual(neutralResourceRewardOf(null), EMPTY_REWARD);
-    assert.deepEqual(neutralResourceRewardOf(undefined), EMPTY_REWARD);
-    // 兜底对象必须是**同一份**：调用方若拿到新对象，引用比较会失效、也白占内存。
-    assert.equal(neutralResourceRewardOf(null), neutralResourceRewardOf(undefined), '空奖励应复用同一份常量');
-    // 五种都必须真的有奖励（否则下面的发奖用例会变成空断言）。
-    for (const id of ['gold', 'mine', 'chest', 'unit_cap', 'artifact_charge']) {
-        assert.equal(hasNeutralResourceReward(neutralResourceRewardOf(id)), true, `${id} 应当有奖励`);
-    }
-    // ⚠️ `unit_cap` 现在的奖励是「产 3 个 68001」而不是金币/充能 ——
-    //    只看 gold/artifactCharge 会把它误判成「什么也不发」。
-    const units = neutralResourceRewardOf('unit_cap');
-    assert.equal(units.gold, 0);
-    assert.equal(units.artifactCharge, 0);
-    assert.equal(units.rewardCardId, '68001');
-    assert.equal(units.rewardUnitCount, 3);
-    // 表里填了卡但数量 <=0 时，等于不发兵（此时 has 必须是 false，否则战报会空刷）。
-    assert.equal(hasNeutralResourceReward({ ...units, rewardUnitCount: 0 }), false);
-    assert.equal(hasNeutralResourceReward({ ...units, rewardCardId: null }), false);
 });
 
 test('相邻即自动领取：金币与神器充能都入袋，格子变成已占领且不重复领', () => {
     withRiverMap((match) => {
         // ⚠️ 必须**在构造模型之前**就把邻居铺好：`new ZCGameModel(snapshot)` 会深拷贝快照，
         // 事后改 `game.snapshot` 改的是副本、不影响模型内部状态（这条坑让本用例先红过一次）。
-        const { hexId, resourceId, snapshot } = bareScene(match);
-        const reward = neutralResourceRewardOf(resourceId);
-        assert.ok(hasNeutralResourceReward(reward), `本局抽到的 ${resourceId} 必须有奖励，否则本用例是空断言`);
+        const { hexId, itemId, snapshot } = bareScene(match);
+        const item = neutralResourceItemOf(itemId);
+        assert.ok(item, `本局抽到的 ${itemId} 必须查得到资源项，否则本用例是空断言`);
 
         // ① 不相邻时**不领**：格子仍是中立未消费。
         const bare = new ZCGameModel(snapshot as never, () => 0.1, match);
@@ -241,15 +242,15 @@ test('相邻即自动领取：金币与神器充能都入袋，格子变成已�
         assert.equal(game.canPlayerDevelop(hexId), false, '同一格不能重复领奖');
 
         // ④ 金币**只增不减**（不再扣开发成本）—— 精确值才能抓住「发奖那行被注释掉」。
-        assert.equal(game.snapshot.playerGold, goldBefore + reward.gold);
+        assert.equal(game.snapshot.playerGold, goldBefore + (item?.gold ?? 0));
         // 神器充能：奖励那部分必须到账，且不超满值上限。
-        if (reward.artifactCharge > 0) {
+        if ((item?.artifactCharge ?? 0) > 0) {
             assert.ok(
                 game.snapshot.artifactCharge >= Math.min(
                     game.artifactChargeFull,
-                    chargeBefore + reward.artifactCharge,
+                    chargeBefore + (item?.artifactCharge ?? 0),
                 ),
-                `神器充能应至少拿到 ${reward.artifactCharge} 点`,
+                `神器充能应至少拿到 ${item?.artifactCharge} 点`,
             );
         }
         assert.ok(game.snapshot.artifactCharge <= game.artifactChargeFull, '充能不得超过满值');
@@ -335,14 +336,14 @@ test('口径隔离：普通地块开发不发资源奖励', () => {
 test('兵力资源点：开发后直接产出 3 个 68001 豌豆游侠，走born 流程', () => {
     withRiverMap((match) => {
         // 这张图没有兵力资源点（见 forceResourceType 的注释），把它改成兵力。
-        forceResourceType(match, 'unit_cap');
-        const reward = neutralResourceRewardOf('unit_cap');
-        assert.equal(reward.rewardCardId, '68001');
-        assert.equal(reward.rewardUnitCount, 3);
+        forceResourceItem(match, ZC_TEST_ITEM.Unit);
+        const item = neutralResourceItemOf(ZC_TEST_ITEM.Unit);
+        assert.equal(item?.cardId, '68001');
+        assert.equal(item?.unitCount, 3);
 
         // ⚠️ 产兵在`resourceScene` 的构造期就发生（模型构造函数会跑一次 refreshTileStates），
         // 所以**基线必须在铺开前取**：这里直接按「铺开后单位列表里多出 3 个」来断言。
-        const { hexId, snapshot } = bareScene(match, 'unit_cap');
+        const { hexId, snapshot } = bareScene(match, ZC_TEST_ITEM.Unit);
         const before = snapshot.units.length;
         paveAround(snapshot, match, hexId, 'player');
         const game = new ZCGameModel(snapshot as never, () => 0.1, match);
@@ -372,7 +373,7 @@ test('兵力资源点：开发后直接产出 3 个 68001 豌豆游侠，走born
 
 test('兵力资源点：产出的兵会自己推进状态机（born → target/moveForward），即会主动进攻', () => {
     withRiverMap((match) => {
-        forceResourceType(match, 'unit_cap');
+        forceResourceItem(match, ZC_TEST_ITEM.Unit);
         const { game } = resourceScene(match, 'player');
         const born = game.snapshot.units[game.snapshot.units.length - 1];
         assert.equal(born.battleState, 'born', '刚产出时是 born');
@@ -388,7 +389,7 @@ test('兵力资源点：产出的兵会自己推进状态机（born → target/m
 
 test('兵力奖励卡查不到时不产兵也不抛错（配置填错 id 的兜底）', () => {
     withRiverMap((match) => {
-        forceResourceType(match, 'unit_cap');
+        forceResourceItem(match, ZC_TEST_ITEM.Unit);
         const { game, hexId } = resourceScene(match, 'player');
         // 卡目录置空 ⇒ 模拟「奖励卡没下发」。发奖读的是常量表的 rewardCardId，
         // 取卡走 findCatalogCard ⇒ 查不到就必须静默不产兵，而不是把整局对局打挂。
@@ -414,7 +415,7 @@ test('兵力奖励卡查不到时不产兵也不抛错（配置填错 id 的兜�
  */
 test('奖励卡不在本局卡组里也照样产兵（取卡不能走 cardById）', () => {
     withRiverMap((match) => {
-        forceResourceType(match, 'unit_cap');
+        forceResourceItem(match, ZC_TEST_ITEM.Unit);
         // 把四方卡组收窄成「不含 68001」的另一张卡 —— 模拟后端下发了我方阵容的情况。
         const narrowed = (match.playerDeck ?? []).filter((card) => card.id !== '68001');
         assert.ok(narrowed.length > 0, '收窄后卡组不该是空的');
@@ -427,7 +428,7 @@ test('奖励卡不在本局卡组里也照样产兵（取卡不能走 cardById�
         };
 
         // ⚠️ 基线取自铺开前的快照：产兵在模型构造期就发生（同用例 5）。
-        const { hexId, snapshot } = bareScene(narrowedMatch, 'unit_cap');
+        const { hexId, snapshot } = bareScene(narrowedMatch, ZC_TEST_ITEM.Unit);
         const before = snapshot.units.length;
         paveAround(snapshot, narrowedMatch, hexId, 'player');
         const game = new ZCGameModel(snapshot as never, () => 0.1, narrowedMatch);
@@ -449,13 +450,13 @@ test('奖励卡不在本局卡组里也照样产兵（取卡不能走 cardById�
 
 test('金币堆领取：入队一条金币飞行事件（金额 50、时长=飞行+错峰+上飘）', () => {
     withRiverMap((match) => {
-        forceResourceType(match, 'gold');
+        forceResourceItem(match, ZC_TEST_ITEM.Gold);
         const { game, hexId } = resourceScene(match, 'player');
         const rewards = game.createRenderFrame().neutralRewards;
         assert.equal(rewards.length, 1, '金币堆只发一条事件');
         const reward = rewards[0];
         assert.equal(reward.hexId, hexId);
-        assert.equal(reward.resourceId, 'gold');
+        assert.equal(reward.itemId, ZC_TEST_ITEM.Gold);
         assert.equal(reward.owner, 'player');
         assert.equal(reward.gold, 50);
         assert.equal(reward.artifactCharge, 0);
@@ -466,29 +467,30 @@ test('金币堆领取：入队一条金币飞行事件（金额 50、时长=飞�
 
 test('宝箱领取：沿用金币飞行（+N 按宝箱的金币数 100 播，不单独播神器）', () => {
     withRiverMap((match) => {
-        forceResourceType(match, 'chest');
+        forceResourceItem(match, ZC_TEST_ITEM.BigChest);
         const { game, hexId } = resourceScene(match, 'player');
         const rewards = game.createRenderFrame().neutralRewards;
         assert.equal(rewards.length, 1);
         const reward = rewards[0];
         assert.equal(reward.hexId, hexId);
-        assert.equal(reward.resourceId, 'chest');
+        assert.equal(reward.itemId, ZC_TEST_ITEM.BigChest);
         assert.equal(reward.owner, 'player');
-        // 宝箱奖励 = 100 金币 + 1 神器充能，但表现**只播金币飞行**（视图按 resourceId 归类）。
+        // 「大金币宝箱」只配了 100 金币（神器充能那一条已随旧表下线，改由组合里的独立资源项承担）；
+        // 表现走金币飞行（视图按资源项的表现键归类）。
         assert.equal(reward.gold, 100);
-        assert.equal(reward.artifactCharge, 1);
+        assert.equal(reward.artifactCharge, 0);
     });
 });
 
 test('神器充能领取：入队一条神器飞行事件（充能 1，无金币）', () => {
     withRiverMap((match) => {
-        forceResourceType(match, 'artifact_charge');
+        forceResourceItem(match, ZC_TEST_ITEM.MixedCharge);
         const { game, hexId } = resourceScene(match, 'player');
         const rewards = game.createRenderFrame().neutralRewards;
         assert.equal(rewards.length, 1);
         const reward = rewards[0];
         assert.equal(reward.hexId, hexId);
-        assert.equal(reward.resourceId, 'artifact_charge');
+        assert.equal(reward.itemId, ZC_TEST_ITEM.MixedCharge);
         assert.equal(reward.artifactCharge, 1);
         assert.equal(reward.gold, 0);
     });
@@ -496,7 +498,7 @@ test('神器充能领取：入队一条神器飞行事件（充能 1，无金币
 
 test('金矿领取：只播「建筑被开发」激活，不播金币飞行', () => {
     withRiverMap((match) => {
-        forceResourceType(match, 'mine');
+        forceResourceItem(match, ZC_TEST_ITEM.Mine);
         const { game, hexId } = resourceScene(match, 'player');
         assert.equal(game.createRenderFrame().neutralRewards.length, 0, '金矿不进飞行队列');
         const activations = game.createRenderFrame().hexActivations;
@@ -508,7 +510,7 @@ test('金矿领取：只播「建筑被开发」激活，不播金币飞行', ()
 
 test('兵力资源点领取：直接产兵、无飞行事件（也不播激活）', () => {
     withRiverMap((match) => {
-        forceResourceType(match, 'unit_cap');
+        forceResourceItem(match, ZC_TEST_ITEM.Unit);
         const { game } = resourceScene(match, 'player');
         assert.equal(game.createRenderFrame().neutralRewards.length, 0, '兵力不走飞行队列');
         assert.equal(game.createRenderFrame().hexActivations.length, 0, '兵力不播激活动画');
@@ -517,7 +519,7 @@ test('兵力资源点领取：直接产兵、无飞行事件（也不播激活�
 
 test('非玩家领取：事件照常入队（owner=领取方），视图再决定只对玩家播飞行', () => {
     withRiverMap((match) => {
-        forceResourceType(match, 'gold');
+        forceResourceItem(match, ZC_TEST_ITEM.Gold);
         const { game } = resourceScene(match, 'enemy');
         const rewards = game.createRenderFrame().neutralRewards;
         assert.equal(rewards.length, 1);

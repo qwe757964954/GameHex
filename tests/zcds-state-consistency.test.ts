@@ -72,14 +72,17 @@ test('伤害结算只统计实际扣血，护盾和重复死亡不会重复给�
     assert.equal(game.snapshot.playerGold, goldBefore + config.rules.killUnitGoldReward);
 });
 
+/** 资源项 id：行军占领只改归属、不领取，所以这里只要一个合法数字（不查表）。 */
+const GOLD_ITEM = 1300101;
+
 test('小兵占领资源格时保留资源，废墟易手仍保留已消费标记', () => {
     const hex = ZCGameModel.createInitialState(() => .1, config).hexes.find((candidate) => candidate.building === 'none')!;
     hex.owner = 'neutral';
-    hex.neutralResourceId = 'gold';
+    hex.neutralResourceId = GOLD_ITEM;
     assert.deepEqual(ZCDevelopmentSystem.captureEmptyTile(hex, 'player'),
         { changed: true, terrainChanged: true });
     assert.equal(hex.owner, 'player');
-    assert.equal(hex.neutralResourceId, 'gold', '行军占领不应领取或隐藏资源');
+    assert.equal(hex.neutralResourceId, GOLD_ITEM, '行军占领不应领取或隐藏资源');
     assert.equal(hex.developmentResolved, false, '行军占领不应将资源标记为已领取');
     hex.neutralResourceId = null;
     hex.owner = 'player';

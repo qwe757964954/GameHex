@@ -36,7 +36,9 @@ test('加载器按后端英雄、召唤链与波次选模型，离线保持完�
         '../../../core/asset/BundleCatalog': { BATTLE_BUNDLE: 'battle' },
         '../../ArtPaths': { spriteFramePath: (root: string, name: string) => `${root}/${name}/spriteFrame`, decorFramePath: (name: string) => `image/decor/${name}/spriteFrame` },
         '../model/ZCCombatCatalog': { getAllUnitDefinitions: () => definitions, findCatalogCard: (id: string) => ({ unitId: id === '91001' ? '68003' : '68005' }) },
-        '../model/ZCNeutralResourceReward': { ZC_NEUTRAL_RESOURCE_REWARDS: { unit_cap: { rewardCardId: '92001', rewardUnitCount: 3 } } },
+        '../model/ZCNeutralResourceGroup': { getZCNeutralResourceCatalog: () => ({ items: new Map([
+            [1, { cardId: '92001', unitCount: 3 }],
+        ]) }) },
         '../model/ZCGameRuntimeConfig': { loadPvpTables() {}, getPvpRuntimeRules: () => ({}) },
         '../model/ZCGameModel': { configureZCMap() {}, getZCLocalPlayerCountOverride: () => 4,
             isRandomMapCandidate: (_layout: unknown, count: unknown) => { counts.push(count); return true; } },

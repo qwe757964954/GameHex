@@ -33,6 +33,11 @@
   var RESOURCE_ASSETS = { chest: 'image/map-resource/chest', gold: 'image/map-resource/gold', mine: 'image/map-resource/mine', unit_cap: 'image/map-resource/unit_cap', artifact_charge: 'image/map-resource/artifact_charge' };
   var resourceBrush = '';
   var resourceGroupId = null;
+  /**
+   * 组合 ID → { name, items }；由 `/api/neutral-resource-groups` 拉取（表没打时为空）。
+   *  **只做提示与校验**：真正发什么由客户端读同一张表决定，编辑器不重复一份业务规则。
+   */
+  var neutralGroups = {};
   var resourceWeight = 1;
   var resourceImages = {};
   var passthrough = {};
@@ -211,7 +216,14 @@
     var hasGroup = Object.prototype.hasOwnProperty.call(point, 'groupId');
     var hasPool = Object.prototype.hasOwnProperty.call(point, 'pool');
     if (hasGroup && hasPool) return '同一资源点不能同时配置 groupId 和旧 pool';
-    if (hasGroup) return validResourceGroupId(point.groupId) ? '' : '资源组合 ID 必须为 1～2147483647 的整数';
+    if (hasGroup) {
+      if (!validResourceGroupId(point.groupId)) return '资源组合 ID 必须为 1～2147483647 的整数';
+      // 表已加载（非空）时才判「组合不存在」——没打表时不能把每个点位都算成错。
+      if (Object.keys(neutralGroups).length && !neutralGroups[point.groupId]) {
+        return '组合 ID ' + point.groupId + ' 在 PVP-中立资源配置 里不存在';
+      }
+      return '';
+    }
     var pool = point.pool;
     if (!hasPool || !pool || typeof pool !== 'object' || Array.isArray(pool)) return '资源点缺少组合 ID 或有效旧资源池';
     var ids = Object.keys(pool);
@@ -243,7 +255,12 @@
     return depth === 'front' ? 'rush' : depth === 'mid' ? 'control' : depth === 'back' ? 'develop' : null;
   }
   function resourceLabel(point) {
-    if (point && point.groupId !== undefined) return '资源组合 ' + point.groupId;
+    if (point && point.groupId !== undefined) {
+      var known = neutralGroups[point.groupId];
+      return known && known.name
+        ? '资源组合 ' + point.groupId + '：' + known.name
+        : '资源组合 ' + point.groupId + '（表里查不到这个组合 ID）';
+    }
     var pool = point && point.pool ? point.pool : {};
     var ids = Object.keys(pool);
     if (!ids.length) return '未配置资源';
@@ -293,9 +310,10 @@
       button.setAttribute('aria-pressed', active ? 'true' : 'false');
     }
     var status = $('resourceGroupStatus');
+    var groupName = resourceGroupId === null ? '' : (neutralGroups[resourceGroupId] || {}).name;
     if (status) status.textContent = resourceGroupId === null ? '填写配置表中的组合 ID，再点击放置。'
-      : active ? '当前组合：' + resourceGroupId + ' · 点击格子放置，右键删除。'
-        : '当前组合：' + resourceGroupId + ' · 已暂停，点击“放置资源点”继续。';
+      : active ? '当前组合：' + resourceGroupId + (groupName ? '（' + groupName + '）' : '') + ' · 点击格子放置，右键删除。'
+        : '当前组合：' + resourceGroupId + (groupName ? '（' + groupName + '）' : '') + ' · 已暂停，点击“放置资源点”继续。';
     var legacy = $('legacyResourceNotice');
     if (legacy) {
       var count = resourcePoints.filter(function (point) { return point.groupId === undefined; }).length;
@@ -2999,7 +3017,19 @@
       setDecorLibrary([]);
     }
   }
+  async function loadNeutralGroups() {
+    try {
+      var result = await api('/api/neutral-resource-groups');
+      neutralGroups = {};
+      (Array.isArray(result.groups) ? result.groups : []).forEach(function (group) {
+        neutralGroups[group.groupId] = group;
+      });
+    } catch (error) {
+      neutralGroups = {};
+    }
+  }
   async function loadResourceLibrary() {
+    await loadNeutralGroups();
     try {
       var result = await api('/api/map-resources');
       resourceImages = {};

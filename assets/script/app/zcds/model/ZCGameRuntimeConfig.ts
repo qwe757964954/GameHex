@@ -6,6 +6,7 @@ import {
 } from './ZCCombatCatalog';
 import type { ZCLegacySkillEffectConfig } from './ZCLegacySkillEffect';
 import { setZCModifierCatalogs } from './ZCModifierRuntime';
+import { setZCNeutralResourceCatalog } from './ZCNeutralResourceGroup';
 import { compilePvpTables } from './ZCPvpConfigCompiler';
 import { setPvpTileRules } from './ZCPvpTileRules';
 export { compilePvpTables } from './ZCPvpConfigCompiler';
@@ -126,6 +127,13 @@ export interface ZCPvpTables {
     pvpTileGen?: Array<Record<string, unknown>>;
     pvpTileGenParams?: Array<{ key: string; value: unknown }>;
     pvpBaseTeamWeight?: Array<Record<string, unknown>>;
+    /**
+     * 中立资源组合（`PVP-中立资源配置.xlsx / 中立资源组合`）。
+     *
+     *  地图资源点只写 `groupId`，组内按 `weight` 抽一个资源项 —— 见 `ZCNeutralResourceGroup`。
+     *  旧表 `neutralResource`（PVP-地块 / 中立资源 sheet）已于 2026-10-26 下线。
+     */
+    neutralResourceGroup?: Array<Record<string, unknown>>;
     skillAttrModifier?: Array<Record<string, unknown>>;
     generalStar?: Array<Record<string, unknown>>;
     pvpAttrMap?: Array<Record<string, unknown>>;
@@ -150,6 +158,7 @@ export function loadPvpTables(tables: ZCPvpTables): ZCConfigLoadResult {
     setCounterRules(compiled.counters);
     setBondRules(compiled.bonds);
     setPvpTileRules(compiled.tileConfigs, compiled.tileWeights, compiled.goldPity);
+    setZCNeutralResourceCatalog(compiled.neutralResources);
     setZCModifierCatalogs(compiled.modifierCatalogs);
     runtimeRules = compiled.rules;
     legacySkillEffects = compiled.legacySkillEffects;

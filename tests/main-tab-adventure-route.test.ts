@@ -24,7 +24,10 @@ test('领地格 = 主城页（内嵌领地图），章节 HUD 由主城顶栏替
     // 主城嵌入 map-only 页面，并在激活前注入资源。
     assert.match(source, /getComponentInChildren\(MainTerritoryMap\)/);
     assert.match(source, /mainTerritoryMap\.initialize\(this\.assets, this\.configs\)/);
-    assert.ok(source.indexOf('mainTerritoryMap.initialize(this.assets, this.configs)') < source.indexOf('page.setParent(this.content)'),
+    // showPage：注入必须在该方法内 setParent 之前。
+    const showPageBody = source.slice(source.indexOf('private showPage('));
+    assert.ok(showPageBody.indexOf('mainTerritoryMap.initialize(this.assets, this.configs)')
+        < showPageBody.indexOf('page.setParent(this.content)'),
         'AssetService 必须在页面激活前注入');
     assert.doesNotMatch(source, /setHudVisible/);
 });

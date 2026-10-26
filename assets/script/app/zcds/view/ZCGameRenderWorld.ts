@@ -2,7 +2,9 @@ import { Color, EffectAsset, Graphics, instantiate, Material, Node, Prefab, Spri
 import { buildHexGridLayout } from '../../../core/hex/HexGridLayout';
 import { findCatalogCard, resolveUnitDefinition, ZCUnitId } from '../model/ZCCombatCatalog';
 import type { ZCAttackTrait } from '../model/ZCCombatCatalog';
-import { neutralResourceRewardOf } from '../model/ZCNeutralResourceReward';
+import {
+    neutralResourceItemOf, neutralResourceVisualOf, ZCNeutralResourceVisual,
+} from '../model/ZCNeutralResourceGroup';
 import { ZCCombatEffectView } from './ZCCombatEffectView';
 import { ZCFloatTextView } from './ZCFloatTextView';
 import { ZCCardRevealView } from './ZCCardRevealView';
@@ -34,7 +36,6 @@ import {
     spawnBaseConfirmPoint,
     territoryTintOwner,
     zcNeutralHintAlpha,
-    ZC_NEUTRAL_HINT_RESOURCE_ID,
 } from './ZCGameViewUtil';
 import type { ZCDecorPlacement } from './ZCGameViewUtil';
 import {
@@ -340,6 +341,8 @@ export class ZCGameRenderWorld {
      */
     private readonly unitFrames = new Map<string, SpriteFrame>();
     private map: readonly ZCHexConfig[] = [];
+    /** 本局各资源点抽中的资源项（`hexId → itemId`）；建视图时按格取兵团骨骼用。 */
+    private resourceItemByHex = new Map<number, number>();
     /** The spawn-confirm button is borrowed from the HUD; ZCGame owns its lifecycle. */
     private spawnConfirmButton: Node | null = null;
     /** 城墙每格六条边的几何（按 hexId 缓存，随地图固定）。 */
@@ -431,6 +434,8 @@ export class ZCGameRenderWorld {
         const map = mapConfig;
         this.wallRenderer.invalidate();
         this.map = map.hexes;
+        // 资源点抽签结果整局不变（开局 `resolveZCMapResources` 冻结一次），这里转成 map 方便按格取。
+        this.resourceItemByHex = new Map((map.resolvedResources ?? []).map((entry) => [entry.hexId, entry.itemId]));
         // 地图可能换局，几何缓存跟着底图一起重置。
         this.wallGeometry.setMap(this.map);
         const rows = mapConfig.rows ?? this.map.reduce((maximum, hex) => Math.max(maximum, hex.row + 1), 0);
@@ -505,9 +510,9 @@ export class ZCGameRenderWorld {
             // 自选地图局的中立资源格盖问号（资源进游戏才随机，别剧透）。非自选局视图根本不会
             // 用这张帧（`hideNeutralResourceLabel` 为假），喂进去也无副作用。
             view.setUnknownResourceFrame(this.options.unknownResourceFrame ?? null);
-            // 兵力资源点（`unit_cap`）按配置站N 个中立待机兵：卡 id + 数量都来自
-            // `neutralResource` 表（经渲染层转成骨骼 prefab），逐个视图喂同一份。
-            this.injectResourceUnits(view);
+            // 兵团资源点（表现键 `unit_cap`）按组合项站 N 个中立待机兵：卡 id + 数量来自
+            // 该格**抽中的资源项**（`neutralResourceGroup`），所以逐格喂、不能共用一份。
+            this.injectResourceUnits(view, config.id);
             const entityId = this.createEntity('hex', config.id, node);
             this.hexViews.set(entityId, view);
             this.hexEntityBySource.set(config.id, entityId);
@@ -740,7 +745,7 @@ export class ZCGameRenderWorld {
                 confirmed: chosen?.confirmed ?? false,
                 blocked,
                 resourcePoint: selection.isResourcePoint(config.id),
-                resourceId: selection.resourceIdAt(config.id),
+                resourceItemId: selection.resourceItemIdAt(config.id),
                 unlocksResource: unlockedResources.has(config.id),
                 boundaryMask: boundaryMasks.get(config.id) ?? 0,
                 homeHighlight: playerBaseNeighbors.has(config.id),
@@ -868,7 +873,7 @@ export class ZCGameRenderWorld {
         const hexes = frame.snapshot.hexes;
         let targetHexId: number | null = null;
         for (let index = 0; index < hexes.length; index += 1) {
-            if (hexes[index].neutralResourceId === ZC_NEUTRAL_HINT_RESOURCE_ID) {
+            if (neutralResourceVisualOf(hexes[index].neutralResourceId) === ZCNeutralResourceVisual.Mine) {
                 targetHexId = hexes[index].id;
                 break;
             }
@@ -1650,19 +1655,19 @@ export class ZCGameRenderWorld {
     }
 
     /**
-     * 把兵力资源点要站的骨骼喂给地块视图。
+     * 把「兵团」资源点要站的骨骼喂给地块视图。
      *
-     * 卡 id 与数量都来自 `neutralResource` 表的 `rewardCardId` / `rewardUnitCount`；
+     * 卡 id 与数量逐格取自该格抽中的资源项（`neutralResourceGroup` 的 `param.resId` / `param.value`）；
      * 骨骼 prefab 走既有 `unitVisualPrefabs`（已随首屏预加载），**不额外加载**。
-     * 表里没配卡 / 卡没单位 prefab ⇒ 喂 `null`，视图退回文字兜底而不是留空格。
+     * 不是兵团项 / 卡没单位 prefab ⇒ 喂 `null`，视图退回图标或文字兜底而不是留空格。
      */
-    private injectResourceUnits(view: ZCHexView): void {
-        const reward = neutralResourceRewardOf('unit_cap');
-        const cardId = reward.rewardCardId;
+    private injectResourceUnits(view: ZCHexView, hexId: number): void {
+        const item = neutralResourceItemOf(this.resourceItemByHex.get(hexId));
+        const cardId = item && item.visual === ZCNeutralResourceVisual.UnitCap ? item.cardId : null;
         const prefabs = this.options.unitVisualPrefabs as ReadonlyMap<ZCUnitId, Prefab> | undefined;
         const unitId = cardId ? this.unitIdOfCard(cardId) : null;
         const prefab = unitId ? prefabs?.get(unitId) ?? null : null;
-        view.setResourceUnits(cardId ?? '', prefab, reward.rewardUnitCount);
+        view.setResourceUnits(cardId ?? '', prefab, item?.unitCount ?? 0);
     }
 
     /** 卡 id → unitId。卡表里两者同值，但别假设：用目录反查，查不到就按同值兜一次。 */

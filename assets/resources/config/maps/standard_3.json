@@ -49,29 +49,17 @@
     {
       "row": 11,
       "column": 5,
-      "pool": {
-        "mine": 1,
-        "gold": 1,
-        "chest": 1
-      }
+      "groupId": 13002
     },
     {
       "row": 10,
       "column": 1,
-      "pool": {
-        "gold": 1,
-        "chest": 1,
-        "unit_cap": 1
-      }
+      "groupId": 13002
     },
     {
       "row": 10,
       "column": 9,
-      "pool": {
-        "unit_cap": 1,
-        "gold": 1,
-        "chest": 1
-      }
+      "groupId": 13002
     }
   ],
   "art": {

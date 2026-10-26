@@ -47,8 +47,8 @@ const NEUTRAL_LAYOUT: ZCMapLayout = {
         { section: 2, cells: Array.from({ length: 32 }, (_, index) => index) },
     ],
     resourcePoints: [
-        { row: 6, column: 1, pool: { gold: 1, chest: 3 } },
-        { row: 1, column: 6, pool: { mine: 2 } },
+        { row: 6, column: 1, groupId: 13002 },
+        { row: 1, column: 6, groupId: 13005 },
     ],
     spacing: { homeMinDistance: 2, resourceMinDistance: 3 },
 };

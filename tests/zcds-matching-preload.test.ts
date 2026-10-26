@@ -546,6 +546,10 @@ function loaderFixture(assets: any, configs = { initialize: async () => {}, getT
                     && (layout?.cityMode === undefined || layout.cityMode === 'fixed' || layout.cityMode === 'select');
             },
         },
+        '../model/ZCNeutralResourceGroup': {
+            // 兵团类资源项要产的兵从完整目录预加载：桩里给空目录（本用例不测那条分支）。
+            getZCNeutralResourceCatalog: () => ({ items: new Map() }),
+        },
         '../model/ZCGameRuntimeConfig': {
             loadPvpTables: () => injected++,
             assertDeckUnitsPlayable() {},

@@ -70,6 +70,30 @@ export function chapterTreasureBattleParams(chapterId: number, cellId: number): 
     return [String(ZC_CHAPTER_BATTLE_SUB_TREASURE), String(chapterId), String(cellId)];
 }
 
+/**
+ * 战斗单元的来源类型 —— 对应 `CmdBattleUnitInfo.unitType`（服务端 2026-10-26 新增）。
+ *
+ * | 值 | 含义 |
+ * |---|---|
+ * | 1 | 玩家 |
+ * | 2 | 机器人 |
+ * | 3 | 怪物 |
+ *
+ * ⚠️ 协议里是 `optional`：老服务端**不下发**这个字段（读到 `undefined`），
+ * 与「给了 0 / 负数 / 未知值」一样都归为「不知道」，**绝不回退成 Player**
+ * —— 把机器人当成玩家会让战绩、结算、头像口径一起错，而且全程零报错。
+ */
+export const ZC_BATTLE_UNIT_TYPE = {
+    /** 真实玩家（有角色档）。 */
+    Player: 1,
+    /** 服务端补位的机器人（有 showInfo，但不是真角色）。 */
+    Robot: 2,
+    /** 关卡 / SLG 怪物（PVP 对局里不该出现）。 */
+    Monster: 3,
+} as const;
+
+export type ZCBattleUnitType = (typeof ZC_BATTLE_UNIT_TYPE)[keyof typeof ZC_BATTLE_UNIT_TYPE];
+
 /** 服务端下发的单个战斗单元（一方）。 */
 export interface ZCBattleHero {
     readonly heroId: number;
@@ -92,6 +116,13 @@ export interface ZCBattleUnit {
     readonly heroes?: readonly ZCBattleHero[];
     readonly artifactId: number;
     readonly artifactLevel: number;
+    /**
+     * 单元来源类型（玩家 / 机器人 / 怪物）。
+     *
+     * 服务端未下发或给了未知值时是 `undefined` —— **不等于玩家**，
+     * 任何按它分流的地方都必须先判空再决定兜底口径。
+     */
+    readonly unitType?: ZCBattleUnitType;
 }
 
 /** 一次开始游戏结果。 */
@@ -106,6 +137,20 @@ export interface ZCBattleStart {
 export interface ZCBattleTeams {
     readonly mine: ZCBattleUnit | null;
     readonly enemy: ZCBattleUnit | null;
+}
+
+/**
+ * `unitType` 归一化：只认 1 / 2 / 3，其余（缺省、0、负数、小数、字符串垃圾）一律 `undefined`。
+ *
+ * 收成联合类型而不是裸 `number`，一是让调用方的 `switch` 能做穷尽检查，
+ * 二是防止有人把魔法数字写进分支（写错一个数字没有任何报错）。
+ */
+export function normalizeBattleUnitType(value: unknown): ZCBattleUnitType | undefined {
+    const num = toCount(value);
+    if (num === ZC_BATTLE_UNIT_TYPE.Player) return ZC_BATTLE_UNIT_TYPE.Player;
+    if (num === ZC_BATTLE_UNIT_TYPE.Robot) return ZC_BATTLE_UNIT_TYPE.Robot;
+    if (num === ZC_BATTLE_UNIT_TYPE.Monster) return ZC_BATTLE_UNIT_TYPE.Monster;
+    return undefined;
 }
 
 /** CmdBattleUnitInfo → ZCBattleUnit；campId / showInfo 缺失返回 null。 */
@@ -136,6 +181,7 @@ export function normalizeBattleUnit(info: CmdBattleUnitInfo | null | undefined):
         heroes,
         artifactId: toCount(info.artifactId),
         artifactLevel: toCount(info.artifactLevel),
+        unitType: normalizeBattleUnitType(info.unitType),
     };
 }
 

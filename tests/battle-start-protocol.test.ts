@@ -36,10 +36,12 @@ import protobuf from 'protobufjs/light.js';
 import { ProtoCoder } from '../assets/script/framework/net/ProtoCoder';
 import {
     ZC_BATTLE_TYPE_PVP,
+    ZC_BATTLE_UNIT_TYPE,
     applyUnitToPlayerView,
     buildMatchProfileLookup,
     normalizeBattleStart,
     normalizeBattleUnit,
+    normalizeBattleUnitType,
     normalizeHeroIds,
     splitBattleUnits,
 } from '../assets/script/app/battle/BattleStartModel';
@@ -119,10 +121,24 @@ test('运行时 protobuf 含开始战斗的 4 个 message，且字段号/类型�
     assert.equal(rsp.fields.unitInfos.resolvedType, unit);
 
     // 战斗单元：showInfo 是必需的，缺了分不出该渲染到左边还是右边
-    assert.deepEqual(Object.keys(unit.fields), ['showInfo', 'campId', 'heroInfos', 'artifactId', 'artifactLevel', 'unitId']);
+    assert.deepEqual(Object.keys(unit.fields), [
+        'showInfo',
+        'campId',
+        'heroInfos',
+        'artifactId',
+        'artifactLevel',
+        'unitId',
+        'unitType',
+    ]);
     assert.equal(unit.fields.showInfo.resolvedType, show);
     assert.equal(unit.fields.campId.type, 'uint32');
     assert.equal(unit.fields.heroInfos.resolvedType, root.lookupType(`${CMD}.CmdPvpHeroInfo`));
+    // unitType（服务端新增）：1 玩家 / 2 机器人 / 3 怪物。
+    //  是 optional ⇒ 老服务端不下发时读到 undefined，客户端分支前必须先兜底，
+    //  别把 `undefined` 当成「玩家」直接放行。
+    assert.equal(unit.fields.unitType.id, 7);
+    assert.equal(unit.fields.unitType.type, 'uint32');
+    assert.equal(unit.fields.unitType.optional, true);
 
     assert.deepEqual(
         Object.keys(show.fields),
@@ -392,6 +408,34 @@ test('战斗单元归一化：campId 必需、heroId 去重且过滤非法', () 
     const start = normalizeBattleStart(rsp({ unitInfos: [unit({ campId: 2 }), unit({ campId: 2, artifactId: 99 })] }))!;
     assert.equal(start.units.length, 1);
     assert.equal(start.units[0].artifactId, 99);
+});
+
+test('unitType 归一化：只认 1/2/3，缺省与未知值一律 undefined（不能冒充玩家）', () => {
+    // 1 玩家 / 2 机器人 / 3 怪物
+    assert.equal(normalizeBattleUnit(unit({ unitType: 1 }) as any)!.unitType, ZC_BATTLE_UNIT_TYPE.Player);
+    assert.equal(normalizeBattleUnit(unit({ unitType: 2 }) as any)!.unitType, ZC_BATTLE_UNIT_TYPE.Robot);
+    assert.equal(normalizeBattleUnit(unit({ unitType: 3 }) as any)!.unitType, ZC_BATTLE_UNIT_TYPE.Monster);
+
+    // 老服务端不下发（字段缺省）⇒ undefined。这条是整条用例的重点：
+    //  协议里 unitType 是 optional，谁要是写 `unitType ?? Player` 兜底，机器人就被统计成玩家。
+    assert.equal(normalizeBattleUnit(unit() as any)!.unitType, undefined, '没下发 ⇒ undefined，不是玩家');
+    assert.equal(normalizeBattleUnit(unit({ unitType: null }) as any)!.unitType, undefined);
+    assert.equal(normalizeBattleUnit(unit({ unitType: 0 }) as any)!.unitType, undefined, '0 不映射任何类型');
+    assert.equal(normalizeBattleUnit(unit({ unitType: -1 }) as any)!.unitType, undefined);
+    assert.equal(normalizeBattleUnit(unit({ unitType: 9 }) as any)!.unitType, undefined, '未登记的值不猜');
+    assert.equal(normalizeBattleUnit(unit({ unitType: 1.5 }) as any)!.unitType, undefined);
+    assert.equal(normalizeBattleUnit(unit({ unitType: 'x' }) as any)!.unitType, undefined);
+
+    // 纯函数入口与 normalizeBattleUnit 同一口径（别处复用时不走两套）
+    assert.equal(normalizeBattleUnitType(undefined), undefined);
+    assert.equal(normalizeBattleUnitType(ZC_BATTLE_UNIT_TYPE.Monster), ZC_BATTLE_UNIT_TYPE.Monster);
+    assert.equal(normalizeBattleUnitType(0), undefined);
+
+    // 整条链路（rsp → normalizeBattleStart）也要透传，不能在中间丢字段
+    const start = normalizeBattleStart(rsp({
+        unitInfos: [unit({ campId: 1, unitType: 1 }), unit({ campId: 2, showInfo: show({ roleId: Long.fromString('20002', true) }), unitType: 2 })],
+    }))!;
+    assert.deepEqual(start.units.map((u) => u.unitType), [ZC_BATTLE_UNIT_TYPE.Player, ZC_BATTLE_UNIT_TYPE.Robot]);
 });
 
 test('heroId 去重要用 Array.from 口径（构建期 Babel 展开会降级）', () => {

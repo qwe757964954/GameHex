@@ -50919,6 +50919,7 @@ CmdBattleUnitInfo.prototype.heroInfos = $util.emptyArray;
 CmdBattleUnitInfo.prototype.artifactId = 0;
 CmdBattleUnitInfo.prototype.artifactLevel = 0;
 CmdBattleUnitInfo.prototype.unitId = 0;
+CmdBattleUnitInfo.prototype.unitType = 0;
 CmdBattleUnitInfo.create = function create(properties) {
 return new CmdBattleUnitInfo(properties);
 };
@@ -50937,6 +50938,8 @@ $root.com.xkhy.tafang.cmd.CmdPvpHeroInfo.encode(message.heroInfos[i], writer.uin
 writer.uint32(  32).uint32(message.artifactId);
 writer.uint32(  40).uint32(message.artifactLevel);
 writer.uint32(  48).uint32(message.unitId);
+if (message.unitType != null && Object.hasOwnProperty.call(message, "unitType"))
+writer.uint32(  56).uint32(message.unitType);
 return writer;
 };
 CmdBattleUnitInfo.decode = function decode(reader, length, error, long) {
@@ -50976,6 +50979,10 @@ break;
 }
 case 6: {
 message.unitId = reader.uint32();
+break;
+}
+case 7: {
+message.unitType = reader.uint32();
 break;
 }
 default:

@@ -6,7 +6,7 @@ import {
     ZC_NEUTRAL_REWARD_FLY_SECONDS,
     ZC_NEUTRAL_REWARD_RISE_SECONDS,
 } from '../model/ZCBattlePresentationQueue';
-import { ZCNeutralResourceId } from '../model/ZCNeutralResourceReward';
+import { neutralResourceVisualOf, ZCNeutralResourceVisual } from '../model/ZCNeutralResourceGroup';
 import type { ZCNeutralReward } from '../model/ZCGameTypes';
 
 /**
@@ -246,7 +246,7 @@ export class ZCNeutralRewardFx {
         for (const event of events) {
             // 非玩家领取不播飞行：金币 / 神器目标都在**玩家自己的** HUD 上（2026-10-20 口径）。
             if (event.owner !== ZCOwner.Player) continue;
-            const kind = this.kindOf(event.resourceId);
+            const kind = this.kindOf(event.itemId);
             if (!kind) continue;
             let entry = this.entries.get(event.id);
             if (!entry) {
@@ -270,10 +270,11 @@ export class ZCNeutralRewardFx {
         this.entries.clear();
     }
 
-    /** 哪种资源播哪种飞行；其余（金矿激活 / 兵力出生）不在本类。 */
-    private kindOf(resourceId: string): 'gold' | 'artifact' | null {
-        if (resourceId === ZCNeutralResourceId.Gold || resourceId === ZCNeutralResourceId.Chest) return 'gold';
-        if (resourceId === ZCNeutralResourceId.ArtifactCharge) return 'artifact';
+    /** 哪种资源播哪种飞行（按资源项的**表现键**判）；其余（建筑激活 / 兵力出生）不在本类。 */
+    private kindOf(itemId: number): 'gold' | 'artifact' | null {
+        const visual = neutralResourceVisualOf(itemId);
+        if (visual === ZCNeutralResourceVisual.Gold || visual === ZCNeutralResourceVisual.Chest) return 'gold';
+        if (visual === ZCNeutralResourceVisual.ArtifactCharge) return 'artifact';
         return null;
     }
 

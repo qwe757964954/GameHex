@@ -21,7 +21,7 @@ import type { IZCSpawnRegionHintFrames } from '../view/ZCSpawnRegionHintOverlay'
 import type { ZCBattleStart } from '../../battle/BattleStartModel';
 import { buildZCClientCombatConfig } from './ZCClientCombatConfig';
 import { resolveZCVisualUnitIds } from '../model/ZCVisualResourcePlan';
-import { ZC_NEUTRAL_RESOURCE_REWARDS } from '../model/ZCNeutralResourceReward';
+import { getZCNeutralResourceCatalog } from '../model/ZCNeutralResourceGroup';
 
 const HUD_URL = ZC_BATTLE_SHELL_PATHS.hud;
 /** 棋盘图层容器。`MapWater / HexLayer / DecorLayer / BuildingOverlay / CooldownOverlay`
@@ -297,10 +297,12 @@ export class ZCGameLoader {
         if (!mapReady) throw new Error(`地图目录中没有可用配置：${this.mapDirectory}`);
         const baseMatchConfig = captureZCMatchConfig(undefined, { allowUnresolvedSelect: true });
         // 波次和中立奖励可从完整目录产兵，不受后端参战卡池限制。
+        // 兵团类资源项要产的兵同样从完整目录来（不走后端参战卡池）；表里没配时为空。
+        const neutralUnitCardIds = Array.from(getZCNeutralResourceCatalog().items.values())
+            .flatMap((item) => (item.cardId && item.unitCount > 0 ? [item.cardId] : []));
         const additionalCardIds = battle ? [
             ...waveCardIds.map(String),
-            ...Object.values(ZC_NEUTRAL_RESOURCE_REWARDS).flatMap((reward) =>
-                reward.rewardCardId && reward.rewardUnitCount > 0 ? [reward.rewardCardId] : []),
+            ...neutralUnitCardIds,
         ] : [];
         const additionalUnitIds = additionalCardIds.flatMap((cardId) => {
             const unitId = findCatalogCard(cardId)?.unitId;
@@ -807,6 +809,7 @@ export class ZCGameLoader {
             'pvpTileGen',
             'pvpTileGenParams',
             'pvpBaseTeamWeight',
+            'neutralResourceGroup',
             'skillAttrModifier',
             'generalStar',
             'pvpAttrMap',

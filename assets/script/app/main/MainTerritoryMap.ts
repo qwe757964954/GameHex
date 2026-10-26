@@ -108,6 +108,9 @@ export class MainTerritoryMap extends Component {
     private detailPanel: TerritorySiteDetailPanel = null!;
     private presenter: TerritoryPresenter | null = null;
     private lastRenderedChapter = -1;
+    /** 首次数据就绪并成功渲染的一次性回调：宿主（MainTabHost）用来确认首屏就绪。 */
+    private firstReadyCallback: (() => void) | null = null;
+    private firstReadyNotified = false;
     /** tick 定时器只在首次渲染成功后挂一次（页面常驻期间一直跑）。 */
     private tickScheduled = false;
     /** `initialize` 注入的资源入口（`ensureBattlePreload` 构造对局加载器用）。 */
@@ -191,20 +194,25 @@ export class MainTerritoryMap extends Component {
     }
 
     /**
-     * 「未解锁云」的两套序列帧：`image/territory/cloud/` 下按前缀分两组。
+     * 「未解锁云」的四套图：`image/territory/cloud/` 下按前缀分四组。
      *
-     * · `cloud_idle_0..4` = 待机飘动（5 帧循环）；
-     * · `cloud_dissolve_0..1` = 解锁消散（2 帧）。
+     * · `cloud_body_0` / `cloud_shadow_0` = 未解锁的**静止**云体与影子（各一张，不轮播）；
+     * · `cloud_dissolve_body_0…1` / `cloud_dissolve_shadow_0…1` = 解锁消散（各两帧）。
      *
      * ⚠️ **必须按前缀分开、各自按文件名排序**：`loadDir` 返回顺序不保证（同族坑见
-     * `loadHexFlipAssets`），而两套混在一个数组里按名排序会让 `cloud_dissolve_*` 排到
-     * `cloud_idle_*` 之前（`d < i`），帧序就整体错位了。
+     * `loadHexFlipAssets`），混在一个数组里按名排序会让 `cloud_dissolve_*` 排到
+     * `cloud_body_*` 之前，帧序就整体错位了。
      *
      * 一张都取不到 ⇒ 整条表现关闭（地图照常渲染），并打一条 warn —— 刚加的图忘了
      * 刷新资源库时能一眼看到原因，而不是"云神秘消失"。
      */
     private async loadCloudArt(assets: AssetService): Promise<void> {
-        const groups = { idle: 'cloud_idle_', dissolve: 'cloud_dissolve_' } as const;
+        const groups = {
+            body: 'cloud_body_',
+            shadow: 'cloud_shadow_',
+            dissolveBody: 'cloud_dissolve_body_',
+            dissolveShadow: 'cloud_dissolve_shadow_',
+        } as const;
         let frames: SpriteFrame[] = [];
         try {
             frames = (await assets.loadDir(TERRITORY_CLOUD_ART_ROOT, SpriteFrame) ?? [])
@@ -215,14 +223,17 @@ export class MainTerritoryMap extends Component {
         const pick = (prefix: string): SpriteFrame[] => frames
             .filter((frame) => frame.name.startsWith(prefix))
             .sort((a, b) => a.name.localeCompare(b.name));
-        const idle = pick(groups.idle);
-        const dissolve = pick(groups.dissolve);
         if (!this.isValid) return;
-        if (!idle.length) {
-            console.warn('[MainTerritoryMap] 未解锁云序列帧缺失（image/territory/cloud/'
-                + 'cloud_idle_0…4），章节地图不盖云；若是刚加的图，请在资源管理器里刷新一次让编辑器导入');
+        if (!pick(groups.body).length) {
+            console.warn('[MainTerritoryMap] 未解锁云帧缺失（image/territory/cloud/'
+                + 'cloud_body_0 / cloud_shadow_0…），章节地图不盖云；若是刚加的图，请在资源管理器里刷新一次让编辑器导入');
         }
-        this.mapView.setCloudFrames(idle, dissolve);
+        this.mapView.setCloudFrames({
+            body: pick(groups.body),
+            shadow: pick(groups.shadow),
+            dissolveBody: pick(groups.dissolveBody),
+            dissolveShadow: pick(groups.dissolveShadow),
+        });
     }
 
     /**
@@ -338,10 +349,20 @@ export class MainTerritoryMap extends Component {
             console.error('[MainTerritoryMap] 缺少资源入口（MainTabHost 未注入 assets），无法加载领地');
             FW.showTip(TERRITORY_TEXTS.loadingResourceMissing);
         }
+        // 防御：章节若在 onLoad 前已就绪（如重进复用），立即补一次完整绘制。
+        if (this.presenter?.state.ready) this.renderAll();
     }
 
     start(): void {
         this.presenter?.start();
+    }
+
+    /**
+     * 注册「首次数据就绪」回调（由宿主在页面挂载前注入）。
+     * 只在首次 renderAll 成功时触发一次，触发后立即清空；传 `null` 可取消。
+     */
+    onFirstReady(callback: (() => void) | null): void {
+        this.firstReadyCallback = callback;
     }
 
     /** 主城快速寻敌：打开当前 Boss 详情，并将地图移到同一个格子。 */
@@ -397,6 +418,13 @@ export class MainTerritoryMap extends Component {
     private renderAll(): void {
         const state = this.presenter?.state;
         if (!state || !state.ready || !state.map || !state.progress) return;
+        // 首次成功渲染即通知宿主首屏就绪（一次性，之后切章不再触发）。
+        if (!this.firstReadyNotified) {
+            this.firstReadyNotified = true;
+            const callback = this.firstReadyCallback;
+            this.firstReadyCallback = null;
+            callback?.();
+        }
         // 数据就绪即挂 tick（进入页面/切章后只需一次；加载中 state.ready=false 不会走到这里）。
         this.ensureTicks();
         const resetScroll = state.chapterId !== this.lastRenderedChapter;

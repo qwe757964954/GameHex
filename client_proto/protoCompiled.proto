@@ -4472,7 +4472,7 @@ message CmdBattleUnitInfo {
    required uint32 artifactId        = 4;//神器id
    required uint32 artifactLevel     = 5;//神器等级
    required uint32 unitId            = 6;//单元id
-
+   optional uint32 unitType          = 7;//单元类型,1玩家2机器人3怪物
 }
 
 // 请求战斗信息

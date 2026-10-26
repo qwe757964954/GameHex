@@ -17,7 +17,8 @@ const POST_LOGIN_ERROR_MESSAGE = '加载失败，请重新进入游戏';
  * 始终是一条 0-100% 连续进度、不会出现「到 100 再 100%」。会话基础资源与 Main
  * 界面加载合并为同一段 `[startRatio, 1]`，最终一次到达 100%。热更流程切出时已释放
  * 其预加载资源作用域，故本流程销毁热更留下的节点、用自己预加载的 prefab 重建；
- * `onLeave`（进入 Main）才销毁。
+ * `onLeave`（进入 Main）保留登录图节点，MainRoot 已在登录预加载阶段挂载并渲染于其下，
+ * 由 `ProcedureMain.onEnter` 直接移除登录图，露出完整主城。
  */
 export class ProcedurePostLogin extends ProcedureBase {
     public static __cname: string = 'ProcedurePostLogin';
@@ -101,7 +102,7 @@ export class ProcedurePostLogin extends ProcedureBase {
 
     onLeave(): void {
         this.revision += 1;
-        this.launchUI?.release();
+        // 登录图节点保留在 host 下（MainRoot 已在其下渲染就绪），由 ProcedureMain.onEnter 直接移除。
         this.launchUI = null;
         this.launchPrefab = null;
         this.releaseResourceScope();

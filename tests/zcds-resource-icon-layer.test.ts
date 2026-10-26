@@ -22,8 +22,10 @@ import { loadViews } from './helpers/zcds-view-fixtures';
 import { configureZCMap, ZCMapLayout } from '../assets/script/app/zcds/model/ZCGameModel';
 import { ZCPvpTileType } from '../assets/script/app/zcds/model/ZCPvpTileRules';
 import { ZC_HEX_ACTIVATION_SECONDS } from '../assets/script/app/zcds/model/ZCBattlePresentationQueue';
+import { installZCNeutralTestCatalog, ZC_TEST_ITEM } from './helpers/zcds-neutral-catalog';
 
 configureZCMap(JSON.parse(readFileSync('tests/fixtures/zcds-legacy-map.json', 'utf8')) as ZCMapLayout);
+installZCNeutralTestCatalog();
 
 /** `ZCGameHex.prefab` 上 `BuildingLayer` 的 `_lpos.y`（它挂着 Widget，运行时也钉在这个值）。 */
 const BUILDING_LAYER_Y = 15.101;
@@ -63,7 +65,7 @@ function resourcePresentation(): any {
             id: 1, owner: 'neutral', state: 'occupiable', building: 'none', tier: 0,
             hp: 0, maxHp: 0, wallHp: 0, wallMaxHp: 0, wallBreachedEdge: null,
             developmentCost: 25, tileType: null, developmentResolved: false,
-            neutralResourceId: 'gold', cardId: null,
+            neutralResourceId: ZC_TEST_ITEM.Gold, cardId: null,
         },
         canDevelop: false,
         playerGold: 0,
@@ -209,7 +211,7 @@ function artifactPresentation(): any {
             id: 7, owner: 'neutral', state: 'occupiable', building: 'none', tier: 0,
             hp: 0, maxHp: 0, wallHp: 0, wallMaxHp: 0, wallBreachedEdge: null,
             developmentCost: 25, tileType: null, developmentResolved: false,
-            neutralResourceId: 'artifact_charge', cardId: null,
+            neutralResourceId: ZC_TEST_ITEM.MixedCharge, cardId: null,
         },
         canDevelop: false,
         playerGold: 0,

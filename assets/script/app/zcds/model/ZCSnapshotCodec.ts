@@ -9,7 +9,6 @@ import {
 import { ownersForPlayerCount, type ZCFaction, ZCOwner } from './ZCMapConfig';
 import type { ZCMatchConfig } from './ZCMatchConfig';
 import { resolveZCUnitDefinition } from './ZCModifierRuntime';
-import { ZCNeutralResourceId } from './ZCNeutralResourceReward';
 import { createPvpTileTypes, ZCPvpTileType } from './ZCPvpTileRules';
 import { ZCStatusSystem } from './ZCStatusEffect';
 
@@ -63,7 +62,7 @@ export class ZCSnapshotCodec {
             ? match.map.homes
             : [match.map.playerHomeId, match.map.enemyHomeId].filter((id) => Number.isInteger(id)) as number[];
         const tileTypes = createPvpTileTypes(random, match);
-        const resolvedResources = new Map((match.map.resolvedResources ?? []).map((item) => [item.hexId, item.resourceId]));
+        const resolvedResources = new Map((match.map.resolvedResources ?? []).map((item) => [item.hexId, item.itemId]));
         // select 地图的 owners 全是 neutral，主城格与主城邻格的归属必须按 homes 下标显式建立：
         // 主城格 owner=对应方（building=hq），周围 6 格 owner=对应方（已占领、未开发，可建造）。
         const homeOwnerById = new Map<number, ZCOwner>();
@@ -209,7 +208,7 @@ export class ZCSnapshotCodec {
             check(optional(hex.captureSeconds, v => nonnegative(v) && v <= captureMax), `${path}.captureSeconds`);
             if (nonnegative(hex.captureSeconds) && hex.captureSeconds > 0) check(typeof hex.captureOwner === 'string' && ownerSet.has(hex.captureOwner), `${path}.captureOwner`);
             check(hex.cardId === null || typeof hex.cardId === 'string', `${path}.cardId`);
-            check(optional(hex.neutralResourceId, (v) => v === null || oneOf(Object.values(ZCNeutralResourceId), v)), `${path}.neutralResourceId`);
+            check(optional(hex.neutralResourceId, (v) => v === null || Number.isInteger(v)), `${path}.neutralResourceId`);
             check(optional(hex.tileType, (v) => v === null || typeof v === 'number' && Object.prototype.hasOwnProperty.call(config.tiles, v)), `${path}.tileType`);
             const mapHex = config.map.hexes[index];
             if (!mapHex.playable) {

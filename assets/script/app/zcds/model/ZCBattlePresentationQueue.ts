@@ -3,7 +3,6 @@ import type {
     ZCBuildingDestruction, ZCBuildingShake, ZCBuildingType, ZCCardReveal, ZCFloatText, ZCFloatTextKind,
     ZCHexActivation, ZCHitFx, ZCNeutralReward,
 } from './ZCGameTypes';
-import type { ZCNeutralResourceId } from './ZCNeutralResourceReward';
 import type { ZCOwner } from './ZCMapConfig';
 import {
     HEX_FLIP_SECONDS,
@@ -222,7 +221,8 @@ export interface IZCCardRevealOptions {
 export interface IZCNeutralRewardOptions {
     readonly now: number;
     readonly hexId: number;
-    readonly resourceId: ZCNeutralResourceId;
+    /** 领取的资源项 id（`neutralResourceGroup.id`）。 */
+    readonly itemId: number;
     readonly owner: ZCOwner;
     readonly gold: number;
     readonly artifactCharge: number;
@@ -356,7 +356,7 @@ export class ZCBattlePresentationQueue {
         const reward: ZCNeutralReward = {
             id: this.nextNeutralRewardId++,
             hexId: input.hexId,
-            resourceId: input.resourceId,
+            itemId: input.itemId,
             owner: input.owner,
             gold: Math.round(input.gold),
             artifactCharge: Math.round(input.artifactCharge),

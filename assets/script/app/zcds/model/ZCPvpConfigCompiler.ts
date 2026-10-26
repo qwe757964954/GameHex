@@ -3,6 +3,10 @@ import type { ZCPvpTables, ZCRuntimeRules } from './ZCGameRuntimeConfig';
 import { parseZCLegacySkillEffectConfig, parseZCLegacySkillViewBindings } from './ZCLegacySkillEffect';
 import { parseZCModifierCatalogs } from './ZCModifierRuntime';
 import {
+    compileZCNeutralResourceCatalog,
+    type ZCNeutralResourceCatalog,
+} from './ZCNeutralResourceGroup';
+import {
     globalNumber, globalNumberOr,
     isHqCard,
     kvToObject,
@@ -32,6 +36,8 @@ export interface IZCPvpCompiledConfig {
     readonly bonds: readonly ZCBondRule[];
     readonly tileConfigs: Readonly<Record<ZCPvpTileType, ZCPvpTileConfig>>;
     readonly tileWeights: readonly ZCPvpTileTypeWeight[];
+    /** 中立资源组合目录（`neutralResourceGroup` 表）；表缺失时为空目录。 */
+    readonly neutralResources: ZCNeutralResourceCatalog;
     readonly goldPity: number;
     readonly modifierCatalogs: ReturnType<typeof parseZCModifierCatalogs>;
     readonly legacySkillEffects: ReturnType<typeof parseZCLegacySkillEffectConfig>;
@@ -100,6 +106,13 @@ export function compilePvpTables(tables: ZCPvpTables): IZCPvpCompiledConfig {
             pvpStatus: tables.pvpStatus ?? [],
             pvpSkillPlan: tables.pvpSkillPlan ?? [],
         },
+    );
+
+    // 中立资源组合：引用的卡牌必须在**本局编译出来的**卡目录里（含建筑卡）。
+    //  表缺失 ⇒ 空目录（资源点不会出资源，但不会让整局起不来）；表在但配错 ⇒ 编译期抛。
+    const neutralResources = compileZCNeutralResourceCatalog(
+        tables.neutralResourceGroup ?? [],
+        new Map(cards.map((card) => [card.id, card])),
     );
 
     const tileRows = (tables.pvpTile ?? []).map((row) => ({
@@ -187,7 +200,7 @@ export function compilePvpTables(tables: ZCPvpTables): IZCPvpCompiledConfig {
 
     return {
         cards, playerDeck, enemyDeck, units, counters, bonds,
-        tileConfigs, tileWeights, goldPity, modifierCatalogs,
+        tileConfigs, tileWeights, goldPity, modifierCatalogs, neutralResources,
         legacySkillEffects: nextLegacySkillEffects, rules: nextRules,
     };
 }

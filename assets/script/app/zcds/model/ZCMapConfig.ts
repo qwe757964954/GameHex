@@ -1,7 +1,5 @@
 /** 地图 JSON 校验、分区 / 镜像配对与六边形棋盘构建；不依赖对局规则。 */
 import { hexGridLogicalPoint } from '../../../core/hex/HexGridLayout';
-import { isZCNeutralResourceId } from './ZCNeutralResourceReward';
-import type { ZCNeutralResourceId } from './ZCNeutralResourceReward';
 
 export const ZC_OWNER_ORDER = ['player', 'enemy', 'enemy2', 'enemy3'] as const;
 export type ZCOwner = typeof ZC_OWNER_ORDER[number];
@@ -102,7 +100,12 @@ export interface ZCMapHomeCandidates {
     cells: number[];
 }
 
-/** 中立资源点位：开局据此抽取生成中立资源的固定格。 */
+/**
+ * 中立资源点位：开局据此抽签生成中立资源的固定格。
+ *
+ *  2026-10-26 起**只写组号**：能出哪些资源、各占多少权重全在 `neutralResourceGroup` 表里，
+ *  地图不再自带资源池（旧的 `pool` 字段已退役，存量地图由地图编辑器另存迁移）。
+ */
 export interface ZCMapResourcePoint {
     row: number;
     column: number;
@@ -110,16 +113,17 @@ export interface ZCMapResourcePoint {
     section?: number;
     /** 所在纵深片；缺省由 regions 反查。 */
     depth?: ZCDepth;
-    /** 资源 id → 抽取权重；至少 1 项且至少 1 个非零。 */
-    pool: Record<string, number>;
+    /** 中立资源组合 id（`neutralResourceGroup.groupId`）；开局在组内按权重抽一个资源项。 */
+    groupId: number;
 }
 
-/** 选点结束时由点位资源池抽出的本局中立资源。 */
+/** 选点结束时由点位所属组合抽出的本局中立资源项。 */
 export interface ZCMapResolvedResource {
     hexId: number;
     section: number;
     depth?: ZCDepth;
-    resourceId: ZCNeutralResourceId;
+    /** 抽中的资源项 id（`neutralResourceGroup.id`）；组内权重全 0 的点位不会出现在本表。 */
+    itemId: number;
 }
 
 /** 可调间距参数（六边形最短路径，单位＝格）。 */
@@ -728,27 +732,23 @@ export function configureZCMap(layout: ZCMapLayout): void {
             if (point.section !== undefined && point.section !== 0) throw new Error('中立资源点的分区必须为 0');
             if (homes.indexOf(id) >= 0) throw new Error('资源点位不能落在主城上');
             if (occupied.has(id)) throw new Error('资源点位不能重复');
-            if (!point.pool || typeof point.pool !== 'object' || Array.isArray(point.pool)) {
-                throw new Error('资源点位必须配置资源池');
+            // 2026-10-26：点位只认组合号（组内权重在 neutralResourceGroup 表里）。
+            // 旧 `pool` 地图必须用地图编辑器另存一次迁移 —— 静默兼容两套会让
+            // 「点位抽了什么」有两处真源。
+            if ((point as ZCMapResourcePoint & { pool?: unknown }).pool !== undefined) {
+                throw new Error('资源点位已改为引用组合 ID（groupId），请用地图编辑器重存该点');
             }
-            const pool: Record<string, number> = {};
-            let total = 0;
-            for (const [resource, weight] of Object.entries(point.pool)) {
-                if (!isZCNeutralResourceId(resource)) throw new Error(`资源池包含未知资源 id：${resource}`);
-                if (typeof weight !== 'number' || !Number.isFinite(weight) || weight < 0) {
-                    throw new Error('资源权重必须是非负数');
-                }
-                pool[resource] = weight;
-                total += weight;
+            const groupId = point.groupId;
+            if (!Number.isInteger(groupId) || (groupId as number) <= 0) {
+                throw new Error('资源点位必须配置正整数组合 ID（groupId）');
             }
-            if (!Object.keys(pool).length || total <= 0) throw new Error('资源池至少要有一项非零权重');
             occupied.set(id, resourcePoints.length);
             resourcePoints.push({
                 row: point.row,
                 column: point.column,
                 section: 0,
                 depth: point.depth ?? regionDepthByCell.get(id),
-                pool,
+                groupId: groupId as number,
             });
         }
         for (let i = 0; i < resourcePoints.length; i += 1) {

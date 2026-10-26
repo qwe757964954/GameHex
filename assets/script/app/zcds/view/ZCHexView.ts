@@ -28,6 +28,7 @@ import { ZC_CLIENT_COLORS, zcDeepFactionColor, zcFactionColor, zcTowardWhite } f
 import { OWNED_OUTLINE_INSET_SCALE, ZC_OUTLINE_HEX_POINTS } from './ZCOutlineLayer';
 import { ZCPvpTileType } from '../model/ZCPvpTileRules';
 import { ZCOwner } from '../model/ZCMapConfig';
+import { neutralResourceVisualOf, ZCNeutralResourceVisual } from '../model/ZCNeutralResourceGroup';
 import {
     ZC_CARD_FADE_START_PROGRESS,
     ZC_CARD_REVEAL_SECONDS,
@@ -78,6 +79,7 @@ const BUILDING_SYMBOLS: Readonly<Record<ZCBuildingType, string>> = {
  */
 const NEUTRAL_RESOURCE_LABELS: Readonly<Record<string, string>> = {
     chest: '宝箱', gold: '金币', mine: '金矿', unit_cap: '兵力', artifact_charge: '神器',
+    barracks: '兵营', buff: 'Buff',
 };
 // 三个「格内图标落点」下面的 y 都是 **BuildingLayer 内的局部坐标**。
 // 详见 docs/ZCHexView设计决策.md §1。
@@ -328,8 +330,8 @@ interface IZCSpawnHexPresentation {
     confirmed: boolean;
     blocked: boolean;
     resourcePoint: boolean;
-    /** 资源点的具体资源 id（选点阶段用资源图标，不再显示「资源/可解锁」文字）。 */
-    resourceId?: string | null;
+    /** 资源点在选点阶段的**预览资源项 id**（`neutralResourceGroup.id`）；视图据此查表现键。 */
+    resourceItemId?: number | null;
     unlocksResource: boolean;
     regionText?: string;
     boundaryMask?: number;
@@ -1422,18 +1424,20 @@ export class ZCHexView extends Component {
         // 因为中立资源是进游戏根据随机」* ⇒ 选点阶段**所有**资源点一律盖问号占位
         // （`setUnknownResourceFrame` 注入 `image/gameui/whh`），连兵力的待机骨骼也不摆
         // —— 骨骼同样是"这一格是兵力资源"的剧透。没有注入占位图时退回原行为（显真图）。
-        const maskResource = presentation.resourcePoint && !!presentation.resourceId
+        const visual = neutralResourceVisualOf(presentation.resourceItemId);
+        const maskResource = presentation.resourcePoint && !!visual
             && !!this.unknownResourceFrame;
         // 骨骼数据在建视图时就已经由 `ZCGameRenderWorld.injectResourceUnits` 喂进来，这里只是把
         // `renderContent` 那条分支搬过来用 —— 兵种/数量没变时 `rebuildResourceUnitsIfNeeded` 只做
         // 显隐，零 `instantiate`（`renderSpawnSelection` 也是每帧调的）。
-        const unitPoint = !maskResource && presentation.resourcePoint && presentation.resourceId === 'unit_cap';
+        const unitPoint = !maskResource && presentation.resourcePoint
+            && visual === ZCNeutralResourceVisual.UnitCap;
         const resourceUnits = unitPoint ? this.rebuildResourceUnitsIfNeeded() : this.hideResourceUnits();
         // 骨骼没建出来（表里没配卡 / 没单位 prefab）时才退回兵营图标兜底，别留一格空白。
         const resourceFrame = maskResource
             ? this.unknownResourceFrame
-            : presentation.resourcePoint && presentation.resourceId && !(unitPoint && resourceUnits)
-                ? this.frameForSpawnResource(presentation.resourceId) : null;
+            : presentation.resourcePoint && visual && !(unitPoint && resourceUnits)
+                ? this.frameForSpawnResource(visual) : null;
         this.setSprite(this.iconSprite, resourceFrame);
         // 与正式对局同一套落点/抬层口径（见 `renderContent` 那段）：选点阶段的地块同样互相重叠，
         // 资源图标不抬层照样会被邻格整图沿格边线切掉。
@@ -1583,7 +1587,7 @@ export class ZCHexView extends Component {
         showDevelopable: boolean,
     ): string {
         return `${state.owner}|${this.sweepKey}|${state.state}|${state.building}`
-            + `|${state.tileType}|${state.neutralResourceId ?? ''}|${state.tier}`
+            + `|${state.tileType}|${state.neutralResourceId ?? 0}|${state.tier}`
             + `|${state.developmentCost}|${state.developmentResolved}|${canDevelop}`
             + `|${affordable}|${presentation.hideNeutralResourceLabel === true}`
             + `|${presentation.boundaryMask ?? 0}|${showDevelopable}`;
@@ -1701,17 +1705,19 @@ export class ZCHexView extends Component {
         // 领取后`neutralResourceId` 被清空 ⇒ 走下面的 else 分支自动收掉。
         // ⚠️ 三元里必须给`&&` 加括号：裸写 `a && b ? x : y` 会被TS 解析成语法错误
         //（报TS1005/TS1389，指望不到具体行，容易误以为是别处坏了）。
-        const wantsResourceUnits = state.neutralResourceId === 'unit_cap' && !hideNeutralResourceLabel;
+        const resourceVisual = neutralResourceVisualOf(state.neutralResourceId);
+        const wantsResourceUnits = resourceVisual === ZCNeutralResourceVisual.UnitCap
+            && !hideNeutralResourceLabel;
         const resourceUnits = wantsResourceUnits
             ? this.rebuildResourceUnitsIfNeeded()
             : this.hideResourceUnits();
         // 神器充能点（`artifact_charge`）：若 prefab 已挂 Spine 动画（六边形底 + 问号指示器），
         // 走 Spine 分支——不显示静态神器图标、也不写中文兜底。`null`（prefab 未挂 Spine）
         // 时回退到旧逻辑（`artifactChargeFrame` 静态图 / 文字兜底）。
-        const useArtifactSpine = state.neutralResourceId === 'artifact_charge'
+        const useArtifactSpine = resourceVisual === ZCNeutralResourceVisual.ArtifactCharge
             && !hideNeutralResourceLabel && !!this.artifactHexSpine;
-        const resourceFrame = state.neutralResourceId && !hideNeutralResourceLabel && !useArtifactSpine
-            ? this.frameForResource(state.neutralResourceId) : null;
+        const resourceFrame = resourceVisual && !hideNeutralResourceLabel && !useArtifactSpine
+            ? this.frameForResource(resourceVisual) : null;
         this.setSprite(this.iconSprite,
             resourceFrame ?? (enemyCanDevelop ? this.enemyDevelopFrame : effectiveCanDevelop ? this.frameForTileType(state.tileType) : null));
         // 神器点 Spine 显隐与动画：六边形底播 `animation`（循环），问号指示器播 `ui_indicatorNPC`（循环）。
@@ -1742,10 +1748,10 @@ export class ZCHexView extends Component {
         this.priceIcon.enabled = effectiveCanDevelop && !!this.priceIcon.spriteFrame;
 
         let text = '';
-        if (state.neutralResourceId && !hideNeutralResourceLabel && !resourceFrame && !resourceUnits && !useArtifactSpine) {
-            // 有图标走图标（chest / gold / mine）；`artifact_charge` 挂了 Spine 时走 Spine、不写文字；
-            // `unit_cap` 有骨骼（`resourceUnits`）⇒ 这里不会再落到中文「兵力」。
-            text = NEUTRAL_RESOURCE_LABELS[state.neutralResourceId] ?? state.neutralResourceId;
+        if (resourceVisual && !hideNeutralResourceLabel && !resourceFrame && !resourceUnits && !useArtifactSpine) {
+            // 有图标走图标（chest / gold / mine / barracks）；神器充能挂了 Spine 时走 Spine、不写文字；
+            // 兵团有骨骼（`resourceUnits`）⇒ 这里不会再落到中文「兵力」。
+            text = NEUTRAL_RESOURCE_LABELS[resourceVisual] ?? '';
         } else if (effectiveCanDevelop) text = String(state.developmentCost);
         else if (showBuilding && !buildingFrame) {
             // 没配外观图（旧存档 / 美术缺图）时才退「城/金/兵/塔」字 + 等级。
@@ -1964,6 +1970,9 @@ export class ZCHexView extends Component {
             case 'chest': return this.chestResourceFrame;
             // 神器充能：显示**玩家本局携带的那件神器**的图（渲染层注入），不是中文字。
             case 'artifact_charge': return this.artifactChargeFrame;
+            // 兵营资源点：暂时复用兵营开发图标（`icon_by`）。表里写的是「沿用卡牌模型」，
+            // 但资源点未领取时还没有建筑实例，先用地块图标顶上；出专属图后在这里换。
+            case 'barracks': return this.barracksIconFrame;
             default: return null;
         }
     }

@@ -108,6 +108,10 @@ test('对局流程在进入前准备地图、配置和全部首屏 Prefab', asyn
         '../model/ZCModifierRuntime': {
             getZCModifierCatalogs: () => ({ adapters: { textOverrides: new Map() } }),
         },
+        '../model/ZCNeutralResourceGroup': {
+            // 兵团类资源项要产的兵从完整目录预加载：桩里给空目录（本用例不测那条分支）。
+            getZCNeutralResourceCatalog: () => ({ items: new Map() }),
+        },
         '../model/ZCGameModel': {
             configureZCMap: (map: { id: string }) => configuredMaps.push(map.id),
             // `loadRandomMap` 的随机池判据（新增依赖，桩里缺符号会在调用时抛 TypeError）。

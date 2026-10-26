@@ -3,8 +3,10 @@ import test from 'node:test';
 import { loadViews } from './helpers/zcds-view-fixtures';
 import { configureZCMap, ZCMapLayout } from '../assets/script/app/zcds/model/ZCGameModel';
 import { readFileSync } from 'node:fs';
+import { installZCNeutralTestCatalog, ZC_TEST_ITEM } from './helpers/zcds-neutral-catalog';
 
 configureZCMap(JSON.parse(readFileSync('tests/fixtures/zcds-legacy-map.json', 'utf8')) as ZCMapLayout);
+installZCNeutralTestCatalog();
 
 /** `ZCGameHex.prefab` 根节点尺寸 —— 资源图标的缩放目标就是它（格子边长）。 */
 const HEX_SIZE = 128;
@@ -63,7 +65,7 @@ test('资源点图标等比缩到格子边长；地块类型图标不被资源�
             id: 1, owner: 'neutral', state: 'occupiable', building: 'none', tier: 0,
             hp: 0, maxHp: 0, wallHp: 0, wallMaxHp: 0, wallBreachedEdge: null,
             developmentCost: 25, tileType: null, developmentResolved: false,
-            neutralResourceId: 'artifact_charge', cardId: null,
+            neutralResourceId: ZC_TEST_ITEM.MixedCharge, cardId: null,
         } as never,
         canDevelop: false,
         playerGold: 0,

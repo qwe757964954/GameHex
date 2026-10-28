@@ -295,14 +295,14 @@ test('阵亡特效：13 帧 + pac + anim + prefab 四件套齐全', () => {
         `时长应 = 13/12 = ${(13 / FPS).toFixed(6)}，实际 ${anim._duration}`);
 });
 
-test('阵亡特效 prefab：RAW + trim 关 + 锚点底边（人物倒下时脚底不动）', () => {
+test('阵亡特效 prefab：CUSTOM + trim 关 + 锚点底边（人物倒下时脚底不动）', () => {
     const prefab = readPrefab(`${DEATH_FX_ROOT}/死亡特效.prefab`);
     const node = findType(prefab, 'cc.Node')!;
     const ui = findType(prefab, 'cc.UITransform')!;
     const sprite = findType(prefab, 'cc.Sprite')!;
     const animation = findType(prefab, 'cc.Animation')!;
     assert.equal(node._layer, 33554432, 'layer 必须是 UI_2D');
-    assert.equal(sprite._sizeMode, 2, 'sizeMode 必须 RAW(2)');
+    assert.equal(sprite._sizeMode, 0, '缩图后使用 CUSTOM 固定显示画布');
     assert.equal(sprite._isTrimmedMode, false, 'trim 必须关');
     // 死亡特效是竖长条（535×1092），底边锚点 + _lpos 让脚底与单位对齐。
     assert.deepEqual({ x: ui._anchorPoint.x, y: ui._anchorPoint.y }, { x: 0.5, y: 0 },

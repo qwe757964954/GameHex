@@ -4,6 +4,7 @@ import { MainTaskDetailPage } from './MainTaskDetailPage';
 import { mainTaskRepository } from './MainTaskRepository';
 import type { IMainTaskRepository, IMainTaskSnapshot } from './MainTaskRepository';
 import { MAIN_TASK_TEXTS } from './MainTaskTexts';
+import { GameNet } from '../net/GameNet';
 
 const { ccclass, property } = _decorator;
 
@@ -29,6 +30,11 @@ export class MainTaskEntry extends Component {
     private revision = 0;
     /** 领奖请求进行中（防连点）。 */
     private busy = false;
+
+    protected onDestroy(): void {
+        this.revision += 1;
+        GameNet.instance.removeCaller(this);
+    }
 
     protected onLoad(): void {
         this.bindClick();

@@ -243,9 +243,9 @@ export interface IHangRepository {
     /** 读表 + 读缓存，组装一次快照；**不发任何请求**。 */
     load(nowMs?: number): Promise<IHangSnapshot>;
     /** 领取挂机奖励（`CmdHangGetRewardReqMsg`）。 */
-    claimReward(caller?: unknown): Promise<HangRequestResult>;
+    claimReward(caller?: object): Promise<HangRequestResult>;
     /** 快速征收 / 扫荡（`CmdBattleSweepReqMsg`）。 */
-    sweep(level: number, type?: number, caller?: unknown): Promise<HangRequestResult>;
+    sweep(level: number, type?: number, caller?: object): Promise<HangRequestResult>;
     /**
      * 记一次「看完广告」（`CmdRoleWatchAdvertReqMsg`）。
      *
@@ -254,7 +254,7 @@ export interface IHangRepository {
      * Demo3.8 没有广告 SDK ⇒ 调用点由 `HangPage.HJ_AD_PLAYBACK_AVAILABLE` 把关，
      * **没有播放凭据不许发**（否则可刷）。
      */
-    watchAd(type?: number, caller?: unknown): Promise<HangRequestResult>;
+    watchAd(type?: number, caller?: object): Promise<HangRequestResult>;
 }
 
 /** 请求超时（与首充 / 七日 / 礼包 / 战令同口径：读 800ms / 写 5000ms）。 */
@@ -535,7 +535,7 @@ export class RuntimeHangRepository implements IHangRepository {
     }
 
     /** 领取挂机奖励：`CmdHangGetRewardReqMsg`（无请求参数）。 */
-    async claimReward(caller?: unknown): Promise<HangRequestResult> {
+    async claimReward(caller?: object): Promise<HangRequestResult> {
         const net = GameNet.instance;
         if (!net.isConnected) return 'offline';
 
@@ -552,7 +552,7 @@ export class RuntimeHangRepository implements IHangRepository {
         try {
             // ⚠️ 必须 withTimeout：`GameNet.send` 没有按请求的超时，服务端不回就永悬。
             const sent = await withTimeout(
-                net.send(new RequestHangGetReward({}, caller as any, callback), false),
+                net.send(new RequestHangGetReward({}, caller, callback), false),
                 WRITE_TIMEOUT_MS,
                 () => false,
             );
@@ -573,7 +573,7 @@ export class RuntimeHangRepository implements IHangRepository {
      *   ② 免费次数用完时先弹「看广告」二次确认。
      * Repository 不替页面做这两个判断（它要弹框 / 要读 UI），只负责发请求。
      */
-    async sweep(level: number, type: number = HJ_SWEEP_TYPE_CHAPTER, caller?: unknown): Promise<HangRequestResult> {
+    async sweep(level: number, type: number = HJ_SWEEP_TYPE_CHAPTER, caller?: object): Promise<HangRequestResult> {
         const net = GameNet.instance;
         if (!net.isConnected) return 'offline';
 
@@ -586,7 +586,7 @@ export class RuntimeHangRepository implements IHangRepository {
         try {
             const sent = await withTimeout(
                 net.send(
-                    new RequestBattleSweep({ level, type }, caller as any, callback),
+                    new RequestBattleSweep({ level, type }, caller, callback),
                     false,
                 ),
                 WRITE_TIMEOUT_MS,
@@ -606,7 +606,7 @@ export class RuntimeHangRepository implements IHangRepository {
      * ⚠️ 调用前必须先真的把广告放完（`HangPage.HJ_AD_PLAYBACK_AVAILABLE` 把关）——
      * 这个请求本身就是「加一次广告次数」的凭据，裸发等于白送。
      */
-    async watchAd(type: number = HJ_AD_TYPE_SWEEP, caller?: unknown): Promise<HangRequestResult> {
+    async watchAd(type: number = HJ_AD_TYPE_SWEEP, caller?: object): Promise<HangRequestResult> {
         const net = GameNet.instance;
         if (!net.isConnected) return 'offline';
 
@@ -620,7 +620,7 @@ export class RuntimeHangRepository implements IHangRepository {
         try {
             const sent = await withTimeout(
                 net.send(
-                    new RequestRoleWatchAdvert({ type }, caller as any, callback),
+                    new RequestRoleWatchAdvert({ type }, caller, callback),
                     false,
                 ),
                 WRITE_TIMEOUT_MS,

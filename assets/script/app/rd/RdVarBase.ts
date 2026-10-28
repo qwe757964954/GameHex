@@ -57,7 +57,7 @@ export abstract class RdVarBase extends ExprVarBase {
             console.warn(`[RdVar] CacheMgr 未就绪，${this.constructor.name} 无法监听 ${cacheName}`);
             return;
         }
-        mgr.setEventUpdate(cacheName, this as unknown as destroyable, () => {
+        mgr.setEventUpdate(cacheName, this, () => {
             if (onChanged) onChanged();
             else this.MarkDirty();
         });

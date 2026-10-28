@@ -1094,3 +1094,26 @@ export function territoryChestFlyFx(
         arcRatio: TERRITORY_CHEST_FLY_ARC_RATIO,
     };
 }
+
+/**
+ * 第 `index` 枚奖励图标**落进资源栏**的时刻（秒）。
+ *
+ * ## 为什么要单独一个函数
+ *
+ *  开箱以后「资源栏那一格的图标和数字跳一下」是**按枚**触发的（用户 2026-10-26 口径：
+ *  「宝箱打开的体力或银币 icon 飞到对应的资源栏中，资源栏的 icon 和数字有跳动增加的反馈」），
+ *  而 `territoryChestFlyFx` 到终点就返回 `null` —— 从「返回 null」反推到达时刻需要记住上一帧，
+ *  那就变成逐帧累加了。这里直接把 {@link territoryChestFlyFx} 的隐式窗口写出来：
+ *  **起飞时刻 = `flyStart + index × stagger`，飞满 `flySeconds` 即到达**。
+ *
+ * ⚠️ 到达时刻必须落在 `territoryChestEndSeconds` 之内，否则最后一枚图标还没飞到、
+ *   表演就被 `stop()` 收掉了（单测 `territory-chest-animation` 盯着这条）。
+ */
+export function territoryChestFlyArriveAt(
+    spec: ITerritoryChestSpec,
+    index: number,
+    flyCount = spec.flyCount,
+): number {
+    if (!Number.isInteger(index) || index < 0) return Number.POSITIVE_INFINITY;
+    return spec.flyStart + index * territoryChestFlyStagger(flyCount) + spec.flySeconds;
+}

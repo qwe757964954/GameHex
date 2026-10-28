@@ -22,21 +22,21 @@
 ## Task 1: ScopedAssetCache
 Files: core/asset/ScopedAssetCache.ts, tests/scoped-asset-cache.test.ts.
 Interfaces: implements AssetService; constructor(delegate, {maxEntries,idleMs}, now); prune(), clear(), stats. Scope lease protection, promise merging, failed removal, capacity bypass.
-- [ ] Write behavioral tests for hit, cancellation, failure retry, TTL, capacity, clear/late; watch RED.
-- [ ] Implement and run npx tsx --test tests/scoped-asset-cache.test.ts; expect all PASS.
+- [x] Write behavioral tests for hit, cancellation, failure retry, TTL, capacity, clear/late; watch RED.
+- [x] Implement and run npx tsx --test tests/scoped-asset-cache.test.ts; expect all PASS.
 
 ## Task 2: Session parsed warmup + entry integration
 Files: SessionAssetService.ts, AppSessionAssetService.ts, ZCBattlePreparation.ts, MainTerritoryMap.ts, MainTabHost.ts, BigMapEntry.ts, BigMapPage.ts, ProcedureBootstrap.ts, ProcedureGame.ts, ProcedureMatching.ts, shared resource manifest.
 Interfaces: reusableAssets?: AssetService; warmupBattle?(): Promise<void>. createZCBattlePreload(assets, configs, battlePromise, options) returns existing ZCGamePreload. Same lease transfer rules.
-- [ ] Tests assert no config/map changes during warmup; duplicate/close/clear; both entry use shared prep and cached assets. Watch RED.
-- [ ] Implement, update only affected VM dependencies, run session/entry/lifecycle tests; expect PASS.
+- [x] Tests assert no config/map changes during warmup; duplicate/close/clear; both entry use shared prep and cached assets. Watch RED.
+- [x] Implement, update only affected VM dependencies, run session/entry/lifecycle tests; expect PASS.
 
 ## Task 3: Resource plan narrowing
 Files: ZCGameLoader.ts, ZCGamePreparedResources / lazy guide consumer as needed, tests/preview-battle-resource-plan.test.ts.
-- [ ] Reproduce unrelated override loading. Assert actual textModifiers and required dependencies retained; offline fallback all. Watch RED.
-- [ ] Implement conditional UI only where view already supports null; preserve required assets if optional consumers require larger refactor. Run loader/client-combat tests; expect PASS.
+- [x] Reproduce unrelated override loading. Assert actual textModifiers and required dependencies retained; offline fallback all. Watch RED.
+- [x] Implement conditional UI only where view already supports null; preserve required assets if optional consumers require larger refactor. Run loader/client-combat tests; expect PASS.
 
 ## Task 4: Engine verification and final review
-- [ ] Refresh scripts; same Chrome probe cold/warm/reentry, capture underlying loader calls and cache stats.
-- [ ] Run focused loading/battle/territory sets, check types attributable to changed files, record unrelated baseline failures.
-- [ ] One fresh final reviewer per executing-plans; fix important findings RED→GREEN. Preserve worktree and no commits.
+- [x] Refresh scripts; same Chrome probe cold/warm/reentry, capture underlying loader calls and cache stats.
+- [x] Run focused loading/battle/territory sets, check types attributable to changed files, record unrelated baseline failures.
+- [x] One fresh final reviewer per executing-plans; fix important findings RED→GREEN. Preserve worktree and no commits.

@@ -266,7 +266,7 @@ test('真实自选主城图：半区划分与「上下半场二分」一致（�
 
 // ── 视图：每格自己的「半区色 → 战斗底色」过渡 ────────────────────────────────
 
-/** 与 `zcds-hex-neighbor-reveal-delay.test.ts` 同款：补齐 prefab 必填引用。 */
+/** 与 `zcds-hex-neighbor-spawn.test.ts` 同款：补齐 prefab 必填引用。 */
 function stubHexView(load: (name: string) => unknown, cc: any, bar: () => any): any {
     const view = new (load('./ZCHexView') as any).ZCHexView();
     const sprite = () => ({ node: bar().node, enabled: true, spriteFrame: null, color: null });

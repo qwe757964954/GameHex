@@ -75,3 +75,43 @@ test('队列业务必填字段和奇数布局约束保留校验', () => {
     }
     assert.throws(() => parseBigMapConfig({ ...raw, [BIGMAP_TABLE.queue]: [{ ...currentQueue(), plotRows: 4 }] }), /奇数/);
 });
+
+test('队列槽位按 maxBuildQueue 全量返回：未解锁的标 locked，界面才知道上限几条', () => {
+    const config = parseBigMapConfig(tables());
+    const presenter = new BigMapPresenter({
+        config, storage: createMemoryBigMapStorage(), saveKey: 'queue-capacity',
+        adventureChapter: () => 3, now: () => 1000,
+    });
+    const views = presenter.queues();
+    // 以前是 `slice(0, queueUnlocked)` —— 新号只能看见 1 条，`maxBuildQueue` 压根没体现。
+    assert.equal(views.length, config.queue.maxBuildQueue, '槽位要按解锁上限给全');
+    const locked = views.filter((view) => view.locked);
+    assert.equal(locked.length, config.queue.maxBuildQueue - config.queue.initBuildQueue);
+    assert.ok(views.slice(0, config.queue.initBuildQueue).every((view) => !view.locked));
+    // 未解锁的槽位不能显示"忙着"（否则队列条会算成正在建造）。
+    assert.ok(locked.every((view) => !view.busy && view.name === '' && view.remainSeconds === 0));
+    // 解锁信息同样来自这张表的 maxBuildQueue / queueUnlockCost2。
+    const unlock = presenter.queueUnlockInfo();
+    assert.equal(unlock.max, config.queue.maxBuildQueue);
+    assert.equal(unlock.current, config.queue.initBuildQueue);
+    assert.equal(unlock.cost, config.queue.queueUnlockCost2);
+    presenter.dispose();
+});
+
+test('队列表七个字段一个都不能白填：每个都在行为上有出处', () => {
+    const config = parseBigMapConfig(tables());
+    const row = currentQueue();
+    assert.equal(config.queue.maxBuildQueue, row.maxBuildQueue);     // 槽位总数
+    assert.equal(config.queue.initBuildQueue, row.initBuildQueue);   // 新档已解锁
+    assert.equal(config.queue.queueUnlockCost2, row.queueUnlockCost2); // 第 2 条价格
+    assert.equal(config.queue.queueUnlockCost3, row.queueUnlockCost3); // 第 3 条价格
+    assert.equal(config.queue.cancelReturnRate, row.cancelReturnRate); // 取消返还比例
+    assert.equal(config.queue.upgradeUnlockChapter, row.upgradeUnlockChapter); // 升级解锁章节
+    const presenter = new BigMapPresenter({
+        config, storage: createMemoryBigMapStorage(), saveKey: 'queue-fields',
+        adventureChapter: () => row.upgradeUnlockChapter as number, now: () => 1000,
+    });
+    // upgradeUnlockChapter：到了这一章才允许升级建筑。
+    assert.equal(presenter.upgradeUnlocked(), true);
+    presenter.dispose();
+});

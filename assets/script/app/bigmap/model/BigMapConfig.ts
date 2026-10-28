@@ -36,8 +36,12 @@ import {
 export const BIGMAP_TABLE = {
     world: 'bigmapWorld',
     schedule: 'bigmapSchedule',
-    building: 'bigmapBuilding',
-    buildingLevel: 'bigmapBuildingLevel',
+    // 🔴 建筑/升级走**策划表**（`DM-建筑配置.xlsx` → `baseBuilding.json` / `DM-建筑升级.xlsx`
+    // → `baseBuildingLevel.json`），早年 `gen_bigmap_tables.py` 推算的 `bigmapBuilding*`
+    // 是另一套 id（8 个建筑 vs 策划 23 个），服务端只认策划表 ⇒ 建造请求会打错建筑。
+    building: 'baseBuilding',
+    buildingLevel: 'baseBuildingLevel',
+    // 旧产出表保留读取，但产出**优先**从 `baseBuildingLevel` 的 resType/producePerHour/produceCap 取。
     produce: 'bigmapBuildingProduce',
     resource: 'bigmapResource',
     queue: 'bigmapQueue',
@@ -110,6 +114,55 @@ function flag(row: BigMapRow, field: string): boolean {
     return int(row, field) !== 0;
 }
 
+/**
+ * 取「两个候选字段里的第一个有值的」——策划表与早期推算表字段名不同
+ * （`baseBuildSize` vs `occupyHex`、`baseBuildMaxNum` vs `maxOwnNum`），
+ * 两个都没有就用默认值。**有值但非法仍然抛**，不能把脏数据当成缺列。
+ */
+function pickInt(row: BigMapRow, primary: string, fallback: string, defaultValue: number): number {
+    for (const field of [primary, fallback]) {
+        const value = row[field];
+        if (value === undefined || value === null || value === '') continue;
+        const parsed = Number(value);
+        if (!Number.isFinite(parsed)) {
+            throw new Error(`[BigMap] 字段 ${field} 不是有效数字：${JSON.stringify(row)}`);
+        }
+        return Math.round(parsed);
+    }
+    return defaultValue;
+}
+
+/** 缺失给 `defaultValue`，有值但非法抛错。 */
+function optionalInt(row: BigMapRow, field: string, defaultValue = 0): number {
+    const value = row[field];
+    if (value === undefined || value === null || value === '') return defaultValue;
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) {
+        throw new Error(`[BigMap] 字段 ${field} 不是有效数字：${JSON.stringify(row)}`);
+    }
+    return Math.round(parsed);
+}
+
+/** `baseBuildingLevel.preBuild`：`[{buildId,buildLevel}]`，可能是 JSON 字符串。 */
+function parsePreBuild(value: unknown): readonly { readonly id: number; readonly level: number }[] {
+    let raw = value;
+    if (typeof raw === 'string') {
+        if (!raw.trim()) return [];
+        try { raw = JSON.parse(raw); } catch { return []; }
+    }
+    if (!Array.isArray(raw)) return [];
+    const result: { id: number; level: number }[] = [];
+    for (const entry of raw) {
+        if (!entry || typeof entry !== 'object') continue;
+        const record = entry as { buildId?: unknown; buildLevel?: unknown };
+        const id = Number(record.buildId);
+        if (!Number.isSafeInteger(id) || id <= 0) continue;
+        const level = Number(record.buildLevel);
+        result.push({ id, level: Number.isSafeInteger(level) && level > 0 ? level : 1 });
+    }
+    return result;
+}
+
 /** 资源类型白名单校验：配置里写错枚举会让产出直接消失，必须拦住。 */
 function resType(row: BigMapRow): BigMapResType {
     const value = text(row, 'resType') as BigMapResType;
@@ -142,9 +195,11 @@ export function parseBigMapConfig(tables: BigMapRawTables): IBigMapConfig {
     }
     if (mainBuildingId === 0) throw new Error('[BigMap] 缺少 baseBuildType = 1 的主城建筑');
 
-    const levels = parseBuildingLevels(table(tables, BIGMAP_TABLE.buildingLevel), buildings);
-    const produce = parseProduce(table(tables, BIGMAP_TABLE.produce), buildings);
+    const levelRows = table(tables, BIGMAP_TABLE.buildingLevel);
+    const levels = parseBuildingLevels(levelRows, buildings);
 
+    // 资源表要先于产出表：`baseBuildingLevel.resType` 存的是**背包道具 id**（18501 粮食…），
+    // 要按 `bigmapResource.itemId` 反查成 grain/wood/iron/coin。
     const resources = new Map<BigMapResType, IBigMapResConfig>();
     for (const row of table(tables, BIGMAP_TABLE.resource)) {
         const item = parseResource(row);
@@ -153,6 +208,8 @@ export function parseBigMapConfig(tables: BigMapRawTables): IBigMapConfig {
     for (const res of BIGMAP_RES_ORDER) {
         if (!resources.has(res)) throw new Error(`[BigMap] 资源定义缺 ${res}`);
     }
+
+    const produce = parseProduce(levelRows, table(tables, BIGMAP_TABLE.produce), buildings, resources);
 
     const queue = parseQueue(table(tables, BIGMAP_TABLE.queue)[0]);
     const cityLevels = new Map<number, IBigMapCityLevelConfig>();
@@ -204,7 +261,47 @@ export function parseBigMapConfig(tables: BigMapRawTables): IBigMapConfig {
     return {
         world, schedule, buildings, levels, produce, resources, queue,
         cities, camps, cityLevels, ranks, scoreRule, monsters, stamina, mainBuildingId,
+        // 背包道具图标要读 `item` 表，那条链在 loader 上（`attachBigMapResourceItemIcons`）；
+        // 这里保持纯函数，先给空表 —— 视图查不到就退回概念图。
+        resourceIcons: new Map(),
     };
+}
+
+/**
+ * 把 `item` 表里的图标并进资源定义：`bigmapResource.itemId → item.icon`。
+ *
+ * 为什么要单独一步：`parseBigMapConfig` 是纯函数，只吃 bigmap 那 12 张表；而资源图标
+ * 现在跟背包道具共用一份图（用户 2026-10-26 口径：「大地图顶部资源 18501..18505 走背包的」），
+ * 读 `item` 表属于「配置加载编排」的活，放 loader 侧才不破坏纯函数。
+ *
+ * `item.icon` 为空（例如策划还没配图）⇒ 这一项不进来，视图退回
+ * `image/bigmap/concept/sprites/<resType>` 概念图，不会出现空图标。
+ */
+export function attachBigMapResourceItemIcons(
+    config: IBigMapConfig,
+    itemRows: readonly unknown[] | null | undefined,
+): IBigMapConfig {
+    const wanted = new Map<number, BigMapResType>();
+    for (const res of config.resources.values()) {
+        if (res.itemId > 0) wanted.set(res.itemId, res.resType);
+    }
+    if (wanted.size === 0 || !itemRows || itemRows.length === 0) return config;
+
+    const byId = new Map<number, BigMapRow>();
+    for (const row of itemRows) {
+        if (!row || typeof row !== 'object') continue;
+        const record = row as BigMapRow;
+        const id = Number(record.resId);
+        if (Number.isSafeInteger(id) && wanted.has(id)) byId.set(id, record);
+    }
+
+    const resourceIcons = new Map<BigMapResType, string>();
+    for (const [itemId, resType] of wanted) {
+        const icon = text(byId.get(itemId) ?? {}, 'icon').trim();
+        if (icon) resourceIcons.set(resType, icon);
+    }
+    if (resourceIcons.size === 0) return config;
+    return { ...config, resourceIcons };
 }
 
 /**
@@ -247,15 +344,25 @@ function parseWorld(row: BigMapRow): IBigMapWorldConfig {
 }
 
 function parseBuilding(row: BigMapRow): IBigMapBuildingConfig {
+    // 策划表：`baseBuildSize` / `baseBuildMaxNum` / `unlockType` + `unlockParam`；
+    // 早期推算表：`occupyHex` / `maxOwnNum` / `unlockChapter`。两套都认。
+    const unlockType = optionalInt(row, 'unlockType', 1);
+    const unlockParam = optionalInt(row, 'unlockParam', 0);
     return {
         id: int(row, 'id'),
         name: text(row, 'baseBuildName'),
         kind: int(row, 'baseBuildType') as BigMapBuildingKind,
-        occupyHex: Math.max(1, int(row, 'occupyHex')),
-        maxOwnNum: Math.max(1, int(row, 'maxOwnNum')),
-        unlockChapter: int(row, 'unlockChapter'),
-        queueType: Math.max(1, int(row, 'queueType')),
+        occupyHex: Math.max(1, pickInt(row, 'baseBuildSize', 'occupyHex', 1)),
+        maxOwnNum: Math.max(1, pickInt(row, 'baseBuildMaxNum', 'maxOwnNum', 1)),
+        // 章节解锁时章节号写在 `unlockParam`；其它解锁方式（赛季天数 / 积分购买）没有章节。
+        unlockChapter: unlockType === 1 ? Math.max(0, unlockParam)
+            : Math.max(0, optionalInt(row, 'unlockChapter', 0)),
+        unlockType: unlockType > 0 ? unlockType : 1,
+        unlockParam: Math.max(0, unlockParam),
+        queueType: Math.max(1, optionalInt(row, 'queueType', 1)),
         sort: int(row, 'sort'),
+        // 缺列按「可移动」处理（早期推算表没这一列，行为与搬移上线时一致）。
+        canMove: pickInt(row, 'canMove', 'canMove', 1) !== 0,
         info: text(row, 'baseBuildInfo'),
     };
 }
@@ -266,6 +373,7 @@ function parseBuildingLevels(
 ): ReadonlyMap<number, ReadonlyMap<number, IBigMapBuildingLevelConfig>> {
     const byBuilding = new Map<number, Map<number, IBigMapBuildingLevelConfig>>();
     for (const row of rows) {
+        const preBuildList = parsePreBuild(row.preBuild);
         const item: IBigMapBuildingLevelConfig = {
             id: int(row, 'id'),
             level: int(row, 'buildLevel'),
@@ -273,12 +381,14 @@ function parseBuildingLevels(
             costWood: int(row, 'costWood'),
             costIron: int(row, 'costIron'),
             instantCost: int(row, 'instantCost'),
-            preBuildId: int(row, 'preBuildId'),
-            preBuildLevel: int(row, 'preBuildLevel'),
+            preBuild: preBuildList,
+            preBuildId: preBuildList[0]?.id ?? optionalInt(row, 'preBuildId', 0),
+            preBuildLevel: preBuildList[0]?.level ?? optionalInt(row, 'preBuildLevel', 0),
             buildTime: int(row, 'buildTime'),
             maxOtherLevel: int(row, 'maxOtherLevel'),
             resCap: int(row, 'resCap'),
-            attrBonus: int(row, 'attrBonus'),
+            // 策划表这列是**数组**（`[]`），旧表是千分比数字；数组一律按 0 处理。
+            attrBonus: Array.isArray(row.attrBonus) ? 0 : optionalInt(row, 'attrBonus', 0),
         };
         if (!buildings.has(item.id)) throw new Error(`[BigMap] 建筑升级表引用了不存在的建筑 ${item.id}`);
         let levels = byBuilding.get(item.id);
@@ -297,35 +407,81 @@ function parseBuildingLevels(
     return byBuilding;
 }
 
+/**
+ * 建筑产出（每等级每小时产量与累积上限）。
+ *
+ * 两个来源，**策划表优先**：
+ * - `baseBuildingLevel` 的 `resType`（**背包道具 id** 18501/18502/18503/18504，0 = 不产）
+ *   + `producePerHour` + `produceCap` —— 策划把产出并进了升级表；
+ * - 早期独立的 `bigmapBuildingProduce`（`resType` 是 grain/wood 字符串），只在上面一行产出都没有时兜底。
+ */
 function parseProduce(
-    rows: readonly BigMapRow[],
+    levelRows: readonly BigMapRow[],
+    legacyRows: readonly BigMapRow[],
     buildings: ReadonlyMap<number, IBigMapBuildingConfig>,
+    resources: ReadonlyMap<BigMapResType, IBigMapResConfig>,
 ): ReadonlyMap<number, ReadonlyMap<number, IBigMapProduceConfig>> {
     const byBuilding = new Map<number, Map<number, IBigMapProduceConfig>>();
-    for (const row of rows) {
-        const item: IBigMapProduceConfig = {
-            id: int(row, 'id'),
-            level: int(row, 'buildLevel'),
-            resType: resType(row),
-            producePerHour: num(row, 'producePerHour'),
-            produceCap: num(row, 'produceCap'),
-        };
-        if (!buildings.has(item.id)) throw new Error(`[BigMap] 产出表引用了不存在的建筑 ${item.id}`);
+    const resTypeByItemId = new Map<number, BigMapResType>();
+    for (const res of resources.values()) {
+        if (res.itemId > 0) resTypeByItemId.set(res.itemId, res.resType);
+    }
+    // 兜底：`bigmapResource.itemId` 还没配（老表 / 少一列）时按固定道具约定反查，
+    // 否则 `baseBuildingLevel.resType` 一个都对不上 ⇒ 资源田整块不产出。
+    if (resTypeByItemId.size === 0) {
+        resTypeByItemId.set(18501, 'grain');
+        resTypeByItemId.set(18502, 'wood');
+        resTypeByItemId.set(18503, 'iron');
+        resTypeByItemId.set(18504, 'coin');
+    }
+
+    const push = (item: IBigMapProduceConfig): void => {
+        if (!buildings.has(item.id)) throw new Error(`[BigMap] 产出配置引用了不存在的建筑 ${item.id}`);
         if (item.produceCap < item.producePerHour) {
             throw new Error(`[BigMap] 建筑 ${item.id} 等级 ${item.level} 的累积上限小于每小时产量`);
         }
         let levels = byBuilding.get(item.id);
         if (!levels) { levels = new Map(); byBuilding.set(item.id, levels); }
         levels.set(item.level, item);
+    };
+
+    for (const row of levelRows) {
+        const itemId = optionalInt(row, 'resType', 0);
+        if (itemId <= 0) continue;
+        const type = resTypeByItemId.get(itemId);
+        if (!type) {
+            throw new Error(`[BigMap] baseBuildingLevel.resType=${itemId} 对不上任何资源的 itemId`);
+        }
+        push({
+            id: int(row, 'id'),
+            level: int(row, 'buildLevel'),
+            resType: type,
+            producePerHour: num(row, 'producePerHour'),
+            produceCap: num(row, 'produceCap'),
+        });
+    }
+    if (byBuilding.size > 0) return byBuilding;
+
+    for (const row of legacyRows) {
+        push({
+            id: int(row, 'id'),
+            level: int(row, 'buildLevel'),
+            resType: resType(row),
+            producePerHour: num(row, 'producePerHour'),
+            produceCap: num(row, 'produceCap'),
+        });
     }
     return byBuilding;
 }
 
 function parseResource(row: BigMapRow): IBigMapResConfig {
+    // `itemId` 允许缺列：老表没有这一列时要退回概念图，不能整表解析失败。
+    const itemId = row.itemId === undefined || row.itemId === null ? 0 : int(row, 'itemId');
     return {
         resType: resType(row),
         name: text(row, 'resName'),
         startAmount: Math.max(0, int(row, 'startAmount')),
+        itemId: Number.isSafeInteger(itemId) && itemId > 0 ? itemId : 0,
     };
 }
 

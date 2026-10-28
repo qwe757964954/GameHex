@@ -14,7 +14,7 @@
 | 建造 | `CmdSlgBuildReqMsg` | `requestBuild` |
 | 升级 | `CmdSlgBuildUpgradeReqMsg` | `requestUpgrade` |
 | 取消 | `CmdSlgBuildCancelReqMsg` | `requestCancelQueue` |
-| 移动 | `CmdSlgBuildMoveReqMsg` | `requestMove`（业务入口；本次不新增拖动交互） |
+| 移动 | `CmdSlgBuildMoveReqMsg` | `requestMove`（基地详情次按钮「移动」→ 点空地；不走拖动） |
 | 收取 | `CmdSlgBuildCollectReqMsg`（`buildInstIds` 批量） | `requestHarvest`、`requestHarvestAll`（一次结算） |
 | 队列解锁 | `CmdSlgBuildUnlockQueueReqMsg` | `requestUnlockBuildQueue` |
 
@@ -45,7 +45,7 @@
 
 ## 当前协议限制
 
-`GameInfo` 响应已包含 `maxMonsterLevel`，本轮同步协议编解码与类型，尚未将该字段接入野怪进度展示。协议仍没有资源余额、行动力总量和待收取库存字段，界面用未知值展示；不套用本地初始余额。领取奖励使用响应 `tlCmdGoods`，不按配表或时间推算。野怪与据点奖励均以对应结算广播为准，不按掉落预览在本地发奖。r826 同时新增据点角色伤害排行榜类型 `SLG_CAMP_ROLE_HARM_RANK = 53`。
+`GameInfo` 响应已包含 `maxMonsterLevel`，已接入野怪击杀进度（详情首行「已通关最高 X 级」，`IBigMapMonsterView.clearedLevel`）。协议仍没有资源余额、行动力总量和待收取库存字段，界面用未知值展示；不套用本地初始余额。领取奖励使用响应 `tlCmdGoods`，不按配表或时间推算。野怪与据点奖励均以对应结算广播为准，不按掉落预览在本地发奖。r826 同时新增据点角色伤害排行榜类型 `SLG_CAMP_ROLE_HARM_RANK = 53`。
 
 `r804` 起建造与升级拆分为两条独立协议：`CmdSlgBuildReqMsg` 只剩 `buildingId`/`position`/`instant`，升级改走 `CmdSlgBuildUpgradeReqMsg`（`buildInstId`/`instant`），响应 `CmdSlgBuildUpgradeRspMsg` 消息号 `1255226437`。旧的 `type=1/2` 合并口径已废弃。
 

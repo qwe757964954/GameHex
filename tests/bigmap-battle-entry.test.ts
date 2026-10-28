@@ -34,6 +34,11 @@ function fixture(start?: (type: number, id: number, isCurrent: () => boolean) =>
     const repository = new BigMapCampRepository({
         fetchSimple: async () => campResponse,
         fetchDetail: async () => campResponse,
+        // 角色列表是另一条协议，这里给「空据点」——这些用例只关心据点状态与开战。
+        fetchRoles: async (campId: number) => ({ campId, infos: [] }),
+        // 迁城是写操作，这批用例用不到；给「明确失败」避免误判成功。
+        requestMove: async () => null,
+        subscribeRoleEvents: () => () => undefined,
     });
     const storage = createMemoryBigMapStorage();
     const presenter = new BigMapPresenter({ config: loadBigMapConfig(), storage, saveKey: 'battle-entry',

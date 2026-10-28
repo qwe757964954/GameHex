@@ -1,8 +1,9 @@
 import { strict as assert } from 'node:assert';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
+import { TERRITORY_RANDOM_GAIN_READOUT_ART } from '../assets/script/app/ArtPaths';
 import {
     isTerritoryWalletResId,
     splitTerritoryRewards,
@@ -31,10 +32,14 @@ import {
     TERRITORY_GAIN_FROM_SCALE,
     TERRITORY_GAIN_POP_SCALE,
     TERRITORY_GAIN_RISE_PX,
+    TERRITORY_GAIN_READOUT_EXTRA_LIFT_PX,
+    TERRITORY_GAIN_READOUT_LIFT_PX,
     TERRITORY_GAIN_SECONDS,
     TERRITORY_GAIN_STACK_GAP_PX,
     TERRITORY_GAIN_START_LIFT_PX,
     TERRITORY_WALLET_RES_IDS,
+    TERRITORY_WALLET_RES_KEY,
+    territoryWalletResKeyOf,
 } from '../assets/script/app/territory/model/TerritoryResourceGain';
 
 const read = (path: string): string => readFileSync(path, 'utf8');
@@ -284,6 +289,27 @@ test('页面只对「非钱包类」奖励弹窗：全是 7/9 时整批跳过 Sh
 const stripComments = (src: string): string => src
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/\/\/[^\n]*/g, '');
+
+test('随机资源格（chest:false）**不许弹奖励窗**：整批走喷发 + 飘字，图标现取现塞', () => {
+    const src = stripComments(read('assets/script/app/main/MainTerritoryMap.ts'));
+    // ① `presentRewards` 的 `chest === false` 分支不能再落到 `settleRewards` ——
+    //    那条会把"非钱包类"（随机池发的道具）全判进 `popup`，实机就是"粒子没了，只剩奖励窗"。
+    const at = src.indexOf('if (presentation?.chest === false) {');
+    assert.ok(at > 0, '`chest === false` 分支不见了');
+    const branch = src.slice(at, at + 200);
+    assert.match(branch, /playCellGains\(/, '随机格必须走 `playCellGains`');
+    assert.doesNotMatch(branch, /settleRewards\(/, '随机格不许再走 `settleRewards`（会弹奖励窗）');
+
+    // ② `playCellGains` 里一条 `FW.ShowReward` 都不许有。
+    const fnAt = src.indexOf('private async playCellGains(');
+    assert.ok(fnAt > 0, '`playCellGains` 不见了');
+    const fn = src.slice(fnAt, fnAt + 1600);
+    assert.doesNotMatch(fn, /FW\.ShowReward/, '随机格发奖不许弹奖励窗');
+    assert.match(fn, /playResourceGain\(/, '随机格必须在格子上喷出来');
+    // ③ 图标是动态的（道具 id 来自随机池），必须现取现塞给视图，否则粒子和飘字都是空图。
+    assert.match(fn, /setGainIcon\(/, '道具图标要现取现塞（`setGainIcon`），否则粒子是空的');
+    assert.match(fn, /collectRewardIcons\(/, '先按这一批 resId 取图标，再喷');
+});
 
 /** 半顶角的正切 —— 出射角判据的斜率，从常量算，不在测试里另抄一个角度。 */
 const CONE_TAN = Math.tan((TERRITORY_GAIN_BURST_HALF_ANGLE_DEG * Math.PI) / 180);
@@ -664,6 +690,13 @@ function loadBurstModule(): Record<string, unknown> {
             // 内容层留白（2026-10-21）：`syncContentSize` 现在把「地图包围盒 + 四周留白」写进
             // 内容层，留白归 `TerritoryMapLayout` 统一算。本用例不校验尺寸，桩只保证宽度高度可用。
             if (id.endsWith('/TerritoryMapLayout')) return {
+                // 2026-10-27：`contentPaddingBottom` 的初值直接取这个常量、偏移取它的一半，
+                // 桩缺了会让字段变 `undefined`（尺寸算出 NaN，用例看着"莫名其妙整片红"）。
+                TERRITORY_MAP_CONTENT_PADDING: 300,
+                // 2026-10-27：顶部留白也是运行时值（`(bottom − top)/2` 决定内容层偏移），
+                // 桩缺了同样会让偏移变 NaN ⇒ 一并给 0。
+                TERRITORY_MAP_CONTENT_PADDING_TOP: 0,
+                territoryMapContentShiftY: (padding = 300, top = 0) => (padding - top) / 2,
                 territoryMapContentSize: (layout: { width: number; height: number }) => ({
                     width: layout.width,
                     height: layout.height,
@@ -849,3 +882,185 @@ test('接线：喷发粒子不用 prefab（贴图由页面注入），飘字 pre
     assert.match(page, /setGainIcons\(/, '页面只注入一次图标表，喷发与飘字共用');
 });
 
+// ── 随机格奖励图标：必须查 `item` 表（2026-10-26 现场修复） ────────────────
+//
+// 现场（用户截图）：点开随机资源格 → 4 条 `+165 / +143 / +141 / +151` 飘字，
+// **前面全没有图标**，一格 12 颗喷发粒子也**一颗都看不见**。
+//
+// 根因不是「表没转 JSON」（`roleProperty.json` / `item.json` 都在，图也在），而是
+// `ensureRewardIcon` 只把 `roleProperty` 传给 `resBarCellOfRefId(resId, rows)`：
+// `itemRows` 留空 ⇒ `kind` 只能是 `roleProperty` / `unknown` ⇒ 随机池发的**道具**
+// （`16001` 精灵弓箭手…，只在 `item` 表里）永远解析成 `unknown` ⇒ `frame = null`。
+// 而喷发与飘字**共用** `gainIcons` 里那批 frame，`Sprite` 没 frame 就什么都不画
+// ⇒ 「图标没有 + 粒子没有」是**同一个**原因，不是两个 bug。
+//
+// 第二层坑：`item.icon`（`icons/item/图标_兵书弓兵`）的图**不在 `resources`**，
+// 在 `main-pages` 分包里；老代码 `assets.load(cell.icon, …)` 既把它当首包路径、又少拼
+// `/spriteFrame`，就算分支走到也必然失败。
+
+test('随机格奖励图标：`resBarCellOfRefId` 必须三参（roleProperty + item 两张表）', () => {
+    const src = stripComments(read('assets/script/app/main/MainTerritoryMap.ts'));
+    // ① 两张表都要取。
+    assert.match(src, /refRows<IResPropertyRow>\(ROLE_PROPERTY_TABLE\)/, '要取 roleProperty 表');
+    assert.match(src, /refRows<IItemRefRow>\(ITEM_TABLE\)/, '要取 item 表（道具的 resId 只在这里）');
+    // ② 必须三参传进去 —— 这是"`item` 分支复活"的唯一判据。
+    assert.match(src, /resBarCellOfRefId\(resId,\s*propRows,\s*itemRows\)/,
+        '`resBarCellOfRefId` 必须收到 itemRows，否则 item 分支是死代码');
+    // ③ 老的两参写法不许回潮。
+    assert.doesNotMatch(src, /resBarCellOfRefId\(resId,\s*rows\)/, '两参写法会漏掉 item 表');
+    assert.doesNotMatch(src, /kind === 'item' && cell\.icon\) \{\s*frame = await assets\.load\(cell\.icon/,
+        'item 的图不在 resources 里，不能直接拿裸路径去 load');
+    // ④ 拼路径必须走唯一出口（两支拼法不同，见 `ResTypes.resBarIconSpritePath`）。
+    assert.match(src, /resBarIconSpritePath\(resBarCellOfRefId\(/, '拼路径要走 `resBarIconSpritePath`');
+});
+
+test('随机格奖励图标：缺图不等于"整条表现关掉"（不放假图、只 warn）', () => {
+    const src = stripComments(read('assets/script/app/main/MainTerritoryMap.ts'));
+    // 取不到图只让那一枚是 `null`，喷发与 `+N` 照旧 —— 与"缺图仍照常升"同一口径。
+    assert.match(src, /this\.rewardIcons\.set\(resId, frame \?\? null\)/);
+    assert.match(src, /console\.warn\(`\[MainTerritoryMap\] 奖励图标/, '缺图要留痕（带 resId），方便催美术');
+    // 不许为了"看起来有东西"塞一张假图：飘金币去代表图纸比没有更误导。
+    assert.doesNotMatch(src, /frame \?\? this\.rewardIcons\.get\(TERRITORY_SILVER_RES_ID\)/,
+        '缺图不许拿银币图顶替');
+});
+
+// ── 随机格读数合成一条：统一图标 + 数量之和（2026-10-26 第二轮口径） ──────
+//
+// 现场：随机格一次发 4 种种族经验，实机是「4 行飘字、4 个不同的球、4 个数字」——
+// 玩家读不出总量，也不懂为什么图不一样。
+//
+// 口径（用户原话）：「将 icon 和数字 UI 的部分统一使用【种族经验球_随机】的 icon，
+// 数字则是全部加起来之和，粒子喷发使用对应的 icon 规则保持不变。」
+//
+// ⇒ **读数**合成一条（统一图标 + 求和）；**喷发**仍按每种奖励各自的图。
+
+test('读数合成：给了 readout 就只出一条，落在起点线（不叠加、不再逐条）', () => {
+    const src = stripComments(read('assets/script/app/territory/view/TerritoryMapView.ts'));
+    const at = src.indexOf('if (readout) {');
+    assert.ok(at > 0, '`playResourceGain` 必须有 `readout` 分支');
+    // 只取到 `return;` 为止 —— 后面就是旧的逐条分支，那里出现 `forEach` 是应该的。
+    const branch = src.slice(at, src.indexOf('return;', at));
+    assert.match(branch, /view\.play\(readout\.frame \?\? null, readout\.amount\)/,
+        '读数要用 readout 的图与求和后的数字');
+    // 起点 = 喷发原点 + 合成读数的抬升（70）；「不叠加」的判据是**不出现 STACK_GAP**。
+    assert.match(branch, /setPosition\(originX, originY \+ TERRITORY_GAIN_READOUT_LIFT_PX, 0\)/,
+        '合成读数要落在 originY + TERRITORY_GAIN_READOUT_LIFT_PX');
+    assert.doesNotMatch(branch, /forEach/, '合成模式下不许再逐条铺开');
+    assert.doesNotMatch(branch, /STACK_GAP/, '合成模式下不许再算纵向错开');
+});
+
+test('读数合成**不影响喷发**：粒子仍按 entries 各用各的图，且喷发先于读数', () => {
+    const src = stripComments(read('assets/script/app/territory/view/TerritoryMapView.ts'));
+    const burstAt = src.indexOf('this.playGainBurst(originX, originY, entries, total)');
+    const readoutAt = src.indexOf('if (readout) {');
+    assert.ok(burstAt > 0, '喷发调用不见了');
+    assert.ok(burstAt < readoutAt, '喷发必须先发生（读数只是它之后的一条字）');
+    // 喷发的图来自 entries 本身，不是 readout.frame。
+    assert.match(src, /const frames = entries\.map\(\(entry\) => this\.gainIcons\.get\(entry\.resId\) \?\? null\)/,
+        '粒子要按每种奖励各自的图轮流取（换成 readout.frame 就丢了"混合资源"的信息）');
+    // entries 没有被合并成一条 —— 否则喷发只剩一种图。
+    assert.match(src, /playGainBurst\(originX, originY, entries, total\)/);
+});
+
+test('读数合成：页面把全部数量求和后只传一条 readout', () => {
+    const src = stripComments(read('assets/script/app/main/MainTerritoryMap.ts'));
+    assert.match(src, /const amount = gains\.reduce\(\(sum, gain\) => sum \+ gain\.amount, 0\)/,
+        '数字 = 全部数量之和');
+    assert.match(src, /playResourceGain\(cellId, gains, \{ frame: readoutFrame, amount \}\)/,
+        '读数合成一条，喷发仍拿 gains');
+    // 图与图标表**并发**取，别串成两趟。
+    assert.match(src, /const \[entries, readoutFrame\] = await Promise\.all\(/);
+    assert.match(src, /ensureRandomGainReadoutIcon\(/);
+});
+
+test('读数统一图标「种族经验球_随机」真的在 main-pages 分包里', () => {
+    const src = read('assets/script/app/ArtPaths.ts');
+    assert.match(src, /TERRITORY_RANDOM_GAIN_READOUT_ART = 'icons\/item\/种族经验球_随机'/,
+        '统一图标必须是 `种族经验球_随机`（用户指定）');
+    const png = `assets/bundles/main-pages/${TERRITORY_RANDOM_GAIN_READOUT_ART}.png`;
+    assert.ok(existsSync(png), `读数图标实盘缺失：${png}（item 的图都在 main-pages 分包）`);
+});
+
+// ── 合成读数的起点抬升：40 + 30 = 70（2026-10-26 第三张截图口径） ────────
+//
+// 用户原话：「金球加数字 UI 的初始位置增加 30px，不会遮挡粒子效果」。
+// 金球（种族经验球）比银币图大，落在 40px 处会被自己喷出的那把粒子压住。
+//
+// ⚠️ 只抬**合成读数**：40 是 row17 的需求原值（金币/体力逐条飘字用它），改它会连带推翻
+//    §3.5 的判据与 `territory-cell-center-align` 的反向守卫。
+
+test('合成读数起点 = 40 + 30 = 70，逐条模式仍是 40（互不影响）', () => {
+    assert.equal(TERRITORY_GAIN_START_LIFT_PX, 40, '逐条模式的需求原值不许动');
+    assert.equal(TERRITORY_GAIN_READOUT_EXTRA_LIFT_PX, 30, '用户口径：合成读数再加 30px');
+    assert.equal(TERRITORY_GAIN_READOUT_LIFT_PX, 70);
+    assert.equal(
+        TERRITORY_GAIN_READOUT_LIFT_PX,
+        TERRITORY_GAIN_START_LIFT_PX + TERRITORY_GAIN_READOUT_EXTRA_LIFT_PX,
+        '70 必须由 40 + 30 派生，不许写成裸字面量',
+    );
+    // 用户要的是「比逐条模式更高」这一条相对关系（具体 30px 是设计口径，不在这里质疑数值）。
+    assert.ok(TERRITORY_GAIN_READOUT_LIFT_PX > TERRITORY_GAIN_START_LIFT_PX,
+        '合成读数必须比逐条模式更高，否则还会和粒子挤在一起');
+});
+
+// ── 2026-10-26：宝箱图标要飞进「对应的那一格」 ────────────────────────────
+//
+// 用户原话：「宝箱打开的体力或银币 icon 飞到对应的资源栏中，资源栏的 icon 和数字
+// 有跳动增加的反馈，资源栏整体闪光」。
+//
+// 「银币落第 1 格、体力落第 2 格」这句是靠 `resId → roleProperty.key` 表达的；
+// 键名写错了不会报错，只会表现为「图标飞到栏外消失了」（静默失效）⇒ 必须有断言。
+
+test('resId → 资源栏 key：银币 7 → gold、体力 9 → end', () => {
+    assert.equal(territoryWalletResKeyOf(7), 'gold');
+    assert.equal(territoryWalletResKeyOf(9), 'end');
+    assert.equal(territoryWalletResKeyOf('7'), 'gold', '服务端 id 有时是字符串');
+    assert.equal(territoryWalletResKeyOf(10), null, '金币(10) 不是钱包资源，没有对应格子');
+    assert.equal(territoryWalletResKeyOf(18003), null);
+    assert.equal(territoryWalletResKeyOf(0), null);
+    assert.equal(territoryWalletResKeyOf(undefined), null);
+    assert.equal(territoryWalletResKeyOf(Number.NaN), null);
+});
+
+test('resId → key 的覆盖面必须与「钱包资源」完全一致（两份名单不许各说各话）', () => {
+    assert.deepEqual(
+        Object.keys(TERRITORY_WALLET_RES_KEY).map(Number).sort((a, b) => a - b),
+        [...TERRITORY_WALLET_RES_IDS].sort((a, b) => a - b),
+        '凡是会走飘字的钱包资源，都必须有对应的资源栏格子；反之亦然',
+    );
+});
+
+test('key 的真源是 roleProperty 表：7 行 key=gold / 9 行 key=end（且图标就是银币、体力）', () => {
+    const rows = JSON.parse(read('assets/remoteRef/roleProperty.json')) as {
+        resId?: number;
+        key?: string;
+        icon?: string;
+        name?: string;
+    }[];
+    const find = (resId: number) => rows.find((row) => Number(row.resId) === resId);
+    for (const resId of TERRITORY_WALLET_RES_IDS) {
+        const key = territoryWalletResKeyOf(resId)!;
+        const row = find(resId);
+        assert.ok(row, `roleProperty 表里没有 resId ${resId}`);
+        assert.equal(row!.key, key, `resId ${resId} 的 key 与表不一致 —— 飞到栏外就查这个`);
+        assert.ok(row!.icon, `resId ${resId} 没配 icon（飞行图标会是空的）`);
+    }
+    assert.equal(find(7)!.name, '银币');
+    assert.equal(find(7)!.icon, '图标_铜币');
+    assert.equal(find(9)!.name, '体力');
+    assert.equal(find(9)!.icon, '图标_体力');
+});
+
+test('HUD 资源栏必须真的摆着这两格（改回 gold,gem 就会让体力图标无处可落）', () => {
+    const prefab = read('assets/resources/ui/main/ArenaRoot.prefab');
+    const keys = /"propertyPath"\s*:\s*\[\s*"resKeys"\s*\]\s*,\s*"value"\s*:\s*"([^"]*)"/.exec(prefab);
+    assert.ok(keys, 'ArenaRoot.prefab 里找不到 ResBar 实例的 resKeys 覆盖项');
+    const list = keys![1].split(',').map((key) => key.trim());
+    assert.deepEqual(list, ['gold', 'end'], 'HUD 两格 = 银币 + 体力（2026-10-26 用户口径）');
+    for (const resId of TERRITORY_WALLET_RES_IDS) {
+        assert.ok(
+            list.includes(territoryWalletResKeyOf(resId)!),
+            `钱包资源 ${resId} 的 key 不在 HUD 的 resKeys 里 —— 它的图标会飞到栏外`,
+        );
+    }
+});

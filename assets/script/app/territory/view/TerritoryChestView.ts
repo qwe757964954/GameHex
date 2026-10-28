@@ -17,6 +17,7 @@ import {
     territoryChestCameraZoomOf,
     territoryChestEndSeconds,
     territoryChestFlyCount,
+    territoryChestFlyArriveAt,
     territoryChestFlyFx,
     territoryChestFountainFx,
     territoryChestOpenFrame,
@@ -213,6 +214,18 @@ export class TerritoryChestView {
     /** 飞向的落点（页面坐标系）。页面可改；默认屏幕顶部中央。 */
     private catchX = 0;
     private catchY = 0;
+    /**
+     * **按资源 id 分开的落点**（页面坐标系）。没登记的资源回落到 {@link catchX}/{@link catchY}。
+     *
+     * 为什么必须分资源：一批奖励里同时有银币（`resId 7`）和体力（`resId 9`）时，
+     * 它们该分别落进资源栏的第 1 格和第 2 格 —— 共用一落点就是「两种图标全砸在同一格」，
+     * 玩家看不出哪一格涨了（2026-10-26 需求）。
+     */
+    private readonly catchPoints = new Map<number, { x: number; y: number }>();
+    /** 某一枚图标**落进资源栏**的回调（页面据此让那一格跳一下 + **那一格**闪光，别的格不动）。 */
+    private onLanded: ((resId: number, amount: number) => void) | null = null;
+    /** 本次表演里通知过落地的资源 id（同一格只该被"击"一次）。 */
+    private readonly landedResIds = new Set<number>();
 
     private art: ITerritoryChestArt = { frames: [] };
     /** 上一次真正写进 Sprite 的帧号（同帧不重复写，站点每秒刷新也标不脏）。 */
@@ -327,6 +340,41 @@ export class TerritoryChestView {
         this.catchY = y;
     }
 
+    /**
+     * 给**某一种资源**单独指定落点（页面坐标系）。
+     *
+     * 与 {@link setCatchPoint} 的关系：这里是**优先**的，没登记的资源才回落到全局落点。
+     * 页面在 `play()` 之前按「银币 → 第 1 格 / 体力 → 第 2 格」各登记一次即可。
+     *
+     * ⚠️ 每次开箱前页面会重算一遍（资源栏位置可能随安全区变化），所以本方法只覆盖不累加。
+     */
+    setCatchPointOf(resId: number, x: number, y: number): void {
+        const id = Number(resId);
+        if (!Number.isFinite(id) || id <= 0) return;
+        this.catchPoints.set(id, { x, y });
+    }
+
+    /** 清空按资源登记的落点（页面拿不到资源栏时调 ⇒ 全部回落全局落点）。 */
+    clearCatchPoints(): void {
+        this.catchPoints.clear();
+    }
+
+    /** 只清掉某一种资源的落点（回落全局落点）。 */
+    clearCatchPointOf(resId: number): void {
+        this.catchPoints.delete(Number(resId));
+    }
+
+    /**
+     * 注入「某一枚图标落地」的回调（页面在建视图后调一次，常驻）。
+     *
+     * 签名 `(resId, amount)`：`amount` 是**这一批奖励里该资源的数量之和** ——
+     * 30 枚图标里同一资源可能占 15 枚，按枚回调会让那一格的数字被「击」15 次，
+     * 所以本类**每种资源只通知一次**（第一枚落地时），数量在通知里一次给全。
+     */
+    setLandedHandler(handler: ((resId: number, amount: number) => void) | null): void {
+        this.onLanded = handler;
+    }
+
     /** 是否正在播（页面据此决定要不要等它结束再弹奖励窗）。 */
     get isPlaying(): boolean {
         return this.elapsed >= 0;
@@ -379,6 +427,8 @@ export class TerritoryChestView {
         this.seed = (this.seed + 1) | 0;
         this.elapsed = 0;
         this.onDone = onDone ?? null;
+        // 落地通知是**每场一次**：上一场同一资源已经通知过，不能带过来把这一场的第一枚吞掉。
+        this.landedResIds.clear();
         this.node.active = true;
         this.applyChestFrames();
         if (this.chest.active !== true) this.chest.active = true;
@@ -403,6 +453,9 @@ export class TerritoryChestView {
         if (this.elapsed < 0 || !this.spec) return;
         const spec = this.spec;
         this.elapsed += dt;
+        // 落地通知必须**在停播判断之前**：最后几枚图标是在收尾段落地的，
+        // 放到 `stop()` 之后再判就永远收不到（资源栏那一格不会跳）。
+        this.fireLandings(this.elapsed);
         // ⚠️ 停播看 `territoryChestEndSeconds` 而不是 `totalSeconds`：
         //   那个数 = 最后一枚奖励落袋 + settleSeconds + fadeOutSeconds。
         //   用 `totalSeconds` 的话，参数表一旦比这条线长，屏幕上就多一段
@@ -420,6 +473,42 @@ export class TerritoryChestView {
     // ============================================================
     // 每帧写入
     // ============================================================
+
+    /**
+     * 推进「落地通知」：哪些资源的第一枚图标已经飞到资源栏了。
+     *
+     * ## 为什么按**到达时刻**判，而不是看 `territoryChestFlyFx` 返回 null
+     *
+     *  `fx` 到终点就返回 `null`，靠它判到达要记住「上一帧还在、这一帧没了」——
+     *  那是逐帧累加，掉帧 / 暂停都会漏。{@link territoryChestFlyArriveAt} 把隐式窗口写成了
+     *  显式时刻，`elapsed` 一过就触发，天然幂等（配合 `landedResIds`）。
+     *
+     * ⚠️ 图标按 `rewards` **轮流取**（30 枚 / 2 条奖励 = 各 15 枚），所以同一资源在
+     *   `flyCount` 里会出现多次 —— 只在**第一枚**（下标最小、时刻最早）通知一次。
+     */
+    private fireLandings(t: number): void {
+        const handler = this.onLanded;
+        const spec = this.spec;
+        if (!handler || !spec || this.rewards.length === 0 || this.flyCount <= 0) return;
+        for (let index = 0; index < this.flyCount; index += 1) {
+            const resId = Number(this.rewards[index % this.rewards.length]?.resId);
+            if (!Number.isFinite(resId) || resId <= 0 || this.landedResIds.has(resId)) continue;
+            if (t < territoryChestFlyArriveAt(spec, index, this.flyCount)) continue;
+            this.landedResIds.add(resId);
+            handler(resId, this.amountOfResId(resId));
+        }
+    }
+
+    /** 这一批奖励里某种资源的数量之和（同一 `resId` 可能来自多条奖励）。 */
+    private amountOfResId(resId: number): number {
+        let total = 0;
+        for (const reward of this.rewards) {
+            if (Number(reward?.resId) !== resId) continue;
+            const amount = Number(reward.amount);
+            if (Number.isFinite(amount) && amount > 0) total += amount;
+        }
+        return total;
+    }
 
     private apply(t: number): void {
         const spec = this.spec;
@@ -684,14 +773,19 @@ export class TerritoryChestView {
             const jitterX = (index % 2 === 0 ? -1 : 1) * (6 + (index % 5) * 2.5);
             const startX = originX + jitterX;
             const startY = originY + 16 + (index % 6) * 5;
+            // 终点**按这一枚的 resId 各自算**：银币落资源栏第 1 格、体力落第 2 格。
+            // 没登记的 resId 回落到全局 `catchX/catchY`（不分配对象，逐帧这里要跑 30 次）。
+            const point = this.catchPoints.get(Number(this.rewards[index % this.rewards.length]?.resId));
+            const targetX = point ? point.x : this.catchX;
+            const targetY = point ? point.y : this.catchY;
             // 二次贝塞尔：控制点 = 起点向上抬（拱高）× 朝终点方向偏 30%。
-            const dx = this.catchX - startX;
-            const dy = this.catchY - startY;
+            const dx = targetX - startX;
+            const dy = targetY - startY;
             const controlX = startX + dx * 0.3;
             const controlY = startY + Math.abs(dy) * fx.arcRatio;
             const inv = 1 - fx.progress;
-            const x = inv * inv * startX + 2 * inv * fx.progress * controlX + fx.progress * fx.progress * this.catchX;
-            const y = inv * inv * startY + 2 * inv * fx.progress * controlY + fx.progress * fx.progress * this.catchY;
+            const x = inv * inv * startX + 2 * inv * fx.progress * controlX + fx.progress * fx.progress * targetX;
+            const y = inv * inv * startY + 2 * inv * fx.progress * controlY + fx.progress * fx.progress * targetY;
             slot.node.setPosition(x, y, 0);
             slot.node.setScale(fx.scale, fx.scale, 1);
             const alpha = Math.round(Math.max(0, Math.min(1, fx.opacity * this.tailFade)) * 255);

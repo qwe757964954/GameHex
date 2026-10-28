@@ -52800,6 +52800,101 @@ return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdCityChapterCellInfoRspMsg";
 };
 return CmdCityChapterCellInfoRspMsg;
 })();
+cmd.SlgGameCameRoleInfo = (function() {
+function SlgGameCameRoleInfo(properties) {
+if (properties)
+for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+if (properties[keys[i]] != null && keys[i] !== "__proto__")
+this[keys[i]] = properties[keys[i]];
+}
+SlgGameCameRoleInfo.prototype.roleId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+SlgGameCameRoleInfo.prototype.serverId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+SlgGameCameRoleInfo.prototype.roleName = "";
+SlgGameCameRoleInfo.prototype.img = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+SlgGameCameRoleInfo.prototype.defenseHp = 0;
+SlgGameCameRoleInfo.prototype.pos = 0;
+SlgGameCameRoleInfo.create = function create(properties) {
+return new SlgGameCameRoleInfo(properties);
+};
+SlgGameCameRoleInfo.encode = function encode(message, writer, q) {
+if (!writer)
+writer = $Writer.create();
+if (q === undefined)
+q = 0;
+if (q > $util.recursionLimit)
+throw Error("max depth exceeded");
+writer.uint32(  8).uint64(message.roleId);
+writer.uint32(  16).uint64(message.serverId);
+writer.uint32(  26).string(message.roleName);
+writer.uint32(  32).uint64(message.img);
+writer.uint32(  40).uint32(message.defenseHp);
+writer.uint32(  48).uint32(message.pos);
+return writer;
+};
+SlgGameCameRoleInfo.decode = function decode(reader, length, error, long) {
+if (!(reader instanceof $Reader))
+reader = $Reader.create(reader);
+if (long === undefined)
+long = 0;
+if (long > $Reader.recursionLimit)
+throw Error("maximum nesting depth exceeded");
+let end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.SlgGameCameRoleInfo();
+while (reader.pos < end) {
+let tag = reader.uint32();
+if (tag === error)
+break;
+switch (tag >>> 3) {
+case 1: {
+message.roleId = reader.uint64();
+break;
+}
+case 2: {
+message.serverId = reader.uint64();
+break;
+}
+case 3: {
+message.roleName = reader.string();
+break;
+}
+case 4: {
+message.img = reader.uint64();
+break;
+}
+case 5: {
+message.defenseHp = reader.uint32();
+break;
+}
+case 6: {
+message.pos = reader.uint32();
+break;
+}
+default:
+reader.skipType(tag & 7, long);
+break;
+}
+}
+if (!message.hasOwnProperty("roleId"))
+throw $util.ProtocolError("missing required 'roleId'", { instance: message });
+if (!message.hasOwnProperty("serverId"))
+throw $util.ProtocolError("missing required 'serverId'", { instance: message });
+if (!message.hasOwnProperty("roleName"))
+throw $util.ProtocolError("missing required 'roleName'", { instance: message });
+if (!message.hasOwnProperty("img"))
+throw $util.ProtocolError("missing required 'img'", { instance: message });
+if (!message.hasOwnProperty("defenseHp"))
+throw $util.ProtocolError("missing required 'defenseHp'", { instance: message });
+if (!message.hasOwnProperty("pos"))
+throw $util.ProtocolError("missing required 'pos'", { instance: message });
+return message;
+};
+SlgGameCameRoleInfo.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+if (typeUrlPrefix === undefined) {
+typeUrlPrefix = "type.googleapis.com";
+}
+return typeUrlPrefix + "/com.xkhy.tafang.cmd.SlgGameCameRoleInfo";
+};
+return SlgGameCameRoleInfo;
+})();
 cmd.SlgGameInfo = (function() {
 function SlgGameInfo(properties) {
 if (properties)
@@ -53748,6 +53843,261 @@ return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdSlgGameInfoRspMsg";
 };
 return CmdSlgGameInfoRspMsg;
 })();
+cmd.CmdSlgCampRoleInfosReqMsg = (function() {
+function CmdSlgCampRoleInfosReqMsg(properties) {
+if (properties)
+for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+if (properties[keys[i]] != null && keys[i] !== "__proto__")
+this[keys[i]] = properties[keys[i]];
+}
+CmdSlgCampRoleInfosReqMsg.prototype.campId = 0;
+CmdSlgCampRoleInfosReqMsg.create = function create(properties) {
+return new CmdSlgCampRoleInfosReqMsg(properties);
+};
+CmdSlgCampRoleInfosReqMsg.encode = function encode(message, writer, q) {
+if (!writer)
+writer = $Writer.create();
+if (q === undefined)
+q = 0;
+if (q > $util.recursionLimit)
+throw Error("max depth exceeded");
+writer.uint32(  8).uint32(message.campId);
+return writer;
+};
+CmdSlgCampRoleInfosReqMsg.decode = function decode(reader, length, error, long) {
+if (!(reader instanceof $Reader))
+reader = $Reader.create(reader);
+if (long === undefined)
+long = 0;
+if (long > $Reader.recursionLimit)
+throw Error("maximum nesting depth exceeded");
+let end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdSlgCampRoleInfosReqMsg();
+while (reader.pos < end) {
+let tag = reader.uint32();
+if (tag === error)
+break;
+switch (tag >>> 3) {
+case 1: {
+message.campId = reader.uint32();
+break;
+}
+default:
+reader.skipType(tag & 7, long);
+break;
+}
+}
+if (!message.hasOwnProperty("campId"))
+throw $util.ProtocolError("missing required 'campId'", { instance: message });
+return message;
+};
+CmdSlgCampRoleInfosReqMsg.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+if (typeUrlPrefix === undefined) {
+typeUrlPrefix = "type.googleapis.com";
+}
+return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdSlgCampRoleInfosReqMsg";
+};
+return CmdSlgCampRoleInfosReqMsg;
+})();
+cmd.CmdSlgCampRoleInfosRspMsg = (function() {
+function CmdSlgCampRoleInfosRspMsg(properties) {
+this.infos = [];
+if (properties)
+for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+if (properties[keys[i]] != null && keys[i] !== "__proto__")
+this[keys[i]] = properties[keys[i]];
+}
+CmdSlgCampRoleInfosRspMsg.prototype.campId = 0;
+CmdSlgCampRoleInfosRspMsg.prototype.infos = $util.emptyArray;
+CmdSlgCampRoleInfosRspMsg.create = function create(properties) {
+return new CmdSlgCampRoleInfosRspMsg(properties);
+};
+CmdSlgCampRoleInfosRspMsg.encode = function encode(message, writer, q) {
+if (!writer)
+writer = $Writer.create();
+if (q === undefined)
+q = 0;
+if (q > $util.recursionLimit)
+throw Error("max depth exceeded");
+writer.uint32(  8).uint32(message.campId);
+if (message.infos != null && message.infos.length)
+for (let i = 0; i < message.infos.length; ++i)
+$root.com.xkhy.tafang.cmd.SlgGameCameRoleInfo.encode(message.infos[i], writer.uint32(  18).fork(), q + 1).ldelim();
+return writer;
+};
+CmdSlgCampRoleInfosRspMsg.decode = function decode(reader, length, error, long) {
+if (!(reader instanceof $Reader))
+reader = $Reader.create(reader);
+if (long === undefined)
+long = 0;
+if (long > $Reader.recursionLimit)
+throw Error("maximum nesting depth exceeded");
+let end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdSlgCampRoleInfosRspMsg();
+while (reader.pos < end) {
+let tag = reader.uint32();
+if (tag === error)
+break;
+switch (tag >>> 3) {
+case 1: {
+message.campId = reader.uint32();
+break;
+}
+case 2: {
+if (!(message.infos && message.infos.length))
+message.infos = [];
+message.infos.push($root.com.xkhy.tafang.cmd.SlgGameCameRoleInfo.decode(reader, reader.uint32(), undefined, long + 1));
+break;
+}
+default:
+reader.skipType(tag & 7, long);
+break;
+}
+}
+if (!message.hasOwnProperty("campId"))
+throw $util.ProtocolError("missing required 'campId'", { instance: message });
+return message;
+};
+CmdSlgCampRoleInfosRspMsg.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+if (typeUrlPrefix === undefined) {
+typeUrlPrefix = "type.googleapis.com";
+}
+return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdSlgCampRoleInfosRspMsg";
+};
+return CmdSlgCampRoleInfosRspMsg;
+})();
+cmd.CmdSlgCampMoveReqMsg = (function() {
+function CmdSlgCampMoveReqMsg(properties) {
+if (properties)
+for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+if (properties[keys[i]] != null && keys[i] !== "__proto__")
+this[keys[i]] = properties[keys[i]];
+}
+CmdSlgCampMoveReqMsg.prototype.campId = 0;
+CmdSlgCampMoveReqMsg.prototype.pos = 0;
+CmdSlgCampMoveReqMsg.prototype.moveType = 0;
+CmdSlgCampMoveReqMsg.create = function create(properties) {
+return new CmdSlgCampMoveReqMsg(properties);
+};
+CmdSlgCampMoveReqMsg.encode = function encode(message, writer, q) {
+if (!writer)
+writer = $Writer.create();
+if (q === undefined)
+q = 0;
+if (q > $util.recursionLimit)
+throw Error("max depth exceeded");
+writer.uint32(  8).uint32(message.campId);
+writer.uint32(  16).uint32(message.pos);
+writer.uint32(  24).uint32(message.moveType);
+return writer;
+};
+CmdSlgCampMoveReqMsg.decode = function decode(reader, length, error, long) {
+if (!(reader instanceof $Reader))
+reader = $Reader.create(reader);
+if (long === undefined)
+long = 0;
+if (long > $Reader.recursionLimit)
+throw Error("maximum nesting depth exceeded");
+let end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdSlgCampMoveReqMsg();
+while (reader.pos < end) {
+let tag = reader.uint32();
+if (tag === error)
+break;
+switch (tag >>> 3) {
+case 1: {
+message.campId = reader.uint32();
+break;
+}
+case 2: {
+message.pos = reader.uint32();
+break;
+}
+case 3: {
+message.moveType = reader.uint32();
+break;
+}
+default:
+reader.skipType(tag & 7, long);
+break;
+}
+}
+if (!message.hasOwnProperty("campId"))
+throw $util.ProtocolError("missing required 'campId'", { instance: message });
+if (!message.hasOwnProperty("pos"))
+throw $util.ProtocolError("missing required 'pos'", { instance: message });
+if (!message.hasOwnProperty("moveType"))
+throw $util.ProtocolError("missing required 'moveType'", { instance: message });
+return message;
+};
+CmdSlgCampMoveReqMsg.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+if (typeUrlPrefix === undefined) {
+typeUrlPrefix = "type.googleapis.com";
+}
+return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdSlgCampMoveReqMsg";
+};
+return CmdSlgCampMoveReqMsg;
+})();
+cmd.CmdSlgCampMoveRspMsg = (function() {
+function CmdSlgCampMoveRspMsg(properties) {
+if (properties)
+for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+if (properties[keys[i]] != null && keys[i] !== "__proto__")
+this[keys[i]] = properties[keys[i]];
+}
+CmdSlgCampMoveRspMsg.prototype.succ = 0;
+CmdSlgCampMoveRspMsg.prototype.req = null;
+CmdSlgCampMoveRspMsg.create = function create(properties) {
+return new CmdSlgCampMoveRspMsg(properties);
+};
+CmdSlgCampMoveRspMsg.encode = function encode(message, writer, q) {
+if (!writer)
+writer = $Writer.create();
+if (q === undefined)
+q = 0;
+if (q > $util.recursionLimit)
+throw Error("max depth exceeded");
+writer.uint32(  8).uint32(message.succ);
+$root.com.xkhy.tafang.cmd.CmdSlgCampMoveReqMsg.encode(message.req, writer.uint32(  18).fork(), q + 1).ldelim();
+return writer;
+};
+CmdSlgCampMoveRspMsg.decode = function decode(reader, length, error, long) {
+if (!(reader instanceof $Reader))
+reader = $Reader.create(reader);
+if (long === undefined)
+long = 0;
+if (long > $Reader.recursionLimit)
+throw Error("maximum nesting depth exceeded");
+let end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdSlgCampMoveRspMsg();
+while (reader.pos < end) {
+let tag = reader.uint32();
+if (tag === error)
+break;
+switch (tag >>> 3) {
+case 1: {
+message.succ = reader.uint32();
+break;
+}
+case 2: {
+message.req = $root.com.xkhy.tafang.cmd.CmdSlgCampMoveReqMsg.decode(reader, reader.uint32(), undefined, long + 1);
+break;
+}
+default:
+reader.skipType(tag & 7, long);
+break;
+}
+}
+if (!message.hasOwnProperty("succ"))
+throw $util.ProtocolError("missing required 'succ'", { instance: message });
+if (!message.hasOwnProperty("req"))
+throw $util.ProtocolError("missing required 'req'", { instance: message });
+return message;
+};
+CmdSlgCampMoveRspMsg.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+if (typeUrlPrefix === undefined) {
+typeUrlPrefix = "type.googleapis.com";
+}
+return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdSlgCampMoveRspMsg";
+};
+return CmdSlgCampMoveRspMsg;
+})();
 cmd.CmdSlgGameInfoBroMsg = (function() {
 function CmdSlgGameInfoBroMsg(properties) {
 if (properties)
@@ -53802,6 +54152,69 @@ typeUrlPrefix = "type.googleapis.com";
 return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdSlgGameInfoBroMsg";
 };
 return CmdSlgGameInfoBroMsg;
+})();
+cmd.CmdSlgGameRoleInfoBroMsg = (function() {
+function CmdSlgGameRoleInfoBroMsg(properties) {
+if (properties)
+for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+if (properties[keys[i]] != null && keys[i] !== "__proto__")
+this[keys[i]] = properties[keys[i]];
+}
+CmdSlgGameRoleInfoBroMsg.prototype.eventType = 0;
+CmdSlgGameRoleInfoBroMsg.prototype.info = null;
+CmdSlgGameRoleInfoBroMsg.create = function create(properties) {
+return new CmdSlgGameRoleInfoBroMsg(properties);
+};
+CmdSlgGameRoleInfoBroMsg.encode = function encode(message, writer, q) {
+if (!writer)
+writer = $Writer.create();
+if (q === undefined)
+q = 0;
+if (q > $util.recursionLimit)
+throw Error("max depth exceeded");
+writer.uint32(  8).uint32(message.eventType);
+$root.com.xkhy.tafang.cmd.SlgGameCameRoleInfo.encode(message.info, writer.uint32(  18).fork(), q + 1).ldelim();
+return writer;
+};
+CmdSlgGameRoleInfoBroMsg.decode = function decode(reader, length, error, long) {
+if (!(reader instanceof $Reader))
+reader = $Reader.create(reader);
+if (long === undefined)
+long = 0;
+if (long > $Reader.recursionLimit)
+throw Error("maximum nesting depth exceeded");
+let end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdSlgGameRoleInfoBroMsg();
+while (reader.pos < end) {
+let tag = reader.uint32();
+if (tag === error)
+break;
+switch (tag >>> 3) {
+case 1: {
+message.eventType = reader.uint32();
+break;
+}
+case 2: {
+message.info = $root.com.xkhy.tafang.cmd.SlgGameCameRoleInfo.decode(reader, reader.uint32(), undefined, long + 1);
+break;
+}
+default:
+reader.skipType(tag & 7, long);
+break;
+}
+}
+if (!message.hasOwnProperty("eventType"))
+throw $util.ProtocolError("missing required 'eventType'", { instance: message });
+if (!message.hasOwnProperty("info"))
+throw $util.ProtocolError("missing required 'info'", { instance: message });
+return message;
+};
+CmdSlgGameRoleInfoBroMsg.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+if (typeUrlPrefix === undefined) {
+typeUrlPrefix = "type.googleapis.com";
+}
+return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdSlgGameRoleInfoBroMsg";
+};
+return CmdSlgGameRoleInfoBroMsg;
 })();
 cmd.CmdSlgBuildInfoReqMsg = (function() {
 function CmdSlgBuildInfoReqMsg(properties) {
@@ -54694,6 +55107,116 @@ return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdSlgBuildInfoBroMsg";
 };
 return CmdSlgBuildInfoBroMsg;
 })();
+cmd.CmdGameViewClickReqMsg = (function() {
+function CmdGameViewClickReqMsg(properties) {
+if (properties)
+for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+if (properties[keys[i]] != null && keys[i] !== "__proto__")
+this[keys[i]] = properties[keys[i]];
+}
+CmdGameViewClickReqMsg.prototype.mark = 0;
+CmdGameViewClickReqMsg.create = function create(properties) {
+return new CmdGameViewClickReqMsg(properties);
+};
+CmdGameViewClickReqMsg.encode = function encode(message, writer, q) {
+if (!writer)
+writer = $Writer.create();
+if (q === undefined)
+q = 0;
+if (q > $util.recursionLimit)
+throw Error("max depth exceeded");
+writer.uint32(  8).uint32(message.mark);
+return writer;
+};
+CmdGameViewClickReqMsg.decode = function decode(reader, length, error, long) {
+if (!(reader instanceof $Reader))
+reader = $Reader.create(reader);
+if (long === undefined)
+long = 0;
+if (long > $Reader.recursionLimit)
+throw Error("maximum nesting depth exceeded");
+let end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdGameViewClickReqMsg();
+while (reader.pos < end) {
+let tag = reader.uint32();
+if (tag === error)
+break;
+switch (tag >>> 3) {
+case 1: {
+message.mark = reader.uint32();
+break;
+}
+default:
+reader.skipType(tag & 7, long);
+break;
+}
+}
+if (!message.hasOwnProperty("mark"))
+throw $util.ProtocolError("missing required 'mark'", { instance: message });
+return message;
+};
+CmdGameViewClickReqMsg.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+if (typeUrlPrefix === undefined) {
+typeUrlPrefix = "type.googleapis.com";
+}
+return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdGameViewClickReqMsg";
+};
+return CmdGameViewClickReqMsg;
+})();
+cmd.CmdGameViewClickRspMsg = (function() {
+function CmdGameViewClickRspMsg(properties) {
+if (properties)
+for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+if (properties[keys[i]] != null && keys[i] !== "__proto__")
+this[keys[i]] = properties[keys[i]];
+}
+CmdGameViewClickRspMsg.prototype.succ = 0;
+CmdGameViewClickRspMsg.create = function create(properties) {
+return new CmdGameViewClickRspMsg(properties);
+};
+CmdGameViewClickRspMsg.encode = function encode(message, writer, q) {
+if (!writer)
+writer = $Writer.create();
+if (q === undefined)
+q = 0;
+if (q > $util.recursionLimit)
+throw Error("max depth exceeded");
+writer.uint32(  8).uint32(message.succ);
+return writer;
+};
+CmdGameViewClickRspMsg.decode = function decode(reader, length, error, long) {
+if (!(reader instanceof $Reader))
+reader = $Reader.create(reader);
+if (long === undefined)
+long = 0;
+if (long > $Reader.recursionLimit)
+throw Error("maximum nesting depth exceeded");
+let end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdGameViewClickRspMsg();
+while (reader.pos < end) {
+let tag = reader.uint32();
+if (tag === error)
+break;
+switch (tag >>> 3) {
+case 1: {
+message.succ = reader.uint32();
+break;
+}
+default:
+reader.skipType(tag & 7, long);
+break;
+}
+}
+if (!message.hasOwnProperty("succ"))
+throw $util.ProtocolError("missing required 'succ'", { instance: message });
+return message;
+};
+CmdGameViewClickRspMsg.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+if (typeUrlPrefix === undefined) {
+typeUrlPrefix = "type.googleapis.com";
+}
+return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdGameViewClickRspMsg";
+};
+return CmdGameViewClickRspMsg;
+})();
 cmd.MessageId = (function() {
 const valuesById = {}, values = Object.create(valuesById);
 values[valuesById[1731012380] = "CmdTakeDayChallengeActRewardRspMsg"] = 1731012380;
@@ -54913,6 +55436,8 @@ values[valuesById[1631409176] = "CmdSlgCampSimpleInfoRspMsg"] = 1631409176;
 values[valuesById[1665140602] = "CmdSlgCampInfoRspMsg"] = 1665140602;
 values[valuesById[196069974] = "CmdSlgActionUpdateRspMsg"] = 196069974;
 values[valuesById[1100779337] = "CmdSlgGameInfoRspMsg"] = 1100779337;
+values[valuesById[1756720515] = "CmdSlgCampRoleInfosRspMsg"] = 1756720515;
+values[valuesById[1866377577] = "CmdSlgCampMoveRspMsg"] = 1866377577;
 values[valuesById[1414628085] = "CmdSlgBuildInfoRspMsg"] = 1414628085;
 values[valuesById[455496637] = "CmdSlgBuildRspMsg"] = 455496637;
 values[valuesById[1255226437] = "CmdSlgBuildUpgradeRspMsg"] = 1255226437;
@@ -54920,6 +55445,7 @@ values[valuesById[1606383447] = "CmdSlgBuildCancelRspMsg"] = 1606383447;
 values[valuesById[2116890094] = "CmdSlgBuildMoveRspMsg"] = 2116890094;
 values[valuesById[1353318189] = "CmdSlgBuildCollectRspMsg"] = 1353318189;
 values[valuesById[1478251158] = "CmdSlgBuildUnlockQueueRspMsg"] = 1478251158;
+values[valuesById[463153146] = "CmdGameViewClickRspMsg"] = 463153146;
 values[valuesById[2051518427] = "CmdSpiritAnimalLevelUpRspMsg"] = 2051518427;
 values[valuesById[1991681903] = "CmdSpiritAnimalStepUpRspMsg"] = 1991681903;
 values[valuesById[1439043070] = "CmdSpiritAnimalBattleRspMsg"] = 1439043070;
@@ -55005,6 +55531,7 @@ values[valuesById[1919419092] = "CmdCelebrationBuyShopGoodsBroMsg"] = 1919419092
 values[valuesById[161909789] = "CmdRechargeDailyUpdateBroMsg"] = 161909789;
 values[valuesById[915823971] = "CmdGuanKaGiftBroMsg"] = 915823971;
 values[valuesById[1546899562] = "CmdSlgGameInfoBroMsg"] = 1546899562;
+values[valuesById[582176172] = "CmdSlgGameRoleInfoBroMsg"] = 582176172;
 values[valuesById[1860748310] = "CmdSlgBuildInfoBroMsg"] = 1860748310;
 values[valuesById[1366910774] = "CmdTeamDetailBroMsg"] = 1366910774;
 values[valuesById[2097470162] = "CmdTeamDisbandBroMsg"] = 2097470162;

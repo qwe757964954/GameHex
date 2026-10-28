@@ -1,3 +1,4 @@
+import { EventMgr } from '../../../framework/event/EventMgr';
 import {
     _decorator,
     Color,
@@ -18,6 +19,7 @@ import {
     HEX_GRID_IMAGE_WIDTH,
 } from '../../../core/hex/HexGridLayout';
 import {
+    TERRITORY_GAIN_READOUT_LIFT_PX,
     TERRITORY_GAIN_STACK_GAP_PX,
     TERRITORY_GAIN_START_LIFT_PX,
     TERRITORY_SILVER_RES_ID,
@@ -31,7 +33,12 @@ import { TerritoryTapFeedback } from './TerritoryTapFeedback';
 import type { TerritoryChestTier } from '../model/TerritoryChestTier';
 import type { TerritoryCampaignStage } from '../model/TerritoryCampaignConfig';
 import type { ITerritoryMapLayout, ITerritoryMapPoint } from '../model/TerritoryMapLayout';
-import { territoryMapContentSize, territoryMapContentShiftY } from '../model/TerritoryMapLayout';
+import {
+    TERRITORY_MAP_CONTENT_PADDING,
+    TERRITORY_MAP_CONTENT_PADDING_TOP,
+    territoryMapContentSize,
+    territoryMapContentShiftY,
+} from '../model/TerritoryMapLayout';
 import type { TerritoryMapConfig, TerritorySite, TerritorySiteType } from '../model/TerritoryMapConfig';
 import { TERRITORY_SITE_TYPE } from '../model/TerritoryMapConfig';
 import type { TerritoryProgress } from '../model/TerritoryProgress';
@@ -40,12 +47,16 @@ import type {
     ITerritoryStationRender,
     TerritoryStationTarget,
 } from './TerritoryStationView';
-import { TerritoryStationView } from './TerritoryStationView';
+import { TerritoryStationView, territoryUsesBottomAnchor } from './TerritoryStationView';
 import { TERRITORY_EVENTS } from './TerritoryEvents';
 import { TERRITORY_HEX_REVEAL_NODE, TerritoryHexFlip } from './TerritoryHexFlip';
 import { TerritoryHexSpawn } from './TerritoryHexSpawn';
 import { territoryHexSpawnDelays } from '../model/TerritoryHexSpawn';
-import { territoryCloudCells, type ITerritoryCloudCell } from '../model/TerritoryCloud';
+import {
+    territoryCloudCells,
+    territoryCloudDollyFitScale,
+    type ITerritoryCloudCell,
+} from '../model/TerritoryCloud';
 import {
     TERRITORY_HEX_RECOLOR_NEW_NODE,
     TERRITORY_HEX_RECOLOR_OLD_NODE,
@@ -247,6 +258,23 @@ export interface ITerritoryMapRenderInput {
 }
 
 /**
+ * 一条**合成**的奖励读数（见 {@link TerritoryMapView.playResourceGain} 的 `readout`）。
+ *
+ * 随机资源格一次会发好几种种族经验，页面上不想要「4 行、4 个不同的图」——
+ * 所以把图标统一成一张（`TERRITORY_RANDOM_GAIN_READOUT_ART`）、数字取总和，
+ * **只出一条**；喷发粒子不受影响（仍按每种奖励各自的图）。
+ *
+ * ⚠️ 图是 `SpriteFrame`（cc 类型），所以这个接口只能放在 view 层，不能落到
+ *   `model/TerritoryResourceGain`（那里必须零 `cc`）。
+ */
+export interface ITerritoryGainReadout {
+    /** 读数前面那张图；`null` = 没取到图，只飘数字（与逐条模式的降级口径一致）。 */
+    readonly frame: SpriteFrame | null;
+    /** 要显示的数量 —— 多笔奖励时是**全部数量之和**。 */
+    readonly amount: number;
+}
+
+/**
  * 领地地图的**数据渲染层**，挂在 `MainTerritoryMap.prefab` 的 `MapLayer`（滚动内容节点）上。
  *
  *  它只做两件事，别的一概不碰：
@@ -254,7 +282,7 @@ export interface ITerritoryMapRenderInput {
  *  2. 把「站点 + 进度」算成 `ITerritoryStationRender` 喂给池化复用的 `TerritoryStationView`。
  *
  *  **不负责**：拖拽（归 `cc.ScrollView`）、主城 HUD 文案（归 `MainPage`）、
- *  弹窗（归 `TerritorySiteDetailPanel`）、数据加载与存档（归页面）。
+ *  弹窗（归 `LevelInfoPanel` / `BigMapPlayerLevelPanel`）、数据加载与存档（归页面）。
  *
  *  站点之间的**解锁连线已去掉**（2026-10-01）—— 原来由 `RouteLayer` 的 `Graphics`
  *  按 `site.unlock.requiredCells` 整层重画，视觉上太乱，改由**编辑器**（`tools/map-editor/territory.html`）
@@ -383,6 +411,17 @@ export class TerritoryMapView extends Component {
      */
     private readonly revealedSnapshot = new Set<number>();
     /**
+     * 上一帧**已解锁**的格子集合（2026-10-28）。
+     *
+     * 为什么光有 `revealedSnapshot` 不够：`revealed` 里本来就包含「前沿看得见、还没花钱开」的格子，
+     * 关卡格从「锁着（银币 + 数字）」变成「已解锁（关卡建筑）」时它**前后都在 revealed 里**
+     * ⇒ 露出集合的 diff 恒为 0，解锁这一步就静默换了外观、没有动画。
+     * 用户口径：「点击地块消耗银币，播放地块切换成关卡地块的动画（与其他新生成的地块动画一致）」。
+     *
+     * ⚠️ 与 `revealedSnapshot` 同生共死：同一帧更新、换章时一起清空。
+     */
+    private readonly unlockedSnapshot = new Set<number>();
+    /**
      * 是否已经用首帧做过一次「已露出」快照。
      *
      * 🔴 与 `hexFlipBootstrapped` 同一个理由：少了它，进页面 / 换章的首帧会把**整张图**的格子
@@ -503,6 +542,14 @@ export class TerritoryMapView extends Component {
     private chestCameraActive = false;
 
     /** 初始化共享层引用与喷发粒子层（页面在 `onLoad` 里调，只需一次）。 */
+    protected onEnable(): void {
+        EventMgr.instance.on(TERRITORY_EVENTS.STATION_TAP, this.onStationClick, this);
+    }
+
+    protected onDisable(): void {
+        EventMgr.instance.offTarget(this);
+    }
+
     initialize(): void {
         this.stationLayers = {
             icon: this.stationIconLayer,
@@ -523,14 +570,59 @@ export class TerritoryMapView extends Component {
     }
 
     /**
+     * 内容层**底部**留白（px）—— **运行时值**，由页面按「视口高 + 顶部 HUD 底边」反算后注入。
+     *
+     * 它是 `cc.ScrollView` 可滚范围的**全部来源**（`elastic = false` ⇒ 拖不过去、松手也不回弹），
+     * 也就是「地图能拖到哪」的硬上限。缺省 {@link TERRITORY_MAP_CONTENT_PADDING}（300）只服务
+     * 没注入的场景（单测 / 页面还没量到 HUD）。
+     *
+     * ⚠️ 改它必须走 {@link setContentPaddingBottom}：内容层偏移是 `(bottom − top)/2`，
+     *    直接赋字段会让偏移停在旧值上。
+     */
+    contentPaddingBottom: number = TERRITORY_MAP_CONTENT_PADDING;
+
+    /**
+     * 内容层**顶部**留白（px）—— 同样是运行时值，由页面按同一个 HUD 底边反算注入。
+     *
+     * 缺省 0（{@link TERRITORY_MAP_CONTENT_PADDING_TOP}）是老行为：滚到顶时第一排格子贴视口顶。
+     * 页面上第一排会被浮在视口之上的 `TopHud` 挡住且拖不下来（用户 2026-10-27 口径）。
+     */
+    contentPaddingTop: number = TERRITORY_MAP_CONTENT_PADDING_TOP;
+
+    /** 地图视口尺寸（页面注入，见 `setViewportSize`）；散场镜头算入画倍率用。 */
+    private viewportWidth = 0;
+    private viewportHeight = 0;
+    /** 散场镜头是否已起跑（起跑那帧要量基准、取对焦点、锁输入，只做一次）。 */
+    private cloudDollyStarted = false;
+    /** 散场镜头的对焦点（地图包围盒中心，只取一次）。 */
+    private cloudDollyOrigin: Vec3 = null!;
+
+    /** 页面注入：底部留白（顺带重写内容层偏移）。 */
+    setContentPaddingBottom(padding: number): void {
+        const value = Number.isFinite(padding) ? Math.max(0, padding) : TERRITORY_MAP_CONTENT_PADDING;
+        if (value === this.contentPaddingBottom) return;
+        this.contentPaddingBottom = value;
+        this.applyContentShift();
+    }
+
+    /** 页面注入：顶部留白（顺带重写内容层偏移）。 */
+    setContentPaddingTop(padding: number): void {
+        const value = Number.isFinite(padding) ? Math.max(0, padding) : TERRITORY_MAP_CONTENT_PADDING_TOP;
+        if (value === this.contentPaddingTop) return;
+        this.contentPaddingTop = value;
+        this.applyContentShift();
+    }
+
+    /**
      * 把「与格子同坐标系的内容层」整体上移到 {@link territoryMapContentShiftY}。
      *
      * ## 为什么要挪
      *
-     * 内容层高度 = 包围盒 + **底部**留白（顶部 0，见 `TerritoryMapLayout`）。`MapLayer`
-     * 锚点居中 ⇒ 内容层比地图高 300 时，上下各空 150 —— 滚到顶就会有一块没有格子的空底图
-     * （用户 2026-10-23 截图「格子没有铺到顶端」）。把内容层整体上移半个留白，地图顶部
-     * 正好贴住内容层顶部，滚到顶就是第一排格子贴视口顶。
+     * 内容层高度 = 包围盒 + 底部留白 + 顶部留白。`MapLayer` 锚点居中 ⇒ 内容层比地图高的那截
+     * 会上下均分 —— 滚到顶就会有一块没有格子的空底图（用户 2026-10-23 截图「格子没有铺到顶端」）。
+     * 把内容层上移 `(bottom − top)/2`，地图顶部正好与内容层顶部对齐。
+     *
+     * ⚠️ 两份留白都是**运行时值**（页面注入），偏移必须每次现算，别缓存。
      *
      * ## 谁不动
      *
@@ -538,7 +630,7 @@ export class TerritoryMapView extends Component {
      * 跟着偏反而会在顶部露边。它的 `pos` 恒为 `(0, 0)`。
      */
     private applyContentShift(): void {
-        const shift = territoryMapContentShiftY();
+        const shift = territoryMapContentShiftY(this.contentPaddingBottom, this.contentPaddingTop);
         for (const child of this.node.children) {
             if (child === this.mapBackground?.node) continue;
             if (child.position.y === shift) continue;
@@ -625,6 +717,45 @@ export class TerritoryMapView extends Component {
     setRewardCatchPoint(x: number, y: number): void {
         this.ensureOverlayHost();
         this.chestView?.setCatchPoint(x, y);
+    }
+
+    /**
+     * 给**某一种资源**指定落点，坐标是**世界坐标**（页面从资源栏那一格取到的是什么就传什么）。
+     *
+     * ## 为什么不要求调用方先换算成覆盖层坐标
+     *
+     *  覆盖层节点是 `TerritoryMapView` 自己懒建的（`ensureOverlayHost`），页面拿不到它；
+     *  而「世界坐标 → 覆盖层局部坐标」只有引擎矩阵说得准（页面缩放 / 安全区都会影响）。
+     *  所以换算留在本类，页面只负责「哪个 resId → 哪一格的世界坐标」这一层业务判断。
+     *
+     * @param world `null` = 清掉这一种资源的专属落点（回落 `setRewardCatchPoint` 的全局落点）。
+     *              **只影响这一个 resId** —— 一次开箱要登记两种资源，这里不能顺手清别的。
+     */
+    setRewardCatchWorldPoint(resId: number, world: Vec3 | null): void {
+        if (!world) {
+            this.chestView?.clearCatchPointOf(resId);
+            return;
+        }
+        const host = this.ensureOverlayHost();
+        const transform = host.getComponent(UITransform);
+        if (!transform) return;
+        const local = transform.convertToNodeSpaceAR(world, new Vec3());
+        this.chestView?.setCatchPointOf(resId, local.x, local.y);
+    }
+
+    /** 清空**全部**按资源登记的落点（页面在每次开箱前调一次，避免上一批的残留）。 */
+    clearRewardCatchPoints(): void {
+        this.chestView?.clearCatchPoints();
+    }
+
+    /**
+     * 注入「奖励图标落进资源栏」的回调（页面据此让那一格跳一下 + **那一格**闪光，别的格不动）。
+     *
+     * 本类只做转发：`resId → 资源栏的哪一格` 是**玩法/版面口径**，归页面。
+     */
+    setRewardLandedHandler(handler: ((resId: number, amount: number) => void) | null): void {
+        this.ensureOverlayHost();
+        this.chestView?.setLandedHandler(handler);
     }
 
     /**
@@ -717,7 +848,7 @@ export class TerritoryMapView extends Component {
      *  ⚠️ 这里**只吃 `(scale, focus)` 两个数** —— 不关心倍率是 1.08 还是 2.3，
      *    换档次不用动本方法（它拿到 `focus` 就已经知道该把格心挪到哪）。
      */
-    private applyChestCamera(scale: number, focus: number): void {
+    private applyChestCamera(scale: number, focus: number, origin?: Vec3): void {
         const base = this.chestCamera;
         if (!base || !this.chestCameraActive || !this.node?.isValid) return;
         // 脏值兜底：`k` 必须是正数（0 / 负数 / NaN 会让地图塌成一条线），`f` 夹到 [0, 1]。
@@ -726,10 +857,14 @@ export class TerritoryMapView extends Component {
         const node = this.node;
         // 倍率乘在 **prefab 的基准缩放**上，不是直接写 k —— 地图节点本身可能带着非 1 的缩放。
         node.setScale(base.baseScale.x * k, base.baseScale.y * k, 1);
-        const lx = base.origin.x - base.layerOrigin.x;
-        const ly = base.origin.y - base.layerOrigin.y;
-        const targetX = base.origin.x * (1 - f) - k * lx;
-        const targetY = base.origin.y * (1 - f) - k * ly;
+        // 对焦点可被覆盖（全解锁散场要把**地图中心**而不是宝箱摆到屏幕正中）；
+        // 不传就用宝箱那一次的基准点。
+        const ox = origin?.x ?? base.origin.x;
+        const oy = origin?.y ?? base.origin.y;
+        const lx = ox - base.layerOrigin.x;
+        const ly = oy - base.layerOrigin.y;
+        const targetX = ox * (1 - f) - k * lx;
+        const targetY = oy * (1 - f) - k * ly;
         // 三数值重载：帧循环里不 new Vec3（场景节点每次推镜都要摆位）。
         node.setPosition(
             base.basePos.x + (targetX - base.layerOrigin.x),
@@ -856,12 +991,15 @@ export class TerritoryMapView extends Component {
         // 都是「时钟置 -1 即空闲」的池化契约，没在播时开销只是一次数值比较。
         this.tapFeedback?.step(dt);
         this.chestView?.step(dt);
-        // 镜头收工 ⇒ 地图还原。自然播完（`step` 内部走到终点会自己 `stop()`）与被打断
-        // 都走这一条，不会留下一个"还放大着、scroll 已解锁"的中间态。
-        if (this.chestCameraActive && !this.chestView?.isPlaying) this.restoreChestCamera();
+        // 散场镜头：必须排在 `clouds.step` **之后** —— 拿到的才是这一帧的拉远程度
+        // （排在前面 ⇒ 镜头比雾晚一帧，起淡那一帧画面是"已经淡了但还没拉远"）。
+        this.stepCloudDolly();
+        // 🔴 收尾只留一条路径：开箱与散场**共用同一套镜头基准**，谁还在播都不许还原 / 解锁。
+        const cameraBusy = this.chestView?.isPlaying === true || this.clouds.dollyActive;
+        if (this.chestCameraActive && !cameraBusy) this.restoreChestCamera();
         // 开箱播完（或被 `stop()` 收掉）⇒ 立刻放开输入。放在 `step` 之后而不是 `onDone` 里：
         // `stop()` 不走 `onDone`，锁必须由「还在不在播」这个状态来释放，才不会有漏放的路径。
-        if (this.inputLocked && !this.chestView?.isPlaying) this.setInputLocked(false);
+        if (this.inputLocked && !cameraBusy) this.setInputLocked(false);
         // 表演结束 ⇒ 解开"摘掉地图宝箱"的标记（结算已经把进度改成已领取，格子自然不再画宝箱；
         // 若是被打断/降级导致没结算，这里也让宝箱回到格子上）。
         if (this.chestPlayingCell !== null && !this.chestView?.isPlaying) this.chestPlayingCell = null;
@@ -901,6 +1039,21 @@ export class TerritoryMapView extends Component {
     }
 
     /**
+     * 追加 / 覆盖**一枚**飘字图标（随机资源格的奖励 id 是动态的，不能只靠预载的两张）。
+     *
+     * 随机资源池发的是道具（图纸 / 蓝本…），`loadResourceGainIcons` 只预载了银币 / 体力两张，
+     * 所以页面在喷之前必须把这一批的图标现取现塞进来 —— 否则粒子和飘字都是**空图**，
+     * 看着就是"粒子没了，只剩奖励信息"（2026-10-26 §3 的现场）。
+     *
+     * @param frame `null` = 这一枚确实没图（照常喷、照常飘数字，只是没有图标）。
+     */
+    setGainIcon(resId: number, frame: SpriteFrame | null): void {
+        const id = Number(resId);
+        if (!Number.isFinite(id)) return;
+        this.gainIcons.set(id, frame ?? null);
+    }
+
+    /**
      * 在**指定格子上方**播一组资源表现：格心**喷发**一把资源图标 + 图标与 `+N` 读数升起。
      *
      * 用于「银币 / 体力不走奖励弹窗」那条口径（见 `TerritoryResourceGain`）。
@@ -917,12 +1070,30 @@ export class TerritoryMapView extends Component {
      *    而是「喷发原点 + 40px」。判据见 `tests/territory-cell-center-align.test.ts` 的反向守卫
      *    与 `tests/territory-resource-gain.test.ts` 的落点换算。
      *
+     *  🔴 **合成读数是唯一的例外**：它落在「喷发原点 + `TERRITORY_GAIN_READOUT_LIFT_PX`(70 = 40 + 30)」
+     *    —— 种族经验球那张图比银币大，贴着 40px 会和格心喷出的那把粒子挤在同一片区域（2026-10-26 用户口径
+     *    「初始位置增加 30px，不会遮挡粒子效果」）。**逐条模式仍是 40**，上面那条 40px 判据不受影响。
+     *
      * ⚠️ 多条（同时给银币 + 体力）**纵向错开** `TERRITORY_GAIN_STACK_GAP_PX`，
      *  否则两条叠在一条线上互相压字；喷发则只有**一次**（多个图标轮流取两条的图）。
      *
-     * @param entries 已经过 `splitTerritoryRewards` 筛选的钱包类奖励
+     * ## `readout`：把读数**合成一条**（2026-10-26 随机格口径）
+     *
+     * 随机资源格一次会发好几种**种族经验**（`+158 / +139 / +140 / +113`），传 `readout`
+     * 时读数只出一条：图标用 {@link ITerritoryGainReadout.frame}（页面给「种族经验球_随机」）、
+     * 数字用 `amount`（页面给**全部数量之和**）。
+     *
+     * 🔴 **只换读数，不换喷发**：粒子仍然按 `entries` **各用各的图**（随机格拿到 4 种经验就
+     *    喷 4 种图，视觉上能看出"这一格给的是混合资源"），个数仍按数量之和分级。
+     *
+     * @param entries 已经过 `splitTerritoryRewards` 筛选的钱包类奖励（喷发用）
+     * @param readout 给了就只出一条读数（图标 + 求和数字）；不给则每条 entries 各一条（旧行为）
      */
-    playResourceGain(cellId: number, entries: readonly { resId: number; amount: number }[]): void {
+    playResourceGain(
+        cellId: number,
+        entries: readonly { resId: number; amount: number }[],
+        readout?: ITerritoryGainReadout | null,
+    ): void {
         if (!entries.length) return;
         const hex = this.hexNodes.get(cellId);
         if (!hex) return;
@@ -932,6 +1103,14 @@ export class TerritoryMapView extends Component {
         // 喷几颗看**这一批的总量**（需求 2026-10-22）：小奖励稀疏、大奖励满喷。
         const total = entries.reduce((sum, entry) => sum + (Number(entry.amount) > 0 ? Number(entry.amount) : 0), 0);
         this.playGainBurst(originX, originY, entries, total);
+        if (readout) {
+            // 合成一条：**不叠加**，落在起点线上（`index = 0`），比逐条模式**再高 30px**
+            // —— 那颗种族经验球比银币图大，落在 40px 会被自己喷出的粒子盖住（2026-10-26 口径）。
+            const view = this.acquireGain();
+            view.node.setPosition(originX, originY + TERRITORY_GAIN_READOUT_LIFT_PX, 0);
+            view.play(readout.frame ?? null, readout.amount);
+            return;
+        }
         entries.forEach((entry, index) => {
             const view = this.acquireGain();
             // ⚠️ 起点必须先写：`play()` 以「节点当前 y」为基准，池化复用时不重设会越飘越高。
@@ -1040,12 +1219,15 @@ export class TerritoryMapView extends Component {
     }
 
     /**
-     * 「未解锁云」：**只给地图里配置过的格位**盖云，刚露出来的播消散。
+     * 「未解锁云」：**真实云层**（会消散、能回退）只给地图里配置过的格位盖，
+     * 其余格（含格网内的空格）由**铺满层**兜底（见 `TerritoryCloudView.setFillOccupied`）。
      *
      * 🔴 2026-10-23 山猫口径（*「地图编辑器那都没有随机格子，就不要云了，配置没有的地方」*）：
-     * 云不再是"整张图铺满"，而是 `sites` + `randomSites.candidateCells`（+ 起始格）这几格。
-     * 空白格位没有内容、也就永远不会解锁 ⇒ 盖上去的云永远散不掉，纯噪声。
-     * 集合口径的实现在 `territoryCloudCells`（纯函数，有用例钉）。
+     * 有内容的格 = `sites` + `randomSites.candidateCells`（+ 起始格）这几格 —— 它们才会解锁、
+     * 才需要"露出来时云消散"。
+     * ⚠️ 2026-10-26 补：**"没有内容就不给云"不等于"整片留白"**。章节图 20×20 里只有 ~117 格
+     * 有内容，剩下 280 多格以前既没真实云也不在铺满范围 ⇒ 地图上出现整条裸底图（用户截图红框）。
+     * 现在那些空格由铺满层盖住，只是不参与消散。
      *
      * ⚠️ 判断「露没露出来」用 `input.revealedCells`（= `territoryRevealedCells`：
      * 已占领 / 已解锁 + 前沿可见格），**不是** `progress.isCellUnlocked` —— 后者只认
@@ -1058,12 +1240,95 @@ export class TerritoryMapView extends Component {
             this.cloudCellsKey = key;
             this.cloudCells.length = 0;
             this.cloudCells.push(...territoryCloudCells(input.map, input.layout.points));
+            // 铺满层要知道「哪些格已经有真实云」—— 否则格网里的空格要么叠两朵、要么一格云都没有
+            // （2026-10-26 那条"左侧空了一块背景图"就是后者）。只在换图 / 换章时重算一次。
+            this.clouds.setFillOccupied(this.cloudCells.map((cell) => cell.cellId));
         }
         const revealed = new Set(input.revealedCells);
         // 「被地块包围」的未解锁小洞（2026-10-23 第二轮）：这些格子里的云**不吃挡云区的反向擦除**，
         // 搬到页面顶层（压住 UI、不影响点击）。判定是纯函数，见 `territoryCloudPocketCells`。
         const pockets = territoryCloudPocketCells(input.map.rows, input.map.columns, revealed);
-        this.clouds.sync(this.cloudCells, revealed, pockets);
+        // 散场镜头：先把「整张图入画」的倍率交给云层（它据此决定要不要演、演多远），
+        // 再 sync —— 第四个参数是**激活探针**（见 `isCellActivated`）。
+        this.clouds.setDollyFitScale(territoryCloudDollyFitScale(
+            input.layout.width, input.layout.height, this.viewportWidth, this.viewportHeight));
+        this.clouds.sync(this.cloudCells, revealed, pockets, (cellId) => this.isCellActivated(cellId, input));
+    }
+
+    /**
+     * 「整片铺满雾该不该收工」的判据：**已激活**（不是"已露出"）。
+     *
+     * 🔴 与逐格消散（用 `revealed`）**故意不同源**：`revealed` 含「前沿随机候选格」
+     * （看得见、还没花钱开）—— 拿它当收官判据会让雾在最后一格还没点时提前散掉
+     * （用户 2026-10-27「还未激活完全部地块，云层就消失了」）。
+     *
+     * 三条都是**服务端确认过**的状态 ⇒ 判据不会死锁：
+     *  · `isCellUnlocked` 服务端允许点；
+     *  · `isOwned`      已占领；
+     *  · `isAreaPassed` 区域已通关（宝箱领完 / 关卡打完）。
+     *
+     * ⚠️ **不要用 `isCellPassed`**：宝箱要"领完"才算，`bonus` 根本不走 `isAreaPassed`
+     *    ⇒ 卡在最后一格永远收不了官。
+     */
+    private isCellActivated(cellId: number, input: ITerritoryMapRenderInput): boolean {
+        if (cellId === input.map.startCellId) return true;
+        const progress = input.progress;
+        return progress.isCellUnlocked(cellId) || progress.isOwned(cellId) || progress.isAreaPassed(cellId);
+    }
+
+    /**
+     * 页面注入：地图**视口**尺寸（px）—— 散场镜头靠它算「整张图入画」的倍率。
+     *
+     * ⚠️ 不猜、不从 prefab 反查：视口在页面那一侧（`MapScrollView`），视图只有 content。
+     *    注入不了（单测 / 页面还没量）时倍率退化成 1 ⇒ 直接走淡出、不演镜头。
+     */
+    setViewportSize(width: number, height: number): void {
+        this.viewportWidth = Number.isFinite(width) ? Math.max(0, width) : 0;
+        this.viewportHeight = Number.isFinite(height) ? Math.max(0, height) : 0;
+    }
+
+    /**
+     * 推进「全解锁 ⇒ 镜头散场」（每帧调，排在 `clouds.step` 之后）。
+     *
+     * 镜头**复用宝箱那套基准**：`k: 1 → fit`（缩到整张图入画）、`f: 0 → 1`（把地图中心挪到屏幕正中），
+     * 两条都用同一条 `zoom` 曲线插值 ⇒ 首末两帧都精确回到基准，不用单独记还原值。
+     */
+    private stepCloudDolly(): void {
+        if (!this.clouds.dollyActive) {
+            this.cloudDollyStarted = false;
+            return;
+        }
+        if (!this.cloudDollyStarted) {
+            const center = this.mapCenterInOverlay();
+            if (!center) return;
+            // 🔴 基准只量一次：开箱还在播时它的基准是动画中途量下来的，复用它会把地图永久停偏。
+            if (!this.chestCameraActive) this.captureChestCamera(center);
+            // 对焦点也只取一次：`mapCenterInOverlay` 量的是**当前世界位置**，镜头一动它每帧都在变，
+            // 每帧重量就成了"追着自己跑"的反馈环。
+            this.cloudDollyOrigin = center;
+            this.setInputLocked(true);
+            this.cloudDollyStarted = true;
+        }
+        const zoom = this.clouds.dollyZoom;
+        const fit = this.clouds.dollyScale;
+        this.applyChestCamera(1 + (fit - 1) * zoom, zoom, this.cloudDollyOrigin);
+    }
+
+    /**
+     * 地图包围盒中心在**页面覆盖层坐标系**里的位置（散场镜头的对焦点）。
+     *
+     * `GridLayer` 的本地原点就是地图包围盒中心，加回内容层抬升量再换算到覆盖层。
+     * 取不到时返回 `null`（⇒ 只演雾散、镜头不动）。
+     */
+    private mapCenterInOverlay(): Vec3 | null {
+        const grid = this.gridLayer;
+        const host = this.overlayHost;
+        if (!grid?.isValid || !host?.isValid) return null;
+        const world = grid.getComponent(UITransform)?.convertToWorldSpaceAR(Vec3.ZERO);
+        if (!world) return null;
+        const local = host.getComponent(UITransform)?.convertToNodeSpaceAR(world);
+        if (!local) return null;
+        return new Vec3(local.x, local.y + HEX_GRID_CONTENT_LIFT, 0);
     }
 
     /**
@@ -1106,19 +1371,23 @@ export class TerritoryMapView extends Component {
     }
 
     /**
-     * 内容层尺寸 = 地图包围盒 + **底部**留白：`cc.ScrollView` 靠它算可滚范围。
+     * 内容层尺寸 = 地图包围盒 + **底部 / 顶部**留白：`cc.ScrollView` 靠它算可滚范围。
      *
-     * 留白不是装饰，是**可滚范围**：`TERRITORY_MAP_CONTENT_PADDING` 让相机能在贴到地图下边缘时
-     * 继续往上滚，从而把底部那几排地块抬到【快速寻敌】按钮之上（用户口径「整体一起上移」）。
-     * 顶部留白恒 0（`TERRITORY_MAP_CONTENT_PADDING_TOP`）—— 滚到顶时第一排格子贴视口顶。
+     * 留白不是装饰，是**可滚范围**：底部那截让相机能在贴到地图下边缘时继续往上滚，把底部那几排
+     * 地块抬到【快速寻敌】按钮之上；顶部那截让第一排地块能被拖到 `TopHud`（个人信息框）下方。
+     * 两份都是**页面注入的运行时值**（见 `setContentPaddingBottom` / `setContentPaddingTop`），
+     * 缺省 300 / 0 只服务没注入的场景。
      * 格心坐标一个都不动，对齐靠 {@link applyContentShift} 的内容层偏移。
      */
     private syncContentSize(layout: ITerritoryMapLayout, rows: number, columns: number): void {
-        const content = territoryMapContentSize(layout);
+        const content = territoryMapContentSize(layout, this.contentPaddingBottom, this.contentPaddingTop);
         this.node.getComponent(UITransform)!.setContentSize(content.width, content.height);
-        // 云要铺满**整块内容层**（不只格位）：内容层四周还留着 `TERRITORY_MAP_CONTENT_PADDING`
-        // 的空白，滚到边缘时那条空白会露出底图（用户 2026-10-23 截图 1 的红框）。
+        // 云要铺满**整块内容层**（不只格位）：内容层四周还留着留白的空白，
+        // 滚到边缘时那条空白会露出底图（用户 2026-10-23 截图 1 的红框）。
         this.clouds.setFillArea(content.width, content.height, rows, columns);
+        // ⚠️ 尺寸变了 ⇒ 偏移也要跟着重写：只 setContentSize 不重算的话，
+        //    「先注入留白、再首次 sync」这一帧的偏移还是旧的（顶部会露出一条空底图）。
+        this.applyContentShift();
     }
 
     /**
@@ -1148,7 +1417,8 @@ export class TerritoryMapView extends Component {
         const { width: artWidth, height: artHeight } = frame.originalSize;
         // 图尺寸未就绪（0/NaN）时不要把节点写成 0×0 —— 那会让整块底图消失且不报错。
         if (!(artWidth > 0) || !(artHeight > 0)) return;
-        const { width, height } = territoryMapContentSize(input.layout);
+        const { width, height } = territoryMapContentSize(
+            input.layout, this.contentPaddingBottom, this.contentPaddingTop);
         if (!(width > 0) || !(height > 0)) return;
         const scale = Math.max(width / artWidth, height / artHeight);
         this.mapBackground.node.getComponent(UITransform)!
@@ -1186,6 +1456,7 @@ export class TerritoryMapView extends Component {
         this.cloudCells.length = 0;
         this.cloudCellsKey = '';
         this.revealedSnapshot.clear();
+        this.unlockedSnapshot.clear();
         this.spawnBootstrapped = false;
         this.resetGains();
         // 覆盖层那两套也要收：格子节点会被重建 / 复用，按压缩放留在旧节点上就会「烂掉一格」。
@@ -1420,26 +1691,49 @@ export class TerritoryMapView extends Component {
     }
 
     /**
-     * 「新地块生成」：本帧 `revealedCells` 里**上一帧还没有**的格子整批进场。
+     * 「新地块生成」：本帧**新出现**的格子整批进场。
      *
-     * 触发靠 **diff**（与 `syncFlip` 同一个套路）：不要求 Presenter 额外传「刚解锁」字段，
-     * 换章 / 重进页面也不会漏 —— 首帧只做快照。
+     * ## 两条触发（2026-10-28 加第二条）
+     *
+     * | 来源 | 判据 | 场景 |
+     * | :-- | :-- | :-- |
+     * | 新露出 | `revealed` 里上一帧没有 | 解锁一片新区域 / 云散开 |
+     * | **新解锁** | `isCellUnlocked` 这一帧才变 true | 点锁着的关卡格花银币解锁（用户口径）|
+     *
+     * 🔴 第二条不能用第一条代替：`revealed` 本来就含「前沿看得见、还没花钱开」的格子，
+     * 关卡格从「锁着（银币 + 数字）」变「已解锁（关卡建筑）」时**前后都在 `revealed` 里**
+     * ⇒ 露出集合的 diff 恒为 0，外观直接换、没有过渡，读作"点了一下什么都没发生"。
      *
      * ⚠️ 必须排在 `paintHexes` 的末尾、且**在 `syncFlip` 之前**（`renderMap` 的调用顺序）：
      *  · 末尾 ⇒ 格子的 `active` 已经置好，`play` 写起手帧时节点是可见的；
-     *  · 在 `syncFlip` 之前 ⇒ 同格如果紧接着要翻格，`syncFlip` 里的 `hexSpawn.stop()` 能立刻掐掉
-     *    这层淡入（翻格自己有"新地皮放大填充"，两层叠在一起会糊成一团）。
+     *  · 在 `syncFlip` 之前 ⇒ 同格如果紧接着要翻格（随机资源格），`syncFlip` 里的
+     *    `hexSpawn.stop()` 能立刻掐掉这层淡入（翻格自己有"新地皮放大填充"，两层叠一起会糊）。
      */
     private syncHexSpawn(input: ITerritoryMapRenderInput, revealed: ReadonlySet<number>): void {
+        const progress = input.progress;
         if (!this.spawnBootstrapped) {
             this.revealedSnapshot.clear();
             for (const cellId of revealed) this.revealedSnapshot.add(cellId);
+            this.unlockedSnapshot.clear();
+            for (const cellId of revealed) {
+                if (progress.isCellUnlocked(cellId)) this.unlockedSnapshot.add(cellId);
+            }
             this.spawnBootstrapped = true;
             return;
         }
-        const fresh: { cellId: number; x: number; y: number; node: Node }[] = [];
+        // ① 先攒「本帧要进场的格」：新露出 ∪ 新解锁，去重。
+        const entered = new Set<number>();
         for (const cellId of revealed) {
-            if (this.revealedSnapshot.has(cellId)) continue;
+            if (!this.revealedSnapshot.has(cellId)) entered.add(cellId);
+        }
+        // 新解锁：这一帧才变 true 的格子（解锁前就已露出 ⇒ 上面那条看不见）。
+        for (const cellId of revealed) {
+            if (!progress.isCellUnlocked(cellId) || this.unlockedSnapshot.has(cellId)) continue;
+            entered.add(cellId);
+        }
+        // ② 再过滤成可播的节点
+        const fresh: { cellId: number; x: number; y: number; node: Node }[] = [];
+        for (const cellId of entered) {
             const node = this.hexNodes.get(cellId);
             if (!node) continue;
             // 正在翻的格子让给翻格（那条动画自带"新地皮从格心放大"）。
@@ -1449,6 +1743,10 @@ export class TerritoryMapView extends Component {
         }
         this.revealedSnapshot.clear();
         for (const cellId of revealed) this.revealedSnapshot.add(cellId);
+        this.unlockedSnapshot.clear();
+        for (const cellId of revealed) {
+            if (progress.isCellUnlocked(cellId)) this.unlockedSnapshot.add(cellId);
+        }
         if (fresh.length === 0) return;
         // 错峰只在**这一批**内部算（簇心 = 这批新格的包围盒中心），与场上其它格子无关。
         const delays = territoryHexSpawnDelays(fresh);
@@ -1612,6 +1910,10 @@ export class TerritoryMapView extends Component {
             const content = {
                 ...base,
                 iconScale: this.buildScaleOf(site, input.art),
+                // 四棵棕榈（69010~69013）走「底边对齐格心」而不是居中 —— 与 `iconScale` 同源
+                // 判据（`site.buildingId` 在地图 JSON 里是**字符串**，必须 `Number(...)`）。
+                // ⚠️ 判定函数从 `TerritoryStationView` 引入，白名单只留一份（这里抄 id 会口径分裂）。
+                bottomAnchor: territoryUsesBottomAnchor(Number(site.buildingId)),
                 // 开箱表演期间摘掉地图上那只（见 `chestPlayingCell`：不摘会在收尾淡出时透出来）。
                 icon: performing ? null : base.icon,
             };
@@ -1647,6 +1949,9 @@ export class TerritoryMapView extends Component {
                 iconScale: isOpened && Number.isFinite(buildingId)
                     ? input.art.buildScales?.get(buildingId) ?? 1
                     : 1,
+                // 与站点路同一条判定：`buildingId` 可能是 `undefined`（这一格没配建筑）⇒ 先挡非有限值，
+                // 否则 `undefined` 会一路传进白名单判定。
+                bottomAnchor: Number.isFinite(buildingId) && territoryUsesBottomAnchor(buildingId),
                 isCondition: !isOpened,
                 isLoading: isPending,
                 conditionIcon: input.art.randomSilverIcon,
@@ -1758,9 +2063,8 @@ export class TerritoryMapView extends Component {
         // ⚠️ 视图在 prefab 上（`TerritoryStation.prefab` 挂了 `TerritoryStationView`）。
         const view = node.getComponent(TerritoryStationView)!;
         view.initialize(this.getStationLayers());
-        // 站点点击：监听挂在**站点节点**上（随节点销毁自动清理），收到后在 `mapView.node`
-        // 上转发给页面。起始格不建监听（`ensureStartView` 走 `clickable = false` 也不发）。
-        node.on(TERRITORY_EVENTS.STATION_CLICK, this.onStationClick, this);
+        // 站点点击不再逐节点挂监听：全局订阅 `STATION_TAP` 一次（见 `onEnable`）。
+        // 起始格（`ensureStartView` 走 `clickable = false`）本来就不发。
         this.stationViews.set(site.cellId, view);
         return view;
     }
@@ -1772,7 +2076,7 @@ export class TerritoryMapView extends Component {
         // 点击反馈必须在**转发之前**播：页面收到事件会发请求，请求期间有全屏 loading 遮挡，
         // 反馈若排在后面就永远被挡住（等于没做）—— 规格要求「按下 0.1s 内看到反馈」。
         this.playTapFeedback(site.cellId);
-        this.node.emit(TERRITORY_EVENTS.STATION_CLICK, site);
+        EventMgr.instance.emit(TERRITORY_EVENTS.STATION_CLICK, site);
     };
 
     /** 起始格：唯一的固定实例（不可点、不池化），首次渲染时建。 */
@@ -1790,6 +2094,9 @@ export class TerritoryMapView extends Component {
 
     private getStationLayers(): ITerritoryStationLayers {
         if (this.stationLayers) return this.stationLayers;
+        // 气泡带点击入口，必须高于相邻站点的透明命中区，否则点编号会选中上一行的关卡。
+        const hitIndex = this.stationHitLayer.getSiblingIndex();
+        if (this.stationBadgeLayer.getSiblingIndex() < hitIndex) this.stationBadgeLayer.setSiblingIndex(hitIndex);
         this.stationLayers = {
             icon: this.stationIconLayer,
             caption: this.stationCaptionLayer,
@@ -1881,6 +2188,10 @@ export class TerritoryMapView extends Component {
             return {
                 site,
                 icon: this.stationIconOf(site, stage, input.art),
+                // 美术稿是 `1-1`：连字符两侧**不留空格**。间距由 `MAP_MARKER_BADGE_SPACING_X` 控，
+                // 字符串里塞空格的话，换字号 / 换字体时那个空格宽度会跟着漂。
+                levelBubble: stage ? `${stage.chapterId}-${stage.stage}` : undefined,
+                levelBubbleFrame: input.art.levelBubbleFrame ?? null,
                 isLoading: pending,
                 caption: '',
                 // 已通关不再显示解锁消耗，用「已通关」绿区分开（与 fixedResource 同口径）。

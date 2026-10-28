@@ -6,7 +6,7 @@ import ts from 'typescript';
 import { configureZCMap, ZC_HEX_CONFIG } from '../assets/script/app/zcds/model/ZCMapConfig';
 import { ZC_HEX_TOP_VERTICES } from '../assets/script/app/zcds/model/ZCHexTopGeometry';
 import { ZCNodePool } from '../assets/script/app/zcds/view/ZCNodePool';
-import { ZCBattlePhaseController } from '../assets/script/app/zcds/application/ZCBattlePhaseController';
+import { ZCBattlePhaseController, ZCBattlePhase } from '../assets/script/app/zcds/application/ZCBattlePhaseController';
 import { ZCPathWorkspace, ZCTargetingSystem } from '../assets/script/app/zcds/model/systems/ZCTargetingSystem';
 import { loadViews } from './helpers/zcds-view-fixtures';
 
@@ -498,7 +498,7 @@ test('特效节点按视觉类型复用，初始化重置，表现时间包含�
 
 test('复用单位和特效视觉子树，同时从头播放动画', () => {
     for (const name of ['ZCUnitView', 'ZCCombatEffectView']) {
-        const { load, FakeNode } = loadViews();
+        const { load, FakeNode, procedureGame } = loadViews();
         let created = 0, played = 0, stopped = 0;
         const prefab = { make: () => {
             created++;
@@ -510,35 +510,26 @@ test('复用单位和特效视觉子树，同时从头播放动画', () => {
         const view = new (load(`./${name}`)[name])();
         // ZCUnitView 的 visualRoot 是 prefab 绑定的固定容器（不再运行时兜底新建），桩按同一形态给一份。
         if (name === 'ZCUnitView') view.visualRoot = new FakeNode('VisualRoot');
-        view.initialize(prefab);
+        else view.graphics = { clear() {} };
+        const definition = { unitId: 'probe', prefabSize: 1 };
+        if (name === 'ZCUnitView') procedureGame.current = { resolveUnitPrefab: () => prefab };
+        view.initialize(name === 'ZCUnitView' ? definition : prefab);
         if (name === 'ZCUnitView') {
             assert.equal(view.visualRoot.position.y, 45.7);
             assert.equal(view.visualNode.parent, view.visualRoot, '兵种美术必须挂在脚点校准容器下');
         }
-        view.initialize(prefab);
+        view.initialize(name === 'ZCUnitView' ? definition : prefab);
         assert.equal(created, 1, name);
         assert.equal(played, 2, name);
         assert.ok(stopped >= 1, name);
         const previous = view.visualNode;
-        view.initialize(null);
+        if (name === 'ZCUnitView') procedureGame.current = null;
+        view.initialize(name === 'ZCUnitView' ? definition : null);
         assert.equal(previous.isValid, false, name);
     }
 });
 
-test('技能视觉只走 prefab：矢量绘制已全删，弹道仍每帧移动', () => {
-    // 2026-10-15：`pvpSkill.json` 43/43 行都填了 effectPrefabPath 且 prefab 全部入库
-    // ⇒ `visualNode` 恒非空，原来的 Graphics 兜底（弹道箭头 / 刀光 / area 椭圆）已删除。
-    // 这条判据钉住新口径：**没有 `moveTo/lineTo/ellipse/fill` 任何一处绘制调用**，
-    // 且清屏（graphics.clear）仍只在首帧与非弹道事件发生。
-    const src = readFileSync('assets/script/app/zcds/view/ZCCombatEffectView.ts', 'utf8');
-    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
-    for (const banned of ['moveTo', 'lineTo', 'ellipse', '.fill(', 'drawProjectileFallback', 'drawMeleeFallback']) {
-        assert.doesNotMatch(code, new RegExp(banned.replace(/[.()]/g, '\\$&')),
-            `矢量绘制已删干净，不该再出现 ${banned}`);
-    }
-    // 反向占位：确认不是「注释里说删了、代码还在」。
-    assert.match(code, /this\.graphics\.clear\(\)/, '仍应保留 clear（prefab 里可能烘焙了几何）');
-
+test('未启用渐进表现时缺失 Prefab 保持透明，弹道仍每帧移动', () => {
     const { load, FakeNode } = loadViews();
     const view = new (load('./ZCCombatEffectView').ZCCombatEffectView)();
     let clears = 0;
@@ -559,12 +550,12 @@ test('技能视觉只走 prefab：矢量绘制已全删，弹道仍每帧移动'
     view.render(event, 1);
     view.render(event, 1.5);
     // 首帧清一次；第二帧是 projectile ⇒ 不再清（与旧口径一致）。
-    assert.equal(clears, 1, '弹道每帧只移动，不每帧重画');
+    assert.equal(clears, 2, '初始化清一次，弹道首帧清一次，随后只移动');
     assert.deepEqual(drawn, [], '弹道移动不得触发任何矢量绘制');
     assert.equal(view.node.position.x, load('./ZCGameViewUtil').mapToViewX(5));
     // area 型同样不再画椭圆，但仍要清屏、仍要定位到命中点。
     view.render({ ...event, id: 2, type: 'area', radius: 3 }, 1);
-    assert.equal(clears, 2, '非弹道事件仍走一次 clear');
+    assert.equal(clears, 3, '非弹道事件仍走一次 clear');
     assert.deepEqual(drawn, [], 'area 型不得再画椭圆');
 });
 
@@ -620,12 +611,13 @@ test('游戏每帧更新动态表现，地块和 HUD 保持 0.15 秒节奏', () 
     const context = {
         exports: {} as any,
         require: (name: string) => name === 'cc' ? cc
-            : name === './application/ZCBattlePhaseController' ? { ZCBattlePhaseController }
+            : name === './application/ZCBattlePhaseController' ? { ZCBattlePhaseController, ZCBattlePhase }
                 : {},
     };
     const code = ts.transpileModule(readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true } }).outputText;
     runInNewContext(code, context);
     const game = new context.exports.ZCGame();
+    game.isValid = true;
     let ticks = 0, dynamic = 0, terrain = 0, hud = 0, drained = 0;
     const snapshot = { status: 'playing' };
     const event = { id: 1, hexId: 4 };

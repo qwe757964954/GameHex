@@ -4422,9 +4422,11 @@ message CmdPvpInfo {
 }
 
 // 战斗统计信息
+//事件类型1,怪物波次,塔防模式使用,k固定为0,v为波次数
+//事件类型2,伤害统计,kv中传入伤害,k固定为harm,v为伤害总数
 message CmdBattleStatisticsInfo {
   required uint32 unitId     = 1;//单元id
-  required uint32 eventType  = 2;//事件类型(1,怪物波次,塔防模式使用,k固定为0,v为波次数)
+  required uint32 eventType  = 2;//事件类型
   required uint32 frameId    = 3;//帧id(某一帧触发)
   repeated string kv         = 4;//k_v_k_v的形式(前端后约定)
 }
@@ -4647,6 +4649,16 @@ message CmdCityChapterCellInfoRspMsg {
    repeated uint64 passCells    = 4;//通关的格子集合(bitSet)
 }
 
+//slg玩法 据点角色展示信息
+message SlgGameCameRoleInfo {
+  required uint64 roleId    = 1; // 玩家Id
+  required uint64 serverId  = 2; // 玩家所在serverId
+  required string roleName  = 3; // 玩家名称
+  required uint64 img       = 4; // 玩家头像
+  required uint32 defenseHp = 5; // 血量
+  required uint32 pos       = 6; // 所在格子
+}
+
 //slg玩法 游戏信息
 message SlgGameInfo {
   required uint32 maxMonsterLevel = 1;//最大击杀的野怪等级
@@ -4736,9 +4748,39 @@ message CmdSlgGameInfoRspMsg {
    required SlgGameInfo info = 1;
 }
 
+//大地图 请求城池据点角色信息
+message CmdSlgCampRoleInfosReqMsg {
+  required uint32 campId = 1; // 据点id
+}
+
+//大地图 响应slg玩法信息
+message CmdSlgCampRoleInfosRspMsg {
+  required uint32 campId = 1; // 据点id
+  repeated SlgGameCameRoleInfo infos = 2;//角色信息
+}
+
+//大地图 请求迁城
+message CmdSlgCampMoveReqMsg {
+  required uint32 campId   = 1; //据点id
+  required uint32 pos      = 2; //下标
+  required uint32 moveType = 3; //移动类型,1常规移动
+}
+
+//大地图 响应迁城
+message CmdSlgCampMoveRspMsg {
+  required uint32 succ = 1; // 1成功
+  required CmdSlgCampMoveReqMsg req = 2;//请求信息
+}
+
 //大地图 广播slg玩法信息
 message CmdSlgGameInfoBroMsg {
    required SlgGameInfo info = 1;
+}
+
+//大地图 广播slg玩家信息
+message CmdSlgGameRoleInfoBroMsg {
+   required uint32 eventType = 1;//事件类型,1攻击,2复活,3移动,4出生
+   required SlgGameCameRoleInfo info = 2;//玩家信息
 }
 
 // ==================== 大地图(SLG) 建造系统协议 ====================
@@ -4827,6 +4869,16 @@ message CmdSlgBuildUnlockQueueRspMsg {
 // 大地图 广播建造信息
 message CmdSlgBuildInfoBroMsg {
 
+}
+
+// 玩家 请求点击界面
+message CmdGameViewClickReqMsg {
+  required uint32 mark = 1;      //编号 2世界
+}
+
+// 玩家 响应点击界面
+message CmdGameViewClickRspMsg {
+  required uint32 succ = 1;      //1成功
 }
 
 // 游戏接口ID类型枚举
@@ -5048,6 +5100,8 @@ enum MessageId {
     CmdSlgCampInfoRspMsg = 1665140602; //大地图 请求据点信息	
     CmdSlgActionUpdateRspMsg = 196069974; //大地图 请求行动力更新
     CmdSlgGameInfoRspMsg = 1100779337; //大地图 请求slg玩法信息	
+    CmdSlgCampRoleInfosRspMsg = 1756720515; //大地图 请求城池据点角色信息
+	CmdSlgCampMoveRspMsg = 1866377577; //大地图 请求迁城
     CmdSlgBuildInfoRspMsg = 1414628085; //大地图 请求建造信息
     CmdSlgBuildRspMsg = 455496637; //大地图 建造建筑
     CmdSlgBuildUpgradeRspMsg = 1255226437; //大地图 升级建筑
@@ -5055,6 +5109,7 @@ enum MessageId {
     CmdSlgBuildMoveRspMsg = 2116890094; //大地图 移动建筑
     CmdSlgBuildCollectRspMsg = 1353318189; //大地图 领取资源产出
     CmdSlgBuildUnlockQueueRspMsg = 1478251158; //大地图 解锁建造队列	
+    CmdGameViewClickRspMsg = 463153146; //玩家 请求点击界面
 	CmdSpiritAnimalLevelUpRspMsg = 2051518427; //灵兽升级
 	CmdSpiritAnimalStepUpRspMsg = 1991681903; //灵兽升阶
 	CmdSpiritAnimalBattleRspMsg = 1439043070; //灵兽上阵
@@ -5140,6 +5195,7 @@ enum MessageId {
 	CmdRechargeDailyUpdateBroMsg = 161909789; //每日充值数据刷新
 	CmdGuanKaGiftBroMsg = 915823971; //限时礼包
     CmdSlgGameInfoBroMsg = 1546899562; //大地图 广播slg玩法信息
+	CmdSlgGameRoleInfoBroMsg = 582176172; //大地图 广播slg玩家信息
     CmdSlgBuildInfoBroMsg = 1860748310; //大地图 广播建造信息
 	CmdTeamDetailBroMsg = 1366910774; //队伍详情广播
 	CmdTeamDisbandBroMsg = 2097470162; //队伍解散广播

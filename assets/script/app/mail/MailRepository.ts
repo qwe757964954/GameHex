@@ -83,15 +83,15 @@ export interface IMailTakeResult {
 
 export interface IMailRepository {
     /** 读一次界面要的全量数据（表 + 首次拉列表）。不抛。 */
-    load(caller?: unknown): Promise<IMailSnapshot>;
+    load(caller?: object): Promise<IMailSnapshot>;
     /** 重新拉列表（服务端 Rsp 是全量替换）。 */
-    reload(caller?: unknown): Promise<MailRequestResult>;
+    reload(caller?: object): Promise<MailRequestResult>;
     /** 读一封邮件的详情（服务端顺带标记已读）；失败返回 `null`。 */
-    readMail(id: string, caller?: unknown): Promise<IMailDetail | null>;
+    readMail(id: string, caller?: object): Promise<IMailDetail | null>;
     /** 批量删除。 */
-    deleteMails(ids: readonly string[], caller?: unknown): Promise<MailRequestResult>;
+    deleteMails(ids: readonly string[], caller?: object): Promise<MailRequestResult>;
     /** 批量领取；`rewards` 是**服务端回带**的那批（可能为空）。 */
-    takeRewards(ids: readonly string[], caller?: unknown): Promise<IMailTakeResult>;
+    takeRewards(ids: readonly string[], caller?: object): Promise<IMailTakeResult>;
 }
 
 /** 请求超时（与好友 / 礼包 / 首充 / 七日同口径：读 800ms / 写 5000ms）。 */
@@ -127,7 +127,7 @@ export class RuntimeMailRepository implements IMailRepository {
         return this.rows;
     }
 
-    async load(caller?: unknown): Promise<IMailSnapshot> {
+    async load(caller?: object): Promise<IMailSnapshot> {
         const [configRows, itemRows, propRows] = await Promise.all([
             readTable('gameConfig'),
             readTable('item'),
@@ -146,10 +146,10 @@ export class RuntimeMailRepository implements IMailRepository {
         };
     }
 
-    async reload(caller?: unknown): Promise<MailRequestResult> {
+    async reload(caller?: object): Promise<MailRequestResult> {
         return this.send(
             () =>
-                new RequestMailList({}, caller as any, (rsp: any) => {
+                new RequestMailList({}, caller, (rsp: any) => {
                     this.rows = normalizeMailRows(rsp?.tlCmdMailSimple);
                     this.fetched = true;
                 }),
@@ -157,13 +157,13 @@ export class RuntimeMailRepository implements IMailRepository {
         );
     }
 
-    async readMail(id: string, caller?: unknown): Promise<IMailDetail | null> {
+    async readMail(id: string, caller?: object): Promise<IMailDetail | null> {
         const mailId = toIdString(id);
         if (!mailId) return null;
         let detail: IMailDetail | null = null;
         const result = await this.send(
             () =>
-                new RequestMailRead({ id: mailId } as any, caller as any, (rsp: any) => {
+                new RequestMailRead({ id: mailId } as any, caller, (rsp: any) => {
                     detail = normalizeMailDetail(rsp?.cmdMail);
                     // 读一封会把它变成「已读」⇒ 顺手把列表快照里那条也标上，
                     // 免得关掉详情回到列表还显示「未读」（老端是 closeUI() 时重拉，两条路都对）
@@ -174,11 +174,11 @@ export class RuntimeMailRepository implements IMailRepository {
         return result === 'ok' ? detail : null;
     }
 
-    async deleteMails(ids: readonly string[], caller?: unknown): Promise<MailRequestResult> {
+    async deleteMails(ids: readonly string[], caller?: object): Promise<MailRequestResult> {
         const list = this.cleanIds(ids);
         if (!list.length) return 'failed';
         const result = await this.send(
-            () => new RequestMailDelete({ id: list } as any, caller as any),
+            () => new RequestMailDelete({ id: list } as any, caller),
             MAIL_WRITE_TIMEOUT_MS,
         );
         if (result === 'ok') {
@@ -189,13 +189,13 @@ export class RuntimeMailRepository implements IMailRepository {
         return result;
     }
 
-    async takeRewards(ids: readonly string[], caller?: unknown): Promise<IMailTakeResult> {
+    async takeRewards(ids: readonly string[], caller?: object): Promise<IMailTakeResult> {
         const list = this.cleanIds(ids);
         if (!list.length) return { result: 'failed', rewards: [] };
         let rewards: IMailReward[] = [];
         const result = await this.send(
             () =>
-                new RequestMailTakeReward({ id: list } as any, caller as any, (rsp: any) => {
+                new RequestMailTakeReward({ id: list } as any, caller, (rsp: any) => {
                     // ⚠️ `CmdMailTakeRewardRspMsg.tlReward` 是**裸 `CmdGoods[]`**（不是 `CmdGoodsList`）
                     FW.ShowReward(rsp?.tlReward ?? []);
                     rewards = mailRewardsOfArray(rsp?.tlReward);

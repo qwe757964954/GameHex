@@ -53,6 +53,10 @@ export function loadViews() {
         getComponent(type?: any) {
             if (this.components.has(type)) return this.components.get(type);
             if (type?.name === 'Graphics') return null;
+            // `UIOpacity` 必须与引擎同义：没挂过就是 null（视图按「懒挂」处理，
+            // 靠这个返回值决定要不要 `addComponent`）。这里若回退到下面那个通用桩，
+            // 每次 `getComponent` 都会给一个**新对象**，写进去的透明度当场就丢了。
+            if (type?.name === 'UIOpacity') return null;
             const node = this;
             return {
                 // 视图层按「本节点 UITransform 的 contentSize」决定绘制尺寸（吐司底 / 选点确认按钮
@@ -106,7 +110,11 @@ export function loadViews() {
         lineWidth = 1;
         lineCap = Graphics.LineCap.BUTT;
         strokeColor: Color | null = null;
-        commands: Array<{ kind: string; x?: number; y?: number; radius?: number; width?: number; height?: number }> = [];
+        commands: Array<{
+            kind: string; x?: number; y?: number; radius?: number; width?: number; height?: number;
+            /** `stroke()` 当时的线宽 / 颜色快照：一条线要叠多笔（外发光）时得逐笔断言。 */
+            lineWidth?: number; color?: { r: number; g: number; b: number; a: number } | null;
+        }> = [];
         fillColor: Color | null = null;
         clear() { this.commands = []; }
         moveTo(x: number, y: number) { this.commands.push({ kind: 'moveTo', x, y }); }
@@ -119,8 +127,20 @@ export function loadViews() {
         roundRect(x: number, y: number, width: number, height: number, radius: number) {
             this.commands.push({ kind: 'roundRect', x, y, radius, width, height });
         }
+        /** 直角矩形（血条扣血白条）：记录左下角与宽高。 */
+        rect(x: number, y: number, width: number, height: number) {
+            this.commands.push({ kind: 'rect', x, y, width, height });
+        }
         fill() { this.commands.push({ kind: 'fill' }); }
-        stroke() { this.commands.push({ kind: 'stroke' }); }
+        /** 与引擎同义：一笔 stroke 按**当前** lineWidth / strokeColor 生成，路径随即不再复用。 */
+        stroke() {
+            const color = this.strokeColor;
+            this.commands.push({
+                kind: 'stroke',
+                lineWidth: this.lineWidth,
+                color: color ? { r: color.r, g: color.g, b: color.b, a: color.a } : null,
+            });
+        }
     }
     class Material {
         isValid = true;
@@ -148,7 +168,13 @@ export function loadViews() {
         _decorator: { ccclass: () => (value: unknown) => value, property: () => () => {}, disallowMultiple: (value: unknown) => value },
         Color, Component: class { node = new FakeNode(); }, Animation: class {}, sp: { Skeleton: class {} }, Graphics, ProgressBar: class {},
         Sprite: class { static SizeMode = { CUSTOM: 0, TRIMMED: 1, RAW: 2 }; static Type = { SLICED: 0, TILED: 1, FILLED: 2, SIMPLE: 3 }; },
-        SpriteFrame: class {}, UITransform: class {}, Label: class {}, Material, Prefab: class {}, Node: FakeNode, Vec4, Vec2,
+        SpriteFrame: class {}, Label: class {}, Material, Prefab: class {}, Node: FakeNode, Vec4, Vec2,
+        /**
+         * 与引擎同义：`UIRenderer` 类组件（Graphics / Sprite）都强制带一份 `UITransform`，
+         * 运行时新挂节点时会 `setContentSize` 定绘制范围 —— 桩必须接得住，否则新挂画布的
+         * 代码路径在用例里会直接抛。
+         */
+        UITransform: class { contentSize = { width: 100, height: 100 }; setContentSize(width: number, height: number) { this.contentSize = { width, height }; } },
         /** 局部透明度（卡牌评语延迟出现 / 金币图标淡出都会懒挂它）。 */
         UIOpacity: class { opacity = 255; },
         Vec3: class {
@@ -203,9 +229,16 @@ export function loadViews() {
         // 没有目录信息的裸名字，本夹具的 `load()` 按名字查表 + 只认 `zcds/view|ui` 两个目录，
         // 会落到 `zcds/ui/EventBus.ts` 报「Missing view fixture module」并让整组用例一起红
         // （2026-10-16 事件中控落地时踩到）。显式映射一层，别让它去猜。
+        //  一组**同层 import** 的显式兜底：这些名字在 `zcds/view|ui` 目录下不存在，
+        //  而是别的层（model / framework）里的模块。坑在于 `load()` 只按名字查 `view|ui`，
+        //  于是**被 view 间接加载的 model 文件**（如 `ZCBattlePresentationQueue`）反手
+        //  `import './ZCNeutralBurst'` 时会去 `view/` 找一个不存在的文件 —— 症状是
+        //  「整组用例一起红 + 报 Missing view fixture module」，看起来像产品代码坏了。
+        //  （2026-10-26 金币喷发把 `ZCNeutralBurst` 引进时间轴模块后实测踩到。）
         const FRAMEWORK_FALLBACK: Record<string, string> = {
             './EventBus': 'assets/script/framework/event/EventBus.ts',
             './EventMgr': 'assets/script/framework/event/EventMgr.ts',
+            './ZCNeutralBurst': 'assets/script/app/zcds/model/ZCNeutralBurst.ts',
         };
         const relative = name.replace(/^\.\//, '');
         const viewPath = join('assets/script/app/zcds/view', `${relative}.ts`);

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 /**
  * `TerritoryStationView` 的三条硬约束：
  *  1. 四个视觉节点必须 reparent 到**共享 layer** 上（合批），并保留 prefab 的偏移；
@@ -15,16 +16,65 @@ import {
     FakeLabel,
     FakeNode,
     FakeSprite,
+    FakeUIOpacity,
     attach,
     loadTerritoryStationView,
     makeStationView,
     withTransform,
     type StationLayers,
     type StationView,
+    stationEmitLog,
 } from './helpers/territory-station-fixtures';
 
 /** 本文件只关心「节点摆放 + 排布」，名字沿用旧调用点。 */
 const loadStationView = loadTerritoryStationView;
+
+test('已解锁关卡气泡显示编号、贴在可见建筑上方，点击沿用站点事件且复用会隐藏', () => {
+    const { view, badge, icon } = makeStationView();
+    withTransform(badge, 88, 30);
+    const frame = { originalSize: { width: 128, height: 128 }, rect: { width: 100, height: 80 },
+        offset: { x: 8, y: -3 } };
+    const tint = new FakeColor(45, 150, 210, 255);
+    const bubbleFrame = { name: 'frame_03' };
+    view.setMapPosition(100, 200);
+    view.render({ site: {}, icon: frame, levelBubble: '12', levelBubbleFrame: bubbleFrame, caption: '', badge: '', tint, interactive: true });
+    assert.equal(badge.active, true);
+    assert.equal(view.badgeLabel.string, '12');
+    const bubble = badge.parent;
+    assert.ok(bubble && bubble.name === 'LevelBubble');
+    assert.equal(bubble.active, true);
+    const background = bubble.getComponent(FakeSprite) as FakeSprite | null;
+    assert.ok(background, '关卡气泡使用 Sprite 美术底图');
+    assert.equal(background.spriteFrame, bubbleFrame);
+    assert.equal(background.sizeMode, FakeSprite.SizeMode.CUSTOM);
+    assert.equal(background.trim, false);
+    assert.equal(background.type, FakeSprite.Type.SLICED);
+    assert.ok(background.color.equals(FakeColor.WHITE), '保留 frame_03 的蓝色原色');
+    view.setSpawnOpacity(0.5);
+    const opacity = (bubble as unknown as { getComponent(type: unknown): { opacity: number } }).getComponent(
+        FakeUIOpacity,
+    );
+    assert.equal(opacity.opacity, 128, '气泡背景与文字随站点一起渐入');
+    assert.equal(bubble.position.x, 100);
+    assert.ok(Math.abs(bubble.position.y - (200 + 80 * 0.84 / 2 + 25.5)) < 1e-9);
+    stationEmitLog.length = 0;
+    bubble.emit(FakeButton.EventType.CLICK);
+    assert.equal(stationEmitLog.length, 1, '气泡点击也派发原站点意图');
+    view.setMapPosition(50, 75);
+    assert.equal(bubble.position.x, 50);
+    assert.ok(Math.abs(bubble.position.y - (75 + 80 * 0.84 / 2 + 25.5)) < 1e-9);
+    view.render({ site: {}, icon: frame, levelBubble: '12', levelBubbleFrame: bubbleFrame, hidden: true, caption: '', badge: '', tint, interactive: true });
+    assert.equal(bubble.active, false, '建筑展示滞后时气泡必须一起隐藏');
+    view.render({ site: {}, icon: frame, levelBubble: '12', levelBubbleFrame: bubbleFrame, isLoading: true, caption: '', badge: '', tint, interactive: true });
+    assert.equal(bubble.active, false, '请求在途不留可点击的气泡');
+    view.render({ site: {}, icon: null, isCondition: true, conditionIcon: {}, caption: '399', badge: '', tint, interactive: true });
+    assert.equal(bubble.active, false, '条件格复用时不留关卡气泡');
+    view.render({ site: {}, icon: frame, caption: '', badge: '', tint, interactive: true });
+    assert.equal(bubble.active, false, '资源建筑不显示关卡编号');
+    assert.equal(icon.active, true);
+    view.dispose();
+    assert.equal(bubble.destroyCount, 1, '游离到共享层的气泡由站点统一释放');
+});
 
 test('station visuals move into contiguous global render layers and preserve prefab offsets', () => {
     const View = loadStationView();
@@ -139,8 +189,7 @@ test('station visuals move into contiguous global render layers and preserve pre
 test('地图不显示关卡名称及状态文字，复用后仍保留银币条件和站点交互', () => {
     const { view, icon, caption, text, badge, captionLabel, root } = makeStationView();
     const tint = new FakeColor(255, 255, 255, 255);
-    let clicked = 0;
-    root.on('territory:station-click', () => { clicked++; }, null);
+    stationEmitLog.length = 0;
     for (const frame of [null, { name: 'building' }, null]) {
         view.render({ site: {}, icon: frame, caption: '首领 5', tint, badge: '已通关', interactive: true });
         assert.equal(caption.active, false);
@@ -150,7 +199,13 @@ test('地图不显示关卡名称及状态文字，复用后仍保留银币条�
         assert.equal(view.iconSprite.enabled, frame !== null);
         root.emit(FakeButton.EventType.CLICK);
     }
-    assert.equal(clicked, 3, '隐藏文字不影响站点点击事件');
+    //  点击不再走节点事件（已改 `EventMgr`）：这里只守「handleClick 发的是 STATION_TAP」，
+    //  运行期派发由 `territory-tap-feedback` 与端到端覆盖。
+    assert.match(
+        readFileSync('assets/script/app/territory/view/TerritoryStationView.ts', 'utf8'),
+        /EventMgr\.instance\.emit\(TERRITORY_EVENTS\.STATION_TAP/,
+        '隐藏文字不影响站点点击事件：handleClick 必须发 STATION_TAP',
+    );
     view.render({ site: {}, icon: null, caption: '399', isCondition: true,
         conditionIcon: { name: 'silver' }, tint, badge: '', interactive: true });
     assert.equal(caption.active, true);

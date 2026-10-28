@@ -28,6 +28,30 @@ export class EventProxy<T extends number | string> extends ScriptObject {
     private _tmEvent: TMap<T, EventHelp>;
     // private _tmEventCaller: TMap<any, number>;
     tmEventCaller = new TMap<any, number>();
+    private readonly callerCleanups = new Map<object, Set<() => void>>();
+
+    addCallerCleanup(caller: object, cleanup: () => void): () => void {
+        if (this.destroyed) {
+            cleanup();
+            return () => {};
+        }
+        const cleanups = this.callerCleanups.get(caller) ?? new Set<() => void>();
+        cleanups.add(cleanup);
+        this.callerCleanups.set(caller, cleanups);
+        return () => {
+            cleanups.delete(cleanup);
+            if (cleanups.size === 0 && this.callerCleanups.get(caller) === cleanups) {
+                this.callerCleanups.delete(caller);
+            }
+        };
+    }
+
+    private releaseCallerCleanups(caller: object): void {
+        const cleanups = this.callerCleanups.get(caller);
+        if (!cleanups) return;
+        this.callerCleanups.delete(caller);
+        for (const cleanup of cleanups) cleanup();
+    }
 
     constructor() {
         super()
@@ -42,27 +66,15 @@ export class EventProxy<T extends number | string> extends ScriptObject {
         super.destroy()
     }
 
-    addNodeListener(event: T, caller: cc.Object, listener: Function): any {
-        this.addWithCaller(event, listener, caller)
-    }
-    addGObjectListener(event: T, caller: any, listener: Function) {
-        this.addWithCaller(event, listener, caller)
-    }
-    addListener(event: T, caller: destroyable, listener: Function): any {
+    addListener(event: T, caller: object, listener: Function): void {
         this.addWithCaller(event, listener, caller)
     }
 
-    removeNodeListener(event: T, caller: cc.Object, listener: Function): any {
-        this.removeWithCaller(event, listener, caller)
-    }
-    removeGObjectListener(event: T, caller: any, listener: Function) {
-        this.removeWithCaller(event, listener, caller)
-    }
-    removeListener(event: T, caller: destroyable, listener: Function) {
+    removeListener(event: T, caller: object, listener: Function): void {
         this.removeWithCaller(event, listener, caller)
     }
 
-    removeCallerListener(caller: any) {
+    removeCallerListener(caller: object) {
         let t = this;
         if (t.destroyed) {
             return
@@ -71,6 +83,7 @@ export class EventProxy<T extends number | string> extends ScriptObject {
 
         let num = t.tmEventCaller.get(caller)
         if (num == null || num <= 0) {
+            t.releaseCallerCleanups(caller);
             return
         }
 
@@ -85,6 +98,7 @@ export class EventProxy<T extends number | string> extends ScriptObject {
         if (num != null && num > 0) {
             t.error("有事件没清理removeCallerListener", num)
         }
+        t.releaseCallerCleanups(caller);
     }
 
 
@@ -108,12 +122,12 @@ export class EventProxy<T extends number | string> extends ScriptObject {
     }
 
     /**
-     * 添加destroyable的监听, destroyable 销毁后 自动解除监听
+     * 添加对象归属的监听；归属失效后停止派发，持有方仍须显式解绑。
      * @param event 事件类型
      * @param listener 回调
     * @param caller 对象,可以传空
      */
-    add(event: T, listener: Function, caller?: any) {
+    add(event: T, listener: Function, caller?: object) {
         if (this.destroyed) {
             return
         }
@@ -129,18 +143,18 @@ export class EventProxy<T extends number | string> extends ScriptObject {
         }
         return eventHelp.add(listener, caller)
     }
-    addWithCaller(event: T, listener: Function, caller: any) {
+    addWithCaller(event: T, listener: Function, caller: object) {
         this.assert(caller != null)
         this.add(event, listener, caller)
     }
 
     /**
-     * 添加destroyable的监听, destroyable 销毁后 自动解除监听
+     * 通过原处理函数与原归属对象解除监听。
      * @param event 事件类型
      * @param listener 回调
     * @param caller 对象,可以传空
     */
-    remove(event: T, listener: Function, caller?: any) {
+    remove(event: T, listener: Function, caller?: object) {
         if (this.destroyed) {
             return
         }
@@ -156,7 +170,7 @@ export class EventProxy<T extends number | string> extends ScriptObject {
         eventHelp.remove(listener, caller)
     }
 
-    removeWithCaller(event: T, listener: Function, caller: any) {
+    removeWithCaller(event: T, listener: Function, caller: object) {
         if (this.destroyed) {
             return
         }
@@ -179,6 +193,7 @@ export class EventProxy<T extends number | string> extends ScriptObject {
     }
 
     removeAll() {
+        if (this.destroyed) return;
         let t = this;
         if (t.destroyed) {
             return
@@ -191,6 +206,7 @@ export class EventProxy<T extends number | string> extends ScriptObject {
 
         // 清理tmEventCaller残留引用,避免僵尸引用累积
         t.tmEventCaller.clear()
+        for (const caller of [...t.callerCleanups.keys()]) t.releaseCallerCleanups(caller);
 
         let count = t.tmEventCaller.keys.length
         if (count > 0) {

@@ -1,5 +1,5 @@
 import { _decorator, Color, Component, Label, Sprite, SpriteFrame, UITransform } from 'cc';
-import { zcFactionColor } from './ZCTheme';
+import { ZC_CLIENT_COLORS, ZC_HUD_DEAD_AVATAR_TINT, zcFactionColor } from './ZCTheme';
 import { ZCOwner } from '../model/ZCMapConfig';
 
 /**
@@ -26,6 +26,11 @@ export interface IHudPlayerRowData {
     /** 两个 buff 的帧（null 各自隐藏）。 */
     readonly buffA: SpriteFrame | null;
     readonly buffB: SpriteFrame | null;
+    /**
+     * 该玩家**已被击杀**（地块清零）⇒ 头像与席位圆盘压黑（2026-10-27 需求）。
+     * 只改颜色，不改名字色：名字仍按席位色，「这是谁」不会因为出局而丢失。
+     */
+    readonly dead: boolean;
 }
 
 @ccclass('ZCGameHudPlayerRow')
@@ -78,6 +83,14 @@ export class ZCGameHudPlayerRow extends Component {
     disc04: SpriteFrame = null!;
 
     /**
+     * 上一次写进去的「已出局」状态（`null` = 还没写过）。
+     *
+     * 颜色是乘进顶点色的：每帧重写同一个值也会把材质标脏，所以只在**状态翻转**时写一次。
+     * 行节点由虚拟列表复用，缓存与节点上实际颜色永远同步（一起被复用、一起被重写）。
+     */
+    private appliedDead: boolean | null = null;
+
+    /**
      * 全量赋值（列表刷新每帧调）。条目复用（虚拟列表回收），字段必须显式写、
      * 不能"没变就跳过"，否则残留上一席的显示。
      */
@@ -95,6 +108,16 @@ export class ZCGameHudPlayerRow extends Component {
 
         // 头像：没帧就保留上一张（清空会变成空框）。
         if (data.head) this.headIcon.spriteFrame = data.head;
+
+        // 被击杀 ⇒ 头像 + 席位圆盘一起压黑（美术稿：整圈变暗，脸只剩轮廓，名字仍亮）。
+        // 圆盘也压：出局席位不该再靠席位色抢注意力，且名字色已经承担了"这是谁"。
+        const dead = data.dead === true;
+        if (dead !== this.appliedDead) {
+            this.appliedDead = dead;
+            const avatarTint = dead ? ZC_HUD_DEAD_AVATAR_TINT : ZC_CLIENT_COLORS.white;
+            this.headFrame.color = avatarTint;
+            this.headIcon.color = avatarTint;
+        }
 
         // 名字：文字 + 席位色。
         this.nameText.string = data.name;

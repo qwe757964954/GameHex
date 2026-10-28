@@ -26,6 +26,7 @@ import {
     ROLE_PROPERTY_TABLE,
     parseResKeys,
     resBarCellOfRefId,
+    resBarIconSpritePath,
     resIconArt,
     resIconOfKey,
     resIconRoot,
@@ -291,4 +292,78 @@ test('GIFT_RES_ICON_ART 覆盖的 resId 都在真表里（含补上的 8 洗炼�
     for (const resId of Object.keys(GIFT_RES_ICON_ART)) {
         assert.ok(resKeyOfRefId(PROP_ROWS, Number(resId)) !== '', `${resId} 在 roleProperty 表里查不到 key`);
     }
+});
+
+// ── 装配路径（`resBarIconSpritePath`） ──────────────────────────────────
+//
+// 两支 `icon` 的拼法**不一样**，混用就是「有表、有图、但取不到图」：
+//   · `roleProperty` 存 FGUI 裸名 `图标_铜币`  → `<resIconRoot(name)>/name/spriteFrame`（首包）
+//   · `item`       存相对**分包**的路径 `icons/item/图标_兵书弓兵` → `path/spriteFrame`（main-pages）
+//
+// 2026-10-26 的领地随机格就是这个坑：`ensureRewardIcon` 连 `item` 表都没查，
+// 道具（兵种经验等）全解析成 `unknown`；就算查到，`assets.load(cell.icon)` 也必然失败
+// （少 `/spriteFrame` + 图根本不在 `resources` 里）⇒ 飘字没图标、喷发粒子全空。
+
+/** `main-pages` 分包的实盘根（`BundleCatalog.MAIN_PAGES_BUNDLE`）。 */
+const MAIN_PAGES = 'assets/bundles/main-pages';
+
+/** 装配路径 → 实盘 png（`xxx/spriteFrame` 对应 `xxx.png`）。 */
+const iconPng = (path: string): string => `${path.replace(/\/spriteFrame$/, '')}.png`;
+
+test('图标路径：roleProperty 裸名 → 首包目录；三张例外走覆盖表', () => {
+    assert.equal(
+        resBarIconSpritePath(resBarCellOfRefId(7, PROP_ROWS, ITEM_ROWS)),
+        `${RESOURCE_ICON_ART_ROOT}/图标_铜币/spriteFrame`,
+        '银币 7 的图在 icons/resource',
+    );
+    // 三张不在 `icons/resource` 的例外：路径必须跟着覆盖表走，且实盘对得上。
+    const exceptions: Array<[number, string]> = [
+        [3, '图标_经验值'],
+        [13, '图标_联盟贡献'],
+        [14, '图标_补天神石'],
+    ];
+    for (const [resId, name] of exceptions) {
+        const path = resBarIconSpritePath(resBarCellOfRefId(resId, PROP_ROWS, ITEM_ROWS));
+        assert.equal(path, `${resIconRoot(name)}/${name}/spriteFrame`, `resId ${resId} 的目录不对`);
+        assert.ok(existsSync(`${RESOURCES}/${iconPng(path)}`), `resId ${resId} 的图实盘缺失：${path}`);
+    }
+});
+
+test('图标路径：item 走**分包** `main-pages`，且后缀幂等', () => {
+    // 16001 精灵弓箭手 → icons/item/图标_兵书弓兵（这就是随机格发的那类奖励）
+    const cell = resBarCellOfRefId(16001, PROP_ROWS, ITEM_ROWS);
+    assert.equal(cell.kind, 'item', '16001 只登记在 item 表里');
+    const path = resBarIconSpritePath(cell);
+    assert.equal(path, 'icons/item/图标_兵书弓兵/spriteFrame');
+    assert.ok(
+        existsSync(`${MAIN_PAGES}/${iconPng(path)}`),
+        'item 的图不在 resources，必须在 main-pages 分包里（assets/bundles/main-pages/icons/item/…）',
+    );
+    // 幂等：`icon` 已经带后缀时不许拼成 `…/spriteFrame/spriteFrame`。
+    assert.equal(
+        resBarIconSpritePath({ ...cell, icon: 'icons/item/图标_兵书弓兵/spriteFrame' }),
+        'icons/item/图标_兵书弓兵/spriteFrame',
+    );
+    // 解析不出就给空串（调用方据此"只让那一枚没图"，不抛）。
+    assert.equal(resBarIconSpritePath(resBarCellOfRefId(987654, PROP_ROWS, ITEM_ROWS)), '');
+    assert.equal(resBarIconSpritePath(null), '');
+});
+
+test('图标路径：item 全表逐行对实盘（首包或 main-pages 至少一处有图）', () => {
+    const noArt: number[] = [];
+    for (const row of ITEM_ROWS) {
+        const path = resBarIconSpritePath(resBarCellOfRefId(row.resId, [], ITEM_ROWS));
+        if (!path) continue; // 表里没填 icon 的行（当前 11 行）—— 只能飘数字
+        assert.match(path, /^icons\/[^/]+\/.+\/spriteFrame$/, `${row.resId} 的路径形状不对：${path}`);
+        assert.doesNotMatch(path, /spriteFrame\/spriteFrame/, `${row.resId} 后缀拼重了`);
+        if (!existsSync(`${RESOURCES}/${iconPng(path)}`) && !existsSync(`${MAIN_PAGES}/${iconPng(path)}`)) {
+            noArt.push(Number(row.resId));
+        }
+    }
+    // 容差 = 「表里没填 icon 的行」+ 真正的美术缺口，**不许再涨**。
+    // 涨了说明有道具的图两边都没有 ⇒ 随机格奖励会飘一个没有图标的 `+N`，及时催美术。
+    assert.ok(
+        noArt.length <= 12,
+        `item 表里有 ${noArt.length} 行的美术两边都缺：${noArt.slice(0, 20).join(', ')}`,
+    );
 });

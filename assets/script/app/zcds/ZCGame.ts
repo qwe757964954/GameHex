@@ -1,6 +1,8 @@
 import {
     _decorator,
     Component,
+    Director,
+    director,
     instantiate,
     Node,
     SpriteFrame,
@@ -39,13 +41,13 @@ import { GameRoute } from '../../core/runtime/GameRoute';
 import { ProcedureManager } from '../../framework/procedure/ProcedureManager';
 import { PopupCloseReason, PopupLayer } from '../../framework/ui/PopupDef';
 import { finishBattle, BATTLE_RESULT_WIN, BATTLE_RESULT_LOSE } from '../battle/BattleStartService';
+import { buildDamageStatistics } from '../battle/BattleStatisticsModel';
 // 章节战斗的结算奖励走服务端广播（`CmdBattleResultBroMsg` 1002），不在 `finishBattle` 回包里。
 import { BattleResultService } from '../battle/BattleResultService';
 import type { IZCChapterBattleOutcome } from '../battle/BattleResultService';
 import type { IZCSlgBattleType } from '../battle/BattleStartModel';
 import { resolveCmdGoodsFrames } from '../showReward/RewardFrames';
-import { itemNumberTextOf } from '../itemdetail/ItemDetailTable';
-import type { IZCSettlementReward } from './ui/ZCSettlementPage';
+import type { IZCSettlementOptions, IZCSettlementReward } from './ui/ZCSettlementPage';
 import { HeadArt } from '../HeadArt';
 
 const { ccclass } = _decorator;
@@ -93,6 +95,13 @@ export class ZCGame extends Component {
     private hudView: ZCGameHUDView | null = null;
     private playerAvatars: Readonly<{ player: string; enemy: string }> | null = null;
     private seatProfiles: Map<ZCOwner, IRankSeatProfile> = new Map();
+    /**
+     * 席位 → 服务端战斗单元 id（`CmdBattleUnitInfo.unitId`），结算上报伤害统计时用来归属。
+     *
+     * 与 `seatProfiles` 同一份分配逻辑派生（`ProcedureGame` 用 `buildSeatUnitIds`）。
+     * 本地局（无服务端 `battle.units`）为空表 ⇒ 上报的 `unitId` 只能是 0。
+     */
+    private seatUnitIds: Map<ZCOwner, number> = new Map();
     private pveContext: IZCGamePveContext | null = null;
     private slgBattleType: IZCSlgBattleType | null = null;
     private initialized = false;
@@ -130,10 +139,24 @@ export class ZCGame extends Component {
     private spawnConfigWasStaged = false;
     /** 结算页（蓝湖「结算-胜利」/「结算-失败」）。伤害统计另走 `damagePopup`（GameRunAway）。 */
     private settlementPopup: ZCSettlementPage | null = null;
+    /**
+     * 最近一次结算页的 userData —— 「确定」先关页、再切流程，切流被取消时靠这份**原样重开**。
+     *
+     *  只写不读于其它路径；`shutdown()` 里清空（换局后不该再拿上一局的奖励格重开）。
+     */
+    private settlementOptions: IZCSettlementOptions | null = null;
+    /**
+     * 「确定」后那一次流程切换落定订阅的退订函数。
+     *
+     *  `ProcedureManager.onSwitchSettled` 是**非一次性**订阅（一次订阅跨多次切换），
+     *  订阅方必须自己退订，否则每次点确定都往回调表里塞一条。
+     */
+    private stopSettlementSwitchWatch: (() => void) | null = null;
     private damagePopup: GameRunAway | null = null;
     private guidePopup: ZCGuidePanel | null = null;
     /** 对局内排行榜弹窗（蓝湖「排行榜」）；与伤害统计同构，离场强制关。 */
     private rankPopup: ZCGameRankBoard | null = null;
+    private deferredAfterDraw: (() => void) | null = null;
     private preparedResources: ZCGamePreparedResources | null = null;
     /**
      * 本局角色卡面图（卡表 `headIcon` → `icons/cardHead/**`）；异步加载，整局一份。
@@ -167,6 +190,7 @@ export class ZCGame extends Component {
         this.battleSeed = entry.battleSeed;
         this.matchConfig = entry.matchConfig;
         this.seatProfiles = new Map(entry.seatProfiles);
+        this.seatUnitIds = new Map(entry.seatUnitIds ?? []);
         this.pveContext = entry.pveContext;
         this.slgBattleType = entry.slgBattleType ?? null;
         this.playerAvatars = entry.playerAvatars;
@@ -261,8 +285,15 @@ export class ZCGame extends Component {
      */
     shutdown(): void {
         if (!this.phase.leave()) return;
+        if (this.deferredAfterDraw) director.off(Director.EVENT_AFTER_DRAW, this.deferredAfterDraw);
+        this.deferredAfterDraw = null;
         this.settlementPopup?.close(PopupCloseReason.Force);
         this.settlementPopup = null;
+        // 「确定」那条「切流被取消就重开」的兜底订阅也要退：人都走了还补一页结算是反效果。
+        this.stopSettlementSwitchWatch?.();
+        this.stopSettlementSwitchWatch = null;
+        // 口令随局清空 —— 不做的话换局后迟到的那次重开会拿上一局的奖励格弹出来。
+        this.settlementOptions = null;
         this.damagePopup?.close(PopupCloseReason.Force);
         this.damagePopup = null;
         this.guidePopup?.close(PopupCloseReason.Force);
@@ -293,6 +324,7 @@ export class ZCGame extends Component {
         this.pveContext = null;
         this.slgBattleType = null;
         this.seatProfiles.clear();
+        this.seatUnitIds.clear();
     }
 
     /**
@@ -489,8 +521,11 @@ export class ZCGame extends Component {
             unitOutlineCopyEffect: prepared.unitOutlineCopyEffect,
             hexGroundGlowFrames: prepared.hexGroundGlowFrames,
             hexPulseFrames: prepared.hexPulseFrames,
+            // 神器领取的格心蓝色爆炸（18 帧序列帧）。
+            artifactClaimBurstFrames: prepared.artifactClaimBurstFrames,
             effectPrefab: prepared.effectPrefab,
             effectVisualPrefabs: prepared.effectVisualPrefabs,
+            allowGenericEffects: !!prepared.loadDeferredArt,
             floatTextPrefab: prepared.floatTextPrefab,
             cardRevealPrefab: prepared.cardRevealPrefab,
             legendBannerPrefab: prepared.legendBannerPrefab,
@@ -500,11 +535,10 @@ export class ZCGame extends Component {
             artifactIconFrame: prepared.artifactIconFrame,
             // 自选地图局的中立资源格盖成问号（资源进游戏才随机，别剧透是箱子还是金矿）。
             unknownResourceFrame: prepared.unknownResourceFrame,
-            // 中立资源获取特效：金币 / 神器从格子飞向 HUD 的对应栏位。
+            // 中立资源获取特效：格子上喷发的金币贴图（`image/map-resource/coin_icon`）。
             goldCoinFrame: prepared.goldCoinFrame,
             // 自选主城区域气泡底图（frame_01 绿 / frame_02 红，九宫格）。
             spawnRegionFrames: prepared.spawnRegionFrames,
-            goldCounterNode: this.hudView.goldIcon,
             artifactButtonNode: this.hudView.artifactButton.node,
             decorPrefab: prepared.decorPrefab,
             spawnFxPrefab: prepared.spawnFxPrefab,
@@ -537,6 +571,31 @@ export class ZCGame extends Component {
         }
         // 自选主城阶段还没有模型，自由装饰直接从本局地图配置读取。
         this.installMapDecor(setupConfig.map, prepared.decorFrames);
+        this.scheduleDeferredArt(prepared, setupConfig.map);
+    }
+
+    private scheduleDeferredArt(prepared: ZCGamePreparedResources, map: ZCMatchMap): void {
+        const load = prepared.loadDeferredArt;
+        if (!load) return;
+        const isCurrent = (): boolean => !this.leaving && this.isValid && this.preparedResources === prepared;
+        const afterDraw = (): void => {
+            this.deferredAfterDraw = null;
+            if (!isCurrent()) return;
+            console.info('[BattleLoading] 首帧已绘制，开始后补特效');
+            let decorFrames = prepared.decorFrames;
+            void load(art => {
+                if (!isCurrent()) return;
+                this.renderWorld.applyDeferredArt(art);
+                if (art.decorFrames !== decorFrames) {
+                    decorFrames = art.decorFrames;
+                    this.installMapDecor(map, decorFrames);
+                }
+            }).catch(error => {
+                if (isCurrent()) console.warn('[BattleLoading] 后补特效中断', error);
+            });
+        };
+        this.deferredAfterDraw = afterDraw;
+        director.once(Director.EVENT_AFTER_DRAW, afterDraw);
     }
 
     /** 从 `art.freeDecor` 铺纯表现装饰；不依赖模型，也不参与格子规则。 */
@@ -864,40 +923,61 @@ export class ZCGame extends Component {
         //  两段等待（等广播 / 等奖励图）都跨 `await`，期间玩家可能已经退出对局（`shutdown()`）⇒
         // **一个判据**收口：离场就不再弹页（真弹了再靠 `.then` 关会闪一帧结算页）。
         if (this.leaving) return;
-        ZCSettlementPage.open({
+        const options: IZCSettlementOptions = {
+            victory: result ? result.code === BATTLE_RESULT_WIN : localVictory,
+            rewards,
+            ...(result?.warScore !== undefined ? {
+                rankName: '战功',
+                scoreText: String(result.warScore),
+                addScoreText: `+${result.warScore}`,
+                rankHint: `本次战斗获得 ${result.warScore} 战功`,
+            } : {}),
+        };
+        // 留一份口令：点「确定」时页面会**先关掉**再切流程，切流若被取消要靠它原样重开。
+        this.settlementOptions = options;
+        void this.openSettlementPopup(options);
+    }
+
+    /**
+     * 把结算页弹出来（首次弹与「切流被取消后重开」共用这一条）。
+     *
+     *  `.then` 里两道闸：
+     *   · `leaving` —— 建页期间玩家已离场（`shutdown()` 只关得到已经在手上的那个句柄）；
+     *   · 已经拿过句柄 —— 重开与首次弹只允许有一个活实例，后到的自己关掉
+     *     （否则两次 `open` 都兑现 ⇒ 屏上叠两个结算页，关一个还剩一个）。
+     */
+    private openSettlementPopup(options: IZCSettlementOptions): Promise<void> {
+        return ZCSettlementPage.open({
             layer: PopupLayer.SYSTEM,
             closeOnBlank: false,
-            userData: {
-                victory: result ? result.code === BATTLE_RESULT_WIN : localVictory,
-                rewards,
-                ...(result?.warScore !== undefined ? {
-                    rankName: '战功',
-                    scoreText: String(result.warScore),
-                    addScoreText: `+${result.warScore}`,
-                    rankHint: `本次战斗获得 ${result.warScore} 战功`,
-                } : {}),
-            },
+            userData: options,
         }).then((popup) => {
-            if (this.leaving) popup?.close(PopupCloseReason.Force);
-            else this.settlementPopup = popup;
+            if (!popup) return;
+            if (this.leaving || (this.settlementPopup && this.settlementPopup !== popup)) {
+                popup.close(PopupCloseReason.Force);
+                return;
+            }
+            this.settlementPopup = popup;
         }).catch((error) => {
             if (ZCDC_LOG_WARNINGS) console.error('[ZCGame] 打开结算弹窗失败', error);
         });
     }
 
     /**
-     * 章节战斗的通关奖励：等广播 → `CmdGoods[]` → 奖励格（帧已加载好）。
+     * 章节战斗的通关奖励：等广播 → `CmdGoods[]` → 奖励格数据。
      *
-     * 帧的解析链与「获得奖励」弹窗**共用一份**（`RewardFrames`）：`item`/`roleProperty`
-     * 两张表都查，品质框按 `quality` 换档 —— 两表都查不到时退化成「品质 1 + 无图标」。
+     * 宿主只喂 `resId` + `amount`，图标 / 品质框 / 数量由公共 `RewardItemView` 自己解析
+     * （与宝箱详情、关卡界面、玩家关卡弹窗共用同一份口径）。
+     *
+     * ⚠️ **排序仍走共用的 `RewardFrames`**（品质降序、同品质 resId 升序）：排序是**展示口径**，
+     * 与格子自己怎么画无关 —— 换公共格子不改变奖励的排列顺序。
      */
     private async loadChapterRewards(result: IZCChapterBattleOutcome): Promise<IZCSettlementReward[]> {
         if (result.goods.length === 0) return [];
         const resolved = await resolveCmdGoodsFrames(result.goods);
-        return resolved.map(({ entry, frames }) => ({
-            qualityFrame: frames.qualityFrame,
-            iconFrame: frames.iconFrame,
-            number: itemNumberTextOf(entry.number),
+        return resolved.map(({ entry }) => ({
+            resId: entry.resId,
+            amount: entry.number,
         }));
     }
 
@@ -913,9 +993,55 @@ export class ZCGame extends Component {
         if (!this.leaving) this.returnToMain();
     }
 
-    /** 结算页「确定」：回主界面（终局与主动撤退共用同一条收尾）。 */
+    /**
+     * 结算页「确定」：**先把页面收掉**，再回主界面（终局与主动撤退共用同一条收尾）。
+     *
+     * ## 为什么先关（2026-10-27 山猫：「点击确定关闭的时候，优先把弹窗关闭」）
+     *
+     * `ProcedureManager.navigate` 是「**预加载 → 进入**」两段：主界面预加载那几百毫秒里
+     * 当前界面**原地不动**。而结算页原先要等到 `onLeave → shutdown()` 才被 `close(Force)`
+     * —— 玩家点完确定，一整段预加载期间弹窗还杵在屏上，体感就是「点了没反应」。
+     * 现在收尾的第一拍就把页面关掉（`close` 是同步的：`_internalClose` + `destroy`，
+     * 当帧消失），预加载在后面静默跑完。
+     *
+     * ## 关页必须配一条兜底，否则就是卡死
+     *
+     * 切流可能被取消（预加载失败 / 被另一次切换顶掉），而 `phase` 这时已是 `Settlement`
+     * ⇒ `openSettlement` 再也进不来。页面没了、人还留在对局里 = 死局。
+     * 所以订阅 `onSwitchSettled`，`entered === false` 时把页面按**同一份 userData** 补回来。
+     *
+     * ⚠️ 该订阅**不是一次性的**（一次订阅跨多次切换），回调里第一件事就是 `stop()`；
+     * 回调在 `onLeave` **之前**同步执行 —— 那时宿主还活着，重开是安全的。
+     */
     private onSettlementConfirm(): void {
-        if (!this.leaving) this.returnToMain();
+        if (this.leaving) return;
+        this.closeSettlementPopup();
+        this.stopSettlementSwitchWatch?.();
+        const stop = ProcedureManager.onSwitchSettled((entered) => {
+            stop();
+            if (this.stopSettlementSwitchWatch === stop) this.stopSettlementSwitchWatch = null;
+            if (!entered) this.reopenSettlement();
+        });
+        this.stopSettlementSwitchWatch = stop;
+        this.returnToMain();
+    }
+
+    /** 收掉结算页句柄（句柄先摘再关：关闭回调里若重开，不该被这个旧句柄挡住）。 */
+    private closeSettlementPopup(): void {
+        const popup = this.settlementPopup;
+        this.settlementPopup = null;
+        popup?.close(PopupCloseReason.Manual);
+    }
+
+    /**
+     * 切流没落定：把刚收掉的结算页**原样补回来**。
+     *
+     *  `settlementOptions` 是首次弹出时留的那份（奖励帧已解析好，重开不用再等广播）；
+     *  没有口令 / 已有活页面 / 已离场，一律不动。
+     */
+    private reopenSettlement(): void {
+        if (this.leaving || !this.settlementOptions || this.settlementPopup) return;
+        void this.openSettlementPopup(this.settlementOptions);
     }
 
     private returnToMain(): void {
@@ -930,15 +1056,31 @@ export class ZCGame extends Component {
         ProcedureManager.navigate(GameRoute.Main);
     }
 
-    /** 把本局伤害汇总转成 CmdBattleStatisticsInfo 上报给服务端。 */
+    /**
+     * 把本局伤害汇总转成 `CmdBattleStatisticsInfo` 上报给服务端。
+     *
+     * ## 协议口径（r862 服务端补注释，别自己发明）
+     *
+     * - `eventType` 必须是 **2（伤害统计）**。1 是「怪物波次（塔防模式）」，PVP 局不适用 ——
+     *   旧实现拿 1 报伤害，服务端会按"波次数"去解析 `kv`；
+     * - `kv` 是 **`[k, v]` 扁平字符串数组**，key 固定 `'harm'`，v 是**伤害总数**（转字符串）；
+     * - `unitId` 取该席位的**服务端单元 id**（`seatUnitIds`），服务端靠它把统计归到单元；
+     *   本地局没有服务端 id 时才是 0；
+     * - `frameId` 恒 0 —— 伤害是整局汇总，不属于"某一帧触发"。
+     *
+     * **每个参战单元一条**：协议里一条只承载一个 `unitId` 的伤害，把四方合成一条
+     * 等于让服务端把所有人的伤害都记到第一个 id 上。
+     *
+     * 只上报"造成"（`dealt`），不上报"承受" —— 协议只定义了 `harm` 一个 key，
+     * 多塞自定义 key 服务端不认（旧实现的 `player_dealt` / `enemy_taken` 就是这么废掉的）。
+     */
     private buildStatistics(): CmdBattleStatisticsInfo[] {
         const stats = this.model.damageStats;
-        const opponents = Object.entries(stats).filter(([owner]) => owner !== ZCOwner.Player);
-        const enemyDealt = opponents.reduce((total, [, v]) => total + v.dealt, 0);
-        const enemyTaken = opponents.reduce((total, [, v]) => total + v.taken, 0);
-        return [
-            { unitId: 0, eventType: 1, frameId: 0, kv: ['player_dealt', String(stats.player.dealt), 'player_taken', String(stats.player.taken), 'enemy_dealt', String(enemyDealt), 'enemy_taken', String(enemyTaken)] },
-        ];
+        const rows: { unitId: number; harm: number }[] = [];
+        for (const owner of this.model.owners) {
+            rows.push({ unitId: this.seatUnitIds.get(owner) ?? 0, harm: stats[owner].dealt });
+        }
+        return buildDamageStatistics(rows);
     }
 
     private damageSummary() {

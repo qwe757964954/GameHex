@@ -33,6 +33,26 @@ tools\map-editor\copy-territory-maps.bat --id chapter_02
 
 客户端静态模型位于 `assets/script/app/territory/model/TerritoryMapConfig.ts`。玩家占据、探索中、停用等进度状态不写进静态地图 JSON，应由后续 `TerritoryProgress` 运行时模型保存。
 
+### 随机站点的逐格建筑 ID（2026-10-27 批量填充）
+
+右侧「随机站点（所选格）→ 建筑 ID」写的是 `randomSites.buildingIds`（`{"<cellId>": "<建筑ID>"}`），
+**只对单个据点的候选格生效**；留空 = 该格统一交给奖励池。空串会被校验丢掉，等于"不写这个键"。
+
+逐格填 400+ 个格子不适合手点，用脚本按比例铺：
+
+```powershell
+python tools/map-editor/randomize_random_sites.py --dry-run          # 先看统计
+python tools/map-editor/randomize_random_sites.py                    # chapter_01~07 全跑
+python tools/map-editor/randomize_random_sites.py --id chapter_03 --ratio 0.8 --seed 7
+python tools/map-editor/randomize_random_sites.py --building-ids 69008-69015 --no-publish
+```
+
+- 名额 = `round(候选格 × --ratio)`，**先定名额再随机挑格**（52 格的小图逐格抛硬币会漂到 77%/92%）；
+- 每格从 `--building-ids` 里均匀抽 1 个，默认 `69008-69015` = `territory_decor_01_v1 … _08_v1`；
+- 只认 `chapter_\d{2}`，`chapter_smile` 这类试验图不会被顺手改；
+- 改完依次落三处：预设（`indent=2` + LF）、`copy_territory_maps.copy_one`（资源目录 + 策划 JSON）、
+  `assets/remoteRef/`（与 `tools/ref/ref_compress_json.py` 同款 `indent=0` 紧凑格式）。
+
 ---
 
 ## 六边几何与笔刷（2026-10-20 统一）

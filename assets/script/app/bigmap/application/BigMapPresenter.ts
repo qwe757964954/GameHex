@@ -15,10 +15,12 @@ import {
     type IBigMapBaseState,
     type IBigMapWorld,
     type IBigMapMonsterBattleConfig,
+    type IBigMapBuildingConfig,
 } from '../model/BigMapTypes';
 import {
     bigMapBuildingCountWithQueue,
     bigMapCanAfford,
+    bigMapCanMove,
     bigMapCanPlace,
     bigMapCanUpgrade,
     bigMapCancelQueue,
@@ -27,6 +29,7 @@ import {
     bigMapHarvestAll,
     bigMapMainBuilding,
     bigMapMainLevel,
+    bigMapMove,
     bigMapPendingHarvest,
     bigMapProducePerHour,
     bigMapResCap,
@@ -60,6 +63,8 @@ import { buildBigMapWorldFromLayout, type IBigMapLayout } from '../model/BigMapL
 import type { ITerritoryColorRegion } from '../model/BigMapTerritoryColor';
 import type { IBigMapCampInfo } from '../model/BigMapCampInfo';
 import { BIGMAP_CAMP_QUERY_TEXT } from '../model/BigMapCampInfo';
+import type { IBigMapCampRoleInfo, BigMapCampRoleStatus } from '../model/BigMapCampRoleInfo';
+import { BIGMAP_CAMP_MOVE_TEXT } from '../model/BigMapCampMove';
 import type { BigMapCampRepository } from './BigMapCampRepository';
 import type { BigMapSlgRepository } from './BigMapSlgRepository';
 import { projectBigMapServerBase } from '../model/BigMapServerState';
@@ -96,6 +101,12 @@ export interface IBigMapPresenterDeps {
     readonly saveKey: string;
     /** 冒险已通关章节数（`TerritorySaveStoreAdapter.loadLastChapter` 的口径）。 */
     readonly adventureChapter: () => number;
+    /**
+     * 背包快照（道具 id → 数量）。**由入口注入**，不在这里 import `ItemBag` ——
+     * 那条链经 `CacheMgr` 一路拖进 `cc`，会把本来能裸跑单测的 Presenter 绑死引擎。
+     * 不注入（离线 / 预览态）时顶栏继续用存档 `base.res`。
+     */
+    readonly itemCounts?: () => ReadonlyMap<string, number>;
     readonly now: () => number;
     /** 世界种子，缺省用默认值；改它等于换一张地图。 */
     readonly seed?: number;
@@ -120,6 +131,17 @@ export interface IBigMapPresenterDeps {
  * `resolveBigMapLayout` 已经做过解析与尺寸校验，这里再 try/catch 一次是给「绕过 loader
  * 直接塞进来」的调用方（单测、调试台）兜底 —— 建世界失败不该让大世界白屏。
  */
+/**
+ * 建造目录的组名：`粮食田-1` → `粮食田`、`装饰雕像1` → `装饰雕像`。
+ *
+ * 策划表 `baseBuilding` 每座田一个 id、名字带序号；建造目录按类合并展示，
+ * 这里只剥尾部序号，不改表里的真实名字（详情面板仍显示「粮食田-1」）。
+ */
+function groupName(name: string): string {
+    const trimmed = name.replace(/[-_\s]*\d+$/, '').trim();
+    return trimmed || name;
+}
+
 function createBigMapWorldInstance(
     config: IBigMapConfig,
     seed: number | undefined,
@@ -154,6 +176,13 @@ export interface IBigMapPlotCellView {
     readonly instanceId: number;
     readonly buildingId: number;
     readonly name: string;
+    /**
+     * 这块地产什么（`baseBuildingLevel.resType` 反查出来的资源类型）；非资源田为 null。
+     *
+     * 以前 view 里硬编码 `{71002:grain,71003:wood,71004:iron,71005:coin}` ——
+     * 策划表里 71002~71006 **全是粮食田**，硬编码会把粮食田-2 画成木材图标。
+     */
+    readonly resType: BigMapResType | null;
     readonly level: number;
     readonly stored: number;
     /** 站位预览色：空闲 / 已占 / 正在建造。 */
@@ -180,9 +209,17 @@ export interface IBigMapPlotDetailView {
 }
 
 export interface IBigMapBuildEntryView {
+    /**
+     * **下一次要建的建筑 id**（不是"这一行是哪栋"）。
+     *
+     * 策划表 `baseBuilding` 里每座田各占一个 id（粮食田 71002~71006 五座），
+     * 建造目录按 `kind` 合并成一行（「粮食田 1/5」），点一次就把这一组里
+     * 下一座没建满的 id 发出去。`0` = 这一组已经建满。
+     */
     readonly buildingId: number;
-    readonly name: string;
+    /** 分组键（= `baseBuildType`）；行点击按它回查菜单，避免用建过的旧 id。 */
     readonly kind: number;
+    readonly name: string;
     readonly unlocked: boolean;
     readonly reason: string;
     readonly count: number;
@@ -203,6 +240,11 @@ export interface IBigMapQueueView {
     readonly remainSeconds: number;
     readonly totalSeconds: number;
     readonly progress: number;
+    /**
+     * 还没解锁的槽位（`slotIndex >= queueUnlocked`）：只用于显示「上限是几条、还能解锁几条」，
+     * 不能排任务。`bigmapQueue.maxBuildQueue` 就是靠这里在界面上体现出来的。
+     */
+    readonly locked: boolean;
 }
 
 export interface IBigMapCityView {
@@ -245,6 +287,14 @@ export interface IBigMapCityView {
     readonly isServerCamp: boolean;
     readonly campInfo: IBigMapCampInfo | null;
     readonly campDetailStatus: 'idle' | 'loading' | 'ready' | 'failed';
+    /**
+     * 据点内角色（`CmdSlgCampRoleInfosRspMsg`，r879）。空数组 = 查过、确实没人。
+     *
+     * 与 `campDetailStatus` **各自独立**：据点状态和角色列表是两条协议，
+     * 一条失败不该把另一条也标成失败（`campRolesStatus` 单独记）。
+     */
+    readonly campRoles: readonly IBigMapCampRoleInfo[];
+    readonly campRolesStatus: BigMapCampRoleStatus;
 }
 
 export interface IBigMapMonsterView {
@@ -252,6 +302,11 @@ export interface IBigMapMonsterView {
     readonly monsterId: number;
     readonly name: string;
     readonly level: number;
+    /**
+     * 已通关的最高野怪等级（联机取服务器 `SlgGameInfo.maxMonsterLevel` 与本地进度的较大者）。
+     * 逐级解锁早就吃它，但界面一直没显示 —— 玩家看不到「打到第几级了」。
+     */
+    readonly clearedLevel: number;
     readonly hexId: number;
     readonly unlocked: boolean;
     readonly reason: string;
@@ -292,7 +347,21 @@ export class BigMapPresenter {
     private isDisposed = false;
     private isStartingBattle = false;
     private readonly campDetailStatuses = new Map<number, IBigMapCityView['campDetailStatus']>();
+    /** 角色列表的查询状态（与据点状态分开记，见 `IBigMapCityView.campRoles`）。 */
+    private readonly campRoleStatuses = new Map<number, IBigMapCityView['campRolesStatus']>();
     private unsubscribeSlg: (() => void) | null = null;
+    /** 据点角色广播订阅（页面销毁时摘掉）。 */
+    private unsubscribeRoles: (() => void) | null = null;
+    /** 据点缓存变化订阅（角色事件合进缓存后转成一次视图重绘）。 */
+    private unsubscribeCampChanged: (() => void) | null = null;
+    /**
+     * 格 id → 据点 id 的**预建反查表**（角色广播只带 `pos`，不带 campId）。
+     *
+     * 用 Map 而不是每次遍历 `territories`：攻击事件可能一秒来好几条，
+     * 每条都跑一遍「几十座城 × 每城几十格」的 includes 就是白烧 CPU。
+     * 同格被多座城声明时以**先声明者**为准（`set` 不覆盖已有键）。
+     */
+    private readonly campIdByHex = new Map<number, number>();
 
     constructor(deps: IBigMapPresenterDeps) {
         this.deps = deps;
@@ -304,7 +373,22 @@ export class BigMapPresenter {
                 .filter((hexId) => this.worldInstance.tileById.has(hexId));
             return { id: site.cityId, hexIds };
         });
+        for (const territory of this.territories) {
+            for (const hexId of territory.hexIds) {
+                if (!this.campIdByHex.has(hexId)) this.campIdByHex.set(hexId, territory.id);
+            }
+        }
         this.data = parseBigMapSave(deps.slgRepository ? null : deps.storage.read(deps.saveKey), deps.config, deps.now()).save;
+        // 角色广播只联机有：事件按 `pos` 反查出据点，再合进该据点的角色缓存。
+        // 合完要主动 `emit()` —— 广播是异步来的，没有它详情面板会停在上一帧的血量。
+        if (deps.campRepository) {
+            this.unsubscribeRoles = deps.campRepository.subscribeRoleEvents(
+                (pos) => this.campIdByHex.get(pos) ?? 0,
+            );
+            this.unsubscribeCampChanged = deps.campRepository.onChanged(() => {
+                if (!this.isDisposed) this.emit();
+            });
+        }
         if (deps.slgRepository) {
             const empty = projectBigMapServerBase({ builds: [], queues: [], unlockQueue: deps.config.queue.initBuildQueue },
                 deps.config, deps.now());
@@ -418,6 +502,25 @@ export class BigMapPresenter {
         return this.deps.adventureChapter();
     }
 
+    /**
+     * 资源类型 → 背包道具图标路径（`item.icon`）。没配 itemId / 图标为空时是空表，
+     * 视图退回 `image/bigmap/concept/sprites/<resType>` 概念图。
+     */
+    get resourceIcons(): ReadonlyMap<BigMapResType, string> {
+        return this.config.resourceIcons;
+    }
+
+    /**
+     * 叫一声「解锁依据可能变了」，让视图重算一遍。
+     *
+     * 冒险章节集合是登录后**并行**拉的（`TerritoryChapterInfoRepository.refresh()`），
+     * 世界页开得比它早时，回包到达那一刻 Presenter 自己察觉不到 —— 建筑解锁会停在旧章节，
+     * 直到下次重进页面。入口那边在回包后调用本方法补一次刷新。
+     */
+    refreshUnlockContext(): void {
+        this.emit();
+    }
+
     private emit(): void {
         if (this.isDisposed) return;
         this.version += 1;
@@ -488,22 +591,46 @@ export class BigMapPresenter {
 
     // -------------------------------------------------------------- 资源栏
 
+    /**
+     * 顶栏资源。
+     *
+     * 🔴 联机态的数量来自**背包**（`CmdItem` 缓存，道具 18501~18505），不是 SLG 存档：
+     * 协议里 `SlgGameInfo` 只有 `maxMonsterLevel` / `toCampId`，**没有任何资源余额字段** ——
+     * 资源在服务端就是背包道具（收取 `CmdSlgBuildCollectReqMsg` 也回 `tlCmdGoods`）。
+     * 以前这里一律 `amountKnown = false`，顶栏 5 个格子全显示 `—`（2026-10-26 用户反馈）。
+     *
+     * 离线 / 预览态没有背包，继续读存档 `base.res`。
+     */
     resourceBar(): readonly IBigMapResourceView[] {
         const pending = bigMapPendingHarvest(this.config, this.data.base);
         const perHour = bigMapProducePerHour(this.config, this.data.base);
-        return BIGMAP_RES_ORDER.map((type) => ({
-            amountKnown: !this.isServerBase,
-            type,
-            name: this.config.resources.get(type)?.name ?? type,
-            // ⚠️ 行动力走 `base.stamina`（会随攻打消耗、随时间恢复），不是资源包里的
-            // `res.stamina`（那只是「初始值」的展示位）。两者同名字段，别串了。
-            amount: type === 'stamina'
-                ? Math.floor(this.data.base.stamina)
-                : Math.floor(this.data.base.res[type]),
-            cap: bigMapResCap(this.config, this.data.base, type),
-            pending: Math.floor(pending[type]),
-            perHour: perHour[type],
-        }));
+        // 背包快照只取一次（读一次遍历整个 `CmdItem` 缓存）。
+        const bag = this.isServerBase ? this.deps.itemCounts?.() ?? null : null;
+        return BIGMAP_RES_ORDER.map((type) => {
+            const config = this.config.resources.get(type);
+            const itemId = config?.itemId ?? 0;
+            const fromBag = bag !== null && itemId > 0;
+            const amount = fromBag
+                ? Math.max(0, bag!.get(String(itemId)) ?? 0)
+                // ⚠️ 行动力走 `base.stamina`（会随攻打消耗、随时间恢复），不是资源包里的
+                // `res.stamina`（那只是「初始值」的展示位）。两者同名字段，别串了。
+                : type === 'stamina'
+                    ? Math.floor(this.data.base.stamina)
+                    : Math.floor(this.data.base.res[type]);
+            return {
+                // 联机态只有真从背包读到才算「已知」：没注入 / 没配 itemId 时仍显示 `—`，
+                // 不能拿存档里的 0 冒充真实余额。
+                amountKnown: !this.isServerBase || fromBag,
+                type,
+                name: config?.name ?? type,
+                amount,
+                // 背包没有「仓库上限」概念（上限是 SLG 自己的 resCap）：给 NaN，
+                // 顶栏就不会拼 `/800` 这种对不上的数字。
+                cap: fromBag ? Number.NaN : bigMapResCap(this.config, this.data.base, type),
+                pending: Math.floor(pending[type]),
+                perHour: perHour[type],
+            };
+        });
     }
 
     /**
@@ -570,6 +697,9 @@ export class BigMapPresenter {
                     instanceId: instance?.instanceId ?? 0,
                     buildingId: instance?.buildingId ?? 0,
                     name: instance ? (this.config.buildings.get(instance.buildingId)?.name ?? '') : '',
+                    resType: instance
+                        ? this.config.produce.get(instance.buildingId)?.get(instance.level)?.resType ?? null
+                        : null,
                     level: instance?.level ?? 0,
                     stored: Math.floor(instance?.stored ?? 0),
                     slot: queue && !instance ? 'constructing' : instance ? 'building' : 'empty',
@@ -604,29 +734,64 @@ export class BigMapPresenter {
         };
     }
 
+    /**
+     * 建造目录：按 `baseBuildType`（kind）**合并同名**成一行。
+     *
+     * 策划表每座田一个 id（粮食田 71002~71006、木材田 71007~71011…），
+     * 照 23 行铺出去面板放不下、玩家也分不清"粮食田-1/-2"。
+     * 所以一行代表一类：`count` = 这类已建总数，`maxOwnNum` = 这类可用 id 数之和，
+     * `buildingId` = **下一座**该建的 id（建满为 0）。
+     *
+     * 解锁按「组里还有未建满且已解锁的成员」判：只要还有一座能建就算解锁；
+     * 全都锁着时把第一条锁的原因带出去（玩家看到的是"通关冒险第 N 章解锁"）。
+     */
     buildMenu(): readonly IBigMapBuildEntryView[] {
         const context = this.unlockContext;
-        return [...this.config.buildings.values()]
-            .sort((a, b) => a.sort - b.sort || a.id - b.id)
-            .map((building) => {
-                const unlock = bigMapBuildingUnlock(building, context);
-                const cost = this.config.levels.get(building.id)?.get(1);
-                return {
-                    buildingId: building.id,
-                    name: building.name,
-                    kind: building.kind,
-                    unlocked: unlock.unlocked,
-                    reason: unlock.reason,
-                    count: bigMapBuildingCountWithQueue(this.data.base, building.id),
-                    maxOwnNum: building.maxOwnNum,
-                    unlockChapter: building.unlockChapter,
-                    costGrain: cost?.costGrain ?? 0,
-                    costWood: cost?.costWood ?? 0,
-                    costIron: cost?.costIron ?? 0,
-                    buildTime: cost?.buildTime ?? 0,
-                    affordable: cost ? this.isServerBase || bigMapCanAfford(this.data.base, cost) : false,
-                };
+        const groups = new Map<number, IBigMapBuildingConfig[]>();
+        for (const building of [...this.config.buildings.values()].sort((a, b) => a.sort - b.sort || a.id - b.id)) {
+            const members = groups.get(building.kind) ?? [];
+            members.push(building);
+            groups.set(building.kind, members);
+        }
+
+        const rows: IBigMapBuildEntryView[] = [];
+        for (const members of groups.values()) {
+            const head = members[0];
+            let nextId = 0;
+            let lockedReason = '';
+            let count = 0;
+            let maxOwnNum = 0;
+            for (const member of members) {
+                const built = bigMapBuildingCountWithQueue(this.data.base, member.id);
+                count += built;
+                maxOwnNum += member.maxOwnNum;
+                if (nextId !== 0 || built >= member.maxOwnNum) continue;
+                const unlock = bigMapBuildingUnlock(member, context);
+                if (!unlock.unlocked) {
+                    if (!lockedReason) lockedReason = unlock.reason;
+                    continue;
+                }
+                // 这一组里第一座「还没建满且已解锁」的 id 就是要建的那座。
+                nextId = member.id;
+            }
+            const cost = this.config.levels.get(nextId || head.id)?.get(1);
+            rows.push({
+                buildingId: nextId,
+                kind: head.kind,
+                name: groupName(head.name),
+                unlocked: nextId !== 0,
+                reason: nextId !== 0 ? '' : (lockedReason || '已达数量上限'),
+                count,
+                maxOwnNum: Math.max(1, maxOwnNum),
+                unlockChapter: head.unlockChapter,
+                costGrain: cost?.costGrain ?? 0,
+                costWood: cost?.costWood ?? 0,
+                costIron: cost?.costIron ?? 0,
+                buildTime: cost?.buildTime ?? 0,
+                affordable: cost ? this.isServerBase || bigMapCanAfford(this.data.base, cost) : false,
             });
+        }
+        return rows;
     }
 
     /** 建筑升级入口是否已解锁（第 3 章），界面据此给「升级」按钮置灰。 */
@@ -634,15 +799,25 @@ export class BigMapPresenter {
         return bigMapUpgradeUnlock(this.config, this.unlockContext).unlocked;
     }
 
+    /**
+     * 队列槽位：**按 `bigmapQueue.maxBuildQueue` 全部返回**，未解锁的标 `locked`。
+     *
+     * 以前是 `slice(0, queueUnlocked)` —— 界面只看得见已解锁的那几条，玩家根本不知道
+     * 「上限是 3 条、还能解锁 2 条」，等于 `maxBuildQueue` 这列只在建造目录那一行生效。
+     */
     queues(): readonly IBigMapQueueView[] {
         const now = this.deps.now();
-        return this.data.base.queues.slice(0, this.data.base.queueUnlocked).map((slot) => {
-            const busy = slot.state === BigMapQueueState.Building;
+        const max = this.config.queue.maxBuildQueue;
+        const unlocked = Math.min(Math.max(0, this.data.base.queueUnlocked), max);
+        return this.data.base.queues.slice(0, max).map((slot) => {
+            const locked = slot.slotIndex >= unlocked;
+            const busy = !locked && slot.state === BigMapQueueState.Building;
             const total = Math.max(1, slot.finishAt - slot.startAt);
             const remain = Math.max(0, slot.finishAt - now);
             return {
                 slotIndex: slot.slotIndex,
                 busy,
+                locked,
                 name: busy ? (this.config.buildings.get(slot.buildingId)?.name ?? '') : '',
                 targetLevel: slot.targetLevel,
                 remainSeconds: Math.ceil(remain),
@@ -735,8 +910,19 @@ export class BigMapPresenter {
 
     async requestMove(instanceId: number, hexId: number): Promise<IBigMapActionFeedback> {
         const repository = this.deps.slgRepository;
-        const id = repository?.serverInstanceId(instanceId);
-        return repository && id ? repository.move(id, hexId) : { ok: false, message: '建筑尚未同步' };
+        if (!repository) {
+            const result = bigMapMove(this.config, this.data.base, instanceId, hexId);
+            if (!result.ok || !result.state) return { ok: false, message: result.reason };
+            this.applyBase(result.state);
+            this.persist();
+            this.emit();
+            return { ok: true, message: '建筑已移动' };
+        }
+        // 服务端只管「实例 + 目标格」，本地先把这一层的合法位置拦掉，避免白发一次请求。
+        const check = bigMapCanMove(this.config, this.data.base, instanceId, hexId);
+        if (!check.ok) return { ok: false, message: check.reason };
+        const id = repository.serverInstanceId(instanceId);
+        return id ? repository.move(id, hexId) : { ok: false, message: '建筑尚未同步' };
     }
 
     async requestHarvest(instanceId: number): Promise<IBigMapActionFeedback> {
@@ -789,20 +975,59 @@ export class BigMapPresenter {
         if (this.isDisposed || !repository || !this.worldInstance.cities.has(campId)
             || this.campDetailStatuses.get(campId) === 'loading') return;
         this.campDetailStatuses.set(campId, 'loading');
+        this.campRoleStatuses.set(campId, 'loading');
         this.emit();
-        const loaded = await repository.refreshDetail([campId]);
+        // 两条协议并行：据点状态（占领/开放）与角色列表互不依赖，
+        // 串行会把详情面板的等待时间翻倍，且任一条失败不该拖住另一条。
+        const [detailLoaded, rolesLoaded] = await Promise.all([
+            repository.refreshDetail([campId]),
+            repository.refreshRoles(campId),
+        ]);
         if (this.isDisposed) return;
-        this.campDetailStatuses.set(campId, loaded ? 'ready' : 'failed');
+        this.campDetailStatuses.set(campId, detailLoaded ? 'ready' : 'failed');
+        this.campRoleStatuses.set(campId, rolesLoaded ? 'ready' : 'failed');
         this.emit();
+    }
+
+    /**
+     * 迁城：把 `campId` 这个据点挪到 `pos`（`CmdSlgCampMoveReqMsg`，r882）。
+     *
+     * **成功后必须三处一起重拉**，缺一处就是"迁了但界面还停在上一个城"：
+     *   ① `SlgGameInfo.toCampId` —— 「我在哪座城」的唯一真源，它变了基地锚点/势力范围/距离全跟着变；
+     *   ② 据点状态（占领/开放）—— 迁出/迁入会改两边的 opType/state；
+     *   ③ 据点内角色列表 —— 自己这一条会从旧城消失、出现在新城。
+     *
+     * 离线（无 `campRepository`）直接拒：迁城没有本地兜底 —— 本地挪一个"城"对服务端毫无意义，
+     * 下次拉 GameInfo 就会被打回原形。
+     *
+     * @param campId 据点 id
+     * @param pos 目标位置（协议"下标"；客户端不做换算，谁选的格谁负责）
+     */
+    async requestMoveCamp(campId: number, pos: number): Promise<IBigMapActionFeedback> {
+        if (this.isDisposed) return { ok: false, message: BIGMAP_CAMP_MOVE_TEXT.disposed };
+        const repository = this.deps.campRepository;
+        if (!repository) return { ok: false, message: BIGMAP_CAMP_MOVE_TEXT.offline };
+        const result = await repository.moveCamp(campId, pos);
+        if (this.isDisposed) return { ok: false, message: BIGMAP_CAMP_MOVE_TEXT.disposed };
+        if (!result.ok) return result;
+        void this.deps.slgRepository?.refreshGame();
+        void this.refreshCampDetail(campId);
+        return result;
     }
 
     dispose(): void {
         this.isDisposed = true;
         this.listeners.clear();
         this.campDetailStatuses.clear();
+        this.campRoleStatuses.clear();
         this.deps.campRepository?.dispose();
         this.unsubscribeSlg?.();
         this.unsubscribeSlg = null;
+        this.unsubscribeRoles?.();
+        this.unsubscribeRoles = null;
+        this.unsubscribeCampChanged?.();
+        this.unsubscribeCampChanged = null;
+        this.campIdByHex.clear();
         this.deps.slgRepository?.dispose();
     }
 
@@ -910,6 +1135,8 @@ export class BigMapPresenter {
             isServerCamp: !!this.deps.campRepository,
             campInfo,
             campDetailStatus: this.campDetailStatuses.get(cityId) ?? 'idle',
+            campRoles: this.deps.campRepository?.rolesOf(cityId) ?? [],
+            campRolesStatus: this.campRoleStatuses.get(cityId) ?? 'idle',
         };
     }
 
@@ -932,6 +1159,7 @@ export class BigMapPresenter {
             monsterId: site.monsterId,
             name: monster.name,
             level: monster.level,
+            clearedLevel: this.unlockContext.maxClearedMonsterLevel,
             hexId: site.anchorHexId,
             unlocked: unlock.unlocked,
             reason: unlock.reason,

@@ -2,6 +2,8 @@ import {
     _decorator,
     CCInteger,
     Component,
+    director,
+    Director,
     instantiate,
     Node,
     Prefab,
@@ -15,10 +17,13 @@ import { MAIN_PAGES_BUNDLE } from '../../core/asset/BundleCatalog';
 import { TabButton } from '../common/TabButton';
 import { mainTabItem } from './MainTabItems';
 import { CardLineupPage } from '../card/CardLineupPage';
+import { fetchFormations } from '../card/FormationService';
 import { checkFirstRechargeOnEnterMain } from '../firstRecharge/FirstRechargeAutoOpen';
 import { MainTerritoryMap } from './MainTerritoryMap';
 import { MainPage } from './MainPage';
 import { BigMapEntry } from '../bigmap/application/BigMapEntry';
+import { GAME_VIEW_MARK, reportGameViewClick } from './GameViewClickService';
+import { GameNet } from '../net/GameNet';
 
 const { ccclass, property } = _decorator;
 
@@ -119,6 +124,8 @@ export class MainTabHost extends Component {
     private sessionAssets: SessionAssetService | null = null;
     private pageScope: ResourceScope | null = null;
     private readonly pendingPageScopes = new Set<ResourceScope>();
+    private backgroundWarmupActive = false;
+    private afterDrawWarmup: (() => void) | null = null;
     private pageRevision = 0;
     private loadingTab = -1;
     private pageLoadingTask: Promise<void> | null = null;
@@ -169,7 +176,13 @@ export class MainTabHost extends Component {
             // 2026-10-21 起大地图不再有单独的悬浮按钮，就挂在这一格上（见 `openBigMap`）。
             if (type === MainTab.World) {
                 button.setEnabled(true);
-                button.bindSelect(() => this.switchTab(type));
+                // 世界格也承担「玩家点击界面」上报（`mark = 2`，**服务端编号，不是 MainTab 下标**）。
+                // 只挂在**按钮点击**上、不挂在 `switchTab` 里：外部路由 `switchToTab(6)`（活动跳转）
+                // 不是玩家点击，混进来会给服务端记假点击。上报本身不阻塞开图。
+                button.bindSelect(() => {
+                    void reportGameViewClick(GAME_VIEW_MARK.World, this);
+                    void this.switchTab(type);
+                });
                 button.bindRedDotExpr(mainTabItem(type)?.rdExpr);
                 continue;
             }
@@ -178,7 +191,10 @@ export class MainTabHost extends Component {
             button.setEnabled(!isLocked);
             // 点击：`TabButton` 内部已经挂了 CLICK（`ensureInit()` 幂等），宿主只交出「点我切哪一页」。
             // 事件监听随节点销毁由引擎自动清理，按项目约定不手动 off。
-            button.bindSelect(isLocked ? null : () => { void this.switchTab(type); });
+            button.bindSelect(isLocked ? null : () => {
+                void reportGameViewClick(GAME_VIEW_MARK.Other, this);
+                void this.switchTab(type);
+            });
             // 红点：后端推送 → 变量标脏 → 表达式重算 → `RedDot.setRedDot`，全程不用宿主干预。
             // `rdExpr` 现在七格都是空的（见 `IMainTabItem.rdExpr`）⇒ 红点恒收起，
             // 但通路已就绪：`open.json` 登记好口径后填上即亮，本文件不用改。
@@ -192,16 +208,11 @@ export class MainTabHost extends Component {
         // 内部全 catch、永不 reject，所以这里的 `then` 不会漏出 unhandled rejection。
         const initialReady = this.switchTab(this.defaultTab);
         const initialRevision = this.pageRevision;
-        const canWarmup = (): boolean => this.isValid && this.pageRevision === initialRevision
+        const isInitialPageCurrent = (): boolean => this.isValid && this.pageRevision === initialRevision
             && this.currentPage !== null && this.loadingTab === -1;
         void initialReady.then(() => {
-            if (!canWarmup()) return;
+            if (!isInitialPageCurrent()) return;
             void checkFirstRechargeOnEnterMain(this);
-            this.scheduleOnce(() => {
-                if (canWarmup()) void this.sessionAssets?.warmup?.().catch((error: unknown) => {
-                    console.warn('[MainTabHost] 公共资源预下载失败', error);
-                });
-            }, 0);
         });
     }
 
@@ -228,9 +239,11 @@ export class MainTabHost extends Component {
             this.renderNav(MainTab.World);
             await BigMapEntry.shared().open(this.configs, {
                 navigation: this.navBar,
-                onClose: () => this.renderNav(this.currentTab),
+                onClose: () => { this.renderNav(this.currentTab); this.scheduleBackgroundWarmup(); },
             });
+            this.scheduleBackgroundWarmup();
         } catch (error) {
+            this.scheduleBackgroundWarmup();
             if (this.isValid) this.renderNav(this.currentTab);
             console.warn('[MainTabHost] 世界页面加载失败', error);
         }
@@ -250,14 +263,30 @@ export class MainTabHost extends Component {
     async switchTab(index: number): Promise<void> {
         // 「世界」不是 tab 页而是压在页面上的大世界：外部跳转（`switchToTab(6)` / 活动路由）也走这里。
         if (index === MainTab.World) {
+            if (this.loadingTab === index && this.pageLoadingTask) return this.pageLoadingTask;
+            if (BigMapEntry.shared().isOpen) return;
             this.cancelPageLoading();
-            await this.openBigMap();
+            const revision = this.pageRevision;
+            this.loadingTab = index;
+            const task = this.openBigMap();
+            this.pageLoadingTask = task;
+            await task;
+            if (this.pageLoadingTask === task) {
+                this.pageLoadingTask = null;
+                this.loadingTab = -1;
+            }
+            if (this.isValid && revision === this.pageRevision) this.scheduleBackgroundWarmup();
             return;
         }
         if (this.loadingTab === index && this.pageLoadingTask) return this.pageLoadingTask;
         this.cancelPageLoading();
         this.closeBigMap();
-        if (index === this.currentTab) return;
+        if (index === this.currentTab) { this.scheduleBackgroundWarmup(); return; }
+
+        // 「角色」页首屏卡在阵型请求上（`CmdFormationInfoReqMsg`）：在**页面资源还没加载完**
+        // 的时候就把请求发出去，等页面 `start()` 跑起来往往已经回来了，等于白赚一个 RTT。
+        // `fetchFormations` 内部会把并发调用合并成一条，这里重复点 tab 不会连发。
+        if (index === MainTab.Hero) void fetchFormations({ label: '切角色 tab 预取' });
 
         const path = this.pagePath(index);
         if (!path || !this.assets) {
@@ -277,6 +306,33 @@ export class MainTabHost extends Component {
             this.pageLoadingTask = null;
             this.loadingTab = -1;
         }
+        if (this.isValid && revision === this.pageRevision) this.scheduleBackgroundWarmup();
+    }
+
+    /** 只由主流程在移除登录覆盖后激活；预加载首屏期间不抢资源。 */
+    activateBackgroundWarmup(): void {
+        this.backgroundWarmupActive = true;
+        this.scheduleBackgroundWarmup();
+    }
+
+    private scheduleBackgroundWarmup(): void {
+        this.cancelBackgroundWarmup();
+        if (!this.backgroundWarmupActive || !this.isValid || this.loadingTab !== -1) return;
+        const revision = this.pageRevision;
+        const callback = (): void => {
+            this.afterDrawWarmup = null;
+            if (!this.isValid || revision !== this.pageRevision || this.loadingTab !== -1) return;
+            void this.sessionAssets?.warmup?.().catch((error: unknown) => {
+                console.warn('[MainTabHost] 战斗资源静默预下载失败', error);
+            });
+        };
+        this.afterDrawWarmup = callback;
+        director.once(Director.EVENT_AFTER_DRAW, callback);
+    }
+
+    private cancelBackgroundWarmup(): void {
+        if (this.afterDrawWarmup) director.off(Director.EVENT_AFTER_DRAW, this.afterDrawWarmup);
+        this.afterDrawWarmup = null;
     }
 
     private async loadPage(index: number, path: string, scope: ResourceScope, revision: number): Promise<void> {
@@ -302,6 +358,8 @@ export class MainTabHost extends Component {
     }
 
     private cancelPageLoading(): void {
+        this.cancelBackgroundWarmup();
+        this.sessionAssets?.pauseWarmup?.();
         this.pageRevision += 1;
         this.loadingTab = -1;
         this.pageLoadingTask = null;
@@ -310,6 +368,7 @@ export class MainTabHost extends Component {
     }
 
     onDestroy(): void {
+        GameNet.instance.removeCaller(this);
         this.unschedule(this.onFirstScreenFallback);
         this.cancelPageLoading();
         this.pageScope?.dispose();
@@ -380,9 +439,14 @@ export class MainTabHost extends Component {
                     this.scheduleOnce(() => this.firstScreenReadyResolve(), 0);
                 });
             }
+            // 公共奖励格（`ui/common/RewardItem.prefab`）的资源入口由**组合根**统一注入
+            // （`ProcedureBootstrap`），这里不再重复注入 —— 主界面与对局流程不是同一条流程，
+            // 靠谁先跑来保证注入必然是隐式时序依赖。
             const mainPage = page.getComponent(MainPage);
-            if (mainPage && mainTerritoryMap) {
-                mainPage.bindFindCurrentBoss(() => mainTerritoryMap.focusCurrentBoss());
+            if (mainPage) {
+                // 宝箱详情弹窗要按路径加载图标/品质框 ⇒ 先注入资源入口（同样在 setParent 之前）。
+                if (this.assets) mainPage.initialize(this.assets);
+                if (mainTerritoryMap) mainPage.bindFindCurrentBoss(() => mainTerritoryMap.focusCurrentBoss());
             }
             const lineup = page.getComponent(CardLineupPage);
             if (lineup && this.assets) lineup.initialize(this.assets);

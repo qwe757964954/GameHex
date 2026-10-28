@@ -31,6 +31,56 @@ framework（通用 UI 基类 / 弹窗 / 路由机制）       -> core
 | `app/<feature>/model` 或 `application` | `core/**`、本 feature 内部纯契约 | 纯 TS 的 Presenter / Model 剥掉 `import type` 后不得依赖 `cc` 或直接调 `resources.load` |
 | `app/<feature>/view` | 本 feature 的 `application`/`model`、`framework`、`cc` | 只负责引擎生命周期、输入转发与渲染编排；严禁跨页面直接切换 `Procedure*`（必须走 `GameRoute`）；严禁直调 `resources.load` 或 `fetch` |
 
+### 2.1 视图 ↔ 控制器只走事件中控（禁止回调穿透）
+
+视图（`app/<feature>/view`、`ui/**` 页面组件）**只派发意图**，控制器（Presenter / `ZC*` 组合根）订阅后处理。
+视图**不得持有、也不得接收**控制器的回调：
+
+```ts
+// ✅ 视图侧：只报「玩家点了什么」
+EventMgr.instance.emit(ZCGameUiEvent.SettlementConfirm);
+EventMgr.instance.emit(ZCGameUiEvent.SettlementGrowEntry, 'equip'); // 同族入口共用一条事件 + payload
+
+// ✅ 控制器侧：订阅集中在一个 bind*Events()，退出时 offTarget(this)
+EventMgr.instance.on(ZCGameUiEvent.SettlementConfirm, this.onSettlementConfirm, this);
+
+// ❌ 严禁：把流程 / 业务入口塞进视图
+ZCSettlementPage.open({ onConfirm: () => this.returnToMain(), onGrowEntry: (key) => … });
+```
+
+- **判定**：视图代码里出现 `this.options?.onXxx?.(...)` 这类「可选回调 + 可选调用」即**违规**。
+  它漏传一个就是**点了没反应且零报错**（`openRank` 曾整条漏传）。
+- **「有没有人接」用布尔门闩，不要用回调占位**：视图要靠「接了没接」决定显隐 / 置灰时，
+  userData 给 `hasXxx?: boolean`，页面据此写 `interactable` / `active`；行为仍由控制器订阅事件处理。
+  拿「回调有没有值」当门闩 = 视图又持有了一次控制器入口。
+- **视图不留 userData**：事件化之后 `private options` 这类字段通常只剩赋值与清空，属死字段，一并删掉。
+- **契约集中**：同一 feature 的意图事件名放在一个纯 TS 契约文件（如 `view/ZCGameHudEvents.ts`），**不许 import `cc`**
+  （要能被纯逻辑单测直接 require）；同族入口用「一条事件 + payload」，不要一个按钮一个事件。
+- **订阅纪律**：订阅在控制器初始化时集中注册一次，退出时 `offTarget(this)`；非一次性订阅
+  （如 `ProcedureManager.onSwitchSettled`）必须由订阅方显式 `stop()`。
+
+### 2.2 回调归属对象直接传递（事件、缓存与网络请求）
+
+`caller` 表达回调的归属对象与 `this`，不代表调用方必须实现 `destroyable`。公共事件、缓存订阅和 `RequestMsg` 的归属参数使用 `object`，允许 Cocos 组件、`ScriptObject`、普通对象及类对象直接传入；可选宿主在调用链上保持 `object | undefined`，禁止先声明成 `unknown` 再断言。
+
+事件入口统一为 `addListener` / `removeListener`；基础事件接口不引用 `cc.Object`、FairyGUI 类型，也不按宿主类别增加 `NodeListener` / `GObjectListener` 包装。
+
+```ts
+GameNet.instance.addEvent('CmdCityChapterPassCellBroMsg', this, this.onPassCellsBro);
+CacheMgr.instance.setEventUpdate('CmdRole', this, this.onRoleCacheUpdate);
+new RequestTerritoryCellInfo({ levelChapter }, this, this.onCellInfo);
+// 普通组件退出时，一次解除广播监听与未完成请求的回调。
+GameNet.instance.removeCaller(this);
+```
+
+- 禁止为满足归属参数而写 `this as unknown as destroyable`、`caller as destroyable`、`caller as any`、`caller as never`；也不得给组件或服务伪造 `destroyed` / `destroy()`。遇到类型不匹配，应修正最底层公共签名及上游端口。
+- 网络请求与事件统一按宿主登记、主动解除，不靠回包时检查组件 `isValid` 兜底。纯 TS 端口为 `core/runtime/CallbackOwner.ICallbackOwnerRegistry`；既有 `EventProxy` 承担归属管理，不另建全局注册表。
+- 普通组件在 `onDestroy` 调用 `GameNet.removeCaller(this)`。`PopupBase` 在关闭及销毁时、`ProcedureManager` 在流程切出、进入失败、预加载取消及销毁时统一解除；端口由 `ProcedureBootstrap` 注入。缓存弹窗关闭时节点可能仍然有效，同样必须解除。`ScriptObject` 沿用既有销毁钩子；普通订阅对象由持有者显式退订。缓存订阅仍按原缓存 API 解绑。
+- `NetworkRequest` 接管 `RequestMsg` 的回调与宿主引用：正常完成后注销清理动作；宿主退出时清空成功/失败回调、取消发送资格并让 `send()` 的 Promise 以 `false` 落定。取消不触发业务失败回调，重复解除和迟到回包不再触达旧宿主。复合异步流程的 `context` / `revision` 守卫仍遵循 §3.2。
+- 未发送的取消请求不再发出，也不在重连后恢复；已发请求不能撤销服务端执行，回包继续由传输层处理公共缓存和其他仍有效的订阅。网络层保留原有 `disabled` / `destroyed` 行为，不新增组件状态探测。
+- 不修改全局 `destroyable` 契约，不将其必填字段改成可选来消除报错；它仍用于确实具备销毁能力的对象。
+- 回归：`npx tsx --test tests/callback-owner.test.ts tests/network-request-policy.test.ts tests/popup-lifecycle.test.ts tests/procedure-manager-preload.test.ts`，覆盖宿主解除、取消等待、迟到回包、重开宿主、公共缓存与业务源码断言禁令。
+
 ## 3. 运行时实现硬约束
 
 ### 3.1 契约先行与边界归一化

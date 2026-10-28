@@ -102,6 +102,15 @@ export interface ZCBattleHero {
 
 export interface ZCBattleUnit {
     readonly campId: number;
+    /**
+     * 服务端战斗单元 id（`CmdBattleUnitInfo.unitId = 6`）。
+     *
+     * ⚠️ 与 `campId` **不是一回事**：`campId` 是阵营席位（1~4，前端只拿它映射 `ZCOwner`），
+     * `unitId` 是服务端给每个参战单元分配的身份 —— 战斗统计
+     * （`CmdBattleStatisticsInfo.unitId`）靠它把数据归属到具体单元。
+     * 缺字段 / 非法值收敛成 0（本地局没有服务端 id），**不代表"第 0 号单元"**。
+     */
+    readonly unitId: number;
     readonly roleId: string;
     readonly serverId: number;
     readonly name: string;
@@ -169,6 +178,7 @@ export function normalizeBattleUnit(info: CmdBattleUnitInfo | null | undefined):
     const heroes = normalizeBattleHeroes(info.heroInfos);
     return {
         campId,
+        unitId: toCount(info.unitId),
         roleId: toIdString(show.roleId),
         serverId: toCount(show.serverId),
         name: typeof show.name === 'string' ? show.name : '',

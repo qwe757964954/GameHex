@@ -104,12 +104,12 @@ export class MainResBar extends Component {
         // 更新缓存并触发 onUpdate，这里收到后重读缓存整条刷新（对齐旧客户端
         // LayerMainResources 的做法；不订阅的话界面只在创建时读一次，之后再也不更新）。
         // 注：货币格由同一条 bar 上的 `common/ResBar` 订阅，两个监听者互不干扰。
-        CacheMgr.instance.setEventUpdate('CmdRole', this as unknown as destroyable, this.onRoleCacheUpdate);
+        CacheMgr.instance.setEventUpdate('CmdRole', this, this.onRoleCacheUpdate);
         void this.reload();
     }
 
     onDestroy(): void {
-        CacheMgr.instance.removeEventUpdate('CmdRole', this as unknown as destroyable, this.onRoleCacheUpdate);
+        CacheMgr.instance.removeEventUpdate('CmdRole', this, this.onRoleCacheUpdate);
     }
 
     /**

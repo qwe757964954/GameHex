@@ -14,7 +14,7 @@
 | 地块激活（脉冲∥缩没→卡牌→建筑） | `ZCHexView.hexActivationFx`、`hexPulseShrinkFx`、`applyTileTransform` | `tests/zcds-hex-activation.test.ts`、`tests/zcds-card-reveal-pop.test.ts`、`tests/territory-hex-flip.test.ts` |
 | 点击脉冲的 5 帧序列（对齐缩放 / 一次性退场） | `ZCHexView.applyPulseRipple`、`HexFlipPresentation.hexPulseFx`（`pulseFrame`） | `tests/zcds-hex-activation.test.ts` |
 | 单位出生抖动 & 建筑产兵/产金抖动 | `ZCUnitView.playSpawnShake` / `ZCHexView.playBuildingShake`、`drainBuildingShakes` | `tests/zcds-unit-spawn-shake.test.ts`、`tests/zcds-building-spawn-shake.test.ts` |
-| 新扩展邻格延迟与描边同步 | `ZCHexView.resolveDevelopableHold`（public） | `tests/zcds-hex-neighbor-reveal-delay.test.ts` |
+| 新扩展邻格生成动画（与脉冲同起） | `ZCHexView.noteDevelopableSpawn` / `advanceDevelopableSpawn`、`ZCGameRenderWorld.renderDevelopableSpawns` | `tests/zcds-hex-neighbor-spawn.test.ts` |
 | 出生 / 受击 / 阵亡特效缩放 | 各特效 `.prefab` 根 `_lscale` / `ZCEffectPool.playSpawnFx`、`playDeathFx`、`playHitFx` | `tests/zcds-hit-fx.test.ts` |
 | 受击特效总时长锁 0.15s（加速、无定格） | `ZCEffectPool.HIT_FX_TARGET_SECONDS` / `state.speed`、`ZCGameModel.HIT_FX_SECONDS` | `tests/zcds-hit-fx.test.ts` |
 | 出生特效锁总时长 1.25s（speed 由 clip 反推） | `ZCEffectPool.SPAWN_FX_TARGET_SECONDS` / `state.speed` | `tests/zcds-spawn-fx.test.ts` |
@@ -25,10 +25,12 @@
 | 战斗飘字「快进慢出」与收尾漂移 | `ZCFloatTextView` / `floatTextEntrance`、`floatTextFade`、`floatTextDrift` | `tests/zcds-float-text-gold-icon.test.ts`、`tests/zcds-progress.test.ts` |
 | 开局归属扩散波 | `ZCClaimWave` / `buildClaimWavePlan`、`ZCHexView.setClaimWave` | `tests/zcds-territory-claim-wave.test.ts` |
 | 胜利结算三段式扫场（铺场/回正/脉冲） | `ZCVictorySweep` / `zcDeepFactionColor`、`setSweepOwner`、`appendHexPulseOutlineSegments` | `tests/zcds-progress.test.ts`、`tests/zcds-outline-layer.test.ts` |
-| 开局金矿格整圈描边闪烁 | `ZCGameViewUtil.zcNeutralHintAlpha` / `ZCHexView.renderHintOutline` | `tests/zcds-neutral-hint-outline.test.ts` |
+| 开局金矿格整圈描边呼吸（绿色 · 9px · 棋盘最上层） | `ZCGameViewUtil.zcNeutralHintAlpha` / `ZCHexView.strokeHintOutline` / `ZCGameRenderWorld.ensureHintOutlineGraphics` | `tests/zcds-neutral-hint-outline.test.ts` |
+| 对局中立资源奖励**格心金币喷发**（12 枚 · ±26° · 翻面）+ 读数在上方 40px（2026-10-26，替换旧「飞向金币栏」） | `model/ZCNeutralBurst.zcNeutralBurstLaunch / zcNeutralBurstParticle / zcNeutralBurstLabelFrame` / `view/ZCNeutralRewardFx`（金币段） / `ZCBattlePresentationQueue.ZC_NEUTRAL_REWARD_TOTAL_SECONDS` | `tests/zcds-neutral-reward-fx.test.ts` |
 | 领地随机资源格「翻开」（**原地碎裂**，2026-10-16 起只剩这一套） | `core/hex/HexFlipPresentation.hexShatterFx` / `TerritoryHexFlip.applyFace`、`applyReveal` | `tests/territory-hex-flip.test.ts` |
 | 领地建筑**生成抖动**（先 Y 后 X，120%）+ **展示滞后到翻转结束** | `core/hex/ShakePresentation` / `TerritoryStationView.playBuildingShake`、`TerritoryMapView.pendingBuildingReveal`、`ITerritoryStationRender.hidden` | `tests/territory-building-shake.test.ts` |
 | 领地「获得银币 / 体力」**格心抛物线喷发（12 颗 · ±26° · 自身上下翻面）** + 读数在其**上方 40px**（row17，2026-10-17 细化） | `model/TerritoryResourceGain.territoryBurstLaunch / territoryBurstParticle` / `view/TerritoryGainBurst` / `TerritoryMapView.playResourceGain`、`ensureBurstRoot` | `tests/territory-resource-gain.test.ts` |
+| 领地奖励**图标解析**：`roleProperty` + `item` **两张表**、`item` 图在 `main-pages` 分包 + 随机格**读数合成一条**（2026-10-26） | `ResTypes.resBarCellOfRefId` / `ResTypes.resBarIconSpritePath` / `MainTerritoryMap.ensureRewardIcon`、`refRows` / `TerritoryMapView.playResourceGain` 的 `readout` | `tests/res-types.test.ts`、`tests/territory-resource-gain.test.ts` |
 
 ## 1. 对局棋盘的图层结构与地块表现（`ZCGameBoard.prefab`）
 
@@ -101,7 +103,7 @@ mapLayer（= ZCGameHUD.prefab 的 content）
   6. **浮点容差与负数保护**：段末比较必须带 `HEX_ACT_SECONDS_EPSILON = 1e-9`；`progress < 0` 必须先返回 idle，严禁交给 `clamp01` 折成 0（否则会把正常建筑 `buildingPopScale` 置 0 藏起来）。
 - **判据**：`tests/zcds-hex-activation.test.ts`（含阶段 1 `tileScale` 恒 1、阶段 2 才缩且末刻到 0.1、`pulseFrame` 按 10fps 等宽推进 / 播完退场、对齐缩放恒定、零位移、淡出窗 > 建筑生长时长）、`tests/zcds-card-reveal-pop.test.ts`、`tests/zcds-building-icon-scale.test.ts`、`tests/territory-hex-flip.test.ts`。
 
-### 1.4 单位出生抖动、建筑产兵/产金抖动与新邻格延迟展示
+### 1.4 单位出生抖动、建筑产兵/产金抖动与新邻格生成动画
 
 - **单位出生抖动（110%）**：
   - `ZCUnitView.playSpawnShake(now)` 只记起点，`render` 按 `now - 起点` 调 `spawnShakePulse`（先 Y 轴拉至 `1 + SPAWN_SHAKE_STRETCH(0.1) = 1.1` 回落，再 X 轴拉至 `1.1` 回落，各 `SPAWN_SHAKE_PHASE_SECONDS = 0.12s`），叠乘在朝向翻转之上（含描边副本 `applyOutlineCopyScale`）。由 `renderUnitEntity` 的 `isBirth` 分支触发。
@@ -109,22 +111,27 @@ mapLayer（= ZCGameHUD.prefab 的 content）
 - **建筑抖动（产兵 + 产金共用曲线，拉伸量 120%）**：
   - 详见第 9.5 节：`ZCHexView.playBuildingShake(now)` 使用 `BUILDING_SHAKE_STRETCH = 0.2`（120%），因子乘进唯一写入口 `applyBuildingScale`，挂 `renderDynamic` 逐帧推进。
   - **判据**：`tests/zcds-building-spawn-shake.test.ts`。
-- **新扩展邻格延迟展示与描边同步（row6 + row9）**：
-  - 消耗金币开发地块后，新点亮邻格的等待窗为 `ZC_HEX_NEIGHBOR_HOLD_SECONDS = ZC_CARD_START_SECONDS(0.7) + ZC_HEX_NEIGHBOR_REVEAL_DELAY_SECONDS(0.2) = 0.9s`（必须锚定 `ZC_CARD_START_SECONDS`，严禁拼 `ZC_HEX_PULSE_SECONDS` 或 `ZC_HEX_FLIP_SECONDS`）。
-  - `ZCHexView.resolveDevelopableHold(now, canDevelop)`（**public**）：只拦截 **`canDevelop` 由假变真** 的格子（严禁按“是否挨着激活格”粗暴隐藏原本已可开发的邻格）；按住期间同时拦截**地块图标、价格、玩家色染色与共享领地轮廓描边**（详见第 9.2 节）；`initialize` 时必须复位 `developableHoldUntil / lastCanDevelop / developableBootstrapped`。
-  - **判据**：`tests/zcds-hex-neighbor-reveal-delay.test.ts`。
+- **新扩展邻格生成动画与脉冲同步（2026-10-26 改口径，**取代** row6 的 0.9s 按住窗）**：
+  - 需求原话：「战斗中，新格子的生成动画和地块脉冲动画同步播放」。旧口径「延迟 0.2s、等卡牌生成动画开始后再展示」（`ZC_HEX_NEIGHBOR_HOLD_SECONDS = ZC_CARD_START_SECONDS + 0.2`）已**删除**，不要加回来。
+  - **不再按住**：新点亮邻格的图标 / 价格数字 / 玩家色染色 / 共享轮廓描边在**点击那一拍**就跟脉冲一起出现（渲染世界与地块视图在同一次静态刷新里各自写，天然同帧，见第 9.2 节）。
+  - **生成动画**：只动 `buildingLayer`（= 地块图标 + 价格图标 + 价格数字的容器）。缩放沿 `elasticPopScale(t, DEVELOPABLE_SPAWN_FROM_SCALE = 0.6)`（`1.2` 峰值 → `0.92` 下探 → `1`），透明度走 `developableSpawnOpacity`（前 `DEVELOPABLE_SPAWN_FADE_END = 0.55` 线性淡入，之后恒 1）。时长 `ZC_HEX_NEIGHBOR_SPAWN_SECONDS = HEX_PULSE_WAVE_SECONDS = 0.5s`，与那道波**同起同收**；**别**把它写成脉冲段长 0.7s（那会把邻格拖到卡牌起点之后才长齐）。
+  - **起点锚脉冲起点**：`ZCHexView.noteDevelopableSpawn` 只在 `canDevelop` **由假变真**那一拍登记，起点取 `presentation.developPulseStartedAt`（渲染层用本帧 `hexActivations` 里最新的 `startedAt` 填），拿不到才退回 `now`。⚠️ 锚 `now` 会让生成动画整体滞后于脉冲（地块走 0.15s 静态节流）。
+  - **逐帧推进**：`ZCGameRenderWorld.renderDevelopableSpawns`（挂 `renderDynamic`）+ `developableSpawnHexes` 集合，与 `renderBuildingShakes` 同款：`renderHexSystem` 里 `isDevelopableSpawning()` 入队、`advanceDevelopableSpawn` 返回 `false` 出队并复位 1 / 255。
+  - `UIOpacity` **懒挂**在 `buildingLayer` 上（只有真播过生成动画的格子才多这个组件）；`initialize` 必须复位 `developableSpawnStartedAt / lastCanDevelop / developableBootstrapped`，并调 `applyDevelopableSpawn(0)` 把缩放 / 透明度落回基准。
+  - **判据**：`tests/zcds-hex-neighbor-spawn.test.ts`。
 
 ### 1.5 特效（出生光柱 / 受击 / 阵亡）的显示大小由 Prefab 根 `_lscale` 唯一决定
 
 与地块/建筑图标（由代码定缩放）**正好相反**，特效的显示尺寸完全归属美术 Prefab 根节点 `_lscale`，**在代码里写 `setScale` 或 `setPosition(0,0,0)` 会静默破坏表现**：
 
-| 特效类型 | 资源原图尺寸 | Prefab 根 `_lscale` | 屏上显示尺寸 | 代码端硬约束（`ZCEffectPool`） |
+| 特效类型 | 图片像素 / 固定显示画布 | Prefab 根 `_lscale` | 屏上显示尺寸 | 代码端硬约束（`ZCEffectPool`） |
 | :--- | :--- | :--- | :--- | :--- |
-| **出生特效** | 266×330 | `0.4144` | 110.2×136.8（基准宽 ~110px） | `playSpawnFx` **严禁写 `setPosition` 或 `setScale`**（Prefab `_lpos = (0, -28.2)` 是美术将光柱重心从头顶压到胸口的偏移，写 `(0,0,0)` 会静默覆盖） |
-| **受击特效（五组）** | 各异 | 按原图折算后再 **×0.7** | 屏上宽 **77px**（战士 61.6，= 110 基准 ×0.7 ×0.8） | 保持原始像素零插值损失，改大小只动 Prefab `_lscale` |
+| **出生特效** | 110×137 / 266×330 | `0.4144` | 110.2×136.8（基准宽 ~110px） | `playSpawnFx` **严禁写 `setPosition` 或 `setScale`**（Prefab `_lpos = (0, -28.2)` 是美术将光柱重心从头顶压到胸口的偏移，写 `(0,0,0)` 会静默覆盖） |
+| **受击特效（五组）** | 约 62–77px / 原显示画布 | 按原图折算后再 **×0.7** | 屏上宽 **77px**（战士 61.6，= 110 基准 ×0.7 ×0.8） | 缩图后固定显示画布，改大小只动 Prefab `_lscale` |
 | **阵亡特效（唯一例外）** | 535×1092 | **`0.16448`**（`= 0.2056 × 0.8`） | **88×179.6**（比 110px 基准小 20%） | `playDeathFx` 只写 `x/y`（阵亡 Prefab `_lpos` 本就是 `(0,0,0)`），**严禁写 `scale`**（池化复用节点每播一次乘一次会逐次缩水；且**严禁顺手把阵亡特效“统一口径”改回 110px**，它刻意缩小 20% 以免抢单位本体视觉重心） |
 
-- **判据**：`tests/zcds-hit-fx.test.ts`（同一条用例同时断言**缩放倍数**与**屏上像素尺寸**，防止原图基数变动漏检）。
+- **2026-10-28 用户要求降低资源包**：出生及五组受击帧按常规显示尺寸缩图；Sprite 改为 `CUSTOM` + `trim=false`，保留原 UITransform 画布、根缩放、位置与帧 UUID。逐帧换图不得让画布跟着新图像素尺寸变化；阵亡特效未调整。
+- **判据**：`tests/zcds-hit-fx.test.ts`（同一条用例同时断言**缩放倍数**与**屏上像素尺寸**，防止原图基数变动漏检）。 `tests/zcds-unit-fx-resolution.test.ts` 核对缩图和固定画布。
 
 ### 1.6 受击特效：总时长锁死 0.15s，且不许有定格（2026-10-17）
 
@@ -152,6 +159,95 @@ mapLayer（= ZCGameHUD.prefab 的 content）
   还按 2.0s 回收就多出 0.75s 冻住的残影。拿不到 clip 时也按这个值占位。
 - ⚠️ 尺寸 / 位置仍归 Prefab（§1.5），加速**只碰 `speed`**，别顺手写 `setScale`。
 - **判据**：`tests/zcds-spawn-fx.test.ts`（`state.speed === 1.6`、1.2s 不回收 / 1.25s 必回收）。
+
+### 1.8 中立资源奖励：**格心金币喷发**（2026-10-26，替换旧「飞向金币栏」）
+
+需求原文（2026-10-26 截图）：「点击地块后，资源奖励**粒子喷发**的动画丢失了，重新找回实现，
+喷射对应的粒子资源的动画」。
+
+也就是：**点开出金币堆 / 宝箱那一格 ⇒ 从格心喷出一束金币（抛物线倒锥 + 自身上下翻面）**，
+「+N」读数在这一束的**上方 40px** 同步升起并淡出。
+
+#### 一、为什么动的是这一段
+
+2026-10-20 那版是 `ZCNeutralRewardFx` 把一把金币从格子**拉到 HUD 金币栏**（`+N` 也在栏位上飘）。
+用户给的截图却是**格子原地喷一束**，读数也在格子上方 —— 和领地页 §3.5 那条喷发同一个观感。
+两条是**同一次反馈**，叠加播放会变成「喷完还要再飞一遍」，所以这里**替换而不是叠加**
+（2026-10-26 用户三选一确认：只要格心喷发）。
+
+⇒ 结论：**金币段不再需要 HUD 落点**。`IZCNeutralRewardFxTargets` 里已经**没有** `goldCounter`，
+`ZCGameRenderWorld` 的 `goldCounterNode` 选项也已删掉（不要再加回来）；只有神器那条还飞向神器按钮。
+
+#### 二、分工表
+
+| 需求里的东西 | 落点 |
+| :--- | :--- |
+| 「喷发多个图标」 | `ZC_NEUTRAL_BURST_COUNT = 12` 枚粒子（**每枚都是一张金币图**，不是一颗带动画的图） |
+| 「倒圆锥」 | `ZC_NEUTRAL_BURST_HALF_ANGLE_DEG = 26` —— 约束的是**出射方向**与竖直轴的夹角 |
+| 「喷发坐标点 = 点击地块中心」 | `ZCNeutralRewardFx.buildEntry`：金币段的根节点 `setPosition(start.x, start.y)`，其余位移都写子节点局部坐标 |
+| 「数字 ui 在上方间隔 40px」 | `ZC_NEUTRAL_BURST_LABEL_LIFT_PX = 40`，读数节点 `setPosition(0, 40 + rise.offsetY)` |
+| 「icon 自身上下翻面」 | `zcNeutralBurstParticle` 的 `scaleX / scaleY`，视图只 `setScale(scaleX, scaleY, 1)` |
+
+#### 三、曲线参数（与领地同值 —— 两张图共用 `core/hex/HexGridLayout` 的 123×90 格面）
+
+| 符号（`model/ZCNeutralBurst`） | 值 |
+| :--- | :--- |
+| `ZC_NEUTRAL_BURST_COUNT` | `12` |
+| `ZC_NEUTRAL_BURST_HALF_ANGLE_DEG` | `26` |
+| `ZC_NEUTRAL_BURST_SPEED` / `_SPEED_JITTER` | `650` / `0.12` |
+| `ZC_NEUTRAL_BURST_GRAVITY` | `1500` |
+| `ZC_NEUTRAL_BURST_STAGGER_SECONDS` | `0.025`（12 枚铺开 0.275s，**绝不同一帧全冒出来**） |
+| `ZC_NEUTRAL_BURST_LIFE_SECONDS` / `_LIFE_JITTER` | `1.1` / `0.15` |
+| `ZC_NEUTRAL_BURST_FADE_SECONDS` / `_SURFACE_FADE_SECONDS` | `0.25` / `0.12` |
+| `ZC_NEUTRAL_BURST_SCALE_JITTER` | `0.2`（基础缩放 0.8~1.2） |
+| `ZC_NEUTRAL_BURST_FLIP_MIN_HZ` / `_MAX_HZ` | `2` / `4` |
+| `ZC_NEUTRAL_BURST_LABEL_*` | `SECONDS 1.15` / `RISE_PX 96` / `LIFT_PX 40` / `ENTRANCE_RATIO 0.32` / `POP 1.18` / `FROM 0.6` |
+
+🔴 **三条红线**（与 §3.5 同一套，别在对局里另出新口径）：
+
+1. 轨迹用**解析式** `y = vy·t − ½·g·t²`，**不写成逐帧累加**（落点会随帧率漂）。
+2. 抖动**不用 `Math.random()`**：同一 `(seed, index)` 必须恒等。`seed` 取事件 id（每次发奖都不同）。
+3. **翻面只压 `y`**：`setScale(baseScale, baseScale·cos, 1)`；叠 `angle` 会读成「一边翻一边歪」。
+   另外 **落地后位置冻住**（横向也不许再滑，否则读成「贴着地皮滑一段」）。
+
+⚠️ **金币事件的总时长必须盖住整段喷发**：`ZC_NEUTRAL_REWARD_TOTAL_SECONDS` 取「神器飞行」与
+`zcNeutralBurstTotalSeconds(12)`（≈1.54s）里**较长**的那条。旧值是 1.4s —— 比喷发还短，
+模型 `prune` 会先一步把事件摘掉 ⇒ 实机正是「粒子刚喷出来整束消失」。
+
+#### 四、判据
+
+`tests/zcds-neutral-reward-fx.test.ts`（19 条）：队列时长必须 ≥ 喷发上限；出射确定性 / `|phi| ≤ 26°`
+/ `|vx|/vy ≤ tan26°` / 初速 ±12% / 左右都铺开且 200 次喷发整体无水平偏向；抛物线上升段单调、
+`y ≥ 0` 不穿模、峰值 ≈ `vy²/2g`、落点横向不超 `4·tan·apex`；错峰（首帧最多 1 枚）；落地横向纵向
+都冻住且 0.12s 淡出后为 `null`；翻面三态齐全、`scaleX` 恒等、相邻帧无硬切、12 枚不同步；读数
+`t=0` 就在（**不等最后一枚落地**）、easeOut 上飘、末段淡出；特效类整喷落在格心、12 枚 + 1 label、
+无 HUD 落点也照喷、事件过期即销毁；源码级别不许出现 `tween(` / `instantiate(`。
+
+#### 五、神器领取的格心爆炸：屏上边长 **90px**（2026-10-27）
+
+`ZC_ARTIFACT_CLAIM_BURST_SIZE` 只决定**屏上大小**（`Sprite` 是 `CUSTOM` + `trim = false`，按 `UITransform` 拉满），与源图像素无关；2026-10-28 按用户要求将 18 帧从 300×300 缩至 90×90，原始尺寸仅用于下方历史问题说明。取值演进：
+
+| 日期 | 值 | 口径 |
+| :--- | :--- | :--- |
+| 初版 | 220 | ≈1.7 格 —— 盖住邻格资源图标与造价数字 |
+| 2026-10-26 | 150 | ≈1.15 格（「特效太大了」第一次收） |
+| **2026-10-27** | **90** | **0.6 × 150，稳在一格之内**（0.73 × 顶面 123） |
+
+- **上限口径**：一格顶面 `123×90`（`core/hex/HexGridLayout`）、地砖脚印 `130×119`（`ZCGameHex.prefab` 的 `TileBackground`），取最紧的 **123** 当红线 —— 用例直接断言 `≤ 123`。
+- 🔴🔴 **这三次改动在屏上全都没生效过（2026-10-27 二次返工查出）**：`ZCNeutralRewardFx.createSprite`
+  原来是「先 `transform.setContentSize(size)` → `addComponent(Sprite)` → **赋 `spriteFrame`** → 最后才
+  `sizeMode = CUSTOM`」。`Sprite._sizeMode` 出厂是 `TRIMMED`，**赋图那一刻**引擎走
+  `_applySpriteFrame() → _applySpriteSize()`，TRIMMED 分支直接 `setContentSize(rect.width, rect.height)`
+  把节点写成**原图 300×300**；而 `sizeMode = CUSTOM` 的 setter 只在非 CUSTOM 时重算，**不会把尺寸还回来**。
+  ⇒ 用户看到的始终是 300px（≈2.4 格），所以「怎么改都没变小」。
+  修法：**先 CUSTOM + `trim = false` → 再赋 `spriteFrame` → 最后兜一次 `setContentSize`**。
+  同一个 helper 建的三样都受影响，修好后一起生效：爆炸 300 → **90**、神器图标 230 → **40**
+  （`ZC_NEUTRAL_REWARD_ARTIFACT_SIZE`）、金币 43 → **34**（`ZC_NEUTRAL_REWARD_COIN_SIZE`）。
+- ⚠️ **别只用 `contentSize` 断言**：测试夹具里的 `cc.Sprite` 是空类，不模拟这条回写 ⇒
+  「先设尺寸后 CUSTOM」的老写法在桩里照样绿。用例现在额外钉**赋值顺序**
+  （`sizeMode` 的位置必须早于 `spriteFrame`，兜底的 `setContentSize` 必须晚于它）。
+- 🔴 **问号状态不跟着缩**：图 1 那个「六边形底 + 问号指示器」是 `ZCHexView.artifactHexSpine`（prefab 里 **168×166.8**、Spine 循环动画，`artifact_charge` 专用），代码只切显隐与动画名、**一行尺寸都不写** ⇒ 改爆炸常量动不到它。
+- 判据：`tests/zcds-artifact-claim-burst.test.ts` 的「爆炸屏上边长 90px（0.6 × 150、不超一格），问号态的六边形 Spine 尺寸不动」——同时钉住 `90 == 0.6 × 150`、`≤ 123`、节点实际 `contentSize`、`createSprite` 的赋值顺序、以及 `ArtifactHexSpine` 仍为 168×166.8。
 
 ## 2. 抽到金卡的「传说卡出场横幅」（`ZCGameLegendBanner.prefab`）
 
@@ -194,6 +290,8 @@ mapLayer（= ZCGameHUD.prefab 的 content）
 | 引擎生命周期与渲染接线 | `app/main/MainTerritoryMap.ts`（`MainTabHost.showPage` 必须在 `setParent` 前调用 `initialize(assets)`） |
 
 ### 3.2 七条硬口径
+
+章节地图已解锁的关卡 / 首领 / 玩家据点在建筑上方显示短编号气泡（显示配置中的 `chapterId-stage`，例如 `1-5`，**连字符两侧不留空格**）。2026-10-28 用户指定底图 `image/spawn-region/frame_03`：使用蓝色带尖角原图，88×45、15 号白字，文字局部 y=5 对齐气泡正文；Sprite 先 CUSTOM + trim=false 再赋帧，采用 SLICED 保留边角，白色顶点色保留原图蓝色。同日按美术效果图校正文字样式：字重改**加粗**（美术稿笔画约占字高 25%，常规体只有 14%）、字距走 `spacingX = -1` 收紧（美术稿三字紧贴）、行高 20、字号 15 保持不变（实测字高/气泡高 0.50，美术稿 0.53，差的不是字号）。⚠️ 间距**不许写进字符串**：空格宽度跟字号 / 字体绑定，一旦换字号就会整体漂移；四个样式值统一从 `app/common/MapMarkerBadge` 导出（`MAP_MARKER_BADGE_FONT_SIZE` / `_LINE_HEIGHT` / `_SPACING_X` / `_BOLD` / `_TEXT_Y`），`renderLevelBubble` 必须整组覆盖 —— prefab 里的 `12 / 16 / 常规体` 是旧角标口径，只改字号会留下旧字重与旧字距。美术由 `TerritoryPageAssets` 经页面作用域的 AssetService 加载，`BundleCatalog` 路由到 battle 分包，不从视图加载。底部尖角距建筑可见顶边 3px；跟随 trim 和 `buildSize` 后的可见高度定位。大地图仍使用原有 88×30 编号牌，两边共用 `app/common/MapMarkerBadge` 的宽度、字号和定位函数。未解锁格保留银币条件，资源点及缺少有效建筑 / 气泡帧 / 关卡配置的站点不画气泡。气泡在共享角标层按需创建，`getStationLayers` 必须把角标层移至透明命中层之后，避免相邻行的 128×128 命中区抢走编号点击。点击沿用 `STATION_TAP`，隐藏 / 在途 / 生成淡入与站点同步，回收时统一销毁。判据：`tests/territory-station-batching.test.ts`、`tests/territory-tile-frames.test.ts`、`tests/territory-level-bubble-style.test.ts`（字重 / 字距 / 行高 / 抬升的常量守卫）、`tmp/territory-level-bubble-probe.mjs`（包含真实鼠标点击）。
 
 快速寻敌优先按当前推进顺序定位未通关 Boss；没有未通关目标时，定位当前章节关卡序号最高的已通关 Boss，同区域优先选建筑格。Boss 关卡、首领波次与异步据点允许重复挑战，区域已通关时跳过再次解锁；详情按钮与地图点击均请求服务端开战，保留在途判重与迟到回包校验。主线 Boss / 首领使用章节格子战斗参数；异步据点沿用服务端确认通关后切宝箱子类型的规则，奖励以服务端结算为准。
 
@@ -395,6 +493,622 @@ scaleY = baseScale · cos(2π · flipHz · t + phase)      flipHz ∈ [2, 4]，p
 - 收尾：落台面 0.12s（位置冻在落点）与生命末段 0.25s 两条分支各自命中、收尾帧几乎全透明；
 - 确定性、脏输入全 `null`；粒子组沙箱（真代码 + `cc` 打桩）验容器落在原点、粒子数 = 常量、逐帧节点值逐位等于模型、错峰可见、放完提前收起、复用能重新点亮；接线守卫（`originY` / `baseY` 的加法结构、喷发只喷一次且排在飘字之前、`setSiblingIndex(0)`、`stepBursts`）、以及「粒子组不许 instantiate prefab / 不许出现 tween」。
 
+### 3.6 领地奖励图标：**必须查两张表**，`item` 的图在 `main-pages` 分包（2026-10-26）
+
+现场：点开随机资源格 → 4 条 `+165 / +143 / +141 / +151` 飘字**前面全没有图标**，一格 12 颗喷发粒子
+**一颗都看不见**。用户的第一反应是「是不是策划表没转 JSON、所以找不到 icon」。
+
+**结论：表没坏、图也没缺，是解析链断了两处。**
+
+| 环节 | 真源 | 证据 |
+|---|---|---|
+| 表 | `assets/remoteRef/roleProperty.json`（17 行）、`assets/remoteRef/item.json`（389 行） | 都在盘上，`RefUtil` → `remoteRef` bundle 正常（HUD 货币条就是同一张表） |
+| 图 | `roleProperty` 图在 `assets/resources/icons/{resource,common}`、`image/main/resbar`；`item` 图在 **`assets/bundles/main-pages/icons/{item,equip,gem,skill,hero}`** | 截图里格子上的银币小图标渲染正常 ⇒ 首包那条链是通的 |
+
+#### 一、两个断点（是**同一个**症状的两个必要条件）
+
+1. **`ensureRewardIcon` 只查 `roleProperty`**：`resBarCellOfRefId(resId, rows)` 的 `itemRows` 留空 ⇒
+   `itemRowOfResId(undefined, …)` 恒 `null` ⇒ `kind` 只能是 `roleProperty` / `unknown`，
+   **`item` 分支是死代码**。随机池发的恰恰是道具（`16001` 精灵弓箭手、`16014` 天赋石…，只在 `item` 表里）
+   ⇒ 全部 `unknown` ⇒ `frame = null`。
+2. **`item.icon` 的图不在首包**：存的是 `icons/item/图标_兵书弓兵`，实盘在 `assets/bundles/main-pages/`。
+   老代码 `assets.load(cell.icon, SpriteFrame)` 两坑都踩：少拼 `/spriteFrame`（Cocos 索引里只有
+   `xxx/spriteFrame`，报 `Bundle resources doesn't contain …`，**不是 404**）+ 当成 `resources` 相对路径。
+
+**为什么「图标没有」和「粒子没有」是一起发生的**：`TerritoryMapView.playGainBurst` 与飘字用
+**同一批** `gainIcons` frame，`Sprite` 没有 `spriteFrame` 就什么都不画 —— 不是两套表现各坏一次。
+
+#### 二、口径（唯一出口）
+
+```ts
+const [propRows, itemRows] = await Promise.all([
+    this.refRows<IResPropertyRow>(ROLE_PROPERTY_TABLE),
+    this.refRows<IItemRefRow>(ITEM_TABLE),
+]);
+const path = resBarIconSpritePath(resBarCellOfRefId(resId, propRows, itemRows));
+if (path) frame = await assets.load(path, SpriteFrame);   // bundle 由 CocosAssetService 自动路由
+```
+
+- `ResTypes.resBarCellOfRefId`：**`roleProperty` 优先、其次 `item`**（与货币条、奖励格同口径）。
+- `ResTypes.resBarIconSpritePath`（本轮新增）：把 `IResBarCell` 拼成**可 load 的全名**。
+  - `roleProperty` 裸名 `图标_铜币` → `spriteFramePath(resIconRoot(name), name)`（三张例外查覆盖表）；
+  - `item` 路径 `icons/item/x` → `spriteFramePathOf(path)`（幂等补 `/spriteFrame`）。
+  - **bundle 路由不在这层做**：`CocosAssetService` 按 `BundleCatalog.bundleForPath` 前缀自动选包，
+    没加载的包它自己 `loadBundle`（所以 `main-pages` 不用页面预先拉起）。
+- 表按名记忆 **Promise**（`refRows`）：一格 3~5 种资源、连开几格时只有第一次真的读表。
+
+#### 三、红线
+
+- 🔴 **不许为「看起来有东西」放假图**。`item` 表 389 行里当前有 11 行没填 `icon`、1 行图两边都没有
+  （`10118` 图标_随机宝石宝箱）⇒ 这些奖励**只有数字、没有图标**。飘一个金币去代表「图纸」比没有图更误导；
+  全工程口径一致（奖励格缺图就只剩品质框）。缺图打一条带 `resId` 的 `console.warn`，催美术时有据可查。
+- 🔴 **缺图不等于关掉表现**：喷发照播、`+N` 照飘、奖励照发。
+- 🔴 **不许再出现两参 `resBarCellOfRefId(resId, rows)`**：任何"随机池 / 服务端回包"给的 `resId` 都可能落在
+  `item` 表里。
+
+#### 四、判据
+
+- `tests/res-types.test.ts`（3 条）：`roleProperty` 裸名 → 首包目录（含 3 / 13 / 14 三张覆盖表例外，逐条对实盘）；
+  `item` → `main-pages` 且后缀幂等；`item` **全表 389 行逐行对实盘**（首包或 `main-pages` 至少一处有图，
+  缺图行数 ≤ 12，涨了就红）。
+- `tests/territory-resource-gain.test.ts`（2 条，源码守卫）：`refRows<IItemRefRow>(ITEM_TABLE)` 必须出现、
+  `resBarCellOfRefId` 必须**三参**、两参写法与 `assets.load(cell.icon` 不许回潮、拼路径必须走
+  `resBarIconSpritePath`；缺图只缓存 `null` + warn，且**不许拿银币图顶替**。
+
+#### 五、读数合成一条：统一图标 + 数量之和（2026-10-26 追加）
+
+图标修好之后现场变成另一个样子：随机格一次发 4 种种族经验（僵尸 / 盆栽 / 花果 / 蘑菇），
+实机是「**4 行飘字、4 个不同的球、4 个数字**」—— 玩家读不出总量，也不懂图为什么不一样。
+
+口径（用户原话）：「将 icon 和数字 UI 的部分统一使用【种族经验球_随机】的 icon，数字则是
+全部加起来之和，粒子喷发使用对应的 icon 规则保持不变。」
+
+| 部分 | 改成什么 | 落点 |
+|---|---|---|
+| **读数**（icon + 数字） | **一条**：图标统一 `种族经验球_随机`，数字 = **全部数量之和** | `TerritoryMapView.playResourceGain` 的 `readout` 参数 |
+| **喷发粒子** | **不变**：仍按每种奖励**各自的图**轮流喷、个数仍按数量之和分级 | `playGainBurst`（一行没动） |
+
+- 统一图标是**写死的美术路径** `TERRITORY_RANDOM_GAIN_READOUT_ART = 'icons/item/种族经验球_随机'`
+  （`ArtPaths`）—— 当前 `item` / `roleProperty` 两张表里**没有任何 resId 指向这张图**，它是美术给
+  「随机种族经验值」这个槽位出的占位图，所以不去表里查 `resId`。图同样在 **`main-pages` 分包**。
+- 为什么**喷发不跟着统一**：喷发是「这一格给的是混合资源」的视觉证据，4 种球各喷几颗比全喷同一种更准确；
+  而且用户明确要求这块「规则保持不变」。
+- 合成模式**不叠加**：读数落在 `originY + 40px` 那条起点线上（`index = 0`），不吃
+  `TERRITORY_GAIN_STACK_GAP_PX`；逐条模式（银币 / 体力那条 `settleRewards` 路）行为完全不变。
+- **合成读数的起点再抬 30px ⇒ 70**（2026-10-26 第三张截图口径：「金球加数字 UI 的初始位置
+  增加 30px，不会遮挡粒子效果」）。种族经验球那张图比银币大，贴着 40px 会和格心喷出的那把粒子
+  挤在同一片区域。常量：`TERRITORY_GAIN_READOUT_EXTRA_LIFT_PX = 30`、
+  `TERRITORY_GAIN_READOUT_LIFT_PX = TERRITORY_GAIN_START_LIFT_PX + 30 = 70`。
+  🔴 **`TERRITORY_GAIN_START_LIFT_PX` 仍是 40**（row17 需求原值 + §3.5 / `territory-cell-center-align`
+  的判据都锚它）—— 这里只多出一个「合成读音专属」的抬升，不许把 40 直接改成 70。
+- 取不到图 ⇒ `readout.frame = null`，读数只剩数字（`+550`），喷发与发奖照旧 + 一条 warn。
+
+判据：`tests/territory-resource-gain.test.ts` 追加 5 条 —— 合成模式只出一条 / 不叠加 / 不再 `forEach`；
+**喷发仍按 `entries` 各用各的图**且先于读数；页面 `gains.reduce` 求和后只传一条 `readout`；
+统一图标常量必须等于 `icons/item/种族经验球_随机` 且实盘在 `main-pages` 里；
+合成起点恒等 `40 + 30 = 70` 且**逐条模式仍是 40**。
+
+### 3.7 宝箱图标飞进资源栏 + 资源栏跳动/闪光（2026-10-26 第四张截图）
+
+用户两条并列需求：
+
+> ① 「更换资源栏的图标，资源栏的按钮分别对应 银币 icon 和 体力 icon」
+> ② 「宝箱打开的体力或银币 icon 飞到对应的资源栏中，资源栏的 icon 和数字有跳动增加的反馈，资源栏整体闪光」
+
+⚠️ ② 里的「整体闪光」**当天就被收窄成「只有命中的那一格闪」**（用户第六张截图，见下面的「二（续）」）。
+本节正文保留原话只为记录需求演进，落地口径以「二（续）」为准。
+
+#### 一、① 改的是一行 prefab 覆盖值，不是代码
+
+HUD 那条货币条是 `common/ResBar` 的**嵌套实例**（`ArenaRoot/TopHud/ResBarLayer/ResBar`），
+格数与顺序的唯一真源就是实例上覆盖的 `resKeys`：
+
+| | 改前 | 改后 |
+|---|---|---|
+| `ArenaRoot.prefab` 的 `resKeys` 覆盖 | `gold,gem` | **`gold,end`** |
+| 第 1 格 | `gold` = 银币（`图标_铜币`） | 同左 |
+| 第 2 格 | `gem` = 晶石（`图标_灵石`） | **`end` = 体力（`图标_体力`）** |
+| 第 3 格 | `render(null)` 整格隐藏 | 同左 |
+
+- `plus`（补货加号）只按 `key === 'end'` 亮 ⇒ 改完只有**体力格**带加号（`MainResBarTypes.buildResBarSlots`）。
+  ⚠️ HUD 这两个槽上还覆盖着 `alwaysShowPlus = true`（银币格也有加号），这是 HUD 自己的版面，别动。
+- 🔴 `MainResBarTypes.RES_BAR_KEYS`（`gold,gem,end`）**不再代表 HUD** —— 它只服务
+  `buildResBarView` 的默认参数（`MainResBar` 算出来的 `slots` 按设计不渲染）。
+  别再拿它去比 prefab，两处已经不是一一对应。
+
+##### 一（续）、图标也要跟着换 —— 而且必须「由 keys 驱动」（2026-10-26 第五张截图）
+
+> 「资源栏这两个图标保持大小不变，分别更换成 图标_银币和 图标_体力」
+
+改完 `resKeys` 后现场是：数值已经是体力口径（`59/30`），**两格图标却还是同一枚金币**。
+
+根因不是 `resKeys`，是宿主把两格的图标**写死**了，而且是**两道**：
+
+| 覆盖项 | 归属 | 后果 |
+|---|---|---|
+| `iconOverride` = `hud_coin_icon`（HUD 专用金色硬币） | `MainResBarSlot` | `render()` 里 `if (this.iconOverride) return;` **直接短路**，表里的图永远不会用 |
+| `_spriteFrame` = `hud_coin_icon` | 格子里的 `Icon` Sprite | 即使去掉上一条，异步加载失败/未完成时也还是那枚金币 |
+
+⇒ 两条一起处理：
+
+1. **摘掉 `iconOverride` 覆盖项**（`propertyOverrides` 里那 2 条），让图标回到
+   `resKeys → roleProperty.icon → resIconRoot()` 这条唯一出口 —— 以后再改 keys，图标自动跟随。
+   ⚠️ 摘除只从 `propertyOverrides` 数组里去掉引用，`CCPropertyOverrideInfo` / `TargetInfo`
+   对象留在原地（`__id__` 编号不能动）；它们变成无引用的死数据，编辑器下次保存会自动清掉。
+2. **`Icon` 的 `_spriteFrame` 换成表里那两张**（`图标_铜币` / `图标_体力`）：它是**首帧占位图**
+   ——异步加载完成前先画对的那张，不会闪一下旧图。
+
+##### 「保持大小不变」是怎么落到 44×44 的
+
+| 图 | 画布 | 可见区 | 可见占比 |
+|---|---|---|---|
+| 旧 `hud_coin_icon` | 38×37 | 38×37 | **100%** |
+| `图标_铜币`（银币） | 100×100 | 86×86 | 86% |
+| `图标_体力` | 100×100 | 90×81 | 90% × 81% |
+
+旧图无透明留白，节点 38×37 ⇒ 可见硬币 **≈ 38px**。游戏内图标带留白，若节点仍给 38
+可见只剩 **≈ 33~34px**（肉眼小一圈）。所以 `Icon` 的 `_contentSize` 覆盖改成 **44×44**：
+
+- `44 × 0.86 = 37.8` ≈ 38（银币）
+- `44 × 0.90 = 39.6` / `44 × 0.81 = 35.6`（体力）
+
+**改尺寸的是节点、不是美术** —— 不要为了"看起来一样大"去重切图。
+
+#### 二、② 的链路：三步，各在一个文件
+
+```
+MainTerritoryMap.wireRewardCatch()          页面：resId → 资源栏哪一格（业务口径）
+  ├─ ResBar.slotWorldPositionOf(key)        资源栏：那一格的世界坐标
+  └─ TerritoryMapView.setRewardCatchWorldPoint(resId, world)  换算成覆盖层局部坐标
+        └─ TerritoryChestView.setCatchPointOf(resId, x, y)    每枚图标各自飞向自己的格子
+TerritoryChestView.step() → fireLandings(t) 到达时刻 = flyStart + i×stagger + flySeconds
+  └─ TerritoryMapView.setRewardLandedHandler → ResBar.playGainFeedback(key, amount)
+        ├─ MainResBarSlot.playGainFeedback  图标弹一下 + 数字滚动
+        └─ ResBar.flash(slot)               **那一格**闪光（Graphics，无美术资源）
+```
+
+| 关注点 | 真源 | 备注 |
+|---|---|---|
+| `resId → key` | `TerritoryResourceGain.TERRITORY_WALLET_RES_KEY`（`7→gold` / `9→end`） | 与 `roleProperty.json` 的 `key` 列一致，单测逐行比对 |
+| 到达时刻 | `territoryChestFlyArriveAt(spec, i, flyCount)` | 不许用「上一帧还在、这一帧没了」反推（逐帧累加会漏最后一枚） |
+| 反馈曲线 | `MainResBarFeedback`（`resBarHitFx` / `resBarFlashFx`） | 纯函数，零 `cc`；视图只「取 fx → 写节点」 |
+| 闪光区域 | **命中的那一格**的框 + 8px（`ResBar.computeGlowRect(target)`） | 见下面第四节：不许回退成整条，否则银币格会跟着体力格一起亮 |
+
+🔴 **这四步必须都在盘上**：2026-10-26 复查时发现页面侧那一段（`wireRewardCatch`）**整段缺失** ——
+视图 API 齐了但零调用，图标只飞默认落点、资源栏从不跳也从不闪，而且**一句错都不报**。
+判据已补在 `tests/territory-chest-animation.test.ts`（「页面接线」那条），别再删。
+
+#### 二（续）、闪光只闪**命中的那一格**（2026-10-26 第六张截图）
+
+> 「宝箱打开获取体力资源，只有对应的资源条闪烁，银币资源栏不闪烁」
+
+上一版写的是「资源栏**整体**闪光」（第二节原话就来自用户的第五张截图）。实机表现是：只发体力时，
+**银币格跟着一起亮** —— 玩家反而读不出到底涨的是哪个资源。这是"整条闪"的固有缺陷，不是参数问题。
+
+根因在 `ResBar` 的两行：
+
+| 位置 | 改前 | 改后 |
+|---|---|---|
+| `playGainFeedback` | `this.flash();` | **`this.flash(slot);`** |
+| `computeGlowRect()` | 无参，遍历 `hostSlots()` 取**所有显示中格子**的包围盒 | `computeGlowRect(target)`，有 `target` 只算那一格 |
+
+细节：
+
+- `flash(target?)` 保留无参形态（= 整条，老口径）**只作兼容**；本工程唯一的调用点必须传槽位。
+- `target` 不可见 / 没有 `UITransform` ⇒ 返回 `null`（**这一帧不闪**），
+  🔴 **绝不回退成整条包围盒** —— 那正是本轮要修的病，回退等于白改。
+- 闪光只有一层 `Graphics`：连续命中**不同格**时后一次直接改写 `glowRect` + 重启时间轴，
+  光「跳」到新格上，而不是两格同时亮（"哪格涨了闪哪格"才是玩家的判据）。
+- `playGainFeedback(key, amount)` 增加早退：`amount <= 0` / 非有限数 ⇒ **整段跳过**。
+  开箱奖励是配表来的，0 值行存在；不拦会出现「这一格亮了一下、数字一动不动」。
+- 曲线本身（`resBarFlashFx` / `RES_BAR_FLASH_SECONDS` / `RES_BAR_FLASH_PEAK_ALPHA`）**一个数都没动**，
+  改的只是画框 —— 时长与亮度是手感，作用域是语义，别混在一起调。
+
+判据：`tests/main-resbar.test.ts` 新增 1 条源码契约 —— `playGainFeedback` 必须 `this.flash(slot)`；
+全文件不许出现无参 `this.flash()`；`computeGlowRect` 必须按槽位算框且算不出时 `return null`。
+
+#### 三、红线
+
+1. **不许用 tween**（规则 106/247）：`ResBar.update` 是唯一心跳，`MainResBarSlot` 自己**不挂** `update`。
+2. **每种资源只通知一次落地**（`landedResIds`）：30 枚图标里同一资源占 15 枚，按枚通知会把数字「击」15 次。
+3. **落地通知必须排在停播判断之前**：最后几枚是在收尾段落地的，放到 `stop()` 之后就永远收不到。
+4. **数字滚动期间 `render()` 只暂存不直写**（`pendingValueText`）：`CmdRole` 推包正好落在滚动途中时，
+   直接重写会表现成「滚到一半跳回新值」。
+5. **找资源栏要「从本节点往上逐层问」**，不许从场景根 `getComponentInChildren` ——
+   商城 / 天赋页内嵌同一个公共件，从根搜很容易先命中被盖住的那一份（图标飞过去就没了）。
+6. 拿不到资源栏（独立预览 / 版面被改）⇒ 保持默认落点 `(0, size.height/2 - 46)`，**发奖不受影响**。
+7. **反馈的视觉范围 = 语义范围**：涨的是哪一格就只动哪一格（跳动、数字、闪光三者一致）。
+   任何"帮玩家看得更清楚"的整体高亮都是在削弱可读性 —— 玩家是靠"哪格在动"认资源的。
+
+#### 四、判据
+
+- `tests/main-resbar-feedback.test.ts`（11 条）：窗口外 `null`、起手恒等 1、图标峰值 = `1 + 0.34`、
+  数字峰值更小、收尾回到 1、`countRatio` 单调、体力后缀 `/上限` 不丢、滚动首尾精确。
+- `tests/territory-chest-animation.test.ts`（+4 条）：`flyArriveAt` 相邻差 = 错峰；
+  **最后一枚必须早于 `territoryChestEndSeconds`**；脏 index 给 `Infinity`；
+  视图里 `fireLandings` 必须排在停播判断之前、`landedResIds` 每场清空。
+- `tests/territory-resource-gain.test.ts`（+4 条）：`7→gold` / `9→end`、覆盖面与钱包资源完全一致、
+  与 `roleProperty` 表逐行一致、**HUD 的 `resKeys` 必须真的摆着这两格**（改回 `gold,gem` 会让体力无处可落）。
+- `tests/main-resbar.test.ts`：`ArenaRoot` 实例的 `resKeys` 断言改成字面量 `gold,end`；
+  另加一条「两格图标跟 `resKeys` 走」——**宿主不许再覆盖 `iconOverride`**、
+  `Icon` 的占位 `_spriteFrame` 必须逐字等于 `roleProperty` 里 `gold`/`end` 那张图的 uuid、
+  `Icon` 尺寸必须 `44×44`。
+
+### 3.8 建筑体量倍率 `buildSize`（表「模型大小」，**可以是小数**）（2026-10-27）
+
+#### 一、链路：改一处表，四棵棕榈树就跟着变
+
+```text
+doc/塔防数据配置/PVP-建筑.xlsx（「装饰建筑」表 D 列「模型大小」）
+  → doc/塔防数据配置/json/client/build.json        （策划转表产物）
+  → assets/remoteRef/build.json                    （ref_compress_json.py 压缩成 k/v/c）
+  → TerritoryPageAssets.buildScales                （Number(row.buildSize)，≤0 或非数 → 1）
+  → TerritoryMapView.buildScaleOf → TerritoryStationView.iconSizeScale
+  → scale = (BUILDING_VISIBLE_WIDTH / 可见宽) × iconSizeScale
+```
+
+- **纯客户端字段**：`json/sever/build.json` 里**没有** `buildSize`（只有 `buildId` / `buildresource`），改体量不用动服务端表。
+- **类型行要跟着改**：xlsx 第 6 行是类型声明行，写小数时 D 列必须写 **`float`**，否则转表工具按 `int` 读会把 `0.8` 抹成 `0`（然后被 `rawSize > 0 ? ... : 1` 兜回 1，表现为「改了表但没变化，零报错」）。
+- **它是乘在归一系数之上，不是替换**：`buildSize = 1` 时与旧行为逐像素一致；>1 变大、<1 变小。替换会让同屏建筑忽大忽小，见 `tests/territory-cell-center-align.test.ts` 第四层。
+
+#### 二、改体量**不会**破坏居中对齐（判据的数学依据）
+
+缩放是围绕 `Icon` 节点锚点（= 节点中心）等比进行的，而 trim 补偿量与缩放同源：
+
+```ts
+const scale  = (BUILDING_VISIBLE_WIDTH / visibleWidth) * this.iconSizeScale;
+const shiftX = frame.offset.x * canvasScaleX * scale;   // ← scale 里已经含 iconSizeScale
+const shiftY = frame.offset.y * canvasScaleY * scale;
+node.setPosition(mapX - shiftX, mapY - shiftY, mapZ);
+```
+
+缩放后「可见区中心偏离画布中心」= `offset × canvasScale × scale`，补偿量**正是同一个式子** ⇒ 残差恒为 **0**，与 `buildSize` 取什么值无关。落点本身由 `cellCenter`（`+ HEX_GRID_CONTENT_LIFT = 12.5`）抬到 2.5D 台面中心，也不受体量影响。
+
+> 所以「缩小 + 对齐中心」这两件事里，**对齐是本来就成立的**，不需要额外改代码；要动的只有表里的倍率。
+
+#### 三、2026-10-27：69010~69013 四棵棕榈树 `1 → 0.8`
+
+`PVP-建筑.xlsx`「装饰建筑」表 69010~69013 = 装饰棕榈树 1~4（`territory_decor_03_v1 … 06_v1`）。
+按「归一宽 84 × buildSize」复算的实际渲染尺寸（台面 123×90）：
+
+| buildId | 素材 | buildSize | 实际可见 宽×高 | 高/台面 |
+| :-- | :-- | :-- | :-- | :-- |
+| 69010 | `territory_decor_03_v1` | 1 → **0.8** | 84×90.1 → **67.2×72.1** | 80.1% |
+| 69011 | `territory_decor_04_v1` | 1 → **0.8** | 84×101.0 → **67.2×80.8** | 89.8% |
+| 69012 | `territory_decor_05_v1` | 1 → **0.8** | 84×117.7 → **67.2×94.2** | 104.6% |
+| 69013 | `territory_decor_06_v1` | 1 → **0.8** | 84×122.9 → **67.2×98.3** | 109.3% |
+
+⚠️ 69012 / 69013 缩到 0.8 后**可见高仍大于台面高 90**（= 截图上「树顶出格子」那两张）。要压进台面还需要再降一档
+（`0.7` ⇒ 82.4 / 86.0；`0.65` ⇒ 76.5 / 79.9），属美术口味，未擅自改。
+同类还有 `territory_decor_12_v1`（69019，92.5，未动）。
+
+### 3.9 装饰建筑「底部对齐格子中心点」（只留 69010~69013，2026-10-27 两轮收敛）
+
+#### 一、现象与真因
+
+截图读作「树没居中、浮在格子上」，**不是锚点坏了、也不是代码没对齐**：
+
+1. `.meta` 的 `rect / offsetX / offsetY` 与 PNG 实测 alpha bbox **逐项一致**（12 张全过）；
+2. `applyIconPlacement` 把**透明包围盒（trim）中心**压到格心，残差恒 **0**（`tests/territory-cell-center-align.test.ts` 第二层钉住）。
+
+真因是**像素重心 ≠ 包围盒中心**：物体越高，"站在地上"的构图让重心越偏底部。换算到地图像素
+（已乘 `buildSize`）后纵向偏差：`decor_03` **−14.6**、`decor_05` **+13.4**、`decor_04` **−6.4**，
+而树桩 / 石块类只有 −1.6 ~ −2.3 —— 正好解释「树歪、树桩正」。
+
+#### 二、口径：可见**底边**压格心
+
+```ts
+const visibleHeight = trimmed.height * canvasScaleY;          // 归一前的可见高
+const anchorLiftY  = this.bottomAnchored
+    ? visibleHeight * scale * 0.5 - TERRITORY_BOTTOM_ANCHOR_DROP_PX   // 4px
+    : 0;
+node.setPosition(mapX - shiftX, mapY - shiftY + anchorLiftY, mapZ);
+```
+
+推导：可见中心原本被摆在格心 ⇒ 可见底边在「格心 − 可见高/2」；要让**底边 = 格心**，节点须再上抬「可见高/2」（缩放后）。
+
+再减 `TERRITORY_BOTTOM_ANCHOR_DROP_PX = 4`：树干底下还有一圈**落地影子**，影子算进了包围盒
+⇒ 严格按"可见底边"对齐时本体被抬起约 4px。用户 2026-10-27 验收：「69010~69013 的对齐中心点往下偏移 4px」。
+⚠️ 这 4px 是**地图像素**，不乘 `buildSize`（位置写在父节点空间，与 `Icon` 缩放无关）。
+
+| 要点 | 口径 |
+| :-- | :-- |
+| 抬升量 | `可见高(trim × canvasScaleY) × scale ÷ 2 − 4`，前一项**含 `buildSize`**、后一项不含 |
+| 影响面 | 只改**纵向落点**，横向与缩放完全不动（`tests/territory-bottom-anchor.test.ts` 逐项钉住） |
+| 白名单 | `TERRITORY_BOTTOM_ANCHOR_BUILD_IDS = 69010…69013`（**四棵棕榈树**），判定函数 `territoryUsesBottomAnchor()` |
+| 传参 | `ITerritoryStationRender.bottomAnchor?`，由 `TerritoryMapView` 两条路各传一次：站点 `Number(site.buildingId)`、随机格 `Number.isFinite(buildingId) && …` |
+| 写入时机 | `render()` 里必须在 **`applyIconPlacement()` 之前**写 `this.bottomAnchored`（站点节点池化复用，晚写就用上一格的口径） |
+
+#### 三、🔴 不要走「让美术把内容往下平移」这条路
+
+`trim` 会自动裁到 alpha bbox，内容平移后 bbox 跟着走，代码照 bbox 中心对齐 ⇒ **屏幕上一个像素都不变**。
+视觉重心的偏差只能靠**落点口径**（本节）或**改构图本身**（让 bbox 中心与重心重合）解决。
+
+#### 四、第二轮的取舍：谁留、谁退回居中
+
+用户按**逐图对位图**验收（`docs/章节地图装饰建筑对位-线上规则.png`，`python tools/preview_decor_alignment.py rules`）：
+
+| buildId | 素材 | buildSize | 验收 | 现在 |
+| :-- | :-- | :-- | :-- | :-- |
+| 69008 | `decor_01` 宝箱屋 | 1.0 | ✗ | **居中**（底边对齐把本体抬太高） |
+| 69009 | `decor_02` 圆顶哨站 | 1.0 | ✗ | **居中** |
+| 69010 | `decor_03` 棕榈 1 | 0.8 | ✓ | 底部对齐 −4px |
+| 69011 | `decor_04` 棕榈 2 | 0.8 | ✓ | 底部对齐 −4px |
+| 69012 | `decor_05` 棕榈 3 | 0.8 | ✓ | 底部对齐 −4px |
+| 69013 | `decor_06` 棕榈 4 | 0.8 | ✓ | 底部对齐 −4px |
+| 69014 | `decor_07` 树桩 | 1.0 | ✗ | **居中**（扁平对称，本身重心就在中间） |
+| 69015 | `decor_08` 树桩+草 | 1.0 | ✗ | **居中** |
+
+规律：**只有"高、细、明显站在地上"的棕榈树需要底边对齐**；屋子/哨站/树桩的重心本来就靠中间，
+底边对齐反而把它们整体抬高。`decor_09…12`（草丛 / 树桩花 / 宝箱）一直是居中口径。
+
+#### 五、判据
+
+`tests/territory-bottom-anchor.test.ts`（11 条，真实模块 + 真实 VM 渲染）：
+
+- 白名单恰好 `[69010, 69011, 69012, 69013]`；`69008 / 69009 / 69014 / 69015 / 69007 / 69016 / 0 / −1 / 69010.5 / NaN / ±Infinity` 一律 `false`；
+- 抬升量 = 21.2（可见高 60、scale 0.84、−4）、随可见高变（40 → 12.8）、随 `buildSize` 变（0.8 → 16.16，
+  **−4 不缩**，若误乘会得 12.16）、与 `trim` 偏移互不干扰；
+- 池化复用：先 `bottomAnchor: true` 再 `false`，抬升必须被完整清掉，且缺省与显式 `false` 逐像素等价；
+- 接线：`bottomAnchored` 的赋值早于 `applyIconPlacement()`；`TerritoryMapView` 两条路都传且渲染层**不许出现 id 字面量**。
+
+### 3.10 地图拖拽**上下**限：地块边缘停在个人信息框下方 15px（2026-10-27 三轮）
+
+#### 一、用户口径
+
+> 第一轮：「最底部的地块可以被拖动到 UI 框的下方，间距约 15px」
+> 第二轮：「**顶部**的格子还是无法拖动到个人信息框的下方」
+> 第三轮：「当前顶部留白已经实现，但是仍然需要可以下拉多大约 **60px**」
+
+⇒ 滚到**下**极限时，地图**底边**停在「顶部 HUD 框底边 + 15px」；
+   滚到**上**极限时，第一排地块的**可见顶边**停在「HUD 底边 + 15 + 60」。
+（HUD 框 = 指挥官栏 + 好友/邮件/排行榜/邀请那一块，即 `ArenaRoot/TopHud`。）
+
+| 边 | 看什么 | 公式（`hudBottom` = HUD 底边到视口顶部的距离） |
+| :-- | :-- | :-- |
+| 底部 | 地图包围盒底边 | `视口高 − hudBottom − 15` |
+| 顶部 | 第一排的**可见顶边** | `hudBottom + 15 + 半个格面高(45) + 呼吸量(60)` |
+
+⚠️ 顶部那两截**必须分开表达**，别合并成 `+105`：
+
+| 常量 | 值 | 性质 | 变不变 |
+| :-- | :-- | :-- | :-- |
+| `TERRITORY_MAP_TOP_FACE_RISE` | `HEX_GRID_FACE_HEIGHT / 2` = 45 | **几何**：格面以格心为中心，图上探半格 | 改行高就得跟着变 |
+| `TERRITORY_MAP_TOP_BREATH` | 60 | **手感**：完整露出来之后还能再拖多远 | 跟几何无关，随时可调 |
+
+只加 15 ⇒ 格心在下巴下面 15px、第一排的**上半张脸**仍压在面板后（第二轮报的）；
+加够 45 但不再留 ⇒ 第一排刚好贴着面板口，读起来还是"没拖完"（第三轮报的）。
+
+#### 二、机制：留白就是硬上限，不是"回弹前的临时越界"
+
+拖拽归 `cc.ScrollView`，它只按「内容层高 − 视口高」钳范围；`MainTerritoryMap.prefab` 里
+`elastic = **false**` ⇒ **拖不过去，松手也不回弹**。所以上限完全由内容层底部留白一个数决定：
+
+```text
+滚到最底 ⇒ 内容层底边贴视口底边 ⇒ 地图底边在视口底部上方 pad
+         ⇒ 地图底边距视口顶部 = 视口高 − pad
+要让这条边落在 hudBottom + GAP：
+  pad = 视口高 − hudBottom − GAP          （GAP = TERRITORY_MAP_HUD_GAP = 15）
+```
+
+顶部同理，只是看的是**可见顶边**：
+
+```text
+滚到最顶 ⇒ 内容层顶边贴视口顶边 ⇒ 地图包围盒顶边距视口顶部 = padTop
+可见顶边 = padTop − FACE_RISE        （FACE_RISE = HEX_GRID_FACE_HEIGHT / 2 = 45）
+要让它在 hudBottom + GAP + BREATH：
+  padTop = hudBottom + GAP + FACE_RISE + BREATH    （BREATH = 60）
+```
+
+两个式子一起实现为 `territoryMapContentPaddingBottom(viewportHeight, hudBottom)` /
+`territoryMapContentPaddingTop(hudBottom)`，都夹在 `[0, ∞)`。
+
+⚠️ 两边**不对称是故意的**：底部看的是「地图包围盒底边」（格心），而地块侧壁在格心**下方** 71px，
+格心停在 `hudBottom + 15` 时整块地块自然已经在面板下方；顶部相反，可见部分在格心**上方**。
+
+#### 三、链路
+
+```text
+ArenaRoot/TopHud（四边 Widget，顶对齐 16）+ 长屏适配 MainHudLayout
+  → MainTerritoryMap.findTopHud()          （从本页往上找同名兄弟，和 BigMapEntry 同款）
+  → topHudBottom()：两个 getBoundingBoxToWorld() 相减 = HUD 底边到视口顶部的距离
+  → territoryMapContentPaddingBottom(viewport.height, hudBottom) / territoryMapContentPaddingTop(hudBottom)
+  → TerritoryMapView.setContentPaddingBottom(pad) / setContentPaddingTop(padTop)
+  → 三处消费（必须同源）：
+       syncContentSize / syncBackground → territoryMapContentSize(layout, pad, padTop)
+       applyContentShift              → territoryMapContentShiftY(pad, padTop) = (pad − padTop) / 2
+       MainTerritoryMap.scrollToCell  → territoryMapOffsetForCell(..., { paddingBottom, paddingTop })
+```
+
+⚠️ **量世界包围盒，不抄 prefab 数字**：TopHud 挂 Widget + 长屏适配（`MainHudLayout` 按安全区改
+`top`）⇒ 底边随屏幕比例变，抄死数值在长屏上会差几十像素。
+⚠️ **`canvas-resize` 回调要延一帧**再量：`MainHudLayout` 也在同一事件里排 TopHud 的 Widget，
+两个组件顺序不保证，同帧量到的可能还是旧底边。
+⚠️ 改留白只能走 setter：偏移是 `(bottom − top)/2`，直接赋字段会让内容层错位。
+⚠️ **两份留白必须一起传**：只传底部 ⇒ 内容层高与偏移各少一截，滚到顶时第一排地块又钻回面板后面。
+
+#### 四、标准 720×1280 屏的实算
+
+| 量 | 值 |
+| :-- | :-- |
+| `MapViewport` | 720 × **1112**（四边 Widget，bottom = 168） |
+| `TopHud` 底边到视口顶部 `hudBottom` | 16 + 130 = **146** |
+| 底部留白 `pad` | 1112 − 146 − 15 = **951**（旧值恒 300） |
+| 顶部留白 `padTop` | 146 + 15 + 45 + 60 = **266**（旧值恒 0 → 上轮 206） |
+| 内容层高（18 行图，1694） | 1694 + 951 + 266 = **2911**（旧 1994 → 上轮 2851） |
+| 内容层偏移 `shift` | (951 − 266) / 2 = **342.5**（旧 475.5 → 上轮 372.5） |
+| 拖到最底时地图底边距屏幕顶部 | **161**（= HUD 底边 146 + 15，不受顶部改动影响） |
+| 拖到最顶时第一排**可见顶边**距屏幕顶部 | **221**（= 146 + 15 + 60） |
+| 拖到最顶时格心距屏幕顶部 | 266（可见顶边再减 45） |
+
+> 副作用（可接受但记一笔）：内容层变高 ⇒ 底图 cover 系数变大（横向裁剪更多）、
+> 云填充面积同步变大（两侧各多半份留白）。滚到最底时地图下方那一大片是**底图 + 云**，不是白底；
+> 滚到最顶时面板下方会露出约 120px 的云（`266 − 146`），读作"还没探索的边境"，不是裸底图。
+
+#### 五、判据
+
+`tests/territory-map-bottom-inset.test.ts`（17 条）：
+
+- 两条反算公式与边界（HUD 高过视口 / 非有限值 / 负数一律夹到合法值）；
+- **两条不变量**：滚到最底地图底边 = `hudBottom + 15`；滚到最顶第一排**可见顶边**
+  = `hudBottom + 15 + 60`（并反证"只加 15 不加 45"会落进面板里、并钉死 45 与 60 是两个常量）；
+- 两份留白一起决定 `内容层高` 与 `偏移 = (bottom − top)/2`，缺省仍是 `300 / 0`；
+- 顶部留白真的撑大了可滚上限（`scrollToOffset` 不被钳在半路）；
+- 视图 `contentPaddingTop` 字段 + `setContentPaddingTop` setter 都同步重写偏移；
+- 页面从宿主页找 TopHud 量包围盒、**两份留白用同一个 `hudBottom` 反算**、注入早于 `initialize`、
+  `scrollToCell` 两份都传。
+
+### 3.11 云层散场：判据用「已激活」，收工先演镜头，雾逐朵退场（2026-10-27）
+
+#### 一、两条判据**故意不同源**
+
+| 判据 | 管什么 | 用什么 |
+| :-- | :-- | :-- |
+| 逐格 | 这一格的云要不要**散** | `revealed`（`territoryRevealedCells`；格子一露就让开） |
+| 整片 | 铺满层（背景那层雾）什么时候**收工** | **已激活**（打通才算） |
+
+`revealed` 里有一类是"看得见、还没开"的格（已占领格**前沿**的随机候选格 + 前置满足的站点）。
+拿它当收工判据 ⇒ 玩家还有一格没激活，雾就散了。激活口径：
+
+```text
+激活 = progress.isCellUnlocked(cellId)     // 服务端允许点
+    || progress.isOwned(cellId)            // 已占领
+    || progress.isAreaPassed(cellId)       // 同 configId 已通关
+```
+
+三条都是服务端确认过的状态 ⇒ 判据**不会死锁**。
+⚠️ 别拿 `isCellPassed` 当唯一判据：宝箱要"领完"、`bonus` 根本不走 `isAreaPassed`
+（`areaPeers` 只认 stage/boss/asyncPvp），卡在最后那一格就永远收不了官。
+
+#### 二、收工演出：拉远 → 看雾散 → 拉回
+
+| 段 | 时长 | 常量 |
+| :-- | :-- | :-- |
+| 拉远（抬到整张图入画，`easeOut`） | 1.1s | `TERRITORY_CLOUD_DOLLY_OUT_SECONDS` |
+| 淡出（在拉远视角里慢慢淡，**逐朵错峰**） | **2s** | `TERRITORY_CLOUD_DOLLY_FADE_SECONDS` |
+| 拉回（`1 - easeOut` 对称落回） | 0.7s | `TERRITORY_CLOUD_DOLLY_IN_SECONDS` |
+
+总时长 `territoryCloudDollyTotalSeconds()` = **3.8s**（别写死，跟着三段走）。
+
+- 淡出时长**单独一份**，不复用 `TERRITORY_CLOUD_FILL_FADE_SECONDS`（0.5s）：那个是"没人看"时的
+  默认值，且刻意与最后一朵云的消散同长；进了演出必须放慢，否则读不出"逐渐消失"。
+- 起淡时机 = **拉远到位那一刻**（`territoryCloudDollyFadeDue`），起早了玩家还没看清全图。
+- 入画倍率 `territoryCloudDollyFitScale(mapW, mapH, vw, vh)`：≤ 1 **只缩不放**，余量 0.94，
+  分母是「包围盒 + 一整格」（包围盒量的是格心，最外圈地块的图还往外探半格）。
+- 时钟只放**一只**（`TerritoryCloudView.dollyElapsed`）：地图视图每帧读 `dollyZoom` / `dollyScale`
+  去推 `MapLayer`，两边各持一只表必然漂。
+- 镜头**复用宝箱那套基准**：`applyChestCamera(1 + (fit - 1) * zoom, zoom)`，对焦点 = 地图包围盒中心。
+  `f: 0→1` 把地图中心挪到屏幕正中，`k: 1→fit` 缩到入画，`(0, 1)` 正好是恒等 ⇒ 首末两帧都精确回原位。
+- 收尾只留一条：`cameraBusy = 开箱在播 || 散场在播`，为真时既不还原镜头也不解锁输入。
+- 退化：`fitScale >= 1`（图本来就比视口小）/ 页面没注入视口 ⇒ 不演镜头，走 0.5s 淡出；
+  取不到覆盖层 ⇒ 只演雾散、镜头不动。**换章 / 回退 ⇒ 演出立刻收，雾立刻复原**（回退不带动画）。
+
+#### 二之二、雾**逐朵**退场：靠近地块的先散，越远越慢（2026-10-27 同日第二次）
+
+需求：「从靠近地块的云雾先消失，离地块远的消失的慢，形成一个消失扩散的视觉效果」。
+
+老口径是整层一个 `UIOpacity` ⇒ 几百朵雾同一帧起淡、同一帧淡完，读成"整层灰整体变薄"。
+现在每朵按自己的**波次**（`0` = 贴着地块、`1` = 最远）各拿一条窗口：
+
+```text
+distance → 波次    territoryCloudFillWaveOrder(distance, maxDistance)     // 0~1，脏参数一律 0
+波次     → 窗口    territoryCloudFillWaveWindow(order, total)             // { delay, duration }
+已用时   → 透明度  territoryCloudFillWaveOpacity(seconds, order, total)    // 复用 easeOut
+```
+
+| 量 | 公式 | 近端 | 远端 |
+| :-- | :-- | :-- | :-- |
+| `delay` | 波次 × `STAGGER`(0.25) × 总时长 | 0 | 0.25T |
+| `duration` | 总时长 − delay − `SPREAD`(0.45) × 总时长 × (1 − 波次) | 0.55T | 0.75T |
+| 淡完 | delay + duration | 0.55T | **1.00T** |
+
+三条硬约束：
+
+1. **"起得早"和"淡得更快"必须同时有**：只错开起淡时间，观感是"整片雾匀速变薄、只是先后不同"，
+   远的那圈并不比近的慢。
+2. **右端不许超过整条时长**（远端正好等于它）：铺满层是"整条走完"才 `active = false` 的，
+   只要有一朵没淡完就被收起来，那朵就是"啪"一下没。
+3. `STAGGER` **必须小于** `SPREAD`：否则窗长随距离**变短**，远的反而先没（单测钉了这条单调性）。
+
+实现要点：
+
+- 波次在**起淡那一刻**编一次（`prepareFillWave`；全解锁时地块位置已是终态），
+  逐帧只做一次除法 —— 每帧拿几百朵 × 几百格求最近距离是白烧 CPU；
+- 逐朵透明度走 `Sprite.color.a`（`writeOpacity`），**不挂 `UIOpacity`**：几百个组件会让节点
+  退出静态合批。影子在另一个节点里，用**同一个读数**一起写；
+- 编不出波（没有地块坐标 / 节点数与波次不齐）⇒ 整层退回"一条曲线"的老口径，
+  宁可没有扩散感，也不要让某一朵停在半透明上。
+
+#### 三、判据
+
+`tests/territory-cloud.test.ts`（50 条）：三段时长与总时长、拉远曲线的形状与单调性、起淡时机、
+入画倍率的独立复算与"只缩不放"与四个脏入参、视图里"拉远未到位雾不淡 / 起淡即 2s / 3.8s 收工回 0"、
+**前沿格不算激活（等 5 秒也不散）**、无余量不演镜头、回退与换章立刻收、演出中不接受新倍率、
+波次归一化与脏参数、波窗口的单调性与右端不越界（`STAGGER < SPREAD`）、
+波透明度"同一时刻近 < 中 < 远、整条走完全 0"、视图层逐朵错峰（近的比远的先散、最远的仍 255、
+收工全 0、影子同读数），以及接线（探针参数、`stepCloudDolly` 排在 `clouds.step` 之后、页面注入视口）。
+
+> 过程与"为什么不是这样"的长版见 `docs/章节地图动画与点击反馈实现说明.md` §8.14~§8.16。
+
+### 3.12 未解锁的关卡格：点一下先花银币解锁，**不弹**关卡界面（2026-10-28）
+
+#### 一、用户口径
+
+> 「当关卡地块未解锁时（显示银币和数字 ui 时），点击地块消耗银币，播放地块切换成关卡地块的
+>  动画（与其他新生成的地块动画一致），**不要**直接改成点击银币弹出【领地关卡弹窗】」
+
+背景：2026-10-27 为了做「关卡界面」（目标 / 奖励 / 感叹号），把关卡格改成**点一次就弹窗**。
+副作用是**锁着的格子**也弹 —— 玩家看到的是"我还没花银币，界面却先开了"，解锁这一步被藏起来。
+
+#### 二、口径：按解锁状态分两段
+
+| 这一格 | 点一下 | 结果 |
+| :-- | :-- | :-- |
+| **未解锁**（银币 + 数字） | `handleUnlockOnly` | 校验前置 / 银币 / 体力 → 解锁 → **播生成动画**，界面不弹 |
+| **已解锁 / 区域已通关** | 打开关卡界面 | 窗里「开始战斗」→ `requestBattle` |
+
+判据是 `progress.isCellUnlocked(cellId) || progress.isAreaPassed(cellId)`
+（`isAreaPassed` 必须有：同 `configId` 的格子共享通关状态，只判 `isCellUnlocked` 会让
+"区域已通关、本格没单独解锁"的格子反复走解锁请求）。
+
+#### 三、动画：为什么要单开一份「已解锁」快照
+
+视图的生成动画（`hexSpawn`）原本只认 **`revealed` 的 diff**。这不够用：
+
+```text
+revealed = owned ∪ unlocked ∪ 前置满足的站点 ∪ **前沿可见的随机候选格**
+```
+
+关卡格从「锁着（银币 + 数字）」变「已解锁（关卡建筑）」时，它**前后都在 `revealed` 里**
+⇒ diff 恒为 0 ⇒ 外观直接换、没有过渡，读作"点了一下什么都没发生"。
+
+所以 `TerritoryMapView.syncHexSpawn` 现在有**两条触发**，合到一个去重集合里：
+
+| 来源 | 判据 |
+| :-- | :-- |
+| 新露出 | `revealed` 里上一帧没有 |
+| **新解锁** | `isCellUnlocked` 这一帧才变 true（`unlockedSnapshot` 的 diff）|
+
+- 两条可能同帧命中（新露出 + 同帧解锁）⇒ 用 `entered` 集合去重，否则同一格播两次、缩放打架。
+- `unlockedSnapshot` 与 `revealedSnapshot` **同生共死**：每帧更新、换章 / 布局重建一起 `clear()`。
+- 正在翻格的格子仍然让给翻格（`hexFlip.isPlaying` ⇒ `continue`），随机资源格不会播两套。
+
+#### 四、红线
+
+- 🔴 未解锁那一下**只发解锁协议**，不发 `CmdStartBattleReqMsg`、不进战斗。
+- 🔴 文案是 `TERRITORY_TEXTS.stageUnlocked`（「已解锁，点击查看关卡」），**不能**沿用
+  `bossUnlocked`（「已解锁，点击开战」）—— 解锁后再点一下是**开界面**，不是直接开战。
+- 🔴 `handleUnlockOnly` 要带 `battleRequestId` 校验（与 `handleBattleStationStart` 同一条守卫）：
+  玩家在 A 的解锁回包在飞时点了 B，A 的回包不能把 A 的界面解锁 + 弹提示盖在 B 的交互上。
+
+#### 五、判据
+
+- `tests/territory-presenter.test.ts`：未解锁点一下 ⇒ `unlock = 1` / `startBattle = 0` /
+  `detail.levelInfo === null`；再点一下 ⇒ 才出现 `detail.levelInfo`；
+  327 / Boss 两条两步式用例按新三段式改写；连点作废 + 真机 309 用例跟着改（含新文案）。
+- `tests/territory-hex-spawn.test.ts`：源码钉住 `unlockedSnapshot` 的三件事
+  （首帧快照 / 每帧推新 / 换章清空）+ `entered` 去重 + 「刚解锁要进场」那一条判据。
+
 ## 4. 其他玩家席位的视觉区分：顶点色相乘灰
 - **统一判据**：`owner !== 'player'`（与领地染色、城墙敌我同口径）。
 - **实现方式**：在 `ZCUnitView.applyVisualTint` 中通过 `Sprite.color` / `Skeleton.color` 顶点色相乘叠 `#828282`（`OTHER_PLAYER_TINT = 0x82`），保留美术明暗体积，不额外建节点。
@@ -424,6 +1138,70 @@ scaleY = baseScale · cos(2π · flipHz · t + phase)      flipHz ∈ [2, 4]，p
 
 判据：`tests/zcds-progress.test.ts` 的「血条使用 ProgressBar，裁切非法比例并按阵营换填充图」——四家映射两两不同 + `neutral` 兜底 + `Set(size) === 4`。
 
+### 4.2 血条尺寸：单位「矮一点、短 20%」，城墙/建筑「高 2px、短 40%」（2026-10-26）
+
+战场上单位挨得近，原稿（蓝湖「多队伍」76×17 / 86×17、地块 94×17）的条会**互相糊在一起、还比分身宽**。两类载体按不同口径收：
+
+| 载体 | 外框 | 填充 | `totalLength` | 填充左缘 |
+| --- | --- | --- | --- | --- |
+| 单位·普通 | 76×17 → **60.8×17**（高不动、宽 ×80%） | 68×8 → **52.8×8** | 68 → **52.8** | −34 → **−26.4** |
+| 单位·英雄 | 86×17 → **68.8×17** | 78×8 → **60.8×8** | 78 → **60.8** | −39 → **−30.4** |
+| 城墙 / 建筑 | 94×17 → **56.4×19**（高 +2px、宽 ×60%） | 86×8 → **51.6×10** | 86 → **51.6** | −43 → **−25.8** |
+
+两条容易踩空的地方：
+
+1. **单位条的真源是脚本字段**，不是 prefab。`ZCUnitView.renderHealthBar` 的写法是「尺寸变了才写一次」，所以只改 prefab 会在第一帧渲染时被 `barWidth / barWidthHero / barHeight / barFillHeight` 覆写回原值 —— 必须改 `@property` 字段，再把 prefab 序列化值同步成同一组数（否则编辑器里看到的是旧宽）。地块条没有对应字段（`ZCHexView` 的血条尺寸完全由 prefab 决定），只改 prefab。
+2. **`barFillInset`（单位条左右内缩）保持 4px 不缩**：它跟的是外框边框的**像素厚度**，而外框高度没变（仍 17），缩它会让描边和填充贴到一起。地块条没有 inset 字段，左右各 4px 是随宽度 ×0.6 一起缩成 2.4px。
+
+验收口径（数字必须两端一致）：`HealthBar` 外框 / `Bar` 填充 / `ProgressBar._totalLength` 三者自洽 —— `totalLength === 外框宽 − 2 × inset`、`Bar._lpos.x === −外框宽 / 2 + inset`。
+
+### 4.3 扣血白条：被扣掉那段先变白，**0.13s 从右往左**缩没（2026-10-27）
+
+需求：「血条扣血增加一个缓动动画，被扣除部分显示成白色，白色部分在 0.13s 内从右往左缩短消失，暴露出黑色底框」。
+
+实现 = `view/ZCHealthBarDamageTrail`（纯类，**单位条与城墙/建筑条共用**）+ `ZCGameViewUtil` 的三条纯函数：
+
+| 符号 | 值 / 口径 |
+| --- | --- |
+| `HEALTH_BAR_DAMAGE_TRAIL_SECONDS` | **0.13**（时间真源，别在实现里再写一份） |
+| `healthBarDamageTrailScale(elapsed)` | `1 → 0`，用 **smoothstep** `1 − t²(3−2t)`（两端速度都为 0 才像"被吸回去"，线性在 0.13s 上会看出起停硬边） |
+| `healthBarDamageTrailWidth(len, progress, from, elapsed)` | `len × (from − progress) × scale`；回血 / 没掉血 / `progress` 非有限 ⇒ **0**（不画） |
+| `healthBarRatio(hp, maxHp)` | 血条比例的**唯一**入口（血条本体、白条、可见性共用一套钳位） |
+
+几何与层级（三条都是踩过就知道的）：
+
+1. **白条是"被扣掉的那段"，不是"旧血量"**：左缘钉在填充条的**当前右缘**（`barSprite.node.position.x + totalLength × progress`），右缘是**扣血前那条边**。宽度收窄时只有右缘往左走 —— 这正是需求的方向；把左缘也一起缩就变成"从中间塌"。
+2. **画布懒建在 `HealthBar` 的第一个子节点**（`Graphics` + 白 `rect` + `fill`，垫在填充条下面）：子节点序 = 渲染顺序，左缘与填充右缘重合处的亚像素重叠永远由填充压住，不会出现"白条吃掉一点血"。
+3. **高度取填充条自己的高**（单位 8 / 地块 10），只改宽度 —— 不去猜 prefab 的槽高。
+
+时间轴挂哪（**这条最容易做错**）：
+
+- **单位条**：`ZCUnitView.render` 走 `renderDynamic`，每帧一次，直接喂 `damageTrail.render(bar, ratio, now)`。
+- **城墙 / 建筑条**：`ZCHexView.render` 走 `renderStatic`（**0.15s 节流**）—— 白条只有 0.13s，留在静态刷新里会「闪一帧就没」。所以按 `developableSpawnHexes` 的同一套机制：静态刷新时 `isHealthBarTrailAnimating()` 登记进 `ZCGameRenderWorld.healthBarTrailHexes`，动态帧 `renderHealthBarTrails` 调 `advanceHealthBarTrail(now)` 推进，播完返回 `false` 出队。集合平时为空 ⇒ 零开销。
+  - 比例仍只在静态刷新里算一次（`lastBarRatio`）：动态帧不重复读模型、不写 `ProgressBar`。代价是白条最多晚一个静态拍（≤0.15s）起手 —— 但**填充条的掉血本来就只在那一拍发生**，两者同步，观感上不会"白条比血先动"。
+- 复用复位：`ZCUnitView.resetForReuse` / `ZCHexView.initialize` 都要 `damageTrail.reset()`，否则回池第一帧会按上一条命的比例闪一条白。
+
+判据：`tests/zcds-health-bar-damage-trail.test.ts`（8 条）—— 曲线两端慢 + 单调、宽度区间（回血/脏参数为 0）、单位条起步位置与半程宽度、中途再挨打重新计时、回血不起白条、复位、以及「白条推进必须挂 `renderDynamic`、不许挂回 `renderStatic`」的源码守卫。
+
+### 4.4 出局玩家的头像压黑（HUD 左侧玩家行，2026-10-27）
+
+需求：「玩家被击杀后，该名玩家的头像需要参考美术效果叠加一点颜色遮黑」。
+
+| 项 | 口径 |
+| --- | --- |
+| 颜色真源 | `ZCTheme.ZC_HUD_DEAD_AVATAR_TINT = Color(72, 72, 72, 255)`（≈0.28 亮度，想调深浅只改这一处） |
+| 压谁 | `headIcon`（头像）+ `headFrame`（席位圆盘）**一起**压 |
+| 不压谁 | `nameText` 仍按 `zcFactionColor(owner)` —— 出局后「这是谁」这条信息不能丢 |
+| 判据 | `territoryCountOf(owner) <= 0`，与顶部四格「红 X」的 `finished` **同一帧同一个数**（复用 `render` 里刚算好的 `counts[i]`） |
+
+三个实现要点：
+
+1. **用 `Sprite.color` 相乘，不盖半透明黑块**。相乘保留原画的明暗与轮廓（与单位「阵亡色」`ZCUnitView.UNIT_DEAD_TINT` 同一套机制）；盖黑块会把圆盘的席位色一起洗成灰，还得多挂一个节点/图。
+2. **只在状态翻转时写一次**（`ZCGameHudPlayerRow.appliedDead` 缓存）。颜色是乘进顶点色的，每帧重写同一个值也会把材质标脏。行节点由虚拟列表复用，缓存跟着组件一起被复用，所以不会出现"上一席的黑留在这一席"。
+3. **判据从 `ZCGameHUDView.render` 注入**（`paintPlayerRows` 第三参 `deadOf`）。`setSeatProfiles` 调 `paintPlayerRows(owners)` 时不传 ⇒ 选点阶段（还没开打、连 `model` 都没有）四行都不压黑。
+
+判据：`tests/zcds-hud-dead-avatar-tint.test.ts`（7 条）—— 常量口径（三通道相等、够深但不至于全黑）、机制守卫（改 `Sprite.color`，禁 `UIOpacity`/黑块）、头像与圆盘同步翻转、只在翻转时写、名字色不变、虚拟列表复用归位、以及「判据必须复用同帧 `counts`」的源码守卫。
+
 ## 5. 自选主城（选择基地模式）：World 层表现 + 跟随基地的确认按钮
 
 沿用既有 `cityMode: 'select'` 的 `ZCSpawnSelection` + `ZCSpawnSelectionView`，仅在 World 层挂载表现，**严禁新建第二套选点状态机或第二颗确认按钮 Prefab**：
@@ -443,11 +1221,19 @@ scaleY = baseScale · cos(2π · flipHz · t + phase)      flipHz ∈ [2, 4]，p
 
 ## 6. 战斗飘字「快进慢出」：前 45% 入场，后 55% 淡出
 
-⚠️ 这一节讲的是**伤害 / 治疗 / 暴击…**那一类飘字。**金币是唯一的例外**（2026-10-23 两次改口径，
-见 §6.3）：它既不「快进慢出」，也没有文字 —— 只剩一枚硬币掉到角色中心缩没。
+⚠️ 这一节讲的是**伤害 / 治疗 / 暴击…**那一类飘字。**金币是唯一的例外**，而且金币内部还分两条
+方向相反的路（2026-10-27 拆开，见 §6.3 / §6.4）：
 
-总时长常量 `FLOAT_TEXT_DAMAGE_SECONDS = 0.85`（金币另有 `FLOAT_TEXT_GOLD_SECONDS = 0.62`），
-由单旋钮 `entranceProgress = FLOAT_TEXT_ENTRANCE_PROGRESS = 0.45` 统一划分前后两段（三条纯函数均在 `ZCGameViewUtil.ts`）：
+| kind | 来处 | 曲线 | 数字 | 方向 |
+| --- | --- | --- | --- | --- |
+| `gold` | 击杀单位 / 拆建筑**掉落** | `floatTextGoldDrop` | 无 | 往下落（`drop >= 0`） |
+| `goldincome` | 主城 / 金矿**产出** | `floatTextGoldRise` | `+N` | 往上升（`rise >= 0`） |
+
+两条曲线**方向必须是反的**，各自有单测按符号卡（掉落一旦往上飘、产金一旦往下掉 = 接错了曲线）。
+
+总时长常量 `FLOAT_TEXT_DAMAGE_SECONDS = 0.85`（金币另有 `FLOAT_TEXT_GOLD_SECONDS = 0.62` 与
+`FLOAT_TEXT_GOLD_INCOME_SECONDS = 0.9`），由单旋钮 `entranceProgress = FLOAT_TEXT_ENTRANCE_PROGRESS = 0.45`
+统一划分前后两段（三条纯函数均在 `ZCGameViewUtil.ts`）：
 
 1. **前 45% 入场（`floatTextEntrance`）**：`progress / entranceProgress` 套 `easeOutCubic`，入场结束后恒为 `1`。**散落、下坠、摇摆、弹出缩放一律喂 `enter`（严禁喂整条 `progress`）**。
 2. **后 55% 匀速淡出（`floatTextFade`）**：入场段恒为 `1`，之后在剩余 55% 时长内**线性**降到 `0`。
@@ -491,16 +1277,21 @@ scaleY = baseScale · cos(2π · flipHz · t + phase)      flipHz ∈ [2, 4]，p
 | `execute` | `25` | `秒杀` | 17 |
 | `heal` | `+25` | —— | —— |
 | `gold` | **（无文字）** | —— | —— |
+| `goldincome` | `+25` | —— | —— |
 | `miss` | `MISS` | —— | —— |
 
 - **负号已删**（`-25` → `25`）：飘字本来就长在挨打的目标身上，负号只多占一个字宽。`+` 保留 —— 它标的是「加」这个语义。
-- **金币连 `+` 和数字一起去掉了**（2026-10-23 用户：「移除金币的加号和数字 UI」）：`battleText` 对 `gold` 返回空串，
+- **`gold`（掉落）连 `+` 和数字一起去掉了**（2026-10-23 用户：「移除金币的加号和数字 UI」）：`battleText` 对 `gold` 返回空串，
   `textLabel.enabled` 每帧置 `false`（**不是** `node.active = false` —— 金币图标是 `Text` 的子节点，关节点会把硬币一起关掉）。
+- **`goldincome`（建筑产出）恰好相反：必须有数字**（2026-10-27 用户：「播放金币 icon 和**对应的数字 UI**」）。
+  数字带 `+`（标"到账"），硬币不自转、排到数字左侧 —— 这条有文字，硬币再居中就会把加号盖掉。
 - **前缀为什么要拆**：`cc.Label` 一条字符串只有**一个**字号，「克制」与「31」写在一句里就只能同号；需求「前缀约只有数字一半高」在单 Label 上无解（换 `RichText` 会连带改锚点与自适应宽度的行为，不值）。
 - 前缀挂在 `Text` 之下 ⇒ 位置、弹出缩放、上下散落自动继承；水平位置按数字**实际宽度**反推（`-(数字宽/2 + 6 + 前缀宽/2)`，间距 6 是留了描边的余地）。前缀恒为 2 个汉字，宽度直接按「字数 × 字号」算（不读 `UITransform`，那条路有一帧延迟）。
 - 字号真源 `ZCFloatTextView.PREFIX_FONT_RATIO = 0.5`：数字按 0.72em 的大写高、汉字按 0.95em 算，30 → 15 时视觉高度是 `21.6 : 14.25 ≈ 0.66`；要更贴「一半高」把它改成 `0.4`（30 → 12）即可，只此一处。
 
-### 6.3 金币飘字：只有硬币，从角色中心上方落到中心点缩没（2026-10-23）
+### 6.3 金币飘字（掉落 `gold`）：只有硬币，从角色中心上方落到中心点缩没（2026-10-23）
+
+> ⚠️ 本节只讲**击杀 / 拆建筑掉落**（`kind: 'gold'`）。**建筑产金**是另一条路，见 §6.4。
 
 同一天两轮口径，最终形态：
 
@@ -514,8 +1305,38 @@ scaleY = baseScale · cos(2π · flipHz · t + phase)      flipHz ∈ [2, 4]，p
 | 曲线 | `ZCGameViewUtil.floatTextGoldDrop`：掉落 30%（`k²` 加速）→ 停住 15% → 缩没 55%（`scale` 与 `fade` 同步 `1-k²`） |
 
 - ⚠️ **不是** `offsetY`：那个值（26）只到小腿/腰，读起来是「金币掉在脚边」；2026-10-23 后 `offsetY` 已废弃（仅留 prefab 序列化兼容）。
-- ⚠️ 建筑产出的金币也走这条路径（`grantGold` 传格心）⇒ `+49` 落在建筑中部，与「从建筑身上掉下来」的观感一致。
-- **判据**：`tests/zcds-float-text-gold-drop.test.ts`（9 条）、`tests/zcds-float-text-gold-icon.test.ts`（7 条）、`tests/zcds-progress.test.ts` 的「飘字整链 / 慢出段漂移」两条。
+- ⚠️ **建筑产出不再走这条**（2026-10-27 起改 `goldincome`）：`grantGold` 有 4 个调用点，只有
+  `economyContext.grantGold`（主城 / 金矿周期产出）传显式的 `'goldincome'`，击杀与拆建筑两处走缺省 `'gold'`。
+- **判据**：`tests/zcds-float-text-gold-drop.test.ts`（8 条）、`tests/zcds-float-text-gold-icon.test.ts`（7 条）、`tests/zcds-progress.test.ts` 的「飘字整链 / 慢出段漂移」两条。
+
+### 6.4 建筑产金飘字（`goldincome`）：硬币 + 数字从建筑顶部升起 50px 并淡出（2026-10-27）
+
+用户口径：「建筑生成金币的动画效果需要和单位被击杀掉落金币的动画效果区分开来，建筑生成金币动画是播放
+金币 icon 和对应的数字 UI 从建筑的顶部往上升起 50px，并且变透明消失」。
+
+改前两种金币**共用一个 kind**，所以建筑产出也在播「落到地面 → 停一下 → 缩小消失」而且没有数字 ——
+读起来像"从地里掉出来一枚硬币"，与"建筑在产钱"这件事完全对不上。
+
+| 项 | 口径 |
+| --- | --- |
+| kind | `goldincome`（`ZCFloatTextKind` 里与 `gold` 并列，因为**来处不同、动画语义相反**） |
+| 文字 | `+N`（`battleText` → `` `+${value}` ``），Label **保持可见** |
+| 硬币 | `GoldIcon` 在数字**左侧**：`x = -(数字宽/2 + GOLD_ICON_TEXT_GAP 4 + GOLD_ICON_HALF_SIZE 15)`，不自转 |
+| 起点 | **建筑顶部**：格心 + `FLOAT_TEXT_GOLD_INCOME_TOP_PX = 48` |
+| 上升 | `FLOAT_TEXT_GOLD_RISE_PX = 50`，缓动 `k(2-k)`（起手快、快到顶收住，不是匀速电梯） |
+| 淡出 | 30% 起淡，`1 - u²` 加速收到 0（前三成保持全不透明，"数字先看清再散"） |
+| 时长 | `FLOAT_TEXT_GOLD_INCOME_SECONDS = 0.9s`（50px 塞进 0.62s 会像被弹出去） |
+| 曲线 | `ZCGameViewUtil.floatTextGoldRise`，返回 `{ rise, fade }` |
+
+- 🔴 **`48` 不是手填的审美值**，是地块 prefab 里 `buildingSprite` 那个节点的上边缘：
+  `lpos.y 15.651 + 高 90 × BUILDING_ICON_SCALE 0.72 / 2 = 48.05`。换建筑图 / 改 `BUILDING_ICON_SCALE`
+  必须重标，`tests/zcds-float-text-gold-income.test.ts` 会**直接读 prefab 算一遍**来卡这个常量（容差 1px）。
+  prefab 里有两个同名 `BuildingIcon`，要用 `ZCHexView.buildingSprite` 那条绑定去找，别按名字猜。
+- 🔴 **硬币与数字一起升靠父子关系**，不是各算一遍：`GoldIcon` 是 `Text` 的子节点，移动 `Text` 两者同步动。
+  这也解释了为什么只能改 `textLabel.enabled`、不能关 `Text` 节点（关了硬币一起没）。
+- **必须显式 `setScale(1,1,1)`**：节点来自对象池，上一条可能是 `gold`（末尾 `scale` 收到 0），
+  不写回 1 就会得到「透明度满但看不见」的一条。
+- **判据**：`tests/zcds-float-text-gold-income.test.ts`（13 条）。
 
 ## 7. 开局归属扩散波：归属格直接切换、中立格逐个替换
 
@@ -595,24 +1416,35 @@ scaleY = baseScale · cos(2π · flipHz · t + phase)      flipHz ∈ [2, 4]，p
    - ⚠️ **修改脉冲参数时必须同步的三处**：
      1. `redrawSharedOutline` 的探针每格压入 **4 个数**（`id / 阵营 / mask / 脉冲档位`），且传参时必须**按档位预建 `Color` 实例复用**（严禁逐格 `new Color`，否则每格拆成一个 `Graphics` subModel 破坏合批）；
      2. `ZCOutlineLayer` 的 `MAX_BUCKETS` 设为 **16**（原为 12）；
-     3. `tests/zcds-hex-neighbor-reveal-delay.test.ts` 中读取轮廓探针的步长固定为 **4**。
+     3. `tests/zcds-progress.test.ts` 中读取轮廓探针的步长固定为 **4**。
    - `ZCVictorySweep.advance` 的重画判据共 4 项：填充步号、回正游标、闪烁相位档位（`victorySweepShimmerTick`）、脉冲波前。
 - **判据**：`tests/zcds-progress.test.ts`（含 3/4 号席位方向、铺过 2 步起跑、深色带宽度、闪烁曲线、只偏深色端、脉冲曲线与探针共 7 条，注意用例须用 `advanceTo` 按绝对时刻推进）与 `tests/zcds-outline-layer.test.ts`（脉冲六边全描 / 同档合批 / 坐标对齐）。
 
 ### 9.2 row9 地块描边与地块图标同帧展示
 
-- `ZCHexView.resolveDevelopableHold` 设为 **public**，渲染世界 `renderHexSystem` 中的 `ownerForHex` 闭包在让 `canPlayerDevelop` 将共享轮廓染成玩家色**之前**，先调用 `resolveDevelopableHold` 检查该格是否仍在 `ZC_HEX_NEIGHBOR_HOLD_SECONDS` 按住窗内。
-- 消除此前“轮廓立刻变蓝、图标和价格还要等 0.2s 才冒出来”的割裂感；该方法查表幂等，同一帧内轮廓与视图各自调用一次完全安全。
-- **判据**：`tests/zcds-hex-neighbor-reveal-delay.test.ts`（★row9 用例）。
+- **2026-10-26 起不再有「按住窗」**：`ZCHexView.resolveDevelopableHold` 与 `ZC_HEX_NEIGHBOR_HOLD_SECONDS` 一并删除。新点亮邻格的图标 / 价格在点击那一拍就出现（只叠一段缩放 + 淡入的生成动画，见第 1.4 节），所以 `ownerForHex` 直接按 `model.canPlayerDevelop()` 判色即可 —— 它与地块视图在同一次 `renderHexSystem` 里写，描边不可能比图标早。
+- 生成动画只改 `buildingLayer` 的缩放 / 透明度，**不改归属**，因此不存在「轮廓先变蓝、图标还在半透明」以外的任何错位；真要再出现割裂，先查是不是有人把延迟/按住加回来了。
+- **判据**：`tests/zcds-hex-neighbor-spawn.test.ts`（★row9 用例：视图桩故意不提供 `resolveDevelopableHold`，加回旧逻辑即炸）。
 
-### 9.3 row10 开局金矿格的整圈描边闪烁
+### 9.3 row10 开局金矿格的整圈描边**呼吸**（2026-10-26 改口径）
 
 - **纯函数曲线 `ZCGameViewUtil.zcNeutralHintAlpha(elapsed)`**：
-  - 窗口总长 `= ZC_NEUTRAL_HINT_CYCLE_SECONDS(1.1) × ZC_NEUTRAL_HINT_CYCLES(4) = 4.4s`；相位用 `cos` 保证 `elapsed = 0` 最亮，脉冲下限 `ZC_NEUTRAL_HINT_MIN_ALPHA = 0.35`。
-  - 🔴 **末段包络必须乘 `(1 - u)²`（二次方），严禁线性**：线性包络在最后一周期脉冲上升段会把乘积重新提亮，变成“闪两下再灭”。
+  - 🔴 **没有窗口**：旧口径「`周期 1.1 × 4 次 = 4.4s` 闪完就停」已删除（连同 `ZC_NEUTRAL_HINT_CYCLES` / `ZC_NEUTRAL_HINT_SECONDS`）。现在只要 `elapsed >= 0`，就一直返回 `[MIN, 1]` 之间的呼吸值 —— 「什么时候收手」只由**目标还在不在**决定（见下一条）。用户的补充口径：**一直呼吸到金矿被点**。
+  - 节奏放慢加深：`ZC_NEUTRAL_HINT_CYCLE_SECONDS = 1.6`（原 1.1，1.1 读起来是「闪」）、`ZC_NEUTRAL_HINT_MIN_ALPHA = 0.15`（原 0.35）；相位用 `cos` 保证 `elapsed = 0` 最亮。
+  - 旧版末段的 `(1-u)²` 收尾包络**已删除**（没有窗口就没有收尾淡出）；负值 / NaN / Infinity 仍返回 0。
 - **绘制落点与生命周期**：
-  - 仅针对 `ZC_NEUTRAL_HINT_RESOURCE_ID = 'mine'` 的格子，画在**单格自带的 `TerritoryOutline`（`cc.Graphics`）**上（金黄色 `ZC_CLIENT_COLORS.gold`、线宽 7，顶点复用 `ZC_OUTLINE_HEX_POINTS` / `OWNED_OUTLINE_INSET_SCALE`，带 2% 死区与 `graphics.enabled` 闸门）。
-  - `ZCGameRenderWorld.renderNeutralHint` 挂 `renderDynamic`，时间锚定 `visualTime`；窗口播完、金矿被领取/开发（`neutralResourceId` 清空）或本局无金矿时，置单向闩锁 `hintOutlineSettled = true` 并清空关闭 `Graphics`。
+  - 🔴 **目标是「金矿地块」而不是只认资源点**（2026-10-26 二次修）：`findMineHintTarget` 先找 `canDevelop && tileType === ZCPvpTileType.Mine` 的格子（就是开局那圈里画 `icon_jk` + 造价「50」的那一格 —— 玩家口中的「初始生成的金矿图标」），找不到才退到中立金矿**资源点**（`neutralResourceVisualOf(neutralResourceId) === ZCNeutralResourceVisual.Mine`）。判据随目标类型走（`hintTargetKind: 'tile' | 'resource'`）：地块类看「还 `canDevelop` 吗」，资源类看「`neutralResourceId` 还是金矿吗」。
+    - 旧口径只认资源点，而实战地图的金矿主要表现成**地块类型** ⇒ 目标一次都没找到，描边一格都没闪过（用户反馈「没看到效果」的根因）。
+  - 🔴 **画在棋盘最上层的共享画布上**（2026-10-26 三次改，用户口径「描边需要覆盖在最上层」）：`ZCGameRenderWorld.ensureHintOutlineGraphics` 惰性建一个 `ZCHintOutline` 节点（`cc.Graphics`）挂到 **`CooldownOverlay`** —— prefab 子节点序的**最后一个图层**（`MapWater / HexLayer / OutlineLayer / ResourceLayer / DecorLayer / BuildingOverlay / CooldownOverlay`），`setParent` 追加到该层子节点序末尾 ⇒ 一定压在所有地块、城墙、资源图标、建筑与冷却环之上。画布节点位置每帧跟着**目标格心**走（顶点是格心局部坐标），整局复用一份。
+    - 旧做法画在单格自带的 `TerritoryOutline` 上 —— 那份和地块同层，相邻格的底色与建筑按绘制顺序把提示线盖掉半圈（用户截图里线被切掉）。该 `Graphics` 现在**永久停用**（`initialize` 里 `clear + enabled = false`），只留字段承接 prefab 已序列化引用。
+  - 样式（2026-10-26 用户口径「换成绿色更显眼、描边大小增加 2px、提示线用 0.94 左右」）：颜色 `ZC_CLIENT_COLORS.hint`（`#3EE36F` 绿，原金色在中立土黄底上同色系看不见），线宽 **9**（领地轮廓 6px + 2px），顶点仍复用 `ZC_OUTLINE_HEX_POINTS` 但**内缩用自己的 `HINT_OUTLINE_INSET_SCALE = 0.94`**（不是领地轮廓的 `OWNED_OUTLINE_INSET_SCALE = 0.98`）：9px 的线在 0.98 下外沿会探出格界 4~5px、盖住邻格的造价数字，0.94 让外沿基本落在格界内侧。几何在 `ZCHexView.strokeHintOutline(graphics, alpha, previousAlpha)`（画布由调用方给，视图只负责 6 条边），带 2% 死区与 `graphics.enabled` 闸门。
+  - **外发光（2026-10-26 用户口径「增加 2px 左右的边缘发光」）**：`cc.Graphics` 的描边**没有渐变**（`strokeColor` 只有一个颜色），项目里也没有适用于矢量线的发光材质 / 后处理 ⇒ 按用户给的第二方案「叠加透明度过渡到边缘」实现：同一圈六边形按 **4 环 + 1 核心**共描 5 笔，宽度 `13 / 12 / 11 / 10 / 9`（核心 9 + 单侧 2px），透明度系数 `ZC_HINT_GLOW_RING_ALPHAS = [0.08, 0.11, 0.15, 0.20]`（由外到内递增）再乘呼吸值。核心线**最后画**，压在光晕之上。
+    - 5 笔共用**同一份顶点**（`traceHexEdges(graphics, inset)`），否则光晕会在格角错开。
+    - `lineCap = ROUND`：六边形是 6 条独立线段，平头会在每个顶点留楔形缺口（光晕的缺口尤其明显）；共享轮廓层 `flushOutlineSegments` 也是 ROUND，两条线在格角才长得一样。
+    - 环系数必须严格递增，任何一环取 1 都会把光晕画成一条实心粗线（有用例钉死）。
+  - `ZCGameRenderWorld.renderNeutralHint` 挂 `renderDynamic`，时间锚定 `visualTime`。**目标 id 只找一次**（`hintTargetHexId` 缓存，不做每帧全盘 find —— 提示现在是整局常驻到被点），之后每帧只查 `hexesById` 里那一格还值不值得提示。
+  - 收手条件只有三条：**目标被开发 / 被领走**、**对局已结束**（`snapshot.status !== 'playing'`，避免压在胜利扫场上）、换局复位 ⇒ 置单向闩锁 `hintOutlineSettled = true` 并清空关闭 `Graphics`；换局在 `initialize` 里把 `hintTargetHexId` / `hintTargetKind` / `hintOutlineSettled` / `hintOutlineAlpha` 一起复位。
+  - ⚠️ **「这一帧没找到目标」不许结账**：开局头几帧目标格可能还没翻成 `canDevelop`（归属扩散波未铺完）/ 资源还没落位，一收手整局就再也起不来。没找到就只是这一帧不画，下一帧继续找。
 - **判据**：`tests/zcds-neutral-hint-outline.test.ts`。
 
 ### 9.4 row11 传说牌横幅 `ZCGameLegendBanner`：从左往右扇入 + Role 下落生成
@@ -702,3 +1534,83 @@ scaleY = baseScale · cos(2π · flipHz · t + phase)      flipHz ∈ [2, 4]，p
   `ResetCameraBtn` 64×64 @ y-144 且 `_lscale = 0.7`）。
 - `tests/zcds-rank-board-wiring.test.ts`：`ResetCameraBtn → onResetCameraClick → emit(ResetCamera)
   → ZCGame.onHudResetCamera → hudView.resetCamera()` 四环逐条。
+
+## 11. 结算弹窗（`ZCSettlement`）：资源区底框与标题排版（2026-10-27）
+
+对局结束弹出的胜负结算页（`ui/ZCSettlementPage.ts` + `ZCSettlement.prefab`）。结构与美术**全在 prefab**，
+代码只按数据刷标题图、段位、奖励格（见类头注）。本节只收「资源部分」这两条 2026-10-27 的表现口径。
+
+### 11.1 资源区必须有底框：`RewardBg`（美术稿里道具外面那块深色圆角底板）
+
+美术稿上「通关奖励」下面是一块**比面板更深的深色圆角矩形**（`bg_02` 填充 `#2C2A2C` vs 面板 `bg_01` 的 `#4B484B`），
+道具格整整齐齐落在里面；而 prefab 里原本没有这个节点 ⇒ 屏上只剩标题和两条装饰线，道具直接浮在面板底上（截图自证）。
+
+| 项 | 值 | 说明 |
+| --- | --- | --- |
+| 节点名 | `RewardBg` | `RewardSection` 的**第一个**子节点（子节点序 = 渲染顺序，排在列表后面就被盖住） |
+| 尺寸 | **623×327** | 与 `RewardScroll` 视窗**完全同矩形**（顶边都在 y=144.5，底边 −182.5） |
+| 图 | `settlement/bg_02` | 与下方「变强途径」的 `GrowBg` **同一张**，两块框的灰度/圆角才对得上 |
+| 类型 | `SLICED`（九宫格） | 131 高的图拉到 327 高，`SIMPLE` 会把 R10 的圆角竖着拉成椭圆 |
+
+`bg_02.png.meta` 的 spriteFrame 必须带边距（`borderTop/Bottom/Left/Right = 12`，≥ 实测圆角半径 R10），
+否则九宫格没有中段可拉伸 —— 但**不影响 `GrowBg`**（它是 `SIMPLE`，不看边距）。
+
+### 11.2 标题排版：13sp / 15.5dp / #FFFEFA，且**不许被 SHRINK 悄悄缩小**
+
+蓝湖标注（「通关奖励 拷贝」）：字号 **13sp**、行高 **15.5dp**、颜色 **#FFFEFA**、MicrosoftYaHei **Regular**、
+图层 **56.5×13.5dp**。美术按 **2×** 出图（56.5×13.5 的图层在 prefab 里就是 113×31）⇒ **26px / 31px**。
+
+| 项 | 旧 | 新 | 依据 |
+| --- | --- | --- | --- |
+| `_fontSize` | 28 | **26** | 13sp × 2 |
+| `_lineHeight` | 34 | **31** | 15.5dp × 2 |
+| `_color` | `#FFFFFF` | **`#FFFEFA`** | 标注色值（暖白，不是纯白） |
+| 节点高 | 27 | **31** | 见下面的 🔴 |
+| `_isBold` | false | false | Regular |
+| 描边 | 黑 / 3px | 黑 / 3px | 保留：白字靠这层黑边在深色底上立起来 |
+
+🔴 **本轮真正的坑：`_overflow: 2` 是 SHRINK，它按「行数 × 行高」和**节点高**比，塞不下就按比例缩字号。**
+原稿图层高 13.5dp（=27px）但行高 15.5dp（=31px），27 < 31 ⇒ 27/34 那一档把 28 直接缩成 **22**，
+屏上比美术稿小一圈 —— 这正是「字号和美术稿不统一」的根因。prefab 里 `_actualFontSize` 留着的
+22 就是缩完的残值（`28 × 27/34 = 22.2`）。**修法是把框高抬到行高（31），而不是继续调 `_fontSize`。**
+（同一份 prefab 里 `RankName/RankScore/RankHint/RankAdd` 也是这个形状 —— 26×25/32=20、24×21/30=16 …
+`_actualFontSize` 与公式逐位吻合。那些是按眼睛调过的既有观感，本轮**不动**。）
+
+「变强途径」的 `GrowTitle` 与本标题在美术稿里是同级标题 ⇒ 跟着改成同一组数（26 / 31 / #FFFEFA）。
+项目里**没有导入任何 TTF**（`_isSystemFontUsed: true` + `_fontFamily: "Arial"` 全工程统一），
+所以设计稿的 "MicrosoftYaHei" 在设备上只能落到系统默认中文字体；真正承载观感的是字号 / 行高 / 颜色 / 描边 / 字重。
+
+判据：`tests/zcds-settlement-reward-frame.test.ts`（9 条）—— 底框存在且是第一个子节点、与视窗同矩形（顶/底边各算一遍）、
+复用 `bg_02` 且为 SLICED、meta 边距 ≥ 圆角半径；标题的 26/31/#FFFEFA/不加粗、描边保留、
+**「框高 ≥ 行高」的 SHRINK 守卫**、两个标题同字号、以及「标题墨迹下沿到框顶 ≈13px」的间距。
+
+### 11.3 奖励格统一走公共 `RewardItem`（2026-10-28）
+
+结算页的奖励格不再自带一份实现（原先是 prefab 里烘一个 `GoodsBox` 静态槽位 + `content/Slot` 模板），
+改为与领地页三个弹窗（宝箱详情 / 关卡界面 / 玩家关卡）**共用同一份公共奖励格**
+`ui/common/RewardItem.prefab`（`RewardItemView` 自己解析图标 / 品质框 / 数量）。
+
+| 项 | 旧 | 新 |
+| --- | --- | --- |
+| 格子来源 | prefab 内烘的 `content/Slot` 静态槽（`GoodsBox`） | `VirtualScrollView.itemPrefab` → `ui/common/RewardItem.prefab` |
+| 创建模式 | `itemCreationMode: 0`（NODE，模板取 content 首子节点） | **`itemCreationMode: 1`（PREFAB）** |
+| 宿主喂什么 | 解析好的帧（`qualityFrame` / `iconFrame` / `number`） | **`{resId, amount}`**（`IRewardItemData`） |
+| 格子尺寸 | 100×100 | **96×96**（公共件原生尺寸） |
+| `content` 子节点 | 1 个静态模板 | **0 个**（PREFAB 模式下 `start()` 会 `removeAllChildren()`） |
+
+**间距按设计稿反推**（格子从 100 缩到 96，但**列距 111 / 行距 114 不变**）：
+`gridSpacing = 111 − 96 = 15`、`spacing = 114 − 96 = 18` ⇒ 落位与原稿逐值相同（首列 x=−222、首行 y=−68）。
+⚠️ 行心 −68 与设计稿量的 −70 差 2px，来源是**格高**（96 的一半 48 + header 20），不是排版错。
+
+**资源入口注入点必须放组合根**（`ProcedureBootstrap`），不能只靠 `MainTabHost.showPage` 顺带注入 ——
+结算弹窗走**对局流程**，不经过主界面；漏注入 ⇒ `RewardItemView.assets` 为 null ⇒
+奖励格**静默渲染成空框、零报错**（`loadFrame` 直接返回 null，不抛不警告）。
+同理，帧加载失败现在会 `console.warn` 出声，不再静默吞掉。
+
+**跨包引用是安全的**：`ZCSettlement.prefab` 在 **battle 分包**，`RewardItem.prefab` 在 **resources 首包**。
+Creator 的规则是「被多个包引用时，资源存进**优先级高**的包，另一包存一条 `redirect` 记录指向它」
+（`resources` 优先级 8 > `battle` 2 ⇒ 资源留在 resources，运行期 battle 读到的是同一条 uuid）。
+
+判据：`tests/zcds-settlement-page.test.ts`（PREFAB 模式 / `itemPrefab` 指向公共件 / content 无静态槽位 / 落位公式）
++ `tests/reward-item.test.ts`（注入点在组合根 / 加载失败必须出声）；
+端到端探针 `tmp/g_settlement_rewarditem_verify.mjs`（12 条：奖励格**真的出图出框**、数量、落位、尺寸）。

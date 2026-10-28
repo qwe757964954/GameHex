@@ -306,10 +306,17 @@ test('C2 章节局先等广播再弹；匹配局不等（1001 本轮没接）', 
         '只有章节局（pveContext 非空）才等广播');
     assert.match(gameSource, /BattleResultService\.waitForChapterResult\(\)/);
     assert.match(gameSource, /resolveCmdGoodsFrames\(result\.goods\)/, '换算走共用的 RewardFrames');
-    assert.match(gameSource, /itemNumberTextOf\(entry\.number\)/, '数量文案与奖励弹窗同一口径');
+    // ★ 结算页奖励格改用**公共** `RewardItem` 后，格子自己解析图标/品质框/数量 ⇒
+    //   这里只传 `{resId, amount}`（数量是数字，格式化由公共件负责）。
+    assert.match(gameSource, /resId: entry\.resId,\s*\n\s*amount: entry\.number,/, '只喂 resId + amount');
+    assert.doesNotMatch(gameSource, /itemNumberTextOf/, '数量文案由公共奖励格自己算');
     // 超时也照弹：await 之后只挡「已离开对局」，不许因为没奖励就不弹
-    assert.match(gameSource, /const result = chapterResult \? await chapterResult : null;[\s\S]{0,500}?ZCSettlementPage\.open\(\{/,
-        '等待之后必须照样弹结算页');
+    // ⚠️ 别用「固定字符窗口」串两处代码 —— 中间加几行注释就失效（本次已踩到）。
+    //    改成**按出现顺序**断言：先等广播，后弹页。
+    const waitIdx = gameSource.indexOf('const result = chapterResult ? await chapterResult : null;');
+    const openIdx = gameSource.indexOf('ZCSettlementPage.open({');
+    assert.ok(waitIdx >= 0, '必须先等广播结果');
+    assert.ok(openIdx > waitIdx, '等待之后必须照样弹结算页');
     assert.match(gameSource, /rewards,/, '奖励要真的传进结算页 userData');
 });
 
@@ -327,8 +334,11 @@ test('C3 换算链真复用：结算页与奖励弹窗共用一份 RewardFrames'
 
 test('C4 结算页不许自己再拉奖励表 / 解析 CmdGoods（数据由 ZCGame 注入）', () => {
     assert.doesNotMatch(pageSource, /getRefAllAsync|parseCmdGoodsList|CmdGoods/,
-        '结算页只吃「帧已加载好」的 IZCSettlementReward[]');
+        '结算页只吃 ZCGame 注入的 IZCSettlementReward[]');
     assert.match(pageSource, /readonly rewards\?: readonly IZCSettlementReward\[\]/);
+    // ★ 奖励格统一走公共 `ui/common/RewardItem.prefab`（`RewardItemView` 自己解析图标/品质框/数量）
+    assert.match(pageSource, /import \{ RewardItemView, type IRewardItemData \} from '\.\.\/\.\.\/common\/RewardItemView'/);
+    assert.doesNotMatch(pageSource, /GoodsBox/, '结算页不再自带奖励格实现');
 });
 
 test('C5 章节局也要发完成上报（`CmdFinishBattleReqMsg`）—— 漏了 1002 广播永远不来', () => {

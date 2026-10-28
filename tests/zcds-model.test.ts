@@ -300,7 +300,7 @@ test('地块按占据、可占据、可开发、已开发、废墟五态流转',
     snapshot.hexes[neighbor].state = 'ruins';
     const restored = new ZCGameModel(snapshot);
     assert.equal(restored.snapshot.hexes[neighbor].state, 'ruins');
-    // 废墟是永久地形：自身不可重建，只作为相邻己方格的开发锚点（见下一条用例）。
+    // 尚未被小兵占领的废墟不可重建，也不作为开发锚点。
     assert.equal(restored.canPlayerDevelop(neighbor), false);
 });
 
@@ -334,7 +334,7 @@ test('城墙耐久上限来自配置表（PVP-全局 wallMaxHp），代码里没
     assert.equal(devGame.snapshot.hexes[developId].wallHp, rules.wallMaxHp);
 });
 
-test('建筑被打掉后废墟归摧毁方，并点亮相邻己方格的开发', () => {
+test('建筑被打掉后废墟归摧毁方，但不点亮相邻己方格的开发', () => {
     const seed = new ZCGameModel(null, () => 0.1);
     const snapshot = cloneSnapshot(seed);
     const sourceId = 10 * ZC_MAP_COLUMNS + 4;
@@ -365,14 +365,15 @@ test('建筑被打掉后废墟归摧毁方，并点亮相邻己方格的开发',
     snapshot.nextUnitId = 2;
     const game = new ZCGameModel(snapshot, () => 0);
 
-    game.tick(1.5);
+    for (let i = 0; i < 30 && game.snapshot.hexes[enemyHexId].building !== 'none'; i++) game.tick(0.05);
     const ruin = game.snapshot.hexes[enemyHexId];
     assert.equal(ruin.building, 'none');
     assert.equal(ruin.state, 'ruins');
     assert.equal(ruin.owner, 'player');
     assert.equal(game.canPlayerDevelop(enemyHexId), false);
     for (const id of anchoredIds) {
-        assert.equal(game.snapshot.hexes[id].state, 'developable', `废墟相邻己方格 ${id} 应可开发`);
+        assert.equal(game.snapshot.hexes[id].state, 'occupied', `废墟相邻己方格 ${id} 只保持占据`);
+        assert.equal(game.canPlayerDevelop(id), false);
     }
 
     // 反向：敌方打掉我方建筑，废墟同样归摧毁方。
@@ -394,7 +395,7 @@ test('建筑被打掉后废墟归摧毁方，并点亮相邻己方格的开发',
     mirrorSnapshot.nextUnitId = 2;
     const mirrorGame = new ZCGameModel(mirrorSnapshot, () => 0);
 
-    mirrorGame.tick(1.5);
+    for (let i = 0; i < 30 && mirrorGame.snapshot.hexes[sourceId].building !== 'none'; i++) mirrorGame.tick(0.05);
     const mirrorRuin = mirrorGame.snapshot.hexes[sourceId];
     assert.equal(mirrorRuin.state, 'ruins');
     assert.equal(mirrorRuin.owner, 'enemy');
@@ -1868,7 +1869,11 @@ test('金矿产金与击杀、摧毁奖励都飘金币数值，数值全部来�
     const beforeGold = game.snapshot.playerGold;
     // 金矿采金周期从卡表读（当前 6 秒）；跑满一个周期才会结算一次金币飘字。
     tickSeconds(game, getPlayerDeck().find((card) => card.id === '2001')!.cycleSeconds!);
-    const income = game.floatTexts.filter((text) => text.kind === 'gold');
+    // 2026-10-27 起金币飘字按**来处**拆成两个 kind：建筑产出 = `goldincome`（coin + 数字
+    // 从建筑顶升起 50px 并淡出），击杀 / 拆建筑掉落 = `gold`（原地掉落缩没）。
+    // 这条用的是产出，筛选口径必须跟着改成 `goldincome` —— 否则产出再飘一次 `gold`
+    // 就说明两条表现又并回一条了（那种情况下视图会播错动画）。
+    const income = game.floatTexts.filter((text) => text.kind === 'goldincome');
     const mineHex = ZC_HEX_CONFIG[mineId];
     const homeHex = ZC_HEX_CONFIG[ZC_PLAYER_HOME_ID];
     const atMine = income.filter((text) => text.x === mineHex.x && text.y === mineHex.y);

@@ -46,6 +46,14 @@ export const FORMATION_SAVE_TIMEOUT_MS = 5000;
 let cachedFormations: readonly ZCFormation[] | null = null;
 let pendingRequest: Promise<readonly ZCFormation[] | null> | null = null;
 
+/** `fetchFormations()` 的等待策略（不传 = 老口径 3000ms）。 */
+export interface FormationFetchOptions {
+    /** 本次等待上限（毫秒）。 */
+    readonly timeoutMs?: number;
+    /** 超时日志里的调用方名字，用来区分是哪个界面在等。 */
+    readonly label?: string;
+}
+
 /**
  * 拉取当前角色的全部阵型。
  *
@@ -54,17 +62,18 @@ let pendingRequest: Promise<readonly ZCFormation[] | null> | null = null;
  *
  * **本函数保证在 `FORMATION_REQUEST_TIMEOUT_MS` 内兑现**，绝不悬空 —— 调用方可以放心 await。
  */
-export function fetchFormations(): Promise<readonly ZCFormation[] | null> {
+export function fetchFormations(options: FormationFetchOptions = {}): Promise<readonly ZCFormation[] | null> {
+    const timeoutMs = Math.max(1, Math.round(options.timeoutMs ?? FORMATION_REQUEST_TIMEOUT_MS));
     if (!pendingRequest) {
         pendingRequest = requestFormations().finally(() => {
             pendingRequest = null;
         });
     }
     const inflight = pendingRequest;
-    return withTimeout(inflight, FORMATION_REQUEST_TIMEOUT_MS, () => {
+    return withTimeout(inflight, timeoutMs, () => {
         console.warn(
-            `[FormationService] 阵型请求 ${FORMATION_REQUEST_TIMEOUT_MS}ms 无响应，`
-            + '布阵面板先按本地卡组渲染',
+            `[FormationService] ${options.label ?? '阵型'}请求 ${timeoutMs}ms 无响应，`
+            + '先按本地卡组 / 本地快照渲染',
         );
         return cachedFormations;
     });
@@ -97,7 +106,7 @@ export function applyFormation(formation: ZCFormation): void {
 export async function saveFormation(
     formationId: number,
     heroIds: readonly number[],
-    caller?: unknown,
+    caller?: object,
 ): Promise<FormationSaveResult> {
     const net = GameNet.instance;
     if (!net.isConnected) return { kind: 'offline' };
@@ -131,7 +140,7 @@ export async function saveFormation(
 async function sendFormationOp(
     formationId: number,
     heroIds: number[],
-    caller?: unknown,
+    caller?: object,
 ): Promise<FormationSaveResult> {
     let response: CmdFormationOpRspMsg | null = null;
     try {
@@ -147,7 +156,7 @@ async function sendFormationOp(
         //  切页签不再单独发包，**保存是同步选中状态的唯一时机**。别把这里改回 0。
         const ok = await GameNet.instance.send(new RequestFormationOp(
             { info: { formationId, heroId: heroIds, select: 1 } },
-            caller as any,
+            caller,
             (rsp) => { response = rsp; },
         ), false);
         if (!ok || !response) return { kind: 'failed' };
@@ -176,7 +185,7 @@ async function sendFormationOp(
  * 告诉服务端「当前出战的是这个阵型」，服务端会把其他阵型的 select 置 0，当前的置 1。
  * 成功后更新本地缓存的 selected 状态。
  */
-export async function selectFormation(formationId: number, caller?: unknown): Promise<boolean> {
+export async function selectFormation(formationId: number, caller?: object): Promise<boolean> {
     const net = GameNet.instance;
     if (!net.isConnected) return false;
 
@@ -190,7 +199,7 @@ export async function selectFormation(formationId: number, caller?: unknown): Pr
         let response: CmdFormationSelectRspMsg | null = null;
         const ok = await net.send(new RequestFormationSelect(
             { formationId: normalizedId },
-            caller as any,
+            caller,
             (rsp) => { response = rsp; },
         ), false);
         if (!ok || !response) return false;

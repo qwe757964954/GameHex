@@ -1,0 +1,14 @@
+{
+  "ver": "1.1.50",
+  "importer": "prefab",
+  "imported": true,
+  "uuid": "dfa3db4d-4529-4fcc-880a-395afc8ad9d5",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {},
+  "userData": {
+    "syncNodeName": "ChestDetailPanel",
+    "hasIcon": false
+  }
+}

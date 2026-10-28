@@ -1,14 +1,11 @@
 import { _decorator, Button, Color, Component, Node } from 'cc';
-import type { CardSkillListPresentation, CardSkillRowPresentation } from './CardPresenters';
+import type { CardSkillListPresentation, CardSkillRowPresentation } from './CardPresentations';
 import { CardSkillSlotView } from './CardSkillSlotView';
+import { CardLineupEvent } from './CardLineupEvents';
+import type { ISkillStepPayload } from './CardLineupEvents';
+import { EventMgr } from '../../framework/event/EventMgr';
 
 const { ccclass, property } = _decorator;
-
-/** 按钮回调宿主（`CardUpgradePage` 实现，经 `CardSkillListView` 注入）。 */
-export interface ICardSkillRowHost {
-    /** `direction = -1` 本地往回看一档；`+1` 发技能升级请求。 */
-    onSkillStep(skillId: number, direction: 1 | -1): void;
-}
 
 /**
  * 一行技能 = 左右两格，每格「名字 + 档位 + 描述 + ↓ / ↑」。
@@ -38,9 +35,6 @@ export class CardSkillRowView extends Component {
 
     @property({ type: Node, tooltip: 'Right/NextBtn（right 为空时无需绑）' })
     rightNext: Node | null = null;
-
-    /** 点击回调宿主。 */
-    host: ICardSkillRowHost | null = null;
 
     /** 颜色由上层列表注入（行节点是 prefab 预建的，颜色只在列表上配一份）。 */
     colors: { active: Color; locked: Color } | null = null;
@@ -102,40 +96,18 @@ export class CardSkillRowView extends Component {
     }
 
     /**
-     * 把点击转给宿主。
+     * 派发点击意图（`CardLineupEvent.SkillStep`），由页面订阅后决定发不发包。
      *
-     * **不能只依赖外部注入的 `host`**：注入走 `CardSkillListView.host → bindRows()`，
-     * 一旦 `getComponent` 因为类尚未注册而返回 `null`（循环 import / 加载顺序），
-     * `host` 就是 `undefined`，点击会被 `host?.` 静默吞掉 —— 表现正是「点了没反应」。
-     * 所以注入失败时沿父节点向上找真正实现了 `onSkillStep` 的组件。
+     *  原来这条路是注入式回调：`CardSkillListView.host` → `view.host` → `onSkillStep`，
+     *  而且为了兜住「注入失败」还写了个沿父链**鸭子类型反射**找宿主的 `findHostUpward()`。
+     *  删掉之后不存在"找不到宿主"这个状态 —— 没人订阅就没人处理，页面开着就一定会订阅。
      */
     private step(skillId: number, direction: 1 | -1): void {
-        console.log(`[CardSkillRowView] 点击 skill=${skillId} dir=${direction} host=${!!this.host}`);
         if (skillId <= 0) {
             console.warn('[CardSkillRowView] 点击时 skillId 为 0，说明这一格还没渲染过（render 未跑）');
             return;
         }
-        const host = this.host ?? this.findHostUpward();
-        if (!host) {
-            console.warn(`[CardSkillRowView] 找不到技能面板宿主，技能 ${skillId} 的点击被丢弃`);
-            return;
-        }
-        host.onSkillStep(skillId, direction);
-    }
-
-    /** 沿父链找带 `onSkillStep` 的组件（页面级宿主）。 */
-    private findHostUpward(): ICardSkillRowHost | null {
-        let current: Node | null = this.node.parent;
-        while (current) {
-            for (const comp of current.components) {
-                const candidate = comp as unknown as Partial<ICardSkillRowHost>;
-                if (typeof candidate.onSkillStep === 'function') {
-                    return comp as unknown as ICardSkillRowHost;
-                }
-            }
-            current = current.parent;
-        }
-        return null;
+        EventMgr.instance.emit(CardLineupEvent.SkillStep, { skillId, direction } satisfies ISkillStepPayload);
     }
 
     private onLeftPrev(): void { this.step(this.leftSkillId, -1); }

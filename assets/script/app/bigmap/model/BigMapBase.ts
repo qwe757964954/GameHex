@@ -254,6 +254,55 @@ export function bigMapCanPlace(
     return { ok: true, reason: '' };
 }
 
+/**
+ * 搬移合法性：建筑存在 → 目标格在建造区 → 目标格没被别的建筑 / 在建占位。
+ *
+ * 与 `bigMapCanPlace` 的区别：**不查解锁章节、数量上限、空闲队列和资源**。
+ * 协议 `CmdSlgBuildMoveReqMsg` 只带 `buildInstId + position`，服务端即时搬、不收费、
+ * 不占建造队列，客户端别自己加一套规矩；本地兜底（未登录预览）按同一口径走。
+ */
+export function bigMapCanMove(
+    config: IBigMapConfig,
+    state: IBigMapBaseState,
+    instanceId: number,
+    hexId: number,
+): IBigMapActionResult {
+    const building = state.buildings.find((item) => item.instanceId === instanceId);
+    if (!building) return { ok: false, reason: '建筑不存在' };
+    if (building.hexId === hexId) return { ok: false, reason: '建筑已经在这个位置' };
+    const plotSize = config.queue.plotRows * config.queue.plotCols;
+    if (!Number.isInteger(hexId) || hexId < 0 || hexId >= plotSize) return { ok: false, reason: '超出建造区' };
+    const size = Math.max(1, config.buildings.get(building.buildingId)?.occupyHex ?? 1);
+    const cells = occupyCells(config, building.buildingId, hexId);
+    if (cells.length < size) return { ok: false, reason: '建造区空间不足' };
+    if (cells.some((cell) => cell < 0 || cell >= plotSize)) return { ok: false, reason: '超出建造区' };
+    const taken = occupiedPlotCells(state, instanceId);
+    if (cells.some((cell) => taken.has(cell))) return { ok: false, reason: '该位置已有建筑' };
+    return { ok: true, reason: '' };
+}
+
+/**
+ * 搬移：只换 `hexId`，等级 / 存量 / 上次结算时刻原样带走 —— 搬一下不白送产出。
+ * 校验不过时把原状态原样返回（`ok=false`），调用方不必再判空。
+ */
+export function bigMapMove(
+    config: IBigMapConfig,
+    state: IBigMapBaseState,
+    instanceId: number,
+    hexId: number,
+): IBigMapActionResult {
+    const check = bigMapCanMove(config, state, instanceId, hexId);
+    if (!check.ok) return { ...check, state };
+    return {
+        ok: true,
+        reason: '',
+        state: {
+            ...state,
+            buildings: state.buildings.map((item) => (item.instanceId === instanceId ? { ...item, hexId } : item)),
+        },
+    };
+}
+
 function bigMapMissingRes(
     state: IBigMapBaseState,
     cost: { readonly costGrain: number; readonly costWood: number; readonly costIron: number },
@@ -303,11 +352,13 @@ export function bigMapCanUpgrade(
             return { ok: false, reason: '受主城等级限制' };
         }
     }
-    if (next.preBuildId !== 0) {
-        const pre = state.buildings.find((item) => item.buildingId === next.preBuildId);
-        if (!pre || pre.level < next.preBuildLevel) {
-            const preName = config.buildings.get(next.preBuildId)?.name ?? '前置建筑';
-            return { ok: false, reason: `需先将${preName}升到 ${next.preBuildLevel} 级` };
+    // 前置建筑是**列表**（策划表 `baseBuildingLevel.preBuild`）：主城升 2 级就要求
+    // 「木材田-1 + 铁矿田-1 都到 1 级」。以前只认单个 `preBuildId`，多前置会漏判。
+    for (const pre of next.preBuild) {
+        const built = state.buildings.find((item) => item.buildingId === pre.id);
+        if (!built || built.level < pre.level) {
+            const preName = config.buildings.get(pre.id)?.name ?? '前置建筑';
+            return { ok: false, reason: `需先将${preName}升到 ${pre.level} 级` };
         }
     }
     if (!bigMapFreeQueueSlot(state)) return { ok: false, reason: '建造队列已满' };

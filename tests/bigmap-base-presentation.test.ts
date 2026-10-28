@@ -18,15 +18,15 @@ test('查看基地升级详情不扣资源、不启动队列，实际升级仍�
     assert.equal(detail.instanceId, main.instanceId);
     assert.equal(detail.name, main.name);
     assert.equal(detail.targetLevel, 2);
-    assert.equal(detail.canUpgrade, true);
-    assert.ok(detail.costWood > 0);
+    // 策划表里主城升 2 级的前置是 [木材田-1(71007) Lv1, 铁矿田-1(71012) Lv1]；
+    // 这个号只有主城 ⇒ 详情里必须是「不可升级」，而且**不能**动存档。
+    assert.equal(detail.canUpgrade, false);
+    assert.match(detail.reason, /前置|升到 1 级|需先将/);
     assert.equal(detail.queueSlotIndex, -1);
     assert.equal(JSON.stringify(presenter.base), before);
-    assert.equal(presenter.startUpgrade(detail.instanceId).ok, true);
-    const busy = presenter.plotDetail(main.hexId)!;
-    assert.equal(busy.canUpgrade, false);
-    assert.ok(busy.queueSlotIndex >= 0);
-    assert.ok(busy.remainSeconds > 0);
+    // 点升级也不会真的排队列（本地规则先拦）。
+    assert.equal(presenter.startUpgrade(detail.instanceId).ok, false);
+    assert.equal(JSON.stringify(presenter.base), before);
     assert.equal(presenter.plotDetail(-1), null);
 });
 

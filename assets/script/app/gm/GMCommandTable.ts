@@ -185,11 +185,10 @@ export class GMCommandTable {
             GMCommandTable.tip('未连接游戏服，服务器指令无法发送');
             return false;
         }
-        const caller = GMCommandTable as unknown as destroyable;
         const ok = await net.send(
             new RequestSystemGm(
                 { cmd: trimmed },
-                caller,
+                GMCommandTable,
                 () => GMCommandTable.tip('GM指令发送成功'),
                 () => GMCommandTable.tip('GM指令发送失败'),
             ),
@@ -206,9 +205,8 @@ export class GMCommandTable {
             onDone(GMCommandTable.getCommandList());
             return;
         }
-        const caller = GMCommandTable as unknown as destroyable;
         void net.send(
-            new RequestGmList({}, caller, (rsp: CmdGmListRspMsg) => {
+            new RequestGmList({}, GMCommandTable, (rsp: CmdGmListRspMsg) => {
                 if (rsp && Array.isArray(rsp.cmd)) {
                     GMCommandTable._serverList = rsp.cmd.map((item) => ({ gm: item.cmd, desc: item.desc ?? '' }));
                 }

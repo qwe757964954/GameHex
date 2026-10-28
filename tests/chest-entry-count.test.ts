@@ -7,6 +7,7 @@ import type { MainPage } from '../assets/script/app/main/MainPage';
 import * as chestTypes from '../assets/script/app/main/ChestTypes';
 
 function createHarness() {
+    const releasedOwners: object[] = [];
     let slots: readonly chestTypes.IChestSlotData[] = [];
     let loads = 0;
     const listeners = new Set<(value: readonly chestTypes.IChestSlotData[]) => void>();
@@ -31,10 +32,13 @@ function createHarness() {
         },
     }).outputText;
     runInNewContext(code, { exports, require: (name: string) => {
+        if (name === '../net/GameNet') return { GameNet: { instance: { removeCaller: (owner: object) => releasedOwners.push(owner) } } };
         if (name === 'cc') return {
             _decorator: { ccclass: () => (type: unknown) => type, property: () => () => {} },
             Component: class {},
         };
+        if (name === '../../framework/event/EventMgr') return { EventMgr: { instance: { on: () => undefined, offTarget: () => undefined } } };
+        if (name === './ChestEvents') return { CHEST_EVENTS: { SLOT_ACTION: 'slot', COLLAPSE: 'collapse', PAGE: 'page' } };
         if (name === './ChestTypes') return chestTypes;
         if (name === './NewTreasureRepository') return { NewTreasureRepository: RepositoryStub };
         return {};

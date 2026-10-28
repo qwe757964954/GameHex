@@ -154,15 +154,71 @@ export function pickHealthBarFill(
     }
 }
 
+/**
+ * 血条比例（`0~1`）。
+ *
+ * `maxHp` 非法（`0` / `NaN` / 负）一律 `0` —— 与 `updateHealthBar` 的 `valid` 判据同一口径，
+ * 血条本体、扣血白条、可见性判断都从这一个函数取比例，避免三处各写一遍钳位。
+ */
+export function healthBarRatio(hp: number, maxHp: number): number {
+    if (!Number.isFinite(maxHp) || maxHp <= 0) return 0;
+    if (!Number.isFinite(hp)) return 0;
+    return Math.max(0, Math.min(1, hp / maxHp));
+}
+
 /** 血条按阵营换填充图（贴图自带颜色，不再走 `color` 染色），并刷新比例与可见性。 */
 export function updateHealthBar(bar: ProgressBar | null, hp: number, maxHp: number, fill: SpriteFrame): void {
     if (!bar) return;
     const valid = Number.isFinite(maxHp) && maxHp > 0;
-    const ratio = valid && Number.isFinite(hp) ? Math.max(0, Math.min(1, hp / maxHp)) : 0;
     bar.node.active = valid;
-    bar.progress = ratio;
+    bar.progress = healthBarRatio(hp, maxHp);
     // 同帧每个单位/地块都会走到这里，只在阵营真的变了时才写 spriteFrame。
     if (bar.barSprite && bar.barSprite.spriteFrame !== fill) bar.barSprite.spriteFrame = fill;
+}
+
+// 扣血白条：被扣掉的那一段先变白，再从右往左缩没，露出黑色底框（2026-10-27 需求）。
+
+/**
+ * 白条的存活时长（秒）。
+ *
+ * 0.13s 短到「看得见是个过程、又不拖节奏」：比一帧长（60fps 下约 8 帧），
+ * 比受击特效的 0.15s 略短 —— 白条收干净时那一下打击感刚好落地。
+ */
+export const HEALTH_BAR_DAMAGE_TRAIL_SECONDS = 0.13;
+
+/**
+ * 白条的收缩比例：`1` = 刚挨打（白条满宽），`0` = 播完（收干净）。
+ *
+ * 用 **smoothstep**（`t²(3−2t)`）而不是线性：0.13s 太短，线性在起停两端各有一帧硬边，
+ * smoothstep 两端速度都是 0，看上去才像被「吸」回去而不是被「切」掉。
+ */
+export function healthBarDamageTrailScale(elapsed: number): number {
+    if (!Number.isFinite(elapsed) || elapsed <= 0) return 1;
+    if (elapsed >= HEALTH_BAR_DAMAGE_TRAIL_SECONDS) return 0;
+    const progress = elapsed / HEALTH_BAR_DAMAGE_TRAIL_SECONDS;
+    return 1 - progress * progress * (3 - 2 * progress);
+}
+
+/**
+ * 白条这一帧该画的像素宽 = `totalLength ×（扣血前 − 当前）× 收缩比例`。
+ *
+ * 白条的**左缘钉在填充条的右缘**上（宽度变化只让右缘往左走），所以 width 就是它盖住的那段。
+ * 血量回升 / 没掉血 / 参数脏 ⇒ `0`（不画）。
+ */
+export function healthBarDamageTrailWidth(
+    totalLength: number,
+    progress: number,
+    fromProgress: number,
+    elapsed: number,
+): number {
+    if (!Number.isFinite(totalLength) || totalLength <= 0) return 0;
+    // 当前比例脏了就不画：宁可这一帧没有白条，也不能因为 `NaN → 0` 闪出一整条白的。
+    if (!Number.isFinite(progress)) return 0;
+    const to = Math.max(0, Math.min(1, progress));
+    const from = Number.isFinite(fromProgress) ? Math.max(0, Math.min(1, fromProgress)) : 0;
+    const span = from - to;
+    if (span <= 0) return 0;
+    return totalLength * span * healthBarDamageTrailScale(elapsed);
 }
 
 // 生成动画（「由小变大」）：卡牌揭示与建筑生成共用同一条弹性曲线。
@@ -206,6 +262,34 @@ export function elasticPopScale(t: number, from: number = POP_FROM_SCALE): numbe
     const u = (k - POP_DIP_AT) / (1 - POP_DIP_AT);
     const eased = 1 - (1 - u) * (1 - u);
     return POP_DIP_SCALE + (1 - POP_DIP_SCALE) * eased;
+}
+
+// 新点亮邻格的「生成动画」：由小到大 + 淡入，与地块脉冲同起同收（需求 2026-10-26）。
+
+/**
+ * 生成动画的起手缩放。
+ *
+ * 比卡牌的 `POP_FROM_SCALE`（0.2）大得多：邻格长出来的是**地块图标 + 价格数字**，
+ * 从 0.2 起步看着像"远处飞进来"，从 0.6 起步才读得出「这一格刚被点亮、正在长齐」。
+ * 峰值 / 回落仍复用 `elasticPopScale` 同一条曲线（全篇生成动画同一族，别再写第二条）。
+ */
+export const DEVELOPABLE_SPAWN_FROM_SCALE = 0.6;
+/**
+ * 生成动画里「淡入」结束的进度占比 —— 到这里之后恒为 1。
+ *
+ * 0.55 ⇒ 只用了 0.5s 里的前 0.275s 在淡入，剩下的时间整段留给「长大 + 落位」：
+ * 全程半透明地长大看着发虚，先看清轮廓再收口才像"生成"。
+ */
+export const DEVELOPABLE_SPAWN_FADE_END = 0.55;
+
+/**
+ * 生成动画的不透明度（纯函数）：`[0, FADE_END)` 由 0 线性淡到 1，之后恒 1。
+ *
+ * 与 `elasticPopScale` 一起构成新邻格的生成表现（缩放走那条共用曲线，这里只管淡入）。
+ */
+export function developableSpawnOpacity(progress: number): number {
+    const t = progress < 0 ? 0 : (progress > 1 ? 1 : progress);
+    return t >= DEVELOPABLE_SPAWN_FADE_END ? 1 : t / DEVELOPABLE_SPAWN_FADE_END;
 }
 
 // 飘字「快进慢出」：前 45% 完成入场（位移 + 缩放 + 金币图标自转），后 55% 缓慢淡出。
@@ -343,6 +427,61 @@ export function floatTextGoldDrop(progress: number): IFloatTextGoldFrame {
     return { drop: 0, scale: Math.max(0, 1 - shrink), fade: Math.max(0, 1 - shrink), spin: 1 };
 }
 
+// 建筑产金飘字（主城 / 金矿的周期产出）**与击杀掉落刻意相反**：从建筑顶部往上升 50px 并淡出。
+//
+// 2026-10-27 用户口径：「建筑生成金币的动画效果需要和单位被击杀掉落金币的动画效果区分开来，
+// 建筑生成金币动画是播放金币 icon 和对应的数字 UI 从建筑的顶部往上升起 50px，并且变透明消失」。
+//
+// 为什么必须是两条曲线而不是给一条曲线加参数：这两个动效的**语义方向**是反的 ——
+// 击杀掉落是"战利品落地"（从上往下、停住、缩没），建筑产出是"收益到账"（从下往上、飘散）。
+// 共用一条曲线再加 `direction = ±1` 只会让两边都读不清，且改动一次就同时影响两个动效。
+
+/** 建筑产金飘字：从建筑顶部往上升起的距离（像素，用户口径 50px）。 */
+export const FLOAT_TEXT_GOLD_RISE_PX = 50;
+/** 建筑产金飘字：上升段占整条时长的比例（其余时间停在顶端淡出）。 */
+export const FLOAT_TEXT_GOLD_RISE_SPAN = 0.7;
+/** 建筑产金飘字：从这个进度开始淡出（先在上升段前 30% 保持全不透明，看得清数字）。 */
+export const FLOAT_TEXT_GOLD_FADE_START = 0.3;
+/**
+ * 建筑顶部相对**格心**的偏移（像素）。
+ *
+ * = 地块 prefab `ZCGameHex.prefab` 里 `buildingSprite` 所在节点的上边缘：
+ * `lpos.y 15.651 + 高 90 × BUILDING_ICON_SCALE 0.72 / 2 = 48.05`。
+ * 飘字锚点是格心（`ZCGameModel` 传的是 `hexCenter`），所以"建筑顶部"= 格心 + 本值。
+ * ⚠️ 换建筑图（`ZCGameHex.prefab` 的 BuildingIcon 尺寸 / 位置）或改 `BUILDING_ICON_SCALE` 时要重标。
+ */
+export const FLOAT_TEXT_GOLD_INCOME_TOP_PX = 48;
+
+/** 建筑产金飘字某一刻的姿态。 */
+export interface IFloatTextGoldRiseFrame {
+    /** 相对**建筑顶部**的上升量（px）：`0 → FLOAT_TEXT_GOLD_RISE_PX`，恒 `>= 0` 且单调不减。 */
+    readonly rise: number;
+    /** 透明度系数（1 → 0）：恒在 `[0, 1]`、单调不增。 */
+    readonly fade: number;
+}
+
+/**
+ * 建筑产金飘字的**上升曲线**（纯函数）：`边升边淡出`。
+ *
+ * | 段 | 区间 | 表现 |
+ * | --- | --- | --- |
+ * | 上升 | `0 ~ 70%` | `rise: 0 → 50px`，缓动 `k(2-k)`（起手快、快到顶收住，不是匀速电梯）；前 30% 不动 alpha |
+ * | 淡出 | `30% ~ 100%` | `rise` 继续走到 50 后停住，alpha 按 `1 - u²` 加速收到 0 |
+ *
+ * ⚠️ `rise` 恒 `>= 0`（只向上）—— 与 `floatTextGoldDrop` 的 `drop >= 0`（只向下）正好互为镜像，
+ *   单测两边都按符号卡：产金一旦往下掉、掉落一旦往上飘，就是接错了曲线。
+ */
+export function floatTextGoldRise(progress: number): IFloatTextGoldRiseFrame {
+    const p = progress <= 0 ? 0 : progress >= 1 ? 1 : (Number.isFinite(progress) ? progress : 1);
+    const riseSpan = FLOAT_TEXT_GOLD_RISE_SPAN > 0 ? Math.min(1, FLOAT_TEXT_GOLD_RISE_SPAN) : 1;
+    const k = Math.min(1, p / riseSpan);
+    const rise = FLOAT_TEXT_GOLD_RISE_PX * k * (2 - k);
+    const fadeStart = Math.min(1, Math.max(0, FLOAT_TEXT_GOLD_FADE_START));
+    const fadeSpan = 1 - fadeStart;
+    const u = fadeSpan <= 0 ? 1 : Math.min(1, Math.max(0, (p - fadeStart) / fadeSpan));
+    return { rise, fade: Math.max(0, 1 - u * u) };
+}
+
 // 生成单位抖动：「Y 拉 120% 回落 → X 拉 120% 回落」两段脉冲。
 //  - 单位出生抖动：`ZCUnitView.playSpawnShake`（新兵自己抖一下，110% 档）；
 //  - 建筑生成抖动：`ZCHexView.playBuildingShake`（建筑模型自己抖一下，需求 2026-10-15，120% 档）。
@@ -387,41 +526,49 @@ export function spawnBaseConfirmPoint(base: { x: number; y: number }): { x: numb
     return { x: base.x, y: base.y + spawnBaseConfirmOffsetY() };
 }
 
-// 开局「点这里」提示：给金矿那一格套一圈整体描边、按正弦脉冲闪几下（需求 2026-10-15 row10）。
+// 开局「点这里」提示：给金矿那一格套一圈整体描边、一直呼吸到金矿被点（需求 2026-10-26 改口径）。
 
-/** 闪烁一个完整周期的时长（秒）。约 1.1s ⇒ 读起来是「一呼一吸」，不是频闪。 */
-export const ZC_NEUTRAL_HINT_CYCLE_SECONDS = 1.1;
-/** 闪几个周期。4 个周期足够被看见，又不会一直分散注意力。 */
-export const ZC_NEUTRAL_HINT_CYCLES = 4;
-/** 提示的**总时长**（秒）= 周期 × 次数（整数倍 ⇒ 收尾落在相位 0，不会闪到一半硬切）。 */
-export const ZC_NEUTRAL_HINT_SECONDS = ZC_NEUTRAL_HINT_CYCLE_SECONDS * ZC_NEUTRAL_HINT_CYCLES;
-/** 脉冲的下限透明度（上限恒 1）：留一点底，描边不会「彻底消失再出现」那样跳。 */
-export const ZC_NEUTRAL_HINT_MIN_ALPHA = 0.35;
+/**
+ * 呼吸一个完整周期的时长（秒）。
+ *
+ * 🔴 2026-10-26 由 `1.1s` 放慢到 `1.6s`：1.1s 读起来是「闪」，加快加深只会像频闪；
+ * 1.6s 一呼一吸才像提示灯。改这个值会直接改手感，别顺手调。
+ */
+export const ZC_NEUTRAL_HINT_CYCLE_SECONDS = 1.6;
+/** 呼吸的下限透明度（上限恒 1）。0.15 ⇒ 几乎退干净再涨回来，"呼吸"的幅度才看得见。 */
+export const ZC_NEUTRAL_HINT_MIN_ALPHA = 0.15;
 
 /**
  * 提示描边的透明度（纯函数）：`elapsed` 是**进入对局后的秒数**。
  *
- * 三段叠起来读：
- *  - 正弦脉冲 `1 → 0.35 → 1` 一周期一次（`cos` 相位 ⇒ **`elapsed = 0` 就是最亮**，
- *    玩家一进场立刻看到描边，而不是先暗一拍）；
- *  - 最后一个周期整体收尾淡出（`tail`）：从最后一个波峰最亮处一路降到 0 ⇒ 窗口结束时
- *    透明度已经到 0，不硬切；
- *  - 窗口外恒 0（含负值 / NaN）⇒ 调用方"看到 0 就收手"这一条判定是安全的。
+ * 🔴 2026-10-26 改口径：需求从「闪 4 个周期就停」改成「一直呼吸到金矿被点」——
+ * 所以本函数**不再有窗口**，只要 `elapsed >= 0` 就一直返回 `[MIN, 1]` 之间的值，
+ * 「什么时候收手」只由**目标还在不在**决定（见 `ZCGameRenderWorld.renderNeutralHint`）。
+ * 旧版末段那层 `(1-u)²` 收尾包络已删除：没有窗口就没有"收尾淡出"可做。
  *
- * ⚠️ `tail` 取 **`(1-u)²` 而不是线性 `1-u`**：线性包络下，脉冲在收尾周期的后半段往回升
- * （0.35 → 1），乘出来会**中途反涨**，肉眼看到的是「最后一下闪两下再灭」。平方包络压得比脉冲
- * 回升快，整段收尾严格单调下降（用例里逐点断言了这条）。
+ * 曲线本身仍是 `cos` 相位（`elapsed = 0` 最亮）：玩家一进场立刻看到描边，而不是先暗一拍。
+ * 负值 / NaN / Infinity 一律返回 0 —— 调用方"看到 0 就先别画"这条判定仍然安全。
  */
 export function zcNeutralHintAlpha(elapsed: number): number {
-    if (!Number.isFinite(elapsed) || elapsed < 0 || elapsed >= ZC_NEUTRAL_HINT_SECONDS) return 0;
+    if (!Number.isFinite(elapsed) || elapsed < 0) return 0;
     const phase = (elapsed % ZC_NEUTRAL_HINT_CYCLE_SECONDS) / ZC_NEUTRAL_HINT_CYCLE_SECONDS;
-    const pulse = ZC_NEUTRAL_HINT_MIN_ALPHA
+    return ZC_NEUTRAL_HINT_MIN_ALPHA
         + (1 - ZC_NEUTRAL_HINT_MIN_ALPHA) * (0.5 + 0.5 * Math.cos(2 * Math.PI * phase));
-    const tailStart = ZC_NEUTRAL_HINT_CYCLE_SECONDS * (ZC_NEUTRAL_HINT_CYCLES - 1);
-    if (elapsed <= tailStart) return pulse;
-    const remaining = 1 - (elapsed - tailStart) / ZC_NEUTRAL_HINT_CYCLE_SECONDS;
-    return pulse * remaining * remaining;
 }
+
+/**
+ * 提示线**外发光**的每一环透明度系数：由外到内，索引 0 = 最外一圈。
+ *
+ * 为什么要"多笔叠加"：`cc.Graphics` 的描边**没有渐变**（`strokeColor` 只有一个颜色，
+ * 不能 `fillColor` 那样做梯度），项目里也没有适用于矢量线的发光材质 / 后处理，
+ * 所以按用户给的第二方案（「叠加一个透明度过渡到边缘」）实现 —— 同一圈六边形按
+ * 由粗到细描若干笔，越靠外越透明，叠出来就是 2px 的柔边。
+ *
+ * ⚠️ 数值是**每环自己的系数**（还要乘呼吸值 `zcNeutralHintAlpha`），不是累计值：
+ * 后画的环会盖在先画的环上，实际观感是「越靠内越亮」的合成结果。
+ * 必须严格递增（外淡内浓），否则会在中间出现一道硬边。
+ */
+export const ZC_HINT_GLOW_RING_ALPHAS: readonly number[] = [0.08, 0.11, 0.15, 0.2];
 
 // 结算扫场：从胜利方那一侧起，整行同时铺**深饱和**阵营色（一行接一行），
 // 铺满前再从**起点**整行推回去、把深色回正成阵营**当前色**（需求 2026-10-15 row8）。

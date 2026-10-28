@@ -714,6 +714,19 @@
     "icon": "icons/item/图标_通用城墙升星材料红"
   },
   {
+    "resId": 10300,
+    "name": "技能升级石",
+    "desc": "技能升级石",
+    "useType": 1,
+    "type": 11,
+    "quality": 2,
+    "icon": "icons/common/图标_联盟贡献",
+    "access": [
+      10
+    ],
+    "useJump": 11
+  },
+  {
     "resId": 10301,
     "name": "联盟贡献",
     "desc": "用于联盟升级",
@@ -4288,6 +4301,61 @@
       8
     ],
     "useJump": 18
+  },
+  {
+    "resId": 18501,
+    "name": "粮食",
+    "desc": "大地图玩法核心资源",
+    "useType": 1,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/item/图标_粮食",
+    "access": [],
+    "useJump": 0
+  },
+  {
+    "resId": 18502,
+    "name": "木材",
+    "desc": "大地图玩法核心资源",
+    "useType": 1,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/item/图标_木材",
+    "access": [],
+    "useJump": 0
+  },
+  {
+    "resId": 18503,
+    "name": "矿石",
+    "desc": "大地图玩法核心资源",
+    "useType": 1,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/item/图标_矿石",
+    "access": [],
+    "useJump": 0
+  },
+  {
+    "resId": 18504,
+    "name": "钻石",
+    "desc": "大地图玩法核心资源",
+    "useType": 1,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/item/图标_钻石",
+    "access": [],
+    "useJump": 0
+  },
+  {
+    "resId": 18505,
+    "name": "行动力",
+    "desc": "大地图玩法核心资源",
+    "useType": 1,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/item/图标_行动力",
+    "access": [],
+    "useJump": 0
   },
   {
     "resId": 19001,

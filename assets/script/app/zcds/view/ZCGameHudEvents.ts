@@ -40,6 +40,15 @@ export enum ZCGameUiEvent {
     ResetCamera = 'zcgame-ui-reset-camera',
     /** 结算页：点「确定」—— 结算页唯一的收尾动作。 */
     SettlementConfirm = 'zcgame-ui-settlement-confirm',
+    /**
+     * 结算页：「双倍奖励」。
+     *
+     * 本期**没有接线**（页面按 `hasDoubleReward` 把按钮置灰），事件先占位 ——
+     * 接功能时在 `ZCGame` 里订阅即可，页面不需要改。
+     */
+    SettlementDoubleReward = 'zcgame-ui-settlement-double-reward',
+    /** 结算页：「变强途径」入口（**payload = `'equip' | 'hero' | 'rune'`**）。本期同样未接线。 */
+    SettlementGrowEntry = 'zcgame-ui-settlement-grow-entry',
     /** 选点：绿勾「确认位置」（失效态也派发，由选点模型给原因文案）。 */
     SpawnConfirm = 'zcgame-ui-spawn-confirm',
     /** 选点：左下「收回提示 / 显示提示」。 */

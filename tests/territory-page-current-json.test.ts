@@ -38,9 +38,9 @@ test('territory page renders every site from the current map JSON, not only boun
     assert.match(mapView, /const stage = input\.stageByCell\.get\(site\.cellId\) \?\? null;/);
     // 未绑定站点同样保留命中区，但地图不再显示类型名或「待配置」角标。
     assert.doesNotMatch(mapView, /TERRITORY_UNBOUND_TYPE_NAMES|TERRITORY_TEXTS\.pendingConfig/);
-    // 点开它的详情是另一条文案（unboundStatus）：字面文案在 TerritoryTexts，Presenter 引用它。
-    assert.match(texts, /仅展示地图站点，不扣资源、不进入战斗/);
-    assert.match(presenter, /TERRITORY_TEXTS\.unboundStatus/);
+    // 站点详情面板已移除（2026-10-27）⇒ 未绑定站点不再弹任何面板，信息只留在左侧 info 区。
+    assert.equal(/TERRITORY_TEXTS\.unboundStatus/.test(presenter), false, 'unboundStatus 随详情面板一起移除');
+    assert.equal(/仅展示地图站点，不扣资源、不进入战斗/.test(texts), false, '死文案要一起删');
 });
 
 test('territory map keeps battle-scale cells and supports two-axis drag within its viewport', () => {
@@ -57,11 +57,13 @@ test('territory map keeps battle-scale cells and supports two-axis drag within i
     assert.equal(scroll.horizontal, true);
     assert.equal(scroll.vertical, true);
     assert.equal(scroll._content.__id__, prefab.indexOf(prefabNode(prefab, 'MapLayer')));
-    // 内容层尺寸 = 地图包围盒 + 四周留白（可滚范围由它和视口尺寸推出）。
-    // ⚠️ 2026-10-21 起**不再**是裸包围盒：留白（`TERRITORY_MAP_CONTENT_PADDING`）就是
-    // 「相机多出来的可滚余量」，没它的话贴到地图下边缘的目标格永远抬不到【快速寻敌】之上
-    // （用户口径「整体一起上移」）。尺寸口径由 `territoryMapContentSize` 统一出口。
-    assert.match(mapView, /territoryMapContentSize\(layout\)/);
+    // 内容层尺寸 = 地图包围盒 + 上下留白（可滚范围由它和视口尺寸推出）。
+    // ⚠️ 2026-10-21 起**不再**是裸包围盒：留白就是「相机多出来的可滚余量」，没它的话贴到
+    // 地图下边缘的目标格永远抬不到【快速寻敌】之上（用户口径「整体一起上移」）。
+    // ⚠️ 2026-10-27 起两份留白都是**运行时值**（页面按 HUD 底边反算后注入），不再恒 300 / 0
+    // ⇒ 尺寸口径由 `territoryMapContentSize` 统一出口，但必须带上视图里的两个字段。
+    assert.match(mapView,
+        /territoryMapContentSize\(\s*layout,\s*this\.contentPaddingBottom,\s*this\.contentPaddingTop\s*,?\s*\)/);
     assert.match(mapView, /setContentSize\(content\.width, content\.height\)/);
 });
 

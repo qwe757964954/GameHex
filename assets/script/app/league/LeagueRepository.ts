@@ -550,15 +550,15 @@ export interface ILeagueRepository {
     /** 入口行红点（只读 `gameConfig` + `CmdRoleUnion`，**不加载图标**）。 */
     loadLeagueEntryRedDots(): Promise<ILeagueEntryRedDots>;
     /** 请求详情（成员列表随推送回来）。 */
-    requestDetail(caller?: unknown): Promise<LeagueRequestResult>;
+    requestDetail(caller?: object): Promise<LeagueRequestResult>;
     /** 请求动态。 */
-    requestLog(caller?: unknown): Promise<LeagueRequestResult>;
+    requestLog(caller?: object): Promise<LeagueRequestResult>;
     /** 请求全服联盟列表。 */
-    requestList(caller?: unknown): Promise<LeagueRequestResult>;
+    requestList(caller?: object): Promise<LeagueRequestResult>;
     /** 请求入盟申请列表。 */
-    requestApplyList(caller?: unknown): Promise<LeagueRequestResult>;
+    requestApplyList(caller?: object): Promise<LeagueRequestResult>;
     /** 按联盟 id 搜索（成功时把结果放进 `searchCache`）。 */
-    search(unionId: string, caller?: unknown): Promise<LeagueRequestResult>;
+    search(unionId: string, caller?: object): Promise<LeagueRequestResult>;
 
     /** 取搜索缓存（键 = **输入框原串**，见类头）。 */
     cachedSearch(key: string): ILeagueUnionRow | null;
@@ -566,15 +566,15 @@ export interface ILeagueRepository {
     clearSearchCache(): void;
 
     /** 踢人。 */
-    kick(memberId: string, caller?: unknown): Promise<LeagueRequestResult>;
+    kick(memberId: string, caller?: object): Promise<LeagueRequestResult>;
     /** 任命盟主。 */
-    appointLeader(memberId: string, caller?: unknown): Promise<LeagueRequestResult>;
+    appointLeader(memberId: string, caller?: object): Promise<LeagueRequestResult>;
     /** 任命副盟主。 */
-    appointAdmin(memberId: string, caller?: unknown): Promise<LeagueRequestResult>;
+    appointAdmin(memberId: string, caller?: object): Promise<LeagueRequestResult>;
     /** 卸任副盟主。 */
-    dismissAdmin(memberId: string, caller?: unknown): Promise<LeagueRequestResult>;
+    dismissAdmin(memberId: string, caller?: object): Promise<LeagueRequestResult>;
     /** 退出联盟。 */
-    quit(caller?: unknown): Promise<LeagueRequestResult>;
+    quit(caller?: object): Promise<LeagueRequestResult>;
 
     /**
      * 申请加入联盟（联盟信息弹窗的「加入」／加入联盟页的「快速加入」）。
@@ -584,7 +584,7 @@ export interface ILeagueRepository {
      *    （包一层单元素数组，不是裸 id）；「快速加入」则是 `RequestLeagueJoin(arr)`（最多 5 条）。
      *    这里保留数组形状，两条调用链共用同一个方法。
      */
-    join(unionIds: readonly string[], caller?: unknown): Promise<LeagueRequestResult>;
+    join(unionIds: readonly string[], caller?: object): Promise<LeagueRequestResult>;
 
     /**
      * 创建联盟（**未入盟**态）。
@@ -593,7 +593,7 @@ export interface ILeagueRepository {
      * `icon` = 旗帜色（`组件_联盟_旗帜` 的 `颜色` 页序）、`name` = 联盟名、
      * `quick` = 「允许快速加入」勾选框。老端 `ModelLeague.RequestLeagueCreat(icon, name, quick)` 同名同序。
      */
-    requestCreat(icon: number, name: string, quick: boolean, caller?: unknown): Promise<LeagueRequestResult>;
+    requestCreat(icon: number, name: string, quick: boolean, caller?: object): Promise<LeagueRequestResult>;
 
     /**
      * 创建消耗的展示模型（**读表 + 读缓存，不发包**）：
@@ -602,14 +602,14 @@ export interface ILeagueRepository {
     createCost(): Promise<ILeagueCostView>;
 
     /** 批准 / 拒绝单条申请。 */
-    approveApply(applyId: string, agree: boolean, caller?: unknown): Promise<LeagueRequestResult>;
+    approveApply(applyId: string, agree: boolean, caller?: object): Promise<LeagueRequestResult>;
     /** 一键批准 / 一键拒绝。 */
-    approveApplyOneKey(agree: boolean, caller?: unknown): Promise<LeagueRequestResult>;
+    approveApplyOneKey(agree: boolean, caller?: object): Promise<LeagueRequestResult>;
 
     /** 设置「快速加入」。 */
-    setQuickJoin(quick: boolean, caller?: unknown): Promise<LeagueRequestResult>;
+    setQuickJoin(quick: boolean, caller?: object): Promise<LeagueRequestResult>;
     /** 编辑信息（`type` 取 `LeagueEditType`）。 */
-    edit(type: number, content: string, caller?: unknown): Promise<LeagueRequestResult>;
+    edit(type: number, content: string, caller?: object): Promise<LeagueRequestResult>;
 
     // ============================================================
     // P4：商店 / 捐献 / 砍价
@@ -627,7 +627,7 @@ export interface ILeagueRepository {
      * ★ **成功（`'ok'`）时本方法自己会弹「获得奖励」**（消费响应里的 `tlCmdGoods`
      *   ⇒ `FW.ShowReward`）。调用方**不要**再弹一次。
      */
-    buyStoreGoods(id: number, caller?: unknown): Promise<LeagueRequestResult>;
+    buyStoreGoods(id: number, caller?: object): Promise<LeagueRequestResult>;
 
     /** 捐献快照（读 `gameConfig` 6 键 + `CmdRoleUnion` + `roleProperty`，**不发包**）。 */
     loadDonate(): Promise<ILeagueDonateSnapshot>;
@@ -643,7 +643,7 @@ export interface ILeagueRepository {
      *    （老端 `ModelLeague.showCommonDonateReward`，它的 `adv` 形参**根本没用到**）。
      *    所以两个数在 `loadDonate()` 时缓存（`donateGain`），`requestDonate` 直接取用。
      */
-    requestDonate(adv: boolean, caller?: unknown): Promise<LeagueRequestResult>;
+    requestDonate(adv: boolean, caller?: object): Promise<LeagueRequestResult>;
 
     /** 砍价快照（读 `unionDiscount` + `CmdUnionActivity` + `CmdUnionMember` + `CmdRoleUnion`，**不发包**）。 */
     loadDiscount(): Promise<ILeagueDiscountSnapshot>;
@@ -654,10 +654,10 @@ export interface ILeagueRepository {
      * ★ **`buy = true` 成功时会自己弹「获得奖励」**（消费响应的 `tlCmdGoods` ⇒ `FW.ShowReward`）；
      *   砍价（`buy = false`）无奖励、不弹。调用方不要自己再弹一次。
      */
-    requestBargain(buy: boolean, caller?: unknown): Promise<LeagueRequestResult>;
+    requestBargain(buy: boolean, caller?: object): Promise<LeagueRequestResult>;
 
     /** 拉活动列表（`type` 取 `LeagueACT_TYPE`；数据由 `CmdUnionActivity` 推送落地）。 */
-    requestActList(type: number, caller?: unknown): Promise<LeagueRequestResult>;
+    requestActList(type: number, caller?: object): Promise<LeagueRequestResult>;
 
     // ============================================================
     // P5：联盟任务
@@ -680,7 +680,7 @@ export interface ILeagueRepository {
      *
      * ★ **成功时会自己弹「获得奖励」**（`rsp.ret` + `tlCmdGoods` ⇒ `FW.ShowReward`）。调用方别再弹。
      */
-    requestTaskReward(resId: number, caller?: unknown): Promise<LeagueRequestResult>;
+    requestTaskReward(resId: number, caller?: object): Promise<LeagueRequestResult>;
 
     /**
      * 任务「看广告」跳过 —— `CmdRoleWatchAdvertReqMsg { type: 14, id: resId }`
@@ -689,7 +689,7 @@ export interface ILeagueRepository {
      * ⚠️ **调用方必须先把广告真放完**（`LeagueAd.playLeagueAd()` 返回 `true` 才发）：
      *    这个请求本身就是「记一次广告」的凭据，裸发等于白送。
      */
-    requestTaskAdvert(resId: number, caller?: unknown): Promise<LeagueRequestResult>;
+    requestTaskAdvert(resId: number, caller?: object): Promise<LeagueRequestResult>;
 
     /**
      * 领进度宝箱奖励（`CmdTaskUnionGetProgressRewardReqMsg { subType }`）。
@@ -700,7 +700,7 @@ export interface ILeagueRepository {
      *
      * ★ **成功时会自己弹「获得奖励」**（`rsp.ret` + `tlCmdGoods` ⇒ `FW.ShowReward`）。调用方别再弹。
      */
-    requestTaskProgressReward(subType: number, caller?: unknown): Promise<LeagueRequestResult>;
+    requestTaskProgressReward(subType: number, caller?: object): Promise<LeagueRequestResult>;
 
     // ============================================================
     // P6：北伐中原（主面板 + 排行 / 奖励两个子页）
@@ -725,17 +725,17 @@ export interface ILeagueRepository {
      * 老端 `requestRankInfo()`：`{ rankType: [24, 22][页签], showNum: 50, unionId: … }`。
      * `ok = false` 时调用点保留上一趟数据（不清空）。
      */
-    loadNorthRank(tab: LeagueNorthRankTab, caller?: unknown): Promise<ILeagueNorthRankSnapshot>;
+    loadNorthRank(tab: LeagueNorthRankTab, caller?: object): Promise<ILeagueNorthRankSnapshot>;
 
     /** 擂鼓（`CmdUnionActDrumReqMsg { type: 2 }`）。 */
-    requestDrum(caller?: unknown): Promise<LeagueRequestResult>;
+    requestDrum(caller?: object): Promise<LeagueRequestResult>;
 
     /**
      * 扫荡（`CmdUnionActSweepReqMsg { type: 2 }`）。
      *
      * ★ **成功时会自己弹「获得奖励」**（`rsp.ret` + `tlCmdGoods` ⇒ `FW.ShowReward`）。调用方别再弹。
      */
-    requestSweep(caller?: unknown): Promise<LeagueRequestResult>;
+    requestSweep(caller?: object): Promise<LeagueRequestResult>;
 }
 
 /** 请求超时（与好友 / 礼包 / 首充同口径：读 800ms / 写 5000ms）。 */
@@ -855,20 +855,20 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
     // 查询（全是空请求体的全量拉）
     // ============================================================
 
-    async requestDetail(caller?: unknown): Promise<LeagueRequestResult> {
-        return this.send(() => new RequestUnionDetail({}, caller as any));
+    async requestDetail(caller?: object): Promise<LeagueRequestResult> {
+        return this.send(() => new RequestUnionDetail({}, caller));
     }
 
-    async requestLog(caller?: unknown): Promise<LeagueRequestResult> {
-        return this.send(() => new RequestUnionLog({}, caller as any));
+    async requestLog(caller?: object): Promise<LeagueRequestResult> {
+        return this.send(() => new RequestUnionLog({}, caller));
     }
 
-    async requestList(caller?: unknown): Promise<LeagueRequestResult> {
-        return this.send(() => new RequestUnionList({}, caller as any));
+    async requestList(caller?: object): Promise<LeagueRequestResult> {
+        return this.send(() => new RequestUnionList({}, caller));
     }
 
-    async requestApplyList(caller?: unknown): Promise<LeagueRequestResult> {
-        return this.send(() => new RequestUnionApplyList({}, caller as any));
+    async requestApplyList(caller?: object): Promise<LeagueRequestResult> {
+        return this.send(() => new RequestUnionApplyList({}, caller));
     }
 
     /**
@@ -878,10 +878,10 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
      * （`onInputTextChange`），所以到这里的串已经被上游保证是数字串了；但缓存键仍按原串存，
      * 与 `pickUnionListForSearch` 的查法一致。
      */
-    async search(unionId: string, caller?: unknown): Promise<LeagueRequestResult> {
+    async search(unionId: string, caller?: object): Promise<LeagueRequestResult> {
         const id = toIdString(unionId);
         if (!id || id === '0') return 'failed';
-        return this.send(() => new RequestUnionSearch({ id } as any, caller as any, (rsp: any) => {
+        return this.send(() => new RequestUnionSearch({ id } as any, caller, (rsp: any) => {
             const row = normalizeLeagueUnion(rsp?.union);
             if (row) this.searchCache.set(unionId, row);
         }));
@@ -899,27 +899,27 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
     // 成员管理
     // ============================================================
 
-    async kick(memberId: string, caller?: unknown): Promise<LeagueRequestResult> {
-        return this.memberRequest((id) => new RequestUnionKick({ memberId: id } as any, caller as any), memberId);
+    async kick(memberId: string, caller?: object): Promise<LeagueRequestResult> {
+        return this.memberRequest((id) => new RequestUnionKick({ memberId: id } as any, caller), memberId);
     }
 
     /** 任命盟主（`officialId = LeaguePosition.LEADER`、`type = true`）。 */
-    async appointLeader(memberId: string, caller?: unknown): Promise<LeagueRequestResult> {
+    async appointLeader(memberId: string, caller?: object): Promise<LeagueRequestResult> {
         return this.appoint(memberId, LeaguePosition.LEADER, true, caller);
     }
 
     /** 任命副盟主。 */
-    async appointAdmin(memberId: string, caller?: unknown): Promise<LeagueRequestResult> {
+    async appointAdmin(memberId: string, caller?: object): Promise<LeagueRequestResult> {
         return this.appoint(memberId, LeaguePosition.ADMIN, true, caller);
     }
 
     /** 卸任副盟主（`type = false`）。 */
-    async dismissAdmin(memberId: string, caller?: unknown): Promise<LeagueRequestResult> {
+    async dismissAdmin(memberId: string, caller?: object): Promise<LeagueRequestResult> {
         return this.appoint(memberId, LeaguePosition.ADMIN, false, caller);
     }
 
-    async quit(caller?: unknown): Promise<LeagueRequestResult> {
-        return this.send(() => new RequestUnionQuit({}, caller as any));
+    async quit(caller?: object): Promise<LeagueRequestResult> {
+        return this.send(() => new RequestUnionQuit({}, caller));
     }
 
     /**
@@ -929,14 +929,14 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
      *    十进制字符串；**整条请求体一个合法 id 都没有时直接早退**（不发包，
      *    与 `memberRequest` 的空 id 守卫同性质：宁可不发，也别发一条 `unionIds: []` 让服务端记一笔）。
      */
-    async join(unionIds: readonly string[], caller?: unknown): Promise<LeagueRequestResult> {
+    async join(unionIds: readonly string[], caller?: object): Promise<LeagueRequestResult> {
         const ids: string[] = [];
         for (const raw of unionIds ?? []) {
             const id = toIdString(raw);
             if (id && id !== '0') ids.push(id);
         }
         if (!ids.length) return 'failed';
-        return this.send(() => new RequestUnionJoin({ unionIds: ids } as any, caller as any));
+        return this.send(() => new RequestUnionJoin({ unionIds: ids } as any, caller));
     }
 
     // ============================================================
@@ -951,14 +951,14 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
      *    这里再兜一道，免得被别的调用方绕过。
      * ⚠️ `icon` 过一遍 `leagueCreateBannerIndexOf` 夹到 `[0, 7]`：FGUI `颜色` controller 只有 8 页。
      */
-    async requestCreat(icon: number, name: string, quick: boolean, caller?: unknown): Promise<LeagueRequestResult> {
+    async requestCreat(icon: number, name: string, quick: boolean, caller?: object): Promise<LeagueRequestResult> {
         const leagueName = typeof name === 'string' ? name : '';
         if (!isLeagueNameUsable(leagueName)) return 'failed';
         return this.send(() => new RequestUnionCreate({
             icon: leagueCreateBannerIndexOf(icon),
             name: leagueName,
             quick: quick === true,
-        } as any, caller as any));
+        } as any, caller));
     }
 
     /**
@@ -979,28 +979,28 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
     // 申请审批
     // ============================================================
 
-    async approveApply(applyId: string, agree: boolean, caller?: unknown): Promise<LeagueRequestResult> {
+    async approveApply(applyId: string, agree: boolean, caller?: object): Promise<LeagueRequestResult> {
         return this.memberRequest(
-            (id) => new RequestUnionApproveJoin({ reqId: id, agree } as any, caller as any),
+            (id) => new RequestUnionApproveJoin({ reqId: id, agree } as any, caller),
             applyId,
         );
     }
 
-    async approveApplyOneKey(agree: boolean, caller?: unknown): Promise<LeagueRequestResult> {
-        return this.send(() => new RequestUnionApproveJoinOneKey({ agree } as any, caller as any));
+    async approveApplyOneKey(agree: boolean, caller?: object): Promise<LeagueRequestResult> {
+        return this.send(() => new RequestUnionApproveJoinOneKey({ agree } as any, caller));
     }
 
     // ============================================================
     // 联盟设置
     // ============================================================
 
-    async setQuickJoin(quick: boolean, caller?: unknown): Promise<LeagueRequestResult> {
-        return this.send(() => new RequestUnionSetQuickJoin({ quick } as any, caller as any));
+    async setQuickJoin(quick: boolean, caller?: object): Promise<LeagueRequestResult> {
+        return this.send(() => new RequestUnionSetQuickJoin({ quick } as any, caller));
     }
 
-    async edit(type: number, content: string, caller?: unknown): Promise<LeagueRequestResult> {
+    async edit(type: number, content: string, caller?: object): Promise<LeagueRequestResult> {
         if (!Number.isFinite(type)) return 'failed';
-        return this.send(() => new RequestUnionEdit({ type, content } as any, caller as any));
+        return this.send(() => new RequestUnionEdit({ type, content } as any, caller));
     }
 
     // ============================================================
@@ -1043,7 +1043,7 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
      *   本工程等价物 = `FW.ShowReward(tlCmdGoods)` → `ShowRewardPage`（「获得奖励」弹窗）。
      *   ⚠️ 曾经这里把响应整个丢掉、只回三态 ⇒ **买成功却不弹「获得奖励」**（用户报的缺陷）。
      */
-    async buyStoreGoods(id: number, caller?: unknown): Promise<LeagueRequestResult> {
+    async buyStoreGoods(id: number, caller?: object): Promise<LeagueRequestResult> {
         const goodsId = Number.isFinite(id) ? Math.trunc(id) : 0;
         if (goodsId <= 0) return 'failed';
         return this.sendWithResponse<CmdShopBuyRspMsg>(
@@ -1051,7 +1051,7 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
                 id: goodsId,
                 cmdShopType: LEAGUE_SHOP_TYPE_UNION,
                 buyTimes: 1,
-            } as any, caller as any, onRsp),
+            } as any, caller, onRsp),
             // ⚠️ `CmdShopBuyRspMsg` **没有 `ret`**（见 Cmd.d.ts）⇒ 只能按奖励列表是否为空判
             (rsp) => { if (rsp?.tlCmdGoods?.length) FW.ShowReward(rsp.tlCmdGoods); },
         );
@@ -1101,9 +1101,9 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
         };
     }
 
-    async requestDonate(adv: boolean, caller?: unknown): Promise<LeagueRequestResult> {
+    async requestDonate(adv: boolean, caller?: object): Promise<LeagueRequestResult> {
         return this.sendWithResponse<CmdUnionDonateRspMsg>(
-            (onRsp) => new RequestUnionDonate({ adv: adv === true } as any, caller as any, onRsp),
+            (onRsp) => new RequestUnionDonate({ adv: adv === true } as any, caller, onRsp),
             // 老端 `ModelLeague.RequestLeagueDonate`：
             //   `if (rsp.ret) { FW.showTip(FW.G_W("DONATE_SUCCESS")); this.showCommonDonateReward(adv); }`
             // ⚠️ 少了这一段 = 「捐献成功既没提示、也不弹获得物品的窗」（用户报的缺陷）。
@@ -1221,16 +1221,16 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
      *   砍价（`buy = false`）没有奖励 ⇒ 回调自然空跑。
      *   ⚠️ 同一个方法两种语义，**不能**因为「砍价不弹」就整条不接。
      */
-    async requestBargain(buy: boolean, caller?: unknown): Promise<LeagueRequestResult> {
+    async requestBargain(buy: boolean, caller?: object): Promise<LeagueRequestResult> {
         return this.sendWithResponse<CmdUnionBargainRspMsg>(
-            (onRsp) => new RequestUnionBargain({ buy: buy === true } as any, caller as any, onRsp),
+            (onRsp) => new RequestUnionBargain({ buy: buy === true } as any, caller, onRsp),
             (rsp) => { if (rsp?.ret && rsp.tlCmdGoods?.length) FW.ShowReward(rsp.tlCmdGoods); },
         );
     }
 
-    async requestActList(type: number, caller?: unknown): Promise<LeagueRequestResult> {
+    async requestActList(type: number, caller?: object): Promise<LeagueRequestResult> {
         const value = Number.isFinite(type) ? Math.trunc(type) : 0;
-        return this.send(() => new RequestUnionActList({ type: value } as any, caller as any));
+        return this.send(() => new RequestUnionActList({ type: value } as any, caller));
     }
 
     // ============================================================
@@ -1279,31 +1279,31 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
         };
     }
 
-    async requestTaskReward(resId: number, caller?: unknown): Promise<LeagueRequestResult> {
+    async requestTaskReward(resId: number, caller?: object): Promise<LeagueRequestResult> {
         const id = Number.isFinite(resId) ? Math.trunc(resId) : 0;
         if (id <= 0) return 'failed';
         // ★ 老端 `ModelLeague.RequestTaskReward`：`if (rsp.ret) FW.ShowReward(rsp.tlCmdGoods)`
         return this.sendWithResponse<CmdTaskUnionGetRewardRspMsg>(
-            (onRsp) => new RequestTaskUnionGetReward({ resId: id } as any, caller as any, onRsp),
+            (onRsp) => new RequestTaskUnionGetReward({ resId: id } as any, caller, onRsp),
             (rsp) => { if (rsp?.ret && rsp.tlCmdGoods?.length) FW.ShowReward(rsp.tlCmdGoods); },
         );
     }
 
-    async requestTaskAdvert(resId: number, caller?: unknown): Promise<LeagueRequestResult> {
+    async requestTaskAdvert(resId: number, caller?: object): Promise<LeagueRequestResult> {
         const id = Number.isFinite(resId) ? Math.trunc(resId) : 0;
         if (id <= 0) return 'failed';
         return this.send(() => new RequestRoleWatchAdvert(
             { type: LEAGUE_AD_TYPE_UNION_TASK, id } as any,
-            caller as any,
+            caller,
         ));
     }
 
-    async requestTaskProgressReward(subType: number, caller?: unknown): Promise<LeagueRequestResult> {
+    async requestTaskProgressReward(subType: number, caller?: object): Promise<LeagueRequestResult> {
         const value = Number.isFinite(subType) ? Math.trunc(subType) : 0;
         if (value <= 0) return 'failed';
         // ★ 老端 `ModelLeague.RequestTaskUnionGetProgressReward`：`if (rsp.ret) FW.ShowReward(rsp.tlCmdGoods)`
         return this.sendWithResponse<CmdTaskUnionGetProgressRewardRspMsg>(
-            (onRsp) => new RequestTaskUnionGetProgressReward({ subType: value } as any, caller as any, onRsp),
+            (onRsp) => new RequestTaskUnionGetProgressReward({ subType: value } as any, caller, onRsp),
             (rsp) => { if (rsp?.ret && rsp.tlCmdGoods?.length) FW.ShowReward(rsp.tlCmdGoods); },
         );
     }
@@ -1399,7 +1399,7 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
      * 老端 `requestRankInfo()` 的请求体：
      * `{ rankType: [24, 22][页签], showNum: 50, unionId: 我角色id }`（见 `RequestGetRank` 的说明）。
      */
-    async loadNorthRank(tab: LeagueNorthRankTab, caller?: unknown): Promise<ILeagueNorthRankSnapshot> {
+    async loadNorthRank(tab: LeagueNorthRankTab, caller?: object): Promise<ILeagueNorthRankSnapshot> {
         const rankType = tab === 'progress' ? LEAGUE_NORTH_RANK_TYPE.progress : LEAGUE_NORTH_RANK_TYPE.league;
         const awards = parseUnionRankAwardRows(await readRows(LEAGUE_UNION_RANK_AWARD_TABLE));
 
@@ -1409,7 +1409,7 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
             // ⚠️ 填**角色 id**（不是 unionId）—— 照抄老端 `ModelRole.GetRole().GetCmd().id`，
             //    见 `RequestGetRank` 的说明（`unionId` 这个字段名在服务端被当角色 id 用）。
             unionId: readSelfRoleId(),
-        } as any, caller as any, done, fail));
+        } as any, caller, done, fail));
 
         const rankInfo = rsp?.rankInfo ?? null;
         const { items, resources } = await this.loadIconTables();
@@ -1430,15 +1430,15 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
         };
     }
 
-    async requestDrum(caller?: unknown): Promise<LeagueRequestResult> {
-        return this.send(() => new RequestUnionActDrum({ type: LeagueACT_TYPE.NORTHERN_EXPEDITION } as any, caller as any));
+    async requestDrum(caller?: object): Promise<LeagueRequestResult> {
+        return this.send(() => new RequestUnionActDrum({ type: LeagueACT_TYPE.NORTHERN_EXPEDITION } as any, caller));
     }
 
-    async requestSweep(caller?: unknown): Promise<LeagueRequestResult> {
+    async requestSweep(caller?: object): Promise<LeagueRequestResult> {
         // ★ 老端 `ModelLeague.RequestUnionActSweep`：`if (rsp.ret) FW.ShowReward(rsp.tlCmdGoods)`
         return this.sendWithResponse<CmdUnionActSweepRspMsg>(
             (onRsp) => new RequestUnionActSweep(
-                { type: LeagueACT_TYPE.NORTHERN_EXPEDITION } as any, caller as any, onRsp,
+                { type: LeagueACT_TYPE.NORTHERN_EXPEDITION } as any, caller, onRsp,
             ),
             (rsp) => { if (rsp?.ret && rsp.tlCmdGoods?.length) FW.ShowReward(rsp.tlCmdGoods); },
         );
@@ -1625,10 +1625,10 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
         memberId: string,
         officialId: number,
         type: boolean,
-        caller?: unknown,
+        caller?: object,
     ): Promise<LeagueRequestResult> {
         return this.memberRequest(
-            (id) => new RequestUnionAppoint({ memberId: id, officialId, type } as any, caller as any),
+            (id) => new RequestUnionAppoint({ memberId: id, officialId, type } as any, caller),
             memberId,
         );
     }

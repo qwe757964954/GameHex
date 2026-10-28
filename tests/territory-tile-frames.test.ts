@@ -99,7 +99,11 @@ function loadMapView() {
                 HEX_GRID_FACE_WIDTH: 123,
                 HEX_GRID_FACE_HEIGHT: 90,
             };
-            if (id === './TerritoryStationView') return { TerritoryStationView: class {} };
+            // `bottomAnchor` 判定（69008~69015 底部对齐）由 TerritoryMapView 调用，
+            // 桩里必须给函数，否则 `undefined is not a function`；本夹具只关心地皮/格面 ⇒ 恒 false。
+            if (id === './TerritoryStationView') {
+                return { TerritoryStationView: class {}, territoryUsesBottomAnchor: () => false };
+            }
             if (id === './TerritoryResourceGainView') return { TerritoryResourceGainView: class {} };
             // 喷发粒子（2026-10-16 row17）：夹具只关心地皮 / 格面框，给个空壳即可。
             if (id === './TerritoryGainBurst') return {
@@ -160,6 +164,13 @@ function loadMapView() {
             // 内容层留白（2026-10-21）：`syncContentSize` 现在把「地图包围盒 + 四周留白」写进
             // 内容层，留白归 `TerritoryMapLayout` 统一算。本用例不校验尺寸，桩只保证宽度高度可用。
             if (id.endsWith('/TerritoryMapLayout')) return {
+                // 2026-10-27：`contentPaddingBottom` 的初值直接取这个常量、偏移取它的一半，
+                // 桩缺了会让字段变 `undefined`（尺寸算出 NaN，用例看着"莫名其妙整片红"）。
+                TERRITORY_MAP_CONTENT_PADDING: 300,
+                // 2026-10-27：顶部留白也是运行时值（`(bottom − top)/2` 决定内容层偏移），
+                // 桩缺了同样会让偏移变 NaN ⇒ 一并给 0。
+                TERRITORY_MAP_CONTENT_PADDING_TOP: 0,
+                territoryMapContentShiftY: (padding = 300, top = 0) => (padding - top) / 2,
                 territoryMapContentSize: (layout: { width: number; height: number }) => ({
                     width: layout.width,
                     height: layout.height,
@@ -227,11 +238,57 @@ function loadMapView() {
             if (id === '../model/TerritoryHexRecolor') return {
                 territoryHexRecolorDelays: () => new Map<number, number>(),
             };
+            //  事件走 `EventMgr` 全局中控（组件侧 emit、页面侧 on 都经它）。
+            if (id.includes('event/EventMgr')) {
+                return { EventMgr: { instance: { emit() {}, on() {}, offTarget() {} } } };
+            }
             throw new Error(`Unexpected dependency: ${id}`);
         },
     });
     return moduleExports.TerritoryMapView as new () => Record<string, unknown>;
 }
+
+test('章节战斗站点气泡显示章节-关卡（连字符不留空格），未解锁条件格与资源点不带气泡', () => {
+    const View = loadMapView();
+    const view = new View();
+    Object.assign(view, { stationIconOf: () => ({ name: 'building' }), stateOf: () => 'available' });
+    const render = (view as unknown as { stationRenderOf(site: unknown, input: unknown): {
+        levelBubble?: string; levelBubbleFrame?: unknown; isCondition?: boolean;
+    } }).stationRenderOf.bind(view);
+    let unlocked = true;
+    const input = {
+        stageByCell: new Map([[1, { chapterId: 3, stage: 12 }]]),
+        art: { randomSilverIcon: {}, levelBubbleFrame: { name: 'frame_01' } }, siteOpenableCells: [1], pendingFixedResourceCells: [],
+        map: { sites: [] },
+        progress: { isCellUnlocked: () => unlocked, isOwned: () => false, isAreaPassed: () => false },
+    };
+    for (const type of ['stage', 'boss', 'asyncPvp']) {
+        const site = { cellId: 1, type, configId: '10012', unlock: { silverCost: 399, requiredCells: [] } };
+        unlocked = true;
+        // 2026-10-28 按美术效果图对齐：`1-1` 连字符两侧**没有空格**，
+        // 字距交给 `MAP_MARKER_BADGE_SPACING_X`，不能再往字符串里塞空格。
+        assert.equal(render(site, input).levelBubble, '3-12', '显示配置中的章节与关卡序号，不能使用长 configId');
+        assert.equal(render(site, input).levelBubbleFrame, input.art.levelBubbleFrame);
+        unlocked = false;
+        const locked = render(site, input);
+        assert.equal(locked.levelBubble, undefined);
+        assert.equal(locked.isCondition, true);
+    }
+    unlocked = true;
+    assert.equal(render({ cellId: 1, type: 'fixedResource' }, input).levelBubble, undefined);
+});
+
+test('气泡层排在透明站点命中层之后，避免相邻行抢走编号点击', () => {
+    const View = loadMapView();
+    const view = new View();
+    let badgeIndex = 4;
+    Object.assign(view, {
+        stationHitLayer: { getSiblingIndex: () => 5 },
+        stationBadgeLayer: { getSiblingIndex: () => badgeIndex, setSiblingIndex: (index: number) => { badgeIndex = index; } },
+    });
+    (view as unknown as { getStationLayers(): unknown }).getStationLayers();
+    assert.equal(badgeIndex, 5, '从前方移除并插入原 hitIndex 后，气泡层位于命中层之上');
+});
 
 const TILE_LOCKED = { name: 'img_land_02', originalSize: { width: 126, height: 117 } };
 const TILE_CLEARED = { name: 'img_land_01', originalSize: { width: 126, height: 117 } };

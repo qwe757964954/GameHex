@@ -7,6 +7,7 @@ import { loadItemIconArt, loadQualityFrameArt } from '../itemdetail/ItemDetailAr
 import { mainTaskRepository } from './MainTaskRepository';
 import type { IHeroTaskSnapshot, IMainTaskRepository } from './MainTaskRepository';
 import { GET_HERO_TEXTS } from './MainTaskTexts';
+import { GameNet } from '../net/GameNet';
 
 const { ccclass, property } = _decorator;
 
@@ -74,6 +75,11 @@ export class GetHeroEntry extends Component {
     private revision = 0;
     /** 领奖请求进行中（防连点）。 */
     private busy = false;
+
+    protected onDestroy(): void {
+        this.revision += 1;
+        GameNet.instance.removeCaller(this);
+    }
 
     protected onLoad(): void {
         if (this.goods) {

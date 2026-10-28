@@ -1,5 +1,7 @@
 import type { ConfigService } from '../../../core/config/ConfigService';
-import { BIGMAP_TABLE, parseBigMapConfig, type BigMapRawTables } from '../model/BigMapConfig';
+import {
+    BIGMAP_TABLE, attachBigMapResourceItemIcons, parseBigMapConfig, type BigMapRawTables,
+} from '../model/BigMapConfig';
 import type { IBigMapConfig } from '../model/BigMapTypes';
 
 /**
@@ -14,7 +16,24 @@ export async function loadBigMapConfig(config: ConfigService): Promise<IBigMapCo
     const names = Object.values(BIGMAP_TABLE);
     const rowsList = await Promise.all(names.map((name) => config.getTable(name)));
     names.forEach((name, index) => { tables[name] = rowsList[index]; });
-    return parseBigMapConfig(tables as BigMapRawTables);
+    const parsed = parseBigMapConfig(tables as BigMapRawTables);
+    // 顶栏资源图标跟背包道具共用一份图（`bigmapResource.itemId` → `item.icon`）。
+    return attachBigMapResourceItemIcons(parsed, await readItemRows(config, parsed));
+}
+
+/**
+ * 读 `item` 表拿背包图标。表读不到 / 还没导（`item.json` 落后于 Excel）都不影响大地图打开 ——
+ * 退回空表，视图就用概念图。
+ */
+async function readItemRows(config: ConfigService, parsed: IBigMapConfig): Promise<readonly unknown[]> {
+    const usesItem = [...parsed.resources.values()].some((res) => res.itemId > 0);
+    if (!usesItem) return [];
+    try {
+        return await config.getTable('item');
+    } catch (error) {
+        console.warn('[BigMapConfigLoader] 背包道具表读取失败，资源图标退回概念图', error);
+        return [];
+    }
 }
 
 /** 给编辑器/单测用：直接把已经读好的表塞进来。 */

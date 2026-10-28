@@ -9,7 +9,7 @@ import type { ZCBattleStart } from './BattleStartModel';
  * 「开始游戏」网络层（数据模型与校验见 `BattleStartModel`）。
  * 对应 `CmdStartBattleReqMsg` / `CmdStartBattleRspMsg`。
  * 载荷必须嵌在 `startBattleInfo` 里：`{ startBattleInfo: { battleType, battleParams } }`。
- * 本层永远兑现、不 reject；拿不到数据返回 `null`，由调用方退回本地对手池。
+ * 本层永远兑现、不 reject；拿不到数据返回 `null`，正式入口必须终止本次开战。
  */
 
 /** 开始游戏请求硬超时（毫秒）。 */
@@ -22,11 +22,11 @@ let lastResult: ZCBattleStart | null = null;
 let pendingRequest: Promise<ZCBattleStart | null> | null = null;
 let pendingRequestKey: string | null = null;
 
-/** 请求开一局；返回 `null` 表示拿不到服务端数据，调用方退本地数据。 */
+/** 请求开一局；返回 `null` 表示服务端未确认开战。 */
 export function startBattle(
     battleType: number = ZC_BATTLE_TYPE_PVP,
     battleParams: readonly string[] = [],
-    caller?: unknown,
+    caller?: object,
     isCurrent?: () => boolean,
 ): Promise<ZCBattleStart | null> {
     if (isCurrent && !isCurrent()) return Promise.resolve(null);
@@ -57,12 +57,12 @@ export function clearLastBattleStart(): void {
 async function requestStartBattle(
     battleType: number,
     battleParams: readonly string[],
-    caller?: unknown,
+    caller?: object,
     isCurrent?: () => boolean,
 ): Promise<ZCBattleStart | null> {
     const net = GameNet.instance;
     if (!net.isConnected) {
-        console.warn('[BattleStartService] 游戏服未连接，跳过开始战斗请求（走本地数据）');
+        console.warn('[BattleStartService] 游戏服未连接，无法确认开战');
         return null;
     }
 
@@ -82,25 +82,36 @@ async function requestStartBattle(
 async function sendStartBattle(
     battleType: number,
     battleParams: readonly string[],
-    caller?: unknown,
+    caller?: object,
     isCurrent: () => boolean = () => true,
 ): Promise<ZCBattleStart | null> {
     let response: CmdStartBattleRspMsg | null = null;
+    let responseAt = 0;
     const isSlg = battleType === ZC_BATTLE_TYPE_SLG_CAMP || battleType === ZC_BATTLE_TYPE_SLG_MONSTER;
     try {
         const request = new RequestStartBattle(
             { startBattleInfo: { battleType, battleParams: Array.from(battleParams) }, version: '1.0.1' },
-            caller as destroyable,
-            (rsp) => { if (isCurrent()) response = rsp; },
+            caller,
+            (rsp) => {
+                if (!isCurrent()) return;
+                response = rsp;
+                responseAt = Date.now();
+                console.info(`[BattleLoading] 收到开战回包 type=${battleType}`);
+            },
         );
         if (isSlg) {
             request.allowRetry = false;
             request.canSend = isCurrent;
         }
         const ok = await GameNet.instance.send(request, false);
-        if (!ok || !response || !isCurrent()) return null;
+        if (!isCurrent()) return null;
+        if (!ok || !response) {
+            console.warn(`[BattleLoading] 开战未获确认 type=${battleType} sendOk=${ok} hasResponse=${response !== null}`);
+            return null;
+        }
+        console.info(`[BattleLoading] 开战回包交接 ${Date.now() - responseAt}ms`);
     } catch (error) {
-        console.warn('[BattleStartService] 开始战斗请求失败，走本地数据', error);
+        console.warn('[BattleStartService] 开始战斗请求失败，未获得开战确认', error);
         return null;
     }
 
@@ -141,7 +152,7 @@ export function finishBattle(
     result: number,
     commands: ReadonlyArray<CmdBattleFrameInfo> = [],
     statisticsInfos: ReadonlyArray<CmdBattleStatisticsInfo> = [],
-    caller?: unknown,
+    caller?: object,
 ): Promise<ZCBattleFinish | null> {
     const net = GameNet.instance;
     if (!net.isConnected) {
@@ -163,7 +174,7 @@ async function sendFinishBattle(
     result: number,
     commands: ReadonlyArray<CmdBattleFrameInfo>,
     statisticsInfos: ReadonlyArray<CmdBattleStatisticsInfo>,
-    caller?: unknown,
+    caller?: object,
 ): Promise<ZCBattleFinish | null> {
     let response: CmdFinishBattleRspMsg | null = null;
     try {
@@ -174,7 +185,7 @@ async function sendFinishBattle(
                 commands: commands.map((c) => ({ ...c })),
                 statisticsInfos: statisticsInfos.map((s) => ({ ...s })),
             },
-            caller as destroyable,
+            caller,
             (rsp) => { response = rsp; },
         ), false);
         if (!ok || !response) return null;

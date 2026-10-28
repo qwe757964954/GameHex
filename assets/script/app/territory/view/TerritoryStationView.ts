@@ -1,5 +1,11 @@
-import { _decorator, Button, Color, Component, Label, Sprite, UIOpacity, UITransform } from 'cc';
-import type { Node, SpriteFrame, Vec3 } from 'cc';
+import { EventMgr } from '../../../framework/event/EventMgr';
+import { _decorator, Button, Color, Component, Label, Node, Sprite, UIOpacity, UITransform } from 'cc';
+import type { SpriteFrame, Vec3 } from 'cc';
+import {
+    MAP_MARKER_BADGE_BOLD, MAP_MARKER_BADGE_FONT_SIZE, MAP_MARKER_BADGE_HEIGHT, MAP_MARKER_BADGE_LINE_HEIGHT,
+    MAP_MARKER_BADGE_SPACING_X, MAP_MARKER_BADGE_TEXT_Y, MAP_MARKER_BADGE_WIDTH, MAP_MARKER_BUBBLE_HEIGHT,
+    mapMarkerBadgeY,
+} from '../../common/MapMarkerBadge';
 import {
     BUILDING_SHAKE_STRETCH,
     SPAWN_SHAKE_TOTAL_SECONDS,
@@ -83,6 +89,50 @@ const CONDITION_ICON_WIDTH_FALLBACK = 40;
  */
 export const BUILDING_VISIBLE_WIDTH = 84;
 
+/**
+ * 这一档建筑图**按「可见底边」对齐格面中心**（其余仍是「可见中心」压格面中心）。
+ *
+ * ## 为什么只有这批
+ *
+ * 归一后的对齐点默认是**透明包围盒中心** —— 那对"方块状"的东西没问题，但装饰物是**站在地上**的：
+ * 树 / 树桩该有"落脚点"。用包围盒居中对齐时，高的东西会有一半沉到台面前沿以外，读起来像浮在格子上。
+ *
+ * ## 2026-10-27 的两次收敛（用户逐图验收，见 `docs/章节地图装饰建筑对位-69008-69015对比.png`）
+ *
+ *  1. 先按「69008~69015 全部底部对齐」落地；
+ *  2. 用户看了逐图对位图后只留 **69010~69013 四棵棕榈树**（打勾的四张）：
+ *     `69008 / 69009`（宝箱屋 / 圆顶哨站）与 `69014 / 69015`（树桩）**打叉，退回居中**
+ *     —— 它们本来"重心就在中间"，底边对齐反而把本体抬高了。
+ *
+ * ⚠️ 这批 id 来自**随机站点抽取池**（见 `tools/map-editor/randomize_random_sites.py`），
+ *    所以"只有这一批"不是随手圈的：地图上真正会出现的装饰就是它们。
+ *    `decor_09…12`（草丛 / 树桩花 / 宝箱）一直是居中口径。
+ *
+ * ⚠️ 只影响**落点**，不影响缩放：底部对齐 = 在原有的 `trim` 补偿之上再加
+ *    `可见高 × scale ÷ 2`（见 `applyIconPlacement` 的 `anchorLiftY`），
+ *    再按 {@link TERRITORY_BOTTOM_ANCHOR_DROP_PX} 往下修一点。
+ */
+export const TERRITORY_BOTTOM_ANCHOR_BUILD_IDS: readonly number[] = [
+    69010, 69011, 69012, 69013,
+];
+
+/**
+ * 底部对齐那一档再**整体往下**偏的像素（`+` 是往下）。
+ *
+ * 用户 2026-10-27 逐图验收：「69010~69013 的对齐中心点往下偏移 4px」。
+ * 原因：树干底下还有一圈**落地影子**，影子算进包围盒 ⇒ 按"可见底边"对齐时本体被抬起约 4px。
+ *
+ * ⚠️ 单位是**地图像素**（= 1:1 缩放下的屏幕像素），不乘 `buildSize`：位置写在父节点（地图）空间里，
+ *    与 `Icon` 自身的缩放无关。改它只需要改这一个数。
+ */
+export const TERRITORY_BOTTOM_ANCHOR_DROP_PX = 4;
+
+/** `buildId` 是否走「底部对齐格心」那一档（非有限值一律 `false`）。 */
+export function territoryUsesBottomAnchor(buildId: number): boolean {
+    if (!Number.isFinite(buildId)) return false;
+    return TERRITORY_BOTTOM_ANCHOR_BUILD_IDS.includes(buildId);
+}
+
 /** 站点名称底条的圆角半径（设计稿口径）。 */
 
 /**
@@ -97,7 +147,7 @@ export interface ITerritoryStationRender {
      * 传 `null` —— 它也不可点，视图不会去读。
      */
     readonly site: TerritoryStationTarget | null;
-    /** 站点建筑图标；地图不显示建筑名称及状态角标。 */
+    /** 站点建筑图标；关卡编号由 levelBubble 单独传入。 */
     readonly icon: SpriteFrame | null;
     /**
      * 建筑表 `buildSize` 的大小倍率（缺省 / ≤0 一律当 1）。
@@ -107,6 +157,16 @@ export interface ITerritoryStationRender {
      *  🔴 与「抖动倍率」是两个独立因子：抖动只在自己那 0.24s 内非 1，两者相乘写进节点缩放。
      */
     readonly iconScale?: number;
+    /**
+     * **底部对齐**：把建筑图「可见底边」抬到格面中心，而不是默认的「可见中心」压格面中心。
+     *
+     * 为什么需要：默认那套对齐的是**透明包围盒中心**，而装饰物（树 / 树桩 / 小屋）本来是
+     * "站在地上"的 —— 用包围盒居中对齐，高的东西就有一半沉到台面前沿以外，看着像浮着。
+     * 按底边对齐后，它的落脚点正好落在 2.5D 台面的中心，读作"站在格子中间"。
+     *
+     * 哪些建筑用这一档由 {@link territoryUsesBottomAnchor} 决定（产品口径，别散在调用方）。
+     */
+    readonly bottomAnchor?: boolean;
     /**
      * 未解锁格在格心显示消耗条件（银币图标 + 数值），复用底条 Sprite 与文字节点。
      *
@@ -123,6 +183,9 @@ export interface ITerritoryStationRender {
     readonly tint: Color;
     /** 站点角标已停用，调用方传空串。 */
     readonly badge: string;
+    /** 已解锁关卡的短编号气泡，缺省不显示。 */
+    readonly levelBubble?: string;
+    readonly levelBubbleFrame?: SpriteFrame | null;
     readonly interactive: boolean;
     readonly isLoading?: boolean;
     /**
@@ -173,7 +236,7 @@ export class TerritoryStationView extends Component {
     @property({ type: Label, group: '节点引用', tooltip: 'CaptionLabel：未解锁时显示消耗数值，缺少建筑图时显示名称' })
     captionLabel: Label = null!;
 
-    @property({ type: Label, group: '节点引用', tooltip: 'BadgeLabel：缺少建筑图时显示角标' })
+    @property({ type: Label, group: '节点引用', tooltip: 'BadgeLabel：已解锁关卡编号气泡文字' })
     badgeLabel: Label = null!;
 
     /** `Icon` 的 `UITransform`（面板拖拽绑定，勿 `getComponent`）：固定 128×128，供可见宽度归一。 */
@@ -208,6 +271,8 @@ export class TerritoryStationView extends Component {
     private mapX = 0;
     private mapY = 0;
     private mapZ = 0;
+    private levelBubble: { readonly node: Node; readonly sprite: Sprite; readonly button: Button } | null = null;
+    private spawnOpacity = 1;
     /**
     /**
      * 上一次 `render` 是否走「未解锁条件」分支。
@@ -231,6 +296,13 @@ export class TerritoryStationView extends Component {
      *  只表达「这个建筑本身该比标准大/小多少」。
      */
     private iconSizeScale = 1;
+    /**
+     * 这一格是否走**底部对齐**（`render` 每帧从 `content.bottomAnchor` 写入，缺省 `false`）。
+     *
+     * 与非 `null` 的 `iconSizeScale` 一样：站点节点是池化复用的，**每帧都必须重写** ——
+     * 漏写就会让上一格的"底部对齐"留在这一格上（表现为这一格的建筑莫名往上跳）。
+     */
+    private bottomAnchored = false;
     /**
      * 建筑生成抖动对缩放的**倍率**（x / y 分开）—— 需求要「先 Y 后 X」两段，所以不能合成一个数。
      *
@@ -294,7 +366,8 @@ export class TerritoryStationView extends Component {
         if (!offsets) return;
         this.applyIconPlacement();
         this.applyCaptionPlacement();
-        this.badgeLabel.node.setPosition(x + offsets.badge.x, y + offsets.badge.y, z + offsets.badge.z);
+        if (this.levelBubble) this.applyLevelBubblePosition();
+        else this.badgeLabel.node.setPosition(x + offsets.badge.x, y + offsets.badge.y, z + offsets.badge.z);
     }
 
     /**
@@ -314,7 +387,8 @@ export class TerritoryStationView extends Component {
         if (this.isDisposed) return;
         const raw = Number.isFinite(value) ? value : 1;
         const target = Math.round((raw > 1 ? 1 : raw < 0 ? 0 : raw) * 255);
-        const nodes = [this.iconSprite.node, this.captionSprite.node, this.captionLabel.node, this.badgeLabel.node];
+        this.spawnOpacity = target / 255;
+        const nodes = [this.iconSprite.node, this.captionSprite.node, this.captionLabel.node, this.levelBubble?.node ?? this.badgeLabel.node];
         if (!this.spawnOpacities) {
             this.spawnOpacities = nodes.map((node) => node.getComponent(UIOpacity) ?? node.addComponent(UIOpacity));
         }
@@ -378,10 +452,18 @@ export class TerritoryStationView extends Component {
         // 抵消 trim 偏移：可见区中心 = 节点中心 + offset * canvasScale * k
         const shiftX = frame.offset.x * canvasScaleX * scale;
         const shiftY = frame.offset.y * canvasScaleY * scale;
+        // 底部对齐那一档：把可见区**整体上抬半个可见高** ⇒ 可见底边从"格心下方半步"变成"正好落在格心"。
+        // 推导：可见中心原本被摆在格心，底边就在 格心 − 可见高/2；
+        //       要让底边 = 格心，节点得再上抬 可见高/2（缩放后）。
+        // 再减 `TERRITORY_BOTTOM_ANCHOR_DROP_PX`：树干下的**落地影子**也进了包围盒 ⇒ 上抬过头约 4px。
+        const visibleHeight = trimmed.height * canvasScaleY;
+        const anchorLiftY = this.bottomAnchored
+            ? visibleHeight * scale * 0.5 - TERRITORY_BOTTOM_ANCHOR_DROP_PX
+            : 0;
         this.applyIconScale(scale);
         node.setPosition(
             this.mapX + offsets.icon.x - shiftX,
-            this.mapY + offsets.icon.y - shiftY,
+            this.mapY + offsets.icon.y - shiftY + anchorLiftY,
             this.mapZ + offsets.icon.z,
         );
     }
@@ -582,6 +664,8 @@ export class TerritoryStationView extends Component {
         this.conditionMode = isCondition;
         // `buildSize` 必须在 `applyIconPlacement` 之前写进来 —— 它是归一系数的第二个因子。
         this.iconSizeScale = content.iconScale && content.iconScale > 0 ? content.iconScale : 1;
+        // 同上：底部对齐也是 `applyIconPlacement` 的入参，晚写就晚一帧（池化复用时是"用上一格的口径"）。
+        this.bottomAnchored = content.bottomAnchor === true;
         this.setIcon(content.icon);
         if (this.iconSprite.node.active === isHidden) this.iconSprite.node.active = !isHidden;
         // 🔴 换帧后必须重算：不同建筑的 trim 偏移与画布尺寸都不同（见 applyIconPlacement），
@@ -604,13 +688,76 @@ export class TerritoryStationView extends Component {
         this.captionLabel.node.active = !isHidden && !isLoading && isCondition;
         const textColor = isCondition ? content.conditionTextColor ?? defaultTextColor : defaultTextColor;
         if (!this.captionLabel.color.equals(textColor)) this.captionLabel.color = textColor;
-        this.badgeLabel.string = '';
-        this.badgeLabel.node.active = false;
+        this.renderLevelBubble(content);
         this.button.interactable = content.interactive && !isLoading && !isHidden;
     }
 
+    private renderLevelBubble(content: ITerritoryStationRender): void {
+        const text = content.levelBubble ?? '';
+        const frame = content.levelBubbleFrame ?? null;
+        const visible = text !== '' && frame !== null && content.icon !== null && !content.isCondition && !content.hidden && !content.isLoading;
+        if (visible && !this.levelBubble) {
+            const parent = this.badgeLabel.node.parent;
+            if (!parent) throw new Error('关卡气泡缺少角标层');
+            const node = new Node('LevelBubble');
+            node.layer = this.badgeLabel.node.layer;
+            node.addComponent(UITransform).setContentSize(MAP_MARKER_BADGE_WIDTH, MAP_MARKER_BUBBLE_HEIGHT);
+            node.setParent(parent);
+            const sprite = node.addComponent(Sprite);
+            sprite.sizeMode = Sprite.SizeMode.CUSTOM;
+            sprite.trim = false;
+            sprite.type = Sprite.Type.SLICED;
+            sprite.color = Color.WHITE;
+            const button = node.addComponent(Button);
+            button.transition = Button.Transition.NONE;
+            node.on(Button.EventType.CLICK, this.handleClick, this);
+            this.badgeLabel.node.setParent(node);
+            this.badgeLabel.node.setPosition(0, MAP_MARKER_BADGE_TEXT_Y, 0);
+            const transform = this.badgeLabel.node.getComponent(UITransform);
+            if (!transform) throw new Error('关卡气泡文字缺少 UITransform');
+            transform.setContentSize(MAP_MARKER_BADGE_WIDTH, MAP_MARKER_BADGE_HEIGHT);
+            // 🔴 美术稿的 `1-1` 是「超粗 + 三字紧贴」，prefab 里的 12/16/常规体是给旧角标用的，
+            //   这里必须整组覆盖：只改 fontSize 会留下 prefab 的字距与字重（见 MapMarkerBadge 注释）。
+            this.badgeLabel.fontSize = MAP_MARKER_BADGE_FONT_SIZE;
+            this.badgeLabel.lineHeight = MAP_MARKER_BADGE_LINE_HEIGHT;
+            this.badgeLabel.isBold = MAP_MARKER_BADGE_BOLD;
+            this.badgeLabel.spacingX = MAP_MARKER_BADGE_SPACING_X;
+            this.badgeLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+            this.badgeLabel.verticalAlign = Label.VerticalAlign.CENTER;
+            this.badgeLabel.overflow = Label.Overflow.SHRINK;
+            this.badgeLabel.color = Color.WHITE;
+            // 旧角标可能已参与生成淡入，改由新根统一承接，避免文字透明度被乘两次。
+            const opacity = this.badgeLabel.node.getComponent(UIOpacity);
+            if (opacity) opacity.opacity = 255;
+            this.levelBubble = { node, sprite, button };
+            this.spawnOpacities = null;
+            this.setSpawnOpacity(this.spawnOpacity);
+        }
+        this.badgeLabel.string = text;
+        this.badgeLabel.node.active = visible;
+        const bubble = this.levelBubble;
+        if (!bubble) return;
+        bubble.node.active = visible;
+        bubble.button.interactable = visible && content.interactive;
+        if (!visible) return;
+        if (bubble.sprite.spriteFrame !== frame) bubble.sprite.spriteFrame = frame;
+        this.applyLevelBubblePosition();
+    }
+
+    private applyLevelBubblePosition(): void {
+        const bubble = this.levelBubble;
+        const offsets = this.localOffsets;
+        if (!bubble || !offsets) return;
+        const frame = this.iconSprite.spriteFrame;
+        const height = frame && frame.originalSize.height > 0
+            ? frame.rect.height * this.iconTransform.contentSize.height / frame.originalSize.height * this.iconBaseScale : 0;
+        const lift = this.bottomAnchored ? height / 2 - TERRITORY_BOTTOM_ANCHOR_DROP_PX : 0;
+        bubble.node.setPosition(this.mapX + offsets.icon.x,
+            mapMarkerBadgeY(this.mapY + offsets.icon.y + lift + height / 2, MAP_MARKER_BUBBLE_HEIGHT), this.mapZ + offsets.icon.z);
+    }
+
     private readonly handleClick = (): void => {
-        if (this.clickable && this.site) this.node.emit(TERRITORY_EVENTS.STATION_CLICK, this.site);
+        if (this.clickable && this.site) EventMgr.instance.emit(TERRITORY_EVENTS.STATION_TAP, this.site);
     };
 
     private setIcon(frame: SpriteFrame | null): void {
@@ -636,11 +783,12 @@ export class TerritoryStationView extends Component {
             this.iconSprite.node,
             this.captionSprite.node,
             this.captionLabel.node,
-            this.badgeLabel.node,
+            this.levelBubble?.node ?? this.badgeLabel.node,
         ]) {
             if (visual.isValid && visual.parent !== this.node) visual.destroy();
         }
         this.site = null;
+        this.levelBubble = null;
     }
 
     /**

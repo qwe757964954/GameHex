@@ -337,7 +337,7 @@ export class GameNet extends ScriptObject {
                 return;
             }
             const request = new NetworkRequest<CmdReqMsg, CmdRspMsg>();
-            request.packageRequest(this._clientIndex, data, reqMsg, needLoading);
+            request.packageRequest(this._clientIndex, data, reqMsg, needLoading, this.callbackOwners);
             request.promise.then(resolve).catch(reject);
             const isOK = netSocket.addNetworkRequest(request, sendNow);
             if (!isOK) {
@@ -372,16 +372,25 @@ export class GameNet extends ScriptObject {
     // 广播事件
     // ========================================================================
 
-    addEvent(name: string, caller: destroyable, listener: Function): void {
+    addEvent(name: string, caller: object, listener: Function): void {
         NetSocket.msgEventProxy.addListener(name, caller, listener);
     }
 
-    removeEvent(name: string, caller: destroyable, listener: Function): void {
+    removeEvent(name: string, caller: object, listener: Function): void {
         NetSocket.msgEventProxy.removeListener(name, caller, listener);
     }
 
-    removeCallerEvent(caller: destroyable): void {
+    removeCallerEvent(caller: object): void {
+        this.removeCaller(caller);
+    }
+
+    /** 同一宿主的广播监听与未完成请求回调一起解除。 */
+    removeCaller(caller: object): void {
         NetSocket.msgEventProxy.removeCallerListener(caller);
+    }
+
+    get callbackOwners() {
+        return NetSocket.msgEventProxy;
     }
 
     // ========================================================================
@@ -468,6 +477,7 @@ export class GameNet extends ScriptObject {
     destroy(): void {
         this.stopTick();
         this.stopHeartbeat();
+        NetSocket.msgEventProxy.removeAll();
         if (this._reconnectEventsBound) {
             NetSocket.msgEventProxy.removeListener('trtReconnect', this, this.onTransportDisconnected);
             this._reconnectEventsBound = false;

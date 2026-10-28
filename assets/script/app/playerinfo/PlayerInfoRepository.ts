@@ -219,17 +219,17 @@ export interface IPlayerInfoRepository {
     /** 读缓存 + 读 `level` 表，组装「自己」的快照；**不发请求**。任何时候都兑现。 */
     loadSelf(): Promise<IPlayerInfoSnapshot>;
     /** 发 `CmdRoleInfoViewReqMsg` 拿别人的资料；离线 / 超时 / 失败返回 `snapshot = null`。 */
-    loadOther(roleId: string, serverId: number, caller?: unknown): Promise<IOtherInfoResult>;
+    loadOther(roleId: string, serverId: number, caller?: object): Promise<IOtherInfoResult>;
     /** 读 `head` 表拿头像列表（+ 可选注入的「已拥有」集合做解锁判定）。 */
     loadHeads(ownedResIds?: ReadonlySet<number> | readonly number[] | null): Promise<readonly IHeadEntry[]>;
     /** 读 `gameConfig` / `item` / `roleProperty`，拿改名消耗与两张图标路径。任何时候都兑现。 */
     loadRenameCost(): Promise<IRenameCostInfo>;
     /** 改名（`CmdRoleChangeNameReqMsg`）。 */
-    rename(name: string, caller?: unknown): Promise<PlayerInfoRequestResult>;
+    rename(name: string, caller?: object): Promise<PlayerInfoRequestResult>;
     /** 换头像（`CmdRoleChangeImgReqMsg`）。 */
-    changeHead(resId: number, caller?: unknown): Promise<PlayerInfoRequestResult>;
+    changeHead(resId: number, caller?: object): Promise<PlayerInfoRequestResult>;
     /** 兑换码（`CmdCodeExchangeReqMsg`）。 */
-    redeem(code: string, caller?: unknown): Promise<PlayerInfoRequestResult>;
+    redeem(code: string, caller?: object): Promise<PlayerInfoRequestResult>;
 }
 
 class PlayerInfoRepositoryImpl implements IPlayerInfoRepository {
@@ -272,7 +272,7 @@ class PlayerInfoRepositoryImpl implements IPlayerInfoRepository {
         };
     }
 
-    async loadOther(roleId: string, serverId: number, caller?: unknown): Promise<IOtherInfoResult> {
+    async loadOther(roleId: string, serverId: number, caller?: object): Promise<IOtherInfoResult> {
         const net = GameNet.instance;
         if (!net.isConnected) return { status: 'offline', snapshot: null };
 
@@ -285,7 +285,7 @@ class PlayerInfoRepositoryImpl implements IPlayerInfoRepository {
                 net.send(
                     new RequestRoleInfoView(
                         { roleId: toNumber(roleId, 0), serverId } as any,
-                        caller as any,
+                        caller,
                         (r: any) => { rsp = (r ?? null) as Record<string, unknown> | null; },
                     ) as any,
                     false,
@@ -403,18 +403,18 @@ class PlayerInfoRepositoryImpl implements IPlayerInfoRepository {
         return this.renameCost;
     }
 
-    async rename(name: string, caller?: unknown): Promise<PlayerInfoRequestResult> {
-        return this.send(() => new RequestRoleChangeName({ name }, caller as any, () => undefined));
+    async rename(name: string, caller?: object): Promise<PlayerInfoRequestResult> {
+        return this.send(() => new RequestRoleChangeName({ name }, caller, () => undefined));
     }
 
-    async changeHead(resId: number, caller?: unknown): Promise<PlayerInfoRequestResult> {
-        return this.send(() => new RequestRoleChangeImg({ resId } as any, caller as any, () => undefined));
+    async changeHead(resId: number, caller?: object): Promise<PlayerInfoRequestResult> {
+        return this.send(() => new RequestRoleChangeImg({ resId } as any, caller, () => undefined));
     }
 
-    async redeem(code: string, caller?: unknown): Promise<PlayerInfoRequestResult> {
+    async redeem(code: string, caller?: object): Promise<PlayerInfoRequestResult> {
         return this.send(() => new RequestCodeExchange(
             { code },
-            caller as any,
+            caller,
             (rsp) => FW.ShowReward(rsp?.tlReward ?? []),
         ));
     }

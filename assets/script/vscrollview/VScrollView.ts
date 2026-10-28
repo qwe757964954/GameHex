@@ -954,7 +954,9 @@ export class VirtualScrollView extends Component {
 
     if (this.itemNodes) {
       for (let i = this.itemNodes.length - 1; i >= 0; i--) {
-        this.itemNodes[i].destroy();
+        // 数组槽位可能是 null：编辑器里把 `itemCreationMode` 从「内联节点」切成「预制体」时，
+        // 旧的模板引用会被清空但槽位留着 —— 这里不判空会在 onDestroy 崩。
+        this.itemNodes[i]?.destroy();
         this.itemNodes[i] = null;
       }
     }

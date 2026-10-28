@@ -12,6 +12,7 @@ import {
     sp,
     Sprite,
     SpriteFrame,
+    UIOpacity,
     UITransform,
     Vec3,
 } from 'cc';
@@ -25,7 +26,8 @@ import type {
 import { ZC_CLIENT_COLORS, zcDeepFactionColor, zcFactionColor, zcTowardWhite } from './ZCTheme';
 // 提示描边与领地轮廓共用同一份顶面顶点口径与内缩比例：这条线也要"贴着台面边缘"，
 // 自己抄一份顶点迟早会和轮廓错开半个像素。
-import { OWNED_OUTLINE_INSET_SCALE, ZC_OUTLINE_HEX_POINTS } from './ZCOutlineLayer';
+import { ZC_OUTLINE_HEX_POINTS } from './ZCOutlineLayer';
+import { ZCHealthBarDamageTrail } from './ZCHealthBarDamageTrail';
 import { ZCPvpTileType } from '../model/ZCPvpTileRules';
 import { ZCOwner } from '../model/ZCMapConfig';
 import { neutralResourceVisualOf, ZCNeutralResourceVisual } from '../model/ZCNeutralResourceGroup';
@@ -35,7 +37,7 @@ import {
     ZC_CARD_START_SECONDS,
     ZC_HEX_ACTIVATION_SECONDS,
     ZC_HEX_BUILDING_SECONDS,
-    ZC_HEX_NEIGHBOR_HOLD_SECONDS,
+    ZC_HEX_NEIGHBOR_SPAWN_SECONDS,
     ZC_HEX_SHRINK_SECONDS,
 } from '../model/ZCBattlePresentationQueue';
 import {
@@ -58,6 +60,8 @@ import { HEX_GRID_FACE_HEIGHT, HEX_GRID_FACE_WIDTH } from '../../../core/hex/Hex
 import {
     BUILDING_POP_FROM_SCALE,
     BUILDING_SHAKE_STRETCH,
+    DEVELOPABLE_SPAWN_FROM_SCALE,
+    developableSpawnOpacity,
     elasticPopScale,
     isHealthBarVisible,
     pickHealthBarFill,
@@ -66,6 +70,8 @@ import {
     spawnShakeScaleY,
     territoryTintOwner,
     updateHealthBar,
+    healthBarRatio,
+    ZC_HINT_GLOW_RING_ALPHAS,
     ZC_LAND_TOP_CENTER_LIFT,
 } from './ZCGameViewUtil';
 
@@ -322,6 +328,13 @@ interface IZCHexPresentation {
     boundaryMask?: number;
     /** 开发成功后的「地块激活表现」事件；无则按普通渲染。 */
     activation?: Readonly<ZCHexActivation> | null;
+    /**
+     * 本帧那次开发的**脉冲起点**（秒）；null / 缺省 = 本帧没有正在播的激活事件。
+     *
+     * 只给「刚点亮的邻格」的生成动画当锚点（需求 2026-10-26：新格子生成动画与脉冲同步）。
+     * 渲染层用本帧 `hexActivations` 里最新的那个 `startedAt` 填空。
+     */
+    developPulseStartedAt?: number | null;
 }
 
 interface IZCSpawnHexPresentation {
@@ -363,14 +376,29 @@ export class ZCHexView extends Component {
      */
     private static readonly SPAWN_BASE_NEIGHBOR_FILL = new Color(0x1D, 0x24, 0xC8, 170);
     /**
-     * 开局「点击金矿」提示描边的线宽与颜色（需求 2026-10-15 row10）。
-     *
-     * 比领地轮廓的 6px 再粗一点：这条线要**压得住**金矿图标和地块底图、在一整盘六边形里被第一眼看到。
-     * 颜色取主题里的金币金 `#ffc62d`——提示的对象就是金矿，用金色比用阵营色更贴题，
-     * 也不会被误读成「这一格归属了谁」。
+     * 开局「点击金矿」提示描边的线宽（需求 2026-10-15 row10；2026-10-26 用户口径
+     * 「描边大小增加 2px」⇒ 7 → 9）。领地轮廓是 6px，提示比它粗 3px。
      */
-    private static readonly HINT_OUTLINE_LINE_WIDTH = 7;
-    private static readonly HINT_OUTLINE_COLOR = ZC_CLIENT_COLORS.gold;
+    private static readonly HINT_OUTLINE_LINE_WIDTH = 9;
+    /** 提示线颜色：绿色（`ZC_CLIENT_COLORS.hint`），见该常量的注释。 */
+    private static readonly HINT_OUTLINE_COLOR = ZC_CLIENT_COLORS.hint;
+    /**
+     * 提示线的**内缩比例**（用户 2026-10-26：「提示线用 0.94 左右」）。
+     *
+     * 与领地轮廓的 `OWNED_OUTLINE_INSET_SCALE = 0.98` **故意不同**：领地线只有 6px，内缩 2%
+     * 刚好贴住台面边缘；提示线是 9px，且画在棋盘最上层（不内缩就会被邻格压住 → 内缩太多又
+     * 会压到邻格的造价数字）。0.94 让 9px 线的**外沿基本落在格界内侧**：
+     * 内缩量约 `(1 - 0.94) × 半宽 61 ≈ 3.7px`，线宽一半 4.5px ⇒ 外沿只探出格界不到 1px。
+     */
+    private static readonly HINT_OUTLINE_INSET_SCALE = 0.94;
+    /**
+     * 提示线**单侧**外发光的宽度（px）。用户 2026-10-26：「增加 2px 左右的边缘发光效果」。
+     *
+     * 光晕叠在核心线两侧，总绘制宽度 = `9 + 2 × 2 = 13px`；分
+     * `ZC_HINT_GLOW_RING_ALPHAS.length` 环由外到内加浓，近似一条 alpha 渐变带
+     * （`cc.Graphics` 的描边没有渐变，见该常量的注释）。
+     */
+    private static readonly HINT_OUTLINE_GLOW_WIDTH = 2;
     /**
      * 中立格填充 alpha：**`0` = 这一格不做任何显示**（2026-10-16 口径「局内地图中立没有任何显示」）。
      *
@@ -449,11 +477,11 @@ export class ZCHexView extends Component {
      * 整盘一个 Graphics 画。字段保留（删了 prefab 已序列化引用会悬空），`initialize` 里
      * `enabled = false`，防止漏网调用路径画出与共享层重叠的第二份线。
      *
-     * 2026-10-15 row10 起**只由开局「点击金矿」提示复用**（`renderHintOutline`）：那条提示是
-     * 单格、每帧都要重绘的闪烁，走共享层会连带整盘轮廓每帧重建（探针里只有它是脏的），
-     * 而这份 per-cell 的画布刚好"一格一画布"、代价只有 6 条边 —— 复活它比加节点更划算。
+     * ⚠️ 2026-10-26 起**连「点击金矿」提示也不再用它**：这份画布和地块同层，提示线会被相邻格
+     * 的底色 / 建筑按绘制顺序盖掉半圈。提示改画到 `ZCGameRenderWorld` 挂在棋盘最上层
+     * （`CooldownOverlay`）的那份共享画布上，几何仍由 `ZCHexView.strokeHintOutline` 提供。
      */
-    @property({ type: Graphics, group: '节点引用', tooltip: 'TerritoryOutline：领地轮廓已停用（走 OutlineLayer 共享绘制）；仅开局金矿提示闪烁复用' })
+    @property({ type: Graphics, group: '节点引用', tooltip: 'TerritoryOutline：已停用（领地轮廓走 OutlineLayer；金矿提示也改到棋盘最上层）' })
     outlineGraphics: Graphics = null!;
 
     @property({ type: Node, group: '节点引用', tooltip: 'BuildingLayer：开发图标和价格' })
@@ -676,25 +704,27 @@ export class ZCHexView extends Component {
     private buildingShakeScaleX = 1;
     private buildingShakeScaleY = 1;
     /**
-     * 新点亮邻格「可开发外观」的按住截止时刻（秒）；<= now 表示已放行。
+     * 新点亮邻格「生成动画」的**起点**（秒）；null = 当前没在播。
      *
-     * 需求（2026-10-15 row6）：「三个新扩展的方块展示时间延迟 0.2s，等待卡牌生成动画开始
-     * 播放后再展示出来」。由 `resolveDevelopableHold` 在 `canDevelop` 由假变真时登记，
-     * 见 `ZC_HEX_NEIGHBOR_HOLD_SECONDS`。
+     * 需求（2026-10-26）：「战斗中，新格子的生成动画和地块脉冲动画同步播放」⇒
+     * `canDevelop` 由假变真时把起点钉在**那次脉冲的起点**（`presentation.developPulseStartedAt`），
+     * 之后由 `advanceDevelopableSpawn` 每帧推进、`ZC_HEX_NEIGHBOR_SPAWN_SECONDS` 内长齐。
+     *
+     * ⚠️ 起点必须用脉冲起点而不是「视图发现它变可开发的这一拍」：地块走 `renderStatic`
+     * 的 0.15s 节流，模型在点击那一拍就翻了 `canDevelop`，锚 `now` 会整体滞后于脉冲。
      */
-    private developableHoldUntil = 0;
+    private developableSpawnStartedAt: number | null = null;
+    /**
+     * `buildingLayer` 上那份**懒挂**的 `UIOpacity`，生成动画的淡入用它。
+     *
+     * 为什么懒挂：整盘几百格各预置一份 `UIOpacity` 是白给的组件开销，而真正需要淡入的
+     * 只有「刚点亮的邻格」那几格。淡完后停在 255，池化复用时由 `initialize` 复位。
+     */
+    private developableSpawnOpacity: UIOpacity | null = null;
     /** 上一帧的 `canDevelop`（用于识别「这一格刚被点亮」那一拍）。 */
     private lastCanDevelop = false;
-    /** 是否已经记过首帧基线；false = 还没渲染过，本帧只记状态、不登记按住窗。 */
+    /** 是否已经记过首帧基线；false = 还没渲染过，本帧只记状态、不起生成动画。 */
     private developableBootstrapped = false;
-    /**
-     * 上一次写进 `outlineGraphics` 的**提示透明度**（`0` = 提示没开）。
-     *
-     * 提示是每帧重绘的闪烁（需求 2026-10-15 row10），而透明度每帧只变一点点 ——
-     * 缓存它才能做到「变化小于 2% 就连 Graphics 都不碰」（`cc.Graphics` 每次 `stroke()`
-     * 都会重建一整份顶点数据 + 提交一个 subModel）。
-     */
-    private hintOutlineAlpha = 0;
     /**
      * 地块节点的**布局位置**（渲染层建视图时 `setPosition` 给的）。
      *
@@ -735,6 +765,13 @@ export class ZCHexView extends Component {
     /** 上一次 `renderTerrain` 用的地块色，侧面与贴边光都沿用它。 */
     private terrainTintColor: Color | null = null;
 
+    /** 扣血白条（城墙 / 建筑共用这一根条）。与单位条同一份实现：`ZCHealthBarDamageTrail`。 */
+    private readonly damageTrail = new ZCHealthBarDamageTrail();
+    /** 上一次算出来的血条比例：动态帧推进白条时要用（`renderHealthBar` 在 0.15s 静态刷新里跑）。 */
+    private lastBarRatio = 0;
+    /** 白条这一帧是否还在动 —— 渲染层据此决定要不要把它挂进逐帧集合。 */
+    private barTrailAnimating = false;
+
     initialize(onClick: () => void): void {
         this.clickHandler = onClick;
         // 地块节点是对象池复用的：先摘再挂，避免同一实例上叠出多个监听。
@@ -747,6 +784,10 @@ export class ZCHexView extends Component {
         this.observedHp = null;
         this.observedWallHp = null;
         this.lastDamagedAt = null;
+        // 地块节点同样复用：白条的时间轴必须一起复位，否则换局第一帧会闪一条白。
+        this.damageTrail.reset();
+        this.lastBarRatio = 0;
+        this.barTrailAnimating = false;
         // 渲染层在这个调用之前已经 `setPosition` 落好格子位置（见 `ZCGameRenderWorld` 建视图那段），
         // 这里捕一份基准给翻面动效用；顺手清掉上一局的补间状态。
         this.basePosition = this.node.position.clone();
@@ -757,17 +798,20 @@ export class ZCHexView extends Component {
         this.groundGlowBaseSize = groundGlowTransform
             ? { width: groundGlowTransform.contentSize.width, height: groundGlowTransform.contentSize.height }
             : null;
-        // 抖动 / 按住窗都是**每局一次**的表现状态，对象池复用会带着上一局的值回来：
-        // 不复位的话新格可能一上来就停在「被拉长的姿态」或「按住不放」。
+        // 抖动 / 邻格生成动画都是**每局一次**的表现状态，对象池复用会带着上一局的值回来：
+        // 不复位的话新格可能一上来就停在「被拉长的姿态」或「半透明的小尺寸」。
         this.buildingShakeStartedAt = null;
         this.buildingShakeScaleX = 1;
         this.buildingShakeScaleY = 1;
-        this.developableHoldUntil = 0;
+        this.developableSpawnStartedAt = null;
         this.lastCanDevelop = false;
         this.developableBootstrapped = false;
-        // 开局「点击金矿」提示也是每局一次：复用回来时上一局的闪烁可能还开在 `outlineGraphics` 上
-        // （`enabled = true` + 一个非 0 的缓存透明度），不复位就会让新局的**别的**格子先闪一下。
-        this.hintOutlineAlpha = 0;
+        // 懒挂的 `UIOpacity` 是**节点级**组件：复用回来的节点上可能已经挂着它（上一局播到一半
+        // 被回收 ⇒ 透明度停在 0）。这里直接从 `buildingLayer` 上重新认领一份，别只信字段。
+        this.developableSpawnOpacity = this.buildingLayer?.getComponent(UIOpacity) ?? null;
+        // 起手把 `buildingLayer` 的缩放 / 透明度落回基准（上一局若播到一半被回收，
+        // 节点会带着 0.6 的缩放与 0 的透明度回来 ⇒ 新局第一帧这一格是"隐形的小格子"）。
+        this.applyDevelopableSpawn(0);
         // 开局归属扩散波是**每局一次**的表现状态：复用回来的视图若还带着上一局的覆盖色，
         // 新局第一帧就会先闪一格归属色（`ZCClaimWave.start` 只会覆盖它自己要染的格）。
         this.claimWave = null;
@@ -987,19 +1031,15 @@ export class ZCHexView extends Component {
 
     render(presentation: Readonly<IZCHexPresentation>): void {
         const { state } = presentation;
-        // 🔴 需求 2026-10-15（row6）：「三个新扩展的方块展示时间延迟 0.2s，等待卡牌生成
-        // 动画开始播放后再展示出来」。按住期内把 `canDevelop` 压成 false ⇒ 下游
-        // 内容签名 / 地形染色 / 图标价格整条路径一起回退成「还没点亮」的样子，
-        // 到点后 `canDevelop` 恢复、签名变化自动触发一次重渲染。
-        // ⚠️ 判定必须**先单独求值**再与 `canDevelop` 合取：写成
-        // `presentation.canDevelop && !this.resolveDevelopableHold(...)` 会被短路 ——
-        // 不可开发的那几拍根本不进方法，`developableBootstrapped` / `lastCanDevelop`
-        // 拿不到基线，第一次「点亮」也就识别不出来（按住窗整条失效）。
-        const holdDevelopable = this.resolveDevelopableHold(presentation.canDevelop, presentation.now);
-        const canDevelop = presentation.canDevelop && !holdDevelopable;
+        const now = presentation.now;
+        // 🔴 需求 2026-10-26：「战斗中，新格子的生成动画和地块脉冲动画同步播放」。
+        // 先识别「这一格刚被点亮」那一拍并登记生成动画的起点（锚在**脉冲起点**），
+        // 再把生成动画写一帧 —— 内容本身不再被按住，与脉冲同一拍亮出来。
+        this.noteDevelopableSpawn(presentation.canDevelop, now, presentation.developPulseStartedAt ?? null);
+        const canDevelop = presentation.canDevelop;
         const activation = presentation.activation;
         const hasCardReveal = activation?.hasCardReveal ?? true;
-        const progress = ZCHexView.activationProgress(activation, presentation.now);
+        const progress = ZCHexView.activationProgress(activation, now);
         // 激活表现不能受 contentKey 缓存拦截（位移/缩放/active/光效不是「内容」）。
         // ⚠️ 这条是 **0.15s 一次的兜底**（`renderStatic` 节流）：真正每帧推进的是
         // `renderActivation`（挂 `renderDynamic`）。留着它是为了「激活事件已过期」时
@@ -1008,7 +1048,10 @@ export class ZCHexView extends Component {
         // 脉冲染色只跟**卡牌品阶**走（2026-10-19），由 `renderActivation` 每帧从激活事件里取；
         // 这条 0.15s 兜底路径拿不到品阶就不动它 —— 用 `state.tileType` 去猜会把颜色改错。
         this.applyActivationFx(fx);
-        this.renderHealthBar(state, presentation.now);
+        // 生成动画（`buildingLayer` 的缩放 / 淡入）不受内容签名缓存管辖：它每帧都在变。
+        // 真正逐帧推进的是 `advanceDevelopableSpawn`（挂 `renderDynamic`），这里是兜底。
+        this.applyDevelopableSpawn(now);
+        this.renderHealthBar(state, now);
         this.renderCooldown(
             !canDevelop && state.state !== 'ruins' && state.building !== 'none' ? presentation.cooldown : null,
         );
@@ -1049,38 +1092,69 @@ export class ZCHexView extends Component {
     }
 
     /**
-     * 开局「点击金矿」提示：给这一格套一圈**整体描边闪烁**（需求 2026-10-15 row10 原文：
-     * 「进入游戏初始时，给金矿图标所在的地块格子增加一个整体的描边闪烁，提示玩家点击金矿」）。
-     * 详见 docs/ZCHexView设计决策.md §15。
+     * 开局「点击金矿」提示：把这一格的一圈**整体描边**画到给定 `Graphics` 上。
+     *
+     * 需求 2026-10-15 row10 原文：「进入游戏初始时，给金矿图标所在的地块格子增加一个整体的
+     * 描边闪烁，提示玩家点击金矿」；2026-10-26 改「一直呼吸到被点」+「绿色、线宽 +2px、
+     * 压在最上层」。详见 docs/ZCHexView设计决策.md §15。
+     *
+     * ⚠️ 画布由**调用方**给（`ZCGameRenderWorld` 里那份挂在棋盘最上层 `CooldownOverlay` 的共享
+     * 画布），不再是格子自带的 `TerritoryOutline` —— 那份和地块同层，会被邻格底色与建筑按绘制
+     * 顺序盖掉半圈。这里只负责几何，坐标是**格心局部**（调用方已把画布摆到格心）。
+     *
+     * 幂等：`alpha <= 0` 就是"关掉"（清空 + 收起画布），重复调用只是空转；与上一帧相差 < 2% 时
+     * 连 `Graphics` 都不碰 —— 呼吸是每帧重绘，必须挡住这种噪声。`previousAlpha` 由调用方持有，
+     * `Graphics` 上没有"上一帧透明度"可读。
      */
-    renderHintOutline(alpha: number): void {
-        const graphics = this.outlineGraphics;
-        if (!graphics) return;
+    static strokeHintOutline(graphics: Graphics, alpha: number, previousAlpha: number): void {
         const value = Number.isFinite(alpha) ? Math.max(0, Math.min(1, alpha)) : 0;
         if (value <= 0) {
-            if (this.hintOutlineAlpha <= 0) return;
-            this.hintOutlineAlpha = 0;
+            if (previousAlpha <= 0) return;
             graphics.clear();
             graphics.enabled = false;
             return;
         }
-        if (graphics.enabled && Math.abs(value - this.hintOutlineAlpha) < 0.02) return;
-        this.hintOutlineAlpha = value;
-        if (!graphics.enabled) graphics.enabled = true;
+        if (graphics.enabled && Math.abs(value - previousAlpha) < 0.02) return;
+        graphics.enabled = true;
         graphics.clear();
-        graphics.lineWidth = ZCHexView.HINT_OUTLINE_LINE_WIDTH;
         const color = ZCHexView.HINT_OUTLINE_COLOR;
+        const inset = ZCHexView.HINT_OUTLINE_INSET_SCALE;
+        // 圆头：六边形是 6 条**独立**线段，平头会在每个顶点留一个楔形缺口；共享轮廓层
+        // （`flushOutlineSegments`）也是 ROUND，两条线在格角才长得一样。
+        graphics.lineCap = Graphics.LineCap.ROUND;
+        // ① 外发光：由外到内叠若干笔，越靠外越透明（`Graphics` 没有渐变描边，见
+        //    `ZC_HINT_GLOW_RING_ALPHAS`）。总宽 = 核心线宽 + 2 × 2px。
+        const core = ZCHexView.HINT_OUTLINE_LINE_WIDTH;
+        const glow = ZCHexView.HINT_OUTLINE_GLOW_WIDTH;
+        const rings = ZC_HINT_GLOW_RING_ALPHAS;
+        for (let index = 0; index < rings.length; index += 1) {
+            const spread = (2 * glow * (rings.length - index)) / rings.length;
+            graphics.lineWidth = core + spread;
+            graphics.strokeColor = new Color(color.r, color.g, color.b, Math.round(255 * value * rings[index]));
+            ZCHexView.traceHexEdges(graphics, inset);
+            graphics.stroke();
+        }
+        // ② 核心线：最后画，压在光晕之上（同上，透明度跟着呼吸走）。
+        graphics.lineWidth = core;
         graphics.strokeColor = new Color(color.r, color.g, color.b, Math.round(255 * value));
-        // 顶点相对格心（本节点就在格心上，`_lpos = 0`）⇒ 与共享轮廓的画法完全一致，
-        // 两条线（提示 / 领地）在屏幕上是同一条边，只是粗细与颜色不同。
+        ZCHexView.traceHexEdges(graphics, inset);
+        graphics.stroke();
+    }
+
+    /**
+     * 沿整格六边形描一圈路径（只 `moveTo / lineTo`，不 `stroke`）。
+     *
+     * 顶点相对格心，`inset` 是内缩比例；外发光与核心线各描一遍，形状必须完全一致，
+     * 否则光晕会在格角错开。
+     */
+    private static traceHexEdges(graphics: Graphics, inset: number): void {
         const points = ZC_OUTLINE_HEX_POINTS;
         for (let index = 0; index < points.length; index += 1) {
             const from = points[index];
             const to = points[(index + 1) % points.length];
-            graphics.moveTo(from[0] * OWNED_OUTLINE_INSET_SCALE, from[1] * OWNED_OUTLINE_INSET_SCALE);
-            graphics.lineTo(to[0] * OWNED_OUTLINE_INSET_SCALE, to[1] * OWNED_OUTLINE_INSET_SCALE);
+            graphics.moveTo(from[0] * inset, from[1] * inset);
+            graphics.lineTo(to[0] * inset, to[1] * inset);
         }
-        graphics.stroke();
     }
 
     renderActivation(activation: Readonly<ZCHexActivation> | null, now: number, owner?: ZCFaction): void {
@@ -1296,21 +1370,79 @@ export class ZCHexView extends Component {
     }
 
     /**
-     * 「新点亮邻格」可开发外观的按住窗判定（需求 2026-10-15 row6）。
-     * 🔴 row9 起**渲染世界也会调它**（`ZCGameRenderWorld.renderHexSystem`）—— 改口径要两边一起看。
-     * 详见 docs/ZCHexView设计决策.md §19。
+     * 识别「这一格刚被点亮」并登记生成动画的起点（需求 2026-10-26）。
+     *
+     * 只认 `canDevelop` **由假变真**的那一拍：开局就可开发的购买位不该再长一遍，
+     * 持续可开发的格子也不该每帧重起一次（否则价格牌会在半透明里抖）。
+     *
+     * @param developPulseStartedAt 本帧那次开发的**脉冲起点**（渲染层给）。拿不到就退回 `now`。
      */
-    resolveDevelopableHold(canDevelop: boolean, now: number): boolean {
+    private noteDevelopableSpawn(canDevelop: boolean, now: number, developPulseStartedAt: number | null): void {
         if (!this.developableBootstrapped) {
             this.developableBootstrapped = true;
             this.lastCanDevelop = canDevelop;
-            return false;
+            return;
         }
-        if (canDevelop && !this.lastCanDevelop) {
-            this.developableHoldUntil = now + ZC_HEX_NEIGHBOR_HOLD_SECONDS;
+        const justLit = canDevelop && !this.lastCanDevelop;
+        if (justLit) {
+            const anchored = typeof developPulseStartedAt === 'number' && Number.isFinite(developPulseStartedAt)
+                ? Math.min(developPulseStartedAt, now)
+                : now;
+            this.developableSpawnStartedAt = anchored;
         }
         this.lastCanDevelop = canDevelop;
-        return canDevelop && now < this.developableHoldUntil;
+    }
+
+    /** 是否正在播新邻格生成动画（渲染层据此把它挂进逐帧集合）。 */
+    isDevelopableSpawning(): boolean {
+        return this.developableSpawnStartedAt !== null;
+    }
+
+    /**
+     * 每帧推进新邻格生成动画；返回是否仍在播（false = 已播完并复位）。
+     *
+     * 与 `advanceBuildingShake` 同款、同样挂 `renderDynamic`：`renderHexSystem` 是 0.15s 节流，
+     * 0.5s 的生成动画用它播只有 3~4 帧，看不出"长大"。
+     */
+    advanceDevelopableSpawn(now: number): boolean {
+        if (this.developableSpawnStartedAt === null) return false;
+        if (now - this.developableSpawnStartedAt >= ZC_HEX_NEIGHBOR_SPAWN_SECONDS) {
+            this.developableSpawnStartedAt = null;
+            this.applyDevelopableSpawn(now);
+            return false;
+        }
+        this.applyDevelopableSpawn(now);
+        return true;
+    }
+
+    /**
+     * 写一帧生成动画：`buildingLayer` 的**缩放 + 淡入**。
+     *
+     * `buildingLayer` 是「开发图标 + 价格图标 + 价格数字」的容器（prefab 里 128×128、锚 0.5），
+     * 所以对它缩放 / 淡入读起来就是「这一格的可开发外观由小长大、由透明渐显」——
+     * 地块本身不动（地形与共享描边是模型态，不是"生成物"）。
+     *
+     * ⚠️ 本方法是 `buildingLayer` 缩放与 `developableSpawnOpacity` 的**唯一写入口**。
+     * 不在播（或播完）时落回 1 / 255：没有别的地方会把它改回来。
+     */
+    private applyDevelopableSpawn(now: number): void {
+        const layer = this.buildingLayer;
+        if (!layer || !layer.isValid) return;
+        const startedAt = this.developableSpawnStartedAt;
+        const progress = startedAt === null ? 1 : clamp01((now - startedAt) / ZC_HEX_NEIGHBOR_SPAWN_SECONDS);
+        const scale = startedAt === null ? 1 : elasticPopScale(progress, DEVELOPABLE_SPAWN_FROM_SCALE);
+        if (layer.scale.x !== scale || layer.scale.y !== scale) layer.setScale(scale, scale, 1);
+        const value = Math.round((startedAt === null ? 1 : developableSpawnOpacity(progress)) * 255);
+        const opacity = this.developableSpawnOpacity;
+        if (opacity) {
+            if (opacity.opacity !== value) opacity.opacity = value;
+            return;
+        }
+        // 透明时才懒挂这份 `UIOpacity`：不做淡入的格子一辈子都不会多出一个组件。
+        if (value >= 255) return;
+        const component = layer.getComponent(UIOpacity) ?? layer.addComponent(UIOpacity);
+        component.opacity = value;
+        this.developableSpawnOpacity = component;
     }
 
     /**
@@ -1603,7 +1735,9 @@ export class ZCHexView extends Component {
         const wallHp = Number.isFinite(state.wallHp) ? state.wallHp : 0;
         const wallMaxHp = Number.isFinite(state.wallMaxHp) ? state.wallMaxHp : 0;
         const hasWall = wallHp > 0 && wallMaxHp > 0;
-        updateHealthBar(bar, hasWall ? wallHp : state.hp, hasWall ? wallMaxHp : state.maxHp,
+        const barHp = hasWall ? wallHp : state.hp;
+        const barMaxHp = hasWall ? wallMaxHp : state.maxHp;
+        updateHealthBar(bar, barHp, barMaxHp,
             pickHealthBarFill(state.owner, this.barFillPlayer, this.barFillEnemy,
                 this.barFillEnemy2, this.barFillEnemy3));
         // 血量比上一帧少 = 这一帧挨了打。第一次渲染只记基线：格子视图是随地图
@@ -1615,6 +1749,25 @@ export class ZCHexView extends Component {
         if (damaged) this.lastDamagedAt = now;
         // updateHealthBar 已经把「maxHp 非法」写进 active，这里再叠 3 秒显示窗口。
         bar.node.active = bar.node.active && isHealthBarVisible(this.lastDamagedAt, now);
+        // 扣血白条：城墙耐久 → 建筑耐久切换、以及任意一次掉血都走同一条曲线（只看比例）。
+        this.lastBarRatio = healthBarRatio(barHp, barMaxHp);
+        this.barTrailAnimating = this.damageTrail.render(bar, this.lastBarRatio, now);
+    }
+
+    /**
+     * 白条是否还在收（`renderHexSystem` 是 0.15s 节流，白条只有 0.13s —— 走静态刷新会一帧闪没）。
+     *
+     * 与 `isDevelopableSpawning()` 同一套用法：静态刷新时登记，动态帧里 `advanceHealthBarTrail` 推进，
+     * 播完返回 `false` 自动出队。平时集合为空 ⇒ 零开销。
+     */
+    isHealthBarTrailAnimating(): boolean {
+        return this.barTrailAnimating;
+    }
+
+    /** 动态帧推进白条（只给**已经在收**的那些地块调，不遍历整盘）。返回是否还活着。 */
+    advanceHealthBarTrail(now: number): boolean {
+        this.barTrailAnimating = this.damageTrail.render(this.healthBar, this.lastBarRatio, now);
+        return this.barTrailAnimating;
     }
 
     private renderTerrain(state: Readonly<ZCHexState>, canDevelop: boolean): void {

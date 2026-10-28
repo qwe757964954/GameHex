@@ -75,13 +75,13 @@ export interface ISevenDayRepository {
     /** 读表 + 读内存状态，组装一次快照；**不发请求**。 */
     load(nowMs?: number): Promise<ISevenDaySnapshot>;
     /** 打开界面时向服务端要一次最新状态；失败不抛错。 */
-    refreshFromServer(caller?: unknown): Promise<boolean>;
+    refreshFromServer(caller?: object): Promise<boolean>;
     /** 领取第 `day` 天的任务奖励（服务端按天结算）。 */
-    claimTaskReward(day: number, caller?: unknown): Promise<SevenDayRequestResult>;
+    claimTaskReward(day: number, caller?: object): Promise<SevenDayRequestResult>;
     /** 购买一个商品（`id` = `sevenDayShop.id`）。 */
-    buyShop(id: number, caller?: unknown): Promise<SevenDayRequestResult>;
+    buyShop(id: number, caller?: object): Promise<SevenDayRequestResult>;
     /** 领取一个积分宝箱（`resId` = `sevenDayPoint.resId`）。 */
-    claimBox(resId: number, caller?: unknown): Promise<SevenDayRequestResult>;
+    claimBox(resId: number, caller?: object): Promise<SevenDayRequestResult>;
     /** 当前内存里的服务器状态（调试 / 测试用）。 */
     peekState(): ISevenDayServerState;
 }
@@ -188,14 +188,14 @@ export class RuntimeSevenDayRepository implements ISevenDayRepository {
         return this.state;
     }
 
-    async refreshFromServer(caller?: unknown): Promise<boolean> {
+    async refreshFromServer(caller?: object): Promise<boolean> {
         const net = GameNet.instance;
         if (!net.isConnected) return false;
         try {
             // ⚠️ 必须 withTimeout：`GameNet.send` 没有按请求的超时，服务端不回就永悬，
             //    界面会卡在「加载中」再也不刷新（连线失败也一样）。
             const sent = await withTimeout(
-                net.send(new RequestSevenDayInfo({}, caller as any, (rsp) => {
+                net.send(new RequestSevenDayInfo({}, caller, (rsp) => {
                     this.applyServerInfo(rsp?.cmdSevenDayInfo);
                 }), false),
                 READ_TIMEOUT_MS,
@@ -208,23 +208,23 @@ export class RuntimeSevenDayRepository implements ISevenDayRepository {
         }
     }
 
-    async claimTaskReward(day: number, caller?: unknown): Promise<SevenDayRequestResult> {
+    async claimTaskReward(day: number, caller?: object): Promise<SevenDayRequestResult> {
         return this.writeRequest(
-            (cb) => new RequestSevenDayTakeTaskReward({ day }, caller as any, cb),
+            (cb) => new RequestSevenDayTakeTaskReward({ day }, caller, cb),
             '领取任务奖励',
         );
     }
 
-    async buyShop(id: number, caller?: unknown): Promise<SevenDayRequestResult> {
+    async buyShop(id: number, caller?: object): Promise<SevenDayRequestResult> {
         return this.writeRequest(
-            (cb) => new RequestSevenDayShopBuy({ id }, caller as any, cb),
+            (cb) => new RequestSevenDayShopBuy({ id }, caller, cb),
             '购买商品',
         );
     }
 
-    async claimBox(resId: number, caller?: unknown): Promise<SevenDayRequestResult> {
+    async claimBox(resId: number, caller?: object): Promise<SevenDayRequestResult> {
         return this.writeRequest(
-            (cb) => new RequestSevenDayTakePointReward({ resId }, caller as any, cb),
+            (cb) => new RequestSevenDayTakePointReward({ resId }, caller, cb),
             '领取积分宝箱',
         );
     }

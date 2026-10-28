@@ -41,6 +41,23 @@ function createOwnerHarness(config: Promise<object> = Promise.resolve({}), layou
     const battles: { type: number; params: readonly string[]; isCurrent: () => boolean }[] = [];
     const preloads: { assets: unknown; battle: unknown }[] = [];
     const routes: { route: string; params: Record<string, unknown> }[] = [];
+    const settledListeners: ((entered: boolean) => void)[] = [];
+    // 冒险章节集合：默认「服务端还没回包」（`current = null`），用例可以 `setChapters` 注入。
+    let chapterSnapshot: { idleTime: number; chapters: readonly number[] } | null = null;
+    let chapterRequests = 0;
+    let manualChapterRefresh = false;
+    let chapterRefreshWaiters: (() => void)[] = [];
+    const chapterRepo = {
+        get current(): { idleTime: number; chapters: readonly number[] } | null { return chapterSnapshot; },
+        get availableChapters(): readonly number[] {
+            return chapterSnapshot && chapterSnapshot.chapters.length > 0 ? chapterSnapshot.chapters : [1];
+        },
+        refresh(): Promise<void> {
+            chapterRequests += 1;
+            if (!manualChapterRefresh) return Promise.resolve();
+            return new Promise<void>((resolve) => { chapterRefreshWaiters.push(resolve); });
+        },
+    };
     let finishBattle: (value: unknown) => void = () => {};
     let finishPage: (() => void) | null = null;
     let pageWait: Promise<void> | null = null;
@@ -50,7 +67,14 @@ function createOwnerHarness(config: Promise<object> = Promise.resolve({}), layou
     class Transform { setContentSize(): void {} }
     class Widget {}
     const detailCallbacks: ((open: boolean) => void)[] = [];
-    class Page { async initialize(...args: unknown[]) { if (typeof args[6] === 'function') detailCallbacks.push(args[6] as (open: boolean) => void); if (pageWait) await pageWait; } }
+    const cancelledEnters: number[] = [];
+    class Page {
+        async initialize(...args: unknown[]) {
+            if (typeof args[6] === 'function') detailCallbacks.push(args[6] as (open: boolean) => void);
+            if (pageWait) await pageWait;
+        }
+        cancelEnteringBattle(): void { cancelledEnters.push(1); }
+    }
     class FakeNode {
         isValid = true;
         active = true;
@@ -58,12 +82,19 @@ function createOwnerHarness(config: Promise<object> = Promise.resolve({}), layou
         constructor(public name: string) { nodes.push(this); }
         addComponent(type: unknown) { return type === Transform ? new Transform() : type === Widget ? new Widget() : new Page(); }
         setParent(): void {}
+        // 世界页会按 `Popup` 名字找常驻弹窗节点再插到它之前；这个 harness 不维护子节点，
+        // 给 null 即可（层级顺序由 `bigmap-page-readiness` 那条用例钉）。
+        getChildByName(): null { return null; }
+        getSiblingIndex(): number { return 0; }
+        setSiblingIndex(): void {}
         destroy() { this.isValid = false; }
     }
+    let unlockRefreshes = 0;
     class FakePresenter {
         constructor(public deps: { adventureChapter(): number;
             startBattle(type: number, id: number, isCurrent: () => boolean): Promise<{ ok: boolean }> }) { presenters.push(this); }
         initializeSlg(): Promise<boolean> { slgRequests += 1; return slgWait; }
+        refreshUnlockContext(): void { unlockRefreshes += 1; }
         dispose(): void {}
     }
     const exports: Record<string, unknown> = {};
@@ -72,9 +103,11 @@ function createOwnerHarness(config: Promise<object> = Promise.resolve({}), layou
     }).outputText, { exports, console: { warn() {} }, require(name: string) {
         if (name === 'cc') return { Node: FakeNode, UITransform: Transform, Widget,
             Layers: { Enum: { UI_2D: 33554432 } }, view: { getVisibleSize: () => ({ width: 720, height: 1280 }) },
-            director: { getScene: () => ({ getChildByName: () => ({}) }) } };
+            director: { getScene: () => ({ getChildByName: () => ({ getChildByName: () => null }) }) } };
         if (name.endsWith('/ZCBattlePreparation')) return { createZCBattlePreload: (assets: unknown, _configs: unknown, battle: unknown) => { const preload = { assets, battle }; preloads.push(preload); return preload; } };
         if (name.endsWith('/MainRoleRow')) return { readRoleRow: () => role };
+        // 背包读取链（ItemBag → CacheMgr → … → cc）在沙箱里不打桩会直接 require 'cc' 失败。
+        if (name.endsWith('/ItemBag')) return { readItemCounts: () => new Map<string, number>() };
         if (name.endsWith('/RequestGuard')) return { toIdString };
         if (name.endsWith('/BigMapBattle')) return { BIGMAP_BATTLE_TEXT };
         if (name.endsWith('/BattleStartService')) return { startBattle: (type: number, params: readonly string[], _caller: unknown, isCurrent: () => boolean) => {
@@ -82,9 +115,16 @@ function createOwnerHarness(config: Promise<object> = Promise.resolve({}), layou
             return new Promise((resolve) => { finishBattle = resolve; });
         } };
         if (name.endsWith('/GameRoute')) return { GameRoute: { Battle: 'battle' } };
-        if (name.endsWith('/ProcedureManager')) return { ProcedureManager: { navigate: (route: string, params: Record<string, unknown>) => {
-            routes.push({ route, params });
-        } } };
+        if (name.endsWith('/ProcedureManager')) return { ProcedureManager: {
+            navigate: (route: string, params: Record<string, unknown>) => { routes.push({ route, params }); },
+            onSwitchSettled: (listener: (entered: boolean) => void) => {
+                settledListeners.push(listener);
+                return () => {
+                    const index = settledListeners.indexOf(listener);
+                    if (index >= 0) settledListeners.splice(index, 1);
+                };
+            },
+        } };
         if (name === './BigMapConfigLoader') return { loadBigMapConfig: () => config };
         if (name === './BigMapLayoutLoader') return { loadBigMapLayout: () => layout };
         if (name === './BigMapStorage') return { createBigMapStorage: (owner: unknown) => { owners.push(owner); return {}; } };
@@ -95,7 +135,7 @@ function createOwnerHarness(config: Promise<object> = Promise.resolve({}), layou
         if (name === './GameNetBigMapCampGateway') return { GameNetBigMapCampGateway: class {} };
         if (name === './BigMapSlgRepository') return { BigMapSlgRepository: class {} };
         if (name === './GameNetBigMapSlgGateway') return { GameNetBigMapSlgGateway: class {} };
-        if (name.endsWith('/TerritoryChapterInfoRepository')) return { TerritoryChapterInfoRepository: { instance: { availableChapters: [1] } } };
+        if (name.endsWith('/TerritoryChapterInfoRepository')) return { TerritoryChapterInfoRepository: { instance: chapterRepo } };
         if (name.endsWith('/TerritorySaveStoreAdapter')) return { createTerritorySaveStore: (owner: unknown) => {
             chapterOwners.push(owner); return { loadLastChapter: () => 1 };
         } };
@@ -105,7 +145,21 @@ function createOwnerHarness(config: Promise<object> = Promise.resolve({}), layou
         open(configs: object): Promise<void>; close(): void; isOpen: boolean; setAssetService(assets: object): void; setSessionAssetService(service: object): void;
     };
     const entry = new Entry();
-    return { entry, owners, chapterOwners, presenters, nodes, battles, routes, preloads, detailCallbacks, finishBattle: (value: unknown) => finishBattle(value),
+    return { entry, owners, chapterOwners, presenters, nodes, battles, routes, preloads, detailCallbacks,
+        cancelledEnters,
+        setChapters(chapters: readonly number[] | null) {
+            chapterSnapshot = chapters ? { idleTime: 0, chapters: [...chapters] } : null;
+        },
+        holdChaptersRefresh() { manualChapterRefresh = true; },
+        finishChaptersRefresh() {
+            const waiters = chapterRefreshWaiters;
+            chapterRefreshWaiters = [];
+            for (const resolve of waiters) resolve();
+        },
+        chapterRequests: () => chapterRequests,
+        unlockRefreshes: () => unlockRefreshes,
+        settleSwitch(entered: boolean) { for (const listener of [...settledListeners]) listener(entered); },
+        finishBattle: (value: unknown) => finishBattle(value),
         switchRole(id: string, serverId = '1') { role = { id, selectServerId: serverId }; },
         waitPage() { pageWait = new Promise<void>((resolve) => { finishPage = resolve; }); },
         finishPage() { finishPage?.(); pageWait = null; },
@@ -153,7 +207,7 @@ test('入口把精确角色与区服交给存储，冒险章节使用同一份�
     h.entry.close();
 });
 
-test('世界入口把城池配置 ID 字符串交给现有服务，成功后直接进入战斗并关闭覆盖页', async () => {
+test('世界入口把城池配置 ID 字符串交给现有服务，成功后进入战斗，流程落定才关闭覆盖页', async () => {
     const h = createOwnerHarness();
     await h.entry.open({});
     const result = h.presenters[0].deps.startBattle(1004, 205, () => true);
@@ -167,7 +221,24 @@ test('世界入口把城池配置 ID 字符串交给现有服务，成功后直�
     assert.equal(h.routes[0].params.battle, battle);
     assert.equal(h.routes[0].params.slgBattleType, 1004);
     assert.equal(h.routes[0].params.selfRoleId, '9007199254740993');
-    assert.equal(h.entry.isOpen, false);
+    // 🔴 不能在这里就关：`navigate` 只是开始预加载，关早了露出来的是主界面的领地 tab
+    // （「点攻打先跑回领地再进战斗」，2026-10-26 用户反馈）。
+    assert.equal(h.entry.isOpen, true, '战斗预加载期间世界页必须留着');
+    h.settleSwitch(true);
+    assert.equal(h.entry.isOpen, false, '流程真正切走后才关覆盖页');
+});
+
+test('战斗预加载失败时世界页保留，并撤掉「正在进入」遮罩让玩家重试', async () => {
+    const h = createOwnerHarness();
+    await h.entry.open({});
+    const attacking = h.presenters[0].deps.startBattle(1003, 8013, () => true);
+    h.finishBattle({ battleId: 'server-2', units: [], seed: '1' });
+    assert.equal((await attacking).ok, true);
+    assert.equal(h.routes.length, 1);
+    h.settleSwitch(false);
+    assert.equal(h.entry.isOpen, true, '没进战斗就不该关页面');
+    assert.equal(h.cancelledEnters.length, 1, '遮罩要撤掉，否则玩家卡死在「正在进入」');
+    h.entry.close();
 });
 
 test('SLG 开战失败或等待期间关页/换服，旧回包不能导航或影响新角色', async () => {
@@ -236,6 +307,37 @@ test('布局加载期间换服，旧入口不创建页面和存档适配器', as
     assert.equal(h.owners.length, 0);
 });
 
+test('大地图按服务端章节集合的最高章算冒险进度，不受本地「上次所在章节」影响', async () => {
+    const h = createOwnerHarness();
+    // 用户现场：`ChapterInfo.chapters = [3,2,1]`（归一化后 [1,2,3]），本地从没进过冒险页。
+    h.setChapters([3, 2, 1]);
+    await h.entry.open({});
+    assert.equal(h.presenters[0].deps.adventureChapter(), 3,
+        '服务端章节集合才是解锁真源；否则通关了粮食田（第 2 章）还是灰的');
+    h.entry.close();
+});
+
+test('服务端章节还没回包时退回本地上次所在章节，且不低于第 1 章', async () => {
+    const h = createOwnerHarness();
+    await h.entry.open({});
+    assert.equal(h.presenters[0].deps.adventureChapter(), 1);
+    h.entry.close();
+});
+
+test('章节集合晚到：回包后补一次刷新，否则建筑要等重进页面才亮', async () => {
+    const h = createOwnerHarness();
+    h.holdChaptersRefresh();
+    await h.entry.open({});
+    assert.equal(h.chapterRequests(), 1, '快照为空时入口自己拉一次');
+    assert.equal(h.unlockRefreshes(), 0, '回包前不刷新');
+    h.setChapters([1, 2, 3]);
+    h.finishChaptersRefresh();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(h.unlockRefreshes(), 1, '回包到达后必须叫一声，让页面重算建造列表');
+    assert.equal(h.presenters[0].deps.adventureChapter(), 3);
+    h.entry.close();
+});
+
 test('旧角色页面初始化期间新角色重开，旧初始化完成不关闭新页', async () => {
     const h = createOwnerHarness();
     h.waitPage();
@@ -255,13 +357,13 @@ test('旧角色页面初始化期间新角色重开，旧初始化完成不关�
 });
 
 
-test('大地图关闭目标详情或关闭页面停止解析预热', async () => {
+test('世界开页不主动解析战斗资源，预下载由主界面绘制时机统一调度', async () => {
     const h = createOwnerHarness(); let warmed = 0, paused = 0;
     h.entry.setSessionAssetService({ warmupBattle: async () => { warmed++; }, pauseWarmup: () => { paused++; } });
     await h.entry.open({});
-    h.detailCallbacks[0](true); assert.equal(warmed, 1);
-    h.detailCallbacks[0](false); assert.equal(paused, 1);
-    h.entry.close(); assert.equal(paused, 2);
+    assert.equal(warmed, 0);
+    assert.equal(h.detailCallbacks.length, 0);
+    h.entry.close(); assert.equal(paused, 1);
 });
 
 test('大地图回包后把统一预加载与会话资产一并移交战斗入口', async () => {

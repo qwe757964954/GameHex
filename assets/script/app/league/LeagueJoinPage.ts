@@ -60,6 +60,7 @@ import { LEAGUE_ART_ROOT, leagueBannerArt } from './LeagueArt';
 import { LeagueCreatePage } from './LeagueCreatePage';
 import { LeagueInfoPage } from './LeagueInfoPage';
 import { leagueRepository, type ILeagueRepository, type LeagueRequestResult } from './LeagueRepository';
+import { GameNet } from '../net/GameNet';
 import { LeagueUnionRow } from './LeagueUnionRow';
 import {
     buildLeagueUnionViews,
@@ -159,6 +160,7 @@ export class LeagueJoinPage extends Component {
 
     protected onDestroy(): void {
         this.revision += 1;
+        GameNet.instance.removeCaller(this);
     }
 
     // ============================================================

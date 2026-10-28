@@ -105,13 +105,13 @@ export interface IChatRepository {
     load(channel: number, selectedRoleId: string): Promise<IChatSnapshot>;
 
     /** 拉某频道某页。`id` 私聊 / 联盟才非 0。 */
-    initChannel(channel: number, id: number, page: number, caller?: unknown): Promise<ChatRequestResult>;
+    initChannel(channel: number, id: number, page: number, caller?: object): Promise<ChatRequestResult>;
     /** 拉招募列表（`CmdTeamRecruitInitReqMsg`，频道 0 用）。 */
-    initRecruits(caller?: unknown): Promise<ChatRequestResult>;
+    initRecruits(caller?: object): Promise<ChatRequestResult>;
     /** 发消息。 */
-    sendMessage(channel: number, id: number, content: string, caller?: unknown): Promise<ChatRequestResult>;
+    sendMessage(channel: number, id: number, content: string, caller?: object): Promise<ChatRequestResult>;
     /** 删掉一个私聊对象。 */
-    delTarget(roleId: string, caller?: unknown): Promise<ChatRequestResult>;
+    delTarget(roleId: string, caller?: object): Promise<ChatRequestResult>;
 
     /** 接广播（`CmdChatBroMsg`）。同一 `caller` 重复调用只生效一次。 */
     listen(caller: object, onMessage: (channel: number, id: number) => void): void;
@@ -379,13 +379,13 @@ export class RuntimeChatRepository implements IChatRepository {
         this.listeners.set(caller, onMessage);
         if (this.broadcaster) return;
         this.broadcaster = {};
-        GameNet.instance.addEvent('CmdChatBroMsg', this.broadcaster as never, (msg: any) => this.onBroadcast(msg));
+        GameNet.instance.addEvent('CmdChatBroMsg', this.broadcaster, (msg: any) => this.onBroadcast(msg));
     }
 
     unlisten(caller: object): void {
         this.listeners.delete(caller);
         if (this.listeners.size === 0 && this.broadcaster) {
-            GameNet.instance.removeCallerEvent(this.broadcaster as never);
+            GameNet.instance.removeCallerEvent(this.broadcaster);
             this.broadcaster = null;
         }
     }
@@ -411,11 +411,11 @@ export class RuntimeChatRepository implements IChatRepository {
     // 请求
     // ============================================================
 
-    async initChannel(channel: number, id: number, page: number, caller?: unknown): Promise<ChatRequestResult> {
+    async initChannel(channel: number, id: number, page: number, caller?: object): Promise<ChatRequestResult> {
         this.inited.add(chatKey(channel, id));
         return this.send(() => new RequestChatInit(
             { channel, page, id: id ? String(id) : '0' } as never,
-            caller as any,
+            caller,
             (rsp: any) => {
                 const list = normalizeMessages(rsp?.list);
                 // ⚠️ Rsp 里回的 channel/id 才是真源（服务端可能纠正请求里的值）——
@@ -438,32 +438,32 @@ export class RuntimeChatRepository implements IChatRepository {
      * ⚠️ 只有这一包能发 —— 同族的 `CmdTeamRecruitSend` / `CmdTeamRecruitJoin` 都要求
      *    `attr: CmdBattleRoleAttr`（战前属性快照），Demo3.8 造不出来（详见 `RequestChatMsg.ts`）。
      */
-    async initRecruits(caller?: unknown): Promise<ChatRequestResult> {
+    async initRecruits(caller?: object): Promise<ChatRequestResult> {
         this.recruitsFetched = true;
         return this.send(() => new RequestTeamRecruitInit(
             {} as never,
-            caller as any,
+            caller,
             (rsp: any) => {
                 this.recruitsRaw = rsp?.infoList?.recruitList ?? [];
             },
         ), READ_TIMEOUT_MS);
     }
 
-    async sendMessage(channel: number, id: number, content: string, caller?: unknown): Promise<ChatRequestResult> {
+    async sendMessage(channel: number, id: number, content: string, caller?: object): Promise<ChatRequestResult> {
         const text = (content ?? '').trim();
         if (!text) return 'failed';
         return this.send(() => new RequestChatSend(
             { channel, content: text, id: id ? String(id) : '0' } as never,
-            caller as any,
+            caller,
         ), WRITE_TIMEOUT_MS);
     }
 
-    async delTarget(roleId: string, caller?: unknown): Promise<ChatRequestResult> {
+    async delTarget(roleId: string, caller?: object): Promise<ChatRequestResult> {
         const id = toIdString(roleId);
         if (!id) return 'failed';
         return this.send(() => new RequestChatDelTarget(
             { id } as never,
-            caller as any,
+            caller,
             () => {
                 // 本地同步把消息流也删掉，别等下一次 `load` 才发现对象没了
                 const key = chatKey(ChatChannel.Private, Number(id));

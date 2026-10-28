@@ -102,6 +102,7 @@ import {
     PopupLayer,
 } from './PopupDef';
 import { PopupManager } from './PopupManager';
+import type { ICallbackOwnerRegistry } from '../../core/runtime/CallbackOwner';
 
 const { ccclass, property } = _decorator;
 
@@ -256,6 +257,12 @@ export class PopupBase extends Component {
     private _openContext: PopupOpenContext | null = null;
     /** 当前生命周期状态。 */
     private _lifecycleState: PopupLifecycleState = PopupLifecycleState.Closed;
+    private _callbackOwners: Pick<ICallbackOwnerRegistry, 'removeCallerListener'> | null = null;
+
+    /** @internal 组合根通过 PopupManager 注入，缓存实例沿用相同的归属管理器。 */
+    _bindCallbackOwners(owners: Pick<ICallbackOwnerRegistry, 'removeCallerListener'>): void {
+        this._callbackOwners = owners;
+    }
 
     /** 空白关闭的触摸状态。 */
     private _blankBound: boolean = false;
@@ -478,6 +485,7 @@ export class PopupBase extends Component {
         } catch (error) {
             console.error(`[PopupBase] ${this.className} onClose 抛错`, error);
         }
+        this._callbackOwners?.removeCallerListener(this);
 
         const onClose = this._params?.onClose;
         this._params = null;
@@ -777,6 +785,8 @@ export class PopupBase extends Component {
     }
 
     onDestroy(): void {
+        this._callbackOwners?.removeCallerListener(this);
+        this._callbackOwners = null;
         // 遵循项目约定：不要主动 off() 事件，节点销毁时引擎会自动清理，
         // 销毁期访问事件 API 容易空指针。这里只清业务字段。
         this._params = null;

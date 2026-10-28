@@ -1,15 +1,9 @@
 import { _decorator, Color, Component, Label, Node } from 'cc';
 import { CARD_LINEUP_TEXTS } from './CardLineupTexts';
-import type { CardSkillListPresentation } from './CardPresenters';
+import type { CardSkillListPresentation } from './CardPresentations';
 import { CardSkillRowView } from './CardSkillRowView';
 
 const { ccclass, property } = _decorator;
-
-/** 一行技能的按钮回调宿主（`CardUpgradePage` 实现）。 */
-export interface ICardSkillRowHost {
-    /** `direction = -1` 本地往回看一档；`+1` 发技能升级请求。 */
-    onSkillStep(skillId: number, direction: 1 | -1): void;
-}
 
 /**
  * 技能列表（`CardUpgrade.prefab` 的 `Skills` 节点）。
@@ -53,16 +47,13 @@ export class CardSkillListView extends Component {
     @property({ type: Color, tooltip: '未到解锁英雄等级时的文字色（要比背景深、但要与已解锁区分开）' })
     lockedColor: Color = new Color(138, 128, 110, 255);
 
-    /** 行宿主（由 `CardUpgradePage` 注入：按钮点击回到 Presenter）。 */
-    host: ICardSkillRowHost | null = null;
-
     private bindRows(): void {
         if (!this.rowsRoot) return;
         const colors = this.colors();
         for (const row of this.rowsRoot.children) {
             const view = row.getComponent(CardSkillRowView);
             if (!view) continue;
-            view.host = this.host;
+            //  行只派发 `CardLineupEvent.SkillStep`，不再需要注入宿主（见 `CardSkillRowView.step`）。
             view.colors = colors;
         }
     }

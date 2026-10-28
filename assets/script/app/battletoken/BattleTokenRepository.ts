@@ -113,11 +113,11 @@ export interface IBattleTokenRepository {
     /** 读表 + 读缓存，组装一次快照；**不发任何请求**。 */
     load(nowMs?: number): Promise<IBattleTokenSnapshot>;
     /** 开通一个档位；人民币档的 `payChannelId` = `battleTokenPlan.rmb`，道具档传 0。 */
-    openPlan(resId: number, payChannelId: number, caller?: unknown): Promise<BattleTokenRequestResult>;
+    openPlan(resId: number, payChannelId: number, caller?: object): Promise<BattleTokenRequestResult>;
     /** 领取某个档位某一级的奖励。 */
-    takeReward(type: number, resId: number, level: number, caller?: unknown): Promise<BattleTokenRequestResult>;
+    takeReward(type: number, resId: number, level: number, caller?: object): Promise<BattleTokenRequestResult>;
     /** 重置战令。 */
-    reset(caller?: unknown): Promise<BattleTokenRequestResult>;
+    reset(caller?: object): Promise<BattleTokenRequestResult>;
     /** 当前缓存的某个类型的状态（调试 / 测试用）。 */
     peekState(type: number): ITokenState;
 }
@@ -219,7 +219,7 @@ export class RuntimeBattleTokenRepository implements IBattleTokenRepository {
     }
 
     /** 开通档位：先发业务前置请求；`ret === true` 才是「服务端同意开通」。 */
-    async openPlan(resId: number, payChannelId: number, caller?: unknown): Promise<BattleTokenRequestResult> {
+    async openPlan(resId: number, payChannelId: number, caller?: object): Promise<BattleTokenRequestResult> {
         const net = GameNet.instance;
         if (!net.isConnected) return 'offline';
 
@@ -231,7 +231,7 @@ export class RuntimeBattleTokenRepository implements IBattleTokenRepository {
         try {
             // ⚠️ 必须 withTimeout：`GameNet.send` 没有按请求的超时，服务端不回就永悬。
             const sent = await withTimeout(
-                net.send(new RequestBattleTokenOpen({ resId }, caller as any, callback), false),
+                net.send(new RequestBattleTokenOpen({ resId }, caller, callback), false),
                 WRITE_TIMEOUT_MS,
                 () => false,
             );
@@ -248,7 +248,7 @@ export class RuntimeBattleTokenRepository implements IBattleTokenRepository {
     }
 
     /** 领取奖励。 */
-    async takeReward(type: number, resId: number, level: number, caller?: unknown): Promise<BattleTokenRequestResult> {
+    async takeReward(type: number, resId: number, level: number, caller?: object): Promise<BattleTokenRequestResult> {
         const net = GameNet.instance;
         if (!net.isConnected) return 'offline';
 
@@ -263,7 +263,7 @@ export class RuntimeBattleTokenRepository implements IBattleTokenRepository {
                 net.send(
                     new RequestBattleTokenTakeReward(
                         { takeAll: true, resId, level, type },
-                        caller as any,
+                        caller,
                         callback,
                     ),
                     false,
@@ -280,14 +280,14 @@ export class RuntimeBattleTokenRepository implements IBattleTokenRepository {
     }
 
     /** 重置战令。 */
-    async reset(caller?: unknown): Promise<BattleTokenRequestResult> {
+    async reset(caller?: object): Promise<BattleTokenRequestResult> {
         const net = GameNet.instance;
         if (!net.isConnected) return 'offline';
 
         let applied = false;
         try {
             const sent = await withTimeout(
-                net.send(new RequestBattleTokenReset({}, caller as any, () => { applied = true; }), false),
+                net.send(new RequestBattleTokenReset({}, caller, () => { applied = true; }), false),
                 WRITE_TIMEOUT_MS,
                 () => false,
             );

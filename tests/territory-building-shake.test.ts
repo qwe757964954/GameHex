@@ -218,7 +218,11 @@ function makeMapView() {
             if (id.endsWith('/HexGridLayout')) {
                 return { HEX_GRID_CONTENT_LIFT: 12.5, HEX_GRID_IMAGE_WIDTH: 130, HEX_GRID_IMAGE_HEIGHT: 119 };
             }
-            if (id === './TerritoryStationView') return { TerritoryStationView: class {} };
+            // `bottomAnchor` 判定（69008~69015 底部对齐）由 TerritoryMapView 调用，
+            // 桩里必须给函数，否则 `undefined is not a function`；本夹具只关心抖动 ⇒ 恒 false。
+            if (id === './TerritoryStationView') {
+                return { TerritoryStationView: class {}, territoryUsesBottomAnchor: () => false };
+            }
             if (id === './TerritoryResourceGainView') return { TerritoryResourceGainView: class {} };
             // 喷发粒子（2026-10-16 row17）：夹具只关心建筑抖动，给个空壳即可。
             if (id === './TerritoryGainBurst') return {
@@ -286,6 +290,13 @@ function makeMapView() {
             // 内容层留白（2026-10-21）：`syncContentSize` 现在把「地图包围盒 + 四周留白」写进
             // 内容层，留白归 `TerritoryMapLayout` 统一算。本用例不校验尺寸，桩只保证宽度高度可用。
             if (id.endsWith('/TerritoryMapLayout')) return {
+                // 2026-10-27：`contentPaddingBottom` 的初值直接取这个常量、偏移取它的一半，
+                // 桩缺了会让字段变 `undefined`（尺寸算出 NaN，用例看着"莫名其妙整片红"）。
+                TERRITORY_MAP_CONTENT_PADDING: 300,
+                // 2026-10-27：顶部留白也是运行时值（`(bottom − top)/2` 决定内容层偏移），
+                // 桩缺了同样会让偏移变 NaN ⇒ 一并给 0。
+                TERRITORY_MAP_CONTENT_PADDING_TOP: 0,
+                territoryMapContentShiftY: (padding = 300, top = 0) => (padding - top) / 2,
                 territoryMapContentSize: (layout: { width: number; height: number }) => ({
                     width: layout.width,
                     height: layout.height,
@@ -351,6 +362,10 @@ function makeMapView() {
             if (id === '../model/TerritoryHexRecolor') return {
                 territoryHexRecolorDelays: () => new Map<number, number>(),
             };
+            //  事件走 `EventMgr` 全局中控（组件侧 emit、页面侧 on 都经它）。
+            if (id.includes('event/EventMgr')) {
+                return { EventMgr: { instance: { emit() {}, on() {}, offTarget() {} } } };
+            }
             throw new Error(`Unexpected dependency: ${id}`);
         },
     });

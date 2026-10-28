@@ -32,7 +32,7 @@ test('12 张 BigMap 表全部解析成功且关键字段对得上', () => {
     assert.equal(config.world.rows, 40);
     assert.equal(config.world.cols, 40);
     assert.equal(config.world.npcBaseCount, 16);
-    assert.equal(config.buildings.size, 8);
+    assert.equal(config.buildings.size, 23);
     assert.equal(config.cities.size, 25);
     assert.equal(config.monsters.size, 34);
     assert.equal(config.mainBuildingId, 71001);
@@ -167,28 +167,40 @@ test('六边距离与邻居拓扑一致：相邻格距离恒为 1，自身为 0'
 });
 
 test('建筑解锁唯一来源是冒险章节通关', () => {
+    // 策划表 `baseBuilding`：每座田一个 id、章节号写在 `unlockParam`（unlockType=1）：
+    // 71001 主城(1) / 71002 粮食田-1(2) / 71003 粮食田-2(3) / 71007 木材田-1(7)。
     const main = config.buildings.get(71001)!;
-    const grain = config.buildings.get(71002)!;
-    const queue = config.buildings.get(71007)!;
-    const decoration = config.buildings.get(71008)!;
+    const grain1 = config.buildings.get(71002)!;
+    const grain2 = config.buildings.get(71003)!;
+    const wood1 = config.buildings.get(71007)!;
 
     assert.equal(bigMapBuildingUnlock(main, makeUnlockContext({ adventureChapter: 0 })).unlocked, false);
     assert.equal(bigMapBuildingUnlock(main, makeUnlockContext({ adventureChapter: 1 })).unlocked, true);
-    assert.equal(bigMapBuildingUnlock(grain, makeUnlockContext({ adventureChapter: 1 })).unlocked, false);
-    assert.equal(bigMapBuildingUnlock(grain, makeUnlockContext({ adventureChapter: 2 })).unlocked, true);
-    assert.equal(bigMapBuildingUnlock(queue, makeUnlockContext({ adventureChapter: 5 })).unlocked, true);
-    assert.equal(bigMapBuildingUnlock(decoration, makeUnlockContext({ adventureChapter: 6 })).unlocked, true);
+    assert.equal(bigMapBuildingUnlock(grain1, makeUnlockContext({ adventureChapter: 1 })).unlocked, false);
+    assert.equal(bigMapBuildingUnlock(grain1, makeUnlockContext({ adventureChapter: 2 })).unlocked, true);
+    assert.equal(bigMapBuildingUnlock(grain2, makeUnlockContext({ adventureChapter: 2 })).unlocked, false);
+    assert.equal(bigMapBuildingUnlock(grain2, makeUnlockContext({ adventureChapter: 3 })).unlocked, true);
+    assert.equal(bigMapBuildingUnlock(wood1, makeUnlockContext({ adventureChapter: 6 })).unlocked, false);
+    assert.equal(bigMapBuildingUnlock(wood1, makeUnlockContext({ adventureChapter: 7 })).unlocked, true);
     // 未解锁必须带人话原因，界面直接显示。
-    assert.match(bigMapBuildingUnlock(queue, makeUnlockContext({ adventureChapter: 2 })).reason, /第 5 章/);
+    assert.match(bigMapBuildingUnlock(wood1, makeUnlockContext({ adventureChapter: 2 })).reason, /第 7 章/);
 
-    assert.deepEqual(
-        bigMapUnlockedBuildings(config, makeUnlockContext({ adventureChapter: 1 })).map((item) => item.id),
-        [71001],
-    );
-    assert.deepEqual(
-        bigMapUnlockedBuildings(config, makeUnlockContext({ adventureChapter: 2 })).map((item) => item.id),
-        [71001, 71002, 71003, 71004],
-    );
+    // 积分购买的赛季建筑（unlockType=3）章节号是 0，**不能**因此判成已解锁。
+    const seasonal = config.buildings.get(71021)!;
+    assert.equal(seasonal.unlockType, 3);
+    assert.equal(bigMapBuildingUnlock(seasonal, makeUnlockContext({ adventureChapter: 99 })).unlocked, false);
+
+    // 按 id 判、不依赖排序：章节 1 只有主城；章节 2 多粮食田-1。
+    // 另外 71018~71020（装饰雕像 1~3）是 `unlockType = 2` + `unlockParam = 0`
+    // 「赛季一开始就开放」，本来就不由章节决定，任何章节都应解锁。
+    const chapter1 = bigMapUnlockedBuildings(config, makeUnlockContext({ adventureChapter: 1 })).map((item) => item.id);
+    assert.ok(chapter1.includes(71001));
+    assert.ok(!chapter1.includes(71002));
+    assert.ok(chapter1.includes(71018), '赛季开始即开放的装饰雕像不受章节限制');
+
+    const chapter2 = bigMapUnlockedBuildings(config, makeUnlockContext({ adventureChapter: 2 })).map((item) => item.id);
+    assert.ok(chapter2.includes(71002));
+    assert.ok(!chapter2.includes(71003), '粮食田-2 要第 3 章');
 });
 
 test('建筑升级功能在配置的章节前不可用', () => {

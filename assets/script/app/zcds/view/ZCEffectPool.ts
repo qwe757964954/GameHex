@@ -1,4 +1,4 @@
-import { Animation, instantiate, Node, Prefab } from 'cc';
+import { Animation, Color, Graphics, instantiate, Node, Prefab, UITransform } from 'cc';
 import type { ZCAttackTrait } from '../model/ZCCombatCatalog';
 import type { ZCHitFx } from '../model/ZCGameTypes';
 import { ZCNodePool } from './ZCNodePool';
@@ -13,6 +13,7 @@ export interface IZCEffectPoolDeps {
     readonly deathFxPrefab: Prefab | null;
     /** 建筑被拆掉时那团白烟雾（`units/effects/建筑死亡特效`）。缺失则这层表现直接跳过。 */
     readonly buildingDestroyFxPrefab: Prefab | null;
+    readonly allowGenericHitFx?: boolean;
     readonly hitFxPrefabs: ReadonlyMap<ZCAttackTrait, Prefab>;
     /** 棋盘坐标 → 视图坐标换算（命中特效用）。 */
     mapToViewX: (x: number) => number;
@@ -84,6 +85,9 @@ const BUILDING_DESTROY_FX_FALLBACK_DURATION = 0.35;
  * 都不重置它 ⇒ 每次播放重算同一个值是安全且幂等的（节点池化复用也不会累乘）。
  */
 const HIT_FX_TARGET_SECONDS = 0.15;
+const GENERIC_HIT_SIZE = 48;
+const GENERIC_HIT_RADIUS = 15;
+const GENERIC_HIT_LINE_WIDTH = 3;
 
 /**
  * 对局特效池：受击闪白、阵亡特效、出生光柱。
@@ -123,7 +127,24 @@ export class ZCEffectPool {
     /** `syncHitFx` 的暂存：本帧模型队列里还活着的 fx（用来摘掉 `hitFxPlayed` 里的过期项）。 */
     private readonly hitFxAlive = new Set<Readonly<ZCHitFx>>();
 
-    constructor(private readonly deps: IZCEffectPoolDeps) {}
+    private art: Pick<IZCEffectPoolDeps, 'spawnFxPrefab' | 'deathFxPrefab' | 'buildingDestroyFxPrefab' | 'hitFxPrefabs'>;
+
+    constructor(private readonly deps: IZCEffectPoolDeps) { this.art = deps; }
+
+    setArt(art: typeof this.art): void { this.art = art; }
+
+    private createGenericHit(): Node {
+        const node = new Node('GenericHit');
+        node.layer = this.deps.mapLayer.layer;
+        node.addComponent(UITransform).setContentSize(GENERIC_HIT_SIZE, GENERIC_HIT_SIZE);
+        const graphics = node.addComponent(Graphics);
+        graphics.strokeColor = new Color(255, 248, 216, 230);
+        graphics.lineWidth = GENERIC_HIT_LINE_WIDTH;
+        graphics.moveTo(-GENERIC_HIT_RADIUS, 0); graphics.lineTo(GENERIC_HIT_RADIUS, 0);
+        graphics.moveTo(0, -GENERIC_HIT_RADIUS); graphics.lineTo(0, GENERIC_HIT_RADIUS);
+        graphics.stroke();
+        return node;
+    }
 
     /**
      * 每帧调用：回收所有播完的特效。
@@ -165,13 +186,11 @@ export class ZCEffectPool {
      * 的坑 —— 这里 `setScale` 会 ① 覆盖美术烘焙值 ② 池化复用每次乘一遍会逐次缩水。
      */
     playHitFx(fx: Readonly<ZCHitFx>, now: number): void {
-        const prefabs = this.deps.hitFxPrefabs;
-        if (!prefabs || prefabs.size === 0) return;
-        const prefab = prefabs.get(fx.trait);
+        const prefab = this.art.hitFxPrefabs.get(fx.trait);
         // 这个职业没交资源 ⇒ 跳过这一下（不猜默认职业，也不复用别的职业的闪白）。
-        if (!prefab) return;
-        const key = `hitFx:${fx.trait}`;
-        const node = this.deps.pool.acquire(key, () => instantiate(prefab));
+        if (!prefab && !this.deps.allowGenericHitFx) return;
+        const key = prefab ? `hitFx:${fx.trait}` : 'hitFx:generic';
+        const node = this.deps.pool.acquire(key, () => prefab ? instantiate(prefab) : this.createGenericHit());
         node.setParent(this.deps.mapLayer);
         node.setSiblingIndex(this.deps.mapLayer.children.length - 1);
         node.layer = this.deps.mapLayer.layer;
@@ -197,7 +216,7 @@ export class ZCEffectPool {
             // 动画已被压到 0.15s，却还按 0.4444s 回收 ⇒ 后 0.29s 是 Normal(只播一遍) 定住的末帧，
             // 看着就是「闪完了还剩一坨东西杵在角色身上」—— 正是需求①要消掉的定格。
             // 拿不到 clip（prefab 损坏）时才退回模型层给的兜底时长。
-            duration: clip ? HIT_FX_TARGET_SECONDS : fx.durationSeconds,
+            duration: !prefab || clip ? HIT_FX_TARGET_SECONDS : fx.durationSeconds,
         });
     }
 
@@ -209,7 +228,7 @@ export class ZCEffectPool {
      * 这里**不写 scale**，只写位置 —— 与 `playHitFx` 同一套口径（池化复用下写 scale 会逐次缩水）。
      */
     playBuildingDestroyFx(x: number, y: number, hexId: number, now: number): void {
-        const prefab = this.deps.buildingDestroyFxPrefab;
+        const prefab = this.art.buildingDestroyFxPrefab;
         if (!prefab) return;
         const node = this.deps.pool.acquire('buildingDestroyFx', () => instantiate(prefab));
         node.setParent(this.deps.mapLayer);
@@ -243,7 +262,7 @@ export class ZCEffectPool {
      *  位置反而是唯一必须在这里写的：`x/y` 来自模型快照，prefab 的 `_lpos` 是 (0,0,0)。
      */
     playDeathFx(x: number, y: number, unitId: number, now: number): void {
-        const prefab = this.deps.deathFxPrefab;
+        const prefab = this.art.deathFxPrefab;
         if (!prefab) return;
         if (this.deadFxPending.has(unitId)) return;
         this.deadFxPending.add(unitId);
@@ -276,7 +295,7 @@ export class ZCEffectPool {
      * 存活时长同步用这个目标值。
      */
     playSpawnFx(host: Node, now: number): void {
-        const prefab = this.deps.spawnFxPrefab;
+        const prefab = this.art.spawnFxPrefab;
         if (!prefab) return;
         const node = this.deps.pool.acquire('spawnFx', () => instantiate(prefab));
         node.setParent(host);

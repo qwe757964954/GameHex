@@ -90,6 +90,9 @@ export const TERRITORY_TEXTS = {
     // Boss 关两步式（先解锁展示建筑；已解锁再次点击 → `CmdStartBattleReqMsg` 开战，不发通关）
     bossUnlocked: '已解锁，点击开战',
     bossUnlockFailed: '解锁失败，请稍后重试',
+    // 关卡格**只解锁**那一步的提示（2026-10-28：锁着时点一下只花银币解锁、不弹关卡界面；
+    // 解锁后还要再点一次才打开界面，所以文案不能沿用 `bossUnlocked` 的「点击开战」）。
+    stageUnlocked: '已解锁，点击查看关卡',
     bossBattleReady: '可开战',
     bossBattleClaimed: '已通关',
     bossBattleStartFailed: '开战失败，请稍后重试',
@@ -106,9 +109,29 @@ export const TERRITORY_TEXTS = {
     matchLineupLabel: '匹配阵容',
 
     // 未绑定关卡的详情面板
-    pendingTitle: '站点配置待补齐',
-    unboundConfigId: '未配置',
-    unboundStatus: '当前 PVP-关卡表中没有可绑定关卡，因此仅展示地图站点，不扣资源、不进入战斗。',
+    pendingTitle: '站点配置待补齐',    unboundConfigId: '未配置',
+
+    // 异步据点「玩家关卡」弹窗（蓝湖「玩家关卡」设计稿）
+    /** 第一条占领奖励的固定文案；本期所有异步据点都是「1 个卡牌宝箱」。 */
+    asyncPlayerChestReward: '获得 1 个卡牌宝箱',
+    /** 开战按钮文案（设计稿原文）。 */
+    asyncPlayerFight: '开始战斗',
+    /** 侦查按钮的暂未开放提示（协议未接，先给明确反馈，别做成点了没反应）。 */
+    asyncPlayerScoutUnavailable: '侦查暂未开放，后续版本上线',
+
+    // 关卡界面 / 关卡提示（蓝湖「关卡界面」「关卡提示」）
+    /** 标题前缀：首领关。 */
+    bossStageTitle: '首领关卡',
+    /** 标题前缀：普通关。 */
+    stageTitle: '领地关卡',
+    /** 通关目标（设计稿固定文案）。 */
+    levelObjective: '第一名成功通过关卡',
+    /** 占据奖励（硬币）：`【征收】+6 硬币`。 */
+    levelOccupy: (amount: number, name: string) => `【征收】+${Math.round(amount)} ${name}`,
+    /** 关卡界面主按钮：已解锁（设计稿原文「开始战斗」）。 */
+    levelFight: '开始战斗',
+    /** 关卡界面主按钮：未解锁（点了先解锁）。 */
+    levelUnlock: '解锁后开战',
 
     // 开战兜底
     resourceNotEnoughFallback: '资源不足',
@@ -141,6 +164,30 @@ export const TERRITORY_DEFAULT_PLAYER_COUNT = 2;
 /** 详情面板敌方守军最多展示几条。 */
 export const TERRITORY_ENEMY_DISPLAY_LIMIT = 8;
 
+/**
+ * 玩家关卡弹窗里**奖励格的数量**（设计稿 = 3 格）。
+ *
+ * 不是「最多显示几条」的自由值：prefab 里就是 3 个槽位，改这个数要么露空槽要么丢奖励，
+ * 真要改必须同步改 prefab（`RewardSlots/Slot1..3`）。
+ */
+export const TERRITORY_ASYNC_REWARD_SLOTS = 3;
+
+/**
+ * 「侦查」按钮的银币消耗（设计稿 = 10）。
+ *
+ * 🔴 服务端还没有侦查协议、也没有对应配置表 ⇒ 先按设计稿写常量。
+ * 协议/配置到位后把它换成服务端下发的价格（只改 Presenter 一处，视图不用动）。
+ */
+export const TERRITORY_ASYNC_SCOUT_SILVER = 10;
+
 /** 存档 storage key 前缀。 */
 export const TERRITORY_STORAGE_PREFIX = 'territory.chapter.v1.';
 export const TERRITORY_LAST_CHAPTER_KEY = 'territory.lastChapter.v1';
+
+// ============================================================
+// 「关卡界面」/「关卡提示」（蓝湖，2026-10-27）
+
+
+/** 「关卡界面」掉落奖励最多几格（与 prefab 的 `DropSlots/Slot1..3` 对应）。 */
+export const TERRITORY_LEVEL_DROP_SLOTS = 3;
+

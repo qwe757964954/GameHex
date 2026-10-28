@@ -204,6 +204,24 @@ test('不许再用「视口宽」算卡片内坐标（图标被推出卡片的�
 
 test('每一轮 refreshInfo 都必须重排（内容方法里有 6 个提前 return）', () => {
     const body = stripped(PAGE_SRC);
-    assert.match(body, /private refreshInfo\(\): void \{\s*this\.refreshInfoContent\(\);\s*this\.applyInfoLayout\(\);\s*this\.refreshTargetPanel\(\);\s*\}/,
+    const start = body.indexOf('private refreshInfo(): void {');
+    assert.ok(start > 0, '找不到 refreshInfo');
+    const end = body.indexOf('private refreshTargetPanel', start);
+    const refreshInfo = body.slice(start, end > start ? end : undefined);
+
+    // 1) 三段式顺序不能乱 —— 排版永远在内容之后、目标面板之前。
+    assert.match(refreshInfo,
+        /this\.refreshInfoContent\(\);[\s\S]*this\.applyInfoLayout\(\);[\s\S]*this\.refreshTargetPanel\(\);/,
         '排版要放在外层包装里，否则某个分支提前 return 就会留下上一轮的图标 / 按钮位置');
+
+    // 2) 「正在进入战斗」的守卫可以早退（那时页面马上随流程销毁、详情内容不必刷），
+    //    但早退**之前也必须排一次版** —— 否则上一轮的图标 / 按钮位置会留下来。
+    const guardEnd = refreshInfo.indexOf('this.refreshInfoContent()');
+    if (refreshInfo.includes('this.enteringBattle') && guardEnd > 0) {
+        const guard = refreshInfo.slice(0, guardEnd);
+        if (guard.includes('return;')) {
+            assert.match(guard, /this\.applyInfoLayout\(\);/,
+                '遮罩守卫可以提前 return，但早退前必须 applyInfoLayout');
+        }
+    }
 });

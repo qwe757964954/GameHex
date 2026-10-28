@@ -21,7 +21,7 @@ import { loadViews } from './helpers/zcds-view-fixtures';
  */
 
 const VIEW_PATH = 'assets/script/app/zcds/view/ZCFloatTextView.ts';
-const PREFAB_PATH = 'assets/resources/ui/game/ZCGameFloatText.prefab';
+const PREFAB_PATH = 'assets/bundles/battle/ui/game/ZCGameFloatText.prefab';
 /** `ZCFloatTextView` 的压缩 cid（= `.ts.meta` uuid 经 compressUuid）。 */
 const VIEW_CID = '5f5d73+cpZKJaf1c3R7eavp';
 const COIN_FRAME_UUID = 'b14fa327-8a00-4264-a31b-d71fb24ed3c0@f9941';

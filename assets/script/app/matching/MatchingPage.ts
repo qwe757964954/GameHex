@@ -36,8 +36,9 @@ export interface MatchingPageOptions {
      *  为什么不能让 `pickOpponents` 自己变成 async：它的契约是同步返回对手，
      *  改成 async 会把 `finishSearch` 变成"半个状态机"，而这里只需要在选人前插一次等待。
      *  等待期间界面**保持 searching**（放大镜继续转），不会露出"卡住"的空档。
+     *  true 才可完成匹配；false 表示开战失败，停止选人和进场回调。
      */
-    awaitReady?: () => Promise<void>;
+    awaitReady?: () => Promise<boolean>;
     /** 匹配时长（秒），到点后判定成功。默认 2.2 秒，与真实匹配的等待感对齐。 */
     searchSeconds?: number;
     /** 匹配成功回调（流程在此切到对局）；参数是本局全部对手。 */
@@ -306,10 +307,10 @@ export class MatchingPage extends Component {
     private async settleOpponent(options: MatchingPageOptions): Promise<void> {
         if (options.awaitReady) {
             try {
-                await options.awaitReady();
+                if (!await options.awaitReady()) return;
             } catch (error) {
-                // 等不到就按"立刻选人"处理 —— 匹配本身不允许失败（界面没有取消入口）。
-                console.warn('[MatchingPage] 等待在途数据失败，直接选人', error);
+                console.warn('[MatchingPage] 开战准备失败，停止匹配', error);
+                return;
             }
             //  等的过程里流程可能已经切走（本组件被销毁），此时再动界面/回调会写到废弃对象上。
             if (!this.isValid || this.options !== options) return;

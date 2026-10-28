@@ -17,6 +17,7 @@ interface IRequest {
     allowRetry: boolean;
     canSend: (() => boolean) | null;
     promise: Promise<boolean>;
+    cancel(): void;
     packageRequest(index: number, data: Uint8Array, msg: object, loading: boolean): void;
 }
 interface IState {
@@ -24,6 +25,7 @@ interface IState {
     addNetworkRequest(request: IRequest): boolean;
     update(delta: number): void;
     DoReconnectNet(): void;
+    onReceiveMessage(data: Uint8Array): void;
 }
 interface ISocket {
     state: IState;
@@ -36,12 +38,14 @@ interface ISocket {
 
 function harness() {
     let sent = 0;
-    const fw = { FW: { ignoreShowloadingNet: [], Task: { delay: async () => {} } } };
+    let cacheUpdates = 0;
+    const fw = { FW: { ignoreShowloadingNet: [], Task: { delay: async () => {} },
+        CacheMgr: { handleCmdCache: () => { cacheUpdates++; } } } };
     const Request = load('assets/script/framework/net/NetworkRequest.ts', (name) =>
         name.endsWith('/FW') ? fw : { ScriptObject: class {} }).NetworkRequest as new () => IRequest;
     const Connected = load('assets/script/framework/net/state/ConnectedNetState.ts', (name) => {
-        if (name.endsWith('/BaseNetState')) return { BaseNetState: class { isSwitchFinish = true; error() {} } };
-        if (name.endsWith('/TDic')) return { TDic: Map };
+        if (name.endsWith('/BaseNetState')) return { BaseNetState: class { isSwitchFinish = true; error() {} log() {} } };
+        if (name.endsWith('/TDic')) return { TDic: class extends Map { remove(key: unknown) { this.delete(key); } } };
         if (name.endsWith('/NetSocket')) return { NetSocket: { heartbeatMsgName: 'heartbeat', msgEventProxy: { execute() {} } } };
         if (name.endsWith('/FW')) return fw;
         return {};
@@ -68,8 +72,41 @@ function harness() {
         request.packageRequest(1, new Uint8Array([1]), { getReqMsgProtoName: () => 'TestReqMsg', allowRetry: retry, canSend }, false);
         return request;
     };
-    return { socket, state, makeRequest, sent: () => sent };
+    return { socket, state, makeRequest, sent: () => sent, cacheUpdates: () => cacheUpdates };
 }
+
+test('取消排队请求立即结束等待，不发送；同队列下一条仍能发出', async () => {
+    const h = harness();
+    const cancelled = h.makeRequest();
+    const pending = cancelled.promise;
+    const next = h.makeRequest();
+    h.socket.isSending = true;
+    h.socket.addNetworkRequest(cancelled);
+    h.socket.addNetworkRequest(next);
+    cancelled.cancel();
+    assert.equal(await pending, false);
+    h.socket.isSending = false;
+    await h.socket.sendData();
+    assert.equal(h.sent(), 1);
+    assert.equal(h.socket.tlRequest.length, 0);
+});
+
+test('已发送请求取消后迟到回包仍更新公共缓存，等待保持取消结果', async () => {
+    const h = harness();
+    const request = h.makeRequest();
+    const pending = request.promise;
+    h.state.addNetworkRequest(request);
+    request.cancel();
+    assert.equal(await pending, false);
+    Object.assign(h.socket, { protoMgr: {
+        decode: () => ({ clientIndex: 1, result: true, cmdCaches: [{}], messageIds: [1], splits: [0], data: new Uint8Array() }),
+        getRspMsg: () => 'TestRspMsg', decodeDataById: () => ({}), isBro: () => false, isCacheApp: () => false,
+    } });
+    h.state.onReceiveMessage(new Uint8Array());
+    assert.equal(h.cacheUpdates(), 1);
+    assert.equal(await pending, false);
+    assert.equal(h.sent(), 1);
+});
 
 test('禁止重试的请求经过真实NetworkRequest与Connected状态，超时只失败不再次发送', async () => {
     const h = harness();

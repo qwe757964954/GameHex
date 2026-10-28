@@ -7,15 +7,17 @@ import { CARD_LINEUP_TEXTS } from './CardLineupTexts';
 import { upgradeButtonText } from './CardUpgradeCost';
 import type { ZCUpgradeStatus } from './CardUpgradeCost';
 import { applyCardHeadArt } from './CardHeadView';
-import { CardUpgradePresenter } from './CardPresenters';
+import { CardLineupEvent } from './CardLineupEvents';
+import type { IHeroUpgradedPayload } from './CardLineupEvents';
+import { EventMgr } from '../../framework/event/EventMgr';
 import { CardSkillPage } from './CardSkillPage';
 import type {
     CardUpgradePhase,
     CardUpgradePresentation,
     ICardUpgradeOpenData,
-} from './CardPresenters';
+} from './CardPresentations';
 
-export type { ICardUpgradeOpenData } from './CardPresenters';
+export type { ICardUpgradeOpenData } from './CardPresentations';
 
 const { ccclass, property } = _decorator;
 
@@ -46,23 +48,22 @@ const { ccclass, property } = _decorator;
  */
 @ccclass('CardUpgradePage')
 export class CardUpgradePage extends PopupBase {
-    private readonly presenter = new CardUpgradePresenter(cardRepository);
     private artRevision = 0;
     /** 本次打开的卡牌 id（「技能」按钮用它打开技能面板）。 */
     private cardIdForSkills = '';
     /** 当前卡牌等级（升级点击时用它决定 loading 文案：「解锁中…」/「升级中…」）。 */
     private currentLevel = 0;
 
+    // ---- 原来在 `CardUpgradePresenter` 里的会话状态 ----
+    /** 取数轮次：`open()` 那次与升级成功后的重刷会交错，慢的回来不许覆盖快的。 */
+    private upgradeRevision = 0;
+    private upgradeData: ICardUpgradeOpenData | null = null;
+    private upgradeStatus: ZCUpgradeStatus | null = null;
+    private upgradePhase: CardUpgradePhase = 'loading';
+
     /**
      * `CloseBtn` / `BtnUpgrade` 上的 `cc.Button`。
-     *
-     *  这两个节点是 prefab 上已绑的 `@property`，组件也一定在（本项目约定：
-     * **已绑的引用不写判空**）—— 所以 `onInit` 里解析一次存起来，之后直接用。
-     * 少了判空分支，prefab 万一被改坏（按钮上的 `cc.Button` 被删）会在打开时
-     * 直接抛错，而不是静默不响应点击。
      */
-    private closeAction: Button = null!;
-    private upgradeAction: Button = null!;
 
     /** 弹窗预制体在 resources 下的路径（`PopupManager` 用它加载）。 */
     static prefabPath = 'ui/card/CardUpgrade';
@@ -70,8 +71,8 @@ export class CardUpgradePage extends PopupBase {
     @property({ type: Label, tooltip: 'Title/Label：标题「卡牌升级」' })
     titleLabel: Label = null!;
 
-    @property({ type: Node, tooltip: 'CloseBtn：右上角关闭按钮（挂 cc.Button）' })
-    closeButton: Node = null!;
+    @property({ type: Button, tooltip: 'CloseBtn 上的 cc.Button（**绑组件不绑节点**）' })
+    closeButton: Button = null!;
 
     @property({ type: Sprite, tooltip: 'Card/Face：卡面底图（common_img_kp_01..04，按品级换图）' })
     cardFace: Sprite = null!;
@@ -112,8 +113,8 @@ export class CardUpgradePage extends PopupBase {
     @property({ type: Label, tooltip: 'Hint：底部提示（材料不足原因 / 未连接 / 已满级）' })
     hintLabel: Label = null!;
 
-    @property({ type: Node, tooltip: 'BtnUpgrade：升级按钮（挂 cc.Button）' })
-    upgradeButton: Node = null!;
+    @property({ type: Button, tooltip: 'BtnUpgrade 上的 cc.Button（**绑组件不绑节点**）' })
+    upgradeButton: Button = null!;
 
     @property({ type: Label, tooltip: 'BtnUpgrade/Label：按钮文案' })
     upgradeLabel: Label = null!;
@@ -125,8 +126,8 @@ export class CardUpgradePage extends PopupBase {
      * 升级按钮占满（背景 651×982），硬塞会与「卡牌」「经验」两行文字重叠。
      * 允许为空 —— 没配这个按钮时技能入口就只从卡牌页走。
      */
-    @property({ type: Node, tooltip: 'BtnSkill：打开技能面板的按钮（挂 cc.Button，可留空）' })
-    skillButton: Node | null = null;
+    @property({ type: Button, tooltip: 'BtnSkill 上的 cc.Button（**绑组件不绑节点**；可留空）' })
+    skillButton: Button | null = null;
 
     @property({ type: Color, tooltip: '材料已满足时的文字颜色（样式放 Inspector，代码不写死）' })
     enoughColor: Color = new Color(104, 218, 59, 255);
@@ -147,17 +148,15 @@ export class CardUpgradePage extends PopupBase {
         this.upgradeLabel.string = upgradeButtonText(1, false);
 
         //  CLICK 是挂在**节点**上的（Button 自身没有 on），别写成 button.on(...)。
-        this.closeAction = this.closeButton.getComponent(Button)!;
-        this.upgradeAction = this.upgradeButton.getComponent(Button)!;
-        this.closeAction.node.on(Button.EventType.CLICK, this.onCloseClick, this);
-        this.upgradeAction.node.on(Button.EventType.CLICK, this.onUpgradeClick, this);
-        this.skillButton?.getComponent(Button)?.node.on(Button.EventType.CLICK, this.onSkillClick, this);
+        this.closeButton.node.on(Button.EventType.CLICK, this.onCloseClick, this);
+        this.upgradeButton.node.on(Button.EventType.CLICK, this.onUpgradeClick, this);
+        this.skillButton?.node.on(Button.EventType.CLICK, this.onSkillClick, this);
     }
 
     protected onOpen(userData?: ICardUpgradeOpenData): void | Promise<void> {
         if (!userData) return;
         this.cardIdForSkills = userData.cardId;
-        return this.presenter.open(userData, this.presenterView());
+        return this.openUpgrade(userData);
     }
 
     /**
@@ -177,11 +176,68 @@ export class CardUpgradePage extends PopupBase {
         this.close();
     }
 
-    private presenterView() {
-        return {
-            isAlive: () => this.alive,
-            presentUpgrade: (data: CardUpgradePresentation) => this.presentUpgrade(data),
-        };
+    /**
+     * 打开：先派发 loading 态，再拉升级状态。
+     *
+     *  这段原来在 `CardUpgradePresenter.open()` 里；现在弹窗自己管
+     *  （`upgradePhase` + `upgradeStatus` 是跨"打开 → 升级 → 重刷"的会话状态）。
+     */
+    private async openUpgrade(data: ICardUpgradeOpenData): Promise<void> {
+        this.upgradeData = data;
+        this.cardIdForSkills = String(data.cardId);
+        this.currentLevel = Math.max(0, Math.floor(Number(data.level) || 0));
+        this.upgradeStatus = null;
+        this.upgradePhase = 'loading';
+        this.emitUpgrade();
+        await this.loadUpgradeStatus();
+    }
+
+    private async loadUpgradeStatus(): Promise<void> {
+        if (!this.upgradeData) return;
+        const revision = ++this.upgradeRevision;
+        const status = await cardRepository.loadUpgradeStatus(this.cardIdForSkills, this.currentLevel);
+        if (revision !== this.upgradeRevision) return;
+        if (!this.alive) return;
+        this.upgradeStatus = status;
+        this.upgradePhase = 'ready';
+        this.emitUpgrade();
+    }
+
+    /**
+     * 「升级」：发 `CmdPvpHeroUpLevelReqMsg`。
+     *
+     * `submitting` 既是**防重入**（第二次点击直接返回）也是按钮置灰的依据；
+     * 失败只回退 phase，不动 `currentLevel`（服务端没变，本地也不该变）。
+     */
+    private async submitUpgrade(caller: object): Promise<void> {
+        if (!this.upgradeData || this.upgradePhase === 'submitting' || !this.upgradeStatus?.canUpgrade) return;
+        this.upgradePhase = 'submitting';
+        this.emitUpgrade();
+        const result = await cardRepository.upgradeHero(Number(this.cardIdForSkills), caller);
+        if (result.kind === 'offline' || result.kind === 'failed') {
+            this.upgradePhase = result.kind;
+            this.emitUpgrade();
+            return;
+        }
+        this.currentLevel = result.level;
+        cardRepository.applyHeroLevel(result.heroId, result.level);
+        //  升级成功**当场派发**，不等弹窗关闭：卡牌页拿它回写等级缓存并整页重刷。
+        EventMgr.instance.emit(CardLineupEvent.HeroUpgraded, {
+            heroId: result.heroId,
+            level: result.level,
+        } satisfies IHeroUpgradedPayload);
+        await this.loadUpgradeStatus();
+    }
+
+    private emitUpgrade(): void {
+        if (!this.upgradeData) return;
+        this.presentUpgrade({
+            data: this.upgradeData,
+            cardId: this.cardIdForSkills,
+            level: this.currentLevel,
+            status: this.upgradeStatus,
+            phase: this.upgradePhase,
+        });
     }
 
     /** 唯一的写 UI 入口：卡面 → 升级状态。 */
@@ -193,7 +249,7 @@ export class CardUpgradePage extends PopupBase {
             this.renderStatus(data.status, data.phase);
             return;
         }
-        this.upgradeAction.interactable = false;
+        this.upgradeButton.interactable = false;
         //  提交中按钮文案保持常态（「升级」/「解锁」）：进行中的状态提示由通用 loading 全屏承担，
         //  按钮不再显示「升级中…」，避免 loading 遮罩下按钮文案与 loading 文字重复。
         this.upgradeLabel.string = upgradeButtonText(data.level, false);
@@ -263,13 +319,13 @@ export class CardUpgradePage extends PopupBase {
             this.hintLabel.string = texts.upgradeNoConfig;
             this.hintLabel.color = this.idleColor;
             this.upgradeLabel.string = upgradeButtonText(status.level, false);
-            this.upgradeAction.interactable = false;
+            this.upgradeButton.interactable = false;
             return;
         }
         if (status.maxed) {
             this.hintLabel.string = '';
             this.upgradeLabel.string = texts.upgradeMaxed;
-            this.upgradeAction.interactable = false;
+            this.upgradeButton.interactable = false;
             return;
         }
         const submitting = phase === 'submitting';
@@ -279,12 +335,12 @@ export class CardUpgradePage extends PopupBase {
         if (phase === 'offline' || phase === 'failed') {
             this.hintLabel.string = phase === 'offline' ? texts.upgradeOffline : texts.upgradeFailed;
             this.hintLabel.color = this.lackColor;
-            this.upgradeAction.interactable = status.canUpgrade;
+            this.upgradeButton.interactable = status.canUpgrade;
             return;
         }
         this.hintLabel.string = status.canUpgrade ? '' : status.blockedReason;
         this.hintLabel.color = status.canUpgrade ? this.enoughColor : this.lackColor;
-        this.upgradeAction.interactable = status.canUpgrade && !submitting;
+        this.upgradeButton.interactable = status.canUpgrade && !submitting;
     }
 
     private onCloseClick(): void {
@@ -310,15 +366,17 @@ export class CardUpgradePage extends PopupBase {
                 : CARD_LINEUP_TEXTS.upgradeSending,
         );
         try {
-            await this.presenter.submit(this, this.presenterView());
+            await this.submitUpgrade(this);
         } finally {
             LoadingPopup.hide();
         }
     }
 
     onDestroy(): void {
+        // 摘掉订阅：`EventMgr` 是全局单例，弹窗每次关闭都销毁重建。
+        EventMgr.instance.offTarget(this);
         this.artRevision += 1;
-        this.presenter.dispose();
+        this.upgradeRevision += 1;
         super.onDestroy();
     }
 }

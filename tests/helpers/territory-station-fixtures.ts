@@ -14,8 +14,12 @@
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
+import * as MapMarkerBadge from '../../assets/script/app/common/MapMarkerBadge';
 
 type Listener = { readonly callback: (...args: unknown[]) => void; readonly target: unknown };
+
+/** 组件侧 `EventMgr.emit` 的记录（`TerritoryStationView` 现在发 `STATION_TAP`）。 */
+export const stationEmitLog: string[] = [];
 
 export class FakeVec3 {
     constructor(public x = 0, public y = 0, public z = 0) {}
@@ -32,7 +36,16 @@ export class FakeVec3 {
  *  引擎会把**实测文本宽**写回 `contentSize`，用例就靠改这个值来模拟引擎量文本。
  */
 export class FakeUITransform {
-    constructor(public contentSize: { width: number; height: number }) {}
+    constructor(public contentSize: { width: number; height: number } = { width: 0, height: 0 }) {}
+    setContentSize(width: number, height: number): void { this.contentSize = { width, height }; }
+}
+
+export class FakeUIOpacity { opacity = 255; }
+export class FakeGraphics {
+    clear(): void {}
+    roundRect(): void {}
+    fill(): void {}
+    stroke(): void {}
 }
 
 export class FakeNode {
@@ -45,6 +58,7 @@ export class FakeNode {
     scale = new FakeVec3(1, 1, 1);
     /** 见 `FakeUITransform`；`withTransform` 挂上去，`makeStationView` 再注入到视图的 `@property` 字段。 */
     uiTransform: FakeUITransform | null = null;
+    private readonly components = new Map<unknown, object>();
     private readonly listeners = new Map<string, Listener[]>();
 
     constructor(readonly name: string) {}
@@ -61,8 +75,17 @@ export class FakeNode {
         this.scale = new FakeVec3(x, y, z);
     }
 
-    getComponent(): unknown {
-        return this.uiTransform;
+    getComponent(type?: unknown): unknown {
+        if (!type || type === FakeUITransform) return this.uiTransform;
+        return this.components.get(type) ?? null;
+    }
+
+    addComponent<T extends object>(type: new () => T): T {
+        const component = new type();
+        Object.assign(component, { node: this });
+        this.components.set(type, component);
+        if (component instanceof FakeUITransform) this.uiTransform = component;
+        return component;
     }
 
     /** 幂等（与 cc `EventTarget.on` 同语义）：同 (event, callback, target) 只注册一份。 */
@@ -98,11 +121,15 @@ export class FakeComponent {
 
 export class FakeButton extends FakeComponent {
     static readonly EventType = { CLICK: 'click' };
+    static readonly Transition = { NONE: 0 };
     interactable = true;
 }
 
 export class FakeSprite extends FakeComponent {
     static readonly Type = { SIMPLE: 0, SLICED: 1 };
+    static readonly SizeMode = { CUSTOM: 0 };
+    sizeMode = 1;
+    trim = true;
     spriteFrame: unknown = null;
     enabled = true;
     color = new FakeColor();
@@ -112,6 +139,8 @@ export class FakeSprite extends FakeComponent {
 export class FakeLabel extends FakeComponent {
     /** 与 `cc.Label.Overflow` 同值；初始值按 prefab 抄（`CaptionLabel` 是 `SHRINK`）。 */
     static readonly Overflow = { NONE: 0, CLAMP: 1, SHRINK: 2, RESIZE_HEIGHT: 3 };
+    static readonly HorizontalAlign = { CENTER: 1 };
+    static readonly VerticalAlign = { CENTER: 1 };
 
     string = '';
     overflow = FakeLabel.Overflow.SHRINK;
@@ -151,9 +180,15 @@ export interface StationRenderContent {
     readonly isCondition?: boolean;
     readonly conditionIcon?: unknown;
     readonly conditionTextColor?: FakeColor;
+    /** 建筑表 `buildSize` 的大小倍率（`applyIconPlacement` 的第二乘数）。 */
+    readonly iconScale?: number;
+    /** 底部对齐（69008~69015）：可见底边压格心，而不是可见中心压格心。 */
+    readonly bottomAnchor?: boolean;
     readonly caption: string;
     readonly tint: FakeColor;
     readonly badge: string;
+    readonly levelBubble?: string;
+    readonly levelBubbleFrame?: unknown;
     readonly interactive: boolean;
     readonly isLoading?: boolean;
     /** 需求 row14：建筑展示滞后期间整站不显示（见 `ITerritoryStationRender.hidden`）。 */
@@ -174,6 +209,7 @@ export interface StationView {
     initialize(layers: StationLayers, clickable?: boolean): void;
     setMapPosition(x: number, y: number, z?: number): void;
     render(content: StationRenderContent): void;
+    setSpawnOpacity(value: number): void;
     /** 建筑生成抖动（需求 row14）：登记起点。 */
     playBuildingShake(): void;
     /** 建筑生成抖动：逐帧推进（引擎每帧调）。 */
@@ -204,6 +240,18 @@ function loadShakeCore(): Record<string, unknown> {
 }
 
 export function loadTerritoryStationView(): new () => StationView {
+    return (loadTerritoryStationModule() as unknown as { TerritoryStationView: new () => StationView })
+        .TerritoryStationView;
+}
+
+/**
+ * 取 `TerritoryStationView.ts` 的**整个模块导出**（不只是类）。
+ *
+ * 2026-10-27：新增了 `TERRITORY_BOTTOM_ANCHOR_BUILD_IDS` / `territoryUsesBottomAnchor` 两个
+ * 纯函数导出，「底部对齐白名单」要在**真实模块**上断言，而不是把 69008~69015 抄进用例里
+ * ——抄一遍就等于两边各改一半也能一起绿。
+ */
+export function loadTerritoryStationModule(): Record<string, unknown> {
     const source = readFileSync('assets/script/app/territory/view/TerritoryStationView.ts', 'utf8');
     const code = ts.transpileModule(source, {
         compilerOptions: {
@@ -225,16 +273,19 @@ export function loadTerritoryStationView(): new () => StationView {
                     Button: FakeButton,
                     Color: FakeColor,
                     Component: FakeComponent,
+                    Graphics: FakeGraphics,
                     Label: FakeLabel,
                     Node: FakeNode,
                     Sprite: FakeSprite,
                     SpriteFrame: class {},
-                    UITransform: class {},
+                    UITransform: FakeUITransform,
+                    UIOpacity: FakeUIOpacity,
                     Vec3: FakeVec3,
                 };
             }
             // 曲线真源：转译真模块（不是抄数字）。
             if (id.endsWith('/ShakePresentation')) return loadShakeCore();
+            if (id.endsWith('/MapMarkerBadge')) return MapMarkerBadge;
             // 事件契约：纯常量表，直接给桩（与 `view/TerritoryEvents.ts` 同值）。
             if (id === './TerritoryEvents') {
                 return {
@@ -247,12 +298,19 @@ export function loadTerritoryStationView(): new () => StationView {
                     },
                 };
             }
+            //  事件统一走 `EventMgr` 全局中控：`emit` 记进 `stationEmitLog`，用例据此断言「点了发事件」。
+            if (id.includes('event/EventMgr')) {
+                return { EventMgr: { instance: {
+                    emit: (event: string) => stationEmitLog.push(event),
+                    on() {}, offTarget() {},
+                } } };
+            }
             throw new Error(`Unexpected require: ${id}`);
         },
     };
     context.module = { exports: context.exports };
     runInNewContext(code, context);
-    return (context.exports as { TerritoryStationView: new () => StationView }).TerritoryStationView;
+    return context.exports as Record<string, unknown>;
 }
 
 export function attach(child: FakeNode, parent: FakeNode, x: number, y: number): FakeNode {

@@ -44,6 +44,29 @@ export function isTerritoryWalletResId(resId: unknown): boolean {
 }
 
 /**
+ * `resId` → **顶部资源栏那一格的 key**（`roleProperty.key` = `CmdRole` 的字段名）。
+ *
+ * 用途单一：宝箱开出来的银币 / 体力会**飞进资源栏**，落点必须是它们各自的格子
+ * （2026-10-26 用户口径）。`7 → gold`（银币）、`9 → end`（体力）——
+ * `roleProperty.json` 里这两行的 `key` 与 `icon` 就是 `图标_铜币` / `图标_体力`，
+ * 与 HUD 那条 `resKeys = gold,end` 是同一套口径。
+ *
+ * ⚠️ 这里是**表现层的落点映射**，不参与发奖（发奖口径是 {@link isTerritoryWalletResId}）；
+ * 两者都源自同一对常量，所以改表只改 `TerritoryIdleReward` 一处。
+ */
+export const TERRITORY_WALLET_RES_KEY: Readonly<Record<number, string>> = {
+    [TERRITORY_SILVER_RES_ID]: 'gold',
+    [TERRITORY_STAMINA_RES_ID]: 'end',
+};
+
+/** `resId` 对应的资源栏 key；不是银币 / 体力（或脏值）⇒ `null`。 */
+export function territoryWalletResKeyOf(resId: unknown): string | null {
+    const id = Number(resId);
+    if (!Number.isFinite(id)) return null;
+    return TERRITORY_WALLET_RES_KEY[id] ?? null;
+}
+
+/**
  * 按 resId 把一批奖励分成「飘字 / 弹窗」两组。
  *
  * ⚠️ **保持原顺序**：飘字先后即视觉上下顺序，弹窗顺序即 `ShowRewardPage` 的格序，
@@ -84,6 +107,29 @@ export const TERRITORY_GAIN_STACK_GAP_PX = 40;
  * ⇒ 这个值就是需求里的那个 40（此前是 30，为「别盖住建筑图标」的经验值）。
  */
 export const TERRITORY_GAIN_START_LIFT_PX = 40;
+
+/**
+ * **合成读数**（随机格：统一图标 + 数量之和）在 {@link TERRITORY_GAIN_START_LIFT_PX} 之上
+ * **再抬**这么多像素。
+ *
+ * 2026-10-26 用户口径：「金球加数字 UI 的初始位置增加 30px，不会遮挡粒子效果」。
+ *
+ * 为什么只抬合成读数、不动 40：
+ *  · 40 是 row17 的需求原值（银币 / 体力那条逐条飘字用它，改它会连带推翻 §3.5 的判据）；
+ *  · 合成读数只有**一条**、图标是最大的那颗「种族经验球」（比银币图宽且高），
+ *    贴着 40px 会和格心喷出来的那一把粒子挤在同一片区域（现场截图 2026-10-26 第三张）。
+ *
+ * ⇒ 逐条模式仍 40，合成模式 40 + 30 = 70（用户口径原话「初始位置增加 30px」）。
+ */
+export const TERRITORY_GAIN_READOUT_EXTRA_LIFT_PX = 30;
+
+/**
+ * **合成读数**的起点抬升（= `TERRITORY_GAIN_START_LIFT_PX + EXTRA`，恒 70）。
+ *
+ * ⚠️ 只给 `TerritoryMapView.playResourceGain` 的 `readout` 分支用；逐条分支走 40。
+ */
+export const TERRITORY_GAIN_READOUT_LIFT_PX =
+    TERRITORY_GAIN_START_LIFT_PX + TERRITORY_GAIN_READOUT_EXTRA_LIFT_PX;
 
 /**
  * 图标与数字之间的间隙（px）。prefab 里的样张（`+100`）也是按这个值摆的。

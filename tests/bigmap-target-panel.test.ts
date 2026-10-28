@@ -4,24 +4,13 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 
-for (const name of ['BigMapLevelInfoPanel', 'BigMapPlayerLevelPanel']) {
-    test(`${name} 绑定真实文字、操作和模态节点，未保留示例奖励与伪造费用`, () => {
-        const objects = JSON.parse(readFileSync(`assets/resources/ui/bigmap/${name}.prefab`, 'utf8'));
-        const binding = objects.find((object: Record<string, unknown>) => 'panelTransform' in object && 'sections' in object);
-        assert.ok(binding, '设计稿弹窗必须挂接 BigMapTargetPanel');
-        for (const key of ['rootTransform', 'panelTransform', 'dimTransform', 'title', 'primary', 'primaryLabel',
-            'cost', 'costIcon', 'costBackground', 'secondary', 'secondaryLabel', 'close', 'primaryBackground']) {
-            assert.ok(binding[key] && objects[binding[key].__id__], key);
-        }
-        assert.equal(objects[binding.primary.__id__].__type__, 'cc.Button');
-        assert.equal(objects[binding.secondary.__id__].__type__, 'cc.Button');
-        assert.equal(binding.headings.length, binding.sections.length);
-        for (const ref of binding.sections) assert.equal(objects[ref.__id__].__type__, 'cc.Label');
-        for (const label of objects.filter((object: Record<string, unknown>) => object.__type__ === 'cc.Label')) {
-            assert.doesNotMatch(label._string, /获得1个卡牌宝箱|【征收】\+6硬币|2-2关卡标题|玩家名称七个字/);
-        }
-    });
-}
+/**
+ * `BigMapTargetPanel`（世界页的「三行文字」目标弹窗）组件行为判据。
+ *
+ * ⚠️ 它挂的两份 prefab（`BigMapLevelInfoPanel` / `BigMapPlayerLevelPanel`）2026-10-27 都
+ * 搬去领地页并换成了专用组件（关卡界面 / 玩家关卡），所以**prefab 结构断言已删除** ——
+ * 这个类现在只剩「复用同一实例时全量覆盖状态」这条行为契约还要守。
+ */
 
 test('同一弹窗复用时全量覆盖状态、费用和内容，禁用操作不触发开战，定位与关闭各走对应入口', () => {
     const exports: Record<string, new () => Record<string, any>> = {};

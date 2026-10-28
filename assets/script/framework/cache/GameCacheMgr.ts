@@ -109,19 +109,19 @@ export class GameCacheMgr extends ScriptObject {
         return this.cacheDictionary.get(cacheName) ?? null;
     }
 
-    setEvent(cacheName: string, eventType: EventType, caller: destroyable, callback: Function) {
+    setEvent(cacheName: string, eventType: EventType, caller: object, callback: Function) {
         let eventProxy = this.getCache(cacheName).eventProxy;
         eventProxy.removeListener(eventType, caller, callback)
         eventProxy.addListener(eventType, caller, callback)
     }
 
-    removeEvent(cacheName: string, eventType: EventType, caller: destroyable, callback: Function) {
+    removeEvent(cacheName: string, eventType: EventType, caller: object, callback: Function) {
         const cache = this.peekCache(cacheName);
         if (cache == null) return;
         cache.eventProxy?.removeListener(eventType, caller, callback)
     }
 
-    removeEventCaller(cacheName: string, caller: destroyable) {
+    removeEventCaller(cacheName: string, caller: object) {
         const cache = this.peekCache(cacheName);
         if (cache == null) return;
         cache.eventProxy?.removeCallerListener(caller)
@@ -133,7 +133,7 @@ export class GameCacheMgr extends ScriptObject {
         cache.eventProxy?.removeAll()
     }
 
-    removeEventCallerAllCache(caller: destroyable) {
+    removeEventCallerAllCache(caller: object) {
         let tmGameCache: GameCache[] = this.cacheDictionary.dict;
         for (let k in tmGameCache) {
             tmGameCache[k].eventProxy.removeCallerListener(caller)
@@ -148,29 +148,29 @@ export class GameCacheMgr extends ScriptObject {
     }
 
     // update
-    setEventUpdate(cacheName: string, caller: destroyable, callback: Function) {
+    setEventUpdate(cacheName: string, caller: object, callback: Function) {
         this.setEvent(cacheName, EventType.onUpdate, caller, callback)
     }
 
-    removeEventUpdate(cacheName: string, caller: destroyable, callback: Function) {
+    removeEventUpdate(cacheName: string, caller: object, callback: Function) {
         this.removeEvent(cacheName, EventType.onUpdate, caller, callback)
     }
 
     // change
-    setEventChange(cacheName: string, caller: destroyable, callback: Function) {
+    setEventChange(cacheName: string, caller: object, callback: Function) {
         this.setEvent(cacheName, EventType.onChange, caller, callback)
     }
 
-    removeEventChange(cacheName: string, caller: destroyable, callback: Function) {
+    removeEventChange(cacheName: string, caller: object, callback: Function) {
         this.removeEvent(cacheName, EventType.onChange, caller, callback)
     }
 
     // add
-    setEventAdd(cacheName: string, caller: destroyable, callback: Function) {
+    setEventAdd(cacheName: string, caller: object, callback: Function) {
         this.setEvent(cacheName, EventType.onAdd, caller, callback)
     }
 
-    removeEventAdd(cacheName: string, caller: destroyable, callback: Function) {
+    removeEventAdd(cacheName: string, caller: object, callback: Function) {
         this.removeEvent(cacheName, EventType.onAdd, caller, callback)
     }
 

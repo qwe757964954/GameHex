@@ -232,7 +232,7 @@ test('服务端章节战斗阵容不再受本地关卡敌方卡牌名单裁剪',
         if (name.endsWith('/ZCClientCombatConfig')) return { buildZCClientCombatConfig };
         if (name.endsWith('/ZCPveCombatConfig')) return { buildZCPveEnemyDecks };
         if (name.endsWith('/ZCMatchConfig')) return { captureZCMatchConfig };
-        if (name.endsWith('/ZCRankBoard')) return { buildSeatProfiles: () => new Map() };
+        if (name.endsWith('/ZCRankBoard')) return { buildSeatProfiles: () => new Map(), buildSeatUnitIds: () => new Map() };
         if (name.endsWith('/ZCGame')) return { ZCGame: class {} };
         return {};
     } });

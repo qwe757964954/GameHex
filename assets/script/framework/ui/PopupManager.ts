@@ -46,6 +46,7 @@ import {
     UITransform,
 } from 'cc';
 import type { AssetService } from '../../core/asset/AssetService';
+import type { ICallbackOwnerRegistry } from '../../core/runtime/CallbackOwner';
 import { ResourceScope } from '../../core/asset/ResourceScope';
 import {
     IPopupOpenParams,
@@ -128,6 +129,7 @@ export class PopupManager extends Component {
     /** Prefab 资源由管理器持有，至少覆盖所有仍存活或缓存中的弹窗节点。 */
     private readonly _assetScope = new ResourceScope('framework:popup-manager');
     private _assetService: AssetService | null = null;
+    private _callbackOwners: ICallbackOwnerRegistry | null = null;
 
     // ============================================================
     // 生命周期
@@ -164,12 +166,13 @@ export class PopupManager extends Component {
     }
 
     /** 由应用组合根注入资源端口；缓存节点与 Prefab 引用共用管理器生命周期。 */
-    initialize(assets: AssetService): void {
+    initialize(assets: AssetService, callbackOwners?: ICallbackOwnerRegistry): void {
         if (this._disposed) {
             console.error('[PopupManager] 管理器已销毁，不能再注入资源服务');
             return;
         }
         this._assetService = assets;
+        this._callbackOwners = callbackOwners ?? null;
     }
 
     // ============================================================
@@ -267,6 +270,7 @@ export class PopupManager extends Component {
         opening.entry = entry;
         this._stack.push(entry);
 
+        if (this._callbackOwners) popup._bindCallbackOwners(this._callbackOwners);
         await popup._internalOpen(entry.serialId, params, layer);
 
         // onOpen 里可能已经自己 close 了（例如数据加载失败直接关掉）

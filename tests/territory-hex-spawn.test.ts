@@ -253,9 +253,26 @@ test('地图视图：diff 触发 + 首帧只做快照 + 换章复位', () => {
     assert.match(source, /this\.applyHexSpawnFade\(/);
 });
 
-test('站点视图：整站透明度是四个视觉节点各挂一个 UIOpacity', () => {
+test('★★★刚解锁的格子也要播生成动画（关卡格花银币解锁，2026-10-28）', () => {
+    const source = readFileSync('assets/script/app/territory/view/TerritoryMapView.ts', 'utf8');
+    // 🔴 为什么不能只靠 `revealed` 的 diff：`revealed` 里本来就含「前沿看得见、还没花钱开」的格子，
+    // 关卡格从「锁着（银币 + 数字）」变「已解锁（关卡建筑）」时**前后都在 revealed 里**
+    // ⇒ 露出集合的 diff 恒为 0，外观直接换、没有过渡（用户：「点击地块消耗银币，播放地块切换成
+    // 关卡地块的动画（与其他新生成的地块动画一致）」）。
+    assert.match(source, /private readonly unlockedSnapshot = new Set<number>\(\);/,
+        '要单独记一份「上一帧已解锁」的集合');
+    assert.match(source,
+        /if \(!progress\.isCellUnlocked\(cellId\) \|\| this\.unlockedSnapshot\.has\(cellId\)\) continue;/,
+        '「这一帧才变已解锁」的格子必须进场');
+    assert.match(source, /this\.unlockedSnapshot\.clear\(\);/, '换章 / 布局重建必须清掉解锁快照');
+    assert.match(source, /this\.unlockedSnapshot\.add\(cellId\)/, '每帧都要把快照推到最新');
+    // 同一格可能两条都命中（新露出 + 同帧解锁）⇒ 必须去重，否则播两次（缩放会打架）。
+    assert.match(source, /const entered = new Set<number>\(\);/, '两条触发要合到一个去重集合里');
+});
+
+test('站点视图：整站透明度覆盖四个视觉根，气泡背景与文字共同淡入', () => {
     const source = readFileSync('assets/script/app/territory/view/TerritoryStationView.ts', 'utf8');
     assert.match(source, /setSpawnOpacity\(value: number\): void/);
-    assert.match(source, /iconSprite\.node, this\.captionSprite\.node, this\.captionLabel\.node, this\.badgeLabel\.node/);
+    assert.match(source, /iconSprite\.node, this\.captionSprite\.node, this\.captionLabel\.node, this\.levelBubble\?\.node \?\? this\.badgeLabel\.node/);
     assert.match(source, /private spawnOpacities: UIOpacity\[\] \| null = null;/);
 });

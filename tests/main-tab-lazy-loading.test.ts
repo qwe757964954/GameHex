@@ -5,19 +5,22 @@ import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
 
-function harness() {
+function harness(worldGate?: Promise<void>) {
+    const releasedOwners: object[] = [];
     const scheduled: (() => void)[] = [];
-    let worldOpened = false, warmups = 0, firstRechargeChecks = 0;
+    const afterDraw = new Set<() => void>();
+    let worldOpened = false, warmups = 0, battleWarmups = 0, firstRechargeChecks = 0, pauses = 0, worldOpenCalls = 0;
     const buttons: { tabType: number; select?: () => void; setEnabled(): void; bindSelect(callback: () => void): void; bindRedDotExpr(): void; node: { position: { x: number } } }[] = [6].map(tabType => ({ tabType, node: { position: { x: 0 } }, setEnabled() {}, bindSelect(callback) { this.select = callback; }, bindRedDotExpr() {} }));
     const requests: { path: string; bundle: string | undefined; scope: ResourceScope; resolve(value: object): void; reject(error: Error): void }[] = [];
     const pages: { name: string; destroyed: boolean }[] = [];
     const createdNodes: { name: string; isValid: boolean }[] = [];
-    let embeddedMap: { onFirstReady(callback: () => void): void } | null = null;
+    let embeddedMap: { setSessionAssetService(): void; initialize(): void; onFirstReady(callback: () => void): void } | null = null;
     const selected: number[] = [];
     const exports: Record<string, unknown> = {};
     runInNewContext(ts.transpileModule(readFileSync('assets/script/app/main/MainTabHost.ts', 'utf8'), {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
     }).outputText, { exports, console: { warn() {} }, require(name: string) {
+        if (name.endsWith('/GameNet')) return { GameNet: { instance: { removeCaller: (owner: object) => releasedOwners.push(owner) } } };
         if (name === 'cc') {
             class MockNode {
                 public name: string;
@@ -49,6 +52,8 @@ function harness() {
                         if (index >= 0) scheduled.splice(index, 1);
                     }
                 },
+                Director: { EVENT_AFTER_DRAW: 'after-draw' },
+                director: { once(_event: string, callback: () => void) { afterDraw.add(callback); }, off(_event: string, callback: () => void) { afterDraw.delete(callback); } },
                 Vec3: { ZERO: {} }, Prefab: class {}, Node: MockNode,
                 Color: class { constructor(public r = 0, public g = 0, public b = 0, public a = 255) {} },
                 UITransform: class { setContentSize(): void {} },
@@ -88,12 +93,15 @@ function harness() {
         }
         if (name.endsWith('/ResourceScope')) return { ResourceScope };
         if (name.endsWith('/BundleCatalog')) return { MAIN_PAGES_BUNDLE: 'main-pages' };
-        if (name.endsWith('/BigMapEntry')) return { BigMapEntry: { shared: () => ({ get isOpen() { return worldOpened; }, open: async () => { worldOpened = true; }, close() { worldOpened = false; } }) } };
+        if (name.endsWith('/BigMapEntry')) return { BigMapEntry: { shared: () => ({ get isOpen() { return worldOpened; }, open: async () => { worldOpenCalls++; if (worldGate) await worldGate; worldOpened = true; }, close() { worldOpened = false; } }) } };
+        // 世界格点击会先上报「玩家点击界面」（mark=2）；这里桩成 no-op，不参与切页断言。
+        if (name.endsWith('/GameViewClickService')) return { GAME_VIEW_MARK: { World: 2 }, reportGameViewClick: () => Promise.resolve(true) };
         if (name.endsWith('/MainTabItems')) return { mainTabItem: () => ({}) };
         if (name.endsWith('/FirstRechargeAutoOpen')) return { checkFirstRechargeOnEnterMain: async () => { firstRechargeChecks++; } };
         return {};
     } });
     const Host = exports.MainTabHost as new () => {
+        activateBackgroundWarmup(): void;
         onLoad(): void; navBar: unknown; defaultTab: number; setConfigService(configs: object): void; setSessionAssetService(service: object): void;
         setAssetService(assets: object): void;
         switchTab(index: number): Promise<void>; onDestroy(): void;
@@ -106,7 +114,7 @@ function harness() {
     }) });
     host.navBar = { getComponentsInChildren: () => buttons };
     host.setConfigService({});
-    host.setSessionAssetService({ pauseWarmup() {}, warmup: async () => { warmups++; } });
+    host.setSessionAssetService({ pauseWarmup() { pauses++; }, warmup: async () => { warmups++; }, warmupBattle: async () => { battleWarmups++; } });
     const attachMap = () => {
         let ready: (() => void) | null = null;
         embeddedMap = {
@@ -116,8 +124,31 @@ function harness() {
         };
         return { fireReady() { if (ready) ready(); } };
     };
-    return { host, requests, pages, selected, buttons, scheduled, createdNodes, attachMap, get warmups() { return warmups; }, get firstRechargeChecks() { return firstRechargeChecks; }, get worldOpened() { return worldOpened; } };
+    return { releasedOwners, fireAfterDraw() { for (const cb of [...afterDraw]) { afterDraw.delete(cb); cb(); } }, host, requests, pages, selected, buttons, scheduled, createdNodes, attachMap, get pauses() { return pauses; }, get worldOpenCalls() { return worldOpenCalls; }, get warmups() { return warmups; }, get battleWarmups() { return battleWarmups; }, get firstRechargeChecks() { return firstRechargeChecks; }, get worldOpened() { return worldOpened; } };
 }
+
+test('主界面宿主销毁时统一解除自身的网络回调', () => {
+    const h = harness();
+    h.host.onDestroy();
+    assert.deepEqual(h.releasedOwners, [h.host]);
+});
+
+test('主界面已进入且真实绘制后才静默下载，切页或销毁取消迟到任务', async () => {
+    for (const cancel of ['none', 'switch', 'destroy']) {
+        const h = harness();
+        const entering = h.host.switchTab(3); h.requests[0].resolve({ name: 'arena' }); await entering;
+        for (const cb of [...h.scheduled]) cb();
+        assert.equal(h.warmups, 0, '登录预加载期间不能派发');
+        h.host.activateBackgroundWarmup();
+        assert.equal(h.warmups, 0, 'onEnter 当帧不能派发');
+        if (cancel === 'switch') void h.host.switchTab(0);
+        if (cancel === 'destroy') h.host.onDestroy();
+        h.fireAfterDraw();
+        assert.equal(h.warmups, cancel === 'none' ? 1 : 0);
+        assert.equal(h.battleWarmups, 0, '不再从页面主动解析 Prefab');
+        if (cancel !== 'destroy') h.host.onDestroy();
+    }
+});
 
 test('主城页走首包、功能页走 main-pages bundle', async () => {
     const h = harness();
@@ -218,4 +249,24 @@ test('首屏 ready 信号丢失时兜底回调强制 resolve，避免永久卡�
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(resolved, true, '兜底回调应强制结束首屏等待');
     h.host.onDestroy();
+});
+
+
+test('重复点击已打开世界不暂停后台下载，初始化在途时合并且不提前预热', async () => {
+    const h = harness();
+    h.host.activateBackgroundWarmup();
+    await h.host.switchTab(6); h.fireAfterDraw();
+    const pauses = h.pauses, warmups = h.warmups;
+    await h.host.switchTab(6); h.fireAfterDraw();
+    assert.equal(h.pauses, pauses); assert.equal(h.warmups, warmups);
+    h.host.onDestroy();
+    let finish: () => void = () => {};
+    const gate = new Promise<void>(resolve => { finish = resolve; });
+    const pending = harness(gate); pending.host.activateBackgroundWarmup();
+    const first = pending.host.switchTab(6), second = pending.host.switchTab(6);
+    pending.fireAfterDraw();
+    try {
+        assert.equal(pending.worldOpenCalls, 1);
+        assert.equal(pending.warmups, 0, '世界初始化中不启动后台下载');
+    } finally { finish(); await Promise.all([first, second]); pending.host.onDestroy(); }
 });

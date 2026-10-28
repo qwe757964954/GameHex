@@ -10685,6 +10685,40 @@
                         }
                       }
                     },
+                    "SlgGameCameRoleInfo": {
+                      "fields": {
+                        "roleId": {
+                          "rule": "required",
+                          "type": "uint64",
+                          "id": 1
+                        },
+                        "serverId": {
+                          "rule": "required",
+                          "type": "uint64",
+                          "id": 2
+                        },
+                        "roleName": {
+                          "rule": "required",
+                          "type": "string",
+                          "id": 3
+                        },
+                        "img": {
+                          "rule": "required",
+                          "type": "uint64",
+                          "id": 4
+                        },
+                        "defenseHp": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 5
+                        },
+                        "pos": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 6
+                        }
+                      }
+                    },
                     "SlgGameInfo": {
                       "fields": {
                         "maxMonsterLevel": {
@@ -10877,12 +10911,82 @@
                         }
                       }
                     },
+                    "CmdSlgCampRoleInfosReqMsg": {
+                      "fields": {
+                        "campId": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 1
+                        }
+                      }
+                    },
+                    "CmdSlgCampRoleInfosRspMsg": {
+                      "fields": {
+                        "campId": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 1
+                        },
+                        "infos": {
+                          "rule": "repeated",
+                          "type": "SlgGameCameRoleInfo",
+                          "id": 2
+                        }
+                      }
+                    },
+                    "CmdSlgCampMoveReqMsg": {
+                      "fields": {
+                        "campId": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 1
+                        },
+                        "pos": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 2
+                        },
+                        "moveType": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 3
+                        }
+                      }
+                    },
+                    "CmdSlgCampMoveRspMsg": {
+                      "fields": {
+                        "succ": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 1
+                        },
+                        "req": {
+                          "rule": "required",
+                          "type": "CmdSlgCampMoveReqMsg",
+                          "id": 2
+                        }
+                      }
+                    },
                     "CmdSlgGameInfoBroMsg": {
                       "fields": {
                         "info": {
                           "rule": "required",
                           "type": "SlgGameInfo",
                           "id": 1
+                        }
+                      }
+                    },
+                    "CmdSlgGameRoleInfoBroMsg": {
+                      "fields": {
+                        "eventType": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 1
+                        },
+                        "info": {
+                          "rule": "required",
+                          "type": "SlgGameCameRoleInfo",
+                          "id": 2
                         }
                       }
                     },
@@ -11049,6 +11153,24 @@
                     },
                     "CmdSlgBuildInfoBroMsg": {
                       "fields": {}
+                    },
+                    "CmdGameViewClickReqMsg": {
+                      "fields": {
+                        "mark": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 1
+                        }
+                      }
+                    },
+                    "CmdGameViewClickRspMsg": {
+                      "fields": {
+                        "succ": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 1
+                        }
+                      }
                     },
                     "MessageId": {
                       "values": {
@@ -11269,6 +11391,8 @@
                         "CmdSlgCampInfoRspMsg": 1665140602,
                         "CmdSlgActionUpdateRspMsg": 196069974,
                         "CmdSlgGameInfoRspMsg": 1100779337,
+                        "CmdSlgCampRoleInfosRspMsg": 1756720515,
+                        "CmdSlgCampMoveRspMsg": 1866377577,
                         "CmdSlgBuildInfoRspMsg": 1414628085,
                         "CmdSlgBuildRspMsg": 455496637,
                         "CmdSlgBuildUpgradeRspMsg": 1255226437,
@@ -11276,6 +11400,7 @@
                         "CmdSlgBuildMoveRspMsg": 2116890094,
                         "CmdSlgBuildCollectRspMsg": 1353318189,
                         "CmdSlgBuildUnlockQueueRspMsg": 1478251158,
+                        "CmdGameViewClickRspMsg": 463153146,
                         "CmdSpiritAnimalLevelUpRspMsg": 2051518427,
                         "CmdSpiritAnimalStepUpRspMsg": 1991681903,
                         "CmdSpiritAnimalBattleRspMsg": 1439043070,
@@ -11361,6 +11486,7 @@
                         "CmdRechargeDailyUpdateBroMsg": 161909789,
                         "CmdGuanKaGiftBroMsg": 915823971,
                         "CmdSlgGameInfoBroMsg": 1546899562,
+                        "CmdSlgGameRoleInfoBroMsg": 582176172,
                         "CmdSlgBuildInfoBroMsg": 1860748310,
                         "CmdTeamDetailBroMsg": 1366910774,
                         "CmdTeamDisbandBroMsg": 2097470162,

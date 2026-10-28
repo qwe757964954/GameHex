@@ -19,7 +19,7 @@ let lastResult: ZCPvpInfo | null = null;
 let pendingRequest: Promise<ZCPvpInfo | null> | null = null;
 
 /** 拉取本机 PVP 玩法信息；返回 `null` 表示没拿到，调用方保留本地值。 */
-export function fetchPvpInfo(caller?: unknown): Promise<ZCPvpInfo | null> {
+export function fetchPvpInfo(caller?: object): Promise<ZCPvpInfo | null> {
     if (!pendingRequest) {
         pendingRequest = requestPvpInfo(caller).finally(() => {
             pendingRequest = null;
@@ -38,7 +38,7 @@ export function clearLastPvpInfo(): void {
     lastResult = null;
 }
 
-async function requestPvpInfo(caller?: unknown): Promise<ZCPvpInfo | null> {
+async function requestPvpInfo(caller?: object): Promise<ZCPvpInfo | null> {
     const net = GameNet.instance;
     if (!net.isConnected) {
         console.warn('[PvpInfoService] 游戏服未连接，跳过 PVP 信息请求（保留本地占位值）');
@@ -51,12 +51,12 @@ async function requestPvpInfo(caller?: unknown): Promise<ZCPvpInfo | null> {
     });
 }
 
-async function sendPvpInfo(caller?: unknown): Promise<ZCPvpInfo | null> {
+async function sendPvpInfo(caller?: object): Promise<ZCPvpInfo | null> {
     let response: CmdPvpInfoRspMsg | null = null;
     try {
         const ok = await GameNet.instance.send(new RequestPvpInfo(
             {},
-            caller as destroyable,
+            caller,
             (rsp) => { response = rsp; },
         ), false);
         if (!ok || !response) return lastResult;

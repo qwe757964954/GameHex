@@ -39,13 +39,7 @@ export class ProcedureLogin extends ProcedureBase {
             return;
         }
         this.loginNode = instantiate(this.loginPrefab);
-        const page = this.loginNode.getComponent(LoginPage) ?? this.loginNode.getComponentInChildren(LoginPage);
-        if (!page) {
-            this.loginNode.destroy();
-            this.loginNode = null;
-            this.error('LoginRoot 缺少 LoginPage 组件');
-            return;
-        }
+        const page = this.loginNode.getComponent(LoginPage)!;
         page.configureGateway(new LoginGateway(this.network));
         this.loginNode.setParent(this.host);
         this.loginNode.setPosition(Vec3.ZERO);

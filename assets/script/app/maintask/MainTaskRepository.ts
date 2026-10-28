@@ -143,7 +143,7 @@ export interface IMainTaskRepository {
      */
     loadFirst(): Promise<IMainTaskSnapshot>;
     /** 领取主线任务奖励（「10级领取」与常规主线任务是**同一个协议**）。 */
-    claim(resId: number, caller?: unknown): Promise<MainTaskRequestResult>;
+    claim(resId: number, caller?: object): Promise<MainTaskRequestResult>;
 }
 
 /** 表行 → 空快照（表没配时的形状）。 */
@@ -342,7 +342,7 @@ class MainTaskRepositoryImpl implements IMainTaskRepository {
         };
     }
 
-    async claim(resId: number, caller?: unknown): Promise<MainTaskRequestResult> {
+    async claim(resId: number, caller?: object): Promise<MainTaskRequestResult> {
         if (!Number.isFinite(resId) || resId <= 0) return 'failed';
         const net = GameNet.instance;
         if (!net.isConnected) return 'offline';
@@ -353,7 +353,7 @@ class MainTaskRepositoryImpl implements IMainTaskRepository {
             const sent = await withTimeout(
                 net.send(new RequestTakeMainTaskReward(
                     { resId },
-                    caller as any,
+                    caller,
                     (rsp) => FW.ShowReward(rsp?.tlCmdGoods ?? []),
                 ), false),
                 WRITE_TIMEOUT_MS,

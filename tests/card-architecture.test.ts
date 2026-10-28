@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {
-    CardLineupPresenter,
-    CardUpgradePresenter,
-} from '../assets/script/app/card/CardPresenters';
 import { LineupDraftStore } from '../assets/script/app/card/LineupDraftStore';
+
+//  注：原先这里还有两条「Presenter 丢弃旧结果 / 升级阶段序列」的用例。
+//  2026-10-27 取消 Presenter 层（取数、轮次校验、phase 都并进页面组件），
+//  那两条要跑就得加载 `cc`，Node 单测里做不到，故删除 —— 状态机正确性改为靠端到端验证。
 
 const card = (id: string) => ({ id, name: id, rarity: '绿' }) as any;
 
@@ -42,51 +42,3 @@ test('LineupDraftStore 按方案隔离草稿，保存值不再从节点名反查
     assert.equal(store.snapshot().dirty, false);
 });
 
-test('CardLineupPresenter 丢弃先发后到的旧刷新结果', async () => {
-    const resolvers: Array<(value: any) => void> = [];
-    const repository = {
-        loadLineup: () => new Promise((resolve) => resolvers.push(resolve)),
-    } as any;
-    const presenter = new CardLineupPresenter(repository);
-    const presented: string[] = [];
-    const view = {
-        isAlive: () => true,
-        presentLineup: (data: any) => { presented.push(data.deck[0].id); },
-    };
-
-    const first = presenter.refresh(true, view);
-    const second = presenter.refresh(true, view);
-    resolvers[1]({ deck: [card('new')], catalog: [], heroLevels: new Map(), heroLevelCaps: new Map() });
-    await second;
-    resolvers[0]({ deck: [card('old')], catalog: [], heroLevels: new Map(), heroLevelCaps: new Map() });
-    await first;
-    assert.deepEqual(presented, ['new']);
-});
-
-test('CardUpgradePresenter 用显式阶段串起加载、提交与成功刷新', async () => {
-    const applied: Array<[number, number]> = [];
-    const repository = {
-        loadUpgradeStatus: async (cardId: string, level: number) => status(cardId, level),
-        upgradeHero: async () => ({ kind: 'success', heroId: 68001, level: 2 }),
-        applyHeroLevel: (heroId: number, level: number) => applied.push([heroId, level]),
-    } as any;
-    const presenter = new CardUpgradePresenter(repository);
-    const phases: string[] = [];
-    let callbackLevel = 0;
-    const view = {
-        isAlive: () => true,
-        presentUpgrade: (data: any) => phases.push(data.phase),
-    };
-
-    await presenter.open({
-        card: card('68001'),
-        cardId: '68001',
-        level: 1,
-        onUpgraded: (_heroId, level) => { callbackLevel = level; },
-    }, view);
-    await presenter.submit({}, view);
-
-    assert.deepEqual(phases, ['loading', 'ready', 'submitting', 'ready']);
-    assert.deepEqual(applied, [[68001, 2]]);
-    assert.equal(callbackLevel, 2);
-});

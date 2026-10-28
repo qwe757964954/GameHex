@@ -6,10 +6,14 @@ export interface AssetType<T> {
 }
 
 export interface AssetLoadOptions {
+    /** 较大值优先派发；不改变资源身份或缓存键。 */
+    readonly priority?: number;
     /** 省略时使用 Creator 内置 resources bundle。 */
     bundle?: string;
     /** 资源跟随该作用域释放。 */
     scope?: ResourceScope;
+    /** false 时只由当前作用域持有，不占用会话复用缓存；引擎适配器忽略此提示。 */
+    cache?: boolean;
 }
 
 /** 引擎无关的资源入口；业务层不再直接调用 resources.load。 */
@@ -27,4 +31,42 @@ export interface AssetService {
      * 平台无法判定时返回 `true`（放行给 `load` 报真实错误），保证不阻断加载路径。
      */
     has<T>(path: string, type: AssetType<T>, options?: AssetLoadOptions): Promise<boolean>;
+}
+
+
+/** 页内动态资产默认归属页面；已明确指定的独立战斗作用域保持原样。 */
+export function scopeAssetService(assets: AssetService, scope: ResourceScope): AssetService {
+    const resolveOptions = (options: AssetLoadOptions = {}): AssetLoadOptions & { scope: ResourceScope } => ({
+        ...options, scope: options.scope ?? scope,
+    });
+    const checkActive = (owner: ResourceScope): void => {
+        if (owner.disposed) throw new Error('资源作用域已释放，加载已取消');
+    };
+    return {
+        async load(path, type, options) {
+            const resolved = resolveOptions(options);
+            checkActive(resolved.scope);
+            const value = await assets.load(path, type, resolved);
+            checkActive(resolved.scope);
+            return value;
+        },
+        async loadDir(path, type, options) {
+            const resolved = resolveOptions(options);
+            checkActive(resolved.scope);
+            const values = await assets.loadDir(path, type, resolved);
+            checkActive(resolved.scope);
+            return values;
+        },
+        async has(path, type, options) {
+            const resolved = resolveOptions(options);
+            checkActive(resolved.scope);
+            const exists = await assets.has(path, type, resolved);
+            checkActive(resolved.scope);
+            return exists;
+        },
+        async preload(path, options) {
+            const resolved = resolveOptions(options);
+            if (!resolved.scope.disposed) await assets.preload?.(path, resolved);
+        },
+    };
 }

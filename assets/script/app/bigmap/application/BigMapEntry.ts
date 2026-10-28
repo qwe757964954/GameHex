@@ -5,6 +5,8 @@ import type { AssetService } from '../../../core/asset/AssetService';
 import type { ConfigService } from '../../../core/config/ConfigService';
 import { GameRoute } from '../../../core/runtime/GameRoute';
 import { ProcedureManager } from '../../../framework/procedure/ProcedureManager';
+// 常驻弹窗根节点名：世界页要插到它**下面**，否则 Toast / CmdTips 全被地图盖住。
+import { POPUP_ROOT_NAME } from '../../../framework/ui/PopupDef';
 import { startBattle } from '../../battle/BattleStartService';
 import { readRoleRow } from '../../main/MainRoleRow';
 import { HeadArt } from '../../HeadArt';
@@ -26,6 +28,8 @@ import { mountBigMapNavigation } from '../view/BigMapNavigation';
 import type { IBigMapLayout } from '../model/BigMapLayout';
 import type { IBigMapConfig } from '../model/BigMapTypes';
 import { BIGMAP_BATTLE_TEXT } from '../model/BigMapBattle';
+// 顶栏资源数量走背包（`CmdItem` 缓存）：SLG 资源在服务端就是道具 18501~18505。
+import { readItemCounts } from '../../card/ItemBag';
 
 /**
  * 大世界入口（**唯一一处**把「配置 / 存档 / 冒险进度 / 页面」接起来的地方）。
@@ -44,6 +48,8 @@ export class BigMapEntry {
 
     private root: Node | null = null;
     private presenter: BigMapPresenter | null = null;
+    /** 页面组件（开战预加载失败时要通知它撤掉「正在进入」遮罩）。 */
+    private page: BigMapPage | null = null;
     private saveOwner: IBigMapSaveOwner | null = null;
     private configCache: IBigMapConfig | null = null;
     /** `undefined` = 还没加载过；`null` = 加载过但没有可用布局。两者必须区分，否则会反复读盘。 */
@@ -150,6 +156,13 @@ export class BigMapEntry {
                 widget.left = 0;
                 widget.right = 0;
                 root.setParent(canvas!);
+                // 🔴 常驻 `Popup` 节点必须永远压在所有页面之上（Toast / LoadingPopup / 各类弹窗
+                // 全挂它下面）。世界页是后加的，默认拿到 Canvas 的**最后一个**兄弟序号，
+                // 正好把 Popup 盖住 —— 服务端回的 `CmdTips`（例如「章节尚未通关」）就弹不出来，
+                // 表现为「请求发了、服务端有提示、界面一片安静」（2026-10-26 反馈）。
+                // 插到 Popup 之前即可，不用改 Popup 自己的序号 —— 关页后顺序依旧正常。
+                const popupRoot = canvas!.getChildByName(POPUP_ROOT_NAME);
+                if (popupRoot) root.setSiblingIndex(popupRoot.getSiblingIndex());
             }
 
             const presenter = new BigMapPresenter({
@@ -159,6 +172,9 @@ export class BigMapEntry {
                 saveKey: BIGMAP_SAVE_KEY,
                 // 每次取实时值：玩家在冒险里推了一章，回到大世界立刻能看到新解锁的建筑。
                 adventureChapter: () => this.readAdventureChapter(owner),
+                // 联机态顶栏数量从背包读（`SlgGameInfo` 没有余额字段）；
+                // 离线 / 预览态没有背包，Presenter 会退回存档值。
+                itemCounts: () => readItemCounts(),
                 now: () => Math.floor(Date.now() / 1000),
                 // 单机档：NPC 模拟榜。联机版换成走服务器的 provider，这里一行不改。
                 rankProvider: new NpcBigMapRankProvider(config),
@@ -167,19 +183,33 @@ export class BigMapEntry {
                     const isCurrent = (): boolean => revision === this.openRevision && root.isValid
                         && this.isSaveOwnerCurrent(owner) && isPresenterCurrent();
                     if (!isCurrent()) return { ok: false, message: BIGMAP_BATTLE_TEXT.closed };
-                    void this.sessionAssets?.warmupBattle?.();
+                    this.sessionAssets?.pauseWarmup?.();
                     const battle = await startBattle(battleType, [String(targetConfigId)], root, isCurrent);
                     if (!isCurrent()) return { ok: false, message: BIGMAP_BATTLE_TEXT.closed };
                     if (!battle) return { ok: false, message: BIGMAP_BATTLE_TEXT.failed };
                     const preload = this.assets ? createZCBattlePreload(this.sessionAssets?.reusableAssets ?? this.assets,
                         configs, Promise.resolve(battle)) : undefined;
+                    // 🔴 别在这里立刻 `close()`：`navigate` 是「预加载 → 进入」两阶段，
+                    // 战斗资源没就绪之前当前界面一直不动。提前关掉世界页，露出来的就是
+                    // 主界面的 `currentTab`（默认 tab = 领地）⇒ 玩家看到的是
+                    // 「点攻打先跑回领地，等几十秒才进战斗」（2026-10-26 反馈）。
+                    // 世界页挂 Canvas、不在 Main 节点下，`ProcedureMain.onLeave` 销毁不到它，
+                    // 所以要自己关 —— 但必须等到流程真正切走的那一刻，见下面的落定钩子。
+                    const stopSettled = ProcedureManager.onSwitchSettled((entered) => {
+                        stopSettled();
+                        if (entered) {
+                            this.close();
+                            return;
+                        }
+                        // 预加载失败 / 被别的切换顶掉：世界页还在，把「正在进入」撤掉让玩家重试。
+                        this.page?.cancelEnteringBattle();
+                    });
                     ProcedureManager.navigate(GameRoute.Battle, {
                         battle,
                         slgBattleType: battleType,
                         preload,
                         selfRoleId: owner.roleId,
                     });
-                    this.close();
                     return { ok: true, message: '' };
                 } : undefined,
                 slgRepository: owner ? new BigMapSlgRepository(
@@ -194,6 +224,7 @@ export class BigMapEntry {
             const navigationHeight = navigation?.isValid ? navigation.getComponent(UITransform)?.height ?? 0 : 0;
             this.root = root;
             this.presenter = presenter;
+            this.page = page;
             this.onCloseCallback = options?.onClose ?? null;
             // 基地写操作由 serverBaseReady 拦截；同步回包不应挡住世界浏览，更不能等到缺包超时才亮页。
             void presenter.initializeSlg().catch((error: unknown) => {
@@ -201,6 +232,14 @@ export class BigMapEntry {
                     console.warn('[BigMapEntry] 基地信息同步失败', error);
                 }
             });
+            // 冒险章节集合是登录后**并行**拉的，世界页可能开在它前面 —— 那会儿建筑解锁只能按
+            // 兜底的「第 1 章」算。回包到达后补一次刷新，否则通关了却建不了（2026-10-26 用户反馈）。
+            if (!TerritoryChapterInfoRepository.instance.current) {
+                void TerritoryChapterInfoRepository.instance.refresh().then(() => {
+                    if (revision !== this.openRevision || !root.isValid || !this.isSaveOwnerCurrent(owner)) return;
+                    this.presenter?.refreshUnlockContext();
+                });
+            }
             await page.initialize(presenter, () => this.close(), this.assets, layout?.background ?? '', navigationHeight, async (scope) => {
                 const role = readRoleRow();
                 if (!role || scope.disposed) return null;
@@ -209,10 +248,6 @@ export class BigMapEntry {
                 return HeadArt.loadHeadFrame(toIdString(role.img), (name, root) => (
                     this.assets.load(`${root}/${name}/spriteFrame`, SpriteFrame, { scope })
                 ), resolver);
-            }, (isOpen) => {
-                if (revision !== this.openRevision || !root.isValid) return;
-                if (isOpen) void this.sessionAssets?.warmupBattle?.();
-                else this.sessionAssets?.pauseWarmup?.();
             });
             if (revision !== this.openRevision || !root.isValid) return;
             if (!this.isSaveOwnerCurrent(owner)) {
@@ -239,6 +274,7 @@ export class BigMapEntry {
         if (this.root?.isValid) this.root.destroy();
         this.root = null;
         this.presenter = null;
+        this.page = null;
         this.saveOwner = null;
         const hud = this.hudRestore;
         this.hudRestore = null;
@@ -273,15 +309,26 @@ export class BigMapEntry {
     }
 
     /**
-     * 冒险已通关章节数。
+     * 冒险进度（建筑 / 城池 / 野怪解锁的唯一依据）—— **服务端章节集合优先**。
      *
-     * `TerritorySaveStore.loadLastChapter` 存的是「玩家当前所在章节」，口径沿用为
-     * 「已通关到第 N 章」——新号是 1，正好对上「第 1 章解锁主城」。
-     * 任何异常都退回 1，绝不让大世界因为读存档失败打不开。
+     * 真源是 `ChapterInfo.chapters`（`TerritoryChapterInfoRepository`）：`[1,2,3]` = 账号能进到第 3 章。
+     * 「能进第 N 章」与配置里的 `unlockChapter = N` 是同一口径（第 N 章的资源田 / 科技树…），
+     * 所以直接取集合里最大那一章。
+     *
+     * 🔴 别拿 `loadLastChapter` 当主口径（2026-10-26 用户反馈）：那个存的是「上次点开的章节」，
+     * 新号 / 从没进过冒险页时恒为 1 —— 服务端明明给了 `[1,2,3]`，大地图仍按第 1 章算，
+     * 粮食田（第 2 章解锁）就全是灰的。它只在服务端还没回包时兜底。
+     *
+     * 任何异常都退回 1，绝不让大世界因为读进度失败打不开。
      */
     private readAdventureChapter(owner: IBigMapSaveOwner | null): number {
         try {
-            const chapters = TerritoryChapterInfoRepository.instance.availableChapters;
+            const repository = TerritoryChapterInfoRepository.instance;
+            const serverTop = (repository.current?.chapters ?? [])
+                .reduce((max, chapter) => Math.max(max, chapter), 0);
+            if (serverTop > 0) return serverTop;
+            // 服务端快照还没到：退回本地上次所在章节（受 `availableChapters` 限制，新号就是 1）。
+            const chapters = repository.availableChapters;
             const store = createTerritorySaveStore(owner);
             return Math.max(1, store.loadLastChapter(chapters, chapters[0] ?? 1));
         } catch (error) {

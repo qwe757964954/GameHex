@@ -159,6 +159,22 @@ export const TERRITORY_CHEST_ART_ROOT = `${ART_ROOT}/territory/chest`;
  */
 export const TERRITORY_CLOUD_ART_ROOT = `${ART_ROOT}/territory/cloud`;
 
+/**
+ * 「随机资源格」奖励**读数**（飘字那一条）统一用的图标：`种族经验球_随机`。
+ *
+ *  ⚠️ 这里故意存**完整 resources 相对路径**（不是 root + 名字）：它与 `item.icon` 同形状，
+ *  图在 **`main-pages` 分包**的 `icons/item/` 下，所以装配时走 `spriteFramePathOf()` +
+ *  `CocosAssetService` 的 `bundleForPath` 自动选包 —— 与 `item` 表那一支完全同一条链。
+ *
+ *  ⚠️ **不是表驱动的**：当前 `item` / `roleProperty` 两张表里没有任何 `resId` 指向这张图
+ *  （它只是美术给「随机种族经验值」这个玩法槽位出的占位图）。所以这里写死路径，而不是
+ *  去表里查一个 `resId`。真源变了改这一行即可，别在页面里再写一份。
+ *
+ *  用途见 `TerritoryMapView.playResourceGain` 的 `readout` 参数：随机格一次发好几种
+ *  种族经验时，读数**合成一条**（这张图 + 数量之和），而**喷发粒子仍然各用各的图**。
+ */
+export const TERRITORY_RANDOM_GAIN_READOUT_ART = 'icons/item/种族经验球_随机';
+
 /** 章节领地专用 HUD：标题框与章节按钮。 */
 export const TERRITORY_UI_ART_ROOT = `${ART_ROOT}/territory/ui`;
 /**
@@ -186,6 +202,21 @@ export const HEX_GROUND_GLOW_ART_ROOT = `${ART_ROOT}/effects/hex_ground_glow`;
  * 那个目录的加载器是「扫全目录按名排序」，混进去会变成 35 帧。
  */
 export const HEX_FLIP_PULSE_ART_ROOT = `${ART_ROOT}/effects/hex_pulse_seq`;
+
+/**
+ * 中立资源点「神器充能」被**领取**那一刻，格心原地炸开的蓝色爆炸序列帧
+ * （**18 帧** `artifact_claim_burst_00..17`，90×90 透明底）。
+ *
+ * 需求 2026-10-26：*「战斗神器领取的时候加个特效」*，美术给的是 `蓝色爆炸`
+ * （原稿 `032 SLBLJS levelup-1_00..17.png`）。这里只做**一次性原地播放**：
+ *   · 位置钉在**格子中心**（不跟着飞向神器栏的那个图标跑 —— 那是另一条通道）；
+ *   · 放大 / 淡出**没有**烘焙进图，所以视图必须自己按帧序号换帧 + 走 `UIOpacity`
+ *     线性淡出（与 `hex_pulse_seq` 那套「全烘焙、只换帧」不同，别照抄那一套）；
+ *   · 帧率 / 显示边长见 `ZCNeutralRewardFx` 的 `ZC_ARTIFACT_CLAIM_BURST_*`。
+ *
+ * ⚠️ 目录里**只许放这一套 18 帧**：加载器是「扫全目录按名排序」，混进第 19 张就变成 19 帧。
+ */
+export const ARTIFACT_CLAIM_BURST_ART_ROOT = `${ART_ROOT}/effects/artifact_claim_burst`;
 
 /** 月卡礼包美术。 */
 export const MONTHCARD_ART_ROOT = `${ART_ROOT}/monthcard`;

@@ -1,0 +1,2269 @@
+{
+  "version": 1,
+  "mapKind": "territoryChapter",
+  "id": "chapter_02",
+  "name": "笑脸章",
+  "chapterId": 2,
+  "rows": 20,
+  "columns": 20,
+  "startCellId": 369,
+  "background": "",
+  "defaults": {
+    "combatPower": 0,
+    "silverCost": 10,
+    "exploreSeconds": 2,
+    "staminaCost": 5
+  },
+  "sites": [
+    {
+      "id": "stage_1",
+      "type": "stage",
+      "cellId": 328,
+      "footprint": [
+        306,
+        309,
+        327,
+        328,
+        329,
+        330,
+        348,
+        350
+      ],
+      "configId": "10011",
+      "buildingId": "",
+      "unlock": {
+        "requiredCells": [
+          369
+        ],
+        "combatPower": 0,
+        "silverCost": 30,
+        "exploreSeconds": 2,
+        "staminaCost": 5
+      }
+    },
+    {
+      "id": "stage_2",
+      "type": "stage",
+      "cellId": 283,
+      "footprint": [
+        242,
+        262,
+        283,
+        303,
+        304
+      ],
+      "configId": "10012",
+      "buildingId": "",
+      "unlock": {
+        "requiredCells": [
+          328,
+          305
+        ],
+        "combatPower": 0,
+        "silverCost": 30,
+        "exploreSeconds": 2,
+        "staminaCost": 5
+      }
+    },
+    {
+      "id": "stage_3",
+      "type": "stage",
+      "cellId": 161,
+      "footprint": [
+        121,
+        141,
+        161,
+        180,
+        181,
+        182,
+        200,
+        202
+      ],
+      "configId": "10013",
+      "buildingId": "",
+      "unlock": {
+        "requiredCells": [
+          283,
+          222
+        ],
+        "combatPower": 0,
+        "silverCost": 30,
+        "exploreSeconds": 2,
+        "staminaCost": 5
+      }
+    },
+    {
+      "id": "stage_4",
+      "type": "stage",
+      "cellId": 84,
+      "footprint": [
+        63,
+        64,
+        65,
+        83,
+        84,
+        85,
+        103
+      ],
+      "configId": "10014",
+      "buildingId": "",
+      "unlock": {
+        "requiredCells": [
+          161,
+          102
+        ],
+        "combatPower": 0,
+        "silverCost": 30,
+        "exploreSeconds": 2,
+        "staminaCost": 5
+      }
+    },
+    {
+      "id": "boss_1",
+      "type": "boss",
+      "cellId": 49,
+      "footprint": [
+        29,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        68,
+        69,
+        70
+      ],
+      "configId": "10015",
+      "buildingId": "",
+      "unlock": {
+        "requiredCells": [
+          84,
+          46
+        ],
+        "combatPower": 0,
+        "silverCost": 50,
+        "exploreSeconds": 4,
+        "staminaCost": 5
+      }
+    },
+    {
+      "id": "stage_5",
+      "type": "stage",
+      "cellId": 75,
+      "footprint": [
+        74,
+        75,
+        94,
+        95,
+        96
+      ],
+      "configId": "10016",
+      "buildingId": "",
+      "unlock": {
+        "requiredCells": [
+          49,
+          73
+        ],
+        "combatPower": 0,
+        "silverCost": 30,
+        "exploreSeconds": 2,
+        "staminaCost": 5
+      }
+    },
+    {
+      "id": "stage_6",
+      "type": "stage",
+      "cellId": 157,
+      "footprint": [
+        137,
+        156,
+        157,
+        158,
+        176,
+        178
+      ],
+      "configId": "10017",
+      "buildingId": "",
+      "unlock": {
+        "requiredCells": [
+          75,
+          116
+        ],
+        "combatPower": 0,
+        "silverCost": 30,
+        "exploreSeconds": 2,
+        "staminaCost": 5
+      }
+    },
+    {
+      "id": "stage_7",
+      "type": "stage",
+      "cellId": 237,
+      "footprint": [
+        217,
+        236,
+        237,
+        238,
+        256,
+        258
+      ],
+      "configId": "10018",
+      "buildingId": "",
+      "unlock": {
+        "requiredCells": [
+          157,
+          197
+        ],
+        "combatPower": 0,
+        "silverCost": 30,
+        "exploreSeconds": 2,
+        "staminaCost": 5
+      }
+    },
+    {
+      "id": "stage_8",
+      "type": "stage",
+      "cellId": 314,
+      "footprint": [
+        294,
+        295,
+        313,
+        314,
+        315
+      ],
+      "configId": "10019",
+      "buildingId": "",
+      "unlock": {
+        "requiredCells": [
+          237,
+          276
+        ],
+        "combatPower": 0,
+        "silverCost": 30,
+        "exploreSeconds": 2,
+        "staminaCost": 5
+      }
+    },
+    {
+      "id": "boss_2",
+      "type": "boss",
+      "cellId": 270,
+      "footprint": [
+        246,
+        267,
+        268,
+        269,
+        270,
+        271,
+        272,
+        273
+      ],
+      "configId": "10020",
+      "buildingId": "",
+      "unlock": {
+        "requiredCells": [
+          314,
+          292
+        ],
+        "combatPower": 0,
+        "silverCost": 50,
+        "exploreSeconds": 4,
+        "staminaCost": 5
+      }
+    },
+    {
+      "id": "asyncPvp_1",
+      "type": "asyncPvp",
+      "cellId": 126,
+      "footprint": [
+        105,
+        107,
+        125,
+        126,
+        127
+      ],
+      "configId": "20005",
+      "buildingId": "",
+      "unlock": {
+        "requiredCells": [
+          84
+        ],
+        "combatPower": 0,
+        "silverCost": 100,
+        "exploreSeconds": 6,
+        "staminaCost": 5
+      }
+    },
+    {
+      "id": "asyncPvp_2",
+      "type": "asyncPvp",
+      "cellId": 133,
+      "footprint": [
+        132,
+        133,
+        134,
+        152,
+        154
+      ],
+      "configId": "20006",
+      "buildingId": "",
+      "unlock": {
+        "requiredCells": [
+          75
+        ],
+        "combatPower": 0,
+        "silverCost": 100,
+        "exploreSeconds": 6,
+        "staminaCost": 5
+      }
+    },
+    {
+      "id": "asyncPvp_3",
+      "type": "asyncPvp",
+      "cellId": 189,
+      "footprint": [
+        188,
+        189,
+        190,
+        208,
+        210
+      ],
+      "configId": "20007",
+      "buildingId": "",
+      "unlock": {
+        "requiredCells": [
+          270
+        ],
+        "combatPower": 0,
+        "silverCost": 100,
+        "exploreSeconds": 6,
+        "staminaCost": 5
+      }
+    },
+    {
+      "id": "fixedResource_1",
+      "type": "fixedResource",
+      "cellId": 305,
+      "footprint": [
+        305
+      ],
+      "configId": "fixedResource_305",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          328
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_2",
+      "type": "fixedResource",
+      "cellId": 222,
+      "footprint": [
+        222
+      ],
+      "configId": "fixedResource_222",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          283
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_3",
+      "type": "fixedResource",
+      "cellId": 102,
+      "footprint": [
+        102
+      ],
+      "configId": "fixedResource_102",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          161
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_4",
+      "type": "fixedResource",
+      "cellId": 46,
+      "footprint": [
+        46
+      ],
+      "configId": "fixedResource_46",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          84
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_5",
+      "type": "fixedResource",
+      "cellId": 73,
+      "footprint": [
+        73
+      ],
+      "configId": "fixedResource_73",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          49
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_6",
+      "type": "fixedResource",
+      "cellId": 116,
+      "footprint": [
+        116
+      ],
+      "configId": "fixedResource_116",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          75
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_7",
+      "type": "fixedResource",
+      "cellId": 197,
+      "footprint": [
+        197
+      ],
+      "configId": "fixedResource_197",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          157
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_8",
+      "type": "fixedResource",
+      "cellId": 276,
+      "footprint": [
+        276
+      ],
+      "configId": "fixedResource_276",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          237
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_9",
+      "type": "fixedResource",
+      "cellId": 292,
+      "footprint": [
+        292
+      ],
+      "configId": "fixedResource_292",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          314
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_10",
+      "type": "fixedResource",
+      "cellId": 209,
+      "footprint": [
+        209
+      ],
+      "configId": "fixedResource_209",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          270
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_11",
+      "type": "fixedResource",
+      "cellId": 170,
+      "footprint": [
+        170
+      ],
+      "configId": "fixedResource_170",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          270
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_12",
+      "type": "fixedResource",
+      "cellId": 171,
+      "footprint": [
+        171
+      ],
+      "configId": "fixedResource_171",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          157
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_13",
+      "type": "fixedResource",
+      "cellId": 168,
+      "footprint": [
+        168
+      ],
+      "configId": "fixedResource_168",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          84
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_14",
+      "type": "fixedResource",
+      "cellId": 149,
+      "footprint": [
+        149
+      ],
+      "configId": "fixedResource_149",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          84
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_15",
+      "type": "fixedResource",
+      "cellId": 187,
+      "footprint": [
+        187
+      ],
+      "configId": "fixedResource_187",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          161
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_16",
+      "type": "fixedResource",
+      "cellId": 212,
+      "footprint": [
+        212
+      ],
+      "configId": "fixedResource_212",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          270
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_17",
+      "type": "fixedResource",
+      "cellId": 207,
+      "footprint": [
+        207
+      ],
+      "configId": "fixedResource_207",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          270
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_18",
+      "type": "fixedResource",
+      "cellId": 231,
+      "footprint": [
+        231
+      ],
+      "configId": "fixedResource_231",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          270
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_19",
+      "type": "fixedResource",
+      "cellId": 250,
+      "footprint": [
+        250
+      ],
+      "configId": "fixedResource_250",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          270
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_20",
+      "type": "fixedResource",
+      "cellId": 232,
+      "footprint": [
+        232
+      ],
+      "configId": "fixedResource_232",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          270
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_21",
+      "type": "fixedResource",
+      "cellId": 248,
+      "footprint": [
+        248
+      ],
+      "configId": "fixedResource_248",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          270
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_22",
+      "type": "fixedResource",
+      "cellId": 227,
+      "footprint": [
+        227
+      ],
+      "configId": "fixedResource_227",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          270
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_23",
+      "type": "fixedResource",
+      "cellId": 129,
+      "footprint": [
+        129
+      ],
+      "configId": "fixedResource_129",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          49
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_24",
+      "type": "fixedResource",
+      "cellId": 186,
+      "footprint": [
+        186
+      ],
+      "configId": "fixedResource_186",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          161
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_25",
+      "type": "fixedResource",
+      "cellId": 173,
+      "footprint": [
+        173
+      ],
+      "configId": "fixedResource_173",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          157
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_26",
+      "type": "fixedResource",
+      "cellId": 131,
+      "footprint": [
+        131
+      ],
+      "configId": "fixedResource_131",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          49
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_27",
+      "type": "fixedResource",
+      "cellId": 252,
+      "footprint": [
+        252
+      ],
+      "configId": "fixedResource_252",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          270
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_28",
+      "type": "fixedResource",
+      "cellId": 226,
+      "footprint": [
+        226
+      ],
+      "configId": "fixedResource_226",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          283
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_29",
+      "type": "fixedResource",
+      "cellId": 153,
+      "footprint": [
+        153
+      ],
+      "configId": "fixedResource_153",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          157
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_30",
+      "type": "fixedResource",
+      "cellId": 247,
+      "footprint": [
+        247
+      ],
+      "configId": "fixedResource_247",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          270
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_31",
+      "type": "fixedResource",
+      "cellId": 185,
+      "footprint": [
+        185
+      ],
+      "configId": "fixedResource_185",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          161
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_32",
+      "type": "fixedResource",
+      "cellId": 214,
+      "footprint": [
+        214
+      ],
+      "configId": "fixedResource_214",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          237
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_33",
+      "type": "fixedResource",
+      "cellId": 165,
+      "footprint": [
+        165
+      ],
+      "configId": "fixedResource_165",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          161
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_34",
+      "type": "fixedResource",
+      "cellId": 109,
+      "footprint": [
+        109
+      ],
+      "configId": "fixedResource_109",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          49
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_35",
+      "type": "fixedResource",
+      "cellId": 234,
+      "footprint": [
+        234
+      ],
+      "configId": "fixedResource_234",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          237
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_36",
+      "type": "fixedResource",
+      "cellId": 253,
+      "footprint": [
+        253
+      ],
+      "configId": "fixedResource_253",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          270
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_37",
+      "type": "fixedResource",
+      "cellId": 225,
+      "footprint": [
+        225
+      ],
+      "configId": "fixedResource_225",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          283
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_38",
+      "type": "fixedResource",
+      "cellId": 290,
+      "footprint": [
+        290
+      ],
+      "configId": "fixedResource_290",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          270
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_39",
+      "type": "fixedResource",
+      "cellId": 266,
+      "footprint": [
+        266
+      ],
+      "configId": "fixedResource_266",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          283
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_40",
+      "type": "fixedResource",
+      "cellId": 288,
+      "footprint": [
+        288
+      ],
+      "configId": "fixedResource_288",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          328
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_41",
+      "type": "fixedResource",
+      "cellId": 184,
+      "footprint": [
+        184
+      ],
+      "configId": "fixedResource_184",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          161
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_42",
+      "type": "fixedResource",
+      "cellId": 175,
+      "footprint": [
+        175
+      ],
+      "configId": "fixedResource_175",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          157
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_43",
+      "type": "fixedResource",
+      "cellId": 245,
+      "footprint": [
+        245
+      ],
+      "configId": "fixedResource_245",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          283
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_44",
+      "type": "fixedResource",
+      "cellId": 224,
+      "footprint": [
+        224
+      ],
+      "configId": "fixedResource_224",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          283
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_45",
+      "type": "fixedResource",
+      "cellId": 113,
+      "footprint": [
+        113
+      ],
+      "configId": "fixedResource_113",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          75
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_46",
+      "type": "fixedResource",
+      "cellId": 289,
+      "footprint": [
+        289
+      ],
+      "configId": "fixedResource_289",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          270
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_47",
+      "type": "fixedResource",
+      "cellId": 235,
+      "footprint": [
+        235
+      ],
+      "configId": "fixedResource_235",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          237
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_48",
+      "type": "fixedResource",
+      "cellId": 291,
+      "footprint": [
+        291
+      ],
+      "configId": "fixedResource_291",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          270
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_49",
+      "type": "fixedResource",
+      "cellId": 144,
+      "footprint": [
+        144
+      ],
+      "configId": "fixedResource_144",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          161
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_50",
+      "type": "fixedResource",
+      "cellId": 106,
+      "footprint": [
+        106
+      ],
+      "configId": "fixedResource_106",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          84
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_51",
+      "type": "fixedResource",
+      "cellId": 87,
+      "footprint": [
+        87
+      ],
+      "configId": "fixedResource_87",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          84
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_52",
+      "type": "fixedResource",
+      "cellId": 90,
+      "footprint": [
+        90
+      ],
+      "configId": "fixedResource_90",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          49
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_53",
+      "type": "fixedResource",
+      "cellId": 265,
+      "footprint": [
+        265
+      ],
+      "configId": "fixedResource_265",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          283
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_54",
+      "type": "fixedResource",
+      "cellId": 135,
+      "footprint": [
+        135
+      ],
+      "configId": "fixedResource_135",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          157
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_55",
+      "type": "fixedResource",
+      "cellId": 196,
+      "footprint": [
+        196
+      ],
+      "configId": "fixedResource_196",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          237
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_56",
+      "type": "fixedResource",
+      "cellId": 88,
+      "footprint": [
+        88
+      ],
+      "configId": "fixedResource_88",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          49
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_57",
+      "type": "fixedResource",
+      "cellId": 163,
+      "footprint": [
+        163
+      ],
+      "configId": "fixedResource_163",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          161
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_58",
+      "type": "fixedResource",
+      "cellId": 93,
+      "footprint": [
+        93
+      ],
+      "configId": "fixedResource_93",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          75
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_59",
+      "type": "fixedResource",
+      "cellId": 124,
+      "footprint": [
+        124
+      ],
+      "configId": "fixedResource_124",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          84
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_60",
+      "type": "fixedResource",
+      "cellId": 92,
+      "footprint": [
+        92
+      ],
+      "configId": "fixedResource_92",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          75
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_61",
+      "type": "fixedResource",
+      "cellId": 114,
+      "footprint": [
+        114
+      ],
+      "configId": "fixedResource_114",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          75
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_62",
+      "type": "fixedResource",
+      "cellId": 223,
+      "footprint": [
+        223
+      ],
+      "configId": "fixedResource_223",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          283
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_63",
+      "type": "fixedResource",
+      "cellId": 311,
+      "footprint": [
+        311
+      ],
+      "configId": "fixedResource_311",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          270
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_64",
+      "type": "fixedResource",
+      "cellId": 275,
+      "footprint": [
+        275
+      ],
+      "configId": "fixedResource_275",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          237
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_65",
+      "type": "fixedResource",
+      "cellId": 285,
+      "footprint": [
+        285
+      ],
+      "configId": "fixedResource_285",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          283
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_66",
+      "type": "fixedResource",
+      "cellId": 243,
+      "footprint": [
+        243
+      ],
+      "configId": "fixedResource_243",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          283
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_67",
+      "type": "fixedResource",
+      "cellId": 307,
+      "footprint": [
+        307
+      ],
+      "configId": "fixedResource_307",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          328
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_68",
+      "type": "fixedResource",
+      "cellId": 284,
+      "footprint": [
+        284
+      ],
+      "configId": "fixedResource_284",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          283
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_69",
+      "type": "fixedResource",
+      "cellId": 136,
+      "footprint": [
+        136
+      ],
+      "configId": "fixedResource_136",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          157
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_70",
+      "type": "fixedResource",
+      "cellId": 72,
+      "footprint": [
+        72
+      ],
+      "configId": "fixedResource_72",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          49
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_71",
+      "type": "fixedResource",
+      "cellId": 263,
+      "footprint": [
+        263
+      ],
+      "configId": "fixedResource_263",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          283
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_72",
+      "type": "fixedResource",
+      "cellId": 331,
+      "footprint": [
+        331
+      ],
+      "configId": "fixedResource_331",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          328
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_73",
+      "type": "fixedResource",
+      "cellId": 66,
+      "footprint": [
+        66
+      ],
+      "configId": "fixedResource_66",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          84
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_74",
+      "type": "fixedResource",
+      "cellId": 296,
+      "footprint": [
+        296
+      ],
+      "configId": "fixedResource_296",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          314
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_75",
+      "type": "fixedResource",
+      "cellId": 218,
+      "footprint": [
+        218
+      ],
+      "configId": "fixedResource_218",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          237
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_76",
+      "type": "fixedResource",
+      "cellId": 201,
+      "footprint": [
+        201
+      ],
+      "configId": "fixedResource_201",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          161
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_77",
+      "type": "fixedResource",
+      "cellId": 221,
+      "footprint": [
+        221
+      ],
+      "configId": "fixedResource_221",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          161
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_78",
+      "type": "fixedResource",
+      "cellId": 277,
+      "footprint": [
+        277
+      ],
+      "configId": "fixedResource_277",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          237
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_79",
+      "type": "fixedResource",
+      "cellId": 333,
+      "footprint": [
+        333
+      ],
+      "configId": "fixedResource_333",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          314
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_80",
+      "type": "fixedResource",
+      "cellId": 316,
+      "footprint": [
+        316
+      ],
+      "configId": "fixedResource_316",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          314
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_81",
+      "type": "fixedResource",
+      "cellId": 241,
+      "footprint": [
+        241
+      ],
+      "configId": "fixedResource_241",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          283
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_82",
+      "type": "fixedResource",
+      "cellId": 325,
+      "footprint": [
+        325
+      ],
+      "configId": "fixedResource_325",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          328
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_83",
+      "type": "fixedResource",
+      "cellId": 324,
+      "footprint": [
+        324
+      ],
+      "configId": "fixedResource_324",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          283
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_84",
+      "type": "fixedResource",
+      "cellId": 31,
+      "footprint": [
+        31
+      ],
+      "configId": "fixedResource_31",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          49
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_85",
+      "type": "fixedResource",
+      "cellId": 138,
+      "footprint": [
+        138
+      ],
+      "configId": "fixedResource_138",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          157
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_86",
+      "type": "fixedResource",
+      "cellId": 97,
+      "footprint": [
+        97
+      ],
+      "configId": "fixedResource_97",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          75
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_87",
+      "type": "fixedResource",
+      "cellId": 199,
+      "footprint": [
+        199
+      ],
+      "configId": "fixedResource_199",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          157
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_88",
+      "type": "fixedResource",
+      "cellId": 219,
+      "footprint": [
+        219
+      ],
+      "configId": "fixedResource_219",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          237
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_89",
+      "type": "fixedResource",
+      "cellId": 347,
+      "footprint": [
+        347
+      ],
+      "configId": "fixedResource_347",
+      "buildingId": "",
+      "rewardId": 1011,
+      "unlock": {
+        "requiredCells": [
+          328
+        ],
+        "combatPower": 0,
+        "silverCost": 15,
+        "exploreSeconds": 1,
+        "staminaCost": 1
+      }
+    },
+    {
+      "id": "fixedResource_103",
+      "type": "fixedResource",
+      "cellId": 368,
+      "footprint": [
+        368
+      ],
+      "configId": "fixedResource_368",
+      "unlock": {
+        "requiredCells": [
+          369
+        ],
+        "combatPower": 0,
+        "silverCost": 10,
+        "exploreSeconds": 2,
+        "staminaCost": 5
+      }
+    },
+    {
+      "id": "fixedResource_104",
+      "type": "fixedResource",
+      "cellId": 370,
+      "footprint": [
+        370
+      ],
+      "configId": "fixedResource_370",
+      "unlock": {
+        "requiredCells": [
+          369
+        ],
+        "combatPower": 0,
+        "silverCost": 10,
+        "exploreSeconds": 2,
+        "staminaCost": 5
+      }
+    }
+  ],
+  "randomSites": {
+    "triggerSilver": 15,
+    "rewardPoolId": "2001",
+    "candidateCells": [
+      27,
+      45,
+      53,
+      67,
+      71,
+      86,
+      89,
+      91,
+      104,
+      108,
+      110,
+      111,
+      112,
+      115,
+      117,
+      122,
+      123,
+      128,
+      130,
+      142,
+      143,
+      145,
+      146,
+      147,
+      148,
+      150,
+      151,
+      155,
+      162,
+      164,
+      166,
+      167,
+      169,
+      172,
+      174,
+      177,
+      179,
+      183,
+      191,
+      192,
+      193,
+      194,
+      195,
+      198,
+      203,
+      204,
+      205,
+      206,
+      211,
+      213,
+      215,
+      216,
+      228,
+      229,
+      230,
+      233,
+      244,
+      249,
+      251,
+      254,
+      255,
+      257,
+      264,
+      274,
+      278,
+      282,
+      286,
+      287,
+      293,
+      297,
+      308,
+      310,
+      312,
+      326,
+      332,
+      334,
+      346,
+      349,
+      351,
+      352,
+      367,
+      371,
+      389
+    ],
+    "maxActive": 1,
+    "buildingIds": {
+      "27": "69006",
+      "86": "69006",
+      "110": "69006",
+      "122": "69006",
+      "143": "69006",
+      "150": "69006",
+      "166": "69006",
+      "177": "69006",
+      "193": "69006",
+      "204": "69006",
+      "215": "69006",
+      "233": "69006",
+      "255": "69006",
+      "282": "69006",
+      "308": "69006",
+      "334": "69006"
+    }
+  }
+}

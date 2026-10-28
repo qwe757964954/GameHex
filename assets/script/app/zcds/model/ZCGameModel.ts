@@ -153,6 +153,15 @@ const FLOAT_TEXT_DAMAGE_SECONDS = 0.85;
  */
 const FLOAT_TEXT_GOLD_SECONDS = 0.62;
 /**
+ * 建筑产金飘字（主城 / 金矿的周期产出）的存活时长（秒）。
+ *
+ * 2026-10-27 与击杀掉落**拆开**：掉落是"迅速收掉"（0.62s），产出是"亮一下给你看"
+ * —— 金币 icon 与数字要从建筑顶部往上升 50px 再淡出，0.62s 里 50px 会像被弹出去。
+ * 0.9s 的实秒分配：上升 0.63s（走完 50px）、之后 0.27s 停在顶端淡出
+ * （曲线见 `ZCGameViewUtil.floatTextGoldRise`，上升段 70%、30% 起淡出）。
+ */
+const FLOAT_TEXT_GOLD_INCOME_SECONDS = 0.9;
+/**
  * 受击特效的存活时长（秒）= **表现总时长**。
  *
  * 2026-10-17 山猫「所有职业受击效果总时长固定 0.15s」后重定：**0.8 → 0.15**。
@@ -514,7 +523,8 @@ export class ZCGameModel {
             cycleSeconds: (hex, card) => this.buildingCycleSeconds(hex, card),
             grantGold: (owner, amount, hexId) => {
                 const center = this.hexCenter(hexId);
-                this.grantGold(owner, amount, center.x, center.y, FLOAT_TEXT_GOLD_SECONDS);
+                this.grantGold(owner, amount, center.x, center.y,
+                    FLOAT_TEXT_GOLD_INCOME_SECONDS, 'goldincome');
                 // 🔴 需求 2026-10-15 row12 / row13：「建筑生成金币的倒计时结束也播放一次
                 //【建筑生成单位动画】」「基地和金矿建筑生成金币时，也播放一次建筑的抖动效果，
                 // 效果和已经做好的【建筑生成单位角色】动画一致」。
@@ -748,11 +758,22 @@ export class ZCGameModel {
         this.presentation.pushHexActivation(this.state.elapsedSeconds, hexId, hasCardReveal, cardRarity);
     }
 
-    /** 给某一方加金币（含飘字），矿区产出与击杀奖励共用。 */
-    private grantGold(owner: ZCOwner, amount: number, x: number, y: number, floatSeconds: number): void {
+    /**
+     * 给某一方加金币（含飘字）。
+     *
+     * `kind` 决定**表现走哪条路**（2026-10-27 用户口径：建筑产金与击杀掉落的动画必须区分开）：
+     * · `'goldincome'` —— 建筑**产出**（主城 / 金矿）：coin + 数字从建筑顶部升起 50px 并淡出；
+     * · `'gold'` —— 击杀 / 拆建筑的**掉落**（缺省）：原地掉落 → 缩小消失，无数字。
+     * ⚠️ 缺省值是 `'gold'` 是刻意的：两个"掉落"调用点不该因为漏传参数就变成产金表现，
+     *    而产金只有一个调用点（`economyContext.grantGold`），显式写清更不容易接错。
+     */
+    private grantGold(
+        owner: ZCOwner, amount: number, x: number, y: number, floatSeconds: number,
+        kind: 'gold' | 'goldincome' = 'gold',
+    ): void {
         if (!Number.isFinite(amount) || amount <= 0) return;
         this.setGold(owner, this.goldOf(owner) + amount);
-        this.pushFloatText({ kind: 'gold', owner, value: amount, x, y, durationSeconds: floatSeconds });
+        this.pushFloatText({ kind, owner, value: amount, x, y, durationSeconds: floatSeconds });
     }
 
     private hexCenter(hexId: number): { x: number; y: number } {
@@ -1274,6 +1295,8 @@ export class ZCGameModel {
     }
 
     private captureEmptyTile(hex: ZCHexState, owner: ZCOwner): void {
+        // 普通对局中建筑归零即出局；残兵不能让出局席位再次取得地块。
+        if (!this.pveDefence && this.developedCount(owner) === 0) return;
         const result = ZCDevelopmentSystem.captureEmptyTile(hex, owner);
         if (!result.changed) return;
         this.tileStatesDirty = true;
@@ -1311,6 +1334,7 @@ export class ZCGameModel {
 
     private damageBuilding(unit: Pick<ZCUnitState, 'owner'>, building: ZCHexState, damage: number): void {
         if (this.pveDefence && building.owner !== ZCOwner.Player && building.building === 'hq') return;
+        const defender = building.owner;
         const result = ZCDamageResolutionSystem.damageBuilding(
             this.state, building, damage, unit, this.damageResolutionContext);
         if (!result) return;
@@ -1318,6 +1342,20 @@ export class ZCGameModel {
         this.pushFloatText({ kind: 'damage', owner: unit.owner, value: result.applied,
             x: center.x, y: center.y, durationSeconds: FLOAT_TEXT_DAMAGE_SECONDS });
         if (!result.killed) return;
+        if (!this.pveDefence && this.developedCount(unit.owner) === 0) building.owner = 'neutral';
+        if (!this.pveDefence && defender !== 'neutral' && this.developedCount(defender) === 0) {
+            // 最后一座建筑消失后，未被攻方占领的空地解除归属；废墟保留废墟状态。
+            for (const hex of this.state.hexes) {
+                if (hex.owner === defender) {
+                    hex.owner = 'neutral';
+                    hex.developmentResolved = false;
+                }
+                if (hex.captureOwner === defender) {
+                    hex.captureOwner = null;
+                    hex.captureSeconds = 0;
+                }
+            }
+        }
         this.tileStatesDirty = true;
         this.invalidateTerrain();
         // 建筑已转废墟 —— 快照里从这一帧起只剩 `state === 'ruins'`，「刚被拆掉」这件事
@@ -1731,7 +1769,11 @@ export class ZCGameModel {
     }
 
     private developedCount(owner: ZCOwner): number {
-        return this.state.hexes.filter((hex) => hex.owner === owner && hex.building !== 'none' && hex.hp > 0).length;
+        let count = 0;
+        for (const hex of this.state.hexes) {
+            if (hex.owner === owner && hex.building !== 'none' && hex.hp > 0) count++;
+        }
+        return count;
     }
 
     private unitCount(owner: ZCOwner): number {

@@ -17,7 +17,7 @@ export function createZCBattlePreload(assets: AssetService, configs: ConfigServi
     const preload = new ZCGamePreload(new ZCGameLoader(assets, configs, MAP_DIRECTORY,
         Math.random, options.playerCount), battle, options.waveCardIds);
     void preload.ready.then(
-        () => console.info(`[BattleLoading] 资源准备完成 ${Math.max(0, Date.now() - startedAt)}ms`),
+        resources => console.info(`[BattleLoading] ${resources.loadDeferredArt ? '首帧资源准备完成' : '资源准备完成'} ${Math.max(0, Date.now() - startedAt)}ms`),
         () => {},
     );
     return preload;

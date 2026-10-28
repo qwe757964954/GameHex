@@ -41,6 +41,7 @@ import {
     territoryChestEndSeconds,
     territoryChestFadeStart,
     territoryChestFlyCount,
+    territoryChestFlyArriveAt,
     territoryChestFlyFx,
     territoryChestFlyStagger,
     territoryChestFountainFx,
@@ -730,6 +731,26 @@ test('页面接线：加载**补帧序列** + 销毁时停播（漏了就是「�
     assert.ok(src.includes('territoryChestTierOfRewards'), '档位必须由 model 判，不在页面 if');
 });
 
+test('页面接线：图标飞向资源栏 + 落地回调（漏掉就是「图标乱飞、资源栏不跳」）', () => {
+    const src = readFileSync('assets/script/app/main/MainTerritoryMap.ts', 'utf8');
+    const body = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    // ① 接线必须在 `playChestOpen` **之前**：落点是 play() 第一帧就要用的
+    assert.match(body, /this\.wireRewardCatch\(rewards\);/, '开箱前要把资源栏接上');
+    assert.ok(
+        body.indexOf('this.wireRewardCatch(rewards);') < body.indexOf('this.mapView.playChestOpen('),
+        '接线必须排在 playChestOpen 前面（接晚了第一批图标按默认落点飞，表现为"飞到屏幕中间"）',
+    );
+    // ② resId → key → 那一格中心 → 覆盖层局部坐标
+    assert.match(body, /territoryWalletResKeyOf\(resId\)/, 'resId → key 只走 model 那个纯函数');
+    assert.match(body, /setRewardCatchWorldPoint\(resId, bar\.slotWorldPositionOf\(key\)\)/,
+        '落点必须是那一格的**世界坐标**，由视图换算（页面算不准缩放/安全区）');
+    // ③ 落地 → 那一格跳动 + 闪光
+    assert.match(body, /bar\.playGainFeedback\(key, amount\)/, '落地回调要击中所属的那一格');
+    // ④ 找栏只许从本节点往上问：商城 / 天赋页内嵌同一个公共件，从场景根搜会命中被盖住的那份
+    assert.match(body, /getComponentInChildren\(ResBar\)/, '要按类型找本页那条资源栏');
+    assert.match(body, /scope = scope\.parent/, '必须逐层往上问，不许 getComponentInChildren 从根搜');
+});
+
 test('视图接线：换帧走 model，别在视图里再算一条时间轴', () => {
     // 曲线/帧号是产品口径（单测钉在上面），视图只许「读帧号 → 写 spriteFrame」。
     const src = readFileSync('assets/script/app/territory/view/TerritoryChestView.ts', 'utf8');
@@ -794,10 +815,11 @@ test('地图视图接线：镜头那一半真的动了 `MapLayer`，且在解锁
     // ① 钩子必须注入 —— 漏了这一句就是用户报的「只有宝箱放大、地块不动」
     assert.match(body, /this\.chestView\.setCameraHook\(\(scale, focus\) => this\.applyChestCamera\(scale, focus\)\)/,
         '建覆盖层时要把地图侧的出口接上');
-    assert.match(body, /private applyChestCamera\(scale: number, focus: number\): void/, '要有地图侧实现');
+    assert.match(body, /private applyChestCamera\(scale: number, focus: number, origin\?: Vec3\): void/,
+        '要有地图侧实现（第三参是对焦点覆盖：云层散场用它把对焦点换成地图中心，宝箱不传）');
     // ② 两件事：地图按同一倍数放大 + 格心挪到 focus 对应的位置
     assert.match(body, /node\.setScale\(base\.baseScale\.x \* k/, '地图要按同一倍数放大（倍率乘在 prefab 的基准缩放上）');
-    assert.match(body, /base\.origin\.x \* \(1 - f\) - k \* lx/, '格心要落到 origin×(1-focus)，与宝箱同一个屏幕点');
+    assert.match(body, /ox \* \(1 - f\) - k \* lx/, '格心要落到 origin×(1-focus)，与宝箱同一个屏幕点');
     // ③ 基准只量一次，且必须在地图被动过之前
     assert.match(body, /captureChestCamera\(point\)/, '开演前要量一次基准');
     assert.match(body, /private captureChestCamera\(origin: Vec3\): void/, '基准 = 格心 + MapLayer 原点 + 原始 position');
@@ -844,4 +866,68 @@ test('视图接线：飞行粒子按 1.35 倍放大（只改 UITransform，不�
     assert.match(body, /labelNode\.setPosition\(0, -\(size \/ 2 \+ 12\), 0\)/, '数量文字按边长定位');
     // 44 × 1.35 = 59.4（留档：换基准要重算这个数，不是随手改两处）
     assert.ok(Math.abs(44 * 1.35 - 59.4) < 1e-9);
+});
+
+// ── 2026-10-26「图标落进资源栏」的到达时刻 ────────────────────────────────
+//
+// 用户原话：「宝箱打开的体力或银币 icon 飞到对应的资源栏中，资源栏的 icon 和数字
+// 有跳动增加的反馈，资源栏整体闪光」。
+//
+// 「哪一刻算落地」必须由**纯函数**给出（视图不能靠「上一帧还在、这一帧没了」反推，
+// 那是逐帧累加，掉帧 / 暂停都会漏掉最后一枚）。
+
+test('territoryChestFlyArriveAt：起飞时刻 + 飞满 flySeconds，就是到达时刻', () => {
+    for (const spec of ALL_SPECS) {
+        assert.equal(territoryChestFlyArriveAt(spec, 0), spec.flyStart + spec.flySeconds);
+        for (const count of [5, 15, 30]) {
+            const stagger = territoryChestFlyStagger(count);
+            for (let i = 1; i < count; i += 1) {
+                assert.ok(
+                    Math.abs(territoryChestFlyArriveAt(spec, i, count) - territoryChestFlyArriveAt(spec, i - 1, count) - stagger) < 1e-9,
+                    `第 ${i} 枚与上一枚的时间差必须等于错峰 ${stagger}`,
+                );
+            }
+        }
+    }
+});
+
+test('territoryChestFlyArriveAt：最后一枚必须在停播之前到达（否则那一格永远不跳）', () => {
+    for (const spec of ALL_SPECS) {
+        for (const count of [5, 15, 30]) {
+            const arrive = territoryChestFlyArriveAt(spec, count - 1, count);
+            assert.ok(
+                arrive < territoryChestEndSeconds(spec, count),
+                `档位 ${spec.tier} / ${count} 枚：到达 ${arrive.toFixed(3)}s 晚于停播 ` +
+                    `${territoryChestEndSeconds(spec, count).toFixed(3)}s —— 资源栏那一格不会跳`,
+            );
+            // 第一枚也不许早于飞行段开始（否则图标还在箱子里就"落地"了）
+            assert.ok(territoryChestFlyArriveAt(spec, 0, count) >= spec.flyStart);
+        }
+    }
+});
+
+test('territoryChestFlyArriveAt：脏 index 给 Infinity（当作永远不到达）', () => {
+    assert.equal(territoryChestFlyArriveAt(WEAK, -1), Number.POSITIVE_INFINITY);
+    assert.equal(territoryChestFlyArriveAt(WEAK, 1.5), Number.POSITIVE_INFINITY);
+    assert.equal(territoryChestFlyArriveAt(WEAK, Number.NaN), Number.POSITIVE_INFINITY);
+});
+
+test('视图接线：落点按 resId 分开登记，落地回调在停播判断之前触发', () => {
+    const src = readFileSync('assets/script/app/territory/view/TerritoryChestView.ts', 'utf8');
+    const body = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    // ① 落点按资源 id 存 —— 银币和体力各有各的格子，不能共用一个 catchX/catchY
+    assert.match(body, /private readonly catchPoints = new Map<number, \{ x: number; y: number \}>\(\)/,
+        '要有按 resId 分开的落点表');
+    assert.match(body, /this\.catchPoints\.get\(Number\(this\.rewards\[index % this\.rewards\.length\]\?\.resId\)\)/,
+        'applyFly 必须按这一枚自己的 resId 取落点');
+    // ② 落地通知必须在 `stop()` 之前判 —— 最后几枚是在收尾段落地的
+    assert.match(body, /this\.fireLandings\(this\.elapsed\);/);
+    assert.ok(
+        body.indexOf('this.fireLandings(this.elapsed)') < body.indexOf('territoryChestEndSeconds(spec, this.flyCount)'),
+        'fireLandings 必须排在停播判断前面（放到 stop 之后就永远收不到）',
+    );
+    // ③ 每种资源只通知一次（30 枚 / 2 条奖励 = 各 15 枚，按枚通知会把数字"击"15 次）
+    assert.match(body, /this\.landedResIds\.add\(resId\)/);
+    // ④ 每场开播要清一次，否则第二场的第一枚会被上一场的记录吞掉
+    assert.match(body, /this\.landedResIds\.clear\(\)/, 'play() 里必须清空落地记录');
 });

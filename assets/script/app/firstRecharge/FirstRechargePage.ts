@@ -129,7 +129,7 @@ export class FirstRechargePage extends PopupBase {
         // 支付是异步链路，不能只依赖点击购买后的那次立即 reload（那时通常还没发货）。
         CacheMgr.instance.setEventUpdate(
             'CmdFirstRechargeNew',
-            this as unknown as destroyable,
+            this,
             this.onFirstRechargeCacheUpdate,
         );
         // 打开时向服务端要一次最新状态；连不上就跳过（继续用缓存渲染，不弹错）。
@@ -141,7 +141,7 @@ export class FirstRechargePage extends PopupBase {
     protected onClose(): void {
         CacheMgr.instance.removeEventUpdate(
             'CmdFirstRechargeNew',
-            this as unknown as destroyable,
+            this,
             this.onFirstRechargeCacheUpdate,
         );
         // 作废尚未完成的读表/贴图任务，避免缓存复用后旧结果覆盖下一次打开。

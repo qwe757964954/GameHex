@@ -20,6 +20,7 @@ import {
 } from './BigMapTheme';
 import { BigMapWorldMarker } from './BigMapWorldMarker';
 import { BigMapWorldTemplates } from './BigMapWorldTemplates';
+import { bigMapBackgroundLayout } from './BigMapBackgroundLayout';
 
 const { ccclass, property } = _decorator;
 export const WORLD_HEX_SIZE = BIGMAP_TILE_WIDTH / 2;
@@ -53,6 +54,14 @@ const TERRAIN_FILL: Readonly<Record<BigMapTerrain, Color>> = {
     rock: new Color(190, 186, 178),
     water: new Color(152, 190, 202),
 };
+/** 连续背景上的地形只留轻色；空地完全透出底图，势力颜色仍由 markerLayer 表达。 */
+const TRANSPARENT_TERRAIN_FILL: Readonly<Record<BigMapTerrain, Color>> = {
+    plain: new Color(0, 0, 0, 0),
+    forest: new Color(96, 170, 104, 24),
+    rock: new Color(120, 122, 132, 24),
+    water: new Color(92, 138, 208, 40),
+};
+const TRANSPARENT_GRID_COLOR = new Color(70, 92, 74, 48);
 interface IWorldMarker {
     readonly hexId: number;
     readonly kind: 'city' | 'monster' | 'base';
@@ -88,6 +97,7 @@ export class BigMapWorldView extends Component {
     @property({ type: Button, group: '操作按钮' }) private focusButton: Button = null!;
     private layout: IHexGridLayout = buildBigMapWorldLayout(0, 0);
     private art: IBigMapArt | null = null;
+    private backgroundTransform: UITransform | null = null;
     private playerPortrait: SpriteFrame | null = null;
     private readonly tilePool: Sprite[] = [];
     private readonly decorPool: Sprite[] = [];
@@ -173,17 +183,47 @@ export class BigMapWorldView extends Component {
 
     setArt(art: IBigMapArt): void {
         this.art = art;
-        this.background.spriteFrame = art.background;
-        this.background.node.active = !!art.background;
-        if (art.background) {
-            const rect = art.background.originalSize;
+        const frame = art.tiledBackground ?? art.background;
+        this.background.spriteFrame = frame;
+        this.background.node.active = !!frame;
+        const transform = this.background.node.getComponent(UITransform);
+        if (!transform) throw new Error('[BigMapWorldView] 背景缺少 UITransform');
+        this.backgroundTransform = transform;
+        this.background.type = art.tiledBackground ? Sprite.Type.TILED : Sprite.Type.SIMPLE;
+        this.background.sizeMode = Sprite.SizeMode.CUSTOM;
+        this.background.trim = false;
+        this.background.color = Color.WHITE;
+        transform.setAnchorPoint(0.5, 0.5);
+        this.background.node.setParent(art.tiledBackground ? this.content : this.viewport);
+        this.background.node.setSiblingIndex(0);
+        this.sand.node.active = !art.tiledBackground;
+        if (art.tiledBackground) {
+            this.background.node.setScale(1, 1, 1);
+        } else if (frame) {
+            const rect = frame.originalSize;
             const scale = Math.max(this.viewportTransform.width / rect.width, this.viewportTransform.height / rect.height);
             this.background.node.setScale(scale, scale, 1);
         }
+        this.syncBackground();
         this.paintTerrain();
         this.contentKey = '';
         this.refresh();
         this.syncVisibleTiles();
+    }
+
+    private syncBackground(): void {
+        const tiled = this.art?.tiledBackground;
+        const frame = tiled ?? this.art?.background;
+        const transform = this.backgroundTransform;
+        if (!frame || !transform) return;
+        const position = this.content.position;
+        const rect = frame.originalSize;
+        const layout = tiled
+            ? bigMapBackgroundLayout(this.viewportTransform.width, this.viewportTransform.height,
+                this.zoom, position.x, position.y, rect.width, rect.height)
+            : { x: 0, y: 0, width: rect.width, height: rect.height };
+        transform.setContentSize(layout.width, layout.height);
+        this.background.node.setPosition(layout.x, layout.y, 0);
     }
 
     private centerOf(hexId: number): Vec2 {
@@ -209,11 +249,29 @@ export class BigMapWorldView extends Component {
         g.close();
     }
 
-    private paintTerrain(): void {
+    private paintTerrain(visibleIds: readonly number[] = []): void {
         const world = this.presenter?.world;
         const g = this.terrainLayer;
         g.clear();
-        if (!world || this.art?.ground) return;
+        if (!world) return;
+        if (this.art?.tiledBackground) {
+            for (const id of visibleIds) {
+                const tile = world.tileById.get(id);
+                if (!tile) continue;
+                const color = TRANSPARENT_TERRAIN_FILL[tile.terrain];
+                if (color.a === 0) continue;
+                g.fillColor = color;
+                this.hexPath(g, id);
+                g.fill();
+            }
+            if (visibleIds.length === 0) return;
+            g.lineWidth = 1;
+            g.strokeColor = TRANSPARENT_GRID_COLOR;
+            for (const id of visibleIds) this.hexPath(g, id);
+            g.stroke();
+            return;
+        }
+        if (this.art?.ground) return;
         for (const tile of world.tiles) {
             g.fillColor = TERRAIN_FILL[tile.terrain];
             this.hexPath(g, tile.id);
@@ -262,7 +320,9 @@ export class BigMapWorldView extends Component {
     /** 相机变化时复用可见槽位，避免为百行地图创建一万个 Sprite。 */
     private syncVisibleTiles(): void {
         const world = this.presenter?.world;
-        if (!world || !this.art?.ground) return;
+        const art = this.art;
+        if (!world || !art || (!art.tiledBackground && !art.ground)) return;
+        const transparent = !!art.tiledBackground;
         const position = this.content.position;
         const halfWidth = this.viewportTransform.width / 2;
         const halfHeight = this.viewportTransform.height / 2;
@@ -270,27 +330,33 @@ export class BigMapWorldView extends Component {
             left: (-halfWidth - position.x) / this.zoom, right: (halfWidth - position.x) / this.zoom,
             bottom: (-halfHeight - position.y) / this.zoom, top: (halfHeight - position.y) / this.zoom,
         });
+        this.paintTerrain(ids);
         for (let i = 0; i < ids.length; i += 1) {
             const point = this.layout.points.get(ids[i]);
             const tile = world.tileById.get(ids[i]);
             if (!point || !tile) continue;
-            const sprite = this.tilePool[i] ?? this.createTileSlot();
-            sprite.node.active = true;
-            const variant = bigMapGroundIndex(world.seed, ids[i], this.art.groundVariants.length);
-            sprite.spriteFrame = this.art.groundVariants[variant] ?? this.art.ground;
-            sprite.color = TERRAIN_TINT[tile.terrain];
-            sprite.node.setPosition(point.x, point.y, 0);
-            sprite.node.getComponent(UITransform)!.setContentSize(BIGMAP_TILE_WIDTH, BIGMAP_TILE_HEIGHT);
-            const decor = this.decorPool[i];
-            const frame = tile.terrain === 'rock' ? this.art.rock : tile.terrain === 'forest' ? this.art.grass : null;
+            if (!transparent) {
+                const sprite = this.tilePool[i] ?? this.createTileSlot();
+                sprite.node.active = true;
+                const variant = bigMapGroundIndex(world.seed, ids[i], art.groundVariants.length);
+                sprite.spriteFrame = art.groundVariants[variant] ?? art.ground;
+                sprite.color = TERRAIN_TINT[tile.terrain];
+                sprite.node.setPosition(point.x, point.y, 0);
+                sprite.node.getComponent(UITransform)!.setContentSize(BIGMAP_TILE_WIDTH, BIGMAP_TILE_HEIGHT);
+            }
+            const decor = this.decorPool[i] ?? this.createDecorSlot();
+            const frame = tile.terrain === 'rock' ? art.rock : tile.terrain === 'forest' ? art.grass : null;
             decor.node.active = !!frame;
             decor.spriteFrame = frame;
             decor.color = Color.WHITE;
             decor.node.setPosition(point.x + 24, point.y - 16, 0);
             if (frame) decor.node.setScale(32 / frame.rect.width, 32 / frame.rect.width, 1);
         }
-        for (let i = ids.length; i < this.tilePool.length; i += 1) {
+        for (let i = transparent ? 0 : ids.length; i < this.tilePool.length; i += 1) {
             this.tilePool[i].node.active = false;
+            if (transparent) this.tilePool[i].spriteFrame = null;
+        }
+        for (let i = ids.length; i < this.decorPool.length; i += 1) {
             this.decorPool[i].node.active = false;
         }
     }
@@ -300,13 +366,17 @@ export class BigMapWorldView extends Component {
         node.setParent(this.tileLayer);
         const sprite = node.getComponent(Sprite);
         if (!sprite) throw new Error('[BigMapWorldView] 地块模板缺少 Sprite');
+        this.tilePool.push(sprite);
+        return sprite;
+    }
+
+    private createDecorSlot(): Sprite {
         const decorNode = instantiate(this.decorTemplate);
         decorNode.setParent(this.decorLayer);
         const decor = decorNode.getComponent(Sprite);
         if (!decor) throw new Error('[BigMapWorldView] 装饰模板缺少 Sprite');
-        this.tilePool.push(sprite);
         this.decorPool.push(decor);
-        return sprite;
+        return decor;
     }
 
     private buildMarkers(): void {
@@ -467,6 +537,7 @@ export class BigMapWorldView extends Component {
         this.zoom = scale;
         this.content.setScale(scale, scale, 1);
         this.content.setPosition(x, y, 0);
+        this.syncBackground();
         this.syncVisibleTiles();
         this.cullMarkers();
         this.queueCampRefresh();

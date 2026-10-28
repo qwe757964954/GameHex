@@ -24,6 +24,7 @@ import type { BattlePreloadProvider } from '../session/AppSessionAssetService';
 import { MAP_DIRECTORY } from '../zcds/ZCGame';
 import { ZCGameLoader } from '../zcds/application/ZCGameLoader';
 import { ZCGamePreload } from '../zcds/application/ZCGamePreload';
+import { EventMgr } from '../../framework/event/EventMgr';
 
 const MATCHING_ROOT_URL = 'ui/matching/MatchingRoot';
 
@@ -53,15 +54,19 @@ const MATCHING_ROOT_URL = 'ui/matching/MatchingRoot';
  *          ③ 「开始游戏」回包一到 → 换成服务端下发的**我方**单元（`applyUnitToPlayerView`）。
  *          ②③ 是**并行**的两条请求，到达顺序不定，所以统一走 `refreshMineView()` 合并，
  *          不写「谁回来就覆盖谁」——那会变成到达顺序依赖，偶发。
- *          ⚠️ ③ 现在拿不到（服务端没实现 `CmdStartBattle`，见 `BattleStartService`），
- *          所以实际生效的是 ① + ② —— 昵称/头像来自 `CmdRole`，段位来自服务端，其余仍是本地占位。
  *   对手 —— 匹配成功那一刻显示服务端下发的对手单元（`pickOpponents`），
- *          拿不到就退回本地对手池。
+ *          开战未获服务端确认时终止匹配并返回主界面。
  *   服务端给的是 id（`gradeId` / `artifactId` / `img`），界面要的是段位名 / 神器名 / 头像图，
  *   所以 `onPreload` 里先把 `grade` / `pvpArtifact` / `head` / `icon` 四张表读成
  *   `MatchProfileLookup` 交给上面几个 `apply*`。头像那条是**两层表**
  *   （`img` → `head.icon` 中文名 → `icon.path` 的 `ui://包/资源名` 末段）。
  */
+/** 匹配流程内的两条异步数据：`.then()` 里 emit，`onEnter` 订阅、`onLeave` 摘掉。 */
+const MATCHING_EVENT = {
+    PvpInfoReady: 'matching-pvp-info-ready',
+    SelfUnitReady: 'matching-self-unit-ready',
+} as const;
+
 export class ProcedureMatching extends ProcedureBase {
     public static __cname: string = 'ProcedureMatching';
 
@@ -96,7 +101,7 @@ export class ProcedureMatching extends ProcedureBase {
      * 本局「开始游戏」的在途请求。
      *
      *  它**自带硬超时**（`BATTLE_START_TIMEOUT_MS`）且保证不 reject —— 见 `BattleStartService`，
-     *  所以可以安全地让匹配流程等它，也可以安全地不检查它的结果。
+     *  null 表示开战未获确认，必须结束匹配，禁止转成本地对局。
      */
     private battleStartTask: Promise<ZCBattleStart | null> | null = null;
 
@@ -170,9 +175,10 @@ export class ProcedureMatching extends ProcedureBase {
             return;
         }
         this.opponent = null;
-        this.matchingNode = instantiate(this.matchingPrefab);
-        this.matchingNode.setParent(this.host);
-        this.matchingNode.setPosition(Vec3.ZERO);
+        const matchingNode = instantiate(this.matchingPrefab);
+        this.matchingNode = matchingNode;
+        matchingNode.setParent(this.host);
+        matchingNode.setPosition(Vec3.ZERO);
 
         const page = this.matchingNode.getComponent(MatchingPage);
         if (!page || !this.iconLoader) {
@@ -181,42 +187,35 @@ export class ProcedureMatching extends ProcedureBase {
         }
         //  「开始游戏」的服务端语义就在这一步：点主界面按钮进到匹配流程 = 请求开一局。
         //  请求与下面的匹配动画**并行**跑（服务端内网应答是毫秒级），所以不拖慢开局手感；
-        //  它自带硬超时且不 reject，拿不到就整条退回本地对手池，匹配流程不会因此失败。
+        //  请求失败或超时必须结束匹配，不能把拒绝开战伪装成本地对局。
         clearLastBattleStart();
         const battleStartTask = startBattle(
             params?.battleType ?? ZC_BATTLE_TYPE_PVP,
             params?.battleParams ?? [],
+            this,
+            () => this.matchingNode === matchingNode,
         );
         this.battleStartTask = battleStartTask;
         const provider = this.sessionAssets as unknown as Partial<BattlePreloadProvider>;
         // 等回包人数和阵容确定后选图、加载本局表现；公共资源已由会话预下载。
         const preload = provider.takeBattlePreload?.()
-            ?? new ZCGamePreload(new ZCGameLoader(this.sessionAssets?.reusableAssets ?? this.assets, this.configs, MAP_DIRECTORY), battleStartTask);
+            ?? new ZCGamePreload(new ZCGameLoader(this.sessionAssets?.reusableAssets ?? this.assets, this.configs, MAP_DIRECTORY),
+                battleStartTask.then((battle) => {
+                    if (!battle) throw new Error('服务端未确认开战');
+                    return battle;
+                }));
         this.battlePreload = preload;
         void preload.ready.catch((error) => {
             if (this.battlePreload === preload) this.error(`对局资源预加载失败：${error}`);
         });
 
-        // 我方信息条的起始数据：本机昵称 / 头像（`CmdRole` 缓存）+ 本地占位。
-        //  底下的段位/奖杯在服务端数据到达前是假的（`MatchPool.LOCAL_PLAYER` 的占位值），
-        //  所以下面立刻去要真的要得着的那一份 —— 见 `refreshMineView` 的注释。
-        //  头像要查两张表（`head` + `icon`），所以必须把 `profileLookup` 一起传进去。
         const identity = readSelfIdentity();
         this.selfIdentity = identity;
         this.mineBase = buildSelfPlayerData(identity, this.profileLookup);
-        // ⚠️ 神器**不在这里取**。
-        //
-        //  原来读 `CacheMgr.instance.getTlCmdArtifact()?.[0]` —— 那是 `CmdArtifact` **推送**缓存，
-        //  而本客户端从未订阅这条推送（`CmdArtifact` 只出现在 CacheMgrGen 与 protobuf 里，
-        //  没有任何 `register`/`onPush` 把它写进缓存）⇒ `getTlCmdArtifact()` 恒为 `[]`
-        //  ⇒ `first` 恒 undefined ⇒ artifactName / artifactIcon 永远留空，
-        //  匹配页神器位**一直空白**（图标那格上一轮刚被清掉占位帧，于是彻底空出来）。
-        //
-        //  正确来源与对手同源：`CmdStartBattleRspMsg.unitInfos[].artifactId`
-        //  （`applyUnitToPlayerView` 里查表换名字 + 图标名）。回包到达时由
-        //  `refreshMineView` 统一合并上屏 —— 那条本来就会覆盖 artifact 字段，无需在此预置。
         this.pvpInfo = null;
         this.selfUnit = null;
+        EventMgr.instance.on(MATCHING_EVENT.PvpInfoReady, this.onPvpInfoReady, this);
+        EventMgr.instance.on(MATCHING_EVENT.SelfUnitReady, this.onSelfUnitReady, this);
 
         page.beginMatch({
             mine: this.mineBase,
@@ -224,7 +223,7 @@ export class ProcedureMatching extends ProcedureBase {
             tips: this.tips,
             // 搜索时长到点时，若服务端数据还在路上，最多再等它一会儿再选人 ——
             // 保证「界面上展示的对手」与「真正带进对局的对手」是同一份数据。
-            awaitReady: () => battleStartTask.then(() => undefined),
+            awaitReady: () => battleStartTask.then((battle) => battle !== null && this.battlePreload === preload),
             pickOpponents: () => this.pickOpponents(),
             onMatched: (opponents) => {
                 if (this.battlePreload === preload) this.enterBattle(opponents);
@@ -232,21 +231,27 @@ export class ProcedureMatching extends ProcedureBase {
         });
 
         // ① 服务端权威的我方 PVP 信息（段位 / 积分）—— 匹配过程中就显示自己的个人信息，
-        //    不等匹配成功。**这是目前唯一通的那条**：`CmdStartBattleRspMsg.unitInfos`
-        //    服务端还没实现（一律回 `CmdTips{content:"配置错误"}`）。
-        //    拿不到（未连接 / 超时 / 服务端未实现）时 `refreshMineView` 什么都不做，保留本地占位。
+        //    不等匹配成功；它的返回不能替代开战回包作为进入对局的依据。
         // 先用上次缓存的段位/积分上屏（打完一局加减分后不会闪空），再拉新的覆盖
         this.pvpInfo = getLastPvpInfo();
         void fetchPvpInfo().then((info) => {
             if (!info) return;
-            this.pvpInfo = info;
-            this.refreshMineView();
+            EventMgr.instance.emit(MATCHING_EVENT.PvpInfoReady, info);
         });
 
         // ② 服务端下发的我方战斗单元（昵称 / 战力 / 段位 / 段位积分 / 神器）——
         //    覆盖范围比 ① 大，但要等「开始游戏」回包；服务端通了之后这条会盖在 ① 上面。
         void battleStartTask.then((battle) => {
-            if (!battle) return;
+            if (this.matchingNode !== matchingNode || this.battlePreload !== preload) return;
+            if (!battle) {
+                this.battlePreload = null;
+                preload.releaseFromMatching();
+                this.battleStartTask = null;
+                clearLastBattleStart();
+                this.error('服务端未确认开战，结束匹配并返回主界面');
+                this.navigate(GameRoute.Main);
+                return;
+            }
             // 调试：打印 CmdRole 推送与双方单元，排查"对手和自己一样"
             try {
                 const roles = CacheMgr.instance.getTlCmdRole() ?? [];
@@ -259,29 +264,31 @@ export class ProcedureMatching extends ProcedureBase {
             console.log('[调试] 本机 selfRoleId =', this.selfIdentity?.roleId);
             const mine = this.pickSelfUnit(battle);
             if (!mine) return;
-            this.selfUnit = mine;
-            this.refreshMineView();
+            EventMgr.instance.emit(MATCHING_EVENT.SelfUnitReady, mine);
         });
         this.log('进入匹配流程');
     }
 
+    private onPvpInfoReady(info: ZCPvpInfo): void {
+        this.pvpInfo = info;
+        this.refreshMineView();
+    }
+
+    private onSelfUnitReady(unit: ZCBattleUnit): void {
+        this.selfUnit = unit;
+        this.refreshMineView();
+    }
+
     /**
-     * 重算我方信息条并上屏 —— **两条服务端数据的统一合并点**。
+     * 重算我方信息条并上屏 —— 两条服务端数据的统一合并点。
      *
-     *  `CmdPvpInfoReqMsg` 与 `CmdStartBattleReqMsg` 是并行发的，到达顺序不定。
-     *  如果各自 `then` 里直接 `updateMine(自己那份)`，就成了「谁后到谁赢」：
-     *  段位来自 PVP 信息、战力来自战斗单元时，先到的会被后到的整条盖掉（且偶发）。
-     *  所以这里每次都**从 `mineBase` 重新叠一遍**，与到达顺序无关。
-     *
-     *  流程已切走（`matchingNode` 已销毁）时直接返回 —— 不能碰已销毁的界面。
+     *  `CmdPvpInfoReqMsg` 与 `CmdStartBattleReqMsg` 并行发、到达顺序不定；各自 `then` 里
+     *  直接 `updateMine(自己那份)` 就会「谁后到谁赢」，所以每次都从 `mineBase` 重叠一遍。
      */
     private refreshMineView(): void {
-        const node = this.matchingNode;
-        if (node == null) return;
-        const page = node.getComponent(MatchingPage);
-        if (!page) return;
         const withPvp = applyPvpInfoToPlayerView(this.mineBase, this.pvpInfo, this.profileLookup);
-        page.updateMine(applyUnitToPlayerView(withPvp, this.selfUnit, this.profileLookup));
+        this.matchingNode!.getComponent(MatchingPage)!
+            .updateMine(applyUnitToPlayerView(withPvp, this.selfUnit, this.profileLookup));
     }
 
     /**
@@ -338,6 +345,7 @@ export class ProcedureMatching extends ProcedureBase {
     }
 
     onLeave(): void {
+        EventMgr.instance.offTarget(this);
         this.battlePreload?.releaseFromMatching();
         this.battlePreload = null;
         if (this.matchingNode) {
@@ -373,15 +381,15 @@ export class ProcedureMatching extends ProcedureBase {
      *  多人局落地时把 `opponents` 一并传过去即可。
      */
     private enterBattle(opponents: readonly MatchPlayerData[]): void {
+        const battle = getLastBattleStart();
+        if (!battle || opponents.length === 0) {
+            this.error('缺少本局开战回包或对手，拒绝进入对局');
+            return;
+        }
         const opponent = opponents[0];
         this.opponent = opponent;
-        const battle = getLastBattleStart();
-        if (battle) {
-            this.log(`匹配到对手：${opponent.name}（战力 ${opponent.power}）`
-                + ` · battleId=${battle.battleId} seed=${battle.seed} 单元 ${battle.units.length} 只`);
-        } else {
-            this.log(`匹配到对手：${opponent.name}（战力 ${opponent.power}）· 本局无服务端数据（本地对局）`);
-        }
+        this.log(`匹配到对手：${opponent.name}（战力 ${opponent.power}）`
+            + ` · battleId=${battle.battleId} seed=${battle.seed} 单元 ${battle.units.length} 只`);
         this.navigate(GameRoute.Battle, {
             opponent,
             opponents,

@@ -124,10 +124,11 @@ META: dict[str, list[dict]] = {
     ],
     'bigmapResource': [
         S('resType', '资源类型', 'grain / wood / iron / coin / stamina，五种必须齐'),
-        S('resName', '资源名称', '资源栏显示名'),
+        S('resName', '资源名称', '资源栏显示名（与背包道具名保持一致）'),
         S('icon', '图标路径', '相对 assets/resources，不带扩展名', 3),
         F('startAmount', '初始数量', '新档初始值'),
         F('showInBar', '是否进资源栏', '1=进顶栏 0=不进（行动力走独立显示）', 3),
+        F('itemId', '道具ID', '背包道具 id（18501..18505）：图标优先走 item.icon，0 = 只用概念图'),
     ],
     'bigmapQueue': [
         F('id', '配置ID', '队列配置唯一 id'),

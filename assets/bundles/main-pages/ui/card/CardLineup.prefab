@@ -1351,7 +1351,7 @@
     "_lpos": {
       "__type__": "cc.Vec3",
       "x": 0,
-      "y": 322.5,
+      "y": 507.5,
       "z": 0
     },
     "_lrot": {
@@ -1453,8 +1453,8 @@
     ],
     "value": {
       "__type__": "cc.Vec3",
-      "x": -278,
-      "y": 52.003000000000014,
+      "x": -283,
+      "y": -132.99699999999999,
       "z": 0
     }
   },
@@ -1565,8 +1565,8 @@
     ],
     "value": {
       "__type__": "cc.Vec3",
-      "x": -92,
-      "y": 52.003000000000014,
+      "x": -97,
+      "y": -132.99699999999999,
       "z": 0
     }
   },
@@ -1677,8 +1677,8 @@
     ],
     "value": {
       "__type__": "cc.Vec3",
-      "x": 94,
-      "y": 52.003000000000014,
+      "x": 89,
+      "y": -132.99699999999999,
       "z": 0
     }
   },
@@ -1789,8 +1789,8 @@
     ],
     "value": {
       "__type__": "cc.Vec3",
-      "x": 280,
-      "y": 52.003000000000014,
+      "x": 275,
+      "y": -132.99699999999999,
       "z": 0
     }
   },
@@ -1901,8 +1901,8 @@
     ],
     "value": {
       "__type__": "cc.Vec3",
-      "x": -278,
-      "y": -138.99699999999996,
+      "x": -283,
+      "y": -323.99699999999996,
       "z": 0
     }
   },
@@ -2013,8 +2013,8 @@
     ],
     "value": {
       "__type__": "cc.Vec3",
-      "x": -92,
-      "y": -138.99699999999996,
+      "x": -97,
+      "y": -323.99699999999996,
       "z": 0
     }
   },
@@ -2125,8 +2125,8 @@
     ],
     "value": {
       "__type__": "cc.Vec3",
-      "x": 94,
-      "y": -138.99699999999996,
+      "x": 89,
+      "y": -323.99699999999996,
       "z": 0
     }
   },
@@ -2237,8 +2237,8 @@
     ],
     "value": {
       "__type__": "cc.Vec3",
-      "x": 280,
-      "y": -138.99699999999996,
+      "x": 275,
+      "y": -323.99699999999996,
       "z": 0
     }
   },
@@ -2287,13 +2287,13 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 710,
+      "width": 720,
       "height": 370
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
       "x": 0.5,
-      "y": 0.5
+      "y": 1
     },
     "_id": ""
   },
@@ -3094,6 +3094,7 @@
     "loadMoreMaxOffset": 150,
     "pullDampingRate": 0.5,
     "pixelAlign": true,
+    "interactive": true,
     "enableItemClickEffect": false,
     "disableBounce": false,
     "blockParentScroll": true,
@@ -4090,6 +4091,7 @@
     "loadMoreMaxOffset": 150,
     "pullDampingRate": 0.5,
     "pixelAlign": true,
+    "interactive": true,
     "enableItemClickEffect": false,
     "disableBounce": false,
     "blockParentScroll": true,
@@ -5088,14 +5090,14 @@
       "__id__": 152
     },
     "cardGrid": {
-      "__id__": 184
+      "__id__": 195
     },
     "previewPower": 1716,
     "fallbackLevel": 3,
     "fallbackLevelMax": 10,
     "autoLoadDecks": true,
     "teamEditButton": {
-      "__id__": 127
+      "__id__": 138
     },
     "_id": ""
   },

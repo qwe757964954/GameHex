@@ -1,9 +1,10 @@
-import { _decorator, CCInteger, Component } from 'cc';
+import { _decorator, CCInteger, Color, Component, Graphics, Node, UITransform, Vec3 } from 'cc';
 import { RefUtil } from '../../framework/ref/RefUtil';
 import { CacheMgr } from '../net/CacheMgr';
 import { readRoleRow } from '../main/MainRoleRow';
 import { MainResBarSlot } from '../main/MainResBarSlot';
 import { buildResBarSlots, buildResBarView } from '../main/MainResBarTypes';
+import { RES_BAR_FLASH_PEAK_ALPHA, RES_BAR_FLASH_SECONDS, resBarFlashFx } from '../main/MainResBarFeedback';
 import {
     IItemRefRow,
     IOpenRefRow,
@@ -19,6 +20,13 @@ import {
 } from './ResTypes';
 
 const { ccclass, property } = _decorator;
+
+/** 闪光的圆角半径（像素）。资源格的 `Bg` 本身就是圆角条，这里取它的量级。 */
+const GLOW_RADIUS = 12;
+/** 闪光描边宽度（像素）。 */
+const GLOW_LINE_WIDTH = 3;
+/** 闪光比格子外扩多少（像素）：不外扩会像"贴在格子上的一块白纸"。 */
+const GLOW_PADDING = 8;
 
 /**
  * 顶部**货币条**（`ui/common/ResBar`，552×106，老端 `组件_资源栏` 的 `组件_资源信息` 部分）。
@@ -60,7 +68,7 @@ const { ccclass, property } = _decorator;
  * | 宿主 | `resKeys` | 效果 |
  * |---|---|---|
  * | 民兵天赋页（3 格） | `coin,gold`（或走 `openRefId=18`） | 三格中前两格出图，第 3 格整格隐藏 |
- * | 竞技页 HUD（3 格） | `gold,gem,end` | 三个都出 |
+ * | 竞技页 HUD（3 格容器） | **`gold,end`**（2026-10-26） | 银币 + 体力两格出图，第 3 格整格隐藏 |
  * | 商城（2 格） | `gold,gem` | 第 3 格整格隐藏（`render(null)`） |
  *
  * 槽位顺序 = 从左到右渲染顺序 = `openRefId` 的 `resShowType` / `resKeys` 顺序；
@@ -118,6 +126,23 @@ export class ResBar extends Component {
     /** 防止 `reload` 重入（缓存落地 / 资源变化都可能触发）。 */
     private loading = false;
 
+    /**
+     * 上一次 `reload` 真正画出来的资源键（顺序 = 从左到右）。
+     *
+     * 反馈要按 key 找格子（`playGainFeedback('gold', 120)`），而 prefab 上的
+     * `slot0/1/2` 只有位置没有语义 ⇒ 必须记住这次渲染的 `keys`。
+     */
+    private keys: readonly string[] = [];
+
+    /** 闪光的绘制层（懒建；`null` = 还没建/建不起来）。只有一层 ⇒ 同帧只可能有一格在闪。 */
+    private glow: Graphics | null = null;
+    /** 本帧闪光的时间轴（`< 0` = 没在闪）。 */
+    private flashElapsed = -1;
+    /** 闪光覆盖的区域（**本组件局部坐标**，已含外扩留白）。 */
+    private glowRect = { x: 0, y: 0, width: 0, height: 0 };
+    /** 有没有反馈在播（没有就整段 `update` 直接返回，不逐帧空转）。 */
+    private feedbackActive = false;
+
     /** `CmdRole` 缓存变化回调（箭头函数属性：引用稳定，供 onDestroy 精确摘除）。 */
     private onRoleCacheUpdate = (): void => {
         if (!this.isValid) return;
@@ -125,12 +150,12 @@ export class ResBar extends Component {
     };
 
     onLoad(): void {
-        CacheMgr.instance.setEventUpdate('CmdRole', this as unknown as destroyable, this.onRoleCacheUpdate);
+        CacheMgr.instance.setEventUpdate('CmdRole', this, this.onRoleCacheUpdate);
         void this.reload();
     }
 
     onDestroy(): void {
-        CacheMgr.instance.removeEventUpdate('CmdRole', this as unknown as destroyable, this.onRoleCacheUpdate);
+        CacheMgr.instance.removeEventUpdate('CmdRole', this, this.onRoleCacheUpdate);
     }
 
     /**
@@ -158,6 +183,7 @@ export class ResBar extends Component {
             this.hostSlots().forEach((slot, i) => {
                 slot.render(slots[i] ?? null);
             });
+            this.keys = keys;
         } catch (error) {
             console.error('[ResBar] 货币条刷新失败', error);
         } finally {
@@ -175,6 +201,197 @@ export class ResBar extends Component {
      */
     private hostSlots(): readonly MainResBarSlot[] {
         return [this.slot0, this.slot1, this.slot2].filter((slot): slot is MainResBarSlot => !!slot);
+    }
+
+    // ============================================================
+    // 被奖励击中的反馈（宝箱图标飞进来那一刻，见 `TerritoryChestView`）
+    // ============================================================
+
+    /**
+     * 逐帧推进反馈（**唯一心跳**：单格的弹跳 / 数字滚动都由这里驱动）。
+     *
+     * 为什么不让 `MainResBarSlot` 自己挂 `update`：一条栏可能三格同时在跳
+     * （银币 + 体力 + 其它），三个组件各自 `update` 只是多三次空转；
+     * 而且闪光**只有一层 `Graphics`**、又是全栏一处时序 ⇒ 收在本组件最省；
+     * 时序收在一处，也不会出现「闪光收尾了、数字还在滚」。
+     *
+     * ⚠️ 不用 tween（规则 106/247）：全是「记起点 + 向纯函数要当帧值」。
+     */
+    update(dt: number): void {
+        if (!this.feedbackActive) return;
+        let busy = false;
+        for (const slot of this.hostSlots()) if (slot.step(dt)) busy = true;
+        if (this.stepFlash(dt)) busy = true;
+        this.feedbackActive = busy;
+    }
+
+    /**
+     * 某一格**被奖励击中**：图标弹一下 + 数字从「原值」滚到「新值」+ **那一格**闪光。
+     *
+     * ⚠️ 2026-10-26 改口径：原先闪**整条栏**，用户反馈「宝箱只给体力时，银币格跟着一起亮，
+     * 看不出到底涨的是哪个」⇒ 现在只闪命中的那一格，别的格纹丝不动。
+     *
+     * @param key    `roleProperty.key`（`gold` 银币 / `end` 体力 …）。
+     *               **不在本条栏的 `keys` 里 ⇒ 静默跳过**（合法配置：HUD 只显示两种资源，
+     *               领地随机格发的道具本来就没有对应的格子）。
+     * @param amount 这次增加了多少（数字滚动的起点 = 当前值 - amount）。
+     *               **`<= 0` / 非有限数 ⇒ 整段跳过**（没涨就没反馈，别让格子弹一下却没变化）。
+     */
+    playGainFeedback(key: string, amount: number): void {
+        // `amount <= 0`（脏数据 / 该资源在这批奖励里配了 0）= **没涨** ⇒ 连闪都不该闪。
+        // 开箱奖励是配表来的，0 值行确实存在；不拦的话会出现「这一格亮了一下、数字没动」。
+        if (!Number.isFinite(amount) || amount <= 0) return;
+        const slot = this.slotOfKey(key);
+        if (!slot) return;
+        slot.playGainFeedback(amount);
+        this.flash(slot);
+        this.feedbackActive = true;
+    }
+
+    /**
+     * 闪光：**传了槽位只闪那一格**，不传才闪整条（兼容旧调用，本工程目前只有单格这一种用法）。
+     *
+     * 复用的场景：`playGainFeedback` 每次都会调一次，所以连续两次命中**只重启时间轴**，
+     * 不会叠出两层光（`Graphics` 只有一个，重画即覆盖）；连续命中**不同格**时，
+     * 后一次直接改写 `glowRect`，光会跳到新格上 —— 这比"两格同时亮"更符合"哪格涨了闪哪格"。
+     */
+    flash(target?: MainResBarSlot | null): void {
+        if (!this.isValid) return;
+        const rect = this.computeGlowRect(target ?? null);
+        if (!rect) return;
+        const glow = this.ensureGlow();
+        if (!glow) return;
+        this.glowRect = rect;
+        this.flashElapsed = 0;
+        this.feedbackActive = true;
+        this.applyFlash();
+    }
+
+    /**
+     * 某一格的**世界坐标中心**（宝箱图标要飞到这里）。
+     *
+     * 返回 `null` = 这一格没显示 / 找不到变换 —— 调用方保持原落点，
+     * 不要拿 `(0,0)` 顶替（那会让整串图标飞到页面正中，比"不飞"更怪）。
+     */
+    slotWorldPositionOf(key: string): Vec3 | null {
+        const slot = this.slotOfKey(key);
+        if (!slot?.node.active) return null;
+        const transform = slot.node.getComponent(UITransform);
+        if (!transform) return null;
+        return transform.convertToWorldSpaceAR(new Vec3(0, 0, 0), new Vec3());
+    }
+
+    /** `key` → 宿主上的具体格子（顺序 = `reload` 时的 `keys` 顺序）。 */
+    private slotOfKey(key: string): MainResBarSlot | null {
+        const index = this.keys.indexOf(key);
+        if (index < 0) return null;
+        return this.hostSlots()[index] ?? null;
+    }
+
+    private stepFlash(dt: number): boolean {
+        if (this.flashElapsed < 0) return false;
+        this.flashElapsed += Number.isFinite(dt) && dt > 0 ? dt : 0;
+        if (resBarFlashFx(this.flashElapsed) === null) {
+            this.flashElapsed = -1;
+            this.glow?.clear();
+            if (this.glow) this.glow.node.active = false;
+            return false;
+        }
+        this.applyFlash();
+        return true;
+    }
+
+    /** 画一帧闪光（`alpha` 由时间轴给出；没有光层就直接返回）。 */
+    private applyFlash(): void {
+        const glow = this.glow;
+        if (!glow) return;
+        const strength = resBarFlashFx(this.flashElapsed) ?? 0;
+        glow.node.active = true;
+        glow.clear();
+        if (strength <= 0) return;
+        const rect = this.glowRect;
+        const alpha = Math.round(strength * RES_BAR_FLASH_PEAK_ALPHA * 255);
+        // 填充：暖白。刻意**不满不刺眼** —— 它是"确认",不是"白屏"，峰值只到 42%。
+        glow.fillColor = new Color(255, 241, 206, alpha);
+        glow.roundRect(rect.x, rect.y, rect.width, rect.height, GLOW_RADIUS);
+        glow.fill();
+        // 描边：比填充亮一档，边缘才读得出「这一格亮了一下」的轮廓。
+        glow.lineWidth = GLOW_LINE_WIDTH;
+        glow.strokeColor = new Color(255, 252, 236, Math.min(255, Math.round(alpha * 1.9)));
+        glow.roundRect(rect.x, rect.y, rect.width, rect.height, GLOW_RADIUS);
+        glow.stroke();
+    }
+
+    /**
+     * 建（或复用）闪光绘制层：本节点下一个 `Graphics` 子节点，**排在最后**（画在图标之上）。
+     *
+     * 为什么现画而不是 prefab 里放一张九宫格：闪光没有美术资源、也不需要被策划调参
+     * （颜色/透明度全在 `MainResBarFeedback` 与本节常量里），而 `Graphics` 现画是
+     * 全工程做"无资源光效"的既有姿势（见 `TerritoryChestView` 的光柱 / 星光）。
+     */
+    private ensureGlow(): Graphics | null {
+        if (this.glow?.isValid) return this.glow;
+        const host = this.node.getComponent(UITransform);
+        if (!host) return null;
+        const node = new Node('FeedbackGlow');
+        node.layer = this.node.layer;
+        node.setParent(this.node);
+        node.addComponent(UITransform);
+        node.setSiblingIndex(this.node.children.length - 1);
+        node.active = false;
+        this.glow = node.addComponent(Graphics);
+        return this.glow;
+    }
+
+    /**
+     * 闪光覆盖范围（本组件局部坐标）。
+     *
+     * - `target` 有值 ⇒ **只算那一格**的框 + 外扩（本轮口径：哪格涨了闪哪格）。
+     * - `target` 为 `null` ⇒ **所有显示中的格子**的包围盒 + 外扩（整条闪，老口径，留作兼容）。
+     *
+     * 为什么不直接用本节点的 `552×106`：那是三格容器的框，而上层宿主只显示 2 格时
+     * 第 3 格的位置是空的 —— 照框画会在右侧糊一大片没有内容的亮块。
+     *
+     * ⚠️ `target` 不可见 / 没有变换时**返回 `null`（不闪）**，绝不回退成整条 ——
+     * 那正是本轮要修的病（银币格跟着体力格一起亮）。
+     */
+    private computeGlowRect(
+        target: MainResBarSlot | null,
+    ): { x: number; y: number; width: number; height: number } | null {
+        const targets = target ? [target] : this.hostSlots();
+        let minX = Number.POSITIVE_INFINITY;
+        let minY = Number.POSITIVE_INFINITY;
+        let maxX = Number.NEGATIVE_INFINITY;
+        let maxY = Number.NEGATIVE_INFINITY;
+        for (const slot of targets) {
+            const node = slot.node;
+            if (!node.active) continue;
+            const transform = node.getComponent(UITransform);
+            if (!transform) continue;
+            const size = transform.contentSize;
+            const anchor = transform.anchorPoint;
+            // 换算到**本节点**坐标系（槽位直接挂在 ResBar 下，但仍用变换求，避免以后再套一层）
+            const center = this.toLocal(node.worldPosition);
+            minX = Math.min(minX, center.x - size.width * anchor.x);
+            minY = Math.min(minY, center.y - size.height * anchor.y);
+            maxX = Math.max(maxX, center.x + size.width * (1 - anchor.x));
+            maxY = Math.max(maxY, center.y + size.height * (1 - anchor.y));
+        }
+        if (!Number.isFinite(minX) || !Number.isFinite(maxX)) return null;
+        const pad = GLOW_PADDING;
+        return {
+            x: minX - pad,
+            y: minY - pad,
+            width: Math.max(1, maxX - minX + pad * 2),
+            height: Math.max(1, maxY - minY + pad * 2),
+        };
+    }
+
+    /** 世界坐标 → 本组件局部坐标（走引擎矩阵，不自己算偏移）。 */
+    private toLocal(world: Readonly<Vec3>): Vec3 {
+        const transform = this.node.getComponent(UITransform);
+        if (!transform) return new Vec3(world.x, world.y, 0);
+        return transform.convertToNodeSpaceAR(new Vec3(world.x, world.y, 0), new Vec3());
     }
 
     /**

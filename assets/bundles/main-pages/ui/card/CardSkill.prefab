@@ -2590,21 +2590,24 @@
     "__prefab": {
       "__id__": 101
     },
-    "nameNode": {
-      "__id__": 63
+    "nameLabel": {
+      "__id__": 68
     },
-    "levelNode": {
-      "__id__": 69
+    "levelLabel": {
+      "__id__": 74
     },
-    "descNode": {
-      "__id__": 81
+    "descLabel": {
+      "__id__": 86
     },
     "lockTip": {
-      "__id__": 75
+      "__id__": 80
     },
     "prevButton": null,
     "nextButton": {
-      "__id__": 87
+      "__id__": 94
+    },
+    "nextLabel": {
+      "__id__": 100
     },
     "_id": ""
   },
@@ -3842,21 +3845,24 @@
     "__prefab": {
       "__id__": 151
     },
-    "nameNode": {
-      "__id__": 113
+    "nameLabel": {
+      "__id__": 118
     },
-    "levelNode": {
-      "__id__": 119
+    "levelLabel": {
+      "__id__": 124
     },
-    "descNode": {
-      "__id__": 131
+    "descLabel": {
+      "__id__": 136
     },
     "lockTip": {
-      "__id__": 125
+      "__id__": 130
     },
     "prevButton": null,
     "nextButton": {
-      "__id__": 137
+      "__id__": 144
+    },
+    "nextLabel": {
+      "__id__": 150
     },
     "_id": ""
   },
@@ -5094,21 +5100,24 @@
     "__prefab": {
       "__id__": 201
     },
-    "nameNode": {
-      "__id__": 163
+    "nameLabel": {
+      "__id__": 168
     },
-    "levelNode": {
-      "__id__": 169
+    "levelLabel": {
+      "__id__": 174
     },
-    "descNode": {
-      "__id__": 181
+    "descLabel": {
+      "__id__": 186
     },
     "lockTip": {
-      "__id__": 175
+      "__id__": 180
     },
     "prevButton": null,
     "nextButton": {
-      "__id__": 187
+      "__id__": 194
+    },
+    "nextLabel": {
+      "__id__": 200
     },
     "_id": ""
   },
@@ -6346,21 +6355,24 @@
     "__prefab": {
       "__id__": 251
     },
-    "nameNode": {
-      "__id__": 213
+    "nameLabel": {
+      "__id__": 218
     },
-    "levelNode": {
-      "__id__": 219
+    "levelLabel": {
+      "__id__": 224
     },
-    "descNode": {
-      "__id__": 231
+    "descLabel": {
+      "__id__": 236
     },
     "lockTip": {
-      "__id__": 225
+      "__id__": 230
     },
     "prevButton": null,
     "nextButton": {
-      "__id__": 237
+      "__id__": 244
+    },
+    "nextLabel": {
+      "__id__": 250
     },
     "_id": ""
   },

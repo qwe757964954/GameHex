@@ -18,19 +18,25 @@ export class CocosAssetService implements AssetService {
         const bundle = await this.getBundle(resolveBundle(path, options));
         if (options.scope?.disposed) return;
         await new Promise<void>((resolve, reject) => {
-            assetManager.preloadAny({ path, bundle: bundle.name, priority: -1 }, (error: Error | null) => error ? reject(error) : resolve());
+            // preload 预设每帧只派发2项，仍在途时会给共享下载队列留下低速调度。
+            // 根预下载并发由调用方限制；保持低优先级与仅下载语义，使用标准下载节奏。
+            assetManager.preloadAny({ path, bundle: bundle.name, priority: options.priority ?? -1 },
+                { preset: 'default' }, (error: Error | null) => error ? reject(error) : resolve());
         });
     }
     async load<T>(path: string, type: AssetType<T>, options: AssetLoadOptions = {}): Promise<T> {
         const bundle = await this.getBundle(resolveBundle(path, options));
         const asset = await new Promise<T>((resolve, reject) => {
-            (bundle.load as any)(path, type, (error: Error | null, value: T) => {
+            const callback = (error: Error | null, value: Asset) => {
                 if (error || !value) {
                     reject(error || new Error(`资源加载失败：${resolveBundle(path, options) ?? RESOURCES_BUNDLE}://${path}`));
                     return;
                 }
-                resolve(value);
-            });
+                resolve(value as unknown as T);
+            };
+            const assetType = type as unknown as typeof Asset;
+            if (options.priority === undefined) bundle.load(path, assetType, callback);
+            else assetManager.loadAny({ path, type: assetType, bundle: bundle.name, priority: options.priority }, callback);
         });
         this.retainInScope(asset, options);
         return asset;
@@ -54,13 +60,16 @@ export class CocosAssetService implements AssetService {
     async loadDir<T>(path: string, type: AssetType<T>, options: AssetLoadOptions = {}): Promise<T[]> {
         const bundle = await this.getBundle(resolveBundle(path, options));
         const assets = await new Promise<T[]>((resolve, reject) => {
-            (bundle.loadDir as any)(path, type, (error: Error | null, values: T[]) => {
+            const callback = (error: Error | null, values: Asset[]) => {
                 if (error) {
                     reject(error);
                     return;
                 }
-                resolve(values ?? []);
-            });
+                resolve((values ?? []) as unknown as T[]);
+            };
+            const assetType = type as unknown as typeof Asset;
+            if (options.priority === undefined) bundle.loadDir(path, assetType, callback);
+            else assetManager.loadAny({ dir: path, type: assetType, bundle: bundle.name, priority: options.priority }, { __outputAsArray__: true }, callback);
         });
         for (const asset of assets) this.retainInScope(asset, options);
         return assets;

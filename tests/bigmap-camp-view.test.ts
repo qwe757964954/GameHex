@@ -5,6 +5,7 @@ import test from 'node:test';
 import ts from 'typescript';
 import * as geometry from '../assets/script/app/bigmap/view/BigMapWorldLayout';
 import * as campModel from '../assets/script/app/bigmap/model/BigMapCampInfo';
+import * as BigMapCampRoleInfo from '../assets/script/app/bigmap/model/BigMapCampRoleInfo';
 import { BIGMAP_CAMP_REFRESH_SECONDS } from '../assets/script/app/bigmap/application/BigMapCampRepository';
 
 function loadModule(path: string, require: (name: string) => unknown, globals: object = {}) {
@@ -159,6 +160,8 @@ test('点击据点调用详情入口，弹窗显示两种独立状态，保留�
         if (name === 'cc') return { _decorator: { ccclass: () => (value: unknown) => value }, Component };
         if (name.endsWith('/ResourceScope')) return { ResourceScope: class {} };
         if (name.endsWith('/BigMapCampInfo')) return campModel;
+        // 详情面板的角色段走这个纯函数 —— 桩成 `{}` 会炸 `formatBigMapCampRoleLines is not a function`。
+        if (name.endsWith('/BigMapCampRoleInfo')) return BigMapCampRoleInfo;
         return {};
     });
     interface IPage {
@@ -173,8 +176,10 @@ test('点击据点调用详情入口，弹窗显示两种独立状态，保留�
     let canAttack = false;
     let campInfo: { campId: number; opType: number; state: number } | null = { campId: 101, opType: 1, state: 3 };
     let campDetailStatus = 'ready';
+    let campRoles: { roleId: string; serverId: string; roleName: string; avatarId: string; defenseHp: number; pos: number }[] = [];
+    let campRolesStatus = 'ready';
     page.presenter = { cityView: () => ({ name: '营地', level: 1, desc: '简介', isServerCamp: true, canAttack, staminaCost: 20,
-        campInfo, campDetailStatus, attackReason: '' }),
+        campInfo, campDetailStatus, attackReason: '', campRoles, campRolesStatus }),
         refreshCampDetail: (id: number) => { calls.push(id); },
     };
     page.worldView = { occupantAt: () => ({ kind: 'city', cityId: 101 }) };
@@ -200,4 +205,14 @@ test('点击据点调用详情入口，弹窗显示两种独立状态，保留�
     assert.equal(enabled, true);
     assert.match(page.infoBody.string, /可尝试攻打/);
     assert.doesNotMatch(page.infoBody.string, /加载中|重新选择/);
+
+    // 据点是空的时候也不能漏掉角色段（两条协议各自独立，失败态只影响自己那一段）。
+    campRoles = [{ roleId: '9007199254740993', serverId: '3002', roleName: '山猫', avatarId: '2001', defenseHp: 120, pos: 12 }];
+    campRolesStatus = 'ready';
+    page.refreshInfo();
+    assert.match(page.infoBody.string, /据点角色：1 人/);
+    assert.match(page.infoBody.string, /山猫/);
+    campRolesStatus = 'failed';
+    page.refreshInfo();
+    assert.match(page.infoBody.string, /山猫/, '★角色查询失败但有旧数据时继续显示旧数据');
 });

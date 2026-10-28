@@ -285,7 +285,7 @@ export class ToolSet extends ScriptObject {
      * @param listener 
      * @returns 
      */
-    addListener<T extends string | number>(proxy: EventProxy<T>, event: T, listener: Function, caller?: destroyable) {
+    addListener<T extends string | number>(proxy: EventProxy<T>, event: T, listener: Function, caller?: object) {
         if (this._tmEventHandler == null) {
             this._tmEventHandler = new Map()
         }
@@ -311,7 +311,7 @@ export class ToolSet extends ScriptObject {
         proxy: EventProxy<any>,
         event: any,
         listener: Function,
-        caller: destroyable
+        caller: object
     }) {
         if (this._tmEventHandler == null) {
             return
@@ -622,7 +622,7 @@ export class ToolSet extends ScriptObject {
     //#region Script
     private _tmScriptListener: Map<any, any>
     // 在注册时自动调用一次(有可能会响应过早导致实际数据还没有，会报空，需要做报空处理)
-    AddScriptListener(script: TExprScript, listener: Function, caller: destroyable) {
+    AddScriptListener(script: TExprScript, listener: Function, caller: object) {
 
         if (this._tmScriptListener == null) {
             this._tmScriptListener = new Map()

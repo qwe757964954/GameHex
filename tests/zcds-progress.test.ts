@@ -992,7 +992,7 @@ test('单位血条按兵种尺寸摆到头顶之上，填充左侧对齐，没�
     unit.hp = 60;
     view.render({ unit, definition, x: 0, y: 0, now: 0.1 });
     assert.equal(view.healthBar.node.active, true);
-    // 外框（槽）与填充是两套尺寸：外框 86×17，填充窄一圈（左右各内缩 4）且只有 8 高。
+    // 外框（槽）与填充是两套尺寸：外框 68.8×17（原稿 86 缩到 80%），填充窄一圈（左右各内缩 4）且只有 8 高。
     const heroFillWidth = view.barWidthHero - view.barFillInset * 2;
     assert.equal(view.healthBar.totalLength, heroFillWidth);
     assert.equal(view.healthBar.barSprite.node.position.x, -view.barWidthHero / 2 + view.barFillInset);
@@ -1215,6 +1215,63 @@ test('两份 HealthBar 预制体为横向进度条，建筑内置径向 Cooldown
     for (const key of ['avatarFrame', 'avatar', 'nameLabel', 'damageProgress', 'damageTakenProgress', 'damageLabel', 'damageTakenLabel']) assert.ok(players[view[key].__id__], key);
 });
 
+
+test('血条尺寸：单位「高度不动、宽 80%」，城墙/建筑「高 +2px、宽 60%」，脚本与 prefab 同一组数', () => {
+    // 真源在 `assets/bundles/battle/ui/game/`（2026-10 资源迁进 bundles），不是老的 resources/ui。
+    const read = (name: string) => JSON.parse(readFileSync(`assets/bundles/battle/ui/game/${name}.prefab`, 'utf8'));
+    /** 节点的 `UITransform._contentSize`（prefab 里尺寸挂在组件上，不在 Node 上）。 */
+    const sizeOf = (data: any[], node: any) => {
+        const transform = node._components
+            .map((r: any) => data[r.__id__])
+            .find((c: any) => c.__type__ === 'cc.UITransform');
+        return { width: transform._contentSize.width, height: transform._contentSize.height };
+    };
+
+    // ── 场地块：城墙 / 建筑共用这一根。原稿 94×17 / 填充 86×8。
+    const hexData = read('ZCGameHex');
+    // 一份 prefab 里有两根 ProgressBar（径向冷却 + 横向血条），按**节点名**挑，别按顺序挑。
+    const hexHealth = hexData.find((o: any) => o.__type__ === 'cc.ProgressBar'
+        && hexData[o.node.__id__]._name === 'HealthBar');
+    const hexBarNode = hexData[hexData[hexHealth._barSprite.__id__].node.__id__];
+    const hexOuter = sizeOf(hexData, hexData[hexHealth.node.__id__]);
+    const hexFill = sizeOf(hexData, hexBarNode);
+    // 宽 ×60%、高 +2px（8 高的填充也 +2）。设计口径是「百分比 × 原稿」，prefab 里存的是
+    // 四舍五入到 0.1 的定值（`94 * 0.6` 在 JS 里是 56.400000000000006），所以统一按一位小数比。
+    const tenth = (value: number) => Number(value.toFixed(1));
+    assert.equal(hexOuter.width, tenth(94 * 0.6));
+    assert.equal(hexOuter.height, 17 + 2);
+    assert.equal(hexFill.width, tenth(86 * 0.6));
+    assert.equal(hexFill.height, 8 + 2);
+    assert.equal(hexHealth._totalLength, hexFill.width);
+    // 填充条锚点是 (0, 0.5)：地块条没有内缩字段，左右那 4px 是随宽度一起 ×0.6 → 2.4，
+    // 所以缩完仍是**左右对称**（左缘 = −填充宽 / 2），不是贴住外框左沿。
+    assert.equal(hexBarNode._lpos.x, -hexFill.width / 2);
+
+    // ── 单位：普通 / 英雄两档。原稿 76×17、86×17，填充 8 高、左右各内缩 4。
+    const unitData = read('ZCGameUnit');
+    const view = unitData[unitData[1]._components.at(-1).__id__];
+    const unitHealth = unitData[view.healthBar.__id__];
+    const unitBar = unitData[unitHealth._barSprite.__id__];
+    const unitHealthNode = unitData[unitHealth.node.__id__];
+    const unitOuter = sizeOf(unitData, unitHealthNode);
+    const unitFill = sizeOf(unitData, unitData[unitBar.node.__id__]);
+    // 宽 ×80%、**高度两档都不动**（17 / 8 保持原稿）。
+    assert.equal(view.barWidth, tenth(76 * 0.8));
+    assert.equal(view.barWidthHero, tenth(86 * 0.8));
+    assert.equal(view.barHeight, 17, '单位条高度不动');
+    assert.equal(view.barFillHeight, 8, '单位填充高度不动');
+    assert.equal(view.barFillInset, 4, '内缩跟的是边框像素厚度，不随宽度缩');
+    // prefab 的序列化值必须与脚本字段同一组数，否则编辑器里看到的是旧宽、运行时被覆写。
+    assert.equal(unitOuter.width, view.barWidth);
+    assert.equal(unitOuter.height, view.barHeight);
+    assert.equal(unitFill.width, view.barWidth - view.barFillInset * 2);
+    assert.equal(unitFill.height, view.barFillHeight);
+    assert.equal(unitHealth._totalLength, unitFill.width);
+    assert.equal(unitData[unitBar.node.__id__]._lpos.x, -view.barWidth / 2 + view.barFillInset);
+    // 英雄档只用脚本值、不走 prefab 尺寸（运行时按 `definition.hero` 覆写），这里守公式。
+    assert.equal(view.barWidthHero - view.barFillInset * 2, 60.8);
+    assert.equal(-view.barWidthHero / 2 + view.barFillInset, -30.4);
+});
 
 test('结算扫场整行同亮：贴着胜利方的行先整行亮起，再推下一行', () => {
     const { load } = loadViews();

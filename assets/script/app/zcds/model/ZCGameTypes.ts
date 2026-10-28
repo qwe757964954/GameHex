@@ -99,8 +99,15 @@ export const ZCCombatFloatTextKind = {
     Execute: 'execute',
 } as const;
 export type ZCCombatFloatTextKind = (typeof ZCCombatFloatTextKind)[keyof typeof ZCCombatFloatTextKind];
-/** Transient battle text. `miss` is supported for the later dodge pipeline as in Old Client. */
-export type ZCFloatTextKind = ZCCombatFloatTextKind | 'heal' | 'miss' | 'gold';
+/**
+ * Transient battle text. `miss` is supported for the later dodge pipeline as in Old Client.
+ *
+ * 金币拆成**两种**飘字，因为两者的来处不同、读法也必须不同（2026-10-27 用户口径）：
+ * · `gold` —— 击杀单位 / 拆建筑的**掉落**：从落点上方落到地面、停一下、缩小消失，没有数字；
+ * · `goldincome` —— 主城 / 金矿的**产出**：金币 icon 与数字一起从**建筑顶部**升起 50px 并淡出。
+ * 两者只差一个 kind，视图侧分别走 `floatTextGoldDrop` / `floatTextGoldRise` 两条曲线。
+ */
+export type ZCFloatTextKind = ZCCombatFloatTextKind | 'heal' | 'miss' | 'gold' | 'goldincome';
 
 export interface ZCHexState {
     id: number;

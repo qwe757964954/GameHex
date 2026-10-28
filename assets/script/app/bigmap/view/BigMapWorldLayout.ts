@@ -3,6 +3,7 @@ import {
     HEX_GRID_IMAGE_HEIGHT, HEX_GRID_IMAGE_WIDTH, type IHexGridLayout,
 } from '../../../core/hex/HexGridLayout';
 import { bigMapHash } from '../model/BigMapWorld';
+import { MAP_MARKER_BADGE_HEIGHT, MAP_MARKER_BADGE_WIDTH, mapMarkerBadgeY } from '../../common/MapMarkerBadge';
 
 /** 大地图原稿为平面 147×96，不改战斗/冒险共用的 130×119 地块几何。 */
 export const BIGMAP_TILE_WIDTH = 147;
@@ -80,12 +81,12 @@ export interface IBigMapMarkerHitArea {
 
 export const BIGMAP_MARKER_ICON_LIFT = 24;
 export const BIGMAP_MARKER_BADGE_Y = 70;
-export const BIGMAP_MARKER_BADGE_WIDTH = 88;
-export const BIGMAP_MARKER_BADGE_HEIGHT = 30;
+export const BIGMAP_MARKER_BADGE_WIDTH = MAP_MARKER_BADGE_WIDTH;
+export const BIGMAP_MARKER_BADGE_HEIGHT = MAP_MARKER_BADGE_HEIGHT;
 
 /** 脚底固定在台面，编号牌随可见建筑高度上移，显示与点击共用坐标。 */
 export function bigMapMarkerLayout(width: number, height: number): Omit<IBigMapMarkerHitArea, 'hexId'> {
-    return { width, height, iconY: height / 2 - 16, badgeY: height - 16 + 18 };
+    return { width, height, iconY: height / 2 - 16, badgeY: mapMarkerBadgeY(height - 16) };
 }
 
 export function pickBigMapMarker(layout: IHexGridLayout, markers: readonly IBigMapMarkerHitArea[], x: number, y: number): number {

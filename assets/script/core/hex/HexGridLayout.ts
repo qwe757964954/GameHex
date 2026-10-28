@@ -21,6 +21,28 @@ export const HEX_GRID_FACE_HEIGHT = 90;
  */
 export const HEX_GRID_CONTENT_LIFT = 12.5;
 
+/**
+ * 地皮图**格面以下那截 2.5D 侧壁**的高度（美术事实，**不参与蜂窝几何**）。
+ *
+ * 领地两张地皮 `img_land_01`（草地）/ `img_land_02`（泥土）都是 **126×117**：
+ * 逐行扫 alpha 实测草地/泥土面占 `y = 0…91`（高 90 = {@link HEX_GRID_FACE_HEIGHT}），
+ * **下面 25~26px 全是深棕色侧壁**。而 Sprite 锚点在整图中心 ⇒ 格面底边在图内 `y = 91`、
+ * 图底在 `y = 117` ⇒ 侧壁在格面下方 **26px**。
+ *
+ * ## 谁要用它
+ *
+ * 任何「按地块的**可见轮廓**摆/擦东西」的地方都要算上这段 —— 只按格面算，就等于把地块
+ * 当成一张薄纸，侧壁那 26px 会被当成空地：
+ *
+ *  · 未解锁云的挡云遮罩（`territoryCloudKeepOutPoints`）：只按格面外扩 15px 时，
+ *    遮罩底边比图底**还高 11px** ⇒ 云压在侧壁上、读成"云和地块 0 间隙"
+ *    （用户 2026-10-26：「底部的云层也要和地块有 15px 的间隙」）。
+ *
+ * ⚠️ 对局侧用的是扁平 `hex_flat`（没有侧壁），**别**在对局里加这一段。
+ * 领地侧旧图 `img_land_01_gray` 是 130×119、侧壁 28px，换图时这个数要跟着复核。
+ */
+export const HEX_GRID_TILE_SIDE_HEIGHT = 26;
+
 export const HEX_GRID_LOGICAL_COLUMN_STEP = 36;
 export const HEX_GRID_LOGICAL_ROW_STEP = 42;
 export const HEX_GRID_LOGICAL_COLUMN_PHASE = HEX_GRID_LOGICAL_ROW_STEP / 4;

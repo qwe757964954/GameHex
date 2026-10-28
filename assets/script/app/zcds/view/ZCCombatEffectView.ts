@@ -1,22 +1,16 @@
-import { _decorator, Animation, Component, Graphics, instantiate, Node, Prefab, Sprite, UITransform, Vec3 } from 'cc';
+import { _decorator, Animation, Color, Component, Graphics, instantiate, Node, Prefab, Sprite, UITransform, Vec3 } from 'cc';
 import { ZCCombatEvent, ZCProjectileState } from '../model/ZCGameModel';
 import { mapToViewX, mapToViewY } from './ZCGameViewUtil';
 
 const { ccclass, property } = _decorator;
+const GENERIC_LINE_WIDTH = 3;
+const GENERIC_TRAIL_START_X = -14;
+const GENERIC_TRAIL_END_X = 4;
+const GENERIC_RING_RADIUS = 8;
+const GENERIC_RING_GROWTH = 14;
+const GENERIC_FADE_RATIO = 0.7;
 
-/**
- * `ZCGameEffect.prefab` 上的技能视觉表现。
- *
- * 🔴 **视觉 100% 来自 prefab**（2026-10-15 删掉全部矢量绘制）：`pvpSkill.json`
- * 43/43 行都填了 `effectPrefabPath` 且对应 prefab 全部入库，`visualNode` 恒非空。
- * 原来的 `Graphics` 兜底（弹道箭头 / 刀光 / area 椭圆）已随之删除。
- *
- * 副作用（**要接受**）：后续新增技能若忘了填 `effectPrefabPath`，
- * 该技能的特效会「什么都不出」而不是出替代图形 —— 属于配置问题，本就该显眼。
- *
- * `graphics` 组件与 `@property` 仍保留：`ZCGameEffect.prefab` 里绑着它，
- * 删声明会造成 prefab 与脚本不一致（规则 161/162）。
- */
+/** 技能表现优先使用专属 Prefab；渐进加载局在它尚未就绪时使用短暂通用表现。 */
 @ccclass('ZCCombatEffectView')
 export class ZCCombatEffectView extends Component {
     @property({ type: Node })
@@ -34,8 +28,12 @@ export class ZCCombatEffectView extends Component {
     private visualNode: Node | null = null;
     private visualPrefab: Prefab | null = null;
     private renderedEventId = -1;
+    private allowGeneric = false;
+    private readonly genericTint = new Color(255, 229, 148);
 
-    initialize(prefab: Prefab | null): void {
+    initialize(prefab: Prefab | null, allowGeneric = false): void {
+        this.allowGeneric = allowGeneric && !prefab;
+        this.graphics.clear();
         this.renderedEventId = -1;
         this.node.setRotationFromEuler(0, 0, 0);
         if (this.visualPrefab !== prefab || !this.visualNode?.isValid) {
@@ -68,8 +66,19 @@ export class ZCCombatEffectView extends Component {
             this.spriteNode.setScale(Vec3.ONE);
             this.spriteNode.setRotationFromEuler(0, 0, 0);
         }
-        // 只清掉 prefab 里可能烘焙的几何；矢量绘制已删，这里不再画任何东西。
-        if (firstRender || event.type !== 'projectile') this.graphics.clear();
+        if (firstRender || event.type !== 'projectile' || this.allowGeneric) this.graphics.clear();
+        if (!this.visualPrefab && this.allowGeneric) {
+            this.genericTint.a = Math.round(255 * (1 - progress * GENERIC_FADE_RATIO));
+            this.graphics.strokeColor = this.genericTint;
+            this.graphics.lineWidth = GENERIC_LINE_WIDTH;
+            if (event.type === 'projectile') {
+                this.graphics.moveTo(GENERIC_TRAIL_START_X, 0);
+                this.graphics.lineTo(GENERIC_TRAIL_END_X, 0);
+            } else {
+                this.graphics.circle(0, 0, GENERIC_RING_RADIUS + GENERIC_RING_GROWTH * progress);
+            }
+            this.graphics.stroke();
+        }
         if (this.visualNode) this.visualNode.active = true;
 
         if (event.type === 'projectile') {

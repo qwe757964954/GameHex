@@ -63,11 +63,14 @@ test('没头像：立绘必须被换上，且头像节点要 active=false（不�
         '只清 spriteFrame 不够：Sprite 会保留上一次的渲染数据，复用槽位时闪出上一张卡的头像');
 });
 
-test('没头像且新立绘也拿不到：保留 prefab 现有图片，不写成 null（不闪空一帧）', () => {
+test('没头像且新立绘也拿不到：必须显式写 null（复用条目不能留上一张的图）', () => {
     const slots = fakeSlots(FRAME('prefab占位'));
     applyCardHeadArt(slots, null, null);
 
-    assert.equal(slots.hero.spriteFrame!.name, 'prefab占位');
+    //  这里**不能**保留 prefab 占位图：宿主是虚拟列表复用出来的条目，跳过赋值就等于把
+    //  上一张卡的立绘留在这一张上（串图）。"图没到"的正确语义是清空 ——
+    //  而"没到位就别渲染"由调用方的 prepare 阶段保证（图备齐才 commit），不需要靠占位图兜。
+    assert.equal(slots.hero.spriteFrame, null);
     assert.equal(slots.hero.node.active, true);
     assert.equal(slots.headIcon.node.active, false);
 });
@@ -158,7 +161,9 @@ test('cardArtKey：没配头像的卡键后缀是空串，且与任何配了头�
 // 3. 四个 prefab 的结构契约
 // ============================================================================
 
-const PREFAB_DIR = 'assets/resources/ui/card/';
+//  这四个 prefab 都在 `main-pages` 分包里；`assets/resources/ui/card/` 早已不存在，
+//  旧路径让本组断言从搬包那天起就一直 ENOENT（不是业务红）。
+const PREFAB_DIR = 'assets/bundles/main-pages/ui/card/';
 
 /** 一个落图点：`headParent` = `HeadIcon` 的父节点路径（`''` 表示 prefab 根）。 */
 interface HeadSlotSpec {

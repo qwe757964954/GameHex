@@ -154,16 +154,7 @@ test('视图：选图优先级 = 地图配的 buildingId > 站点 type', () => {
     assert.match(fn, /TERRITORY_SITE_ART\[site\.type\]/, '回退路径仍按站点 type 取图');
 });
 
-test('详情面板：建筑 ID 有值才显示那一行，没有则整行不出现', () => {
-    const src = readFileSync(PRESENTER_PATH, 'utf8');
-    // 两处详情（已解锁 stage / 未绑定 unbound）都要条件展开，不能无条件显示占位
-    const occurrences = src.match(/\.\.\.\(site\.buildingId \? \[`建筑 ID：\$\{site\.buildingId\}`\] : \[\]\)/g) ?? [];
-    assert.equal(occurrences.length, 2,
-        `stageDetailContent 与 unboundDetailContent 两处都应条件展开，实际 ${occurrences.length} 处`);
-    // 旧口径是无条件 + 缺失填 unboundConfigId 占位，必须已经没有了
-    assert.ok(!src.includes('`建筑 ID：${site.buildingId || TERRITORY_TEXTS.unboundConfigId}`'),
-        '仍有「缺失时填未配置占位」的旧写法 —— 口径是「没配就不显示」');
-});
+// 站点详情面板已移除（2026-10-27），「建筑 ID」那行随之消失，用例一并删除。
 
 test('地图数据：同一 configId 是一片区域，区域内只有配了 buildingId 的站点生成建筑', () => {
     const map = JSON.parse(readFileSync(MAP_PRESET, 'utf8')) as Raw;

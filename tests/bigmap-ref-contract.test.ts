@@ -58,7 +58,8 @@ test('按运行时口径取到 12 张表后，parseBigMapConfig 不抛错', () =
     for (const name of Object.values(BIGMAP_TABLE)) tables[name] = refUtilUnwrap(readTableRaw(name));
     const config = parseBigMapConfig(tables as BigMapRawTables);
     assert.equal(config.world.rows, 40);
-    assert.equal(config.buildings.size, 8);
+    // 策划表 `baseBuilding`：每座田一个 id，共 23 行（旧推算表只有 8 行）。
+    assert.equal(config.buildings.size, 23);
 });
 
 test('守卫：RefUtil 的解压门槛仍是 c == 1（口径漂移时本用例先红）', () => {

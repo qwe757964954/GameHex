@@ -30,11 +30,20 @@ function slgFixture() {
             throw new Error(`Unstubbed import: ${name}`);
         },
     });
-    return { sent, complete: () => finishSend(true),
+    return { sent, complete: (ok = true) => finishSend(ok),
         start: exports.startBattle as (type: number, params: string[], caller?: unknown, isCurrent?: () => boolean) => Promise<unknown>,
         last: exports.getLastBattleStart as () => unknown,
     };
 }
+
+test('宝箱开战被服务端拒绝时返回 null，不缓存有效战局', async () => {
+    const f = slgFixture();
+    const pending = f.start(1002, ['2']);
+    assert.equal(f.sent.length, 1);
+    f.complete(false);
+    assert.equal(await pending, null);
+    assert.equal(f.last(), null);
+});
 
 test('SLG 开战按字符串业务参数编码，禁止重发，关页迟到回包不缓存、不导航', async () => {
     for (const [type, id] of [[1003, 8001], [1004, 205]]) {

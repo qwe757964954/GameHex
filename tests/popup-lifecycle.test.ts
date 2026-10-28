@@ -123,6 +123,9 @@ test('PopupBase 在 onOpen 尚未完成时关闭，也会结束 open 并取消�
     }
 
     const popup = new HangingPopup();
+    const released: object[] = [];
+    assert.equal(typeof popup._bindCallbackOwners, 'function');
+    popup._bindCallbackOwners({ removeCallerListener: (owner: object) => released.push(owner) });
     const opening = popup._internalOpen(7, {}, PopupDef.PopupLayer.NORMAL);
     await Promise.resolve();
     assert.equal(popup.lifecycleState, PopupDef.PopupLifecycleState.Opening);
@@ -131,6 +134,13 @@ test('PopupBase 在 onOpen 尚未完成时关闭，也会结束 open 并取消�
     await opening;
     assert.equal(popup.lifecycleState, PopupDef.PopupLifecycleState.Closed);
     assert.equal(popup.isPopupOpen, false);
+    assert.deepEqual(released, [popup]);
+    assert.equal(popup.node.isValid, true, '缓存关闭时节点仍有效，也必须解除回调');
+    const reopening = popup._internalOpen(9, {}, PopupDef.PopupLayer.NORMAL);
+    await Promise.resolve();
+    popup._internalClose(PopupDef.PopupCloseReason.Manual);
+    await reopening;
+    assert.deepEqual(released, [popup, popup], '重开后关闭仍由同一生命周期入口解除');
 
     const context = new PopupOpenContext(8);
     const nextFrame = context.nextFrame();
@@ -220,6 +230,8 @@ test('PopupManager 默认合并同类打开，打开中关闭后仍可重新打�
     );
 
     let created = 0;
+    const callbackOwners = { removeCallerListener() {} };
+    let boundOwners: unknown;
     class HangingPopup {
         static prefabPath = 'ui/test/HangingPopup';
         popupLayer = PopupDef.PopupLayer.NORMAL;
@@ -229,6 +241,7 @@ test('PopupManager 默认合并同类打开，打开中关闭后仍可重新打�
         private readonly openGate = new Promise<void>((resolve) => { this.finishOpen = resolve; });
 
         _internalOpen(): Promise<void> { return this.openGate; }
+        _bindCallbackOwners(owners: unknown): void { boundOwners = owners; }
         _internalClose(): void { this.finishOpen(); }
         _internalDepthChanged(): void {}
         _internalCover(): void {}
@@ -250,7 +263,7 @@ test('PopupManager 默认合并同类打开，打开中关闭后仍可重新打�
             options?.scope?.defer(() => { releasedAssets += 1; });
             return prefabs.get(path)!;
         },
-    });
+    }, callbackOwners);
 
     const first = manager.openAsync(HangingPopup);
     const duplicated = manager.openAsync(HangingPopup);
@@ -258,6 +271,7 @@ test('PopupManager 默认合并同类打开，打开中关闭后仍可重新打�
     await flushMicrotasks();
     const firstPopup = manager.get(HangingPopup);
     assert.ok(firstPopup);
+    assert.equal(boundOwners, callbackOwners);
     assert.equal(created, 1);
     assert.equal(firstPopup!.node.name, 'HangingPopup', '打开后根节点应显示弹窗脚本组件名');
 

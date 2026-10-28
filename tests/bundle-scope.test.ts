@@ -54,7 +54,7 @@ test('CocosAssetService 未显式 bundle 时按路径前缀自动路由到分包
             Asset: class {},
             resources: { name: 'resources', load() {}, loadDir() {}, getInfoWithPath: () => null },
             assetManager: {
-                preloadAny: (request: { path: string; bundle: string }, done: Function) => { requests.push(request); done(null, []); },
+                preloadAny: (request: { path: string; bundle: string }, _options: unknown, done: Function) => { requests.push(request); done(null, []); },
                 getBundle: (name: string) => name === 'resources' ? null : { name, load() {}, loadDir() {}, getInfoWithPath: () => null },
                 loadBundle: (name: string, done: Function) => { requests.push({ path: `__bundle:${name}`, bundle: name }); done(null, { name, load() {}, loadDir() {}, getInfoWithPath: () => null }); },
             },

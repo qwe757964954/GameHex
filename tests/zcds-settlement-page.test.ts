@@ -18,7 +18,10 @@ const pageSource = readFileSync('assets/script/app/zcds/ui/ZCSettlementPage.ts',
 const gameSource = readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8');
 const pageMeta = JSON.parse(readFileSync('assets/script/app/zcds/ui/ZCSettlementPage.ts.meta', 'utf8'));
 const goodsMeta = JSON.parse(readFileSync('assets/script/app/itemdetail/GoodsBox.ts.meta', 'utf8'));
-const prefabText = readFileSync('assets/resources/ui/game/ZCSettlement.prefab', 'utf8');
+const rewardItemViewMeta = JSON.parse(readFileSync('assets/script/app/common/RewardItemView.ts.meta', 'utf8'));
+//  prefab / 切图都随 battle 分包搬到了 `assets/bundles/battle/` 下（判据原先读 `assets/resources/`，
+//  整份文件在模块顶层就 ENOENT 崩掉，30+ 条一条都跑不到）。
+const prefabText = readFileSync('assets/bundles/battle/ui/game/ZCSettlement.prefab', 'utf8');
 const objects: any[] = JSON.parse(prefabText);
 
 const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
@@ -57,10 +60,16 @@ const DESIGN = {
     btnConfirm: { x: 156, y: -536, w: 218, h: 90 },
 };
 /**
- * 奖励栅格 = **虚拟列表**（`VirtualScrollView`）：设计稿量到格子 100×100、列距 111、行距 114、
- * 视口内左右各留 ~38/41。这些数直接喂给组件，落位由它按下面两条公式算（不再烘 20 个槽位）。
+ * 奖励栅格 = **虚拟列表**（`VirtualScrollView`）：设计稿量到**列距 111 / 行距 114**、5 列、
+ * 视口 623×327。
+ *
+ * ⚠️ **格子尺寸 = 公共奖励格 `ui/common/RewardItem.prefab` 的 96×96**（不是原稿的 100×100）——
+ * 奖励格统一走公共件后，格宽由公共件决定；**间距按设计稿反推补偿**：
+ * `gridSpacing = 111 − 96 = 15`、`spacing = 114 − 96 = 18` ⇒ **落位与原稿逐值相同**。
  */
-const VGRID = { cols: 5, cell: 100, gridSpacing: 11, spacing: 14, header: 20, footer: 20, rows: 4 };
+const VGRID = { cols: 5, cell: 96, gridSpacing: 15, spacing: 18, header: 20, footer: 20, rows: 4 };
+/** 公共奖励格 prefab（`assets/resources/ui/common/RewardItem.prefab`）的 uuid。 */
+const REWARD_ITEM_UUID = '375dbd89-8396-4fe8-95e0-3871cf334c43';
 const VSCROLL_CID = '544earF5qRLB4JTuTnSr11+';
 /** Cocos **内置**的 2×2 白图（`default_sprite_splash`）—— 工程里所有全屏遮罩都用它染色。 */
 const BUILTIN_SPLASH = '7d8f9b89-4fd1-4c9f-a3ab-38ec7cded7ca@f9941';
@@ -117,7 +126,7 @@ const sizeOf = (node: any): [number, number] => {
 const positionOf = (node: any): [number, number] => [node._lpos.x, node._lpos.y];
 const childrenOf = (node: any): string[] => node._children.map((ref: any) => objects[ref.__id__]._name);
 const frameOf = (art: string): string =>
-    JSON.parse(readFileSync(`assets/resources/image/settlement/${art}.png.meta`, 'utf8')).subMetas.f9941.uuid;
+    JSON.parse(readFileSync(`assets/bundles/battle/image/settlement/${art}.png.meta`, 'utf8')).subMetas.f9941.uuid;
 
 test('页面脚本不再自己建节点，坐标全归 prefab', () => {
     const code = stripComments(pageSource);
@@ -227,8 +236,11 @@ test('ZCSettlement.prefab：奖励区是虚拟列表（视窗挂 Mask + VirtualS
     // 列表参数全在 prefab 里（代码只喂条数）：漏一项就是「排得不对、且不报错」
     assert.equal(list.useVirtualList, true);
     assert.equal(list.direction, 0, 'VERTICAL');
-    assert.equal(list.itemCreationMode, 0, 'NODE：模板取自 content 的首子节点');
-    assert.equal(list.itemPrefab, null, 'NODE 模式不许配 itemPrefab（会抢走模板）');
+    // ★ 奖励格统一走**公共** `ui/common/RewardItem.prefab`：PREFAB 模式 + itemPrefab 指向它，
+    //   静态槽位全删（自己烘一份 = 同一件事做两遍，改公共件时结算页不跟着变）。
+    assert.equal(list.itemCreationMode, 1, 'PREFAB：用公共奖励格 prefab 克隆');
+    assert.equal(list.itemPrefab?.__uuid__, REWARD_ITEM_UUID, 'itemPrefab 必须指向 ui/common/RewardItem');
+    assert.equal(list.itemNode, null, 'PREFAB 模式不许配 itemNode');
     assert.equal(list.gridCount, VGRID.cols);
     assert.equal(list.gridSpacing, VGRID.gridSpacing);
     assert.equal(list.spacing, VGRID.spacing);
@@ -251,39 +263,50 @@ test('ZCSettlement.prefab：奖励区是虚拟列表（视窗挂 Mask + VirtualS
     assert.deepEqual(positionOf(content), [0, 0], 'content 的 lpos 必须 (0,0)（原点 = 视窗上边缘）');
     assert.deepEqual(positionOf(scroll), [DESIGN.rewardScroll.x, DESIGN.rewardScroll.y], '锚点改了，但视觉盒子不许动');
 
-    // ⚠️ content 只留**一个**模板：`start()` 只摘 `children[0]` 当克隆源，槽位是运行时铺的
-    assert.deepEqual(childrenOf(content), ['Slot'], 'content 只该有模板一个子节点');
-    const slot = nodeNamed('Slot', 'content')!;
-    assert.deepEqual(sizeOf(slot), [VGRID.cell, VGRID.cell], '槽位尺寸 = 组件读的 itemMainSize/itemCrossSize');
-    assert.deepEqual(positionOf(slot), [slotX(0), slotY(0)]);
+    // ★ content 下**不许留静态槽位**：PREFAB 模式下 `start()` 会 `removeAllChildren()` 清空 content，
+    //   留着既是垃圾、又会被误当成"模板"（旧版 GoodsBox 槽位就是这么混进来的）。
+    assert.deepEqual(childrenOf(content), [], 'content 下不许有静态槽位（公共件是唯一来源）');
+    assert.equal(nodeNamed('Slot', 'content'), undefined, '旧的 GoodsBox 静态槽位必须删干净');
 });
 
-test('虚拟列表落位公式与设计稿一致（列距 111 / 行距 114 / 首格 −222,−70）', () => {
-    assert.equal(slotX(1) - slotX(0), VGRID.cell + VGRID.gridSpacing, '列距 111 = 格宽 100 + 列距 11');
-    assert.equal(slotY(1) - slotY(0), -(VGRID.cell + VGRID.spacing), '行距 114 = 格高 100 + 行距 14');
+test('虚拟列表落位公式与设计稿一致（列距 111 / 行距 114）', () => {
+    // ⚠️ 格子 96（公共件），**间距按设计稿反推** ⇒ 列距/行距仍是 111 / 114。
+    //    绝对坐标随格高变（首行中心 = −(header 20 + 格高一半 48) = −68）；
+    //    设计稿量的 −70 是 100 格时的值，差 2px 来自格高，不是排版错。
+    assert.equal(slotX(1) - slotX(0), VGRID.cell + VGRID.gridSpacing, '列距 111 = 格宽 96 + 列距 15');
+    assert.equal(slotY(1) - slotY(0), -(VGRID.cell + VGRID.spacing), '行距 114 = 格高 96 + 行距 18');
     // 设计稿量到 −223.5 / −112.5 / −1.5 / 109.5 / 220.5（居中留白 38 : 41）
     // ⇒ 组件按整行居中算出来是 ±222，整体比稿右 1.5px。1.5px 肉眼不可见，认这个差。
     assert.deepEqual([slotX(0), slotX(2), slotX(4)], [-222, 0, 222]);
-    // 设计稿量到 −70 / −184 / −298 / −412 ⇒ 与公式逐值相同（headerSpacing 取 20）
-    assert.deepEqual([slotY(0), slotY(1), slotY(2), slotY(3)], [-70, -184, -298, -412]);
+    // 行心：首行 −68（格高 96 的一半 48 + header 20），行距仍是 114
+    assert.deepEqual([slotY(0), slotY(1), slotY(2), slotY(3)], [-68, -182, -296, -410]);
 });
 
-test('奖励格模板挂 GoodsBox，三件套（Frame/Icon/Num）绑齐', () => {
+test('奖励格用公共 RewardItem（不自带 GoodsBox / 静态槽位）', () => {
+    // ★ 结算页**不再自带**奖励格实现：格子来自公共 `ui/common/RewardItem.prefab`，
+    //   由 `RewardItemView` 自己解析图标 / 品质框 / 数量（与宝箱详情、关卡界面、玩家关卡弹窗同源）。
     const goodsCid = cidOf(goodsMeta.uuid);
-    const boxes = objects.filter((o) => o.__type__ === goodsCid);
-    assert.equal(boxes.length, 1, '虚拟列表只在 prefab 里烘**一个**模板槽位（旧版是 20 个静态槽）');
-    const box = boxes[0];
-    for (const prop of ['frame', 'icon', 'num']) {
-        assert.ok(box[prop]?.__id__ !== undefined, `模板槽位的 ${prop} 未绑定`);
+    assert.equal(
+        objects.filter((o) => o.__type__ === goodsCid).length, 0,
+        '结算页 prefab 里不许再挂 GoodsBox（奖励格统一走公共 RewardItem）',
+    );
+    // 公共件本体自带三件套 + 概率标签（挂 RewardItemView）
+    const rewardItem = JSON.parse(readFileSync('assets/resources/ui/common/RewardItem.prefab', 'utf8')) as any[];
+    const rewardItemView = rewardItem.find((o) => o.__type__ === cidOf(rewardItemViewMeta.uuid));
+    assert.ok(rewardItemView, '公共 RewardItem 必须挂 RewardItemView');
+    for (const prop of ['frame', 'icon', 'num', 'rate']) {
+        assert.ok(rewardItemView[prop]?.__id__ !== undefined, `公共 RewardItem 的 ${prop} 未绑定`);
     }
-    const num = objects[box.num.__id__];
-    assert.equal(num.__type__, 'cc.Label');
-    assert.equal(num._overflow, 0, '数量必须是 overflow=NONE（GoodsBox 口径）');
-    const numTransform = componentOf(objects[num.node.__id__], 'cc.UITransform')!;
-    assert.deepEqual([numTransform._anchorPoint.x, numTransform._anchorPoint.y], [1, 0.5], '数量锚点在右下角');
-    assert.equal(objects[objects[box.frame.__id__].node.__id__]._name, 'Frame');
-    assert.equal(objects[objects[box.icon.__id__].node.__id__]._name, 'Icon');
-    // 品质框/图标是运行时换图 ⇒ 出厂留空（不能是 `{}` 空对象，那会让引擎读 uv[0] 抛错）
+    // 页面侧：只喂 {resId, amount}，格子自己解析
+    assert.match(pageSource, /import \{ RewardItemView, type IRewardItemData \} from '\.\.\/\.\.\/common\/RewardItemView'/);
+    assert.match(pageSource, /node\.getComponent\(RewardItemView\)!\.render\(this\.rewards\[index\]\)/);
+    assert.doesNotMatch(pageSource, /GoodsBox/, '结算页不再使用 GoodsBox');
+    // 数量文案由公共件自己算（`amount` 数字），页面不自己拼字符串
+    assert.doesNotMatch(pageSource, /itemNumberTextOf/);
+});
+
+test('品质框/图标是运行时换图 ⇒ prefab 里出厂留空（不能是 `{}` 空对象）', () => {
+    // `{}` 空对象既不是 `null` 也不是 `SpriteFrame` ⇒ 引擎 `Sprite._calculateUV` 读 `uv[0]` 抛错
     assert.doesNotMatch(prefabText, /"_spriteFrame":\s*\{\s*\}/);
 });
 
@@ -429,7 +452,9 @@ test('页面逻辑：整组显隐 / 虚拟列表喂条数 + 按下标现取 / �
         '回调只在 onInit 接一次（槽位复用，重复接会越滚越多）');
     assert.match(code, /this\.rewards = rewards/);
     assert.match(code, /this\.rewardList\.setTotalCount\(rewards\.length\)/);
-    assert.match(code, /const reward = this\.rewards\[index\]/, '按下标现取本趟数据');
+    // 按下标现取本趟数据（★ 公共奖励格：只喂 resId+amount，图标/品质框/数量由格子自己解析）
+    assert.match(code, /node\.getComponent\(RewardItemView\)!\.render\(this\.rewards\[index\]\)/,
+        '按下标现取本趟数据');
     assert.match(code, /this\.rewardList\.scrollToTop\(false\)/);
     // ⚠️ 禁闭包捕获「本趟」的数组：`renderItemFn` 只在首次铺列表时绑一次，捕获了下一局还是旧数据
     assert.doesNotMatch(code, /renderItemFn = \(node, index\) => \{[^}]*rewards\[/,
@@ -474,11 +499,11 @@ test('🔴 双倍奖励常显（只展示、未接线不可点）；变强途径
     // 不做点了没反应的假交互。
     assert.match(code, /private renderEntryGroups\(data: IZCSettlementOptions\)/);
     assert.match(code, /this\.doubleButton\.node\.active = true;/, '双倍奖励按钮必须常显');
-    assert.match(code, /this\.doubleButton\.interactable = Boolean\(data\.onDoubleReward\)/,
+    assert.match(code, /this\.doubleButton\.interactable = Boolean\(data\.hasDoubleReward\)/,
         '★没接线 ⇒ 不可点（展示位，不是假交互）');
     // ⚠️ 收的是 `Panel/Grow` **整组**（底板 + 标题 + 三个入口）而不是三个入口 ——
     // 只收入口会剩一个空标题框，比死按钮更奇怪。
-    assert.match(code, /this\.growGroup\.active = Boolean\(data\.onGrowEntry\)/);
+    assert.match(code, /this\.growGroup\.active = Boolean\(data\.hasGrowEntry\)/);
     assert.doesNotMatch(code, /entryEquip\.node\.active|entryHero\.node\.active|entryRune\.node\.active/,
         '三个入口不许各自显隐（会剩空标题框）');
     assert.match(code, /this\.renderEntryGroups\(userData\);/, 'onOpen 必须调它，否则 prefab 的默认 active 会一直露着');
@@ -488,6 +513,21 @@ test('🔴 双倍奖励常显（只展示、未接线不可点）；变强途径
     assert.doesNotMatch(code, /Button\.EventType\.CLICK, \(\) =>/, '按钮监听不许再用箭头闭包');
 });
 
+test('四个按钮只 emit 意图事件，页面不持有任何回调（视图不认识流程）', () => {
+    const code = stripComments(pageSource);
+    // 「确定」之外，双倍奖励与变强三入口也统一走事件中控（2026-10-27；此前它们还是回调）。
+    assert.match(code, /EventMgr\.instance\.emit\(ZCGameUiEvent\.SettlementDoubleReward\)/);
+    assert.match(code, /EventMgr\.instance\.emit\(ZCGameUiEvent\.SettlementGrowEntry, entry\)/,
+        '三个入口共用一条事件，点哪个由 payload 区分');
+    for (const entry of ['equip', 'hero', 'rune']) {
+        assert.match(code, new RegExp(`emitGrowEntry\\('${entry}'\\)`), `${entry} 入口必须走 payload`);
+    }
+    // 页面侧不许再出现 userData 回调：`options?.onXxx?.(...)` 就是「漏传一个 = 点了没反应且零报错」。
+    assert.doesNotMatch(code, /this\.options\?\.on/, '页面不许持有回调');
+    assert.doesNotMatch(code, /onDoubleReward\?:|onGrowEntry\?:/, 'userData 只留 has* 门闩，不留回调字段');
+    assert.doesNotMatch(code, /private options: IZCSettlementOptions/, '留一份 userData 没意义 —— 意图全派发出去了');
+});
+
 test('ZCGame：对局结束改弹 ZCSettlementPage（伤害统计仍走 GameRunAway）', () => {
     const code = stripComments(gameSource);
     assert.match(code, /import \{ ZCSettlementPage \} from '\.\/ui\/ZCSettlementPage'/);
@@ -495,7 +535,9 @@ test('ZCGame：对局结束改弹 ZCSettlementPage（伤害统计仍走 GameRunA
     //  胜负口径要连着两步看：先算 `localVictory`（**撤退算失败**），再把胜负与章节等待器一起交给弹页
     //（章节局要先等 `CmdBattleResultBroMsg` 才弹，见 ZCGame.showSettlement 的签名）。
     assert.match(code, /const localVictory = !retreated && state\.status === 'victory'/, '胜负口径：撤退算失败');
-    assert.match(code, /void this\.showSettlement\(localVictory, chapterResult\)/, '胜负与章节等待器一起交给弹页');
+    //  实参是 `battleResult`：章节局那个 `chapterResult` 会被包一层（PVP 走 `waitForBattleResult`，
+    //  章节局直接用它），所以这里钉的是包好之后的那个名字。
+    assert.match(code, /void this\.showSettlement\(localVictory, battleResult\)/, '胜负与章节等待器一起交给弹页');
     //  签名是多行的（`victory` + 章节等待器 `chapterResult`）⇒ 用 `\s*` 兼容换行。
     assert.match(code, /private async showSettlement\(\s*localVictory: boolean,/);
     assert.match(code, /ZCSettlementPage\.open\(\{/);
@@ -503,8 +545,16 @@ test('ZCGame：对局结束改弹 ZCSettlementPage（伤害统计仍走 GameRunA
     assert.match(code, /import \{ ZCGameUiEvent \} from '\.\/view\/ZCGameHudEvents'/);
     assert.match(code, /EventMgr\.instance\.on\(ZCGameUiEvent\.SettlementConfirm, this\.onSettlementConfirm, this\)/,
         '★ZCGame 必须订阅结算页的确定事件 —— 漏了就「点了没反应」（页面自己不会关）');
-    assert.match(code, /private onSettlementConfirm\(\): void \{\s*if \(!this\.leaving\) this\.returnToMain\(\);/,
-        '确定 = 回主界面（离场后不许再导航）');
+    //  确定 = ① 先收页面 ② 再回主界面（切流程是「预加载 → 进入」两段，弹窗不能等 onLeave 才消失）
+    //  ③ 切流被取消时按同一份 userData 把页面补回来（否则 phase 已 Settlement ⇒ 卡死）。
+    assert.match(code, /private onSettlementConfirm\(\): void \{\s*if \(this\.leaving\) return;\s*this\.closeSettlementPopup\(\);/,
+        '确定必须先关弹窗再导航 —— 顺序反了就是「点了没反应」');
+    assert.doesNotMatch(code, /private onSettlementConfirm\(\): void \{\s*if \(!this\.leaving\) this\.returnToMain\(\);/,
+        '不许退回「不关页、直接导航」的旧写法（伤害统计那条 `onDamageStatsReturnToMain` 不在本次范围）');
+    assert.match(code, /ProcedureManager\.onSwitchSettled\(\(entered\) => \{[\s\S]{0,200}?if \(!entered\) this\.reopenSettlement\(\)/,
+        '切流被取消必须把结算页补回来');
+    assert.match(code, /private reopenSettlement\(\): void \{[\s\S]{0,200}?this\.openSettlementPopup\(this\.settlementOptions\)/,
+        '重开复用首次那份 userData（奖励帧已解析好，不必再等广播）');
     assert.doesNotMatch(code, /onConfirm: \(\)/, '不该再往结算页塞收尾回调');
     assert.match(code, /private settlementPopup: ZCSettlementPage \| null = null/);
     // 伤害统计弹窗没被顺手删掉（HUD 的伤害按钮还在用它）

@@ -40,7 +40,7 @@ test('territory stations open details and start a table-driven local PVE battle'
     const presenter = readFileSync(new URL('../assets/script/app/territory/application/TerritoryPresenter.ts', import.meta.url), 'utf8');
     const adapter = readFileSync(new URL('../assets/script/app/territory/application/TerritorySaveStoreAdapter.ts', import.meta.url), 'utf8');
     const loader = readFileSync(new URL('../assets/script/app/territory/application/TerritoryChapterLoader.ts', import.meta.url), 'utf8');
-    // 2026-09-30 拆分后：站点详情归 `TerritorySiteDetailPanel`，美术路径归 `TerritoryPageAssets`。
+    // 2026-09-30 拆分后：弹窗归 `LevelInfoPanel`，美术路径归 `TerritoryPageAssets`。
     const assets = readFileSync(new URL('../assets/script/app/territory/application/TerritoryPageAssets.ts', import.meta.url), 'utf8');
     const game = readFileSync(new URL('../assets/script/app/procedure/ProcedureGame.ts', import.meta.url), 'utf8');
     // 章节战役由 ChapterLoader 加载（Page 不再直接调）。
@@ -56,9 +56,10 @@ test('territory stations open details and start a table-driven local PVE battle'
     // 章节记忆走 store 端口（委托断言读适配器）。
     assert.match(adapter, /this\.store\.loadLastChapter/);
     assert.match(adapter, /this\.store\.saveLastChapter/);
-    // 站点详情改由独立弹窗承载（Presenter 的 intent 是 selectSite）。
+    // 站点详情面板已移除（2026-10-27）⇒ 关卡 / 首领改走 PopupBase 的「关卡界面」。
     assert.match(presenter, /selectSite\(site: TerritorySite\)/);
-    assert.match(page, /this\.detailPanel\.open\(/);
+    assert.match(page, /LevelInfoPanel/);
+    assert.equal(/this\.detailPanel/.test(page), false, '页面不该再有站点详情面板');
     // 真正的导航在 Page（outputs.navigateToBattle 由 Presenter 定义、Page 实现）。
     assert.match(page, /ProcedureManager\.navigate\(GameRoute\.Battle/);
     // 导航数据由 Presenter 组装。
@@ -82,8 +83,8 @@ test('territory stations open details and start a table-driven local PVE battle'
     assert.match(game, /baseConfig\.enemyDeck\.filter/);
     assert.match(game, /maxHpPct: \(pve\.hpRate - 1\) \* 100/);
     assert.match(game, /attackPct: \(pve\.attackRate - 1\) \* 100/);
-    assert.match(game, /builtClientCombat\.config\.modifiers\?\.enemy/);
-    assert.match(game, /captureZCMatchConfig\(\{/);
+    assert.match(game, /sourceModifiers\?\.enemy/);
+    assert.match(game, /captureZCMatchConfig\(\s*Object\.assign/);
     assert.match(game, /pve\?\.mode === 'defence'/);
     assert.match(game, /pveDefence\?\.waves\.length/);
     assert.match(presenter, /playerCount: TERRITORY_DEFAULT_PLAYER_COUNT/);

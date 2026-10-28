@@ -92,7 +92,7 @@ export class RdExprBinding {
                 if (!redDot.isValid) return;
                 redDot.setRedDot(normalizeRedDotCount(value as number), type);
             },
-            redDot as unknown as destroyable,
+            redDot,
         );
 
         this.toolSet = handler;

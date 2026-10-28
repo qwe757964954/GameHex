@@ -9,6 +9,9 @@
  * | 2026-10-23 二版 | ① 云与地块留**固定 15px** 间隔，不许遮挡地块；② 序列帧**只在云消散**时用，未解锁状态是一张**静止图** |
  * | 2026-10-23 三版 | ① 影子必须画在云体**之下**；② 云洞**不再裁剪**，改成"少放几朵 + 轻微缩小"（{@link TERRITORY_CLOUD_POCKET_SCALE}） |
  * | 2026-10-23 四版（本次） | 三版的"运行时按行切 `SpriteFrame.rect`"实机**翻车**（影子压到云上，整片云发灰）⇒ 改由**美术层离线拆图**：`cloud_body_N` / `cloud_shadow_N` 两张同画布 PNG，运行时一个 rect 都不算 |
+ * | 2026-10-26 五版 | ① 铺满不再跳过格网内的空格（否则整条裸底图）；② 云洞按**整朵云含影子**收倍率（`0.74 → 0.60`）；③ y 偏移改成**按倍率算**（`territoryCloudArtOffsetY`），缩小时不再往下漂 |
+ * | 2026-10-26 六版 | 消散从"瞬间换帧 + 淡出"升级成四段过渡：**整朵炸一下（放大 6%）→ 裂开（壳收到 0.84）→ 碎块炸开（1.15）+ 上飘 + 淡出**；`ITerritoryCloudDissolveFrame` 增加 `scale` / `liftY` / `shadowScale` / `shadowOpacity`，`index = -1` 表示"还没裂" |
+ * | 2026-10-26 七版（本次） | 挡云遮罩的基准从**格面**换成**地块可见轮廓**（格面 + 下方 {@link HEX_GRID_TILE_SIDE_HEIGHT} 侧壁）—— 只按格面外扩时遮罩底边比图底还高 11px，云压在侧壁上（用户：「底部的云层也要和地块有 15px 的间隙」） |
  *
  * ⇒ 待机那套「5 帧循环 + 相位错开」整条退役（`territoryCloudIdleFrame` / `territoryCloudPhase`
  * 连常量一起删掉）。留着它等于留一条"以后有人顺手接回去"的路，与当初删白光爆点同一态度。
@@ -20,14 +23,16 @@
  * | --- | --- |
  * | 未解锁（静止） | `cloud_body_0`（云体）+ `cloud_shadow_0`（影子），**不随帧变化** |
  * | 云体 / 影子分层 | 两张同画布图、同坐标；影子分组恒为层里第 0 个孩子（视图侧的事） |
- * | 解锁消散 | `cloud_dissolve_body_0…1` + `cloud_dissolve_shadow_0…1` 各两帧 + 淡出（{@link territoryCloudDissolveFrame}） |
- * | 与地块的间隔 | 挡云遮罩：{@link territoryCloudKeepOutPoints}（格面外扩 {@link TERRITORY_CLOUD_KEEP_OUT_PX}） |
+ * | 解锁消散 | 四段：整朵炸一下 → `cloud_dissolve_body_0`（壳收到 0.84）→ `cloud_dissolve_body_1`（碎块炸到 1.15）+ 上飘 + 淡出（{@link territoryCloudDissolveFrame}） |
+ * | 与地块的间隔 | 挡云遮罩：{@link territoryCloudKeepOutPoints}（**地块轮廓**外扩 {@link TERRITORY_CLOUD_KEEP_OUT_PX}） |
  *
  * ## 为什么要"外扩多边形"而不是"把云缩小"
  *
  * 一朵云 200×240，一格的脸才 123×90 —— 云**天生**盖到相邻格。所以"不遮挡地块"只能靠
- * **擦掉**（视图侧用 `Mask` 反向遮罩），擦除区 = 每个已解锁格的格面**外扩 15px**。
+ * **擦掉**（视图侧用 `Mask` 反向遮罩），擦除区 = 每个已解锁格的地块轮廓**外扩 15px**。
  * 外扩量必须是真的 15px，见 `territoryCloudKeepOutPoints` 的注释（按顶点等比放大会缩水到 ~7.5px）。
+ *
+ * ⚠️ 基准是**地块可见轮廓**（格面 + 下方 26px 侧壁），不是格面 —— 见 {@link territoryTileOutlinePoints}。
  *
  * ⚠️ 唯一的例外是**云洞**（被地块包围的未解锁格）：那里不擦、也不裁，靠
  * {@link TERRITORY_CLOUD_POCKET_SCALE} 把云缩小一点留出观感上的空隙（三版口径）。
@@ -36,6 +41,7 @@
 import {
     HEX_GRID_FACE_HEIGHT,
     HEX_GRID_FACE_WIDTH,
+    HEX_GRID_TILE_SIDE_HEIGHT,
     HEX_GRID_VIEW_COLUMN_SPACING,
     HEX_GRID_VIEW_ROW_SPACING,
     hexGridNeighborIds,
@@ -45,7 +51,7 @@ import {
 import type { TerritoryMapConfig } from './TerritoryMapConfig';
 
 /**
- * 消散总时长（秒）：2 帧（裂成环 → 几乎散尽）走完再淡到透明。
+ * 消散总时长（秒）：整朵炸一下 → 裂成环 → 碎块散尽，全程伴随缩小与淡出。
  *
  * 0.5s 是刻意压短的 —— 云散开之后地皮还要由 `TerritoryHexSpawn`（0.4s）长出来，
  * 两者同帧起步，云停留太久会读成"点了没反应"。
@@ -54,6 +60,68 @@ export const TERRITORY_CLOUD_DISSOLVE_SECONDS = 0.5;
 
 /** 消散过程中**保持全不透明**的比例（0~1）；过了这一段才开始淡出。 */
 export const TERRITORY_CLOUD_DISSOLVE_HOLD = 0.3;
+
+/**
+ * 消散起手「整朵炸一下」占的比例（0~1）—— 这一段**还没换消散帧**，用的仍是待机整朵图。
+ *
+ * 2026-10-26 六版：老口径第一帧就直接写 `cloud_dissolve_body_0`（中间已经裂出一个大洞的环），
+ * 于是"整朵云 → 断掉的环"是一次**瞬间跳变**，看着不像过渡，像换了一张图。
+ * 现在先让整朵云**放大 6% 再收**，把"炸开"的动作交给缩放，裂开才交给序列帧。
+ */
+export const TERRITORY_CLOUD_DISSOLVE_INTACT = 0.12;
+
+/** 起手膨胀的峰值倍率（"炸开"那一下；≥1，大会晕、小看不见）。 */
+export const TERRITORY_CLOUD_DISSOLVE_PUNCH = 1.06;
+
+/**
+ * 裂开段收尾的倍率：外壳"炸出洞"时收缩到的尺寸（< 1 = 在变小）。
+ *
+ * 这一段对应消散帧 0（中间已经裂出一个大洞的环）—— 壳在往回收，读"云朵快速变小"。
+ */
+export const TERRITORY_CLOUD_DISSOLVE_CRUSH_SCALE = 0.84;
+
+/**
+ * 碎块段收尾的倍率：碎片向外炸出去的峰值（> 1 = 在散开）。
+ *
+ * ⚠️ 这个数**大于 1** 不矛盾：消散帧 1 只有三小块碎屑（美术包围盒 75×152，整朵是 200×198），
+ * 放大 1.15 之后碎块的可见范围仍只有整朵云的一半 —— 观感是"云炸开、碎片飞散"，
+ * 而不是"整朵云涨大"。反过来若在这一段继续缩小，就变成"碎块往中间缩"，与"爆炸散开"相反。
+ */
+export const TERRITORY_CLOUD_DISSOLVE_BURST_SCALE = 1.15;
+
+/**
+ * 缩放**调头的分界**（裂开之后的进度比例，0~1）：这段之前收缩、之后炸开。
+ *
+ * `0.5` 故意对上"两帧序列的中点"——消散帧 1（碎块）接管的那一帧正好开始向外炸，
+ * 帧与缩放同一拍，不会出现"先炸开再换图"的错位。以后美术给更多帧时这个数不用跟帧号绑定，
+ * 它只是手感参数。
+ */
+export const TERRITORY_CLOUD_DISSOLVE_FRAGMENT = 0.5;
+
+/**
+ * 消散过程中云体**上飘**的距离（地图像素）；影子不跟着飘。
+ *
+ * 影子是贴在地面上的投影：云被炸散时它是留在原地的，只有云体往上走 ——
+ * 体 / 影一分离，"散开"才有方向感（两个一起飘就只是"整体平移"）。
+ */
+export const TERRITORY_CLOUD_DISSOLVE_LIFT_PX = 12;
+
+/**
+ * 影子**消失得更早**（进度比例）：到这一刻影子已经全透明。
+ *
+ * 🔴 2026-10-26 六版（预览图看出来的）：云体和影子原来同一个透明度、一起淡到 100%，
+ * 结果是最后那 0.2s 里**云已经只剩几缕、地上还挂着一大团灰影子**（像忘了清的一块脏）。
+ * 物理上也说不通：云升起来、散掉，地上的投影只会先没。
+ */
+export const TERRITORY_CLOUD_DISSOLVE_SHADOW_GONE = 0.75;
+
+/**
+ * 影子在碎块段收到多小（不跟着向外炸）。
+ *
+ * 云体在碎块段是放大到 1.15（碎片向外飞），影子**反过来**收到 0.7 ——
+ * 投影只会随着云变薄、升高而收缩。跟着放大就是"地上那团灰也炸开了"，一眼假。
+ */
+export const TERRITORY_CLOUD_DISSOLVE_SHADOW_SCALE = 0.7;
 
 /**
  * 云与地块（格面）之间**固定的空白间隔**（像素，地图局部坐标）。
@@ -73,12 +141,276 @@ export const TERRITORY_CLOUD_KEEP_OUT_PX = 15;
 export const TERRITORY_CLOUD_SCALE = 1;
 
 /**
- * 云节点相对「格面中心」的 y 偏移（美术像素）。
+ * 云美术「视觉重心」相对**画布中心**的偏移（美术像素，向上为正）。
  *
- * 原图 200×240 里云体（含投影）占 `y = 0…198`，重心比画布中心高约 21px
- * （中心对齐会把云体顶到格子上方去）。取负值把云体压回格面。
+ * 原图 200×240 里云体（含投影）占 `y = 0…198` ⇒ 重心在 `y = 99`，比画布中心 `120`
+ * 高 **21.5px**。这个数是**美术事实**，不随显示倍率变；真正写进节点的偏移要乘倍率
+ * （见 {@link territoryCloudArtOffsetY}）。
  */
-export const TERRITORY_CLOUD_ART_OFFSET_Y = -21;
+export const TERRITORY_CLOUD_ART_CENTER_Y = 21.5;
+
+/**
+ * 云节点相对「格面中心」的 y 偏移（地图像素）—— **必须按显示倍率算**。
+ *
+ * ## 为什么不能写成常数
+ *
+ * 重心偏移是**美术像素**，节点缩放后它在屏幕上的长度会跟着缩水：
+ * 固定写 `-21.5` 时，1.0 倍正好把云压在格面上，0.6 倍就只压回 12.9px ⇒ 云整体**往下漂**
+ * 8.6px（云洞缩得越小漂得越多，看起来"云跑到下面那格去了"）。
+ * 乘倍率之后，任何一种倍率下云的重心都精确落在格面中心。
+ *
+ * @param scale 这一朵云的显示倍率（`TERRITORY_CLOUD_SCALE` 或再乘云洞倍率）。
+ */
+export function territoryCloudArtOffsetY(scale: number = TERRITORY_CLOUD_SCALE): number {
+    const value = Number.isFinite(scale) ? scale : TERRITORY_CLOUD_SCALE;
+    return -TERRITORY_CLOUD_ART_CENTER_Y * value;
+}
+
+/**
+ * 1.0 倍下的 y 偏移（= `territoryCloudArtOffsetY(TERRITORY_CLOUD_SCALE)`）。
+ *
+ * 只给"倍率恒为 1"的调用方与用例当参照；真正摆位一律走 {@link territoryCloudArtOffsetY}。
+ */
+export const TERRITORY_CLOUD_ART_OFFSET_Y = territoryCloudArtOffsetY(TERRITORY_CLOUD_SCALE);
+
+/**
+ * 云体（alpha 主体，不含地面投影）的尺寸 —— 美术实测 `cloud_body_0` 的 `alpha > 40` 包围盒。
+ *
+ * 云洞的可用空间是按它算的：格面 + 四周 15px = `153×120`；
+ * 而**整朵云**（体 + 影子）高 198，所以洞里的缩放上限由「198 × s ≤ 120」定死。
+ */
+export const TERRITORY_CLOUD_BODY_WIDTH = 200;
+export const TERRITORY_CLOUD_BODY_HEIGHT = 120;
+/** 整朵云（云体 + 地面投影）的高度 —— 美术实测 `cloud_idle_0` 包围盒 `y = 0…197`。 */
+export const TERRITORY_CLOUD_FULL_HEIGHT = 198;
+
+/**
+ * 铺满层（`CloudFillLayer`）**退场**的时长（秒）—— 全解锁后整层雾淡到全透明。
+ *
+ * ## 为什么与消散同长（0.5s）
+ *
+ * 铺满层的退场起点 = "最后一个有内容的格被露出"的那一帧，而那一刻**最后一朵真实云**也开始散。
+ * 两条时间轴同长 ⇒ 边界那圈雾与那朵云一起散尽，读起来是"整片雾退掉"；
+ * 铺满层比消散长 ⇒ 云已经散完了地图上还挂着一层灰，比消散短 ⇒ 边界比中心先秃一块。
+ *
+ * ⚠️ 别写成"消完再淡"：那会让全解锁的画面上多出 0.5s 的"只有边界有雾"的空档。
+ *
+ * 2026-10-27 用户：「给铺满层挂 UIOpacity 走一条淡出时间轴」（此前是 `active = false` 瞬间没）。
+ *
+ * ⚠️ 这个数是**整条时间轴**的长度（最慢的那一朵刚好在它上面淡完），不是每一朵的时长 ——
+ *    逐朵窗口见 {@link territoryCloudFillWaveWindow}（近端 0.55 倍、远端 1 倍，都压在它以内）。
+ */
+export const TERRITORY_CLOUD_FILL_FADE_SECONDS = 0.5;
+
+/**
+ * 「全解锁 ⇒ 云雾散场」的镜头演出分段（秒，2026-10-27 用户口径）：
+ *
+ * > 「优化云层消失效果，拉高摄像机，观看云层逐渐消失的过程，屏幕内囊括了所有地块，
+ * >  云雾消失后重新拉进镜头，回到初始高度」
+ *
+ * | 段 | 时长 | 画面 |
+ * | --- | --- | --- |
+ * | 拉远 | {@link TERRITORY_CLOUD_DOLLY_OUT_SECONDS} 1.1s | 镜头抬高到「整张图入画」 |
+ * | 淡出 | {@link TERRITORY_CLOUD_DOLLY_FADE_SECONDS} 2.0s | 铺满层在拉远视角里**慢慢**淡掉（逐朵错峰，见 {@link TERRITORY_CLOUD_FILL_WAVE_STAGGER}） |
+ * | 拉回 | {@link TERRITORY_CLOUD_DOLLY_IN_SECONDS} 0.7s | 回到初始高度 |
+ *
+ * ⚠️ 淡出时长在这里**单独一份**，不写进 `TERRITORY_CLOUD_FILL_FADE_SECONDS`（0.5s）：
+ *    那个 0.5 是"散场没人看"时的默认值，且刻意与最后一朵云的消散同长。
+ *    进了演出就得放慢到能看清"逐渐消失"，两条时长各有各的约束，不能合并。
+ *
+ * 📌 2026-10-27 第二轮（用户）：「拉远 0.7s 改成 1.1s，雾淡阶段 1.4s 改成 2s」——
+ *    拉远要抬得"看得清是在抬"，1.4s 里几百朵雾一起淡完太快、读不出"扩散"。
+ *    总时长随之 2.8s → **3.8s**（`territoryCloudDollyTotalSeconds()`，别在这里写死）。
+ */
+export const TERRITORY_CLOUD_DOLLY_OUT_SECONDS = 1.1;
+export const TERRITORY_CLOUD_DOLLY_FADE_SECONDS = 2;
+export const TERRITORY_CLOUD_DOLLY_IN_SECONDS = 0.7;
+
+/**
+ * 拉远时给地图四周留的余量（0~1）。0.94 ⇒ 最长的那一边占满 94% 视口。
+ *
+ * 地图包围盒量的是**格心**，最外圈地块的图还往外探半格 ——
+ * {@link territoryCloudDollyFitScale} 里已经把这一格算进尺寸，这里只留"呼吸感"。
+ */
+export const TERRITORY_CLOUD_DOLLY_FIT_MARGIN = 0.94;
+
+/** 演出总时长（秒）；`elapsed >= 它` 就是收工，地图必须还原。 */
+export function territoryCloudDollyTotalSeconds(): number {
+    return TERRITORY_CLOUD_DOLLY_OUT_SECONDS
+        + TERRITORY_CLOUD_DOLLY_FADE_SECONDS
+        + TERRITORY_CLOUD_DOLLY_IN_SECONDS;
+}
+
+/**
+ * 演出已用时 → 镜头「拉远程度」（**0 = 初始高度，1 = 整张图入画**）。纯函数。
+ *
+ * 曲线：拉远用 `easeOut`（一下子抬起来再收住），拉回用 `1 - easeOut`（对称地落回去，
+ * 末段慢、不会"啪"一下砸回原位）。中间那段恒为 1 —— 雾就是在这段里淡完的。
+ *
+ * @param seconds 已用时（秒）；`<= 0` 或 `>= 总时长` 一律 0（收工态 = 初始高度）
+ */
+export function territoryCloudDollyZoom(seconds: number): number {
+    const total = territoryCloudDollyTotalSeconds();
+    if (!(seconds > 0) || !(seconds < total)) return 0;
+    if (seconds < TERRITORY_CLOUD_DOLLY_OUT_SECONDS) {
+        return easeOut(seconds / TERRITORY_CLOUD_DOLLY_OUT_SECONDS);
+    }
+    const backAt = TERRITORY_CLOUD_DOLLY_OUT_SECONDS + TERRITORY_CLOUD_DOLLY_FADE_SECONDS;
+    if (seconds < backAt) return 1;
+    return 1 - easeOut((seconds - backAt) / TERRITORY_CLOUD_DOLLY_IN_SECONDS);
+}
+
+/**
+ * 铺满层该不该开始淡 —— **拉远到位那一刻**才起跑，否则玩家还没看清全图雾就淡一半了。
+ */
+export function territoryCloudDollyFadeDue(seconds: number): boolean {
+    return seconds >= TERRITORY_CLOUD_DOLLY_OUT_SECONDS;
+}
+
+/**
+ * 让「整张图入画」的内容层缩放（≤ 1，**只缩小不放大**）。
+ *
+ * 包围盒量的是格心（`layout.width/height`），最外圈地块的图还往外探**半格**
+ * ⇒ 尺寸按「包围盒 + 一整格」（左右各半格）算，再乘 {@link TERRITORY_CLOUD_DOLLY_FIT_MARGIN}。
+ *
+ * 任一入参非法（0 / 负数 / NaN / Infinity）⇒ 返回 1（不缩放），绝不让地图塌成 0。
+ * ⚠️ 四个都要 `Number.isFinite`：只判 `> 0` 的话 `Infinity` 视口会算出个"半倍率"，
+ *    看着像正常值、实际是脏数据带进来的。
+ */
+export function territoryCloudDollyFitScale(
+    mapWidth: number,
+    mapHeight: number,
+    viewportWidth: number,
+    viewportHeight: number,
+): number {
+    if (!Number.isFinite(mapWidth) || !Number.isFinite(mapHeight)) return 1;
+    if (!Number.isFinite(viewportWidth) || !Number.isFinite(viewportHeight)) return 1;
+    if (!(mapWidth > 0) || !(mapHeight > 0)) return 1;
+    if (!(viewportWidth > 0) || !(viewportHeight > 0)) return 1;
+    const width = mapWidth + HEX_GRID_FACE_WIDTH;
+    const height = mapHeight + HEX_GRID_FACE_HEIGHT;
+    const fit = Math.min(viewportWidth / width, viewportHeight / height) * TERRITORY_CLOUD_DOLLY_FIT_MARGIN;
+    if (!Number.isFinite(fit) || !(fit > 0)) return 1;
+    return Math.min(1, fit);
+}
+
+/**
+ * 铺满层退场时间轴：**已用时 → 不透明度（0~1）**。纯函数，`easeOut`（快起慢收）⇒
+ * 起手一下就明显变透、尾段慢慢抹平，与消散那套同一条缓动。
+ *
+ * @param seconds 退场已用时（秒）；`<= 0` = 起手（全不透明）；`>= totalSeconds` = 退完（0）。
+ */
+export function territoryCloudFillOpacity(
+    seconds: number,
+    totalSeconds: number = TERRITORY_CLOUD_FILL_FADE_SECONDS,
+): number {
+    const total = totalSeconds > 0 ? totalSeconds : 0;
+    // 与消散同一条挡脏参数的分界：`!(x > 0)` 一次吃掉 NaN / 0 / 负数。
+    if (!(seconds > 0)) return 1;
+    if (total <= 0) return 0;
+    if (!(seconds < total)) return 0;
+    return 1 - easeOut(seconds / total);
+}
+
+// ============================================================
+// 雾散的「扩散波」：靠近地块的先散、越远越慢（2026-10-27 第二轮）
+// ============================================================
+//
+// 用户原话：「从靠近地块的云雾先消失，离地块远的消失的慢，形成一个消失扩散的视觉效果」。
+//
+// 老口径是**整层一个 `UIOpacity`** ⇒ 几百朵雾同一帧起淡、同一帧淡完，屏幕上是一层灰
+// 整体变薄（读"调低了透明度"，不读"雾在退"）。现在按「这一朵到最近地块的距离」逐朵错峰：
+//
+// ```
+// 距离  0（贴着地块） ────────────────────────→ 最远
+// 起淡   0            ── 0.25 × 总时长 ──────→
+// 时长   0.55 × 总时长 ──────────────────────→ 0.75 × 总时长
+// 淡完   0.55 × 总时长 ──────────────────────→ 1.00 × 总时长
+// ```
+//
+// 三条同时生效（起得早、还更快）⇒ 全透明的"边界"从地块外沿一圈一圈推出去，就是那个扩散读法。
+// 只做起淡延迟、时长仍相同的话，观感是"整片雾匀速变薄、只是错开了"——远的那圈并不比近的慢。
+
+/**
+ * 近端**缩短**多少（占整条时长的比例，`0~1`）：贴着地块的那朵只淡 `1 - 它`。
+ *
+ * 0.45 ⇒ 近端 0.55 倍、远端 1.0 倍。太小（0）只是整层一起淡，太大（>0.6）近端会"啪"一下没。
+ */
+export const TERRITORY_CLOUD_FILL_WAVE_SPREAD = 0.45;
+
+/**
+ * 远端**推迟**多少（占整条时长的比例，`0~1`）：最远那朵晚这么多秒才起淡。
+ *
+ * 0.25 ⇒ 整条时长里前 1/4 只有近处的雾在动，远处的还没开始 —— 这一"先后"才是扩散感。
+ *
+ * ⚠️ **必须小于** {@link TERRITORY_CLOUD_FILL_WAVE_SPREAD}：窗长 = 总时长 − 推迟 − 近端缺口 ×(1−波次)，
+ *    推迟 ≥ 差距时窗长会随距离**变短**（远的反而淡得更快，方向就反了）。
+ */
+export const TERRITORY_CLOUD_FILL_WAVE_STAGGER = 0.25;
+
+/**
+ * 「这一朵雾离地块多远」→ 波次（`0` = 贴着地块、`1` = 最远的那朵）。纯函数。
+ *
+ * @param distance    到这朵雾**最近的地块格心**的距离（地图像素）
+ * @param maxDistance 全部铺满雾里的最大距离（归一化的分母）
+ *
+ * 脏参数一律当 0（= 当它贴着地块、按近端速度淡）：宁可让它早散一点，也不要算出 `NaN`
+ * 让某朵雾永远停在半透明上。
+ */
+export function territoryCloudFillWaveOrder(distance: number, maxDistance: number): number {
+    if (!Number.isFinite(distance) || !Number.isFinite(maxDistance) || !(maxDistance > 0)) return 0;
+    return clamp01(distance / maxDistance);
+}
+
+/** 一朵雾的淡出窗口（秒，相对**整条时间轴的起点**）。 */
+export interface ITerritoryCloudFillWaveWindow {
+    /** 晚多少秒起淡（近端 0）。 */
+    readonly delay: number;
+    /** 自己这条淡出曲线有多长（近端短、远端长）。 */
+    readonly duration: number;
+}
+
+/**
+ * 波次 → 这一朵的淡出窗口（`[delay, delay + duration] ⊆ [0, 总时长]`）。纯函数。
+ *
+ * ```
+ * delay    = 波次 × STAGGER × 总时长
+ * duration = 总时长 − delay − SPREAD × 总时长 × (1 − 波次)
+ * ```
+ *
+ * 两端严格**收在整条时长以内**（远端 `delay + duration = 总时长`）—— 铺满层是按"整条时长走完"
+ * 才 `active = false` 的，只要有一朵没淡完就被收起来，那朵就是"啪"一下没。
+ *
+ * @param order        波次（0~1，越界自动夹紧）
+ * @param totalSeconds 整条时间轴时长；非正 / 脏值 ⇒ 退化成一帧淡完（与老口径一致）
+ */
+export function territoryCloudFillWaveWindow(
+    order: number,
+    totalSeconds: number = TERRITORY_CLOUD_FILL_FADE_SECONDS,
+): ITerritoryCloudFillWaveWindow {
+    const total = Number.isFinite(totalSeconds) && totalSeconds > 0 ? totalSeconds : 0;
+    const wave = clamp01(order);
+    const delay = wave * TERRITORY_CLOUD_FILL_WAVE_STAGGER * total;
+    const duration = total - delay - TERRITORY_CLOUD_FILL_WAVE_SPREAD * total * (1 - wave);
+    // 窗长被脏参数（比如把两个手感参数配成 SPREAD + STAGGER > 1）压到非正 ⇒ 退回"整条一条曲线"。
+    if (!(duration > 0)) return { delay: 0, duration: total };
+    return { delay, duration };
+}
+
+/**
+ * 一朵雾在「整条时间轴已用时 `seconds`」时的不透明度（`0~1`）。纯函数。
+ *
+ * 就是 `territoryCloudFillOpacity(seconds − delay, duration)` —— 曲线仍是同一个 `easeOut`，
+ * 只是每朵自己一个窗口。`seconds < delay` 时接口天然给 1（还没轮到它）。
+ */
+export function territoryCloudFillWaveOpacity(
+    seconds: number,
+    order: number,
+    totalSeconds: number = TERRITORY_CLOUD_FILL_FADE_SECONDS,
+): number {
+    const window = territoryCloudFillWaveWindow(order, totalSeconds);
+    return territoryCloudFillOpacity(seconds - window.delay, window.duration);
+}
 
 /** 一个二维点（只在本文件与视图之间传递，不引 `cc`）。 */
 export interface ITerritoryCloudPoint {
@@ -87,12 +419,12 @@ export interface ITerritoryCloudPoint {
 }
 
 /**
- * 格面六边形的**原始 6 个顶点**（相对格面中心，**逆时针**，y 向上）。
+ * **格面**六边形的 6 个顶点（相对格面中心，逆时针，y 向上）—— 只有"台面"，不含侧壁。
  *
- * 平顶蜂窝：左右各一个尖角，上下各一条平边 —— 与 `HEX_GRID_FACE_WIDTH / HEIGHT` 同源，
- * 所以"擦除区"永远与地块的真实轮廓对齐（改格子尺寸时不用改这里）。
+ * 什么时候用它：算「云洞」那种**只看台面**的可用空间（{@link TERRITORY_CLOUD_POCKET_SCALE}）；
+ * 挡云遮罩请用 {@link territoryTileOutlinePoints}（含侧壁），否则底部会贴上去。
  */
-const HEX_FACE_OUTLINE: readonly ITerritoryCloudPoint[] = (() => {
+export function territoryFaceOutlinePoints(): ITerritoryCloudPoint[] {
     const hw = HEX_GRID_FACE_WIDTH / 2;
     const hh = HEX_GRID_FACE_HEIGHT / 2;
     const qw = HEX_GRID_FACE_WIDTH / 4;
@@ -104,7 +436,41 @@ const HEX_FACE_OUTLINE: readonly ITerritoryCloudPoint[] = (() => {
         { x: -qw, y: -hh },
         { x: qw, y: -hh },
     ];
-})();
+}
+
+/**
+ * 地块**可见轮廓**的 6 个顶点（相对格面中心，**逆时针**，y 向上）。
+ *
+ * 不是"格面六边形"，而是「格面 + 下方那截 2.5D 侧壁」—— 领地的地皮是 126×117 的立体图，
+ * 侧壁在格面下方还有 {@link HEX_GRID_TILE_SIDE_HEIGHT}（26px）。只按格面算，就等于把地块
+ * 当成一张薄纸，侧壁那片会被当成空地。
+ *
+ * 🔴 2026-10-26：用户「底部的云层也要和地块有 15px 的间隙」。当时遮罩底边 = 格面底边 − 15，
+ * 比**图底**还高 11px ⇒ 云压在侧壁上，看起来就是"底部 0 间隙"（上边缘却是正常的 14px，
+ * 因为图顶只比格面顶多 1px）。
+ *
+ * 平顶蜂窝：左右各一个尖角，上下各一条平边 —— 与 `HEX_GRID_FACE_WIDTH / HEIGHT` 同源，
+ * 所以"擦除区"永远与地块的真实轮廓对齐（改格子尺寸时不用改这里）。
+ *
+ * 侧壁怎么建模：把下面两个顶点**竖直下移**侧壁高（`x` 不变）⇒ 下边缘整段压低，
+ * 两条下斜边随之变长。斜接外扩后，下斜边与底边各自精确外移 15px。
+ *
+ * @returns 新的数组（调用方可随意改）；点序恒为「右 → 右上 → 左上 → 左 → 左下 → 右下」。
+ */
+export function territoryTileOutlinePoints(): ITerritoryCloudPoint[] {
+    const hw = HEX_GRID_FACE_WIDTH / 2;
+    const hh = HEX_GRID_FACE_HEIGHT / 2;
+    const qw = HEX_GRID_FACE_WIDTH / 4;
+    const bottom = -hh - HEX_GRID_TILE_SIDE_HEIGHT;
+    return [
+        { x: hw, y: 0 },
+        { x: qw, y: hh },
+        { x: -qw, y: hh },
+        { x: -hw, y: 0 },
+        { x: -qw, y: bottom },
+        { x: qw, y: bottom },
+    ];
+}
 
 /** 边 `a → b` 的**外法线**（逆时针多边形：`(dy, -dx)` 归一化）。 */
 function edgeNormal(a: ITerritoryCloudPoint, b: ITerritoryCloudPoint): ITerritoryCloudPoint {
@@ -116,7 +482,7 @@ function edgeNormal(a: ITerritoryCloudPoint, b: ITerritoryCloudPoint): ITerritor
 }
 
 /**
- * 格面**向外平移 `inset` 像素**后的 6 个顶点（相对格面中心，逆时针，y 向上）。
+ * 地块可见轮廓**向外平移 `inset` 像素**后的 6 个顶点（相对格面中心，逆时针，y 向上）。
  *
  * ## 为什么不是"顶点按比例放大"
  *
@@ -127,19 +493,25 @@ function edgeNormal(a: ITerritoryCloudPoint, b: ITerritoryCloudPoint): ITerritor
  *  这里走**斜接（miter）**：每个顶点按相邻两条边的外法线求交，
  *  `p' = p + inset × (n₁ + n₂) / (1 + n₁·n₂)` ⇒ 每条边都精确外移 `inset`。
  *
+ * 基准是 {@link territoryTileOutlinePoints}（格面 + 侧壁），**不是**格面 ——
+ * 否则底部那 26px 侧壁会被当成空地，云贴上去（2026-10-26 那条）。
+ *
  * @param inset 外扩量（像素）；非有限值退回 {@link TERRITORY_CLOUD_KEEP_OUT_PX}，
- *              负数 / 0 按 0 处理（= 正好贴着格面）。
+ *              负数 / 0 按 0 处理（= 正好贴着地块轮廓）。
+ * @param outline 基准轮廓；**别在运行时传**（默认就是地块轮廓）。只有离线对照图会把它换成
+ *               格面轮廓，用来画"旧口径长什么样"。
  */
 export function territoryCloudKeepOutPoints(
     inset: number = TERRITORY_CLOUD_KEEP_OUT_PX,
+    outline: readonly ITerritoryCloudPoint[] = territoryTileOutlinePoints(),
 ): ITerritoryCloudPoint[] {
     const gap = Number.isFinite(inset) ? (inset > 0 ? inset : 0) : TERRITORY_CLOUD_KEEP_OUT_PX;
-    const count = HEX_FACE_OUTLINE.length;
+    const count = outline.length;
     const out: ITerritoryCloudPoint[] = [];
     for (let index = 0; index < count; index += 1) {
-        const previous = HEX_FACE_OUTLINE[(index - 1 + count) % count];
-        const current = HEX_FACE_OUTLINE[index];
-        const next = HEX_FACE_OUTLINE[(index + 1) % count];
+        const previous = outline[(index - 1 + count) % count];
+        const current = outline[index];
+        const next = outline[(index + 1) % count];
         const first = edgeNormal(previous, current);
         const second = edgeNormal(current, next);
         const denominator = 1 + (first.x * second.x + first.y * second.y);
@@ -158,17 +530,48 @@ function clamp01(value: number): number {
 
 /** 消散某一帧的姿态。视图照着写节点，不再做二次换算。 */
 export interface ITerritoryCloudDissolveFrame {
-    /** 消散序列帧的下标（`0…frameCount-1`）。 */
+    /**
+     * 消散序列帧的下标（`0…frameCount-1`）；**`-1` = 还没裂开**，用待机的整朵云图。
+     *
+     * 起手段（{@link TERRITORY_CLOUD_DISSOLVE_INTACT}）只做"炸一下"的缩放、不换帧 ——
+     * 否则第一帧就从整朵云跳到"中间已经裂出洞的环"，读成换图而不是过渡。
+     */
     readonly index: number;
     /** 节点不透明度（`1 → 0`，视图乘 255 取整）。 */
     readonly opacity: number;
+    /** 这一帧的缩放倍率（乘在这朵云的**基础倍率**上：正常层 1.0、云洞 0.6）。 */
+    readonly scale: number;
+    /** 云体相对起手位置的上飘量（地图像素，向上为正）；影子不吃这一项。 */
+    readonly liftY: number;
+    /** 影子的缩放比例（相对基础倍率）：裂开段跟云体同步、碎块段**反着收小**。 */
+    readonly shadowScale: number;
+    /** 影子的不透明度：比云体**更早**归零（云升空了，地上的投影先没）。 */
+    readonly shadowOpacity: number;
+}
+
+/** 缓出（快起慢收）：`x ∈ [0,1]`。消散的缩放 / 上飘都走它 —— "快速变小"靠的就是前段陡。 */
+function easeOut(x: number): number {
+    const value = clamp01(x);
+    return 1 - (1 - value) * (1 - value);
 }
 
 /**
- * 消散进度 → 这一帧用第几张 + 多透明；`null` = 已经散尽（该把云收掉了）。
+ * 消散进度 → 这一帧的姿态（帧号 / 不透明度 / 缩放 / 上飘）；`null` = 已经散尽（该把云收掉了）。
  *
- * 帧号按**时长均分**（2 帧 ⇒ 前 0.25s 裂环、后 0.25s 碎散），淡出压在第二帧上：
- * 第一帧还是"裂开的云"，直接一起淡会读成"凭空变淡"而不是"散掉"。
+ * ## 四段（2026-10-26 六版）
+ *
+ * | 段 | 进度 | 帧 | 缩放 | 其他 |
+ * | --- | --- | --- | --- | --- |
+ * | ① 炸一下 | `0 ~ 12%` | **整朵**（`index = -1`） | `1 → 1.06`（缓出） | 全不透明、不上飘 |
+ * | ② 裂开 + 变小 | `12% ~ 56%` | 消散帧 0（裂出洞的环） | `1.06 → 0.84`（缓出，前段陡） | 开始上飘；过 `HOLD` 才开始淡 |
+ * | ③ 碎块炸开 | `56% ~ 100%` | 消散帧 1（三块碎屑） | `0.84 → 1.15`（缓出） | 上飘到 +12px、透明度见底 |
+ *
+ * ②③ 的**调头点**是 {@link TERRITORY_CLOUD_DISSOLVE_FRAGMENT}（= 两帧序列的中点）：
+ * 壳在收缩 → 碎块向外散。只有"一路缩小"会读成云瘪了，"一路放大"又变成云涨大；
+ * 一收一放才是"炸开"。
+ *
+ * 帧号在 ②③ 段**按剩余时长均分**（2 帧 ⇒ 各占 44%）：淡出压在最后一帧上 ——
+ * 第一帧就一起淡会读成"凭空变淡"而不是"散掉"。
  *
  * @param seconds 这一格自己的消散已用时（不含任何相位）。`<= 0` = 起手帧。
  */
@@ -179,13 +582,48 @@ export function territoryCloudDissolveFrame(
 ): ITerritoryCloudDissolveFrame | null {
     if (!(frameCount > 0)) return null;
     const total = totalSeconds > 0 ? totalSeconds : 0;
+    const punch = TERRITORY_CLOUD_DISSOLVE_PUNCH;
+    const crush = TERRITORY_CLOUD_DISSOLVE_CRUSH_SCALE;
+    const burstScale = TERRITORY_CLOUD_DISSOLVE_BURST_SCALE;
+    const fragment = TERRITORY_CLOUD_DISSOLVE_FRAGMENT;
+    const intact = TERRITORY_CLOUD_DISSOLVE_INTACT;
     // `!(seconds > 0)` 一次挡掉 NaN / 0 / 负数：NaN 的比较恒 false，正是想要的语义。
-    if (!(seconds > 0)) return { index: 0, opacity: 1 };
+    if (!(seconds > 0)) {
+        return { index: -1, opacity: 1, scale: 1, liftY: 0, shadowScale: 1, shadowOpacity: 1 };
+    }
     if (!(seconds < total)) return null;
     const t = seconds / total;
-    const index = Math.min(frameCount - 1, Math.floor(t * frameCount));
+    // ① 炸一下：整朵云只放大、不换帧、不上飘（影子跟着一起，还没到分家的阶段）。
+    if (t < intact) {
+        const grow = 1 + (punch - 1) * easeOut(t / intact);
+        return { index: -1, opacity: 1, scale: grow, liftY: 0, shadowScale: grow, shadowOpacity: 1 };
+    }
     const fade = 1 - clamp01((t - TERRITORY_CLOUD_DISSOLVE_HOLD) / (1 - TERRITORY_CLOUD_DISSOLVE_HOLD));
-    return { index, opacity: fade };
+    // ②③ 裂开之后的进度（`intact` 处 = 0，到点 = 1）—— 帧号 / 缩放 / 上飘共用它，三者永远同步。
+    const burst = (t - intact) / (1 - intact);
+    const index = Math.min(frameCount - 1, Math.floor(burst * frameCount));
+    const pivot = fragment > 0 && fragment < 1 ? fragment : 0.5;
+    // 壳先收（②"变小"）、碎块再炸出去（③"散开"）：两段都用缓出（前段陡），接缝处严格连续。
+    const scale = burst < pivot
+        ? punch + (crush - punch) * easeOut(burst / pivot)
+        : crush + (burstScale - crush) * easeOut((burst - pivot) / (1 - pivot));
+    // 影子：裂开段跟云体同缩放（同一朵云），碎块段**反着收**（云升空了，投影只会更小）；
+    // 透明度另有一条更早的曲线（{@link TERRITORY_CLOUD_DISSOLVE_SHADOW_GONE}）。
+    const shadowScale = burst < pivot
+        ? scale
+        : crush + (TERRITORY_CLOUD_DISSOLVE_SHADOW_SCALE - crush) * easeOut((burst - pivot) / (1 - pivot));
+    const shadowGone = TERRITORY_CLOUD_DISSOLVE_SHADOW_GONE;
+    const shadowFade = shadowGone > TERRITORY_CLOUD_DISSOLVE_HOLD
+        ? 1 - clamp01((t - TERRITORY_CLOUD_DISSOLVE_HOLD) / (shadowGone - TERRITORY_CLOUD_DISSOLVE_HOLD))
+        : fade;
+    return {
+        index,
+        opacity: fade,
+        scale,
+        liftY: TERRITORY_CLOUD_DISSOLVE_LIFT_PX * easeOut(burst),
+        shadowScale,
+        shadowOpacity: shadowFade,
+    };
 }
 
 /** 一朵云要盖在哪：只要格号与格心坐标（坐标 = 布局点，未加 `HEX_GRID_CONTENT_LIFT`）。 */
@@ -235,14 +673,23 @@ export const TERRITORY_CLOUD_ART_HEIGHT = 240;
  * 缩小云朵的size，在视觉上保留云朵未解锁的象征意义即可」）—— 遮罩一撤，云 200×240 会实实在在
  * 糊到周围的地块上，只能靠"少放几朵（每格一朵）+ 缩一点"把观感找回来。
  *
- * 取 0.74 是算出来的：云体（alpha>100 的那块）是 200×120，一格格面 123×90，
- * 加上**四周 15px 的间隔**（用户第三轮：「这部分的云朵也要与地块有间隔」）刚好 153×120 ——
- * 200 × 0.74 = 148 < 153、120 × 0.74 = 89 < 120，一朵云正好落在"洞 + 15px"里，不再压地块。
+ * ## 0.60 是"整朵云刚好塞进洞里"算出来的（2026-10-26 修）
+ *
+ * 洞的可用空间 = 格面 + 四周 15px = **153×120**。
+ * 老口径 0.74 是拿**云体**（200×120）算的 —— 漏掉了下面那块**地面投影**：
+ * 整朵云其实是 `200×198`，0.74 时高 **147px**，比洞的 120 还高出 27px
+ * ⇒ 云实实在在糊到上下相邻的地块上（用户 2026-10-26 截图红圈："被地块包围的云层太大"）。
+ *
+ * 现在按**整朵云**收：
+ *  - 高：`198 × s ≤ 120` ⇒ `s ≤ 0.606`
+ *  - 宽：`200 × s ≤ 153` ⇒ `s ≤ 0.765`
+ *
+ * 取两者的小值并留一点余量 ⇒ **0.60**（实机 118.8×120 正好落在洞 + 15px 里，一朵都不压地块）。
  *
  * 为什么不再往下缩：缩到"连透明边都不碰格面"要 0.45 倍，那个尺寸的云会变成一颗颗孤立的小白点，
  * 反而读不出"这里被雾盖着"。
  */
-export const TERRITORY_CLOUD_POCKET_SCALE = 0.74;
+export const TERRITORY_CLOUD_POCKET_SCALE = 0.6;
 
 /**
  * 「被地块包围的云洞」最多算几格。
@@ -254,20 +701,32 @@ export const TERRITORY_CLOUD_POCKET_SCALE = 0.74;
 export const TERRITORY_CLOUD_POCKET_MAX_CELLS = 8;
 
 /**
- * 铺满内容层要补的**虚拟云格点**（真实格之外、覆盖整块背景）。
+ * 铺满内容层要补的**虚拟云格点**（覆盖整块背景，含格网内没有内容的空格）。
  *
  * 为什么不用"再铺一层云"：那会和真实格那层形成**两套密度**（重叠区更亮），边界一眼可见。
  * 这里直接把**同一张格网向外延伸**：行列号允许越界，坐标仍旧由 `hexGridViewPoint` 算
  * （它不校验范围）⇒ 延伸出来的点与真实格**同相位、同间距**，云连成一片、没有接缝。
  *
+ * ## 🔴 2026-10-26：格网内**没有内容的空格**也必须盖云
+ *
+ * 老口径只铺"格网矩形之外"那圈（格内交给真实云层）。可真实云层只认 `sites` /
+ * `randomSites.candidateCells` / 起始格 —— 章节图 20×20 / 400 格里只有 ~117 格配了内容，
+ * 剩下那 280 多格既没内容云、又不在铺满范围内 ⇒ **一整条裸露的沙漠底图**
+ * （用户 2026-10-26 截图左侧红框：「未解锁的地块没有云层遮挡，空了一块背景图」）。
+ *
+ * 现在改成：格网内的空格**照铺**，只跳过 {@link occupied}（= 已经由真实云层负责的格），
+ * 免得同一处叠两朵。
+ *
  * @param width  / @param height  内容层尺寸（`territoryMapContentSize`），矩形以 (0,0) 为中心
- * @returns 只包含**真实格以外**的点，且只留「云的包围盒与内容层矩形相交」的那些
+ * @param occupied 真实云层已经盖了哪些格（`territoryCloudCells` 的 cellId 集合）；不传 = 一格都不占
+ * @returns 只留「云的包围盒与内容层矩形相交」的点
  */
 export function territoryCloudFillPoints(
     rows: number,
     columns: number,
     width: number,
     height: number,
+    occupied?: ReadonlySet<number>,
 ): ITerritoryCloudPoint[] {
     const out: ITerritoryCloudPoint[] = [];
     if (!(rows > 0) || !(columns > 0) || !(width > 0) || !(height > 0)) return out;
@@ -282,8 +741,11 @@ export function territoryCloudFillPoints(
     const rowEnd = Math.ceil(centerRow + (height / 2 + halfH) / HEX_GRID_VIEW_ROW_SPACING) + 1;
     for (let column = columnStart; column <= columnEnd; column += 1) {
         for (let row = rowStart; row <= rowEnd; row += 1) {
-            // 真实格由 `sync` 那一套负责（要消散、要判解锁），这里只补外面的。
-            if (row >= 0 && row < rows && column >= 0 && column < columns) continue;
+            // 真实云层已经盖过的格由 `sync` 那一套负责（要消散、要判解锁），这里不重复放。
+            if (row >= 0 && row < rows && column >= 0 && column < columns) {
+                const cellId = row * columns + column;
+                if (occupied?.has(cellId)) continue;
+            }
             const point = hexGridViewPoint(row, column, rows, columns);
             if (Math.abs(point.x) - halfW > width / 2) continue;
             if (Math.abs(point.y) - halfH > height / 2) continue;

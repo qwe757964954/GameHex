@@ -4,6 +4,7 @@ import { runInNewContext } from 'node:vm';
 import test from 'node:test';
 import ts from 'typescript';
 import * as catalog from '../assets/script/app/bigmap/application/BigMapArtCatalog';
+import * as bundleCatalog from '../assets/script/core/asset/BundleCatalog';
 
 function artLoader() {
     const source = readFileSync('assets/script/app/bigmap/application/BigMapArtLoader.ts', 'utf8');
@@ -16,6 +17,7 @@ function artLoader() {
         require: (name: string) => {
             if (name === 'cc') return { SpriteFrame: class {} };
             if (name === './BigMapArtCatalog') return catalog;
+            if (name === '../../../core/asset/BundleCatalog') return bundleCatalog;
             throw new Error(`未预期依赖 ${name}`);
         },
     });
@@ -31,6 +33,7 @@ test('同一作用域中的重复建筑资源仅加载一次，布局指定背�
     const art = await artLoader()(assets, { disposed: false }, 'custom/world');
     assert.equal(calls.filter((path) => path.endsWith('/construction/spriteFrame')).length, 1);
     assert.equal(art.background.path, 'custom/world/spriteFrame');
+    assert.equal(art.tiledBackground.path, 'image/bigmap/bigMapBG/spriteFrame');
     assert.equal(art.buildings.size, 8);
     assert.equal(art.resources.size, 5);
     assert.equal(art.ui.size, 9);
@@ -66,7 +69,18 @@ test('页面加载前关闭不会发起资源请求，加载途中关闭不会�
     const late = await load(assets, scope);
     assert.equal(late.home, null);
     assert.equal(late.baseBackground, null);
+    assert.equal(late.tiledBackground, null);
     assert.ok([...late.ui.values()].every((frame) => frame === null));
+});
+
+test('连续背景缺失仍保留原布局背景和六张地皮', async () => {
+    const art = await artLoader()({
+        has: async (path: string) => !path.includes('/bigMapBG/'),
+        load: async (path: string) => ({ path }),
+    }, { disposed: false }, 'custom/world');
+    assert.equal(art.tiledBackground, null);
+    assert.equal(art.background.path, 'custom/world/spriteFrame');
+    assert.equal(art.groundVariants.filter(Boolean).length, 6);
 });
 
 test('资源缺失走既有建筑兜底，缺失美术不会改变规则配置', async () => {

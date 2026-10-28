@@ -1,4 +1,4 @@
-import { _decorator, Button, Label, Node, SpriteFrame } from 'cc';
+import { _decorator, Label, Node, SpriteFrame } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { PopupCloseReason } from '../../framework/ui/PopupDef';
 import { Toast } from '../common/Toast';
@@ -70,7 +70,7 @@ export class MainTaskDetailPage extends PopupBase {
      */
     static prefabPath = 'ui/MainTask/MainTaskDetail';
 
-    @property({ type: Node, tooltip: 'CloseBtn：关闭按钮（挂 cc.Button）' })
+    @property({ type: Node, tooltip: 'CloseBtn：关闭按钮（点它收起，挂不挂 cc.Button 都行）' })
     closeButton: Node = null!;
 
     @property({ type: Label, tooltip: 'TaskTitle：任务标题 `任务名 (x/y)`（老端 `lab_title`）' })
@@ -97,9 +97,19 @@ export class MainTaskDetailPage extends PopupBase {
     // ============================================================
 
     protected onInit(): void {
-        this.bindButton(this.closeButton, () => this.close(PopupCloseReason.CloseButton));
-        this.bindButton(this.btnGo, () => this.onGoClick());
+        // 统一走节点触摸：不查 `cc.Button`、也不要求按钮节点必须挂它
+        // （FGUI 迁过来的 `<loader>`/`<image>` 本来就没有 `cc.Button`）
+        this.closeButton?.on(Node.EventType.TOUCH_END, this.handleClose, this);
+        this.btnGo?.on(Node.EventType.TOUCH_END, this.handleGo, this);
     }
+
+    private readonly handleClose = (): void => {
+        this.close(PopupCloseReason.CloseButton);
+    };
+
+    private readonly handleGo = (): void => {
+        this.onGoClick();
+    };
 
     protected async onOpen(): Promise<void> {
         this.snapshot = null;
@@ -123,23 +133,6 @@ export class MainTaskDetailPage extends PopupBase {
     /** 弹窗还活着吗（异步回来时页面可能已被关掉）。 */
     private get alive(): boolean {
         return !!this.node && this.node.isValid && this.isPopupOpen;
-    }
-
-    /**
-     * 绑按钮。
-     *
-     * ⚠️ FGUI `<loader>` / `<image>` 迁过来**只有 `cc.Sprite`、没有 `cc.Button`**（规则 81b）：
-     * 那种节点上绑 `Button.EventType.CLICK` 是**静默死按钮**。反过来 `<component>` 形态的
-     * 按钮迁过来**有** `cc.Button`，绑 `TOUCH_END` 会绕过 `interactable`。按实际组件分流。
-     */
-    private bindButton(node: Node | null | undefined, handler: () => void): void {
-        if (!node) return;
-        const button = node.getComponent(Button);
-        if (button) {
-            button.node.on(Button.EventType.CLICK, handler, this);
-            return;
-        }
-        node.on(Node.EventType.TOUCH_END, handler, this);
     }
 
     /** 奖励格（遍历容器子节点拿 `GoodsBox`，不逐个写 `@property` 引用）。 */

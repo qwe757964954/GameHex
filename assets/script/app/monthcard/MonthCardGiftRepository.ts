@@ -57,12 +57,12 @@ export interface IMonthCardGiftRepository {
      * `type` = `monthCardActPlan.type`（**不是** `plan`，见 `RequestMonthCardMsg` 的说明）；
      * `payId` = `payChannel.id`（= `monthCardActPlan.rmb`），`rsp.ret` 为真后发起支付。
      */
-    buy(type: number, payId: number, caller?: unknown): Promise<MonthCardRequestResult>;
+    buy(type: number, payId: number, caller?: object): Promise<MonthCardRequestResult>;
     /**
      * 领取某张月卡的今日奖励。
      * `activityResId` = 该活动在缓存里的 `openResId`（`buildStates` 已把它带在状态里）。
      */
-    claim(activityResId: number, caller?: unknown): Promise<MonthCardRequestResult>;
+    claim(activityResId: number, caller?: object): Promise<MonthCardRequestResult>;
     /**
      * 接购买成功广播（`CmdCardBuyBroMsg`）。同一 `caller` 重复调用只生效一次。
      * 回调收到的是**服务端真发货**（endTime 已加、buyReward 已发）后的奖励明细 `tlRewards`。
@@ -126,7 +126,7 @@ export class RuntimeMonthCardGiftRepository implements IMonthCardGiftRepository 
         return map;
     }
 
-    async buy(type: number, payId: number, caller?: unknown): Promise<MonthCardRequestResult> {
+    async buy(type: number, payId: number, caller?: object): Promise<MonthCardRequestResult> {
         const net = GameNet.instance;
         if (!net.isConnected) return 'offline';
         // 老客户端在 `rsp.ret` 为真之后调 `SDKMgr.pay(payRef.id, "common", 0)` 发起真实支付，
@@ -136,7 +136,7 @@ export class RuntimeMonthCardGiftRepository implements IMonthCardGiftRepository 
         let ret = false;
         try {
             const ok = await net.send(
-                new RequestMonthCardBuy({ res_Id: type }, caller as any, (rsp) => { ret = rsp?.ret === true; }),
+                new RequestMonthCardBuy({ res_Id: type }, caller, (rsp) => { ret = rsp?.ret === true; }),
                 false,
             );
             if (!ok) return 'failed';
@@ -149,7 +149,7 @@ export class RuntimeMonthCardGiftRepository implements IMonthCardGiftRepository 
         return 'ok';
     }
 
-    async claim(activityResId: number, caller?: unknown): Promise<MonthCardRequestResult> {
+    async claim(activityResId: number, caller?: object): Promise<MonthCardRequestResult> {
         const net = GameNet.instance;
         if (!net.isConnected) return 'offline';
         //  ⚠️ `CmdTakeMonthCardActRewardRspMsg` **没有 `ret` 字段**（整个响应体只有 `tlReward` ——
@@ -161,7 +161,7 @@ export class RuntimeMonthCardGiftRepository implements IMonthCardGiftRepository 
             const ok = await net.send(
                 new RequestTakeMonthCardReward(
                     { resId: activityResId },
-                    caller as any,
+                    caller,
                     // 老客户端收到响应直接弹奖励（`ModelActivity.RequestTakeMonthCardActReward` →
                     // `FW.ShowReward(rsp.tlReward)`）。`FW.ShowReward` 是可注入全局出口
                     // （组合根接成 `ShowRewardPage.open`），本文件不 import 视图类 / `cc`
@@ -194,7 +194,7 @@ export class RuntimeMonthCardGiftRepository implements IMonthCardGiftRepository 
         // Demo3.8 所有月卡购买都收敛到 `MonthCardGiftPage`（挂机页也只是 `open` 它），
         // 所以广播监听挂在 Repository 上、由页面 onOpen/onClose 驱动即可，购买时弹窗一定开着。
         this.broadcaster = {};
-        GameNet.instance.addEvent('CmdCardBuyBroMsg', this.broadcaster as never, (msg: any) => {
+        GameNet.instance.addEvent('CmdCardBuyBroMsg', this.broadcaster, (msg: any) => {
             const goods: CmdGoods[] = Array.isArray(msg?.tlRewards) ? (msg.tlRewards as CmdGoods[]) : [];
             for (const fn of this.listeners.values()) fn(goods);
         });
@@ -203,7 +203,7 @@ export class RuntimeMonthCardGiftRepository implements IMonthCardGiftRepository 
     unlisten(caller: object): void {
         this.listeners.delete(caller);
         if (this.listeners.size === 0 && this.broadcaster) {
-            GameNet.instance.removeCallerEvent(this.broadcaster as never);
+            GameNet.instance.removeCallerEvent(this.broadcaster);
             this.broadcaster = null;
         }
     }

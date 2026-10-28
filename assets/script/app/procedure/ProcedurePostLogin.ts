@@ -1,9 +1,12 @@
 import { Prefab, sys } from 'cc';
 import { GameRoute } from '../../core/runtime/GameRoute';
 import { AudioMgr } from '../../framework/audio/AudioMgr';
+import { EventMgr } from '../../framework/event/EventMgr';
 import { ProcedureBase } from '../../framework/procedure/ProcedureBase';
 import type { ProcedurePreloadContext } from '../../framework/procedure/ProcedureBase';
 import { LAUNCH_UPDATE_WEIGHT, LaunchProgressUI } from '../loading/LaunchProgressUI';
+import { MAIN_LOADING_EVENTS } from '../main/MainLoadingEvents';
+import type { IMainLoadingProgress } from '../main/MainLoadingEvents';
 import { TerritoryChapterInfoRepository } from '../territory/application/TerritoryChapterInfoRepository';
 
 const POST_LOGIN_ERROR_MESSAGE = '加载失败，请重新进入游戏';
@@ -55,6 +58,7 @@ export class ProcedurePostLogin extends ProcedureBase {
             return;
         }
         this.launchUI.show();
+        this.bindMainLoadingEvents();
         this.bootstrapTerritoryChapterInfo(params);
         void this.prepare();
     }
@@ -101,11 +105,33 @@ export class ProcedurePostLogin extends ProcedureBase {
     }
 
     onLeave(): void {
+        EventMgr.instance.offTarget(this);
         this.revision += 1;
         // 登录图节点保留在 host 下（MainRoot 已在其下渲染就绪），由 ProcedureMain.onEnter 直接移除。
         this.launchUI = null;
         this.launchPrefab = null;
         this.releaseResourceScope();
+    }
+
+    protected onDestroy(): void {
+        EventMgr.instance.offTarget(this);
+        this.revision += 1;
+        this.launchUI = null;
+        super.onDestroy();
+    }
+
+    private bindMainLoadingEvents(): void {
+        EventMgr.instance.on(MAIN_LOADING_EVENTS.PROGRESS, this.onMainLoadingProgress, this);
+        EventMgr.instance.on(MAIN_LOADING_EVENTS.FAILED, this.onMainLoadingFailed, this);
+    }
+
+    private onMainLoadingProgress({ ratio }: IMainLoadingProgress): void {
+        const remain = 1 - this.startRatio;
+        this.launchUI?.setProgress(this.startRatio + remain * (0.7 + ratio * 0.3));
+    }
+
+    private onMainLoadingFailed(): void {
+        this.launchUI?.setStatus(POST_LOGIN_ERROR_MESSAGE);
     }
 
     private async prepare(): Promise<void> {
@@ -124,16 +150,7 @@ export class ProcedurePostLogin extends ProcedureBase {
                 this.launchUI?.setProgress(this.startRatio + progress.ratio * remain * 0.7);
             });
             if (revision !== this.revision) return;
-            this.navigate(GameRoute.Main, {
-                onProgress: (ratio: number) => {
-                    if (revision !== this.revision) return;
-                    this.launchUI?.setProgress(this.startRatio + remain * (0.7 + ratio * 0.3));
-                },
-                onError: () => {
-                    if (revision !== this.revision) return;
-                    this.launchUI?.setStatus(POST_LOGIN_ERROR_MESSAGE);
-                },
-            });
+            this.navigate(GameRoute.Main);
         } catch (error) {
             if (revision !== this.revision) return;
             console.error('[ProcedurePostLogin] 登录后资源加载失败', error);

@@ -155,7 +155,7 @@ export class TerritoryChapterInfoRepository {
         this.broListener = {};
         GameNet.instance.addEvent(
             'CmdCityChapterInfoBroMsg',
-            this.broListener as never,
+            this.broListener,
             (msg: unknown) => {
                 const info = readInfoField(msg);
                 const normalized = normalizeChapterInfo(info);

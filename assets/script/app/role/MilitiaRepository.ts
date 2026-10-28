@@ -111,7 +111,7 @@ class MilitiaRepository {
         const net = GameNet.instance;
         if (!net.isConnected) return 'offline';
         try {
-            const ok = await net.send(new RequestArmyUpLevel({ armyId }, this as never, () => { }), false);
+            const ok = await net.send(new RequestArmyUpLevel({ armyId }, this, () => { }), false);
             return ok ? 'ok' : 'failed';
         } catch (error) {
             console.warn('[MilitiaRepository] 兵种升级请求失败', error);

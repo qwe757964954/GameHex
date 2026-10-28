@@ -231,15 +231,15 @@ export interface ICelebrationRepository {
     /** 读表 + 读缓存，组装一次快照；**不发任何请求**。 */
     load(nowMs?: number): Promise<ICelebrationSnapshot>;
     /** 领取庆典目标奖励（`CmdCelebrationGetTargetRewardReqMsg`，返回 `tlCmdGoods`）。 */
-    claimTargetReward(id: number, subId: number, caller?: unknown): Promise<CelebrationRequestResult>;
+    claimTargetReward(id: number, subId: number, caller?: object): Promise<CelebrationRequestResult>;
     /** 购买限时特惠商品（`CmdCelebrationBuyShopGoodsReqMsg`）。 */
-    buyShopGoods(id: number, subId: number, caller?: unknown): Promise<CelebrationBuyResult>;
+    buyShopGoods(id: number, subId: number, caller?: object): Promise<CelebrationBuyResult>;
     /**
      * 查详细排名（`CmdGetRankReqMsg`）。
      *
      * 与另两个不同：**这是查询**，回包才有数据 ⇒ 读超时用 800ms（不是 5000）。
      */
-    requestRank(rankType: number, showNum: number, unionId: string, caller?: unknown): Promise<ICelebrationRankDetail | null>;
+    requestRank(rankType: number, showNum: number, unionId: string, caller?: object): Promise<ICelebrationRankDetail | null>;
 }
 
 /** 生产环境 Repository。 */
@@ -309,7 +309,7 @@ export class RuntimeCelebrationRepository implements ICelebrationRepository {
     }
 
     /** 领取庆典目标奖励。⚠️ `id` 是 `celebrationConfig.id`，不是 `rankType`（见 `RequestCelebrationMsg`）。 */
-    async claimTargetReward(id: number, subId: number, caller?: unknown): Promise<CelebrationRequestResult> {
+    async claimTargetReward(id: number, subId: number, caller?: object): Promise<CelebrationRequestResult> {
         const net = GameNet.instance;
         if (!net.isConnected) return 'offline';
 
@@ -330,7 +330,7 @@ export class RuntimeCelebrationRepository implements ICelebrationRepository {
         try {
             // ⚠️ 必须 withTimeout：`GameNet.send` 没有按请求的超时，服务端不回就永悬。
             const sent = await withTimeout(
-                net.send(new RequestCelebrationGetTargetReward({ id, subId }, caller as any, callback), false),
+                net.send(new RequestCelebrationGetTargetReward({ id, subId }, caller, callback), false),
                 WRITE_TIMEOUT_MS,
                 () => false,
             );
@@ -351,7 +351,7 @@ export class RuntimeCelebrationRepository implements ICelebrationRepository {
      * ⚠️ 老端在发请求**之前**还会做一次「够不够钱」的前置校验（`CheckHaveEnoughCost`），
      * 那是页面的事（要弹框 / 要读 UI），Repository 不替它做。
      */
-    async buyShopGoods(id: number, subId: number, caller?: unknown): Promise<CelebrationBuyResult> {
+    async buyShopGoods(id: number, subId: number, caller?: object): Promise<CelebrationBuyResult> {
         const net = GameNet.instance;
         if (!net.isConnected) return 'offline';
 
@@ -368,7 +368,7 @@ export class RuntimeCelebrationRepository implements ICelebrationRepository {
 
         try {
             const sent = await withTimeout(
-                net.send(new RequestCelebrationBuyShop({ id, subId }, caller as any, callback), false),
+                net.send(new RequestCelebrationBuyShop({ id, subId }, caller, callback), false),
                 WRITE_TIMEOUT_MS,
                 () => false,
             );
@@ -391,7 +391,7 @@ export class RuntimeCelebrationRepository implements ICelebrationRepository {
         rankType: number,
         showNum: number,
         unionId: string,
-        caller?: unknown,
+        caller?: object,
     ): Promise<ICelebrationRankDetail | null> {
         const net = GameNet.instance;
         if (!net.isConnected) return null;
@@ -415,7 +415,7 @@ export class RuntimeCelebrationRepository implements ICelebrationRepository {
                     //    在超过 `Number.MAX_SAFE_INTEGER` 时会**静默丢精度**（规则 23）。
                     new RequestGetRank(
                         { rankType: rankType as CmdRankType, showNum, unionId: unionId as any },
-                        caller as any,
+                        caller,
                         callback,
                     ),
                     false,

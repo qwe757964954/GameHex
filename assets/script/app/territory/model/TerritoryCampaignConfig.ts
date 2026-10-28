@@ -22,6 +22,10 @@ export interface TerritoryCardRow {
     enabled: number | boolean;
     unitId?: number;
     rarity?: number;
+    /** `pvpCard.headIcon`：敌军头像（关卡提示的敌军卡用）。 */
+    headIcon?: string;
+    /** `pvpCard.description`：敌方说明（关卡提示的描述框用）。 */
+    description?: string;
 }
 
 export interface TerritoryNpcTeamRow {
@@ -78,6 +82,10 @@ export interface TerritoryCampaignEnemy {
     pvpCardId?: number;
     name: string;
     level: number;
+    /** 敌军头像路径（`pvpCard.headIcon`）。可选：老夹具/查不到时不写。 */
+    headIcon?: string;
+    /** 敌方说明（`pvpCard.description`）。可选：查不到时不写。 */
+    description?: string;
 }
 
 export interface TerritoryCampaignWave {
@@ -185,21 +193,33 @@ export function buildTerritoryCampaign(
     const resourceNames = new Map(resourceRows.map((row) => [row.resId, row.name]));
 
     const projectCard = (cardId: number, level = 1): TerritoryCampaignEnemy => {
+        // 头像按 `npcTeam.cardId` → `pvpCard` → `monsterCard` 依次找（两张表都有 `headIcon`，`pvpCard` 另有 `icon` 口径）
+        const headIconOf = (row: Record<string, unknown> | undefined): string => {
+            const raw = row?.headIcon ?? row?.icon ?? '';
+            return typeof raw === 'string' ? raw : '';
+        };
+        const headIconFor = (cardId: number): string =>
+            headIconOf(pvpCardsById.get(cardId) as unknown as Record<string, unknown> | undefined)
+            || headIconOf(monsters.get(cardId) as unknown as Record<string, unknown> | undefined);
         const pvpCard = pvpCardsById.get(cardId);
         if (pvpCard) return {
             cardId,
             pvpCardId: pvpCard.id,
             name: pvpCard.name || `卡牌 ${cardId}`,
             level: Math.max(1, level),
+            headIcon: headIconFor(cardId),
+            description: typeof pvpCard.description === 'string' ? pvpCard.description : '',
         };
         const monster = monsters.get(cardId);
         const name = monster?.name ?? `怪物 ${cardId}`;
-        const pvpCardId = pvpCardByName.get(name.trim())?.id;
+        const sameName = pvpCardByName.get(name.trim());
         return {
             cardId,
-            ...(pvpCardId ? { pvpCardId } : {}),
+            ...(sameName ? { pvpCardId: sameName.id } : {}),
             name,
             level: Math.max(1, level),
+            headIcon: headIconFor(cardId),
+            description: typeof sameName?.description === 'string' ? sameName.description : '',
         };
     };
 

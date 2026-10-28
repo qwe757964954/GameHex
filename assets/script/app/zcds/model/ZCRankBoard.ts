@@ -33,6 +33,7 @@
 
 import { ZCOwner } from './ZCMapConfig';
 import { ownerForSection } from './ZCMapConfig';
+import { toCount } from '../../net/RequestGuard';
 
 /** 一条排行数据。 */
 export interface IRankSeat {
@@ -121,24 +122,78 @@ export function buildRankSeats(
 }
 
 /**
- * 由「后端下发的席位」建席位档案表（键 = `ZCOwner`）。
+ * 席位分配的最小输入：只要 `campId`（定席位）和 `roleId`（认自己）。
+ * 名字 / 头像 / `unitId` 都是可选，由两个派生函数各取所需。
+ */
+interface ISeatCandidate {
+    readonly campId: number;
+    readonly roleId: string;
+}
+
+/**
+ * 后端席位 → `ZCOwner` 的**唯一**分配逻辑（`buildSeatProfiles` 与 `buildSeatUnitIds` 共用）。
  *
- * ##  为什么不能只取 `sorted[0]` / `sorted[1]`
+ * ##  为什么必须抽出来共用
  *
- * `ProcedureGame` 原实现是：
- * ```ts
- * const sorted = [...battle.units].sort((a, b) => a.campId - b.campId);
- * const self = sorted.find((u) => u.roleId === selfRoleId) ?? sorted[0];
- * const foe  = sorted.find((u) => u !== self) ?? sorted[1];
- * IZCGameEntry.seatProfiles = buildSeatProfiles(battle.units, selfRoleId);
- * ```
- * 两槽昵称不够承载 3~4 人局的排行榜；完整档案随单局 entry 交接。
- * HUD 顶部与传说卡横幅只显示两栏所以看不出来，但排行榜要按 2~4 席逐行渲染。
+ * 排行榜要「名字/头像」、战斗统计要「服务端 `unitId`」，两件事都要求
+ * 「哪个席位是 `player`」的答案**逐字一致**。各写一份分配逻辑，只要有一处改了
+ * （比如少掉「先把自己钉进 player 槽」那步），就会出现「排行榜显示我是第 2 名、
+ * 但伤害算在第 1 名头上」这种**零报错**的错账。
  *
- * ## 席位映射
+ * ## 席位映射（原实现逐字保留）
+ *
+ * 老实现（`ProcedureGame` 早期版本）是 `sorted[0]` 当自己、`sorted[1]` 当对手：
+ * 本机若不在 `campId = 1`，两槽会整体错位；3~4 人局更是直接丢掉后两席。
+ * 现在的口径是「roleId 认自己 + 其余按 campId 顺序填空槽」。
  *
  * `campId`（1~4）经 `ownerForSection` 转 `ZCOwner`。**不能用下标硬凑** ——
  * `campId` 缺 1 时下标会整体错位（`ownerForSection` 已做 `>= 1` 校验，非法值返 `null` 跳过）。
+ *
+ *  **不能**直接 `ownerForSection(campId)` 后再把"自己"那档改写成 `player`：
+ * 自己若在 campId=2，`ownerForSection(2)` 给 enemy，而 campId=1 那位会给 player
+ * ⇒ 两个都写 `player` 键，后者覆盖前者，**敌方凭空消失一档**（实测踩过，用例 14 抓到的）。
+ *
+ * 正解：**先把自己钉进 `player` 槽并从待分配里摘掉**，其余席位按 campId 顺序
+ * 取 `RANK_SEAT_ORDER` 里**尚未被占用**的槽 —— 槽位与席位一一对应，
+ * 且"自己永远是 player"与"其余按序"两条规则不打架。
+ *
+ * @param units 后端席位（函数内按 campId 排序，不依赖调用方顺序）
+ * @param selfRoleId 自己的 roleId；用来把「我方」标成 `player` 槽（否则第 1 席未必是自己）
+ * @returns 键 = `ZCOwner`，值 = 该席位的后端单元；`campId` 非法的席位**跳过**
+ */
+function assignSeatUnits<T extends ISeatCandidate>(
+    units: readonly T[],
+    selfRoleId: string | null,
+): Map<ZCOwner, T> {
+    const assigned = new Map<ZCOwner, T>();
+    //  两道过滤/排序，缺一不可：
+    //   ① 校验 `campId` 合法（1~4）—— 非法席位**跳过**，不猜它属于谁。
+    //      少了这步：`campId=0/9` 的脏数据会被当成合法席位塞进槽位（实测）。
+    //   ② 按 campId 升序 —— 结果表的插入序稳定，不依赖调用方传入顺序。
+    const sorted = units
+        .filter((unit) => ownerForSection(unit.campId) !== null)
+        .sort((a, b) => a.campId - b.campId);
+    const selfUnit = selfRoleId ? sorted.find((unit) => unit.roleId === selfRoleId) : undefined;
+    const rest = selfUnit ? sorted.filter((unit) => unit !== selfUnit) : sorted;
+    if (selfUnit) assigned.set(ZCOwner.Player, selfUnit);
+    let cursor = 0;
+    for (const unit of rest) {
+        // `RANK_SEAT_ORDER[0]` 是 player，已被自己（或留空）占用 ⇒ 从 1 起找空槽。
+        while (cursor < RANK_SEAT_ORDER.length && assigned.has(RANK_SEAT_ORDER[cursor])) cursor += 1;
+        const owner = RANK_SEAT_ORDER[cursor];
+        if (!owner) continue;
+        assigned.set(owner, unit);
+    }
+    return assigned;
+}
+
+/**
+ * 由「后端下发的席位」建席位档案表（键 = `ZCOwner`）。
+ *
+ * 两槽昵称不够承载 3~4 人局的排行榜；完整档案随单局 entry 交接。
+ * HUD 顶部与传说卡横幅只显示两栏所以看不出来，但排行榜要按 2~4 席逐行渲染。
+ *
+ * 席位归属见 {@link assignSeatUnits}（**唯一**分配逻辑）。
  *
  * @param units 后端席位（已按 campId 排序最佳，函数内也会再排一次保证确定性）
  * @param selfRoleId 自己的 roleId；用来把「我方」标成 `player` 槽（否则第 1 席未必是自己）
@@ -149,39 +204,33 @@ export function buildSeatProfiles(
     selfRoleId: string | null,
 ): Map<ZCOwner, IRankSeatProfile> {
     const profiles = new Map<ZCOwner, IRankSeatProfile>();
-    //  两道过滤/排序，缺一不可：
-    //   ① 校验 `campId` 合法（1~4）—— 非法席位**跳过**，不猜它属于谁。
-    //      少了这步：`campId=0/9` 的脏数据会被当成合法席位塞进槽位（实测）。
-    //   ② 按 campId 升序 —— 结果表的插入序稳定，不依赖调用方传入顺序。
-    const sorted = units
-        .filter((unit) => ownerForSection(unit.campId) !== null)
-        .sort((a, b) => a.campId - b.campId);
-    //  **不能**直接 `ownerForSection(campId)` 后再把"自己"那档改写成 `player`：
-    // 自己若在 campId=2，`ownerForSection(2)` 给 enemy，而 campId=1 那位会给 player
-    // ⇒ 两个都写 `player` 键，后者覆盖前者，**敌方凭空消失一档**（实测踩过，用例 14 抓到的）。
-    //
-    // 正解：**先把自己钉进 `player` 槽并从待分配里摘掉**，其余席位按 campId 顺序
-    // 取 `RANK_SEAT_ORDER` 里**尚未被占用**的槽 —— 槽位与席位一一对应，
-    // 且"自己永远是 player"与"其余按序"两条规则不打架。
-    const selfUnit = selfRoleId ? sorted.find((unit) => unit.roleId === selfRoleId) : undefined;
-    const rest = selfUnit ? sorted.filter((unit) => unit !== selfUnit) : sorted;
-    if (selfUnit) {
-        profiles.set(ZCOwner.Player, {
-            name: selfUnit.name || RANK_FALLBACK_NAMES.player,
-            headKey: selfUnit.avatarId || '',
-        });
-    }
-    let cursor = 0;
-    for (const unit of rest) {
-        // `RANK_SEAT_ORDER[0]` 是 player，已被自己（或留空）占用 ⇒ 从 1 起找空槽。
-        while (cursor < RANK_SEAT_ORDER.length && profiles.has(RANK_SEAT_ORDER[cursor])) cursor += 1;
-        const owner = RANK_SEAT_ORDER[cursor];
-        if (!owner) continue;
+    for (const [owner, unit] of assignSeatUnits(units, selfRoleId)) {
         // SLG 守军仍是完整参战席位，但 showInfo.name 可为空；名称沿用阵营兜底，避免 HUD 出现空行。
         profiles.set(owner, { name: unit.name || RANK_FALLBACK_NAMES[owner], headKey: unit.avatarId || '' });
     }
     return profiles;
 }
+
+/**
+ * 由「后端下发的席位」建**服务端单元 id** 表（键 = `ZCOwner`）。
+ *
+ * 只给战斗统计（`CmdBattleStatisticsInfo.unitId`）用：服务端靠这个 id 把伤害归属到单元，
+ * 填 0 就等于把所有人的伤害堆进同一个桶。席位归属与 {@link buildSeatProfiles} **同一份逻辑**
+ * （{@link assignSeatUnits}），所以两边不会漂。
+ *
+ * 缺字段（本地局 / 老回包没带 `unitId`）收敛成 0 —— 那是「不知道」，不是「0 号单元」。
+ */
+export function buildSeatUnitIds(
+    units: readonly { readonly campId: number; readonly roleId: string; readonly unitId?: unknown }[],
+    selfRoleId: string | null,
+): Map<ZCOwner, number> {
+    const result = new Map<ZCOwner, number>();
+    for (const [owner, unit] of assignSeatUnits(units, selfRoleId)) {
+        result.set(owner, toCount(unit.unitId));
+    }
+    return result;
+}
+
 
 /**
  * 名次徽章资源键（设计稿的 `icon_01 / icon_02 / icon_03`）。

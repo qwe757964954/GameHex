@@ -193,6 +193,7 @@ export class NetSocket extends NetSocketBase {
 
     private tlRequest: NetworkRequest<any, any>[] = []
     addNetworkRequest(request: NetworkRequest<any, any>, sendNow: boolean = false) {
+        if (request.cancelled) { request.returnToPool(); return false; }
         if (sendNow) {
             let state = this.getState()
             if (state != null) {
@@ -228,6 +229,7 @@ export class NetSocket extends NetSocketBase {
             if (!request) {
                 break
             }
+            if (request.cancelled) { request.returnToPool(); continue; }
             if (!request.data) {
                 console.error("sendData request.data null:", request?.messageName)
                 continue
@@ -288,6 +290,7 @@ export class NetSocket extends NetSocketBase {
     private isSending = false;
 
     ReconnectNetStateToRestoreRequest(request: NetworkRequest<any, any>) {
+        if (request.cancelled) { request.returnToPool(); return; }
         if (!request?.data) {
             return
         }

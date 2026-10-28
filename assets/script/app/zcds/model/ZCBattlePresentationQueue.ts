@@ -6,7 +6,12 @@ import type {
 import type { ZCOwner } from './ZCMapConfig';
 import {
     HEX_FLIP_SECONDS,
+    HEX_PULSE_WAVE_SECONDS,
 } from '../../../core/hex/HexFlipPresentation';
+import {
+    ZC_NEUTRAL_BURST_COUNT,
+    zcNeutralBurstTotalSeconds,
+} from './ZCNeutralBurst';
 
 const FLOAT_TEXT_CAP = 96;
 const CARD_REVEAL_CAP = 24;
@@ -49,29 +54,37 @@ const NEUTRAL_REWARD_CAP = 16;
 /**
  * 中立资源获取表现的**时长口径**（秒）—— 队列生命周期与视图动画共用的真源。
  *
- * 轴的顺序（2026-10-20 需求「从格子飞到金币栏，再往上升一个加多少」）：
- *   ① 飞行段 `ZC_NEUTRAL_REWARD_FLY_SECONDS`：金币 / 神器从格子飞向目标栏；
- *   ② 错峰尾 `STAGGER × (COUNT-1)`：金币逐颗错峰出发，最后一颗落地后；
- *   ③ 上飘段 `ZC_NEUTRAL_REWARD_RISE_SECONDS`：「+N」从目标栏原地升起并淡出。
- * 总长 = ①②③ 之和（事件在总长之后由 `prune` 摘掉，视图同时收节点）。
+ * 两条通道各自的时间轴，事件总长取**较长的那条**（prune 按它摘，视图同时收节点）：
+ *   ① 神器（2026-10-20 需求）：飞行段 `ZC_NEUTRAL_REWARD_FLY_SECONDS` + 落地淡出；
+ *   ② 金币（2026-10-26 改口径）：**格心喷发** —— 12 枚错峰出发 + 最长生命，
+ *      见 `model/ZCNeutralBurst.zcNeutralBurstTotalSeconds`（含「+N」读数的 1.15s)。
+ *
+ * ⚠️ 别为了让 total 变短去压 ②：喷发还没落干净就被 prune 摘掉，实机就是
+ *    「粒子刚出来就整束消失」——这是 UID 上一个正是本次要修的现象。
  */
 export const ZC_NEUTRAL_REWARD_FLY_SECONDS = 0.6;
+/** 金币事件的老上飘段（保留给曲线自身的引用）；现在的事件总长已改由喷发那条决定。 */
 export const ZC_NEUTRAL_REWARD_RISE_SECONDS = 0.6;
-/** 金币逐颗出发的错峰（秒）；也决定「+N」上飘的起点（最后一颗落地之后）。 */
+/** 金币逐枚出发的错峰（秒）。 */
 export const ZC_NEUTRAL_REWARD_COIN_STAGGER = 0.04;
 /** 金币堆 / 宝箱共用的一把飞行金币数。 */
 export const ZC_NEUTRAL_REWARD_COIN_COUNT = 6;
-export const ZC_NEUTRAL_REWARD_TOTAL_SECONDS =
+/** 神器那条通道的时长（飞行 + 落地淡出）。 */
+const ZC_NEUTRAL_REWARD_ARTIFACT_TOTAL_SECONDS =
     ZC_NEUTRAL_REWARD_FLY_SECONDS
     + ZC_NEUTRAL_REWARD_COIN_STAGGER * (ZC_NEUTRAL_REWARD_COIN_COUNT - 1)
     + ZC_NEUTRAL_REWARD_RISE_SECONDS;
+export const ZC_NEUTRAL_REWARD_TOTAL_SECONDS = Math.max(
+    ZC_NEUTRAL_REWARD_ARTIFACT_TOTAL_SECONDS,
+    zcNeutralBurstTotalSeconds(ZC_NEUTRAL_BURST_COUNT),
+);
 
 /**
  * 地块**脉冲段**的时长（秒）—— 激活轴的第 ① 段（点击动画）：播一道美术脉冲序列帧。
  *
  * 2026-10-19 起 **段长与「波多长」解耦**：
  *   · 段长 = 本值 **0.7s** —— 它决定**卡牌什么时候弹**（`ZC_CARD_START_SECONDS`）、
- *     首批兵什么时候能站上来、邻格按住窗多长，是整条时间轴的锚，不跟着换美术动；
+ *     首批兵什么时候能站上来、邻格生成动画的**起点**，是整条时间轴的锚，不跟着换美术动；
  *   · 波 = `HEX_PULSE_WAVE_SECONDS` **0.5s**（5 帧 × 10fps）—— 一段里**只播一道**，
  *     播完直接消失，段内剩下的 0.2s 只剩缩没段在收格子。
  *   · 缩没（阶段 2）从 `HEX_PULSE_SHRINK_START_SECONDS`（脉冲中间帧）才开始，见 `ZCHexView`。
@@ -115,9 +128,11 @@ export const ZC_HEX_BUILDING_SECONDS = 0.36;
  * **点击动画即将结束时，再展示卡牌生成动画**」⇒ 点击动画 = max(脉冲, 缩没) = `ZC_HEX_PULSE_SECONDS`，
  * 卡牌就在这一刻接棒。
  *
- * 🔴 这是「卡牌起点」的**唯一真源**：`pushCardReveal` 的 `startedAt`、row6 的按住窗
- * （`ZC_HEX_NEIGHBOR_HOLD_SECONDS`）、兵营首批兵的推迟时刻（`ZCGameModel`）都必须锚它 ——
- * 2026-10-15 吃过一次亏：迁移时只改了其中一处，另一处仍锚旧段，整条链路偏了半截。
+ * 🔴 这是「卡牌起点」的**唯一真源**：`pushCardReveal` 的 `startedAt`、兵营首批兵的推迟时刻
+ * （`ZCGameModel`）都必须锚它 —— 2026-10-15 吃过一次亏：迁移时只改了其中一处，
+ * 另一处仍锚旧段，整条链路偏了半截。
+ * ⚠️ 邻格的生成动画**已不再锚这里**（2026-10-26 改口径）：它跟点击那一拍的**脉冲起点**同步，
+ * 见 `ZC_HEX_NEIGHBOR_SPAWN_SECONDS`。
  */
 export const ZC_CARD_START_SECONDS = ZC_HEX_PULSE_SECONDS;
 /**
@@ -162,24 +177,20 @@ export const ZC_CARD_AXIS_RATIO = ZC_CARD_REVEAL_SECONDS / ZC_HEX_ACTIVATION_SEC
  */
 export const ZC_CARD_FADE_START_PROGRESS = 0.62;
 /**
- * 「开发后新点亮的邻格」可开发外观的**延迟量**（秒）—— 需求口径（2026-10-15 row6）。
+ * 「新点亮的邻格」生成动画的**时长**（秒）—— **与地块脉冲同起同收**（需求 2026-10-26）。
  *
- * 需求原话：「消耗金币点击方块后，三个新扩展的方块展示时间延迟 0.2s，等待卡牌生成动画
- * 开始播放后再展示出来」。这里只钉**延迟量**本身；起算点见 `ZC_HEX_NEIGHBOR_HOLD_SECONDS`。
+ * 需求原话：「战斗中，新格子的生成动画和地块脉冲动画同步播放」。
+ *
+ * 取代 2026-10-15 row6 的「延迟 0.2s、等卡牌生成动画开始播放后再展示」那套按住窗
+ * （`ZC_CARD_START_SECONDS + 0.2` = 0.9s）：那一版的图标 / 价格要等到卡牌弹出后才出现，
+ * 与点击那一拍的脉冲完全错开。现在改成——点击那一拍邻格就和脉冲一起亮，
+ * 并在本值内由小到大 + 淡入长齐。
+ *
+ * 为什么取 `HEX_PULSE_WAVE_SECONDS`（5 帧 × 10fps = 0.5s）而不是脉冲**段长** 0.7s：
+ * 要同收的是**那道波**。0.7s 里最后 0.2s 只剩缩没在收格子，再让邻格继续长就会拖住
+ * 点击动画的收口（卡牌 / 首批兵 / 邻格三处都锚 `ZC_CARD_START_SECONDS`）。
  */
-export const ZC_HEX_NEIGHBOR_REVEAL_DELAY_SECONDS = 0.2;
-/**
- * 新点亮邻格可开发外观的**按住窗**（秒）= 卡牌弹出时刻 + 延迟量。
- *
- * 🔴 起算点就是卡牌真正的起点 `ZC_CARD_START_SECONDS`（脉冲 + 缩没）—— 需求要的是
- * 「等卡牌动画开始播放后再展示」。锚在**别处**（比如只锚脉冲段、或锚缩没段）都会让按住窗
- * 比卡牌更早或更晚结束，正好违反需求，所以两者共用同一个真源。
- *
- * 视图侧（`ZCHexView.resolveDevelopableHold`）在某格 `canDevelop` 由假变真时登记这个窗，
- * 窗内把该格的地块图标 / 价格一起按住（表现回退成「还没点亮」）。
- * ⚠️ 本来就可开发的邻格不登记（否则价格牌会「闪一下又回来」）。
- */
-export const ZC_HEX_NEIGHBOR_HOLD_SECONDS = ZC_CARD_START_SECONDS + ZC_HEX_NEIGHBOR_REVEAL_DELAY_SECONDS;
+export const ZC_HEX_NEIGHBOR_SPAWN_SECONDS = HEX_PULSE_WAVE_SECONDS;
 
 /** 飘字入参（世界坐标像素 + 存活时长）。 */
 export interface IZCFloatTextOptions {

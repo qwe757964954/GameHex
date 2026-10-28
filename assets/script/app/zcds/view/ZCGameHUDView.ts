@@ -168,6 +168,12 @@ export class ZCGameHUDView extends Component {
     /** 兵力文案取值函数；`null` = 这一局还没有兵力数据（选点阶段）。 */
     private rowUnitTextOf: ((owner: ZCOwner, index: number) => string | null) | null = null;
     /**
+     * 「该席位是否已被击杀」取值函数；`null` = 还不知道（选点阶段）⇒ 四行都不压黑。
+     *
+     * 判据与顶部四格的「红 X」同源：`territoryCountOf(owner) <= 0`，即**地块清零 = 出局**。
+     */
+    private rowDeadOf: ((owner: ZCOwner, index: number) => boolean) | null = null;
+    /**
      * 是否处于选点阶段。
      *
      *  `render()` 现在也会开关 `topInfoPanel`（守城局整个收起），所以**必须**记住这个模式 ——
@@ -400,13 +406,16 @@ export class ZCGameHUDView extends Component {
      * @param owners     席位序（第 i 行 ↔ `owners[i]`）
      * @param unitTextOf 兵力文案；**缺省 = 这一局还没有兵力数据** ⇒ 四行的兵力整组收掉
      *                   （设计稿本来也只有第 1 行有这组元素）
+     * @param deadOf     该席位是否已被击杀；**缺省 = 还没开打** ⇒ 四行都不压黑
      */
     private paintPlayerRows(
         owners: readonly ZCOwner[],
         unitTextOf?: (owner: ZCOwner, index: number) => string | null,
+        deadOf?: (owner: ZCOwner, index: number) => boolean,
     ): void {
         this.rowOwners = owners;
         this.rowUnitTextOf = unitTextOf ?? null;
+        this.rowDeadOf = deadOf ?? null;
         this.repaintPlayerRows();
         //  规则 86：虚拟列表的槽位在它**自己的 `start()`** 里建，而 `createGame` 里的
         // `setSeatProfiles` 早于 `start()`；选点阶段之后又不会再有人调 `render`
@@ -439,6 +448,7 @@ private fillPlayerRow(node: Node, index: number): void {
             unitText: this.rowUnitTextOf?.(owner, index) ?? null,
             buffA: null,
             buffB: null,
+            dead: this.rowDeadOf?.(owner, index) ?? false,
         });
     }
 
@@ -497,13 +507,17 @@ private fillPlayerRow(node: Node, index: number): void {
         // 左侧四行玩家：逐席位渲染头像框 / 头像 / 名字 / 兵力 / buff。
         // 兵力按 `unit.owner === owner` 现数活口（`battleState === 'dead'` 不算）。
         // **四行都显示**（2026-10-09 用户要求「所有玩家兵力数量都要显示」；设计稿只画了第 1 行的 `14/100`）。
+        //
+        // 第三个参数「是否已出局」：直接复用上面刚数好的 `counts`，而不是再调一遍
+        // `territoryCountOf` —— 左侧头像的压黑与顶部四格的红 X 因此是**同一帧的同一个数**，
+        // 不会出现「上面已经红了、下面头像还亮着」这种半拍的错位。
         this.paintPlayerRows(model.owners, (owner) => {
             let alive = 0;
             for (const unit of state.units) {
                 if (unit.owner === owner && unit.battleState !== 'dead') alive += 1;
             }
             return `${alive}/${model.unitCap}`;
-        });
+        }, (_owner, index) => (counts[index] ?? 0) <= 0);
         this.playing = state.status === 'playing';
         const readyUses = Math.max(0, state.artifactReadyUses ?? 0);
         const cooling = state.artifactCooldown > 0;

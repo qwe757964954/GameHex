@@ -1,4 +1,4 @@
-import { _decorator, Component, Label, Prefab, Sprite, SpriteFrame } from 'cc';
+import { _decorator, Component, Label, Prefab, Sprite, SpriteFrame, UIOpacity } from 'cc';
 import { ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
 import { applyCardHeadArt } from './CardHeadView';
 import { CARD_LINEUP_TEXTS } from './CardLineupTexts';
@@ -48,6 +48,9 @@ export class CardLineupSlot extends Component {
 
     private preview: CardUnitPreview | null = null;
 
+    /** 落位淡入用的透明度组件（首次需要时补挂，Prefab 里不预置 —— 常态不需要它）。 */
+    private enterOpacity: UIOpacity | null = null;
+
     /** @param frames null 项保留 prefab 现图；level 不传用 fallbackLevel。 */
     render(card: ZCDeckCard, frames: ZCSlotFrames, level?: number, prefab?: Prefab | null): void {
         if (frames.disc) this.disc.spriteFrame = frames.disc;
@@ -58,7 +61,13 @@ export class CardLineupSlot extends Component {
             this.preview?.clear();
             applyCardHeadArt(this, frames.hero, frames.head);
         }
+        //  每次显式写 255：渲染幂等，不依赖上一次的透明度。
+        this.opacityOf().opacity = 255;
         this.levelLabel.string = `${Math.max(1, Math.round(level ?? this.fallbackLevel))}${CARD_LINEUP_TEXTS.levelSuffix}`;
+    }
+
+    private opacityOf(): UIOpacity {
+        return (this.enterOpacity ??= this.node.getComponent(UIOpacity) ?? this.node.addComponent(UIOpacity));
     }
 
     setEmpty(): void {

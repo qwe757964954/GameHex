@@ -44,10 +44,12 @@ test('挑战页签保持锁定；世界页签解锁并改为大地图（大世�
         '悬浮入口组件 BigMapEntryButton.ts 应已删除');
 });
 
-test('宝箱展开时左箭头收起侧栏，且主城接好收起回调', () => {
-    assert.match(chestBar, /bindCollapse\(/);
-    assert.match(chestBar, /private onPrev\(\): void\s*\{\s*if \(this\.isOpen\)\s*\{\s*this\.onCollapse\?\.\(\);/);
-    assert.match(mainPage, /this\.chestBar\.bindCollapse\(\(\) => this\.setChestPanelOpen\(false\)\)/);
+test('宝箱展开时左箭头收起侧栏（意图走事件，主城只订阅一次）', () => {
+    // 视图不再持有页面回调：收起 / 翻页都是 `EventMgr` 事件
+    assert.match(chestBar, /CHEST_EVENTS\.COLLAPSE/);
+    assert.match(chestBar, /private onPrev\(\): void\s*\{\s*if \(this\.isOpen\)\s*\{\s*EventMgr\.instance\.emit\(CHEST_EVENTS\.COLLAPSE\)/);
+    assert.equal(/onCollapse\?\.\(\)/.test(chestBar), false, '不该再有 onCollapse 回调字段');
+    assert.match(mainPage, /EventMgr\.instance\.on\(CHEST_EVENTS\.COLLAPSE/);
 });
 
 test('宝箱左箭头使用独立 96×180 点击区域，箭头图案保持原尺寸', () => {

@@ -134,17 +134,32 @@ test('★★所有战斗站点（stage/boss/asyncPvp）都走开战流程，绝�
     //    （「早前这里只有 bossStage?.isBoss || isTerritoryTwoStepCell(...)」），
     //    不剥 ⇒ 旧口径被注释复活成**假绿**（规则 104 的同款陷阱）。
     const code = codeOf(select);
-    // 新口径：站点类型 = stage / boss / asyncPvp ⇒ 两步式（解锁 → 再点开战）。
-    assert.match(code, /if \(site\.type === TERRITORY_SITE_TYPE\.stage \|\| site\.type === TERRITORY_SITE_TYPE\.boss \|\| site\.type === TERRITORY_SITE_TYPE\.asyncPvp\)/,
+    // 2026-10-27：stage / boss 也改成「点格子先弹关卡界面」，开战挪到面板的按钮上
+    // （`requestBattle` → `handleBattleStationStart`）。`selectSite` 里只留选站点。
+    assert.match(code, /if \(site\.type === TERRITORY_SITE_TYPE\.stage \|\| site\.type === TERRITORY_SITE_TYPE\.boss\)/,
         '战斗站点必须按类型分流，不再认 cellId 名单');
+    const asyncAt = code.indexOf('site.type === TERRITORY_SITE_TYPE.asyncPvp');
+    assert.ok(asyncAt >= 0, 'asyncPvp 必须有独立分支（先弹玩家关卡弹窗）');
+    const stageAt = code.indexOf('if (site.type === TERRITORY_SITE_TYPE.stage');
+    assert.ok(stageAt > asyncAt, 'asyncPvp 分支必须在关卡判断之前 return 掉');
+    const asyncBranch = code.slice(asyncAt, stageAt);
+    assert.ok(!/handleBattleStationStart/.test(asyncBranch),
+        'asyncPvp 分支不许直接开战 —— 开战只能由弹窗的「开始战斗」按钮调 requestBattle 发起');
+    assert.match(asyncBranch, /this\.detailSite = site/, 'asyncPvp 分支要选中站点给弹窗用');
+    const levelBranch = code.slice(stageAt);
+    assert.ok(!/handleBattleStationStart/.test(levelBranch),
+        '关卡分支同样不许直接开战（先弹关卡界面，按钮再发请求）');
+    assert.match(levelBranch, /this\.detailSite = site/, '关卡分支要选中站点给关卡界面用');
     assert.ok(!/isTerritoryTwoStepCell/.test(code),
         '不许再按格子 id 名单判定（每加一关改一次代码，漏改的症状是「点了没反应」且零报错）');
     assert.ok(!/bossStage\?\.isBoss/.test(code),
         'isBoss 不再当准入条件（levelMod=1 的普通关卡照样要能打）');
-    const stageAt = code.indexOf('site.type === TERRITORY_SITE_TYPE.stage');
-    const battleAt = code.indexOf('handleBattleStationStart');
-    assert.ok(stageAt >= 0 && battleAt > stageAt,
-        '关卡分支必须通向 handleBattleStationStart（走 CmdStartBattleReqMsg）');
+    // 开战链路必须还在 `requestBattle` 里（弹窗按钮走的就是它），且要认 asyncPvp。
+    const requestBattle = codeOf(memberOf(src, 'requestBattle(): void'));
+    assert.match(requestBattle, /handleBattleStationStart/,
+        'requestBattle 必须通向 handleBattleStationStart（走 CmdStartBattleReqMsg）');
+    assert.match(requestBattle, /TERRITORY_SITE_TYPE\.asyncPvp/,
+        'requestBattle 必须把 asyncPvp 纳入开战分流（弹窗按钮走的就是它）');
 
     // ⚠️ 通关只留给资源点：fixedResource 走 `handleUnlockThenPass`，
     // 关卡一旦发通关，服务端回「章节格子非资源类型」（早期实机踩过）。

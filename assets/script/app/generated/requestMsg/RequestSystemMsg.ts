@@ -16,3 +16,15 @@ export class RequestGmList extends RequestMsg<CmdGmListReqMsg, CmdGmListRspMsg> 
         return "CmdGmListReqMsg"
     }
 }
+
+/**
+ * 玩家点击界面（`mark` 是**服务端编号**，2 = 世界；与客户端 `MainTab` 下标无关）。
+ *
+ * 这是**单向埋点**：回包只有 `succ`，不携带任何业务数据 ⇒ 调用方 fire-and-forget，
+ * 失败只 warn，绝不阻塞界面切换。
+ */
+export class RequestGameViewClick extends RequestMsg<CmdGameViewClickReqMsg, CmdGameViewClickRspMsg> {
+    getReqMsgProtoName(): ReqMsgProtoName {
+        return "CmdGameViewClickReqMsg"
+    }
+}

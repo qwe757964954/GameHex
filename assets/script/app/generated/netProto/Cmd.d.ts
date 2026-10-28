@@ -5906,6 +5906,17 @@
 
     
 
+    declare class SlgGameCameRoleInfo {
+        roleId: Long;
+        serverId: Long;
+        roleName: string;
+        img: Long;
+        defenseHp: number;
+        pos: number;
+    }
+
+    
+
     declare class SlgGameInfo {
         maxMonsterLevel: number;
         toCampId: number;
@@ -6008,8 +6019,43 @@
 
     
 
+    declare class CmdSlgCampRoleInfosReqMsg {
+        campId: number;
+    }
+
+    
+
+    declare class CmdSlgCampRoleInfosRspMsg {
+        campId: number;
+        infos?: (SlgGameCameRoleInfo[]|null);
+    }
+
+    
+
+    declare class CmdSlgCampMoveReqMsg {
+        campId: number;
+        pos: number;
+        moveType: number;
+    }
+
+    
+
+    declare class CmdSlgCampMoveRspMsg {
+        succ: number;
+        req: CmdSlgCampMoveReqMsg;
+    }
+
+    
+
     declare class CmdSlgGameInfoBroMsg {
         info: SlgGameInfo;
+    }
+
+    
+
+    declare class CmdSlgGameRoleInfoBroMsg {
+        eventType: number;
+        info: SlgGameCameRoleInfo;
     }
 
     
@@ -6107,6 +6153,18 @@
     
 
     declare class CmdSlgBuildInfoBroMsg {
+    }
+
+    
+
+    declare class CmdGameViewClickReqMsg {
+        mark: number;
+    }
+
+    
+
+    declare class CmdGameViewClickRspMsg {
+        succ: number;
     }
 
     
@@ -6329,6 +6387,8 @@
         CmdSlgCampInfoRspMsg = 1665140602,
         CmdSlgActionUpdateRspMsg = 196069974,
         CmdSlgGameInfoRspMsg = 1100779337,
+        CmdSlgCampRoleInfosRspMsg = 1756720515,
+        CmdSlgCampMoveRspMsg = 1866377577,
         CmdSlgBuildInfoRspMsg = 1414628085,
         CmdSlgBuildRspMsg = 455496637,
         CmdSlgBuildUpgradeRspMsg = 1255226437,
@@ -6336,6 +6396,7 @@
         CmdSlgBuildMoveRspMsg = 2116890094,
         CmdSlgBuildCollectRspMsg = 1353318189,
         CmdSlgBuildUnlockQueueRspMsg = 1478251158,
+        CmdGameViewClickRspMsg = 463153146,
         CmdSpiritAnimalLevelUpRspMsg = 2051518427,
         CmdSpiritAnimalStepUpRspMsg = 1991681903,
         CmdSpiritAnimalBattleRspMsg = 1439043070,
@@ -6421,6 +6482,7 @@
         CmdRechargeDailyUpdateBroMsg = 161909789,
         CmdGuanKaGiftBroMsg = 915823971,
         CmdSlgGameInfoBroMsg = 1546899562,
+        CmdSlgGameRoleInfoBroMsg = 582176172,
         CmdSlgBuildInfoBroMsg = 1860748310,
         CmdTeamDetailBroMsg = 1366910774,
         CmdTeamDisbandBroMsg = 2097470162,
@@ -7373,6 +7435,7 @@ declare type MessageProtoName =
 | "CmdCityChapterInfoBroMsg"
 | "CmdCityChapterCellInfoReqMsg"
 | "CmdCityChapterCellInfoRspMsg"
+| "SlgGameCameRoleInfo"
 | "SlgGameInfo"
 | "SlgGameActionInfo"
 | "SlgCampSimpleInfo"
@@ -7388,7 +7451,12 @@ declare type MessageProtoName =
 | "CmdSlgActionUpdateRspMsg"
 | "CmdSlgGameInfoReqMsg"
 | "CmdSlgGameInfoRspMsg"
+| "CmdSlgCampRoleInfosReqMsg"
+| "CmdSlgCampRoleInfosRspMsg"
+| "CmdSlgCampMoveReqMsg"
+| "CmdSlgCampMoveRspMsg"
 | "CmdSlgGameInfoBroMsg"
+| "CmdSlgGameRoleInfoBroMsg"
 | "CmdSlgBuildInfoReqMsg"
 | "CmdSlgBuildInfoRspMsg"
 | "CmdSlgBuildReqMsg"
@@ -7404,6 +7472,8 @@ declare type MessageProtoName =
 | "CmdSlgBuildUnlockQueueReqMsg"
 | "CmdSlgBuildUnlockQueueRspMsg"
 | "CmdSlgBuildInfoBroMsg"
+| "CmdGameViewClickReqMsg"
+| "CmdGameViewClickRspMsg"
 | "ClientCmdData"
 | "CmdCache"
 | "CmdCacheField"
@@ -7681,6 +7751,8 @@ declare type ReqMsgProtoName =
 | "CmdSlgCampInfoReqMsg"
 | "CmdSlgActionUpdateReqMsg"
 | "CmdSlgGameInfoReqMsg"
+| "CmdSlgCampRoleInfosReqMsg"
+| "CmdSlgCampMoveReqMsg"
 | "CmdSlgBuildInfoReqMsg"
 | "CmdSlgBuildReqMsg"
 | "CmdSlgBuildUpgradeReqMsg"
@@ -7688,6 +7760,7 @@ declare type ReqMsgProtoName =
 | "CmdSlgBuildMoveReqMsg"
 | "CmdSlgBuildCollectReqMsg"
 | "CmdSlgBuildUnlockQueueReqMsg"
+| "CmdGameViewClickReqMsg"
 
 declare interface protoCacheGen{CmdActivity:{c:CmdActivity, c_k:CmdActivity_Key}
 CmdRole:{c:CmdRole, c_k:CmdRole_Key}

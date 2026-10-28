@@ -1,13 +1,25 @@
 import { _decorator, Button, Component, Node, Sprite, SpriteFrame } from 'cc';
+import type { AssetService } from '../../core/asset/AssetService';
 import { GameRoute } from '../../core/runtime/GameRoute';
 import { ProcedureManager } from '../../framework/procedure/ProcedureManager';
 import { FW } from '../../framework/FW';
+import { EventMgr } from '../../framework/event/EventMgr';
 import { ZC_BATTLE_TYPE_CHAPTER, ZC_CHAPTER_BATTLE_SUB_TREASURE } from '../battle/BattleStartModel';
 import type { IMatchingEntryParams } from '../matching/MatchTypes';
+import { spriteFramePathOf } from '../ArtPaths';
+import { qualityFrameArtPath } from '../itemdetail/ItemDetailArt';
+import { qualityFrameSuffixOf, qualityNameOf } from '../itemdetail/ItemDetailTable';
 import { ChestBar } from './ChestBar';
-import { CHEST_EMPTY_SLOT_STAMINA_COST, CHEST_SLOT_COUNT, ChestSlotAction, ChestSlotState } from './ChestTypes';
-import type { IChestSlotData } from './ChestTypes';
+import { PopupManager } from '../../framework/ui/PopupManager';
+import { ChestDetailPanel } from './ChestDetailPanel';
+import type { IChestDetailContent } from './ChestDetailPanel';
+import { CHEST_EVENTS } from './ChestEvents';
+import {
+    CHEST_EMPTY_SLOT_STAMINA_COST, CHEST_SLOT_COUNT, ChestSlotAction, ChestSlotState, formatChestCountdown,
+} from './ChestTypes';
+import type { IChestDetailData, IChestSlotData } from './ChestTypes';
 import { NewTreasureRepository } from './NewTreasureRepository';
+import { GameNet } from '../net/GameNet';
 
 const { ccclass, property } = _decorator;
 
@@ -56,6 +68,13 @@ export class MainPage extends Component {
 
     private findCurrentBoss: (() => void) | null = null;
     private readonly treasureRepository = new NewTreasureRepository();
+    /** 详情弹窗当前对应的槽位（1~4）与那颗按钮要发的动作；`0` = 没开。 */
+    private detailSlot = 0;
+    private detailAction: ChestSlotAction = ChestSlotAction.Open;
+    /** `initialize` 注入的资源入口（宝箱图标 / 品质框）。 */
+    private assets: AssetService | null = null;
+    /** 图标按路径缓存（同一批奖励反复加载同一张图不值得）。 */
+    private readonly chestIconCache = new Map<string, SpriteFrame | null>();
     private readonly emptyChestSlots: readonly IChestSlotData[] = Array.from({ length: CHEST_SLOT_COUNT }, (_, index) => ({
         index: index + 1,
         state: ChestSlotState.Empty,
@@ -69,7 +88,20 @@ export class MainPage extends Component {
     onLoad(): void {
         this.startButton.on(Button.EventType.CLICK, this.onStartGame, this);
         this.chestToggle.on(Button.EventType.CLICK, this.onToggleChestPanel, this);
-        this.chestBar.bindCollapse(() => this.setChestPanelOpen(false));
+        // 宝箱栏的意图（点格子 / 收起 / 翻页）都由 EventMgr 派发，页面**只订阅一次**
+        EventMgr.instance.on(CHEST_EVENTS.SLOT_ACTION, this.onChestAction, this);
+        EventMgr.instance.on(CHEST_EVENTS.COLLAPSE, this.onChestCollapse, this);
+
+        // 宝箱详情走 `PopupBase`（`PopupManager` 管层级 / 遮罩 / 点空白关闭 / 尺寸），
+        // 页面**不实例化、不撑尺寸**，只订阅它的三条意图。
+        EventMgr.instance.on(CHEST_EVENTS.CLOSE, this.onChestDetailClose, this);
+        EventMgr.instance.on(CHEST_EVENTS.FAST_OPEN, this.onChestDetailFastOpen, this);
+        EventMgr.instance.on(CHEST_EVENTS.OPEN, this.onChestDetailOpen, this);
+    }
+
+    /** 注入资源入口（宿主 `MainTabHost` 在 `setParent` 之前调）。 */
+    initialize(assets: AssetService): void {
+        this.assets = assets;
     }
 
     /** 由主界面宿主接入同页地图，避免快速寻敌另开战斗流程。 */
@@ -93,8 +125,10 @@ export class MainPage extends Component {
     }
 
     onDestroy(): void {
+        EventMgr.instance.offTarget(this);
         this.findCurrentBoss = null;
         this.treasureRepository.dispose();
+        GameNet.instance.removeCaller(this);
     }
 
     private async loadTreasureQueue(): Promise<void> {
@@ -130,12 +164,30 @@ export class MainPage extends Component {
             cells[index].spriteFrame = index < count ? this.chestCellFilled : this.chestCellEmpty;
         }
         if (!this.chestBar) return;
-        this.chestBar.render(data, (slot) => { void this.onChestAction(slot); });
+        this.chestBar.render(data);
     }
+
+    /** 宝箱栏收起（点折叠箭头 / 左箭头在展开态）。 */
+    private readonly onChestCollapse = (): void => { this.setChestPanelOpen(false); };
 
     private readonly refreshTreasureDisplay = (): void => {
         this.renderChests(this.treasureRepository.slots);
+        this.refreshChestDetailCountdown();
     };
+
+    /** 弹窗开着时每秒刷一次倒计时（只写那一颗按钮，不整窗重开）。 */
+    private refreshChestDetailCountdown(): void {
+        const panel = PopupManager.inst?.get(ChestDetailPanel);
+        if (!panel || this.detailSlot <= 0) return;
+        const detail = this.treasureRepository.detailOf(this.detailSlot);
+        if (!detail) {
+            // 槽位没了（刚开完箱）⇒ 收起弹窗，别指着一个空槽
+            panel.close();
+            return;
+        }
+        this.detailAction = detail.action;
+        panel.updateCountdown(detail.action === ChestSlotAction.SpeedUp ? detail.remainSeconds : 0);
+    }
 
     private async onChestAction(slot: number): Promise<void> {
         const item = this.treasureRepository.slots[slot];
@@ -148,14 +200,121 @@ export class MainPage extends Component {
             ProcedureManager.navigate(GameRoute.Matching, entry);
             return;
         }
+        // 2026-10-27（蓝湖「宝箱详情」）：非空槽位**先弹详情**，让玩家看见能开出什么、
+        // 立即开要花多少，再由弹窗的两颗按钮发请求。原来这里是点一下直接发
+        // activate / fastOpen / open 三条之一，全程没有确认也没有奖励预览。
+        await this.openChestDetail(item.index);
+    }
 
-        const result = item.action === ChestSlotAction.Activate
-            ? await this.treasureRepository.activate(item.index)
-            : (item.action === ChestSlotAction.SpeedUp
-                ? await this.treasureRepository.fastOpen(item.index)
-                : await this.treasureRepository.open(item.index));
+    // ============================================================
+    // 宝箱详情弹窗
+    // ============================================================
+
+    private async openChestDetail(index: number): Promise<void> {
+        const detail = this.treasureRepository.detailOf(index);
+        if (!detail) return;
+        this.detailSlot = index;
+        this.detailAction = detail.action;
+        const content = await this.chestDetailContentOf(detail);
         if (!this.isValid) return;
-        if (result === 'busy' || result === 'ok') return;
+        // 加载期间玩家可能又点了别的箱子（或关了弹窗）⇒ 以最新那次为准
+        if (this.detailSlot !== index) return;
+        const opened = PopupManager.inst?.get(ChestDetailPanel);
+        if (opened) { opened.applyContent(content); return; }
+        void ChestDetailPanel.open({ userData: content });
+    }
+
+    private async chestDetailContentOf(detail: IChestDetailData): Promise<IChestDetailContent> {
+        const [icon, frame, rewards] = await Promise.all([
+            this.loadChestFrame(detail.icon),
+            this.loadQualityFrame(detail.quality),
+            // 奖励格只要 id + 数量，图标/品质框由 `RewardItemView` 自己解析
+            detail.rewards.map((reward) => ({
+                resId: reward.resId,
+                amount: reward.amount,
+                ratePercent: reward.ratePercent,
+            })),
+        ]);
+        const counting = detail.action === ChestSlotAction.SpeedUp;
+        const activated = detail.action !== ChestSlotAction.Activate;
+        return {
+            name: detail.name,
+            qualityText: `品质：${qualityNameOf(null, detail.quality)}`,
+            // 银币图标用 prefab 上的静态帧（弹窗只在传了帧时才覆盖）
+            costIcon: null,
+            // 协议没有「持有数量」字段（`CmdNewTreasureInfo` 只有 cardBoxID/openTime/index）
+            // ⇒ 按「一个槽位一个宝箱」固定 1（山猫 2026-10-27 口径）。
+            countText: '数量：1',
+            icon,
+            qualityFrame: frame,
+            rewards,
+            fastOpenCost: detail.fastOpenCost,
+            // 未激活时也能花银币直接开（跳过倒计时）；空槽位走不到这里。
+            fastOpenEnabled: true,
+            openCaption: '打开',
+            openCountdown: counting ? formatChestCountdown(detail.remainSeconds) : '',
+            // 倒计时中不能开（要么等、要么点「立即打开」）；未激活时这颗 = 开始计时。
+            openEnabled: !counting && (activated || detail.remainSeconds >= 0),
+        };
+    }
+
+    /** 图标按路径缓存；缺图返回 `null`（那一枚没图，不影响其它格）。 */
+    private async loadChestFrame(path: string): Promise<SpriteFrame | null> {
+        if (!path) return null;
+        if (this.chestIconCache.has(path)) return this.chestIconCache.get(path) ?? null;
+        const assets = this.assets;
+        if (!assets) {
+            this.chestIconCache.set(path, null);
+            return null;
+        }
+        let frame: SpriteFrame | null = null;
+        try {
+            frame = await assets.load(spriteFramePathOf(path), SpriteFrame);
+        } catch {
+            frame = null;
+        }
+        this.chestIconCache.set(path, frame);
+        return frame;
+    }
+
+    private async loadQualityFrame(quality: number): Promise<SpriteFrame | null> {
+        return this.loadChestFrame(`image/${qualityFrameArtPath(qualityFrameSuffixOf(quality))}`);
+    }
+
+    private readonly onChestDetailClose = (): void => {
+        this.detailSlot = 0;
+    };
+
+    private readonly onChestDetailFastOpen = (): void => {
+        void this.runTreasureAction('fastOpen');
+    };
+
+    private readonly onChestDetailOpen = (): void => {
+        // 「打开」在未激活状态 = 开始计时；到点状态 = 开箱。
+        if (this.detailAction === ChestSlotAction.Activate) void this.runTreasureAction('activate');
+        else if (this.detailAction === ChestSlotAction.Open) void this.runTreasureAction('open');
+    };
+
+    /**
+     * 发请求 + 收尾。
+     *
+     * 成功（`ok`/`busy`）后关掉弹窗：`open`/`fastOpen` 会让槽位消失，弹窗再留着就是
+     * 一个指向空槽的界面；`activate` 则换成倒计时状态 —— 两种情况都该收起，
+     * 玩家要看进度回宝箱栏看。
+     */
+    private async runTreasureAction(kind: 'activate' | 'fastOpen' | 'open'): Promise<void> {
+        const index = this.detailSlot;
+        if (index <= 0) return;
+        const result = kind === 'activate'
+            ? await this.treasureRepository.activate(index)
+            : (kind === 'fastOpen'
+                ? await this.treasureRepository.fastOpen(index)
+                : await this.treasureRepository.open(index));
+        if (!this.isValid) return;
+        if (result === 'ok' || result === 'busy') {
+            this.onChestDetailClose();
+            return;
+        }
         if (result === 'offline') FW.showTip(MAIN_PAGE_TEXTS.networkUnavailable);
         else if (result === 'failed') FW.showTip(MAIN_PAGE_TEXTS.actionFailed);
         else if (result === 'protocol-missing') FW.showTip(MAIN_PAGE_TEXTS.openProtocolMissing);

@@ -61,6 +61,21 @@ export class ProcedureManager extends Component {
     private completedToken = 0;
     private pendingSwitch: PendingSwitch | null = null;
 
+    /**
+     * 本次流程切换的落定回调。进入成功传 `true`；预加载失败 / 被新的切换顶掉传 `false`。
+     *
+     * ## 为什么需要这个钩子
+     *
+     * `changeProcedure` 是「预加载 → 进入」两阶段，**预加载期间当前界面一直不动**。
+     * 压在主界面之上的覆盖页（大世界）如果在这时候就被提前销毁，露出来的就是
+     * `MainTabHost.currentTab` —— 而默认 tab 是领地 ⇒ 玩家看到的是
+     * 「点攻打先跑回领地，等几十秒才进战斗」。
+     *
+     * 覆盖页应当留到流程真正切走的这一刻再关，所以这里给一个落定钩子；
+     * 预加载失败时它同样会收到 `false`，覆盖页据此撤掉自己的「正在进入」态。
+     */
+    private readonly switchSettled = new Set<(entered: boolean) => void>();
+
     /** 逻辑帧间隔累计（用于把真实 dt 切分为固定逻辑步长）。 */
     private readonly fixedDelta = 1 / 60;
     private accumulator = 0;
@@ -77,10 +92,12 @@ export class ProcedureManager extends Component {
         this.completedToken = this.switchToken;
         this.cancelPendingSwitch();
         for (const procedure of this.procedures.values()) {
+            this._context?.callbackOwners?.removeCallerListener(procedure);
             procedure.destroy();
         }
         this.procedures.clear();
         this.routes.clear();
+        this.switchSettled.clear();
         this._context?.sessionAssets.clear();
         this._context = null;
         this.current = null;
@@ -201,10 +218,20 @@ export class ProcedureManager extends Component {
             return;
         }
         // 预加载完成，若已不是最新切换则作废。
+        // 这里**不再**补一次 `settleSwitch(false)`：走这条路说明切换已被顶掉或取消，
+        // `cancelPendingSwitch()` 当时已经通知过；再补一次会让订阅方收到重复的失败。
         if (token !== this.switchToken || context.cancelled || this.pendingSwitch?.token !== token) {
             return;
         }
-        this.current?.onLeave();
+        // 通知覆盖页：这一刻才真正切走。放在 `onLeave` 之前 —— 宿主页面还活着，
+        // 覆盖页关闭时回调宿主刷新底栏才不会碰到已销毁的节点。
+        this.settleSwitch(true);
+        const previous = this.current;
+        try {
+            previous?.onLeave();
+        } finally {
+            if (previous) this._context?.callbackOwners?.removeCallerListener(previous);
+        }
         this.current = next;
         next._adoptResourceScope(context.resources);
         //  onEnter 是同步的，但里面会 addComponent / 建对局模型 —— 一旦抛错，异常会顺着
@@ -222,6 +249,7 @@ export class ProcedureManager extends Component {
             } catch (cleanupError) {
                 console.error(`[ProcedureManager] ${next.className}.onLeave 清理失败`, cleanupError);
             }
+            this._context?.callbackOwners?.removeCallerListener(next);
             context.resources.dispose();
             if (this.current === next) this.current = null;
         } finally {
@@ -241,11 +269,56 @@ export class ProcedureManager extends Component {
         } catch (error) {
             console.error(`[ProcedureManager] 清理过期预加载失败：${pending.next.className}`, error);
         }
+        this._context?.callbackOwners?.removeCallerListener(pending.next);
+        // 被新的切换顶掉 / 预加载失败 / 管理器销毁 —— 都算「没进去」，覆盖页据此撤掉等待态。
+        this.settleSwitch(false);
     }
 
     /** 当前流程。 */
     get currentProcedure(): ProcedureBase | null {
         return this.current;
+    }
+
+    /**
+     * 订阅「流程切换落定」；返回取消函数，**订阅方负责在自己不要时调用**。
+     *
+     * 用法（覆盖页保活到真正切走）：
+     * ```ts
+     * const stop = ProcedureManager.onSwitchSettled((entered) => {
+     *     stop();
+     *     if (entered) overlay.close(); else overlay.cancelPendingEnter();
+     * });
+     * ```
+     *
+     * ⚠️ 回调在 `onLeave` **之前**同步执行 —— 宿主（主界面）还活着，
+     * 覆盖页关闭时回调宿主刷新底栏高亮才是安全的。
+     */
+    subscribeSwitchSettled(listener: (entered: boolean) => void): () => void {
+        this.switchSettled.add(listener);
+        return () => { this.switchSettled.delete(listener); };
+    }
+
+    /** 静态入口：业务页面不持有管理器实例时也能订阅（语义同 `navigate`）。 */
+    static onSwitchSettled(listener: (entered: boolean) => void): () => void {
+        const mgr = ProcedureManager._instance;
+        if (!mgr) {
+            console.error('[ProcedureManager] 尚未初始化，无法订阅流程切换落定');
+            return () => undefined;
+        }
+        return mgr.subscribeSwitchSettled(listener);
+    }
+
+    private settleSwitch(entered: boolean): void {
+        if (this.switchSettled.size === 0) return;
+        // 不在这里清空：一次订阅可能要跨多次切换（例如先被取消、再真正进入）。
+        // 订阅方在回调里自己 `stop()` —— 覆盖页那一侧就是这么写的。
+        for (const listener of Array.from(this.switchSettled)) {
+            try {
+                listener(entered);
+            } catch (error) {
+                console.error('[ProcedureManager] 切换落定回调失败', error);
+            }
+        }
     }
 
     /** 每帧驱动当前流程，并顺带驱动框架的 `UpdateBeat`。 */

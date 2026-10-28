@@ -102,13 +102,15 @@ export class LineupBoardCard extends Component {
      * 填入一张卡池卡。
      *
      * @param card    卡牌数据
-     * @param frames  已加载好的四张图；前三张为 `null` 时保留 prefab 现有图片
+     * @param frames  已加载好的四张图；某张为 `null` 时会**清空**该位置（条目复用，不能保留上一张的图）
      * @param onField 是否已在上阵区（决定压暗遮罩与对勾的显隐）
      * @param level   该卡等级；不传用 `fallbackLevel`
      */
     render(card: ZCDeckCard, frames: ZCBoardCardFrames, onField: boolean, level?: number): void {
-        if (frames.frame) this.frame.spriteFrame = frames.frame;
-        if (frames.badge) this.badge.spriteFrame = frames.badge;
+        //  两张图**无条件赋值**：本组件由虚拟列表复用，`null` 时跳过赋值会把上一张卡的
+        //  卡框 / 角标留在这一张上（串图）。`this.frame` 等是必绑组件，不用判。
+        this.frame.spriteFrame = frames.frame;
+        this.badge.spriteFrame = frames.badge;
         // 头像一个入口、互斥显隐（`frames.head` 为 null 时自动退回 Hero 立绘）。
         applyCardHeadArt(this, frames.hero, frames.head);
         this.levelLabel.string = String(Math.max(1, Math.round(level ?? this.fallbackLevel)));

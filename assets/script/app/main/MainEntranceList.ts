@@ -123,7 +123,7 @@ export class MainEntranceList extends Component {
 
         // 订阅 CmdRole 缓存更新：主界面创建早于服务端下发 CmdRole 时，onLoad 这一次
         // 读不到角色会按「未登录」过滤掉所有入口；缓存到达后必须重算一次（对齐 MainResBar）。
-        CacheMgr.instance?.setEventUpdate('CmdRole', this as unknown as destroyable, this.onRoleCacheUpdate);
+        CacheMgr.instance?.setEventUpdate('CmdRole', this, this.onRoleCacheUpdate);
         void this.reload();
     }
 
@@ -134,7 +134,7 @@ export class MainEntranceList extends Component {
     };
 
     onDestroy(): void {
-        CacheMgr.instance?.removeEventUpdate('CmdRole', this as unknown as destroyable, this.onRoleCacheUpdate);
+        CacheMgr.instance?.removeEventUpdate('CmdRole', this, this.onRoleCacheUpdate);
         // 必须解绑：表达式引擎里留着指向本槽位 RedDot 的回调，槽位销毁后再来一次值变化
         // 就会往死对象上写（`RdExprBinding` 头注释里写的第 1 种场合）。顺带把表达式的
         // 引用计数还回去，归零的表达式才会从 `ExprMgr` 里退场。

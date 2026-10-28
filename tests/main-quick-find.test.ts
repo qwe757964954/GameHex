@@ -1,3 +1,4 @@
+import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -7,7 +8,12 @@ import type { MainPage } from '../assets/script/app/main/MainPage';
 import type { MainTerritoryMap } from '../assets/script/app/main/MainTerritoryMap';
 import * as chestTypes from '../assets/script/app/main/ChestTypes';
 import * as battleStart from '../assets/script/app/battle/BattleStartModel';
-import { buildTerritoryMapLayout, territoryMapOffsetForCell } from '../assets/script/app/territory/model/TerritoryMapLayout';
+import {
+    buildTerritoryMapLayout,
+    territoryMapContentPaddingBottom,
+    territoryMapContentPaddingTop,
+    territoryMapOffsetForCell,
+} from '../assets/script/app/territory/model/TerritoryMapLayout';
 import { configureTerritoryMap } from '../assets/script/app/territory/model/TerritoryMapConfig';
 import { TERRITORY_TEXTS } from '../assets/script/app/territory/application/TerritoryTexts';
 
@@ -93,7 +99,10 @@ test('quick-find button invokes the injected map action without navigating to ma
 test('Boss focus stops map inertia and scrolls to the selected cell; missing target leaves scroll alone', () => {
     const MapView = loadComponent<MainTerritoryMap>('MainTerritoryMap', {
         cc,
-        '../territory/model/TerritoryMapLayout': { territoryMapOffsetForCell },
+        '../../core/asset/ResourceScope': { ResourceScope },
+        '../territory/model/TerritoryMapLayout': {
+            territoryMapContentPaddingBottom, territoryMapContentPaddingTop, territoryMapOffsetForCell,
+        },
         '../territory/application/TerritoryTexts': { TERRITORY_TEXTS },
     });
     const mapView = new MapView();

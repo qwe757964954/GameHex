@@ -322,18 +322,81 @@ prefab 都走这条兼容路径，不会因为缺层而崩或改表现。
 
 ---
 
-## §15 开局「点击金矿」提示描边闪烁
+## §15 开局「点击金矿」提示描边（呼吸，一直播到被点）
 
-> 原 `ZCHexView.ts` 行 1016–1028。
+> 原 `ZCHexView.ts` 行 1016–1028；2026-10-26 起几何在 `ZCHexView.strokeHintOutline`（静态），
+> 画布归 `ZCGameRenderWorld.ensureHintOutlineGraphics`。
 
-开局「点击金矿」提示：给这一格套一圈**整体描边闪烁**（需求 2026-10-15 row10 原文：
+开局「点击金矿」提示：给这一格套一圈**整体描边**（需求 2026-10-15 row10 原文：
 「进入游戏初始时，给金矿图标所在的地块格子增加一个整体的描边闪烁，提示玩家点击金矿」）。
+
+2026-10-26 改口径：从「闪 4 个周期（4.4s）就停」改成**一直呼吸到金矿被点** ——
+`zcNeutralHintAlpha` 不再有窗口（1.6s 一呼一吸、`1 ↔ 0.15`），收手只由渲染层按
+「目标被开发/被领走 / 对局结束」判定（见 `ZCGameRenderWorld.renderNeutralHint`）。
+
+🔴 2026-10-26 二次修（用户反馈「没看到效果」）：**提示目标原来只认中立金矿资源点
+（`neutralResourceId` → `mine`），但实战地图里的「金矿图标」是地块类型**
+（`tileType = mine` ⇒ 画 `icon_jk` + 造价「50」）——目标一次都没找到，描边一格都没闪过。
+现在 `findMineHintTarget` 优先 `canDevelop && tileType === mine` 的金矿**地块**，
+找不到才退到金矿**资源点**；判据随 `hintTargetKind` 走。另外「这一帧没找到目标」
+**不再结账**（开局头几帧 `canDevelop` 还没翻成 true，一收手整局都起不来）。
+
+🔴 2026-10-26 三次修（用户：「换成绿色更显眼、描边大小增加 2px、描边需要覆盖在最上层」）：
+
+| 项 | 旧 | 新 | 原因 |
+| :--- | :--- | :--- | :--- |
+| 颜色 | `ZC_CLIENT_COLORS.gold` `#FFC62D` | `ZC_CLIENT_COLORS.hint` `#3EE36F` | 金线画在中立格土黄底上**同色系**，几乎看不见 |
+| 线宽 | 7 | **9** | 领地轮廓 6px + 用户要求的 2px |
+| 内缩 | `OWNED_OUTLINE_INSET_SCALE` 0.98 | **`HINT_OUTLINE_INSET_SCALE` 0.94** | 9px 的线在 0.98 下外沿探出格界 4~5px，**盖住邻格的造价数字**；0.94 让外沿基本落在格界内侧 |
+| 画布 | 单格 `TerritoryOutline` | 棋盘最上层 `CooldownOverlay` 上的共享画布 | 格子自带的 Graphics 和地块同层，**邻格底色与建筑会按绘制顺序盖掉半圈** |
+
+内缩为什么单独一个常量：领地线 6px + 0.98 是「贴住台面边缘」的口径，两条线**曾经**严格同一条边；
+提示线加粗到 9px 之后如果继续共用 0.98，等于把 4.5px 的半宽有 3.3px 甩到格界外 —— 抬到最上层
+之后它就会实打实压住邻格的数字。0.94 下内缩量 `(1-0.94) × 半宽 61 ≈ 3.7px`，外沿只探出不到 1px。
+顶点仍然共用 `ZC_OUTLINE_HEX_POINTS`（形状必须一致，否则两条线会在格角错开）。
+
+**外发光（2026-10-26 第四次改，用户：「增加 2px 左右的边缘发光效果」）**
+
+没有标准方案可用：`cc.Graphics` 的描边**不支持渐变**（`strokeColor` 是单一颜色，`fillColor`
+那套梯度只对填充有效），项目里的 `hex-ground-glow` / `unit-outline-copy` / `hex-pulse` 三个
+effect 都是给 Sprite / Spine 用的，套不到矢量线上。所以走用户给的第二方案 ——
+**叠加、透明度过渡到边缘**：
+
+| 笔 | 宽度 | 透明度（× 呼吸值） | 说明 |
+| :--- | :--- | :--- | :--- |
+| 1 | 13 | 0.08 | 最外一圈，几乎只剩一层薄雾 |
+| 2 | 12 | 0.11 | |
+| 3 | 11 | 0.15 | |
+| 4 | 10 | 0.20 | 紧贴核心线的一圈 |
+| 5 | **9** | **1.0** | 核心线，最后画、压在光晕之上 |
+
+5 笔按「由外到内」顺序描，后画的压住先画的，合成出来就是 2px 的柔边（每侧 2px = 4px 共 4 环，
+每环 0.5px）。系数表在 `ZCGameViewUtil.ZC_HINT_GLOW_RING_ALPHAS`，**必须严格递增** ——
+任何一环取 1 都会把光晕画成一条实心粗线；有用例钉死这一条，也钉死 5 笔的宽度/透明度序列。
+
+两个细节：
+
+- **同一份顶点**：5 笔都走 `traceHexEdges(graphics, inset)`，光晕和核心线形状完全一致，
+  否则会在格角错开半个像素、露出毛边。
+- **`lineCap = ROUND`**：六边形是 6 条**独立**线段（不是一条闭合路径），平头会在每个顶点留
+  一个楔形缺口 —— 核心线以前就有这个缺口，光晕的缺口会更明显。共享轮廓层
+  `flushOutlineSegments` 用的就是 ROUND，两条线在格角才长得一样。
+
+代价：一份 `Graphics` 里 5 个 subModel（同一材质，可合批），6 条边 × 5 = 30 段。只挂在**一格**上，
+可接受；如果哪天要给多格同时提示，应该改成「整盘一份画布、按格 push 段落」而不是给每格各建一份。
 
 `alpha` 是提示透明度（`0` = 关掉），由渲染层每帧喂 `ZCGameViewUtil.zcNeutralHintAlpha`。
 
-为什么画在 `outlineGraphics`（那份 per-cell 的 `TerritoryOutline`）而不是共享轮廓层：
-提示是**每帧都在变**的闪烁，而共享层是整盘一张画布 —— 想每帧只更新这一格就得把整盘
-轮廓重建一遍（探针里只有它是脏的）。这份画布刚好"一格一画布"，重绘代价只有 6 条边。
+**为什么不再画在 `outlineGraphics` 上**：那份 per-cell 画布确实便宜（6 条边），但它的绘制
+顺序绑死在格子自己那一层 —— 只要邻格先铺了底色、或者邻格立了建筑，提示线就被切掉一段。
+2026-10-15 row10 那一版把它"复活"是为了省一次整盘重建，代价是层级被锁死；现在改成
+**一份共享画布挂棋盘最后一个图层**，既解决层级，重绘代价仍然只有 6 条边（比 per-cell 更省）。
+`outlineGraphics` 从此**永久停用**（`initialize` 里 `clear + enabled = false`），只留字段承接
+prefab 已序列化引用。
+
+图层顺序（`ZCGameBoard.prefab` 子节点序，`setParent` 追加到末尾）：
+`MapWater → HexLayer → OutlineLayer → ResourceLayer → DecorLayer → BuildingOverlay → CooldownOverlay`。
+城墙层是运行时插在 `OutlineLayer + 1` 的，也在提示之下。
 
 ⚠️ 所有权属轮廓仍**只由** `ZCOutlineLayer` 画，这里绝不画领地边 —— 否则会和共享层叠出双线。
 幂等：`alpha <= 0` 就是"关掉"，重复调用只是空转；透明度变化 < 2% 时连 Graphics 都不碰。
@@ -392,27 +455,29 @@ prefab 都走这条兼容路径，不会因为缺层而崩或改表现。
 
 ---
 
-## §19 新点亮邻格「可开发外观」的按住窗判定
+## §19 新点亮邻格的「生成动画」与脉冲同步
 
-> 原 `ZCHexView.ts` 行 1288–1306。
+> 原 `ZCHexView.ts` 的 `noteDevelopableSpawn` / `advanceDevelopableSpawn` / `applyDevelopableSpawn`。
 
-「新点亮邻格」可开发外观的按住窗判定（需求 2026-10-15 row6）。
+需求（2026-10-26）：「战斗中，新格子的生成动画和地块脉冲动画同步播放」。
 
-只在 `canDevelop` 由假变真的**那一拍**登记一个 `ZC_HEX_NEIGHBOR_HOLD_SECONDS` 的窗，
-窗内返回 true ⇒ 调用方把该格压回「还没点亮」的外观。
+「新点亮邻格」不再有按住窗（2026-10-15 row6 的 0.9s 延迟已删除）：点击那一拍图标 / 价格 /
+描边就跟脉冲一起出现，同时 `buildingLayer` 由小到大 + 淡入长齐。
 
-⚠️ 三条边界：
-- **首帧只记基线**（`developableBootstrapped`）：开局就亮着的购买位不能被按住，否则
-一进对局满屏价格牌都要先藏一拍；
-- **持续可开发不重登记**：否则玩家每帧都会重置窗口，价格牌永远不放出来；
-- 不可开发时直接返回 false（本来就没内容可藏）。
+⚠️ 四条边界：
+- **首帧只记基线**（`developableBootstrapped`）：开局就亮着的购买位不能被"生成"一遍，否则
+一进对局满屏价格牌一起蹦；
+- **持续可开发不重登记**：只有 `canDevelop` 由假变真那一拍才重设起点，否则价格牌会在半透明里抖；
+- **起点锚脉冲起点**（`presentation.developPulseStartedAt`）：地块走 0.15s 静态节流，
+  锚 `now` 会让生成动画整体滞后于脉冲；拿不到脉冲起点才退回 `now`；
+- 不可开发时直接按"没在播"处理（落回 1 / 255），本来就没内容可长。
 
-🔴 2026-10-15 row9 起**渲染世界也会调它**（`ZCGameRenderWorld.renderHexSystem` 的
-`ownerForHex`）：轮廓与「点亮图标」必须同一拍出现，而轮廓是在地块视图之外单独画的，
-只有问这里才能拿到同一个按住状态 —— 描边先冒出来、0.2s 后图标才跟上正是需求要修的现象。
+🔴 逐帧推进走 `ZCGameRenderWorld.renderDevelopableSpawns`（`developableSpawnHexes` 集合，
+与 `renderBuildingShakes` 同款）：0.5s 的动画用 0.15s 的静态刷新播只有 3~4 帧。
 
-同拍重复调用是安全的（幂等）：第二次进来 `lastCanDevelop` 已经是 `canDevelop`，
-不会再重置窗口，返回值也一样。所以「谁先调」不影响结果。
+🔴 row9 的描边同帧问题**也随这套口径一起解决**：渲染世界的 `ownerForHex` 不再问视图要
+"是否在按住窗内"（`resolveDevelopableHold` 已删除）。图标与描边在同一次 `renderHexSystem`
+里各自写，天然同帧；生成动画只改缩放 / 透明度，不改归属。
 
 ---
 
@@ -514,6 +579,14 @@ setSharedMaterial(mat, 0)`，读已释放的渲染状态 ⇒
 
 「被攻击才有血条」是刚需而非装饰：每个已开发地块都带满耐久城墙，内部格子的墙
 永远挨不到打，常显会让整片棋盘糊满血条。
+
+**扣血白条（2026-10-27）为什么单开一条逐帧通道**：血条本体挂在 `render`（`renderStatic`，
+0.15s 节流）上 —— 城墙挨打后「条掉一格」这件事本来就是一拍一拍发生的，够用。
+但被扣掉那段的白条只有 **0.13s**，比节流间隔还短，留在静态刷新里只会在某一拍出现、
+下一拍（0.15s 后）就没了，等于「闪一帧」。所以照 §「新点亮邻格生成动画」的同一套机制：
+静态刷新时 `isHealthBarTrailAnimating()` 入队 `ZCGameRenderWorld.healthBarTrailHexes`，
+动态帧 `renderHealthBarTrails` 调 `advanceHealthBarTrail(now)` 推进、播完自动出队。
+比例仍只算一次（`lastBarRatio`），动态帧只按时间轴重算宽度，不重复读模型、不写 `ProgressBar`。
 
 ---
 

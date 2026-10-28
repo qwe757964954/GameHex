@@ -715,11 +715,14 @@ test('E1 详情弹窗的 prefabPath 与磁盘目录逐字一致（大小写敏�
         'prefabPath 指向的文件不存在（真机 resources.load 失败 ⇒ 空弹窗）');
 });
 
-test('E2 详情弹窗：按钮分流绑定（有 cc.Button 才绑 CLICK，否则 TOUCH_END）', () => {
-    const body = methodBody(DETAIL_SRC, 'bindButton');
-    assert.ok(body.includes('getComponent(Button)'), 'bindButton 里没查 cc.Button');
-    assert.ok(body.includes('Button.EventType.CLICK'), '有 Button 的分支必须绑 CLICK');
-    assert.ok(body.includes('Node.EventType.TOUCH_END'), '没 Button 的分支必须退化成 TOUCH_END');
+test('E2 详情弹窗：两颗按钮统一绑 Node.TOUCH_END（不查 cc.Button、不做分流）', () => {
+    const body = methodBody(DETAIL_SRC, 'onInit');
+    assert.ok(body.includes('Node.EventType.TOUCH_END'), '必须绑节点触摸');
+    assert.ok(body.includes('this.closeButton'), '关闭按钮要绑');
+    assert.ok(body.includes('this.btnGo'), '「前往」按钮要绑');
+    assert.equal(/bindButton/.test(DETAIL_SRC), false, '不该再有 bindButton 包装方法');
+    assert.equal(/Button\.EventType\.CLICK|getComponent\(Button\)/.test(DETAIL_SRC), false,
+        '不该再依赖 cc.Button（节点挂不挂都能点）');
 });
 
 test('E3 详情弹窗：点「前往」只提示、**不关窗**（老端是跳转后 unload）', () => {

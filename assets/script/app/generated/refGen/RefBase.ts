@@ -142,7 +142,6 @@ protected _RefMgrpvpModifierOverride:RefMgrpvpModifierOverrideBase<IRefpvpModifi
 protected _RefMgrpvpPity:RefMgrpvpPityBase<IRefpvpPity>;
 protected _RefMgrpvpSkill:RefMgrpvpSkillBase<IRefpvpSkill>;
 protected _RefMgrpvpSkillBinding:RefMgrpvpSkillBindingBase<IRefpvpSkillBinding>;
-protected _RefMgrpvpSkillPlan:RefMgrpvpSkillPlanBase<IRefpvpSkillPlan>;
 protected _RefMgrpvpStatus:RefMgrpvpStatusBase<IRefpvpStatus>;
 protected _RefMgrpvpTile:RefMgrpvpTileBase<IRefpvpTile>;
 protected _RefMgrpvpTileGen:RefMgrpvpTileGenBase<IRefpvpTileGen>;
@@ -346,7 +345,6 @@ get RefMgrpvpModifierOverride(){if(!this._RefMgrpvpModifierOverride){this._RefMg
 get RefMgrpvpPity(){if(!this._RefMgrpvpPity){this._RefMgrpvpPity=new RefMgrpvpPityBase<IRefpvpPity>()}return this._RefMgrpvpPity}
 get RefMgrpvpSkill(){if(!this._RefMgrpvpSkill){this._RefMgrpvpSkill=new RefMgrpvpSkillBase<IRefpvpSkill>()}return this._RefMgrpvpSkill}
 get RefMgrpvpSkillBinding(){if(!this._RefMgrpvpSkillBinding){this._RefMgrpvpSkillBinding=new RefMgrpvpSkillBindingBase<IRefpvpSkillBinding>()}return this._RefMgrpvpSkillBinding}
-get RefMgrpvpSkillPlan(){if(!this._RefMgrpvpSkillPlan){this._RefMgrpvpSkillPlan=new RefMgrpvpSkillPlanBase<IRefpvpSkillPlan>()}return this._RefMgrpvpSkillPlan}
 get RefMgrpvpStatus(){if(!this._RefMgrpvpStatus){this._RefMgrpvpStatus=new RefMgrpvpStatusBase<IRefpvpStatus>()}return this._RefMgrpvpStatus}
 get RefMgrpvpTile(){if(!this._RefMgrpvpTile){this._RefMgrpvpTile=new RefMgrpvpTileBase<IRefpvpTile>()}return this._RefMgrpvpTile}
 get RefMgrpvpTileGen(){if(!this._RefMgrpvpTileGen){this._RefMgrpvpTileGen=new RefMgrpvpTileGenBase<IRefpvpTileGen>()}return this._RefMgrpvpTileGen}
@@ -552,7 +550,6 @@ export class RefMgrpvpModifierOverrideBase<T extends IRefBase> extends RefMgrBas
 export class RefMgrpvpPityBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("pvpPity")}}
 export class RefMgrpvpSkillBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("pvpSkill")}}
 export class RefMgrpvpSkillBindingBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("pvpSkillBinding")}}
-export class RefMgrpvpSkillPlanBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("pvpSkillPlan")}}
 export class RefMgrpvpStatusBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("pvpStatus")}}
 export class RefMgrpvpTileBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("pvpTile")}}
 export class RefMgrpvpTileGenBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("pvpTileGen")}}

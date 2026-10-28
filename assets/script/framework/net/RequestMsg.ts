@@ -3,7 +3,7 @@ import { ScriptObject } from "../base/ScriptObject";
 export class RequestMsg<CmdReqMsg, CmdRspMsg> extends ScriptObject {
     public static __cname: string = "RequestMsg";
     /**回调对象，可无 */
-    public caller: destroyable;
+    public caller: object | null | undefined;
     /**返回数据 */
     public fCallback: (rsp: CmdRspMsg) => void;
     /**错误回调 */
@@ -14,7 +14,7 @@ export class RequestMsg<CmdReqMsg, CmdRspMsg> extends ScriptObject {
     public allowRetry = true;
     /** 实际出队前检查请求所属会话与有效期。 */
     public canSend: (() => boolean) | null = null;
-    constructor(cmdReqMsg: CmdReqMsg, caller?: destroyable, fCallback?: (rsp: CmdRspMsg) => void, fErrorCallback?: Function) {
+    constructor(cmdReqMsg: CmdReqMsg, caller?: object, fCallback?: (rsp: CmdRspMsg) => void, fErrorCallback?: Function) {
         super();
         this.cmdReqMsg = cmdReqMsg
         this.caller = caller;

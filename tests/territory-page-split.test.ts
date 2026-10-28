@@ -6,7 +6,6 @@ const UI = 'assets/resources/ui/main';
 const PATHS = {
     page: `${UI}/MainTerritoryMap.prefab`,
     station: 'assets/resources/ui/territory/TerritoryStation.prefab',
-    detail: 'assets/resources/ui/territory/TerritorySiteDetail.prefab',
     pageScript: 'assets/script/app/main/MainTerritoryMap.ts',
 };
 
@@ -137,7 +136,8 @@ test('MainTerritoryMap.prefab：主城只嵌地图视图，HUD 已移除，弹�
     assert.equal('hudView' in script, false, 'MainTerritoryMap 不应保留 HUD 引用');
 
     // ④ 弹窗是独立 prefab（运行时 instantiate），不是页面的嵌套实例。
-    assert.ok((script.detailPrefab as Raw).__uuid__, 'detailPrefab 没绑');
+    assert.ok((script.playerStagePrefab as Raw).__uuid__, 'playerStagePrefab 没绑');
+    assert.equal('detailPrefab' in script, false, '站点详情面板已移除，不应再绑 detailPrefab');
 
     assertUiLayers(objects, 'MainTerritoryMap');
 });
@@ -182,46 +182,7 @@ test('TerritoryStation.prefab：128 站点 + 名称条 + 角标，整块可点�
     assert.deepEqual(objects[nodeIndexOf(objects, 'CaptionBg')]._lpos, { __type__: 'cc.Vec3', x: 0, y: 52, z: 0 });
     assertUiLayers(objects, 'TerritoryStation');
 });
-
-// ── 详情弹窗 ─────────────────────────────────────────────────────────────
-test('TerritorySiteDetail.prefab：全屏暗底 + 面板，根与暗底都四边对齐，面板自身吞点击', () => {
-    const objects = load(PATHS.detail);
-    const view = scriptOf(objects, cidOf('assets/script/app/territory/view/TerritorySiteDetailPanel.ts'));
-    const root = nodeIndexOf(objects, 'TerritorySiteDetail');
-    assert.equal(view.node.__id__, root);
-    assert.equal(objects[root]._active, false, '弹窗出厂必须隐藏');
-
-    // 规则 152b：弹窗根与底图都四边对齐，否则长屏上下会露底。
-    assert.equal(flagsOf(objects, root), 45, '弹窗根要四边对齐');
-    const dim = nodeIndexOf(objects, 'Dim');
-    assert.equal(flagsOf(objects, dim), 45, '暗底要四边对齐');
-    expectRef(objects, view, 'dimButton', 'Dim', 'cc.Button');
-
-    const panel = nodeIndexOf(objects, 'Panel');
-    const panelTransform = componentOf(objects, panel, 'cc.UITransform');
-    assert.equal(panelTransform._contentSize.width, 650);
-    assert.equal(panelTransform._contentSize.height, 760);
-    // 面板要自己吞点击，否则点面板会穿透到暗底把弹窗关掉。
-    assert.ok(componentOf(objects, panel, 'cc.Button'), 'Panel 需要拦事件的 Button');
-
-    expectRef(objects, view, 'titleLabel', 'Title', 'cc.Label');
-    expectRef(objects, view, 'subtitleLabel', 'Subtitle', 'cc.Label');
-    expectRef(objects, view, 'infoLabel', 'Info', 'cc.Label');
-    expectRef(objects, view, 'closeButton', 'Close', 'cc.Button');
-    expectRef(objects, view, 'startButton', 'Start', 'cc.Button');
-
-    // 两个按钮的文案挂子节点（FGUI/VirtualScrollView 那轮的同类口径：底图与字是两回事）。
-    for (const [parent, caption] of [['Close', '返回地图'], ['Start', '开战']]) {
-        const node = nodeIndexOf(objects, parent);
-        const textNode = (objects[node]._children ?? [])
-            .map((ref: { __id__: number }) => objects[ref.__id__])
-            .find((child) => child._name === 'Label');
-        assert.ok(textNode, `${parent} 缺文案子节点`);
-        const text = componentOf(objects, objects.indexOf(textNode), 'cc.Label')._string;
-        assert.equal(text, caption);
-    }
-    assertUiLayers(objects, 'TerritorySiteDetail');
-});
+// 站点详情弹窗已移除（2026-10-27 山猫：不需要了），对应 prefab 与组件一并删除。
 
 // ── 源码守卫：这一轮要消灭的写法不许回流 ─────────────────────────────────
 test('MainTerritoryMap.ts 不再自己搭 UI、不再直调 resources.load、不再手写拖拽', () => {
@@ -241,7 +202,8 @@ test('MainTerritoryMap.ts 不再自己搭 UI、不再直调 resources.load、不
     // 但注入点与视图接线必须在。
     assert.ok(code.includes('this.mapView.renderMap('), '页面应驱动地图渲染层');
     assert.equal(code.includes('this.hudView'), false, '主城地图页面不应保留 HUD 接线');
-    assert.ok(code.includes('this.detailPanel.open('), '页面应驱动详情弹窗');
+    assert.ok(code.includes('LevelInfoPanel'), '关卡 / 首领应走关卡界面弹窗');
+    assert.equal(code.includes('detailPanel'), false, '站点详情面板已移除');
 });
 
 // ── 源码守卫：Presenter 重构后，业务编排不许留在 Page ─────────────────────
@@ -264,7 +226,8 @@ test('MainTerritoryMap.ts 不再做配置/战役/存档/进度编排，只接线
     // 主城页面仍驱动地图和详情视图（Passive View 的渲染入口）。
     assert.ok(code.includes('this.mapView.renderMap('), '页面应驱动地图渲染层');
     assert.equal(code.includes('this.hudView'), false, 'HUD 已由主城页面顶栏承载');
-    assert.ok(code.includes('this.detailPanel.open('), '页面应驱动详情弹窗');
+    assert.ok(code.includes('LevelInfoPanel'), '关卡 / 首领应走关卡界面弹窗');
+    assert.equal(code.includes('detailPanel'), false, '站点详情面板已移除');
 });
 
 // ── Presenter 纯度守卫：纯 TS 编排器，整条 import 链不许碰 cc / 边界 ───────

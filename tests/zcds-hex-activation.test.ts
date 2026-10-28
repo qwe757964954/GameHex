@@ -574,7 +574,7 @@ test('对局全程不挂翻转材质：底图 customMaterial 恒为 null，视�
 // ── 地面光斑：抬起时点亮并钉在原格，复位即熄灭 + 摘材质 ───────────────────────
 
 test('GroundGlow 在底图之上绘制，开口边的半透明光不会被底图遮住', () => {
-    const prefab = JSON.parse(readFileSync('assets/resources/ui/game/ZCGameHex.prefab', 'utf8')) as
+    const prefab = JSON.parse(readFileSync('assets/bundles/battle/ui/game/ZCGameHex.prefab', 'utf8')) as
         Array<{ __type__?: string; _name?: string; _children?: Array<{ __id__: number }> }>;
     const root = prefab.find((entry) => entry.__type__ === 'cc.Node' && entry._name === 'ZCGameHex');
     const children = root?._children?.map(({ __id__ }) => prefab[__id__]._name);
@@ -820,7 +820,7 @@ test('脉冲段不再画 Graphics 圆环（圆圈影响视觉），改走中间�
     assert.match(readFileSync('assets/script/app/ArtPaths.ts', 'utf8'),
         /HEX_FLIP_PULSE_ART_ROOT = `\$\{ART_ROOT\}\/effects\/hex_pulse_seq`/);
     assert.match(strip('assets/script/app/zcds/view/ZCGameRenderWorld.ts'),
-        /setHexPulseFrames\(this\.options\.hexPulseFrames/, '渲染层要真的把帧喂给每个地块视图');
+        /setHexPulseFrames\(this\.hexPulseFrames/, '渲染层要真的把帧喂给每个地块视图');
 });
 
 // ── 旧脉冲着色器已退役：新美术把虚化烘焙进图，不许再把 `hex-pulse.effect` 接回来 ──────

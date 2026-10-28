@@ -64,12 +64,11 @@ export class ZCTileSystem {
     }
 
     /**
-     * 已开发锚点：废墟（建筑被打掉后归摧毁方）仍算己方已开发锚点，会点亮己方侧全部相邻格。
+     * 只有已完成开发的地块或存活建筑才提供锚点；废墟只保留归属，不解锁周边。
      * 只读标志位，单趟遍历中判定与迭代顺序无关 —— 不要依赖同趟刚算出的 state。
      */
     private static isDevelopedAnchor(neighbor: ZCHexState): boolean {
-        return neighbor.state === 'ruins'
-            || neighbor.developmentResolved
+        return neighbor.developmentResolved
             || (neighbor.building !== 'none' && neighbor.hp > 0);
     }
 

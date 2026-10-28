@@ -123,11 +123,15 @@ test('流程管理器能拿到对局控制器（只读出口）；不在对局�
 });
 
 
-test('公共预下载只发低优先级下载请求，不解析或持有资产；取消后不派发', async () => {
+test('公共预下载用标准下载节奏保留低优先级，不继承每帧2项节流；取消不派发', async () => {
     const requests: unknown[] = [];
+    const presets: unknown[] = [];
     const { CocosAssetService } = load('assets/script/platform/cocos/CocosAssetService.ts', {
         cc: { resources: { name: 'resources', load() { throw new Error('不能解析'); } },
-            assetManager: { preloadAny: (request: unknown, done: Function) => { requests.push(request); done(null, []); } } },
+            assetManager: { preloadAny: (request: unknown, optionsOrDone: { preset: string } | Function, done?: Function) => {
+                requests.push(request); presets.push(typeof optionsOrDone === 'function' ? undefined : optionsOrDone.preset);
+                (typeof optionsOrDone === 'function' ? optionsOrDone : done!)(null, []);
+            } } },
         '../../core/asset/BundleCatalog': { bundleForPath: () => undefined },
         '../hotupdate/CocosBundleRegistry': {},
     });
@@ -135,7 +139,30 @@ test('公共预下载只发低优先级下载请求，不解析或持有资产�
     const scope = new ResourceScope('warm');
     await service.preload('ui/game/ZCGameHUD', { scope });
     assert.deepEqual(JSON.parse(JSON.stringify(requests)), [{ path: 'ui/game/ZCGameHUD', bundle: 'resources', priority: -1 }]);
+    assert.deepEqual(presets, ['default'], '只绕过 preload 预设的共享队列低速限制，依然不解析');
     scope.dispose();
     await service.preload('late', { scope });
     assert.equal(requests.length, 1);
+});
+
+
+test('Cocos 适配器通过公开 loadAny 透传优先级和目录数组语义', async () => {
+    const requests: object[] = [];
+    const { CocosAssetService } = load('assets/script/platform/cocos/CocosAssetService.ts', {
+        cc: { Asset, resources: { name: 'resources' }, assetManager: {
+            loadAny: (request: { dir?: string }, optionsOrDone: Function | object, done?: Function) => {
+                requests.push(request);
+                if (request.dir) { assert.deepEqual(Object.keys(optionsOrDone), ['__outputAsArray__']); done!(null, []); }
+                else (optionsOrDone as Function)(null, new Asset());
+            },
+            preloadAny: (request: object, _options: unknown, done: Function) => { requests.push(request); done(null); },
+        } },
+        '../../core/asset/BundleCatalog': { bundleForPath: () => undefined }, '../hotupdate/CocosBundleRegistry': {},
+    });
+    const service = new CocosAssetService();
+    await service.load('shell', Asset, { priority: 100 });
+    await service.loadDir('scene', Asset, { priority: 100 });
+    await service.preload('idle', { priority: -10 });
+    assert.deepEqual(requests.map((r: any) => r.priority), [100, 100, -10]);
+    assert.deepEqual(requests.map((r: any) => r.bundle), ['resources', 'resources', 'resources']);
 });

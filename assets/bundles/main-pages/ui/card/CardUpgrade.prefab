@@ -55,11 +55,11 @@
         "__id__": 138
       },
       {
-        "__id__": 141
+        "__id__": 140
       }
     ],
     "_prefab": {
-      "__id__": 140
+      "__id__": 142
     },
     "_lpos": {
       "__type__": "cc.Vec3",
@@ -957,10 +957,7 @@
       "b": 255,
       "a": 255
     },
-    "_spriteFrame": {
-      "__uuid__": "7b57e505-2203-47ac-b4df-c5bfdf3d1fb2@f9941",
-      "__expectedType__": "cc.SpriteFrame"
-    },
+    "_spriteFrame": null,
     "_type": 0,
     "_fillType": 0,
     "_sizeMode": 1,
@@ -3493,7 +3490,7 @@
       "__id__": 12
     },
     "closeButton": {
-      "__id__": 128
+      "__id__": 133
     },
     "cardFace": {
       "__id__": 24
@@ -3535,12 +3532,12 @@
       "__id__": 125
     },
     "upgradeButton": {
-      "__id__": 108
+      "__id__": 119
     },
     "upgradeLabel": {
       "__id__": 112
     },
-    "fallbackLevel": 1,
+    "skillButton": null,
     "enoughColor": {
       "__type__": "cc.Color",
       "r": 104,
@@ -3569,18 +3566,6 @@
     "fileId": "car7+rMABCFpsn68rY+34o"
   },
   {
-    "__type__": "cc.PrefabInfo",
-    "root": {
-      "__id__": 1
-    },
-    "asset": {
-      "__id__": 0
-    },
-    "fileId": "b8H3Vs7MhMpp9385x40Ge9",
-    "instance": null,
-    "targetOverrides": null
-  },
-  {
     "__type__": "cc.Widget",
     "_name": "",
     "_objFlags": 0,
@@ -3590,7 +3575,7 @@
     },
     "_enabled": true,
     "__prefab": {
-      "__id__": 142
+      "__id__": 141
     },
     "_alignFlags": 45,
     "_target": null,
@@ -3615,5 +3600,17 @@
   {
     "__type__": "cc.CompPrefabInfo",
     "fileId": "KpOsdUu8bPbrz0/R9zJqnE"
+  },
+  {
+    "__type__": "cc.PrefabInfo",
+    "root": {
+      "__id__": 1
+    },
+    "asset": {
+      "__id__": 0
+    },
+    "fileId": "b8H3Vs7MhMpp9385x40Ge9",
+    "instance": null,
+    "targetOverrides": null
   }
 ]

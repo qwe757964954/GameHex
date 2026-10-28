@@ -1,6 +1,7 @@
 import { JsonAsset, SpriteFrame } from 'cc';
 import type { AssetService } from '../../../core/asset/AssetService';
 import { RefUtil } from '../../../framework/ref/RefUtil';
+import { MAP_MARKER_BUBBLE_FRAME_PATH } from '../../common/MapMarkerBadge';
 import {
     ART_ROOT,
     BUILDING_ART_ROOT,
@@ -20,6 +21,8 @@ import {
  */
 export interface ITerritoryBattleArt {
     readonly background: SpriteFrame | null;
+    /** 章节关卡编号气泡，复用 battle 分包中的蓝色 frame_03。 */
+    readonly levelBubbleFrame?: SpriteFrame | null;
     /**
      * **未通关**格的地皮（未解锁 / 已解锁未通关 / 中立格都用它）：`img_land_02` 泥土块。
      *
@@ -217,7 +220,7 @@ export async function loadTerritoryBattleArt(
     assets: AssetService,
     backgroundPath: string,
 ): Promise<ITerritoryBattleArt> {
-    const [background, tileLocked, tileCleared, frameBoss, frameStage, frameAsyncPvp, frameChest, start, stage, boss, asyncPvp, fixedResource, randomResource, randomSilverIcon, bonus, header, navButton, actionButton, buildAssets] = await Promise.all([
+    const [background, tileLocked, tileCleared, frameBoss, frameStage, frameAsyncPvp, frameChest, start, stage, boss, asyncPvp, fixedResource, randomResource, randomSilverIcon, bonus, header, navButton, actionButton, buildAssets, levelBubbleFrame] = await Promise.all([
         // 地图 JSON 有 background 就按它走（spriteFramePathOf 对已带后缀的路径幂等），否则用默认背景。
         // ⚠️ 默认图 zdbg1 在 `image/` **根目录**（不在 `image/territory/`）⇒ 走 `spriteFramePath(ART_ROOT, …)`；
         //    用 `spriteFramePathOf(TERRITORY_ART_ROOT/…)` 拼会在 bundle 索引里查不到
@@ -252,8 +255,9 @@ export async function loadTerritoryBattleArt(
         loadFrame(assets, spriteFramePath(COMMON_ART_ROOT, 'cu_ty_btn09')),
         loadFrame(assets, spriteFramePath(COMMON_ART_ROOT, 'cu_ty_btn13')),
         loadBuildAssets(assets),
+        loadFrame(assets, MAP_MARKER_BUBBLE_FRAME_PATH),
     ]);
-    return { background, tileLocked, tileCleared, frameBoss, frameStage, frameAsyncPvp, frameChest, start, stage, boss, asyncPvp, fixedResource, randomResource, randomSilverIcon, bonus, header, navButton, actionButton, buildFrames: buildAssets.frames, buildScales: buildAssets.scales };
+    return { background, levelBubbleFrame, tileLocked, tileCleared, frameBoss, frameStage, frameAsyncPvp, frameChest, start, stage, boss, asyncPvp, fixedResource, randomResource, randomSilverIcon, bonus, header, navButton, actionButton, buildFrames: buildAssets.frames, buildScales: buildAssets.scales };
 }
 
 /**

@@ -66,7 +66,7 @@ export interface IGiftRepository {
     /** 读表 + 读缓存，组装一次快照；**不发任何请求**。 */
     load(nowMs?: number): Promise<IGiftSnapshot>;
     /** 购买一个礼包商品（`id` = `giftShop.id`）。 */
-    buyGift(id: number, caller?: unknown): Promise<GiftRequestResult>;
+    buyGift(id: number, caller?: object): Promise<GiftRequestResult>;
     /** 当前缓存的已购次数（调试 / 测试用）。 */
     peekBuyTimes(): ReadonlyMap<number, number>;
 }
@@ -128,7 +128,7 @@ export class RuntimeGiftRepository implements IGiftRepository {
         return readBuyTimes();
     }
 
-    async buyGift(id: number, caller?: unknown): Promise<GiftRequestResult> {
+    async buyGift(id: number, caller?: object): Promise<GiftRequestResult> {
         const net = GameNet.instance;
         if (!net.isConnected) return 'offline';
 
@@ -146,7 +146,7 @@ export class RuntimeGiftRepository implements IGiftRepository {
                 net.send(
                     new RequestGiftShopBuy(
                         { id, cmdShopType: GIFT_SHOP_TYPE as any, buyTimes: 1 },
-                        caller as any,
+                        caller,
                         callback,
                     ),
                     false,

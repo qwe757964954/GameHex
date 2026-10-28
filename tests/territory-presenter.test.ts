@@ -1,14 +1,20 @@
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { runInNewContext } from 'node:vm';
+import ts from 'typescript';
+import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
 import {
     ITerritoryBattleNavParams,
     ITerritoryCellGateway,
     ITerritoryChapterBundle,
     ITerritoryChapterLoader,
     ITerritoryChapterStore,
-    ITerritoryPresenterOutputs,
+    ITerritoryNavigateBattlePayload,
     ITerritoryPresenterPorts,
+    ITerritoryShowRewardsPayload,
+    ITerritoryShowTipPayload,
+    ITerritorySetBusyPayload,
     TerritoryPresenter,
 } from '../assets/script/app/territory/application/TerritoryPresenter';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
@@ -29,7 +35,105 @@ import type {
     TerritoryStartBattleResult,
     TerritoryWriteResult,
 } from '../assets/script/app/territory/application/TerritoryCellRepository';
-import { emptyCellState, type ITerritoryCellState } from '../assets/script/app/territory/model/TerritoryCellBitSet';
+import { emptyCellState } from '../assets/script/app/territory/model/TerritoryCellBitSet';
+
+interface IBattlePageProbe {
+    onDetailStart(): void;
+    onDetailClose(): void;
+    onNavigateToBattle(payload: ITerritoryNavigateBattlePayload): void;
+}
+
+/** 用真实页面事件处理器连接真实 Presenter；只替换引擎、弹窗栈和最终路由。 */
+function createBattlePageProbe(presenter: TerritoryPresenter) {
+    const exports: { MainTerritoryMap?: new () => IBattlePageProbe } = {};
+    class LevelInfoPanel {}
+    class LevelTipPanel {}
+    let opened = true;
+    let closes = 0;
+    const routes: unknown[] = [];
+    const imports: Record<string, unknown> = {
+        cc: { Component: class {}, _decorator: {
+            ccclass: () => (type: unknown) => type, property: () => () => {},
+        } },
+        '../../core/asset/ResourceScope': { ResourceScope },
+        './LevelInfoPanel': { LevelInfoPanel },
+        './LevelTipPanel': { LevelTipPanel },
+        '../../core/runtime/GameRoute': { GameRoute: { Battle: 'battle' } },
+        '../../framework/procedure/ProcedureManager': { ProcedureManager: {
+            navigate: (_route: string, params: unknown) => routes.push(params),
+        } },
+        '../../framework/ui/PopupManager': { PopupManager: { inst: {
+            get: (type: unknown) => type === LevelInfoPanel && opened ? { close: () => {
+                opened = false;
+                closes++;
+                page.onDetailClose();
+            } } : null,
+        } } },
+    };
+    runInNewContext(ts.transpileModule(readFileSync('assets/script/app/main/MainTerritoryMap.ts', 'utf8'), {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
+    }).outputText, { exports, require: (id: string) => imports[id] ?? {} });
+    assert.ok(exports.MainTerritoryMap);
+    const page = new exports.MainTerritoryMap();
+    Object.assign(page, { presenter });
+    EventMgr.instance.on(TERRITORY_PRESENTER_EVENTS.NavigateToBattle, page.onNavigateToBattle, page);
+    return { page, routes, closes: () => closes, dispose: () => EventMgr.instance.offTarget(page) };
+}
+
+test('关卡按钮等有效开战回包后才收弹窗，关闭事件不能取消刚发出的请求', async () => {
+    const gateway = createFakeGateway({ fetch: {
+        ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [367, 213], passCells: [367] },
+    } });
+    let reply: (result: TerritoryStartBattleResult) => void = () => {};
+    gateway.gateway.startBattle = () => new Promise((resolve) => { reply = resolve; });
+    const h = createHarness({ loader: createBossFindLoader(), gateway });
+    const probe = createBattlePageProbe(h.presenter);
+    try {
+        h.presenter.start();
+        await flush();
+        assert.equal(h.presenter.focusCurrentBoss(), 213);
+        probe.page.onDetailStart();
+        assert.equal(probe.closes(), 0, '请求在途不能触发 DETAIL_CLOSE 并作废 requestId');
+        reply({ ok: true, battle: fakeBattleStart });
+        await flush();
+        assert.equal(h.nav.length, 1, '有效回包必须交接到战斗流程');
+        assert.equal(probe.routes.length, 1);
+        assert.equal(probe.closes(), 1, '流程接手时收掉挂在全局弹窗栈上的关卡界面');
+    } finally {
+        probe.dispose();
+        h.presenter.dispose();
+    }
+});
+
+test('关卡开战被拒绝时保留详情可重试，玩家主动关闭仍取消迟到回包', async () => {
+    const gateway = createFakeGateway({ fetch: {
+        ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [367, 213], passCells: [367] },
+    } });
+    let reply: (result: TerritoryStartBattleResult) => void = () => {};
+    let requests = 0;
+    gateway.gateway.startBattle = () => { requests++; return new Promise((resolve) => { reply = resolve; }); };
+    const h = createHarness({ loader: createBossFindLoader(), gateway });
+    const probe = createBattlePageProbe(h.presenter);
+    try {
+        h.presenter.start();
+        await flush();
+        h.presenter.focusCurrentBoss();
+        probe.page.onDetailStart();
+        reply({ ok: false, reason: 'failed' });
+        await flush();
+        assert.equal(probe.closes(), 0);
+        assert.equal(h.presenter.state.detail.levelInfo?.fightEnabled, true);
+        probe.page.onDetailStart();
+        assert.equal(requests, 2);
+        probe.page.onDetailClose();
+        reply({ ok: true, battle: fakeBattleStart });
+        await flush();
+        assert.equal(h.nav.length, 0, '真正关闭详情后仍必须丢弃迟到回包');
+    } finally {
+        probe.dispose();
+        h.presenter.dispose();
+    }
+});
 
 // ── 夹具 ───────────────────────────────────────────────────────────────
 
@@ -119,9 +223,9 @@ test('quick find opens current Boss detail without unlocking, charging, or start
     h.presenter.start();
     await flush();
     assert.equal(h.presenter.focusCurrentBoss(), 213);
-    assert.equal(h.presenter.state.detail.open, true);
-    assert.equal(h.presenter.state.detail.content?.title, '首领关卡  5');
-    assert.equal(h.presenter.state.detail.content?.startEnabled, true, 'server-unlocked Boss remains challengeable');
+    assert.ok(h.presenter.state.detail.levelInfo, '关卡界面必须弹');
+    assert.equal(h.presenter.state.detail.levelInfo?.title, '首领关卡  5');
+    assert.equal(h.presenter.state.detail.levelInfo?.fightEnabled, true, 'server-unlocked Boss remains challengeable');
     assert.equal(h.gatewayCalls.unlock, 0);
     assert.equal(h.gatewayCalls.startBattle, 0);
     assert.equal(h.gatewayCalls.pass, 0);
@@ -143,14 +247,14 @@ test('locked Boss detail uses the existing unlock-then-start flow and cannot can
     h.presenter.start();
     await flush();
     assert.equal(h.presenter.focusCurrentBoss(), 213);
-    assert.equal(h.presenter.state.detail.content?.startCaption, '解锁');
+    assert.equal(h.presenter.state.detail.levelInfo?.fightCaption, '解锁后开战');
     h.presenter.requestBattle();
     assert.equal(h.presenter.focusCurrentBoss(), null, 'quick find must not invalidate a pending write');
     await flush();
     assert.equal(h.gatewayCalls.unlock, 1);
     assert.equal(h.gatewayCalls.startBattle, 0);
-    assert.equal(h.presenter.state.detail.open, true);
-    assert.equal(h.presenter.state.detail.content?.startCaption, '开战');
+    assert.ok(h.presenter.state.detail.levelInfo, '关卡界面必须弹');
+    assert.equal(h.presenter.state.detail.levelInfo?.fightCaption, '开始战斗');
     h.presenter.requestBattle();
     await flush();
     assert.equal(h.gatewayCalls.startBattle, 1);
@@ -165,11 +269,11 @@ test('quick find falls back to the latest cleared Boss and starts a server battl
     h.presenter.start();
     await flush();
     assert.equal(h.presenter.focusCurrentBoss(), 105);
-    assert.equal(h.presenter.state.detail.content?.title, '首领关卡  10');
+    assert.equal(h.presenter.state.detail.levelInfo?.title, '首领关卡  10');
     h.presenter.state.progress!.markCellPassed(85);
     assert.equal(h.presenter.focusCurrentBoss(), 105);
-    assert.equal(h.presenter.state.detail.open, true);
-    assert.equal(h.presenter.state.detail.content?.startEnabled, true);
+    assert.ok(h.presenter.state.detail.levelInfo, '关卡界面必须弹');
+    assert.equal(h.presenter.state.detail.levelInfo?.fightEnabled, true);
     h.presenter.requestBattle();
     h.presenter.requestBattle();
     await flush();
@@ -335,13 +439,21 @@ test('an initially locked stage unlocks on the first click without entering batt
     } }) });
     h.presenter.start();
     await flush();
-    h.presenter.selectSite(h.presenter.state.map!.sites[0]);
-    // 关卡不弹详情面板 —— 面板留给 asyncPvp / bonus / 待配表站点。
-    assert.equal(h.presenter.state.detail.open, false, '关卡不再弹详情面板');
+    const site = h.presenter.state.map!.sites[0];
+    h.presenter.selectSite(site);
+    // 🔴 2026-10-28 用户口径：「当关卡地块未解锁时（显示银币和数字 ui 时），点击地块消耗银币，
+    // 播放地块切换成关卡地块的动画，**不要**直接改成点击银币弹出【领地关卡弹窗】」。
+    // ⇒ 第一次点击 = 花银币解锁，界面**不弹**（弹窗留给"已经看得见这座关卡"的第二次点击）。
+    assert.equal(h.presenter.state.detail.levelInfo, null,
+        '未解锁 ⇒ 不弹「关卡界面」（点击这一下只负责解锁）');
     await flush();
     assert.equal(h.gatewayCalls.unlock, 1, '未解锁 ⇒ 第一次点击只解锁');
     assert.equal(h.gatewayCalls.startBattle, 0, '未解锁 ⇒ 这一步不发开战请求');
     assert.equal(h.nav.length, 0, '解锁阶段不进战斗');
+    assert.equal(h.presenter.state.progress?.isCellUnlocked(site.cellId), true, '解锁要记账');
+    // 已解锁之后再点 ⇒ 才打开关卡界面（窗里的「开始战斗」走 requestBattle）。
+    h.presenter.selectSite(site);
+    assert.ok(h.presenter.state.detail.levelInfo, '已解锁 ⇒ 点一下打开关卡界面');
 });
 
 test('an already unlocked stage starts without sending a duplicate unlock', async () => {
@@ -370,11 +482,14 @@ test('re-clicking a stage while its unlock is in flight cancels the stale attemp
     await flush();
     const site = h.presenter.state.map!.sites[0];
     const other = h.presenter.state.map!.sites[1];
+    // 2026-10-28 起「未解锁 ⇒ 点一下直接解锁」，所以这里不再需要 `requestBattle()`。
     h.presenter.selectSite(site);
     // 同一格的解锁还在飞 ⇒ 连点**不再**发第二次（`pendingFixedResourceCells` 挡）。
     h.presenter.selectSite(site);
     assert.equal(pending.length, 1, '★同一格的解锁在飞 ⇒ 连点不重复发请求');
     // 切到别的站点 ⇒ `cancelBattleRequest()` 递增 ⇒ 那一次回包作废。
+    // ⚠️ 另一格发不发自己的解锁请求，取决于它在不在 `revealed` / 有没有解锁 —— 与本条无关，
+    //    这里只关心 `site` 那一发的命运，所以只把 `pending[0]` 结掉。
     h.presenter.selectSite(other);
     pending[0]({ ok: true });
     await flush();
@@ -543,14 +658,9 @@ test('repeated ticks cannot duplicate an in-flight unlock, and never send passCe
 });
 
 test('a server-pushed CellInfo confirms the pending pass without sending passCell', async () => {
-    let pushCellInfo: ((state: ITerritoryCellState) => void) | null = null;
     const gateway = createFakeGateway({ fetch: {
         ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [1], passCells: [] },
     } });
-    gateway.gateway.listenCellInfo = (_maxCell: number, onState: (state: ITerritoryCellState) => void) => {
-        pushCellInfo = onState;
-    };
-    gateway.gateway.unlistenCellInfo = () => { pushCellInfo = null; };
     const h = createHarness({ gateway, store: createFakeStore({ battle: {
         chapterId: 1, cellId: 1, levelId: 1001, status: 'victory', startedAt: 100, resolvedAt: 200,
     } }) });
@@ -561,20 +671,19 @@ test('a server-pushed CellInfo confirms the pending pass without sending passCel
     assert.deepEqual(h.presenter.state.progress?.pendingPassCells, [1]);
     assert.equal(h.gatewayCalls.pass, 0);
     // 服务端主动下发完整快照（含通关 1）⇒ 清待确认、刷新，仍不发 passCell。
-    assert.equal(typeof pushCellInfo, 'function');
-    pushCellInfo?.({ levelChapter: 1, rewardState: 0, unlockCells: [1], passCells: [1] });
+    h.presenter.applyCellInfoState({ levelChapter: 1, rewardState: 0, unlockCells: [1], passCells: [1] });
     assert.deepEqual(h.presenter.state.progress?.pendingPassCells, []);
     assert.equal(h.presenter.state.progress?.isOwned(1), true);
     assert.equal(h.gatewayCalls.pass, 0);
     // 重复推送幂等：再来一次没有新增、不报错。
-    pushCellInfo?.({ levelChapter: 1, rewardState: 0, unlockCells: [1], passCells: [1] });
+    h.presenter.applyCellInfoState({ levelChapter: 1, rewardState: 0, unlockCells: [1], passCells: [1] });
     assert.deepEqual(h.presenter.state.progress?.pendingPassCells, []);
     // 别的章节的下发必须被忽略。
-    pushCellInfo?.({ levelChapter: 2, rewardState: 0, unlockCells: [1], passCells: [1] });
+    h.presenter.applyCellInfoState({ levelChapter: 2, rewardState: 0, unlockCells: [1], passCells: [1] });
     assert.equal(h.presenter.state.progress?.isOwned(1), true);
 });
 
-function createOutputs() {
+function createOutputSpy() {
     const tips: string[] = [];
     const rewards: { resId: number; amount: number }[][] = [];
     /** 与 `rewards` 逐条对应的「来源格」；`null` = 挂机产出这类没有格子的发奖。 */
@@ -582,23 +691,7 @@ function createOutputs() {
     const nav: ITerritoryBattleNavParams[] = [];
     const battles: (ZCBattleStart | undefined)[] = [];
     const busy: Array<{ busy: boolean; text?: string }> = [];
-    const outputs: ITerritoryPresenterOutputs = {
-        navigateToBattle: (pve: ITerritoryBattleNavParams, battle?: ZCBattleStart) => {
-            nav.push(pve);
-            battles.push(battle);
-        },
-        showTip: (text: string) => tips.push(text),
-        showRewards: (
-            gains: readonly { resId: number; amount: number }[],
-            originCellId?: number | null,
-        ) => {
-            rewards.push(gains.map((g) => ({ ...g })));
-            rewardOrigins.push(originCellId);
-        },
-        // 默认记录 busy 开关序列；断言「请求在途 ⇒ 全屏 loading 遮挡」直接用 `h.busy`。
-        setBusy: (busyFlag, text) => { busy.push({ busy: busyFlag, text }); },
-    };
-    return { outputs, tips, rewards, rewardOrigins, nav, battles, busy };
+    return { tips, rewards, rewardOrigins, nav, battles, busy };
 }
 
 interface HarnessOptions {
@@ -606,7 +699,6 @@ interface HarnessOptions {
     loader?: ReturnType<typeof createFakeLoader>;
     gateway?: ReturnType<typeof createFakeGateway>;
     store?: ReturnType<typeof createFakeStore>;
-    outputs?: ReturnType<typeof createOutputs>;
     serverWallet?: () => TerritoryWallet | null;
 }
 
@@ -614,27 +706,52 @@ function createHarness(options: HarnessOptions = {}) {
     const loader = options.loader ?? createFakeLoader();
     const gateway = options.gateway ?? createFakeGateway();
     const store = options.store ?? createFakeStore();
-    const outputs = options.outputs ?? createOutputs();
+    const spy = createOutputSpy();
     let stateChanges = 0;
     const ports: ITerritoryPresenterPorts = {
         loader: loader.loader,
         gateway: gateway.gateway,
         store: store.store,
-        outputs: outputs.outputs,
         walletSeed: (): TerritoryWallet => ({ silver: 10000, stamina: 100 }),
-        readServerWallet: () => options.serverWallet?.() ?? null,
+        readServerWallet: () => (options.serverWallet ? options.serverWallet() : null),
         availableChapters: options.chapters ?? [1],
     };
     const presenter = new TerritoryPresenter(ports);
     // 订阅挂在 `EventMgr` 全局中控上，target = presenter：`presenter.dispose()` 里 `offTarget(this)` 一并摘净。
     EventMgr.instance.on(TERRITORY_PRESENTER_EVENTS.StateChange, () => { stateChanges++; }, presenter);
+    EventMgr.instance.on(
+        TERRITORY_PRESENTER_EVENTS.NavigateToBattle,
+        (payload: ITerritoryNavigateBattlePayload) => {
+            spy.nav.push(payload.pve);
+            spy.battles.push(payload.battle);
+        },
+        presenter,
+    );
+    EventMgr.instance.on(
+        TERRITORY_PRESENTER_EVENTS.ShowTip,
+        (payload: ITerritoryShowTipPayload) => { spy.tips.push(payload.text); },
+        presenter,
+    );
+    EventMgr.instance.on(
+        TERRITORY_PRESENTER_EVENTS.ShowRewards,
+        (payload: ITerritoryShowRewardsPayload) => {
+            spy.rewards.push(payload.rewards.map((g) => ({ resId: g.resId, amount: g.amount })));
+            spy.rewardOrigins.push(payload.originCellId);
+        },
+        presenter,
+    );
+    EventMgr.instance.on(
+        TERRITORY_PRESENTER_EVENTS.SetBusy,
+        (payload: ITerritorySetBusyPayload) => { spy.busy.push({ busy: payload.busy, text: payload.text }); },
+        presenter,
+    );
     return {
         presenter,
         stateChanges: () => stateChanges,
         loaderCalls: loader.calls,
         gatewayCalls: gateway.calls,
         storeCalls: store.calls,
-        ...outputs,
+        ...spy,
     };
 }
 
@@ -920,7 +1037,7 @@ test('fetchChapterCells failure does not block the page (fail-open)', async () =
 
 // 🔴 口径反转（2026-10-15）：关卡（`stage`/`boss`）**不再弹详情面板**，点一下直接走解锁→开战。
 // 面板只留给 asyncPvp / bonus / 待配表站点 —— 这条用例就是这次反转的判据。
-test('selectSite on a bound stage does NOT open the detail (stages start on click)', async () => {
+test('selectSite on a bound stage opens the level panel first, battle starts from its button', async () => {
     const h = createHarness({
         gateway: createFakeGateway({
             fetch: {
@@ -932,14 +1049,20 @@ test('selectSite on a bound stage does NOT open the detail (stages start on clic
     h.presenter.start();
     await flush();
     const { detail } = h.presenter.state;
-    assert.equal(detail.open, false, '关卡不弹面板');
+    assert.equal(detail.open, false, '没点之前不弹面板');
     h.presenter.selectSite(h.presenter.state.map!.sites[0]);
-    assert.equal(h.presenter.state.detail.open, false, '关卡点了也不弹面板');
     await flush();
-    assert.equal(h.gatewayCalls.startBattle, 1, '已解锁的关卡第一次点击就发开战请求');
+    // 2026-10-27（蓝湖「关卡界面」）：点关卡先弹面板，**不发**开战请求。
+    assert.ok(h.presenter.state.detail.levelInfo, '关卡点击后弹关卡界面');
+    assert.ok(h.presenter.state.detail.levelInfo, '关卡界面内容必须给出');
+    assert.equal(h.gatewayCalls.startBattle, 0, '只弹窗，不开战');
+    // 面板上的「开始战斗」= 原来的开战入口。
+    h.presenter.requestBattle();
+    await flush();
+    assert.equal(h.gatewayCalls.startBattle, 1, '点开始战斗才发开战请求');
 });
 
-test('selectSite on an unbound site opens the detail with no start button', async () => {
+test('selectSite on an unbound site opens nothing (站点详情面板已移除)', async () => {
     const h = createHarness({ gateway: createFakeGateway({ fetch: {
         ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [0, 2], passCells: [0] },
     } }) });
@@ -947,9 +1070,11 @@ test('selectSite on an unbound site opens the detail with no start button', asyn
     await flush();
     h.presenter.selectSite(h.presenter.state.map!.sites[1]);
     const { detail } = h.presenter.state;
-    assert.equal(detail.open, true);
-    assert.equal(detail.content?.startEnabled, false);
-    assert.match(detail.content?.title ?? '', /站点配置待补齐/);
+    assert.equal(detail.open, true, '有站点被选中');
+    // 详情面板已删（2026-10-27）⇒ 绑不到关卡的格子什么面板都不弹，信息留在左侧 info 区
+    assert.equal(detail.levelInfo, null);
+    assert.equal(detail.playerStage, null);
+    assert.equal(h.gatewayCalls.startBattle, 0);
 });
 
 test('clicking a fixed resource unlocks it directly without opening detail', async () => {
@@ -1206,9 +1331,10 @@ test('two-step stage 327 unlocks first, shows the building, then starts battle o
     const site = h.presenter.state.map!.sites.find((entry) => entry.cellId === 327)!;
     assert.equal(site.type, 'stage', 'chapter_01.json 的 stage_4 应为 stage 类型');
     assert.deepEqual(site.unlock.requiredCells, [367], 'stage_4 前置为主城 367');
-    // 第一步：未解锁 → 不弹详情、不发战斗，直接请求解锁并记账。
+    // 第一步：未解锁 → **只解锁**：不弹界面、不发战斗请求（2026-10-28 用户口径）。
     h.presenter.selectSite(site);
-    assert.equal(h.presenter.state.detail.open, false, '两步式格子不弹关卡详情');
+    assert.equal(h.presenter.state.detail.levelInfo, null,
+        '未解锁 ⇒ 不弹「关卡界面」（这一下只花银币解锁）');
     await flush();
     assert.deepEqual(h.gatewayCalls.unlockedCells, [327]);
     assert.deepEqual(h.gatewayCalls.passedCells, []);
@@ -1223,7 +1349,8 @@ test('two-step stage 327 unlocks first, shows the building, then starts battle o
     // 第二步必须是开战 —— battleType 固定 1002（章节战斗类型，不是 configId 10001），
     // battleParams = [子类型, 章节id, cellId]（子类型 1 = 格子战斗，由 chapterCellBattleParams 组）。
     h.presenter.selectSite(site);
-    assert.equal(h.presenter.state.detail.open, false);
+    assert.ok(h.presenter.state.detail.levelInfo, '已解锁 ⇒ 点一下打开关卡界面');
+    h.presenter.requestBattle();
     await flush();
     assert.equal(h.gatewayCalls.unlock, 1, '开战阶段不再重复解锁');
     assert.deepEqual(h.gatewayCalls.passedCells, [],
@@ -1239,6 +1366,7 @@ test('two-step stage 327 unlocks first, shows the building, then starts battle o
     // 🔴 2026-10-21 口径：`bossBattleStart` 不再参与防连点（防连点 = pending 判重 + loading），
     // 未通关格允许再次开战（打输 / 未打完可重打）。
     h.presenter.selectSite(site);
+    h.presenter.requestBattle();
     await flush();
     assert.equal(h.gatewayCalls.unlock, 1, '重打不夹带解锁请求');
     assert.equal(h.gatewayCalls.startBattle, 2, '开战后未通关可重打（再次发开战请求）');
@@ -1352,6 +1480,7 @@ test('a stage click starts the server battle and navigates with the bound level'
     await flush();
     // 默认网关返回 unlockCells 已含 1 ⇒ 关卡处于已解锁态，点一下就是开战。
     h.presenter.selectSite(h.presenter.state.map!.sites[0]);
+    h.presenter.requestBattle();
     await flush();
     assert.equal(h.gatewayCalls.startBattle, 1, '关卡必须发 CmdStartBattleReqMsg（拿 battleId/seed）');
     assert.deepEqual(h.gatewayCalls.battleTypes, [1002]);
@@ -1376,6 +1505,7 @@ test('server unlock rejection stops the stage unlock and shows a tip', async () 
     h.presenter.start();
     await flush();
     h.presenter.selectSite(h.presenter.state.map!.sites[0]);
+    h.presenter.requestBattle();
     await flush();
     assert.equal(h.nav.length, 0);
     assert.equal(h.gatewayCalls.startBattle, 0);
@@ -1396,6 +1526,7 @@ test('stage unlock network failure stops before battle (no local fail-open)', as
     h.presenter.start();
     await flush();
     h.presenter.selectSite(h.presenter.state.map!.sites[0]);
+    h.presenter.requestBattle();
     await flush();
     assert.equal(h.nav.length, 0, '解锁没确认 ⇒ 不进战斗');
     assert.equal(h.gatewayCalls.startBattle, 0, '没解锁就不该发开战请求');
@@ -1414,6 +1545,7 @@ test('local resource shortage blocks the stage before any request', async () => 
     h.presenter.start();
     await flush();
     h.presenter.selectSite(h.presenter.state.map!.sites[0]);
+    h.presenter.requestBattle();
     await flush();
     assert.equal(h.gatewayCalls.unlock, 0, '银币不足 ⇒ 不该先发解锁白试一趟');
     assert.equal(h.gatewayCalls.startBattle, 0);
@@ -1554,9 +1686,10 @@ test('boss site unlocks first, then clicking again sends CmdStartBattleReqMsg in
     await flush();
     const site = h.presenter.state.map!.sites.find((entry) => entry.cellId === 2)!;
     assert.equal(site.type, 'boss');
-    // 第一步：未解锁 → 不弹详情、不发战斗请求，直接解锁展示建筑。
+    // 第一步：未解锁 → **只解锁**：不弹界面、不发战斗请求（2026-10-28 用户口径）。
     h.presenter.selectSite(site);
-    assert.equal(h.presenter.state.detail.open, false, 'Boss 关不弹关卡详情');
+    assert.equal(h.presenter.state.detail.levelInfo, null,
+        '未解锁 ⇒ 不弹「关卡界面」（这一下只花银币解锁）');
     await flush();
     assert.deepEqual(h.gatewayCalls.unlockedCells, [2]);
     assert.deepEqual(h.gatewayCalls.passedCells, []);
@@ -1564,9 +1697,10 @@ test('boss site unlocks first, then clicking again sends CmdStartBattleReqMsg in
     assert.equal(h.storeCalls.beginBattle, 0, '解锁阶段不进战斗');
     assert.equal(h.presenter.state.progress?.isCellUnlocked(2), true);
     assert.equal(h.presenter.state.progress?.isOwned(2), false);
-    // 第二步：已解锁（建筑已展示）→ 再次点击发 CmdStartBattleReqMsg 开战。
+    // 第二步：已解锁（建筑已展示）→ 点一下打开界面，窗里「开始战斗」发 CmdStartBattleReqMsg。
     h.presenter.selectSite(site);
-    assert.equal(h.presenter.state.detail.open, false);
+    assert.ok(h.presenter.state.detail.levelInfo, '已解锁 ⇒ 打开「关卡界面」');
+    h.presenter.requestBattle();
     await flush();
     assert.equal(h.gatewayCalls.startBattle, 1);
     assert.deepEqual(h.gatewayCalls.battleTypes, [1002],
@@ -1587,6 +1721,7 @@ test('boss site unlocks first, then clicking again sends CmdStartBattleReqMsg in
     // 第三步：已通关仍可重复挑战，不重新解锁。
     h.presenter.state.progress?.markCellPassed(2);
     h.presenter.selectSite(site);
+    h.presenter.requestBattle();
     await flush();
     assert.equal(h.gatewayCalls.startBattle, 2);
     assert.equal(h.gatewayCalls.unlock, 1);
@@ -1610,14 +1745,21 @@ for (const [siteType, isBoss, mode] of [
         h.presenter.start();
         await flush();
         const site = h.presenter.state.map!.sites[0];
+        // 关卡改成「点格子先弹界面」后，连点语义挪到弹窗的开始按钮上：
+        // 同一帧连点两次「开始战斗」只该发一次请求（`startingBattle` 挡住第二次）。
         h.presenter.selectSite(site);
-        h.presenter.selectSite(site);
+        await flush();
+        assert.ok(h.presenter.state.detail.levelInfo, '关卡界面必须弹');
+        h.presenter.requestBattle();
+        h.presenter.requestBattle();
         await flush();
         assert.deepEqual(h.gatewayCalls.battleParamsList, [['1', '1', '1']]);
         assert.equal(h.gatewayCalls.unlock, 0);
         assert.equal(h.gatewayCalls.pass, 0);
         assert.equal(h.nav.length, 1, '重复点击不得取消正在请求的战斗');
         h.presenter.selectSite(site);
+        await flush();
+        h.presenter.requestBattle();
         await flush();
         assert.equal(h.gatewayCalls.startBattle, 2, '返回后再次挑战仍请求服务端');
         assert.equal(h.nav.length, 2);
@@ -1659,18 +1801,28 @@ test('asyncPvp sites sharing configId unlock independently then start their conf
     for (const site of sites) {
         h.presenter.selectSite(site);
         await flush();
-        assert.equal(h.presenter.state.detail.open, false, '异步关卡解锁时不弹未绑定关卡详情');
+        // 2026-10-27 交互变更：点异步据点**只弹「玩家关卡」弹窗**，不再当场发解锁/开战请求；
+        // 由弹窗的「开始战斗」按钮调 `requestBattle()` 才进入原链路。
+        assert.ok(h.presenter.state.detail.playerStage, '异步据点点击后弹玩家关卡弹窗');
+        assert.equal(h.presenter.state.detail.levelInfo, null, '玩家关卡弹窗不用关卡界面内容');
+        assert.equal(h.presenter.state.detail.playerStage?.title, '异步据点');
+        assert.equal(h.presenter.state.progress?.isCellUnlocked(site.cellId), false,
+            `cellId ${site.cellId} 弹窗阶段还不解锁`);
+        h.presenter.requestBattle();
+        await flush();
         assert.equal(h.presenter.state.progress?.isCellUnlocked(site.cellId), true,
             `cellId ${site.cellId} 应独立记为已解锁`);
     }
 
     assert.deepEqual(h.gatewayCalls.unlockedCells, [372, 373, 392]);
     assert.deepEqual(h.gatewayCalls.passedCells, [], '异步关卡解锁不走资源点通关接口');
-    assert.equal(h.gatewayCalls.startBattle, 0, '首次点击只解锁，不启动战斗');
+    assert.equal(h.gatewayCalls.startBattle, 0, '首次点「开始战斗」只解锁，不启动战斗');
     assert.deepEqual(h.tips, ['已解锁，点击开战', '已解锁，点击开战', '已解锁，点击开战'],
         '首次解锁提示后续点击可开战');
 
     h.presenter.selectSite(sites[0]);
+    await flush();
+    h.presenter.requestBattle();
     await flush();
     assert.equal(h.gatewayCalls.unlock, 3, '已解锁的异步格再次点击不重复请求解锁');
     assert.equal(h.gatewayCalls.startBattle, 1, '已解锁异步据点应走章节战斗请求');
@@ -1700,6 +1852,7 @@ test('boss site already unlocked starts battle on click without unlock', async (
     const site = h.presenter.state.map!.sites.find((entry) => entry.cellId === 2)!;
     assert.equal(h.presenter.state.progress?.isCellUnlocked(2), true);
     h.presenter.selectSite(site);
+    h.presenter.requestBattle();
     await flush();
     assert.equal(h.gatewayCalls.startBattle, 1);
     assert.equal(h.gatewayCalls.unlock, 0, '已解锁不再请求解锁');
@@ -1726,6 +1879,7 @@ test('boss start battle failure shows a tip and does not enter battle', async ()
     await flush();
     const site = h.presenter.state.map!.sites.find((entry) => entry.cellId === 2)!;
     h.presenter.selectSite(site);
+    h.presenter.requestBattle();
     await flush();
     assert.equal(h.gatewayCalls.startBattle, 1);
     assert.equal(h.storeCalls.beginBattle, 0, '请求失败不进战斗');
@@ -1741,6 +1895,7 @@ test('chapter start forwards the complete server battle to navigation', async ()
     h.presenter.start();
     await flush();
     h.presenter.selectSite(h.presenter.state.map!.sites[0]);
+    h.presenter.requestBattle();
     await flush();
     assert.equal(h.nav.length, 1);
     assert.deepEqual(h.battles[0], fakeBattleStart);
@@ -1748,7 +1903,7 @@ test('chapter start forwards the complete server battle to navigation', async ()
 
 test('territory page passes battle and current role to the game route', () => {
     const page = readFileSync('assets/script/app/main/MainTerritoryMap.ts', 'utf8');
-    assert.match(page, /navigateToBattle: \(pve, battle\) =>[\s\S]*?ProcedureManager\.navigate\(GameRoute\.Battle, \{[\s\S]*?battle,[\s\S]*?selfRoleId: saveOwner\?\.roleId/);
+    assert.match(page, /onNavigateToBattle\(payload: ITerritoryNavigateBattlePayload\)[\s\S]*?ProcedureManager\.navigate\(GameRoute\.Battle, \{[\s\S]*?battle,[\s\S]*?selfRoleId: this\.saveOwner\?\.roleId/);
 });
 
 test('chapter start ignores repeat clicks while in flight and stale response after selection changes', async () => {
@@ -1765,9 +1920,12 @@ test('chapter start ignores repeat clicks while in flight and stale response aft
     await flush();
     const site = h.presenter.state.map!.sites[0];
     h.presenter.selectSite(site);
+    h.presenter.requestBattle();
     h.presenter.selectSite(site);
+    h.presenter.requestBattle();
     assert.equal(gateway.calls.startBattle, 1);
     h.presenter.selectSite(h.presenter.state.map!.sites[1]);
+    h.presenter.requestBattle();
     pending[0]({ ok: true, battle: fakeBattleStart });
     await flush();
     assert.equal(h.nav.length, 0);
@@ -1861,12 +2019,15 @@ test('★★★★真机口径：只打通 328，点 309 必须发解锁协议�
     assert.equal(site.buildingId, '69004', '309 就是真机点的那格（有建筑）');
     assert.ok(h.presenter.state.revealedCells.includes(309), '309 已揭示（玩家看得见）');
 
+    // 2026-10-28 起未解锁点一下直接解锁（不再需要 `requestBattle` 那一步）。
     h.presenter.selectSite(site);
     await flush();
     assert.deepEqual(h.gatewayCalls.unlockedCells, [309],
         '★必须发 CmdCityChapterPassCellReqMsg 类解锁请求 —— 曾经这里是 0 次请求');
     assert.ok(!h.tips.includes('前置领地尚未占领'), '不能再被前置判定挡住');
-    assert.equal(h.tips[h.tips.length - 1], '已解锁，点击开战');
+    // 文案从「已解锁，点击开战」改成「已解锁，点击查看关卡」：解锁后那一下是**开界面**
+    // （窗里的「开始战斗」才开战），说「点击开战」会让玩家以为再点一次就直接进战斗。
+    assert.equal(h.tips[h.tips.length - 1], '已解锁，点击查看关卡');
 });
 
 // ── 全屏 loading 遮挡（防「服务端还没响应就快速连点」）───────────────────
@@ -1885,6 +2046,7 @@ test('解锁请求在途：loading 在网关调用前显示，回包处理后关
     h.presenter.start();
     await flush();
     h.presenter.selectSite(h.presenter.state.map!.sites[0]);
+    h.presenter.requestBattle();
     // selectSite 同步走到「确认要发请求」⇒ 网关调用前 setBusy(true) 已同步执行。
     assert.equal(h.busy.length, 1, '请求在途只显示一层 loading');
     assert.equal(h.busy[0].busy, true, '请求在途 ⇒ busy=true');
@@ -2003,6 +2165,7 @@ test('校验失败（银币不足）不发请求：不弹 loading 不闪屏', as
     h.presenter.start();
     await flush();
     h.presenter.selectSite(h.presenter.state.map!.sites[0]);
+    h.presenter.requestBattle();
     await flush();
     assert.equal(h.busy.length, 0, '校验失败不发请求 ⇒ 不弹 loading');
     assert.equal(h.gatewayCalls.unlock, 0, '银币不足 ⇒ 未发解锁请求');
@@ -2054,6 +2217,8 @@ test('★asyncPvp 已通关可重复挑战：再次点击重新发开战请求�
     assert.equal(h.presenter.state.progress?.isOwned(372), true, '372 已通关');
     h.presenter.selectSite(site);
     await flush();
+    h.presenter.requestBattle();
+    await flush();
     assert.equal(h.gatewayCalls.unlock, 0, '已通关格不重复发解锁');
     assert.equal(h.gatewayCalls.startBattle, 1, '★已通关 asyncPvp 可再次开战');
     // asyncPvp = 宝箱战斗子类型（battleParams[0] = 2），不是主线的格子战斗子类型 1。
@@ -2063,6 +2228,8 @@ test('★asyncPvp 已通关可重复挑战：再次点击重新发开战请求�
     assert.equal(h.busy.length, 2, '开战请求全程 loading 遮挡（true → false）');
     // 返回领地后再点（模拟上一局已结算、battleId 已清）⇒ 可无限重复挑战。
     h.presenter.selectSite(site);
+    await flush();
+    h.presenter.requestBattle();
     await flush();
     assert.equal(h.gatewayCalls.startBattle, 2, '★重复挑战：第二次点击再次发开战请求');
     assert.deepEqual(h.gatewayCalls.battleParamsList,
@@ -2083,6 +2250,8 @@ test('★asyncPvp 已通关但快照没给 unlockCells：点击跳过解锁直�
     assert.equal(h.presenter.state.progress?.isCellUnlocked(372), false, '但本地 unlockable 里没有它');
     h.presenter.selectSite(site);
     await flush();
+    h.presenter.requestBattle();
+    await flush();
     assert.equal(h.gatewayCalls.unlock, 0, '不因缺 unlockable 发解锁请求');
     assert.equal(h.gatewayCalls.startBattle, 1, '已通关 asyncPvp 直接开战');
     assert.deepEqual(h.gatewayCalls.battleParamsList, [['2', '1', '372']],
@@ -2100,11 +2269,16 @@ test('★asyncPvp 未通关：首次挑战用格子战斗子类型 1（通关后
     const site = h.presenter.state.map!.sites[0];
     assert.equal(h.presenter.state.progress?.isOwned(372), false, '372 未通关');
     assert.equal(h.presenter.state.progress?.isCellUnlocked(372), false, '372 未解锁');
-    h.presenter.selectSite(site); // 第一次点击：解锁步
+    h.presenter.selectSite(site); // 第一次点击：弹窗
+    await flush();
+    assert.equal(h.gatewayCalls.unlock, 0, '弹窗阶段不发解锁请求');
+    h.presenter.requestBattle(); // 「开始战斗」→ 解锁步
     await flush();
     assert.equal(h.gatewayCalls.unlock, 1, '未通关 asyncPvp 先发解锁');
     assert.equal(h.gatewayCalls.startBattle, 0, '解锁步不发战斗请求');
-    h.presenter.selectSite(site); // 解锁后再点：开战步
+    h.presenter.selectSite(site); // 解锁后再点：再弹窗
+    await flush();
+    h.presenter.requestBattle(); // 再点「开始战斗」→ 开战步
     await flush();
     assert.equal(h.gatewayCalls.startBattle, 1, '解锁后可开战');
     assert.deepEqual(h.gatewayCalls.battleParamsList, [['1', '1', '372']],
@@ -2133,9 +2307,133 @@ test('★asyncPvp 本地旧档残留通关但服务端未确认：子类型按�
     assert.equal(h.presenter.state.progress?.isServerOwned(372), false, '但服务端未确认通关');
     h.presenter.selectSite(site);
     await flush();
+    h.presenter.requestBattle();
+    await flush();
     // isServerOwned=false ⇒ 首次挑战 ⇒ 子类型 1（修复前用 isOwned ⇒ 传 2 ⇒ 服务端「配置错误」）
     assert.equal(h.gatewayCalls.startBattle, 1);
     assert.deepEqual(h.gatewayCalls.battleParamsList, [['1', '1', '372']],
         '旧档残留不算通关：asyncPvp 按服务端确认分流，未确认传格子战斗子类型 1');
     assert.equal(h.nav.length, 1);
+});
+
+test('★异步据点点击弹「玩家关卡」弹窗：标题/占领奖励/双按钮费用全部来自配置，只弹窗不发请求', async () => {
+    const rewardStage: TerritoryCampaignStage = {
+        ...asyncRepeatStage,
+        idleRewards: [
+            { resId: 7, name: '银币', amount: 75, probability: 10000 },
+            { resId: 16014, name: '天赋石', amount: 8, probability: 10000 },
+            { resId: 16015, name: '抽不到的占位', amount: 0, probability: 0 },
+            { resId: 12, name: '卷轴', amount: 8, probability: 600 },
+        ],
+    };
+    const h = createHarness({
+        loader: createFakeLoader({
+            ...bundle,
+            mapJson: asyncRepeatMap,
+            campaign: { stages: [stage, rewardStage], playerCardCount: 3, idleRewardMaxHours: 8 },
+        }),
+        gateway: createFakeGateway({ fetch: {
+            ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [367], passCells: [367] },
+        } }),
+    });
+    h.presenter.start();
+    await flush();
+    h.presenter.selectSite(h.presenter.state.map!.sites[0]);
+    await flush();
+
+    const content = h.presenter.state.detail.playerStage;
+    assert.ok(content, '异步据点必须产出玩家关卡弹窗内容');
+    assert.equal(h.presenter.state.detail.levelInfo, null, '玩家关卡不走关卡界面');
+    assert.equal(h.presenter.state.detail.levelInfo, null, '玩家关卡不走关卡界面');
+    assert.equal(content.title, '异步据点', '服务端不下发对手昵称，标题先写据点类型');
+    assert.equal(content.chestText, '获得 1 个卡牌宝箱');
+    // 概率 0 的空位必须被过滤掉 —— 展示出来等于骗玩家「可能拿到」
+    assert.deepEqual(content.rewards,
+        [{ resId: 7, amount: 75 }, { resId: 16014, amount: 8 }, { resId: 12, amount: 8 }],
+        '按概率过滤空位、最多 3 格、顺序照配置表');
+    assert.equal(content.scoutCost, 10, '侦查 = 设计稿 10 银币（服务端暂无配置）');
+    assert.equal(content.fightCost, 10, '开战 = 站点 unlock.silverCost');
+    assert.equal(content.fightCaption, '开始战斗');
+    assert.equal(content.fightEnabled, true);
+    assert.equal(h.gatewayCalls.startBattle, 0, '只弹窗，不发开战请求');
+    assert.equal(h.gatewayCalls.unlock, 0, '只弹窗，也不发解锁请求');
+
+    h.presenter.closeDetail();
+    await flush();
+    assert.equal(h.presenter.state.detail.playerStage, null, '关掉弹窗后内容清空');
+    assert.equal(h.presenter.state.detail.open, false);
+});
+
+test('★点关卡/首领弹「关卡界面」：占据奖励取硬币、掉落取其余道具、推荐留空；感叹号开关关卡提示', async () => {
+    const levelStage: TerritoryCampaignStage = {
+        ...stage,
+        levelId: 10005, // 与 bossMap 的 boss 站点 configId 对齐（否则绑不到 stage ⇒ 退回未绑定分支）
+        stage: 2,
+        isBoss: true,
+        staminaCost: 10,
+        enemies: [
+            { cardId: 101, pvpCardId: 11, name: '食人花', level: 3, headIcon: 'icons/card/a', description: '无法阻拦' },
+            { cardId: 102, pvpCardId: 12, name: '金发老板', level: 3, headIcon: 'icons/card/b', description: '' },
+        ],
+        idleRewards: [
+            // 硬币（resId 7）= 占据奖励，不进掉落
+            { resId: 7, name: '硬币', amount: 6, probability: 10000 },
+            { resId: 10012, name: '卷轴', amount: 8, probability: 10000 },
+            { resId: 10011, name: '项圈', amount: 8, probability: 600 },
+            // 概率 0 的空位不该出现在掉落里
+            { resId: 16014, name: '天赋石', amount: 1, probability: 0 },
+        ],
+    };
+    const h = createHarness({
+        loader: createFakeLoader({
+            ...bundle,
+            mapJson: bossMap,
+            campaign: { stages: [levelStage], playerCardCount: 3, idleRewardMaxHours: 8 },
+        }),
+        gateway: createFakeGateway({ fetch: {
+            ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [0, 1, 2], passCells: [0] },
+        } }),
+    });
+    h.presenter.start();
+    await flush();
+    const site = h.presenter.state.map!.sites.find((entry) => entry.type === 'boss')!;
+    h.presenter.selectSite(site);
+    await flush();
+
+    const info = h.presenter.state.detail.levelInfo;
+    assert.ok(info, '关卡/首领点击后必须产出关卡界面内容');
+    assert.equal(h.presenter.state.detail.levelTip, null, '关卡提示默认不开');
+    assert.equal(info!.title, '首领关卡  2');
+    assert.equal(info!.hasTip, true, '有敌军 ⇒ 显示感叹号入口');
+    assert.equal(info!.objective, '第一名成功通过关卡');
+    assert.equal(info!.occupy, '【征收】+6 硬币', '占据奖励只取硬币那条');
+    assert.deepEqual(info!.drops.map((d) => [d.resId, d.amount]), [[10012, 8], [10011, 8]],
+        '掉落 = 其余带概率的奖励（硬币剔除、概率 0 的空位剔除）');
+    assert.equal(info!.recommend, '', '推荐卡牌没有数据源 ⇒ 空串（视图整行隐藏）');
+    assert.equal(info!.fightCaption.length > 0, true);
+    assert.equal(info!.staminaCost, 10);
+    assert.equal(h.gatewayCalls.startBattle, 0, '只弹窗，不开战');
+
+    // 感叹号 → 关卡提示（标题与关卡界面一致，敌军前 3 张，描述拼非空项）
+    h.presenter.openLevelTip();
+    await flush();
+    const tip = h.presenter.state.detail.levelTip;
+    assert.ok(tip, '感叹号必须能打开关卡提示');
+    assert.equal(tip!.title, '首领关卡  2');
+    assert.deepEqual(tip!.enemies.map((e) => e.name), ['食人花 Lv.3', '金发老板 Lv.3']);
+    assert.equal(tip!.description, '无法阻拦', '空描述不参与拼接');
+
+    // 关提示只收提示，关卡界面还在
+    h.presenter.closeLevelTip();
+    await flush();
+    assert.equal(h.presenter.state.detail.levelTip, null);
+    assert.ok(h.presenter.state.detail.levelInfo, '关卡界面不受影响');
+
+    // 关详情把两层一起收掉
+    h.presenter.openLevelTip();
+    await flush();
+    h.presenter.closeDetail();
+    await flush();
+    assert.equal(h.presenter.state.detail.levelInfo, null);
+    assert.equal(h.presenter.state.detail.levelTip, null);
 });

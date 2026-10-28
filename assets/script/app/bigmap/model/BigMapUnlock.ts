@@ -50,6 +50,17 @@ export function bigMapBuildingUnlock(
     building: IBigMapBuildingConfig,
     context: IBigMapUnlockContext,
 ): IBigMapUnlockResult {
+    // 策划表 `baseBuilding.unlockType`：1=章节 / 2=赛季开始天数 / 3=赛季小玩法积分购买。
+    // ⚠️ 只有 type=1 才有 `unlockChapter`；type=2/3 的章节号是 0，**不能**直接拿去比 ——
+    // 否则「装饰雕像（积分购买）」会因 0 > adventureChapter 为假而被当成已解锁。
+    if (building.unlockType === 2) {
+        const day = Math.max(0, building.unlockParam);
+        if (context.openDay < day) return bigMapLocked(`开服第 ${day} 天解锁`);
+        return OK;
+    }
+    if (building.unlockType === 3) {
+        return bigMapLocked('需在赛季小玩法商店购买');
+    }
     if (building.unlockChapter > context.adventureChapter) {
         return bigMapLocked(`通关冒险第 ${building.unlockChapter} 章解锁`);
     }

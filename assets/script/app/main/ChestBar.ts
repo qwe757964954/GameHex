@@ -1,4 +1,6 @@
 import { _decorator, Button, Component, Node, SpriteFrame, UITransform } from 'cc';
+import { EventMgr } from '../../framework/event/EventMgr';
+import { CHEST_EVENTS } from './ChestEvents';
 import { ChestSlotView } from './ChestSlotView';
 import { resolveChestPanelX } from './MainHudMotion';
 import { ChestSlotState } from './ChestTypes';
@@ -62,9 +64,7 @@ export class ChestBar extends Component {
     private slots: ChestSlotView[] = [];
 
     /** 翻页回调（`-1` 上一页 / `+1` 下一页）；由宿主接。 */
-    private onPage: ((delta: number) => void) | null = null;
     /** 展开状态下左箭头收起侧栏。 */
-    private onCollapse: (() => void) | null = null;
     private openX: number | null = null;
     private isOpen = false;
     private motionFromX = 0;
@@ -99,11 +99,17 @@ export class ChestBar extends Component {
         this.motionToX = toX;
         this.motionStartedAt = Date.now() / 1000;
         this.isMoving = Math.abs(fromX - toX) > 0.01;
-        if (!this.isMoving) this.node.active = open;
+        if (!this.isMoving) {
+            this.node.active = open;
+            return;
+        }
+        // 只在滑动期间按帧推进；静止时**完全不进函数**（不用 `update()` 空转）
+        this.unschedule(this.stepMotion);
+        this.schedule(this.stepMotion, 0);
     }
 
-    update(): void {
-        if (!this.isMoving) return;
+    /** 开合滑入动画的一帧（`setOpen` 期间才调度）。 */
+    private readonly stepMotion = (): void => {
         const now = Date.now() / 1000;
         const x = resolveChestPanelX(
             this.motionFromX,
@@ -115,7 +121,12 @@ export class ChestBar extends Component {
         this.node.setPosition(x, this.node.position.y, this.node.position.z);
         if (now - this.motionStartedAt < CHEST_PANEL_SLIDE_SECONDS) return;
         this.isMoving = false;
+        this.unschedule(this.stepMotion);
         this.node.active = this.isOpen;
+    };
+
+    onDisable(): void {
+        this.unschedule(this.stepMotion);
     }
 
     private captureOpenX(): void {
@@ -163,35 +174,28 @@ export class ChestBar extends Component {
         return this.slots;
     }
 
-    /** 接翻页回调。 */
-    bindPage(handler: ((delta: number) => void) | null): void {
-        this.onPage = handler;
-    }
-
-    /** 接收关闭回调；展开时左侧大热区优先执行收起。 */
-    bindCollapse(handler: (() => void) | null): void {
-        this.onCollapse = handler;
-    }
-
+    /** 左箭头：展开态先收起，否则上一页。意图走事件，不持有页面回调。 */
     private onPrev(): void {
         if (this.isOpen) {
-            this.onCollapse?.();
+            EventMgr.instance.emit(CHEST_EVENTS.COLLAPSE);
             return;
         }
-        this.onPage?.(-1);
+        EventMgr.instance.emit(CHEST_EVENTS.PAGE, -1);
     }
 
     private onNext(): void {
-        this.onPage?.(1);
+        EventMgr.instance.emit(CHEST_EVENTS.PAGE, 1);
     }
 
     /**
      * 全量渲染：按数组顺序填槽位，多出来的槽位隐藏。
      *
+     * 点击格子由 `ChestSlotView` 自己 `emit(CHEST_EVENTS.SLOT_ACTION, 下标)`，
+     * 这里**不再收回调**（视图不持有页面入口）。
+     *
      * @param data 槽位数据（长度可变：不到 4 个时后面的槽位收起）
-     * @param onClick 点了某一格的按钮
      */
-    render(data: readonly IChestSlotData[], onClick?: (index: number) => void): void {
+    render(data: readonly IChestSlotData[]): void {
         const slots = this.ensureSlots();
         let hasBattleEntry = false;
         for (let index = 0; index < slots.length; index += 1) {
@@ -199,15 +203,13 @@ export class ChestBar extends Component {
             const item = data[index];
             if (!item) {
                 slot.node.active = false;
-                slot.bindAction(null);
                 continue;
             }
             const isEmpty = item.state === ChestSlotState.Empty;
             const showBattleEntry = isEmpty && !hasBattleEntry;
             if (showBattleEntry) hasBattleEntry = true;
             slot.node.active = true;
-            slot.render(item, showBattleEntry);
-            slot.bindAction(onClick && (!isEmpty || showBattleEntry) ? () => onClick(index) : null);
+            slot.render(item, showBattleEntry, index);
         }
     }
 

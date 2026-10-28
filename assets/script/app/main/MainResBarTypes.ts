@@ -6,12 +6,17 @@ import { FALLBACK_RES_ICON_ART } from '../common/ResTypes';
 import { toCount, toIdString } from '../net/RequestGuard';
 
 /**
- * 主界面资源栏的展示顺序（下标 = 第几格）：银币 / 晶石 / 体力。
+ * 资源栏的**兜底展示顺序**（下标 = 第几格）：银币 / 晶石 / 体力。
  *
- * ⚠️ 2026-09-29 起它**只服务 `buildResBarView` 的默认参数** —— HUD 上真正渲染货币的是
- * `ArenaRoot/ResBarLayer` 下那颗 `common/ResBar` **嵌套实例**，它的格数真源是实例上覆盖的
- * `resKeys`。两处必须一致，由 `tests/main-resbar.test.ts` 焊死：
- * 改这里就要同步改 `ArenaRoot.prefab` 里那份实例的 `resKeys`，否则货币顺序静默漂移。
+ * ⚠️ 2026-09-29 起它**只服务 `buildResBarView` 的默认参数**（`MainResBar` 拿它算一份
+ * `view.slots`，但玩家信息块按设计不渲染货币格）—— HUD 上真正渲染货币的是
+ * `ArenaRoot/TopHud/ResBarLayer` 下那颗 `common/ResBar` **嵌套实例**，
+ * 格数真源是实例上覆盖的 `resKeys`。
+ *
+ * 🔴 **2026-10-26：HUD 不再是三格** —— 实例上覆盖成 `gold,end`（银币 + 体力，用户口径：
+ * 「资源栏的按钮分别对应 银币 icon 和 体力 icon」）。所以本常量与 HUD **不再一一对应**，
+ * `tests/main-resbar.test.ts` 里那条断言直接比 `'gold,end'` 字面量：
+ * 改本文件**不需要**动 prefab，改 prefab 才需要同步那条断言。
  */
 export const RES_BAR_KEYS: readonly string[] = ['gold', 'gem', 'end'];
 

@@ -43,7 +43,7 @@ export class FWEventCenter extends ScriptObject {
         super.destroy()
     }
 
-    public removeCallerListener(caller: any) {
+    public removeCallerListener(caller: object) {
         this._eventProxy?.removeCallerListener(caller)
     }
 
@@ -51,30 +51,30 @@ export class FWEventCenter extends ScriptObject {
         this._eventProxy.execute(FWEventType.theNextDay)
     }
 
-    public setViewResizeEvent(caller: destroyable, listener: Function) {
+    public setViewResizeEvent(caller: object, listener: Function) {
         this._eventProxy.addListener(FWEventType.viewResize, caller, listener)
     }
-    public removeViewResizeEvent(caller: destroyable, listener: Function) {
+    public removeViewResizeEvent(caller: object, listener: Function) {
         this._eventProxy.removeListener(FWEventType.viewResize, caller, listener)
     }
     public dispatchViewResizeEvent() {
         this._eventProxy.execute(FWEventType.viewResize)
     }
 
-    public addOnHide(caller: destroyable, listener: Function) {
+    public addOnHide(caller: object, listener: Function) {
         this._eventProxy.addListener(FWEventType.onHide, caller, listener)
     }
-    public removeOnHide(caller: destroyable, listener: Function) {
+    public removeOnHide(caller: object, listener: Function) {
         this._eventProxy.removeListener(FWEventType.onHide, caller, listener)
     }
     public dispatchOnHide() {
         this._eventProxy.execute(FWEventType.onHide)
     }
 
-    public addOnShow(caller: destroyable, listener: Function) {
+    public addOnShow(caller: object, listener: Function) {
         this._eventProxy.addListener(FWEventType.onShow, caller, listener)
     }
-    public removeOnShow(caller: destroyable, listener: Function) {
+    public removeOnShow(caller: object, listener: Function) {
         this._eventProxy.removeListener(FWEventType.onShow, caller, listener)
     }
     public dispatchOnShow() {

@@ -50,11 +50,11 @@ export interface IFirstRechargeRepository {
     /** 读表 + 读缓存，组装一次快照；**不发请求**。 */
     load(nowMs?: number): Promise<IFirstRechargeSnapshot>;
     /** 打开界面时向服务端要一次最新状态（失败不抛错，页面继续用缓存渲染）。 */
-    refreshFromServer(caller?: unknown): Promise<boolean>;
+    refreshFromServer(caller?: object): Promise<boolean>;
     /** 购买某一档（`rmb` = `firstRechargeNew.rmb`，即 `payChannel.id`）。 */
-    buy(rmb: number, caller?: unknown): Promise<FirstRechargeRequestResult>;
+    buy(rmb: number, caller?: object): Promise<FirstRechargeRequestResult>;
     /** 领取某一档第 `day` 天的奖励。 */
-    claim(id: number, day: number, caller?: unknown): Promise<FirstRechargeRequestResult>;
+    claim(id: number, day: number, caller?: object): Promise<FirstRechargeRequestResult>;
 }
 
 /** 读一张分表的全部行；表缺失时返回空数组（与 `CardLineupDecks.readRows` 同口径）。 */
@@ -116,20 +116,20 @@ export class RuntimeFirstRechargeRepository implements IFirstRechargeRepository 
         return buildStateMap(infos);
     }
 
-    async refreshFromServer(caller?: unknown): Promise<boolean> {
+    async refreshFromServer(caller?: object): Promise<boolean> {
         const net = GameNet.instance;
         if (!net.isConnected) return false;
         try {
             // 打开界面时拉一次，服务端会把 CmdFirstRechargeNew 同步进缓存。
             // 这里不看响应体（`CmdFirstRechargeOpenRspMsg` 是空的），后续统一从缓存读。
-            return await net.send(new RequestFirstRechargeOpen({}, caller as any), false);
+            return await net.send(new RequestFirstRechargeOpen({}, caller), false);
         } catch (error) {
             console.warn('[FirstRecharge] 拉取首充状态失败', error);
             return false;
         }
     }
 
-    async buy(rmb: number, caller?: unknown): Promise<FirstRechargeRequestResult> {
+    async buy(rmb: number, caller?: object): Promise<FirstRechargeRequestResult> {
         const net = GameNet.instance;
         if (!net.isConnected) return 'offline';
         // 老客户端在 `rsp.ret` 为真之后调 `SDKMgr.pay(ref.rmb, "common", 0)` 发起真实支付。
@@ -138,7 +138,7 @@ export class RuntimeFirstRechargeRepository implements IFirstRechargeRepository 
         let ret = false;
         try {
             const ok = await net.send(
-                new RequestFirstRechargeBuy({ id: rmb }, caller as any, (rsp) => { ret = rsp?.ret === true; }),
+                new RequestFirstRechargeBuy({ id: rmb }, caller, (rsp) => { ret = rsp?.ret === true; }),
                 false,
             );
             if (!ok) return 'failed';
@@ -151,7 +151,7 @@ export class RuntimeFirstRechargeRepository implements IFirstRechargeRepository 
         return 'ok';
     }
 
-    async claim(id: number, day: number, caller?: unknown): Promise<FirstRechargeRequestResult> {
+    async claim(id: number, day: number, caller?: object): Promise<FirstRechargeRequestResult> {
         const net = GameNet.instance;
         if (!net.isConnected) return 'offline';
         let ret = false;
@@ -159,7 +159,7 @@ export class RuntimeFirstRechargeRepository implements IFirstRechargeRepository 
             const ok = await net.send(
                 new RequestFirstRechargeReward(
                     { id, day },
-                    caller as any,
+                    caller,
                     // 老端 `ModelFirstRecharge` L65：`if (rsp.tlCmdGoods) FW.ShowReward(rsp.tlCmdGoods)`。
                     // 之前只认 `ret`、奖励明细被丢掉；现在走同一条全局出口。
                     // ⚠️ `FW.ShowReward` 是可注入的全局出口（组合根接成 `ShowRewardPage.open`），

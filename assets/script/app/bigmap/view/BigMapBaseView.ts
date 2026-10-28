@@ -8,9 +8,6 @@ import { BIGMAP_COLORS, createLabel, createUiNode } from './BigMapTheme';
 import { BIGMAP_PRESENTATION_TEXT } from './BigMapPresentationText';
 
 const { ccclass } = _decorator;
-const RESOURCE_FOR_BUILDING: Readonly<Record<number, 'grain' | 'wood' | 'iron' | 'coin'>> = {
-    71002: 'grain', 71003: 'wood', 71004: 'iron', 71005: 'coin',
-};
 
 interface IBigMapPlotArt {
     readonly root: Node;
@@ -198,7 +195,7 @@ export class BigMapBaseView extends Component {
                 : cell.stored > 0 ? `${BIGMAP_PRESENTATION_TEXT.stored} ${cell.stored}` : '';
             slot.status.node.active = slot.status.string.length > 0;
             slot.status.node.setPosition(0, iconHeight + height * 0.05, 0);
-            const resourceType = RESOURCE_FOR_BUILDING[cell.buildingId];
+            const resourceType = cell.resType;
             fitBigMapSprite(slot.resource, cell.stored > 0 && resourceType ? this.art?.resources.get(resourceType) ?? null : null,
                 26 * this.layout.scale, 0, iconHeight + height * 0.35);
         }

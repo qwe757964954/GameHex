@@ -1,63 +1,53 @@
 import { _decorator, Button, Color, Component, Label, Node } from 'cc';
 import { CARD_LINEUP_TEXTS } from './CardLineupTexts';
 import { isSkillMaxed, skillLevelRow, skillMaxLevel } from './CardSkillList';
-import type { CardSkillListPresentation, CardSkillRowPresentation } from './CardPresenters';
+import type { CardSkillListPresentation, CardSkillRowPresentation } from './CardPresentations';
 
 const { ccclass, property } = _decorator;
 
-/** 往节点上的 Label 写文案；节点没绑或没挂 Label 时静默跳过（技能区是可选模块）。 */
 /**
- * 往节点（或其第一个挂 Label 的子节点）写文案。
- *
- * 按钮的文案在子节点 `Label` 上，按钮节点本身没有 `Label`，所以先查自身再往下一层找；
- * 都没有就静默跳过 —— 技能区是可选模块，缺一个 Label 不该让面板打不开。
- */
-function setLabel(node: Node | null | undefined, text: string): void {
-    if (!node) return;
-    const self = node.getComponent(Label);
-    if (self) {
-        self.string = text;
-        return;
-    }
-    const child = node.children.find((item) => item.getComponent(Label));
-    const label = child?.getComponent(Label);
-    if (label) label.string = text;
-}
-
-/**
- * 单格技能：名字 / 档位 /（解锁提示）/ 描述 + 两个按钮的可用状态。
+ * 单格技能：名字 / 档位 /（解锁提示）/ 描述 + 升级按钮的可用状态。
  *
  * 渲染是**纯函数式**的：全部按入参重算，不读组件上一次的状态，因此可以在任意帧重复调用。
+ *
+ * ## 为什么每个文字位都直接绑 `cc.Label`
+ *
+ * 早前这里绑的是**节点**，运行时再 `getComponent(Label)`，还写了个 `setLabel(node, text)`
+ * 往自身 / 第一个子节点上找 Label。那条路的代价是：**绑错了永远不知道** —— 找不到 Label
+ * 就静默跳过（当时的理由是"技能区是可选模块，缺一个 Label 不该让面板打不开"），
+ * 表现是「技能行文字空白，日志一个字都没有」。
+ * 现在的约定是**必绑、绑组件**：没绑就是打开面板时当场抛错，而不是静默不显示。
  *
  * ⚠️ 必须单独成文件：一个脚本最多一个 `Component`。
  */
 @ccclass('CardSkillSlotView')
 export class CardSkillSlotView extends Component {
-    //  三个文字位一律绑**节点**、用时 `getComponent(Label)`：组件类型的属性对序列化值
-    //  要求更严（存成节点就整字段被丢弃 → 运行时 undefined），节点引用则宽容得多。
-    @property({ type: Node, tooltip: 'NameLabel：技能名节点（挂 Label）' })
-    nameNode: Node = null!;
+    @property({ type: Label, tooltip: 'NameLabel：技能名（**绑组件不绑节点**）' })
+    nameLabel: Label = null!;
 
-    @property({ type: Node, tooltip: 'LevelLabel：写成「2/3」的节点（挂 Label）' })
-    levelNode: Node = null!;
+    @property({ type: Label, tooltip: 'LevelLabel：写成「2/3」的 Label' })
+    levelLabel: Label = null!;
 
-    @property({ type: Node, tooltip: 'DescLabel：该档效果描述的节点（挂 Label）' })
-    descNode: Node = null!;
+    @property({ type: Label, tooltip: 'DescLabel：该档效果描述的 Label' })
+    descLabel: Label = null!;
 
-    @property({ type: Node, tooltip: 'LockTip：未解锁提示（够等级时隐藏）' })
-    lockTip: Node = null!;
+    @property({ type: Label, tooltip: 'LockTip：未解锁提示的 Label（够等级时整个节点隐藏）' })
+    lockTip: Label = null!;
 
     /**
-     * 升级按钮（**唯一**）。
+     * 已废弃的 `↓`「往回看一档」按钮。
      *
-     * 早前还有过一个 `↓`「往回看一档」的按钮，已按用户要求去掉：技能面板每行只保留
-     * 一个升级入口。留成可空是为了兼容还没清理的旧 prefab，绑了也不会被使用。
+     * 面板每行只保留一个升级入口（用户要求），这个字段只为兼容还没清理的旧 prefab，
+     * 绑了也不会被使用。
      */
     @property({ type: Node, tooltip: 'PrevBtn：已废弃（保留兼容，不参与交互）' })
     prevButton: Node | null = null;
 
-    @property({ type: Node, tooltip: 'NextBtn：升级按钮' })
-    nextButton: Node = null!;
+    @property({ type: Button, tooltip: 'NextBtn 上的 cc.Button（升级按钮，**绑组件不绑节点**）' })
+    nextButton: Button = null!;
+
+    @property({ type: Label, tooltip: 'NextBtn/Label：按钮文案（满级时写「满级」）' })
+    nextLabel: Label = null!;
 
     render(
         item: CardSkillRowPresentation,
@@ -90,32 +80,22 @@ export class CardSkillSlotView extends Component {
 
         // 表里 `name` / `desc` 可能为空（狼骑兵四个技能就是全空），空了给占位文案，
         // 否则整个格子只剩编号，看起来像没加载出来。
-        setLabel(this.nameNode, skill.name || `${texts.skillNameFallback}${skill.skillId}`);
+        this.nameLabel.string = skill.name || `${texts.skillNameFallback}${skill.skillId}`;
         //  满级直接写「3（满级）」，比只写 3/3 更明确 —— 玩家不会去猜还有没有下一档。
-        setLabel(
-            this.levelNode,
-            maxed
-                ? `${texts.skillLevelPrefix}${item.level}${texts.skillMaxed}`
-                : `${texts.skillLevelPrefix}${item.level}/${maxLevel}`,
-        );
-        setLabel(this.descNode, item.desc || texts.skillDescEmpty);
-        const desc = this.descNode?.getComponent(Label);
-        if (desc && colors) desc.color = locked ? colors.locked : colors.active;
+        this.levelLabel.string = maxed
+            ? `${texts.skillLevelPrefix}${item.level}${texts.skillMaxed}`
+            : `${texts.skillLevelPrefix}${item.level}/${maxLevel}`;
+        this.descLabel.string = item.desc || texts.skillDescEmpty;
+        if (colors) this.descLabel.color = locked ? colors.locked : colors.active;
 
         // 「未解锁」只在**下一档还没到解锁等级**时才说（纯提示；满级时不再显示）。
-        if (this.lockTip) this.lockTip.active = locked;
-        setLabel(this.lockTip, `${texts.skillLocked}（${targetNeed}）`);
+        this.lockTip.node.active = locked;
+        this.lockTip.string = `${texts.skillLocked}（${targetNeed}）`;
 
         //  「升级」只在**满级**或**发包中**时置灰：这两个是客户端能确知的硬约束。
         //  等级不足一律放行给服务端，否则口径一错就整排按钮点不动。
-        this.setEnabled(this.nextButton, !maxed && !busy);
+        this.nextButton.interactable = !maxed && !busy;
         //  满级时按钮文案也换成「满级」—— 只置灰不改字，玩家会以为卡住/没加载。
-        setLabel(this.nextButton, maxed ? texts.skillMaxed : texts.skillUpgradeButton);
-    }
-
-    private setEnabled(node: Node, enabled: boolean): void {
-        if (!node) return;
-        const button = node.getComponent(Button);
-        if (button) button.interactable = enabled;
+        this.nextLabel.string = maxed ? texts.skillMaxed : texts.skillUpgradeButton;
     }
 }

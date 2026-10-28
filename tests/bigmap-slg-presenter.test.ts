@@ -100,8 +100,11 @@ test('基地升级、移动、收取和队列解锁都走对应SLG请求并保�
         ? { build: { ...h.home, state: 2, finishTime: 1100 }, queue: { queueId: 1, type: 2, buildInstId: ID } }
         : name === 'CmdSlgBuildMoveReqMsg' ? { build: { ...h.home, position: 3 } }
             : name === 'CmdSlgBuildCollectReqMsg' ? { tlCmdGoods: [{ resId: 18501, number: '7' }] } : { unlockQueue: 2 });
-    assert.equal((await h.presenter.requestUpgrade(localId)).ok, true);
-    assert.equal(h.calls.at(-1)?.body.buildInstId, ID);
+    // 主城升 2 级要求「木材田-1 + 铁矿田-1 各 1 级」（策划表 `preBuild` 数组），
+    // 这个假号的基地只有主城 ⇒ 本地规则就拦住，一条请求都不该发。
+    const blocked = await h.presenter.requestUpgrade(localId);
+    assert.equal(blocked.ok, false);
+    assert.match(blocked.message, /前置|升到 1 级|需先将/);
     // 用全量确认升级完成后再移动。
     h.setReply(async () => ({ info: { builds: [h.home], queues: [], unlockQueue: 1 } }));
     await h.repo.refreshBuildInfo();

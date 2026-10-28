@@ -67,7 +67,7 @@ export interface IRechargeActivityRepository {
     /** 读表 + 读缓存，组装一次快照；不发请求。 */
     load(nowMs?: number): Promise<IRechargeActivitySnapshot>;
     /** 领某档位的累计充值奖励（`activityId` = 活动实例 `openResId`）。 */
-    claim(activityId: number, rechargeProcess: number, caller?: unknown): Promise<RechargeActivityRequestResult>;
+    claim(activityId: number, rechargeProcess: number, caller?: object): Promise<RechargeActivityRequestResult>;
 }
 
 const READ_TIMEOUT_MS = 800;
@@ -135,11 +135,11 @@ export class RuntimeRechargeActivityRepository implements IRechargeActivityRepos
     async claim(
         activityId: number,
         rechargeProcess: number,
-        caller?: unknown,
+        caller?: object,
     ): Promise<RechargeActivityRequestResult> {
         const msg = new RequestTakeRechargeGiftActReward(
             { resId: activityId, rechargeProcess },
-            caller as any,
+            caller,
             (rsp) => FW.ShowReward(rsp?.tlReward ?? []),
         );
         const net = GameNet.instance;

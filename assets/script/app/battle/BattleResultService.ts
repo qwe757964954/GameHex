@@ -57,7 +57,7 @@ class BattleResultServiceClass {
     ensureListening(): void {
         if (this.listener) return;
         this.listener = {};
-        GameNet.instance.addEvent(BATTLE_RESULT_BRO, this.listener as never, (msg: unknown) => this.onBroadcast(msg));
+        GameNet.instance.addEvent(BATTLE_RESULT_BRO, this.listener, (msg: unknown) => this.onBroadcast(msg));
     }
 
     /**

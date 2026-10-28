@@ -71,3 +71,96 @@ test('失败可重试，目录/单资源/bundle/构造器分开缓存，已取�
     await cache.load('same', class Other {}, { scope }); assert.equal(calls, 5);
     scope.dispose(); await assert.rejects(cache.load('late', Item, { scope }), /取消/); assert.equal(calls, 5); cache.clear();
 });
+
+test('底层加载有并发预算，命中合并和容量透传均不突破预算', async () => {
+    const started: string[] = [];
+    const completions: (() => void)[] = [];
+    const cache = new ScopedAssetCache(adapter({
+        load: (path: string) => new Promise<Item>(resolve => {
+            started.push(path); completions.push(() => resolve(new Item()));
+        }), has: async () => true,
+    }), { maxEntries: 1, idleMs: 100, maxConcurrentLoads: 1 }, () => 0);
+    const scope = new ResourceScope('match');
+    const first = cache.load('first', Item, { scope });
+    const shared = cache.load('first', Item, { scope });
+    const next = cache.load('next', Item, { scope });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(started, ['first']);
+    completions.shift()!();
+    assert.equal(await first, await shared);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(started, ['first', 'next']);
+    completions.shift()!(); await next; scope.dispose(); cache.clear();
+});
+
+test('排队加载在取消和清缓存后不再派发，失败后继续后续请求', async () => {
+    const started: string[] = [];
+    let fail: (reason: Error) => void = () => {};
+    const cache = new ScopedAssetCache(adapter({
+        load: async (path: string) => {
+            started.push(path);
+            if (path === 'first') await new Promise((_resolve, reject) => { fail = reject; });
+            return new Item();
+        }, has: async () => true,
+    }), { maxEntries: 4, idleMs: 100, maxConcurrentLoads: 1 }, () => 0);
+    const live = new ResourceScope('live'), cancelled = new ResourceScope('cancelled');
+    const first = cache.load('first', Item, { scope: live });
+    const obsolete = cache.load('obsolete', Item, { scope: cancelled });
+    const next = cache.load('next', Item, { scope: live });
+    const rejected = Promise.all([assert.rejects(first, /offline/), assert.rejects(obsolete, /取消/)]);
+    await new Promise(resolve => setImmediate(resolve));
+    cancelled.dispose(); cache.clear(); fail(new Error('offline'));
+    await rejected; assert.ok(await next);
+    assert.deepEqual(started, ['first', 'next']);
+    assert.equal(cache.stats.entries, 0);
+    live.dispose();
+});
+
+test('低复用资源可绕过会话缓存，避免地图装饰挤掉单位资源', async () => {
+    const f = fixture(1);
+    const first = new ResourceScope('first');
+    const model = await f.cache.load('model', Item, { scope: first }); first.dispose();
+    const scene = new ResourceScope('scene');
+    await f.cache.load('decor', Item, { scope: scene, cache: false }); scene.dispose();
+    const second = new ResourceScope('second');
+    assert.equal(await f.cache.load('model', Item, { scope: second }), model);
+    assert.equal(f.calls, 2);
+    assert.equal(f.cache.stats.entries, 1);
+    second.dispose(); f.cache.clear();
+});
+
+
+test('后台解析只填空余容量，不逐出已有缓存，已缓存项仍可复用', async () => {
+    let loads = 0;
+    const cache = new ScopedAssetCache({ load: async () => { loads++; return {}; } } as AssetService,
+        { maxEntries: 1, idleMs: 1000 }, () => 0);
+    const foreground = new ResourceScope('foreground'), background = new ResourceScope('idle');
+    const Type = class {};
+    await cache.load('actual-battle', Type, { scope: foreground }); foreground.dispose();
+    assert.equal(await cache.warm('unrelated', Type, { scope: background }), false);
+    assert.equal(loads, 1);
+    assert.equal(await cache.warm('actual-battle', Type, { scope: background }), true);
+    assert.equal(loads, 1); assert.equal(cache.stats.entries, 1);
+    background.dispose(); cache.clear();
+});
+
+
+test('前台优先于排队后台，同路径提优合并且保持同优先级 FIFO', async () => {
+    const started: string[] = [], completions: (() => void)[] = [];
+    const cache = new ScopedAssetCache(adapter({ load: (path: string) => new Promise<Item>(resolve => {
+        started.push(path); completions.push(() => resolve(new Item()));
+    }) }), { maxEntries: 8, idleMs: 1000, maxConcurrentLoads: 1 }, () => 0);
+    const scope = new ResourceScope('caller');
+    const first = cache.load('running', Item, { scope });
+    const low = cache.load('idle', Item, { scope, priority: -10 });
+    const promoted = cache.load('promoted', Item, { scope, priority: -10 });
+    const urgent = cache.load('critical', Item, { scope, priority: 100 });
+    const shared = cache.load('promoted', Item, { scope, priority: 100 });
+    await new Promise(resolve => setImmediate(resolve));
+    for (const expected of ['running', 'promoted', 'critical', 'idle']) {
+        assert.equal(started.at(-1), expected);
+        completions.shift()!(); await new Promise(resolve => setImmediate(resolve));
+    }
+    assert.equal(await promoted, await shared);
+    await Promise.all([first, low, urgent]); scope.dispose(); cache.clear();
+});

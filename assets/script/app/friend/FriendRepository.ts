@@ -112,36 +112,36 @@ export interface IFriendRepository {
     load(nowMs?: number): Promise<IFriendSnapshot>;
 
     /** 好友申请（对方会收到一条申请）。 */
-    apply(targetId: string, caller?: unknown): Promise<FriendRequestResult>;
+    apply(targetId: string, caller?: object): Promise<FriendRequestResult>;
     /** 通过别人的申请。 */
-    agree(targetId: string, caller?: unknown): Promise<FriendRequestResult>;
+    agree(targetId: string, caller?: object): Promise<FriendRequestResult>;
     /** 拒绝别人的申请。 */
-    refuse(targetId: string, caller?: unknown): Promise<FriendRequestResult>;
+    refuse(targetId: string, caller?: object): Promise<FriendRequestResult>;
     /** 删除好友（**批量**，唯一一个数组请求体）。 */
-    remove(targetIds: readonly string[], caller?: unknown): Promise<FriendRequestResult>;
+    remove(targetIds: readonly string[], caller?: object): Promise<FriendRequestResult>;
     /** 拉黑。 */
-    black(targetId: string, caller?: unknown): Promise<FriendRequestResult>;
+    black(targetId: string, caller?: object): Promise<FriendRequestResult>;
     /** 移出黑名单。 */
-    blackRemove(targetId: string, caller?: unknown): Promise<FriendRequestResult>;
+    blackRemove(targetId: string, caller?: object): Promise<FriendRequestResult>;
 
     /** 搜索（`parseSearch` 的结果直接传进来）。 */
-    search(parsed: SearchParse, caller?: unknown): Promise<FriendRequestResult>;
+    search(parsed: SearchParse, caller?: object): Promise<FriendRequestResult>;
     /** 「换一批」/ 切到「添加好友」页签时刷新推荐列表。 */
-    refreshSuggest(caller?: unknown): Promise<FriendRequestResult>;
+    refreshSuggest(caller?: object): Promise<FriendRequestResult>;
 
     /** 领取某个好友的体力。 */
-    getEnd(targetId: string, caller?: unknown): Promise<FriendRequestResult>;
+    getEnd(targetId: string, caller?: object): Promise<FriendRequestResult>;
     /** 一键领取。 */
-    getEndOneKey(caller?: unknown): Promise<FriendRequestResult>;
+    getEndOneKey(caller?: object): Promise<FriendRequestResult>;
     /** 赠送体力。 */
-    sendEnd(targetId: string, caller?: unknown): Promise<FriendRequestResult>;
+    sendEnd(targetId: string, caller?: object): Promise<FriendRequestResult>;
     /** 一键赠送。 */
-    sendEndOneKey(caller?: unknown): Promise<FriendRequestResult>;
+    sendEndOneKey(caller?: object): Promise<FriendRequestResult>;
 
     /** 一键同意全部申请。 */
-    agreeOneKey(caller?: unknown): Promise<FriendRequestResult>;
+    agreeOneKey(caller?: object): Promise<FriendRequestResult>;
     /** 一键拒绝全部申请。 */
-    refuseOneKey(caller?: unknown): Promise<FriendRequestResult>;
+    refuseOneKey(caller?: object): Promise<FriendRequestResult>;
 }
 
 /** 请求超时（与礼包 / 首充 / 七日同口径：读 800ms / 写 5000ms）。 */
@@ -230,9 +230,9 @@ export class RuntimeFriendRepository implements IFriendRepository {
     // 请求
     // ============================================================
 
-    async apply(targetId: string, caller?: unknown): Promise<FriendRequestResult> {
+    async apply(targetId: string, caller?: object): Promise<FriendRequestResult> {
         const result = await this.request(
-            (id) => new RequestFriendsApply({ targetId: id }, caller as any, () => {
+            (id) => new RequestFriendsApply({ targetId: id }, caller, () => {
                 // 老端在**发之前**就 push 进 applyList（发失败也标成「已申请」）；
                 // 这里改成**成功才记** —— 失败时按钮不置灰，还能再点一次。
                 this.appliedIds.add(targetId);
@@ -242,86 +242,86 @@ export class RuntimeFriendRepository implements IFriendRepository {
         return result;
     }
 
-    async agree(targetId: string, caller?: unknown): Promise<FriendRequestResult> {
-        return this.request((id) => new RequestFriendsAdd({ targetId: id }, caller as any), targetId);
+    async agree(targetId: string, caller?: object): Promise<FriendRequestResult> {
+        return this.request((id) => new RequestFriendsAdd({ targetId: id }, caller), targetId);
     }
 
-    async refuse(targetId: string, caller?: unknown): Promise<FriendRequestResult> {
-        return this.request((id) => new RequestFriendsRefuse({ targetId: id }, caller as any), targetId);
+    async refuse(targetId: string, caller?: object): Promise<FriendRequestResult> {
+        return this.request((id) => new RequestFriendsRefuse({ targetId: id }, caller), targetId);
     }
 
-    async remove(targetIds: readonly string[], caller?: unknown): Promise<FriendRequestResult> {
+    async remove(targetIds: readonly string[], caller?: object): Promise<FriendRequestResult> {
         const ids = this.cleanIds(targetIds);
         if (ids.length === 0) return 'failed';
         // 本地也把「申请过」的记录清掉：删掉的人不该再显示「已申请」
         for (const id of ids) this.appliedIds.delete(id);
-        return this.send(() => new RequestFriendsRemove({ targetId: ids as any }, caller as any));
+        return this.send(() => new RequestFriendsRemove({ targetId: ids as any }, caller));
     }
 
-    async black(targetId: string, caller?: unknown): Promise<FriendRequestResult> {
-        return this.request((id) => new RequestFriendsBlack({ targetId: id }, caller as any), targetId);
+    async black(targetId: string, caller?: object): Promise<FriendRequestResult> {
+        return this.request((id) => new RequestFriendsBlack({ targetId: id }, caller), targetId);
     }
 
-    async blackRemove(targetId: string, caller?: unknown): Promise<FriendRequestResult> {
-        return this.request((id) => new RequestFriendBlackRemove({ targetId: id }, caller as any), targetId);
+    async blackRemove(targetId: string, caller?: object): Promise<FriendRequestResult> {
+        return this.request((id) => new RequestFriendBlackRemove({ targetId: id }, caller), targetId);
     }
 
-    async search(parsed: SearchParse, caller?: unknown): Promise<FriendRequestResult> {
+    async search(parsed: SearchParse, caller?: object): Promise<FriendRequestResult> {
         if (parsed.kind !== 'id' && parsed.kind !== 'name') return 'failed';
         // 老端 `requetSearch`：**先清空**推荐列表，再把结果 push 进去（搜不到就是空列表）
         this.suggestRaw = [];
         if (parsed.kind === 'id') {
             return this.send(() => new RequestFriendsSearch(
                 { targetId: String(parsed.id), targetName: '' },
-                caller as any,
+                caller,
                 (rsp: any) => { this.suggestRaw = rsp?.friend ? [rsp.friend] : []; },
             ));
         }
         return this.send(() => new RequestFriendsSearch(
             { targetId: '0', targetName: parsed.name },
-            caller as any,
+            caller,
             (rsp: any) => { this.suggestRaw = rsp?.friend ? [rsp.friend] : []; },
         ));
     }
 
-    async refreshSuggest(caller?: unknown): Promise<FriendRequestResult> {
+    async refreshSuggest(caller?: object): Promise<FriendRequestResult> {
         // 老端 `requetRefreshSuggest`：先清空，Rsp 的 `suggestList` 是**全量替换**
         this.suggestRaw = [];
-        return this.send(() => new RequestdFriendRefreshSuggest({}, caller as any, (rsp: any) => {
+        return this.send(() => new RequestdFriendRefreshSuggest({}, caller, (rsp: any) => {
             this.suggestRaw = Array.isArray(rsp?.suggestList) ? rsp.suggestList : [];
         }));
     }
 
     // ---- 体力（领取 / 赠送）—— 这四条的 Rsp 是唯一数据源，要打本地补丁 ----
 
-    async getEnd(targetId: string, caller?: unknown): Promise<FriendRequestResult> {
+    async getEnd(targetId: string, caller?: object): Promise<FriendRequestResult> {
         return this.request(
-            () => new RequestFriendGetEnd({ targetId }, caller as any, (rsp: any) => this.patchOne(rsp?.friend)),
+            () => new RequestFriendGetEnd({ targetId }, caller, (rsp: any) => this.patchOne(rsp?.friend)),
             targetId,
         );
     }
 
-    async getEndOneKey(caller?: unknown): Promise<FriendRequestResult> {
-        return this.send(() => new RequestFriendGetEndOneKey({}, caller as any, (rsp: any) => this.patchMany(rsp?.friendList)));
+    async getEndOneKey(caller?: object): Promise<FriendRequestResult> {
+        return this.send(() => new RequestFriendGetEndOneKey({}, caller, (rsp: any) => this.patchMany(rsp?.friendList)));
     }
 
-    async sendEnd(targetId: string, caller?: unknown): Promise<FriendRequestResult> {
+    async sendEnd(targetId: string, caller?: object): Promise<FriendRequestResult> {
         return this.request(
-            () => new RequestFriendSendEnd({ targetId }, caller as any, (rsp: any) => this.patchOne(rsp?.friend)),
+            () => new RequestFriendSendEnd({ targetId }, caller, (rsp: any) => this.patchOne(rsp?.friend)),
             targetId,
         );
     }
 
-    async sendEndOneKey(caller?: unknown): Promise<FriendRequestResult> {
-        return this.send(() => new RequestFriendSendEndOneKey({}, caller as any, (rsp: any) => this.patchMany(rsp?.friendList)));
+    async sendEndOneKey(caller?: object): Promise<FriendRequestResult> {
+        return this.send(() => new RequestFriendSendEndOneKey({}, caller, (rsp: any) => this.patchMany(rsp?.friendList)));
     }
 
-    async agreeOneKey(caller?: unknown): Promise<FriendRequestResult> {
-        return this.send(() => new RequestdFriendAgreeOneKey({}, caller as any));
+    async agreeOneKey(caller?: object): Promise<FriendRequestResult> {
+        return this.send(() => new RequestdFriendAgreeOneKey({}, caller));
     }
 
-    async refuseOneKey(caller?: unknown): Promise<FriendRequestResult> {
-        return this.send(() => new RequestdFriendRefuseOneKey({}, caller as any));
+    async refuseOneKey(caller?: object): Promise<FriendRequestResult> {
+        return this.send(() => new RequestdFriendRefuseOneKey({}, caller));
     }
 
     // ============================================================

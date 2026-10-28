@@ -1,3 +1,4 @@
+import type { IZCDeferredBattleArt } from '../application/ZCGameLoader';
 import { Color, EffectAsset, Graphics, instantiate, Material, Node, Prefab, Sprite, SpriteFrame, UITransform, Vec3 } from 'cc';
 import { buildHexGridLayout } from '../../../core/hex/HexGridLayout';
 import { findCatalogCard, resolveUnitDefinition, ZCUnitId } from '../model/ZCCombatCatalog';
@@ -5,6 +6,7 @@ import type { ZCAttackTrait } from '../model/ZCCombatCatalog';
 import {
     neutralResourceItemOf, neutralResourceVisualOf, ZCNeutralResourceVisual,
 } from '../model/ZCNeutralResourceGroup';
+import { ZCPvpTileType } from '../model/ZCPvpTileRules';
 import { ZCCombatEffectView } from './ZCCombatEffectView';
 import { ZCFloatTextView } from './ZCFloatTextView';
 import { ZCCardRevealView } from './ZCCardRevealView';
@@ -20,6 +22,7 @@ import type { ZCMatchMap } from '../model/ZCMatchConfig';
 import {
     type ZCCombatEvent,
     type ZCCardReveal,
+    type ZCHexActivation,
     type ZCNeutralReward,
     type ZCProjectileState,
     type ZCUnitState,
@@ -57,6 +60,75 @@ type ZCRenderEntityKind = 'hex' | 'unit' | 'effect' | 'float' | 'cardReveal' | '
 
 /** 旧测试 frame 缺 `neutralRewards` 字段时的共享空数组（渲染层只读，永不修改）。 */
 const EMPTY_NEUTRAL_REWARDS: readonly Readonly<ZCNeutralReward>[] = [];
+
+/**
+ * 开局「点击金矿」提示挂在哪一类格子上。
+ *
+ *   - `tile`：**金矿地块**（`tileType = mine`，格上画 `icon_jk` + 造价）—— 玩家开局看到的那一圈里
+ *     「金矿图标 + 50」就是它。这是「点击金矿」的主口径：点它就是开发金矿。
+ *   - `resource`：**中立金矿资源点**（格上站的就是一堆金子）—— 有些地图的金矿是资源点而不是地块类型。
+ */
+type ZCHintTargetKind = 'tile' | 'resource';
+
+/** 这一格是不是「金矿地块」（`icon_jk` + 造价那种）。 */
+function isMineTile(hex: Readonly<{ state: Readonly<{ tileType: number | null }> }>): boolean {
+    return hex.state.tileType === ZCPvpTileType.Mine;
+}
+
+/** 这一格是不是「中立金矿资源点」（格上站的就是金矿）。 */
+function isMineResource(hex: Readonly<{ state: Readonly<{ neutralResourceId?: number | null }> }>): boolean {
+    return neutralResourceVisualOf(hex.state.neutralResourceId) === ZCNeutralResourceVisual.Mine;
+}
+
+/** 提示目标是否还值得提示：地块类看「还能不能开发」，资源类看「资源还在不在」。 */
+function hintTargetStillValid(
+    hex: Readonly<{ canDevelop: boolean; state: Readonly<{ tileType: number | null; neutralResourceId?: number | null }> }>,
+    kind: ZCHintTargetKind,
+): boolean {
+    return kind === 'tile' ? hex.canDevelop && isMineTile(hex) : isMineResource(hex);
+}
+
+/**
+ * 找开局要提示的那一格金矿，以及它属于哪一类。没有就返回 `null`。
+ *
+ * 优先级按「玩家点了算不算数」排：先找**现在就能开发的金矿地块**（开局那圈，点下去立刻变成
+ * 己方金矿），再退到中立金矿资源点。
+ *
+ * ⚠️ 2026-10-26 修：原来只认 `neutralResourceId` 的金矿 **资源点**，但「金矿」在这套地图里
+ * 主要表现成 **地块类型**（`tileType = mine` ⇒ 画 `icon_jk` + 造价），玩家的原话「初始生成的
+ * 金矿图标」指的正是它 —— 于是描边一直挂在一个地图上根本不存在的目标上，一格都没闪过。
+ *
+ * ⚠️ 只在通道**第一次**找到目标时调一次（之后缓存 id），不做每帧全盘 find。
+ */
+function findMineHintTarget(
+    hexesById: ReadonlyMap<number, Readonly<{
+        canDevelop: boolean;
+        state: Readonly<{ tileType: number | null; neutralResourceId?: number | null }>;
+    }>> | undefined,
+): { hexId: number; kind: ZCHintTargetKind } | null {
+    if (!hexesById) return null;
+    let resourceFallback: number | null = null;
+    for (const [hexId, hex] of hexesById) {
+        if (hex.canDevelop && isMineTile(hex)) return { hexId, kind: 'tile' };
+        if (resourceFallback === null && isMineResource(hex)) resourceFallback = hexId;
+    }
+    return resourceFallback === null ? null : { hexId: resourceFallback, kind: 'resource' };
+}
+
+/**
+ * 本帧「最近一次开发点击」的脉冲起点（秒）；没有激活事件返回 null。
+ *
+ * 用途只有一个：给新点亮邻格的生成动画当锚点（需求 2026-10-26「与地块脉冲同步」）。
+ * 同一拍通常只有一个激活事件；玩家在 1.856s 内连点两格时取**最新**那个 —— 刚好是
+ * 正在点亮邻格的那一次。
+ */
+function latestHexActivationStartedAt(activations: readonly Readonly<ZCHexActivation>[]): number | null {
+    let latest: number | null = null;
+    for (const activation of activations) {
+        if (latest === null || activation.startedAt > latest) latest = activation.startedAt;
+    }
+    return latest;
+}
 
 interface ZCIdentityComponent {
     kind: ZCRenderEntityKind;
@@ -123,8 +195,16 @@ interface ZCRenderWorldOptions {
      * 缺省 / 空数组 ⇒ 脉冲段只剩「原地缩没」，其余表现不受影响。
      */
     hexPulseFrames?: readonly SpriteFrame[];
+    /**
+     * 「神器充能」被领取那一刻、**格心原地炸开**的序列帧
+     * （`image/effects/artifact_claim_burst`，已按帧序，18 帧）。
+     *
+     * 缺省 / 空数组 ⇒ 这一层表现整条跳过（神器图标照常飞向神器栏），不影响对局。
+     */
+    artifactClaimBurstFrames?: readonly SpriteFrame[];
     effectPrefab: Prefab | null;
     effectVisualPrefabs: ReadonlyMap<string, Prefab>;
+    allowGenericEffects?: boolean;
     floatTextPrefab: Prefab | null;
     /** 抽卡小卡牌 prefab；缺失时只少一层表现，不影响对局。 */
     cardRevealPrefab?: Prefab | null;
@@ -160,11 +240,11 @@ interface ZCRenderWorldOptions {
      */
     spawnRegionFrames?: IZCSpawnRegionHintFrames | null;
     /**
-     * HUD 金币栏图标（`BottomInfoPanel/CoinPanel/coin`）：金币飞行的目标挂点。
-     * 缺省 ⇒ 不播金币飞行（领地 / 测试环境没有金币栏时静默跳过）。
+     * HUD 神器按钮（`BottomInfoPanel/ArtifactButton`）：神器飞行的目标挂点；缺省 ⇒ 不播神器飞行。
+     *
+     * ⚠️ 2026-10-26 起**没有**金币栏挂点：金币段改成「在格子上就地喷发」（不飞向 HUD），
+     *    所以这里不再需要 `goldCounterNode`，别再加回来。
      */
-    goldCounterNode?: Node | null;
-    /** HUD 神器按钮（`BottomInfoPanel/ArtifactButton`）：神器飞行的目标挂点；缺省 ⇒ 不播神器飞行。 */
     artifactButtonNode?: Node | null;
     /** 场景装饰条目 prefab（`sizeMode=CUSTOM` + 不裁边烘在它身上）；缺失时只少一层表现。 */
     decorPrefab?: Prefab | null;
@@ -247,6 +327,9 @@ export class ZCGameRenderWorld {
     private nextEntityId = 1;
     private readonly identity = new Map<number, ZCIdentityComponent>();
     private readonly scene = new Map<number, ZCSceneComponent>();
+    private hexGroundGlowFrames: readonly SpriteFrame[];
+    private hexPulseFrames: readonly SpriteFrame[];
+    private artifactClaimBurstFrames: readonly SpriteFrame[];
     private readonly hexViews = new Map<number, ZCHexView>();
     private spawnRegionHintOverlay: ZCSpawnRegionHintOverlay | null = null;
     private spawnRegionHints: readonly IZCSpawnRegionHint[] = [];
@@ -286,6 +369,7 @@ export class ZCGameRenderWorld {
      * （塞进 ECS 只会让 `removeEntity` 多一条分支）。挂点差异（出生光柱挂单位节点跟随、
      * 受击/阵亡挂 mapLayer 与宿主存活解耦）与去重/回收判据都在 `ZCEffectPool` 内。
      */
+    private effectVisualPrefabs: ReadonlyMap<string, Prefab>;
     private readonly effectPool: ZCEffectPool;
     private readonly effectViews = new Map<number, ZCCombatEffectView>();
     private readonly floatTextViews = new Map<number, ZCFloatTextView>();
@@ -298,10 +382,11 @@ export class ZCGameRenderWorld {
     private readonly cardRevealEntityBySource = new Map<number, number>();
     private readonly legendBannerEntityBySource = new Map<number, number>();
     /**
-     * 中立资源获取特效（金币/神器飞向 HUD 栏位）。
+     * 中立资源获取特效（格心喷发金币 / 神器飞向神器按钮）。
      *
-     * 与飘字同型：按事件 id 对齐、新增即建、事件过期即销毁；只对**玩家**领取播（目标
-     * 在玩家 HUD 上）。挂在 `options.overlayLayer`（HUD 根）下，坐标由渲染层换算。
+     * 与飘字同型：按事件 id 对齐、新增即建、事件过期即销毁；只对**玩家**领取播（神器目标
+     * 在玩家 HUD 上，金币是"我拿到了多少"）。挂在 `options.overlayLayer`（HUD 根）下，
+     * 坐标由渲染层换算。缺帧 ⇒ 特效类内部静默跳过，不影响对局。
      */
     private readonly neutralRewardFx: ZCNeutralRewardFx;
     /** 棋盘上的纯表现装饰节点；不属于 ECS，销毁时显式清理。 */
@@ -328,6 +413,25 @@ export class ZCGameRenderWorld {
      * 建筑产兵时由 `renderUnitEntity` 入队，播完（`advanceBuildingShake` 返回 false）出队。
      */
     private readonly buildingShakeHexes = new Set<number>();
+    /**
+     * 正在播「新点亮邻格生成动画」的格子（hexId 集合，平时为空）。
+     *
+     * 与 `buildingShakeHexes` 同一套机制：状态存在 `ZCHexView` 上（起点 + 曲线），
+     * 渲染世界只维护「哪些格子还要每帧推」——`renderHexSystem` 静态刷新时入队，
+     * `advanceDevelopableSpawn` 返回 false（播完）时出队。
+     */
+    private readonly developableSpawnHexes = new Set<number>();
+    /**
+     * 血条正在播「扣血白条」的地块（hexId 集合，平时为空）。
+     *
+     * 白条只活 0.13s，而 `renderHexSystem` 挂在 `renderStatic` 上（0.15s 节流）——
+     * 挂在静态刷新里会「闪一帧就没」（甚至一帧都看不到）。所以照 `developableSpawnHexes`
+     * 那一套：静态刷新时登记，`renderHealthBarTrails` 每帧推进，播完出队。
+     *
+     * 单位条不用进这个集合：`ZCUnitView.renderHealthBar` 由 `renderUnitSystem` 每帧调，
+     * 白条天然逐帧。只有地块条需要在动的时候把它从 0.15s 的节流里「捞」出来。
+     */
+    private readonly healthBarTrailHexes = new Set<number>();
 
 
     /**
@@ -363,23 +467,65 @@ export class ZCGameRenderWorld {
      */
     private readonly claimWave: ZCClaimWave;
     /**
-     * 开局「点击金矿」提示当前挂在哪一格（`null` = 没挂），见 `renderNeutralHint`。
+     * 开局「点击金矿」提示的**共享画布**：惰性建在棋盘最上层 `CooldownOverlay` 上，整局复用一份。
      *
-     * 记引用而不是 hexId：提示是**每帧**推的，落格那一步要走 `hexEntityBySource → hexViews`
-     * 两次查表，而这一格在一整段提示里都不会变。
+     * 为什么不画在格子自带的 `TerritoryOutline` 上（2026-10-15 row10 的旧做法）：那份 Graphics
+     * 和地块同层，相邻格的底色与建筑会按绘制顺序盖掉提示线 —— 用户 2026-10-26 截图里线被切掉
+     * 半圈，要求「描边需要覆盖在最上层」。抬到棋盘**最后一个图层**（prefab 子节点序：…、
+     * `BuildingOverlay`、`CooldownOverlay`）⇒ 一定压在所有地块、城墙、资源图标、建筑与冷却环之上。
+     *
+     * 代价仍是 6 条边、一格一画布变成一份共享画布（比 per-cell 更省）。
      */
-    private hintOutlineView: ZCHexView | null = null;
+    private hintOutlineNode: Node | null = null;
+    private hintOutlineGraphics: Graphics | null = null;
+    /** 上一次写进提示画布的透明度（`0` = 没开）；2% 死区靠它挡噪声，`Graphics` 上读不到。 */
+    private hintOutlineAlpha = 0;
     /**
-     * 提示通道是否已经收工（窗口播完 / 换局复位）。
+     * 提示目标的 hexId（`null` = 还没找到 / 已经收手）。
      *
-     * 收工后整条通道直接返回，不再每帧扫一遍全盘快照找金矿格 —— 提示只活 4.4s，
-     * 而 `renderDynamic` 是整局每帧都在跑的。
+     * 2026-10-26 起提示要**一直呼吸到金矿被点**，所以"每帧全盘 find 金矿"不能再用：
+     * 找到一次就缓存 id，之后每帧只查这一格还值不值得提示（`hexesById` 一跳）。
+     */
+    private hintTargetHexId: number | null = null;
+    /** 缓存的目标属于哪一类（地块 / 资源点）—— 判"还值不值得提示"的判据依赖它。 */
+    private hintTargetKind: ZCHintTargetKind = 'tile';
+    /**
+     * 提示通道是否已经收工（目标被点掉 / 对局结束 / 换局复位）。
+     *
+     * 收工后整条通道直接返回：目标被点掉之后 `renderDynamic` 仍然每帧都在跑，
+     * 不结账就等于整局白扫一遍。
+     *
+     * ⚠️ 「这一刻还没找到目标」**不能**结账：开局头几帧（归属扩散波还没铺完）目标格的
+     * `canDevelop` 还没翻成 true，一收手就再也起不来 —— 这正是 2026-10-26 那次
+     * 「描边呼吸看不到」的成因之一。
      */
     private hintOutlineSettled = false;
     /** 整体外轮廓（放大副本）材质；所有非己方 Spine 共用一份，靠顶点色区分阵营。 */
     private readonly unitOutlineCopyMaterial: Material | null;
 
+    /** 新事件每次 acquire 都重新 initialize，已池化的通用壳也会使用最新专属 Prefab。 */
+    applyDeferredArt(art: IZCDeferredBattleArt): void {
+        this.effectVisualPrefabs = art.effectVisualPrefabs;
+        this.effectPool.setArt(art);
+        if (art.hexGroundGlowFrames && art.hexGroundGlowFrames !== this.hexGroundGlowFrames) {
+            this.hexGroundGlowFrames = art.hexGroundGlowFrames;
+            for (const view of this.hexViews.values()) view.setGroundGlowFrames(art.hexGroundGlowFrames);
+        }
+        if (art.hexPulseFrames && art.hexPulseFrames !== this.hexPulseFrames) {
+            this.hexPulseFrames = art.hexPulseFrames;
+            for (const view of this.hexViews.values()) view.setHexPulseFrames(art.hexPulseFrames);
+        }
+        if (art.artifactClaimBurstFrames && art.artifactClaimBurstFrames !== this.artifactClaimBurstFrames) {
+            this.artifactClaimBurstFrames = art.artifactClaimBurstFrames;
+            this.neutralRewardFx.setBurstFrames(art.artifactClaimBurstFrames);
+        }
+    }
+
     constructor(private readonly options: ZCRenderWorldOptions) {
+        this.effectVisualPrefabs = options.effectVisualPrefabs ?? new Map();
+        this.hexGroundGlowFrames = options.hexGroundGlowFrames ?? [];
+        this.hexPulseFrames = options.hexPulseFrames ?? [];
+        this.artifactClaimBurstFrames = options.artifactClaimBurstFrames ?? [];
         const effect = options.unitOutlineCopyEffect;
         if (effect) {
             const material = new Material();
@@ -400,6 +546,7 @@ export class ZCGameRenderWorld {
             deathFxPrefab: options.deathFxPrefab ?? null,
             buildingDestroyFxPrefab: options.buildingDestroyFxPrefab ?? null,
             hitFxPrefabs: options.hitFxPrefabs ?? new Map(),
+            allowGenericHitFx: options.allowGenericEffects,
             mapToViewX,
             mapToViewY,
         });
@@ -416,6 +563,8 @@ export class ZCGameRenderWorld {
             options.overlayLayer ?? null,
             options.goldCoinFrame ?? null,
             options.artifactIconFrame ?? null,
+            // 神器领取的格心蓝色爆炸（18 帧序列帧）；缺帧 ⇒ 只剩神器图标飞行那一条。
+            options.artifactClaimBurstFrames ?? [],
         );
     }
 
@@ -498,11 +647,11 @@ export class ZCGameRenderWorld {
             // 地面光斑的序列帧（抬升期点亮）。取不到时降级为「不画光」。
             //  地块收场已改成「原地缩到最小」（2026-10-14），不再压扁 ⇒ 不再注入
             // `shaders/hex-flip` 那份透视材质（领地地图的翻格仍自带一份）。
-            view.setGroundGlowFrames(this.options.hexGroundGlowFrames ?? []);
+            view.setGroundGlowFrames(this.hexGroundGlowFrames);
             // 脉冲段的序列帧：中间层播，按地块类型染色（兵营蓝紫 / 金矿绿）。
             // 5 帧的放大与淡出都烘焙在图里，视图只换帧 —— 不再需要专用材质。
             // 取不到时降级为「只缩没」，不等于整段表现失效。
-            view.setHexPulseFrames(this.options.hexPulseFrames ?? []);
+            view.setHexPulseFrames(this.hexPulseFrames);
             // 废墟外观同理兜底 fx（prefab 已绑则不覆盖）。
             view.ensureRuinsFrame(this.options.buildingFrames);
             // 中立资源点「神器充能」格显示玩家携带的那件神器：整局一张，逐个视图喂同一份。
@@ -540,10 +689,17 @@ export class ZCGameRenderWorld {
         this.attachBuildingOverlay(placed, this.boardLayer('BuildingOverlay'));
         this.attachCooldownOverlay(placed, this.boardLayer('CooldownOverlay'));
         this.cacheSpawnRegionHints(mapConfig);
-        // 提示通道是**每局一次**的：换局后重新开窗（窗口按新局的 `elapsedSeconds` 从 0 起算），
+        // 提示通道是**每局一次**的：换局后重新找一次金矿（提示要一直呼吸到被点，没有窗口），
         // 上一局挂过的格（视图可能已经随地图重建销毁）也要松手。
-        this.hintOutlineView = null;
+        this.hintTargetHexId = null;
+        this.hintTargetKind = 'tile';
         this.hintOutlineSettled = false;
+        // 换局把提示画布收干净（画布本身挂在棋盘最上层、跨局复用，只清内容不复建）。
+        this.hintOutlineAlpha = 0;
+        if (this.hintOutlineNode?.isValid && this.hintOutlineGraphics) {
+            this.hintOutlineGraphics.clear();
+            this.hintOutlineGraphics.enabled = false;
+        }
     }
 
     /** 按名取 `ZCGameBoard.prefab` 里声明的图层 —— 结构在那里，代码不自己拼层。 */
@@ -799,6 +955,8 @@ export class ZCGameRenderWorld {
         this.renderCardReveals(frame);
         this.renderLegendBanners(frame);
         this.renderHexActivations(frame);
+        this.renderDevelopableSpawns(frame);
+        this.renderHealthBarTrails(frame);
         this.renderBuildingShakes(frame, events);
         this.renderBuildingDestructions(frame, events);
         this.renderTerritoryClaimWave(frame);
@@ -821,8 +979,8 @@ export class ZCGameRenderWorld {
         const rewards = frame.neutralRewards ?? EMPTY_NEUTRAL_REWARDS;
         if (!rewards.length && this.neutralRewardFx.size === 0) return;
         this.neutralRewardFx.render(rewards, this.visualTime(frame), (hexId) => this.neutralRewardStartLocal(hexId), {
-            // 目标都是固定 HUD 节点，每帧现算一次（节点不可用 ⇒ null ⇒ 不播对应飞行）。
-            goldCounter: this.overlayLocalOf(this.options.goldCounterNode ?? null),
+            // 只有神器还需要 HUD 落点（金币段改成就地喷发了 —— 见 `ZCNeutralRewardFx` 头注）；
+            // 目标节点不可用 ⇒ null ⇒ 不播对应飞行。
             artifactSlot: this.overlayLocalOf(this.options.artifactButtonNode ?? null),
         });
     }
@@ -848,45 +1006,119 @@ export class ZCGameRenderWorld {
     }
 
     /**
-     * 开局「点击金矿」提示：给金矿那一格套一圈整体描边闪烁（需求 2026-10-15 row10）。
+     * 开局「点击金矿」提示：给金矿那一格套一圈整体描边**一直呼吸到它被点**（需求 2026-10-26）。
      *
-     * 窗口锚在**对局时间**上（`visualTime`，进对局那一刻为 0）⇒ 需求原文的「进入游戏初始时」
-     * 就是「`elapsedSeconds ∈ [0, ZC_NEUTRAL_HINT_SECONDS)`」，不需要另开一个状态机，
-     * 换局 / 重连换 `elapsedSeconds` 天然重新计时。
+     * 旧口径（2026-10-15 row10）只闪 4 个周期（4.4s）就自动收手 —— 玩家进对局慢一拍 /
+     * 先看了别处，提示就已经消失，等于没提示。现在改成：
+     *  - 曲线没有窗口（`zcNeutralHintAlpha` 只要 `elapsed >= 0` 就一直 `1 ↔ 0.15` 呼吸）；
+     *  - **什么时候收手只看"还能不能点"**：目标被开发 / 被领走（地块不再 `canDevelop`、
+     *    资源点不再是金矿）或对局已经结束（结算演出，提示不该压在胜利扫场上）⇒ 收掉描边并结账
+     *    （`hintOutlineSettled`），之后不再每帧查。
      *
-     * 三个收手条件（任一满足就停）：
-     *  - 窗口播完（`zcNeutralHintAlpha` 归 0）；
-     *  - 金矿被领取 / 被开发 —— 模型里 `neutralResourceId` 会被清空，目标自然消失；
-     *  - 这一盘根本没有金矿格（`find` 不到）。
+     * 目标口径 2026-10-26 修：优先**金矿地块**（`tileType = mine`，画 `icon_jk` + 造价 ——
+     * 开局那圈里的「金矿图标 + 50」），退而求其次才是中立金矿**资源点**。原来只认资源点，
+     * 而这张图的金矿表现成地块类型 ⇒ 目标永远找不到，描边一格都没闪过。见 `findMineHintTarget`。
      *
-     * ⚠️ 必须挂在 `renderDynamic` 上：闪烁要 60fps，走 `renderStatic` 的 0.15s 节流会变成频闪。
+     * 目标 id 只在第一次找到之后缓存（`hintTargetHexId`），不做每帧全盘 find ——
+     * 提示现在是"整局常驻到被点"，`renderDynamic` 又是每帧都跑的。
+     *
+     * 绘制落点：**棋盘最上层的共享画布**（`ensureHintOutlineGraphics`），不在格子自带的
+     * `TerritoryOutline` 上 —— 那份会被邻格底色与建筑盖掉半圈。
+     *
+     * ⚠️ 必须挂在 `renderDynamic` 上：呼吸要 60fps，走 `renderStatic` 的 0.15s 节流会变成频闪。
      */
     private renderNeutralHint(frame: ZCGameRenderFrame): void {
         if (this.hintOutlineSettled) return;
-        const alpha = zcNeutralHintAlpha(this.visualTime(frame));
-        if (alpha <= 0) {
-            this.setHintOutlineTarget(null);
+        // 对局已经结束（结算演出 / 扫场）⇒ 直接收手：提示是给"还能点"的阶段用的，
+        // 一直呼吸到结算画面里会压在胜利扫场上。这条也顺带把结账做了。
+        if (frame.snapshot.status !== 'playing') {
+            this.renderHintOutline(null, 0);
             this.hintOutlineSettled = true;
             return;
         }
-        // 消除箭头闭包 + 全盘 find：窗口期（约 4.4s）内每帧都跑，用普通 for 提前 break。
-        const hexes = frame.snapshot.hexes;
-        let targetHexId: number | null = null;
-        for (let index = 0; index < hexes.length; index += 1) {
-            if (neutralResourceVisualOf(hexes[index].neutralResourceId) === ZCNeutralResourceVisual.Mine) {
-                targetHexId = hexes[index].id;
-                break;
+        if (this.hintTargetHexId === null) {
+            const found = findMineHintTarget(frame.hexesById);
+            if (found === null) {
+                // 这一帧还没找到目标 —— **不结账**，下一帧继续找（开局头几帧 `canDevelop`
+                // 还没翻成 true，一收手就再也起不来）。
+                this.renderHintOutline(null, 0);
+                return;
             }
+            this.hintTargetHexId = found.hexId;
+            this.hintTargetKind = found.kind;
         }
-        this.setHintOutlineTarget(targetHexId === null ? null : this.hexViewOf(targetHexId));
-        this.hintOutlineView?.renderHintOutline(alpha);
+        // 缓存的那一格已经不值得提示了（被开发 / 被领走）⇒ 收手结账。
+        // 查不到 `hexesById`（老测试桩）时照旧播。
+        const target = frame.hexesById ? frame.hexesById.get(this.hintTargetHexId) : undefined;
+        if (target && !hintTargetStillValid(target, this.hintTargetKind)) {
+            this.hintTargetHexId = null;
+            this.renderHintOutline(null, 0);
+            this.hintOutlineSettled = true;
+            return;
+        }
+        const alpha = zcNeutralHintAlpha(this.visualTime(frame));
+        // `alpha <= 0`（时间非法）时先别画，但**不结账**：下一帧还能正常呼吸。
+        this.renderHintOutline(this.hintTargetHexId, alpha);
     }
 
-    /** 换提示目标（先收掉旧的）—— 目标没变时零开销，每帧调用安全。 */
-    private setHintOutlineTarget(next: ZCHexView | null): void {
-        if (this.hintOutlineView === next) return;
-        this.hintOutlineView?.renderHintOutline(0);
-        this.hintOutlineView = next;
+    /**
+     * 把提示描边推到目标格（`hexId = null` / `alpha <= 0` ⇒ 收掉）。
+     *
+     * 唯一写这份共享画布的入口。画布**位置跟着格心走**（`_lpos = 0` 时顶点口径才和领地轮廓
+     * 对齐），透明度只变 < 2% 时连 `Graphics` 都不碰。
+     */
+    private renderHintOutline(hexId: number | null, alpha: number): void {
+        const graphics = this.ensureHintOutlineGraphics();
+        const node = this.hintOutlineNode;
+        if (!graphics || !node) return;
+        const view = hexId === null ? null : this.hexViewOf(hexId);
+        if (!view) {
+            if (this.hintOutlineAlpha <= 0) return;
+            this.hintOutlineAlpha = 0;
+            graphics.clear();
+            graphics.enabled = false;
+            return;
+        }
+        // 画布换格才写坐标；同一格连推几百帧时零开销。
+        const position = view.node.position;
+        if (node.position.x !== position.x || node.position.y !== position.y) {
+            node.setPosition(position.x, position.y, 0);
+        }
+        const value = Number.isFinite(alpha) ? Math.max(0, Math.min(1, alpha)) : 0;
+        ZCHexView.strokeHintOutline(graphics, value, this.hintOutlineAlpha);
+        this.hintOutlineAlpha = value;
+    }
+
+    /**
+     * 提示画布（惰性建在棋盘**最上层** `CooldownOverlay` 上，整局复用）。
+     *
+     * 图层顺序见 `ZCGameBoard.prefab` 的子节点序：`MapWater / HexLayer / OutlineLayer /
+     * ResourceLayer / DecorLayer / BuildingOverlay / CooldownOverlay`。挂最后一层并在
+     * `setParent` 时追加到子节点序末尾 ⇒ 一定压在所有地块、城墙、资源图标、建筑与冷却环之上。
+     * 城墙层是运行时插到 `OutlineLayer + 1` 的，也在它之下。
+     */
+    private ensureHintOutlineGraphics(): Graphics | null {
+        // 判活看**节点**：画布是节点的子组件，节点没了组件必然一起失效；反过来只查组件
+        // 在自己的桩/老版本上不一定有 `isValid`，会每帧重建一份画布。
+        const alive = this.hintOutlineNode?.isValid === true ? this.hintOutlineGraphics : null;
+        if (alive) return alive;
+        this.hintOutlineNode = null;
+        this.hintOutlineGraphics = null;
+        this.hintOutlineAlpha = 0;
+        const board = this.options.board;
+        const layer = board?.isValid ? board.getChildByName('CooldownOverlay') : null;
+        if (!layer?.isValid) return null;
+        const node = new Node('ZCHintOutline');
+        node.layer = layer.layer;
+        // 画布范围按 `ZCHexView` 的 `TerritoryOutline` 给（128×128，覆盖 123×90 的顶面六边形）；
+        // `Graphics` 的 `UIRenderer` 认这个尺寸，留给默认的 100×100 会让六边形被裁边。
+        node.addComponent(UITransform).setContentSize(128, 128);
+        const graphics = node.addComponent(Graphics);
+        graphics.enabled = false;
+        node.setParent(layer);
+        this.hintOutlineNode = node;
+        this.hintOutlineGraphics = graphics;
+        return graphics;
     }
 
     /** hexId → 地块视图（两跳查表 + 缺表兜底，散在几处就迟早有一处漏判 undefined）。 */
@@ -1145,11 +1377,10 @@ export class ZCGameRenderWorld {
     }
 
     /**
-     * 本帧快照与时间（描边染色用）。与 `UNIT_PRESENTATION_SCRATCH` 同口径：复用字段，
+     * 本帧快照（描边染色用）。与 `UNIT_PRESENTATION_SCRATCH` 同口径：复用字段，
      * 不在调用点新建闭包／对象。
      */
     private territoryFrame: ZCGameRenderFrame | null = null;
-    private territoryOutlineNow = 0;
 
     /** 逐格归属的稳定引用（整局一份，每帧直接传）。 */
     private readonly ownerForHex = this.territoryOwnerForHex.bind(this);
@@ -1158,9 +1389,11 @@ export class ZCGameRenderWorld {
      * 逐格归属：领地**底图与描边共用同一处实现**（分开算就会出现「底图一个色、轮廓另一个色」）。
      *
      *  ① 扫场期间用胜利方覆盖真实归属（纯表现层，不回写模型）；
-     *  ② 中立且可开发的格子按可开发方染色；
-     *  ③ 新点亮的邻格在「按住窗」内仍未点亮 ⇒ 描边跟着一起等（需求 2026-10-15 row9：
-     *     描边不许比地块图标先变色）。按住状态只问地块视图，`resolveDevelopableHold` 是唯一真源。
+     *  ② 中立且可开发的格子按可开发方染色。
+     *
+     *  2026-10-26 起不再有「按住窗」这一层：新点亮邻格的图标 / 价格在点击那一拍就跟脉冲一起
+     *  出现（生成动画只做缩放 + 淡入，不改归属），所以描边与图标天然同帧 —— row9 的
+     *  「描边不许比图标先变色」由「同一处判据 + 同一次静态刷新」保证。
      */
     private territoryOwnerForHex(id: number): ZCFaction {
         const sweepOwner = this.sweep.ownerForHex(id);
@@ -1168,9 +1401,6 @@ export class ZCGameRenderWorld {
         const hex = this.territoryFrame?.hexesById.get(id);
         const owner = hex?.state.owner ?? 'neutral';
         if (hex?.canDevelop !== true) return territoryTintOwner(owner, false);
-        const entityId = this.hexEntityBySource.get(id);
-        const view = entityId === undefined ? undefined : this.hexViews.get(entityId);
-        if (view?.resolveDevelopableHold(true, this.territoryOutlineNow)) return territoryTintOwner(owner, false);
         return territoryTintOwner(owner, true);
     }
 
@@ -1318,6 +1548,8 @@ export class ZCGameRenderWorld {
         this.cardRevealIds.clear();
         this.legendBannerIds.clear();
         this.buildingShakeHexes.clear();
+        this.developableSpawnHexes.clear();
+        this.healthBarTrailHexes.clear();
         this.unitInterpolator.clear();
         this.wallGeometry.clear();
         this.unitOutlineCopyMaterial?.destroy();
@@ -1378,7 +1610,9 @@ export class ZCGameRenderWorld {
         const now = this.visualTime(frame);
         // 逐格归属抽成具名方法（规范：不在调用点写内联闭包）；本帧 frame / now 走字段。
         this.territoryFrame = frame;
-        this.territoryOutlineNow = now;
+        // 本帧「刚开发成功」那次点击的脉冲起点：新点亮邻格的生成动画锚它才与脉冲同步
+        // （模型在点击那一拍就翻了 `canDevelop`，而地块只按 0.15s 节流刷新）。
+        const developPulseStartedAt = latestHexActivationStartedAt(frame.hexActivations);
         const boundaryMasks = buildTerritoryBoundaryMasks(this.map, this.ownerForHex);
         this.redrawSharedOutline(this.map, boundaryMasks);
         for (const state of frame.snapshot.hexes) {
@@ -1386,7 +1620,9 @@ export class ZCGameRenderWorld {
             if (!entityId) continue;
             const hex = frame.hexesById.get(state.id);
             if (!hex) continue;
-            this.hexViews.get(entityId)?.render({
+            const view = this.hexViews.get(entityId);
+            if (!view) continue;
+            view.render({
                 state,
                 canDevelop: hex.canDevelop,
                 playerGold: frame.snapshot.playerGold,
@@ -1395,7 +1631,50 @@ export class ZCGameRenderWorld {
                 hideNeutralResourceLabel: frame.mapConfig.cityMode === 'select',
                 boundaryMask: boundaryMasks.get(state.id) ?? 0,
                 activation: hex.activation,
+                developPulseStartedAt,
             });
+            // 刚点亮 ⇒ 挂进逐帧集合；播完或本来就没在播 ⇒ 出队（集合平时为空，判断极廉价）。
+            if (view.isDevelopableSpawning()) this.developableSpawnHexes.add(state.id);
+            else if (this.developableSpawnHexes.size) this.developableSpawnHexes.delete(state.id);
+            // 血条刚掉血 ⇒ 同样挂进逐帧集合（白条 0.13s < 静态刷新的 0.15s 节流）。
+            if (view.isHealthBarTrailAnimating()) this.healthBarTrailHexes.add(state.id);
+            else if (this.healthBarTrailHexes.size) this.healthBarTrailHexes.delete(state.id);
+        }
+    }
+
+    /**
+     * 新点亮邻格的**生成动画**（需求 2026-10-26：「新格子的生成动画和地块脉冲动画同步播放」）
+     * 每帧推进。
+     *
+     * 为什么单开一条：`renderHexSystem` 挂在 `renderStatic` 上（0.15s 节流），生成动画只有
+     * `ZC_HEX_NEIGHBOR_SPAWN_SECONDS`（0.5s）—— 走静态刷新只剩 3~4 帧，"长大"会变成"跳大"。
+     * 队列平时为空 ⇒ 零开销；视图没了（换图 / 换局）也当播完处理。
+     */
+    private renderDevelopableSpawns(frame: ZCGameRenderFrame): void {
+        if (!this.developableSpawnHexes.size) return;
+        const now = this.visualTime(frame);
+        for (const hexId of this.developableSpawnHexes) {
+            const view = this.hexViewOf(hexId);
+            if (!view || !view.advanceDevelopableSpawn(now)) this.developableSpawnHexes.delete(hexId);
+        }
+    }
+
+    /**
+     * 地块血条的**扣血白条**每帧推进（需求 2026-10-27：「被扣掉那段变白、0.13s 从右往左缩没」）。
+     *
+     * 为什么单开一条：白条只有 `HEALTH_BAR_DAMAGE_TRAIL_SECONDS`（0.13s），而
+     * `renderHexSystem` 挂在 `renderStatic` 上（0.15s 节流）—— 留在静态刷新里会「闪一帧就没」，
+     * 甚至一帧都看不到。与 `renderDevelopableSpawns` 完全同一套机制：集合平时为空 ⇒ 零开销。
+     *
+     * ⚠️ 这条通道**不读模型**：`advanceHealthBarTrail` 只用 `ZCHexView` 缓存的
+     * `lastBarRatio` + 时间轴重算宽度，不碰 `ProgressBar`、不改血量，纯表现。
+     */
+    private renderHealthBarTrails(frame: ZCGameRenderFrame): void {
+        if (!this.healthBarTrailHexes.size) return;
+        const now = this.visualTime(frame);
+        for (const hexId of this.healthBarTrailHexes) {
+            const view = this.hexViewOf(hexId);
+            if (!view || !view.advanceHealthBarTrail(now)) this.healthBarTrailHexes.delete(hexId);
         }
     }
 
@@ -1728,7 +2007,8 @@ export class ZCGameRenderWorld {
                 node.name = `SkillEffect_${event.skillId}_${event.id}`;
                 // 同上：视图组件在 ZCGameEffect.prefab 上。
                 const view = node.getComponent(ZCCombatEffectView)!;
-                view.initialize(event.effectPrefabPath ? this.options.effectVisualPrefabs.get(event.effectPrefabPath) || null : null);
+                view.initialize(event.effectPrefabPath ? this.effectVisualPrefabs.get(event.effectPrefabPath) || null : null,
+                    !!this.options.allowGenericEffects && !!event.effectPrefabPath);
                 entityId = this.createEntity('effect', event.id, node);
                 this.pooledEntityKeys.set(entityId, key);
                 this.effectViews.set(entityId, view);

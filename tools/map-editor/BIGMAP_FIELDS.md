@@ -93,7 +93,7 @@ column= hexId % columns
 | `ring` | int | **必须**（编辑器缺省 0） | 落位时选的环号。**不能由几何反推** —— 种子生成有「目标环占满就退一环」，反推会让往返对拍假红 |
 | `rangeHex` | int[] | 缺省 `[]` | 势力范围标注（P1 联盟层才进规则） |
 | `adjacentCityIds` | int[] | 缺省 `[]` | 相邻城 id，去重 + 升序写回 |
-| `label` | string | 缺省 `String(cityId)` | 图上编号，如 `8-1` |
+| `label` | string | 缺省 `String(cityId)` | 图上编号，**纯数字拼接**：章节 + 关卡补足两位，如 `801`（= 8-1）、`111`（= 1-11）。旧写法 `8-1` 会在 2026-10-27 起统一成数字 |
 
 占格数：`layer === 4`（王座）⇒ 6 格，其余 ⇒ 4 格。空间不够时编辑器直接拒绝落位，不会硬塞。
 
@@ -246,7 +246,7 @@ bases:   baseId name isPlayer hexId ring power
     "ring": 0,
     "rangeHex": [741, 742],
     "adjacentCityIds": [102],
-    "label": "1-1"
+    "label": "101"
   }],
   "monsters": [{
     "instanceId": 1,

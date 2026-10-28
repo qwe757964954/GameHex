@@ -181,3 +181,45 @@ test('中立格只认本方锚点：贴着敌方的我方买不了，敌方 AI �
         configureZCMap(legacyLayout);
     }
 });
+
+test('废墟及小兵占领后的空地均不解锁周边己方格或中立格', () => {
+    configureZCMap(neutralLayout);
+    try {
+        for (const owner of ['player', 'enemy'] as const) {
+            for (const tileOwner of ['neutral', owner] as const) {
+                const { match: base, tile, anchor } = neutralNextTo(captureZCMatchConfig().map.owners, owner);
+                const match: ZCMatchConfig = {
+                    ...base,
+                    rules: { ...base.rules, enemyAiIntervalSeconds: 10000 },
+                    units: base.units.map((definition) => ({ ...definition, moveSpeed: 0 })),
+                };
+                const snapshot = ZCGameModel.createInitialState(() => 0.1, match);
+                snapshot.hexes[tile.id].owner = tileOwner;
+                snapshot.hexes[anchor].state = 'ruins';
+                snapshot.hexes[anchor].building = 'none';
+                snapshot.hexes[anchor].developmentResolved = false;
+                snapshot.hexes[anchor].hp = 0;
+                snapshot.hexes[anchor].maxHp = 0;
+                const runner = stationaryUnit(match, anchor);
+                runner.owner = owner;
+                snapshot.units = [runner];
+                snapshot.nextUnitId = 2;
+                const game = new ZCGameModel(snapshot, () => 0.1, match);
+                const expectedState = tileOwner === 'neutral' ? 'occupiable' : 'occupied';
+
+                assert.equal(game.snapshot.hexes[anchor].state, 'ruins');
+                assert.equal(game.snapshot.hexes[tile.id].state, expectedState, '废墟不提供开发锚点');
+                assert.equal(game.canDevelopFor(owner, tile.id), false);
+
+                game.tick(0.05);
+                assert.equal(game.snapshot.hexes[anchor].owner, owner);
+                assert.equal(game.snapshot.hexes[anchor].state, 'occupied', '小兵经过后只占据空地');
+                assert.equal(game.snapshot.hexes[anchor].developmentResolved, false);
+                assert.equal(game.snapshot.hexes[tile.id].state, expectedState, '占领也不解锁周边');
+                assert.equal(game.canDevelopFor(owner, tile.id), false);
+            }
+        }
+    } finally {
+        configureZCMap(legacyLayout);
+    }
+});

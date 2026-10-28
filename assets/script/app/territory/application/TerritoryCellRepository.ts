@@ -34,7 +34,7 @@ import { TERRITORY_REQUEST_STATUS, type TerritoryRequestFailure, type TerritoryR
  * 这正是 `ProcedureMatching` 踩过的坑（推送表没人写却当数据源用）。
  *
  * ⚠️ 例外是 **`CmdCityChapterPassCellBroMsg`（通关格子广播）**—— 它是**真的服务端主动推**，
- * 走 `GameNet.addEvent` 订阅（见 `listenPassCellsBro`），不走 req、也不进 `CacheMgr`。
+ * 由 `MainTerritoryMap` 通过 `GameNet.addEvent` 订阅，不走 req、也不进 `CacheMgr`。
  * 所以「服务端一条都不推」只对 **req 侧那张表**成立，别拿它当「没有推送」的证据。
  *
  * ## ⚠️ 写请求一律**不乐观更新**
@@ -97,144 +97,29 @@ export class TerritoryCellRepository {
         return this.state;
     }
 
-    // ============================================================
-    // 服务端主动推送：通关格子广播
-    // ============================================================
-
-    /** Bro 订阅句柄（`GameNet.removeCallerEvent` 的凭据），没订阅过为 `null`。 */
-    private broListener: object | null = null;
-
-    /** Bro 落地回调：由 `TerritoryPresenter` 注入（它才有 `TerritoryProgress` 与刷新能力）。 */
-    private onPassCellsBro: ((levelChapter: number, cellIds: readonly number[]) => void) | null = null;
-
-    /**
-     * 订阅「通关格子」广播（`CmdCityChapterPassCellBroMsg`）。
-     *
-     * ## 为什么必须显式订阅
-     *
-     * `RequestMsg` 那套只管**自己发起的 req→rsp**；服务端主动推的消息只能靠
-     * `GameNet.addEvent(消息名, …)` 接（`ChatRepository` 的 `CmdChatBroMsg` 同款）。
-     * **不订阅的症状是零报错的静默失效** —— 联机时看不到别人的通关，界面一切正常。
-     *
-     * ## ⚠️ `cellId` 是**数组**（`repeated uint32`），不是单值
-     *
-     * 一次广播可能带多个格子（`[327]` / `[12, 27, 33]`），所以转发的是 `readonly number[]`。
-     * protobufjs 把它解成普通 `number[]`（`uint32` 不是 `uint64`，**没有 `Long` 转换问题**，
-     * 与 `decodeCellBitSet` 处理的 `repeated uint64` 不同 —— 别在这儿套那个函数）。
-     *
-     * ## 重复订阅幂等
-     *
-     * 领地页可能反复 `open`；已订阅时只换回调、不重复挂监听 ——
-     * 否则同一个包会被处理多次，表现为「一次广播新增了 N 个格子」。
-     */
-    listenPassCellsBro(onPassCells: (levelChapter: number, cellIds: readonly number[]) => void): void {
-        this.onPassCellsBro = onPassCells;
-        if (this.broListener) return;
-        this.broListener = {};
-        GameNet.instance.addEvent(
-            'CmdCityChapterPassCellBroMsg',
-            this.broListener as never,
-            (msg: unknown) => this.onBroMessage(msg),
-        );
-    }
-
-    /** 退订并清掉回调（关界面 / 登出）。 */
-    unlistenPassCellsBro(): void {
-        this.onPassCellsBro = null;
-        if (!this.broListener) return;
-        GameNet.instance.removeCallerEvent(this.broListener as never);
-        this.broListener = null;
-    }
-
-    // ============================================================
-    // 服务端主动推送：章节格子状态（战斗结束 / 通关后不经请求下发）
-    // ============================================================
-
-    /** CellInfo 订阅句柄，没订阅过为 `null`。 */
-    private cellInfoListener: object | null = null;
-
-    /** CellInfo 落地回调：由 `TerritoryPresenter` 注入。 */
-    private onCellInfo: ((state: ITerritoryCellState) => void) | null = null;
-
-    /** 裁剪上界（`rows × columns`），注册时由 Presenter 传入。 */
-    private cellInfoMaxCell = 0;
-
-    /**
-     * 章节格子拉取是否正在进行。用来在事件回调里**排除 fetchChapterCells 自己的响应**：
-     * 每条响应都会经 `msgEventProxy` 广播，fetch 那次已在 RequestMsg 回调里 readState 处理，
-     * 不该再当"主动推"落地；主动下发时没有在途 fetch，才处理。
-     */
+    /** 排除主动拉取同步广播的响应，避免按推送重复合并。 */
     private fetchInProgress = false;
 
-    /**
-     * 订阅服务端**主动下发**的章节格子状态（`CmdCityChapterCellInfoRspMsg`）。
-     *
-     * ## 为什么要单独订阅
-     *
-     * 战斗结束、关卡通关后，后端会不经请求下发一条 `CmdCityChapterCellInfoRspMsg`
-     * （用户明确：前端不需要再发 `CmdCityChapterPassCellReqMsg`，那只会被回
-     * 「章节格子非资源类型」）。这条消息不是 Bro（名字不以 `BroMsg` 结尾），
-     * 走 `GameNet.addEvent` 接，且需在收到时让 Presenter 刷新。
-     *
-     * ⚠️ 框架在收到"无匹配请求的非 Bro 响应"时会打一条 `返回协议没有找到发送的msgResult`
-     * 日志，那是误报（这确实是主动推），但消息仍会通过 `msgEventProxy` 广播到这里。
-     *
-     * @param maxCell 本章格子总数（`rows × columns`），用于裁剪上界
-     * @param onState 收到完整快照时的回调
-     */
-    listenCellInfo(maxCell: number, onState: (state: ITerritoryCellState) => void): void {
-        this.onCellInfo = onState;
-        this.cellInfoMaxCell = maxCell;
-        if (this.cellInfoListener) return;
-        this.cellInfoListener = {};
-        GameNet.instance.addEvent(
-            'CmdCityChapterCellInfoRspMsg',
-            this.cellInfoListener as never,
-            (msg: unknown) => this.onCellInfoMessage(msg),
-        );
-    }
-
-    /** 退订并清掉回调（关界面 / 登出）。 */
-    unlistenCellInfo(): void {
-        this.onCellInfo = null;
-        if (!this.cellInfoListener) return;
-        GameNet.instance.removeCallerEvent(this.cellInfoListener as never);
-        this.cellInfoListener = null;
-    }
-
-    /** 把主动下发的 CellInfo 收敛成快照再回调；fetch 自己的响应（在途 fetch）忽略。 */
-    private onCellInfoMessage(msg: unknown): void {
-        if (this.fetchInProgress) return;
+    /** 解析页面收到的完整快照；请求响应由 fetchChapterCells 自己处理。 */
+    readCellInfo(msg: unknown, maxCell: number): ITerritoryCellState | null {
+        if (this.fetchInProgress) return null;
         const record = msg as { levelChapter?: unknown } | null;
         const chapter = this.normalizeChapter(Number(record?.levelChapter));
-        // quiet 解析：主动下发不重复打印诊断日志。
-        const state = this.readState(msg, chapter, this.cellInfoMaxCell, true);
-        if (state) {
-            this.state = state;
-            this.onCellInfo?.(state);
-        }
+        const state = this.readState(msg, chapter, maxCell, true);
+        if (state) this.state = state;
+        return state;
     }
 
-    /**
-     * 把 Bro 报文收敛成 `(levelChapter, cellIds)` 再交给回调。
-     *
-     * ⚠️ **章节号必须归一到与 req 同一口径**（`normalizeChapter`）：Bro 里的 `levelChapter=0`
-     * 若不归一会与「正在看的 chapterId」比不上，格子就白收了（症状：格子没变但也没报错）。
-     *
-     * ⚠️ `cellId` 只做「**非负整数**」过滤，不做上界裁剪：上界要靠地图 `rows × columns`，
-     * 而 Repository 这层没有地图（`applyServerState` 里已有 `validCell` 会按 `total` 裁）。
-     * 这里重复裁一遍反而会与「服务端已扩容、客户端地图是旧的」打架。
-     */
-    private onBroMessage(msg: unknown): void {
+    /** Bro 的 cellId 是普通 uint32 列表，不是快照使用的 uint64 位集。 */
+    readPassCellsBro(msg: unknown): { readonly levelChapter: number; readonly cellIds: readonly number[] } | null {
         const record = msg as { levelChapter?: unknown; cellId?: unknown } | null;
-        if (!record || typeof record !== 'object') return;
+        if (!record || typeof record !== 'object') return null;
         const raw = record.cellId;
         const cellIds = (Array.isArray(raw) ? raw : raw === undefined || raw === null ? [] : [raw])
             .map(Number)
             .filter((cell) => Number.isInteger(cell) && cell >= 0);
-        // 空数组 = 服务端只广播了章节号、没有格子 ⇒ 无事可做，别去惊动界面。
-        if (cellIds.length === 0) return;
-        this.onPassCellsBro?.(this.normalizeChapter(Number(record.levelChapter)), cellIds);
+        if (cellIds.length === 0) return null;
+        return { levelChapter: this.normalizeChapter(Number(record.levelChapter)), cellIds };
     }
 
     /**
@@ -248,16 +133,16 @@ export class TerritoryCellRepository {
     async fetchChapterCells(
         levelChapter: number,
         maxCell: number,
-        caller?: unknown,
+        caller?: object,
     ): Promise<TerritoryCellFetchResult> {
         const chapter = this.normalizeChapter(levelChapter);
-        // 标记在途 fetch：响应到达时（同一次收包同步广播）onCellInfoMessage 据此忽略，
+        // 标记在途 fetch：响应到达时（同一次收包同步广播）readCellInfo 据此忽略，
         // 不把自己的响应当主动推重复落地。
         this.fetchInProgress = true;
         try {
             let resolved: ITerritoryCellState | null = null;
             const sent = await this.send(
-                () => new RequestTerritoryCellInfo({ levelChapter: chapter }, caller as never, (rsp) => {
+                () => new RequestTerritoryCellInfo({ levelChapter: chapter }, caller, (rsp) => {
                     resolved = this.readState(rsp, chapter, maxCell);
                 }),
                 '[TerritoryCell] 拉取章节格子信息失败',
@@ -287,13 +172,13 @@ export class TerritoryCellRepository {
      * 所以这里把回包里的格子清单原样带出去，由调用方**逐格**记账。
      * 空数组（服务端没给）时退回请求的那一格 —— 保守但不会把本次解锁记丢。
      */
-    async unlockCell(levelChapter: number, cellId: number, caller?: unknown): Promise<TerritoryWriteResult> {
+    async unlockCell(levelChapter: number, cellId: number, caller?: object): Promise<TerritoryWriteResult> {
         let unlocked: number[] = [];
         let rewards: ITerritoryGrantedReward[] = [];
         const result = await this.writeWithSucc(
             (recordSuccess) => new RequestTerritoryUnlockCell(
                 { levelChapter: this.normalizeChapter(levelChapter), cellId },
-                caller as never,
+                caller,
                 (rsp) => {
                     unlocked = readCellIdArray(rsp);
                     const success = Number((rsp as { succ?: unknown })?.succ) === 1;
@@ -308,12 +193,12 @@ export class TerritoryCellRepository {
     }
 
     /** 通关格子（占领）。 */
-    async passCell(levelChapter: number, cellId: number, caller?: unknown): Promise<TerritoryWriteResult> {
+    async passCell(levelChapter: number, cellId: number, caller?: object): Promise<TerritoryWriteResult> {
         let rewards: ITerritoryGrantedReward[] = [];
         const result = await this.writeWithSucc(
             (recordSuccess) => new RequestTerritoryPassCell(
                 { levelChapter: this.normalizeChapter(levelChapter), cellId },
-                caller as never,
+                caller,
             (rsp) => {
                 const success = Number((rsp as { succ?: unknown })?.succ) === 1;
                 recordSuccess(success);
@@ -333,7 +218,7 @@ export class TerritoryCellRepository {
     async startBattle(
         battleType: number,
         battleParams: readonly string[],
-        caller?: unknown,
+        caller?: object,
     ): Promise<TerritoryStartBattleResult> {
         const started = await requestStartBattle(battleType, battleParams, caller);
         if (!started) return { ok: false, reason: TERRITORY_REQUEST_STATUS.failed };
@@ -341,11 +226,11 @@ export class TerritoryCellRepository {
     }
 
     /** 章节扫荡。 */
-    async sweep(levelChapter: number, cellId: number, caller?: unknown): Promise<TerritoryWriteResult> {
+    async sweep(levelChapter: number, cellId: number, caller?: object): Promise<TerritoryWriteResult> {
         return this.writeWithSucc(
             (recordSuccess) => new RequestTerritorySweep(
                 { levelChapter: this.normalizeChapter(levelChapter), cellId },
-                caller as never,
+                caller,
                 (rsp) => { recordSuccess(Number((rsp as { succ?: unknown })?.succ) === 1); },
             ),
             '[TerritoryCell] 章节扫荡失败',
@@ -356,11 +241,11 @@ export class TerritoryCellRepository {
      * 领挂机奖励。回包带 `idleTime`（上次挂机时间戳，秒）。
      * 领奖态由服务端 `rewardState` 权威给出，客户端不自行推断。
      */
-    async claimIdleReward(levelChapter: number, caller?: unknown): Promise<TerritoryWriteResult> {
+    async claimIdleReward(levelChapter: number, caller?: object): Promise<TerritoryWriteResult> {
         return this.writeWithSucc(
             (recordSuccess) => new RequestTerritoryIdleReward(
                 { levelChapter: this.normalizeChapter(levelChapter) },
-                caller as never,
+                caller,
                 (rsp) => {
                     const time = Number((rsp as { idleTime?: unknown })?.idleTime);
                     this.lastIdleTime = Number.isFinite(time) && time > 0 ? time : 0;

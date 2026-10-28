@@ -4,7 +4,7 @@ import test from 'node:test';
 import { loadViews } from './helpers/zcds-view-fixtures';
 
 /**
- * 受击特效（`assets/resources/units/effects/受击特效/`）+ 阵亡特效（`.../死亡特效/`）的
+ * 受击特效（`assets/bundles/battle/units/effects/受击特效/`）+ 阵亡特效（`.../死亡特效/`）的
  * 资产与接线守卫。
  *
  * 与出生特效同源的**静默失效**清单，每条都能钉死：
@@ -47,9 +47,9 @@ import { loadViews } from './helpers/zcds-view-fixtures';
  */
 
 /** 受击特效根目录（美术源 `0通用-受击` 的五个子目录）。 */
-const HIT_FX_ROOT = 'assets/resources/units/effects/受击特效';
+const HIT_FX_ROOT = 'assets/bundles/battle/units/effects/受击特效';
 /** 阵亡特效根目录。 */
-const DEATH_FX_ROOT = 'assets/resources/units/effects/死亡特效';
+const DEATH_FX_ROOT = 'assets/bundles/battle/units/effects/死亡特效';
 
 /**
  * 受击特效的**原始基准**显示宽度（px，见文件头「缩放口径」）。
@@ -222,7 +222,7 @@ test('受击特效：anim 逐帧引用都命中盘上的图，时长 = (帧数-1
     }
 });
 
-test('受击特效 prefab：layer=UI_2D、sizeMode=RAW、trim 关（抖动三连）', () => {
+test('受击特效 prefab：layer=UI_2D、sizeMode=CUSTOM、trim 关', () => {
     for (const group of HIT_FX_GROUPS) {
         const prefab = readPrefab(`${HIT_FX_ROOT}/${group.name}/${group.name}.prefab`);
         const node = findType(prefab, 'cc.Node');
@@ -230,8 +230,8 @@ test('受击特效 prefab：layer=UI_2D、sizeMode=RAW、trim 关（抖动三连
         assert.ok(node && sprite, `${group.name} prefab 结构异常`);
         assert.equal(node!._layer, 33554432,
             `${group.name} 的 layer 必须是 UI_2D(33554432)，落DEFAULT 就完全看不见`);
-        assert.equal(sprite!._sizeMode, 2,
-            `${group.name} 的 sizeMode 必须是 RAW(2)：各帧 trim 包围盒不同，CUSTOM 会忽大忽小地抖`);
+        assert.equal(sprite!._sizeMode, 0,
+            `${group.name} 缩图后必须使用 CUSTOM 固定显示画布`);
         assert.equal(sprite!._isTrimmedMode, false,
             `${group.name} 的 trim 必须关，否则位置也跟着跳`);
         assert.ok(sprite!._spriteFrame, `${group.name} prefab 没绑首帧 spriteFrame`);
@@ -348,10 +348,10 @@ test('受击特效：加载侧只点名四个职业，「中毒」不进映射�
  */
 test('受击特效：加载器容错加载 + 逐个点名，不 loadDir（别把中毒那组捞进来）', () => {
     const loader = readFileSync('assets/script/app/zcds/application/ZCGameLoader.ts', 'utf8');
-    assert.ok(loader.includes('units/effects/死亡特效/死亡特效'), '缺 DEATH_FX_URL');
+    assert.ok(readFileSync('assets/script/app/zcds/model/ZCGameResourcePlan.ts', 'utf8').includes('units/effects/死亡特效/死亡特效'), '缺 DEATH_FX_URL');
     assert.ok(loader.includes('loadDeathFxPrefab'), '缺阵亡特效容错加载器');
     assert.ok(loader.includes('loadHitFxPrefabs'), '缺受击特效加载器');
-    assert.ok(loader.includes('units/effects/受击特效'), '缺 HIT_FX_DIRECTORY');
+    assert.ok(readFileSync('assets/script/app/zcds/model/ZCGameResourcePlan.ts', 'utf8').includes('units/effects/受击特效'), '缺 HIT_FX_DIRECTORY');
     // loadHitFxPrefabs 函数体内不能出现 loadDir
     const body = /private async loadHitFxPrefabs\([\s\S]*?\n    }/.exec(loader)?.[0] ?? '';
     assert.ok(body.length > 0, '找不到 loadHitFxPrefabs 实现');
@@ -678,7 +678,7 @@ test('受击/阵亡/出生特效：destroy() 显式销毁全部在播节点，�
  * 与其它特效同源的**静默失效**清单：layer 落 DEFAULT ⇒ 看不见；`sizeMode` 不是 RAW(2)
  * 或 `trim=true` ⇒ 4 帧 trim 包围盒不同（156~189）⇒ 逐帧忽大忽小；`_defaultClip` 空 ⇒ 不播。
  */
-const BUILDING_DESTROY_FX_ROOT = 'assets/resources/units/effects/建筑死亡特效';
+const BUILDING_DESTROY_FX_ROOT = 'assets/bundles/battle/units/effects/建筑死亡特效';
 const BUILDING_DESTROY_FX_NAME = '建筑死亡特效';
 /** 屏上目标宽度：与受击 / 出生同基准 110px（建筑本体归一宽 70，烟雾要盖得住它）。 */
 const BUILDING_DESTROY_FX_SCREEN_WIDTH = 110;

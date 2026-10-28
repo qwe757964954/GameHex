@@ -189,6 +189,23 @@ for (let index = 0; index < centers.length; index += 1) {
     }
 }
 
+/**
+ * 城池编号 = **纯数字拼接**（用户 2026-10-27）：章节数字直接衔关卡数字，关卡不足两位补 0。
+ *
+ * | 旧 | 新 | 说明 |
+ * | --- | --- | --- |
+ * | `1-1` | `101` | 拼完只有 2 位 ⇒ 中间补 0 |
+ * | `1-11` | `111` | 拼完 3 位 ⇒ 只是删掉横杠 |
+ *
+ * 等价于"章节 + 关卡补足两位"，章节 1~8、关卡 ≤ 99 时恒为 3 位、不带任何分隔符
+ * （地图上的编号气泡只有一格宽，`1-1` 的横杠会把编号挤成两行）。
+ *
+ * ⚠️ 改这里要同步 `presets/bigmap/*.json` 里的存量数据；`tools/build_camp81.py` 两种格式都认。
+ */
+function cityLabel(level: number, index: number): string {
+    return `${level}${String(index).padStart(2, '0')}`;
+}
+
 interface ICityDraft {
     cityId: number;
     level: number;
@@ -215,7 +232,7 @@ for (const plan of CITY_PLAN) {
         cities.push({
             cityId: nextCityId,
             level: plan.level,
-            label: `${plan.level}-${index + 1}`,
+            label: cityLabel(plan.level, index + 1),
             anchorHexId: claimed[0],
             hexIds: claimed,
             ring: Math.round(ringOf(claimed[0])),

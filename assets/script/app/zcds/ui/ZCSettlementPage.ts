@@ -1,8 +1,8 @@
-import { _decorator, Button, Label, Node, Sprite, SpriteFrame } from 'cc';
+import { _decorator, Button, Label, Node, Sprite } from 'cc';
 import { PopupBase } from '../../../framework/ui/PopupBase';
 import { PopupCloseReason } from '../../../framework/ui/PopupDef';
 import { VirtualScrollView } from '../../../vscrollview/VScrollView';
-import { GoodsBox } from '../../itemdetail/GoodsBox';
+import { RewardItemView, type IRewardItemData } from '../../common/RewardItemView';
 import { loadIdArtByRel } from '../../itemdetail/ItemDetailArtLoader';
 import { ZCGameUiEvent } from '../view/ZCGameHudEvents';
 import { EventMgr } from '../../../framework/event/EventMgr';
@@ -18,16 +18,16 @@ const TITLE_RELS = {
 /** 结算页的两态（图标文案里的「战斗胜利 / 战斗失败」走美术，不写文字）。 */
 export type ZCSettlementOutcome = 'victory' | 'defeat';
 
-/** 变强途径三个入口的键（点哪个由上层决定）。 */
+/** 变强途径三个入口 —— 作为 `SettlementGrowEntry` 事件的 payload 派发出去。 */
 export type ZCSettlementGrowEntry = 'equip' | 'hero' | 'rune';
 
-/** 一个奖励格：**帧已加载好**再传（解析链在调用方，页面只负责画）。 */
-export interface IZCSettlementReward {
-    readonly qualityFrame: SpriteFrame | null;
-    readonly iconFrame: SpriteFrame | null;
-    /** 数量文案；空串 = 不显示数量（`GoodsBox` 口径）。 */
-    readonly number: string;
-}
+/**
+ * 一个奖励格：**公共奖励格 `ui/common/RewardItem.prefab`** 的数据。
+ *
+ * 宿主只喂 `resId` + `amount`，图标 / 品质框 / 数量由 `RewardItemView` 自己解析
+ * （与宝箱详情、关卡界面、玩家关卡弹窗共用同一份口径，见 `common/RewardItemView.ts`）。
+ */
+export type IZCSettlementReward = IRewardItemData;
 
 /** `ZCSettlementPage.open` 的 userData。 */
 export interface IZCSettlementOptions {
@@ -43,41 +43,43 @@ export interface IZCSettlementOptions {
     readonly rankProgress?: number;
     /** 段位说明（「本次战斗段位获得100积分」）。 */
     readonly rankHint?: string;
-    /** 通关奖励（条数不限；虚拟列表按视口铺槽位）。 */
+    /** 通关奖励（条数不限；虚拟列表按视口铺槽位）。宿主只给 `resId` + `amount`。 */
     readonly rewards?: readonly IZCSettlementReward[];
-    /** 双倍奖励。**本期没有接线**：不给就整组收起 `BtnDouble`（见 {@link onOpen}）。 */
-    readonly onDoubleReward?: () => void;
-    /** 变强途径三个入口。**本期没有接线**：不给就整组收起 `Panel/Grow`（见 {@link onOpen}）。 */
-    readonly onGrowEntry?: (entry: ZCSettlementGrowEntry) => void;
-    //  确定/关闭**不走回调**：页面只 `EventMgr.instance.emit(ZCGameUiEvent.SettlementConfirm)`，
-    // 「回主界面 / 换流程」由控制器订阅后处理（契约见 `view/ZCGameHudEvents.ts`）。原先的 `onConfirm`
-    // 必填字段要求调用方把流程入口塞进视图，还得给「没拿到回调」写一条告警兜底 —— 现在都不需要了。
+    /**
+     * 是否接了「双倍奖励」。缺省 / `false` ⇒ `BtnDouble` 常显但**置灰**（不收起，见 `renderEntryGroups`）。
+     *
+     * 它只回答「点了有没有人接」，行为本身由控制器订阅 `SettlementDoubleReward` 决定。
+     */
+    readonly hasDoubleReward?: boolean;
+    /**
+     * 是否接了「变强途径」。缺省 / `false` ⇒ `Panel/Grow`（连标题）**整组收起**。
+     *
+     * 入口点哪个走 `SettlementGrowEntry` 事件的 payload（`'equip' | 'hero' | 'rune'`）。
+     */
+    readonly hasGrowEntry?: boolean;
+    //  所有按钮**都不走回调**：页面只 `EventMgr.instance.emit(...)`，「回主界面 / 换流程 /
+    //  双倍 / 变强入口」全由控制器订阅后处理（契约见 `view/ZCGameHudEvents.ts`）。回调那套
+    //  要求调用方把流程入口塞进视图，漏传一个就是「点了没反应且零报错」。
 }
 
 /**
  * 对局结算页（挂在 `ZCSettlement.prefab` 根节点上）。
  *
- * 蓝湖「结算-胜利」/「结算-失败」两张稿：同一套骨架，只有标题套图不同。
- * 结构、尺寸、美术全在 prefab 里；代码只按数据刷文案 / 标题图 / 段位条 / 奖励格。
+ * 胜负两稿同一骨架，只有标题套图不同；**结构 / 尺寸 / 美术全在 prefab**，代码只按数据刷文案、
+ * 标题图、段位条与奖励格。奖励格复用**公共奖励格 `ui/common/RewardItem.prefab`**（`RewardItemView`
+ * 自己解析图标 / 品质框 / 数量，宿主只喂 `resId` + `amount`），奖励区是虚拟列表
+ * （视窗 / 模板 / 5 列等参数都在 prefab 里），代码只喂条数。全屏遮罩 `Dim` 是纯 prefab 件、
+ * **代码不碰** —— 改回 `cc.Graphics` 手画会在长屏上下各漏 165px。
  *
- * 奖励格复用物品详情那套 `GoodsBox`（品质框 `cu_quality_*` + 道具图标 + 数量），
- * **帧由调用方解析好再传**（`image/settlement/` 之外的美术不归这一页管）。
- *
- *  奖励区是**虚拟列表**（`VirtualScrollView`，视窗 + content + 模板 `Slot` 全在本 prefab 内联）：
- * 槽位只有「视口放得下的行数 + buffer + 2」个、靠 `renderItemFn` 反复复用 ⇒ 奖励条数不再被格数卡住。
- * 列表参数（5 列 / 列距 11 / 行距 14 / 上下留白 20）全在 prefab 的 Inspector 里，代码只喂条数与内容。
- *
- *  全屏遮罩 `Dim` 是**纯 prefab 件**（白块 Sprite + 染色 + 四边 Widget），**代码不碰** ——
- * 别在这里改回 `cc.Graphics` 手画矩形：那个只在 `onInit` 画一次、用的是 prefab 烘的 720×1280，
- * 真机可见区 720×1610 会上下各漏 165px（`UITransform` 被 Widget 拉大了，画上去的矩形却没变）。
- *
- * ## 两条不可绕过的收尾约定
- *
- *  ① **关闭只走 `ZCGameUiEvent.SettlementConfirm` 事件**（页面自己不关、也不改流程），且**禁止空白关闭**
- *  （`canCloseOnBlank()` 覆写为 `false`）。结算页一关，`ZCGame.openSettlement` 置死的
- *  `settlementOpened` 就让它再也弹不出来 ⇒ 「关页」等价于「卡死」，不能当退路。
- *  ② **没接线的功能整组收起**：`onDoubleReward` / `onGrowEntry` 不给就收起 `BtnDouble`
- *  与 `Panel/Grow`（含标题），与 `renderRank` 的 `hasRank` 同一口径 —— 不留点了没反应的死按钮。
+ * 三条不可绕过的约定：
+ *  ① **页面自己不关、也不改流程**，只派发意图事件；`canCloseOnBlank()` 恒 `false`
+ *     （关页 = `settlementOpened` 置死后再也弹不出来 = 卡死）。真正关页的是
+ *     `ZCGame.onSettlementConfirm`：先 `close()` 再 `navigate`，切流被取消时它负责把页面补回来
+ *     —— 所以别在这里改成 `this.close()`。
+ *  ② **按钮一律只 `emit` 事件**（`SettlementConfirm` / `SettlementDoubleReward` /
+ *     `SettlementGrowEntry`），控制器订阅后处理；页面不持有任何回调。
+ *  ③ **没接线的功能不留死按钮**：`hasDoubleReward` / `hasGrowEntry` 缺省就置灰 / 整组收起
+ *     （与 `renderRank` 的 `hasRank` 同一口径）。
  */
 @ccclass('ZCSettlementPage')
 export class ZCSettlementPage extends PopupBase {
@@ -132,7 +134,6 @@ export class ZCSettlementPage extends PopupBase {
     @property({ type: Button, group: '变强途径', tooltip: 'Panel/Grow/Entry2：符文' })
     entryRune: Button = null!;
 
-    private options: IZCSettlementOptions | null = null;
     /** 本趟要显示的奖励（`renderItemFn` 按下标现取 —— 禁止闭包捕获，槽位会跨趟复用）。 */
     private rewards: readonly IZCSettlementReward[] = [];
     /** 标题套图的加载代号：两态切换 / 关闭后到达的异步结果要丢掉。 */
@@ -141,15 +142,10 @@ export class ZCSettlementPage extends PopupBase {
     private confirming = false;
 
     protected onInit(): void {
-        // 虚拟列表的回调只在初始化时接**一次**（槽位节点被反复复用，回调里再挂事件会越滚越多）。
-        //  赋**具名方法 + `.bind(this)`**（规范 §7.5 配套第 3 条）：`VScrollView` 侧是
-        // `this.renderItemFn(node, i)` 的**方法调用**语法，不绑的话函数里 `this` 会是 VScrollView
-        // ⇒ `this.rewards` 读到 undefined 直接崩。
+        // 回调与按钮监听都只在实例生命周期内绑**一次**（`PopupBase` 保证首次打开前调一次）：
+        // 虚拟列表要给 `.bind(this)`（`VScrollView` 是方法调用语法，不绑 `this` 会是它自己）；
+        // 按钮用「具名方法 + this 作 target」，将来要 `off` 有稳定引用，箭头闭包做不到。
         this.rewardList.renderItemFn = this.renderReward.bind(this);
-        // 按钮只在实例生命周期内绑一次（`PopupBase` 保证首次打开前调一次），
-        // 节点失活 / 池化复用不会掉监听，补绑会叠出多份。
-        // 监听一律**具名方法 + this 作 target**（范本 `GameRunAway.onInit`）：调用栈里能看到是谁点的，
-        // 将来要 `off` 也有稳定的函数引用可传 —— 箭头闭包这两样都做不到。
         this.doubleButton.node.on(Button.EventType.CLICK, this.onDoubleRewardClicked, this);
         this.confirmButton.node.on(Button.EventType.CLICK, this.onConfirmClicked, this);
         this.entryEquip.node.on(Button.EventType.CLICK, this.onEquipEntryClicked, this);
@@ -157,9 +153,9 @@ export class ZCSettlementPage extends PopupBase {
         this.entryRune.node.on(Button.EventType.CLICK, this.onRuneEntryClicked, this);
     }
 
+    /** 这一页**不留 userData**：所有意图都派发出去，页面不需要记得「谁接的」。 */
     protected onOpen(userData?: IZCSettlementOptions): void {
         if (!userData) return;
-        this.options = userData;
         this.confirming = false;
         this.renderRank(userData);
         this.renderRewards(userData.rewards ?? []);
@@ -170,48 +166,37 @@ export class ZCSettlementPage extends PopupBase {
     protected onClose(_reason: PopupCloseReason): void {
         // 关掉后异步回来的标题图不许再写（槽位会被下一局复用）。
         this.titleRevision += 1;
-        this.options = null;
     }
 
-    /**
-     * 结算页**绝不允许被空白关闭**（覆写基类那层 `closeOnBlank` 的默认放行）。
-     *
-     *  理由：结算是终局页，关闭动作只有一个 —— `onConfirm`（回主界面 / 换流程）。
-     *  走空白关闭等于绕过它 ⇒ 页面消失、对局还开着，而调用方 `openSettlement` 早已把
-     *  `settlementOpened` 置死 ⇒ 这局**再也弹不出结算页**，玩家卡死在战斗结束态。
-     *
-     *  ⚠️ 与调用方 `ZCSettlementPage.open({ closeOnBlank: false })` 的关系：
-     *  那只是**同向的一层保险**，兜底必须放在页面自己身上 —— 参数写漏一次不该出事。
-     */
+    /** 结算页**绝不允许被空白关闭**：那是绕过「确定」⇒ 页面消失、对局还开着、再也弹不回来。 */
     protected canCloseOnBlank(): boolean {
         return false;
     }
 
-    // 按钮响应
+    // 按钮响应：**全部只派发意图**，页面不持有回调（见类头注 ②）
 
     private onDoubleRewardClicked(): void {
-        this.options?.onDoubleReward?.();
+        EventMgr.instance.emit(ZCGameUiEvent.SettlementDoubleReward);
     }
 
     private onEquipEntryClicked(): void {
-        this.options?.onGrowEntry?.('equip');
+        this.emitGrowEntry('equip');
     }
 
     private onHeroEntryClicked(): void {
-        this.options?.onGrowEntry?.('hero');
+        this.emitGrowEntry('hero');
     }
 
     private onRuneEntryClicked(): void {
-        this.options?.onGrowEntry?.('rune');
+        this.emitGrowEntry('rune');
     }
 
-    /**
-     * 确定：只**派发意图事件**，页面自己不关、也不改流程（收尾归控制器）。
-     *
-     *  绝不能退化成 `close()` —— 那正是「页面关了、人还留在对局里」那个坑（2026-10-14 探针逮到过），
-     * 何况对局侧已置死 `settlementOpened`，关了就是卡死。
-     *  `confirming` 保留：连点两下只派发一次（收尾多半是切流程，重复等于 navigate 两次）。
-     */
+    /** 三个入口共用一条事件，点哪个由 payload 区分（控制器按 key 路由）。 */
+    private emitGrowEntry(entry: ZCSettlementGrowEntry): void {
+        EventMgr.instance.emit(ZCGameUiEvent.SettlementGrowEntry, entry);
+    }
+
+    /** 确定：连点两下只派发一次（收尾是切流程，重复发等于 navigate 两次）。 */
     private onConfirmClicked(): void {
         if (this.confirming) return;
         this.confirming = true;
@@ -221,11 +206,7 @@ export class ZCSettlementPage extends PopupBase {
     // 渲染
     
 
-    /**
-     * 标题套图：两态各一套（`image/settlement/`），异步加载完才换。
-     *
-     *  加载期间保留 prefab 里的默认（胜利那套），别先清空 —— 会闪一帧空底板。
-     */
+    /** 标题套图：异步加载完才换；加载期间保留 prefab 默认那套（先清空会闪一帧空底板）。 */
     private async applyTitle(outcome: ZCSettlementOutcome): Promise<void> {
         const revision = ++this.titleRevision;
         const rel = TITLE_RELS[outcome];
@@ -251,12 +232,7 @@ export class ZCSettlementPage extends PopupBase {
         this.rankFill.fillRange = Math.max(0, Math.min(1, data.rankProgress ?? 0));
     }
 
-    /**
-     * 通关奖励：**只喂条数**，格内容由 {@link renderReward} 按需填（虚拟列表铺槽位并复用）。
-     *
-     *  本趟数据存进字段、回调里按下标**现取**：`renderItemFn` 只在首次铺列表时绑一次，
-     * 闭包捕获的本趟数组到了下一局就还是上一局的（技能 §6 的两条时序铁律之一）。
-     */
+    /** 通关奖励：**只喂条数**；内容由 {@link renderReward} 按下标现取（闭包捕获会留上一局的数组）。 */
     private renderRewards(rewards: readonly IZCSettlementReward[]): void {
         this.rewards = rewards;
         this.rewardList.setTotalCount(rewards.length);
@@ -266,22 +242,19 @@ export class ZCSettlementPage extends PopupBase {
 
     /** 把一个奖励填进槽位（新建的或回收来的都要**全量**赋值，别留上一局的数量/图标）。 */
     private renderReward(node: Node, index: number): void {
-        const reward = this.rewards[index];
-        node.getComponent(GoodsBox)!.render(reward.qualityFrame, reward.iconFrame, reward.number, true);
+        // 组件由 `itemPrefab` 焊死、下标由 `setTotalCount` 限死，两处都不可能为空。
+        node.getComponent(RewardItemView)!.render(this.rewards[index]);
     }
 
     /**
-     * 「双倍奖励」与「变强途径」的口径（`renderRank` 的 `hasRank` 同一套思路）：
-     *
-     *  - **双倍奖励按钮常显**：它在设计稿里是奖励区中间那一段（两侧 `RewardLineL/R` 接过去），
-     *    藏掉会中间断一截、左右不对称 ⇒ 一律显示（层片归 prefab，代码不碰美术）；
-     *    但**没接线时 `interactable = false`** —— 看得到、点不动，不做「点了没反应」的假交互。
-     *  - **变强途径**没接线时**整组收起**：它是一整块（底板 + 标题 + 三个入口），
-     *    只收入口会剩一个空标题框，比死按钮更奇怪；收整组则「本期没有这个功能」一眼可见。
+     * 「双倍奖励」与「变强途径」的显隐口径（与 `renderRank` 的 `hasRank` 同一套思路）：
+     *  - 双倍按钮**常显但按 `hasDoubleReward` 置灰**：它在设计稿里是奖励区中间那一段，
+     *    藏掉两侧 `RewardLineL/R` 会断开 ⇒ 一律显示，只在没接线时 `interactable = false`；
+     *  - 变强途径**整组收起**：只收入口会剩一个空标题框，比死按钮更奇怪。
      */
     private renderEntryGroups(data: IZCSettlementOptions): void {
         this.doubleButton.node.active = true;
-        this.doubleButton.interactable = Boolean(data.onDoubleReward);
-        this.growGroup.active = Boolean(data.onGrowEntry);
+        this.doubleButton.interactable = Boolean(data.hasDoubleReward);
+        this.growGroup.active = Boolean(data.hasGrowEntry);
     }
 }

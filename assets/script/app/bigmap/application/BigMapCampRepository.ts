@@ -1,9 +1,35 @@
 import { withTimeout } from '../../net/RequestGuard';
 import { isBigMapCampId, normalizeBigMapCampInfos, type IBigMapCampInfo } from '../model/BigMapCampInfo';
+import { normalizeBigMapCampRoleInfos, type IBigMapCampRoleInfo, type IBigMapRoleEvent } from '../model/BigMapCampRoleInfo';
+import {
+    BIGMAP_CAMP_MOVE_TEXT,
+    BIGMAP_CAMP_MOVE_TYPE,
+    isBigMapCampMoveSucceeded,
+    normalizeBigMapCampMoveRequest,
+    type BigMapCampMoveType,
+    type IBigMapCampMoveRequest,
+    type IBigMapCampMoveResult,
+} from '../model/BigMapCampMove';
 
 export interface IBigMapCampGateway {
     fetchSimple(campIds: readonly number[]): Promise<unknown>;
     fetchDetail(campIds: readonly number[]): Promise<unknown>;
+    /**
+     * 据点角色列表（`CmdSlgCampRoleInfosReqMsg`，一次一个 `campId`）。
+     *
+     * 与 `fetchDetail` 分开：角色是**详情展开后**才需要的附加信息，
+     * 和据点状态（占领/开放）来自两条不同协议，任一条失败都不该拖垮另一条。
+     */
+    fetchRoles(campId: number): Promise<unknown>;
+    /** 迁城（`CmdSlgCampMoveReqMsg`）——**写操作**，与上面三条读请求分开走。 */
+    requestMove(body: IBigMapCampMoveRequest): Promise<unknown>;
+    /**
+     * 角色事件广播（`CmdSlgGameRoleInfoBroMsg`）：出生 / 移动 / 攻击 / 复活。
+     *
+     * 与 `refreshSimple` 那类"失效通知"不同 —— 这条广播**自带完整角色信息**，
+     * 走增量更新而不是重拉。返回取消订阅函数（页面销毁时调）。
+     */
+    subscribeRoleEvents(listener: (event: IBigMapRoleEvent) => void): () => void;
 }
 
 export const BIGMAP_CAMP_REFRESH_SECONDS = 5;
@@ -15,6 +41,15 @@ export class BigMapCampRepository {
     private readonly appliedRevisions = new Map<number, number>();
     private readonly updatedAt = new Map<number, number>();
     private readonly pending = new Map<string, Promise<boolean>>();
+    /** 据点角色列表（`campId` → 该据点内的角色）。空数组是**有效事实**（据点里没人）。 */
+    private readonly roleSnapshots = new Map<number, readonly IBigMapCampRoleInfo[]>();
+    private readonly roleRevisions = new Map<number, number>();
+    /** 正在迁城的据点 id（0 = 空闲）。迁城是写操作，同页串行。 */
+    private movingCampId = 0;
+    /** 角色广播订阅的取消函数（页面销毁时统一摘掉）。 */
+    private unsubscribeRoles: (() => void)[] = [];
+    /** 缓存变化监听（Presenter 用它把角色广播转成一次视图重绘）。 */
+    private listeners: (() => void)[] = [];
     private revision = 0;
     private isDisposed = false;
 
@@ -22,6 +57,129 @@ export class BigMapCampRepository {
 
     get(campId: number): IBigMapCampInfo | null {
         return this.snapshots.get(campId) ?? null;
+    }
+
+    /** 已缓存的角色列表；`null` = 还没成功查过（与「查过、确实没人」的空数组不同）。 */
+    rolesOf(campId: number): readonly IBigMapCampRoleInfo[] | null {
+        return this.roleSnapshots.get(campId) ?? null;
+    }
+
+    /**
+     * 拉某座据点的角色列表。
+     *
+     * 返回 `true` = 这次真的拿到了（哪怕是空列表）；`false` = 超时/断线/坏包/已销毁 ——
+     * 调用方据此决定「维持原样」还是「显示失败」，**不要**用 `false` 去清空已有列表。
+     */
+    refreshRoles(campId: number): Promise<boolean> {
+        if (this.isDisposed || !isBigMapCampId(campId)) return Promise.resolve(false);
+        const key = `roles:${campId}`;
+        const pending = this.pending.get(key);
+        if (pending) return pending;
+        const revision = ++this.revision;
+        const request = this.loadRoles(campId, revision).finally(() => this.pending.delete(key));
+        this.pending.set(key, request);
+        return request;
+    }
+
+    /**
+     * 迁城：把 `campId` 这个据点挪到 `pos`。
+     *
+     * ## 三件必须做对的事
+     *
+     * 1. **串行**：`movingCampId !== 0` 直接拒 —— 迁城是改「我在哪座城」的写操作，
+     *    连点两次第二发必然基于已过期的落点，服务端还可能按先到先得处理。
+     * 2. **回包必须属于本次请求**（`isBigMapCampMoveSucceeded` 比 `req` 三项），
+     *    否则迟到/串包会被当成功（见 `BigMapCampMove.ts` 文件头）。
+     * 3. **失败不清缓存**：一次超时不该把已展示的据点状态、角色列表抹掉，
+     *    交给调用方决定重拉（Presenter 成功后本来就会重拉）。
+     *
+     * 成功后**不在这里**改任何快照 —— 迁城会牵动 `SlgGameInfo.toCampId`（我在哪座城）、
+     * 据点状态和据点内角色三处，由调用方统一重拉，避免仓库自己猜新状态。
+     */
+    async moveCamp(
+        campId: number,
+        pos: number,
+        moveType: BigMapCampMoveType = BIGMAP_CAMP_MOVE_TYPE.Normal,
+    ): Promise<IBigMapCampMoveResult> {
+        if (this.isDisposed) return { ok: false, message: BIGMAP_CAMP_MOVE_TEXT.disposed };
+        const request = normalizeBigMapCampMoveRequest(campId, pos, moveType);
+        if (!request) return { ok: false, message: BIGMAP_CAMP_MOVE_TEXT.invalid };
+        if (this.movingCampId !== 0) return { ok: false, message: BIGMAP_CAMP_MOVE_TEXT.busy };
+        this.movingCampId = request.campId;
+        try {
+            const response = await withTimeout(
+                this.gateway.requestMove(request),
+                READ_TIMEOUT_MS,
+                () => null,
+            );
+            if (this.isDisposed) return { ok: false, message: BIGMAP_CAMP_MOVE_TEXT.disposed };
+            if (!isBigMapCampMoveSucceeded(response, request)) {
+                return { ok: false, message: BIGMAP_CAMP_MOVE_TEXT.failed };
+            }
+            return { ok: true, message: BIGMAP_CAMP_MOVE_TEXT.moved };
+        } catch {
+            return { ok: false, message: BIGMAP_CAMP_MOVE_TEXT.failed };
+        } finally {
+            this.movingCampId = 0;
+        }
+    }
+
+    /**
+     * 把一条角色事件合进**指定据点**的缓存列表（由 Presenter 用 `pos` 反查出 campId 后调用）。
+     *
+     * ## 为什么按 roleId 覆盖、而不是按 pos
+     *
+     * `Move` 事件里 `pos` 已经变了，用 pos 找不到旧记录 ⇒ 会留下一条"幽灵角色"停在旧格上。
+     * `roleId` 才是身份：先摘掉同 roleId 的旧记录，再按新的 `pos` 重新插入并排序。
+     *
+     * ## 没拉过该据点就什么都不做
+     *
+     * 缓存为空 = 从没成功查过这个据点，此时往里面塞一条会让「据点角色：1 人」凭空出现；
+     * 下次 `refreshRoles` 会拿到权威列表。**不猜**是这里的原则。
+     */
+    applyRoleEvent(campId: number, event: IBigMapRoleEvent): boolean {
+        if (this.isDisposed || !isBigMapCampId(campId) || !event) return false;
+        const current = this.roleSnapshots.get(campId);
+        if (!current) return false;
+        // 两把钥匙同时摘：
+        //  · **roleId** —— 这个角色自己的旧记录（`Move` 后 pos 变了，按 pos 找不到它）；
+        //  · **pos**     —— 新位置原来站着的人（一格一人，被顶掉的那条必须消失，
+        //                  否则列表会同时显示两条 `格 12`，而查询回包是按 pos 去重的 —— 两边不一致）。
+        const next = current.filter((role) => role.roleId !== event.role.roleId && role.pos !== event.role.pos);
+        next.push(event.role);
+        next.sort((a, b) => a.pos - b.pos);
+        this.roleSnapshots.set(campId, next);
+        this.notify();
+        return true;
+    }
+
+    /**
+     * 订阅角色事件并自动合进缓存。
+     *
+     * @param campIdOf 由 `pos`（格 id）反查据点 id 的纯函数；查不到返回 0 表示"不归任何据点"
+     * @returns 取消订阅函数
+     */
+    subscribeRoleEvents(campIdOf: (pos: number) => number): () => void {
+        if (this.isDisposed) return () => undefined;
+        const off = this.gateway.subscribeRoleEvents((event) => {
+            const campId = campIdOf(event.role.pos);
+            if (campId > 0) this.applyRoleEvent(campId, event);
+        });
+        this.unsubscribeRoles.push(off);
+        return off;
+    }
+
+    /** 缓存变化通知（角色广播是异步来的，视图要靠它重绘）。 */
+    onChanged(listener: () => void): () => void {
+        this.listeners.push(listener);
+        return () => {
+            this.listeners = this.listeners.filter((item) => item !== listener);
+        };
+    }
+
+    private notify(): void {
+        if (this.isDisposed) return;
+        for (const listener of this.listeners.slice()) listener();
     }
 
     refreshSimple(campIds: readonly number[]): Promise<boolean> {
@@ -34,10 +192,17 @@ export class BigMapCampRepository {
 
     dispose(): void {
         this.isDisposed = true;
+        // 广播订阅必须先摘：否则页面关了还在往已清空的缓存里写，且监听器会一直持有 Presenter。
+        for (const off of this.unsubscribeRoles) off();
+        this.unsubscribeRoles = [];
+        this.listeners = [];
         this.snapshots.clear();
         this.pending.clear();
         this.appliedRevisions.clear();
         this.updatedAt.clear();
+        this.roleSnapshots.clear();
+        this.roleRevisions.clear();
+        this.movingCampId = 0;
     }
 
     private refresh(campIds: readonly number[], isDetail: boolean): Promise<boolean> {
@@ -53,6 +218,22 @@ export class BigMapCampRepository {
         const request = this.load(ids, isDetail, revision).finally(() => this.pending.delete(key));
         this.pending.set(key, request);
         return request;
+    }
+
+    private async loadRoles(campId: number, revision: number): Promise<boolean> {
+        try {
+            const response = await withTimeout(this.gateway.fetchRoles(campId), READ_TIMEOUT_MS, () => null);
+            if (this.isDisposed) return false;
+            const infos = normalizeBigMapCampRoleInfos(response, campId);
+            // `null` = 整包不可用（超时 / 串包 / 结构坏）⇒ 保留旧快照，别把列表抹空。
+            if (!infos) return false;
+            if (revision < (this.roleRevisions.get(campId) ?? 0)) return false;
+            this.roleSnapshots.set(campId, infos);
+            this.roleRevisions.set(campId, revision);
+            return true;
+        } catch {
+            return false;
+        }
     }
 
     private async load(ids: readonly number[], isDetail: boolean, revision: number): Promise<boolean> {

@@ -14,13 +14,20 @@ function deferred() {
 
 function makeGateway() {
     const calls: { kind: string; ids: readonly number[] }[] = [];
+    const roleCalls: number[] = [];
     const simple = deferred();
     const detail = deferred();
+    const roles = deferred();
+    const move = deferred();
+    const moveCalls: { campId: number; pos: number; moveType: number }[] = [];
     const gateway: IBigMapCampGateway = {
         fetchSimple: (ids) => { calls.push({ kind: 'simple', ids }); return simple.promise; },
         fetchDetail: (ids) => { calls.push({ kind: 'detail', ids }); return detail.promise; },
+        fetchRoles: (campId) => { roleCalls.push(campId); return roles.promise; },
+        requestMove: (body) => { moveCalls.push({ ...body }); return move.promise; },
+        subscribeRoleEvents: () => () => undefined,
     };
-    return { calls, simple, detail, gateway };
+    return { calls, roleCalls, moveCalls, simple, detail, roles, move, gateway };
 }
 
 test('回包保持占领状态与开放状态独立，过滤非法字段并按据点去重', () => {

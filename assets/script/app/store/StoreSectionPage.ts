@@ -107,17 +107,15 @@ export class StoreSectionPage extends Component {
         // 口径与 `StorePage` / `MainResBar` 一致（都是 `setEventUpdate`）。
         // ⚠️ 另外 4 段不订阅 —— 它们的内容来自静态表，与背包无关。
         if (section.key === 'gem') {
-            const caller = this as unknown as destroyable;
-            CacheMgr.instance.setEventUpdate('CmdItem', caller, this.onChestWalletChanged);
-            CacheMgr.instance.setEventUpdate('CmdRole', caller, this.onChestWalletChanged);
+            CacheMgr.instance.setEventUpdate('CmdItem', this, this.onChestWalletChanged);
+            CacheMgr.instance.setEventUpdate('CmdRole', this, this.onChestWalletChanged);
         }
     }
 
     onDestroy(): void {
         // 对没订阅过的表 `removeEventCaller` 是 no-op（内部先 `peekCache`）⇒ 不必判断段键。
-        const caller = this as unknown as destroyable;
-        CacheMgr.instance.removeEventCaller('CmdItem', caller);
-        CacheMgr.instance.removeEventCaller('CmdRole', caller);
+        CacheMgr.instance.removeEventCaller('CmdItem', this);
+        CacheMgr.instance.removeEventCaller('CmdRole', this);
     }
 
     /** 背包 / 钱包变化 ⇒ 重刷宝箱段（老端 `VOBag.OnChanged` → `RenderBox` 的对应物）。 */

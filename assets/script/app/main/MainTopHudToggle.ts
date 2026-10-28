@@ -32,20 +32,18 @@ export class MainTopHudToggle extends Component {
     @property({ type: Node, tooltip: 'InviteLabel：邀请文字' })
     inviteLabel: Node = null!;
 
-    @property({ type: Node, tooltip: 'Arrow：展开 / 收起按钮' })
-    arrow: Node = null!;
+    @property({ type: Button, tooltip: 'Arrow：展开 / 收起按钮（绑 cc.Button）' })
+    arrow: Button = null!;
 
     private expanded = true;
 
     onEnable(): void {
-        const button = this.arrow.getComponent(Button);
-        if (!button) return;
-        this.arrow.on(Button.EventType.CLICK, this.toggle, this);
+        this.arrow.node.on(Button.EventType.CLICK, this.toggle, this);
         this.applyState();
     }
 
     onDisable(): void {
-        this.arrow.off(Button.EventType.CLICK, this.toggle, this);
+        this.arrow.node.off(Button.EventType.CLICK, this.toggle, this);
     }
 
     private toggle(): void {
@@ -61,6 +59,6 @@ export class MainTopHudToggle extends Component {
         ]) {
             node.active = this.expanded;
         }
-        this.arrow.angle = this.expanded ? 0 : 180;
+        this.arrow.node.angle = this.expanded ? 0 : 180;
     }
 }

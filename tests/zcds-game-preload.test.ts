@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
-import { HEX_FLIP_PULSE_ART_ROOT, HEX_GROUND_GLOW_ART_ROOT, MAP_RESOURCE_ART_ROOT, SPAWN_REGION_ART_ROOT, GAMEUI_ART_ROOT, NEUTRAL_RESOURCE_UNKNOWN_ICON_NAME } from '../assets/script/app/ArtPaths';
+import { ARTIFACT_CLAIM_BURST_ART_ROOT, HEX_FLIP_PULSE_ART_ROOT, HEX_GROUND_GLOW_ART_ROOT, MAP_RESOURCE_ART_ROOT, SPAWN_REGION_ART_ROOT, GAMEUI_ART_ROOT, NEUTRAL_RESOURCE_UNKNOWN_ICON_NAME } from '../assets/script/app/ArtPaths';
 
 test('建筑 prefab 不保留已删除的固定兵营/防御塔帧，城墙 prefab 使用现有墙砖', () => {
     const revealPrefab = readFileSync('assets/bundles/battle/ui/game/ZCGameCardReveal.prefab', 'utf8');
@@ -83,6 +83,7 @@ test('对局流程在进入前准备地图、配置和全部首屏 Prefab', asyn
             // 地块底部发光序列帧的目录。**必须透传真值**：漏给这个符号时 loader 侧拿到
             // `undefined`，`loadDir(undefined)` 会让下面的目录清单多出一个 `undefined` 项 ——
             // 症状就是「多出一项 undefined」而不是报错，很难看出是桩缺符号（2026-10-14 修）。
+            ARTIFACT_CLAIM_BURST_ART_ROOT,
             HEX_GROUND_GLOW_ART_ROOT,
             HEX_FLIP_PULSE_ART_ROOT,
             // 金币/气泡/中立占位图三组同样透传真值：漏给时 `spriteFramePath` 拼出
@@ -153,17 +154,14 @@ test('对局流程在进入前准备地图、配置和全部首屏 Prefab', asyn
     assert.equal(prepared.baseMatchConfig.configHash, 'loader-snapshot');
     assert.deepEqual(
         loadedDirectories.slice().sort(),
-        [mapDirectory, buildingDirectory, wallDirectory, HEX_GROUND_GLOW_ART_ROOT, HEX_FLIP_PULSE_ART_ROOT].sort(),
+        [mapDirectory, buildingDirectory, wallDirectory, HEX_GROUND_GLOW_ART_ROOT, HEX_FLIP_PULSE_ART_ROOT, ARTIFACT_CLAIM_BURST_ART_ROOT].sort(),
     );
     assert.deepEqual(configuredMaps, ['preloaded-map']);
     assert.deepEqual(loadedPrefabs.sort(), [
         // 本局携带神器的图标（中立资源点「神器充能」格用，图名来自 pvpArtifact[].icon）。
         'image/artifact/霜封冰刃/spriteFrame',
         // 中立资源占位问号 / 金币飞行贴图 / 自选主城区域气泡（三组后期新增的图标加载）。
-        'image/gameui/whh/spriteFrame',
         'image/map-resource/coin_icon/spriteFrame',
-        'image/spawn-region/frame_01/spriteFrame',
-        'image/spawn-region/frame_02/spriteFrame',
         'effects/arrow',
         'effects/empowered',
         'effects/slash',

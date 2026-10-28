@@ -27,6 +27,39 @@ function requireWithUpdateBeat(updateBeat: { UpdateBeat: { loop: (dt: number) =>
     };
 }
 
+test('流程切出、预加载取消与管理器销毁都解除对应宿主的回调', async () => {
+    const context = {
+        exports: {} as { ProcedureManager: new () => any },
+        require: requireWithUpdateBeat(trampolineCounter()), console: { error() {} },
+    };
+    runInNewContext(ts.transpileModule(readFileSync('assets/script/framework/procedure/ProcedureManager.ts', 'utf8'), {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
+    }).outputText, context);
+    class Procedure {
+        className = 'Procedure';
+        onInit() {} onPreload() {} onPreloadCancelled() {} onEnter() {} onLeave() {} destroy() {}
+        _adoptResourceScope() {}
+    }
+    class Pending extends Procedure { onPreload(): any { return new Promise(() => {}); } }
+    class Next extends Procedure {}
+    const released: object[] = [];
+    const manager = new context.exports.ProcedureManager();
+    manager.configure({ callbackOwners: { removeCallerListener: (owner: object) => released.push(owner) },
+        sessionAssets: { clear() {} } });
+    manager.startProcedure(Procedure);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const previous = manager.currentProcedure;
+    const pending = manager.registerProcedure(Pending);
+    manager.changeProcedure(Pending);
+    manager.changeProcedure(Next);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.ok(released.includes(previous), '切出流程必须解除自己的回调');
+    assert.ok(released.includes(pending), '预加载取消必须解除目标流程回调');
+    const current = manager.currentProcedure;
+    manager.onDestroy();
+    assert.ok(released.includes(current));
+});
+
 test('流程预加载失败时保留当前界面并允许再次切换', async () => {
     const code = ts.transpileModule(readFileSync('assets/script/framework/procedure/ProcedureManager.ts', 'utf8'), {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },

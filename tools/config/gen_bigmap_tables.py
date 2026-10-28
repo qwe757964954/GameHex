@@ -196,12 +196,19 @@ def monsters():
 
 WORLD_MAP = [[1, "植物大地图", 40, 40, 18, 12, 10, 18, 16, 11]]
 
+# 字段顺序 = resType, resName, icon, startAmount, showInBar, itemId
+#
+# `itemId` 指向 `W-物品表` 的背包道具（18501 粮食 / 18502 木材 / 18503 矿石 /
+# 18504 钻石 / 18505 行动力）：顶栏图标优先按 `item.icon` 走背包那套加载
+# （`icons/item/xxx` + `spriteFramePathOf` + `main-pages` 分包），
+# `item.icon` 为空时退回 `image/bigmap/concept/sprites/<resType>` 概念图。
+# `resName` 与背包道具名保持一致（矿石 / 钻石），避免同一个东西两套叫法。
 RESOURCES = [
-    ["grain", "粮食", "ui/bigmap/icon_grain", 800, 1],
-    ["wood", "木材", "ui/bigmap/icon_wood", 800, 1],
-    ["iron", "铁矿", "ui/bigmap/icon_iron", 800, 1],
-    ["coin", "大地图货币", "ui/bigmap/icon_coin", 200, 1],
-    ["stamina", "行动力", "ui/bigmap/icon_stamina", 120, 1],
+    ["grain", "粮食", "ui/bigmap/icon_grain", 800, 1, 18501],
+    ["wood", "木材", "ui/bigmap/icon_wood", 800, 1, 18502],
+    ["iron", "矿石", "ui/bigmap/icon_iron", 800, 1, 18503],
+    ["coin", "钻石", "ui/bigmap/icon_coin", 200, 1, 18504],
+    ["stamina", "行动力", "ui/bigmap/icon_stamina", 120, 1, 18505],
 ]
 
 QUEUE = [[1, 3, 1, 120, 360, 1.0, 8, 3, 5, 5]]
@@ -295,7 +302,7 @@ def main():
           building_produce())
 
     write("bigmapResource",
-          ["resType", "resName", "icon", "startAmount", "showInBar"], RESOURCES)
+          ["resType", "resName", "icon", "startAmount", "showInBar", "itemId"], RESOURCES)
 
     write("bigmapQueue",
           ["id", "maxBuildQueue", "initBuildQueue", "queueUnlockCost2", "queueUnlockCost3",

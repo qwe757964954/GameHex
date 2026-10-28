@@ -10,7 +10,7 @@ import { buildZCPveEnemyDecks } from '../zcds/application/ZCPveCombatConfig';
 import { captureZCMatchConfig } from '../zcds/model/ZCMatchConfig';
 import type { ZCCompiledModifierLoadout } from '../zcds/model/ZCModifierRuntime';
 import { createTerritorySaveStore } from '../territory/application/TerritorySaveStoreAdapter';
-import { buildSeatProfiles } from '../zcds/model/ZCRankBoard';
+import { buildSeatProfiles, buildSeatUnitIds } from '../zcds/model/ZCRankBoard';
 
 /**
  * 对局流程。
@@ -48,6 +48,8 @@ export class ProcedureGame extends ProcedureBase {
     private preparedResources: ZCGamePreparedResources | null = null;
 
     async onPreload(params?: ZCGameEntryParams, context?: ProcedurePreloadContext): Promise<void> {
+        const warmup = this.sessionAssets?.warmupProgress;
+        if (warmup) console.info(`[BattleLoading] 静默准备 下载${warmup.completed}/${warmup.total} 累计解析${warmup.parsed} 缓存${warmup.cached} 核心保留${warmup.pinned ?? 0}`);
         this.sessionAssets?.pauseWarmup?.();
         if (params?.preload) {
             if (!context) throw new Error('移交匹配预加载资源需要流程资源作用域');
@@ -138,16 +140,15 @@ export class ProcedureGame extends ProcedureBase {
                     attackRate: wave.attackRate,
                 })),
         } : undefined;
-        const matchConfig = pve
-            ? {
-                ...baseConfig,
-                ...(pveEnemyDeck.length > 0 ? { enemyDeck: pveEnemyDeck } : {}),
-                ...(!battle && pve.mode === 'match' && pve.enemyTeamCardIds.length > 0 ? {
-                    ownerDecks: buildZCPveEnemyDecks(baseConfig.enemyDeck, pve.enemyTeamCardIds),
-                } : {}),
-                ...(pveDefence?.waves.length ? { pveDefence } : {}),
+        let matchConfig = baseConfig;
+        if (pve) {
+            matchConfig = Object.assign({}, baseConfig);
+            if (pveEnemyDeck.length > 0) matchConfig.enemyDeck = pveEnemyDeck;
+            if (!battle && pve.mode === 'match' && pve.enemyTeamCardIds.length > 0) {
+                matchConfig.ownerDecks = buildZCPveEnemyDecks(baseConfig.enemyDeck, pve.enemyTeamCardIds);
             }
-            : baseConfig;
+            if (pveDefence?.waves.length) matchConfig.pveDefence = pveDefence;
+        }
         const builtClientCombat = buildZCClientCombatConfig(
             matchConfig,
             battle,
@@ -155,26 +156,30 @@ export class ProcedureGame extends ProcedureBase {
             captureOptions,
         );
         // buildZCClientCombatConfig 会重建 owner 修改器；关卡倍率必须在它之后合并，否则会被覆盖。
-        const clientCombat = pve ? {
-            ...builtClientCombat,
-            config: captureZCMatchConfig({
-                ...builtClientCombat.config,
-                modifiers: {
-                    ...builtClientCombat.config.modifiers,
-                    enemy: [...(builtClientCombat.config.modifiers?.enemy ?? []), ...pveModifiers],
-                    enemy2: [...(builtClientCombat.config.modifiers?.enemy2 ?? []), ...pveModifiers],
-                    enemy3: [...(builtClientCombat.config.modifiers?.enemy3 ?? []), ...pveModifiers],
-                },
-            }, captureOptions),
-        } : builtClientCombat;
+        let clientCombat = builtClientCombat;
+        if (pve) {
+            const sourceModifiers = builtClientCombat.config.modifiers;
+            const mergedConfig = captureZCMatchConfig(
+                Object.assign({}, builtClientCombat.config, {
+                    modifiers: Object.assign({}, sourceModifiers, {
+                        enemy: (sourceModifiers?.enemy ?? []).concat(pveModifiers),
+                        enemy2: (sourceModifiers?.enemy2 ?? []).concat(pveModifiers),
+                        enemy3: (sourceModifiers?.enemy3 ?? []).concat(pveModifiers),
+                    }),
+                }),
+                captureOptions,
+            );
+            clientCombat = Object.assign({}, builtClientCombat, { config: mergedConfig });
+        }
         if (clientCombat.skipped.length) {
             console.warn('[ProcedureGame] 尚未完成移植的客户端武将构筑已跳过', clientCombat.skipped);
         }
         const selfRoleId = entry?.selfRoleId;
         let playerAvatars: IZCGameEntry['playerAvatars'] = null;
         let seatProfiles: IZCGameEntry['seatProfiles'] = [];
+        let seatUnitIds: IZCGameEntry['seatUnitIds'] = [];
         if (battle?.units?.length) {
-            const sorted = [...battle.units].sort((a, b) => a.campId - b.campId);
+            const sorted = battle.units.slice().sort((a, b) => a.campId - b.campId);
             const self = (selfRoleId ? sorted.find((u) => u.roleId === selfRoleId) : undefined) ?? sorted[0];
             const foe = sorted.find((u) => u !== self) ?? sorted[1];
             playerAvatars = { player: self?.avatarId ?? '', enemy: foe?.avatarId ?? '' };
@@ -184,6 +189,8 @@ export class ProcedureGame extends ProcedureBase {
             // ⇒ HUD 里 `profile.headKey` 崩，整局停在空白（报错点在 setSeatProfiles，真凶在这行）。
             // ⚠️ 展开源是**函数返回值**，不是 `.keys()/.values()/.entries()`，正则判据容易漏。
             seatProfiles = Array.from(buildSeatProfiles(battle.units, selfRoleId ?? null));
+            // 战斗统计要按**服务端单元 id** 归属，同一份席位分配逻辑派生（见 buildSeatUnitIds）。
+            seatUnitIds = Array.from(buildSeatUnitIds(battle.units, selfRoleId ?? null));
         } else if (pve) {
             this.log(`领地 PVE：chapter=${pve.chapterId} level=${pve.levelId} mode=${pve.mode} players=${pve.playerCount} enemyCards=${pveEnemyDeck.length} waves=${pveDefence?.waves.length ?? 0}`);
         }
@@ -206,6 +213,7 @@ export class ProcedureGame extends ProcedureBase {
             matchConfig: clientCombat.config,
             playerAvatars,
             seatProfiles,
+            seatUnitIds,
             pveContext,
             slgBattleType: entry?.slgBattleType ?? null,
         };

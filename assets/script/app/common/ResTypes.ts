@@ -45,6 +45,8 @@ import {
     COMMON_ICON_ART_ROOT as ART_COMMON_ICON_ROOT,
     RESBAR_ART_ROOT,
     RESOURCE_ICON_ART_ROOT,
+    spriteFramePath,
+    spriteFramePathOf,
 } from '../ArtPaths';
 import { toCount } from '../net/RequestGuard';
 
@@ -334,6 +336,36 @@ export function resBarCellOfRefId(
         };
     }
     return { refId, kind: 'unknown', key: '', icon: '', iconIsPath: false, name: '' };
+}
+
+/**
+ * {@link IResBarCell} → **可交给 `AssetService.load` 的装配路径**（已带 `/spriteFrame`）；
+ * 解析不出（`kind = unknown` / 表里没填 `icon`）返回空串。
+ *
+ * ## 为什么必须有这一层（2026-10-26 的现场）
+ *
+ * `roleProperty.icon` 是 **FGUI 裸名**、`item.icon` 是 **相对某个 bundle 的路径**，
+ * 两者的拼法**不同**，而且 `item` 那支的图**不在 `resources` 里**：
+ *
+ * | 来源 | `icon` 存的 | 拼法 | 落在哪个 bundle |
+ * |---|---|---|---|
+ * | `roleProperty` | `图标_铜币` | `spriteFramePath(resIconRoot(name), name)` | `resources`（例外见覆盖表） |
+ * | `item` | `icons/item/图标_兵书弓兵` | `spriteFramePathOf(path)`（幂等补后缀） | **`main-pages`**（`BundleCatalog` 里登记的 `icons/item` 等目录） |
+ *
+ * 少拼 `/spriteFrame` 的症状是 `Bundle resources doesn't contain …`（**不是 404**，极易
+ * 误判成「美术没交图」）；把 `item` 的图当成 `resources` 相对路径的症状是**静默返回 null**
+ * —— 领地随机格奖励的飘字没有图标、喷发 12 颗全是空 sprite（喷发与飘字共用同一批 frame），
+ * 看起来就是「粒子动画丢了」。端到端只有量「颗粒有没有画面」才逮得到。
+ *
+ * ⚠️ bundle 路由**不在这里做**：`CocosAssetService` 按路径前缀查 `BundleCatalog.bundleForPath`
+ * 自动选 bundle，所以这里只给**全名**，调用方一句 `load(路径, SpriteFrame)` 即可。
+ */
+export function resBarIconSpritePath(cell: IResBarCell | null | undefined): string {
+    const name = textOf(cell?.icon);
+    if (!name) return '';
+    return cell?.iconIsPath
+        ? spriteFramePathOf(name)
+        : spriteFramePath(resIconRoot(name), name);
 }
 
 /**

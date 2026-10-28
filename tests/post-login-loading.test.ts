@@ -6,6 +6,89 @@ import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
+import { EventMgr } from '../assets/script/framework/event/EventMgr';
+
+function loadPostLogin() {
+    const bus = new EventMgr();
+    const ratios: number[] = [];
+    const statuses: string[] = [];
+    const navigations: Array<{ route: string; params: unknown }> = [];
+    const ui = {
+        show() {},
+        setStatus(message: string) { statuses.push(message); },
+        setProgress(ratio: number) { ratios.push(ratio); },
+    };
+    const context = {
+        exports: {} as { ProcedurePostLogin: new () => {
+            onPreload(): Promise<void>; onEnter(): void; onLeave(): void; onDestroy(): void;
+        } },
+        console: { warn() {}, error() {} },
+        require(name: string) {
+            if (name === 'cc') return { Prefab: class {}, sys: { localStorage: { getItem: () => null } } };
+            if (name.endsWith('/EventMgr')) return { EventMgr: { instance: bus } };
+            if (name.endsWith('/MainLoadingEvents')) return require('../assets/script/app/main/MainLoadingEvents');
+            if (name.endsWith('/GameRoute')) return { GameRoute: { Main: 'main' } };
+            if (name.endsWith('/AudioMgr')) return { AudioMgr: { instance: { init() {} } } };
+            if (name.endsWith('/TerritoryChapterInfoRepository')) return {};
+            if (name.endsWith('/LaunchProgressUI')) return {
+                LAUNCH_UPDATE_WEIGHT: 0.6,
+                LaunchProgressUI: { ensure: () => null, createFromPrefab: () => ui },
+            };
+            if (name.endsWith('/ProcedureBase')) return { ProcedureBase: class {
+                protected host = {};
+                protected assets = { load: async () => ({}) };
+                protected sessionAssets = { prepare: async (report: (progress: { ratio: number }) => void) => report({ ratio: 1 }) };
+                protected navigate(route: string, params?: unknown) { navigations.push({ route, params }); }
+                protected releaseResourceScope() {}
+                protected onDestroy() {}
+            } };
+            throw new Error(`unexpected dependency: ${name}`);
+        },
+    };
+    const code = ts.transpileModule(readFileSync('assets/script/app/procedure/ProcedurePostLogin.ts', 'utf8'), {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+    }).outputText;
+    runInNewContext(code, context);
+    return { procedure: new context.exports.ProcedurePostLogin(), bus, ratios, statuses, navigations };
+}
+
+test('PostLogin 导航 Main 只传入口数据，加载事件继续推进同一条进度', async () => {
+    const h = loadPostLogin();
+    await h.procedure.onPreload();
+    h.procedure.onEnter();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.deepEqual(h.navigations, [{ route: 'main', params: undefined }]);
+    for (const ratio of [0, 0.3, 1]) h.bus.emit('main-loading:progress', { ratio, message: 'loading' });
+    const expected = [0.6, 0.88, 0.88, 0.916, 1];
+    assert.equal(h.ratios.length, expected.length);
+    h.ratios.forEach((ratio, index) => assert.ok(Math.abs(ratio - expected[index]) < 1e-10));
+});
+
+test('PostLogin 订阅 Main 失败事件显示错误，离开后不再接收加载通知', async () => {
+    const h = loadPostLogin();
+    await h.procedure.onPreload();
+    h.procedure.onEnter();
+    h.bus.emit('main-loading:failed', 'asset failure');
+    assert.equal(h.statuses.at(-1), '加载失败，请重新进入游戏');
+    h.procedure.onLeave();
+    const counts = [h.ratios.length, h.statuses.length];
+    h.bus.emit('main-loading:progress', { ratio: 1, message: 'late progress' });
+    h.bus.emit('main-loading:failed', 'late failure');
+    assert.deepEqual([h.ratios.length, h.statuses.length], counts);
+});
+
+test('销毁 PostLogin 会解除事件订阅并取消未完成的会话准备', async () => {
+    const h = loadPostLogin();
+    await h.procedure.onPreload();
+    h.procedure.onEnter();
+    h.procedure.onDestroy();
+    const counts = [h.ratios.length, h.statuses.length];
+    h.bus.emit('main-loading:progress', { ratio: 1, message: 'late progress' });
+    h.bus.emit('main-loading:failed', 'late failure');
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.deepEqual([h.ratios.length, h.statuses.length], counts);
+    assert.deepEqual(h.navigations, []);
+});
 
 test('LaunchProgress 是首包 prefab：启动图 + 进度条，全 UI_2D 且组件引用齐全', () => {
     // 2026-10-12：启动 UI 资源化。prefab 放 assets/resources（首包内置，不进远程热更 bundle），

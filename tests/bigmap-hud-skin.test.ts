@@ -15,7 +15,7 @@ import {
  *
  * 口径落定（追问后确认）：走**领地页顶部 HUD 那套深色卡**，不是底部菜单栏的木牌。钉五件事：
  * 1. **色是取出来的**：card / rim 与 `image/main/hud/hud_player_card.png` 同值，
- *    scrim 与领地弹窗 `TerritorySiteDetail.prefab` 的 `Dim` 同值（直接读 prefab JSON 比对）；
+ *    scrim 与领地弹窗 `LevelInfoPanel.prefab` 的 `Dim` 同值（直接读 prefab JSON 比对）；
  * 2. **三层结构**：近黑描边 → 卡面收 2px → 铜金细线再收 2px，线只能细；
  * 3. **按钮用领地页那颗 3D 金钮**（`btn_quick_fight`），木牌只留给【基地/大地图】切换；
  * 4. **标题字删干净**：页面里不许再出现 worldName / 缎带 / titleLabel；
@@ -72,10 +72,10 @@ function skinModule() {
 const PAGE_SOURCE = readFileSync('assets/script/app/bigmap/view/BigMapPage.ts', 'utf8');
 const LOADER_SOURCE = readFileSync('assets/script/app/bigmap/application/BigMapArtLoader.ts', 'utf8');
 
-/** 读领地弹窗 prefab 里 `Dim` 节点的序列化颜色（Cocos prefab 是扁平数组，靠 `__id__` 引用）。 */
+/** 读领地弹窗 prefab 里 `Dim` 节点的序列化颜色（站点详情面板已删，改读关卡界面）。 */
 function territoryScrim(): { r: number; g: number; b: number; a: number } {
     const data = JSON.parse(readFileSync(
-        'assets/resources/ui/territory/TerritorySiteDetail.prefab', 'utf8',
+        'assets/resources/ui/main/LevelInfoPanel.prefab', 'utf8',
     )) as Record<string, any>[];
     const resolve = (ref: unknown): Record<string, any> | null =>
         (ref && typeof ref === 'object' && '__id__' in (ref as object) ? data[(ref as { __id__: number }).__id__] : null);

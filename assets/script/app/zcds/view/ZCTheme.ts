@@ -20,9 +20,28 @@ export const ZC_CLIENT_COLORS = {
     ruins: new Color(94, 101, 108, 255),
     paper: new Color(248, 244, 226, 255),
     gold: new Color(255, 198, 45, 255),
+    /**
+     * 开局「点击金矿」提示描边（2026-10-26 用户口径「换成绿色，更显眼」）。
+     *
+     * 原来用 `gold`：金线画在中立格的土黄底上属于同色系，几乎看不出来。绿色在中立土黄底与
+     * 己方紫色领地上都跳得出来，是这套配色里唯一两个背景都高对比的色相。
+     */
+    hint: new Color(62, 227, 111, 255),          // #3EE36F
     white: new Color(255, 255, 255, 255),
     muted: new Color(173, 192, 202, 255),
 } as const;
+
+/**
+ * 已被**击杀**的玩家：HUD 左侧玩家行的头像（连同席位圆盘）压黑色（2026-10-27 需求）。
+ *
+ * 走 `Sprite.color` **相乘**：保留头像原画的明暗与轮廓，只把整体压黑 —— 与单位「阵亡色」
+ * （`ZCUnitView.UNIT_DEAD_TINT`）同一套机制，不是盖一层半透明黑块（那会同时把圆盘的
+ * 席位色洗成灰，且要多挂一个节点/图）。
+ *
+ * 取值 ~0.28（72/255）：再深就看不出是哪个头像了；名字仍按 `zcFactionColor(owner)` 上色，
+ * 所以「这是谁」这条信息不会丢。想调深浅只改这一处。
+ */
+export const ZC_HUD_DEAD_AVATAR_TINT = new Color(72, 72, 72, 255);
 
 /** 多人席位填充色（含 neutral 中立色）；穷举阵营，新增席位时编译报错。 */
 const FACTION_COLOR_BY_FACTION: Readonly<Record<ZCFaction, Color>> = {

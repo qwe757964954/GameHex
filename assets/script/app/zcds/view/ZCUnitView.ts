@@ -3,7 +3,8 @@ import type { ZCUnitDefinition } from '../model/ZCCombatCatalog';
 import type { ZCUnitState } from '../model/ZCGameModel';
 import { ZCOwner } from '../model/ZCMapConfig';
 import { ZC_CLIENT_COLORS } from './ZCTheme';
-import { isHealthBarVisible, pickHealthBarFill, spawnShakePulse, SPAWN_SHAKE_PHASE_SECONDS, updateHealthBar } from './ZCGameViewUtil';
+import { isHealthBarVisible, pickHealthBarFill, spawnShakePulse, SPAWN_SHAKE_PHASE_SECONDS, updateHealthBar, healthBarRatio } from './ZCGameViewUtil';
+import { ZCHealthBarDamageTrail } from './ZCHealthBarDamageTrail';
 import { ProcedureGame } from '../../procedure/ProcedureGame';
 
 const { ccclass, property } = _decorator;
@@ -154,11 +155,16 @@ export class ZCUnitView extends Component {
     // 单位根节点现在是逻辑脚点，VisualRoot 上移 45.7px 后，美术脚底正好落在原点；
     // 头顶相对脚点约 +69~+74，所以血条放在 +80（离头顶 6~11）。
     // 尺寸取蓝湖「多队伍」稿：外框 76×17（内容区 72×12），填充 8 高、左右各内缩 4。
-    @property({ group: '状态条', tooltip: '普通单位血条外框宽度' })
-    barWidth = 76;
+    // 2026-10-26 表现层调整：**高度按原稿不动**，宽度统一缩到原稿的 80%
+    // （76 → 60.8、86 → 68.8）。战场里单位挨得近，原宽的条会互相糊在一起、
+    // 也比角色本体宽；缩 20% 后仍能读出比例，头顶也清爽。
+    // 宽度必须改**这里**而不是只改 prefab：`renderHealthBar` 是「脚本值变了才写 prefab」，
+    // 只改 prefab 会在第一帧渲染时被下面的字段值覆写回原宽。
+    @property({ group: '状态条', tooltip: '普通单位血条外框宽度（原稿 76 的 80%）' })
+    barWidth = 60.8;
 
-    @property({ group: '状态条', tooltip: '英雄单位血条外框宽度' })
-    barWidthHero = 86;
+    @property({ group: '状态条', tooltip: '英雄单位血条外框宽度（原稿 86 的 80%）' })
+    barWidthHero = 68.8;
 
     @property({ group: '状态条', tooltip: '血条外框高度（蓝湖稿 17）' })
     barHeight = 17;
@@ -219,6 +225,8 @@ export class ZCUnitView extends Component {
     private barAppliedMaxHp: number | null = null;
     private barAppliedOwner: ZCOwner | null = null;
     private barAppliedOffsetY = Number.NaN;
+    /** 扣血白条（被扣掉那段先变白、0.13s 从右往左收没）。纯类，无 tween，见 ZCHealthBarDamageTrail。 */
+    private readonly damageTrail = new ZCHealthBarDamageTrail();
     /** 本兵最后一次实际扣血的表现时间；null = 还没挨过打，血条不显示。 */
     private lastDamagedAt: number | null = null;
     private fallbackKey = -1;
@@ -301,6 +309,8 @@ export class ZCUnitView extends Component {
         this.barAppliedMaxHp = null;
         this.barAppliedOwner = null;
         this.barAppliedOffsetY = Number.NaN;
+        // 回池的白条必须清干净：不然新单位的第一次渲染会拿着上一条命的比例算出个「白条」。
+        this.damageTrail.reset();
         this.appliedRootX = Number.NaN;
         this.appliedRootY = Number.NaN;
         this.appliedTint = -1;
@@ -581,7 +591,7 @@ export class ZCUnitView extends Component {
             // 填充条锚点是 (0, 0.5)，靠 position 把左缘对齐到外框内沿（与引擎 _initBarSprite 同一算法）。
             this.healthBar.barSprite?.node.setPosition(-width / 2 + this.barFillInset, 0, 0);
             this.healthBar.totalLength = fillWidth;
-            // 「陷阱①」：普通单位的 fillWidth 恰好等于 prefab 的 68 → 上一行也会因「值没变」早退，
+            // 「陷阱①」：普通单位的 fillWidth 恰好等于 prefab 的 52.8 → 上一行也会因「值没变」早退，
             // 宽度就停在刚写进去的满条上。用一个越界值空写一次，逼 totalLength 必定重算
             // （同一次 render 内同步完成，中间态不会被绘制）。
             this.healthBar.totalLength = fillWidth + 1;
@@ -613,6 +623,9 @@ export class ZCUnitView extends Component {
             && unit.battleState !== 'dead'
             && isHealthBarVisible(this.lastDamagedAt, now);
         if (this.healthBar.node.active !== isVisible) this.healthBar.node.active = isVisible;
+        // 扣血白条：被扣掉的那段先变白、0.13s 从右往左缩没。**只看比例**（不回看 hp），
+        // 所以「换了个体但血量一样」不会误起白条；放在可见性之后，白条从血条亮起的那一帧开始计时。
+        this.damageTrail.render(this.healthBar, healthBarRatio(unit.hp, unit.maxHp), now);
     }
 
     /**

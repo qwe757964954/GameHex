@@ -17,6 +17,7 @@ import { buildArmySkillTable } from './CardSkillList';
 import type { ZCArmySkillTable } from './CardSkillList';
 import { fetchFormations, saveFormation } from './FormationService';
 import type { FormationSaveResult, ZCFormation } from './FormationService';
+import { readLineupSnapshot, writeLineupSnapshot } from './LineupSnapshot';
 import { createItemCounter } from './ItemBag';
 import { resolveSelectedDeck } from './LineupPresets';
 import {
@@ -35,6 +36,12 @@ export interface CardLineupData {
     readonly heroLevels: ReadonlyMap<string, number>;
     readonly heroLevelCaps: ReadonlyMap<string, number>;
     readonly heroListKnown: boolean;
+    /**
+     * 服务端阵型这次到底拿到了没有。
+     *
+     * `false` = 这次没拿到服务端阵型（未连接 / 超时），`deck` 是空数组（上阵区留空等数据）。
+     */
+    readonly formationsKnown: boolean;
     readonly bonuses: ZCDeckBonuses;
 }
 
@@ -83,15 +90,23 @@ export type UpgradeHeroSkillResult =
 /** 页面 Presenter 依赖的统一数据端口；测试可以注入内存实现。 */
 export interface ICardRepository {
     loadLineup(autoLoadDecks: boolean): Promise<CardLineupData>;
+    /**
+     * 首帧用的**本地阵容快照**（同步，命中才有值）。
+     *
+     * 有它就等于「上次服务端确认过的阵容」：页面第一帧直接画出来，网络回来再覆盖。
+     * 没有（首次安装 / 过期 / 存坏）返回 `null`，页面走空台直到权威数据到达。
+     * 见 `LineupSnapshot.ts` 文件头。
+     */
+    loadLineupSnapshot(): CardLineupData | null;
     loadBoard(autoLoadDecks: boolean): Promise<LineupBoardData>;
     loadUpgradeStatus(cardId: string, level: number): Promise<ZCUpgradeStatus>;
-    upgradeHero(heroId: number, caller?: unknown): Promise<UpgradeHeroResult>;
-    upgradeHeroSkill(heroId: number, skillId: number, caller?: unknown): Promise<UpgradeHeroSkillResult>;
+    upgradeHero(heroId: number, caller?: object): Promise<UpgradeHeroResult>;
+    upgradeHeroSkill(heroId: number, skillId: number, caller?: object): Promise<UpgradeHeroSkillResult>;
     /** 技能面板取数（卡表技能顺序 + `armySkillLevelUp` + 该英雄技能等级）。 */
     loadSkillList(heroId: number): Promise<CardSkillListData>;
     applyHeroLevel(heroId: number, level: number): void;
     /** 覆盖保存一个阵型；结果里带回服务端确认后的阵型。 */
-    saveFormation(formationId: number, heroIds: readonly number[], caller?: unknown): Promise<FormationSaveResult>;
+    saveFormation(formationId: number, heroIds: readonly number[], caller?: object): Promise<FormationSaveResult>;
 }
 
 /** 生产环境 Repository：统一封装 Ref 表、后端英雄列表、背包与升级请求。 */
@@ -119,16 +134,49 @@ export class RuntimeCardRepository implements ICardRepository {
             cached === null ? fetchPvpHeroInfos() : Promise.resolve(cached),
             loadPvpHeroLevelCaps(),
             loadPvpCatalogCards(),
-            fetchFormations(),
+            // 与布阵面板同口径等满 3000ms：没拿到就留空台（见下方 `deck`），不拿兜底卡组先顶上。
+            fetchFormations({ label: '阵容页首屏阵型' }),
         ]);
-        const deck = resolveSelectedDeck({ deck: tableDeck, pool: catalog, formations }) ?? tableDeck;
+        const heroLevels = this.levels(heroInfos);
+        const selectedDeck = resolveSelectedDeck({ deck: tableDeck, pool: catalog, formations });
+        //  只给**服务端确认过的选中阵型**写快照 —— 本地卡表那张「玩家默认」八卡不是玩家的阵容，
+        // 写进去就是把假数据持久化，下次首帧会理直气壮地画错。
+        if (selectedDeck) writeLineupSnapshot(selectedDeck, heroLevels);
+        //  阵型没拿到（未连接 / 超时）→ 上阵区**留空**，等真数据回来再画；
+        //  拿到但里面没有选中阵型 → 用本地卡表的「玩家默认」八卡。
+        const deck = formations === null ? [] : (selectedDeck ?? tableDeck);
         return {
             deck,
             catalog,
-            heroLevels: this.levels(heroInfos),
+            heroLevels,
             heroLevelCaps,
             heroListKnown: heroInfos !== null,
+            formationsKnown: formations !== null,
             bonuses: currentDeckBonuses(deck),
+        };
+    }
+
+    /**
+     * 首帧快照：只有上阵八卡与等级，**卡库留空**。
+     *
+     * 卡库（`CardGrid`）的全表卡面一次要加载 36 张图 + 36 份升级进度，让它跟着快照一起
+     * 抢首帧既慢又没必要 —— 快照的职责只是「别让玩家看到一个假的阵容」。
+     */
+    loadLineupSnapshot(): CardLineupData | null {
+        const snapshot = readLineupSnapshot();
+        if (!snapshot || snapshot.cards.length === 0) return null;
+        const heroLevels = new Map<string, number>();
+        for (const [key, value] of Object.entries(snapshot.levels)) heroLevels.set(key, value);
+        return {
+            deck: snapshot.cards,
+            catalog: [],
+            heroLevels,
+            heroLevelCaps: new Map(),
+            // 快照来自服务端确认过的数据，等级是已知的（未出现在 `levels` 里的按 0 处理，
+            // 与在线路径「后端列表里没有 = 没拥有」同一口径）。
+            heroListKnown: true,
+            formationsKnown: true,
+            bonuses: currentDeckBonuses(snapshot.cards),
         };
     }
 
@@ -200,13 +248,13 @@ export class RuntimeCardRepository implements ICardRepository {
         return fallbackIds;
     }
 
-    async upgradeHero(heroId: number, caller?: unknown): Promise<UpgradeHeroResult> {
+    async upgradeHero(heroId: number, caller?: object): Promise<UpgradeHeroResult> {
         const net = GameNet.instance;
         if (!net.isConnected) return { kind: 'offline' };
         let response: CmdPvpHeroUpLevelRspMsg | null = null;
         try {
             const ok = await net.send(
-                new RequestPvpHeroUpLevel({ heroId }, caller as any, (rsp) => { response = rsp; }),
+                new RequestPvpHeroUpLevel({ heroId }, caller, (rsp) => { response = rsp; }),
                 false,
             );
             if (!ok || !response) return { kind: 'failed' };
@@ -231,7 +279,7 @@ export class RuntimeCardRepository implements ICardRepository {
      * 响应只回一条 `CmdPvpHeroInfo` —— 技能等级从**响应里的那一条**取（不猜 `skillId + 1`，
      * 服务端可能因条件不满级/连升），再整份写回缓存。
      */
-    async upgradeHeroSkill(heroId: number, skillId: number, caller?: unknown): Promise<UpgradeHeroSkillResult> {
+    async upgradeHeroSkill(heroId: number, skillId: number, caller?: object): Promise<UpgradeHeroSkillResult> {
         const net = GameNet.instance;
         if (!net.isConnected) return { kind: 'offline' };
         if (!Number.isSafeInteger(heroId) || heroId <= 0) return { kind: 'failed' };
@@ -239,7 +287,7 @@ export class RuntimeCardRepository implements ICardRepository {
         let response: CmdPvpHeroUpSkillRspMsg | null = null;
         try {
             const ok = await net.send(
-                new RequestPvpHeroUpSkill({ heroId, skillId }, caller as any, (rsp) => { response = rsp; }),
+                new RequestPvpHeroUpSkill({ heroId, skillId }, caller, (rsp) => { response = rsp; }),
                 false,
             );
             if (!ok || !response) return { kind: 'failed' };
@@ -269,7 +317,7 @@ export class RuntimeCardRepository implements ICardRepository {
         applyPvpHeroLevel(heroId, level, skills);
     }
 
-    saveFormation(formationId: number, heroIds: readonly number[], caller?: unknown): Promise<FormationSaveResult> {
+    saveFormation(formationId: number, heroIds: readonly number[], caller?: object): Promise<FormationSaveResult> {
         return saveFormation(formationId, heroIds, caller);
     }
 

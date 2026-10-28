@@ -725,6 +725,17 @@
     "icon": "icons/item/图标_通用城墙升星材料红",
     "iconPath": "icons/item/图标_通用城墙升星材料红"
   },
+  "10300": {
+    "id": 10300,
+    "name": "技能升级石",
+    "desc": "技能升级石",
+    "key": "",
+    "useType": 1,
+    "type": 11,
+    "quality": 2,
+    "icon": "icons/common/图标_联盟贡献",
+    "iconPath": "icons/common/图标_联盟贡献"
+  },
   "10301": {
     "id": 10301,
     "name": "联盟贡献",
@@ -4134,6 +4145,61 @@
     "quality": 4,
     "icon": "icons/item/请神牛头碎片",
     "iconPath": "icons/item/请神牛头碎片"
+  },
+  "18501": {
+    "id": 18501,
+    "name": "粮食",
+    "desc": "大地图玩法核心资源",
+    "key": "",
+    "useType": 1,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/item/图标_粮食",
+    "iconPath": "icons/item/图标_粮食"
+  },
+  "18502": {
+    "id": 18502,
+    "name": "木材",
+    "desc": "大地图玩法核心资源",
+    "key": "",
+    "useType": 1,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/item/图标_木材",
+    "iconPath": "icons/item/图标_木材"
+  },
+  "18503": {
+    "id": 18503,
+    "name": "矿石",
+    "desc": "大地图玩法核心资源",
+    "key": "",
+    "useType": 1,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/item/图标_矿石",
+    "iconPath": "icons/item/图标_矿石"
+  },
+  "18504": {
+    "id": 18504,
+    "name": "钻石",
+    "desc": "大地图玩法核心资源",
+    "key": "",
+    "useType": 1,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/item/图标_钻石",
+    "iconPath": "icons/item/图标_钻石"
+  },
+  "18505": {
+    "id": 18505,
+    "name": "行动力",
+    "desc": "大地图玩法核心资源",
+    "key": "",
+    "useType": 1,
+    "type": 1,
+    "quality": 4,
+    "icon": "icons/item/图标_行动力",
+    "iconPath": "icons/item/图标_行动力"
   },
   "19001": {
     "id": 19001,

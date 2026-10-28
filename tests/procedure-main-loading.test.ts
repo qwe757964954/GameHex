@@ -4,15 +4,21 @@ import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
+import { EventMgr } from '../assets/script/framework/event/EventMgr';
 
 const MAIN_ROOT_URL = 'ui/main/MainRoot';
 
-function loadProcedure(overrides: { noCover?: boolean } = {}) {
+function loadProcedure(overrides: { noCover?: boolean; loadError?: Error } = {}) {
+    const events: Array<{ event: string; payload: unknown }> = [];
+    const bus = new EventMgr();
+    const emit = bus.emit.bind(bus);
+    bus.emit = (event, payload) => { events.push({ event, payload }); emit(event, payload); };
     const loads: Array<{ path: string; type: string }> = [];
     const injections: string[] = [];
     const parents: unknown[] = [];
     let siblingIndex = -1;
     let coverReleased = false;
+    let warmupActivated = 0;
     let mainDestroyed = false;
     const hostNode = { name: 'host' };
     const hostChildren: unknown[] = [{}, {}];
@@ -22,9 +28,11 @@ function loadProcedure(overrides: { noCover?: boolean } = {}) {
     }
 
     let readyResolve!: () => void;
-    const whenReady = new Promise<void>((resolve) => { readyResolve = resolve; });
+    let readyReject!: (error: Error) => void;
+    const whenReady = new Promise<void>((resolve, reject) => { readyResolve = resolve; readyReject = reject; });
 
     class MockTabHost {
+        activateBackgroundWarmup(): void { assert.ok(overrides.noCover || coverReleased, '先移除登录图'); warmupActivated++; }
         defaultTab = 3;
         setAssetService(): void { injections.push('assets'); }
         setConfigService(): void { injections.push('configs'); }
@@ -46,6 +54,7 @@ function loadProcedure(overrides: { noCover?: boolean } = {}) {
     const assets = {
         load: (path: string, type: unknown) => {
             loads.push({ path, type: (type as { name?: string }).name ?? '' });
+            if (overrides.loadError) return Promise.reject(overrides.loadError);
             return Promise.resolve(new Prefab(path));
         },
     };
@@ -53,7 +62,10 @@ function loadProcedure(overrides: { noCover?: boolean } = {}) {
     const context = {
         exports: {} as { ProcedureMain: new () => any },
         console: { warn() {}, log() {}, error() {} },
+        Error,
         require(name: string) {
+            if (name.endsWith('/EventMgr')) return { EventMgr: { instance: bus } };
+            if (name.endsWith('/MainLoadingEvents')) return require('../assets/script/app/main/MainLoadingEvents');
             if (name === 'cc') {
                 return {
                     Prefab,
@@ -100,11 +112,14 @@ function loadProcedure(overrides: { noCover?: boolean } = {}) {
     return {
         procedure,
         readyResolve,
+        readyReject,
+        events,
         loads,
         injections,
         parents,
         hostNode,
         get siblingIndex() { return siblingIndex; },
+        get warmupActivated() { return warmupActivated; },
         get coverReleased() { return coverReleased; },
         get mainDestroyed() { return mainDestroyed; },
     };
@@ -116,6 +131,46 @@ test('onPreload 加载 MainRoot prefab（Prefab，英文路径）', async () => 
     h.readyResolve();
     await preload;
     assert.deepEqual(h.loads, [{ path: MAIN_ROOT_URL, type: 'Prefab' }]);
+});
+
+test('Main 路由参数只包含数据，不接收加载通知回调', () => {
+    const source = readFileSync('assets/script/app/procedure/ProcedureMain.ts', 'utf8');
+    assert.doesNotMatch(source, /readonly\s+on(?:Progress|Error)\??\s*:/);
+    assert.doesNotMatch(source, /params\?\.on(?:Progress|Error)/);
+});
+
+test('预加载通过事件报告进度，路由无需提供回调', async () => {
+    const h = loadProcedure();
+    const preload = h.procedure.onPreload({}, { resources: new ResourceScope('test'), cancelled: false });
+    h.readyResolve();
+    await preload;
+    assert.deepEqual(h.events.map(({ event, payload }) => [event, (payload as { ratio: number }).ratio]), [
+        ['main-loading:progress', 0], ['main-loading:progress', 0.3], ['main-loading:progress', 1],
+    ]);
+});
+
+test('加载失败发布错误事件并保留 rejection 供流程管理器处理', async () => {
+    const error = new Error('asset unavailable');
+    const h = loadProcedure({ loadError: error });
+    await assert.rejects(h.procedure.onPreload({}, { resources: new ResourceScope('test'), cancelled: false }), error);
+    assert.deepEqual(h.events.filter(({ event }) => event === 'main-loading:failed'), [
+        { event: 'main-loading:failed', payload: '主界面加载失败：asset unavailable' },
+    ]);
+});
+
+test('取消后首屏 ready 不发布完成事件，迟到 rejection 不发布错误事件', async () => {
+    for (const reject of [false, true]) {
+        const h = loadProcedure();
+        const context = { resources: new ResourceScope('test'), cancelled: false };
+        const preload = h.procedure.onPreload({}, context);
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        context.cancelled = true;
+        const eventCount = h.events.length;
+        if (reject) h.readyReject(new Error('late failure')); else h.readyResolve();
+        if (reject) await assert.rejects(preload, /late failure/); else await preload;
+        assert.equal(h.events.length, eventCount);
+        assert.equal(h.mainDestroyed, true);
+    }
 });
 
 test('onPreload 实例化 MainRoot、注入依赖并挂到 host，登录图置顶盖住', async () => {
@@ -146,7 +201,9 @@ test('onEnter 移除登录图（release），无登录图时不报错', async ()
     const preload = h.procedure.onPreload({}, { resources: new ResourceScope('test'), cancelled: false });
     h.readyResolve();
     await preload;
+    assert.equal(h.warmupActivated, 0, '预加载阶段不预热');
     h.procedure.onEnter();
+    assert.equal(h.warmupActivated, 1);
     assert.equal(h.coverReleased, true, 'onEnter 应销毁登录图');
 
     const h2 = loadProcedure({ noCover: true });

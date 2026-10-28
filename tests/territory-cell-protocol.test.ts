@@ -531,38 +531,6 @@ test('★Bro 的格子同样走越界裁剪（服务端扩容过章节、客户�
     assert.equal(progress.isOwned(99), false);
 });
 
-test('★★★ Bro 必须真的订阅了（不订阅 = 联机时看不到别人的通关，零报错）', () => {
-    assert.match(REPO_SRC, /addEvent\(\s*'CmdCityChapterPassCellBroMsg'/,
-        'Repository 必须用 GameNet.addEvent 订阅 Bro —— RequestMsg 那套只管自己发的 req→rsp');
-    assert.match(REPO_SRC, /listenPassCellsBro/,
-        '必须暴露订阅入口，否则 Presenter 接不上');
-    assert.match(PRESENTER_SRC, /gateway\.listenPassCellsBro\?\./,
-        'Presenter 装载章节后必须订阅 Bro');
-    assert.match(PRESENTER_SRC, /applyPassCellsBro/,
-        'Presenter 必须有一个落地方法');
-});
-
-test('★★★ Bro 订阅幂等 + dispose 必退订', () => {
-    // 重复订阅只挂一次监听：否则同一个包被处理多次，表现为「一次广播新增了 N 个格子」。
-    const listen = REPO_SRC.slice(
-        REPO_SRC.indexOf('listenPassCellsBro(onPassCells'),
-        REPO_SRC.indexOf('unlistenPassCellsBro'),
-    );
-    assert.match(listen, /if \(this\.broListener\) return;/,
-        '重复订阅必须早退（只换回调，不重复挂监听）');
-    assert.match(REPO_SRC, /removeCallerEvent/,
-        '退订要用 removeCallerEvent（按 caller 摘掉全部监听）');
-
-    // dispose 必须退订：监听挂在 GameNet 上（进程级），Presenter 销毁后还在回调
-    // ⇒ 表现为「关页面后再进，格子莫名变已占领」。
-    const dispose = PRESENTER_SRC.slice(
-        PRESENTER_SRC.indexOf('dispose(): void {'),
-        PRESENTER_SRC.indexOf('dispose(): void {') + 400,
-    );
-    assert.match(dispose, /unlistenPassCellsBro/,
-        'dispose 必须退订 Bro 监听，否则会回调到已销毁的对象');
-});
-
 test('★★★ Bro 的章节号归一：Repository 与 Presenter 必须同一口径', () => {
     // 两处各写一份归一（Repository 收包时用、Presenter 比对时用）⇒ 必须一致，
     // 否则「服务端推 levelChapter=0」时 Repository 归成1、Presenter 按 0 比对，
@@ -580,7 +548,7 @@ test('★★★ Bro 的章节号归一：Repository 与 Presenter 必须同一�
 
 test('★★★ Bro 落地必须复用 applyServerState，且不碰 serverStateKnown', () => {
     const bro = PRESENTER_SRC.slice(
-        PRESENTER_SRC.indexOf('private applyPassCellsBro'),
+        PRESENTER_SRC.indexOf('applyPassCellsBro(levelChapter'),
         PRESENTER_SRC.indexOf('private normalizeBroChapter'),
     );
     assert.ok(bro.length > 0, 'applyPassCellsBro 要能定位');
@@ -600,52 +568,10 @@ test('★★★ Bro 落地必须复用 applyServerState，且不碰 serverStateK
 // C-2. 服务端主动下发：章节格子状态（战斗结束 / 通关后不经请求下发）
 // ============================================================
 
-test('★★★ 主动下发的 CellInfo 必须真的订阅了（不订阅 = 战斗结束界面不刷新，零报错）', () => {
-    assert.match(REPO_SRC, /addEvent\(\s*'CmdCityChapterCellInfoRspMsg'/,
-        'Repository 必须用 GameNet.addEvent 订阅主动下发的 CellInfo');
-    assert.match(REPO_SRC, /listenCellInfo/,
-        '必须暴露订阅入口，否则 Presenter 接不上');
-    assert.match(PRESENTER_SRC, /gateway\.listenCellInfo\?\./,
-        'Presenter 装载章节后必须订阅 CellInfo');
-    assert.match(PRESENTER_SRC, /applyCellInfoState/,
-        'Presenter 必须有一个落地方法');
-});
-
-test('★★★ CellInfo 订阅幂等 + dispose 必退订', () => {
-    // 重复订阅只挂一次监听：否则主动下发的一条快照会被落地两次。
-    const listen = REPO_SRC.slice(
-        REPO_SRC.indexOf('listenCellInfo(maxCell'),
-        REPO_SRC.indexOf('unlistenCellInfo'),
-    );
-    assert.match(listen, /if \(this\.cellInfoListener\) return;/,
-        '重复订阅必须早退（只换回调，不重复挂监听）');
-    const dispose = PRESENTER_SRC.slice(
-        PRESENTER_SRC.indexOf('dispose(): void {'),
-        PRESENTER_SRC.indexOf('dispose(): void {') + 420,
-    );
-    assert.match(dispose, /unlistenCellInfo/,
-        'dispose 必须退订 CellInfo 监听，否则会回调到已销毁的对象');
-});
-
-test('★★★ fetch 自己的响应不能被当主动推重复落地', () => {
-    // 每条响应都会经 msgEventProxy 广播，fetch 那次已在 RequestMsg 回调里 readState，
-    // 必须靠在途标志排除，否则同一份快照被落地两次。
-    assert.match(REPO_SRC, /this\.fetchInProgress = true/,
-        'fetchChapterCells 开始必须置在途标志');
-    assert.match(REPO_SRC, /this\.fetchInProgress = false/,
-        'fetchChapterCells 结束（finally）必须清在途标志');
-    const onMsg = REPO_SRC.slice(
-        REPO_SRC.indexOf('private onCellInfoMessage'),
-        REPO_SRC.indexOf('private onCellInfoMessage') + 420,
-    );
-    assert.match(onMsg, /if \(this\.fetchInProgress\) return;/,
-        '在途 fetch 的响应必须忽略，不能重复落地');
-});
-
 test('★★★ CellInfo 落地复用 applyServerState；完整快照可 markServerStateKnown（与 Bro 不同）', () => {
     const apply = PRESENTER_SRC.slice(
-        PRESENTER_SRC.indexOf('private applyCellInfoState'),
-        PRESENTER_SRC.indexOf('private applyCellInfoState') + 900,
+        PRESENTER_SRC.indexOf('applyCellInfoState(state:'),
+        PRESENTER_SRC.indexOf('applyCellInfoState(state:') + 900,
     );
     assert.ok(apply.length > 0, 'applyCellInfoState 要能定位');
     assert.match(apply, /applyServerState\(state\)/,

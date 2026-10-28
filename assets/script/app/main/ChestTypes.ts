@@ -56,3 +56,61 @@ export interface IChestSlotData {
     /** 空槽位的体力消耗（`Battle` 才显示闪电 + 数字）。 */
     cost: number;
 }
+
+// ============================================================
+// 宝箱详情弹窗（蓝湖「宝箱详情」）
+// ============================================================
+
+/**
+ * 详情弹窗里**奖励说明**能放几格 —— 与 prefab 的 `Panel/ItemSlots/Slot1..5` 一一对应。
+ *
+ * 不是可调参数：改这个数要么露空槽、要么丢奖励，必须同步改 prefab。
+ */
+export const CHEST_DETAIL_REWARD_SLOTS = 5;
+
+/** 一格「奖励说明」：品质框档位 + 图标 + 数量 + 概率（`ratePercent` 是**百分比**，70 ⇒ 显示 70%）。 */
+export interface IChestDetailRewardData {
+    readonly resId: number;
+    readonly amount: number;
+    readonly ratePercent: number;
+    /** `icon` 字段拼好的可加载路径（取不到为空串）。 */
+    readonly icon: string;
+    /** 奖励道具品质（1..8，决定格子用哪个品质框）。 */
+    readonly quality: number;
+}
+
+/**
+ * 详情弹窗的**纯数据**。
+ *
+ * 刻意不在这里放 `SpriteFrame`：本文件是「零 `cc` 依赖」的领域模型，帧由页面
+ * （`MainPage`）按 `icon` / 品质档位加载后注入视图。
+ */
+export interface IChestDetailData {
+    readonly index: number;
+    readonly cardBoxId: number;
+    readonly name: string;
+    readonly quality: number;
+    /** 宝箱图标路径（`icons/item/...`）。 */
+    readonly icon: string;
+    readonly rewards: readonly IChestDetailRewardData[];
+    /** 「立即打开」的货币消耗（`cardBoxOpenNow` 的第一段）；`0` = 不显示价格。 */
+    readonly fastOpenCost: number;
+    /** 剩余秒数（倒计时中才有意义）。 */
+    readonly remainSeconds: number;
+    readonly state: ChestSlotState;
+    readonly action: ChestSlotAction;
+}
+
+/**
+ * 秒数 → `HH:MM:SS`。
+ *
+ * 详情弹窗的倒计时文本与页面的每秒刷新共用同一份格式：两处各写一次必然漂移
+ * （设计稿是 `01:35:25` 这种**三位**，不能省小时位）。
+ */
+export function formatChestCountdown(seconds: number): string {
+    const total = Math.max(0, Math.floor(seconds));
+    const hours = Math.floor(total / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    const rest = total % 60;
+    return [hours, minutes, rest].map((value) => String(value).padStart(2, '0')).join(':');
+}

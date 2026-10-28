@@ -21,7 +21,7 @@
  *
  * | | 依赖 | 适用 |
  * |---|---|---|
- * | `EventProxy` | `ScriptObject → Log → EngineMain`（`Utils` 还摸 `cc.view`）；`add` 要求**可销毁的 caller** | 网络那套（`NetSocket.msgEventProxy`），长生命周期、消息名动态 |
+ * | `EventProxy` | `ScriptObject → Log → EngineMain`（`Utils` 还摸 `cc.view`）；caller 统一为普通对象，退出时显式解除 | 网络那套（`NetSocket.msgEventProxy`），长生命周期、消息名动态 |
  * | `FWEventCenter`（`FW.FWEvent`） | 同上（引擎向），事件类型写死在 `FWEventType` | 框架自有事件（次日刷新 / 前后台 / 窗口 resize） |
  * | `EventMgr` | **零依赖（纯 TS）** | 界面意图（`ZCGameUiEvent`）：纯逻辑单测能直接 require，不必造引擎桩 |
  */

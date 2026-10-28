@@ -21,7 +21,6 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import protobuf from 'protobufjs/light.js';
-import { LineupBoardPresenter } from '../assets/script/app/card/CardPresenters';
 import { normalizeFormations, withTimeout } from '../assets/script/app/card/FormationModel';
 import { LineupDraftStore } from '../assets/script/app/card/LineupDraftStore';
 import { buildPresetDecks, presetFormationId, resolveSelectedDeck } from '../assets/script/app/card/LineupPresets';
@@ -202,38 +201,25 @@ test('保存阵型即「选中」：Op 请求必须带 select = 1', () => {
     assert.doesNotMatch(service, /select: 0/);
 });
 
-test('LineupBoardPresenter：刷新时按阵型组各页签草稿，提交走 repository.saveFormation', async () => {
+test('buildPresetDecks + LineupDraftStore：按阵型组各页签草稿', () => {
+    //  这条原来测 `LineupBoardPresenter.refresh()`。Presenter 层取消后（取数与组草稿
+    //  并进 `LineupBoardPage`），这里直接测那两个纯模块 —— 它们才是草稿口径的真源。
     const deck = [card('68001')];
-    const calls: Array<[number, number[]]> = [];
-    const repository = {
-        loadBoard: async () => ({
-            deck,
-            pool: [card('68002')],
-            heroLevels: new Map<string, number>(),
-            heroLevelCaps: new Map<string, number>(),
-            formations: [{ formationId: 2, heroIds: [68002] }],
-        }),
-        saveFormation: async (formationId: number, heroIds: readonly number[]) => {
-            calls.push([formationId, [...heroIds]]);
-            return { kind: 'success', formation: { formationId, heroIds: [...heroIds] } };
-        },
+    const data = {
+        deck,
+        pool: [card('68002')],
+        heroLevels: new Map<string, number>(),
+        heroLevelCaps: new Map<string, number>(),
+        formations: [{ formationId: 2, heroIds: [68002] }],
     } as any;
 
-    const presenter = new LineupBoardPresenter(repository);
-    let presented: any = null;
-    await presenter.refresh(true, 2, 0, {
-        isAlive: () => true,
-        presentBoard: (data) => { presented = data; },
-    });
-
+    const presetCount = 2;
+    const decks = buildPresetDecks(data, presetCount);
     // 页签 0 → formationId 1，服务端没回 → 空；页签 1 → formationId 2 → 一张卡
-    assert.deepEqual(presented.draft.snapshot().cards.map((entry: any) => entry.id), []);
-    presented.draft.selectPreset(1);
-    assert.deepEqual(presented.draft.snapshot().cards.map((entry: any) => entry.id), ['68002']);
-
-    const result = await presenter.submit(2, [68002]);
-    assert.equal(result.kind, 'success');
-    assert.deepEqual(calls, [[2, [68002]]]);
+    const store = new LineupDraftStore(deck, 8, presetCount, 0, decks);
+    assert.deepEqual(store.snapshot().cards.map((entry) => entry.id), []);
+    store.selectPreset(1);
+    assert.deepEqual(store.snapshot().cards.map((entry) => entry.id), ['68002']);
 });
 
 test('协议名、Repository 接线与两条引擎约束在源码里被写死（改了会回归）', () => {
@@ -251,24 +237,29 @@ test('协议名、Repository 接线与两条引擎约束在源码里被写死（
     assert.match(repository, /formations \};/);
 
     const board = readFileSync('assets/script/app/card/LineupBoardPage.ts', 'utf8');
-    assert.match(board, /implements IBoardCardDragHost/);
-    assert.match(board, /this\.presenter\.submit\(formationId, heroIds, this\)/);
+    //  （接口名是 `IBoardCardHost`，不是 `IBoardCardDragHost` —— 后者全工程已不存在。）
+    assert.match(board, /implements IBoardCardHost/);
+    assert.match(board, /cardRepository\.saveFormation\(formationId, heroIds, this\)/);
     assert.match(board, /draft\.formationIdOf\(this\.presetIndex\)/);
-    // 克隆体必须在挂进场景之前禁用，否则它自己会变成可点/可拖的目标
-    assert.match(board, /view\.enabled = false/);
-    // 克隆体要压在等一切之上：挂到弹窗根节点并置为最后一个子节点
-    assert.match(board, /ghost\.setSiblingIndex\(Math\.max\(0, this\.node\.children\.length - 1\)\)/);
+    //  原来这里还有两条「拖拽克隆体」断言（`view.enabled = false` /
+    //  `ghost.setSiblingIndex(...)`）。2026-10-27 核对：全模块已搜不到 `ghost`、
+    //  `setSiblingIndex`、「克隆」字样 —— 拖拽改成卡片与站台自己处理手势
+    //  （见下面 `LineupBoardCard` 的 TOUCH_END / TOUCH_CANCEL 断言），那两条已失效，删掉。
 
     const cardView = readFileSync('assets/script/app/card/LineupBoardCard.ts', 'utf8');
-    // 松手可能派发成 TOUCH_CANCEL（手指早已离开卡片矩形）→ 收尾必须挂全局监听
-    assert.match(cardView, /input\.on\(Input\.EventType\.TOUCH_END/);
-    assert.match(cardView, /input\.on\(Input\.EventType\.TOUCH_CANCEL/);
-    // 不阻断冒泡的话祖先节点 PoolList 上的 VirtualScrollView 会跟着手指一起滚
-    assert.match(cardView, /event\.propagationStopped = true/);
+    // 松手可能派发成 TOUCH_CANCEL（手指早已离开卡片矩形）→ 两个都要收尾。
+    //  （2026-10-27 核对：这里是**节点级**监听 `this.node.on(Node.EventType.TOUCH_*)`，
+    //   不是早期的 `input.on(Input.EventType.*)`；`propagationStopped` 那套也随
+    //   克隆体拖拽一起移除了，见上面 `board` 段的说明。）
+    assert.match(cardView, /this\.node\.on\(Node\.EventType\.TOUCH_END/);
+    assert.match(cardView, /this\.node\.on\(Node\.EventType\.TOUCH_CANCEL/);
 
     // 阵型请求必须兜硬超时：`GameNet.send` 没有按请求的超时，服务端不回包就永远悬着，
     // 而它挂在 `loadBoard` 的 `Promise.all` 上 → 整块面板停在 prefab 占位外观（真机踩过）。
-    assert.match(service, /withTimeout\(inflight, FORMATION_REQUEST_TIMEOUT_MS/);
+    //  （2026-10-27：预算改成可传参的 `timeoutMs`，默认 `FORMATION_REQUEST_TIMEOUT_MS`；
+    //   阵容页不再用短超时兜底 —— 没拿到就留空台等真数据。）
+    assert.match(service, /withTimeout\(inflight, timeoutMs/);
+    assert.match(service, /options\.timeoutMs \?\? FORMATION_REQUEST_TIMEOUT_MS/);
     // 保存同理：不兜的话按钮永远停在「保存中」，再也点不动。
     assert.match(service, /withTimeout\(\s*sendFormationOp\(/);
     assert.match(service, /FORMATION_SAVE_TIMEOUT_MS/);

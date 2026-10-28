@@ -4,11 +4,11 @@ import test from 'node:test';
 import { loadViews } from './helpers/zcds-view-fixtures';
 
 /**
- * 单位出生特效（`assets/resources/units/effects/出生特效/`）的资产与接线守卫。
+ * 单位出生特效（`assets/bundles/battle/units/effects/出生特效/`）的资产与接线守卫。
  *
  * 这套特效的每个关键配置都**不报错、只是静默失效**，所以逐条钉死：
  *  - `layer` 落 DEFAULT(1073741824)⇒ UI_2D 相机下完全看不见；
- *  - `sizeMode` 不是 RAW(2) ⇒ 引擎按 trim 后的 rect 重算尺寸，而各帧的 trim 包围盒
+ *  - `sizeMode` 不是 CUSTOM(0) ⇒ 引擎按缩小后的图片尺寸重算节点尺寸，而各帧的 trim 包围盒
  *    各不相同 ⇒ 动画播放时**忽大忽小地抖**；
  *  - `trim=true` ⇒ 又按 SpriteFrame 的 trim 区渲染，位置也开始跳；
  *  - `Animation._clips` 为空 ⇒ `play(defaultClip.name)` 找不到 clip；
@@ -30,12 +30,12 @@ import { loadViews } from './helpers/zcds-view-fixtures';
  * ## 尺寸为什么是「帧 266×330 + `_lscale 0.4144`」
  * 帧按**原始像素**落地，显示尺寸交给 `_lscale` ⇒ 屏上 **110.2×136.8**。这个值被两条既有约束夹出来
  * （见 `EXPECTED_SCALE` 的注释）：宽度 < 112（地块面宽，否则盖邻格）、高度是人物可见高 67.27 的 2~3 倍。
- * **不要重采样成显示尺寸** —— 保留原始像素零插值损失，也让「改显示大小」只动一个数。
- * ⚠️ `sizeMode` 必须是 **RAW(2)**：各帧 `trim` 包围盒不同，CUSTOM 会按 trim rect 拉伸 ⇒ 动画忽大忽小地抖。
+ * 2026-10-28 按用户要求将帧缩至 110×137；画布尺寸仍保留 266×330，显示尺寸不变。
+ * `sizeMode = CUSTOM` 与 `trim=false` 固定显示画布，播放期间不随帧尺寸改变。
  */
 
 
-const FX_ROOT = 'assets/resources/units/effects/出生特效';
+const FX_ROOT = 'assets/bundles/battle/units/effects/出生特效';
 const PREFAB_PATH = `${FX_ROOT}/出生特效.prefab`;
 const ANIM_PATH = `${FX_ROOT}/anim/出生特效.anim`;
 const ATLAS_DIR = `${FX_ROOT}/atlas`;
@@ -45,6 +45,8 @@ const ATLAS_DIR = `${FX_ROOT}/atlas`;
  */
 const EXPECTED_FRAME_WIDTH = 266;
 const EXPECTED_FRAME_HEIGHT = 330;
+const EXPECTED_IMAGE_WIDTH = 110;
+const EXPECTED_IMAGE_HEIGHT = 137;
 /** atlas 里的帧文件数：帧全导（第 25 张是第 24 帧的重复副本，只为保持命名/文件数稳定）。 */
 const FRAME_COUNT = 25;
 /** `anim` 实际引用的帧数 = 24（新美术 24 张全用；`sample=12` ⇒ 24/12 = 2.0s，与老口径同长）。 */
@@ -79,7 +81,7 @@ type Raw = Record<string, any>;
 
 const loadRaw = (path: string): Raw[] => JSON.parse(readFileSync(path, 'utf8')) as Raw[];
 
-test('出生特效：25 帧序列帧全在，命名是「出生特效_spawn_NN」，且都是原始尺寸 208x376', () => {
+test('出生特效：25 帧序列帧全在，命名连续且按显示尺寸缩图', () => {
     assert.ok(existsSync(PREFAB_PATH), '出生特效 prefab 缺失');
     const frames = sortedFrames();
     assert.equal(frames.length, FRAME_COUNT,
@@ -95,10 +97,8 @@ test('出生特效：25 帧序列帧全在，命名是「出生特效_spawn_NN�
         const userData = meta.subMetas?.f9941?.userData;
         assert.ok(userData, `${frame} 缺 sprite-frame 子资源，引擎没能导出可绑的 SpriteFrame`);
         // rawWidth/rawHeight 是**未裁剪**的原始尺寸，全帧一致才说明缩放没走偏。
-        assert.equal(userData.rawWidth, EXPECTED_FRAME_WIDTH,
-            `${frame} 原始宽度应为 ${EXPECTED_FRAME_WIDTH}（老端 sourceSize），实际 ${userData.rawWidth}`);
-        assert.equal(userData.rawHeight, EXPECTED_FRAME_HEIGHT,
-            `${frame} 原始高度应为 ${EXPECTED_FRAME_HEIGHT}（老端 sourceSize），实际 ${userData.rawHeight}`);
+        assert.equal(userData.rawWidth, EXPECTED_IMAGE_WIDTH, `${frame} 图片宽度`);
+        assert.equal(userData.rawHeight, EXPECTED_IMAGE_HEIGHT, `${frame} 图片高度`);
     }
 });
 
@@ -163,7 +163,7 @@ test('出生特效：动画片段逐帧引用 16 张图，时长 = 帧数 / fps'
     assert.equal(clip.wrapMode, 1, `wrapMode 应为 1(ClampToForever)，实际 ${clip.wrapMode}`);
 });
 
-test('出生特效 prefab：layer=UI_2D、sizeMode=RAW、trim关（抖动三连）', () => {
+test('出生特效 prefab：layer=UI_2D、sizeMode=CUSTOM、trim关', () => {
     const prefab = loadRaw(PREFAB_PATH);
     const node = prefab.find((o) => o?.__type__ === 'cc.Node');
     assert.ok(node, 'prefab 没有根节点');
@@ -172,13 +172,12 @@ test('出生特效 prefab：layer=UI_2D、sizeMode=RAW、trim关（抖动三连�
 
     const sprite = prefab.find((o) => o?.__type__ === 'cc.Sprite');
     assert.ok(sprite, 'prefab 没有 cc.Sprite，动画无处换图');
-    assert.equal(sprite._sizeMode, 2,
-        `sizeMode 必须是 RAW(2)：24 帧 trim 包围盒各不相同，CUSTOM/TRIMMED 会让动画忽大忽小`);
+    assert.equal(sprite._sizeMode, 0, '缩图后必须固定显示画布，不随原图回写尺寸');
     assert.equal(sprite._isTrimmedMode, false,
         'trim 必须为false，否则又按 trim 区渲染，逐帧位置会跳');
     assert.ok(sprite._spriteFrame?.__uuid__, 'Sprite 没绑首帧 spriteFrame');
 
-    // 节点尺寸应等于原生帧尺寸（RAW 下引擎写成 originalSize）。
+    // 节点保留原有显示画布，与缩小后的图片像素尺寸独立。
     const uiTransform = prefab.find((o) => o?.__type__ === 'cc.UITransform');
     assert.equal(uiTransform._contentSize.width, EXPECTED_FRAME_WIDTH);
     assert.equal(uiTransform._contentSize.height, EXPECTED_FRAME_HEIGHT);
@@ -333,7 +332,7 @@ test('出生特效：垂直落位全归 prefab（anchorPoint + _lpos），渲染
 
 test('出生特效：加载器容错加载 + 渲染层播放，两端都接上了', () => {
     const loader = readFileSync('assets/script/app/zcds/application/ZCGameLoader.ts', 'utf8');
-    assert.ok(loader.includes('units/effects/出生特效/出生特效'),
+    assert.ok(readFileSync('assets/script/app/zcds/model/ZCGameResourcePlan.ts', 'utf8').includes('units/effects/出生特效/出生特效'),
         'SPAWN_FX_URL 没指向出生特效 prefab');
     assert.ok(loader.includes('loadSpawnFxPrefab'),
         '缺容错加载器 —— 出生特效没交/路径写错不该让整局开不起来');

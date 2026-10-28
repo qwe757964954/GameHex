@@ -9,11 +9,15 @@ import {
 } from '../../battle/BattleStartModel';
 import type { ZCBattleStart } from '../../battle/BattleStartModel';
 import {
+    TERRITORY_ASYNC_REWARD_SLOTS,
+    TERRITORY_ASYNC_SCOUT_SILVER,
     TERRITORY_DEFAULT_PLAYER_COUNT,
     TERRITORY_ENEMY_DISPLAY_LIMIT,
+    TERRITORY_LEVEL_DROP_SLOTS,
     TERRITORY_TEXTS,
     TERRITORY_UNBOUND_TYPE_NAMES,
 } from './TerritoryTexts';
+import { TERRITORY_SILVER_RES_ID } from '../model/TerritoryIdleReward';
 import type { TerritoryCampaignStage } from '../model/TerritoryCampaignConfig';
 import { TERRITORY_IDLE_REWARD_MAX_HOURS_FALLBACK } from '../model/TerritoryCampaignConfig';
 import type {
@@ -48,7 +52,6 @@ import type {
     TerritoryWallet,
 } from '../model/TerritorySaveStore';
 import { TERRITORY_BATTLE_STATUS } from '../model/TerritoryBattleStatus';
-import type { ITerritorySiteDetailContent } from '../view/TerritorySiteDetailPanel';
 import {
     canOpenTerritoryRandomCell,
     canClaimTerritoryRandomResource,
@@ -80,37 +83,18 @@ export interface ITerritoryChapterLoader {
 /** 服务端格子网关；运行时直接传现有 TerritoryCellRepository 实例（结构匹配）。 */
 export interface ITerritoryCellGateway {
     fetchChapterCells(
-        chapterId: number, maxCell: number, host?: unknown,
+        chapterId: number, maxCell: number, host?: object,
     ): Promise<TerritoryCellFetchResult>;
     /** 服务端解锁格子；战斗入口允许离线继续，固定资源领取只认成功回包。 */
-    unlockCell(chapterId: number, cellId: number, host?: unknown): Promise<TerritoryWriteResult>;
+    unlockCell(chapterId: number, cellId: number, host?: object): Promise<TerritoryWriteResult>;
     /** 探索到期占领后上报通关；fire-and-forget。 */
-    passCell(chapterId: number, cellId: number, host?: unknown): Promise<TerritoryWriteResult>;
+    passCell(chapterId: number, cellId: number, host?: object): Promise<TerritoryWriteResult>;
     /** Boss 关开战：请求战斗信息（`CmdStartBattleReqMsg`），**不走**通关上报。 */
     startBattle(
         battleType: number,
         battleParams: readonly string[],
-        host?: unknown,
+        host?: object,
     ): Promise<TerritoryStartBattleResult>;
-    /**
-     * 订阅「通关格子」广播（`CmdCityChapterPassCellBroMsg`）。**服务端主动推**，不走 req。
-     *
-     * 标成**可选**是因为测试与部分注入的桩网关没实现它 —— 缺了只是收不到联机广播，
-     * 不该让整个 Presenter 构造不出来（`'x' in gateway` 那套分支反而更啰嗦）。
-     */
-    listenPassCellsBro?(onPassCells: (levelChapter: number, cellIds: readonly number[]) => void): void;
-    /** 退订（`dispose` 必调，否则监听挂在 `GameNet` 上会回调到已销毁的对象）。 */
-    unlistenPassCellsBro?(): void;
-    /**
-     * 订阅服务端**主动下发**的章节格子状态（`CmdCityChapterCellInfoRspMsg`，
-     * 战斗结束、关卡通关后后端不经请求下发，前端据此刷新，不再发通关请求）。
-     *
-     * 与 `listenPassCellsBro` 一样标成可选；`maxCell` 用来裁剪上界，`fetchChapterCells`
-     * 自己的正常响应不会重复回调（实现里用 in-flight 标志排除）。
-     */
-    listenCellInfo?(maxCell: number, onState: (state: ITerritoryCellState) => void): void;
-    /** 退订（`dispose` 必调）。 */
-    unlistenCellInfo?(): void;
     clear(): void;
 }
 
@@ -172,30 +156,37 @@ export interface ITerritoryBattleNavParams {
     }>;
 }
 
-export interface ITerritoryPresenterOutputs {
-    readonly navigateToBattle: (pve: ITerritoryBattleNavParams, battle?: ZCBattleStart) => void;
-    readonly showTip: (text: string) => void;
-    /**
-     * 发奖反馈。
-     *
-     * @param originCellId 奖励来自哪一格（资源点领取 / 随机格开启 ⇒ 那一格的 `cellId`；
-     *   挂机产出按关卡结算、**没有格子** ⇒ `null`）。页面用它决定飘字落点
-     *   （`null` 时回落到起始格），见 `TerritoryResourceGain` 的口径说明。
-     */
-    readonly showRewards: (
-        rewards: readonly (TerritoryIdleRewardGain | ITerritoryGrantedReward)[],
-        originCellId?: number | null,
-        options?: ITerritoryRewardPresentation,
-    ) => void;
-    /**
-     * 与服务端通信中的全屏遮挡开关（解锁 / 通关 / 开战 / 随机格开启的写请求在途时
-     * `busy=true`，全部结束后 `busy=false`）。页面用工程通用 `LoadingPopup` 实现：
-     * 请求期间玩家无法点击，从源头防快速点击重复发包。
-     *
-     * 标成**可选**：测试与部分注入的桩 outputs 没实现它时，业务照常走，只是少了遮挡。
-     * 文案由 Presenter 按操作类型给出（`TERRITORY_TEXTS.busy*`）。
-     */
-    readonly setBusy?: (busy: boolean, text?: string) => void;
+/** NavigateToBattle 事件载荷：pve 为现 ProcedureManager.navigate 的 { pve: … } 里的 pve。 */
+export interface ITerritoryNavigateBattlePayload {
+    readonly pve: ITerritoryBattleNavParams;
+    readonly battle?: ZCBattleStart;
+}
+
+/** ShowTip 事件载荷。 */
+export interface ITerritoryShowTipPayload {
+    readonly text: string;
+}
+
+/**
+ * ShowRewards 事件载荷。
+ *
+ * @param originCellId 奖励来自哪一格（资源点领取 / 随机格开启 ⇒ 那一格的 `cellId`；
+ *   挂机产出按关卡结算、**没有格子** ⇒ `null`）。页面用它决定飘字落点
+ *   （`null` 时回落到起始格），见 `TerritoryResourceGain` 的口径说明。
+ */
+export interface ITerritoryShowRewardsPayload {
+    readonly rewards: readonly (TerritoryIdleRewardGain | ITerritoryGrantedReward)[];
+    readonly originCellId?: number | null;
+    readonly options?: ITerritoryRewardPresentation;
+}
+
+/**
+ * SetBusy 事件载荷：写请求在途 `busy=true`（全屏遮挡，防快速点击重复发包），
+ * 全部结束后 `busy=false`；文案由 Presenter 按操作类型给出（`TERRITORY_TEXTS.busy*`）。
+ */
+export interface ITerritorySetBusyPayload {
+    readonly busy: boolean;
+    readonly text?: string;
 }
 
 /**
@@ -216,12 +207,11 @@ export interface ITerritoryPresenterPorts {
     readonly loader: ITerritoryChapterLoader;
     readonly gateway: ITerritoryCellGateway;
     readonly store: ITerritoryChapterStore;
-    readonly outputs: ITerritoryPresenterOutputs;
     readonly walletSeed: () => TerritoryWallet;
     readonly readServerWallet: () => TerritoryWallet | null;
     readonly availableChapters: readonly number[];
     /** 网络请求的生命周期宿主（页面组件；断网/销毁时取消请求）。 */
-    readonly lifecycleHost?: unknown;
+    readonly lifecycleHost?: object;
 }
 
 /**
@@ -253,7 +243,87 @@ const TERRITORY_TWO_STEP_TEXTS = {
 
 export interface ITerritoryDetailState {
     readonly open: boolean;
-    readonly content: ITerritorySiteDetailContent | null;
+    /**
+     * 异步据点的「玩家关卡」弹窗内容（`null` = 当前选中的不是异步据点）。
+     *
+     * 与 `content` **互斥**：同一个 `detailSite` 只会走其中一条渲染路径，
+     * 页面按「playerStage 有值就用玩家关卡弹窗，否则用通用详情弹窗」选面板。
+     */
+    readonly playerStage: ITerritoryPlayerStageContent | null;
+    /** 关卡/首领据点的「关卡界面」内容（`null` = 当前选中的不是关卡型站点）。 */
+    readonly levelInfo: ITerritoryLevelInfoContent | null;
+    /** 「关卡提示」内容；非 `null` = 提示弹窗开着（压在关卡界面上面）。 */
+    readonly levelTip: ITerritoryLevelTipContent | null;
+}
+
+/** 「关卡界面」里一格掉落（图标由页面按 `resId` 解析）。 */
+export interface ITerritoryLevelDrop {
+    readonly resId: number;
+    readonly amount: number;
+}
+
+/** 「关卡界面」呈现数据（蓝湖「关卡界面」设计稿）。 */
+export interface ITerritoryLevelInfoContent {
+    readonly title: string;
+    /** 有没有「敌军提示」可看（没有就隐藏右上角感叹号，别让玩家点出一个空面板）。 */
+    readonly hasTip: boolean;
+    readonly objective: string;
+    readonly occupy: string;
+    readonly drops: readonly ITerritoryLevelDrop[];
+    /** 推荐文案；空串 = 整行隐藏。 */
+    readonly recommend: string;
+    readonly fightCaption: string;
+    readonly fightEnabled: boolean;
+    readonly staminaCost: number;
+}
+
+/**
+ * 「关卡提示」里一个敌军卡位。
+ *
+ * 🔴 `description` 是**逐个敌人**的说明（`pvpCard.description`）——
+ * 蓝湖设计稿里描述框显示的是**当前选中那个敌人**的技能描述，
+ * 不是所有敌人拼在一起（拼在一起在超过 3 个敌人时会撑爆描述框）。
+ */
+export interface ITerritoryLevelTipEnemy {
+    /** `pvpCard.headIcon` 路径；空串 = 没有头像。 */
+    readonly headIcon: string;
+    readonly name: string;
+    /** 该敌人的技能描述；空串 = 描述框显示占位文案。 */
+    readonly description: string;
+}
+
+/** 「关卡提示」呈现数据。 */
+export interface ITerritoryLevelTipContent {
+    readonly title: string;
+    readonly enemies: readonly ITerritoryLevelTipEnemy[];
+    /**
+     * 描述框的**兜底**文案（所有敌人都没有描述时用）。
+     * 正常路径是「选中敌人的 `description`」，这个字段只在全员无描述时兜底。
+     */
+    readonly description: string;
+}
+
+/** 玩家关卡弹窗里的一格占领奖励（图标由页面按 `resId` 解析，Presenter 只给纯数据）。 */
+export interface ITerritoryPlayerStageReward {
+    readonly resId: number;
+    readonly amount: number;
+}
+
+/**
+ * 异步据点「玩家关卡」弹窗的呈现数据。
+ *
+ * 字段对齐蓝湖「玩家关卡」设计稿：标题木牌 + 两条占领奖励（第二条是图标格）+ 侦查/开战双按钮。
+ * 两个按钮各带一份**银币**消耗 —— 数值全部来自配置与存档，视图不自己造数。
+ */
+export interface ITerritoryPlayerStageContent {
+    readonly title: string;
+    /** 第一条占领奖励的文案；空串 = 整条隐藏（没有卡牌宝箱奖励的据点）。 */
+    readonly chestText: string;
+    readonly rewards: readonly ITerritoryPlayerStageReward[];
+    readonly scoutCost: number;
+    readonly fightCost: number;
+    readonly fightCaption: string;
+    readonly fightEnabled: boolean;
 }
 
 /** 领地章节 HUD 的纯呈现数据；主城地图宿主不渲染这组字段。 */
@@ -302,7 +372,7 @@ interface TerritoryStageView {
  *  状态变更经 `EventMgr.instance.emit(TERRITORY_PRESENTER_EVENTS.StateChange)` 广播，
  *  页面订阅后须在 `onDestroy` 里 `offTarget(this)` 摘干净（见 `TerritoryEvents.ts`）。
  *
- *  页内刷新只有这一个通知通道——加载失败走 `outputs.showTip` 轻提示，
+ *  页内刷新只有这一个通知通道——加载失败走 `showTip` 轻提示，
  *  不再有整页 loading 面板（生产口径：本地存档先渲染、服务端状态后台合并、失败不锁屏）。
  */
 export class TerritoryPresenter {
@@ -317,6 +387,7 @@ export class TerritoryPresenter {
     private layout: ITerritoryMapLayout = { points: new Map(), width: 0, height: 0, paintOrder: [] };
     private art: ITerritoryBattleArt = {
         background: null,
+        levelBubbleFrame: null,
         // 地皮两态（未通关 / 已通关）+ 四张「已解锁未通关」的格面框，口径见 `TerritoryMapView.paintHexes`。
         tileLocked: null,
         tileCleared: null,
@@ -353,6 +424,8 @@ export class TerritoryPresenter {
     private resultNotice = '';
     private detailStage: TerritoryCampaignStage | null = null;
     private detailSite: TerritorySite | null = null;
+    /** 「关卡提示」是否开着（压在关卡界面上的二级弹窗，关它不影响下面的面板）。 */
+    private levelTipOpen = false;
     private randomResourceCells: number[] = [];
     /** 开战失败后显示的原因；请求进行中由 startingBattle 驱动转圈。 */
     private battleStartNotice: string | null = null;
@@ -392,12 +465,8 @@ export class TerritoryPresenter {
         // 永不关闭，遮罩上的 `BlockInputEvents` 常驻吞点击，其他页面「点不动」。
         while (this.busyCount > 0) {
             this.busyCount -= 1;
-            this.ports.outputs.setBusy?.(false);
+            this.setBusy(false);
         }
-        // 必须退订：Bro 监听挂在 `GameNet` 上（进程级），Presenter 销毁后还在监听会往
-        // 已dispose 的对象上回调，表现为「关页面后再进，格子莫名变已占领」。
-        this.ports.gateway.unlistenPassCellsBro?.();
-        this.ports.gateway.unlistenCellInfo?.();
         // 全局中控上的残留监听一并摘干净（zcds 的 `ZCGame.shutdown` 同款；
         // 页面侧由 `MainTerritoryMap.onDestroy` 的 `offTarget(this)` 负责）。
         EventMgr.instance.offTarget(this);
@@ -416,13 +485,13 @@ export class TerritoryPresenter {
     focusCurrentBoss(): number | null {
         if (this.disposed || this.startingBattle || this.busyCount > 0) return null;
         if (!this.map || !this.progress || this.map.chapterId !== this.currentChapterId) {
-            this.ports.outputs.showTip(TERRITORY_TEXTS.loadingChapter);
+            this.showTip(TERRITORY_TEXTS.loadingChapter);
             return null;
         }
         const target = findCurrentTerritoryBoss(this.map.sites, this.stageByCell, this.progress);
         if (!target) {
             this.closeDetail();
-            this.ports.outputs.showTip(TERRITORY_TEXTS.noBossTarget);
+            this.showTip(TERRITORY_TEXTS.noBossTarget);
             return null;
         }
         this.cancelBattleRequest();
@@ -439,7 +508,19 @@ export class TerritoryPresenter {
             && (this.progress.isCellUnlocked(site.cellId) || this.progress.isAreaPassed(site.cellId))
             && this.pendingFixedResourceCells.has(site.cellId)) return;
         this.cancelBattleRequest();
-        // 可开战站点（`stage` / `boss` / `asyncPvp`）统一走「两步式」：先解锁展示建筑；已解锁再次点击
+        // 🔴 异步据点（`asyncPvp`）**先弹「玩家关卡」弹窗**，不直接开战。
+        //
+        // 设计稿（蓝湖「玩家关卡」）把「侦查 / 开始战斗」两颗按钮都放在弹窗里，
+        // 点格子就发开战请求会把这层整个跳过；弹窗里的「开始战斗」再走
+        // `requestBattle()` → `handleBattleStationStart`（解锁 + 开战的原链路一行没动）。
+        if (site.type === TERRITORY_SITE_TYPE.asyncPvp) {
+            this.detailSite = site;
+            this.detailStage = this.stageByCell.get(site.cellId) ?? null;
+            this.battleStartNotice = null;
+            this.emitStateChange();
+            return;
+        }
+        // 可开战站点（`stage` / `boss`）统一走「两步式」：先解锁展示建筑；已解锁再次点击
         // → `CmdStartBattleReqMsg` 开战（**不发**通关）。
         //
         // 🔴 2026-10-15 口径（山猫）：「点建筑就开始」是**所有关卡**的行为，不是 327/328 的特例。
@@ -449,18 +530,33 @@ export class TerritoryPresenter {
         // ⚠️ 判据：**站点类型**决定走哪条路，`isBoss`（= `levelMod === 2`）与是否绑到 campaign
         // 都不是准入条件 —— 找不到战斗配置时走 `handleUnlockOnly`，不会发空请求。
         //（`stageByCell` 已把主线与 asyncPvp 的同区域格子都填上 stage，见 `loadChapter`。）
-        if (site.type === TERRITORY_SITE_TYPE.stage || site.type === TERRITORY_SITE_TYPE.boss || site.type === TERRITORY_SITE_TYPE.asyncPvp) {
-            const stage = this.stageByCell.get(site.cellId) ?? null;
-            this.detailSite = null;
-            this.detailStage = null;
-            this.emitStateChange();
-            if (stage) {
-                void this.handleBattleStationStart(site, stage);
-            } else {
-                // 没有 stage 绑定（绑不到 campaign 行）⇒ 无从开战，退回纯解锁那一步，
-                // 别硬发一个没有 battleParams 语义的请求。
-                void this.handleUnlockOnly(site);
+        if (site.type === TERRITORY_SITE_TYPE.stage || site.type === TERRITORY_SITE_TYPE.boss) {
+            // 🔴 2026-10-28 用户口径：「当关卡地块未解锁时（显示银币和数字 ui 时），点击地块消耗银币，
+            // 播放地块切换成关卡地块的动画（与其他新生成的地块动画一致），**不要**直接改成点击银币
+            // 弹出【领地关卡弹窗】」。
+            //
+            // ⇒ 锁着的格子点一下 = **花银币解锁**（走 `handleUnlockOnly`：校验前置 / 银币 / 体力 →
+            //   `CmdCityChapterUnlockCellReqMsg` → `markCellsUnlocked`），界面**不弹**。
+            //   解锁动画由视图侧按「刚解锁」的 diff 播（与其它新露出格子同一套 `hexSpawn`）。
+            //
+            // ⚠️ 判据必须 **`isCellUnlocked || isAreaPassed`**（与 `isCellActivated` 同源）：
+            //   只判 `isCellUnlocked` 会让「区域已通关、但本格没单独解锁」的格子反复走解锁请求。
+            if (!this.progress.isCellUnlocked(site.cellId) && !this.progress.isAreaPassed(site.cellId)) {
+                this.detailSite = null;
+                this.detailStage = null;
+                this.battleStartNotice = null;
+                this.levelTipOpen = false;
+                this.emitStateChange();
+                void this.handleUnlockOnly(site, TERRITORY_TEXTS.stageUnlocked);
+                return;
             }
+            // 已解锁（或区域已通关）：维持 2026-10-27（蓝湖「关卡界面」）的「先弹弹窗」口径，
+            // 两颗入口都在面板里（感叹号 → 关卡提示，开始战斗 → `requestBattle`）。
+            this.detailSite = site;
+            this.detailStage = this.stageByCell.get(site.cellId) ?? null;
+            this.battleStartNotice = null;
+            this.levelTipOpen = false;
+            this.emitStateChange();
             return;
         }
         // 只剩**资源点**走「解锁 → 通关」（`CmdCityChapterPassCellReqMsg`）。
@@ -495,6 +591,23 @@ export class TerritoryPresenter {
         this.detailSite = null;
         this.detailStage = null;
         this.battleStartNotice = null;
+        this.levelTipOpen = false;
+        this.emitStateChange();
+    }
+
+    /** 关卡界面的感叹号 → 打开「关卡提示」（只对关卡型站点有效）。 */
+    openLevelTip(): void {
+        if (this.disposed || !this.detailSite) return;
+        // 没有敌军就没有提示可看（与感叹号的显隐口径一致）
+        if (!this.levelTipContent()?.enemies.length) return;
+        this.levelTipOpen = true;
+        this.emitStateChange();
+    }
+
+    /** 关掉「关卡提示」，关卡界面留着。 */
+    closeLevelTip(): void {
+        if (!this.levelTipOpen) return;
+        this.levelTipOpen = false;
         this.emitStateChange();
     }
 
@@ -502,9 +615,17 @@ export class TerritoryPresenter {
         const site = this.detailSite;
         const stage = this.detailStage;
         if (this.disposed || !site || !this.map || !this.saveState || !this.progress) return;
-        if (!stage || this.startingBattle) return;
-        if (!this.progress.isAreaPassed(site.cellId) && !this.progress.isCellUnlocked(site.cellId)
-            && !this.progress.checkUnlock(site.cellId, Number.MAX_SAFE_INTEGER).ok) return;
+        if (this.startingBattle) return;
+        // 站点可达性（解锁/通关/花费）全部由 `handleBattleStationStart` 自己判 ——
+        // 这里再拦一次会把「需要先解锁」的关卡挡成静默 return（弹窗点了没反应）。
+        // 绑不到 campaign 行 ⇒ 无从开战（没有 battleParams 语义），退回纯解锁那一步。
+        // 这条兜底原来在 `selectSite` 里，关卡改成「先弹界面」后挪到这里。
+        if (!stage) {
+            if (site.type === TERRITORY_SITE_TYPE.stage || site.type === TERRITORY_SITE_TYPE.boss) {
+                void this.handleUnlockOnly(site);
+            }
+            return;
+        }
         if (site.type === TERRITORY_SITE_TYPE.boss || site.type === TERRITORY_SITE_TYPE.stage
             || site.type === TERRITORY_SITE_TYPE.asyncPvp) {
             if (this.pendingFixedResourceCells.has(site.cellId)) return;
@@ -547,17 +668,17 @@ export class TerritoryPresenter {
             if (this.pendingFixedResourceCells.has(site.cellId)) return;
             const check = progress.checkUnlock(site.cellId, Number.MAX_SAFE_INTEGER);
             if (!check.ok) {
-                if ('reason' in check) this.ports.outputs.showTip(check.reason);
+                if ('reason' in check) this.showTip(check.reason);
                 return;
             }
             const wallet = this.saveState?.wallet;
             if (!wallet) return;
             if (wallet.silver < site.unlock.silverCost) {
-                this.ports.outputs.showTip(TERRITORY_TEXTS.silverNotEnough);
+                this.showTip(TERRITORY_TEXTS.silverNotEnough);
                 return;
             }
             if (wallet.stamina < site.unlock.staminaCost) {
-                this.ports.outputs.showTip(TERRITORY_TEXTS.staminaNotEnough);
+                this.showTip(TERRITORY_TEXTS.staminaNotEnough);
                 return;
             }
             const pending = this.pendingFixedResourceCells;
@@ -578,9 +699,9 @@ export class TerritoryPresenter {
                     progress.markCellsUnlocked(result.unlockedCellIds ?? [site.cellId]);
                     this.persistProgress();
                     this.refreshWalletFromServer(false);
-                    this.ports.outputs.showTip(TERRITORY_TEXTS.bossUnlocked);
+                    this.showTip(TERRITORY_TEXTS.bossUnlocked);
                 } else {
-                    this.ports.outputs.showTip(TERRITORY_TEXTS.bossUnlockFailed);
+                    this.showTip(TERRITORY_TEXTS.bossUnlockFailed);
                 }
             } finally {
                 pending.delete(site.cellId);
@@ -634,7 +755,7 @@ export class TerritoryPresenter {
             );
             if (this.disposed || loadId !== this.loadId || requestId !== this.battleRequestId) return;
             if (!result.ok) {
-                this.ports.outputs.showTip(TERRITORY_TEXTS.bossBattleStartFailed);
+                this.showTip(TERRITORY_TEXTS.bossBattleStartFailed);
             } else {
                 this.bossBattleStart = { battleId: result.battle.battleId, seed: result.battle.seed };
                 this.beginBattle(site, stage, result.battle);
@@ -671,19 +792,23 @@ export class TerritoryPresenter {
         if (!territoryRevealedCells(map, progress).includes(site.cellId)) return;
         const check = progress.checkUnlock(site.cellId, Number.MAX_SAFE_INTEGER);
         if (!check.ok) {
-            if ('reason' in check) this.ports.outputs.showTip(check.reason);
+            if ('reason' in check) this.showTip(check.reason);
             return;
         }
         const wallet = this.saveState?.wallet;
         if (!wallet) return;
         if (wallet.silver < site.unlock.silverCost) {
-            this.ports.outputs.showTip(TERRITORY_TEXTS.silverNotEnough);
+            this.showTip(TERRITORY_TEXTS.silverNotEnough);
             return;
         }
         if (wallet.stamina < site.unlock.staminaCost) {
-            this.ports.outputs.showTip(TERRITORY_TEXTS.staminaNotEnough);
+            this.showTip(TERRITORY_TEXTS.staminaNotEnough);
             return;
         }
+        // 🔴 与 `handleBattleStationStart` 同一条守卫：`selectSite` 开头已 `cancelBattleRequest()`
+        // 递增过 ⇒ 记下这一次的号。「玩家解锁 A 在飞时又点了 B」⇒ A 的回包迟到，
+        // 不能把 A 的界面解锁 + 弹一条提示盖在 B 的交互上。
+        const requestId = this.battleRequestId;
         const pending = this.pendingFixedResourceCells;
         const loadId = this.loadId;
         pending.add(site.cellId);
@@ -691,14 +816,15 @@ export class TerritoryPresenter {
         const exitBusy = this.enterBusy(TERRITORY_TEXTS.busyUnlock);
         try {
             const result = await this.ports.gateway.unlockCell(map.chapterId, site.cellId, this.ports.lifecycleHost);
-            if (this.disposed || loadId !== this.loadId) return;
+            if (this.disposed || loadId !== this.loadId
+                || requestId !== this.battleRequestId) return;
             if (result.ok) {
                 progress.markCellsUnlocked(result.unlockedCellIds ?? [site.cellId]);
                 this.persistProgress();
                 this.refreshWalletFromServer(false);
-                this.ports.outputs.showTip(unlockedText);
+                this.showTip(unlockedText);
             } else {
-                this.ports.outputs.showTip(TERRITORY_TEXTS.bossUnlockFailed);
+                this.showTip(TERRITORY_TEXTS.bossUnlockFailed);
             }
         } finally {
             pending.delete(site.cellId);
@@ -728,17 +854,17 @@ export class TerritoryPresenter {
             if (!territoryRevealedCells(map, progress).includes(site.cellId)) return;
             const check = progress.checkUnlock(site.cellId, Number.MAX_SAFE_INTEGER);
             if (!check.ok) {
-                if ('reason' in check) this.ports.outputs.showTip(check.reason);
+                if ('reason' in check) this.showTip(check.reason);
                 return;
             }
             const wallet = this.saveState?.wallet;
             if (!wallet) return;
             if (wallet.silver < site.unlock.silverCost) {
-                this.ports.outputs.showTip(TERRITORY_TEXTS.silverNotEnough);
+                this.showTip(TERRITORY_TEXTS.silverNotEnough);
                 return;
             }
             if (wallet.stamina < site.unlock.staminaCost) {
-                this.ports.outputs.showTip(TERRITORY_TEXTS.staminaNotEnough);
+                this.showTip(TERRITORY_TEXTS.staminaNotEnough);
                 return;
             }
         }
@@ -759,12 +885,12 @@ export class TerritoryPresenter {
                 this.refreshWalletFromServer(false);
                 // 空串 = 这次不提示（资源点解锁不再弹「已解锁，点击宝箱领取」，见 §3）。
                 const tip = isUnlocked ? texts.claimed : texts.unlocked;
-                if (tip) this.ports.outputs.showTip(tip);
+                if (tip) this.showTip(tip);
                 if (isUnlocked && result.rewards?.length) {
-                    this.ports.outputs.showRewards(result.rewards, site.cellId);
+                    this.showRewards(result.rewards, site.cellId);
                 }
             } else {
-                this.ports.outputs.showTip(isUnlocked
+                this.showTip(isUnlocked
                     ? texts.claimFailed : texts.unlockFailed);
             }
         } finally {
@@ -810,7 +936,7 @@ export class TerritoryPresenter {
                 const reason = check.reason === 'silver' ? TERRITORY_TEXTS.silverNotEnough
                     : check.reason === 'stamina' ? TERRITORY_TEXTS.staminaNotEnough
                         : TERRITORY_TEXTS.randomNeedsNeighbor;
-                this.ports.outputs.showTip(reason);
+                this.showTip(reason);
             }
             return;
         }
@@ -832,16 +958,19 @@ export class TerritoryPresenter {
                 progress.markCellsPassed(openedCellIds);
                 this.persistProgress();
                 this.refreshWalletFromServer(false);
-                // ⚠️ 不补「已开启」轻提示：随机格是解锁即发奖，奖励弹窗已经承担了这次操作的反馈，
-                // 再弹一句轻提示会和奖励窗同时出现（两条 UI 抢同一时刻）。
-                // 失败分支的轻提示保留（那时没有奖励窗）。
+                // ⚠️ 不补「已开启」轻提示：随机格是解锁即发奖，**格子上喷出的资源**已经承担了
+                // 这次操作的反馈（2026-10-26：这条反馈是粒子 + 飘字，不是奖励弹窗），
+                // 再弹一句轻提示会和它抢同一时刻。
+                // 失败分支的轻提示保留（那时没有资源喷发）。
                 // 随机格是**解锁即发奖**，没有"开箱"这一步：直接喷资源图标（需求 2026-10-22 §1）。
                 // 粒子个数由页面按奖励总量分级（< 50 很稀疏），不在这里算。
+                // ⚠️ `{ chest: false }` 同时还意味着**不弹奖励窗**（2026-10-26 §3）：
+                //    随机池发的是道具（非钱包类），走 `settleRewards` 会被全部判进 `popup`。
                 if (result.rewards?.length) {
-                    this.ports.outputs.showRewards(result.rewards, cellId, { chest: false });
+                    this.showRewards(result.rewards, cellId, { chest: false });
                 }
             } else {
-                this.ports.outputs.showTip(TERRITORY_TEXTS.randomOpenFailed);
+                this.showTip(TERRITORY_TEXTS.randomOpenFailed);
             }
         } finally {
             pending.delete(cellId);
@@ -861,7 +990,7 @@ export class TerritoryPresenter {
      */
     private enterBusy(text: string): () => void {
         this.busyCount += 1;
-        this.ports.outputs.setBusy?.(true, text);
+        this.setBusy(true, text);
         return () => {
             // dispose 已统一撤回在途 loading（见 `dispose`），这里再退就是重复 hide，
             // 会把**其他页面**贡献的 loading 也关掉。
@@ -872,7 +1001,7 @@ export class TerritoryPresenter {
             // 时（A show 后 B show ⇒ _refCount=2，A exit 不 hide，B exit 归零只 hide 一次 ⇒
             // 残留 1）会让全屏遮罩常驻 —— 遮罩上的 `BlockInputEvents` 会吞掉地图所有点击，
             // 表现为「刚解锁的宝箱再点没反应」。每次 hide 配对后：并发 ⇒ 2→1→0 正常关闭。
-            this.ports.outputs.setBusy?.(false);
+            this.setBusy(false);
         };
     }
 
@@ -913,7 +1042,7 @@ export class TerritoryPresenter {
                 if (unlock.reason === TERRITORY_REQUEST_STATUS.rejected) {
                     this.startingBattle = false;
                     this.battleStartNotice = null;
-                    this.ports.outputs.showTip(TERRITORY_TEXTS.unlockRejected);
+                    this.showTip(TERRITORY_TEXTS.unlockRejected);
                     this.emitStateChange();
                     return;
                 }
@@ -944,12 +1073,12 @@ export class TerritoryPresenter {
             this.bossBattleStart = null;
             this.startingBattle = false;
             this.battleStartNotice = reason;
-            this.ports.outputs.showTip(reason);
+            this.showTip(reason);
             this.emitStateChange();
             return;
         }
         this.emitStateChange();
-        this.ports.outputs.navigateToBattle({
+        this.navigateToBattle({
             levelId: stage.levelId,
             chapterId: stage.chapterId,
             stage: stage.stage,
@@ -979,7 +1108,7 @@ export class TerritoryPresenter {
         if (nextChapter === undefined || nextChapter === this.currentChapterId) return;
         if (offset > 0 && !this.chapterCompletion().complete) {
             const completion = this.chapterCompletion();
-            this.ports.outputs.showTip(
+            this.showTip(
                 TERRITORY_TEXTS.requireChapterComplete(completion.occupied, completion.total),
             );
             return;
@@ -995,7 +1124,7 @@ export class TerritoryPresenter {
         this.ensureRandomResources();
         this.persistProgress();
         this.emitStateChange();
-        if (idle?.rewards.length) this.ports.outputs.showRewards(idle.rewards);
+        if (idle?.rewards.length) this.showRewards(idle.rewards);
     }
 
     /** 60 秒拍：每拍都结算探索与挂机产出（与旧 tickIdleRewards 口径一致）。 */
@@ -1008,7 +1137,7 @@ export class TerritoryPresenter {
             this.persistProgress();
             this.emitStateChange();
         }
-        if (idle?.rewards.length) this.ports.outputs.showRewards(idle.rewards);
+        if (idle?.rewards.length) this.showRewards(idle.rewards);
         void this.reportPendingPasses();
     }
 
@@ -1017,7 +1146,7 @@ export class TerritoryPresenter {
     // ============================================================
 
     private async loadChapter(chapterId: number): Promise<void> {
-        const { loader, gateway, store, outputs, lifecycleHost } = this.ports;
+        const { loader, gateway, store, lifecycleHost } = this.ports;
         const loadId = ++this.loadId;
         this.cancelBattleRequest();
         this.pendingFixedResourceCells = new Set<number>();
@@ -1047,14 +1176,14 @@ export class TerritoryPresenter {
         } catch (error) {
             console.error('[TerritoryPresenter] 领地数据加载失败', error);
             if (loadId === this.loadId && !this.disposed) {
-                this.ports.outputs.showTip(TERRITORY_TEXTS.loadFailed);
+                this.showTip(TERRITORY_TEXTS.loadFailed);
                 this.currentChapterId = previousChapterId;
             }
             return;
         }
         if (loadId !== this.loadId || this.disposed) return;
         if (bundle == null) {
-            this.ports.outputs.showTip(TERRITORY_TEXTS.loadFailed);
+            this.showTip(TERRITORY_TEXTS.loadFailed);
             this.currentChapterId = previousChapterId;
             return;
         }
@@ -1111,25 +1240,13 @@ export class TerritoryPresenter {
         await this.mergeServerState(chapterId, loadId, lifecycleHost);
         if (loadId !== this.loadId || this.disposed) return;
 
-        // 订阅「通关格子」广播（`CmdCityChapterPassCellBroMsg`）。放在 mergeServerState **之后** ——
-        // 先把本章权威状态拉齐再开监听，避免「拉取途中到的广播」被 clear 掉或重复落地。
-        // 重复调用是幂等的（Repository 只挂一次监听、只换回调）。
-        // ⚠️ 可选链：桩网关（单测 / 注入的精简实现）可能没实现订阅，缺了只是收不到广播。
-        gateway.listenPassCellsBro?.((broChapter, broCells) => {
-            this.applyPassCellsBro(broChapter, broCells);
-        });
-        // 战斗结束后后端**主动下发**的章节格子状态（非请求响应），收到即刷新。
-        gateway.listenCellInfo?.(this.map.rows * this.map.columns, (state) => {
-            this.applyCellInfoState(state);
-        });
-
         this.applyStoredBattleResult();
         const now = Date.now();
         this.settleProgress(now);
         this.persistProgress();
         const idle = this.settleIdleRewards(now);
         this.emitStateChange();
-        if (idle?.rewards.length) outputs.showRewards(idle.rewards);
+        if (idle?.rewards.length) this.showRewards(idle.rewards);
         void this.reportPendingPasses();
     }
 
@@ -1154,7 +1271,7 @@ export class TerritoryPresenter {
      * @param levelChapter Bro 里的章节号
      * @param cellIds 本次新增的格子 id（可能一批多个）
      */
-    private applyPassCellsBro(levelChapter: number, cellIds: readonly number[]): void {
+    applyPassCellsBro(levelChapter: number, cellIds: readonly number[]): void {
         if (this.disposed || !this.progress || !this.map) return;
         if (this.normalizeBroChapter(levelChapter) !== this.map.chapterId) return;
         const added = this.progress.applyServerState({ unlockCells: [], passCells: cellIds });
@@ -1190,7 +1307,7 @@ export class TerritoryPresenter {
      * - 落地复用 `applyServerState`（单调增加、按上界裁剪、清掉待确认的 pendingPasses）；
      * - 只有真新增才刷新 + 落盘，重复推送幂等。
      */
-    private applyCellInfoState(state: ITerritoryCellState): void {
+    applyCellInfoState(state: ITerritoryCellState): void {
         if (this.disposed || !this.progress || !this.map) return;
         if (this.normalizeBroChapter(state.levelChapter) !== this.map.chapterId) return;
         this.progress.markServerStateKnown(true);
@@ -1255,7 +1372,7 @@ export class TerritoryPresenter {
     private async mergeServerState(
         chapterId: number,
         loadId: number,
-        host: unknown,
+        host: object,
     ): Promise<void> {
         const progress = this.progress;
         const map = this.map;
@@ -1432,8 +1549,12 @@ export class TerritoryPresenter {
             pendingFixedResourceCells: Array.from(this.pendingFixedResourceCells),
             hud: ready ? this.buildHud() : null,
             detail: {
+                // 站点详情面板已移除（2026-10-27 山猫：不需要了）⇒ `open` 只表示「有站点被选中」，
+                // 显示哪个弹窗看下面三个内容字段（玩家关卡 / 关卡界面 / 关卡提示）。
                 open: this.detailSite !== null,
-                content: this.detailContent(),
+                playerStage: this.playerStageContent(),
+                levelInfo: this.levelInfoContent(),
+                levelTip: this.levelTipOpen ? this.levelTipContent() : null,
             },
         };
     }
@@ -1465,101 +1586,98 @@ export class TerritoryPresenter {
         };
     }
 
-    private detailContent(): ITerritorySiteDetailContent | null {
+    private levelInfoContent(): ITerritoryLevelInfoContent | null {
         const site = this.detailSite;
         if (!site) return null;
+        if (site.type !== TERRITORY_SITE_TYPE.stage && site.type !== TERRITORY_SITE_TYPE.boss) return null;
         const stage = this.detailStage;
-        if (stage) return this.stageDetailContent(site, stage);
-        return this.unboundDetailContent(site);
-    }
-
-    private stageDetailContent(site: TerritorySite, stage: TerritoryCampaignStage): ITerritorySiteDetailContent {
+        const title = stage
+            ? `${stage.isBoss ? TERRITORY_TEXTS.bossStageTitle : TERRITORY_TEXTS.stageTitle}  ${stage.stage}`
+            : TERRITORY_UNBOUND_TYPE_NAMES[site.type];
+        const rewards = stage ? stage.idleRewards.filter((reward) => reward.probability > 0 && reward.amount > 0) : [];
+        const silver = rewards.find((reward) => reward.resId === TERRITORY_SILVER_RES_ID);
+        const drops = rewards
+            .filter((reward) => reward.resId !== TERRITORY_SILVER_RES_ID)
+            .slice(0, TERRITORY_LEVEL_DROP_SLOTS)
+            .map((reward) => ({ resId: reward.resId, amount: reward.amount }));
         const progress = this.progress;
-        if (!progress) {
-            return {
-                title: '', subtitle: '', info: '', canStart: false,
-                startCaption: '', startEnabled: false, isLoading: false,
-            };
-        }
-        const owned = progress.isAreaPassed(site.cellId);
-        const exploration = progress.explorationAt(site.cellId);
-        const check = progress.checkUnlock(site.cellId, Number.MAX_SAFE_INTEGER);
-        const canStart = owned || (!exploration && (progress.isCellUnlocked(site.cellId) || check.ok));
-        const remainSeconds = exploration
-            ? Math.max(0, Math.ceil((exploration.finishesAt - Date.now()) / 1000))
-            : 0;
-        const stateText = owned
-            ? TERRITORY_TEXTS.owned
-            : exploration
-                ? TERRITORY_TEXTS.exploring(remainSeconds)
-                : canStart
-                    ? TERRITORY_TEXTS.available
-                    : 'reason' in check ? check.reason : TERRITORY_TEXTS.notUnlocked;
-        const enemyLimit = TERRITORY_ENEMY_DISPLAY_LIMIT;
-        const enemyText = stage.enemies.length
-            ? `${stage.enemies.slice(0, enemyLimit).map((enemy) => `${enemy.name} Lv.${enemy.level}`).join('、')}`
-                + `${stage.enemies.length > enemyLimit ? ` 等 ${stage.enemies.length} 张卡牌` : ''}`
-            : TERRITORY_TEXTS.noEnemyCards;
-        const waveText = stage.waves.length
-            ? `${stage.waves.length} 波，`
-                + `${stage.waves.map((wave) => `${wave.showAtSeconds}s ${wave.monsterName}×${wave.monsterCount}`).join('；')}`
-            : stage.mode === 'defence'
-                ? TERRITORY_TEXTS.noWavesUseBossTeam
-                : TERRITORY_TEXTS.singleNpcOpponent;
-        const rewardText = stage.idleRewards.length
-            ? stage.idleRewards
-                .map((reward) => `${reward.name}×${reward.amount}${reward.probability < 10000 ? `(${reward.probability / 100}%)` : ''}`)
-                .join('、')
-            : TERRITORY_TEXTS.noReward;
-        const isLoading = this.startingBattle || this.pendingFixedResourceCells.has(site.cellId);
-        const startCaption = isLoading ? '' : (this.battleStartNotice
-            ?? (canStart
-                ? (progress.isCellUnlocked(site.cellId) || owned ? TERRITORY_TEXTS.startBattle : TERRITORY_TEXTS.unlockBattle)
-                : exploration ? TERRITORY_TEXTS.exploringShort : TERRITORY_TEXTS.notUnlocked));
+        const unlocked = !!progress && !!site
+            && (progress.isCellUnlocked(site.cellId) || progress.isAreaPassed(site.cellId));
         return {
-            title: stage.isBoss ? `首领关卡  ${stage.stage}` : `领地关卡  ${stage.stage}`,
-            subtitle: `关卡 ID  ${stage.levelId}`,
-            info: [
-                `站点状态：${stateText}`,
-                `挑战消耗：体力 ${stage.staminaCost}  ·  银币 ${site.unlock.silverCost}`,
-                `探索耗时：${stage.exploreSeconds} 秒`,
-                // ⚠️ 建筑 ID **有值才显示这一行**（2026-10-10 口径）。
-                // 解锁后的建筑完全来自 `chapter_XX.json` 里配的 `buildingId`：
-                // 同一个 `configId`（战斗 id）算一片区域，区域内只有配了 id 的那个站点是建筑；
-                // 没配 id 的格子不生成建筑，这一行也整行不出现（不是显示「未配置」占位）。
-                ...(site.buildingId ? [`建筑 ID：${site.buildingId}`] : []),
-                `敌方生命：${Math.round(stage.hpRate * 100)}%    敌方攻击：${Math.round(stage.attackRate * 100)}%`,
-                `${stage.mode === 'defence' ? TERRITORY_TEXTS.defenceWavesLabel : TERRITORY_TEXTS.matchLineupLabel}：${waveText}`,
-                `守军：${enemyText}`,
-                `占领挂机产出：${rewardText}`,
-                `挂机累计：每满 1 小时自动结算，最多累计 ${this.idleRewardMaxHours} 小时`,
-            ].join('\n\n'),
-            canStart: true,
-            startCaption,
-            startEnabled: canStart && !isLoading && this.battleStartNotice === null,
-            isLoading,
+            title,
+            // 敌军列表为空 ⇒ 感叹号藏起来（点了只会弹一个空框）
+            hasTip: !!stage && stage.enemies.length > 0,
+            objective: TERRITORY_TEXTS.levelObjective,
+            occupy: silver
+                ? TERRITORY_TEXTS.levelOccupy(silver.amount, silver.name)
+                : TERRITORY_TEXTS.noReward,
+            drops,
+            recommend: '',
+            fightCaption: unlocked ? TERRITORY_TEXTS.levelFight : TERRITORY_TEXTS.levelUnlock,
+            // 绑不到关卡也允许点（点了走 `handleUnlockOnly` 只解锁），只有请求在途时禁掉。
+            fightEnabled: !this.pendingFixedResourceCells.has(site.cellId) && !this.startingBattle,
+            staminaCost: stage?.staminaCost ?? 0,
         };
     }
 
-    private unboundDetailContent(site: TerritorySite): ITerritorySiteDetailContent {
+    /** 「关卡提示」内容：敌军前 3 张卡 + 敌方说明拼接。 */
+    private levelTipContent(): ITerritoryLevelTipContent | null {
+        const info = this.levelInfoContent();
+        const stage = this.detailStage;
+        if (!info) return null;
+        // 敌军**全量**下发：虚拟列表按条数渲染（设计稿只画 3 张，但一章经常超过 3 个）
+        const enemies = stage
+            ? stage.enemies.map((enemy) => ({
+                headIcon: enemy.headIcon ?? '',
+                name: `${enemy.name} Lv.${enemy.level}`,
+                description: enemy.description ?? '',
+            }))
+            : [];
+        // 描述框兜底：所有敌人都没写描述时，至少别让框空着
+        const description = stage
+            ? stage.enemies
+                .map((enemy) => enemy.description ?? '')
+                .filter((text) => text !== '')
+                .join('\n')
+            : '';
+        return { title: info.title, enemies, description };
+    }
+
+    /**
+     * 异步据点的「玩家关卡」弹窗内容；选中别的站点时返回 `null`。
+     *
+     * ## 数值口径
+     *
+     * - **占领奖励**：第一条是固定的「1 个卡牌宝箱」（设计稿口径，本期所有异步据点都一样）；
+     *   第二条起取 `PVP-关卡.idleReward`（与「占领挂机产出」同一份配置），按万分比概率
+     *   过滤掉 `pro == 0` 的行 —— 那些是策划留的空位，展示出来等于骗玩家。
+     * - **侦查**：`TERRITORY_ASYNC_SCOUT_SILVER` 常量（服务端还没有侦查协议/配置；
+     *   等协议到位替换成服务端下发的价格，视图侧不用改）。
+     * - **开始战斗**：`site.unlock.silverCost`（= 真正的解锁价，与现有点击开战扣的是同一笔）。
+     */
+    private playerStageContent(): ITerritoryPlayerStageContent | null {
+        const site = this.detailSite;
+        if (!site || site.type !== TERRITORY_SITE_TYPE.asyncPvp) return null;
+        const stage = this.detailStage;
+        const rewards = stage
+            ? stage.idleRewards
+                .filter((reward) => reward.probability > 0 && reward.amount > 0)
+                .slice(0, TERRITORY_ASYNC_REWARD_SLOTS)
+                .map((reward) => ({ resId: reward.resId, amount: reward.amount }))
+            : [];
         return {
-            title: TERRITORY_TEXTS.pendingTitle,
-            subtitle: `类型  ${TERRITORY_UNBOUND_TYPE_NAMES[site.type]}`,
-            info: [
-                `站点：${site.id}`,
-                `类型：${site.type}`,
-                `格子：${site.cellId}`,
-                `配置 ID：${site.configId || TERRITORY_TEXTS.unboundConfigId}`,
-                // ⚠️ 建筑 ID **有值才显示这一行**（2026-10-10 口径）。
-                // 以前是无条件显示、缺失时填 `unboundConfigId` 占位 —— 那会让「没配建筑」的格子
-                // 也显示一行「建筑 ID：（未配置）」，看着像配错了。
-                ...(site.buildingId ? [`建筑 ID：${site.buildingId}`] : []),
-                `状态：${TERRITORY_TEXTS.unboundStatus}`,
-            ].join('\n\n'),
-            canStart: false,
-            startCaption: '',
-            startEnabled: false,
-            isLoading: false,
+            // 🔴 服务端暂不下发**对手玩家昵称**（`CmdCityChapterCellInfoRspMsg` 只有 bitSet），
+            //    所以标题只能写据点类型；协议补上昵称后只改这一行。
+            title: TERRITORY_UNBOUND_TYPE_NAMES.asyncPvp,
+            chestText: TERRITORY_TEXTS.asyncPlayerChestReward,
+            rewards,
+            scoutCost: TERRITORY_ASYNC_SCOUT_SILVER,
+            fightCost: Math.max(0, Math.round(site.unlock.silverCost)),
+            fightCaption: TERRITORY_TEXTS.asyncPlayerFight,
+            // 绑不到关卡 = 没有可开战的战斗参数，按钮直接灰掉（与 `handleUnlockOnly` 的兜底同口径）；
+            // 解锁/开战请求在途时也灰掉，防连点。
+            fightEnabled: stage !== null && !this.pendingFixedResourceCells.has(site.cellId)
+                && !this.startingBattle,
         };
     }
 
@@ -1587,5 +1705,37 @@ export class TerritoryPresenter {
 
     private emitStateChange(): void {
         EventMgr.instance.emit(TERRITORY_PRESENTER_EVENTS.StateChange);
+    }
+
+    private navigateToBattle(pve: ITerritoryBattleNavParams, battle?: ZCBattleStart): void {
+        EventMgr.instance.emit(
+            TERRITORY_PRESENTER_EVENTS.NavigateToBattle,
+            { pve, battle } satisfies ITerritoryNavigateBattlePayload,
+        );
+    }
+
+    private showTip(text: string): void {
+        EventMgr.instance.emit(
+            TERRITORY_PRESENTER_EVENTS.ShowTip,
+            { text } satisfies ITerritoryShowTipPayload,
+        );
+    }
+
+    private showRewards(
+        rewards: readonly (TerritoryIdleRewardGain | ITerritoryGrantedReward)[],
+        originCellId?: number | null,
+        options?: ITerritoryRewardPresentation,
+    ): void {
+        EventMgr.instance.emit(
+            TERRITORY_PRESENTER_EVENTS.ShowRewards,
+            { rewards, originCellId, options } satisfies ITerritoryShowRewardsPayload,
+        );
+    }
+
+    private setBusy(busy: boolean, text?: string): void {
+        EventMgr.instance.emit(
+            TERRITORY_PRESENTER_EVENTS.SetBusy,
+            { busy, text } satisfies ITerritorySetBusyPayload,
+        );
     }
 }

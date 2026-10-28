@@ -3,6 +3,18 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
+import { ZC_BATTLE_COMMON_PREFABS } from '../assets/script/app/zcds/model/ZCGameResourcePlan';
+
+test('主界面实际绘制后统一预下载，世界和详情不额外解析预热', () => {
+    for (const path of ['units/effects/出生特效/出生特效', 'units/effects/死亡特效/死亡特效',
+        'units/effects/建筑死亡特效/建筑死亡特效', 'units/effects/受击特效/法师受击/法师受击']) {
+        assert.ok((ZC_BATTLE_COMMON_PREFABS as readonly string[]).includes(path), path);
+    }
+    const host = readFileSync('assets/script/app/main/MainTabHost.ts', 'utf8');
+    const world = readFileSync('assets/script/app/bigmap/application/BigMapEntry.ts', 'utf8');
+    assert.match(host, /director\.once\(Director\.EVENT_AFTER_DRAW/);
+    assert.ok(!world.includes('warmupBattle'));
+});
 
 test('领地与大地图都移交统一预加载，所有战斗入口使用会话复用资产', () => {
     const territory = readFileSync('assets/script/app/main/MainTerritoryMap.ts', 'utf8');
@@ -12,8 +24,8 @@ test('领地与大地图都移交统一预加载，所有战斗入口使用会�
     assert.match(bigmap, /createZCBattlePreload/);
     assert.match(bigmap, /slgBattleType: battleType,[\s\S]*?preload/);
     for (const source of [territory, bigmap, game]) assert.match(source, /reusableAssets/);
-    assert.match(territory, /warmupBattle/);
-    assert.match(bigmap, /warmupBattle/);
+    assert.ok(!territory.includes('warmupBattle'));
+    assert.ok(!bigmap.includes('warmupBattle'));
 });
 
 test('统一预加载原样传递战斗 Promise、波次与地图人数，不提前构筑', async () => {

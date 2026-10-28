@@ -7021,9 +7021,6 @@
         "__id__": 327
       },
       {
-        "__id__": 329
-      },
-      {
         "__id__": 331
       },
       {
@@ -7082,9 +7079,6 @@
       },
       {
         "__id__": 362
-      },
-      {
-        "__id__": 364
       },
       {
         "__id__": 366
@@ -7279,7 +7273,7 @@
     "propertyPath": [
       "resKeys"
     ],
-    "value": "gold,gem"
+    "value": "gold,end"
   },
   {
     "__type__": "cc.TargetInfo",
@@ -7425,7 +7419,7 @@
       "_spriteFrame"
     ],
     "value": {
-      "__uuid__": "87c1a322-1fe5-4dbb-8d62-95ea87a3c70c@f9941",
+      "__uuid__": "c8663be1-3c6f-4000-9097-e25048571a33@f9941",
       "__expectedType__": "cc.SpriteFrame"
     }
   },
@@ -7445,8 +7439,8 @@
     ],
     "value": {
       "__type__": "cc.Size",
-      "width": 38,
-      "height": 37
+      "width": 44,
+      "height": 44
     }
   },
   {
@@ -7777,7 +7771,7 @@
       "_spriteFrame"
     ],
     "value": {
-      "__uuid__": "87c1a322-1fe5-4dbb-8d62-95ea87a3c70c@f9941",
+      "__uuid__": "46e48feb-c7a6-4f52-b11c-3c97bc0b3ffd@f9941",
       "__expectedType__": "cc.SpriteFrame"
     }
   },
@@ -7797,8 +7791,8 @@
     ],
     "value": {
       "__type__": "cc.Size",
-      "width": 38,
-      "height": 37
+      "width": 44,
+      "height": 44
     }
   },
   {
@@ -8259,7 +8253,7 @@
       "__id__": 302
     },
     "arrow": {
-      "__id__": 272
+      "__id__": 281
     },
     "_id": ""
   },

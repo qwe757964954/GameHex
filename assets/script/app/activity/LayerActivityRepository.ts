@@ -94,11 +94,11 @@ export interface IActivityRepository {
      * 领取某条每日任务的奖励。
      * `taskResId` = `dayChallengeActTask.resId`；活动实例 id 由内部从缓存取。
      */
-    claimTask(taskResId: number, caller?: unknown): Promise<ActivityRequestResult>;
+    claimTask(taskResId: number, caller?: object): Promise<ActivityRequestResult>;
     /** 领取某个周活跃宝箱（`id` = `dayChallengeActTaskProgress.id`）。 */
-    claimBox(id: number, caller?: unknown): Promise<ActivityRequestResult>;
+    claimBox(id: number, caller?: object): Promise<ActivityRequestResult>;
     /** 订阅活动缓存变化；返回取消订阅函数。 */
-    subscribe(caller: unknown, listener: () => void): () => void;
+    subscribe(caller: object, listener: () => void): () => void;
     /** 当前缓存里的活动状态（调试 / 测试用）。 */
     peekState(): IActivityServerState;
 }
@@ -184,10 +184,10 @@ export class RuntimeActivityRepository implements IActivityRepository {
      * ⚠️ 缓存事件是「一个 `caller` 一条回调」的模型（`GameCacheMgr.setEventChange`），
      * 页面销毁时**必须**调返回的取消函数，否则弹窗关了回调还在跑、去写已销毁的 Label。
      */
-    subscribe(caller: unknown, listener: () => void): () => void {
+    subscribe(caller: object, listener: () => void): () => void {
         const mgr = CacheMgr.instance;
         try {
-            mgr.setEventChange(ACTIVITY_CACHE, caller as any, listener);
+            mgr.setEventChange(ACTIVITY_CACHE, caller, listener);
         } catch (error) {
             console.warn('[Activity] 订阅活动缓存失败，界面将只在主动操作后刷新', error);
             return () => {};
@@ -197,20 +197,20 @@ export class RuntimeActivityRepository implements IActivityRepository {
             if (done) return;
             done = true;
             try {
-                mgr.removeEventChange(ACTIVITY_CACHE, caller as any, listener);
+                mgr.removeEventChange(ACTIVITY_CACHE, caller, listener);
             } catch (error) {
                 console.warn('[Activity] 取消活动缓存订阅失败', error);
             }
         };
     }
 
-    async claimTask(taskResId: number, caller?: unknown): Promise<ActivityRequestResult> {
+    async claimTask(taskResId: number, caller?: object): Promise<ActivityRequestResult> {
         const instanceId = this.instanceIdOrZero();
         if (instanceId <= 0) return 'noInstance';
         return this.writeRequest(
             (cb) => new RequestTakeDayChallengeActReward(
                 { resId: instanceId, taskResId },
-                caller as any,
+                caller,
                 cb,
             ),
             '领取任务奖励',
@@ -218,11 +218,11 @@ export class RuntimeActivityRepository implements IActivityRepository {
         );
     }
 
-    async claimBox(id: number, caller?: unknown): Promise<ActivityRequestResult> {
+    async claimBox(id: number, caller?: object): Promise<ActivityRequestResult> {
         const instanceId = this.instanceIdOrZero();
         if (instanceId <= 0) return 'noInstance';
         return this.writeRequest(
-            (cb) => new RequestTakeDayActProgressReward({ resId: instanceId, id }, caller as any, cb),
+            (cb) => new RequestTakeDayActProgressReward({ resId: instanceId, id }, caller, cb),
             '领取周活跃宝箱',
             'tlCmdGoods',
         );

@@ -180,13 +180,13 @@ export interface IStoreRepository {
     adRemaining(type: number): Promise<number>;
 
     /** 抽奖（`cmdShopType = gemBox`，`buyTimes` 1 / 10）。 */
-    draw(cardId: number, tenTimes: boolean, caller?: unknown): Promise<StoreRequestResult>;
+    draw(cardId: number, tenTimes: boolean, caller?: object): Promise<StoreRequestResult>;
     /** 通用商店购买（铜钱铺 / 杂货铺）。 */
-    buyShopGoods(id: number, cmdShopType: number, caller?: unknown): Promise<StoreRequestResult>;
+    buyShopGoods(id: number, cmdShopType: number, caller?: object): Promise<StoreRequestResult>;
     /** 记一次「看完广告」（`AdType`）。 */
-    watchAd(type: number, caller?: unknown): Promise<StoreRequestResult>;
+    watchAd(type: number, caller?: object): Promise<StoreRequestResult>;
     /** 买关卡礼包（`RequestRoleGuanKaGiftBuy`）。 */
-    buyGuanKaGift(resId: number, caller?: unknown): Promise<StoreRequestResult>;
+    buyGuanKaGift(resId: number, caller?: object): Promise<StoreRequestResult>;
     /** 发起真实支付（老端 `SDKMgr.pay(id, "common", 0)`）。 */
     pay(payChannelId: number): void;
 }
@@ -391,20 +391,20 @@ class RuntimeStoreRepository implements IStoreRepository {
 
     // ---------- 发包 ----------
 
-    draw(cardId: number, tenTimes: boolean, caller?: unknown): Promise<StoreRequestResult> {
+    draw(cardId: number, tenTimes: boolean, caller?: object): Promise<StoreRequestResult> {
         return this.shopBuy(cardId, STORE_SHOP_TYPE.gemBox, tenTimes ? 10 : 1, caller);
     }
 
-    buyShopGoods(id: number, cmdShopType: number, caller?: unknown): Promise<StoreRequestResult> {
+    buyShopGoods(id: number, cmdShopType: number, caller?: object): Promise<StoreRequestResult> {
         return this.shopBuy(id, cmdShopType, 1, caller);
     }
 
-    async watchAd(type: number, caller?: unknown): Promise<StoreRequestResult> {
+    async watchAd(type: number, caller?: object): Promise<StoreRequestResult> {
         const net = GameNet.instance;
         if (!net?.isConnected) return 'offline';
         try {
             const sent = await withTimeout(
-                net.send(new RequestRoleWatchAdvert({ type }, caller as any, (rsp: CmdRoleWatchAdvertRspMsg) => {
+                net.send(new RequestRoleWatchAdvert({ type }, caller, (rsp: CmdRoleWatchAdvertRspMsg) => {
                     if (rsp?.tlCmdGoods?.length) FW.ShowReward(rsp.tlCmdGoods);
                 }), false),
                 WRITE_TIMEOUT_MS,
@@ -417,12 +417,12 @@ class RuntimeStoreRepository implements IStoreRepository {
         }
     }
 
-    async buyGuanKaGift(resId: number, caller?: unknown): Promise<StoreRequestResult> {
+    async buyGuanKaGift(resId: number, caller?: object): Promise<StoreRequestResult> {
         const net = GameNet.instance;
         if (!net?.isConnected) return 'offline';
         try {
             const sent = await withTimeout(
-                net.send(new RequestRoleGuanKaGiftBuy({ resId }, caller as any, (rsp: CmdRoleGuanKaGiftBuyRspMsg) => {
+                net.send(new RequestRoleGuanKaGiftBuy({ resId }, caller, (rsp: CmdRoleGuanKaGiftBuyRspMsg) => {
                     if (rsp?.tlCmdGoods?.length) FW.ShowReward(rsp.tlCmdGoods);
                 }), false),
                 WRITE_TIMEOUT_MS,
@@ -446,7 +446,7 @@ class RuntimeStoreRepository implements IStoreRepository {
         id: number,
         cmdShopType: number,
         buyTimes: number,
-        caller?: unknown,
+        caller?: object,
     ): Promise<StoreRequestResult> {
         const net = GameNet.instance;
         if (!net?.isConnected) return 'offline';
@@ -454,7 +454,7 @@ class RuntimeStoreRepository implements IStoreRepository {
             const sent = await withTimeout(
                 net.send(new RequestShopBuy(
                     { id, cmdShopType, buyTimes } as CmdShopBuyReqMsg,
-                    caller as any,
+                    caller,
                     (rsp: CmdShopBuyRspMsg) => {
                         if (rsp?.tlCmdGoods?.length) {
                             // 铜钱铺用金币音效（老端 `isGold: storeType == StoreType.gold`）。

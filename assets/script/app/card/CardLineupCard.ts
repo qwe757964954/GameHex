@@ -95,8 +95,10 @@ export class CardLineupCard extends Component {
         level?: number,
         progress?: ZCCardFragmentProgress,
     ): void {
-        if (frames.face) this.face.spriteFrame = frames.face;
-        if (frames.badge) this.badge.spriteFrame = frames.badge;
+        //  两张图**无条件赋值**：本组件由虚拟列表复用，`null` 时若跳过赋值，
+        //  会把上一张卡的职业框 / 角标留在这一张上（串图）。`this.face` 等是必绑组件。
+        this.face.spriteFrame = frames.face;
+        this.badge.spriteFrame = frames.badge;
         applyCardHeadArt(this, frames.hero, frames.head);
 
         const normalizedLevel = Math.max(0, Math.round(level ?? 0));

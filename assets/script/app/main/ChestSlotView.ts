@@ -1,4 +1,6 @@
 import { _decorator, Button, Component, Label, Node, Sprite, SpriteFrame, UITransform } from 'cc';
+import { EventMgr } from '../../framework/event/EventMgr';
+import { CHEST_EVENTS } from './ChestEvents';
 import { ChestSlotAction, ChestSlotState, IChestSlotData } from './ChestTypes';
 
 const { ccclass, property } = _decorator;
@@ -75,7 +77,10 @@ export class ChestSlotView extends Component {
     private static btnFrames: { gold: SpriteFrame | null; blue: SpriteFrame | null; green: SpriteFrame | null } =
         { gold: null, blue: null, green: null };
 
-    private onAction: (() => void) | null = null;
+    /** 本格在界面数组里的下标（点击时随事件回传；服务端 `item.index` 是 1~4，不是它）。 */
+    private dataIndex = -1;
+    /** 这一格现在能不能点。**门闩用布尔字段**，不拿「回调有没有值」当门闩（规范 §2.1）。 */
+    private actionEnabled = false;
 
     /** 由宿主一次性注入美术（三张卡底 / 三张按钮底）。 */
     static setArt(
@@ -91,16 +96,13 @@ export class ChestSlotView extends Component {
         this.btn.node.on(Button.EventType.CLICK, this.handleAction, this);
     }
 
-    bindAction(handler: (() => void) | null): void {
-        this.onAction = handler;
-    }
-
     private handleAction(): void {
-        this.onAction?.();
+        if (!this.actionEnabled) return;
+        EventMgr.instance.emit(CHEST_EVENTS.SLOT_ACTION, this.dataIndex);
     }
 
     /** 全量赋值；空槽仅在被宝箱栏选为战斗入口时显示按钮及消耗。 */
-    render(data: IChestSlotData, showBattleEntry = true): void {
+    render(data: IChestSlotData, showBattleEntry = true, dataIndex = -1): void {
         const empty = data.state === ChestSlotState.Empty;
         const isUnactivated = data.action === ChestSlotAction.Activate;
         const isCounting = data.state === ChestSlotState.Counting;
@@ -121,7 +123,10 @@ export class ChestSlotView extends Component {
         this.timer.active = !empty && (isUnactivated || isCounting);
         this.timeBg.active = !empty && isCounting;
         this.speedUpIcon.active = isSpeedUp;
-        this.btn.node.active = !empty || showBattleEntry;
+        const hasButton = !empty || showBattleEntry;
+        this.btn.node.active = hasButton;
+        this.dataIndex = dataIndex;
+        this.actionEnabled = hasButton;
         if (this.emptyLabel) this.emptyLabel.node.active = empty;
         if (this.cost) this.cost.active = empty && showBattleEntry && data.cost > 0;
 

@@ -76,10 +76,23 @@ export interface IBigMapBuildingConfig {
     readonly kind: BigMapBuildingKind;
     readonly occupyHex: number;
     readonly maxOwnNum: number;
-    /** 解锁所需冒险章节 —— **建筑解锁的唯一来源**。 */
+    /**
+     * 解锁所需冒险章节 —— `unlockType = 1` 时等于 `unlockParam`，其它解锁方式为 0。
+     *
+     * ⚠️ 这张表来自**策划表 `baseBuilding`**（`DM-建筑配置.xlsx`），不是早期的
+     * `gen_bigmap_tables.py` 推算版：id 是 71001~71023，每座田各占一个 id
+     * （71002~71006 粮食田×5、71007~71011 木材田×5、71012~71014 铁矿田×3、71015 货币田）。
+     * 服务端按这张表校验 `CmdSlgBuildReqMsg.buildingId`，两边必须同一套 id。
+     */
     readonly unlockChapter: number;
+    /** 解锁方式：1=章节（`unlockParam` 是章节号）/ 2=赛季开始天数 / 3=赛季小玩法积分购买。 */
+    readonly unlockType: number;
+    /** 解锁参数，语义随 `unlockType`。 */
+    readonly unlockParam: number;
     readonly queueType: number;
     readonly sort: number;
+    /** 建造后是否允许搬移（`baseBuilding.canMove`）；0 = 钉死原地。 */
+    readonly canMove: boolean;
     readonly info: string;
 }
 
@@ -90,7 +103,14 @@ export interface IBigMapBuildingLevelConfig {
     readonly costWood: number;
     readonly costIron: number;
     readonly instantCost: number;
-    /** 0 表示无前置建筑。 */
+    /**
+     * 前置建筑列表（`baseBuildingLevel.preBuild`，形如 `[{buildId:71007,buildLevel:1}]`）。
+     *
+     * ⚠️ 是**数组**：策划表里主城升 2 级要求「木材田-1 + 铁矿田-1 都到 1 级」两个前置。
+     * 早期 `bigmapBuildingLevel` 只有单值 `preBuildId/preBuildLevel`，照抄会漏判。
+     */
+    readonly preBuild: readonly { readonly id: number; readonly level: number }[];
+    /** 兼容字段：`preBuild[0]`，没有前置时为 0。 */
     readonly preBuildId: number;
     readonly preBuildLevel: number;
     readonly buildTime: number;
@@ -113,6 +133,13 @@ export interface IBigMapResConfig {
     readonly resType: BigMapResType;
     readonly name: string;
     readonly startAmount: number;
+    /**
+     * 背包道具 id（`W-物品表` 的 18501 粮食 / 18502 木材 / 18503 矿石 / 18504 钻石 / 18505 行动力）。
+     *
+     * `0` = 没配 ⇒ 顶栏图标只用大地图概念图。配了的话优先走 `item.icon`
+     * （`icons/item/xxx` + `spriteFramePathOf` + `main-pages` 分包），图标为空再退回来。
+     */
+    readonly itemId: number;
 }
 
 export interface IBigMapQueueConfig {
@@ -247,6 +274,13 @@ export interface IBigMapConfig {
     readonly levels: ReadonlyMap<number, ReadonlyMap<number, IBigMapBuildingLevelConfig>>;
     readonly produce: ReadonlyMap<number, ReadonlyMap<number, IBigMapProduceConfig>>;
     readonly resources: ReadonlyMap<BigMapResType, IBigMapResConfig>;
+    /**
+     * 资源类型 → **背包道具图标路径**（`item.icon`，如 `icons/item/图标_粮食`）。
+     *
+     * 由 `attachBigMapResourceItemIcons` 在配置加载时并进来（`parseBigMapConfig` 仍是纯函数，
+     * 不碰 item 表）。没配 itemId / item.icon 为空 ⇒ 这里没有这一项，视图退回概念图。
+     */
+    readonly resourceIcons: ReadonlyMap<BigMapResType, string>;
     readonly queue: IBigMapQueueConfig;
     readonly cities: ReadonlyMap<number, IBigMapCityConfig>;
     readonly camps: ReadonlyMap<number, IBigMapCampConfig>;

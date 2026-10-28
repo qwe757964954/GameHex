@@ -1,5 +1,6 @@
 import { _decorator, Color, Component, Graphics, Label, Node, Sprite, SpriteFrame } from 'cc';
-import { BIGMAP_MARKER_BADGE_HEIGHT, BIGMAP_MARKER_BADGE_WIDTH, bigMapMarkerLayout, type IBigMapMarkerHitArea } from './BigMapWorldLayout';
+import { bigMapMarkerLayout, type IBigMapMarkerHitArea } from './BigMapWorldLayout';
+import { paintMapMarkerBadge } from '../../common/MapMarkerBadge';
 
 const { ccclass, property } = _decorator;
 
@@ -31,14 +32,7 @@ export class BigMapWorldMarker extends Component {
             (frame ? -frame.offset.y * scale : 0) + (this.markerLayout.iconY ?? 0), 0);
         this.badge.node.setPosition(0, this.markerLayout.badgeY ?? 0, 0);
         this.badge.enabled = false;
-        this.badgeBackground.clear();
-        this.badgeBackground.fillColor = tint;
-        this.badgeBackground.strokeColor = new Color(49, 31, 26);
-        this.badgeBackground.lineWidth = 2;
-        this.badgeBackground.roundRect(-BIGMAP_MARKER_BADGE_WIDTH / 2, -BIGMAP_MARKER_BADGE_HEIGHT / 2,
-            BIGMAP_MARKER_BADGE_WIDTH, BIGMAP_MARKER_BADGE_HEIGHT, 8);
-        this.badgeBackground.fill();
-        this.badgeBackground.stroke();
+        paintMapMarkerBadge(this.badgeBackground, tint, new Color(49, 31, 26));
         this.label.string = title;
         this.label.color = Color.WHITE;
         this.badge.color = tint;

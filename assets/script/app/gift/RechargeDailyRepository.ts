@@ -43,9 +43,9 @@ export interface IRechargeDailyRepository {
     /** 读表 + 读缓存，组装一次快照；不发请求。 */
     load(nowMs?: number): Promise<IRechargeDailySnapshot>;
     /** 领某档某天的每日奖励。 */
-    claimDay(round: number, day: number, caller?: unknown): Promise<RechargeDailyRequestResult>;
+    claimDay(round: number, day: number, caller?: object): Promise<RechargeDailyRequestResult>;
     /** 领某档累计第 day 天的奖励。 */
-    claimAcc(round: number, day: number, caller?: unknown): Promise<RechargeDailyRequestResult>;
+    claimAcc(round: number, day: number, caller?: object): Promise<RechargeDailyRequestResult>;
 }
 
 const READ_TIMEOUT_MS = 800;
@@ -109,18 +109,18 @@ export class RuntimeRechargeDailyRepository implements IRechargeDailyRepository 
         };
     }
 
-    async claimDay(round: number, day: number, caller?: unknown): Promise<RechargeDailyRequestResult> {
+    async claimDay(round: number, day: number, caller?: object): Promise<RechargeDailyRequestResult> {
         let applied = false;
-        const msg = new RequestRechargeDailyGetReward({ id: round, day }, caller as any, (rsp) => {
+        const msg = new RequestRechargeDailyGetReward({ id: round, day }, caller, (rsp) => {
             FW.ShowReward(rsp?.tlCmdGoods ?? []);
             applied = true;
         });
         return this.sendClaim(msg);
     }
 
-    async claimAcc(round: number, day: number, caller?: unknown): Promise<RechargeDailyRequestResult> {
+    async claimAcc(round: number, day: number, caller?: object): Promise<RechargeDailyRequestResult> {
         let applied = false;
-        const msg = new RequestRechargeDailyGetAccReward({ id: round, day }, caller as any, (rsp) => {
+        const msg = new RequestRechargeDailyGetAccReward({ id: round, day }, caller, (rsp) => {
             FW.ShowReward(rsp?.tlCmdGoods ?? []);
             applied = true;
         });

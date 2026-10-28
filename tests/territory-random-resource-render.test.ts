@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import * as MapMarkerBadge from '../assets/script/app/common/MapMarkerBadge';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
@@ -25,7 +26,11 @@ test('locked sites show only the silver icon and amount, and random sites hide t
             // 2026-10-15 起 MapView 不再 import `TerritoryMapConfig` 的运行时值
             // （两步式名单连同 `isTerritoryTwoStepCell` 已删除，关卡一律按站点类型判定）
             // ⇒ 这里不需要再给 TerritoryMapConfig 打桩。
-            if (id === './TerritoryStationView') return { TerritoryStationView: class {} };
+            // `bottomAnchor` 判定（69008~69015 底部对齐）由 TerritoryMapView 调用，
+            // 桩里必须给函数，否则 `undefined is not a function`；本夹具只关心文案 ⇒ 恒 false。
+            if (id === './TerritoryStationView') {
+                return { TerritoryStationView: class {}, territoryUsesBottomAnchor: () => false };
+            }
             if (id === './TerritoryResourceGainView') return { TerritoryResourceGainView: class {} };
             // 喷发粒子（2026-10-16 row17）：夹具只关心站点文案，给个空壳即可。
             if (id === './TerritoryGainBurst') return {
@@ -88,6 +93,13 @@ test('locked sites show only the silver icon and amount, and random sites hide t
             // 内容层留白（2026-10-21）：`syncContentSize` 现在把「地图包围盒 + 四周留白」写进
             // 内容层，留白归 `TerritoryMapLayout` 统一算。本用例不校验尺寸，桩只保证宽度高度可用。
             if (id.endsWith('/TerritoryMapLayout')) return {
+                // 2026-10-27：`contentPaddingBottom` 的初值直接取这个常量、偏移取它的一半，
+                // 桩缺了会让字段变 `undefined`（尺寸算出 NaN，用例看着"莫名其妙整片红"）。
+                TERRITORY_MAP_CONTENT_PADDING: 300,
+                // 2026-10-27：顶部留白也是运行时值（`(bottom − top)/2` 决定内容层偏移），
+                // 桩缺了同样会让偏移变 NaN ⇒ 一并给 0。
+                TERRITORY_MAP_CONTENT_PADDING_TOP: 0,
+                territoryMapContentShiftY: (padding = 300, top = 0) => (padding - top) / 2,
                 territoryMapContentSize: (layout: { width: number; height: number }) => ({
                     width: layout.width,
                     height: layout.height,
@@ -152,6 +164,10 @@ test('locked sites show only the silver icon and amount, and random sites hide t
             if (id === '../model/TerritoryHexRecolor') return {
                 territoryHexRecolorDelays: () => new Map<number, number>(),
             };
+            //  事件走 `EventMgr` 全局中控（组件侧 emit、页面侧 on 都经它）。
+            if (id.includes('event/EventMgr')) {
+                return { EventMgr: { instance: { emit() {}, on() {}, offTarget() {} } } };
+            }
             throw new Error(`Unexpected dependency: ${id}`);
         },
     });
@@ -420,6 +436,7 @@ test('territory art loads the existing silver icon for random conditions', async
         exports: moduleExports,
         require: (id: string) => {
             if (id === 'cc') return { JsonAsset: class {}, SpriteFrame: class {} };
+            if (id.endsWith('/MapMarkerBadge')) return MapMarkerBadge;
             // ⚠️ `loadTerritoryBattleArt` 内部会顺带加载建筑表（`loadBuildFrames`），
             // 而 build 表在**remoteRef bundle** ⇒ 必须走 `RefUtil`，不是 `AssetService`。
             // 这个 import 是 2026-10-10 加的（此前报 `Bundle resources doesn't contain build`）。
@@ -455,13 +472,14 @@ test('territory art loads the existing silver icon for random conditions', async
     const loadArt = moduleExports.loadTerritoryBattleArt as (
         assets: { load: (path: string) => Promise<{ path: string }>; has: () => Promise<boolean> },
         backgroundPath: string,
-    ) => Promise<{ randomSilverIcon: { path: string } }>;
+    ) => Promise<{ randomSilverIcon: { path: string }; levelBubbleFrame: { path: string } }>;
     const paths: string[] = [];
     const art = await loadArt({ load: async (path) => {
         paths.push(path);
         return { path };
     }, has: async () => true }, '');
     assert.equal(art.randomSilverIcon.path, 'icons/resource/图标_铜币/spriteFrame');
+    assert.equal(art.levelBubbleFrame.path, 'image/spawn-region/frame_03/spriteFrame', '章节关卡气泡使用指定的蓝色 frame_03');
     assert.equal(paths.includes('image/territory/buildings/territory_random_resource_v1/spriteFrame'), true);
     // 顺带验 build 表那一路：RefUtil 桩给了 `69003` ⇒ 对应贴图必须真的被 load 过。
     // 否则「RefUtil 桩写了、但代码压根没走到查表那条路」也会绿。

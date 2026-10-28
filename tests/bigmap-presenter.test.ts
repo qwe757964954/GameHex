@@ -103,18 +103,26 @@ test('资源栏：5 种资源、带名称与上限；新档有货币和行动力
 });
 
 test('建造列表跟着冒险章节解锁，未解锁带人话原因', () => {
+    // 建造目录按 `kind`（baseBuildType）合并：2=粮食田 / 5=货币田 / 6=研究院。
     const { presenter, clock } = makeHarness(1);
     const locked = presenter.buildMenu();
-    assert.equal(locked.find((item) => item.buildingId === 71002)!.unlocked, false);
-    assert.match(locked.find((item) => item.buildingId === 71002)!.reason, /第 2 章/);
+    const grainLocked = locked.find((item) => item.kind === 2)!;
+    assert.equal(grainLocked.unlocked, false);
+    assert.equal(grainLocked.buildingId, 0, '全锁着时没有可建的 id');
+    assert.match(grainLocked.reason, /第 2 章/);
     assert.equal(presenter.upgradeUnlocked(), false);
 
     clock.chapter = 3;
     // 章节变了要重新取一次（Presenter 每次调用都读最新进度，不需要重新构造）。
     const unlocked = presenter.buildMenu();
-    assert.equal(unlocked.find((item) => item.buildingId === 71002)!.unlocked, true);
-    assert.equal(unlocked.find((item) => item.buildingId === 71005)!.unlocked, true);
-    assert.equal(unlocked.find((item) => item.buildingId === 71006)!.unlocked, false);
+    const grain = unlocked.find((item) => item.kind === 2)!;
+    assert.equal(grain.unlocked, true);
+    // 粮食田 71002~71006 五座，第 3 章解锁前两座（71002 第2章 / 71003 第3章），
+    // 一座都还没建 ⇒ 下一座就是 71002。
+    assert.equal(grain.buildingId, 71002);
+    assert.equal(grain.maxOwnNum, 5);
+    const coin = unlocked.find((item) => item.kind === 5)!;
+    assert.equal(coin.unlocked, false, '货币田-1 要第 15 章');
     assert.equal(presenter.upgradeUnlocked(), true);
 });
 
@@ -126,7 +134,7 @@ test('建造 → 队列视图 → 到点落地 → 产出可收获', () => {
     assert.equal(presenter.plotCells().find((item) => item.hexId === cell)!.slot, 'constructing');
     const queue = presenter.queues()[0];
     assert.equal(queue.busy, true);
-    assert.equal(queue.name, '粮食田');
+    assert.equal(queue.name, '粮食田-1', '队列条显示建筑表里的原名');
     assert.ok(queue.remainSeconds > 0);
 
     clock.now += 30;
@@ -142,14 +150,16 @@ test('建造 → 队列视图 → 到点落地 → 产出可收获', () => {
         presenter.tick();
     }
     const bar = presenter.resourceBar().find((item) => item.type === 'grain')!;
-    assert.ok(bar.pending >= 80, `应有待收粮食，实际 ${bar.pending}`);
     assert.equal(bar.perHour, 40);
-
-    // 先把粮食花掉一部分，给仓库腾空间。
-    const before = bar.amount;
-    const collected = presenter.harvestAll();
-    assert.equal(collected.ok, true, collected.message);
-    assert.ok(presenter.resourceBar().find((item) => item.type === 'grain')!.amount > before);
+    // 田里确实产出到账（策划表里粮食田-1 是 40/小时）。
+    const stored = presenter.plotCells().find((item) => item.hexId === cell)!.stored;
+    assert.ok(stored >= 80, `田里应攒到 80，实际 ${stored}`);
+    // 新档粮食就是满仓（800/800），而 1 级建造不要钱 ⇒ 仓库腾不出空间，
+    // 待收被上限压成 0 —— 这是**正确**行为，不是漏算。
+    assert.equal(bar.amount, 800);
+    // `pending` 是田里攒的量（不按仓库上限截断），收获时才截。
+    assert.ok(bar.pending >= 80, `田里应有待收，实际 ${bar.pending}`);
+    assert.equal(presenter.harvestAll().ok, false, '满仓时没有可收的');
 });
 
 test('建造失败会返回可直接展示的原因', () => {
@@ -160,10 +170,10 @@ test('建造失败会返回可直接展示的原因', () => {
     const onMain = presenter.startBuild(bigMapPlotHexId(2, 2, 5), 71002);
     assert.equal(onMain.ok, false);
     assert.match(onMain.message, /已有建筑/);
-    // 未解锁的建筑。
+    // 未解锁的建筑：71006 是粮食田-5（unlockParam = 6）。
     const locked = presenter.startBuild(bigMapPlotHexId(0, 0, 5), 71006);
     assert.equal(locked.ok, false);
-    assert.match(locked.message, /第 4 章/);
+    assert.match(locked.message, /第 6 章/);
 });
 
 test('城池视图：解锁状态、距离、伤害预览都在同一条数据里', () => {
@@ -427,7 +437,8 @@ test('脏存档里的非法建筑会被丢掉，主城缺失时自动补回', ()
     // 不认识的建筑被丢掉，主城被补回，等级被夹到合法值。
     assert.equal(buildings.some((item) => item.buildingId === 99999), false);
     assert.equal(buildings.some((item) => item.buildingId === config.mainBuildingId), true);
-    assert.equal(buildings.find((item) => item.buildingId === 71002)!.level, 5);
+    // 策划表 `baseBuildingLevel` 里粮食田-1 最高 30 级，脏档的 99 被夹到 30。
+    assert.equal(buildings.find((item) => item.buildingId === 71002)!.level, 30);
     // 队列数量是**存档权威**（文档口径：付费解锁，不来自建筑），越界的 9 被夹到上限。
     assert.equal(presenter.queues().length, config.queue.maxBuildQueue);
     assert.equal(presenter.queues()[0].busy, false, '脏队列被清成空闲');

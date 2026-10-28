@@ -58,9 +58,9 @@ export interface ILimitTimeActRepository {
     /** 主动拉一次配置 + 数据（页面打开时调）；成功后缓存到内存。 */
     refresh(): Promise<boolean>;
     /** 领某条每日任务的奖励（`taskResId` = 任务行 `resId`）。 */
-    claimTask(taskResId: number, caller?: unknown): Promise<LimitTimeRequestResult>;
+    claimTask(taskResId: number, caller?: object): Promise<LimitTimeRequestResult>;
     /** 购买某个每日礼包 / 限购（`type`: 2 每日礼包 / 3 限购，`goodsResId` = 礼包行 `resId`）。 */
-    buyGoods(type: number, goodsResId: number, caller?: unknown): Promise<LimitTimeRequestResult>;
+    buyGoods(type: number, goodsResId: number, caller?: object): Promise<LimitTimeRequestResult>;
     /** 当前缓存的活动 meta（调试 / 测试用）。 */
     peekMeta(): ILimitTimeActMeta | null;
 }
@@ -164,16 +164,16 @@ export class RuntimeLimitTimeActRepository implements ILimitTimeActRepository {
         return parseActData(rsp);
     }
 
-    async claimTask(taskResId: number, caller?: unknown): Promise<LimitTimeRequestResult> {
+    async claimTask(taskResId: number, caller?: object): Promise<LimitTimeRequestResult> {
         return this.take(1, taskResId, caller);
     }
 
-    async buyGoods(type: number, goodsResId: number, caller?: unknown): Promise<LimitTimeRequestResult> {
+    async buyGoods(type: number, goodsResId: number, caller?: object): Promise<LimitTimeRequestResult> {
         return this.take(type, goodsResId, caller);
     }
 
     /** `reqActivityLimitTimeTake` 的公共壳：离线早退、超时兜底、响应覆盖内存缓存。 */
-    private async take(type: number, resId: number, caller?: unknown): Promise<LimitTimeRequestResult> {
+    private async take(type: number, resId: number, caller?: object): Promise<LimitTimeRequestResult> {
         const net = GameNet.instance;
         if (!net || !net.isConnected) return 'offline';
 
@@ -182,7 +182,7 @@ export class RuntimeLimitTimeActRepository implements ILimitTimeActRepository {
             const ok = await withTimeout(
                 net.send(new RequestActivityLimitTimeTake(
                     { resId, type },
-                    caller as any,
+                    caller,
                     (r) => {
                         rsp = r;
                         FW.ShowReward(r?.tlCmdGoods ?? []);

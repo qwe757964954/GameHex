@@ -353,11 +353,15 @@ test('ArenaRoot.prefab：货币条 = common/ResBar 的嵌套实例（实例身�
     assert.ok(lpos, '实例必须覆盖 _lpos —— 丢了就落回 (0,0)，整条压在玩家信息上');
     assert.deepEqual({ x: lpos!.x, y: lpos!.y }, { x: -84, y: 587 }, '实例位置必须覆盖成 (-84,587)（= 原 Mid 的框左上）');
 
-    // ② 格数真源 = 实例覆盖的 `resKeys`，必须与 `RES_BAR_KEYS` 逐字一致
+    // ② 格数真源 = 实例覆盖的 `resKeys`
+    //   🔴 2026-10-26 用户口径：「资源栏的按钮分别对应 银币 icon 和 体力 icon」
+    //   ⇒ HUD 从 `gold,gem`（银币 + 晶石）改成 **`gold,end`**（银币 + 体力），
+    //     `gold` 的行是 `roleProperty.resId=7 icon=图标_铜币`，`end` 是 `resId=9 icon=图标_体力`。
+    //   别再拿 `RES_BAR_KEYS`（银币/晶石/体力三格）比 —— 那个常量只服务 `buildResBarView` 的默认参数。
     assert.equal(
         overrides.get('resKeys'),
-        RES_BAR_KEYS.join(','),
-        '实例上的 resKeys 与 MainResBarTypes.RES_BAR_KEYS 不一致 —— 改一处必须改另一处',
+        'gold,end',
+        '实例上的 resKeys 必须是 gold,end（银币 + 体力）—— 改这里要同步 HUD 版面口径',
     );
     // ③ HUD 这三国货币是写死的（老端同口径）⇒ 不覆盖 `openRefId`，继承公共件默认 0
     assert.ok(!overrides.has('openRefId'), 'HUD 货币不走 open.json，不该覆盖 openRefId');
@@ -583,3 +587,167 @@ test('点头像弹个人信息：MainResBar 必须绑头像点击并打开 Playe
     assert.match(src, /Node\.EventType\.TOUCH_END/, 'HeadIcon 是纯 Sprite（无 cc.Button），必须按规则 81b 走 TOUCH_END');
     assert.match(src, /PlayerInfoPage\.open\(\)/, '点击回调必须打开 PlayerInfoPage');
 });
+
+// ── 2026-10-26：两格图标 = 游戏内「银币 / 体力」图，且由 `resKeys` 驱动 ─────────
+//
+// 用户原话：「资源栏这两个图标保持大小不变，分别更换成 图标_银币和 图标_体力」。
+//
+// ## 为什么不是「把 prefab 上的图换一下」就完事
+//
+// 现场是：宿主给两格都覆盖了 `iconOverride = hud_coin_icon`（HUD 专用金色硬币），
+// 于是**不管 `resKeys` 配成什么，两格都画同一枚金币** —— 上一轮把 `resKeys` 改成
+// `gold,end` 后数值已经是体力口径（59/30），图标却纹丝不动，就是这个原因。
+// 所以这里守两件事：
+//   ① 宿主**不许**再覆盖 `iconOverride`（否则改表/改 keys 图标永远不跟随，静默）；
+//   ② 预制体里当占位用的 `_spriteFrame` 必须就是表里那两张图（首帧加载前不会闪错图）。
+//
+// ## 「保持大小不变」怎么落成数字
+//
+// 旧图 `hud_coin_icon.png` 是 38×37 且四周无透明留白（可见区 = 画布 100%），节点 38×37
+// ⇒ 可见硬币 ≈ 38px。游戏内图标是 100×100 且带留白（`图标_铜币` 可见 86%、
+// `图标_体力` 可见 90%×81%），同样铺 38×38 会缩到 ≈33~34px（肉眼小一圈）。
+// 所以节点放到 **44×44**：44×0.86 = 37.8 ≈ 38，可见大小与换图前一致。
+
+/** `roleProperty.icon` + `resIconRoot` → 那张图在磁盘上的 spriteFrame uuid（`<uuid>@f9941`）。 */
+function iconSpriteFrameUuid(iconName: string): string {
+    const root = resIconRootForTest(iconName);
+    const metaPath = `${RESOURCES}/${root}/${iconName}.png.meta`;
+    assert.ok(existsSync(metaPath), `表里配的图标在盘上找不到：${metaPath}`);
+    const uuid = (JSON.parse(readFileSync(metaPath, 'utf8')) as { uuid: string }).uuid;
+    return `${uuid}@f9941`;
+}
+
+/** 与 `ResTypes.resIconRoot` 同口径（只认那三条覆盖，其余落 `icons/resource`）。 */
+function resIconRootForTest(iconName: string): string {
+    if (iconName === '图标_联盟贡献' || iconName === '图标_补天神石') return 'icons/common';
+    if (iconName === '图标_经验值') return 'image/main/resbar';
+    return RESOURCE_ICON_ART_ROOT;
+}
+
+test('ArenaRoot 的货币条：两格图标跟 resKeys 走（不覆盖 iconOverride），占位图 = 表里的 银币/体力', () => {
+    const prefab = readPrefab(HUD_PREFAB);
+    const common = readPrefab(COMMON_RESBAR);
+
+    // ── 源 prefab 的 fileId → 节点名（覆盖项的 TargetInfo.localID 落在这一套上）──
+    const prefabInfoOwner = new Map<number, number>();
+    for (let i = 0; i < common.length; i += 1) {
+        const entry = common[i];
+        for (const key of ['_prefab', '__prefab'] as const) {
+            const ref = entry?.[key] as ObjRef | undefined;
+            if (ref && typeof ref.__id__ === 'number') prefabInfoOwner.set(ref.__id__, i);
+        }
+    }
+    const fileIdIndex = new Map<string, number>();
+    for (let i = 0; i < common.length; i += 1) {
+        const fileId = common[i]?.fileId as string | undefined;
+        if (fileId) fileIdIndex.set(fileId, i);
+    }
+    /** localID → 「节点名 · 组件类型」（解析不出返回空串）。 */
+    const ownerOf = (localID: string): string => {
+        const infoIndex = fileIdIndex.get(localID);
+        if (infoIndex === undefined) return '';
+        const ownerIndex = prefabInfoOwner.get(infoIndex);
+        if (ownerIndex === undefined) return '';
+        const owner = common[ownerIndex];
+        if (owner.__type__ === 'cc.Node') return String(owner._name ?? '');
+        const node = owner.node ? common[(owner.node as ObjRef).__id__] : null;
+        return `${String(node?._name ?? '?')} · ${String(owner.__type__)}`;
+    };
+
+    // ── ResBar 实例：覆盖项 = (属性路径, 归属节点名, 值) ──
+    const shell = childrenOf(
+        prefab.find((entry) => entry.__type__ === 'cc.Node' && entry._name === 'ResBarLayer')!,
+    ).map((ref) => prefab[ref.__id__]).find((node) => node._name === undefined)!;
+    const info = prefab[(shell._prefab as ObjRef).__id__];
+    const instance = prefab[(info.instance as ObjRef).__id__];
+    const overrides = ((instance.propertyOverrides ?? []) as ObjRef[]).map((ref) => {
+        const ov = prefab[ref.__id__] as { propertyPath?: string[]; value?: unknown; targetInfo?: ObjRef };
+        const target = prefab[(ov.targetInfo as ObjRef).__id__] as { localID?: string[] };
+        return {
+            path: (ov.propertyPath ?? []).join('.'),
+            owner: ownerOf((target.localID ?? [])[0] ?? ''),
+            value: ov.value,
+        };
+    });
+
+    // ① 不许再覆盖 iconOverride —— 否则「改 resKeys 图标不跟随」会静默复发
+    assert.deepEqual(
+        overrides.filter((one) => one.path === 'iconOverride').map((one) => one.owner),
+        [],
+        '宿主不许覆盖 iconOverride：两格图标必须由 resKeys → roleProperty.icon 决定',
+    );
+
+    // ② 占位图 = 表里那两张（首帧异步加载完成前不会闪成别的资源）
+    const rows = JSON.parse(readFileSync('assets/remoteRef/roleProperty.json', 'utf8')) as {
+        resId?: number;
+        key?: string;
+        icon?: string;
+    }[];
+    const iconOfKey = (key: string): string => {
+        const row = rows.find((one) => one.key === key);
+        assert.ok(row?.icon, `roleProperty 表里 key=${key} 没配 icon`);
+        return row!.icon!;
+    };
+    // `resKeys` 的两格顺序 = Res0 / Res1 的覆盖项顺序（_spriteFrame 按 slot 依次出现）
+    const keys = String(overrides.find((one) => one.path === 'resKeys')!.value).split(',');
+    assert.deepEqual(keys, ['gold', 'end'], 'HUD 两格 = 银币 + 体力');
+    const iconFrames = overrides
+        .filter((one) => one.path === '_spriteFrame' && one.owner.startsWith('Icon · '))
+        .map((one) => (one.value as { __uuid__?: string })?.__uuid__ ?? '');
+    assert.equal(iconFrames.length, 2, `两格各有一张占位图，实际 ${iconFrames.length} 张`);
+    assert.deepEqual(
+        iconFrames,
+        keys.map((key) => iconSpriteFrameUuid(iconOfKey(key))),
+        '占位图必须与 roleProperty 里 gold/end 配的图标是同一张（否则加载完成前会闪错图）',
+    );
+
+    // ③ 44×44：补偿游戏内图标的透明留白，让「可见」大小与换图前的 38px 金币一致
+    const iconSizes = overrides
+        .filter((one) => one.path === '_contentSize' && one.owner.startsWith('Icon · '))
+        .map((one) => one.value as { width?: number; height?: number });
+    assert.equal(iconSizes.length, 2);
+    for (const size of iconSizes) {
+        assert.deepEqual({ width: size.width, height: size.height }, { width: 44, height: 44 },
+            'Icon 尺寸必须是 44×44（可见区 86%/90% × 44 ≈ 换图前的 38px）');
+    }
+});
+
+// ============================================================
+// 闪光的作用域：只有命中的那一格闪
+// ============================================================
+//
+// 用户 2026-10-26 原话：
+// > 「宝箱打开获取体力资源，只有对应的资源条闪烁，银币资源栏不闪烁」
+//
+// 上一轮的实现是**整条闪**（`flash()` 无参、`computeGlowRect()` 取全部格子的包围盒），
+// 于是体力涨的时候银币格跟着一起亮 —— 玩家反而看不出到底涨的是哪个资源。
+//
+// `ResBar` 是 `cc.Component`，node 测试沙箱里跑不起来 ⇒ 这里退一步守**源码契约**
+// （与本文件另外几条 `readFileSync(...MainResBar.ts)` 同一种守法的先例）：
+//  ① `playGainFeedback` 必须把命中的槽位传下去（`this.flash(slot)`）；
+//  ② 全文件**不许**再出现无参 `this.flash()`（那就是整条闪）；
+//  ③ `computeGlowRect` 必须接一个槽位参数，且目标不可见时返回 `null` 而不是回退整条包围盒。
+test('ResBar 闪光只落在命中的那一格（不许整条一起亮）', () => {
+    const src = readFileSync('assets/script/app/common/ResBar.ts', 'utf8');
+
+    const body = /playGainFeedback\(key: string, amount: number\): void \{([\s\S]*?)\n {4}\}/.exec(src);
+    assert.ok(body, '找不到 playGainFeedback 的实现体（方法签名变了就同步改这条用例）');
+    assert.match(body![1], /this\.flash\(slot\)\s*;/,
+        'playGainFeedback 必须 this.flash(slot)：不传槽位就是整条闪，银币格会跟着体力格一起亮');
+
+    assert.doesNotMatch(src, /this\.flash\(\s*\)/,
+        '不许出现无参 this.flash()：那会回退成「所有显示中格子的包围盒」= 整条闪');
+
+    // 闪光框必须能收槽位；`target` 缺席的那条分支只留作兼容，不该被本工程调用。
+    assert.match(src, /flash\(target\?: MainResBarSlot \| null\): void \{/,
+        'flash 必须接受可选的目标槽位');
+    assert.match(src, /private computeGlowRect\(\s*target: MainResBarSlot \| null,?\s*\)/,
+        'computeGlowRect 必须按槽位算框（传 null 才回退整条）');
+
+    // 目标格不可见 / 没变换 ⇒ 不闪（`null`），绝不回退成整条 —— 那正是本轮要修的病。
+    const rectBody = /private computeGlowRect\([\s\S]*?\n {4}\}/.exec(src);
+    assert.ok(rectBody, '找不到 computeGlowRect 的实现体');
+    assert.match(rectBody![0], /if \(!Number\.isFinite\(minX\) \|\| !Number\.isFinite\(maxX\)\) return null;/,
+        '算不出框时必须返回 null（不闪），而不是拿本节点的三格容器去画一大片亮块');
+});
+

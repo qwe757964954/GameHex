@@ -10,6 +10,8 @@ import {
 
 export interface IBigMapArt {
     readonly background: SpriteFrame | null;
+    /** 世界坐标连续平铺底图；缺失时回退布局背景，地皮仍独立绘制。 */
+    readonly tiledBackground: SpriteFrame | null;
     readonly ground: SpriteFrame | null;
     readonly groundVariants: readonly (SpriteFrame | null)[];
     readonly home: SpriteFrame | null;
@@ -26,8 +28,18 @@ export interface IBigMapArt {
     readonly resources: ReadonlyMap<BigMapResType, SpriteFrame | null>;
 }
 
-/** 只装配表现资源；JSON 中的背景优先，地图坐标和规则仍只来自原来的布局链。 */
-export async function loadBigMapArt(assets: AssetService, scope: ResourceScope, background = ''): Promise<IBigMapArt> {
+/**
+ * 只装配表现资源；世界视图优先连续底图，缺图时回退 JSON 背景；地图坐标和规则只来自布局链。
+ *
+ * @param resourceIcons 资源类型 → **背包道具图标路径**（`item.icon`，来自 `bigmapResource.itemId`）。
+ *   有就走背包那份图，没有 / 加载失败退回 `image/bigmap/concept/sprites/<resType>` 概念图。
+ */
+export async function loadBigMapArt(
+    assets: AssetService,
+    scope: ResourceScope,
+    background = '',
+    resourceIcons: ReadonlyMap<BigMapResType, string> = new Map(),
+): Promise<IBigMapArt> {
     const fetchFrame = async (path: string): Promise<SpriteFrame | null> => {
         try {
             const framePath = `${path}/spriteFrame`;
@@ -57,6 +69,7 @@ export async function loadBigMapArt(assets: AssetService, scope: ResourceScope, 
         load('image/territory/buildings/territory_boss_v1'),
         load('image/decor/wasteland/st2'),
         load('image/decor/wasteland/cao'),
+        load('image/bigmap/bigMapBG'),
     ]);
     const sprite = (name: string): Promise<SpriteFrame | null> => load(`${BIGMAP_CONCEPT_ROOT}/sprites/${name}`);
     const buildingTask = Promise.all(Object.entries(BIGMAP_BUILDING_ART).map(async ([id, name]) => (
@@ -78,18 +91,28 @@ export async function loadBigMapArt(assets: AssetService, scope: ResourceScope, 
         const frame = await load(BIGMAP_HUD_UI_FILES[key]);
         return [key, frame] as const;
     }));
-    const resourceTask = Promise.all((['grain', 'wood', 'iron', 'coin', 'stamina'] as const).map(async (key) => (
-        [key, key === 'stamina' ? (await uiTask).find(([name]) => name === 'stamina')?.[1] ?? null : await sprite(key)] as const
-    )));
+    const resourceTask = Promise.all((['grain', 'wood', 'iron', 'coin', 'stamina'] as const).map(async (key) => {
+        // 背包道具图标优先：`item.icon` 是相对 resources 的路径（`icons/item/xxx`），
+        // `load` 补 `/spriteFrame`，bundle 由 `BundleCatalog` 路由到 `main-pages`。
+        const itemIcon = resourceIcons.get(key);
+        if (itemIcon) {
+            const frame = await load(itemIcon);
+            if (frame) return [key, frame] as const;
+        }
+        // 没配 itemId / 表还没导 / 图缺失 ⇒ 退回大地图自己的概念图，绝不留空图标。
+        return [key, key === 'stamina'
+            ? (await uiTask).find(([name]) => name === 'stamina')?.[1] ?? null
+            : await sprite(key)] as const;
+    }));
     const baseTask = Promise.all([
         load(`${BIGMAP_CONCEPT_ROOT}/base_ground`), sprite('construction'), sprite('fortress'),
         sprite('mutant_camp'), sprite('rocks'), sprite('grass'),
     ]);
-    const [[backdrop, groundVariants, home, city, monster, rock, grass], buildingEntries, uiEntries,
+    const [[backdrop, groundVariants, home, city, monster, rock, grass, tiledBackground], buildingEntries, uiEntries,
         hudEntries, resourceEntries, [baseBackground, construction, fortress, mutantCamp, conceptRock, conceptGrass]] =
         await Promise.all([terrainTask, buildingTask, uiTask, hudTask, resourceTask, baseTask]);
     const buildings = new Map(buildingEntries);
-    return { background: backdrop, ground: groundVariants.find((frame) => frame !== null) ?? null,
+    return { background: backdrop, tiledBackground, ground: groundVariants.find((frame) => frame !== null) ?? null,
         groundVariants, home: home ?? buildings.get(71001) ?? null, city: city ?? fortress, monster: monster ?? mutantCamp,
         rock: conceptRock ?? rock, grass: conceptGrass ?? grass,
         baseBackground, construction, buildings, ui: new Map(uiEntries), hud: new Map(hudEntries),

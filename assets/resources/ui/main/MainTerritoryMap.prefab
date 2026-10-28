@@ -1028,6 +1028,10 @@
       "__uuid__": "b5b9c1d5-fcea-437a-a519-0cc186e49eb0",
       "__expectedType__": "cc.Prefab"
     },
+    "chestPrefab": {
+      "__uuid__": "506fb026-4beb-474f-b29a-e148c5f0e874",
+      "__expectedType__": "cc.Prefab"
+    },
     "gainLayer": {
       "__id__": 34
     },

@@ -110,3 +110,57 @@ test('从旧贴图模式切换到连续背景后，已有槽位不再遮住底�
     assert.equal(marker.fills[0].a, theme.BIGMAP_TERRITORY_FILL_ALPHA);
     assert.ok(marker.fills[0].a < 255);
 });
+
+/** 色相（0~360）；灰阶（饱和度≈0）返回 -1，不参与红/绿族判定。 */
+function hueOf(color: { r: number; g: number; b: number }): number {
+    const r = color.r / 255, g = color.g / 255, b = color.b / 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    const delta = max - min;
+    if (delta < 0.02) return -1;
+    let hue = max === r ? ((g - b) / delta) % 6 : max === g ? (b - r) / delta + 2 : (r - g) / delta + 4;
+    hue *= 60;
+    return hue < 0 ? hue + 360 : hue;
+}
+const isRedHue = (hue: number): boolean => hue >= 0 && (hue < 20 || hue > 340);
+const isGreenHue = (hue: number): boolean => hue > 70 && hue < 165;
+
+test('势力归属决定整片范围的颜色：己方绿、他人红、无主走色板且更淡', () => {
+    const { view, theme } = fixture();
+    const rgb = (color: { r: number; g: number; b: number }) => [color.r, color.g, color.b];
+
+    const mine = view.territoryPaint(101, { territoryOwner: 'self' });
+    assert.deepEqual(rgb(mine.color), rgb(theme.BIGMAP_TERRITORY_SELF_COLOR));
+    assert.ok(isGreenHue(hueOf(mine.color)), '己方势力必须是绿色');
+
+    const enemy = view.territoryPaint(202, { territoryOwner: 'other' });
+    assert.deepEqual(rgb(enemy.color), rgb(theme.BIGMAP_TERRITORY_ENEMY_COLOR));
+    assert.ok(isRedHue(hueOf(enemy.color)), '其他玩家占据的势力必须是红色');
+
+    // 归属地要压过中立的色板色：填充更实（但仍透出地块纹理）。
+    assert.equal(mine.alpha, theme.BIGMAP_TERRITORY_OWNED_FILL_ALPHA);
+    assert.equal(enemy.alpha, theme.BIGMAP_TERRITORY_OWNED_FILL_ALPHA);
+    assert.ok(theme.BIGMAP_TERRITORY_OWNED_FILL_ALPHA > theme.BIGMAP_TERRITORY_FILL_ALPHA);
+    assert.ok(theme.BIGMAP_TERRITORY_OWNED_FILL_ALPHA < 255);
+
+    // 没被占的城：走色板，用淡填充 —— 且不会拿到红绿两族（否则和状态色撞车）。
+    const neutral = view.territoryPaint(303, { territoryOwner: 'neutral' });
+    assert.equal(neutral.alpha, theme.BIGMAP_TERRITORY_FILL_ALPHA);
+    assert.deepEqual(rgb(neutral.color), rgb(theme.BIGMAP_TERRITORY_COLORS[0]));
+});
+
+test('色板一律冷色系：不许出现红绿两族，也不许橙黄（压在沙地上看不出边界）', () => {
+    const { theme } = fixture();
+    for (const color of theme.BIGMAP_TERRITORY_COLORS) {
+        const hue = hueOf(color);
+        const name = `rgb(${color.r},${color.g},${color.b})`;
+        assert.ok(!isRedHue(hue), `色板色 ${name} 是红族，会和「他人占据」混淆`);
+        assert.ok(!isGreenHue(hue), `色板色 ${name} 是绿族，会和「己方占据」混淆`);
+        // 底色是暖沙（#CFAF8C）：橙 / 黄 / 土褐压上去等于没染（2026-10-28 用户反馈）。
+        assert.ok(
+            hue === -1 || (hue >= 165 && hue <= 335),
+            `色板色 ${name} 的色相 ${hue.toFixed(0)}° 不在冷色范围（青→蓝→紫，165°~335°），会和沙地背景糊在一起`,
+        );
+    }
+    // 色板要够用：真布局按邻接上色，4 色够；色板少于 5 个就没法在几何兜底时还保证相邻不同色。
+    assert.ok(theme.BIGMAP_TERRITORY_COLORS.length >= 5, '色板少于 5 色时相邻势力会撞色');
+});

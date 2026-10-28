@@ -22,18 +22,47 @@ const { ccclass } = _decorator;
 
 type BigMapMode = 'world' | 'base';
 
+/**
+ * 【基地 / 大地图】模式按钮 —— 和 `IBigMapButton`（Graphics 画的方按钮）**不是一套东西**：
+ * 它要的是主界面【任务】按钮那种「底框 + 卡通图标压在框上 + 描边字压在最下」的三段结构，
+ * 而 `createButton` 的 label 永远居中、只会换一张底图（`setSkin`），做不出图标位。
+ * 所以这里单独建节点、单独持有三个部件，换模式时只换 `label.string` 和 `icon.spriteFrame`。
+ */
+interface IBigMapModeButton {
+    readonly node: Node;
+    readonly label: Label;
+    readonly icon: Sprite;
+    readonly frame: Sprite;
+    /** 贴图没加载出来时兜底的那块手画底板（和其余按钮的 `drawPanel` 同款），有贴图就隐掉。 */
+    readonly fallback: Graphics;
+}
+
 const HEADER_HEIGHT = 108;
 
 const FOOTER_HEIGHT = 88;
 const SIDE_PANEL_WIDTH = 300;
 
 /**
- * 「基地 / 世界」切换按钮的尺寸 —— **和底部菜单栏七格一模一样**的 122×96
- * （`cu_ty_btn13` 原生 168×132 等比 ×0.726）。用户口径是「和底部菜单栏保持统一」，
- * 这里连木牌大小都对齐，不另造一个尺寸。
+ * 「基地 / 世界」切换按钮的尺寸 —— 节点仍是底部菜单栏那格的 122×96，
+ * **但皮肤换成了主界面【任务】按钮**（2026-10-28 用户口径：*「基地按钮 和大地图按钮的图标
+ * 更换成类似任务按钮的样式，底框加成对应内容(建筑icon-基地，地图icon--大地图)的卡通icon」*）。
+ * 下面这串数字是照抄 `assets/resources/ui/MainTask/MainTaskEntry.prefab` 量出来的：
+ * 底板 111×79 落在 y −7.5、图标 79×71 抬到 y +11.5（压住底框上沿）、Label 沉到底部 y −25，
+ * 22 号粗体白字 + 2px 黑描边。三者**只有图标顶出底框、文字压住图标下沿**这一个错位关系，
+ * 是任务按钮的全部观感来源，改尺寸时这三个 y 要一起动，否则就散架。
  */
 const MODE_BUTTON_WIDTH = 122;
 const MODE_BUTTON_HEIGHT = 96;
+/** 底框贴图 `hud_task_tab` 的原生尺寸，**不做九宫拉伸**（`.meta` 里 border 全 0）。 */
+const MODE_FRAME_WIDTH = 111;
+const MODE_FRAME_HEIGHT = 79;
+const MODE_FRAME_Y = -7.5;
+/** 图标位：任务按钮的图标是 79×71，这里取 79 宽**按贴图原生比例**缩（不一味拉到 72×72）。 */
+const MODE_ICON_SIZE = 79;
+const MODE_ICON_Y = 11.5;
+const MODE_LABEL_Y = -25;
+const MODE_LABEL_FONT_SIZE = 22;
+const MODE_LABEL_LINE_HEIGHT = 31;
 
 /** 建造列表末尾「解锁队列」伪行的 id（真实建筑 id 都是 7 开头）。 */
 const QUEUE_ROW_ID = -1;
@@ -70,7 +99,7 @@ export class BigMapPage extends Component {
      * 按剩余空间等比缩小。存字段而不是当场算，是因为「自然高度」要靠它反推。
      */
     private infoIconWidth = 112;
-    private modeButton: IBigMapButton = null!;
+    private modeButton: IBigMapModeButton = null!;
     private harvestButton: IBigMapButton = null!;
     private resetButton: IBigMapButton = null!;
 
@@ -184,7 +213,8 @@ export class BigMapPage extends Component {
         // 顶栏 / 详情 / 建造 / 队列**不贴 `concept/ui/*` 那张深铁概念图**：
         // 它们在 `buildUi` 里已经是手画的领地页 HUD 卡（`paintBigMapCardPanel`），贴上去反而盖住。
         // 概念图只留 `plot` / `stamina` / `home` 这些**地图上的图标**继续用。
-        // 实心按钮统一走领地页【快速寻敌】那颗 3D 金钮；【基地/大地图】那颗另走两态木牌（见 `applyMode`）。
+        // 实心按钮统一走领地页【快速寻敌】那颗 3D 金钮；【基地/大地图】那颗是任务按钮同款三段结构
+        // （底框 + 卡通图标 + 描边字），各自在 `applyMode` 里贴图，不走 `setSkin`。
         for (const button of this.skinButtons) button.setSkin(art.hud.get('button') ?? null, BIGMAP_HUD_COLORS.ink);
         this.primaryButton.setSkin(art.hud.get('button') ?? null, BIGMAP_HUD_COLORS.ink);
         for (const [type, icon] of this.resourceIcons) {
@@ -278,17 +308,54 @@ export class BigMapPage extends Component {
         this.harvestButton.node.setPosition(width / 2 - 12 - harvestWidth / 2, 0, 0);
         this.harvestButton.label.color = BIGMAP_HUD_COLORS.ink;
         this.skinButtons.push(this.harvestButton);
-        this.modeButton = createButton(this.node, BIGMAP_PRESENTATION_TEXT.baseToggle,
-            MODE_BUTTON_WIDTH, MODE_BUTTON_HEIGHT,
-            () => this.switchMode(this.mode === 'world' ? 'base' : 'world'), 24);
-        this.modeButton.label.color = BIGMAP_HUD_COLORS.ink;
-        this.modeButton.label.enableOutline = false;
-        this.modeButton.node.name = 'BaseWorldToggle';
+        this.buildModeButton();
         this.buildMenuButton = createButton(this.node, BIGMAP_PRESENTATION_TEXT.build, 88, 40, () => {
             this.buildPanel.active = !this.buildPanel.active;
         }, 18);
         this.buildMenuButton.node.setPosition(-width / 2 + 60, height / 2 - HEADER_HEIGHT - 32, 0);
         this.skinButtons.push(this.buildMenuButton);
+    }
+
+    /**
+     * 搭【基地 / 大地图】那颗模式按钮 —— **主界面【任务】按钮的同款结构**（2026-10-28）。
+     *
+     * 三层，从下往上：
+     *  1. `ModeFrame`：`hud_task_tab` 深板岩圆角底框，**原尺寸 111×79 贴**（无九宫边，拉则糊）；
+     *  2. `ModeIcon`：卡通图标压在底框上沿（`基地` = 石堡城门 / `大地图` = 折页地图），换图在 `applyMode`；
+     *  3. `ModeLabel`：22 号粗体白字 + 2px 黑描边，沉到底框下沿 —— 白字不带描边在沙地上就散了。
+     *
+     * 文字口径没变，还是「写**下一个**模式」：在大地图上显示【基地】，在基地里显示【大地图】，
+     * 图标跟着文字走（建筑 icon 对基地、地图 icon 对大地图），玩家不用猜。
+     */
+    private buildModeButton(): void {
+        const node = createUiNode('BaseWorldToggle', this.node, MODE_BUTTON_WIDTH, MODE_BUTTON_HEIGHT);
+        // 兜底底板先画：贴图到了由 `applyMode` 隐掉它（`drawPanel` 的深色板，和顶栏按钮同款）。
+        const fallbackNode = createUiNode('ModeFrameFallback', node, MODE_FRAME_WIDTH, MODE_FRAME_HEIGHT);
+        const fallback = fallbackNode.addComponent(Graphics);
+        drawPanel(fallback, MODE_FRAME_WIDTH, MODE_FRAME_HEIGHT, BIGMAP_COLORS.panelLight, BIGMAP_COLORS.border, 12);
+        fallbackNode.setPosition(0, MODE_FRAME_Y, 0);
+
+        // 底框与图标都走 `fitBigMapSprite`：**按贴图原生比例缩放**，不按节点尺寸硬拉。
+        // 两张模式图标比例不一样（石堡 82×79、折页地图 108×88），CUSTOM 硬塞 72×72 会把地图压扁。
+        const frame = createBigMapSprite('ModeFrame', node);
+        const icon = createBigMapSprite('ModeIcon', node);
+
+        const label = createLabel(node, BIGMAP_PRESENTATION_TEXT.baseToggle, MODE_LABEL_FONT_SIZE,
+            Color.WHITE, MODE_BUTTON_WIDTH - 12, MODE_LABEL_LINE_HEIGHT + 5);
+        label.horizontalAlign = Label.HorizontalAlign.CENTER;
+        label.verticalAlign = Label.VerticalAlign.CENTER;
+        label.lineHeight = MODE_LABEL_LINE_HEIGHT;
+        label.isBold = true;
+        label.enableOutline = true;
+        // 描边用**近黑**而不是纯黑（照抄任务按钮）：压在深板岩底框上才是「描边」而不是「黑边」。
+        // ⚠️ 颜色必须**在方法里** new，不能提到模块顶层 —— 一堆页面测试用最小 `cc` 桩
+        // （只有 `_decorator` / `Component`）转译执行这个文件，顶层 `new Color` 会让它们全挂。
+        label.outlineColor = new Color(10, 8, 6, 255);
+        label.outlineWidth = 2;
+        label.node.setPosition(0, MODE_LABEL_Y, 0);
+
+        node.on(Node.EventType.TOUCH_END, () => this.switchMode(this.mode === 'world' ? 'base' : 'world'));
+        this.modeButton = { node, label, icon, frame, fallback };
     }
 
     /** 浏览地图铺满屏宽；浮层放在地图之上，不再把竖屏压成负宽度。 */
@@ -599,12 +666,17 @@ export class BigMapPage extends Component {
         this.buildPanel.active = this.mode === 'base' && this.buildPanel.active;
         this.buildMenuButton.node.active = this.mode === 'base';
         this.queuePanel.active = this.mode === 'base';
-        this.modeButton.setText(this.mode === 'world' ? BIGMAP_PRESENTATION_TEXT.baseToggle : BIGMAP_PRESENTATION_TEXT.worldToggle);
-        this.modeButton.label.color = BIGMAP_HUD_COLORS.ink;
+        this.modeButton.label.string = this.mode === 'world'
+            ? BIGMAP_PRESENTATION_TEXT.baseToggle
+            : BIGMAP_PRESENTATION_TEXT.worldToggle;
         if (this.art) {
-            // 与底部菜单栏同一个两态口径：`cu_ty_btn13`（常态）/ `cu_ty_btn14`（当前所在模式）。
-            const key = this.mode === 'base' ? 'tab_active' : 'tab_idle';
-            this.modeButton.setSkin(this.art.hud.get(key) ?? null, BIGMAP_HUD_COLORS.ink);
+            // 图标跟着文字走：写【基地】就压建筑 icon，写【大地图】就压折页地图。
+            // 换模式时**只换 spriteFrame**，不重建节点 —— 重建会让那颗按钮在点下的那一帧闪一下。
+            const icon = this.art.hud.get(this.mode === 'world' ? 'mode_base' : 'mode_world') ?? null;
+            fitBigMapSprite(this.modeButton.icon, icon, MODE_ICON_SIZE, 0, MODE_ICON_Y);
+            const frame = this.art.hud.get('mode_frame') ?? null;
+            fitBigMapSprite(this.modeButton.frame, frame, MODE_FRAME_WIDTH, 0, MODE_FRAME_Y);
+            this.modeButton.fallback.node.active = !frame;
         }
     }
 

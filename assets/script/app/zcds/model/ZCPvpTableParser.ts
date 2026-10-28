@@ -58,7 +58,11 @@ function optionalNumber(value: unknown, field: string): number | undefined {
 function assetPath(value: unknown, field: string): string | undefined {
     if (value === null || value === undefined || value === '') return undefined;
     if (typeof value !== 'string') throw new Error(field + ' 必须是资源路径字符串');
-    return value;
+    // 收口到 `/`：Cocos 的 bundle 路由只认正斜杠，`skel\豌豆射手\豌豆射手` 会被当成**单个文件名**
+    // 报 "Bundle resources doesn't contain …"（Windows 上 existsSync 却照样为真，本地测不出来）。
+    // 源头的表守卫仍然不许写 `\`（`tests/pvp-card-unit-columns.test.ts` 第一条用例），
+    // 这里是给已经下发出去的错表兜底，保证下游拿到的路径一定是 `/`。
+    return value.replace(/\\/g, '/');
 }
 
 function optionalTrigger(value: unknown, field: string): ZCSkillTrigger | undefined {

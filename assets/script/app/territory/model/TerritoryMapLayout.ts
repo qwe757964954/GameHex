@@ -56,42 +56,88 @@ export const TERRITORY_MAP_VIEW_LIFT = 100;
  *
  * 数值取 300：主城页底部叠着【快速寻敌】+【任务】挂件，实测遮挡高度约 150~200px，
  * 留 300 之后整排地块（行高 90）都能完整露出来。
+ *
+ * ⚠️ 2026-10-27 起这只是**缺省值**，真实留白由
+ * {@link territoryMapContentPaddingBottom} 现算（基准已在 2026-10-28 换成底部挂件上沿）。
  */
 export const TERRITORY_MAP_CONTENT_PADDING = 300;
 
 /**
  * 地图**底边**与「顶部 HUD 框底边」之间要保留的间隙（px）。
  *
- * 2026-10-27 用户口径：「最底部的地块可以被拖动到 UI 框的下方，间距约 15px」→ 上限收紧到这条线：
- * 拖到最上时地图底边停在「HUD 底边 + 15px」，**不许更远**。
- * 数值沿用领地那套 15px 习惯（见 `TERRITORY_CLOUD_KEEP_OUT_PX`）。
+ * 2026-10-27 用户口径：「最底部的地块可以被拖动到 UI 框的下方，间距约 15px」→ 上限收紧到这条线。
+ *
+ * ⚠️ 2026-10-28 起这个常数**只服务顶部留白**了：底部留白的基准换成了
+ * {@link TERRITORY_MAP_BOTTOM_GAP}（用户：「地图最底部的地块限制拖动距离，最大只能间距 50px」，
+ * 量的是「地块底边 → 底部挂件上沿」，而不是「地块底边 → 顶部 HUD 底边」）。
  */
 export const TERRITORY_MAP_HUD_GAP = 15;
 
 /**
- * 由「视口高 + 顶部 HUD 底边」反算内容层**底部**留白（px）。
+ * 地图**底边**与「底部挂件（任务 / 快速寻敌 / 宝箱栏）**上沿**」之间允许的最大空当（px）。
+ *
+ * 🔴 2026-10-28 用户口径：「地图最底部的地块限制拖动距离，最大只能间距 50px」。
+ *
+ * 之前（2026-10-27）这条上限是拿**顶部** HUD 反算的：`pad = 视口高 − hudBottom − 15`，
+ * 效果是把地图底边一直送到个人信息框下方 —— 720×1280 上 `pad` 高达 951，
+ * 意味着拖到最底时地图下方会留出 951px 的纯云，用户截图「距离太高」。
+ *
+ * 现在的口径换成**底部挂件**：拖到最底时，地块底边停在挂件上沿上方 50px。
+ * 语义上更稳：挂件是底部固定的，不受顶部 HUD 高度变化影响；
+ * 同时仍然保证「最底下那排地块完整露在挂件之上、能点」。
+ */
+export const TERRITORY_MAP_BOTTOM_GAP = 50;
+
+/**
+ * 量不到底部挂件时的**兜底**咬入高度（px）。
+ *
+ * = 「底部挂件（任务 / 快速寻敌 / 宝箱栏）从**视口底边**往上吃掉多少」。
+ * 页面会实时量（`MainTerritoryMap.bottomHudInset`）；只有宿主页结构变了 / 单跑地图页
+ * 拿不到那几个节点时才退到这个数 —— 宁可差几十像素，也不要让 `pad` 掉成 0（那样底排会被挂件压住）。
+ *
+ * 数值来自 `ArenaRoot` → `MainTerritoryMap` 的真实 prefab 几何（720×1280）：
+ *
+ * ```text
+ * 屏幕 1280 高，中心锚点        ⇒ 屏幕底 = −640
+ * MapViewport 720×1112、bottom=168 ⇒ 视口底 = −472
+ * MainTaskEntry 页面 y −215、高 96 ⇒ 上沿 = −167  ⇒ 咬入 305   ← 最高的那块，就是它
+ * BeginGame（快速寻敌）y −345、高 114 ⇒ 上沿 = −288 ⇒ 咬入 184
+ * ChestBar y −329.5、高 317          ⇒ 上沿 = −171 ⇒ 咬入 301
+ * ```
+ *
+ * 取 **300** 而不是 305：兜底宁可少咬几像素（地块多露 5px），也不要多咬（那会白留一条云）。
+ */
+export const TERRITORY_MAP_BOTTOM_INSET = 300;
+
+/**
+ * 由「视口高 + 底部挂件咬入高度」反算内容层**底部**留白（px）。
  *
  * ## 推导（留白 = 可滚范围的全部来源）
  *
  * 滚到最底时 content 底边贴住视口底边 ⇒ 地图底边在视口底部**上方 `pad`**。
- * 换成「距视口顶部」的坐标：`地图底边 = 视口高 − pad`。
- * 要让这条边正好落在 `hudBottom + GAP`：
+ * 要让「地图底边 → 挂件上沿」正好等于 `GAP`，而挂件上沿本身离视口底部 `inset`：
  *
  * ```text
- * 视口高 − pad = hudBottom + GAP
- * ⇒ pad = 视口高 − hudBottom − GAP
+ * pad = inset + GAP
  * ```
  *
- * @param viewportHeight 地图视口高（`MapViewport` 的 `UITransform.height`）
- * @param hudBottom      顶部 HUD 底边到**视口顶部**的距离（px）；找不到 HUD 时传 0
+ * 也就是：**地图只管停在挂件上方 50px，挂件多高完全由页面量出来喂进来**。
  *
- * ⚠️ 结果夹在 `[0, ∞)`：HUD 比视口还高时（极端长屏 / HUD 改版）退回 0 ——
- *    也就是「地图底边最多贴到视口底部」，不会再让内容层尺寸算出负数。
+ * @param viewportHeight 地图视口高（`MapViewport` 的 `UITransform.height`）
+ * @param bottomInset    底部挂件从视口底边往上咬掉的高度（px）；量不到时用
+ *                       {@link TERRITORY_MAP_BOTTOM_INSET}
+ *
+ * ⚠️ 结果夹在 `[0, 视口高]`：极端情况下（挂件比视口还高）最多把整屏都留成空，
+ *    不会让内容层尺寸算出负数或滚出画面。
  */
-export function territoryMapContentPaddingBottom(viewportHeight: number, hudBottom: number): number {
+export function territoryMapContentPaddingBottom(
+    viewportHeight: number,
+    bottomInset = TERRITORY_MAP_BOTTOM_INSET,
+): number {
     const height = Number.isFinite(viewportHeight) ? Math.max(0, viewportHeight) : 0;
-    const bottom = Number.isFinite(hudBottom) ? Math.max(0, hudBottom) : 0;
-    return Math.max(0, height - bottom - TERRITORY_MAP_HUD_GAP);
+    const inset = Number.isFinite(bottomInset) ? Math.max(0, bottomInset) : TERRITORY_MAP_BOTTOM_INSET;
+    const pad = inset + TERRITORY_MAP_BOTTOM_GAP;
+    return height > 0 ? Math.min(height, pad) : pad;
 }
 
 /**

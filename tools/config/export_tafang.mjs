@@ -1,5 +1,5 @@
 import {
-    cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync,
+    copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync,
 } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -132,10 +132,28 @@ function runEson(esonDirectory, classesDirectory, classpath, input, output) {
     ], { cwd: esonDirectory, label: 'eSon 导表' });
 }
 
+/**
+ * 递归复制并**覆盖**目标已有文件（发布策划 JSON 用）。
+ *
+ * 🔴 不能退化成 `cpSync(src, dst, { recursive: true, force: true })`：本机 Node 22.22.2 在
+ * **跨卷**（C: 临时目录 → D: 工程/文档目录）且目标文件**已存在**时静默跳过 ——
+ * 不复制、不报错、退出码 0。2026-10-28 实测：`before 23731 / after 23731`，
+ * 而 `copyFileSync` 同场景 `23731 → 47590` 正常。于是 `doc/塔防数据配置/json/**`
+ * 这一跳一直发布的是旧内容（只有同卷 tmp→tmp 才正常）。逐文件 `copyFileSync` 跨卷可靠。
+ */
 function copyJsonTree(source, destination) {
     requirePath(source, '待发布 JSON 目录');
+    copyDirectory(source, destination);
+}
+
+function copyDirectory(source, destination) {
     mkdirSync(destination, { recursive: true });
-    cpSync(source, destination, { recursive: true, force: true });
+    for (const entry of readdirSync(source, { withFileTypes: true })) {
+        const from = join(source, entry.name);
+        const to = join(destination, entry.name);
+        if (entry.isDirectory()) copyDirectory(from, to);
+        else copyFileSync(from, to);
+    }
 }
 
 function generateClientRef(jsonClientDirectory) {

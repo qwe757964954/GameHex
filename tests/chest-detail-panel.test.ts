@@ -16,7 +16,7 @@ import ts from 'typescript';
 const PREFAB = 'assets/resources/ui/main/ChestDetailPanel.prefab';
 const PANEL_CID = 'fba93mSlUVEQ4N0/mw7tcEZ';
 const VSCROLL_CID = '544earF5qRLB4JTuTnSr11+';
-const REWARD_ITEM = 'assets/resources/ui/common/RewardItem.prefab';
+const REWARD_ITEM = 'assets/resources/ui/main/ChestDetailRewardItem.prefab';
 
 type Obj = Record<string, any>;
 const objects = JSON.parse(readFileSync(PREFAB, 'utf8')) as Obj[];
@@ -55,7 +55,7 @@ test('宝箱详情弹窗：根节点挂专用组件，22 个引用全部绑上�
     }
 });
 
-test('宝箱详情弹窗：奖励说明是「公共 RewardItem」的 4 列网格虚拟列表（4+1 换行）', () => {
+test('宝箱详情弹窗：奖励说明是详情卡片的 4 列网格虚拟列表（4+1 换行）', () => {
     const slots = objects.find((o) => o?.__type__ === 'cc.Node' && o._name === 'ItemSlots');
     assert.ok(slots, '缺 ItemSlots');
     assert.deepEqual((slots!._children ?? []).map((ref) => at(ref)).map((c) => c?._name), ['content'],
@@ -63,16 +63,31 @@ test('宝箱详情弹窗：奖励说明是「公共 RewardItem」的 4 列网格
 
     const list = (slots!._components ?? []).map((ref) => at(ref)).find((c) => c?.__type__ === VSCROLL_CID);
     assert.ok(list, 'ItemSlots 必须挂 VirtualScrollView');
+    assert.ok((slots!._components ?? []).map((ref) => at(ref)).some((c) => c?.__type__ === 'cc.Mask'),
+        '滚动时奖励卡片必须裁剪在奖励说明框内');
     assert.equal(list!.useVirtualList, true);
     assert.equal(list!.gridCount, 4, '4 列（设计稿 4+1 换行）');
     assert.equal(list!.itemCreationMode, 1, 'PREFAB 模式 —— 复用公共 item');
     const rewardUuid = (JSON.parse(readFileSync(REWARD_ITEM + '.meta', 'utf8')) as Obj).uuid;
-    assert.equal(list!.itemPrefab?.__uuid__, rewardUuid, 'itemPrefab 指向 ui/common/RewardItem');
+    assert.equal(list!.itemPrefab?.__uuid__, rewardUuid, 'itemPrefab 指向详情奖励卡片');
 
     const tf = (slots!._components ?? []).map((ref) => at(ref)).find((c) => c?.__type__ === 'cc.UITransform');
     assert.equal(tf!._anchorPoint.y, 1, '视窗锚点必须 (0.5, 1)');
     const content = (slots!._children ?? []).map((ref) => at(ref)).find((c) => c?._name === 'content');
     assert.equal(content!._lpos.y, 0, 'content.lpos.y 必须为 0');
+});
+
+test('宝箱奖励卡：浅色底在图标和概率之下，尺寸与四列布局一致', () => {
+    const item = JSON.parse(readFileSync(REWARD_ITEM, 'utf8')) as Obj[];
+    const card = item.find((o) => o?.__type__ === 'cc.Node' && o._name === 'ChestDetailRewardItem')!;
+    const children = card._children.map((ref: Obj) => item[ref.__id__]);
+    assert.deepEqual(children.map((n: Obj) => n._name), ['CardBackground', 'Frame', 'Icon', 'Num', 'Rate']);
+    const tf = card._components.map((ref: Obj) => item[ref.__id__]).find((c: Obj) => c.__type__ === 'cc.UITransform');
+    assert.deepEqual([tf._contentSize.width, tf._contentSize.height], [126, 151]);
+    const rate = children.find((n: Obj) => n._name === 'Rate');
+    const label = rate._components.map((ref: Obj) => item[ref.__id__]).find((c: Obj) => c.__type__ === 'cc.Label');
+    assert.equal(label._enableOutline, false);
+    assert.ok(rate._lpos.y < 0, '概率在图标下方');
 });
 
 test('宝箱详情弹窗：全部节点 UI_2D 且有 UITransform；示例文案必须清空', () => {
@@ -181,7 +196,8 @@ test('弹窗组件：全量赋值、三颗按钮派发意图事件、倒计时�
         panel[key] = label();
     }
     panel.qualityFrame = { spriteFrame: null };
-    panel.chestIcon = { spriteFrame: null };
+    const fallbackIcon = { id: 'default-chest' };
+    panel.chestIcon = { spriteFrame: fallbackIcon };
     for (const key of ['fastCostRoot', 'openCostRoot']) panel[key] = node();
     panel.fastCostIcon = { spriteFrame: null };
     for (const key of ['fastButton', 'openButton', 'closeButton']) panel[key] = { node: node(), interactable: true };
@@ -213,10 +229,17 @@ test('弹窗组件：全量赋值、三颗按钮派发意图事件、倒计时�
     assert.equal(panel.nameLabel.string, '青铜宝箱');
     assert.equal(panel.qualityLabel.string, '品质：普通');
     assert.equal(panel.countLabel.string, '数量：1');
+    assert.equal(panel.chestIcon.spriteFrame.id, 'box');
     assert.deepEqual(counts, [2], '条数 = 奖励数量（不再固定 5 格）');
     assert.equal(panel.fastCostLabel.string, '10');
     assert.equal(panel.openCostLabel.string, '01:35:25');
     assert.equal(panel.openButton.interactable, false, '倒计时中不能点「打开」');
+
+    panel.applyContent({ name: '宝箱', qualityText: '', countText: '', icon: null, qualityFrame: null,
+        rewards: [], fastOpenCost: 0, fastOpenEnabled: true, openCaption: '打开', openCountdown: '',
+        openEnabled: true, costIcon: null });
+    assert.equal(panel.chestIcon.spriteFrame, fallbackIcon, '缺少配置图时还原预制体宝箱图');
+    panel.openButton.interactable = false;
 
     panel.handleFastOpen();
     panel.handleClose();
@@ -230,6 +253,13 @@ test('弹窗组件：全量赋值、三颗按钮派发意图事件、倒计时�
     panel.updateCountdown(0);
     assert.equal(panel.openCostRoot.active, false);
     assert.equal(panel.openButton.interactable, true);
+    panel.updateCountdown(3600, false);
+    assert.equal(panel.openCostLabel.string, '01:00:00');
+    assert.equal(panel.openButton.interactable, true, '未激活时展示所需时长但仍可启动');
+    panel.updateCountdown(3599, true);
+    assert.equal(panel.openCostLabel.string, '00:59:59');
+    assert.equal(panel.openButton.interactable, false, '计时中不能提前打开');
+    panel.updateCountdown(0);
     panel.handleOpen();
     assert.deepEqual(emitted, ['chest-detail:open']);
 });

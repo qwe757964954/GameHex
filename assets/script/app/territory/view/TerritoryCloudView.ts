@@ -357,6 +357,18 @@ export class TerritoryCloudView {
     private fillOccupied: ReadonlySet<number> = new Set<number>();
     /** `MapLayer`（`CloudKeepOut` 的父节点）—— 云洞层每帧对齐它的世界变换。 */
     private mapLayer: Node | null = null;
+    /**
+     * 内容层偏移（= `TerritoryMapView.applyContentShift` 真正写进 `GridLayer` 的那个 y）。
+     *
+     * 🔴 **必须由地图视图注入**（`setContentShiftY`），不能现算缺省值。
+     * 自 2026-10-27 起两份留白都是页面按「视口高 + HUD 底边」反算的**运行时值**，
+     * `territoryMapContentShiftY()` 不传参拿到的是老缺省（300 / 0 ⇒ +150），
+     * 而 720×1280 上的真值是 342.5 —— 差 192.5px（≈ 两排），
+     * 云洞层整排漂到上面那几排已解锁地块上（用户 2026-10-28 截图红圈）。
+     *
+     * 缺省值保留只为「没人注入」的场景（单测 / 页面还没量到 HUD）有个合理兜底。
+     */
+    private contentShiftY = territoryMapContentShiftY();
     /** 最近一次 `sync` 的布局（消散层重画挡云区时要用格坐标）。 */
     private cells: readonly ITerritoryCloudCell[] = [];
     /**
@@ -1318,6 +1330,8 @@ export class TerritoryCloudView {
             shadow.node.setPosition(cell.x, y, 0);
             this.pocketShadowSprites.push(shadow);
         }
+        // 刚建完就先对齐一次：`step` 里那次要到下一帧才跑，中间会闪一帧"云在错位置"。
+        this.syncPocketTransform();
     }
 
     /**
@@ -1363,16 +1377,31 @@ export class TerritoryCloudView {
     }
 
     /**
+     * 注入「内容层偏移」—— 由 `TerritoryMapView.applyContentShift` 每次现算后写进来。
+     *
+     * 两份留白都是运行时值，这个数**不能缓存成常量**，也不能在云层这边自己再算一遍
+     * （算就会算成缺省值，见 {@link contentShiftY} 的注释）。
+     *
+     * 幂等：值没变直接返回，避免每帧 `syncContentSize` 都触发一次对齐。
+     */
+    setContentShiftY(shift: number): void {
+        const value = Number.isFinite(shift) ? shift : territoryMapContentShiftY();
+        if (value === this.contentShiftY) return;
+        this.contentShiftY = value;
+        this.syncPocketTransform();
+    }
+
+    /**
      * 让云洞层每帧对齐 `MapLayer`（世界位置 + 世界缩放）。
      *
      * 这样云洞层里的子节点可以继续用**地图局部坐标**摆位：地图滚动 / 推镜时不用逐格换算，
      * 只有这一个节点在动。没有洞时开销就是一次 `size` 判断。
      *
-     * ## 🔴 必须把「内容层偏移」一起算进去（2026-10-26 修）
+     * ## 🔴 必须把「内容层偏移」一起算进去（2026-10-26 修，2026-10-28 补注入）
      *
-     * `territoryMapContentShiftY()`（= 150）是 `TerritoryMapView.applyContentShift` 写在
-     * **`MapLayer` 的孩子**上的（格子层 / 云层 / 站点层 / 飘字层都 +150），`MapLayer` 自己
-     * 的 `worldPosition` 里**没有**这 150。
+     * `territoryMapContentShiftY()` 是 `TerritoryMapView.applyContentShift` 写在
+     * **`MapLayer` 的孩子**上的（格子层 / 云层 / 站点层 / 飘字层都 +shift），`MapLayer` 自己
+     * 的 `worldPosition` 里**没有**这一截。
      *
      * 云洞层偏偏是**页面根**的孩子（要压在 UI 之上），之前直接
      * `pocket.setWorldPosition(map.worldPosition)` ⇒ 它整层比地块**低 150 地图像素**
@@ -1381,12 +1410,17 @@ export class TerritoryCloudView {
      *
      * 所以这里不能拿 `worldPosition` 直接对齐，要问 `MapLayer` 要「局部 `(0, shift)` 的世界坐标」，
      * 缩放在内的整条变换链一次算完。
+     *
+     * ⚠️ 2026-10-28 复发：这个 `shift` 又变回了「现算缺省值」（+150），而真值在 720×1280 上是
+     * **342.5**（见 `territoryMapContentShiftY` 的运行时口径）⇒ 云洞整层低 192.5px（≈ 两排），
+     * 云没落在洞里、而是压到了上面那排已解锁地块上（用户截图红圈）。
+     * 现值一律取自 {@link contentShiftY}，由 `applyContentShift` 注入。
      */
     private syncPocketTransform(): void {
         const pocket = this.pocketNode;
         const map = this.mapLayer;
         if (!pocket?.isValid || !map?.isValid || !this.pocketCells.size) return;
-        const shift = territoryMapContentShiftY();
+        const shift = this.contentShiftY;
         const transform = map.getComponent(UITransform);
         const world = transform
             ? transform.convertToWorldSpaceAR(new Vec3(0, shift, 0))

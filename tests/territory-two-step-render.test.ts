@@ -92,8 +92,12 @@ test('stationRenderOf 为关卡保留"解锁后展示建筑、通关后变绿"�
         '渲染层必须按站点类型判定关卡分支');
     assert.doesNotMatch(body, /stagePassClaimReady|stagePassClaimed/, '地图不再叠加状态文字');
     assert.match(body, /TERRITORY_COLORS\.cleared/, '通关后要用「已通关」绿');
-    assert.match(body, /interactive: \(claimed \? isAsyncPvp : true\) && !pending/,
-        '已通关：asyncPvp 可重复挑战仍可点；主线 stage/boss 与请求中不可再点');
+    // 🔴 2026-10-28 用户：「点击已通过的关卡也可以打开【领地关卡信息弹窗】」。
+    // 这里原来钉的是 `interactive: (claimed ? isAsyncPvp : true) && !pending` ——
+    // 打完的主线 stage/boss 直接不可点，弹窗打不开。现在**已通关也可点**，
+    // 唯一不可点是请求在途（防连点）。
+    assert.match(body, /interactive: !pending/,
+        '已通关的关卡也要能点（打开信息弹窗）；只有请求在途时禁掉');
     // 解锁中（pendingFixedResourceCells）与 fixedResource 同一转圈通道。
     assert.match(body, /pendingFixedResourceCells\.includes\(site\.cellId\)/,
         '解锁请求进行中要复用 pending 转圈通道');
@@ -141,7 +145,11 @@ test('无建筑图标时不再启用兜底文字，只有未解锁条件可以�
     const dependents = [
         /captionSprite\.node\.active = !isHidden && !isLoading && isCondition/,
         /captionLabel\.node\.active = !isHidden && !isLoading && isCondition/,
-        /badgeLabel\.node\.active = false/,
+        // 2026-10-28 起角标不再「恒 false」：文字被收进新建的 `LevelBubble` 根里，
+        // `badgeLabel` / 气泡根都跟着同一个 `visible` 开关 —— 没有文案时两者都关，
+        // 所以这里钉的是「跟 `visible` 走」，不是写死的 false。
+        /this\.badgeLabel\.node\.active = visible/,
+        /bubble\.node\.active = visible/,
     ];
     for (const re of dependents) {
         assert.match(view, re);

@@ -132,6 +132,9 @@ export const TERRITORY_TEXTS = {
     levelFight: '开始战斗',
     /** 关卡界面主按钮：未解锁（点了先解锁）。 */
     levelUnlock: '解锁后开战',
+    // ⚠️ 不要恢复「已通关」那档按钮文案（2026-10-28 曾短暂存在、同日撤回）：
+    // 用户口径是**已通关的关卡再打一次照常扣体力** ⇒ 按钮恒为 {@link levelFight} 或
+    // {@link levelUnlock}，没有第三种状态。写回去会被读成"这关不能打了"，是错的。
 
     // 开战兜底
     resourceNotEnoughFallback: '资源不足',

@@ -99,10 +99,6 @@ export class TerritoryProgress {
         return Array.from(this.pendingPasses).sort((a, b) => a - b);
     }
 
-    confirmCellPassed(cellId: number): void {
-        this.pendingPasses.delete(cellId);
-    }
-
     get disabledCells(): readonly number[] {
         return Array.from(this.disabled).sort((a, b) => a - b);
     }
@@ -305,15 +301,40 @@ export class TerritoryProgress {
 
     /** 同区域的其它格子（不含自己）。非战斗站点或configId 非数字 ⇒ 空数组。 */
     areaPeers(cellId: number): readonly number[] {
-        const site = this.map.sites.find((candidate) => candidate.cellId === cellId);
-        if (!site || (site.type !== TERRITORY_SITE_TYPE.stage && site.type !== TERRITORY_SITE_TYPE.boss && site.type !== TERRITORY_SITE_TYPE.asyncPvp)) return [];
-        const configId = site.configId;
-        if (typeof configId !== 'string' || !/^\d+$/.test(configId)) return [];
-        return this.map.sites
-            .filter((peer) => peer.cellId !== cellId
-                && (peer.type === TERRITORY_SITE_TYPE.stage || peer.type === TERRITORY_SITE_TYPE.boss || peer.type === TERRITORY_SITE_TYPE.asyncPvp)
-                && peer.configId === configId)
-            .map((peer) => peer.cellId);
+        const { byCell, byConfig } = this.areaIndex();
+        const configId = byCell.get(cellId);
+        if (configId === undefined) return [];
+        return (byConfig.get(configId) ?? []).filter((peer) => peer !== cellId);
+    }
+
+    /**
+     * 同区域战斗格索引（`cellId → configId` 与 `configId → cellId[]`）。
+     *
+     * `map` 在实例生命周期内不变 ⇒ **构建一次后缓存**，把原来 `areaPeers` 每次调用的
+     * 两趟 `map.sites` 线性扫描（`find` + `filter`）降为一次性构建 + O(1) 查表。
+     * `areaPeers` 走渲染热路径（`isAreaPassed` → `isCellActivated` / `levelInfoContent`
+     * 每格一调），全量重渲染时原先是几千次数组扫描。
+     *
+     * 区域组 = 所有 `type ∈ {stage, boss, asyncPvp}` 且 `configId` 为非空数字串的站点
+     * （口径与下方 `isPrerequisiteComplete` 一致；fixedResource 同 configId 有多格，不参与）。
+     */
+    private areaIndexCache: { byCell: Map<number, string>; byConfig: Map<string, number[]> } | null = null;
+    private areaIndex(): { byCell: Map<number, string>; byConfig: Map<string, number[]> } {
+        if (this.areaIndexCache) return this.areaIndexCache;
+        const byCell = new Map<number, string>();
+        const byConfig = new Map<string, number[]>();
+        for (const peer of this.map.sites) {
+            const isBattleSite = peer.type === TERRITORY_SITE_TYPE.stage || peer.type === TERRITORY_SITE_TYPE.boss || peer.type === TERRITORY_SITE_TYPE.asyncPvp;
+            if (!isBattleSite) continue;
+            const configId = peer.configId;
+            if (typeof configId !== 'string' || !/^\d+$/.test(configId)) continue;
+            byCell.set(peer.cellId, configId);
+            const list = byConfig.get(configId);
+            if (list) list.push(peer.cellId);
+            else byConfig.set(configId, [peer.cellId]);
+        }
+        this.areaIndexCache = { byCell, byConfig };
+        return this.areaIndexCache;
     }
 
     isOwned(cellId: number): boolean { return this.owned.has(cellId); }

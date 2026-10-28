@@ -9,6 +9,9 @@
  * 每次先染「已染邻居颜色种类最多」的那块，平面图上 4 色就够，色板给 6~8 个绰绰有余。
  *
  * 只在 `build` 时算一次（世界是只读快照，城池占格不会变），渲染层缓存结果。
+ *
+ * 2026-10-28 追加口径：色板只服务**无主**势力；己方占的城染绿、其他玩家占的城染红
+ * （`bigMapTerritoryOwnerOf`）。所以色板里不能再出现红族/绿族，否则归属和势力编号混在一起。
  */
 
 /** 一块势力范围（城池）。 */
@@ -17,6 +20,34 @@ export interface ITerritoryColorRegion {
     readonly id: number;
     /** 该势力占的格子。 */
     readonly hexIds: readonly number[];
+}
+
+/**
+ * 势力归属类别（2026-10-28 用户口径）。
+ *
+ * - `self`：**我占据**的城池 → 整片范围染绿；
+ * - `other`：**其他玩家**占据的城池 → 整片范围染红；
+ * - `neutral`：无主 → 按 `BIGMAP_TERRITORY_COLORS` 上色（相邻不同色）。
+ *
+ * 为什么要有这一层而不是在视图里直接判 `state === 'occupied'`：
+ * 「被占」和「我占的」在联机档是两件事 —— 服务端 `CmdSlgCampInfo` 只给 `opType = 1`（有人占），
+ * 归属要看 `SlgGameInfo.toCampId`。放在纯模型里，三种归属的口径只有一处。
+ */
+export type BigMapTerritoryOwner = 'self' | 'other' | 'neutral';
+
+/**
+ * 一座城的势力范围该归属到哪一类颜色。
+ *
+ * @param mine    这座城就是「我所在的城」。联机档 = `SlgGameInfo.toCampId === cityId`；
+ *                离线档没有 `toCampId`，拿本地进度里的「已占领」当己方（那本来就是我打的）。
+ * @param occupied 这座城已经被某个玩家占据（联机档 `opType === 1`，离线档 `state === 'occupied'`）。
+ *
+ * 两个入参分开传：`occupied && !mine` 才是「其他玩家占的」，
+ * 合成一个 bool 就没法区分「我占的」和「别人占的」，红绿必然反过来。
+ */
+export function bigMapTerritoryOwnerOf(mine: boolean, occupied: boolean): BigMapTerritoryOwner {
+    if (mine) return 'self';
+    return occupied ? 'other' : 'neutral';
 }
 
 /**

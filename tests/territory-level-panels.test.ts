@@ -344,6 +344,10 @@ test('关卡界面组件：掉落交给虚拟列表（先 active 再 setTotalCou
         panel[key] = labelStub();
     }
     panel.fightCostRoot = nodeStub();
+    // 费用图标（`BtnPrimary/CostIcon`）：2026-10-28 起由 `applyContent` 按 `staminaIcon` 现贴，
+    // 不许再靠 prefab 里焊死的硬币图 ⇒ 这里必须桩出 `spriteFrame` 与 `node.active`。
+    const costIcon = { spriteFrame: 'stale-coin' as unknown, node: nodeStub() };
+    panel.fightCostIcon = costIcon;
     const clickable = () => ({ node: { on: () => undefined, active: true }, interactable: true });
     panel.hintButton = clickable();
     panel.fightButton = clickable();
@@ -360,6 +364,7 @@ test('关卡界面组件：掉落交给虚拟列表（先 active 再 setTotalCou
         title: '2-2关卡标题', hasTip: true, objective: '第一名成功通过关卡', occupy: '【征收】+6 硬币',
         drops: [{ frame: {}, icon: {}, amount: 8 }, { frame: {}, icon: {}, amount: 75 }],
         recommend: '', fightCaption: '开始战斗', fightEnabled: true, staminaCost: 10,
+        staminaIcon: { name: '体力' } as never,
     });
     assert.equal(panel.hintButton.node.active, true, '有敌军提示 ⇒ 感叹号显示');
     assert.equal(panel.titleLabel.string, '2-2关卡标题');
@@ -367,6 +372,9 @@ test('关卡界面组件：掉落交给虚拟列表（先 active 再 setTotalCou
     assert.deepEqual(counts, [2], '条数 = 掉落数量（不再固定 3 格）');
     assert.equal(panel.recommendLabel.node.active, false, '没有推荐文案时整行隐藏');
     assert.equal(panel.fightCostLabel.string, '10');
+    // 🔴 用户：「挑战按钮上的图标要更换成对应的体力图标」⇒ 贴进来的必须是传进去那枚，不是 prefab 的硬币。
+    assert.deepEqual(costIcon.spriteFrame, { name: '体力' }, '费用图标必须换成传进来的体力图标');
+    assert.equal(costIcon.node.active, true, '有费用 ⇒ 图标显示');
 
     // 单格渲染：走公共 RewardItemView
     const makeItem = () => {
@@ -396,8 +404,29 @@ test('关卡界面组件：掉落交给虚拟列表（先 active 再 setTotalCou
     panel.applyContent({
         title: '2-2关卡标题', hasTip: false, objective: '第一名成功通过关卡', occupy: '【征收】+6 硬币',
         drops: [], recommend: '', fightCaption: '开始战斗', fightEnabled: true, staminaCost: 10,
+        staminaIcon: { name: '体力' } as never,
     });
     assert.equal(panel.hintButton.node.active, false, '没有敌军提示时隐藏感叹号');
+
+    // 免费关卡（staminaCost 0）⇒ 数字清空、底与图标一起藏
+    // （`CostIcon` 是 `BtnPrimary` 的直接子节点，不跟着 `fightCostRoot.active` 关，必须单独判）。
+    panel.applyContent({
+        title: '2-2关卡标题', hasTip: false, objective: '第一名成功通过关卡', occupy: '【征收】+6 硬币',
+        drops: [], recommend: '', fightCaption: '开始战斗', fightEnabled: true, staminaCost: 0,
+        staminaIcon: { name: '体力' } as never,
+    });
+    assert.equal(panel.fightCostLabel.string, '', '没有费用 ⇒ 数字清空');
+    assert.equal(panel.fightCostRoot.active, false, '没有费用 ⇒ 费用底藏起来');
+    assert.equal(costIcon.node.active, false, '没有费用 ⇒ 图标也要藏（否则留一颗无数字的体力图标）');
+
+    // 图没加载到（`staminaIcon: null`）⇒ 只少图标，数字照常显示
+    panel.applyContent({
+        title: '2-2关卡标题', hasTip: false, objective: '第一名成功通过关卡', occupy: '【征收】+6 硬币',
+        drops: [], recommend: '', fightCaption: '开始战斗', fightEnabled: true, staminaCost: 10,
+        staminaIcon: null,
+    });
+    assert.equal(panel.fightCostLabel.string, '10', '缺图不影响数字');
+    assert.equal(costIcon.node.active, false, '图缺了就别显示空框');
 });
 
 test('关卡提示组件：敌军全量交给虚拟列表（先 active 再 setTotalCount），关闭只派发提示自己的事件', () => {

@@ -1171,16 +1171,21 @@ test('视图：云洞每格**只放一朵**、缩到 POCKET_SCALE，且跟着地
     assert.equal(parked!.active, false, '洞格的正常云必须收起，由云洞层那朵顶班');
 
     // 每帧对齐 MapLayer 的世界变换：地图滑动 / 推镜时云洞得跟着走。
-    // 🔴 还要**加上内容层偏移**（`territoryMapContentShiftY` = 150）—— 那 150px 是
-    //    `applyContentShift` 写在 `MapLayer` 的**孩子**上的，`MapLayer.worldPosition` 里没有它；
-    //    少了这一项，云洞整层比地块低 150（≈ 一排半格，实机就是"云没落在洞里"）。
-    const shift = layout.territoryMapContentShiftY();
-    assert.ok(shift > 0, '内容层偏移必须是正的（否则下面那条断言等于没测）');
+    // 🔴 还要**加上内容层偏移** —— 那是 `applyContentShift` 写在 `MapLayer` 的**孩子**上的，
+    //    `MapLayer.worldPosition` 里没有它；少了这一项，云洞整层就差一整截。
+    // 🔴 2026-10-28：这一截**必须由地图视图注入**，不能现算缺省值。
+    //    自 2026-10-27 起两份留白都是页面按「视口高 + HUD 底边」反算的运行时值；
+    //    顶部留白一加上，真实偏移就变成**负数**，而缺省值（300 / 0）恒为 +150 ——
+    //    两者相差 200 多像素，实机表现就是云洞的云整排漂到上面那几排已解锁地块上。
+    const injected = -73;
+    assert.notEqual(injected, layout.territoryMapContentShiftY(),
+        '注入值必须和缺省值不同，否则下面这条断言测不出「没注入」');
+    view.setContentShiftY(injected);
     mapLayer.setWorldPosition({ x: -120, y: 340, z: 0 });
     mapLayer.setWorldScale({ x: 1.35, y: 1.35, z: 1 });
     view.step(1 / 60);
-    assert.deepEqual(pocket.worldPosition, { x: -120, y: 340 + shift * 1.35, z: 0 },
-        '云洞层的世界坐标 = MapLayer 的世界坐标 + 内容层偏移（按世界缩放换算）');
+    assert.deepEqual(pocket.worldPosition, { x: -120, y: 340 + injected * 1.35, z: 0 },
+        '云洞层的世界坐标 = MapLayer 的世界坐标 + **注入的**内容层偏移（按世界缩放换算）');
     assert.deepEqual(pocket.worldScale, { x: 1.35, y: 1.35, z: 1 });
 
     // 洞补上（那一格解锁了）⇒ 云洞清空，那朵云**原地转成消散**（不是瞬间消失）。

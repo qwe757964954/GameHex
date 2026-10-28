@@ -1,7 +1,7 @@
 import { JsonAsset, SpriteFrame } from 'cc';
 import type { AssetService } from '../../../core/asset/AssetService';
 import { RefUtil } from '../../../framework/ref/RefUtil';
-import { MAP_MARKER_BUBBLE_FRAME_PATH } from '../../common/MapMarkerBadge';
+import { MAP_MARKER_BUBBLE_FRAME_PASSED_PATH, MAP_MARKER_BUBBLE_FRAME_PENDING_PATH } from '../../common/MapMarkerBadge';
 import {
     ART_ROOT,
     BUILDING_ART_ROOT,
@@ -21,8 +21,21 @@ import {
  */
 export interface ITerritoryBattleArt {
     readonly background: SpriteFrame | null;
-    /** 章节关卡编号气泡，复用 battle 分包中的蓝色 frame_03。 */
+    /**
+     * 关卡气泡底图（蓝）：`image/spawn-region/frame_03`。
+     *
+     * 🔴 2026-10-28 16:23 用户：气泡**统一蓝色**（此前试过「已通关绿 / 未通关红」，已否决）。
+     * 与 {@link levelBubblePendingFrame} 目前指向同一张图。
+     */
     readonly levelBubbleFrame?: SpriteFrame | null;
+    /**
+     * **未通关**关卡的气泡底图 —— 与 {@link levelBubbleFrame} 同图（蓝色 `frame_03`）。
+     *
+     * 字段保留是为了不打乱二选一管线：将来要重新分色只改 `MapMarkerBadge` 的常量即可。
+     * 取不到时视图回退到 {@link levelBubbleFrame}（宁可同色一下，也不能没气泡 ——
+     * 编号是这一格唯一的关卡标识）。
+     */
+    readonly levelBubblePendingFrame?: SpriteFrame | null;
     /**
      * **未通关**格的地皮（未解锁 / 已解锁未通关 / 中立格都用它）：`img_land_02` 泥土块。
      *
@@ -38,6 +51,11 @@ export interface ITerritoryBattleArt {
      *  框的语义就是「这里有东西可打」，打完了再留着会读成「还能再打一次」。
      */
     readonly frameBoss: SpriteFrame | null;
+    /**
+     * 普通关卡（`stage`）的框。
+     *
+     * 🔴 2026-10-28 起**与首领同图（红）**：原来的 `frame_03` 紫框已被用户否掉。
+     */
     readonly frameStage: SpriteFrame | null;
     readonly frameAsyncPvp: SpriteFrame | null;
     /** 宝箱格（`fixedResource`）的框。⚠️ 美术文件名是 `fram_02`（**少一个 e**），别"顺手改对"。 */
@@ -220,7 +238,7 @@ export async function loadTerritoryBattleArt(
     assets: AssetService,
     backgroundPath: string,
 ): Promise<ITerritoryBattleArt> {
-    const [background, tileLocked, tileCleared, frameBoss, frameStage, frameAsyncPvp, frameChest, start, stage, boss, asyncPvp, fixedResource, randomResource, randomSilverIcon, bonus, header, navButton, actionButton, buildAssets, levelBubbleFrame] = await Promise.all([
+    const [background, tileLocked, tileCleared, frameBoss, frameStage, frameAsyncPvp, frameChest, start, stage, boss, asyncPvp, fixedResource, randomResource, randomSilverIcon, bonus, header, navButton, actionButton, buildAssets, levelBubbleFrame, levelBubblePendingFrame] = await Promise.all([
         // 地图 JSON 有 background 就按它走（spriteFramePathOf 对已带后缀的路径幂等），否则用默认背景。
         // ⚠️ 默认图 zdbg1 在 `image/` **根目录**（不在 `image/territory/`）⇒ 走 `spriteFramePath(ART_ROOT, …)`；
         //    用 `spriteFramePathOf(TERRITORY_ART_ROOT/…)` 拼会在 bundle 索引里查不到
@@ -240,7 +258,10 @@ export async function loadTerritoryBattleArt(
         // ⚠️ 美术这批命名不统一，**逐字对照**别改：
         //    `frame_01`=首领(红) / `frame_03`=普通关卡(紫) / `frame_04`=异步关卡(金) / **`fram_02`=宝箱(蓝，少一个 e)**。
         loadFrame(assets, spriteFramePath(BUILDING_ART_ROOT, 'frame_01')),
-        loadFrame(assets, spriteFramePath(BUILDING_ART_ROOT, 'frame_03')),
+        // 🔴 2026-10-28 山猫：**普通关卡也用首领那张红框**（原 `frame_03` 紫）。
+        //    槽位仍是 `frameStage`（`TERRITORY_SITE_FRAME` 不动），只是换了图 ——
+        //    `frame_03` 从此不再被引用，美术目录里那张图留着不动。
+        loadFrame(assets, spriteFramePath(BUILDING_ART_ROOT, 'frame_01')),
         loadFrame(assets, spriteFramePath(BUILDING_ART_ROOT, 'frame_04')),
         loadFrame(assets, spriteFramePath(BUILDING_ART_ROOT, 'fram_02')),
         loadFrame(assets, spriteFramePath(TERRITORY_BUILDING_ART_ROOT, 'territory_home_v1')),
@@ -255,9 +276,13 @@ export async function loadTerritoryBattleArt(
         loadFrame(assets, spriteFramePath(COMMON_ART_ROOT, 'cu_ty_btn09')),
         loadFrame(assets, spriteFramePath(COMMON_ART_ROOT, 'cu_ty_btn13')),
         loadBuildAssets(assets),
-        loadFrame(assets, MAP_MARKER_BUBBLE_FRAME_PATH),
+        // 气泡底图：**统一蓝色** `frame_03`（2026-10-28 16:23 用户否决了绿/红分色）。
+        // 两个槽位指向同一张图，第二次 load 直接命中 AssetService 缓存；留两档是为了
+        // 将来重新分色时只改 `MapMarkerBadge` 常量，不用动这里的 Promise.all 顺序。
+        loadFrame(assets, MAP_MARKER_BUBBLE_FRAME_PASSED_PATH),
+        loadFrame(assets, MAP_MARKER_BUBBLE_FRAME_PENDING_PATH),
     ]);
-    return { background, levelBubbleFrame, tileLocked, tileCleared, frameBoss, frameStage, frameAsyncPvp, frameChest, start, stage, boss, asyncPvp, fixedResource, randomResource, randomSilverIcon, bonus, header, navButton, actionButton, buildFrames: buildAssets.frames, buildScales: buildAssets.scales };
+    return { background, levelBubbleFrame, levelBubblePendingFrame, tileLocked, tileCleared, frameBoss, frameStage, frameAsyncPvp, frameChest, start, stage, boss, asyncPvp, fixedResource, randomResource, randomSilverIcon, bonus, header, navButton, actionButton, buildFrames: buildAssets.frames, buildScales: buildAssets.scales };
 }
 
 /**

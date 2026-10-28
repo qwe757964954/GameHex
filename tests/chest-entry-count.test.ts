@@ -5,6 +5,7 @@ import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import type { MainPage } from '../assets/script/app/main/MainPage';
 import * as chestTypes from '../assets/script/app/main/ChestTypes';
+import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
 
 function createHarness() {
     const releasedOwners: object[] = [];
@@ -33,6 +34,7 @@ function createHarness() {
     }).outputText;
     runInNewContext(code, { exports, require: (name: string) => {
         if (name === '../net/GameNet') return { GameNet: { instance: { removeCaller: (owner: object) => releasedOwners.push(owner) } } };
+        if (name === '../../core/asset/ResourceScope') return { ResourceScope };
         if (name === 'cc') return {
             _decorator: { ccclass: () => (type: unknown) => type, property: () => () => {} },
             Component: class {},

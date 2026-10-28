@@ -34,12 +34,14 @@ async function loadTreasure(infos: readonly ITreasureInfo[], nowSeconds: number)
     } }).outputText;
     runInNewContext(code, { exports, console, Date: { now: () => nowMs }, require: (name: string) => {
         if (name === './ChestTypes') return chestTypes;
+        if (name === '../common/ResTypes') return { ITEM_TABLE: 'item', ROLE_PROPERTY_TABLE: 'roleProperty',
+            resBarCellOfRefId: () => null, resBarIconSpritePath: () => '' };
         if (name === '../net/RequestGuard') return requestGuard;
         if (name === '../../framework/FW') return { FW: {} };
         if (name === '../../framework/net/RequestMsg') return { RequestMsg: RequestStub };
         if (name === '../../framework/ref/RefUtil') return { RefUtil: { instance: {
             getRefAllAsync: async (table: string) => {
-                if (table === 'item') return [];
+                if (['item', 'roleProperty', 'itemBoxPro'].includes(table)) return [];
                 assert.equal(table, 'newTreasureBoxConfig');
                 return [
                     { cardBoxID: 19001, cardBoxOpenTime: 10 },
@@ -84,6 +86,8 @@ function createChestSlotView() {
             Component: ComponentStub,
         };
         if (name === './ChestTypes') return chestTypes;
+        if (name === '../../framework/event/EventMgr') return { EventMgr: { instance: { emit() {} } } };
+        if (name === './ChestEvents') return { CHEST_EVENTS: {} };
         throw new Error(`Unexpected import: ${name}`);
     } });
     assert.ok(exports.ChestSlotView);
@@ -136,6 +140,8 @@ function createChestBar(views: ChestSlotView[]): ChestBar {
         };
         if (name === './ChestSlotView') return { ChestSlotView: views[0].constructor };
         if (name === './ChestTypes') return chestTypes;
+        if (name === '../../framework/event/EventMgr') return { EventMgr: { instance: { emit() {} } } };
+        if (name === './ChestEvents') return { CHEST_EVENTS: {} };
         if (name === './MainHudMotion') return {};
         throw new Error(`Unexpected import: ${name}`);
     } });
@@ -227,12 +233,12 @@ test('多个空槽只保留最左侧战斗入口，空槽变化后按钮和体�
     ], 1792495000);
     const slots = repository.slots;
     const render = (data: readonly chestTypes.IChestSlotData[], expectedButtons: boolean[], expectedCosts: boolean[]) => {
-        bar.render(data, () => {});
+        bar.render(data);
         assert.deepEqual(views.map((view) => view.btn.node.active), expectedButtons);
         assert.deepEqual(views.map((view) => view.cost.active), expectedCosts);
         views.forEach((view, index) => {
             assert.equal(view.emptyLabel.node.active, data[index].state === chestTypes.ChestSlotState.Empty);
-            assert.equal(typeof view.onAction === 'function', expectedButtons[index]);
+            assert.equal(Reflect.get(view, 'actionEnabled'), expectedButtons[index]);
         });
     };
     render(slots, [true, true, true, false], [true, false, false, false]);

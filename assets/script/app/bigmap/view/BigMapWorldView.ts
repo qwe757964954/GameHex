@@ -4,10 +4,12 @@ import {
 } from 'cc';
 import type { IHexGridLayout } from '../../../core/hex/HexGridLayout';
 import type { IBigMapArt } from '../application/BigMapArtLoader';
-import type { BigMapPresenter } from '../application/BigMapPresenter';
+import type { BigMapPresenter, IBigMapCityView } from '../application/BigMapPresenter';
 import { BIGMAP_CAMP_REFRESH_SECONDS } from '../application/BigMapCampRepository';
 import { bigMapHexDistance, bigMapOccupantOf } from '../model/BigMapWorld';
-import { assignTerritoryColorSlots, bigMapPlayerBaseColorSlot } from '../model/BigMapTerritoryColor';
+import {
+    assignTerritoryColorSlots, assignTerritoryColorSlotsFromAdjacency, bigMapPlayerBaseColorSlot,
+} from '../model/BigMapTerritoryColor';
 import type { BigMapCityState, BigMapTerrain } from '../model/BigMapTypes';
 import {
     BIGMAP_TILE_WIDTH, BIGMAP_TILE_HEIGHT, BIGMAP_COLUMN_STEP, BIGMAP_ROW_STEP,
@@ -15,7 +17,8 @@ import {
     type IBigMapTerritoryEdge,
 } from './BigMapWorldLayout';
 import {
-    BIGMAP_COLORS, BIGMAP_TERRITORY_COLORS, BIGMAP_TERRITORY_FILL_ALPHA, BIGMAP_TERRITORY_STROKE_ALPHA,
+    BIGMAP_COLORS, BIGMAP_TERRITORY_COLORS, BIGMAP_TERRITORY_FILL_ALPHA, BIGMAP_TERRITORY_OWNED_FILL_ALPHA,
+    BIGMAP_TERRITORY_SELF_COLOR, BIGMAP_TERRITORY_ENEMY_COLOR, BIGMAP_TERRITORY_STROKE_ALPHA,
     BIGMAP_TERRITORY_NEIGHBOR_GAP,
 } from './BigMapTheme';
 import { BigMapWorldMarker } from './BigMapWorldMarker';
@@ -286,8 +289,10 @@ export class BigMapWorldView extends Component {
     /**
      * 算一次势力配色（世界是只读快照，城池占格不会变，所以只在 `build` 时跑）。
      *
-     * 「相邻」的判定距离见 `BIGMAP_TERRITORY_NEIGHBOR_GAP`（10 格）—— 城池最近也相距 4 格，
-     * 按「贴身」判会让 25 座城全用同一个颜色。
+     * 「相邻」优先信布局里的 `adjacentCityIds`（编辑器按**范围真实相接**推导）：
+     * 势力范围铺满地图后，两片地是真的贴在一起，只有沿边界一条线的邻居；
+     * 按锚点距离近似会把「隔着两格」的也算成邻居（见 `BIGMAP_TERRITORY_NEIGHBOR_GAP` = 10），
+     * 需要 7~8 色才够，色板一浅就撞色。种子世界没有邻接表时才退回距离判定。
      */
     private rebuildTerritorySlots(): void {
         const presenter = this.presenter;
@@ -303,18 +308,41 @@ export class BigMapWorldView extends Component {
             const hexId = base.isPlayer ? presenter.playerBaseHexId : base.hexId;
             this.baseTerritoryEdges.set(hexId, buildBigMapTerritoryEdges(this.layout, [hexId]));
         }
-        this.territorySlots = assignTerritoryColorSlots(
-            regions,
-            (a, b) => bigMapHexDistance(world.rows, world.cols, a, b),
-            BIGMAP_TERRITORY_COLORS.length,
-            BIGMAP_TERRITORY_NEIGHBOR_GAP,
-        );
+        const paletteSize = BIGMAP_TERRITORY_COLORS.length;
+        const hasAdjacency = [...world.cities.values()].some((city) => (city.adjacentCityIds?.length ?? 0) > 0);
+        this.territorySlots = hasAdjacency
+            ? assignTerritoryColorSlotsFromAdjacency(
+                regions, (id) => world.cities.get(id)?.adjacentCityIds ?? [], paletteSize,
+            )
+            : assignTerritoryColorSlots(
+                regions,
+                (a, b) => bigMapHexDistance(world.rows, world.cols, a, b),
+                paletteSize,
+                BIGMAP_TERRITORY_NEIGHBOR_GAP,
+            );
     }
 
-    /** 城池 → 势力色。没配到（理论上不会）就退回苔绿，绝不返回 null 让上面的调用点判空。 */
-    private territoryColor(cityId: number): Color {
+    /**
+     * 城池 → 势力范围该刷什么色、刷多实。
+     *
+     * 口径（2026-10-28 用户要求）：
+     * - 我占的城 = **绿**；其他玩家占的城 = **红**；这两种给更实的填充，压过中立的色板色；
+     * - 其余（无主）= 色板色，相邻两片不同色（`rebuildTerritorySlots` 保证）。
+     *
+     * 没查到这座城的视图（理论上不会）时按无主处理，绝不返回 null 让调用点判空。
+     */
+    private territoryPaint(cityId: number, city: IBigMapCityView | undefined): { color: Color; alpha: number } {
+        if (city?.territoryOwner === 'self') {
+            return { color: BIGMAP_TERRITORY_SELF_COLOR, alpha: BIGMAP_TERRITORY_OWNED_FILL_ALPHA };
+        }
+        if (city?.territoryOwner === 'other') {
+            return { color: BIGMAP_TERRITORY_ENEMY_COLOR, alpha: BIGMAP_TERRITORY_OWNED_FILL_ALPHA };
+        }
         const slot = this.territorySlots.get(cityId) ?? 0;
-        return BIGMAP_TERRITORY_COLORS[slot % BIGMAP_TERRITORY_COLORS.length];
+        return {
+            color: BIGMAP_TERRITORY_COLORS[slot % BIGMAP_TERRITORY_COLORS.length],
+            alpha: BIGMAP_TERRITORY_FILL_ALPHA,
+        };
     }
 
     /** 相机变化时复用可见槽位，避免为百行地图创建一万个 Sprite。 */
@@ -422,9 +450,14 @@ export class BigMapWorldView extends Component {
         this.refresh();
     }
 
-    private paintTerritory(hexIds: readonly number[], tint: Color, edges: readonly IBigMapTerritoryEdge[]): void {
+    private paintTerritory(
+        hexIds: readonly number[],
+        tint: Color,
+        edges: readonly IBigMapTerritoryEdge[],
+        fillAlpha = BIGMAP_TERRITORY_FILL_ALPHA,
+    ): void {
         const g = this.markerLayer;
-        const fill = new Color(tint.r, tint.g, tint.b, BIGMAP_TERRITORY_FILL_ALPHA);
+        const fill = new Color(tint.r, tint.g, tint.b, fillAlpha);
         for (const hexId of hexIds) {
             g.fillColor = fill;
             this.hexPath(g, hexId);
@@ -466,18 +499,26 @@ export class BigMapWorldView extends Component {
         if (key === this.contentKey) return;
         this.contentKey = key;
         this.markerLayer.clear();
+        const cityById = new Map(cities.map((city) => [city.cityId, city] as const));
+        // 每片势力范围整片铺色：无主走色板（相邻不同色），己方绿、他人红（见 `territoryPaint`）。
         for (const region of presenter.territoryRegions()) {
-            this.paintTerritory(region.hexIds, this.territoryColor(region.id), this.territoryEdges.get(region.id) ?? []);
+            const paint = this.territoryPaint(region.id, cityById.get(region.id));
+            this.paintTerritory(region.hexIds, paint.color,
+                this.territoryEdges.get(region.id) ?? [], paint.alpha);
         }
         for (const marker of this.markers) {
             if (marker.kind === 'city') {
                 const city = cities.find((entry) => entry.cityId === marker.id);
                 if (!city) continue;
                 // 地块叠势力色（相邻不同色），角标仍用状态色 —— 两套信息各走各的通道。
-                const tint = city.isServerCamp
-                    ? (city.campInfo ? (city.campInfo.opType === 1 ? BIGMAP_COLORS.campOccupied : BIGMAP_COLORS.campUnoccupied)
-                        : BIGMAP_COLORS.locked)
-                    : this.cityTint(city.state);
+                // 唯一例外：**己方占据**的城角标也跟着变绿（2026-10-28 口径「我占了这座城，
+                // 城池的颜色变成绿色」），否则会出现「一整片绿地里插着个红城头」。
+                const tint = city.territoryOwner === 'self'
+                    ? BIGMAP_TERRITORY_SELF_COLOR
+                    : city.isServerCamp
+                        ? (city.campInfo ? (city.campInfo.opType === 1 ? BIGMAP_COLORS.campOccupied : BIGMAP_COLORS.campUnoccupied)
+                            : BIGMAP_COLORS.locked)
+                        : this.cityTint(city.state);
                 this.applyMarker(marker, this.art?.city ?? null, String(city.cityId), tint, 110 + city.level * 3);
                 marker.icon.color = city.state === 'unavailable' ? new Color(130, 130, 130) : Color.WHITE;
             } else if (marker.kind === 'monster') {
@@ -490,17 +531,19 @@ export class BigMapWorldView extends Component {
             } else {
                 const base = presenter.world.bases.find((entry) => entry.baseId === marker.id) ?? presenter.world.playerBase;
                 // 玩家基地的势力 = 服务器 `SlgGameInfo.toCampId` 指向的那座城（2026-10-23 山猫口径：
-                // 「从地图查找到的城池就是大地图的基地」）⇒ 取该城的势力色，与周围那片范围同色。
+                // 「从地图查找到的城池就是大地图的基地」）⇒ 那座城的范围已经是**己方绿**，
+                // 基地格必须同色（2026-10-28 口径：我占的城整片绿），不再从色板里挑一档。
                 // 未收到包 / 未归属 / 该城不在地图上 ⇒ 回退原来的绿色标记。
-                const campSlot = base.isPlayer
+                const mineSlot = base.isPlayer
                     ? bigMapPlayerBaseColorSlot(presenter.playerCampId, this.territorySlots)
                     : null;
-                const tint = campSlot !== null
-                    ? BIGMAP_TERRITORY_COLORS[campSlot % BIGMAP_TERRITORY_COLORS.length]
-                    : base.isPlayer ? BIGMAP_COLORS.open : BIGMAP_COLORS.campOccupied;
+                const tint = base.isPlayer
+                    ? (mineSlot !== null ? BIGMAP_TERRITORY_SELF_COLOR : BIGMAP_COLORS.open)
+                    : BIGMAP_COLORS.campOccupied;
                 // 用标记自己的格（= `playerBaseHexId`），不能再用 `base.hexId`（那是布局档的旧位置）。
                 this.paintTerritory([marker.hexId], tint,
-                    this.baseTerritoryEdges.get(marker.hexId) ?? []);
+                    this.baseTerritoryEdges.get(marker.hexId) ?? [],
+                    base.isPlayer ? BIGMAP_TERRITORY_OWNED_FILL_ALPHA : BIGMAP_TERRITORY_FILL_ALPHA);
                 this.applyMarker(marker, this.art?.home ?? null, base.isPlayer ? '主城' : base.name, tint, base.isPlayer ? 150 : 110);
                 if (base.isPlayer) marker.view.setPortrait(this.playerPortrait);
             }

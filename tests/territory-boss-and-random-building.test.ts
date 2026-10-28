@@ -136,20 +136,20 @@ test('★★所有战斗站点（stage/boss/asyncPvp）都走开战流程，绝�
     const code = codeOf(select);
     // 2026-10-27：stage / boss 也改成「点格子先弹关卡界面」，开战挪到面板的按钮上
     // （`requestBattle` → `handleBattleStationStart`）。`selectSite` 里只留选站点。
-    assert.match(code, /if \(site\.type === TERRITORY_SITE_TYPE\.stage \|\| site\.type === TERRITORY_SITE_TYPE\.boss\)/,
+    // 2026-10-28：这组「战斗站点」类型判断原来在 `selectSite` 里逐处枚举了两遍
+    //（再加 `requestBattle` 一遍）⇒ 收口到 `isBattleSite`。判据改成两段：
+    // ① 分流入口认 `isBattleSite`；② 那个方法的类型集合必须**恰好**是 stage/boss/asyncPvp。
+    assert.match(code, /if \(this\.isBattleSite\(site\)\)/,
         '战斗站点必须按类型分流，不再认 cellId 名单');
-    const asyncAt = code.indexOf('site.type === TERRITORY_SITE_TYPE.asyncPvp');
-    assert.ok(asyncAt >= 0, 'asyncPvp 必须有独立分支（先弹玩家关卡弹窗）');
-    const stageAt = code.indexOf('if (site.type === TERRITORY_SITE_TYPE.stage');
-    assert.ok(stageAt > asyncAt, 'asyncPvp 分支必须在关卡判断之前 return 掉');
-    const asyncBranch = code.slice(asyncAt, stageAt);
-    assert.ok(!/handleBattleStationStart/.test(asyncBranch),
-        'asyncPvp 分支不许直接开战 —— 开战只能由弹窗的「开始战斗」按钮调 requestBattle 发起');
-    assert.match(asyncBranch, /this\.detailSite = site/, 'asyncPvp 分支要选中站点给弹窗用');
-    const levelBranch = code.slice(stageAt);
-    assert.ok(!/handleBattleStationStart/.test(levelBranch),
-        '关卡分支同样不许直接开战（先弹关卡界面，按钮再发请求）');
-    assert.match(levelBranch, /this\.detailSite = site/, '关卡分支要选中站点给关卡界面用');
+    const battleSite = codeOf(memberOf(src, 'private isBattleSite(site: TerritorySite): boolean'));
+    for (const type of ['stage', 'boss', 'asyncPvp']) {
+        assert.ok(battleSite.includes(`TERRITORY_SITE_TYPE.${type}`),
+            `isBattleSite 必须涵盖 ${type}（漏一个就是「点了没反应」且零报错）`);
+    }
+    // 战斗站点分支里**不许**直接开战：开战只能由弹窗的「开始战斗」按钮调 requestBattle 发起。
+    assert.ok(!/handleBattleStationStart/.test(code),
+        '战斗站点分支不许直接开战 —— 先弹界面，按钮再走 requestBattle');
+    assert.match(code, /this\.detailSite = site/, '战斗站点分支要选中站点给弹窗用');
     assert.ok(!/isTerritoryTwoStepCell/.test(code),
         '不许再按格子 id 名单判定（每加一关改一次代码，漏改的症状是「点了没反应」且零报错）');
     assert.ok(!/bossStage\?\.isBoss/.test(code),
@@ -158,7 +158,7 @@ test('★★所有战斗站点（stage/boss/asyncPvp）都走开战流程，绝�
     const requestBattle = codeOf(memberOf(src, 'requestBattle(): void'));
     assert.match(requestBattle, /handleBattleStationStart/,
         'requestBattle 必须通向 handleBattleStationStart（走 CmdStartBattleReqMsg）');
-    assert.match(requestBattle, /TERRITORY_SITE_TYPE\.asyncPvp/,
+    assert.match(requestBattle, /this\.isBattleSite\(site\)/,
         'requestBattle 必须把 asyncPvp 纳入开战分流（弹窗按钮走的就是它）');
 
     // ⚠️ 通关只留给资源点：fixedResource 走 `handleUnlockThenPass`，
@@ -344,10 +344,16 @@ test('★★★开战后本地不变 owned：防连点靠 pending 判重；async
     // 光有开头那个 `isOwned → return` 拦不住连点。原判据 `bossBattleStart` 是**全局单值**：
     // navigate 后不清则整章永久拒绝开战，且与「asyncPvp 已通关可重复挑战」（2026-10-21 口径）
     // 冲突 ⇒ 已改为**按格 pending 判重**（与第一步解锁同款）。
-    const boss = memberOf(src, 'private async handleBattleStationStart');
-    const pendingGuard = 'if (this.pendingFixedResourceCells.has(site.cellId)) return;';
-    assert.ok(boss.split(pendingGuard).length - 1 >= 2,
-        '第一步解锁 + 第二步开战都必须按 pending 判重防连点（同一格请求在飞 ⇒ 不重发）');
+    const boss = codeOf(memberOf(src, 'private async handleBattleStationStart'));
+    // 2026-10-28：两条路都收口到 `runCellWrite`（骨架不再各写一份）⇒ 判重不再靠"源码里出现两次
+    // `pendingFixedResourceCells.has`"，改判「两条路都进骨架 + 骨架里确实按 pending 判重」。
+    const skeleton = codeOf(memberOf(src, 'private async runCellWrite<T>('));
+    assert.match(skeleton, /if \(pending\.has\(cellId\)\) return;/,
+        '写请求骨架必须按 pending 判重防连点（同一格请求在飞 ⇒ 不重发）');
+    assert.match(boss, /await this\.runCellWrite\(/,
+        '第二步开战必须走 runCellWrite（防连点 / 在途帧 / 竞态校验同一份）');
+    assert.match(boss, /await this\.handleUnlockOnly\(site, TERRITORY_TEXTS\.bossUnlocked\)/,
+        '第一步解锁必须复用 handleUnlockOnly，不许再复制一份解锁骨架');
     // Boss / 首领 / asyncPvp 的重复挑战行为由 territory-presenter 的运行测试覆盖。
 
     // ⚠️ 清理点必须有两处，否则换章 / 打完再来一次会被「已经开过战」永久拒绝。

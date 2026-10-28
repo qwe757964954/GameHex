@@ -136,7 +136,7 @@ test('据点角标按 opType 红黄显示，状态相同时变更占领仍会重
     let state = 1;
     const tints: unknown[] = [];
     h.view.markers = [h.view.markers[0]];
-    h.view.presenter = { world: { monsters: [] }, territoryRegions: () => [],
+    h.view.presenter = { world: { monsters: [] }, playerBaseHexId: -1, territoryRegions: () => [],
         allCityViews: () => [{ cityId: 101, name: '营地', state: 'open', level: 1, isServerCamp: true,
             campInfo: { campId: 101, opType, state } }],
     };

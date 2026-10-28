@@ -60,7 +60,8 @@ import {
 } from '../model/BigMapUnlock';
 import { bigMapHexDistance, buildBigMapWorld } from '../model/BigMapWorld';
 import { buildBigMapWorldFromLayout, type IBigMapLayout } from '../model/BigMapLayout';
-import type { ITerritoryColorRegion } from '../model/BigMapTerritoryColor';
+import type { ITerritoryColorRegion, BigMapTerritoryOwner } from '../model/BigMapTerritoryColor';
+import { bigMapTerritoryOwnerOf } from '../model/BigMapTerritoryColor';
 import type { IBigMapCampInfo } from '../model/BigMapCampInfo';
 import { BIGMAP_CAMP_QUERY_TEXT } from '../model/BigMapCampInfo';
 import type { IBigMapCampRoleInfo, BigMapCampRoleStatus } from '../model/BigMapCampRoleInfo';
@@ -273,6 +274,14 @@ export interface IBigMapCityView {
      * 与 `isServerCamp`（这座城有没有接服务器据点协议）不是一回事，别混。
      */
     readonly isPlayerCamp: boolean;
+    /**
+     * 这座城的势力范围该刷哪一类颜色（2026-10-28 用户口径）：
+     * `self` = 我的城（绿）/ `other` = 其他玩家的城（红）/ `neutral` = 无主（按色板上色）。
+     *
+     * 视图只管「拿颜色填满这片地」，归属判定留在模型层（`bigMapTerritoryOwnerOf`）：
+     * 联机档「被占」与「我占的」是两件事，不能靠 `state` 一句话判掉。
+     */
+    readonly territoryOwner: BigMapTerritoryOwner;
     /** 当前攻城日程阶段（顶栏/详情面板显示「可攻打 / 已锁榜 / 休战」）。 */
     readonly phase: BigMapCityPhase;
     /** 现在能不能打（= 已开放 + 日程放行）；`attackReason` 是打不了的具体原因。 */
@@ -1106,6 +1115,14 @@ export class BigMapPresenter {
                 board.attackerCount, board.playerRank, playerCampId,
             )
             : null;
+        const isPlayerCamp = playerCampId > 0 && cityId === playerCampId;
+        // 归属（2026-10-28）：联机档「已占领」只是「有人占了」，是不是我还要看 `toCampId`；
+        // 离线档没有 `toCampId`，本地进度里的「已占领」就是我打的，直接算己方 ——
+        // 不这么分，单机档一占城就会把整片地刷成「别人的红」。
+        const territoryOwner = bigMapTerritoryOwnerOf(
+            isPlayerCamp || (!this.deps.campRepository && state === 'occupied'),
+            state === 'occupied',
+        );
         return {
             cityId: city.cityId,
             name: this.deps.campRepository && camp ? camp.name : city.name,
@@ -1125,7 +1142,8 @@ export class BigMapPresenter {
             previewWarScore: preview?.warScore ?? 0,
             inRange: preview?.inRange ?? false,
             damageCutPct: preview?.damageCutPct ?? 0,
-            isPlayerCamp: playerCampId > 0 && cityId === playerCampId,
+            isPlayerCamp,
+            territoryOwner,
             phase: timeline.phase,
             canAttack: this.deps.campRepository ? campAttackReason === '' : gate.canAttack,
             attackReason: this.deps.campRepository ? campAttackReason : gate.reason,

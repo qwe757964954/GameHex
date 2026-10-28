@@ -3822,7 +3822,7 @@
       "a": 255
     },
     "_spriteFrame": {
-      "__uuid__": "e454135e-8c51-4185-ad01-c570c9b17047@f9941",
+      "__uuid__": "46e48feb-c7a6-4f52-b11c-3c97bc0b3ffd@f9941",
       "__expectedType__": "cc.SpriteFrame"
     },
     "_type": 0,
@@ -5257,6 +5257,9 @@
     },
     "fightCostRoot": {
       "__id__": 136
+    },
+    "fightCostIcon": {
+      "__id__": 151
     },
     "fightCostLabel": {
       "__id__": 157

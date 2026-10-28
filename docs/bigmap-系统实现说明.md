@@ -226,8 +226,18 @@ assets/script/app/bigmap/
 | --- | --- | --- |
 | 地块默认色 | **一律沙地本色** `#CFAF8C`，地形只保留极轻冷暖差 | `BigMapWorldView` 的 `TERRAIN_TINT`（**乘算**，只能压暗） |
 | 势力范围 | **整片势力范围**（布局里的 `rangeHex`，线上 30~88 格/城）逐格填势力色，填充半透明（α≈40%），地块纹理透上来 | `paintTerritory` + `BIGMAP_TERRITORY_COLORS` |
+| 势力归属（2026-10-28） | **我占据的城池** → 整片范围**绿**；**其他玩家占据** → **红**（这两种填充更实，α≈59%，压过中立色） | `IBigMapCityView.territoryOwner`（`bigMapTerritoryOwnerOf`）+ `BIGMAP_TERRITORY_SELF_COLOR` / `BIGMAP_TERRITORY_ENEMY_COLOR` |
 | 相邻势力 | **不同色**；邻接取布局的 `adjacentCityIds`（编辑器按范围实际咬合推导），没有布局时按 10 格距离兜底 | `assignTerritoryColorSlotsFromAdjacency` / `assignTerritoryColorSlots`（DSATUR 图着色，`model/BigMapTerritoryColor.ts`） |
-| 城池状态 | 走**角标**颜色（可打/已占领/未解锁），不占用地块颜色 | `cityTint` |
+| 城池状态 | 走**角标**颜色（可打/已占领/未解锁），不占用地块颜色；**例外：己方占据的城角标转绿**，与那片地同色 | `cityTint` / `city.territoryOwner === 'self'` 分支 |
+
+> 🔴 **色板里不许有红族与绿族**（2026-10-28 用户口径：*「除了红色和绿色外，用任意颜色填充」*）。
+> 红绿是**归属状态色**：一旦色板里还留着苔绿/砖红，玩家就分不清「这块地是我的」和「这只是某一方势力」。
+>
+> 🔴 **色板一律冷色系**（同日追加口径：*「将橙色和黄色都改成偏冷色系，一定要和背景图的颜色区分开」*）。
+> 地图底是暖沙 `#CFAF8C` + 暖赭石装饰 ⇒ 橙 / 黄压上去 41% 等于没染。色相只取 **青 → 蓝 → 紫**
+> （HSV 165°~335°）：天蓝 211° / 青碧 176° / 紫罗兰 273° / 藕荷 307°（主 4 色，真布局只用这 4 个），
+> 其余（蓝紫 / 石板蓝 / 青灰 / 深青）是几何兜底才用到的备用近色。
+> 守卫：`tests/bigmap-transparent-tiles.test.ts` 按 HSV 色相判，出现红族 / 绿族 / 暖色直接红。
 
 **「范围」和「占格」是两份数据，别混用**（2026-10-22 用户口径：「范围内所有地块都上色，
 现在只有城池所在的地块上了色」）：
@@ -270,8 +280,8 @@ npx tsx tools/map-editor/verify_bigmap_world.ts                  # 校验布局�
 | 元素 | 用什么 | 出处 / 尺寸 |
 | --- | --- | --- |
 | 资源卡 / 详情弹窗 / 建造面板 / 队列条 | `drawBigMapCardPanel` 手画：近黑描边 2px → 卡面（各收 2px）→ 铜金细线 1px（再收 2px） | 色值取自 `hud_player_card.png`，见 `BIGMAP_HUD_COLORS` |
-| 题头 | **不要底板、不要文字**（用户要求删「植物大地图」） | 顶栏只留 `ResourceCard` + 收取钮；模式由切换木牌表达 |
-| 「基地 / 大地图」切换 | `cu_ty_btn13`（常态）/ `cu_ty_btn14`（当前所在模式），**122×96** | 底部菜单栏七格 `TabButton.offBgFrame/onBgFrame` 同款**同尺寸** |
+| 题头 | **不要底板、不要文字**（用户要求删「植物大地图」） | 顶栏只留 `ResourceCard` + 收取钮；模式由切换按钮表达 |
+| 「基地 / 大地图」切换 | **任务按钮同款三段结构**（2026-10-28）：`hud_task_tab` 底框 111×79 @ y−7.5 ＋ 卡通图标 72 宽 @ y+11.5 ＋ 22 号粗体描边字 @ y−25，节点仍 **122×96** | 照抄 `ui/MainTask/MainTaskEntry.prefab`；基地 = `nav_territory` 石堡，大地图 = `hud_mode_world` 折页地图 |
 | 一键收取 / 建造 / 攻打 / 定位 | `btn_quick_fight`（领地页【快速寻敌】那颗 3D 金钮） | `image/main/city`，无九宫边，按宽度压 |
 | 弹窗 | 居中模态：全屏暗底 `scrim = 5,10,14,205` + 居中卡（标题金 / 正文米白 / 两颗钮并排） | 暗底与 `TerritorySiteDetail.prefab` 的 `Dim` **逐通道同值** |
 | 文字 | 米白正文 + 金色标题，一律 2px 近黑描边 | 压在深色卡/地图上都得有描边，否则字会被吃掉 |
@@ -282,10 +292,16 @@ npx tsx tools/map-editor/verify_bigmap_world.ts                  # 校验布局�
    面板从 62 高的资源条到 400 高的弹窗都有，SIMPLE 拉伸会把圆角和右上角那块小装饰一起拉糊 ⇒ 手画。
 2. **首轮的木牌不能混着留**：`BIGMAP_WOOD_COLORS` / `drawBigMapWoodPanel` / 缎带 `cu_title_brown` /
    扁条 `cu_9g_bar_02` 已**整条退役**，`tests/bigmap-hud-skin.test.ts` 里有反向断言挡回流。
+   2026-10-28 起底部菜单栏那两张两态木牌（`cu_ty_btn13` / `cu_ty_btn14`）**也退役**了 ——
+   模式按钮换成任务按钮后不再有「木牌皮肤」这条路，`BIGMAP_HUD_UI_KEYS` 里已经没有 `tab_idle/tab_active`。
 3. **暗底与卡片必须同生同死**：只亮卡片就是一块浮在地图上的板，没有模态感；`setInfoVisible` 两行都要写。
    暗底要挂 `BlockInputEvents` + 点它 `clearSelection()`（领地页同一个交互）。
 4. **标题字删了，`baseTitle` 也一起退役**：世界页不再有标题 Label，「当前在基地还是大地图」由那颗
-   两态木牌表达；`BIGMAP_PRESENTATION_TEXT.baseTitle` 已删并留注释。
+   模式按钮表达；`BIGMAP_PRESENTATION_TEXT.baseTitle` 已删并留注释。
+   **模式按钮的三段结构不能改成 `setSkin`**（2026-10-28）：`createButton` 的 label 永远居中，
+   只换底图做不出「图标压框 + 字压图标下沿」的任务按钮观感；文字写的是**下一个**模式
+   （在大地图上写【基地】），图标跟着文字走，所以换模式只换 `label.string` + `icon.spriteFrame`，
+   **不重建节点**（重建会在点下那一帧闪一下）。
 5. **颜色不许写第二份数值**：`BIGMAP_HUD_COLORS.card/rim` 必须等于 `hud_player_card` 的实测色，
    `scrim` 必须等于领地弹窗 `Dim`（测试直接读 prefab JSON 比对），改一边另一边就会红。
 
@@ -354,7 +370,7 @@ npx tsx tools/preview_bigmap_info_layout_curves.ts && python tools/preview_bigma
 
 ### 5.4.1 无缝背景上的透明格（2026-10-28）
 
-世界地图使用连续平铺背景时，`BigMapWorldView` 不再覆盖 `grounds/ground_0x` 沙地 Sprite。空地完全透明，森林 / 岩地 / 水面只叠轻色（alpha 24 / 24 / 40），格线 alpha 48、宽 1px；既有势力范围仍使用原色板、alpha 104 的填充与原边界描边，透出连续背景的纹理。
+世界地图使用连续平铺背景时，`BigMapWorldView` 不再覆盖 `grounds/ground_0x` 沙地 Sprite。空地完全透明，森林 / 岩地 / 水面只叠轻色（alpha 24 / 24 / 40），格线 alpha 48、宽 1px；势力范围仍透出连续背景的纹理 —— 无主势力用原色板 + alpha 104，己方 / 他人占据的范围用绿 / 红 + alpha 150（见 §5.1）。
 
 `syncVisibleTiles` 沿用原视口裁剪结果，只让 `paintTerrain(ids)` 绘制可见六边格。草石装饰使用独立复用槽位，建筑、编号、头像、选中和点击几何沿用原路径。切入无缝背景时必须隐藏并清空已有沙地图槽位；视口移出世界时清掉旧格与装饰。不改变世界规则、地图数据或基地地面。
 

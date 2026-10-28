@@ -33,6 +33,9 @@
 | 🔴 代码建 Sprite 的**尺寸被原图回写**（`sizeMode` 必须先 CUSTOM 再赋 `spriteFrame`） | `docs/zcds-表现层与领地规范.md` §1.8 第五条；同坑 `app/gm/GMManager.ts`、`app/activity/ActivityProgressBox.ts` | `tests/zcds-artifact-claim-burst.test.ts` |
 | 传说卡出场横幅 (`ZCGameLegendBanner`) | `docs/zcds-表现层与领地规范.md` §2、§9.4 | `tests/zcds-legend-banner.test.ts` |
 | 「冒险」领地页 (`app/territory/**`) | `docs/zcds-表现层与领地规范.md` §3 | `tests/territory-presenter.test.ts`、`tests/territory-page-split.test.ts`、`tests/territory-cell-center-align.test.ts`、`tests/territory-hex-flip.test.ts`、`tests/territory-building-shake.test.ts`、`tests/territory-hex-spawn.test.ts` |
+| 领地关卡**气泡**：底图统一蓝 `frame_03` + 文案 `1-5` / `PVP` / `章节`；格面框普通关卡同首领红 | `docs/zcds-表现层与领地规范.md` §3.2 | `tests/territory-tile-frames.test.ts`、`tests/territory-level-bubble-style.test.ts`、`tests/territory-random-resource-render.test.ts` |
+| 领地地图**拖拽上下限**（顶部 HUD 底边 +15 / 底部挂件上沿 +50） | `docs/zcds-表现层与领地规范.md` §3.10 | `tests/territory-map-bottom-inset.test.ts`、`tests/territory-cloud.test.ts` |
+| 领地**已通关关卡可点 / 可重复挑战 / 照常扣体力** + 按钮费用图标 = 体力 | `docs/zcds-表现层与领地规范.md` §3.13 | `tests/territory-presenter.test.ts`、`tests/territory-two-step-render.test.ts`、`tests/territory-tile-frames.test.ts`、`tests/territory-level-panels.test.ts` |
 | 领地奖励**图标解析**（`roleProperty` + `item` 两张表，`item` 图在 `main-pages` 分包）+ 随机格**读数合成一条** | `docs/zcds-表现层与领地规范.md` §3.6 | `tests/res-types.test.ts`、`tests/territory-resource-gain.test.ts` |
 | 宝箱图标**飞进资源栏**（按 `resId` 分落点）+ 资源栏跳动/数字滚动/整条闪光；HUD 两格 = 银币 + 体力（`resKeys = gold,end`） | `docs/zcds-表现层与领地规范.md` §3.7 | `tests/main-resbar-feedback.test.ts`、`tests/main-resbar.test.ts`、`tests/territory-chest-animation.test.ts`、`tests/territory-resource-gain.test.ts` |
 | 敌方单位暗色叠加 (`ZCUnitView`) | `docs/zcds-表现层与领地规范.md` §4 | `tests/zcds-unit-view-render.test.ts` |

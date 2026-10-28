@@ -37,13 +37,17 @@ import { BUILDING_VISIBLE_WIDTH } from './TerritoryStationView';
 /**
  * 章节宝箱开箱的**表现层**（三档共用一套节点，参数走 `model/TerritoryChestAnimation`）。
  *
- * ## 为什么不是 prefab
+ * ## prefab 与代码的分工（2026-10-28 改）
  *
- *  · 宝箱本身是**一组补帧图换帧**（闭合 → 开盖，`ITerritoryChestArt`）；
- *  · 光柱 / 彩虹 / 放射光条 / 星光全是 `Graphics` 现画（用户口径：「星光特效、粒子可以使用新的」）；
- *  · 唯一需要美术的是**资源图标**，而它按 `resId` 由页面注入（与飘字 `setGainIcons` 同一口径）。
+ * 节点树 + `Graphics` / `Sprite` / `UIOpacity` 全在 `ui/territory/TerritoryChest.prefab` 里
+ * （页面 instantiate 后把根节点传进来）—— 在 Inspector 里看得见、能对着设计稿调层级。
+ * 代码只负责**每帧重画**：光柱 / 彩虹 / 光条 / 星光的形状是 `Graphics` 现画的，本来就序列化不了；
+ * 池化的 `FountainSlot_*` / `FlySlot_*` 数量按奖励总量变（5 / 15 / 30），仍由代码建。
  *
- * 三样都不适合塞进 prefab 序列化 ⇒ 与 `TerritoryGainBurst` 一样用代码建节点。
+ * 早前这套层级是构造函数里 `new Node` + `addComponent` 拼出来的，当时给的理由是
+ * 「宝箱补帧换图、光效全是 Graphics 现画、图标按 resId 注入 ⇒ 都不适合塞进 prefab」——
+ * 前两条讲的是**绘制**、第三条讲的是**内容注入**，都不构成「结构不能进 prefab」的理由：
+ * 结构一直是固定这十来个节点。
  *
  * ## 层级（后建的在上面，顺序 = 渲染序）
  *
@@ -172,6 +176,7 @@ interface IFlySlot extends IChestParticleSlot {
     readonly label: Label;
 }
 
+/** 动态池化粒子用：容器节点由调用方给（固定结构在 prefab 里，见 `constructor`）。 */
 function makeNode(name: string, parent: Node): Node {
     const node = new Node(name);
     node.layer = parent.layer;
@@ -180,10 +185,25 @@ function makeNode(name: string, parent: Node): Node {
     return node;
 }
 
-function makeGraphics(name: string, parent: Node, size?: { width: number; height: number }): Graphics {
-    const node = makeNode(name, parent);
-    if (size) node.getComponent(UITransform)!.setContentSize(size.width, size.height);
-    return node.addComponent(Graphics);
+/**
+ * 取 prefab 里的固定节点 —— **找不到就抛出**。
+ *
+ * 这套层级是 `ui/territory/TerritoryChest.prefab` 的结构契约（见类头注释的层级图），
+ * 少一层就是「光效整个不出现」且零报错；宁可在这里炸掉，也不要静默降级。
+ */
+function requireChild(parent: Node, name: string): Node {
+    const node = parent.getChildByName(name);
+    if (!node) throw new Error(`[TerritoryChest] prefab 缺节点 ${parent.name}/${name}（结构被改过？）`);
+    return node;
+}
+
+/** 取 prefab 里的 `Graphics` 节点；`width/height > 0` 时顺带按视口重设尺寸。 */
+function requireGraphics(parent: Node, name: string, width = 0, height = 0): Graphics {
+    const node = requireChild(parent, name);
+    if (width > 0 && height > 0) node.getComponent(UITransform)!.setContentSize(width, height);
+    const graphics = node.getComponent(Graphics);
+    if (!graphics) throw new Error(`[TerritoryChest] 节点 ${name} 上缺 cc.Graphics（prefab 结构被改过？）`);
+    return graphics;
 }
 
 export class TerritoryChestView {
@@ -285,42 +305,50 @@ export class TerritoryChestView {
      */
     private cameraZoom = 1;
 
-    constructor(layer: Node, size: { width: number; height: number }) {
+    /**
+     * @param root `ui/territory/TerritoryChest.prefab` 的实例（页面 instantiate 后传进来）；
+     *   节点树、`Graphics` / `Sprite` / `UIOpacity` 全在 prefab 里，本类只取引用 + 每帧重画。
+     *
+     *   ⚠️ 早前这套层级是构造函数里 `new Node` + `addComponent` 一个个拼出来的（理由写在类头
+     *   「为什么不是 prefab」）—— 那样在 Inspector 里看不见结构、改不了层级，也没法在设计稿
+     *   对照时打开。现在改成 prefab：**结构归 prefab，绘制归代码**（`Graphics` 每帧 clear + 重画，
+     *   本来也序列化不了）。
+     */
+    constructor(root: Node, size: { width: number; height: number }) {
         this.size = { width: Math.max(1, size.width), height: Math.max(1, size.height) };
-        this.node = makeNode('TerritoryChest', layer);
-        this.node.getComponent(UITransform)!.setContentSize(this.size.width, this.size.height);
-        this.node.active = false;
+        const { width, height } = this.size;
+        this.node = root;
+        root.getComponent(UITransform)!.setContentSize(width, height);
+        root.active = false;
         this.catchX = 0;
-        this.catchY = this.size.height / 2 - 40;
+        this.catchY = height / 2 - 40;
 
-        this.backdrop = makeGraphics('Backdrop', this.node, this.size);
-        this.stage = makeNode('Stage', this.node);
+        this.backdrop = requireGraphics(root, 'Backdrop', width, height);
+        this.stage = requireChild(root, 'Stage');
         // 光柱 / 彩虹挂在**镜头层**里（2026-10-23）：镜头推近时宝箱会被挪到屏幕中央，
         // 这两样要是留在 Root，就会与箱子脱开、杵在原格上。它们本来就是"从箱口射出来"的，
         // 跟着箱子一起放大才对。
-        this.beam = makeGraphics('Beam', this.stage, this.size);
-        this.rainbow = makeGraphics('Rainbow', this.stage);
-        this.stars = makeGraphics('Stars', this.stage);
-        this.rays = makeGraphics('Rays', this.stage);
-        this.glow = makeGraphics('Glow', this.stage);
-        this.chest = makeNode('Chest', this.stage);
+        this.beam = requireGraphics(this.stage, 'Beam', width, height);
+        this.rainbow = requireGraphics(this.stage, 'Rainbow');
+        this.stars = requireGraphics(this.stage, 'Stars');
+        this.rays = requireGraphics(this.stage, 'Rays');
+        this.glow = requireGraphics(this.stage, 'Glow');
+        this.chest = requireChild(this.stage, 'Chest');
         // 宝箱本体的透明度：只在**收尾淡出**时被写（`territoryChestTailFade`）。
         // 挂在 `Chest` 而不是 `ChestArt` 上：光晕/爆点这些兄弟节点各自算 alpha，
         // 分成两层写会出现「箱子已经没了、光晕还亮着」。
-        this.chestOpacity = this.chest.addComponent(UIOpacity);
+        this.chestOpacity = this.chest.getComponent(UIOpacity)!;
         // 一张图换帧（2026-10-22）：不再拆箱体/箱盖 —— 闭合与开盖是两张成品图，
         // 中间帧由 `tools/gen_chest_open_frames.py` 烘焙，运行时只按帧号换 `spriteFrame`。
         //
         // ⚠️ 缩放要分两层：`Chest` 收**动画**缩放（弹出 / 蓄力挤压），`ChestArt` 收**基准**缩放
         //   （把美术缩到 `CHEST_VISIBLE_WIDTH`）。合成一层的话 `applyChest` 每帧写死
         //   `setScale(fx.scale, …)` 会把基准覆盖掉，宝箱瞬间缩成 1:1 像素。
-        this.chestArt = makeNode('ChestArt', this.chest);
-        this.chestSprite = this.chestArt.addComponent(Sprite);
-        this.chestSprite.trim = false;
-        this.chestSprite.sizeMode = Sprite.SizeMode.CUSTOM;
+        this.chestArt = requireChild(this.chest, 'ChestArt');
+        this.chestSprite = this.chestArt.getComponent(Sprite)!;
         this.chestTransform = this.chestArt.getComponent(UITransform)!;
-        this.fountain = makeNode('Fountain', this.stage);
-        this.flyLayer = makeNode('Fly', this.node);
+        this.fountain = requireChild(this.stage, 'Fountain');
+        this.flyLayer = requireChild(root, 'Fly');
     }
 
     /** 注入宝箱美术（页面在资源就绪后调一次）。 */

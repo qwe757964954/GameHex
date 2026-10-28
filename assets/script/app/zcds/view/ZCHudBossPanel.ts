@@ -74,8 +74,7 @@ export class ZCHudBossPanel extends Component {
     /**
      * 全量赋值（每次渲染都会被调）。
      *
-     *  头像帧是**异步**拿到的：`null` 表示「还没加载到」而不是「这一波没头像」
-     * ⇒ 保留上一张，别清空（清空会留一个空框，与「没这个怪」区分不开）。
+     * 头像帧异步取得；切波尚未加载时清空旧图，避免把上一波的怪当作当前波。
      */
     render(progress: Readonly<ZCDefenceWaveProgress>, name: string, portrait: SpriteFrame | null): void {
         const wave = formatZCDefenceWaveText(progress);
@@ -86,7 +85,7 @@ export class ZCHudBossPanel extends Component {
 
         this.nameLabel.string = name;
         this.rateLabel.string = formatZCDefenceHpRate(progress.currentWaveHpRate);
-        if (portrait) this.portraitIcon.spriteFrame = portrait;
+        this.portraitIcon.spriteFrame = portrait;
 
         // 分母取「生成那一刻记下的总血量」，分母为 0（该波没生成出单位）时条画空。
         const ratio = progress.currentWaveMaxHp > 0 ? progress.currentWaveHp / progress.currentWaveMaxHp : 0;

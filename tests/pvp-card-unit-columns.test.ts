@@ -38,6 +38,18 @@ interface CardRow {
 }
 
 /**
+ * 单位 prefab 的候选根 —— 与 `tools/pvp_card_check.py` 的 `PREFAB_ROOTS` 同源。
+ *
+ * 2026-10-23 分包后 `units/` 从 `assets/resources` 迁到 battle 包
+ * （`core/asset/BundleCatalog.ts` 的 `BUNDLE_DIRECTORIES[BATTLE_BUNDLE]` 含 `units`），
+ * 而 `skel/**` 仍留在首包。只认 `assets/resources` 会让 17 张烘焙 prefab 的兵种卡假红。
+ */
+const PREFAB_ROOTS = ['assets/resources', 'assets/bundles/battle'];
+
+const prefabExists = (path: string): boolean =>
+    PREFAB_ROOTS.some((root) => existsSync(`${root}/${path}.prefab`));
+
+/**
  * 兵种卡上必须齐备的单位数值列。
  *
  * 判据来自 `ZCGameRuntimeConfig.parseUnits` —— 这些列在那边是**硬取**的（缺列即抛错），
@@ -199,7 +211,7 @@ test('真实表：pvpCard 每一行的单位列都成对、可解析', () => {
     const issues = collectUnitColumnIssues(
         cards,
         readSkillIds(),
-        (path) => existsSync(`assets/resources/${path}.prefab`),
+        (path) => prefabExists(path),
         (row) => numericColumns.get(row.id) ?? {},
     );
 

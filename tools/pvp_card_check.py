@@ -42,7 +42,20 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() not in ("utf-8", "utf8"):
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, ".."))
 REF_DIR = os.path.join(ROOT, "assets", "remoteRef")
-RES_DIR = os.path.join(ROOT, "assets", "resources")
+
+# 单位 prefab 的候选根 —— 必须逐个查，不能只认首包。
+# 2026-10-23 分包后 `units/` 从 `assets/resources` 迁到 battle 包（`BUNDLE_DIRECTORIES[BATTLE_BUNDLE]`
+# 含 `units`，见 `core/asset/BundleCatalog.ts`），而 `skel/**` 仍在首包。只查 resources 会让
+# 17 张走烘焙 prefab 的兵种卡全员假红（2026-10-28 实测：守卫报 17 条不存在，17/17 实际都在 battle 包）。
+PREFAB_ROOTS = [
+    os.path.join(ROOT, "assets", "resources"),
+    os.path.join(ROOT, "assets", "bundles", "battle"),
+]
+
+
+def prefab_exists(path):
+    return any(os.path.exists(os.path.join(root, path + ".prefab")) for root in PREFAB_ROOTS)
+
 
 #  与 `ZCGameRuntimeConfig.parseUnits` 对齐：这些列在那边是**硬取**的，缺列即抛错。
 REQUIRED_UNIT_NUMERIC_COLUMNS = [
@@ -97,7 +110,7 @@ def collect_issues(cards, skill_ids):
             issues.append("%s 只配了 unitSkillId=%s，缺 unitPrefabPath（两列必须成对）" % (label, skill))
         if skill is None:
             issues.append("%s 只配了 unitPrefabPath=%s，缺 unitSkillId（两列必须成对）" % (label, prefab))
-        if prefab and not os.path.exists(os.path.join(RES_DIR, prefab + ".prefab")):
+        if prefab and not prefab_exists(prefab):
             issues.append("%s 的 unitPrefabPath=%s 对应的 .prefab 不存在" % (label, prefab))
         if skill is not None and skill not in skill_ids:
             issues.append("%s 的 unitSkillId=%s 在 pvpSkill 里不存在" % (label, skill))

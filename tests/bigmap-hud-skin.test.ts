@@ -6,6 +6,7 @@ import test from 'node:test';
 import ts from 'typescript';
 import {
     BIGMAP_COMMON_ART_ROOT, BIGMAP_HUD_UI_FILES, BIGMAP_HUD_UI_KEYS, BIGMAP_MAIN_CITY_ART_ROOT,
+    BIGMAP_MAIN_HUD_ART_ROOT,
 } from '../assets/script/app/bigmap/application/BigMapArtCatalog';
 
 /**
@@ -169,9 +170,10 @@ test('圆角被面板尺寸夹住，不会画出负半径（通栏条 radius 0 �
 
 // ── 3. 贴图 ────────────────────────────────────────────────
 
-test('★三张皮肤图都在磁盘上且已导入；按钮来自主城页、页签来自 image/common', () => {
+test('★四张皮肤图都在磁盘上且已导入；金钮来自主城页、任务底框与地图图标来自主界面 HUD', () => {
     assert.equal(BIGMAP_COMMON_ART_ROOT, 'image/common');
     assert.equal(BIGMAP_MAIN_CITY_ART_ROOT, 'image/main/city');
+    assert.equal(BIGMAP_MAIN_HUD_ART_ROOT, 'image/main/hud');
     assert.deepEqual([...BIGMAP_HUD_UI_KEYS].sort(), Object.keys(BIGMAP_HUD_UI_FILES).sort());
     for (const key of BIGMAP_HUD_UI_KEYS) {
         const file = join('assets/resources', `${BIGMAP_HUD_UI_FILES[key]}.png`);
@@ -180,13 +182,19 @@ test('★三张皮肤图都在磁盘上且已导入；按钮来自主城页、�
     }
 });
 
-test('★按钮就是领地页【快速寻敌】那颗金钮，木牌只留给模式切换，缎带 / 扁条已退役', () => {
+test('★按钮就是领地页【快速寻敌】那颗金钮；模式按钮换成一整套「任务按钮」三件套', () => {
     assert.equal(BIGMAP_HUD_UI_FILES.button, 'image/main/city/btn_quick_fight');
-    assert.equal(BIGMAP_HUD_UI_FILES.tab_idle, 'image/common/cu_ty_btn13');
-    assert.equal(BIGMAP_HUD_UI_FILES.tab_active, 'image/common/cu_ty_btn14');
+    // 2026-10-28 用户口径：「基地按钮 和大地图按钮的图标更换成类似任务按钮的样式，
+    // 底框加成对应内容(建筑icon-基地，地图icon--大地图)的卡通icon」
+    assert.equal(BIGMAP_HUD_UI_FILES.mode_frame, 'image/main/hud/hud_task_tab');
+    assert.equal(BIGMAP_HUD_UI_FILES.mode_base, 'image/main/city/nav_territory');
+    assert.equal(BIGMAP_HUD_UI_FILES.mode_world, 'image/main/hud/hud_mode_world');
     const keys = BIGMAP_HUD_UI_KEYS as readonly string[];
     assert.equal(keys.includes('title_ribbon'), false, '标题字删了，缎带不该还在');
     assert.equal(keys.includes('bar'), false, '扁按钮改用 3D 金钮，扁条退役');
+    // 底部菜单栏那两张两态木牌随模式按钮一起退役（任务按钮结构做不出图标位，只换底图没意义）
+    assert.equal(keys.includes('tab_idle'), false, '两态木牌已退役');
+    assert.equal(keys.includes('tab_active'), false, '两态木牌已退役');
 });
 
 test('美术加载器把皮肤图挂到独立的 hud 表，概念图 ui 表结构不变', () => {
@@ -224,15 +232,30 @@ test('★详情弹窗改成居中模态：暗底（scrim）＋居中卡片＋点
     assert.match(PAGE_SOURCE, /this\.infoDim\.active = visible/);
 });
 
-test('★实心按钮统一走领地页金钮；模式切换仍走底栏两态木牌', () => {
+test('★实心按钮统一走领地页金钮；模式按钮改成任务按钮同款「底框 + 卡通图标 + 描边字」', () => {
     assert.match(PAGE_SOURCE, /for \(const button of this\.skinButtons\) button\.setSkin\(art\.hud\.get\('button'\)/);
     assert.match(PAGE_SOURCE, /this\.primaryButton\.setSkin\(art\.hud\.get\('button'\)/);
     assert.match(PAGE_SOURCE, /const MODE_BUTTON_WIDTH = 122;/);
     assert.match(PAGE_SOURCE, /const MODE_BUTTON_HEIGHT = 96;/);
-    assert.match(PAGE_SOURCE, /const key = this\.mode === 'base' \? 'tab_active' : 'tab_idle';/);
-    assert.match(PAGE_SOURCE, /this\.modeButton\.setSkin\(this\.art\.hud\.get\(key\)/);
-    // 168×132 等比 ×0.726 ⇒ 122×96，比例必须相等（差 1% 木牌边框就会歪）
-    assert.ok(Math.abs(122 / 168 - 96 / 132) < 0.01);
+    // 三段结构与尺寸全部照抄 MainTaskEntry.prefab：底板 111×79 @ y −7.5、图标 @ y +11.5、字 @ y −25
+    assert.match(PAGE_SOURCE, /const MODE_FRAME_WIDTH = 111;/);
+    assert.match(PAGE_SOURCE, /const MODE_FRAME_HEIGHT = 79;/);
+    assert.match(PAGE_SOURCE, /const MODE_FRAME_Y = -7\.5;/);
+    assert.match(PAGE_SOURCE, /const MODE_ICON_Y = 11\.5;/);
+    assert.match(PAGE_SOURCE, /const MODE_LABEL_Y = -25;/);
+    assert.match(PAGE_SOURCE, /createUiNode\('BaseWorldToggle', this\.node, MODE_BUTTON_WIDTH, MODE_BUTTON_HEIGHT\)/);
+    assert.match(PAGE_SOURCE, /createBigMapSprite\('ModeFrame', node\)/);
+    assert.match(PAGE_SOURCE, /createBigMapSprite\('ModeIcon', node\)/);
+    // 字必须白 + 粗 + 2px 近黑描边（沙地上不描边就散；颜色要在方法里 new，见源码注释）
+    assert.match(PAGE_SOURCE, /label\.isBold = true;/);
+    assert.match(PAGE_SOURCE, /label\.outlineColor = new Color\(10, 8, 6, 255\);/);
+    assert.match(PAGE_SOURCE, /label\.outlineWidth = 2;/);
+    // 图标跟着文字走：写【基地】压建筑 icon、写【大地图】压折页地图；只换图不重建节点
+    assert.match(PAGE_SOURCE, /this\.art\.hud\.get\(this\.mode === 'world' \? 'mode_base' : 'mode_world'\)/);
+    assert.match(PAGE_SOURCE, /fitBigMapSprite\(this\.modeButton\.icon, icon, MODE_ICON_SIZE, 0, MODE_ICON_Y\)/);
+    // 木牌那套 `setSkin` 接线必须彻底退场，否则两套皮肤会互相盖
+    assert.equal(/this\.modeButton\.setSkin/.test(PAGE_SOURCE), false, '模式按钮不再走木牌皮肤');
+    assert.equal(/this\.modeButton\.setText/.test(PAGE_SOURCE), false, '模式按钮不再走 IBigMapButton 的 setText');
 });
 
 test('页面不再给面板贴深铁概念图，也不再引用木牌皮肤', () => {

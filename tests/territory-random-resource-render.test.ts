@@ -472,14 +472,30 @@ test('territory art loads the existing silver icon for random conditions', async
     const loadArt = moduleExports.loadTerritoryBattleArt as (
         assets: { load: (path: string) => Promise<{ path: string }>; has: () => Promise<boolean> },
         backgroundPath: string,
-    ) => Promise<{ randomSilverIcon: { path: string }; levelBubbleFrame: { path: string } }>;
+    ) => Promise<{
+        randomSilverIcon: { path: string };
+        levelBubbleFrame: { path: string };
+        levelBubblePendingFrame: { path: string };
+        frameBoss: { path: string };
+        frameStage: { path: string };
+    }>;
     const paths: string[] = [];
     const art = await loadArt({ load: async (path) => {
         paths.push(path);
         return { path };
     }, has: async () => true }, '');
     assert.equal(art.randomSilverIcon.path, 'icons/resource/图标_铜币/spriteFrame');
-    assert.equal(art.levelBubbleFrame.path, 'image/spawn-region/frame_03/spriteFrame', '章节关卡气泡使用指定的蓝色 frame_03');
+    // 2026-10-28 16:23 用户：气泡**改回蓝色** `frame_03`（绿/红分色已否决）。
+    assert.equal(art.levelBubbleFrame.path, 'image/spawn-region/frame_03/spriteFrame', '气泡=蓝色底图，不能误用红色六边形同名图');
+    // 未通关槽位目前与已通关同图；两个槽位都要加载（管线保留，将来分色只改常量）。
+    assert.equal(art.levelBubblePendingFrame.path, 'image/spawn-region/frame_03/spriteFrame',
+        '未通关槽位也必须是 spawn-region 那张蓝图，不许落回 image/buildings/ 的同名六边形');
+    // 2026-10-28 山猫：**未通过的普通关卡，地表要和 Boss 一致（红）**，紫框 frame_03 退役。
+    assert.equal(art.frameBoss.path, 'image/buildings/frame_01/spriteFrame', '首领 = 红框');
+    assert.equal(art.frameStage.path, 'image/buildings/frame_01/spriteFrame',
+        '普通关卡必须与首领同框（红）；回退成 frame_03 就是"地表又变紫了"');
+    assert.equal(paths.includes('image/buildings/frame_03/spriteFrame'), false,
+        '紫框 frame_03 已退役，不该再被加载（多加载一份 = 白白占显存 + 口径回流）');
     assert.equal(paths.includes('image/territory/buildings/territory_random_resource_v1/spriteFrame'), true);
     // 顺带验 build 表那一路：RefUtil 桩给了 `69003` ⇒ 对应贴图必须真的被 load 过。
     // 否则「RefUtil 桩写了、但代码压根没走到查表那条路」也会绿。

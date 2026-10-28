@@ -75,6 +75,7 @@ import {
 import { RefUtil } from '../../framework/ref/RefUtil';
 import { ResBar } from '../common/ResBar';
 import {
+    TERRITORY_MAP_BOTTOM_INSET,
     territoryMapContentPaddingBottom,
     territoryMapContentPaddingTop,
     territoryMapOffsetForCell,
@@ -123,6 +124,36 @@ const FALLBACK_CHAPTERS = [1] as const;
 const TOP_HUD_NODE_NAME = 'TopHud';
 
 /**
+ * 底部挂件（任务入口 / 快速寻敌 / 宝箱栏）的节点名 —— 地图**下边界**的基准。
+ *
+ * 🔴 2026-10-28 用户：「地图最底部的地块限制拖动距离，最大只能间距 50px」，
+ *    当场追问确认的基准是「到任务 / 快速寻敌挂件的**上沿**」，不是顶部 HUD。
+ *
+ * 三块的位置各不相同，所以只能按名字找：
+ *  · `MainTaskEntry` 是 `BottomHud` 的**孩子**（prefab 实例，Widget 已关，靠 `_lpos` 定位）；
+ *  · `BeginGame`（快速寻敌）与 `ChestBar`（宝箱栏）是宿主页 `ArenaRoot` 的**孩子**。
+ *
+ * 取它们上沿里**最高**的那个（= 咬入视口最深的那个）—— 地图要让开的是最高的那一块，
+ * 不是平均线。`MainTaskEntry` 实测就是最高的（305px），也是用户红框画在它上方的原因。
+ */
+const BOTTOM_HUD_NODE_NAMES = ['MainTaskEntry', 'BeginGame', 'ChestBar'] as const;
+
+/**
+ * 在 `root` 子树里按名字找节点（深度优先，含 `root` 自己）。
+ *
+ * 不用 `cc.find('BottomHud/MainTaskEntry')`：那是**绝对路径**，宿主页结构一动就断，
+ * 而这几个挂件有的是孩子、有的是孙辈，写死路径等于把结构抄进代码。
+ */
+function findDescendantByName(root: Node, name: string): Node | null {
+    if (root.name === name) return root;
+    for (const child of root.children) {
+        const hit = findDescendantByName(child, name);
+        if (hit) return hit;
+    }
+    return null;
+}
+
+/**
  * 「冒险」页的 Passive View。
  *
  *  本类只做引擎生命周期、接线与渲染编排；**状态、流程、规则全部在纯 TS 的
@@ -165,6 +196,13 @@ export class MainTerritoryMap extends Component {
      * 这里还要多一张按 `roleProperty.quality` 选出来的品质框。
      */
     private readonly playerStageIcons = new Map<number, IBigMapPlayerLevelReward>();
+    /**
+     * 「关卡界面」主按钮上的**费用图标**（体力）。
+     *
+     * 与飘字那批资源一起加载（`loadResourceGainIcons`）：那一批本来就取了 `图标_体力`，
+     * 再单独 load 一次是白发一次请求。`null` = 图没加载到 ⇒ 弹窗只藏图标、数字照常。
+     */
+    private staminaIcon: SpriteFrame | null = null;
     private presenter: TerritoryPresenter | null = null;
     private cellRepository: TerritoryCellRepository | null = null;
     /** 领地存档归属（roleId/serverId），进入对局时随 pve 一并下发。 */
@@ -315,6 +353,13 @@ export class MainTerritoryMap extends Component {
         this.mapView.setGainIcons(frames);
         // 「玩家关卡」弹窗两颗按钮的费用图标 = 同一枚银币（页面统一加载，弹窗不解表）。
         if (this.playerStagePanel) this.playerStagePanel.setCostIcon(frames.get(TERRITORY_SILVER_RES_ID) ?? null);
+        // 「关卡界面」主按钮写的是**体力**消耗（2026-10-28 用户要求换图标）⇒ 存一份给 `levelInfoContentOf`。
+        this.staminaIcon = frames.get(TERRITORY_STAMINA_RES_ID) ?? null;
+        // 图标晚于弹窗到达（理论上不会，页面初始化就跑这条）⇒ 已开着的关卡界面重贴一次，
+        // 否则会一直留着 prefab 里的硬币占位图。
+        const info = this.presenter?.state.detail.levelInfo;
+        const opened = PopupManager.inst?.get(LevelInfoPanel);
+        if (info && opened) opened.applyContent(this.levelInfoContentOf(info));
     }
 
     /**
@@ -675,6 +720,8 @@ export class MainTerritoryMap extends Component {
             fightCaption: content.fightCaption,
             fightEnabled: content.fightEnabled,
             staminaCost: content.staminaCost,
+            // 费用图标由页面加载后透传（弹窗不解配置表）；缺图时弹窗只藏图标、数字照常
+            staminaIcon: this.staminaIcon,
         };
     }
 
@@ -842,10 +889,44 @@ export class MainTerritoryMap extends Component {
     }
 
     /**
-     * 量一次 HUD 底边，把**上下两份**留白一起注入地图视图。
+     * 底部挂件**上沿**到**视口底边**的距离（px）。
      *
-     * 🔴 `hudBottom` **只量一次**：量世界包围盒要走两趟 `getBoundingBoxToWorld()`，
-     *    两次注入各量一遍既浪费又可能取到两个不同帧的值（HUD 正在适配时上下限会错开）。
+     * 与 {@link topHudBottom} 是同一个套路（两个世界包围盒相减），只是方向相反：
+     * 顶部量「视口顶 − HUD 底」，底部量「挂件顶 − 视口底」。
+     *
+     * 🔴 基准是**视口**底边，不是屏幕底边：`MapViewport` 底边离屏幕底还有 168px，
+     *    拿屏幕底量会把这段也算进去，`pad` 直接大 168（底排又被压回挂件下面）。
+     *
+     * 几个挂件的高度都会变（任务入口有红点、宝箱栏有展开态、快速寻敌换文案），
+     * 所以每次都得重量 —— 这也是它跟 `canvas-resize` 一起重算的原因。
+     *
+     * @returns 一个都找不到 / 量不到包围盒时返回 `null`：调用方退到
+     *          {@link TERRITORY_MAP_BOTTOM_INSET}，而不是当成 0（0 = 底排被挂件压住）。
+     */
+    private bottomHudInset(viewport: UITransform): number | null {
+        const host = this.node.parent;
+        const viewportBox = viewport?.getBoundingBoxToWorld();
+        if (!host?.isValid || !viewportBox) return null;
+        let top: number | null = null;
+        for (const name of BOTTOM_HUD_NODE_NAMES) {
+            const box = findDescendantByName(host, name)
+                ?.getComponent(UITransform)?.getBoundingBoxToWorld();
+            if (!box) continue;
+            top = top === null ? box.yMax : Math.max(top, box.yMax);
+        }
+        if (top === null) return null;
+        const inset = top - viewportBox.yMin;
+        return Number.isFinite(inset) ? Math.max(0, inset) : null;
+    }
+
+    /**
+     * 量一次上下两条基准线，把**上下两份**留白一起注入地图视图。
+     *
+     * 🔴 两条基准线**不是同一个东西**，别为了省一次测量合成一个：
+     *  · 顶部留白看 `TopHud` 底边（{@link TERRITORY_MAP_HUD_GAP}：地块能被拖到个人信息框下方 15px）；
+     *  · 底部留白看底部挂件上沿（{@link TERRITORY_MAP_BOTTOM_GAP}：最底那排最多比挂件高 50px）。
+     * 2026-10-27 曾经两边都拿顶部 HUD 反算，`pad` 在 720×1280 上高达 951 ——
+     * 拖到最底时地图下方留了 951px 纯云，就是用户截图里的「距离太高」。
      *
      * 同时把视口尺寸交给视图（全解锁镜头散场要用它算「整张图入画」的倍率）。
      */
@@ -854,8 +935,10 @@ export class MainTerritoryMap extends Component {
         const viewport = this.mapScrollView.node.getComponent(UITransform);
         if (!viewport) return;
         const hudBottom = this.topHudBottom(viewport);
+        // `?? 兜底`：宿主页结构变了也要有一条可信的底线（0 会让底排被挂件压住）。
+        const bottomInset = this.bottomHudInset(viewport) ?? TERRITORY_MAP_BOTTOM_INSET;
         this.mapView.setContentPaddingBottom(
-            territoryMapContentPaddingBottom(viewport.height, hudBottom));
+            territoryMapContentPaddingBottom(viewport.height, bottomInset));
         this.mapView.setContentPaddingTop(territoryMapContentPaddingTop(hudBottom));
         this.mapView.setViewportSize(viewport.width, viewport.height);
     }

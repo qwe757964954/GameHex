@@ -1202,26 +1202,31 @@ export class ZCGame extends Component {
     }
 
     /**
-     * 预扫**本局敌方牌组**的波次怪头像与名字（守城局的怪就是以 `pvpCard` 行生成的单位）。
+     * 波次怪可能来自任一参战席位或完整卡牌目录；按与单位模型一致的卡 id 收集头像与名字。
      *
      * 与 `loadLegendCardArt` 同一套口径：卡面走卡表 `headIcon`，异步加载完再落表；
      * 一张都拿不到就留空框，**不阻断对局**。
      */
     private loadDefenceBossArt(): void {
-        const deck = this.matchConfig?.enemyDeck ?? getEnemyDeck();
+        const config = this.matchConfig;
+        const decks: ReadonlyArray<readonly ZCDeckCard[]> = [
+            getEnemyDeck(),
+            ...(config ? ZC_OWNER_ORDER.map((owner) => (
+                config.ownerDecks?.[owner] ?? (owner === ZCOwner.Player ? config.playerDeck : config.enemyDeck)
+            )) : []),
+        ];
         const icons = new Map<string, string>();
-        for (const card of deck) {
-            if (!card.name) continue;
-            this.bossNames.set(card.id, card.name);
-            if (card.headIcon) icons.set(card.id, card.headIcon);
+        for (const deck of decks) {
+            for (const card of deck) {
+                if (card.name) this.bossNames.set(card.id, card.name);
+                if (card.headIcon) icons.set(card.id, card.headIcon);
+            }
         }
-        if (!icons.size) return;
-        void Promise.all(Array.from(icons).map(async ([cardId, icon]) => (
-            [cardId, await HeadArt.loadHeadIconFrame(icon).catch(() => null)] as const
-        ))).then((entries) => {
-            if (this.leaving) return;
-            for (const [cardId, frame] of entries) if (frame) this.bossPortraits.set(cardId, frame);
-        });
+        for (const [cardId, icon] of Array.from(icons)) {
+            void HeadArt.loadHeadIconFrame(icon).then((frame) => {
+                if (!this.leaving && frame?.isValid) this.bossPortraits.set(cardId, frame);
+            }).catch((error) => console.warn(`[ZCGame] 波次怪头像加载失败：${icon}`, error));
+        }
     }
 
 }

@@ -4,6 +4,7 @@ import type { SpriteFrame, Vec3 } from 'cc';
 import {
     MAP_MARKER_BADGE_BOLD, MAP_MARKER_BADGE_FONT_SIZE, MAP_MARKER_BADGE_HEIGHT, MAP_MARKER_BADGE_LINE_HEIGHT,
     MAP_MARKER_BADGE_SPACING_X, MAP_MARKER_BADGE_TEXT_Y, MAP_MARKER_BADGE_WIDTH, MAP_MARKER_BUBBLE_HEIGHT,
+    MAP_MARKER_BADGE_OUTLINE_WIDTH,
     mapMarkerBadgeY,
 } from '../../common/MapMarkerBadge';
 import {
@@ -722,6 +723,9 @@ export class TerritoryStationView extends Component {
             this.badgeLabel.lineHeight = MAP_MARKER_BADGE_LINE_HEIGHT;
             this.badgeLabel.isBold = MAP_MARKER_BADGE_BOLD;
             this.badgeLabel.spacingX = MAP_MARKER_BADGE_SPACING_X;
+            // 字重：系统字体只有常规/加粗两档，`isBold` 到顶后再加厚描边（见 MapMarkerBadge 注释）。
+            this.badgeLabel.enableOutline = true;
+            this.badgeLabel.outlineWidth = MAP_MARKER_BADGE_OUTLINE_WIDTH;
             this.badgeLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
             this.badgeLabel.verticalAlign = Label.VerticalAlign.CENTER;
             this.badgeLabel.overflow = Label.Overflow.SHRINK;

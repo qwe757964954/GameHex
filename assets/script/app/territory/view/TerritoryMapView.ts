@@ -76,6 +76,31 @@ import type { TerritorySiteState } from './TerritoryTheme';
 
 const { ccclass, property } = _decorator;
 
+/**
+ * 初始点位（`startCellId`）的气泡文案 —— 「章节」。
+ *
+ * 🔴 2026-10-28 用户：初始点位也要有气泡提示，提示词固定为「章节」。
+ * （同日二次：原文案「章节选择」四字改成「章节」两字 —— 四字在 88 宽气泡里太挤，
+ *   两字留白更接近美术稿；宽度预算见下条注释。）
+ * 它与站点编号共用同一套气泡（`MAP_MARKER_BUBBLE_*`）：底图、字号、字距、抬升全都不另起一套，
+ * 否则同一张图上会出现两种粗细 / 两种间距的角标。
+ *
+ * ⚠️ 文案**不许**带空格或换行：气泡宽 88、字 17 号，`章节` 两字正好 34 宽（余量 54），
+ *    塞空格会白白吃掉字距预算；四字（68）虽然也装得下，但两边只剩 10px 显得顶格。
+ */
+export const TERRITORY_START_BUBBLE_TEXT = '章节';
+
+/**
+ * 异步据点（`asyncPvp`）的气泡文案 —— 「PVP」。
+ *
+ * 🔴 2026-10-28 用户：「异步据点气泡文案从【1-4】改为【PVP】」。
+ *
+ * 异步据点原本复用主线的 `章节-关卡` 编号（`${chapterId}-${stage}`），但它是**可重复挑战**的
+ * 异步对战，编号会读成"第 4 关"（玩家以为打一次就过）；而 `PVP` 才是它真正的身份。
+ * 底色仍沿用原有的「已通过 = 绿 / 未通过 = 红」二选一（见 `stationRenderOf`）。
+ */
+export const TERRITORY_ASYNC_PVP_BUBBLE_TEXT = 'PVP';
+
 /** 地图渲染需要的建筑帧（页面持有更全的一套，多出的字段不影响结构类型兼容）。 */
 export interface ITerritoryMapArt {
     /** 地图底图（`MapLayer/MapBackground` 的帧；null = 保持 prefab 默认）。 */
@@ -97,7 +122,12 @@ export interface ITerritoryMapArt {
      *  （`Frame`）渲染，所以天然在建筑图标之下、地皮之上。
      */
     readonly frameBoss: SpriteFrame | null;
-    /** 普通关卡（`stage`）的框。 */
+    /**
+     * 普通关卡（`stage`）的框。
+     *
+     * 🔴 2026-10-28 起**与首领同图（红）**：原来的 `frame_03` 紫框已被用户否掉。
+     * 映射表里 `stage` 仍然指向这个槽位，换图只发生在 `TerritoryPageAssets` 的加载路径上。
+     */
     readonly frameStage: SpriteFrame | null;
     /** 异步关卡（`asyncPvp`）的框。 */
     readonly frameAsyncPvp: SpriteFrame | null;
@@ -129,6 +159,22 @@ export interface ITerritoryMapArt {
     readonly randomResource: SpriteFrame | null;
     readonly randomSilverIcon: SpriteFrame | null;
     readonly bonus: SpriteFrame | null;
+    /**
+     * 关卡编号气泡底图（蓝，`image/spawn-region/frame_03`）。
+     *
+     * 🔴 2026-10-28 16:23 用户：「改回蓝色」⇒ 气泡**不再按通关状态分色**，所有格子同一张。
+     * （此前试过「已通关绿 / 未通关红」，判据是 `progress.isAreaPassed`，已否决。）
+     * 通关状态改由**地皮图**（`img_land_01` 草地 / `img_land_02` 泥土）表达，
+     * 气泡只负责「这一格是第几关」这件事。
+     */
+    readonly levelBubbleFrame?: SpriteFrame | null;
+    /**
+     * 关卡编号气泡的**未通关**槽位 —— 目前与 {@link levelBubbleFrame} 同图（蓝色）。
+     *
+     * 字段保留只为不打乱二选一管线；取不到时回退 {@link levelBubbleFrame}：
+     * 宁可同色一下，也不能没气泡 —— 编号是这一格唯一的关卡标识（`stationRenderOf` 里做兜底）。
+     */
+    readonly levelBubblePendingFrame?: SpriteFrame | null;
     /**
      * **建筑表按 `buildId` 查到的帧**（`buildId` → 帧）。
      *
@@ -329,6 +375,15 @@ export class TerritoryMapView extends Component {
 
     @property({ type: Prefab, group: '节点引用', tooltip: '资源飘字 prefab（ui/territory/TerritoryResourceGain）' })
     gainPrefab: Prefab = null!;
+
+    /**
+     * 开箱表演的覆盖层 prefab（`ui/territory/TerritoryChest`）。
+     *
+     * 节点树（Backdrop / Stage / 光效 / ChestArt / Fly）在 prefab 里，`TerritoryChestView`
+     * 只取引用 + 每帧重画 —— 别再退回构造函数里 `new Node` 拼层级（Inspector 里看不见、改不了）。
+     */
+    @property({ type: Prefab, group: '节点引用', tooltip: '开箱表演 prefab（ui/territory/TerritoryChest）' })
+    chestPrefab: Prefab = null!;
 
     /**
      * `MapLayer/GainLayer`：飘字容器（**必须是 MapLayer 的最后一个子节点**）。
@@ -631,6 +686,10 @@ export class TerritoryMapView extends Component {
      */
     private applyContentShift(): void {
         const shift = territoryMapContentShiftY(this.contentPaddingBottom, this.contentPaddingTop);
+        // 云洞层（`TerritoryCloudPocket`）是**页面根**的孩子（要压在 UI 之上），不在下面这个循环里，
+        // 拿不到这层偏移 ⇒ 必须显式告诉它，否则它只能拿 `territoryMapContentShiftY()` 的缺省值对齐，
+        // 两份留白一变成运行时值就整层漂掉（2026-10-28 用户截图：云洞的云压到上面那排已解锁地块上）。
+        this.clouds.setContentShiftY(shift);
         for (const child of this.node.children) {
             if (child === this.mapBackground?.node) continue;
             if (child.position.y === shift) continue;
@@ -662,7 +721,11 @@ export class TerritoryMapView extends Component {
         host.setSiblingIndex(page.children.length - 1);
         this.overlayHost = host;
         const size = this.readViewportSize();
-        this.chestView = new TerritoryChestView(host, size);
+        // 层级在 prefab 里（`ui/territory/TerritoryChest`）—— 这里只负责实例化 + 挂到覆盖层。
+        const chestRoot = instantiate(this.chestPrefab);
+        chestRoot.layer = host.layer;
+        chestRoot.setParent(host);
+        this.chestView = new TerritoryChestView(chestRoot, size);
         this.chestView.setArt({ frames: this.chestArt });
         // 镜头**拆两半**（2026-10-23）：覆盖层那半由视图自己缩 `Stage`，地图这半在这里接上。
         // 漏了这一句就是用户报的「只有宝箱放大、地块不动」。
@@ -1606,7 +1669,8 @@ export class TerritoryMapView extends Component {
      *    tint（已占领绿 / 有站点金 / 中立米）」整体删除：成品美术图自带明暗，再乘色会发脏，
      *    状态改由「哪张地皮 + 哪个框」表达。
      *  · **格面框**表达「这里有东西可打」：**已解锁且未通关**才叠，站点类型决定用哪张
-     *    （首领 `frame_01` / 普通关卡 `frame_03` / 异步关卡 `frame_04` / 宝箱 `fram_02`）。
+     *    （首领 `frame_01` 红 / 普通关卡**同样用 `frame_01` 红**（2026-10-28 起，原 `frame_03` 紫）/
+     *      异步关卡 `frame_04` 金 / 宝箱 `fram_02` 蓝）。
      *    需求原文后半句「**通关了，fram 要去掉，用 img_land_01**」就是这里的 `passed ⇒ 不叠框`。
      */
     private paintHexes(input: ITerritoryMapRenderInput): void {
@@ -1892,6 +1956,11 @@ export class TerritoryMapView extends Component {
                 tint: TERRITORY_COLORS.owned,
                 badge: '',
                 interactive: false,
+                // 🔴 2026-10-28 山猫：初始点位也要有气泡，提示这里是「章节」入口。
+                // 底图走 `levelBubbleFrame`（现在与所有气泡同图，蓝色 `frame_03`）——
+                // 初始点从开局就属于玩家，不该跟"待挑战"的格子长得不一样。
+                levelBubble: TERRITORY_START_BUBBLE_TEXT,
+                levelBubbleFrame: input.art.levelBubbleFrame ?? null,
             });
         }
         const seen = new Set<number>();
@@ -2190,8 +2259,18 @@ export class TerritoryMapView extends Component {
                 icon: this.stationIconOf(site, stage, input.art),
                 // 美术稿是 `1-1`：连字符两侧**不留空格**。间距由 `MAP_MARKER_BADGE_SPACING_X` 控，
                 // 字符串里塞空格的话，换字号 / 换字体时那个空格宽度会跟着漂。
-                levelBubble: stage ? `${stage.chapterId}-${stage.stage}` : undefined,
-                levelBubbleFrame: input.art.levelBubbleFrame ?? null,
+                // 🔴 异步据点（2026-10-28 山猫）**不显示编号**：它可重复挑战，编号会读成"第 4 关"，
+                //   统一写 `PVP`。判定放在编号之前 —— 异步据点也有 `stage`（`configId` 2000x），
+                //   若先算编号就只有"没绑关卡的异步据点"才会变，看起来像没改。
+                levelBubble: isAsyncPvp
+                    ? TERRITORY_ASYNC_PVP_BUBBLE_TEXT
+                    : stage ? `${stage.chapterId}-${stage.stage}` : undefined,
+                // 气泡底图**统一蓝色**（2026-10-28 16:23 用户改回）：两个槽位现在指同一张图，
+                // 但二选一管线保留 —— 将来要分色只改 `MapMarkerBadge` 常量，这里不用动。
+                // 通关状态由地皮图表达（草地 / 泥土），气泡只回答"这是第几关"。
+                levelBubbleFrame: claimed
+                    ? input.art.levelBubbleFrame ?? null
+                    : input.art.levelBubblePendingFrame ?? input.art.levelBubbleFrame ?? null,
                 isLoading: pending,
                 caption: '',
                 // 已通关不再显示解锁消耗，用「已通关」绿区分开（与 fixedResource 同口径）。
@@ -2199,9 +2278,13 @@ export class TerritoryMapView extends Component {
                     : isAsyncPvp && input.progress.isCellUnlocked(site.cellId)
                         ? territoryBossTint() : territoryStationTint(this.stateOf(site, input)),
                 badge: '',
-                // 已通关：主线 stage/boss 不可再点（打完即通关）；**asyncPvp 可重复挑战 ⇒ 仍可点**。
-                // 请求在途（pending）一律不可点（防连点，loading 遮挡是主防线）。
-                interactive: (claimed ? isAsyncPvp : true) && !pending,
+                // 🔴 2026-10-28 用户：「点击已通过的关卡也可以打开【领地关卡信息弹窗】」。
+                // 原来这里写的是 `claimed ? isAsyncPvp : true` —— 打完的 `stage`/`boss` 直接不可点，
+                // 玩家想回头看一眼通关目标 / 占领奖励 / 敌军一览都点不开。
+                // 现在**已通关也可点**：`selectSite` 对已解锁 / 区域已通关的关卡一律只开弹窗
+                // （开战请求在 `handleBattleStationStart` 里另有守卫，不会误发）。
+                // 唯一不可点的情况是请求在途（`pending`，防连点；loading 遮挡是主防线）。
+                interactive: !pending,
             };
         }
         if (!stage) {

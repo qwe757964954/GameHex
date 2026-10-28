@@ -70,8 +70,8 @@ export class ChestDetailPanel extends PopupBase {
     @property({ type: Label, group: '节点引用', tooltip: 'Panel/CountText：数量' })
     private countLabel: Label = null!;
 
-    /** 奖励说明：**公共格子 `ui/common/RewardItem.prefab`** 的 4 列网格虚拟列表（4+1 换行）。 */
-    @property({ type: VirtualScrollView, group: '节点引用', tooltip: 'Panel/ItemSlots：奖励说明（itemPrefab = common/RewardItem）' })
+    /** 奖励说明：四列网格使用详情页样式，仍由公共 RewardItemView 解析物品。 */
+    @property({ type: VirtualScrollView, group: '节点引用', tooltip: 'Panel/ItemSlots：奖励说明（itemPrefab = ChestDetailRewardItem）' })
     private dropList: VirtualScrollView = null!;
 
     @property({ type: Button, group: '节点引用', tooltip: 'Panel/BtnSecondary：立即打开（花银币）' })
@@ -104,9 +104,10 @@ export class ChestDetailPanel extends PopupBase {
     @property({ type: Button, group: '节点引用', tooltip: 'Panel/BtnClose：关闭' })
     private closeButton: Button = null!;
 
-    private inited = false;
+    private fallbackChestIcon: SpriteFrame | null = null;
 
     protected onInit(): void {
+        this.fallbackChestIcon = this.chestIcon.spriteFrame;
         this.dropList.renderItemFn = this.renderReward;
         this.closeButton.node.on(Button.EventType.CLICK, this.handleClose, this);
         this.fastButton.node.on(Button.EventType.CLICK, this.handleFastOpen, this);
@@ -132,7 +133,7 @@ export class ChestDetailPanel extends PopupBase {
         this.nameLabel.string = content.name;
         this.qualityLabel.string = content.qualityText;
         this.countLabel.string = content.countText;
-        this.chestIcon.spriteFrame = content.icon;
+        this.chestIcon.spriteFrame = content.icon ?? this.fallbackChestIcon;
         this.qualityFrame.spriteFrame = content.qualityFrame;
 
         this.rewards = content.rewards;
@@ -157,9 +158,9 @@ export class ChestDetailPanel extends PopupBase {
      * 整窗重开（`open`）会重写全部标签并重设兄弟顺序 ⇒ 每秒闪一下；倒计时是唯一
      * 逐秒变化的东西，所以单独给一条轻量入口。
      */
-    updateCountdown(remainSeconds: number): void {
+    updateCountdown(remainSeconds: number, isCounting = true): void {
         this.updateCountdownText(remainSeconds > 0 ? formatChestCountdown(remainSeconds) : '');
-        this.openButton.interactable = remainSeconds <= 0;
+        this.openButton.interactable = !isCounting || remainSeconds <= 0;
     }
 
     /** 本趟的奖励（`renderItemFn` 按下标现取，别在回调里闭包捕获某一趟的 content）。 */

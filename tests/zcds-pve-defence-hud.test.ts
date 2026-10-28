@@ -85,6 +85,40 @@ test('血量倍率徽标：整数不带小数点，非法值退回 X1', () => {
     assert.equal(panel.formatZCDefenceHpRate(Number.NaN), 'X1');
 });
 
+test('波次头像从本局所有席位和完整卡表获取，并按当前波切换', async () => {
+    const exports: { ZCGame?: typeof import('../assets/script/app/zcds/ZCGame').ZCGame } = {};
+    const code = ts.transpileModule(readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8'), {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
+    }).outputText;
+    const frames = { a: { id: 'a', isValid: true }, b: { id: 'b', isValid: true } };
+    runInNewContext(code, { exports, require: (name: string) => {
+        if (name === 'cc') return STUB_CC;
+        if (name === './application/ZCBattlePhaseController') return { ZCBattlePhase, ZCBattlePhaseController };
+        if (name === '../HeadArt') return { HeadArt: { loadHeadIconFrame: async (key: 'a' | 'b') => frames[key] } };
+        if (name === './model/ZCMapConfig') return { ZCOwner: { Player: 'player' }, ZC_OWNER_ORDER: ['player', 'enemy', 'enemy2', 'enemy3'] };
+        if (name === './model/ZCCombatCatalog') return { getEnemyDeck: () => [{ id: '2', name: '怪二', headIcon: 'b' }] };
+        return {};
+    } });
+    const game = new exports.ZCGame!();
+    Object.assign(game, { matchConfig: { playerDeck: [], enemyDeck: [], ownerDecks: {
+        player: [{ id: '1', name: '怪一', headIcon: 'a' }], enemy: [],
+    } }, isValid: true });
+    Reflect.get(game, 'loadDefenceBossArt').call(game);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const portraits = Reflect.get(game, 'bossPortraits') as Map<string, unknown>;
+    assert.equal(portraits.get('1'), frames.a, '本局其他席位的波次怪应有头像');
+    assert.equal(portraits.get('2'), frames.b, '完整卡表的波次怪应有头像');
+
+    const boss = new panel.ZCHudBossPanel();
+    Object.assign(boss, { hpFill: {}, waveLabel: {}, rateLabel: {}, nameLabel: {}, portraitIcon: {} });
+    boss.render(wave({ currentWaveCardId: '1' }), '怪一', frames.a as never);
+    assert.equal(boss.portraitIcon.spriteFrame, frames.a);
+    boss.render(wave({ currentWaveCardId: '2' }), '怪二', null);
+    assert.equal(boss.portraitIcon.spriteFrame, null, '新波头像尚未加载时不能显示上一波的怪');
+    boss.render(wave({ currentWaveCardId: '2' }), '怪二', frames.b as never);
+    assert.equal(boss.portraitIcon.spriteFrame, frames.b);
+});
+
 test('战斗主循环按 HUD 节奏刷新首领血条，受伤清零和换波都更新面板', () => {
     const exports: { ZCGame?: typeof import('../assets/script/app/zcds/ZCGame').ZCGame } = {};
     const code = ts.transpileModule(readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8'), {
@@ -97,6 +131,8 @@ test('战斗主循环按 HUD 节奏刷新首领血条，受伤清零和换波都
     } });
     assert.ok(exports.ZCGame);
     const game = new exports.ZCGame();
+    Object.assign(game, { isValid: true });
+    (Reflect.get(game, 'phase') as ZCBattlePhaseController).startPlaying();
     const boss = new panel.ZCHudBossPanel();
     const hpFill = { fillRange: 1 };
     const waveLabel = { string: '' };

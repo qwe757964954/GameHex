@@ -7,14 +7,15 @@
 产出 `docs/世界页HUD皮肤-改前改后.png`，三栏：
   ① 改前：用户给的实机截图（深铁概念顶栏 + 扁金条按钮）
   ② 改后：顶栏换成领地页语法 —— **没有通栏底板、没有标题字**，只有一张浮起来的资源卡 +
-     「一键收取」3D 金钮；「基地」仍是底栏同款木牌
+     「一键收取」3D 金钮；「基地」用任务按钮同款（底框 + 建筑卡通风图标 + 描边字）
   ③ 改后（弹窗）：点目标时弹出**居中模态** —— 全屏暗底 + 居中深色卡 + 两颗金钮
 
 口径全部照抄代码，改代码后重跑这张图即可复核：
   · 卡面板   = `BigMapSkin.drawBigMapCardPanel`（rim 7,7,8 2px → 卡面 72,73,83 → 金线 176,138,78 1px）
   · 暗底     = `BIGMAP_HUD_COLORS.scrim`（5,10,14,205，与领地弹窗 `Dim` 同值）
   · 按钮     = `image/main/city/btn_quick_fight`（领地页【快速寻敌】那颗，无九宫边，直接按宽度压）
-  · 模式木牌 = `image/common/cu_ty_btn13` 122×96（与底部菜单栏七格同款同尺寸）
+  · 模式按钮 = 主界面【任务】按钮同款三段结构（`hud_task_tab` 111×79 + 卡通图标 79 宽 + 22 号描边字），
+    节点 122×96；基地 = `nav_territory` 石堡、大地图 = `hud_mode_world` 折页地图（2026-10-28）
 
 坐标按 640×1280 设计分辨率换算（截图 429×831 ⇒ 缩放 0.649），三栏底图完全相同，
 所以能直接横向比差异。
@@ -30,7 +31,9 @@ BASE = 'C:/Users/Administrator/.workbuddy/clipboard-images/clipboard-2026-10-22T
 OUT = os.path.join('docs', '世界页HUD皮肤-改前改后.png')
 
 RES = 'assets/resources/image'
-TAB_PLATE = f'{RES}/common/cu_ty_btn13.png'
+TASK_FRAME = f'{RES}/main/hud/hud_task_tab.png'
+MODE_BASE_ICON = f'{RES}/main/city/nav_territory.png'
+MODE_WORLD_ICON = f'{RES}/main/hud/hud_mode_world.png'
 QUICK_FIGHT = f'{RES}/main/city/btn_quick_fight.png'
 ICON_DIR = f'{RES}/bigmap/concept/sprites'
 
@@ -118,6 +121,25 @@ def patch_header(screen: Image.Image) -> Image.Image:
     return out
 
 
+def mode_button(base: Image.Image, origin: tuple[float, float], caption: str, icon_path: str) -> None:
+    """【基地 / 大地图】按钮 —— 主界面【任务】按钮同款三段结构（2026-10-28）。
+
+    尺寸照抄 `MainTaskEntry.prefab`：底框 111×79 落 y−7.5、图标 79 宽抬到 y+11.5、22 号粗体字沉到 y−25。
+    注意游戏坐标 y 向上、图像坐标 y 向下，所以下面「+y」要写成减号。
+    """
+    ox, oy = origin
+    cx = ox + g2p(MODE_BUTTON_W) / 2
+    cy = oy + g2p(MODE_BUTTON_H) / 2
+    frame = fit_width(Image.open(TASK_FRAME).convert('RGBA'), g2p(111))
+    base.paste(frame, (round(cx - frame.width / 2), round(cy + g2p(7.5) - frame.height / 2)), frame)
+    icon = fit_width(Image.open(icon_path).convert('RGBA'), g2p(79))
+    base.paste(icon, (round(cx - icon.width / 2), round(cy - g2p(11.5) - icon.height / 2)), icon)
+    centered_text(ImageDraw.Draw(base),
+                  (cx - g2p(MODE_BUTTON_W) / 2, cy + g2p(25) - g2p(18),
+                   cx + g2p(MODE_BUTTON_W) / 2, cy + g2p(25) + g2p(18)),
+                  caption, (255, 255, 255), 22 * SCALE, outline=(10, 8, 6), outline_w=2)
+
+
 def restyle(screen: Image.Image) -> Image.Image:
     out = patch_header(screen)
     draw = ImageDraw.Draw(out)
@@ -148,13 +170,8 @@ def restyle(screen: Image.Image) -> Image.Image:
     gold_button(out, (HEADER_BOX[2] - g2p(12) - g2p(harvest_w / 2), header_cy),
                 harvest_w, harvest_h, '一键收取', 18 * SCALE)
 
-    # 4) 基地木牌（不变：底栏同款同尺寸）
-    plate = fit_width(Image.open(TAB_PLATE).convert('RGBA'), g2p(MODE_BUTTON_W))
-    px = MODE_BOX[0]
-    py = NAV_TOP - 8 - plate.height
-    out.paste(plate, (round(px), round(py)), plate)
-    centered_text(draw, (px, py + plate.height * 0.16, px + plate.width, py + plate.height),
-                  '基地', INK, 24 * SCALE, outline=(214, 190, 150), outline_w=1)
+    # 4) 模式按钮：任务按钮同款（底框 + 建筑卡通风图标 + 22 号描边字），写的是「下一个」模式
+    mode_button(out, (MODE_BOX[0], NAV_TOP - 8 - g2p(MODE_BUTTON_H)), '基地', MODE_BASE_ICON)
     return out
 
 

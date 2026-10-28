@@ -3,6 +3,10 @@ import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
+import {
+    MAP_MARKER_BUBBLE_FRAME_PASSED_PATH,
+    MAP_MARKER_BUBBLE_FRAME_PENDING_PATH,
+} from '../assets/script/app/common/MapMarkerBadge';
 
 /**
  * 领地图纸「地皮 + 格面框」的判据（2026-10-16 山猫需求）。
@@ -18,7 +22,7 @@ import ts from 'typescript';
  * |---|---|---|
  * | 未解锁 | `tileLocked`（`img_land_02` 泥土） | 无（「解锁」就是框出现的那一刻） |
  * | 已解锁未通关 · 首领 | `tileLocked` | `frameBoss`（`frame_01`） |
- * | 已解锁未通关 · 普通关卡 | `tileLocked` | `frameStage`（`frame_03`） |
+ * | 已解锁未通关 · 普通关卡 | `tileLocked` | `frameStage`（**2026-10-28 起同首领那张 `frame_01` 红**，原 `frame_03` 紫） |
  * | 已解锁未通关 · 异步关卡 | `tileLocked` | `frameAsyncPvp`（`frame_04`） |
  * | 已解锁未通关 · 宝箱 | `tileLocked` | `frameChest`（`fram_02`，美术少写一个 e） |
  * | **已通关 / 已领取** | **`tileCleared`（`img_land_01` 草地）** | **无** |
@@ -267,7 +271,10 @@ test('章节战斗站点气泡显示章节-关卡（连字符不留空格），�
         unlocked = true;
         // 2026-10-28 按美术效果图对齐：`1-1` 连字符两侧**没有空格**，
         // 字距交给 `MAP_MARKER_BADGE_SPACING_X`，不能再往字符串里塞空格。
-        assert.equal(render(site, input).levelBubble, '3-12', '显示配置中的章节与关卡序号，不能使用长 configId');
+        // 🔴 同日第二轮：**异步据点不写编号，写 `PVP`** —— 它可重复挑战，
+        //    编号会被读成"第 12 关，打一次就过"（详见 `TERRITORY_ASYNC_PVP_BUBBLE_TEXT`）。
+        assert.equal(render(site, input).levelBubble, type === 'asyncPvp' ? 'PVP' : '3-12',
+            '主线/首领显示章节-关卡；异步据点固定 PVP');
         assert.equal(render(site, input).levelBubbleFrame, input.art.levelBubbleFrame);
         unlocked = false;
         const locked = render(site, input);
@@ -276,6 +283,74 @@ test('章节战斗站点气泡显示章节-关卡（连字符不留空格），�
     }
     unlocked = true;
     assert.equal(render({ cellId: 1, type: 'fixedResource' }, input).levelBubble, undefined);
+});
+
+test('气泡底图必须统一蓝色 frame_03，且能在磁盘上找到', () => {
+    // 2026-10-28 16:23 用户：「改回蓝色」⇒ 两档同图，不再按通关状态分色。
+    assert.equal(MAP_MARKER_BUBBLE_FRAME_PASSED_PATH, MAP_MARKER_BUBBLE_FRAME_PENDING_PATH,
+        '两个槽位必须指同一张蓝色图；若哪天要重新分色，改这里的断言并同步文档');
+    for (const path of [MAP_MARKER_BUBBLE_FRAME_PASSED_PATH, MAP_MARKER_BUBBLE_FRAME_PENDING_PATH]) {
+        assert.match(path, /^image\/spawn-region\/frame_0[123]\/spriteFrame$/,
+            '必须落在 spawn-region 下 —— image/buildings/ 里同名的是首领的红色六边形格面框');
+        const png = `assets/bundles/battle/${path.replace('/spriteFrame', '')}.png`;
+        assert.equal(existsSync(png), true, `美术切图缺失：${png}`);
+    }
+});
+
+test('气泡底图按「通没通过」二选一：未通关红、已通关绿，红图缺失回退绿图', () => {
+    const View = loadMapView();
+    const view = new View();
+    Object.assign(view, { stationIconOf: () => ({ name: 'building' }), stateOf: () => 'available' });
+    const render = (view as unknown as { stationRenderOf(site: unknown, input: unknown): {
+        levelBubbleFrame?: unknown;
+    } }).stationRenderOf.bind(view);
+    const green = { name: 'frame_01' };
+    const red = { name: 'frame_02' };
+    let passed = false;
+    const base = {
+        stageByCell: new Map([[1, { chapterId: 1, stage: 3 }]]),
+        art: { randomSilverIcon: {}, levelBubbleFrame: green, levelBubblePendingFrame: red },
+        siteOpenableCells: [1], pendingFixedResourceCells: [],
+        map: { sites: [] },
+        // 2026-10-28：判据是**区域口径**（`isAreaPassed`）。同一 `configId` 的兄弟格共享通关状态，
+        // 按 `isCellUnlocked` 判会出现「一格通关、兄弟格还红」。
+        progress: { isCellUnlocked: () => true, isOwned: () => false, isAreaPassed: () => passed },
+    };
+    const site = { cellId: 1, type: 'stage', configId: '10001', unlock: { silverCost: 0, requiredCells: [] } };
+    assert.equal(render(site, base).levelBubbleFrame, red, '未通关 ⇒ 红色底图');
+    passed = true;
+    assert.equal(render(site, base).levelBubbleFrame, green, '已通关 ⇒ 绿色底图');
+    passed = false;
+    const noRed = { ...base, art: { ...base.art, levelBubblePendingFrame: undefined } };
+    assert.equal(render(site, noRed).levelBubbleFrame, green,
+        '红色底图没加载到时必须回退绿图 —— 不能让这一格连编号都没有');
+});
+
+test('已通关的关卡仍然可点（要能打开领地关卡信息弹窗）', () => {
+    const View = loadMapView();
+    const view = new View();
+    Object.assign(view, { stationIconOf: () => ({ name: 'building' }), stateOf: () => 'available' });
+    const render = (view as unknown as { stationRenderOf(site: unknown, input: unknown): {
+        interactive?: boolean;
+    } }).stationRenderOf.bind(view);
+    const base = (pending: boolean) => ({
+        stageByCell: new Map([[1, { chapterId: 1, stage: 3 }]]),
+        art: { randomSilverIcon: {}, levelBubbleFrame: { name: 'frame_01' },
+            levelBubblePendingFrame: { name: 'frame_02' } },
+        siteOpenableCells: [], pendingFixedResourceCells: pending ? [1] : [],
+        map: { sites: [] },
+        progress: { isCellUnlocked: () => true, isOwned: () => true, isAreaPassed: () => true },
+    });
+    // 🔴 2026-10-28 用户：「点击已通过的关卡也可以打开【领地关卡信息弹窗】」。
+    // 以前这里是 `claimed ? isAsyncPvp : true` ⇒ 打完的 stage/boss 直接不可点，点建筑毫无反应。
+    for (const type of ['stage', 'boss', 'asyncPvp']) {
+        const site = { cellId: 1, type, configId: '10001', unlock: { silverCost: 0, requiredCells: [] } };
+        assert.equal(render(site, base(false)).interactive, true,
+            `已通关的 ${type} 必须仍可点，否则关卡信息弹窗打不开`);
+    }
+    // 唯一不可点的情况：请求在途（防连点）。
+    const stage = { cellId: 1, type: 'stage', configId: '10001', unlock: { silverCost: 0, requiredCells: [] } };
+    assert.equal(render(stage, base(true)).interactive, false, '请求在途时必须禁掉，防连点');
 });
 
 test('气泡层排在透明站点命中层之后，避免相邻行抢走编号点击', () => {
@@ -445,14 +520,13 @@ test('★类型→框的映射表：四类站点逐个对上，bonus 不在表�
     assert.doesNotMatch(code, /bonus: 'frame/, 'bonus 没有美术框，别为了表全硬指一张');
 });
 
-test('★★美术引用与磁盘：六张图都在、尺寸与代码口径一致（换图必须回来重算贴合）', () => {
+test('★★美术引用与磁盘：五张图都在、尺寸与代码口径一致（换图必须回来重算贴合）', () => {
     const source = readFileSync(ASSETS_PATH, 'utf8');
     // 名字逐字对照美术文件名 —— `fram_02` 少一个 e 是**美术的原始拼写**，别"顺手改对"。
     const expected: Record<string, [number, number]> = {
         img_land_02: [126, 117],
         img_land_01: [126, 117],
         frame_01: [124, 92],
-        frame_03: [124, 92],
         frame_04: [124, 92],
         fram_02: [124, 92],
     };
@@ -466,6 +540,10 @@ test('★★美术引用与磁盘：六张图都在、尺寸与代码口径一�
         assert.equal(header.readUInt32BE(0), width, `${name} 宽度变了 ⇒ 回来核对格面框贴合`);
         assert.equal(header.readUInt32BE(4), height, `${name} 高度变了 ⇒ 回来核对格面框贴合`);
     }
+    // 紫框退役：2026-10-28 山猫要求「未通过的关卡地表与 Boss 一致（红）」⇒ 普通关卡改吃 `frame_01`。
+    // 图还留在美术目录里，但**代码不许再引用** —— 否则"地表又变紫了"会静默回流。
+    assert.doesNotMatch(stripComments(source), /'frame_03'/,
+        '普通关卡已改用 frame_01 红框，紫框 frame_03 不该再被引用');
     // 旧灰图不该再被领地引用（它已由两张成品图取代；对局侧本来也不用它）。
     assert.doesNotMatch(stripComments(source), /'img_land_01_gray'/,
         '领地已经改用 img_land_01 / img_land_02，灰图引用应已删除');

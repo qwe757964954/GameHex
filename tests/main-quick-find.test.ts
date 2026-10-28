@@ -75,6 +75,7 @@ test('quick-find button invokes the injected map action without navigating to ma
     let click: (() => void) | undefined;
     const Page = loadComponent<MainPage>('MainPage', {
         cc,
+        '../../core/asset/ResourceScope': { ResourceScope },
         './ChestTypes': chestTypes,
         '../battle/BattleStartModel': battleStart,
         './NewTreasureRepository': { NewTreasureRepository: class {} },

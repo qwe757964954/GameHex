@@ -1,4 +1,4 @@
-import { _decorator, Button, Label, Node } from 'cc';
+import { _decorator, Button, Label, Node, Sprite, type SpriteFrame } from 'cc';
 import { EventMgr } from '../../framework/event/EventMgr';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
@@ -22,6 +22,13 @@ export interface ILevelInfoContent {
     readonly fightCaption: string;
     readonly fightEnabled: boolean;
     readonly staminaCost: number;
+    /**
+     * 费用图标（体力）。`null` ⇒ 只藏图标、数字照常显示。
+     *
+     * 由**页面**加载后透传（`MainTerritoryMap` 在建内容时塞 `图标_体力`），
+     * 弹窗自己不解配置表 —— 与 `BigMapTargetPanel.staminaIcon` 同一口径。
+     */
+    readonly staminaIcon: SpriteFrame | null;
 }
 
 /**
@@ -79,6 +86,17 @@ export class LevelInfoPanel extends PopupBase {
     @property({ type: Node, group: '节点引用', tooltip: 'BtnPrimary/CostBg：体力费用底' })
     private fightCostRoot: Node = null!;
 
+    /**
+     * `BtnPrimary/CostIcon`：费用**图标**。
+     *
+     * 🔴 2026-10-28 用户：「挑战按钮上的图标要更换成对应的体力图标」。
+     * prefab 里焊的是 `coin.png`（硬币），但这一行写的是**体力**消耗 ⇒ 运行时由
+     * `applyContent` 换成 `图标_体力`（页面加载后透传 `staminaIcon`），
+     * prefab 里那张硬币只作编辑器里的占位。
+     */
+    @property({ type: Sprite, group: '节点引用', tooltip: 'BtnPrimary/CostIcon：费用图标（体力）' })
+    private fightCostIcon: Sprite = null!;
+
     @property({ type: Label, group: '节点引用', tooltip: 'BtnPrimary/CostLabel：体力数字' })
     private fightCostLabel: Label = null!;
 
@@ -120,6 +138,12 @@ export class LevelInfoPanel extends PopupBase {
         const hasCost = Number.isFinite(content.staminaCost) && content.staminaCost > 0;
         this.fightCostLabel.string = hasCost ? String(Math.round(content.staminaCost)) : '';
         this.fightCostRoot.active = hasCost;
+        // 图标跟着数字走：没有费用就整块藏起来；有费用但图没加载到 ⇒ 只少一颗图标，数字照常。
+        // ⚠️ 判据必须是 `hasCost && frame !== null`：CostIcon 是 `BtnPrimary` 的**直接子节点**
+        // （和 `CostBg` / `CostLabel` 平级），不跟着 `fightCostRoot.active` 一起关，
+        // 少了这根判据就会留一颗没有数字的体力图标挂在按钮上。
+        this.fightCostIcon.spriteFrame = content.staminaIcon;
+        this.fightCostIcon.node.active = hasCost && content.staminaIcon !== null;
     }
 
     /** 单格渲染 —— 数据按**当前**下标现取，别在回调里闭包捕获某一趟的 `content`。 */

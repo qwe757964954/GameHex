@@ -1,6 +1,6 @@
 import { EventMgr } from '../../../framework/event/EventMgr';
 import {
-    _decorator, BlockInputEvents, Button, Component, Label, Node, Sprite, SpriteFrame, UITransform,
+    _decorator, Button, Component, Label, Node, Sprite, SpriteFrame, UITransform,
 } from 'cc';
 import { TERRITORY_EVENTS } from './TerritoryEvents';
 import { RewardItemView } from '../../common/RewardItemView';
@@ -122,12 +122,7 @@ export class BigMapPlayerLevelPanel extends Component {
         }
         if (this.inited) return;
         this.inited = true;
-        if (!this.dimTransform.node.getComponent(BlockInputEvents)) {
-            this.dimTransform.node.addComponent(BlockInputEvents);
-        }
-        if (!this.panelTransform.node.getComponent(BlockInputEvents)) {
-            this.panelTransform.node.addComponent(BlockInputEvents);
-        }
+        // `Dim` / `Panel` 的 `cc.BlockInputEvents` 挂在 prefab 上（拦点击穿透），这里不再运行时 addComponent。
         this.dimTransform.node.on(Node.EventType.TOUCH_END, this.handleClose, this);
         this.closeButton.node.on(Button.EventType.CLICK, this.handleClose, this);
         this.scoutButton.node.on(Button.EventType.CLICK, this.handleScout, this);

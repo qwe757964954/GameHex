@@ -1,5 +1,6 @@
 import { _decorator, Button, Component, Node, Sprite, SpriteFrame } from 'cc';
 import type { AssetService } from '../../core/asset/AssetService';
+import { ResourceScope } from '../../core/asset/ResourceScope';
 import { GameRoute } from '../../core/runtime/GameRoute';
 import { ProcedureManager } from '../../framework/procedure/ProcedureManager';
 import { FW } from '../../framework/FW';
@@ -74,7 +75,8 @@ export class MainPage extends Component {
     /** `initialize` 注入的资源入口（宝箱图标 / 品质框）。 */
     private assets: AssetService | null = null;
     /** 图标按路径缓存（同一批奖励反复加载同一张图不值得）。 */
-    private readonly chestIconCache = new Map<string, SpriteFrame | null>();
+    private readonly chestIconCache = new Map<string, SpriteFrame>();
+    private readonly chestArtScope = new ResourceScope('main:chest-detail-art');
     private readonly emptyChestSlots: readonly IChestSlotData[] = Array.from({ length: CHEST_SLOT_COUNT }, (_, index) => ({
         index: index + 1,
         state: ChestSlotState.Empty,
@@ -125,6 +127,9 @@ export class MainPage extends Component {
     }
 
     onDestroy(): void {
+        if (this.detailSlot > 0) PopupManager.inst?.get(ChestDetailPanel)?.close();
+        this.chestArtScope.dispose();
+        this.chestIconCache.clear();
         EventMgr.instance.offTarget(this);
         this.findCurrentBoss = null;
         this.treasureRepository.dispose();
@@ -186,7 +191,7 @@ export class MainPage extends Component {
             return;
         }
         this.detailAction = detail.action;
-        panel.updateCountdown(detail.action === ChestSlotAction.SpeedUp ? detail.remainSeconds : 0);
+        panel.updateCountdown(detail.remainSeconds, detail.action === ChestSlotAction.SpeedUp);
     }
 
     private async onChestAction(slot: number): Promise<void> {
@@ -252,7 +257,7 @@ export class MainPage extends Component {
             // 未激活时也能花银币直接开（跳过倒计时）；空槽位走不到这里。
             fastOpenEnabled: true,
             openCaption: '打开',
-            openCountdown: counting ? formatChestCountdown(detail.remainSeconds) : '',
+            openCountdown: detail.remainSeconds > 0 ? formatChestCountdown(detail.remainSeconds) : '',
             // 倒计时中不能开（要么等、要么点「立即打开」）；未激活时这颗 = 开始计时。
             openEnabled: !counting && (activated || detail.remainSeconds >= 0),
         };
@@ -260,21 +265,21 @@ export class MainPage extends Component {
 
     /** 图标按路径缓存；缺图返回 `null`（那一枚没图，不影响其它格）。 */
     private async loadChestFrame(path: string): Promise<SpriteFrame | null> {
-        if (!path) return null;
-        if (this.chestIconCache.has(path)) return this.chestIconCache.get(path) ?? null;
+        if (!path || this.chestArtScope.disposed) return null;
+        const cached = this.chestIconCache.get(path);
+        if (cached?.isValid) return cached;
+        this.chestIconCache.delete(path);
         const assets = this.assets;
-        if (!assets) {
-            this.chestIconCache.set(path, null);
+        if (!assets) return null;
+        try {
+            const frame = await assets.load(spriteFramePathOf(path), SpriteFrame, { scope: this.chestArtScope });
+            if (this.chestArtScope.disposed || !frame.isValid) return null;
+            this.chestIconCache.set(path, frame);
+            return frame;
+        } catch (error) {
+            console.warn(`[MainPage] 宝箱详情图标加载失败：${path}`, error);
             return null;
         }
-        let frame: SpriteFrame | null = null;
-        try {
-            frame = await assets.load(spriteFramePathOf(path), SpriteFrame);
-        } catch {
-            frame = null;
-        }
-        this.chestIconCache.set(path, frame);
-        return frame;
     }
 
     private async loadQualityFrame(quality: number): Promise<SpriteFrame | null> {
@@ -298,9 +303,7 @@ export class MainPage extends Component {
     /**
      * 发请求 + 收尾。
      *
-     * 成功（`ok`/`busy`）后关掉弹窗：`open`/`fastOpen` 会让槽位消失，弹窗再留着就是
-     * 一个指向空槽的界面；`activate` 则换成倒计时状态 —— 两种情况都该收起，
-     * 玩家要看进度回宝箱栏看。
+     * 激活成功后在当前弹窗继续显示倒计时；真正开箱后关闭对应详情。
      */
     private async runTreasureAction(kind: 'activate' | 'fastOpen' | 'open'): Promise<void> {
         const index = this.detailSlot;
@@ -310,9 +313,11 @@ export class MainPage extends Component {
             : (kind === 'fastOpen'
                 ? await this.treasureRepository.fastOpen(index)
                 : await this.treasureRepository.open(index));
-        if (!this.isValid) return;
-        if (result === 'ok' || result === 'busy') {
-            this.onChestDetailClose();
+        if (!this.isValid || this.detailSlot !== index) return;
+        if (result === 'busy') return;
+        if (result === 'ok') {
+            if (kind === 'activate') this.refreshChestDetailCountdown();
+            else PopupManager.inst?.get(ChestDetailPanel)?.close();
             return;
         }
         if (result === 'offline') FW.showTip(MAIN_PAGE_TEXTS.networkUnavailable);

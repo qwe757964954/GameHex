@@ -1,3 +1,4 @@
+import { componentControllerModule } from './helpers/controller-context';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -9,6 +10,7 @@ import { ZCNodePool } from '../assets/script/app/zcds/view/ZCNodePool';
 import { ZCBattlePhaseController, ZCBattlePhase } from '../assets/script/app/zcds/application/ZCBattlePhaseController';
 import { ZCPathWorkspace, ZCTargetingSystem } from '../assets/script/app/zcds/model/systems/ZCTargetingSystem';
 import { loadViews } from './helpers/zcds-view-fixtures';
+import { assetPath } from './helpers/asset-paths';
 
 configureZCMap(JSON.parse(readFileSync('tests/fixtures/zcds-legacy-map.json', 'utf8')));
 
@@ -378,7 +380,7 @@ test('城墙端点连接统计按阵营隔离，同阵营仅顶点接触也要�
 });
 
 test('城墙接缝 shader 保持实体 alpha，用墙体内部颜色覆盖深色端帽', () => {
-    const effect = readFileSync('assets/resources/shaders/wall-tile.effect', 'utf8');
+    const effect = readFileSync(assetPath('shaders/wall-tile.effect'), 'utf8');
     const fragment = effect.match(/vec4 frag \(\) \{([\s\S]*?)return result;/)?.[1] ?? '';
 
     assert.equal(
@@ -610,7 +612,7 @@ test('游戏每帧更新动态表现，地块和 HUD 保持 0.15 秒节奏', () 
     const { cc } = loadViews();
     const context = {
         exports: {} as any,
-        require: (name: string) => name === 'cc' ? cc
+        require: (name: string) => name.endsWith('/ComponentController') ? componentControllerModule() : name === 'cc' ? cc
             : name === './application/ZCBattlePhaseController' ? { ZCBattlePhaseController, ZCBattlePhase }
                 : {},
     };
@@ -661,7 +663,7 @@ test('城墙边→邻格匹配不得把同一个邻格分给两条边（阈值 �
     // 判据：正确匹配的 cos 实测最小 0.951、误匹配 0.737 ⇒ 同一邻格不该被方向不同的两条边同时选中。
     try {
         for (const file of ['standard.json', 'standard_3.json', 'standard_4.json']) {
-            configureZCMap(JSON.parse(readFileSync(`assets/resources/config/maps/${file}`, 'utf8')));
+            configureZCMap(JSON.parse(readFileSync(assetPath(`config/maps/${file}`), 'utf8')));
             const hexes = ZC_HEX_CONFIG;                    // configureZCMap 之后的真源
             // 每张地图独立一个几何缓存（等价于产品路径 initialize 时 setMap）。
             const geometry = new ZCWallGeometry();

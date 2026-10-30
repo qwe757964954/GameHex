@@ -68,61 +68,61 @@ function descSegment(text: string, fill: string, outline: string): string {
 @ccclass('MonthCardGiftEntry')
 export class MonthCardGiftEntry extends Component {
     @property({ type: Sprite, tooltip: 'Bg：卡面' })
-    bg: Sprite = null!;
+    bg: Sprite = null;
 
     @property({ type: Node, tooltip: 'SpNode：yueka spine 容器' })
-    spNode: Node = null!;
+    spNode: Node = null;
 
     @property({ type: Node, tooltip: 'BtnBuy：主按钮' })
-    btnBuy: Node = null!;
+    btnBuy: Node = null;
 
     @property({ type: Label, tooltip: 'BtnBuy/Label：按钮文案' })
-    btnBuyLabel: Label = null!;
+    btnBuyLabel: Label = null;
 
     @property({ type: Node, tooltip: 'BoughtTag：已购买角标' })
-    boughtTag: Node = null!;
+    boughtTag: Node = null;
 
     @property({ type: Label, tooltip: 'LbTime：剩余时间' })
-    lbTime: Label = null!;
+    lbTime: Label = null;
 
     @property({ type: RichText, tooltip: 'DescTitle：有效期说明' })
-    descTitle: RichText = null!;
+    descTitle: RichText = null;
 
     @property({ type: Node, tooltip: 'BtnTaken：已领取按钮（恒隐藏）' })
-    btnTaken: Node = null!;
+    btnTaken: Node = null;
 
     @property({ type: Node, tooltip: 'BtnReward：领取按钮' })
-    btnReward: Node = null!;
+    btnReward: Node = null;
 
     @property({ type: Node, tooltip: 'BtnReward/RedDot：领取红点' })
-    redDot: Node = null!;
+    redDot: Node = null;
 
     @property({ type: Node, tooltip: 'GainBubble：立即获得气泡' })
-    gainBubble: Node = null!;
+    gainBubble: Node = null;
 
     @property({ type: Node, tooltip: 'GainLabel：立即获得文案' })
-    gainLabel: Node = null!;
+    gainLabel: Node = null;
 
     @property({ type: MonthCardGiftSlot, tooltip: 'GainGoods：购买即时奖励' })
-    gainGoods: MonthCardGiftSlot = null!;
+    gainGoods: MonthCardGiftSlot = null;
 
     @property({ type: Node, tooltip: 'DayBg：每日奖励区底' })
-    dayBg: Node = null!;
+    dayBg: Node = null;
 
     @property({ type: Node, tooltip: 'DayDot：每日领取前的点' })
-    dayDot: Node = null!;
+    dayDot: Node = null;
 
     @property({ type: Node, tooltip: 'DayLabel：每日领取文案' })
-    dayLabel: Node = null!;
+    dayLabel: Node = null;
 
     @property({ type: Node, tooltip: 'DayRewardList：每日奖励格容器' })
-    dayList: Node = null!;
+    dayList: Node = null;
 
     @property({ type: Node, tooltip: 'PrivilegeList：特权行容器' })
-    privilegeList: Node = null!;
+    privilegeList: Node = null;
 
     @property({ type: Label, tooltip: 'Title：卡名' })
-    titleLabel: Label = null!;
+    titleLabel: Label = null;
 
     private view: IMonthCardGiftView | null = null;
     private privilegeRows: MonthCardGiftPrivilegeRow[] = [];

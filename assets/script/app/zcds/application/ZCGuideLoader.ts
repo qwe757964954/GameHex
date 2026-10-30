@@ -1,7 +1,6 @@
 import { SpriteFrame } from 'cc';
-import type { AssetService } from '../../../core/asset/AssetService';
 import type { ResourceScope } from '../../../core/asset/ResourceScope';
-import type { ConfigService } from '../../../core/config/ConfigService';
+import type { IControllerResources } from '../../../framework/controller/ControllerBase';
 import { ZCDC_LOG_WARNINGS } from '../ZCDCLogSwitch';
 import {
     getGuideIconPath,
@@ -22,14 +21,13 @@ export interface ZCGuidePreparedContent {
  */
 export class ZCGuideLoader {
     constructor(
-        private readonly assets: AssetService,
-        private readonly configs: ConfigService,
+        private readonly resources: Pick<IControllerResources, 'assets' | 'configs'>,
     ) {}
 
     async prepare(scope?: ResourceScope): Promise<ZCGuidePreparedContent> {
         const [entryRows, paramRows] = await Promise.all([
-            this.configs.getTable('zcGuide'),
-            this.configs.getTable('zcGuideParams'),
+            this.resources.configs.getTable('zcGuide'),
+            this.resources.configs.getTable('zcGuideParams'),
         ]);
         this.checkActive(scope);
         const entries = parseGuideEntries(entryRows);
@@ -49,7 +47,7 @@ export class ZCGuideLoader {
             const path = getGuideIconPath(key);
             if (!path) return;
             try {
-                frames.set(key, await this.assets.load(path, SpriteFrame, { scope }));
+                frames.set(key, await this.resources.assets.load(path, SpriteFrame, { scope }));
             } catch (error) {
                 if (ZCDC_LOG_WARNINGS) console.warn(`[ZCGuideLoader] 指南图标加载失败：${key} → ${path}`, error);
             }

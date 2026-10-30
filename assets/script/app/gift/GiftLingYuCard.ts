@@ -18,25 +18,25 @@ const { ccclass, property } = _decorator;
 @ccclass('GiftLingYuCard')
 export class GiftLingYuCard extends Component {
     @property({ type: Label, tooltip: 'Title：档位名（如「少量元宝」）' })
-    titleLabel: Label = null!;
+    titleLabel: Label = null;
 
     @property({ type: Label, tooltip: 'Coin：到账数量' })
-    coinLabel: Label = null!;
+    coinLabel: Label = null;
 
     @property({ type: Label, tooltip: 'Price：按钮上的价格文案' })
-    priceLabel: Label = null!;
+    priceLabel: Label = null;
 
     @property({ type: Sprite, tooltip: 'Icon：货币图标（统一用 gf_icon_stone）' })
-    icon: Sprite = null!;
+    icon: Sprite = null;
 
     @property({ type: Node, tooltip: 'DoubleTag：首充翻倍角标（firstBuy 时才显示）' })
-    doubleTag: Node = null!;
+    doubleTag: Node = null;
 
     @property({ type: Sprite, tooltip: 'BtnBg：购买按钮底图' })
-    btnBg: Sprite = null!;
+    btnBg: Sprite = null;
 
     @property({ type: Button, tooltip: 'Button：购买按钮' })
-    button: Button = null!;
+    button: Button = null;
 
     private index = 0;
 

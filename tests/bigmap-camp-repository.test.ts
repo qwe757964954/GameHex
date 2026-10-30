@@ -25,7 +25,6 @@ function makeGateway() {
         fetchDetail: (ids) => { calls.push({ kind: 'detail', ids }); return detail.promise; },
         fetchRoles: (campId) => { roleCalls.push(campId); return roles.promise; },
         requestMove: (body) => { moveCalls.push({ ...body }); return move.promise; },
-        subscribeRoleEvents: () => () => undefined,
     };
     return { calls, roleCalls, moveCalls, simple, detail, roles, move, gateway };
 }

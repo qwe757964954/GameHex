@@ -7,7 +7,7 @@
 //
 // 覆盖两块新行为：
 //   1. `/bg/<资源名>` 背景图路由 —— 编辑器画布衬底取的是**游戏里同一张**贴图
-//      （`assets/resources/image/zdbg1.jpg`），所以路由必须能读到它，且挡住路径穿越。
+//      （assetPath(`image/zdbg1.jpg`)），所以路由必须能读到它，且挡住路径穿越。
 //   2. 装饰值兼容新格式 `{ art, span?, offset? }` —— 多格占位的每一格都要在虚空内，
 //      坏 span 必须被挡（不能靠 `Number(null) → 0` 隐性兜底）。
 import assert from 'node:assert/strict';
@@ -15,6 +15,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:http';
 import { existsSync } from 'node:fs';
 import test from 'node:test';
+import { assetExists, assetPath } from './helpers/asset-paths';
 
 /** 先占一个空闲端口再放掉，拿到的端口交给被测服务 —— 不与开发者本机跑着的编辑器撞端口。 */
 async function freePort(): Promise<number> {
@@ -85,7 +86,7 @@ async function putPreset(base: string, id: string, body: unknown): Promise<{ sta
 }
 
 test('地图编辑器服务端：/bg 背景图路由读游戏同源贴图，且挡路径穿越', async () => {
-    assert.ok(existsSync('assets/resources/image/zdbg1.jpg'), '★默认底图 zdbg1.jpg 必须存在（游戏与编辑器共用）');
+    assert.ok(assetExists('image/zdbg1.jpg'), '★默认底图 zdbg1.jpg 必须存在（游戏与编辑器共用）');
     await withServer(async (base) => {
         // 编辑器画布请求的就是 art.background（默认 image/zdbg1，不带扩展名）。
         const response = await fetch(`${base}/bg/image/zdbg1`);

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
+import { assetPath } from './helpers/asset-paths';
 
 /**
  * 自选地图局：中立资源格不许暴露"是什么"，一律盖问号（`image/gameui/whh`）。
@@ -23,7 +24,7 @@ const stripComments = (source: string): string => source
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/\/\/[^\n]*/g, '');
 
-const UNKNOWN_ART = 'assets/resources/image/gameui/whh.png';
+const UNKNOWN_ART = assetPath('image/gameui/whh.png');
 
 test('占位图入库 + 资源名单一出口（`whh`）', () => {
     assert.ok(existsSync(UNKNOWN_ART), `占位图必须入库：${UNKNOWN_ART}`);

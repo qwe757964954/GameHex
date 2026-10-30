@@ -1,3 +1,6 @@
+import { createControllerContext, createControllerResources } from './helpers/controller-context';
+import { EventMgr } from '../assets/script/framework/event/EventMgr';
+import * as mvcEvents from '../assets/script/app/bigmap/application/BigMapEvents';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
@@ -14,6 +17,8 @@ test('页面初始化的完成信号必须等待美术加载，而不是仅完�
     } }).outputText;
     const exports: Record<string, unknown> = {};
     runInNewContext(code, { exports, require: (name: string) => {
+        if (name.endsWith('/EventMgr')) return { EventMgr };
+        if (name.endsWith('/BigMapEvents')) return mvcEvents;
         if (name === 'cc') return { _decorator: { ccclass: () => (value: unknown) => value }, Component: class {} };
         if (name.endsWith('/ResourceScope')) return { ResourceScope };
         // 世界入口开页时会读冒险章节集合（建筑解锁的唯一依据），需给一份空快照。
@@ -22,18 +27,18 @@ test('页面初始化的完成信号必须等待美术加载，而不是仅完�
         return {};
     } });
     const Page = exports.BigMapPage as new () => {
-        buildUi(): void; refreshAll(): void; loadArt(): Promise<void>; loadWorldView(): Promise<void>; loadTargetPanels(): Promise<void>; isValid: boolean;
-        initialize(presenter: object, onClose: null, assets: object): Promise<void>;
+        buildUi(): void; refreshAll(): void; loadArt(): Promise<void>; loadWorldView(): Promise<void>; loadPageLayout(): Promise<void>; isValid: boolean;
+        initialize(data: object, assets: object): Promise<void>;
     };
     const page = new Page();
     page.isValid = true;
     page.loadWorldView = async () => undefined;
-    page.loadTargetPanels = async () => undefined;
+    page.loadPageLayout = async () => undefined;
     page.buildUi = () => undefined;
-    page.refreshAll = () => undefined;
+    (page as any).render = () => {}; page.refreshAll = () => undefined;
     page.loadArt = () => artReady;
     let finished = false;
-    const initialization = Promise.resolve(page.initialize({ onChanged: () => () => undefined }, null, {}))
+    const initialization = Promise.resolve(page.initialize({}, createControllerResources()))
         .then(() => { finished = true; });
     await new Promise((resolve) => setImmediate(resolve));
     try { assert.equal(finished, false); }
@@ -41,7 +46,7 @@ test('页面初始化的完成信号必须等待美术加载，而不是仅完�
     assert.equal(finished, true);
 });
 
-test('世界地图、弹窗与美术并行准备，完整美术就绪前不绘制备用地形', async () => {
+test('页面模板、世界地图与美术并行准备，完整美术就绪前不绘制备用地形', async () => {
     const started: string[] = [];
     let finish: () => void = () => {};
     const ready = new Promise<void>((resolve) => { finish = resolve; });
@@ -49,6 +54,8 @@ test('世界地图、弹窗与美术并行准备，完整美术就绪前不绘�
     runInNewContext(ts.transpileModule(readFileSync('assets/script/app/bigmap/view/BigMapPage.ts', 'utf8'), {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
     }).outputText, { exports, require(name: string) {
+        if (name.endsWith('/EventMgr')) return { EventMgr };
+        if (name.endsWith('/BigMapEvents')) return mvcEvents;
         if (name === 'cc') return { _decorator: { ccclass: () => (value: unknown) => value }, Component: class { isValid = true; } };
         if (name.endsWith('/ResourceScope')) return { ResourceScope };
         // 世界入口开页时会读冒险章节集合（建筑解锁的唯一依据），需给一份空快照。
@@ -57,21 +64,21 @@ test('世界地图、弹窗与美术并行准备，完整美术就绪前不绘�
         return {};
     } });
     const Page = exports.BigMapPage as new () => {
-        initialize(presenter: object, close: null, assets: object): Promise<void>;
-        loadWorldView(): Promise<void>; loadTargetPanels(): Promise<void>; loadArt(): Promise<void>;
+        initialize(data: object, assets: object): Promise<void>;
+        loadWorldView(): Promise<void>; loadPageLayout(): Promise<void>; loadArt(): Promise<void>;
         buildUi(): void; refreshAll(): void;
     };
     const page = new Page();
-    for (const [method, label] of [['loadWorldView', 'world'], ['loadTargetPanels', 'panels'], ['loadArt', 'art']] as const) {
+    for (const [method, label] of [['loadPageLayout', 'page'], ['loadWorldView', 'world'], ['loadArt', 'art']] as const) {
         page[method] = async () => { started.push(label); await ready; };
     }
     let builds = 0;
     page.buildUi = () => { builds += 1; };
-    page.refreshAll = () => {};
-    const opening = page.initialize({ onChanged: () => () => {} }, null, {});
+    (page as any).render = () => {}; page.refreshAll = () => {};
+    const opening = page.initialize({}, createControllerResources());
     await new Promise((resolve) => setImmediate(resolve));
     try {
-        assert.deepEqual(started, ['world', 'panels', 'art']);
+        assert.deepEqual(started, ['page', 'world', 'art']);
         assert.equal(builds, 0, '资源就绪前不创建完整备用地形');
     } finally { finish(); await opening; }
     assert.equal(builds, 1);
@@ -88,6 +95,8 @@ for (const fails of [false, true]) test(`地图预制体加载期间关闭页面
     } }).outputText;
     const exports: Record<string, unknown> = {};
     runInNewContext(code, { exports, require: (name: string) => {
+        if (name.endsWith('/EventMgr')) return { EventMgr };
+        if (name.endsWith('/BigMapEvents')) return mvcEvents;
         if (name === 'cc') return { _decorator: { ccclass: () => (value: unknown) => value },
             Component: class { isValid = true; }, Prefab: class {}, instantiate: () => { instances += 1; } };
         if (name.endsWith('/ResourceScope')) return { ResourceScope };
@@ -99,17 +108,17 @@ for (const fails of [false, true]) test(`地图预制体加载期间关闭页面
     const Page = exports.BigMapPage as new () => {
         isValid: boolean; artScope: ResourceScope; buildUi(): void;
         loadArt(): Promise<void>;
-        initialize(presenter: object, close: null, assets: object): Promise<void>;
+        initialize(data: object, assets: object): Promise<void>;
     };
     const page = new Page();
     page.loadArt = async () => {};
     let built = false;
     page.buildUi = () => { built = true; };
     const paths: string[] = [];
-    const opening = page.initialize({}, null, { load: (path: string) => { paths.push(path); return prefabReady; } });
+    const opening = page.initialize({}, { ...createControllerResources(), assets: { load: (path: string) => { paths.push(path); return prefabReady; } } });
     // 2026-10-27：`BigMapPlayerLevelPanel`（异步据点）和 `BigMapLevelInfoPanel`（关卡界面）
-    // 都搬去领地页了，世界页这两个弹窗全部下线 ⇒ 只剩地图预制体一个资源。
-    assert.deepEqual(paths, ['ui/bigmap/BigMapWorldView']);
+    // 都搬去领地页了，世界页这两个弹窗全部下线 ⇒ 页面外壳与世界地图两个预制体一起等待，取消须同时生效。
+    assert.deepEqual(paths, ['ui/bigmap/BigMapPage', 'ui/bigmap/BigMapWorldView']);
     page.isValid = false;
     page.artScope.dispose();
     if (fails) failPrefab(new Error('load failed after close'));
@@ -176,12 +185,17 @@ function createEntryHarness() {
     const exports: Record<string, unknown> = {};
     runInNewContext(code, { exports, console,
         require: (name: string) => {
-            if (name === 'cc') return { Node: FakeNode, UITransform, Widget,
+            if (name.endsWith('/EventMgr')) return { EventMgr };
+        if (name.endsWith('/BigMapEvents')) return mvcEvents;
+        if (name === 'cc') return { Node: FakeNode, UITransform, Widget,
                 Layers: { Enum: { UI_2D: 1 } }, view: { getVisibleSize: () => ({ width: 720, height: 1466 }) },
                 director: { getScene: () => ({ getChildByName: () => canvas }) } };
             if (name === './BigMapConfigLoader') return { loadBigMapConfig: async () => ({}) };
             if (name === './BigMapLayoutLoader') return { loadBigMapLayout: async () => null };
-            if (name === './BigMapPresenter') return { BigMapPresenter: class {
+            if (name.endsWith('/ProcedureManager')) return { ProcedureManager: { instance: { context: createControllerContext() } } };
+            if (name.endsWith('/GameNet')) return { GameNet: { instance: {} } };
+            if (name === './BigMapController') return { BigMapController: class { resources = createControllerResources(); start() {} refreshUnlockContext() {} initialize() { return Promise.resolve(); } get snapshot() { return {}; } dispose() {} } };
+            if (name === './BigMapModel') return { BigMapModel: class {
                 dispose() {}
                 async initializeSlg() { return true; }
                 refreshUnlockContext() {}
@@ -207,12 +221,10 @@ function createEntryHarness() {
     });
     const Entry = exports.BigMapEntry as new () => {
         root: FakeNode | null;
-        setAssetService(assets: object): void;
         open(configs: object, options: object): Promise<void>;
         close(): void;
     };
     const entry = new Entry();
-    entry.setAssetService({});
     return { entry, navigation, canvas, popupRoot, finishArt, mounts: () => navigationMounts };
 }
 

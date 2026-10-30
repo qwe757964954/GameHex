@@ -56,46 +56,46 @@ export type { IOsShopVisibility } from './CelebrationViewState';
 @ccclass('OSShopItem')
 export class OSShopItem extends Component {
     @property({ type: OSRewardSlot, tooltip: 'Goods：奖励格（吃 `rewards[0]`，FGUI `com_goods`）' })
-    goods: OSRewardSlot = null!;
+    goods: OSRewardSlot = null;
 
     @property({ type: Label, tooltip: 'NameText：商品名（FGUI `lab_name`）' })
-    nameText: Label = null!;
+    nameText: Label = null;
 
     @property({ type: Label, tooltip: 'OldPriceText：原价（FGUI `lab_old_price`，**常显**）' })
-    oldPriceText: Label = null!;
+    oldPriceText: Label = null;
 
     @property({ type: Label, tooltip: 'PriceText：现价（FGUI `lab_price`，**只在可购买时显示**）' })
-    priceText: Label = null!;
+    priceText: Label = null;
 
     @property({ type: Node, tooltip: 'RmbSign2：原价的 ￥（FGUI `n32`，常显）' })
-    rmbSignOld: Node = null!;
+    rmbSignOld: Node = null;
 
     @property({ type: Node, tooltip: 'RmbSign3：rmb 分支现价的 ￥（FGUI `n44`）' })
-    rmbSignNow: Node = null!;
+    rmbSignNow: Node = null;
 
     @property({ type: Node, tooltip: 'RmbSign1：FGUI `n39`，与 `RmbSign2` 像素级重叠的残留件 ⇒ 恒隐藏（见文件头）' })
-    rmbSignRedundant: Node = null!;
+    rmbSignRedundant: Node = null;
 
     @property({ type: Sprite, tooltip: 'CostIcon2：cost 分支的货币图标（FGUI `icon_cost`，需宿主预加载）' })
-    costIcon: Sprite = null!;
+    costIcon: Sprite = null;
 
     @property({ type: Node, tooltip: 'SoldOutText：已售罄（FGUI `n41`）' })
-    soldOutText: Node = null!;
+    soldOutText: Node = null;
 
     @property({ type: Label, tooltip: 'LimitText：限购 `限购{n}/{m}`（FGUI `lab_limit_buy`）' })
-    limitText: Label = null!;
+    limitText: Label = null;
 
     @property({ type: Label, tooltip: 'SaleText：折扣 `5折`（FGUI `lab_sale`）' })
-    saleText: Label = null!;
+    saleText: Label = null;
 
     @property({ type: Node, tooltip: 'BuyBtn：购买按钮（FGUI `btn_buy`，售罄时置灰但**仍可点**）' })
-    buyBtn: Node = null!;
+    buyBtn: Node = null;
 
     @property({ type: Node, tooltip: 'BuyBtn/Plate：按钮底图（置灰对象）' })
-    buyPlate: Node = null!;
+    buyPlate: Node = null;
 
     @property({ type: Label, tooltip: 'BuyBtn/Title：按钮文案（置灰对象）' })
-    buyTitle: Label = null!;
+    buyTitle: Label = null;
 
     /** 购买回调 —— **由宿主在每次铺行时重设**（理由同 `OSTargetItem.onClaim`）。 */
     onBuy: (() => void) | null = null;

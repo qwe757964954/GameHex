@@ -1,3 +1,4 @@
+import { componentControllerModule } from './helpers/controller-context';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -30,13 +31,48 @@ function loadGame(instantiate: (prefab: unknown) => unknown): IGameClass {
         exports: {} as { ZCGame?: IGameClass },
         console: { error() {} },
         require: (name: string): unknown => {
+            if (name.endsWith('/ComponentController')) return componentControllerModule();
             if (name === 'cc') return {
                 _decorator: { ccclass: () => (component: unknown) => component },
-                Component: class { node = { layer: 1 }; },
+                // `Component` 桩要带上计时器 API：ZCGame.ts:718/724 会用
+                // `scheduleOnce(this.finishSpawnSelection, …)` / `unschedule(...)` 做自选主城的展示倒计时。
+                // 桩里只需收下回调、不真排程 —— 这两条用例只验资源注入，不验倒计时。
+                Component: class {
+                    node = { layer: 1 };
+                    // 🔴 `isValid` 必须给 true。ZCGame 的 `leaving` getter 是
+                    // `!this.isValid || this.phase.isLeaving`，桩上留 undefined ⇒ `!undefined` 恒 true
+                    // ⇒ `renderBossPanel` 在 `if (this.leaving) return` 处提前返回，
+                    // 一条 prefab 都不实例化，表现为 `instantiated` 空数组的假红。
+                    isValid = true;
+                    scheduleOnce(_cb: () => void, _delay: number): void {}
+                    unschedule(_cb: () => void): void {}
+                },
                 instantiate,
+            };
+            if (name === '../../framework/event/EventMgr') return {
+                // 中控订阅全挂在全局唯一的 `EventMgr.instance` 上（ZCGame.ts:316/629+）：
+                // `on` 订阅 11 次、`offTarget(this)` 在 shutdown 里摘一次。
+                EventMgr: { instance: { on(): void {}, offTarget(): void {} } },
             };
             if (name === '../battle/BattleResultService') return {
                 BattleResultService: { ensureListening() {} },
+            };
+            // ⚠️ `ZCBattlePhaseController` 已从 `./view/` 迁到 `./application/`（ZCGame.ts:38）。
+            //    不显式桩上就会落到下面的 `return {}`，`new undefined()` ⇒
+            //    `ZCBattlePhaseController is not a constructor`，整个文件的两条用例全废。
+            //    这里只桩**接口形状**（阶段状态 + 几个推进方法），phase 的状态机行为
+            //    由 `tests/zcds-progress.test.ts` 覆盖，不靠这个桩兜。
+            if (name === './application/ZCBattlePhaseController') return {
+                ZCBattlePhase: { Settlement: 'settlement' },
+                ZCBattlePhaseController: class {
+                    current = '';
+                    isLeaving = false;
+                    beginSettlementPresentation(): void {}
+                    leave(): boolean { return true; }
+                    startPlaying(): void {}
+                    startSpawnSelection(): void {}
+                    openSettlement(): boolean { return true; }
+                },
             };
             return {};
         },
@@ -94,6 +130,11 @@ test('守城首领条延迟创建时使用本局预加载的 Prefab', () => {
     const resources = { bossPanelPrefab };
     game.onLoad();
     game.initialize({ resources });
+    // 首领条要 `setParent(hudView.node)` 并继承它的 layer；`hudView` 是 `createGame` 里建的，
+    // 上面把它桩成空函数 ⇒ 这里补一个最小 HUD 宿主（真 HUD 的渲染行为由 zcds-hud* 覆盖）。
+    (game as unknown as { hudView: unknown }).hudView = {
+        node: { layer: 1, setParent() {}, destroy() {} },
+    };
 
     const progress = { currentWaveCardId: null };
     game.renderBossPanel({ defenceWaveProgress: progress });

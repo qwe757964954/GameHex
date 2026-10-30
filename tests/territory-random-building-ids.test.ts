@@ -12,6 +12,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizeTerritoryMap } from '../tools/map-editor/formats/territory-format.js';
 import { configureTerritoryMap } from '../assets/script/app/territory/model/TerritoryMapConfig';
+import { assetUrl } from './helpers/asset-paths';
 
 /** 最小可用地图：5×5、主城 12、两个候选格 7/8（都不与站点/主城重叠）。 */
 function baseMap(): Record<string, unknown> {
@@ -166,7 +167,7 @@ test('产物里的 buildingIds 按 cellId 升序，不受输入顺序影响', ()
 test('没有 buildingIds 的既有地图解析后不多出该键', async () => {
     const { readFileSync } = await import('node:fs');
     const sample = JSON.parse(readFileSync(
-        new URL('../assets/resources/config/territory-maps/chapter_01.json', import.meta.url), 'utf8'));
+        assetUrl('config/territory-maps/chapter_01.json'), 'utf8'));
     assert.equal(sample.randomSites.buildingIds, undefined, '样本本身不该有这个键');
     const config = configureTerritoryMap(sample);
     assert.equal(config.randomSites?.buildingIds, undefined);

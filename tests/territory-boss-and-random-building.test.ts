@@ -26,8 +26,9 @@ import {
     ZC_CHAPTER_BATTLE_SUB_CELL,
     ZC_CHAPTER_BATTLE_SUB_TREASURE,
 } from '../assets/script/app/battle/BattleStartModel';
+import { assetPath } from './helpers/asset-paths';
 
-const PRESENTER_PATH = 'assets/script/app/territory/application/TerritoryPresenter.ts';
+const PRESENTER_PATH = 'assets/script/app/territory/application/TerritoryModel.ts';
 const VIEW_PATH = 'assets/script/app/territory/view/TerritoryMapView.ts';
 const MODEL_PATH = 'assets/script/app/battle/BattleStartModel.ts';
 const MAP_CONFIG_PATH = 'assets/script/app/territory/model/TerritoryMapConfig.ts';
@@ -83,11 +84,14 @@ test('★★关卡开战发CmdStartBattleReqMsg：battleType 用常量、不是 
 
     // battleParams 口径：[子类型, 章节id, cellId]（山猫 2026-10-15 定「1002 的战斗里嵌子类型：
     // 下标 0 = 子类型、1 = 格子战斗、2 = 宝箱战斗；子类型为 1 时下标 1 = 章节、下标 2 = 格子id」）
-    // 🔴 必须走 chapterCellBattleParams 这个唯一构造入口，不能在 Presenter 里内联数组 ——
-    //    内联就会漏掉下标 0 的子类型 ⇒ 服务端当未知子类型，症状是「点了没反应」且零报错。
-    assert.match(boss, /chapterCellBattleParams\(map\.chapterId, site\.cellId\)/,
+    // 🔴 2026-10-29：构造收口到 `battleParamsFor`（弹窗「开始战斗」与「解锁那一次直开」共用一份）
+    //    ⇒ 这里钉两段：① 开战入口必须调它；② 它内部必须走 `chapterCellBattleParams` 唯一构造入口。
+    assert.match(boss, /this\.battleParamsFor\(site, /,
+        'battleParams 必须由 battleParamsFor 统一构造（两条开战入口共用一个口径）');
+    const params = codeOf(memberOf(src, 'private battleParamsFor('));
+    assert.match(params, /chapterCellBattleParams\(chapterId, site\.cellId\)/,
         'battleParams 必须由 chapterCellBattleParams 组（= [子类型, 章节id, cellId]）');
-    assert.ok(!/\[\s*String\(map\.chapterId\)/.test(boss),
+    assert.ok(!/\[\s*String\(chapterId\)/.test(params),
         'battleParams 不能在 Presenter 里内联（会漏掉下标 0 的子类型）');
 });
 
@@ -146,10 +150,15 @@ test('★★所有战斗站点（stage/boss/asyncPvp）都走开战流程，绝�
         assert.ok(battleSite.includes(`TERRITORY_SITE_TYPE.${type}`),
             `isBattleSite 必须涵盖 ${type}（漏一个就是「点了没反应」且零报错）`);
     }
-    // 战斗站点分支里**不许**直接开战：开战只能由弹窗的「开始战斗」按钮调 requestBattle 发起。
+    // 🔴 2026-10-29 口径：「**只有解锁那一次**直开，之后仍弹窗」——
+    // 锁态分支走 `handleUnlockThenBattle`（解锁成功立刻发开战），已解锁才 `detailSite = site`。
+    assert.match(code, /this\.handleUnlockThenBattle\(site, lockedStage\)/,
+        '锁着的主线关卡必须走「解锁 + 立刻开战」（解锁那一次直开）');
+    assert.match(code, /lockedStage && this\.isLevelSite\(site\)/,
+        '直开只给主线关卡：asyncPvp 的弹窗带侦查，绑不到关卡的格没有 battleParams');
     assert.ok(!/handleBattleStationStart/.test(code),
-        '战斗站点分支不许直接开战 —— 先弹界面，按钮再走 requestBattle');
-    assert.match(code, /this\.detailSite = site/, '战斗站点分支要选中站点给弹窗用');
+        '弹窗按钮那条路（handleBattleStationStart）不在这里 —— selectSite 只负责直开与弹窗分流');
+    assert.match(code, /this\.detailSite = site/, '已解锁分支要选中站点给弹窗用');
     assert.ok(!/isTerritoryTwoStepCell/.test(code),
         '不许再按格子 id 名单判定（每加一关改一次代码，漏改的症状是「点了没反应」且零报错）');
     assert.ok(!/bossStage\?\.isBoss/.test(code),
@@ -270,7 +279,7 @@ test('★★★★关卡/首领/异步据点没配buildingId 必须 return null�
 test('★★★同一 configId 区域内，配了 buildingId 的站点恰好一个且画的是它', () => {
     // 山猫 2026-10-12 的原话：cellId 328 与 327 战斗/配置 ID 相同（10001），
     // 但只有一个该显示建筑。用真实地图 JSON 钉住这条数据事实。
-    const mapJson = JSON.parse(readFileSync('assets/resources/config/territory-maps/chapter_01.json', 'utf8'));
+    const mapJson = JSON.parse(readFileSync(assetPath('config/territory-maps/chapter_01.json'), 'utf8'));
     const sites = mapJson.sites as { id: string; type: string; cellId: number; configId?: string; buildingId?: string }[];
 
     const byConfig = new Map<string, typeof sites>();
@@ -313,7 +322,7 @@ test('★★关卡/首领的 type 建筑图在无 buildingId 时不再被使用�
 // ============================================================
 
 test('★★地图里逐格 buildingIds 只能是候选格（配置校验已拦，这里钉住数据现状）', () => {
-    const mapJson = JSON.parse(readFileSync('assets/resources/config/territory-maps/chapter_01.json', 'utf8'));
+    const mapJson = JSON.parse(readFileSync(assetPath('config/territory-maps/chapter_01.json'), 'utf8'));
     const random = mapJson.randomSites ?? {};
     const candidates: number[] = random.candidateCells ?? [];
     const buildingIds: Record<string, string> = random.buildingIds ?? {};
@@ -364,5 +373,36 @@ test('★★★开战后本地不变 owned：防连点靠 pending 判重；async
     const stored = memberOf(src, 'private applyStoredBattleResult');
     assert.match(stored, /this\.bossBattleStart = null;/,
         '战斗有结果时必须清 bossBattleStart（打完一次后要能再开）');
+});
+
+test('★★★交互号只有两个递增点：换号必须同步 interactionCell（`startBattle` 不许裸 ++）', () => {
+    const src = readFileSync(PRESENTER_PATH, 'utf8');
+
+    // 换号的两个合法出口：`nextInteraction`（记住目标格）+ `cancelInteraction`（作废，格子置空）。
+    // 任何**第三处**裸写 `++this.interactionId` 都会让「号」和「停在哪一格」脱节：
+    // 号已经变了、记录里却还是那一格 ⇒ 下一次点同一格被 `beginInteraction` 判成同格连点
+    // ⇒ 既不作废在途请求、也不清 `startingBattle`，界面停在在途帧（按钮灰着点不动，且**零报错**）。
+    const code = codeOf(src);
+    const bumps = code.match(/this\.interactionId\s*(\+=|(\+\+)|--)\s*[01]?|\+\+\s*this\.interactionId/g) ?? [];
+    assert.equal(bumps.length, 2,
+        `交互号只允许在 nextInteraction / cancelInteraction 两处递增，实际 ${bumps.length} 处：${bumps.join(' | ')}`);
+
+    const next = codeOf(memberOf(src, 'private nextInteraction(cellId: number): number'));
+    assert.match(next, /this\.interactionId \+= 1;/);
+    assert.match(next, /this\.interactionCell = cellId;/,
+        '换号必须同步目标格 —— 否则同一格连点会漏判（见本用例开头）');
+    assert.match(next, /this\.startingBattle = false;/, '换号必须清「正在开战」门闩');
+
+    const begin = codeOf(memberOf(src, 'private beginInteraction(cellId: number): void'));
+    assert.match(begin, /if \(this\.interactionCell === cellId\) return;/,
+        '同格连点必须 no-op（递增会把自己刚发的请求判成过期 ⇒ 点了没反应）');
+    assert.match(begin, /this\.nextInteraction\(cellId\)/,
+        'beginInteraction 必须走统一换号入口，不许自己递增');
+
+    const start = codeOf(memberOf(src, 'private async startBattle('));
+    assert.match(start, /this\.nextInteraction\(site\.cellId\)/,
+        'startBattle 必须走统一换号入口（早前这里裸写 ++this.interactionId，漏同步 interactionCell）');
+    assert.ok(!/this\.interactionId\s*\+=|\+\+\s*this\.interactionId/.test(start),
+        'startBattle 里不许再出现裸递增');
 });
 

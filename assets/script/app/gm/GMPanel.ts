@@ -48,22 +48,22 @@ export class GMPanel extends PopupBase {
     // ============================================================
 
     @property({ type: Node, tooltip: 'Panel：面板主体（620×860），同时充当「点击空白关闭」的内容区' })
-    panel: Node = null!;
+    panel: Node = null;
 
     @property({ type: Node, tooltip: 'Panel/BtnClose：右上角关闭按钮（挂 cc.Button）' })
-    closeButton: Node = null!;
+    closeButton: Node = null;
 
     @property({ type: EditBox, tooltip: 'Panel/Input：GM 指令输入框' })
-    cmdInput: EditBox = null!;
+    cmdInput: EditBox = null;
 
     @property({ type: Node, tooltip: 'Panel/BtnExecute：执行按钮（挂 cc.Button）' })
-    executeButton: Node = null!;
+    executeButton: Node = null;
 
     @property({ type: VirtualScrollView, tooltip: 'Panel/ListView：指令列表虚拟视窗（挂 VirtualScrollView + Mask）' })
-    listView: VirtualScrollView = null!;
+    listView: VirtualScrollView = null;
 
     @property({ type: Label, tooltip: 'Panel/StatusLabel：底部状态栏（提示语 / 服务器连接状态）' })
-    statusLabel: Label = null!;
+    statusLabel: Label = null;
 
     // ============================================================
     // 运行时状态

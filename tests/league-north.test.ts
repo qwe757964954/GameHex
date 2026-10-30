@@ -165,6 +165,7 @@ import {
     LEAGUE_NORTH_TAB_REWARD_LEAGUE,
     LEAGUE_NORTH_TAB_REWARD_ROLE,
 } from '../assets/script/app/league/LeagueTexts';
+import { assetPath } from './helpers/asset-paths';
 
 // ============================================================
 // 路径
@@ -839,7 +840,11 @@ test('E7 三个列表页：都等 `nextPopupFrame()` 再 refreshList（否则虚
         assert.ok(frame > 0, `${path} 缺 await this.nextPopupFrame()`);
         assert.ok(refresh > frame, `${path} 的 refreshList 必须晚于 defer 一帧`);
         assert.ok(code.includes('.scrollToTop(false)'), `${path} 铺完应回到顶部`);
-        assert.ok(/if \(!this\.rendererBound\)/.test(code), `${path} 的 renderItemFn 绑定要幂等`);
+        // `onInit` 由 `PopupBase._inited` 保证每实例只跑一次 ⇒ 不再需要「只绑一次」门闩
+        assert.ok(!/if \(!this\.rendererBound\)/.test(code), `${path} 不该再有「只绑一次」门闩`);
+        const initEnd = code.indexOf('protected async onOpen');
+        const initBody = code.slice(code.indexOf('protected onInit(): void {'), initEnd > 0 ? initEnd : undefined);
+        assert.ok(initBody.includes('.renderItemFn = '), `${path} 的 renderItemFn 要在 onInit 里赋一次`);
     }
 });
 
@@ -926,7 +931,7 @@ test('E11 LeagueRepository：北伐快照的取数与两种请求通道', () => 
 // D. prefab 结构 + 几何（6 张 prefab）
 // ============================================================
 
-const PREFAB_DIR = 'assets/resources/ui/League';
+const PREFAB_DIR = assetPath('ui/League');
 /** 1. 页签（`组件_联盟_页签`，207×105） */
 const TAB_PREFAB = `${PREFAB_DIR}/LeagueNorthTab.prefab`;
 /** 2. 排行行（`组件_联盟_北伐中原_排行Item`，550×130） */
@@ -939,7 +944,7 @@ const MAIN_PREFAB = `${PREFAB_DIR}/LeagueNorthExpedition.prefab`;
 const RANK_PREFAB = `${PREFAB_DIR}/LeagueNorthRank.prefab`;
 /** 6. 奖励弹窗（`组件_联盟_北伐中原_奖励`） */
 const REWARD_PREFAB = `${PREFAB_DIR}/LeagueNorthReward.prefab`;
-const RED_DOT_PREFAB = 'assets/resources/ui/common/RedDot.prefab';
+const RED_DOT_PREFAB = assetPath('ui/common/RedDot.prefab');
 const SLOT_TS = 'assets/script/app/league/LeagueRewardSlot.ts';
 const VSCROLL_TS = 'assets/script/vscrollview/VScrollView.ts';
 
@@ -969,7 +974,7 @@ const near = (a: number, b: number, eps = 0.05): boolean => Math.abs(a - b) <= e
 /**
  * 本组 prefab 用到的图 → `spriteFrame` uuid（`<顶层uuid>@f9941`）。
  *
- * ⚠️ 这张表**不手抄**：`D0` 会把每个 uuid 拿回 `assets/resources/image/**` 对号
+ * ⚠️ 这张表**不手抄**：`D0` 会把每个 uuid 拿回 assetPath(`image/**`) 对号
  *    （文件名必须与图名一致）—— 图换了 / 名字拼错 / 表过期，D0 立刻红，
  *    而不是等到某个 `assertSprites` 给出一个看不懂的 uuid diff。
  */
@@ -1245,7 +1250,7 @@ function assertBinds(
 const RANK_ROW = 'RankList/content/RankRow';
 const REWARD_ROW = 'RewardList/content/RewardRow';
 
-test('D0 `U` 表守卫：每个 uuid 都能在 `assets/resources/image` 里对上号，且文件名 = 图名', () => {
+test('D0 `U` 表守卫：每个 uuid 都能在 assetPath(`image`) 里对上号，且文件名 = 图名', () => {
     const byUuid = new Map<string, string>();
     const walk = (dir: string): void => {
         for (const e of readdirSync(dir, { withFileTypes: true })) {
@@ -1257,7 +1262,7 @@ test('D0 `U` 表守卫：每个 uuid 都能在 `assets/resources/image` 里对�
             if (uuid) byUuid.set(uuid, e.name.replace(/\.(png|jpg)\.meta$/, ''));
         }
     };
-    walk('assets/resources/image');
+    walk(assetPath('image'));
     assert.ok(byUuid.size > 300, `图片索引只找到 ${byUuid.size} 张 —— 路径不对？`);
     for (const [art, sf] of Object.entries(U)) {
         const uuid = sf.replace(/@f9941$/, '');

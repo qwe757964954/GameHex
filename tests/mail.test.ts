@@ -98,8 +98,9 @@ import {
     MAIL_TITLE,
     formatText,
 } from '../assets/script/app/mail/MailTexts';
+import { assetPath } from './helpers/asset-paths';
 
-const MAIL_DIR = 'assets/resources/ui/Mail';
+const MAIL_DIR = assetPath('ui/Mail');
 const PREFAB_MAIN = `${MAIL_DIR}/Mail.prefab`;
 const PREFAB_DETAIL = `${MAIL_DIR}/MailDetail.prefab`;
 /** 槽位组件的 cid（`MailRewardSlot.ts.meta` 的 uuid 压缩形；C3 会逐个反解核一遍）。 */
@@ -438,7 +439,7 @@ test('A21 ⚠️ 居中的**唯一真源**是 `VirtualScrollView.autoCenter` —
 
 test('B1 邮件新增 6 张图都在 `image/mail/`（少一张就是一个白框，且**不报错**）', () => {
     for (const [key, name] of Object.entries(MAIL_ART_NAMES)) {
-        const file = `assets/resources/${MAIL_ART_ROOT}/${name}.png`;
+        const file = assetPath(`${MAIL_ART_ROOT}/${name}.png`);
         assert.ok(existsSync(file), `缺图：${file}（逻辑名 ${key}）`);
         assert.ok(existsSync(`${file}.meta`), `缺 .meta：${file}.meta`);
     }
@@ -450,7 +451,7 @@ test('B2 复用的 6 张公共图确实存在（与 friend / login 同源，不�
         'image/friend/fd_panel_bg', 'image/friend/fd_title_bg', 'image/friend/fd_row_bg',
         'image/friend/fd_btn_gold', 'image/friend/fd_btn_dark', 'image/login/公用_按钮_关闭01',
     ]) {
-        assert.ok(existsSync(`assets/resources/${path}.png`), `公共图缺失：${path}`);
+        assert.ok(existsSync(assetPath(`${path}.png`)), `公共图缺失：${path}`);
     }
 });
 
@@ -468,7 +469,7 @@ test('B3 ⚠️ 九宫 3 张：边框必须落在 `.png.meta`，且 `rawW − le
     for (const [name, { grid, raw }] of Object.entries(want)) {
         const [gx, gy, gw, gh] = grid;
         const [rawW, rawH] = raw;
-        const file = `assets/resources/${MAIL_ART_ROOT}/${name}.png`;
+        const file = assetPath(`${MAIL_ART_ROOT}/${name}.png`);
         const meta = JSON.parse(readFileSync(`${file}.meta`, 'utf8')) as any;
         const user = meta.subMetas.f9941.userData;
         // ① 边框顺序是 L / T / R / B（不是 FGUI 的 x,y,w,h）
@@ -820,7 +821,7 @@ test('D1 两个页面的 `prefabPath` 大小写正确，且文件真的存在（
     assert.ok(m && d);
     assert.equal(m![1], 'ui/Mail/Mail');
     assert.equal(d![1], 'ui/Mail/MailDetail');
-    for (const p of [m![1], d![1]]) assert.ok(existsSync(`assets/resources/${p}.prefab`), `缺 assets/resources/${p}.prefab`);
+    for (const p of [m![1], d![1]]) assert.ok(existsSync(assetPath(`${p}.prefab`)), `缺 assets/resources/${p}.prefab`);
 });
 
 test('D2 ⚠️ 4 个协议类名与老端一致（改一个字母就是静默发不出去）', () => {

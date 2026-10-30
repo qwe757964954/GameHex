@@ -42,10 +42,10 @@ export interface IGiftLingYuPresentData {
 @ccclass('GiftLingYuView')
 export class GiftLingYuView extends Component {
     @property({ type: Node, tooltip: 'CardBar：档位卡容器（预摆 6 个 GiftLingYuCard）' })
-    cardBar: Node = null!;
+    cardBar: Node = null;
 
     @property({ type: Label, tooltip: 'Banner：顶部条文案（FGUI 复用了超值礼包页签那张条）' })
-    bannerLabel: Label = null!;
+    bannerLabel: Label = null;
 
     /**
      * 点了某张卡的购买按钮（回传 `payChannel.id`）。

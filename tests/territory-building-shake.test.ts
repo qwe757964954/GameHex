@@ -1,3 +1,4 @@
+import * as mvcEvents from '../assets/script/app/territory/application/TerritoryEvents';
 /**
  * 冒险（领地）**建筑生成抖动 + 建筑展示滞后**（钉钉需求 row14，2026-10-16）：
  *
@@ -366,6 +367,7 @@ function makeMapView() {
             if (id.includes('event/EventMgr')) {
                 return { EventMgr: { instance: { emit() {}, on() {}, offTarget() {} } } };
             }
+            if (id === '../application/TerritoryEvents') return mvcEvents;
             throw new Error(`Unexpected dependency: ${id}`);
         },
     });

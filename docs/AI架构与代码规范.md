@@ -56,8 +56,57 @@ ZCSettlementPage.open({ onConfirm: () => this.returnToMain(), onGrowEntry: (key)
 - **视图不留 userData**：事件化之后 `private options` 这类字段通常只剩赋值与清空，属死字段，一并删掉。
 - **契约集中**：同一 feature 的意图事件名放在一个纯 TS 契约文件（如 `view/ZCGameHudEvents.ts`），**不许 import `cc`**
   （要能被纯逻辑单测直接 require）；同族入口用「一条事件 + payload」，不要一个按钮一个事件。
+- **注释只在契约文件写一次**：意图事件的名字、载荷、语义，在契约文件的 JSDoc 里写全（`ChestEvents.ts`、
+  `ZCGameHudEvents.ts` 这类），**`emit` 处与 `on` 处不再复述**。「×× 意图走事件、视图不持有回调」属于规范本身，
+  不写进代码注释。视图 / 页面里的注释只写契约没写的东西：为什么这条要多发一次、关闭时谁清哪个状态、
+  prefab 上的物理事实。判据：同一句语义在仓库只出现一次，事件名相关注释的命中收敛在契约文件。
 - **订阅纪律**：订阅在控制器初始化时集中注册一次，退出时 `offTarget(this)`；非一次性订阅
   （如 `ProcedureManager.onSwitchSettled`）必须由订阅方显式 `stop()`。
+- **「只绑一次」不需要布尔门闩**：`PopupBase` 用 `_inited`（`PopupBase.ts:468` `if (!this._inited)`）保证 `onInit()` **每实例只跑一次**，`onLoad` 同理由引擎保证 ⇒ 里面再写 `if (this.buttonsBound) return` 或 `if (!this.rendererBound) { … }` 属双重保险，删。
+  - 绑定的**唯一正确时机**是 `onInit` / `onLoad`；放到 `onOpen` / `present` / `render` / `update` 才是真会重复的地方。
+  - `node.on()` 的监听随节点销毁一并释放；即便重复订阅，`EventTarget` 也会按 `callback + target` 去重 —— 前提是 handler 写成**箭头函数属性**（引用稳定），不是每次新建的闭包。
+  - `renderItemFn` / `onItemClickFn` 是**普通属性赋值**，不是事件订阅 ⇒ 重复赋同一个函数不叠加，同样不需要门闩。
+  - **必须留下的门闩**：用来做「当前是否绑着」**解绑判断**的（`PopupBase._blankBound` 在 `_unbindBlankClose` 里）、跨场景全局单例（`GameNet._reconnectEventsBound`）、绑/解成对且会被反复调用的（`MainTerritoryMap.mapInsetResizeBound`，`onDestroy` 里有 `off` 配对）。
+  - 存量：2026-10-30 清了 **17 个文件 / 20 处**（12 个弹窗页的 `if (!x) { … }` 形态 + 5 个 `if (x) return` 形态）。剩余 12 处 `bound` 仍在「行组件 `bind()` / `bindButtons()`」这类可能反复调用的方法里，要先核 handler 引用是否稳定再删。
+
+### 2.1.1 释放即解除事件，不在同步回调重复判断 disposed（2026-10-30）
+
+- Controller 在 `dispose()` 中统一 `EventMgr.offTarget(this)`、网络 `removeCaller(this)`、取消定时器及退订缓存 / Model。同步事件处理函数不再重复 `if (this.disposed) return`，定时器回调也依靠取消调度停止。
+- 解绑必须在事件基础设施中立即生效。`EventBus.emit` 仍遍历快照，但执行每项前确认它仍是原订阅；派发中 `off` / `offTarget` 后，尚未执行的旧监听本次也不再执行。同一函数移除再注册视为新订阅，下一次派发才执行。不在业务回调里模拟这条契约。
+- 仓库清空监听集合后，无须在纯通知方法里重复检查 disposed；数组快照派发也须跳过已经退订的监听。网络请求回调由归属管理解除，局部回包赋值不再重复检测宿主释放。
+- 仍保留真正跨生命周期的保护：`await` 后、`catch` / `finally` 中可能触发的 UI 更新、无法取消的异步任务、公开入口拒绝对已释放对象发起新操作，以及 `dispose()` 幂等检查。解绑不能撤回已经开始运行的 async 函数。
+- 章节地图释放先断开输入、时钟和缓存，保留 Model 输出订阅完成本会话 loading 收尾，再退订输出。`stopping` 用于区分收尾消息，不是事件解绑的替代品。
+- 测试应通过真实事件分发、请求归属和调度取消验证关闭后的行为，不保存旧 handler 再绕过事件系统直接调用。测试定时器的 stop 必须实际撤掉回调。
+- 回归：`tests/framework-event-bus.test.ts`、`tests/bigmap-controller.test.ts`、`tests/territory-controller.test.ts`、`tests/territory-cell-subscriptions.test.ts`、`tests/callback-owner.test.ts`、`tests/view-intent-events.test.ts`。
+
+### 2.1.2 按钮点击回调不判 `interactable`（2026-10-30）
+
+`cc.Button` 在 `interactable = false` 时**根本不派发** `TOUCH_END` / `CLICK`，回调能进来就说明按钮可点。
+回调开头再判一次 `interactable` 是**恒真的死代码**：它不表达任何业务语义，只会让后来读代码的人以为
+「这个 handler 还有别的调用途径」。
+
+```ts
+// ✅ 置灰由渲染时全量写 interactable 表达，回调只负责派发意图
+this.fastButton.interactable = content.fastOpenEnabled;   // render / applyContent 里赋值
+
+private handleFastOpen(): void {
+    EventMgr.instance.emit(CHEST_EVENTS.FAST_OPEN);
+}
+
+// ❌ 冗余守卫：按钮不可点时这行永远不会执行
+private handleFastOpen(): void {
+    if (!this.fastButton.interactable) return;
+    EventMgr.instance.emit(CHEST_EVENTS.FAST_OPEN);
+}
+```
+
+- **该判什么**：真正要拦的是**业务条件**（次数不足、扣费不够、请求在途）。门闩属控制器 / Presenter 判，
+  或由渲染时的 `interactable` 表达；视图回调里**不读 `interactable` 反推业务状态**。
+- **唯一例外**：handler 同时被 `Button` 以外的路径调用（键盘快捷键、代码直调、长按与点击共用入口）时，
+  「按钮不可点」并不等于「本次调用该拒」—— 这种情况判**业务门闩**（`if (!this.canXxx) return;`），
+  **仍然不判 `interactable`**。
+- **排查口径**：`grep -rn "\.interactable) return" assets/script --include=*.ts` 应恒为 0 命中。
+- 回归：`tests/chest-detail-panel.test.ts`、`tests/view-intent-events.test.ts`。
 
 ### 2.2 回调归属对象直接传递（事件、缓存与网络请求）
 
@@ -91,6 +140,21 @@ GameNet.instance.removeCaller(this);
 - 所有 `async / await` 或回调逻辑必须显式处理以下 4 种中断场景：**节点/弹窗已销毁、流程预加载已取消、玩家重复点击、请求失败**。
 - `PopupBase` 子类统一使用 `nextPopupFrame()`，并在每次 `await` 恢复后立即检查 `if (!this.isValid) return;`。
 - 流程级预加载（`Procedure*`）必须在异步阶段检查 `if (context.cancelled) return;`，防止切流程后幽灵回调污染新页面。
+- **同步事件 / 缓存回调不判 `isValid`**（原则见 §2.1.1）：`CacheMgr.setEventUpdate` / `view.on('xxx')` / `EventMgr.on` 注册的**同步**回调，`onDestroy` 里已按 `caller + callback` 精确摘除，且事件层 `EventListener.execute`（`framework/event/EventProxy.ts:524`）派发前就有 `if (t.caller.destroyed === true) return false;` ⇒ 已销毁归属对象的监听**根本不会被调用** ⇒ 回调开头 `if (!this.isValid) return;` 恒真、属死代码，删掉。（Cocos 的 `destroyed` 在 `onDestroy` 之前就已置位，与 `isValid` 在本场景等价。）
+  - **必须保留的三类**：① 任何 `await` 恢复之后；② `.then()` / `catch` / `finally` 里；③ **没有解除的**延迟调度（`scheduleOnce` / `setTimeout` / tween 结束回调）—— 它们绕过事件层的 `destroyed` 检查。
+  - 判据：同步回调（`private onXxx = (): void =>`）体内出现 `isValid` 即违规；异步函数体内的 `isValid` 才是正常防护。
+- **生命周期方法与已解除的调度回调内不判 `isValid`**：
+  - `onLoad` / `onEnable` / `start` / `onDisable` / `update` / `lateUpdate` 由引擎保证只在组件存活期回调（`onDestroy` 本身就是销毁流程中的一站），`start` 更是在激活后、首帧 `update` 之前同步跑一次 ⇒ 体内 `if (!this.isValid) return;` 恒真，删。
+  - `schedule` / `scheduleOnce` 的回调也不必判：引擎 `Component._onPreDestroy()`（3.8.8 `cocos/scene-graph/component.ts:405`）第一句就是 `this.unscheduleAllCallbacks()`，组件一销毁定时器随即可撤销；在 `onDisable` / `onDestroy` 里手动 `unschedule` 过的同理。
+  - 真正要判的只有**跨帧才回来**的部分：`await` 之后、`.then / catch / finally`、没随组件销毁解除的 `setTimeout` / 外部传入的 tween 回调，以及外部可在任意时机调用的公开方法。
+  - 判据：`onLoad|start|onEnable|update|lateUpdate` 与 `schedule` 回调体内出现 `isValid` = 违规。
+- **`await` 之后必须判 `isValid` —— 但判据是「宿主有没有 destroy 路径」，不是「玩家主观会不会点别的」**：
+  - 本工程的真实销毁路径：`MainTabHost.currentPage?.destroy()`（**换 tab 就销毁当前页**）、`ProcedureMain.destroyMainNode()`（进战斗 / 回登录时销毁整个主界面）。所以 tab 页里的任何异步等待，回来时页面可能已经没了。
+  - **必须判**：资源加载完再弹窗 / 再刷 UI。反例（删了会出事）：`MainPage.openChestDetail` 里 `await this.chestDetailContentOf(detail)` 挂的是 `assets.load`，窗口内玩家切一个 tab 页面就被销毁；而 `if (this.detailSlot !== index) return;` 挡的是「又点了别的箱子」，**挡不住销毁** —— 销毁不会把字段改回哨兵值，判断仍为 false，接着就在已销毁页面上 `ChestDetailPanel.open(...)`，弹出一个与当前 tab 无关的孤儿窗（且此时 `chestArtScope` 已 disposed，图标全是 null）。
+  - **弹窗同样要判**：`PopupManager` 默认 `cache = false`（`cache: params.cache === true`）⇒ 关闭即 `node.destroy()`；只有显式传 `cache: true` 的弹窗才 `removeFromParent + active = false` 进池复用。所以弹窗里的 `await` 之后也要判，并另外用 `presentRevision` 之类的口令挡住「内容串到别的弹窗」。
+  - ⚠️ **既有债务**：视图层仍有 110 处「`await` 之后写 UI 却没有 `isValid`」的写法（口径见 `tmp/_view_await_gap.py`），新代码不要照抄，改到哪算哪。
+  - **不判**：Repository / Model（纯数据，不碰视图）、生命周期方法、同步事件回调、`schedule` 回调。
+  - 判据：写 tab 页异步时先问一句「这段窗口里用户能不能切 tab / 退出流程」，能就必须判。
 
 ### 3.3 渲染幂等、纯函数时间轴与唯一写入口
 - **全量幂等 `render`**：视图 `render(state)` 必须是幂等的全量赋值。对象池复用节点或虚拟列表项在绑定新数据时，必须显式写全所有受控属性（含 `node.active`、缩放、染色、自定义材质开关），不得依赖上一帧或上一次池化前的残留状态。
@@ -111,6 +175,19 @@ GameNet.instance.removeCaller(this);
 - **模块前缀**：对局玩法 `zcds` 内的类统一以 `ZC` 开头；全仓严禁拼音命名。
 - **TypeScript 严格性**：4 空格缩进、单引号、显式分号；纯类型依赖强制使用 `import type`；接口与入参优先标 `readonly`（除非如 `drainBuildingShakes` 需内部替换数组引用）；用 `unknown` 替代 `any`；Cocos Inspector 必填引用标 `null!`，可空引用显式标 `| null`，严禁用 `as any` 或静默 `?.` 掩盖绑定缺失。
 - **注释原则**：注释只解释**业务原因、Cocos 引擎陷阱、数学不变式或兼容分支的删除条件**，严禁复述代码字面逻辑。
+- **单例访问点必须非空，调用点不许写 `?.`**：`EventMgr.instance` / `CacheMgr.instance` / `PopupManager.inst` 一律声明成**非空类型**；构造不出来（场景里既没有 `Popup` 节点也没有 Canvas 这类初始化错误）就让 getter **直接 throw**，不要 `console.error + return null` 把判断推给每个调用点。
+  - 调用点写 `Xxx.inst.doThing()`，**不写 `inst?.`、也不写 `if (!mgr) { console.error(...); return; }`** —— 这类兜底把「管理器没初始化」降级成「点了没反应」，是典型的静默失效；让它抛出来才能定位。
+  - `?.` 只留给**真的可能为空**的查询：`PopupManager.inst.get(SomePanel)?.close()`（弹窗没开）、`GMManager.inst`（GM 面板未加载即无，允许 `| null`）。
+  - 判据：`grep -rn "\.inst?\." assets/script --include=*.ts` 与 `grep -rn "instance?\." assets/script --include=*.ts` 均为 0。
+- **组件查询与引用取用禁止 `!.`**：工程 `strict: false`（`strictNullChecks` 关闭），`getComponent(X)` / `getChildByName()` / `getComponentInChildren()` 的返回类型**看起来非空** ⇒ 写 `!` 只是把真实可能为 null 的值断言成非空，`tsc` 又不会再拦，崩溃从编译期挪到运行期。口径：
+  - prefab 焊死的组件（`itemPrefab` 上的 `XxxView`、`@property` 已绑定的引用）属**不变量** ⇒ 直接 `.` 取用，**不写 `!`、也不加 `if (!x) return` 这种只为消音的判断**（配错了要炸出来，静默跳过会让错误变成「点了没反应」）。
+  - 真可空（外部数据、显式 `| null` 的字段、按名字取的 `getComponent('XxxItem')`）⇒ 显式判空窄化或 `?.`，不用 `!` 糊。
+  - 已有的判空若保留，必须是**真的能取不到**（如遍历 `content.children` 时靠 `dataIndex` 先筛出池化槽位），不能是「怕它不在」。
+  - 判据：`grep -rn "[A-Za-z0-9_)]!\." assets/script --include=*.ts` 恒为 0 命中（注释里讲解该规则的地方除外）。
+- **`@property` 绑死的引用直接用，不判空**：prefab 上已绑定的 `Node` / `Sprite` / `Label` / 自定义组件属**不变量** ⇒ 一律 `this.xxx.active` / `.string` / `.node` 直接取，**不写 `if (this.xxx)` / `this.xxx?.` / `if (this.xxx && …)`**。判空只会把「prefab 掉了组件」降级成「点了没反应」，查不出根因。
+  - 「绑没绑」不靠直觉：读对应 prefab —— 找 `__type__` 等于该脚本 cid 的对象，看字段的 `__id__` 是否指向真实对象。公共组件常在一个 prefab 上挂**多个实例**，必须逐个核（如 `LeagueAdButton` 在 `LeagueDonate.prefab` 有 `BtnFree` / `BtnBuy` 两处，7 个字段都要存在）。
+  - **例外（判空要留）**：① 字段 tooltip / 注释明写「可选 / 老端兼容 / 接口先留好」；② 同一脚本被多个 prefab 复用、并非每个都绑；③ `getComponent` 懒取缓存（`if (!this.iconSprite)` 是缓存判断，不是防御）；④ 入参本身可为 `null`（`setCostIcon(frame: SpriteFrame | null)` 里的 `if (!frame) return` 是语义，不是冗余）。
+  - 存量与判据：按「`@property` 字段名 × `if (this.x)` / `this.x?.` 形态」扫全仓，2026-10-30 为 **558 处 / 122 个文件**（Top：`OSRankPage` 29、`LeagueHallPage` 28、`HangPage` 19、`OSShopItem` 17、`BattleTokenPage` 17）。**不要一把梭**：按模块清，每清一个文件先把它的所有 prefab 实例对完账，再改用例护栏。
 
 ## 5. Cocos Creator 预制体（Prefab）与静默陷阱守卫
 
@@ -126,6 +203,12 @@ Cocos 引擎中许多配置错误**完全不报错但表现静默失效**，修�
 | **属性序列化覆盖** | 修改组件代码中 `@property` 的默认值（如 `entranceProgress`、`driftDistance`）时，必须同步更新 `.prefab` 中的序列化值 | 面板序列化值优先级高于代码默认值，只改代码在运行期完全不生效 |
 | **双通道顶点染色** | 同时支持序列帧（`Sprite`）与骨骼（`sp.Skeleton`）的组件写色必须写 `if (sprite) ... else if (skeleton) ...` | 漏写 `else if (skeleton)` 会导致所有 Spine 单位永远不变色且无报错 |
 | **克隆材质释放** | 每实例独立写 uniform 的材质（如 `pulseFade`）必须 `new Material()` 克隆，并在 `onDestroy` 中显式 `.destroy()` | 共用材质会导致多格同播时互相覆盖 uniform；不销毁则造成非托管内存泄漏 |
+| **点击必须在 prefab 上挂 `cc.Button`** | 交互节点（头像 / 图标 / 自定义形状按钮）一律在 prefab 上挂 `cc.Button`（`transition = NONE`、`target = null`），代码只写 `node.on(Button.EventType.CLICK, handler, this)`。**禁止** `getComponent(Button) ? CLICK : TOUCH_END` 这种按组件形态分流的兜底 | 缺 `cc.Button` 的节点上绑 `CLICK` 是**静默死按钮**；而分流兜底把「prefab 掉了组件」降级成同样的静默无反应，且 `TOUCH_END` 会绕过 `interactable`（灰态仍可点） |
+
+> **点击分流兜底的存量**（2026-10-30 扫全仓）：另有 25 处「有 Button 走 CLICK、否则退 `TOUCH_END`」的写法，集中在 `app/league/**`（17 处，多为 `bindByName(node, handler)` 这类通用 helper）、`app/playerinfo/**`（5 处）、`app/itemdetail/ItemDetailPage`、`app/maintask/MainTaskEntry`、`app/celebration/OSTabButton`、`app/chat/ChatRecruitRow`、`app/gift/RechargeChest`、`app/activity/LayerActivityPage`。
+>
+> 改造顺序**不能反**：① 先逐个核对目标节点、在 prefab 上补齐 `cc.Button`（`transition=NONE`）；② 再删代码里的兜底分支；③ 用 prefab 静态断言（该节点有 `cc.Button`）+ 源码断言（`doesNotMatch(/TOUCH_END/)`，**先剥注释**）锁住。倒过来做（先删兜底、后补组件）等于批量制造静默死按钮。
+
 
 ## 6. 测试护栏与交付验证标准
 
@@ -169,3 +252,36 @@ Cocos 引擎中许多配置错误**完全不报错但表现静默失效**，修�
 - **原 §7.3.8**（战斗飘字「快进慢出」45%/55% 单旋钮曲线与收尾漂移）➔ 见专项规范 **§6**
 - **原 §7.3.9**（开局归属扩散波 `ZCClaimWave`）➔ 见专项规范 **§7**
 - **原 §7.3.10 ~ §7.3.11**（体验反馈专项：胜利三段式扫场 row8、描边同步 row9、开局金矿闪烁 row10）➔ 见专项规范 **§9.1 ~ §9.3**
+
+
+### 控制器资源归属
+
+- `ControllerBase` 统一管理必需的资源、配置、会话服务与 ResourceScope；未使用资源即销毁时，不读取运行时服务。
+- `ComponentController` 复用既有 `ProcedureManager.context`，首次使用服务时解析；未配置运行时即访问服务必须明确报错，不降级为可空资源入口。
+- 主界面宿主、主城宝箱、卡牌阵容和公共奖励格各自持有控制器，退出时调用 dispose。业务页面不再暴露独立的 setAssetService / setConfigService / setSessionAssetService / useAssets 注入接口，弹窗 userData 也不传资源服务。
+- `zcds` 入口统一调用 `createZCBattlePreload(battle, options)`，不再逐项传资源服务。战斗准备控制器从运行时取得必需资源契约，`ZCGameLoader` / `ZCGuideLoader` 只消费该契约，不自己查全局服务。
+- 对局资源分两段归属：预加载资源由匹配任务独立 scope 持有，成功后移交流程；头像、卡面、首领头像与结算补图由 `ZCGame` 持有的 `ComponentController` 管理，`shutdown()` 在拆除展示节点后统一释放。不可用来源地图的 scope 代替战斗 scope。
+- `PopupBase` 统一提供必需的 `assets` / `configs` / `sessionAssets` 与本次打开的 `resourceScope`，服务首次使用时从已有 `ProcedureManager.context` 解析。弹窗子类（如 `LineupBoardPage`）直接使用继承入口，不为资源另建 `ComponentController`。
+- 弹窗关闭和销毁均由基类释放动态资源，`onClose` 先完成业务收尾；缓存弹窗每次重开创建新作用域。子类须清空本次加载缓存，加载闭包捕获本次资源服务，异步返回检查本次作用域是否已释放，防止旧任务借到新一轮作用域。关闭 / 销毁不再额外递增刷新版本号；版本号仅用于同一次打开期间重复刷新或切换阵容时防止旧结果覆盖新结果。`PopupManager` 负责 prefab 加载的原有作用域不变。
+- `PopupManager.initialize` 是组合根配置框架端口，仍由 Bootstrap 完成；不属于业务页面的依赖穿透。
+
+### 大地图 MVC 事件归属
+
+- `ControllerBase` 从组合入口交付的必需 `GameContext` 统一取得资源、配置与会话服务，创建控制器 ResourceScope；页面只接收 `IControllerResources` 展示资源契约，不再单独注入可空 AssetService。资源加载默认归控制器，显式战斗 scope 原样传递，Controller dispose 时统一释放。
+- `BigMapEntry` 是组合入口，从既有 ProcedureManager 取得已配置 GameContext，创建 Model、Controller、仓库与 View，并在关闭时释放 Controller。
+- `BigMapController` 统一绑定网络广播、仓库/Model 变更和界面操作意图，管理操作锁、进入战斗状态与据点轮询。
+- `BigMapModel` 保留状态和业务规则；仓库仅负责请求及快照，网关不自行监听广播。原 `BigMapPresenter` 路径仅兼容导出同一份 Model。
+- `BigMapPage`、`BigMapWorldView`、`BigMapBaseView` 只消费 `IBigMapViewState`；用户操作经 `BigMapUiEvent.Intent` 派发，由 Controller 处理后发送 `BigMapViewEvent.Render/Command`。
+- 地图页面为单实例，界面事件只携带操作与展示数据；场景直接销毁页面时发送 `Disposed`，Controller 幂等停止时钟、解除全部监听、释放仓库和网络请求，迟到结果不得再通知界面。
+
+
+### 章节地图 MVC 事件归属（2026-10-30）
+
+- `TerritoryEntry` 为每个页面装配 Model、Controller、章节加载器、Repository 与存档适配器；章节加载器与页面美术共用 ControllerBase 管理的 ResourceScope。
+- `TerritoryController` 集中绑定格子推送、角色缓存与界面意图，管理 1 秒 / 60 秒时钟；网络请求 caller 为 Controller，销毁时统一 removeCaller。
+- `TerritoryModel` 复用原 Presenter 的章节上下文、业务规则、加载期推送合并与交互版本校验；只通过实例 onOutput 通知 Controller，不广播全局界面事件。`TerritoryPresenter` 仅保留兼容重导出。
+- `MainTerritoryMap` 只消费 `TerritoryViewEvent.Render/Command`，地图与三个关卡弹窗通过 `TerritoryUiEvent.Intent` 派发操作，页面关闭时由 Controller 统一解除事件、网络和缓存订阅。格子命中在地图内部先做输入锁判定，再转发意图。
+- `TerritoryViewState` 为进度提供独立只读投影；未知服务端状态也须保留本地解锁格，不允许通过渲染快照修改 Model。
+- 页面销毁先通知 Disposed，再幂等释放 Entry；Controller 作废 Model 的在途任务、配对释放 busy 提示、停止时钟与订阅。页面退出时关闭全局关卡弹窗；异步补图保留节点有效性、内容与任务版本校验。
+
+回归：`territory-controller`、`territory-view-state`、`territory-mvc-boundary`、`territory-presenter`、`territory-cell-subscriptions`、`territory-level-tip-icons`，并运行领地专项绑定测试。

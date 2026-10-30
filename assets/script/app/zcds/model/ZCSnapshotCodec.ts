@@ -173,6 +173,8 @@ export class ZCSnapshotCodec {
             && owners.every((owner) => nonnegative(data.goldByOwner[owner])), 'goldByOwner');
         check(nonnegative(data.durationSeconds) && data.durationSeconds > 0, 'durationSeconds');
         check(optional(data.pendingSeconds, nonnegative), 'pendingSeconds');
+        check(optional(data.nextDefenceWaveIndex, (index) => typeof index === 'number' && integer(index)
+            && index <= (config.pveDefence?.waves.length ?? 0)), 'nextDefenceWaveIndex');
         check(oneOf(Object.values(ZCGameStatus), data.status), 'status');
         check(typeof data.resultReason === 'string', 'resultReason');
         check(record(data.spawnClocks) && Object.entries(data.spawnClocks).every(([key, clock]) => (
@@ -345,10 +347,11 @@ export class ZCSnapshotCodec {
     private static normalizeUnits(state: ZCSnapshot, config: ZCMatchConfig): void {
         for (const unit of state.units) {
             const data = unit as ZCUnitState & Record<string, unknown>;
-            const baseDefinition = config.units.find((definition) => definition.unitId === unit.unitId)!;
+            const baseDefinition = config.units.find((definition) => definition.unitId === unit.unitId);
             const definition = resolveZCUnitDefinition(
                 baseDefinition,
                 config.modifiers?.[unit.owner] ?? [],
+                config.ownerRates?.[unit.owner],
             );
             if (!data.battleState) data.battleState = 'target';
             if (!Number.isFinite(data.stateTime)) data.stateTime = 0;

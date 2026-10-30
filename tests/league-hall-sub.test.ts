@@ -67,6 +67,7 @@ import {
     LEAGUE_LEVEL_ROW_CTX_PREFIX,
     LEAGUE_LEVEL_ROW_TITLE_PREFIX,
 } from '../assets/script/app/league/LeagueTexts';
+import { assetPath } from './helpers/asset-paths';
 
 // ============================================================
 // A. 文案口径（LeagueTexts 子面板段）
@@ -149,15 +150,15 @@ test('B3 ⚠️ 弹窗骨架 4 张 + 底板 1 张 + 等级行 3 张都必须真�
         LEAGUE_ART_POPUP_TITLE_DECO,
         LEAGUE_ART_POPUP_CLOSE,
     ]) {
-        const png = `assets/resources/${LEAGUE_POPUP_ART_ROOT}/${art}.png`;
+        const png = assetPath(`${LEAGUE_POPUP_ART_ROOT}/${art}.png`);
         assert.ok(existsSync(png), `缺图：${png}`);
         assert.ok(existsSync(`${png}.meta`), `缺 meta：${png}.meta（编辑器不会导入）`);
     }
-    const board = `assets/resources/${LEAGUE_POPUP_BOARD_ROOT}/${LEAGUE_ART_POPUP_BOARD}.png`;
+    const board = assetPath(`${LEAGUE_POPUP_BOARD_ROOT}/${LEAGUE_ART_POPUP_BOARD}.png`);
     assert.ok(existsSync(board), `缺图：${board}`);
     assert.ok(existsSync(`${board}.meta`), `缺 meta：${board}.meta`);
     for (const art of [LEAGUE_ART_LEVEL_ROW_BG, LEAGUE_ART_LEVEL_ROW_TITLE_BAR, LEAGUE_ART_LEVEL_ROW_CTX_BAR]) {
-        const png = `assets/resources/image/league/${art}.png`;
+        const png = assetPath(`image/league/${art}.png`);
         assert.ok(existsSync(png), `缺图：${png}`);
         assert.ok(existsSync(`${png}.meta`), `缺 meta：${png}.meta`);
     }
@@ -283,7 +284,7 @@ test('C7 空表 / 单行等边界：不抛，行数正确', () => {
 // D. prefab 结构 + 几何
 // ============================================================
 
-const PREVIEW_PREFAB = 'assets/resources/ui/League/LeagueLevelPreview.prefab';
+const PREVIEW_PREFAB = assetPath('ui/League/LeagueLevelPreview.prefab');
 const PREVIEW_PAGE_TS = 'assets/script/app/league/LeagueLevelPreviewPage.ts';
 const ROW_TS = 'assets/script/app/league/LeagueLevelRow.ts';
 const VSCROLL_TS = 'assets/script/vscrollview/VScrollView.ts';
@@ -680,7 +681,7 @@ test('D14 ⚠️ 需要九宫格的两张图，`.png.meta` 里必须有非零 bo
         white_jiao8: [13, 9, 0, 6],
     };
     for (const [art, want] of Object.entries(BORDER)) {
-        const meta = JSON.parse(readFileSync(`assets/resources/image/league/${art}.png.meta`, 'utf8')) as {
+        const meta = JSON.parse(readFileSync(assetPath(`image/league/${art}.png.meta`), 'utf8')) as {
             userData?: { type?: string };
             subMetas?: Record<string, { userData?: Record<string, number> }>;
         };
@@ -711,10 +712,12 @@ test('E1 `prefabPath` 大小写与磁盘一致，且继承 PopupBase', () => {
 
 test('E2 ⚠️ 虚拟列表三处时序守点：renderItemFn 只绑一次 / 取数后 defer 一帧 / 完了 refreshList', () => {
     const page = readFileSync(PREVIEW_PAGE_TS, 'utf8');
-    // ① `renderItemFn` 在 `onOpen` 里绑会随每次打开叠加 ⇒ 必须有「只绑一次」的守卫
-    assert.ok(page.includes('rowRendererBound'), '缺 rowRendererBound 守卫（重复 open 会叠加回调）');
-    assert.ok(/if\s*\(!this\.rowRendererBound\)/.test(page), 'rowRendererBound 必须只在首次绑定时进入');
-    assert.ok(page.includes('this.levelList.renderItemFn ='), '没接 renderItemFn');
+    // ① `renderItemFn` 在 `onInit` 里赋一次即可：`PopupBase._inited` 保证 onInit 每实例只跑一次，
+    //    所以「只绑一次」的布尔门闩已统一删除（2026-10-30）；放 `onOpen` 才会重复叠加。
+    assert.ok(!/if\s*\(!this\.rowRendererBound\)/.test(page), '不该再有「只绑一次」门闩（onInit 每实例只跑一次）');
+    const initEnd = page.indexOf('protected async onOpen');
+    const initBody = page.slice(page.indexOf('protected onInit(): void {'), initEnd > 0 ? initEnd : undefined);
+    assert.ok(initBody.includes('this.levelList.renderItemFn ='), '`renderItemFn` 要在 onInit 里赋一次');
     // ② `VirtualScrollView` 在 `start()` 里建槽位，而 `onOpen` 早于 `start()` ⇒ 必须 defer
     assert.ok(page.includes('await this.nextPopupFrame()'), '⚠️ 铺数据前必须 await nextPopupFrame()，否则列表空白');
     assert.ok(page.includes('this.levelList.refreshList('), '没调用 refreshList');

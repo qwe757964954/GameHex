@@ -107,6 +107,7 @@ import {
 import type { ILevelRow } from '../assets/script/app/battletoken/BattleTokenTable';
 import { BT_TEXTS, btCountdownText, btFormat, btMoneyText, btTabLabel, btUnlockHint } from '../assets/script/app/battletoken/BattleTokenTexts';
 import { qualityFrameLevel as sevenDayQualityFrameLevel } from '../assets/script/app/sevenDay/SevenDayArt';
+import { assetDirNames, assetExists, assetPath } from './helpers/asset-paths';
 
 /** 读一张 `remoteRef` 表（顶层就是行数组）。 */
 function table(name: string): Array<Record<string, unknown>> {
@@ -626,7 +627,7 @@ test('⚠️ qipaoBoxOf：气泡只有七日登录是 378 宽；高度恒 195（
 // B. 资源口径
 // ============================================================
 
-const BT_ART_DIR = 'assets/resources/image/battletoken';
+const BT_ART_DIR = assetPath('image/battletoken');
 
 /** 战令自有图是否在磁盘上（`.png` / `.jpg` 都算 —— `bt_bg` 是 jpg）。 */
 function artExists(name: string): boolean {
@@ -701,7 +702,7 @@ test('品质框：4 档，**必须与七日 / 礼包 / 活动 / 首充同算法*
         );
     }
     for (const name of BT_QUALITY_FRAME_NAMES) {
-        assert.ok(existsSync(`assets/resources/image/frame/${name}.png`), `品质框缺图：${name}`);
+        assert.ok(existsSync(assetPath(`image/frame/${name}.png`)), `品质框缺图：${name}`);
     }
 });
 
@@ -711,7 +712,7 @@ test('跨模块复用的 4 张（不另存第二份，md5 同源）', () => {
     assert.deepEqual(BT_SHARED_LOCK_MASK, { root: 'image/sevenDay', name: 'sd_bb24' });
     assert.deepEqual(BT_SHARED_CHECK, { root: 'image/sevenDay', name: 'sd_check' });
     for (const ref of [BT_SHARED_BOTTOM_BAR, BT_SHARED_BACK, BT_SHARED_LOCK_MASK, BT_SHARED_CHECK]) {
-        assert.ok(existsSync(`assets/resources/${ref.root}/${ref.name}.png`), `复用图丢了：${ref.root}/${ref.name}`);
+        assert.ok(existsSync(assetPath(`${ref.root}/${ref.name}.png`)), `复用图丢了：${ref.root}/${ref.name}`);
         // ⚠️ 复用图**不能**在战令目录里再存一份（改一处忘一处）
         assert.equal(artExists(ref.name), false, `${ref.name} 不该出现在 ${BT_ART_DIR}`);
     }
@@ -719,7 +720,7 @@ test('跨模块复用的 4 张（不另存第二份，md5 同源）', () => {
 
 test('⚠️ 「已消耗：」的小图标（`costIcon` / 体力 9）必须落盘 —— 它是 `roleProperty` 那一支，整条链上没有第二处守卫', () => {
     // ⚠️ 2026-09-24 端到端探针逮到的**真缺口**：`roleProperty` 的图标迁到
-    //    `assets/resources/icons/resource/` 时，铜币 / 洗炼石 / 幻灵玉 / 活跃度 / 灵石 都迁了，
+    //    assetPath(`icons/resource/`) 时，铜币 / 洗炼石 / 幻灵玉 / 活跃度 / 灵石 都迁了，
     //    **偏偏漏了体力（resId 9）** ⇒ `resources.load('icons/resource/图标_体力/spriteFrame')`
     //    失败、`_setFrame` 静默跳过 ⇒ 消耗图标永久留白（不报错、prefab 校验也全绿）。
     assert.equal(BT_EXP_COST_RES_ID, 9, '老端 `TabBattleTokenPage` 写死 `roleProperty.end`');
@@ -732,8 +733,8 @@ test('⚠️ 「已消耗：」的小图标（`costIcon` / 体力 9）必须落�
     assert.equal(row.name, '体力');
     assert.equal(row.icon, '图标_体力', '`icon` 存的是 FGUI 裸名 ⇒ 落 icons/resource/<name>');
     // 落盘（含 `.meta`，否则进不了包）
-    assert.equal(existsSync('assets/resources/icons/resource/图标_体力.png'), true);
-    assert.equal(existsSync('assets/resources/icons/resource/图标_体力.png.meta'), true);
+    assert.equal(assetExists('icons/resource/图标_体力.png'), true);
+    assert.equal(assetExists('icons/resource/图标_体力.png.meta'), true);
 });
 
 test('⚠️ 所有装配路径都必须带 `/spriteFrame`（漏了只是静默留白 + 一条 warn）', () => {
@@ -824,7 +825,7 @@ test('`btSpriteType`：`BT_ART_SLICED` 里的返回 1(SLICED)，其余 0(SIMPLE)
 // C. prefab 结构 + 几何
 // ============================================================
 
-const PREFAB_PATH = 'assets/resources/ui/BattleToken/BattleToken.prefab';
+const PREFAB_PATH = assetPath('ui/BattleToken/BattleToken.prefab');
 
 /** 编辑器压缩 uuid：前 5 个 hex 原样 + 其余 27 个 hex 每 3 个编 2 个 base64 字符 = 23 位。 */
 function compressUuid(uuid: string): string {
@@ -1084,7 +1085,7 @@ function pngSize(file: string): { w: number; h: number } {
 // （2026-09-28 起与主界面六格共用同一个 prefab；旧的私有 `BattleTokenTabButton` 已退场）
 // ============================================================
 
-const TABBUTTON_PREFAB_PATH = 'assets/resources/ui/common/TabButton.prefab';
+const TABBUTTON_PREFAB_PATH = assetPath('ui/common/TabButton.prefab');
 const TABBUTTON_PREFAB = JSON.parse(readFileSync(TABBUTTON_PREFAB_PATH, 'utf8')) as Array<Record<string, unknown>>;
 const TABBUTTON_ASSET_UUID = (JSON.parse(readFileSync(`${TABBUTTON_PREFAB_PATH}.meta`, 'utf8')) as { uuid: string }).uuid;
 /** 子 prefab 里各节点的 `fileId` —— 也就是覆盖里 `targetInfo.localID` 那一段。 */
@@ -1624,13 +1625,13 @@ test('页面：`static prefabPath` 指向新 prefab，且路径真的存在（�
     assert.ok(matched, 'BattleTokenPage 必须声明 static prefabPath');
     assert.equal(matched![1], 'ui/BattleToken/BattleToken');
     assert.ok(
-        existsSync(`assets/resources/${matched![1]}.prefab`),
+        existsSync(assetPath(`${matched![1]}.prefab`)),
         `prefabPath 指向的文件不存在：assets/resources/${matched![1]}.prefab`,
     );
     // ⚠️ Android / iOS 的 zip 内路径**大小写敏感** —— 目录名与磁盘必须逐字相同
     // ⚠️ 大小写只能从**文件名本身**核（Windows 的 FS 不敏感，`existsSync('ui/battletoken')` 也返回 true，
     //    真机 / 热更新 zip 里才会炸）
-    const dirs = readdirSync('assets/resources/ui');
+    const dirs = assetDirNames('ui');
     assert.ok(dirs.includes('BattleToken'), 'assets/resources/ui 下必须有 BattleToken（大小写逐字一致）');
     assert.equal(dirs.includes('battletoken'), false, '别用全小写（Windows 上照样能跑，真机才炸）');
 });

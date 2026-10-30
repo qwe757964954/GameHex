@@ -1,4 +1,5 @@
-import { resources, SpriteFrame } from 'cc';
+import type { SpriteFrame } from 'cc';
+import { createRoutedSpriteFrameCache } from './SpriteFrameCache';
 import { artKey, COMMON_ART_ROOT, spriteFramePath } from '../ArtPaths';
 import type { RedDotArtKey } from './RedDotState';
 
@@ -102,52 +103,11 @@ export const RED_DOT_SPINE_SIZE: { readonly width: number; readonly height: numb
 // 帧缓存（自持，不依赖 Host 预加载）
 // ============================================================
 
-/**
- * 红点会在非常多的界面里出现（页签 / 按钮 / 入口），让每个宿主各自预加载这三张小图是重复劳动，
- * 所以本模块自带一份缓存。
- *
- * ⚠️ 没有复用 `card/CardLineupIcons.loadCommonArt()`（那份 idiom 一模一样）——
- * `app/common` 是**通用层**，反过来依赖 `app/card` 会把依赖方向搞颠倒。
- * 代价是这一段 20 行左右的重复，等以后有人把「按 root 加载 spriteFrame」提到 `app/` 层再合并。
- */
-const frameCache = new Map<string, SpriteFrame>();
-const pendingLoads = new Map<string, Promise<SpriteFrame | null>>();
-let cacheGeneration = 0;
+const frameCache = createRoutedSpriteFrameCache('RedDot');
 
-/** 加载红点静态图（带缓存；失败返回 `null` 且只打一条 warn，不抛）。 */
 export function loadRedDotFrame(key: RedDotArtKey): Promise<SpriteFrame | null> {
     const path = redDotArtPath(key);
-    if (!path) return Promise.resolve(null);
-    const cached = frameCache.get(path);
-    if (cached?.isValid) return Promise.resolve(cached);
-    if (cached) frameCache.delete(path);
-    const running = pendingLoads.get(path);
-    if (running) return running;
-    const generation = cacheGeneration;
-
-    const task = new Promise<SpriteFrame | null>((resolve) => {
-        resources.load(path, SpriteFrame, (error, frame) => {
-            if (error || !frame || !frame.isValid) {
-                console.warn(`[RedDot] 红点图加载失败：${path}`, error);
-                resolve(null);
-                return;
-            }
-            if (generation !== cacheGeneration) {
-                resolve(null);
-                return;
-            }
-            // JS Map 不参与 Cocos 引用计数，缓存必须自己持有引用。
-            frame.addRef();
-            frameCache.set(path, frame);
-            resolve(frame);
-        });
-    });
-    pendingLoads.set(path, task);
-    const clearPending = (): void => {
-        if (pendingLoads.get(path) === task) pendingLoads.delete(path);
-    };
-    void task.then(clearPending, clearPending);
-    return task;
+    return frameCache.load(path ?? '');
 }
 
 /** 预加载三张红点图（进界面前调一次，减少首帧空白）。 */
@@ -157,11 +117,6 @@ export function preloadRedDotFrames(): Promise<void> {
 
 /** 退出登录时释放本次会话持有的动态美术引用。 */
 export function releaseRedDotFrames(): void {
-    cacheGeneration += 1;
-    pendingLoads.clear();
-    for (const frame of frameCache.values()) {
-        if (frame?.isValid) frame.decRef();
-    }
     frameCache.clear();
 }
 

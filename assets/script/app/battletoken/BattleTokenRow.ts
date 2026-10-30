@@ -40,25 +40,25 @@ export interface IRowContext {
 @ccclass('BattleTokenRow')
 export class BattleTokenRow extends Component {
     @property({ type: Sprite, tooltip: '行底板（三方案 bt_row_bg_3 / 两方案 bt_row_bg_2）' })
-    background: Sprite = null!;
+    background: Sprite = null;
 
     @property({ type: [BattleTokenRewardSlot], tooltip: '奖励格（三方案 3 个 / 两方案 2 个）' })
     slots: BattleTokenRewardSlot[] = [];
 
     @property({ type: Node, tooltip: '上方连接段容器（FGUI group n105「头」）' })
-    lineTop: Node = null!;
+    lineTop: Node = null;
 
     @property({ type: Sprite, tooltip: '上方连接段的填充（FGUI n104「上」）' })
-    lineTopFill: Sprite = null!;
+    lineTopFill: Sprite = null;
 
     @property({ type: Node, tooltip: '下方连接段容器（FGUI group n102「尾」）' })
-    lineBottom: Node = null!;
+    lineBottom: Node = null;
 
     @property({ type: Sprite, tooltip: '下方连接段的填充（FGUI n98「下」）' })
-    lineBottomFill: Sprite = null!;
+    lineBottomFill: Sprite = null;
 
     @property({ type: Label, tooltip: '等级数字（FGUI 文本_等级）' })
-    levelLabel: Label = null!;
+    levelLabel: Label = null;
 
     /** 这条模板是几个格子（3 = 通行证，2 = 其余）。由生成器写死。 */
     @property({ type: CCInteger, tooltip: '格子数：3 = 三方案模板，2 = 两方案模板' })
@@ -66,7 +66,7 @@ export class BattleTokenRow extends Component {
 
     /** 行底板图（生成器写入；两个模板各自固定，仅暴露给单测核对）。 */
     @property({ type: SpriteFrame, tooltip: '行底板图（生成器写入）' })
-    backgroundFrame: SpriteFrame = null!;
+    backgroundFrame: SpriteFrame = null;
 
     /**
      * 铺一行。

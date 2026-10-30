@@ -27,13 +27,13 @@ const { ccclass, property } = _decorator;
 @ccclass('TerritoryResourceGainView')
 export class TerritoryResourceGainView extends Component {
     @property({ type: Sprite, group: '节点引用', tooltip: 'Icon：资源图标（银币 / 体力）' })
-    iconSprite: Sprite = null!;
+    iconSprite: Sprite = null;
 
     @property({ type: Label, group: '节点引用', tooltip: 'Amount：+N 数值' })
-    amountLabel: Label = null!;
+    amountLabel: Label = null;
 
     @property({ type: UIOpacity, group: '节点引用', tooltip: '挂在根节点上的 cc.UIOpacity（整条一起淡出）' })
-    opacity: UIOpacity = null!;
+    opacity: UIOpacity = null;
 
     /** < 0 = 空闲（可被复用）。 */
     private elapsed = -1;

@@ -44,25 +44,25 @@ export type { IOsTargetNodeState } from './CelebrationViewState';
 @ccclass('OSTargetItem')
 export class OSTargetItem extends Component {
     @property({ type: Label, tooltip: 'Desc：`{战力口径}达到{N}`（FGUI `lab_desc`）' })
-    desc: Label = null!;
+    desc: Label = null;
 
     @property({ type: OSArtStrip, tooltip: 'RewardList：横向奖励条（FGUI `list`）' })
-    strip: OSArtStrip = null!;
+    strip: OSArtStrip = null;
 
     @property({ type: Node, tooltip: 'ClaimBtn：领取按钮（FGUI `按钮_领取`，`状态` 页 id `1`）' })
-    claimBtn: Node = null!;
+    claimBtn: Node = null;
 
     @property({ type: Node, tooltip: 'ClaimBtn/RedDot：老端**常亮**（见文件头）' })
-    claimRedDot: Node = null!;
+    claimRedDot: Node = null;
 
     @property({ type: Node, tooltip: 'GoBtn：前往按钮（FGUI `按钮_前往`，`状态` 页 id `0`）' })
-    goBtn: Node = null!;
+    goBtn: Node = null;
 
     @property({ type: Node, tooltip: 'GoBtn/RedDot：老端从不点亮 ⇒ 恒隐藏' })
-    goRedDot: Node = null!;
+    goRedDot: Node = null;
 
     @property({ type: Node, tooltip: 'ClaimedMark：已领取印章（FGUI `n35`，`状态` 页 id `2`）' })
-    claimedMark: Node = null!;
+    claimedMark: Node = null;
 
     /**
      * 领取回调 —— **由宿主在每次铺行时重设**（`OSRankPage.renderTargetRow`）。

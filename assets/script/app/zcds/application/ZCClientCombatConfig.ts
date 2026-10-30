@@ -1,8 +1,9 @@
+import { battleBuffRatio } from '../../battle/BattleStartModel';
 import type { ZCBattleHero, ZCBattleStart, ZCBattleUnit } from '../../battle/BattleStartModel';
 import type { ZCDeckCard } from '../model/ZCCombatCatalog';
 import { ZCOwner, ZCPlayerCount } from '../model/ZCMapConfig';
 import { ownersForPlayerCount } from '../model/ZCMapConfig';
-import { captureZCMatchConfig, type ZCMatchConfig } from '../model/ZCMatchConfig';
+import { captureZCMatchConfig, type ZCMatchConfig, type IZCBattleRates } from '../model/ZCMatchConfig';
 import type { ZCCompiledModifierLoadout } from '../model/ZCModifierRuntime';
 import { compileZCCombatBuild, getZCModifierCatalogs } from '../model/ZCModifierRuntime';
 
@@ -17,6 +18,32 @@ export interface ZCClientCombatConfigOptions {
 }
 
 const ZC_MAX_BATTLE_HERO_CARDS = 8;
+
+/** 服务端 buff 的乘数键；仅作用于对应阵营成长后的单位属性。 */
+export const ZC_BATTLE_RATE_KEYS = {
+    /** 攻击倍率。 */
+    attack: 'levelAttackRatio',
+    /** 生命倍率。 */
+    hp: 'levelHpRatio',
+} as const;
+
+/** 将服务端字段投影为阵营倍率，不读取本地关卡配置，也不补缺失字段。 */
+export function ownerRatesOf(unit: ZCBattleUnit | undefined): IZCBattleRates | undefined {
+    if (!unit) return undefined;
+    const hp = battleBuffRatio(unit.buffs, ZC_BATTLE_RATE_KEYS.hp);
+    const attack = battleBuffRatio(unit.buffs, ZC_BATTLE_RATE_KEYS.attack);
+    if (hp === null && attack === null) return undefined;
+    if (hp !== null && (!Number.isFinite(hp) || hp <= 0)) {
+        throw new Error(`服务端生命倍率无效：${hp}`);
+    }
+    if (attack !== null && (!Number.isFinite(attack) || attack < 0)) {
+        throw new Error(`服务端攻击倍率无效：${attack}`);
+    }
+    return {
+        ...(hp === null ? {} : { hpRate: hp }),
+        ...(attack === null ? {} : { attackRate: attack }),
+    };
+}
 
 function battleUnitsByOwner(
     playerCount: ZCPlayerCount,
@@ -206,10 +233,11 @@ export function buildZCClientCombatConfig(
             ? buildBattleDeck(sourceDeck, roster[owner] ?? [])
             : sourceDeck;
     }
+    const ownerRates = mapClientRosterOwners(rosterContext, (_owner, unit) => ownerRatesOf(unit));
     const playerDeck = ownerDecks.player ?? config.playerDeck;
     const enemyDeck = ownerDecks.enemy ?? config.enemyDeck;
     return {
-        config: captureZCMatchConfig({ ...config, playerDeck, enemyDeck, ownerDecks, modifiers }, options),
+        config: captureZCMatchConfig({ ...config, playerDeck, enemyDeck, ownerDecks, modifiers, ownerRates }, options),
         skipped,
     };
 }

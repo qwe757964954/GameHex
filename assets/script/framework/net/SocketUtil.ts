@@ -861,13 +861,4 @@ export class SocketUtil {
         return tlInfo.join("");
     }
 
-    private callHeartbeatCallback() {
-        let isOK = false
-        let callback = this._heartbeatCallback;
-        if (callback) {
-            isOK = callback();
-        }
-        return isOK
-    }
-
 }

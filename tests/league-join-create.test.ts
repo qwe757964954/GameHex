@@ -24,7 +24,7 @@
  *     `共用组件/组件/按钮/按钮_公共_通用.xml`、`共用组件/组件/弹窗/组件_公共弹窗_新.xml`
  *   - 老端：`client/assets/script/app/game/ctrl/main/league/play/TabLeagueJoin.ts`、
  *     `…/LayerLeagueCreat.ts`、`client/assets/script/lib/fgui/fairygui.js`
- *   - 本项目：`assets/script/app/league/**`、`assets/resources/ui/League/*.prefab`
+ *   - 本项目：`assets/script/app/league/**`、assetPath(`ui/League/*.prefab`)
  *
  * ## ⚠️ 四条**刻意与 FGUI 原稿不同**（理由见各页面类文件头与构建器注释）
  *
@@ -116,6 +116,7 @@ import {
     LEAGUE_JOIN_BTN_QUICK,
     LEAGUE_NO_JOINABLE,
 } from '../assets/script/app/league/LeagueTexts';
+import { assetPath } from './helpers/asset-paths';
 
 // ============================================================
 // A. 文案口径
@@ -178,20 +179,20 @@ test('B4 勾选框两图 + 图真的在磁盘上', () => {
     assert.equal(LEAGUE_POPUP_BOARD_ROOT, 'image/league', '弹窗底板单独在 image/league');
     assert.equal(LEAGUE_COST_ICON_ROOT, 'icons/resource');
     for (const [dir, name] of [
-        ['assets/resources/image/league', LEAGUE_ART_JOIN_BG],
-        ['assets/resources/image/league', LEAGUE_ART_JOIN_FRAME],
-        ['assets/resources/image/league', LEAGUE_ART_JOIN_BOARD],
-        ['assets/resources/image/league', LEAGUE_ART_BTN_CREATE],
-        ['assets/resources/image/league', LEAGUE_ART_BTN_QUICK_JOIN],
-        ['assets/resources/image/league', LEAGUE_ART_COST_BTN],
-        ['assets/resources/image/league', LEAGUE_ART_CREATE_NAME_BG],
-        ['assets/resources/image/league', LEAGUE_ART_SEARCH_BTN],
-        ['assets/resources/image/league', LEAGUE_ART_POPUP_BOARD],
-        ['assets/resources/image/common', LEAGUE_ART_POPUP_TITLE_BG],
-        ['assets/resources/image/common', LEAGUE_ART_POPUP_TITLE_DECO],
-        ['assets/resources/image/common', LEAGUE_ART_POPUP_CLOSE],
-        ['assets/resources/image/league', LEAGUE_ART_CHECK_BG],
-        [`assets/resources/${LEAGUE_SHARED_CHECK_ROOT}`, LEAGUE_ART_CHECK_MARK],
+        [assetPath('image/league'), LEAGUE_ART_JOIN_BG],
+        [assetPath('image/league'), LEAGUE_ART_JOIN_FRAME],
+        [assetPath('image/league'), LEAGUE_ART_JOIN_BOARD],
+        [assetPath('image/league'), LEAGUE_ART_BTN_CREATE],
+        [assetPath('image/league'), LEAGUE_ART_BTN_QUICK_JOIN],
+        [assetPath('image/league'), LEAGUE_ART_COST_BTN],
+        [assetPath('image/league'), LEAGUE_ART_CREATE_NAME_BG],
+        [assetPath('image/league'), LEAGUE_ART_SEARCH_BTN],
+        [assetPath('image/league'), LEAGUE_ART_POPUP_BOARD],
+        [assetPath('image/common'), LEAGUE_ART_POPUP_TITLE_BG],
+        [assetPath('image/common'), LEAGUE_ART_POPUP_TITLE_DECO],
+        [assetPath('image/common'), LEAGUE_ART_POPUP_CLOSE],
+        [assetPath('image/league'), LEAGUE_ART_CHECK_BG],
+        [assetPath(`${LEAGUE_SHARED_CHECK_ROOT}`), LEAGUE_ART_CHECK_MARK],
     // ⚠️ `lm_bg02` 在磁盘上是 **`.jpg`**（1280 高的整屏底图，被 P2 大厅同源复用）
     //    ⇒ 这里两种扩展名都放行，但**必须命中一个**。
     ] as const) {
@@ -331,9 +332,9 @@ test('C8 `buildLeagueCostView`：`lab_has` 带 `/` 尾巴、`enough` 驱动两�
 // D. prefab 结构 + 几何
 // ============================================================
 
-const TAB_PREFAB = 'assets/resources/ui/League/LeagueTab.prefab';
-const JOIN_PREFAB = 'assets/resources/ui/League/LeagueJoin.prefab';
-const CREATE_PREFAB = 'assets/resources/ui/League/LeagueCreate.prefab';
+const TAB_PREFAB = assetPath('ui/League/LeagueTab.prefab');
+const JOIN_PREFAB = assetPath('ui/League/LeagueJoin.prefab');
+const CREATE_PREFAB = assetPath('ui/League/LeagueCreate.prefab');
 const TAB_PAGE_TS = 'assets/script/app/league/LeagueTabPage.ts';
 const JOIN_PAGE_TS = 'assets/script/app/league/LeagueJoinPage.ts';
 const CREATE_PAGE_TS = 'assets/script/app/league/LeagueCreatePage.ts';

@@ -12,11 +12,12 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { assetPath } from './helpers/asset-paths';
 
 type Entry = Record<string, unknown>;
 
-const SLOT_PATH = 'assets/resources/ui/main/ChestSlot.prefab';
-const ARENA_PATH = 'assets/resources/ui/main/ArenaRoot.prefab';
+const SLOT_PATH = assetPath('ui/main/ChestSlot.prefab');
+const ARENA_PATH = assetPath('ui/main/ArenaRoot.prefab');
 
 const SLOT = JSON.parse(readFileSync(SLOT_PATH, 'utf8')) as Entry[];
 const ARENA = JSON.parse(readFileSync(ARENA_PATH, 'utf8')) as Entry[];

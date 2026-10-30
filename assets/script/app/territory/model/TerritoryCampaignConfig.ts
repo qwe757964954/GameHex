@@ -76,6 +76,36 @@ export function readTerritoryIdleRewardMaxHours(
     return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
 }
 
+/**
+ * `gameConfig.chapterLevelAutoStartConfig` 的缺省值。
+ *
+ * 策划表 `S-数据配置` 原话：「章节地图【首次】激活关卡地块，自动进入战斗（1开 0关」，
+ * 表里当前是 `1`。⚠️ 缺省取 **开**：取关会让整个功能在配置读不到时**静默失效**
+ * （表现是「点了格子只解锁、不进战斗」，零报错）。要关请改表，不要靠删配置行来关。
+ */
+export const TERRITORY_LEVEL_AUTO_START_FALLBACK = true;
+
+/**
+ * 读「章节地图首次激活关卡地块是否自动进战斗」。
+ *
+ * 口径（`1` 开 / `0` 关）来自策划表；`0` 是唯一表示「关」的值 —— 认不出的脏值退回
+ * `fallback`（开），不把 `NaN` 当「关」，否则表里多打个空格就静默关掉整个功能。
+ */
+export function readTerritoryLevelAutoStart(
+    rows: readonly TerritoryGameConfigRow[],
+    fallback = TERRITORY_LEVEL_AUTO_START_FALLBACK,
+): boolean {
+    const raw = rows.find((entry) => entry.key === 'chapterLevelAutoStartConfig')?.value;
+    if (raw == null) return fallback;
+    // ⚠️ 别直接 `Number(raw)`：`Number('')` / `Number('  ')` / `Number(null)` 全是 **0**
+    // ⇒ 空值会被当成「关」⇒ 表里多一个空格就把功能静默关掉。空串必须走 fallback。
+    if (typeof raw === 'number') return Number.isFinite(raw) ? raw !== 0 : fallback;
+    const text = typeof raw === 'string' ? raw.trim() : '';
+    if (text === '') return fallback;
+    const value = Number(text);
+    return Number.isFinite(value) ? value !== 0 : fallback;
+}
+
 export interface TerritoryCampaignEnemy {
     cardId: number;
     /** 同名映射到战斗运行时 pvpCard；存在时可直接构建本地 PVE 敌方卡组。 */
@@ -235,7 +265,7 @@ export function buildTerritoryCampaign(
                         && teamMatchesLevel(team, row.levelId))
                     .sort((a, b) => a.npcTeamId - b.npcTeamId)
                     .slice(0, 1)
-                : bossTeamId && teams.has(bossTeamId) ? [teams.get(bossTeamId)!] : [];
+                : bossTeamId && teams.has(bossTeamId) ? [teams.get(bossTeamId)] : [];
             const waves = mode === 'defence'
                 ? defenceWaveRows
                     .filter((wave) => wave.startId === row.levelModValue)

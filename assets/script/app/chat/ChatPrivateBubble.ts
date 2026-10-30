@@ -22,28 +22,28 @@ const { ccclass, property } = _decorator;
 @ccclass('ChatPrivateBubble')
 export class ChatPrivateBubble extends Component {
     @property({ type: Node, tooltip: 'Left：对方发的（425×143）' })
-    leftGroup: Node = null!;
+    leftGroup: Node = null;
 
     @property({ type: Sprite, tooltip: 'Left/Head/Icon：头像' })
-    leftHead: Sprite = null!;
+    leftHead: Sprite = null;
 
     @property({ type: Label, tooltip: 'Left/Name：玩家名' })
-    leftName: Label = null!;
+    leftName: Label = null;
 
     @property({ type: RichText, tooltip: 'Left/Msg：正文（**必须 RichText**）' })
-    leftMsg: RichText = null!;
+    leftMsg: RichText = null;
 
     @property({ type: Node, tooltip: 'Right：我发的（425×113）' })
-    rightGroup: Node = null!;
+    rightGroup: Node = null;
 
     @property({ type: Sprite, tooltip: 'Right/Head/Icon：头像' })
-    rightHead: Sprite = null!;
+    rightHead: Sprite = null;
 
     @property({ type: Label, tooltip: 'Right/Name：玩家名' })
-    rightName: Label = null!;
+    rightName: Label = null;
 
     @property({ type: RichText, tooltip: 'Right/Msg：正文（**必须 RichText**）' })
-    rightMsg: RichText = null!;
+    rightMsg: RichText = null;
 
     private avatar: FriendAvatarLoader | null = null;
 

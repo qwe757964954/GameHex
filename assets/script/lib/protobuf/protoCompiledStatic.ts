@@ -50429,6 +50429,72 @@ return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdPvpArtifactSelectRspMsg";
 };
 return CmdPvpArtifactSelectRspMsg;
 })();
+cmd.CmdPvpBuffInfo = (function() {
+function CmdPvpBuffInfo(properties) {
+this.buffs = [];
+if (properties)
+for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+if (properties[keys[i]] != null && keys[i] !== "__proto__")
+this[keys[i]] = properties[keys[i]];
+}
+CmdPvpBuffInfo.prototype.source = 0;
+CmdPvpBuffInfo.prototype.buffs = $util.emptyArray;
+CmdPvpBuffInfo.create = function create(properties) {
+return new CmdPvpBuffInfo(properties);
+};
+CmdPvpBuffInfo.encode = function encode(message, writer, q) {
+if (!writer)
+writer = $Writer.create();
+if (q === undefined)
+q = 0;
+if (q > $util.recursionLimit)
+throw Error("max depth exceeded");
+writer.uint32(  8).uint32(message.source);
+if (message.buffs != null && message.buffs.length)
+for (let i = 0; i < message.buffs.length; ++i)
+writer.uint32(  18).string(message.buffs[i]);
+return writer;
+};
+CmdPvpBuffInfo.decode = function decode(reader, length, error, long) {
+if (!(reader instanceof $Reader))
+reader = $Reader.create(reader);
+if (long === undefined)
+long = 0;
+if (long > $Reader.recursionLimit)
+throw Error("maximum nesting depth exceeded");
+let end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdPvpBuffInfo();
+while (reader.pos < end) {
+let tag = reader.uint32();
+if (tag === error)
+break;
+switch (tag >>> 3) {
+case 1: {
+message.source = reader.uint32();
+break;
+}
+case 2: {
+if (!(message.buffs && message.buffs.length))
+message.buffs = [];
+message.buffs.push(reader.string());
+break;
+}
+default:
+reader.skipType(tag & 7, long);
+break;
+}
+}
+if (!message.hasOwnProperty("source"))
+throw $util.ProtocolError("missing required 'source'", { instance: message });
+return message;
+};
+CmdPvpBuffInfo.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+if (typeUrlPrefix === undefined) {
+typeUrlPrefix = "type.googleapis.com";
+}
+return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdPvpBuffInfo";
+};
+return CmdPvpBuffInfo;
+})();
 cmd.CmdPvpInfo = (function() {
 function CmdPvpInfo(properties) {
 if (properties)
@@ -50908,6 +50974,7 @@ return CmdBattleUnitShowInfo;
 cmd.CmdBattleUnitInfo = (function() {
 function CmdBattleUnitInfo(properties) {
 this.heroInfos = [];
+this.buffInfo = [];
 if (properties)
 for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
 if (properties[keys[i]] != null && keys[i] !== "__proto__")
@@ -50920,6 +50987,7 @@ CmdBattleUnitInfo.prototype.artifactId = 0;
 CmdBattleUnitInfo.prototype.artifactLevel = 0;
 CmdBattleUnitInfo.prototype.unitId = 0;
 CmdBattleUnitInfo.prototype.unitType = 0;
+CmdBattleUnitInfo.prototype.buffInfo = $util.emptyArray;
 CmdBattleUnitInfo.create = function create(properties) {
 return new CmdBattleUnitInfo(properties);
 };
@@ -50940,6 +51008,9 @@ writer.uint32(  40).uint32(message.artifactLevel);
 writer.uint32(  48).uint32(message.unitId);
 if (message.unitType != null && Object.hasOwnProperty.call(message, "unitType"))
 writer.uint32(  56).uint32(message.unitType);
+if (message.buffInfo != null && message.buffInfo.length)
+for (let i = 0; i < message.buffInfo.length; ++i)
+$root.com.xkhy.tafang.cmd.CmdPvpBuffInfo.encode(message.buffInfo[i], writer.uint32(  66).fork(), q + 1).ldelim();
 return writer;
 };
 CmdBattleUnitInfo.decode = function decode(reader, length, error, long) {
@@ -50983,6 +51054,12 @@ break;
 }
 case 7: {
 message.unitType = reader.uint32();
+break;
+}
+case 8: {
+if (!(message.buffInfo && message.buffInfo.length))
+message.buffInfo = [];
+message.buffInfo.push($root.com.xkhy.tafang.cmd.CmdPvpBuffInfo.decode(reader, reader.uint32(), undefined, long + 1));
 break;
 }
 default:

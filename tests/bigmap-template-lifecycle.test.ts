@@ -1,3 +1,5 @@
+import { EventMgr } from '../assets/script/framework/event/EventMgr';
+import * as mvcEvents from '../assets/script/app/bigmap/application/BigMapEvents';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
@@ -18,6 +20,8 @@ function createViewHarness() {
         target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, experimentalDecorators: true,
     } }).outputText;
     runInNewContext(code, { exports, require(name: string) {
+        if (name.endsWith('/EventMgr')) return { EventMgr };
+        if (name.endsWith('/BigMapEvents')) return mvcEvents;
         if (name === 'cc') return { _decorator: { ccclass: () => (value: unknown) => value,
             property: () => () => undefined }, Component, Color, instantiate: () => { clones++; return root; } };
         if (name === './BigMapWorldLayout') return { buildBigMapWorldLayout: () => ({}) };

@@ -9,12 +9,13 @@ import {
     ZC_TENDENCY_TEXT,
     type ZCMapLayout,
 } from '../assets/script/app/zcds/model/ZCGameModel';
+import { assetPath } from './helpers/asset-paths';
 
 const hexView = readFileSync('assets/script/app/zcds/view/ZCHexView.ts', 'utf8');
 const renderWorld = readFileSync('assets/script/app/zcds/view/ZCGameRenderWorld.ts', 'utf8');
 const game = readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8');
 const hintOverlay = readFileSync('assets/script/app/zcds/view/ZCSpawnRegionHintOverlay.ts', 'utf8');
-const boardPrefab = JSON.parse(readFileSync('assets/resources/ui/game/ZCGameBoard.prefab', 'utf8')) as any[];
+const boardPrefab = JSON.parse(readFileSync(assetPath('ui/game/ZCGameBoard.prefab'), 'utf8')) as any[];
 
 test('spawn region hints render in a dedicated non-interactive overlay', () => {
     assert.match(renderWorld, /spawnRegionHintOverlay = new ZCSpawnRegionHintOverlay\(/);
@@ -193,7 +194,7 @@ test('自选主城地图不在正式战斗地块上显示金币等资源文字',
  * 这条用例同时钉住两侧：地图数据不许再带占位 text，且归一化后的文案必须是兜底表里的正经词。
  */
 test('★select_river 的区域文案由 tendency 推导，落盘的 "???" 占位必须清掉', () => {
-    const layout = JSON.parse(readFileSync('assets/resources/config/maps/select_river.json', 'utf8')) as ZCMapLayout;
+    const layout = JSON.parse(readFileSync(assetPath('config/maps/select_river.json'), 'utf8')) as ZCMapLayout;
     assert.ok(Array.isArray(layout.regions) && layout.regions.length > 0, 'select_river 必须圈了区域（选点阶段靠它出区域提示）');
     for (const region of layout.regions!) {
         assert.equal(region.text, undefined,

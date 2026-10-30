@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { assetPath } from './helpers/asset-paths';
 
 /**
  * 对局结算页（`ZCSettlementPage` + `ZCSettlement.prefab`）的结构守卫。
@@ -68,7 +69,7 @@ const DESIGN = {
  * `gridSpacing = 111 − 96 = 15`、`spacing = 114 − 96 = 18` ⇒ **落位与原稿逐值相同**。
  */
 const VGRID = { cols: 5, cell: 96, gridSpacing: 15, spacing: 18, header: 20, footer: 20, rows: 4 };
-/** 公共奖励格 prefab（`assets/resources/ui/common/RewardItem.prefab`）的 uuid。 */
+/** 公共奖励格 prefab（assetPath(`ui/common/RewardItem.prefab`)）的 uuid。 */
 const REWARD_ITEM_UUID = '375dbd89-8396-4fe8-95e0-3871cf334c43';
 const VSCROLL_CID = '544earF5qRLB4JTuTnSr11+';
 /** Cocos **内置**的 2×2 白图（`default_sprite_splash`）—— 工程里所有全屏遮罩都用它染色。 */
@@ -291,7 +292,7 @@ test('奖励格用公共 RewardItem（不自带 GoodsBox / 静态槽位）', () 
         '结算页 prefab 里不许再挂 GoodsBox（奖励格统一走公共 RewardItem）',
     );
     // 公共件本体自带三件套 + 概率标签（挂 RewardItemView）
-    const rewardItem = JSON.parse(readFileSync('assets/resources/ui/common/RewardItem.prefab', 'utf8')) as any[];
+    const rewardItem = JSON.parse(readFileSync(assetPath('ui/common/RewardItem.prefab'), 'utf8')) as any[];
     const rewardItemView = rewardItem.find((o) => o.__type__ === cidOf(rewardItemViewMeta.uuid));
     assert.ok(rewardItemView, '公共 RewardItem 必须挂 RewardItemView');
     for (const prop of ['frame', 'icon', 'num', 'rate']) {

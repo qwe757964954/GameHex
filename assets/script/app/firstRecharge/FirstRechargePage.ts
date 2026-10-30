@@ -55,28 +55,28 @@ export class FirstRechargePage extends PopupBase {
     static prefabPath = 'ui/FirstRecharge/FirstRecharge';
 
     @property({ type: Label, tooltip: 'UnitName：压名牌上的兵种名（如「兽人民兵」）' })
-    unitNameLabel: Label = null!;
+    unitNameLabel: Label = null;
 
     @property({ type: Node, tooltip: 'CloseBtn：右上角关闭按钮（挂 cc.Button）' })
-    closeButton: Node = null!;
+    closeButton: Node = null;
 
     @property({ type: Node, tooltip: 'TierBar：档位栏（下面挂 4 个 FirstRechargeTierTab）' })
-    tierBar: Node = null!;
+    tierBar: Node = null;
 
     @property({ type: Node, tooltip: 'DayList：天数列表（下面挂 3 个 FirstRechargeDayRow）' })
-    dayList: Node = null!;
+    dayList: Node = null;
 
     @property({ type: Node, tooltip: 'BtnBuy：底部按钮（挂 cc.Button）' })
-    buyButton: Node = null!;
+    buyButton: Node = null;
 
     @property({ type: Label, tooltip: 'BtnBuy/Label：按钮文案' })
-    buyLabel: Label = null!;
+    buyLabel: Label = null;
 
     @property({ type: RedDot, tooltip: 'BtnBuy/RedDot：可领取红点（默认隐藏）' })
-    buyRedDot: RedDot = null!;
+    buyRedDot: RedDot = null;
 
     @property({ type: Label, tooltip: 'Hint：底板里的副标题，异常时被离线 / 失败提示顶掉' })
-    hintLabel: Label = null!;
+    hintLabel: Label = null;
 
     @property({ type: Color, tooltip: '提示文字：正常态颜色' })
     hintIdleColor: Color = new Color(176, 168, 150, 255);
@@ -87,8 +87,8 @@ export class FirstRechargePage extends PopupBase {
     /** 数据端口；测试可替换（`repository` 只读，用 `setRepository` 换）。 */
     private repo: IFirstRechargeRepository = firstRechargeRepository;
 
-    private closeAction: Button = null!;
-    private buyAction: Button = null!;
+    private closeAction: Button = null;
+    private buyAction: Button = null;
 
     /** 当前快照（表 + 服务器状态 + 道具表）。 */
     private snapshot: IFirstRechargeSnapshot | null = null;
@@ -111,8 +111,8 @@ export class FirstRechargePage extends PopupBase {
         this.subtitle = this.hintLabel.string;
 
         //  CLICK 挂在**节点**上（Button 自身没有 on）—— 与 `CardUpgradePage` 同一写法。
-        this.closeAction = this.closeButton.getComponent(Button)!;
-        this.buyAction = this.buyButton.getComponent(Button)!;
+        this.closeAction = this.closeButton.getComponent(Button);
+        this.buyAction = this.buyButton.getComponent(Button);
         this.closeAction.node.on(Button.EventType.CLICK, this.onCloseClick, this);
         this.buyAction.node.on(Button.EventType.CLICK, this.onBuyClick, this);
 

@@ -104,9 +104,9 @@ test('初始点位必须挂「章节」气泡，且与站点气泡同一套底�
     const block = source.slice(at, source.indexOf('const seen = new Set<number>();', at));
     assert.match(block, /levelBubble: TERRITORY_START_BUBBLE_TEXT/,
         '初始点位不注入气泡文案 ⇒ `renderLevelBubble` 的 `text !== \'\'` 直接判假，气泡不会出现');
-    // 底色复用「已通关绿」：初始点开局就属于玩家，红底会读成"这里还有个关卡没打"。
+    // 底色复用「已通关」那张蓝：初始点开局就属于玩家，红底会读成"这里还有个关卡没打"。
     assert.match(block, /levelBubbleFrame: input\.art\.levelBubbleFrame/,
-        '初始点位的气泡底图必须复用已通关那张，别另配一张');
+        '初始点位的气泡底图必须复用已通关那张（蓝），别跟着未通关一起变红');
     // 文案不许带空格 / 换行：气泡内宽 88、17 号字，「章节」两字正好 34 宽，塞空格纯属浪费预算。
     assert.doesNotMatch(source, /'章节\s*选择'/);
     assert.doesNotMatch(source, /'章节\s+'/);

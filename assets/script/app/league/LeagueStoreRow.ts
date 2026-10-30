@@ -64,25 +64,25 @@ const NORMAL_TINT = new Color(...LEAGUE_TINT_NORMAL);
 @ccclass('LeagueStoreRow')
 export class LeagueStoreRow extends Component {
     @property({ type: Label, tooltip: 'labName：商品名（26px 居中）' })
-    nameLabel: Label = null!;
+    nameLabel: Label = null;
 
     @property({ type: Label, tooltip: 'labCount：限购进度「剩余/上限」（18px 右对齐）' })
-    countLabel: Label = null!;
+    countLabel: Label = null;
 
     @property({ type: LeagueRewardSlot, tooltip: 'com_goods：奖励格（图标 + 数量）' })
-    rewardSlot: LeagueRewardSlot = null!;
+    rewardSlot: LeagueRewardSlot = null;
 
     @property({ type: Node, tooltip: 'btnBuy：购买按钮' })
-    buyButton: Node = null!;
+    buyButton: Node = null;
 
     @property({ type: Label, tooltip: 'btnBuy/title：单价数字（18px）' })
-    costLabel: Label = null!;
+    costLabel: Label = null;
 
     @property({ type: Sprite, tooltip: 'btnBuy/priceIcon：货币图标（按 priceType 换帧）' })
-    priceIcon: Sprite = null!;
+    priceIcon: Sprite = null;
 
     @property({ type: Node, tooltip: 'btnBuy/com_rd：红点（⚠️ 恒隐藏 —— 老端那两行是注释掉的）' })
-    redDot: Node = null!;
+    redDot: Node = null;
 
     /** 点「购买」的回调（`view` 是**点击那一刻**这一槽位上的行数据）。 */
     onBuy: ((view: ILeagueStoreRowView) => void) | null = null;

@@ -1,3 +1,4 @@
+import { componentControllerModule } from './helpers/controller-context';
 /**
  * 「玩家点击界面」上报（`CmdGameViewClickReqMsg` / `CmdGameViewClickRspMsg`）的单测。
  *
@@ -18,11 +19,12 @@ import test from 'node:test';
 import protobuf from 'protobufjs/light.js';
 import ts from 'typescript';
 import { toCount, withTimeout } from '../assets/script/app/net/RequestGuard';
+import { assetPath } from './helpers/asset-paths';
 
 const CMD = 'com.xkhy.tafang.cmd';
 
 function loadRoot(): protobuf.Root {
-    return protobuf.Root.fromJSON(JSON.parse(readFileSync('assets/resources/config/protoCompiled.json', 'utf8')));
+    return protobuf.Root.fromJSON(JSON.parse(readFileSync(assetPath('config/protoCompiled.json'), 'utf8')));
 }
 
 const root = loadRoot();
@@ -100,7 +102,7 @@ function loadModule(path: string, require: (name: string) => unknown): Record<st
     const code = ts.transpileModule(readFileSync(path, 'utf8'), { compilerOptions: {
         module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true,
     } }).outputText;
-    runInNewContext(code, { exports, require });
+    runInNewContext(code, { exports, require: (name: string) => name.endsWith('/ComponentController') ? componentControllerModule() : require(name) });
     return exports;
 }
 
@@ -268,6 +270,7 @@ test('底栏实际点击：世界报 2，其他可用入口报 1；初始化和�
     assert.equal(buttons[4].enabled, false);
     assert.equal(buttons[4].select, null, '未开放的挑战入口不触发点击');
     host.switchTab = switchTab;
+    Object.assign(host, { pagePath: () => null });
     host.switchToTab(0);
     await Promise.resolve();
     assert.equal(reports.length, 0, '程序跳转不计入点击');

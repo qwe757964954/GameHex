@@ -65,7 +65,7 @@ const { ccclass, property } = _decorator;
 @ccclass('OSRankEntryButton')
 export class OSRankEntryButton extends Component {
     @property({ type: Node, tooltip: 'RedDot：红点占位（老端 `开服冲榜.组件_红点`，值 = `GetRd()`）' })
-    redDot: Node = null!;
+    redDot: Node = null;
 
     protected onLoad(): void {
         // ⚠️ 监听挂在**节点**上（`cc.Button` 的 click 本来就是 `node.emit` 出来的）。

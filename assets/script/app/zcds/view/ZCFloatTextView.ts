@@ -124,7 +124,7 @@ export class ZCFloatTextView extends Component {
     }
 
     @property({ type: Label, group: '节点引用', tooltip: 'Text：显示数值的 Label（必填）' })
-    textLabel: Label = null!;
+    textLabel: Label = null;
 
     @property({
         type: Label,

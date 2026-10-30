@@ -1,4 +1,4 @@
-import { instantiate, Node, Prefab, Vec3 } from 'cc';
+import { instantiate, Node, Prefab, UIOpacity, Vec3 } from 'cc';
 import { EventMgr } from '../../framework/event/EventMgr';
 import { ProcedureBase } from '../../framework/procedure/ProcedureBase';
 import type { ProcedurePreloadContext } from '../../framework/procedure/ProcedureBase';
@@ -13,6 +13,14 @@ const MAIN_ROOT_PROGRESS = 0.3;
 
 interface IMainEntryParams {
     readonly initialTab?: number | 'territory' | 'world';
+    /**
+     * 章节局结算返回时带上的「回来先看哪一格」+ 它所属章节。
+     *
+     * 只在领地 tab 首次渲染时消费一次（居中 → 看清那颗格子的通关翻转）；
+     * 普通进主界面不传。跨章节的存局不生效，页面会回落到初始点位。
+     */
+    readonly focusChapterId?: number;
+    readonly focusCellId?: number;
 }
 
 /**
@@ -35,6 +43,9 @@ export class ProcedureMain extends ProcedureBase {
     /** 当前主界面节点实例（登录预加载阶段提前挂载，切出时销毁）。 */
     private mainNode: Node | null = null;
 
+    /** 无登录图遮挡的返回流程：保持节点激活以准备首屏，正式进入时再显示。 */
+    private mainOpacity: UIOpacity | null = null;
+
     async onPreload(params?: IMainEntryParams, context?: ProcedurePreloadContext): Promise<void> {
         if (context && context.cancelled) return;
         if (this.mainNode) {
@@ -50,19 +61,29 @@ export class ProcedureMain extends ProcedureBase {
 
             const node = instantiate(prefab);
             const tabHost = node.getComponent(MainTabHost);
-            tabHost.setAssetService(this.assets);
-            tabHost.setConfigService(this.configs);
-            tabHost.setSessionAssetService(this.sessionAssets);
             if (tabHost && params && params.initialTab !== undefined) {
                 // 章节战斗结束回到主城地图；领地已成为底部主 tab。
                 tabHost.defaultTab = params.initialTab === 'territory' ? MainTab.Territory
                     : params.initialTab === 'world' ? MainTab.World : params.initialTab;
             }
+            // 必须赶在 `setParent`（各 tab 页 onLoad / 首屏渲染）之前落到宿主上：
+            // 领地页在首屏 `renderAll` 里就消费这份焦点，晚一步相机已经回初始点位了。
+            if (tabHost && params?.focusCellId !== undefined) {
+                tabHost.focusCellId = {
+                    chapterId: params.focusChapterId ?? 0,
+                    cellId: params.focusCellId,
+                };
+            }
             this.mainNode = node;
+            const launchCover = LaunchProgressUI.ensure(this.host);
+            if (!launchCover) {
+                // 战斗仍是当前流程；挂载前隐藏整个外壳，避免异步子页尚未就绪时盖住战斗。
+                this.mainOpacity = node.getComponent(UIOpacity) ?? node.addComponent(UIOpacity);
+                this.mainOpacity.opacity = 0;
+            }
             node.setParent(this.host);
             node.setPosition(Vec3.ZERO);
             // MainRoot 后挂载会渲染在登录图之上，把登录图重新置顶盖住，主城在其下完成首帧渲染。
-            const launchCover = LaunchProgressUI.ensure(this.host);
             if (launchCover && this.host) {
                 launchCover.node.setSiblingIndex(this.host.children.length - 1);
             }
@@ -89,6 +110,8 @@ export class ProcedureMain extends ProcedureBase {
     }
 
     onEnter(): void {
+        // 首屏准备完成且旧流程已退出，同步显示，避免「外壳先闪、内容再补齐」。
+        if (this.mainOpacity) this.mainOpacity.opacity = 255;
         // 主城已在登录图下渲染好，直接移除登录图，屏幕上即完整主城（无遮挡、无干等）。
         const launchUi = LaunchProgressUI.ensure(this.host);
         if (launchUi) launchUi.release();
@@ -103,6 +126,7 @@ export class ProcedureMain extends ProcedureBase {
             this.mainNode.destroy();
             this.mainNode = null;
         }
+        this.mainOpacity = null;
         this.mainPrefab = null;
     }
 

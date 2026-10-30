@@ -1,19 +1,5 @@
-/**
- * 角色模块美术的**加载层**（`RoleArt.ts` 的表 + 这里的一份缓存）。
- *
- * 与表本身分开的原因（**别合并回去**）：
- *   `RoleArt.ts` 是纯数据（键 → 路径），零 `cc` 依赖 ⇒ `tests/role.test.ts` 能直接
- *   import 它做「美术映射 ↔ 磁盘文件」双向对账；一旦在那边写 `import { resources } from 'cc'`，
- *   整组用例就 `Cannot find module 'cc'` 静默失效（项目规则：判定/数据层不许引引擎）。
- *
- * ⚠️ 缓存**必须** `addRef()`（项目规则 81）：模块级 `Map` 不参与引用计数，
- * `SpriteFrame.refCount` 停在 0 会被引擎的 `ReleaseManager._freeAssets()` 直接 `destroy()`，
- * 而 `cc.Sprite._spriteFrame` 仍指着它 ⇒ 下一次标脏渲染炸
- * `Simple.updateUVs: Cannot read properties of null (reading '0')`
- * （只在重新渲染那一刻炸，看着像别的模块的锅）。
- */
-import { SpriteFrame } from 'cc';
-import { routedLoad } from '../common/RoutedResource';
+import type { SpriteFrame } from 'cc';
+import { createRoutedSpriteFrameCache } from '../common/SpriteFrameCache';
 import { spriteFramePathOf } from '../ArtPaths';
 import { loadItemIconArt, loadQualityFrameArt } from '../itemdetail/ItemDetailArtLoader';
 import { qualityFrameSuffixOf } from '../itemdetail/ItemDetailTable';
@@ -36,46 +22,15 @@ export function roleFramePathOf(key: string): string {
     return spriteFramePathOf(roleArtRelPath(key));
 }
 
-const cache = new Map<string, SpriteFrame>();
-const pending = new Map<string, Promise<SpriteFrame | null>>();
-let generation = 0;
+const cache = createRoutedSpriteFrameCache('RoleArt');
 
-/** 取一张角色模块的图；拿不到返回 `null`（调用方自己决定留白 / 隐藏）。 */
 export function loadRoleArt(key: string): Promise<SpriteFrame | null> {
     const path = roleFramePathOf(key);
     if (!path) {
         console.warn(`[RoleArt] 没有 key ${key}`);
         return Promise.resolve(null);
     }
-    const cached = cache.get(key);
-    if (cached?.isValid) return Promise.resolve(cached);
-    if (cached) cache.delete(key);
-    const running = pending.get(key);
-    if (running) return running;
-
-    const mark = generation;
-    const task = new Promise<SpriteFrame | null>((resolve) => {
-        routedLoad(path, SpriteFrame, (error, frame) => {
-            if (error || !frame || !frame.isValid) {
-                console.warn(`[RoleArt] 加载失败：${path}`, error);
-                resolve(null);
-                return;
-            }
-            if (mark !== generation) {
-                resolve(null);
-                return;
-            }
-            frame.addRef();
-            cache.set(key, frame);
-            resolve(frame);
-        });
-    });
-    pending.set(key, task);
-    const clear = () => {
-        if (pending.get(key) === task) pending.delete(key);
-    };
-    void task.then(clear, clear);
-    return task;
+    return cache.load(path);
 }
 
 /** 批量预加载（同一批里失败的记 `null`，调用方按 `null` 留白）。 */
@@ -89,8 +44,7 @@ export async function loadRoleArtAll(keys: readonly string[]): Promise<Map<strin
 
 /** 已有缓存（不触发加载）。 */
 export function peekRoleArt(key: string): SpriteFrame | null {
-    const cached = cache.get(key);
-    return cached?.isValid ? cached : null;
+    return cache.peek(roleFramePathOf(key));
 }
 
 /**
@@ -98,17 +52,8 @@ export function peekRoleArt(key: string): SpriteFrame | null {
  * 正常流程**不要**在运行时调 —— 会把已经 `addRef()` 的图丢掉引用来源。
  */
 export function resetRoleArtCacheForTest(): void {
-    generation += 1;
-    for (const frame of cache.values()) {
-        if (frame.isValid) frame.decRef();
-    }
     cache.clear();
-    pending.clear();
-    for (const frame of bagIconCache.values()) {
-        if (frame.isValid) frame.decRef();
-    }
     bagIconCache.clear();
-    bagIconPending.clear();
 }
 
 // ============================================================
@@ -132,43 +77,14 @@ const BAG_ICON_ROOTS: Readonly<Record<'gem' | 'equip' | 'militia', string>> = {
     militia: 'icons/militia',
 };
 
-const bagIconCache = new Map<string, SpriteFrame>();
-const bagIconPending = new Map<string, Promise<SpriteFrame | null>>();
+const bagIconCache = createRoutedSpriteFrameCache('RoleBagArt');
 
-/** 取 `icons/<kind>/<iconKey>` 一张图；拿不到返回 `null`（调用方留白）。 */
+/** 背包图标按 kind 分目录，不经过头像包名解析。 */
 export function loadRoleBagIconSprite(
     kind: 'gem' | 'equip' | 'militia',
     iconKey: string,
 ): Promise<SpriteFrame | null> {
-    const root = BAG_ICON_ROOTS[kind];
-    if (!root || !iconKey) return Promise.resolve(null);
-    const key = `${root}/${iconKey}`;
-
-    const cached = bagIconCache.get(key);
-    if (cached?.isValid) return Promise.resolve(cached);
-    if (cached) bagIconCache.delete(key);
-    const running = bagIconPending.get(key);
-    if (running) return running;
-
-    const task = new Promise<SpriteFrame | null>((resolve) => {
-        routedLoad(spriteFramePathOf(key), SpriteFrame, (error, frame) => {
-            if (error || !frame || !frame.isValid) {
-                // 图确实缺（美术未导）⇒ 这条 warn 是**正确路径**的缺图提示，不是拼错目录。
-                console.warn(`[RoleArt] 背包图标缺失：${key}`, error);
-                resolve(null);
-                return;
-            }
-            frame.addRef();   // 同 loadRoleArt：模块级缓存必须持引用（规则 81）
-            bagIconCache.set(key, frame);
-            resolve(frame);
-        });
-    });
-    bagIconPending.set(key, task);
-    const clear = () => {
-        if (bagIconPending.get(key) === task) bagIconPending.delete(key);
-    };
-    void task.then(clear, clear);
-    return task;
+    return bagIconCache.loadNamed(iconKey, BAG_ICON_ROOTS[kind]);
 }
 
 /**

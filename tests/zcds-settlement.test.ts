@@ -4,6 +4,7 @@ import test from 'node:test';
 import { ZCOwner } from '../assets/script/app/zcds/model/ZCMapConfig';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
+import { assetPath } from './helpers/asset-paths';
 
 const flush = () => new Promise<void>(resolve => setImmediate(resolve));
 function load(file: string, dependencies: Record<string, unknown>) {
@@ -312,7 +313,7 @@ test('结算 Prefab 按钮与说明绑定完整，复用现有按钮贴图且位
     const button = prefab[script.returnButton.__id__]; assert.equal(button.__type__, 'cc.Button');
     const node = prefab[button.node.__id__]; assert.equal(node._active, false);
     const sprite = node._components.map((ref: any) => prefab[ref.__id__]).find((x: any) => x.__type__ === 'cc.Sprite');
-    const meta = JSON.parse(readFileSync('assets/resources/image/common/anniu_01.png.meta', 'utf8'));
+    const meta = JSON.parse(readFileSync(assetPath('image/common/anniu_01.png.meta'), 'utf8'));
     assert.equal(sprite._spriteFrame.__uuid__, meta.subMetas.f9941.uuid);
     const transform = node._components.map((ref: any) => prefab[ref.__id__]).find((x: any) => x.__type__ === 'cc.UITransform');
     const panel = prefab[node._parent.__id__];

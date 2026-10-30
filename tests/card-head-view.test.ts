@@ -24,6 +24,7 @@ import { applyCardHeadArt } from '../assets/script/app/card/CardHeadView';
 import { cardArtKey } from '../assets/script/app/card/CardLineupTypes';
 import { normalizeCardRow, parseCard } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
 import type { Sprite, SpriteFrame } from 'cc';
+import { assetPath } from './helpers/asset-paths';
 
 // ============================================================================
 // 1. applyCardHeadArt：头像与立绘互斥显示
@@ -161,7 +162,7 @@ test('cardArtKey：没配头像的卡键后缀是空串，且与任何配了头�
 // 3. 四个 prefab 的结构契约
 // ============================================================================
 
-//  这四个 prefab 都在 `main-pages` 分包里；`assets/resources/ui/card/` 早已不存在，
+//  这四个 prefab 都在 `main-pages` 分包里；assetPath(`ui/card/`) 早已不存在，
 //  旧路径让本组断言从搬包那天起就一直 ENOENT（不是业务红）。
 const PREFAB_DIR = 'assets/bundles/main-pages/ui/card/';
 

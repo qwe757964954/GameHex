@@ -103,6 +103,10 @@ import {
 } from './PopupDef';
 import { PopupManager } from './PopupManager';
 import type { ICallbackOwnerRegistry } from '../../core/runtime/CallbackOwner';
+import { scopeAssetService, type AssetService } from '../../core/asset/AssetService';
+import { ResourceScope } from '../../core/asset/ResourceScope';
+import { ProcedureManager } from '../procedure/ProcedureManager';
+import type { GameContext } from '../../core/runtime/GameContext';
 
 const { ccclass, property } = _decorator;
 
@@ -202,6 +206,29 @@ export class PopupOpenContext {
 
 @ccclass('PopupBase')
 export class PopupBase extends Component {
+    private _resourceScope = new ResourceScope('popup');
+    private _assets: AssetService | null = null;
+
+    /** 动态展示资源归本次打开所有；子类无需另外持有资源控制器。 */
+    protected get resourceScope(): ResourceScope { return this._resourceScope; }
+
+    protected get assets(): AssetService {
+        if (!this._assets) {
+            const context = this.gameContext;
+            this._assets = scopeAssetService(context.sessionAssets.reusableAssets ?? context.assets, this.resourceScope);
+        }
+        return this._assets;
+    }
+
+    protected get configs(): GameContext['configs'] { return this.gameContext.configs; }
+    protected get sessionAssets(): GameContext['sessionAssets'] { return this.gameContext.sessionAssets; }
+
+    private get gameContext(): GameContext {
+        const manager = ProcedureManager.instance;
+        if (!manager) throw new Error(`${this.className} requires the configured application context`);
+        return manager.context;
+    }
+
     // ============================================================
     // 子类契约（静态）
     // ============================================================
@@ -320,7 +347,7 @@ export class PopupBase extends Component {
     // ============================================================
 
     /**
-     * 打开本弹窗。等价于 `PopupManager.inst().openAsync(本类, params)`。
+     * 打开本弹窗。等价于 `PopupManager.inst.openAsync(本类, params)`。
      *
      * 用法（子类无需再写 static open）：
      *   await GameRunAway.open({ userData: { mine, enemy } });
@@ -329,12 +356,7 @@ export class PopupBase extends Component {
         this: new () => T,
         params: IPopupOpenParams = {},
     ): Promise<T | null> {
-        const mgr = PopupManager.inst;
-        if (!mgr) {
-            console.error(`[PopupBase] ${this.name}.open 失败：场景内没有 PopupManager（常驻节点 Popup）`);
-            return null;
-        }
-        return mgr.openAsync(this, params);
+        return PopupManager.inst.openAsync(this, params);
     }
 
     // ============================================================
@@ -394,7 +416,7 @@ export class PopupBase extends Component {
         if (this._closeHandled) return;
 
         const mgr = PopupManager.inst;
-        if (mgr && mgr.owns(this)) {
+        if (mgr.owns(this)) {
             mgr.close(this, reason);
             return;
         }
@@ -430,6 +452,9 @@ export class PopupBase extends Component {
     /** @internal 由 PopupManager 调用。 */
     public async _internalOpen(serialId: number, params: IPopupOpenParams, layer: PopupLayer): Promise<void> {
         this._openContext?.cancel();
+        this._resourceScope.dispose();
+        this._resourceScope = new ResourceScope(`popup:${this.className}`);
+        this._assets = null;
         const context = new PopupOpenContext(serialId);
         this._openContext = context;
         this._lifecycleState = PopupLifecycleState.Opening;
@@ -486,6 +511,7 @@ export class PopupBase extends Component {
             console.error(`[PopupBase] ${this.className} onClose 抛错`, error);
         }
         this._callbackOwners?.removeCallerListener(this);
+        this._resourceScope.dispose();
 
         const onClose = this._params?.onClose;
         this._params = null;
@@ -785,6 +811,7 @@ export class PopupBase extends Component {
     }
 
     onDestroy(): void {
+        this._resourceScope.dispose();
         this._callbackOwners?.removeCallerListener(this);
         this._callbackOwners = null;
         // 遵循项目约定：不要主动 off() 事件，节点销毁时引擎会自动清理，

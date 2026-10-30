@@ -15,7 +15,14 @@ function rewardEditor(initialRewardIds: Array<number | undefined>) {
     };
     const match = source.match(/function applyRewardIdFromForm\(\) \{[\s\S]*?\n\}/);
     assert.ok(match, 'rewardId must have a dedicated draft persistence function');
-    const apply = runInNewContext(`${match[0]}; applyRewardIdFromForm`, context) as () => boolean;
+    // `applyRewardIdFromForm` 内部要调 `siteAtCell(selectedCell)` 找当前格 —— 那是同文件的顶层函数声明，
+    // 在浏览器里靠 hoisting 拿得到，但 `runInNewContext` 只喂了这一段源码，不注入就是 ReferenceError。
+    const siteAtCellSrc = source.match(/function siteAtCell\(cell\) \{[\s\S]*?\n\}/);
+    assert.ok(siteAtCellSrc, 'siteAtCell 必须仍是顶层函数声明（否则 applyRewardIdFromForm 里会 ReferenceError）');
+    const apply = runInNewContext(
+        `${siteAtCellSrc[0]}; ${match[0]}; applyRewardIdFromForm`,
+        context,
+    ) as () => boolean;
     return { sites, field, context, apply };
 }
 

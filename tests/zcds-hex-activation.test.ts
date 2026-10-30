@@ -35,6 +35,7 @@ import {
 } from '../assets/script/app/zcds/model/ZCBattlePresentationQueue';
 import { BUILDING_POP_FROM_SCALE, POP_PEAK_SCALE, ZC_LAND_TOP_CENTER_LIFT } from '../assets/script/app/zcds/view/ZCGameViewUtil';
 import { ZCPvpTileType } from '../assets/script/app/zcds/model/ZCPvpTileRules';
+import { assetPath } from './helpers/asset-paths';
 
 // ── 模型部分：开发成功 → 入队「地块激活表现」，过期清理，reset 清空 ─────────────
 // 与 `zcds-model.test.ts` 同款加载骨架：remoteRef 的 PVP 表 + legacy 地图夹具。
@@ -615,7 +616,7 @@ test('底部发光改用序列帧：不再加载 hex-ground-glow.effect，视图
  * 误判成亮边 / 把亮度溢出到格形之外。现在的现役落点是碎裂的裂缝。
  */
 test('碎裂裂缝的透明度按贴图轮廓给，不能用阵营染色的 alpha（否则整张格子都亮）', () => {
-    const effect = readFileSync('assets/resources/shaders/hex-flip.effect', 'utf8');
+    const effect = readFileSync(assetPath('shaders/hex-flip.effect'), 'utf8');
     assert.match(effect, /result\.a = min\(1\.0, result\.a \+ seam \* texel\.a \* 0\.6\);/,
         '裂缝要乘 texel.a（贴图原始 alpha）；用 color.a 会把格外的透明区一起提亮');
     // 顶点 3D 段已删，`vEdge`（转轴亮带）不该被写回来 —— 它会在格子正面形成整条横向白纹。

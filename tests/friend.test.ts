@@ -123,6 +123,7 @@ import {
     FRIEND_TIP_SEND_MAX,
     formatText,
 } from '../assets/script/app/friend/FriendTexts';
+import { assetPath } from './helpers/asset-paths';
 
 // ============================================================
 // 夹具
@@ -577,7 +578,7 @@ test('A22 页签常量与枚举一致（`FRIEND_TAB_COUNT` 是 prefab 里页签�
 // B. 资源口径
 // ============================================================
 
-const ART_DIR = 'assets/resources/image/friend';
+const ART_DIR = assetPath('image/friend');
 
 /** `FriendArt` 里 12 个静态图名。 */
 const ART_NAMES: readonly string[] = [
@@ -727,9 +728,9 @@ interface IPrefabFile {
 }
 
 const PREFABS: readonly IPrefabFile[] = [
-    { file: 'assets/resources/ui/Friend/Friend.prefab', rootName: 'Friend', all: [] },
-    { file: 'assets/resources/ui/Friend/FriendApply.prefab', rootName: 'FriendApply', all: [] },
-    { file: 'assets/resources/ui/Friend/FriendGetEnd.prefab', rootName: 'FriendGetEnd', all: [] },
+    { file: assetPath('ui/Friend/Friend.prefab'), rootName: 'Friend', all: [] },
+    { file: assetPath('ui/Friend/FriendApply.prefab'), rootName: 'FriendApply', all: [] },
+    { file: assetPath('ui/Friend/FriendGetEnd.prefab'), rootName: 'FriendGetEnd', all: [] },
 ].map((item) => ({
     ...item,
     all: JSON.parse(readFileSync(item.file, 'utf8')) as Record<string, unknown>[],
@@ -1186,8 +1187,8 @@ test('D1 三个页面的 prefabPath 大小写正确（真机区分大小写，�
     ];
     for (const [label, code, path] of cases) {
         assert.ok(code.includes(`static prefabPath = '${path}'`), `${label} 的 prefabPath 必须是 '${path}'`);
-        assert.ok(existsSync(`assets/resources/${path}.prefab`), `磁盘上没有 assets/resources/${path}.prefab`);
-        assert.ok(existsSync(`assets/resources/${path}.prefab.meta`), `缺 ${path}.prefab.meta（不会被编辑器导入）`);
+        assert.ok(existsSync(assetPath(`${path}.prefab`)), `磁盘上没有 assets/resources/${path}.prefab`);
+        assert.ok(existsSync(assetPath(`${path}.prefab.meta`)), `缺 ${path}.prefab.meta（不会被编辑器导入）`);
     }
 });
 

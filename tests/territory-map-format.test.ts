@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { hexGridNeighborIds } from '../assets/script/core/hex/HexGridLayout';
 import { hexNeighbors, normalizeTerritoryMap, TerritoryValidationError } from '../tools/map-editor/formats/territory-format.js';
+import { assetUrl } from './helpers/asset-paths';
 
 /**
  * 领地编辑器的六邻居必须与客户端 `hexGridNeighborIds` 逐格一致。
@@ -21,7 +22,7 @@ test('领地编辑器的六邻居与客户端逐格一致（20×20 与 40×40）
     }
 });
 
-const sample = JSON.parse(readFileSync(new URL('../assets/resources/config/territory-maps/chapter_01.json', import.meta.url), 'utf8'));
+const sample = JSON.parse(readFileSync(assetUrl('config/territory-maps/chapter_01.json'), 'utf8'));
 
 test('territory sample normalizes independently from battle map protocol', () => {
     const result = normalizeTerritoryMap(sample);

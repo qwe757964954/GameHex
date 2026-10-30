@@ -103,19 +103,19 @@ export class LeagueJoinPage extends Component {
     static prefabPath = 'ui/League/LeagueJoin';
 
     @property({ type: Node, tooltip: 'Search/BtnSearch：按联盟 ID 查询' })
-    searchButton: Node = null!;
+    searchButton: Node = null;
 
     @property({ type: EditBox, tooltip: 'Search/Input：联盟 ID 查询框（数字键盘）' })
-    searchInput: EditBox = null!;
+    searchInput: EditBox = null;
 
     @property({ type: VirtualScrollView, tooltip: 'LeagueListView：可加入的联盟列表（虚拟列表 + Mask）' })
-    unionList: VirtualScrollView = null!;
+    unionList: VirtualScrollView = null;
 
     @property({ type: Node, tooltip: 'BtnCreate：创建联盟（开 LeagueCreate 弹窗）' })
-    createButton: Node = null!;
+    createButton: Node = null;
 
     @property({ type: Node, tooltip: 'BtnQuickJoin：快速加入（最多 5 条）' })
-    quickJoinButton: Node = null!;
+    quickJoinButton: Node = null;
 
     /**
      * 写成功（快速加入 / 创建）后的回敲 —— 由容器页 `LeagueTabPage` 赋值。

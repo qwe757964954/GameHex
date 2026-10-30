@@ -183,7 +183,7 @@ export class NewTreasureRepository {
      */
     private detailRewards(cardBoxId: number): readonly IChestDetailRewardData[] {
         const rates = Array.isArray(this.configs.get(cardBoxId)?.cardDropRate)
-            ? this.configs.get(cardBoxId)!.cardDropRate as { poolId?: unknown; pro?: unknown }[]
+            ? this.configs.get(cardBoxId).cardDropRate as { poolId?: unknown; pro?: unknown }[]
             : [];
         const out: IChestDetailRewardData[] = [];
         for (const rate of rates) {

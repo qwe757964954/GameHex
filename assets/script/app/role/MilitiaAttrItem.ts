@@ -12,9 +12,9 @@ const { ccclass, property } = _decorator;
 @ccclass('MilitiaAttrItem')
 export class MilitiaAttrItem extends Component {
     @property({ type: Node, tooltip: 'Desc：行文本（其上挂 cc.Label）' })
-    descNode: Node = null!;
+    descNode: Node = null;
 
-    private desc: Label = null!;
+    private desc: Label = null;
     private inited = false;
 
     protected onLoad(): void {

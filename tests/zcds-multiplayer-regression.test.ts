@@ -7,6 +7,7 @@ import { loadPvpTables, type ZCPvpTables } from '../assets/script/app/zcds/model
 import { configureZCMap, ownersForPlayerCount } from '../assets/script/app/zcds/model/ZCMapConfig';
 import { captureZCMatchConfig } from '../assets/script/app/zcds/model/ZCMatchConfig';
 import type { ZCHexState } from '../assets/script/app/zcds/model/ZCGameTypes';
+import { assetPath } from './helpers/asset-paths';
 
 function rows(name: string): Array<Record<string, unknown>> {
     const source = JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8')) as
@@ -25,11 +26,11 @@ const tableNames = [
 loadPvpTables(Object.fromEntries(tableNames.map((name) => [name, rows(name)])) as unknown as ZCPvpTables);
 
 test('local 2/3/4-player battles initialize every owner and preserve deterministic snapshots', () => {
-    const baseline = JSON.parse(readFileSync('assets/resources/config/maps/standard.json', 'utf8'));
+    const baseline = JSON.parse(readFileSync(assetPath('config/maps/standard.json'), 'utf8'));
     try {
         for (const playerCount of [2, 3, 4] as const) {
             const mapName = playerCount === 2 ? 'standard' : `standard_${playerCount}`;
-            configureZCMap(JSON.parse(readFileSync(`assets/resources/config/maps/${mapName}.json`, 'utf8')));
+            configureZCMap(JSON.parse(readFileSync(assetPath(`config/maps/${mapName}.json`), 'utf8')));
             const built = buildZCClientCombatConfig(captureZCMatchConfig(), null);
             const owners = ownersForPlayerCount(playerCount);
             assert.deepEqual(Object.keys(built.config.modifiers ?? {}), owners, mapName);
@@ -65,9 +66,9 @@ test('local 2/3/4-player battles initialize every owner and preserve determinist
 });
 
 test('多人局某玩家最后建筑被摧毁后，其剩余空地归中立，不能被残兵重新占回', () => {
-    const baseline = JSON.parse(readFileSync('assets/resources/config/maps/standard.json', 'utf8'));
+    const baseline = JSON.parse(readFileSync(assetPath('config/maps/standard.json'), 'utf8'));
     try {
-        configureZCMap(JSON.parse(readFileSync('assets/resources/config/maps/standard_4.json', 'utf8')));
+        configureZCMap(JSON.parse(readFileSync(assetPath('config/maps/standard_4.json'), 'utf8')));
         const config = buildZCClientCombatConfig(captureZCMatchConfig(), null).config;
         const seed = new ZCGameModel(null, () => .1, config);
         const snapshot = seed.exportSnapshot();

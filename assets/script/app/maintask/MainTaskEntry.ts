@@ -17,10 +17,10 @@ const { ccclass, property } = _decorator;
 @ccclass('MainTaskEntry')
 export class MainTaskEntry extends Component {
     @property({ type: Label, tooltip: 'Label: task entry title' })
-    label: Label = null!;
+    label: Label = null;
 
     @property({ type: Node, tooltip: 'RedDot：可领取红点（只有 `FINISH` 才亮）' })
-    redDot: Node = null!;
+    redDot: Node = null;
 
     /** 数据端口；测试 / 探针可替换。 */
     private repo: IMainTaskRepository = mainTaskRepository;

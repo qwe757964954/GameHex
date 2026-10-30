@@ -73,10 +73,10 @@ export class LoadingPopup extends PopupBase {
     }
 
     @property({ type: Node, group: 'Loading', tooltip: 'Spinner：转圈容器' })
-    spinner: Node = null!;
+    spinner: Node = null;
 
     @property({ type: Label, group: 'Loading', tooltip: 'Label：提示文字' })
-    label: Label = null!;
+    label: Label = null;
 
     @property({ group: 'Loading', tooltip: '旋转速度（度/秒）' })
     spinSpeed = 240;

@@ -1,9 +1,4 @@
-/**
- * 匹配中我方信息条的自己资料（找对手时就要显示，不等对手）。
- * 身份来源：CmdRole 缓存（服务端权威）→ localStorage.login_session（兜底 roleId）→ null。
- * 只能给昵称 / roleId / 头像 id；战力段位奖杯等开始游戏回包才有，本模块不造。
- * 头像 id 就在 CmdRole.img 里，登录后即可查资源名显示。
- */
+/** 身份优先读 CmdRole，登录会话仅兜底 roleId；战斗数值等待服务端回包。 */
 import { sys } from 'cc';
 import { CacheMgr } from '../net/CacheMgr';
 import { toIdString } from '../net/RequestGuard';
@@ -12,17 +7,15 @@ import type { MatchProfileLookup } from '../battle/BattleStartModel';
 import { LOCAL_PLAYER } from './MatchPool';
 import type { MatchPlayerData } from './MatchTypes';
 
-/** 本机身份。name 允许为空。 */
 export interface SelfIdentity {
     readonly roleId: string;
     readonly name: string;
-    /** 头像 id（head 表 resId，不是资源名）。空串 = 无此列。 */
+    /** head 表中的头像 id，非资源名。 */
     readonly avatarId: string;
 }
 
 const LOGIN_SESSION_KEY = 'login_session';
 
-/** 从 CmdRole 缓存取本机行。 */
 function readFromRoleCache(): SelfIdentity | null {
     let rows: readonly CmdRole[] = [];
     try {
@@ -44,7 +37,6 @@ function readFromRoleCache(): SelfIdentity | null {
     return null;
 }
 
-/** 从登录会话取 roleId（会话里只有身份）。 */
 function readFromLoginSession(): SelfIdentity | null {
     try {
         const raw = sys.localStorage.getItem(LOGIN_SESSION_KEY);
@@ -58,24 +50,19 @@ function readFromLoginSession(): SelfIdentity | null {
     }
 }
 
-/** 读本机身份。每次重读缓存（CmdRole 登录后才落地，缓存空值会被钉死）。 */
+/** 不缓存空身份，避免登录数据稍后到达时仍读不到。 */
 export function readSelfIdentity(): SelfIdentity | null {
     return readFromRoleCache() ?? readFromLoginSession();
 }
 
-/**
- * 我方信息条起始数据：本地占位 + 本机昵称 + 本机头像。
- * 昵称、头像各自独立覆盖；战力等保留本地值等回包。
- */
+/** 返回独立展示副本，昵称与头像分别覆盖。 */
 export function buildSelfPlayerData(
     identity: SelfIdentity | null = readSelfIdentity(),
     lookup?: MatchProfileLookup | null,
 ): MatchPlayerData {
-    // 返回副本：LOCAL_PLAYER 是共享常量，就地改写会污染下次匹配。
-    if (!identity) return { ...LOCAL_PLAYER };
-    const next: MatchPlayerData = { ...LOCAL_PLAYER };
+    const next: MatchPlayerData = { ...LOCAL_PLAYER, stats: [] };
+    if (!identity) return next;
     if (identity.name) next.name = identity.name;
-    // 头像连根目录一起换，查不到保留占位图。
     applyHeadArt(next, identity.avatarId, lookup?.headArt);
     return next;
 }

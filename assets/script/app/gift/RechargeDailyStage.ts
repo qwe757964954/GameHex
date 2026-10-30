@@ -19,16 +19,16 @@ export type RechargeStageState = 'locked' | 'claimable' | 'taken';
 @ccclass('RechargeDailyStage')
 export class RechargeDailyStage extends Component {
     @property({ type: GiftRewardSlot, tooltip: 'Goods：奖励格（本节点 Sprite 是品质框，子节点 Icon 是道具图）' })
-    goods: GiftRewardSlot = null!;
+    goods: GiftRewardSlot = null;
 
     @property({ type: Label, tooltip: 'DayLabel：下方天数文案（如「累计 2 天」）' })
-    dayLabel: Label = null!;
+    dayLabel: Label = null;
 
     @property({ type: Node, tooltip: 'ClaimTip：可领奖文字（默认隐藏）' })
-    claimTip: Node = null!;
+    claimTip: Node = null;
 
     @property({ type: Node, tooltip: 'CheckMark：已领奖对勾（默认隐藏）' })
-    checkMark: Node = null!;
+    checkMark: Node = null;
 
     /** 宿主点这一格时回调（只有 `claimable` 态才真的派发）。 */
     onAction: (() => void) | null = null;

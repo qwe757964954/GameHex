@@ -64,13 +64,13 @@ export class LeagueNorthTab extends Component {
      *    万一有 prefab 还是那个形状，`onLoad` 里也能取到。
      */
     @property({ type: Sprite, tooltip: 'Bg：页签底图（两态靠换 spriteFrame）' })
-    bg: Sprite = null!;
+    bg: Sprite = null;
 
     @property({ type: Label, tooltip: 'title：页签文案（联盟排名 / 盟内进度 / 联盟奖励 / 个人奖励）' })
-    titleLabel: Label = null!;
+    titleLabel: Label = null;
 
     @property({ type: Node, tooltip: 'com_rd：页签红点（只有奖励页会点亮）' })
-    redDot: Node = null!;
+    redDot: Node = null;
 
     /** 点到这个页签（宿主按自己的页签表分发）。 */
     onTabClick: (() => void) | null = null;
@@ -81,12 +81,9 @@ export class LeagueNorthTab extends Component {
     private frames: ILeagueNorthTabFrames = { normal: null, selected: null };
     private selected = false;
     private dotOn = false;
-    private bound = false;
 
     protected onLoad(): void {
         this.bgSprite = this.bg ?? this.getComponent(Sprite);
-        if (this.bound) return;
-        this.bound = true;
         const button = this.getComponent(Button);
         if (button) button.node.on(Button.EventType.CLICK, this.onClick, this);
         else this.node.on(Node.EventType.TOUCH_END, this.onClick, this);

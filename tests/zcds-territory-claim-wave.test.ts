@@ -41,6 +41,7 @@ import {
     ZC_CLAIM_WAVE_FADE_SECONDS,
     ZC_CLAIM_WAVE_SECONDS,
 } from '../assets/script/app/zcds/view/ZCGameViewUtil';
+import { assetPath } from './helpers/asset-paths';
 
 // ── 纯函数：时间表 ─────────────────────────────────────────────────────────
 
@@ -193,7 +194,7 @@ test('真实自选主城图（select_river）：波覆盖整片半场的中立�
     loadPvpTables(tables);
 
     const layout = JSON.parse(
-        readFileSync('assets/resources/config/maps/select_river.json', 'utf8'),
+        readFileSync(assetPath('config/maps/select_river.json'), 'utf8'),
     ) as ZCMapLayout;
     configureZCMap(layout);
     const base = captureZCMatchConfig(undefined, { allowUnresolvedSelect: true });
@@ -248,7 +249,7 @@ test('真实自选主城图（select_river）：波覆盖整片半场的中立�
 
 test('真实自选主城图：半区划分与「上下半场二分」一致（波两侧各一半的由来）', () => {
     const layout = JSON.parse(
-        readFileSync('assets/resources/config/maps/select_river.json', 'utf8'),
+        readFileSync(assetPath('config/maps/select_river.json'), 'utf8'),
     ) as ZCMapLayout;
     configureZCMap(layout);
     const base = captureZCMatchConfig(undefined, { allowUnresolvedSelect: true });

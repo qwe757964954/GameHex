@@ -58,7 +58,7 @@
  * 就读哪一行，天然不会串。
  */
 
-import { _decorator, Button, Component, Label, Node, Sprite, SpriteFrame, UITransform } from 'cc';
+import {_decorator, Button, Component, Label, Node, Sprite, UITransform} from 'cc';
 import { RedDot } from '../common/RedDot';
 import type { ILeagueRewardArt } from './LeagueRewardArt';
 import { LeagueRewardSlot } from './LeagueRewardSlot';
@@ -80,37 +80,37 @@ export const LEAGUE_TASK_ROW_PROGRESS_FULL_WIDTH = 156;
 @ccclass('LeagueTaskRow')
 export class LeagueTaskRow extends Component {
     @property({ type: Label, tooltip: 'title：任务名（24px 居中）' })
-    titleLabel: Label = null!;
+    titleLabel: Label = null;
 
     @property({ type: LeagueRewardSlot, tooltip: 'com_goods：奖励 1（缺位整格隐藏）' })
-    rewardSlot: LeagueRewardSlot = null!;
+    rewardSlot: LeagueRewardSlot = null;
 
     @property({ type: LeagueRewardSlot, tooltip: 'com_goods1：奖励 2（缺位整格隐藏）' })
-    rewardSlot1: LeagueRewardSlot = null!;
+    rewardSlot1: LeagueRewardSlot = null;
 
     @property({ type: Node, tooltip: 'comp_progress：整条进度（「已领取」页整块不显示）' })
-    progressNode: Node = null!;
+    progressNode: Node = null;
 
     @property({ type: Sprite, tooltip: 'comp_progress/bar：填充（按 value/max 改宽度）' })
-    progressFill: Sprite = null!;
+    progressFill: Sprite = null;
 
     @property({ type: Label, tooltip: 'comp_progress/lab_title：百分比文案（18/20px）' })
-    progressLabel: Label = null!;
+    progressLabel: Label = null;
 
     @property({ type: Node, tooltip: 'btn_get：领取按钮（仅「可领取」页）' })
-    getButton: Node = null!;
+    getButton: Node = null;
 
     @property({ type: Node, tooltip: 'btn_get/组件_红点：可领取红点（与按钮可见性同源）' })
-    getRedDot: Node = null!;
+    getRedDot: Node = null;
 
     @property({ type: Node, tooltip: 'btn_go：前往按钮（仅「未完成」页）' })
-    goButton: Node = null!;
+    goButton: Node = null;
 
     @property({ type: Node, tooltip: 'btn_adv：看广告按钮（仅「未完成」+ 有广告次数 + 广告能力可用）' })
-    advButton: Node = null!;
+    advButton: Node = null;
 
     @property({ type: Node, tooltip: 'n35：整幅「已领取」标（仅「已领取」页）' })
-    doneTag: Node = null!;
+    doneTag: Node = null;
 
     /** 点「领取」（`view` 是**点击那一刻**这一槽位上的行数据）。 */
     onGet: ((view: ILeagueTaskRowView) => void) | null = null;

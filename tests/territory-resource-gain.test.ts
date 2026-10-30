@@ -41,6 +41,7 @@ import {
     TERRITORY_WALLET_RES_KEY,
     territoryWalletResKeyOf,
 } from '../assets/script/app/territory/model/TerritoryResourceGain';
+import { assetPath } from './helpers/asset-paths';
 
 const read = (path: string): string => readFileSync(path, 'utf8');
 
@@ -118,8 +119,8 @@ test('升起：入场段弹出到峰值缩放，淡出段回落并淡到全透�
 
 // ── prefab 结构（离线读盘，不需要引擎） ──────────────────────────────────
 
-const GAIN_PREFAB = 'assets/resources/ui/territory/TerritoryResourceGain.prefab';
-const PAGE_PREFAB = 'assets/resources/ui/main/MainTerritoryMap.prefab';
+const GAIN_PREFAB = assetPath('ui/territory/TerritoryResourceGain.prefab');
+const PAGE_PREFAB = assetPath('ui/main/MainTerritoryMap.prefab');
 
 interface IPrefabObject { __type__?: string; _name?: string; [key: string]: unknown }
 const load = (path: string): IPrefabObject[] => JSON.parse(read(path)) as IPrefabObject[];
@@ -1052,7 +1053,7 @@ test('key 的真源是 roleProperty 表：7 行 key=gold / 9 行 key=end（且�
 });
 
 test('HUD 资源栏必须真的摆着这两格（改回 gold,gem 就会让体力图标无处可落）', () => {
-    const prefab = read('assets/resources/ui/main/ArenaRoot.prefab');
+    const prefab = read(assetPath('ui/main/ArenaRoot.prefab'));
     const keys = /"propertyPath"\s*:\s*\[\s*"resKeys"\s*\]\s*,\s*"value"\s*:\s*"([^"]*)"/.exec(prefab);
     assert.ok(keys, 'ArenaRoot.prefab 里找不到 ResBar 实例的 resKeys 覆盖项');
     const list = keys![1].split(',').map((key) => key.trim());

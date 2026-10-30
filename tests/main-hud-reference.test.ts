@@ -1,11 +1,12 @@
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { assetPath } from './helpers/asset-paths';
 
 const mainTabHost = readFileSync('assets/script/app/main/MainTabHost.ts', 'utf8');
 const mainPage = readFileSync('assets/script/app/main/MainPage.ts', 'utf8');
 const chestBar = readFileSync('assets/script/app/main/ChestBar.ts', 'utf8');
-const arenaPrefab = JSON.parse(readFileSync('assets/resources/ui/main/ArenaRoot.prefab', 'utf8')) as unknown;
+const arenaPrefab = JSON.parse(readFileSync(assetPath('ui/main/ArenaRoot.prefab'), 'utf8')) as unknown;
 
 function findNodes(value: unknown, name: string): Record<string, unknown>[] {
     if (Array.isArray(value)) return value.flatMap((item) => findNodes(item, name));

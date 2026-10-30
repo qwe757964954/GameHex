@@ -51,7 +51,6 @@ export interface ProtobufStaticRoot {
  */
 export class ProtocolCodec {
     private readonly gameNamespace = 'com.xkhy.tafang.cmd';
-    private readonly engineNamespace = 'com.cca.core.network.cmd';
     /** 业务协议命名空间：com.xkhy.tafang.cmd */
     private readonly game: ProtobufStaticNamespace;
     /** 引擎信封命名空间：com.cca.core.network.cmd */

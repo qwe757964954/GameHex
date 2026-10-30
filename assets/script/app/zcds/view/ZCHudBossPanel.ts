@@ -19,7 +19,6 @@ export interface IZCHudBossWaveText {
 /** 波次徽标字号（设计稿文字框 109×32、白核高 29.9 ⇒ fontSize ≈ 32）。 */
 const ZC_BOSS_WAVE_FONT_SIZE = 32;
 /** 倍率徽标字号（设计稿 `X4` 白核 26.5×16.1 ⇒ fontSize ≈ 22）。 */
-const ZC_BOSS_RATE_FONT_SIZE = 22;
 /** 黑描边宽度（设计稿白核四周实测 2~3px）。 */
 const ZC_BOSS_LABEL_OUTLINE_WIDTH = 3;
 
@@ -57,19 +56,19 @@ export function formatZCDefenceHpRate(hpRate: number): string {
 @ccclass('ZCHudBossPanel')
 export class ZCHudBossPanel extends Component {
     @property({ type: Label, group: '节点引用', tooltip: 'WaveText：第N/M波（白字黑描边，压在沙地上）' })
-    waveLabel: Label = null!;
+    waveLabel: Label = null;
 
     @property({ type: Sprite, group: '节点引用', tooltip: 'Portrait/Icon：首领头像（当前波那波的怪）' })
-    portraitIcon: Sprite = null!;
+    portraitIcon: Sprite = null;
 
     @property({ type: Label, group: '节点引用', tooltip: 'BossName：首领名字' })
-    nameLabel: Label = null!;
+    nameLabel: Label = null;
 
     @property({ type: Sprite, group: '节点引用', tooltip: 'Bar/Fill：本波血条填充（FILLED 横条）' })
-    hpFill: Sprite = null!;
+    hpFill: Sprite = null;
 
     @property({ type: Label, group: '节点引用', tooltip: 'Bar/Rate：血量倍率 X4' })
-    rateLabel: Label = null!;
+    rateLabel: Label = null;
 
     /**
      * 全量赋值（每次渲染都会被调）。

@@ -9,13 +9,20 @@ import {
 
 /** 复用现有 Socket、缓存与广播分发；页面生命周期由 Repository 管理。 */
 export class GameNetBigMapSlgGateway implements IBigMapSlgGateway {
+    private isDisposed = false;
     constructor(private readonly isOwnerCurrent: () => boolean) {}
+
+    dispose(): void {
+        if (this.isDisposed) return;
+        this.isDisposed = true;
+        GameNet.instance.removeCaller(this);
+    }
 
     async request(name: IBigMapSlgRequestName, body: IBigMapSlgRequestBody): Promise<unknown> {
         const net = GameNet.instance;
-        if (!net.isConnected || !this.isOwnerCurrent()) return null;
+        if (this.isDisposed || !net.isConnected || !this.isOwnerCurrent()) return null;
         let response: unknown = null;
-        const receive = (rsp: unknown): void => { if (this.isOwnerCurrent()) response = rsp; };
+        const receive = (rsp: unknown): void => { response = rsp; };
         const uint = (key: string): number => {
             const value = bigMapServerUint(body[key]);
             if (value === null) throw new Error(`[SLG] 非法请求字段 ${key}`);
@@ -38,41 +45,28 @@ export class GameNetBigMapSlgGateway implements IBigMapSlgGateway {
         };
         let request: RequestMsg<unknown, unknown>;
         switch (name) {
-            case 'CmdSlgActionUpdateReqMsg': request = new RequestSlgActionUpdate({}, undefined, receive); break;
-            case 'CmdSlgGameInfoReqMsg': request = new RequestSlgGameInfo({}, undefined, receive); break;
-            case 'CmdSlgBuildInfoReqMsg': request = new RequestSlgBuildInfo({}, undefined, receive); break;
+            case 'CmdSlgActionUpdateReqMsg': request = new RequestSlgActionUpdate({}, this, receive); break;
+            case 'CmdSlgGameInfoReqMsg': request = new RequestSlgGameInfo({}, this, receive); break;
+            case 'CmdSlgBuildInfoReqMsg': request = new RequestSlgBuildInfo({}, this, receive); break;
             case 'CmdSlgBuildReqMsg':
                 request = new RequestSlgBuild({
                     buildingId: uint('buildingId'), position: uint('position'), instant: uint('instant'),
-                }, undefined, receive);
+                }, this, receive);
                 break;
             case 'CmdSlgBuildUpgradeReqMsg':
-                request = new RequestSlgBuildUpgrade({ buildInstId: id(), instant: uint('instant') }, undefined, receive);
+                request = new RequestSlgBuildUpgrade({ buildInstId: id(), instant: uint('instant') }, this, receive);
                 break;
-            case 'CmdSlgBuildCancelReqMsg': request = new RequestSlgBuildCancel({ buildInstId: id() }, undefined, receive); break;
-            case 'CmdSlgBuildMoveReqMsg': request = new RequestSlgBuildMove({ buildInstId: id(), position: uint('position') }, undefined, receive); break;
-            case 'CmdSlgBuildCollectReqMsg': request = new RequestSlgBuildCollect({ buildInstIds: ids() }, undefined, receive); break;
-            case 'CmdSlgBuildUnlockQueueReqMsg': request = new RequestSlgBuildUnlockQueue({ queueId: uint('queueId') }, undefined, receive); break;
+            case 'CmdSlgBuildCancelReqMsg': request = new RequestSlgBuildCancel({ buildInstId: id() }, this, receive); break;
+            case 'CmdSlgBuildMoveReqMsg': request = new RequestSlgBuildMove({ buildInstId: id(), position: uint('position') }, this, receive); break;
+            case 'CmdSlgBuildCollectReqMsg': request = new RequestSlgBuildCollect({ buildInstIds: ids() }, this, receive); break;
+            case 'CmdSlgBuildUnlockQueueReqMsg': request = new RequestSlgBuildUnlockQueue({ queueId: uint('queueId') }, this, receive); break;
         }
         const expiresAt = Date.now() + 5000;
-        request.canSend = () => this.isOwnerCurrent() && Date.now() < expiresAt;
+        request.canSend = () => !this.isDisposed && this.isOwnerCurrent() && Date.now() < expiresAt;
         request.allowRetry = name === 'CmdSlgGameInfoReqMsg' || name === 'CmdSlgActionUpdateReqMsg'
             || name === 'CmdSlgBuildInfoReqMsg';
         const sent = await net.send(request, false);
-        return sent && this.isOwnerCurrent() ? response : null;
+        return sent && !this.isDisposed && this.isOwnerCurrent() ? response : null;
     }
 
-    subscribe(listener: (kind: 'game' | 'build') => void): () => void {
-        const net = GameNet.instance;
-        const caller: destroyable = { destroyed: false, destroy() { this.destroyed = true; } };
-        const game = (): void => { if (this.isOwnerCurrent()) listener('game'); };
-        const build = (): void => { if (this.isOwnerCurrent()) listener('build'); };
-        net.addEvent('CmdSlgGameInfoBroMsg', caller, game);
-        net.addEvent('CmdSlgBuildInfoBroMsg', caller, build);
-        net.addEvent('reconnectSuccessAndLogin', caller, game);
-        return () => {
-            net.removeCallerEvent(caller);
-            caller.destroy();
-        };
-    }
 }

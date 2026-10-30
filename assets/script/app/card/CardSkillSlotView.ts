@@ -23,16 +23,16 @@ const { ccclass, property } = _decorator;
 @ccclass('CardSkillSlotView')
 export class CardSkillSlotView extends Component {
     @property({ type: Label, tooltip: 'NameLabel：技能名（**绑组件不绑节点**）' })
-    nameLabel: Label = null!;
+    nameLabel: Label = null;
 
     @property({ type: Label, tooltip: 'LevelLabel：写成「2/3」的 Label' })
-    levelLabel: Label = null!;
+    levelLabel: Label = null;
 
     @property({ type: Label, tooltip: 'DescLabel：该档效果描述的 Label' })
-    descLabel: Label = null!;
+    descLabel: Label = null;
 
     @property({ type: Label, tooltip: 'LockTip：未解锁提示的 Label（够等级时整个节点隐藏）' })
-    lockTip: Label = null!;
+    lockTip: Label = null;
 
     /**
      * 已废弃的 `↓`「往回看一档」按钮。
@@ -44,10 +44,10 @@ export class CardSkillSlotView extends Component {
     prevButton: Node | null = null;
 
     @property({ type: Button, tooltip: 'NextBtn 上的 cc.Button（升级按钮，**绑组件不绑节点**）' })
-    nextButton: Button = null!;
+    nextButton: Button = null;
 
     @property({ type: Label, tooltip: 'NextBtn/Label：按钮文案（满级时写「满级」）' })
-    nextLabel: Label = null!;
+    nextLabel: Label = null;
 
     render(
         item: CardSkillRowPresentation,

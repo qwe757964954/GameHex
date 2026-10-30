@@ -66,19 +66,19 @@ export class FriendGetEndPage extends PopupBase {
     static prefabPath = 'ui/Friend/FriendGetEnd';
 
     @property({ type: Node, tooltip: 'Popup/CloseBtn：右上关闭按钮（挂 cc.Button）' })
-    closeButton: Node = null!;
+    closeButton: Node = null;
 
     @property({ type: VirtualScrollView, tooltip: 'Popup/RowView：可领取列表（虚拟列表 + Mask）' })
-    rowList: VirtualScrollView = null!;
+    rowList: VirtualScrollView = null;
 
     @property({ type: Node, tooltip: 'Popup/GetEndOneKeyBtn：一键领取' })
-    getEndOneKeyButton: Node = null!;
+    getEndOneKeyButton: Node = null;
 
     @property({ type: Label, tooltip: 'GetEndOneKeyBtn/Label：文案' })
-    getEndOneKeyLabel: Label = null!;
+    getEndOneKeyLabel: Label = null;
 
     @property({ type: Label, tooltip: 'Popup/TimesLabel：「今日还可领取N次」' })
-    timesLabel: Label = null!;
+    timesLabel: Label = null;
 
     /** 数据端口；测试可注入替身。 */
     private repo: IFriendRepository = friendRepository;
@@ -90,9 +90,6 @@ export class FriendGetEndPage extends PopupBase {
 
     /** 与 `rows` 下标一一对应的 id（回调靠它认行）。 */
     private rowIds: string[] = [];
-
-    /** `renderItemFn` 只绑一次。 */
-    private rowRendererBound = false;
 
     /** 一个请求还没回来时忽略后续点击。 */
     private busy = false;
@@ -111,10 +108,7 @@ export class FriendGetEndPage extends PopupBase {
         this.bind(this.getEndOneKeyButton, this.onGetEndOneKeyClick);
 
         // ⚠️ 回调只在 onInit 接一次（放 onOpen 会随每次打开重复叠加）。
-        if (!this.rowRendererBound) {
-            this.rowRendererBound = true;
-            this.rowList.renderItemFn = (node, index) => this.renderRow(node, index);
-        }
+        this.rowList.renderItemFn = (node, index) => this.renderRow(node, index);
     }
 
     protected async onOpen(): Promise<void> {

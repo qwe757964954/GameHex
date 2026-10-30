@@ -1,4 +1,5 @@
 import type { ZCUnitDefinition } from './ZCCombatCatalog';
+import type { IZCBattleRates } from './ZCMatchConfig';
 import {
     executeGeneralStarModifiers,
     indexGeneralStarRows,
@@ -588,7 +589,7 @@ function resolveLegacyPatch(base: ZCUnitDefinition, loadouts: readonly ZCCompile
 }
 
 /** 将同一单位命中的静态修正合并为有效定义；绝不修改全局单位目录。 */
-export function resolveZCUnitDefinition(
+function resolveZCModifiedUnitDefinition(
     base: ZCUnitDefinition,
     loadouts: readonly ZCCompiledModifierLoadout[],
 ): ZCUnitDefinition {
@@ -617,6 +618,21 @@ export function resolveZCUnitDefinition(
         else empoweredProfile = updated;
     }
     return { ...definition, attackProfile, empoweredProfile };
+}
+
+/** 服务端倍率在成长、星级和技能属性编译后生效，不进入普通百分比加成。 */
+export function resolveZCUnitDefinition(
+    base: ZCUnitDefinition,
+    loadouts: readonly ZCCompiledModifierLoadout[],
+    rates?: IZCBattleRates,
+): ZCUnitDefinition {
+    const definition = resolveZCModifiedUnitDefinition(base, loadouts);
+    if (!rates) return definition;
+    return {
+        ...definition,
+        attack: rates.attackRate === undefined ? definition.attack : definition.attack * rates.attackRate,
+        maxHp: rates.hpRate === undefined ? definition.maxHp : definition.maxHp * rates.hpRate,
+    };
 }
 
 /**

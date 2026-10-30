@@ -17,25 +17,25 @@ const { ccclass, property } = _decorator;
 @ccclass('BattleTokenTabButton')
 export class BattleTokenTabButton extends Component {
     @property({ type: Sprite, tooltip: '页签底图（由 prefab 声明）' })
-    bg: Sprite = null!;
+    bg: Sprite = null;
 
     @property({ type: Sprite, tooltip: '页签图标（图内已含文字）' })
-    icon: Sprite = null!;
+    icon: Sprite = null;
 
     @property({ type: Button, tooltip: '按钮本体（点击切页）' })
-    button: Button = null!;
+    button: Button = null;
 
     @property({ type: SpriteFrame, tooltip: '底图·未选（生成器写入）' })
-    offFrame: SpriteFrame = null!;
+    offFrame: SpriteFrame = null;
 
     @property({ type: SpriteFrame, tooltip: '底图·选中（生成器写入）' })
-    onFrame: SpriteFrame = null!;
+    onFrame: SpriteFrame = null;
 
     @property({ type: SpriteFrame, tooltip: '图标·未选（生成器写入）' })
-    offIcon: SpriteFrame = null!;
+    offIcon: SpriteFrame = null;
 
     @property({ type: SpriteFrame, tooltip: '图标·选中（生成器写入）' })
-    onIcon: SpriteFrame = null!;
+    onIcon: SpriteFrame = null;
 
     @property({ type: CCInteger, tooltip: '对应的 `CmdBattleTokenType`（1 通行证 / 2 七日登录 / 3 等级基金 / 4 过关令）' })
     tabType = 1;

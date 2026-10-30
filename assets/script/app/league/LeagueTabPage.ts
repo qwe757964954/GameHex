@@ -49,10 +49,10 @@ export class LeagueTabPage extends Component {
     static prefabPath = 'ui/League/LeagueTab';
 
     @property({ type: Prefab, tooltip: '已入盟页预制体（ui/League/League，主页外壳）' })
-    joinedPage: Prefab = null!;
+    joinedPage: Prefab = null;
 
     @property({ type: Prefab, tooltip: '未入盟页预制体（ui/League/LeagueJoin）' })
-    joinPage: Prefab = null!;
+    joinPage: Prefab = null;
 
     /** 当前挂在本节点下的子页。 */
     private currentPage: Node | null = null;

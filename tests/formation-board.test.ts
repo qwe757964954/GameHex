@@ -24,11 +24,12 @@ import protobuf from 'protobufjs/light.js';
 import { normalizeFormations, withTimeout } from '../assets/script/app/card/FormationModel';
 import { LineupDraftStore } from '../assets/script/app/card/LineupDraftStore';
 import { buildPresetDecks, presetFormationId, resolveSelectedDeck } from '../assets/script/app/card/LineupPresets';
+import { assetPath } from './helpers/asset-paths';
 
 const card = (id: string) => ({ id, name: id, rarity: '绿' }) as any;
 
 test('运行时 protobuf 包含阵型请求、响应与消息号', () => {
-    const schema = JSON.parse(readFileSync('assets/resources/config/protoCompiled.json', 'utf8'));
+    const schema = JSON.parse(readFileSync(assetPath('config/protoCompiled.json'), 'utf8'));
     const root = protobuf.Root.fromJSON(schema);
     const messageId = root.lookupEnum('com.xkhy.tafang.cmd.MessageId');
 

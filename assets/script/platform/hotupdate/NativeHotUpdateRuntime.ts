@@ -364,7 +364,8 @@ export class NativeHotUpdateRuntime {
 
     /** checkUpdate 的异步结果靠事件回调拿，这里包成 Promise。 */
     private checkForNewVersion(emit: (progress: INativeHotUpdateProgress) => void): Promise<'new' | 'up-to-date' | 'updated'> {
-        const manager = this.manager!;
+        const manager = this.manager;
+        if (!manager) return Promise.reject(new Error('热更新管理器未初始化'));
         const environment = this.dependencies.host.environment;
         const host = this.dependencies.host;
         return new Promise<'new' | 'up-to-date' | 'updated'>((resolve, reject) => {
@@ -428,7 +429,8 @@ export class NativeHotUpdateRuntime {
         onProgress: ((progress: INativeHotUpdateProgress) => void) | undefined,
         trigger: () => void,
     ): Promise<void> {
-        const manager = this.manager!;
+        const manager = this.manager;
+        if (!manager) return Promise.reject(new Error('热更新管理器未初始化'));
         const environment = this.dependencies.host.environment;
         return new Promise<void>((resolve, reject) => {
             manager.setEventCallback((event: INativeAssetsManagerEvent) => {

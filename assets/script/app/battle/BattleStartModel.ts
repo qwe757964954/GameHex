@@ -100,6 +100,47 @@ export interface ZCBattleHero {
     readonly level: number;
 }
 
+/**
+ * `CmdPvpBuffInfo.buffs` 里的一对 `key,value`（已校验）。
+ *
+ * 协议是 `repeated string`，注释写的是 `[id,value,id,value]`，但**实际下发的 `id` 是字符串属性名**
+ * （2026-10-29 实测：`["levelAttackRatio","0.8","levelHpRatio","0.8"]`，与 `levelInfo` 表的
+ * `levelAttack` / `levelHp` 对应）—— 不是数字编号。按数字解析会把**所有合法数据丢光**，
+ * 而且全程零报错（`toPositiveInt('levelAttackRatio')` 返回 null）。
+ */
+export interface ZCBattleBuffEntry {
+    /** 属性 key（如 `levelAttackRatio` / `levelHpRatio`），**字符串**，原样保留。 */
+    readonly key: string;
+    /**
+     * 原始值字符串（如 `"0.8"`）。
+     *
+     * 协议只承诺是 `string`，没承诺一定是数字（将来可能有文本属性）。
+     * 原文一律保留，数值另见 {@link numeric}。
+     */
+    readonly value: string;
+    /**
+     * `value` 解析出的**有限数值**；解析不出来是 `null`。
+     *
+     * 单独给一个字段而不是让消费方自己 `Number()`：`Number('')` 是 0、`Number('x')` 是 NaN，
+     * 两者都会被静默当成"合法的 0 加成"，比显式 null 难查一个数量级。
+     */
+    readonly numeric: number | null;
+}
+
+/**
+ * 一种来源的 buff 集合（`CmdPvpBuffInfo`）。
+ *
+ * ⚠️ `source` 的取值含义协议里只有一句「来源」，客户端没有枚举表。
+ * 实测（2026-10-29）只见过 `source = 1`，内容就是服务端算好的关卡倍率
+ * （`levelAttackRatio` / `levelHpRatio`）。**别按 source 分支**，见 {@link ZCBattleUnit.buffs}。
+ */
+export interface ZCBattleBuff {
+    /** 来源（`CmdPvpBuffInfo.source`，`uint32`）。 */
+    readonly source: number;
+    /** 该来源下的 buff，保持服务端下发顺序，**不去重不合并**（叠加语义归消费方）。 */
+    readonly entries: readonly ZCBattleBuffEntry[];
+}
+
 export interface ZCBattleUnit {
     readonly campId: number;
     /**
@@ -132,6 +173,18 @@ export interface ZCBattleUnit {
      * 任何按它分流的地方都必须先判空再决定兜底口径。
      */
     readonly unitType?: ZCBattleUnitType;
+    /**
+     * PVP buff 列表（`CmdBattleUnitInfo.buffInfo = 8`，服务端 2026-10-29 / r936 新增）。
+     *
+     * **恒为数组**：老服务端不下发 ⇒ `[]`，调用方不用判 `undefined`。
+     * 结构是「来源 → 若干 `key,value`」，其中 key 是**属性名**（`levelAttackRatio` 等），
+     * 不是数字编号 —— 详见 {@link ZCBattleBuffEntry}。
+     *
+     * 消费方是 `buildZCClientCombatConfig`（按 `campId` 折成 owner 级关卡倍率，
+     * 再经 `compileZCMatchRuntime` 乘进该方所有单位的攻/血）。
+     * 同一 `key` 出现多次时**按倍率累乘**，不按来源去重。
+     */
+    readonly buffs: readonly ZCBattleBuff[];
 }
 
 /** 一次开始游戏结果。 */
@@ -160,6 +213,85 @@ export function normalizeBattleUnitType(value: unknown): ZCBattleUnitType | unde
     if (num === ZC_BATTLE_UNIT_TYPE.Robot) return ZC_BATTLE_UNIT_TYPE.Robot;
     if (num === ZC_BATTLE_UNIT_TYPE.Monster) return ZC_BATTLE_UNIT_TYPE.Monster;
     return undefined;
+}
+
+/**
+ * `[key,value,key,value,...]` 扁平字符串 → 成对结构。
+ *
+ * 三条边界，全部「丢数据 + 出声」，不猜：
+ *   ① **奇数长度**：末位没有配对的 value，丢弃并告警（补齐一个假 value 等于替服务端编数据）；
+ *   ② **key 为空 / 非字符串**：**整对**丢弃 —— 只有 value 没有 key 是无主数据；
+ *   ③ **同 key 重复**：**保留多条**，不合并、不覆盖 —— 合并语义（覆盖？累乘？）属于消费方，
+ *      在这里替它决定会把「叠加」和「服务端 bug」一起吞掉。
+ *
+ * ⚠️ **不要把 key 当数字解析**：实际下发的是 `levelAttackRatio` 这种属性名。
+ * 2026-10-29 之前这里按正整数解析，会把整条 buff 丢光且零报错。
+ */
+export function parseBattleBuffEntries(buffs: readonly string[] | null | undefined): ZCBattleBuffEntry[] {
+    const list = Array.isArray(buffs) ? buffs : [];
+    const entries: ZCBattleBuffEntry[] = [];
+    if (list.length % 2 !== 0) {
+        console.warn('[BattleStartModel] buff 列表长度为奇数，末位已丢弃', list.length, list[list.length - 1]);
+    }
+    const pairCount = Math.floor(list.length / 2);
+    for (let index = 0; index < pairCount; index += 1) {
+        const keyText = list[index * 2];
+        const valueText = list[index * 2 + 1];
+        const key = typeof keyText === 'string' ? keyText.trim() : '';
+        const value = typeof valueText === 'string' ? valueText : String(valueText ?? '');
+        if (!key) {
+            console.warn('[BattleStartModel] buff key 为空，整对已丢弃', keyText, valueText);
+            continue;
+        }
+        entries.push({ key, value, numeric: toFiniteNumber(value) });
+    }
+    return entries;
+}
+
+/** 字符串 → 有限数值；空串 / 非数字 / Infinity 一律 `null`（不是 0，也不是 NaN）。 */
+function toFiniteNumber(value: string): number | null {
+    if (!value.trim()) return null;
+    const num = Number(value);
+    return Number.isFinite(num) ? num : null;
+}
+
+/**
+ * `CmdBattleUnitInfo.buffInfo` → {@link ZCBattleBuff} 数组。
+ *
+ * 一个单元可能有多种来源（每个元素一个 `source`），**按数组原序保留**，不合并同 `source` 的条目。
+ * 缺字段 / 非数组 / 元素为 null ⇒ 返回 `[]`（老服务端不下发，不是错误）。
+ */
+export function parseBattleBuffs(infos: CmdPvpBuffInfo[] | null | undefined): ZCBattleBuff[] {
+    const list = Array.isArray(infos) ? infos : [];
+    const result: ZCBattleBuff[] = [];
+    for (const info of list) {
+        if (!info) continue;
+        result.push({
+            source: toCount(info.source),
+            entries: parseBattleBuffEntries(info.buffs),
+        });
+    }
+    return result;
+}
+
+/**
+ * 从 buff 列表里取某个 key 的**倍率值**；一处都没有 / 全是非数值 ⇒ `null`。
+ *
+ * - 同 key 出现多次按**累乘**（倍率天生可叠，且不区分 `source`）；
+ * - 一个都没有时返回 `null` 而不是 `1` —— 调用方据此区分「服务端没下发」与「下发了 1」，
+ *   后者是"明确要求 ×1"，前者是"这局没有这条规则"。
+ */
+export function battleBuffRatio(buffs: readonly ZCBattleBuff[] | null | undefined, key: string): number | null {
+    const target = typeof key === 'string' ? key.trim() : '';
+    if (!target) return null;
+    let result: number | null = null;
+    for (const group of Array.isArray(buffs) ? buffs : []) {
+        for (const entry of group?.entries ?? []) {
+            if (!entry || entry.key !== target || entry.numeric === null) continue;
+            result = (result ?? 1) * entry.numeric;
+        }
+    }
+    return result;
 }
 
 /** CmdBattleUnitInfo → ZCBattleUnit；campId / showInfo 缺失返回 null。 */
@@ -192,6 +324,7 @@ export function normalizeBattleUnit(info: CmdBattleUnitInfo | null | undefined):
         artifactId: toCount(info.artifactId),
         artifactLevel: toCount(info.artifactLevel),
         unitType: normalizeBattleUnitType(info.unitType),
+        buffs: parseBattleBuffs(info.buffInfo),
     };
 }
 

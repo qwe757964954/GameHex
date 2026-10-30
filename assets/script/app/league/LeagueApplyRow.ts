@@ -65,22 +65,22 @@ export type LeagueApplyAction = 'agree' | 'reject';
 @ccclass('LeagueApplyRow')
 export class LeagueApplyRow extends Component {
     @property({ type: Label, tooltip: 'lab_name：申请人名（26px 左对齐）' })
-    nameLabel: Label = null!;
+    nameLabel: Label = null;
 
     @property({ type: Label, tooltip: 'lab_lv：等级（纯数字，无后缀）' })
-    levelLabel: Label = null!;
+    levelLabel: Label = null;
 
     @property({ type: Label, tooltip: 'lab_power：战力（纯数字）' })
-    powerLabel: Label = null!;
+    powerLabel: Label = null;
 
     @property({ type: Sprite, tooltip: 'icon：头像（宿主按 view.img 取图后调 applyAvatar）' })
-    avatarSprite: Sprite = null!;
+    avatarSprite: Sprite = null;
 
     @property({ type: Node, tooltip: 'btn_sure：同意（⚠️ 发 agree=true）' })
-    agreeButton: Node = null!;
+    agreeButton: Node = null;
 
     @property({ type: Node, tooltip: 'btn_kick：拒绝（⚠️ 名字叫 kick，语义是「拒绝」、发 agree=false）' })
-    rejectButton: Node = null!;
+    rejectButton: Node = null;
 
     /** 点「同意 / 拒绝」的回调（`view` 是**点击那一刻**这一槽位上的行数据）。 */
     onAction: ((action: LeagueApplyAction, view: ILeagueApplyView) => void) | null = null;

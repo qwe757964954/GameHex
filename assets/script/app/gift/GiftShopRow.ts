@@ -57,34 +57,34 @@ const LABEL_WITH_ICON_X = 16;
 @ccclass('GiftShopRow')
 export class GiftShopRow extends Component {
     @property({ type: Sprite, tooltip: 'Background：行底框（本节点上的 cc.Sprite，`gf_row_bg`）' })
-    background: Sprite = null!;
+    background: Sprite = null;
 
     @property({ type: Label, tooltip: 'Title：商品名（`giftShop.desc`）' })
-    titleLabel: Label = null!;
+    titleLabel: Label = null;
 
     @property({ type: Label, tooltip: 'Limit：限购文案（`限购 0/1`）；空串时整块隐藏' })
-    limitLabel: Label = null!;
+    limitLabel: Label = null;
 
     @property({ type: Node, tooltip: 'RewardBar：奖励格容器（挂 4 个 GiftRewardSlot）' })
-    rewardBar: Node = null!;
+    rewardBar: Node = null;
 
     @property({ type: Node, tooltip: 'ActionBtn：购买按钮（挂 cc.Button）' })
-    actionButton: Node = null!;
+    actionButton: Node = null;
 
     @property({ type: Label, tooltip: 'ActionBtn/Label：按钮文案' })
-    actionLabel: Label = null!;
+    actionLabel: Label = null;
 
     @property({ type: Sprite, tooltip: 'ActionBtn/Icon：按钮左侧货币图标（`免费` 时隐藏）' })
-    actionIcon: Sprite = null!;
+    actionIcon: Sprite = null;
 
     @property({ type: Node, tooltip: 'DiscountTag：折扣角标（售罄时隐藏）' })
-    discountTag: Node = null!;
+    discountTag: Node = null;
 
     @property({ type: Label, tooltip: 'DiscountTag/Label：折扣文案（`5折`）' })
-    discountLabel: Label = null!;
+    discountLabel: Label = null;
 
     @property({ type: Node, tooltip: 'SoldOutIcon：已售罄标（售罄时按钮整块让位给它）' })
-    soldOutIcon: Node = null!;
+    soldOutIcon: Node = null;
 
     /**
      * 按钮点击回调，**由宿主在每次铺行时重设**（`GiftSpecialView.renderRow`）。

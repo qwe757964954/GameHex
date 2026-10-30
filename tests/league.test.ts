@@ -71,6 +71,7 @@ import {
     pendingLeagueEntrances,
 } from '../assets/script/app/league/LeagueTable';
 import { LEAGUE_TIP_LOADING, LEAGUE_TIP_NOT_OPEN } from '../assets/script/app/league/LeagueTexts';
+import { assetExists, assetPath } from './helpers/asset-paths';
 
 // ============================================================
 // A. 判定口径（LeagueTable）
@@ -212,7 +213,7 @@ test('B1 图目录与主页用图的图名（FGUI 原名，只在磁盘上核对
     assert.equal(LEAGUE_ART_BANNER_BASE, 'icon_lm07');
     assert.equal(LEAGUE_ART_HELP, 'zx_btn01');
     // 背景实际落地是 jpg（`lm_bg01.jpg`）—— 取图走 `loadArt(name, root)`，不带扩展名
-    assert.ok(existsSync(`assets/resources/${LEAGUE_ART_ROOT}/${LEAGUE_ART_BG}.jpg`), 'lm_bg01.jpg 不在磁盘上');
+    assert.ok(existsSync(assetPath(`${LEAGUE_ART_ROOT}/${LEAGUE_ART_BG}.jpg`)), 'lm_bg01.jpg 不在磁盘上');
 });
 
 test('B2 按钮底图按颜色语义取，棕是三种入口共用的那一张', () => {
@@ -301,7 +302,7 @@ function scriptCid(tsPath: string): string {
     return compressUuid(meta.uuid);
 }
 
-const LEAGUE_PREFAB = 'assets/resources/ui/League/League.prefab';
+const LEAGUE_PREFAB = assetPath('ui/League/League.prefab');
 const LEAGUE_PAGE_TS = 'assets/script/app/league/LeaguePage.ts';
 const UI_2D = 33554432;
 
@@ -572,7 +573,7 @@ test('C9b ⚠️ 描边走 Label **内建** `enableOutline`，不用已废弃的
     // 项目既有 prefab（Friend / Gift / MainRoot）里该组件计数恒为 0。
     const outlineComps = prefab.filter((e) => e?.__type__ === 'cc.LabelOutline');
     assert.equal(outlineComps.length, 0, 'League.prefab 里不应有 cc.LabelOutline（已废弃）');
-    for (const other of ['assets/resources/ui/Friend/Friend.prefab', 'assets/resources/ui/Gift/Gift.prefab']) {
+    for (const other of [assetPath('ui/Friend/Friend.prefab'), assetPath('ui/Gift/Gift.prefab')]) {
         const raw = readFileSync(other, 'utf8');
         assert.ok(!raw.includes('cc.LabelOutline'), `${other} 也该没有 cc.LabelOutline`);
         assert.ok(raw.includes('"_enableOutline": true'), `${other} 用 Label 内建描边`);
@@ -645,15 +646,15 @@ const leaguePrefabUuid = (JSON.parse(readFileSync(`${LEAGUE_PREFAB}.meta`, 'utf8
  * 一个 tab 只能吃一个 `Prefab` ⇒ 由 `LeagueTabPage` 当壳、运行时再整页替换。
  * 容器页自己的 `joinedPage` / `joinPage` 两个绑定由 `league-join-create.test.ts` 的 E 段守。
  */
-const leagueTabPrefabUuid = (JSON.parse(readFileSync('assets/resources/ui/League/LeagueTab.prefab.meta', 'utf8')) as { uuid: string }).uuid;
+const leagueTabPrefabUuid = (JSON.parse(readFileSync(assetPath('ui/League/LeagueTab.prefab.meta'), 'utf8')) as { uuid: string }).uuid;
 
 test('D1 LeaguePage.prefabPath 大小写正确，且磁盘上有这个 prefab', () => {
     const code = readFileSync(LEAGUE_PAGE_TS, 'utf8');
     assert.ok(code.includes("static prefabPath = 'ui/League/League'"), "prefabPath 必须是 'ui/League/League'");
     assert.ok(code.includes('extends Component'), 'tab 页是 Component，不是 PopupBase');
     // 真机 zip 内路径大小写敏感：目录名是 `League`（L 大写）
-    assert.ok(existsSync('assets/resources/ui/League/League.prefab'));
-    assert.ok(existsSync('assets/resources/ui/League.meta'), '目录 meta 缺失');
+    assert.ok(assetExists('ui/League/League.prefab'));
+    assert.ok(assetExists('ui/League.meta'), '目录 meta 缺失');
 });
 
 test('D2 MainTabHost 里有 alliancePage 字段，且 pagePrefab 真的返回它', () => {
@@ -666,7 +667,7 @@ test('D2 MainTabHost 里有 alliancePage 字段，且 pagePrefab 真的返回它
 });
 
 test('D3 ⚠️ MainRoot.prefab 上 alliancePage 真的绑到了联盟**容器页**（否则点了高亮不动）', () => {
-    const mainRoot = JSON.parse(readFileSync('assets/resources/ui/main/MainRoot.prefab', 'utf8')) as Entry[];
+    const mainRoot = JSON.parse(readFileSync(assetPath('ui/main/MainRoot.prefab'), 'utf8')) as Entry[];
     const comp = mainRoot.find((e) => e && e.alliancePage !== undefined);
     assert.ok(comp, 'MainRoot.prefab 里找不到带 alliancePage 的组件（主界面的 tab 宿主）');
     const ref = comp!.alliancePage as { __uuid__?: string };

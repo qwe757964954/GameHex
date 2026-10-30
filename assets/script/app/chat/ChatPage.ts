@@ -117,79 +117,79 @@ export class ChatPage extends PopupBase {
 
     // ---- 弹窗框 ----
     @property({ type: Node, tooltip: 'PanelBg/CloseBtn：右上关闭按钮（挂 cc.Button）' })
-    closeButton: Node = null!;
+    closeButton: Node = null;
 
     // ---- 页签 ----
     @property({ type: VirtualScrollView, tooltip: 'TabBar：5 个频道页签（横向滚动）' })
-    tabList: VirtualScrollView = null!;
+    tabList: VirtualScrollView = null;
 
     // ---- 列表 ----
     @property({ type: VirtualScrollView, tooltip: 'RowView：公共频道消息（页签 1/2/4）' })
-    rowList: VirtualScrollView = null!;
+    rowList: VirtualScrollView = null;
 
     @property({ type: VirtualScrollView, tooltip: 'ApplyList：招募列表（页签 0）' })
-    applyList: VirtualScrollView = null!;
+    applyList: VirtualScrollView = null;
 
     @property({ type: VirtualScrollView, tooltip: 'PrivateList：私聊消息（页签 3）' })
-    privateList: VirtualScrollView = null!;
+    privateList: VirtualScrollView = null;
 
     @property({ type: VirtualScrollView, tooltip: 'HeadList：私聊联系人（页签 3）' })
-    headList: VirtualScrollView = null!;
+    headList: VirtualScrollView = null;
 
     @property({ type: VirtualScrollView, tooltip: 'EmojiPopup/EmojiList：44 格表情' })
-    emojiList: VirtualScrollView = null!;
+    emojiList: VirtualScrollView = null;
 
     @property({ type: VirtualScrollView, tooltip: 'AtPopup/RoleList：好友列表（艾特用）' })
-    roleList: VirtualScrollView = null!;
+    roleList: VirtualScrollView = null;
 
     // ---- 受 controller 控制的容器 ----
     @property({ type: Node, tooltip: 'BottomBg：底部黑色九宫底（页签 0/2/4）' })
-    bottomBg: Node = null!;
+    bottomBg: Node = null;
 
     @property({ type: Label, tooltip: 'Empty：「暂无聊天」（数据=空）' })
-    emptyLabel: Label = null!;
+    emptyLabel: Label = null;
 
     @property({ type: Node, tooltip: 'SilentLabel：「该频道不可发言」（页签 0）' })
-    silentLabel: Node = null!;
+    silentLabel: Node = null;
 
     @property({ type: Node, tooltip: 'InputBar：输入条（页签 2/4）' })
-    inputBar: Node = null!;
+    inputBar: Node = null;
 
     @property({ type: EditBox, tooltip: 'InputBar/Input：公共频道输入框' })
-    inputBox: EditBox = null!;
+    inputBox: EditBox = null;
 
     @property({ type: Node, tooltip: 'InputBar/EmojiBtn：表情（页签 2/4）' })
-    emojiButton: Node = null!;
+    emojiButton: Node = null;
 
     @property({ type: Node, tooltip: 'InputBar/SendBtn：发送（页签 2/4）' })
-    sendButton: Node = null!;
+    sendButton: Node = null;
 
     @property({ type: Node, tooltip: 'InputBar/AtBtn：艾特（页签 2/4）' })
-    atButton: Node = null!;
+    atButton: Node = null;
 
     @property({ type: Node, tooltip: 'PrivateBottomBg：底部黑色九宫底（页签 3 且有数据）' })
-    privateBottomBg: Node = null!;
+    privateBottomBg: Node = null;
 
     @property({ type: Node, tooltip: 'PrivateInputBar：输入条（页签 3 且有数据）' })
-    privateInputBar: Node = null!;
+    privateInputBar: Node = null;
 
     @property({ type: EditBox, tooltip: 'PrivateInputBar/Input：私聊输入框' })
-    privateInputBox: EditBox = null!;
+    privateInputBox: EditBox = null;
 
     @property({ type: Node, tooltip: 'PrivateInputBar/EmojiBtn：表情（私聊）' })
-    privateEmojiButton: Node = null!;
+    privateEmojiButton: Node = null;
 
     @property({ type: Node, tooltip: 'PrivateInputBar/SendBtn：发送（私聊）' })
-    privateSendButton: Node = null!;
+    privateSendButton: Node = null;
 
     @property({ type: Node, tooltip: 'Mask：点空白关掉表情 / 艾特弹窗（两个之一打开时）' })
-    maskButton: Node = null!;
+    maskButton: Node = null;
 
     @property({ type: Node, tooltip: 'EmojiPopup：表情弹窗' })
-    emojiPopup: Node = null!;
+    emojiPopup: Node = null;
 
     @property({ type: Node, tooltip: 'AtPopup：艾特弹窗' })
-    atPopup: Node = null!;
+    atPopup: Node = null;
 
     /** 数据端口；测试可注入替身。 */
     private repo: IChatRepository = chatRepository;
@@ -219,9 +219,6 @@ export class ChatPage extends PopupBase {
     /** 每次取数 / 换页签递增，用来作废在飞的异步结果。 */
     private revision = 0;
 
-    /** 7 个 `renderItemFn` 只绑一次。 */
-    private renderersBound = false;
-
     /** 静态帧（页签两态），首次用到后缓存。 */
     private tabFrames: { readonly on: SpriteFrame | null; readonly off: SpriteFrame | null } | null = null;
 
@@ -244,16 +241,13 @@ export class ChatPage extends PopupBase {
         this.bind(this.privateSendButton, () => void this.onSendClick());
 
         // ⚠️ 7 个回调只在 onInit 接一次（放 onOpen 会随每次打开重复叠加）
-        if (!this.renderersBound) {
-            this.renderersBound = true;
-            this.tabList.renderItemFn = (node, index) => this.renderTabNode(node, index);
-            this.rowList.renderItemFn = (node, index) => this.renderMessageNode(node, index);
-            this.applyList.renderItemFn = (node, index) => this.renderRecruitNode(node, index);
-            this.privateList.renderItemFn = (node, index) => this.renderPrivateNode(node, index);
-            this.headList.renderItemFn = (node, index) => this.renderHeadNode(node, index);
-            this.emojiList.renderItemFn = (node, index) => this.renderEmojiNode(node, index);
-            this.roleList.renderItemFn = (node, index) => this.renderAtNode(node, index);
-        }
+        this.tabList.renderItemFn = (node, index) => this.renderTabNode(node, index);
+        this.rowList.renderItemFn = (node, index) => this.renderMessageNode(node, index);
+        this.applyList.renderItemFn = (node, index) => this.renderRecruitNode(node, index);
+        this.privateList.renderItemFn = (node, index) => this.renderPrivateNode(node, index);
+        this.headList.renderItemFn = (node, index) => this.renderHeadNode(node, index);
+        this.emojiList.renderItemFn = (node, index) => this.renderEmojiNode(node, index);
+        this.roleList.renderItemFn = (node, index) => this.renderAtNode(node, index);
     }
 
     /**
@@ -763,7 +757,7 @@ export class ChatPage extends PopupBase {
     /** 好友行（艾特弹窗用）—— 与好友模块同一张缓存。 */
     private friendRows(): unknown[] {
         try {
-            return CacheMgr.instance?.getTlCmdFriend() ?? [];
+            return CacheMgr.instance.getTlCmdFriend() ?? [];
         } catch (error) {
             console.warn('[Chat] 读 CmdFriend 缓存失败', error);
             return [];

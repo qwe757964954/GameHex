@@ -23,7 +23,9 @@ import type {
     ZCHexActivation,
     ZCHexState,
 } from '../model/ZCGameModel';
-import { ZC_CLIENT_COLORS, zcDeepFactionColor, zcFactionColor, zcTowardWhite } from './ZCTheme';
+import {
+    ZC_CLIENT_COLORS, zcDeepFactionColor, zcFactionColor, zcRuinsFactionColor, zcTowardWhite,
+} from './ZCTheme';
 // 提示描边与领地轮廓共用同一份顶面顶点口径与内缩比例：这条线也要"贴着台面边缘"，
 // 自己抄一份顶点迟早会和轮廓错开半个像素。
 import { ZC_OUTLINE_HEX_POINTS } from './ZCOutlineLayer';
@@ -463,11 +465,11 @@ export class ZCHexView extends Component {
     }
 
     @property({ type: Sprite, group: '节点引用' })
-    tileSprite: Sprite = null!;
+    tileSprite: Sprite = null;
 
     /** 三个投影侧面与原位柔光共用的 Sprite；图片仅提供柔光纹理。 */
     @property({ type: Sprite, group: '节点引用', tooltip: 'GroundGlow：三个阵营色投影侧面；图片仅供原位柔光取样' })
-    groundGlow: Sprite = null!;
+    groundGlow: Sprite = null;
 
     @property({ type: SpriteFrame, group: '地块底图', tooltip: '统一六边格蒙版：hex_flat（130×119 画布 / 面 123×90，扁平纯白）' })
     tileFrame: SpriteFrame | null = null;
@@ -482,19 +484,19 @@ export class ZCHexView extends Component {
      * （`CooldownOverlay`）的那份共享画布上，几何仍由 `ZCHexView.strokeHintOutline` 提供。
      */
     @property({ type: Graphics, group: '节点引用', tooltip: 'TerritoryOutline：已停用（领地轮廓走 OutlineLayer；金矿提示也改到棋盘最上层）' })
-    outlineGraphics: Graphics = null!;
+    outlineGraphics: Graphics = null;
 
     @property({ type: Node, group: '节点引用', tooltip: 'BuildingLayer：开发图标和价格' })
-    buildingLayer: Node = null!;
+    buildingLayer: Node = null;
 
     @property({ type: Sprite, group: '节点引用', tooltip: '根节点下的 BuildingIcon：已建建筑' })
-    buildingSprite: Sprite = null!;
+    buildingSprite: Sprite = null;
 
     @property({ type: Sprite, group: '节点引用' })
-    iconSprite: Sprite = null!;
+    iconSprite: Sprite = null;
 
     @property({ type: Sprite, group: '节点引用' })
-    priceIcon: Sprite = null!;
+    priceIcon: Sprite = null;
 
     @property({ type: SpriteFrame, group: '开发图标', tooltip: '金矿开发图标：icon_jk' })
     mineIconFrame: SpriteFrame | null = null;
@@ -560,27 +562,27 @@ export class ZCHexView extends Component {
     artifactSpineRoot: Node | null = null;
 
     @property({ type: Label, group: '节点引用' })
-    iconLabel: Label = null!;
+    iconLabel: Label = null;
 
     @property({ type: ProgressBar, group: '状态条', tooltip: 'HealthBar：建筑生命值' })
-    healthBar: ProgressBar = null!;
+    healthBar: ProgressBar = null;
 
     // 血条填充图：按阵营各一张，与 ZCGameUnit 同一套（我方蓝 / 敌红 / 敌2 黄 / 敌3 紫）。
     // 第 4 家的紫图取自项目里已有但一直没人用的 `buildings/jindutiao_p.png`，见 pickHealthBarFill。
     @property({ type: SpriteFrame, group: '状态条', tooltip: '血条填充：我方（蓝）' })
-    barFillPlayer: SpriteFrame = null!;
+    barFillPlayer: SpriteFrame = null;
 
     @property({ type: SpriteFrame, group: '状态条', tooltip: '血条填充：敌方（红）' })
-    barFillEnemy: SpriteFrame = null!;
+    barFillEnemy: SpriteFrame = null;
 
     @property({ type: SpriteFrame, group: '状态条', tooltip: '血条填充：敌方 2（黄）' })
-    barFillEnemy2: SpriteFrame = null!;
+    barFillEnemy2: SpriteFrame = null;
 
     @property({ type: SpriteFrame, group: '状态条', tooltip: '血条填充：敌方 3（紫）' })
-    barFillEnemy3: SpriteFrame = null!;
+    barFillEnemy3: SpriteFrame = null;
 
     @property({ type: ProgressBar, group: '状态条', tooltip: 'Cooldown：内置建筑建造/工作周期圆环' })
-    cooldownBar: ProgressBar = null!;
+    cooldownBar: ProgressBar = null;
 
     private clickHandler: (() => void) | null = null;
     /** 由 ZCGameRenderWorld 注入；见 IZCBuildingFrameResolver。 */
@@ -1788,11 +1790,12 @@ export class ZCHexView extends Component {
             return this.claimWaveTint(this.claimWave.from, this.claimWave.to, this.claimWave.progress);
         }
         if (state.state === 'ruins') {
-            return new Color(
-                ZC_CLIENT_COLORS.ruins.r,
-                ZC_CLIENT_COLORS.ruins.g,
-                ZC_CLIENT_COLORS.ruins.b,
-                ZCHexView.TERRITORY_FILL_ALPHA);
+            // 废墟格**按归属方上色**（需求 2026-10-29：「形成废墟后，废墟的地块颜色需要和
+            // 归属玩家的一致」）。原来这里是无条件写死 `ZC_CLIENT_COLORS.ruins`（#5E656C 灰）
+            // —— 谁的地被打成废墟都会变成同一块中立灰，看不出这块废墟原本属于谁。
+            // 取色口径见 `zcRuinsFactionColor`：阵营色往废墟灰里混 45%，既认得出人、也看得出废。
+            const color = zcRuinsFactionColor(state.owner);
+            return new Color(color.r, color.g, color.b, ZCHexView.TERRITORY_FILL_ALPHA);
         }
         return this.territoryFill(territoryTintOwner(state.owner, canDevelop));
     }

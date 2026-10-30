@@ -110,8 +110,6 @@ export const MONTHCARD_ROLE_PROPERTY_MAX_RES_ID = 9999;
 export const MONTH_CARD_ACT_TYPE = 1002;
 export const MONTH_CARD_ACT_TYPE_2 = 1006;
 
-const DAY_MS = 86400000;
-
 // ============================================================
 // 工具函数
 // ============================================================

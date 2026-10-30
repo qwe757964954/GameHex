@@ -60,10 +60,6 @@ export class ChatEntryButton extends Component {
      */
     async openChat(): Promise<void> {
         const manager = PopupManager.inst;
-        if (!manager) {
-            console.error('[Chat] 入口按钮：PopupManager 不可用，聊天打不开');
-            return;
-        }
         const popup = await manager.openAsync(ChatPage);
         if (!popup) console.error('[Chat] 入口按钮：聊天弹窗打开失败');
     }

@@ -1,3 +1,5 @@
+import { createControllerContext } from './helpers/controller-context';
+import { scopeAssetService } from '../assets/script/core/asset/AssetService';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -11,6 +13,9 @@ function loadModule(path: string, dependencies: Record<string, unknown>): any {
         exports: {} as any,
         console,
         require: (name: string) => {
+            if (name.endsWith('/ResourceScope')) return { ResourceScope };
+            if (name.endsWith('/AssetService')) return { scopeAssetService };
+            if (name.endsWith('/ProcedureManager')) return dependencies[name] ?? { ProcedureManager: { instance: null } };
             assert.ok(name in dependencies, `missing test dependency: ${name}`);
             return dependencies[name];
         },
@@ -381,4 +386,82 @@ test('PopupManager 仅在 allowMultiple=true 时允许同类多开', async () =>
     assert.match(source, /const pending = this\._openingByPath\.get\(path\)/);
     assert.match(source, /const opened = this\.get\(cls\)/);
     assert.match(def, /allowMultiple\?: boolean/);
+});
+
+
+function popupResourceFixture(context = createControllerContext()) {
+    class Vector { x = 0; y = 0; z = 0; }
+    const runtime = { instance: { context } as { context: typeof context } | null };
+    const { PopupBase } = loadModule('assets/script/framework/ui/PopupBase.ts', {
+        cc: {
+            _decorator: { ccclass: classDecorator, property: propertyDecorator },
+            Component: class { node = { isValid: true }; },
+            Node: class {}, Vec2: Vector, Vec3: Vector,
+        },
+        './PopupDef': PopupDef,
+        './PopupManager': { PopupManager: { inst: null } },
+        '../procedure/ProcedureManager': { ProcedureManager: runtime },
+    });
+    class ResourcePopup extends PopupBase {
+        closeOnBlank = false;
+        get ownedAssets() { return this.assets; }
+        get ownedScope(): ResourceScope { return this.resourceScope; }
+        get ownedConfigs() { return this.configs; }
+        get ownedSession() { return this.sessionAssets; }
+    }
+    return { popup: new ResourcePopup(), runtime, context };
+}
+
+test('PopupBase 资源服务按需解析，未用资源即销毁不要求运行时', () => {
+    const h = popupResourceFixture();
+    h.runtime.instance = null;
+    assert.throws(() => h.popup.ownedAssets, /configured application context/);
+    assert.doesNotThrow(() => h.popup.onDestroy());
+});
+
+test('PopupBase 管理动态资源，缓存关闭即释放，重开取得独立作用域', async () => {
+    const h = popupResourceFixture();
+    let releases = 0;
+    h.context.assets.load = async (_path, Type, options) => {
+        options?.scope?.defer(() => releases++);
+        return new Type();
+    };
+    await h.popup._internalOpen(1, {}, PopupDef.PopupLayer.NORMAL);
+    const oldScope = h.popup.ownedScope, oldAssets = h.popup.ownedAssets;
+    assert.equal(h.popup.ownedConfigs, h.context.configs);
+    assert.equal(h.popup.ownedSession, h.context.sessionAssets);
+    await oldAssets.load('preview', class {});
+    h.popup._internalClose(PopupDef.PopupCloseReason.Manual);
+    assert.equal(releases, 1);
+    assert.equal(oldScope.disposed, true);
+    await assert.rejects(oldAssets.load('preview', class {}), /释放/);
+    await h.popup._internalOpen(2, {}, PopupDef.PopupLayer.NORMAL);
+    assert.notEqual(h.popup.ownedScope, oldScope);
+    assert.equal(h.popup.ownedScope.disposed, false);
+    await h.popup.ownedAssets.load('preview', class {});
+    h.popup._internalClose(PopupDef.PopupCloseReason.Manual);
+    h.popup.onDestroy();
+    assert.equal(releases, 2);
+});
+
+test('PopupBase 旧打开的迟到资源被释放并拒绝，不占用重开后的作用域', async () => {
+    const h = popupResourceFixture();
+    let complete: () => void = () => {};
+    let releases = 0;
+    h.context.assets.load = async (_path, Type, options) => {
+        await new Promise<void>(resolve => { complete = resolve; });
+        options?.scope?.defer(() => releases++);
+        return new Type();
+    };
+    await h.popup._internalOpen(1, {}, PopupDef.PopupLayer.NORMAL);
+    const pending = h.popup.ownedAssets.load('preview', class {});
+    h.popup._internalClose(PopupDef.PopupCloseReason.Manual);
+    await h.popup._internalOpen(2, {}, PopupDef.PopupLayer.NORMAL);
+    const newScope = h.popup.ownedScope;
+    complete();
+    await assert.rejects(pending, /释放/);
+    assert.equal(releases, 1);
+    assert.equal(newScope.disposed, false);
+    h.popup.onDestroy();
+    assert.equal(newScope.disposed, true);
 });

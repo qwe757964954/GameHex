@@ -30,34 +30,34 @@ const { ccclass, property } = _decorator;
 @ccclass('ZCGameRankRow')
 export class ZCGameRankRow extends Component {
     @property({ type: Sprite, tooltip: 'Bg：行底板（第一名 phb_list_01，其余 phb_list_02）' })
-    bg: Sprite = null!;
+    bg: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'Badge：名次徽章（前三名显 icon_01/02/03，第 4 名起关掉改显数字）' })
-    badgeIcon: Sprite = null!;
+    badgeIcon: Sprite = null;
 
     @property({ type: Label, tooltip: 'RankText：第 4 名起显示的纯数字名次（与徽章同位，互斥显示）' })
-    rankText: Label = null!;
+    rankText: Label = null;
 
     @property({ type: Sprite, tooltip: 'Head：头像圆框底 common_txk（运行时叠玩家头像）' })
-    headFrame: Sprite = null!;
+    headFrame: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'Head/HeadIcon：玩家头像（icons/head 的键；空则留框）' })
-    headIcon: Sprite = null!;
+    headIcon: Sprite = null;
 
     @property({ type: Label, tooltip: 'NameText：玩家昵称' })
-    nameText: Label = null!;
+    nameText: Label = null;
 
     @property({ type: Sprite, tooltip: 'TileIcon：地块图标 icon_tile' })
-    tileIcon: Sprite = null!;
+    tileIcon: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'CountBg：右侧底板（正常 di_01 / 比赛中 di_02）' })
-    countBg: Sprite = null!;
+    countBg: Sprite = null;
 
     @property({ type: Label, tooltip: 'CountText：地块数（白色 24px + 黑描边，与 PlayingText 互斥）' })
-    countText: Label = null!;
+    countText: Label = null;
 
     @property({ type: Label, tooltip: 'PlayingText：「比赛中…」（深藏青 32px，与 CountText 互斥）' })
-    playingText: Label = null!;
+    playingText: Label = null;
 
     /** 当前渲染的帧缓存；空表示"还没 render 过"（虚拟列表首帧会先拿未初始化的行）。 */
     private frames: IRankRowFrames | null = null;

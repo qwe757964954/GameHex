@@ -21,25 +21,25 @@ export interface RunAwayPlayerInfo {
 @disallowMultiple
 export class RunAwayPlayerItem extends Component {
     @property({ type: Sprite, tooltip: 'AvatarFrame：头像装饰框' })
-    avatarFrame: Sprite = null!;
+    avatarFrame: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'Avatar：玩家头像' })
-    avatar: Sprite = null!;
+    avatar: Sprite = null;
 
     @property({ type: Label, tooltip: 'PlayerNameLabel：玩家昵称' })
-    nameLabel: Label = null!;
+    nameLabel: Label = null;
 
     @property({ type: ProgressBar, tooltip: 'DamageProgress：造成伤害进度条' })
-    damageProgress: ProgressBar = null!;
+    damageProgress: ProgressBar = null;
 
     @property({ type: ProgressBar, tooltip: 'DamageTakenProgress：承受伤害进度条' })
-    damageTakenProgress: ProgressBar = null!;
+    damageTakenProgress: ProgressBar = null;
 
     @property({ type: Label, tooltip: 'DamageValueLabel：造成伤害数值' })
-    damageLabel: Label = null!;
+    damageLabel: Label = null;
 
     @property({ type: Label, tooltip: 'DamageTakenValueLabel：承受伤害数值' })
-    damageTakenLabel: Label = null!;
+    damageTakenLabel: Label = null;
 
     /** 刷新昵称、头像及伤害数据；空头像会清理上一位玩家的图片。 */
     public refresh(info: Readonly<RunAwayPlayerInfo>): void {

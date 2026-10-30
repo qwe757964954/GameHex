@@ -20,10 +20,10 @@ const { ccclass, property } = _decorator;
 @ccclass('MailRewardSlot')
 export class MailRewardSlot extends Component {
     @property({ type: Sprite, tooltip: 'Frame：品质框底图（本节点上的 cc.Sprite）' })
-    frame: Sprite = null!;
+    frame: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'Icon：道具图标（解析不出时整块隐藏）' })
-    icon: Sprite = null!;
+    icon: Sprite = null;
 
     protected onLoad(): void {
         if (!this.frame) {

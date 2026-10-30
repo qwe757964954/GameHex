@@ -45,6 +45,25 @@ test('LoginPage 可恢复 StatusLabel 绑定，销毁后忽略异步状态更新
         './ProtocolCodec': { ProtocolCodec: class {} },
         './ServerSelectPanel': { ServerSelectPanel: class {} },
         './ServerSelectItem': { serverStatusText: () => '' },
+        // 业务已抽到 `LoginRoot`（LoginPage.ts:65 `private rootLogic = new LoginRoot()`）。
+        // 本用例只验 **UI 层**（StatusLabel 回填 / 销毁后忽略异步），业务桩成空实现即可；
+        // 登录校验本身由 LoginRoot 那一侧覆盖。
+        './LoginRoot': {
+            LoginRoot: class {
+                isBusy = false;
+                protocolReady = false;
+                servers: unknown[] = [];
+                selectedServerId = null;
+                recentServerIds: string[] = [];
+                configureGateway(): void {}
+                bootstrap(): Promise<void> { return Promise.resolve(); }
+                dispose(): void {}
+                login(): Promise<boolean> { return Promise.resolve(false); }
+                register(): Promise<boolean> { return Promise.resolve(false); }
+                restoreAccount(): Promise<unknown> { return Promise.resolve(null); }
+                setSelectedServer(): void {}
+            },
+        },
         '../common/Toast': { Toast: { show: (message: string) => toasts.push(message) } },
     };
     const context = {
@@ -109,6 +128,27 @@ test('LoginPage 登录校验失败时只弹吐司（不再弹 CommonTips），�
         '../net/GameNet': { GameNet: { instance: {} } },
         '../generated/netProto/CmdInterface': { LoginStatus: {} },
         '../generated/requestMsg/RequestRoleMsg': { RequestRoleLogin: class {} },
+        // 校验逻辑已搬到 `LoginRoot.login()`（LoginRoot.ts:129 空账号密码 ⇒ `{ok:false, reason:'请输入账号和密码'}`）。
+        // LoginPage 只剩「拿到 ok:false ⇒ showProblem ⇒ Toast」这一段 UI 责任，所以桩直接回那个失败结果，
+        // 断言口径不变：只弹一条吐司、状态栏留空。
+        './LoginRoot': {
+            LoginRoot: class {
+                isBusy = false;
+                protocolReady = false;
+                servers: unknown[] = [];
+                selectedServerId = null;
+                recentServerIds: string[] = [];
+                configureGateway(): void {}
+                bootstrap(): Promise<void> { return Promise.resolve(); }
+                dispose(): void {}
+                login(): Promise<{ ok: boolean; reason?: string }> {
+                    return Promise.resolve({ ok: false, reason: '请输入账号和密码' });
+                }
+                register(): Promise<boolean> { return Promise.resolve(false); }
+                restoreAccount(): Promise<unknown> { return Promise.resolve(null); }
+                setSelectedServer(): void {}
+            },
+        },
         '../common/Toast': { Toast: { show: (message: string) => toasts.push(message) } },
     };
     const context = {
@@ -153,9 +193,13 @@ test('LoginPage 状态栏只写白名单文案（登录过程态与失败一律�
 
     // 回归点：bootstrap 成功分支必须给状态栏收尾。
     // 少了这一句，状态栏会永远停在「正在获取服务器列表…」——安卓包上就是这么被误判成「没网络」的。
+    // ⚠️ 锚点已变：网络引导搬到 `LoginRoot.bootstrap()`（LoginRoot.ts:91），
+    //    页面这边只剩 `await this.rootLogic.bootstrap(versionConfig)` 和解包结果。
+    //    终点取到方法结束（`private loadVersionConfig`）：新结构是「先判 !result.ok 弹吐司并 return，
+    //    成功分支才 setStatus('服务器列表已就绪')」，拿 showProblem 当终点会切在 setStatus 之前。
     const successPath = code.slice(
-        code.indexOf('await this.gateway.bootstrap('),
-        code.indexOf("this.showProblem('服务器列表获取失败"),
+        code.indexOf('await this.rootLogic.bootstrap('),
+        code.indexOf('private loadVersionConfig('),
     );
     assert.ok(successPath.length > 0, '未能定位 bootstrap 成功分支（正则失效时报警）');
     assert.match(

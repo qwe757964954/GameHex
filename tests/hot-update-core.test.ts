@@ -14,6 +14,7 @@ import type {
     IHotUpdateStoredState,
     IHotUpdateStore,
 } from '../assets/script/core/update/HotUpdateTypes';
+import { assetPath } from './helpers/asset-paths';
 
 const baseConfig: IHotUpdateConfig = {
     enabled: true,
@@ -190,7 +191,7 @@ test('首装要求远端资源时，网络失败会阻断', async () => {
 
 test('启动链先进入更新流程，测试配置仅启用 Android/iOS', () => {
     const bootstrap = readFileSync('assets/script/app/bootstrap/ProcedureBootstrap.ts', 'utf8');
-    const config = JSON.parse(readFileSync('assets/resources/config/hot_update.json', 'utf8')) as IHotUpdateConfig;
+    const config = JSON.parse(readFileSync(assetPath('config/hot_update.json'), 'utf8')) as IHotUpdateConfig;
     assert.match(bootstrap, /registerRoute\(GameRoute\.Update, ProcedureUpdate\)/);
     assert.match(bootstrap, /navigate\(GameRoute\.Update\)/);
     assert.equal(config.enabled, true);

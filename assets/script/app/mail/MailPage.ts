@@ -19,7 +19,7 @@
  * ③ 行底图必须在 `refreshList` **之前**取完（`loadRowArt`），否则复用条目会闪上一行的图。
  */
 
-import { _decorator, Button, Label, SpriteFrame } from 'cc';
+import {_decorator, Button, Label} from 'cc';
 import { loadArt } from '../card/CardLineupIcons';
 import { CommonTips } from '../common/CommonTips';
 import { FW } from '../../framework/FW';
@@ -69,28 +69,28 @@ export class MailPage extends PopupBase {
     static prefabPath = 'ui/Mail/Mail';
 
     @property({ type: Button, tooltip: 'CloseBtn：右上角关闭' })
-    closeButton: Button = null!;
+    closeButton: Button = null;
 
     @property({ type: VirtualScrollView, tooltip: 'RowView：邮件列表（自带虚拟列表 + Mask）' })
-    rowList: VirtualScrollView = null!;
+    rowList: VirtualScrollView = null;
 
     @property({ type: Button, tooltip: 'BatchRemoveBtn：一键删除' })
-    batchRemoveButton: Button = null!;
+    batchRemoveButton: Button = null;
 
     @property({ type: Label, tooltip: 'BatchRemoveBtn/Label：文案' })
-    batchRemoveLabel: Label = null!;
+    batchRemoveLabel: Label = null;
 
     @property({ type: Button, tooltip: 'GetOneKeyBtn：一键领取' })
-    getOneKeyButton: Button = null!;
+    getOneKeyButton: Button = null;
 
     @property({ type: Label, tooltip: 'GetOneKeyBtn/Label：文案' })
-    getOneKeyLabel: Label = null!;
+    getOneKeyLabel: Label = null;
 
     @property({ type: Label, tooltip: 'EmptyLabel：邮箱内没有任何信件' })
-    emptyLabel: Label = null!;
+    emptyLabel: Label = null;
 
     @property({ type: Label, tooltip: 'AutoDeleteLabel：自动删除提示（带配置占位）' })
-    autoDeleteLabel: Label = null!;
+    autoDeleteLabel: Label = null;
 
     /** 数据端口（测试 / 探针用 `setRepository` 换掉）。 */
     private repo: IMailRepository = mailRepository;

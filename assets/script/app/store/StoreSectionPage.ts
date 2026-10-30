@@ -75,7 +75,7 @@ const { ccclass, property } = _decorator;
 @ccclass('StoreSectionPage')
 export class StoreSectionPage extends Component {
     @property({ type: Label, tooltip: 'Title：段标题（`title_brown` 绶带上的描边文字）' })
-    titleLabel: Label = null!;
+    titleLabel: Label = null;
 
     /**
      * 本段是 5 段里的哪一段。

@@ -42,10 +42,10 @@ export interface IFirstRechargeDayRowData {
 @ccclass('FirstRechargeDayRow')
 export class FirstRechargeDayRow extends Component {
     @property({ type: Label, tooltip: 'DayLabel：第几天，如「第1天」' })
-    dayLabel: Label = null!;
+    dayLabel: Label = null;
 
     @property({ type: Node, tooltip: 'SlotBar：奖励格容器（下面挂 3 个 FirstRechargeSlot）' })
-    slotBar: Node = null!;
+    slotBar: Node = null;
 
     /**
      * 行内的奖励格，**按 x 从左到右**排序 —— 渲染顺序契约与设计稿一致。

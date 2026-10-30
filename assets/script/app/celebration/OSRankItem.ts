@@ -48,16 +48,16 @@ const { ccclass, property } = _decorator;
 @ccclass('OSRankItem')
 export class OSRankItem extends Component {
     @property({ type: Label, tooltip: 'RankText：`第1名` / `2-3名` / `21-50名`（FGUI `文本_排名`）' })
-    rankText: Label = null!;
+    rankText: Label = null;
 
     @property({ type: OSArtStrip, tooltip: 'RewardList：横向奖励条（吃 `rewards1`）' })
-    strip: OSArtStrip = null!;
+    strip: OSArtStrip = null;
 
     @property({ type: OSRewardSlot, tooltip: 'Goods：右侧单个奖励格（吃 `rewards2[0]`，FGUI `com_goods`）' })
-    goods: OSRewardSlot = null!;
+    goods: OSRewardSlot = null;
 
     @property({ type: Label, tooltip: 'PowerText：`{战力口径}达{N}`（FGUI `lab_power`）' })
-    powerText: Label = null!;
+    powerText: Label = null;
 
     render(snapshot: ICelebrationSnapshot, row: ICelebrationRankRow, frames: CelebrationFrames): void {
         // ---- 名次文案 + 颜色（gearColor `名次`）----

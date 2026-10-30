@@ -26,16 +26,16 @@ export class HangEntryButton extends Component {
         type: Node,
         tooltip: 'HangIcon：金币车图标，时间文字不参与摇摆',
     })
-    shakeNode: Node = null!;
+    shakeNode: Node = null;
 
     @property({ type: Label, tooltip: 'HangTime：累计挂机时长' })
-    timeLabel: Label = null!;
+    timeLabel: Label = null;
 
     @property({
         type: Node,
         tooltip: 'RedDot：红点占位（FGUI `com_rd`）。老端从不点亮，本轮不接；接的时候用 setRedDot()。',
     })
-    redDot: Node = null!;
+    redDot: Node = null;
 
     /** 挂机起点（毫秒）；老端 `refreshLastTime` 的 `startTime`（0 时退到「现在」）。 */
     private _startMs: number = 0;

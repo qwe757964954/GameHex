@@ -66,40 +66,40 @@ export class ZCSpawnSelectionView extends Component {
     private static readonly CONFIRM_IDLE = new Color(128, 136, 150, 255);
 
     @property({ type: Label, group: '节点引用', tooltip: 'SpawnInfoBand/Hint：顶栏文案' })
-    hintLabel: Label = null!;
+    hintLabel: Label = null;
 
     @property({ type: Label, group: '节点引用', tooltip: 'SpawnInfoBand/Clock：剩余秒数' })
-    clockLabel: Label = null!;
+    clockLabel: Label = null;
 
     @property({ type: Node, group: '节点引用', tooltip: 'SpawnInfoBand/Progress：整条进度（等待态隐藏）' })
-    progressNode: Node = null!;
+    progressNode: Node = null;
 
     @property({ type: Sprite, group: '节点引用', tooltip: 'SpawnInfoBand/Progress/ProgressFill：FILLED 填充' })
-    progressFill: Sprite = null!;
+    progressFill: Sprite = null;
 
     @property({ type: Node, group: '节点引用', tooltip: 'ConfirmSpawn：确认落点（等待态隐藏）' })
-    confirmButton: Node = null!;
+    confirmButton: Node = null;
 
     @property({ type: Sprite, group: '节点引用', tooltip: 'ConfirmSpawn 上的绿勾（按状态染色）' })
-    confirmIcon: Sprite = null!;
+    confirmIcon: Sprite = null;
 
     @property({ type: Node, group: '节点引用', tooltip: 'ToggleHints：收起/显示提示' })
-    toggleButton: Node = null!;
+    toggleButton: Node = null;
 
     @property({ type: Label, group: '节点引用', tooltip: 'ToggleHints/Label' })
-    toggleLabel: Label = null!;
+    toggleLabel: Label = null;
 
     @property({ type: Node, group: '节点引用', tooltip: 'ToggleHints/Arrow：收起/展开箭头' })
-    toggleArrow: Node = null!;
+    toggleArrow: Node = null;
 
     @property({ type: Node, group: '节点引用', tooltip: 'SpawnToast：只在 flash() 期间 active' })
-    toastNode: Node = null!;
+    toastNode: Node = null;
 
     @property({ type: Graphics, group: '节点引用' })
-    toastBackground: Graphics = null!;
+    toastBackground: Graphics = null;
 
     @property({ type: Label, group: '节点引用' })
-    toastLabel: Label = null!;
+    toastLabel: Label = null;
 
     initialize(): void {
         // 监听一律「具名方法 + this target」（规范 §7.5 配套第 3 条）：不内联箭头闭包 ——
@@ -164,7 +164,7 @@ export class ZCSpawnSelectionView extends Component {
 
     /** 吐司底：尺寸与圆角都从 prefab 上那个节点的 `UITransform` 读，代码不存宽高。 */
     private drawToastBackground(): void {
-        const { width, height } = this.toastBackground.node.getComponent(UITransform)!.contentSize;
+        const { width, height } = this.toastBackground.node.getComponent(UITransform).contentSize;
         const radius = Math.min(ZCSpawnSelectionView.PANEL_CORNER_RADIUS, height / 4);
         this.toastBackground.clear();
         this.toastBackground.fillColor = ZCSpawnSelectionView.TOAST_PANEL;

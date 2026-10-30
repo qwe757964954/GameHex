@@ -136,7 +136,7 @@ function occupyCells(
     const queue: number[] = [anchorHexId];
     const seen = new Set<number>();
     while (queue.length > 0 && cells.length < size) {
-        const hexId = queue.shift()!;
+        const hexId = queue.shift();
         if (seen.has(hexId) || hexId < 0 || hexId >= rows * cols) continue;
         seen.add(hexId);
         cells.push(hexId);
@@ -388,8 +388,8 @@ export function bigMapStartBuild(
 ): IBigMapActionResult {
     const check = bigMapCanPlace(config, state, unlock, buildingId, hexId);
     if (!check.ok) return check;
-    const slot = bigMapFreeQueueSlot(state)!;
-    const cost = config.levels.get(buildingId)!.get(1)!;
+    const slot = bigMapFreeQueueSlot(state);
+    const cost = config.levels.get(buildingId).get(1);
     return {
         ok: true,
         reason: '',
@@ -419,9 +419,9 @@ export function bigMapStartUpgrade(
 ): IBigMapActionResult {
     const check = bigMapCanUpgrade(config, state, unlock, instanceId);
     if (!check.ok) return check;
-    const instance = state.buildings.find((item) => item.instanceId === instanceId)!;
-    const slot = bigMapFreeQueueSlot(state)!;
-    const next = config.levels.get(instance.buildingId)!.get(instance.level + 1)!;
+    const instance = state.buildings.find((item) => item.instanceId === instanceId);
+    const slot = bigMapFreeQueueSlot(state);
+    const next = config.levels.get(instance.buildingId).get(instance.level + 1);
     return {
         ok: true,
         reason: '',

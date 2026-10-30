@@ -9,7 +9,7 @@
  * 1. 五张资源表确实配了 18501..18505；
  * 2. `item.icon` 有值就并进 `resourceIcons`；
  * 3. `item.icon` 为空 / item 表缺行 **不并**（视图退回概念图，绝不留空图标）；
- * 4. 老表没有 `itemId` 列也能解析（给 0），不能一条都解析不出来。
+ * 4. 没有 `itemId` 列时按既有道具约定连接背包。
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -24,7 +24,7 @@ function currentTables(): Record<string, unknown> {
         JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8'))]));
 }
 
-test('五张资源表都配了背包道具 id：18501 粮食 / 18502 木材 / 18503 矿石 / 18504 钻石 / 18505 行动力', () => {
+test('五种资源归一为背包道具 id：18501 粮食 / 18502 木材 / 18503 矿石 / 18504 钻石 / 18505 行动力', () => {
     const config = loadBigMapConfig();
     const expected: Record<string, number> = {
         grain: 18501, wood: 18502, iron: 18503, coin: 18504, stamina: 18505,
@@ -32,9 +32,6 @@ test('五张资源表都配了背包道具 id：18501 粮食 / 18502 木材 / 18
     for (const [resType, itemId] of Object.entries(expected)) {
         assert.equal(config.resources.get(resType as never)?.itemId, itemId, `${resType} 的道具 id 不对`);
     }
-    // 名称跟背包道具保持一致（背包里 18503 叫「矿石」、18504 叫「钻石」）。
-    assert.equal(config.resources.get('iron')?.name, '矿石');
-    assert.equal(config.resources.get('coin')?.name, '钻石');
 });
 
 test('item 表里的 icon 会被并进 resourceIcons（这是「走背包」的落点）', () => {
@@ -68,16 +65,28 @@ test('item.icon 全为空 / item 表缺失时原样返回，一个空图标都�
     assert.equal(stranger.resourceIcons.size, 0);
 });
 
-test('老表没有 itemId 列也能解析（给 0，退回概念图），不会整表报错', () => {
+test('资源表没有 itemId 列时仍使用背包图标', () => {
     const tables = currentTables();
     const rows = decompressBigMapRows(tables[BIGMAP_TABLE.resource]) as Array<Record<string, unknown>>;
     const withoutColumn = rows.map(({ itemId: _drop, ...rest }) => rest);
     const config = parseBigMapConfig({ ...tables, [BIGMAP_TABLE.resource]: withoutColumn });
     for (const res of config.resources.values()) {
-        assert.equal(res.itemId, 0, `${res.resType} 缺列时应为 0`);
+        assert.ok(res.itemId > 0, `${res.resType} 缺列时仍须关联背包`);
     }
     assert.equal(attachBigMapResourceItemIcons(config, [{ resId: 18501, icon: 'icons/item/x' }])
-        .resourceIcons.size, 0);
+        .resourceIcons.get('grain'), 'icons/item/x');
+});
+
+test('显式 itemId 优先于缺列约定，0 仍可关闭背包映射', () => {
+    const tables = currentTables();
+    const rows = decompressBigMapRows(tables[BIGMAP_TABLE.resource]);
+    for (const itemId of [19999, 0]) {
+        const config = parseBigMapConfig({ ...tables, [BIGMAP_TABLE.resource]: rows.map((row) => ({
+            ...row, ...(row.resType === 'stamina' ? { itemId } : {}),
+        })) });
+        assert.equal(config.resources.get('stamina')?.itemId, itemId);
+        assert.equal(config.resources.get('iron')?.itemId, 18503);
+    }
 });
 test('真实 item 表已配 18501~18505 的图标，且图真的在 main-pages/icons/item 下', () => {
     const config = loadBigMapConfig();

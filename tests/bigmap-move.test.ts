@@ -1,3 +1,8 @@
+import { createControllerContext } from './helpers/controller-context';
+import { BigMapController } from '../assets/script/app/bigmap/application/BigMapController';
+import { bigMapViewStateFixture } from './helpers/bigmap-view-state-fixture';
+import { EventMgr } from '../assets/script/framework/event/EventMgr';
+import * as mvcEvents from '../assets/script/app/bigmap/application/BigMapEvents';
 /**
  * 建筑搬移 + 野怪击杀进度展示。
  *
@@ -196,6 +201,8 @@ function loadPageClass(): new () => Record<string, unknown> {
     } }).outputText;
     const exports: Record<string, unknown> = {};
     runInNewContext(code, { exports, require: (name: string) => {
+        if (name.endsWith('/EventMgr')) return { EventMgr };
+        if (name.endsWith('/BigMapEvents')) return mvcEvents;
         if (name === 'cc') return { _decorator: { ccclass: () => (value: unknown) => value }, Component: class {} };
         // `BigMapPage` 的字段初始化器会 `new ResourceScope(...)`，桩成 `{}` 会当场炸。
         if (name.endsWith('/ResourceScope')) return { ResourceScope };
@@ -206,59 +213,27 @@ function loadPageClass(): new () => Record<string, unknown> {
     return exports.BigMapPage as new () => Record<string, unknown>;
 }
 
-test('搬移态：点别的格走 requestMove 并退出搬移态；点原格只取消、不发请求', async () => {
-    const page = new (loadPageClass())() as any;
+for (const succeeds of [true, false]) test(`Controller 搬移：${succeeds ? '成功后退出，点原格取消' : '拒绝后保留搬移态供重试'}`, async () => {
+    const model = new BigMapPresenter({ config, storage: createMemoryBigMapStorage(), saveKey: 'mvc-move', adventureChapter: () => 10, now: () => NOW });
     const calls: number[][] = [];
-    page.presenter = {
-        plotDetail: () => ({ instanceId: 7, buildingId: 71001, hexId: 12, queueSlotIndex: -1, stored: 0 }),
-        requestMove: async (instanceId: number, hexId: number) => {
-            calls.push([instanceId, hexId]);
-            return { ok: true, message: '' };
-        },
-        canCollectBuilding: () => false,
-    };
-    page.selectedPlotHexId = 12;
-    page.pendingMoveInstanceId = 7;
-    page.baseView = { select: () => undefined, setPendingBuilding: () => undefined };
-    page.buildPanel = { active: false };
-    page.feedback = () => undefined;
-    page.refreshInfo = () => undefined;
-    page.runBaseAction = async (action: () => Promise<{ ok: boolean; message: string }>, onSuccess?: () => void) => {
-        const result = await action();
-        if (result.ok) onSuccess?.();
-    };
-
-    await page.onPlotTap(13);
-    assert.deepEqual(calls, [[7, 13]]);
-    assert.equal(page.pendingMoveInstanceId, 0);
-
-    // 点回原格 = 取消：一次请求都不该多发。
-    page.pendingMoveInstanceId = 7;
-    await page.onPlotTap(12);
-    assert.deepEqual(calls, [[7, 13]]);
-    assert.equal(page.pendingMoveInstanceId, 0);
-});
-
-test('搬移态被服务端拒绝时保留搬移态，方便换一格再试', async () => {
-    const page = new (loadPageClass())() as any;
-    page.presenter = {
-        plotDetail: () => ({ instanceId: 7, buildingId: 71001, hexId: 12, queueSlotIndex: -1, stored: 0 }),
-        requestMove: async () => ({ ok: false, message: '该位置已有建筑' }),
-        canCollectBuilding: () => false,
-    };
-    page.selectedPlotHexId = 12;
-    page.pendingMoveInstanceId = 7;
-    page.baseView = { select: () => undefined, setPendingBuilding: () => undefined };
-    page.buildPanel = { active: false };
-    page.feedback = () => undefined;
-    page.refreshInfo = () => undefined;
-    page.runBaseAction = async (action: () => Promise<{ ok: boolean; message: string }>, onSuccess?: () => void) => {
-        const result = await action();
-        if (result.ok) onSuccess?.();
-    };
-
-    await page.onPlotTap(13);
-    assert.equal(page.pendingMoveInstanceId, 7);
+    model.plotDetail = () => ({ instanceId: 7, buildingId: 71001, hexId: 12, queueSlotIndex: -1, stored: 0 } as any);
+    model.requestMove = async (id, hexId) => { calls.push([id, hexId]); return { ok: succeeds, message: '' }; };
+    model.canCollectBuilding = () => false;
+    const controller = new BigMapController(model, { context: createControllerContext(), schedule: () => () => {} });
+    const intent = (value: mvcEvents.BigMapIntent) => EventMgr.instance.emit(mvcEvents.BigMapUiEvent.Intent, { intent: value });
+    controller.start();
+    try {
+        intent({ kind: 'mode', mode: 'base' }); intent({ kind: 'plotTap', hexId: 12 }); intent({ kind: 'secondary' });
+        assert.equal(controller.snapshot.ui.pendingMoveInstanceId, 7);
+        intent({ kind: 'plotTap', hexId: 13 });
+        await new Promise(resolve => setImmediate(resolve));
+        assert.deepEqual(calls, [[7, 13]]);
+        assert.equal(controller.snapshot.ui.pendingMoveInstanceId, succeeds ? 0 : 7);
+        if (succeeds) intent({ kind: 'secondary' });
+        intent({ kind: 'plotTap', hexId: 12 });
+        assert.deepEqual(calls, [[7, 13]]);
+        assert.equal(controller.snapshot.ui.pendingMoveInstanceId, 0);
+    } finally { controller.dispose(); }
 });
 
 test('基地详情次按钮：收不了的角色给「移动」，施工中的直接隐藏', () => {
@@ -283,15 +258,14 @@ test('基地详情次按钮：收不了的角色给「移动」，施工中的�
         page.secondaryButton = makeButton();
         page.setInfoVisible = () => undefined;
         page.setInfoIcon = () => undefined;
-        page.presenter = {
-            plotDetail: () => ({
+        page.data = bigMapViewStateFixture({
+            plotDetails: new Map([[12, {
                 name: '主城', buildingId: 71001, instanceId: 1, level: 1, targetLevel: 2, stored: 0,
                 costGrain: 0, costWood: 0, costIron: 0, buildTime: 0, canUpgrade: true,
                 reason: '', queueSlotIndex, remainSeconds: 0, progress: 0,
-            }),
-            canCollectBuilding: () => false,
+            }]]),
             isServerBase: false,
-        };
+        });
         page.refreshInfoContent();
         return page;
     };

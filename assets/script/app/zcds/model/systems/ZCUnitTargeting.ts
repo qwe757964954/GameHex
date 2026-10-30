@@ -1,6 +1,6 @@
 import type { IZCModelServices } from './ZCModelServices';
 import type { ZCUnitDefinition } from '../ZCCombatCatalog';
-import type { ZCCombatTarget, ZCHexState, ZCUnitState } from '../ZCGameTypes';
+import type {ZCCombatTarget, ZCUnitState} from '../ZCGameTypes';
 import type { ZCMatchMap } from '../ZCMatchConfig';
 import type { ZCMapGeometry } from '../ZCMapGeometry';
 import { ZCTargetingSystem, ZCPathWorkspace, type ZCTargetingContext } from './ZCTargetingSystem';

@@ -47,29 +47,29 @@ export class MilitiaTalentPage extends PopupBase {
     static prefabPath = 'ui/Role/TabMilitiaTalent';
 
     @property({ type: Node, tooltip: 'List：天赋列表（其上挂 VirtualScrollView，gridCount=1）' })
-    listNode: Node = null!;
+    listNode: Node = null;
 
     @property({ type: Node, tooltip: 'AttrBtn：天赋属性总览按钮（挂 cc.Button）' })
-    attrButton: Node = null!;
+    attrButton: Node = null;
 
     @property({ type: Node, tooltip: 'Mask：详情弹窗的遮罩（挂 cc.Button，点它关弹窗）' })
-    maskButton: Node = null!;
+    maskButton: Node = null;
 
     @property({ type: Node, tooltip: 'BtnActivate：激活按钮（挂 cc.Button）' })
-    activateButton: Node = null!;
+    activateButton: Node = null;
 
     // ---- 底部菜单层（`MenuBar`，老端 `组件_民兵_菜单层`）----
 
     /** `MenuBar/BtnBack`：返回（关整页）。老端 `LayerMiltiaMenuMenuUI.onReturnClick`。 */
     @property({ type: Node, tooltip: 'MenuBar/BtnBack：返回（挂 cc.Button）' })
-    backButton: Node = null!;
+    backButton: Node = null;
 
     /**
      * `MenuBar/TabTalent`：「天赋」页签（复用 `ui/common/TabButton` ——
      * 老端 `按钮_首页_菜单` 的 `类型=23`，图标 `zjm_icon01_TianFu/TianFu02`）。
      */
     @property({ type: TabButton, tooltip: 'MenuBar/TabTalent：天赋页签（当前页，常驻选中）' })
-    tabTalent: TabButton = null!;
+    tabTalent: TabButton = null;
 
     /**
      * `MenuBar/TabSkin`：「皮肤」页签（`类型=24`，图标 `zjm_icon01_PiFu/PiFu02`）。
@@ -78,10 +78,10 @@ export class MilitiaTalentPage extends PopupBase {
      * ⇒ 页签照摆（还原原稿），点击给「没移植」提示，不留死按钮（规则 113 的同款口径）。
      */
     @property({ type: TabButton, tooltip: 'MenuBar/TabSkin：皮肤页签（未移植，点击给提示）' })
-    tabSkin: TabButton = null!;
+    tabSkin: TabButton = null;
 
     /** 缓存：列表组件。 */
-    private list: VirtualScrollView = null!;
+    private list: VirtualScrollView = null;
 
     /** 当前列表数据（等级降序）。 */
     private cells: readonly IMilitiaTalentCell[] = [];
@@ -138,16 +138,16 @@ export class MilitiaTalentPage extends PopupBase {
         this.list.onItemClickFn = (_node: Node, index: number) => this.onItemClick(index);
 
         // CLICK 挂在**节点**上（Button 自身没有 on）。
-        this.attrButton.getComponent(Button)!.node.on(Button.EventType.CLICK, this.onAttrClick, this);
-        this.maskButton.getComponent(Button)!.node.on(Button.EventType.CLICK, this.hideInfo, this);
-        this.activateButton.getComponent(Button)!.node.on(Button.EventType.CLICK, this.onActivateClick, this);
-        this.backButton.getComponent(Button)!.node.on(Button.EventType.CLICK, this.closeByButton, this);
+        this.attrButton.getComponent(Button).node.on(Button.EventType.CLICK, this.onAttrClick, this);
+        this.maskButton.getComponent(Button).node.on(Button.EventType.CLICK, this.hideInfo, this);
+        this.activateButton.getComponent(Button).node.on(Button.EventType.CLICK, this.onActivateClick, this);
+        this.backButton.getComponent(Button).node.on(Button.EventType.CLICK, this.closeByButton, this);
         // 页签：天赋 = 当前页（常驻选中、不接点击）；皮肤没迁 ⇒ 点它给提示。
         this.tabTalent.setSelected(true);
         this.tabSkin.setSelected(false);
         this.tabSkin.bindSelect(() => FW.showTip(ROLE_TEXTS.tabSkinMissing));
-        this.node.getChildByName('Popup')!.getChildByName('CloseBtn')!
-            .getComponent(Button)!.node.on(Button.EventType.CLICK, this.hideInfo, this);
+        this.node.getChildByName('Popup').getChildByName('CloseBtn')
+            .getComponent(Button).node.on(Button.EventType.CLICK, this.hideInfo, this);
     }
 
     // ============================================================
@@ -262,13 +262,13 @@ export class MilitiaTalentPage extends PopupBase {
         this.detail = detail;
 
         this.setInfoVisible(true);
-        this.node.getChildByName('SkillName')!.getComponent(Label)!.string = detail.effectName;
-        this.node.getChildByName('SkillDesc')!.getComponent(Label)!.string = detail.effectDesc;
+        this.node.getChildByName('SkillName').getComponent(Label).string = detail.effectName;
+        this.node.getChildByName('SkillDesc').getComponent(Label).string = detail.effectDesc;
 
         // 图标：详情的 key 可能不在列表预加载的集合里（点的是未解锁的高等级）⇒ 现加载。
         const icon = this.iconFrames.get(detail.iconKey) ?? await loadMilitiaTalentIcon(detail.iconKey);
         if (!this.alive || rev !== this.revision) return;
-        this.node.getChildByName('NodeIcon')!.getChildByName('Icon')!.getComponent(Sprite)!.spriteFrame = icon;
+        this.node.getChildByName('NodeIcon').getChildByName('Icon').getComponent(Sprite).spriteFrame = icon;
 
         this.renderCost('Cost1', this.goldFrame, detail.goldOwned, detail.goldNeed);
         const itemFrame = await this.loadCostItemIcon(detail.itemId);
@@ -298,10 +298,10 @@ export class MilitiaTalentPage extends PopupBase {
 
     /** 一行消耗：图标 + 「持有/需要」（`HasText` / `NeedText`）。 */
     private renderCost(nodeName: string, frame: SpriteFrame | null, owned: number, need: number): void {
-        const box = this.node.getChildByName(nodeName)!;
-        box.getChildByName('CostIcon')!.getComponent(Sprite)!.spriteFrame = frame;
-        box.getChildByName('HasText')!.getComponent(Label)!.string = String(owned);
-        box.getChildByName('NeedText')!.getComponent(Label)!.string = `/${need}`;
+        const box = this.node.getChildByName(nodeName);
+        box.getChildByName('CostIcon').getComponent(Sprite).spriteFrame = frame;
+        box.getChildByName('HasText').getComponent(Label).string = String(owned);
+        box.getChildByName('NeedText').getComponent(Label).string = `/${need}`;
     }
 
     /** 消耗道具的图标（`item.icon` 的 resources 相对路径）。 */

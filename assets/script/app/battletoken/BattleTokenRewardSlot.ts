@@ -1,4 +1,4 @@
-import { _decorator, Button, Component, Label, Node, Sprite, SpriteFrame } from 'cc';
+import {_decorator, Button, Component, Node, Sprite, SpriteFrame} from 'cc';
 import { BT_SPRITE_SIMPLE } from './BattleTokenArt';
 import type { IRewardSlotState } from './BattleTokenTable';
 
@@ -24,25 +24,25 @@ const { ccclass, property } = _decorator;
 @ccclass('BattleTokenRewardSlot')
 export class BattleTokenRewardSlot extends Component {
     @property({ type: Sprite, tooltip: '品质框（`image/frame/common_img_pzk_*`）' })
-    frame: Sprite = null!;
+    frame: Sprite = null;
 
     @property({ type: Sprite, tooltip: '道具图标（`item` / `roleProperty` 两支分流解析）' })
-    icon: Sprite = null!;
+    icon: Sprite = null;
 
     @property({ type: Node, tooltip: '已领取对勾（复用 sevenDay/sd_check）' })
-    checkMark: Node = null!;
+    checkMark: Node = null;
 
     @property({ type: Node, tooltip: '置灰遮罩（bt_icon_mask）' })
-    mask: Node = null!;
+    mask: Node = null;
 
     @property({ type: Node, tooltip: '未解锁的锁标（bt_lock）' })
-    lockIcon: Node = null!;
+    lockIcon: Node = null;
 
     @property({ type: Node, tooltip: '可领取红点（common/cm_red_dot）' })
-    redDot: Node = null!;
+    redDot: Node = null;
 
     @property({ type: Button, tooltip: '整格的按钮（可领取时才 interactable）' })
-    button: Button = null!;
+    button: Button = null;
 
     private _onTake: (() => void) | null = null;
 

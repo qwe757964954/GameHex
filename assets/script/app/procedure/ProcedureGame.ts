@@ -1,3 +1,4 @@
+import { ComponentController } from '../../framework/controller/ComponentController';
 import { ProcedureBase } from '../../framework/procedure/ProcedureBase';
 import { ProcedureManager } from '../../framework/procedure/ProcedureManager';
 import type { ProcedurePreloadContext } from '../../framework/procedure/ProcedureBase';
@@ -7,8 +8,6 @@ import type { IZCGameEntry } from '../zcds/application/ZCGameEntry';
 import type { ZCGameEntryParams } from '../zcds/application/ZCGamePreload';
 import { buildZCClientCombatConfig } from '../zcds/application/ZCClientCombatConfig';
 import { buildZCPveEnemyDecks } from '../zcds/application/ZCPveCombatConfig';
-import { captureZCMatchConfig } from '../zcds/model/ZCMatchConfig';
-import type { ZCCompiledModifierLoadout } from '../zcds/model/ZCModifierRuntime';
 import { createTerritorySaveStore } from '../territory/application/TerritorySaveStoreAdapter';
 import { buildSeatProfiles, buildSeatUnitIds } from '../zcds/model/ZCRankBoard';
 
@@ -48,9 +47,9 @@ export class ProcedureGame extends ProcedureBase {
     private preparedResources: ZCGamePreparedResources | null = null;
 
     async onPreload(params?: ZCGameEntryParams, context?: ProcedurePreloadContext): Promise<void> {
-        const warmup = this.sessionAssets?.warmupProgress;
+        const warmup = this.sessionAssets.warmupProgress;
         if (warmup) console.info(`[BattleLoading] 静默准备 下载${warmup.completed}/${warmup.total} 累计解析${warmup.parsed} 缓存${warmup.cached} 核心保留${warmup.pinned ?? 0}`);
-        this.sessionAssets?.pauseWarmup?.();
+        this.sessionAssets.pauseWarmup?.();
         if (params?.preload) {
             if (!context) throw new Error('移交匹配预加载资源需要流程资源作用域');
             const preload = params.preload;
@@ -68,15 +67,17 @@ export class ProcedureGame extends ProcedureBase {
             if (count !== 2 && count !== 3 && count !== 4) throw new Error('SLG 开战数据缺少有效参战人数');
             playerCount = count;
         }
+        if (!context) throw new Error('对局预加载需要流程资源作用域');
+        const controller = new ComponentController('battle:direct-preload');
+        context.resources.defer(() => controller.dispose());
         const loader = new ZCGameLoader(
-            this.sessionAssets?.reusableAssets ?? this.assets,
-            this.configs,
+            controller.resources,
             MAP_DIRECTORY,
             Math.random,
             playerCount,
         );
-        const prepared = await loader.prepare(context?.resources, params?.battle, params?.pve?.waves.map((wave) => wave.pvpCardId));
-        if (context?.cancelled) return;
+        const prepared = await loader.prepare(context.resources, params?.battle, params?.pve?.waves.map((wave) => wave.pvpCardId));
+        if (context.cancelled || context.resources.disposed) return;
         this.preparedResources = prepared;
         this.log('对局配置、地图与显示资源预加载完成');
     }
@@ -107,24 +108,6 @@ export class ProcedureGame extends ProcedureBase {
         const pveEnemyDeck = !battle && requestedEnemyCards.size > 0
             ? baseConfig.enemyDeck.filter((card) => requestedEnemyCards.has(card.id))
             : baseConfig.enemyDeck;
-        const pveUnitIds = Array.from(new Set(pveEnemyDeck.flatMap((card) => card.unitId ? [card.unitId] : [])));
-        const pveModifiers: ZCCompiledModifierLoadout[] = pve ? pveUnitIds.map((unitId) => ({
-            sourceKey: `territory:${pve.levelId}`,
-            sourceKind: 'growth',
-            targetUnitId: unitId,
-            appliedModifierIds: [],
-            rawAttributes: { hpRate: pve.hpRate, attackRate: pve.attackRate },
-            statPatch: {
-                maxHpPct: (pve.hpRate - 1) * 100,
-                attackPct: (pve.attackRate - 1) * 100,
-            },
-            typedModifiers: [],
-            skillPlans: [],
-            breakdown: [],
-            effects: [],
-            unsupportedAttributes: [],
-            configHash: `territory:${pve.levelId}`,
-        })) : [];
         const pveDefence = pve?.mode === 'defence' && pve.waves.length > 0 ? {
             waves: pve.waves
                 .filter((wave) => wave.monsterCount > 0 && wave.showAtSeconds >= 0)
@@ -134,10 +117,8 @@ export class ProcedureGame extends ProcedureBase {
                     showAtSeconds: wave.showAtSeconds,
                     cardId: String(wave.pvpCardId),
                     monsterCount: wave.monsterCount,
-                    // monsterSize 是表现尺寸，不错误套用为战斗星级；波次生命倍率由 hpRate 独立生效。
+                    // 波次只决定出怪计划；战斗倍率统一来自服务端 buffInfo。
                     tier: 1,
-                    hpRate: wave.hpRate,
-                    attackRate: wave.attackRate,
                 })),
         } : undefined;
         let matchConfig = baseConfig;
@@ -149,28 +130,12 @@ export class ProcedureGame extends ProcedureBase {
             }
             if (pveDefence?.waves.length) matchConfig.pveDefence = pveDefence;
         }
-        const builtClientCombat = buildZCClientCombatConfig(
+        const clientCombat = buildZCClientCombatConfig(
             matchConfig,
             battle,
             entry?.selfRoleId,
             captureOptions,
         );
-        // buildZCClientCombatConfig 会重建 owner 修改器；关卡倍率必须在它之后合并，否则会被覆盖。
-        let clientCombat = builtClientCombat;
-        if (pve) {
-            const sourceModifiers = builtClientCombat.config.modifiers;
-            const mergedConfig = captureZCMatchConfig(
-                Object.assign({}, builtClientCombat.config, {
-                    modifiers: Object.assign({}, sourceModifiers, {
-                        enemy: (sourceModifiers?.enemy ?? []).concat(pveModifiers),
-                        enemy2: (sourceModifiers?.enemy2 ?? []).concat(pveModifiers),
-                        enemy3: (sourceModifiers?.enemy3 ?? []).concat(pveModifiers),
-                    }),
-                }),
-                captureOptions,
-            );
-            clientCombat = Object.assign({}, builtClientCombat, { config: mergedConfig });
-        }
         if (clientCombat.skipped.length) {
             console.warn('[ProcedureGame] 尚未完成移植的客户端武将构筑已跳过', clientCombat.skipped);
         }

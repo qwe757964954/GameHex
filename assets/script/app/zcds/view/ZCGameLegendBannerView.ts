@@ -112,43 +112,43 @@ export class ZCGameLegendBannerView extends Component {
     private static readonly FADE_START_PROGRESS = 0.78;
 
     @property({ type: UIOpacity, group: '节点引用', tooltip: '根节点上的 UIOpacity：整条横幅的淡入淡出由它一个组件承担' })
-    bannerOpacity: UIOpacity = null!;
+    bannerOpacity: UIOpacity = null;
 
     @property({ type: Sprite, group: '节点引用', tooltip: 'Banner：底板，按 owner 换图（四色）' })
-    bannerSprite: Sprite = null!;
+    bannerSprite: Sprite = null;
 
     @property({ type: Sprite, group: '节点引用', tooltip: 'Role：立绘，运行时按卡注入（兵种 idle / 建筑图）' })
-    roleSprite: Sprite = null!;
+    roleSprite: Sprite = null;
 
     @property({ type: Sprite, group: '节点引用', tooltip: 'Title：固定的「传说卡牌」标题图' })
-    titleSprite: Sprite = null!;
+    titleSprite: Sprite = null;
 
     @property({ type: Sprite, group: '节点引用', tooltip: 'Portrait/Ring：头像环，按 owner 换图（四色）' })
-    ringSprite: Sprite = null!;
+    ringSprite: Sprite = null;
 
     @property({ type: Sprite, group: '节点引用', tooltip: 'Portrait/Ring/Head：玩家头像（CircleAvatar 圆裁）；拿不到头像时只留色环' })
-    headSprite: Sprite = null!;
+    headSprite: Sprite = null;
 
     @property({ type: Label, group: '节点引用', tooltip: 'Name：卡名（卡表 name，如「吐豌豆骑手」）' })
-    nameLabel: Label = null!;
+    nameLabel: Label = null;
 
     @property({ type: SpriteFrame, group: '玩家配色', tooltip: '我方（player，蓝）：legend_banner_02' })
-    bannerPlayer: SpriteFrame = null!;
+    bannerPlayer: SpriteFrame = null;
     @property({ type: SpriteFrame, group: '玩家配色', tooltip: '2 号（enemy，红）：legend_banner_01' })
-    bannerEnemy: SpriteFrame = null!;
+    bannerEnemy: SpriteFrame = null;
     @property({ type: SpriteFrame, group: '玩家配色', tooltip: '3 号（enemy2，黄）：legend_banner_04' })
-    bannerEnemy2: SpriteFrame = null!;
+    bannerEnemy2: SpriteFrame = null;
     @property({ type: SpriteFrame, group: '玩家配色', tooltip: '4 号（enemy3，紫）：legend_banner_03' })
-    bannerEnemy3: SpriteFrame = null!;
+    bannerEnemy3: SpriteFrame = null;
 
     @property({ type: SpriteFrame, group: '玩家配色', tooltip: '我方头像环（蓝）：legend_ring_02' })
-    ringPlayer: SpriteFrame = null!;
+    ringPlayer: SpriteFrame = null;
     @property({ type: SpriteFrame, group: '玩家配色', tooltip: '2 号头像环（红）：legend_ring_01' })
-    ringEnemy: SpriteFrame = null!;
+    ringEnemy: SpriteFrame = null;
     @property({ type: SpriteFrame, group: '玩家配色', tooltip: '3 号头像环（黄）：legend_ring_04' })
-    ringEnemy2: SpriteFrame = null!;
+    ringEnemy2: SpriteFrame = null;
     @property({ type: SpriteFrame, group: '玩家配色', tooltip: '4 号头像环（紫）：legend_ring_03' })
-    ringEnemy3: SpriteFrame = null!;
+    ringEnemy3: SpriteFrame = null;
 
     /** 上一次 render 到的内容组合；没变就跳过选图选字，只在首帧与换卡时写。 */
     private contentKey = '';

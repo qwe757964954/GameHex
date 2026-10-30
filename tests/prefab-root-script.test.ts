@@ -35,6 +35,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
+import { assetPath } from './helpers/asset-paths';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
@@ -143,7 +144,7 @@ test('ChangeHead 的 8 个槽位都挂着 ChangeHeadItem，且 4 个引用形态
     // 第一句就是 `node.getComponent(ChangeHeadItem); if (!item) return;` —— 槽位没挂组件 = 列表永远空白，
     // **不报错、单测也测不出**（2026-09-26 实测：生成器只铺了节点树、没挂组件）。
     const objects = JSON.parse(
-        readFileSync(path.join(ROOT, 'assets/resources/ui/PlayerInfo/ChangeHead.prefab'), 'utf8'),
+        readFileSync(path.join(ROOT, assetPath('ui/PlayerInfo/ChangeHead.prefab')), 'utf8'),
     ) as Array<Record<string, unknown>>;
     const itemCid = compressUuid(
         JSON.parse(readFileSync(path.join(ROOT, 'assets/script/app/playerinfo/ChangeHeadItem.ts.meta'), 'utf8')).uuid as string,
@@ -177,7 +178,7 @@ test('ChangeHead 的 8 个槽位都挂着 ChangeHeadItem，且 4 个引用形态
 
 test('ChangeHead 根节点的 5 个 @property 都指向了正确形态（节点 / 组件）', () => {
     const objects = JSON.parse(
-        readFileSync(path.join(ROOT, 'assets/resources/ui/PlayerInfo/ChangeHead.prefab'), 'utf8'),
+        readFileSync(path.join(ROOT, assetPath('ui/PlayerInfo/ChangeHead.prefab')), 'utf8'),
     ) as Array<Record<string, unknown>>;
     const decl = DECLS.find((d) => d.cls === 'ChangeHeadPage');
     assert.ok(decl, '没扫到 ChangeHeadPage');

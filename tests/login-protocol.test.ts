@@ -14,6 +14,7 @@ import {
 import { ProtocolCodec } from '../assets/script/app/login/ProtocolCodec';
 import protobufRoot from '../assets/script/lib/protobuf/protoCompiledStatic';
 import type { NetworkRequest, NetworkTransport } from '../assets/script/core/network/NetworkTransport';
+import { assetPath } from './helpers/asset-paths';
 
 const servers: ServerInfoData[] = [
     { serverId: '1', name: '一服', serverOpenTime: 100, status: ServerStatus.Recommend },
@@ -99,7 +100,7 @@ test('随包 protobuf 静态模块包含信封与角色登录协议，且不含�
 });
 
 test('静态模块的协议覆盖不低于 config/protoCompiled.json（防生成产物过期）', () => {
-    const schema = JSON.parse(readFileSync('assets/resources/config/protoCompiled.json', 'utf8'));
+    const schema = JSON.parse(readFileSync(assetPath('config/protoCompiled.json'), 'utf8'));
     const jsonCmd = schema.nested.com.nested.xkhy.nested.tafang.nested.cmd;
     const moduleCmd = (protobufRoot as any).com.xkhy.tafang.cmd;
 

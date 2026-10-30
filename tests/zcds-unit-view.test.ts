@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { assetPath } from './helpers/asset-paths';
 
 /**
  * 单位视图（`ZCUnitView` + `ZCGameUnit.prefab`）的结构守卫。
@@ -15,7 +16,7 @@ import test from 'node:test';
  * ③ prefab 上这六个引用都能反解到正确类型的对象（漏绑 = 运行时空指针）。
  */
 const source = readFileSync('assets/script/app/zcds/view/ZCUnitView.ts', 'utf8');
-const objects: any[] = JSON.parse(readFileSync('assets/resources/ui/game/ZCGameUnit.prefab', 'utf8'));
+const objects: any[] = JSON.parse(readFileSync(assetPath('ui/game/ZCGameUnit.prefab'), 'utf8'));
 
 /** 反向断言前先剥注释（本文件的注释里就写着 `new Node`）。 */
 function stripComments(text: string): string {

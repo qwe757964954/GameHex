@@ -261,7 +261,7 @@ const pageSrc = readFileSync(
     'utf8',
 );
 const presenterSrc = readFileSync(
-    new URL('../assets/script/app/territory/application/TerritoryPresenter.ts', import.meta.url),
+    new URL('../assets/script/app/territory/application/TerritoryModel.ts', import.meta.url),
     'utf8',
 );
 const adapterSrc = readFileSync(

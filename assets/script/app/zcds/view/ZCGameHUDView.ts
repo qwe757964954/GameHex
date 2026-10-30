@@ -1,4 +1,4 @@
-﻿import { _decorator, Button, Color, Component, EventMouse, EventTouch, Label, Layout, Node, ScrollView, Sprite, SpriteFrame, UITransform, Vec3 } from 'cc';
+import { _decorator, Button, Color, Component, EventMouse, EventTouch, Label, Layout, Node, ScrollView, Sprite, SpriteFrame, UITransform, Vec3 } from 'cc';
 import { tween, type Tween } from 'cc';
 import { Widget } from 'cc';
 import { ZCGameHudScoreSlot } from './ZCGameHudScoreSlot';
@@ -88,11 +88,11 @@ export class ZCGameHUDView extends Component {
 
     // 必填引用由 `ZCGameHUD.prefab` 提供；缺绑定应在使用时尽早暴露。
     @property({ type: ScrollView, group: '地图', tooltip: 'MapScrollView；对局期间由 HUD 统一处理二维拖动' })
-    mapScrollView: ScrollView = null!;
+    mapScrollView: ScrollView = null;
     @property({ type: Node, group: '地图', tooltip: 'MapScrollView/view：裁切和触摸区域' })
-    mapViewport: Node = null!;
+    mapViewport: Node = null;
     @property({ type: Node, group: '地图', tooltip: 'MapScrollView/view/content：地块、单位和城墙挂载点' })
-    mapLayer: Node = null!;
+    mapLayer: Node = null;
     /**
      * `MapScrollView/view/content/Background` 那张铺底图。
      *
@@ -102,62 +102,62 @@ export class ZCGameHUDView extends Component {
      * 取不到就是 prefab 错，在绑定层就炸。
      */
     @property({ type: Node, group: '地图', tooltip: 'MapScrollView/view/content/Background：铺底大图，按全景倍率 cover 铺满' })
-    mapBackground: Node = null!;
+    mapBackground: Node = null;
 
     // 顶部四格（设计稿「多队伍」）：逐席位显示地块数；**地块数 = 0 视为该玩家已战斗结束** ⇒ 显示红 X。
     //  用四个独立 `@property` 而不是 `[ZCGameHudScoreSlot]` 数组 —— MCP 设不了数组属性
     //   （见 `cocos-mcp-build-prefab` 技能铁律 3：传单值会把数组写坏成 `{__id__:N}`）。
     @property({ type: Layout, group: '顶部信息', tooltip: 'TopInfoPanel/ScoreLayout：居中的分数格排列' })
-    scoreLayout: Layout = null!;
+    scoreLayout: Layout = null;
     @property({ type: ZCGameHudScoreSlot, group: '顶部信息', tooltip: 'TopInfoPanel/ScoreLayout/Score1：第 1 席地块数' })
-    scoreSlot1: ZCGameHudScoreSlot = null!;
+    scoreSlot1: ZCGameHudScoreSlot = null;
     @property({ type: ZCGameHudScoreSlot, group: '顶部信息', tooltip: 'TopInfoPanel/ScoreLayout/Score2：第 2 席地块数' })
-    scoreSlot2: ZCGameHudScoreSlot = null!;
+    scoreSlot2: ZCGameHudScoreSlot = null;
     @property({ type: ZCGameHudScoreSlot, group: '顶部信息', tooltip: 'TopInfoPanel/ScoreLayout/Score3：第 3 席地块数' })
-    scoreSlot3: ZCGameHudScoreSlot = null!;
+    scoreSlot3: ZCGameHudScoreSlot = null;
     @property({ type: ZCGameHudScoreSlot, group: '顶部信息', tooltip: 'TopInfoPanel/ScoreLayout/Score4：第 4 席地块数' })
-    scoreSlot4: ZCGameHudScoreSlot = null!;
+    scoreSlot4: ZCGameHudScoreSlot = null;
     @property({ type: Label, group: '顶部信息', tooltip: 'TopInfoPanel/time/timeLab：剩余时间 mm:ss' })
-    timeLabel: Label = null!;
+    timeLabel: Label = null;
 
     // 左侧玩家列表（设计稿「多队伍」）：逐席位显示圆盘 / 头像 / 名字 / 兵力 / buff×2。
     // 走**虚拟列表**：条目统一 308×88，圆盘与头像的尺寸、名字颜色都由条目脚本按 `owner` 现取
     // （设计稿我方那一行更大）。这样人数 2~4 变化时不用改 prefab 结构。
     @property({ type: VirtualScrollView, group: '玩家列表', tooltip: 'PlayerList：左侧玩家列表（纵向虚拟列表）' })
-    playerList: VirtualScrollView = null!;
+    playerList: VirtualScrollView = null;
 
     @property({ type: Node, group: '底部信息', tooltip: 'BottomInfoPanel/CoinPanel/coin：金币图标，金币不足时跳动' })
-    goldIcon: Node = null!;
+    goldIcon: Node = null;
     @property({ type: Label, group: '底部信息', tooltip: 'BottomInfoPanel/CoinPanel/GoldLabel：只显示金币数' })
-    goldLabel: Label = null!;
+    goldLabel: Label = null;
     @property({ type: Button, group: '底部信息', tooltip: 'BottomInfoPanel/ArtifactButton' })
-    artifactButton: Button = null!;
+    artifactButton: Button = null;
     @property({ type: Sprite, group: '底部信息', tooltip: 'ArtifactButton/ArtifactIcon：不可释放时置灰' })
-    artifactIcon: Sprite = null!;
+    artifactIcon: Sprite = null;
     @property({ type: Sprite, group: '底部信息', tooltip: 'ArtifactButton/ArtifactChargeFill：充能进度环' })
-    artifactProgress: Sprite = null!;
+    artifactProgress: Sprite = null;
     @property({ type: Label, group: '底部信息', tooltip: 'ArtifactButton/ArtifactCountLabel：已存次数 ×N' })
-    artifactCountLabel: Label = null!;
+    artifactCountLabel: Label = null;
 
     @property({ type: Button, group: '左侧功能', tooltip: 'leftPanel/RankBtn' })
-    rankButton: Button = null!;
+    rankButton: Button = null;
     @property({ type: Button, group: '左侧功能', tooltip: 'leftPanel/ZhiNanBtn' })
-    guideButton: Button = null!;
+    guideButton: Button = null;
     @property({ type: Button, group: '左侧功能', tooltip: 'leftPanel/HurtBtn' })
-    damageButton: Button = null!;
+    damageButton: Button = null;
     @property({ type: Button, group: '左侧功能', tooltip: 'leftPanel/RunAwayBtn：不等同于重开' })
-    retreatButton: Button = null!;
+    retreatButton: Button = null;
     @property({ type: Button, group: '左侧功能', tooltip: 'leftPanel/ResetCameraBtn：镜头一键复位到初始点位' })
-    resetCameraButton: Button = null!;
+    resetCameraButton: Button = null;
 
     // 选点阶段要整体收起的三个面板。原来按名字 `getChildByName` 找 —— 名字写错或节点改名
     // 会静默什么都不发生（面板照样盖在棋盘上），改成 prefab 绑定后缺一个就尽早炸。
     @property({ type: Node, group: '选点收起', tooltip: 'TopInfoPanel：选点阶段整体隐藏' })
-    topInfoPanel: Node = null!;
+    topInfoPanel: Node = null;
     @property({ type: Node, group: '选点收起', tooltip: 'BottomInfoPanel：选点阶段整体隐藏' })
-    bottomInfoPanel: Node = null!;
+    bottomInfoPanel: Node = null;
     @property({ type: Node, group: '选点收起', tooltip: 'leftPanel：选点阶段整体隐藏' })
-    leftPanel: Node = null!;
+    leftPanel: Node = null;
 
     /** 本局席位档案（键 = 席位序，与 `ZC_OWNER_ORDER` 一致）；由 `setSeatProfiles` 注入。 */
     private seatProfiles: Map<ZCOwner, IRankSeatProfile> = new Map();
@@ -458,11 +458,14 @@ private fillPlayerRow(node: Node, index: number): void {
         // 守城（塔防）局：顶部信息带（计时 + 四格）整体收起 —— 蓝湖「BOSS」稿那一帧只有左上角的首领条，
         // 而首领条（`ZCBossPanel`，由 `ZCGame` 实例化）高 173px、居中的四格会与它重叠。
         this.topInfoPanel.active = defence === null && !this.spawnSelectionMode;
-        if (!defence) {
-            const seconds = Math.max(0, Math.ceil(model.remainingSeconds));
+        const remainingSeconds = model.remainingSeconds;
+        if (remainingSeconds !== null) {
+            const seconds = Math.max(0, Math.ceil(remainingSeconds));
             this.timeLabel.fontSize = 28;
             this.timeLabel.lineHeight = 40;
             this.timeLabel.string = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+        } else {
+            this.timeLabel.string = '';
         }
         this.goldLabel.string = String(Math.max(0, Math.floor(state.playerGold)));
         // 顶部四格：逐席位显示地块数。**地块数 = 0 ⇒ 该玩家已战斗结束**（数字收掉、红 X 亮起）。
@@ -571,7 +574,8 @@ private fillPlayerRow(node: Node, index: number): void {
      */
     private playGoldIconDenyBounce(): void {
         const node = this.goldIcon;
-        const rest = this.goldDenyIconRestPos!;
+        const rest = this.goldDenyIconRestPos;
+        if (!rest) return;
         const pop = ZC_GOLD_DENY_POP_SCALE;
         const lift = ZC_GOLD_DENY_LIFT_PIXELS;
         const beat = ZC_GOLD_DENY_BOUNCE_SECONDS / 4;
@@ -613,7 +617,8 @@ private fillPlayerRow(node: Node, index: number): void {
     }
 
     private stepGoldLabelDenyFlash(): void {
-        const rest = this.goldDenyLabelRestColor!;
+        const rest = this.goldDenyLabelRestColor;
+        if (!rest) return;
         if (this.goldDenyFlashStep >= ZC_GOLD_DENY_FLASH_STEPS) {
             // 收尾那一拍显式复位：中途被打断也不会留一块红字。
             this.goldLabel.color = rest;
@@ -885,7 +890,7 @@ private fillPlayerRow(node: Node, index: number): void {
      * 用例可以按「源码里只出现一次 `mapViewport.getComponent`」把这条钉死。
      */
     private get mapViewportTransform(): UITransform {
-        if (!this.viewportTransform) this.viewportTransform = this.mapViewport.getComponent(UITransform)!;
+        if (!this.viewportTransform) this.viewportTransform = this.mapViewport.getComponent(UITransform);
         return this.viewportTransform;
     }
 
@@ -931,8 +936,8 @@ private fillPlayerRow(node: Node, index: number): void {
         // 由 prefab 绑定（曾按名 `getChildByName('Background')` 取 —— 每帧字符串查表，
         // 而且名字一改就静默失效）。缺绑定应在绑定层就暴露，这里不再兜底。
         const background = this.mapBackground;
-        const transform = background.getComponent(UITransform)!;
-        const sprite = background.getComponent(Sprite)!;
+        const transform = background.getComponent(UITransform);
+        const sprite = background.getComponent(Sprite);
         const widget = background.getComponent(Widget);
         if (widget) widget.enabled = false;
 

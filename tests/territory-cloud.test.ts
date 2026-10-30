@@ -49,6 +49,7 @@ import {
     territoryCloudPocketCells,
     territoryTileOutlinePoints,
 } from '../assets/script/app/territory/model/TerritoryCloud';
+import { assetExists, assetPath } from './helpers/asset-paths';
 
 /**
  * 「章节地图未解锁云」判据（2026-10-23 第四版口径）
@@ -1547,7 +1548,7 @@ function pngSize(path: string): { width: number; height: number } {
 }
 
 test('美术拆图：云体 / 影子是**两张同画布** 200×240 的图，且都按 trimType=none 导入', () => {
-    const dir = 'assets/resources/image/territory/cloud';
+    const dir = assetPath('image/territory/cloud');
     // 原图留着当母版（拆图脚本的输入；别再手改它们）。
     for (let index = 0; index < 5; index += 1) {
         assert.ok(readFileSync(`${dir}/cloud_idle_${index}.png`).length > 0, `缺 cloud_idle_${index}.png`);
@@ -1583,7 +1584,7 @@ test('美术拆图：云体 / 影子是**两张同画布** 200×240 的图，且
 
     // 图集口径：`image/territory/` 树最外层那一份 pac 递归覆盖子目录，父子同放会打架。
     assert.equal(existsSync(`${dir}/auto-atlas.pac`), false, 'cloud/ 目录不许再放自己的 auto-atlas.pac');
-    assert.equal(existsSync('assets/resources/image/territory/auto-atlas.pac'), true,
+    assert.equal(assetExists('image/territory/auto-atlas.pac'), true,
         'image/territory 树最外层那份 auto-atlas 必须在（同帧的云才能合批）');
     assert.ok(existsSync('tools/split_cloud_layers.py'), '拆图脚本不见了（美术换图后要重拆）');
 });

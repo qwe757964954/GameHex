@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
+import { assetUrl } from './helpers/asset-paths';
 
 test('challenge tab stays visible but cannot open the old adventure page', () => {
     const source = readFileSync(new URL('../assets/script/app/main/MainTabHost.ts', import.meta.url), 'utf8');
@@ -10,7 +11,7 @@ test('challenge tab stays visible but cannot open the old adventure page', () =>
     assert.match(source, /button\.bindSelect\(isLocked \? null : \(\) => \{ void this\.switchTab\(type\); \}\);/);
     assert.doesNotMatch(source, /if \(index === MainTab\.Challenge\) return this\.adventurePage;/);
     assert.doesNotMatch(source, /adventurePage/, '旧章节地图 prefab 入口应移除');
-    const mainRoot = readFileSync(new URL('../assets/resources/ui/main/MainRoot.prefab', import.meta.url), 'utf8');
+    const mainRoot = readFileSync(assetUrl('ui/main/MainRoot.prefab'), 'utf8');
     assert.doesNotMatch(mainRoot, /adventurePage|1a6ca85d-9a57-444a-abb7-0c7915f07dc0/,
         'MainRoot 不得残留失效的 TerritoryPage prefab 引用');
     assert.match(source, /getComponentInChildren\(MainTerritoryMap\)/);
@@ -23,10 +24,10 @@ test('领地格 = 主城页（内嵌领地图），章节 HUD 由主城顶栏替
     assert.match(source, /if \(index === MainTab\.Territory\) return 'ui\/main\/ArenaRoot';/);
     // 主城嵌入 map-only 页面，并在激活前注入资源。
     assert.match(source, /getComponentInChildren\(MainTerritoryMap\)/);
-    assert.match(source, /mainTerritoryMap\.initialize\(this\.assets, this\.configs\)/);
+    assert.match(source, /mainTerritoryMap\.initialize\(this\.controller\.resources\)/);
     // showPage：注入必须在该方法内 setParent 之前。
     const showPageBody = source.slice(source.indexOf('private showPage('));
-    assert.ok(showPageBody.indexOf('mainTerritoryMap.initialize(this.assets, this.configs)')
+    assert.ok(showPageBody.indexOf('mainTerritoryMap.initialize(this.controller.resources)')
         < showPageBody.indexOf('page.setParent(this.content)'),
         'AssetService 必须在页面激活前注入');
     assert.doesNotMatch(source, /setHudVisible/);
@@ -76,7 +77,7 @@ test('territory stations open details and start a table-driven local PVE battle'
     //    ——**不是 404**，极易误判成「美术没交图」（2026-10-10 换图时踩过）。
     assert.match(assets, /spriteFramePath\(ART_ROOT, DEFAULT_TERRITORY_BG_NAME\)/);
     assert.match(assets, /const DEFAULT_TERRITORY_BG_NAME = 'zdbg1'/);
-    assert.ok(existsSync(new URL('../assets/resources/image/zdbg1.jpg', import.meta.url)),
+    assert.ok(existsSync(assetUrl('image/zdbg1.jpg')),
         '★默认底图 zdbg1 必须在 image/ 根目录（ART_ROOT）下');
     assert.match(assets, /spriteFramePath\(BUILDING_ART_ROOT, 'img_land_02'\)/);
     assert.match(game, /requestedEnemyCards/);
@@ -90,12 +91,15 @@ test('territory stations open details and start a table-driven local PVE battle'
     assert.match(presenter, /playerCount: TERRITORY_DEFAULT_PLAYER_COUNT/);
     assert.match(game, /params\?\.pve\?\.playerCount/);
     assert.ok(existsSync(new URL('../assets/bundles/battle/image/gameui/bg_03.png', import.meta.url)));
-    assert.ok(existsSync(new URL('../assets/resources/image/buildings/hex_nor.png', import.meta.url)));
+    assert.ok(existsSync(assetUrl('image/buildings/hex_nor.png')));
 });
 
 test('PVE settlement returns to the territory main tab', () => {
     const game = readFileSync(new URL('../assets/script/app/zcds/ZCGame.ts', import.meta.url), 'utf8');
     const main = readFileSync(new URL('../assets/script/app/procedure/ProcedureMain.ts', import.meta.url), 'utf8');
-    assert.match(game, /ProcedureManager\.navigate\(GameRoute\.Main, \{ initialTab: 'territory' \}\)/);
+    // 2026-10-29 起入口参数多带「刚打的格子」（回来要居中看通关翻转），
+    // 所以不再是一行写完的 `{ initialTab: 'territory' }` —— 认分支而不是认整行字面量。
+    assert.match(game, /ProcedureManager\.navigate\(GameRoute\.Main, \{\s*initialTab: 'territory',/);
+    assert.match(game, /focusCellId: this\.pveContext\.territoryCellId/);
     assert.match(main, /params\.initialTab === 'territory' \? MainTab\.Territory/);
 });

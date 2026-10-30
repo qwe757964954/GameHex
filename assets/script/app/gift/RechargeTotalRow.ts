@@ -27,46 +27,46 @@ export interface IRechargeTotalRowTexts {
 @ccclass('RechargeTotalRow')
 export class RechargeTotalRow extends Component {
     @property({ type: Label, tooltip: 'Title：档位标题' })
-    titleLabel: Label = null!;
+    titleLabel: Label = null;
 
     @property({ type: GiftRewardSlot, tooltip: 'RewardList/Goods0：第 1 个奖励格' })
-    goods0: GiftRewardSlot = null!;
+    goods0: GiftRewardSlot = null;
 
     @property({ type: GiftRewardSlot, tooltip: 'RewardList/Goods1：第 2 个奖励格' })
-    goods1: GiftRewardSlot = null!;
+    goods1: GiftRewardSlot = null;
 
     @property({ type: GiftRewardSlot, tooltip: 'RewardList/Goods2：第 3 个奖励格' })
-    goods2: GiftRewardSlot = null!;
+    goods2: GiftRewardSlot = null;
 
     @property({ type: GiftRewardSlot, tooltip: 'RewardList/Goods3：第 4 个奖励格' })
-    goods3: GiftRewardSlot = null!;
+    goods3: GiftRewardSlot = null;
 
     @property({ type: GiftRewardSlot, tooltip: 'RewardList/Goods4：第 5 个奖励格' })
-    goods4: GiftRewardSlot = null!;
+    goods4: GiftRewardSlot = null;
 
     @property({ type: Node, tooltip: 'BtnClaim：领取按钮' })
-    btnClaim: Node = null!;
+    btnClaim: Node = null;
 
     @property({ type: Label, tooltip: 'BtnClaim 的文案' })
-    btnClaimLabel: Label = null!;
+    btnClaimLabel: Label = null;
 
     @property({ type: Node, tooltip: 'BtnUndone：前往按钮（未达成，老端跳商店）' })
-    btnUndone: Node = null!;
+    btnUndone: Node = null;
 
     @property({ type: Label, tooltip: 'BtnUndone 的文案' })
-    btnUndoneLabel: Label = null!;
+    btnUndoneLabel: Label = null;
 
     @property({ type: Node, tooltip: 'TakenIcon：已领取图标' })
-    takenIcon: Node = null!;
+    takenIcon: Node = null;
 
     @property({ type: Node, tooltip: 'Limit：限购文本组（不限购时整组隐藏）' })
-    limitNode: Node = null!;
+    limitNode: Node = null;
 
     @property({ type: Label, tooltip: 'Limit/Title：「每周限购：」' })
-    limitTitle: Label = null!;
+    limitTitle: Label = null;
 
     @property({ type: Label, tooltip: 'Limit/Value：已购/上限' })
-    limitValue: Label = null!;
+    limitValue: Label = null;
 
     /** 宿主点按钮时回调（领取 / 前往都走它，宿主按 `state` 分派）。 */
     onAction: (() => void) | null = null;

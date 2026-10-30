@@ -36,6 +36,7 @@ import {
     redDotTypePageName,
     resolveRedDotState,
 } from '../assets/script/app/common/RedDotState';
+import { assetPath } from './helpers/asset-paths';
 
 // ============================================================
 // A. 判定口径
@@ -125,9 +126,9 @@ test('A9 判定结果每一项都齐（界面侧要**绝对赋值**，缺字段�
 
 const RED_DOT_TS = 'assets/script/app/common/RedDot.ts';
 const RED_DOT_ART_TS = 'assets/script/app/common/RedDotArt.ts';
-const PREFAB_PATH = 'assets/resources/ui/common/RedDot.prefab';
-const COMMON_ART_DIR = 'assets/resources/image/common';
-const SPINE_DIR = 'assets/resources/skel/reddot';
+const PREFAB_PATH = assetPath('ui/common/RedDot.prefab');
+const COMMON_ART_DIR = assetPath('image/common');
+const SPINE_DIR = assetPath('skel/reddot');
 
 /** 编辑器压缩 uuid：前 5 个 hex 原样 + 其余 27 个 hex 每 3 个编 2 个 base64 字符 = 23 位。 */
 function compressUuid(uuid: string): string {
@@ -331,7 +332,9 @@ const DOT_SOURCE = readFileSync(RED_DOT_TS, 'utf8');
 
 test('D1 取图路径必须是 `<root>/<name>/spriteFrame`（少这一段 = 静默留白 + 一条 warn）', () => {
     assert.ok(ART_SOURCE.includes("spriteFramePath(RED_DOT_ART_ROOT, name)"), 'redDotArtPath 必须走 spriteFramePath');
-    assert.ok(ART_SOURCE.includes("resources.load(path, SpriteFrame,"), '必须用 SpriteFrame 类型重载');
+    assert.match(ART_SOURCE, /createRoutedSpriteFrameCache\('RedDot'\)/);
+    const loader = readFileSync('assets/script/app/common/SpriteFrameCache.ts', 'utf8');
+    assert.match(loader, /routedLoad\(path, SpriteFrame,/);
     assert.ok(!ART_SOURCE.includes('resources.load(artKey('), '不能拿裸路径去 load');
 });
 

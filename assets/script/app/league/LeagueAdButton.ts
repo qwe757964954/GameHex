@@ -21,6 +21,10 @@
  *    那条灰底）—— 只写 `a` 不写 rgb 会渲染成白条。见 `LEAGUE_ART_AD_BAR_TINT`。
  * 4. **`com_rd` 在「免费」页只受 `hasDonateRD` 管**（老端 `LayerLeagueDonate.updateView`）
  *    —— 广告子系统没迁 ⇒ 本端**恒关**（见 `LeagueDonatePage`）。
+ *
+ * 7 个 `@property` 在 `LeagueDonate.prefab` 的两颗实例（`BtnFree` / `BtnBuy`）上**全部绑死**
+ * ⇒ 方法里一律直接 `.` 取值，不写 `if (this.xxx)`（2026-10-30 清理；prefab 掉组件要炸出来，
+ * 静默跳过只会让「切页没反应」查不出来）。
  */
 
 import { _decorator, Component, Label, Node, Sprite, SpriteFrame } from 'cc';
@@ -33,25 +37,25 @@ export type LeagueAdButtonPage = 'free' | 'coin';
 @ccclass('LeagueAdButton')
 export class LeagueAdButton extends Component {
     @property({ type: Sprite, tooltip: 'n10：底图 TY_btn10（两页共用）' })
-    bg: Sprite = null!;
+    bg: Sprite = null;
 
     @property({ type: Node, tooltip: 'n7：浅色条 white_jiao8（仅「免费」页）' })
-    freeBar: Node = null!;
+    freeBar: Node = null;
 
     @property({ type: Label, tooltip: 'lab_adv：免费次数文案（仅「免费」页）' })
-    freeLabel: Label = null!;
+    freeLabel: Label = null;
 
     @property({ type: Node, tooltip: 'n9：小视频角标 img_video（仅「免费」页）' })
-    freeVideo: Node = null!;
+    freeVideo: Node = null;
 
     @property({ type: Node, tooltip: 'icon：货币图标容器（仅「金币」页，内含 cc.Sprite）' })
-    costIcon: Node = null!;
+    costIcon: Node = null;
 
     @property({ type: Label, tooltip: 'labCost：单价（仅「金币」页）' })
-    costLabel: Label = null!;
+    costLabel: Label = null;
 
     @property({ type: Node, tooltip: 'com_rd：红点（老端只受 hasDonateRD 管；本端恒关）' })
-    redDot: Node = null!;
+    redDot: Node = null;
 
     /** `icon` 上的 `cc.Sprite`（懒取一次）。 */
     private iconSprite: Sprite | null = null;
@@ -63,32 +67,32 @@ export class LeagueAdButton extends Component {
      */
     setPage(page: LeagueAdButtonPage): void {
         const free = page === 'free';
-        if (this.freeBar) this.freeBar.active = free;
-        if (this.freeLabel) this.freeLabel.node.active = free;
-        if (this.freeVideo) this.freeVideo.active = free;
-        if (this.costIcon) this.costIcon.active = !free;
-        if (this.costLabel) this.costLabel.node.active = !free;
+        this.freeBar.active = free;
+        this.freeLabel.node.active = free;
+        this.freeVideo.active = free;
+        this.costIcon.active = !free;
+        this.costLabel.node.active = !free;
     }
 
     /** `labCost`（金币页的单价）。 */
     setCost(cost: number): void {
-        if (this.costLabel) this.costLabel.string = Number.isFinite(cost) ? String(Math.trunc(cost)) : '0';
+        this.costLabel.string = Number.isFinite(cost) ? String(Math.trunc(cost)) : '0';
     }
 
     /** `lab_adv`（免费页的文案）。 */
     setFreeLabel(text: string): void {
-        if (this.freeLabel) this.freeLabel.string = text;
+        this.freeLabel.string = text;
     }
 
     /** `icon` 的货币图标（按 `resId` 解析出的帧；`null` 时保留静态图）。 */
     setCostIcon(frame: SpriteFrame | null): void {
         if (!frame) return;
-        if (!this.iconSprite && this.costIcon) this.iconSprite = this.costIcon.getComponent(Sprite);
-        if (this.iconSprite) this.iconSprite.spriteFrame = frame;
+        if (!this.iconSprite) this.iconSprite = this.costIcon.getComponent(Sprite);
+        this.iconSprite.spriteFrame = frame;
     }
 
     /** 红点显隐的唯一入口（本端恒 `false`，接口先留好）。 */
     setRedDot(visible: boolean): void {
-        if (this.redDot) this.redDot.active = !!visible;
+        this.redDot.active = !!visible;
     }
 }

@@ -26,10 +26,10 @@ const { ccclass, property } = _decorator;
 @ccclass('MainResBarSlot')
 export class MainResBarSlot extends Component {
     @property({ type: Sprite, tooltip: 'Icon：资源图标' })
-    icon: Sprite = null!;
+    icon: Sprite = null;
 
     @property({ type: Label, tooltip: 'Value：数值（体力是 当前/上限）' })
-    valueLabel: Label = null!;
+    valueLabel: Label = null;
 
     /**
      * Plus：补货加号。**设计上可选** —— 只有「能补货」的格子（体力这类）才配这个节点，

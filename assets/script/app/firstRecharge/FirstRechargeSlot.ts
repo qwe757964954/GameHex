@@ -10,10 +10,10 @@ const { ccclass, property } = _decorator;
 @ccclass('FirstRechargeSlot')
 export class FirstRechargeSlot extends Component {
     @property({ type: Sprite, tooltip: 'Frame：品质框（本节点 cc.Sprite）' })
-    frame: Sprite = null!;
+    frame: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'Icon：道具图标（无图时隐藏）' })
-    icon: Sprite = null!;
+    icon: Sprite = null;
 
     @property({ type: UIOpacity, tooltip: 'Dim：压暗用（可选）' })
     dim: UIOpacity | null = null;

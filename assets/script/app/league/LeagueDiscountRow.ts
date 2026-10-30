@@ -34,16 +34,16 @@ const { ccclass, property } = _decorator;
 @ccclass('LeagueDiscountRow')
 export class LeagueDiscountRow extends Component {
     @property({ type: Label, tooltip: 'lab_who：砍价的成员名（24px）' })
-    whoLabel: Label = null!;
+    whoLabel: Label = null;
 
     @property({ type: Label, tooltip: 'n43：「砍价」二字（⚠️ 静态文本，老端从没赋值）' })
-    actionLabel: Label = null!;
+    actionLabel: Label = null;
 
     @property({ type: Label, tooltip: 'lab_price：该成员砍掉的额度（24px）' })
-    priceLabel: Label = null!;
+    priceLabel: Label = null;
 
     @property({ type: Sprite, tooltip: 'icon：货币图标（金币 `图标_幻灵玉`）' })
-    icon: Sprite = null!;
+    icon: Sprite = null;
 
     /** 当前铺在这一行上的数据（`null` = 空槽）。 */
     private current: ILeagueDiscountRowView | null = null;

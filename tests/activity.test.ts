@@ -8,7 +8,7 @@
  *  反推出来的结果。这里用**真实 `dayChallengeActTaskProgress` 表的 cost** 驱动，任何一环被改
  *  都会红。
  *
- *  **B. prefab ↔ layout 对拍**（读 `assets/resources/ui/Activity/Activity.prefab`）——
+ *  **B. prefab ↔ layout 对拍**（读 assetPath(`ui/Activity/Activity.prefab`)）——
  *  把「代码常量」与「美术资源实际摆位」钉在一起：改 prefab 忘了改常量（或反之）都会红。
  *  只挑承重的几条；全量 257 条离线体检在 `tmp/_activity/audit_activity_prefab.mjs`。
  *
@@ -125,12 +125,13 @@ import {
     hasActivityJumpRoute,
     resolveActivityJump,
 } from '../assets/script/app/activity/ActivityJumpTable';
+import { assetPath } from './helpers/asset-paths';
 
 // ============================================================
 // 真实资源
 // ============================================================
 
-const PREFAB = 'assets/resources/ui/Activity/Activity.prefab';
+const PREFAB = assetPath('ui/Activity/Activity.prefab');
 const TASK_TABLE = 'assets/remoteRef/dayChallengeActTask.json';
 const PROGRESS_TABLE = 'assets/remoteRef/dayChallengeActTaskProgress.json';
 const TAB_TABLE = 'assets/remoteRef/activityTab.json';
@@ -810,7 +811,7 @@ test('⚠️ 真实 dayChallengeActTask 的每个奖励都解析得出图标，�
         '活跃度 15 ⇒ icons/resource/图标_活跃度（zarts 原图叫 `活跃度.png`，按 icon.json 的 key 改了名）');
 
     for (const [resId, ref] of seen) {
-        const file = `assets/resources/${ref.root}/${ref.name}.png`;
+        const file = assetPath(`${ref.root}/${ref.name}.png`);
         assert.ok(existsSync(file), `奖励 resId=${resId} 的图标文件不存在：${file}`);
     }
 });
@@ -982,7 +983,7 @@ test('C. 文案常量与 FGUI 原稿一致（标题 / 周活跃 / 按钮）', ()
 // 「该方法不适用于720p的界面，位置信息错误」，而本端设计分辨率正是 720×1280；
 // 且箭头图本端没有 ⇒ 改成确定性规则（贴宝箱正上方 / 水平居中 / 夹进屏内 / 上方放不下翻下方）。
 
-const PREVIEW_PREFAB = 'assets/resources/ui/Activity/RewardPreview.prefab';
+const PREVIEW_PREFAB = assetPath('ui/Activity/RewardPreview.prefab');
 const PREVIEW_PREFAB_TREE = JSON.parse(readFileSync(PREVIEW_PREFAB, 'utf8')) as unknown[];
 
 /** 通用 prefab 路径索引（`Activity.prefab` 那份 `PREFAB_INDEX` 是写死根名的，这里要按根名参数化）。 */

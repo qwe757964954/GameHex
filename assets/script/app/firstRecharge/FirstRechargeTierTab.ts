@@ -1,4 +1,4 @@
-import { _decorator, Color, Component, Label, Node, Sprite, SpriteFrame } from 'cc';
+import {_decorator, Color, Component, Label, Sprite, SpriteFrame} from 'cc';
 import { RedDot } from '../common/RedDot';
 
 const { ccclass, property } = _decorator;
@@ -17,13 +17,13 @@ const TIER_LABEL_COLOR_OFF = new Color(255, 255, 255, 255);
 @ccclass('FirstRechargeTierTab')
 export class FirstRechargeTierTab extends Component {
     @property({ type: Sprite, tooltip: 'Background：档位底图（本节点上的 cc.Sprite）' })
-    background: Sprite = null!;
+    background: Sprite = null;
 
     @property({ type: Label, tooltip: 'PriceLabel：价格文案，写成「¥11」' })
-    priceLabel: Label = null!;
+    priceLabel: Label = null;
 
     @property({ type: RedDot, tooltip: 'RedDot：可领取红点（默认隐藏）' })
-    redDot: RedDot = null!;
+    redDot: RedDot = null;
 
     @property({ type: SpriteFrame, tooltip: '选中态底板（主页同款 city/nav_sel）' })
     selectedFrame: SpriteFrame | null = null;

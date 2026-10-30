@@ -291,7 +291,7 @@ function toNumber(value: unknown): number {
 /** 读 `CmdRole` 的第一行；拿不到返回 `null`。 */
 function readRole(): IHangRoleState | null {
     try {
-        const rows = CacheMgr.instance?.getTlCmdRole() ?? [];
+        const rows = CacheMgr.instance.getTlCmdRole() ?? [];
         for (const row of rows) {
             if (!row) continue;
             const cmd = row as unknown as Record<string, unknown>;
@@ -316,7 +316,7 @@ function readRole(): IHangRoleState | null {
 function readInteractedIds(): Set<number> {
     const ids = new Set<number>();
     try {
-        const rows = CacheMgr.instance?.getTlCmdRoleInteractInfo() ?? [];
+        const rows = CacheMgr.instance.getTlCmdRoleInteractInfo() ?? [];
         for (const row of rows) {
             if (!row) continue;
             const item = row as unknown as Record<string, unknown>;
@@ -449,7 +449,7 @@ function readAdLimit(adRows: readonly unknown[]): number {
  */
 function readAdUsed(): number {
     try {
-        const rows = CacheMgr.instance?.getTlCmdRole() ?? [];
+        const rows = CacheMgr.instance.getTlCmdRole() ?? [];
         for (const row of rows) {
             if (!row) continue;
             const list = (row as unknown as Record<string, unknown>).tlCmdAdvert;

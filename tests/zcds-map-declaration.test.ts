@@ -10,6 +10,7 @@ import {
     resolveZCMapZoom, ZC_MAP_ZOOM_MAX, ZC_MAP_ZOOM_MIN,
 } from '../assets/script/app/zcds/model/ZCMapConfig';
 import { loadPvpTables, ZCPvpTables } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
+import { assetPath } from './helpers/asset-paths';
 
 //  `captureZCMatchConfig()` 的默认分支会读全局 PVP 表，先按 tests/zcds-neutral-map.test.ts 的口径装载。
 const tableNames = [
@@ -168,7 +169,7 @@ test('固定主城地图的开局配置带上人数与主城模式', () => {
 });
 
 test('地图目录里的每一张都在声明层可用，缺省为 2 人 / 固定主城', () => {
-    const directory = `assets/resources/${MAP_DIRECTORY}`;
+    const directory = assetPath(`${MAP_DIRECTORY}`);
     const names = readdirSync(directory).filter((name) => name.endsWith('.json'));
     assert.ok(names.length > 1);
     try {
@@ -229,7 +230,7 @@ test('★★地图自己的镜头倍率区间：缺省 0.6/1.2，越界就抛，
     }
 
     // ③ 地图目录里的每一张都过得了这一关
-    const directory = `assets/resources/${MAP_DIRECTORY}`;
+    const directory = assetPath(`${MAP_DIRECTORY}`);
     for (const name of readdirSync(directory).filter((entry) => entry.endsWith('.json'))) {
         const source = JSON.parse(readFileSync(`${directory}/${name}`, 'utf8')) as ZCMapLayout;
         assert.doesNotThrow(() => resolveZCMapZoom(source), `${name} 的镜头倍率配置不合法`);

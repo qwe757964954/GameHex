@@ -23,19 +23,19 @@ const { ccclass, property } = _decorator;
 @ccclass('RoleEquipSlot')
 export class RoleEquipSlot extends Component {
     @property({ type: Node, tooltip: 'QualityFrame：品质框节点（其上挂 cc.Sprite）' })
-    frameNode: Node = null!;
+    frameNode: Node = null;
 
     @property({ type: Node, tooltip: 'Icon：装备图标节点（其上挂 cc.Sprite）' })
-    iconNode: Node = null!;
+    iconNode: Node = null;
 
     @property({ type: Label, tooltip: 'LevelLabel：等级文字（Lv.x，空位不显示）' })
-    levelLabel: Label = null!;
+    levelLabel: Label = null;
 
     /** 缓存：品质框 Sprite（{@link ensureInit} 里取）。 */
-    private frameSprite: Sprite = null!;
+    private frameSprite: Sprite = null;
 
     /** 缓存：图标 Sprite。 */
-    private iconSprite: Sprite = null!;
+    private iconSprite: Sprite = null;
 
     /** {@link ensureInit} 是否跑过（幂等标记）。 */
     private inited = false;

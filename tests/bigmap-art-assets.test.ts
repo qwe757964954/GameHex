@@ -4,8 +4,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { BIGMAP_BUILDING_ART, BIGMAP_CONCEPT_ROOT, BIGMAP_UI_KEYS } from '../assets/script/app/bigmap/application/BigMapArtCatalog';
+import { assetExists, assetPath } from './helpers/asset-paths';
 
-const root = join('assets/resources', BIGMAP_CONCEPT_ROOT);
+const root = assetPath(BIGMAP_CONCEPT_ROOT);
 
 test('26 张设计切图与清单一致，建筑和 UI 保持真实透明通道', () => {
     const manifest = JSON.parse(readFileSync(join(root, 'manifest.json'), 'utf8'));
@@ -27,7 +28,7 @@ test('实际配置建筑与所有运行时图标均有资源，自动图集只�
     for (const name of ['grain', 'wood', 'iron', 'coin', 'fortress', 'mutant_camp']) {
         assert.ok(existsSync(join(root, 'sprites', `${name}.png`)), name);
     }
-    assert.ok(existsSync('assets/resources/image/bigmap/auto-atlas.pac'));
+    assert.ok(assetExists('image/bigmap/auto-atlas.pac'));
     for (const directory of [root, join(root, 'sprites'), join(root, 'ui')]) {
         assert.equal(existsSync(join(directory, 'auto-atlas.pac')), false, directory);
     }

@@ -70,7 +70,6 @@ export interface IRechargeActivityRepository {
     claim(activityId: number, rechargeProcess: number, caller?: object): Promise<RechargeActivityRequestResult>;
 }
 
-const READ_TIMEOUT_MS = 800;
 const WRITE_TIMEOUT_MS = 5000;
 
 async function readRows(table: string): Promise<unknown[]> {
@@ -80,7 +79,7 @@ async function readRows(table: string): Promise<unknown[]> {
 /** 读 `CmdActivity` 缓存；拿不到返回空数组。 */
 function readCmdActivities(): unknown[] {
     try {
-        return CacheMgr.instance?.getTlCmdActivity() ?? [];
+        return CacheMgr.instance.getTlCmdActivity() ?? [];
     } catch (error) {
         console.warn('[RechargeActivity] 读 CmdActivity 缓存失败', error);
         return [];

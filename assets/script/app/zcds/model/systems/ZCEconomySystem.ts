@@ -35,12 +35,23 @@ export class ZCEconomySystem {
         while (state.incomeClock >= rules.hqIncomeIntervalSeconds) {
             state.incomeClock -= rules.hqIncomeIntervalSeconds;
             for (const owner of context.owners) {
+                // 🔴 主城收入必须**先确认主城还在**（需求 2026-10-29：「形成废墟的建筑不会再生产金币」）。
+                //
+                // 这里原来是**无条件**给每一方发钱、并且把金币飘字挂在 `homeId(owner)` 上 ——
+                // 主城被打成废墟（`building = 'none'` + `state = 'ruins'` + `hp = 0`）之后，
+                // 只要这一方还有别的建筑（`developedCount > 0`，对局没有结束），这段循环照跑，
+                // 于是**废墟格上每一拍都飘一次「金币 + 数字」、还带着建筑抖动**，看起来就是
+                // 「废墟还在产金币」。金矿那条下面本来就有 `building !== 'mine'` 兜着，
+                // 只有主城这一路漏了判断（它的来源不是 `state.hexes` 里的建筑，而是 `homeId`）。
+                const homeId = context.homeId(owner);
+                if (!this.isIncomeSource(this.hexById(state, homeId), 'hq')) continue;
                 context.grantGold(owner, rules.hqIncomeAmount + context.bonuses(owner).incomeBonus * rules.hqIncomeIntervalSeconds,
-                    context.homeId(owner));
+                    homeId);
             }
         }
         for (const mine of state.hexes) {
-            if (mine.building !== 'mine' || mine.owner === 'neutral' || !this.isBuildingOperational(mine)) continue;
+            // 与主城同一条闸（`isIncomeSource` = 还是金矿 + 还在运转），废墟金矿不再产出。
+            if (mine.owner === 'neutral' || !this.isIncomeSource(mine, 'mine')) continue;
             const card = mine.cardId ? context.cardById(mine.owner, mine.cardId) : undefined;
             if (!card) continue;
             const interval = context.cycleSeconds(mine, card);
@@ -106,7 +117,34 @@ export class ZCEconomySystem {
     }
 
     static isBuildingOperational(hex: ZCHexState): boolean {
-        return hex.hp > 0 && hex.constructionRemainingSeconds <= 0;
+        // 「有一栋建筑且它在运转」—— 废墟两条都占反：`building = 'none'`、`state = 'ruins'`。
+        // `state` 那一半是**冗余保险**：`damageBuilding` 会同时改这两个字段，但存档 / 回放里
+        // 只留下 `state = 'ruins'` 而 `building` 被补回旧值的脏数据不该重新开始产出。
+        return hex.building !== 'none' && hex.state !== 'ruins'
+            && hex.hp > 0 && hex.constructionRemainingSeconds <= 0;
+    }
+
+    /**
+     * 这一格现在是不是「某类正在运转的**产出**建筑」—— `tickIncome` 的主城与金矿两条路共用它
+     * （兵营 / 箭塔只判 `isBuildingOperational`，它们不产金币）。
+     *
+     * `hex` 允许 `undefined`（`homeId` 是配置里查出来的 id，快照残缺时可能查不到格子）
+     * —— 查不到就是**没有产出**，不是「照发」。
+     */
+    private static isIncomeSource(hex: ZCHexState | undefined, kind: ZCHexState['building']): hex is ZCHexState {
+        return !!hex && hex.building === kind && this.isBuildingOperational(hex);
+    }
+
+    /**
+     * 按 id 取格。
+     *
+     * `state.hexes` 是**按 id 稠密排列**的（`id === 下标`，虚空也保留），所以绝大多数情况
+     * 一次下标就够；`find` 只是兜住「快照经过裁剪 / 重排」这类不该发生但也不该崩的情况。
+     */
+    private static hexById(state: ZCSnapshot, hexId: number): ZCHexState | undefined {
+        const direct = state.hexes[hexId];
+        if (direct && direct.id === hexId) return direct;
+        return state.hexes.find((hex) => hex.id === hexId);
     }
 
     static cycleKey(hex: Pick<ZCHexState, 'id' | 'building'>): string {

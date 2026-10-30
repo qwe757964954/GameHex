@@ -86,10 +86,10 @@ export class RolePage extends Component {
     //    声明成 `Label` / `RoleBagPanel` 会拿到一个 cc.Node（truthy），
     //    然后 `.node.on(...)` 抛 `Cannot read properties of undefined (reading 'on')`。
     @property({ type: Node, tooltip: 'BagPanel：背包列表面板节点（其上挂 RoleBagPanel）' })
-    bagPanel: Node = null!;
+    bagPanel: Node = null;
 
     @property({ type: Node, tooltip: 'PowerValue：战斗力数值节点（其上挂 cc.Label）' })
-    powerValue: Node = null!;
+    powerValue: Node = null;
 
     /** 当前选中的背包页签（null = 未选中）。 */
     private activeTab: RoleBagTabId | null = null;
@@ -98,16 +98,16 @@ export class RolePage extends Component {
     private readonly equipSlots: RoleEquipSlot[] = [];
 
     /** 宝石页签的红点（`BagTabGem/com_rd`，`RedDot` 组件）。 */
-    private gemTabRedDot: RedDot = null!;
+    private gemTabRedDot: RedDot = null;
 
     /** 缓存：BagPanel 节点上的面板组件（{@link ensureInit} 里取）。 */
-    private bagPanelComp: RoleBagPanel = null!;
+    private bagPanelComp: RoleBagPanel = null;
 
     /** 缓存：主角立绘上的 `cc.Animation`（进页面播 idle）。 */
-    private heroAnim: Animation = null!;
+    private heroAnim: Animation = null;
 
     /** 缓存：PowerValue 节点上的 Label。 */
-    private powerLabel: Label = null!;
+    private powerLabel: Label = null;
 
     /** {@link ensureInit} 是否跑过（幂等标记）。 */
     private inited = false;

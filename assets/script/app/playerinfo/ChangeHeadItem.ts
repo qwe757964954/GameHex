@@ -31,16 +31,16 @@ const COLOR_LOCKED = new Color(90, 90, 90, 255);
 @ccclass('ChangeHeadItem')
 export class ChangeHeadItem extends Component {
     @property({ type: Sprite, tooltip: 'HeadIcon：头像图（`com_head.icon`，设计期无图，运行时塞）' })
-    headIcon: Sprite = null!;
+    headIcon: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'HeadFrame：头像底框 73×73（`com_head.n0`）' })
-    headFrame: Sprite = null!;
+    headFrame: Sprite = null;
 
     @property({ type: Node, tooltip: 'SelectedFrame：选中框（`n2`，设计期隐藏）' })
-    selectedFrame: Node = null!;
+    selectedFrame: Node = null;
 
     @property({ type: Node, tooltip: 'RedDot：新头像红点（`com_rd`，设计期隐藏）' })
-    redDot: Node = null!;
+    redDot: Node = null;
 
     /** 点这一格（参数 = **数据下标**，由 `HeadGridList` 在重绑时写入 `dataIndex`）。 */
     onClicked: ((dataIndex: number) => void) | null = null;

@@ -126,58 +126,58 @@ export class LeagueMgrPage extends PopupBase {
     static prefabPath = 'ui/League/LeagueMgr';
 
     @property({ type: Node, tooltip: 'CloseBtn：右上关闭按钮（挂 cc.Button）' })
-    closeButton: Node = null!;
+    closeButton: Node = null;
 
     @property({ type: Sprite, tooltip: 'Banner/ColorIcon：旗面（按 icon 换图）' })
-    bannerColor: Sprite = null!;
+    bannerColor: Sprite = null;
 
     @property({ type: Label, tooltip: 'LeagueName：联盟名（可点，改名字）' })
-    nameLabel: Label = null!;
+    nameLabel: Label = null;
 
     @property({ type: Label, tooltip: 'LeagueId：联盟 ID' })
-    idLabel: Label = null!;
+    idLabel: Label = null;
 
     @property({ type: Label, tooltip: 'LeagueWx：联系微信号（可点，改微信号）' })
-    wxLabel: Label = null!;
+    wxLabel: Label = null;
 
     @property({ type: Node, tooltip: 'CopyId：复制联盟 ID' })
-    copyIdButton: Node = null!;
+    copyIdButton: Node = null;
 
     @property({ type: Node, tooltip: 'NameHot：联盟名的点击热区（无图）' })
-    nameButton: Node = null!;
+    nameButton: Node = null;
 
     @property({ type: Node, tooltip: 'WxHot：微信号的点击热区（无图）' })
-    wxButton: Node = null!;
+    wxButton: Node = null;
 
     @property({ type: Node, tooltip: 'DecBox：联盟宣言块（点它改宣言）' })
-    declarationButton: Node = null!;
+    declarationButton: Node = null;
 
     @property({ type: Node, tooltip: 'NoticeBox：联盟公告块（点它改公告）' })
-    noticeButton: Node = null!;
+    noticeButton: Node = null;
 
     @property({ type: Label, tooltip: 'DecBox/Content：宣言正文' })
-    declarationLabel: Label = null!;
+    declarationLabel: Label = null;
 
     @property({ type: Label, tooltip: 'NoticeBox/Content：公告正文' })
-    noticeLabel: Label = null!;
+    noticeLabel: Label = null;
 
     @property({ type: Node, tooltip: 'BtnMgr：申请管理（仅「是」页可见）' })
-    mgrButton: Node = null!;
+    mgrButton: Node = null;
 
     @property({ type: Node, tooltip: 'BtnQuit：退出联盟（仅「是」页可见，居左）' })
-    quitButton: Node = null!;
+    quitButton: Node = null;
 
     @property({ type: Node, tooltip: 'BtnQuitOnly：退出联盟（仅「否」页可见，居中）' })
-    quitOnlyButton: Node = null!;
+    quitOnlyButton: Node = null;
 
     @property({ type: Node, tooltip: 'QuickJoinBox：允许快速加入勾选框（仅「是」页可见）' })
-    quickJoinButton: Node = null!;
+    quickJoinButton: Node = null;
 
     @property({ type: Node, tooltip: 'QuickJoinBox/Check：勾（选中才显示）' })
-    quickJoinCheck: Node = null!;
+    quickJoinCheck: Node = null;
 
     @property({ type: Node, tooltip: 'QuickJoinLabel：勾选框右侧的说明文字（仅「是」页可见）' })
-    quickJoinLabel: Node = null!;
+    quickJoinLabel: Node = null;
 
     /** 本趟铺上来的视图（`onClose` 时拿它比对「勾选变了没」）。 */
     private view: ILeagueMgrView | null = null;
@@ -194,8 +194,6 @@ export class LeagueMgrPage extends PopupBase {
     /** 旗面帧缓存（8 色，只加载一次）。 */
     private bannerFrames: (SpriteFrame | null)[] | null = null;
 
-    private buttonsBound = false;
-
     /** 每次取数递增，用来作废在飞的异步结果。 */
     private revision = 0;
 
@@ -204,8 +202,6 @@ export class LeagueMgrPage extends PopupBase {
     // ============================================================
 
     protected onInit(): void {
-        if (this.buttonsBound) return;
-        this.buttonsBound = true;
 
         const close = this.closeButton?.getComponent(Button);
         if (close) close.node.on(Button.EventType.CLICK, this.onCloseClick, this);

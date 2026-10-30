@@ -29,6 +29,7 @@ import {
 } from '../model/ZCGameTypes';
 import { ZC_OWNER_ORDER } from '../model/ZCMapConfig';
 import { ZCFaction, ZCHexConfig, ZCOwner } from '../model/ZCMapConfig';
+import type { ZCMapResolvedResource } from '../model/ZCMapConfig';
 import type { ZCBattlePresentationEvents, ZCGameRenderFrame } from '../model/ZCGameRenderFrame';
 import { ZCUnitView } from './ZCUnitView';
 import { ZCUnitRenderInterpolator } from './ZCUnitRenderInterpolator';
@@ -612,7 +613,7 @@ export class ZCGameRenderWorld {
         // 中立资源图标层（2026-10-14 加）。不带 `!` 断言：棋盘 prefab 万一还没补这一层，
         // 退化成「图标留在格节点里」就行 —— 表现为图标仍会被邻格切，但不该整局开不起来。
         this.resourceLayer = this.options.board.getChildByName('ResourceLayer') ?? null;
-        const surface = water.getComponent(Graphics)!;
+        const surface = water.getComponent(Graphics);
         surface.fillColor = new Color(30, 151, 215, 0);
         surface.rect(minX, minY, maxX - minX, maxY - minY);
         surface.fill();
@@ -632,7 +633,7 @@ export class ZCGameRenderWorld {
             node.name = `Hex_${config.id}`;
             // 视图组件与它的 @property 都在 ZCGameHex.prefab 上绑好了 —— 不再 `|| addComponent` 兜底：
             // 那个分支永远走不到，真掉组件时反而会悄悄补一个空视图（Inspector 引用全 null，表现全无）。
-            const view = node.getComponent(ZCHexView)!;
+            const view = node.getComponent(ZCHexView);
             //  点击**只派发意图**（带 `hexId`），处理方由控制器订阅 —— 渲染世界不再收上层回调。
             view.initialize(() => EventMgr.instance.emit(ZCGameUiEvent.HexClick, config.id));
             // 建筑专属外观解析整局不变，新建视图时喂一次（与 unit frame resolver 同口径）。
@@ -704,7 +705,7 @@ export class ZCGameRenderWorld {
 
     /** 按名取 `ZCGameBoard.prefab` 里声明的图层 —— 结构在那里，代码不自己拼层。 */
     private boardLayer(name: string): Node {
-        return this.options.board.getChildByName(name)!;
+        return this.options.board.getChildByName(name);
     }
 
     /**
@@ -789,8 +790,8 @@ export class ZCGameRenderWorld {
             // 宽高比与图原始比例不一致时（旧数据、非等比手动缩放），拉伸会让游戏里变形、
             // 编辑器预览却正常。宽高等于原图时 fit = 1，正好 1:1。配它的 `sizeMode = CUSTOM`
             // 也烘在 prefab 里：默认的 TRIMMED 会按 SpriteFrame 自己重算尺寸，把这个 fit 吃掉。
-            node.getComponent(Sprite)!.spriteFrame = frame;
-            const transform = node.getComponent(UITransform)!;
+            node.getComponent(Sprite).spriteFrame = frame;
+            const transform = node.getComponent(UITransform);
             const original = frame.originalSize;
             if (original && original.width > 0 && original.height > 0) {
                 const fit = Math.min(item.width / original.width, item.height / original.height);
@@ -1247,7 +1248,7 @@ export class ZCGameRenderWorld {
                 node.setScale(Vec3.ONE);
                 node.name = `CardReveal_${reveal.id}`;
                 // 同上：视图组件在 ZCGameCardReveal.prefab 上。
-                const view = node.getComponent(ZCCardRevealView)!;
+                const view = node.getComponent(ZCCardRevealView);
                 // 卡面图 / 建筑帧由视图自己按 id 向控制器取（`ProcedureGame.current`）⇒ 这里不再注入闭包。
                 entityId = this.createEntity('cardReveal', reveal.id, node);
                 this.pooledEntityKeys.set(entityId, 'cardReveal');
@@ -1299,7 +1300,7 @@ export class ZCGameRenderWorld {
                 node.setScale(Vec3.ONE);
                 node.name = `LegendBanner_${reveal.id}`;
                 // 同上：视图组件在 ZCGameLegendBanner.prefab 上。
-                const view = node.getComponent(ZCGameLegendBannerView)!;
+                const view = node.getComponent(ZCGameLegendBannerView);
                 view.setArtResolver((item) => this.resolveLegendArt(item));
                 //  头像帧在控制器上（`ProcedureGame.current`）⇒ 闭包每帧现取，晚到也能吃上。
                 view.setPortraitResolver((owner) => ProcedureGame.current?.resolveLegendPortrait(owner) ?? null);
@@ -1472,7 +1473,7 @@ export class ZCGameRenderWorld {
                 node.setScale(Vec3.ONE);
                 node.name = `FloatText_${text.id}`;
                 // 同上：视图组件在 ZCGameFloatText.prefab 上。
-                const view = node.getComponent(ZCFloatTextView)!;
+                const view = node.getComponent(ZCFloatTextView);
                 entityId = this.createEntity('float', text.id, node);
                 this.pooledEntityKeys.set(entityId, 'float');
                 this.floatTextViews.set(entityId, view);
@@ -1888,7 +1889,7 @@ export class ZCGameRenderWorld {
             node.setScale(Vec3.ONE);
             node.name = `Unit_${unit.id}`;
             // 同上：视图组件在 ZCGameUnit.prefab 上。
-            const view = node.getComponent(ZCUnitView)!;
+            const view = node.getComponent(ZCUnitView);
             view.setOutlineCopyMaterial(this.unitOutlineCopyMaterial);
             // 第二个参数是卡表 `pvpCard.prefabSize`（美术等比缩放，解析层永远给值、
             // 表里留空按 1）。 从 `definition` 取、不是从 prefab 取：同一个 prefab
@@ -1913,7 +1914,7 @@ export class ZCGameRenderWorld {
         this.unitViews.get(entityId)?.render(presentation);
         // 出生光柱挂到**单位节点**下（不是 mapLayer 的兄弟），这样它自动跟着插值后的位置走。
         if (isBirth) {
-            this.effectPool.playSpawnFx(this.scene.get(entityId)!.node, presentation.now);
+            this.effectPool.playSpawnFx(this.scene.get(entityId).node, presentation.now);
             // 新兵自己原地抖一下（Y 拉 110% 回落、再 X 拉 110% 回落）。
             this.unitViews.get(entityId)?.playSpawnShake(presentation.now);
             // 生成它的**建筑**也抖一下（需求 2026-10-15 row5）：兵营产兵倒计时结束时，
@@ -1930,6 +1931,16 @@ export class ZCGameRenderWorld {
         // 挂 mapLayer 不挂宿主、按 unitId 去重只播一次 —— 口径都在 `ZCEffectPool.playDeathFx`。
         if (unit.battleState === 'dead') {
             this.effectPool.playDeathFx(presentation.x, presentation.y, unit.id, this.visualTime(frame));
+        }
+    }
+
+    /** 选点结束后抽签结果才落定；复用棋盘时须在首次战斗渲染前补齐兵团绑定。 */
+    syncResolvedResources(resources: readonly ZCMapResolvedResource[]): void {
+        this.resourceItemByHex.clear();
+        for (const resource of resources) this.resourceItemByHex.set(resource.hexId, resource.itemId);
+        for (const [hexId, entityId] of this.hexEntityBySource) {
+            const view = this.hexViews.get(entityId);
+            if (view) this.injectResourceUnits(view, hexId);
         }
     }
 
@@ -2006,7 +2017,7 @@ export class ZCGameRenderWorld {
                 node.setScale(Vec3.ONE);
                 node.name = `SkillEffect_${event.skillId}_${event.id}`;
                 // 同上：视图组件在 ZCGameEffect.prefab 上。
-                const view = node.getComponent(ZCCombatEffectView)!;
+                const view = node.getComponent(ZCCombatEffectView);
                 view.initialize(event.effectPrefabPath ? this.effectVisualPrefabs.get(event.effectPrefabPath) || null : null,
                     !!this.options.allowGenericEffects && !!event.effectPrefabPath);
                 entityId = this.createEntity('effect', event.id, node);

@@ -1,9 +1,12 @@
+import { componentControllerModule } from './helpers/controller-context';
+import { createControllerContext } from './helpers/controller-context';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
+import { assetPath } from './helpers/asset-paths';
 
 function harness(worldGate?: Promise<void>) {
     const releasedOwners: object[] = [];
@@ -14,13 +17,16 @@ function harness(worldGate?: Promise<void>) {
     const requests: { path: string; bundle: string | undefined; scope: ResourceScope; resolve(value: object): void; reject(error: Error): void }[] = [];
     const pages: { name: string; destroyed: boolean }[] = [];
     const createdNodes: { name: string; isValid: boolean }[] = [];
-    let embeddedMap: { setSessionAssetService(): void; initialize(): void; onFirstReady(callback: () => void): void } | null = null;
+    const context = createControllerContext();
+    let embeddedMap: { initialize(): void; onFirstReady(callback: () => void): void } | null = null;
     const selected: number[] = [];
     const exports: Record<string, unknown> = {};
     runInNewContext(ts.transpileModule(readFileSync('assets/script/app/main/MainTabHost.ts', 'utf8'), {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
     }).outputText, { exports, console: { warn() {} }, require(name: string) {
+        if (name.endsWith('/ComponentController')) return componentControllerModule(context);
         if (name.endsWith('/GameNet')) return { GameNet: { instance: { removeCaller: (owner: object) => releasedOwners.push(owner) } } };
+        if (name.endsWith('/ProcedureManager')) return { ProcedureManager: { instance: { context: createControllerContext() } } };
         if (name === 'cc') {
             class MockNode {
                 public name: string;
@@ -102,23 +108,20 @@ function harness(worldGate?: Promise<void>) {
     } });
     const Host = exports.MainTabHost as new () => {
         activateBackgroundWarmup(): void;
-        onLoad(): void; navBar: unknown; defaultTab: number; setConfigService(configs: object): void; setSessionAssetService(service: object): void;
-        setAssetService(assets: object): void;
+        onLoad(): void; navBar: unknown; defaultTab: number;
         switchTab(index: number): Promise<void>; onDestroy(): void;
         renderNav(index: number): void; currentTab: number; currentPage: unknown;
         whenFirstScreenReady: Promise<void>;
     };
     const host = new Host();host.renderNav = (index) => { selected.push(index); };
-    host.setAssetService({ load: (path: string, _type: unknown, options: { scope: ResourceScope; bundle?: string }) => new Promise((resolve,reject) => {
+    Object.assign(context.assets, { load: (path: string, _type: unknown, options: { scope: ResourceScope; bundle?: string }) => new Promise((resolve,reject) => {
         requests.push({path,bundle:options.bundle,scope:options.scope,resolve,reject});
     }) });
     host.navBar = { getComponentsInChildren: () => buttons };
-    host.setConfigService({});
-    host.setSessionAssetService({ pauseWarmup() { pauses++; }, warmup: async () => { warmups++; }, warmupBattle: async () => { battleWarmups++; } });
+    Object.assign(context.sessionAssets, { pauseWarmup() { pauses++; }, warmup: async () => { warmups++; }, warmupBattle: async () => { battleWarmups++; } });
     const attachMap = () => {
         let ready: (() => void) | null = null;
         embeddedMap = {
-            setSessionAssetService() {},
             initialize() {},
             onFirstReady(callback) { ready = callback; },
         };
@@ -163,7 +166,7 @@ test('主城页走首包、功能页走 main-pages bundle', async () => {
 });
 
 test('MainRoot 不再强引用五个功能页，首屏只请求主城页', async () => {
-    const prefab = readFileSync('assets/resources/ui/main/MainRoot.prefab','utf8');
+    const prefab = readFileSync(assetPath('ui/main/MainRoot.prefab'),'utf8');
     for (const field of ['arenaPage','rolePage','roleMainPage','alliancePage','shopPage']) {
         assert.ok(!prefab.includes(`"${field}"`), `${field} 会把未打开页面带进首屏依赖`);
     }

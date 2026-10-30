@@ -422,11 +422,7 @@ export class TerritoryCloudView {
         const sibling = hexLayer.getSiblingIndex() + 1;
 
         // ① 挡云遮罩（`CloudLayer` 的父节点）。
-        const keepOut = new Node(TERRITORY_CLOUD_KEEP_OUT_NODE);
-        keepOut.layer = hexLayer.layer;
-        keepOut.setParent(parent);
-        keepOut.setSiblingIndex(sibling);
-        keepOut.addComponent(UITransform);
+        const keepOut = this.createLayerNode(TERRITORY_CLOUD_KEEP_OUT_NODE, parent, hexLayer.layer, sibling);
         const mask = keepOut.addComponent(Mask);
         // `GRAPHICS_STENCIL` + `inverted`：画到哪、哪里就**看不见**云。
         // 用反向遮罩而不是"画一张云可以被裁的框"，是因为要擦的区域是"已解锁格的外扩并集"，
@@ -451,11 +447,7 @@ export class TerritoryCloudView {
         // 但整个 `CloudLayer` 排在 `CloudFillLayer` **之后** ⇒ 真实云层的影子画到了
         // 铺满层的云体**之上**，地图上出现一条"灰云带"（用户截图）。
         // 现在把影子全部抽到一个独立层里、压在两个云体层之下 —— 跨层也不可能有影子压云。
-        const shadowLayer = new Node(TERRITORY_CLOUD_SHADOW_NODE);
-        shadowLayer.layer = hexLayer.layer;
-        shadowLayer.setParent(keepOut);
-        shadowLayer.setSiblingIndex(0);
-        shadowLayer.addComponent(UITransform);
+        const shadowLayer = this.createLayerNode(TERRITORY_CLOUD_SHADOW_NODE, keepOut, hexLayer.layer, 0);
         this.shadowLayer = shadowLayer;
         // 两个子分组各自可清空：重建铺满层 / 换章清真实云层时互不干扰。
         this.fillShadowGroup = this.createShadowGroup(shadowLayer, TERRITORY_CLOUD_FILL_SHADOW_NODE);
@@ -463,28 +455,16 @@ export class TerritoryCloudView {
 
         // ②-0 铺满层（虚拟格点）—— 画在真实格云之下。
         //      同一张遮罩 ⇒ 已解锁的地方连它一起擦，不用单独判一遍。
-        const fill = new Node(TERRITORY_CLOUD_FILL_NODE);
-        fill.layer = hexLayer.layer;
-        fill.setParent(keepOut);
-        fill.setSiblingIndex(1);
-        fill.addComponent(UITransform);
+        const fill = this.createLayerNode(TERRITORY_CLOUD_FILL_NODE, keepOut, hexLayer.layer, 1);
         this.fillLayer = fill;
 
         // ② 云层（静止云）——挂在遮罩下，才会被擦。
-        const layer = new Node(TERRITORY_CLOUD_LAYER_NODE);
-        layer.layer = hexLayer.layer;
-        layer.setParent(keepOut);
-        layer.setSiblingIndex(2);
-        layer.addComponent(UITransform);
+        const layer = this.createLayerNode(TERRITORY_CLOUD_LAYER_NODE, keepOut, hexLayer.layer, 2);
         this.layer = layer;
 
         // ③ 消散层 —— 插在遮罩**之后**（遮罩之上、站点层之下）。
         //    ⚠️ 别写成 `parent.children.length`：那会跑到 `GainLayer` 之上，把飘字压住。
-        const dissolve = new Node(TERRITORY_CLOUD_DISSOLVE_NODE);
-        dissolve.layer = hexLayer.layer;
-        dissolve.setParent(parent);
-        dissolve.setSiblingIndex(sibling + 1);
-        dissolve.addComponent(UITransform);
+        const dissolve = this.createLayerNode(TERRITORY_CLOUD_DISSOLVE_NODE, parent, hexLayer.layer, sibling + 1);
         const dissolveMask = dissolve.addComponent(Mask);
         // 同挡云区：反向擦除。区别只有一个 —— 正在消散的那些格**不进**擦除区（见类注释）。
         dissolveMask.type = Mask.Type.GRAPHICS_STENCIL;
@@ -507,11 +487,22 @@ export class TerritoryCloudView {
      * 一个分组顶掉"每朵云两套兄弟序"的做法：挪层 / 回退只动分组，不用逐朵算该插到第几位。
      */
     private createShadowGroup(parent: Node, name: string = TERRITORY_CLOUD_SHADOW_NODE): Node {
-        const group = new Node(name);
-        group.layer = parent.layer;
-        group.setParent(parent);
-        group.addComponent(UITransform);
-        return group;
+        return this.createLayerNode(name, parent, parent.layer);
+    }
+
+    /**
+     * 建一个只装 Sprite 的图层节点：`设 layer → 挂父 → 定兄弟序 → 补 UITransform` 四步合一处。
+     *
+     * ⚠️ 兄弟序**必须在调用点算**：`attachPocket` 的「挂到最后一个孩子」依赖 `setParent` **之后**
+     * 的 `children.length`，挪进这里会差一位（云洞层压不住 UI）。
+     */
+    private createLayerNode(name: string, parent: Node, layer: number, siblingIndex?: number): Node {
+        const node = new Node(name);
+        node.layer = layer;
+        node.setParent(parent);
+        if (siblingIndex !== undefined) node.setSiblingIndex(siblingIndex);
+        node.addComponent(UITransform);
+        return node;
     }
 
     /**
@@ -1442,7 +1433,8 @@ export class TerritoryCloudView {
 
     /** 建一朵云（云体 + 影子），两人共用同一个落点。 */
     private createCloud(cellId: number): Sprite {
-        const layer = this.layer!;
+        const layer = this.layer;
+        if (!layer) throw new Error('TerritoryCloudView 云层节点未绑定');
         const body = this.createSprite(layer, `Cloud_${cellId}`, this.idleFrame, TERRITORY_CLOUD_SCALE);
         this.sprites.set(cellId, body);
         const group = this.shadowGroup?.isValid ? this.shadowGroup : null;

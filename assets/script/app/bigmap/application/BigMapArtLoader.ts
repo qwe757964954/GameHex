@@ -2,9 +2,9 @@ import { SpriteFrame } from 'cc';
 import type { AssetService } from '../../../core/asset/AssetService';
 import type { ResourceScope } from '../../../core/asset/ResourceScope';
 import { bundleForPath } from '../../../core/asset/BundleCatalog';
-import type { BigMapResType } from '../model/BigMapTypes';
+import type { BigMapResType, IBigMapBuildingConfig, IBigMapCampConfig } from '../model/BigMapTypes';
 import {
-    BIGMAP_BUILDING_ART, BIGMAP_CONCEPT_ROOT, BIGMAP_HUD_UI_FILES, BIGMAP_HUD_UI_KEYS, BIGMAP_UI_KEYS,
+    BIGMAP_BASE_BACKGROUND, BIGMAP_BUILDING_ART, BIGMAP_CONCEPT_ROOT, BIGMAP_HUD_UI_FILES, BIGMAP_HUD_UI_KEYS, BIGMAP_UI_KEYS,
     type IBigMapHudUiKey, type IBigMapUiKey,
 } from './BigMapArtCatalog';
 
@@ -22,6 +22,7 @@ export interface IBigMapArt {
     readonly baseBackground: SpriteFrame | null;
     readonly construction: SpriteFrame | null;
     readonly buildings: ReadonlyMap<number, SpriteFrame | null>;
+    readonly camps: ReadonlyMap<number, SpriteFrame | null>;
     readonly ui: ReadonlyMap<IBigMapUiKey, SpriteFrame | null>;
     /** 领地页 HUD 同款按钮 / 模式木牌（`image/common` + `image/main/city`）。缺图时上层退回手画底，不影响布局。 */
     readonly hud: ReadonlyMap<IBigMapHudUiKey, SpriteFrame | null>;
@@ -33,12 +34,15 @@ export interface IBigMapArt {
  *
  * @param resourceIcons 资源类型 → **背包道具图标路径**（`item.icon`，来自 `bigmapResource.itemId`）。
  *   有就走背包那份图，没有 / 加载失败退回 `image/bigmap/concept/sprites/<resType>` 概念图。
+ * @param buildingConfigs 基地建筑配置。只按类型使用现有图片，尚未入库的 baseBuildIcon 不接入加载。
  */
 export async function loadBigMapArt(
     assets: AssetService,
     scope: ResourceScope,
     background = '',
     resourceIcons: ReadonlyMap<BigMapResType, string> = new Map(),
+    buildingConfigs: ReadonlyMap<number, IBigMapBuildingConfig> = new Map(),
+    campConfigs: ReadonlyMap<number, IBigMapCampConfig> = new Map(),
 ): Promise<IBigMapArt> {
     const fetchFrame = async (path: string): Promise<SpriteFrame | null> => {
         try {
@@ -72,8 +76,12 @@ export async function loadBigMapArt(
         load('image/bigmap/bigMapBG'),
     ]);
     const sprite = (name: string): Promise<SpriteFrame | null> => load(`${BIGMAP_CONCEPT_ROOT}/sprites/${name}`);
-    const buildingTask = Promise.all(Object.entries(BIGMAP_BUILDING_ART).map(async ([id, name]) => (
-        [Number(id), await sprite(name)] as const
+    const buildingTask = Promise.all([...buildingConfigs.values()].map(async (building) => {
+        const name = BIGMAP_BUILDING_ART[building.kind];
+        return [building.id, name ? await sprite(name) : null] as const;
+    }));
+    const campTask = Promise.all([...campConfigs.values()].map(async (camp) => (
+        [camp.campId, camp.iconPath ? await load(camp.iconPath) : null] as const
     )));
     const uiTask = Promise.all(BIGMAP_UI_KEYS.map(async (key) => {
         const frame = await load(`${BIGMAP_CONCEPT_ROOT}/ui/${key}`);
@@ -105,16 +113,18 @@ export async function loadBigMapArt(
             : await sprite(key)] as const;
     }));
     const baseTask = Promise.all([
-        load(`${BIGMAP_CONCEPT_ROOT}/base_ground`), sprite('construction'), sprite('fortress'),
+        load(BIGMAP_BASE_BACKGROUND), sprite('construction'), sprite('fortress'),
         sprite('mutant_camp'), sprite('rocks'), sprite('grass'),
     ]);
     const [[backdrop, groundVariants, home, city, monster, rock, grass, tiledBackground], buildingEntries, uiEntries,
-        hudEntries, resourceEntries, [baseBackground, construction, fortress, mutantCamp, conceptRock, conceptGrass]] =
-        await Promise.all([terrainTask, buildingTask, uiTask, hudTask, resourceTask, baseTask]);
+        hudEntries, resourceEntries, [baseBackground, construction, fortress, mutantCamp, conceptRock, conceptGrass], campEntries] =
+        await Promise.all([terrainTask, buildingTask, uiTask, hudTask, resourceTask, baseTask, campTask]);
     const buildings = new Map(buildingEntries);
     return { background: backdrop, tiledBackground, ground: groundVariants.find((frame) => frame !== null) ?? null,
         groundVariants, home: home ?? buildings.get(71001) ?? null, city: city ?? fortress, monster: monster ?? mutantCamp,
         rock: conceptRock ?? rock, grass: conceptGrass ?? grass,
-        baseBackground, construction, buildings, ui: new Map(uiEntries), hud: new Map(hudEntries),
+        baseBackground, construction, buildings,
+        camps: new Map(campEntries.map(([id, frame]) => [id, frame ?? city ?? fortress])),
+        ui: new Map(uiEntries), hud: new Map(hudEntries),
         resources: new Map(resourceEntries) };
 }

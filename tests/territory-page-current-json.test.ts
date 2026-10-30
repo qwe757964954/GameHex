@@ -12,7 +12,7 @@ const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf
 //   滚动容器 → prefab 上的 cc.ScrollView         站点条目 → TerritoryStation.prefab
 // 断言跟着真源走，别再去 TerritoryPage.ts 里找 —— 那里的职责只剩流程编排。
 const page = read('../assets/script/app/main/MainTerritoryMap.ts');
-const presenter = read('../assets/script/app/territory/application/TerritoryPresenter.ts');
+const presenter = read('../assets/script/app/territory/application/TerritoryModel.ts');
 const mapView = read('../assets/script/app/territory/view/TerritoryMapView.ts');
 const assets = read('../assets/script/app/territory/application/TerritoryPageAssets.ts');
 const texts = read('../assets/script/app/territory/application/TerritoryTexts.ts');

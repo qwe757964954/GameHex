@@ -18,7 +18,7 @@
  *     （`组件/组件_商店_界面.xml` + `通用/组件_商店_背景.xml` + 5 个 `页面/组件_商店_*页面.xml`
  *      + 5 个 `..._item.xml` + `公用0/**` 的公共组件）
  *   - 老端：`client/assets/script/app/game/ctrl/main/store/TabStoreMain.ts`
- *   - 本项目：`assets/script/app/store/**`、`assets/resources/ui/Store/**`
+ *   - 本项目：`assets/script/app/store/**`、assetPath(`ui/Store/**`)
  *   - 生成器：`tmp/_store2_build.mjs`（本文件 C 段的期望值就是它的输入口径）
  *
  * ⚠️ 三条**刻意**的选择，本文件当契约钉住：
@@ -79,6 +79,7 @@ import {
     storeCardCount,
     storeQualityFrame,
 } from '../assets/script/app/store/StoreShopTable';
+import { assetExists, assetPath } from './helpers/asset-paths';
 
 /** 段内反复出现的几个图标路径（写死在这里 = 一旦表改成别的图，B 段会立刻红）。 */
 const ICON_RES_FANTASY_JADE = 'icons/resource/图标_幻灵玉';
@@ -340,7 +341,7 @@ test('B8 段内图标**都真的在磁盘上**且 meta 是 sprite-frame（悬空
 // C. 6 张 prefab 结构 + 几何
 // ============================================================
 
-const PREFAB_DIR = 'assets/resources/ui/Store';
+const PREFAB_DIR = assetPath('ui/Store');
 const SHELL_TS = 'assets/script/app/store/StorePage.ts';
 const SECTION_TS = 'assets/script/app/store/StoreSectionPage.ts';
 /** 顶部资源条走**公共货币件**：`app/common/ResBar` + 它的槽组件 `MainResBarSlot`。
@@ -350,7 +351,7 @@ const SECTION_TS = 'assets/script/app/store/StoreSectionPage.ts';
  *      `RESBAR_TS` / `RESBAR_SLOT_TS` 的 cid 也不该在 Store.prefab 里出现（出现 = 又变回内联）。 */
 const RESBAR_TS = 'assets/script/app/common/ResBar.ts';
 const RESBAR_SLOT_TS = 'assets/script/app/main/MainResBarSlot.ts';
-const RESBAR_PREFAB = 'assets/resources/ui/common/ResBar.prefab';
+const RESBAR_PREFAB = assetPath('ui/common/ResBar.prefab');
 const UI_2D = 33554432;
 const KEYS_B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 /** 嵌套实例「壳节点」在 prefab JSON 里没有 `_name` ⇒ 解析不出来时用这个占位。 */
@@ -929,13 +930,13 @@ test('C9 六张 prefab 的**根 UITransform** = 真实版心（改版面表就�
 // D. 接线
 // ============================================================
 
-const MAIN_ROOT = 'assets/resources/ui/main/MainRoot.prefab';
+const MAIN_ROOT = assetPath('ui/main/MainRoot.prefab');
 const MAIN_TAB_HOST_TS = 'assets/script/app/main/MainTabHost.ts';
 
 test('D1 `StorePage.prefabPath` 与磁盘目录大小写一致（Android/iOS 的 zip 内路径大小写敏感）', () => {
     const src = readFileSync(SHELL_TS, 'utf8');
     assert.match(src, /static\s+prefabPath\s*=\s*'ui\/Store\/Store'/, 'prefabPath 必须是 ui/Store/Store（S 大写）');
-    assert.ok(existsSync('assets/resources/ui/Store/Store.prefab'), '磁盘上必须有 ui/Store/Store.prefab');
+    assert.ok(assetExists('ui/Store/Store.prefab'), '磁盘上必须有 ui/Store/Store.prefab');
 });
 
 test('D2 `MainTabHost` 有 `shopPage`，且 `MainTab.Shop` 路由到它', () => {

@@ -62,7 +62,7 @@ test('加载器按后端英雄、召唤链与波次选模型，离线保持完�
     runInNewContext(ts.transpileModule(readFileSync('assets/script/app/zcds/application/ZCGameLoader.ts', 'utf8'), {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
     }).outputText, context);
-    const loader = new context.exports.ZCGameLoader({
+    const loader = new context.exports.ZCGameLoader({ assets: {
         load: async (path: string, _type: unknown, options: { bundle?: string; cache?: boolean } | undefined) => {
             if (path.startsWith('image/decor/')) assert.equal(options?.cache, false, '随机地图装饰不占用会话缓存');
             paths.push(path); bundles.push([path, options?.bundle ?? bundleForPath(path)]);
@@ -77,7 +77,7 @@ test('加载器按后端英雄、召唤链与波次选模型，离线保持完�
             if (path.startsWith('image/effects/')) return [{ name: 'frame_02' }, { name: 'frame_01' }];
             return path === 'maps' ? [{ name: 'map', json: { art: { freeDecor: [{ art: 'wasteland/st1' }] } } }] : [];
         },
-    }, { initialize: async () => { if (initialization) await initialization; }, getTable: async () => [] }, 'maps');
+    }, configs: { initialize: async () => { if (initialization) await initialization; }, getTable: async () => [] } }, 'maps');
     const prepared = await loader.prepare(undefined, { units: [
         { heroes: [{ heroId: 68001 }], heroIds: [68004] }, { heroes: [], heroIds: [68004] },
     ] }, [91001]);

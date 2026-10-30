@@ -19,6 +19,7 @@ import {
     hexShrinkBackFx,
     hexShrinkFx,
 } from '../assets/script/core/hex/HexFlipPresentation';
+import { assetPath } from './helpers/asset-paths';
 
 /**
  * 领地随机资源格「翻开」的判据。
@@ -406,7 +407,7 @@ test('领地翻格的触发只在首帧快照之后（免得历史已开启格�
 
 // ── 着色器（只剩「原地碎裂」那部分） ──────────────────────────────────────────
 
-const HEX_FLIP_EFFECT = 'assets/resources/shaders/hex-flip.effect';
+const HEX_FLIP_EFFECT = assetPath('shaders/hex-flip.effect');
 
 /** 碎裂那一段用到的 uniform（顶点 / 片元两块必须一字不差）。 */
 const UNIFORM_MEMBERS = [

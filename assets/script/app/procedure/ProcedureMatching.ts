@@ -1,3 +1,4 @@
+import { createZCBattlePreload } from '../zcds/application/ZCBattlePreparation';
 import { instantiate, Node, Prefab, Vec3 } from 'cc';
 import { GameRoute } from '../../core/runtime/GameRoute';
 import { ProcedureBase } from '../../framework/procedure/ProcedureBase';
@@ -21,8 +22,6 @@ import { loadMatchTips } from '../matching/MatchTipsConfig';
 import { MatchPlayerData } from '../matching/MatchTypes';
 import type { IMatchingEntryParams } from '../matching/MatchTypes';
 import type { BattlePreloadProvider } from '../session/AppSessionAssetService';
-import { MAP_DIRECTORY } from '../zcds/ZCGame';
-import { ZCGameLoader } from '../zcds/application/ZCGameLoader';
 import { ZCGamePreload } from '../zcds/application/ZCGamePreload';
 import { EventMgr } from '../../framework/event/EventMgr';
 
@@ -199,7 +198,7 @@ export class ProcedureMatching extends ProcedureBase {
         const provider = this.sessionAssets as unknown as Partial<BattlePreloadProvider>;
         // 等回包人数和阵容确定后选图、加载本局表现；公共资源已由会话预下载。
         const preload = provider.takeBattlePreload?.()
-            ?? new ZCGamePreload(new ZCGameLoader(this.sessionAssets?.reusableAssets ?? this.assets, this.configs, MAP_DIRECTORY),
+            ?? createZCBattlePreload(
                 battleStartTask.then((battle) => {
                     if (!battle) throw new Error('服务端未确认开战');
                     return battle;
@@ -287,7 +286,9 @@ export class ProcedureMatching extends ProcedureBase {
      */
     private refreshMineView(): void {
         const withPvp = applyPvpInfoToPlayerView(this.mineBase, this.pvpInfo, this.profileLookup);
-        this.matchingNode!.getComponent(MatchingPage)!
+        const node = this.matchingNode;
+        if (!node) return;
+        node.getComponent(MatchingPage)
             .updateMine(applyUnitToPlayerView(withPvp, this.selfUnit, this.profileLookup));
     }
 

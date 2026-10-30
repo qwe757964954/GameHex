@@ -148,13 +148,13 @@ export class Toast extends PopupBase {
     // ============================================================
 
     @property({ type: Node, group: '吐司', tooltip: 'Bar：底条 + 文字的容器（图形绘制的宿主）' })
-    panel: Node = null!;
+    panel: Node = null;
 
     @property({ type: Graphics, group: '吐司', tooltip: 'Bar 上的 cc.Graphics：按下面参数绘制深色圆角底条' })
-    panelGraphics: Graphics = null!;
+    panelGraphics: Graphics = null;
 
     @property({ type: Label, group: '吐司', tooltip: 'Bar/Label：提示文字' })
-    label: Label = null!;
+    label: Label = null;
 
     @property({ group: '吐司', tooltip: '底条宽度（设计像素，固定宽；文字在其中居中）' })
     barWidth = 430;

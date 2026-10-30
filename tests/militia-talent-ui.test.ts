@@ -13,27 +13,28 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { buildResBarSlots } from '../assets/script/app/main/MainResBarTypes';
+import { assetPath } from './helpers/asset-paths';
 
 type Obj = Record<string, any>;
 
 const PREFAB = {
-    page: 'assets/resources/ui/Role/TabMilitiaTalent.prefab',
-    item: 'assets/resources/ui/Role/MilitiaTalentItem.prefab',
-    resBar: 'assets/resources/ui/common/ResBar.prefab',
-    tabButton: 'assets/resources/ui/common/TabButton.prefab',
+    page: assetPath('ui/Role/TabMilitiaTalent.prefab'),
+    item: assetPath('ui/Role/MilitiaTalentItem.prefab'),
+    resBar: assetPath('ui/common/ResBar.prefab'),
+    tabButton: assetPath('ui/common/TabButton.prefab'),
 } as const;
 
 /** 美术真源：`.png.meta` 的 uuid（`spriteFrame` 子资源 = `<uuid>@f9941`）。 */
 const ART = {
-    frameZhikuang04: 'assets/resources/image/common/cu_frame_zhikuang04.png.meta',
-    tfBar01Bg: 'assets/resources/image/militia/ml_tf_bar01_bg.png.meta',
-    tfBarFg3gong: 'assets/resources/image/militia/ml_tf_bar_fg_3gong.png.meta',
-    iconTianFu: 'assets/resources/icons/main/zjm_icon01_TianFu.png.meta',
-    iconTianFu02: 'assets/resources/icons/main/zjm_icon01_TianFu02.png.meta',
-    iconPiFu: 'assets/resources/icons/main/zjm_icon01_PiFu.png.meta',
-    iconPiFu02: 'assets/resources/icons/main/zjm_icon01_PiFu02.png.meta',
-    diban: 'assets/resources/image/common/cu_diban_bg.png.meta',
-    btnFanHui: 'assets/resources/image/common/cu_btn_fan_hui.png.meta',
+    frameZhikuang04: assetPath('image/common/cu_frame_zhikuang04.png.meta'),
+    tfBar01Bg: assetPath('image/militia/ml_tf_bar01_bg.png.meta'),
+    tfBarFg3gong: assetPath('image/militia/ml_tf_bar_fg_3gong.png.meta'),
+    iconTianFu: assetPath('icons/main/zjm_icon01_TianFu.png.meta'),
+    iconTianFu02: assetPath('icons/main/zjm_icon01_TianFu02.png.meta'),
+    iconPiFu: assetPath('icons/main/zjm_icon01_PiFu.png.meta'),
+    iconPiFu02: assetPath('icons/main/zjm_icon01_PiFu02.png.meta'),
+    diban: assetPath('image/common/cu_diban_bg.png.meta'),
+    btnFanHui: assetPath('image/common/cu_btn_fan_hui.png.meta'),
 } as const;
 
 /** 老端 FGUI 画布 720×1280，组件根锚点 (0.5,0.5) ⇒ 本工程根 lpos(0,0) = 画布中心。 */

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { assetPath } from './helpers/asset-paths';
 
 /**
  * 自选主城 HUD（`ZCSpawnSelectionView` + `ZCSpawnSelection.prefab`）的结构守卫。
@@ -19,7 +20,7 @@ const viewSource = readFileSync('assets/script/app/zcds/view/ZCSpawnSelectionVie
 const gameSource = readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8');
 const loaderSource = readFileSync('assets/script/app/zcds/application/ZCGameLoader.ts', 'utf8');
 const viewMeta = JSON.parse(readFileSync('assets/script/app/zcds/view/ZCSpawnSelectionView.ts.meta', 'utf8'));
-const prefabText = readFileSync('assets/resources/ui/game/ZCSpawnSelection.prefab', 'utf8');
+const prefabText = readFileSync(assetPath('ui/game/ZCSpawnSelection.prefab'), 'utf8');
 const objects: any[] = JSON.parse(prefabText);
 
 /** cid 由脚本 uuid 推出（前 5 hex 原样 + 每 3 hex → 2 个 base64 字符），与编辑器同一套规则。 */
@@ -88,7 +89,7 @@ const labelOf = (node: any) => componentOf(node, 'cc.Label');
 
 /** 美术名 → SpriteFrame uuid（`.meta` 的 subMetas uuid **已自带 `@f9941`**，别再拼）。 */
 const frameOf = (art: string): string =>
-    JSON.parse(readFileSync(`assets/resources/image/gameui/${art}.png.meta`, 'utf8')).subMetas.f9941.uuid;
+    JSON.parse(readFileSync(assetPath(`image/gameui/${art}.png.meta`), 'utf8')).subMetas.f9941.uuid;
 
 test('视图脚本不再自己建节点 / 不再用 Graphics 画面板底', () => {
     const code = stripComments(viewSource);

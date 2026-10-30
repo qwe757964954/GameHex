@@ -55,6 +55,42 @@ function resourceHexState(id: string, extra: Record<string, unknown> = {}): neve
     } as never;
 }
 
+test('选点后同步抽签结果，为已有资源格补上兵团模型并清除文字回退', () => {
+    const { load, cc, bar } = loadViews();
+    const view = stubHexView(load, cc, bar);
+    const prefab = spinePrefab(load, cc);
+    const world = new (load('./ZCGameRenderWorld').ZCGameRenderWorld)({
+        unitVisualPrefabs: new Map([['68001', prefab]]),
+    });
+    world.hexEntityBySource.set(7, 1);
+    world.hexViews.set(1, view);
+    const presentation = {
+        state: resourceHexState(ZC_TEST_ITEM.Unit),
+        canDevelop: false, playerGold: 0, cooldown: null, now: 0,
+    };
+    view.render(presentation);
+    assert.equal(view.iconLabel.string, '兵力', '复现选点时尚未注入骨骼');
+    world.syncResolvedResources([{ hexId: 7, itemId: ZC_TEST_ITEM.Unit }]);
+    view.render(presentation);
+    assert.equal(view.resourceUnitNodes.length, 3);
+    assert.ok(view.resourceUnitNodes.every((node: { active: boolean }) => node.active));
+    assert.equal(view.iconLabel.string, '');
+    assert.equal(view.iconLabel.enabled, false);
+    const nodes = [...view.resourceUnitNodes];
+    world.syncResolvedResources([{ hexId: 7, itemId: ZC_TEST_ITEM.Unit }]);
+    view.render(presentation);
+    assert.ok(nodes.every((node, index) => node === view.resourceUnitNodes[index]), '重复同步不重建骨骼');
+    world.syncResolvedResources([]);
+    assert.equal(view.resourceUnitCount, 0, '清空抽签结果时移除旧兵团绑定');
+});
+
+test('选点结束必须在首次战斗渲染前同步资源抽签结果', () => {
+    const source = readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8');
+    const finish = source.slice(source.indexOf('private finishSpawnSelection()'), source.indexOf('private applyResult('));
+    const sync = finish.indexOf('this.renderWorld.syncResolvedResources(matchConfig.map.resolvedResources ?? []);');
+    assert.ok(sync >= 0 && sync < finish.indexOf('this.renderWorld.render('));
+});
+
 test('unit_cap 不再写中文「兵力」：按配置站N 个中立待机兵，播idle', () => {
     const { load, cc, bar } = loadViews();
     const view = stubHexView(load, cc, bar);

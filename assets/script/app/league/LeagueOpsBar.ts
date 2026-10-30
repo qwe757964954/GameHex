@@ -41,22 +41,22 @@ export type LeagueOpsAction = 'show' | 'toLeader' | 'toAdmin' | 'unAdmin' | 'kic
 @ccclass('LeagueOpsBar')
 export class LeagueOpsBar extends Component {
     @property({ type: Node, tooltip: 'btn_show：查看' })
-    showButton: Node = null!;
+    showButton: Node = null;
 
     @property({ type: Node, tooltip: 'btn_to_leader：任命盟主' })
-    toLeaderButton: Node = null!;
+    toLeaderButton: Node = null;
 
     @property({ type: Node, tooltip: 'btn_to_admin：任命副盟主' })
-    toAdminButton: Node = null!;
+    toAdminButton: Node = null;
 
     @property({ type: Node, tooltip: 'btn_un_admin：卸任副盟主' })
-    unAdminButton: Node = null!;
+    unAdminButton: Node = null;
 
     @property({ type: Node, tooltip: 'btn_kick：踢出联盟' })
-    kickButton: Node = null!;
+    kickButton: Node = null;
 
     @property({ type: Node, tooltip: 'click：全屏点击遮罩（点它收起浮层）' })
-    clickMask: Node = null!;
+    clickMask: Node = null;
 
     /** 点中某个操作时的回调（浮层**先自己收起**再回调，与老端 `onGlobalTouch()` 同序）。 */
     onSelect: ((action: LeagueOpsAction) => void) | null = null;

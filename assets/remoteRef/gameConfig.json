@@ -140,4 +140,5 @@
 {"key":"artifactMaxPage","value":1},
 {"key":"formationMaxNum","value":4},
 {"key":"battleHeroInitArray","value":[1,2,3,4,5,6,7,8]},
-{"key":"formationMinimumPostNum","value":8}]
+{"key":"formationMinimumPostNum","value":8},
+{"key":"chapterLevelAutoStartConfig","value":1}]

@@ -1,4 +1,4 @@
-import { _decorator, Component, Label, Node, Sprite, SpriteFrame } from 'cc';
+import {_decorator, Component, Label, Sprite, SpriteFrame} from 'cc';
 import { RedDot } from '../common/RedDot';
 
 const { ccclass, property } = _decorator;
@@ -16,19 +16,19 @@ const { ccclass, property } = _decorator;
 @ccclass('SevenDayPageTab')
 export class SevenDayPageTab extends Component {
     @property({ type: Label, tooltip: 'TitleLabel：页签名（表里的 typeName）' })
-    titleLabel: Label = null!;
+    titleLabel: Label = null;
 
     @property({ type: Sprite, tooltip: '背景：本节点上的 cc.Sprite（两态换图）' })
-    background: Sprite = null!;
+    background: Sprite = null;
 
     @property({ type: RedDot, tooltip: 'RedDot：该页签有可领取内容时的红点（默认隐藏）' })
-    redDot: RedDot = null!;
+    redDot: RedDot = null;
 
     @property({ type: SpriteFrame, tooltip: '选中底板（`sd_tab_on`）' })
-    selectedFrame: SpriteFrame = null!;
+    selectedFrame: SpriteFrame = null;
 
     @property({ type: SpriteFrame, tooltip: '未选中底板（`sd_tab_off`）' })
-    normalFrame: SpriteFrame = null!;
+    normalFrame: SpriteFrame = null;
 
     render(title: string, selected: boolean, hasRedDot: boolean): void {
         if (!this.background) {

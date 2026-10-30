@@ -23,13 +23,14 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
+import { assetPath } from './helpers/asset-paths';
 
 type Entry = Record<string, unknown>;
 
-const MAINROOT_PATH = 'assets/resources/ui/main/MainRoot.prefab';
-const BATTLETOKEN_PATH = 'assets/resources/ui/BattleToken/BattleToken.prefab';
-const TABBUTTON_PATH = 'assets/resources/ui/common/TabButton.prefab';
-const REDDOT_PATH = 'assets/resources/ui/common/RedDot.prefab';
+const MAINROOT_PATH = assetPath('ui/main/MainRoot.prefab');
+const BATTLETOKEN_PATH = assetPath('ui/BattleToken/BattleToken.prefab');
+const TABBUTTON_PATH = assetPath('ui/common/TabButton.prefab');
+const REDDOT_PATH = assetPath('ui/common/RedDot.prefab');
 
 const MAINROOT = JSON.parse(readFileSync(MAINROOT_PATH, 'utf8')) as Entry[];
 const BATTLETOKEN = JSON.parse(readFileSync(BATTLETOKEN_PATH, 'utf8')) as Entry[];
@@ -313,7 +314,7 @@ test('D1 共用页签绑定右上角白色锁图，默认隐藏并处于 UI_2D �
     assert.ok(components.some((component) => component?.__type__ === 'cc.UITransform'));
     const sprite = components.find((component) => component?.__type__ === 'cc.Sprite');
     assert.equal((sprite?._spriteFrame as { __uuid__: string }).__uuid__,
-        `${assetUuid('assets/resources/image/main/chest/chest_lock.png')}@f9941`);
+        `${assetUuid(assetPath('image/main/chest/chest_lock.png'))}@f9941`);
     assert.equal(sprite?._isTrimmedMode, false);
     const tab = TABBUTTON.find((entry) => entry.__type__ === scriptCid('assets/script/app/common/TabButton.ts'))!;
     assert.equal(resolve(TABBUTTON, tab.lockIcon), lock, 'TabButton.lockIcon 未绑定到锁节点');

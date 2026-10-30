@@ -26,7 +26,7 @@ import test from 'node:test';
 const BUILD_TABLE = 'assets/remoteRef/build.json';
 const MAP_PRESET = 'tools/map-editor/presets/territory/chapter_01.json';
 const VIEW_PATH = 'assets/script/app/territory/view/TerritoryMapView.ts';
-const PRESENTER_PATH = 'assets/script/app/territory/application/TerritoryPresenter.ts';
+const PRESENTER_PATH = 'assets/script/app/territory/application/TerritoryModel.ts';
 const ASSETS_PATH = 'assets/script/app/territory/application/TerritoryPageAssets.ts';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -68,56 +68,56 @@ export class PlayerInfoOtherPage extends PopupBase {
 
     // ---------- 弹窗框 ----------
     @property({ type: Node, tooltip: 'PopBg/CloseBtn：关闭按钮（FGUI 原稿里是老端隐藏的那个；没有就留 null）' })
-    closeButton: Node = null!;
+    closeButton: Node = null;
 
     // ---------- 身份区 ----------
     @property({ type: Sprite, tooltip: 'HeadBox/HeadIcon：头像（`com_head.icon`，80×74）' })
-    headIcon: Sprite = null!;
+    headIcon: Sprite = null;
 
     @property({ type: Label, tooltip: 'NameLabel：玩家名（`text_name`）' })
-    nameLabel: Label = null!;
+    nameLabel: Label = null;
 
     @property({ type: Label, tooltip: 'UidLabel：玩家 ID（`text_uid`）' })
-    uidLabel: Label = null!;
+    uidLabel: Label = null;
 
     @property({ type: Label, tooltip: 'ServerLabel：区服名（`text_serverid`，本工程恒空，见文件头 ①）' })
-    serverLabel: Label = null!;
+    serverLabel: Label = null;
 
     // ---------- 数值区 ----------
     @property({ type: Label, tooltip: 'AttackLabel：攻击力（`文本_攻击力`）' })
-    attackLabel: Label = null!;
+    attackLabel: Label = null;
 
     @property({ type: Label, tooltip: 'BattleLevelLabel：关卡进度（`文本_关卡进度`）' })
-    battleLevelLabel: Label = null!;
+    battleLevelLabel: Label = null;
 
     @property({ type: Label, tooltip: 'UnionLabel：联盟名（`联盟名`）' })
-    unionLabel: Label = null!;
+    unionLabel: Label = null;
 
     // ---------- 立绘 / 装备 / 列表 ----------
     @property({ type: Node, tooltip: 'ModelHost：骨骼模型位（`iconHalf`），本工程不渲染（文件头 ③）' })
-    modelHost: Node = null!;
+    modelHost: Node = null;
 
     @property({ type: [Node], tooltip: 'EquipSlots：6 个装备格（`equipType1`..`equipType6`，按部位号顺序）' })
     equipSlots: Node[] = [];
 
     @property({ type: Node, tooltip: 'ListHost：底部列表容器（`list`），本工程不铺项（文件头 ④）' })
-    listHost: Node = null!;
+    listHost: Node = null;
 
     // ---------- 按钮 ----------
     @property({ type: Node, tooltip: 'BlackBtn：拉黑 / 解除拉黑（`按钮_拉黑`）' })
-    blackButton: Node = null!;
+    blackButton: Node = null;
 
     @property({ type: Label, tooltip: 'BlackBtn/Label：拉黑按钮文字' })
-    blackLabel: Label = null!;
+    blackLabel: Label = null;
 
     @property({ type: Node, tooltip: 'FriendBtn：加好友 / 删好友（`按钮_好友`）' })
-    friendButton: Node = null!;
+    friendButton: Node = null;
 
     @property({ type: Label, tooltip: 'FriendBtn/Label：好友按钮文字' })
-    friendLabel: Label = null!;
+    friendLabel: Label = null;
 
     @property({ type: Node, tooltip: 'ChatBtn：私聊（`按钮_私聊`）' })
-    chatButton: Node = null!;
+    chatButton: Node = null;
 
     /** 个人信息的数据端口；测试 / 探针可替换。 */
     private repo: IPlayerInfoRepository = playerInfoRepository;

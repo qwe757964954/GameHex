@@ -4,11 +4,14 @@ import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import type { ZCBattleStart } from '../assets/script/app/battle/BattleStartModel';
+import { parseBattleBuffs } from '../assets/script/app/battle/BattleStartModel';
+import { compileZCMatchRuntime } from '../assets/script/app/zcds/model/ZCMatchRuntimeCompiler';
 import { buildZCClientCombatConfig, clientHeroIdsByOwner } from '../assets/script/app/zcds/application/ZCClientCombatConfig';
 import { buildZCPveEnemyDecks } from '../assets/script/app/zcds/application/ZCPveCombatConfig';
 import { configureZCMap } from '../assets/script/app/zcds/model/ZCMapConfig';
 import { loadPvpTables, type ZCPvpTables } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
 import { captureZCMatchConfig } from '../assets/script/app/zcds/model/ZCMatchConfig';
+import { assetPath } from './helpers/asset-paths';
 
 function readRows(name: string): Array<Record<string, unknown>> {
     const source = JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8')) as
@@ -29,7 +32,7 @@ function prepare(playerCount: 3 | 4 = 4) {
     ];
     loadPvpTables(Object.fromEntries(names.map((name) => [name, readRows(name)])) as unknown as ZCPvpTables);
     configureZCMap(JSON.parse(readFileSync(
-        `assets/resources/config/maps/standard_${playerCount}.json`, 'utf8',
+        assetPath(`config/maps/standard_${playerCount}.json`), 'utf8',
     )));
     return captureZCMatchConfig();
 }
@@ -239,13 +242,52 @@ test('服务端章节战斗阵容不再受本地关卡敌方卡牌名单裁剪',
     const Procedure = exports.ProcedureGame as new () => { preparedResources: object; onEnter(params: object): void };
     const procedure = new Procedure();
     procedure.preparedResources = { baseMatchConfig: source };
-    procedure.onEnter({ battle: battle([68001], [68002]), selfRoleId: 'self', pve: {
-        mode: 'match', chapterId: 1, levelId: 1, territoryCellId: 327, hpRate: 1, attackRate: 1,
+    const pve = {
+        mode: 'match', chapterId: 1, levelId: 1, territoryCellId: 327, hpRate: 0.2, attackRate: 0.3,
         enemyCardIds: [68001], enemyTeamCardIds: [[68001], [68001], [68001]], waves: [], playerCount: 4,
-    } });
+    };
+    procedure.onEnter({ battle: battle([68001], [68002]), selfRoleId: 'self', pve });
     assert.ok(initialized);
     assert.deepEqual((initialized as { matchConfig: typeof source }).matchConfig.enemyDeck
         .filter((card) => card.unitId !== undefined).map((card) => Number(card.unitId)), [68002]);
+    const actual = (initialized as { matchConfig: typeof source }).matchConfig;
+    const expected = buildZCClientCombatConfig(source, battle([68001], [68002]), 'self').config;
+    assert.deepEqual(actual.modifiers, expected.modifiers, '本地关卡倍率不得追加到修改器');
+    const start = battle([68001], [68002]);
+    const server = { ...start, units: start.units.map((unit) => ({
+        ...unit, buffs: parseBattleBuffs([{ source: 1, buffs: ['levelAttackRatio', '0.8', 'levelHpRatio', '0.8'] }]),
+    })) };
+    procedure.preparedResources = { baseMatchConfig: source };
+    procedure.onEnter({ battle: server, selfRoleId: 'self', pve });
+    const combined = (initialized as { matchConfig: typeof source }).matchConfig;
+    assert.deepEqual(combined, buildZCClientCombatConfig(source, server, 'self').config,
+        '服务端倍率与本地关卡参数同时存在时，也只采用服务端');
+    procedure.preparedResources = { baseMatchConfig: source };
+    procedure.onEnter({ selfRoleId: 'self', pve });
+    const local = (initialized as { matchConfig: typeof source }).matchConfig;
+    assert.deepEqual(local.ownerRates, {}, '没有服务端数据时不补本地倍率');
+    assert.ok(Object.values(local.modifiers ?? {}).flat().every((loadout) => !loadout.sourceKey.startsWith('territory:')));
+});
+
+test('服务端倍率独立作用于成长后的属性，保留英雄技能参数且不串阵营', () => {
+    const source = prepare(4);
+    const plain = buildZCClientCombatConfig(source, battle(), 'self').config;
+    const start = battle();
+    const buffed = { ...start, units: start.units.map((unit) => unit.roleId === 'self' ? {
+        ...unit, buffs: parseBattleBuffs([{ source: 1, buffs: ['levelAttackRatio', '0.8', 'levelHpRatio', '0.5'] }]),
+    } : unit) };
+    const config = buildZCClientCombatConfig(source, buffed, 'self').config;
+    assert.deepEqual(config.modifiers, plain.modifiers, '倍率不能占用英雄修改器和 rawAttributes');
+    const before = compileZCMatchRuntime(plain);
+    const after = compileZCMatchRuntime(config);
+    for (const unit of source.units) {
+        assert.equal(after.effectiveDefinitions.player.get(unit.unitId)?.attack,
+            before.effectiveDefinitions.player.get(unit.unitId)!.attack * 0.8);
+        assert.equal(after.effectiveDefinitions.player.get(unit.unitId)?.maxHp,
+            before.effectiveDefinitions.player.get(unit.unitId)!.maxHp * 0.5);
+    }
+    assert.deepEqual(after.legacyAttributes, before.legacyAttributes);
+    assert.deepEqual(after.effectiveDefinitions.enemy, before.effectiveDefinitions.enemy);
 });
 
 test('自选主城配置可在显式预备模式下完成客户端构筑', () => {

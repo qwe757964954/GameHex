@@ -21,13 +21,13 @@ const { ccclass, property } = _decorator;
 @ccclass('HangGearSwitch')
 export class HangGearSwitch extends Component {
     @property({ type: Label, tooltip: '`x5` 角标（FGUI `times_text`）' })
-    timesText: Label = null!;
+    timesText: Label = null;
 
     @property({ type: Button, tooltip: '整块按钮（FGUI `extention="Button"`）' })
-    button: Button = null!;
+    button: Button = null;
 
     @property({ type: Node, tooltip: '内嵌 `按钮_公共_通用` 的小箭头（FGUI `change_btn`）' })
-    arrow: Node = null!;
+    arrow: Node = null;
 
     private _onTap: (() => void) | null = null;
 

@@ -205,16 +205,11 @@ export class GMManager extends Component {
 
     openPanel(): void {
         const mgr = PopupManager.inst;
-        if (!mgr) {
-            console.error('[GM] PopupManager 不可用（场景缺少常驻 Popup 节点）');
-            return;
-        }
         void mgr.openAsync(GMPanel, { layer: PopupLayer.SYSTEM, userData: {} });
     }
 
     togglePanel(): void {
         const mgr = PopupManager.inst;
-        if (!mgr) return;
         const panel = mgr.get(GMPanel);
         if (panel) {
             panel.close();

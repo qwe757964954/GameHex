@@ -31,6 +31,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
+import { assetPath } from './helpers/asset-paths';
 
 const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
@@ -89,7 +90,7 @@ test('声明类型与 prefab 引用一一对应（绑成 Node 却声明组件 �
     const unbound: string[] = [];
     let checked = 0;
 
-    for (const prefab of walk('assets/resources/ui', '.prefab')) {
+    for (const prefab of walk(assetPath('ui'), '.prefab')) {
         const o = JSON.parse(readFileSync(prefab, 'utf8')) as Array<Record<string, any>>;
         // 根 PrefabInfo 的 targetOverrides（跨嵌套实例引用的正确形态）
         const rootNode = o.find((e) => e && e.__type__ === 'cc.Node' && e._parent == null) ?? o[1];

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
+import { assetPath } from './helpers/asset-paths';
 
 const PROJECT_ROOT = process.cwd();
 const LEGACY_TAB_ASSETS = [
@@ -32,7 +33,7 @@ test('主页页签改版后删除旧 tab_bg 资源和所有代码、Prefab 引�
 
     const consumers = [
         ...filesUnder('assets/script/app'),
-        ...filesUnder('assets/resources/ui'),
+        ...filesUnder(assetPath('ui')),
     ];
     for (const path of consumers) {
         const source = readFileSync(join(PROJECT_ROOT, path), 'utf8');
@@ -45,7 +46,7 @@ test('主页页签改版后删除旧 tab_bg 资源和所有代码、Prefab 引�
 test('礼包、首充、限时活动和共用页签都接主页金色选中底板', () => {
     const navSelUuid = '5aa83ea4-4ad3-4935-9da7-c6081617404f@f9941';
     const gift = JSON.parse(readFileSync(
-        join(PROJECT_ROOT, 'assets/resources/ui/Gift/Gift.prefab'), 'utf8',
+        join(PROJECT_ROOT, assetPath('ui/Gift/Gift.prefab')), 'utf8',
     )) as Array<Record<string, unknown>>;
     const giftBindings = gift.filter((item) => Object.prototype.hasOwnProperty.call(item, 'selectedFrame'));
     assert.equal(giftBindings.length, 3, '礼包三个大页签都要接主页选中图');
@@ -54,7 +55,7 @@ test('礼包、首充、限时活动和共用页签都接主页金色选中底�
     }
 
     const firstRecharge = JSON.parse(readFileSync(
-        join(PROJECT_ROOT, 'assets/resources/ui/FirstRecharge/FirstRecharge.prefab'), 'utf8',
+        join(PROJECT_ROOT, assetPath('ui/FirstRecharge/FirstRecharge.prefab')), 'utf8',
     )) as Array<Record<string, unknown>>;
     const tierBindings = firstRecharge.filter((item) => Object.prototype.hasOwnProperty.call(item, 'selectedFrame'));
     assert.equal(tierBindings.length, 4, '首充四个档位都要接主页选中图');
@@ -64,14 +65,14 @@ test('礼包、首充、限时活动和共用页签都接主页金色选中底�
     }
 
     const limitTimeAct = JSON.parse(readFileSync(
-        join(PROJECT_ROOT, 'assets/resources/ui/LimitTimeAct/LimitTimeAct.prefab'), 'utf8',
+        join(PROJECT_ROOT, assetPath('ui/LimitTimeAct/LimitTimeAct.prefab')), 'utf8',
     )) as Array<Record<string, unknown>>;
     const limitTimeBinding = limitTimeAct.find((item) => Object.prototype.hasOwnProperty.call(item, 'selectedTabFrame'));
     assert.ok(limitTimeBinding, '限时活动页签必须在 prefab 上绑定选中底板');
     assert.deepEqual(limitTimeBinding!.selectedTabFrame, { __uuid__: navSelUuid, __expectedType__: 'cc.SpriteFrame' });
 
     const sharedTab = JSON.parse(readFileSync(
-        join(PROJECT_ROOT, 'assets/resources/ui/common/TabButton.prefab'), 'utf8',
+        join(PROJECT_ROOT, assetPath('ui/common/TabButton.prefab')), 'utf8',
     )) as Array<Record<string, unknown>>;
     const sharedBinding = sharedTab.find((item) => Object.prototype.hasOwnProperty.call(item, 'onBgFrame'));
     assert.ok(sharedBinding, '共用 TabButton 需要序列化选中态资源');

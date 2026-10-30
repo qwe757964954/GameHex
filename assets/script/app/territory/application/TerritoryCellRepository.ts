@@ -97,12 +97,15 @@ export class TerritoryCellRepository {
         return this.state;
     }
 
-    /** 排除主动拉取同步广播的响应，避免按推送重复合并。 */
-    private fetchInProgress = false;
+    /** 只排除请求回调实际收到的响应对象；在途请求不能吞掉其它章节或主动推送。 */
+    private readonly fetchedResponses = new WeakSet<object>();
 
     /** 解析页面收到的完整快照；请求响应由 fetchChapterCells 自己处理。 */
-    readCellInfo(msg: unknown, maxCell: number): ITerritoryCellState | null {
-        if (this.fetchInProgress) return null;
+    readCellInfo(msg: unknown, maxCell?: number): ITerritoryCellState | null {
+        if (msg && typeof msg === 'object' && this.fetchedResponses.has(msg)) {
+            this.fetchedResponses.delete(msg);
+            return null;
+        }
         const record = msg as { levelChapter?: unknown } | null;
         const chapter = this.normalizeChapter(Number(record?.levelChapter));
         const state = this.readState(msg, chapter, maxCell, true);
@@ -136,27 +139,21 @@ export class TerritoryCellRepository {
         caller?: object,
     ): Promise<TerritoryCellFetchResult> {
         const chapter = this.normalizeChapter(levelChapter);
-        // 标记在途 fetch：响应到达时（同一次收包同步广播）readCellInfo 据此忽略，
-        // 不把自己的响应当主动推重复落地。
-        this.fetchInProgress = true;
-        try {
-            let resolved: ITerritoryCellState | null = null;
-            const sent = await this.send(
-                () => new RequestTerritoryCellInfo({ levelChapter: chapter }, caller, (rsp) => {
-                    resolved = this.readState(rsp, chapter, maxCell);
-                }),
-                '[TerritoryCell] 拉取章节格子信息失败',
-            );
-            if (sent !== TERRITORY_REQUEST_STATUS.ok) return this.failFetch(sent, chapter);
-            // ⚠️ `ok` 只代表**包发出去了且没抛**，回调可能还没跑（超时兜底会先返回）。
-            // 这里必须判null ⇒ invalid，而不是拿 `emptyCellState` 当正常结果 ——
-            // 否则"回包没到"会表现成"服务端说这章一个格子都没有"。
-            if (!resolved) return this.failFetch(TERRITORY_REQUEST_STATUS.invalid, chapter);
-            this.state = resolved;
-            return { ok: true, state: resolved };
-        } finally {
-            this.fetchInProgress = false;
-        }
+        let resolved: ITerritoryCellState | null = null;
+        const sent = await this.send(
+            () => new RequestTerritoryCellInfo({ levelChapter: chapter }, caller, (rsp) => {
+                if (rsp && typeof rsp === 'object') this.fetchedResponses.add(rsp);
+                resolved = this.readState(rsp, chapter, maxCell);
+            }),
+            '[TerritoryCell] 拉取章节格子信息失败',
+        );
+        if (sent !== TERRITORY_REQUEST_STATUS.ok) return this.failFetch(sent, chapter);
+        // ⚠️ `ok` 只代表**包发出去了且没抛**，回调可能还没跑（超时兜底会先返回）。
+        // 这里必须判null ⇒ invalid，而不是拿 `emptyCellState` 当正常结果 ——
+        // 否则"回包没到"会表现成"服务端说这章一个格子都没有"。
+        if (!resolved) return this.failFetch(TERRITORY_REQUEST_STATUS.invalid, chapter);
+        this.state = resolved;
+        return { ok: true, state: resolved };
     }
 
     /**
@@ -331,7 +328,7 @@ export class TerritoryCellRepository {
     private readState(
         rsp: unknown,
         chapter: number,
-        maxCell: number,
+        maxCell: number | undefined,
         quiet: boolean = false,
     ): ITerritoryCellState | null {
         if (!rsp || typeof rsp !== 'object') return null;

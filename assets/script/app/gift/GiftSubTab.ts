@@ -17,13 +17,13 @@ const { ccclass, property } = _decorator;
 @ccclass('GiftSubTab')
 export class GiftSubTab extends Component {
     @property({ type: Sprite, tooltip: 'Bg：底图（未选 / 选中两张切换）' })
-    bg: Sprite = null!;
+    bg: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'TitleArt：标题图（保留上一帧，拿不到不切）' })
-    titleArt: Sprite = null!;
+    titleArt: Sprite = null;
 
     @property({ type: Button, tooltip: 'Button：本节点上的 cc.Button' })
-    button: Button = null!;
+    button: Button = null;
 
     /** 本页签在列表里的下标（宿主 `bind` 时写入）。 */
     private index = 0;

@@ -8,6 +8,7 @@ import { getPvpRuntimeRules, loadPvpTables, ZCPvpTables } from '../assets/script
 import { captureZCMatchConfig, ZCMatchConfig } from '../assets/script/app/zcds/model/ZCMatchConfig';
 import { createPvpTileTypes, ZCPvpTileType } from '../assets/script/app/zcds/model/ZCPvpTileRules';
 import { createSeededRandom } from '../assets/script/app/zcds/model/ZCSeededRandom';
+import { assetPath } from './helpers/asset-paths';
 
 /**
  * 初始地块的「金矿保底」口径（2026-09-30 由「全场合计」改成「每席位各保底」）。
@@ -33,9 +34,9 @@ loadPvpTables(tables);
 /** 地图目录只在 `ZCGame.ts` 里定义一次，这里读回来，避免路径在两处漂移。 */
 const MAP_DIRECTORY = readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8')
     .match(/MAP_DIRECTORY = '([^']+)'/)![1];
-const candidateLayouts = readdirSync(`assets/resources/${MAP_DIRECTORY}`)
+const candidateLayouts = readdirSync(assetPath(`${MAP_DIRECTORY}`))
     .filter((name) => name.endsWith('.json'))
-    .map((name) => JSON.parse(readFileSync(`assets/resources/${MAP_DIRECTORY}/${name}`, 'utf8')) as ZCMapLayout)
+    .map((name) => JSON.parse(readFileSync(assetPath(`${MAP_DIRECTORY}/${name}`), 'utf8')) as ZCMapLayout)
     .filter((layout) => isRandomMapCandidate(layout, null));
 
 const SEEDS = 24;

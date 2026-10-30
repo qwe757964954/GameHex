@@ -1,14 +1,16 @@
 export const BIGMAP_CONCEPT_ROOT = 'image/bigmap/concept';
+export const BIGMAP_BASE_BACKGROUND = 'image/bigmap/base_background';
 
+/** 按 `baseBuilding.baseBuildType` 回退，不能再按旧版八个建筑 ID 对图。 */
 export const BIGMAP_BUILDING_ART: Readonly<Record<number, string>> = {
-    71001: 'headquarters',
-    71002: 'farm',
-    71003: 'sawmill',
-    71004: 'ironworks',
-    71005: 'warehouse',
-    71006: 'water_tower',
-    71007: 'construction',
-    71008: 'rocks',
+    1: 'headquarters',
+    2: 'farm',
+    3: 'sawmill',
+    4: 'ironworks',
+    5: 'warehouse',
+    6: 'water_tower',
+    7: 'construction',
+    8: 'rocks',
 };
 
 export const BIGMAP_UI_KEYS = ['header', 'detail', 'button', 'tab_idle', 'tab_active', 'badge', 'plot', 'stamina', 'home'] as const;

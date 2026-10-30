@@ -72,31 +72,31 @@ export class RenamePage extends PopupBase {
 
     // ---------- 弹窗框 ----------
     @property({ type: Node, tooltip: 'PopBg/CloseBtn：关闭按钮' })
-    closeButton: Node = null!;
+    closeButton: Node = null;
 
     // ---------- 输入 ----------
     @property({ type: EditBox, tooltip: 'NameInput：姓名输入框（FGUI `文本_输入姓名`）' })
-    nameInput: EditBox = null!;
+    nameInput: EditBox = null;
 
     // ---------- 按钮 ----------
     @property({ type: Node, tooltip: 'FreeBtn：「免费」（FGUI `按钮_免费`，绿底，免费页显示）' })
-    freeButton: Node = null!;
+    freeButton: Node = null;
 
     @property({ type: Node, tooltip: 'ConfirmBtn：「确定」（FGUI `按钮_确定`，付费页显示）' })
-    confirmButton: Node = null!;
+    confirmButton: Node = null;
 
     @property({ type: Sprite, tooltip: 'ConfirmBtn/CostIcon：消耗图标（改名卡 / 金币）' })
-    confirmCostIcon: Sprite = null!;
+    confirmCostIcon: Sprite = null;
 
     @property({ type: Label, tooltip: 'ConfirmBtn/CostLabel：消耗数量（`x1` / `x500`）' })
-    confirmCostLabel: Label = null!;
+    confirmCostLabel: Label = null;
 
     // ---------- 底部 ----------
     @property({ type: Label, tooltip: 'TipsLabel：「剩余免费次数：N」（FGUI `text_tips`，原稿是 UBB）' })
-    tipsLabel: Label = null!;
+    tipsLabel: Label = null;
 
     @property({ type: Node, tooltip: 'GmBtn：彩蛋按钮（FGUI `组件_GM开关`），不挂也不影响主流程' })
-    gmButton: Node = null!;
+    gmButton: Node = null;
 
     /**
      * 敏感词检查器（注入点）。

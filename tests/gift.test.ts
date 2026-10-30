@@ -75,6 +75,7 @@ import {
     resolveGiftIconRef,
 } from '../assets/script/app/gift/GiftArt';
 import { formatText, GIFT_TEXTS } from '../assets/script/app/gift/GiftTexts';
+import { assetPath } from './helpers/asset-paths';
 
 // ============================================================
 // 夹具：直接读工程真实配置表（策划改表 ⇒ 本段立刻红，是有意的）
@@ -357,7 +358,7 @@ test('B2 `giftArtPath` 未知键返回 null（不拼出半个路径去 load）',
 });
 
 test('B3 大页签在 prefab 上绑定主页同款金色选中底板', () => {
-    const prefab = JSON.parse(readFileSync('assets/resources/ui/Gift/Gift.prefab', 'utf8')) as Array<Record<string, unknown>>;
+    const prefab = JSON.parse(readFileSync(assetPath('ui/Gift/Gift.prefab'), 'utf8')) as Array<Record<string, unknown>>;
     const tabs = prefab.filter((item) => Object.prototype.hasOwnProperty.call(item, 'selectedFrame'));
     assert.equal(tabs.length, 3, '三个大页签都要绑定选中资源');
     for (const tab of tabs) {
@@ -425,7 +426,7 @@ test('B6 品质框：`clamp(quality − 1, 1, 4)` —— 与七日狂欢**同算
 // C. prefab 结构 + 几何
 // ============================================================
 
-const PREFAB_PATH = 'assets/resources/ui/Gift/Gift.prefab';
+const PREFAB_PATH = assetPath('ui/Gift/Gift.prefab');
 
 /** 编辑器压缩 uuid：前 5 个 hex 原样 + 其余 27 个 hex 每 3 个编 2 个 base64 字符 = 23 位。 */
 function compressUuid(uuid: string): string {

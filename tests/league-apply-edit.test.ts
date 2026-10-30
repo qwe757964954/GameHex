@@ -23,7 +23,7 @@
  *     `公用0/package.xml`（图 id → 文件名反查）
  *   - 老端：`client/assets/script/app/game/ctrl/main/league/play/LayerLeagueHallApprove.ts`、
  *     `…/LayerLeagueEdit.ts`
- *   - 本项目：`assets/script/app/league/**`、`assets/resources/ui/League/*.prefab`
+ *   - 本项目：`assets/script/app/league/**`、assetPath(`ui/League/*.prefab`)
  *
  * ## ⚠️ 三条**刻意与 FGUI 原稿不同**（理由见各页面类文件头）
  *
@@ -84,6 +84,7 @@ import {
     LEAGUE_EDIT_TITLE,
     LEAGUE_HALL_WX_PREFIX,
 } from '../assets/script/app/league/LeagueTexts';
+import { assetExists, assetPath } from './helpers/asset-paths';
 
 // ============================================================
 // A. 文案口径
@@ -193,7 +194,7 @@ test('B4 申请行与详情行的**同图 / 异图**关系', () => {
 });
 
 test('B5 申请行 6 张图 + 通用按钮 2 张都必须真的在磁盘上（拷漏不报错，只是渲染空白）', () => {
-    const leagueDir = 'assets/resources/image/league';
+    const leagueDir = assetPath('image/league');
     for (const name of [
         LEAGUE_ART_APPLY_ROW_BG, LEAGUE_ART_APPLY_ROW_POWER_DECO, LEAGUE_ART_APPLY_ROW_HEAD_FRAME,
         LEAGUE_ART_APPLY_ROW_LEVEL_BADGE, LEAGUE_ART_APPLY_ROW_POWER_BAR,
@@ -205,7 +206,7 @@ test('B5 申请行 6 张图 + 通用按钮 2 张都必须真的在磁盘上（�
     }
     // 弹窗骨架三张在 image/common
     for (const name of [LEAGUE_ART_POPUP_TITLE_BG, LEAGUE_ART_POPUP_TITLE_DECO, LEAGUE_ART_POPUP_CLOSE]) {
-        assert.ok(existsSync(`assets/resources/image/common/${name}.png`), `缺图：image/common/${name}.png`);
+        assert.ok(existsSync(assetPath(`image/common/${name}.png`)), `缺图：image/common/${name}.png`);
     }
 });
 
@@ -264,13 +265,13 @@ test('C4 `normalizeLeagueApply`：`applyId` 空或 `0` 的脏行要丢', () => {
 // D. prefab 结构 + 几何
 // ============================================================
 
-const APPLY_PREFAB = 'assets/resources/ui/League/LeagueApplyList.prefab';
-const EDIT_PREFAB = 'assets/resources/ui/League/LeagueEdit.prefab';
-const PREVIEW_PREFAB = 'assets/resources/ui/League/LeagueLevelPreview.prefab';
+const APPLY_PREFAB = assetPath('ui/League/LeagueApplyList.prefab');
+const EDIT_PREFAB = assetPath('ui/League/LeagueEdit.prefab');
+const PREVIEW_PREFAB = assetPath('ui/League/LeagueLevelPreview.prefab');
 const APPLY_LIST_PAGE_TS = 'assets/script/app/league/LeagueApplyListPage.ts';
 const EDIT_PAGE_TS = 'assets/script/app/league/LeagueEditPage.ts';
 const APPLY_ROW_TS = 'assets/script/app/league/LeagueApplyRow.ts';
-const BOARD_DIR = 'assets/resources/image/league';
+const BOARD_DIR = assetPath('image/league');
 const UI_2D = 33554432;
 
 type Entry = Record<string, unknown>;
@@ -581,7 +582,7 @@ test('D10b ⚠️ 通用按钮内文案的 y 一律 = −1（`Top_Middle` 解算
         }
     }
     // 对照：已收口的母面板操作浮层是第 3 刀的 +9，本刀**不沿用**（记录差异，便于将来统一）
-    const hall = JSON.parse(readFileSync('assets/resources/ui/League/LeagueHall.prefab', 'utf8')) as Entry[];
+    const hall = JSON.parse(readFileSync(assetPath('ui/League/LeagueHall.prefab'), 'utf8')) as Entry[];
     const hallAt = (r: unknown) => (r && typeof r === 'object' && '__id__' in (r as Entry) ? hall[(r as { __id__: number }).__id__]! : null);
     const hallLabels = hall.filter((e) => e?.__type__ === 'cc.Node' && e._name === 'Label')
         .map((n) => ((n._lpos ?? {}) as { y?: number }).y);
@@ -756,14 +757,17 @@ test('E1 两个页面类 `prefabPath` 大小写与磁盘一致，且继承 Popup
     assert.ok(/export class LeagueApplyListPage extends PopupBase/.test(list));
     assert.ok(/export class LeagueEditPage extends PopupBase/.test(editSrc));
     // 目录大小写必须与磁盘一致（热更新 zip 内路径大小写敏感）
-    assert.ok(existsSync('assets/resources/ui/League/LeagueApplyList.prefab'));
-    assert.ok(existsSync('assets/resources/ui/League/LeagueEdit.prefab'));
+    assert.ok(assetExists('ui/League/LeagueApplyList.prefab'));
+    assert.ok(assetExists('ui/League/LeagueEdit.prefab'));
 });
 
 test('E2 ⚠️ 申请列表三处时序 / 两道闸门', () => {
     const src = stripComments(readFileSync(APPLY_LIST_PAGE_TS, 'utf8'));
-    // renderItemFn 只绑一次（放 onOpen 会随每次打开重复叠加）
-    assert.ok(/rendererBound/.test(src) && /if \(!this\.rendererBound\)/.test(src), 'renderItemFn 要只绑一次');
+    // renderItemFn 在 onInit 里赋一次即可：`PopupBase._inited` 已保证 onInit 每实例只跑一次，
+    // 所以不再需要「只绑一次」的布尔门闩（2026-10-30 统一清理）；也不能挪到 onOpen（那里每次打开都跑）。
+    assert.ok(!/if \(!this\.rendererBound\)/.test(src), '不再用「只绑一次」门闩（onInit 每实例只跑一次）');
+    const initBody = src.slice(src.indexOf('protected onInit(): void {'), src.indexOf('protected async onOpen'));
+    assert.ok(initBody.includes('this.applyList.renderItemFn = '), 'renderItemFn 要在 onInit 里赋一次');
     assert.ok(/this\.applyList\.renderItemFn = /.test(src));
     // ⚠️ VirtualScrollView 在 start() 里建槽位，onOpen 早于 start ⇒ 必须 defer 一帧
     assert.ok(/await this\.nextPopupFrame\(\)/.test(src), '取数后要 defer 一帧再 refreshList');

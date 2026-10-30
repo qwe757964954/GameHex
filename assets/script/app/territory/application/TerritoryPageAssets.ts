@@ -22,17 +22,16 @@ import {
 export interface ITerritoryBattleArt {
     readonly background: SpriteFrame | null;
     /**
-     * 关卡气泡底图（蓝）：`image/spawn-region/frame_03`。
+     * 关卡气泡底图（**已通关**）：蓝 `image/spawn-region/frame_03`。
      *
-     * 🔴 2026-10-28 16:23 用户：气泡**统一蓝色**（此前试过「已通关绿 / 未通关红」，已否决）。
-     * 与 {@link levelBubblePendingFrame} 目前指向同一张图。
+     * 🔴 2026-10-29：气泡按「通没通过」二选一 —— 已通关蓝 / **未通关红**（{@link levelBubblePendingFrame}）。
+     * 初始点位（「章节」）也走这一张：它不是「待挑战的关卡」，不该跟着未通关一起变红。
      */
     readonly levelBubbleFrame?: SpriteFrame | null;
     /**
-     * **未通关**关卡的气泡底图 —— 与 {@link levelBubbleFrame} 同图（蓝色 `frame_03`）。
+     * **未通关**关卡的气泡底图：红 `image/spawn-region/frame_02`（2026-10-29 用户口径）。
      *
-     * 字段保留是为了不打乱二选一管线：将来要重新分色只改 `MapMarkerBadge` 的常量即可。
-     * 取不到时视图回退到 {@link levelBubbleFrame}（宁可同色一下，也不能没气泡 ——
+     * 取不到时视图回退到 {@link levelBubbleFrame}（宁可蓝一下，也不能没气泡 ——
      * 编号是这一格唯一的关卡标识）。
      */
     readonly levelBubblePendingFrame?: SpriteFrame | null;
@@ -276,9 +275,9 @@ export async function loadTerritoryBattleArt(
         loadFrame(assets, spriteFramePath(COMMON_ART_ROOT, 'cu_ty_btn09')),
         loadFrame(assets, spriteFramePath(COMMON_ART_ROOT, 'cu_ty_btn13')),
         loadBuildAssets(assets),
-        // 气泡底图：**统一蓝色** `frame_03`（2026-10-28 16:23 用户否决了绿/红分色）。
-        // 两个槽位指向同一张图，第二次 load 直接命中 AssetService 缓存；留两档是为了
-        // 将来重新分色时只改 `MapMarkerBadge` 常量，不用动这里的 Promise.all 顺序。
+        // 气泡底图：已通关蓝 `frame_03` / **未通关红 `frame_02`**（2026-10-29 用户口径）。
+        // 两张都是 `spawn-region` 下 94×45 带小尾巴的同款异色图，槽位二选一由
+        // `stationRenderOf` 的 `claimed` 决定；顺序必须与上面的解构对齐。
         loadFrame(assets, MAP_MARKER_BUBBLE_FRAME_PASSED_PATH),
         loadFrame(assets, MAP_MARKER_BUBBLE_FRAME_PENDING_PATH),
     ]);

@@ -41,7 +41,7 @@ import {
 } from '../model/TerritoryMapLayout';
 import type { TerritoryMapConfig, TerritorySite, TerritorySiteType } from '../model/TerritoryMapConfig';
 import { TERRITORY_SITE_TYPE } from '../model/TerritoryMapConfig';
-import type { TerritoryProgress } from '../model/TerritoryProgress';
+import type { ITerritoryProgressView } from '../application/TerritoryViewState';
 import type {
     ITerritoryStationLayers,
     ITerritoryStationRender,
@@ -49,6 +49,7 @@ import type {
 } from './TerritoryStationView';
 import { TerritoryStationView, territoryUsesBottomAnchor } from './TerritoryStationView';
 import { TERRITORY_EVENTS } from './TerritoryEvents';
+import { TerritoryUiEvent } from '../application/TerritoryEvents';
 import { TERRITORY_HEX_REVEAL_NODE, TerritoryHexFlip } from './TerritoryHexFlip';
 import { TerritoryHexSpawn } from './TerritoryHexSpawn';
 import { territoryHexSpawnDelays } from '../model/TerritoryHexSpawn';
@@ -160,19 +161,17 @@ export interface ITerritoryMapArt {
     readonly randomSilverIcon: SpriteFrame | null;
     readonly bonus: SpriteFrame | null;
     /**
-     * 关卡编号气泡底图（蓝，`image/spawn-region/frame_03`）。
+     * 关卡编号气泡底图（**已通关**，蓝 `image/spawn-region/frame_03`）。
      *
-     * 🔴 2026-10-28 16:23 用户：「改回蓝色」⇒ 气泡**不再按通关状态分色**，所有格子同一张。
-     * （此前试过「已通关绿 / 未通关红」，判据是 `progress.isAreaPassed`，已否决。）
-     * 通关状态改由**地皮图**（`img_land_01` 草地 / `img_land_02` 泥土）表达，
-     * 气泡只负责「这一格是第几关」这件事。
+     * 🔴 2026-10-29：气泡按「通没通过」二选一 —— 已通关蓝 / 未通关红，判据是 `progress.isAreaPassed`。
+     * 初始点位（「章节」）也用这一张，跟「已通关」同色。
      */
     readonly levelBubbleFrame?: SpriteFrame | null;
     /**
-     * 关卡编号气泡的**未通关**槽位 —— 目前与 {@link levelBubbleFrame} 同图（蓝色）。
+     * 关卡编号气泡的**未通关**槽位（红 `image/spawn-region/frame_02`）。
      *
-     * 字段保留只为不打乱二选一管线；取不到时回退 {@link levelBubbleFrame}：
-     * 宁可同色一下，也不能没气泡 —— 编号是这一格唯一的关卡标识（`stationRenderOf` 里做兜底）。
+     * 取不到时回退 {@link levelBubbleFrame}：宁可蓝一下，也不能没气泡 ——
+     * 编号是这一格唯一的关卡标识（`stationRenderOf` 里做兜底）。
      */
     readonly levelBubblePendingFrame?: SpriteFrame | null;
     /**
@@ -293,7 +292,7 @@ export interface ITerritoryMapRenderInput {
     readonly map: TerritoryMapConfig;
     readonly layout: ITerritoryMapLayout;
     readonly art: ITerritoryMapArt;
-    readonly progress: TerritoryProgress;
+    readonly progress: ITerritoryProgressView;
     readonly revealedCells: readonly number[];
     readonly siteOpenableCells: readonly number[];
     /** cellId → 已绑定的关卡；固定资源点不绑定战斗关卡。 */
@@ -350,31 +349,31 @@ export class TerritoryMapView extends Component {
      * 渲染序同理：它必须是 `MapLayer` 的**第一个子节点**，格子才画在背景上（子节点顺序 = 渲染序）。
      */
     @property({ type: Sprite, group: '节点引用', tooltip: 'MapLayer/MapBackground：随地图一起滑动的底图（须是 MapLayer 第一个子节点）' })
-    mapBackground: Sprite = null!;
+    mapBackground: Sprite = null;
 
     @property({ type: Node, group: '节点引用', tooltip: 'GridLayer：六边格容器（按 cellId 复用）' })
-    gridLayer: Node = null!;
+    gridLayer: Node = null;
 
     @property({ type: Node, group: '节点引用', tooltip: 'StationIconLayer：连续渲染全部建筑图标' })
-    stationIconLayer: Node = null!;
+    stationIconLayer: Node = null;
 
     @property({ type: Node, group: '节点引用', tooltip: 'StationCaptionLayer：连续渲染全部名称底条' })
-    stationCaptionLayer: Node = null!;
+    stationCaptionLayer: Node = null;
 
     @property({ type: Node, group: '节点引用', tooltip: 'StationTextLayer：连续渲染全部站点名称' })
-    stationTextLayer: Node = null!;
+    stationTextLayer: Node = null;
 
     @property({ type: Node, group: '节点引用', tooltip: 'StationBadgeLayer：连续渲染全部站点角标' })
-    stationBadgeLayer: Node = null!;
+    stationBadgeLayer: Node = null;
 
     @property({ type: Node, group: '节点引用', tooltip: 'StationHitLayer：只保存站点按钮根节点' })
-    stationHitLayer: Node = null!;
+    stationHitLayer: Node = null;
 
     @property({ type: Prefab, group: '节点引用', tooltip: '站点条目 prefab（ui/territory/TerritoryStation）' })
-    stationPrefab: Prefab = null!;
+    stationPrefab: Prefab = null;
 
     @property({ type: Prefab, group: '节点引用', tooltip: '资源飘字 prefab（ui/territory/TerritoryResourceGain）' })
-    gainPrefab: Prefab = null!;
+    gainPrefab: Prefab = null;
 
     /**
      * 开箱表演的覆盖层 prefab（`ui/territory/TerritoryChest`）。
@@ -383,7 +382,7 @@ export class TerritoryMapView extends Component {
      * 只取引用 + 每帧重画 —— 别再退回构造函数里 `new Node` 拼层级（Inspector 里看不见、改不了）。
      */
     @property({ type: Prefab, group: '节点引用', tooltip: '开箱表演 prefab（ui/territory/TerritoryChest）' })
-    chestPrefab: Prefab = null!;
+    chestPrefab: Prefab = null;
 
     /**
      * `MapLayer/GainLayer`：飘字容器（**必须是 MapLayer 的最后一个子节点**）。
@@ -391,7 +390,7 @@ export class TerritoryMapView extends Component {
      * 挂在 `MapLayer` 里 ⇒ 与格子同一坐标系、随地图一起滚动；排在最后 ⇒ 画在全部站点之上。
      */
     @property({ type: Node, group: '节点引用', tooltip: 'MapLayer/GainLayer：资源飘字容器（MapLayer 最后一个子节点）' })
-    gainLayer: Node = null!;
+    gainLayer: Node = null;
 
     /** cellId → 六边格节点。 */
     private readonly hexNodes = new Map<number, Node>();
@@ -650,7 +649,7 @@ export class TerritoryMapView extends Component {
     /** 散场镜头是否已起跑（起跑那帧要量基准、取对焦点、锁输入，只做一次）。 */
     private cloudDollyStarted = false;
     /** 散场镜头的对焦点（地图包围盒中心，只取一次）。 */
-    private cloudDollyOrigin: Vec3 = null!;
+    private cloudDollyOrigin: Vec3 = null;
 
     /** 页面注入：底部留白（顺带重写内容层偏移）。 */
     setContentPaddingBottom(padding: number): void {
@@ -1212,7 +1211,7 @@ export class TerritoryMapView extends Component {
         const node = instantiate(this.gainPrefab);
         node.layer = this.gainLayer.layer;
         node.setParent(this.gainLayer);
-        const view = node.getComponent(TerritoryResourceGainView)!;
+        const view = node.getComponent(TerritoryResourceGainView);
         this.activeGains.push(view);
         return view;
     }
@@ -1444,7 +1443,7 @@ export class TerritoryMapView extends Component {
      */
     private syncContentSize(layout: ITerritoryMapLayout, rows: number, columns: number): void {
         const content = territoryMapContentSize(layout, this.contentPaddingBottom, this.contentPaddingTop);
-        this.node.getComponent(UITransform)!.setContentSize(content.width, content.height);
+        this.node.getComponent(UITransform).setContentSize(content.width, content.height);
         // 云要铺满**整块内容层**（不只格位）：内容层四周还留着留白的空白，
         // 滚到边缘时那条空白会露出底图（用户 2026-10-23 截图 1 的红框）。
         this.clouds.setFillArea(content.width, content.height, rows, columns);
@@ -1484,7 +1483,7 @@ export class TerritoryMapView extends Component {
             input.layout, this.contentPaddingBottom, this.contentPaddingTop);
         if (!(width > 0) || !(height > 0)) return;
         const scale = Math.max(width / artWidth, height / artHeight);
-        this.mapBackground.node.getComponent(UITransform)!
+        this.mapBackground.node.getComponent(UITransform)
             .setContentSize(artWidth * scale, artHeight * scale);
     }
 
@@ -1886,7 +1885,7 @@ export class TerritoryMapView extends Component {
      *  也不动 `cellCenter` 的落点口径。帧缺失时退回设计值，不写 0×0（那会让整格消失且不报错）。
      */
     private applyTileFrame(node: Node, frame: SpriteFrame | null): void {
-        const sprite = node.getComponent(Sprite)!;
+        const sprite = node.getComponent(Sprite);
         if (sprite.spriteFrame !== frame) sprite.spriteFrame = frame;
         sprite.enabled = frame !== null;
         // 地皮恒白：状态不再靠染色，染色会把成品美术的明暗压脏。
@@ -1894,7 +1893,7 @@ export class TerritoryMapView extends Component {
         const size = frame?.originalSize;
         const width = size && size.width > 0 ? size.width : HEX_GRID_IMAGE_WIDTH;
         const height = size && size.height > 0 ? size.height : HEX_GRID_IMAGE_HEIGHT;
-        const transform = node.getComponent(UITransform)!;
+        const transform = node.getComponent(UITransform);
         const current = transform.contentSize;
         // 同值不写：`setContentSize` 会把节点标脏，而本函数每次渲染（每秒）都会走一遍。
         if (current.width === width && current.height === height) return;
@@ -1919,7 +1918,7 @@ export class TerritoryMapView extends Component {
         const size = frame.originalSize;
         const width = size && size.width > 0 ? size.width : HEX_GRID_FACE_WIDTH;
         const height = size && size.height > 0 ? size.height : HEX_GRID_FACE_HEIGHT;
-        const transform = sprite.node.getComponent(UITransform)!;
+        const transform = sprite.node.getComponent(UITransform);
         const current = transform.contentSize;
         if (current.width === width && current.height === height) return;
         transform.setContentSize(width, height);
@@ -1957,7 +1956,7 @@ export class TerritoryMapView extends Component {
                 badge: '',
                 interactive: false,
                 // 🔴 2026-10-28 山猫：初始点位也要有气泡，提示这里是「章节」入口。
-                // 底图走 `levelBubbleFrame`（现在与所有气泡同图，蓝色 `frame_03`）——
+                // 底图走 `levelBubbleFrame`（已通关那张蓝 `frame_03`，2026-10-29 起未通关才是红）——
                 // 初始点从开局就属于玩家，不该跟"待挑战"的格子长得不一样。
                 levelBubble: TERRITORY_START_BUBBLE_TEXT,
                 levelBubbleFrame: input.art.levelBubbleFrame ?? null,
@@ -2130,7 +2129,7 @@ export class TerritoryMapView extends Component {
         node.setParent(this.stationHitLayer);
         node.name = 'kind' in site ? `RandomResource_${site.cellId}` : `Site_${site.id}`;
         // ⚠️ 视图在 prefab 上（`TerritoryStation.prefab` 挂了 `TerritoryStationView`）。
-        const view = node.getComponent(TerritoryStationView)!;
+        const view = node.getComponent(TerritoryStationView);
         view.initialize(this.getStationLayers());
         // 站点点击不再逐节点挂监听：全局订阅 `STATION_TAP` 一次（见 `onEnable`）。
         // 起始格（`ensureStartView` 走 `clickable = false`）本来就不发。
@@ -2139,13 +2138,14 @@ export class TerritoryMapView extends Component {
     }
 
     /** 站点点击转发：站点节点事件 → 地图容器节点事件（页面在 `mapView.node` 上收）。 */
-    private readonly onStationClick = (site: TerritoryStationTarget): void => {
+    private readonly onStationClick = (event: { readonly target: TerritoryStationTarget }): void => {
+        const site = event.target;
         // 表演期间的输入锁：直接吞掉（连点会再发一次解锁/领取请求，且动画位置会被刷新打断）。
         if (this.inputLocked) return;
         // 点击反馈必须在**转发之前**播：页面收到事件会发请求，请求期间有全屏 loading 遮挡，
         // 反馈若排在后面就永远被挡住（等于没做）—— 规格要求「按下 0.1s 内看到反馈」。
         this.playTapFeedback(site.cellId);
-        EventMgr.instance.emit(TERRITORY_EVENTS.STATION_CLICK, site);
+        EventMgr.instance.emit(TerritoryUiEvent.Intent, { intent: { kind: 'kind' in site ? 'randomTap' : 'siteTap', cellId: site.cellId } });
     };
 
     /** 起始格：唯一的固定实例（不可点、不池化），首次渲染时建。 */
@@ -2155,7 +2155,7 @@ export class TerritoryMapView extends Component {
         node.layer = this.stationHitLayer.layer;
         node.setParent(this.stationHitLayer);
         node.name = 'Start';
-        const view = node.getComponent(TerritoryStationView)!;
+        const view = node.getComponent(TerritoryStationView);
         view.initialize(this.getStationLayers(), false);
         this.startView = view;
         return view;
@@ -2265,9 +2265,9 @@ export class TerritoryMapView extends Component {
                 levelBubble: isAsyncPvp
                     ? TERRITORY_ASYNC_PVP_BUBBLE_TEXT
                     : stage ? `${stage.chapterId}-${stage.stage}` : undefined,
-                // 气泡底图**统一蓝色**（2026-10-28 16:23 用户改回）：两个槽位现在指同一张图，
-                // 但二选一管线保留 —— 将来要分色只改 `MapMarkerBadge` 常量，这里不用动。
-                // 通关状态由地皮图表达（草地 / 泥土），气泡只回答"这是第几关"。
+                // 气泡底图按「通没通过」二选一（2026-10-29 用户）：未通关红 `frame_02` / 已通关蓝 `frame_03`。
+                // 判据必须用**区域口径** `isAreaPassed`（同 `configId` 的兄弟格共享通关状态）；
+                // 红图没加载到时回退蓝图，别让这一格连编号都没有。
                 levelBubbleFrame: claimed
                     ? input.art.levelBubbleFrame ?? null
                     : input.art.levelBubblePendingFrame ?? input.art.levelBubbleFrame ?? null,

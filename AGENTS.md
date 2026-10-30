@@ -33,11 +33,11 @@
 | 🔴 代码建 Sprite 的**尺寸被原图回写**（`sizeMode` 必须先 CUSTOM 再赋 `spriteFrame`） | `docs/zcds-表现层与领地规范.md` §1.8 第五条；同坑 `app/gm/GMManager.ts`、`app/activity/ActivityProgressBox.ts` | `tests/zcds-artifact-claim-burst.test.ts` |
 | 传说卡出场横幅 (`ZCGameLegendBanner`) | `docs/zcds-表现层与领地规范.md` §2、§9.4 | `tests/zcds-legend-banner.test.ts` |
 | 「冒险」领地页 (`app/territory/**`) | `docs/zcds-表现层与领地规范.md` §3 | `tests/territory-presenter.test.ts`、`tests/territory-page-split.test.ts`、`tests/territory-cell-center-align.test.ts`、`tests/territory-hex-flip.test.ts`、`tests/territory-building-shake.test.ts`、`tests/territory-hex-spawn.test.ts` |
-| 领地关卡**气泡**：底图统一蓝 `frame_03` + 文案 `1-5` / `PVP` / `章节`；格面框普通关卡同首领红 | `docs/zcds-表现层与领地规范.md` §3.2 | `tests/territory-tile-frames.test.ts`、`tests/territory-level-bubble-style.test.ts`、`tests/territory-random-resource-render.test.ts` |
-| 领地地图**拖拽上下限**（顶部 HUD 底边 +15 / 底部挂件上沿 +50） | `docs/zcds-表现层与领地规范.md` §3.10 | `tests/territory-map-bottom-inset.test.ts`、`tests/territory-cloud.test.ts` |
+| 领地关卡**气泡**：底图按通关状态分色（未通关红 `frame_02` / 已通关蓝 `frame_03`）+ 文案 `1-5` / `PVP` / `章节`；格面框普通关卡同首领红 | `docs/zcds-表现层与领地规范.md` §3.2 | `tests/territory-tile-frames.test.ts`、`tests/territory-level-bubble-style.test.ts`、`tests/territory-random-resource-render.test.ts` |
+| 领地地图**拖拽上下限**（顶部 HUD 底边 +15 / 底部挂件上沿 +50）**+ 通关返回居中到刚打的格**（`focusCellId` 单次口令） | `docs/zcds-表现层与领地规范.md` §3.10 | `tests/territory-map-bottom-inset.test.ts`、`tests/territory-cloud.test.ts`、`tests/territory-return-focus.test.ts` |
 | 领地**已通关关卡可点 / 可重复挑战 / 照常扣体力** + 按钮费用图标 = 体力 | `docs/zcds-表现层与领地规范.md` §3.13 | `tests/territory-presenter.test.ts`、`tests/territory-two-step-render.test.ts`、`tests/territory-tile-frames.test.ts`、`tests/territory-level-panels.test.ts` |
 | 领地奖励**图标解析**（`roleProperty` + `item` 两张表，`item` 图在 `main-pages` 分包）+ 随机格**读数合成一条** | `docs/zcds-表现层与领地规范.md` §3.6 | `tests/res-types.test.ts`、`tests/territory-resource-gain.test.ts` |
-| 宝箱图标**飞进资源栏**（按 `resId` 分落点）+ 资源栏跳动/数字滚动/整条闪光；HUD 两格 = 银币 + 体力（`resKeys = gold,end`） | `docs/zcds-表现层与领地规范.md` §3.7 | `tests/main-resbar-feedback.test.ts`、`tests/main-resbar.test.ts`、`tests/territory-chest-animation.test.ts`、`tests/territory-resource-gain.test.ts` |
+| 宝箱图标**飞进资源栏**（按 `resId` 分落点）+ 资源栏跳动/数字滚动/整条闪光；HUD 两格 = 银币 + 体力（`resKeys = gold,end`）；开箱**层级**：箱口特效（`Stars`/`Rays`/`Glow`）在 `Chest` 之上、`Fountain` 之下，`Beam`/`Rainbow` 刻意留在箱体之下（顺序只活在 `ui/territory/TerritoryChest.prefab` 的 `_children`） | `docs/zcds-表现层与领地规范.md` §3.7；`docs/章节地图动画与点击反馈实现说明.md` §3.1.4 | `tests/main-resbar-feedback.test.ts`、`tests/main-resbar.test.ts`、`tests/territory-chest-animation.test.ts`、`tests/territory-chest-layer-order.test.ts`、`tests/territory-resource-gain.test.ts` |
 | 敌方单位暗色叠加 (`ZCUnitView`) | `docs/zcds-表现层与领地规范.md` §4 | `tests/zcds-unit-view-render.test.ts` |
 | 血条尺寸 / 扣血白条 (`ZCHealthBarDamageTrail`：0.13s 由右向左收没) | `docs/zcds-表现层与领地规范.md` §4.2、§4.3 | `tests/zcds-health-bar-damage-trail.test.ts`、`tests/zcds-progress.test.ts` |
 | 出局玩家**头像压黑** (`ZCGameHudPlayerRow` + `ZC_HUD_DEAD_AVATAR_TINT`) | `docs/zcds-表现层与领地规范.md` §4.4 | `tests/zcds-hud-dead-avatar-tint.test.ts` |
@@ -46,6 +46,9 @@
 | 金币掉落 vs 建筑产金**两条反向飘字**（`gold` 落地缩没 / `goldincome` 从建筑顶升 50px 淡出） | `docs/zcds-表现层与领地规范.md` §6.3、§6.4 | `tests/zcds-float-text-gold-drop.test.ts`、`tests/zcds-float-text-gold-income.test.ts` |
 | 开局归属扩散波 (`ZCClaimWave`) | `docs/zcds-表现层与领地规范.md` §7 | `tests/zcds-territory-claim-wave.test.ts` |
 | 胜利结算三段式扫场 (`ZCVictorySweep`) | `docs/zcds-表现层与领地规范.md` §9.1 | `tests/zcds-progress.test.ts`、`tests/zcds-outline-layer.test.ts` |
+| 🔴 结算扫场**按胜方本色铺地**（`winner` 由 `ZCOutcomeSystem` 判、经 `renderFrame.winner` 下发；**禁止用 status 反推**） | `docs/zcds-表现层与领地规范.md` §9.1 第 0 条 | `tests/zcds-victory-sweep-winner-color.test.ts`、`tests/zcds-outcome-system.test.ts` |
+| 废墟地块**底色按归属方混合灰**（`zcRuinsFactionColor` = 阵营色 × 废墟灰 `0.45`；中立原样灰） | `docs/zcds-表现层与领地规范.md` §1.9 | `tests/zcds-ruins-tile-color.test.ts` |
+| 🔴 废墟建筑**不再产金**（主城收入原来无条件发钱、飘字挂在 `homeId`；金矿靠 `building !== 'mine'` 兜住） | `docs/zcds-表现层与领地规范.md` §1.9 | `tests/zcds-ruins-income.test.ts` |
 | 开局金矿整圈描边呼吸 (`renderNeutralHint` / `strokeHintOutline`) | `docs/zcds-表现层与领地规范.md` §9.3 | `tests/zcds-neutral-hint-outline.test.ts` |
 | 结算弹窗**资源区底框** (`RewardBg` 九宫格) + 标题 13sp/15.5dp/#FFFEFA | `docs/zcds-表现层与领地规范.md` §11 | `tests/zcds-settlement-reward-frame.test.ts` |
 | 奖励格统一用**公共** `ui/common/RewardItem.prefab`（结算页 / 宝箱详情 / 关卡界面 / 玩家关卡同源） | `docs/zcds-表现层与领地规范.md` §11.3 | `tests/reward-item.test.ts`、`tests/zcds-settlement-page.test.ts` |
@@ -72,15 +75,23 @@ framework（通用 UI/流程机制）            -> core
 ## 实现硬约束
 
 - **契约先行**：先定义输入、输出、错误/取消语义和不变量，再写实现。外部数据一律在边界归一化、校验。
-- **异步安全**：异步操作必须能处理节点/弹窗已关闭、流程预加载已取消、重复点击、请求失败。`PopupBase` 子类使用 `nextPopupFrame()` 并在 `await` 后检查 `isValid`；流程预加载检查 `context.cancelled`。
+- **异步安全**：异步操作必须能处理节点/弹窗已关闭、流程预加载已取消、重复点击、请求失败。tab 页（`MainPage` / 各 tab 页，换 tab 即 `destroy`）的 `await` 之后**必须判** `isValid`；弹窗默认 `cache=false`（关闭即 `destroy`）同样要判，只有显式 `cache:true` 才 `active=false` 复用。同步事件 / 缓存回调里**不判 `isValid`**（`onDestroy` 已摘除 + 事件层派发前判 `caller.destroyed`），只在 `await` 之后、`.then/catch/finally` 里、未随组件销毁解除的延迟调度里判；生命周期方法（`onLoad`/`start`/`onEnable`/`update`）与 `schedule` 回调内同样不判。详见全局规范 §3.2。`PopupBase` 子类使用 `nextPopupFrame()` 并在 `await` 后检查 `isValid`；流程预加载检查 `context.cancelled`。
 - **渲染幂等与纯函数时间轴**：UI `render` 必须是幂等的全量赋值，对象池/虚拟列表不得依赖上一次状态；动画与时间轴一律记录 `startedAt` 并由纯函数按 `now - startedAt` 计算进度，禁止在视图组件内零散建 `tween` 或靠 `dt` 累加状态。
-- **视图只派发意图（禁止回调穿透）**：视图 / 页面组件**严禁持有控制器回调**（`options.onXxx?.()`、`params.onSave?.()`），一律 `EventMgr` 派发 → 控制器集中订阅（`bind*Events()`）。需要用「接了没接」决定显隐/置灰时，userData 给 `hasXxx?: boolean` 门闩，**不要拿回调的有没有值当门闩**；同族入口（如三个按钮）用「一条事件 + payload」。详见 `docs/AI架构与代码规范.md` §2.1。
+- **视图只派发意图（禁止回调穿透）**：视图 / 页面组件**严禁持有控制器回调**（`options.onXxx?.()`、`params.onSave?.()`），一律 `EventMgr` 派发 → 控制器集中订阅（`bind*Events()`）。需要用「接了没接」决定显隐/置灰时，userData 给 `hasXxx?: boolean` 门闩，**不要拿回调的有没有值当门闩**；同族入口（如三个按钮）用「一条事件 + payload」。详见 `docs/AI架构与代码规范.md` §2.1。事件语义只在契约文件（如 `ChestEvents.ts`）注释一次，`emit` / `on` 处不重复。
+  - **不写「只绑一次」门闩**：`onInit` / `onLoad` 每实例只跑一次（`PopupBase._inited` 保证），绑定放这里即可；`node.on` 随节点销毁释放、重复订阅也会按 `callback + target` 去重（handler 用箭头函数属性）。门闩只留给「解绑判断」和跨场景单例。详见全局规范 §2.1。
+  - **按钮点击回调禁止判 `interactable`**：`Button` 在 `interactable = false` 时本就不派发 `CLICK`，回调能进来必可点；置灰态由渲染时写 `interactable` 表达，回调内 `if (!btn.interactable) return;` 纯属冗余，一律去掉。要拦的是业务条件（次数 / 扣费 / 请求在途），门闩放控制器判；handler 若同时被键盘或代码直调，判业务门闩 `canXxx` 而不是 `interactable`。详见全局规范 §2.1.2。
 - **引用与类型红线**：Cocos Inspector 必填引用用 `null!`，允许为空的引用明确写 `| null` 并在边界处理；不得用 `as any`、非空断言或静默 optional chaining 掩盖必填绑定错误。
+  - **单例访问点非空**：`EventMgr.instance` / `CacheMgr.instance` / `PopupManager.inst` 返回非空类型，构造不出来就在 getter 里 throw；调用点写 `Xxx.inst.doThing()`，**不写 `inst?.` / `if (!mgr) return`**。`?.` 只留给真可能为空的查询（`inst.get(SomePanel)?.close()`）。详见全局规范 §4。
+  - 工程未开 `strictNullChecks`（`tsconfig.json` `"strict": false`），`getComponent(X)` / `getChildByName(name)` 返回类型本身非空：组件/节点查询**一律直接调用，禁止写 `!.`**（`getComponent(X)!` → `getComponent(X)`）。
+  - 可空字段（`| null`）使用处**禁止** `!.`：直接访问或先取局部变量再判空窄化；`await` 后属性窄化失效，必须把字段先取出再 `await`。
+  - 数据/配置查表不变量（算法或配表保证必有，如 `Map.get(key)` 命中必存在、实体 id 必有）同样**禁止 `!.`**，直接访问即可。
+  - **`@property` 绑死的引用不判空**：prefab 已绑的 `Node`/`Sprite`/`Label`/自定义组件直接 `.` 取用，不写 `if (this.x)` / `this.x?.`；例外是注释明示可选、多 prefab 复用非全绑、`getComponent` 懒取缓存、入参允许 null。详见全局规范 §4。
 - **回调归属对象直接传、退出时统一解除**：事件、缓存订阅和网络请求的 `caller` 直接传 `this` 或真实宿主对象，禁止 `as unknown as destroyable`、`caller as any`、`caller as never` 等断言；类型不兼容须修正 API 契约（归属参数为 `object`），不得伪造 `destroyed` / `destroy()`。网络请求和事件共用归属管理：普通组件销毁时 `GameNet.removeCaller(this)`；弹窗关闭/销毁与流程退出由基类/管理器统一解除。取消须释放请求回调并让 Promise 以 `false` 落定，禁止靠分发时检查组件 `isValid` 代替解除。详见全局规范 §2.2，守卫 `tests/callback-owner.test.ts`。
 - **帧循环禁令**：禁止在 `update` 里加载资源、查全局配置、创建临时数组/节点，或混入业务规则；高频渲染按已有节流策略（`renderDynamic` vs 0.15s `renderStatic`）执行。
 - **禁全局可变状态**：不引入新的全局可变状态或 static 暂存区。跨流程传值优先写入明确的 entry params / context；临时桥接必须单次消费、立刻清空并有测试。
 - **Prefab、资源与配表工具链**：
   - 严禁修改生成文件、`library/`、`temp/`、`build/`、`native/`（除非用户明确要求）。
+  - **点击必须在 prefab 上挂 `cc.Button`**：交互节点在 prefab 挂 `cc.Button`（`transition=NONE`、`target=null`），代码只 `node.on(Button.EventType.CLICK, …)`；**禁止** `getComponent(Button) ? CLICK : TOUCH_END` 分流（缺 Button 绑 CLICK = 静默死按钮，兜底又把「掉了组件」变成静默无反应）。详见全局规范 §5。
   - 工程的 Prefab 搭建与修改使用 Cocos MCP 定位和验证；修改 `.prefab`、`.scene` 后通过 MCP 刷新资源，生成 `.meta` 由引擎负责；手写或脚本生成 Prefab 节点必须显式包含 `cc.UITransform`，`CUSTOM` 尺寸 Sprite 必须设 `_isTrimmedMode = false`。
   - 美术碎图目录每棵目录树**最外层**放一份 `auto-atlas.pac`（递归覆盖子目录，严禁父子同放或放在 `image/` 根目录）。
   - Spine 单位目录固定 `<前缀>.atlas.txt` + `.png` + `.skel` + `<目录>.prefab`，节点 `layer = UI_2D`、`defaultAnimation = 'idle'`、`_enableBatch = true`。

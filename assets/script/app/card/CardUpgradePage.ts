@@ -1,4 +1,4 @@
-import { _decorator, Button, Color, Label, Node, Sprite } from 'cc';
+import { _decorator, Button, Color, Label, Sprite } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { cardArtProvider } from './CardArtProvider';
 import { cardRepository } from './CardRepository';
@@ -69,55 +69,55 @@ export class CardUpgradePage extends PopupBase {
     static prefabPath = 'ui/card/CardUpgrade';
 
     @property({ type: Label, tooltip: 'Title/Label：标题「卡牌升级」' })
-    titleLabel: Label = null!;
+    titleLabel: Label = null;
 
     @property({ type: Button, tooltip: 'CloseBtn 上的 cc.Button（**绑组件不绑节点**）' })
-    closeButton: Button = null!;
+    closeButton: Button = null;
 
     @property({ type: Sprite, tooltip: 'Card/Face：卡面底图（common_img_kp_01..04，按品级换图）' })
-    cardFace: Sprite = null!;
+    cardFace: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'Card/Badge：左上角职业角标（class_*）' })
-    cardBadge: Sprite = null!;
+    cardBadge: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'Card/Hero：职业营地雕像（camp_*）' })
-    cardHero: Sprite = null!;
+    cardHero: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'Card/HeadIcon：该卡自己的头像（84×84，与 Hero 互斥显示）' })
-    cardHeadIcon: Sprite = null!;
+    cardHeadIcon: Sprite = null;
 
     @property({ type: Label, tooltip: 'Info/NameLabel：卡牌名（如「精灵弓箭手」）' })
-    nameLabel: Label = null!;
+    nameLabel: Label = null;
 
     @property({ type: Label, tooltip: 'Info/LevelLabel：等级，写成「3级 → 4级」；已满级时只写当前等级' })
-    levelLabel: Label = null!;
+    levelLabel: Label = null;
 
     @property({ type: Label, tooltip: 'CostCard/NameLabel：消耗行名称「卡牌」' })
-    cardCostNameLabel: Label = null!;
+    cardCostNameLabel: Label = null;
 
     @property({ type: Label, tooltip: 'CostCard/CountLabel：卡牌数量「持有/需要」' })
-    cardCostCountLabel: Label = null!;
+    cardCostCountLabel: Label = null;
 
     @property({ type: Label, tooltip: 'CostCard/ItemLabel：小字，写被消耗卡牌的道具 id' })
-    cardCostItemLabel: Label = null!;
+    cardCostItemLabel: Label = null;
 
     @property({ type: Label, tooltip: 'CostExp/NameLabel：消耗行名称「经验」' })
-    expCostNameLabel: Label = null!;
+    expCostNameLabel: Label = null;
 
     @property({ type: Label, tooltip: 'CostExp/CountLabel：经验数量「合计持有/需要」（通用 + 兵种）' })
-    expCostCountLabel: Label = null!;
+    expCostCountLabel: Label = null;
 
     @property({ type: Label, tooltip: 'CostExp/ItemLabel：小字，写「通用 16000 + 兵种 16003」' })
-    expCostItemLabel: Label = null!;
+    expCostItemLabel: Label = null;
 
     @property({ type: Label, tooltip: 'Hint：底部提示（材料不足原因 / 未连接 / 已满级）' })
-    hintLabel: Label = null!;
+    hintLabel: Label = null;
 
     @property({ type: Button, tooltip: 'BtnUpgrade 上的 cc.Button（**绑组件不绑节点**）' })
-    upgradeButton: Button = null!;
+    upgradeButton: Button = null;
 
     @property({ type: Label, tooltip: 'BtnUpgrade/Label：按钮文案' })
-    upgradeLabel: Label = null!;
+    upgradeLabel: Label = null;
 
     /**
      * 「技能」按钮：打开独立的技能面板弹窗。

@@ -97,67 +97,67 @@ export class OSRankPage extends PopupBase {
     // ============================================================
 
     @property({ type: Label, tooltip: 'RefreshTime：倒计时 `13:16:55后刷新`（FGUI `refreshTime`）' })
-    refreshTime: Label = null!;
+    refreshTime: Label = null;
 
     @property({ type: Label, tooltip: 'MyPowerLabel：战力口径名（FGUI `lab_proty`，运行时被 `config.name` 覆盖）' })
-    myPowerLabel: Label = null!;
+    myPowerLabel: Label = null;
 
     @property({ type: Label, tooltip: 'MyPowerValue：当前进度值（FGUI `lab_my_power`；老端直接 `setText(curValue)`，**不缩写**）' })
-    myPowerValue: Label = null!;
+    myPowerValue: Label = null;
 
     @property({ type: Label, tooltip: 'MyRankLabel：`我的名次:`（FGUI `n99`，静态文案）' })
-    myRankLabel: Label = null!;
+    myRankLabel: Label = null;
 
     @property({ type: Label, tooltip: 'MyRankValue：`第3名` / `未上榜`（FGUI `lab_my_rank`）' })
-    myRankValue: Label = null!;
+    myRankValue: Label = null;
 
     @property({ type: Label, tooltip: 'FooterTip：邮件发放说明（FGUI `n105`，**只在排名页可见**，原文含错别字「多钱」，照抄）' })
-    footerTip: Label = null!;
+    footerTip: Label = null;
 
     @property({ type: [Node], tooltip: '列头底图 + 文案（FGUI group `n123` 的 6 个成员，**只在排名页可见**）：Header1/2/3 + HeaderLabel1/2/3' })
     rankHeaderNodes: Node[] = [];
 
     @property({ type: Label, tooltip: '列头第三格 `{战力口径}要求`（FGUI `lab_proty1`，**只在排名页可见**）' })
-    rankHeaderLabel3: Label = null!;
+    rankHeaderLabel3: Label = null;
 
     @property({ type: VirtualScrollView, tooltip: 'ListTarget：庆典目标列表（FGUI `list_target`）' })
-    listTarget: VirtualScrollView = null!;
+    listTarget: VirtualScrollView = null;
 
     @property({ type: VirtualScrollView, tooltip: 'ListRank：庆典排名列表（FGUI `list_rank`）' })
-    listRank: VirtualScrollView = null!;
+    listRank: VirtualScrollView = null;
 
     @property({ type: VirtualScrollView, tooltip: 'ListShop：限时特惠列表（FGUI `list_goods`）' })
-    listShop: VirtualScrollView = null!;
+    listShop: VirtualScrollView = null;
 
     @property({ type: OSTabButton, tooltip: 'TabTarget：庆典目标页签（FGUI `按钮_庆典目标`）' })
-    tabTarget: OSTabButton = null!;
+    tabTarget: OSTabButton = null;
 
     @property({ type: OSTabButton, tooltip: 'TabRank：庆典排名页签（FGUI `按钮_庆典排名`）' })
-    tabRank: OSTabButton = null!;
+    tabRank: OSTabButton = null;
 
     @property({ type: OSTabButton, tooltip: 'TabShop：限时特惠页签（FGUI `按钮_庆典特惠`）' })
-    tabShop: OSTabButton = null!;
+    tabShop: OSTabButton = null;
 
     @property({ type: Node, tooltip: 'BackBtn：返回（FGUI `按钮_返回`）' })
-    backBtn: Node = null!;
+    backBtn: Node = null;
 
     @property({ type: Node, tooltip: 'RankDetailBtn：`详细排名>`（FGUI `btn_rank`）' })
-    rankDetailBtn: Node = null!;
+    rankDetailBtn: Node = null;
 
     @property({ type: Node, tooltip: 'RankDetailBtn/RedDot：老端**从不点亮** ⇒ 每趟写 false（见文件头）' })
-    rankDetailRedDot: Node = null!;
+    rankDetailRedDot: Node = null;
 
     @property({ type: Node, tooltip: 'HelpBtn：帮助（FGUI `btn_help`）' })
-    helpBtn: Node = null!;
+    helpBtn: Node = null;
 
     @property({ type: Node, tooltip: 'HelpBtn/RedDot：老端**从不点亮** ⇒ 每趟写 false' })
-    helpRedDot: Node = null!;
+    helpRedDot: Node = null;
 
     @property({ type: Node, tooltip: 'GoBuildBtn：`前往提升>`（FGUI `btn_go_build`）' })
-    goBuildBtn: Node = null!;
+    goBuildBtn: Node = null;
 
     @property({ type: Node, tooltip: 'GoBuildBtn/RedDot：老端**从不点亮** ⇒ 每趟写 false' })
-    goBuildRedDot: Node = null!;
+    goBuildRedDot: Node = null;
 
     // ============================================================
     // 运行时状态

@@ -22,10 +22,11 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import protobuf from 'protobufjs/light.js';
 import protobufRoot from '../assets/script/lib/protobuf/protoCompiledStatic';
+import { assetPath } from './helpers/asset-paths';
 
 const PROTO_SRC = 'client_proto/protoCompiled.proto';
 const STATIC_SRC = 'assets/script/lib/protobuf/protoCompiledStatic.ts';
-const REFLECT_JSON = 'assets/resources/config/protoCompiled.json';
+const REFLECT_JSON = assetPath('config/protoCompiled.json');
 
 const SERVICE_SRC = 'assets/script/app/card/PvpHeroService.ts';
 const REPO_SRC = 'assets/script/app/card/CardRepository.ts';

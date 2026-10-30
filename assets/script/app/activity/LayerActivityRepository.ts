@@ -117,7 +117,7 @@ async function readRows(table: string): Promise<unknown[]> {
 /** 读缓存里的 `CmdActivity` 全表；缓存不可用时返回空数组（不抛）。 */
 function readActivityCmds(): readonly unknown[] {
     try {
-        return CacheMgr.instance?.getTlCmdActivity() ?? [];
+        return CacheMgr.instance.getTlCmdActivity() ?? [];
     } catch (error) {
         console.warn('[Activity] 读 CmdActivity 缓存失败', error);
         return [];
@@ -127,7 +127,7 @@ function readActivityCmds(): readonly unknown[] {
 /** 读缓存里的 `CmdRole` 全表；缓存不可用时返回空数组（不抛）。 */
 function readRoleRows(): readonly unknown[] {
     try {
-        return CacheMgr.instance?.getTlCmdRole() ?? [];
+        return CacheMgr.instance.getTlCmdRole() ?? [];
     } catch (error) {
         console.warn('[Activity] 读 CmdRole 缓存失败', error);
         return [];

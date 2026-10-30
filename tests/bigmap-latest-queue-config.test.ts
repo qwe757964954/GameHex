@@ -66,14 +66,20 @@ for (const field of ['offlineMaxHours', 'plotRows', 'plotCols']) {
     });
 }
 
-test('队列业务必填字段和奇数布局约束保留校验', () => {
+test('队列业务必填字段和基地20格上限保留校验，允许偶数尺寸', () => {
     const raw = tables();
     for (const field of ['maxBuildQueue', 'initBuildQueue', 'queueUnlockCost2', 'queueUnlockCost3', 'cancelReturnRate', 'upgradeUnlockChapter']) {
         const row = currentQueue();
         delete row[field];
         assert.throws(() => parseBigMapConfig({ ...raw, [BIGMAP_TABLE.queue]: [row] }), new RegExp(field));
     }
-    assert.throws(() => parseBigMapConfig({ ...raw, [BIGMAP_TABLE.queue]: [{ ...currentQueue(), plotRows: 4 }] }), /奇数/);
+    const config = parseBigMapConfig({ ...raw, [BIGMAP_TABLE.queue]: [{ ...currentQueue(), plotRows: 20, plotCols: 20 }] });
+    assert.equal(config.queue.plotRows * config.queue.plotCols, 400);
+    for (const field of ['plotRows', 'plotCols']) {
+        for (const value of [0, 2, 21]) {
+            assert.throws(() => parseBigMapConfig({ ...raw, [BIGMAP_TABLE.queue]: [{ ...currentQueue(), [field]: value }] }), /建造区/);
+        }
+    }
 });
 
 test('队列槽位按 maxBuildQueue 全量返回：未解锁的标 locked，界面才知道上限几条', () => {

@@ -30,28 +30,28 @@ const { ccclass, property } = _decorator;
 @ccclass('ChatBubble')
 export class ChatBubble extends Component {
     @property({ type: Node, tooltip: 'Left：别人发的（530×112）' })
-    leftGroup: Node = null!;
+    leftGroup: Node = null;
 
     @property({ type: Sprite, tooltip: 'Left/Head/Icon：头像' })
-    leftHead: Sprite = null!;
+    leftHead: Sprite = null;
 
     @property({ type: Label, tooltip: 'Left/Name：玩家名' })
-    leftName: Label = null!;
+    leftName: Label = null;
 
     @property({ type: RichText, tooltip: 'Left/Msg：正文（**必须 RichText**，表情与艾特靠它）' })
-    leftMsg: RichText = null!;
+    leftMsg: RichText = null;
 
     @property({ type: Node, tooltip: 'Right：自己发的（530×114）' })
-    rightGroup: Node = null!;
+    rightGroup: Node = null;
 
     @property({ type: Sprite, tooltip: 'Right/Head/Icon：头像' })
-    rightHead: Sprite = null!;
+    rightHead: Sprite = null;
 
     @property({ type: Label, tooltip: 'Right/Name：玩家名' })
-    rightName: Label = null!;
+    rightName: Label = null;
 
     @property({ type: RichText, tooltip: 'Right/Msg：正文（**必须 RichText**）' })
-    rightMsg: RichText = null!;
+    rightMsg: RichText = null;
 
     private avatar: FriendAvatarLoader | null = null;
 

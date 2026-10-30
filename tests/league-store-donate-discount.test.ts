@@ -132,6 +132,7 @@ import {
     ROLE_PROPERTY_ICON_ROOT_OVERRIDE,
 } from '../assets/script/app/activity/LayerActivityArt';
 import { parseRolePropertyRows } from '../assets/script/app/activity/LayerActivityTable';
+import { assetPath } from './helpers/asset-paths';
 
 const STORE_PAGE_TS = 'assets/script/app/league/LeagueStorePage.ts';
 const REPO_TS = 'assets/script/app/league/LeagueRepository.ts';
@@ -334,7 +335,7 @@ test('B11 `roleProperty` 裸名图标落哪个目录：默认 `icons/resource`�
         if (!info.icon) continue;
         const ref = resolveRewardIconRef(info);
         assert.ok(ref, `resId=${resId} 的 roleProperty 行必须解析得出图标`);
-        const file = `assets/resources/${ref.root}/${ref.name}.png`;
+        const file = assetPath(`${ref.root}/${ref.name}.png`);
         assert.ok(existsSync(file),
             `resId=${resId}（${info.name}）解析到 ${ref.root}/${ref.name}，但实盘没有 ${file}`
             + ' ⇒ 该加进 LayerActivityArt 的 `ROLE_PROPERTY_ICON_ROOT_OVERRIDE`');
@@ -352,7 +353,7 @@ test('B11 `roleProperty` 裸名图标落哪个目录：默认 `icons/resource`�
     // 反向：覆盖表里不许有**多余**的条目（那些名字其实在 `icons/resource/` 有图 ⇒ 多余且会掩盖回归）。
     for (const name of Object.keys(ROLE_PROPERTY_ICON_ROOT_OVERRIDE)) {
         if (name === '图标_经验值') continue; // 本来就不在 icons/resource（见上面清单）
-        assert.ok(!existsSync(`assets/resources/${RESOURCE_ICON_ART_ROOT}/${name}.png`),
+        assert.ok(!existsSync(assetPath(`${RESOURCE_ICON_ART_ROOT}/${name}.png`)),
             `${name} 在 icons/resource/ 已经有图了 ⇒ 覆盖表里这条是多余的，删掉`);
     }
 });
@@ -877,9 +878,9 @@ test('E14 三页都实现 PopupBase 的三件套（onInit 绑一次 / onOpen 取
 // D. prefab 结构 + 几何
 // ============================================================
 
-const STORE_PREFAB = 'assets/resources/ui/League/LeagueStore.prefab';
-const DONATE_PREFAB = 'assets/resources/ui/League/LeagueDonate.prefab';
-const DISCOUNT_PREFAB = 'assets/resources/ui/League/LeagueDiscount.prefab';
+const STORE_PREFAB = assetPath('ui/League/LeagueStore.prefab');
+const DONATE_PREFAB = assetPath('ui/League/LeagueDonate.prefab');
+const DISCOUNT_PREFAB = assetPath('ui/League/LeagueDiscount.prefab');
 const REWARD_SLOT_TS = 'assets/script/app/league/LeagueRewardSlot.ts';
 const AD_BTN_TS = 'assets/script/app/league/LeagueAdButton.ts';
 const VSCROLL_TS = 'assets/script/vscrollview/VScrollView.ts';

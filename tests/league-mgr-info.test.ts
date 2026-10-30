@@ -24,7 +24,7 @@
  *     `公用0/package.xml`（图 id → 文件名 + `scale9grid` 反查）
  *   - 老端：`client/assets/script/app/game/ctrl/main/league/play/LayerLeagueHallMgr.ts`、
  *     `…/LayerLeagueInfo.ts`
- *   - 本项目：`assets/script/app/league/**`、`assets/resources/ui/League/*.prefab`
+ *   - 本项目：`assets/script/app/league/**`、assetPath(`ui/League/*.prefab`)
  *
  * ## ⚠️ 本刀最值得记住的一条：**`autoSize` 缺省的 text 不能落 `overflow = NONE`**
  *
@@ -100,6 +100,7 @@ import {
     LEAGUE_UNION_LEADER_PREFIX,
     LEAGUE_UNION_MEMBER_PREFIX,
 } from '../assets/script/app/league/LeagueTexts';
+import { assetExists, assetPath } from './helpers/asset-paths';
 
 // ============================================================
 // A. 文案口径
@@ -342,13 +343,13 @@ test('C7 两条「行 → 详情」路径对同一行给出**一致**的视图�
 // D. prefab 结构 + 几何
 // ============================================================
 
-const MGR_PREFAB = 'assets/resources/ui/League/LeagueMgr.prefab';
-const INFO_PREFAB = 'assets/resources/ui/League/LeagueInfo.prefab';
+const MGR_PREFAB = assetPath('ui/League/LeagueMgr.prefab');
+const INFO_PREFAB = assetPath('ui/League/LeagueInfo.prefab');
 const MGR_PAGE_TS = 'assets/script/app/league/LeagueMgrPage.ts';
 const INFO_PAGE_TS = 'assets/script/app/league/LeagueInfoPage.ts';
 const REPO_TS = 'assets/script/app/league/LeagueRepository.ts';
-const BOARD_DIR = 'assets/resources/image/league';
-const SHARED_ART_ROOT = 'assets/resources/image/sevenDay';
+const BOARD_DIR = assetPath('image/league');
+const SHARED_ART_ROOT = assetPath('image/sevenDay');
 const UI_2D = 33554432;
 
 type Entry = Record<string, unknown>;
@@ -935,8 +936,8 @@ test('E1 两个页面类 `prefabPath` 大小写与磁盘一致，且继承 Popup
     assert.ok(/export class LeagueMgrPage extends PopupBase/.test(m));
     assert.ok(/export class LeagueInfoPage extends PopupBase/.test(i));
     // 目录大小写必须与磁盘一致（热更新 zip 内路径大小写敏感）
-    assert.ok(existsSync('assets/resources/ui/League/LeagueMgr.prefab'));
-    assert.ok(existsSync('assets/resources/ui/League/LeagueInfo.prefab'));
+    assert.ok(assetExists('ui/League/LeagueMgr.prefab'));
+    assert.ok(assetExists('ui/League/LeagueInfo.prefab'));
     // 两个类都给出 `titleText`（供复用方取，避免到处写中文字面量）
     assert.ok(/static get titleText\(\): string \{/.test(m) && /LEAGUE_MGR_TITLE/.test(m));
     assert.ok(/static get titleText\(\): string \{/.test(i) && /LEAGUE_INFO_TITLE/.test(i));

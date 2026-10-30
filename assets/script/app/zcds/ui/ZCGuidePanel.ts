@@ -73,19 +73,19 @@ export class ZCGuidePanel extends PopupBase {
     static prefabPath = 'ui/game/ZCGuidePanel';
 
     @property({ type: Sprite, group: '面板', tooltip: 'Panel：羊皮纸底 bg_05' })
-    panelBg: Sprite = null!;
+    panelBg: Sprite = null;
 
     @property({ type: Label, group: '面板', tooltip: 'TitleBar/TitleLab：面板标题' })
-    titleLabel: Label = null!;
+    titleLabel: Label = null;
 
     @property({ type: Button, group: '面板', tooltip: 'CloseBtn：右上角关闭按钮' })
-    closeButton: Button = null!;
+    closeButton: Button = null;
 
     @property({ type: Label, group: '面板', tooltip: 'FooterLab：底部说明文案' })
-    footerLabel: Label = null!;
+    footerLabel: Label = null;
 
     @property({ type: VirtualScrollView, group: '列表', tooltip: 'Panel/ListView：虚拟滚动列表（条目预制体等配置在它自己身上绑）' })
-    listView: VirtualScrollView = null!;
+    listView: VirtualScrollView = null;
 
     private entries: ZCGuideEntry[] = [];
     private iconFrames: ReadonlyMap<string, SpriteFrame> = new Map();

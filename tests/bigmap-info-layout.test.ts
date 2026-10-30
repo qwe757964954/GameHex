@@ -76,9 +76,10 @@ test('icon 的水平位置由视图写 `centerX`，模型只给尺寸（可断�
 
 test('正文恒居中（不许回退成左对齐）', () => {
     const body = stripped(PAGE_SRC);
-    assert.match(body, /this\.infoBody\.horizontalAlign = Label\.HorizontalAlign\.CENTER/);
-    assert.match(body, /this\.infoBody\.verticalAlign = Label\.VerticalAlign\.CENTER/,
-        'Label 默认 TOP：不设 CENTER 的话文字会全贴到图标底下、下方留一大块空白');
+    const prefab = JSON.parse(readFileSync('assets/bundles/bigmap/ui/bigmap/BigMapPage.prefab', 'utf8'));
+    const bindings = prefab.find((item: object) => 'infoBody' in item && 'resourceLabels' in item);
+    assert.equal(prefab[bindings.infoBody.__id__]._horizontalAlign, 1);
+    assert.equal(prefab[bindings.infoBody.__id__]._verticalAlign, 1);
     assert.doesNotMatch(body, /hasThumbnail \? Label\.HorizontalAlign\.LEFT/, '老的「有图标就左对齐」已废弃');
 });
 
@@ -206,12 +207,12 @@ test('每一轮 refreshInfo 都必须重排（内容方法里有 6 个提前 ret
     const body = stripped(PAGE_SRC);
     const start = body.indexOf('private refreshInfo(): void {');
     assert.ok(start > 0, '找不到 refreshInfo');
-    const end = body.indexOf('private refreshTargetPanel', start);
+    const end = body.indexOf('private refreshInfoContent', start);
     const refreshInfo = body.slice(start, end > start ? end : undefined);
 
-    // 1) 三段式顺序不能乱 —— 排版永远在内容之后、目标面板之前。
+    // 内容分支可以提前返回，外层仍须统一排版。
     assert.match(refreshInfo,
-        /this\.refreshInfoContent\(\);[\s\S]*this\.applyInfoLayout\(\);[\s\S]*this\.refreshTargetPanel\(\);/,
+        /this\.refreshInfoContent\(\);[\s\S]*this\.applyInfoLayout\(\);/,
         '排版要放在外层包装里，否则某个分支提前 return 就会留下上一轮的图标 / 按钮位置');
 
     // 2) 「正在进入战斗」的守卫可以早退（那时页面马上随流程销毁、详情内容不必刷），

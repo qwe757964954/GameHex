@@ -151,7 +151,7 @@ export function bigMapCityAttackPreview(
     ));
     const warScore = Math.round(
         bigMapMarginalWarScore(damage, config.scoreRule.marginalDamageCap)
-        * config.cityLevels.get(city.cityLevel)!.warScoreRate
+        * config.cityLevels.get(city.cityLevel).warScoreRate
         * bigMapRankCoeff(config, rank)
         * bigMapCrowdCoeff(config, attackers),
     );
@@ -250,7 +250,7 @@ export function bigMapAttackCity(
     const hpAfter = Math.max(0, hpBefore - preview.damage);
     const warScoreTotal = (progress.cityWarScore[city.cityId] ?? 0) + preview.warScore;
 
-    const levelConfig = config.cityLevels.get(city.cityLevel)!;
+    const levelConfig = config.cityLevels.get(city.cityLevel);
     const breached = hpBefore > 0 && hpAfter <= 0;
     const occupied = hpAfter <= 0 && warScoreTotal >= levelConfig.minOccupyWarScore;
 
@@ -291,7 +291,7 @@ export function bigMapMonsterAttackPreview(
     site: IBigMapMonsterSite,
     rank = 1,
 ): IBigMapAttackPreview {
-    const monster = config.monsters.get(site.monsterId)!;
+    const monster = config.monsters.get(site.monsterId);
     const damage = Math.max(1, Math.round(bigMapAttackPower(config, base)));
     const warScore = Math.round(
         bigMapMarginalWarScore(damage, config.scoreRule.marginalDamageCap)

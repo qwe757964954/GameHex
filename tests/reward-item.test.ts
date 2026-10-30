@@ -1,3 +1,5 @@
+import { createControllerContext } from './helpers/controller-context';
+import { componentControllerModule } from './helpers/controller-context';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -5,6 +7,7 @@ import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
 import type { AssetService, AssetLoadOptions } from '../assets/script/core/asset/AssetService';
+import { assetPath } from './helpers/asset-paths';
 
 /**
  * **公共奖励格** `ui/common/RewardItem.prefab` 的判据。
@@ -12,7 +15,7 @@ import type { AssetService, AssetLoadOptions } from '../assets/script/core/asset
  * 它被领地页三个弹窗（关卡界面 / 玩家关卡 / 宝箱详情）共用 —— 格子只建一份，
  * 宿主拿它当 `VirtualScrollView.itemPrefab` 或直接摆。所以这里的每一条都是「要么全对、要么全错」。
  */
-const PREFAB = 'assets/resources/ui/common/RewardItem.prefab';
+const PREFAB = assetPath('ui/common/RewardItem.prefab');
 const CID = '1cf9efGyXZBA61uKwFzx5LJ'; // RewardItemView
 
 type Obj = Record<string, any>;
@@ -75,7 +78,6 @@ test('公共奖励格：数量右下白字描边、概率底部（默认隐藏�
 
 function loadClass(overrides: Record<string, unknown> = {}): {
     new (): Record<string, any>;
-    useAssets(assets: AssetService): void;
 } {
     const exports: Record<string, new () => Record<string, any>> = {};
     const code = ts.transpileModule(readFileSync('assets/script/app/common/RewardItemView.ts', 'utf8'), {
@@ -98,7 +100,9 @@ function loadClass(overrides: Record<string, unknown> = {}): {
         ...overrides,
     };
     runInNewContext(code, { exports, require: (request: string) => {
+
         if (stubs[request]) return stubs[request];
+        if (request.endsWith('/ComponentController')) return componentControllerModule();
         return {
             Component, Sprite, Label,
             _decorator: { ccclass: () => (value: unknown) => value, property: () => () => undefined },
@@ -119,7 +123,6 @@ function createRewardLifecycleFixture(gate?: Promise<void>) {
     }
     const frames = new Map<string, Frame>();
     const loads: string[] = [];
-    const ViewClass = loadClass();
     const assets: AssetService = {
         async load<T>(path: string, _type: unknown, options?: AssetLoadOptions): Promise<T> {
             loads.push(path);
@@ -135,7 +138,8 @@ function createRewardLifecycleFixture(gate?: Promise<void>) {
         },
         loadDir: async () => [], has: async () => true,
     };
-    ViewClass.useAssets(assets);
+    const context = { ...createControllerContext(), assets };
+    const ViewClass = loadClass({ '../../framework/controller/ComponentController': componentControllerModule(context) });
     const createView = () => {
         const view = new ViewClass();
         Object.assign(view, { isValid: true, node: { active: true },
@@ -222,16 +226,12 @@ test('公共奖励格：品质框路径必须带 `image/` 前缀（`qualityFrame
     assert.match(src, /`image\/\$\{qualityFrameArtPath/, '品质框路径必须补 image/ 前缀');
 });
 
-test('公共奖励格：资源入口必须在**组合根**注入（不能只靠主界面顺带）', () => {
-    // 🔴 结算弹窗走**对局流程**，不经过 `MainTabHost.showPage` ⇒ 注入点必须在组合根
-    //    （`ProcedureBootstrap`），否则奖励格静默渲染成空框、零报错。
+test('公共奖励格使用控制器资源，无需主界面或组合根单独注入', () => {
+    const source = readFileSync('assets/script/app/common/RewardItemView.ts', 'utf8');
+    assert.match(source, /new ComponentController\('ui:reward-item'\)/);
+    assert.doesNotMatch(source, /static assets|useAssets/);
     const bootstrap = readFileSync('assets/script/app/bootstrap/ProcedureBootstrap.ts', 'utf8');
-    assert.match(bootstrap, /RewardItemView\.useAssets\(assets\)/, '组合根必须注入资源入口');
-
-    // 主界面那份已被组合根取代 ⇒ 不许再有第二个注入点（重复真源 ⇒ 迟早漂移）
-    const tabHost = readFileSync('assets/script/app/main/MainTabHost.ts', 'utf8');
-    assert.doesNotMatch(tabHost, /RewardItemView\.useAssets/, 'MainTabHost 不再重复注入（组合根已统一）');
-    assert.doesNotMatch(tabHost, /import \{ RewardItemView \}/, 'MainTabHost 不再依赖 RewardItemView');
+    assert.doesNotMatch(bootstrap, /RewardItemView/);
 });
 
 test('公共奖励格：帧加载失败必须出声（不许静默吞成空框）', () => {

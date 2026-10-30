@@ -25,7 +25,7 @@ import { ZCGameRenderWorld } from './view/ZCGameRenderWorld';
 import type { ZCGameRenderFrame } from './model/ZCGameRenderFrame';
 import { buildDecorPlacements, buildPlayerHomeFocus } from './view/ZCGameViewUtil';
 import { createSeededRandom } from './model/ZCSeededRandom';
-import { buildRankSeats, type IRankSeat, type IRankSeatProfile } from './model/ZCRankBoard';
+import {buildRankSeats, type IRankSeatProfile} from './model/ZCRankBoard';
 import { ZCGameRankBoard } from './view/ZCGameRankBoard';
 // `ZC_OWNER_ORDER` 是值（遍历本局全部 owner 的卡池），不是纯类型。
 import { ZC_OWNER_ORDER, resolveZCMapZoom, ZCOwner } from './model/ZCMapConfig';
@@ -49,6 +49,8 @@ import type { IZCSlgBattleType } from '../battle/BattleStartModel';
 import { resolveCmdGoodsFrames } from '../showReward/RewardFrames';
 import type { IZCSettlementOptions, IZCSettlementReward } from './ui/ZCSettlementPage';
 import { HeadArt } from '../HeadArt';
+import { ComponentController } from '../../framework/controller/ComponentController';
+import { createIconLoader, type IIconLoader } from '../common/SpriteFrameCache';
 
 const { ccclass } = _decorator;
 
@@ -77,6 +79,25 @@ export type { IZCGameEntry } from './application/ZCGameEntry';
  */
 @ccclass('ZCGame')
 export class ZCGame extends Component {
+    private readonly resourceController = new ComponentController('battle:runtime-art');
+    private iconLoader: IIconLoader | null = null;
+
+    private get loadIcon(): IIconLoader {
+        return this.iconLoader ??= createIconLoader(this.resourceController.resources.assets, this.resourceController.scope);
+    }
+
+    private async loadHeadFrame(avatarId: string): Promise<SpriteFrame | null> {
+        const resolver = await HeadArt.loadHeadArtResolver(this.resourceController.resources.configs);
+        if (this.leaving) return null;
+        return HeadArt.loadHeadFrame(avatarId, this.loadIcon, resolver);
+    }
+
+    private async loadHeadIconFrame(icon: string): Promise<SpriteFrame | null> {
+        const resolver = await HeadArt.loadIconArtResolver(this.resourceController.resources.configs);
+        if (this.leaving) return null;
+        return HeadArt.loadHeadIconFrame(icon, this.loadIcon, resolver);
+    }
+
     /**
      * 本局模型。**自选主城局的前半段它真的不存在**，所以声明成 `| null` 而不是 `!`
      * （AGENTS.md 引用红线：必填引用才写 `null!`，允许为空的写 `T | null` 并在边界判一次）。
@@ -264,7 +285,12 @@ export class ZCGame extends Component {
     private beginVictorySweep(frame: ZCGameRenderFrame): boolean {
         const status = frame.snapshot.status;
         if (status !== 'victory' && status !== 'defeat') return false;
-        const winner = status === 'victory' ? ZCOwner.Player : ZCOwner.Enemy;
+        // 🔴 用**模型判定的胜方**，不要拿 status 反推：status 只有 victory / defeat 两态，
+        // 而 4 人局里"我方出局"可能是 2 号红方、也可能是 4 号紫方赢 —— 反推会把紫方赢的局
+        // 铺成红方色（2026-10-28 用户报的就是这个）。
+        // 兜底只在模型没给胜方时用（例如恢复一份已经结束的快照，`checkOutcome` 不会重判）：
+        // 那时退回旧口径，至少方向和以前一致，不至于整段扫场不播。
+        const winner = frame.winner ?? (status === 'victory' ? ZCOwner.Player : ZCOwner.Enemy);
         return this.renderWorld.startVictorySweep(frame, winner);
     }
 
@@ -325,12 +351,17 @@ export class ZCGame extends Component {
         this.slgBattleType = null;
         this.seatProfiles.clear();
         this.seatUnitIds.clear();
+        this.legendCardArtFrames = new Map();
+        this.legendPortraitFrames = new Map();
+        this.bossPortraits.clear();
+        this.resourceController.dispose();
+        this.iconLoader = null;
     }
 
     /**
      * 传说卡横幅右上角的玩家头像。
      *
-     *  头像要过 head/icon 表 + `resources.load` 才拿得到，是**异步**的；而 `createGame` 是同步路径
+     *  头像要过 head/icon 表 + 控制器 AssetService 才拿得到，是**异步**的；而 `createGame` 是同步路径
      * （首帧必须在这一帧画出来），所以这里 fire-and-forget：拿到就注入解析器，拿不到就只留
      * 四个玩家色的头像环 —— 少一枚头像不影响这次演出，**不**阻断对局。
      *
@@ -341,8 +372,8 @@ export class ZCGame extends Component {
         const avatars = this.playerAvatars;
         if (!avatars) return;
         void Promise.all([
-            HeadArt.loadHeadFrame(avatars.player).catch(() => null),
-            HeadArt.loadHeadFrame(avatars.enemy).catch(() => null),
+            this.loadHeadFrame(avatars.player).catch(() => null),
+            this.loadHeadFrame(avatars.enemy).catch(() => null),
         ]).then(([player, enemy]) => {
             //  判据只用 phase：`renderWorld` 与 `leaving` 同由 `shutdown()` 驱动（它首行 `phase.leave()`、
             // 随后同步置 null）⇒ 两者在每个 await 边界上恒等，多写一个对象判空只是重复判据。
@@ -360,7 +391,7 @@ export class ZCGame extends Component {
     /**
      * **卡面静态图**（卡表 `headIcon` → `icons/cardHead/**`）：传说横幅左格与对局小卡牌**共用**。
      *
-     *  口径与 `loadLegendPortraits` 完全一致：卡面图要过 icon 表 + `resources.load`，是**异步**的，
+     *  口径与 `loadLegendPortraits` 完全一致：卡面图要过 icon 表 + 控制器 AssetService，是**异步**的，
      *  而 `createGame` 是同步路径（首帧必须画出来）⇒ 这里 fire-and-forget；拿到就注入解析器
      *  （`ZCGameRenderWorld.setLegendCardArtResolver` 会连同已弹出的横幅与小卡牌一起补刷），
      *  一张都拿不到就保留回退链，**不阻断对局**。
@@ -391,7 +422,7 @@ export class ZCGame extends Component {
         }
         if (!icons.size) return;
         void Promise.all(Array.from(icons).map(async ([cardId, icon]) => (
-            [cardId, await HeadArt.loadHeadIconFrame(icon).catch(() => null)] as const
+            [cardId, await this.loadHeadIconFrame(icon).catch(() => null)] as const
         ))).then((entries) => {
             //  同上：`leaving` 已经盖住「renderWorld 被收走」这件事。
             if (this.leaving) return;
@@ -407,7 +438,7 @@ export class ZCGame extends Component {
     /**
      * 玩家头像（owner → 头像帧；取不到返回 null，横幅只留四个玩家色的头像环）。
      *
-     * 与 {@link resolveCardArt} 同一条口径：`images/head` 要过 head/icon 表 + `resources.load`，
+     * 与 {@link resolveCardArt} 同一条口径：`images/head` 要过 head/icon 表 + 控制器 AssetService，
      * 属于"可能慢一步"的资源 —— 数据放控制器、视图按 owner 现取，不必让渲染层再包一层闭包。
      */
     resolveLegendPortrait(owner: string): SpriteFrame | null {
@@ -472,7 +503,7 @@ export class ZCGame extends Component {
         // 视图组件与它的 14 个 @property 都在 ZCGameHUD.prefab 上绑好（leftPlayer / rightPlayer /
         // gameVS 是嵌套实例引用，走根 PrefabInfo 的 targetOverrides）⇒ 不再 `|| addComponent` 兜底：
         // 那个分支永远走不到，真掉组件时反而会静默补一个空视图。
-        this.hudView = hud.getComponent(ZCGameHUDView)!;
+        this.hudView = hud.getComponent(ZCGameHUDView);
         // HUD 的神器按钮原先显示 prefab 硬绑的通用图（`image/gameui/zd_faqi.png`），
         // 与本局携带的神器无关 ⇒ 棋盘显示剑、HUD 显示石锤。这里喂同一份已加载的帧。
         // ⚠️ 自选地图局**不遮蔽这个按钮**：它显示的是玩家自己的神器，不是地图里的随机资源
@@ -731,7 +762,7 @@ export class ZCGame extends Component {
         const node = instantiate(prepared.spawnSelectionPrefab);
         node.layer = this.hudView.node.layer;
         node.setParent(this.hudView.node);
-        this.spawnSelectionView = node.getComponent(ZCSpawnSelectionView)!;
+        this.spawnSelectionView = node.getComponent(ZCSpawnSelectionView);
         //  订阅已在 `bindUiEvents` 注册好（走中控），这里不用补。
         this.spawnSelectionView.initialize();
         // 需求 2：基地正下方 2 格的绿色【确认位置】按钮 —— 直接借用 HUD 上那颗绿勾，
@@ -854,6 +885,7 @@ export class ZCGame extends Component {
 
         this.model = new ZCGameModel(null, this.matchRandom, matchConfig);
         this.model.recordSpawnSelection();
+        this.renderWorld.syncResolvedResources(matchConfig.map.resolvedResources ?? []);
         this.phase.startPlaying();
         const frame = this.model.createRenderFrame();
         this.renderWorld.render(frame, this.model.drainPresentationEvents());
@@ -974,7 +1006,7 @@ export class ZCGame extends Component {
      */
     private async loadChapterRewards(result: IZCChapterBattleOutcome): Promise<IZCSettlementReward[]> {
         if (result.goods.length === 0) return [];
-        const resolved = await resolveCmdGoodsFrames(result.goods);
+        const resolved = await resolveCmdGoodsFrames(result.goods, this.resourceController.resources);
         return resolved.map(({ entry }) => ({
             resId: entry.resId,
             amount: entry.number,
@@ -1050,7 +1082,14 @@ export class ZCGame extends Component {
             return;
         }
         if (this.pveContext) {
-            ProcedureManager.navigate(GameRoute.Main, { initialTab: 'territory' });
+            // 🔴 2026-10-29 用户：通关回章节页时相机不能停在初始点位 —— 要把**刚打的那格**居中，
+            //    否则服务端推来的「通关格子」广播在屏幕外播翻转，玩家什么都看不见。
+            //    格子 id 走 entry params 单次传给页面（`territoryCellId` 就是开战那格）。
+            ProcedureManager.navigate(GameRoute.Main, {
+                initialTab: 'territory',
+                focusChapterId: this.pveContext.chapterId,
+                focusCellId: this.pveContext.territoryCellId,
+            });
             return;
         }
         ProcedureManager.navigate(GameRoute.Main);
@@ -1191,7 +1230,7 @@ export class ZCGame extends Component {
             node.layer = hud.layer;
             node.setParent(hud);
             // 位置归 prefab 的 Widget（左上角按 top=76 / left=129 钉住），这里不写 setPosition。
-            this.bossPanel = node.getComponent(ZCHudBossPanel)!;
+            this.bossPanel = node.getComponent(ZCHudBossPanel);
         }
         const cardId = progress.currentWaveCardId;
         this.bossPanel.render(
@@ -1223,7 +1262,7 @@ export class ZCGame extends Component {
             }
         }
         for (const [cardId, icon] of Array.from(icons)) {
-            void HeadArt.loadHeadIconFrame(icon).then((frame) => {
+            void this.loadHeadIconFrame(icon).then((frame) => {
                 if (!this.leaving && frame?.isValid) this.bossPortraits.set(cardId, frame);
             }).catch((error) => console.warn(`[ZCGame] 波次怪头像加载失败：${icon}`, error));
         }

@@ -1,4 +1,4 @@
-import { _decorator, Component, EventTouch, Node, Sprite, UITransform, Vec3 } from 'cc';
+import {_decorator, Component, EventTouch, Node, UITransform, Vec3} from 'cc';
 
 const { ccclass, property } = _decorator;
 
@@ -37,13 +37,13 @@ const _tmpLocal = new Vec3();
 @ccclass('VolumeSlider')
 export class VolumeSlider extends Component {
     @property({ type: Node, tooltip: 'Track：底槽（同时也是拖动热区，宽度是进度分母）' })
-    track: Node = null!;
+    track: Node = null;
 
     @property({ type: Node, tooltip: 'Fill：填充条（锚点 (0,1)，只改宽度）' })
-    fill: Node = null!;
+    fill: Node = null;
 
     @property({ type: Node, tooltip: 'Grip：滑块（40×40，位置按 ratio 平移）' })
-    grip: Node = null!;
+    grip: Node = null;
 
     /** 数值变化回调（拖动 / `setValue` 都会触发）。 */
     onChanged: ((value: number) => void) | null = null;

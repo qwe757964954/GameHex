@@ -56,22 +56,22 @@ export class ChangeHeadPage extends PopupBase {
 
     // ---------- 弹窗框 ----------
     @property({ type: Node, tooltip: 'PopBg/CloseBtn：关闭按钮' })
-    closeButton: Node = null!;
+    closeButton: Node = null;
 
     // ---------- 预览区 ----------
     @property({ type: Sprite, tooltip: 'HeadBox/HeadIcon：当前选中头像的大预览（`com_head.icon`）' })
-    headIcon: Sprite = null!;
+    headIcon: Sprite = null;
 
     @property({ type: Label, tooltip: 'DescLabel：头像名 / 「自定义头像」（`text_desc`）' })
-    descLabel: Label = null!;
+    descLabel: Label = null;
 
     // ---------- 列表 ----------
     @property({ type: HeadGridList, tooltip: 'List：4 列 × 2 行头像网格' })
-    grid: HeadGridList = null!;
+    grid: HeadGridList = null;
 
     // ---------- 底部 ----------
     @property({ type: Node, tooltip: 'ConfirmBtn：确认（FGUI `btn_confirm`，黄底）' })
-    confirmButton: Node = null!;
+    confirmButton: Node = null;
 
     /** 数据端口；测试 / 探针可替换。 */
     private repo: IPlayerInfoRepository = playerInfoRepository;

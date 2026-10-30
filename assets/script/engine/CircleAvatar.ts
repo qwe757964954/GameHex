@@ -53,12 +53,13 @@ export class CircleAvatar extends Component {
     }
 
     protected onDisable(): void {
-        if (isValid(this.sprite)) {
-            if (this.sprite!.customMaterial === this.avatarMaterial) {
-                this.sprite!.customMaterial = this.previousMaterial;
+        const sprite = this.sprite;
+        if (isValid(sprite)) {
+            if (sprite.customMaterial === this.avatarMaterial) {
+                sprite.customMaterial = this.previousMaterial;
             }
-            this.sprite!.type = this.previousType;
-            this.sprite!.trim = this.previousTrim;
+            sprite.type = this.previousType;
+            sprite.trim = this.previousTrim;
         }
         this.avatarMaterial?.destroy();
         this.avatarMaterial = null;
@@ -70,7 +71,8 @@ export class CircleAvatar extends Component {
         this.loading = true;
         const onLoaded = (error: Error | null, effect: EffectAsset): void => {
             this.loading = false;
-            if (!isValid(this, true) || !this.enabledInHierarchy || !isValid(this.sprite, true)) return;
+            const sprite = this.sprite;
+            if (!isValid(this, true) || !this.enabledInHierarchy || !isValid(sprite, true)) return;
             if (error) {
                 warn('[CircleAvatar] 无法加载 shaders/circle-avatar.effect', error);
                 return;
@@ -78,7 +80,7 @@ export class CircleAvatar extends Component {
             const material = new Material();
             material.initialize({ effectAsset: effect });
             this.avatarMaterial = material;
-            this.sprite!.customMaterial = material;
+            sprite.customMaterial = material;
             this.refresh();
         };
         if (EDITOR_NOT_IN_PREVIEW) {

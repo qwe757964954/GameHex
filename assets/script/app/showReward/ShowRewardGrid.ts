@@ -23,7 +23,7 @@ const TAP_TOLERANCE = 12;
 @ccclass('ShowRewardGrid')
 export class ShowRewardGrid extends Component {
     @property({ type: Node, tooltip: 'Content：槽位容器（不参与滚动，子节点 = 预摆的 12 个 ShowRewardItem）' })
-    content: Node = null!;
+    content: Node = null;
 
     /** 铺一格（重绑时按 dataIndex 现取数据）。 */
     renderItem: ((node: Node, dataIndex: number) => void) | null = null;

@@ -24,6 +24,7 @@ import {
     ZCSpawnSelection,
 } from '../assets/script/app/zcds/model/ZCSpawnSelection';
 import { installZCNeutralTestCatalog, ZC_TEST_ITEM } from './helpers/zcds-neutral-catalog';
+import { assetPath } from './helpers/asset-paths';
 
 installZCNeutralTestCatalog();
 
@@ -89,7 +90,7 @@ test('select maps require candidate cells for every player section', () => {
 
 test('三张河道自选主城地图都按各自前中后区并集限制游戏内落点', () => {
     for (const file of ['river_custom.json', 'river_custom_new.json', 'select_river.json']) {
-        const layout = JSON.parse(readFileSync(`assets/resources/config/maps/${file}`, 'utf8')) as ZCMapLayout;
+        const layout = JSON.parse(readFileSync(assetPath(`config/maps/${file}`), 'utf8')) as ZCMapLayout;
         const selection = new ZCSpawnSelection(makeMap(layout), sequence(0));
         for (const [owner, section] of [['player', 1], ['enemy', 2]] as const) {
             const zoneCells = layout.regions?.filter((region) => region.section === section)

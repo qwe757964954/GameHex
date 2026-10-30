@@ -57,16 +57,16 @@ export class OSRankRankDetailPage extends PopupBase {
     static prefabPath = 'ui/Celebration/OSRankRankDetail';
 
     @property({ type: VirtualScrollView, tooltip: 'List：排行列表（FGUI `list`，item = `OSRankDetailRow`）' })
-    list: VirtualScrollView = null!;
+    list: VirtualScrollView = null;
 
     @property({ type: OSDetailRow, tooltip: 'HeroRow：自己那一行（FGUI `heroItem`，**不在列表里**，见文件头）' })
-    heroRow: OSDetailRow = null!;
+    heroRow: OSDetailRow = null;
 
     @property({ type: Label, tooltip: 'ColPower：表头第三格（FGUI `lab_key`，运行时被 `rankKey` 覆盖）' })
-    colPower: Label = null!;
+    colPower: Label = null;
 
     @property({ type: Node, tooltip: 'PopBg/CloseBtn：关闭按钮（FGUI `按钮_关闭`）' })
-    closeBtn: Node = null!;
+    closeBtn: Node = null;
 
     /** 本次拿到的排行行（`renderItemFn` 按 index 现取，规则 55）。 */
     private _rows: readonly ICelebrationRankEntry[] = [];

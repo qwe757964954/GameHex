@@ -1,3 +1,5 @@
+import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
+import { scopeAssetService } from '../assets/script/core/asset/AssetService';
 /**
  * 「点击空白关闭」的回归网（`framework/ui/PopupBase.ts`）。
  *
@@ -180,6 +182,9 @@ function loadPopupBase(): PopupBaseCtor {
         exports: {},
         console,
         require: (name: string) => {
+            if (name.endsWith('/ResourceScope')) return { ResourceScope };
+            if (name.endsWith('/AssetService')) return { scopeAssetService };
+            if (name.endsWith('/ProcedureManager')) return { ProcedureManager: { instance: null } };
             if (name === 'cc') return ccStub;
             if (name === './PopupDef') return require('../assets/script/framework/ui/PopupDef');
             if (name === './PopupManager') return { PopupManager: { inst: null, owns: () => false } };

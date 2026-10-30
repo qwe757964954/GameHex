@@ -63,7 +63,8 @@ export class ZCGamePreload {
     private readonly resources = new ResourceScope('battle:matching-preload');
     private transferred = false;
 
-    constructor(loader: Pick<ZCGameLoader, 'prepare'>, battle?: Promise<ZCBattleStart | null>, waveCardIds: readonly number[] = []) {
+    constructor(loader: Pick<ZCGameLoader, 'prepare'>, battle?: Promise<ZCBattleStart | null>, waveCardIds: readonly number[] = [], releaseOwner?: () => void) {
+        if (releaseOwner) this.resources.defer(releaseOwner);
         this.ready = battle ? battle.then((data) => {
             if (this.resources.disposed) throw new Error('对局预加载已取消');
             return loader.prepare(this.resources, data, waveCardIds);

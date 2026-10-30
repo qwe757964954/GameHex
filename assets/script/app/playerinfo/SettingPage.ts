@@ -49,45 +49,45 @@ export class SettingPage extends PopupBase {
 
     // ---------- 弹窗框 ----------
     @property({ type: Node, tooltip: 'PopBg/CloseBtn：关闭按钮' })
-    closeButton: Node = null!;
+    closeButton: Node = null;
 
     // ---------- 音乐 ----------
     @property({ type: Node, tooltip: 'MusicSwitch：「音乐开关」整块（挂 cc.Button）' })
-    musicSwitch: Node = null!;
+    musicSwitch: Node = null;
 
     @property({ type: Node, tooltip: 'MusicSwitch/OffKnob：关态滑块（靠左）' })
-    musicOffKnob: Node = null!;
+    musicOffKnob: Node = null;
     @property({ type: Node, tooltip: 'MusicSwitch/OnKnob：开态滑块（靠右）' })
-    musicOnKnob: Node = null!;
+    musicOnKnob: Node = null;
     @property({ type: Node, tooltip: 'MusicSwitch/OffLabel：「关」字' })
-    musicOffLabel: Node = null!;
+    musicOffLabel: Node = null;
     @property({ type: Node, tooltip: 'MusicSwitch/OnLabel：「开」字' })
-    musicOnLabel: Node = null!;
+    musicOnLabel: Node = null;
 
     @property({ type: VolumeSlider, tooltip: 'MusicSlider：音乐音量滑动条' })
-    musicSlider: VolumeSlider = null!;
+    musicSlider: VolumeSlider = null;
 
     @property({ type: Label, tooltip: 'MusicVolumeValue：音乐音量数值文本' })
-    musicVolumeValue: Label = null!;
+    musicVolumeValue: Label = null;
 
     // ---------- 音效 ----------
     @property({ type: Node, tooltip: 'SoundSwitch：「音效开关」整块' })
-    soundSwitch: Node = null!;
+    soundSwitch: Node = null;
 
     @property({ type: Node, tooltip: 'SoundSwitch/OffKnob：关态滑块' })
-    soundOffKnob: Node = null!;
+    soundOffKnob: Node = null;
     @property({ type: Node, tooltip: 'SoundSwitch/OnKnob：开态滑块' })
-    soundOnKnob: Node = null!;
+    soundOnKnob: Node = null;
     @property({ type: Node, tooltip: 'SoundSwitch/OffLabel：「关」字' })
-    soundOffLabel: Node = null!;
+    soundOffLabel: Node = null;
     @property({ type: Node, tooltip: 'SoundSwitch/OnLabel：「开」字' })
-    soundOnLabel: Node = null!;
+    soundOnLabel: Node = null;
 
     @property({ type: VolumeSlider, tooltip: 'SoundSlider：音效音量滑动条' })
-    soundSlider: VolumeSlider = null!;
+    soundSlider: VolumeSlider = null;
 
     @property({ type: Label, tooltip: 'SoundVolumeValue：音效音量数值文本' })
-    soundVolumeValue: Label = null!;
+    soundVolumeValue: Label = null;
 
     // ============================================================
     // 生命周期

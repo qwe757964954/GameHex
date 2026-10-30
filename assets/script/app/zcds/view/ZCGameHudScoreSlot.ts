@@ -52,13 +52,13 @@ export interface IHudScoreSlotData {
 @ccclass('ZCGameHudScoreSlot')
 export class ZCGameHudScoreSlot extends Component {
     @property({ type: Sprite, tooltip: 'Score 自身的九宫格底板 frame_01~04' })
-    background: Sprite = null!;
+    background: Sprite = null;
 
     @property({ type: Label, tooltip: 'Value：地块数（已结束时隐藏）' })
-    value: Label = null!;
+    value: Label = null;
 
     @property({ type: Sprite, tooltip: 'Cross：红 X（该玩家已战斗结束；平时隐藏）' })
-    cross: Sprite = null!;
+    cross: Sprite = null;
 
     /** 是否已完成首次渲染 —— 首帧直接落位，不让开局四格从默认尺寸演一遍。 */
     private rendered = false;
@@ -95,7 +95,7 @@ export class ZCGameHudScoreSlot extends Component {
             this.value.lineHeight = data.leading ? SCORE_LEAD_LINE_HEIGHT : SCORE_NORMAL_LINE_HEIGHT;
         }
         if (this.value.isBold !== data.leading) this.value.isBold = data.leading;
-        const rect = this.node.getComponent(UITransform)!;
+        const rect = this.node.getComponent(UITransform);
         const targetWidth = data.leading ? SCORE_LEAD_WIDTH : SCORE_NORMAL_WIDTH;
         const targetHeight = data.leading ? SCORE_LEAD_HEIGHT : SCORE_NORMAL_HEIGHT;
         // 数字变化 / 领先切换的判据要在写入 `leading` / `lastValue` **之前**算好。

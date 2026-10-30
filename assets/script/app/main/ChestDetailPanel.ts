@@ -44,11 +44,10 @@ export interface IChestDetailContent {
  * 玩家看不到箱子里有什么、也不知道马上开要花多少钱。现在点宝箱只弹这个详情，
  * 由弹窗上的两颗按钮发请求（语义与原来一一对应，见 `MainPage`）。
  *
- * ## 交互：只派发意图
+ * ## 弹窗职责
  *
- * 三颗按钮都走 `EventMgr`（`CHEST_EVENTS`），页面订阅后转给 Repository；
  * 尺寸 / 遮罩 / 点击空白关闭 / 层级全部交给 `PopupManager`（prefab 上 Dim 与根节点挂 `cc.Widget` 四边对齐）。
- * 视图不持有控制器入口 —— 与 `BigMapPlayerLevelPanel` / `LevelInfoPanel` 同口径。
+ * 三颗按钮的意图事件见 `ChestEvents.ts`（语义在那儿写一次，这里不重复）。
  */
 @ccclass('ChestDetailPanel')
 export class ChestDetailPanel extends PopupBase {
@@ -56,53 +55,53 @@ export class ChestDetailPanel extends PopupBase {
     static prefabPath = 'ui/main/ChestDetailPanel';
 
     @property({ type: Sprite, group: '节点引用', tooltip: 'Panel/QualityFrame：品质框' })
-    private qualityFrame: Sprite = null!;
+    private qualityFrame: Sprite = null;
 
     @property({ type: Sprite, group: '节点引用', tooltip: 'Panel/ChestIcon：宝箱图标' })
-    private chestIcon: Sprite = null!;
+    private chestIcon: Sprite = null;
 
     @property({ type: Label, group: '节点引用', tooltip: 'Panel/ChestName：宝箱名' })
-    private nameLabel: Label = null!;
+    private nameLabel: Label = null;
 
     @property({ type: Label, group: '节点引用', tooltip: 'Panel/QualityText：品质' })
-    private qualityLabel: Label = null!;
+    private qualityLabel: Label = null;
 
     @property({ type: Label, group: '节点引用', tooltip: 'Panel/CountText：数量' })
-    private countLabel: Label = null!;
+    private countLabel: Label = null;
 
     /** 奖励说明：四列网格使用详情页样式，仍由公共 RewardItemView 解析物品。 */
     @property({ type: VirtualScrollView, group: '节点引用', tooltip: 'Panel/ItemSlots：奖励说明（itemPrefab = ChestDetailRewardItem）' })
-    private dropList: VirtualScrollView = null!;
+    private dropList: VirtualScrollView = null;
 
     @property({ type: Button, group: '节点引用', tooltip: 'Panel/BtnSecondary：立即打开（花银币）' })
-    private fastButton: Button = null!;
+    private fastButton: Button = null;
 
     @property({ type: Label, group: '节点引用', tooltip: 'BtnSecondary/Label' })
-    private fastLabel: Label = null!;
+    private fastLabel: Label = null;
 
     @property({ type: Node, group: '节点引用', tooltip: 'BtnSecondary/CostBg：费用底' })
-    private fastCostRoot: Node = null!;
+    private fastCostRoot: Node = null;
 
     @property({ type: Sprite, group: '节点引用', tooltip: 'BtnSecondary/CostIcon：银币图标' })
-    private fastCostIcon: Sprite = null!;
+    private fastCostIcon: Sprite = null;
 
     @property({ type: Label, group: '节点引用', tooltip: 'BtnSecondary/CostLabel：费用数字' })
-    private fastCostLabel: Label = null!;
+    private fastCostLabel: Label = null;
 
     @property({ type: Button, group: '节点引用', tooltip: 'Panel/BtnPrimary：打开 / 倒计时' })
-    private openButton: Button = null!;
+    private openButton: Button = null;
 
     @property({ type: Label, group: '节点引用', tooltip: 'BtnPrimary/Label：打开' })
-    private openLabel: Label = null!;
+    private openLabel: Label = null;
 
     @property({ type: Node, group: '节点引用', tooltip: 'BtnPrimary/CostBg：倒计时底' })
-    private openCostRoot: Node = null!;
+    private openCostRoot: Node = null;
 
     @property({ type: Label, group: '节点引用', tooltip: 'BtnPrimary/CostLabel：倒计时文本' })
-    private openCostLabel: Label = null!;
+    private openCostLabel: Label = null;
 
     @property({ type: Button, group: '节点引用', tooltip: 'Panel/BtnClose：关闭' })
-    private closeButton: Button = null!;
+    private closeButton: Button = null;
 
     private fallbackChestIcon: SpriteFrame | null = null;
 
@@ -168,7 +167,7 @@ export class ChestDetailPanel extends PopupBase {
 
     /** 单格渲染 —— 走公共 `RewardItemView`（带概率的那套只有这个弹窗用）。 */
     private readonly renderReward = (item: Node, index: number): void => {
-        item.getComponent(RewardItemView)!.render(this.rewards[index]);
+        item.getComponent(RewardItemView).render(this.rewards[index]);
     };
 
     private updateCountdownText(text: string): void {
@@ -177,12 +176,10 @@ export class ChestDetailPanel extends PopupBase {
     }
 
     private handleFastOpen(): void {
-        if (!this.fastButton.interactable) return;
         EventMgr.instance.emit(CHEST_EVENTS.FAST_OPEN);
     }
 
     private handleOpen(): void {
-        if (!this.openButton.interactable) return;
         EventMgr.instance.emit(CHEST_EVENTS.OPEN);
     }
 

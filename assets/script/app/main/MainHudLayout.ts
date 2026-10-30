@@ -19,10 +19,10 @@ export function resolveMainHudTop(width: number, height: number, safeTop: number
 @ccclass('MainHudLayout')
 export class MainHudLayout extends Component {
     @property({ type: UITransform, tooltip: '主界面全屏视口' })
-    viewport: UITransform = null!;
+    viewport: UITransform = null;
 
     @property({ type: Widget, tooltip: 'TopHud 的顶部对齐组件' })
-    topHudWidget: Widget = null!;
+    topHudWidget: Widget = null;
 
     onEnable(): void {
         this.viewport.node.on(Node.EventType.SIZE_CHANGED, this.applyLayout, this);

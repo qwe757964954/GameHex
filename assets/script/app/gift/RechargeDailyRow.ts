@@ -32,37 +32,37 @@ export interface IRechargeDailyButtonTexts {
 @ccclass('RechargeDailyRow')
 export class RechargeDailyRow extends Component {
     @property({ type: Label, tooltip: 'Desc：行描述' })
-    descLabel: Label = null!;
+    descLabel: Label = null;
 
     @property({ type: RechargeProgressBar, tooltip: 'Progress：金币进度条（仅「前往充值」态显示）' })
-    progress: RechargeProgressBar = null!;
+    progress: RechargeProgressBar = null;
 
     @property({ type: GiftRewardSlot, tooltip: 'Goods0：第一个奖励格' })
-    goods0: GiftRewardSlot = null!;
+    goods0: GiftRewardSlot = null;
 
     @property({ type: GiftRewardSlot, tooltip: 'Goods1：第二个奖励格' })
-    goods1: GiftRewardSlot = null!;
+    goods1: GiftRewardSlot = null;
 
     @property({ type: Node, tooltip: 'BtnLock：未开启按钮（静态，不可点）' })
-    btnLock: Node = null!;
+    btnLock: Node = null;
 
     @property({ type: Label, tooltip: 'BtnLock 的文案' })
-    btnLockLabel: Label = null!;
+    btnLockLabel: Label = null;
 
     @property({ type: Node, tooltip: 'BtnGoto：前往充值按钮' })
-    btnGoto: Node = null!;
+    btnGoto: Node = null;
 
     @property({ type: Label, tooltip: 'BtnGoto 的文案' })
-    btnGotoLabel: Label = null!;
+    btnGotoLabel: Label = null;
 
     @property({ type: Node, tooltip: 'BtnClaim：领取按钮' })
-    btnClaim: Node = null!;
+    btnClaim: Node = null;
 
     @property({ type: Label, tooltip: 'BtnClaim 的文案' })
-    btnClaimLabel: Label = null!;
+    btnClaimLabel: Label = null;
 
     @property({ type: Label, tooltip: 'TakenText：已领取文字' })
-    takenText: Label = null!;
+    takenText: Label = null;
 
     /** 当前按钮键（宿主回调时按它分派动作）。 */
     private buttonKey: RechargeDailyButtonKey = 'locked';

@@ -2,21 +2,6 @@ import { ScriptObject } from "../base/ScriptObject";
 import { Container } from "../container/Container";
 import { World } from "./World";
 
-let map = {}
-function record(key:string, time:number){
-    map[key] = time
-    print()
-}
-
-let _t = 0
-function print(){
-    let frame = (cc.game as any).frameCount
-    if(frame - _t > 60){
-        _t = frame
-        console.log(JSON.stringify(map))
-    }
-}
-
 export abstract class System extends ScriptObject
 {
     protected world:World

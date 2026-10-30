@@ -35,31 +35,31 @@ const STATUS_COLOR = new Color(166, 176, 166, 255);
 export class LoginPage extends Component {
     // ===== 编辑器拖拽绑定 =====
     @property({ type: Node, tooltip: '登录根节点 LoginRoot' })
-    root: Node = null!;
+    root: Node = null;
 
     @property({ type: EditBox, tooltip: '账号输入框 AccountEdit' })
-    accountInput: EditBox = null!;
+    accountInput: EditBox = null;
 
     @property({ type: EditBox, tooltip: '密码输入框 PasswordAccount' })
-    passwordInput: EditBox = null!;
+    passwordInput: EditBox = null;
 
     @property({ type: Label, tooltip: '服务器按钮文字 ServerLab' })
-    serverButtonLabel: Label = null!;
+    serverButtonLabel: Label = null;
 
     @property({ type: Label, tooltip: '登录状态文字 StatusLabel' })
-    statusLabel: Label = null!;
+    statusLabel: Label = null;
 
     @property({ type: Label, tooltip: '版本号文字 VersionLabel' })
-    versionLabel: Label = null!;
+    versionLabel: Label = null;
 
     @property({ type: Node, tooltip: '选择服务器按钮 ServerBtn' })
-    serverButton: Node = null!;
+    serverButton: Node = null;
 
     @property({ type: Node, tooltip: '登录按钮 LoginBtn' })
-    loginButton: Node = null!;
+    loginButton: Node = null;
 
     @property({ type: Node, tooltip: '注册按钮 RegisterBtn' })
-    registerButton: Node = null!;
+    registerButton: Node = null;
 
     // ===== 业务根（不进 Inspector）=====
     private rootLogic = new LoginRoot();
@@ -254,6 +254,6 @@ export class LoginPage extends Component {
 
     private repairStatusLabelBinding(): void {
         if (this.statusLabel || this.disposed) return;
-        this.statusLabel = this.resolveRoot().getChildByName('StatusLabel')?.getComponent(Label) ?? null!;
+        this.statusLabel = this.resolveRoot().getChildByName('StatusLabel')?.getComponent(Label) ?? null;
     }
 }

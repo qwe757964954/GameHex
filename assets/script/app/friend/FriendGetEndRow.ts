@@ -24,31 +24,31 @@ const { ccclass, property } = _decorator;
 @ccclass('FriendGetEndRow')
 export class FriendGetEndRow extends Component {
     @property({ type: Sprite, tooltip: 'Background：行底框（本节点上的 cc.Sprite，`fd_row_bg` 九宫格）' })
-    background: Sprite = null!;
+    background: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'HeadFrame：头像框（`fd_head_frame`，81×81）' })
-    headFrame: Sprite = null!;
+    headFrame: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'Icon：头像（50×50，运行时按 `CmdFriend.img` 加载）' })
-    icon: Sprite = null!;
+    icon: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'LvTag：等级标签底（`fd_lv_tag`，40×40）' })
-    lvTag: Sprite = null!;
+    lvTag: Sprite = null;
 
     @property({ type: Label, tooltip: 'Lv：等级数字' })
-    lvLabel: Label = null!;
+    lvLabel: Label = null;
 
     @property({ type: Label, tooltip: 'Name：玩家名' })
-    nameLabel: Label = null!;
+    nameLabel: Label = null;
 
     @property({ type: Label, tooltip: 'Power：战力文案' })
-    powerLabel: Label = null!;
+    powerLabel: Label = null;
 
     @property({ type: Label, tooltip: 'EndNum：右侧「体力数:N」（右对齐，空串时整块隐藏）' })
-    endNumLabel: Label = null!;
+    endNumLabel: Label = null;
 
     @property({ type: Node, tooltip: 'ActionBtn：领取按钮（金色底图，`颜色,1`）' })
-    actionButton: Node = null!;
+    actionButton: Node = null;
 
     /** 点击回调，**由宿主在每次铺行时重设**（虚拟列表复用节点，只能靠 index 认行）。 */
     onAction: (() => void) | null = null;

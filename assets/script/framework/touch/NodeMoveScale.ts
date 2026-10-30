@@ -3,7 +3,6 @@ import { ScriptObject } from "../base/ScriptObject";
 
 export class NodeMoveScale extends ScriptObject {
     public static __cname: string = "NodeMoveScale";
-    private _showTestLog = false;
     private scaleFactor: number
 
     // 地图最小显示的的缩放(正常显示时检测,手指缩放时不检测)
@@ -793,20 +792,6 @@ export class NodeMoveScale extends ScriptObject {
         t.stageWidth = stageWidth
         t.stageHeight = stageHeight
         t._isChange = true
-    }
-
-    private consoleTouchesPoints(points: any[]) {
-        if (!this._showTestLog) return;
-
-        if (points && points.length) {
-            this.log("consoleTouchesPoints")
-            if (points.length > 2) {
-                this.log("===!!!!!!!! 超了2个了!!!!!!!!")
-            }
-            for (const pt of points) {
-                this.log(pt.stageX + "   " + pt.stageY)
-            }
-        }
     }
 
 }

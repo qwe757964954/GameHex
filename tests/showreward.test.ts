@@ -58,6 +58,7 @@ import {
 } from '../assets/script/app/showReward/ShowRewardTable';
 import type { IRewardEntry } from '../assets/script/app/showReward/ShowRewardTable';
 import { parseItemRows, parseRolePropertyRows } from '../assets/script/app/activity/LayerActivityTable';
+import { assetPath } from './helpers/asset-paths';
 
 // ============================================================
 // 公共小工具
@@ -65,8 +66,7 @@ import { parseItemRows, parseRolePropertyRows } from '../assets/script/app/activ
 
 const CANVAS_W = 720;
 const CANVAS_H = 1280;
-const IMAGE_ROOT = 'assets/resources/image';
-const PREFAB = 'assets/resources/ui/ShowReward/ShowReward.prefab';
+const PREFAB = assetPath('ui/ShowReward/ShowReward.prefab');
 const GENERATOR = 'tmp/gen_showreward.mjs';
 
 const PAGE_SRC = readFileSync('assets/script/app/showReward/ShowRewardPage.ts', 'utf8');
@@ -139,7 +139,7 @@ function prefabUuid(path: string): string {
 }
 
 function metaOf(rel: string): { uuid: string; rawW: number; rawH: number; border: number[] } {
-    const head = `${IMAGE_ROOT}/${rel}.png.meta`;
+    const head = assetPath(`image/${rel}.png.meta`);
     const j = JSON.parse(readFileSync(head, 'utf8')) as any;
     const u = j.subMetas.f9941.userData;
     return {
@@ -328,7 +328,7 @@ test('A9｜5 星轨迹：个数、顺序、与 prefab 用的静置位三处一�
 test('B1｜5 张图全在磁盘上，且尺寸与 `ShowRewardArt` 注释一致', () => {
     assert.deepEqual(Object.keys(SR_ART_NAMES).sort(), ['glow', 'hintBg', 'panelBg', 'star', 'title']);
     for (const [key, rel] of Object.entries(SR_ART_NAMES)) {
-        const png = `${IMAGE_ROOT}/${rel}.png`;
+        const png = assetPath(`image/${rel}.png`);
         assert.ok(existsSync(png), `${key} → ${png} 不存在`);
         assert.ok(existsSync(`${png}.meta`), `${key} 缺 .png.meta（编辑器没导入）`);
     }
@@ -827,7 +827,7 @@ test('E2｜音效 key 必须在 `audioConfig.json` 里，且 mp3 真在磁盘上
         const value = byKey.get(key);
         assert.ok(value, `audioConfig 里没有音效「${key}」（AudioMgr 会静默 return null）`);
         const rel = value!.replace('resources://', '');
-        assert.ok(existsSync(`assets/resources/${rel}.mp3`), `${rel}.mp3 不在磁盘上`);
+        assert.ok(existsSync(assetPath(`${rel}.mp3`)), `${rel}.mp3 不在磁盘上`);
     }
     assert.equal(showRewardSoundKey(true), SHOW_REWARD_SOUNDS.coin);
     assert.equal(showRewardSoundKey(false), SHOW_REWARD_SOUNDS.reward);
@@ -899,7 +899,7 @@ test('F5｜反向守卫：`ShowRewardPage.prefabPath` 与磁盘目录大小写�
     const m = PAGE_SRC.match(/static prefabPath = '([^']+)'/);
     assert.ok(m, '缺 static prefabPath');
     assert.equal(m![1], 'ui/ShowReward/ShowReward');
-    assert.ok(existsSync(`assets/resources/${m![1]}.prefab`), `磁盘上没有 assets/resources/${m![1]}.prefab`);
+    assert.ok(existsSync(assetPath(`${m![1]}.prefab`)), `磁盘上没有 assets/resources/${m![1]}.prefab`);
     // `.prefab.meta` 的 uuid 也要在（生成器会写，改名后重建不会静默失配）
     assert.ok(prefabUuid(PREFAB).length > 0);
 });

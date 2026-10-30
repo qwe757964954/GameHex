@@ -7,13 +7,13 @@ const { ccclass, property } = _decorator;
 /** 节点和排版由预制体提供，池化实例只更新本次标记的显示数据。 */
 @ccclass('BigMapWorldMarker')
 export class BigMapWorldMarker extends Component {
-    @property({ type: Sprite, group: '图标' }) icon: Sprite = null!;
-    @property({ type: Sprite, group: '角标' }) private badge: Sprite = null!;
-    @property({ type: Label, group: '角标' }) private label: Label = null!;
-    @property({ type: Graphics, group: '角标' }) private badgeBackground: Graphics = null!;
-    @property({ type: Node, group: '玩家头像' }) private portraitRoot: Node = null!;
-    @property({ type: Sprite, group: '玩家头像' }) private portrait: Sprite = null!;
-    @property({ type: Graphics, group: '玩家头像' }) private portraitBackground: Graphics = null!;
+    @property({ type: Sprite, group: '图标' }) icon: Sprite = null;
+    @property({ type: Sprite, group: '角标' }) private badge: Sprite = null;
+    @property({ type: Label, group: '角标' }) private label: Label = null;
+    @property({ type: Graphics, group: '角标' }) private badgeBackground: Graphics = null;
+    @property({ type: Node, group: '玩家头像' }) private portraitRoot: Node = null;
+    @property({ type: Sprite, group: '玩家头像' }) private portrait: Sprite = null;
+    @property({ type: Graphics, group: '玩家头像' }) private portraitBackground: Graphics = null;
 
     private markerLayout: Omit<IBigMapMarkerHitArea, 'hexId'> = { width: 0, height: 0 };
 

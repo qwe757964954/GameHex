@@ -4,7 +4,7 @@ import { CacheMgr } from '../net/CacheMgr';
 import { readRoleRow } from '../main/MainRoleRow';
 import { MainResBarSlot } from '../main/MainResBarSlot';
 import { buildResBarSlots, buildResBarView } from '../main/MainResBarTypes';
-import { RES_BAR_FLASH_PEAK_ALPHA, RES_BAR_FLASH_SECONDS, resBarFlashFx } from '../main/MainResBarFeedback';
+import {RES_BAR_FLASH_PEAK_ALPHA, resBarFlashFx} from '../main/MainResBarFeedback';
 import {
     IItemRefRow,
     IOpenRefRow,
@@ -96,13 +96,13 @@ const GLOW_PADDING = 8;
 @ccclass('ResBar')
 export class ResBar extends Component {
     @property({ type: MainResBarSlot, tooltip: 'Res0：第 1 格（顺序 = openRefId 的 resShowType / resKeys）' })
-    slot0: MainResBarSlot = null!;
+    slot0: MainResBarSlot = null;
 
     @property({ type: MainResBarSlot, tooltip: 'Res1：第 2 格' })
-    slot1: MainResBarSlot = null!;
+    slot1: MainResBarSlot = null;
 
     @property({ type: MainResBarSlot, tooltip: 'Res2：第 3 格（keys 不足 3 个时整格隐藏）' })
-    slot2: MainResBarSlot = null!;
+    slot2: MainResBarSlot = null;
 
     /**
      * `open.json` 的 `refId`（**首选**）：填了就读该行的 `resShowType` 决定显示哪几格。
@@ -145,7 +145,6 @@ export class ResBar extends Component {
 
     /** `CmdRole` 缓存变化回调（箭头函数属性：引用稳定，供 onDestroy 精确摘除）。 */
     private onRoleCacheUpdate = (): void => {
-        if (!this.isValid) return;
         void this.reload();
     };
 

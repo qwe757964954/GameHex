@@ -56,13 +56,13 @@ const { ccclass, property } = _decorator;
 @ccclass('GetHeroEntry')
 export class GetHeroEntry extends Component {
     @property({ type: GoodsBox, tooltip: 'Goods：奖励物品框（带 `Frame`/`Icon`/`Num` 三件套）' })
-    goods: GoodsBox = null!;
+    goods: GoodsBox = null;
 
     @property({ type: Label, tooltip: 'ValueLabel：进度文案 `(7/10)`' })
-    valueLabel: Label = null!;
+    valueLabel: Label = null;
 
     @property({ type: Node, tooltip: 'RedDot：可领取红点（只有 `FINISH` 才亮）' })
-    redDot: Node = null!;
+    redDot: Node = null;
 
     /** 数据端口；测试可替换。 */
     private repo: IMainTaskRepository = mainTaskRepository;

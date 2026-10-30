@@ -1,4 +1,4 @@
-import { Graphics, ProgressBar, SpriteFrame } from 'cc';
+import {ProgressBar, SpriteFrame} from 'cc';
 import {
     HEX_GRID_CONTENT_LIFT,
     HEX_GRID_FACE_HEIGHT,
@@ -712,7 +712,7 @@ export function buildVictorySweepPlan(
     const stepByLayer = new Map<number, number>();
     layerList.forEach((layer, index) => stepByLayer.set(layer, index));
     const steps = new Map<number, number>();
-    for (const hex of playable) steps.set(hex.id, stepByLayer.get(layerOf(hex.row))!);
+    for (const hex of playable) steps.set(hex.id, stepByLayer.get(layerOf(hex.row)));
     return { steps, stepCount: layerList.length };
 }
 
@@ -1074,8 +1074,9 @@ export function buildDecorPlacements(
     measure: (art: string) => Readonly<{ width: number; height: number }> | null,
 ): ZCDecorPlacement[] {
     const placements: ZCDecorPlacement[] = [];
-    for (let index = 0; index < (freeDecor?.length ?? 0); index++) {
-        const item = freeDecor![index];
+    if (!freeDecor) return placements;
+    for (let index = 0; index < freeDecor.length; index++) {
+        const item = freeDecor[index];
         if (!item || typeof item.art !== 'string' || !item.art.trim()) continue;
         if (!Number.isFinite(item.x) || !Number.isFinite(item.y)
             || !(item.width > 0) || !Number.isFinite(item.width)

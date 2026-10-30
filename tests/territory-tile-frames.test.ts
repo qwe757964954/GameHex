@@ -1,3 +1,4 @@
+import * as mvcEvents from '../assets/script/app/territory/application/TerritoryEvents';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -7,6 +8,7 @@ import {
     MAP_MARKER_BUBBLE_FRAME_PASSED_PATH,
     MAP_MARKER_BUBBLE_FRAME_PENDING_PATH,
 } from '../assets/script/app/common/MapMarkerBadge';
+import { assetPath } from './helpers/asset-paths';
 
 /**
  * 领地图纸「地皮 + 格面框」的判据（2026-10-16 山猫需求）。
@@ -33,7 +35,7 @@ import {
 
 const MAP_VIEW_PATH = 'assets/script/app/territory/view/TerritoryMapView.ts';
 const ASSETS_PATH = 'assets/script/app/territory/application/TerritoryPageAssets.ts';
-const BUILDING_DIR = 'assets/resources/image/buildings';
+const BUILDING_DIR = assetPath('image/buildings');
 
 /** 剥掉注释再匹配（规则 104：注释里为解释"为什么不能这么写"会带上被禁的写法）。 */
 const stripComments = (source: string): string =>
@@ -246,6 +248,7 @@ function loadMapView() {
             if (id.includes('event/EventMgr')) {
                 return { EventMgr: { instance: { emit() {}, on() {}, offTarget() {} } } };
             }
+            if (id === '../application/TerritoryEvents') return mvcEvents;
             throw new Error(`Unexpected dependency: ${id}`);
         },
     });
@@ -285,10 +288,15 @@ test('章节战斗站点气泡显示章节-关卡（连字符不留空格），�
     assert.equal(render({ cellId: 1, type: 'fixedResource' }, input).levelBubble, undefined);
 });
 
-test('气泡底图必须统一蓝色 frame_03，且能在磁盘上找到', () => {
-    // 2026-10-28 16:23 用户：「改回蓝色」⇒ 两档同图，不再按通关状态分色。
-    assert.equal(MAP_MARKER_BUBBLE_FRAME_PASSED_PATH, MAP_MARKER_BUBBLE_FRAME_PENDING_PATH,
-        '两个槽位必须指同一张蓝色图；若哪天要重新分色，改这里的断言并同步文档');
+test('气泡底图必须按通关状态分色：未通关红 frame_02 / 已通关蓝 frame_03，且都能在磁盘上找到', () => {
+    // 🔴 2026-10-29 10:11 用户（附截图圈出蓝色 `1-2`）：「需要区分未通关关卡的气泡 icon 底色是红色」。
+    // 2026-10-28 16:23 那句「改回蓝色」说的是**已通关那颗变绿**，不是要所有气泡同色。
+    assert.equal(MAP_MARKER_BUBBLE_FRAME_PENDING_PATH, 'image/spawn-region/frame_02/spriteFrame',
+        '未通关必须是红色那张（spawn-region 下的 frame_02）');
+    assert.equal(MAP_MARKER_BUBBLE_FRAME_PASSED_PATH, 'image/spawn-region/frame_03/spriteFrame',
+        '已通关保持蓝色那张（spawn-region 下的 frame_03）');
+    assert.notEqual(MAP_MARKER_BUBBLE_FRAME_PASSED_PATH, MAP_MARKER_BUBBLE_FRAME_PENDING_PATH,
+        '两档必须不同图，否则「通没通过」在气泡上分不出来');
     for (const path of [MAP_MARKER_BUBBLE_FRAME_PASSED_PATH, MAP_MARKER_BUBBLE_FRAME_PENDING_PATH]) {
         assert.match(path, /^image\/spawn-region\/frame_0[123]\/spriteFrame$/,
             '必须落在 spawn-region 下 —— image/buildings/ 里同名的是首领的红色六边形格面框');
@@ -297,19 +305,19 @@ test('气泡底图必须统一蓝色 frame_03，且能在磁盘上找到', () =>
     }
 });
 
-test('气泡底图按「通没通过」二选一：未通关红、已通关绿，红图缺失回退绿图', () => {
+test('气泡底图按「通没通过」二选一：未通关红、已通关蓝，红图缺失回退蓝图', () => {
     const View = loadMapView();
     const view = new View();
     Object.assign(view, { stationIconOf: () => ({ name: 'building' }), stateOf: () => 'available' });
     const render = (view as unknown as { stationRenderOf(site: unknown, input: unknown): {
         levelBubbleFrame?: unknown;
     } }).stationRenderOf.bind(view);
-    const green = { name: 'frame_01' };
+    const blue = { name: 'frame_03' };
     const red = { name: 'frame_02' };
     let passed = false;
     const base = {
         stageByCell: new Map([[1, { chapterId: 1, stage: 3 }]]),
-        art: { randomSilverIcon: {}, levelBubbleFrame: green, levelBubblePendingFrame: red },
+        art: { randomSilverIcon: {}, levelBubbleFrame: blue, levelBubblePendingFrame: red },
         siteOpenableCells: [1], pendingFixedResourceCells: [],
         map: { sites: [] },
         // 2026-10-28：判据是**区域口径**（`isAreaPassed`）。同一 `configId` 的兄弟格共享通关状态，
@@ -319,11 +327,11 @@ test('气泡底图按「通没通过」二选一：未通关红、已通关绿�
     const site = { cellId: 1, type: 'stage', configId: '10001', unlock: { silverCost: 0, requiredCells: [] } };
     assert.equal(render(site, base).levelBubbleFrame, red, '未通关 ⇒ 红色底图');
     passed = true;
-    assert.equal(render(site, base).levelBubbleFrame, green, '已通关 ⇒ 绿色底图');
+    assert.equal(render(site, base).levelBubbleFrame, blue, '已通关 ⇒ 蓝色底图');
     passed = false;
     const noRed = { ...base, art: { ...base.art, levelBubblePendingFrame: undefined } };
-    assert.equal(render(site, noRed).levelBubbleFrame, green,
-        '红色底图没加载到时必须回退绿图 —— 不能让这一格连编号都没有');
+    assert.equal(render(site, noRed).levelBubbleFrame, blue,
+        '红色底图没加载到时必须回退蓝图 —— 不能让这一格连编号都没有');
 });
 
 test('已通关的关卡仍然可点（要能打开领地关卡信息弹窗）', () => {
@@ -550,7 +558,7 @@ test('★★美术引用与磁盘：五张图都在、尺寸与代码口径一�
 });
 
 test('★TerritoryPresenter 的默认 art 字面量必须与接口同步（漏字段会静默退成 undefined）', () => {
-    const presenter = readFileSync('assets/script/app/territory/application/TerritoryPresenter.ts', 'utf8');
+    const presenter = readFileSync('assets/script/app/territory/application/TerritoryModel.ts', 'utf8');
     for (const field of ['tileLocked', 'tileCleared', 'frameBoss', 'frameStage', 'frameAsyncPvp', 'frameChest']) {
         assert.match(presenter, new RegExp(`${field}: null`), `Presenter 默认 art 缺字段：${field}`);
     }

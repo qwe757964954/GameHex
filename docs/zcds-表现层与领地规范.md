@@ -25,12 +25,23 @@
 | 战斗飘字「快进慢出」与收尾漂移 | `ZCFloatTextView` / `floatTextEntrance`、`floatTextFade`、`floatTextDrift` | `tests/zcds-float-text-gold-icon.test.ts`、`tests/zcds-progress.test.ts` |
 | 开局归属扩散波 | `ZCClaimWave` / `buildClaimWavePlan`、`ZCHexView.setClaimWave` | `tests/zcds-territory-claim-wave.test.ts` |
 | 胜利结算三段式扫场（铺场/回正/脉冲） | `ZCVictorySweep` / `zcDeepFactionColor`、`setSweepOwner`、`appendHexPulseOutlineSegments` | `tests/zcds-progress.test.ts`、`tests/zcds-outline-layer.test.ts` |
+| **废墟地块底色按归属方混合灰**（2026-10-29） | `ZCTheme.zcRuinsFactionColor` / `ZCHexView.territoryTint`（`ZCHexView.TERRITORY_FILL_ALPHA`） | `tests/zcds-ruins-tile-color.test.ts` |
+| **废墟建筑不再产金**（主城那一路原来无条件发钱，2026-10-29） | `ZCEconomySystem.tickIncome` / `isIncomeSource`、`isBuildingOperational` | `tests/zcds-ruins-income.test.ts` |
 | 开局金矿格整圈描边呼吸（绿色 · 9px · 棋盘最上层） | `ZCGameViewUtil.zcNeutralHintAlpha` / `ZCHexView.strokeHintOutline` / `ZCGameRenderWorld.ensureHintOutlineGraphics` | `tests/zcds-neutral-hint-outline.test.ts` |
 | 对局中立资源奖励**格心金币喷发**（12 枚 · ±26° · 翻面）+ 读数在上方 40px（2026-10-26，替换旧「飞向金币栏」） | `model/ZCNeutralBurst.zcNeutralBurstLaunch / zcNeutralBurstParticle / zcNeutralBurstLabelFrame` / `view/ZCNeutralRewardFx`（金币段） / `ZCBattlePresentationQueue.ZC_NEUTRAL_REWARD_TOTAL_SECONDS` | `tests/zcds-neutral-reward-fx.test.ts` |
 | 领地随机资源格「翻开」（**原地碎裂**，2026-10-16 起只剩这一套） | `core/hex/HexFlipPresentation.hexShatterFx` / `TerritoryHexFlip.applyFace`、`applyReveal` | `tests/territory-hex-flip.test.ts` |
 | 领地建筑**生成抖动**（先 Y 后 X，120%）+ **展示滞后到翻转结束** | `core/hex/ShakePresentation` / `TerritoryStationView.playBuildingShake`、`TerritoryMapView.pendingBuildingReveal`、`ITerritoryStationRender.hidden` | `tests/territory-building-shake.test.ts` |
 | 领地「获得银币 / 体力」**格心抛物线喷发（12 颗 · ±26° · 自身上下翻面）** + 读数在其**上方 40px**（row17，2026-10-17 细化） | `model/TerritoryResourceGain.territoryBurstLaunch / territoryBurstParticle` / `view/TerritoryGainBurst` / `TerritoryMapView.playResourceGain`、`ensureBurstRoot` | `tests/territory-resource-gain.test.ts` |
 | 领地奖励**图标解析**：`roleProperty` + `item` **两张表**、`item` 图在 `main-pages` 分包 + 随机格**读数合成一条**（2026-10-26） | `ResTypes.resBarCellOfRefId` / `ResTypes.resBarIconSpritePath` / `MainTerritoryMap.ensureRewardIcon`、`refRows` / `TerritoryMapView.playResourceGain` 的 `readout` | `tests/res-types.test.ts`、`tests/territory-resource-gain.test.ts` |
+
+## 对局资源与控制器生命周期（2026-10-30）
+
+- 匹配、大地图、章节地图均通过 `createZCBattlePreload(battle, options)` 准备对局；入口只交战斗 Promise、人数与波次，不再注入独立 AssetService / ConfigService。
+- 战斗准备创建 `ComponentController`，沿用 `ControllerBase` 从既有 GameContext 取得必需服务、优先使用会话复用资源。加载器只接收统一的只读资源契约。
+- `ZCGamePreload` 独立 scope 归属加载资源和准备控制器。取消或失败释放；移交后匹配退出不释放，战斗流程退出才释放。显式 scope 必须穿透控制器的默认 scope。
+- 直接进入战斗时，`ProcedureGame.onPreload` 将准备控制器登记到本次流程 scope；取消后不得写入 preparedResources。流程上下文缺失须明确报错。
+- `ZCGame` 单独持有运行时补图控制器，玩家头像、角色卡面、首领头像及结算奖励图经其 AssetService 加载；继续复用公共头像解析、图标缓存和奖励换算规则。异步返回仍检查离场状态，`shutdown()` 先关闭弹窗和展示节点，再释放控制器并清空帧表，重复退出幂等。
+- 回归：`tests/zcds-controller-resources.test.ts`、`tests/battle-preparation-entry.test.ts`、`tests/zcds-matching-preload.test.ts`、`tests/zcds-game-preload.test.ts`、`tests/zcds-map-loading.test.ts`、`tests/zcds-sprite-frame-loader.test.ts`、`tests/cocos-resource-lifecycle.test.ts`、`tests/controller-resources.test.ts`。
 
 ## 1. 对局棋盘的图层结构与地块表现（`ZCGameBoard.prefab`）
 
@@ -249,6 +260,42 @@ mapLayer（= ZCGameHUD.prefab 的 content）
 - 🔴 **问号状态不跟着缩**：图 1 那个「六边形底 + 问号指示器」是 `ZCHexView.artifactHexSpine`（prefab 里 **168×166.8**、Spine 循环动画，`artifact_charge` 专用），代码只切显隐与动画名、**一行尺寸都不写** ⇒ 改爆炸常量动不到它。
 - 判据：`tests/zcds-artifact-claim-burst.test.ts` 的「爆炸屏上边长 90px（0.6 × 150、不超一格），问号态的六边形 Spine 尺寸不动」——同时钉住 `90 == 0.6 × 150`、`≤ 123`、节点实际 `contentSize`、`createSprite` 的赋值顺序、以及 `ArtifactHexSpine` 仍为 168×166.8。
 
+### 1.9 废墟：底色按归属方混合灰，且**不再产金**（2026-10-29）
+
+用户口径两条：
+
+> 1.「战斗中形成废墟后，废墟的地块颜色需要和归属玩家的一致」
+> 2.「形成废墟的建筑不会再生产金币，现在前端还有播放金币生成的动画」
+
+**① 底色（`ZCHexView.territoryTint` + `ZCTheme.zcRuinsFactionColor`）**
+
+- 改前：`state.state === 'ruins'` 时**无条件**返回 `ZC_CLIENT_COLORS.ruins`（`#5E656C` 一块中立灰），
+  `state.owner` 完全没参与取色 ⇒ 谁的地被打成废墟都变成同一块灰，看不出这块废墟原来属于谁。
+- 改后：`zcRuinsFactionColor(owner)` = **阵营色往废墟灰里线性混 `ZC_RUINS_GRAY_MIX = 0.45`**。
+  实测 我方 `#7e82ff → #7075bd`、敌方 `#fb4969 → #b4566a`、3 号 `#fbcc49 → #b0a05a`、4 号 `#bd49fb → #8f56bd`。
+  `0` = 跟完好领地一样（看不出废了）、`1` = 退回老 bug（全都一块灰）—— 两端都别取。
+- `owner === 'neutral'` **原样返回废墟灰**：中立没有阵营色可混（`zcFactionColor('neutral')` 是浅石板色，
+  混出来比灰还亮、反倒像"崭新"），中立废墟就是"没有归属的废墟"。
+- alpha 不在函数里写死：`ZCHexView.TERRITORY_FILL_ALPHA` 由视图给，与普通领地同一口径（透明度的语义是
+  「这格是不是领地」，不是「是不是废墟」）。取色优先级不变：扫场 `sweepOwner` → 开局扩散波 `claimWave` → 废墟 → 常规。
+- 判据：`tests/zcds-ruins-tile-color.test.ts` —— 纯函数逐通道按公式复算、四席位废墟色两两不同、
+  视图真的按 `state.owner` 出 `tileSprite.color`、源码守卫禁止再出现 `ZC_CLIENT_COLORS.ruins.r/g/b`。
+
+**② 产金（`ZCEconomySystem.tickIncome`）**
+
+- 🔴 真凶是**主城**那一路：主城收入原来是**无条件**给 `context.owners` 每一方发钱、飘字坐标写死
+  `homeId(owner)`。主城被打成废墟（`building='none'` + `state='ruins'` + `hp=0`）之后，只要这一方
+  还有别的建筑（`developedCount > 0`，对局没结束），这段循环照跑 ⇒ **废墟格每一拍飘一次「金币 + 数字」、
+  还带着建筑抖动**，看起来就是"废墟还在产金币"。
+- 金矿那一路本来就有 `building !== 'mine'` 兜着，所以之前只在主城上露出来。
+- 修法：主城先 `isIncomeSource(hexById(homeId), 'hq')` 判「主城还在且还在运转」，判不过 `continue`；
+  金矿改走同一条闸 `isIncomeSource(mine, 'mine')`。`isBuildingOperational` 同时补齐
+  `building !== 'none'` 与 `state !== 'ruins'`（存档 / 回放里两者只其一的脏数据也挡住）。
+- **不是"把产金关掉"**：同一时刻还活着的金矿必须照常产出、照常飘字 —— 用例用反向守卫钉住这一点
+  （只钉"废墟没有飘字"的话，删掉整条产金也能绿）。
+- 判据：`tests/zcds-ruins-income.test.ts` —— 主城废墟 + 旁边活金矿 ⇒ 主城坐标 0 条产金飘字、
+  金币增量**恰好**等于金矿飘出的数值之和；金矿废墟同理；外加 `tickIncome` 的赋值顺序守卫。
+
 ## 2. 抽到金卡的「传说卡出场横幅」（`ZCGameLegendBanner.prefab`）
 
 抽到 `tier === 4`（金卡/传说）时，除地块上的小卡牌（`ZCGameCardReveal`，挂 `mapLayer`）外，同时在 **HUD 根节点 `options.overlayLayer`** 弹出全屏出场横幅 `ui/game/ZCGameLegendBanner.prefab`（四色底板与头像环按 `ZC_CLIENT_COLORS` 色相匹配 `owner`）。
@@ -274,7 +321,7 @@ mapLayer（= ZCGameHUD.prefab 的 content）
 - **异步头像晚注入**：`ZCGame.loadLegendPortraits()` 异步加载完成后，渲染层每帧 `renderLegendBanners` 里通过闭包取 `ProcedureGame.current?.resolveLegendPortrait(owner)` 喂给 `view.setPortraitResolver`；解析器更换时作废内容键、立刻重绘已弹出的横幅。加载失败则保留玩家色头像环，不阻断对局。
 - **判据**：`tests/zcds-legend-banner.test.ts`、端到端探针 `tmp/_legendbanner_probe.mjs`。
 
-## 3. 「冒险」领地页的职责边界（Prefab 骨架 + 三个视图 + 纯 TS Presenter）
+## 3. 「冒险」领地页的职责边界（Prefab 骨架 + 视图 + MVC）
 
 ### 3.1 职责切分表
 
@@ -286,12 +333,17 @@ mapLayer（= ZCGameHUD.prefab 的 content）
 | 站点条目、图标 trim 补偿、未解锁格「银币图标 + 数值」排布 | `ui/territory/TerritoryStation.prefab` + `view/TerritoryStationView.ts` |
 | 站点 / 待配置据点详情弹层 | `ui/territory/TerritorySiteDetail.prefab` + `view/TerritorySiteDetailPanel.ts`（页内 `instantiate` 持有，`Panel` 挂空 `cc.Button` 防点击穿透） |
 | 配色真源 / 坐标换算 / 协议归一化 | `view/TerritoryTheme.ts` / `model/TerritoryMapLayout.ts` / `model/TerritoryMapConfig.ts` |
-| 状态与业务编排（纯 TS Passive View） | `application/TerritoryPresenter.ts`（副作用全走 `TerritoryChapterLoader` / `TerritorySaveStoreAdapter` 等端口） |
-| 引擎生命周期与渲染接线 | `app/main/MainTerritoryMap.ts`（`MainTabHost.showPage` 必须在 `setParent` 前调用 `initialize(assets)`） |
+| 章节状态与业务规则（纯 TS） | `application/TerritoryModel.ts`，原 `TerritoryPresenter` 仅兼容导出 |
+| 网络/缓存订阅、时钟、界面意图与会话生命周期 | `application/TerritoryController.ts`，页面单实例，退出时统一解除订阅并取消异步任务 |
+| 章节 JSON、地图美术与弹窗补图资源归属 | `framework/controller/ControllerBase.ts` 提供必需展示资源契约并统一释放，页面不保存可空 AssetService |
+| 章节加载器、Repository、存档与 MVC 装配 | `application/TerritoryEntry.ts`，页面传入已绑定 ResourceScope 的资源入口 |
+| 引擎生命周期与渲染接线 | `app/main/MainTerritoryMap.ts` 消费展示快照与表现命令、派发操作意图；`MainTabHost.showPage` 必须在 `setParent` 前调用 `initialize(this.controller.resources)` |
+
+章节地图事件释放遵循全局规范 §2.1.1：Controller 退出时退订 UI、网络、缓存与时钟，同步意图 / 广播 / 定时回调不重复判断 disposed。退出前的 `stopping` 仅用于平衡本会话 loading；`await` 后的有效性和取消检查继续保留。测试从事件入口验证解绑，不直接调用已保存的旧 handler。
 
 ### 3.2 七条硬口径
 
-章节地图的关卡、首领和异步据点统一两步点击：未解锁且区域未通关时，点击只请求解锁并展示建筑，解锁回包成功后不自动弹窗；再次点击已解锁站点才打开对应详情（异步据点为「玩家关卡」）。已通关区域跳过重复解锁，保留重复挑战入口。验证见 `tests/territory-presenter.test.ts`。
+章节地图的关卡、首领和异步据点统一两步点击：未解锁且区域未通关时，点击先请求解锁；**主线关卡（stage / boss）解锁回包成功后立刻请求开战、直接进战斗**（2026-10-29 口径「只有解锁那一次直开」），异步据点与绑不到关卡的格子只解锁、不自动弹窗；再次点击**已解锁**站点才打开对应详情（异步据点为「玩家关卡」，主线为「关卡界面」）。已通关区域跳过重复解锁，保留重复挑战入口。验证见 `tests/territory-presenter.test.ts`。
 
 章节地图已解锁的关卡 / 首领 / 玩家据点在建筑上方显示短编号气泡（显示配置中的 `chapterId-stage`，例如 `1-5`，**连字符两侧不留空格**）。2026-10-28 用户指定底图 `image/spawn-region/frame_03`：使用蓝色带尖角原图，88×45、15 号白字，文字局部 y=5 对齐气泡正文；Sprite 先 CUSTOM + trim=false 再赋帧，采用 SLICED 保留边角，白色顶点色保留原图蓝色。同日按美术效果图校正文字样式：字重改**加粗**（美术稿笔画约占字高 25%，常规体只有 14%）、字距走 `spacingX = -1` 收紧（美术稿三字紧贴）、行高 20、字号 15 保持不变（实测字高/气泡高 0.50，美术稿 0.53，差的不是字号）。⚠️ 间距**不许写进字符串**：空格宽度跟字号 / 字体绑定，一旦换字号就会整体漂移；四个样式值统一从 `app/common/MapMarkerBadge` 导出（`MAP_MARKER_BADGE_FONT_SIZE` / `_LINE_HEIGHT` / `_SPACING_X` / `_BOLD` / `_TEXT_Y`），`renderLevelBubble` 必须整组覆盖 —— prefab 里的 `12 / 16 / 常规体` 是旧角标口径，只改字号会留下旧字重与旧字距。美术由 `TerritoryPageAssets` 经页面作用域的 AssetService 加载，`BundleCatalog` 路由到 battle 分包，不从视图加载。底部尖角距建筑可见顶边 3px；跟随 trim 和 `buildSize` 后的可见高度定位。大地图仍使用原有 88×30 编号牌，两边共用 `app/common/MapMarkerBadge` 的宽度、字号和定位函数。未解锁格保留银币条件，资源点及缺少有效建筑 / 气泡帧 / 关卡配置的站点不画气泡。气泡在共享角标层按需创建，`getStationLayers` 必须把角标层移至透明命中层之后，避免相邻行的 128×128 命中区抢走编号点击。点击沿用 `STATION_TAP`，隐藏 / 在途 / 生成淡入与站点同步，回收时统一销毁。判据：`tests/territory-station-batching.test.ts`、`tests/territory-tile-frames.test.ts`、`tests/territory-level-bubble-style.test.ts`（字重 / 字距 / 行高 / 抬升的常量守卫）、`tmp/territory-level-bubble-probe.mjs`（包含真实鼠标点击）。
 
@@ -1052,26 +1104,55 @@ distance → 波次    territoryCloudFillWaveOrder(distance, maxDistance)     //
 
 > 过程与"为什么不是这样"的长版见 `docs/章节地图动画与点击反馈实现说明.md` §8.14~§8.16。
 
-### 3.12 未解锁的关卡格：点一下先花银币解锁，**不弹**关卡界面（2026-10-28）
+### 3.12 未解锁的关卡格：解锁那一次**直开**，之后仍弹窗（2026-10-29 更新）
 
-#### 一、用户口径
+#### 一、用户口径（两轮，后一轮覆盖前一轮的第二步）
+
+2026-10-28：
 
 > 「当关卡地块未解锁时（显示银币和数字 ui 时），点击地块消耗银币，播放地块切换成关卡地块的
 >  动画（与其他新生成的地块动画一致），**不要**直接改成点击银币弹出【领地关卡弹窗】」
 
-背景：2026-10-27 为了做「关卡界面」（目标 / 奖励 / 感叹号），把关卡格改成**点一次就弹窗**。
-副作用是**锁着的格子**也弹 —— 玩家看到的是"我还没花银币，界面却先开了"，解锁这一步被藏起来。
+2026-10-29：
 
-#### 二、口径：按解锁状态分两段
+> 「章节地图，首次解锁关卡，立即发送请求给服务器开战，不用弹窗」
+> 追加确认口径：**「只有解锁那一次直开、之后仍弹窗」**。
 
-| 这一格 | 点一下 | 结果 |
+背景：2026-10-27 为了做「关卡界面」（目标 / 奖励 / 感叹号），把关卡格改成**点一次就弹窗**；
+2026-10-28 改成「点一下只解锁」，于是玩家要**点两次**才进得去第一场战斗（解锁一次、开界面再点一次）。
+2026-10-29 收口成：**解锁那一下直接进战斗**，解锁之后回到「弹窗 → 点开始战斗」的老路。
+
+#### 二、口径：按解锁状态 + 站点类型分三段
+
+| 这一格 | 入口 | 结果 |
 | :-- | :-- | :-- |
-| **未解锁**（银币 + 数字） | `handleUnlockOnly` | 校验前置 / 银币 / 体力 → 解锁 → **播生成动画**，界面不弹 |
-| **已解锁 / 区域已通关** | 打开关卡界面 | 窗里「开始战斗」→ `requestBattle` |
+| **未解锁** + 绑得到关卡（`stage` / `boss`） | `handleUnlockThenBattle` | 校验前置 / 银币 / 体力 → `unlockCell` → **回包 `ok` 后立刻 `CmdStartBattleReqMsg`** → 进战斗；界面不弹 |
+| **未解锁** + 绑不到 campaign 行 / `asyncPvp` | `handleUnlockOnly` | 只解锁 + 「已解锁，点击查看关卡」提示（asyncPvp 的弹窗带侦查，要留给人点） |
+| **已解锁 / 区域已通关** | 打开对应详情 | 窗里「开始战斗」→ `requestBattle` |
 
-判据是 `progress.isCellUnlocked(cellId) || progress.isAreaPassed(cellId)`
-（`isAreaPassed` 必须有：同 `configId` 的格子共享通关状态，只判 `isCellUnlocked` 会让
-"区域已通关、本格没单独解锁"的格子反复走解锁请求）。
+判据两段（`selectSite`）：
+
+- 进不进锁态分支：`!progress.isCellUnlocked(cellId) && !progress.isAreaPassed(cellId)`。
+  `isAreaPassed` 必须有：同 `configId` 的格子共享通关状态，只判 `isCellUnlocked` 会让
+  "区域已通关、本格没单独解锁"的格子反复走解锁请求。
+- 直不直开：`stageByCell.get(cellId)` 有值 **且** `isLevelSite(site)`（`stage` / `boss`）。
+  🔴 **不要**再按 `isOwned` / 是否打过二次分流 —— 「未通关」不是「该直开」的条件，
+  否则玩家退出战斗后再点它又是直开、永远看不到关卡界面。
+
+**开关**：`gameConfig.chapterLevelAutoStartConfig`（策划表 `S-数据配置` 原话：
+「章节地图【首次】激活关卡地块，自动进入战斗（1开 0关」）。
+
+| 值 | 行为 |
+| :-- | :-- |
+| `1`（表里当前值） | 锁着的主线关卡点一下 = 解锁 + 立刻开战 |
+| `0` | **完整退回**改之前的两步：只解锁 + 「已解锁，点击查看关卡」，界面不弹、不发开战 |
+
+读表口径 `readTerritoryLevelAutoStart`：**`0` 是唯一表示「关」的值**；缺行 / `''` / `'  '` / `null`
+一律退回缺省 `TERRITORY_LEVEL_AUTO_START_FALLBACK = true`。
+🔴 缺省必须取**开**：取关会让「配置没同步」表现成功能静默失效（点了只解锁、零报错）；
+🔴 别直接 `Number(raw)` —— `Number('')` 是 `0`，表里多一个空格就把功能静默关掉。
+环节：`loadTerritoryCampaign`（读表）→ `TerritoryChapterLoader`（搬进 bundle）→
+`ITerritoryChapterContext.levelAutoStart` → `selectSite` 那一处判据。
 
 #### 三、动画：为什么要单开一份「已解锁」快照
 
@@ -1094,20 +1175,39 @@ revealed = owned ∪ unlocked ∪ 前置满足的站点 ∪ **前沿可见的随
 - 两条可能同帧命中（新露出 + 同帧解锁）⇒ 用 `entered` 集合去重，否则同一格播两次、缩放打架。
 - `unlockedSnapshot` 与 `revealedSnapshot` **同生共死**：每帧更新、换章 / 布局重建一起 `clear()`。
 - 正在翻格的格子仍然让给翻格（`hexFlip.isPlaying` ⇒ `continue`），随机资源格不会播两套。
+- ⚠️ 2026-10-29 起解锁成功会**马上 navigate 进战斗**，生成动画只在「后端的解锁推送先到、开战回包还没回」
+  这一小段里可见；不要为了看动画而延后开战请求。
 
 #### 四、红线
 
-- 🔴 未解锁那一下**只发解锁协议**，不发 `CmdStartBattleReqMsg`、不进战斗。
-- 🔴 文案是 `TERRITORY_TEXTS.stageUnlocked`（「已解锁，点击查看关卡」），**不能**沿用
-  `bossUnlocked`（「已解锁，点击开战」）—— 解锁后再点一下是**开界面**，不是直接开战。
-- 🔴 `handleUnlockOnly` 要带 `battleRequestId` 校验（与 `handleBattleStationStart` 同一条守卫）：
-  玩家在 A 的解锁回包在飞时点了 B，A 的回包不能把 A 的界面解锁 + 弹提示盖在 B 的交互上。
+- 🔴 **两个请求共用一具骨架**：`unlockCell` 与 `startBattle` 都写在**同一个** `runCellWrite` 的
+  `request` 里串行发（一次 pending 登记、**一层** loading、一个交互号）。
+  两次 `runCellWrite` 嵌套会让 loading 在中间归零闪一下，且第二段取到的是新交互号 ⇒
+  玩家中途点别的格作废不掉这条开战。
+- 🔴 解锁回包**必须是 `ok` 才发开战**：`offline` / `failed` 一律不发（解锁状态是服务端权威，
+  没确认就开战会被按「未解锁」拒绝）。这里**不套用** `startBattle` 的 fail-open ——
+  那条放行的是纯本地开战，不发 `CmdStartBattleReqMsg`，两者不是一回事。
+- 🔴 `battleParams` 唯一构造入口是 `battleParamsFor(site, chapterId)`；弹窗按钮与直开两条路共用，
+  不许各拼一遍（漏一条就是「某种入口点进去服务端说配置错误」）。
+- 🔴 开战被拒：只提示 `TERRITORY_TEXTS.bossBattleStartFailed`，格子**已解锁照常记账**，
+  下一次点击回到关卡界面（不会因为一次拒绝把这格锁死）。
+- 🔴 交互号：`runCellWrite` 取当下的 `this.interactionId`；串两段时**不能**中途换号，
+  否则「点 A 在途 → 点 B」作废不掉 A 的开战。
+- 文案：直开路径**不发**「已解锁」提示（这一下直接进战斗，提示会先闪一句再被 loading 盖掉）。
 
 #### 五、判据
 
-- `tests/territory-presenter.test.ts`：未解锁点一下 ⇒ `unlock = 1` / `startBattle = 0` /
-  `detail.levelInfo === null`；再点一下 ⇒ 才出现 `detail.levelInfo`；
-  327 / Boss 两条两步式用例按新三段式改写；连点作废 + 真机 309 用例跟着改（含新文案）。
+- `tests/territory-presenter.test.ts`：
+  - `chapterLevelAutoStartConfig = 0：锁着的关卡点一下只解锁，不弹窗也不开战` —— 开关关掉必须完整退回两步。
+  - `an initially locked stage unlocks and starts the battle on the first click` —— 解锁 1 + 开战 1 + `nav = 1` + `detail.levelInfo === null`；再点 → 才出现 `detail.levelInfo` 且**不再**自动开战。
+  - `★首次解锁直开被拒：…再点回到关卡界面` —— 拒绝时 `nav = 0` / `beginBattle = 0` / 解锁照常记账。
+  - `解锁请求在途：…同一层 loading 继续盖着开战请求` —— `busy` 全程只有一对 show/hide（不闪），文案「开战中…」。
+  - 327 / Boss 两条两步式用例、真机 309 用例已按三段式改写。
+- `tests/territory-campaign-config.test.ts`：`chapterLevelAutoStartConfig：1 开 / 0 关；缺行或脏值退回缺省（开）`
+  —— 含「真表里这行必须是 1」的守卫（删表行 / 改值会红）。
+- `tests/territory-boss-and-random-building.test.ts`：源码钉住 `selectSite` 走
+  `handleUnlockThenBattle(site, lockedStage)` 且受 `lockedStage && isLevelSite(site)` 守卫；
+  `battleParamsFor` 内部仍走 `chapterCellBattleParams`。
 - `tests/territory-hex-spawn.test.ts`：源码钉住 `unlockedSnapshot` 的三件事
   （首帧快照 / 每帧推新 / 换章清空）+ `entered` 去重 + 「刚解锁要进场」那一条判据。
 
@@ -1604,15 +1704,13 @@ revealed = owned ∪ unlocked ∪ 前置满足的站点 ∪ **前沿可见的随
 `gridSpacing = 111 − 96 = 15`、`spacing = 114 − 96 = 18` ⇒ 落位与原稿逐值相同（首列 x=−222、首行 y=−68）。
 ⚠️ 行心 −68 与设计稿量的 −70 差 2px，来源是**格高**（96 的一半 48 + header 20），不是排版错。
 
-**资源入口注入点必须放组合根**（`ProcedureBootstrap`），不能只靠 `MainTabHost.showPage` 顺带注入 ——
-结算弹窗走**对局流程**，不经过主界面；漏注入 ⇒ `RewardItemView.assets` 为 null ⇒
-奖励格**静默渲染成空框、零报错**（`loadFrame` 直接返回 null，不抛不警告）。
-同理，帧加载失败现在会 `console.warn` 出声，不再静默吞掉。
+**资源入口由控制器统一处理**：每个 `RewardItemView` 持有 `ComponentController`，首次加载时从既有 GameContext 取得必需服务，帧租约归当前格子的控制器，销毁时释放。主界面与对局流程共用此路径，无需组合根或宿主页单独调用 useAssets。
+帧加载失败继续 `console.warn` 出声；节点销毁、资源作用域释放和条目复用仍必须校验。
 
 **跨包引用是安全的**：`ZCSettlement.prefab` 在 **battle 分包**，`RewardItem.prefab` 在 **resources 首包**。
 Creator 的规则是「被多个包引用时，资源存进**优先级高**的包，另一包存一条 `redirect` 记录指向它」
 （`resources` 优先级 8 > `battle` 2 ⇒ 资源留在 resources，运行期 battle 读到的是同一条 uuid）。
 
 判据：`tests/zcds-settlement-page.test.ts`（PREFAB 模式 / `itemPrefab` 指向公共件 / content 无静态槽位 / 落位公式）
-+ `tests/reward-item.test.ts`（注入点在组合根 / 加载失败必须出声）；
++ `tests/reward-item.test.ts`（控制器资源归属 / 加载失败必须出声）；
 端到端探针 `tmp/g_settlement_rewarditem_verify.mjs`（12 条：奖励格**真的出图出框**、数量、落位、尺寸）。

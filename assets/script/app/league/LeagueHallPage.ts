@@ -118,8 +118,6 @@ const PROGRESS_FULL_WIDTH = 383;
 /** 页签下标（与 `LEAGUE_HALL_TABS` 同序）。 */
 const TAB_DETAIL = 0;
 const TAB_LOG = 1;
-const TAB_ALL_SERVER = 2;
-
 /**
  * 操作浮层的中心相对「被点行的竖向中点」的偏移（正数 = 浮层往下挪）。
  *
@@ -141,88 +139,88 @@ export class LeagueHallPage extends PopupBase {
     static prefabPath = 'ui/League/LeagueHall';
 
     @property({ type: Node, tooltip: 'Banner：联盟旗帜容器' })
-    banner: Node = null!;
+    banner: Node = null;
 
     @property({ type: Sprite, tooltip: 'Banner/ColorIcon：旗面' })
-    bannerColor: Sprite = null!;
+    bannerColor: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'Banner/Frame：选中态外框' })
-    bannerFrame: Sprite = null!;
+    bannerFrame: Sprite = null;
 
     @property({ type: Label, tooltip: 'LabName：联盟名' })
-    nameLabel: Label = null!;
+    nameLabel: Label = null;
 
     @property({ type: Label, tooltip: 'LabLv：等级' })
-    levelLabel: Label = null!;
+    levelLabel: Label = null;
 
     @property({ type: Label, tooltip: 'LabNotice：公告' })
-    noticeLabel: Label = null!;
+    noticeLabel: Label = null;
 
     @property({ type: Label, tooltip: 'LabId：联盟 ID' })
-    idLabel: Label = null!;
+    idLabel: Label = null;
 
     @property({ type: Label, tooltip: 'LabWx：联系微信号' })
-    wxLabel: Label = null!;
+    wxLabel: Label = null;
 
     @property({ type: Sprite, tooltip: 'Progress/ProgressFill：经验进度填充' })
-    progressFill: Sprite = null!;
+    progressFill: Sprite = null;
 
     @property({ type: Label, tooltip: 'Progress/ProgressLabel：经验数值' })
-    progressLabel: Label = null!;
+    progressLabel: Label = null;
 
     @property({ type: Node, tooltip: 'BtnBack：返回（关面板）' })
-    backButton: Node = null!;
+    backButton: Node = null;
 
     @property({ type: Node, tooltip: 'BtnMgr：管理（子面板未落地 ⇒ 提示）' })
-    mgrButton: Node = null!;
+    mgrButton: Node = null;
 
     @property({ type: Node, tooltip: 'BtnHelp：帮助 ⇒ 打开等级预览' })
-    helpButton: Node = null!;
+    helpButton: Node = null;
 
     @property({ type: Node, tooltip: 'BtnCopyId：复制联盟 ID（老端未接线 ⇒ 提示）' })
-    copyIdButton: Node = null!;
+    copyIdButton: Node = null;
 
     @property({ type: Node, tooltip: 'BtnCopyWx：复制联系微信（老端未接线 ⇒ 提示）' })
-    copyWxButton: Node = null!;
+    copyWxButton: Node = null;
 
     @property({ type: Node, tooltip: 'TabAllServer/Search/BtnSearch：全服联盟查询' })
-    searchButton: Node = null!;
+    searchButton: Node = null;
 
     @property({ type: Node, tooltip: 'BtnDetail：页签「详情」' })
-    tabDetailButton: Node = null!;
+    tabDetailButton: Node = null;
 
     @property({ type: Node, tooltip: 'BtnLog：页签「动态」' })
-    tabLogButton: Node = null!;
+    tabLogButton: Node = null;
 
     @property({ type: Node, tooltip: 'BtnAllServer：页签「全服联盟」' })
-    tabAllServerButton: Node = null!;
+    tabAllServerButton: Node = null;
 
     @property({ type: Node, tooltip: 'TabDetail：详情内容容器' })
-    tabDetailPage: Node = null!;
+    tabDetailPage: Node = null;
 
     @property({ type: Node, tooltip: 'TabLog：动态内容容器' })
-    tabLogPage: Node = null!;
+    tabLogPage: Node = null;
 
     @property({ type: Node, tooltip: 'TabAllServer：全服联盟内容容器' })
-    tabAllServerPage: Node = null!;
+    tabAllServerPage: Node = null;
 
     @property({ type: Label, tooltip: 'TabDetail/LabUserCount：联盟成员(N/M)' })
-    memberCountLabel: Label = null!;
+    memberCountLabel: Label = null;
 
     @property({ type: VirtualScrollView, tooltip: 'TabDetail/DetailList：成员列表' })
-    memberList: VirtualScrollView = null!;
+    memberList: VirtualScrollView = null;
 
     @property({ type: VirtualScrollView, tooltip: 'TabLog/LogList：动态列表' })
-    logList: VirtualScrollView = null!;
+    logList: VirtualScrollView = null;
 
     @property({ type: VirtualScrollView, tooltip: 'TabAllServer/ServerList：全服联盟列表' })
-    serverList: VirtualScrollView = null!;
+    serverList: VirtualScrollView = null;
 
     @property({ type: EditBox, tooltip: 'TabAllServer/Search/Input：联盟 ID 查询框（数字键盘）' })
-    searchInput: EditBox = null!;
+    searchInput: EditBox = null;
 
     @property({ type: LeagueOpsBar, tooltip: 'TabDetail/OpsBar：角色操作浮层' })
-    opsBar: LeagueOpsBar = null!;
+    opsBar: LeagueOpsBar = null;
 
     /** 当前选中的页签下标（0=详情 / 1=动态 / 2=全服联盟）。 */
     selectedTab = 0;

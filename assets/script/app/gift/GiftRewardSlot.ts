@@ -27,10 +27,10 @@ export interface IGiftSlotFrame {
 @ccclass('GiftRewardSlot')
 export class GiftRewardSlot extends Component {
     @property({ type: Sprite, tooltip: 'Frame：品质框底图（本节点上的 cc.Sprite）' })
-    frame: Sprite = null!;
+    frame: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'Icon：道具图标（没有映射图时会被隐藏）' })
-    icon: Sprite = null!;
+    icon: Sprite = null;
 
     protected onLoad(): void {
         if (!this.frame) {

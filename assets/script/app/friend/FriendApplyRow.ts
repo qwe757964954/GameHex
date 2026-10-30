@@ -34,31 +34,31 @@ const { ccclass, property } = _decorator;
 @ccclass('FriendApplyRow')
 export class FriendApplyRow extends Component {
     @property({ type: Sprite, tooltip: 'Background：行底框（本节点上的 cc.Sprite，`fd_row_bg` 九宫格）' })
-    background: Sprite = null!;
+    background: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'HeadFrame：头像框（`fd_head_frame`，81×81）' })
-    headFrame: Sprite = null!;
+    headFrame: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'Icon：头像（**72×72**，运行时按 `CmdFriend.img` 加载）' })
-    icon: Sprite = null!;
+    icon: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'LvTag：等级标签底（`fd_lv_tag`，40×40）' })
-    lvTag: Sprite = null!;
+    lvTag: Sprite = null;
 
     @property({ type: Label, tooltip: 'Lv：等级数字' })
-    lvLabel: Label = null!;
+    lvLabel: Label = null;
 
     @property({ type: Label, tooltip: 'Name：玩家名' })
-    nameLabel: Label = null!;
+    nameLabel: Label = null;
 
     @property({ type: Label, tooltip: 'Power：战力文案' })
-    powerLabel: Label = null!;
+    powerLabel: Label = null;
 
     @property({ type: Node, tooltip: 'RejectBtn：拒绝按钮（深色底图，`颜色,0`）' })
-    rejectButton: Node = null!;
+    rejectButton: Node = null;
 
     @property({ type: Node, tooltip: 'AgreeBtn：添加按钮（金色底图，`颜色,1`）' })
-    agreeButton: Node = null!;
+    agreeButton: Node = null;
 
     /** 两个回调**由宿主在每次铺行时重设**（回调里必须按 index 现取当前行）。 */
     onAgree: (() => void) | null = null;

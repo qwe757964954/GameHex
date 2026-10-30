@@ -44,7 +44,7 @@ class InternalNodePool {
       return null;
     }
     if (pool.length > 0) {
-      const node = pool.pop()!;
+      const node = pool.pop();
       node.active = false;
       return node;
     }
@@ -672,12 +672,13 @@ export class VirtualScrollView extends Component {
   };
 
   private get _contentTf(): UITransform {
-    this.content = this._getContentNode();
-    return this.content!.getComponent(UITransform)!;
+    const content = this._getContentNode();
+    this.content = content;
+    return content.getComponent(UITransform);
   }
 
   private get _viewportTf(): UITransform {
-    return this.node.getComponent(UITransform)!;
+    return this.node.getComponent(UITransform);
   }
 
   private _getContentNode(): Node {
@@ -798,7 +799,9 @@ export class VirtualScrollView extends Component {
   }
 
   private _getContentMainPos(): number {
-    return this._isVertical() ? this.content!.position.y : this.content!.position.x;
+    const content = this.content;
+    if (!content) return 0;
+    return this._isVertical() ? content.position.y : content.position.x;
   }
 
   private _getEndBound(): number {
@@ -853,13 +856,15 @@ export class VirtualScrollView extends Component {
   private _setContentMainPos(pos: number) {
     if (!Number.isFinite(pos)) return;
     if (this.pixelAlign) pos = Math.round(pos);
-    const p = this.content!.position;
+    const content = this.content;
+    if (!content) return;
+    const p = content.position;
     if (this._isVertical()) {
       if (pos === p.y) return;
-      this.content!.setPosition(p.x, pos, p.z);
+      content.setPosition(p.x, pos, p.z);
     } else {
       if (pos === p.x) return;
-      this.content!.setPosition(pos, p.y, p.z);
+      content.setPosition(pos, p.y, p.z);
     }
   }
 
@@ -1096,9 +1101,11 @@ export class VirtualScrollView extends Component {
     const stride = this.itemMainSize + this.spacing;
     const visibleLines = Math.ceil(this._viewportSize / stride);
     this._slots = Math.max(1, (visibleLines + this.buffer + 2) * this.gridCount);
+    const content = this.content;
+    if (!content) return;
     for (let i = 0; i < this._slots; i++) {
       const n = instantiate(item_pre);
-      n.parent = this.content!;
+      n.parent = content;
       n.active = false;
       const itf = n.getComponent(UITransform);
       if (itf) {
@@ -1674,7 +1681,9 @@ export class VirtualScrollView extends Component {
       // 如果提供了 duration 则使用，否则根据距离自动计算
       const finalDuration = duration !== undefined ? duration : Math.max(0.2, distance / 3000);
       const targetVec = this._isVertical() ? new Vec3(0, targetPos, 0) : new Vec3(targetPos, 0, 0);
-      this._scrollTween = tween(this.content!)
+      const content = this.content;
+      if (!content) return;
+      this._scrollTween = tween(content)
         .to(
           finalDuration,
           { position: targetVec },

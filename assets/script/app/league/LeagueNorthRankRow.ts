@@ -28,7 +28,7 @@
  *    —— 前 3 名没有专属的奖牌图，`rank.lab` 就是统一的白字数字。照抄，不"补全"。
  */
 
-import { _decorator, Component, Label, Node, Sprite, SpriteFrame } from 'cc';
+import {_decorator, Component, Label, Node, Sprite} from 'cc';
 import type { ILeagueNorthRankRowView } from './LeagueTable';
 import { LEAGUE_NORTH_RANK_UNRANKED } from './LeagueTexts';
 import { LeagueRewardSlot } from './LeagueRewardSlot';
@@ -44,50 +44,50 @@ export class LeagueNorthRankRow extends Component {
     // ---------- 名次格（两页共用） ----------
 
     @property({ type: Sprite, tooltip: 'RowBg：行底框（`显示背景` 控制器第 1 页时藏掉）' })
-    rowBg: Sprite = null!;
+    rowBg: Sprite = null;
 
     @property({ type: Label, tooltip: 'Rank/lab：名次数字（未上榜时整块换成 Unranked）' })
-    rankLabel: Label = null!;
+    rankLabel: Label = null;
 
     @property({ type: Node, tooltip: 'Rank/Unranked：「未上榜」那块（名次 = -1 时显示）' })
-    unranked: Node = null!;
+    unranked: Node = null;
 
     // ---------- 「联盟排名」页 ----------
 
     @property({ type: Node, tooltip: 'RankFields：联盟名 / 伤害 / 人数 / 奖励（第 0 页）' })
-    rankFields: Node = null!;
+    rankFields: Node = null;
 
     @property({ type: Label, tooltip: 'leagueName：联盟名' })
-    leagueName: Label = null!;
+    leagueName: Label = null;
 
     @property({ type: Label, tooltip: 'leaguePower：联盟伤害（`formatNumberToZH`）' })
-    leaguePower: Label = null!;
+    leaguePower: Label = null;
 
     @property({ type: Label, tooltip: 'lab_role：人数（`count/maxCount`）' })
-    roleCount: Label = null!;
+    roleCount: Label = null;
 
     @property({ type: LeagueRewardSlot, tooltip: 'com_goods：奖励格 1' })
-    rewardSlot: LeagueRewardSlot = null!;
+    rewardSlot: LeagueRewardSlot = null;
 
     @property({ type: LeagueRewardSlot, tooltip: 'com_goods1：奖励格 2' })
-    rewardSlot1: LeagueRewardSlot = null!;
+    rewardSlot1: LeagueRewardSlot = null;
 
     // ---------- 「盟内进度」页 ----------
 
     @property({ type: Node, tooltip: 'ProgressFields：头像 / 玩家名 / 伤害 / 战斗力（第 1 页）' })
-    progressFields: Node = null!;
+    progressFields: Node = null;
 
     @property({ type: Sprite, tooltip: 'com_head/Icon：头像内层（本端解析不出玩家头像 ⇒ 隐藏）' })
-    headIcon: Sprite = null!;
+    headIcon: Sprite = null;
 
     @property({ type: Label, tooltip: 'userName：玩家名' })
-    userName: Label = null!;
+    userName: Label = null;
 
     @property({ type: Label, tooltip: 'userPower：伤害（`numAbbr` 缩写）' })
-    userPower: Label = null!;
+    userPower: Label = null;
 
     @property({ type: Label, tooltip: '文本_战斗力：战斗力/伤害那一格（同 `numAbbr`）' })
-    powerText: Label = null!;
+    powerText: Label = null;
 
     /** 当前铺在这一行的数据（`null` = 没铺）。 */
     private current: ILeagueNorthRankRowView | null = null;

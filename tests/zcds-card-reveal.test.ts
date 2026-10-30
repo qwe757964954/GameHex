@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { assetPath } from './helpers/asset-paths';
 
 /**
  * `ZCGameCardReveal.prefab` 的**绑定守卫**。
@@ -19,7 +20,7 @@ import test from 'node:test';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Raw = Record<string, any>;
 
-const PREFAB_PATH = 'assets/resources/ui/game/ZCGameCardReveal.prefab';
+const PREFAB_PATH = assetPath('ui/game/ZCGameCardReveal.prefab');
 const VIEW_PATH = 'assets/script/app/zcds/view/ZCCardRevealView.ts';
 
 /** `ZCCardRevealView` 的压缩 cid（= `.ts.meta` 的 uuid 经 compressUuid）。 */
@@ -152,7 +153,7 @@ test('卡牌小卡牌：切图与prefab 绑定一致（品级 4 + 资源点 + �
 
     // 切图文件必须真的存在（防「绑了 uuid 但美术没导」）
     for (const name of ['cardRevealLuck_01', 'cardRevealLuck_03', 'cardRevealLuck_04', 'common_img_pzk_05']) {
-        const meta = `assets/resources/image/frame/${name}.png.meta`;
+        const meta = assetPath(`image/frame/${name}.png.meta`);
         assert.doesNotThrow(() => readFileSync(meta), `缺美术：${meta}`);
     }
 });

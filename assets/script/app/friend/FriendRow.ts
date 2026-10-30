@@ -34,25 +34,25 @@ const { ccclass, property } = _decorator;
 @ccclass('FriendRow')
 export class FriendRow extends Component {
     @property({ type: Sprite, tooltip: 'Bg：行底框（`fd_row_bg`，九宫格）' })
-    background: Sprite = null!;
+    background: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'HeadFrame：头像框（`fd_head_frame`）' })
-    headFrame: Sprite = null!;
+    headFrame: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'Icon：头像（运行时按 `CmdFriend.img` 加载）' })
-    icon: Sprite = null!;
+    icon: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'LvTag：等级标签底（`fd_lv_tag`）' })
-    lvTag: Sprite = null!;
+    lvTag: Sprite = null;
 
     @property({ type: Label, tooltip: 'Lv：等级数字' })
-    lvLabel: Label = null!;
+    lvLabel: Label = null;
 
     @property({ type: Label, tooltip: 'Name：玩家名' })
-    nameLabel: Label = null!;
+    nameLabel: Label = null;
 
     @property({ type: Label, tooltip: 'Power：战力文案' })
-    powerLabel: Label = null!;
+    powerLabel: Label = null;
 
     /**
      * 「头像框 / 头像 / 等级标签 / 等级数字 / 玩家名 / 战力」这一组的容器
@@ -62,31 +62,31 @@ export class FriendRow extends Component {
      * 对齐 FGUI 的 `gearXY`：那个 controller 作用在组上，不作用在成员上。
      */
     @property({ type: Node, tooltip: 'Group：左侧那一组（删除模式下整组右移 43、下移 6）' })
-    shiftGroup: Node = null!;
+    shiftGroup: Node = null;
 
     @property({ type: Node, tooltip: 'ChatBtn：私聊按钮（仅好友列表页签显示）' })
-    chatButton: Node = null!;
+    chatButton: Node = null;
 
     @property({ type: Label, tooltip: 'ChatBtn/Label：私聊文案（静态）' })
-    chatLabel: Label = null!;
+    chatLabel: Label = null;
 
     @property({ type: Node, tooltip: 'ActionBtn：主按钮（赠送 / 申请 / 移除）' })
-    actionButton: Node = null!;
+    actionButton: Node = null;
 
     @property({ type: Sprite, tooltip: 'ActionBtn：按钮底图（置灰时改 tint）' })
-    actionBackground: Sprite = null!;
+    actionBackground: Sprite = null;
 
     @property({ type: Label, tooltip: 'ActionBtn/Label：主按钮文案' })
-    actionLabel: Label = null!;
+    actionLabel: Label = null;
 
     @property({ type: Label, tooltip: 'Duration：在线 / 离线时长（仅好友列表页签显示）' })
-    durationLabel: Label = null!;
+    durationLabel: Label = null;
 
     @property({ type: Node, tooltip: 'CheckBtn：勾选框（仅好友列表页签的删除模式显示）' })
-    checkButton: Node = null!;
+    checkButton: Node = null;
 
     @property({ type: Node, tooltip: 'CheckBtn/Mark：对勾（勾选时显示）' })
-    checkMark: Node = null!;
+    checkMark: Node = null;
 
     /**
      * 三个回调，**由宿主在每次铺行时重设**（`FriendPage.renderRow`）。

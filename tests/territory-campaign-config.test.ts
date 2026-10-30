@@ -4,6 +4,8 @@ import { readFileSync } from 'node:fs';
 import {
     buildTerritoryCampaign,
     readTerritoryIdleRewardMaxHours,
+    readTerritoryLevelAutoStart,
+    TERRITORY_LEVEL_AUTO_START_FALLBACK,
 } from '../assets/script/app/territory/model/TerritoryCampaignConfig';
 
 function rows(name: string): any[] {
@@ -121,4 +123,18 @@ test('★★ 脏列表列必须走 asArray 边界，不能用 ?? []', () => {
     //（其余 `?? []` 走的是工程自有类型 `TerritorySite[]` 等，不是转表产物，不在管辖范围。）
     assert.ok(!/idleReward \?\? \[\]/.test(src), 'idleReward 不能用 ?? []');
     assert.ok(!/npcTeamMatch \?\? \[\]/.test(src), 'npcTeamMatch 不能用 ?? []');
+});
+
+test('chapterLevelAutoStartConfig：1 开 / 0 关；缺行或脏值退回缺省（开）', () => {
+    // 真表当前是 1 —— 策划表 `S-数据配置`：「章节地图【首次】激活关卡地块，自动进入战斗（1开 0关」。
+    assert.equal(readTerritoryLevelAutoStart(rows('gameConfig')), true, '真表里这行必须是 1（改了这里的断言等于改需求）');
+    assert.equal(readTerritoryLevelAutoStart([{ key: 'chapterLevelAutoStartConfig', value: 1 }]), true);
+    assert.equal(readTerritoryLevelAutoStart([{ key: 'chapterLevelAutoStartConfig', value: 0 }]), false, '0 = 关');
+    assert.equal(readTerritoryLevelAutoStart([{ key: 'chapterLevelAutoStartConfig', value: '0' }]), false,
+        '表里下发成字符串 "0" 也必须认（不能 Number 之后又当字符串比）');
+    assert.equal(readTerritoryLevelAutoStart([]), TERRITORY_LEVEL_AUTO_START_FALLBACK, '缺行 ⇒ 缺省');
+    assert.equal(readTerritoryLevelAutoStart([{ key: 'chapterLevelAutoStartConfig', value: '' }]),
+        TERRITORY_LEVEL_AUTO_START_FALLBACK, '脏值不许被当成「关」（静默关功能是最难查的一类 bug）');
+    assert.equal(TERRITORY_LEVEL_AUTO_START_FALLBACK, true,
+        '缺省必须是开：读不到配置就静默退回两步的话，没人会发现开关没生效');
 });

@@ -1,3 +1,6 @@
+import { bigMapViewStateFixture } from './helpers/bigmap-view-state-fixture';
+import { EventMgr } from '../assets/script/framework/event/EventMgr';
+import * as mvcEvents from '../assets/script/app/bigmap/application/BigMapEvents';
 /**
  * 开战到进战斗之间的「界面交接」回归。
  *
@@ -34,6 +37,8 @@ function loadManagerClass(): new () => {
     } }).outputText;
     const exports: Record<string, unknown> = {};
     runInNewContext(code, { exports, require: (name: string) => {
+        if (name.endsWith('/EventMgr')) return { EventMgr };
+        if (name.endsWith('/BigMapEvents')) return mvcEvents;
         if (name === 'cc') return { _decorator: { ccclass: () => (value: unknown) => value, property: () => () => undefined }, Component: class {} };
         if (name.endsWith('/ResourceScope')) return { ResourceScope };
         if (name.endsWith('/UpdateBeat')) return { UpdateBeat: { loop: () => undefined } };
@@ -122,6 +127,8 @@ function loadPageClass(): new () => Record<string, unknown> {
     } }).outputText;
     const exports: Record<string, unknown> = {};
     runInNewContext(code, { exports, require: (name: string) => {
+        if (name.endsWith('/EventMgr')) return { EventMgr };
+        if (name.endsWith('/BigMapEvents')) return mvcEvents;
         if (name === 'cc') return { _decorator: { ccclass: () => (value: unknown) => value }, Component: class {} };
         if (name.endsWith('/ResourceScope')) return { ResourceScope };
         if (name.endsWith('/BigMapPresentationText')) return BigMapPresentationText;
@@ -134,9 +141,15 @@ function pageFixture() {
     const page = new (loadPageClass())() as any;
     const taps: number[] = [];
     page.enterMask = { active: false, setSiblingIndex: () => undefined, isValid: true };
+    page.layout = { node: { children: [] } };
     page.node = { children: new Array(3).fill(null) };
     page.worldView = { occupantAt: (hexId: number) => { taps.push(hexId); return { kind: 'empty' }; } };
-    page.presenter = { emit: () => undefined };
+    page.data = bigMapViewStateFixture();
+    page.ready = true;
+    page.applyMode = () => {};
+    page.setBuildMenuVisible = () => {};
+    page.refreshAll = () => {};
+    EventMgr.instance.on(mvcEvents.BigMapUiEvent.Intent, (event: mvcEvents.IBigMapIntentEvent) => { if (event.intent.kind === 'worldTap') taps.push(event.intent.hexId); }, page);
     page.baseView = { select: () => undefined, setPendingBuilding: () => undefined };
     page.buildPanel = { active: false };
     page.feedback = () => undefined;
@@ -147,16 +160,17 @@ function pageFixture() {
 
 test('开战成功后盖遮罩，并拦掉地图点击（避免预加载期间再发请求）', () => {
     const { page, taps } = pageFixture();
-    page.showEnteringBattle();
+    page.render({ ...page.data, ui: { ...page.data?.ui, enteringBattle: true } });
     assert.equal(page.enterMask.active, true);
     page.onWorldTap(42);
     page.onPlotTap(42);
     assert.deepEqual(taps, [], '遮罩期间不该再走选中/开战');
     // 预加载失败时撤掉，玩家可以重新点。
-    page.cancelEnteringBattle();
+    page.render({ ...page.data, ui: { ...page.data?.ui, enteringBattle: false } });
     assert.equal(page.enterMask.active, false);
     page.onWorldTap(42);
     assert.deepEqual(taps, [42]);
+    EventMgr.instance.offTarget(page);
 });
 
 test('开战入口不再立刻关世界页：源码上必须走落定钩子', () => {
@@ -172,28 +186,33 @@ test('开战入口不再立刻关世界页：源码上必须走落定钩子', ()
 
 test('开战输入层透明，后台更新不能重新盖上详情暗底', () => {
     const source = readFileSync('assets/script/app/bigmap/view/BigMapPage.ts', 'utf8');
-    const build = source.slice(source.indexOf('private buildEnteringBattleMask('), source.indexOf('showEnteringBattle():'));
-    assert.ok(!build.includes('addComponent(Graphics)') && !build.includes('drawPanel('));
-    assert.ok(build.includes('addComponent(BlockInputEvents)'));
-    const refresh = source.slice(source.indexOf('private refreshInfo():'), source.indexOf('private refreshTargetPanel():'));
+    const prefab = JSON.parse(readFileSync('assets/bundles/bigmap/ui/bigmap/BigMapPage.prefab', 'utf8'));
+    const mask = prefab.find((item: Record<string, unknown>) => item.__type__ === 'cc.Node' && item._name === 'EnteringBattleMask');
+    const types = mask._components.map((ref: { __id__: number }) => prefab[ref.__id__].__type__);
+    assert.equal(types.includes('cc.Graphics'), false);
+    assert.equal(types.includes('cc.BlockInputEvents'), true);
+    const refresh = source.slice(source.indexOf('private refreshInfo():'), source.indexOf('private refreshInfoContent():'));
     assert.match(refresh, /this.enteringBattle/);
-    assert.match(refresh, /panel.hide\(\)/);
+    assert.match(refresh, /this.setInfoVisible\(false\)/);
 });
 
 
 test('等待时隐藏详情，取消后重新渲染选中目标且恢复模态', () => {
     const Page = loadPageClass();
     const page = new Page() as any;
-    let visible = true, hidden = 0, refreshed = 0;
+    let visible = true, refreshed = 0;
     page.setInfoVisible = (value: boolean) => { visible = value; };
-    page.targetPanels = new Map([['level', { hide() { hidden++; } }]]);
     page.refreshInfoContent = () => { visible = true; refreshed++; };
     page.applyInfoLayout = () => undefined;
-    page.refreshTargetPanel = () => undefined;
     page.enterMask = { active: false, isValid: true, setSiblingIndex() {} };
+    page.layout = { node: { children: [] } };
     page.node = { children: [] };
-    page.showEnteringBattle(); page.refreshInfo();
-    assert.equal(visible, false); assert.equal(hidden, 2); assert.equal(refreshed, 0);
-    page.cancelEnteringBattle();
+    page.data = bigMapViewStateFixture();
+    page.applyMode = () => {};
+    page.setBuildMenuVisible = () => {};
+    page.refreshAll = () => page.refreshInfo();
+    page.render({ ...page.data, ui: { ...page.data?.ui, enteringBattle: true } }); page.refreshInfo();
+    assert.equal(visible, false); assert.equal(refreshed, 0);
+    page.render({ ...page.data, ui: { ...page.data?.ui, enteringBattle: false } });
     assert.equal(visible, true); assert.equal(refreshed, 1); assert.equal(page.enterMask.active, false);
 });

@@ -31,16 +31,16 @@ const { ccclass, property } = _decorator;
 @ccclass('LeagueLevelRow')
 export class LeagueLevelRow extends Component {
     @property({ type: Sprite, tooltip: 'TitleBar：深色半透明衬底（`BB_img03`，静态）' })
-    titleBar: Sprite = null!;
+    titleBar: Sprite = null;
 
     @property({ type: Label, tooltip: 'Title：「等级N」' })
-    titleLabel: Label = null!;
+    titleLabel: Label = null;
 
     @property({ type: Sprite, tooltip: 'CtxBar：浅色半透明衬底（`white_jiao8` 九宫格，静态）' })
-    ctxBar: Sprite = null!;
+    ctxBar: Sprite = null;
 
     @property({ type: Label, tooltip: 'Ctx：「最大可加入人数：+Δ」' })
-    ctxLabel: Label = null!;
+    ctxLabel: Label = null;
 
     /** 铺一行（所有状态**绝对赋值**）。 */
     render(view: ILeagueLevelView): void {

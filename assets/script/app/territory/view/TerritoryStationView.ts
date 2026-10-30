@@ -226,31 +226,31 @@ export interface ITerritoryStationLayers {
 @ccclass('TerritoryStationView')
 export class TerritoryStationView extends Component {
     @property({ type: Button, group: '节点引用', tooltip: '根节点上的 Button（过渡用 SCALE，命中即整个站点）' })
-    button: Button = null!;
+    button: Button = null;
 
     @property({ type: Sprite, group: '节点引用', tooltip: 'Icon：站点图标（主城 / 前哨 / 首领）' })
-    iconSprite: Sprite = null!;
+    iconSprite: Sprite = null;
 
     @property({ type: Sprite, group: '节点引用', tooltip: 'CaptionBg：未解锁时显示消耗图标，缺少建筑图时作为名称底条' })
-    captionSprite: Sprite = null!;
+    captionSprite: Sprite = null;
 
     @property({ type: Label, group: '节点引用', tooltip: 'CaptionLabel：未解锁时显示消耗数值，缺少建筑图时显示名称' })
-    captionLabel: Label = null!;
+    captionLabel: Label = null;
 
     @property({ type: Label, group: '节点引用', tooltip: 'BadgeLabel：已解锁关卡编号气泡文字' })
-    badgeLabel: Label = null!;
+    badgeLabel: Label = null;
 
     /** `Icon` 的 `UITransform`（面板拖拽绑定，勿 `getComponent`）：固定 128×128，供可见宽度归一。 */
     @property({ type: UITransform, group: '尺寸绑定', tooltip: 'Icon 的 UITransform（128×128）' })
-    iconTransform: UITransform = null!;
+    iconTransform: UITransform = null;
 
     /** `CaptionBg`（银币图标）的 `UITransform`：条件格排布读宽（40×40）。 */
     @property({ type: UITransform, group: '尺寸绑定', tooltip: 'CaptionBg 的 UITransform（40×40）' })
-    captionIconTransform: UITransform = null!;
+    captionIconTransform: UITransform = null;
 
     /** `CaptionLabel`（数值）的 `UITransform`：条件模式读实测文本宽（`readConditionValueWidth`）；名称底条模式 92×28。 */
     @property({ type: UITransform, group: '尺寸绑定', tooltip: 'CaptionLabel 的 UITransform（条件格实测文本宽）' })
-    captionTextTransform: UITransform = null!;
+    captionTextTransform: UITransform = null;
 
     /** 当前节点代表的站点；点击时读它，不读闭包。起始格为 `null`。 */
     private site: TerritoryStationTarget | null = null;
@@ -761,7 +761,7 @@ export class TerritoryStationView extends Component {
     }
 
     private readonly handleClick = (): void => {
-        if (this.clickable && this.site) EventMgr.instance.emit(TERRITORY_EVENTS.STATION_TAP, this.site);
+        if (this.clickable && this.site) EventMgr.instance.emit(TERRITORY_EVENTS.STATION_TAP, { target: this.site });
     };
 
     private setIcon(frame: SpriteFrame | null): void {

@@ -61,33 +61,33 @@ export class ZCGuideItem extends Component {
     }
 
     @property({ type: Label, group: '标题', tooltip: 'TitleLab：卡片标题，如「获得一座金矿」' })
-    titleLabel: Label = null!;
+    titleLabel: Label = null;
 
     @property({ type: Sprite, group: '图标', tooltip: 'HexIcon：绿色六边形地块底图' })
-    hexIcon: Sprite = null!;
+    hexIcon: Sprite = null;
 
     @property({ type: Sprite, group: '图标', tooltip: 'HexIcon/icon_question：六边形里的图标槽位（金矿/兵营/问号）' })
-    iconSprite: Sprite = null!;
+    iconSprite: Sprite = null;
 
     @property({ type: Sprite, group: '消耗', tooltip: 'HexIcon/CostIcon：金币图标' })
-    costIcon: Sprite = null!;
+    costIcon: Sprite = null;
 
     @property({ type: Label, group: '消耗', tooltip: 'HexIcon/CostLab：开发消耗金币' })
-    costLabel: Label = null!;
+    costLabel: Label = null;
 
     // 奖励槽位拆成 4 个显式 @property，方便在 Inspector 逐个拖拽绑定
     // （cc 的组件数组属性在编辑器脚本里不便批量赋值，显式字段更稳）。
     @property({ type: Label, group: '奖励', tooltip: 'Reward0：奖励文字槽位 1（行优先，左列）' })
-    reward0: Label = null!;
+    reward0: Label = null;
 
     @property({ type: Label, group: '奖励', tooltip: 'Reward1：奖励文字槽位 2（行优先，右列）' })
-    reward1: Label = null!;
+    reward1: Label = null;
 
     @property({ type: Label, group: '奖励', tooltip: 'Reward2：奖励文字槽位 3（行优先，左列第二行）' })
-    reward2: Label = null!;
+    reward2: Label = null;
 
     @property({ type: Label, group: '奖励', tooltip: 'Reward3：奖励文字槽位 4（行优先，右列第二行）' })
-    reward3: Label = null!;
+    reward3: Label = null;
 
     /** 4 个奖励槽位，按「行优先」顺序展开，供内部遍历。 */
     private get rewardSlots(): Label[] {
@@ -135,7 +135,7 @@ export class ZCGuideItem extends Component {
         // 尺寸由代码统一控制，所以切成 CUSTOM：TRIMMED 会在换图时把节点拉回原图尺寸
         sprite.sizeMode = Sprite.SizeMode.CUSTOM;
         const size = fitInside(frame, ICON_BOX_WIDTH, ICON_BOX_HEIGHT);
-        sprite.node.getComponent(UITransform)!.setContentSize(size.width, size.height);
+        sprite.node.getComponent(UITransform).setContentSize(size.width, size.height);
     }
 
     /**

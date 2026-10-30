@@ -30,19 +30,19 @@ const { ccclass, property } = _decorator;
 @ccclass('LeagueUnionRow')
 export class LeagueUnionRow extends Component {
     @property({ type: Label, tooltip: 'lab_name：联盟名（25px 居中）' })
-    nameLabel: Label = null!;
+    nameLabel: Label = null;
 
     @property({ type: Label, tooltip: 'lab_lv：等级（已带「级」后缀）' })
-    levelLabel: Label = null!;
+    levelLabel: Label = null;
 
     @property({ type: Label, tooltip: 'lab_topuser：盟主:xxxx' })
-    leaderLabel: Label = null!;
+    leaderLabel: Label = null;
 
     @property({ type: Label, tooltip: 'lab_usercount：成员:45/46' })
-    memberLabel: Label = null!;
+    memberLabel: Label = null;
 
     @property({ type: Sprite, tooltip: 'banner/ColorIcon：旗面（按 view.icon 换图）' })
-    bannerColor: Sprite = null!;
+    bannerColor: Sprite = null;
 
     /** 当前铺在这一行上的联盟 id（点击时宿主用它去开「联盟信息」）。 */
     private current: ILeagueUnionView | null = null;

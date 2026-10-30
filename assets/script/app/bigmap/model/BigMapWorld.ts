@@ -105,7 +105,7 @@ function claimFootprint(
     const claimed: number[] = [];
     const queue: number[] = [anchorHexId];
     while (queue.length > 0 && claimed.length < size) {
-        const hexId = queue.shift()!;
+        const hexId = queue.shift();
         if (taken.has(hexId) || (canClaim && !canClaim(hexId))) continue;
         taken.add(hexId);
         claimed.push(hexId);
@@ -163,7 +163,8 @@ function placeCities(
             }
         }
         if (anchor < 0) continue;
-        const hexIds = claimFootprint(anchor, Math.max(1, cityFootprint(city)), context.rows, context.cols, context.taken);
+        const footprint = config.camps.get(city.cityId)?.campSize ?? cityFootprint(city);
+        const hexIds = claimFootprint(anchor, footprint, context.rows, context.cols, context.taken);
         const site: IBigMapCitySite = {
             cityId: city.cityId,
             anchorHexId: hexIds[0],
@@ -177,7 +178,16 @@ function placeCities(
     return { sites, byHex };
 }
 
-/** 城池占格：文档规定据点占 4 格（含主格）。这里统一取 4，配置未单列该字段。 */
+/** 复用原有环位/BFS 占格算法，为布局缺少的城池补位；已有实体作为保留格。 */
+export function placeBigMapCities(config: IBigMapConfig, seed: number, reserved: ReadonlySet<number>): Map<number, IBigMapCitySite> {
+    const rows = config.world.rows;
+    const cols = config.world.cols;
+    const center = Math.floor((rows - 1) / 2) * cols + Math.floor((cols - 1) / 2);
+    return placeCities(config, { rows, cols, taken: new Set(reserved),
+        ringOf: (id) => bigMapHexDistance(rows, cols, center, id) }, seed).sites;
+}
+
+/** 历史离线城池的占格；新版取 `bigMapCamp.campSize`，布局模式仍保持原占格。 */
 function cityFootprint(city: IBigMapCityConfig): number {
     return city.layer === BigMapCityLayer.Throne ? 6 : 4;
 }

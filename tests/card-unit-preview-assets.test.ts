@@ -3,6 +3,7 @@ import test from 'node:test';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { CardUnitPreviewAssets } from '../assets/script/app/card/CardUnitPreviewAssets';
 import { parseCardCatalogRow } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
+import { assetPath } from './helpers/asset-paths';
 
 test('卡表解析保留兵种预制体路径，阵容页无需依赖对局单位目录缓存', () => {
     const packed = JSON.parse(readFileSync('assets/remoteRef/pvpCard.json', 'utf8')) as
@@ -21,13 +22,13 @@ test('卡表中的上阵兵种预制体均有待机动作', () => {
         typeof value === 'string' && value.length > 0));
     assert.ok(paths.size > 0);
     for (const path of paths) {
-        const prefabPath = `assets/resources/${path}.prefab`;
+        const prefabPath = assetPath(`${path}.prefab`);
         assert.ok(existsSync(prefabPath), `${path} 预制体应存在`);
         if (path.startsWith('skel/')) {
             assert.match(readFileSync(prefabPath, 'utf8'), /"defaultAnimation": "idle"/,
                 `${path} 骨骼预制体应提供 idle`);
         } else {
-            const folder = `assets/resources/${path.slice(0, path.lastIndexOf('/'))}/anim`;
+            const folder = assetPath(`${path.slice(0, path.lastIndexOf('/'))}/anim`);
             assert.ok(readdirSync(folder).some((name) => name.endsWith('-idle.anim')),
                 `${path} 序列帧预制体应提供 idle`);
         }

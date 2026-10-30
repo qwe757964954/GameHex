@@ -8,7 +8,6 @@ import { CocosAssetService } from '../../platform/cocos/CocosAssetService';
 import { RefConfigService } from '../../platform/config/RefConfigService';
 import { FetchNetworkTransport } from '../../platform/network/FetchNetworkTransport';
 import { CenterPaymentService } from '../../platform/payment/CenterPaymentService';
-import { BigMapEntry } from '../bigmap/application/BigMapEntry';
 import { ProcedureGame } from '../procedure/ProcedureGame';
 import { ProcedureLogin } from '../procedure/ProcedureLogin';
 import { ProcedureMain } from '../procedure/ProcedureMain';
@@ -18,7 +17,6 @@ import { ProcedureUpdate } from '../procedure/ProcedureUpdate';
 import { AppSessionAssetService } from '../session/AppSessionAssetService';
 import { ShowRewardPage } from '../showReward/ShowRewardPage';
 import { Toast } from '../common/Toast';
-import { RewardItemView } from '../common/RewardItemView';
 import { registerRdVars } from '../rd/RdRegistry';
 import { GameNet } from '../net/GameNet';
 import { GameSocketBridge } from '../gm/GameSocketBridge';
@@ -81,19 +79,10 @@ export class ProcedureBootstrap extends Component {
 
         const manager = this.getComponent(ProcedureManager) ?? this.addComponent(ProcedureManager);
         const assets = new CocosAssetService();
-        // 公共奖励格（`ui/common/RewardItem.prefab`）自己解析图标 / 品质框 ⇒ 资源入口注入一次。
-        //
-        // ⚠️ **必须放组合根，不能只靠 `MainTabHost.showPage` 顺带注入**：结算弹窗（对局流程）
-        // 与主界面不是同一条流程，谁先跑不保证；漏注入 ⇒ 奖励格静默渲染成空框（零报错）。
-        RewardItemView.useAssets(assets);
-        // 大世界布局从 `config/bigmap-maps/` 读（走 AssetService，不直调 resources.load）。
-        // 不注入也能玩：`BigMapEntry` 会降级成「按种子生成世界」，所以入口按钮那条链不用传参。
-        BigMapEntry.shared().setAssetService(assets);
         const configs = new RefConfigService();
         const callbackOwners = GameNet.instance.callbackOwners;
-        PopupManager.inst?.initialize(assets, callbackOwners);
+        PopupManager.inst.initialize(assets, callbackOwners);
         const sessionAssets = new AppSessionAssetService(assets, configs);
-        BigMapEntry.shared().setSessionAssetService(sessionAssets);
         manager.configure({
             assets,
             sessionAssets,

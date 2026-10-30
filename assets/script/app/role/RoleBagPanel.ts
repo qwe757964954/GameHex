@@ -29,13 +29,13 @@ export class RoleBagPanel extends Component {
     // ⚠️ 同 RolePage：prefab 里这个引用存的是【节点】，声明一律 `Node`，
     //    组件在 onLoad 里 getComponent 现取并缓存（声明成组件类型会拿到 cc.Node，运行时静默失效）。
     @property({ type: Node, tooltip: 'Grid：背包网格节点（其上挂 VirtualScrollView，gridCount=5）' })
-    grid: Node = null!;
+    grid: Node = null;
 
     @property({ type: Node, tooltip: 'EmptyTip：空背包提示（无条目时显示）' })
-    emptyTip: Node = null!;
+    emptyTip: Node = null;
 
     /** 缓存：Grid 节点上的虚拟列表。 */
-    private list: VirtualScrollView = null!;
+    private list: VirtualScrollView = null;
 
     /** 当前展示条目（已排序）。 */
     private entries: IRoleBagEntry[] = [];

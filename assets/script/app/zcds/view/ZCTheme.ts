@@ -104,6 +104,40 @@ export function zcDeepFactionColor(owner: ZCFaction, alpha = 255): Color {
 }
 
 /**
+ * 废墟地块往「废墟灰」里混的比例（`0` = 完全用阵营色、`1` = 完全用 `ZC_CLIENT_COLORS.ruins`）。
+ *
+ * 需求 2026-10-29 原话：「战斗中形成废墟后，**废墟的地块颜色需要和归属玩家的一致**」。
+ * 要同时满足两件事 —— ①一眼看出**这是谁的地**；②一眼看出**这格已经废了**。
+ * 纯阵营色（0）会跟旁边完好的领地完全分不开，纯灰（1）就是原来的 bug（拆谁的地都变同一块灰）。
+ * 0.45 实测：我方 `#7e82ff → #7075bd`（还是那股靛蓝，但压暗发了灰）、
+ * 敌方 `#fb4969 → #b4566a`、3 号 `#fbcc49 → #b0a05a`、4 号 `#bd49fb → #8f56bd`。
+ * 想更醒目就往小调，想更"死"就往大调 —— 只改这一处。
+ */
+export const ZC_RUINS_GRAY_MIX = 0.45;
+
+/**
+ * 废墟地块的底色：**归属方的阵营色往废墟灰里混**（需求 2026-10-29）。
+ *
+ * 为什么要单独一个函数而不是在 `ZCHexView` 里现算：这条混合要能被**没有引擎**的纯函数
+ * 用例逐点断言（同 `zcDeepFactionColor` / `zcTowardWhite` 的理由），而且它是「废墟长什么样」
+ * 的唯一定义 —— 塞进视图里，下一个画废墟的地方（小地图 / 别的模式）就会各写一份灰。
+ *
+ * `neutral` 没有阵营色可混（`zcFactionColor('neutral')` 是浅石板色，混出来比灰还亮、
+ * 反倒像"崭新"），所以**原样返回废墟灰** —— 中立废墟就是"没有归属的废墟"。
+ *
+ * `alpha` 只做透传：透明度的语义是「这格是不是领地」，由视图按自己的口径给
+ * （`ZCHexView.TERRITORY_FILL_ALPHA`），不在这里写死。
+ */
+export function zcRuinsFactionColor(owner: ZCFaction, alpha = 255): Color {
+    const ruins = ZC_CLIENT_COLORS.ruins;
+    if (owner === 'neutral') return new Color(ruins.r, ruins.g, ruins.b, alpha);
+    const base = zcFactionColor(owner);
+    const k = Math.min(1, Math.max(0, ZC_RUINS_GRAY_MIX));
+    const mix = (channel: number, gray: number): number => Math.round(channel + (gray - channel) * k);
+    return new Color(mix(base.r, ruins.r), mix(base.g, ruins.g), mix(base.b, ruins.b), alpha);
+}
+
+/**
  * 把任意颜色往**白**里偏 `amount`（`0` = 原样、`1` = 纯白）—— 结算扫场铺场时的闪烁用
  * （需求 2026-10-16：「颜色在同色系偏白色的范围内快速变化」）。
  *

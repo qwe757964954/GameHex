@@ -27,22 +27,22 @@ const { ccclass, property } = _decorator;
 @ccclass('HangSweepButton')
 export class HangSweepButton extends Component {
     @property({ type: Button, tooltip: '整块按钮' })
-    button: Button = null!;
+    button: Button = null;
 
     @property({ type: Label, tooltip: '「快速征收」（跟随 `免费` 页换位置）' })
-    title: Label = null!;
+    title: Label = null;
 
     @property({ type: Node, tooltip: '看广告小图标（`免费` = 否 时显示）' })
-    adIcon: Node = null!;
+    adIcon: Node = null;
 
     @property({ type: Sprite, tooltip: '体力图标（`roleProperty.end = 9` ⇒ `图标_体力`）' })
-    costIcon: Sprite = null!;
+    costIcon: Sprite = null;
 
     @property({ type: Label, tooltip: '`x10` 形态的花费文案' })
-    cost: Label = null!;
+    cost: Label = null;
 
     @property({ type: Node, tooltip: '红点（FGUI `com_rd`；截图无红点 ⇒ 默认隐藏，留待红点系统接）' })
-    redDot: Node = null!;
+    redDot: Node = null;
 
     /** `title` 在「否」页的位置（组件内相对中心的局部坐标）。 */
     private static readonly TITLE_POS_NOT_FREE = { x: 10, y: -10 };

@@ -1,4 +1,5 @@
-import type { IBigMapPlotDetailView, IBigMapMonsterView } from '../application/BigMapPresenter';
+import { BIGMAP_MOVE_HINT } from '../application/BigMapEvents';
+import type { IBigMapPlotDetailView, IBigMapMonsterView } from '../application/BigMapViewState';
 
 export const BIGMAP_PRESENTATION_TEXT = {
     // `baseTitle: '我的基地'` 已退役（2026-10-22 第二轮）：用户要求删掉题头文字，
@@ -14,7 +15,7 @@ export const BIGMAP_PRESENTATION_TEXT = {
     /** 已建成建筑的次按钮：能收取就先给「收取」，收不了才给「移动」（同一颗按钮，不新增控件）。 */
     move: '移动',
     moveCancel: '取消移动',
-    moveHint: '点击空地移过去；点这格取消',
+    moveHint: BIGMAP_MOVE_HINT,
     emptyQueue: '暂无建造任务',
     queue: '建造队列',
     /** 队列条尾部提示：还差几条才到 `bigmapQueue.maxBuildQueue`（花货币解锁）。 */

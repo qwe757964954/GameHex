@@ -18,34 +18,34 @@ const { ccclass, property } = _decorator;
 @ccclass('SevenDayPointBox')
 export class SevenDayPointBox extends Component {
     @property({ type: Sprite, tooltip: 'BoxIcon：宝箱图（`sd_box_glow`）' })
-    boxIcon: Sprite = null!;
+    boxIcon: Sprite = null;
 
     @property({ type: Node, tooltip: 'BoxBtn：宝箱点击区（挂 cc.Button）' })
-    boxButton: Node = null!;
+    boxButton: Node = null;
 
     @property({ type: Node, tooltip: 'ProgressBar：填充条（锚点必须 (0,0.5)）' })
-    progressBar: Node = null!;
+    progressBar: Node = null;
 
     @property({ type: Node, tooltip: 'ProgressBg：进度条底（满宽，用来取宽度上限）' })
-    progressBg: Node = null!;
+    progressBg: Node = null;
 
     @property({ type: Label, tooltip: 'NeedLabel：达标积分数字' })
-    needLabel: Label = null!;
+    needLabel: Label = null;
 
     @property({ type: Node, tooltip: 'CheckMark：已领取对勾（默认隐藏）' })
-    checkMark: Node = null!;
+    checkMark: Node = null;
 
     @property({ type: Node, tooltip: 'Ray：可领取时的旋转光效（默认隐藏）' })
-    ray: Node = null!;
+    ray: Node = null;
 
     @property({ type: Sprite, tooltip: 'BoxBtn 里的品质框 Sprite（复用 `image/frame/common_img_pzk_*`）' })
-    qualityFrame: Sprite = null!;
+    qualityFrame: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'BoxBtn/Icon：奖励物品图标（这一档能领到什么）；没有映射图时整块隐藏' })
-    rewardIcon: Sprite = null!;
+    rewardIcon: Sprite = null;
 
     @property({ type: Node, tooltip: 'BoxBtn/RedDot：可领取时的红点（默认隐藏）' })
-    redDot: Node = null!;
+    redDot: Node = null;
 
     /**
      * 铺一个宝箱。
@@ -92,7 +92,7 @@ export class SevenDayPointBox extends Component {
         //    所以 prefab 里**故意不给宝箱建红点节点**，这里必须判空 —— 直接 `this.redDot.active`
         //    会在渲染路径上抛 `TypeError`（`null.active`）把整个界面带崩。
         if (this.redDot) this.redDot.active = state === 'claimable';
-        this.boxButton.getComponent(Button)!.interactable = true;
+        this.boxButton.getComponent(Button).interactable = true;
         // 未开启时压暗宝箱本体（老端靠换「开启/未开启」两张图；这里压暗省一张美术）
         // `addComponent` 的返回类型带 `null` ⇒ 必须判一次，别直接 `!`（prefab 配错时宁可不变暗，也别在
         // 渲染路径上抛异常把整页带崩）。

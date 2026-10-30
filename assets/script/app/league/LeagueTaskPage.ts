@@ -104,40 +104,40 @@ export class LeagueTaskPage extends PopupBase {
     static prefabPath = 'ui/League/LeagueTask';
 
     @property({ type: Node, tooltip: 'CloseBtn：右上关闭按钮（挂 cc.Button）' })
-    closeButton: Node = null!;
+    closeButton: Node = null;
 
     @property({ type: VirtualScrollView, tooltip: 'TaskListView：任务列表（虚拟列表 + Mask）' })
-    taskList: VirtualScrollView = null!;
+    taskList: VirtualScrollView = null;
 
     @property({ type: Sprite, tooltip: 'TaskProgress/ProgressFill：顶部进度填充' })
-    progressFill: Sprite = null!;
+    progressFill: Sprite = null;
 
     @property({ type: Label, tooltip: 'TaskProgress/ProgressLabel：顶部进度文案（老端恒置空）' })
-    progressLabel: Label = null!;
+    progressLabel: Label = null;
 
     @property({ type: Label, tooltip: 'lab_count：已领奖任务数' })
-    countLabel: Label = null!;
+    countLabel: Label = null;
 
     @property({ type: Label, tooltip: 'lab_jump：看广告跳过次数（广告未接入 ⇒ 整行隐藏）' })
-    adLabel: Label = null!;
+    adLabel: Label = null;
 
     @property({ type: Node, tooltip: 'Box1：第 1 个宝箱（FGUI `box_3`，里程碑取自表）' })
-    box1: Node = null!;
+    box1: Node = null;
 
     @property({ type: Node, tooltip: 'Box2：第 2 个宝箱（FGUI `box_5`）' })
-    box2: Node = null!;
+    box2: Node = null;
 
     @property({ type: Node, tooltip: 'Box3：第 3 个宝箱（FGUI `box_8`）' })
-    box3: Node = null!;
+    box3: Node = null;
 
     @property({ type: Node, tooltip: 'reward：宝箱奖励浮框（默认隐藏）' })
-    rewardNode: Node = null!;
+    rewardNode: Node = null;
 
     @property({ type: LeagueRewardSlot, tooltip: 'reward/com_goods：浮框里的奖励格' })
-    rewardSlot: LeagueRewardSlot = null!;
+    rewardSlot: LeagueRewardSlot = null;
 
     @property({ type: Node, tooltip: 'reward/clickNode：点任意处关掉浮框' })
-    rewardClose: Node = null!;
+    rewardClose: Node = null;
 
     /** 本趟列表的视图模型（`renderItemFn` 按 index 现取）。 */
     private rows: ILeagueTaskRowView[] = [];
@@ -150,9 +150,6 @@ export class LeagueTaskPage extends PopupBase {
 
     /** 本趟快照。 */
     private snapshot: ILeagueTaskSnapshot | null = null;
-
-    /** `renderItemFn` 只绑一次（放 `onOpen` 会随每次打开重复叠加）。 */
-    private rendererBound = false;
 
     /** 写操作在飞（防连点）。 */
     private busy = false;
@@ -176,10 +173,7 @@ export class LeagueTaskPage extends PopupBase {
             if (box) box.onBoxClick = (view) => void this.onBoxClick(view);
         }
 
-        if (!this.rendererBound) {
-            this.rendererBound = true;
-            if (this.taskList) this.taskList.renderItemFn = (node, index) => this.renderRow(node, index);
-        }
+        if (this.taskList) this.taskList.renderItemFn = (node, index) => this.renderRow(node, index);
     }
 
     protected async onOpen(): Promise<void> {

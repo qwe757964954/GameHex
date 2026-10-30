@@ -793,7 +793,7 @@ export function territoryCloudPocketCells(
     }
     // ② 顺着未解锁格灌，能到边缘的都算"外围雾"。
     while (stack.length) {
-        const cellId = stack.pop()!;
+        const cellId = stack.pop();
         for (const neighbor of hexGridNeighborIds(cellId, rows, columns)) {
             if (revealed.has(neighbor) || exposed.has(neighbor)) continue;
             exposed.add(neighbor);
@@ -809,7 +809,7 @@ export function territoryCloudPocketCells(
         const queue: number[] = [cellId];
         visited.add(cellId);
         while (queue.length) {
-            const id = queue.pop()!;
+            const id = queue.pop();
             component.push(id);
             for (const neighbor of hexGridNeighborIds(id, rows, columns)) {
                 if (revealed.has(neighbor) || exposed.has(neighbor) || visited.has(neighbor)) continue;

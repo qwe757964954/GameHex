@@ -39,28 +39,28 @@ const { ccclass, property } = _decorator;
 @ccclass('LeagueMemberRow')
 export class LeagueMemberRow extends Component {
     @property({ type: Label, tooltip: 'lab_name：成员名（26px 左对齐）' })
-    nameLabel: Label = null!;
+    nameLabel: Label = null;
 
     @property({ type: Label, tooltip: 'lab_lv：等级（纯数字，无后缀）' })
-    levelLabel: Label = null!;
+    levelLabel: Label = null;
 
     @property({ type: Label, tooltip: 'lab_power：战力（纯数字）' })
-    powerLabel: Label = null!;
+    powerLabel: Label = null;
 
     @property({ type: Label, tooltip: 'lab_time：「在线」或「N分/小时/天前」' })
-    timeLabel: Label = null!;
+    timeLabel: Label = null;
 
     @property({ type: Label, tooltip: 'lab_usercount：今日贡献/累计贡献' })
-    contributeLabel: Label = null!;
+    contributeLabel: Label = null;
 
     @property({ type: Label, tooltip: 'n15：职务字（盟主 / 副盟主）' })
-    positionLabel: Label = null!;
+    positionLabel: Label = null;
 
     @property({ type: Sprite, tooltip: 'icon：头像（宿主按 view.img 取图后调 applyAvatar）' })
-    avatarSprite: Sprite = null!;
+    avatarSprite: Sprite = null;
 
     @property({ type: Node, tooltip: 'n14：职务标底图（仅盟主 / 副盟主显示）' })
-    positionTag: Node = null!;
+    positionTag: Node = null;
 
     /** 当前铺在这一行上的成员（`roleId` 供宿主做「是不是自己」的判断）。 */
     private current: ILeagueMemberView | null = null;

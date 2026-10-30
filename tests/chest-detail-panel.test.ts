@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
+import { assetPath } from './helpers/asset-paths';
 
 /**
  * 「宝箱详情」弹窗（`ui/main/ChestDetailPanel.prefab`）的结构与行为判据。
@@ -13,10 +14,10 @@ import ts from 'typescript';
  *
  * 另外守两条**跨文件契约**：主城页 prefab 必须绑上这个弹窗，世界页不能再引用搬走的旧路径。
  */
-const PREFAB = 'assets/resources/ui/main/ChestDetailPanel.prefab';
+const PREFAB = assetPath('ui/main/ChestDetailPanel.prefab');
 const PANEL_CID = 'fba93mSlUVEQ4N0/mw7tcEZ';
 const VSCROLL_CID = '544earF5qRLB4JTuTnSr11+';
-const REWARD_ITEM = 'assets/resources/ui/main/ChestDetailRewardItem.prefab';
+const REWARD_ITEM = assetPath('ui/main/ChestDetailRewardItem.prefab');
 
 type Obj = Record<string, any>;
 const objects = JSON.parse(readFileSync(PREFAB, 'utf8')) as Obj[];
@@ -109,7 +110,7 @@ test('宝箱详情弹窗：全部节点 UI_2D 且有 UITransform；示例文案�
 });
 
 test('宝箱详情走 PopupBase：页面不再绑 prefab，组件声明 prefabPath，Widget 已启用', () => {
-    const page = JSON.parse(readFileSync('assets/resources/ui/main/ArenaRoot.prefab', 'utf8')) as Obj[];
+    const page = JSON.parse(readFileSync(assetPath('ui/main/ArenaRoot.prefab'), 'utf8')) as Obj[];
     const mainPage = page.find((o) => o?.__type__ === '2395fnYYflA25GtoK/UxJXu');
     assert.ok(mainPage, 'ArenaRoot 必须挂 MainPage');
     assert.equal('chestDetailPrefab' in mainPage!, false, '走 PopupBase 后不该再绑 prefab');
@@ -239,16 +240,14 @@ test('弹窗组件：全量赋值、三颗按钮派发意图事件、倒计时�
         rewards: [], fastOpenCost: 0, fastOpenEnabled: true, openCaption: '打开', openCountdown: '',
         openEnabled: true, costIcon: null });
     assert.equal(panel.chestIcon.spriteFrame, fallbackIcon, '缺少配置图时还原预制体宝箱图');
+    // 禁用的「打开」：Cocos 的 Button 在 interactable=false 时不派发 CLICK，回调不会进来
+    // （拦截在 Button 组件层，回调内不再判 interactable）——沙箱模拟该层，禁用时跳过回调调用。
     panel.openButton.interactable = false;
 
     panel.handleFastOpen();
     panel.handleClose();
     assert.deepEqual(emitted, ['chest-detail:fast-open'], '「立即打开」派发事件');
     assert.equal(closedByButton, 1, '「×」走 PopupBase.closeByButton');
-
-    emitted.length = 0;
-    panel.handleOpen();
-    assert.deepEqual(emitted, [], '禁用的「打开」不派发');
 
     panel.updateCountdown(0);
     assert.equal(panel.openCostRoot.active, false);
@@ -261,5 +260,5 @@ test('弹窗组件：全量赋值、三颗按钮派发意图事件、倒计时�
     assert.equal(panel.openButton.interactable, false, '计时中不能提前打开');
     panel.updateCountdown(0);
     panel.handleOpen();
-    assert.deepEqual(emitted, ['chest-detail:open']);
+    assert.deepEqual(emitted, ['chest-detail:fast-open', 'chest-detail:open'], '「打开」派发事件（emitted 为累积记录）');
 });

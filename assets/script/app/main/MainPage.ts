@@ -1,5 +1,5 @@
 import { _decorator, Button, Component, Node, Sprite, SpriteFrame } from 'cc';
-import type { AssetService } from '../../core/asset/AssetService';
+import { ComponentController } from '../../framework/controller/ComponentController';
 import { ResourceScope } from '../../core/asset/ResourceScope';
 import { GameRoute } from '../../core/runtime/GameRoute';
 import { ProcedureManager } from '../../framework/procedure/ProcedureManager';
@@ -21,6 +21,7 @@ import {
 import type { IChestDetailData, IChestSlotData } from './ChestTypes';
 import { NewTreasureRepository } from './NewTreasureRepository';
 import { GameNet } from '../net/GameNet';
+import { TerritoryUiEvent, TerritoryViewEvent, type ITerritoryRenderEvent } from '../territory/application/TerritoryEvents';
 
 const { ccclass, property } = _decorator;
 
@@ -41,42 +42,48 @@ const MAIN_PAGE_TEXTS = {
 @ccclass('MainPage')
 export class MainPage extends Component {
     @property({ type: Node, tooltip: 'BeginGame：快速寻敌按钮' })
-    startButton: Node = null!;
+    startButton: Node = null;
+
+    @property({ type: Node, tooltip: 'BeginGame/PreviousChapter：上一章' })
+    previousChapterButton: Node = null!;
+
+    @property({ type: Node, tooltip: 'BeginGame/NextChapter：下一章（当前章通关后显示）' })
+    nextChapterButton: Node = null!;
 
     @property({ type: Node, tooltip: 'ChestEntry：打开 / 收起底部宝箱栏' })
-    chestToggle: Node = null!;
+    chestToggle: Node = null;
 
     @property({ type: Sprite, tooltip: 'BottomHud/Cell0：第一个宝箱数量格' })
-    chestCell0: Sprite = null!;
+    chestCell0: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'BottomHud/Cell1：第二个宝箱数量格' })
-    chestCell1: Sprite = null!;
+    chestCell1: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'BottomHud/Cell2：第三个宝箱数量格' })
-    chestCell2: Sprite = null!;
+    chestCell2: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'BottomHud/Cell3：第四个宝箱数量格' })
-    chestCell3: Sprite = null!;
+    chestCell3: Sprite = null;
 
     @property({ type: SpriteFrame, tooltip: '宝箱数量格：已占用（绿色）' })
-    chestCellFilled: SpriteFrame = null!;
+    chestCellFilled: SpriteFrame = null;
 
     @property({ type: SpriteFrame, tooltip: '宝箱数量格：空闲（灰色）' })
-    chestCellEmpty: SpriteFrame = null!;
+    chestCellEmpty: SpriteFrame = null;
 
     @property({ type: ChestBar, tooltip: 'ChestBar：底部宝箱栏（4 格，蓝湖「塔防主界面-2」）' })
-    chestBar: ChestBar = null!;
+    chestBar: ChestBar = null;
 
     private findCurrentBoss: (() => void) | null = null;
     private readonly treasureRepository = new NewTreasureRepository();
     /** 详情弹窗当前对应的槽位（1~4）与那颗按钮要发的动作；`0` = 没开。 */
     private detailSlot = 0;
     private detailAction: ChestSlotAction = ChestSlotAction.Open;
-    /** `initialize` 注入的资源入口（宝箱图标 / 品质框）。 */
-    private assets: AssetService | null = null;
+    private get assets() { return this.controller.resources.assets; }
     /** 图标按路径缓存（同一批奖励反复加载同一张图不值得）。 */
     private readonly chestIconCache = new Map<string, SpriteFrame>();
-    private readonly chestArtScope = new ResourceScope('main:chest-detail-art');
+    private readonly controller = new ComponentController('main:chest-detail-art');
+    private get chestArtScope(): ResourceScope { return this.controller.scope; }
     private readonly emptyChestSlots: readonly IChestSlotData[] = Array.from({ length: CHEST_SLOT_COUNT }, (_, index) => ({
         index: index + 1,
         state: ChestSlotState.Empty,
@@ -89,21 +96,20 @@ export class MainPage extends Component {
 
     onLoad(): void {
         this.startButton.on(Button.EventType.CLICK, this.onStartGame, this);
+        this.previousChapterButton.on(Button.EventType.CLICK, this.onPreviousChapter, this);
+        this.nextChapterButton.on(Button.EventType.CLICK, this.onNextChapter, this);
+        this.previousChapterButton.active = false;
+        this.nextChapterButton.active = false;
+        EventMgr.instance.on(TerritoryViewEvent.Render, this.onTerritoryRender, this);
         this.chestToggle.on(Button.EventType.CLICK, this.onToggleChestPanel, this);
-        // 宝箱栏的意图（点格子 / 收起 / 翻页）都由 EventMgr 派发，页面**只订阅一次**
+        // 宝箱栏意图：语义见 `ChestEvents.ts`，页面只订阅、退出时统一 offTarget(this)
         EventMgr.instance.on(CHEST_EVENTS.SLOT_ACTION, this.onChestAction, this);
         EventMgr.instance.on(CHEST_EVENTS.COLLAPSE, this.onChestCollapse, this);
 
-        // 宝箱详情走 `PopupBase`（`PopupManager` 管层级 / 遮罩 / 点空白关闭 / 尺寸），
-        // 页面**不实例化、不撑尺寸**，只订阅它的三条意图。
+        // 宝箱详情走 `PopupBase`：页面不实例化、不撑尺寸（层级 / 遮罩 / 点空白关闭由 `PopupManager` 管）。
         EventMgr.instance.on(CHEST_EVENTS.CLOSE, this.onChestDetailClose, this);
         EventMgr.instance.on(CHEST_EVENTS.FAST_OPEN, this.onChestDetailFastOpen, this);
         EventMgr.instance.on(CHEST_EVENTS.OPEN, this.onChestDetailOpen, this);
-    }
-
-    /** 注入资源入口（宿主 `MainTabHost` 在 `setParent` 之前调）。 */
-    initialize(assets: AssetService): void {
-        this.assets = assets;
     }
 
     /** 由主界面宿主接入同页地图，避免快速寻敌另开战斗流程。 */
@@ -127,8 +133,8 @@ export class MainPage extends Component {
     }
 
     onDestroy(): void {
-        if (this.detailSlot > 0) PopupManager.inst?.get(ChestDetailPanel)?.close();
-        this.chestArtScope.dispose();
+        if (this.detailSlot > 0) PopupManager.inst.get(ChestDetailPanel)?.close();
+        this.controller.dispose();
         this.chestIconCache.clear();
         EventMgr.instance.offTarget(this);
         this.findCurrentBoss = null;
@@ -162,6 +168,20 @@ export class MainPage extends Component {
         this.findCurrentBoss();
     }
 
+    private onTerritoryRender(event: ITerritoryRenderEvent): void {
+        const { ready, hud } = event.state;
+        this.previousChapterButton.active = ready && !!hud?.previousEnabled;
+        this.nextChapterButton.active = ready && !!hud?.nextEnabled;
+    }
+
+    private onPreviousChapter(): void {
+        EventMgr.instance.emit(TerritoryUiEvent.Intent, { intent: { kind: 'chapter', offset: -1 } });
+    }
+
+    private onNextChapter(): void {
+        EventMgr.instance.emit(TerritoryUiEvent.Intent, { intent: { kind: 'chapter', offset: 1 } });
+    }
+
     private renderChests(data: readonly IChestSlotData[]): void {
         const count = data.reduce((total, slot) => total + Number(slot.state !== ChestSlotState.Empty), 0);
         const cells = [this.chestCell0, this.chestCell1, this.chestCell2, this.chestCell3];
@@ -182,7 +202,7 @@ export class MainPage extends Component {
 
     /** 弹窗开着时每秒刷一次倒计时（只写那一颗按钮，不整窗重开）。 */
     private refreshChestDetailCountdown(): void {
-        const panel = PopupManager.inst?.get(ChestDetailPanel);
+        const panel = PopupManager.inst.get(ChestDetailPanel);
         if (!panel || this.detailSlot <= 0) return;
         const detail = this.treasureRepository.detailOf(this.detailSlot);
         if (!detail) {
@@ -224,7 +244,7 @@ export class MainPage extends Component {
         if (!this.isValid) return;
         // 加载期间玩家可能又点了别的箱子（或关了弹窗）⇒ 以最新那次为准
         if (this.detailSlot !== index) return;
-        const opened = PopupManager.inst?.get(ChestDetailPanel);
+        const opened = PopupManager.inst.get(ChestDetailPanel);
         if (opened) { opened.applyContent(content); return; }
         void ChestDetailPanel.open({ userData: content });
     }
@@ -269,10 +289,8 @@ export class MainPage extends Component {
         const cached = this.chestIconCache.get(path);
         if (cached?.isValid) return cached;
         this.chestIconCache.delete(path);
-        const assets = this.assets;
-        if (!assets) return null;
         try {
-            const frame = await assets.load(spriteFramePathOf(path), SpriteFrame, { scope: this.chestArtScope });
+            const frame = await this.assets.load(spriteFramePathOf(path), SpriteFrame, { scope: this.chestArtScope });
             if (this.chestArtScope.disposed || !frame.isValid) return null;
             this.chestIconCache.set(path, frame);
             return frame;
@@ -317,7 +335,7 @@ export class MainPage extends Component {
         if (result === 'busy') return;
         if (result === 'ok') {
             if (kind === 'activate') this.refreshChestDetailCountdown();
-            else PopupManager.inst?.get(ChestDetailPanel)?.close();
+            else PopupManager.inst.get(ChestDetailPanel)?.close();
             return;
         }
         if (result === 'offline') FW.showTip(MAIN_PAGE_TEXTS.networkUnavailable);

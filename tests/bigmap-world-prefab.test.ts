@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { BIGMAP_MARKER_BADGE_Y } from '../assets/script/app/bigmap/view/BigMapWorldLayout';
+import { assetPath } from './helpers/asset-paths';
 
 interface IPrefabRef { __id__: number }
 interface IPrefabObject {
@@ -25,9 +26,9 @@ interface IPrefabObject {
     readonly [field: string]: unknown;
 }
 
-const WORLD_PATH = 'assets/resources/ui/bigmap/BigMapWorldView.prefab';
+const WORLD_PATH = assetPath('ui/bigmap/BigMapWorldView.prefab');
 const VIEW_PATH = 'assets/script/app/bigmap/view/BigMapWorldView.ts';
-const TEMPLATES_PATH = 'assets/resources/ui/bigmap/BigMapWorldTemplates.prefab';
+const TEMPLATES_PATH = assetPath('ui/bigmap/BigMapWorldTemplates.prefab');
 
 test('世界视图只引用独立模板资产，层级中不含 Templates 或模板子树', () => {
     assert.ok(existsSync(TEMPLATES_PATH));

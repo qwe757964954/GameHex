@@ -5,6 +5,7 @@ import { loadViews } from './helpers/zcds-view-fixtures';
 import { hexGridViewPoint } from '../assets/script/core/hex/HexGridLayout';
 import { configureZCMap, ZC_HEX_CONFIG, ZCMapLayout } from '../assets/script/app/zcds/model/ZCGameModel';
 import { ZCPvpTileType } from '../assets/script/app/zcds/model/ZCPvpTileRules';
+import { assetPath } from './helpers/asset-paths';
 
 configureZCMap(JSON.parse(readFileSync('tests/fixtures/zcds-legacy-map.json', 'utf8')) as ZCMapLayout);
 
@@ -538,7 +539,7 @@ test('Old Client 技能飘字覆盖暴击、回复、MISS、秒杀、克制和�
 });
 
 test('ZCGameFloatText prefab 预绑 Text 节点的 Label：textLabel 是必填引用', () => {
-    const data = JSON.parse(readFileSync('assets/resources/ui/game/ZCGameFloatText.prefab', 'utf8'));
+    const data = JSON.parse(readFileSync(assetPath('ui/game/ZCGameFloatText.prefab'), 'utf8'));
     const root = data[1];
     const view = data[root._components.at(-1).__id__];
     assert.ok(view.textLabel && typeof view.textLabel.__id__ === 'number',
@@ -686,14 +687,14 @@ test('建筑圆环沿用建筑冷却，建造/工作周期切换，废墟和空�
 });
 
 test('building cooldown prefab matches the jindu_02 ring size and visual', () => {
-    const data = JSON.parse(readFileSync('assets/resources/ui/game/ZCGameHex.prefab', 'utf8'));
+    const data = JSON.parse(readFileSync(assetPath('ui/game/ZCGameHex.prefab'), 'utf8'));
     const cooldown = data.find((item: any) => item.__type__ === 'cc.Node' && item._name === 'Cooldown');
     const children = cooldown._children.map((ref: any) => data[ref.__id__]);
     assert.deepEqual(children.map((node: any) => node._name), ['Fill']);
     const sprite = (node: any) => data[node._components.map((ref: any) => ref.__id__).find((id: number) => data[id].__type__ === 'cc.Sprite')];
     const track = sprite(cooldown);
     const fill = sprite(children[0]);
-    const meta = JSON.parse(readFileSync('assets/resources/image/buildings/jindu_02.png.meta', 'utf8'));
+    const meta = JSON.parse(readFileSync(assetPath('image/buildings/jindu_02.png.meta'), 'utf8'));
     const frame = `${meta.uuid}@f9941`;
     assert.equal(track._spriteFrame.__uuid__, frame);
     assert.equal(fill._spriteFrame.__uuid__, frame);
@@ -709,7 +710,7 @@ test('building cooldown prefab matches the jindu_02 ring size and visual', () =>
 });
 
 test('棋盘图层顺序声明在 ZCGameBoard.prefab 里，代码不再用 siblingIndex 现算', () => {
-    const data = JSON.parse(readFileSync('assets/resources/ui/game/ZCGameBoard.prefab', 'utf8'));
+    const data = JSON.parse(readFileSync(assetPath('ui/game/ZCGameBoard.prefab'), 'utf8'));
     const root = data[data[0].data.__id__];
     const order = root._children.map((ref: any) => data[ref.__id__]._name);
     // 子节点顺序 = 渲染顺序（后画的压在上面）：水面垫底，状态条最上。
@@ -937,7 +938,7 @@ test('新地块节点独立切换阵营、开发图标和建筑，保留 prefab 
 });
 
 test('ZCGameHex 使用 hex_flat 扁平底图，TerritoryOutline 的 Graphics 由 prefab 预挂并绑定', () => {
-    const data = JSON.parse(readFileSync('assets/resources/ui/game/ZCGameHex.prefab', 'utf8'));
+    const data = JSON.parse(readFileSync(assetPath('ui/game/ZCGameHex.prefab'), 'utf8'));
     const root = data[1];
     const view = data[root._components.at(-1).__id__];
     const nodeOf = (key: string) => data[data[view[key].__id__].node.__id__];
@@ -967,16 +968,16 @@ test('ZCGameHex 使用 hex_flat 扁平底图，TerritoryOutline 的 Graphics 由
     // 同阵营地块之间的内部重复边。
     assert.ok(!outlineCompTypes.includes('cc.Sprite'), 'TerritoryOutline 不能预挂完整六边形 Sprite（与 Graphics 同为渲染组件）');
     for (const [key, name] of Object.entries({ tileFrame: 'hex_flat', mineIconFrame: 'icon_jk', barracksIconFrame: 'icon_by', mysteryFrame: 'icon_wh', ruinsFrame: 'fx' })) {
-        const meta = JSON.parse(readFileSync(`assets/resources/image/buildings/${name}.png.meta`, 'utf8'));
+        const meta = JSON.parse(readFileSync(assetPath(`image/buildings/${name}.png.meta`), 'utf8'));
         assert.equal(view[key].__uuid__, meta.subMetas.f9941.uuid, key);
     }
     // 主城外观统一由 `buildingFrameResolver` 提供（对局与选点阶段同源，都是 `hq-base`）；
     // 旧的「我方 icon_ymp / 敌方 icon_m」两张通用图已下线 —— prefab 上不许再有这两个字段。
     assert.equal(view.playerHqFrame, undefined, 'ZCHexView 不该再有 playerHqFrame');
     assert.equal(view.enemyHqFrame, undefined, 'ZCHexView 不该再有 enemyHqFrame');
-    assert.ok(!readFileSync('assets/resources/ui/game/ZCGameHex.prefab', 'utf8').includes('2ef681ff-cd7e-4e50-b7ae-6a2d21ae18e5'),
+    assert.ok(!readFileSync(assetPath('ui/game/ZCGameHex.prefab'), 'utf8').includes('2ef681ff-cd7e-4e50-b7ae-6a2d21ae18e5'),
         'ZCGameHex.prefab 不该再引用 icon_ymp');
-    assert.ok(!readFileSync('assets/resources/ui/game/ZCGameHex.prefab', 'utf8').includes('24b4f17f-6ddd-46b3-af9b-8a10fe9d6101'),
+    assert.ok(!readFileSync(assetPath('ui/game/ZCGameHex.prefab'), 'utf8').includes('24b4f17f-6ddd-46b3-af9b-8a10fe9d6101'),
         'ZCGameHex.prefab 不该再引用 icon_m');
 });
 
@@ -1143,7 +1144,7 @@ test('兵种视觉 prefab 关闭 Sprite 裁剪模式，画布统一 256 使各�
     // 扫整个 units 目录，**不写死名单**：兵种会增删（2026-09-30 有 5 个换成 spine 后删了目录），
     // 硬编码名单在删目录时只会抛 ENOENT —— 而这条用例真正要守的是「渲染比例统一」。
     // 只认「有同名 prefab + 有 atlas 目录」的序列帧单位（`projectiles` 这类目录自然被排除）。
-    const unitsRoot = 'assets/resources/units';
+    const unitsRoot = assetPath('units');
     const units = readdirSync(unitsRoot).filter((name) =>
         existsSync(`${unitsRoot}/${name}/${name}.prefab`) && existsSync(`${unitsRoot}/${name}/atlas`));
     assert.ok(units.length > 0, '至少要扫到一个序列帧兵种');
@@ -1187,7 +1188,7 @@ test('RunAwayPlayerItem 刷新两列统计，处理零上限并在复用时清�
 });
 
 test('两份 HealthBar 预制体为横向进度条，建筑内置径向 Cooldown，无独立冷却资源', () => {
-    const read = (name: string) => JSON.parse(readFileSync(`assets/resources/ui/game/${name}.prefab`, 'utf8'));
+    const read = (name: string) => JSON.parse(readFileSync(assetPath(`ui/game/${name}.prefab`), 'utf8'));
     for (const name of ['ZCGameHex', 'ZCGameUnit']) {
         const data = read(name);
         const nodes = data.filter((o: any) => o.__type__ === 'cc.Node' && o._name === 'HealthBar');
@@ -1913,15 +1914,15 @@ test('血条四色在 prefab 上绑齐：敌3 用紫色 jindutiao_p，四张两�
         return meta.uuid;
     };
     const expected: Record<string, string> = {
-        barFillPlayer: uuidOf('assets/resources/image/gameui/jindutiao_b.png'),
-        barFillEnemy: uuidOf('assets/resources/image/gameui/jindutiao_r.png'),
-        barFillEnemy2: uuidOf('assets/resources/image/gameui/jindutiao_y.png'),
-        barFillEnemy3: uuidOf('assets/resources/image/buildings/jindutiao_p.png'),
+        barFillPlayer: uuidOf(assetPath('image/gameui/jindutiao_b.png')),
+        barFillEnemy: uuidOf(assetPath('image/gameui/jindutiao_r.png')),
+        barFillEnemy2: uuidOf(assetPath('image/gameui/jindutiao_y.png')),
+        barFillEnemy3: uuidOf(assetPath('image/buildings/jindutiao_p.png')),
     };
     assert.equal(new Set(Object.values(expected)).size, 4, '四家的填充图必须两两不同');
     for (const prefab of ['ZCGameUnit', 'ZCGameHex']) {
         const data = JSON.parse(
-            readFileSync(`assets/resources/ui/game/${prefab}.prefab`, 'utf8'),
+            readFileSync(assetPath(`ui/game/${prefab}.prefab`), 'utf8'),
         ) as Array<Record<string, unknown>>;
         const holder = data.find((row) => row !== null && typeof row === 'object' && 'barFillEnemy3' in row);
         assert.ok(holder, `${prefab}.prefab 必须绑 barFillEnemy3`);

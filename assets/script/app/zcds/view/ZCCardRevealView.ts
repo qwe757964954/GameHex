@@ -235,22 +235,16 @@ export class ZCCardRevealView extends Component {
         }
     }
 
-    /**
-     * 卡面主图：角色卡牌图（卡表 `headIcon`）；取不到回退建筑图并打日志 ——
-     * 卡面缺失是配置问题，静默回退会归因不到卡表。
-     *
-     * 归 `ZCDC_LOG_WARNINGS` 档（默认开）而不是诊断档：它一局只打一条、不刷屏，
-     * 且是「卡表 headIcon 没配」的唯一线索，关掉就归因不到了。
-     */
+    /** 卡面主图优先角色图；金矿已确定使用建筑图，缺角色图不再告警。 */
     private frameForArt(reveal: Readonly<ZCCardReveal>): SpriteFrame | null {
         const cardArt = ProcedureGame.current?.resolveCardArt(reveal.cardId) ?? null;
         if (cardArt) return cardArt;
-        if (ZCDC_LOG_WARNINGS) {
-            console.warn(
-                `[ZCCardRevealView] 卡牌 ${reveal.cardId}（${reveal.cardName}）没有角色卡面图，已回退建筑图`
-                + '；请检查卡表 headIcon 是否配置、或图片是否已进包',
-            );
-        }
+        // if (ZCDC_LOG_WARNINGS) {
+        //     console.warn(
+        //         `[ZCCardRevealView] 卡牌 ${reveal.cardId}（${reveal.cardName}）没有角色卡面图，已回退建筑图`
+        //         + '；请检查卡表 headIcon 是否配置、或图片是否已进包',
+        //     );
+        // }
         const configured = ProcedureGame.current?.resolveBuildingFrame(reveal.cardId, reveal.building) ?? null;
         return configured ?? this.frameForBuilding(reveal.building, reveal.owner);
     }

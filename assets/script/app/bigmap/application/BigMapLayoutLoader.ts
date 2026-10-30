@@ -2,6 +2,7 @@ import { JsonAsset } from 'cc';
 import type { AssetService } from '../../../core/asset/AssetService';
 import { resolveBigMapLayout, type IBigMapLayout } from '../model/BigMapLayout';
 import type { IBigMapConfig } from '../model/BigMapTypes';
+import { completeBigMapCampLayout } from '../model/BigMapCampWorld';
 
 /**
  * 大地图**布局文件**的加载器（唯一允许碰 `cc` 的布局入口）。
@@ -35,7 +36,7 @@ export async function loadBigMapLayout(
         const asset = await assets.load(path, JsonAsset);
         const { layout, reason } = resolveBigMapLayout(asset.json, config);
         if (!layout) console.warn(`[BigMap] 布局不可用（${reason}），回退种子生成：${path}`);
-        return layout;
+        return layout ? completeBigMapCampLayout(config, layout) : null;
     } catch (error) {
         console.warn(`[BigMap] 布局加载失败，回退种子生成：${path}`, error);
         return null;

@@ -1,7 +1,7 @@
 /**
  * 美术路径 ↔ 磁盘资源 的一致性守卫。
  *
- * 起因：2026-09-15 美术目录统一收进 `assets/resources/image/**`（卡牌阵容的图还从
+ * 起因：2026-09-15 美术目录统一收进 assetPath(`image/**`)（卡牌阵容的图还从
  * `main/` 挪到了 `card/`），而各模块里写的是裸子目录（`main` / `matching` / `buildings`）。
  * `resources.load` 找不到路径时**只打一条 warn、返回 null**，界面表现为「静默留白」——
  * 不报错、不崩，最容易当成代码写错查半天。
@@ -47,6 +47,7 @@ import {
 } from '../assets/script/app/role/RoleArt';
 import { MILITIA_ARMY_ID } from '../assets/script/app/role/MilitiaTypes';
 import { getGuideIconPath } from '../assets/script/app/zcds/model/ZCGuideConfig';
+import { assetPath } from './helpers/asset-paths';
 
 const RESOURCES = 'assets/resources';
 
@@ -137,8 +138,8 @@ test('主城七格文案配置与 prefab 绑定的新图标资源齐全', () => 
         'btm_arena_n', 'btm_arena_s', 'btm_char_n', 'btm_char_s', 'btm_shop_n', 'btm_shop_s',
         'btn_adventure_n', 'btn_adventure_s', 'btn_alliance_n', 'btn_alliance_s', 'btn_territory_n', 'btn_territory_s',
     ]) {
-        assert.equal(existsSync(`assets/resources/image/main/${oldIcon}.png`), false, `${oldIcon} 旧底栏资源应已删除`);
-        assert.equal(existsSync(`assets/resources/image/main/${oldIcon}.png.meta`), false, `${oldIcon} 旧资源 meta 应随资源删除`);
+        assert.equal(existsSync(assetPath(`image/main/${oldIcon}.png`)), false, `${oldIcon} 旧底栏资源应已删除`);
+        assert.equal(existsSync(assetPath(`image/main/${oldIcon}.png.meta`)), false, `${oldIcon} 旧资源 meta 应随资源删除`);
     }
     assert.equal(existsSync('assets/resources/ui/card/CardLineupNav.prefab'), false,
         '旧主城导航 prefab 应已由共用 TabButton 取代');
@@ -175,7 +176,9 @@ test('匹配页图标按「页面大图 / 信息条小图标」分两个根目�
     }
 
     // 两个根目录只能在 ArtPaths 里定义一次，业务侧不许写死子目录字面量
-    assertUsesArtPaths(readFileSync('assets/script/app/matching/MatchIcons.ts', 'utf8'), 'MatchIcons');
+    const loader = readFileSync('assets/script/app/matching/MatchIcons.ts', 'utf8');
+    assert.match(loader, /createIconLoader as createMatchIconLoader/);
+    assertUsesArtPaths(readFileSync('assets/script/app/common/SpriteFrameCache.ts', 'utf8'), '公共图标加载器');
     assertUsesArtPaths(readFileSync('assets/script/app/matching/MatchPlayerItem.ts', 'utf8'), 'MatchPlayerItem');
     assertUsesArtPaths(readFileSync('assets/script/app/procedure/ProcedureMatching.ts', 'utf8'), 'ProcedureMatching');
 });

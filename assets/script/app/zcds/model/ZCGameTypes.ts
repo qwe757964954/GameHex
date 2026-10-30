@@ -492,6 +492,8 @@ export interface ZCSnapshot {
     elapsedSeconds: number;
     /** 尚未推进的固定步长余量；旧 version 4 存档默认为 0。 */
     pendingSeconds?: number;
+    /** 实际已出塔防波数；旧存档缺省时按配置时间推导。 */
+    nextDefenceWaveIndex?: number;
     durationSeconds: number;
     playerGold: number;
     enemyGold: number;

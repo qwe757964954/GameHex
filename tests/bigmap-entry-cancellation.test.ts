@@ -1,3 +1,6 @@
+import { createControllerContext, createControllerResources } from './helpers/controller-context';
+import { EventMgr } from '../assets/script/framework/event/EventMgr';
+import * as mvcEvents from '../assets/script/app/bigmap/application/BigMapEvents';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
@@ -17,7 +20,9 @@ test('加载配置期间切走页面，取消的世界入口不能稍后弹出�
     const exports: Record<string, unknown> = {};
     runInNewContext(code, { exports, console: { warn: () => undefined },
         require: (name: string) => {
-            if (name === 'cc') return { director: { getScene: () => { canvasLookups += 1; return null; } } };
+            if (name.endsWith('/EventMgr')) return { EventMgr };
+        if (name.endsWith('/BigMapEvents')) return mvcEvents;
+        if (name === 'cc') return { director: { getScene: () => { canvasLookups += 1; return null; } } };
             if (name === './BigMapConfigLoader') return { loadBigMapConfig: () => config };
             if (name.endsWith('/MainRoleRow')) return { readRoleRow: () => null };
             return {};
@@ -33,6 +38,7 @@ test('加载配置期间切走页面，取消的世界入口不能稍后弹出�
 });
 
 function createOwnerHarness(config: Promise<object> = Promise.resolve({}), layout: Promise<null> = Promise.resolve(null)) {
+    const context = createControllerContext();
     let role = { id: '9007199254740993', selectServerId: '1' };
     const owners: unknown[] = [];
     const chapterOwners: unknown[] = [];
@@ -101,10 +107,12 @@ function createOwnerHarness(config: Promise<object> = Promise.resolve({}), layou
     runInNewContext(ts.transpileModule(readFileSync('assets/script/app/bigmap/application/BigMapEntry.ts', 'utf8'), {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
     }).outputText, { exports, console: { warn() {} }, require(name: string) {
+        if (name.endsWith('/EventMgr')) return { EventMgr };
+        if (name.endsWith('/BigMapEvents')) return mvcEvents;
         if (name === 'cc') return { Node: FakeNode, UITransform: Transform, Widget,
             Layers: { Enum: { UI_2D: 33554432 } }, view: { getVisibleSize: () => ({ width: 720, height: 1280 }) },
             director: { getScene: () => ({ getChildByName: () => ({ getChildByName: () => null }) }) } };
-        if (name.endsWith('/ZCBattlePreparation')) return { createZCBattlePreload: (assets: unknown, _configs: unknown, battle: unknown) => { const preload = { assets, battle }; preloads.push(preload); return preload; } };
+        if (name.endsWith('/ZCBattlePreparation')) return { createZCBattlePreload: (battle: unknown) => { const preload = { battle }; preloads.push(preload); return preload; } };
         if (name.endsWith('/MainRoleRow')) return { readRoleRow: () => role };
         // 背包读取链（ItemBag → CacheMgr → … → cc）在沙箱里不打桩会直接 require 'cc' 失败。
         if (name.endsWith('/ItemBag')) return { readItemCounts: () => new Map<string, number>() };
@@ -116,6 +124,7 @@ function createOwnerHarness(config: Promise<object> = Promise.resolve({}), layou
         } };
         if (name.endsWith('/GameRoute')) return { GameRoute: { Battle: 'battle' } };
         if (name.endsWith('/ProcedureManager')) return { ProcedureManager: {
+            instance: { context },
             navigate: (route: string, params: Record<string, unknown>) => { routes.push({ route, params }); },
             onSwitchSettled: (listener: (entered: boolean) => void) => {
                 settledListeners.push(listener);
@@ -128,7 +137,16 @@ function createOwnerHarness(config: Promise<object> = Promise.resolve({}), layou
         if (name === './BigMapConfigLoader') return { loadBigMapConfig: () => config };
         if (name === './BigMapLayoutLoader') return { loadBigMapLayout: () => layout };
         if (name === './BigMapStorage') return { createBigMapStorage: (owner: unknown) => { owners.push(owner); return {}; } };
-        if (name === './BigMapPresenter') return { BigMapPresenter: FakePresenter };
+        if (name.endsWith('/GameNet')) return { GameNet: { instance: {} } };
+        if (name === './BigMapModel') return { BigMapModel: FakePresenter };
+        if (name === './BigMapController') return { BigMapController: class { resources = createControllerResources(context);
+            constructor(private model: FakePresenter) {}
+            start() {} get snapshot() { return {}; }
+            initialize() { return this.model.initializeSlg(); }
+            refreshUnlockContext() { this.model.refreshUnlockContext(); }
+            cancelEnteringBattle() { cancelledEnters.push(1); }
+            dispose() { this.model.dispose(); }
+        } };
         if (name.endsWith('/BigMapPage')) return { BigMapPage: Page };
         if (name === './NpcBigMapRankProvider') return { NpcBigMapRankProvider: class {} };
         if (name === './BigMapCampRepository') return { BigMapCampRepository: class {} };
@@ -142,10 +160,10 @@ function createOwnerHarness(config: Promise<object> = Promise.resolve({}), layou
         return {};
     } });
     const Entry = exports.BigMapEntry as new () => {
-        open(configs: object): Promise<void>; close(): void; isOpen: boolean; setAssetService(assets: object): void; setSessionAssetService(service: object): void;
+        open(configs: object): Promise<void>; close(): void; isOpen: boolean;
     };
     const entry = new Entry();
-    return { entry, owners, chapterOwners, presenters, nodes, battles, routes, preloads, detailCallbacks,
+    return { entry, context, owners, chapterOwners, presenters, nodes, battles, routes, preloads, detailCallbacks,
         cancelledEnters,
         setChapters(chapters: readonly number[] | null) {
             chapterSnapshot = chapters ? { idleTime: 0, chapters: [...chapters] } : null;
@@ -297,7 +315,6 @@ test('旧入口仍在加载时新角色重新打开，旧回调不会取消新�
 test('布局加载期间换服，旧入口不创建页面和存档适配器', async () => {
     let finish: (value: null) => void = () => {};
     const h = createOwnerHarness(Promise.resolve({}), new Promise((resolve) => { finish = resolve; }));
-    h.entry.setAssetService({});
     const opening = h.entry.open({});
     await new Promise((resolve) => setImmediate(resolve));
     h.switchRole('9007199254740993', '2');
@@ -359,21 +376,21 @@ test('旧角色页面初始化期间新角色重开，旧初始化完成不关�
 
 test('世界开页不主动解析战斗资源，预下载由主界面绘制时机统一调度', async () => {
     const h = createOwnerHarness(); let warmed = 0, paused = 0;
-    h.entry.setSessionAssetService({ warmupBattle: async () => { warmed++; }, pauseWarmup: () => { paused++; } });
+    Object.assign(h.context.sessionAssets, { warmupBattle: async () => { warmed++; }, pauseWarmup: () => { paused++; } });
     await h.entry.open({});
     assert.equal(warmed, 0);
     assert.equal(h.detailCallbacks.length, 0);
     h.entry.close(); assert.equal(paused, 1);
 });
 
-test('大地图回包后把统一预加载与会话资产一并移交战斗入口', async () => {
+test('大地图回包后把统一预加载移交战斗入口', async () => {
     const h = createOwnerHarness(); const sharedAssets = {};
-    h.entry.setAssetService({}); h.entry.setSessionAssetService({ reusableAssets: sharedAssets, warmupBattle: async () => {} });
+    Object.assign(h.context.sessionAssets, { reusableAssets: sharedAssets, warmupBattle: async () => {} });
     await h.entry.open({});
     const attacking = h.presenters[0].deps.startBattle(1004, 205, () => true);
     const battle = { battleId: 'actual', seed: '1', units: [] };
     h.finishBattle(battle); assert.equal((await attacking).ok, true);
-    assert.equal(h.preloads.length, 1); assert.equal(h.preloads[0].assets, sharedAssets);
+    assert.equal(h.preloads.length, 1);
     assert.equal(await h.preloads[0].battle, battle);
     assert.equal(h.routes[0].params.preload, h.preloads[0]);
 });

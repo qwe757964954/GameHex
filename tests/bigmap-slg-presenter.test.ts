@@ -1,3 +1,8 @@
+import { createControllerContext } from './helpers/controller-context';
+import { BigMapController } from '../assets/script/app/bigmap/application/BigMapController';
+import { afterEach } from 'node:test';
+const controllers: BigMapController[] = [];
+afterEach(() => { controllers.splice(0).forEach(c => c.dispose()); });
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { BigMapPresenter } from '../assets/script/app/bigmap/application/BigMapPresenter';
@@ -6,7 +11,7 @@ import { loadBigMapConfig } from './helpers/bigmap-fixtures';
 
 const config = loadBigMapConfig();
 const ID = 0xffffffff;
-function harness() {
+function harness(itemCounts?: () => ReadonlyMap<string, number>) {
     let writes = 0;
     let now = 1000;
     const calls: { name: string; body: Readonly<Record<string, number>> }[] = [];
@@ -16,15 +21,40 @@ function harness() {
         : name === 'CmdSlgActionUpdateReqMsg' ? { info: { nextRevertTime: 20 } }
             : name === 'CmdSlgGameInfoReqMsg' ? { info: { maxMonsterLevel: 0, toCampId: 0 } } : {};
     const gateway: IBigMapSlgGateway = {
-        request(name, body) { calls.push({ name, body }); return reply(name, body); }, subscribe: () => () => {},
+        request(name, body) { calls.push({ name, body }); return reply(name, body); },
     };
     const repo = new BigMapSlgRepository(gateway, config, () => now);
     const presenter = new BigMapPresenter({ config, storage: { read: () => { throw new Error('联机不能读取离线基地'); },
         write: () => { writes += 1; } }, saveKey: 'slg-test', adventureChapter: () => 10,
-        now: () => now, slgRepository: repo });
+        now: () => now, slgRepository: repo, itemCounts });
+    const controller = new BigMapController(presenter, { context: createControllerContext(), slgRepository: repo, schedule: () => () => {} });
+    controller.start(); controllers.push(controller);
     return { presenter, repo, calls, home, setReply: (fn: typeof reply) => { reply = fn; },
         writes: () => writes, advance: () => { now += 2000; } };
 }
+
+test('当前缺 itemId 列的资源表仍展示背包材料，战斗奖励到账与返回世界后都读最新余额', async () => {
+    const bag = new Map([['18501', 100], ['18502', 80], ['18503', 60], ['18504', 40], ['18505', 20]]);
+    const h = harness(() => bag);
+    await h.presenter.initializeSlg();
+    const assertBar = (presenter: BigMapPresenter, amounts: number[]) => {
+        const bar = presenter.resourceBar();
+        assert.ok(bar.every((item) => item.amountKnown));
+        assert.deepEqual(bar.map((item) => item.amount), amounts);
+    };
+    try {
+        assertBar(h.presenter, [100, 80, 60, 40, 20]);
+        bag.set('18501', 200);
+        bag.set('18502', 160);
+        bag.delete('18505');
+        assertBar(h.presenter, [200, 160, 60, 40, 0]);
+        const returned = harness(() => bag);
+        try {
+            await returned.presenter.initializeSlg();
+            assertBar(returned.presenter, [200, 160, 60, 40, 0]);
+        } finally { returned.presenter.dispose(); }
+    } finally { h.presenter.dispose(); }
+});
 
 test('联机基地只展示服务端建筑，不读写本地存档，不自动增长资源或完成队列', async () => {
     const h = harness();

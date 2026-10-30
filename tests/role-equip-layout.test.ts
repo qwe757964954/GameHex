@@ -35,6 +35,7 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { assetPath } from './helpers/asset-paths';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PROJECT = join(HERE, '..');
@@ -85,8 +86,8 @@ function box(arr: Obj[], node: Obj, self = false): { l: number; r: number; b: nu
 const inside = (a: { l: number; r: number; b: number; t: number }, b: { l: number; r: number; b: number; t: number }) =>
     a.l >= b.l - 0.01 && a.r <= b.r + 0.01 && a.b >= b.b - 0.01 && a.t <= b.t + 0.01;
 
-const ROLE = 'assets/resources/ui/Role/Role.prefab';
-const BAG_ITEM = 'assets/resources/ui/Role/RoleBagItem.prefab';
+const ROLE = assetPath('ui/Role/Role.prefab');
+const BAG_ITEM = assetPath('ui/Role/RoleBagItem.prefab');
 
 const SLOTS = [1, 2, 3, 4, 5, 6];
 

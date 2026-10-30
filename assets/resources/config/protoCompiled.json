@@ -10128,6 +10128,20 @@
                         }
                       }
                     },
+                    "CmdPvpBuffInfo": {
+                      "fields": {
+                        "source": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 1
+                        },
+                        "buffs": {
+                          "rule": "repeated",
+                          "type": "string",
+                          "id": 2
+                        }
+                      }
+                    },
                     "CmdPvpInfo": {
                       "fields": {
                         "grade": {
@@ -10279,6 +10293,11 @@
                         "unitType": {
                           "type": "uint32",
                           "id": 7
+                        },
+                        "buffInfo": {
+                          "rule": "repeated",
+                          "type": "CmdPvpBuffInfo",
+                          "id": 8
                         }
                       }
                     },

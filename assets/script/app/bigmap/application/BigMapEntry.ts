@@ -1,7 +1,6 @@
-import type { SessionAssetService } from '../../../core/asset/SessionAssetService';
 import { createZCBattlePreload } from '../../zcds/application/ZCBattlePreparation';
 import { director, Layers, Node, SpriteFrame, UITransform, view, Widget } from 'cc';
-import type { AssetService } from '../../../core/asset/AssetService';
+import type { GameContext } from '../../../core/runtime/GameContext';
 import type { ConfigService } from '../../../core/config/ConfigService';
 import { GameRoute } from '../../../core/runtime/GameRoute';
 import { ProcedureManager } from '../../../framework/procedure/ProcedureManager';
@@ -16,7 +15,9 @@ import { createTerritorySaveStore } from '../../territory/application/TerritoryS
 import { loadBigMapConfig } from './BigMapConfigLoader';
 import { loadBigMapLayout } from './BigMapLayoutLoader';
 import { NpcBigMapRankProvider } from './NpcBigMapRankProvider';
-import { BigMapPresenter } from './BigMapPresenter';
+import { BigMapModel } from './BigMapModel';
+import { BigMapController } from './BigMapController';
+import { GameNet } from '../../net/GameNet';
 import { BIGMAP_SAVE_KEY, type IBigMapSaveOwner } from './BigMapSaveKeys';
 import { createBigMapStorage } from './BigMapStorage';
 import { BigMapCampRepository } from './BigMapCampRepository';
@@ -34,7 +35,7 @@ import { readItemCounts } from '../../card/ItemBag';
 /**
  * 大世界入口（**唯一一处**把「配置 / 存档 / 冒险进度 / 页面」接起来的地方）。
  *
- * 为什么单独放一层：`view/BigMapPage` 只认 `BigMapPresenter`，不知道配置从哪来、冒险进度
+ * 为什么单独放一层：`view/BigMapPage` 只接收展示快照，不知道配置从哪来、冒险进度
  * 存在哪。这里做三件脏活：
  * 1. 用 `ConfigService` 读 12 张 `bigmap*` 表并解析成强类型配置；
  * 2. 用领地存档（`TerritorySaveStore`）取「冒险已通关章节」——用户要求建筑解锁**只**来自它；
@@ -47,16 +48,22 @@ export class BigMapEntry {
     private static instance: BigMapEntry | null = null;
 
     private root: Node | null = null;
-    private presenter: BigMapPresenter | null = null;
+    private model: BigMapModel | null = null;
+    private controller: BigMapController | null = null;
     /** 页面组件（开战预加载失败时要通知它撤掉「正在进入」遮罩）。 */
     private page: BigMapPage | null = null;
     private saveOwner: IBigMapSaveOwner | null = null;
     private configCache: IBigMapConfig | null = null;
     /** `undefined` = 还没加载过；`null` = 加载过但没有可用布局。两者必须区分，否则会反复读盘。 */
     private layoutCache: IBigMapLayout | null | undefined = undefined;
-    private assets: AssetService | null = null;
+    private get context(): GameContext {
+        const manager = ProcedureManager.instance;
+        if (!manager) throw new Error('BigMapEntry requires the configured application context');
+        return manager.context;
+    }
     private opening = false;
     private openRevision = 0;
+    private stopBattleSwitch: (() => void) | null = null;
     private navigationRestore: (() => void) | null = null;
     /** 关闭回调（宿主注入；`close()` 时回调一次，用于把底栏高亮切回去）。 */
     private onCloseCallback: (() => void) | null = null;
@@ -66,20 +73,6 @@ export class BigMapEntry {
     static shared(): BigMapEntry {
         if (!BigMapEntry.instance) BigMapEntry.instance = new BigMapEntry();
         return BigMapEntry.instance;
-    }
-
-    /**
-     * 由组合根（`ProcedureBootstrap`）注入资源入口。
-     *
-     * 不注入也能玩：布局加载降级为「按种子生成世界」。这样入口那条链
-     * （`MainTabHost` 的「世界」格 → 本类）不用为了接布局改签名。
-     */
-    private sessionAssets: SessionAssetService | null = null;
-    setSessionAssetService(service: SessionAssetService): void { this.sessionAssets = service; }
-
-    setAssetService(assets: AssetService | null): void {
-        this.assets = assets;
-        this.layoutCache = undefined;
     }
 
     get isOpen(): boolean {
@@ -145,6 +138,7 @@ export class BigMapEntry {
                     hudNode.setSiblingIndex(host.children.length - 1);
                 }
             } else {
+                if (!canvas) return;
                 transform.setContentSize(size.width, size.height);
                 const widget = root.addComponent(Widget);
                 widget.isAlignTop = true;
@@ -155,17 +149,24 @@ export class BigMapEntry {
                 widget.bottom = 0;
                 widget.left = 0;
                 widget.right = 0;
-                root.setParent(canvas!);
+                root.setParent(canvas);
                 // 🔴 常驻 `Popup` 节点必须永远压在所有页面之上（Toast / LoadingPopup / 各类弹窗
                 // 全挂它下面）。世界页是后加的，默认拿到 Canvas 的**最后一个**兄弟序号，
                 // 正好把 Popup 盖住 —— 服务端回的 `CmdTips`（例如「章节尚未通关」）就弹不出来，
                 // 表现为「请求发了、服务端有提示、界面一片安静」（2026-10-26 反馈）。
                 // 插到 Popup 之前即可，不用改 Popup 自己的序号 —— 关页后顺序依旧正常。
-                const popupRoot = canvas!.getChildByName(POPUP_ROOT_NAME);
+                const popupRoot = canvas.getChildByName(POPUP_ROOT_NAME);
                 if (popupRoot) root.setSiblingIndex(popupRoot.getSiblingIndex());
             }
 
-            const presenter = new BigMapPresenter({
+            const campRepository = new BigMapCampRepository(new GameNetBigMapCampGateway(
+                () => revision === this.openRevision && this.isSaveOwnerCurrent(owner),
+            ));
+            const slgRepository = owner ? new BigMapSlgRepository(
+                new GameNetBigMapSlgGateway(() => revision === this.openRevision && this.isSaveOwnerCurrent(owner)),
+                config, () => Math.floor(Date.now() / 1000),
+            ) : undefined;
+            const model = new BigMapModel({
                 config,
                 layout,
                 storage: createBigMapStorage(owner),
@@ -178,31 +179,33 @@ export class BigMapEntry {
                 now: () => Math.floor(Date.now() / 1000),
                 // 单机档：NPC 模拟榜。联机版换成走服务器的 provider，这里一行不改。
                 rankProvider: new NpcBigMapRankProvider(config),
-                campRepository: new BigMapCampRepository(new GameNetBigMapCampGateway()),
+                campRepository,
                 startBattle: owner ? async (battleType, targetConfigId, isPresenterCurrent) => {
                     const isCurrent = (): boolean => revision === this.openRevision && root.isValid
                         && this.isSaveOwnerCurrent(owner) && isPresenterCurrent();
                     if (!isCurrent()) return { ok: false, message: BIGMAP_BATTLE_TEXT.closed };
-                    this.sessionAssets?.pauseWarmup?.();
+                    this.controller?.resources.sessionAssets.pauseWarmup?.();
                     const battle = await startBattle(battleType, [String(targetConfigId)], root, isCurrent);
                     if (!isCurrent()) return { ok: false, message: BIGMAP_BATTLE_TEXT.closed };
                     if (!battle) return { ok: false, message: BIGMAP_BATTLE_TEXT.failed };
-                    const preload = this.assets ? createZCBattlePreload(this.sessionAssets?.reusableAssets ?? this.assets,
-                        configs, Promise.resolve(battle)) : undefined;
+                    const preload = createZCBattlePreload( Promise.resolve(battle));
                     // 🔴 别在这里立刻 `close()`：`navigate` 是「预加载 → 进入」两阶段，
                     // 战斗资源没就绪之前当前界面一直不动。提前关掉世界页，露出来的就是
                     // 主界面的 `currentTab`（默认 tab = 领地）⇒ 玩家看到的是
                     // 「点攻打先跑回领地，等几十秒才进战斗」（2026-10-26 反馈）。
                     // 世界页挂 Canvas、不在 Main 节点下，`ProcedureMain.onLeave` 销毁不到它，
                     // 所以要自己关 —— 但必须等到流程真正切走的那一刻，见下面的落定钩子。
-                    const stopSettled = ProcedureManager.onSwitchSettled((entered) => {
-                        stopSettled();
+                    this.stopBattleSwitch?.();
+                    this.stopBattleSwitch = ProcedureManager.onSwitchSettled((entered) => {
+                        this.stopBattleSwitch?.();
+                        this.stopBattleSwitch = null;
+                        if (!isCurrent()) return;
                         if (entered) {
                             this.close();
                             return;
                         }
                         // 预加载失败 / 被别的切换顶掉：世界页还在，把「正在进入」撤掉让玩家重试。
-                        this.page?.cancelEnteringBattle();
+                        this.controller?.cancelEnteringBattle();
                     });
                     ProcedureManager.navigate(GameRoute.Battle, {
                         battle,
@@ -212,22 +215,22 @@ export class BigMapEntry {
                     });
                     return { ok: true, message: '' };
                 } : undefined,
-                slgRepository: owner ? new BigMapSlgRepository(
-                    new GameNetBigMapSlgGateway(() => revision === this.openRevision && this.isSaveOwnerCurrent(owner)),
-                    config, () => Math.floor(Date.now() / 1000),
-                ) : undefined,
+                slgRepository,
             });
 
+            const controller = new BigMapController(model, { context: this.context, network: GameNet.instance, campRepository, slgRepository });
             const page = root.addComponent(BigMapPage);
             root.active = false;
             const navigation = options?.navigation;
             const navigationHeight = navigation?.isValid ? navigation.getComponent(UITransform)?.height ?? 0 : 0;
             this.root = root;
-            this.presenter = presenter;
+            this.model = model;
+            this.controller = controller;
+            controller.start();
             this.page = page;
             this.onCloseCallback = options?.onClose ?? null;
             // 基地写操作由 serverBaseReady 拦截；同步回包不应挡住世界浏览，更不能等到缺包超时才亮页。
-            void presenter.initializeSlg().catch((error: unknown) => {
+            void controller.initialize().catch((error: unknown) => {
                 if (revision === this.openRevision && root.isValid && this.isSaveOwnerCurrent(owner)) {
                     console.warn('[BigMapEntry] 基地信息同步失败', error);
                 }
@@ -237,16 +240,16 @@ export class BigMapEntry {
             if (!TerritoryChapterInfoRepository.instance.current) {
                 void TerritoryChapterInfoRepository.instance.refresh().then(() => {
                     if (revision !== this.openRevision || !root.isValid || !this.isSaveOwnerCurrent(owner)) return;
-                    this.presenter?.refreshUnlockContext();
+                    this.controller?.refreshUnlockContext();
                 });
             }
-            await page.initialize(presenter, () => this.close(), this.assets, layout?.background ?? '', navigationHeight, async (scope) => {
+            await page.initialize(controller.snapshot, controller.resources, layout?.background ?? '', navigationHeight, async (scope) => {
                 const role = readRoleRow();
                 if (!role || scope.disposed) return null;
                 const resolver = await HeadArt.loadHeadArtResolver(configs);
                 if (scope.disposed) return null;
                 return HeadArt.loadHeadFrame(toIdString(role.img), (name, root) => (
-                    this.assets.load(`${root}/${name}/spriteFrame`, SpriteFrame, { scope })
+                    controller.resources.assets.load(`${root}/${name}/spriteFrame`, SpriteFrame, { scope })
                 ), resolver);
             });
             if (revision !== this.openRevision || !root.isValid) return;
@@ -265,15 +268,18 @@ export class BigMapEntry {
     }
 
     close(): void {
-        this.sessionAssets?.pauseWarmup?.();
+        this.controller?.resources.sessionAssets.pauseWarmup?.();
         this.openRevision += 1;
         this.opening = false;
         this.navigationRestore?.();
         this.navigationRestore = null;
-        this.presenter?.dispose();
+        this.stopBattleSwitch?.();
+        this.stopBattleSwitch = null;
+        this.controller?.dispose();
         if (this.root?.isValid) this.root.destroy();
         this.root = null;
-        this.presenter = null;
+        this.model = null;
+        this.controller = null;
         this.page = null;
         this.saveOwner = null;
         const hud = this.hudRestore;
@@ -299,12 +305,7 @@ export class BigMapEntry {
      */
     private async ensureLayout(config: IBigMapConfig): Promise<IBigMapLayout | null> {
         if (this.layoutCache !== undefined) return this.layoutCache;
-        if (!this.assets) {
-            console.warn('[BigMapEntry] 没有注入 AssetService，跳过布局文件，按种子生成世界');
-            this.layoutCache = null;
-            return null;
-        }
-        this.layoutCache = await loadBigMapLayout(this.assets, config);
+        this.layoutCache = await loadBigMapLayout(this.context.assets, config);
         return this.layoutCache;
     }
 

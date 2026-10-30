@@ -76,10 +76,10 @@ export class RewardPreviewPage extends PopupBase {
     static prefabPath = 'ui/Activity/RewardPreview';
 
     @property({ type: Node, tooltip: 'Bubble：气泡底板（九宫格；锚点必须 (0.5,0.5)，运行时按格数改宽）' })
-    bubble: Node = null!;
+    bubble: Node = null;
 
     @property({ type: Node, tooltip: 'Bubble/Cells：格子容器（子节点 Cell1..CellN，各挂 GoodsBox）' })
-    cells: Node = null!;
+    cells: Node = null;
 
     /**
      * 当前**打开着**的实例。

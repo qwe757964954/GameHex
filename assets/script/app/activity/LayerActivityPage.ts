@@ -138,34 +138,34 @@ export class LayerActivityPage extends PopupBase {
     static prefabPath = 'ui/Activity/Activity';
 
     @property({ type: Node, tooltip: 'CloseBtn：右上角关闭按钮（挂 cc.Button）' })
-    closeButton: Node = null!;
+    closeButton: Node = null;
 
     @property({ type: Label, tooltip: 'TitleLabel：标题横幅上的字（`每日任务`）' })
-    titleLabel: Label = null!;
+    titleLabel: Label = null;
 
     @property({ type: VirtualScrollView, tooltip: 'RowView：任务行列表（自带虚拟列表 + Mask）' })
-    rowList: VirtualScrollView = null!;
+    rowList: VirtualScrollView = null;
 
     @property({ type: Node, tooltip: 'ProgressStrip：周活跃整条（徽章 / 积分 / 条 / 宝箱都在它下面）' })
-    progressStrip: Node = null!;
+    progressStrip: Node = null;
 
     @property({ type: Node, tooltip: 'ProgressStrip/BarFill：进度条填充（锚点必须 (0,0.5)，靠改宽度走）' })
-    barFill: Node = null!;
+    barFill: Node = null;
 
     @property({ type: Node, tooltip: 'ProgressStrip/BoxRow：宝箱容器（子节点在运行时从 BoxTemplate clone）' })
-    boxRow: Node = null!;
+    boxRow: Node = null;
 
     @property({ type: Node, tooltip: 'ProgressStrip/BoxRow/BoxTemplate：宝箱模板（默认隐藏，只用来 clone）' })
-    boxTemplate: Node = null!;
+    boxTemplate: Node = null;
 
     @property({ type: Label, tooltip: 'ProgressStrip/CoinLabel：当前周活跃积分' })
-    coinLabel: Label = null!;
+    coinLabel: Label = null;
 
     @property({ type: Label, tooltip: 'Hint：提示行（离线 / 空配置 / 操作失败时显示）' })
-    hintLabel: Label = null!;
+    hintLabel: Label = null;
 
     @property({ type: Node, tooltip: 'PanelBg：长屏时拉伸的九宫主底板（位置不动、只长高：上下各吃一半额外高度）' })
-    panel: Node = null!;
+    panel: Node = null;
 
     @property({ type: [Node], tooltip: '贴顶节点：长屏额外高度不改变它们距屏幕顶部的位置（留空 ⇒ 用代码里的 ACTIVITY_HEADER_NODES，见其注释）' })
     topAlignedNodes: Node[] = [];

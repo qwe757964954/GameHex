@@ -24,7 +24,7 @@ const { ccclass, property } = _decorator;
 @ccclass('ChatEmojiItem')
 export class ChatEmojiItem extends Component {
     @property({ type: Sprite, tooltip: 'Icon：表情图（ct_emoji_<N>）' })
-    icon: Sprite = null!;
+    icon: Sprite = null;
 
     /** 由宿主在每次铺行时重设。 */
     onPick: (() => void) | null = null;

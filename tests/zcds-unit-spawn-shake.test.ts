@@ -21,8 +21,11 @@ test('spawnShakePulse：单段内 1 → 1.1 → 1，段外 clamp', () => {
 });
 
 test('单位出生抖动：先 Y 拉 110% 回落、再 X 拉 110% 回落，结束回基准', () => {
-    const { load, bar, cc, FakeNode } = loadViews();
+    const { load, bar, cc, FakeNode, procedureGame } = loadViews();
     const view = new (load('./ZCUnitView').ZCUnitView)();
+    // 组件宿主节点：attachVisual 里会 `visual.layer = this.node.layer`，缺了就是
+    // 「Cannot set properties of undefined (setting 'layer')」。
+    (view as unknown as { node: unknown }).node = new FakeNode();
     view.rootTransform = { setContentSize() {} };
     view.visualRoot = new FakeNode();
     view.sprite = { enabled: true, spriteFrame: null };
@@ -39,9 +42,13 @@ test('单位出生抖动：先 Y 拉 110% 回落、再 X 拉 110% 回落，结�
             return node;
         },
     };
-    view.initialize(prefab, 1);
+    // ⚠️ `initialize` 签名变了（2026-10-16）：不再从入参收 prefab / prefabSize，
+    //    改为 `ProcedureGame.current?.resolveUnitPrefab(definition.unitId)` 现取 + `definition.prefabSize`。
+    //    继续传第二参会被忽略 ⇒ prefab 取不到 ⇒ `visualNode` 永远是 null ⇒ 读 `.scale` 直接崩。
+    procedureGame.current = { resolveUnitPrefab: () => prefab };
+    view.initialize({ unitId: 'test-unit', hero: false, attackRange: 20, prefabSize: 1 });
     const unit = { hp: 100, maxHp: 100, owner: 'player', battleState: 'idle', facingRadians: 0, completedAttackCount: 0 };
-    const definition = { hero: false, attackRange: 20 };
+    const definition = { unitId: 'test-unit', hero: false, attackRange: 20, prefabSize: 1 };
     const render = (now: number) => view.render({ unit, definition, x: 0, y: 0, now });
     const scale = () => view.visualNode.scale;
 
@@ -72,6 +79,8 @@ test('建筑生成单位时触发出生抖动（renderUnitEntity 的 isBirth 分
     const end = source.indexOf('private injectResourceUnits');
     assert.ok(start > 0 && end > start, 'renderUnitEntity 必须存在');
     const body = source.slice(start, end);
-    assert.match(body, /if \(isBirth && model\) \{[\s\S]*?playSpawnShake\(presentation\.now\)/,
+    // ⚠️ 条件已简化成 `if (isBirth)`（原先 `isBirth && model`）—— `model` 判空移到上游了，
+    //    抖动语义没变：新生单位同一拍里 playSpawnShake。
+    assert.match(body, /if \(isBirth\) \{[\s\S]*?playSpawnShake\(presentation\.now\)/,
         '单位首次出现（isBirth）必须触发出生抖动');
 });

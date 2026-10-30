@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { assetPath } from './helpers/asset-paths';
 
-const UI = 'assets/resources/ui/main';
+const UI = assetPath('ui/main');
 const PATHS = {
     page: `${UI}/MainTerritoryMap.prefab`,
-    station: 'assets/resources/ui/territory/TerritoryStation.prefab',
+    station: assetPath('ui/territory/TerritoryStation.prefab'),
     pageScript: 'assets/script/app/main/MainTerritoryMap.ts',
 };
 
@@ -231,7 +232,7 @@ test('MainTerritoryMap.ts 不再做配置/战役/存档/进度编排，只接线
 });
 
 // ── Presenter 纯度守卫：纯 TS 编排器，整条 import 链不许碰 cc / 边界 ───────
-const PRESENTER_SCRIPT = 'assets/script/app/territory/application/TerritoryPresenter.ts';
+const PRESENTER_SCRIPT = 'assets/script/app/territory/application/TerritoryModel.ts';
 
 test('TerritoryPresenter.ts 是纯 TS：不 import cc / framework / 边界模块', () => {
     const source = readFileSync(PRESENTER_SCRIPT, 'utf8');

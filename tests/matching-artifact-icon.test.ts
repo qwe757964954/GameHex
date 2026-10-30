@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { buildMatchProfileLookup, applyUnitToPlayerView } from '../assets/script/app/battle/BattleStartModel';
 import type { MatchPlayerData } from '../assets/script/app/matching/MatchTypes';
+import { assetPath } from './helpers/asset-paths';
 
 /**
  * 匹配界面的神器图标必须与对局里**同一张图**。
@@ -81,7 +82,7 @@ test('匹配 prefab 不再硬绑那张占位神器图', () => {
     //  `MatchEnemyItem.prefab` 随之删除，所以这里只剩一个 prefab 要查。
     const PLACEHOLDER_UUID = 'd18e689c-9532-4c19-9d4d-d5974023519b';
     for (const name of ['MatchPlayerItem']) {
-        const prefab = readFileSync(`assets/resources/ui/matching/${name}.prefab`, 'utf8');
+        const prefab = readFileSync(assetPath(`ui/matching/${name}.prefab`), 'utf8');
         assert.ok(
             !prefab.includes(PLACEHOLDER_UUID),
             `${name}.prefab 的 ArtifactIcon 不该再硬绑占位神器图（蓝色法杖）—— 查不到配置就留空，别显示错的`,

@@ -84,7 +84,7 @@ import {
     LEAGUE_COST_SHORT_STROKE,
     leagueBannerArt,
 } from './LeagueArt';
-import { leagueRepository, type ILeagueRepository, type LeagueRequestResult } from './LeagueRepository';
+import {leagueRepository, type ILeagueRepository} from './LeagueRepository';
 import {
     isLeagueNameUsable,
     leagueCreateBannerIndices,
@@ -124,31 +124,31 @@ export class LeagueCreatePage extends PopupBase {
     static prefabPath = 'ui/League/LeagueCreate';
 
     @property({ type: Node, tooltip: 'CloseBtn：右上关闭按钮（挂 cc.Button）' })
-    closeButton: Node = null!;
+    closeButton: Node = null;
 
     @property({ type: EditBox, tooltip: 'NameInput：lab_leagueName 的 cc.EditBox（多行）' })
-    nameInput: EditBox = null!;
+    nameInput: EditBox = null;
 
     @property({ type: VirtualScrollView, tooltip: 'BannerListView：可选旗帜色（横向虚拟列表，8 项）' })
-    bannerList: VirtualScrollView = null!;
+    bannerList: VirtualScrollView = null;
 
     @property({ type: Node, tooltip: 'QuickJoinBox：「允许快速加入」勾选框（整块 50×50 是热区）' })
-    quickJoinBox: Node = null!;
+    quickJoinBox: Node = null;
 
     @property({ type: Node, tooltip: 'QuickJoinBox/Check：勾（FGUI 实例 checked=true ⇒ 默认已勾）' })
-    quickJoinCheck: Node = null!;
+    quickJoinCheck: Node = null;
 
     @property({ type: Node, tooltip: 'BtnCreate：消耗按钮（底图 + 衬底 + 「创建」+ 消耗项）' })
-    costButton: Node = null!;
+    costButton: Node = null;
 
     @property({ type: Sprite, tooltip: 'BtnCreate/Cost/CostIcon：消耗图标（运行时按表换帧）' })
-    costIcon: Sprite = null!;
+    costIcon: Sprite = null;
 
     @property({ type: Label, tooltip: 'BtnCreate/Cost/Has：持有量（「100/」，两态换色）' })
-    costHasLabel: Label = null!;
+    costHasLabel: Label = null;
 
     @property({ type: Label, tooltip: 'BtnCreate/Cost/Need：需要量（恒一色，FGUI 没有 gearColor）' })
-    costNeedLabel: Label = null!;
+    costNeedLabel: Label = null;
 
     /** 建盟成功后的回敲（由 `LeagueJoinPage` 传入）。 */
     private onCreated?: () => void;
@@ -168,10 +168,6 @@ export class LeagueCreatePage extends PopupBase {
     /** 老端 `_creating`（防连点）。 */
     private creating = false;
 
-    private buttonsBound = false;
-
-    private rendererBound = false;
-
     /** 每次取数递增，用来作废在飞的异步结果。 */
     private revision = 0;
 
@@ -179,10 +175,11 @@ export class LeagueCreatePage extends PopupBase {
     // 生命周期
     // ============================================================
 
+    /**
+     * 按钮 / 列表回调在 `onInit` 里接一次即可：`PopupBase._inited` 保证每实例只跑一次
+     * （`if (!this._inited)`），所以「只绑一次」的布尔门闩已删（2026-10-30）。
+     */
     protected onInit(): void {
-        if (this.buttonsBound) return;
-        this.buttonsBound = true;
-
         const close = this.closeButton?.getComponent(Button);
         if (close) close.node.on(Button.EventType.CLICK, this.onCloseClick, this);
         else console.warn('[LeagueCreate] CloseBtn 上没有 cc.Button，点击不会生效');
@@ -190,14 +187,11 @@ export class LeagueCreatePage extends PopupBase {
         this.bindClick(this.costButton, () => void this.onSubmit());
         this.bindClick(this.quickJoinBox, () => this.toggleQuickJoin());
 
-        if (!this.rendererBound) {
-            this.rendererBound = true;
-            if (this.bannerList) {
-                this.bannerList.renderItemFn = (node, index) => this.renderBanner(node, index);
-                this.bannerList.onItemClickFn = (_node, index) => this.onBannerClick(index);
-            } else {
-                console.warn('[LeagueCreate] BannerListView 没绑上，旗帜列表不会渲染');
-            }
+        if (this.bannerList) {
+            this.bannerList.renderItemFn = (node, index) => this.renderBanner(node, index);
+            this.bannerList.onItemClickFn = (_node, index) => this.onBannerClick(index);
+        } else {
+            console.warn('[LeagueCreate] BannerListView 没绑上，旗帜列表不会渲染');
         }
     }
 

@@ -65,7 +65,7 @@ export class CelebrationFrames {
      */
     loadFrame(path: string): Promise<SpriteFrame | null> {
         if (!path) return Promise.resolve(null);
-        if (this._frames.has(path)) return Promise.resolve(this._frames.get(path)!);
+        if (this._frames.has(path)) return Promise.resolve(this._frames.get(path));
         this._requested.add(path);
         return new Promise((resolve) => {
             routedLoad(path, SpriteFrame, (error, frame) => {

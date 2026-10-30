@@ -87,37 +87,37 @@ export class CommonTips extends PopupBase {
     // （不改 prefab 把三个字段重拖成 Button 组件：全工程只有 `MailPage` 调 `CommonTips.open`，
     //   而这个 prefab 是别人的资产；声明跟着实际数据走、代码做归一化，改动面最小。）
     @property({ type: Sprite, tooltip: '弹窗主背景 bg_05' })
-    panelBg: Sprite = null!;
+    panelBg: Sprite = null;
 
     @property({ type: Sprite, tooltip: '标题栏底图 title_01' })
-    titleBg: Sprite = null!;
+    titleBg: Sprite = null;
 
     @property({ type: Sprite, tooltip: '标题装饰底图 title_02' })
-    titleDeco: Sprite = null!;
+    titleDeco: Sprite = null;
 
     @property({ type: Label, tooltip: '标题文字 TipsLab' })
-    titleLabel: Label = null!;
+    titleLabel: Label = null;
 
     @property({ type: Label, tooltip: '正文文字 ContentLab' })
-    contentLabel: Label = null!;
+    contentLabel: Label = null;
 
     @property({ type: Node, tooltip: '右上角关闭按钮 btn_close（节点；`cc.Button` 挂在它身上）' })
-    closeButton: Node = null!;
+    closeButton: Node = null;
 
     @property({ type: Node, tooltip: '按钮容器 Layout' })
-    buttonLayout: Node = null!;
+    buttonLayout: Node = null;
 
     @property({ type: Node, tooltip: '确定按钮 SureBtn（节点；`cc.Button` 挂在它身上）' })
-    sureButton: Node = null!;
+    sureButton: Node = null;
 
     @property({ type: Label, tooltip: '确定按钮文字 SureLab' })
-    sureLabel: Label = null!;
+    sureLabel: Label = null;
 
     @property({ type: Node, tooltip: '取消按钮 CancelBtn（节点；`cc.Button` 挂在它身上）' })
-    cancelButton: Node = null!;
+    cancelButton: Node = null;
 
     @property({ type: Label, tooltip: '取消按钮文字 CancelLab' })
-    cancelLabel: Label = null!;
+    cancelLabel: Label = null;
 
     // ===== 运行时状态 =====
     private options: CommonTipsOptions | null = null;

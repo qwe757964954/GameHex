@@ -26,10 +26,11 @@ import { BigMapPresenter } from '../assets/script/app/bigmap/application/BigMapP
 import type { BigMapSlgRepository } from '../assets/script/app/bigmap/application/BigMapSlgRepository';
 import { createMemoryBigMapStorage } from '../assets/script/app/bigmap/application/BigMapSaveKeys';
 import { loadBigMapConfig } from './helpers/bigmap-fixtures';
+import { assetPath } from './helpers/asset-paths';
 
 const CMD = 'com.xkhy.tafang.cmd';
 
-const root = protobuf.Root.fromJSON(JSON.parse(readFileSync('assets/resources/config/protoCompiled.json', 'utf8')));
+const root = protobuf.Root.fromJSON(JSON.parse(readFileSync(assetPath('config/protoCompiled.json'), 'utf8')));
 
 function loadModule(path: string, require: (name: string) => unknown): Record<string, unknown> {
     const exports: Record<string, unknown> = {};
@@ -142,7 +143,6 @@ function makeGateway() {
         fetchDetail: () => detail.promise,
         fetchRoles: async () => null,
         requestMove: (body) => { moves.push({ ...body }); return move.promise; },
-        subscribeRoleEvents: () => () => undefined,
     };
     return { moves, move, detail, gateway };
 }
@@ -213,18 +213,22 @@ test('★网关：真发 CmdSlgCampMoveReqMsg，body 三项，allowRetry=false',
     const requests = loadModule('assets/script/app/bigmap/application/RequestBigMapCampMsg.ts', () => ({
         RequestMsg: class {
             allowRetry = true;
-            constructor(public cmdReqMsg: Record<string, unknown>, _caller: unknown, public fCallback: (rsp: unknown) => void) {}
+            constructor(public cmdReqMsg: Record<string, unknown>, public caller: object, public fCallback: (rsp: unknown) => void) {}
         },
     }));
     const sent: { name: string; body: Record<string, unknown>; allowRetry: boolean; needLoading: boolean }[] = [];
+    const removed: object[] = [];
+    let requestOwner: object | null = null;
     const net = {
         isConnected: true,
         async send(req: { getReqMsgProtoName(): string; cmdReqMsg: Record<string, unknown>; fCallback(rsp: unknown): void;
-            allowRetry: boolean }, needLoading: boolean) {
+            caller: object; allowRetry: boolean }, needLoading: boolean) {
+            requestOwner = req.caller;
             sent.push({ name: req.getReqMsgProtoName(), body: req.cmdReqMsg, allowRetry: req.allowRetry, needLoading });
             req.fCallback({ succ: 1, req: { campId: 205, pos: 7, moveType: 1 } });
             return true;
         },
+        removeCaller(owner: object) { removed.push(owner); },
     };
     const mod = loadModule('assets/script/app/bigmap/application/GameNetBigMapCampGateway.ts', (name) => {
         if (name.endsWith('/GameNet')) return { GameNet: { instance: net } };
@@ -233,8 +237,15 @@ test('★网关：真发 CmdSlgCampMoveReqMsg，body 三项，allowRetry=false',
     });
     const Gateway = mod.GameNetBigMapCampGateway as new () => {
         requestMove(body: { campId: number; pos: number; moveType: number }): Promise<unknown>;
+        dispose(): void;
     };
-    await new Gateway().requestMove({ campId: 205, pos: 7, moveType: 1 });
+    const gateway = new Gateway();
+    await gateway.requestMove({ campId: 205, pos: 7, moveType: 1 });
+    assert.equal(requestOwner, gateway);
+    gateway.dispose();
+    gateway.dispose();
+    assert.deepEqual(removed, [gateway]);
+    assert.equal(await gateway.requestMove({ campId: 205, pos: 7, moveType: 1 }), null);
     assert.equal(sent.length, 1);
     assert.equal(sent[0].name, 'CmdSlgCampMoveReqMsg');
     assert.deepEqual(Object.keys(sent[0].body), ['campId', 'pos', 'moveType']);

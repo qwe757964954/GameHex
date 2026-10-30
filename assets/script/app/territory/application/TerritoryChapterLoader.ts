@@ -34,6 +34,7 @@ export class TerritoryChapterLoader implements ITerritoryChapterLoader {
                 stages: campaign.stages,
                 playerCardCount: campaign.playerCardCount,
                 idleRewardMaxHours: campaign.idleRewardMaxHours,
+                levelAutoStart: campaign.levelAutoStart,
             },
             art,
         };

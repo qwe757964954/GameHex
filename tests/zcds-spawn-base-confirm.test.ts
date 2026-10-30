@@ -31,6 +31,7 @@ import {
     ZC_HEX_CONFIG,
     ZC_MAP_COLUMNS,
     ZC_MAP_HOMES,
+    ZC_MAP_HOME_CANDIDATES,
     ZC_MAP_ID,
     ZC_MAP_PLAYER_COUNT,
     ZC_MAP_REGIONS,
@@ -41,6 +42,7 @@ import {
 } from '../assets/script/app/zcds/model/ZCGameModel';
 import type { ZCMatchMap } from '../assets/script/app/zcds/model/ZCMatchConfig';
 import { ZCSpawnSelection } from '../assets/script/app/zcds/model/ZCSpawnSelection';
+import { assetPath } from './helpers/asset-paths';
 
 // ============================================================
 // 选点地图夹具
@@ -53,6 +55,16 @@ import { ZCSpawnSelection } from '../assets/script/app/zcds/model/ZCSpawnSelecti
  */
 const PLAYER_HOME_ROW = 5;
 const PLAYER_HOME_COLUMN = 4;
+
+/** 把行区间展开成格子 id（8 列，映射与 `row * columns + column` 一致）。 */
+function cellsInRows(rowFrom: number, rowTo: number): number[] {
+    const ids: number[] = [];
+    for (let row = rowFrom; row <= rowTo; row += 1) {
+        for (let column = 0; column < 8; column += 1) ids.push(row * 8 + column);
+    }
+    return ids;
+}
+
 const SELECT_LAYOUT: ZCMapLayout = {
     id: 'spawn-base-confirm-test',
     version: 3,
@@ -67,6 +79,14 @@ const SELECT_LAYOUT: ZCMapLayout = {
     homes: [
         { row: PLAYER_HOME_ROW, column: PLAYER_HOME_COLUMN },
         { row: 2, column: 3 },
+    ],
+    // 🔴 `homeCandidates` 现在是选点的**硬前置**：`ZCSpawnSelection.homeRegionInvalidReason`
+    //    的 legacy 分支查不到候选范围就返回「本区未配置前 / 中 / 后区域」⇒ 合法格为空 ⇒
+    //    构造时抛 `player 未配置可选主城区域`。只写 `ascii` 分区已经不够用了。
+    //    这里保持原意：我方（1 区）只能在下半场 row ≥ 4 落点，敌方（2 区）只能在上半场。
+    homeCandidates: [
+        { section: 1, cells: cellsInRows(4, 7) },
+        { section: 2, cells: cellsInRows(0, 3) },
     ],
     spacing: { homeMinDistance: 2, resourceMinDistance: 3 },
 };
@@ -90,6 +110,8 @@ function makeMap(layout: ZCMapLayout = SELECT_LAYOUT): ZCMatchMap {
         regions: ZC_MAP_REGIONS,
         resourcePoints: ZC_MAP_RESOURCE_POINTS,
         spacing: ZC_MAP_SPACING,
+        // 与 `regions` 同理：选点的合法格判据在这两条链上取，漏传就等于「本区没配候选范围」。
+        homeCandidates: ZC_MAP_HOME_CANDIDATES,
     };
 }
 
@@ -251,15 +273,42 @@ function loadZCGameClass(): { ZCGame: any; Widget: unknown } {
         '../showReward/RewardFrames': { resolveCmdGoodsFrames: () => Promise.resolve([]) },
         '../itemdetail/ItemDetailTable': { itemNumberTextOf: (n: unknown) => String(n) },
         './model/ZCGameRuntimeConfig': {}, './model/ZCSeededRandom': {},
+        // 阶段机已从 `view/` 迁到 `application/`（ZCGame.ts:38 值导入）。只需接口形状。
+        './application/ZCBattlePhaseController': {
+            ZCBattlePhase: new Proxy({}, { get: (_t, key) => String(key) }),
+            ZCBattlePhaseController: class {
+                current = '';
+                isLeaving = false;
+                beginSettlementPresentation(): void {}
+                leave(): boolean { return true; }
+                startPlaying(): void {}
+                startSpawnSelection(): void {}
+                openSettlement(): boolean { return true; }
+            },
+        },
+        // ZCGame.ts:14 值导入 `ZCDC_LOG_WARNINGS`（日志开关表）。缺桩 ⇒ `runInNewContext`
+        // 里 `require('./ZCDCLogSwitch')` 直接断言失败，借/还按钮的 4 条用例整个不跑。
+        './ZCDCLogSwitch': { ZCDC_LOG_WARNINGS: {} },
+        // `ZCGame.ts:19` 值导入事件名常量（`EventMgr.instance.on(ZCGameUiEvent.*)`）。
+        // 这里只需要键存在——用例不校验事件分发本身。
+        './view/ZCGameHudEvents': {
+            ZCGameUiEvent: new Proxy({}, { get: (_t, key) => `ui:${String(key)}` }),
+        },
         '../ArtPaths': {}, '../HeadArt': { HeadArt: {} },
         '../../framework/ref/RefUtil': {},
         '../../framework/FW': { FW: { showTip: () => {} } },
         '../../core/runtime/GameRoute': { GameRoute: { Main: 'main' } },
+        // `ZCGame` 的中控订阅挂 `EventMgr.instance`（`on` / `offTarget`）。
+        '../../framework/event/EventMgr': {
+            EventMgr: { instance: { on: () => {}, off: () => {}, offTarget: () => {} } },
+        },
         '../../framework/procedure/ProcedureManager': { ProcedureManager: { navigate: () => {} } },
         '../../framework/ui/PopupDef': { PopupLayer: { SYSTEM: 1 }, PopupCloseReason: { Force: 3 } },
         '../battle/BattleStartService': {
             finishBattle: () => Promise.resolve(null), BATTLE_RESULT_WIN: 1, BATTLE_RESULT_LOSE: 2,
         },
+        // ZCGame.ts:44 值导入战斗统计（退出结算时构建本局伤害统计）。
+        '../battle/BattleStatisticsModel': { buildDamageStatistics: () => ({}) },
     };
     const context = { exports: {} as any, console, require: (name: string) => {
         assert.ok(name in dependencies, name);
@@ -414,12 +463,18 @@ test('按钮沿用 HUD 那颗绿勾：没有第二套 prefab，位置由世界�
     assert.doesNotMatch(strip(gameSource), /disposeSpawnBaseConfirm/);
 
     // 来源 = 选点 HUD 上现成的 `ConfirmSpawn`（`ZCSpawnSelectionView.confirmButton`）。
-    assert.match(gameSource, /const button = this\.spawnSelectionView\?\.confirmButton;/);
-    assert.match(gameSource, /const layer = this\.hudView\?\.mapLayer;/);
+    // ⚠️ 源码去掉了可选链：`confirmButton` 是 prefab 上的**必填引用**（ZCGame.ts:788 的注释写明
+    //    「这里不判按钮 / 父级是否存在」），所以取法从 `?.` 变成了直接点。
+    assert.match(gameSource, /const button = this\.spawnSelectionView\.confirmButton;/);
+    // 同上：`hudView.mapLayer` 也是必填（`hudView` 声明非空），源码里没有 `?.`。
+    assert.match(gameSource, /const layer = this\.hudView\.mapLayer;/);
     assert.match(gameSource, /button\.setParent\(layer\);/);
     assert.match(gameSource, /const widget = button\.getComponent\(Widget\);/);
     assert.match(gameSource, /if \(widget\) widget\.enabled = false;/);
-    assert.match(gameSource, /this\.renderWorld\?\.setSpawnConfirmButton\(button\);/);
+    // 借用时 renderWorld 已非空（startSpawnSelection 里刚建好），源码这里是**直接点**；
+    // 归还那条走的是 this.renderWorld?.setSpawnConfirmButton(null)（退出路径可能已拆过）。
+    assert.match(gameSource, /this\.renderWorld\.setSpawnConfirmButton\(button\);/);
+    assert.match(gameSource, /this\.renderWorld\?\.setSpawnConfirmButton\(null\);/);
     // 选点结束与退出对局都要归还。
     assert.match(gameSource, /private borrowSpawnConfirmButton\(\): void/);
     assert.match(gameSource, /private restoreSpawnConfirmButton\(\): void/);
@@ -458,7 +513,7 @@ test('按钮沿用 HUD 那颗绿勾：没有第二套 prefab，位置由世界�
 });
 
 test('确认按钮用的是 HUD 上那颗绿勾节点（`btn_gou.png`），不在别处另起一份', () => {
-    const prefab = JSON.parse(readFileSync('assets/resources/ui/game/ZCSpawnSelection.prefab', 'utf8'));
+    const prefab = JSON.parse(readFileSync(assetPath('ui/game/ZCSpawnSelection.prefab'), 'utf8'));
     const nodes = prefab.filter((object: any) => object.__type__ === 'cc.Node');
     const confirm = nodes.find((node: any) => node._name === 'ConfirmSpawn');
     assert.ok(confirm, '选点 HUD 里必须有 ConfirmSpawn —— 借用的就是它');
@@ -472,7 +527,7 @@ test('确认按钮用的是 HUD 上那颗绿勾节点（`btn_gou.png`），不�
     assert.ok(components.some((component: any) => component.__type__ === 'cc.Widget'));
 
     // 全工程只有这一个按钮用到绿勾图，不存在第二颗「确认」按钮。
-    const meta = JSON.parse(readFileSync('assets/resources/image/gameui/btn_gou.png.meta', 'utf8'));
+    const meta = JSON.parse(readFileSync(assetPath('image/gameui/btn_gou.png.meta'), 'utf8'));
     // 子资源 uuid 带 `@f9941` 后缀（SpriteFrame 子元），比前缀即可。
     assert.ok(meta.subMetas.f9941.uuid.startsWith('5f18794c-236e-4cba-94b4-13c297595dbc'));
     assert.ok((sprite._spriteFrame.__uuid__ as string).startsWith(meta.subMetas.f9941.uuid));

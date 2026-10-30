@@ -86,13 +86,13 @@ export class RechargeDailyView extends Component {
     roundTabs: Node[] = [];
 
     @property({ type: RechargeProgressBar, tooltip: 'DailyTopProgress：顶部累计进度条' })
-    topProgress: RechargeProgressBar = null!;
+    topProgress: RechargeProgressBar = null;
 
     @property({ type: [RechargeDailyStage], tooltip: 'Reward0/1/2：顶部三个累计阶段格' })
     stages: RechargeDailyStage[] = [];
 
     @property({ type: VirtualScrollView, tooltip: 'List：每日行列表（自带虚拟列表 + Mask）' })
-    rowList: VirtualScrollView = null!;
+    rowList: VirtualScrollView = null;
 
     /** 换档位（回传 `rechargeDaily.round`）。 */
     onSwitchRound: ((round: number) => void) | null = null;

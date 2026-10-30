@@ -27,13 +27,13 @@ const { ccclass, property } = _decorator;
 @ccclass('FriendTabButton')
 export class FriendTabButton extends Component {
     @property({ type: Sprite, tooltip: 'Bg：页签底图（选中 / 未选 两态切换）' })
-    background: Sprite = null!;
+    background: Sprite = null;
 
     @property({ type: Label, tooltip: 'Label：页签文案（好友列表 / 添加好友 / 黑名单）' })
-    label: Label = null!;
+    label: Label = null;
 
     @property({ type: Button, tooltip: 'Button：本节点上的 cc.Button' })
-    button: Button = null!;
+    button: Button = null;
 
     /** 本按钮对应的页签下标（`FriendTab` 的数值）。 */
     private index = 0;

@@ -13,6 +13,7 @@ import {
     HEX_GRID_VIEW_COLUMN_SPACING,
     HEX_GRID_VIEW_ROW_SPACING,
 } from '../assets/script/core/hex/HexGridLayout';
+import { assetPath } from './helpers/asset-paths';
 
 function createEditor(options: { hash?: string; fetch?: (path: string, options?: any) => Promise<any>; confirm?: boolean; imageSizes?: Record<string, { width: number; height: number }> } = {}) {
     const elements = new Map<string, any>();
@@ -1476,7 +1477,7 @@ function gameBackgroundBounds(mapWidth: number, mapHeight: number, sourceWidth: 
 }
 
 test('底图范围和原图比例与游戏真实 fitMapBackground 对拍', () => {
-    const meta = JSON.parse(readFileSync('assets/resources/image/zdbg1.jpg.meta', 'utf8'));
+    const meta = JSON.parse(readFileSync(assetPath('image/zdbg1.jpg.meta'), 'utf8'));
     const size = meta.subMetas.f9941.userData;
     const { editor } = createEditor();
     for (const [rows, columns] of [[20, 11], [4, 4], [40, 20], [11, 35]]) {

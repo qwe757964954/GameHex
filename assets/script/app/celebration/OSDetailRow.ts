@@ -93,19 +93,19 @@ export class OSAvatarLoader {
 @ccclass('OSDetailRow')
 export class OSDetailRow extends Component {
     @property({ type: Label, tooltip: 'RankNum：名次数字（FGUI `rank/lab`，`标签` 页 0..3）' })
-    rankNum: Label = null!;
+    rankNum: Label = null;
 
     @property({ type: Label, tooltip: 'RankNone：`未上榜`（FGUI `rank/n10`，`标签` 页 4）' })
-    rankNone: Label = null!;
+    rankNone: Label = null;
 
     @property({ type: Label, tooltip: 'NameText：玩家名（FGUI `userName`）' })
-    nameText: Label = null!;
+    nameText: Label = null;
 
     @property({ type: Sprite, tooltip: 'HeadFrame/icon：头像（异步加载，走 `HeadArt.loadHeadFrame`）' })
-    headIcon: Sprite = null!;
+    headIcon: Sprite = null;
 
     @property({ type: Label, tooltip: 'PowerText：战力（`numAbbr`）' })
-    powerText: Label = null!;
+    powerText: Label = null;
 
     /** 头像加载器（`onLoad` 里建，`onEnable` 后可用）。 */
     private _avatar: OSAvatarLoader | null = null;

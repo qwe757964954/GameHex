@@ -45,13 +45,13 @@ export interface IBoardCardHost {
 @ccclass('LineupBoardCard')
 export class LineupBoardCard extends Component {
     @property({ type: Sprite, tooltip: 'Frame：品级卡框（common_img_pzk_01..04，按品级换图）' })
-    frame: Sprite = null!;
+    frame: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'Badge：左上角职业角标（class_*）' })
-    badge: Sprite = null!;
+    badge: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'Hero：职业 Q 版立绘（char_0X）' })
-    hero: Sprite = null!;
+    hero: Sprite = null;
 
     /**
      * `HeadIcon`：**该卡自己的头像**（57×57，`PVP-卡牌.headIcon` 解出来的图）。
@@ -60,16 +60,16 @@ export class LineupBoardCard extends Component {
      *  在两边都是等比缩放、不会变形。
      */
     @property({ type: Sprite, tooltip: 'HeadIcon：该卡的头像（57×57，与 Hero 互斥显示）' })
-    headIcon: Sprite = null!;
+    headIcon: Sprite = null;
 
     @property({ type: Node, tooltip: 'Dim：整卡压暗遮罩（已上阵时显示），压在角标/立绘之上、对勾之下' })
-    dim: Node = null!;
+    dim: Node = null;
 
     @property({ type: Node, tooltip: 'Check：绿色对勾（已上阵时显示）' })
-    check: Node = null!;
+    check: Node = null;
 
     @property({ type: Label, tooltip: 'LevelLabel：左下角等级数字，只写数字本身（设计稿上是「1」）' })
-    levelLabel: Label = null!;
+    levelLabel: Label = null;
 
     @property({ tooltip: '等级占位值：养成表落地前统一用这个数' })
     fallbackLevel = 1;

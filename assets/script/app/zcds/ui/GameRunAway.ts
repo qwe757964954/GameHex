@@ -58,21 +58,21 @@ export class GameRunAway extends PopupBase {
     static prefabPath = 'ui/game/GameRunAway';
 
     @property({ type: Label, group: '面板', tooltip: 'Content/Label：标题' })
-    titleLabel: Label = null!;
+    titleLabel: Label = null;
 
     // 两行统计是 RunAwayPlayerItem 的嵌套实例，引用由 PrefabInfo targetOverrides 注入，
     // prefab JSON 里读出为 null 属正常，别据此判断"没绑"。
     @property({ type: RunAwayPlayerItem, group: '统计', tooltip: 'Content/MinePlayerItem：我方一行' })
-    mineItem: RunAwayPlayerItem = null!;
+    mineItem: RunAwayPlayerItem = null;
 
     @property({ type: RunAwayPlayerItem, group: '统计', tooltip: 'Content/EnemyPlayerItem：敌方一行' })
-    enemyItem: RunAwayPlayerItem = null!;
+    enemyItem: RunAwayPlayerItem = null;
 
     @property({ type: Button, group: '面板', tooltip: '（可选）关闭按钮；不绑也能关——点空白即可' })
     closeButton: Button | null = null;
 
     @property({ type: Button, group: '面板', tooltip: '返回主界面按钮' })
-    returnButton: Button = null!;
+    returnButton: Button = null;
 
     /** 「返回主界面」模式（由 `open` 的 `showReturn` 数据决定显隐，动作走事件）。 */
     private showReturn = false;

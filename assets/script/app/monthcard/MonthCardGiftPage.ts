@@ -40,7 +40,7 @@ export class MonthCardGiftPage extends PopupBase {
         type: Node,
         tooltip: 'List：月卡条目容器',
     })
-    list: Node = null!;
+    list: Node = null;
 
     @property({ type: Label, tooltip: 'Hint：空列表提示（可选）' })
     hintLabel: Label | null = null;

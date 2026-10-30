@@ -137,14 +137,15 @@ import {
     LEAGUE_TASK_PERCENT_TEMPLATE,
     LEAGUE_TASK_TITLE,
 } from '../assets/script/app/league/LeagueTexts';
+import { assetPath } from './helpers/asset-paths';
 
 // ============================================================
 // 路径
 // ============================================================
 
-const TASK_PREFAB = 'assets/resources/ui/League/LeagueTask.prefab';
-const BOX_PREFAB = 'assets/resources/ui/League/LeagueTaskBox.prefab';
-const RED_DOT_PREFAB = 'assets/resources/ui/common/RedDot.prefab';
+const TASK_PREFAB = assetPath('ui/League/LeagueTask.prefab');
+const BOX_PREFAB = assetPath('ui/League/LeagueTaskBox.prefab');
+const RED_DOT_PREFAB = assetPath('ui/common/RedDot.prefab');
 
 const PAGE_TS = 'assets/script/app/league/LeagueTaskPage.ts';
 const ROW_TS = 'assets/script/app/league/LeagueTaskRow.ts';
@@ -1128,8 +1129,11 @@ test('E3 ⚠️ `refreshList` 必须晚于 `nextPopupFrame()`（否则虚拟列�
     assert.ok(frame > 0, '没找到 `await this.nextPopupFrame();`');
     assert.ok(refresh > frame, '`refreshList` 出现在 defer 一帧之前 ⇒ 列表会空');
     assert.ok(code.includes('this.taskList.scrollToTop(false)'), '铺完应回到顶部（换页 / 重开都会留着上次的滚动位置）');
-    // 行渲染回调只绑一次（放 onOpen 会随每次打开重复叠加）
-    assert.ok(/if \(!this\.rendererBound\)/.test(code), '`renderItemFn` 的绑定要幂等');
+    // 行渲染回调在 onInit 里赋一次即可（`PopupBase._inited` 保证每实例只跑一次；放 onOpen 会重复）
+    assert.ok(!/if \(!this\.rendererBound\)/.test(code), '`renderItemFn` 不再需要「只绑一次」门闩');
+    const initEnd = code.indexOf('protected async onOpen');
+    const initBody = code.slice(code.indexOf('protected onInit(): void {'), initEnd > 0 ? initEnd : undefined);
+    assert.ok(initBody.includes('this.taskList.renderItemFn = '), '`renderItemFn` 要在 onInit 里赋一次');
 });
 
 test('E4 防连点 + 写后三态收口（`ok` 重读、`offline` / 其它各给提示）', () => {

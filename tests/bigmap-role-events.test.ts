@@ -1,3 +1,5 @@
+import { createControllerContext } from './helpers/controller-context';
+import { BigMapController } from '../assets/script/app/bigmap/application/BigMapController';
 /**
  * 据点角色事件广播（`CmdSlgGameRoleInfoBroMsg`，协议 r883）的接线单测。
  *
@@ -24,10 +26,11 @@ import { BigMapCampRepository, type IBigMapCampGateway } from '../assets/script/
 import { BigMapPresenter } from '../assets/script/app/bigmap/application/BigMapPresenter';
 import { createMemoryBigMapStorage } from '../assets/script/app/bigmap/application/BigMapSaveKeys';
 import { loadBigMapConfig } from './helpers/bigmap-fixtures';
+import { assetPath } from './helpers/asset-paths';
 
 const CMD = 'com.xkhy.tafang.cmd';
 
-const root = protobuf.Root.fromJSON(JSON.parse(readFileSync('assets/resources/config/protoCompiled.json', 'utf8')));
+const root = protobuf.Root.fromJSON(JSON.parse(readFileSync(assetPath('config/protoCompiled.json'), 'utf8')));
 
 function role(patch: Partial<{ roleId: string; serverId: string; roleName: string; img: string; defenseHp: number; pos: number }> = {}) {
     return { roleId: '1', serverId: '3001', roleName: '山猫', img: '2001', defenseHp: 100, pos: 5, ...patch };
@@ -110,21 +113,16 @@ const event = (
 /** 网关桩：`rosters` 决定 `fetchRoles` 返回什么；`emit` 用来模拟服务端推广播。 */
 function makeGateway(rosters: ReadonlyMap<number, readonly ReturnType<typeof role>[]> = new Map()) {
     let listener: ((event: IBigMapRoleEvent) => void) | null = null;
-    let unsubscribed = 0;
     const gateway: IBigMapCampGateway = {
         fetchSimple: async () => null,
         fetchDetail: async (ids) => ({ infos: ids.map((campId) => ({ campId, opType: 0, state: 1 })) }),
         fetchRoles: async (campId) => ({ campId, infos: [...(rosters.get(campId) ?? [])] }),
         requestMove: async () => null,
-        subscribeRoleEvents: (fn) => {
-            listener = fn;
-            return () => { unsubscribed += 1; listener = null; };
-        },
     };
     return {
         gateway,
+        bind: (fn: (event: IBigMapRoleEvent) => void) => { listener = fn; },
         emit: (evt: IBigMapRoleEvent) => listener?.(evt),
-        get unsubscribed() { return unsubscribed; },
     };
 }
 
@@ -133,9 +131,35 @@ async function withRoles(roster: readonly ReturnType<typeof role>[]) {
     const h = makeGateway(new Map([[205, roster]]));
     const repository = new BigMapCampRepository(h.gateway);
     await repository.refreshRoles(205);
-    repository.subscribeRoleEvents((pos) => (pos <= 20 ? 205 : 0));
+    h.bind(evt => repository.applyRoleEvent(evt.role.pos <= 20 ? 205 : 0, evt));
     return { h, repository };
 }
+
+test('跨据点移动会清除旧据点，目标未查询时也不保留旧角色', async () => {
+    for (const loaded of [true, false]) {
+        const h = makeGateway(new Map([[205, [role()]], [206, []]]));
+        const repository = new BigMapCampRepository(h.gateway);
+        await repository.refreshRoles(205);
+        if (loaded) await repository.refreshRoles(206);
+        h.bind(evt => repository.applyRoleEvent(evt.role.pos === 5 ? 205 : 206, evt));
+        h.emit(event({ pos: 30 }, BIGMAP_ROLE_EVENT_TYPE.Move));
+        assert.deepEqual(repository.rolesOf(205), []);
+        assert.equal(repository.rolesOf(206)?.[0]?.pos ?? null, loaded ? 30 : null);
+        repository.dispose();
+    }
+});
+
+test('查询期间的角色广播不会被较早的查询快照覆盖', async () => {
+    const { h, repository } = await withRoles([role()]);
+    let resolve!: (value: unknown) => void;
+    h.gateway.fetchRoles = () => new Promise((done) => { resolve = done; });
+    const pending = repository.refreshRoles(205);
+    h.emit(event({ defenseHp: 40 }));
+    resolve({ campId: 205, infos: [role()] });
+    await pending;
+    assert.equal(repository.rolesOf(205)?.[0]?.defenseHp, 40);
+    repository.dispose();
+});
 
 test('★仓库：没查过的据点不许凭空塞角色（面板会凭空出现「1 人」）', () => {
     const h = makeGateway();
@@ -177,13 +201,10 @@ test('★仓库：pos 反查不到据点（campIdOf 返 0）就丢弃，不乱�
     repository.dispose();
 });
 
-test('仓库：dispose 会摘掉广播订阅', () => {
-    const h = makeGateway();
-    const repository = new BigMapCampRepository(h.gateway);
-    repository.subscribeRoleEvents(() => 205);
-    assert.equal(h.unsubscribed, 0);
+test('仓库销毁后拒绝事件写入，不自行持有网络广播订阅', async () => {
+    const { repository } = await withRoles([role()]);
     repository.dispose();
-    assert.equal(h.unsubscribed, 1, '★页面关了必须退订，否则监听器一直持有 Presenter');
+    assert.equal(repository.applyRoleEvent(205, event()), false);
 });
 
 // ============================================================================
@@ -202,13 +223,15 @@ test('★Presenter：广播按 pos 反查据点，详情面板角色列表实时
             return { campId, infos: roster.infos };
         },
         requestMove: async () => null,
-        subscribeRoleEvents: (fn) => { listener = fn; return () => { listener = null; }; },
     };
     const repository = new BigMapCampRepository(gateway);
     const presenter = new BigMapPresenter({
         config, storage: createMemoryBigMapStorage(), saveKey: 'role-broadcast',
         adventureChapter: () => 0, now: () => 957600, campRepository: repository,
     });
+    const controller = new BigMapController(presenter, { context: createControllerContext(), campRepository: repository, schedule: () => () => {} });
+    controller.start();
+    listener = event => presenter.applyRoleEvent(event);
     const campId = presenter.territoryRegions()[0].id;
     const hexId = presenter.territoryRegions()[0].hexIds[0];
     assert.ok(campId > 0 && hexId >= 0, '夹具：地图上至少有一座城带格');
@@ -226,5 +249,5 @@ test('★Presenter：广播按 pos 反查据点，详情面板角色列表实时
     } });
     assert.equal(presenter.cityView(campId)?.campRoles[0].defenseHp, 30, '★广播要实时落到面板上');
     assert.ok(notifies >= 1, '要通知视图重绘');
-    presenter.dispose();
+    controller.dispose();
 });

@@ -27,10 +27,10 @@ const { ccclass, property } = _decorator;
 @ccclass('ItemDetailRow')
 export class ItemDetailRow extends Component {
     @property({ type: Sprite, tooltip: 'Background：行底（本节点上的 cc.Sprite，九宫 `id_row_bg`）' })
-    background: Sprite = null!;
+    background: Sprite = null;
 
     @property({ type: Label, tooltip: 'Label：途径文案（`viewtype.value`，如「冒险关卡」）' })
-    label: Label = null!;
+    label: Label = null;
 
     protected onLoad(): void {
         if (!this.background) {

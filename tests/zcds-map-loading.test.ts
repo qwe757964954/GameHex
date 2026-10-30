@@ -6,12 +6,13 @@ import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import { configureZCMap, isRandomMapCandidate, ZC_MAP_ID } from '../assets/script/app/zcds/model/ZCGameModel';
 import * as artPaths from '../assets/script/app/ArtPaths';
+import { assetPath } from './helpers/asset-paths';
 
 const GAME_SOURCE = 'assets/script/app/zcds/ZCGame.ts';
 const LOADER_SOURCE = 'assets/script/app/zcds/application/ZCGameLoader.ts';
 /** 地图目录只在 ZCGame.ts 里定义一次，这里读回来，避免路径在两处漂移。 */
 const MAP_DIRECTORY = readFileSync(GAME_SOURCE, 'utf8').match(/MAP_DIRECTORY = '([^']+)'/)![1];
-const mapDirectory = `assets/resources/${MAP_DIRECTORY}`;
+const mapDirectory = assetPath(`${MAP_DIRECTORY}`);
 const assets = readdirSync(mapDirectory).filter((name) => name.endsWith('.json')).map((name) => ({
     name: name.slice(0, -5),
     json: JSON.parse(readFileSync(`${mapDirectory}/${name}`, 'utf8')),
@@ -52,11 +53,11 @@ function makeGame(
         // ZCGameLoader 从 ArtPaths 取资源目录常量；不映射会解构出 undefined.HEX_GROUND_GLOW_ART_ROOT
         '../../ArtPaths': artPaths,
     };
-    const context = { exports: {} as { ZCGameLoader: new (assets: unknown, configs: unknown, mapDirectory: string, random: () => number, playerCountOverride?: 2 | 3 | 4) => { loadRandomMap(): Promise<boolean> } },
+    const context = { exports: {} as { ZCGameLoader: new (resources: unknown, mapDirectory: string, random: () => number, playerCountOverride?: 2 | 3 | 4) => { loadRandomMap(): Promise<boolean> } },
         require: (name: string) => dependencies[name],
         console: { info() {}, warn() {}, error() {} } };
     runInNewContext(code, context);
-    return { game: new context.exports.ZCGameLoader(assetService, {}, MAP_DIRECTORY, random.random, constructorOverride), loaded };
+    return { game: new context.exports.ZCGameLoader({ assets: assetService, configs: {} }, MAP_DIRECTORY, random.random, constructorOverride), loaded };
 }
 
 /**

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { assetPath } from './helpers/asset-paths';
 
 /**
  * 「别人玩家的关卡」弹窗（领地页）：`Dim` / `Panel` 的 `cc.BlockInputEvents` 归 **prefab** 管。
@@ -15,7 +16,7 @@ import { readFileSync } from 'node:fs';
  * 这条守「组件到底配在哪」。
  */
 
-const PREFAB = 'assets/resources/ui/territory/BigMapPlayerLevelPanel.prefab';
+const PREFAB = assetPath('ui/territory/BigMapPlayerLevelPanel.prefab');
 const SCRIPT = 'assets/script/app/territory/view/BigMapPlayerLevelPanel.ts';
 
 interface IPrefabObject {

@@ -490,7 +490,7 @@ export function stateSignatureOf(state: IActivityServerState): string {
     const parts: string[] = [String(state.instanceId), String(state.coin)];
     const ids = Array.from(state.tasks.keys()).sort((a, b) => a - b);
     for (const id of ids) {
-        const row = state.tasks.get(id)!;
+        const row = state.tasks.get(id);
         parts.push(`${id}:${row.process}:${row.state}`);
     }
     parts.push(`box:${state.claimedBoxes.join(',')}`);

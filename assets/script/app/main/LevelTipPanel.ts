@@ -1,9 +1,9 @@
 import { EventMgr } from '../../framework/event/EventMgr';
-import { _decorator, Label, Node, Sprite, SpriteFrame, UITransform } from 'cc';
+import {_decorator, Label, Node, SpriteFrame} from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { EnemyCardView } from '../common/EnemyCardView';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
-import { TERRITORY_EVENTS } from '../territory/view/TerritoryEvents';
+import { TerritoryUiEvent } from '../territory/application/TerritoryEvents';
 
 const { ccclass, property } = _decorator;
 
@@ -58,13 +58,13 @@ export class LevelTipPanel extends PopupBase {
     static prefabPath = 'ui/main/LevelTipPanel';
 
     @property({ type: Label, group: '节点引用', tooltip: 'Panel/TitleLabel：关卡标题（与关卡界面同一份）' })
-    private titleLabel: Label = null!;
+    private titleLabel: Label = null;
 
     @property({ type: VirtualScrollView, group: '节点引用', tooltip: 'Panel/EnemyScroll：敌军列表（横向一行虚拟列表）' })
-    private enemyList: VirtualScrollView = null!;
+    private enemyList: VirtualScrollView = null;
 
     @property({ type: Label, group: '节点引用', tooltip: 'Panel/DescText：敌军描述（当前选中敌人的技能描述）' })
-    private descLabel: Label = null!;
+    private descLabel: Label = null;
 
     /** 当前这批敌军（`renderItemFn` 按下标取）。 */
     private enemies: readonly ILevelTipEnemy[] = [];
@@ -109,14 +109,14 @@ export class LevelTipPanel extends PopupBase {
 
     protected onClose(): void {
         // 只派发提示自己的关闭：`DETAIL_CLOSE` 会把下面的关卡界面一起收掉
-        EventMgr.instance.emit(TERRITORY_EVENTS.LEVEL_TIP_CLOSE);
+        EventMgr.instance.emit(TerritoryUiEvent.Intent, { intent: { kind: 'closeLevelTip' } });
     }
 
     /** 单卡渲染：缺图只关图标（「有框没图」是美术缺图，「整格消失」会被读成没有这个敌人）。 */
 
     private readonly renderEnemy = (card: Node, index: number): void => {
         // 卡是独立预制体，`EnemyCardView` 一定在（`itemPrefab` 焊死），下标也不会越界（`setTotalCount` 就是它的长度）
-        const view = card.getComponent(EnemyCardView)!;
+        const view = card.getComponent(EnemyCardView);
         view.render(this.enemies[index]);
         // 选中框跟着当前下标走（槽位是复用的，改下标时要重刷所有卡）
         view.setSelected(index === this.selectedIndex);
@@ -142,10 +142,10 @@ export class LevelTipPanel extends PopupBase {
         for (const child of content.children) {
             const item = child.getComponent('VScrollViewItem') as { dataIndex?: number } | null;
             const index = item?.dataIndex;
+            // `dataIndex` 取不到 = 不是池化槽位，前面已跳过；能取到就一定是 `itemPrefab` 的实例，
+            // `EnemyCardView` 焊死在上面（与 `renderEnemy` 同一套不变量），不再重复判空。
             if (index === undefined || index < 0) continue;
-            const view = child.getComponent(EnemyCardView);
-            if (!view) continue;
-            view.setSelected(index === this.selectedIndex);
+            child.getComponent(EnemyCardView).setSelected(index === this.selectedIndex);
         }
     }
 

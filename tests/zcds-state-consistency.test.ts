@@ -11,6 +11,7 @@ import { ZCCardType, ZCDeckCard } from '../assets/script/app/zcds/model/ZCCombat
 import { ZCHexState, ZCUnitState } from '../assets/script/app/zcds/model/ZCGameTypes';
 import { ZCUnitRegistry } from '../assets/script/app/zcds/model/systems/ZCUnitRegistry';
 import { ZCDevelopmentSystem } from '../assets/script/app/zcds/model/systems/ZCDevelopmentSystem';
+import { assetPath } from './helpers/asset-paths';
 
 //  `pvpUnit` 已于 2026-09-20 并入 `pvpCard`（单位列内联、加 `unit` 前缀），表已下线。
 const tableNames = [
@@ -343,7 +344,7 @@ test('按小兵脚点轨迹双向判定经过：高速跨过中间格且落点�
 });
 
 test('单位公共预制体以根节点为脚点，并由 VisualRoot 校准兵种美术', () => {
-    const prefab = JSON.parse(readFileSync('assets/resources/ui/game/ZCGameUnit.prefab', 'utf8')) as any[];
+    const prefab = JSON.parse(readFileSync(assetPath('ui/game/ZCGameUnit.prefab'), 'utf8')) as any[];
     const root = prefab[1];
     const children = root._children.map((reference: { __id__: number }) => prefab[reference.__id__]);
     const footPoint = children.find((node: any) => node._name === 'FootPoint');

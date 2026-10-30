@@ -82,6 +82,7 @@ import {
     LEAGUE_UNION_LEADER_PREFIX,
     LEAGUE_UNION_MEMBER_PREFIX,
 } from '../assets/script/app/league/LeagueTexts';
+import { assetPath } from './helpers/asset-paths';
 
 // ============================================================
 // 常量 / 工具
@@ -719,7 +720,7 @@ test('C11 真表解析出来与代码里的期望值一致（表变了这条会�
 // D. prefab 结构 + 几何
 // ============================================================
 
-const HALL_PREFAB = 'assets/resources/ui/League/LeagueHall.prefab';
+const HALL_PREFAB = assetPath('ui/League/LeagueHall.prefab');
 
 type Entry = Record<string, unknown>;
 const hall: Entry[] = JSON.parse(readFileSync(HALL_PREFAB, 'utf8')) as Entry[];

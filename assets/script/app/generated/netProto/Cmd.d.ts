@@ -5650,6 +5650,13 @@
 
     
 
+    declare class CmdPvpBuffInfo {
+        source: number;
+        buffs?: (string[]|null);
+    }
+
+    
+
     declare class CmdPvpInfo {
         grade: number;
         score: number;
@@ -5711,6 +5718,7 @@
         artifactLevel: number;
         unitId: number;
         unitType?: (number|null);
+        buffInfo?: (CmdPvpBuffInfo[]|null);
     }
 
     
@@ -7401,6 +7409,7 @@ declare type MessageProtoName =
 | "CmdPvpArtifactUpLevelRspMsg"
 | "CmdPvpArtifactSelectReqMsg"
 | "CmdPvpArtifactSelectRspMsg"
+| "CmdPvpBuffInfo"
 | "CmdPvpInfo"
 | "CmdBattleStatisticsInfo"
 | "CmdPvpInfoReqMsg"

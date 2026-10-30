@@ -7,6 +7,7 @@ import { loadPvpTables, ZCPvpTables } from '../assets/script/app/zcds/model/ZCGa
 import { captureZCMatchConfig } from '../assets/script/app/zcds/model/ZCMatchConfig';
 import type { ZCMatchConfig } from '../assets/script/app/zcds/model/ZCMatchConfig';
 import type { ZCUnitState, ZCOwner } from '../assets/script/app/zcds/model/ZCGameTypes';
+import { assetPath } from './helpers/asset-paths';
 
 const tableNames = [
     'pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond',
@@ -20,7 +21,7 @@ const tables = Object.fromEntries(tableNames.map((name) => {
 })) as unknown as ZCPvpTables;
 loadPvpTables(tables);
 
-const layout = JSON.parse(readFileSync('assets/resources/config/maps/select_river.json', 'utf8')) as ZCMapLayout;
+const layout = JSON.parse(readFileSync(assetPath('config/maps/select_river.json'), 'utf8')) as ZCMapLayout;
 configureZCMap(layout);
 const base = captureZCMatchConfig(undefined, { allowUnresolvedSelect: true });
 

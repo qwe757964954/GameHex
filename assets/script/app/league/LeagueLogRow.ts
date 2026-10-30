@@ -24,10 +24,10 @@ const { ccclass, property } = _decorator;
 @ccclass('LeagueLogRow')
 export class LeagueLogRow extends Component {
     @property({ type: Label, tooltip: 'lab_ctx：整句动态文案' })
-    ctxLabel: Label = null!;
+    ctxLabel: Label = null;
 
     @property({ type: Label, tooltip: 'lab_time：MM/DD HH:mm:ss' })
-    timeLabel: Label = null!;
+    timeLabel: Label = null;
 
     /** 铺一行（所有状态**绝对赋值**）。传 `null` 等价于藏掉整行。 */
     render(view: ILeagueLogView | null): void {

@@ -61,25 +61,25 @@ export class FriendApplyPage extends PopupBase {
     static prefabPath = 'ui/Friend/FriendApply';
 
     @property({ type: Node, tooltip: 'Popup/CloseBtn：右上关闭按钮（挂 cc.Button）' })
-    closeButton: Node = null!;
+    closeButton: Node = null;
 
     @property({ type: VirtualScrollView, tooltip: 'Popup/RowView：申请列表（虚拟列表 + Mask）' })
-    applyList: VirtualScrollView = null!;
+    applyList: VirtualScrollView = null;
 
     @property({ type: Node, tooltip: 'Popup/RefuseOneKeyBtn：一键拒绝（有申请时才显示）' })
-    refuseOneKeyButton: Node = null!;
+    refuseOneKeyButton: Node = null;
 
     @property({ type: Label, tooltip: 'RefuseOneKeyBtn/Label：文案' })
-    refuseOneKeyLabel: Label = null!;
+    refuseOneKeyLabel: Label = null;
 
     @property({ type: Node, tooltip: 'Popup/AgreeOneKeyBtn：一键同意（有申请时才显示）' })
-    agreeOneKeyButton: Node = null!;
+    agreeOneKeyButton: Node = null;
 
     @property({ type: Label, tooltip: 'AgreeOneKeyBtn/Label：文案' })
-    agreeOneKeyLabel: Label = null!;
+    agreeOneKeyLabel: Label = null;
 
     @property({ type: Label, tooltip: 'Popup/EmptyLabel：「暂无申请」（没有申请时才显示）' })
-    emptyLabel: Label = null!;
+    emptyLabel: Label = null;
 
     /** 数据端口；测试可注入替身。 */
     private repo: IFriendRepository = friendRepository;
@@ -91,9 +91,6 @@ export class FriendApplyPage extends PopupBase {
 
     /** 与 `rows` 下标一一对应的 id（回调靠它认行）。 */
     private rowIds: string[] = [];
-
-    /** `renderItemFn` 只绑一次。 */
-    private rowRendererBound = false;
 
     /** 一个请求还没回来时忽略后续点击。 */
     private busy = false;
@@ -113,10 +110,7 @@ export class FriendApplyPage extends PopupBase {
         this.bind(this.agreeOneKeyButton, this.onAgreeOneKeyClick);
 
         // ⚠️ 回调只在 onInit 接一次（放 onOpen 会随每次打开重复叠加）。
-        if (!this.rowRendererBound) {
-            this.rowRendererBound = true;
-            this.applyList.renderItemFn = (node, index) => this.renderRow(node, index);
-        }
+        this.applyList.renderItemFn = (node, index) => this.renderRow(node, index);
     }
 
     protected async onOpen(): Promise<void> {

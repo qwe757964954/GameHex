@@ -47,22 +47,22 @@ const LOCKED_TINT = new Color(190, 190, 190, 255);
 @ccclass('ActivityProgressBox')
 export class ActivityProgressBox extends Component {
     @property({ type: Node, tooltip: 'ChestBtn：宝箱本体（挂 cc.Button，呼吸动效作用在它身上）' })
-    chestButton: Node = null!;
+    chestButton: Node = null;
 
     @property({ type: Sprite, tooltip: 'ChestBtn/Bg：宝箱图（按状态换 by0/by1/by2）' })
-    chestIcon: Sprite = null!;
+    chestIcon: Sprite = null;
 
     @property({ type: Node, tooltip: 'ChestBtn/Check：已领取对勾（默认隐藏）' })
-    checkMark: Node = null!;
+    checkMark: Node = null;
 
     @property({ type: Node, tooltip: 'ChestBtn/RedDot：可领取红点（默认隐藏）' })
-    redDot: Node = null!;
+    redDot: Node = null;
 
     @property({ type: Label, tooltip: 'ChestBtn/Hint：可领取时显示「可领取」' })
-    hintLabel: Label = null!;
+    hintLabel: Label = null;
 
     @property({ type: Label, tooltip: 'CostLabel：达标积分（FGUI `lab_value`）' })
-    costLabel: Label = null!;
+    costLabel: Label = null;
 
     /** 宝箱点击回调，由宿主在铺的时候重设。 */
     onClick: (() => void) | null = null;

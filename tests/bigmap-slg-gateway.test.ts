@@ -18,24 +18,26 @@ function loadModule(path: string, require: (name: string) => unknown): Record<st
 function harness() {
     const requests = loadModule('assets/script/app/bigmap/application/RequestBigMapSlgMsg.ts', () => ({
         RequestMsg: class {
-            constructor(public cmdReqMsg: object, _caller: unknown, public fCallback: (rsp: unknown) => void) {}
+            constructor(public cmdReqMsg: object, public caller: object, public fCallback: (rsp: unknown) => void) {}
         },
     }));
     let current = true;
-    const calls: { name: string; body: Record<string, unknown>; allowRetry?: boolean; canSend?: () => boolean }[] = [];
+    const calls: { name: string; body: Record<string, unknown>; caller: object; allowRetry?: boolean; canSend?: () => boolean }[] = [];
+    const removed: object[] = [];
     const events = new Map<string, () => void>();
     let onSend: (() => Promise<void>) | null = null;
     const net = {
         isConnected: true,
         async send(req: { getReqMsgProtoName(): string; cmdReqMsg: Record<string, unknown>; fCallback(rsp: unknown): void;
-            allowRetry?: boolean; canSend?: () => boolean }) {
-            calls.push({ name: req.getReqMsgProtoName(), body: req.cmdReqMsg, allowRetry: req.allowRetry, canSend: req.canSend });
+            caller: object; allowRetry?: boolean; canSend?: () => boolean }) {
+            calls.push({ name: req.getReqMsgProtoName(), body: req.cmdReqMsg, caller: req.caller, allowRetry: req.allowRetry, canSend: req.canSend });
             if (onSend) await onSend();
             req.fCallback({ received: true });
             return true;
         },
         addEvent(name: string, _caller: unknown, listener: () => void) { events.set(name, listener); },
         removeCallerEvent() { events.clear(); },
+        removeCaller(owner: object) { removed.push(owner); events.clear(); },
     };
     const exports = loadModule('assets/script/app/bigmap/application/GameNetBigMapSlgGateway.ts', (name) => {
         if (name.endsWith('/GameNet')) return { GameNet: { instance: net } };
@@ -44,9 +46,21 @@ function harness() {
         return {};
     });
     const Gateway = exports.GameNetBigMapSlgGateway as new (isCurrent: () => boolean) => IBigMapSlgGateway;
-    return { gateway: new Gateway(() => current), calls, events, net, switchOwner: () => { current = false; },
+    return { gateway: new Gateway(() => current), calls, events, net, removed, switchOwner: () => { current = false; },
         setSend: (handler: () => Promise<void>) => { onSend = handler; } };
 }
+
+test('页面退出统一解除真实网关宿主，禁止旧请求再次发送', async () => {
+    const h = harness();
+    await h.gateway.request('CmdSlgBuildInfoReqMsg', {});
+    assert.equal(h.calls[0].caller, h.gateway);
+    h.gateway.dispose?.();
+    h.gateway.dispose?.();
+    assert.deepEqual(h.removed, [h.gateway]);
+    assert.equal(h.calls[0].canSend?.(), false);
+    assert.equal(await h.gateway.request('CmdSlgBuildInfoReqMsg', {}), null);
+    assert.equal(h.calls.length, 1);
+});
 
 test('GameNet适配器将九组请求送入既有队列，原样发送uint32实例且保留0号位置', async () => {
     const h = harness();
@@ -86,23 +100,16 @@ test('所有建筑写请求拒绝超出uint32范围或非数字的实例ID，不
     assert.equal(h.calls.length, 0);
 });
 
-test('切号后旧响应和广播无效，关闭解除两个广播及重连监听', async () => {
+test('网关仅处理请求，切号后旧响应失效且不自行注册网络广播', async () => {
     const h = harness();
-    const notifications: string[] = [];
-    const unsubscribe = h.gateway.subscribe((kind) => notifications.push(kind));
-    assert.equal(h.events.size, 3);
-    h.events.get('CmdSlgGameInfoBroMsg')?.();
-    h.events.get('CmdSlgBuildInfoBroMsg')?.();
-    assert.deepEqual(notifications, ['game', 'build']);
+    assert.equal(h.events.size, 0);
     h.setSend(async () => { h.switchOwner(); });
     assert.equal(await h.gateway.request('CmdSlgBuildInfoReqMsg', {}), null);
     assert.equal(h.calls.at(-1)?.canSend?.(), false);
-    h.events.get('CmdSlgBuildInfoBroMsg')?.();
-    assert.equal(notifications.length, 2);
     const count = h.calls.length;
     assert.equal(await h.gateway.request('CmdSlgGameInfoReqMsg', {}), null);
     assert.equal(h.calls.length, count);
-    unsubscribe();
+    h.gateway.dispose();
     assert.equal(h.events.size, 0);
 });
 

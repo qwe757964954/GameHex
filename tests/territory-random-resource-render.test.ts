@@ -1,3 +1,4 @@
+import * as mvcEvents from '../assets/script/app/territory/application/TerritoryEvents';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as MapMarkerBadge from '../assets/script/app/common/MapMarkerBadge';
@@ -168,6 +169,7 @@ test('locked sites show only the silver icon and amount, and random sites hide t
             if (id.includes('event/EventMgr')) {
                 return { EventMgr: { instance: { emit() {}, on() {}, offTarget() {} } } };
             }
+            if (id === '../application/TerritoryEvents') return mvcEvents;
             throw new Error(`Unexpected dependency: ${id}`);
         },
     });
@@ -466,6 +468,7 @@ test('territory art loads the existing silver icon for random conditions', async
             // / `territory-tap-feedback` 里单独测）。
             if (id === './TerritoryChestView') return { TerritoryChestView: class {} };
             if (id === './TerritoryTapFeedback') return { TerritoryTapFeedback: class {} };
+            if (id === '../application/TerritoryEvents') return mvcEvents;
             throw new Error(`Unexpected dependency: ${id}`);
         },
     });
@@ -485,11 +488,11 @@ test('territory art loads the existing silver icon for random conditions', async
         return { path };
     }, has: async () => true }, '');
     assert.equal(art.randomSilverIcon.path, 'icons/resource/图标_铜币/spriteFrame');
-    // 2026-10-28 16:23 用户：气泡**改回蓝色** `frame_03`（绿/红分色已否决）。
+    // 🔴 2026-10-29 10:11 用户（附截图圈出蓝色 `1-2`）：「需要区分未通关关卡的气泡 icon 底色是红色」。
+    //    已通关蓝 `frame_03` / 未通关红 `frame_02`；两张都必须是 spawn-region 下的 94×45 气泡图。
     assert.equal(art.levelBubbleFrame.path, 'image/spawn-region/frame_03/spriteFrame', '气泡=蓝色底图，不能误用红色六边形同名图');
-    // 未通关槽位目前与已通关同图；两个槽位都要加载（管线保留，将来分色只改常量）。
-    assert.equal(art.levelBubblePendingFrame.path, 'image/spawn-region/frame_03/spriteFrame',
-        '未通关槽位也必须是 spawn-region 那张蓝图，不许落回 image/buildings/ 的同名六边形');
+    assert.equal(art.levelBubblePendingFrame.path, 'image/spawn-region/frame_02/spriteFrame',
+        '未通关槽位必须是 spawn-region 那张红图，不许落回 image/buildings/ 的同名六边形');
     // 2026-10-28 山猫：**未通过的普通关卡，地表要和 Boss 一致（红）**，紫框 frame_03 退役。
     assert.equal(art.frameBoss.path, 'image/buildings/frame_01/spriteFrame', '首领 = 红框');
     assert.equal(art.frameStage.path, 'image/buildings/frame_01/spriteFrame',

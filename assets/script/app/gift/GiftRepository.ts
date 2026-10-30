@@ -95,7 +95,7 @@ function readBuyTimes(): ReadonlyMap<number, number> {
 /** 读 `CmdRole` 的第一行；拿不到返回 `null`（灵玉页按「全都没首充」渲染）。 */
 function readRole(): unknown {
     try {
-        const rows = CacheMgr.instance?.getTlCmdRole() ?? [];
+        const rows = CacheMgr.instance.getTlCmdRole() ?? [];
         for (const row of rows) {
             if (row) return row;
         }

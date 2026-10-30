@@ -4,8 +4,7 @@ import {
 } from 'cc';
 import type { IHexGridLayout } from '../../../core/hex/HexGridLayout';
 import type { IBigMapArt } from '../application/BigMapArtLoader';
-import type { BigMapPresenter, IBigMapCityView } from '../application/BigMapPresenter';
-import { BIGMAP_CAMP_REFRESH_SECONDS } from '../application/BigMapCampRepository';
+import type { IBigMapViewState, IBigMapCityView } from '../application/BigMapViewState';
 import { bigMapHexDistance, bigMapOccupantOf } from '../model/BigMapWorld';
 import {
     assignTerritoryColorSlots, assignTerritoryColorSlotsFromAdjacency, bigMapPlayerBaseColorSlot,
@@ -24,6 +23,9 @@ import {
 import { BigMapWorldMarker } from './BigMapWorldMarker';
 import { BigMapWorldTemplates } from './BigMapWorldTemplates';
 import { bigMapBackgroundLayout } from './BigMapBackgroundLayout';
+
+import { EventMgr } from '../../../framework/event/EventMgr';
+import { BigMapUiEvent } from '../application/BigMapEvents';
 
 const { ccclass, property } = _decorator;
 export const WORLD_HEX_SIZE = BIGMAP_TILE_WIDTH / 2;
@@ -77,27 +79,27 @@ interface IWorldMarker {
 /** JSON 世界的表现：地块按视口复用，规则和落位只读 Presenter。 */
 @ccclass('BigMapWorldView')
 export class BigMapWorldView extends Component {
-    private presenter: BigMapPresenter | null = null;
-    @property({ type: UITransform, group: '布局' }) private rootTransform: UITransform = null!;
-    @property({ type: Node, group: '布局' }) private viewport: Node = null!;
-    @property({ type: UITransform, group: '布局' }) private viewportTransform: UITransform = null!;
-    @property({ type: Node, group: '地图图层' }) private content: Node = null!;
-    @property({ type: Sprite, group: '背景' }) private background: Sprite = null!;
-    @property({ type: Sprite, group: '背景' }) private sand: Sprite = null!;
-    @property({ type: UITransform, group: '背景' }) private sandTransform: UITransform = null!;
-    @property({ type: Graphics, group: '地图图层' }) private terrainLayer: Graphics = null!;
-    @property({ type: Node, group: '地图图层' }) private tileLayer: Node = null!;
-    @property({ type: Node, group: '地图图层' }) private decorLayer: Node = null!;
-    @property({ type: Graphics, group: '地图图层' }) private markerLayer: Graphics = null!;
-    @property({ type: Node, group: '地图图层' }) private iconLayer: Node = null!;
-    @property({ type: Prefab, group: '模板资源' }) private templatesPrefab: Prefab = null!;
+    private data: IBigMapViewState | null = null;
+    @property({ type: UITransform, group: '布局' }) private rootTransform: UITransform = null;
+    @property({ type: Node, group: '布局' }) private viewport: Node = null;
+    @property({ type: UITransform, group: '布局' }) private viewportTransform: UITransform = null;
+    @property({ type: Node, group: '地图图层' }) private content: Node = null;
+    @property({ type: Sprite, group: '背景' }) private background: Sprite = null;
+    @property({ type: Sprite, group: '背景' }) private sand: Sprite = null;
+    @property({ type: UITransform, group: '背景' }) private sandTransform: UITransform = null;
+    @property({ type: Graphics, group: '地图图层' }) private terrainLayer: Graphics = null;
+    @property({ type: Node, group: '地图图层' }) private tileLayer: Node = null;
+    @property({ type: Node, group: '地图图层' }) private decorLayer: Node = null;
+    @property({ type: Graphics, group: '地图图层' }) private markerLayer: Graphics = null;
+    @property({ type: Node, group: '地图图层' }) private iconLayer: Node = null;
+    @property({ type: Prefab, group: '模板资源' }) private templatesPrefab: Prefab = null;
     private templateRoot: Node | null = null;
-    private groundTemplate: Node = null!;
-    private decorTemplate: Node = null!;
-    private markerTemplate: Node = null!;
-    @property({ type: Button, group: '操作按钮' }) private zoomInButton: Button = null!;
-    @property({ type: Button, group: '操作按钮' }) private zoomOutButton: Button = null!;
-    @property({ type: Button, group: '操作按钮' }) private focusButton: Button = null!;
+    private groundTemplate: Node = null;
+    private decorTemplate: Node = null;
+    private markerTemplate: Node = null;
+    @property({ type: Button, group: '操作按钮' }) private zoomInButton: Button = null;
+    @property({ type: Button, group: '操作按钮' }) private zoomOutButton: Button = null;
+    @property({ type: Button, group: '操作按钮' }) private focusButton: Button = null;
     private layout: IHexGridLayout = buildBigMapWorldLayout(0, 0);
     private art: IBigMapArt | null = null;
     private backgroundTransform: UITransform | null = null;
@@ -106,7 +108,7 @@ export class BigMapWorldView extends Component {
     private readonly decorPool: Sprite[] = [];
     private readonly markers: IWorldMarker[] = [];
     private contentKey = '';
-    /** 上次绘制时玩家基地所在的格（`presenter.playerBaseHexId`）；变化即重建标记。 */
+    /** 上次绘制时玩家基地所在的格（`data.playerBaseHexId`）；变化即重建标记。 */
     private markerAnchorHexId = -1;
     private zoom = 1;
     private selectedHexId = -1;
@@ -119,26 +121,25 @@ export class BigMapWorldView extends Component {
     private pinchDistance = 0;
     private gesturePinched = false;
     private campRefreshTimer: ReturnType<typeof setTimeout> | null = null;
-    onTap: ((hexId: number) => void) | null = null;
 
-    build(presenter: BigMapPresenter, width: number, height: number): void {
+    build(data: IBigMapViewState, width: number, height: number): void {
         this.ensureTemplates();
         this.unbindInput();
         for (const marker of this.markers) marker.node.destroy();
         for (const sprite of this.tilePool) sprite.node.destroy();
         for (const sprite of this.decorPool) sprite.node.destroy();
-        this.presenter = presenter;
+        this.data = data;
         this.markers.length = 0;
         this.tilePool.length = 0;
         this.decorPool.length = 0;
         this.contentKey = '';
         this.selectedHexId = -1;
-        this.layout = buildBigMapWorldLayout(presenter.world.rows, presenter.world.cols);
+        this.layout = buildBigMapWorldLayout(data.world.rows, data.world.cols);
         this.rootTransform.setContentSize(width, height);
         this.viewportTransform.setContentSize(width, height);
         this.sandTransform.setContentSize(width, height);
         this.buildMarkers();
-        this.markerAnchorHexId = presenter.playerBaseHexId;
+        this.markerAnchorHexId = data.playerBaseHexId;
         this.rebuildTerritorySlots();
         this.paintTerrain();
         this.refresh();
@@ -181,7 +182,15 @@ export class BigMapWorldView extends Component {
     private onZoomIn(): void { this.zoomBy(1.2); }
     private onZoomOut(): void { this.zoomBy(1 / 1.2); }
     private onFocus(): void {
-        if (this.presenter) this.focusOn(this.presenter.playerBaseHexId);
+        if (this.data) this.focusOn(this.data.playerBaseHexId);
+    }
+
+    render(data: IBigMapViewState): void {
+        this.data = data;
+        this.selectedHexId = data.ui.selectedCityId > 0 ? data.cities.get(data.ui.selectedCityId)?.hexId ?? -1
+            : data.ui.selectedMonsterId > 0 ? data.monsters.get(data.ui.selectedMonsterId)?.hexId ?? -1
+            : data.ui.selectedBaseHexId;
+        this.refresh();
     }
 
     setArt(art: IBigMapArt): void {
@@ -235,7 +244,7 @@ export class BigMapWorldView extends Component {
     }
 
     pickHexAt(local: Vec2): number {
-        const world = this.presenter?.world;
+        const world = this.data?.world;
         return world ? pickBigMapHex(this.layout, world.rows, world.cols, local.x, local.y) : -1;
     }
 
@@ -253,7 +262,7 @@ export class BigMapWorldView extends Component {
     }
 
     private paintTerrain(visibleIds: readonly number[] = []): void {
-        const world = this.presenter?.world;
+        const world = this.data?.world;
         const g = this.terrainLayer;
         g.clear();
         if (!world) return;
@@ -295,17 +304,17 @@ export class BigMapWorldView extends Component {
      * 需要 7~8 色才够，色板一浅就撞色。种子世界没有邻接表时才退回距离判定。
      */
     private rebuildTerritorySlots(): void {
-        const presenter = this.presenter;
-        if (!presenter) return;
-        const world = presenter.world;
-        const regions = presenter.territoryRegions();
+        const data = this.data;
+        if (!data) return;
+        const world = data.world;
+        const regions = data.territories;
         this.territoryEdges.clear();
         for (const region of regions) this.territoryEdges.set(region.id, buildBigMapTerritoryEdges(this.layout, region.hexIds));
         this.baseTerritoryEdges.clear();
         // 玩家基地画在 `playerBaseHexId`（`toCampId` 那座城的锚点），描边必须按**实际绘制格**算 ——
         // 按布局档的 `isPlayer` 格算会在基地搬家后留下一圈错位的边线。
         for (const base of world.bases) {
-            const hexId = base.isPlayer ? presenter.playerBaseHexId : base.hexId;
+            const hexId = base.isPlayer ? data.playerBaseHexId : base.hexId;
             this.baseTerritoryEdges.set(hexId, buildBigMapTerritoryEdges(this.layout, [hexId]));
         }
         const paletteSize = BIGMAP_TERRITORY_COLORS.length;
@@ -347,7 +356,7 @@ export class BigMapWorldView extends Component {
 
     /** 相机变化时复用可见槽位，避免为百行地图创建一万个 Sprite。 */
     private syncVisibleTiles(): void {
-        const world = this.presenter?.world;
+        const world = this.data?.world;
         const art = this.art;
         if (!world || !art || (!art.tiledBackground && !art.ground)) return;
         const transparent = !!art.tiledBackground;
@@ -370,7 +379,7 @@ export class BigMapWorldView extends Component {
                 sprite.spriteFrame = art.groundVariants[variant] ?? art.ground;
                 sprite.color = TERRAIN_TINT[tile.terrain];
                 sprite.node.setPosition(point.x, point.y, 0);
-                sprite.node.getComponent(UITransform)!.setContentSize(BIGMAP_TILE_WIDTH, BIGMAP_TILE_HEIGHT);
+                sprite.node.getComponent(UITransform).setContentSize(BIGMAP_TILE_WIDTH, BIGMAP_TILE_HEIGHT);
             }
             const decor = this.decorPool[i] ?? this.createDecorSlot();
             const frame = tile.terrain === 'rock' ? art.rock : tile.terrain === 'forest' ? art.grass : null;
@@ -408,16 +417,16 @@ export class BigMapWorldView extends Component {
     }
 
     private buildMarkers(): void {
-        const presenter = this.presenter;
-        if (!presenter) return;
-        for (const city of presenter.allCityViews()) this.addMarker('city', city.cityId, city.hexId);
-        for (const monster of presenter.world.monsters) this.addMarker('monster', monster.instanceId, monster.anchorHexId);
+        const data = this.data;
+        if (!data) return;
+        for (const city of data.cities.values()) this.addMarker('city', city.cityId, city.hexId);
+        for (const monster of data.world.monsters) this.addMarker('monster', monster.instanceId, monster.anchorHexId);
         // NPC 基地按布局档落位；**玩家基地钉在服务器 `toCampId` 那座城的锚点上**（见 `playerBaseHexId`），
         // 所以它永远只有一条标记，不再按 baseId 遍历 —— 否则会同时画出「布局格」和「城锚点」两个。
-        for (const base of presenter.world.bases) {
+        for (const base of data.world.bases) {
             if (!base.isPlayer) this.addMarker('base', base.baseId, base.hexId);
         }
-        this.addMarker('base', presenter.world.playerBase.baseId, presenter.playerBaseHexId);
+        this.addMarker('base', data.world.playerBase.baseId, data.playerBaseHexId);
         this.markers.sort((a, b) => this.centerOf(b.hexId).y - this.centerOf(a.hexId).y);
         this.markers.forEach((marker, index) => marker.node.setSiblingIndex(index));
     }
@@ -480,28 +489,28 @@ export class BigMapWorldView extends Component {
     }
 
     refresh(): void {
-        const presenter = this.presenter;
-        if (!presenter) return;
+        const data = this.data;
+        if (!data) return;
         // 基地格 = `toCampId` 那座城的锚点，它可能在页面打开之后才从 game 包到达。
         // 位置变了必须先重建标记并作废内容 key，否则下面的早退会让基地图标停在上一个格。
-        const anchorHexId = presenter.playerBaseHexId;
+        const anchorHexId = data.playerBaseHexId;
         if (anchorHexId !== this.markerAnchorHexId) {
             this.markerAnchorHexId = anchorHexId;
             this.rebuildMarkers();
             this.contentKey = '';
         }
-        const cities = presenter.allCityViews();
-        const monsters = presenter.world.monsters.map((site) => presenter.monsterView(site.instanceId));
+        const cities = [...data.cities.values()];
+        const monsters = data.world.monsters.map((site) => data.monsters.get(site.instanceId));
         // `playerCampId` 必须进 key：game 包到达后基地要换成所属城池的势力色，
         // 不带上它就会因为「其它内容没变」而早退，染色永远停在上一次。
-        const key = `${this.selectedHexId}|${presenter.playerCampId}|${cities.map((c) => `${c.cityId}:${c.state}:${c.campInfo?.opType}:${c.campInfo?.state}`).join(',')}|`
+        const key = `${this.selectedHexId}|${data.playerCampId}|${cities.map((c) => `${c.cityId}:${c.state}:${c.campInfo?.opType}:${c.campInfo?.state}`).join(',')}|`
             + monsters.map((m) => m ? `${m.instanceId}:${m.unlocked}:${m.respawnInSeconds > 0}` : '').join(',');
         if (key === this.contentKey) return;
         this.contentKey = key;
         this.markerLayer.clear();
         const cityById = new Map(cities.map((city) => [city.cityId, city] as const));
         // 每片势力范围整片铺色：无主走色板（相邻不同色），己方绿、他人红（见 `territoryPaint`）。
-        for (const region of presenter.territoryRegions()) {
+        for (const region of data.territories) {
             const paint = this.territoryPaint(region.id, cityById.get(region.id));
             this.paintTerritory(region.hexIds, paint.color,
                 this.territoryEdges.get(region.id) ?? [], paint.alpha);
@@ -519,7 +528,8 @@ export class BigMapWorldView extends Component {
                         ? (city.campInfo ? (city.campInfo.opType === 1 ? BIGMAP_COLORS.campOccupied : BIGMAP_COLORS.campUnoccupied)
                             : BIGMAP_COLORS.locked)
                         : this.cityTint(city.state);
-                this.applyMarker(marker, this.art?.city ?? null, String(city.cityId), tint, 110 + city.level * 3);
+                this.applyMarker(marker, this.art?.camps.get(city.cityId) ?? this.art?.city ?? null,
+                    String(city.cityId), tint, 110 + city.level * 3);
                 marker.icon.color = city.state === 'unavailable' ? new Color(130, 130, 130) : Color.WHITE;
             } else if (marker.kind === 'monster') {
                 const monster = monsters.find((entry) => entry?.instanceId === marker.id);
@@ -529,13 +539,13 @@ export class BigMapWorldView extends Component {
                     monster.unlocked ? BIGMAP_COLORS.campOccupied : BIGMAP_COLORS.locked, 96);
                 marker.icon.color = monster.respawnInSeconds > 0 ? new Color(100, 100, 100) : Color.WHITE;
             } else {
-                const base = presenter.world.bases.find((entry) => entry.baseId === marker.id) ?? presenter.world.playerBase;
+                const base = data.world.bases.find((entry) => entry.baseId === marker.id) ?? data.world.playerBase;
                 // 玩家基地的势力 = 服务器 `SlgGameInfo.toCampId` 指向的那座城（2026-10-23 山猫口径：
                 // 「从地图查找到的城池就是大地图的基地」）⇒ 那座城的范围已经是**己方绿**，
                 // 基地格必须同色（2026-10-28 口径：我占的城整片绿），不再从色板里挑一档。
                 // 未收到包 / 未归属 / 该城不在地图上 ⇒ 回退原来的绿色标记。
                 const mineSlot = base.isPlayer
-                    ? bigMapPlayerBaseColorSlot(presenter.playerCampId, this.territorySlots)
+                    ? bigMapPlayerBaseColorSlot(data.playerCampId, this.territorySlots)
                     : null;
                 const tint = base.isPlayer
                     ? (mineSlot !== null ? BIGMAP_TERRITORY_SELF_COLOR : BIGMAP_COLORS.open)
@@ -590,24 +600,22 @@ export class BigMapWorldView extends Component {
         if (this.campRefreshTimer !== null) clearTimeout(this.campRefreshTimer);
         this.campRefreshTimer = setTimeout(() => {
             this.campRefreshTimer = null;
-            this.refreshVisibleCamps();
+            this.reportVisibleCamps();
         }, 150);
     }
 
-    private refreshVisibleCamps(): void {
-        if (!this.isValid || !this.node.activeInHierarchy || !this.presenter) return;
+    private reportVisibleCamps(): void {
+        if (!this.isValid || !this.node.activeInHierarchy || !this.data) return;
         const ids = this.markers.filter((marker) => marker.kind === 'city' && marker.node.active)
             .map((marker) => Number(marker.id));
-        void this.presenter.refreshVisibleCamps(ids);
+        EventMgr.instance.emit(BigMapUiEvent.Intent, { intent: { kind: 'visibleCamps', campIds: ids } });
     }
 
     protected onEnable(): void {
         this.queueCampRefresh();
-        this.schedule(this.refreshVisibleCamps, BIGMAP_CAMP_REFRESH_SECONDS);
     }
 
     protected onDisable(): void {
-        this.unschedule(this.refreshVisibleCamps);
         if (this.campRefreshTimer !== null) clearTimeout(this.campRefreshTimer);
         this.campRefreshTimer = null;
     }
@@ -622,8 +630,8 @@ export class BigMapWorldView extends Component {
     }
 
     resetCamera(): void {
-        if (!this.presenter) return;
-        const base = this.centerOf(this.presenter.playerBaseHexId);
+        if (!this.data) return;
+        const base = this.centerOf(this.data.playerBaseHexId);
         const scale = Math.min(1, Math.max(0.55, this.viewportTransform.width / 720));
         this.applyCamera(scale, -base.x * scale, -base.y * scale - 100);
     }
@@ -697,7 +705,7 @@ export class BigMapWorldView extends Component {
         if (hexId < 0) return;
         this.selectedHexId = hexId;
         this.refresh();
-        this.onTap?.(hexId);
+        EventMgr.instance.emit(BigMapUiEvent.Intent, { intent: { kind: 'worldTap', hexId } });
     }
 
     private onTouchCancel(): void {
@@ -719,8 +727,8 @@ export class BigMapWorldView extends Component {
     get selected(): number { return this.selectedHexId; }
 
     occupantAt(hexId: number) {
-        return this.presenter
-            ? bigMapOccupantOf(this.presenter.world, hexId, this.presenter.playerBaseHexId)
+        return this.data
+            ? bigMapOccupantOf(this.data.world, hexId, this.data.playerBaseHexId)
             : { kind: 'empty' as const };
     }
 }

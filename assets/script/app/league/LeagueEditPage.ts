@@ -80,16 +80,16 @@ export class LeagueEditPage extends PopupBase {
     static prefabPath = 'ui/League/LeagueEdit';
 
     @property({ type: Node, tooltip: 'CloseBtn：右上关闭按钮（挂 cc.Button）' })
-    closeButton: Node = null!;
+    closeButton: Node = null;
 
     @property({ type: EditBox, tooltip: 'Input：lab_input 的 cc.EditBox（maxLength=128）' })
-    inputField: EditBox = null!;
+    inputField: EditBox = null;
 
     @property({ type: Node, tooltip: 'BtnSure：确定' })
-    sureButton: Node = null!;
+    sureButton: Node = null;
 
     @property({ type: Node, tooltip: 'BtnCancel：取消' })
-    cancelButton: Node = null!;
+    cancelButton: Node = null;
 
     /** 老端 `LayerLagueEdit.type`。 */
     private editType = 0;
@@ -97,15 +97,11 @@ export class LeagueEditPage extends PopupBase {
     /** 老端 `_editing`（防连点）。 */
     private editing = false;
 
-    private buttonsBound = false;
-
     // ============================================================
     // 生命周期
     // ============================================================
 
     protected onInit(): void {
-        if (this.buttonsBound) return;
-        this.buttonsBound = true;
 
         const close = this.closeButton?.getComponent(Button);
         if (close) close.node.on(Button.EventType.CLICK, this.onCancelClick, this);

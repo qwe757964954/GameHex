@@ -42,7 +42,7 @@ test('新号升级详情显示真实章节限制，不因加载美术而解锁�
     assert.match(detail.reason, /章/);
 });
 
-test('基地矩形地块自适应竖屏，绘制与拾取共用坐标且拒绝场地外点击', async () => {
+test('基地固定格距，不因视口缩小建筑，绘制与拾取共用地图坐标', async () => {
     const modulePath = '../assets/script/app/bigmap/view/BigMapBasePresentation';
     assert.ok(existsSync(new URL(`${modulePath}.ts`, import.meta.url)), '缺少基地表现几何');
     const { buildBigMapBaseLayout, pickBigMapBasePlot } = await import(modulePath);
@@ -50,14 +50,14 @@ test('基地矩形地块自适应竖屏，绘制与拾取共用坐标且拒绝�
         const cells = Array.from({ length: rows * columns }, (_, hexId) => ({
             hexId, row: Math.floor(hexId / columns), column: hexId % columns,
         }));
-        const layout = buildBigMapBaseLayout(cells, width, height);
+        const layout = buildBigMapBaseLayout(cells);
         assert.equal(layout.points.size, cells.length);
         for (const [hexId, point] of layout.points) {
             assert.equal(pickBigMapBasePlot(layout, point.x, point.y), hexId);
-            assert.ok(Math.abs(point.x) + layout.tileWidth / 2 <= width / 2);
-            assert.ok(Math.abs(point.y) + layout.tileHeight / 2 <= height / 2);
+            assert.ok(Math.abs(point.x) + layout.tileWidth / 2 < layout.mapSize / 2);
+            assert.ok(Math.abs(point.y) + layout.tileHeight / 2 < layout.mapSize / 2);
         }
-        assert.equal(pickBigMapBasePlot(layout, width, height), -1);
+        assert.equal(pickBigMapBasePlot(layout, layout.mapSize, layout.mapSize), -1);
         assert.equal(pickBigMapBasePlot(layout, Number.NaN, 0), -1);
     }
 });
@@ -68,7 +68,7 @@ test('基地相邻六边格按大地图比例共边，列错位恒为半格且�
         hexId, row: Math.floor(hexId / 2), column: hexId % 2,
     }));
     for (const [width, height] of [[720, 900], [390, 600]]) {
-        const layout = buildBigMapBaseLayout(cells, width, height);
+        const layout = buildBigMapBaseLayout(cells);
         const first = layout.points.get(0)!;
         const nextColumn = layout.points.get(1)!;
         const nextRow = layout.points.get(2)!;

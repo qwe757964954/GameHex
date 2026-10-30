@@ -36,6 +36,7 @@ import {
     type ZCFaction,
     type ZCMapLayout,
 } from '../assets/script/app/zcds/model/ZCGameModel';
+import { assetPath } from './helpers/asset-paths';
 
 /** 加载 `ZCOutlineLayer`；`ZCTheme` 走真源（颜色口径不许在测试里另抄一份）。 */
 function loadOutline() {
@@ -293,19 +294,23 @@ test('选中没有边界 mask 的内部格也高亮；切换落点或进入对�
         { id: 8, x: 3, y: 0, playable: true },
     ];
     const masks = new Map([[7, 0], [8, 0]]);
-    const owner = (): ZCFaction => 'player';
+    // ⚠️ 源码签名变了：`redrawSharedOutline(hexes, boundaryMasks, mode, selectedHexId)` ——
+    //    归属不再由**调用点传闭包**，而是按 `mode` 选实例上的具名实现
+    //    （`spawn` ⇒ `this.spawnOwnerForHex`，`battle` ⇒ `this.ownerForHex`，见 ZCGameRenderWorld:1704）。
+    //    所以这里钉住字段，而不是继续传第二参。
+    (world as unknown as { spawnOwnerForHex: () => ZCFaction }).spawnOwnerForHex = () => 'player';
     let clears = 0;
     const clear = graphics.clear.bind(graphics);
     graphics.clear = () => { clears += 1; clear(); };
 
-    world.redrawSharedOutline(hexes, owner, masks, 'spawn', 7);
+    world.redrawSharedOutline(hexes, masks, 'spawn', 7);
     assert.equal(graphics.commands.filter((command: { kind: string }) => command.kind === 'lineTo').length, 6);
-    world.redrawSharedOutline(hexes, owner, masks, 'spawn', 7);
+    world.redrawSharedOutline(hexes, masks, 'spawn', 7);
     assert.equal(clears, 1, '相同落点不应重复上传描线');
 
-    world.redrawSharedOutline(hexes, owner, masks, 'spawn', 8);
+    world.redrawSharedOutline(hexes, masks, 'spawn', 8);
     assert.equal(clears, 2, '仅落点变更也要重画');
-    world.redrawSharedOutline(hexes, owner, masks);
+    world.redrawSharedOutline(hexes, masks);
     assert.equal(clears, 3, '正式对局必须清除选点高亮');
     assert.equal(graphics.commands.length, 0);
 });
@@ -318,16 +323,17 @@ test('地图缩放变化会刷新共享轮廓，静止时不重复上传', () =>
     world.outlineGraphics = graphics;
     const hexes = [{ id: 7, x: 0, y: 0, playable: true }];
     const masks = new Map([[7, 0b111111]]);
-    const owner = (): ZCFaction => 'neutral';
+    // 同上一处：battle 模式取 `this.ownerForHex`，不再由调用点传闭包。
+    (world as unknown as { ownerForHex: () => ZCFaction }).ownerForHex = () => 'neutral';
     let clears = 0;
     const clear = graphics.clear.bind(graphics);
     graphics.clear = () => { clears += 1; clear(); };
 
-    world.redrawSharedOutline(hexes, owner, masks);
-    world.redrawSharedOutline(hexes, owner, masks);
+    world.redrawSharedOutline(hexes, masks);
+    world.redrawSharedOutline(hexes, masks);
     assert.equal(clears, 1);
     mapLayer.scale.x = 1;
-    world.redrawSharedOutline(hexes, owner, masks);
+    world.redrawSharedOutline(hexes, masks);
     assert.equal(clears, 2, '放大后线宽需恢复，不能沿用全图视角的描线缓存');
 });
 
@@ -421,11 +427,11 @@ test('逐张真图：所有可玩格的 mask 都能被共享层还原，笔数�
     const util = load('./ZCGameViewUtil');
     // 逐张**真图**跑。`configureZCMap` 会改写模块级 `ZC_HEX_CONFIG`，所以循环里每张都要重配。
     // 只测一张合成数据容易漏掉"某张图有四阵营 / 整盘中立"这类分桶边界。
-    const maps = readdirSync('assets/resources/config/maps').filter((f) => f.endsWith('.json'));
+    const maps = readdirSync(assetPath('config/maps')).filter((f) => f.endsWith('.json'));
     assert.ok(maps.length >= 8, `地图只有 ${maps.length} 张，覆盖面不够`);
     for (const file of maps) {
         configureZCMap(
-            JSON.parse(readFileSync(`assets/resources/config/maps/${file}`, 'utf8')) as ZCMapLayout,
+            JSON.parse(readFileSync(assetPath(`config/maps/${file}`), 'utf8')) as ZCMapLayout,
         );
         // ⚠️ `ZCHexConfig` 是**地图配置**，只有 playable/邻接/坐标，**没有 owner**
         //（owner 在快照的 `ZCHexState` 上）。这里要的是"这格归谁"来算 mask，

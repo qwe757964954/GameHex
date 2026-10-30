@@ -21,10 +21,10 @@ const { ccclass, property } = _decorator;
 @ccclass('HangGainItem')
 export class HangGainItem extends Component {
     @property({ type: Sprite, tooltip: '货币图标（`icons/resource/*`，`roleProperty.icon`）' })
-    icon: Sprite = null!;
+    icon: Sprite = null;
 
     @property({ type: Label, tooltip: '`16/h` 形态的每小时产出' })
-    text: Label = null!;
+    text: Label = null;
 
     /**
      * 铺一条。

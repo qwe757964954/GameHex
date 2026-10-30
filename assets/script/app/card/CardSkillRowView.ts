@@ -18,13 +18,13 @@ const { ccclass, property } = _decorator;
 @ccclass('CardSkillRowView')
 export class CardSkillRowView extends Component {
     @property({ type: Node, tooltip: 'Left：左技能格' })
-    left: Node = null!;
+    left: Node = null;
 
     @property({ type: Node, tooltip: 'Left/PrevBtn：↓ 往回看一档（本地预览）' })
-    leftPrev: Node = null!;
+    leftPrev: Node = null;
 
     @property({ type: Node, tooltip: 'Left/NextBtn：↑ 升一级（发请求）' })
-    leftNext: Node = null!;
+    leftNext: Node = null;
 
     /** 右技能格：一行两技能的版式才需要；一行一技能时留空。 */
     @property({ type: Node, tooltip: 'Right：右技能格（一行一技能的版式留空）' })

@@ -1,3 +1,5 @@
+import { EventMgr } from '../assets/script/framework/event/EventMgr';
+import * as mvcEvents from '../assets/script/app/bigmap/application/BigMapEvents';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -57,7 +59,7 @@ function fixture(ground: unknown = { name: 'opaque-ground' }) {
     }, instantiate: () => new Node(), _decorator: { ccclass: () => (value: unknown) => value, property: () => () => {} } };
     const theme = load('assets/script/app/bigmap/view/BigMapTheme.ts', { cc });
     const { BigMapWorldView } = load('assets/script/app/bigmap/view/BigMapWorldView.ts', {
-        cc, '../application/BigMapCampRepository': {}, '../model/BigMapWorld': {}, '../model/BigMapTerritoryColor': {},
+        cc, '../../../framework/event/EventMgr': { EventMgr }, '../application/BigMapEvents': mvcEvents, '../model/BigMapWorld': {}, '../model/BigMapTerritoryColor': {},
         './BigMapWorldLayout': geometry, './BigMapTheme': theme, './BigMapWorldMarker': {},
         './BigMapWorldTemplates': {}, './BigMapBackgroundLayout': {},
     });
@@ -66,7 +68,7 @@ function fixture(ground: unknown = { name: 'opaque-ground' }) {
         terrain: (['plain', 'forest', 'rock', 'water'] as const)[id % 4] }));
     const terrain = new Graphics(), marker = new Graphics();
     Object.assign(view, {
-        presenter: { world: { rows: 100, cols: 100, seed: 1, tiles, tileById: new Map(tiles.map(t => [t.id,t])) } },
+        data: { world: { rows: 100, cols: 100, seed: 1, tiles, tileById: new Map(tiles.map(t => [t.id,t])) } },
         layout: geometry.buildBigMapWorldLayout(100, 100), content: { position: { x: 0, y: 0 } },
         viewportTransform: { width: 720, height: 1280 }, terrainLayer: terrain, markerLayer: marker,
         art: { tiledBackground: { name:'seamless' }, ground, groundVariants: [ground],

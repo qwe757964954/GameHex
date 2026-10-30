@@ -46,7 +46,7 @@ const TAP_TOLERANCE = 12;
 @ccclass('HeadGridList')
 export class HeadGridList extends Component {
     @property({ type: Node, tooltip: 'Content：槽位容器（**不参与滚动**，子节点 = 8 个 ChangeHeadItem 槽位）' })
-    content: Node = null!;
+    content: Node = null;
 
     /** 铺一格（**在每次重绑时按 `dataIndex` 现取数据**）。 */
     renderItem: ((node: Node, dataIndex: number) => void) | null = null;

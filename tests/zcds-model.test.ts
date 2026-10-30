@@ -51,6 +51,7 @@ import {
     loadPvpTables,
     ZCPvpTables,
 } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
+import { assetPath } from './helpers/asset-paths';
 
 function readPvpRef(name: string): Array<Record<string, unknown>> {
     return JSON.parse(readFileSync(`../doc/塔防数据配置/json/client/${name}.json`, 'utf8'));
@@ -97,8 +98,8 @@ function readPvpTables(): ZCPvpTables {
 loadPvpTables(readPvpTables());
 
 /** 地图目录只在 ZCGame.ts 里定义一次，这里读回来，避免路径在两处漂移。 */
-const MAP_DIRECTORY_PATH = `assets/resources/${readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8')
-    .match(/MAP_DIRECTORY = '([^']+)'/)![1]}`;
+const MAP_DIRECTORY_PATH = assetPath(`${readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8')
+    .match(/MAP_DIRECTORY = '([^']+)'/)![1]}`);
 
 function readLayout(name: string): ZCMapLayout {
     return JSON.parse(readFileSync(`${MAP_DIRECTORY_PATH}/${name}.json`, 'utf8')) as ZCMapLayout;
@@ -211,13 +212,17 @@ test('新对局使用测试地图 JSON，双方各占半场且没有中立地块
     assert.equal(initial.filter((hex) => hex.tileType === ZCPvpTileType.BarracksCommon).length, 2);
 });
 
-test('11 列河道配置进入对局：水域不可通行，双方各占 80 格', () => {
+test('11 列河道配置进入对局：水域不可通行，双方各占 82 格', () => {
     configureZCMap(readLayout('river'));
     try {
         assert.equal(ZC_MAP_COLUMNS, 11);
         assert.equal(ZC_MAP_ROWS, 20);
-        assert.equal(ZC_INITIAL_TERRITORY, 80);
-        assert.equal(ZC_HEX_CONFIG.filter((hex) => !hex.playable).length, 60);
+        // ⚠️ 别再断言 `ZC_INITIAL_TERRITORY === 80`：这个变量现在存的是 `playerIds.length`
+        //    （ZCMapConfig.ts:953），**不是**初始领地格数，而且全仓只被 import 没有读取点（死变量）。
+        //    「初始领地」的真判据在下面 `playerTerritoryCount / enemyTerritoryCount`。
+        // 数值跟着 `config/maps/river.json` 走：半张 ascii（10×11，`1` = home）垂直镜像成 20 行，
+        // 不可通行 `.` 28 个 ×2 = 56，playable 164 ⇒ 双方各 82。改图必然动这几个数。
+        assert.equal(ZC_HEX_CONFIG.filter((hex) => !hex.playable).length, 56);
         assert.equal(ZC_HEX_CONFIG[ZC_PLAYER_HOME_ID].column, 5);
         assert.equal(ZC_HEX_CONFIG[ZC_ENEMY_HOME_ID].column, 5);
         for (const config of ZC_HEX_CONFIG) {
@@ -226,9 +231,9 @@ test('11 列河道配置进入对局：水域不可通行，双方各占 80 格'
             assert.ok(config.neighbors.every((id) => ZC_HEX_CONFIG[id].playable));
         }
         const game = new ZCGameModel(null, () => 0.1);
-        assert.equal(game.playerTerritoryCount, 80);
-        assert.equal(game.enemyTerritoryCount, 80);
-        assert.equal(game.snapshot.hexes.filter((hex) => hex.owner === 'neutral').length, 60);
+        assert.equal(game.playerTerritoryCount, 82);
+        assert.equal(game.enemyTerritoryCount, 82);
+        assert.equal(game.snapshot.hexes.filter((hex) => hex.owner === 'neutral').length, 56);
         assert.ok(game.snapshot.hexes.every((hex) => ZC_HEX_CONFIG[hex.id].playable || hex.tileType === null));
         assert.ok(game.snapshot.hexes.every((hex) => !ZC_HEX_CONFIG[hex.id].playable
             || hex.building === 'hq' || typeof hex.tileType === 'string'));
@@ -493,7 +498,9 @@ test('全部地块类型均达上限时按数量最少均摊，而非固定回�
         [ZCPvpTileType.BarracksCommon, 8],
         [ZCPvpTileType.BarracksMedium, 9],
         [ZCPvpTileType.BarracksAdvanced, 9],
-        ['mine', 9],
+        // 必须是枚举值 10005，不能写字符串 'mine'：`selectPvpTileType` 按数字 key 查 Map，
+        // 键对不上等于 Mine 的计数是「没配」⇒ 反而被当成最少而选中。
+        [ZCPvpTileType.Mine, 9],
     ]);
     const result = selectPvpTileType(() => 0.99, weights, excluded, counts);
     assert.equal(result, ZCPvpTileType.BarracksCommon);
@@ -1425,7 +1432,7 @@ test('pvpCard 里配了单位预设的兵种卡都有可加载的父 Prefab 和�
         assert.equal(typeof row.unitPrefabPath, 'string', `兵种卡 ${label} 缺 unitPrefabPath`);
         assert.equal(typeof row.unitSkillId, 'number', `兵种卡 ${label} 缺 unitSkillId`);
         assert.ok(
-            existsSync(`assets/resources/${row.unitPrefabPath}.prefab`),
+            existsSync(assetPath(`${row.unitPrefabPath}.prefab`)),
             `兵种卡 ${label} 的 Prefab 不存在：${row.unitPrefabPath}`,
         );
         checked += 1;
@@ -2111,6 +2118,9 @@ test('战斗帧上报只按协议 op 口径采集：翻格带格子 id、单位�
 test('卡类型只有一份清单：英文 key + 集合判定 + 无 legacy 别名', () => {
     const CATALOG = readFileSync('assets/script/app/zcds/model/ZCCombatCatalog.ts', 'utf8');
     const CONFIG = readFileSync('assets/script/app/zcds/model/ZCGameRuntimeConfig.ts', 'utf8');
+    // ⚠️ 数字校验（`CARD_TYPE_DIGITS` / `isZCCardType` 消费）已从 `ZCGameRuntimeConfig` 抽到
+    //    `ZCPvpTableParser`（表解析独立成模块）。再在 CONFIG 里找必然是红的。
+    const PARSER = readFileSync('assets/script/app/zcds/model/ZCPvpTableParser.ts', 'utf8');
     // 能量名用英文，中文只留在文案表里。
     for (const cn of ['金矿', '兵营', '防御塔', '城墙', '主城']) {
         // 两种形态：引用处 `ZCCardType.中文`、声明处 `中文: 1,`
@@ -2126,7 +2136,7 @@ test('卡类型只有一份清单：英文 key + 集合判定 + 无 legacy 别�
     // 旧表的英文别名与硬编码区间正则都应消失（都是第二份清单）。
     assert.ok(!/LEGACY_CARD_TYPES/.test(CONFIG), '不应再有 LEGACY_CARD_TYPES');
     assert.ok(!/\[1-5\]/.test(CONFIG), '不应再有硬编码的 /^[1-5]$/');
-    assert.ok(/CARD_TYPE_DIGITS/.test(CONFIG), '数字校验应从枚举派生');
+    assert.ok(/CARD_TYPE_DIGITS/.test(PARSER), '数字校验应从枚举派生（位置：ZCPvpTableParser）');
     // 中间表只剩一份（中文名，两处运行期文案在用）；建筑映射收进 `cardTypeToBuilding`。
     assert.ok(!/ZC_CARD_TYPE_BUILDING/.test(CATALOG), '建筑映射表不应导出（收进 cardTypeToBuilding 即可）');
     assert.ok(!/ZCCardTypeName/.test(CATALOG), 'ZCCardTypeName 应内联到 ZC_CARD_TYPE_NAMES，不单独导出');

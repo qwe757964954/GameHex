@@ -125,42 +125,40 @@ export class LeagueInfoPage extends PopupBase {
     static prefabPath = 'ui/League/LeagueInfo';
 
     @property({ type: Node, tooltip: 'CloseBtn：右上关闭按钮（挂 cc.Button）' })
-    closeButton: Node = null!;
+    closeButton: Node = null;
 
     @property({ type: Sprite, tooltip: 'Banner/ColorIcon：旗面（按 icon 换图）' })
-    bannerColor: Sprite = null!;
+    bannerColor: Sprite = null;
 
     @property({ type: Label, tooltip: 'LeagueName：联盟名' })
-    nameLabel: Label = null!;
+    nameLabel: Label = null;
 
     @property({ type: Label, tooltip: 'LeagueLv：等级（`6级`）' })
-    levelLabel: Label = null!;
+    levelLabel: Label = null;
 
     @property({ type: Label, tooltip: 'LeagueLeader：盟主（`盟主:xxx`）' })
-    leaderLabel: Label = null!;
+    leaderLabel: Label = null;
 
     @property({ type: Label, tooltip: 'LeagueId：联盟 ID' })
-    idLabel: Label = null!;
+    idLabel: Label = null;
 
     @property({ type: Label, tooltip: 'LeagueWx：联系微信号' })
-    wxLabel: Label = null!;
+    wxLabel: Label = null;
 
     @property({ type: Label, tooltip: 'LabUser：成员数（`成员:46/51`）' })
-    memberLabel: Label = null!;
+    memberLabel: Label = null;
 
     @property({ type: Label, tooltip: 'DecBox/Content：联盟宣言正文' })
-    declarationLabel: Label = null!;
+    declarationLabel: Label = null;
 
     @property({ type: Node, tooltip: 'BtnJoin：加入' })
-    joinButton: Node = null!;
+    joinButton: Node = null;
 
     /** 本趟铺上来的视图（点「加入」时取它的 id）。 */
     private view: ILeagueInfoView | null = null;
 
     /** 旗面帧缓存（8 色，只加载一次）。 */
     private bannerFrames: (SpriteFrame | null)[] | null = null;
-
-    private buttonsBound = false;
 
     /** 加入请求在飞（防连点，**本端有意增补**）。 */
     private busy = false;
@@ -170,8 +168,6 @@ export class LeagueInfoPage extends PopupBase {
     // ============================================================
 
     protected onInit(): void {
-        if (this.buttonsBound) return;
-        this.buttonsBound = true;
 
         const close = this.closeButton?.getComponent(Button);
         if (close) close.node.on(Button.EventType.CLICK, this.onCloseClick, this);

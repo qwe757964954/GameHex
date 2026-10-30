@@ -89,18 +89,20 @@ export class PopupManager extends Component {
     private static _instance: PopupManager | null = null;
 
     /**
-     * 全局访问点。
-     * 优先返回已挂载的实例；实例不存在/已销毁时按名字在场景里重新定位，
-     * 找不到 `Popup` 节点则兜底创建，保证业务侧永远拿到可用对象（或 null 并报错）。
+     * 全局访问点（**必有值**，口径同 `EventMgr.instance` / `CacheMgr.instance`）。
+     *
+     * 优先返回已挂载的实例；不存在/已销毁时按名字在场景里重新定位，找不到 `Popup` 节点
+     * 就在 Canvas 下补建。连 Canvas 都没有 = 场景没起来，属**初始化错误** ⇒ 直接抛：
+     * 调用点一律写 `PopupManager.inst.xxx()`，**不写 `inst?.`、也不写 `if (!mgr) return`**
+     * —— 静默跳过只会让整条弹窗链路失灵且零报错。
      */
-    static get inst(): PopupManager | null {
+    static get inst(): PopupManager {
         const cached = PopupManager._instance;
         if (cached && cached.isValid) return cached;
 
         const root = PopupManager._ensureSceneRoot();
         if (!root) {
-            console.error('[PopupManager] 场景内既没有 Popup 节点也找不到 Canvas，无法初始化');
-            return null;
+            throw new Error('[PopupManager] 场景内既没有 Popup 节点也找不到 Canvas，无法初始化');
         }
         let mgr = root.getComponent(PopupManager);
         if (!mgr) {
@@ -215,7 +217,7 @@ export class PopupManager extends Component {
             path,
             cls,
             cancelled: false,
-            promise: null!,
+            promise: null,
         };
         const task = this._openNew(cls, params, opening);
         opening.promise = task;

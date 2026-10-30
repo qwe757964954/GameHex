@@ -1,4 +1,4 @@
-import { Color, Graphics, Label, Layers, Node, Sprite, SpriteFrame, UITransform, Vec3 } from 'cc';
+import { Color, Graphics, Label, Node, SpriteFrame } from 'cc';
 
 /**
  * 大世界地图／基地建造的配色与 UI 构建工具。
@@ -129,38 +129,6 @@ export const BIGMAP_TERRITORY_OWNED_FILL_ALPHA = 150;
  */
 export const BIGMAP_TERRITORY_NEIGHBOR_GAP = 10;
 
-/** 建一个 UI 节点（默认挂在 UI_2D 层，否则 Canvas 不渲染）。 */
-export function createUiNode(name: string, parent: Node, width = 0, height = 0): Node {
-    const node = new Node(name);
-    node.layer = Layers.Enum.UI_2D;
-    const transform = node.addComponent(UITransform);
-    transform.setContentSize(width, height);
-    node.setParent(parent);
-    return node;
-}
-
-/** 建一个 Label 节点（左对齐的正文 / 居中的标题都用它，靠 `align` 区分）。 */
-export function createLabel(
-    parent: Node,
-    text: string,
-    fontSize: number,
-    color: Color,
-    width = 0,
-    height = 0,
-): Label {
-    const node = createUiNode(`Label_${text.slice(0, 6)}`, parent, width, height);
-    const label = node.addComponent(Label);
-    label.string = text;
-    label.fontSize = fontSize;
-    label.lineHeight = Math.round(fontSize * 1.32);
-    label.color = color;
-    label.useSystemFont = true;
-    label.overflow = Label.Overflow.NONE;
-    label.horizontalAlign = Label.HorizontalAlign.LEFT;
-    label.verticalAlign = Label.VerticalAlign.CENTER;
-    return label;
-}
-
 /** 画一块面板底（圆角 + 描边），所有面板 / 按钮共用这一套观感。 */
 export function drawPanel(
     graphics: Graphics,
@@ -189,61 +157,4 @@ export interface IBigMapButton {
     setEnabled(enabled: boolean): void;
     setText(text: string): void;
     setSkin(frame: SpriteFrame | null, foreground: Color): void;
-}
-
-export function createButton(
-    parent: Node,
-    text: string,
-    width: number,
-    height: number,
-    onClick: () => void,
-    fontSize = 20,
-    isPrimary = false,
-): IBigMapButton {
-    const node = createUiNode(`Btn_${text}`, parent, width, height);
-    const graphics = node.addComponent(Graphics);
-    const label = createLabel(node, text, fontSize, BIGMAP_COLORS.text, width - 8, height);
-    label.horizontalAlign = Label.HorizontalAlign.CENTER;
-    let enabled = true;
-    let skin: Sprite | null = null;
-    let skinForeground: Color | null = null;
-    const paint = (): void => {
-        drawPanel(
-            graphics, width, height,
-            enabled ? (isPrimary ? BIGMAP_COLORS.gold : BIGMAP_COLORS.panelLight) : BIGMAP_COLORS.panel,
-            enabled ? (isPrimary ? new Color(66, 42, 19) : BIGMAP_COLORS.border) : BIGMAP_COLORS.muted,
-        );
-        label.color = enabled ? (isPrimary ? new Color(48, 34, 22) : BIGMAP_COLORS.text) : BIGMAP_COLORS.muted;
-        if (skin && skinForeground) {
-            skin.color = enabled ? Color.WHITE : new Color(140, 140, 140);
-            label.color = enabled ? skinForeground : new Color(167, 159, 143);
-        }
-    };
-    paint();
-    node.on(Node.EventType.TOUCH_END, () => { if (enabled) onClick(); });
-    return {
-        node,
-        label,
-        setEnabled: (value: boolean) => { enabled = value; paint(); },
-        setText: (value: string) => { label.string = value; },
-        setSkin: (frame: SpriteFrame | null, foreground: Color) => {
-            if (!frame) return;
-            if (!skin) {
-                skin = createUiNode('ButtonArt', node, width, height).addComponent(Sprite);
-                skin.type = Sprite.Type.SLICED;
-                skin.sizeMode = Sprite.SizeMode.CUSTOM;
-                skin.trim = false;
-                skin.node.setSiblingIndex(0);
-            }
-            graphics.enabled = false;
-            skin.spriteFrame = frame;
-            skinForeground = foreground;
-            paint();
-        },
-    };
-}
-
-/** 把节点放到父节点坐标系里的某点（保持 z=0）。 */
-export function placeAt(node: Node, x: number, y: number): void {
-    node.setPosition(new Vec3(x, y, 0));
 }

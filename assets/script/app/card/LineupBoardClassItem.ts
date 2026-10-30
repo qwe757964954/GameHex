@@ -13,10 +13,10 @@ const { ccclass, property } = _decorator;
 @ccclass('LineupBoardClassItem')
 export class LineupBoardClassItem extends Component {
     @property({ type: Sprite, tooltip: 'Icon：职业图标（亮态 common_img_{职业}01/02）' })
-    icon: Sprite = null!;
+    icon: Sprite = null;
 
     @property({ type: Label, tooltip: 'CountLabel：本职业在阵容里的卡数' })
-    countLabel: Label = null!;
+    countLabel: Label = null;
 
     /**
      * 填入一项统计。

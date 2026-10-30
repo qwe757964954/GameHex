@@ -226,10 +226,11 @@ test('C. parseGoodsRows：非法行跳过、按 resId 升序', () => {
 // ============================================================
 
 import { readFileSync } from 'node:fs';
+import { assetPath } from './helpers/asset-paths';
 
 type PrefabObj = { __type__?: string; _name?: string; [k: string]: unknown };
 
-const PREFAB_PATH = 'assets/resources/ui/LimitTimeAct/LimitTimeAct.prefab';
+const PREFAB_PATH = assetPath('ui/LimitTimeAct/LimitTimeAct.prefab');
 const PREFAB: PrefabObj[] = JSON.parse(readFileSync(PREFAB_PATH, 'utf8')) as PrefabObj[];
 
 /** 脚本组件 cid（生成器从编译产物读；这里独立钉住，cid 变了说明 .ts.meta uuid 变了，prefab 要重新生成）。 */

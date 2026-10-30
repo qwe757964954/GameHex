@@ -19,6 +19,7 @@ import {
 } from '../assets/script/app/zcds/model/ZCHexTopGeometry';
 import { ZCDamageResolutionSystem } from '../assets/script/app/zcds/model/systems/ZCDamageResolutionSystem';
 import type { ZCHexState } from '../assets/script/app/zcds/model/ZCGameTypes';
+import { assetPath } from './helpers/asset-paths';
 
 const columnSpacing = HEX_GRID_VIEW_COLUMN_SPACING;
 const rowSpacing = HEX_GRID_VIEW_ROW_SPACING;
@@ -55,7 +56,7 @@ const tables = Object.fromEntries(tableNames.map((name) => {
 })) as unknown as ZCPvpTables;
 loadPvpTables(tables);
 
-const layout = JSON.parse(readFileSync('assets/resources/config/maps/select_river.json', 'utf8')) as ZCMapLayout;
+const layout = JSON.parse(readFileSync(assetPath('config/maps/select_river.json'), 'utf8')) as ZCMapLayout;
 configureZCMap(layout);
 
 test('城墙 6 条边各自朝向正确的邻格（贴合真实地块轮廓）', () => {

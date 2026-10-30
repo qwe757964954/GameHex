@@ -1,5 +1,4 @@
 import { Color, Graphics, Node, Sprite, SpriteFrame, UITransform } from 'cc';
-import { createUiNode } from './BigMapTheme';
 
 export const BIGMAP_SKIN_COLORS = {
     text: new Color(245, 233, 205),
@@ -46,31 +45,10 @@ export const BIGMAP_HUD_COLORS = {
     scrim: new Color(5, 10, 14, 205),
 } as const;
 
-export function createBigMapSprite(name: string, parent: Node): Sprite {
-    const sprite = createUiNode(name, parent).addComponent(Sprite);
-    sprite.sizeMode = Sprite.SizeMode.RAW;
-    sprite.trim = false;
-    return sprite;
-}
-
 export function requireBigMapTransform(node: Node): UITransform {
     const transform = node.getComponent(UITransform);
     if (!transform) throw new Error(`[BigMap] ${node.name} 缺少 UITransform`);
     return transform;
-}
-
-export function applyBigMapPanel(node: Node, frame: SpriteFrame | null): Sprite | null {
-    if (!frame) return null;
-    const transform = requireBigMapTransform(node);
-    const graphics = node.getComponent(Graphics);
-    if (graphics) graphics.enabled = false;
-    const sprite = createBigMapSprite('PanelArt', node);
-    sprite.type = Sprite.Type.SLICED;
-    sprite.sizeMode = Sprite.SizeMode.CUSTOM;
-    sprite.spriteFrame = frame;
-    requireBigMapTransform(sprite.node).setContentSize(transform.width, transform.height);
-    sprite.node.setSiblingIndex(0);
-    return sprite;
 }
 
 export function fitBigMapSprite(sprite: Sprite, frame: SpriteFrame | null, width: number, x = 0, y = 0): void {
@@ -126,23 +104,4 @@ export function drawBigMapCardPanel(
         );
         graphics.stroke();
     }
-}
-
-/**
- * 给节点挂一块 HUD 卡（幂等：有 `Graphics` 就重画，没有就加一个）。
- *
- * 与 `applyBigMapPanel` 分工：那个贴成品概念图（深铁框），这个手画深色卡。
- * 两者都往 `siblingIndex(0)` 压，前景内容不用动层级。
- */
-export function paintBigMapCardPanel(
-    node: Node,
-    width: number,
-    height: number,
-    radius = 12,
-    fill: Color = BIGMAP_HUD_COLORS.card,
-): Graphics {
-    const graphics = node.getComponent(Graphics) ?? node.addComponent(Graphics);
-    graphics.enabled = true;
-    drawBigMapCardPanel(graphics, width, height, radius, fill);
-    return graphics;
 }

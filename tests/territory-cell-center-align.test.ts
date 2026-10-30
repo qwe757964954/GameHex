@@ -18,13 +18,14 @@
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import test from 'node:test';
+import { assetPath } from './helpers/asset-paths';
 
 const MAP_VIEW_SRC = readFileSync('assets/script/app/territory/view/TerritoryMapView.ts', 'utf8');
 const STATION_SRC = readFileSync('assets/script/app/territory/view/TerritoryStationView.ts', 'utf8');
 const LAYOUT_SRC = readFileSync('assets/script/core/hex/HexGridLayout.ts', 'utf8');
 
 /** 领地建筑图目录（`.png` 与 `.png.meta` 成对）。 */
-const BUILDING_DIR = 'assets/resources/image/territory/buildings';
+const BUILDING_DIR = assetPath('image/territory/buildings');
 
 /** `Icon` 节点在 prefab 里写死的尺寸 + `sizeMode`（`CUSTOM(0)`）。 */
 const ICON_NODE_SIZE = 128;

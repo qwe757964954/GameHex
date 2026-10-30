@@ -71,6 +71,7 @@ import {
     LEAGUE_HALL_WX_PREFIX,
     LEAGUE_TIP_NOT_OPEN,
 } from '../assets/script/app/league/LeagueTexts';
+import { assetPath } from './helpers/asset-paths';
 
 // ============================================================
 // A. 文案口径（LeagueTexts 大厅段）
@@ -151,7 +152,7 @@ test('B2 ⚠️ 大厅这 6 张公用图必须真的在磁盘上（跨包拷漏�
         LEAGUE_ART_PROGRESS_BG,
         LEAGUE_ART_PROGRESS_FILL,
     ]) {
-        const png = `assets/resources/${LEAGUE_ART_ROOT}/${art}.png`;
+        const png = assetPath(`${LEAGUE_ART_ROOT}/${art}.png`);
         assert.ok(existsSync(png), `缺图：${png}`);
         assert.ok(existsSync(`${png}.meta`), `缺 meta：${png}.meta（编辑器不会导入）`);
     }
@@ -164,8 +165,8 @@ test('B3 页签图标复用「主界面图标目录」，两套（选中/未选�
     assert.equal(new Set(names).size, 6, `6 个图名必须互不相同：${names.join(',')}`);
     for (const a of LEAGUE_HALL_TAB_ARTS) {
         assert.notEqual(a.up, a.down, '选中 / 未选中不能用同一张图（看不出切换）');
-        assert.ok(existsSync(`assets/resources/${LEAGUE_TAB_ICON_ROOT}/${a.up}.png`), `缺图：${a.up}`);
-        assert.ok(existsSync(`assets/resources/${LEAGUE_TAB_ICON_ROOT}/${a.down}.png`), `缺图：${a.down}`);
+        assert.ok(existsSync(assetPath(`${LEAGUE_TAB_ICON_ROOT}/${a.up}.png`)), `缺图：${a.up}`);
+        assert.ok(existsSync(assetPath(`${LEAGUE_TAB_ICON_ROOT}/${a.down}.png`)), `缺图：${a.down}`);
     }
 });
 
@@ -220,7 +221,7 @@ test('B5 ⚠️ 九宫格集合：大厅 6 张必须 SLICED（拉伸不变形）
 // C. prefab 结构 + 几何
 // ============================================================
 
-const HALL_PREFAB = 'assets/resources/ui/League/LeagueHall.prefab';
+const HALL_PREFAB = assetPath('ui/League/LeagueHall.prefab');
 const HALL_PAGE_TS = 'assets/script/app/league/LeagueHallPage.ts';
 const UI_2D = 33554432;
 

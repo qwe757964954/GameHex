@@ -6,7 +6,7 @@
  *   A. **判定口径**（`SevenDayTable`，零 import 纯函数）—— 老端这些判定散在
  *      `ModelSevenday` + `LayerSevendayUI` 里（依赖 DI 容器 / `TimeUtil`），没法单测；
  *      移植时全部收敛成传参纯函数，本段是它们唯一的回归网。
- *   B. **prefab 结构**（`assets/resources/ui/SevenDay/SevenDay.prefab`）—— 脚本组件的
+ *   B. **prefab 结构**（assetPath(`ui/SevenDay/SevenDay.prefab`)）—— 脚本组件的
  *      `__type__` **必须**能从 `*.ts.meta` 的 uuid 反解出来（23 位 cid），
  *      `_layer` 必须全 `UI_2D`，节点尺寸必须与 FGUI XML 反解出的几何一致。
  *   C. **数据管道接线**（源码文本）—— 四条协议名、内存态口径、超时兜底。
@@ -82,6 +82,7 @@ import {
     SEVEN_DAY_ART_ROOT,
     splitIconPath,
 } from '../assets/script/app/sevenDay/SevenDayArt';
+import { assetPath } from './helpers/asset-paths';
 
 // ============================================================
 // 夹具
@@ -552,7 +553,7 @@ test('dayLabelOf 拼出「第N天」（前缀/后缀都来自文案表）', () =
 // B. prefab 结构
 // ============================================================
 
-const PREFAB_PATH = 'assets/resources/ui/SevenDay/SevenDay.prefab';
+const PREFAB_PATH = assetPath('ui/SevenDay/SevenDay.prefab');
 
 /** 编辑器压缩 uuid：前 5 个 hex 原样 + 其余 27 个 hex 每 3 个编 2 个 base64 字符 = 23 位。 */
 function compressUuid(uuid: string): string {
@@ -920,7 +921,7 @@ test('弹窗类契约：prefabPath 指向新 prefab，且路径真的存在', ()
     assert.ok(matched, 'SevenDayPage 必须声明 static prefabPath');
     assert.equal(matched![1], 'ui/SevenDay/SevenDay');
     assert.ok(
-        existsSync(`assets/resources/${matched![1]}.prefab`),
+        existsSync(assetPath(`${matched![1]}.prefab`)),
         `prefabPath 指向的文件不存在：assets/resources/${matched![1]}.prefab`,
     );
 });
@@ -958,7 +959,7 @@ test('界面文案全部来自 SEVEN_DAY_TEXTS（别把中文散到 prefab 的 L
     assert.deepEqual(orphans, [], `文案表里这些键没人消费，也不在 PENDING 里：${orphans.join(', ')}`);
 
     // 改名了也能立刻发现：prefab 里烘死的静态文案必须与文案表一致（只改一边 = 界面纹丝不动）
-    const prefab = readFileSync('assets/resources/ui/SevenDay/SevenDay.prefab', 'utf8');
+    const prefab = readFileSync(assetPath('ui/SevenDay/SevenDay.prefab'), 'utf8');
     for (const key of BAKED) {
         const value = SEVEN_DAY_TEXTS[key as keyof typeof SEVEN_DAY_TEXTS];
         assert.ok(
@@ -1098,7 +1099,7 @@ test('美术口径：品质框按「框档」枚举 4 张（按品质档枚举�
 
 test('道具图标：`item.icon` 是资源路径时直通解析，老格式裸名一律 null（调用方据此隐藏图标）', () => {
     // 2026-09-23 起 `item.icon` 从「老客户端 FGUI 组件名」改成「相对 assets/resources/ 的路径」
-    // （`icons/<dir>/<name>`），图已导进 `assets/resources/icons/*`。所以主路径是**直通解析**，
+    // （`icons/<dir>/<name>`），图已导进 assetPath(`icons/*`)。所以主路径是**直通解析**，
     // 人工白名单 `SEVEN_DAY_ITEM_ICON_MAP` 退化成「个别对不上时的补丁」。
     assert.deepEqual(splitIconPath('icons/item/图标_兵书随机'), { root: 'icons/item', name: '图标_兵书随机' });
     assert.deepEqual(splitIconPath('icons/common/铜币'), { root: 'icons/common', name: '铜币' });
@@ -1155,7 +1156,7 @@ test('真表 + 磁盘：七日狂欢的奖励图标能解析出来，且解析�
         const ref = resolveItemIconRef(byId.get(resId)?.icon ?? '');
         if (!ref) continue;
         resolved.push(`${ref.root}/${ref.name}`);
-        if (!['png', 'jpg'].some((ext) => existsSync(`assets/resources/${ref.root}/${ref.name}.${ext}`))) {
+        if (!['png', 'jpg'].some((ext) => existsSync(assetPath(`${ref.root}/${ref.name}.${ext}`)))) {
             broken.push(`resId=${resId} → ${ref.root}/${ref.name}`);
         }
     }
@@ -1177,7 +1178,7 @@ test('真表 + 磁盘：七日狂欢的奖励图标能解析出来，且解析�
 
 test('七日美术资源都在 image/sevenDay 下，且九宫图的 border 已按 FGUI scale9grid 写入', () => {
     // ⚠️ `SEVEN_DAY_ART_ROOT` 是**运行时**路径（相对 `resources`）；落盘时还要带 `assets/resources/`。
-    const artDir = `assets/resources/${SEVEN_DAY_ART_ROOT}`;
+    const artDir = assetPath(`${SEVEN_DAY_ART_ROOT}`);
     const required = [
         'sd_bg_top', 'sd_deco', 'sd_title', 'sd_panel', 'sd_time_bg', 'sd_chip_bg', 'sd_medal',
         'sd_day_on', 'sd_day_off', 'sd_day_glow', 'sd_bar', 'sd_bar_bg', 'sd_tab_on', 'sd_tab_off',
@@ -1246,7 +1247,7 @@ test('EMPTY_SEVEN_DAY_STATE 是共享常量，测试不能就地改它（后跑�
 /** 取某张七日美术的 SpriteFrame uuid（`@f9941` 子资源）—— 用来按**图身份**比对 prefab 里的引用。 */
 function frameUuidOf(name: string): string {
     const meta = JSON.parse(
-        readFileSync(`assets/resources/${SEVEN_DAY_ART_ROOT}/${name}.png.meta`, 'utf8'),
+        readFileSync(assetPath(`${SEVEN_DAY_ART_ROOT}/${name}.png.meta`), 'utf8'),
     ) as { uuid: string };
     return `${meta.uuid}@f9941`;
 }

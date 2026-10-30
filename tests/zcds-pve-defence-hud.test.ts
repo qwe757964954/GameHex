@@ -1,3 +1,4 @@
+import { componentControllerModule } from './helpers/controller-context';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -92,9 +93,11 @@ test('波次头像从本局所有席位和完整卡表获取，并按当前波�
     }).outputText;
     const frames = { a: { id: 'a', isValid: true }, b: { id: 'b', isValid: true } };
     runInNewContext(code, { exports, require: (name: string) => {
+            if (name.endsWith('/ComponentController')) return componentControllerModule();
         if (name === 'cc') return STUB_CC;
         if (name === './application/ZCBattlePhaseController') return { ZCBattlePhase, ZCBattlePhaseController };
-        if (name === '../HeadArt') return { HeadArt: { loadHeadIconFrame: async (key: 'a' | 'b') => frames[key] } };
+        if (name.endsWith('/SpriteFrameCache')) return { createIconLoader: () => async () => null };
+        if (name === '../HeadArt') return { HeadArt: { loadIconArtResolver: async () => ({}), loadHeadIconFrame: async (key: 'a' | 'b') => frames[key] } };
         if (name === './model/ZCMapConfig') return { ZCOwner: { Player: 'player' }, ZC_OWNER_ORDER: ['player', 'enemy', 'enemy2', 'enemy3'] };
         if (name === './model/ZCCombatCatalog') return { getEnemyDeck: () => [{ id: '2', name: '怪二', headIcon: 'b' }] };
         return {};
@@ -125,6 +128,7 @@ test('战斗主循环按 HUD 节奏刷新首领血条，受伤清零和换波都
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
     }).outputText;
     runInNewContext(code, { exports, require: (name: string) => {
+            if (name.endsWith('/ComponentController')) return componentControllerModule();
         if (name === 'cc') return STUB_CC;
         if (name === './application/ZCBattlePhaseController') return { ZCBattlePhase, ZCBattlePhaseController };
         return {};

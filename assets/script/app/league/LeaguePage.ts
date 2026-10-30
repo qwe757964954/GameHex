@@ -103,25 +103,25 @@ export class LeaguePage extends Component {
     static prefabPath = 'ui/League/League';
 
     @property({ type: Node, tooltip: 'Banner：联盟旗帜容器（底 / 外框 / 旗面）' })
-    banner: Node = null!;
+    banner: Node = null;
 
     @property({ type: Sprite, tooltip: 'Banner/ColorIcon：旗面（随联盟颜色切图）' })
-    bannerColor: Sprite = null!;
+    bannerColor: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'Banner/Frame：选中态外框（未选中时隐藏）' })
-    bannerFrame: Sprite = null!;
+    bannerFrame: Sprite = null;
 
     @property({ type: Label, tooltip: 'LabName：联盟名' })
-    nameLabel: Label = null!;
+    nameLabel: Label = null;
 
     @property({ type: Label, tooltip: 'LabLv：联盟等级' })
-    levelLabel: Label = null!;
+    levelLabel: Label = null;
 
     @property({ type: Label, tooltip: 'LabUserCount：成员数' })
-    memberLabel: Label = null!;
+    memberLabel: Label = null;
 
     @property({ type: Node, tooltip: 'BtnHelp：玩法说明（未落地 ⇒ 提示）' })
-    helpButton: Node = null!;
+    helpButton: Node = null;
 
     /** 当前展示的联盟颜色下标（FGUI `颜色` controller 的页序）。 */
     private bannerColorIndex = 0;

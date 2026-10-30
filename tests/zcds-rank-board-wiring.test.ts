@@ -11,6 +11,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
+import { assetPath } from './helpers/asset-paths';
 
 const GAME_SRC = readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8');
 const PROC_SRC = readFileSync('assets/script/app/procedure/ProcedureGame.ts', 'utf8');
@@ -116,8 +117,8 @@ test('★★排行榜数据源在 model 上有出口（territoryCount 私有着�
 });
 
 test('★★两个 prefab 都在，且行 prefab 的 VSV itemPrefab 指向它', () => {
-    const row = 'assets/resources/ui/game/ZCGameRankRow.prefab';
-    const board = 'assets/resources/ui/game/ZCGameRankBoard.prefab';
+    const row = assetPath('ui/game/ZCGameRankRow.prefab');
+    const board = assetPath('ui/game/ZCGameRankBoard.prefab');
     assert.ok(existsSync(row), '缺 ZCGameRankRow.prefab（虚拟列表的 itemPrefab 指向它）');
     assert.ok(existsSync(board), '缺 ZCGameRankBoard.prefab（弹窗本体）');
 
@@ -146,7 +147,7 @@ test('★★closeBtn 的**声明**必须是 `Node | null`（`null!` 与可选链
     // 当成了资源错误。真按 `null!` 的语义去掉判空，就会在 onInit 当场崩
     // （prefab 里根本没有 CloseBtn 节点，实测该节点不存在）。
     const raw = JSON.parse(
-        readFileSync('assets/resources/ui/game/ZCGameRankBoard.prefab', 'utf8'),
+        readFileSync(assetPath('ui/game/ZCGameRankBoard.prefab'), 'utf8'),
     ) as unknown[];
     const sc = raw.find(
         (o): o is { __type__?: string; closeBtn?: unknown; list?: unknown } =>
@@ -214,7 +215,7 @@ test('★★11 张切图都在磁盘上（缺图是静默的：只 warn + 留白
         'di_01', 'di_02',
     ];
     const missing = names.filter(
-        (n) => !existsSync(`assets/resources/image/GameRank/${n}.png`),
+        (n) => !existsSync(assetPath(`image/GameRank/${n}.png`)),
     );
     assert.deepEqual(missing, [], `★缺切图：${missing.join(',')}（缺图只 warn，画面留白）`);
 });
@@ -226,7 +227,7 @@ test('★★★prefab 里 Label 的占位文字必须清空（引擎默认 "labe
     //
     // 判据：prefab 里**不允许**残留任何非空 Label.string。
     // ⚠️ 用 JSON 解析而不是 grep —— `"_string": ""` 与缺字段要分清。
-    for (const p of ['assets/resources/ui/game/ZCGameRankRow.prefab']) {
+    for (const p of [assetPath('ui/game/ZCGameRankRow.prefab')]) {
         const raw = JSON.parse(readFileSync(p, 'utf8')) as unknown[];
         const placeholders = raw
             .filter((o): o is { __type__: string; _string: string } =>
@@ -249,7 +250,7 @@ test('★★★全部节点坐标必须是 Panel 局部系，且与蓝湖设计�
     //   local_x = (designX + w/2) - 360 ；local_y = 781.5 - (designY + h/2)
     // 下面每个数字都来自蓝湖节点的 bounds，**不是推算**。
     const raw = JSON.parse(
-        readFileSync('assets/resources/ui/game/ZCGameRankBoard.prefab', 'utf8'),
+        readFileSync(assetPath('ui/game/ZCGameRankBoard.prefab'), 'utf8'),
     ) as unknown[];
     const nodes = raw.filter(
         (o): o is { __type__: string; _name: string; _lpos: { x: number; y: number } } =>
@@ -297,7 +298,7 @@ test('★★★Panel 不该有 Mask/Graphics；Mask 只能挂在 List 上（滚�
     // 那是设计的一部分，不该裁。
     // 真正需要 Mask 的只有 `List`（虚拟列表滚动裁剪）。
     const raw = JSON.parse(
-        readFileSync('assets/resources/ui/game/ZCGameRankBoard.prefab', 'utf8'),
+        readFileSync(assetPath('ui/game/ZCGameRankBoard.prefab'), 'utf8'),
     ) as unknown[];
     const nodes = raw.filter(
         (o): o is { __type__: string; _name: string; _components: { __id__: number }[] } =>
@@ -336,7 +337,7 @@ test('★★★行 prefab 的文字样式必须与设计稿一致（逐节点钉
     //   互换也能通过（本次就是 `CountText` 错拿了「比赛中」的深藏青 32px 而没被发现）。
     //   必须**按节点名逐个断言**。
     const raw = JSON.parse(
-        readFileSync('assets/resources/ui/game/ZCGameRankRow.prefab', 'utf8'),
+        readFileSync(assetPath('ui/game/ZCGameRankRow.prefab'), 'utf8'),
     ) as unknown[];
     const nameOf = (o: { node?: { __id__: number } }) =>
         o.node ? (raw[o.node.__id__] as { _name?: string } | undefined)?._name : undefined;
@@ -392,7 +393,7 @@ test('★★★行内四个 Label 一律禁止换行（enableWrapText=false）',
     // ⚠️ MCP 的 `boolean` 参数必须传真布尔 —— 传字符串 `"false"` 会被当成 true
     //   （回执照样 success），本项就是踩过这个之后补的护栏。
     const raw = JSON.parse(
-        readFileSync('assets/resources/ui/game/ZCGameRankRow.prefab', 'utf8'),
+        readFileSync(assetPath('ui/game/ZCGameRankRow.prefab'), 'utf8'),
     ) as unknown[];
     const labels = raw.filter(
         (o): o is { __type__: string; _enableWrapText: boolean; node?: { __id__: number }; _fontSize: number } =>
@@ -432,7 +433,7 @@ test('★★★弹窗根必须撑满屏幕（720×1280 + cc.Widget），否则�
     // 工程惯例见 ui/gm/GMPanel.prefab、ui/login/ServerSelectPanel.prefab：
     // 根 720×1280 + cc.Widget alignFlags=45（四边对齐）。
     const raw = JSON.parse(
-        readFileSync('assets/resources/ui/game/ZCGameRankBoard.prefab', 'utf8'),
+        readFileSync(assetPath('ui/game/ZCGameRankBoard.prefab'), 'utf8'),
     ) as unknown[];
     const root = raw.find(
         (o): o is { __type__: string; _name: string; _components: { __id__: number }[] } =>
@@ -458,7 +459,7 @@ test('★★★根下必须有全屏半透明遮罩 Bg（rgb(0,0,0) a=160），�
     // ⚠️ 它同时会被 `PopupBase.isBlankBackdrop` 判为「全屏装饰底图」而排除出内容区
     //    ⇒ 点它 = 点空白 ⇒ 正常关闭（这正是我们要的）。
     const raw = JSON.parse(
-        readFileSync('assets/resources/ui/game/ZCGameRankBoard.prefab', 'utf8'),
+        readFileSync(assetPath('ui/game/ZCGameRankBoard.prefab'), 'utf8'),
     ) as unknown[];
     const root = raw.find(
         (o): o is { __type__: string; _name: string; _children: { __id__: number }[] } =>
@@ -503,7 +504,7 @@ test('★★★底部的「点击空白处以关闭」提示（白 24px a=204 + 
     // 位置用**底部 Widget**（bottom=110）而不是写死 y：设计稿 1610 高、机型 1280 高，
     // 写死坐标会在短屏上跑出屏幕外，而「底部提示」的语义就是贴底。
     const raw = JSON.parse(
-        readFileSync('assets/resources/ui/game/ZCGameRankBoard.prefab', 'utf8'),
+        readFileSync(assetPath('ui/game/ZCGameRankBoard.prefab'), 'utf8'),
     ) as unknown[];
     const node = raw.find(
         (o): o is { __type__: string; _name: string; _components: { __id__: number }[] } =>
@@ -532,7 +533,7 @@ test('★★★底部的「点击空白处以关闭」提示（白 24px a=204 + 
 
 test('★★★closeOnBlank 必须为 true（点空白关闭已启用）', () => {
     const raw = JSON.parse(
-        readFileSync('assets/resources/ui/game/ZCGameRankBoard.prefab', 'utf8'),
+        readFileSync(assetPath('ui/game/ZCGameRankBoard.prefab'), 'utf8'),
     ) as unknown[];
     const sc = raw.find(
         (o): o is { __type__: string; closeOnBlank?: boolean; popupLayer?: number } =>
@@ -555,7 +556,7 @@ test('★★★contentNodes 必须是数组形态（MCP 往数组属性传单值
     // ⚠️ 想精确限定内容区（例如让「点击空白处以关闭」提示也算空白）**不能**靠 MCP——
     //    它的 node 类型只收单值；要么手改 prefab JSON，要么在代码里 `onInit` 赋值。
     const raw = JSON.parse(
-        readFileSync('assets/resources/ui/game/ZCGameRankBoard.prefab', 'utf8'),
+        readFileSync(assetPath('ui/game/ZCGameRankBoard.prefab'), 'utf8'),
     ) as unknown[];
     const sc = raw.find(
         (o): o is { __type__: string; contentNodes?: unknown } =>

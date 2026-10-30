@@ -17,16 +17,16 @@ const BACKGROUND_COLOR = new Color(255, 255, 255, 255);
 @ccclass('GiftTabButton')
 export class GiftTabButton extends Component {
     @property({ type: Sprite, tooltip: 'Bg：底图（选中 / 未选切换）' })
-    bg: Sprite = null!;
+    bg: Sprite = null;
 
     @property({ type: Label, tooltip: 'Label：页签文案' })
-    label: Label = null!;
+    label: Label = null;
 
     @property({ type: Button, tooltip: 'Button：本节点上的 cc.Button' })
-    button: Button = null!;
+    button: Button = null;
 
     @property({ type: SpriteFrame, tooltip: '选中态底板（主页同款 city/nav_sel）' })
-    selectedFrame: SpriteFrame = null!;
+    selectedFrame: SpriteFrame = null;
 
     private index = 0;
 

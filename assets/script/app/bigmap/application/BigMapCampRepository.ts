@@ -12,6 +12,7 @@ import {
 } from '../model/BigMapCampMove';
 
 export interface IBigMapCampGateway {
+    dispose?(): void;
     fetchSimple(campIds: readonly number[]): Promise<unknown>;
     fetchDetail(campIds: readonly number[]): Promise<unknown>;
     /**
@@ -23,13 +24,7 @@ export interface IBigMapCampGateway {
     fetchRoles(campId: number): Promise<unknown>;
     /** 迁城（`CmdSlgCampMoveReqMsg`）——**写操作**，与上面三条读请求分开走。 */
     requestMove(body: IBigMapCampMoveRequest): Promise<unknown>;
-    /**
-     * 角色事件广播（`CmdSlgGameRoleInfoBroMsg`）：出生 / 移动 / 攻击 / 复活。
-     *
-     * 与 `refreshSimple` 那类"失效通知"不同 —— 这条广播**自带完整角色信息**，
-     * 走增量更新而不是重拉。返回取消订阅函数（页面销毁时调）。
-     */
-    subscribeRoleEvents(listener: (event: IBigMapRoleEvent) => void): () => void;
+
 }
 
 export const BIGMAP_CAMP_REFRESH_SECONDS = 5;
@@ -46,8 +41,6 @@ export class BigMapCampRepository {
     private readonly roleRevisions = new Map<number, number>();
     /** 正在迁城的据点 id（0 = 空闲）。迁城是写操作，同页串行。 */
     private movingCampId = 0;
-    /** 角色广播订阅的取消函数（页面销毁时统一摘掉）。 */
-    private unsubscribeRoles: (() => void)[] = [];
     /** 缓存变化监听（Presenter 用它把角色广播转成一次视图重绘）。 */
     private listeners: (() => void)[] = [];
     private revision = 0;
@@ -124,23 +117,24 @@ export class BigMapCampRepository {
         }
     }
 
-    /**
-     * 把一条角色事件合进**指定据点**的缓存列表（由 Presenter 用 `pos` 反查出 campId 后调用）。
-     *
-     * ## 为什么按 roleId 覆盖、而不是按 pos
-     *
-     * `Move` 事件里 `pos` 已经变了，用 pos 找不到旧记录 ⇒ 会留下一条"幽灵角色"停在旧格上。
-     * `roleId` 才是身份：先摘掉同 roleId 的旧记录，再按新的 `pos` 重新插入并排序。
-     *
-     * ## 没拉过该据点就什么都不做
-     *
-     * 缓存为空 = 从没成功查过这个据点，此时往里面塞一条会让「据点角色：1 人」凭空出现；
-     * 下次 `refreshRoles` 会拿到权威列表。**不猜**是这里的原则。
-     */
+    /** 按角色身份跨据点迁移；未查询的目标不补造名单，广播版本阻止旧查询回写。 */
     applyRoleEvent(campId: number, event: IBigMapRoleEvent): boolean {
-        if (this.isDisposed || !isBigMapCampId(campId) || !event) return false;
+        if (this.isDisposed || !event) return false;
+        let changed = false;
+        for (const [oldCampId, roles] of this.roleSnapshots) {
+            if (oldCampId === campId) continue;
+            const next = roles.filter((role) => role.roleId !== event.role.roleId);
+            if (next.length === roles.length) continue;
+            this.roleSnapshots.set(oldCampId, next);
+            this.roleRevisions.set(oldCampId, ++this.revision);
+            changed = true;
+        }
+        if (isBigMapCampId(campId)) this.roleRevisions.set(campId, ++this.revision);
         const current = this.roleSnapshots.get(campId);
-        if (!current) return false;
+        if (!current) {
+            if (changed) this.notify();
+            return changed;
+        }
         // 两把钥匙同时摘：
         //  · **roleId** —— 这个角色自己的旧记录（`Move` 后 pos 变了，按 pos 找不到它）；
         //  · **pos**     —— 新位置原来站着的人（一格一人，被顶掉的那条必须消失，
@@ -153,22 +147,6 @@ export class BigMapCampRepository {
         return true;
     }
 
-    /**
-     * 订阅角色事件并自动合进缓存。
-     *
-     * @param campIdOf 由 `pos`（格 id）反查据点 id 的纯函数；查不到返回 0 表示"不归任何据点"
-     * @returns 取消订阅函数
-     */
-    subscribeRoleEvents(campIdOf: (pos: number) => number): () => void {
-        if (this.isDisposed) return () => undefined;
-        const off = this.gateway.subscribeRoleEvents((event) => {
-            const campId = campIdOf(event.role.pos);
-            if (campId > 0) this.applyRoleEvent(campId, event);
-        });
-        this.unsubscribeRoles.push(off);
-        return off;
-    }
-
     /** 缓存变化通知（角色广播是异步来的，视图要靠它重绘）。 */
     onChanged(listener: () => void): () => void {
         this.listeners.push(listener);
@@ -178,8 +156,9 @@ export class BigMapCampRepository {
     }
 
     private notify(): void {
-        if (this.isDisposed) return;
-        for (const listener of this.listeners.slice()) listener();
+        for (const listener of this.listeners.slice()) {
+            if (this.listeners.includes(listener)) listener();
+        }
     }
 
     refreshSimple(campIds: readonly number[]): Promise<boolean> {
@@ -191,10 +170,9 @@ export class BigMapCampRepository {
     }
 
     dispose(): void {
+        if (this.isDisposed) return;
         this.isDisposed = true;
-        // 广播订阅必须先摘：否则页面关了还在往已清空的缓存里写，且监听器会一直持有 Presenter。
-        for (const off of this.unsubscribeRoles) off();
-        this.unsubscribeRoles = [];
+        this.gateway.dispose?.();
         this.listeners = [];
         this.snapshots.clear();
         this.pending.clear();

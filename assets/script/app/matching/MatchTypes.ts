@@ -1,31 +1,30 @@
-/** 匹配流程的开战参数；未传入时沿用普通 PVP 匹配。 */
+/** 匹配开战参数；普通 PVP 可不传。 */
 export interface IMatchingEntryParams {
     readonly battleType: number;
-    /** 协议 repeated string，入口必须将数字参数转成字符串。 */
+    /** 协议为 repeated string，数字需由入口转成字符串。 */
     readonly battleParams: readonly string[];
 }
 
-/** 匹配界面小图标统计（图标资源名 + 数值）。 */
+/** 信息条统计项，图标根目录为 MATCH_ICON_ART_ROOT。 */
 export interface MatchStat {
-    /** 资源名；根目录固定 MATCH_ICON_ART_ROOT。 */
     icon: string;
     value: number;
 }
 
-/** 匹配界面一名玩家的展示数据。两侧共用，prefab 区分阵营配色。 */
+/** 参与方展示数据，阵营配色由槽位决定。 */
 export interface MatchPlayerData {
     name: string;
-    /** 头像资源名；为空时保留当前头像。 */
+    /** 头像资源名；缺失时保留占位图。 */
     avatarIcon: string;
-    /** 头像根目录；缺省用 MATCH_ART_ROOT（占位图）。写入走 applyHeadArt。 */
+    /** 缺省 MATCH_ART_ROOT；由 applyHeadArt 与头像资源名成对写入。 */
     avatarRoot?: string;
     power: number;
     rank: string;
     trophy: number;
     artifactName: string;
-    /** 神器图标资源名；根目录 MATCH_ART_ROOT。 */
+    /** 神器资源名，根目录为 ARTIFACT_ART_ROOT。 */
     artifactIcon: string;
-    /** 小图标统计，最多 4 项。 */
+    /** 最多展示 MATCH_STAT_SLOTS 项。 */
     stats: MatchStat[];
 }
 
@@ -33,7 +32,6 @@ export type MatchPhase = 'searching' | 'matched';
 
 export const MATCH_STAT_SLOTS = 4;
 
-/** 匹配状态机文案（非策划运营文案）。 */
 export const MATCH_TEXT = {
     searching: '正在寻找对手中...',
     matched: '匹配成功！',

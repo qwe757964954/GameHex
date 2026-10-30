@@ -34,13 +34,13 @@ const ITEM_COLORS = {
 @ccclass('ServerSelectItem')
 export class ServerSelectItem extends Component {
     @property({ type: Sprite, tooltip: '服务器条目底图（id_row_bg 九宫，按状态着色）' })
-    background: Sprite = null!;
+    background: Sprite = null;
 
     @property({ type: Label, tooltip: '服务器名称' })
-    nameLabel: Label = null!;
+    nameLabel: Label = null;
 
     @property({ type: Label, tooltip: '服务器状态（流畅 / 新服 / 爆满 / 维护）' })
-    statusLabel: Label = null!;
+    statusLabel: Label = null;
 
     private selectHandler: (() => void) | null = null;
 

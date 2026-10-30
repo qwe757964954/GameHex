@@ -14,8 +14,8 @@ export type IBigMapSlgRequestName = 'CmdSlgActionUpdateReqMsg' | 'CmdSlgGameInfo
 export type IBigMapSlgRequestBody = Readonly<Record<string, number | readonly number[]>>;
 
 export interface IBigMapSlgGateway {
+    dispose?(): void;
     request(name: IBigMapSlgRequestName, body: IBigMapSlgRequestBody): Promise<unknown>;
-    subscribe(listener: (kind: 'game' | 'build') => void): () => void;
 }
 
 export interface IBigMapSlgReward { readonly resId: number; readonly amount: number }
@@ -37,7 +37,6 @@ export class BigMapSlgRepository {
     private game: IBigMapServerGameInfo | null = null;
     private base: IBigMapBaseState | null = null;
     private readonly listeners = new Set<() => void>();
-    private readonly unsubscribe: () => void;
     private buildTask: Promise<boolean> | null = null;
     private actionTask: Promise<boolean> | null = null;
     private gameTask: Promise<boolean> | null = null;
@@ -51,18 +50,18 @@ export class BigMapSlgRepository {
     private nextPollAt = 0;
 
     constructor(private readonly gateway: IBigMapSlgGateway, private readonly config: IBigMapConfig,
-        private readonly now: () => number, private readonly timeoutMs = 5000) {
-        this.unsubscribe = gateway.subscribe((kind) => {
-            if (this.isDisposed) return;
-            this.revision += 1;
-            if (this.isWriting) this.refreshAfterWrite = true;
-            else void this.refreshBuildInfo(true);
-            if (kind === 'game') {
-                // 广播还带游戏信息（所处城池会变），不能只刷行动力。
-                void this.refreshGame();
-                void this.refreshAction();
-            }
-        });
+        private readonly now: () => number, private readonly timeoutMs = 5000) {}
+
+    invalidate(kind: 'game' | 'build'): void {
+        if (this.isDisposed) return;
+        this.revision += 1;
+        if (this.isWriting) this.refreshAfterWrite = true;
+        else void this.refreshBuildInfo(true);
+        if (kind === 'game') {
+            // 广播还带游戏信息（所处城池会变），不能只刷行动力。
+            void this.refreshGame();
+            void this.refreshAction();
+        }
     }
 
     get ready(): boolean { return this.info !== null && !this.isBuildDirty; }
@@ -248,8 +247,8 @@ export class BigMapSlgRepository {
     dispose(): void {
         if (this.isDisposed) return;
         this.isDisposed = true;
+        this.gateway.dispose?.();
         this.revision += 1;
-        this.unsubscribe();
         this.listeners.clear();
     }
 
@@ -327,6 +326,6 @@ export class BigMapSlgRepository {
         return true;
     }
     private emit(): void {
-        if (!this.isDisposed) for (const listener of this.listeners) listener();
+        for (const listener of this.listeners) listener();
     }
 }

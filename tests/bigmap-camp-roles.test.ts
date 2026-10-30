@@ -22,11 +22,12 @@ import {
     formatBigMapCampRoleLines,
     normalizeBigMapCampRoleInfos,
 } from '../assets/script/app/bigmap/model/BigMapCampRoleInfo';
+import { assetPath } from './helpers/asset-paths';
 
 const CMD = 'com.xkhy.tafang.cmd';
 
 function loadRoot(): protobuf.Root {
-    return protobuf.Root.fromJSON(JSON.parse(readFileSync('assets/resources/config/protoCompiled.json', 'utf8')));
+    return protobuf.Root.fromJSON(JSON.parse(readFileSync(assetPath('config/protoCompiled.json'), 'utf8')));
 }
 
 const root = loadRoot();

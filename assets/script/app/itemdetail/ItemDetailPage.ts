@@ -75,43 +75,43 @@ export class ItemDetailPage extends PopupBase {
     static prefabPath = 'ui/ItemDetail/ItemDetail';
 
     @property({ type: Node, tooltip: 'CloseBtn：关闭按钮（挂 cc.Button）' })
-    closeButton: Node = null!;
+    closeButton: Node = null;
 
     @property({ type: Sprite, tooltip: 'TitleBg：品质缎带（7 档，随品质换帧）' })
-    titleBg: Sprite = null!;
+    titleBg: Sprite = null;
 
     @property({ type: Label, tooltip: 'NameText：物品名' })
-    nameText: Label = null!;
+    nameText: Label = null;
 
     @property({ type: GoodsBox, tooltip: 'Goods：主物品框（带数量）' })
-    goods: GoodsBox = null!;
+    goods: GoodsBox = null;
 
     @property({ type: Label, tooltip: 'QualityText：品质名（`gameConfig.qualityname`）' })
-    qualityText: Label = null!;
+    qualityText: Label = null;
 
     @property({ type: Label, tooltip: 'CountText：持有数量（`0` ⇒ 空串）' })
-    countText: Label = null!;
+    countText: Label = null;
 
     @property({ type: Label, tooltip: 'DescText：道具说明' })
-    descText: Label = null!;
+    descText: Label = null;
 
     @property({ type: Node, tooltip: 'ContentTitle：「内容」标题（有 itemBox 才显示）' })
-    contentTitle: Node = null!;
+    contentTitle: Node = null;
 
     @property({ type: Node, tooltip: 'ContentBar：「内容」格子容器（挂 GoodsBox，从左到右）' })
-    contentBar: Node = null!;
+    contentBar: Node = null;
 
     @property({ type: VirtualScrollView, tooltip: 'AccessList：获取途径列表（模板 = ItemDetailRow）' })
-    accessList: VirtualScrollView = null!;
+    accessList: VirtualScrollView = null;
 
     @property({ type: Node, tooltip: 'BtnGo：前往按钮（有内容可使用）' })
-    btnGo: Node = null!;
+    btnGo: Node = null;
 
     @property({ type: Node, tooltip: 'BtnGo1：前往按钮（无内容可使用）' })
-    btnGo1: Node = null!;
+    btnGo1: Node = null;
 
     @property({ type: Node, tooltip: 'BtnCompos：合成按钮（碎片够才显示）' })
-    btnCompos: Node = null!;
+    btnCompos: Node = null;
 
     /** 数据端口；测试可替换。 */
     private repo: IItemDetailRepository = itemDetailRepository;

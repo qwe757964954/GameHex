@@ -23,6 +23,7 @@ import {
 } from '../assets/script/app/HeadArtModel';
 import { normalizeCardRow, parseCard } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
 import type { SpriteFrame } from 'cc';
+import { assetPath } from './helpers/asset-paths';
 
 const FRAME = { name: 'fake' } as unknown as SpriteFrame;
 
@@ -159,8 +160,8 @@ test('真表 + 磁盘：pvpCard 的每一行 headIcon 都能解出资源名，�
     const iconRows = readRows('icon') as { key?: unknown; path?: unknown }[];
     const resolver = createIconArtResolver(iconRows);
 
-    const cardHead = new Set(readdirSync('assets/resources/icons/cardHead'));
-    const head = new Set(readdirSync('assets/resources/icons/head'));
+    const cardHead = new Set(readdirSync(assetPath('icons/cardHead')));
+    const head = new Set(readdirSync(assetPath('icons/head')));
 
     assert.ok(cards.length >= 37, `pvpCard 应有 37 行，实际 ${cards.length}`);
     const filled: string[] = [];
@@ -203,7 +204,7 @@ test('真表 + 磁盘：pvpCard 的每一行 headIcon 都能解出资源名，�
 test('真表 + 守卫：cardHead 目录里的图与 icon.json 的「兵种_头像_*」条目一一对应', () => {
     const iconRows = readRows('icon') as { key?: unknown; path?: unknown }[];
     const resolver = createIconArtResolver(iconRows);
-    const onDisk = new Set(readdirSync('assets/resources/icons/cardHead')
+    const onDisk = new Set(readdirSync(assetPath('icons/cardHead'))
         .filter((f) => f.endsWith('.png')).map((f) => f.slice(0, -4)));
 
     const mapped = new Set<string>();

@@ -1,33 +1,33 @@
-import { _decorator, BlockInputEvents, Color, Component, Graphics, instantiate, Label, Node, Prefab, Sprite, SpriteFrame, UITransform, Vec3, view } from 'cc';
-import type { AssetService } from '../../../core/asset/AssetService';
+import { _decorator, Color, Component, Graphics, instantiate, Label, Node, Prefab, Sprite, SpriteFrame, UITransform, Vec3, view } from 'cc';
+import type { IControllerResources } from '../../../framework/controller/ControllerBase';
 import { ResourceScope } from '../../../core/asset/ResourceScope';
-import { BIGMAP_BUNDLE } from '../../../core/asset/BundleCatalog';
 import { loadBigMapArt, type IBigMapArt } from '../application/BigMapArtLoader';
-import type { BigMapPresenter, IBigMapActionFeedback } from '../application/BigMapPresenter';
-import { BIGMAP_COLORS, createButton, createLabel, createUiNode, drawPanel, type IBigMapButton } from './BigMapTheme';
+import type { IBigMapViewState } from '../application/BigMapViewState';
+import { BIGMAP_COLORS, type IBigMapButton } from './BigMapTheme';
 import { BigMapWorldView } from './BigMapWorldView';
 import { BigMapBaseView } from './BigMapBaseView';
-import { BigMapTargetPanel } from './BigMapTargetPanel';
 import { BIGMAP_CITY_PHASE_LABEL } from '../model/BigMapCitySchedule';
 import { sortSnapshotScores } from '../model/BigMapSnapshot';
 import {
-    BIGMAP_HUD_COLORS, createBigMapSprite, drawBigMapCardPanel, paintBigMapCardPanel, fitBigMapSprite,
+    BIGMAP_HUD_COLORS, drawBigMapCardPanel, fitBigMapSprite,
 } from './BigMapSkin';
 import { bigMapInfoLayout } from '../model/BigMapInfoLayout';
 import { BIGMAP_PRESENTATION_TEXT, formatBigMapPlotDetail, formatBigMapMonsterDetail } from './BigMapPresentationText';
 import { BIGMAP_CAMP_STATE_TEXT, BIGMAP_CAMP_OCCUPATION_TEXT, BIGMAP_CAMP_QUERY_TEXT } from '../model/BigMapCampInfo';
 import { formatBigMapCampRoleLines } from '../model/BigMapCampRoleInfo';
 
+import { BigMapPageLayout } from './BigMapPageLayout';
+import { BigMapButton } from './BigMapButton';
+import { BigMapBuildRow } from './BigMapBuildRow';
+
+import { EventMgr } from '../../../framework/event/EventMgr';
+import { BigMapUiEvent, BigMapViewEvent, type BigMapIntent, type IBigMapRenderEvent, type IBigMapViewCommandEvent } from '../application/BigMapEvents';
+
 const { ccclass } = _decorator;
 
 type BigMapMode = 'world' | 'base';
 
-/**
- * 【基地 / 大地图】模式按钮 —— 和 `IBigMapButton`（Graphics 画的方按钮）**不是一套东西**：
- * 它要的是主界面【任务】按钮那种「底框 + 卡通图标压在框上 + 描边字压在最下」的三段结构，
- * 而 `createButton` 的 label 永远居中、只会换一张底图（`setSkin`），做不出图标位。
- * 所以这里单独建节点、单独持有三个部件，换模式时只换 `label.string` 和 `icon.spriteFrame`。
- */
+/** 模式按钮的 Prefab 引用。 */
 interface IBigMapModeButton {
     readonly node: Node;
     readonly label: Label;
@@ -42,68 +42,52 @@ const HEADER_HEIGHT = 108;
 const FOOTER_HEIGHT = 88;
 const SIDE_PANEL_WIDTH = 300;
 
-/**
- * 「基地 / 世界」切换按钮的尺寸 —— 节点仍是底部菜单栏那格的 122×96，
- * **但皮肤换成了主界面【任务】按钮**（2026-10-28 用户口径：*「基地按钮 和大地图按钮的图标
- * 更换成类似任务按钮的样式，底框加成对应内容(建筑icon-基地，地图icon--大地图)的卡通icon」*）。
- * 下面这串数字是照抄 `assets/resources/ui/MainTask/MainTaskEntry.prefab` 量出来的：
- * 底板 111×79 落在 y −7.5、图标 79×71 抬到 y +11.5（压住底框上沿）、Label 沉到底部 y −25，
- * 22 号粗体白字 + 2px 黑描边。三者**只有图标顶出底框、文字压住图标下沿**这一个错位关系，
- * 是任务按钮的全部观感来源，改尺寸时这三个 y 要一起动，否则就散架。
- */
-const MODE_BUTTON_WIDTH = 122;
 const MODE_BUTTON_HEIGHT = 96;
-/** 底框贴图 `hud_task_tab` 的原生尺寸，**不做九宫拉伸**（`.meta` 里 border 全 0）。 */
 const MODE_FRAME_WIDTH = 111;
-const MODE_FRAME_HEIGHT = 79;
 const MODE_FRAME_Y = -7.5;
-/** 图标位：任务按钮的图标是 79×71，这里取 79 宽**按贴图原生比例**缩（不一味拉到 72×72）。 */
 const MODE_ICON_SIZE = 79;
 const MODE_ICON_Y = 11.5;
-const MODE_LABEL_Y = -25;
-const MODE_LABEL_FONT_SIZE = 22;
-const MODE_LABEL_LINE_HEIGHT = 31;
 
 /** 建造列表末尾「解锁队列」伪行的 id（真实建筑 id 都是 7 开头）。 */
 const QUEUE_ROW_ID = -1;
-const INFO_PANEL_WIDTH = 330;
+const BIGMAP_PAGE_PREFAB_PATH = 'ui/bigmap/BigMapPage';
 const BIGMAP_WORLD_PREFAB_PATH = 'ui/bigmap/BigMapWorldView';
 
 /**
  * 大世界页面：地图铺满浏览区，目标详情点选时浮出；建造菜单仅基地模式显示。
  *
- * 页面只做三件事：摆节点、把点击转成 Presenter 调用、把 Presenter 的视图数据写进 Label。
+ * 页面只做三件事：摆节点、派发点击意图、把 Controller 的展示快照写进 Label。
  * 任何规则判断都不在这里（都在 `model/`），所以改数值不用碰这个文件。
  */
 @ccclass('BigMapPage')
 export class BigMapPage extends Component {
-    private presenter: BigMapPresenter | null = null;
+    private data: IBigMapViewState | null = null;
+    private ready = false;
     private mode: BigMapMode = 'world';
-    private tickAccumulator = 0;
-    private unsubscribe: (() => void) | null = null;
     private navigationHeight = FOOTER_HEIGHT;
     private toastUntil = 0;
-    private readonly artScope = new ResourceScope('BigMapPage');
+    private controllerResources: IControllerResources = null;
+    private get artScope(): ResourceScope { return this.controllerResources.scope; }
 
-    private worldView: BigMapWorldView = null!;
-    private baseView: BigMapBaseView = null!;
+    private layout: BigMapPageLayout = null;
+    private worldView: BigMapWorldView = null;
+    private baseView: BigMapBaseView = null;
 
     private readonly resLabels = new Map<string, Label>();
     private art: IBigMapArt | null = null;
-    private buildMenuButton: IBigMapButton = null!;
+    private buildMenuButton: IBigMapButton = null;
     private readonly skinButtons: IBigMapButton[] = [];
     private readonly resourceIcons = new Map<string, Sprite>();
-    private infoThumbnail: Sprite = null!;
+    private infoThumbnail: Sprite = null;
     /**
      * 详情卡图标的**请求显示宽度**（像素）：图标先按它铺开，再由 `applyInfoLayout`
      * 按剩余空间等比缩小。存字段而不是当场算，是因为「自然高度」要靠它反推。
      */
     private infoIconWidth = 112;
-    private modeButton: IBigMapModeButton = null!;
-    private harvestButton: IBigMapButton = null!;
-    private resetButton: IBigMapButton = null!;
+    private modeButton: IBigMapModeButton = null;
+    private harvestButton: IBigMapButton = null;
 
-    private buildPanel: Node = null!;
+    private buildPanel: Node = null;
     /**
      * 建造目录的行。**按 `kind`（= `baseBuildType`）定位**，不按 `buildingId` ——
      * 一行代表一类建筑（「粮食田 1/5」），点一次建的是这一类的下一座 id，
@@ -117,19 +101,19 @@ export class BigMapPage extends Component {
         kind: number;
     }[] = [];
 
-    private infoPanel: Node = null!;
+    private infoPanel: Node = null;
     /** 弹窗暗底（领地页 `TerritorySiteDetail` 的 `Dim` 同款）：点一下关闭。 */
-    private infoDim: Node = null!;
-    private infoTitle: Label = null!;
-    private infoBody: Label = null!;
-    private primaryButton: IBigMapButton = null!;
-    private secondaryButton: IBigMapButton = null!;
+    private infoDim: Node = null;
+    private infoTitle: Label = null;
+    private infoBody: Label = null;
+    private primaryButton: IBigMapButton = null;
+    private secondaryButton: IBigMapButton = null;
 
-    private queueLabel: Label = null!;
-    private queuePanel: Node = null!;
-    private toastLabel: Label = null!;
+    private queueLabel: Label = null;
+    private queuePanel: Node = null;
+    private toastLabel: Label = null;
     /** 开战回包已到、战斗还在预加载：全屏遮罩挡住地图，别让玩家继续点。 */
-    private enterMask: Node = null!;
+    private enterMask: Node = null;
     private enteringBattle = false;
 
     private selectedCityId = 0;
@@ -140,42 +124,56 @@ export class BigMapPage extends Component {
     private pendingMoveInstanceId = 0;
     private baseActionPending = false;
     private selectedBaseHexId = -1;
-    /**
-     * 世界页的关卡目标弹窗（唯一一份）。
-     *
-     * ⚠️ 2026-10-27：原来这里还有一份 `BigMapPlayerLevelPanel`（点其他玩家基地时弹的占位面板）。
-     * 那个 prefab 已搬到 `resources/ui/territory/`，**改成领地页异步据点专用的双按钮弹窗**
-     * （结构变了：占领奖励格 + 侦查/开战各带费用），世界页这套「三行文字」内容已不适用，
-     * 所以不再加载它 —— 点其他玩家基地改为一句轻提示（见 `onWorldTap`）。
-     */
-    private readonly targetPanels = new Map<'level', BigMapTargetPanel>();
     private playerPortraitLoader: ((scope: ResourceScope) => Promise<SpriteFrame | null>) | null = null;
     private playerPortrait: SpriteFrame | null = null;
 
-    /** 由入口注入 Presenter（单独注入而非在页面里 new，便于单测与后续联机版替换实现）。 */
-    async initialize(presenter: BigMapPresenter, _onClose: (() => void) | null = null, assets: AssetService | null = null, background = '', navigationHeight = FOOTER_HEIGHT,
+    /** 由入口交付初始快照，之后只响应展示事件。 */
+    async initialize(data: IBigMapViewState, resources: IControllerResources, background = '', navigationHeight = FOOTER_HEIGHT,
         playerPortraitLoader: ((scope: ResourceScope) => Promise<SpriteFrame | null>) | null = null): Promise<void> {
-        this.presenter = presenter;
+        this.controllerResources = resources;
+        this.data = data;
+        EventMgr.instance.on(BigMapViewEvent.Render, this.onRender, this);
+        EventMgr.instance.on(BigMapViewEvent.Command, this.onCommand, this);
         this.navigationHeight = navigationHeight;
         this.playerPortraitLoader = playerPortraitLoader;
         await Promise.all([
-            this.loadWorldView(assets),
-            this.loadTargetPanels(assets),
-            assets ? this.loadArt(assets, background) : Promise.resolve(),
+            this.loadPageLayout(),
+            this.loadWorldView(),
+            this.loadArt(background),
         ]);
         if (!this.isValid || this.artScope.disposed) return;
         this.buildUi();
         this.applyArt();
-        this.unsubscribe = presenter.onChanged(() => this.refreshAll());
-        this.refreshAll();
+        this.ready = true;
+        this.render(this.data);
+        EventMgr.instance.emit(BigMapUiEvent.Ready);
     }
 
-    private async loadWorldView(assets: AssetService | null): Promise<void> {
-        if (!assets) throw new Error('[BigMapPage] 加载地图预制体需要 AssetService');
+    private async loadPageLayout(): Promise<void> {
         if (!this.isValid || this.artScope.disposed) return;
         let prefab: Prefab;
         try {
-            prefab = await assets.load(BIGMAP_WORLD_PREFAB_PATH, Prefab, { scope: this.artScope });
+            prefab = await this.controllerResources.assets.load(BIGMAP_PAGE_PREFAB_PATH, Prefab, { scope: this.artScope });
+        } catch (error) {
+            if (!this.isValid || this.artScope.disposed) return;
+            throw error;
+        }
+        if (!this.isValid || this.artScope.disposed) return;
+        const node = instantiate(prefab);
+        const layout = node.getComponent(BigMapPageLayout);
+        if (!layout) {
+            node.destroy();
+            throw new Error('[BigMapPage] 页面预制体缺少 BigMapPageLayout');
+        }
+        node.setParent(this.node);
+        this.layout = layout;
+    }
+
+    private async loadWorldView(): Promise<void> {
+        if (!this.isValid || this.artScope.disposed) return;
+        let prefab: Prefab;
+        try {
+            prefab = await this.controllerResources.assets.load(BIGMAP_WORLD_PREFAB_PATH, Prefab, { scope: this.artScope });
         } catch (error) {
             if (!this.isValid || this.artScope.disposed) return;
             throw error;
@@ -191,9 +189,10 @@ export class BigMapPage extends Component {
         this.worldView = worldView;
     }
 
-    private async loadArt(assets: AssetService, background: string): Promise<void> {
+    private async loadArt(background: string): Promise<void> {
         const [art, portrait] = await Promise.all([
-            loadBigMapArt(assets, this.artScope, background, this.presenter?.resourceIcons ?? new Map()),
+            loadBigMapArt(this.controllerResources.assets, this.artScope, background, this.data?.resourceIcons ?? new Map(),
+                this.data?.buildingConfigs ?? new Map(), this.data?.campConfigs ?? new Map()),
             this.playerPortraitLoader ? this.playerPortraitLoader(this.artScope).catch((error: unknown) => {
                 console.warn('[BigMapPage] 玩家头像加载失败', error);
                 return null;
@@ -210,11 +209,6 @@ export class BigMapPage extends Component {
         this.worldView.setArt(art);
         this.worldView.setPlayerPortrait(this.playerPortrait);
         this.baseView.setArt(art);
-        // 顶栏 / 详情 / 建造 / 队列**不贴 `concept/ui/*` 那张深铁概念图**：
-        // 它们在 `buildUi` 里已经是手画的领地页 HUD 卡（`paintBigMapCardPanel`），贴上去反而盖住。
-        // 概念图只留 `plot` / `stamina` / `home` 这些**地图上的图标**继续用。
-        // 实心按钮统一走领地页【快速寻敌】那颗 3D 金钮；【基地/大地图】那颗是任务按钮同款三段结构
-        // （底框 + 卡通图标 + 描边字），各自在 `applyMode` 里贴图，不走 `setSkin`。
         for (const button of this.skinButtons) button.setSkin(art.hud.get('button') ?? null, BIGMAP_HUD_COLORS.ink);
         this.primaryButton.setSkin(art.hud.get('button') ?? null, BIGMAP_HUD_COLORS.ink);
         for (const [type, icon] of this.resourceIcons) {
@@ -222,18 +216,6 @@ export class BigMapPage extends Component {
                 27, icon.node.position.x, icon.node.position.y);
         }
         this.applyMode();
-    }
-
-    /**
-     * 目标弹窗 —— **2026-10-27 起世界页不再加载**。
-     *
-     * 它原来加载的 `ui/bigmap/BigMapLevelInfoPanel` 已经搬到领地页、改造成「关卡界面」
-     * （`ui/main/LevelInfoPanel`：三块缎带 + 掉落格 + 感叹号，内容结构完全不同），
-     * 世界页这套「三行文字」内容已经对不上。这里保留空实现而不是删方法：
-     * `initialize` 里那条并行启动链不用动，目标信息继续走左侧 info 区（`refreshInfoContent`）。
-     */
-    private async loadTargetPanels(_assets: AssetService | null): Promise<void> {
-        // no-op：见上方说明
     }
 
     // -------------------------------------------------------------- 构建
@@ -248,114 +230,75 @@ export class BigMapPage extends Component {
 
     private buildUi(): void {
         const { width, height } = this.size;
-        const root = this.node.getComponent(UITransform) ?? this.node.addComponent(UITransform);
-        root.setContentSize(width, height);
-
-        const backdrop = createUiNode('Backdrop', this.node, width, height);
-        drawPanel(backdrop.addComponent(Graphics), width, height, new Color(35, 32, 27), null, 0);
-        backdrop.addComponent(BlockInputEvents);
-
+        const ui = this.layout;
+        ui.resize(width, height, this.navigationHeight);
+        this.baseView = ui.baseView;
+        this.buildPanel = ui.buildPanel;
+        this.infoPanel = ui.infoPanel;
+        this.infoDim = ui.infoDim;
+        this.infoTitle = ui.infoTitle;
+        this.infoBody = ui.infoBody;
+        this.infoThumbnail = ui.infoThumbnail;
+        this.primaryButton = ui.primaryButton;
+        this.secondaryButton = ui.secondaryButton;
+        this.harvestButton = ui.harvestButton;
+        this.buildMenuButton = ui.buildMenuButton;
+        this.queuePanel = ui.queuePanel;
+        this.queueLabel = ui.queueLabel;
+        this.toastLabel = ui.toastLabel;
+        this.enterMask = ui.enterMask;
+        this.modeButton = { node: ui.modeNode, label: ui.modeLabel, icon: ui.modeIcon,
+            frame: ui.modeFrame, fallback: ui.modeFallback };
+        for (const [index, type] of (['grain', 'wood', 'iron', 'coin', 'stamina'] as const).entries()) {
+            this.resLabels.set(type, ui.resourceLabels[index]);
+            this.resourceIcons.set(type, ui.resourceIcons[index]);
+        }
+        this.skinButtons.push(ui.harvestButton, ui.buildMenuButton, ui.secondaryButton);
+        this.bindButton(ui.harvestButton, () => this.sendIntent({ kind: 'harvestAll' }));
+        this.bindButton(ui.buildMenuButton, () => this.sendIntent({ kind: 'toggleBuildMenu' }));
+        this.bindButton(ui.closeButton, () => this.clearSelection());
+        this.bindButton(ui.primaryButton, () => this.onPrimaryAction());
+        this.bindButton(ui.secondaryButton, () => this.onSecondaryAction());
+        this.infoDim.on(Node.EventType.TOUCH_END, this.clearSelection, this);
+        ui.modeNode.on(Node.EventType.TOUCH_END, () => this.switchMode(this.mode === 'world' ? 'base' : 'world'), this);
+        this.worldView.node.setParent(ui.node);
+        this.worldView.node.setSiblingIndex(1);
         this.buildWorldArea(width, height);
         this.buildBaseArea(width, height);
-        this.buildHeader(width, height);
-        this.buildBuildPanel(width, height);
-        this.buildInfoPanel(width, height);
-        this.modeButton.node.setSiblingIndex(this.node.children.length - 1);
-        // 弹窗（暗底 + 卡片）必须压在最上层 —— 上面那行把模式木牌提到了最后，
-        // 不再抬一次的话木牌会浮在暗底之上，模态当场穿帮。
-        this.infoDim.setSiblingIndex(this.node.children.length - 1);
-        this.infoPanel.setSiblingIndex(this.node.children.length - 1);
-        // 轻提示最后抬：弹窗开着时也要能看见（「货币不足」这类正是点按钮才有的）。
-        this.toastLabel.node.setSiblingIndex(this.node.children.length - 1);
-        // 「正在进入战斗」遮罩压在所有东西之上：开战后到战斗流程接手之间，这层必须盖住地图。
-        this.buildEnteringBattleMask(width, height);
-
+        this.bindBuildRows();
+        this.applyInfoLayout();
         this.mode = 'world';
         this.applyMode();
     }
 
-    private buildHeader(width: number, height: number): void {
-        const header = createUiNode('Header', this.node, width, HEADER_HEIGHT);
-        header.setPosition(0, height / 2 - HEADER_HEIGHT / 2, 0);
-        // 顶栏**不再是一条通栏底板**，也不再有标题字（2026-10-22 第二轮用户口径：
-        // 「删除植物大地图的文字」）。领地页顶部也是这个语法：地图顶到屏幕边，
-        // 只有几张**浮在上面的 HUD 卡**（玩家卡 / 资源条），底图完全透出来。
-        // `Header` 只当「顶部占位 + 坐标系」用，自己不画任何东西。
-        const cardHeight = 62;
-        const harvestWidth = 116;
-        const cardWidth = Math.max(220, width - 24 - harvestWidth - 12);
-        const resourceCard = createUiNode('ResourceCard', header, cardWidth, cardHeight);
-        resourceCard.setPosition(-width / 2 + 12 + cardWidth / 2, 0, 0);
-        paintBigMapCardPanel(resourceCard, cardWidth, cardHeight, 14);
-
-        const resourceWidth = cardWidth / 5;
-        for (const [index, type] of (['grain', 'wood', 'iron', 'coin', 'stamina'] as const).entries()) {
-            const x = -cardWidth / 2 + resourceWidth * (index + 0.5);
-            const icon = createBigMapSprite(`Resource_${type}`, resourceCard);
-            icon.node.setPosition(x - resourceWidth / 2 + 20, 0, 0);
-            const label = createLabel(resourceCard, '', 22, BIGMAP_HUD_COLORS.cream, resourceWidth - 38, 30);
-            label.overflow = Label.Overflow.SHRINK;
-            label.enableOutline = true;
-            label.outlineColor = BIGMAP_HUD_COLORS.rim;
-            label.outlineWidth = 2;
-            label.node.setPosition(x + 14, 0, 0);
-            this.resourceIcons.set(type, icon);
-            this.resLabels.set(type, label);
-        }
-
-        this.harvestButton = createButton(header, BIGMAP_PRESENTATION_TEXT.harvestAll, harvestWidth, 48,
-            () => { void this.runBaseAction(() => this.presenter!.requestHarvestAll()); }, 18);
-        this.harvestButton.node.setPosition(width / 2 - 12 - harvestWidth / 2, 0, 0);
-        this.harvestButton.label.color = BIGMAP_HUD_COLORS.ink;
-        this.skinButtons.push(this.harvestButton);
-        this.buildModeButton();
-        this.buildMenuButton = createButton(this.node, BIGMAP_PRESENTATION_TEXT.build, 88, 40, () => {
-            this.buildPanel.active = !this.buildPanel.active;
-        }, 18);
-        this.buildMenuButton.node.setPosition(-width / 2 + 60, height / 2 - HEADER_HEIGHT - 32, 0);
-        this.skinButtons.push(this.buildMenuButton);
+    private bindButton(button: BigMapButton, action: () => void): void {
+        button.node.on(Node.EventType.TOUCH_END, () => { if (button.interactable) action(); }, this);
     }
 
-    /**
-     * 搭【基地 / 大地图】那颗模式按钮 —— **主界面【任务】按钮的同款结构**（2026-10-28）。
-     *
-     * 三层，从下往上：
-     *  1. `ModeFrame`：`hud_task_tab` 深板岩圆角底框，**原尺寸 111×79 贴**（无九宫边，拉则糊）；
-     *  2. `ModeIcon`：卡通图标压在底框上沿（`基地` = 石堡城门 / `大地图` = 折页地图），换图在 `applyMode`；
-     *  3. `ModeLabel`：22 号粗体白字 + 2px 黑描边，沉到底框下沿 —— 白字不带描边在沙地上就散了。
-     *
-     * 文字口径没变，还是「写**下一个**模式」：在大地图上显示【基地】，在基地里显示【大地图】，
-     * 图标跟着文字走（建筑 icon 对基地、地图 icon 对大地图），玩家不用猜。
-     */
-    private buildModeButton(): void {
-        const node = createUiNode('BaseWorldToggle', this.node, MODE_BUTTON_WIDTH, MODE_BUTTON_HEIGHT);
-        // 兜底底板先画：贴图到了由 `applyMode` 隐掉它（`drawPanel` 的深色板，和顶栏按钮同款）。
-        const fallbackNode = createUiNode('ModeFrameFallback', node, MODE_FRAME_WIDTH, MODE_FRAME_HEIGHT);
-        const fallback = fallbackNode.addComponent(Graphics);
-        drawPanel(fallback, MODE_FRAME_WIDTH, MODE_FRAME_HEIGHT, BIGMAP_COLORS.panelLight, BIGMAP_COLORS.border, 12);
-        fallbackNode.setPosition(0, MODE_FRAME_Y, 0);
+    private setBuildMenuVisible(visible: boolean): void {
+        this.buildPanel.active = visible;
+        // 激活会重画模板底板，同帧补回可建造/已满等状态底色。
+        if (visible) this.refreshBuildRows();
+    }
 
-        // 底框与图标都走 `fitBigMapSprite`：**按贴图原生比例缩放**，不按节点尺寸硬拉。
-        // 两张模式图标比例不一样（石堡 82×79、折页地图 108×88），CUSTOM 硬塞 72×72 会把地图压扁。
-        const frame = createBigMapSprite('ModeFrame', node);
-        const icon = createBigMapSprite('ModeIcon', node);
-
-        const label = createLabel(node, BIGMAP_PRESENTATION_TEXT.baseToggle, MODE_LABEL_FONT_SIZE,
-            Color.WHITE, MODE_BUTTON_WIDTH - 12, MODE_LABEL_LINE_HEIGHT + 5);
-        label.horizontalAlign = Label.HorizontalAlign.CENTER;
-        label.verticalAlign = Label.VerticalAlign.CENTER;
-        label.lineHeight = MODE_LABEL_LINE_HEIGHT;
-        label.isBold = true;
-        label.enableOutline = true;
-        // 描边用**近黑**而不是纯黑（照抄任务按钮）：压在深板岩底框上才是「描边」而不是「黑边」。
-        // ⚠️ 颜色必须**在方法里** new，不能提到模块顶层 —— 一堆页面测试用最小 `cc` 桩
-        // （只有 `_decorator` / `Component`）转译执行这个文件，顶层 `new Color` 会让它们全挂。
-        label.outlineColor = new Color(10, 8, 6, 255);
-        label.outlineWidth = 2;
-        label.node.setPosition(0, MODE_LABEL_Y, 0);
-
-        node.on(Node.EventType.TOUCH_END, () => this.switchMode(this.mode === 'world' ? 'base' : 'world'));
-        this.modeButton = { node, label, icon, frame, fallback };
+    private bindBuildRows(): void {
+        const data = this.data;
+        if (!data) return;
+        const menu = data.buildMenu;
+        const entries = [...menu, { kind: QUEUE_ROW_ID, name: '解锁建造队列' }];
+        entries.forEach((entry, index) => {
+            const node = instantiate(this.layout.buildRowTemplate.node);
+            node.name = `BuildRow_${entry.kind}`;
+            node.setParent(this.buildPanel);
+            node.active = true;
+            node.setPosition(0, 216 - index * 56);
+            const row = node.getComponent(BigMapBuildRow);
+            if (!row) throw new Error('[BigMapPage] 建造行模板缺少 BigMapBuildRow');
+            row.nameLabel.string = entry.name;
+            node.on(Node.EventType.TOUCH_END, () => this.onBuildRowClick(entry.kind), this);
+            this.buildRows.push({ node, background: row.background, name: row.nameLabel,
+                detail: row.detail, kind: entry.kind });
+        });
     }
 
     /** 浏览地图铺满屏宽；浮层放在地图之上，不再把竖屏压成负宽度。 */
@@ -368,197 +311,25 @@ export class BigMapPage extends Component {
     }
 
     private buildWorldArea(width: number, height: number): void {
+        const data = this.data;
+        if (!data) return;
         const rect = this.worldAreaRect(width, height);
         const node = this.worldView.node;
-        node.setSiblingIndex(this.node.children.length - 1);
         node.setPosition(new Vec3(rect.x, rect.y, 0));
         // 先交付已加载的贴图，避免 build 把整张世界逐格画成 Graphics 后又立即清空重画。
         if (this.art) this.worldView.setArt(this.art);
-        this.worldView.build(this.presenter!, rect.width, rect.height);
-        this.worldView.onTap = (hexId) => this.onWorldTap(hexId);
+        this.worldView.build(data, rect.width, rect.height);
     }
 
     private buildBaseArea(width: number, height: number): void {
+        const data = this.data;
+        if (!data) return;
         const rect = this.worldAreaRect(width, height);
         rect.height -= 200;
         rect.y += 100;
-        const node = createUiNode('BaseView', this.node, rect.width, rect.height);
+        const node = this.baseView.node;
         node.setPosition(new Vec3(rect.x, rect.y, 0));
-        this.baseView = node.addComponent(BigMapBaseView);
-        this.baseView.build(this.presenter!, rect.width, rect.height);
-        this.baseView.onTap = (hexId) => this.onPlotTap(hexId);
-        this.baseView.onHarvest = (instanceId) => { void this.runBaseAction(() => this.presenter!.requestHarvest(instanceId)); };
-    }
-
-    private buildBuildPanel(width: number, _height: number): void {
-        const panelHeight = 9 * 56 + 52;
-        const panel = createUiNode('BuildPanel', this.node, SIDE_PANEL_WIDTH, panelHeight);
-        panel.setPosition(new Vec3(-width / 2 + SIDE_PANEL_WIDTH / 2 + 12, -40, 0));
-        paintBigMapCardPanel(panel, SIDE_PANEL_WIDTH, panelHeight, 14);
-        this.buildPanel = panel;
-        panel.addComponent(BlockInputEvents);
-
-        const title = createLabel(panel, BIGMAP_PRESENTATION_TEXT.buildMenu, 20, BIGMAP_HUD_COLORS.gold, SIDE_PANEL_WIDTH - 24, 26);
-        title.node.setPosition(new Vec3(0, panelHeight / 2 - 24, 0));
-        title.horizontalAlign = Label.HorizontalAlign.CENTER;
-
-        const menu = this.presenter!.buildMenu();
-        menu.forEach((entry, index) => {
-            const row = createUiNode(`BuildRow_${entry.buildingId}`, panel, SIDE_PANEL_WIDTH - 24, 50);
-            row.setPosition(new Vec3(0, panelHeight / 2 - 62 - index * 56, 0));
-            const background = row.addComponent(Graphics);
-            drawBigMapCardPanel(background, SIDE_PANEL_WIDTH - 24, 50, 8, BIGMAP_HUD_COLORS.cardLight);
-            const name = createLabel(row, entry.name, 17, BIGMAP_HUD_COLORS.cream, SIDE_PANEL_WIDTH - 40, 22);
-            name.node.setPosition(new Vec3(0, 10, 0));
-            const detail = createLabel(row, '', 13, BIGMAP_HUD_COLORS.muted, SIDE_PANEL_WIDTH - 40, 18);
-            detail.node.setPosition(new Vec3(0, -11, 0));
-            row.on(Node.EventType.TOUCH_END, () => this.onBuildRowClick(entry.kind));
-            this.buildRows.push({ node: row, background, name, detail, kind: entry.kind });
-        });
-
-        // 队列付费解锁是一条**动作**而不是建筑，但在 UI 上和建筑同属「花钱变强」，所以放在列表末尾。
-        const queueRow = createUiNode('BuildRow_Queue', panel, SIDE_PANEL_WIDTH - 24, 50);
-        queueRow.setPosition(new Vec3(0, panelHeight / 2 - 62 - menu.length * 56, 0));
-        const queueBackground = queueRow.addComponent(Graphics);
-        drawBigMapCardPanel(queueBackground, SIDE_PANEL_WIDTH - 24, 50, 8, BIGMAP_HUD_COLORS.cardLight);
-        const queueName = createLabel(queueRow, '解锁建造队列', 17, BIGMAP_HUD_COLORS.cream, SIDE_PANEL_WIDTH - 40, 22);
-        queueName.node.setPosition(new Vec3(0, 10, 0));
-        const queueDetail = createLabel(queueRow, '', 13, BIGMAP_HUD_COLORS.muted, SIDE_PANEL_WIDTH - 40, 18);
-        queueDetail.node.setPosition(new Vec3(0, -11, 0));
-        queueRow.on(Node.EventType.TOUCH_END, () => this.onBuildRowClick(QUEUE_ROW_ID));
-        this.buildRows.push({
-            node: queueRow,
-            background: queueBackground,
-            name: queueName,
-            detail: queueDetail,
-            kind: QUEUE_ROW_ID,
-        });
-    }
-
-    /**
-     * 目标详情弹窗。
-     *
-     * 2026-10-22 第二轮用户口径：「弹窗样式」跟领地页一致 ⇒ 从**贴底大面板**改成**居中模态**：
-     * 全屏暗底（`BIGMAP_HUD_COLORS.scrim`，与 `TerritorySiteDetail` 的 `Dim` 同值 5/10/14/205）
-     * + 居中深色卡（标题金、正文米白、两颗按钮并排放在底部）。
-     *
-     * 2026-10-22 第三轮：「弹窗内的 icon 和描述以及标题需要统一居中对齐」⇒ 卡内改成
-     * **一条中线的竖排**（标题 → 图标 → 正文 → 按钮），不再用「左图标 + 右文字栏」。
-     * 那个老排法有两个毛病（截图可见）：图标用 `this.size.width`（视口宽）算 x，
-     * 而它的父节点是**卡片**（panel 宽 560），于是被推到卡片左边缘、压在正文上；
-     * 标题为让开图标又整体右移，看着不居中。
-     *
-     * 暗底先建、卡片后建：同级后来者在上，卡片自然压在暗底之上，不用管 z 序。
-     * 暗底挂 `BlockInputEvents`，点它等于「关掉弹窗」（领地页同一个交互）。
-     */
-    private buildInfoPanel(width: number, height: number): void {
-        const dim = createUiNode('InfoDim', this.node, width, height);
-        drawPanel(dim.addComponent(Graphics), width, height, BIGMAP_HUD_COLORS.scrim, null, 0);
-        dim.addComponent(BlockInputEvents);
-        dim.on(Node.EventType.TOUCH_END, () => this.clearSelection());
-        this.infoDim = dim;
-
-        const panelWidth = Math.min(Math.max(300, width - 48), 560);
-        const panelHeight = Math.min(400, Math.max(300, height - HEADER_HEIGHT - this.navigationHeight - 160));
-        const panel = createUiNode('InfoPanel', this.node, panelWidth, panelHeight);
-        panel.setPosition(0, 0, 0);
-        paintBigMapCardPanel(panel, panelWidth, panelHeight, 16);
-        this.infoPanel = panel;
-        panel.addComponent(BlockInputEvents);
-        const close = createButton(panel, '×', 30, 30, () => this.clearSelection(), 22);
-        close.node.setPosition(panelWidth / 2 - 23, panelHeight / 2 - 22, 0);
-        close.label.color = BIGMAP_HUD_COLORS.ink;
-        // 关闭按钮 30×30 是方的：`btn_quick_fight` 是高光金钮，压进方形会糊掉高光 ⇒
-        // 不套皮肤，保留 `createButton` 自带的圆角小块（在深色卡上就是一块小亮块，够区分）。
-        //
-        // ⚠️ 卡内一律 `x = 0`：中线的位置由 `applyInfoLayout` 统一决定，这里只给尺寸。
-        this.infoThumbnail = createBigMapSprite('TargetThumbnail', panel);
-        this.infoThumbnail.node.active = false;
-        this.infoTitle = createLabel(panel, '', 24, BIGMAP_HUD_COLORS.gold, panelWidth - 56, 34);
-        this.infoTitle.overflow = Label.Overflow.SHRINK;
-        this.infoTitle.horizontalAlign = Label.HorizontalAlign.CENTER;
-        this.infoTitle.enableOutline = true;
-        this.infoTitle.outlineColor = BIGMAP_HUD_COLORS.rim;
-        this.infoTitle.outlineWidth = 2;
-        this.infoTitle.node.setPosition(0, panelHeight / 2 - 46, 0);
-        this.infoBody = createLabel(panel, '', 15, BIGMAP_HUD_COLORS.cream, panelWidth - 56, panelHeight - 170);
-        // 正文**恒居中**（用户口径）：图标在时读成「图标下方的说明」，图标不在时就是一整段居中文字。
-        // ⚠️ 垂直也要 CENTER：Label 默认 TOP，而居中竖排给正文的框是「图标下沿 ~ 按钮上沿」，
-        //    TOP 会让文字全部贴到图标底下、把下方留成一大块空白（看着像少画了一段）。
-        this.infoBody.horizontalAlign = Label.HorizontalAlign.CENTER;
-        this.infoBody.verticalAlign = Label.VerticalAlign.CENTER;
-        this.infoBody.node.setPosition(0, -14, 0);
-        this.infoBody.overflow = Label.Overflow.CLAMP;
-        this.infoBody.lineHeight = 21;
-        // 两颗按钮并排在卡片底部：与领地页弹窗「返回地图 / 开战」同一个排法。
-        const actionY = -panelHeight / 2 + 46;
-        this.secondaryButton = createButton(panel, '定位', 132, 52, () => this.onSecondaryAction(), 19);
-        this.secondaryButton.node.setPosition(-76, actionY, 0);
-        this.secondaryButton.label.color = BIGMAP_HUD_COLORS.ink;
-        this.skinButtons.push(this.secondaryButton);
-        this.primaryButton = createButton(panel, '攻打', 132, 52, () => this.onPrimaryAction(), 20, true);
-        this.primaryButton.node.setPosition(76, actionY, 0);
-        this.queuePanel = createUiNode('QueueStatus', this.node, width - 180, 38);
-        this.queuePanel.setPosition(50, height / 2 - HEADER_HEIGHT - 26, 0);
-        paintBigMapCardPanel(this.queuePanel, width - 180, 38, 10, BIGMAP_HUD_COLORS.cardDeep);
-        this.queueLabel = createLabel(this.queuePanel, '', 17, BIGMAP_HUD_COLORS.cream, width - 210, 30);
-        this.queueLabel.overflow = Label.Overflow.SHRINK;
-        this.queueLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
-        this.toastLabel = createLabel(this.node, '', 20, BIGMAP_HUD_COLORS.gold, width - 40, 36);
-        this.toastLabel.node.setPosition(0, height / 2 - HEADER_HEIGHT - 80, 0);
-        this.toastLabel.enableOutline = true;
-        this.toastLabel.outlineColor = BIGMAP_HUD_COLORS.rim;
-        this.toastLabel.outlineWidth = 2;
-        this.toastLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
-        this.toastLabel.node.active = false;
-        // 建完先按「没有图标」排一次：标题/正文的最终位置由 `applyInfoLayout` 给，
-        // 这里不给会让首帧（`refreshAll` 之前）留一个错位的中间态。
-        this.applyInfoLayout();
-        // 初始必须是关的：`setInfoVisible` 在首帧 `refreshAll` 里也会调一次。
-        this.infoDim.active = false;
-        this.infoPanel.active = false;
-    }
-
-    /**
-     * 「正在进入战斗」全屏遮罩。
-     *
-     * 开战回包到了，但 `ProcedureManager.navigate` 还要先把战斗资源预加载完才真正切流程
-     * （首次冷加载实测 25s 量级，见 `docs/领地与大地图开战加载优化验证.md`）。
-     * 这段时间世界页必须留着 —— 提前关掉露出来的就是主界面的当前 tab（默认领地），
-     * 玩家看到的是「点攻打先跑回领地，等几十秒才进战斗」。
-     *
-     * 代价是地图还点得到，所以这层同时承担三件事：挡住误触、给明确反馈、
-     * 预加载失败时能被 `cancelEnteringBattle()` 撤掉。
-     */
-    private buildEnteringBattleMask(width: number, height: number): void {
-        const mask = createUiNode('EnteringBattleMask', this.node, width, height);
-        mask.addComponent(BlockInputEvents);
-        const label = createLabel(mask, BIGMAP_PRESENTATION_TEXT.enteringBattle, 24,
-            BIGMAP_HUD_COLORS.cream, width - 80, 44);
-        label.horizontalAlign = Label.HorizontalAlign.CENTER;
-        label.enableOutline = true;
-        label.outlineColor = BIGMAP_HUD_COLORS.rim;
-        label.outlineWidth = 2;
-        label.node.setPosition(0, height / 2 - 160, 0);
-        mask.active = false;
-        this.enterMask = mask;
-    }
-
-    /** 开战回包成功：盖遮罩锁住输入，等流程切换落定时随页面一起销毁。 */
-    showEnteringBattle(): void {
-        if (this.enteringBattle || !this.enterMask) return;
-        this.enteringBattle = true;
-        this.refreshInfo();
-        this.enterMask.active = true;
-        this.enterMask.setSiblingIndex(this.node.children.length - 1);
-    }
-
-    /** 预加载失败 / 被别的流程顶掉：撤掉遮罩，让玩家能重新点攻打。 */
-    cancelEnteringBattle(): void {
-        if (!this.enteringBattle) return;
-        this.enteringBattle = false;
-        if (this.enterMask?.isValid) this.enterMask.active = false;
-        this.refreshInfo();
+        this.baseView.build(data, rect.width, rect.height);
     }
 
     /**
@@ -641,24 +412,7 @@ export class BigMapPage extends Component {
 
     // -------------------------------------------------------------- 模式切换
 
-    private switchMode(mode: BigMapMode): void {
-        if (mode === this.mode) return;
-        this.mode = mode;
-        this.buildPanel.active = false;
-        this.pendingBuildingId = 0;
-        this.pendingMoveInstanceId = 0;
-        this.baseView.setPendingBuilding(0);
-        this.applyMode();
-        this.clearSelection();
-        if (mode === 'base') {
-            const main = this.presenter!.plotCells().find((cell) => cell.buildingId === this.presenter!.mainBuildingId);
-            if (main) {
-                this.selectedPlotHexId = main.hexId;
-                this.baseView.select(main.hexId);
-            }
-        }
-        this.refreshAll();
-    }
+    private switchMode(mode: BigMapMode): void { this.sendIntent({ kind: 'mode', mode }); }
 
     private applyMode(): void {
         this.worldView.node.active = this.mode === 'world';
@@ -692,206 +446,84 @@ export class BigMapPage extends Component {
 
     // -------------------------------------------------------------- 交互
 
-    private onWorldTap(hexId: number): void {
-        // 开战回包已到、正等战斗流程接手：地图仍然可见（遮罩盖着），点了也不该改选中或再发请求。
-        if (this.enteringBattle) return;
-        const presenter = this.presenter!;
-        const occupant = this.worldView.occupantAt(hexId);
-        if (occupant.kind === 'city') {
-            this.selectedBaseHexId = -1;
-            this.selectedCityId = occupant.cityId;
-            this.selectedMonsterId = 0;
-            this.selectedPlotHexId = -1;
-            this.refreshInfo();
-            // 榜单异步拉一次（拿回来 presenter 会 emit，页面自己重绘）。
-            if (presenter.cityView(occupant.cityId)?.isServerCamp) void presenter.refreshCampDetail(occupant.cityId);
-            else void presenter.refreshCityRank(occupant.cityId);
-            return;
-        }
-        if (occupant.kind === 'monster') {
-            this.selectedBaseHexId = -1;
-            this.selectedMonsterId = occupant.instanceId;
-            this.selectedCityId = 0;
-            this.selectedPlotHexId = -1;
-            this.refreshInfo();
-            return;
-        }
-        if (occupant.kind === 'base') {
-            if (occupant.base.isPlayer) {
-                this.switchMode('base');
-                this.feedback({ ok: true, message: '回到自己的基地' });
-            } else {
-                // 世界页的「其他玩家基地」是客户端模拟的 NPC 据点（基地攻防在服务端还是 P2），
-                // 既没有占领奖励配置、也没有侦查/开战协议 ⇒ 只给一句明确的提示，
-                // 不留一个「选中了但什么都做不了」的选中态。
-                // 异步据点的完整弹窗（占领奖励 + 侦查/开始战斗）在领地页，见
-                // `BigMapPlayerLevelPanel`。
-                this.clearSelection();
-                this.feedback({ ok: false, message: '该玩家据点暂未开放' });
-            }
-            return;
-        }
-        this.clearSelection();
+    private sendIntent(intent: BigMapIntent): void {
+        if (this.data && this.ready && !this.enteringBattle) EventMgr.instance.emit(BigMapUiEvent.Intent, { intent });
     }
+    private onWorldTap(hexId: number): void { this.sendIntent({ kind: 'worldTap', hexId }); }
+    private onPlotTap(hexId: number): void { this.sendIntent({ kind: 'plotTap', hexId }); }
+    private onBuildRowClick(buildingKind: number): void { this.sendIntent({ kind: 'build', buildingKind }); }
+    private onPrimaryAction(): void { this.sendIntent({ kind: 'primary' }); }
+    private onSecondaryAction(): void { this.sendIntent({ kind: 'secondary' }); }
+    private clearSelection(): void { this.sendIntent({ kind: 'clear' }); }
 
-    private onPlotTap(hexId: number): void {
-        if (this.enteringBattle) return;
-        const presenter = this.presenter!;
-        const moveId = this.pendingMoveInstanceId;
-        if (moveId !== 0) {
-            // 搬移态：点原格 = 取消；点别的格 = 搬过去（被拒就留着搬移态，方便换一格再试）。
-            if (hexId === this.selectedPlotHexId) {
-                this.cancelMove();
-                return;
-            }
-            // `BigMapBaseView` 在回调前已经把高亮切到被点的格，这里按回原建筑，
-            // 否则详情面板会显示目标空格的文案、把「移动中」的状态弄丢。
-            this.baseView.select(this.selectedPlotHexId);
-            void this.runBaseAction(() => presenter.requestMove(moveId, hexId), () => this.cancelMove());
-            return;
-        }
-        this.selectedPlotHexId = hexId;
-        if (this.pendingBuildingId !== 0) {
-            const buildingId = this.pendingBuildingId;
-            void this.runBaseAction(() => presenter.requestBuild(hexId, buildingId), () => {
-                this.pendingBuildingId = 0;
-                this.baseView.setPendingBuilding(0);
-            });
-            return;
-        }
-        const detail = presenter.plotDetail(hexId);
-        this.buildPanel.active = detail === null;
-        this.refreshInfo();
+    private onRender(event: IBigMapRenderEvent): void {
+        this.data = event.state;
+        if (this.ready) this.render(event.state);
     }
-
-    private onBuildRowClick(kind: number): void {
-        if (kind === QUEUE_ROW_ID) {
-            void this.runBaseAction(() => this.presenter!.requestUnlockBuildQueue());
-            return;
-        }
-        // 按 kind 现查菜单：`entry.buildingId` 是「这一类的下一座」，建完就会换 id。
-        const entry = this.presenter!.buildMenu().find((item) => item.kind === kind);
-        if (!entry) return;
-        if (!entry.unlocked || entry.buildingId === 0) {
-            this.feedback({ ok: false, message: entry.reason });
-            return;
-        }
-        const picking = this.pendingBuildingId === entry.buildingId;
-        this.pendingBuildingId = picking ? 0 : entry.buildingId;
-        this.baseView.setPendingBuilding(this.pendingBuildingId);
-        this.buildPanel.active = false;
-        this.feedback({
-            ok: true,
-            message: picking ? '已取消选择' : `点击空地放置${entry.name}`,
-        });
+    private onCommand(event: IBigMapViewCommandEvent): void {
+        if (!this.ready) return;
+        const command = event.command;
+        if (command.kind === 'feedback') this.feedback(command);
+        else if (command.kind === 'focusWorld') this.worldView.focusOn(command.hexId);
+        else this.baseView.focusOn(command.hexId);
     }
-
-    private onPrimaryAction(): void {
-        const presenter = this.presenter!;
-        if (this.mode === 'base' && this.selectedPlotHexId >= 0) {
-            const detail = presenter.plotDetail(this.selectedPlotHexId);
-            if (!detail) return;
-            void this.runBaseAction(() => detail.queueSlotIndex >= 0
-                ? presenter.requestCancelQueue(detail.queueSlotIndex) : presenter.requestUpgrade(detail.instanceId));
-            return;
-        }
-        // 开战成功后**不关页面**：战斗还在预加载，关掉就会露出主界面的当前 tab（默认领地）。
-        // 先盖遮罩锁住输入，页面等 `ProcedureManager` 的落定钩子再销毁（见 `BigMapEntry.startBattle`）。
-        if (this.selectedCityId !== 0) {
-            const cityId = this.selectedCityId;
-            void this.runBaseAction(() => presenter.requestAttackCity(cityId), () => this.showEnteringBattle());
-            return;
-        }
-        if (this.selectedMonsterId !== 0) {
-            const instanceId = this.selectedMonsterId;
-            void this.runBaseAction(() => presenter.requestAttackMonster(instanceId), () => this.showEnteringBattle());
-            return;
-        }
-        this.feedback({ ok: false, message: '先在地图上选一座城池或一只野怪' });
-    }
-
-    private onSecondaryAction(): void {
-        const presenter = this.presenter!;
-        if (this.mode === 'base') {
-            const detail = presenter.plotDetail(this.selectedPlotHexId);
-            if (!detail) return;
-            // 与 `refreshInfoContent` 同一判据：能收取时次按钮是「收取」，否则是「移动」。
-            if (detail.stored > 0 || presenter.canCollectBuilding(detail.buildingId)) {
-                void this.runBaseAction(() => presenter.requestHarvest(detail.instanceId));
-                return;
-            }
-            if (this.pendingMoveInstanceId === detail.instanceId) {
-                this.cancelMove();
-                return;
-            }
-            if (detail.queueSlotIndex >= 0) return;
-            this.pendingMoveInstanceId = detail.instanceId;
-            this.feedback({ ok: true, message: BIGMAP_PRESENTATION_TEXT.moveHint });
-            this.refreshInfo();
-            return;
-        }
-        if (this.selectedCityId !== 0) {
-            const view = presenter.cityView(this.selectedCityId);
-            if (view) this.worldView.focusOn(view.hexId);
-        }
-        if (this.selectedMonsterId !== 0) {
-            const view = presenter.monsterView(this.selectedMonsterId);
-            if (view) this.worldView.focusOn(view.hexId);
-        }
-        if (this.selectedBaseHexId >= 0) this.worldView.focusOn(this.selectedBaseHexId);
-    }
-
-    private cancelMove(): void {
-        if (this.pendingMoveInstanceId === 0) return;
-        this.pendingMoveInstanceId = 0;
-        if (this.isValid) this.refreshInfo();
-    }
-
-    private clearSelection(): void {
-        this.pendingMoveInstanceId = 0;
-        this.selectedBaseHexId = -1;
-        this.selectedCityId = 0;
-        this.selectedMonsterId = 0;
-        this.selectedPlotHexId = -1;
-        this.baseView.select(-1);
-        this.refreshInfo();
+    private render(data: IBigMapViewState): void {
+        this.data = data;
+        const ui = data.ui;
+        this.mode = ui.mode;
+        this.selectedCityId = ui.selectedCityId;
+        this.selectedMonsterId = ui.selectedMonsterId;
+        this.selectedPlotHexId = ui.selectedPlotHexId;
+        this.selectedBaseHexId = ui.selectedBaseHexId;
+        this.pendingBuildingId = ui.pendingBuildingId;
+        this.pendingMoveInstanceId = ui.pendingMoveInstanceId;
+        this.baseActionPending = ui.baseActionPending;
+        this.enteringBattle = ui.enteringBattle;
+        this.applyMode();
+        this.setBuildMenuVisible(ui.mode === 'base' && ui.buildMenuVisible);
+        this.enterMask.active = ui.enteringBattle;
+        this.refreshAll();
     }
 
     // -------------------------------------------------------------- 刷新
 
     private refreshAll(): void {
-        if (!this.presenter) return;
+        if (!this.data) return;
         this.refreshHeader();
         this.refreshBuildRows();
         this.refreshQueue();
         this.refreshInfo();
-        this.worldView?.refresh();
-        this.baseView?.refresh();
+        this.worldView.render(this.data);
+        this.baseView.render(this.data);
         this.refreshToast();
     }
 
     private refreshHeader(): void {
-        for (const view of this.presenter!.resourceBar()) {
+        const data = this.data;
+        if (!data) return;
+        for (const view of data.resources) {
             const label = this.resLabels.get(view.type);
             if (!label) continue;
             const cap = Number.isFinite(view.cap) ? `/${Math.floor(view.cap)}` : '';
             const pending = view.pending > 0 ? `  +${view.pending}` : '';
             const amount = view.amount >= 1000 ? `${(view.amount / 1000).toFixed(1)}K` : `${view.amount}`;
-            const recovery = this.presenter!.actionRecoverSeconds;
+            const recovery = data.actionRecoverSeconds;
             label.string = view.amountKnown === false ? view.type === 'stamina' && recovery !== null && recovery > 0 ? `${recovery}s` : '—'
                 : this.art ? amount + (view.type === 'stamina' ? cap : '') : `${view.name} ${view.amount}${cap}${pending}`;
             // HUD 皮肤：米白压深板岩卡；没加载到美术（纯色兜底）时退回旧的深棕字压浅纸面。
             label.color = this.art ? BIGMAP_HUD_COLORS.cream : BIGMAP_COLORS.text;
         }
-        this.harvestButton.setEnabled(!this.baseActionPending && this.presenter!.canHarvest);
+        this.harvestButton.setEnabled(!this.baseActionPending && data.canHarvest);
     }
 
     private refreshBuildRows(): void {
-        const menu = this.presenter!.buildMenu();
+        const data = this.data;
+        if (!data) return;
+        const menu = data.buildMenu;
         const textColor = this.art ? BIGMAP_HUD_COLORS.cream : BIGMAP_COLORS.text;
         const mutedColor = this.art ? BIGMAP_HUD_COLORS.muted : BIGMAP_COLORS.muted;
         const dangerColor = this.art ? BIGMAP_HUD_COLORS.danger : BIGMAP_COLORS.danger;
-        const queueInfo = this.presenter!.queueUnlockInfo();
+        const queueInfo = data.queueUnlock;
         for (const row of this.buildRows) {
             if (row.kind === QUEUE_ROW_ID) {
                 drawBigMapCardPanel(
@@ -933,7 +565,9 @@ export class BigMapPage extends Component {
     }
 
     private refreshQueue(): void {
-        const queues = this.presenter!.queues();
+        const data = this.data;
+        if (!data) return;
+        const queues = data.queues;
         const busy = queues.filter((queue) => queue.busy)
             .map((queue) => `${queue.name}→Lv.${queue.targetLevel} ${queue.remainSeconds}s`);
         // 分母是 `bigmapQueue.maxBuildQueue`（解锁上限），不是"已解锁几条" ——
@@ -957,43 +591,16 @@ export class BigMapPage extends Component {
             // 「正在进入战斗」期间不刷详情内容，但**排版必须跟一轮** ——
             // 否则会留着上一轮的图标 / 按钮位置（`bigmap-info-layout` 钉的就是这条）。
             this.setInfoVisible(false);
-            for (const panel of this.targetPanels.values()) panel.hide();
             this.applyInfoLayout();
             return;
         }
         this.refreshInfoContent();
         this.applyInfoLayout();
-        this.refreshTargetPanel();
-    }
-
-    private refreshTargetPanel(): void {
-        const panel = this.targetPanels.get('level');
-        if (!panel) return;
-        if (this.mode !== 'world' || (this.selectedCityId === 0 && this.selectedMonsterId === 0)) {
-            panel.hide();
-            return;
-        }
-        const presenter = this.presenter;
-        if (!presenter) return;
-        const city = this.selectedCityId ? presenter.cityView(this.selectedCityId) : null;
-        const monster = this.selectedMonsterId ? presenter.monsterView(this.selectedMonsterId) : null;
-        if (!city && !monster) {
-            panel.hide();
-            return;
-        }
-        const lines = this.infoBody.string.split('\n').filter((line) => line !== '');
-        panel.render({
-            title: this.infoTitle.string, headings: ['目标状态', '挑战信息', '目标说明'],
-            sections: [lines.slice(0, 2).join('\n'), lines.slice(2, 5).join('\n'), lines.slice(5).join('\n')],
-            tip: '消耗行动力挑战目标，奖励以战斗结算为准',
-            primaryCaption: this.primaryButton.label.string, primaryEnabled: city?.canAttack ?? monster?.canAttack ?? false,
-            staminaCost: city?.staminaCost ?? monster?.staminaCost ?? 0,
-            staminaIcon: this.art?.resources.get('stamina') ?? null,
-        });
     }
 
     private refreshInfoContent(): void {
-        const presenter = this.presenter!;
+        const data = this.data;
+        if (!data) return;
         this.setInfoVisible(this.selectedCityId !== 0 || this.selectedMonsterId !== 0
             || (this.mode === 'base' && this.selectedPlotHexId >= 0));
         this.secondaryButton.node.active = true;
@@ -1001,7 +608,7 @@ export class BigMapPage extends Component {
         this.infoBody.fontSize = this.mode === 'base' ? 18 : 14;
         this.infoBody.lineHeight = this.mode === 'base' ? 28 : 19;
         if (this.mode === 'base' && this.selectedPlotHexId >= 0) {
-            const detail = presenter.plotDetail(this.selectedPlotHexId);
+            const detail = data.plotDetails.get(this.selectedPlotHexId);
             if (!detail) { this.setInfoVisible(false); return; }
             this.infoTitle.string = `${detail.name}  Lv.${detail.level} → ${detail.targetLevel}`;
             const busy = detail.queueSlotIndex >= 0;
@@ -1012,10 +619,10 @@ export class BigMapPage extends Component {
             this.primaryButton.setEnabled(busy || detail.canUpgrade);
             // 次按钮一键两用：有产出（或能收服务端产出）优先「收取」，否则给「移动」；
             // 建造中的格子既收不了也搬不了，直接藏掉。
-            const canHarvest = detail.stored > 0 || presenter.canCollectBuilding(detail.buildingId);
+            const canHarvest = detail.stored > 0 || data.collectableBuildings.has(detail.buildingId);
             this.secondaryButton.node.active = canHarvest || !busy;
             this.secondaryButton.setText(canHarvest
-                ? presenter.isServerBase ? BIGMAP_PRESENTATION_TEXT.harvest : `${BIGMAP_PRESENTATION_TEXT.harvest} ${detail.stored}`
+                ? data.isServerBase ? BIGMAP_PRESENTATION_TEXT.harvest : `${BIGMAP_PRESENTATION_TEXT.harvest} ${detail.stored}`
                 : moving ? BIGMAP_PRESENTATION_TEXT.moveCancel : BIGMAP_PRESENTATION_TEXT.move);
             if (this.art && this.size.width >= 600) {
                 this.setInfoIcon(this.art.buildings.get(detail.buildingId) ?? null, 110);
@@ -1024,12 +631,15 @@ export class BigMapPage extends Component {
         }
 
         if (this.selectedCityId !== 0) {
-            const city = presenter.cityView(this.selectedCityId);
+            const city = data.cities.get(this.selectedCityId);
             if (!city) return;
             this.infoTitle.string = `${city.name}（Lv.${city.level}）`;
-            if (this.art && this.size.width >= 600) this.setInfoIcon(this.art.city, 112);
+            if (this.art && this.size.width >= 600) {
+                this.setInfoIcon(this.art.camps.get(city.cityId) ?? this.art.city, 112);
+            }
             if (city.isServerCamp) {
                 const info = city.campInfo;
+                const camp = city.campConfig;
                 this.infoBody.string = [
                     info ? `占领状态：${BIGMAP_CAMP_OCCUPATION_TEXT[info.opType]}` : '',
                     info ? `据点状态：${BIGMAP_CAMP_STATE_TEXT[info.state]}` : '',
@@ -1039,6 +649,8 @@ export class BigMapPage extends Component {
                         ? city.canAttack && !info ? BIGMAP_CAMP_QUERY_TEXT.failedCanAttack : BIGMAP_CAMP_QUERY_TEXT.failed : '',
                     // 角色列表（r879 协议）：与据点状态是两条独立请求，各占一段、互不吞并。
                     ...formatBigMapCampRoleLines(city.campRoles, city.campRolesStatus),
+                    camp ? `每日宣战上限：${camp.dailyBattleLimit} 次 · 开服第 ${camp.openDay} 天开放` : '',
+                    camp ? `上榜积分：${camp.rankMinScore} · 占领积分：${camp.minOccupyScore}` : '',
                     `消耗行动力：${city.staminaCost}`,
                     city.attackReason,
                     city.desc,
@@ -1079,7 +691,7 @@ export class BigMapPage extends Component {
         }
 
         if (this.selectedMonsterId !== 0) {
-            const monster = presenter.monsterView(this.selectedMonsterId);
+            const monster = data.monsters.get(this.selectedMonsterId);
             if (!monster) return;
             this.infoTitle.string = `${monster.name}（${monster.level} 级）`;
             if (this.art && this.size.width >= 600) this.setInfoIcon(this.art.monster, 112);
@@ -1101,7 +713,7 @@ export class BigMapPage extends Component {
                 '· 详情里的「移动」→ 点空地搬过去',
                 '· 点建造中的格子 → 取消并返还资源',
                 '',
-                `建筑解锁全部来自冒险章节，当前已通关第 ${presenter.adventureChapter} 章。`,
+                `建筑解锁全部来自冒险章节，当前已通关第 ${data.adventureChapter} 章。`,
             ].join('\n')
             : [
                 '点击地图上的：',
@@ -1122,31 +734,15 @@ export class BigMapPage extends Component {
      * 没有快照（新号 / 还没过过 22:00）就返回空串，不占版面也不显示「暂无」这种噪音。
      */
     private daySnapshotLines(): string {
-        const presenter = this.presenter;
-        const snapshot = presenter?.daySnapshot();
-        if (!presenter || !snapshot) return '';
+        const data = this.data;
+        const snapshot = data?.daySnapshot;
+        if (!data || !snapshot) return '';
         const top = sortSnapshotScores(snapshot).slice(0, 3);
         if (top.length === 0) return '';
         const lines = top.map(([cityId, score]) => (
-            `· ${presenter.cityView(cityId)?.name ?? cityId}　第 ${score.rank} 名　战功 ${score.warScore}`
+            `· ${data.cities.get(cityId)?.name ?? cityId}　第 ${score.rank} 名　战功 ${score.warScore}`
         ));
         return ['', `昨日战绩（累计积分 ${snapshot.totalWarScore}）`, ...lines].join('\n');
-    }
-
-    private async runBaseAction(action: () => Promise<IBigMapActionFeedback>, onSuccess?: () => void): Promise<void> {
-        if (this.baseActionPending) return;
-        this.baseActionPending = true;
-        try {
-            const result = await action();
-            if (!this.isValid || this.artScope.disposed) return;
-            if (result.ok) onSuccess?.();
-            this.feedback(result);
-        } catch {
-            if (this.isValid && !this.artScope.disposed) this.feedback({ ok: false, message: '操作失败，请重试' });
-        } finally {
-            this.baseActionPending = false;
-            if (this.isValid && !this.artScope.disposed) this.refreshAll();
-        }
     }
 
     private feedback(feedback: { ok: boolean; message: string }): void {
@@ -1155,7 +751,7 @@ export class BigMapPage extends Component {
         this.toastLabel.color = feedback.ok ? BIGMAP_COLORS.gold : BIGMAP_COLORS.danger;
         this.toastUntil = Date.now() + 2600;
         this.toastLabel.node.active = true;
-        this.toastLabel.node.setSiblingIndex(this.node.children.length - 1);
+        this.toastLabel.node.setSiblingIndex(this.layout.node.children.length - 1);
     }
 
     private refreshToast(): void {
@@ -1164,31 +760,18 @@ export class BigMapPage extends Component {
             this.toastUntil = 0;
             this.toastLabel.node.active = false;
         } else {
-            this.toastLabel.node.setSiblingIndex(this.node.children.length - 1);
+            this.toastLabel.node.setSiblingIndex(this.layout.node.children.length - 1);
         }
     }
 
     // -------------------------------------------------------------- 心跳
 
-    protected update(deltaTime: number): void {
-        if (!this.presenter) return;
-        this.tickAccumulator += deltaTime;
-        if (this.tickAccumulator < 0.5) return;
-        this.tickAccumulator = 0;
-        // 静默推进（不触发 onChanged 递归），随后自己刷一次——地图标记重画比整页刷新便宜。
-        this.presenter.tick(false);
-        this.refreshHeader();
-        this.refreshQueue();
-        this.refreshInfo();
-        this.worldView?.refresh();
-        this.baseView?.refresh();
-        this.refreshToast();
-    }
+    protected update(): void { this.refreshToast(); }
 
     onDestroy(): void {
-        this.presenter?.dispose();
-        this.artScope.dispose();
-        this.unsubscribe?.();
-        this.unsubscribe = null;
+        this.ready = false;
+        if (this.data) EventMgr.instance.emit(BigMapUiEvent.Disposed);
+        EventMgr.instance.offTarget(this);
+        this.data = null;
     }
 }

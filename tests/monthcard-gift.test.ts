@@ -74,6 +74,7 @@ import type { IMonthCardGift } from '../assets/script/app/monthcard/MonthCardGif
 import { MONTHCARD_TEXTS } from '../assets/script/app/monthcard/MonthCardGiftTexts';
 import { RES_BAR_ICON_ART } from '../assets/script/app/main/MainResBarTypes';
 import { resIconRoot } from '../assets/script/app/common/ResTypes';
+import { assetPath } from './helpers/asset-paths';
 
 const RESOURCES = 'assets/resources';
 const DAY_MS = 86400000;
@@ -508,8 +509,8 @@ test('列表与格子的排布：步进取 XML 原值，且都在容器范围内
 // 条目预制体的静态结构（读 prefab JSON，本项目的 house style）
 // ============================================================
 
-const ENTRY_PREFAB = 'assets/resources/ui/MonthCardGift/MonthCardGiftEntry.prefab';
-const SHELL_PREFAB = 'assets/resources/ui/MonthCardGift/MonthCardGift.prefab';
+const ENTRY_PREFAB = assetPath('ui/MonthCardGift/MonthCardGiftEntry.prefab');
+const SHELL_PREFAB = assetPath('ui/MonthCardGift/MonthCardGift.prefab');
 
 interface PrefabNode {
     readonly __type__?: string;

@@ -28,22 +28,22 @@ export interface ZCBoardSlotFrames {
 @ccclass('LineupBoardSlot')
 export class LineupBoardSlot extends Component {
     @property({ type: Sprite, tooltip: 'Stage：木台底座' })
-    stage: Sprite = null!;
+    stage: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'Disc：品级垫盘' })
-    disc: Sprite = null!;
+    disc: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'Hero：职业 Q 版立绘' })
-    hero: Sprite = null!;
+    hero: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'ClassBadge：职业角标' })
-    classBadge: Sprite = null!;
+    classBadge: Sprite = null;
 
     @property({ type: Label, tooltip: 'LevelLabel：等级' })
-    levelLabel: Label = null!;
+    levelLabel: Label = null;
 
     @property({ type: Node, tooltip: '空站位时整组隐藏（底座垫盘保留）' })
-    unitGroup: Node = null!;
+    unitGroup: Node = null;
 
     @property({ tooltip: '养成表落地前的等级占位值' })
     fallbackLevel = 3;

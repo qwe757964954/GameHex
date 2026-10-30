@@ -28,6 +28,7 @@ import {
     writeFailText,
 } from '../assets/script/app/playerinfo/PlayerInfoTable';
 import { PLAYER_INFO_TEXTS } from '../assets/script/app/playerinfo/PlayerInfoTexts';
+import { assetPath } from './helpers/asset-paths';
 
 const ROOT = 'assets/script/app/playerinfo';
 const src = (file: string): string => readFileSync(`${ROOT}/${file}`, 'utf8');
@@ -74,7 +75,7 @@ test('writeFailText 透传任意「xx 失败」文案（不写死换头像那一
 // B. 头像列表几何 ↔ prefab 静态摆位
 // ============================================================
 
-const PREFAB = JSON.parse(readFileSync('assets/resources/ui/PlayerInfo/ChangeHead.prefab', 'utf8')) as any[];
+const PREFAB = JSON.parse(readFileSync(assetPath('ui/PlayerInfo/ChangeHead.prefab'), 'utf8')) as any[];
 
 test('★ 8 个槽位的位置 = headSlotOffset()（4 列 / 步进 131.4 / 128.7）', () => {
     const slots = PREFAB.filter((o) => o && o.__type__ === 'cc.Node' && /^Slot\d+$/.test(o._name ?? ''));

@@ -8,8 +8,6 @@ import {
     Sprite,
 } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
-import type { AssetService } from '../../core/asset/AssetService';
-import { ResourceScope } from '../../core/asset/ResourceScope';
 import type { ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
 import { cardArtProvider } from './CardArtProvider';
 import { cardRepository } from './CardRepository';
@@ -35,21 +33,6 @@ import type { ICardDeckSavedPayload } from './CardLineupEvents';
 import { EventMgr } from '../../framework/event/EventMgr';
 
 const { ccclass, property } = _decorator;
-
-/**
- * 布阵面板的打开参数（`LineupBoardPage.open({ userData })`）。
- *
- * 只带**依赖**（加载兵种 prefab 用的 `AssetService`），不带业务结果 ——
- * 保存成功的结果走 `CardLineupEvent.DeckSaved` 事件（见 `CardLineupEvents`）。
- *
- *  以前这里叫 `ILineupBoardOpenSession`，还带一个 `saved?: boolean`：面板保存时置 `true`，
- * 卡牌页在 `onClose` 里读。两个毛病 —— 结果绑在「关闭」上（面板开着保存，页面不刷），
- * 以及共享可变字段要靠「这轮是不是我写的」互相猜。事件版本把这两件事都去掉了：
- * 保存成功**当场**派发，订阅方各自决定要不要刷。
- */
-export interface ILineupBoardOpenData {
-    assets?: AssetService | null;
-}
 
 /**
  * 「布阵」面板（`assets/resources/ui/card/LineupBoard.prefab`）。
@@ -84,8 +67,6 @@ export interface ILineupBoardOpenData {
 export class LineupBoardPage extends PopupBase implements IBoardCardHost {
     /** 取数轮次：慢的那次回来不许覆盖快的（这职责原来在 `LineupBoardPresenter` 里）。 */
     private boardRevision = 0;
-    private readonly previewScope = new ResourceScope('lineup-board-preview');
-    private assets: AssetService | null = null;
     private previewAssets: CardUnitPreviewAssets<Prefab> | null = null;
     private arenaRevision = 0;
 
@@ -93,40 +74,40 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
     static prefabPath = 'ui/card/LineupBoard';
 
     @property({ type: Label, tooltip: 'Title/Ribbon/Label：标题「布阵」' })
-    titleLabel: Label = null!;
+    titleLabel: Label = null;
 
     @property({ type: Label, tooltip: 'Footer/QualityLabel：左下角「品质加成」' })
-    qualityLabel: Label = null!;
+    qualityLabel: Label = null;
 
     @property({ type: Label, tooltip: 'Footer/BtnReset/Label：「一键下阵」' })
-    resetLabel: Label = null!;
+    resetLabel: Label = null;
 
     @property({ type: Label, tooltip: 'Footer/BtnSave/Label：「保存」（发包期间改成「保存中…」，结果就地反馈）' })
-    saveLabel: Label = null!;
+    saveLabel: Label = null;
 
     @property({ type: Node, tooltip: 'Arena：上阵区容器（其下 Slots 挂 cc.Layout，8 个站台由 Layout 自动排）' })
-    arenaArea: Node = null!;
+    arenaArea: Node = null;
 
     @property({ type: Node, tooltip: 'Pool：卡池容器（Panel 背景 + ClassRow + PoolList）' })
-    poolArea: Node = null!;
+    poolArea: Node = null;
 
     @property({ type: VirtualScrollView, tooltip: 'Pool/PoolList：卡池虚拟列表（本 prefab 内的普通节点，Inspector 已绑定）' })
-    poolList: VirtualScrollView = null!;
+    poolList: VirtualScrollView = null;
 
     @property({ type: Node, tooltip: 'Pool/ClassRow：4 个 LineupBoardClassItem 的容器（挂 cc.Layout 水平排位，代码仍按 x 排序取用）' })
-    classBar: Node = null!;
+    classBar: Node = null;
 
     @property({ type: Node, tooltip: 'Arena/PresetRow：4 个布阵方案页签（顺序由 x 决定，第 i 格 = formationId i+1）' })
-    presetBar: Node = null!;
+    presetBar: Node = null;
 
     @property({ type: Button, tooltip: 'Footer/BtnReset 上的 cc.Button（**绑组件不绑节点**）' })
-    resetButton: Button = null!;
+    resetButton: Button = null;
 
     @property({ type: Button, tooltip: 'Footer/BtnSave 上的 cc.Button（**绑组件不绑节点**）' })
-    saveButton: Button = null!;
+    saveButton: Button = null;
 
     @property({ type: Button, tooltip: 'CloseBtn 上的 cc.Button（**绑组件不绑节点**）' })
-    closeButton: Button = null!;
+    closeButton: Button = null;
 
     @property({ tooltip: '后端没有该卡等级时，站台「N级」使用的兜底值' })
     fallbackLevel = 3;
@@ -199,14 +180,14 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
             this.presetBar.children.map((node) => ({ node })),
         );
         for (let index = 0; index < presets.length; index += 1) {
-            const button = presets[index].node.getComponent(Button)!;
+            const button = presets[index].node.getComponent(Button);
             button.node.on(Button.EventType.CLICK, () => this.selectPreset(index), this);
         }
     }
 
-    protected onOpen(userData?: ILineupBoardOpenData): void | Promise<void> {
-        // 调用方（卡牌阵容页）只传依赖；保存结果通过 `CardLineupEvent.DeckSaved` 事件回传。
-        this.assets = userData?.assets ?? null;
+    protected onOpen(): void | Promise<void> {
+        this.saving = false;
+        this.setSaveButtonEnabled(true);
         //  8 个站台先收起：`LineupBoardSlot.prefab` 的 `Unit` 组默认就是收起的，
         //  这里再显式收一遍 —— 面板是复用打开的（关了再开），别让上一轮的卡停在新面板上。
         for (const slot of this.arenaSlots()) slot.setEmpty(true);
@@ -221,11 +202,12 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
      *  直接 `destroy()` 时，实测会崩在 `LineupBoardSlot.render` 里 `this.disc` 为 null。
      */
     async refresh(): Promise<void> {
+        const scope = this.resourceScope;
         const presetCount = Math.max(1, this.presetBar.children.length);
         const revision = ++this.boardRevision;
         const data = await cardRepository.loadBoard(this.autoLoadDecks);
         if (revision !== this.boardRevision) return;
-        if (!this.alive) return;
+        if (scope.disposed || !this.alive) return;
         // 每个页签的初始卡组来自后端阵型（`formationId = 页签下标 + 1`）；
         // 没有后端数据时 `buildPresetDecks` 会让所有页签都用本地卡组。
         const decks = buildPresetDecks(data, presetCount);
@@ -244,11 +226,12 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
     }
 
     private async presentBoard(data: LineupBoardPresentation): Promise<void> {
+        const scope = this.resourceScope;
         this.draft = data.draft;
         this.heroLevels = data.heroLevels;
         this.heroLevelCaps = data.heroLevelCaps;
         const deck = data.draft.snapshot().cards;
-        if (!this.alive) return;
+        if (scope.disposed || !this.alive) return;
         const snapshot = data.draft.snapshot();
         //  卡组为空的两种情况要分开：**没有后端阵型数据**时 store 用的是本地八卡（不会为空，
         // 除非表本身读不到）；有后端数据但这一格是空的，则本来就该显示「没有上阵卡」。
@@ -257,11 +240,11 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
             console.warn('[LineupBoardPage] 卡组为空（既没有后端阵型也没有本地卡表），保持 prefab 占位外观');
         }
         this.applySnapshot(snapshot);
-        if (!this.alive) return;
+        if (scope.disposed || !this.alive) return;
         await Promise.all([this.renderArena(deck), this.renderPool(data.pool)]);
-        if (!this.alive) return;
+        if (scope.disposed || !this.alive) return;
         await this.renderClassRow(deck);
-        if (!this.alive) return;
+        if (scope.disposed || !this.alive) return;
         this.updatePresetTabs(snapshot.selectedPreset);
     }
 
@@ -270,7 +253,7 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
      * `Component.node` 在组件被销毁后会变成 `null`，所以两种形态都要挡。
      */
     private get alive(): boolean {
-        return !!this.node && this.node.isValid;
+        return !!this.node && this.node.isValid && !this.resourceScope.disposed;
     }
 
     /**
@@ -289,15 +272,16 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
 
     /** 上阵区：按卡组顺序填满 8 个站台，多出来的站台置空。 */
     private async renderArena(deck: readonly ZCDeckCard[]): Promise<void> {
+        const scope = this.resourceScope;
         const revision = ++this.arenaRevision;
         const slots = this.arenaSlots();
         const previewAssets = this.unitPreviewAssets();
         const ready = await Promise.all(deck.slice(0, slots.length).map(async (card) => ({
             card,
             frames: await cardArtProvider.loadBoardSlot(card),
-            prefab: await previewAssets?.load(card) ?? null,
+            prefab: await previewAssets.load(card),
         })));
-        if (!this.alive || revision !== this.arenaRevision) return;
+        if (scope.disposed || !this.alive || revision !== this.arenaRevision) return;
         for (let index = 0; index < slots.length; index += 1) {
             // 站台实例是 prefab 预建的、长期存活；tapHost 每次刷新都重指一次，
             // 与 applyPoolItem 里 `view.tapHost = this` 同一约定（节点复用后宿主不能悬空）。
@@ -312,12 +296,10 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
         }
     }
 
-    private unitPreviewAssets(): CardUnitPreviewAssets<Prefab> | null {
-        const assets = this.assets;
-        if (!assets) return null;
+    private unitPreviewAssets(): CardUnitPreviewAssets<Prefab> {
         if (!this.previewAssets) {
-            this.previewAssets = new CardUnitPreviewAssets(
-                (path) => assets.load(path, Prefab, { scope: this.previewScope }));
+            const assets = this.assets;
+            this.previewAssets = new CardUnitPreviewAssets((path) => assets.load(path, Prefab));
         }
         return this.previewAssets;
     }
@@ -331,6 +313,7 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
      * 「已上阵」仍按当前八卡 id 集合判断。
      */
     private async renderPool(pool: readonly ZCDeckCard[]): Promise<void> {
+        const scope = this.resourceScope;
         this.poolCards = pool;
 
         // 按 key 去重后并发预加载（同一张图只 load 一次）
@@ -342,7 +325,7 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
 
         //  预加载期间面板可能已经关了。必须在这里挡：节点一销毁，`poolList` 也会被释放，
         // 再往下走就会往已释放的列表上写，把真正的原因盖掉。
-        if (!this.alive) return;
+        if (scope.disposed || !this.alive) return;
 
         const list = this.poolList;
         if (!list.node.isValid) return;
@@ -350,7 +333,7 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
         // `VirtualScrollView` 的槽位是在 start() 里建的，而 onOpen 早于 start。
         // 统一走 PopupBase 的取消安全帧等待：关闭期间会返回 false，不留下悬空 Promise。
         if (!await this.nextPopupFrame()) return;
-        if (!this.alive || !list.node.isValid) return;
+        if (scope.disposed || !this.alive || !list.node.isValid) return;
         list.setTotalCount(pool.length);
     }
 
@@ -382,13 +365,14 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
 
     /** 中间那行「职业图标 + 数量」，顺序固定为 `ZC_CARD_CLASSES`。 */
     private async renderClassRow(deck: readonly ZCDeckCard[]): Promise<void> {
+        const scope = this.resourceScope;
         const tallies = tallyDeckClasses(deck);
         //  ClassRow 挂的是水平 Layout，顺序 = 节点树顺序（同 `arenaSlots`：坐标是 Layout 算的，别反推）。
         const items = this.classBar.getComponentsInChildren(LineupBoardClassItem);
         for (let index = 0; index < items.length; index += 1) {
             const cardClass = ZC_CARD_CLASSES[index];
             const { on } = await cardArtProvider.loadClassFrames(cardClass);
-            if (!this.alive) return;
+            if (scope.disposed || !this.alive) return;
             items[index].render(tallies[index] ?? null, on);
         }
     }
@@ -422,7 +406,7 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
         if (presets.length === 0) return;
         this.presetIndex = Math.max(0, Math.min(presets.length - 1, Math.round(index)));
         for (let i = 0; i < presets.length; i += 1) {
-            const bg = presets[i].node.getComponent(Sprite)!;
+            const bg = presets[i].node.getComponent(Sprite);
             bg.color = i === this.presetIndex ? this.presetActiveColor : this.presetIdleColor;
         }
     }
@@ -455,6 +439,7 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
      * **失败时不 `commit()`** —— 草稿仍然算"未保存"，用户可以再点一次。
      */
     async onSave(): Promise<void> {
+        const scope = this.resourceScope;
         if (this.saving) return;
         const draft = this.draft;
         if (!draft) return;
@@ -479,8 +464,8 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
 
         const result = await cardRepository.saveFormation(formationId, heroIds, this);
 
+        if (scope.disposed || !this.alive) return;
         this.saving = false;
-        if (!this.alive) return;
         this.setSaveButtonEnabled(true);
 
         if (result.kind !== 'success') {
@@ -540,13 +525,15 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
         this.rerenderPoolItems();
     }
 
+    protected onClose(): void {
+        this.saving = false;
+        this.previewAssets = null;
+    }
+
     onDestroy(): void {
         // 摘掉订阅（`DeckSaved` 等）：`EventMgr` 是全局单例，面板每次关闭都销毁重建。
         EventMgr.instance.offTarget(this);
-        this.arenaRevision += 1;
-        this.previewScope.dispose();
         this.arenaSlotCache = null;
-        this.boardRevision += 1;
         super.onDestroy();
     }
 }

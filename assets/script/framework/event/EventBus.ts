@@ -63,11 +63,13 @@ export class EventBus<E extends number | string = string> {
 
     /**
      * 派发。遍历前**拷一份** —— 回调里再订阅 / 注销都不会漏派或越界
-     * （「本次新增的监听不会被本次触发」这条语义因此自动成立）。
+     * （本次新增监听延后到下次；已解绑的监听立即停止，即使还在遍历副本中）。
      */
     emit(event: E, payload?: any): void {
         const list = this.handlers.get(event);
         if (!list) return;
-        for (const item of [...list]) item.handler.call(item.target, payload);
+        for (const item of [...list]) {
+            if (this.handlers.get(event)?.includes(item)) item.handler.call(item.target, payload);
+        }
     }
 }

@@ -142,7 +142,7 @@ const REPO_SRC = readFileSync(
 const PAGE_SRC = readFileSync('assets/script/app/main/MainTerritoryMap.ts', 'utf8');
 // 2026-10-09 抽 Presenter 后：编排与调用方断言的真源换到 TerritoryPresenter（纯 TS，可直接读文本）。
 const PRESENTER_SRC = readFileSync(
-    'assets/script/app/territory/application/TerritoryPresenter.ts',
+    'assets/script/app/territory/application/TerritoryModel.ts',
     'utf8',
 );
 const REQ_SRC = readFileSync(
@@ -322,16 +322,14 @@ test('★Repository 绝不走 CacheMgr（服务端不推，走缓存只会拿到
 
 test('★TerritoryPage 确实调了 Repository，且在建完 progress 之后立刻合并', () => {
     // Page 持有 Repository（构造 Presenter 时作为 gateway 端口传入）。
-    assert.ok(/new TerritoryCellRepository\(\)/.test(PAGE_SRC), '页面必须持有 Repository');
+    assert.ok(/new TerritoryCellRepository\(\)/.test(readFileSync('assets/script/app/territory/application/TerritoryEntry.ts', 'utf8')), 'Entry 装配 Repository，页面不再持有网络依赖');
     // 发请求与合并在 Presenter（gateway 端口）。
     assert.ok(/gateway\.fetchChapterCells\(/.test(PRESENTER_SRC), '必须真的发请求（否则线上不请求）');
     // 顺序：先 new TerritoryProgress，再 fetch + apply。
     const progressAt = PRESENTER_SRC.indexOf('new TerritoryProgress(');
     const fetchAt = PRESENTER_SRC.indexOf('gateway.fetchChapterCells(');
-    // ⚠️ 这里必须锚 `result.state`（`mergeServerState` 里那处）而不是裸的 `progress.applyServerState(` ——
-    // `applyPassCellsBro`（Bro 落地）里也有一句同名的 `this.progress.applyServerState(...)`，
-    // 而它写在文件更靠前的位置 ⇒ 用 `indexOf` 抓裸串会抓到Bro 那处、判出「apply 在 fetch 之前」的假红。
-    const applyAt = PRESENTER_SRC.indexOf('progress.applyServerState(result.state)');
+    // 拉取与主动推送复用非空上下文合并入口，锚定拉取成功后的调用。
+    const applyAt = PRESENTER_SRC.indexOf('this.mergeCellInfo(context, result.state)');
     assert.ok(progressAt > 0 && fetchAt > progressAt, '必须先建 progress 再拉服务端状态');
     assert.ok(applyAt > fetchAt, '拉到的状态必须合并进 progress（只拉不合并 = 白拉）');
 });
@@ -348,13 +346,13 @@ test('★拉取失败时不阻断页面、且不收紧解锁态（网络抖动�
     const body = mergeServerStateBody();
     const failAt = body.indexOf("'reason' in result");
     assert.ok(failAt > 0, 'mergeServerState 里要有失败早退分支');
-    const knownAt = body.indexOf('markServerStateKnown(true)');
-    assert.ok(knownAt > 0, '要有标记已知的调用');
+    const knownAt = body.indexOf('this.mergeCellInfo(context, result.state)');
+    assert.ok(knownAt > 0, '成功快照须走统一合并入口');
     assert.ok(knownAt > failAt, '★标记必须在失败早退之后（失败时标"已知"会把玩家锁死）');
     // 失败分支体里不得出现标记。
     const failBranch = body.slice(failAt, body.indexOf('}', failAt));
     assert.ok(
-        !/markServerStateKnown/.test(failBranch),
+        !/markServerStateKnown|mergeCellInfo/.test(failBranch),
         '失败分支里不能标记服务端状态已知 —— 请求失败时未知状态必须继续"全放行"',
     );
 });
@@ -391,10 +389,10 @@ test('★页面真的发了请求（"没请求"就是我上一轮的错，必须
 test('★切章节要清服务端快照（否则会先渲染上一章的状态再被覆盖，格子闪一下）', () => {
     // gateway 在 loadChapter 里是从 ports 解构的局部变量，调用形式是 `gateway.clear()`。
     const clearAt = PRESENTER_SRC.indexOf('gateway.clear();');
-    const cachedReset = PRESENTER_SRC.indexOf('this.serverCellStateCache = null');
+    const cachedReset = PRESENTER_SRC.indexOf('serverCellStateCache: null,');
     assert.ok(clearAt > 0, '切章节必须清 Repository 快照');
-    assert.ok(cachedReset > 0, '切章节必须清 Presenter 侧的 serverCellStateCache');
-    // 两个清理都要在 loadChapter 里（所有入口都走它）。
+    assert.ok(cachedReset > 0, '新章节上下文必须使用空的服务端快照');
+    // 清理 Repository 与构建新上下文都必须在 loadChapter 里。
     const loadAt = PRESENTER_SRC.indexOf('private async loadChapter(');
     assert.ok(clearAt > loadAt && cachedReset > loadAt, '清理必须在 loadChapter 内');
 });
@@ -560,7 +558,7 @@ test('★★★ Bro 落地必须复用 applyServerState，且不碰 serverStateK
     assert.ok(!/markServerStateKnown/.test(bro),
         'Bro 不带解锁信息，绝不能调 markServerStateKnown（会让玩家点不动格子）');
     // 章节不匹配直接丢。
-    assert.match(bro, /normalizeBroChapter\(levelChapter\) !== this\.map\.chapterId/,
+    assert.match(bro, /chapterId !== context\.map\.chapterId/,
         '章节不匹配的 Bro 必须直接丢（切章节时服务端可能还在推旧章）');
 });
 
@@ -571,7 +569,7 @@ test('★★★ Bro 落地必须复用 applyServerState，且不碰 serverStateK
 test('★★★ CellInfo 落地复用 applyServerState；完整快照可 markServerStateKnown（与 Bro 不同）', () => {
     const apply = PRESENTER_SRC.slice(
         PRESENTER_SRC.indexOf('applyCellInfoState(state:'),
-        PRESENTER_SRC.indexOf('applyCellInfoState(state:') + 900,
+        PRESENTER_SRC.indexOf('/** 随机资源位置'),
     );
     assert.ok(apply.length > 0, 'applyCellInfoState 要能定位');
     assert.match(apply, /applyServerState\(state\)/,
@@ -579,6 +577,6 @@ test('★★★ CellInfo 落地复用 applyServerState；完整快照可 markSer
     // 与 Bro 相反：CellInfo 带 unlockCells 完整快照，应当 mark，否则下次点开仍按旧快照判。
     assert.match(apply, /markServerStateKnown\(true\)/,
         'CellInfo 是完整快照，应当 markServerStateKnown（Bro 才不能 mark）');
-    assert.match(apply, /normalizeBroChapter\(state\.levelChapter\) !== this\.map\.chapterId/,
+    assert.match(apply, /chapterId !== context\.map\.chapterId/,
         '章节不匹配的 CellInfo 必须直接丢');
 });

@@ -43,19 +43,19 @@ export class ShowRewardPage extends PopupBase {
     static prefabPath = 'ui/ShowReward/ShowReward';
 
     @property({ type: Node, tooltip: 'PanelBg：弹窗底（FGUI n1，入场纵向弹入）' })
-    panelBg: Node = null!;
+    panelBg: Node = null;
 
     @property({ type: Node, tooltip: 'TitleImage：标题图（FGUI n2，延迟 3 帧弹入）' })
-    titleImage: Node = null!;
+    titleImage: Node = null;
 
     @property({ type: ShowRewardGrid, tooltip: 'RewardGrid：奖励网格（FGUI list，视口 468×330）' })
-    grid: ShowRewardGrid = null!;
+    grid: ShowRewardGrid = null;
 
     @property({ type: Node, tooltip: 'HintBg：底部提示条底（FGUI n10，延迟 4 帧显示）' })
-    hintBg: Node = null!;
+    hintBg: Node = null;
 
     @property({ type: Label, tooltip: 'HintLabel：底部提示文案（FGUI n11）' })
-    hintLabel: Label = null!;
+    hintLabel: Label = null;
 
     /** 本次奖励（已排序）。 */
     private entries: IRewardEntry[] = [];

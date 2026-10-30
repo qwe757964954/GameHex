@@ -37,6 +37,7 @@ import {
 import type { IMainTaskRow, IMainTaskState } from '../assets/script/app/maintask/MainTaskTable';
 import { GET_HERO_TEXTS, MAIN_TASK_TEXTS } from '../assets/script/app/maintask/MainTaskTexts';
 import { MT_ART_NAMES, MT_ART_SLICED, MT_ART_TILED } from '../assets/script/app/maintask/MainTaskArt';
+import { assetExists, assetPath } from './helpers/asset-paths';
 
 // ============================================================
 // 公共小工具
@@ -46,10 +47,9 @@ import { MT_ART_NAMES, MT_ART_SLICED, MT_ART_TILED } from '../assets/script/app/
 const CANVAS_W = 720;
 const CANVAS_H = 1280;
 
-const IMAGE_ROOT = 'assets/resources/image';
-const DETAIL_PREFAB = 'assets/resources/ui/MainTask/MainTaskDetail.prefab';
-const ENTRY_PREFAB = 'assets/resources/ui/MainTask/MainTaskEntry.prefab';
-const ARENA_PREFAB = 'assets/resources/ui/main/ArenaRoot.prefab';
+const DETAIL_PREFAB = assetPath('ui/MainTask/MainTaskDetail.prefab');
+const ENTRY_PREFAB = assetPath('ui/MainTask/MainTaskEntry.prefab');
+const ARENA_PREFAB = assetPath('ui/main/ArenaRoot.prefab');
 
 const DETAIL_SRC = readFileSync('assets/script/app/maintask/MainTaskDetailPage.ts', 'utf8');
 const ENTRY_SRC = readFileSync('assets/script/app/maintask/MainTaskEntry.ts', 'utf8');
@@ -406,7 +406,7 @@ test('C1 MT_ART_NAMES 每个 key 都在磁盘上（相对 assets/resources/image
     assert.ok(keys.length >= 12, `至少要 12 个 key（详情 5 + 入口 3 + 10级领取 4）实际 ${keys.length}`);
     const missing: string[] = [];
     for (const [key, rel] of Object.entries(MT_ART_NAMES)) {
-        if (!existsSync(`${IMAGE_ROOT}/${rel}.png`)) missing.push(`${key} → ${rel}.png`);
+        if (!existsSync(assetPath(`image/${rel}.png`))) missing.push(`${key} → ${rel}.png`);
     }
     assert.deepEqual(missing, [], `缺图（静默留白）：\n  ${missing.join('\n  ')}`);
 });
@@ -425,7 +425,7 @@ test('C2 MT_ART_NAMES 的路径两两不同（同图必须指同一个 key，别
 test('C3 MT_ART_SLICED ↔ `.meta` border 双向对账（在名单里 ⇔ border 有非 0）', () => {
     const bad: string[] = [];
     for (const [key, rel] of Object.entries(MT_ART_NAMES)) {
-        const metaPath = `${IMAGE_ROOT}/${rel}.png.meta`;
+        const metaPath = assetPath(`image/${rel}.png.meta`);
         if (!existsSync(metaPath)) {
             bad.push(`${key}：没有 .meta（${metaPath}）`);
             continue;
@@ -711,7 +711,7 @@ test('E1 详情弹窗的 prefabPath 与磁盘目录逐字一致（大小写敏�
     const m = DETAIL_SRC.match(/static\s+prefabPath\s*=\s*'([^']+)'/);
     assert.ok(m, 'MainTaskDetailPage 里没有 static prefabPath');
     assert.equal(m![1], 'ui/MainTask/MainTaskDetail');
-    assert.ok(existsSync('assets/resources/ui/MainTask/MainTaskDetail.prefab'),
+    assert.ok(assetExists('ui/MainTask/MainTaskDetail.prefab'),
         'prefabPath 指向的文件不存在（真机 resources.load 失败 ⇒ 空弹窗）');
 });
 
@@ -895,7 +895,7 @@ test('G2 MainTaskEntry 实例是 ArenaRoot 的**直接子节点**，位置覆写
 /** 子节点标签 —— 嵌套实例的根在**父 prefab** 里没有 `_name`（名字来自源 prefab），得靠 uuid 认。 */
 const NESTED_LABEL = new Map<string, string>([
     [ARENA_UUID, 'MainTaskEntry'],
-    [prefabUuid('assets/resources/ui/MainTask/GetHeroEntry.prefab'), 'GetHeroEntry'],
+    [prefabUuid(assetPath('ui/MainTask/GetHeroEntry.prefab')), 'GetHeroEntry'],
 ]);
 
 function childLabel(nodeId: number): string {
@@ -950,7 +950,7 @@ test('G5 实例侧不许有 `mountedComponents` / `mountedChildren`（否则嵌�
 });
 
 test('G6 MainTaskEntry 紧贴 GetHeroEntry 上方 10px（同列 HUD 堆叠）', () => {
-    const heroUuid = prefabUuid('assets/resources/ui/MainTask/GetHeroEntry.prefab');
+    const heroUuid = prefabUuid(assetPath('ui/MainTask/GetHeroEntry.prefab'));
     const heroFound = nestedInstanceOf(arena, heroUuid);
     const mainFound = nestedInstanceOf(arena, ARENA_UUID);
     assert.ok(heroFound && mainFound, '两个入口的嵌套实例都要在');
@@ -964,7 +964,7 @@ test('G6 MainTaskEntry 紧贴 GetHeroEntry 上方 10px（同列 HUD 堆叠）', 
 });
 
 test('G7 GetHeroEntry（上一轮）的 Widget 也还好好的（没被生成器重跑抹掉）', () => {
-    const heroPrefab = loadPrefab('assets/resources/ui/MainTask/GetHeroEntry.prefab');
+    const heroPrefab = loadPrefab(assetPath('ui/MainTask/GetHeroEntry.prefab'));
     const widget = compOf(heroPrefab, 1, 'cc.Widget');
     assert.ok(widget, 'GetHeroEntry.prefab 根上的 cc.Widget 丢了');
     assert.equal(widget._alignFlags, 36);

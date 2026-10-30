@@ -7,10 +7,10 @@ const { ccclass, property } = _decorator;
 @ccclass('CardLineupBond')
 export class CardLineupBond extends Component {
     @property({ type: Sprite, tooltip: 'Icon：职业 / 阵营图标' })
-    icon: Sprite = null!;
+    icon: Sprite = null;
 
     @property({ type: Label, tooltip: 'CountLabel：卡数' })
-    countLabel: Label = null!;
+    countLabel: Label = null;
 
     /**
      * @param item null = 数字清 0

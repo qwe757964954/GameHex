@@ -109,6 +109,7 @@ import {
     emojiRichSrc,
 } from '../assets/script/app/chat/ChatArt';
 import { channelTitle, CHAT_TEXTS, CHAT_TITLE, formatText } from '../assets/script/app/chat/ChatTexts';
+import { assetExists, assetPath } from './helpers/asset-paths';
 
 // ============================================================
 // 夹具
@@ -465,7 +466,7 @@ test('A22 战区消息统一换系统头像（老端 `headIcon = 70003`）', () 
 // B. 资源口径
 // ============================================================
 
-const ART_DIR = 'assets/resources/image/chat';
+const ART_DIR = assetPath('image/chat');
 
 /** `ChatArt` 里 chat 自有（`ct_`）的 8 个单图名（emoji 另有 44 张）。 */
 const CHAT_OWN_ART: readonly string[] = [
@@ -509,7 +510,7 @@ test('B2 ⚠️ 九宫格 **9 项**：边框必须落在 `.png.meta`，且中心
     const failures: string[] = [];
     for (const name of CHAT_ART_SLICED) {
         const dir = `${ART_DIR}/../../${CHAT_ART_DIRS[name]}`.replace(/\/[^/]+\/\.\.\//, '/');
-        const metaPath = `assets/resources/${CHAT_ART_DIRS[name]}/${name}.png.meta`;
+        const metaPath = assetPath(`${CHAT_ART_DIRS[name]}/${name}.png.meta`);
         assert.ok(existsSync(metaPath), `CHAT_ART_DIRS 指错了：${name} → ${metaPath}（${dir}）`);
         const meta = JSON.parse(readFileSync(metaPath, 'utf8')) as {
             subMetas: Record<string, { userData: Record<string, unknown> }>;
@@ -568,7 +569,7 @@ test('B5 复用的外模块图：目录 + 图名都在磁盘上（引错目录 =
     const failures: string[] = [];
     for (const [root, name] of SHARED) {
         const rel = `${root}/${name}.png`;
-        if (!existsSync(`assets/resources/${rel}`)) failures.push(`assets/resources/${rel} 不存在`);
+        if (!existsSync(assetPath(`${rel}`))) failures.push(assetPath(`${rel} 不存在`));
     }
     assert.deepEqual(failures, [], failures.join('\n'));
     // 送花按钮跨模块复用 `image/friend`（与头像框同目录）
@@ -585,7 +586,7 @@ test('B6 `chatTint`：灰度用 tint 近似（Cocos 无内置灰度滤镜，口�
 test('B7 主界面旧聊天浮钮与专用图片已移除', () => {
     assert.equal(existsSync(`${ART_DIR}/ct_main_chat.png`), false);
     assert.equal(existsSync(`${ART_DIR}/ct_main_chat.png.meta`), false);
-    const mainRoot = JSON.parse(readFileSync('assets/resources/ui/main/ArenaRoot.prefab', 'utf8')) as Record<string, unknown>[];
+    const mainRoot = JSON.parse(readFileSync(assetPath('ui/main/ArenaRoot.prefab'), 'utf8')) as Record<string, unknown>[];
     assert.ok(!mainRoot.some((entry) => entry.__type__ === 'cc.Node' && entry._name === 'ChatEntry'));
 });
 
@@ -593,7 +594,7 @@ test('B7 主界面旧聊天浮钮与专用图片已移除', () => {
 // C. prefab 结构 + 几何
 // ============================================================
 
-const PREFAB = 'assets/resources/ui/Chat/Chat.prefab';
+const PREFAB = assetPath('ui/Chat/Chat.prefab');
 const ALL = JSON.parse(readFileSync(PREFAB, 'utf8')) as Record<string, unknown>[];
 
 /** 编辑器压缩 uuid：前 5 个 hex 原样 + 其余 27 个 hex 每 3 个编 2 个 base64 字符 = 23 位。 */
@@ -959,7 +960,7 @@ test('C7 根节点子序 = 渲染序：底板在前、Mask 与两个弹窗在最
 test('C8 ⚠️ 九宫格：`_type` 必须是 1(SLICED)，非九宫给 0，且 `_sizeMode` 恒为 0(CUSTOM)', () => {
     const slicedUuids = new Map<string, string>();
     for (const name of CHAT_ART_SLICED) {
-        const meta = JSON.parse(readFileSync(`assets/resources/${CHAT_ART_DIRS[name]}/${name}.png.meta`, 'utf8')) as { uuid: string };
+        const meta = JSON.parse(readFileSync(assetPath(`${CHAT_ART_DIRS[name]}/${name}.png.meta`), 'utf8')) as { uuid: string };
         slicedUuids.set(meta.uuid, name);
     }
     assert.equal(slicedUuids.size, 9, '9 张九宫格图的 png uuid 不能重复');
@@ -1132,8 +1133,8 @@ const OPEN_TABLE = 'assets/remoteRef/open.json';
 
 test('D1 页面 `prefabPath` 大小写正确（真机区分大小写，写错就是黑屏）', () => {
     assert.ok(PAGE_CODE.includes(`static prefabPath = 'ui/Chat/Chat'`), "prefabPath 必须是 'ui/Chat/Chat'");
-    assert.ok(existsSync('assets/resources/ui/Chat/Chat.prefab'), '磁盘上没有 assets/resources/ui/Chat/Chat.prefab');
-    assert.ok(existsSync('assets/resources/ui/Chat/Chat.prefab.meta'), '缺 Chat.prefab.meta（不会被编辑器导入）');
+    assert.ok(assetExists('ui/Chat/Chat.prefab'), '磁盘上没有 assets/resources/ui/Chat/Chat.prefab');
+    assert.ok(assetExists('ui/Chat/Chat.prefab.meta'), '缺 Chat.prefab.meta（不会被编辑器导入）');
 });
 
 test('D2 ⚠️ 三张缓存都走 `CacheMgr`（服务端会推），**不自己存快照**', () => {
@@ -1267,7 +1268,7 @@ test('D11 ⚠️ 主界面入口按钮：点开 `ChatPage`，红点占位但**�
     // 红点在 prefab 里必须是隐藏的（本轮不接数据源）
     const redDot = ALL.find((e) => e && e.__type__ === 'cc.Node' && e._name === 'RedDot') as { _active: boolean } | undefined;
     assert.ok(!redDot, '红点占位只在 ArenaRoot 的 ChatEntry 里；Chat.prefab 里若也有同名节点说明重复落了一份');
-    const main = JSON.parse(readFileSync('assets/resources/ui/main/ArenaRoot.prefab', 'utf8')) as Record<string, unknown>[];
+    const main = JSON.parse(readFileSync(assetPath('ui/main/ArenaRoot.prefab'), 'utf8')) as Record<string, unknown>[];
     const mainRedDot = main.find((e) => e && e.__type__ === 'cc.Node' && e._name === 'RedDot') as { _active: boolean } | undefined;
     assert.ok(mainRedDot, 'ArenaRoot 里必须有 RedDot 占位节点');
     assert.equal(mainRedDot!._active, false, '红点本轮不接 ⇒ 必须保持隐藏');

@@ -9,6 +9,7 @@ import {
     TerritoryNpcTeamRow,
     TerritoryResourceRow,
     readTerritoryIdleRewardMaxHours,
+    readTerritoryLevelAutoStart,
 } from './TerritoryCampaignConfig';
 
 /** 把 RefUtil 返回的 unknown[] 收成强类型行表；表名对不上时给空数组而不是崩。 */
@@ -21,6 +22,8 @@ export async function loadTerritoryCampaign(chapterId: number): Promise<{
     stages: TerritoryCampaignStage[];
     playerCardCount: number;
     idleRewardMaxHours: number;
+    /** `gameConfig.chapterLevelAutoStartConfig`：首次激活关卡地块是否自动进战斗。 */
+    levelAutoStart: boolean;
 }> {
     const [levels, monsters, teams, cards, defenceWaves, items, roleProperties, gameConfig] = await Promise.all([
         RefUtil.instance.getRefAllAsync('levelInfo'),
@@ -44,5 +47,6 @@ export async function loadTerritoryCampaign(chapterId: number): Promise<{
             resourceRows,
         ),
         idleRewardMaxHours: readTerritoryIdleRewardMaxHours(asRows<TerritoryGameConfigRow>(gameConfig)),
+        levelAutoStart: readTerritoryLevelAutoStart(asRows<TerritoryGameConfigRow>(gameConfig)),
     };
 }

@@ -44,6 +44,30 @@ test('扫场借用视图索引，支持初始化后填表和实体 0，返回变
     assert.equal(views.size, 1);
 });
 
+test('扫场原样使用传进来的胜方席位（4 号紫方也要铺紫，不许折成玩家 / 敌人两档）', () => {
+    const { load } = loadViews();
+    const { ZCVictorySweep } = load('./ZCVictorySweep');
+    const view = {
+        owner: null as string | null,
+        mix: 0,
+        setSweepOwner(owner: string | null, mix = 0): void {
+            this.owner = owner;
+            this.mix = mix;
+        },
+    };
+    // 实体的号从 0 开始：0 号格子也要染（写成 falsy 判断就会漏）。
+    const sweep = new ZCVictorySweep(new Map([[0, view]]), new Map([[7, 0]]));
+    const map = [{ id: 7, row: 1, x: 0, playable: true }];
+
+    assert.equal(sweep.start(map, 'enemy3'), true);
+    sweep.advance(0);
+    assert.equal(view.owner, 'enemy3', '胜方是 4 号席就必须原样传下去');
+    // 铺到顶就回正到该阵营的当前色（`mix = 1`），仍是同一个 owner。
+    sweep.advance(10);
+    assert.equal(view.owner, 'enemy3');
+    assert.equal(view.mix, 1, '回正到 1 时用的是该阵营当前色，不是深饱和色');
+});
+
 test('扩散波借用视图索引，完成或中止后清除覆盖', () => {
     const { load } = loadViews();
     const { ZCClaimWave } = load('./ZCClaimWave');

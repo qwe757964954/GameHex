@@ -86,35 +86,32 @@ export class LeagueDonatePage extends PopupBase {
     static prefabPath = 'ui/League/LeagueDonate';
 
     @property({ type: Node, tooltip: 'CloseBtn：右上关闭按钮（挂 cc.Button）' })
-    closeButton: Node = null!;
+    closeButton: Node = null;
 
     @property({ type: LeagueRewardSlot, tooltip: 'ItemCoin/Reward：铜币奖励格' })
-    coinSlot: LeagueRewardSlot = null!;
+    coinSlot: LeagueRewardSlot = null;
 
     @property({ type: Label, tooltip: 'ItemCoin/Name：labName「联盟金币*300」' })
-    coinName: Label = null!;
+    coinName: Label = null;
 
     @property({ type: LeagueRewardSlot, tooltip: 'ItemExp/Reward：贡献奖励格' })
-    expSlot: LeagueRewardSlot = null!;
+    expSlot: LeagueRewardSlot = null;
 
     @property({ type: Label, tooltip: 'ItemExp/Name：labName「联盟贡献*10」' })
-    expName: Label = null!;
+    expName: Label = null;
 
     @property({ type: Label, tooltip: 'LabCount：剩余捐献次数' })
-    countLabel: Label = null!;
+    countLabel: Label = null;
 
     @property({ type: LeagueAdButton, tooltip: 'BtnFree：免费捐献（广告未接入 ⇒ 只提示）' })
-    freeButton: LeagueAdButton = null!;
+    freeButton: LeagueAdButton = null;
 
     @property({ type: LeagueAdButton, tooltip: 'BtnBuy：金币捐献' })
-    buyButton: LeagueAdButton = null!;
+    buyButton: LeagueAdButton = null;
 
     /** 本趟快照。 */
     private snapshot: ILeagueDonateSnapshot | null = null;
     private art: ILeagueRewardArt | null = null;
-
-    /** 按钮只绑一次。 */
-    private buttonsBound = false;
 
     /** 写操作在飞（防连点）。 */
     private busy = false;
@@ -131,11 +128,8 @@ export class LeagueDonatePage extends PopupBase {
         if (button) button.node.on(Button.EventType.CLICK, this.onCloseClick, this);
         else console.warn('[LeagueDonate] CloseBtn 上没有 cc.Button，点击不会生效');
 
-        if (!this.buttonsBound) {
-            this.buttonsBound = true;
-            this.bindClick(this.freeButton, () => void this.donateFree());
-            this.bindClick(this.buyButton, () => void this.donateByCoin());
-        }
+        this.bindClick(this.freeButton, () => void this.donateFree());
+        this.bindClick(this.buyButton, () => void this.donateByCoin());
     }
 
     protected async onOpen(): Promise<void> {

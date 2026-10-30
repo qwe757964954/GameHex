@@ -1,3 +1,4 @@
+import { componentControllerModule } from './helpers/controller-context';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -6,6 +7,7 @@ import ts from 'typescript';
 import type { MainPage } from '../assets/script/app/main/MainPage';
 import * as chestTypes from '../assets/script/app/main/ChestTypes';
 import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
+import { assetPath } from './helpers/asset-paths';
 
 function createHarness() {
     const releasedOwners: object[] = [];
@@ -33,6 +35,7 @@ function createHarness() {
         },
     }).outputText;
     runInNewContext(code, { exports, require: (name: string) => {
+        if (name.endsWith('/ComponentController')) return componentControllerModule();
         if (name === '../net/GameNet') return { GameNet: { instance: { removeCaller: (owner: object) => releasedOwners.push(owner) } } };
         if (name === '../../core/asset/ResourceScope') return { ResourceScope };
         if (name === 'cc') return {
@@ -101,7 +104,7 @@ test('每局返回主城重新加载宝箱列表，数量格不沿用上一局',
 });
 
 test('主城 prefab 的四个数量格和亮灭图片都绑定到 MainPage', () => {
-    const objects = JSON.parse(readFileSync('assets/resources/ui/main/ArenaRoot.prefab', 'utf8')) as Array<Record<string, unknown>>;
+    const objects = JSON.parse(readFileSync(assetPath('ui/main/ArenaRoot.prefab'), 'utf8')) as Array<Record<string, unknown>>;
     const page = objects.find((entry) => 'chestToggle' in entry && 'chestCell0' in entry);
     assert.ok(page);
     for (let index = 0; index < chestTypes.CHEST_SLOT_COUNT; index++) {
@@ -115,7 +118,7 @@ test('主城 prefab 的四个数量格和亮灭图片都绑定到 MainPage', () 
     for (const [property, image] of [
         ['chestCellFilled', 'hud_chest_cell'], ['chestCellEmpty', 'hud_chest_cell_off'],
     ]) {
-        const metadata = JSON.parse(readFileSync(`assets/resources/image/main/hud/${image}.png.meta`, 'utf8'));
+        const metadata = JSON.parse(readFileSync(assetPath(`image/main/hud/${image}.png.meta`), 'utf8'));
         assert.equal((page[property] as { __uuid__: string }).__uuid__, `${metadata.uuid}@f9941`);
     }
 });

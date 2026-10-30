@@ -6,6 +6,7 @@ import { configureZCMap, ZCMapLayout } from '../assets/script/app/zcds/model/ZCM
 import { loadPvpTables, ZCPvpTables } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
 import { captureZCMatchConfig } from '../assets/script/app/zcds/model/ZCMatchConfig';
 import { resolveZCSpawnMatchConfig } from '../assets/script/app/zcds/model/ZCSpawnSelection';
+import { assetPath } from './helpers/asset-paths';
 
 // 复用与 zcds-state-consistency 相同的卡表（assets/remoteRef）。
 const tableNames = [
@@ -20,7 +21,7 @@ const tables = Object.fromEntries(tableNames.map((name) => {
 })) as unknown as ZCPvpTables;
 loadPvpTables(tables);
 
-const layout = JSON.parse(readFileSync('assets/resources/config/maps/select_river.json', 'utf8')) as ZCMapLayout;
+const layout = JSON.parse(readFileSync(assetPath('config/maps/select_river.json'), 'utf8')) as ZCMapLayout;
 configureZCMap(layout);
 const base = captureZCMatchConfig(undefined, { allowUnresolvedSelect: true });
 

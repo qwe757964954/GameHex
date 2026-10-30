@@ -18,6 +18,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { assetPath } from './helpers/asset-paths';
 
 /** 关卡分支的起点（fixedResource 那段源码截取到它为止）。 */
 const STAGE_BRANCH_ANCHOR = '\n        if (site.type === ';
@@ -28,7 +29,7 @@ const STAGE_BRANCH = "site.type === TERRITORY_SITE_TYPE.stage || site.type === T
 const MAP_VIEW_SRC = readFileSync(
     'assets/script/app/territory/view/TerritoryMapView.ts', 'utf8');
 const PRESENTER_SRC = readFileSync(
-    'assets/script/app/territory/application/TerritoryPresenter.ts', 'utf8');
+    'assets/script/app/territory/application/TerritoryModel.ts', 'utf8');
 const CONFIG_SRC = readFileSync(
     'assets/script/app/territory/model/TerritoryMapConfig.ts', 'utf8');
 
@@ -69,7 +70,7 @@ test('★★关卡型站点的 configId 必须都能在 levelInfo 里找到（�
         levelInfo.k.map((key, i) => [key, v[i]]))) as { levelChapter: number; levelId: number }[];
     for (const chapter of [1]) {
         const map = JSON.parse(readFileSync(
-            `assets/resources/config/territory-maps/chapter_0${chapter}.json`, 'utf8')) as {
+            assetPath(`config/territory-maps/chapter_0${chapter}.json`), 'utf8')) as {
                 sites: { cellId: number; type: string; configId?: string }[];
             };
         const levelIds = new Set(rows.filter((r) => r.levelChapter === chapter).map((r) => r.levelId));

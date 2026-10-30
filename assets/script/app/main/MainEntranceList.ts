@@ -1,5 +1,6 @@
-import { _decorator, CCInteger, Component, Node, resources, Sprite, SpriteFrame, UITransform } from 'cc';
-import { ART_ROOT, spriteFramePath } from '../ArtPaths';
+import { _decorator, CCInteger, Component, Node, Sprite, SpriteFrame, UITransform } from 'cc';
+import { ART_ROOT } from '../ArtPaths';
+import { createRoutedSpriteFrameCache } from '../common/SpriteFrameCache';
 import { HeadArt } from '../HeadArt';
 import { IconArtResolver, loadIconByKey } from '../HeadArtModel';
 import { RefUtil } from '../../framework/ref/RefUtil';
@@ -123,18 +124,17 @@ export class MainEntranceList extends Component {
 
         // 订阅 CmdRole 缓存更新：主界面创建早于服务端下发 CmdRole 时，onLoad 这一次
         // 读不到角色会按「未登录」过滤掉所有入口；缓存到达后必须重算一次（对齐 MainResBar）。
-        CacheMgr.instance?.setEventUpdate('CmdRole', this, this.onRoleCacheUpdate);
+        CacheMgr.instance.setEventUpdate('CmdRole', this, this.onRoleCacheUpdate);
         void this.reload();
     }
 
     /** CmdRole 到达 / 升级 / 充值等变化后重算入口可见性。 */
     private onRoleCacheUpdate = (): void => {
-        if (!this.isValid) return;
         void this.reload();
     };
 
     onDestroy(): void {
-        CacheMgr.instance?.removeEventUpdate('CmdRole', this, this.onRoleCacheUpdate);
+        CacheMgr.instance.removeEventUpdate('CmdRole', this, this.onRoleCacheUpdate);
         // 必须解绑：表达式引擎里留着指向本槽位 RedDot 的回调，槽位销毁后再来一次值变化
         // 就会往死对象上写（`RdExprBinding` 头注释里写的第 1 种场合）。顺带把表达式的
         // 引用计数还回去，归零的表达式才会从 `ExprMgr` 里退场。
@@ -163,8 +163,8 @@ export class MainEntranceList extends Component {
 
             // [DEBUG-ENTRANCE] 定位首充入口为何不显示，定位完可删
             const target = openRows.find((r) => r.url === 'LayerFirstRecharge');
-            const blRows = CacheMgr.instance?.getTlCmdBattleLevel() ?? [];
-            const blRow1 = CacheMgr.instance?.getCmdBattleLevel(1);
+            const blRows = CacheMgr.instance.getTlCmdBattleLevel() ?? [];
+            const blRow1 = CacheMgr.instance.getCmdBattleLevel(1);
             console.log('[DEBUG-ENTRANCE] belond=', normalizeBelond(this.belond),
                 'openRows=', openRows.length,
                 'state=', JSON.stringify({
@@ -194,7 +194,7 @@ export class MainEntranceList extends Component {
     private async resolvePlayerState(): Promise<EntrancePlayerState> {
         let role: CmdRole | null = null;
         try {
-            const rows = CacheMgr.instance?.getTlCmdRole() ?? [];
+            const rows = CacheMgr.instance.getTlCmdRole() ?? [];
             role = rows.find((row) => row != null) ?? null;
         } catch (error) {
             console.warn('[MainEntranceList] CmdRole 缓存不可用', error);
@@ -358,8 +358,8 @@ export class MainEntranceList extends Component {
 
         const cls = MainEntranceList.POPUP_CLASSES[key];
         const manager = PopupManager.inst;
-        if (!cls || !manager) {
-            console.error(`[MainEntranceList] 入口 refId=${item.refId} 路由 ${key}，但管理器不可用`);
+        if (!cls) {
+            console.error(`[MainEntranceList] 入口 refId=${item.refId} 路由 ${key}，但没有配置弹窗类`);
             return;
         }
         const popup = await manager.openAsync(cls);
@@ -374,7 +374,7 @@ export class MainEntranceList extends Component {
 /** 某关是否已通关：CmdBattleLevel.star >= 1。 */
 function isLevelPassed(level: number): boolean {
     try {
-        const row = CacheMgr.instance?.getCmdBattleLevel(level);
+        const row = CacheMgr.instance.getCmdBattleLevel(level);
         return row != null && toCount(row.star) >= 1;
     } catch (error) {
         console.warn('[MainEntranceList] 读 CmdBattleLevel 失败', error);
@@ -440,24 +440,8 @@ function buildEntranceRdExprs(rows: readonly OpenRowLike[]): ReadonlyMap<number,
     return out;
 }
 
-const entranceCache = new Map<string, SpriteFrame>();
+const entranceCache = createRoutedSpriteFrameCache('MainEntranceList');
 
-/** 加载入口图标，带缓存，frame 自己 addRef。不 reject，失败返回 null。 */
 function loadEntranceSprite(name: string, root: string = ENTRANCE_ART_ROOT): Promise<SpriteFrame | null> {
-    if (!name || !root) return Promise.resolve(null);
-    const key = `${root}/${name}`;
-    const cached = entranceCache.get(key);
-    if (cached) return Promise.resolve(cached);
-    return new Promise<SpriteFrame | null>((resolve) => {
-        resources.load(spriteFramePath(root, name), SpriteFrame, (error, frame) => {
-            if (error || !frame) {
-                console.warn(`[MainEntranceList] 入口图加载失败：${key}`, error);
-                resolve(null);
-                return;
-            }
-            frame.addRef();
-            entranceCache.set(key, frame);
-            resolve(frame);
-        });
-    });
+    return entranceCache.loadNamed(name, root);
 }

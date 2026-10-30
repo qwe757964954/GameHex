@@ -5,6 +5,7 @@ import { configureZCMap } from '../assets/script/app/zcds/model/ZCMapConfig';
 import { loadPvpTables, type ZCPvpTables } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
 import { compileZCCombatBuild, getZCModifierCatalogs, selectZCSkillPlans } from '../assets/script/app/zcds/model/ZCModifierRuntime';
 import { captureZCMatchConfig } from '../assets/script/app/zcds/model/ZCMatchConfig';
+import { assetPath } from './helpers/asset-paths';
 
 function readRows(name: string): Array<Record<string, unknown>> {
     const source = JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8')) as
@@ -22,7 +23,7 @@ function prepare() {
         'pvpUnitGrowth', 'pvpSkillBinding', 'pvpStatus', 'pvpSkillPlan',
     ];
     loadPvpTables(Object.fromEntries(names.map((name) => [name, readRows(name)])) as unknown as ZCPvpTables);
-    configureZCMap(JSON.parse(readFileSync('assets/resources/config/maps/standard.json', 'utf8')));
+    configureZCMap(JSON.parse(readFileSync(assetPath('config/maps/standard.json'), 'utf8')));
     return captureZCMatchConfig();
 }
 

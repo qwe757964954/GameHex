@@ -22,11 +22,12 @@ import {
     territoryChestPlacement,
 } from '../assets/script/app/territory/model/TerritoryChestAnimation';
 import { readPngAlphaBox } from './helpers/png-alpha';
+import { assetPath } from './helpers/asset-paths';
 
-const CHEST_DIR = 'assets/resources/image/territory/chest';
+const CHEST_DIR = assetPath('image/territory/chest');
 const FRAME_FILES = Array.from({ length: TERRITORY_CHEST_OPEN_FRAMES }, (_, i) => `${CHEST_DIR}/chest_seq_${i}.png`);
 /** 地图上静止宝箱用的那张图（`fixedResource` 据点）。 */
-const STATIC_CHEST_FILE = 'assets/resources/image/territory/buildings/territory_fixed_resource_v1.png';
+const STATIC_CHEST_FILE = assetPath('image/territory/buildings/territory_fixed_resource_v1.png');
 
 const VIEW_SRC = readFileSync('assets/script/app/territory/view/TerritoryChestView.ts', 'utf8');
 const STATION_SRC = readFileSync('assets/script/app/territory/view/TerritoryStationView.ts', 'utf8');

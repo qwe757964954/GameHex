@@ -49,57 +49,57 @@ export class PlayerInfoPage extends PopupBase {
 
     // ---------- 弹窗框 ----------
     @property({ type: Node, tooltip: 'PopBg/CloseBtn：关闭按钮（挂 cc.Button）' })
-    closeButton: Node = null!;
+    closeButton: Node = null;
 
     // ---------- 头像区 ----------
     @property({ type: Sprite, tooltip: 'HeadBox/HeadIcon：头像图（90×90）' })
-    headIcon: Sprite = null!;
+    headIcon: Sprite = null;
 
     @property({ type: Node, tooltip: 'ChangeHeadBtn：「更换头像」按钮' })
-    changeHeadButton: Node = null!;
+    changeHeadButton: Node = null;
 
     @property({ type: Node, tooltip: 'ChangeHeadBtn/RedDot：新头像红点（本工程恒隐藏，见文件头 ②）' })
-    changeHeadDot: Node = null!;
+    changeHeadDot: Node = null;
 
     @property({ type: Node, tooltip: 'SettingBtn：「设置」按钮' })
-    settingButton: Node = null!;
+    settingButton: Node = null;
 
     // ---------- 名字区 ----------
     @property({ type: Label, tooltip: 'NameLabel：玩家名（`text_name`）' })
-    nameLabel: Label = null!;
+    nameLabel: Label = null;
 
     @property({ type: Node, tooltip: 'RenameBtn：改名铅笔（`btn_rename`）' })
-    renameButton: Node = null!;
+    renameButton: Node = null;
 
     // ---------- 数值区 ----------
     @property({ type: Label, tooltip: 'LevelLabel：等级（`text_level`）' })
-    levelLabel: Label = null!;
+    levelLabel: Label = null;
 
     @property({ type: Node, tooltip: 'ExpBar/ExpBg：经验条底（满宽，用来取宽度上限）' })
-    expBg: Node = null!;
+    expBg: Node = null;
 
     @property({ type: Node, tooltip: 'ExpBar/ExpFill：经验条填充（锚点 (0,1)，只改宽度）' })
-    expFill: Node = null!;
+    expFill: Node = null;
 
     @property({ type: Label, tooltip: 'ExpBar/ExpLabel：经验数值（老端漏写，本工程补上 `当前/上限`）' })
-    expLabel: Label = null!;
+    expLabel: Label = null;
 
     @property({ type: Label, tooltip: 'UidLabel：玩家 ID（`text_uid`）' })
-    uidLabel: Label = null!;
+    uidLabel: Label = null;
 
     @property({ type: Label, tooltip: 'ServerLabel：区服名（`text_serverid`）' })
-    serverLabel: Label = null!;
+    serverLabel: Label = null;
 
     // ---------- 兑换码 ----------
     @property({ type: EditBox, tooltip: 'RedeemInput/RedeemEditBox：兑换码输入框' })
-    redeemInput: EditBox = null!;
+    redeemInput: EditBox = null;
 
     @property({ type: Node, tooltip: 'RedeemBtn：兑换码「确定」' })
-    redeemButton: Node = null!;
+    redeemButton: Node = null;
 
     // ---------- 底部 ----------
     @property({ type: Node, tooltip: 'LogoutBtn：「切换角色」（本工程只提示，见文件头 ③）' })
-    logoutButton: Node = null!;
+    logoutButton: Node = null;
 
     /** 数据端口；测试 / 探针可替换。 */
     private repo: IPlayerInfoRepository = playerInfoRepository;
@@ -111,8 +111,6 @@ export class PlayerInfoPage extends PopupBase {
     private loadRevision = 0;
     /** 兑换码请求进行中（防连点重复发请求）。 */
     private redeeming = false;
-    /** 改名请求进行中。 */
-    private renaming = false;
 
     // ============================================================
     // 生命周期
@@ -138,7 +136,6 @@ export class PlayerInfoPage extends PopupBase {
         this.snapshot = null;
         this.headFrame = null;
         this.redeeming = false;
-        this.renaming = false;
     }
 
     /** 供测试 / 探针注入替身 Repository。 */

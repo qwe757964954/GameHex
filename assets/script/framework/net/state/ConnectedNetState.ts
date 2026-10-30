@@ -136,8 +136,6 @@ export class ConnectedNetState extends BaseNetState {
                         this.requestMapState.delete(networkRequest)
                         this._tmTryReSend.delete(networkRequest)
                         this.removeAppendData(messageName)
-                        // this.doAppendData(serverCmdData, rspMsgName, messageName)
-                        
                         if (!networkRequest.resolve) {
                             this.error("resolve null, 叫服务器检查,协议可能返回了多次", rspMsgName, clientIndex)
                         } else {
@@ -314,19 +312,6 @@ export class ConnectedNetState extends BaseNetState {
 
     removeAppendData(messageName) {
         this._tmAppendData.remove(messageName);
-    }
-
-    private doAppendData(serverCmdData, rspMsgName: string, messageName?: string) {
-        // 因为加了订阅处理,所有要先处理协议数据再处理附加数据,但处理完增加数据才能回调
-        /**服务端增加了一个后缀为AppendMsg的附加消息类型 */
-        if (serverCmdData.splits.length > 1) {
-            let item;
-            let _length = serverCmdData.splits.length;
-            for (let i = 1, len = _length; i < len; i++) {
-                item = serverCmdData.data.subarray(0, serverCmdData.splits[i])
-                AppendMessage.handler(item, rspMsgName, messageName);
-            }
-        }
     }
 
     /**清理发送数据 */

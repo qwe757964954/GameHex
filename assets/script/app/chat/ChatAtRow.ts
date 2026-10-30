@@ -26,16 +26,16 @@ const { ccclass, property } = _decorator;
 @ccclass('ChatAtRow')
 export class ChatAtRow extends Component {
     @property({ type: Sprite, tooltip: 'Bg：底框（fd_row_bg，九宫格）' })
-    background: Sprite = null!;
+    background: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'Head/Icon：头像（运行时按 img 加载）' })
-    headIcon: Sprite = null!;
+    headIcon: Sprite = null;
 
     @property({ type: Label, tooltip: 'Name：玩家名' })
-    nameLabel: Label = null!;
+    nameLabel: Label = null;
 
     @property({ type: Label, tooltip: 'Server：区服名' })
-    serverLabel: Label = null!;
+    serverLabel: Label = null;
 
     /** 由宿主在每次铺行时重设（见 `ChatRecruitRow` 的同款说明）。 */
     onPick: (() => void) | null = null;

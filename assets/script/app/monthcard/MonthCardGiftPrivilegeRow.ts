@@ -6,10 +6,10 @@ const { ccclass, property } = _decorator;
 @ccclass('MonthCardGiftPrivilegeRow')
 export class MonthCardGiftPrivilegeRow extends Component {
     @property({ type: Sprite, tooltip: 'Dot：行首的点' })
-    dot: Sprite = null!;
+    dot: Sprite = null;
 
     @property({ type: Label, tooltip: 'Label：特权描述' })
-    label: Label = null!;
+    label: Label = null;
 
     /** @param dotFrame null = 保留 prefab 静态点。 */
     render(dotFrame: SpriteFrame | null, text: string): void {

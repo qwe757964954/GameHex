@@ -1,3 +1,4 @@
+import { requireChild } from '../../framework/ui/RequireComponent';
 import { _decorator, Button, Color, Label, Node, SpriteFrame } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { loadArt, loadFrameArt } from '../card/CardLineupIcons';
@@ -12,7 +13,6 @@ import {
 import { giftRepository } from './GiftRepository';
 import type { IGiftRepository, IGiftSnapshot } from './GiftRepository';
 import { GiftLingYuView } from './GiftLingYuView';
-import type { IGiftLingYuCardView } from './GiftLingYuView';
 import type { IGiftShopRowView } from './GiftShopRow';
 import { GiftSpecialView } from './GiftSpecialView';
 import type { IGiftSubTabFrames } from './GiftSpecialView';
@@ -35,10 +35,7 @@ import {
     giftShopStateOf,
     limitTextOf,
     listGiftOfType,
-    listLingYuCards,
     listSubTabs,
-    payCoinText,
-    payPriceText,
     sortGiftRows,
 } from './GiftTable';
 import type { IGiftShopRow } from './GiftTable';
@@ -89,25 +86,25 @@ export class GiftPage extends PopupBase {
     static prefabPath = 'ui/Gift/Gift';
 
     @property({ type: Node, tooltip: 'BackBtn：左下返回按钮（挂 cc.Button）' })
-    backButton: Node = null!;
+    backButton: Node = null;
 
     @property({ type: Node, tooltip: 'TabBar：底部大页签栏（挂 2 个 GiftTabButton）' })
-    tabBar: Node = null!;
+    tabBar: Node = null;
 
     @property({ type: Node, tooltip: 'PageRoot：页面容器（下挂 SpecialPage / LingYuPage，同一时刻只开一个）' })
-    pageRoot: Node = null!;
+    pageRoot: Node = null;
 
     @property({ type: GiftSpecialView, tooltip: 'PageRoot/SpecialPage：超值礼包页' })
-    specialView: GiftSpecialView = null!;
+    specialView: GiftSpecialView = null;
 
     @property({ type: Node, tooltip: 'PageRoot/RechargeTotalPage：累计充值页' })
-    totalViewNode: Node = null!;
+    totalViewNode: Node = null;
 
     @property({ type: Node, tooltip: 'PageRoot/DailyPage：每日充值页' })
-    dailyViewNode: Node = null!;
+    dailyViewNode: Node = null;
 
     @property({ type: Label, tooltip: 'Hint：提示行（空配置 / 离线 / 操作失败 / 购买成功）' })
-    hintLabel: Label = null!;
+    hintLabel: Label = null;
 
     /** 数据端口；测试可替换。 */
     private repo: IGiftRepository = giftRepository;
@@ -154,11 +151,6 @@ export class GiftPage extends PopupBase {
 
     /** 确认**没有图**的 `resId`（负缓存，避免每次刷新都重试）。 */
     private readonly missingIcons = new Set<number>();
-
-    /** 灵玉页购买按钮底图（`gf_btn_lingyu`，固定一张）。 */
-    private lingYuButtonFrame: SpriteFrame | null = null;
-
-    private lingYuButtonTried = false;
 
     // ============================================================
     // 生命周期
@@ -291,8 +283,6 @@ export class GiftPage extends PopupBase {
         // ⚠️ 必须**额外带上货币档 `GIFT_CURRENCY_RES_ID`**：购买按钮左侧那颗图标不在
         //    `row.rewards` 里，只按奖励 resId 预加载会让 `buildRowView` 永远取不到它 ⇒
         //    所有付费按钮静默降级成「60幻灵玉」而不是「60 + 图标」。
-        //    （灵玉页那条路径是单独 `loadIconFrames([GIFT_CURRENCY_RES_ID])` 的，所以没这个问题 ——
-        //      这里漏了，端到端探针逮到的。）
         await this.loadIconFrames(collectGiftRewardResIds(rows).concat(GIFT_CURRENCY_RES_ID));
         if (!this.alive || revision !== this.revision) return;
 
@@ -382,10 +372,10 @@ export class GiftPage extends PopupBase {
      */
     private ensureViews(): void {
         if (!this.totalViewNode && this.pageRoot) {
-            this.totalViewNode = this.pageRoot.getChildByName('RechargeTotalPage')!;
+            this.totalViewNode = this.pageRoot.getChildByName('RechargeTotalPage');
         }
         if (!this.dailyViewNode && this.pageRoot) {
-            this.dailyViewNode = this.pageRoot.getChildByName('DailyPage')!;
+            this.dailyViewNode = this.pageRoot.getChildByName('DailyPage');
         }
         if (!this.totalView && this.totalViewNode) {
             this.totalView = this.totalViewNode.getComponent(RechargeTotalView);
@@ -537,32 +527,6 @@ export class GiftPage extends PopupBase {
     // 灵玉直冲页
     // ============================================================
 
-    private async presentLingYu(snapshot: IGiftSnapshot, revision: number): Promise<void> {
-        const cards = listLingYuCards(snapshot.payChannels, snapshot.paidChannelIds);
-        if (cards.length === 0) {
-            this.totalViewNode.active = false;
-        this.dailyViewNode.active = false;
-            this.setHint(GIFT_TEXTS.empty);
-            return;
-        }
-
-        await this.loadIconFrames([GIFT_CURRENCY_RES_ID]);
-        const buttonFrame = await this.loadLingYuButtonFrame();
-        if (!this.alive || revision !== this.revision) return;
-
-        const iconFrame = this.iconFrames.get(GIFT_CURRENCY_RES_ID) ?? null;
-        const cardViews: IGiftLingYuCardView[] = cards.map((card) => ({
-            id: card.row.id,
-            title: card.row.name,
-            coin: payCoinText(card.row.coin),
-            price: payPriceText(card.row.rmb),
-            firstBuy: card.firstBuy,
-            iconFrame,
-            buttonFrame,
-        }));
-        // 灵玉直冲页已下线
-    }
-
     // ============================================================
     // 交互
     // ============================================================
@@ -690,12 +654,11 @@ export class GiftPage extends PopupBase {
     // 图与文案
     // ============================================================
 
-    /** 固定几张图（品质框 / 子页签 / 灵玉按钮底）；首次之后走缓存。 */
+    /** 固定几张图（品质框 / 子页签）；首次之后走缓存。 */
     private async preloadStaticFrames(): Promise<void> {
         await Promise.all([
             this.loadQualityFrames(),
             this.loadSubTabFrames(),
-            this.loadLingYuButtonFrame(),
         ]);
     }
 
@@ -731,13 +694,6 @@ export class GiftPage extends PopupBase {
         const frames: IGiftSubTabFrames = { off: loaded[0], on: loaded[1], titles };
         this.subTabFrames = frames;
         return frames;
-    }
-
-    private async loadLingYuButtonFrame(): Promise<SpriteFrame | null> {
-        if (this.lingYuButtonTried) return this.lingYuButtonFrame;
-        this.lingYuButtonTried = true;
-        this.lingYuButtonFrame = await this.loadGiftArt('btnLingYu');
-        return this.lingYuButtonFrame;
     }
 
     /**

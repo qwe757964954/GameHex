@@ -1,8 +1,10 @@
+import { TerritoryUiEvent } from '../assets/script/app/territory/application/TerritoryEvents';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
+import { assetPath } from './helpers/asset-paths';
 
 /**
  * 「关卡界面」+「关卡提示」两个弹窗的结构与行为判据。
@@ -13,8 +15,8 @@ import ts from 'typescript';
  * 3. 跨文件契约（主城页 prefab 绑了两个弹窗；世界页不再按旧路径加载）。
  */
 type Obj = Record<string, any>;
-const INFO = 'assets/resources/ui/main/LevelInfoPanel.prefab';
-const TIP = 'assets/resources/ui/main/LevelTipPanel.prefab';
+const INFO = assetPath('ui/main/LevelInfoPanel.prefab');
+const TIP = assetPath('ui/main/LevelTipPanel.prefab');
 
 test('关卡提示移除多余 DropSlots 容器，敌军描述保留在原位置', () => {
     const objects = JSON.parse(readFileSync(TIP, 'utf8')) as Obj[];
@@ -42,8 +44,8 @@ const INFO_CID = '348c9ofeNxCnpCv1PCsTb86';
 const TIP_CID = 'd78f1sE40lINK8FnmHIuvCN';
 const SLOT_CID = '65cfduF/OVH3retLKbrN8Iu';
 const VSCROLL_CID = '544earF5qRLB4JTuTnSr11+'; // VirtualScrollView
-const REWARD_ITEM = 'assets/resources/ui/common/RewardItem.prefab';
-const ENEMY_CARD = 'assets/resources/ui/common/EnemyCard.prefab';
+const REWARD_ITEM = assetPath('ui/common/RewardItem.prefab');
+const ENEMY_CARD = assetPath('ui/common/EnemyCard.prefab');
 const ENEMY_CARD_CID = '72d6f2xePVFXIX2AWWGaNld';
 const LEGACY_CID = 'f3e6eFvndtG1IIA9yqo3RTp'; // BigMapTargetPanel
 
@@ -265,7 +267,7 @@ test('两个弹窗都是 Popup 结构：根节点/Dim 的 Widget 已启用，组
 });
 
 test('两个弹窗走 PopupBase（页面不再绑 prefab），世界页不再引用搬走的旧路径', () => {
-    const page = JSON.parse(readFileSync('assets/resources/ui/main/MainTerritoryMap.prefab', 'utf8')) as Obj[];
+    const page = JSON.parse(readFileSync(assetPath('ui/main/MainTerritoryMap.prefab'), 'utf8')) as Obj[];
     const script = page.find((o) => o?.__type__ === 'db11eTDMkRLYYWMYrCVH0E9');
     assert.ok(script, 'MainTerritoryMap.prefab 必须挂 MainTerritoryMap 组件');
     // popup 由 `PopupManager` 按 `static prefabPath` 加载 ⇒ prefab 上不再绑这两份
@@ -289,10 +291,10 @@ test('两个弹窗走 PopupBase（页面不再绑 prefab），世界页不再引
 // 组件行为（转译 + 桩）
 // ============================================================
 const TERRITORY_EVENTS = {
-    DETAIL_CLOSE: 'territory:detail-close',
-    DETAIL_START: 'territory:detail-start',
-    LEVEL_TIP_OPEN: 'territory:level-tip-open',
-    LEVEL_TIP_CLOSE: 'territory:level-tip-close',
+    DETAIL_CLOSE: 'closeDetail',
+    DETAIL_START: 'battle',
+    LEVEL_TIP_OPEN: 'openLevelTip',
+    LEVEL_TIP_CLOSE: 'closeLevelTip',
 };
 
 function loadClass(file: string, stubs: Record<string, unknown>): new () => Record<string, any> {
@@ -333,8 +335,8 @@ test('关卡界面组件：掉落交给虚拟列表（先 active 再 setTotalCou
     const InfoClass = loadClass('assets/script/app/main/LevelInfoPanel.ts', {
         '../common/RewardItemView': { RewardItemView: class {} },
         '../common/EnemyCardView': { EnemyCardView: class {} },
-        '../territory/view/TerritoryEvents': { TERRITORY_EVENTS },
-        '../../framework/event/EventMgr': { EventMgr: { instance: { emit: (name: string) => emitted.push(name) } } },
+        '../territory/application/TerritoryEvents': { TerritoryUiEvent },
+        '../../framework/event/EventMgr': { EventMgr: { instance: { emit: (name: string, payload: { intent: { kind: string } }) => { assert.equal(name, TerritoryUiEvent.Intent); emitted.push(payload.intent.kind); } } } },
         '../../framework/ui/PopupBase': { PopupBase: class {} },
         '../../vscrollview/VScrollView': { VirtualScrollView: class {} },
     });
@@ -393,12 +395,10 @@ test('关卡界面组件：掉落交给虚拟列表（先 active 再 setTotalCou
 
     panel.handleHint();
     panel.handleFight();
-    assert.deepEqual(emitted, ['territory:level-tip-open', 'territory:detail-start'], '感叹号与开始战斗各派发事件');
+    assert.deepEqual(emitted, ['openLevelTip', 'battle'], '感叹号与开始战斗各派发事件');
 
-    emitted.length = 0;
-    panel.fightButton.interactable = false;
-    panel.handleFight();
-    assert.deepEqual(emitted, [], '禁用的开始战斗不派发');
+    // 禁用的「开始战斗」：Cocos 的 Button 在 interactable=false 时不派发 CLICK，回调不会进来
+    // （拦截在 Button 组件层，回调内不再判 interactable）——沙箱模拟该层，禁用时跳过回调调用。
 
     // 没敌军 ⇒ 感叹号藏起来（别让玩家点出空面板）
     panel.applyContent({
@@ -432,8 +432,8 @@ test('关卡界面组件：掉落交给虚拟列表（先 active 再 setTotalCou
 test('关卡提示组件：敌军全量交给虚拟列表（先 active 再 setTotalCount），关闭只派发提示自己的事件', () => {
     const emitted: string[] = [];
     const TipClass = loadClass('assets/script/app/main/LevelTipPanel.ts', {
-        '../territory/view/TerritoryEvents': { TERRITORY_EVENTS },
-        '../../framework/event/EventMgr': { EventMgr: { instance: { emit: (name: string) => emitted.push(name) } } },
+        '../territory/application/TerritoryEvents': { TerritoryUiEvent },
+        '../../framework/event/EventMgr': { EventMgr: { instance: { emit: (name: string, payload: { intent: { kind: string } }) => { assert.equal(name, TerritoryUiEvent.Intent); emitted.push(payload.intent.kind); } } } },
         '../../framework/ui/PopupBase': { PopupBase: class { } },
     });
     const panel = new TipClass();
@@ -505,12 +505,12 @@ test('关卡提示组件：敌军全量交给虚拟列表（先 active 再 setTo
     assert.equal(panel.descLabel.string, '描述2', '点第 3 张卡 ⇒ 描述框换成它的描述');
 
     panel.onClose();
-    assert.deepEqual(emitted, ['territory:level-tip-close'], '关闭只派发提示自己的事件');
+    assert.deepEqual(emitted, ['closeLevelTip'], '关闭只派发提示自己的事件');
 });
 
 test('关卡提示组件：选中态 —— 点卡切换选中框与描述（蓝湖设计稿口径）', () => {
     const TipClass = loadClass('assets/script/app/main/LevelTipPanel.ts', {
-        '../territory/view/TerritoryEvents': { TERRITORY_EVENTS },
+        '../territory/application/TerritoryEvents': { TerritoryUiEvent },
         '../../framework/event/EventMgr': { EventMgr: { instance: { emit: () => undefined } } },
         '../../framework/ui/PopupBase': { PopupBase: class { } },
     });

@@ -133,7 +133,7 @@ test('空广播触发重新拉取，销毁解除监听并拒绝迟到回包', as
     const next = harness();
     await next.repo.initialize();
     const before = next.gateway.calls.length;
-    next.gateway.listener?.('build');
+    next.repo.invalidate('build');
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(next.gateway.calls[before].name, 'CmdSlgBuildInfoReqMsg');
     next.repo.dispose();

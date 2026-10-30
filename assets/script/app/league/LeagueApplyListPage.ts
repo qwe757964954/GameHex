@@ -58,28 +58,22 @@ export class LeagueApplyListPage extends PopupBase {
     static prefabPath = 'ui/League/LeagueApplyList';
 
     @property({ type: Node, tooltip: 'CloseBtn：右上关闭按钮（挂 cc.Button）' })
-    closeButton: Node = null!;
+    closeButton: Node = null;
 
     @property({ type: VirtualScrollView, tooltip: 'ApplyListView：申请列表（虚拟列表 + Mask）' })
-    applyList: VirtualScrollView = null!;
+    applyList: VirtualScrollView = null;
 
     @property({ type: Node, tooltip: 'BtnAllAgree：全部同意' })
-    allAgreeButton: Node = null!;
+    allAgreeButton: Node = null;
 
     @property({ type: Node, tooltip: 'BtnAllReject：全部拒绝' })
-    allRejectButton: Node = null!;
+    allRejectButton: Node = null;
 
     /** 本趟列表的视图模型（`renderItemFn` 按 index 现取）。 */
     private rows: ILeagueApplyView[] = [];
 
     /** 本次有没有待审批的申请（`canApproveAll` 的入参）。 */
     private pendingCount = 0;
-
-    /** `renderItemFn` 只绑一次（放 `onOpen` 会随每次打开重复叠加）。 */
-    private rendererBound = false;
-
-    /** 按钮只绑一次。 */
-    private buttonsBound = false;
 
     /** 写操作在飞（防连点）。 */
     private busy = false;
@@ -91,21 +85,19 @@ export class LeagueApplyListPage extends PopupBase {
     // 生命周期
     // ============================================================
 
+    /**
+     * 三颗按钮的节点在 `LeagueApplyList.prefab` 上都挂了 `cc.Button` ⇒ 统一监听节点 `CLICK`。
+     *
+     * 不再用「只绑一次」的布尔门闩：`onInit` 每个实例只跑一次（换页复用走 `onOpen`），
+     * 而 `node.on` 的监听随节点销毁一起释放；即便重复订阅，`EventTarget` 也会按
+     * `callback + target` 去重（下面两个 handler 是箭头函数属性，引用稳定）。
+     */
     protected onInit(): void {
-        const button = this.closeButton?.getComponent(Button);
-        if (button) button.node.on(Button.EventType.CLICK, this.onCloseClick, this);
-        else console.warn('[LeagueApplyList] CloseBtn 上没有 cc.Button，点击不会生效');
-
-        if (!this.buttonsBound) {
-            this.buttonsBound = true;
-            this.bindClick(this.allAgreeButton, () => void this.approveAll(true));
-            this.bindClick(this.allRejectButton, () => void this.approveAll(false));
-        }
-
-        if (!this.rendererBound) {
-            this.rendererBound = true;
-            if (this.applyList) this.applyList.renderItemFn = (node, index) => this.renderRow(node, index);
-        }
+        this.closeButton.on(Button.EventType.CLICK, this.onCloseClick, this);
+        this.allAgreeButton.on(Button.EventType.CLICK, this.handleAgreeAll, this);
+        this.allRejectButton.on(Button.EventType.CLICK, this.handleRejectAll, this);
+        // `renderItemFn` 是普通属性赋值（不是事件订阅）⇒ 重复赋同一个函数不会叠加
+        this.applyList.renderItemFn = (node, index) => this.renderRow(node, index);
     }
 
     protected async onOpen(): Promise<void> {
@@ -163,10 +155,8 @@ export class LeagueApplyListPage extends PopupBase {
     }
 
     private present(): void {
-        if (this.applyList) {
-            this.applyList.refreshList(this.rows);
-            this.applyList.scrollToTop(false);
-        }
+        this.applyList.refreshList(this.rows);
+        this.applyList.scrollToTop(false);
     }
 
     /** 虚拟列表的行渲染（槽位会被 clone 复用 ⇒ 回调里按 index **现取**）。 */
@@ -250,16 +240,14 @@ export class LeagueApplyListPage extends PopupBase {
     // 杂项
     // ============================================================
 
-    /** 按名字接按钮；节点有 `cc.Button` 走 CLICK，否则退回 `TOUCH_END`（缺节点只 warn）。 */
-    private bindClick(node: Node | null, handler: () => void): void {
-        if (!node) {
-            console.warn('[LeagueApplyList] 按钮节点缺失，点击不会生效');
-            return;
-        }
-        const button = node.getComponent(Button);
-        if (button) button.node.on(Button.EventType.CLICK, handler, this);
-        else node.on(Node.EventType.TOUCH_END, handler, this);
-    }
+    /** 「全部同意 / 全部拒绝」——箭头函数属性：引用稳定，重复 `on` 会被引擎去重。 */
+    private readonly handleAgreeAll = (): void => {
+        void this.approveAll(true);
+    };
+
+    private readonly handleRejectAll = (): void => {
+        void this.approveAll(false);
+    };
 
     private onCloseClick(): void {
         this.closeByButton();

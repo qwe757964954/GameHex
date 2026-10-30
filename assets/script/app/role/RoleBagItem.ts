@@ -42,37 +42,37 @@ export class RoleBagItem extends Component {
     // ⚠️ prefab 里这两个引用存的是【节点】（QualityFrame / Icon），声明成 `Sprite` 会拿到 cc.Node。
     //    （同 prefab 的 countLabel / rankLabel 存的是组件，所以那两个保持 `Label`。）
     @property({ type: Node, tooltip: 'Frame：品质框节点（QualityFrame，其上挂 cc.Sprite）' })
-    frame: Node = null!;
+    frame: Node = null;
 
     @property({ type: Node, tooltip: 'Icon：物品图标节点（ItemFrame/Icon，其上挂 cc.Sprite）' })
-    icon: Node = null!;
+    icon: Node = null;
 
     /** 缓存：品质框 Sprite（{@link ensureInit} 里取）。 */
-    private frameSprite: Sprite = null!;
+    private frameSprite: Sprite = null;
 
     /** 缓存：物品图标 Sprite。 */
-    private iconSprite: Sprite = null!;
+    private iconSprite: Sprite = null;
 
     /** {@link ensureInit} 是否跑过（幂等标记）。 */
     private inited = false;
 
     @property({ type: Label, tooltip: 'CountLabel：数量文字（宝石/道具，count>1 显示）' })
-    countLabel: Label = null!;
+    countLabel: Label = null;
 
     @property({ type: Label, tooltip: 'RankLabel：品阶文字（装备 {rank}GRADE_RANK，rank>0 显示）' })
-    rankLabel: Label = null!;
+    rankLabel: Label = null;
 
     @property({ type: Node, tooltip: 'Selected：选中高亮节点' })
-    selected: Node = null!;
+    selected: Node = null;
 
     @property({ type: Node, tooltip: 'Equipped：「装备中」横条' })
-    equipped: Node = null!;
+    equipped: Node = null;
 
     @property({ type: Node, tooltip: 'UpMark：更优装备箭头' })
-    upMark: Node = null!;
+    upMark: Node = null;
 
     @property({ type: Node, tooltip: 'RedDot：红点节点' })
-    redDot: Node = null!;
+    redDot: Node = null;
 
     protected onLoad(): void {
         this.ensureInit();

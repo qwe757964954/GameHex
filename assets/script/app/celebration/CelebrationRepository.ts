@@ -171,7 +171,7 @@ async function readRows(table: string): Promise<unknown[]> {
 /** 读 `CmdCelebrationInfo` 全表；拿不到返回空数组。 */
 function readServers(): ICelebrationServerState[] {
     try {
-        return parseServerStates(CacheMgr.instance?.getTlCmdCelebrationInfo() ?? []);
+        return parseServerStates(CacheMgr.instance.getTlCmdCelebrationInfo() ?? []);
     } catch (error) {
         console.warn('[Celebration] 读 CmdCelebrationInfo 缓存失败', error);
         return [];
@@ -181,7 +181,7 @@ function readServers(): ICelebrationServerState[] {
 /** 读 `CmdRankItem` 全表 → `rankType` → 时间窗；拿不到返回空表。 */
 function readRankTimes(): Map<number, ICelebrationRankTime> {
     try {
-        return parseRankTimes(CacheMgr.instance?.getTlCmdRankItem() ?? []);
+        return parseRankTimes(CacheMgr.instance.getTlCmdRankItem() ?? []);
     } catch (error) {
         console.warn('[Celebration] 读 CmdRankItem 缓存失败', error);
         return new Map<number, ICelebrationRankTime>();
@@ -199,7 +199,7 @@ function readRankTimes(): Map<number, ICelebrationRankTime> {
  */
 export function celebrationSelfRoleId(): string {
     try {
-        const rows = CacheMgr.instance?.getTlCmdRole() ?? [];
+        const rows = CacheMgr.instance.getTlCmdRole() ?? [];
         for (const row of rows) {
             if (!row) continue;
             const id = toIdString((row as unknown as Record<string, unknown>).id);

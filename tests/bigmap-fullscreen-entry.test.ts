@@ -1,3 +1,4 @@
+import { componentControllerModule } from './helpers/controller-context';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
@@ -36,6 +37,7 @@ function makeHost() {
     runInNewContext(code, {
         exports: moduleExports, console,
         require: (name: string) => {
+            if (name.endsWith('/ComponentController')) return componentControllerModule();
             if (name === 'cc') return {
                 _decorator: { ccclass: () => (value: unknown) => value, property: () => () => undefined },
                 Component: class {}, Node: class {}, Prefab: class {}, UITransform: class {}, CCInteger: 0,
@@ -47,7 +49,6 @@ function makeHost() {
     });
     const Host = moduleExports.MainTabHost as new () => IMainTabHostHarness;
     const host = new Host();
-    host.configs = {};
     host.currentTab = 3;
     host.currentPage = { name: 'ArenaRoot' };
     host.content = { name: 'Content' };

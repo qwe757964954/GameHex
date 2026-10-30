@@ -4,6 +4,7 @@ import test from 'node:test';
 import protobuf from 'protobufjs/light.js';
 import { parseCardCatalogRow } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
 import { ZCCardType } from '../assets/script/app/zcds/model/ZCCombatCatalog';
+import { assetPath } from './helpers/asset-paths';
 
 function readRef(name: string): Array<Record<string, unknown>> {
     const source = JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8')) as {
@@ -14,7 +15,7 @@ function readRef(name: string): Array<Record<string, unknown>> {
 }
 
 test('运行时 protobuf 包含 PVP 英雄列表请求、响应与消息号', () => {
-    const schema = JSON.parse(readFileSync('assets/resources/config/protoCompiled.json', 'utf8'));
+    const schema = JSON.parse(readFileSync(assetPath('config/protoCompiled.json'), 'utf8'));
     const root = protobuf.Root.fromJSON(schema);
     const request = root.lookupType('com.xkhy.tafang.cmd.CmdPvpHeroInfoListReqMsg');
     const response = root.lookupType('com.xkhy.tafang.cmd.CmdPvpHeroInfoListRspMsg');

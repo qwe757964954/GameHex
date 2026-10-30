@@ -43,10 +43,10 @@ export interface IGiftSpecialPresentData {
 @ccclass('GiftSpecialView')
 export class GiftSpecialView extends Component {
     @property({ type: Node, tooltip: 'SubTabBar：子页签栏（挂 3 个 GiftSubTab）' })
-    subTabBar: Node = null!;
+    subTabBar: Node = null;
 
     @property({ type: VirtualScrollView, tooltip: 'RowView：商品行列表（自带虚拟列表 + Mask）' })
-    rowList: VirtualScrollView = null!;
+    rowList: VirtualScrollView = null;
 
     /** 点了某个子页签（回传 `giftShop.type`）。 */
     onSelectType: ((type: number) => void) | null = null;

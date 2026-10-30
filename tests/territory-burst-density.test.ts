@@ -100,7 +100,7 @@ test('粒子数变化不改变单颗轨迹（同一 index 同一时刻位置一�
 // ============================================================
 
 test('Presenter 给随机格标 `chest: false`（页面据此不放开箱）', () => {
-    const src = readFileSync('assets/script/app/territory/application/TerritoryPresenter.ts', 'utf8');
+    const src = readFileSync('assets/script/app/territory/application/TerritoryModel.ts', 'utf8');
     assert.ok(src.includes('chest: false'), '随机格必须显式要求"不要宝箱"');
 
     // 固定资源点那一路仍然走默认（开箱），不能被顺手改成 burst

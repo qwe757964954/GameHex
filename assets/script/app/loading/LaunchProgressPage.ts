@@ -1,8 +1,6 @@
 import { _decorator, Color, Component, Label, Sprite } from 'cc';
 
 const { ccclass, property } = _decorator;
-const LOADING_MESSAGE = '正在加载，请稍候…';
-
 /**
  * 启动进度页组件（热更 + 登录后资源加载共用）。
  *

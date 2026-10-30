@@ -1,3 +1,4 @@
+import { componentControllerModule } from './helpers/controller-context';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -5,9 +6,11 @@ import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
 import * as ArtPaths from '../assets/script/app/ArtPaths';
+import { loadSpriteFrameCache } from './helpers/sprite-frame-cache';
 
 function load(path: string, dependencies: Record<string, unknown>) {
     const context = { exports: {} as any, console, require: (name: string) => {
+        if (name.endsWith('/ComponentController')) return componentControllerModule();
         assert.ok(name in dependencies, name); return dependencies[name];
     } };
     runInNewContext(ts.transpileModule(readFileSync(path, 'utf8'), { compilerOptions: {
@@ -47,6 +50,7 @@ test('应用图标缓存持有 Cocos 引用，返回主界面复用有效帧，�
         cc: { SpriteFrame: Asset, resources: { load: (_path: string, _type: unknown, done: Function) => { calls++; done(null, frame); } } },
         '../ArtPaths': ArtPaths, '../HeadArt': { HeadArt: {} },
         '../common/RoutedResource': { routedLoad: (_path: string, _type: unknown, done: Function) => { calls++; done(null, frame); } },
+        '../common/SpriteFrameCache': loadSpriteFrameCache((_path: string, _type: unknown, done: Function) => { calls++; done(null, frame); }),
     });
     assert.equal(await loadArt('nav_shop', 'image/main/city'), frame); assert.equal(frame.refs, 1);
     frame.addRef(); frame.decRef();

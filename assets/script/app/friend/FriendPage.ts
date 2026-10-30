@@ -105,74 +105,74 @@ export class FriendPage extends PopupBase {
 
     // ---- 弹窗框 ----
     @property({ type: Node, tooltip: 'PanelBg/CloseBtn：右上关闭按钮（挂 cc.Button）' })
-    closeButton: Node = null!;
+    closeButton: Node = null;
 
     // ---- 列表 ----
     @property({ type: VirtualScrollView, tooltip: 'RowView：好友列表（自带虚拟列表 + Mask）' })
-    rowList: VirtualScrollView = null!;
+    rowList: VirtualScrollView = null;
 
     // ---- 底部按钮（文案 / 显隐 / 底图都随页签变） ----
     @property({ type: Node, tooltip: 'BatchRemoveBtn：右上「批量删除 / 返回」（页签 0）' })
-    batchRemoveButton: Node = null!;
+    batchRemoveButton: Node = null;
 
     @property({ type: Sprite, tooltip: 'BatchRemoveBtn：底图（删除模式切深色，否则金色）' })
-    batchRemoveBackground: Sprite = null!;
+    batchRemoveBackground: Sprite = null;
 
     @property({ type: Label, tooltip: 'BatchRemoveBtn/Label：文案（批量删除 / 返回）' })
-    batchRemoveLabel: Label = null!;
+    batchRemoveLabel: Label = null;
 
     @property({ type: Node, tooltip: 'SendOneKeyBtn：一键赠送（页签 0 且非删除模式）' })
-    sendOneKeyButton: Node = null!;
+    sendOneKeyButton: Node = null;
 
     @property({ type: Label, tooltip: 'SendOneKeyBtn/Label：文案' })
-    sendOneKeyLabel: Label = null!;
+    sendOneKeyLabel: Label = null;
 
     @property({ type: Node, tooltip: 'GetEndBtn：领取体力（页签 0 且非删除模式）' })
-    getEndButton: Node = null!;
+    getEndButton: Node = null;
 
     @property({ type: Label, tooltip: 'GetEndBtn/Label：文案' })
-    getEndLabel: Label = null!;
+    getEndLabel: Label = null;
 
     @property({ type: Node, tooltip: 'RemoveOneKeyBtn：一键删除（页签 0 且删除模式）' })
-    removeOneKeyButton: Node = null!;
+    removeOneKeyButton: Node = null;
 
     @property({ type: Label, tooltip: 'RemoveOneKeyBtn/Label：文案' })
-    removeOneKeyLabel: Label = null!;
+    removeOneKeyLabel: Label = null;
 
     @property({ type: Node, tooltip: 'RefreshBtn：换一批（页签 1）' })
-    refreshButton: Node = null!;
+    refreshButton: Node = null;
 
     @property({ type: Label, tooltip: 'RefreshBtn/Label：文案' })
-    refreshLabel: Label = null!;
+    refreshLabel: Label = null;
 
     @property({ type: Node, tooltip: 'ApplyListBtn：好友申请（页签 1）' })
-    applyListButton: Node = null!;
+    applyListButton: Node = null;
 
     @property({ type: Label, tooltip: 'ApplyListBtn/Label：文案' })
-    applyListLabel: Label = null!;
+    applyListLabel: Label = null;
 
     @property({ type: Node, tooltip: 'SearchBtn：搜索（页签 1）' })
-    searchButton: Node = null!;
+    searchButton: Node = null;
 
     @property({ type: EditBox, tooltip: 'SearchInput：玩家名 / ID 输入框（页签 1）' })
-    searchInput: EditBox = null!;
+    searchInput: EditBox = null;
 
     // ---- 页签 ----
     @property({ type: Node, tooltip: 'TabBar：底部三个页签的容器' })
-    tabBar: Node = null!;
+    tabBar: Node = null;
 
     // ---- 文本 ----
     @property({ type: Label, tooltip: 'FriendCountLabel：好友数：n/max（页签 0）' })
-    friendCountLabel: Label = null!;
+    friendCountLabel: Label = null;
 
     @property({ type: Label, tooltip: 'BlackCountLabel：黑名单：n/max（页签 2）' })
-    blackCountLabel: Label = null!;
+    blackCountLabel: Label = null;
 
     @property({ type: Label, tooltip: 'SendTimesLabel：今日还可赠送 N 次（页签 0 且非删除模式）' })
-    sendTimesLabel: Label = null!;
+    sendTimesLabel: Label = null;
 
     @property({ type: Label, tooltip: 'RemoveCountLabel：已选择：N 人（页签 0 且删除模式）' })
-    removeCountLabel: Label = null!;
+    removeCountLabel: Label = null;
 
     /** 数据端口；测试可注入替身。 */
     private repo: IFriendRepository = friendRepository;
@@ -194,9 +194,6 @@ export class FriendPage extends PopupBase {
 
     /** 与 `rows` 下标一一对应的 id（回调靠它认行）。 */
     private rowIds: string[] = [];
-
-    /** `renderItemFn` 只绑一次。 */
-    private rowRendererBound = false;
 
     /** 一个请求还没回来时忽略后续点击（避免连点发两次）。 */
     private busy = false;
@@ -232,10 +229,7 @@ export class FriendPage extends PopupBase {
         this.bind(this.searchButton, this.onSearchClick);
 
         // ⚠️ 回调只在 onInit 接一次（放 onOpen 会随每次打开重复叠加）。
-        if (!this.rowRendererBound) {
-            this.rowRendererBound = true;
-            this.rowList.renderItemFn = (node, index) => this.renderRow(node, index);
-        }
+        this.rowList.renderItemFn = (node, index) => this.renderRow(node, index);
     }
 
     protected async onOpen(): Promise<void> {

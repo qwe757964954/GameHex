@@ -1,9 +1,9 @@
 import { ZC_BATTLE_FX_PATHS, ZC_BATTLE_SHELL_PATHS } from '../model/ZCGameResourcePlan';
 import { EffectAsset, JsonAsset, Material, Prefab, SpriteFrame } from 'cc';
-import type { AssetLoadOptions, AssetService } from '../../../core/asset/AssetService';
+import type { AssetLoadOptions } from '../../../core/asset/AssetService';
 import type { ResourceScope } from '../../../core/asset/ResourceScope';
 import { BATTLE_BUNDLE } from '../../../core/asset/BundleCatalog';
-import type { ConfigService } from '../../../core/config/ConfigService';
+import type { IControllerResources } from '../../../framework/controller/ControllerBase';
 import { findCatalogCard, getAllUnitDefinitions } from '../model/ZCCombatCatalog';
 import type { ZCAttackTrait, ZCUnitId } from '../model/ZCCombatCatalog';
 import { configureZCMap, getZCLocalPlayerCountOverride, isRandomMapCandidate } from '../model/ZCGameModel';
@@ -311,8 +311,7 @@ export class ZCGameLoader {
     private selectedMap: ZCMapLayout | null = null;
 
     constructor(
-        private readonly assets: AssetService,
-        private readonly configs: ConfigService,
+        private readonly resources: Pick<IControllerResources, 'assets' | 'configs'>,
         private readonly mapDirectory: string,
         private readonly random: () => number = Math.random,
         private readonly playerCountOverride?: 2 | 3 | 4,
@@ -324,7 +323,7 @@ export class ZCGameLoader {
     async prepare(scope?: ResourceScope, battle?: ZCBattleStart | null, waveCardIds: readonly number[] = []): Promise<ZCGamePreparedResources> {
         const startedAt = Date.now();
         // 文件读取不依赖战斗表；地图筛选与 configure 仍在本局配置应用后执行。
-        const mapFiles = this.assets.loadDir(this.mapDirectory, JsonAsset, { scope, priority: BATTLE_ENTRY_PRIORITY });
+        const mapFiles = this.resources.assets.loadDir(this.mapDirectory, JsonAsset, { scope, priority: BATTLE_ENTRY_PRIORITY });
         // 配置较慢或先失败时，提前失败的地图请求也必须立即有人处理拒绝。
         void mapFiles.catch(() => {});
         await this.loadPvpRuntimeConfig(scope);
@@ -367,21 +366,21 @@ export class ZCGameLoader {
             [buildingFrames, wallFrames, wallMaterial, unitOutlineCopyEffect, hexGroundGlowFrames, hexPulseFrames, artifactClaimBurstFrames, decorFrames, artifactIconFrame, unknownResourceFrame, goldCoinFrame, spawnRegionFrames],
         ] = await Promise.all([
             this.traceArt('公共外壳', Promise.all([
-                this.assets.load(HUD_URL, Prefab, this.battleOptions(scope)),
-                this.assets.load(BOARD_URL, Prefab, this.battleOptions(scope)),
-                this.assets.load(HEX_URL, Prefab, this.battleOptions(scope)),
-                this.assets.load(UNIT_URL, Prefab, this.battleOptions(scope)),
-                this.assets.load(EFFECT_URL, Prefab, this.battleOptions(scope)),
-                this.assets.load(WALL_URL, Prefab, this.battleOptions(scope)),
-                this.assets.load(WALL_LAYER_URL, Prefab, this.battleOptions(scope)),
-                this.assets.load(FLOAT_TEXT_URL, Prefab, this.battleOptions(scope)),
-                this.assets.load(CARD_REVEAL_URL, Prefab, this.battleOptions(scope)),
-                this.assets.load(LEGEND_BANNER_URL, Prefab, this.battleOptions(scope)),
-                this.assets.load(DECOR_URL, Prefab, this.battleOptions(scope)),
+                this.resources.assets.load(HUD_URL, Prefab, this.battleOptions(scope)),
+                this.resources.assets.load(BOARD_URL, Prefab, this.battleOptions(scope)),
+                this.resources.assets.load(HEX_URL, Prefab, this.battleOptions(scope)),
+                this.resources.assets.load(UNIT_URL, Prefab, this.battleOptions(scope)),
+                this.resources.assets.load(EFFECT_URL, Prefab, this.battleOptions(scope)),
+                this.resources.assets.load(WALL_URL, Prefab, this.battleOptions(scope)),
+                this.resources.assets.load(WALL_LAYER_URL, Prefab, this.battleOptions(scope)),
+                this.resources.assets.load(FLOAT_TEXT_URL, Prefab, this.battleOptions(scope)),
+                this.resources.assets.load(CARD_REVEAL_URL, Prefab, this.battleOptions(scope)),
+                this.resources.assets.load(LEGEND_BANNER_URL, Prefab, this.battleOptions(scope)),
+                this.resources.assets.load(DECOR_URL, Prefab, this.battleOptions(scope)),
                 baseMatchConfig.map.cityMode === 'select'
-                    ? this.assets.load(SPAWN_SELECTION_URL, Prefab, this.battleOptions(scope)) : Promise.resolve(null),
+                    ? this.resources.assets.load(SPAWN_SELECTION_URL, Prefab, this.battleOptions(scope)) : Promise.resolve(null),
                 !battle || waveCardIds.length > 0
-                    ? this.assets.load(BOSS_PANEL_URL, Prefab, this.battleOptions(scope)) : Promise.resolve(null),
+                    ? this.resources.assets.load(BOSS_PANEL_URL, Prefab, this.battleOptions(scope)) : Promise.resolve(null),
             ])),
             progressive ? Promise.resolve([null, null, null, new Map<ZCAttackTrait, Prefab>()] as const) : this.traceArt('公共特效', Promise.all([
                 this.loadSpawnFxPrefab(scope),
@@ -411,7 +410,7 @@ export class ZCGameLoader {
         const loadGuide = (): Promise<ZCGuidePreparedContent> => {
             this.checkActive(scope);
             if (guideTask) return guideTask;
-            const task = new ZCGuideLoader(this.assets, this.configs).prepare(scope);
+            const task = new ZCGuideLoader(this.resources).prepare(scope);
             guideTask = task;
             void task.catch(() => { if (guideTask === task) guideTask = null; });
             return task;
@@ -470,20 +469,20 @@ export class ZCGameLoader {
                     // 点击地块马上会用到的5帧脉冲先补齐，其余辅助序列帧排在战斗特效后。
                     async () => ({ hexPulseFrames: await this.loadSortedSpriteFrames(HEX_FLIP_PULSE_DIRECTORY, '翻格脉冲', scope, BATTLE_DEFERRED_PRIORITY) }),
                     ...HIT_FX_TRAITS.map(trait => async () => {
-                        const prefab = await this.assets.load(`${HIT_FX_DIRECTORY}/${trait}受击/${trait}受击`, Prefab, { scope, priority: BATTLE_DEFERRED_PRIORITY });
+                        const prefab = await this.resources.assets.load(`${HIT_FX_DIRECTORY}/${trait}受击/${trait}受击`, Prefab, { scope, priority: BATTLE_DEFERRED_PRIORITY });
                         return { hitFxPrefabs: new Map([...art.hitFxPrefabs, [trait, prefab]]) };
                     }),
                     ...effectPaths.map(path => async () => {
-                        const prefab = await this.assets.load(path, Prefab, { scope, priority: BATTLE_DEFERRED_PRIORITY });
+                        const prefab = await this.resources.assets.load(path, Prefab, { scope, priority: BATTLE_DEFERRED_PRIORITY });
                         return { effectVisualPrefabs: new Map([...art.effectVisualPrefabs, [path, prefab]]) };
                     }),
-                    async () => ({ spawnFxPrefab: await this.assets.load(SPAWN_FX_URL, Prefab, { ...this.battleOptions(scope), priority: BATTLE_DEFERRED_PRIORITY }) }),
-                    async () => ({ deathFxPrefab: await this.assets.load(DEATH_FX_URL, Prefab, { ...this.battleOptions(scope), priority: BATTLE_DEFERRED_PRIORITY }) }),
-                    async () => ({ buildingDestroyFxPrefab: await this.assets.load(BUILDING_DESTROY_FX_URL, Prefab, { ...this.battleOptions(scope), priority: BATTLE_DEFERRED_PRIORITY }) }),
+                    async () => ({ spawnFxPrefab: await this.resources.assets.load(SPAWN_FX_URL, Prefab, { ...this.battleOptions(scope), priority: BATTLE_DEFERRED_PRIORITY }) }),
+                    async () => ({ deathFxPrefab: await this.resources.assets.load(DEATH_FX_URL, Prefab, { ...this.battleOptions(scope), priority: BATTLE_DEFERRED_PRIORITY }) }),
+                    async () => ({ buildingDestroyFxPrefab: await this.resources.assets.load(BUILDING_DESTROY_FX_URL, Prefab, { ...this.battleOptions(scope), priority: BATTLE_DEFERRED_PRIORITY }) }),
                     async () => ({ hexGroundGlowFrames: await this.loadSortedSpriteFrames(HEX_GROUND_GLOW_DIRECTORY, '底部发光', scope, BATTLE_DEFERRED_PRIORITY) }),
                     async () => ({ artifactClaimBurstFrames: await this.loadSortedSpriteFrames(ARTIFACT_CLAIM_BURST_DIRECTORY, '神器领取爆炸', scope, BATTLE_DEFERRED_PRIORITY) }),
                     ...decorNames.map(name => async () => {
-                        const frame = await this.assets.load(decorFramePath(name), SpriteFrame, { scope, cache: false, priority: BATTLE_DEFERRED_PRIORITY });
+                        const frame = await this.resources.assets.load(decorFramePath(name), SpriteFrame, { scope, cache: false, priority: BATTLE_DEFERRED_PRIORITY });
                         return { decorFrames: new Map([...art.decorFrames, [name, frame]]) };
                     }),
                 ];
@@ -518,7 +517,7 @@ export class ZCGameLoader {
     async loadRandomMap(scope?: ResourceScope, battlePlayerCount?: 2 | 3 | 4, mapFiles?: Promise<JsonAsset[]>): Promise<boolean> {
         let maps: JsonAsset[];
         try {
-            maps = await (mapFiles ?? this.assets.loadDir(this.mapDirectory, JsonAsset, { scope, priority: BATTLE_ENTRY_PRIORITY }));
+            maps = await (mapFiles ?? this.resources.assets.loadDir(this.mapDirectory, JsonAsset, { scope, priority: BATTLE_ENTRY_PRIORITY }));
         } catch (error) {
             if (ZCDC_LOG_WARNINGS) console.error(`[ZCGameLoader] 地图目录加载失败：${this.mapDirectory}`, error);
             return false;
@@ -585,7 +584,7 @@ export class ZCGameLoader {
         const effects = new Map<string, Prefab>();
         const load = async (path: string, assign: (prefab: Prefab) => void): Promise<void> => {
             try {
-                assign(await this.assets.load(path, Prefab, { scope, priority: BATTLE_ENTRY_PRIORITY }));
+                assign(await this.resources.assets.load(path, Prefab, { scope, priority: BATTLE_ENTRY_PRIORITY }));
             } catch (error) {
                 // 单个表现资源缺失不阻断整局，渲染层会回退到通用单位/特效壳。
                 if (ZCDC_LOG_WARNINGS) console.warn(`[ZCGameLoader] 配置的 Prefab 加载失败：${path}`, error);
@@ -633,7 +632,7 @@ export class ZCGameLoader {
     private async loadBuildingFrames(scope?: ResourceScope): Promise<ReadonlyMap<string, SpriteFrame>> {
         const frames = new Map<string, SpriteFrame>();
         try {
-            const assets = await this.assets.loadDir(BUILDING_DIRECTORY, SpriteFrame, { scope, priority: BATTLE_ENTRY_PRIORITY });
+            const assets = await this.resources.assets.loadDir(BUILDING_DIRECTORY, SpriteFrame, { scope, priority: BATTLE_ENTRY_PRIORITY });
             for (const frame of assets) {
                 if (frame?.name) frames.set(frame.name, frame);
             }
@@ -653,7 +652,7 @@ export class ZCGameLoader {
     private async loadUnknownResourceFrame(scope?: ResourceScope): Promise<SpriteFrame | null> {
         const path = spriteFramePath(GAMEUI_ART_ROOT, NEUTRAL_RESOURCE_UNKNOWN_ICON_NAME);
         try {
-            return await this.assets.load(path, SpriteFrame, this.battleOptions(scope));
+            return await this.resources.assets.load(path, SpriteFrame, this.battleOptions(scope));
         } catch (error) {
             if (ZCDC_LOG_WARNINGS) console.warn(`[ZCGameLoader] 中立资源占位图加载失败：${path}`, error);
             return null;
@@ -678,7 +677,7 @@ export class ZCGameLoader {
         // 报错形态是 `Bundle resources doesn't contain ...`（不是 404，容易误判成「美术没交图」）。
         const path = spriteFramePath(ARTIFACT_DIRECTORY, iconName);
         try {
-            return await this.assets.load(path, SpriteFrame, { scope, priority: BATTLE_ENTRY_PRIORITY });
+            return await this.resources.assets.load(path, SpriteFrame, { scope, priority: BATTLE_ENTRY_PRIORITY });
         } catch (error) {
             if (ZCDC_LOG_WARNINGS) console.warn(`[ZCGameLoader] 神器图标加载失败：${path}`, error);
             return null;
@@ -696,7 +695,7 @@ export class ZCGameLoader {
      */
     private async loadGoldCoinFrame(scope?: ResourceScope): Promise<SpriteFrame | null> {
         try {
-            return await this.assets.load(spriteFramePath(MAP_RESOURCE_ART_ROOT, 'coin_icon'), SpriteFrame, this.battleOptions(scope));
+            return await this.resources.assets.load(spriteFramePath(MAP_RESOURCE_ART_ROOT, 'coin_icon'), SpriteFrame, this.battleOptions(scope));
         } catch (error) {
             if (ZCDC_LOG_WARNINGS) console.warn('[ZCGameLoader] 金币图标加载失败（金币飞行特效将透明），', error);
             return null;
@@ -720,7 +719,7 @@ export class ZCGameLoader {
 
     private async loadSpawnRegionFrame(name: 'frame_01' | 'frame_02', scope?: ResourceScope): Promise<SpriteFrame | null> {
         try {
-            return await this.assets.load(spriteFramePath(SPAWN_REGION_ART_ROOT, name), SpriteFrame, this.battleOptions(scope));
+            return await this.resources.assets.load(spriteFramePath(SPAWN_REGION_ART_ROOT, name), SpriteFrame, this.battleOptions(scope));
         } catch (error) {
             if (ZCDC_LOG_WARNINGS) console.warn(`[ZCGameLoader] 区域气泡切图加载失败：${name}`, error);
             return null;
@@ -734,7 +733,7 @@ export class ZCGameLoader {
      */
     private async loadSpawnFxPrefab(scope?: ResourceScope): Promise<Prefab | null> {
         try {
-            return await this.assets.load(SPAWN_FX_URL, Prefab, this.battleOptions(scope));
+            return await this.resources.assets.load(SPAWN_FX_URL, Prefab, this.battleOptions(scope));
         } catch (error) {
             if (ZCDC_LOG_WARNINGS) console.warn(`[ZCGameLoader] 出生特效加载失败：${SPAWN_FX_URL}`, error);
             return null;
@@ -746,7 +745,7 @@ export class ZCGameLoader {
      */
     private async loadDeathFxPrefab(scope?: ResourceScope): Promise<Prefab | null> {
         try {
-            return await this.assets.load(DEATH_FX_URL, Prefab, this.battleOptions(scope));
+            return await this.resources.assets.load(DEATH_FX_URL, Prefab, this.battleOptions(scope));
         } catch (error) {
             if (ZCDC_LOG_WARNINGS) console.warn(`[ZCGameLoader] 阵亡特效加载失败：${DEATH_FX_URL}`, error);
             return null;
@@ -759,7 +758,7 @@ export class ZCGameLoader {
      */
     private async loadBuildingDestroyFxPrefab(scope?: ResourceScope): Promise<Prefab | null> {
         try {
-            return await this.assets.load(BUILDING_DESTROY_FX_URL, Prefab, this.battleOptions(scope));
+            return await this.resources.assets.load(BUILDING_DESTROY_FX_URL, Prefab, this.battleOptions(scope));
         } catch (error) {
             if (ZCDC_LOG_WARNINGS) {
                 console.warn(`[ZCGameLoader] 建筑死亡特效加载失败：${BUILDING_DESTROY_FX_URL}`, error);
@@ -785,7 +784,7 @@ export class ZCGameLoader {
         await Promise.all(HIT_FX_TRAITS.map(async (trait) => {
             const url = `${HIT_FX_DIRECTORY}/${trait}受击/${trait}受击`;
             try {
-                const prefab = await this.assets.load(url, Prefab, this.battleOptions(scope));
+                const prefab = await this.resources.assets.load(url, Prefab, this.battleOptions(scope));
                 if (prefab) prefabs.set(trait, prefab);
             } catch (error) {
                 if (ZCDC_LOG_WARNINGS) console.warn(`[ZCGameLoader] 受击特效加载失败：${url}`, error);
@@ -801,7 +800,7 @@ export class ZCGameLoader {
     private async loadWallFrames(scope?: ResourceScope): Promise<ReadonlyMap<string, SpriteFrame>> {
         const frames = new Map<string, SpriteFrame>();
         try {
-            const assets = await this.assets.loadDir(WALL_TILE_DIRECTORY, SpriteFrame, { scope, priority: BATTLE_ENTRY_PRIORITY });
+            const assets = await this.resources.assets.loadDir(WALL_TILE_DIRECTORY, SpriteFrame, { scope, priority: BATTLE_ENTRY_PRIORITY });
             for (const frame of assets) {
                 if (frame?.name) frames.set(frame.name, frame);
             }
@@ -817,7 +816,7 @@ export class ZCGameLoader {
      */
     private async loadWallMaterial(scope?: ResourceScope): Promise<Material | null> {
         try {
-            const effect = await this.assets.load(WALL_TILE_EFFECT_URL, EffectAsset, { scope, priority: BATTLE_ENTRY_PRIORITY });
+            const effect = await this.resources.assets.load(WALL_TILE_EFFECT_URL, EffectAsset, { scope, priority: BATTLE_ENTRY_PRIORITY });
             if (!effect) return null;
             const material = new Material();
             material.initialize({ effectAsset: effect });
@@ -831,7 +830,7 @@ export class ZCGameLoader {
     /** 兵种整体外轮廓（放大副本）；失败返回 null ⇒ 只关闭该表现，不影响对局。 */
     private async loadUnitOutlineCopyEffect(scope?: ResourceScope): Promise<EffectAsset | null> {
         try {
-            return await this.assets.load(UNIT_OUTLINE_COPY_EFFECT_URL, EffectAsset, { scope, priority: BATTLE_ENTRY_PRIORITY }) ?? null;
+            return await this.resources.assets.load(UNIT_OUTLINE_COPY_EFFECT_URL, EffectAsset, { scope, priority: BATTLE_ENTRY_PRIORITY }) ?? null;
         } catch (error) {
             if (ZCDC_LOG_WARNINGS) console.warn(`[ZCGameLoader] 单位整体轮廓材质加载失败：${UNIT_OUTLINE_COPY_EFFECT_URL}`, error);
             return null;
@@ -846,7 +845,7 @@ export class ZCGameLoader {
         priority = BATTLE_ENTRY_PRIORITY,
     ): Promise<SpriteFrame[]> {
         try {
-            const assets = await this.assets.loadDir(directory, SpriteFrame, { ...this.battleOptions(scope), priority });
+            const assets = await this.resources.assets.loadDir(directory, SpriteFrame, { ...this.battleOptions(scope), priority });
             return assets
                 .filter((frame) => !!frame?.name)
                 .sort((a, b) => a.name.localeCompare(b.name));
@@ -881,7 +880,7 @@ export class ZCGameLoader {
         await Promise.all(Array.from(names).map(async (name) => {
             try {
                 // 随机地图的小装饰只随本局持有，把有限的会话缓存留给单位和公共资源。
-                frames.set(name, await this.assets.load(decorFramePath(name), SpriteFrame, { scope, cache: false }));
+                frames.set(name, await this.resources.assets.load(decorFramePath(name), SpriteFrame, { scope, cache: false }));
             } catch (error) {
                 // 装饰缺失不阻断对局；对应格子保持空白并留下可定位日志。
                 if (ZCDC_LOG_WARNINGS) console.warn(`[ZCGameLoader] 地图装饰加载失败：${name}`, error);
@@ -895,7 +894,7 @@ export class ZCGameLoader {
     }
 
     private async loadPvpRuntimeConfig(scope?: ResourceScope): Promise<void> {
-        await this.configs.initialize();
+        await this.resources.configs.initialize();
         this.checkActive(scope);
         const names = [
             'pvpGlobal',
@@ -923,7 +922,7 @@ export class ZCGameLoader {
             'skillEffect',
             'skillBuff',
         ] as const;
-        const values = await Promise.all(names.map((name) => this.configs.getTable(name)));
+        const values = await Promise.all(names.map((name) => this.resources.configs.getTable(name)));
         this.checkActive(scope);
         // names 与 ZCPvpTables 的可选字段一一对应（见上方 as const 列表），这里直接按
         // Partial<ZCPvpTables> 拼装，不再做 unknown → ZCPvpTables 的双重断言。

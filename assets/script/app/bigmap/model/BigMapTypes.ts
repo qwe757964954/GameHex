@@ -18,14 +18,16 @@ export const BIGMAP_RES_ORDER: readonly BigMapResType[] = ['grain', 'wood', 'iro
 /** 建造资源（可被主城 `resCap` 卡上限的那三种）。 */
 export const BIGMAP_BUILD_RES: readonly BigMapResType[] = ['grain', 'wood', 'iron'];
 
-/** 建筑类型枚举，对应 `bigmapBuilding.baseBuildType`。 */
+/** 建筑类型枚举，对应 `baseBuilding.baseBuildType`。 */
 export const enum BigMapBuildingKind {
     Main = 1,
     ResourceField = 2,
-    CoinField = 3,
-    Tech = 4,
-    Function = 5,
-    Decoration = 6,
+    WoodField = 3,
+    IronField = 4,
+    CoinField = 5,
+    Tech = 6,
+    Function = 7,
+    Decoration = 8,
 }
 
 /** 建造队列槽位状态：空闲 / 建造中。 */
@@ -74,6 +76,10 @@ export interface IBigMapBuildingConfig {
     readonly id: number;
     readonly name: string;
     readonly kind: BigMapBuildingKind;
+    /** `baseBuildIcon`，空值时与同类型建筑共用图片。 */
+    readonly icon: string;
+    /** 基建图格子 ID（`basebuildPositon`）；不是现有基地数组下标。 */
+    readonly initialCellId: number | null;
     readonly occupyHex: number;
     readonly maxOwnNum: number;
     /**
@@ -184,6 +190,28 @@ export interface IBigMapCampConfig {
     readonly name: string;
     readonly staminaCost: number;
     readonly desc: string;
+    readonly chapter: number;
+    readonly gateNo: number;
+    readonly occupyType: BigMapCityLayer;
+    readonly rallyOpen: boolean;
+    readonly campSize: number;
+    readonly adjacentCampIds: readonly number[];
+    readonly openDay: number;
+    readonly dailyBattleLimit: number;
+    readonly rankMinScore: number;
+    readonly warScoreRate: number;
+    readonly singleDamageScoreMax: number;
+    readonly maxScoreConfig: number;
+    readonly occupyScore: number;
+    readonly minOccupyScore: number;
+    readonly rankResetTime: number;
+    readonly warScoreReset: number;
+    readonly buffGroupIds: readonly number[];
+    readonly buffEffectIds: readonly number[];
+    readonly firstRewardId: number;
+    readonly buffConNum: number;
+    readonly buffRate: number;
+    readonly iconPath: string;
 }
 
 export interface IBigMapCityLevelConfig {

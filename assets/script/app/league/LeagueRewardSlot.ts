@@ -46,10 +46,10 @@ const { ccclass, property } = _decorator;
 @ccclass('LeagueRewardSlot')
 export class LeagueRewardSlot extends Component {
     @property({ type: Sprite, tooltip: 'Icon：道具图标（没有映射图时整节点隐藏）' })
-    icon: Sprite = null!;
+    icon: Sprite = null;
 
     @property({ type: Label, tooltip: 'Count：数量（showCount=false 或数量<=0 时隐藏）' })
-    countLabel: Label = null!;
+    countLabel: Label = null;
 
     /** 品质框（本节点上的 `cc.Sprite`；`onLoad` 兜底自取）。 */
     private frame: Sprite | null = null;

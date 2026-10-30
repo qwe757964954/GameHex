@@ -3,7 +3,7 @@ import { EventMgr } from '../../framework/event/EventMgr';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
 import { RewardItemView, type IRewardItemData } from '../common/RewardItemView';
-import { TERRITORY_EVENTS } from '../territory/view/TerritoryEvents';
+import { TerritoryUiEvent } from '../territory/application/TerritoryEvents';
 
 const { ccclass, property } = _decorator;
 
@@ -59,32 +59,32 @@ export class LevelInfoPanel extends PopupBase {
     static prefabPath = 'ui/main/LevelInfoPanel';
 
     @property({ type: Label, group: '节点引用', tooltip: 'Panel/TitleLabel：关卡标题' })
-    private titleLabel: Label = null!;
+    private titleLabel: Label = null;
 
     @property({ type: Button, group: '节点引用', tooltip: 'Panel/HintIcon：感叹号 → 关卡提示' })
-    private hintButton: Button = null!;
+    private hintButton: Button = null;
 
     @property({ type: Label, group: '节点引用', tooltip: 'Panel/ObjectiveText：通关目标' })
-    private objectiveLabel: Label = null!;
+    private objectiveLabel: Label = null;
 
     @property({ type: Label, group: '节点引用', tooltip: 'Panel/OccupyText：占据奖励' })
-    private occupyLabel: Label = null!;
+    private occupyLabel: Label = null;
 
     /** 掉落奖励：**公共格子 `ui/common/RewardItem.prefab`** 的 3 列网格虚拟列表。 */
     @property({ type: VirtualScrollView, group: '节点引用', tooltip: 'Panel/DropSlots：掉落奖励（VirtualScrollView，itemPrefab = common/RewardItem）' })
-    private dropList: VirtualScrollView = null!;
+    private dropList: VirtualScrollView = null;
 
     @property({ type: Label, group: '节点引用', tooltip: 'Panel/TipText：推荐文案' })
-    private recommendLabel: Label = null!;
+    private recommendLabel: Label = null;
 
     @property({ type: Button, group: '节点引用', tooltip: 'Panel/BtnPrimary：开始战斗' })
-    private fightButton: Button = null!;
+    private fightButton: Button = null;
 
     @property({ type: Label, group: '节点引用', tooltip: 'BtnPrimary/Label：按钮文案' })
-    private fightLabel: Label = null!;
+    private fightLabel: Label = null;
 
     @property({ type: Node, group: '节点引用', tooltip: 'BtnPrimary/CostBg：体力费用底' })
-    private fightCostRoot: Node = null!;
+    private fightCostRoot: Node = null;
 
     /**
      * `BtnPrimary/CostIcon`：费用**图标**。
@@ -95,10 +95,10 @@ export class LevelInfoPanel extends PopupBase {
      * prefab 里那张硬币只作编辑器里的占位。
      */
     @property({ type: Sprite, group: '节点引用', tooltip: 'BtnPrimary/CostIcon：费用图标（体力）' })
-    private fightCostIcon: Sprite = null!;
+    private fightCostIcon: Sprite = null;
 
     @property({ type: Label, group: '节点引用', tooltip: 'BtnPrimary/CostLabel：体力数字' })
-    private fightCostLabel: Label = null!;
+    private fightCostLabel: Label = null;
 
     /** 本趟要铺的掉落（`renderItemFn` 按下标取）。 */
     private drops: readonly IRewardItemData[] = [];
@@ -149,20 +149,19 @@ export class LevelInfoPanel extends PopupBase {
     /** 单格渲染 —— 数据按**当前**下标现取，别在回调里闭包捕获某一趟的 `content`。 */
     private readonly renderDrop = (item: Node, index: number): void => {
         // 组件由 `itemPrefab` 焊死、下标由 `setTotalCount` 限死，两处都不可能为空
-        item.getComponent(RewardItemView)!.render(this.drops[index]);
+        item.getComponent(RewardItemView).render(this.drops[index]);
     }
 
     protected onClose(): void {
         // Presenter 靠这条清 `detailSite`（页面订阅后调 closeDetail，幂等）
-        EventMgr.instance.emit(TERRITORY_EVENTS.DETAIL_CLOSE);
+        EventMgr.instance.emit(TerritoryUiEvent.Intent, { intent: { kind: 'closeDetail' } });
     }
 
     private handleHint(): void {
-        EventMgr.instance.emit(TERRITORY_EVENTS.LEVEL_TIP_OPEN);
+        EventMgr.instance.emit(TerritoryUiEvent.Intent, { intent: { kind: 'openLevelTip' } });
     }
 
     private handleFight(): void {
-        if (!this.fightButton.interactable) return;
-        EventMgr.instance.emit(TERRITORY_EVENTS.DETAIL_START);
+        EventMgr.instance.emit(TerritoryUiEvent.Intent, { intent: { kind: 'battle' } });
     }
 }

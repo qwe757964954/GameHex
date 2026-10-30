@@ -1,3 +1,5 @@
+import { EventMgr } from '../assets/script/framework/event/EventMgr';
+import * as mvcEvents from '../assets/script/app/bigmap/application/BigMapEvents';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
@@ -65,7 +67,11 @@ function makeWorldView() {
         unschedule() { this.scheduled = null; }
     }
     const exports = loadModule('assets/script/app/bigmap/view/BigMapWorldView.ts', (name) => {
+        if (name.endsWith('/EventMgr')) return { EventMgr };
+        if (name.endsWith('/BigMapEvents')) return mvcEvents;
         if (name === 'cc') return { _decorator: { ccclass: () => (value: unknown) => value, property: () => () => undefined }, Color, Component };
+        if (name.endsWith('/EventMgr')) return { EventMgr };
+        if (name.endsWith('/BigMapEvents')) return mvcEvents;
         if (name === './BigMapWorldLayout') return geometry;
         if (name === './BigMapTheme') return { BIGMAP_COLORS: colors };
         if (name.endsWith('/BigMapCampRepository')) return { BIGMAP_CAMP_REFRESH_SECONDS };
@@ -77,7 +83,7 @@ function makeWorldView() {
     interface IMarker { kind: string; id: number; node: { active: boolean; position: { x: number; y: number } }; icon: object;
         view: { hitArea: { badgeY: number; badgeHeight: number } } }
     interface IView extends Component {
-        presenter: object; viewportTransform: object; content: object; markers: IMarker[];
+        data: object; viewportTransform: object; content: object; markers: IMarker[];
         markerLayer: object; applyMarker: (...args: unknown[]) => void;
         applyCamera(scale: number, x: number, y: number): void; refresh(): void;
         onEnable(): void; onDisable(): void; onDestroy(): void;
@@ -100,7 +106,10 @@ function makeWorldView() {
 test('相机变化合并查询，只传实际可见据点；停用地图取消定时刷新', () => {
     const h = makeWorldView();
     const calls: number[][] = [];
-    h.view.presenter = { world: {}, refreshVisibleCamps: (ids: number[]) => { calls.push(Array.from(ids)); } };
+    h.view.data = { world: {} };
+    EventMgr.instance.on(mvcEvents.BigMapUiEvent.Intent, (event: mvcEvents.IBigMapIntentEvent) => {
+        if (event.intent.kind === 'visibleCamps') calls.push(Array.from(event.intent.campIds));
+    }, h.view);
     h.view.onEnable();
     h.view.applyCamera(1, 0, 0);
     h.view.applyCamera(1, 1, 0);
@@ -114,12 +123,13 @@ test('相机变化合并查询，只传实际可见据点；停用地图取消�
     h.view.onDisable();
     assert.equal(h.timers.size, 0);
     assert.equal(h.view.scheduled, null);
+    EventMgr.instance.offTarget(h.view);
     h.view.onDestroy();
 });
 
 test('建筑根已离开视口但主城头像仍在屏内时保留标记，完全离屏后才隐藏', () => {
     const h = makeWorldView();
-    h.view.presenter = { world: {}, refreshVisibleCamps: () => undefined };
+    h.view.data = { world: {}, refreshVisibleCamps: () => undefined };
     const marker = h.view.markers[0];
     marker.node.position.y = -380;
     marker.view = { hitArea: { badgeY: 270, badgeHeight: 110 } };
@@ -136,9 +146,9 @@ test('据点角标按 opType 红黄显示，状态相同时变更占领仍会重
     let state = 1;
     const tints: unknown[] = [];
     h.view.markers = [h.view.markers[0]];
-    h.view.presenter = { world: { monsters: [] }, playerBaseHexId: -1, territoryRegions: () => [],
-        allCityViews: () => [{ cityId: 101, name: '营地', state: 'open', level: 1, isServerCamp: true,
-            campInfo: { campId: 101, opType, state } }],
+    h.view.data = { world: { monsters: [] }, playerBaseHexId: -1, territories: [],
+        get cities() { return new Map([[101, { cityId: 101, name: '营地', state: 'open', level: 1, isServerCamp: true,
+            campInfo: { campId: 101, opType, state } }]]); },
     };
     h.view.markerLayer = { clear() {} };
     h.view.applyMarker = (_marker, _frame, _title, tint) => { tints.push(tint); };
@@ -157,6 +167,8 @@ test('据点角标按 opType 红黄显示，状态相同时变更占领仍会重
 test('点击据点调用详情入口，弹窗显示两种独立状态，保留定位操作', () => {
     class Component {}
     const exports = loadModule('assets/script/app/bigmap/view/BigMapPage.ts', (name) => {
+        if (name.endsWith('/EventMgr')) return { EventMgr };
+        if (name.endsWith('/BigMapEvents')) return mvcEvents;
         if (name === 'cc') return { _decorator: { ccclass: () => (value: unknown) => value }, Component };
         if (name.endsWith('/ResourceScope')) return { ResourceScope: class {} };
         if (name.endsWith('/BigMapCampInfo')) return campModel;
@@ -165,7 +177,7 @@ test('点击据点调用详情入口，弹窗显示两种独立状态，保留�
         return {};
     });
     interface IPage {
-        presenter: object; worldView: object; infoThumbnail: object; infoBody: { string: string };
+        data: object; worldView: object; infoThumbnail: object; infoBody: { string: string };
         infoTitle: object; primaryButton: { node: { active: boolean }; setText(value: string): void; setEnabled(value: boolean): void }; secondaryButton: object;
         setInfoVisible(value: boolean): void; refreshInfo(): void; onWorldTap(hexId: number): void;
     }
@@ -178,9 +190,8 @@ test('点击据点调用详情入口，弹窗显示两种独立状态，保留�
     let campDetailStatus = 'ready';
     let campRoles: { roleId: string; serverId: string; roleName: string; avatarId: string; defenseHp: number; pos: number }[] = [];
     let campRolesStatus = 'ready';
-    page.presenter = { cityView: () => ({ name: '营地', level: 1, desc: '简介', isServerCamp: true, canAttack, staminaCost: 20,
-        campInfo, campDetailStatus, attackReason: '', campRoles, campRolesStatus }),
-        refreshCampDetail: (id: number) => { calls.push(id); },
+    page.data = { get cities() { return new Map([[101, { name: '营地', level: 1, desc: '简介', isServerCamp: true, canAttack, staminaCost: 20,
+        campInfo, campDetailStatus, attackReason: '', campRoles, campRolesStatus }]]); },
     };
     page.worldView = { occupantAt: () => ({ kind: 'city', cityId: 101 }) };
     page.infoThumbnail = { node: { active: false } };
@@ -190,8 +201,15 @@ test('点击据点调用详情入口，弹窗显示两种独立状态，保留�
     page.primaryButton = { node: { active: true }, setText() {}, setEnabled(value) { enabled = value; } };
     page.secondaryButton = { node: { active: true }, setText() {} };
     page.setInfoVisible = () => undefined;
+    (page as any).ready = true;
+    (page as any).selectedCityId = 101;
+    EventMgr.instance.on(mvcEvents.BigMapUiEvent.Intent, (event: mvcEvents.IBigMapIntentEvent) => {
+        if (event.intent.kind === 'worldTap') calls.push(event.intent.hexId);
+    }, page);
     page.onWorldTap(1);
-    assert.deepEqual(calls, [101]);
+    page.refreshInfo();
+    assert.deepEqual(calls, [1]);
+    EventMgr.instance.offTarget(page);
     assert.match(page.infoBody.string, /占领状态：已占领/);
     assert.match(page.infoBody.string, /据点状态：结算中/);
     assert.equal(page.primaryButton.node.active, true);

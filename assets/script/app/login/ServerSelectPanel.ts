@@ -30,10 +30,10 @@ export class ServerSelectPanel extends PopupBase {
     static prefabPath = 'ui/login/ServerSelectPanel';
 
     @property({ type: Node, tooltip: '关闭按钮 CloseBtn' })
-    closeButton: Node = null!;
+    closeButton: Node = null;
 
     @property({ type: VirtualScrollView, tooltip: '服务器列表（Layout item + 对象池）' })
-    serverList: VirtualScrollView = null!;
+    serverList: VirtualScrollView = null;
 
     private options: ServerSelectOptions | null = null;
     /** 本趟要铺的服务器（新服优先）。renderItemFn 按 index 现取，禁闭包捕获。 */
@@ -70,7 +70,7 @@ export class ServerSelectPanel extends PopupBase {
         const server = this.servers[index];
         const options = this.options;
         if (!server || !options) return;
-        node.getComponent(ServerSelectItem)!.initialize(
+        node.getComponent(ServerSelectItem).initialize(
             server,
             Number(server.serverId) === options.selectedServerId,
             () => this.select(server),

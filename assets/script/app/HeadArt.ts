@@ -5,9 +5,9 @@
  * const frame = await HeadArt.loadHeadFrame(avatarId);
  * if (frame) sprite.spriteFrame = frame;
  */
-import { SpriteFrame } from 'cc';
-import { HEAD_ART_ROOT, artKey, spriteFramePath } from './ArtPaths';
-import { routedLoad } from './common/RoutedResource';
+import type { SpriteFrame } from 'cc';
+import { HEAD_ART_ROOT } from './ArtPaths';
+import { createRoutedSpriteFrameCache } from './common/SpriteFrameCache';
 import type { ConfigService } from '../core/config/ConfigService';
 import { RefUtil } from '../framework/ref/RefUtil';
 import {
@@ -31,34 +31,14 @@ export class HeadArt {
     private static readonly TABLES = ['head', 'icon'] as const;
 
     /** 头像 SpriteFrame 缓存（键 = `根目录/资源名`）。 */
-    private static readonly spriteCache = new Map<string, SpriteFrame>();
+    private static readonly spriteCache = createRoutedSpriteFrameCache('HeadArt');
 
     /** head + icon 表的单次加载任务（整个进程复用一个解析器）。 */
     private static tableTask: Promise<HeadArtTables> | null = null;
 
     /** 按资源名加载头像 SpriteFrame，带缓存。 */
     static loadHeadSprite(name: string, root: string = HEAD_ART_ROOT): Promise<SpriteFrame | null> {
-        if (!name || !root) return Promise.resolve(null);
-        const key = artKey(root, name);
-        const cached = HeadArt.spriteCache.get(key);
-        if (cached) return Promise.resolve(cached);
-        return new Promise<SpriteFrame | null>((resolve) => {
-            routedLoad(spriteFramePath(root, name), SpriteFrame, (error, frame) => {
-                if (error || !frame) {
-                    console.warn(`[HeadArt] 头像加载失败：${key}`, error);
-                    resolve(null);
-                    return;
-                }
-                // 模块级 Map 不参与 Cocos 引用计数：不 addRef 的话，引用计数为 0 的
-                // SpriteFrame 会被引擎的 ReleaseManager 自动回收（`_destruct()` 把 uv 置 null），
-                // 而仍持有它、还在渲染的 Sprite 会炸
-                // 「Simple.updateUVs: Cannot read properties of null (reading '0')」。
-                // 与 `MainResBarArt.loadResBarSprite` / `CardLineupIcons.loadArt` 的缓存口径一致。
-                frame.addRef();
-                HeadArt.spriteCache.set(key, frame);
-                resolve(frame);
-            });
-        });
+        return HeadArt.spriteCache.loadNamed(name, root);
     }
 
     /** 头像 id → SpriteFrame。 */
@@ -125,9 +105,6 @@ export class HeadArt {
     /** 仅供测试重置缓存。 */
     static resetCacheForTest(): void {
         HeadArt.tableTask = null;
-        for (const frame of HeadArt.spriteCache.values()) {
-            if (frame?.isValid) frame.decRef();   // 与 loadHeadSprite 的 addRef 对称
-        }
         HeadArt.spriteCache.clear();
     }
 }

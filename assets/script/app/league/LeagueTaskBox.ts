@@ -53,23 +53,22 @@ const BREATH_SEGMENT_SECONDS = 0.5;
 @ccclass('LeagueTaskBox')
 export class LeagueTaskBox extends Component {
     @property({ type: Sprite, tooltip: '按钮_章节宝箱：宝箱图（zb0 不可领取 / zb1 可领取 / zb2 已领取）' })
-    chest: Sprite = null!;
+    chest: Sprite = null;
 
     @property({ type: Label, tooltip: 'lab_value：里程碑数字（3 / 5 / 8）' })
-    valueLabel: Label = null!;
+    valueLabel: Label = null;
 
     @property({ type: Node, tooltip: 'n67：已领取对勾（仅「已领取」页）' })
-    checkMark: Node = null!;
+    checkMark: Node = null;
 
     @property({ type: Node, tooltip: 'com_rd：可领取红点（仅「可领取」页）' })
-    redDot: Node = null!;
+    redDot: Node = null;
 
     /** 点到这个宝箱（无论什么状态都会回调，由宿主按状态分三支）。 */
     onBoxClick: ((view: ILeagueTaskBoxView) => void) | null = null;
 
     /** 当前铺在这个宝箱上的数据（`null` = 没铺）。 */
     private current: ILeagueTaskBoxView | null = null;
-    private bound = false;
 
     protected onLoad(): void {
         const button = this.chest ? this.chest.getComponent(Button) : null;

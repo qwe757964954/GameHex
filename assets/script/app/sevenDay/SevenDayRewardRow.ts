@@ -17,49 +17,49 @@ const { ccclass, property } = _decorator;
 @ccclass('SevenDayRewardRow')
 export class SevenDayRewardRow extends Component {
     @property({ type: Sprite, tooltip: 'Background：行底框（本节点上的 cc.Sprite，九宫 `sd_row_bg`）' })
-    background: Sprite = null!;
+    background: Sprite = null;
 
     @property({ type: Label, tooltip: 'Title：任务名 / 商品名' })
-    titleLabel: Label = null!;
+    titleLabel: Label = null;
 
     @property({ type: Label, tooltip: 'Progress：进度文案，如 `(3/100)`' })
-    progressLabel: Label = null!;
+    progressLabel: Label = null;
 
     @property({ type: Node, tooltip: 'RewardBar：奖励格容器（下面挂 SevenDayRewardSlot）' })
-    rewardBar: Node = null!;
+    rewardBar: Node = null;
 
     @property({ type: Node, tooltip: 'ActionBtn：右侧按钮（挂 cc.Button）' })
-    actionButton: Node = null!;
+    actionButton: Node = null;
 
     @property({ type: Label, tooltip: 'ActionBtn/Label：按钮文案' })
-    actionLabel: Label = null!;
+    actionLabel: Label = null;
 
     @property({ type: Sprite, tooltip: 'ActionBtn 的背景 Sprite（按状态换 绿/蓝/红 三张九宫图）' })
-    actionBackground: Sprite = null!;
+    actionBackground: Sprite = null;
 
     @property({ type: RedDot, tooltip: 'ActionBtn/RedDot：可领取红点（默认隐藏）' })
-    actionRedDot: RedDot = null!;
+    actionRedDot: RedDot = null;
 
     @property({ type: Node, tooltip: 'DiscountTag：折扣角标（`{0}折`，默认隐藏）' })
-    discountTag: Node = null!;
+    discountTag: Node = null;
 
     @property({ type: Label, tooltip: 'DiscountTag/Label：折扣文案' })
-    discountLabel: Label = null!;
+    discountLabel: Label = null;
 
     @property({ type: Node, tooltip: 'SoldOutIcon：已售罄角标（默认隐藏）' })
-    soldOutIcon: Node = null!;
+    soldOutIcon: Node = null;
 
     @property({ type: Node, tooltip: 'TakenIcon：已领取角标（默认隐藏）' })
-    takenIcon: Node = null!;
+    takenIcon: Node = null;
 
     @property({ type: SpriteFrame, tooltip: '按钮底图：绿（可领取 / 免费 / 前往）`sd_btn_green`' })
-    buttonGreen: SpriteFrame = null!;
+    buttonGreen: SpriteFrame = null;
 
     @property({ type: SpriteFrame, tooltip: '按钮底图：蓝（购买）`sd_btn_blue`' })
-    buttonBlue: SpriteFrame = null!;
+    buttonBlue: SpriteFrame = null;
 
     @property({ type: SpriteFrame, tooltip: '按钮底图：红（未完成，不可点）`sd_btn_red`' })
-    buttonRed: SpriteFrame = null!;
+    buttonRed: SpriteFrame = null;
 
     /**
      * 按钮点击回调，**由宿主在每次铺行时重设**（`SevenDayPage` 的 `renderItemFn`）。

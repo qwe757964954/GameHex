@@ -2,9 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { configureTerritoryMap, territoryNeighbors, TERRITORY_SITE_TYPE } from '../assets/script/app/territory/model/TerritoryMapConfig';
+import { assetUrl } from './helpers/asset-paths';
 
-const sample = JSON.parse(readFileSync(new URL('../assets/resources/config/territory-maps/chapter_01.json', import.meta.url), 'utf8'));
-const chapterTwo = JSON.parse(readFileSync(new URL('../assets/resources/config/territory-maps/chapter_02.json', import.meta.url), 'utf8'));
+const sample = JSON.parse(readFileSync(assetUrl('config/territory-maps/chapter_01.json'), 'utf8'));
+const chapterTwo = JSON.parse(readFileSync(assetUrl('config/territory-maps/chapter_02.json'), 'utf8'));
 
 test('client territory config loads static chapter data', () => {
     const config = configureTerritoryMap(sample);
@@ -35,7 +36,7 @@ test('map editor preset matches the published chapter and the runtime fallback b
     const preset = JSON.parse(readFileSync(new URL('../tools/map-editor/presets/territory/chapter_01.json', import.meta.url), 'utf8'));
     assert.deepEqual(preset, sample);
     assert.equal(sample.background, '');
-    assert.equal(existsSync(new URL('../assets/resources/image/gameui/bg_03.png', import.meta.url)), true);
+    assert.equal(existsSync(assetUrl('image/gameui/bg_03.png')), true);
 });
 
 test('chapter two keeps the current editor site format in sync with the published JSON', () => {
@@ -46,7 +47,7 @@ test('chapter two keeps the current editor site format in sync with the publishe
     assert.equal(config.sites.length, 35);
     assert.ok(config.sites.every((site) => /^(fixedResource|stage|asyncPvp)_\d+$/.test(site.configId)));
     assert.deepEqual(preset, chapterTwo);
-    assert.equal(existsSync(new URL('../assets/resources/config/territory-maps/chapter_02.json.meta', import.meta.url)), true);
+    assert.equal(existsSync(assetUrl('config/territory-maps/chapter_02.json.meta')), true);
 });
 
 test('published later chapter names stay aligned with their current map presets', () => {

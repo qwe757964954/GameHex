@@ -8,7 +8,6 @@ import { Group } from "./Group";
 import { System } from "./System";
 
 const CACHE_FRAME = 5// id延迟5帧回池
-const CACHE_OVERTIME = 10*1000//引用超时警告 毫秒
 
 export type EntityRef = [number,number]
 

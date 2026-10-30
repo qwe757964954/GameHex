@@ -1,5 +1,6 @@
 import {
     Color,
+    Component,
     Graphics,
     Label,
     LabelOutline,
@@ -49,7 +50,7 @@ import { BUILDING_VISIBLE_WIDTH } from './TerritoryStationView';
  * 前两条讲的是**绘制**、第三条讲的是**内容注入**，都不构成「结构不能进 prefab」的理由：
  * 结构一直是固定这十来个节点。
  *
- * ## 层级（后建的在上面，顺序 = 渲染序）
+ * ## 层级（子节点顺序 = 渲染序，越靠后越在上）
  *
  * ```
  * Root                      页面坐标系（不随地图滚动）
@@ -57,13 +58,27 @@ import { BUILDING_VISIBLE_WIDTH } from './TerritoryStationView';
  * ├── Stage      镜头层（倍率按奖励总量 1.08 / 1.35 / 2.3 ⇒ 推近不影响飞向栏位的图标）
  * │   ├── Beam     光柱（只有中档）——2026-10-23 起放进镜头层，跟着一起放大
  * │   ├── Rainbow  彩虹光束（只有强档）
+ * │   ├── Chest    宝箱（Chest 收动画缩放 / ChestArt 收基准缩放，两张一张图换帧）
  * │   ├── Stars    星光（Graphics 一批画完，不用 40 个节点）
  * │   ├── Rays     金色放射光条
  * │   ├── Glow     箱口光晕
- * │   ├── Chest    宝箱（Chest 收动画缩放 / ChestArt 收基准缩放，两张一张图换帧）
  * │   └── Fountain 喷泉图标（复用资源图，池化）
  * └── Fly        飞向顶部栏的奖励图标 + 数量（页面坐标系 ⇒ 不跟着镜头缩放）
  * ```
+ *
+ * ## 🔴 三条层级不变量（2026-10-29 用户：「打开宝箱的特效应该在宝箱的上层，
+ *    奖励资源的 icon 的下层显示，现在被宝箱遮挡了」）
+ *
+ *  1. **`Chest` 必须排在 `Stars` / `Rays` / `Glow` 之前**。这三样都是「从箱口炸出来」的，
+ *     画在箱子后面时过半形状被 84×67 的箱体吃掉 —— 实机就是用户说的「被宝箱遮挡」。
+ *     它们在 `prefab` 里的**兄弟序就是这个需求本身**，改顺序 = 改需求，单测
+ *     `territory-chest-layer-order` 直接读 prefab 断言。
+ *  2. **`Fountain` 必须是 `Stage` 的最后一个孩子**（奖励图标压在全部光效之上）：
+ *     玩家最先要读到的是"拿到了什么"，光效盖住图标就是本末倒置。
+ *  3. **`Beam` / `Rainbow` 留在 `Chest` 之后（即箱体**下方**），这是刻意的不对称**：
+ *     它们是从箱口一直铺到屏幕顶的**背景光**（光柱在箱口那一段宽 36px、alpha 到 235），
+ *     挪到箱子前面会把箱体中央糊成一片白 —— 「光从箱子后面射出来」才是对的。
+ *     别为了"统一"把这一条也翻过来。
  *
  * ⚠️ 2026-10-23 起**镜头是"真镜头"**（用户：「相机推进的实际效果应该是地块和宝箱同时放大，
  *   而不是只有宝箱放大，且放大的同时需要保证宝箱的坐标点在屏幕的中央」）：
@@ -185,25 +200,11 @@ function makeNode(name: string, parent: Node): Node {
     return node;
 }
 
-/**
- * 取 prefab 里的固定节点 —— **找不到就抛出**。
- *
- * 这套层级是 `ui/territory/TerritoryChest.prefab` 的结构契约（见类头注释的层级图），
- * 少一层就是「光效整个不出现」且零报错；宁可在这里炸掉，也不要静默降级。
- */
-function requireChild(parent: Node, name: string): Node {
-    const node = parent.getChildByName(name);
-    if (!node) throw new Error(`[TerritoryChest] prefab 缺节点 ${parent.name}/${name}（结构被改过？）`);
-    return node;
-}
-
 /** 取 prefab 里的 `Graphics` 节点；`width/height > 0` 时顺带按视口重设尺寸。 */
 function requireGraphics(parent: Node, name: string, width = 0, height = 0): Graphics {
-    const node = requireChild(parent, name);
-    if (width > 0 && height > 0) node.getComponent(UITransform)!.setContentSize(width, height);
-    const graphics = node.getComponent(Graphics);
-    if (!graphics) throw new Error(`[TerritoryChest] 节点 ${name} 上缺 cc.Graphics（prefab 结构被改过？）`);
-    return graphics;
+    const node = parent.getChildByName(name);
+    if (width > 0 && height > 0) node.getComponent(UITransform).setContentSize(width, height);
+    return node.getComponent(Graphics);
 }
 
 export class TerritoryChestView {
@@ -318,13 +319,13 @@ export class TerritoryChestView {
         this.size = { width: Math.max(1, size.width), height: Math.max(1, size.height) };
         const { width, height } = this.size;
         this.node = root;
-        root.getComponent(UITransform)!.setContentSize(width, height);
+        root.getComponent(UITransform).setContentSize(width, height);
         root.active = false;
         this.catchX = 0;
         this.catchY = height / 2 - 40;
 
         this.backdrop = requireGraphics(root, 'Backdrop', width, height);
-        this.stage = requireChild(root, 'Stage');
+        this.stage = root.getChildByName('Stage');
         // 光柱 / 彩虹挂在**镜头层**里（2026-10-23）：镜头推近时宝箱会被挪到屏幕中央，
         // 这两样要是留在 Root，就会与箱子脱开、杵在原格上。它们本来就是"从箱口射出来"的，
         // 跟着箱子一起放大才对。
@@ -333,22 +334,22 @@ export class TerritoryChestView {
         this.stars = requireGraphics(this.stage, 'Stars');
         this.rays = requireGraphics(this.stage, 'Rays');
         this.glow = requireGraphics(this.stage, 'Glow');
-        this.chest = requireChild(this.stage, 'Chest');
+        this.chest = this.stage.getChildByName('Chest');
         // 宝箱本体的透明度：只在**收尾淡出**时被写（`territoryChestTailFade`）。
         // 挂在 `Chest` 而不是 `ChestArt` 上：光晕/爆点这些兄弟节点各自算 alpha，
         // 分成两层写会出现「箱子已经没了、光晕还亮着」。
-        this.chestOpacity = this.chest.getComponent(UIOpacity)!;
+        this.chestOpacity = this.chest.getComponent(UIOpacity);
         // 一张图换帧（2026-10-22）：不再拆箱体/箱盖 —— 闭合与开盖是两张成品图，
         // 中间帧由 `tools/gen_chest_open_frames.py` 烘焙，运行时只按帧号换 `spriteFrame`。
         //
         // ⚠️ 缩放要分两层：`Chest` 收**动画**缩放（弹出 / 蓄力挤压），`ChestArt` 收**基准**缩放
         //   （把美术缩到 `CHEST_VISIBLE_WIDTH`）。合成一层的话 `applyChest` 每帧写死
         //   `setScale(fx.scale, …)` 会把基准覆盖掉，宝箱瞬间缩成 1:1 像素。
-        this.chestArt = requireChild(this.chest, 'ChestArt');
-        this.chestSprite = this.chestArt.getComponent(Sprite)!;
-        this.chestTransform = this.chestArt.getComponent(UITransform)!;
-        this.fountain = requireChild(this.stage, 'Fountain');
-        this.flyLayer = requireChild(root, 'Fly');
+        this.chestArt = this.chest.getChildByName('ChestArt');
+        this.chestSprite = this.chestArt.getComponent(Sprite);
+        this.chestTransform = this.chestArt.getComponent(UITransform);
+        this.fountain = this.stage.getChildByName('Fountain');
+        this.flyLayer = root.getChildByName('Fly');
     }
 
     /** 注入宝箱美术（页面在资源就绪后调一次）。 */
@@ -828,10 +829,6 @@ export class TerritoryChestView {
     // 节点装配
     // ============================================================
 
-    /** 箱盖底边（铰链）在 `Chest` 局部坐标系里的位置。 */
-    private lidBaseX = 0;
-    private lidBaseY = 0;
-
     /**
      * 把宝箱美术裁成「箱体 + 箱盖」两片并对齐。
      *
@@ -882,7 +879,7 @@ export class TerritoryChestView {
             const node = makeNode(`FountainSlot_${index}`, this.fountain);
             node.active = false;
             const size = 46;
-            node.getComponent(UITransform)!.setContentSize(size, size);
+            node.getComponent(UITransform).setContentSize(size, size);
             const sprite = node.addComponent(Sprite);
             sprite.trim = false;
             sprite.sizeMode = Sprite.SizeMode.CUSTOM;
@@ -890,7 +887,7 @@ export class TerritoryChestView {
                 node,
                 sprite,
                 opacity: node.addComponent(UIOpacity),
-                transform: node.getComponent(UITransform)!,
+                transform: node.getComponent(UITransform),
             });
         }
         // 图标按奖励条目**轮流取**（与飘字喷发同一口径）：一批里既有银币又有道具时两种图标都出现。
@@ -910,12 +907,12 @@ export class TerritoryChestView {
             const index = this.flySlots.length;
             const node = makeNode(`FlySlot_${index}`, this.flyLayer);
             node.active = false;
-            node.getComponent(UITransform)!.setContentSize(size, size);
+            node.getComponent(UITransform).setContentSize(size, size);
             const sprite = node.addComponent(Sprite);
             sprite.trim = false;
             sprite.sizeMode = Sprite.SizeMode.CUSTOM;
             const labelNode = makeNode('Amount', node);
-            labelNode.getComponent(UITransform)!.setContentSize(120, 26);
+            labelNode.getComponent(UITransform).setContentSize(120, 26);
             // 数量文字挂在粒子**底边之下**：图标变大后（44 → 59.4）固定 -30 会被压住，
             // 所以按当前边长推到 `size/2 + 12`，放大前后都留 12px 间隙。
             labelNode.setPosition(0, -(size / 2 + 12), 0);
@@ -931,7 +928,7 @@ export class TerritoryChestView {
                 node,
                 sprite,
                 opacity: node.addComponent(UIOpacity),
-                transform: node.getComponent(UITransform)!,
+                transform: node.getComponent(UITransform),
                 label,
             });
         }

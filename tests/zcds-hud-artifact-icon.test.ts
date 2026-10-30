@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
+import { assetPath } from './helpers/asset-paths';
 
 /**
  * HUD 神器图标必须与棋盘资源格显示**同一件神器**。
@@ -14,9 +15,9 @@ import test from 'node:test';
  */
 
 /** prefab 上原先硬绑的通用图。 */
-const GENERIC_ARTIFACT_ART = 'assets/resources/image/gameui/zd_faqi.png';
+const GENERIC_ARTIFACT_ART = assetPath('image/gameui/zd_faqi.png');
 /** 本局携带神器的图（`pvpArtifact[].icon` = 霜封冰刃）。 */
-const CARRIED_ARTIFACT_ART = 'assets/resources/image/artifact/霜封冰刃.png';
+const CARRIED_ARTIFACT_ART = assetPath('image/artifact/霜封冰刃.png');
 
 function readSource(path: string): string {
     return readFileSync(path, 'utf8');
@@ -65,7 +66,7 @@ test('棋盘资源格与 HUD 共用同一份神器帧 —— 两者都由 artifa
 
 test('prefab 侧：ArtifactIcon 仍是 TRIMMED，所以代码里必须缩放而不是改 sizeMode', () => {
     // 这条是给「后人」看的护栏：改sizeMode 会让 prefab 与代码两处口径打架。
-    const prefab = readFileSync('assets/resources/ui/game/ZCGameHUD.prefab', 'utf8');
+    const prefab = readFileSync(assetPath('ui/game/ZCGameHUD.prefab'), 'utf8');
     assert.match(prefab, /"artifactIcon"/, 'HUD prefab 上应有 ArtifactIcon 引用');
     assert.match(prefab, /"_sizeMode":\s*1/, 'ArtifactIcon 的 sizeMode 应仍是 TRIMMED(1)');
 });

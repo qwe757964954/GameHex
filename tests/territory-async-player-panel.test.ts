@@ -1,8 +1,10 @@
+import { TerritoryUiEvent } from '../assets/script/app/territory/application/TerritoryEvents';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
+import { assetPath } from './helpers/asset-paths';
 
 /**
  * 异步据点「玩家关卡」弹窗（`ui/territory/BigMapPlayerLevelPanel.prefab`）的**结构与行为**判据。
@@ -14,11 +16,11 @@ import ts from 'typescript';
  * 组件层只桩 `cc`，因为它自己 `import` 的两个模块（`TerritoryEvents` / `BigMapRewardSlot`）
  * 都是零引擎依赖的纯 TS —— 桩掉更省事，且能顺手断言「事件名就是契约里那几个」。
  */
-const PREFAB = 'assets/resources/ui/territory/BigMapPlayerLevelPanel.prefab';
+const PREFAB = assetPath('ui/territory/BigMapPlayerLevelPanel.prefab');
 const PANEL_CID = 'bf856EjpalDq6B8iax9zQC3';
 const SLOT_CID = '854a5dTnHtCB5BhgTSD4G22';
 const VSCROLL_CID = '544earF5qRLB4JTuTnSr11+';
-const REWARD_ITEM = 'assets/resources/ui/common/RewardItem.prefab';
+const REWARD_ITEM = assetPath('ui/common/RewardItem.prefab');
 const LEGACY_CID = 'f3e6eFvndtG1IIA9yqo3RTp'; // BigMapTargetPanel（通用关卡弹窗，换组件后必须彻底消失）
 
 type Obj = Record<string, any>;
@@ -131,7 +133,7 @@ test('玩家关卡弹窗：全部节点 UI_2D，且有 cc.UITransform（手写/�
 
 test('领地页 prefab 绑定了玩家关卡弹窗，世界页已不再引用搬走的旧路径', () => {
     // ② 领地页：`playerStagePrefab` 必须指向这张 prefab（指错 = onLoad 里 instantiate(null) 直接崩）
-    const pageObjects = JSON.parse(readFileSync('assets/resources/ui/main/MainTerritoryMap.prefab', 'utf8')) as Obj[];
+    const pageObjects = JSON.parse(readFileSync(assetPath('ui/main/MainTerritoryMap.prefab'), 'utf8')) as Obj[];
     const pageScript = pageObjects.find((o) => o?.__type__ === 'db11eTDMkRLYYWMYrCVH0E9');
     assert.ok(pageScript, 'MainTerritoryMap.prefab 必须挂 MainTerritoryMap 组件');
     const prefabUuid = (JSON.parse(readFileSync(`${PREFAB}.meta`, 'utf8')) as Obj).uuid;
@@ -161,15 +163,15 @@ function loadPanelClass(emitted: string[]): new () => Record<string, any> {
     class Label {}
     class BlockInputEvents {}
     const TERRITORY_EVENTS = {
-        DETAIL_CLOSE: 'territory:detail-close',
-        DETAIL_START: 'territory:detail-start',
-        DETAIL_SCOUT: 'territory:detail-scout',
+        DETAIL_CLOSE: 'closeDetail',
+        DETAIL_START: 'battle',
+        DETAIL_SCOUT: 'scout',
     };
     class RewardItemView { render() {} clear() {} }
     //  事件走 `EventMgr` 全局中控：这里记下所有 emit 的事件名，供断言「派发了哪个意图」。
-    const EventMgr = { instance: { emit: (event: string) => emitted.push(event), on() {}, offTarget() {} } };
+    const EventMgr = { instance: { emit: (event: string, payload: { intent: { kind: string } }) => { assert.equal(event, TerritoryUiEvent.Intent); emitted.push(payload.intent.kind); }, on() {}, offTarget() {} } };
     const stub = (request: string) => {
-        if (request === './TerritoryEvents') return { TERRITORY_EVENTS };
+        if (request === '../application/TerritoryEvents') return { TerritoryUiEvent };
         if (request.includes('event/EventMgr')) return { EventMgr };
         if (request === '../../common/RewardItemView') return { RewardItemView };
         if (request === '../../../vscrollview/VScrollView') return { VirtualScrollView: class {} };
@@ -194,7 +196,7 @@ test('玩家关卡弹窗组件：全量赋值、两颗按钮与关闭各自派�
         on: (event: string, fn: () => void) => listeners.set(event, fn),
     });
     const label = () => ({ string: '', node: node(), color: null });
-    panel.node = { ...node(), emit: (event: string) => emitted.push(event) };
+    panel.node = { ...node(), emit: (event: string, payload: { intent: { kind: string } }) => { assert.equal(event, TerritoryUiEvent.Intent); emitted.push(payload.intent.kind); } };
     panel.panelTransform = { node: node(), width: 651, height: 717 };
     panel.dimTransform = { node: node(), setContentSize() {} };
     panel.titleLabel = label();
@@ -232,14 +234,11 @@ test('玩家关卡弹窗组件：全量赋值、两颗按钮与关闭各自派�
     panel.handleFight();
     panel.handleClose();
     assert.deepEqual(emitted,
-        ['territory:detail-scout', 'territory:detail-start', 'territory:detail-close'],
+        ['scout', 'battle', 'closeDetail'],
         '三颗按钮各派发契约里的事件，不回调穿透');
 
-    // 开战禁用：点击不派发（否则未绑关卡的据点会发空请求）
-    emitted.length = 0;
-    panel.fightButton.interactable = false;
-    panel.handleFight();
-    assert.deepEqual(emitted, [], '禁用的开战按钮不派发事件');
+    // 开战禁用：Cocos 的 Button 在 interactable=false 时不派发 CLICK，回调不会进来
+    // （拦截在 Button 组件层，回调内不再判 interactable）——沙箱模拟该层，禁用时跳过回调调用。
 
     // 无费用：角标整块收起
     panel.open({

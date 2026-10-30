@@ -50,25 +50,25 @@ export class LimitTimeActPage extends PopupBase {
     static prefabPath = 'ui/LimitTimeAct/LimitTimeAct';
 
     @property({ type: Label, tooltip: 'TitleLabel：标题（服务端 limitTimeConfig.title 下发，兜底「限时活动」）' })
-    titleLabel: Label = null!;
+    titleLabel: Label = null;
 
     @property({ type: Label, tooltip: 'TimeLabel：倒计时' })
-    timeLabel: Label = null!;
+    timeLabel: Label = null;
 
     @property({ type: Label, tooltip: 'DescLabel：页签描述' })
-    descLabel: Label = null!;
+    descLabel: Label = null;
 
     @property({ type: VirtualScrollView, tooltip: 'List：三页签共用的虚拟列表' })
-    list: VirtualScrollView = null!;
+    list: VirtualScrollView = null;
 
     @property({ type: Button, tooltip: 'CloseBtn：关闭按钮' })
-    closeBtn: Button = null!;
+    closeBtn: Button = null;
 
     @property({ type: Label, tooltip: 'HintLabel：提示行（未开 / 离线 / 失败）' })
-    hintLabel: Label = null!;
+    hintLabel: Label = null;
 
     @property({ type: SpriteFrame, tooltip: '页签选中底板（主页同款 city/nav_sel）' })
-    selectedTabFrame: SpriteFrame = null!;
+    selectedTabFrame: SpriteFrame = null;
 
     /** 数据端口；测试可替换。 */
     private repo: ILimitTimeActRepository = limitTimeActRepository;

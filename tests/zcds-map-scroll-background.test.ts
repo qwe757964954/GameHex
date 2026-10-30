@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { assetPath } from './helpers/asset-paths';
 
 type PrefabObject = Record<string, unknown> & {
     __type__?: string;
@@ -9,7 +10,7 @@ type PrefabObject = Record<string, unknown> & {
     _children?: Array<{ __id__: number }>;
 };
 
-const prefab = JSON.parse(readFileSync('assets/resources/ui/game/ZCGameHUD.prefab', 'utf8')) as PrefabObject[];
+const prefab = JSON.parse(readFileSync(assetPath('ui/game/ZCGameHUD.prefab'), 'utf8')) as PrefabObject[];
 const nodeNamed = (name: string, parentName?: string): PrefabObject => {
     const node = prefab.find((item) =>
         item.__type__ === 'cc.Node'

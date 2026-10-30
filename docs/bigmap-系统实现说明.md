@@ -583,6 +583,58 @@ npx tsx tools/preview_bigmap_info_layout_curves.ts && python tools/preview_bigma
 2. **`resType` 是道具 id 不是枚举串**，要靠 `bigmapResource.itemId` 反查；两者都没配时按固定约定 18501~18504 兜底，否则资源田整块不产出。
 3. **`queueUnlocked` 仍由服务端 `unlockQueue` 决定**，`baseBuilding` 里的「小玩法入口」(71017) 不再是队列建筑。
 
+### 5.11 更新建筑类型与图片接入（2026-10-29）
+
+`DM-建筑配置.xlsx` 的 23 行已与 `baseBuilding.json` 一致。类型按策划表解释为
+1 主城 / 2 粮食田 / 3 木材田 / 4 铁矿田 / 5 货币田 / 6 研究院 / 7 小玩法入口 / 8 装饰。
+`BigMapBuildingKind` 与这八类同步，建造菜单继续按类型合并，并使用下一座真实建筑 ID 请求建造。
+
+基地建筑配置经 Presenter → Page 传给 `BigMapArtLoader`，按类型使用现有概念图。
+用户确认未入库的 `baseBuildIcon` 不接入加载，不探测 `ui/bigmap/building/...` 路径。
+图片表按类型索引，不能再按旧 8 个建筑 ID 索引，否则 71003 粮食田会被画成木材田。
+同路径请求在页面资源作用域内复用。世界主城、城池和野怪的图片仍走世界标记链路。
+
+当前配置的 `ui/bigmap/building/7100x` 图片尚未入库，因此暂用现有概念图。
+`basebuildPositon` 已解析为 `initialCellId`，保留 1001～1023 原始格子编号；
+这些编号指向基建图，现有基地地块编号为 0～24，缺少对应基建地图定义时不转换或自动摆放。
+`baseBuildType` 越界、初始格子 ID 非整数或负数均在配置边界报错。
+
+验证：`tests/bigmap-latest-building-config.test.ts`、`tests/bigmap-art-loading.test.ts`，以及基地与 Presenter 回归。
+
+### 5.12 DM 城池配置接入（2026-10-29）
+
+用户确认：接入 `DM-城池配置.xlsx`，位置沿用现有建筑摆放方式。
+该表导出为 `bigMapCamp`，共有 81 座城。正式 `loadBigMapConfig` 使用这些城池 ID
+构建世界配置，旧表中的 200 / 300 不再作为正式城池显示。`parseBigMapConfig` 的旧城池
+数据仍供历史离线模拟和对应回归测试使用，不用新表推造另一套本地结算。
+
+`BigMapCampWorld.withBigMapCampCities` 将城池身份接入原有世界生成契约；
+`completeBigMapCampLayout` 在加载旧布局时保留仍有效城池的锚点和占格，
+新增城池经原有环位选择 / BFS 占格算法落位，避开已有城池、野怪、基地、障碍和据点。
+没有布局文件时继续走原种子生成入口。布局补齐后按多源 BFS 重新分配势力范围，
+保证每格只有一个归属、各城范围连通，并从实际边界生成对称邻接。
+旧布局文件保持原样，不覆盖编辑器中的手工修改。
+
+`bigMapCamp` 的章节、关卡序号、占领类型、集结开关、尺寸、相邻城池、开放天数、
+每日宣战上限、积分参数、重置参数、BUFF 与奖励引用、图片和说明均进入强类型配置。
+新增城池的种子占格大小来自 `campSize`；显式布局继续以布局占格为准。
+图片由 `campIcon` 经 AssetService / ResourceScope 加载，按 campId 分发给地图标记和详情图，
+相同路径共用请求，缺失时回退既有城池图片。详情展示宣战上限、开放天数和积分门槛。
+
+联机攻打继续发送 `1004 + campId`；开战资格、积分曲线、奖励和 BUFF 发放由服务端执行，
+联机视图不再计算旧版离线伤害预览。不会将 `campBattleId` 当作地图城池 ID。
+
+验证：`tests/bigmap-latest-camp-config.test.ts` 检查 81 座城完整加载、参数校验、图片实际存在、
+保留原锚点、无占位重叠、确定性及范围连通；配合城池开战、地图、表现与 Presenter 回归。
+
+### 5.13 基地连续场景（2026-10-29）
+
+- 基地底图使用 `image/bigmap/base_background`，来源为美术目录「主基地地图/主基地BG.jpg」（2048×2048），经 Cocos MCP 导入 bigmap 分包，关闭整图 packable。基地不再加载 `concept/base_ground`，也不再创建每格 Foundation；世界页原有地形不受影响。
+- `BigMapBasePresentation` 固定格距147×96，逻辑格和建筑顶部留在背景中央54%内；背景、建筑、格子拾取共用一个 BaseContent 坐标系。行列配置范围3～20（允许偶数），默认仍5×5，保留既有服务端位置编号，不自动扩列重排旧建筑。
+- 基地支持单指拖动、双指锚点缩放和鼠标滚轮缩放；纯函数约束缩放与边界，防止露底。进入基地定位主城，正常浏览隐藏空地文本与格线，建造/搬移时显示空位提示。
+- 所有建筑与收取图标共用手势判定，拖动距离超过12或发生双指操作时松手不触发点击。建筑按屏幕纵向排序，视口外节点隐藏；关闭/切换模式清理手势状态。
+- 回归：`bigmap-base-camera`、`bigmap-base-view`、`bigmap-base-render`、`bigmap-base-presentation`、`bigmap-latest-queue-config`、`bigmap-art-loading`。
+
 ## 6. 测试
 
 ```
@@ -618,3 +670,15 @@ npx tsx --test tests/bigmap-info-layout.test.ts     # 15 条：详情弹窗排�
 4. **美术替换点**：`view/BigMapTheme.ts`（配色与面板）+ 两个 View 里的 `Graphics` 绘制。
    `BigMapPage` 的布局（坐标常量）不用动。
 5. **商店 / 赛季 / 托管 / 战斗加速**：按用户要求不做。
+
+
+### 5.14 页面 UI 改为 Prefab 维护（2026-10-29）
+
+- 固定界面：`assets/bundles/bigmap/ui/bigmap/BigMapPage.prefab`。资源栏、模式切换、建造目录、详情卡、提示与开战遮罩均在此编辑；根组件 `BigMapPageLayout` 用 Inspector 引用接线。
+- `Templates/BuildRowTemplate` 是建造目录行，`Templates/PlotTemplate` 是基地地块模板。Templates 容器默认关闭，运行时只实例化两种重复项，不再创建 Node 或添加 UI 组件。修改模板会作用于所有实例。
+- 基地层级：`BaseView/BaseViewport/BaseContent` 下依次为 `BaseGround`、`BasePlots`；图层、Mask、UITransform、Sprite 尺寸模式由 Prefab 保存。`BigMapBaseView` 只负责地图状态、相机与拾取。
+- `BigMapPanel` 保存底板颜色/圆角及预挂 Graphics 引用，编辑器可预览；`BigMapButton` 保存 Label/皮肤/兜底底板引用。状态底色、选择轮廓等仍按数据绘制。页面布局适配集中在 `BigMapPageLayout.resize`，详情卡内部空间由既有纯布局模型分配。
+- 世界地图仍维护独立 `BigMapWorldView.prefab` 与 `BigMapWorldTemplates.prefab`。页面外壳和世界 Prefab 经 AssetService 并行加载，共用页面 ResourceScope；关闭后迟到的加载不会再实例化节点。
+- 删除 Theme/Skin 中旧建节点工厂及 Page 中已退役目标弹窗装配；bigmap/view 不再含运行时 `new Node`、`addComponent` 或 `destroyAllChildren`。
+
+验证：页面 Prefab 经 Cocos MCP 刷新、结构校验与真实实例引用检查；在引擎中执行 390×900 布局后，开战提示 y=290，控制台无错误。测试覆盖模板接线、禁用按钮、两个开建造菜单入口、400 格裁剪、拖拽/缩放/收取、并行加载取消、开战遮罩。完整游戏内视觉验收仍需登录后检查。

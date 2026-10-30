@@ -34,9 +34,10 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import test from 'node:test';
+import { assetPath } from './helpers/asset-paths';
 
-const MAP_DIR = 'assets/resources/config/maps';
-const DECOR_ROOT = 'assets/resources/image/decor';
+const MAP_DIR = assetPath('config/maps');
+const DECOR_ROOT = assetPath('image/decor');
 const ATLAS_META = `${DECOR_ROOT}/auto-atlas.pac.meta`;
 
 /** 所有地图与编辑器夹具 `art.freeDecor` 里使用的资源名。 */

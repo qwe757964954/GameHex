@@ -73,7 +73,7 @@ export class LeagueNorthRankPage extends PopupBase {
     static prefabPath = 'ui/League/LeagueNorthRank';
 
     @property({ type: Node, tooltip: 'CloseBtn：右上关闭按钮（挂 cc.Button）' })
-    closeButton: Node = null!;
+    closeButton: Node = null;
 
     /**
      * `TabRank` / `TabProgress`：两个页签。
@@ -82,16 +82,16 @@ export class LeagueNorthRankPage extends PopupBase {
      *    运行时 `getComponent(LeagueNorthTab)`。
      */
     @property({ type: Node, tooltip: 'TabRank：「联盟排名」页签（默认选中）' })
-    tabRank: Node = null!;
+    tabRank: Node = null;
 
     @property({ type: Node, tooltip: 'TabProgress：「盟内进度」页签' })
-    tabProgress: Node = null!;
+    tabProgress: Node = null;
 
     @property({ type: VirtualScrollView, tooltip: 'RankList：名次列表（虚拟列表）' })
-    rankList: VirtualScrollView = null!;
+    rankList: VirtualScrollView = null;
 
     @property({ type: Node, tooltip: 'MyBg：我的名次底板（n13，594×160）' })
-    myBg: Node = null!;
+    myBg: Node = null;
 
     /**
      * `HeroItem`：我的名次那一行（**不画行底框**）。
@@ -102,16 +102,16 @@ export class LeagueNorthRankPage extends PopupBase {
      *    ⇒ 绑节点、运行时 `getComponent(LeagueNorthRankRow)`。
      */
     @property({ type: Node, tooltip: 'HeroItem：我的名次那一行的节点（挂 LeagueNorthRankRow）' })
-    heroItem: Node = null!;
+    heroItem: Node = null;
 
     @property({ type: Node, tooltip: 'HeaderRank：联盟排名页的表头（n15，随页签显隐）' })
-    headerRank: Node = null!;
+    headerRank: Node = null;
 
     @property({ type: Node, tooltip: 'HeaderProgress：盟内进度页的表头（n16，随页签显隐）' })
-    headerProgress: Node = null!;
+    headerProgress: Node = null;
 
     @property({ type: Label, tooltip: 'AwardTip：发奖说明（n12，静态文案）' })
-    awardTip: Label = null!;
+    awardTip: Label = null;
 
     /** 当前页签。 */
     private tab: LeagueNorthRankTab = 'rank';
@@ -129,12 +129,6 @@ export class LeagueNorthRankPage extends PopupBase {
     /** 页签底图（读一次就够）。 */
     private tabFramesReady = false;
 
-    /** `renderItemFn` 只绑一次（放 `onOpen` 会随每次打开重复叠加）。 */
-    private rendererBound = false;
-
-    /** 页签只绑一次。 */
-    private tabsBound = false;
-
     /** 每次取数递增，用来作废在飞的异步结果。 */
     private revision = 0;
 
@@ -151,15 +145,9 @@ export class LeagueNorthRankPage extends PopupBase {
         this.tabRankRef = this.tabRank ? this.tabRank.getComponent(LeagueNorthTab) : null;
         this.tabProgressRef = this.tabProgress ? this.tabProgress.getComponent(LeagueNorthTab) : null;
 
-        if (!this.rendererBound) {
-            this.rendererBound = true;
-            if (this.rankList) this.rankList.renderItemFn = (node, index) => this.renderRow(node, index);
-        }
-        if (!this.tabsBound) {
-            this.tabsBound = true;
-            if (this.tabRankRef) this.tabRankRef.onTabClick = () => void this.onTabClick('rank');
-            if (this.tabProgressRef) this.tabProgressRef.onTabClick = () => void this.onTabClick('progress');
-        }
+        if (this.rankList) this.rankList.renderItemFn = (node, index) => this.renderRow(node, index);
+        if (this.tabRankRef) this.tabRankRef.onTabClick = () => void this.onTabClick('rank');
+        if (this.tabProgressRef) this.tabProgressRef.onTabClick = () => void this.onTabClick('progress');
         if (this.awardTip) this.awardTip.string = LEAGUE_NORTH_RANK_AWARD_TIP;
         // 页签文案由图里的静态文字兜底，这里再写一遍（改文案表时不用回 prefab 改）
         if (this.tabRankRef) this.tabRankRef.setTitle(LEAGUE_NORTH_TAB_RANK);

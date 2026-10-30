@@ -41,12 +41,12 @@ function createLoader(assets: unknown, warnings: unknown[][] = []) {
         '../ZCDCLogSwitch': { ZCDC_LOG_WARNINGS: true, ZCDC_LOG_DIAGNOSTICS: false },
     };
     const context = {
-        exports: {} as { ZCGameLoader: new (assets: unknown, configs: unknown, mapDirectory: string) => object },
+        exports: {} as { ZCGameLoader: new (resources: unknown, mapDirectory: string) => object },
         require: (name: string) => dependencies[name],
         console: { warn: (...args: unknown[]) => warnings.push(args) },
     };
     runInNewContext(code, context);
-    return new context.exports.ZCGameLoader(assets, {}, 'maps');
+    return new context.exports.ZCGameLoader({ assets, configs: {} }, 'maps');
 }
 
 function loadSortedSpriteFrames(loader: object) {

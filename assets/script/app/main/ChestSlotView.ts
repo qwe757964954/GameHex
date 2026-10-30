@@ -27,49 +27,49 @@ const CHEST_PROGRESS_SCALE_X = 0.78;
 @ccclass('ChestSlotView')
 export class ChestSlotView extends Component {
     @property({ type: Sprite, tooltip: 'Card：卡片底（蓝 / 金 / 空槽三选一）' })
-    card: Sprite = null!;
+    card: Sprite = null;
 
     @property({ type: Node, tooltip: 'Timer：顶部计时条容器' })
-    timer: Node = null!;
+    timer: Node = null;
 
     @property({ type: Node, tooltip: 'Timer/TimeBg：仅激活倒计时中显示的进度条' })
-    timeBg: Node = null!;
+    timeBg: Node = null;
 
     @property({ type: Node, tooltip: 'Timer/Clock：闹钟图标' })
-    clock: Node = null!;
+    clock: Node = null;
 
     @property({ type: Sprite, tooltip: 'Timer/TimeBg/TimeFill：进度填充（FILLED）' })
-    timeFill: Sprite = null!;
+    timeFill: Sprite = null;
 
     @property({ type: Label, tooltip: 'Timer/TimeText：剩余时间文本' })
-    timeText: Label = null!;
+    timeText: Label = null;
 
     @property({ type: UITransform, tooltip: 'Timer/TimeText：时间文本布局' })
-    timeTextTransform: UITransform = null!;
+    timeTextTransform: UITransform = null;
 
     @property({ type: Sprite, tooltip: 'Box：宝箱图' })
-    box: Sprite = null!;
+    box: Sprite = null;
 
     @property({ type: Label, tooltip: 'NameLabel：宝箱名字' })
-    nameLabel: Label = null!;
+    nameLabel: Label = null;
 
     @property({ type: Label, tooltip: 'EmptyLabel：「空槽位」' })
-    emptyLabel: Label = null!;
+    emptyLabel: Label = null;
 
     @property({ type: Node, tooltip: 'Cost：闪电 + 体力数字（空槽态）' })
-    cost: Node = null!;
+    cost: Node = null;
 
     @property({ type: Label, tooltip: 'Cost/Count：体力数字' })
-    costLabel: Label = null!;
+    costLabel: Label = null;
 
     @property({ type: Sprite, tooltip: 'Btn：按钮底（金 / 蓝 / 绿三选一）' })
-    btn: Sprite = null!;
+    btn: Sprite = null;
 
     @property({ type: Label, tooltip: 'Btn/BtnLabel：按钮文案' })
-    btnLabel: Label = null!;
+    btnLabel: Label = null;
 
     @property({ type: Node, tooltip: 'Btn/SpeedUpIcon：加速按钮的视频图标' })
-    speedUpIcon: Node = null!;
+    speedUpIcon: Node = null;
 
     /** 三张卡底 + 三张按钮底，由 `ChestBar` 在装配时灌进来。 */
     private static cardFrames: { blue: SpriteFrame | null; gold: SpriteFrame | null; empty: SpriteFrame | null } =

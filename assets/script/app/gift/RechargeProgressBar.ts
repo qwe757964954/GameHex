@@ -18,14 +18,14 @@ const { ccclass, property } = _decorator;
 @ccclass('RechargeProgressBar')
 export class RechargeProgressBar extends Component {
     @property({ type: Node, tooltip: 'Bg：底条（满宽，用来取宽度上限）' })
-    bg: Node = null!;
+    bg: Node = null;
 
     @property({ type: Node, tooltip: 'Bar：填充条（锚点必须 (0,0.5)）' })
-    bar: Node = null!;
+    bar: Node = null;
 
     /** 累计页顶部的 `ProgressBar1` 没有文本 ⇒ 这个引用允许为空，代码里判一次。 */
     @property({ type: Label, tooltip: 'Value：进度文本（有些进度条没有文本，留空即可）' })
-    valueLabel: Label = null!;
+    valueLabel: Label = null;
 
     /**
      * 铺进度。
@@ -35,10 +35,10 @@ export class RechargeProgressBar extends Component {
      * @param text  进度文本；传 `null` 时保留 prefab 上的静态文本（`valueLabel` 为空则忽略）
      */
     render(value: number, max: number, text: string | null = null): void {
-        const full = this.bg.getComponent(UITransform)!.contentSize.width;
+        const full = this.bg.getComponent(UITransform).contentSize.width;
         const ratio = max > 0 ? Math.max(0, Math.min(1, value / max)) : 0;
 
-        const barTrans = this.bar.getComponent(UITransform)!;
+        const barTrans = this.bar.getComponent(UITransform);
         barTrans.setContentSize(full * ratio, barTrans.contentSize.height);
         this.bar.setPosition(-full / 2, this.bar.position.y, 0);
 

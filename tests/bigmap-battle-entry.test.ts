@@ -1,3 +1,5 @@
+import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
+import { componentControllerModule } from './helpers/controller-context';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -38,7 +40,6 @@ function fixture(start?: (type: number, id: number, isCurrent: () => boolean) =>
         fetchRoles: async (campId: number) => ({ campId, infos: [] }),
         // 迁城是写操作，这批用例用不到；给「明确失败」避免误判成功。
         requestMove: async () => null,
-        subscribeRoleEvents: () => () => undefined,
     });
     const storage = createMemoryBigMapStorage();
     const presenter = new BigMapPresenter({ config: loadBigMapConfig(), storage, saveKey: 'battle-entry',
@@ -174,6 +175,7 @@ function gameFixture(battleType: 1003 | 1004) {
     runInNewContext(ts.transpileModule(readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8'), {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
     }).outputText, { exports, require(name: string) {
+            if (name.endsWith('/ComponentController')) return componentControllerModule();
         if (name === 'cc') return { _decorator: { ccclass: () => (value: unknown) => value }, Component: class { node = {}; isValid = true; } };
         if (name.endsWith('/ZCBattlePhaseController')) return { ZCBattlePhaseController, ZCBattlePhase };
         if (name.endsWith('/BattleResultService')) return { BattleResultService: {
@@ -244,17 +246,18 @@ test('SLG 预加载按服务端参战人数挑选地图，缺失战斗或非法�
     runInNewContext(ts.transpileModule(readFileSync('assets/script/app/procedure/ProcedureGame.ts', 'utf8'), {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
     }).outputText, { exports, require(name: string) {
-        if (name.endsWith('/ProcedureBase')) return { ProcedureBase: class { log() {} } };
+            if (name.endsWith('/ComponentController')) return componentControllerModule();
+        if (name.endsWith('/ProcedureBase')) return { ProcedureBase: class { sessionAssets = {}; log() {} } };
         if (name.endsWith('/ZCGame')) return { MAP_DIRECTORY: 'config/maps' };
         if (name.endsWith('/ZCGameLoader')) return { ZCGameLoader: class {
-            constructor(_assets: unknown, _configs: unknown, _dir: string, _random: unknown, playerCount: unknown) { counts.push(playerCount); }
+            constructor(_resources: unknown, _dir: string, _random: unknown, playerCount: unknown) { counts.push(playerCount); }
             async prepare() { return {}; }
         } };
         return {};
     } });
     const Procedure = exports.ProcedureGame as new () => { onPreload(params: object, context: object): Promise<void> };
     for (const count of [2, 3, 4]) {
-        await new Procedure().onPreload({ slgBattleType: 1004, battle: { units: Array.from({ length: count }, () => ({})) } }, {});
+        await new Procedure().onPreload({ slgBattleType: 1004, battle: { units: Array.from({ length: count }, () => ({})) } }, { resources: new ResourceScope('test-battle'), cancelled: false });
     }
     assert.deepEqual(counts, [2, 3, 4]);
     await assert.rejects(new Procedure().onPreload({ slgBattleType: 1004 }, {}), /SLG/);

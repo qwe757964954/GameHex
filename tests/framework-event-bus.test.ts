@@ -110,3 +110,33 @@ test('EventMgr：全局单例 + on/emit/offTarget（订阅方销毁必须摘自�
     mgr.emit('demo');
     assert.deepEqual(seen, ['hit:h'], 'offTarget 之后不该再被回调');
 });
+
+test('EventBus：派发中解绑宿主立即生效，不再调用遍历副本中的旧监听', () => {
+    const bus = new EventBus<E>();
+    const owner = {};
+    const seen: string[] = [];
+    bus.on(E.A, () => { seen.push('close'); bus.offTarget(owner); });
+    bus.on(E.A, () => seen.push('old'), owner);
+    bus.on(E.A, () => seen.push('other'));
+    bus.emit(E.A);
+    assert.deepEqual(seen, ['close', 'other']);
+});
+
+test('EventBus：派发中移除再重订同一处理函数，新订阅只在下一次派发生效', () => {
+    const bus = new EventBus<E>();
+    const owner = {};
+    const seen: string[] = [];
+    const listener = () => seen.push('listener');
+    let rebind = true;
+    bus.on(E.A, () => {
+        if (!rebind) return;
+        rebind = false;
+        bus.off(E.A, listener, owner);
+        bus.on(E.A, listener, owner);
+    });
+    bus.on(E.A, listener, owner);
+    bus.emit(E.A);
+    assert.deepEqual(seen, []);
+    bus.emit(E.A);
+    assert.deepEqual(seen, ['listener']);
+});

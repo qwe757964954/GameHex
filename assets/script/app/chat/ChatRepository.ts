@@ -291,7 +291,7 @@ export class RuntimeChatRepository implements IChatRepository {
 
     private selfId(): string {
         try {
-            const rows = CacheMgr.instance?.getTlCmdRole() ?? [];
+            const rows = CacheMgr.instance.getTlCmdRole() ?? [];
             for (const row of rows) {
                 const id = toIdString((row as { id?: unknown } | null)?.id);
                 if (id) return id;
@@ -305,7 +305,7 @@ export class RuntimeChatRepository implements IChatRepository {
     /** 私聊对象原始行（`CmdChatRole` 缓存）。拿不到返回空数组，**不抛**。 */
     private cachedChatRoles(): unknown[] {
         try {
-            return CacheMgr.instance?.getTlCmdChatRole() ?? [];
+            return CacheMgr.instance.getTlCmdChatRole() ?? [];
         } catch (error) {
             console.warn('[Chat] 读 CmdChatRole 缓存失败', error);
             return [];
@@ -320,7 +320,7 @@ export class RuntimeChatRepository implements IChatRepository {
      */
     private joinedUnion(): boolean {
         try {
-            const rows = CacheMgr.instance?.getTlCmdUnion() ?? [];
+            const rows = CacheMgr.instance.getTlCmdUnion() ?? [];
             return rows.length > 0;
         } catch {
             return false;

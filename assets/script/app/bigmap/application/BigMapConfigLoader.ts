@@ -3,6 +3,7 @@ import {
     BIGMAP_TABLE, attachBigMapResourceItemIcons, parseBigMapConfig, type BigMapRawTables,
 } from '../model/BigMapConfig';
 import type { IBigMapConfig } from '../model/BigMapTypes';
+import { withBigMapCampCities } from '../model/BigMapCampWorld';
 
 /**
  * 从 `ConfigService` 读取 BigMap 表（含联机据点 bigMapCamp）并解析成强类型配置。
@@ -16,7 +17,7 @@ export async function loadBigMapConfig(config: ConfigService): Promise<IBigMapCo
     const names = Object.values(BIGMAP_TABLE);
     const rowsList = await Promise.all(names.map((name) => config.getTable(name)));
     names.forEach((name, index) => { tables[name] = rowsList[index]; });
-    const parsed = parseBigMapConfig(tables as BigMapRawTables);
+    const parsed = withBigMapCampCities(parseBigMapConfig(tables as BigMapRawTables));
     // 顶栏资源图标跟背包道具共用一份图（`bigmapResource.itemId` → `item.icon`）。
     return attachBigMapResourceItemIcons(parsed, await readItemRows(config, parsed));
 }

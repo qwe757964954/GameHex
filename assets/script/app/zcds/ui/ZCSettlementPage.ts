@@ -87,52 +87,52 @@ export class ZCSettlementPage extends PopupBase {
     static prefabPath = 'ui/game/ZCSettlement';
 
     @property({ type: Sprite, group: '标题', tooltip: 'Panel/TitlePlate：胜利/失败的标题底板' })
-    titlePlate: Sprite = null!;
+    titlePlate: Sprite = null;
 
     @property({ type: Sprite, group: '标题', tooltip: 'Panel/TitlePlate/TitleText：胜利/失败的标题字' })
-    titleText: Sprite = null!;
+    titleText: Sprite = null;
 
     @property({ type: Node, group: '段位', tooltip: 'Panel/RankRow：段位行整组（无数据时收起）' })
-    rankRow: Node = null!;
+    rankRow: Node = null;
 
     @property({ type: Sprite, group: '段位', tooltip: 'RankRow/RankIcon' })
-    rankIcon: Sprite = null!;
+    rankIcon: Sprite = null;
 
     @property({ type: Label, group: '段位', tooltip: 'RankRow/RankName：段位名' })
-    rankName: Label = null!;
+    rankName: Label = null;
 
     @property({ type: Sprite, group: '段位', tooltip: 'RankRow/RankBar/RankFill：段位进度（FILLED）' })
-    rankFill: Sprite = null!;
+    rankFill: Sprite = null;
 
     @property({ type: Label, group: '段位', tooltip: 'RankRow/RankScore：12/100' })
-    rankScore: Label = null!;
+    rankScore: Label = null;
 
     @property({ type: Label, group: '段位', tooltip: 'RankRow/RankAdd：+100' })
-    rankAdd: Label = null!;
+    rankAdd: Label = null;
 
     @property({ type: Label, group: '段位', tooltip: 'RankRow/RankHint：本次战斗段位获得100积分' })
-    rankHint: Label = null!;
+    rankHint: Label = null;
 
     @property({ type: VirtualScrollView, group: '奖励', tooltip: 'Panel/RewardSection/RewardScroll：通关奖励虚拟列表（模板 = content/Slot）' })
-    rewardList: VirtualScrollView = null!;
+    rewardList: VirtualScrollView = null;
 
     @property({ type: Button, group: '底部', tooltip: 'BtnDouble：双倍奖励' })
-    doubleButton: Button = null!;
+    doubleButton: Button = null;
 
     @property({ type: Node, group: '变强途径', tooltip: 'Panel/Grow：变强途径整组（无回调时连标题带入口一起收起）' })
-    growGroup: Node = null!;
+    growGroup: Node = null;
 
     @property({ type: Button, group: '底部', tooltip: 'BtnConfirm：确定' })
-    confirmButton: Button = null!;
+    confirmButton: Button = null;
 
     @property({ type: Button, group: '变强途径', tooltip: 'Panel/Grow/Entry0：装备升级' })
-    entryEquip: Button = null!;
+    entryEquip: Button = null;
 
     @property({ type: Button, group: '变强途径', tooltip: 'Panel/Grow/Entry1：英雄' })
-    entryHero: Button = null!;
+    entryHero: Button = null;
 
     @property({ type: Button, group: '变强途径', tooltip: 'Panel/Grow/Entry2：符文' })
-    entryRune: Button = null!;
+    entryRune: Button = null;
 
     /** 本趟要显示的奖励（`renderItemFn` 按下标现取 —— 禁止闭包捕获，槽位会跨趟复用）。 */
     private rewards: readonly IZCSettlementReward[] = [];
@@ -225,7 +225,7 @@ export class ZCSettlementPage extends PopupBase {
         const hasRank = Boolean(data.rankName);
         this.rankRow.active = hasRank;
         if (!hasRank) return;
-        this.rankName.string = data.rankName!;
+        this.rankName.string = data.rankName;
         this.rankScore.string = data.scoreText ?? '';
         this.rankAdd.string = data.addScoreText ?? '';
         this.rankHint.string = data.rankHint ?? '';
@@ -243,7 +243,7 @@ export class ZCSettlementPage extends PopupBase {
     /** 把一个奖励填进槽位（新建的或回收来的都要**全量**赋值，别留上一局的数量/图标）。 */
     private renderReward(node: Node, index: number): void {
         // 组件由 `itemPrefab` 焊死、下标由 `setTotalCount` 限死，两处都不可能为空。
-        node.getComponent(RewardItemView)!.render(this.rewards[index]);
+        node.getComponent(RewardItemView).render(this.rewards[index]);
     }
 
     /**

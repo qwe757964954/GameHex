@@ -43,7 +43,7 @@ export class ZCGameRankBoard extends PopupBase {
     static prefabPath = 'ui/game/ZCGameRankBoard';
 
     @property({ type: VirtualScrollView, tooltip: 'List：排行虚拟列表（纵向）' })
-    list: VirtualScrollView = null!;
+    list: VirtualScrollView = null;
 
     @property({ type: Node, tooltip: 'CloseBtn：关闭按钮（**设计稿没有，留空**；本弹窗靠点空白关闭）' })
     closeBtn: Node | null = null;

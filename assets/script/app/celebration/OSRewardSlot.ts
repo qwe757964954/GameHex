@@ -52,13 +52,13 @@ export function osNumberTextOf(number: number): string {
 @ccclass('OSRewardSlot')
 export class OSRewardSlot extends Component {
     @property({ type: Sprite, tooltip: 'Frame：品质框（`image/frame/common_img_pzk_0N`）。必须排在 Icon 之前。' })
-    frame: Sprite = null!;
+    frame: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'Icon：道具 / 货币图标' })
-    icon: Sprite = null!;
+    icon: Sprite = null;
 
     @property({ type: Label, tooltip: 'Num：数量（0 时为空串，老端 `GetNumberStr`）' })
-    num: Label = null!;
+    num: Label = null;
 
     /**
      * 铺一格。

@@ -107,25 +107,25 @@ export class LeagueNorthExpeditionPage extends PopupBase {
     static prefabPath = 'ui/League/LeagueNorthExpedition';
 
     @property({ type: Node, tooltip: 'BackBtn：左下返回（挂 cc.Button）' })
-    backButton: Node = null!;
+    backButton: Node = null;
 
     @property({ type: Node, tooltip: 'HelpBtn：「英雄共鸣」右侧帮助按钮' })
-    helpButton: Node = null!;
+    helpButton: Node = null;
 
     @property({ type: Node, tooltip: 'RewardBtn：左侧「奖励」入口（开奖励子页）' })
-    rewardButton: Node = null!;
+    rewardButton: Node = null;
 
     @property({ type: Node, tooltip: 'RankBtn：左侧「排行」入口（开排行子页）' })
-    rankButton: Node = null!;
+    rankButton: Node = null;
 
     @property({ type: Node, tooltip: 'RewardRedDot：奖励入口上的红点' })
-    rewardRedDot: Node = null!;
+    rewardRedDot: Node = null;
 
     @property({ type: Node, tooltip: 'DrumBtn：「擂鼓」' })
-    drumButton: Node = null!;
+    drumButton: Node = null;
 
     @property({ type: Node, tooltip: 'ChallengeBtn：「挑战」' })
-    challengeButton: Node = null!;
+    challengeButton: Node = null;
 
     /**
      * `ChallengeBtn/RedDot`：「挑战」按钮上的红点 —— 老端 `按钮_挑战.组件_红点`。
@@ -137,43 +137,43 @@ export class LeagueNorthExpeditionPage extends PopupBase {
      *    （同口径：`rewardRedDot` / `LeagueDiscountPage.saleRedDot` / `LeagueStoreRow.redDot`。）
      */
     @property({ type: Node, tooltip: 'ChallengeBtn/RedDot：「挑战」按钮上的红点（还有挑战次数）' })
-    challengeRedDot: Node = null!;
+    challengeRedDot: Node = null;
 
     /** `challengeRedDot` 没绑时的兜底查询结果（见 `challengeRedDotNode()`）。 */
     private fallbackChallengeRedDot: Node | null = null;
 
     @property({ type: Node, tooltip: 'SweepBtn：「扫荡」' })
-    sweepButton: Node = null!;
+    sweepButton: Node = null;
 
     @property({ type: Label, tooltip: 'MonsterLabel：boss 名（`guankaReward` → `monster`）' })
-    monsterLabel: Label = null!;
+    monsterLabel: Label = null;
 
     @property({ type: Label, tooltip: 'EndTimeLabel：活动剩余时间' })
-    endTimeLabel: Label = null!;
+    endTimeLabel: Label = null;
 
     @property({ type: Label, tooltip: 'TimesLabel：挑战次数' })
-    timesLabel: Label = null!;
+    timesLabel: Label = null;
 
     @property({ type: Label, tooltip: 'AttrLeaguePower/Value：今日联盟累计伤害' })
-    attrLeaguePower: Label = null!;
+    attrLeaguePower: Label = null;
 
     @property({ type: Label, tooltip: 'AttrPower/Value：今日累计伤害（我）' })
-    attrPower: Label = null!;
+    attrPower: Label = null;
 
     @property({ type: Label, tooltip: 'AttrTime/Value：Buff 剩余时间' })
-    attrTime: Label = null!;
+    attrTime: Label = null;
 
     @property({ type: Label, tooltip: 'AttrAdd/Value：叠加层数' })
-    attrAdd: Label = null!;
+    attrAdd: Label = null;
 
     @property({ type: Label, tooltip: 'AttrBuff/Value：属性加成' })
-    attrBuff: Label = null!;
+    attrBuff: Label = null;
 
     @property({ type: LeagueRewardSlot, tooltip: 'DailySlot0：今日挑战奖励第 1 个物品框' })
-    dailySlot0: LeagueRewardSlot = null!;
+    dailySlot0: LeagueRewardSlot = null;
 
     @property({ type: LeagueRewardSlot, tooltip: 'DailySlot1：今日挑战奖励第 2 个物品框' })
-    dailySlot1: LeagueRewardSlot = null!;
+    dailySlot1: LeagueRewardSlot = null;
 
     /** 本趟快照（时间那两行每秒要用它重算）。 */
     private snapshot: ILeagueNorthSnapshot | null = null;

@@ -1,3 +1,5 @@
+import { EventMgr } from '../assets/script/framework/event/EventMgr';
+import * as mvcEvents from '../assets/script/app/bigmap/application/BigMapEvents';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -20,7 +22,7 @@ test('同一弹窗复用时全量覆盖状态、费用和内容，禁用操作�
     class Component {}
     class Button { static EventType = { CLICK: 'click' }; }
     class Node { static EventType = { TOUCH_END: 'end' }; }
-    runInNewContext(code, { exports, require: () => ({ Component, Button, Node, Color: class { static WHITE = {}; },
+    runInNewContext(code, { exports, require: (name: string) => name.endsWith('/EventMgr') ? { EventMgr } : name.endsWith('/BigMapEvents') ? mvcEvents : ({ Component, Button, Node, Color: class { static WHITE = {}; },
         _decorator: { ccclass: () => (value: unknown) => value, property: () => () => undefined } }) });
     const panel = new exports.BigMapTargetPanel();
     const listeners = new Map<string, () => void>();
@@ -38,7 +40,12 @@ test('同一弹窗复用时全量覆盖状态、费用和内容，禁用操作�
     panel.primaryBackground = { color: null };
     for (const key of ['primary', 'secondary', 'close']) panel[key] = { node: node(key), interactable: true };
     const calls = { primary: 0, locate: 0, close: 0 };
-    panel.initialize(720, 1280, () => calls.primary++, () => calls.locate++, () => calls.close++);
+        EventMgr.instance.on(mvcEvents.BigMapUiEvent.Intent, (event: mvcEvents.IBigMapIntentEvent) => {
+        if (event.intent.kind === 'primary') calls.primary++;
+        if (event.intent.kind === 'secondary') calls.locate++;
+        if (event.intent.kind === 'clear') calls.close++;
+    }, panel);
+    panel.initialize(720, 1280);
     const content = { title: '雾隐堡', headings: ['状态', '消耗', '说明'], sections: ['可攻打', '行动力 20', '据点'],
         tip: '服务端结算', primaryCaption: '攻打', primaryEnabled: true, staminaCost: 20, staminaIcon: {} };
     panel.render(content);
@@ -57,6 +64,7 @@ test('同一弹窗复用时全量覆盖状态、费用和内容，禁用操作�
     listeners.get('secondary:click')?.();
     listeners.get('close:click')?.();
     assert.deepEqual(calls, { primary: 1, locate: 1, close: 1 });
+    EventMgr.instance.offTarget(panel);
     panel.hide();
     assert.equal(panel.node.active, false);
 });

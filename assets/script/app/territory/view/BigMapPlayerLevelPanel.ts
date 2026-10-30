@@ -2,7 +2,7 @@ import { EventMgr } from '../../../framework/event/EventMgr';
 import {
     _decorator, Button, Component, Label, Node, Sprite, SpriteFrame, UITransform,
 } from 'cc';
-import { TERRITORY_EVENTS } from './TerritoryEvents';
+import { TerritoryUiEvent } from '../application/TerritoryEvents';
 import { RewardItemView } from '../../common/RewardItemView';
 import type { IRewardItemData } from '../../common/RewardItemView';
 import { VirtualScrollView } from '../../../vscrollview/VScrollView';
@@ -54,53 +54,53 @@ export interface IBigMapPlayerLevelContent {
 @ccclass('BigMapPlayerLevelPanel')
 export class BigMapPlayerLevelPanel extends Component {
     @property({ type: UITransform, group: '节点引用', tooltip: 'Panel：弹窗主卡（用于等比缩放适配）' })
-    private panelTransform: UITransform = null!;
+    private panelTransform: UITransform = null;
 
     @property({ type: UITransform, group: '节点引用', tooltip: 'Dim：全屏暗底（点它 = 关闭）' })
-    private dimTransform: UITransform = null!;
+    private dimTransform: UITransform = null;
 
     @property({ type: Label, group: '节点引用', tooltip: 'Panel/TitleLabel：据点名' })
-    private titleLabel: Label = null!;
+    private titleLabel: Label = null;
 
     @property({ type: Label, group: '节点引用', tooltip: 'Panel/RewardText1：第一条占领奖励文案' })
-    private chestLabel: Label = null!;
+    private chestLabel: Label = null;
 
     /** 占领奖励：**公共格子 `ui/common/RewardItem.prefab`** 的 3 列网格虚拟列表。 */
     @property({ type: VirtualScrollView, group: '节点引用', tooltip: 'Panel/RewardSlots：占领奖励（itemPrefab = common/RewardItem）' })
-    private dropList: VirtualScrollView = null!;
+    private dropList: VirtualScrollView = null;
 
     @property({ type: Button, group: '节点引用', tooltip: 'Panel/BtnSecondary：侦查' })
-    private scoutButton: Button = null!;
+    private scoutButton: Button = null;
 
     @property({ type: Label, group: '节点引用', tooltip: 'BtnSecondary/Label：侦查文案' })
-    private scoutLabel: Label = null!;
+    private scoutLabel: Label = null;
 
     @property({ type: Node, group: '节点引用', tooltip: 'BtnSecondary/CostBg：费用底色（无费用时隐藏）' })
-    private scoutCostRoot: Node = null!;
+    private scoutCostRoot: Node = null;
 
     @property({ type: Sprite, group: '节点引用', tooltip: 'BtnSecondary/CostIcon：货币图标' })
-    private scoutCostIcon: Sprite = null!;
+    private scoutCostIcon: Sprite = null;
 
     @property({ type: Label, group: '节点引用', tooltip: 'BtnSecondary/CostLabel：费用数字' })
-    private scoutCostLabel: Label = null!;
+    private scoutCostLabel: Label = null;
 
     @property({ type: Button, group: '节点引用', tooltip: 'Panel/BtnPrimary：开始战斗' })
-    private fightButton: Button = null!;
+    private fightButton: Button = null;
 
     @property({ type: Label, group: '节点引用', tooltip: 'BtnPrimary/Label：开战文案' })
-    private fightLabel: Label = null!;
+    private fightLabel: Label = null;
 
     @property({ type: Node, group: '节点引用', tooltip: 'BtnPrimary/CostBg：费用底色' })
-    private fightCostRoot: Node = null!;
+    private fightCostRoot: Node = null;
 
     @property({ type: Sprite, group: '节点引用', tooltip: 'BtnPrimary/CostIcon：货币图标' })
-    private fightCostIcon: Sprite = null!;
+    private fightCostIcon: Sprite = null;
 
     @property({ type: Label, group: '节点引用', tooltip: 'BtnPrimary/CostLabel：费用数字' })
-    private fightCostLabel: Label = null!;
+    private fightCostLabel: Label = null;
 
     @property({ type: Button, group: '节点引用', tooltip: 'Panel/Close：关闭' })
-    private closeButton: Button = null!;
+    private closeButton: Button = null;
 
     private inited = false;
 
@@ -135,7 +135,7 @@ export class BigMapPlayerLevelPanel extends Component {
 
     /** 单格渲染 —— 走公共 `RewardItemView`（不带概率）。 */
     private readonly renderReward = (item: Node, index: number): void => {
-        item.getComponent(RewardItemView)!.render(this.rewards[index]);
+        item.getComponent(RewardItemView).render(this.rewards[index]);
     }
 
     get isOpen(): boolean {
@@ -185,15 +185,14 @@ export class BigMapPlayerLevelPanel extends Component {
     }
 
     private handleScout(): void {
-        EventMgr.instance.emit(TERRITORY_EVENTS.DETAIL_SCOUT);
+        EventMgr.instance.emit(TerritoryUiEvent.Intent, { intent: { kind: 'scout' } });
     }
 
     private handleFight(): void {
-        if (!this.fightButton.interactable) return;
-        EventMgr.instance.emit(TERRITORY_EVENTS.DETAIL_START);
+        EventMgr.instance.emit(TerritoryUiEvent.Intent, { intent: { kind: 'battle' } });
     }
 
     private handleClose(): void {
-        EventMgr.instance.emit(TERRITORY_EVENTS.DETAIL_CLOSE);
+        EventMgr.instance.emit(TerritoryUiEvent.Intent, { intent: { kind: 'closeDetail' } });
     }
 }

@@ -23,13 +23,13 @@ const { ccclass, property } = _decorator;
 @ccclass('ActivityRewardSlot')
 export class ActivityRewardSlot extends Component {
     @property({ type: Sprite, tooltip: 'Frame：品质框底图（本节点上的 cc.Sprite）' })
-    frame: Sprite = null!;
+    frame: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'Icon：道具图标（没有映射图时会被隐藏）' })
-    icon: Sprite = null!;
+    icon: Sprite = null;
 
     @property({ type: Label, tooltip: 'Num：数量 —— **子节点 `Num` 上**的 cc.Label（锚点 (1,0.5) + overflow=NONE；空串时不显示）' })
-    num: Label = null!;
+    num: Label = null;
 
     protected onLoad(): void {
         if (!this.frame) {

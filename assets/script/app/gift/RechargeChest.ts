@@ -18,19 +18,19 @@ const { ccclass, property } = _decorator;
 @ccclass('RechargeChest')
 export class RechargeChest extends Component {
     @property({ type: Node, tooltip: 'Closed：未开启宝箱图' })
-    closedIcon: Node = null!;
+    closedIcon: Node = null;
 
     @property({ type: Node, tooltip: 'Opened：已开启宝箱图' })
-    openedIcon: Node = null!;
+    openedIcon: Node = null;
 
     @property({ type: Node, tooltip: 'Button：宝箱点击区（挂 cc.Button）' })
-    button: Node = null!;
+    button: Node = null;
 
     @property({ type: GiftRewardSlot, tooltip: 'Goods：奖励格（70×70）' })
-    goods: GiftRewardSlot = null!;
+    goods: GiftRewardSlot = null;
 
     @property({ type: Label, tooltip: 'Progress：`M/N` 进度文本' })
-    progressLabel: Label = null!;
+    progressLabel: Label = null;
 
     /** 宿主点宝箱时回调。 */
     onAction: (() => void) | null = null;
@@ -69,7 +69,7 @@ export class RechargeChest extends Component {
         // 两态一律绝对赋值（宝箱只有 2 个槽位，但状态会随进度来回变）
         this.closedIcon.active = !taken;
         this.openedIcon.active = taken;
-        this.button.getComponent(Button)!.interactable = !taken && reachable;
+        this.button.getComponent(Button).interactable = !taken && reachable;
 
         this.progressLabel.string = progressText;
         this.goods.render(qualityFrame, iconFrame);

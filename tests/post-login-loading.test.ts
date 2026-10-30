@@ -7,6 +7,7 @@ import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
+import { assetPath } from './helpers/asset-paths';
 
 function loadPostLogin() {
     const bus = new EventMgr();
@@ -94,7 +95,7 @@ test('LaunchProgress 是首包 prefab：启动图 + 进度条，全 UI_2D 且组
     // 2026-10-12：启动 UI 资源化。prefab 放 assets/resources（首包内置，不进远程热更 bundle），
     // 热更阶段（ProcedureUpdate）可直接 load；结构沿用旧 PostLoginRoot：
     // ProgressTrack(轨道) 下挂 Bar(青色 FILLED 填充)，StatusLabel/ProgressLabel 平行。
-    const prefab = JSON.parse(readFileSync('assets/resources/ui/loading/LaunchProgress.prefab', 'utf8')) as any[];
+    const prefab = JSON.parse(readFileSync(assetPath('ui/loading/LaunchProgress.prefab'), 'utf8')) as any[];
     const nodes = prefab.filter((item) => item.__type__ === 'cc.Node');
     const byName = new Map(nodes.map((node) => [node._name, node]));
     assert.deepEqual(Array.from(byName.keys()), [

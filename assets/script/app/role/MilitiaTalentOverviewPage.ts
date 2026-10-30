@@ -21,17 +21,17 @@ export class MilitiaTalentOverviewPage extends PopupBase {
     static prefabPath = 'ui/Role/MilitiaTalentOverview';
 
     @property({ type: Node, tooltip: 'AttrList：属性聚合列表（其上挂 VirtualScrollView，gridCount=1）' })
-    attrListNode: Node = null!;
+    attrListNode: Node = null;
 
     @property({ type: Node, tooltip: 'List：已解锁描述列表（其上挂 VirtualScrollView，gridCount=1）' })
-    descListNode: Node = null!;
+    descListNode: Node = null;
 
     @property({ type: Node, tooltip: 'Popup/CloseBtn：右上角关闭（挂 cc.Button）' })
-    closeButton: Node = null!;
+    closeButton: Node = null;
 
     /** 缓存：两个列表组件。 */
-    private attrList: VirtualScrollView = null!;
-    private descList: VirtualScrollView = null!;
+    private attrList: VirtualScrollView = null;
+    private descList: VirtualScrollView = null;
 
     /** 当前数据（铺格时按 index 现取）。 */
     private attrs: string[] = [];
@@ -59,7 +59,7 @@ export class MilitiaTalentOverviewPage extends PopupBase {
         this.attrList.renderItemFn = (node: Node, index: number) => this.renderAttr(node, index);
         this.descList.renderItemFn = (node: Node, index: number) => this.renderDesc(node, index);
 
-        this.closeButton.getComponent(Button)!.node.on(Button.EventType.CLICK, this.closeByButton, this);
+        this.closeButton.getComponent(Button).node.on(Button.EventType.CLICK, this.closeByButton, this);
     }
 
     /** 读表 → 聚合 → 铺两个列表。 */

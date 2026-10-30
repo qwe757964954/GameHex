@@ -67,7 +67,7 @@ export class LeagueNorthRewardPage extends PopupBase {
     static prefabPath = 'ui/League/LeagueNorthReward';
 
     @property({ type: Node, tooltip: 'CloseBtn：右上关闭按钮（挂 cc.Button）' })
-    closeButton: Node = null!;
+    closeButton: Node = null;
 
     /**
      * `TabLeague` / `TabRole`：两个页签（`LeagueNorthTab.prefab` 的**嵌套实例**）。
@@ -75,13 +75,13 @@ export class LeagueNorthRewardPage extends PopupBase {
      * ⚠️ 绑节点、运行时 `getComponent(LeagueNorthTab)`（同 `LeagueNorthRankPage.heroItem`）。
      */
     @property({ type: Node, tooltip: 'TabLeague：「联盟奖励」页签（默认选中）' })
-    tabLeague: Node = null!;
+    tabLeague: Node = null;
 
     @property({ type: Node, tooltip: 'TabRole：「个人奖励」页签' })
-    tabRole: Node = null!;
+    tabRole: Node = null;
 
     @property({ type: VirtualScrollView, tooltip: 'RewardList：奖励列表（虚拟列表）' })
-    rewardList: VirtualScrollView = null!;
+    rewardList: VirtualScrollView = null;
 
     /** 当前页签。 */
     private tab: LeagueNorthRewardTab = 'league';
@@ -102,12 +102,6 @@ export class LeagueNorthRewardPage extends PopupBase {
     /** 页签底图（读一次就够）。 */
     private tabFramesReady = false;
 
-    /** `renderItemFn` 只绑一次。 */
-    private rendererBound = false;
-
-    /** 页签只绑一次。 */
-    private tabsBound = false;
-
     /** 领奖在飞（防连点）。 */
     private busy = false;
 
@@ -127,15 +121,9 @@ export class LeagueNorthRewardPage extends PopupBase {
         this.tabLeagueRef = this.tabLeague ? this.tabLeague.getComponent(LeagueNorthTab) : null;
         this.tabRoleRef = this.tabRole ? this.tabRole.getComponent(LeagueNorthTab) : null;
 
-        if (!this.rendererBound) {
-            this.rendererBound = true;
-            if (this.rewardList) this.rewardList.renderItemFn = (node, index) => this.renderRow(node, index);
-        }
-        if (!this.tabsBound) {
-            this.tabsBound = true;
-            if (this.tabLeagueRef) this.tabLeagueRef.onTabClick = () => this.onTabClick('league');
-            if (this.tabRoleRef) this.tabRoleRef.onTabClick = () => this.onTabClick('role');
-        }
+        if (this.rewardList) this.rewardList.renderItemFn = (node, index) => this.renderRow(node, index);
+        if (this.tabLeagueRef) this.tabLeagueRef.onTabClick = () => this.onTabClick('league');
+        if (this.tabRoleRef) this.tabRoleRef.onTabClick = () => this.onTabClick('role');
         if (this.tabLeagueRef) this.tabLeagueRef.setTitle(LEAGUE_NORTH_TAB_REWARD_LEAGUE);
         if (this.tabRoleRef) this.tabRoleRef.setTitle(LEAGUE_NORTH_TAB_REWARD_ROLE);
         this.applyTabPage();

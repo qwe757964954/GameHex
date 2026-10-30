@@ -71,16 +71,16 @@ export class MainTaskDetailPage extends PopupBase {
     static prefabPath = 'ui/MainTask/MainTaskDetail';
 
     @property({ type: Node, tooltip: 'CloseBtn：关闭按钮（点它收起，挂不挂 cc.Button 都行）' })
-    closeButton: Node = null!;
+    closeButton: Node = null;
 
     @property({ type: Label, tooltip: 'TaskTitle：任务标题 `任务名 (x/y)`（老端 `lab_title`）' })
-    taskTitle: Label = null!;
+    taskTitle: Label = null;
 
     @property({ type: Node, tooltip: 'RewardList：奖励格容器（子节点挂 GoodsBox，从左到右、每行居中）' })
-    rewardList: Node = null!;
+    rewardList: Node = null;
 
     @property({ type: Node, tooltip: 'BtnGo：「前往」按钮' })
-    btnGo: Node = null!;
+    btnGo: Node = null;
 
     /** 数据端口；测试 / 探针可替换。 */
     private repo: IMainTaskRepository = mainTaskRepository;

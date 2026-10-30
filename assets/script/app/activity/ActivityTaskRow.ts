@@ -47,28 +47,28 @@ export interface IActivityTaskRowView {
 @ccclass('ActivityTaskRow')
 export class ActivityTaskRow extends Component {
     @property({ type: Sprite, tooltip: 'Background：行底框（本节点上的 cc.Sprite，九宫 `act_row_bg`）' })
-    background: Sprite = null!;
+    background: Sprite = null;
 
     @property({ type: Label, tooltip: 'Title：任务名 + 进度，如 `完成1次装备升级 (1/1)`' })
-    titleLabel: Label = null!;
+    titleLabel: Label = null;
 
     @property({ type: Node, tooltip: 'RewardBar：奖励格容器（下面挂 ActivityRewardSlot）' })
-    rewardBar: Node = null!;
+    rewardBar: Node = null;
 
     @property({ type: Node, tooltip: 'ActionBtn：右侧按钮（挂 cc.Button）' })
-    actionButton: Node = null!;
+    actionButton: Node = null;
 
     @property({ type: Label, tooltip: 'ActionBtn/Label：按钮文案' })
-    actionLabel: Label = null!;
+    actionLabel: Label = null;
 
     @property({ type: Sprite, tooltip: 'ActionBtn/Bg：按钮底图（按状态换 绿/蓝/灰 三张九宫图）' })
-    actionBackground: Sprite = null!;
+    actionBackground: Sprite = null;
 
     @property({ type: Node, tooltip: 'ActionBtn/RedDot：可领取红点（默认隐藏）' })
-    actionRedDot: Node = null!;
+    actionRedDot: Node = null;
 
     @property({ type: Node, tooltip: 'TakenStamp：已领取印章（`act_taken_stamp`，默认隐藏）' })
-    takenStamp: Node = null!;
+    takenStamp: Node = null;
 
     /**
      * 按钮点击回调，**由宿主在每次铺行时重设**（`LayerActivityPage.renderRow`）。

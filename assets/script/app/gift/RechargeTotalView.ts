@@ -94,16 +94,16 @@ export class RechargeTotalView extends Component {
     tabs: Node[] = [];
 
     @property({ type: RechargeProgressBar, tooltip: 'RechargeTopProgress：顶部总进度条（原稿不带文本）' })
-    topProgress: RechargeProgressBar = null!;
+    topProgress: RechargeProgressBar = null;
 
     @property({ type: Label, tooltip: 'RechargeIntro/Text：活动介绍正文' })
-    introLabel: Label = null!;
+    introLabel: Label = null;
 
     @property({ type: [RechargeChest], tooltip: 'Chest1/Chest2：顶部两个宝箱（按 x 排序）' })
     chests: RechargeChest[] = [];
 
     @property({ type: VirtualScrollView, tooltip: 'List：档位行列表（自带虚拟列表 + Mask）' })
-    rowList: VirtualScrollView = null!;
+    rowList: VirtualScrollView = null;
 
     /** 换页签（回传 `RechargeActivityTable.RECHARGE_TAB.*`）。 */
     onSwitchTab: ((tab: number) => void) | null = null;

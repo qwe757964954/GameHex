@@ -8,10 +8,11 @@ import {
     ZC_MAP_CITY_MODE,
     type ZCMapLayout,
 } from '../assets/script/app/zcds/model/ZCGameModel';
+import { assetPath } from './helpers/asset-paths';
 
 const GAME_SRC = readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8');
 const layout = JSON.parse(
-    readFileSync('assets/resources/config/maps/select_river.json', 'utf8'),
+    readFileSync(assetPath('config/maps/select_river.json'), 'utf8'),
 ) as ZCMapLayout;
 layout.art = {
     ...(layout.art ?? {}),

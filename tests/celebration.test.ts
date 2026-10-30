@@ -91,14 +91,14 @@ import {
     osTabVisual,
     osTargetNodeState,
 } from '../assets/script/app/celebration/CelebrationViewState';
+import { assetPath } from './helpers/asset-paths';
 
 // ============================================================
 // 公共小工具
 // ============================================================
 
-const CL_ROOT = 'assets/resources/ui/Celebration';
-const ARENA_ROOT = 'assets/resources/ui/main/ArenaRoot.prefab';
-const IMAGE_ROOT = 'assets/resources/image';
+const CL_ROOT = assetPath('ui/Celebration');
+const ARENA_ROOT = assetPath('ui/main/ArenaRoot.prefab');
 
 /** 解析一个 prefab，返回对象数组。 */
 function loadPrefab(path: string): any[] {
@@ -146,7 +146,7 @@ function deepBorder(obj: any): any | null {
 
 /** 取一张图的九宫 border（没配就是全 0）。 */
 function borderOf(value: string): { t: number; b: number; l: number; r: number } {
-    const metaPath = `${IMAGE_ROOT}/${value}.png.meta`;
+    const metaPath = assetPath(`image/${value}.png.meta`);
     if (!existsSync(metaPath)) return { t: 0, b: 0, l: 0, r: 0 };
     const hit = deepBorder(JSON.parse(readFileSync(metaPath, 'utf8')));
     return hit
@@ -164,7 +164,7 @@ function stripComments(src: string): string {
 /** 一张图在磁盘上的第一个真实扩展名（`bg` 是 .jpg，其余基本是 .png）。 */
 function artExt(relPathUnderResources: string): string | null {
     for (const ext of ['png', 'jpg', 'jpeg']) {
-        if (existsSync(`assets/resources/${relPathUnderResources}.${ext}`)) return ext;
+        if (existsSync(assetPath(`${relPathUnderResources}.${ext}`))) return ext;
     }
     return null;
 }
@@ -434,7 +434,7 @@ test('庆祝 B3｜osArtPath 必须带 image/ 前缀 + /spriteFrame（漏前缀 �
         }
         // 拼出来的路径必须在 resources 下真的有这张图（png / jpg 都算）
         const rel = path.slice(0, -'/spriteFrame'.length);
-        const ok = ['png', 'jpg', 'jpeg'].some((ext) => existsSync(`assets/resources/${rel}.${ext}`));
+        const ok = ['png', 'jpg', 'jpeg'].some((ext) => existsSync(assetPath(`${rel}.${ext}`)));
         if (!ok) bad.push(`${key} → assets/resources/${rel} 在磁盘上不存在`);
     }
     assert.deepEqual(bad, [], '装配路径不对 / 磁盘上没这张图');
@@ -717,12 +717,12 @@ test("庆祝 F'3｜RedDot：30×30 + 位置 (34,34) + 烘 false，且脚本 redD
 });
 
 test("庆祝 F'4｜两张红点图字节相同（所以 cu_icon_dot 与 cm_red_dot 可互换）", () => {
-    const a = readFileSync(`${IMAGE_ROOT}/common/cu_icon_dot.png`);
-    const b = readFileSync(`${IMAGE_ROOT}/common/cm_red_dot.png`);
+    const a = readFileSync(assetPath(`image/common/cu_icon_dot.png`));
+    const b = readFileSync(assetPath(`image/common/cm_red_dot.png`));
     assert.equal(Buffer.compare(a, b), 0, '这两张是同一张图的副本；若不相等，说明有人换了其中一张，入口红点样式会与同屏 HUD 不一致');
     // 两个文件都必须还在（CelebrationArt 用 cu_icon_dot，ArenaRoot 入口用 cm_red_dot）
-    assert.ok(existsSync(`${IMAGE_ROOT}/common/cu_icon_dot.png`));
-    assert.ok(existsSync(`${IMAGE_ROOT}/common/cm_red_dot.png`));
+    assert.ok(existsSync(assetPath(`image/common/cu_icon_dot.png`)));
+    assert.ok(existsSync(assetPath(`image/common/cm_red_dot.png`)));
 });
 
 // ============================================================

@@ -40,13 +40,13 @@ const { ccclass, property } = _decorator;
 @ccclass('RedDot')
 export class RedDot extends Component {
     @property({ type: Sprite, tooltip: 'Icon：静态图（普通红点兜底 / 数字底 / 新红点）' })
-    icon: Sprite = null!;
+    icon: Sprite = null;
 
     @property({ type: Label, tooltip: 'Title：数字红点的数值（无数字时整节点隐藏）' })
-    titleLabel: Label = null!;
+    titleLabel: Label = null;
 
     @property({ type: sp.Skeleton, tooltip: 'Spine：普通红点的「红点闪闪」（素材是 塔防/spine/reddot）' })
-    spine: sp.Skeleton = null!;
+    spine: sp.Skeleton = null;
 
     private type: RedDotType = RED_DOT_TYPE_DEFAULT;
     /** 最近一次的原始入参（`setRedDotType` 只换类型时要拿它重算，不能丢计数）。 */

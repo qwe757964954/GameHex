@@ -1,3 +1,8 @@
+import type { IControllerResources } from '../../framework/controller/ControllerBase';
+import { bundleForPath } from '../../core/asset/BundleCatalog';
+import { spriteFramePathOf } from '../ArtPaths';
+import { idFramePathOf } from '../itemdetail/ItemDetailArtLoader';
+import { qualityFrameArtPath } from '../itemdetail/ItemDetailArt';
 import { SpriteFrame } from 'cc';
 import { RefUtil } from '../../framework/ref/RefUtil';
 import { loadItemIconArt, loadQualityFrameArt } from '../itemdetail/ItemDetailArtLoader';
@@ -33,10 +38,10 @@ export interface IRewardGoodsTables {
  *
  * ⚠️ 两张表都要读：漏掉 `roleProperty` 那一支，货币格只剩品质框、没有图标（静默降级）。
  */
-export async function loadRewardGoodsTables(): Promise<IRewardGoodsTables> {
+export async function loadRewardGoodsTables(configs?: IControllerResources['configs']): Promise<IRewardGoodsTables> {
     const [itemRows, resourceRows] = await Promise.all([
-        RefUtil.instance.getRefAllAsync('item'),
-        RefUtil.instance.getRefAllAsync('roleProperty'),
+        configs ? configs.getTable('item') : RefUtil.instance.getRefAllAsync('item'),
+        configs ? configs.getTable('roleProperty') : RefUtil.instance.getRefAllAsync('roleProperty'),
     ]);
     return {
         items: parseItemRows(itemRows ?? []),
@@ -44,18 +49,29 @@ export async function loadRewardGoodsTables(): Promise<IRewardGoodsTables> {
     };
 }
 
+/** 使用调用方控制器持有资源；失败保留原有占位图语义。 */
+async function loadControllerRewardFrame(resources: IControllerResources, path: string): Promise<SpriteFrame | null> {
+    try {
+        return await resources.assets.load(spriteFramePathOf(path), SpriteFrame, { bundle: bundleForPath(path) });
+    } catch (error) {
+        if (!resources.scope.disposed) console.warn(`[RewardFrames] 奖励图加载失败：${path}`, error);
+        return null;
+    }
+}
+
 /** 一条奖励 → 两张图（品质框按 `quality` 换档，图标可能没有）。 */
-export async function loadRewardFramesOf(entry: IRewardEntry): Promise<IRewardFrames> {
+export async function loadRewardFramesOf(entry: IRewardEntry, resources?: IControllerResources): Promise<IRewardFrames> {
+    const suffix = qualityFrameSuffixOf(entry.quality);
     const [qualityFrame, iconFrame] = await Promise.all([
-        loadQualityFrameArt(qualityFrameSuffixOf(entry.quality)),
-        entry.iconPath ? loadItemIconArt(entry.iconPath) : Promise.resolve(null),
+        resources ? loadControllerRewardFrame(resources, idFramePathOf(qualityFrameArtPath(suffix))) : loadQualityFrameArt(suffix),
+        entry.iconPath ? (resources ? loadControllerRewardFrame(resources, entry.iconPath) : loadItemIconArt(entry.iconPath)) : Promise.resolve(null),
     ]);
     return { qualityFrame, iconFrame };
 }
 
 /** 一串条目 → **同序**的图（`Promise.all` 保序）。 */
-export function loadRewardFrames(entries: readonly IRewardEntry[]): Promise<IRewardFrames[]> {
-    return Promise.all(entries.map((entry) => loadRewardFramesOf(entry)));
+export function loadRewardFrames(entries: readonly IRewardEntry[], resources?: IControllerResources): Promise<IRewardFrames[]> {
+    return Promise.all(entries.map((entry) => loadRewardFramesOf(entry, resources)));
 }
 
 /**
@@ -66,11 +82,12 @@ export function loadRewardFrames(entries: readonly IRewardEntry[]): Promise<IRew
  */
 export async function resolveCmdGoodsFrames(
     raw: unknown,
+    resources?: IControllerResources,
 ): Promise<{ entry: IRewardEntry; frames: IRewardFrames }[]> {
     const goods = parseCmdGoodsList(raw);
     if (!goods.length) return [];
-    const tables = await loadRewardGoodsTables();
+    const tables = await loadRewardGoodsTables(resources?.configs);
     const entries = sortRewardEntries(goods.map((one) => rewardEntryOf(one, tables.items, tables.resources)));
-    const frames = await loadRewardFrames(entries);
+    const frames = await loadRewardFrames(entries, resources);
     return entries.map((entry, index) => ({ entry, frames: frames[index] }));
 }

@@ -343,25 +343,13 @@ export class ZCSpawnSelection {
 
     private finishIfReady(): void {
         if (this.completed || this.owners.some((owner) => this.states[owner].confirmedHexId === null)) return;
-        const homes = Object.fromEntries(this.owners.map((owner) => [owner, this.states[owner].confirmedHexId!])) as Record<ZCOwner, number>;
+        const homes = Object.fromEntries(this.owners.map((owner) => [owner, this.states[owner].confirmedHexId])) as Record<ZCOwner, number>;
         this.finalResult = { homes, resolvedResources: this.drawResources() };
         this.completed = true;
     }
 
     private drawResources(): ZCMapResolvedResource[] {
         return resolveZCMapResources(this.map, this.random);
-    }
-
-    private sectionOf(hexId: number): number {
-        const explicit = this.map.sections?.[hexId];
-        if (explicit !== undefined) return explicit;
-        const owner = this.map.owners[hexId];
-        const index = this.owners.indexOf(owner as ZCOwner);
-        return index < 0 ? 0 : index + 1;
-    }
-
-    private depthOf(hexId: number): ZCDepth | undefined {
-        return this.map.regions?.find((region) => region.cells.includes(hexId))?.depth;
     }
 
     /** 按地图邻接关系做 BFS；虚空造成的绕路也会被正确计入。 */

@@ -29,28 +29,28 @@ const { ccclass, property } = _decorator;
 @ccclass('BattleTokenBuyButton')
 export class BattleTokenBuyButton extends Component {
     @property({ type: Sprite, tooltip: '底图（bt_btn_yellow / bt_btn_red / bt_btn_free）' })
-    bg: Sprite = null!;
+    bg: Sprite = null;
 
     @property({ type: Sprite, tooltip: '货币 / 道具小图标（无图标时整节点隐藏）' })
-    icon: Sprite = null!;
+    icon: Sprite = null;
 
     @property({ type: Label, tooltip: '金额（￥6）或数量（680）' })
-    title: Label = null!;
+    title: Label = null;
 
     @property({ type: Button, tooltip: '按钮本体' })
-    button: Button = null!;
+    button: Button = null;
 
     @property({ type: Node, tooltip: '已开通的对勾（FGUI n21，挂 `gearDisplay controller="解锁" pages="1"`）' })
-    checkMark: Node = null!;
+    checkMark: Node = null;
 
     @property({ type: SpriteFrame, tooltip: '黄底（生成器写入）' })
-    yellowFrame: SpriteFrame = null!;
+    yellowFrame: SpriteFrame = null;
 
     @property({ type: SpriteFrame, tooltip: '红底（生成器写入）' })
-    redFrame: SpriteFrame = null!;
+    redFrame: SpriteFrame = null;
 
     @property({ type: SpriteFrame, tooltip: '免费档底图（生成器写入）' })
-    freeFrame: SpriteFrame = null!;
+    freeFrame: SpriteFrame = null;
 
     /**
      * 图标有 / 无时，**文字节点左边缘**相对按钮中心的 `x`（生成器按 FGUI 的 `hz` 组算出）。

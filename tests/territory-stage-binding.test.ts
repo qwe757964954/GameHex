@@ -248,7 +248,7 @@ test('★★★接线层：Presenter 用战斗绑定扩散 stageByCell，主线 
     //   `new Map(bindings.map(...))`，9 条用例**依然全绿** —— 而真机上的
     //   cellId 328 会重新弹「站点配置待补齐」。所以这两行必须单独钉。
     const src = readFileSync(
-        new URL('../assets/script/app/territory/application/TerritoryPresenter.ts', import.meta.url),
+        new URL('../assets/script/app/territory/application/TerritoryModel.ts', import.meta.url),
         'utf8');
     assert.match(src, /const battleBindings = bindTerritoryBattleStages\(sourceMap\.sites, campaign\.stages\);/,
         'stageByCell 的输入绑定必须包含 asyncPvp 战斗站点');

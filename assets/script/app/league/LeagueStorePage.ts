@@ -75,10 +75,10 @@ export class LeagueStorePage extends PopupBase {
     static prefabPath = 'ui/League/LeagueStore';
 
     @property({ type: Node, tooltip: 'CloseBtn：右上关闭按钮（挂 cc.Button）' })
-    closeButton: Node = null!;
+    closeButton: Node = null;
 
     @property({ type: VirtualScrollView, tooltip: 'StoreListView：商品列表（虚拟列表 + Mask）' })
-    storeList: VirtualScrollView = null!;
+    storeList: VirtualScrollView = null;
 
     /** 本趟列表的视图模型（`renderItemFn` 按 index 现取）。 */
     private rows: ILeagueStoreRowView[] = [];
@@ -88,9 +88,6 @@ export class LeagueStorePage extends PopupBase {
 
     /** 本趟快照（`onBuy` 要拿货币名拼「不足」提示）。 */
     private snapshot: ILeagueStoreSnapshot | null = null;
-
-    /** `renderItemFn` 只绑一次（放 `onOpen` 会随每次打开重复叠加）。 */
-    private rendererBound = false;
 
     /** 写操作在飞（防连点）。 */
     private busy = false;
@@ -107,10 +104,7 @@ export class LeagueStorePage extends PopupBase {
         if (button) button.node.on(Button.EventType.CLICK, this.onCloseClick, this);
         else console.warn('[LeagueStore] CloseBtn 上没有 cc.Button，点击不会生效');
 
-        if (!this.rendererBound) {
-            this.rendererBound = true;
-            if (this.storeList) this.storeList.renderItemFn = (node, index) => this.renderRow(node, index);
-        }
+        if (this.storeList) this.storeList.renderItemFn = (node, index) => this.renderRow(node, index);
     }
 
     protected async onOpen(): Promise<void> {

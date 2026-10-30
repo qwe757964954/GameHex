@@ -1,3 +1,4 @@
+import { componentControllerModule } from './helpers/controller-context';
 import * as resourcePlan from '../assets/script/app/zcds/model/ZCGameResourcePlan';
 ﻿import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -284,6 +285,8 @@ function procedures(sessionPreload: ZCGamePreload | null = null) {
         '../../framework/procedure/ProcedureManager': { ProcedureManager: { instance: null } },
         '../zcds/ZCGame': { MAP_DIRECTORY: 'config/maps', ZCGame: class ZCGame {} },
         '../zcds/application/ZCGameLoader': { ZCGameLoader: Loader },
+        '../../framework/controller/ComponentController': componentControllerModule(),
+        '../zcds/application/ZCBattlePreparation': { createZCBattlePreload: (battle: Promise<ZCBattleStart | null>) => new ZCGamePreload(new Loader(), battle) },
         '../zcds/application/ZCGamePreload': { ZCGamePreload },
         '../zcds/application/ZCClientCombatConfig': { buildZCClientCombatConfig: (config: unknown) => ({ config, skipped: [] }) },
         '../zcds/application/ZCPveCombatConfig': { buildZCPveEnemyDecks: () => ({}) },
@@ -628,7 +631,7 @@ function loaderFixture(assets: any, configs = { initialize: async () => {}, getT
     const context = { exports: {} as any, require: (name: string) => dependencies[name], console: { info() {}, error() {}, warn() {} } };
     const code = ts.transpileModule(readFileSync('assets/script/app/zcds/application/ZCGameLoader.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
     runInNewContext(code, context);
-    return { loader: new context.exports.ZCGameLoader(assets, configs, 'maps', () => 0),
+    return { loader: new context.exports.ZCGameLoader({ assets, configs }, 'maps', () => 0),
         get configured() { return configured; }, get injected() { return injected; } };
 }
 

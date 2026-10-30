@@ -207,7 +207,7 @@ export interface ZCDefenceWaveProgress {
     currentWaveHp: number;
     /** 当前波的**总血量上限**（生成那一刻固定下来，与剩余量同减才不会被"分母也跟着掉"骗到）。 */
     currentWaveMaxHp: number;
-    /** 当前波的血量倍率（塔防波的 `hpRate`，HUD 上显示成 `X4` 那类）。 */
+    /** 当前敌方服务端生命倍率（HUD 上显示成 `X4` 那类）。 */
     currentWaveHpRate: number;
     /** 当前波用的卡 id（HUD 用它取首领头像与名字）；该波没生成过单位时为 null。 */
     currentWaveCardId: string | null;
@@ -299,10 +299,22 @@ export class ZCGameModel {
     private readonly outcomeContext: IZCOutcomeContext;
     private nextDefenceWaveIndex = 0;
     /**
+     * 本局**真正的胜方**（`draw` / 未定 = `null`），由 `ZCOutcomeSystem` 判定后写入。
+     *
+     * `status` 只有 playing / victory / defeat 三态，而且是以**我方视角**分的 ——
+     * 4 人局里"我方出局"可能是 2 号红方赢、也可能是 4 号紫方赢，两者 status 都是 `defeat`。
+     * 结算胜利扫场要按**胜方本色**铺地，靠 status 反推就只能一律铺成 2 号色（2026-10-28 用户报的 bug）。
+     *
+     * ⚠️ 刻意**不写进 `ZCSnapshot`**（与 `floatTexts` / `hitFxs` 同一口径）：它是纯表现用的
+     * 一次性结论，混进快照要牵动 `version` 与存档兼容。快照里已经有 `status` + `hexes`，
+     * 需要复盘时按同一套规则重算即可。
+     */
+    private matchWinner: ZCOwner | null = null;
+    /**
      * 每波**生成过**的单位 id 与本波总血量上限（键 = 波序，与 `nextDefenceWaveIndex` 同序）。
      *
      * 塔防 HUD 那条「本波剩余 / 本波总」的血条要一个**不会跟着死亡往下掉**的分母 ⇒ 总血量必须在
-     * 生成那一刻记下来（`spawnUnit` 里应用了关卡倍率与波次 `hpRate`，事后算不回来）。
+     * 生成那一刻记下来（`spawnUnit` 里应用了服务端倍率与卡组加成，事后算不回来）。
      * 只记 id 不记对象引用：单位死亡后会被 `removeDeadUnits` 摘掉，活着查不到就按 0 计。
      */
     private readonly defenceWaveLedger: Array<{ ids: number[]; maxHp: number }> = [];
@@ -333,7 +345,7 @@ export class ZCGameModel {
     constructor(snapshot?: ZCSnapshot | null, random: () => number = Math.random, config?: ZCMatchConfig) {
         this.random = random;
         this.config = captureZCMatchConfig(config);
-        this.legacySkillRuntime = new ZCLegacySkillEffectRuntime(this.config.legacySkillEffects!);
+        this.legacySkillRuntime = new ZCLegacySkillEffectRuntime(this.config.legacySkillEffects);
         this.activeOwners = ownersForPlayerCount(this.config.map.playerCount ?? 2);
         for (const definition of this.config.statusDefinitions ?? []) this.statusSystem.register(definition);
         this.rules = this.config.rules;
@@ -601,7 +613,9 @@ export class ZCGameModel {
         } else {
             this.state = ZCSnapshotCodec.createInitialState(this.config, this.random);
         }
-        if (this.pveDefence && this.state.elapsedSeconds > 0) {
+        if (this.pveDefence && this.state.nextDefenceWaveIndex !== undefined) {
+            this.nextDefenceWaveIndex = this.state.nextDefenceWaveIndex;
+        } else if (this.pveDefence && this.state.elapsedSeconds > 0) {
             this.nextDefenceWaveIndex = this.pveDefence.waves.findIndex((wave) => wave.showAtSeconds > this.state.elapsedSeconds + 1e-9);
             if (this.nextDefenceWaveIndex < 0) this.nextDefenceWaveIndex = this.pveDefence.waves.length;
         }
@@ -650,6 +664,9 @@ export class ZCGameModel {
                 ? Math.max(0, Math.min(1, (this.state.pendingSeconds ?? 0) / ZC_SIMULATION_STEP_SECONDS))
                 : 1,
             owners: this.activeOwners,
+            // 胜方身份随帧下发：结算扫场要按**胜方本色**铺地。为 null（未定 / 平局）时
+            // 视图按 status 兜底，见 `ZCGame.beginVictorySweep`。
+            winner: this.matchWinner,
             hexesById: this.buildHexRenderMap(),
             unitDefinitionsById: this.buildUnitDefinitionMap(),
             floatTexts: this.presentation.floatTexts,
@@ -781,7 +798,9 @@ export class ZCGameModel {
         return { x: config.x, y: config.y };
     }
 
-    get remainingSeconds(): number {
+    /** null 表示无时限；塔防只由清空全部波次或我方主城失守结束。 */
+    get remainingSeconds(): number | null {
+        if (this.pveDefence) return null;
         return Math.max(0, this.state.durationSeconds - this.state.elapsedSeconds);
     }
 
@@ -812,7 +831,7 @@ export class ZCGameModel {
             ), 0),
             currentWaveHp,
             currentWaveMaxHp: ledger?.maxHp ?? 0,
-            currentWaveHpRate: current?.hpRate ?? 1,
+            currentWaveHpRate: current ? this.config.ownerRates?.enemy?.hpRate ?? 1 : 1,
             currentWaveCardId: current?.cardId ?? null,
         };
     }
@@ -895,7 +914,7 @@ export class ZCGameModel {
             const currentId = queue[head];
             for (const neighborId of this.config.map.hexes[currentId].neighbors) {
                 if (connected.has(neighborId)) continue;
-                const neighbor = this.hex(neighborId)!;
+                const neighbor = this.hex(neighborId);
                 if (neighbor.owner !== start.owner
                     || (!neighbor.developmentResolved && neighbor.building === 'none')) continue;
                 connected.add(neighborId);
@@ -978,6 +997,9 @@ export class ZCGameModel {
         this.deferredBarracksSpawns.length = 0;
         this.frameEvents.length = 0;
         this.nextDefenceWaveIndex = 0;
+        // 胜方也归零：`reset()` 换的是一整局新快照，留着上一局的胜方会让 `renderFrame.winner`
+        // 在下一局开局就带脏值（结算前谁赢这件事必须由本局重新判）。
+        this.matchWinner = null;
         for (const owner of ZC_OWNER_ORDER) {
             this.damageDealt[owner] = 0;
             this.damageTaken[owner] = 0;
@@ -1321,8 +1343,6 @@ export class ZCGameModel {
     }
 
     private damageWall(unit: Pick<ZCUnitState, 'owner' | 'freeX' | 'freeY'>, wall: ZCHexState, damage: number): void {
-        // 波次间保留敌方墙体作为集结目标，不能破墙后继续拆城。
-        if (this.pveDefence && wall.owner !== ZCOwner.Player) return;
         const center = this.hexCenter(wall.id);
         const result = ZCDamageResolutionSystem.damageWall(
             wall, damage, unit, this.hasExposedWall(wall), center, this.damageResolutionContext);
@@ -1333,7 +1353,9 @@ export class ZCGameModel {
     }
 
     private damageBuilding(unit: Pick<ZCUnitState, 'owner'>, building: ZCHexState, damage: number): void {
-        if (this.pveDefence && building.owner !== ZCOwner.Player && building.building === 'hq') return;
+        if (building.building === 'none' || building.hp <= 0) return;
+        const summonsDefenceBoss = this.pveDefence && building.owner === ZCOwner.Enemy
+            && building.id === this.homeId(ZCOwner.Enemy) && building.building === 'hq';
         const defender = building.owner;
         const result = ZCDamageResolutionSystem.damageBuilding(
             this.state, building, damage, unit, this.damageResolutionContext);
@@ -1342,6 +1364,7 @@ export class ZCGameModel {
         this.pushFloatText({ kind: 'damage', owner: unit.owner, value: result.applied,
             x: center.x, y: center.y, durationSeconds: FLOAT_TEXT_DAMAGE_SECONDS });
         if (!result.killed) return;
+        if (summonsDefenceBoss) this.spawnDueDefenceWaves(true);
         if (!this.pveDefence && this.developedCount(unit.owner) === 0) building.owner = 'neutral';
         if (!this.pveDefence && defender !== 'neutral' && this.developedCount(defender) === 0) {
             // 最后一座建筑消失后，未被攻方占领的空地解除归属；废墟保留废墟状态。
@@ -1508,15 +1531,15 @@ export class ZCGameModel {
         for (const spawn of pending) this.deferredBarracksSpawns.push(spawn);
     }
 
-    /** 生成一个单位；返回**新建的**单位（被 `unitCapPerSide` 挡下或卡没配单位时返回 null）。 */
+    /** 生成一个单位；拆城触发的末波 Boss 可越过兵力上限，避免跳波后 Boss 被吞掉。 */
     private spawnUnit(
         owner: ZCOwner,
         card: ZCDeckCard,
         tier: number,
         hexId: number,
-        waveRates?: { hpRate: number; attackRate: number },
+        ignoreUnitCap = false,
     ): ZCUnitState | null {
-        if (!card.unitId || this.unitCount(owner) >= this.rules.unitCapPerSide) return null;
+        if (!card.unitId || (!ignoreUnitCap && this.unitCount(owner) >= this.rules.unitCapPerSide)) return null;
         const definition = this.effectiveUnitDefinitionFor(owner, card.unitId);
         const spawnCenter = this.hexCenter(hexId);
         // 落点：离兵营中心约半个格距、方向随机 —— 新兵不会和兵营图标叠在一起。
@@ -1527,9 +1550,7 @@ export class ZCGameModel {
         const spawnY = spawnCenter.y + Math.sin(spawnAngle) * SPAWN_OFFSET_RADIUS;
         const bonuses = this.bonusesFor(owner);
         const tierMultiplier = 1 + (tier - 1) * this.rules.unitHpPerTier;
-        const hpRate = waveRates?.hpRate && waveRates.hpRate > 0 ? waveRates.hpRate : 1;
-        const attackMultiplier = waveRates?.attackRate && waveRates.attackRate > 0 ? waveRates.attackRate : 1;
-        const maxHp = Math.max(1, Math.round(definition.maxHp * bonuses.unitHpMultiplier * tierMultiplier * hpRate));
+        const maxHp = Math.max(1, Math.round(definition.maxHp * bonuses.unitHpMultiplier * tierMultiplier));
         // nextUnitId 理论上严格递增；若异常重复则自动顺延，避免整局崩在 register 上。
         while (this.units.byId.has(this.state.nextUnitId)) this.state.nextUnitId += 1;
         const unit: ZCUnitState = {
@@ -1543,7 +1564,7 @@ export class ZCGameModel {
             progress: 0,
             hp: maxHp,
             maxHp,
-            attackMultiplier,
+            attackMultiplier: 1,
             shield: 0,
             battleState: 'born',
             stateTime: 0,
@@ -1569,13 +1590,24 @@ export class ZCGameModel {
         return unit;
     }
 
-    /** 按 defenceModWave.waveShowTime 在敌方主城生成整波单位。 */
-    private spawnDueDefenceWaves(): void {
+    /** 到配置时间或已出怪物全部被击退时，在敌方主城生成下一波；首波只按时间。 */
+    private spawnDueDefenceWaves(forceLastWave = false): void {
         if (!this.pveDefence) return;
+        if (forceLastWave) {
+            if (this.nextDefenceWaveIndex >= this.pveDefence.waves.length) return;
+            // 拆城直接挑战末波；已在场的怪物保留，尚未生成的中间波不再生成。
+            this.nextDefenceWaveIndex = this.pveDefence.waves.length - 1;
+        }
         while (this.nextDefenceWaveIndex < this.pveDefence.waves.length) {
             const wave = this.pveDefence.waves[this.nextDefenceWaveIndex];
-            if (wave.showAtSeconds > this.state.elapsedSeconds + 1e-9) return;
+            if (!forceLastWave && wave.showAtSeconds > this.state.elapsedSeconds + 1e-9) {
+                if (this.nextDefenceWaveIndex === 0 || this.state.units.some((unit) => (
+                    unit.owner !== ZCOwner.Player && unit.battleState !== 'dead'
+                ))) return;
+            }
             this.nextDefenceWaveIndex += 1;
+            // 提前出怪后不能再按 elapsedSeconds 推导进度，存档必须记下实际波序。
+            this.state.nextDefenceWaveIndex = this.nextDefenceWaveIndex;
             // 先占位再生成：波序与账本下标必须**逐位对齐**，中途 `continue` 也不能错位。
             const ledger = { ids: [] as number[], maxHp: 0 };
             this.defenceWaveLedger[this.nextDefenceWaveIndex - 1] = ledger;
@@ -1585,10 +1617,8 @@ export class ZCGameModel {
             }
             const count = Math.max(0, Math.floor(wave.monsterCount));
             for (let index = 0; index < count; index += 1) {
-                const unit = this.spawnUnit(ZCOwner.Enemy, card, Math.max(1, Math.floor(wave.tier)), this.homeId(ZCOwner.Enemy), {
-                    hpRate: wave.hpRate,
-                    attackRate: wave.attackRate,
-                });
+                const unit = this.spawnUnit(ZCOwner.Enemy, card, Math.max(1, Math.floor(wave.tier)),
+                    this.homeId(ZCOwner.Enemy), forceLastWave);
                 if (!unit) continue;
                 ledger.ids.push(unit.id);
                 ledger.maxHp += Math.max(0, unit.maxHp);
@@ -1747,12 +1777,18 @@ export class ZCGameModel {
 
     private checkOutcome(): void {
         const result = ZCOutcomeSystem.checkOutcome(this.state, this.outcomeContext, this.nextDefenceWaveIndex);
-        if (result) this.finish(result.status, result.reason);
+        if (result) this.finish(result.status, result.reason, result.winner);
     }
 
-    private finish(status: Exclude<ZCGameStatus, 'playing'>, reason: string): void {
+    private finish(status: Exclude<ZCGameStatus, 'playing'>, reason: string, winner: ZCOwner | null): void {
         this.state.status = status;
         this.state.resultReason = reason;
+        this.matchWinner = winner;
+    }
+
+    /** 本局胜方（`draw` / 未定 = `null`）。结算扫场用它上色，见 `matchWinner` 的说明。 */
+    get winner(): ZCOwner | null {
+        return this.matchWinner;
     }
 
     private mineIncome(owner: ZCOwner): number {

@@ -72,6 +72,7 @@ import {
 } from '../assets/script/app/maintask/MainTaskTable';
 import { GET_HERO_TEXTS } from '../assets/script/app/maintask/MainTaskTexts';
 import { MT_ART_NAMES, MT_ART_SLICED, MT_ART_TILED } from '../assets/script/app/maintask/MainTaskArt';
+import { assetPath } from './helpers/asset-paths';
 
 // ============================================================
 // 公共小工具
@@ -81,11 +82,10 @@ import { MT_ART_NAMES, MT_ART_SLICED, MT_ART_TILED } from '../assets/script/app/
 const CANVAS_W = 720;
 const CANVAS_H = 1280;
 
-const IMAGE_ROOT = 'assets/resources/image';
-const ID_PREFAB = 'assets/resources/ui/ItemDetail/ItemDetail.prefab';
-const ID_ROW_PREFAB = 'assets/resources/ui/ItemDetail/ItemDetailRow.prefab';
-const MT_PREFAB = 'assets/resources/ui/MainTask/GetHeroEntry.prefab';
-const ARENA_PREFAB = 'assets/resources/ui/main/ArenaRoot.prefab';
+const ID_PREFAB = assetPath('ui/ItemDetail/ItemDetail.prefab');
+const ID_ROW_PREFAB = assetPath('ui/ItemDetail/ItemDetailRow.prefab');
+const MT_PREFAB = assetPath('ui/MainTask/GetHeroEntry.prefab');
+const ARENA_PREFAB = assetPath('ui/main/ArenaRoot.prefab');
 
 /** `GetHeroEntry.prefab` 的 uuid（`ArenaRoot` 里那个嵌套实例指向它）。 */
 const GET_HERO_PREFAB_UUID = 'aaa14e0a-941b-4175-923b-dc69a0b81a0d';
@@ -260,7 +260,7 @@ function biggestMessageIdValues(root: any): Record<string, number> | null {
 }
 
 function borderOf(rel: string): { t: number; b: number; l: number; r: number } {
-    const metaPath = `${IMAGE_ROOT}/${rel}.png.meta`;
+    const metaPath = assetPath(`image/${rel}.png.meta`);
     if (!existsSync(metaPath)) return { t: 0, b: 0, l: 0, r: 0 };
     const hit = deepBorder(JSON.parse(readFileSync(metaPath, 'utf8')));
     return hit
@@ -544,8 +544,8 @@ test('物品 C1｜每张图的 .png 与 .png.meta 都在盘上', () => {
     const all = [...Object.entries(ID_ART_NAMES), ...Object.entries(MT_ART_NAMES)];
     assert.ok(all.length >= 18, `图数量太少（${all.length}）—— 是不是漏迁了`);
     for (const [key, rel] of all) {
-        assert.ok(existsSync(`${IMAGE_ROOT}/${rel}.png`), `缺图：${key} → ${rel}.png`);
-        assert.ok(existsSync(`${IMAGE_ROOT}/${rel}.png.meta`), `缺 meta：${key} → ${rel}.png.meta（编辑器没导入）`);
+        assert.ok(existsSync(assetPath(`image/${rel}.png`)), `缺图：${key} → ${rel}.png`);
+        assert.ok(existsSync(assetPath(`image/${rel}.png.meta`)), `缺 meta：${key} → ${rel}.png.meta（编辑器没导入）`);
     }
 });
 
@@ -627,8 +627,8 @@ test('物品 C4｜缎带 key ↔ TITLE_ART_STEPS 1:1；品质框图路径 8 档�
     for (let quality = 1; quality <= QUALITY_FRAME_COUNT; quality++) {
         const rel = qualityFrameArtPath(qualityFrameSuffixOf(quality));
         assert.equal(rel, `common/cu_quality_${qualityFrameSuffixOf(quality)}`);
-        assert.ok(existsSync(`${IMAGE_ROOT}/${rel}.png`), `缺品质框图：${rel}.png`);
-        assert.ok(existsSync(`${IMAGE_ROOT}/${rel}.png.meta`), `缺品质框图 meta：${rel}.png.meta`);
+        assert.ok(existsSync(assetPath(`image/${rel}.png`)), `缺品质框图：${rel}.png`);
+        assert.ok(existsSync(assetPath(`image/${rel}.png.meta`)), `缺品质框图 meta：${rel}.png.meta`);
     }
 });
 
@@ -739,7 +739,7 @@ test('物品 D5｜三个按钮的底图统一换成 `cu_ty_btn21`（FGUI 控制�
     const prefab = loadPrefab(ID_PREFAB);
     const rects = collectRects(prefab);
     // `.meta.uuid + '@f9941'` 才是 SpriteFrame 的 uuid（图片资源本体是 `.meta.uuid`）
-    const green = `${JSON.parse(readFileSync(`${IMAGE_ROOT}/${ID_ART_NAMES.btn2Green}.png.meta`, 'utf8')).uuid}@f9941`;
+    const green = `${JSON.parse(readFileSync(assetPath(`image/${ID_ART_NAMES.btn2Green}.png.meta`), 'utf8')).uuid}@f9941`;
     const plateOf = (nodeName: string): string | undefined => {
         const node = prefab[rects.get(nodeName)!.id];
         for (const cid of node._children ?? []) {
@@ -1104,7 +1104,7 @@ test('物品 G2｜领奖协议在**三份产物**里都登记了（规则 40：�
     // ① protoCompiled.json：真源在 `nested.com.xkhy.tafang.cmd.MessageId.values`
     //    ⚠️ 别用 `proto.nested.cmd` 猜路径 —— 全文档里有好几个叫 MessageId 的节点，
     //       必须取**条目最多**的那个（真正的 MessageId 枚举有几百条）。
-    const proto = JSON.parse(readFileSync('assets/resources/config/protoCompiled.json', 'utf8'));
+    const proto = JSON.parse(readFileSync(assetPath('config/protoCompiled.json'), 'utf8'));
     const values = biggestMessageIdValues(proto);
     assert.ok(values, 'protoCompiled.json 里找不到 MessageId.values');
     assert.equal(values!.CmdTakeMainTaskRewardRspMsg, 189258127,
@@ -1127,7 +1127,7 @@ test('物品 G3｜`item` 表口径对得上（389 行 / itemBox 最长 3 —— 
     assert.ok(rows.some((r) => Array.isArray(r.access) && r.access.length > 0), 'item 表里没有一行有 access —— 「获取途径」永远空态');
     const maxBox = rows.reduce((m: number, r: any) => Math.max(m, Array.isArray(r.itemBox) ? r.itemBox.length : 0), 0);
     assert.equal(maxBox, 3, `itemBox 最长 ${maxBox} ≠ 3 —— 单测 D4 的「固定 3 槽」假设失效了，prefab 要跟着改`);
-    // 主键是 `resId`（不是 `id`）—— `assets/resources/config/item.json` 是另一张旧表（键是 id、没有 access），别拿错
+    // 主键是 `resId`（不是 `id`）—— assetPath(`config/item.json`) 是另一张旧表（键是 id、没有 access），别拿错
     assert.ok(typeof rows[0].resId === 'number' && rows[0].id === undefined, 'item 表主键应当是 resId');
 });
 
@@ -1156,7 +1156,7 @@ test('物品 G5｜奖励物 18014 在 item 表里有名字 / 品质 / 图标，�
     assert.ok(reward!.icon.length > 0, '18014 没有 icon');
     // `icon` 是**相对 assets/resources/** 的路径，漏了只会静默留白
     assert.ok(
-        existsSync(`assets/resources/${reward!.icon}.png`),
+        existsSync(assetPath(`${reward!.icon}.png`)),
         `18014 的 icon 文件不存在：assets/resources/${reward!.icon}.png`,
     );
     // 途径表也要有：18014 的 access 里 8 = 商店（viewtype）

@@ -8,7 +8,7 @@ export class ZCNodePool<T extends { active: boolean; isValid: boolean; destroy()
         const bucket = this.buckets.get(key);
         let node: T | undefined;
         while (bucket?.length) {
-            const candidate = bucket.pop()!;
+            const candidate = bucket.pop();
             this.size--;
             if (candidate.isValid) { node = candidate; break; }
         }

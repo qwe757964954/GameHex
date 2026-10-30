@@ -48,7 +48,6 @@ export interface IRechargeDailyRepository {
     claimAcc(round: number, day: number, caller?: object): Promise<RechargeDailyRequestResult>;
 }
 
-const READ_TIMEOUT_MS = 800;
 const WRITE_TIMEOUT_MS = 5000;
 
 async function readRows(table: string): Promise<unknown[]> {
@@ -58,7 +57,7 @@ async function readRows(table: string): Promise<unknown[]> {
 /** 读 CmdRechargeDaily 第一行；拿不到返回 null。 */
 function readCmd(): unknown {
     try {
-        const rows = CacheMgr.instance?.getTlCmdRechargeDaily() ?? [];
+        const rows = CacheMgr.instance.getTlCmdRechargeDaily() ?? [];
         for (const row of rows) {
             if (row) return row;
         }

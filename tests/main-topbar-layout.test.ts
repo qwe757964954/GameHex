@@ -12,8 +12,9 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { assetPath } from './helpers/asset-paths';
 
-const PREFAB_PATH = 'assets/resources/ui/main/ArenaRoot.prefab';
+const PREFAB_PATH = assetPath('ui/main/ArenaRoot.prefab');
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Raw = Record<string, any>;
@@ -122,7 +123,7 @@ test('快速寻敌：白字 + 加粗 + 描边 + 字号放大', () => {
     const button = findNode(objects, 'BeginGame');
     const buttonSprite = componentOf(objects, button, 'cc.Sprite');
     assert.ok(buttonSprite, 'BeginGame 上没有快速寻敌底图');
-    const artUuid = (JSON.parse(readFileSync('assets/resources/image/main/city/btn_quick_fight.png.meta', 'utf8')) as { uuid: string }).uuid;
+    const artUuid = (JSON.parse(readFileSync(assetPath('image/main/city/btn_quick_fight.png.meta'), 'utf8')) as { uuid: string }).uuid;
     assert.equal(buttonSprite!._spriteFrame?.__uuid__, `${artUuid}@f9941`,
         '快速寻敌要用蓝湖稿的橙金放射按钮底图');
     const buttonTransform = componentOf(objects, button, 'cc.UITransform');

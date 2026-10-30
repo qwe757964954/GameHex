@@ -43,10 +43,13 @@ import {
     normalizeBattleUnit,
     normalizeBattleUnitType,
     normalizeHeroIds,
+    parseBattleBuffEntries,
+    parseBattleBuffs,
     splitBattleUnits,
 } from '../assets/script/app/battle/BattleStartModel';
 import { toCount, toIdString, toPositiveInt, withTimeout } from '../assets/script/app/net/RequestGuard';
 import * as ArtPaths from '../assets/script/app/ArtPaths';
+import { assetPath } from './helpers/asset-paths';
 
 const CMD = 'com.xkhy.tafang.cmd';
 
@@ -61,7 +64,7 @@ const Long = (protobuf.util as unknown as {
 }).Long;
 
 function loadRoot(): protobuf.Root {
-    const schema = JSON.parse(readFileSync('assets/resources/config/protoCompiled.json', 'utf8'));
+    const schema = JSON.parse(readFileSync(assetPath('config/protoCompiled.json'), 'utf8'));
     return protobuf.Root.fromJSON(schema);
 }
 
@@ -129,6 +132,8 @@ test('运行时 protobuf 含开始战斗的 4 个 message，且字段号/类型�
         'artifactLevel',
         'unitId',
         'unitType',
+        // r936：PVP buff 列表（另有一条用例专门钉它的结构）
+        'buffInfo',
     ]);
     assert.equal(unit.fields.showInfo.resolvedType, show);
     assert.equal(unit.fields.campId.type, 'uint32');
@@ -146,6 +151,29 @@ test('运行时 protobuf 含开始战斗的 4 个 message，且字段号/类型�
     );
     assert.equal(show.fields.roleId.type, 'uint64');
     assert.equal(show.fields.img.type, 'uint64');
+});
+
+test('r936 新增 CmdPvpBuffInfo：source(uint32) + buffs(扁平字符串)，挂在 CmdBattleUnitInfo.buffInfo=8', () => {
+    const buff = root.lookupType(`${CMD}.CmdPvpBuffInfo`);
+    assert.deepEqual(Object.keys(buff.fields), ['source', 'buffs']);
+    assert.equal(buff.fields.source.id, 1);
+    assert.equal(buff.fields.source.type, 'uint32');
+    assert.equal(buff.fields.source.required, true);
+    assert.equal(buff.fields.buffs.id, 2);
+    assert.equal(buff.fields.buffs.repeated, true);
+    // 扁平字符串数组 `[id,value,id,value]`，**不是**嵌套 message ——
+    //  后端要是哪天改成 `{id,value}` 结构化，这里的 type 断言先红。
+    assert.equal(buff.fields.buffs.type, 'string');
+
+    const unitMsg = root.lookupType(`${CMD}.CmdBattleUnitInfo`);
+    assert.equal(unitMsg.fields.buffInfo.id, 8, 'buffInfo 必须挂在字段 8（写错号 = 服务端下发了也解不出来）');
+    assert.equal(unitMsg.fields.buffInfo.repeated, true);
+    assert.equal(unitMsg.fields.buffInfo.resolvedType, buff);
+
+    // 真跑一遍编码 → 解码：只对 schema 做字段断言抓不到「字段号错位但类型都对」这种事故
+    const round = buff.decode(buff.encode(buff.create({ source: 7, buffs: ['101', '30', '102', 'x'] })).finish());
+    assert.equal(round.source, 7);
+    assert.deepEqual([...(round.buffs ?? [])], ['101', '30', '102', 'x'], 'value 原样是字符串，不能在编解码层被转数字');
 });
 
 test('开始战斗请求的编码口径（r259 抽子消息后，字段 1 是 message 不再是 uint32）', () => {
@@ -335,9 +363,9 @@ test('匹配流程保留兜底对手分支，且选人只走一次', () => {
 
     const page = readFileSync('assets/script/app/matching/MatchingPage.ts', 'utf8');
     // 等待期间 phase 仍是 searching，update() 会每帧再进 finishSearch → 必须有守卫
-    assert.match(page, /private finishing = false;/);
-    assert.match(page, /this\.finishing = false;/, 'beginMatch 必须重置守卫');
-    assert.match(page, /if \(!options \|\| this\.finishing\) return;/);
+    assert.match(page, /private isFinishing = false;/);
+    assert.match(page, /this\.isFinishing = false;/, 'beginMatch 必须重置守卫');
+    assert.match(page, /if \(!options \|\| this\.isFinishing\) return;/);
     assert.match(page, /this\.isValid/, 'await 之后必须确认组件还活着再回调');
 });
 
@@ -436,6 +464,57 @@ test('unitType 归一化：只认 1/2/3，缺省与未知值一律 undefined（�
         unitInfos: [unit({ campId: 1, unitType: 1 }), unit({ campId: 2, showInfo: show({ roleId: Long.fromString('20002', true) }), unitType: 2 })],
     }))!;
     assert.deepEqual(start.units.map((u) => u.unitType), [ZC_BATTLE_UNIT_TYPE.Player, ZC_BATTLE_UNIT_TYPE.Robot]);
+});
+
+test('buffInfo → ZCBattleUnit.buffs：按来源分包、成对解析、顺序原样', () => {
+    // 真实下发形态（2026-10-29 抓包）：key 是**属性名**，不是数字编号
+    const parsed = normalizeBattleUnit(unit({
+        buffInfo: [
+            { source: 1, buffs: ['levelAttackRatio', '0.8', 'levelHpRatio', '0.8'] },
+            { source: 2, buffs: ['levelHpRatio', '1.5'] },
+        ],
+    }) as any)!;
+    assert.deepEqual(
+        parsed.buffs.map((item) => ({ source: item.source, entries: item.entries.map((e) => [e.key, e.numeric]) })),
+        [
+            { source: 1, entries: [['levelAttackRatio', 0.8], ['levelHpRatio', 0.8]] },
+            { source: 2, entries: [['levelHpRatio', 1.5]] },
+        ],
+        '两个来源各留一条；同 key 跨来源不合并；key 必须是属性名字符串',
+    );
+
+    // 老服务端不下发 buffInfo ⇒ 空数组（不是 undefined，调用方不用判空）
+    assert.deepEqual(normalizeBattleUnit(unit() as any)!.buffs, []);
+    assert.deepEqual(parseBattleBuffs(null), []);
+    assert.deepEqual(parseBattleBuffs(undefined), []);
+    assert.deepEqual(parseBattleBuffs([]), []);
+
+    // 整条链路（rsp → normalizeBattleStart）也要透传，不能在中间把字段丢掉
+    const start = normalizeBattleStart(rsp({
+        unitInfos: [unit({ campId: 1, buffInfo: [{ source: 3, buffs: ['levelHpRatio', '2'] }] })],
+    }))!;
+    assert.deepEqual(start.units[0].buffs.map((item) => item.source), [3]);
+});
+
+test('buff 解析边界：奇数长度丢尾、空 key 整对丢、同 key 保留两条', () => {
+    const flat = (list: readonly (string | null | undefined)[] | null | undefined): unknown =>
+        parseBattleBuffEntries(list as any).map((e) => [e.key, e.value, e.numeric]);
+
+    // ① 奇数长度：末位没有配对的 value，丢弃（补一个假 value 等于替服务端编数据）
+    assert.deepEqual(flat(['levelHpRatio', '0.8', 'levelAttackRatio']), [['levelHpRatio', '0.8', 0.8]]);
+    // ② key 为空 / 全空白：整对丢弃（只有 value 没有 key 是无主数据）
+    assert.deepEqual(flat(['', '30', '   ', '9', 'levelHpRatio', '2']), [['levelHpRatio', '2', 2]]);
+    // ③ 同 key 重复：保留两条，不合并 —— 前端擅自去重会把「叠加」和「服务端 bug」一起吞掉
+    assert.deepEqual(
+        flat(['levelHpRatio', '1', 'levelHpRatio', '2']),
+        [['levelHpRatio', '1', 1], ['levelHpRatio', '2', 2]],
+    );
+    // ④ 空 / 非数组：一律空数组，不抛
+    assert.deepEqual(flat(null), []);
+    assert.deepEqual(flat(undefined), []);
+    assert.deepEqual(flat([]), []);
+    // ⑤ 非数字 value：条目保留（原文不动），numeric 显式 null —— 不是 0、不是 NaN
+    assert.deepEqual(flat(['levelAttackRatio', 'atkUp']), [['levelAttackRatio', 'atkUp', null]]);
 });
 
 test('heroId 去重要用 Array.from 口径（构建期 Babel 展开会降级）', () => {
@@ -558,7 +637,7 @@ test('真表 + 磁盘：head 表 20 行都能解出资源名，且图确实导�
     const lookup = buildMatchProfileLookup(null, null, headRows, iconRows);
     // 目录**从 `ArtPaths.HEAD_ART_ROOT` 取**，不写死字面量：这条链最容易出的错就是
     // 资源被挪了目录而 `HEAD_ART_ROOT` 没跟着改（或反过来），写死字面量就两边都不知道。
-    const root = `assets/resources/${ArtPaths.HEAD_ART_ROOT}`;
+    const root = assetPath(`${ArtPaths.HEAD_ART_ROOT}`);
     const imported = new Set(readdirSync(root));
     const missing: string[] = [];
     for (const row of headRows) {

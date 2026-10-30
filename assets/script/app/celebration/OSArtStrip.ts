@@ -44,7 +44,7 @@ export class OSArtStrip extends Component {
         tooltip: '条目预制体（`ui/Celebration/OSRankRewardItem`）。**必须烘成 cc.Prefab 引用**，'
             + '填字符串（prefab 名）不会报错，只会退化成空条 —— 与 `itemPrefab` 那个坑同一个。',
     })
-    itemPrefab: Prefab = null!;
+    itemPrefab: Prefab = null;
 
     @property({ tooltip: '条目显示宽（庆典目标 84 / 庆典排名 72.24 = 84×0.86）' })
     itemWidth: number = OS_REWARD_NATIVE_W;

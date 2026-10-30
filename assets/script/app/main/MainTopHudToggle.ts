@@ -6,34 +6,34 @@ const { ccclass, property } = _decorator;
 @ccclass('MainTopHudToggle')
 export class MainTopHudToggle extends Component {
     @property({ type: Node, tooltip: 'EntryBar: background of the collapsible shortcuts' })
-    entryBar: Node = null!;
+    entryBar: Node = null;
 
     @property({ type: Node, tooltip: 'Friend：好友图标' })
-    friend: Node = null!;
+    friend: Node = null;
 
     @property({ type: Node, tooltip: 'Mail：邮件图标' })
-    mail: Node = null!;
+    mail: Node = null;
 
     @property({ type: Node, tooltip: 'Rank：排行图标' })
-    rank: Node = null!;
+    rank: Node = null;
 
     @property({ type: Node, tooltip: 'Invite：邀请图标' })
-    invite: Node = null!;
+    invite: Node = null;
 
     @property({ type: Node, tooltip: 'FriendLabel：好友文字' })
-    friendLabel: Node = null!;
+    friendLabel: Node = null;
 
     @property({ type: Node, tooltip: 'MailLabel：邮件文字' })
-    mailLabel: Node = null!;
+    mailLabel: Node = null;
 
     @property({ type: Node, tooltip: 'RankLabel：排行文字' })
-    rankLabel: Node = null!;
+    rankLabel: Node = null;
 
     @property({ type: Node, tooltip: 'InviteLabel：邀请文字' })
-    inviteLabel: Node = null!;
+    inviteLabel: Node = null;
 
     @property({ type: Button, tooltip: 'Arrow：展开 / 收起按钮（绑 cc.Button）' })
-    arrow: Button = null!;
+    arrow: Button = null;
 
     private expanded = true;
 

@@ -3,11 +3,12 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { resolveChestPanelX } from '../assets/script/app/main/MainHudMotion';
+import { assetPath } from './helpers/asset-paths';
 
 type Raw = Record<string, unknown>;
 const load = (path: string): Raw[] => JSON.parse(readFileSync(path, 'utf8')) as Raw[];
-const MAIN_ROOT = load('assets/resources/ui/main/MainRoot.prefab');
-const ARENA_ROOT = load('assets/resources/ui/main/ArenaRoot.prefab');
+const MAIN_ROOT = load(assetPath('ui/main/MainRoot.prefab'));
+const ARENA_ROOT = load(assetPath('ui/main/ArenaRoot.prefab'));
 
 function scriptCid(path: string): string {
     const uuid = (JSON.parse(readFileSync(`${path}.meta`, 'utf8')) as { uuid: string }).uuid.replace(/-/g, '');
@@ -37,7 +38,7 @@ function instanceName(instance: Raw): string {
 }
 
 test('MainRoot 底部导航实例按 tabType 绑定类型与自身两态图标', () => {
-    const itemPrefabUuid = (JSON.parse(readFileSync('assets/resources/ui/common/TabButton.prefab.meta', 'utf8')) as { uuid: string }).uuid;
+    const itemPrefabUuid = (JSON.parse(readFileSync(assetPath('ui/common/TabButton.prefab.meta'), 'utf8')) as { uuid: string }).uuid;
     const instances = MAIN_ROOT.flatMap((entry, index) => {
         if (entry.__type__ !== 'cc.PrefabInstance') return [];
         const info = MAIN_ROOT.find((candidate) => candidate.__type__ === 'cc.PrefabInfo'
@@ -46,7 +47,7 @@ test('MainRoot 底部导航实例按 tabType 绑定类型与自身两态图标',
     });
     const navItems = instances;
     assert.equal(navItems.length, 7);
-    const sharedLabel = load('assets/resources/ui/common/TabButton.prefab')
+    const sharedLabel = load(assetPath('ui/common/TabButton.prefab'))
         .find((entry) => entry.__type__ === 'cc.Label');
     assert.ok(sharedLabel, '共用页签必须提供名称 Label');
     const expected: Record<string, { type: number; icon: string }> = {
@@ -72,7 +73,7 @@ test('MainRoot 底部导航实例按 tabType 绑定类型与自身两态图标',
             true, `${name} 名称使用描边`);
         assert.equal(overrideOf(item, MAIN_ROOT, '_outlineWidth') ?? sharedLabel._outlineWidth,
             3, `${name} 名称描边宽度`);
-        const iconMeta = JSON.parse(readFileSync(`assets/resources/image/main/city/${specification.icon}.png.meta`, 'utf8')) as { uuid: string };
+        const iconMeta = JSON.parse(readFileSync(assetPath(`image/main/city/${specification.icon}.png.meta`), 'utf8')) as { uuid: string };
         const expectedFrame = `${iconMeta.uuid}@f9941`;
         for (const property of ['offIcon', 'onIcon']) {
             const frame = overrideOf(item, MAIN_ROOT, property) as { __uuid__?: string } | undefined;
@@ -85,7 +86,7 @@ test('MainRoot 底部导航实例按 tabType 绑定类型与自身两态图标',
 });
 
 test('角色使用蓝湖蓝色建筑切图，不能把旧头盔改名后继续使用', () => {
-    const icon = readFileSync('assets/resources/image/main/city/nav_role.png');
+    const icon = readFileSync(assetPath('image/main/city/nav_role.png'));
     // 用户提供的 zjm_icon_sj.png 原图；角色与世界复用建筑外观，锁定状态由页签控制。
     assert.equal(createHash('sha256').update(icon).digest('hex'),
         '1077f09508803f8966e2e7da382749b664310d8eeb2cccbf9407ff713b258f96');

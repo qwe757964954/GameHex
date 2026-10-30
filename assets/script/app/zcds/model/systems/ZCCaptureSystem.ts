@@ -81,7 +81,7 @@ export class ZCCaptureSystem {
 
             if (this.rules.captureRequireSupply && !supplied[owner]) supplied[owner] = this.suppliedHexes(state, owner);
             const hasSupply = !this.rules.captureRequireSupply
-                || this.map.hexes[hex.id].neighbors.some((id) => supplied[owner]!.has(id));
+                || this.map.hexes[hex.id].neighbors.some((id) => supplied[owner].has(id));
             if (!hasSupply) {
                 this.reduceProgress(hex, dt * this.rules.captureDecayMultiplier);
                 continue;

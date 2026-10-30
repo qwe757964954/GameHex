@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { assetPath } from './helpers/asset-paths';
 
 const source = readFileSync('assets/script/app/card/CardLineupPage.ts', 'utf8');
 const cardSource = readFileSync('assets/script/app/card/CardLineupCard.ts', 'utf8');
-//  卡库条目与站台都在 `main-pages` 分包里（`assets/resources/ui/card/` 已不存在 ——
+//  卡库条目与站台都在 `main-pages` 分包里（assetPath(`ui/card/`) 已不存在 ——
 //  这是本用例在 2026-10-27 之前一直红着的根因，与业务无关）。
 const prefab = JSON.parse(readFileSync('assets/bundles/main-pages/ui/card/CardLineupCard.prefab', 'utf8')) as Array<Record<string, any>>;
 const nodes = prefab.filter((item) => item.__type__ === 'cc.Node');

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { assetPath } from './helpers/asset-paths';
 
 /**
  * 预制体卫生：**全工程不许出现 `cc.LabelOutline`**。
@@ -18,9 +19,9 @@ import { join } from 'node:path';
  *
  * 约定：描边**只用 Label 内建** `enableOutline` / `outlineColor` / `outlineWidth`。
  * 同口径见 `tests/league.test.ts:570`、`tests/league-hall.test.ts:491`、`tests/league-hall-sub.test.ts:541`
- * （那三条覆盖 League 那几个；这条覆盖 `assets/resources/ui/**` 全部，避免只在某一批里守）。
+ * （那三条覆盖 League 那几个；这条覆盖 assetPath(`ui/**`) 全部，避免只在某一批里守）。
  */
-const UI_ROOT = 'assets/resources/ui';
+const UI_ROOT = assetPath('ui');
 
 function collectPrefabs(dir: string, out: string[] = []): string[] {
     for (const entry of readdirSync(dir)) {

@@ -32,6 +32,13 @@ export interface ZCGameRenderFrame {
     readonly simulationStepSeconds: number;
     readonly interpolationAlpha: number;
     readonly owners: readonly ZCOwner[];
+    /**
+     * 本局胜方（未定 / 平局 = `null`）。
+     *
+     * 结算「胜利方扫场」按**它**的本色铺地 —— `status` 只有 victory / defeat，
+     * 而 4 人局里"我方出局"可能是任意一个对手赢，用 status 反推就会一律铺成 2 号色。
+     */
+    readonly winner: ZCOwner | null;
     readonly hexesById: ReadonlyMap<number, ZCGameRenderHex>;
     readonly unitDefinitionsById: ReadonlyMap<string, ZCUnitDefinition>;
     readonly floatTexts: readonly DeepReadonly<ZCFloatText>[];

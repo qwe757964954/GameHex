@@ -8,6 +8,7 @@ import {
     BIGMAP_COMMON_ART_ROOT, BIGMAP_HUD_UI_FILES, BIGMAP_HUD_UI_KEYS, BIGMAP_MAIN_CITY_ART_ROOT,
     BIGMAP_MAIN_HUD_ART_ROOT,
 } from '../assets/script/app/bigmap/application/BigMapArtCatalog';
+import { assetPath } from './helpers/asset-paths';
 
 /**
  * 世界页「领地页 HUD 皮肤」判据（2026-10-22 第二轮用户口径：
@@ -76,7 +77,7 @@ const LOADER_SOURCE = readFileSync('assets/script/app/bigmap/application/BigMapA
 /** 读领地弹窗 prefab 里 `Dim` 节点的序列化颜色（站点详情面板已删，改读关卡界面）。 */
 function territoryScrim(): { r: number; g: number; b: number; a: number } {
     const data = JSON.parse(readFileSync(
-        'assets/resources/ui/main/LevelInfoPanel.prefab', 'utf8',
+        assetPath('ui/main/LevelInfoPanel.prefab'), 'utf8',
     )) as Record<string, any>[];
     const resolve = (ref: unknown): Record<string, any> | null =>
         (ref && typeof ref === 'object' && '__id__' in (ref as object) ? data[(ref as { __id__: number }).__id__] : null);
@@ -212,50 +213,46 @@ test('★「植物大地图」字样从页面里彻底删掉（不再读 worldNa
     assert.equal(/titleRibbon|TitleRibbon|fitBigMapRibbon/.test(PAGE_SOURCE), false, '缎带相关代码必须删干净');
 });
 
-test('顶栏不再是通栏底板：只浮一张资源卡 + 一颗收取钮', () => {
-    assert.equal(/paintBigMapCardPanel\(header,/.test(PAGE_SOURCE), false, 'Header 自己不画底板');
-    assert.match(PAGE_SOURCE, /const resourceCard = createUiNode\('ResourceCard', header, cardWidth, cardHeight\)/);
-    assert.match(PAGE_SOURCE, /paintBigMapCardPanel\(resourceCard, cardWidth, cardHeight, 14\)/);
+const PAGE_PREFAB = JSON.parse(readFileSync('assets/bundles/bigmap/ui/bigmap/BigMapPage.prefab', 'utf8'));
+const prefabNode = (name: string) => PAGE_PREFAB.find((item: Record<string, unknown>) => item.__type__ === 'cc.Node' && item._name === name);
+const prefabComponent = (node: Record<string, any>, type: string) => node._components.map((ref: { __id__: number }) => PAGE_PREFAB[ref.__id__]).find((item: Record<string, unknown>) => item.__type__ === type);
+
+test('顶栏保留透明 Header、独立资源卡和收取按钮', () => {
+    const header = prefabNode('Header');
+    assert.equal(prefabComponent(header, 'cc.Graphics'), undefined);
+    assert.ok(prefabNode('ResourceCard'));
+    assert.ok(prefabNode('HarvestAll'));
 });
 
-// ── 5. 弹窗与按钮接线 ──────────────────────────────────────
-
-test('★详情弹窗改成居中模态：暗底（scrim）＋居中卡片＋点暗底关闭', () => {
-    assert.match(PAGE_SOURCE, /const dim = createUiNode\('InfoDim', this\.node, width, height\);/);
-    assert.match(PAGE_SOURCE, /drawPanel\(dim\.addComponent\(Graphics\), width, height, BIGMAP_HUD_COLORS\.scrim, null, 0\)/);
-    assert.match(PAGE_SOURCE, /dim\.addComponent\(BlockInputEvents\)/);
-    assert.match(PAGE_SOURCE, /dim\.on\(Node\.EventType\.TOUCH_END, \(\) => this\.clearSelection\(\)\)/);
-    assert.match(PAGE_SOURCE, /const panel = createUiNode\('InfoPanel', this\.node, panelWidth, panelHeight\)/);
-    assert.match(PAGE_SOURCE, /panel\.setPosition\(0, 0, 0\)/, '卡片必须居中（原先贴底）');
-    assert.match(PAGE_SOURCE, /paintBigMapCardPanel\(panel, panelWidth, panelHeight, 16\)/);
-    // 暗底与卡片同生同死
+test('详情卡是居中模态，暗底拦截输入并关闭选择', () => {
+    const dim = prefabNode('InfoDim');
+    const panel = prefabNode('InfoPanel');
+    assert.ok(prefabComponent(dim, 'cc.BlockInputEvents'));
+    assert.ok(prefabComponent(panel, 'cc.BlockInputEvents'));
+    assert.equal(panel._lpos.x, 0);
+    assert.equal(panel._lpos.y, 0);
+    const style = dim._components.map((ref: { __id__: number }) => PAGE_PREFAB[ref.__id__]).find((item: object) => 'fill' in item);
+    assert.deepEqual([style.fill.r, style.fill.g, style.fill.b, style.fill.a], [5, 10, 14, 205]);
+    assert.match(PAGE_SOURCE, /this\.infoDim\.on\(Node\.EventType\.TOUCH_END, this\.clearSelection, this\)/);
     assert.match(PAGE_SOURCE, /this\.infoDim\.active = visible/);
 });
 
-test('★实心按钮统一走领地页金钮；模式按钮改成任务按钮同款「底框 + 卡通图标 + 描边字」', () => {
+test('实心按钮使用 HUD 金钮，模式按钮的三层结构在 Prefab 中维护', () => {
     assert.match(PAGE_SOURCE, /for \(const button of this\.skinButtons\) button\.setSkin\(art\.hud\.get\('button'\)/);
     assert.match(PAGE_SOURCE, /this\.primaryButton\.setSkin\(art\.hud\.get\('button'\)/);
-    assert.match(PAGE_SOURCE, /const MODE_BUTTON_WIDTH = 122;/);
-    assert.match(PAGE_SOURCE, /const MODE_BUTTON_HEIGHT = 96;/);
-    // 三段结构与尺寸全部照抄 MainTaskEntry.prefab：底板 111×79 @ y −7.5、图标 @ y +11.5、字 @ y −25
-    assert.match(PAGE_SOURCE, /const MODE_FRAME_WIDTH = 111;/);
-    assert.match(PAGE_SOURCE, /const MODE_FRAME_HEIGHT = 79;/);
-    assert.match(PAGE_SOURCE, /const MODE_FRAME_Y = -7\.5;/);
-    assert.match(PAGE_SOURCE, /const MODE_ICON_Y = 11\.5;/);
-    assert.match(PAGE_SOURCE, /const MODE_LABEL_Y = -25;/);
-    assert.match(PAGE_SOURCE, /createUiNode\('BaseWorldToggle', this\.node, MODE_BUTTON_WIDTH, MODE_BUTTON_HEIGHT\)/);
-    assert.match(PAGE_SOURCE, /createBigMapSprite\('ModeFrame', node\)/);
-    assert.match(PAGE_SOURCE, /createBigMapSprite\('ModeIcon', node\)/);
-    // 字必须白 + 粗 + 2px 近黑描边（沙地上不描边就散；颜色要在方法里 new，见源码注释）
-    assert.match(PAGE_SOURCE, /label\.isBold = true;/);
-    assert.match(PAGE_SOURCE, /label\.outlineColor = new Color\(10, 8, 6, 255\);/);
-    assert.match(PAGE_SOURCE, /label\.outlineWidth = 2;/);
-    // 图标跟着文字走：写【基地】压建筑 icon、写【大地图】压折页地图；只换图不重建节点
+    const toggle = prefabNode('BaseWorldToggle');
+    const names = toggle._children.map((ref: { __id__: number }) => PAGE_PREFAB[ref.__id__]._name);
+    assert.deepEqual(names, ['ModeFrameFallback', 'ModeFrame', 'ModeIcon', 'ModeLabel']);
+    assert.equal(prefabNode('ModeFrame')._lpos.y, -7.5);
+    assert.equal(prefabNode('ModeIcon')._lpos.y, 11.5);
+    assert.equal(prefabNode('ModeLabel')._lpos.y, -25);
+    const label = prefabComponent(prefabNode('ModeLabel'), 'cc.Label');
+    assert.equal(label._fontSize, 22);
+    assert.equal(label._isBold, true);
+    assert.equal(label._enableOutline, true);
+    assert.equal(label._outlineWidth, 2);
     assert.match(PAGE_SOURCE, /this\.art\.hud\.get\(this\.mode === 'world' \? 'mode_base' : 'mode_world'\)/);
     assert.match(PAGE_SOURCE, /fitBigMapSprite\(this\.modeButton\.icon, icon, MODE_ICON_SIZE, 0, MODE_ICON_Y\)/);
-    // 木牌那套 `setSkin` 接线必须彻底退场，否则两套皮肤会互相盖
-    assert.equal(/this\.modeButton\.setSkin/.test(PAGE_SOURCE), false, '模式按钮不再走木牌皮肤');
-    assert.equal(/this\.modeButton\.setText/.test(PAGE_SOURCE), false, '模式按钮不再走 IBigMapButton 的 setText');
 });
 
 test('页面不再给面板贴深铁概念图，也不再引用木牌皮肤', () => {

@@ -18,17 +18,17 @@ const { ccclass, property } = _decorator;
 export class SevenDayDayTab extends Component {
     /** `DayLabel`：`第一天` / `第二天` … */
     @property({ type: Label, tooltip: 'DayLabel：天数文案（第N天）' })
-    dayLabel: Label = null!;
+    dayLabel: Label = null;
 
     /** 底板就是**本节点自己**的 `cc.Sprite`。 */
     @property({ type: Sprite, tooltip: '背景：本节点上的 cc.Sprite（两态换图）' })
-    background: Sprite = null!;
+    background: Sprite = null;
 
     @property({ type: RedDot, tooltip: 'RedDot：有可领取任务时的红点（默认隐藏）' })
-    redDot: RedDot = null!;
+    redDot: RedDot = null;
 
     @property({ type: Node, tooltip: 'SelectGlow：选中时的旋转光效（默认隐藏）' })
-    selectGlow: Node = null!;
+    selectGlow: Node = null;
 
     /**
      * ⚠️ 图名别写反（2026-09-26 实测，用 md5 对过老端原稿）：
@@ -39,10 +39,10 @@ export class SevenDayDayTab extends Component {
      *   （先前这里两个 tooltip 互换了，prefab 也照错的绑 —— 症状是「已解锁的天显示成暗球」。）
      */
     @property({ type: SpriteFrame, tooltip: '已解锁的底板（`sd_day_on`，亮黄）' })
-    unlockedFrame: SpriteFrame = null!;
+    unlockedFrame: SpriteFrame = null;
 
     @property({ type: SpriteFrame, tooltip: '未解锁的底板（`sd_day_off`，暗灰）' })
-    lockedFrame: SpriteFrame = null!;
+    lockedFrame: SpriteFrame = null;
 
     /** 选中态的放大倍率——FGUI 用 scale 1.2 表示"当前天"。 */
     private static readonly SELECTED_SCALE = 1.12;

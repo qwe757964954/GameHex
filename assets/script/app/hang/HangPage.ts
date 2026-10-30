@@ -104,49 +104,49 @@ export class HangPage extends PopupBase {
     static prefabPath = 'ui/Hang/Hang';
 
     @property({ type: Node, tooltip: '弹窗关闭键（`组件_公共弹窗_新/按钮_关闭`）' })
-    closeButton: Node = null!;
+    closeButton: Node = null;
 
     @property({ type: Node, tooltip: '「领取」按钮（FGUI `按钮_领取`，`颜色=1` 橙底）' })
-    claimButton: Node = null!;
+    claimButton: Node = null;
 
     @property({ type: ProgressBar, tooltip: '征收进度条（FGUI `征收_进度`）' })
-    progressBar: ProgressBar = null!;
+    progressBar: ProgressBar = null;
 
     @property({ type: Label, tooltip: '已征收时长 `08:00:00`（FGUI `time`）' })
-    timeLabel: Label = null!;
+    timeLabel: Label = null;
 
     @property({ type: Node, tooltip: '`MAX` 角标（FGUI `maxImg`，只在到顶时显示）' })
-    maxBadge: Node = null!;
+    maxBadge: Node = null;
 
     @property({ type: HangGainItem, tooltip: '收益条 1（吃 `mergedRewards[0]`）' })
-    gain1: HangGainItem = null!;
+    gain1: HangGainItem = null;
 
     @property({ type: HangGainItem, tooltip: '收益条 2（吃 `mergedRewards[1]`）' })
-    gain2: HangGainItem = null!;
+    gain2: HangGainItem = null;
 
     @property({ type: [HangRewardSlot], tooltip: '产出奖励网格的 6 个格子（顺序 = 网格顺序，多余隐藏）' })
     rewardSlots: HangRewardSlot[] = [];
 
     @property({ type: HangSweepButton, tooltip: '「快速征收」按钮' })
-    sweepButton: HangSweepButton = null!;
+    sweepButton: HangSweepButton = null;
 
     @property({ type: Label, tooltip: '广告次数行（`今日剩余(3/3)` / `今日看广告次数:5/5` / `无限征收`）' })
-    adCountLabel: Label = null!;
+    adCountLabel: Label = null;
 
     @property({ type: HangGearSwitch, tooltip: '倍率切换角标（FGUI `change_btn`）' })
-    gearSwitch: HangGearSwitch = null!;
+    gearSwitch: HangGearSwitch = null;
 
     @property({ type: Node, tooltip: '月卡销售条（FGUI 组 `n74`，无月卡时显示）' })
-    monthCardBar: Node = null!;
+    monthCardBar: Node = null;
 
     @property({ type: Node, tooltip: '月卡入口图标（FGUI `taskBtn`，点它进月卡礼包页）' })
-    monthCardEntry: Node = null!;
+    monthCardEntry: Node = null;
 
     @property({ type: Node, tooltip: '月卡购买按钮（FGUI `月卡_按钮`）' })
-    monthCardBuy: Node = null!;
+    monthCardBuy: Node = null;
 
     @property({ type: Label, tooltip: '月卡价格 `￥30`（FGUI `月卡_按钮/title`）' })
-    monthCardPriceLabel: Label = null!;
+    monthCardPriceLabel: Label = null;
 
     // ---------------- 运行态 ----------------
 
@@ -531,7 +531,7 @@ export class HangPage extends PopupBase {
     }
 
     private _loadFrame(path: string): Promise<SpriteFrame | null> {
-        if (this._frames.has(path)) return Promise.resolve(this._frames.get(path)!);
+        if (this._frames.has(path)) return Promise.resolve(this._frames.get(path));
         return new Promise((resolve) => {
             // ⚠️ 必须带 `/spriteFrame`（规则 57）：裸路径会报
             //    `Bundle resources doesn't contain xxx`，且只是静默留白 + 一条 warn。

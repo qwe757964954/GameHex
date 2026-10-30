@@ -41,34 +41,34 @@ const { ccclass, property } = _decorator;
 @ccclass('ChatRecruitRow')
 export class ChatRecruitRow extends Component {
     @property({ type: Sprite, tooltip: 'Bg：招募项底板（ct_recruit_bg，九宫格）' })
-    background: Sprite = null!;
+    background: Sprite = null;
 
     @property({ type: Node, tooltip: 'Head：头像框整节点（框 + 头像一起挪）' })
-    headNode: Node = null!;
+    headNode: Node = null;
 
     @property({ type: Sprite, tooltip: 'Head/Icon：头像（运行时按 img 加载）' })
-    headIcon: Sprite = null!;
+    headIcon: Sprite = null;
 
     @property({ type: Label, tooltip: 'Name：玩家名（自己右对齐、别人左对齐）' })
-    nameLabel: Label = null!;
+    nameLabel: Label = null;
 
     @property({ type: Node, tooltip: 'InfoGroup：关卡名 / 宣言 / 战力 / 加入按钮 的容器（整组平移）' })
-    infoGroup: Node = null!;
+    infoGroup: Node = null;
 
     @property({ type: Label, tooltip: 'InfoGroup/Stage：关卡名（如 1-1-藏宝海湾）' })
-    stageLabel: Label = null!;
+    stageLabel: Label = null;
 
     @property({ type: Label, tooltip: 'InfoGroup/Declare：宣言（老端恒写空串）' })
-    declareLabel: Label = null!;
+    declareLabel: Label = null;
 
     @property({ type: Label, tooltip: 'InfoGroup/Power：战力文案' })
-    powerLabel: Label = null!;
+    powerLabel: Label = null;
 
     @property({ type: Node, tooltip: 'InfoGroup/JoinBtn：点击加入（挂 cc.Button）' })
-    joinButton: Node = null!;
+    joinButton: Node = null;
 
     @property({ type: Label, tooltip: 'InfoGroup/JoinBtn/Label：按钮文案' })
-    joinLabel: Label = null!;
+    joinLabel: Label = null;
 
     /**
      * 两个回调，**由宿主在每次铺行时重设**（`ChatPage.renderRecruitRow`）。

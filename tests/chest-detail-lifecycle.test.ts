@@ -1,3 +1,5 @@
+import { createControllerContext } from './helpers/controller-context';
+import { componentControllerModule } from './helpers/controller-context';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -7,6 +9,7 @@ import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
 import * as chestTypes from '../assets/script/app/main/ChestTypes';
 
 function createPage() {
+    const context = createControllerContext();
     let panel: { updateCountdown: (...args: unknown[]) => void; close: () => void } | null = null;
     const exports: Record<string, new () => Record<string, any>> = {};
     const code = ts.transpileModule(readFileSync('assets/script/app/main/MainPage.ts', 'utf8'), {
@@ -14,6 +17,7 @@ function createPage() {
     }).outputText;
     class Repository { dispose() {} }
     runInNewContext(code, { exports, console, require: (name: string) => {
+        if (name.endsWith('/ComponentController')) return componentControllerModule(context);
         if (name === 'cc') return { _decorator: { ccclass: () => (value: unknown) => value, property: () => () => {} },
             Component: class {}, SpriteFrame: class {} };
         if (name === '../../core/asset/ResourceScope') return { ResourceScope };
@@ -29,7 +33,7 @@ function createPage() {
     } });
     const page = new exports.MainPage();
     page.isValid = true;
-    return { page, setPanel: (value: typeof panel) => { panel = value; } };
+    return { page, context, setPanel: (value: typeof panel) => { panel = value; } };
 }
 
 test('未激活宝箱显示配置等待时长并允许开启，激活后立即刷新倒计时', async () => {
@@ -55,9 +59,9 @@ test('未激活宝箱显示配置等待时长并允许开启，激活后立即�
 });
 
 test('详情图标和品质框持有独立资源作用域，页面销毁后释放', async () => {
-    const { page } = createPage();
+    const { page, context } = createPage();
     const frame = { isValid: true, refs: 0 };
-    page.initialize({ load: async (_path: string, _type: unknown, options: { scope?: ResourceScope }) => {
+    Object.assign(context.assets, { load: async (_path: string, _type: unknown, options: { scope?: ResourceScope }) => {
         assert.ok(options.scope, '缓存的 SpriteFrame 必须持有资源作用域');
         frame.refs++;
         options.scope.defer(() => { frame.refs--; });

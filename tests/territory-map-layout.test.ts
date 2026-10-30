@@ -19,8 +19,9 @@ import {
     territoryMapOffsetForCell,
 } from '../assets/script/app/territory/model/TerritoryMapLayout';
 import { configureTerritoryMap, territoryCellCoords } from '../assets/script/app/territory/model/TerritoryMapConfig';
+import { assetPath } from './helpers/asset-paths';
 
-const MAP_PATH = 'assets/resources/config/territory-maps/chapter_01.json';
+const MAP_PATH = assetPath('config/territory-maps/chapter_01.json');
 
 const readMap = () => configureTerritoryMap(JSON.parse(readFileSync(MAP_PATH, 'utf8')));
 

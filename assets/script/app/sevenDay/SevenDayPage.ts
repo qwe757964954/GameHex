@@ -72,31 +72,31 @@ export class SevenDayPage extends PopupBase {
     static prefabPath = 'ui/SevenDay/SevenDay';
 
     @property({ type: Node, tooltip: 'CloseBtn：右上角关闭按钮（挂 cc.Button）' })
-    closeButton: Node = null!;
+    closeButton: Node = null;
 
     @property({ type: Label, tooltip: 'TimeLabel：剩余时间（`3天12时`）' })
-    timeLabel: Label = null!;
+    timeLabel: Label = null;
 
     @property({ type: Node, tooltip: 'DayBar：天数按钮栏（下面挂 7 个 SevenDayDayTab）' })
-    dayBar: Node = null!;
+    dayBar: Node = null;
 
     @property({ type: Node, tooltip: 'TabBar：页签栏（下面挂 3 个 SevenDayPageTab）' })
-    tabBar: Node = null!;
+    tabBar: Node = null;
 
     @property({ type: VirtualScrollView, tooltip: 'RowView：奖励行列表（自带虚拟列表 + Mask）' })
-    rowList: VirtualScrollView = null!;
+    rowList: VirtualScrollView = null;
 
     @property({ type: Node, tooltip: 'BoxBar：积分宝箱栏（下面挂 5 个 SevenDayPointBox）' })
-    boxBar: Node = null!;
+    boxBar: Node = null;
 
     @property({ type: Label, tooltip: 'PointLabel：当前积分' })
-    pointLabel: Label = null!;
+    pointLabel: Label = null;
 
     @property({ type: Label, tooltip: 'Hint：提示行（离线 / 空配置 / 操作失败时替换掉页签名）' })
-    hintLabel: Label = null!;
+    hintLabel: Label = null;
 
     @property({ type: Node, tooltip: 'Panel：长屏时向下拉伸的九宫主底板' })
-    panel: Node = null!;
+    panel: Node = null;
 
     @property({ type: [Node], tooltip: '贴顶节点：长屏额外高度不改变它们距屏幕顶部的位置' })
     topAlignedNodes: Node[] = [];
@@ -275,7 +275,8 @@ export class SevenDayPage extends PopupBase {
         if (tabs.length === 0) {
             this.selectedTab = '';
         } else if (!tabs.some((tab) => tab.typeName === this.selectedTab)) {
-            this.selectedTab = tabs[0]!.typeName;
+            const firstTab = tabs[0];
+            if (firstTab) this.selectedTab = firstTab.typeName;
         }
 
         this.presentTime(snapshot);

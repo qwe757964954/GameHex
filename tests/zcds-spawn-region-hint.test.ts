@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { configureZCMap, ZC_HEX_CONFIG, type ZCMapLayout, type ZCMapRegion } from '../assets/script/app/zcds/model/ZCGameModel';
 import { resolveZCSpawnRegionHints } from '../assets/script/app/zcds/model/ZCSpawnRegionHint';
+import { assetPath } from './helpers/asset-paths';
 
 test('region hints use depth defaults, tendency overrides, own section, and mean cell positions', () => {
     const regions: ZCMapRegion[] = [
@@ -32,7 +33,7 @@ test('region hints use depth defaults, tendency overrides, own section, and mean
 });
 
 test('configureZCMap rejects inherited tendency property names', () => {
-    const source = JSON.parse(readFileSync('assets/resources/config/maps/select_river.json', 'utf8')) as ZCMapLayout;
+    const source = JSON.parse(readFileSync(assetPath('config/maps/select_river.json'), 'utf8')) as ZCMapLayout;
     for (const tendency of ['constructor', 'toString', '__proto__']) {
         const layout = structuredClone(source);
         assert.ok(layout.regions?.length);
@@ -42,7 +43,7 @@ test('configureZCMap rejects inherited tendency property names', () => {
 });
 
 test('configureZCMap rejects duplicate section and depth regions', () => {
-    const layout = JSON.parse(readFileSync('assets/resources/config/maps/select_river.json', 'utf8')) as ZCMapLayout;
+    const layout = JSON.parse(readFileSync(assetPath('config/maps/select_river.json'), 'utf8')) as ZCMapLayout;
     assert.ok(layout.regions?.length);
     const first = layout.regions[0];
     configureZCMap(layout);
@@ -54,7 +55,7 @@ test('configureZCMap rejects duplicate section and depth regions', () => {
 });
 
 test('configureZCMap rejects unknown region tendency with the defined configuration error', () => {
-    const layout = JSON.parse(readFileSync('assets/resources/config/maps/select_river.json', 'utf8')) as ZCMapLayout;
+    const layout = JSON.parse(readFileSync(assetPath('config/maps/select_river.json'), 'utf8')) as ZCMapLayout;
     assert.ok(layout.regions?.length, 'select_river must include regions');
     layout.regions[0].tendency = 'unknown' as ZCMapRegion['tendency'];
     assert.throws(() => configureZCMap(layout), /打法倾向必须是 rush \/ control \/ develop/);

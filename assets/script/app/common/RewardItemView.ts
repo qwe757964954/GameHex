@@ -1,5 +1,5 @@
 import { _decorator, Component, Label, Sprite, SpriteFrame } from 'cc';
-import type { AssetService } from '../../core/asset/AssetService';
+import { ComponentController } from '../../framework/controller/ComponentController';
 import { ResourceScope } from '../../core/asset/ResourceScope';
 import { RefUtil } from '../../framework/ref/RefUtil';
 import { spriteFramePathOf } from '../ArtPaths';
@@ -38,45 +38,32 @@ export interface IRewardItemData {
  *
  * 用法：
  * ```ts
- * RewardItemView.useAssets(assets);          // 启动时注入一次（MainTabHost 手里就有）
  * view.render({ resId: 16014, amount: 8 });  // 图标/品质框自己搞定
  * ```
  */
 @ccclass('RewardItemView')
 export class RewardItemView extends Component {
     @property({ type: Sprite, tooltip: 'Frame：品质框（按物品品质自动换帧）' })
-    frame: Sprite = null!;
+    frame: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'Icon：物品图标' })
-    icon: Sprite = null!;
+    icon: Sprite = null;
 
     @property({ type: Label, tooltip: 'Num：数量（`0` ⇒ 空串）' })
-    num: Label = null!;
+    num: Label = null;
 
     @property({ type: Label, tooltip: 'Rate：概率（`0` ⇒ 整行隐藏，只有宝箱详情用）' })
-    rate: Label = null!;
+    rate: Label = null;
 
     // ============================================================
-    // 静态：资源入口与只读表数据；动态图帧由每个格子持有。
+    // 只读表数据共享；动态图帧由每个格子的控制器持有。
     // ============================================================
-    private static assets: AssetService | null = null;
     private static propRows: readonly IResPropertyRow[] = [];
     private static itemRows: readonly IItemRefRow[] = [];
     private static tablesLoading: Promise<void> | null = null;
-    private readonly resourceScope = new ResourceScope('ui:reward-item');
+    private readonly controller = new ComponentController('ui:reward-item');
+    private get resourceScope(): ResourceScope { return this.controller.scope; }
     private readonly frameCache = new Map<string, Promise<SpriteFrame | null>>();
-
-    /**
-     * 注入资源入口（`MainTabHost` 在 `showPage` 里调一次）。
-     *
-     * 表数据惰性加载一次；读不到只是「图标/品质框空着」，不影响格子本身。
-     */
-    static useAssets(assets: AssetService): void {
-        RewardItemView.assets = assets;
-        if (!RewardItemView.tablesLoading) {
-            RewardItemView.tablesLoading = RewardItemView.loadTables();
-        }
-    }
 
     private static async loadTables(): Promise<void> {
         const [props, items] = await Promise.all([
@@ -91,8 +78,7 @@ export class RewardItemView extends Component {
         if (!path || this.resourceScope.disposed) return Promise.resolve(null);
         const cached = this.frameCache.get(path);
         if (cached) return cached;
-        const assets = RewardItemView.assets;
-        if (!assets) return Promise.resolve(null);
+        const assets = this.controller.resources.assets;
         // JS Map 不持有 Cocos 引用；显式租约避免切对局时共用帧被释放成 uv=null。
         const task = assets.load(spriteFramePathOf(path), SpriteFrame, { scope: this.resourceScope })
             .then((frame) => !this.resourceScope.disposed && frame.isValid ? frame : null, (err) => {
@@ -106,7 +92,7 @@ export class RewardItemView extends Component {
     }
 
     protected onDestroy(): void {
-        this.resourceScope.dispose();
+        this.controller.dispose();
         this.frameCache.clear();
     }
 
@@ -145,7 +131,7 @@ export class RewardItemView extends Component {
 
 
     private async applyFrames(resId: number): Promise<void> {
-        await RewardItemView.tablesLoading;
+        await (RewardItemView.tablesLoading ??= RewardItemView.loadTables());
         if (!this.isValid || this.resourceScope.disposed || this.currentResId !== resId) return;
         const quality = RewardItemView.qualityOf(resId);
         const iconPath = resBarIconSpritePath(resBarCellOfRefId(resId, RewardItemView.propRows, RewardItemView.itemRows));

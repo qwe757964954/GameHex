@@ -119,37 +119,37 @@ export class ZCUnitView extends Component {
     }
 
     @property({ type: UITransform })
-    rootTransform: UITransform = null!;
+    rootTransform: UITransform = null;
 
     @property({ type: Node, tooltip: '兵种美术容器；原点相对单位逻辑脚点上移 45.7px' })
-    visualRoot: Node = null!;
+    visualRoot: Node = null;
 
     @property({ type: Sprite })
-    sprite: Sprite = null!;
+    sprite: Sprite = null;
 
     @property({ type: Graphics })
-    fallback: Graphics = null!;
+    fallback: Graphics = null;
 
     @property({ type: Label })
-    fallbackLabel: Label = null!;
+    fallbackLabel: Label = null;
 
     @property({ type: ProgressBar, group: '状态条', tooltip: 'HealthBar：单位生命值' })
-    healthBar: ProgressBar = null!;
+    healthBar: ProgressBar = null;
 
     // 血条填充图：按阵营各一张 —— 我方蓝 / 敌红 / 敌2 黄 / 敌3 紫（R25「不同阵营区分不同的血条」）。
     // 紫图取自项目里已有但一直没人用的 `buildings/jindutiao_p.png`，不需要新美术；
     // 四家的取值口径见 `ZCGameViewUtil.pickHealthBarFill`。
     @property({ type: SpriteFrame, group: '状态条', tooltip: '血条填充：我方（蓝）' })
-    barFillPlayer: SpriteFrame = null!;
+    barFillPlayer: SpriteFrame = null;
 
     @property({ type: SpriteFrame, group: '状态条', tooltip: '血条填充：敌方（红）' })
-    barFillEnemy: SpriteFrame = null!;
+    barFillEnemy: SpriteFrame = null;
 
     @property({ type: SpriteFrame, group: '状态条', tooltip: '血条填充：敌方 2（黄）' })
-    barFillEnemy2: SpriteFrame = null!;
+    barFillEnemy2: SpriteFrame = null;
 
     @property({ type: SpriteFrame, group: '状态条', tooltip: '血条填充：敌方 3（紫）' })
-    barFillEnemy3: SpriteFrame = null!;
+    barFillEnemy3: SpriteFrame = null;
 
     // 兵种视觉 prefab 的画布统一是 256×256、节点 98×98，可见身体约 56~74 宽 × 69 高。
     // 单位根节点现在是逻辑脚点，VisualRoot 上移 45.7px 后，美术脚底正好落在原点；
@@ -586,8 +586,9 @@ export class ZCUnitView extends Component {
             // 填充条比外框窄一圈：外框是「槽」（17 高），填充是槽里那条（8 高、左右各内缩 4）。
             const fillWidth = width - this.barFillInset * 2;
             // 先用「陷阱②」决定顺序：先写尺寸再设 totalLength，反了高度会停在 prefab 的旧值。
-            this.healthBar.barSprite?.node.getComponent(UITransform)!.setContentSize(fillWidth, this.barFillHeight);
-            this.healthBar.node.getComponent(UITransform)!.setContentSize(width, height);
+            const barSprite = this.healthBar.barSprite;
+            if (barSprite) barSprite.node.getComponent(UITransform).setContentSize(fillWidth, this.barFillHeight);
+            this.healthBar.node.getComponent(UITransform).setContentSize(width, height);
             // 填充条锚点是 (0, 0.5)，靠 position 把左缘对齐到外框内沿（与引擎 _initBarSprite 同一算法）。
             this.healthBar.barSprite?.node.setPosition(-width / 2 + this.barFillInset, 0, 0);
             this.healthBar.totalLength = fillWidth;

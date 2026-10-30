@@ -1,3 +1,6 @@
+import { createControllerContext } from './helpers/controller-context';
+import { TerritoryController } from '../assets/script/app/territory/application/TerritoryController';
+import type { TerritoryModel } from '../assets/script/app/territory/application/TerritoryModel';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -53,32 +56,19 @@ function createHarness() {
         },
     );
     const repository = new Repository();
-    const panel = { node: { on() {} }, initialize() {}, close() {} };
-    const Page = loadClass<MainTerritoryMap>('assets/script/app/main/MainTerritoryMap.ts', 'MainTerritoryMap', {
-        cc: {
-            _decorator: { ccclass: () => (type: unknown) => type, property: () => () => {} },
-            Component: class {}, Vec3: { ZERO: {} },
-            instantiate: () => ({ setParent() {}, setPosition() {}, getComponent: () => panel }),
-        },
-        '../../core/asset/ResourceScope': { ResourceScope },
-        '../../framework/event/EventMgr': { EventMgr: { instance: new EventMgr() } },
-        '../net/CacheMgr': { CacheMgr: { instance: { setEventUpdate() {}, removeEventUpdate() {} } } },
-        '../net/GameNet': { GameNet: { instance: net } },
-        '../territory/view/TerritoryEvents': events,
-    });
     const passed: Array<[number, readonly number[]]> = [];
     const snapshots: bitSet.ITerritoryCellState[] = [];
     const presenter = {
         state: { ready: false, map: { rows: 3, columns: 3 } },
         applyPassCellsBro(chapter: number, cells: readonly number[]) { passed.push([chapter, cells]); },
         applyCellInfoState(state: bitSet.ITerritoryCellState) { snapshots.push(state); },
-        dispose() {},
+        dispose() {}, start() {}, onOutput() { return () => {}; },
     };
-    const page = new Page();
-    Object.assign(page, {
-        cellRepository: repository, presenter, node: { getComponent: () => null },
-        mapView: { initialize() {}, node: { on() {} }, stopChestPlay() {} },
+    const controller = new TerritoryController(() => presenter as unknown as TerritoryModel, { context: createControllerContext(),
+        network: net, cells: repository,
+        roleCache: { subscribe: () => () => {} }, schedule: () => () => {},
     });
+    const page = { onLoad: () => controller.start(), onDestroy: () => controller.dispose() };
     return {
         page, repository, listeners, requests, passed, snapshots, presenter,
         emit(name: string, msg: unknown) {
@@ -87,7 +77,7 @@ function createHarness() {
     };
 }
 
-test('页面订阅两类格子消息并在销毁时解绑，Repository 不持有订阅入口', () => {
+test('Controller 订阅两类格子消息并在销毁时解绑，Repository 不持有订阅入口', () => {
     const h = createHarness();
     assert.equal('listenPassCellsBro' in h.repository, false);
     assert.equal('listenCellInfo' in h.repository, false);
@@ -99,13 +89,17 @@ test('页面订阅两类格子消息并在销毁时解绑，Repository 不持有
     assert.equal(h.passed.length, 1);
     assert.equal(h.passed[0][0], 1);
     assert.deepEqual(Array.from(h.passed[0][1]), [1, 4]);
+    h.emit('CmdCityChapterCellInfoRspMsg', { levelChapter: 1, unlockCells: [2], passCells: [16] });
+    assert.equal(h.snapshots.length, 1);
     h.page.onDestroy();
     h.emit('CmdCityChapterPassCellBroMsg', { levelChapter: 1, cellId: [7] });
+    h.emit('CmdCityChapterCellInfoRspMsg', { levelChapter: 1, unlockCells: [4], passCells: [32] });
     assert.equal(h.listeners.length, 0);
     assert.equal(h.passed.length, 1);
+    assert.equal(h.snapshots.length, 1, '销毁后两类消息都必须在订阅层停止，不能再调用 Presenter');
 });
 
-test('页面将完整快照交给 Presenter，按当前地图裁剪并拒绝损坏报文', () => {
+test('Controller 将完整快照交给 Presenter 并拒绝损坏报文', () => {
     const h = createHarness();
     h.page.onLoad();
     h.emit('CmdCityChapterCellInfoRspMsg', { levelChapter: 0, unlockCells: [18], passCells: [272] });
@@ -113,6 +107,20 @@ test('页面将完整快照交给 Presenter，按当前地图裁剪并拒绝损�
     assert.deepEqual({ ...h.snapshots[0] }, { levelChapter: 1, rewardState: 0, unlockCells: [1, 4], passCells: [4, 8] });
     h.emit('CmdCityChapterCellInfoRspMsg', { levelChapter: 1, unlockCells: ['bad'], passCells: [16] });
     assert.equal(h.snapshots.length, 1);
+    h.page.onDestroy();
+});
+
+test('地图未就绪时 Controller仍转交快照，切章期间不按旧地图裁剪', () => {
+    const h = createHarness();
+    h.page.onLoad();
+    Object.assign(h.presenter.state, { map: null });
+    h.emit('CmdCityChapterCellInfoRspMsg', { levelChapter: 1, unlockCells: [1024], passCells: [16] });
+    assert.equal(h.snapshots.length, 1);
+    assert.deepEqual(Array.from(h.snapshots[0].unlockCells), [10]);
+    Object.assign(h.presenter.state, { map: { rows: 1, columns: 1 } });
+    h.emit('CmdCityChapterCellInfoRspMsg', { levelChapter: 2, unlockCells: [1024], passCells: [16] });
+    assert.equal(h.snapshots.length, 2);
+    assert.deepEqual(Array.from(h.snapshots[1].unlockCells), [10]);
     h.page.onDestroy();
 });
 
@@ -128,5 +136,25 @@ test('请求响应在途时不作为推送重复合并，后续主动推送仍�
     assert.equal((await pending).ok, true);
     h.emit('CmdCityChapterCellInfoRspMsg', rsp);
     assert.equal(h.snapshots.length, 1);
+    h.page.onDestroy();
+});
+
+test('旧章请求在途不吞掉新章快照，独立推送也不因同章请求在途而丢失', async () => {
+    const h = createHarness();
+    h.page.onLoad();
+    const pending = h.repository.fetchChapterCells(1, 9);
+    h.repository.clear();
+    Object.assign(h.presenter.state, { map: null });
+    h.emit('CmdCityChapterCellInfoRspMsg', { levelChapter: 2, unlockCells: [1024], passCells: [16] });
+    assert.equal(h.snapshots.length, 1, '新章推送必须进入 Presenter 的加载暂存入口');
+    assert.equal(h.snapshots[0].levelChapter, 2);
+    h.emit('CmdCityChapterCellInfoRspMsg', { levelChapter: 1, unlockCells: [4], passCells: [16] });
+    assert.equal(h.snapshots.length, 2, '独立推送不能按请求是否在途粗暴丢弃');
+    const rsp = { levelChapter: 1, unlockCells: [18], passCells: [16] };
+    h.requests[0].callback(rsp);
+    h.emit('CmdCityChapterCellInfoRspMsg', rsp);
+    assert.equal(h.snapshots.length, 2, '实际请求响应仍只合并一次');
+    h.requests[0].resolve(true);
+    await pending;
     h.page.onDestroy();
 });

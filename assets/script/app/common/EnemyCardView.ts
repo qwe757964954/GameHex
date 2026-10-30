@@ -1,4 +1,4 @@
-import { _decorator, Component, Label, Node, Sprite, SpriteFrame } from 'cc';
+import {_decorator, Component, Label, Sprite, SpriteFrame} from 'cc';
 
 const { ccclass, property } = _decorator;
 
@@ -26,13 +26,13 @@ export interface IEnemyCardData {
 @ccclass('EnemyCardView')
 export class EnemyCardView extends Component {
     @property({ type: Sprite, tooltip: 'Icon：敌军头像' })
-    icon: Sprite = null!;
+    icon: Sprite = null;
 
     @property({ type: Label, tooltip: 'EnemyName：敌军名字' })
-    nameLabel: Label = null!;
+    nameLabel: Label = null;
 
     @property({ type: Sprite, tooltip: 'SelectedFrame：选中框（黄色括号）' })
-    selectedFrame: Sprite = null!;
+    selectedFrame: Sprite = null;
 
     /**
      * 铺一张卡（幂等）。

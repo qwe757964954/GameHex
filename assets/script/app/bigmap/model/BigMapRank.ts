@@ -97,7 +97,7 @@ export function buildBigMapCityRankBoard(
         warScore: item.warScore,
         isPlayer: item.isPlayer,
     }));
-    const playerEntry = entries.find((entry) => entry.isPlayer)!;
+    const playerEntry = entries.find((entry) => entry.isPlayer);
 
     return {
         cityId: city.cityId,

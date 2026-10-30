@@ -52,6 +52,7 @@ import {
     parseCard,
     parseUnits,
 } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
+import { assetPath } from './helpers/asset-paths';
 
 /** 读 remoteRef 的列存表（`{k, v, c}`）→ 行对象数组。 */
 function readPvpRef(name: string): Array<Record<string, unknown>> {
@@ -334,7 +335,7 @@ type PrefabObject = Record<string, unknown>;
 //（全 tests/ 里那 91 处 TS1259 就是这件事），于是 tsc 不会跟着 assert 收窄，得自己补。
 // 运行时的守卫是真的，`!` 只是给 tsc 看的。
 
-/** 读 prefab JSON —— `assets/resources/ui/card` 下这两张 prefab 是本页外观的唯一真源。 */
+/** 读 prefab JSON —— assetPath(`ui/card`) 下这两张 prefab 是本页外观的唯一真源。 */
 function readPrefab(path: string): PrefabObject[] {
     return JSON.parse(readFileSync(path, 'utf8')) as PrefabObject[];
 }
@@ -368,10 +369,10 @@ function prefabTransform(prefab: PrefabObject[], node: PrefabObject): PrefabObje
 }
 
 test('图标行虚拟列表：节奏 115px 复刻原 4 项，条目模板已合并图标、参数与接线对齐', () => {
-    const prefab = readPrefab('assets/resources/ui/card/CardLineup.prefab');
-    const itemPrefab = readPrefab('assets/resources/ui/card/CardLineupBond.prefab');
+    const prefab = readPrefab(assetPath('ui/card/CardLineup.prefab'));
+    const itemPrefab = readPrefab(assetPath('ui/card/CardLineupBond.prefab'));
     const itemMeta = JSON.parse(
-        readFileSync('assets/resources/ui/card/CardLineupBond.prefab.meta', 'utf8'),
+        readFileSync(assetPath('ui/card/CardLineupBond.prefab.meta'), 'utf8'),
     ) as { uuid: string };
 
     const list = prefabNode(prefab, 'BondList');
@@ -562,7 +563,7 @@ test('真实 pvpBond + 玩家八卡算出两条生效羁绊与 16.00% 合计', (
 test('CardLineupCard binds level and card fragment progress to the prefab', () => {
     const src = readFileSync('assets/script/app/card/CardLineupCard.ts', 'utf8');
     const page = readFileSync('assets/script/app/card/CardLineupPage.ts', 'utf8');
-    const prefab = JSON.parse(readFileSync('assets/resources/ui/card/CardLineupCard.prefab', 'utf8')) as Array<Record<string, any>>;
+    const prefab = JSON.parse(readFileSync(assetPath('ui/card/CardLineupCard.prefab'), 'utf8')) as Array<Record<string, any>>;
     const node = (name: string) => prefab.find((item) => item.__type__ === 'cc.Node' && item._name === name);
     const track = node('CardFragmentProgress');
     const plate = node('LevelPlate');

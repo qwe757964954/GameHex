@@ -43,44 +43,44 @@ export class ZCGameHudPlayerRow extends Component {
     private static readonly OTHER_HEAD_SIZE = 66;
 
     @property({ type: Sprite, tooltip: 'HeadFrame：头像圆盘（图按席位换）' })
-    headFrame: Sprite = null!;
+    headFrame: Sprite = null;
 
     @property({ type: UITransform, tooltip: 'HeadFrame 的 UITransform（圆盘尺寸按席位换）' })
-    discRect: UITransform = null!;
+    discRect: UITransform = null;
 
     @property({ type: Sprite, tooltip: 'HeadFrame/HeadIcon：玩家头像（icons/head 的键）' })
-    headIcon: Sprite = null!;
+    headIcon: Sprite = null;
 
     @property({ type: UITransform, tooltip: 'HeadIcon 的 UITransform（头像尺寸按席位换）' })
-    headRect: UITransform = null!;
+    headRect: UITransform = null;
 
     @property({ type: Label, tooltip: 'NameText：玩家名（左对齐不换行，颜色按席位）' })
-    nameText: Label = null!;
+    nameText: Label = null;
 
     @property({ type: Sprite, tooltip: 'Info/UnitIcon：兵力图标 zd_icon_shibing' })
-    unitIcon: Sprite = null!;
+    unitIcon: Sprite = null;
 
     @property({ type: Label, tooltip: 'Info/UnitText：兵力 14/100' })
-    unitText: Label = null!;
+    unitText: Label = null;
 
     @property({ type: Sprite, tooltip: 'Info/Buff1：第一个 buff' })
-    buffA: Sprite = null!;
+    buffA: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'Info/Buff2：第二个 buff' })
-    buffB: Sprite = null!;
+    buffB: Sprite = null;
 
     // 四张圆盘图（`zd_txk_01~04`），按席位显式绑定（Inspector 拖拽约定不支持数组属性）。
     @property({ type: SpriteFrame, tooltip: 'zd_txk_01：我方圆盘' })
-    disc01: SpriteFrame = null!;
+    disc01: SpriteFrame = null;
 
     @property({ type: SpriteFrame, tooltip: 'zd_txk_02：2 号席位圆盘' })
-    disc02: SpriteFrame = null!;
+    disc02: SpriteFrame = null;
 
     @property({ type: SpriteFrame, tooltip: 'zd_txk_03：3 号席位圆盘' })
-    disc03: SpriteFrame = null!;
+    disc03: SpriteFrame = null;
 
     @property({ type: SpriteFrame, tooltip: 'zd_txk_04：4 号席位圆盘' })
-    disc04: SpriteFrame = null!;
+    disc04: SpriteFrame = null;
 
     /**
      * 上一次写进去的「已出局」状态（`null` = 还没写过）。
@@ -128,7 +128,7 @@ export class ZCGameHudPlayerRow extends Component {
         const hasUnits = data.unitText !== null && data.unitText !== '';
         this.unitIcon.node.active = hasUnits;
         this.unitText.node.active = hasUnits;
-        if (hasUnits) this.unitText.string = data.unitText!;
+        if (hasUnits) this.unitText.string = data.unitText;
 
         // 两个 buff 各自判空。
         this.buffA.node.active = data.buffA !== null;

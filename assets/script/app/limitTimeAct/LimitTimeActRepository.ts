@@ -81,7 +81,7 @@ export class RuntimeLimitTimeActRepository implements ILimitTimeActRepository {
     /** 读缓存里的 `CmdActivitySimple` 全表。 */
     private readActivitySimples(): readonly unknown[] {
         try {
-            return CacheMgr.instance?.getTlCmdActivitySimple() ?? [];
+            return CacheMgr.instance.getTlCmdActivitySimple() ?? [];
         } catch (error) {
             console.warn('[LimitTimeAct] 读 CmdActivitySimple 缓存失败', error);
             return [];

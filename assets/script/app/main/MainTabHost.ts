@@ -1,3 +1,4 @@
+import { ComponentController } from '../../framework/controller/ComponentController';
 import {
     _decorator,
     CCInteger,
@@ -9,14 +10,10 @@ import {
     Prefab,
     Vec3,
 } from 'cc';
-import type { AssetService } from '../../core/asset/AssetService';
-import type { ConfigService } from '../../core/config/ConfigService';
-import type { SessionAssetService } from '../../core/asset/SessionAssetService';
 import { ResourceScope } from '../../core/asset/ResourceScope';
 import { MAIN_PAGES_BUNDLE } from '../../core/asset/BundleCatalog';
 import { TabButton } from '../common/TabButton';
 import { mainTabItem } from './MainTabItems';
-import { CardLineupPage } from '../card/CardLineupPage';
 import { fetchFormations } from '../card/FormationService';
 import { checkFirstRechargeOnEnterMain } from '../firstRecharge/FirstRechargeAutoOpen';
 import { MainTerritoryMap } from './MainTerritoryMap';
@@ -84,10 +81,10 @@ export const enum MainTab {
 @ccclass('MainTabHost')
 export class MainTabHost extends Component {
     @property({ type: Node, tooltip: 'BottomNav：底部七格导航容器' })
-    navBar: Node = null!;
+    navBar: Node = null;
 
     @property({ type: Node, tooltip: 'Content：页面容器，切 tab 时把子页实例挂到这里' })
-    content: Node = null!;
+    content: Node = null;
 
     // ⚠️ 必须 `CCInteger`：Cocos 3.8 的 `@property` 不认裸 `Number`，prefab 每次加载都会
     // warn（`must be CCFloat or CCInteger, not Number`）。prefab 里存的是裸数字 `2`，换类型后原样保留。
@@ -96,6 +93,14 @@ export class MainTabHost extends Component {
         tooltip: '初始选中的 tab：0商店 1英雄 2角色 3领地(主城) 4挑战 5联盟 6世界',
     })
     defaultTab = MainTab.Territory as number;
+
+    /**
+     * 「领地页回来先看这一格」的一次性口令（`ProcedureMain` 在 `setParent` 之前写入）。
+     *
+     * 章节局结算返回时带 `{ chapterId, cellId }`：领地页首次渲染会把它居中（看通关翻转），
+     * 取走即置 `null` —— 单次消费，别让它在下一次切 tab 时又把相机拽回去。
+     */
+    focusCellId: { readonly chapterId: number; readonly cellId: number } | null = null;
 
     /** 七格视图，按 x 从左到右排好。 */
     private readonly navItems: TabButton[] = [];
@@ -106,22 +111,10 @@ export class MainTabHost extends Component {
     /** 当前选中的 tab 下标；`-1` 表示还没选过。 */
     private currentTab = -1;
 
-    /**
-     * 资源入口，由 `ProcedureMain` 注入（`ProcedureBase.assets`）。
-     *
-     *  页面是 `instantiate` 出来的 prefab，拿不到流程的依赖 ⇒ 由宿主在挂载时转交。
-     *  目前只有领地页需要它（地图 JSON 与美术都走 `AssetService`，不再直调 `resources.load`）。
-     */
-    private assets: AssetService | null = null;
-
-    /**
-     * 配置入口，由 `ProcedureMain` 注入。
-     *
-     * 目前只有大世界入口用它：`BigMap-*` 12 张表要在打开页面时解析成强类型配置，
-     * 而 tab 页是 `instantiate` 出来的 prefab，同样拿不到流程依赖。
-     */
-    private configs: ConfigService | null = null;
-    private sessionAssets: SessionAssetService | null = null;
+    private readonly controller = new ComponentController('main-tabs');
+    private get assets() { return this.controller.resources.assets; }
+    private get configs() { return this.controller.resources.configs; }
+    private get sessionAssets() { return this.controller.resources.sessionAssets; }
     private pageScope: ResourceScope | null = null;
     private readonly pendingPageScopes = new Set<ResourceScope>();
     private backgroundWarmupActive = false;
@@ -138,20 +131,6 @@ export class MainTabHost extends Component {
     private readonly firstScreenReady = new Promise<void>((resolve) => {
         this.firstScreenReadyResolve = resolve;
     });
-
-    /** 注入资源入口；必须在实例化并激活页面之前调用（`ProcedureMain.onEnter` 里就是这么做的）。 */
-    setAssetService(assets: AssetService): void {
-        this.assets = assets;
-    }
-
-    /** 注入配置入口（大世界用；同样要在 setParent 之前调用）。 */
-    setConfigService(configs: ConfigService): void {
-        this.configs = configs;
-    }
-
-    setSessionAssetService(assets: SessionAssetService): void {
-        this.sessionAssets = assets;
-    }
 
     /** 首屏真实渲染就绪的等待（ProcedureMain 在登录预加载挂载后 await）。 */
     get whenFirstScreenReady(): Promise<void> {
@@ -229,12 +208,8 @@ export class MainTabHost extends Component {
      * 保留当前底页，只临时把底栏高亮切到「世界」，关掉时回调恢复 `currentTab`。
      */
     private async openBigMap(): Promise<void> {
-        if (!this.configs) {
-            console.warn('[MainTabHost] 还没注入 ConfigService，无法打开大世界');
-            return;
-        }
         if (BigMapEntry.shared().isOpen) return;
-        this.sessionAssets?.pauseWarmup?.();
+        this.sessionAssets.pauseWarmup?.();
         try {
             this.renderNav(MainTab.World);
             await BigMapEntry.shared().open(this.configs, {
@@ -289,12 +264,12 @@ export class MainTabHost extends Component {
         if (index === MainTab.Hero) void fetchFormations({ label: '切角色 tab 预取' });
 
         const path = this.pagePath(index);
-        if (!path || !this.assets) {
+        if (!path) {
             console.warn(`[MainTabHost] tab ${index}（${mainTabItem(index)?.name ?? '?'}）的页面还没落地，忽略切换`);
             return;
         }
 
-        this.sessionAssets?.pauseWarmup?.();
+        this.sessionAssets.pauseWarmup?.();
         const revision = this.pageRevision;
         const scope = new ResourceScope(`main-tab:${index}`);
         this.pendingPageScopes.add(scope);
@@ -322,7 +297,7 @@ export class MainTabHost extends Component {
         const callback = (): void => {
             this.afterDrawWarmup = null;
             if (!this.isValid || revision !== this.pageRevision || this.loadingTab !== -1) return;
-            void this.sessionAssets?.warmup?.().catch((error: unknown) => {
+            void this.sessionAssets.warmup?.().catch((error: unknown) => {
                 console.warn('[MainTabHost] 战斗资源静默预下载失败', error);
             });
         };
@@ -336,11 +311,9 @@ export class MainTabHost extends Component {
     }
 
     private async loadPage(index: number, path: string, scope: ResourceScope, revision: number): Promise<void> {
-        const assets = this.assets;
-        if (!assets) return;
         let adopted = false;
         try {
-            const prefab = await assets.load(path, Prefab, { scope, bundle: this.pageBundle(index) });
+            const prefab = await this.assets.load(path, Prefab, { scope, bundle: this.pageBundle(index) });
             if (!this.isValid || revision !== this.pageRevision || scope.disposed) return;
             this.showPage(prefab);
             const previous = this.pageScope;
@@ -359,7 +332,7 @@ export class MainTabHost extends Component {
 
     private cancelPageLoading(): void {
         this.cancelBackgroundWarmup();
-        this.sessionAssets?.pauseWarmup?.();
+        this.sessionAssets.pauseWarmup?.();
         this.pageRevision += 1;
         this.loadingTab = -1;
         this.pageLoadingTask = null;
@@ -373,7 +346,8 @@ export class MainTabHost extends Component {
         this.cancelPageLoading();
         this.pageScope?.dispose();
         this.pageScope = null;
-        this.sessionAssets?.pauseWarmup?.();
+        this.sessionAssets.pauseWarmup?.();
+        this.controller.dispose();
     }
 
     /**
@@ -430,26 +404,23 @@ export class MainTabHost extends Component {
         try {
             // 依赖注入必须发生在 `setParent`（页面 onLoad / start）之前。
             const mainTerritoryMap = page.getComponentInChildren(MainTerritoryMap);
-            if (mainTerritoryMap && this.assets) {
-                mainTerritoryMap.setSessionAssetService(this.sessionAssets);
-                mainTerritoryMap.initialize(this.assets, this.configs);
+            if (mainTerritoryMap) {
+                mainTerritoryMap.initialize(this.controller.resources);
+                // 通关返回的焦点格：同样必须在 `setParent` 之前交过去（首屏 renderAll 就消费）。
+                // 取走即清空 —— 换到别的 tab 再回来时不该再跳一次。
+                const focus = this.focusCellId;
+                this.focusCellId = null;
+                if (focus) mainTerritoryMap.setFocusCell(focus.chapterId, focus.cellId);
                 // 章节首次就绪：下一帧（引擎已在登录图下完成一次真实渲染）再 resolve 首屏等待；
                 // 登录图移除时本页已完整显示。ready 信号丢失时由 onLoad 兜底超时处理。
                 mainTerritoryMap.onFirstReady(() => {
                     this.scheduleOnce(() => this.firstScreenReadyResolve(), 0);
                 });
             }
-            // 公共奖励格（`ui/common/RewardItem.prefab`）的资源入口由**组合根**统一注入
-            // （`ProcedureBootstrap`），这里不再重复注入 —— 主界面与对局流程不是同一条流程，
-            // 靠谁先跑来保证注入必然是隐式时序依赖。
             const mainPage = page.getComponent(MainPage);
             if (mainPage) {
-                // 宝箱详情弹窗要按路径加载图标/品质框 ⇒ 先注入资源入口（同样在 setParent 之前）。
-                if (this.assets) mainPage.initialize(this.assets);
                 if (mainTerritoryMap) mainPage.bindFindCurrentBoss(() => mainTerritoryMap.focusCurrentBoss());
             }
-            const lineup = page.getComponent(CardLineupPage);
-            if (lineup && this.assets) lineup.initialize(this.assets);
             page.setParent(this.content);
             page.setPosition(Vec3.ZERO);
         } catch (error) {

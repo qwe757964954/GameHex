@@ -68,19 +68,19 @@ export class MailDetailPage extends PopupBase {
     static prefabPath = 'ui/Mail/MailDetail';
 
     @property({ type: Button, tooltip: 'CloseBtn：右上角关闭' })
-    closeButton: Button = null!;
+    closeButton: Button = null;
 
     @property({ type: Label, tooltip: 'MailTitle：邮件标题' })
-    titleLabel: Label = null!;
+    titleLabel: Label = null;
 
     @property({ type: Node, tooltip: 'ContentView：正文（Label 多行；无奖励时会拉高）' })
-    contentNode: Node = null!;
+    contentNode: Node = null;
 
     @property({ type: Label, tooltip: 'ContentView：正文字（本节点上的 cc.Label）' })
-    contentLabel: Label = null!;
+    contentLabel: Label = null;
 
     @property({ type: Node, tooltip: 'RewardBox：奖励底框（有奖励才显示）' })
-    rewardBox: Node = null!;
+    rewardBox: Node = null;
 
     /**
      * 奖励列表（`RewardBox/RewardList`）：横向 `VirtualScrollView`，item 模板是它
@@ -90,16 +90,16 @@ export class MailDetailPage extends PopupBase {
      * （旧形态是 `rewardSlots: Node[]` 预摆 8 个，与工程其它模块的 `rewardBar` 口径也不一致）。
      */
     @property({ type: VirtualScrollView, tooltip: 'RewardList：奖励横向列表（格数与回收交给它）' })
-    rewardList: VirtualScrollView = null!;
+    rewardList: VirtualScrollView = null;
 
     @property({ type: Button, tooltip: 'TakeBtn：领取 / 删除' })
-    takeButton: Button = null!;
+    takeButton: Button = null;
 
     @property({ type: Label, tooltip: 'TakeBtn/Label：按钮文案（领取 / 删除）' })
-    takeLabel: Label = null!;
+    takeLabel: Label = null;
 
     @property({ type: Node, tooltip: 'TakenStamp：「已领取」印章（已领取才显示）' })
-    takenStamp: Node = null!;
+    takenStamp: Node = null;
 
     private repo: IMailRepository = mailRepository;
     private detail: IMailDetail | null = null;
@@ -236,7 +236,7 @@ export class MailDetailPage extends PopupBase {
      */
     private renderRewardSlot(node: Node, index: number): void {
         const frames = this.rewardFrames[index] ?? [null, null];
-        node.getComponent(MailRewardSlot)!.render(frames[0], frames[1]);
+        node.getComponent(MailRewardSlot).render(frames[0], frames[1]);
     }
 
     /** 正文框高度：有奖励 400、无奖励 580（FGUI `gearSize` 的两页，见文件头偏离 ②）。 */

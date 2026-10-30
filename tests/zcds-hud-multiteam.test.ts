@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
+import { assetPath } from './helpers/asset-paths';
 
 /**
  * 对局 HUD「多队伍」改造的**顶栏**结构断言（阶段 1）。
@@ -8,7 +9,7 @@ import { readFileSync, readdirSync } from 'node:fs';
  * 设计稿：`8e042e77`（多队伍），换算口径 `absY = 640 − (canvasY + h/2)`。
  * 这里只钉 prefab 的**结构事实**，不依赖 `cc`（规则 78），所以能在 Node 里直接跑。
  */
-const PREFAB = 'assets/resources/ui/game/ZCGameHUD.prefab';
+const PREFAB = assetPath('ui/game/ZCGameHUD.prefab');
 const SCORE_CID = '6f04eAAck1Pvp3rCM/ChxSd';   // ZCGameHudScoreSlot
 const VIEW_CID = '64e67gBXL1Amov0itNRcpvE';    // ZCGameHUDView
 
@@ -109,7 +110,7 @@ test('each Score has one renderer and separate Value and Cross children', () => 
     }
 });
 
-const ROW_PREFAB = 'assets/resources/ui/game/ZCGameHudPlayerRow.prefab';
+const ROW_PREFAB = assetPath('ui/game/ZCGameHudPlayerRow.prefab');
 
 test('★★★左侧 PlayerList 必须是纵向虚拟列表（Mask + VSV + content），几何按设计稿', () => {
     // 设计稿左侧组 x8 y159 308×350。换成虚拟列表后锚点改(0.5,1)：顶边保持不变
@@ -454,9 +455,9 @@ test('★★★SPRITE 过渡的按钮，四个过渡态贴图必须与同节点 
     // **覆写回旧图**：新图标永远不显示、**零报错**，看起来像"换了图没生效"。
     // 连带后果：旧图被"假引用"着，资源审计会把它们误判成"仍在使用"。
     const artName = new Map<string, string>();
-    for (const f of readdirSync('assets/resources/image/gameui')) {
+    for (const f of readdirSync(assetPath('image/gameui'))) {
         if (!f.endsWith('.png.meta')) continue;
-        const meta = JSON.parse(readFileSync(`assets/resources/image/gameui/${f}`, 'utf8')) as TObj;
+        const meta = JSON.parse(readFileSync(assetPath(`image/gameui/${f}`), 'utf8')) as TObj;
         artName.set(meta.uuid, f.replace('.png.meta', ''));
     }
     const nameOf = (ref: TObj | null | undefined) => {

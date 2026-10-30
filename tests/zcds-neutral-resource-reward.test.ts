@@ -12,6 +12,7 @@ import {
 } from '../assets/script/app/zcds/model/ZCNeutralResourceGroup';
 import { ZC_TEST_ITEM } from './helpers/zcds-neutral-catalog';
 import { ZC_NEUTRAL_REWARD_TOTAL_SECONDS } from '../assets/script/app/zcds/model/ZCBattlePresentationQueue';
+import { assetPath } from './helpers/asset-paths';
 
 //  `pvpUnit` 已于 2026-09-20 并入 `pvpCard`（单位列内联、加 `unit` 前缀），表已下线。
 const tableNames = [
@@ -35,7 +36,7 @@ loadPvpTables(tables);
  * 「自选主城地图需要先完成开局选点」，测试里造不出可开发的现场。
  */
 const riverLayout = JSON.parse(
-    readFileSync('assets/resources/config/maps/standard_3.json', 'utf8'),
+    readFileSync(assetPath('config/maps/standard_3.json'), 'utf8'),
 ) as ZCMapLayout;
 
 const fallbackLayout = JSON.parse(

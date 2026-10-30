@@ -1,5 +1,5 @@
 
-import { view, _decorator, assetManager, macro } from 'cc';
+import {view, _decorator, macro} from 'cc';
 import * as env from 'cc/env';
 
 export type saveType = boolean | string | number;
@@ -87,11 +87,7 @@ export class EngineMain {
 
     /**是否需要刘海适配 */
     static isNeedLiuHaiAdjust() {
-        // if (EngineMain.isMiniGameWeiXin) {
-        //     return true
-        // }
         if (EngineMain.isFullPhone) {
-            // if (EngineMain.isFullPhone && EngineMain.isMobile) {
             return true
         }
         return false
@@ -99,7 +95,6 @@ export class EngineMain {
 
     init() {
         let eng = EngineMain;
-        // let t = this;
 
         let safeAreaRect = ({x:0,y:0,width:0,height:0} as any)
         console.log("getSafeAreaRect")
@@ -127,14 +122,6 @@ export class EngineMain {
                     EngineMain.fpsFrameRateMin = minFps
 
                     // 在 iOS 上，当微信客户端在一定时间间隔内（目前是 5 秒）连续收到两次及以上系统内存告警时，会主动进行小程序的销毁
-                    // if (EngineMain.isIOS) {
-                    // if (wx && wx.onMemoryWarning) {
-                    //     wx.onMemoryWarning(function () {
-                    //         console.log('Memory Warning')
-                    //         EngineMain.triggerGC()
-                    //     })
-                    // }
-                    // }
                 }
 
                 if (wx) {
@@ -313,12 +300,6 @@ export class EngineMain {
 
     // 默认fps
     private static getDefFPS() {
-        // if (EngineMain.isIOS && EngineMain.isMiniGameWeiXin) {
-        //     if (EngineMain.isIOSHighPerformanceMode) {
-        //         return EngineMain.fpsFrameRateMax
-        //     }
-        //     return EngineMain.fpsFrameRateMin
-        // }
         return EngineMain.fpsFrameRateMax
     }
 
@@ -370,53 +351,6 @@ export class EngineMain {
         EngineMain.saveLocalStorage(EngineMain.fpsFrameRateKey, fpsFrameRate)
         return fpsFrameRate
     }
-
-    // public static async newGImage(url: string, resolve?: Function): Promise<fgui.GImage> {
-    //     let t = this
-    //     let image = new fgui.GImage();
-    //     image.blendMode = 0
-    //     let spf: cc.SpriteFrame = await ResourceMgr.load(url, (spf: cc.SpriteFrame) => {
-    //     }, t, cc.SpriteFrame)
-    //     let _originalSize = spf.getOriginalSize()
-    //     image.sourceWidth = _originalSize.width;
-    //     image.sourceHeight = _originalSize.height;
-    //     image.initWidth = image.sourceWidth;
-    //     image.initHeight = image.sourceHeight;
-    //     image._content.spriteFrame = spf;
-    //     image.setSize(_originalSize.width, _originalSize.height)
-    //     image.blendMode = 0
-    //     if (resolve) {
-    //         resolve(image)
-    //     }
-    //     return image
-    // }
-
-    // public static async newGImageFrameAtlas(spriteFrameName: string, url: string, resolve?: Function): Promise<fgui.GImage> {
-    //     let t = this
-    //     let image = new fgui.GImage()
-    //     image.blendMode = 0
-    //     let spatlas: cc.SpriteAtlas = await ResourceMgr.load(url, () => { }, t, cc.SpriteAtlas)
-    //     if (spatlas) {
-    //         let extname = cc.path.extname(spriteFrameName);
-    //         if (extname) {
-    //             spriteFrameName = spriteFrameName.replace(extname, "");
-    //         }
-    //         let spf: cc.SpriteFrame = spatlas.getSpriteFrame(spriteFrameName)
-    //         image._content.spriteFrame = spf;
-    //         let _originalSize = spf.getOriginalSize()
-    //         image.sourceWidth = _originalSize.width;
-    //         image.sourceHeight = _originalSize.height;
-    //         image.initWidth = image.sourceWidth;
-    //         image.initHeight = image.sourceHeight;
-    //         image._content.spriteFrame = spf;
-    //         image.setSize(_originalSize.width, _originalSize.height)
-    //         image.blendMode = 0
-    //         if (resolve) {
-    //             resolve(image)
-    //         }
-    //     }
-    //     return image
-    // }
 
     public static newGImageByTexture2D(texture2D: any, rect: any) {
         // FGUI 已剔除：构建 SpriteFrame 并直接返回，业务层用 cc.Sprite 渲染

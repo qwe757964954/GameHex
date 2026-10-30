@@ -118,7 +118,6 @@ export class ProtoCoder {
         tmBaseType["double"] = protoEnginepPackage['CmdDouble'];
 
         t.initMessage();
-        // t.initAppendMessage();
         t.initCacheSub();
         //AppendMessage.init();
     }
@@ -342,25 +341,6 @@ export class ProtoCoder {
             let rspName = name + "RspMsg";
             t.rspMap[messageId] = protoPackage[rspName];
             t._rspIdNameMap[messageId] = rspName;
-        }
-    }
-
-    private initAppendMessage(): void {
-        let t = this
-        let appendMap = t.appendMap
-        let protoPackage = t.protoPackage
-
-        let tmMessageId: any = protoPackage.AppendMessageId;//com.gzyouai.hummingbird.gz.cmd.AppendMessageId
-        let keys = Object.keys(tmMessageId);
-        let name: string;
-        let messageId: number;
-        for (let i = 0, len = keys.length; i < len; i++) {
-            name = keys[i];
-            messageId = tmMessageId[name];
-            if (name == "CmdCacheAppMsg") {
-                t._appendCacheMsgId = messageId;
-            }
-            appendMap[messageId] = protoPackage[name];
         }
     }
 

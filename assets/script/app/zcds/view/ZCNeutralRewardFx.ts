@@ -377,9 +377,11 @@ export class ZCNeutralRewardFx {
         start: Readonly<{ x: number; y: number }>,
         target: Readonly<{ x: number; y: number }>,
     ): IZCNeutralRewardFxEntry | null {
+        const host = this.host;
+        if (!host) return null;
         const root = new Node(`NeutralReward_${event.id}`);
-        root.setParent(this.host!);
-        root.layer = this.host!.layer;
+        root.setParent(host);
+        root.layer = host.layer;
         root.active = true;
         let coins: readonly IZCNeutralRewardFxCoin[] = [];
         let label: Label | null = null;

@@ -45,28 +45,28 @@ export interface IMailRowArt {
 @ccclass('MailRow')
 export class MailRow extends Component {
     @property({ type: Sprite, tooltip: '本节点：行底图（未读 / 已读两张，运行时切换）' })
-    background: Sprite = null!;
+    background: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'Deco：左侧信纸装饰（`ml_mail_deco`，静态）' })
-    deco: Sprite = null!;
+    deco: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'MailIcon：信封图标（`ml_mail_icon`，静态）' })
-    mailIcon: Sprite = null!;
+    mailIcon: Sprite = null;
 
     @property({ type: Label, tooltip: 'Title：邮件标题' })
-    titleLabel: Label = null!;
+    titleLabel: Label = null;
 
     @property({ type: Label, tooltip: 'Time：相对时间' })
-    timeLabel: Label = null!;
+    timeLabel: Label = null;
 
     @property({ type: Label, tooltip: 'State：状态文本（只有「已读」显示）' })
-    stateLabel: Label = null!;
+    stateLabel: Label = null;
 
     @property({ type: Node, tooltip: 'TakenStamp：「已领取」印章（只有已领取显示）' })
-    takenStamp: Node = null!;
+    takenStamp: Node = null;
 
     @property({ type: Button, tooltip: '本节点：整行可点（打开详情）' })
-    button: Button = null!;
+    button: Button = null;
 
     /**
      * 打开详情回调 —— **由宿主在每次铺行时重设**（`MailPage.renderRow`）。
@@ -76,7 +76,7 @@ export class MailRow extends Component {
     onOpen: ((id: string) => void) | null = null;
 
     /** 当前渲染的是哪一封（回调里用）—— 每次 `render` 覆盖。 */
-    private viewId = '';
+    private mailId = '';
 
     protected onLoad(): void {
         this.button?.node.on(Button.EventType.CLICK, this.emitOpen, this);
@@ -84,7 +84,7 @@ export class MailRow extends Component {
 
     /** 铺一行（所有状态绝对赋值）。 */
     render(view: IMailRowView, art: IMailRowArt): void {
-        this.viewId = view.id;
+        this.mailId = view.id;
 
         this.titleLabel.string = view.title;
         this.timeLabel.string = view.timeText;
@@ -108,7 +108,7 @@ export class MailRow extends Component {
     }
 
     private emitOpen(): void {
-        if (!this.viewId) return;
-        this.onOpen?.(this.viewId);
+        if (!this.mailId) return;
+        this.onOpen?.(this.mailId);
     }
 }

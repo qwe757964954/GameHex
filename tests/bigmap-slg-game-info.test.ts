@@ -1,3 +1,8 @@
+import { createControllerContext } from './helpers/controller-context';
+import { BigMapController } from '../assets/script/app/bigmap/application/BigMapController';
+import { afterEach } from 'node:test';
+const controllers: BigMapController[] = [];
+afterEach(() => { controllers.splice(0).forEach(c => c.dispose()); });
 /**
  * 服务器 `SlgGameInfo`（所处城池 `toCampId` / 最大击杀野怪等级 `maxMonsterLevel`）的落点回归。
  *
@@ -50,6 +55,8 @@ function harness() {
         config, storage: { read: () => { throw new Error('联机不能读取离线基地'); }, write: () => {} },
         saveKey: 'slg-game-info', adventureChapter: () => 10, now: () => NOW, slgRepository: repo,
     });
+    const controller = new BigMapController(presenter, { context: createControllerContext(), slgRepository: repo, schedule: () => () => {} });
+    controller.start(); controllers.push(controller);
     return { gateway, repo, presenter };
 }
 
@@ -117,7 +124,7 @@ test('Repository：game 广播同时刷新所处城池，不只刷行动力', as
     await repo.initialize();
     const before = gateway.calls.length;
     gateway.game = { info: { maxMonsterLevel: 5, toCampId: 303 } };
-    gateway.listener?.('game');
+    repo.invalidate('game');
     await new Promise((resolve) => setImmediate(resolve));
     assert.ok(gateway.calls.slice(before).includes('CmdSlgGameInfoReqMsg'));
     assert.equal(repo.campId, 303);
@@ -162,12 +169,12 @@ test('基地染色：只拿 toCampId 去色槽表里查，查不到就回退（�
 test('世界页：玩家基地的势力色与 contentKey 都接上了 playerCampId', () => {
     const source = readFileSync('assets/script/app/bigmap/view/BigMapWorldView.ts', 'utf8');
     // 染色必须查 toCampId 对应的城，而不是沿用固定绿或「最近的城」。
-    assert.match(source, /bigMapPlayerBaseColorSlot\(presenter\.playerCampId, this\.territorySlots\)/);
+    assert.match(source, /bigMapPlayerBaseColorSlot\(data\.playerCampId, this\.territorySlots\)/);
     // key 漏了它，game 包到达后染色不会重画（早退）。
-    assert.match(source, /\$\{this\.selectedHexId\}\|\$\{presenter\.playerCampId\}\|/);
+    assert.match(source, /\$\{this\.selectedHexId\}\|\$\{data\.playerCampId\}\|/);
     // 基地位置也要认 toCampId（位置变了必须重建标记），否则图标停在布局档那一格。
-    assert.match(source, /const anchorHexId = presenter\.playerBaseHexId;\s*\n\s*if \(anchorHexId !== this\.markerAnchorHexId\)/);
-    assert.match(source, /this\.addMarker\('base', presenter\.world\.playerBase\.baseId, presenter\.playerBaseHexId\)/);
+    assert.match(source, /const anchorHexId = data\.playerBaseHexId;\s*\n\s*if \(anchorHexId !== this\.markerAnchorHexId\)/);
+    assert.match(source, /this\.addMarker\('base', data\.world\.playerBase\.baseId, data\.playerBaseHexId\)/);
 });
 
 test('玩家基地钉在 toCampId 那座城的锚点上，没归属才回布局档的格', async () => {

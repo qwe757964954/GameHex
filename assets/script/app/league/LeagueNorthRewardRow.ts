@@ -52,39 +52,36 @@ const TINT_GRAY = new Color(...LEAGUE_TINT_GRAY);
 @ccclass('LeagueNorthRewardRow')
 export class LeagueNorthRewardRow extends Component {
     @property({ type: Label, tooltip: 'labName：任务标题（`{count}` 已替换）' })
-    nameLabel: Label = null!;
+    nameLabel: Label = null;
 
     @property({ type: LeagueRewardSlot, tooltip: 'com_goods：奖励格' })
-    rewardSlot: LeagueRewardSlot = null!;
+    rewardSlot: LeagueRewardSlot = null;
 
     @property({ type: Node, tooltip: 'comp_progress：进度条（未完成 / 已完成两页显示）' })
-    progressNode: Node = null!;
+    progressNode: Node = null;
 
     @property({ type: Sprite, tooltip: 'comp_progress/bar：填充（按 value/max 改宽度）' })
-    progressFill: Sprite = null!;
+    progressFill: Sprite = null;
 
     @property({ type: Label, tooltip: 'comp_progress/lab_title：进度文案（`now/max`）' })
-    progressLabel: Label = null!;
+    progressLabel: Label = null;
 
     @property({ type: Node, tooltip: 'n7：整幅「已领取」印章（只在「已领取」页显示）' })
-    doneTag: Node = null!;
+    doneTag: Node = null;
 
     @property({ type: Node, tooltip: '按钮：领取按钮（未完成 / 已完成两页显示）' })
-    claimButton: Node = null!;
+    claimButton: Node = null;
 
     @property({ type: Label, tooltip: '按钮/title：按钮文案（未完成 / 领取）' })
-    claimLabel: Label = null!;
+    claimLabel: Label = null;
 
     /** 点到那条「领取」（只在可领取时由宿主发包）。 */
     onClaim: ((view: ILeagueNorthRewardRowView) => void) | null = null;
 
     /** 当前铺在这一行的数据。 */
     private current: ILeagueNorthRewardRowView | null = null;
-    private bound = false;
 
     protected onLoad(): void {
-        if (this.bound) return;
-        this.bound = true;
         const button = this.claimButton ? this.claimButton.getComponent(Button) : null;
         if (button) button.node.on(Button.EventType.CLICK, this.onClick, this);
         else if (this.claimButton) this.claimButton.on(Node.EventType.TOUCH_END, this.onClick, this);

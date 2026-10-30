@@ -2,11 +2,12 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { loadViews } from './helpers/zcds-view-fixtures';
+import { assetPath } from './helpers/asset-paths';
 
-const PREFAB_PATH = 'assets/resources/ui/game/ZCGameLegendBanner.prefab';
+const PREFAB_PATH = assetPath('ui/game/ZCGameLegendBanner.prefab');
 // ⚠️ 横幅美术从 `image/gameui/legend` 搬到了 `image/legend`（gameui 目录清理时随批迁出），
 // 这条守卫当时没跟改 ⇒ 一直报 ENOENT 红着（与「图丢了」完全不是一回事，别再被它带偏）。
-const ART_ROOT = 'assets/resources/image/legend';
+const ART_ROOT = assetPath('image/legend');
 
 /** 四个玩家各一套（底板 + 头像环）。映射依据 = 色相对齐 `ZC_CLIENT_COLORS`，写在视图 `bannerFor`。 */
 const OWNER_ART = [
@@ -231,7 +232,7 @@ test('立绘/头像解析器晚于横幅弹出注入时，已经弹出的那一�
 });
 
 test('渲染层只给金卡（tier 4）弹横幅，且挂全屏层而不是可滚动的 mapLayer', () => {
-    const { load, FakeNode } = loadViews();
+    const { load, FakeNode, procedureGame } = loadViews();
     const { ZCGameRenderWorld } = load('./ZCGameRenderWorld');
     const { ZCGameLegendBannerView } = load('./ZCGameLegendBannerView');
     const overlay = new FakeNode('ZCGameHUD');
@@ -289,8 +290,17 @@ test('渲染层只给金卡（tier 4）弹横幅，且挂全屏层而不是可�
     assert.equal(overlay.children.filter((child: Raw) => child.active).length, 0);
 
     // 头像解析器晚注入：已经弹过的横幅也要吃到（渲染层负责转发）。
+    // ⚠️ 注入渠道已变：早前是 `world.setLegendPortraitResolver(...)` 由渲染层存起来再转发，
+    //    现在渲染层每帧直接 `ProcedureGame.current?.resolveLegendPortrait(owner)` 现取（ZCGameRenderWorld:1306），
+    //    "晚注入也生效"是靠**闭包每帧现取**实现的，不是靠 setter 补刷。
     const portrait = { name: 'head' };
-    world.setLegendPortraitResolver(() => portrait);
+    // 桩要给全三个方法：渲染层同一条链上还会问 `resolveCardArt`（左边卡面）和
+    // `resolveBuildingFrame`（金矿/主城回退），少一个就 `is not a function`。
+    procedureGame.current = {
+        resolveLegendPortrait: () => portrait,
+        resolveCardArt: () => null,
+        resolveBuildingFrame: () => null,
+    };
     world.renderLegendBanners(model([reveal(9, 4)]));
     const bound = views.filter((view) => view.portraitResolver !== null);
     assert.ok(bound.length > 0, '横幅视图没拿到头像解析器');
@@ -620,7 +630,7 @@ function buildView(view: Raw, FakeNode: new (name?: string) => Raw): Raw {
 }
 
 test('★横幅左边那格优先取「卡牌阵容」那条静态卡面图（cardId → headIcon），取不到才回退兵种/建筑', () => {
-    const { load, FakeNode } = loadViews();
+    const { load, FakeNode, procedureGame } = loadViews();
     const { ZCGameRenderWorld } = load('./ZCGameRenderWorld');
     const { ZCGameLegendBannerView } = load('./ZCGameLegendBannerView');
     const overlay = new FakeNode('ZCGameHUD');
@@ -664,7 +674,14 @@ test('★横幅左边那格优先取「卡牌阵容」那条静态卡面图（ca
 
     // 注入之后：**已经弹出来的**横幅也要立刻吃到（渲染层负责转发），且优先于兵种图。
     const cardArt = { name: 'cardHead', height: 84 };
-    world.setLegendCardArtResolver((cardId: string) => (cardId === '68001' ? cardArt : null));
+    // ⚠️ 渠道已变：早前 ，现在渲染层  直接
+    //     现取（ZCGameRenderWorld 的 resolveLegendArt ①）。
+    procedureGame.current = {
+        resolveCardArt: (cardId: string) => (cardId === '68001' ? cardArt : null),
+        // 同一条链的另外两个出口（头像 / 建筑回退）本用例不关心，但必须存在，否则调用即崩。
+        resolveLegendPortrait: () => null,
+        resolveBuildingFrame: () => null,
+    };
     assert.equal(view.artResolver(reveal(1, '68001')), cardArt,
         '★横幅左边的卡面必须用「卡牌阵容」那张静态图（cardId → headIcon）');
     // 没配头像的卡（金矿 / 主城这类）解析为 null ⇒ 自然落回兵种 / 建筑链。
@@ -676,7 +693,8 @@ test('ZCGame 预扫本局卡组的 headIcon 并注入（与卡牌阵容同一条
     assert.match(source, /this\.loadLegendCardArt\(\);/, '★预扫入口必须真被调用（只定义不调 = 横幅永远走老链）');
     assert.match(source, /card\.headIcon/, '键要从卡表 `headIcon` 取（不是资源名）');
     assert.match(source, /loadHeadIconFrame\(/, '★必须走 `loadHeadIconFrame`（包名决定目录 cardHead / head），与阵容页同链');
-    assert.match(source, /setLegendCardArtResolver\(/, '拿到帧后要注入渲染层');
+    assert.match(source, /resolveCardArt\(cardId: string\): SpriteFrame \| null/, '★卡面必须经 resolveCardArt 按 id 现取（视图从 ProcedureGame.current 拉，不再由渲染层注入闭包）');
+    assert.match(source, /this\.legendCardArtFrames\.get\(cardId\)/, 'resolveCardArt 必须从预扫表取帧（表空 ⇒ 横幅退回兵种图）');
 });
 
 /**

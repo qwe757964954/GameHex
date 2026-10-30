@@ -1,5 +1,5 @@
 /**
- * 全屏弹窗「四边对齐 Widget」的回归网（`assets/resources/ui/**`）。
+ * 全屏弹窗「四边对齐 Widget」的回归网（assetPath(`ui/**`)）。
  *
  * 背景：本工程弹窗统一挂在常驻节点 `Popup` 下，而 `Popup` 自己挂了四边对齐
  * Widget —— 长屏（本机预览 720×**1463.04**）下会被拉到可见高。面板 prefab 若
@@ -32,6 +32,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
+import { assetPath } from './helpers/asset-paths';
 
 // ============================================================
 // 口径常量
@@ -41,7 +42,7 @@ import test from 'node:test';
 const DESIGN_HEIGHT = 1280;
 /** 全屏子节点判定下界（宽）。 */
 const FULLSCREEN_MIN_WIDTH = 720;
-const UI_DIR = 'assets/resources/ui';
+const UI_DIR = assetPath('ui');
 /** 演示层目录：整目录排除（非业务弹窗）。 */
 const EXCLUDED_DIR_SEGMENT = '/uidemo/';
 /** 四边对齐：TOP(1)|BOT(4)|LEFT(8)|RIGHT(32)。 */

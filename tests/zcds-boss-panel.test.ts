@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { assetPath } from './helpers/asset-paths';
 
 /**
  * 波次怪守城（塔防）左上角**首领条**（`ZCHudBossPanel` + `ZCBossPanel.prefab`）的结构守卫。
@@ -19,7 +20,7 @@ const gameSource = readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8');
 const hudSource = readFileSync('assets/script/app/zcds/view/ZCGameHUDView.ts', 'utf8');
 const loaderSource = readFileSync('assets/script/app/zcds/application/ZCGameLoader.ts', 'utf8');
 const panelMeta = JSON.parse(readFileSync('assets/script/app/zcds/view/ZCHudBossPanel.ts.meta', 'utf8'));
-const prefabText = readFileSync('assets/resources/ui/game/ZCBossPanel.prefab', 'utf8');
+const prefabText = readFileSync(assetPath('ui/game/ZCBossPanel.prefab'), 'utf8');
 const objects: any[] = JSON.parse(prefabText);
 
 const CID_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
@@ -68,7 +69,7 @@ const childrenOf = (node: any): string[] => node._children.map((ref: any) => obj
 const spriteOf = (node: any) => componentOf(node, 'cc.Sprite');
 const labelOf = (node: any) => componentOf(node, 'cc.Label');
 const frameOf = (art: string): string =>
-    JSON.parse(readFileSync(`assets/resources/image/gameui/${art}.png.meta`, 'utf8')).subMetas.f9941.uuid;
+    JSON.parse(readFileSync(assetPath(`image/gameui/${art}.png.meta`), 'utf8')).subMetas.f9941.uuid;
 
 test('面板脚本不再自己建节点，也不自己算坐标', () => {
     const code = stripComments(panelSource);

@@ -6,11 +6,12 @@ import { ProtoCoder } from '../assets/script/framework/net/ProtoCoder';
 import { BigMapPresenter } from '../assets/script/app/bigmap/application/BigMapPresenter';
 import { createMemoryBigMapStorage } from '../assets/script/app/bigmap/application/BigMapSaveKeys';
 import { loadBigMapConfig } from './helpers/bigmap-fixtures';
+import { assetPath } from './helpers/asset-paths';
 
 test('两组据点协议在真实运行时可注册、编码并解码', async () => {
     const coder = new ProtoCoder();
     await coder.init();
-    const root = protobuf.Root.fromJSON(JSON.parse(readFileSync('assets/resources/config/protoCompiled.json', 'utf8')));
+    const root = protobuf.Root.fromJSON(JSON.parse(readFileSync(assetPath('config/protoCompiled.json'), 'utf8')));
     for (const [stem, messageId] of [['CmdSlgCampSimpleInfo', 1631409176], ['CmdSlgCampInfo', 1665140602]] as const) {
         assert.equal(coder.getMessageId(`${stem}ReqMsg`), messageId);
         const encoded = coder.encode(`${stem}ReqMsg`, { campIds: [101, 102] });

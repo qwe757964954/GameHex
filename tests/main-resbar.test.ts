@@ -5,7 +5,7 @@
  *
  *   ① **图标白名单与磁盘不同步** —— `RES_BAR_ICON_ART` 里写了个目录里没有的名字，
  *      `resources.load` 只打一条 warn、界面留白，不报错。所以这里把白名单逐个对到
- *      `assets/resources/<ArtPaths.RESBAR_ART_ROOT>/<名>.png`。
+ *      assetPath(`<ArtPaths.RESBAR_ART_ROOT>/<名>.png`)。
  *   ② **满级时经验条变 `Infinity`** —— 老端口径是 `exp / level[lv+1].exp`，满级取不到
  *      下一级 → 0，而 `Sprite.fillRange = Infinity` 的表现不定（可能整条铺满）。
  *   ③ **prefab 掉绑定** —— 脚本引用存的是脚本资产 uuid 派生的 cid，prefab 被回滚 /
@@ -32,17 +32,18 @@ import {
     RES_BAR_KEYS,
     type ResBarRoleRow,
 } from '../assets/script/app/main/MainResBarTypes';
+import { assetPath } from './helpers/asset-paths';
 
 const RESOURCES = 'assets/resources';
 // ⚠️ 2026-09-24：资源栏已从 `ArenaRoot.prefab`（主界面外壳）**搬到 `ArenaRoot.prefab`（竞技页）**。
 //    口径变化：它是「竞技页自己的常驻 HUD」，随 ArenaRoot 一起 instantiate / destroy
 //    （切到角色页就收起来），不再挂在外壳上。读 prefab 的路径随之改到 ArenaRoot。
-const HUD_PREFAB = 'assets/resources/ui/main/ArenaRoot.prefab';
+const HUD_PREFAB = assetPath('ui/main/ArenaRoot.prefab');
 // ⚠️ 2026-09-29：货币三格**不再内联在 ArenaRoot 里**，而是 `common/ResBar.prefab` 的
 //    嵌套 prefab 实例（宿主只存 `PrefabInfo.asset.__uuid__` + `cc.PrefabInstance`）。
 //    好处：改公共件穿透所有宿主（HUD / 商城 / 天赋页）。代价：宿主文件里**看不到** `Res0/1/2`
 //    ⇒ 想断言几何只能「实例位置（本文件守） ⊕ 公共件内部相对坐标（militia-talent-ui.test.ts 守）」。
-const COMMON_RESBAR = 'assets/resources/ui/common/ResBar.prefab';
+const COMMON_RESBAR = assetPath('ui/common/ResBar.prefab');
 const COMMON_RESBAR_UUID = (JSON.parse(readFileSync(`${COMMON_RESBAR}.meta`, 'utf8')) as { uuid: string }).uuid;
 
 /** `level.json` 的形状（`{level, exp}`，`exp` = 从该级升到下一级所需）。 */
@@ -576,16 +577,35 @@ test('资源栏几何：整块贴在画布左上角（不居中、不悬浮）',
     assert.ok(head.top >= 0 && head.top + head.height <= 1280, `头像纵向出屏：top=${head.top}`);
 });
 
-test('点头像弹个人信息：MainResBar 必须绑头像点击并打开 PlayerInfoPage（老端 LayerMainResources.InitClick）', () => {
+test('点头像弹个人信息：prefab 的 AvatarHead 挂 cc.Button + 脚本监听节点 CLICK 打开 PlayerInfoPage', () => {
     // 老端：`LayerMainResources.InitClick()` 给「组件_玩家信息.icon」绑 CLICK →
     // `CtrlPlayer.LayerPlayerInfo.load()`。Demo3.8 的对位是 MainResBar.bindHeadClick →
-    // PlayerInfoPage.open()。这条守护防「绑点被顺手删掉」——它是静默失效
-    // （prefab 里没有按钮绑定，全靠这行代码），删了不报任何错。
+    // PlayerInfoPage.open()。这条守护防「绑点被顺手删掉」——它是静默失效，
+    // 删了不报任何错，只是点头像没反应。
+    //
+    // 2026-10-30：`AvatarHead` 在 `ArenaRoot.prefab` 上补了 `cc.Button`（transition=NONE），
+    // 脚本统一监听节点 `CLICK`。旧形态「没有 Button 就退回 TOUCH_END」已删 ——
+    // 那种分流会让「prefab 掉了组件」降级成静默无反应，且 TOUCH_END 还会绕过 interactable。
     const src = readFileSync('assets/script/app/main/MainResBar.ts', 'utf8');
     assert.match(src, /import \{ PlayerInfoPage \} from '\.\.\/playerinfo\/PlayerInfoPage';/);
     assert.match(src, /this\.bindHeadClick\(\)/, 'onLoad 里必须调 bindHeadClick —— 删了点头像就毫无反应且零报错');
-    assert.match(src, /Node\.EventType\.TOUCH_END/, 'HeadIcon 是纯 Sprite（无 cc.Button），必须按规则 81b 走 TOUCH_END');
+    assert.match(src, /this\.avatarIcon\.node\.on\(Button\.EventType\.CLICK, this\.onClickHead, this\)/,
+        '必须监听头像节点的 CLICK');
+    // 反向断言前先剥注释（规则 104）：本文件的说明里就会写 `TOUCH_END`
+    assert.doesNotMatch(stripSourceComments(src), /TOUCH_END/,
+        '不许退回 TOUCH_END 兜底（绕过 interactable，且会掩盖「prefab 掉了组件」）');
     assert.match(src, /PlayerInfoPage\.open\(\)/, '点击回调必须打开 PlayerInfoPage');
+
+    // prefab 侧：AvatarHead 必须挂 cc.Button —— 缺了这条，`Button.EventType.CLICK` 永远不派发（静默死按钮）
+    const data = JSON.parse(readFileSync('assets/resources/ui/main/ArenaRoot.prefab', 'utf8')) as any[];
+    const head = data.find((o) => o?.__type__ === 'cc.Node' && o._name === 'AvatarHead');
+    assert.ok(head, 'ArenaRoot.prefab 里必须有 AvatarHead 节点');
+    const button = (head._components ?? [])
+        .map((c: any) => data[c.__id__])
+        .find((c: any) => c.__type__ === 'cc.Button');
+    assert.ok(button, 'AvatarHead 必须挂 cc.Button（否则 CLICK 永远不派发）');
+    assert.equal(button._transition, 0, '头像点击保持 transition = NONE，不加缩放/变色过渡');
+    assert.equal(button._target?.__id__ ?? null, null, '不给 Button 指定 target（默认作用于自己那颗 Sprite）');
 });
 
 // ── 2026-10-26：两格图标 = 游戏内「银币 / 体力」图，且由 `resKeys` 驱动 ─────────
@@ -751,3 +771,7 @@ test('ResBar 闪光只落在命中的那一格（不许整条一起亮）', () =
         '算不出框时必须返回 null（不闪），而不是拿本节点的三格容器去画一大片亮块');
 });
 
+/** 反向断言前先剥注释（规则 104：注释里会写反例，不剥会被自己的文档绊倒）。 */
+function stripSourceComments(src: string): string {
+    return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:\\])\/\/[^\n]*/g, '$1');
+}

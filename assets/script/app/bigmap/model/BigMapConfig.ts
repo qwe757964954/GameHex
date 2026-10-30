@@ -246,13 +246,7 @@ export function parseBigMapConfig(tables: BigMapRawTables): IBigMapConfig {
 
     const camps = new Map<number, IBigMapCampConfig>();
     for (const row of table(tables, BIGMAP_TABLE.camp)) {
-        const item: IBigMapCampConfig = {
-            campId: campInt(row, 'campId', 1),
-            battleId: campInt(row, 'campBattleId', 1),
-            name: text(row, 'campName'),
-            staminaCost: campInt(row, 'staminaCost', 0),
-            desc: text(row, 'campDesc'),
-        };
+        const item = parseCamp(row);
         if (camps.has(item.campId)) throw new Error(`[BigMap] 据点 campId 重复：${item.campId}`);
         camps.set(item.campId, item);
     }
@@ -348,10 +342,22 @@ function parseBuilding(row: BigMapRow): IBigMapBuildingConfig {
     // 早期推算表：`occupyHex` / `maxOwnNum` / `unlockChapter`。两套都认。
     const unlockType = optionalInt(row, 'unlockType', 1);
     const unlockParam = optionalInt(row, 'unlockParam', 0);
+    const kind = num(row, 'baseBuildType');
+    if (!Number.isInteger(kind) || kind < BigMapBuildingKind.Main || kind > BigMapBuildingKind.Decoration) {
+        throw new Error(`[BigMap] baseBuildType 非法：${kind}`);
+    }
+    const rawCellId = row.basebuildPositon;
+    const initialCellId = rawCellId === undefined || rawCellId === null || rawCellId === ''
+        ? 0 : num(row, 'basebuildPositon');
+    if (!Number.isInteger(initialCellId) || initialCellId < 0) {
+        throw new Error(`[BigMap] basebuildPositon 非法：${initialCellId}`);
+    }
     return {
         id: int(row, 'id'),
         name: text(row, 'baseBuildName'),
-        kind: int(row, 'baseBuildType') as BigMapBuildingKind,
+        kind,
+        icon: text(row, 'baseBuildIcon').trim(),
+        initialCellId: initialCellId || null,
         occupyHex: Math.max(1, pickInt(row, 'baseBuildSize', 'occupyHex', 1)),
         maxOwnNum: Math.max(1, pickInt(row, 'baseBuildMaxNum', 'maxOwnNum', 1)),
         // 章节解锁时章节号写在 `unlockParam`；其它解锁方式（赛季天数 / 积分购买）没有章节。
@@ -426,14 +432,6 @@ function parseProduce(
     for (const res of resources.values()) {
         if (res.itemId > 0) resTypeByItemId.set(res.itemId, res.resType);
     }
-    // 兜底：`bigmapResource.itemId` 还没配（老表 / 少一列）时按固定道具约定反查，
-    // 否则 `baseBuildingLevel.resType` 一个都对不上 ⇒ 资源田整块不产出。
-    if (resTypeByItemId.size === 0) {
-        resTypeByItemId.set(18501, 'grain');
-        resTypeByItemId.set(18502, 'wood');
-        resTypeByItemId.set(18503, 'iron');
-        resTypeByItemId.set(18504, 'coin');
-    }
 
     const push = (item: IBigMapProduceConfig): void => {
         if (!buildings.has(item.id)) throw new Error(`[BigMap] 产出配置引用了不存在的建筑 ${item.id}`);
@@ -474,11 +472,17 @@ function parseProduce(
     return byBuilding;
 }
 
+// 缺列的资源表仍须连接背包；图标、余额与建筑产出共用归一后的身份。
+const BIGMAP_RESOURCE_ITEM_IDS: Readonly<Record<BigMapResType, number>> = {
+    grain: 18501, wood: 18502, iron: 18503, coin: 18504, stamina: 18505,
+};
+
 function parseResource(row: BigMapRow): IBigMapResConfig {
-    // `itemId` 允许缺列：老表没有这一列时要退回概念图，不能整表解析失败。
-    const itemId = row.itemId === undefined || row.itemId === null ? 0 : int(row, 'itemId');
+    const type = resType(row);
+    const itemId = row.itemId === undefined || row.itemId === null
+        ? BIGMAP_RESOURCE_ITEM_IDS[type] : int(row, 'itemId');
     return {
-        resType: resType(row),
+        resType: type,
         name: text(row, 'resName'),
         startAmount: Math.max(0, int(row, 'startAmount')),
         itemId: Number.isSafeInteger(itemId) && itemId > 0 ? itemId : 0,
@@ -510,8 +514,9 @@ function parseQueue(row: BigMapRow): IBigMapQueueConfig {
         plotCols: Math.max(3, queueClientInt(row, 'plotCols')),
     };
     if (queue.initBuildQueue > queue.maxBuildQueue) throw new Error('[BigMap] 初始队列数大于上限');
-    if (queue.plotRows % 2 === 0 || queue.plotCols % 2 === 0) {
-        throw new Error('[BigMap] 建造区行列必须是奇数（中心格要放主城）');
+    if (queueClientInt(row, 'plotRows') < 3 || queueClientInt(row, 'plotCols') < 3
+        || queue.plotRows > 20 || queue.plotCols > 20) {
+        throw new Error('[BigMap] 建造区行列必须在3～20之间');
     }
     return queue;
 }
@@ -532,7 +537,7 @@ function parseCityLevel(row: BigMapRow): IBigMapCityLevelConfig {
 function parseCity(row: BigMapRow, cityLevels: ReadonlyMap<number, IBigMapCityLevelConfig>): IBigMapCityConfig {
     const cityLevel = int(row, 'cityLevel');
     if (!cityLevels.has(cityLevel)) throw new Error(`[BigMap] 城池等级 ${cityLevel} 未配置`);
-    const level = cityLevels.get(cityLevel)!;
+    const level = cityLevels.get(cityLevel);
     const available = flag(row, 'available');
     const layer = int(row, 'layer');
     // 本期只做「纯玩家个人战斗」，联盟/战盟层配置成 available = 0；反过来开放层必须是个人层。
@@ -586,12 +591,64 @@ function parseScoreRule(row: BigMapRow): IBigMapScoreRuleConfig {
     return rule;
 }
 
-function campInt(row: BigMapRow, field: string, min: number): number {
+function campInt(row: BigMapRow, field: string, min: number, max = 0xFFFFFFFF): number {
     const value = row[field];
-    if (typeof value !== 'number' || !Number.isInteger(value) || value < min || value > 0xFFFFFFFF) {
-        throw new Error(`[BigMap] 据点字段 ${field} 必须为 ${min}~4294967295 的整数`);
+    if (typeof value !== 'number' || !Number.isInteger(value) || value < min || value > max) {
+        throw new Error(`[BigMap] 据点字段 ${field} 必须为 ${min}~${max} 的整数`);
     }
     return value;
+}
+
+function campNumber(row: BigMapRow, field: string): number {
+    const value = row[field];
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+        throw new Error(`[BigMap] 据点字段 ${field} 必须为非负有限数值`);
+    }
+    return value;
+}
+
+function campIds(row: BigMapRow, field: string): readonly number[] {
+    let value = row[field];
+    if (typeof value === 'string') {
+        try { value = JSON.parse(value); }
+        catch { throw new Error(`[BigMap] 据点字段 ${field} 不是有效 JSON`); }
+    }
+    if (!Array.isArray(value) || value.some((id) => !Number.isSafeInteger(id) || id <= 0)) {
+        throw new Error(`[BigMap] 据点字段 ${field} 必须为正整数数组`);
+    }
+    return [...value];
+}
+
+function parseCamp(row: BigMapRow): IBigMapCampConfig {
+    return {
+        campId: campInt(row, 'campId', 1),
+        battleId: campInt(row, 'campBattleId', 1),
+        name: text(row, 'campName'),
+        staminaCost: campInt(row, 'staminaCost', 0),
+        desc: text(row, 'campDesc'),
+        chapter: campInt(row, 'chapter', 1),
+        gateNo: campInt(row, 'gateNo', 1),
+        occupyType: campInt(row, 'occupyType', 1, 4),
+        rallyOpen: campInt(row, 'rallyOpen', 0, 1) === 1,
+        campSize: campInt(row, 'campSize', 1),
+        adjacentCampIds: campIds(row, 'adjacentcampIds'),
+        openDay: campInt(row, 'openDay', 0),
+        dailyBattleLimit: campInt(row, 'dailyBattleLimit', 0),
+        rankMinScore: campInt(row, 'rankMinScore', 0, Number.MAX_SAFE_INTEGER),
+        warScoreRate: campNumber(row, 'warScoreRate'),
+        singleDamageScoreMax: campInt(row, 'singleDamageScoreMax', 0, Number.MAX_SAFE_INTEGER),
+        maxScoreConfig: campNumber(row, 'maxScoreConfig'),
+        occupyScore: campInt(row, 'occupyScore', 0),
+        minOccupyScore: campInt(row, 'minOccupyScore', 0, Number.MAX_SAFE_INTEGER),
+        rankResetTime: campInt(row, 'rankResetTime', 0),
+        warScoreReset: campInt(row, 'warScoreReset', 0, Number.MAX_SAFE_INTEGER),
+        buffGroupIds: campIds(row, 'buffGroupId'),
+        buffEffectIds: campIds(row, 'buffEffectId'),
+        firstRewardId: campInt(row, 'firstRewardId', 0),
+        buffConNum: campInt(row, 'buffConNum', 0),
+        buffRate: campNumber(row, 'buffRate'),
+        iconPath: text(row, 'campIcon').trim(),
+    };
 }
 
 function parseMonster(row: BigMapRow): IBigMapMonsterConfig {

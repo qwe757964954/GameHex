@@ -47,7 +47,7 @@
  *  编辑器直连预览 / 登录半途进主界面都会走到这条分支，
  *  界面该显示的是"还没数据"，不是"空壳"。
  */
-import { _decorator, Button, Component, Label, Node, Sprite } from 'cc';
+import { _decorator, Button, Component, Label, Sprite } from 'cc';
 import { RefUtil } from '../../framework/ref/RefUtil';
 import { CacheMgr } from '../net/CacheMgr';
 import { HeadArt } from '../HeadArt';
@@ -63,19 +63,19 @@ const LEVEL_TABLE = 'level';
 @ccclass('MainResBar')
 export class MainResBar extends Component {
     @property({ type: Sprite, tooltip: 'AvatarIcon：玩家头像 80×80（走 head 表 + image/icon/head）' })
-    avatarIcon: Sprite = null!;
+    avatarIcon: Sprite = null;
 
     @property({ type: Label, tooltip: 'Name：昵称' })
-    nameLabel: Label = null!;
+    nameLabel: Label = null;
 
     @property({ type: Label, tooltip: 'Level：`{等级}`（纯数字，不带 LV 前缀）' })
-    levelLabel: Label = null!;
+    levelLabel: Label = null;
 
     @property({ type: Label, tooltip: 'Uid：`uid:{角色 id}`' })
     uidLabel: Label | null = null;
 
     @property({ type: Sprite, tooltip: 'ExpFill：经验条（FILLED / HORIZONTAL，代码只改 fillRange）' })
-    expFill: Sprite = null!;
+    expFill: Sprite = null;
 
     /** 防止 `reload` 重入（缓存落地 / 资源变化都可能触发）。 */
     private loading = false;
@@ -85,7 +85,6 @@ export class MainResBar extends Component {
      * 箭头函数属性：引用稳定，供 onDestroy 精确摘除。
      */
     private onRoleCacheUpdate = (): void => {
-        if (!this.isValid) return;
         void this.reload();
     };
 
@@ -121,21 +120,14 @@ export class MainResBar extends Component {
      *     this.CtrlMgr.CtrlPlayer.LayerPlayerInfo.load();
      * });
      * ```
-     * 即：只绑头像 icon（`HeadIcon`，80×80），点昵称 / 等级 / uid 不触发。
+     * 即：只绑头像 icon（`AvatarHead`，84×85），点昵称 / 等级 / uid 不触发。
      *
-     * ⚠️ `HeadIcon` 是 FGUI `<loader>` 迁来的**只有 `cc.Sprite`、没有 `cc.Button`**
-     * （规则 81b）⇒ 按组件实际形态分流：有 Button 走 `CLICK`，否则走 `TOUCH_END`
-     * （后者在无 Button 的节点上绑 `CLICK` 是**静默死按钮**）。
+     * `AvatarHead` 在 `ArenaRoot.prefab` 上已挂 `cc.Button`（`transition = NONE`、`target = null`）
+     * ⇒ 直接监听节点 `CLICK`。不再按组件形态分流 —— 那种「有 Button 走 CLICK、否则 TOUCH_END」
+     * 的兜底会让「prefab 掉组件」变成静默降级（表现是"点了没反应"），该由 prefab 配置保证。
      */
     private bindHeadClick(): void {
-        const head = this.avatarIcon?.node;
-        if (!head) return;
-        const button = head.getComponent(Button);
-        if (button) {
-            button.node.on(Button.EventType.CLICK, this.onClickHead, this);
-        } else {
-            head.on(Node.EventType.TOUCH_END, this.onClickHead, this);
-        }
+        this.avatarIcon.node.on(Button.EventType.CLICK, this.onClickHead, this);
     }
 
     /** 点头像 → 打开「个人信息」弹窗。`PopupManager` 同类单实例 ⇒ 连点不会叠出第二个面板。 */

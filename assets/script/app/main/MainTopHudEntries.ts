@@ -10,16 +10,16 @@ const { ccclass, property } = _decorator;
 @ccclass('MainTopHudEntries')
 export class MainTopHudEntries extends Component {
     @property({ type: Button, tooltip: '好友图标按钮' })
-    friendButton: Button = null!;
+    friendButton: Button = null;
 
     @property({ type: Button, tooltip: '邮件图标按钮' })
-    mailButton: Button = null!;
+    mailButton: Button = null;
 
     @property({ type: Node, tooltip: '好友文字点击区域' })
-    friendLabel: Node = null!;
+    friendLabel: Node = null;
 
     @property({ type: Node, tooltip: '邮件文字点击区域' })
-    mailLabel: Node = null!;
+    mailLabel: Node = null;
 
     onEnable(): void {
         this.friendButton.node.on(Button.EventType.CLICK, this.openFriend, this);
@@ -45,10 +45,6 @@ export class MainTopHudEntries extends Component {
 
     private async openPopup(page: new () => PopupBase): Promise<void> {
         const manager = PopupManager.inst;
-        if (!manager) {
-            console.error('[MainTopHudEntries] PopupManager 不可用');
-            return;
-        }
         try {
             const popup = await manager.openAsync(page);
             if (!this.isValid) return;

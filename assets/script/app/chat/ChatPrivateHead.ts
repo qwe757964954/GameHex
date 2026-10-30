@@ -36,16 +36,16 @@ const { ccclass, property } = _decorator;
 @ccclass('ChatPrivateHead')
 export class ChatPrivateHead extends Component {
     @property({ type: Sprite, tooltip: 'Bg：底框（fd_row_bg，九宫格）' })
-    background: Sprite = null!;
+    background: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'Head/Icon：头像（运行时按 img 加载）' })
-    headIcon: Sprite = null!;
+    headIcon: Sprite = null;
 
     @property({ type: Label, tooltip: 'Name：玩家名' })
-    nameLabel: Label = null!;
+    nameLabel: Label = null;
 
     @property({ type: Node, tooltip: 'RemoveBtn：删除按钮（右上角）' })
-    removeButton: Node = null!;
+    removeButton: Node = null;
 
     /** 由宿主在每次铺行时重设（见 `ChatRecruitRow` 的同款说明）。 */
     onSelect: (() => void) | null = null;

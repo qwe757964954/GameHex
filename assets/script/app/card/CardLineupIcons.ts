@@ -1,127 +1,27 @@
-import { SpriteFrame } from 'cc';
-import { routedLoad } from '../common/RoutedResource';
+import type { SpriteFrame } from 'cc';
+import { createRoutedSpriteFrameCache } from '../common/SpriteFrameCache';
 import {
-    artKey,
     CARD_ART_ROOT,
     COMMON_ART_ROOT,
     FRAME_ART_ROOT,
     ICON_ART_ROOT,
-    MAIN_ART_ROOT,
-    spriteFramePath,
-    spriteFramePathOf,
 } from '../ArtPaths';
 import { HeadArt } from '../HeadArt';
 
-/**
- * 按名加载 `image/**` 下的 SpriteFrame，带内存缓存。
- *
- * 资源名一律由数据（配置表 / 卡组 / 六格配置组）驱动，不写死；
- * 加载失败时返回 `null` 并**保留视图现有图片**，不抛异常 —— 卡牌阵容整页 30+ 张图，
- * 单张缺失不该阻断渲染（`MatchIcons.loadMatchIcon` 是同一套写法）。
- *
- *  根目录必须显式传入：卡面在 `CARD_ART_ROOT`（`image/card`），底部六格导航
- * 在 `MAIN_ART_ROOT`（`image/main`），两者都叫 `btn_*`/`icon_*` 风格的名字，
- * 混用会「图能出来但出的是另一张」。
- */
+/** 卡牌图标归会话缓存；目录与头像查表由本模块负责。 */
+const artCache = createRoutedSpriteFrameCache('ArtIcons');
 
-/** 应用级图标缓存，持有引用以跨主界面/对局切换复用（键 = `根目录/资源名`）。 */
-const artCache = new Map<string, SpriteFrame>();
-
-/** 正在加载中的请求（同一张图并发加载时复用同一个 Promise）。 */
-const pending = new Map<string, Promise<SpriteFrame | null>>();
-let cacheGeneration = 0;
-
-/** 加载 `root/<name>` 的 SpriteFrame；`root` 取 `ArtPaths` 里的常量。 */
 export function loadArt(name: string, root: string): Promise<SpriteFrame | null> {
-    if (!name || !root) return Promise.resolve(null);
-    const key = artKey(root, name);
-    const cached = artCache.get(key);
-    if (cached?.isValid) return Promise.resolve(cached);
-    if (cached) artCache.delete(key);
-    const running = pending.get(key);
-    if (running) return running;
-    const generation = cacheGeneration;
-
-    const task = new Promise<SpriteFrame | null>((resolve) => {
-        routedLoad(spriteFramePath(root, name), SpriteFrame, (error, frame) => {
-            if (error || !frame || !frame.isValid) {
-                console.warn(`[ArtIcons] 图标加载失败：${key}`, error);
-                resolve(null);
-                return;
-            }
-            if (generation !== cacheGeneration) {
-                resolve(null);
-                return;
-            }
-            // JS Map 不参与 Cocos 引用计数，缓存必须自己持有引用。
-            frame.addRef();
-            artCache.set(key, frame);
-            resolve(frame);
-        });
-    });
-    pending.set(key, task);
-    // 缓存命中时加载回调可能同步执行，等 Promise 完成后再清理请求记录。
-    const clearPending = () => {
-        if (pending.get(key) === task) pending.delete(key);
-    };
-    void task.then(clearPending, clearPending);
-    return task;
+    return artCache.loadNamed(name, root);
 }
 
-/** 退出登录时释放本次会话持有的动态美术引用。 */
+/** 退出登录时释放本次会话的美术引用。 */
 export function releaseArtCache(): void {
-    cacheGeneration += 1;
-    pending.clear();
-    for (const frame of artCache.values()) {
-        if (frame?.isValid) frame.decRef();
-    }
     artCache.clear();
 }
 
-/**
- * 按 resources 直接路径加载 `icons/**` 下的 SpriteFrame。
- * 物品表 `icon` 字段现在直接是 icons/ 路径，用它一步加载。
- *
- *  ⚠️ 传进来的 `artPath` 是**图片资源路径**（`icons/item/图标_兵书随机`），
- *  **必须**经 `spriteFramePathOf()` 补成 `<路径>/spriteFrame` 再去 load。
- *  实测（2026-09-23 编辑器预览，`tmp/_icon_path_probe.mjs`）：resources bundle 的索引里
- *  只登记 `xxx/spriteFrame`，裸路径 `xxx` 查不到 ⇒ `Bundle resources doesn't contain xxx`，
- *  界面静默留白（只打一条 warn）。这跟自动图集无关 ——
- *  `image/card/*`、`image/main/*` 这些老目录的裸路径同样查不到，全部目录一致。
- */
 export function loadIconByArtPath(artPath: string): Promise<SpriteFrame | null> {
-    if (!artPath) return Promise.resolve(null);
-    const key = artPath;
-    const cached = artCache.get(key);
-    if (cached?.isValid) return Promise.resolve(cached);
-    if (cached) artCache.delete(key);
-    const running = pending.get(key);
-    if (running) return running;
-    const generation = cacheGeneration;
-
-    const framePath = spriteFramePathOf(artPath);
-    const task = new Promise<SpriteFrame | null>((resolve) => {
-        routedLoad(framePath, SpriteFrame, (error, frame) => {
-            if (error || !frame || !frame.isValid) {
-                console.warn(`[ArtIcons] 图标加载失败：${framePath}`, error);
-                resolve(null);
-                return;
-            }
-            if (generation !== cacheGeneration) {
-                resolve(null);
-                return;
-            }
-            frame.addRef();
-            artCache.set(key, frame);
-            resolve(frame);
-        });
-    });
-    pending.set(key, task);
-    const clearPending = () => {
-        if (pending.get(key) === task) pending.delete(key);
-    };
-    void task.then(clearPending, clearPending);
-    return task;
+    return artCache.load(artPath);
 }
 
 /** 卡牌阵容页美术（`image/card`）：卡面 `common_img_kp_*`、站台 `kpzr_stage`、垫盘 `kpzr_di_*`。 */

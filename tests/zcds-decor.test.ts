@@ -7,8 +7,9 @@ import {
     ZC_MAP_ART,
     ZCMapLayout,
 } from '../assets/script/app/zcds/model/ZCGameModel';
+import { assetPath } from './helpers/asset-paths';
 
-configureZCMap(JSON.parse(readFileSync('assets/resources/config/maps/corset.json', 'utf8')) as ZCMapLayout);
+configureZCMap(JSON.parse(readFileSync(assetPath('config/maps/corset.json'), 'utf8')) as ZCMapLayout);
 
 const TILE_FRAME = { width: 128, height: 128 };
 
@@ -114,7 +115,7 @@ test('运行时摆放清单只接受 freeDecor', () => {
 });
 
 test('地图配置边界保留合法 freeDecor 并丢弃编辑器锁定状态', () => {
-    const layout = JSON.parse(readFileSync('assets/resources/config/maps/corset.json', 'utf8')) as ZCMapLayout;
+    const layout = JSON.parse(readFileSync(assetPath('config/maps/corset.json'), 'utf8')) as ZCMapLayout;
     layout.art = {
         ...(layout.art ?? {}),
         freeDecor: [{
@@ -132,7 +133,7 @@ test('地图配置边界保留合法 freeDecor 并丢弃编辑器锁定状态', 
 });
 
 test('地图配置边界拒绝非法 freeDecor 标识和翻转值', () => {
-    const source = JSON.parse(readFileSync('assets/resources/config/maps/corset.json', 'utf8')) as ZCMapLayout;
+    const source = JSON.parse(readFileSync(assetPath('config/maps/corset.json'), 'utf8')) as ZCMapLayout;
     const decorate = (entry: Record<string, unknown>): ZCMapLayout => ({
         ...source,
         art: { ...(source.art ?? {}), freeDecor: [{

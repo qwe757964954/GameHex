@@ -52,34 +52,34 @@ export interface ZCCardFragmentProgress {
 @ccclass('CardLineupCard')
 export class CardLineupCard extends Component {
     @property({ type: Sprite, tooltip: 'Face：卡面底图' })
-    face: Sprite = null!;
+    face: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'Badge：职业角标（品级由本图标表达）' })
-    badge: Sprite = null!;
+    badge: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'Hero：营地雕像' })
-    hero: Sprite = null!;
+    hero: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'HeadIcon：该卡头像（与 Hero 互斥）' })
-    headIcon: Sprite = null!;
+    headIcon: Sprite = null;
 
     @property({ type: Node, tooltip: 'OnField：已出战标（未上阵隐藏）' })
-    onField: Node = null!;
+    onField: Node = null;
 
     @property({ type: Label, tooltip: 'OnField/Label' })
-    onFieldLabel: Label = null!;
+    onFieldLabel: Label = null;
 
     @property({ type: Node, tooltip: 'LevelPlate：等级底板，0 级隐藏' })
-    levelPlate: Node = null!;
+    levelPlate: Node = null;
 
     @property({ type: Label, tooltip: 'LevelPlate/LevelLabel：卡牌等级' })
-    levelLabel: Label = null!;
+    levelLabel: Label = null;
 
     @property({ type: ProgressBar, tooltip: 'CardFragmentProgress/ProgressBar：卡牌进度（bar = CardFragmentFill）' })
-    progressBar: ProgressBar = null!;
+    progressBar: ProgressBar = null;
 
     @property({ type: Label, tooltip: 'CardFragmentCountLabel：卡牌数「已持有/所需」' })
-    cardFragmentLabel: Label = null!;
+    cardFragmentLabel: Label = null;
 
     @property({ tooltip: '碎片数占位值（页面没给进度时的兜底）' })
     fallbackOwned = 3;

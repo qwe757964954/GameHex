@@ -15,20 +15,22 @@ export const MAP_MARKER_BADGE_FONT_SIZE = 17;
 export const MAP_MARKER_BUBBLE_HEIGHT = 45;
 
 /**
- * 编号气泡底图：**统一用蓝色那张**（`image/spawn-region/frame_03`，94×45 带小尾巴）。
+ * 编号气泡底图：**按「通没通过」二选一**（2026-10-29 用户定稿）。
+ *  · 已通关 = 蓝 `image/spawn-region/frame_03`；
+ *  · **未通关 = 红 `image/spawn-region/frame_02`**。
  *
- * 🔴 2026-10-28 16:23 用户：「蓝色的气泡改成绿色了，改回蓝色」。
- *    `frame_01` 绿 / `frame_02` 红 是**选点界面**（`ZCSpawnRegionHintOverlay`，「红 = 前区 / 绿 = 中后区」）
- *    的语义图，被借到领地气泡上做过一版「已通关绿 / 未通关红」，用户否决 ⇒ 全部退回蓝色。
- *
- * 两个常量都指向同一张图：`PENDING` 留着是为了不打乱 `ITerritoryBattleArt` / `TerritoryStationView`
- * 的二选一管线，将来若要重新分色，只改这一个值即可，不必再动调用方。
+ * 🔴 2026-10-29 10:11 用户（附截图，圈出 `1-2` 那颗蓝气泡）：
+ *    *「需要区分未通关关卡的气泡 icon 底色是红色」*。
+ *    2026-10-28 16:23 那句 *「蓝色的气泡改成绿色了，改回蓝色」* 指的是**已通关那颗变成了绿色**
+ *    （当时是「已通关绿 `frame_01` / 未通关红 `frame_02`」），不是要求「所有气泡一律蓝」——
+ *    两个槽位当时被压成同一张 `frame_03`，把用户要的红也一起改没了。
+ *    现在恢复：**已通关蓝、未通关红**，绿（`frame_01`）不用。
  *
  * ⚠️ 别拿 `image/buildings/frame_01` 当气泡：那个**同名**文件是首领的**红色六边形格面框**，
  *    尺寸与形状都完全不同（踩过一次，表现为气泡被拉成一张大六边形）。
  */
 export const MAP_MARKER_BUBBLE_FRAME_PASSED_PATH = 'image/spawn-region/frame_03/spriteFrame';
-export const MAP_MARKER_BUBBLE_FRAME_PENDING_PATH = 'image/spawn-region/frame_03/spriteFrame';
+export const MAP_MARKER_BUBBLE_FRAME_PENDING_PATH = 'image/spawn-region/frame_02/spriteFrame';
 
 /**
  * 编号气泡的文字样式（2026-10-28 按美术效果图对齐）。

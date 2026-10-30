@@ -18,10 +18,10 @@ const sec = (frames: number): number => frames / FGUI_FPS;
 @ccclass('ShowRewardItem')
 export class ShowRewardItem extends Component {
     @property({ type: GoodsBox, tooltip: 'Goods：物品框（品质框 / 图标 / 数量），FGUI 的 com_goods' })
-    goods: GoodsBox = null!;
+    goods: GoodsBox = null;
 
     @property({ type: Sprite, tooltip: 'Glow：闪光（FGUI n1），入场时 alpha 1→0 淡出' })
-    glow: Sprite = null!;
+    glow: Sprite = null;
 
     @property({ type: [Sprite], tooltip: 'Stars：5 个星点（FGUI n2~n6，按顺序传入，与 SR_STAR_TRACKS 对应）' })
     stars: Sprite[] = [];

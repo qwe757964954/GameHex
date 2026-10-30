@@ -28,6 +28,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { loadPvpTables, parseUnits, ZCPvpTables } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
+import { assetPath } from './helpers/asset-paths';
 
 interface CardRow {
     id: number;
@@ -132,7 +133,7 @@ function collectUnitColumnIssues(
         }
         if (row.unitPrefabPath && row.unitPrefabPath.includes('\\')) {
             // ⚠️ 这条判据**不能**靠 `prefabExists`（下一行那个）：Windows 上 `existsSync` 把 `\` 与 `/`
-            // 当同一个分隔符，`assets/resources/skel\豌豆射手\豌豆射手.prefab` 照样返回 true
+            // 当同一个分隔符，assetPath(`skel\豌豆射手\豌豆射手.prefab`) 照样返回 true
             // —— 表里写反斜杠时那条判据**永远抓不到**，要等对局预加载才报
             // `Bundle resources doesn't contain skel\豌豆射手\豌豆射手`（看着像资源缺失、其实是路径格式不对）。
             // 跨平台判据只有一个：这个字符串里不许出现 `\`。

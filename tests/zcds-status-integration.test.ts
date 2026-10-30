@@ -7,6 +7,7 @@ import { configureZCMap } from '../assets/script/app/zcds/model/ZCMapConfig';
 import { captureZCMatchConfig } from '../assets/script/app/zcds/model/ZCMatchConfig';
 import { parseZCModifierAdapterCatalogs } from '../assets/script/app/zcds/model/ZCStatSchema';
 import { ZCStatusSystem } from '../assets/script/app/zcds/model/ZCStatusEffect';
+import { assetPath } from './helpers/asset-paths';
 
 function readRows(name: string): Array<Record<string, unknown>> {
     const source = JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8')) as
@@ -27,7 +28,7 @@ function loadActualPvpTables(): void {
     ];
     loadPvpTables(Object.fromEntries(names.map((name) => [name, readRows(name)])) as unknown as ZCPvpTables);
     configureZCMap(JSON.parse(readFileSync(
-        'assets/resources/config/maps/normal.json', 'utf8',
+        assetPath('config/maps/normal.json'), 'utf8',
     )));
 }
 

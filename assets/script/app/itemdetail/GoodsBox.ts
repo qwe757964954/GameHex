@@ -37,13 +37,13 @@ const { ccclass, property } = _decorator;
 @ccclass('GoodsBox')
 export class GoodsBox extends Component {
     @property({ type: Sprite, tooltip: 'Frame：品质框 —— **子节点 `Frame` 上**的 cc.Sprite（8 档 `cu_quality_01`..`08`）' })
-    frame: Sprite = null!;
+    frame: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'Icon：道具图标 —— **子节点 `Icon` 上**的 cc.Sprite（没有映射图时会被整块隐藏）' })
-    icon: Sprite = null!;
+    icon: Sprite = null;
 
     @property({ type: Label, tooltip: 'Num：数量 —— **子节点 `Num` 上**的 cc.Label（锚点 (1,0.5) + overflow=NONE；`0` 时不显示）' })
-    num: Label = null!;
+    num: Label = null;
 
     /**
      * 点击回调 —— **由宿主在每次铺格子时重设**。

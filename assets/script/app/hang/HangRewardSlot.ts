@@ -26,10 +26,10 @@ const { ccclass, property } = _decorator;
 @ccclass('HangRewardSlot')
 export class HangRewardSlot extends Component {
     @property({ type: Sprite, tooltip: '品质框（`image/frame/common_img_pzk_0N`）' })
-    frame: Sprite = null!;
+    frame: Sprite = null;
 
     @property({ type: Sprite, tooltip: '道具图标（`item` / `roleProperty` 两支分流解析）' })
-    icon: Sprite = null!;
+    icon: Sprite = null;
 
     /**
      * 铺一格。

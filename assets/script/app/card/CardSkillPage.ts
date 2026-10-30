@@ -58,18 +58,18 @@ export class CardSkillPage extends PopupBase {
     static prefabPath = 'ui/card/CardSkill';
 
     @property({ type: Node, tooltip: 'CloseBtn：右上角关闭按钮（挂 cc.Button）' })
-    closeButton: Node = null!;
+    closeButton: Node = null;
 
     //  文字位一律绑**节点**、用时 `getComponent(Label)`：组件类型的属性对序列化值要求更严
     //  （存成节点就整字段被丢弃 → 运行时 undefined），节点引用则宽容得多。
     @property({ type: Node, tooltip: 'TitleLabel：弹窗标题节点（挂 Label）' })
-    titleNode: Node = null!;
+    titleNode: Node = null;
 
     @property({ type: Node, tooltip: 'NameLabel：卡名节点（挂 Label）' })
-    nameNode: Node = null!;
+    nameNode: Node = null;
 
     @property({ type: Node, tooltip: 'Skills：技能列表根节点（挂 CardSkillListView）' })
-    skillListNode: Node = null!;
+    skillListNode: Node = null;
 
     private skillList: CardSkillListView | null = null;
     private cardName = '';

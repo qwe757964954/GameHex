@@ -26,11 +26,12 @@ import {
     normalizeStatUnitId,
 } from '../assets/script/app/battle/BattleStatisticsModel';
 import { buildSeatProfiles, buildSeatUnitIds } from '../assets/script/app/zcds/model/ZCRankBoard';
+import { assetPath } from './helpers/asset-paths';
 
 const CMD = 'com.xkhy.tafang.cmd';
 
 function loadRoot(): protobuf.Root {
-    const schema = JSON.parse(readFileSync('assets/resources/config/protoCompiled.json', 'utf8'));
+    const schema = JSON.parse(readFileSync(assetPath('config/protoCompiled.json'), 'utf8'));
     return protobuf.Root.fromJSON(schema);
 }
 

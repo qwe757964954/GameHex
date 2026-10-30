@@ -186,11 +186,3 @@ export class GlobalErrorHandler extends ScriptObject {
 }
 
 
-
-function __errorHandler(file:string, lineno: number, message:string, stack: string) {
-    console.log("GlobalErrorHandler.__errorHandler2", message)
-    GlobalErrorHandler.instance.handleError(message + `${file}:${lineno}`, stack, 'window.onerror');
-        
-    // 返回true阻止默认处理
-    return false;
-};

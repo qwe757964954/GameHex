@@ -243,10 +243,6 @@ export async function checkFirstRechargeOnEnterMain(caller?: unknown): Promise<I
 /** 调弹窗管理器拉起首充弹窗。加载失败返回 `false`（不抛）。 */
 async function openFirstRecharge(caller?: unknown): Promise<boolean> {
     const manager = PopupManager.inst;
-    if (!manager) {
-        console.warn('[FirstRecharge] 弹窗管理器不可用，跳过自动弹出');
-        return false;
-    }
     try {
         // 默认同类单实例：已经开着时 `openAsync` 会返回现有实例，不会重复弹。
         const popup = await manager.openAsync(FirstRechargePage, { layer: PopupLayer.NORMAL, userData: caller });

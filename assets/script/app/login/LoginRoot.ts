@@ -127,7 +127,9 @@ export class LoginRoot {
     async login(account: string, password: string, net: any): Promise<LoginFlowResult> {
         if (this.busy || this.disposed) return { ok: false, reason: 'busy' };
         if (!account || !password) return { ok: false, reason: '请输入账号和密码' };
-        if (!this.gameConfig) return { ok: false, reason: '登录中心尚未就绪，请稍后重试' };
+        const config = this.gameConfig;
+        const gateway = this.gateway;
+        if (!config || !gateway) return { ok: false, reason: '登录服务尚未就绪，请稍后重试' };
         if (this.selectedServerId == null) return { ok: false, reason: '请先选择服务器' };
 
         const selected = this.servers.find((s) => Number(s.serverId) === this.selectedServerId);
@@ -137,10 +139,10 @@ export class LoginRoot {
 
         this.busy = true;
         try {
-            const user = await this.gateway!.loginAccount(this.gameConfig, account, password);
+            const user = await gateway.loginAccount(config, account, password);
             if (this.disposed) return { ok: false, reason: 'disposed' };
 
-            const recent = await this.gateway!.queryRecentServers(this.gameConfig, user);
+            const recent = await gateway.queryRecentServers(config, user);
             this.recentServerIds = recent.roleServerList || recent.roleList?.map((i: any) => i.selectServerId) || [];
             if (this.selectedServerId == null) {
                 this.selectedServerId = selectRecommendedServer(this.servers, recent.recentServerId, this.recentServerIds);
@@ -148,18 +150,18 @@ export class LoginRoot {
             const allowedAfter = canEnterServer(selected, this.recentServerIds, recent.state === 1);
             if (!allowedAfter.ok) return { ok: false, reason: allowedAfter.reason };
 
-            await this.gateway!.loginServer(this.gameConfig, user, this.selectedServerId);
-            const session = await this.gateway!.enterServer(this.gameConfig, user, this.selectedServerId);
+            await gateway.loginServer(config, user, this.selectedServerId);
+            const session = await gateway.enterServer(config, user, this.selectedServerId);
 
             const connected = await this.connectGameServer(user, session, net);
             if (!connected.ok) return { ok: false, reason: connected.reason };
 
             CenterPaymentService.current?.configure({
-                centerUrl: this.gameConfig.url,
-                platform: this.gameConfig.channelCode,
+                centerUrl: config.url,
+                platform: config.channelCode,
                 code: user.code,
                 roleId: Number(session.roleId),
-                sdkType: this.gameConfig.sdkType ?? '',
+                sdkType: config.sdkType ?? '',
             });
 
             this.persistLogin(account, password, session);
@@ -175,10 +177,12 @@ export class LoginRoot {
     async register(account: string, password: string): Promise<{ ok: boolean; reason?: string }> {
         if (this.busy || this.disposed) return { ok: false, reason: 'busy' };
         if (!account || !password) return { ok: false, reason: '请输入账号和密码' };
-        if (!this.gameConfig) return { ok: false, reason: '登录中心尚未就绪，请稍后重试' };
+        const config = this.gameConfig;
+        const gateway = this.gateway;
+        if (!config || !gateway) return { ok: false, reason: '登录服务尚未就绪，请稍后重试' };
         this.busy = true;
         try {
-            await this.gateway!.registerAccount(this.gameConfig, account, password);
+            await gateway.registerAccount(config, account, password);
             sys.localStorage.setItem('account_num', account);
             sys.localStorage.setItem('password_num', password);
             return { ok: true };
@@ -229,15 +233,17 @@ export class LoginRoot {
         session: any,
         reconnect: boolean,
     ): Promise<{ ok: boolean; reason?: string }> {
+        const config = this.gameConfig;
+        if (!config) return { ok: false, reason: '登录中心尚未就绪，请稍后重试' };
         const version = this.versionConfig?.version ?? '';
         // ⚠️ 必须走工厂，不要手写对象字面量：`CmdClientInfo` 有 13 个 proto2 `required`
         // 字段，少一个就会在 `CmdClientInfo.encode` 抛 TypeError（新增无守卫、无条件写），
         // 表现为「链接成功」后立刻 `socket close 1005` 且没有任何异常堆栈。
         // 详见 LoginProtocol.createClientInfo 的注释与 tests/login-protocol.test.ts。
-        const cmdClientInfo = createClientInfo(version, this.gameConfig?.channel ?? '');
+        const cmdClientInfo = createClientInfo(version, config.channel);
         const param = {
             cmdClientInfo,
-            platform: this.gameConfig!.channelCode,
+            platform: config.channelCode,
             code: user.code,
             roleId: session.roleId,
             time: session.time,

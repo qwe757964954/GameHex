@@ -5,8 +5,9 @@ import protobuf from 'protobufjs/light.js';
 import Long from 'long';
 import { ProtoCoder } from '../assets/script/framework/net/ProtoCoder';
 import protobufRoot from '../assets/script/lib/protobuf/protoCompiledStatic';
+import { assetPath } from './helpers/asset-paths';
 
-const schema = JSON.parse(readFileSync('assets/resources/config/protoCompiled.json', 'utf8'));
+const schema = JSON.parse(readFileSync(assetPath('config/protoCompiled.json'), 'utf8'));
 const root = protobuf.Root.fromJSON(schema);
 const messages = schema.nested.com.nested.xkhy.nested.tafang.nested.cmd.nested;
 

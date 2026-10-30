@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
+import { assetPath } from './helpers/asset-paths';
 
-const prefab = JSON.parse(readFileSync('assets/resources/ui/game/ZCGameHUD.prefab', 'utf8')) as Array<Record<string, any>>;
+const prefab = JSON.parse(readFileSync(assetPath('ui/game/ZCGameHUD.prefab'), 'utf8')) as Array<Record<string, any>>;
 const nodes = prefab.filter((item) => item.__type__ === 'cc.Node');
 const nodeNamed = (name: string) => nodes.find((node) => node._name === name);
 const components = (node: Record<string, any>) => node._components.map((ref: { __id__: number }) => prefab[ref.__id__]);

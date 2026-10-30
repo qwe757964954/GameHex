@@ -1,3 +1,5 @@
+import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
+import { scopeAssetService } from '../assets/script/core/asset/AssetService';
 /**
  * Toast（吐司）单测
  * ------------------------------------------------------------------
@@ -20,6 +22,7 @@ import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import * as PopupDef from '../assets/script/framework/ui/PopupDef';
+import { assetPath } from './helpers/asset-paths';
 
 /**
  * 依赖表以「工程根相对路径」为 key（裸模块名如 'cc' 原样保留）。
@@ -39,6 +42,9 @@ function loadModule(path: string, dependencies: Record<string, unknown>): any {
         exports: {} as any,
         console,
         require: (name: string) => {
+            if (name.endsWith('/ResourceScope')) return { ResourceScope };
+            if (name.endsWith('/AssetService')) return { scopeAssetService };
+            if (name.endsWith('/ProcedureManager')) return { ProcedureManager: { instance: null } };
             const key = resolveSpecifier(path, name);
             assert.ok(key in dependencies, `${path} 引用了未提供的依赖：${name}（解析为 ${key}）`);
             return dependencies[key];
@@ -306,7 +312,7 @@ test('样式口径：吐司与主界面聊天条（BottomHud/ChatBar/ChatMsg）�
     assert.ok(toast, '实例没起来');
 
     // 聊天条上的消息正文：ArenaRoot/BottomHud/ChatMsg（HUD 上唯一的"黑底说明文字"）
-    const arena = JSON.parse(readFileSync('assets/resources/ui/main/ArenaRoot.prefab', 'utf8')) as any[];
+    const arena = JSON.parse(readFileSync(assetPath('ui/main/ArenaRoot.prefab'), 'utf8')) as any[];
     const chat = arena.find((item) => item.__type__ === 'cc.Label'
         && typeof item._string === 'string' && item._string.indexOf('空空如也') >= 0);
     assert.ok(chat, '聊天条消息 Label 改文案了？找不到 "空空如也消息~"');
@@ -345,7 +351,7 @@ test('样式口径：吐司与主界面聊天条（BottomHud/ChatBar/ChatMsg）�
 });
 
 test('Toast.prefab 里序列化的样式与脚本 @property 默认值一致（编辑器预览 = 运行时）', () => {
-    const prefab = JSON.parse(readFileSync('assets/resources/ui/common/Toast.prefab', 'utf8')) as any[];
+    const prefab = JSON.parse(readFileSync(assetPath('ui/common/Toast.prefab'), 'utf8')) as any[];
     // 自定义组件的 __type__ 是脚本 uuid 的压缩串，不是 cc.* —— 全文件只有这一个。
     const comp = prefab.find((item) => typeof item.__type__ === 'string' && !item.__type__.startsWith('cc.'));
     assert.ok(comp, 'Toast.prefab 里找不到 Toast 组件');

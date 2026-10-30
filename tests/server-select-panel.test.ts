@@ -31,9 +31,10 @@ import * as assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import * as path from 'node:path';
+import { assetPath } from './helpers/asset-paths';
 
 const ROOT = process.cwd();
-const PREFAB_DIR = path.join(ROOT, 'assets/resources/ui/login');
+const PREFAB_DIR = path.join(ROOT, assetPath('ui/login'));
 const SCRIPT_DIR = path.join(ROOT, 'assets/script/app/login');
 
 /** 弹窗皮「道具详情包」的取件表（uuid 前 8 位足以唯一化，全 32 位在 meta 里）。 */

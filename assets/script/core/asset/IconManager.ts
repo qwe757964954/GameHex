@@ -73,12 +73,12 @@ export class IconManager {
 
         // 1. 先查缓存
         if (this._cache.has(itemId)) {
-            return this._cache.get(itemId)!;
+            return this._cache.get(itemId);
         }
 
         // 2. 正在加载中？复用 Promise
         if (this._loading.has(itemId)) {
-            return this._loading.get(itemId)!;
+            return this._loading.get(itemId);
         }
 
         // 3. 从物品配置里直接拿 iconPath
@@ -132,7 +132,7 @@ export class IconManager {
 
         const worker = async () => {
             while (queue.length > 0) {
-                const id = queue.shift()!;
+                const id = queue.shift();
                 await this.getIconByItemId(id);
                 done++;
                 onProgress?.(done, total);

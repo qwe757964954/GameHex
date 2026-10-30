@@ -124,74 +124,74 @@ export class BattleTokenPage extends PopupBase {
 
     // ---------------- 底栏 ----------------
     @property({ type: Node, tooltip: '返回按钮（FGUI 按钮_返回）' })
-    backButton: Node = null!;
+    backButton: Node = null;
 
     @property({ type: Node, tooltip: '内容页根（长屏时贴顶）' })
-    pageRoot: Node = null!;
+    pageRoot: Node = null;
 
     @property({ type: Node, tooltip: '中间面板底（长屏时随列表向下拉伸）' })
-    panelBg: Node = null!;
+    panelBg: Node = null;
 
     @property({ type: Node, tooltip: '底栏底图（长屏时贴底）' })
-    bottomBar: Node = null!;
+    bottomBar: Node = null;
 
     @property({ type: Node, tooltip: '底部页签容器（长屏时贴底）' })
-    tabBar: Node = null!;
+    tabBar: Node = null;
 
     // ---------------- 页头 ----------------
     @property({ type: Sprite, tooltip: '页头背景（720×484，按页签换帧）' })
-    headBg: Sprite = null!;
+    headBg: Sprite = null;
 
     @property({ type: Sprite, tooltip: '角色立绘（显示尺寸恒 353×357）' })
-    hero: Sprite = null!;
+    hero: Sprite = null;
 
     @property({ type: Sprite, tooltip: '标题 logo（406×167）' })
-    titleIcon: Sprite = null!;
+    titleIcon: Sprite = null;
 
     @property({ type: Node, tooltip: '标题条底板（FGUI n127，`pages="1,3,0"` ⇒ 等级基金不显示）' })
-    titleBg: Node = null!;
+    titleBg: Node = null;
 
     @property({ type: Node, tooltip: '页头说明气泡（FGUI n141，七日登录比其他页宽 48）' })
-    qipao: Node = null!;
+    qipao: Node = null;
 
     @property({ type: Label, tooltip: '页头说明（FGUI n13，按页签换文案 + 换框尺寸）' })
-    hintLabel: Label = null!;
+    hintLabel: Label = null;
 
     @property({ type: Label, tooltip: '倒计时（FGUI 文本_倒计时）' })
-    countdownLabel: Label = null!;
+    countdownLabel: Label = null;
 
     // ---------------- 通行证专有 ----------------
     @property({ type: Node, tooltip: '整块「经验条 + 已消耗」容器（只在通行证页显示）' })
-    expGroup: Node = null!;
+    expGroup: Node = null;
 
     @property({ type: BattleTokenProgressBar, tooltip: '经验条（FGUI progress）' })
-    expBar: BattleTokenProgressBar = null!;
+    expBar: BattleTokenProgressBar = null;
 
     @property({ type: Label, tooltip: '「已消耗：」（FGUI n138）' })
-    consumedLabel: Label = null!;
+    consumedLabel: Label = null;
 
     @property({ type: Label, tooltip: '已消耗数值（FGUI 文本_消耗）' })
-    consumedValue: Label = null!;
+    consumedValue: Label = null;
 
     @property({ type: Sprite, tooltip: '消耗的道具图标（FGUI costIcon）' })
-    costIcon: Sprite = null!;
+    costIcon: Sprite = null;
 
     // ---------------- 购买行 ----------------
     @property({ type: BattleTokenBuyButton, tooltip: '方案 1（免费 / 基础）' })
-    plan1Btn: BattleTokenBuyButton = null!;
+    plan1Btn: BattleTokenBuyButton = null;
 
     @property({ type: BattleTokenBuyButton, tooltip: '方案 2（只有通行证有第 3 个方案时才会出现）' })
-    plan2Btn: BattleTokenBuyButton = null!;
+    plan2Btn: BattleTokenBuyButton = null;
 
     @property({ type: BattleTokenBuyButton, tooltip: '方案 3（仅通行证）' })
-    plan3Btn: BattleTokenBuyButton = null!;
+    plan3Btn: BattleTokenBuyButton = null;
 
     // ---------------- 列表 ----------------
     @property({ type: VirtualScrollView, tooltip: '三方案列表（通行证用）' })
-    list3: VirtualScrollView = null!;
+    list3: VirtualScrollView = null;
 
     @property({ type: VirtualScrollView, tooltip: '两方案列表（其余 3 个页签用）' })
-    list2: VirtualScrollView = null!;
+    list2: VirtualScrollView = null;
 
     // ---------------- 运行时 ----------------
     private _snapshot: IBattleTokenSnapshot | null = null;
@@ -623,7 +623,7 @@ export class BattleTokenPage extends PopupBase {
     }
 
     private _loadFrame(path: string): Promise<SpriteFrame | null> {
-        if (this._frames.has(this._keyOf(path))) return Promise.resolve(this._frames.get(this._keyOf(path))!);
+        if (this._frames.has(this._keyOf(path))) return Promise.resolve(this._frames.get(this._keyOf(path)));
         return new Promise((resolve) => {
             // ⚠️ 必须带 `/spriteFrame`（规则 57）：裸路径会报
             //    `Bundle resources doesn't contain xxx`，且只是静默留白 + 一条 warn。

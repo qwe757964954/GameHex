@@ -5,6 +5,7 @@ import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import { ARTIFACT_CLAIM_BURST_ART_ROOT, HEX_FLIP_PULSE_ART_ROOT, HEX_GROUND_GLOW_ART_ROOT, MAP_RESOURCE_ART_ROOT, SPAWN_REGION_ART_ROOT, GAMEUI_ART_ROOT, NEUTRAL_RESOURCE_UNKNOWN_ICON_NAME } from '../assets/script/app/ArtPaths';
+import { assetPath } from './helpers/asset-paths';
 
 test('建筑 prefab 不保留已删除的固定兵营/防御塔帧，城墙 prefab 使用现有墙砖', () => {
     const revealPrefab = readFileSync('assets/bundles/battle/ui/game/ZCGameCardReveal.prefab', 'utf8');
@@ -16,7 +17,7 @@ test('建筑 prefab 不保留已删除的固定兵营/防御塔帧，城墙 pref
 
     const wallPrefab = readFileSync('assets/bundles/battle/ui/game/ZCGameWall.prefab', 'utf8');
     // 墙砖目录已随 Loader 的 WALL_TILE_DIRECTORY 迁到 image/buildings/walls（旧 image/walls 从未入库）。
-    const downMeta = JSON.parse(readFileSync('assets/resources/image/buildings/walls/down.png.meta', 'utf8')) as { uuid: string };
+    const downMeta = JSON.parse(readFileSync(assetPath('image/buildings/walls/down.png.meta'), 'utf8')) as { uuid: string };
     assert.ok(wallPrefab.includes(`${downMeta.uuid}@f9941`), 'ZCGameWall 应绑定现有 down 墙砖作为加载兜底');
 });
 
@@ -141,13 +142,13 @@ test('对局流程在进入前准备地图、配置和全部首屏 Prefab', asyn
         },
     };
     const context = {
-        exports: {} as { ZCGameLoader: new (assets: unknown, configs: unknown, mapDirectory: string) => { prepare(): Promise<any> } },
+        exports: {} as { ZCGameLoader: new (resources: unknown, mapDirectory: string) => { prepare(): Promise<any> } },
         require: (name: string) => dependencies[name],
         console: { info() {}, warn() {}, error() {} },
     };
     runInNewContext(code, context);
 
-    const loader = new context.exports.ZCGameLoader(assetService, configService, mapDirectory);
+    const loader = new context.exports.ZCGameLoader({ assets: assetService, configs: configService }, mapDirectory);
     const prepared = await loader.prepare();
 
     assert.equal(prepared.baseMatchConfig.map.id, 'preloaded-map', '冻结配置快照随预加载结果移交');

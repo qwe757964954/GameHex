@@ -16,8 +16,10 @@
  *   D. **数据管道接线**（源码文本）—— 四条协议名 + `MessageId`、缓存读法、超时兜底、
  *      入口 / 弹窗口径、`CacheMgr` 生成的 `getTl*` 方法名。
  *   E. **文案表**。
- *   F. **主城金币车入口（HUD）** —— 复用原挂机组件，守卫新入口点击接线、
- *      累计时长、整体命中范围、视觉位置与旧 HangEntry 节点删除。
+ *   F. **主界面「征收」入口（HUD）** —— 挂在 `ui/main/ArenaRoot.prefab` 上、**不**走
+ *      `open.url` 白名单。守三件「改错了不报错」的事：`_active` 必须烘 `true`（否则
+ *      `onLoad` 死锁）、`_children` 序 = FGUI displayList 序、`Btn` 是 `scaleFree`
+ *      缩出来的 100×90.27（不是 100×100）。
  *
  * ## ⚠️ 为什么判定必须在 `HangTable` 里（而不是 `HangRepository`）
  *
@@ -53,7 +55,7 @@
  *   - 配置：`assets/remoteRef/{guankaReward,interactReward,gameConfig,ad,item,roleProperty,monthCardActPlan,payChannel}.json`
  *   - 老端：`client/assets/script/app/game/{ctrl/hang,model/hang,model/chapter,model/vo/Other}/**`
  *   - 设计：`zarts/art/UIProject/trunk/UIProject/assets/挂机/**`（720×1280）
- *   - 缓存：`assets/resources/config/protoCache.json`
+ *   - 缓存：assetPath(`config/protoCache.json`)
  */
 
 import assert from 'node:assert/strict';
@@ -155,6 +157,7 @@ import {
     resolveEntranceRoute,
     routedEntranceUrls,
 } from '../assets/script/app/main/MainEntranceRoute';
+import { assetDirNames, assetExists, assetPath } from './helpers/asset-paths';
 
 // ============================================================
 // 共用夹具
@@ -688,12 +691,12 @@ test('真表：`ad` 表 `type=11` 就是扫荡，`limit=5`；`monthCardActPlan` 
 // B. 资源口径（HangArt）
 // ============================================================
 
-const HJ_ART_DIR = 'assets/resources/image/hang';
+const HJ_ART_DIR = assetPath('image/hang');
 
 /**
  * 读一张图的 **spriteFrame** subMeta（`uuid/width/height/border*`）。
  *
- * ⚠️ `dir` 是**相对工程根**的目录（`assets/resources/image/hang`），不是相对 `resources`。
+ * ⚠️ `dir` 是**相对工程根**的目录（assetPath(`image/hang`)），不是相对 `resources`。
  * ⚠️ 返回的 `uuid` 是 `subMetas.f9941.uuid`（**带 `@f9941`**），不是顶层 `meta.uuid` ——
  *    prefab 的 `cc.Sprite._spriteFrame.__uuid__` 存的也是带 `@f9941` 的那个（规则 64）。
  *    拿顶层 uuid 去比会「看起来差一点点」然后被当成抄错。
@@ -825,15 +828,15 @@ test('跨模块复用的 9 张全部落盘（不另存第二份，md5 同源）'
     ];
     for (const [ref, why] of shared) {
         assert.ok(
-            existsSync(`assets/resources/${ref.root}/${ref.name}.png`),
+            existsSync(assetPath(`${ref.root}/${ref.name}.png`)),
             `缺复用图：${ref.root}/${ref.name}（${why}）`,
         );
     }
     // ⚠️ `fd_tab_off`（TY_btn23）**不是**九宫 —— FGUI `package.xml` 里没有 `scale9grid`，
     //    按印象抄 TY_btn06 的 `14,11,4,12` 会让按钮文字被拉伸变形
-    assert.deepEqual(spriteMeta('assets/resources/image/friend', 'fd_tab_off').border, [0, 0, 0, 0]);
+    assert.deepEqual(spriteMeta(assetPath('image/friend'), 'fd_tab_off').border, [0, 0, 0, 0]);
     // 反向：`title_brown`（弹窗标题底条）**是**九宫（171,20,16,40）
-    assert.deepEqual(spriteMeta('assets/resources/image/firstRecharge', 'title_brown').border, [171, 20, 16, 40]);
+    assert.deepEqual(spriteMeta(assetPath('image/firstRecharge'), 'title_brown').border, [171, 20, 16, 40]);
 });
 
 test('品质框：4 档，**必须与七日 / 礼包 / 活动 / 首充 / 战令同算法**（跨 5 个模块的约定）', () => {
@@ -841,7 +844,7 @@ test('品质框：4 档，**必须与七日 / 礼包 / 活动 / 首充 / 战令�
     assert.deepEqual([...QUALITY_FRAME_NAMES], ['common_img_pzk_01', 'common_img_pzk_02', 'common_img_pzk_03', 'common_img_pzk_04']);
     for (const name of QUALITY_FRAME_NAMES) {
         // ⚠️ `FRAME_ART_ROOT` 是相对 `resources` 的（`image/frame`），落盘检查要补 `assets/resources/`
-        assert.ok(existsSync(`assets/resources/${FRAME_ART_ROOT}/${name}.png`), `缺品质框：${name}`);
+        assert.ok(existsSync(assetPath(`${FRAME_ART_ROOT}/${name}.png`)), `缺品质框：${name}`);
     }
     for (let quality = -1; quality <= 9; quality++) {
         assert.equal(qualityFrameLevel(quality), sevenDayQualityFrameLevel(quality), `quality=${quality} 与七日算法必须一致`);
@@ -861,7 +864,7 @@ test('⚠️ 体力图标（`roleProperty.resId = 9` 的 `图标_体力`）必�
     assert.equal(HJ_RESOURCE_ICON_ROOT, 'icons/resource');
     assert.equal(HJ_COST_ICON_NAME, '图标_体力');
     assert.equal(HJ_COST_ICON_PATH, 'icons/resource/图标_体力/spriteFrame');
-    assert.ok(existsSync(`assets/resources/${HJ_RESOURCE_ICON_ROOT}/${HJ_COST_ICON_NAME}.png`), '漏了不报错、按钮上永远留一块白');
+    assert.ok(existsSync(assetPath(`${HJ_RESOURCE_ICON_ROOT}/${HJ_COST_ICON_NAME}.png`)), '漏了不报错、按钮上永远留一块白');
 });
 
 test('所有装配路径都必须带 `/spriteFrame`（漏了只是静默留白 + 一条 warn）', () => {
@@ -881,7 +884,7 @@ test('所有装配路径都必须带 `/spriteFrame`（漏了只是静默留白 +
 // C. prefab 结构 + 几何
 // ============================================================
 
-const PREFAB_PATH = 'assets/resources/ui/Hang/Hang.prefab';
+const PREFAB_PATH = assetPath('ui/Hang/Hang.prefab');
 const CANVAS_W = 720;
 const CANVAS_H = 1280;
 
@@ -1306,9 +1309,9 @@ test('⚠️ 九宫：`HJ_ART_SLICED` 的每张图在 prefab 里都必须 `_type
         ['Hang/SweepBar/Bg', `${HJ_ART_DIR}`, HJ_ART_NAMES.barBg],
         ['Hang/SweepBar/Fill', `${HJ_ART_DIR}`, HJ_ART_NAMES.barFill],
         ['Hang/RewardFrame', `${HJ_ART_DIR}`, HJ_ART_NAMES.rewardFrame],
-        ['Hang/PopBg/Bg', 'assets/resources/image/friend', 'fd_panel_bg'],
-        ['Hang/PopBg/TitleBg', 'assets/resources/image/firstRecharge', 'title_brown'],
-        ['Hang/ClaimBtn', 'assets/resources/image/friend', 'fd_btn_gold'],
+        ['Hang/PopBg/Bg', assetPath('image/friend'), 'fd_panel_bg'],
+        ['Hang/PopBg/TitleBg', assetPath('image/firstRecharge'), 'title_brown'],
+        ['Hang/ClaimBtn', assetPath('image/friend'), 'fd_btn_gold'],
     ];
     for (const [path, dir, name] of sliced) {
         assert.equal(uuidOf(dir, name), spriteUuidAt(path), `${path} 应当用 ${dir}/${name}`);
@@ -1328,15 +1331,15 @@ test('⚠️ 九宫：`HJ_ART_SLICED` 的每张图在 prefab 里都必须 `_type
     const plain: ReadonlyArray<readonly [string, string, string]> = [
         ['Hang/HeadBg', HJ_ART_DIR, HJ_ART_NAMES.headBg],
         ['Hang/MaxBadge', HJ_ART_DIR, HJ_ART_NAMES.tagMax],
-        ['Hang/SweepBtn', 'assets/resources/image/friend', 'fd_tab_off'],
-        ['Hang/PopBg/CloseBtn', 'assets/resources/image/activity', 'act_btn_close'],
+        ['Hang/SweepBtn', assetPath('image/friend'), 'fd_tab_off'],
+        ['Hang/PopBg/CloseBtn', assetPath('image/activity'), 'act_btn_close'],
         ['Hang/SweepBtn/AdIcon', HJ_ART_DIR, HJ_ART_NAMES.ad],
         ['Hang/GearSwitch/Bg', HJ_ART_DIR, HJ_ART_NAMES.gearBg],
         ['Hang/GearSwitch/Arrow/Icon', HJ_ART_DIR, HJ_ART_NAMES.gearIcon],
         ['Hang/MonthCardBar/Bg', HJ_ART_DIR, HJ_ART_NAMES.monthBg],
         ['Hang/MonthCardBar/Deco', HJ_ART_DIR, HJ_ART_NAMES.monthDeco],
         ['Hang/MonthCardBar/BuyBtn', HJ_ART_DIR, HJ_ART_NAMES.monthBtn],
-        ['Hang/SweepBtn/RedDot/Dot', 'assets/resources/image/common', 'cm_red_dot'],
+        ['Hang/SweepBtn/RedDot/Dot', assetPath('image/common'), 'cm_red_dot'],
     ];
     for (const [path, dir, name] of plain) {
         assert.equal(uuidOf(dir, name), spriteUuidAt(path), `${path} 应当用 ${dir}/${name}`);
@@ -1350,7 +1353,7 @@ test('⚠️ 奖励格烘焙的品质框：前 4 格 = 档 2（`common_img_pzk_0
     //    （真实是 5 档 2 + 1 档 1，见下面那个用例）—— 别把这条当成「品质映射对不对」的判据。
     //    本条只守两件事：① 6 格都指向 `image/frame/` 里的合法品质框；② 两极（档 1 / 档 2）都在。
     // ⚠️ `FRAME_ART_ROOT` 是相对 `resources` 的 ⇒ 落盘/读 meta 都要补 `assets/resources/`
-    const frameUuid = (name: string): string => spriteMeta(`assets/resources/${FRAME_ART_ROOT}`, name).uuid;
+    const frameUuid = (name: string): string => spriteMeta(assetPath(`${FRAME_ART_ROOT}`), name).uuid;
     for (const i of [1, 2, 3, 4]) {
         assert.equal(
             (compOfType(`Hang/RewardGrid/Slot${i}`, 'cc.Sprite')._spriteFrame as { __uuid__: string }).__uuid__,
@@ -1628,8 +1631,8 @@ test('Repository：8 张表一次读完，状态读 `CacheMgr`（**不自存快�
     ]) {
         assert.match(repository, new RegExp(`readRows\\('${table}'\\)`), `没读 ${table} 表`);
     }
-    assert.match(repository, /CacheMgr\.instance\?\.getTlCmdRole\(\)/);
-    assert.match(repository, /CacheMgr\.instance\?\.getTlCmdRoleInteractInfo\(\)/);
+    assert.match(repository, /CacheMgr\.instance\.getTlCmdRole\(\)/);
+    assert.match(repository, /CacheMgr\.instance\.getTlCmdRoleInteractInfo\(\)/);
     assert.match(repository, /getCmdBattleLevel\(level\)/);
     assert.match(repository, /getCmdBattleChapter\(chapter\)/);
     // 缓存读法必须走生成的 `getTl*`（方法名写错 = 编译不过，但改成手写字典就是另一回事了）
@@ -1639,7 +1642,7 @@ test('Repository：8 张表一次读完，状态读 `CacheMgr`（**不自存快�
     }
     // ⚠️ `CmdAdvert` **不是**独立的缓存表（protoCache.json 里没有）—— 它是 `CmdRole.tlCmdAdvert`
     assert.equal(gen.includes('getTlCmdAdvert'), false, '`CmdAdvert` 不该有独立缓存入口');
-    const protoCache = JSON.parse(readFileSync('assets/resources/config/protoCache.json', 'utf8')) as Record<string, unknown>;
+    const protoCache = JSON.parse(readFileSync(assetPath('config/protoCache.json'), 'utf8')) as Record<string, unknown>;
     assert.ok(protoCache.CmdRole, 'protoCache 应有 CmdRole');
     assert.equal(protoCache.CmdAdvert, undefined, 'protoCache 里没有 CmdAdvert（只能从 CmdRole.tlCmdAdvert 读）');
     assert.match(repository, /tlCmdAdvert/);
@@ -1691,15 +1694,15 @@ test('⚠️ `readAdLimit` / `readAdUsed` 的方向：`num` 是**已用**次数�
 test('页面：`static prefabPath` 指向新 prefab，且路径真的存在（大小写也必须一致）', () => {
     const page = src('HangPage.ts');
     assert.match(page, /static prefabPath = 'ui\/Hang\/Hang';/);
-    assert.ok(existsSync('assets/resources/ui/Hang/Hang.prefab'), '`ui/Hang/Hang` 对应的 prefab 不存在');
+    assert.ok(assetExists('ui/Hang/Hang.prefab'), '`ui/Hang/Hang` 对应的 prefab 不存在');
     // Android / iOS 热更新 zip 内路径大小写敏感 ⇒ 别写成 ui/hang。
     // ⚠️ **不能**用 `existsSync('assets/resources/ui/hang/…') === false` 来守：Windows 文件系统
     //    大小写不敏感，那个断言在开发机上永远失败（而在 Linux 构建机上才有效）。
     //    改守「目录列举里必须是 `Hang`、且没有第二个 `hang`」—— 这才是真判据。
-    const uiDirs = readdirSync('assets/resources/ui');
-    assert.ok(uiDirs.includes('Hang'), '`assets/resources/ui/` 下应有 `Hang` 目录');
+    const uiDirs = assetDirNames('ui');
+    assert.ok(uiDirs.includes('Hang'), 'assetPath(`ui/`) 下应有 `Hang` 目录');
     assert.equal(uiDirs.includes('hang'), false, 'ui/ 下不要另建一个 `hang`（大小写不一致 = 热更新包里找不到）');
-    assert.equal(readdirSync('assets/resources/ui/Hang').includes('Hang.prefab'), true);
+    assert.equal(readdirSync(assetPath('ui/Hang')).includes('Hang.prefab'), true);
 });
 
 test('页面继承 `PopupBase`（入口要按弹窗打开它，不是自己 instantiate）', () => {
@@ -2026,12 +2029,17 @@ test('文案表的键集合稳定（增删键要让每条用途都还有人用�
 // 主城 BottomHud 左下角金币车复用原挂机入口组件。
 // 此处守卫打开接线、整体命中区、原视觉位置、累计时长，以及旧节点确实被删除。
 
-const ARENA_PATH = 'assets/resources/ui/main/ArenaRoot.prefab';
+const ARENA_PATH = assetPath('ui/main/ArenaRoot.prefab');
 
 /** `HangEntryButton.ts.meta` 的 uuid 压缩出来的 cid（`compressUuid` 定义在 C 段）。 */
 const ENTRY_CID = '10ef5PuHu1JN556yrBvqD60';
 
-/** 节点表使用包含 ArenaRoot 根名的完整路径。 */
+/**
+ * 入口子树的根路径。
+ *
+ * ⚠️ 节点表的 key **带根名**（与 Hang 那边的 `Hang/PopBg` 同一口径）—— 写成裸 `HangEntry`
+ * 会「一层都没匹配上」，症状是每条用例都报「里没有节点 HangEntry」。
+ */
 const ENTRY = 'ArenaRoot/BottomHud/HangRewardEntry';
 
 /** `ENTRY` 下的子节点路径。 */
@@ -2079,6 +2087,10 @@ function aCompOfType(path: string, type: string): Record<string, unknown> {
     const hit = aCompsOf(path).find((comp) => comp && comp.__type__ === type);
     assert.ok(hit, `${path} 上没挂 ${type}`);
     return hit!;
+}
+
+function aHasCompType(path: string, type: string): boolean {
+    return aCompsOf(path).some((comp) => comp && comp.__type__ === type);
 }
 
 function aSizeOf(path: string): { w: number; h: number } {

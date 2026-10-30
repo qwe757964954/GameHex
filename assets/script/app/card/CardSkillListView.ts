@@ -27,7 +27,7 @@ const { ccclass, property } = _decorator;
 export class CardSkillListView extends Component {
     /** 技能行容器（`Skills/Rows`），其下 2 个 `CardSkillRow` 实例。 */
     @property({ type: Node, tooltip: 'Rows：技能行容器（子节点为 prefab 预建的 CardSkillRow）' })
-    rowsRoot: Node = null!;
+    rowsRoot: Node = null;
 
     /**
      * 空态提示（主城 / 金矿这类没有技能的卡）。
@@ -37,7 +37,7 @@ export class CardSkillListView extends Component {
      * 运行时读到 `undefined` 而不是抛错，只能等到用的时候才炸。节点引用则宽容得多。
      */
     @property({ type: Node, tooltip: 'Empty：没有任何技能时的提示节点（挂 Label）' })
-    emptyNode: Node = null!;
+    emptyNode: Node = null;
 
     //  底色是浅米黄（244,232,200），文字必须够深才看得清：
     //  「未解锁」只是略淡，不能淡到与背景融为一体（旧值 176,168,150 实测几乎看不见）。

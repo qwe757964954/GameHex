@@ -78,12 +78,16 @@ export interface ZCPveDefenceWave {
     cardId: string;
     monsterCount: number;
     tier: number;
-    hpRate: number;
-    attackRate: number;
 }
 
 export interface ZCPveDefenceConfig {
     waves: readonly ZCPveDefenceWave[];
+}
+
+/** 服务端下发的阵营倍率；缺失字段不修改对应属性。 */
+export interface IZCBattleRates {
+    readonly hpRate?: number;
+    readonly attackRate?: number;
 }
 
 /** 只包含数据，允许测试、机器人模拟和回放注入独立的配置版本。 */
@@ -102,6 +106,8 @@ export interface ZCMatchConfig {
     goldPity: number;
     /** 客户端选定武将/星级后编译出的本局修正；缺省表示本局不启用旧表修正。 */
     modifiers?: Readonly<Partial<Record<ZCOwner, readonly ZCCompiledModifierLoadout[]>>>;
+    /** 独立于英雄成长和技能参数，在单位静态属性编译完成后相乘。 */
+    ownerRates?: Readonly<Partial<Record<ZCOwner, IZCBattleRates>>>;
     /** 本局冻结的技能行为绑定与状态定义，不在战斗中读取全局表。 */
     skillBindings?: readonly ZCSkillBinding[];
     statusDefinitions?: readonly ZCStatusEffectDef[];

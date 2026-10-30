@@ -42,7 +42,7 @@ export function compileZCMatchRuntime(config: Readonly<ZCMatchConfig>): IZCMatch
         const deck = deckFor(owner);
         effectiveDefinitions[owner] = new Map(config.units.map((unit) => [
             unit.unitId,
-            resolveZCUnitDefinition(unit, loadouts),
+            resolveZCUnitDefinition(unit, loadouts, config.ownerRates?.[owner]),
         ]));
         unitStatPatches[owner] = new Map(config.units.map((unit) => [
             unit.unitId,
@@ -63,7 +63,14 @@ export function compileZCMatchRuntime(config: Readonly<ZCMatchConfig>): IZCMatch
             }
         }
         skillRuntime[owner] = runtimes;
-        legacyAttributes[owner] = new Map(loadouts.map((loadout) => [loadout.targetUnitId, loadout.rawAttributes]));
+        const attributes = new Map<string, Readonly<Record<string, unknown>>>();
+        for (const loadout of loadouts) {
+            attributes.set(loadout.targetUnitId, {
+                ...attributes.get(loadout.targetUnitId),
+                ...loadout.rawAttributes,
+            });
+        }
+        legacyAttributes[owner] = attributes;
         deckBonuses[owner] = calculateDeckBonuses(deck);
         for (const card of deck) cards.set(card.id, card);
     }

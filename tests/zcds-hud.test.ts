@@ -5,6 +5,7 @@ import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import { buildSeatProfiles, RANK_FALLBACK_NAMES } from '../assets/script/app/zcds/model/ZCRankBoard';
+import { assetPath } from './helpers/asset-paths';
 
 /**
  * ZCGameViewUtil 在**模块作用域**就 `new Color(...)` 建了四个血表配色常量，
@@ -381,7 +382,7 @@ test('每张工程地图的开局落点都成立：主城在屏内、且不被 r
     const { buildPlayerHomeFocus, mapToViewX, mapToViewY, ZC_HEX_VIEW_WIDTH, ZC_HEX_VIEW_HEIGHT } =
         loadPureModule('assets/script/app/zcds/view/ZCGameViewUtil.ts');
     const mapConfig = loadPureModule('assets/script/app/zcds/model/ZCMapConfig.ts');
-    const dir = 'assets/resources/config/maps';
+    const dir = assetPath('config/maps');
     // 与 HUD 的常量保持一致（ZCGameHUDView 的 MAP_EDGE_MARGIN_* 与 prefab 上的 720×1280 视口）
     const VIEW_W = 720, VIEW_H = 1280, MARGIN_X = 80, MARGIN_Y = 230;
     let checked = 0;
@@ -464,6 +465,18 @@ test('HUD 按区域刷新：顶部计时与金币、逐席位地块数与兵力'
     assert.equal(hud.rowCalls[0].unitText, '1/100');
     assert.equal(hud.rowCalls[1].name, '红方');
     assert.equal(hud.rowCalls[1].unitText, '2/100', '★兵力四行都显示（不再只第 1 行）');
+});
+
+test('塔防 HUD 不保留三分钟倒计时，切回普通对战恢复计时', () => {
+    const { hud, model } = createHud();
+    hud.initialize();
+    hud.render(model);
+    assert.equal(hud.timeLabel.string, '1:01');
+    hud.render({ ...model, remainingSeconds: null, defenceWaveProgress: { spawnedWaves: 1 } });
+    assert.equal(hud.topInfoPanel.active, false);
+    assert.equal(hud.timeLabel.string, '', '无时限模式清除上一局剩余时间');
+    hud.render(model);
+    assert.equal(hud.timeLabel.string, '1:01');
 });
 
 test('四格顶栏：领先者变化和并列时，尺寸状态同步交给 Layout', () => {
@@ -732,7 +745,7 @@ test('地图拖动标记保持到触摸结束派发后，并随视口尺寸重�
 });
 
 test('HUD prefab 的直接引用与嵌套组件引用完整且没有旧字段', () => {
-    const read = (name: string) => JSON.parse(readFileSync(`assets/resources/ui/game/${name}.prefab`, 'utf8'));
+    const read = (name: string) => JSON.parse(readFileSync(assetPath(`ui/game/${name}.prefab`), 'utf8'));
     const data = read('ZCGameHUD');
     const component = data.find((o: any) => o.mapViewport && o.mapLayer && o.artifactButton);
     for (const key of ['statLabel', 'hintLabel', 'artifactLabel', 'resetButton']) assert.ok(!(key in component));

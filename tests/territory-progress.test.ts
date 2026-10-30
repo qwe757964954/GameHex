@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { configureTerritoryMap } from '../assets/script/app/territory/model/TerritoryMapConfig';
 import { TerritoryProgress } from '../assets/script/app/territory/model/TerritoryProgress';
+import { assetUrl } from './helpers/asset-paths';
 
-const raw = JSON.parse(readFileSync(new URL('../assets/resources/config/territory-maps/chapter_01.json', import.meta.url), 'utf8'));
+const raw = JSON.parse(readFileSync(assetUrl('config/territory-maps/chapter_01.json'), 'utf8'));
 const map = configureTerritoryMap(raw);
 
 test('territory progress starts from the chapter foothold and follows map-defined site gates', () => {

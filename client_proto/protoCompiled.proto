@@ -4413,6 +4413,12 @@ message CmdPvpArtifactSelectRspMsg {
    required CmdPvpArtifactInfo info = 1;//神器
 }
 
+//pvp buff列表
+message CmdPvpBuffInfo {
+   required uint32 source  = 1;//来源
+   repeated string buffs   = 2;//[id,value,id,value]
+}
+
 // pvp信息
 message CmdPvpInfo {
    required uint32 grade  = 1;//段位
@@ -4475,6 +4481,9 @@ message CmdBattleUnitInfo {
    required uint32 artifactLevel     = 5;//神器等级
    required uint32 unitId            = 6;//单元id
    optional uint32 unitType          = 7;//单元类型,1玩家2机器人3怪物
+
+   //buff
+   repeated CmdPvpBuffInfo buffInfo  = 8;//buff   
 }
 
 // 请求战斗信息

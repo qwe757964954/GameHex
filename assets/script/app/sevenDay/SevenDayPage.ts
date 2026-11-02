@@ -14,7 +14,6 @@ import { SevenDayPageTab } from './SevenDayPageTab';
 import { SevenDayPointBox } from './SevenDayPointBox';
 import { SevenDayRewardRow } from './SevenDayRewardRow';
 import {
-    boxHasRedDot,
     boxProgressOf,
     boxStateOf,
     dayHasRedDot,
@@ -27,7 +26,7 @@ import {
     listRowsOfTab,
     shopStateOf,
     taskProgressText,
-    taskStateOf,
+    taskStateOf
 } from './SevenDayTable';
 import type { SevenDayListRow } from './SevenDayTable';
 import { SEVEN_DAY_TEXTS } from './SevenDayTexts';

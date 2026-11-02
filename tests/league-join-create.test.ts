@@ -948,7 +948,7 @@ test('E4 ⚠️ 加入页：刷新列表必须 defer 一帧（虚拟列表槽位
     assert.ok(/scheduleOnce|nextFrame|setTimeout|defer|setTimeoutFrame/i.test(before.slice(-1200)) ||
         /refreshList\s*\(\s*\)\s*\{[\s\S]{0,400}?scheduleOnce/.test(src),
         'refreshList 前要有让帧（本工程口径：defer 一帧，否则列表空白）');
-    assert.ok(src.includes('onJoined'), '加入成功后要回敲容器页');
+    assert.ok(src.includes('LeagueTabEvent.Joined'), '加入成功后通过事件通知容器');
 });
 
 test('E5 ⚠️ 创建页：勾选框同步 + 名字守卫 + 消耗两态换色 + 成功后关窗回敲', () => {

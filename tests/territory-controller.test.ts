@@ -20,7 +20,7 @@ function harness() {
         refreshWalletFromServer() { calls.push('wallet'); },
         applyPassCellsBro(chapter: number, ids: number[]) { calls.push(['pass', chapter, ids]); },
         applyCellInfoState(state: unknown) { calls.push(['cells', state]); },
-        focusCurrentBoss() { return 7; },
+        focusCurrentLevel() { return 7; },
     };
     const listeners = new Map<string, { caller: object; handler: (msg: unknown) => void }>();
     let cache: (() => void) | null = null;

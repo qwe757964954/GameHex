@@ -1,5 +1,8 @@
 import { _decorator, Component } from 'cc';
 
+import { VIEW_LIFECYCLE } from '../../framework/ui/ViewLifecycle';
+import { EventMgr } from '../../framework/event/EventMgr';
+
 const { ccclass } = _decorator;
 
 /**
@@ -70,4 +73,6 @@ export class StorePage extends Component {
      * 在编辑器里照样能跑（Windows 不敏感），真机上才会 `resources.load` 失败变空白页。
      */
     static prefabPath = 'ui/Store/Store';
+    onLoad(): void { EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'ready' }); }
+    onDestroy(): void { EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'destroyed' }); }
 }

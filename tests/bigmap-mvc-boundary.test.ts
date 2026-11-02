@@ -22,5 +22,5 @@ test('MVC：网络广播只在 Controller 绑定，仓库和 Model 不自行订�
     assert.match(controller, /bindNetworkEvents/);
     assert.match(controller, /bindModelEvents/);
     assert.match(controller, /bindUiEvents/);
-    assert.match(controller, /offTarget\(this\)/);
+    assert.match(controller, /this\.releaseInputs\(\)/);
 });

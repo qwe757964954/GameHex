@@ -11,7 +11,7 @@ export const TERRITORY_TEXTS = {
     // 加载态（2026-10-12 起不再有整页 LoadingPanel：本地存档先渲染、失败只 toast）
     loadingResourceMissing: '领地资源未就绪',
     loadingChapter: '领地数据加载中，请稍候',
-    noBossTarget: '暂无可定位的 Boss 关卡',
+    noLevelTarget: '暂无可定位的关卡',
     loadFailed: '领地数据加载失败\n请检查关卡与怪物卡牌配置',
 
     // 站点详情 - 状态

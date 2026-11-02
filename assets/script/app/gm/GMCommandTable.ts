@@ -5,6 +5,8 @@ import { ProcedureManager } from '../../framework/procedure/ProcedureManager';
 import { RequestGmList, RequestSystemGm } from '../generated/requestMsg/RequestSystemMsg';
 import { GameNet } from '../net/GameNet';
 import { GMUtils } from './GMUtils';
+import { EventMgr } from '../../framework/event/EventMgr';
+import { ZCGameUiEvent, type IZCDebugDrawCardResult } from '../zcds/view/ZCGameHudEvents';
 
 /** GM 指令项（对齐 client 的 { gm, desc } 结构）。 */
 export interface GMCommandDef {
@@ -53,6 +55,21 @@ export class GMCommandTable {
         GMCommandTable._serverList = [];
 
         // ===================== 本地指令 =====================
+        this.registerLocal('addBattleCard', (args) => {
+            if (args.length !== 3 || !/^\d+$/.test(args[1]) || !/^\d+$/.test(args[2])) {
+                GMCommandTable.tip('用法：addBattleCard <卡牌ID> <翻格次数>');
+                return;
+            }
+            let message = '请先进入战斗并完成出生点选择';
+            const onResult = (result: IZCDebugDrawCardResult) => { message = result.message; };
+            EventMgr.instance.on(ZCGameUiEvent.DebugDrawCardResult, onResult, GMCommandTable);
+            try {
+                EventMgr.instance.emit(ZCGameUiEvent.DebugDrawCard, { cardId: args[1], count: Number(args[2]) });
+            } finally {
+                EventMgr.instance.off(ZCGameUiEvent.DebugDrawCardResult, onResult, GMCommandTable);
+            }
+            GMCommandTable.tip(message);
+        });
         // 帧率（cc 2.x: cc.debug.setDisplayStats → 3.8: profiler.showStats/hideStats）
         this.registerLocal('fps', () => {
             if (profiler.isShowingStats()) profiler.hideStats();
@@ -124,25 +141,27 @@ export class GMCommandTable {
 
         // ===================== 指令列表 =====================
         GMCommandTable._list = [
-            { gm: '3经验 6钻石 7金币 8洗炼石 9体力 10充值币', desc: '常见资源ID（服务器指令）' },
-            { gm: 'addItem 10001 1', desc: '发道具、资源' },
-            { gm: 'add 10001 1', desc: '加道具（addItem 别名）' },
-            { gm: 'addGem 1000000 1 1', desc: '发宝石 resId 品质 数量' },
+            { gm: 'addBattleCard 68001 1', desc: '指定翻格卡' },
+            { gm: '3经验 6钻石 7金币', desc: '资源ID' },
+            { gm: '8洗炼石 9体力 10充值币', desc: '资源ID' },
+            { gm: 'addItem 10001 1', desc: '发道具资源' },
+            { gm: 'add 10001 1', desc: '发道具' },
+            { gm: 'addGem 1000000 1 1', desc: '发宝石' },
             { gm: 'addCoin 100000', desc: '加金币' },
             { gm: 'addDiamond 100000', desc: '加钻石' },
             { gm: 'addExp 100000', desc: '加经验' },
-            { gm: 'superRole', desc: '超级账号，加各种资源' },
+            { gm: 'superRole', desc: '超级账号' },
             { gm: 'consume 10001 1', desc: '消耗物品' },
-            { gm: 'clearRole', desc: '清号（服务器）' },
-            { gm: 'fps', desc: '本地：显示/隐藏帧率' },
-            { gm: 'hideLog', desc: '本地：关闭打印' },
-            { gm: 'log main', desc: '本地：切换日志开关' },
-            { gm: 'changeShowGoodsId', desc: '本地：显示/隐藏物品ID' },
-            { gm: 'hideGMEntrance', desc: '本地：隐藏GM入口' },
-            { gm: 'showGMEntrance', desc: '本地：显示GM入口' },
-            { gm: 'TestCloseSocket', desc: '本地：测试断Socket' },
-            { gm: 'TestReconnectSocket', desc: '本地：测试Socket重连' },
-            { gm: 'testLogin', desc: '本地：返回登录' },
+            { gm: 'clearRole', desc: '清号' },
+            { gm: 'fps', desc: '切换帧率' },
+            { gm: 'hideLog', desc: '关闭日志' },
+            { gm: 'log main', desc: '切换日志' },
+            { gm: 'changeShowGoodsId', desc: '切换物品ID' },
+            { gm: 'hideGMEntrance', desc: '隐藏GM入口' },
+            { gm: 'showGMEntrance', desc: '显示GM入口' },
+            { gm: 'TestCloseSocket', desc: '断开连接' },
+            { gm: 'TestReconnectSocket', desc: '重新连接' },
+            { gm: 'testLogin', desc: '返回登录' },
         ];
     }
 

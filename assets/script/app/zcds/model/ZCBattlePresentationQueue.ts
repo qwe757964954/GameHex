@@ -5,8 +5,7 @@ import type {
 } from './ZCGameTypes';
 import type { ZCOwner } from './ZCMapConfig';
 import {
-    HEX_FLIP_SECONDS,
-    HEX_PULSE_WAVE_SECONDS,
+    HEX_PULSE_WAVE_SECONDS
 } from '../../../core/hex/HexFlipPresentation';
 import {
     ZC_NEUTRAL_BURST_COUNT,
@@ -208,6 +207,8 @@ export interface IZCHitFxOptions {
     readonly now: number;
     readonly trait: ZCAttackTrait;
     readonly owner: ZCOwner;
+    /** 被打那一方的模型等比缩放（`pvpCard.prefabSize`）；缺省 1 = 保持 prefab 烘焙尺寸。 */
+    readonly targetScale?: number;
     readonly x: number;
     readonly y: number;
     readonly durationSeconds: number;
@@ -298,6 +299,10 @@ export class ZCBattlePresentationQueue {
             id: this.nextHitFxId++,
             trait: input.trait,
             owner: input.owner,
+            // 非有限值 / 非正数一律归 1：尺寸系数是渲染层直接乘进 `setScale` 的，
+            // 混进 NaN 会让节点缩放变成 NaN（整只特效消失，且不报错）。
+            targetScale: Number.isFinite(input.targetScale) && (input.targetScale as number) > 0
+                ? (input.targetScale as number) : 1,
             x: input.x,
             y: input.y,
             startedAt: input.now,

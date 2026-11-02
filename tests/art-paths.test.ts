@@ -180,7 +180,7 @@ test('匹配页图标按「页面大图 / 信息条小图标」分两个根目�
     assert.match(loader, /createIconLoader as createMatchIconLoader/);
     assertUsesArtPaths(readFileSync('assets/script/app/common/SpriteFrameCache.ts', 'utf8'), '公共图标加载器');
     assertUsesArtPaths(readFileSync('assets/script/app/matching/MatchPlayerItem.ts', 'utf8'), 'MatchPlayerItem');
-    assertUsesArtPaths(readFileSync('assets/script/app/procedure/ProcedureMatching.ts', 'utf8'), 'ProcedureMatching');
+    assertUsesArtPaths(readFileSync('assets/script/app/bootstrap/matching/MatchingComposition.ts', 'utf8'), 'ProcedureMatching');
 });
 
 /**

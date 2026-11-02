@@ -11,7 +11,7 @@ test('主界面实际绘制后统一预下载，世界和详情不额外解析�
         'units/effects/建筑死亡特效/建筑死亡特效', 'units/effects/受击特效/法师受击/法师受击']) {
         assert.ok((ZC_BATTLE_COMMON_PREFABS as readonly string[]).includes(path), path);
     }
-    const host = readFileSync('assets/script/app/main/MainTabHost.ts', 'utf8');
+    const host = readFileSync('assets/script/app/bootstrap/main/MainTabsComposition.ts', 'utf8');
     const world = readFileSync('assets/script/app/bigmap/application/BigMapEntry.ts', 'utf8');
     assert.match(host, /director\.once\(Director\.EVENT_AFTER_DRAW/);
     assert.ok(!world.includes('warmupBattle'));

@@ -1,0 +1,131 @@
+{
+  "__type__": "cc.AnimationClip",
+  "_name": "镭射飞龙_普攻-loop",
+  "_objFlags": 0,
+  "_native": "",
+  "sample": 26,
+  "speed": 1,
+  "wrapMode": 2,
+  "events": [],
+  "_duration": 0.7307692308,
+  "_keys": [],
+  "_stepness": 0,
+  "curveDatas": {},
+  "_curves": [],
+  "_commonTargets": [],
+  "_hash": 0,
+  "_tracks": [
+    {
+      "__type__": "cc.animation.ObjectTrack",
+      "_binding": {
+        "__type__": "cc.animation.TrackBinding",
+        "path": {
+          "__type__": "cc.animation.TrackPath",
+          "_paths": [
+            {
+              "__type__": "cc.animation.ComponentPath",
+              "component": "cc.Sprite"
+            },
+            "spriteFrame"
+          ]
+        },
+        "proxy": null
+      },
+      "_channel": {
+        "__type__": "cc.animation.Channel",
+        "_curve": {
+          "__type__": "cc.ObjectCurve",
+          "_times": [
+            0.0,
+            0.0384615385,
+            0.0769230769,
+            0.1153846154,
+            0.1538461538,
+            0.1923076923,
+            0.2307692308,
+            0.2692307692,
+            0.3076923077,
+            0.3461538462,
+            0.3846153846,
+            0.4230769231,
+            0.4615384615,
+            0.5,
+            0.5384615385,
+            0.5769230769,
+            0.6153846154,
+            0.6538461538,
+            0.6923076923
+          ],
+          "_values": [
+            {
+              "__uuid__": "72882e7f-db9f-4b48-b704-9c01f1860def@f9941"
+            },
+            {
+              "__uuid__": "baff162c-7e01-4661-95f8-81aa89d43e58@f9941"
+            },
+            {
+              "__uuid__": "fb827efd-d737-424b-aaae-cd1fff6462cd@f9941"
+            },
+            {
+              "__uuid__": "12063408-d4c7-4c98-abc2-838fbc5c642b@f9941"
+            },
+            {
+              "__uuid__": "171a8e48-1eba-4ac6-b7ea-24827b1ea05d@f9941"
+            },
+            {
+              "__uuid__": "f0b7681b-d070-4491-8dd7-21ad2b94133a@f9941"
+            },
+            {
+              "__uuid__": "a4797097-1b13-48f0-9e70-91fb1b0ce638@f9941"
+            },
+            {
+              "__uuid__": "a4aba0d9-bdd2-4984-a36e-8ddad6ce5877@f9941"
+            },
+            {
+              "__uuid__": "53375739-9f72-4492-9283-a5923b60f6fd@f9941"
+            },
+            {
+              "__uuid__": "fe069132-277d-4a98-aa0e-887be89a7c41@f9941"
+            },
+            {
+              "__uuid__": "ead436f7-2659-43a6-9664-84af731dec8f@f9941"
+            },
+            {
+              "__uuid__": "1a7f6c61-2051-43be-b6b3-52f52e60432e@f9941"
+            },
+            {
+              "__uuid__": "7f79c26f-1053-4fb2-9dea-83c4482063d7@f9941"
+            },
+            {
+              "__uuid__": "fe15201a-8a95-46b7-93ba-b178f9d261b1@f9941"
+            },
+            {
+              "__uuid__": "470d2087-eebc-4b2b-afbb-37a9eb74278c@f9941"
+            },
+            {
+              "__uuid__": "452e795e-c17b-44f3-8981-de365e0eb3f5@f9941"
+            },
+            {
+              "__uuid__": "0cd4695e-06e8-42da-a7eb-a35c133eea25@f9941"
+            },
+            {
+              "__uuid__": "e0285b2b-4b42-46b6-b299-e038d8d3c40e@f9941"
+            },
+            {
+              "__uuid__": "70f3ac22-1ec2-4abb-974d-47086a27f0fa@f9941"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "_exoticAnimation": null,
+  "_events": [],
+  "_embeddedPlayers": [],
+  "_additiveSettings": {
+    "__type__": "cc.AnimationClipAdditiveSettings",
+    "enabled": false,
+    "refClip": null
+  },
+  "_auxiliaryCurveEntries": []
+}

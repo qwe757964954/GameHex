@@ -45,7 +45,7 @@ import {
     bindTerritoryBattleStages,
     bindTerritoryStages,
     expandBindingsToAreaSites,
-    findCurrentTerritoryBoss,
+    findCurrentTerritoryLevel,
     territoryChapterCompletion,
 } from '../model/TerritoryStageBinding';
 import type { TerritoryCellFetchResult, TerritoryStartBattleResult, TerritoryWriteResult } from './TerritoryCellRepository';
@@ -566,17 +566,24 @@ export class TerritoryModel {
     // intents
     // ============================================================
 
-    /** 快速寻敌只选中详情并返回定位格，不调用点击站点的解锁 / 开战流程。 */
-    focusCurrentBoss(): number | null {
+    /**
+     * 快速寻敌：选中**当前章节关卡链上「推进到的那一关」**（选点真源 `findCurrentTerritoryLevel`），
+     * 返回定位格给视图滚屏。
+     *
+     * 2026-10-31 用户口径：「跳到当前章节地图上最新一个未通过的关卡，如果没有未通过的关卡，
+     * 就打开已通过的关卡」—— 所以目标从「Boss」放宽成「整条关卡链」，全部通关才退回最高关。
+     * 只开详情，**不**走点击站点的解锁 / 开战流程；镜头仍是既有的 `focusCell` 命令链，一行没动。
+     */
+    focusCurrentLevel(): number | null {
         if (this.startingBattle || this.busyCount > 0) return null;
         if (!this.map || !this.progress || this.map.chapterId !== this.currentChapterId) {
             this.showTip(TERRITORY_TEXTS.loadingChapter);
             return null;
         }
-        const target = findCurrentTerritoryBoss(this.map.sites, this.stageByCell, this.progress);
+        const target = findCurrentTerritoryLevel(this.map.sites, this.stageByCell, this.progress);
         if (!target) {
             this.closeDetail();
-            this.showTip(TERRITORY_TEXTS.noBossTarget);
+            this.showTip(TERRITORY_TEXTS.noLevelTarget);
             return null;
         }
         this.cancelInteraction();
@@ -1285,23 +1292,33 @@ export class TerritoryModel {
                 return;
             }
         }
-        void this.loadChapter(nextChapter);
+        void this.loadChapter(nextChapter, false);
+    }
+
+    private advanceCompletedChapter(): void {
+        if (this.loadingPushes || !this.chapterCompletion().complete) return;
+        const index = this.ports.availableChapters.indexOf(this.currentChapterId);
+        const nextChapter = index >= 0 ? this.ports.availableChapters[index + 1] : undefined;
+        if (nextChapter !== undefined) void this.loadChapter(nextChapter);
     }
 
     /** 1 秒拍：仅在有探索进行时工作；探索到期且无新占领时早退（与旧 tickProgress 口径一致）。 */
     fastTick(now: number): void {
         if (this.loadingPushes || !this.progress || !this.progress.activeExplorations.length) return;
+        const wasComplete = this.chapterCompletion().complete;
         if (!this.settleProgress(now).length) return;
         const idle = this.settleIdleRewards(now);
         this.ensureRandomResources();
         this.persistProgress();
         this.emitStateChange();
         if (idle?.rewards.length) this.showRewards(idle.rewards);
+        if (!wasComplete) this.advanceCompletedChapter();
     }
 
     /** 60 秒拍：每拍都结算探索与挂机产出（与旧 tickIdleRewards 口径一致）。 */
     slowTick(now: number): void {
         if (this.loadingPushes) return;
+        const wasComplete = this.chapterCompletion().complete;
         const claimed = this.settleProgress(now);
         const idle = this.settleIdleRewards(now);
         const randomChanged = this.ensureRandomResources();
@@ -1311,13 +1328,14 @@ export class TerritoryModel {
         }
         if (idle?.rewards.length) this.showRewards(idle.rewards);
         void this.reportPendingPasses();
+        if (!wasComplete) this.advanceCompletedChapter();
     }
 
     // ============================================================
     // 章节加载
     // ============================================================
 
-    private async loadChapter(chapterId: number): Promise<void> {
+    private async loadChapter(chapterId: number, autoAdvance = true): Promise<void> {
         const { loader, gateway, store, lifecycleHost } = this.ports;
         const pushes: ITerritoryChapterPushes = this.loadId === 0
             && this.loadingPushes?.chapterId === chapterId
@@ -1410,6 +1428,8 @@ export class TerritoryModel {
         };
         this.chapter = context;
         this.loadingPushes = null;
+        const wasComplete = this.chapterCompletion().complete;
+        const returningFromBattle = saveState.battle !== null && saveState.battle !== undefined;
         this.refreshWalletFromServer(false);
         // 推送早于地图就绪时，先落地再发布首屏；拉取失败也不会丢失已确认状态。
         if (pushes.cellInfo) this.mergeCellInfo(context, pushes.cellInfo);
@@ -1437,6 +1457,8 @@ export class TerritoryModel {
         this.emitStateChange();
         if (idle?.rewards.length) this.showRewards(idle.rewards);
         void this.reportPendingPasses();
+        // 手动回看只展示旧章；战斗返回或新同步的通关结果才自动推进。
+        if (autoAdvance && (!wasComplete || returningFromBattle)) this.advanceCompletedChapter();
     }
 
     /**
@@ -1469,7 +1491,9 @@ export class TerritoryModel {
         }
         const context = this.chapter;
         if (!context || chapterId !== context.map.chapterId) return;
+        const wasComplete = this.chapterCompletion().complete;
         if (this.mergePassCells(context, cellIds)) this.emitStateChange();
+        if (!wasComplete) this.advanceCompletedChapter();
     }
 
     private mergePassCells(context: ITerritoryChapterContext, cellIds: readonly number[]): boolean {
@@ -1519,7 +1543,9 @@ export class TerritoryModel {
         }
         const context = this.chapter;
         if (!context || chapterId !== context.map.chapterId) return;
+        const wasComplete = this.chapterCompletion().complete;
         if (this.mergeCellInfo(context, state)) this.emitStateChange();
+        if (!wasComplete) this.advanceCompletedChapter();
     }
 
     private mergeCellInfo(context: ITerritoryChapterContext, state: ITerritoryCellState): boolean {

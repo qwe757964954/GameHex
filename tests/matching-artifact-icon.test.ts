@@ -99,7 +99,7 @@ test('匹配 prefab 不再硬绑那张占位神器图', () => {
 // ⚠️ 这类 bug 单测测不出来（测试环境不跑网络），只能靠"断言源码不出现那条读法"钉死。
 
 test('我方神器不得读从未订阅的 CmdArtifact 推送缓存（那条恒为空 ⇒ 图标永远空白）', () => {
-    const src = readFileSync('assets/script/app/procedure/ProcedureMatching.ts', 'utf8');
+    const src = readFileSync('assets/script/app/bootstrap/matching/MatchingComposition.ts', 'utf8');
     // 反例断言先剥注释（规则 104）：解释根因的注释里会提到这个方法名。
     const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
     assert.ok(
@@ -108,7 +108,7 @@ test('我方神器不得读从未订阅的 CmdArtifact 推送缓存（那条恒�
         + 'getTlCmdArtifact 是未订阅的推送缓存，恒为空 ⇒ artifactIcon 永远拿不到值',
     );
     // 正向：确实走了 applyUnitToPlayerView 这条合并点。
-    assert.match(code, /applyUnitToPlayerView\(withPvp,\s*this\.selfUnit,\s*this\.profileLookup\)/,
+    assert.match(readFileSync('assets/script/app/matching/MatchingModel.ts', 'utf8'), /applyUnitToPlayerView\(withPvp,\s*teams\?\.mine \?\? null,\s*this\.lookup\)/,
         '我方神器应由 refreshMineView 的 applyUnitToPlayerView 统一合并上屏');
 });
 
@@ -127,7 +127,7 @@ test('预热走全表图标名：按 id 预热必然查不到（本局神器 id 
         ['同一张'],
     );
 
-    const src = readFileSync('assets/script/app/procedure/ProcedureMatching.ts', 'utf8');
+    const src = readFileSync('assets/script/app/bootstrap/matching/MatchingComposition.ts', 'utf8');
     assert.match(src, /preloadMatchIcons\(\s*lookup\.allArtifactIcons\(\),\s*ARTIFACT_ART_ROOT/,
         '匹配页预热必须用 allArtifactIcons() 全表预热，否则我方神器图标要等 onDemand 晚一帧');
 });

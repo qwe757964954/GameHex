@@ -113920,7 +113920,6 @@ $root.com = (function() {
                      * @interface ISlgCampSimpleInfo
                      * @property {number} campId SlgCampSimpleInfo campId
                      * @property {number} opType SlgCampSimpleInfo opType
-                     * @property {number} state SlgCampSimpleInfo state
                      */
 
                     /**
@@ -113955,14 +113954,6 @@ $root.com = (function() {
                     SlgCampSimpleInfo.prototype.opType = 0;
 
                     /**
-                     * SlgCampSimpleInfo state.
-                     * @member {number} state
-                     * @memberof com.xkhy.tafang.cmd.SlgCampSimpleInfo
-                     * @instance
-                     */
-                    SlgCampSimpleInfo.prototype.state = 0;
-
-                    /**
                      * Creates a new SlgCampSimpleInfo instance using the specified properties.
                      * @function create
                      * @memberof com.xkhy.tafang.cmd.SlgCampSimpleInfo
@@ -113992,7 +113983,6 @@ $root.com = (function() {
                             throw Error("max depth exceeded");
                         writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.campId);
                         writer.uint32(/* id 2, wireType 0 =*/16).uint32(message.opType);
-                        writer.uint32(/* id 3, wireType 0 =*/24).uint32(message.state);
                         return writer;
                     };
 
@@ -114028,10 +114018,6 @@ $root.com = (function() {
                                     message.opType = reader.uint32();
                                     break;
                                 }
-                            case 3: {
-                                    message.state = reader.uint32();
-                                    break;
-                                }
                             default:
                                 reader.skipType(tag & 7, long);
                                 break;
@@ -114041,8 +114027,6 @@ $root.com = (function() {
                             throw $util.ProtocolError("missing required 'campId'", { instance: message });
                         if (!message.hasOwnProperty("opType"))
                             throw $util.ProtocolError("missing required 'opType'", { instance: message });
-                        if (!message.hasOwnProperty("state"))
-                            throw $util.ProtocolError("missing required 'state'", { instance: message });
                         return message;
                     };
 
@@ -114072,7 +114056,8 @@ $root.com = (function() {
                      * @interface ISlgCampInfo
                      * @property {number} campId SlgCampInfo campId
                      * @property {number} opType SlgCampInfo opType
-                     * @property {number} state SlgCampInfo state
+                     * @property {Long|null} [occupyRoleId] SlgCampInfo occupyRoleId
+                     * @property {string|null} [occupyRoleName] SlgCampInfo occupyRoleName
                      */
 
                     /**
@@ -114107,12 +114092,20 @@ $root.com = (function() {
                     SlgCampInfo.prototype.opType = 0;
 
                     /**
-                     * SlgCampInfo state.
-                     * @member {number} state
+                     * SlgCampInfo occupyRoleId.
+                     * @member {Long} occupyRoleId
                      * @memberof com.xkhy.tafang.cmd.SlgCampInfo
                      * @instance
                      */
-                    SlgCampInfo.prototype.state = 0;
+                    SlgCampInfo.prototype.occupyRoleId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+                    /**
+                     * SlgCampInfo occupyRoleName.
+                     * @member {string} occupyRoleName
+                     * @memberof com.xkhy.tafang.cmd.SlgCampInfo
+                     * @instance
+                     */
+                    SlgCampInfo.prototype.occupyRoleName = "";
 
                     /**
                      * Creates a new SlgCampInfo instance using the specified properties.
@@ -114144,7 +114137,10 @@ $root.com = (function() {
                             throw Error("max depth exceeded");
                         writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.campId);
                         writer.uint32(/* id 2, wireType 0 =*/16).uint32(message.opType);
-                        writer.uint32(/* id 3, wireType 0 =*/24).uint32(message.state);
+                        if (message.occupyRoleId != null && Object.hasOwnProperty.call(message, "occupyRoleId"))
+                            writer.uint32(/* id 3, wireType 0 =*/24).uint64(message.occupyRoleId);
+                        if (message.occupyRoleName != null && Object.hasOwnProperty.call(message, "occupyRoleName"))
+                            writer.uint32(/* id 4, wireType 2 =*/34).string(message.occupyRoleName);
                         return writer;
                     };
 
@@ -114181,7 +114177,11 @@ $root.com = (function() {
                                     break;
                                 }
                             case 3: {
-                                    message.state = reader.uint32();
+                                    message.occupyRoleId = reader.uint64();
+                                    break;
+                                }
+                            case 4: {
+                                    message.occupyRoleName = reader.string();
                                     break;
                                 }
                             default:
@@ -114193,8 +114193,6 @@ $root.com = (function() {
                             throw $util.ProtocolError("missing required 'campId'", { instance: message });
                         if (!message.hasOwnProperty("opType"))
                             throw $util.ProtocolError("missing required 'opType'", { instance: message });
-                        if (!message.hasOwnProperty("state"))
-                            throw $util.ProtocolError("missing required 'state'", { instance: message });
                         return message;
                     };
 

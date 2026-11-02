@@ -99,7 +99,6 @@ export class World extends ScriptObject {
     private entityVer: number[] = [0]
 
     private isModify:boolean = false
-    private lastRemove:number = 0
 
     //记录新增EntityId
     protected addSet: Set<number> = new Set<number>()

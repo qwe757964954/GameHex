@@ -1,16 +1,16 @@
 /**
  * 当日战绩快照 —— **纯规则，零 `cc`、零 `Date`**。
  *
- * 文档口径：每日 21:00 锁榜、22:00 出快照。快照本身是**客观可算的**那一半：
+ * 文档口径：每日 21:00 锁榜、21:10 停攻、21:30 结算完成出快照。快照本身是**客观可算的**那一半：
  * 把「今天打完的最终名次与战功」定格下来，供次日展示、也为将来的收益发放留位置。
  *
  * ⚠️ 刻意**不做**的两件事（口径未定，别在这里自作主张）：
- * 1. **不发奖**：文档只写了 22:00 推 `PushBigMapSnapshot{当日收益}`，「收益从哪来」没有定义，
+ * 1. **不发奖**：文档只写了 21:30 推 `PushBigMapSnapshot{当日收益}`，「收益从哪来」没有定义，
  *    所以快照只记录成绩，不折算成资源；
  * 2. **不清战功**：「战功何时重置」在文档里没有唯一答案（占领后清零是已知规则，按日重置未定），
  *    快照只做记录，不碰 `battle.cityWarScore`。
  *
- * 快照的幂等键是「业务日序号」：同一天只会出一份，22:00 不在线的话，次日凌晨上线补出
+ * 快照的幂等键是「业务日序号」：同一天只会出一份，21:30 不在线的话，次日凌晨上线补出
  * 的仍是**昨天**那一份（见 `bigMapSnapshotDay`）。
  */
 import type { IBigMapBattleProgress } from './BigMapBattle';
@@ -25,7 +25,7 @@ export interface IBigMapCityDayScore {
     readonly warScore: number;
 }
 
-/** 当日快照：22:00 定格，次日展示用。 */
+/** 当日快照：21:30 定格，次日展示用。 */
 export interface IBigMapDaySnapshot {
     /** 业务日序号，用来做「一天只出一份」的幂等键。 */
     readonly day: number;
@@ -48,7 +48,7 @@ export function bigMapLocalDay(schedule: IBigMapCitySchedule, nowSeconds: number
 /**
  * 这一刻生成的快照属于**哪一天**的战绩。
  *
- * 22:00 之后到午夜 = 今天的；午夜到次日 09:00 = 昨天的（那时今天的攻城还没开始）。
+ * 21:30 之后到午夜 = 今天的；午夜到次日 09:00 = 昨天的（那时今天的攻城还没开始）。
  */
 export function bigMapSnapshotDay(schedule: IBigMapCitySchedule, nowSeconds: number): number {
     const timeline = bigMapCityTimeline(schedule, nowSeconds);
@@ -60,7 +60,7 @@ export function bigMapSnapshotDay(schedule: IBigMapCitySchedule, nowSeconds: num
 /**
  * 现在是否该出快照。
  *
- * 只在「过了 22:00 快照点」或「次日开战前」为真；09:00~22:00 一律为假，
+ * 只在「过了 21:30 快照点」或「次日开战前」为真；09:00~21:30 一律为假，
  * 免得白天每帧 tick 都去算一份半成品。
  */
 export function bigMapSnapshotDue(

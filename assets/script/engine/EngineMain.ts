@@ -1,5 +1,5 @@
 
-import {view, _decorator, macro} from 'cc';
+import {view, macro} from 'cc';
 import * as env from 'cc/env';
 
 export type saveType = boolean | string | number;

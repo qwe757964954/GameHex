@@ -71,15 +71,12 @@ import {
     leagueNorthResetRemainSec,
 } from './LeagueTable';
 import {
-    LEAGUE_NORTH_BTN_CHALLENGE,
-    LEAGUE_NORTH_BTN_DRUM,
-    LEAGUE_NORTH_BTN_SWEEP,
     LEAGUE_NORTH_DRUM_LIMIT,
     LEAGUE_NORTH_HELP_ID,
     LEAGUE_NORTH_REMAIN_TIME_TEMPLATE,
     LEAGUE_TIP_FAILED,
     LEAGUE_TIP_OFFLINE,
-    fillLeagueText,
+    fillLeagueText
 } from './LeagueTexts';
 
 const { ccclass, property } = _decorator;

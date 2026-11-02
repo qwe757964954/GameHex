@@ -25,8 +25,15 @@ import {
 export interface IBigMapUnlockContext {
     /** 冒险玩法已通关章节数（`TerritorySaveStoreAdapter.loadLastChapter` 的口径：0 表示一章都没过）。 */
     readonly adventureChapter: number;
-    /** 开服天数，0 起（本期单机版恒为 0，联机版由服务器下发）。 */
-    readonly openDay: number;
+    /**
+     * 开服天数（1 起，开服当天 = 1）。
+     *
+     * ⚠️ **可选**：`undefined` = 服务器还没下发这个字段，此时**不参与任何解锁判定**
+     * （2026-10-30 山猫口径：「开服天数先打开，待服务器有，再做控制」）。
+     * 协议 `SlgGameInfo` 目前只有 `maxMonsterLevel` / `toCampId`，没有开服天数 ——
+     * 等后端补字段后，只要 `BigMapEntry` 把 `deps.openDay` 传进来就自动生效，不用回来改判定。
+     */
+    readonly openDay?: number;
     /** 已占领的城池 id 集合。 */
     readonly occupiedCityIds: ReadonlySet<number>;
     /** 已通关的最高野怪等级（0 = 一只都没打）。 */
@@ -55,7 +62,10 @@ export function bigMapBuildingUnlock(
     // 否则「装饰雕像（积分购买）」会因 0 > adventureChapter 为假而被当成已解锁。
     if (building.unlockType === 2) {
         const day = Math.max(0, building.unlockParam);
-        if (context.openDay < day) return bigMapLocked(`开服第 ${day} 天解锁`);
+        // 同样：没拿到开服天数（`undefined`）就先放行，等服务器有字段再控制。
+        if (context.openDay !== undefined && context.openDay < day) {
+            return bigMapLocked(`开服第 ${day} 天解锁`);
+        }
         return OK;
     }
     if (building.unlockType === 3) {
@@ -86,7 +96,13 @@ export function bigMapUpgradeUnlock(config: IBigMapConfig, context: IBigMapUnloc
     return OK;
 }
 
-/** 城池解锁：`available`（本期开放层）→ 已占领 → 章节 → 开服天数 → 前置城池。 */
+/**
+ * 城池解锁：`available`（本期开放层）→ 已占领 → 章节 → 开服天数 → 前置城池。
+ *
+ * ⚠️ **联机档不以这个函数判「可不可打」**：服务器 `SlgCampSimpleInfo` 只给
+ * `opType`（有没有人占），能下发说明该据点已开放，未占领即可打 —— 判据在
+ * `BigMapModel.cityView` / `resolveCampAttackReason`。这里只服务离线档与回退路径。
+ */
 export function bigMapCityState(city: IBigMapCityConfig, context: IBigMapUnlockContext): BigMapCityState {
     if (!city.available) return 'unavailable';
     if (context.occupiedCityIds.has(city.cityId)) return 'occupied';
@@ -99,8 +115,11 @@ export function bigMapCityUnlock(city: IBigMapCityConfig, context: IBigMapUnlock
     if (context.adventureChapter < city.unlockChapter) {
         return bigMapLocked(`通关冒险第 ${city.unlockChapter} 章解锁`);
     }
-    if (context.openDay < city.openDay) {
-        return bigMapLocked(`开服第 ${city.openDay + 1} 天开放`);
+    // 开服天数没拿到（`undefined`）就**不控制**，城池按章节 / 前置城池放行 ——
+    // 服务器还没下发这个字段，先打开（2026-10-30 山猫口径）。字段到位后自动生效。
+    // 文案按「1 起、开服当天 = 1」写，与 `bigMapCamp.openDay` 的配表和详情面板保持一致。
+    if (context.openDay !== undefined && context.openDay < city.openDay) {
+        return bigMapLocked(`开服第 ${city.openDay} 天开放`);
     }
     if (city.prevCityId !== 0 && !context.occupiedCityIds.has(city.prevCityId)) {
         return bigMapLocked('需先占领前置城池');

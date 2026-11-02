@@ -1,6 +1,8 @@
 import { _decorator, Button, Component, Label, Node, Prefab, SpriteFrame } from 'cc';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
-import { ComponentController } from '../../framework/controller/ComponentController';
+import type { IControllerResources } from '../../framework/controller/ControllerBase';
+import { VIEW_LIFECYCLE } from '../../framework/ui/ViewLifecycle';
+
 import { ResourceScope } from '../../core/asset/ResourceScope';
 import type { ZCDeckBonuses, ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
 import { cardArtProvider } from './CardArtProvider';
@@ -12,18 +14,14 @@ import type { CardLineupData } from './CardRepository';
 import { CardLineupSlot } from './CardLineupSlot';
 import type { ZCSlotFrames } from './CardLineupSlot';
 import { CARD_LINEUP_TEXTS } from './CardLineupTexts';
-import { CardUpgradePage } from './CardUpgradePage';
 import { CardUnitPreviewAssets } from './CardUnitPreviewAssets';
-import type { ICardUpgradeOpenData } from './CardUpgradePage';
 import {
     activeBondTitle,
     bondPercentTotal,
     visibleIconTallies,
 } from './CardLineupTypes';
 import type { ZCCardTally } from './CardLineupTypes';
-import { LineupBoardPage } from './LineupBoardPage';
-import { CardLineupEvent } from './CardLineupEvents';
-import type { ICardDeckSavedPayload, IHeroUpgradedPayload } from './CardLineupEvents';
+import { CardLineupUiEvent, type ICardLineupRender } from './CardLineupEvents';
 import { EventMgr } from '../../framework/event/EventMgr';
 
 const { ccclass, property } = _decorator;
@@ -77,11 +75,10 @@ interface IPreparedIcons {
  */
 @ccclass('CardLineupPage')
 export class CardLineupPage extends Component {
-    /** 取数轮次：`bootstrap()` 的快照那次与 `refresh()` 的权威值那次会交错，用它丢掉过期结果。 */
-    private lineupRevision = 0;
-    private readonly controller = new ComponentController('card-lineup-preview');
-    private get previewScope(): ResourceScope { return this.controller.scope; }
-    private get assets() { return this.controller.resources.assets; }
+    private presentationResources: IControllerResources = null!;
+    initialize(resources: IControllerResources): void { this.presentationResources = resources; }
+    private get previewScope(): ResourceScope { return this.presentationResources.scope; }
+    private get assets() { return this.presentationResources.assets; }
     private previewAssets: CardUnitPreviewAssets<Prefab> | null = null;
 
     /**
@@ -159,15 +156,9 @@ export class CardLineupPage extends Component {
         this.bondTitleLabel.string = CARD_LINEUP_TEXTS.bondBonusTitle;
         this.powerLabel.string = String(Math.max(0, Math.floor(this.previewPower)));
         this.bindTeamEdit();
-        //  布阵面板保存成功 → 重刷本页（`onDeckSaved`）；卡升级成功 → 回写等级 + 重刷
-        //  （`onHeroUpgraded`）。订阅必须在 `onDestroy` 里摘掉 —— `EventMgr` 是全局单例，
-        //  页面是切 tab 就销毁重建的，不摘就会留着旧实例被回调。
-        EventMgr.instance.on(CardLineupEvent.DeckSaved, this.onDeckSaved, this);
-        EventMgr.instance.on(CardLineupEvent.HeroUpgraded, this.onHeroUpgraded, this);
-        //  先把 8 个站台收起，再开始取数：prefab 的默认外观（8 个同款雕像 + 「3级」）
-        // 是**假数据**，一帧都不该露出来。`start()` 在首帧渲染之前跑，所以这里来得及。
         this.renderLoading();
-        void this.bootstrap();
+        EventMgr.instance.on(CardLineupUiEvent.Render, this.onLineupRender, this);
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'ready' });
     }
 
     /**
@@ -177,11 +168,11 @@ export class CardLineupPage extends Component {
      * 静默校正 —— 空窗从「假阵容」变成「旧阵容」。没快照（首次安装 / 过期 / 存坏）就
      * 老老实实停在空台，等 `refresh()` 画真实阵容。
      */
-    private async bootstrap(): Promise<void> {
-        const snapshot = cardRepository.loadLineupSnapshot();
-        if (snapshot) await this.presentLineup(snapshot);
-        await this.refresh();
-    }
+    private readonly onLineupRender = (event: ICardLineupRender): void => {
+        if (event.owner === this) void this.presentLineup(event.data).catch(error => {
+            if (this.isValid) console.warn('[CardLineup] 渲染失败', error);
+        });
+    };
 
     /** 数据没到时的空台：8 个站台一律收起，不留任何「上一次渲染」的残留。 */
     private renderLoading(): void {
@@ -192,8 +183,7 @@ export class CardLineupPage extends Component {
         EventMgr.instance.offTarget(this);
         this.presentRevision += 1;
         this.arenaSlotCache = null;
-        this.controller.dispose();
-        this.lineupRevision += 1;
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'destroyed' });
     }
 
     /** 「队伍编辑」入口：字段直接绑 `cc.Button`，CLICK 仍挂在**节点**上（Button 自己没有 `on`）。 */
@@ -208,26 +198,10 @@ export class CardLineupPage extends Component {
      *  （`PopupDef.onClose` 只有一个 `reason`，装不下业务结果）。
      */
     private onTeamEditClick(): void {
-        void LineupBoardPage.open();
+        EventMgr.instance.emit(CardLineupUiEvent.Intent, { owner: this, kind: 'edit' });
     }
 
-    /** 布阵保存成功：本页八卡读的是「选中阵型」，而保存会把它置为选中，所以必须重刷。 */
-    private onDeckSaved(_payload: ICardDeckSavedPayload): void {
-        //  不判存活：订阅在 `onDestroy` 里摘掉了，页面没了就收不到这条。
-        void this.refresh();
-    }
-
-    /**
-     * 取一次权威阵容并渲染。
-     *
-     *  `lineupRevision` 挡「快照那次」与「这次权威值」的先后 —— 慢的那次回来不许覆盖快的。
-     */
-    async refresh(): Promise<void> {
-        const revision = ++this.lineupRevision;
-        const data = await cardRepository.loadLineup(this.autoLoadDecks);
-        if (revision !== this.lineupRevision) return;
-        await this.presentLineup(data);
-    }
+    refresh(): void { EventMgr.instance.emit(CardLineupUiEvent.Intent, { owner: this, kind: 'refresh' }); }
 
     /**
      * 页面唯一的写节点入口：只渲染，不取数。
@@ -255,7 +229,7 @@ export class CardLineupPage extends Component {
             cards.length > 0 ? this.preparePool(cards, deployedIds) : Promise.resolve(null),
             this.prepareIcons(deck),
         ]);
-        if (revision !== this.presentRevision) return;
+        if (!this.isValid || revision !== this.presentRevision) return;
 
         this.commitSlots(slots);
         if (pool) this.commitPool(pool);
@@ -372,7 +346,7 @@ export class CardLineupPage extends Component {
         // 按下-抬起位移判定，滑动列表不会误触发）。
         this.cardGrid.onItemClickFn = (_node, index) => {
             const card = cards[index];
-            if (card) void this.openUpgrade(card);
+            if (card) EventMgr.instance.emit(CardLineupUiEvent.Intent, { owner: this, kind: 'upgrade', card });
         };
         this.cardGrid.refreshList(cards.length);
     }
@@ -384,31 +358,6 @@ export class CardLineupPage extends Component {
      * `onHeroUpgraded` 里订阅（见 `start()`）。这样弹窗不需要知道外面谁想听，
      * 也不会出现「漏传回调 ⇒ 升级完页面等级不更新且零报错」。
      */
-    private async openUpgrade(card: ZCDeckCard): Promise<void> {
-        await CardUpgradePage.open({
-            userData: {
-                card,
-                cardId: card.id,
-                level: this.levelOf(card),
-            } satisfies ICardUpgradeOpenData,
-        });
-    }
-
-    /**
-     * 升级成功的回写：先把新等级塞进本页缓存（布阵面板不再发包，不补这一步它那边还是旧等级），
-     * 再整页重刷一次。
-     *
-     * 重刷会**重新向后端要一次英雄列表**（`fetchPvpHeroInfos` 不做缓存命中），
-     * 拿到的就是权威值；上面那步是给「不走本页重刷」的调用方兜底。
-     */
-    private onHeroUpgraded(payload: IHeroUpgradedPayload): void {
-        const next = new Map(this.heroLevels);
-        next.set(String(payload.heroId), payload.level);
-        this.heroLevels = next;
-        //  同上：事件订阅已随 `offTarget` 摘掉，这里不用再判存活。
-        void this.refresh();
-    }
-
     /** 金矿等非英雄卡没有后端等级，继续使用 prefab 上的兜底值。 */
     private levelOf(card: ZCDeckCard): number {
         const level = this.heroLevels.get(card.id);

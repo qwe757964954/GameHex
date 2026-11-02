@@ -22,9 +22,7 @@ import {
     TERRITORY_GAIN_READOUT_LIFT_PX,
     TERRITORY_GAIN_STACK_GAP_PX,
     TERRITORY_GAIN_START_LIFT_PX,
-    TERRITORY_SILVER_RES_ID,
-    TERRITORY_STAMINA_RES_ID,
-    territoryBurstCountForTotal,
+    territoryBurstCountForTotal
 } from '../model/TerritoryResourceGain';
 import { TerritoryResourceGainView } from './TerritoryResourceGainView';
 import { TerritoryGainBurst, TERRITORY_GAIN_BURST_NODE } from './TerritoryGainBurst';

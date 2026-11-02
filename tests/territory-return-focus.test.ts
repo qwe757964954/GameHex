@@ -57,11 +57,12 @@ test('ProcedureMain：入口参数转发到宿主，且早于 setParent', () => 
 test('MainTabHost：焦点格交页面前取走并清空（单次消费）', () => {
     const source = host();
     assert.match(source, /focusCellId: \{ readonly chapterId: number; readonly cellId: number \} \| null = null;/);
-    const showPage = source.slice(source.indexOf('private showPage('));
-    const take = showPage.indexOf('const focus = this.focusCellId;');
-    const clear = showPage.indexOf('this.focusCellId = null;');
-    const push = showPage.indexOf('mainTerritoryMap.setFocusCell(focus.chapterId, focus.cellId)');
-    const parentAt = showPage.indexOf('page.setParent(this.content)');
+    const composition = readFileSync('assets/script/app/bootstrap/main/MainTabsComposition.ts', 'utf8');
+    const showPage = composition.slice(composition.indexOf('private showPage('));
+    const take = showPage.indexOf('const focus = this.host.focusCellId;');
+    const clear = showPage.indexOf('this.host.focusCellId = null;');
+    const push = showPage.indexOf('map.setFocusCell(focus.chapterId, focus.cellId)');
+    const parentAt = showPage.indexOf('this.host.mountPage(node)');
     assert.ok(take > 0 && clear > take, '取走之后必须置空，否则切 tab 回来又跳一次');
     assert.ok(push > clear && parentAt > push, '注入要早于 setParent（页面 onLoad 之前）');
 });

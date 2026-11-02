@@ -234,13 +234,17 @@ test('城池解锁是「章节 + 开服天数 + 前置已占领」三重条件',
     assert.equal(bigMapCityState(second, makeUnlockContext({
         adventureChapter: 3, occupiedCityIds: new Set([101]),
     })), 'open');
-    // 开服天数不够 → 锁（103 需要第 2 天）。
+    // 🔴 开服天数**没拿到**（`undefined`）就不控制 —— 服务器 `SlgGameInfo` 还没有这个字段，
+    // 所以章节 + 前置城池够就放行（2026-10-30 山猫口径「先打开待服务器有，再做控制」）。
     assert.equal(bigMapCityState(late, makeUnlockContext({
+        adventureChapter: 4, occupiedCityIds: new Set([101, 102]),
+    })), 'open', '没给开服天数时不该被锁');
+    // 服务器给了天数才开始控制（1 起、开服当天 = 1）：103 需要第 1 天，给 0 就该锁。
+    const notYet = makeUnlockContext({
         adventureChapter: 4, occupiedCityIds: new Set([101, 102]), openDay: 0,
-    })), 'locked');
-    assert.match(bigMapCityUnlock(late, makeUnlockContext({
-        adventureChapter: 4, occupiedCityIds: new Set([101, 102]), openDay: 0,
-    })).reason, /开服/);
+    });
+    assert.equal(bigMapCityState(late, notYet), 'locked');
+    assert.match(bigMapCityUnlock(late, notYet).reason, /开服第 1 天/);
     assert.equal(bigMapCityState(late, makeUnlockContext({
         adventureChapter: 4, occupiedCityIds: new Set([101, 102]), openDay: 1,
     })), 'open');

@@ -9,7 +9,7 @@ import {
     bindTerritoryBattleStages,
     bindTerritoryStages,
     expandBindingsToAreaSites,
-    findCurrentTerritoryBoss,
+    findCurrentTerritoryLevel,
     territoryChapterCompletion,
 } from '../assets/script/app/territory/model/TerritoryStageBinding';
 
@@ -38,31 +38,86 @@ function chapter(number: number) {
     )));
 }
 
-test('quick find follows unpassed Boss progression and locates the building in its shared area', () => {
+test('quick find walks the whole level chain, not just Bosses', () => {
     const map = chapter(1);
     const byCell = expandBindingsToAreaSites(map.sites, bindTerritoryBattleStages(map.sites, campaign(1).stages));
     const progress = new TerritoryProgress(map);
+    // 入参故意倒序：定位结果不许依赖 `sites` 的遍历顺序
     const sites = [...map.sites].reverse();
-    assert.equal(findCurrentTerritoryBoss(sites, byCell, progress)?.site.cellId, 213);
-    progress.markCellPassed(193);
-    assert.equal(findCurrentTerritoryBoss(sites, byCell, progress)?.site.cellId, 105,
-        'passing any peer clears the entire Boss area');
-    progress.markCellPassed(85);
-    assert.equal(findCurrentTerritoryBoss(sites, byCell, progress)?.site.cellId, 105,
-        'all Boss areas passed: replay the highest stage and prefer its building cell');
-    assert.equal(findCurrentTerritoryBoss(sites, new Map(), new TerritoryProgress(map)), null,
-        'unbound Boss stations must not open an empty battle detail');
+    // 2026-10-31 用户口径：「跳到当前章节地图上最新一个未通过的关卡」——
+    // 第一章的关卡链是 1…10（Boss 在 5 和 10），开局的目标必须是**第 1 关**，
+    // 不是像老逻辑那样一步跳到第 5 关的 Boss。
+    assert.equal(findCurrentTerritoryLevel(sites, byCell, progress)?.site.cellId, 328,
+        '开局停在第 1 关（同一关绑了多格 ⇒ 取带建筑的那格）');
+    progress.markCellPassed(327);
+    assert.equal(findCurrentTerritoryLevel(sites, byCell, progress)?.site.cellId, 309,
+        '通过同区域任意一格 = 整片通过，目标推进到第 2 关');
+    progress.markCellPassed(288);
+    assert.equal(findCurrentTerritoryLevel(sites, byCell, progress)?.site.cellId, 270, '推进到第 3 关');
+    progress.markCellPassed(269);
+    assert.equal(findCurrentTerritoryLevel(sites, byCell, progress)?.site.cellId, 252, '推进到第 4 关');
+    progress.markCellPassed(252);
+    assert.equal(findCurrentTerritoryLevel(sites, byCell, progress)?.site.cellId, 213,
+        '1~4 关全通后推进到第 5 关（Boss）——普通关卡与 Boss 一视同仁');
+    assert.equal(findCurrentTerritoryLevel(sites, new Map(), new TerritoryProgress(map)), null,
+        '没有 stage 绑定的站点不得打开空详情');
 });
 
-test('quick find skips disabled Boss cells when falling back to cleared stages', () => {
+test('quick find skips disabled level cells instead of parking on them', () => {
     const map = chapter(1);
     const byCell = expandBindingsToAreaSites(map.sites, bindTerritoryBattleStages(map.sites, campaign(1).stages));
+    const cellsOfStage = (stage: number): number[] => map.sites
+        .filter((site) => byCell.get(site.cellId)?.stage === stage)
+        .map((site) => site.cellId);
     const progress = new TerritoryProgress(map, {
-        ownedCells: [367, 193, 85],
-        disabledCells: map.sites.filter((site) => byCell.get(site.cellId)?.stage === 10).map((site) => site.cellId),
+        ownedCells: [1, 2, 3, 4].flatMap(cellsOfStage),
+        disabledCells: cellsOfStage(5),
     });
-    assert.equal(findCurrentTerritoryBoss(map.sites, byCell, progress)?.site.cellId, 213);
-    assert.equal(findCurrentTerritoryBoss([], byCell, progress), null);
+    assert.equal(findCurrentTerritoryLevel(map.sites, byCell, progress)?.site.cellId, 155,
+        '第 5 关整片 disabled ⇒ 直接跳到第 6 关，而不是停在一格点不动的 Boss 上');
+    assert.equal(findCurrentTerritoryLevel([], byCell, progress), null);
+});
+
+test('quick find only picks unlocked levels: a locked frontier falls back to the cleared one', () => {
+    // 2026-10-31 用户追加「只挑已解锁的」。服务端状态**已确认**时才收紧
+    // （`markServerStateKnown()` ⇒ `isUnlockable` 变成严格集合）。
+    const map = chapter(1);
+    const byCell = expandBindingsToAreaSites(map.sites, bindTerritoryBattleStages(map.sites, campaign(1).stages));
+    const progress = new TerritoryProgress(map);
+    progress.markServerStateKnown();
+    // 只解锁第 1 关（328）和它带建筑的那格 —— 其余关卡都还锁着。
+    progress.markCellUnlocked(328);
+    assert.equal(findCurrentTerritoryLevel(map.sites, byCell, progress)?.site.cellId, 328);
+    // 通过第 1 关：第 2 关没解锁 ⇒ 不许跳到锁着的 309 / 288，回落到刚通过的第 1 关。
+    progress.markCellPassed(328);
+    assert.equal(findCurrentTerritoryLevel(map.sites, byCell, progress)?.site.cellId, 328,
+        '锁着的第 2 关不进候选 —— 宁可回放第 1 关，也不弹一个只能看「解锁后开战」的详情');
+    // 解锁第 2 关之后立刻推进过去（区域扩散会把同关的兄弟格一并算上）。
+    progress.markCellUnlocked(288);
+    progress.markCellUnlocked(309);
+    progress.markCellUnlocked(310);
+    assert.equal(findCurrentTerritoryLevel(map.sites, byCell, progress)?.site.cellId, 309,
+        '解锁后第 2 关才是目标');
+});
+
+test('quick find fails open before the server state arrives', () => {
+    // 解锁状态没拉回来（`serverStateKnown === false`）时一律放行 —— 否则弱网下
+    // 快速寻敌会一个候选都没有，按钮直接变死。这是「只挑已解锁的」的**唯一**例外。
+    const map = chapter(1);
+    const byCell = expandBindingsToAreaSites(map.sites, bindTerritoryBattleStages(map.sites, campaign(1).stages));
+    const progress = new TerritoryProgress(map);
+    assert.equal(progress.serverStateKnown, false);
+    assert.equal(findCurrentTerritoryLevel(map.sites, byCell, progress)?.site.cellId, 328,
+        '状态未知 ⇒ 仍按关卡链推进，不返回 null');
+});
+test('all levels cleared: quick find falls back to the highest level for a replay', () => {
+    const map = chapter(1);
+    const byCell = expandBindingsToAreaSites(map.sites, bindTerritoryBattleStages(map.sites, campaign(1).stages));
+    const progress = new TerritoryProgress(map);
+    for (const cellId of byCell.keys()) progress.markCellPassed(cellId);
+    const target = findCurrentTerritoryLevel(map.sites, byCell, progress);
+    assert.equal(target?.stage.stage, 10, '没有未通关的关卡 ⇒ 回到关卡序号最高的那一关');
+    assert.equal(target?.site.cellId, 105, '同一关多格 ⇒ 取带建筑的那格（与老逻辑一致）');
 });
 
 test('chapter one has exactly ten explicit playable level bindings', () => {
@@ -116,10 +171,19 @@ test('async PvP cells bind to shared levelInfo battles without joining campaign 
     }
 });
 
-test('chapter two stays display-only until its sites receive explicit level IDs', () => {
+test('chapter two now binds ten explicit levels in the same shape as chapter one', () => {
+    // ⚠️ 2026-10-31 起这条用例的口径反了：`chapter_02.json` 的关卡站点已经补齐 `configId`
+    // （10011~10020），老断言「绑定 0 条 ⇒ 第二章只做展示」的前提过期、必然变红。
+    // 现在守的是「本章数据必须和第一章同形」：十个序号齐全、Boss 仍在第 5 / 10 关、各占一格。
+    // 数据回退（有人把 configId 删了）会让这条立刻红 —— 那正是要拦的事。
     const map = chapter(2);
-    const bindings = bindTerritoryStages(map.sites, campaign(2).stages);
-    assert.equal(bindings.length, 0);
+    const bindings = bindTerritoryStages(map.sites, campaign(2).stages)
+        .sort((a, b) => a.stage.stage - b.stage.stage);
+    assert.equal(bindings.length, 10);
+    assert.deepEqual(bindings.map(({ stage }) => stage.stage), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    assert.deepEqual(bindings.filter(({ stage }) => stage.isBoss).map(({ stage }) => stage.stage), [5, 10],
+        'Boss 仍在第 5 / 10 关（与第一章同形）');
+    assert.equal(new Set(bindings.map(({ site }) => site.cellId)).size, 10, '十个关卡各占一格，不许叠格');
 });
 
 test('chapter one can advance through ten levels from a fresh save without placeholder sites', () => {
@@ -255,8 +319,9 @@ test('★★★接线层：Presenter 用战斗绑定扩散 stageByCell，主线 
     assert.match(src, /const stageByCell = expandBindingsToAreaSites\(sourceMap\.sites, battleBindings\);/,
         'stageByCell 必须由战斗绑定扩散生成（同区域格子共用关卡）');
     // 反向：stages 是章节进度分母，绝不能拿扩散后的 54 格去算。
-    assert.match(src, /this\.stages = bindings\.map\(\(\{ site, stage \}\) => \(\{ site, stage \}\)\);/,
+    // （2026-10-31：赋值点从 `this.stages = …` 搬进了 chapter 对象字面量，断言跟着改成当前位置。）
+    assert.match(src, /stages: bindings\.map\(\(\{ site, stage \}\) => \(\{ site, stage \}\)\),/,
         'stages 必须用去重后的 bindings（一片区域只算一步，分母保持 10）');
-    assert.ok(!/this\.stages = this\.map\.sites\.flatMap/.test(src),
+    assert.ok(!/stages: .*flatMap/.test(src),
         '旧的 flatMap 写法会让分母随扩散膨胀，必须换掉');
 });

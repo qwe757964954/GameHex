@@ -86,3 +86,60 @@ test('补载序列帧显式刷新已有地块，同一快照不重置动画或�
     assert.equal(pulses.length, 1); assert.equal(glows.length, 1); assert.equal(bursts.length, 1);
     assert.equal(pulses[0], art.hexPulseFrames); assert.equal(bursts[0], art.artifactClaimBurstFrames);
 });
+
+/**
+ * 后补美术是**补丁**，不能把首帧已经准备好的特效冲成空。
+ *
+ * 真实回归（2026-11-04，「法师受击一次都不出现」）：`createDeferredArt` 的初始壳是
+ * `spawnFxPrefab/deathFxPrefab/buildingDestroyFxPrefab = null` + `hitFxPrefabs = 空 Map`，
+ * 第一个 job 是「翻格脉冲」（不带任何 prefab），它一 `onUpdate` 就整对象替换，
+ * 把首帧加载好的四组受击图全冲掉了。
+ */
+test('后补美术只加不降级：空壳补丁不能冲掉首帧已备好的受击/出生/死亡 prefab', () => {
+    const { load, FakeNode } = loadViews();
+    const pool = new (load('./ZCNodePool').ZCNodePool)();
+    const mapLayer = new FakeNode();
+    //  `playHitFx` 会覆盖节点名（`HitFx_<职业>_<id>`），所以不能靠节点名认图 ——
+    //  用 `make()` 的调用次数来判「到底实例化了哪一组 prefab」。
+    const made: string[] = [];
+    const prefabOf = (name: string) => ({ make: () => { made.push(name); return new FakeNode(name); } });
+    const effects = new (load('./ZCEffectPool').ZCEffectPool)({
+        pool, mapLayer, allowGenericHitFx: false,
+        spawnFxPrefab: prefabOf('spawn'), deathFxPrefab: prefabOf('death'),
+        buildingDestroyFxPrefab: prefabOf('building'),
+        hitFxPrefabs: new Map([
+            ['射手', prefabOf('hit-射手')], ['战士', prefabOf('hit-战士')],
+            ['法师', prefabOf('hit-法师')], ['坦克', prefabOf('hit-坦克')],
+        ]),
+        mapToViewX: (x: number) => x, mapToViewY: (y: number) => y,
+    });
+
+    // 模拟 deferred 的第一帧：除翻格脉冲外全是空壳
+    effects.setArt({
+        spawnFxPrefab: null, deathFxPrefab: null, buildingDestroyFxPrefab: null,
+        hitFxPrefabs: new Map(),
+    });
+
+    const art = (effects as unknown as { art: Record<string, any> }).art;
+    assert.ok(art.spawnFxPrefab, '出生光柱被空壳补丁冲掉了');
+    assert.ok(art.deathFxPrefab, '死亡特效被空壳补丁冲掉了');
+    assert.ok(art.buildingDestroyFxPrefab, '建筑摧毁特效被空壳补丁冲掉了');
+    assert.deepEqual([...art.hitFxPrefabs.keys()].sort(), ['坦克', '射手', '战士', '法师'].sort(),
+        '四组受击图被空壳补丁冲掉了');
+
+    // 法师这一下必须还能拿到自己的图（不是通用兜底，也不是别人的图）
+    effects.playHitFx({ trait: '法师', id: 1, x: 10, y: 20, durationSeconds: .15 }, 0);
+    assert.equal(mapLayer.children.length, 1);
+    assert.deepEqual(made, ['hit-法师'], `实例化的应该是法师那组图，实际 ${JSON.stringify(made)}`);
+
+    // 再来一个只含「射手」的增量补丁：法师必须还在
+    effects.setArt({
+        spawnFxPrefab: null, deathFxPrefab: null, buildingDestroyFxPrefab: null,
+        hitFxPrefabs: new Map([['射手', prefabOf('hit-射手2')]]),
+    });
+    const after = (effects as unknown as { art: Record<string, any> }).art;
+    assert.equal(after.hitFxPrefabs.size, 4, '增量补丁不能把其余职业删掉');
+    made.length = 0;
+    after.hitFxPrefabs.get('射手').make();
+    assert.deepEqual(made, ['hit-射手2'], '同名键应以新补丁为准');
+});

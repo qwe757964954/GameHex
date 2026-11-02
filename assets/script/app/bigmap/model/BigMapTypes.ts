@@ -208,7 +208,14 @@ export interface IBigMapCampConfig {
     readonly warScoreReset: number;
     readonly buffGroupIds: readonly number[];
     readonly buffEffectIds: readonly number[];
-    readonly firstRewardId: number;
+    /**
+     * 首占奖励（`bigMapCamp.firstReward`，2026-10-30 由单个 `firstRewardId` 改成掉落数组）。
+     *
+     * 客户端**只做展示/预览**，实际发奖以服务端结算广播为准；空数组 = 这张表这一格没配奖励。
+     */
+    readonly firstReward: readonly IBigMapDrop[];
+    /** 占领奖励（`bigMapCamp.occupyReward`），结构同 `firstReward`。 */
+    readonly occupyReward: readonly IBigMapDrop[];
     readonly buffConNum: number;
     readonly buffRate: number;
     readonly iconPath: string;
@@ -256,9 +263,17 @@ export interface IBigMapMonsterConfig {
     readonly offlineBattle: IBigMapMonsterOfflineBattle | null;
 }
 
-export interface IBigMapMonsterDrop {
+/**
+ * 一条掉落：`{resId, number, pro}`。
+ *
+ * 据点首占/占领奖励（`bigMapCamp.firstReward` / `occupyReward`）与野怪掉落
+ * （`bigmapMonster.firstKillDropId` / `normalDropId`）是**同一个结构**，
+ * 所以共用一个类型，别为据点再造一份等价的。
+ */
+export interface IBigMapDrop {
     readonly resId: number;
     readonly number: number;
+    /** 概率，万分比（10000 = 100%）。 */
     readonly pro: number;
 }
 
@@ -269,8 +284,8 @@ export interface IBigMapMonsterBattleConfig {
     readonly unlockValue: number;
     readonly rallyOpen: boolean;
     readonly rallyNum: number;
-    readonly firstKillDrops: readonly IBigMapMonsterDrop[];
-    readonly normalDrops: readonly IBigMapMonsterDrop[];
+    readonly firstKillDrops: readonly IBigMapDrop[];
+    readonly normalDrops: readonly IBigMapDrop[];
     readonly iconPath: string;
     readonly modelPath: string;
 }

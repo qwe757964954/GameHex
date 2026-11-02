@@ -53099,7 +53099,6 @@ this[keys[i]] = properties[keys[i]];
 }
 SlgCampSimpleInfo.prototype.campId = 0;
 SlgCampSimpleInfo.prototype.opType = 0;
-SlgCampSimpleInfo.prototype.state = 0;
 SlgCampSimpleInfo.create = function create(properties) {
 return new SlgCampSimpleInfo(properties);
 };
@@ -53112,7 +53111,6 @@ if (q > $util.recursionLimit)
 throw Error("max depth exceeded");
 writer.uint32(  8).uint32(message.campId);
 writer.uint32(  16).uint32(message.opType);
-writer.uint32(  24).uint32(message.state);
 return writer;
 };
 SlgCampSimpleInfo.decode = function decode(reader, length, error, long) {
@@ -53136,10 +53134,6 @@ case 2: {
 message.opType = reader.uint32();
 break;
 }
-case 3: {
-message.state = reader.uint32();
-break;
-}
 default:
 reader.skipType(tag & 7, long);
 break;
@@ -53149,8 +53143,6 @@ if (!message.hasOwnProperty("campId"))
 throw $util.ProtocolError("missing required 'campId'", { instance: message });
 if (!message.hasOwnProperty("opType"))
 throw $util.ProtocolError("missing required 'opType'", { instance: message });
-if (!message.hasOwnProperty("state"))
-throw $util.ProtocolError("missing required 'state'", { instance: message });
 return message;
 };
 SlgCampSimpleInfo.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
@@ -53170,7 +53162,8 @@ this[keys[i]] = properties[keys[i]];
 }
 SlgCampInfo.prototype.campId = 0;
 SlgCampInfo.prototype.opType = 0;
-SlgCampInfo.prototype.state = 0;
+SlgCampInfo.prototype.occupyRoleId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+SlgCampInfo.prototype.occupyRoleName = "";
 SlgCampInfo.create = function create(properties) {
 return new SlgCampInfo(properties);
 };
@@ -53183,7 +53176,10 @@ if (q > $util.recursionLimit)
 throw Error("max depth exceeded");
 writer.uint32(  8).uint32(message.campId);
 writer.uint32(  16).uint32(message.opType);
-writer.uint32(  24).uint32(message.state);
+if (message.occupyRoleId != null && Object.hasOwnProperty.call(message, "occupyRoleId"))
+writer.uint32(  24).uint64(message.occupyRoleId);
+if (message.occupyRoleName != null && Object.hasOwnProperty.call(message, "occupyRoleName"))
+writer.uint32(  34).string(message.occupyRoleName);
 return writer;
 };
 SlgCampInfo.decode = function decode(reader, length, error, long) {
@@ -53208,7 +53204,11 @@ message.opType = reader.uint32();
 break;
 }
 case 3: {
-message.state = reader.uint32();
+message.occupyRoleId = reader.uint64();
+break;
+}
+case 4: {
+message.occupyRoleName = reader.string();
 break;
 }
 default:
@@ -53220,8 +53220,6 @@ if (!message.hasOwnProperty("campId"))
 throw $util.ProtocolError("missing required 'campId'", { instance: message });
 if (!message.hasOwnProperty("opType"))
 throw $util.ProtocolError("missing required 'opType'", { instance: message });
-if (!message.hasOwnProperty("state"))
-throw $util.ProtocolError("missing required 'state'", { instance: message });
 return message;
 };
 SlgCampInfo.getTypeUrl = function getTypeUrl(typeUrlPrefix) {

@@ -5941,7 +5941,6 @@
     declare class SlgCampSimpleInfo {
         campId: number;
         opType: number;
-        state: number;
     }
 
     
@@ -5949,7 +5948,8 @@
     declare class SlgCampInfo {
         campId: number;
         opType: number;
-        state: number;
+        occupyRoleId?: (Long|null);
+        occupyRoleName?: (string|null);
     }
 
     

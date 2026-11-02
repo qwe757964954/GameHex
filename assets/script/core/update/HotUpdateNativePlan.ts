@@ -1,8 +1,7 @@
 import { HOT_UPDATE_NATIVE_SCHEMA_VERSION } from './HotUpdateTypes';
 import type {
     IHotUpdateNativePlan,
-    HotUpdatePlatform,
-    NativeVersionCompareMode,
+    HotUpdatePlatform
 } from './HotUpdateTypes';
 import { assertRemoteUrl, compareVersion } from './HotUpdateManifest';
 

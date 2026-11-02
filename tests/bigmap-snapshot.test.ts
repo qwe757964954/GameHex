@@ -28,7 +28,8 @@ function atLocal(localSeconds: number): number {
 const LOCAL_2205 = 22 * 3600 + 5 * 60;
 const LOCAL_0300 = 3 * 3600;
 const LOCAL_1000 = 10 * 3600;
-const LOCAL_2130 = 21 * 3600 + 30 * 60;
+/** 结算完成前 5 分钟（`gameConfig.bigMapRankRewardTime` 首版 = 21:30）。 */
+const LOCAL_2125 = 21 * 3600 + 25 * 60;
 
 test('本地日序号按时区折算，不按 UTC', () => {
     const noon = atLocal(12 * 3600);
@@ -45,10 +46,10 @@ test('22:00 之后算今天的战绩，凌晨到开战前算昨天的', () => {
     assert.equal(bigMapSnapshotDay(SCHEDULE, atLocal(LOCAL_0300 + 86400)), today, '次日 03:00 补的仍是昨天那份');
 });
 
-test('白天和锁榜期都不出快照，22:00 起才出', () => {
+test('白天和锁榜期都不出快照，结算完成（21:30）起才出', () => {
     const none: IBigMapDaySnapshot | null = null;
     assert.equal(bigMapSnapshotDue(SCHEDULE, atLocal(LOCAL_1000), none), false, '10:00 不该出');
-    assert.equal(bigMapSnapshotDue(SCHEDULE, atLocal(LOCAL_2130), none), false, '21:30 还没到快照点');
+    assert.equal(bigMapSnapshotDue(SCHEDULE, atLocal(LOCAL_2125), none), false, '21:25 还没到结算完成');
     assert.equal(bigMapSnapshotDue(SCHEDULE, atLocal(LOCAL_2205), none), true, '22:05 该出');
     assert.equal(bigMapSnapshotDue(SCHEDULE, atLocal(LOCAL_0300 + 86400), none), true, '凌晨补昨天的');
 });

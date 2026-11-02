@@ -1,6 +1,9 @@
 import { _decorator, Animation, Color, Component, Graphics, instantiate, Node, Prefab, Sprite, UITransform, Vec3 } from 'cc';
 import { ZCCombatEvent, ZCProjectileState } from '../model/ZCGameModel';
 import { mapToViewX, mapToViewY } from './ZCGameViewUtil';
+import { zcCombatEffectAnchorOf, zcCombatEffectAnchorPoint } from './ZCCombatEffectPlacement';
+import { zcBeamFrame, zcBeamSpecOf, zcBeamWidthScaleOf } from './ZCBeamEffect';
+import type { IZCBeamSpec } from './ZCBeamEffect';
 
 const { ccclass, property } = _decorator;
 const GENERIC_LINE_WIDTH = 3;
@@ -29,9 +32,15 @@ export class ZCCombatEffectView extends Component {
     private visualPrefab: Prefab | null = null;
     private renderedEventId = -1;
     private allowGeneric = false;
+    /** 光束类特效的配置（镭射飞龙）；`null` = 走原来的「移动小图」弹道。 */
+    private beamSpec: IZCBeamSpec | null = null;
+    /** 光束预制体的画布宽度（视图单位）；`scaleX = 长度 / 它`。 */
+    private beamCanvasWidth = 0;
+    /** 光束预制体根节点的原始 y 缩放，用来叠 `widthScale`（不被逐帧的宽度覆盖掉）。 */
+    private beamBaseScaleY = 1;
     private readonly genericTint = new Color(255, 229, 148);
 
-    initialize(prefab: Prefab | null, allowGeneric = false): void {
+    initialize(prefab: Prefab | null, allowGeneric = false, effectPrefabPath?: string | null): void {
         this.allowGeneric = allowGeneric && !prefab;
         this.graphics.clear();
         this.renderedEventId = -1;
@@ -41,6 +50,9 @@ export class ZCCombatEffectView extends Component {
             this.visualNode = null;
         }
         this.visualPrefab = prefab;
+        this.beamSpec = null;
+        this.beamCanvasWidth = 0;
+        this.beamBaseScaleY = 1;
         if (!prefab) return;
         const visual = this.visualNode ?? instantiate(prefab);
         visual.setParent(this.node);
@@ -50,6 +62,13 @@ export class ZCCombatEffectView extends Component {
         // 世界定位仍由宿主 this.node 承担（见 render()），这里只管「相对宿主的摆位」。
         visual.layer = this.node.layer;
         this.visualNode = visual;
+        this.beamSpec = zcBeamSpecOf(effectPrefabPath);
+        if (this.beamSpec) {
+            // 光束预制体的锚点在**左端**（发射口），所以 `scaleX` 只拉长不两头长；
+            // 画布宽度取 UITransform 的 contentSize，根节点自身缩放折算进 `beamBaseScaleY`。
+            this.beamCanvasWidth = visual.getComponent(UITransform)?.contentSize.width ?? 0;
+            this.beamBaseScaleY = visual.scale.y || 1;
+        }
         const animation = visual.getComponent(Animation) ?? visual.getComponentInChildren(Animation);
         const clipName = animation?.defaultClip?.name || animation?.clips?.[0]?.name;
         if (animation && clipName) { animation.stop(); animation.play(clipName); }
@@ -82,9 +101,27 @@ export class ZCCombatEffectView extends Component {
         if (this.visualNode) this.visualNode.active = true;
 
         if (event.type === 'projectile') {
-            const x = mapToViewX(projectile ? projectile.previousX + (projectile.x - projectile.previousX) * alpha : event.fromX + (event.toX - event.fromX) * progress);
-            const y = mapToViewY(projectile ? projectile.previousY + (projectile.y - projectile.previousY) * alpha : event.fromY + (event.toY - event.fromY) * progress);
-            this.node.setPosition(x, y, 0);
+            //  弹头位置：有 `projectile` 时按上一个逻辑步插值，没有（已经命中、只剩事件）时按事件进度。
+            const headX = projectile ? projectile.previousX + (projectile.x - projectile.previousX) * alpha : event.fromX + (event.toX - event.fromX) * progress;
+            const headY = projectile ? projectile.previousY + (projectile.y - projectile.previousY) * alpha : event.fromY + (event.toY - event.fromY) * progress;
+            //  光束（镭射飞龙）：不"飞"，而是从发射口一路连到弹头 —— 节点摆在发射口、转角对住弹道，
+            //  `scaleX` 拉成"发射口→弹头"的长度。锚点在预制体左端，所以只有远端在长。
+            if (this.beamSpec && this.visualNode && this.beamCanvasWidth > 0) {
+                const frame = zcBeamFrame(
+                    { x: mapToViewX(event.fromX), y: mapToViewY(event.fromY) },
+                    { x: mapToViewX(headX), y: mapToViewY(headY) },
+                    this.beamSpec,
+                );
+                this.node.setPosition(frame.x, frame.y, 0);
+                this.node.setRotationFromEuler(0, 0, frame.angleDegrees);
+                this.visualNode.setScale(
+                    frame.length / this.beamCanvasWidth,
+                    this.beamBaseScaleY * zcBeamWidthScaleOf(this.beamSpec, event.skillId),
+                    1,
+                );
+                return;
+            }
+            this.node.setPosition(mapToViewX(headX), mapToViewY(headY), 0);
             const angle = Math.atan2(mapToViewY(event.toY - event.fromY), mapToViewX(event.toX - event.fromX)) * 180 / Math.PI;
             this.node.setRotationFromEuler(0, 0, angle);
             return;
@@ -93,8 +130,12 @@ export class ZCCombatEffectView extends Component {
         this.node.setPosition(mapToViewX(event.toX), mapToViewY(event.toY), 0);
         this.node.setRotationFromEuler(0, 0, 0);
         if (event.type === 'melee') {
-            // 近战特效贴**出手点**，不是命中点（与 projectile 走 from→to 的口径不同）。
-            this.node.setPosition(mapToViewX(event.fromX), mapToViewY(event.fromY), 0);
+            // 近战特效默认贴**出手点**（与 projectile 走 from→to 的口径不同）；
+            // 个别特效改贴「攻击者 ↔ 受击目标」的连线中点，口径见 `ZCCombatEffectPlacement`
+            // （需求 2026-10-30：巨力坚果普攻砸在两者中间，而不是砸在自己身上）。
+            const anchor = zcCombatEffectAnchorOf(event.effectPrefabPath);
+            const point = zcCombatEffectAnchorPoint(event, anchor);
+            this.node.setPosition(mapToViewX(point.x), mapToViewY(point.y), 0);
         }
     }
 }

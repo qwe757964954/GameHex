@@ -7,7 +7,6 @@ import { BaseNetState } from "./BaseNetState";
 
 
 
-let M_interval = 8
 export class ConnectedNetState extends BaseNetState {
     public static __cname: string = "ConnectedNetState";
     private _timeStame: number;

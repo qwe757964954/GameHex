@@ -51,12 +51,22 @@ test('客户端状态表保留周期参数与硬控列', () => {
         handlerKey: 'periodic_damage', amountPct: 1, basis: 'targetMaxHp', cap: 2,
     });
 
-    assert.deepEqual(
-        Object.fromEntries(catalogs.statuses
-            .filter((status) => status.control)
-            .map((status) => [status.statusId, status.control])),
-        { stun: 'stun', stun_2: 'stun', freeze: 'freeze', paralysis: 'paralysis', blind: 'blind' },
-    );
+    const controls = Object.fromEntries(catalogs.statuses
+        .filter((status) => status.control)
+        .map((status) => [status.statusId, status.control]));
+    // 旧表口径的五条：不许变（`stun_2` 是「眩晕 2 秒」的状态 id，control 仍是 stun）。
+    const legacyControls: Record<string, string> = {
+        stun: 'stun', stun_2: 'stun', freeze: 'freeze', paralysis: 'paralysis', blind: 'blind',
+    };
+    for (const [id, kind] of Object.entries(legacyControls)) {
+        assert.equal(controls[id], kind, `${id} 的硬控口径`);
+    }
+    // 2026-10-30 僵尸分档眩晕（103004 绿尸寒 / 103304 天外飞石 / 103403 帽子戏法 / 103504 轨道打击）。
+    // 这几条当初漏配 `control`，`ZCStatusSystem.controlOf` 读不到，表现为「表填了、人不晕」。
+    for (const id of ['stun_1', 'stun_1_5', 'stun_2_5', 'stun_2s', 'stun_3', 'stun_4']) {
+        assert.equal(controls[id], 'stun', `${id} 的硬控口径`);
+    }
+    assert.equal(Object.keys(controls).length, 11, '除硬控外不该再有别的 status 写 control 列');
 });
 
 test('客户端技能命中状态与本局状态定义形成闭环', () => {

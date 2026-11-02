@@ -503,7 +503,7 @@ export class BigMapWorldView extends Component {
         const monsters = data.world.monsters.map((site) => data.monsters.get(site.instanceId));
         // `playerCampId` 必须进 key：game 包到达后基地要换成所属城池的势力色，
         // 不带上它就会因为「其它内容没变」而早退，染色永远停在上一次。
-        const key = `${this.selectedHexId}|${data.playerCampId}|${cities.map((c) => `${c.cityId}:${c.state}:${c.campInfo?.opType}:${c.campInfo?.state}`).join(',')}|`
+        const key = `${this.selectedHexId}|${data.playerCampId}|${cities.map((c) => `${c.cityId}:${c.state}:${c.campInfo?.opType}`).join(',')}|`
             + monsters.map((m) => m ? `${m.instanceId}:${m.unlocked}:${m.respawnInSeconds > 0}` : '').join(',');
         if (key === this.contentKey) return;
         this.contentKey = key;

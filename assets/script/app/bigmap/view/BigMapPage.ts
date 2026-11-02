@@ -1,4 +1,4 @@
-import { _decorator, Color, Component, Graphics, instantiate, Label, Node, Prefab, Sprite, SpriteFrame, UITransform, Vec3, view } from 'cc';
+import { _decorator, Component, Graphics, instantiate, Label, Node, Prefab, Sprite, SpriteFrame, UITransform, Vec3, view } from 'cc';
 import type { IControllerResources } from '../../../framework/controller/ControllerBase';
 import { ResourceScope } from '../../../core/asset/ResourceScope';
 import { loadBigMapArt, type IBigMapArt } from '../application/BigMapArtLoader';
@@ -13,7 +13,7 @@ import {
 } from './BigMapSkin';
 import { bigMapInfoLayout } from '../model/BigMapInfoLayout';
 import { BIGMAP_PRESENTATION_TEXT, formatBigMapPlotDetail, formatBigMapMonsterDetail } from './BigMapPresentationText';
-import { BIGMAP_CAMP_STATE_TEXT, BIGMAP_CAMP_OCCUPATION_TEXT, BIGMAP_CAMP_QUERY_TEXT } from '../model/BigMapCampInfo';
+import { BIGMAP_CAMP_OCCUPATION_TEXT, BIGMAP_CAMP_QUERY_TEXT } from '../model/BigMapCampInfo';
 import { formatBigMapCampRoleLines } from '../model/BigMapCampRoleInfo';
 
 import { BigMapPageLayout } from './BigMapPageLayout';
@@ -642,7 +642,9 @@ export class BigMapPage extends Component {
                 const camp = city.campConfig;
                 this.infoBody.string = [
                     info ? `占领状态：${BIGMAP_CAMP_OCCUPATION_TEXT[info.opType]}` : '',
-                    info ? `据点状态：${BIGMAP_CAMP_STATE_TEXT[info.state]}` : '',
+                    // 占领者只有详情包（`SlgCampInfo`）才下发，简略包拿不到 —— 空则整行不显示。
+                    // 「能不能打」不再由协议给（`state` 已移除），原因统一由 `city.attackReason` 说明。
+                    info?.occupyRoleName ? `占领者：${info.occupyRoleName}` : '',
                     city.campDetailStatus === 'loading' || !info && city.campDetailStatus === 'idle'
                         ? BIGMAP_CAMP_QUERY_TEXT.pending : '',
                     city.campDetailStatus === 'failed'

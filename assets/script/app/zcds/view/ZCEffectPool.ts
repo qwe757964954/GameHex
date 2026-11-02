@@ -1,6 +1,8 @@
 import { Animation, Color, Graphics, instantiate, Node, Prefab, UITransform } from 'cc';
+import { ZCDC_LOG_WARNINGS } from '../ZCDCLogSwitch';
 import type { ZCAttackTrait } from '../model/ZCCombatCatalog';
 import type { ZCHitFx } from '../model/ZCGameTypes';
+import { zcHitFxNodeScale } from './ZCCombatEffectScale';
 import { ZCNodePool } from './ZCNodePool';
 
 /** 资源在构造前准备好；对象池、挂载层和资源的所有权归调用方。 */
@@ -124,14 +126,68 @@ export class ZCEffectPool {
      *    新局第一个特效被上一局的记录挡掉（见 `ZCBattlePresentationQueue.reset`）。
      */
     private readonly hitFxPlayed = new Set<Readonly<ZCHitFx>>();
+    /**
+     * 受击特效 prefab 的**烘焙基准缩放**（键 = 池的 key，如 `hitFx:法师`）。
+     *
+     * 2026-10-31「各类受击特效需要匹配受击目标的模型大小」之后，节点缩放不再是死的：
+     * 实际写入 = **本表里的烘焙基准 × `zcHitFxScale(fx.targetScale)`**。
+     *
+     * 🔴 为什么要存基准、而不是在节点当前缩放上乘：节点是**池化复用**的，
+     * 第二次播放时它的 `scale` 已经是「基准 × 上一个目标的体型」，再乘一遍就成了平方
+     * （打到第 N 只会缩成离谱的值）。所以每次都必须**从基准重算绝对值**。
+     *
+     * 基准在 `instantiate` 那一瞬间读一次就固定：它是 prefab 根的 `_lscale`，
+     * 四类还不一样（射手 0.12418 / 战士 0.29333 / 法师 0.05593 / 坦克 & 中毒 0.07098），
+     * 直接写 `setScale(系数)` 会把美术那份意图抹平。存成普通对象而不是 `Vec3`：
+     * 这里只要三个数，没必要为每个 key 留一个引擎对象。
+     */
+    private readonly hitFxBakedScales = new Map<string, { x: number; y: number; z: number }>();
     /** `syncHitFx` 的暂存：本帧模型队列里还活着的 fx（用来摘掉 `hitFxPlayed` 里的过期项）。 */
     private readonly hitFxAlive = new Set<Readonly<ZCHitFx>>();
+    /**
+     * 已经报过「这个职业没有受击 prefab」的 trait。
+     *
+     * 🔴 2026-11-04 补：这一条原来是**完全静默的 return**（"少一层表现，绝不阻塞结算"是本意），
+     * 代价是「美术交了图、代码也接了，但资源没打进包 / 加载失败」这种情形在游戏里表现为
+     * **法师受击一次都没出现，而控制台干干净净** —— 只能靠翻代码猜。
+     * 现在按职业各报一次（`console.warn`）：
+     *  - 有这条 warn ⇒ 问题在**加载侧**（`ZCGameLoader.loadHitFxPrefabs` 没拿到 prefab）；
+     *  - 没有这条 warn 但依然看不到 ⇒ 问题在**渲染侧**（层级 / 尺寸 / 时长 / 被单位挡住）。
+     * 只报一次，不会每帧刷屏。
+     */
+    private readonly hitFxMissingWarned = new Set<string>();
 
     private art: Pick<IZCEffectPoolDeps, 'spawnFxPrefab' | 'deathFxPrefab' | 'buildingDestroyFxPrefab' | 'hitFxPrefabs'>;
 
     constructor(private readonly deps: IZCEffectPoolDeps) { this.art = deps; }
 
-    setArt(art: typeof this.art): void { this.art = art; }
+    /**
+     * 应用后补美术。**按字段合并，不是整对象替换**。
+     *
+     * 🔴 2026-11-04 修正（这条 bug 的表象是「法师受击一次都不出现」）：
+     * `ZCGameLoader.createDeferredArt` 的初始壳是
+     * `spawnFxPrefab/deathFxPrefab/buildingDestroyFxPrefab = null`、`hitFxPrefabs = 空 Map`，
+     * 每跑完一个 job 才 `{...art, ...patch}` 并 `onUpdate`。原来这里是 `this.art = art` 直接替换 ——
+     * 于是**第一个 job（翻格脉冲，不带任何 prefab）一回来，就把首帧已经准备好的**
+     * 受击 / 出生 / 死亡 / 建筑摧毁 prefab **全部冲成空 / null**，之后要等各自那个 job 跑完
+     * 才慢慢补回来。受击四组在 job 队列里排第 2~5 位，职业靠后的（法师是第 3 个）回来得最晚；
+     * 期间任何一次提前退出（离场 / 换局 / 某个 job 抛错被吞）就永久停在残缺状态。
+     *
+     * 合并规则：`null` / `undefined` 视为「这次还没加载好」，**不覆盖**已有值；
+     * Map 走「旧 + 新」，新条目覆盖同名键。这样补丁只能加，不能降级。
+     */
+    setArt(patch: typeof this.art): void {
+        const current = this.art;
+        const hitFx = patch.hitFxPrefabs;
+        this.art = {
+            spawnFxPrefab: patch.spawnFxPrefab ?? current.spawnFxPrefab,
+            deathFxPrefab: patch.deathFxPrefab ?? current.deathFxPrefab,
+            buildingDestroyFxPrefab: patch.buildingDestroyFxPrefab ?? current.buildingDestroyFxPrefab,
+            hitFxPrefabs: hitFx && hitFx.size
+                ? new Map([...current.hitFxPrefabs, ...hitFx])
+                : current.hitFxPrefabs,
+        };
+    }
 
     private createGenericHit(): Node {
         const node = new Node('GenericHit');
@@ -182,18 +238,43 @@ export class ZCEffectPool {
      * ⚠️ **渲染循环里别直接调它** —— 同一个 fx 会跨很多帧一直躺在模型队列里，逐个直接调会让
      * 动画每帧被 seek 回 0。走 `syncHitFx`。
      *
-     * 尺寸（需求「统一缩小 0.7」）**不在这里改**：烘在 prefab 根的 `_lscale` 里。同 `playDeathFx`
-     * 的坑 —— 这里 `setScale` 会 ① 覆盖美术烘焙值 ② 池化复用每次乘一遍会逐次缩水。
+     * 尺寸（需求「统一缩小 0.7」）**不在这里手写**：烘在 prefab 根的 `_lscale` 里。
+     * 2026-10-31 起再叠一层「跟着被打的体型走」—— 写入的是**烘焙基准 × `fx.targetScale`**，
+     * 每次从基准重算（见 `hitFxBakedScales`），不在节点当前缩放上累乘。
+     * 同 `playDeathFx` 的坑 —— 累乘会在池化复用下逐次缩水。
      */
     playHitFx(fx: Readonly<ZCHitFx>, now: number): void {
         const prefab = this.art.hitFxPrefabs.get(fx.trait);
         // 这个职业没交资源 ⇒ 跳过这一下（不猜默认职业，也不复用别的职业的闪白）。
+        // 但**必须留下痕迹**：见 `hitFxMissingWarned` 的注释，一行静默 return 会让「资源没打进包」
+        // 表现为「特效没做出来」，下一步只能猜。
+        if (!prefab && !this.hitFxMissingWarned.has(fx.trait)) {
+            this.hitFxMissingWarned.add(fx.trait);
+            if (ZCDC_LOG_WARNINGS) console.warn(`[ZCEffectPool] 受击特效缺失：职业「${fx.trait}」没有加载到 prefab`
+                + `（units/effects/受击特效/${fx.trait}受击/${fx.trait}受击），这一下只能不播`);
+        }
         if (!prefab && !this.deps.allowGenericHitFx) return;
         const key = prefab ? `hitFx:${fx.trait}` : 'hitFx:generic';
-        const node = this.deps.pool.acquire(key, () => prefab ? instantiate(prefab) : this.createGenericHit());
+        const node = this.deps.pool.acquire(key, () => {
+            const created = prefab ? instantiate(prefab) : this.createGenericHit();
+            // 建节点的这一瞬间读一次烘焙基准，之后每次播放都从它重算（理由见 `hitFxBakedScales`）。
+            const baked = created.scale;
+            this.hitFxBakedScales.set(key, { x: baked.x, y: baked.y, z: baked.z });
+            return created;
+        });
         node.setParent(this.deps.mapLayer);
         node.setSiblingIndex(this.deps.mapLayer.children.length - 1);
         node.layer = this.deps.mapLayer.layer;
+        // 尺寸：烘焙基准 × 目标体型（`pvpCard.prefabSize`）。**每次播放都按绝对值重写**，
+        // 不读 node 当前的 scale —— 那是上一次（可能另一个体型）用完剩下的结果。
+        const baked = this.hitFxBakedScales.get(key);
+        if (baked) {
+            node.setScale(
+                zcHitFxNodeScale(baked.x, fx.targetScale),
+                zcHitFxNodeScale(baked.y, fx.targetScale),
+                baked.z,
+            );
+        }
         // 必须过 mapToViewX/Y：ZCHitFx.x/y 是模型的棋盘坐标，node.setPosition 吃的是视图局部坐标。
         node.setPosition(this.deps.mapToViewX(fx.x), this.deps.mapToViewY(fx.y), 0);
         node.name = `HitFx_${fx.trait}_${fx.id}`;

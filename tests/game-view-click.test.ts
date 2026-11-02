@@ -1,3 +1,9 @@
+import { createControllerContext } from './helpers/controller-context';
+import { VIEW_LIFECYCLE } from '../assets/script/framework/ui/ViewLifecycle';
+import { MainTabController } from '../assets/script/app/main/MainTabController';
+import { MainTab } from '../assets/script/app/main/MainTabModel';
+import { MainTabEvent } from '../assets/script/app/main/MainTabEvents';
+import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { componentControllerModule } from './helpers/controller-context';
 /**
  * 「玩家点击界面」上报（`CmdGameViewClickReqMsg` / `CmdGameViewClickRspMsg`）的单测。
@@ -194,18 +200,17 @@ test('真实 withTimeout：永不兑现的请求也会兜底为 false', async ()
 // ============================================================================
 
 test('★MainTabHost：世界按钮点击时上报，且不在 switchTab 里上报（外部路由不是玩家点击）', () => {
-    const host = codeOf('assets/script/app/main/MainTabHost.ts');
-    assert.match(host, /reportGameViewClick\(GAME_VIEW_MARK\.World,\s*this\)/, '世界格点击必须上报 mark=2');
-    assert.match(host, /type === MainTab\.World\)[\s\S]{0,400}reportGameViewClick/, '上报要挂在世界格的按钮回调里');
+    const host = codeOf('assets/script/app/bootstrap/main/MainTabsComposition.ts');
+    assert.match(host, /reportClick:.*tab === MainTab\.World \? GAME_VIEW_MARK\.World : GAME_VIEW_MARK\.Other/, '上报映射服务端编号');
     // switchTab 内部不许出现上报：`switchToTab(6)`（活动跳转）也会走它，混进来就是假点击。
-    const switchBody = host.slice(host.indexOf('async switchTab('), host.indexOf('activateBackgroundWarmup'));
+    const switchBody = host.slice(host.indexOf('switchTab('), host.indexOf('activateBackgroundWarmup'));
     assert.doesNotMatch(switchBody, /reportGameViewClick/, '★switchTab 里不许上报（外部跳转不是玩家点击）');
 });
 
 test('底栏实际点击：世界报 2，其他可用入口报 1；初始化和路由跳转不上报', async () => {
     interface ITestButton {
         tabType: number;
-        node: { position: { x: number } };
+        node: { position: { x: number }; on(event: string, handler: () => void): void };
         enabled: boolean;
         select: (() => void) | null;
         setEnabled(enabled: boolean): void;
@@ -216,10 +221,11 @@ test('底栏实际点击：世界报 2，其他可用入口报 1；初始化和�
         navBar: { getComponentsInChildren(): ITestButton[] };
         switchTab(index: number): Promise<void>;
         switchToTab(index: number): void;
-        onLoad(): void;
+        onLoad(): void; onDestroy(): void;
+        showPage(): void; renderNav(tab: number): void;
     }
     const buttons: ITestButton[] = [0, 1, 2, 3, 4, 5, 6].map((tabType) => ({
-        tabType, node: { position: { x: tabType } }, enabled: false, select: null,
+        tabType, node: { position: { x: tabType }, on(_event, handler) { buttons[tabType].select = handler; } }, enabled: false, select: null,
         setEnabled(enabled) { this.enabled = enabled; },
         bindSelect(select) { this.select = select; },
         bindRedDotExpr() {},
@@ -227,12 +233,20 @@ test('底栏实际点击：世界报 2，其他可用入口报 1；初始化和�
     const reports: Array<{ mark: number; caller: object }> = [];
     const { mod: service } = loadService();
     const hostModule = loadModule('assets/script/app/main/MainTabHost.ts', (name) => {
+        if (name.endsWith('/ViewLifecycle')) return { VIEW_LIFECYCLE };
+        if (name.endsWith('/MainTabController')) return { MainTabController };
+        if (name.endsWith('/MainTabModel')) return { MainTab };
+        if (name.endsWith('/MainTabEvents')) return { MainTabEvent };
+        if (name.endsWith('/EventMgr')) return { EventMgr };
+        if (name.endsWith('/FormationService')) return { fetchFormations: async () => {} };
+        if (name.endsWith('/FirstRechargeAutoOpen')) return { checkFirstRechargeOnEnterMain: async () => {} };
+        if (name.endsWith('/GameNet')) return { GameNet: { instance: { removeCaller() {} } } };
         if (name === 'cc') return {
             _decorator: {
                 ccclass: () => (value: unknown) => value,
                 property: () => () => undefined,
             },
-            Component: class { isValid = true; scheduleOnce() {} },
+            Component: class { isValid = true; scheduleOnce() {} unschedule() {} }, Prefab: class {}, Button: { EventType: { CLICK: 'click' } },
         };
         if (name.endsWith('/GameViewClickService')) return {
             GAME_VIEW_MARK: service.GAME_VIEW_MARK,
@@ -242,16 +256,25 @@ test('底栏实际点击：世界报 2，其他可用入口报 1；初始化和�
             },
         };
         if (name.endsWith('/MainTabItems')) return { mainTabItem: () => ({}) };
-        if (name.endsWith('/BigMapEntry')) return { BigMapEntry: { shared: () => ({ close() {} }) } };
+        if (name.endsWith('/BigMapEntry')) return { BigMapEntry: { shared: () => ({ isOpen: false, close() {}, open: async () => {} }) } };
         return {};
     });
     const Host = hostModule.MainTabHost as new () => ITestHost;
     const host = new Host();
     host.navBar = { getComponentsInChildren: () => buttons };
-    const switchTab = host.switchTab;
     const switches: number[] = [];
-    host.switchTab = async (index) => { switches.push(index); };
+    host.showPage = () => {};
+    host.renderNav = index => switches.push(index);
+    const controller = new MainTabController(createControllerContext(), {
+        owner: host, assetType: class {}, showPage() {}, renderNav: tab => switches.push(tab),
+        openWorld: async () => {}, closeWorld() {}, isWorldOpen: () => false,
+        beforeSwitch() {}, settled() {}, prefetchHero() {}, failed: assert.fail,
+        reportClick: tab => { reports.push({ mark: tab === MainTab.World ? service.GAME_VIEW_MARK.World : service.GAME_VIEW_MARK.Other, caller: host }); },
+    });
+    controller.start();
     host.onLoad();
+    await controller.switchTab(3);
+    await new Promise(resolve => setImmediate(resolve));
     assert.equal(reports.length, 0, '默认页初始化不算点击');
     switches.length = 0;
 
@@ -260,6 +283,7 @@ test('底栏实际点击：世界报 2，其他可用入口报 1；初始化和�
         assert.equal(button.enabled, true);
         assert.ok(button.select);
         button.select();
+        await new Promise(resolve => setImmediate(resolve));
         assert.equal(reports.length, 1, '一次点击只上报一次');
         assert.equal(reports[0].mark, mark, `入口 ${tabType} 的服务端编号`);
         assert.equal(reports[0].caller, host, '请求归属于真实宿主');
@@ -268,12 +292,13 @@ test('底栏实际点击：世界报 2，其他可用入口报 1；初始化和�
         switches.length = 0;
     }
     assert.equal(buttons[4].enabled, false);
-    assert.equal(buttons[4].select, null, '未开放的挑战入口不触发点击');
-    host.switchTab = switchTab;
-    Object.assign(host, { pagePath: () => null });
+    buttons[4].select?.();
+    assert.equal(reports.length, 0, '控制器拒绝未开放的挑战入口');
     host.switchToTab(0);
     await Promise.resolve();
     assert.equal(reports.length, 0, '程序跳转不计入点击');
+    host.onDestroy();
+    controller.dispose();
 });
 
 test('请求封装注册在系统类请求里，协议名与 d.ts 一致', () => {

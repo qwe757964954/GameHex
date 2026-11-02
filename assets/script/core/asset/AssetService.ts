@@ -16,8 +16,33 @@ export interface AssetLoadOptions {
     cache?: boolean;
 }
 
+export interface IResourceLoadRequest<T> {
+    readonly path: string;
+    readonly type: AssetType<T>;
+    readonly options?: Omit<AssetLoadOptions, 'scope'>;
+}
+
+export interface IResourceLoadProgress {
+    readonly completed: number;
+    readonly total: number;
+    readonly ratio: number;
+}
+
+export interface IResourceLoadBatchOptions {
+    readonly scope: ResourceScope;
+    readonly onProgress?: (progress: IResourceLoadProgress) => void;
+}
+
+export interface IResourceLoadBatch<T> {
+    /** 成功按输入顺序返回；取消为 false，加载失败保持 reject。 */
+    readonly result: Promise<T[] | false>;
+    cancel(): void;
+}
+
 /** 引擎无关的资源入口；业务层不再直接调用 resources.load。 */
 export interface AssetService {
+    /** 可选的受作用域管理的批量加载能力，进度按清单项计数。 */
+    loadBatch?<T>(requests: readonly IResourceLoadRequest<T>[], options: IResourceLoadBatchOptions): IResourceLoadBatch<T>;
     /** 可选的后台预下载能力；不解析资源、不获取资产所有权。 */
     preload?(path: string, options?: AssetLoadOptions): Promise<void>;
     load<T>(path: string, type: AssetType<T>, options?: AssetLoadOptions): Promise<T>;
@@ -43,6 +68,8 @@ export function scopeAssetService(assets: AssetService, scope: ResourceScope): A
         if (owner.disposed) throw new Error('资源作用域已释放，加载已取消');
     };
     return {
+        // 批量调用必须显式提供资产宿主，保留管理器的 this 与独立对局归属。
+        loadBatch: assets.loadBatch?.bind(assets),
         async load(path, type, options) {
             const resolved = resolveOptions(options);
             checkActive(resolved.scope);

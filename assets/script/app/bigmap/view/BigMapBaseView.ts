@@ -1,4 +1,4 @@
-import { _decorator, Color, Component, EventMouse, EventTouch, Graphics, instantiate, isValid, Label, Node, Sprite, UITransform, Vec2, Vec3 } from 'cc';
+import { _decorator, Component, EventMouse, EventTouch, Graphics, instantiate, isValid, Label, Node, Sprite, UITransform, Vec2, Vec3 } from 'cc';
 import type { IBigMapArt } from '../application/BigMapArtLoader';
 import type { IBigMapViewState, IBigMapPlotCellView } from '../application/BigMapViewState';
 import {

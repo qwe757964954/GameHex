@@ -244,9 +244,16 @@ export class ZCSnapshotCodec {
             check(optional(unit.battleState, (v) => oneOf(Object.values(ZCUnitBattleState), v)), `${path}.battleState`);
             for (const key of ['targetWallHexId', 'targetBuildingHexId']) check(optional(unit[key], reference), `${path}.${key}`);
             for (const key of ['targetUnitId', 'hatredUnitId']) check(optional(unit[key], (v) => v === null || integer(v) && (v as number) > 0), `${path}.${key}`);
-            for (const key of ['stateTime', 'nextAttackAt', 'waitUntil', 'hatredUntil', 'deathRemoveAt', 'completedAttackCount', 'empoweredReadyAt']) {
+            //  末七项是 2026-10-29 新增（连发 / 单体盾到期 / 低血护体 / 常驻被动）。
+            //  ⚠️ 新增的单位可选数值字段必须**登记进这个数组**，否则回放校验会把脏值放过去。
+            for (const key of ['stateTime', 'nextAttackAt', 'waitUntil', 'hatredUntil', 'deathRemoveAt', 'completedAttackCount', 'empoweredReadyAt',
+                'secondaryReadyAt',
+                'shieldExpireAt', 'burstShotsLeft', 'burstNextAt', 'burstInterval', 'burstDamageRate', 'lowHpGuardFiredAt',
+                'retaliateSlowPct', 'retaliateUntil', 'selfCastReadyAt', 'strikeReadyAt', 'strikeFiredCount',
+                'strikeUntil', 'strikeNextAt']) {
                 check(optional(unit[key], nonnegative), `${path}.${key}`);
             }
+            check(optional(unit.passiveStatusApplied, (v) => typeof v === 'boolean'), `${path}.passiveStatusApplied`);
             for (const key of ['freeX', 'freeY', 'facingRadians']) check(optional(unit[key], Number.isFinite), `${path}.${key}`);
             check(optional(unit.marchAngle, (v) => v === null || Number.isFinite(v)), `${path}.marchAngle`);
             check(optional(unit.attackHitDone, (v) => typeof v === 'boolean'), `${path}.attackHitDone`);
@@ -277,6 +284,7 @@ export class ZCSnapshotCodec {
             check(nonnegative(projectile.durationSeconds) && projectile.durationSeconds > 0, `${path}.durationSeconds`);
             for (const key of ['canHitAir', 'empowered']) check(typeof projectile[key] === 'boolean', `${path}.${key}`);
             check(optional(projectile.remainingPierces, integer), `${path}.remainingPierces`);
+            check(optional(projectile.pierceFalloff, v => nonnegative(v) && (v as number) <= 1), `${path}.pierceFalloff`);
             check(optional(projectile.executeChance, v => nonnegative(v) && (v as number) <= 1), `${path}.executeChance`);
             check(optional(projectile.criticalHit, v => typeof v === 'boolean'), `${path}.criticalHit`);
             check(optional(projectile.splashRadius, nonnegative), `${path}.splashRadius`);
@@ -312,6 +320,12 @@ export class ZCSnapshotCodec {
             check(optional(zone.expireDamage, nonnegative), `${path}.expireDamage`);
             check(optional(zone.expireStatusId, v => typeof v === 'string'), `${path}.expireStatusId`);
             check(optional(zone.expireStatusDuration, nonnegative), `${path}.expireStatusDuration`);
+            //  2026-11-04 移动区域（椰蛋战士「暴风」）：速度可负（朝左上），命中名额是正整数。
+            check(optional(zone.moveVelocityX, Number.isFinite), `${path}.moveVelocityX`);
+            check(optional(zone.moveVelocityY, Number.isFinite), `${path}.moveVelocityY`);
+            check(optional(zone.maxHits, v => integer(v) && (v as number) >= 0), `${path}.maxHits`);
+            check(optional(zone.hitUnitIds, v => Array.isArray(v)
+                && v.every(id => integer(id) && (id as number) > 0)), `${path}.hitUnitIds`);
         });
         // 在途弹道复用战斗事件 ID，恢复时不能与后续表现事件冲突。
         check(optional(data.nextCombatEventId, (v) => integer(v) && (v as number) > 0), 'nextCombatEventId');

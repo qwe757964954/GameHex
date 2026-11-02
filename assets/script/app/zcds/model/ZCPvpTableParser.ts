@@ -278,6 +278,8 @@ export function parseAttackProfiles(value: unknown): ReadonlyMap<number, ZCAttac
             areaRadius: optionalPositiveNumber(raw.areaRadius, `skills.${skillId}.areaRadius`),
             empoweredEvery: optionalPositiveNumber(raw.empoweredEvery, `skills.${skillId}.empoweredEvery`),
             empoweredSkillId: optionalPositiveNumber(raw.empoweredSkillId, `skills.${skillId}.empoweredSkillId`),
+            //  副技能行（2026-11-04）：一条普攻行只有一个强化槽，第二条主动挂这里。
+            secondarySkillId: optionalPositiveNumber(raw.secondarySkillId, `skills.${skillId}.secondarySkillId`),
             // 留空 = 按次数（`empoweredEvery`）；`'every_seconds'` 才走 CD。值域校验在 `optionalTrigger` 里，
             // 写错拼写会**直接抛错**而不是静默回落 —— 触发方式是决定战斗节拍的东西，静默回落最难查。
             trigger: optionalTrigger(raw.trigger, `skills.${skillId}.trigger`),
@@ -286,6 +288,13 @@ export function parseAttackProfiles(value: unknown): ReadonlyMap<number, ZCAttac
             // 把 `0` 也当「未配置」—— 倍率 0 没有业务含义，静默当成默认比让它把伤害打没更安全。
             damageRate: optionalPositiveNumber(raw.damageRate, `skills.${skillId}.damageRate`),
             effectPrefabPath: assetPath(raw.effectPrefabPath, `skills.${skillId}.effectPrefabPath`),
+            //  冲刺（2026-10-31，运动霸「拳击冲撞」203301）：距敌 `chargeDistance` 内把移速乘
+            //  `chargeSpeedScale`。两个都留空 ⇒ 整段不执行，存量 34 张卡的移动逐字不变。
+            //  用 `optionalPositiveNumber`：0 / 负数当「未配置」—— 倍率 0 会让单位当场定住，
+            //  距离 0 会让判定恒真（等于永远冲刺），两种都是把配置写错变成「看着像卡了」的怪象。
+            chargeDistance: optionalPositiveNumber(raw.chargeDistance, `skills.${skillId}.chargeDistance`),
+            chargeSpeedScale: optionalPositiveNumber(raw.chargeSpeedScale, `skills.${skillId}.chargeSpeedScale`),
+            impactEffectPrefabPath: assetPath(raw.impactEffectPrefabPath, `skills.${skillId}.impactEffectPrefabPath`),
             durationSeconds: optionalNumber(raw.durationSeconds, `skills.${skillId}.durationSeconds`),
             waves: optionalPositiveNumber(raw.waves, `skills.${skillId}.waves`),
             slowRatio: optionalNumber(raw.slowRatio, `skills.${skillId}.slowRatio`),
@@ -352,6 +361,17 @@ export function parseUnits(
                 + '但 PVP 技能表里没有这一行',
             );
         }
+        // 副技能行（2026-11-04 椰蛋战士「横扫」）：与上面同一条口径 —— 指向了就必须存在，
+        // 否则「每 8 秒横扫一次」会退化成静默不出手。
+        const secondaryProfile = attackProfile.secondarySkillId
+            ? skills.get(attackProfile.secondarySkillId)
+            : undefined;
+        if (attackProfile.secondarySkillId && !secondaryProfile) {
+            throw new Error(
+                `pvpCard.${label} 的普攻技能 ${skillId} 配了 secondarySkillId=${attackProfile.secondarySkillId}，`
+                + '但 PVP 技能表里没有这一行',
+            );
+        }
         result.set(unitId, {
             unitId,
             name: text(raw.name, `pvpCard.${label}.name`),
@@ -373,6 +393,7 @@ export function parseUnits(
             prefabSize: parsePrefabSize(raw.prefabSize, `pvpCard.${label}.prefabSize`),
             attackProfile,
             empoweredProfile,
+            secondaryProfile,
         });
     }
     if (result.size === 0) {

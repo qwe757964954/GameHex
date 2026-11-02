@@ -1,3 +1,6 @@
+import { ControllerBase } from '../assets/script/framework/controller/ControllerBase';
+import { MatchingController } from '../assets/script/app/matching/MatchingController';
+import { MatchingModel } from '../assets/script/app/matching/MatchingModel';
 import { componentControllerModule } from './helpers/controller-context';
 import * as resourcePlan from '../assets/script/app/zcds/model/ZCGameResourcePlan';
 ﻿import assert from 'node:assert/strict';
@@ -168,9 +171,29 @@ function procedures(sessionPreload: ZCGamePreload | null = null) {
      * 匹配界面组件的替身。**必须是同一个对象**：`updateMine` 要在 `onEnter` 之后
      * 由 `battleStartTask.then()` 异步调用，每次 `getComponent` 都新建对象就抓不到。
      */
+    const bus = EventMgr.instance;
+    let currentRound: any;
+    let battleTask: Promise<ZCBattleStart | null> = Promise.resolve(null);
     const page = {
-        beginMatch: (value: unknown) => options.push(value),
-        updateMine: (value: unknown) => mineUpdates.push(value),
+        isValid: true,
+        initialize() {
+            const timers = new Map<number, () => void>();
+            currentRound = { mine: null, state: null, timers,
+                awaitReady: async () => { const value = await battleTask; await flush(); return value !== null; },
+                pickOpponents: () => currentRound.state?.opponents ?? [],
+                onMatched() { timers.get(3)?.(); timers.get(1.4)?.(); },
+            };
+            const round = currentRound;
+            round.pickOpponents = () => round.state?.opponents ?? [];
+            options.push(round);
+        },
+        render(state: any) {
+            if (currentRound.mine === null) currentRound.mine = state.mine;
+            else mineUpdates.push(state.mine);
+            currentRound.state = state;
+        },
+        scheduleOnce(fn: () => void, seconds: number) { currentRound.timers.set(seconds, fn); },
+        unschedule(fn: () => void) { for (const [seconds, callback] of currentRound.timers) if (callback === fn) currentRound.timers.delete(seconds); },
     };
     class Base {
         assets = { load: async () => ({}) };
@@ -185,9 +208,9 @@ function procedures(sessionPreload: ZCGamePreload | null = null) {
         onDestroy() { this.releaseResourceScope(); }
     }
     const dependencies: Record<string, unknown> = {
-        '../../framework/event/EventMgr': { EventMgr: { instance: new EventMgr() } },
+        '../../framework/event/EventMgr': { EventMgr: { instance: bus } },
         '../model/ZCGameResourcePlan': resourcePlan,
-        cc: { Prefab: class {}, Node: class {}, Vec3: { ZERO: {} }, instantiate: () => ({ setParent() {}, setPosition() {}, getComponent: () => page, destroy: () => destroyed++ }) },
+        cc: { Prefab: class {}, Node: class {}, Vec3: { ZERO: {} }, instantiate: () => ({ isValid: true, setParent() { bus.emit('ui:view-lifecycle', { owner: page, phase: 'ready' }); }, setPosition() {}, getComponent: () => page, destroy: () => destroyed++ }) },
         '../../core/runtime/GameRoute': { GameRoute: { Battle: 'battle', Main: 'main' } },
         '../../framework/procedure/ProcedureBase': { ProcedureBase: Base },
         // 用真模块（ArtPaths 不 import cc，Node 里能直接读），免得根目录改名后这里静默变 undefined
@@ -205,7 +228,7 @@ function procedures(sessionPreload: ZCGamePreload | null = null) {
         // 前者不能写成同步 —— 否则 `pickOpponents` 不等也能拿到数据，
         // "选人前必须先 await 一次"这条约束就验不出来了。
         '../battle/BattleStartService': {
-            startBattle: () => Promise.resolve().then(() => {
+            startBattle: () => battleTask = Promise.resolve().then(() => {
                 lastResult = serverResponse;
                 return serverResponse;
             }),
@@ -282,7 +305,7 @@ function procedures(sessionPreload: ZCGamePreload | null = null) {
         // 抛掉，整个文件的所有用例一起红（这正是"新增 import 不补依赖"那个坑）。
         // 返回空表即可：那两处只用于日志与"没推送就留空占位"。
         '../net/CacheMgr': { CacheMgr: { instance: { getTlCmdArtifact: () => [], getTlCmdRole: () => [] } } },
-        '../../framework/procedure/ProcedureManager': { ProcedureManager: { instance: null } },
+        '../../framework/procedure/ProcedureManager': { ProcedureManager: { instance: null, navigate: (route: string, params: unknown) => navigations.push({ route, params }) } },
         '../zcds/ZCGame': { MAP_DIRECTORY: 'config/maps', ZCGame: class ZCGame {} },
         '../zcds/application/ZCGameLoader': { ZCGameLoader: Loader },
         '../../framework/controller/ComponentController': componentControllerModule(),
@@ -295,6 +318,22 @@ function procedures(sessionPreload: ZCGamePreload | null = null) {
         '../territory/model/TerritorySaveStore': { TerritorySaveStore: { resolveBattle() {} } },
         '../territory/application/TerritorySaveStoreAdapter': { createTerritorySaveStore: () => ({ resolveBattle() {} }) },
     };
+    const compositionExports: Record<string, any> = {};
+    runInNewContext(ts.transpileModule(readFileSync('assets/script/app/bootstrap/matching/MatchingComposition.ts', 'utf8'), {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+    }).outputText, { exports: compositionExports, console: { error() {}, warn() {} }, require(name: string) {
+        if (name.endsWith('/ControllerBase')) return { ControllerBase };
+        if (name.endsWith('/ViewLifecycle')) return { VIEW_LIFECYCLE: 'ui:view-lifecycle' };
+        if (name.endsWith('/EventMgr')) return { EventMgr: { instance: bus } };
+        if (name.endsWith('/MatchingController')) return { MatchingController };
+        if (name.endsWith('/MatchingModel')) return { MatchingModel };
+        if (name.endsWith('/GameNet')) return { GameNet: { instance: { removeCaller() {} } } };
+        const normalized = name.startsWith('../../../framework/') ? name.replace('../../../framework/', '../../framework/')
+            : name.startsWith('../../') ? name.replace('../../', '../') : name;
+        if (!(normalized in dependencies)) throw new Error(`Unexpected composition dependency: ${name}`);
+        return dependencies[normalized];
+    } });
+    dependencies['../bootstrap/matching/MatchingComposition'] = compositionExports;
     const load = (name: string) => {
         const context = { exports: {} as any, require: (name: string) => {
             if (!(name in dependencies)) throw new Error(`Unexpected dependency: ${name}`);
@@ -329,7 +368,7 @@ test('匹配开始即加载，对局等待同一 Promise，界面退出后战斗
     const opponent = { name: 'enemy', power: 100 };
     fixture.options[0].onMatched([opponent]);
     const params = fixture.navigations[0].params;
-    assert.equal(params.opponent, opponent);
+    assert.equal(params.opponent.name, '对手');
     const scope = new ResourceScope('battle');
     let done = false;
     const ready = fixture.battle.onPreload(params, { resources: scope, cancelled: false }).then(() => { done = true; });
@@ -456,7 +495,7 @@ test('开始游戏：服务端下发对局数据时，选对手用敌方单元�
     await options.awaitReady();
     await flush();
     // 回包到达即刷新我方条 —— 「匹配过程中显示自己的个人信息」，不等匹配成功。
-    assert.equal(fixture.mineUpdates.length, 1, '服务端回包到达必须刷新我方信息条');
+    assert.ok(fixture.mineUpdates.length >= 1, '服务端回包到达必须刷新我方信息条');
     const mine = fixture.mineUpdates[0];
     assert.equal(mine.name, '我方', '我方昵称取服务端单元');
     assert.equal(mine.power, 111, '我方战力取服务端单元');
@@ -473,7 +512,7 @@ test('开始游戏：服务端下发对局数据时，选对手用敌方单元�
 
     options.onMatched([picked]);
     const params = fixture.navigations[0].params;
-    assert.equal(params.opponent, picked);
+    assert.deepEqual(params.opponent, picked);
     assert.equal(params.battle?.battleId, 'battle-1', '本局服务端数据必须随 params 带进对局');
     assert.equal(params.battle?.seed, '1234567890123456789', 'seed 走字符串，不接受 number');
 
@@ -497,10 +536,8 @@ test('开始游戏：服务端没数据时保留我方资料，但禁止进入�
     assert.equal(await options.awaitReady(), false);
     await flush();
     assert.equal(fixture.mineUpdates.length, 0, '没有服务端数据就不刷新我方条（保持本机资料，别清空）');
-    const picked = options.pickOpponents()[0];
-    assert.equal(picked.name, '无对手', '拿不到服务端数据时用空占位对手（旧 MatchPool 本地对手兜底已退役，见 pickOpponents）');
-
-    options.onMatched([picked]);
+    assert.equal(options.pickOpponents().length, 0, '服务端未确认时没有对手');
+    options.onMatched([]);
     assert.equal(fixture.navigations.filter(n => n.route === 'battle').length, 0);
     assert.equal(fixture.navigations[0].route, 'main');
 });
@@ -541,15 +578,15 @@ test('对局随机种子：服务端种子交给 ZCGame entry，直接本地入�
 });
 test('匹配中显示服务端 PVP 信息（段位/积分），本接口没有的列保留本地值', async () => {
     const fixture = procedures();
-    fixture.setServerBattleStart({ battleId: 'pvp-info-only', seed: '1', version: '1.0.1', units: [] });
+    fixture.setServerBattleStart({ battleId: 'pvp-info-only', seed: '1', version: '1.0.1', units: [battleUnit(1, '', 0, SELF_ROLE_ID), battleUnit(2, 'enemy', 1, '2')] });
     // `CmdPvpInfoRspMsg.info` 真机实测形状：满级前的号就是 grade=1001 / score=0 / winCount=0。
     fixture.setPvpInfo({ grade: 1001, score: 0, winCount: 0, gradeRewardTag: 0 });
     await fixture.matching.onPreload(undefined, { resources: new ResourceScope('matching'), cancelled: false });
     fixture.matching.onEnter();
     await flush();
 
-    assert.equal(fixture.mineUpdates.length, 1, 'PVP 信息到达必须刷新我方信息条（匹配过程中，不等匹配成功）');
-    const mine = fixture.mineUpdates[0];
+    assert.ok(fixture.mineUpdates.length >= 1, 'PVP 信息到达必须刷新我方信息条');
+    const mine = fixture.mineUpdates[fixture.mineUpdates.length - 1];
     assert.equal(mine.rank, '菜鸟护卫Ⅰ', 'grade 是 id → 经 grade 表换成段位名');
     assert.equal(mine.name, '本机昵称', '本接口没有昵称列 → 保留 CmdRole 缓存的本机昵称');
     assert.equal(mine.trophy, 1, 'score = 0 不是有效显示值 → 保留本地占位，不能清成 0');

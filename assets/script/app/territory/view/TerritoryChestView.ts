@@ -1,6 +1,5 @@
 import {
     Color,
-    Component,
     Graphics,
     Label,
     LabelOutline,
@@ -9,7 +8,7 @@ import {
     SpriteFrame,
     UIOpacity,
     UITransform,
-    Vec3,
+    Vec3
 } from 'cc';
 import {
     territoryChestBeamAlpha,

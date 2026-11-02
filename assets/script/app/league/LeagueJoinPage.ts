@@ -1,3 +1,5 @@
+import { EventMgr } from '../../framework/event/EventMgr';
+import { LeagueTabEvent } from './LeagueTabEvents';
 /**
  * 「加入联盟」页（老端 `TabLeagueJoin`，`ui/League/LeagueJoin`）——**「未入盟」态的整页**。
  *
@@ -121,7 +123,7 @@ export class LeagueJoinPage extends Component {
      * 写成功（快速加入 / 创建）后的回敲 —— 由容器页 `LeagueTabPage` 赋值。
      * 老端靠 `CmdRoleUnion` 推送驱动容器切页，本端没有推送事件 ⇒ 用这条链路顶上。
      */
-    onJoined?: () => void;
+    joinOwner: object | null = null;
 
     /** 本趟列表的视图模型（`renderItemFn` 按 index 现取）。 */
     private rows: ILeagueUnionView[] = [];
@@ -367,11 +369,7 @@ export class LeagueJoinPage extends Component {
     }
 
     private notifyJoined(): void {
-        try {
-            this.onJoined?.();
-        } catch (error) {
-            console.error('[LeagueJoin] onJoined 回调抛错', error);
-        }
+        if (this.joinOwner) EventMgr.instance.emit(LeagueTabEvent.Joined, { owner: this.joinOwner });
     }
 
     /** 三态归一：只有 `'ok'` 静默。 */

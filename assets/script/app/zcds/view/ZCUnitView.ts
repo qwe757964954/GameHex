@@ -460,12 +460,17 @@ export class ZCUnitView extends Component {
                 this.applyOutlineCopyScale(scaleX, scaleY);
             }
             const attacking = unit.battleState === 'attack';
+            // 冲刺（运动霸「拳击冲撞」203301）：冲刺段仍属 `move` 状态，但设计案要求
+            // 「开始冲刺时播放循环的攻击动作」—— 所以这一段把移动动作换成攻击动作。
+            // spine 的 `setAnimation(0, name, true)` 本身就是循环播放（见 `playClip`），
+            // 不需要额外开 loop 开关；`restart=false` 让连续冲刺的每一帧都接着演，不会每帧重头。
+            const charging = unit.charging === true;
             // target（索敌）本质是「正在接近目标」的过渡态，追击时每跨一格都会短暂经过，
             // 若把它当 idle 会导致 run 动画被频繁打断成 idle，看起来像「不切换动作」。
             const moving = unit.battleState === 'move'
                 || unit.battleState === 'moveForward'
                 || unit.battleState === 'target';
-            const clip = attacking ? this.attackClip : moving ? this.moveClip : this.idleClip;
+            const clip = attacking || charging ? this.attackClip : moving ? this.moveClip : this.idleClip;
             const attackRestarted = attacking && (unit.completedAttackCount ?? 0) !== this.lastAttackCount;
             this.playClip(clip, attackRestarted);
             this.lastAttackCount = unit.completedAttackCount ?? 0;

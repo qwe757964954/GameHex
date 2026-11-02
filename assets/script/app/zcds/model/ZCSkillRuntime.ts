@@ -12,7 +12,27 @@ export interface ZCSkillRuntimeDefinition {
     replacementSkillId?: number;
     cooldown?: number;
     maxTriggers?: number;
+    /**
+     * 开局常驻状态（`behaviorKey === 'passive_status'`）。
+     *
+     * 与 `statusId` 分开是因为两者生效时机不同：`statusId` 是「命中时挂给被打的人」，
+     * 这个是在单位出生后挂给**自己**、且不过期。合成一个字段会让
+     * `ZCAttackResolutionSystem.sendAttack` 里的 `skillRuntime?.statusId ?? profile.onHitStatusId`
+     * 把常驻被动误当成命中减益打到敌人身上。
+     */
+    passiveStatusId?: string;
 }
+
+/** 允许把 `pvpSkillPlan` 行直接喂进注册表：计划没有 `legacySkillId`，只借行为/参数/状态三样。 */
+export interface ZCSkillRuntimePlanLike {
+    pvpSkillId: number;
+    targetUnitId: string;
+    behaviorKey?: string | null;
+    trigger?: string | null;
+    stateMode?: ZCSkillStateMode | null;
+    statusId?: string | null;
+}
+
 
 /**
  * 技能行为注册表只接受显式处理器。旧 skillEffect 的数值公式由
@@ -27,6 +47,29 @@ export class ZCSkillRuntimeRegistry {
         this.register('multi_projectile', 'counter');
         this.register('periodic_damage', 'none');
         this.register('on_hit_status', 'none');
+        //  2026-10-29 新增两条「只带数据、不带行为」的 key：
+        //  · `skill_params` —— 计划行只提供 `skillParamJson` 里的数值参数（连发次数 / 护盾比例 / 低血阈值…），
+        //    没有自己的结算逻辑，结算仍由既有的普攻 / empowered 流程读参数完成；
+        //  · `passive_status` —— 开局给自己挂一个不过期的状态（藤盾这类常驻减伤）。
+        //  新增而不是复用 on_hit_status，是因为后者的语义是「打中别人时挂给被打的人」，
+        //  混用会让常驻被动被当成命中减益打到敌人身上。
+        this.register('skill_params', 'none');
+        this.register('passive_status', 'none');
+        //  2026-11-04 椰蛋战士「暴风」（100504）：收招阶段从施法者抛出 N 个移动区域。
+        //  与 `skill_params` 一样只带数据，结算由 `ZCAttackResolutionSystem` 的 zone 分支完成；
+        //  单独注册是因为它要能出现在表里（`SKILL_BEHAVIORS` 白名单）而不报错。
+        this.register('on_cast_end_spawn_zone', 'none');
+        //  2026-10-30 僵尸「共生信号」系列（103001 / 103002 / 103003）：友军光环。
+        //  与上面几条一样「只带数据」—— 施加状态由 `ZCSkillTriggerSystem.applyTeamAura` 每步推进，
+        //  结算复用状态系统的 `statMods`（`attackPct` / `maxHpPct` / `moveSpeedPct` / `attackIntervalPct`）。
+        this.register('team_aura', 'none');
+        //  2026-10-30 六条「第二个主动」的两条新车道，同样只带数据、不带状态机：
+        //  · `self_cast`     —— 冷却到点给自己开一段限时增益（可带自愈 / 友军治疗 / 净化），
+        //                      施加与计时全在 `ZCSkillTriggerSystem.applySelfCast`；
+        //  · `random_strike` —— 冷却到点在半径内挑 N 个敌人各打一发，
+        //                      选目标与伤害结算分别落在 trigger system 与 `ZCAttackResolutionSystem`。
+        this.register('self_cast', 'none');
+        this.register('random_strike', 'none');
     }
 
     register(key: string, stateMode: ZCSkillStateMode): this {
@@ -89,11 +132,27 @@ export class ZCSkillRuntimeRegistry {
                 unitId: first.targetUnitId,
                 skillId: first.pvpSkillId,
                 behaviorKey: first.behaviorKey,
-                trigger: first.trigger,
+                trigger: first.trigger ?? 'none',
                 stateMode: first.stateMode,
                 parameters,
+                //  2026-10-29：把状态 id 透传到运行时。此前这里只吐 `parameters`，而
+                //  `ZCAttackResolutionSystem.sendAttack` 早就在读 `skillRuntime?.statusId`，
+                //  结果是「计划行按等级挂命中减益」永远不生效（只认 profile 上那个定死的 onHitStatusId）。
+                //  缺省 undefined ⇒ 所有既有行行为不变。
+                ...runtimeStatusOf(first),
             });
         }
         return result;
     }
 }
+
+/** 从绑定行/计划行上取两种状态 id；`passive_status` 走常驻槽，其余走命中槽。 */
+function runtimeStatusOf(binding: ZCSkillBinding): Pick<ZCSkillRuntimeDefinition, 'statusId' | 'passiveStatusId'> {
+    const statusId = typeof binding.statusId === 'string' && binding.statusId.trim()
+        ? binding.statusId.trim() : undefined;
+    if (!statusId) return {};
+    return binding.behaviorKey === 'passive_status'
+        ? { passiveStatusId: statusId }
+        : { statusId };
+}
+

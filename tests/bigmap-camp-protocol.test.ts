@@ -18,11 +18,23 @@ test('两组据点协议在真实运行时可注册、编码并解码', async ()
         const req = root.lookupType(`com.xkhy.tafang.cmd.${stem}ReqMsg`);
         assert.deepEqual(req.toObject(req.decode(encoded)), { campIds: [101, 102] });
         const rsp = root.lookupType(`com.xkhy.tafang.cmd.${stem}RspMsg`);
-        const bytes = rsp.encode({ infos: [{ campId: 101, opType: 1, state: 3 }] }).finish();
+        // 简略包只有 `opType`；详情包多两个占领者字段（`occupyRoleId` 是 uint64）。
+        const detail = stem === 'CmdSlgCampInfo';
+        const info = detail
+            ? { campId: 101, opType: 1, occupyRoleId: 8589934593, occupyRoleName: '甲玩家' }
+            : { campId: 101, opType: 1 };
+        const bytes = rsp.encode({ infos: [info] }).finish();
         const decoded = coder.decodeDataById(messageId, bytes);
         assert.equal(decoded.infos[0].campId, 101);
         assert.equal(decoded.infos[0].opType, 1);
-        assert.equal(decoded.infos[0].state, 3);
+        // 2026-10-30 协议定稿：`state` 已移除（能不能打改由客户端日程判），回包里不该再有这个字段。
+        assert.equal(decoded.infos[0].state, undefined, `${stem} 不该再带 state`);
+        if (detail) {
+            assert.equal(String(decoded.infos[0].occupyRoleId), '8589934593', 'uint64 必须原样过线，不丢精度');
+            assert.equal(decoded.infos[0].occupyRoleName, '甲玩家');
+        } else {
+            assert.equal(decoded.infos[0].occupyRoleName, undefined, '简略包不下发占领者');
+        }
     }
 });
 

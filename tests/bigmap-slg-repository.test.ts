@@ -179,3 +179,53 @@ test('写请求未确认且无广播时，只读重拉恢复服务端已经执�
     assert.equal(gateway.calls.filter((call) => call.name === 'CmdSlgBuildMoveReqMsg').length, 1);
     repo.dispose();
 });
+
+const flush = () => new Promise((resolve) => setImmediate(resolve));
+
+test('行动力倒计时到 0 必须自己发 ActionUpdate，回包重置后继续轮询', async () => {
+    const { repo, gateway, advance } = harness();
+    await repo.initialize();
+    const actionCalls = () => gateway.calls.filter((call) => call.name === 'CmdSlgActionUpdateReqMsg').length;
+    assert.equal(actionCalls(), 1, '进页面拉一次');
+    assert.equal(repo.actionRemainingSeconds, 20);
+
+    // 没到点：tick 一轮不该发。
+    advance(4);
+    repo.tick();
+    await flush();
+    assert.equal(actionCalls(), 1, '还差 16 秒，不该发');
+    assert.equal(repo.actionRemainingSeconds, 16);
+
+    // 到点：tick 必须发一次（`tick` 有 5 秒轮询节流，所以这里一次跨过窗口；
+    // 真实运行时 500ms 一 tick ⇒ 到点后最多延迟 5 秒发出，对分钟级恢复可接受）。
+    advance(20);
+    repo.tick();
+    await flush();
+    assert.equal(actionCalls(), 2, '倒计时到 0 就该拉一次');
+    assert.equal(repo.actionRemainingSeconds, 20, 'nextRevertTime 是剩余秒数，回包把倒计时重置');
+
+    // 再走一轮，证明是轮询而不是只补一次
+    advance(20);
+    repo.tick();
+    await flush();
+    assert.equal(actionCalls(), 3, '每一轮恢复都要重新拉');
+    repo.dispose();
+});
+
+test('nextRevertTime = 0 表示没有待恢复，不再自动轮询（否则每 5 秒打一次服务器）', async () => {
+    const { repo, gateway, advance } = harness();
+    gateway.reply = async (name) => {
+        if (name === 'CmdSlgActionUpdateReqMsg') return { info: { nextRevertTime: 0 } };
+        if (name === 'CmdSlgBuildInfoReqMsg') return snapshot();
+        return { info: { maxMonsterLevel: 0, toCampId: 0 } };
+    };
+    await repo.initialize();
+    const actionCalls = () => gateway.calls.filter((call) => call.name === 'CmdSlgActionUpdateReqMsg').length;
+    assert.equal(actionCalls(), 1);
+    assert.equal(repo.actionRemainingSeconds, 0, '0 秒 = 当前没有恢复计划');
+    advance(600);
+    repo.tick();
+    await flush();
+    assert.equal(actionCalls(), 1, '已经满了就不该再轮询');
+    repo.dispose();
+});

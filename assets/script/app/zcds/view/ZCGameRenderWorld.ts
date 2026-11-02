@@ -8,6 +8,12 @@ import {
 } from '../model/ZCNeutralResourceGroup';
 import { ZCPvpTileType } from '../model/ZCPvpTileRules';
 import { ZCCombatEffectView } from './ZCCombatEffectView';
+import {
+    zcCombatEffectAnchorOf,
+    zcCombatEffectAnchorPoint,
+    zcCombatEffectLayerOf,
+    zcCombatEffectSiblingIndex,
+} from './ZCCombatEffectPlacement';
 import { ZCFloatTextView } from './ZCFloatTextView';
 import { ZCCardRevealView } from './ZCCardRevealView';
 import { ProcedureGame } from '../../procedure/ProcedureGame';
@@ -506,7 +512,13 @@ export class ZCGameRenderWorld {
 
     /** 新事件每次 acquire 都重新 initialize，已池化的通用壳也会使用最新专属 Prefab。 */
     applyDeferredArt(art: IZCDeferredBattleArt): void {
-        this.effectVisualPrefabs = art.effectVisualPrefabs;
+        //  🔴 后补美术是**补丁**：`art.effectVisualPrefabs` 从空 Map 起步、逐个 job 往里加。
+        //  原来这里是 `= art.effectVisualPrefabs` 直接替换 ⇒ 第一个 job（翻格脉冲，不带 prefab）
+        //  一回来就把首帧已加载的**技能特效 prefab 全冲掉**，之后靠后续 job 慢慢补。
+        //  与 `ZCEffectPool.setArt` 同一口径：只加不降级。
+        if (art.effectVisualPrefabs.size) {
+            this.effectVisualPrefabs = new Map([...this.effectVisualPrefabs, ...art.effectVisualPrefabs]);
+        }
         this.effectPool.setArt(art);
         if (art.hexGroundGlowFrames && art.hexGroundGlowFrames !== this.hexGroundGlowFrames) {
             this.hexGroundGlowFrames = art.hexGroundGlowFrames;
@@ -2011,15 +2023,29 @@ export class ZCGameRenderWorld {
                 const key = `effect:${event.effectPrefabPath ?? ''}`;
                 const node = this.pool.acquire(key, () => instantiate(effectPrefab));
                 node.setParent(this.options.mapLayer);
-                node.setSiblingIndex(this.options.mapLayer.children.length - 1);
+                // 层序：**地面区域特效要压在所有角色之下**（2026-10-30「形成火焰在脚底的视角」）。
+                // `mapLayer` 里没有「单位层」这种容器，单位 / 飘字 / 卡牌 / 受击特效全是平铺的兄弟节点，
+                // 规则是「新建就置顶」= 谁后创建谁在上 ⇒ 地面特效必须**显式插队到棋盘之后**，
+                // 靠创建顺序会出现"角色晚一帧出生就把火盖回去"的抖动。
+                node.setSiblingIndex(zcCombatEffectSiblingIndex(
+                    zcCombatEffectLayerOf(event.type),
+                    this.options.board.getSiblingIndex(),
+                    this.options.mapLayer.children.length,
+                ));
                 node.layer = this.options.mapLayer.layer;
-                node.setPosition(new Vec3(mapToViewX(event.fromX), mapToViewY(event.fromY), 0));
+                // 初值也走 `ZCCombatEffectPlacement`：`ZCCombatEffectView.render` 每帧会用同一个
+                // 函数重设一次，两边不同源的话第一帧会先闪在旧位置（近战贴出手点 / 中点的差别）。
+                const anchorPoint = zcCombatEffectAnchorPoint(event, zcCombatEffectAnchorOf(event.effectPrefabPath));
+                node.setPosition(new Vec3(mapToViewX(anchorPoint.x), mapToViewY(anchorPoint.y), 0));
                 node.setScale(Vec3.ONE);
                 node.name = `SkillEffect_${event.skillId}_${event.id}`;
                 // 同上：视图组件在 ZCGameEffect.prefab 上。
                 const view = node.getComponent(ZCCombatEffectView);
                 view.initialize(event.effectPrefabPath ? this.effectVisualPrefabs.get(event.effectPrefabPath) || null : null,
-                    !!this.options.allowGenericEffects && !!event.effectPrefabPath);
+                    !!this.options.allowGenericEffects && !!event.effectPrefabPath,
+                    //  光束类特效（镭射飞龙）按**路径**认：同一份美术被普攻与「镭射死光」共用，
+                    //  配一次两条都对；见 `ZCBeamEffect`。
+                    event.effectPrefabPath);
                 entityId = this.createEntity('effect', event.id, node);
                 this.pooledEntityKeys.set(entityId, key);
                 this.effectViews.set(entityId, view);

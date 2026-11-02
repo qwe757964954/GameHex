@@ -254,16 +254,16 @@ test('B2 两个旧的私有页签组件已从 prefab 里彻底退场（防 cid �
 // C. 宿主源码形状
 // ============================================================
 
-test('C1 `MainTabHost`：按 x 排序收集 `TabButton`，点击走 `bindSelect`，红点走 `bindRedDotExpr`', () => {
+test('C1 `MainTabHost`：按 x 排序收集 `TabButton`，点击派发导航意图，红点走 `bindRedDotExpr`', () => {
     const code = stripComments(readFileSync('assets/script/app/main/MainTabHost.ts', 'utf8'));
     assert.match(code, /getComponentsInChildren\(TabButton\)/, '宿主要收集 TabButton');
     assert.match(code, /\.sort\(\(a, b\) => a\.node\.position\.x - b\.node\.position\.x\)/, '必须按 x 排序');
-    assert.match(code, /bindSelect\(/, '点击要交给 TabButton');
+    assert.match(code, /EventMgr\.instance\.emit\(MainTabEvent\.Select/, '点击派发导航意图');
     assert.match(code, /bindRedDotExpr\(/, '红点要接表达式通路');
     // 旧写法（宿主自己挂 CLICK / 实例化旧视图类）不许回来
     assert.ok(!/getComponentsInChildren\(CardLineupNav\)/.test(code), '还在收集旧的 CardLineupNav');
     assert.ok(!/new CardLineupNav\b/.test(code), '还在 new 旧的 CardLineupNav');
-    assert.ok(!/Button\.EventType\.CLICK/.test(code), '宿主不该自己挂 CLICK —— TabButton 内部已挂（幂等）');
+    assert.match(code, /Button\.EventType\.CLICK/, '只监听 prefab Button 的 CLICK');
     // 名称仍由主城文案表驱动，不写死在宿主
     assert.match(code, /mainTabItem\(type\)/, '名称/红点配置必须按 prefab 业务类型查表');
 });
@@ -289,12 +289,10 @@ test('C3 红点回路：`TabButton` 持 `RdExprBinding`，销毁时**必须**解
     assert.match(code, /ensureInit\(\): void/, '初始化要幂等（宿主 active=false ⇒ onLoad 会晚跑）');
 });
 
-test('C4 挑战与世界 tab 禁用后保持可见、使用灰态并拒绝切页点击', () => {
+test('C4 挑战保持可见并禁用，世界作为可用覆盖入口', () => {
     const host = stripComments(readFileSync('assets/script/app/main/MainTabHost.ts', 'utf8'));
     const tab = stripComments(readFileSync('assets/script/app/common/TabButton.ts', 'utf8'));
-    assert.match(host, /const isLocked = type === MainTab\.Challenge \|\| type === MainTab\.World/);
-    assert.match(host, /button\.setEnabled\(!isLocked\)/);
-    assert.match(host, /button\.bindSelect\(isLocked \? null/);
+    assert.match(host, /button\.setEnabled\(type !== MainTab\.Challenge\)/);
     assert.match(tab, /setEnabled\(enabled: boolean\): void/);
     assert.match(tab, /if \(!this\.isEnabled\) return/);
     assert.match(tab, /const tint = this\.isEnabled \? TAB_ENABLED_TINT : TAB_DISABLED_TINT/);

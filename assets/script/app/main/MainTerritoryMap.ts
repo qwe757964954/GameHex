@@ -15,7 +15,7 @@ import {
 } from 'cc';
 import type { AssetService } from '../../core/asset/AssetService';
 import type { GameContext } from '../../core/runtime/GameContext';
-import type { IControllerContext, IControllerResources } from '../../framework/controller/ControllerBase';
+import type { IControllerResources } from '../../framework/controller/ControllerBase';
 import { createIconArtResolver, type IconRow } from '../HeadArtModel';
 import {
     HEX_GROUND_GLOW_ART_ROOT,
@@ -32,8 +32,7 @@ import { ProcedureManager } from '../../framework/procedure/ProcedureManager';
 import { FW } from '../../framework/FW';
 import { EventMgr } from '../../framework/event/EventMgr';
 import {
-    TERRITORY_DEFAULT_PLAYER_COUNT,
-    TERRITORY_TEXTS,
+    TERRITORY_DEFAULT_PLAYER_COUNT
 } from '../territory/application/TerritoryTexts';
 import type { ITerritoryRewardPresentation } from '../territory/application/TerritoryEvents';
 import type { ZCGamePreload } from '../zcds/application/ZCGamePreload';
@@ -97,7 +96,7 @@ import { qualityFrameArtPath } from '../itemdetail/ItemDetailArt';
 import { qualityFrameSuffixOf } from '../itemdetail/ItemDetailTable';
 import { LoadingPopup } from '../common/LoadingPopup';
 
-import { TerritoryEntry } from '../territory/application/TerritoryEntry';
+import { VIEW_LIFECYCLE } from '../../framework/ui/ViewLifecycle';
 import { TerritoryUiEvent, TerritoryViewEvent, type TerritoryIntent,
     type ITerritoryRenderEvent, type ITerritoryCommandEvent } from '../territory/application/TerritoryEvents';
 import type { ITerritoryRenderState } from '../territory/application/TerritoryViewState';
@@ -191,14 +190,12 @@ export class MainTerritoryMap extends Component {
      * 再单独 load 一次是白发一次请求。`null` = 图没加载到 ⇒ 弹窗只藏图标、数字照常。
      */
     private staminaIcon: SpriteFrame | null = null;
-    private entry: TerritoryEntry | null = null;
     private state: ITerritoryRenderState | null = null;
     /** 领地存档归属（roleId/serverId），进入对局时随 pve 一并下发。 */
     private saveOwner: ITerritorySaveOwner | null = null;
     private lastRenderedChapter = -1;
     private focusCell: { readonly chapterId: number; readonly cellId: number } | null = null;
-    /** 首次数据就绪并成功渲染的一次性回调：宿主（MainTabHost）用来确认首屏就绪。 */
-    private firstReadyCallback: (() => void) | null = null;
+    /** 首次完整绘制后报告 presented，组合层据此确认首屏就绪。 */
     private firstReadyNotified = false;
     private controllerResources: IControllerResources = null;
     private get assets(): AssetService { return this.controllerResources.assets; }
@@ -234,14 +231,10 @@ export class MainTerritoryMap extends Component {
      */
     private readoutIconPending: Promise<SpriteFrame | null> | null = null;
 
-    /** Host supplies the application context once, before mounting the page. */
-    initialize(context: IControllerContext): void {
-        this.entry = new TerritoryEntry(context, (callback, seconds) => {
-            this.schedule(callback, seconds);
-            return () => this.unschedule(callback);
-        });
-        this.controllerResources = this.entry.controller.resources;
-        this.saveOwner = this.entry.saveOwner;
+    /** Composition supplies presentation resources before mounting the page. */
+    initialize(resources: IControllerResources, saveOwner: ITerritorySaveOwner | null = null): void {
+        this.controllerResources = resources;
+        this.saveOwner = saveOwner;
         EventMgr.instance.on(TerritoryViewEvent.Render, this.onRender, this);
         EventMgr.instance.on(TerritoryViewEvent.Command, this.onCommand, this);
         void this.loadHexFlipAssets();
@@ -416,23 +409,15 @@ export class MainTerritoryMap extends Component {
             if (this.mapScrollView?.isValid) this.mapScrollView.enabled = !locked;
         };
 
-        if (!this.entry) {
-            throw new Error('[MainTerritoryMap] 页面挂载前必须初始化控制器');
+        if (!this.controllerResources) {
+            throw new Error('[MainTerritoryMap] 页面挂载前必须注入展示资源');
         }
         // 防御：章节若在 onLoad 前已就绪（如重进复用），立即补一次完整绘制。
         EventMgr.instance.emit(TerritoryUiEvent.Ready);
     }
 
     start(): void {
-        this.entry?.start();
-    }
-
-    /**
-     * 注册「首次数据就绪」回调（由宿主在页面挂载前注入）。
-     * 只在首次 renderAll 成功时触发一次，触发后立即清空；传 `null` 可取消。
-     */
-    onFirstReady(callback: (() => void) | null): void {
-        this.firstReadyCallback = callback;
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'ready' });
     }
 
     /** 主城快速寻敌：打开当前 Boss 详情，并将地图移到同一个格子。 */
@@ -447,8 +432,7 @@ export class MainTerritoryMap extends Component {
 
     onDestroy(): void {
         EventMgr.instance.emit(TerritoryUiEvent.Disposed);
-        this.entry?.dispose();
-        this.entry = null;
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'destroyed' });
         this.closePopup(LevelTipPanel);
         this.closePopup(LevelInfoPanel);
         EventMgr.instance.offTarget(this);
@@ -548,9 +532,7 @@ export class MainTerritoryMap extends Component {
         // 首次成功渲染即通知宿主首屏就绪（一次性，之后切章不再触发）。
         if (!this.firstReadyNotified) {
             this.firstReadyNotified = true;
-            const callback = this.firstReadyCallback;
-            this.firstReadyCallback = null;
-            callback?.();
+            EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'presented' });
         }
         // 数据就绪即挂 tick（进入页面/切章后只需一次；加载中 state.ready=false 不会走到这里）。
         const resetScroll = state.chapterId !== this.lastRenderedChapter;

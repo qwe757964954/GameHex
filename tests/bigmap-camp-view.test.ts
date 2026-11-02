@@ -29,7 +29,7 @@ test('真实 GameNet 适配器发送两种请求及 campIds，无连接与发送
     const net = { isConnected: true, ok: true,
         async send(request: RequestMsg & { getReqMsgProtoName(): string }, loading: boolean) {
             sent.push({ name: request.getReqMsgProtoName(), ids: Array.from((request.cmdReqMsg as { campIds: number[] }).campIds), loading });
-            request.fCallback({ infos: [{ campId: 101, opType: 1, state: 2 }] });
+            request.fCallback({ infos: [{ campId: 101, opType: 1 }] });
             return this.ok;
         },
     };
@@ -140,15 +140,14 @@ test('建筑根已离开视口但主城头像仍在屏内时保留标记，完�
     h.view.onDisable();
 });
 
-test('据点角标按 opType 红黄显示，状态相同时变更占领仍会重绘', () => {
+test('据点角标按 opType 红黄显示，opType 未变时不重绘', () => {
     const h = makeWorldView();
     let opType = 0;
-    let state = 1;
     const tints: unknown[] = [];
     h.view.markers = [h.view.markers[0]];
     h.view.data = { world: { monsters: [] }, playerBaseHexId: -1, territories: [],
         get cities() { return new Map([[101, { cityId: 101, name: '营地', state: 'open', level: 1, isServerCamp: true,
-            campInfo: { campId: 101, opType, state } }]]); },
+            campInfo: { campId: 101, opType, occupyRoleId: '', occupyRoleName: '', detailed: false } }]]); },
     };
     h.view.markerLayer = { clear() {} };
     h.view.applyMarker = (_marker, _frame, _title, tint) => { tints.push(tint); };
@@ -158,13 +157,10 @@ test('据点角标按 opType 红黄显示，状态相同时变更占领仍会重
     assert.equal(tints.length, 1);
     opType = 1;
     h.view.refresh();
-    assert.equal(tints[1], h.colors.campOccupied);
-    state = 3;
-    h.view.refresh();
-    assert.equal(tints[2], h.colors.campOccupied, '结算中不改变占领颜色');
+    assert.equal(tints[1], h.colors.campOccupied, '协议只表达有没有人占，角标也只看 opType');
 });
 
-test('点击据点调用详情入口，弹窗显示两种独立状态，保留定位操作', () => {
+test('点击据点调用详情入口，弹窗显示占领状态与占领者，保留定位操作', () => {
     class Component {}
     const exports = loadModule('assets/script/app/bigmap/view/BigMapPage.ts', (name) => {
         if (name.endsWith('/EventMgr')) return { EventMgr };
@@ -186,7 +182,8 @@ test('点击据点调用详情入口，弹窗显示两种独立状态，保留�
     Object.defineProperty(page, 'size', { value: { width: 500, height: 1000 } });
     const calls: number[] = [];
     let canAttack = false;
-    let campInfo: { campId: number; opType: number; state: number } | null = { campId: 101, opType: 1, state: 3 };
+    let campInfo: { campId: number; opType: number; occupyRoleId: string; occupyRoleName: string; detailed: boolean } | null =
+        { campId: 101, opType: 1, occupyRoleId: '9007199254740993', occupyRoleName: '甲玩家', detailed: true };
     let campDetailStatus = 'ready';
     let campRoles: { roleId: string; serverId: string; roleName: string; avatarId: string; defenseHp: number; pos: number }[] = [];
     let campRolesStatus = 'ready';
@@ -211,7 +208,8 @@ test('点击据点调用详情入口，弹窗显示两种独立状态，保留�
     assert.deepEqual(calls, [1]);
     EventMgr.instance.offTarget(page);
     assert.match(page.infoBody.string, /占领状态：已占领/);
-    assert.match(page.infoBody.string, /据点状态：结算中/);
+    assert.match(page.infoBody.string, /占领者：甲玩家/);
+    assert.doesNotMatch(page.infoBody.string, /据点状态/, '协议不再下发开放/攻城中/结算中，界面不能编一个');
     assert.equal(page.primaryButton.node.active, true);
     assert.equal(enabled, false);
     canAttack = true;

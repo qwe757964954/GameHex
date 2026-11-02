@@ -18,7 +18,16 @@
 | 收取 | `CmdSlgBuildCollectReqMsg`（`buildInstIds` 批量） | `requestHarvest`、`requestHarvestAll`（一次结算） |
 | 队列解锁 | `CmdSlgBuildUnlockQueueReqMsg` | `requestUnlockBuildQueue` |
 
-已有 `CmdSlgCampSimpleInfoReqMsg`、`CmdSlgCampInfoReqMsg` 继续由据点 Repository 处理，可见区域和点击详情的查询入口不变。
+已有 `CmdSlgCampSimpleInfoReqMsg`、`CmdSlgCampInfoReqMsg` 继续由据点 Repository 处理，可见区域和点击详情的查询入口不变。两条回包的字段不同（2026-10-30 协议定稿）：
+
+| 消息 | 字段 | 用途 |
+| --- | --- | --- |
+| `SlgCampSimpleInfo`（缩略） | `campId` / `opType` | 只决定角标与势力色：0=未占领（黄）/ 1=已占领（红） |
+| `SlgCampInfo`（详情） | `campId` / `opType` / `occupyRoleId` / `occupyRoleName` | 弹窗展示占领者 |
+
+- 两者**都没有**「开放 / 攻城中 / 结算中」，能不能打完全由客户端日程判（见下条）。
+- `occupyRoleId` 是 `uint64`，按 `toIdString` 走十进制字符串，不转 `number`；未占领时占领者字段一律清空。
+- Repository 合并口径：**详情包整条替换，简略包只覆盖 `opType`**。简略包没有占领者字段，直接 `set` 会把刚查到的占领者名字抹掉；简略包改判未占领时占领者随之清空，不留「未占领 · 张三」。
 
 ## 配置与开战
 
@@ -26,7 +35,17 @@
 - 野怪开战：`CmdStartBattleReqMsg.startBattleInfo = { battleType: 1003, battleParams: [String(monsterId)] }`（用户确认参数口径，例如怪物 8013 关联战斗 30013，实际传 `['8013']`）。
 - 据点开战：`CmdStartBattleReqMsg.startBattleInfo = { battleType: 1004, battleParams: [String(campId)] }`（2026-10-23 用户最新更正）。例如雾隐堡传 `['205']`，不传其关联战斗 `['50027']`。
 - 页面调用 `requestAttackMonster` / `requestAttackCity`，Presenter 校验解锁或服务端据点状态；Entry 复用 `BattleStartService`，收到成功且类型、参数匹配的响应后通过 `GameRoute.Battle` 导航。未确认开战不进入本地模拟局，也不预扣资源或行动力。
-- 已收到据点状态时，只对未占领且状态为开放/攻城中的、已配置战斗的地图据点启用攻击。详情查询失败且没有状态快照时，允许向开战协议请求资格确认，不伪造开放状态，不本地扣费；详情仍在加载时等待查询结束。配置表存在但当前地图没有放置的据点不会凭空生成。旧地图中的据点若在 `bigMapCamp` 无对应行则禁用攻击，不猜测映射。
+- 已收到据点状态时，只对**未占领**（`opType = 0`）、已配置战斗、且**当前处于攻城时段**的地图据点启用攻击。详情查询失败且没有状态快照时，允许向开战协议请求资格确认，不伪造开放状态，不本地扣费；详情仍在加载时等待查询结束。配置表存在但当前地图没有放置的据点不会凭空生成。旧地图中的据点若在 `bigMapCamp` 无对应行则禁用攻击，不猜测映射。
+- 攻城时段由配置算，代码里不写 `21:00` 这种字面量：`bigmapSchedule` 表给 `openTime/lockTime/settleTime/snapshotTime`，`gameConfig` 覆盖其中两项并补一项 ——
+
+  | `gameConfig.key` | 首版值 | 语义 | 落到 |
+  | --- | --- | --- | --- |
+  | `bigMapStartCountRankTime` | `[21,10]` | 停止攻城 | `schedule.settleAt` |
+  | `bigMapRankRewardTime` | `[21,30]` | 结算完成、下发排行奖励 | `schedule.snapshotAt` |
+  | `bigMapReFreshRankStopTime` | `60` | 跨天结算前后 X 分钟不可攻城 | `schedule.crossDayStopMinutes` |
+
+- 跨天禁攻是**独立于每日开放窗口**的第二条约束（`00:00 ± X 分钟`，首版 = 23:00~01:00）。正常 21:10 就停攻，这条在窗口被拉长时才起作用，所以不能因为「被前一条覆盖」就不实现。它不新增阶段，只把 `canAttack` 置假，原因文案走「跨天排行结算中，暂不可攻城」。
+- 覆盖层**降级不抛错**：`bigmapSchedule` 表本身写错仍直接抛（错一天全服战功都错）；`gameConfig` 是后配的另一张表，缺键/脏值/倒挂都退回表值并留日志，不让世界页打不开。
 - SLG 开战禁止自动重发与重连恢复；重复点击不叠请求，关页、换号、换服、超时后迟到回包失效。成功数据只随 entry params 交接，不进入 PVP 最近战斗缓存。
 - 1003 / 1004 的 NPC 也占参战席位。`showInfo.name` 为空时，席位档案使用既有阵营名（如“敌方”），HUD 与排行榜共用此档案；不因名称或头像缺失删除第二方，也不伪造头像。
 - 所有正式战斗共用服务端英雄阵容规则：各方卡牌采用各自 `heroInfos` 的英雄 ID、顺序与等级（沿用最多八张英雄卡的限制）；英雄卡池与相关资源查询使用同一份归一化阵容。明确的空数组、未下发的额外席位均不补本地英雄；只有无服务端回包的本地模式才用默认阵容。章节敌方名单不再提前裁剪正式回包的卡池；无英雄 ID 的系统卡继续使用客户端配置。

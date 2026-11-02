@@ -55,8 +55,10 @@ test('页面关闭后不派发默认请求，迟到完成释放且拒绝交给�
 
 test('领地章节美术、翻格、云、宝箱统一使用页面作用域，销毁时归还', () => {
     const source = readFileSync('assets/script/app/main/MainTerritoryMap.ts', 'utf8');
-    assert.match(source, /this.controllerResources = this.entry.controller.resources/);
-    assert.match(source, /new TerritoryEntry\(context,/);
+    assert.match(source, /this.controllerResources = resources/);
+    const composition = readFileSync('assets/script/app/bootstrap/main/MainPageComposition.ts', 'utf8');
+    assert.match(composition, /new TerritoryEntry\(context,/);
+    assert.match(composition, /territory\.initialize\(entry\.controller\.resources, entry\.saveOwner\)/);
     const entry = readFileSync('assets/script/app/territory/application/TerritoryEntry.ts', 'utf8');
     assert.match(entry, /new TerritoryChapterLoader\(resources.assets\)/);
     for (const method of ['loadHexFlipAssets', 'loadResourceGainIcons', 'loadChestArt', 'loadCloudArt']) {

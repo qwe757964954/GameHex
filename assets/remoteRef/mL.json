@@ -3204,6 +3204,11 @@
 640,
 "SLG_BASE_CANNOT_ATTACK_SELF",
 "不能攻击自己"
+],
+[
+641,
+"SLG_CAN_NOT_SETTLEMENT_TIME",
+"结算期间无法战斗"
 ]
 ],
 "c":1

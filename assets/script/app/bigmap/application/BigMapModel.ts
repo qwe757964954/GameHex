@@ -112,7 +112,12 @@ export interface IBigMapModelDeps {
     readonly now: () => number;
     /** 世界种子，缺省用默认值；改它等于换一张地图。 */
     readonly seed?: number;
-    /** 开服天数，缺省 0（单机版恒 0）。 */
+    /**
+     * 开服天数（1 起，开服当天 = 1）。
+     *
+     * **不传 = 服务器还没下发，不做开服控制**（2026-10-30 山猫口径：「先打开待服务器有，再做控制」）。
+     * 协议 `SlgGameInfo` 目前没有这个字段；等后端补上后，`BigMapEntry` 在这里传值即自动生效。
+     */
     readonly openDay?: number;
     /**
      * 策划布局（`BigMapLayoutLoader` 产出）。缺省 / `null` = 按种子生成世界。
@@ -467,14 +472,22 @@ export class BigMapModel {
     }
 
     get unlockContext(): IBigMapUnlockContext {
-        const context = bigMapUnlockContextOf(this.data.battle, this.deps.adventureChapter(), this.deps.openDay ?? 0);
+        const context = bigMapUnlockContextOf(this.data.battle, this.deps.adventureChapter(), this.deps.openDay);
+        // 联机档的本地存档是空的，`occupiedCityIds` 恒为空集 ⇒ 城池链会断在第一个前置城上，
+        // 表现为「章节够了但所有城都未解锁」。用「客户端刷到过的已占据点」补一个下界
+        // （服务器不下发全量归属，所以只能是下界，不是全服占领表）。
+        const serverOccupied = this.deps.campRepository?.occupiedCampIds() ?? [];
+        const merged = serverOccupied.length === 0 ? context : {
+            ...context,
+            occupiedCityIds: new Set([...context.occupiedCityIds, ...serverOccupied]),
+        };
         const server = this.deps.slgRepository;
-        if (!server) return context;
+        if (!server) return merged;
         // 联机版的击杀进度在服务器（`SlgGameInfo.maxMonsterLevel`），本地存档是空的；
         // 不覆盖会把野外怪全部锁死（`preLevel > 0` 一律不放行）。
         return {
-            ...context,
-            maxClearedMonsterLevel: Math.max(context.maxClearedMonsterLevel, server.maxClearedMonsterLevel),
+            ...merged,
+            maxClearedMonsterLevel: Math.max(merged.maxClearedMonsterLevel, server.maxClearedMonsterLevel),
         };
     }
 
@@ -984,8 +997,16 @@ export class BigMapModel {
 
     async refreshCampDetail(campId: number): Promise<void> {
         const repository = this.deps.campRepository;
-        if (this.isDisposed || !repository || !this.worldInstance.cities.has(campId)
-            || this.campDetailStatuses.get(campId) === 'loading') return;
+        if (this.isDisposed) return;
+        if (!repository) return;
+        // 早退必须**逐条留痕**：这里以前是一行 `if (...) return`，点据点没反应时完全看不出
+        // 卡在哪一条（2026-10-30 排查「没看到发 CmdSlgCampInfoReqMsg」时踩的）。
+        if (!this.worldInstance.cities.has(campId)) {
+            console.warn(`[BigMap] 据点 ${campId} 不在这张地图的城池里，跳过详情查询`,
+                `已知城池数=${this.worldInstance.cities.size}`);
+            return;
+        }
+        if (this.campDetailStatuses.get(campId) === 'loading') return;
         this.campDetailStatuses.set(campId, 'loading');
         this.campRoleStatuses.set(campId, 'loading');
         this.emit();
@@ -1075,7 +1096,18 @@ export class BigMapModel {
         this.emit();
     }
 
-    private resolveCampAttackReason(campId: number, info: IBigMapCampInfo | null): string {
+    /**
+     * 联机据点「能不能打」。
+     *
+     * 协议（2026-10-30）只给 `opType`，**没有** `开放 / 攻城中 / 结算中` ——
+     * 所以判据拆成两段：服务器定「有没有人占」，日程定「现在能不能打」。
+     * 两段都必须过，缺一段就会出现「按钮亮着但服务端拒绝」或「到了开放时间还是灰的」。
+     */
+    private resolveCampAttackReason(
+        campId: number,
+        info: IBigMapCampInfo | null,
+        timeline: IBigMapCityTimeline,
+    ): string {
         if (this.isDisposed) return BIGMAP_BATTLE_TEXT.closed;
         if (this.isStartingBattle) return BIGMAP_BATTLE_TEXT.pending;
         if (!this.config.camps.has(campId)) return BIGMAP_BATTLE_TEXT.campMissing;
@@ -1084,7 +1116,8 @@ export class BigMapModel {
             // 详情查询与开战是独立协议；查询失败不能让开战入口永久不可用，资格以开战回包为准。
             return this.campDetailStatuses.get(campId) === 'failed' ? '' : BIGMAP_CAMP_QUERY_TEXT.pending;
         }
-        return info.opType === 0 && (info.state === 1 || info.state === 2) ? '' : BIGMAP_BATTLE_TEXT.campUnavailable;
+        if (info.opType === 1) return BIGMAP_BATTLE_TEXT.campOccupied;
+        return bigMapCityAttackGate('open', timeline).reason;
     }
 
     cityView(cityId: number): IBigMapCityView | null {
@@ -1095,12 +1128,23 @@ export class BigMapModel {
         const playerCampId = this.playerCampId;
         const campInfo = this.deps.campRepository?.get(cityId) ?? null;
         const camp = this.config.camps.get(cityId);
-        const campAttackReason = this.resolveCampAttackReason(cityId, campInfo);
+        // 一次快照只认一个时刻：日程在这里取一次，往下（能不能打 / 阶段文案 / gate）全部复用同一份。
+        // 分两次取 `now()` 时，跨过秒边界会让同一座城的「能不能打」和「阶段文案」来自两个时刻
+        // （详见 `cityTimeline`）。
+        const timeline = this.cityTimeline();
+        const campAttackReason = this.resolveCampAttackReason(cityId, campInfo, timeline);
+        // 联机档（有 `campInfo`）**只认 `opType`**：服务器能把这座据点下发出来，就说明它已开放，
+        // 未占领即可打；「现在能不能打」由 `resolveCampAttackReason` 再叠日程判。
+        // ⚠️ 这里**不能**先判 `city.available`：那是「本期开放哪一层」的配置开关，
+        // `withBigMapCampCities` 只把 `occupyType = 1`（个人层）标成可用，而 `bigMapCamp` 表里
+        // 81 座据点有 58 座是军团层（`occupyType = 2`）—— 先判它会把服务器明确下发的据点
+        // 全打成「未开放」（2026-10-30 反馈「点所有玩家据点都是未开放」），图标灰、点进去没内容。
+        // 早期协议的 `state`（0=未开放/1=开放/2=攻城中/3=结算中）已于 2026-10-30 移除，
+        // 不要为它留兼容分支：两套真源同时存在时必然打架。
         const state = campInfo
-            ? (campInfo.opType === 1 ? 'occupied' : campInfo.state === 0 ? 'unavailable' : 'open')
+            ? (campInfo.opType === 1 ? 'occupied' : 'open')
             : bigMapCityState(city, context);
         const reason = bigMapCityUnlock(city, context).reason;
-        const timeline = this.cityTimeline();
         const gate = bigMapCityAttackGate(state, timeline);
         const board = this.cityRankBoard(cityId);
         const distance = bigMapHexDistance(
@@ -1241,7 +1285,7 @@ export class BigMapModel {
             this.config, this.data.base, this.data.battle, city, view.distance,
             {
                 adventureChapter: this.deps.adventureChapter(),
-                openDay: this.deps.openDay ?? 0,
+                openDay: this.deps.openDay,
                 // 名次 / 拥挤系数用当前榜单的真值，不再恒等于 1。
                 attackers: view.attackerCount,
                 rank: view.playerRank,

@@ -26,9 +26,6 @@ export interface IBigMapControllerOptions {
 /** 唯一的事件编排入口：网络/Model/UI → 状态变更 → 展示事件。 */
 export class BigMapController extends ControllerBase {
     private started = false;
-    private disposed = false;
-    private stopTimer: (() => void) | null = null;
-    private readonly subscriptions: (() => void)[] = [];
     private visibleCampIds: readonly number[] = [];
     private nextCampRefreshAt = 0;
     private ui: { -readonly [K in keyof IBigMapUiState]: IBigMapUiState[K] } = {
@@ -42,20 +39,21 @@ export class BigMapController extends ControllerBase {
     get snapshot(): IBigMapViewState { return buildBigMapViewState(this.model, this.ui); }
 
     start(): void {
-        if (this.started || this.disposed) return;
+        if (this.started || this.isDisposed) return;
         this.started = true;
         this.bindModelEvents();
         this.bindNetworkEvents();
+        this.own(() => this.options.network?.removeCaller(this));
         this.bindUiEvents();
         const schedule = this.options.schedule ?? ((callback: () => void, milliseconds: number) => {
             const timer = setInterval(callback, milliseconds);
             return () => clearInterval(timer);
         });
-        this.stopTimer = schedule(() => this.tick(), 500);
+        this.own(schedule(() => this.tick(), 500));
     }
 
     initialize(): Promise<boolean> { return this.model.initializeSlg(); }
-    refreshUnlockContext(): void { if (!this.disposed) this.model.refreshUnlockContext(); }
+    refreshUnlockContext(): void { if (!this.isDisposed) this.model.refreshUnlockContext(); }
 
     private bindNetworkEvents(): void {
         const net = this.options.network;
@@ -73,14 +71,14 @@ export class BigMapController extends ControllerBase {
     private onBuildBroadcast(): void { this.options.slgRepository?.invalidate('build'); }
 
     private bindModelEvents(): void {
-        this.subscriptions.push(this.model.onChanged(() => this.publish()));
-        if (this.options.campRepository) this.subscriptions.push(this.options.campRepository.onChanged(() => this.model.notifyCampChanged()));
-        if (this.options.slgRepository) this.subscriptions.push(this.options.slgRepository.onChanged(() => this.model.syncServerBase()));
+        this.own(this.model.onChanged(() => this.publish()));
+        if (this.options.campRepository) this.own(this.options.campRepository.onChanged(() => this.model.notifyCampChanged()));
+        if (this.options.slgRepository) this.own(this.options.slgRepository.onChanged(() => this.model.syncServerBase()));
     }
     private bindUiEvents(): void {
-        EventMgr.instance.on(BigMapUiEvent.Intent, this.onIntent, this);
-        EventMgr.instance.on(BigMapUiEvent.Ready, this.onViewReady, this);
-        EventMgr.instance.on(BigMapUiEvent.Disposed, this.onViewDisposed, this);
+        this.listen(BigMapUiEvent.Intent, this.onIntent);
+        this.listen(BigMapUiEvent.Ready, this.onViewReady);
+        this.listen(BigMapUiEvent.Disposed, this.onViewDisposed);
     }
     private onViewDisposed(): void {
         this.dispose();
@@ -220,18 +218,18 @@ export class BigMapController extends ControllerBase {
         this.publish();
         try {
             const result = await action();
-            if (this.disposed) return;
+            if (this.isDisposed) return;
             if (result.ok) onSuccess?.();
             this.feedback(result);
         } catch {
-            if (!this.disposed) this.feedback({ ok: false, message: '操作失败，请重试' });
+            if (!this.isDisposed) this.feedback({ ok: false, message: '操作失败，请重试' });
         } finally {
             this.ui.baseActionPending = false;
-            if (!this.disposed) this.publish();
+            if (!this.isDisposed) this.publish();
         }
     }
     cancelEnteringBattle(): void {
-        if (this.disposed || !this.ui.enteringBattle) return;
+        if (this.isDisposed || !this.ui.enteringBattle) return;
         this.ui.enteringBattle = false;
         this.publish();
     }
@@ -247,13 +245,8 @@ export class BigMapController extends ControllerBase {
         await this.model.refreshVisibleCamps(this.visibleCampIds);
     }
     dispose(): void {
-        if (this.disposed) return;
-        this.disposed = true;
-        this.stopTimer?.(); this.stopTimer = null;
-        EventMgr.instance.offTarget(this);
-        this.options.network?.removeCaller(this);
-        for (const unsubscribe of this.subscriptions) unsubscribe();
-        this.subscriptions.length = 0;
+        if (this.isDisposed) return;
+        this.releaseInputs();
         this.model.dispose();
         super.dispose();
     }

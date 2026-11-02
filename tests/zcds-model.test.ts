@@ -986,9 +986,14 @@ test('PVP 技能表驱动近战刀光、远程弹道、范围技与强化计数'
     const basketball = resolveUnitDefinition('68030').attackProfile;
     assert.equal(basketball.skillId, 30702, '68030 篮球天才用自己的独立行 30702（不再与 68001 共用）');
     assert.notEqual(basketball.skillId, archer.skillId, '同职业的两张植物卡必须各用各的 skillId');
-    assert.deepEqual([basketball.mode, basketball.projectileKey, basketball.empoweredEvery],
-        [archer.mode, archer.projectileKey, archer.empoweredEvery],
-        '独立行的战斗参数必须与它复制自的职业行逐项一致');
+    //  2026-10-30：30702 不再「整行复制豌豆游侠」。篮球天才的强化槽换成自己的主动
+    //  「绿尸寒警告」30848（每 14 秒一次），节拍从「每 12 次普攻」改成了「按冷却触发」，
+    //  所以这两个字段必然与 30701 不同 —— 只保留「形态 / 弹道」这一层的一致性。
+    assert.deepEqual([basketball.mode, basketball.projectileKey],
+        [archer.mode, archer.projectileKey],
+        '独立行的战斗形态必须与它复制自的职业行一致');
+    assert.deepEqual([basketball.trigger, basketball.cooldown, basketball.empoweredSkillId],
+        ['every_seconds', 14, 30848], '篮球天才的主动链：14 秒冷却 → 绿尸寒警告');
     assert.deepEqual([areaUnit.skillId, areaUnit.mode, areaUnit.areaRadius], [30667, 'area', 60]);
     assert.deepEqual([necromancer.skillId, necromancer.mode, necromancer.projectileKey], [30671, 'projectile', '子弹_亡灵']);
 });
@@ -1180,27 +1185,44 @@ test('普攻 / 技能双链：真表名单 —— 火法师走次数、冰法师
     // 2026-10-21：火焰树妖 30181 → 30711（独立行，参数整行复制 30181，只换特效预设）。
     assert.equal(fire.skillId, 30711);
     assert.equal(fire.trigger, 'every_n_attacks');
-    assert.equal(fire.empoweredEvery, 10);          // 走次数 → 第 10 次普攻
-    assert.equal(fire.empoweredSkillId, 36181);
+    // 2026-10-30：火焰树妖改成「累计够 6 次普攻放一次灼热地带」，
+    // 与下面那条用例（1243 行）保持同一口径 —— 原值 10 是上一轮改动前的节拍。
+    assert.equal(fire.empoweredEvery, 6);           // 走次数 → 每 6 次普攻
+    // 2026-10-30：强化目标也从借用火法师武将技 36181（火船）改成自己的 30811 灼热地带。
+    assert.equal(fire.empoweredSkillId, 30811);
 
     const ice = resolveUnitDefinition('68011').attackProfile;    // 冰法师
-    assert.equal(ice.skillId, 30201);
+    // 冰法师现在指向 30261（弩兵普攻行，共用冰锥特效），不是 30201 —— 两行都走 `every_seconds`。
+    assert.equal(ice.skillId, 30261);
     assert.equal(ice.trigger, 'every_seconds');
     // ⚠️ 秒数同上是**策划调参**（2026-09-21 12:33 改成 5）→ 只断言「配了正的冷却值」，不锁死数字。
     assert.ok(typeof ice.cooldown === 'number' && ice.cooldown > 0,
         `冰法师走时间，必须配正的 cooldown，实际 ${ice.cooldown}`);
-    assert.equal(ice.empoweredEvery, 7);            // 老节拍列**保留但不参与**判定
-    assert.equal(ice.empoweredSkillId, 36201);
+    assert.equal(ice.empoweredEvery, 12);           // 老节拍列**保留但不参与**判定
+    assert.equal(ice.empoweredSkillId, 36261);
 
-    // 火法师（远程 projectile，攻击间隔 1.8s）：40 秒 ≈ 22 击 → 强化精确落在第 10 / 20 击。
+    // 火法师（远程 projectile，攻击间隔 1.8s）：40 秒 ≈ 22 击 → 强化按每 6 击落在第 6 / 12 / 18 击。
+    //
+    //  ⚠️ 这条**不能再按「第几次事件」逐击比对**（2026-10-30）：火焰树妖的强化击已经改成 30811
+    //  灼热地带（`mode: area`），它不再产生 `type: 'projectile'` 的出手事件 —— 现在
+    //  `combatEvents` 里能看到的只有「命中确认」（`resolveProjectileHit` 推的 radius 4 / 0.18s）
+    //  和「区域波次」。所以改成按语义断言：普通击必然是 30711、强化击必然是 30811，
+    //  并且强化击的**时间点**落在每 6 击的节拍上（1.8s × 6 = 10.8s 一次）。
     const { events } = collectAttacks('68003', 40, 0);
-    assert.ok(events.length >= 20, `40 秒内至少该打出 20 次普攻（间隔 1.8s），实际 ${events.length}`);
-    assert.deepEqual(events.map((event) => event.empowered),
-        events.map((_, index) => (index + 1) % 10 === 0), '第 10 / 20 次普攻的强化落点不对');
-    assert.deepEqual(Array.from(new Set(events.filter((event) => event.empowered).map((event) => event.skillId))),
-        [36181], '强化那一击必须换用武将技行的 skillId');
-    assert.deepEqual(Array.from(new Set(events.filter((event) => !event.empowered).map((event) => event.skillId))),
+    const normalHits = events.filter((event) => !event.empowered);
+    const strongHits = events.filter((event) => event.empowered);
+    assert.ok(normalHits.length >= 15,
+        `40 秒内至少该打出 15 次普攻命中（间隔 1.8s），实际 ${normalHits.length}`);
+    assert.ok(strongHits.length >= 3,
+        `每 6 击强化一次，40 秒（≈22 击）至少该有 3 次，实际 ${strongHits.length}`);
+    assert.deepEqual(Array.from(new Set(strongHits.map((event) => event.skillId))),
+        [30811], '强化那一击必须换用技能行的 skillId');
+    assert.deepEqual(Array.from(new Set(normalHits.map((event) => event.skillId))),
         [30711], '非强化击必须仍用普攻行的 skillId');
+    // 首个强化击落在第 6 击 ≈ 10.8s（留 1 个攻击间隔的余量给命中延迟）。
+    const firstStrong = strongHits[0]!.startedAt;
+    assert.ok(firstStrong >= 9.5 && firstStrong <= 13.5,
+        `首个强化击应落在第 6 击（≈10.8s），实际 ${firstStrong}s`);
 });
 
 test('植物占领世界普攻特效接入：每张卡用自己的独立行，源职业行不再被劫持', () => {
@@ -1212,10 +1234,12 @@ test('植物占领世界普攻特效接入：每张卡用自己的独立行，�
     const skillRows = new Map(readPvpRef('pvpSkill').map((row) => [Number(row.skillId), row]));
     const cases: Array<[string, number, number, string]> = [
         ['68003', 30711, 30181, '火法师_新子弹/火法师_新子弹'],   // 火焰树妖
-        ['68007', 30712, 30221, '长戟兵_撕裂/长戟兵_撕裂'],       // 吞噬大嘴花
-        ['68033', 30713, 30241, '重骑兵_践踏/重骑兵_践踏'],       // 运动霸（美术名「消灭学霸」）
         ['68020', 30714, 30251, '风法师_绿风/风法师_绿风'],       // 三叶小丑
-        ['68004', 30715, 30681, '子弹_新怪物/女猎手'],           // 玉米射手（卡名「玉林好汉」）
+        // 68004 玉林好汉（历史卡名沿用「玉米射手」）2026-10-30 已从 30681/30715 这条链上摘走：
+        // 它有了自己的 30716 + 精英猎手 30821，不再是「整行复制源行只换特效」，所以不在这张表里比字段，
+        // 单独断言见下面。
+        // 68007 吞噬大嘴花（30712）/ 68033 运动霸（30713）2026-10-30 也从这张表里退出：
+        // 两张卡的强化节拍与强化目标都按角色定制了（见文末断言），不再是「只换特效」。
     ];
     for (const [cardId, ownSkillId, baseSkillId, basePrefab] of cases) {
         assert.equal(resolveUnitDefinition(cardId).attackProfile.skillId, ownSkillId,
@@ -1226,8 +1250,11 @@ test('植物占领世界普攻特效接入：每张卡用自己的独立行，�
         assert.ok(base, `${baseSkillId} 行必须存在`);
         // 独立行 = 整行复制，只有特效预设不同 → 战斗参数逐项一致（否则等于偷偷改了数值）。
         // `projectileKey` / `effectKey` 不在这里比 —— 它们由下面那条「15 行必须为空」统一管。
-        for (const field of ['mode', 'projectileSpeed', 'areaRadius', 'empoweredEvery',
-            'empoweredSkillId', 'trigger', 'cooldown', 'onHitStatusId']) {
+        // `empoweredEvery` / `empoweredSkillId` 对 30711 例外（2026-10-30）：火焰树妖的强化节拍
+        // 与强化目标都按角色定制了（每 6 次普攻 → 自己的灼热地带 30811），不再是「只换特效」。
+        const fields = ['mode', 'projectileSpeed', 'areaRadius', 'trigger', 'cooldown', 'onHitStatusId'];
+        if (ownSkillId !== 30711) fields.push('empoweredEvery', 'empoweredSkillId');
+        for (const field of fields) {
             assert.deepEqual(own![field] ?? null, base![field] ?? null,
                 `${ownSkillId}.${field} 必须与源行 ${baseSkillId} 一致（独立行只是换特效）`);
         }
@@ -1235,6 +1262,48 @@ test('植物占领世界普攻特效接入：每张卡用自己的独立行，�
         assert.ok(String(base!.effectPrefabPath).endsWith(basePrefab),
             `${baseSkillId} 的特效预设必须回退成 ${basePrefab}，不能留着植物卡的特效`);
     }
+    // 火焰树妖的强化击必须指向**自己的**灼热地带，不能再借用火法师武将技（36181 = 火船）。
+    const treant = skillRows.get(30711)!;
+    assert.equal(treant.empoweredEvery, 6, '火焰树妖每 6 次普攻强化一次（累计够 6 次放 1 次灼热地带）');
+    assert.equal(treant.empoweredSkillId, 30811, '火焰树妖强化击必须指向 30811 灼热地带');
+    assert.equal(String(skillRows.get(30811)!.mode), 'area', '灼热地带必须是 area 模式，才会在目标点建持续区域');
+
+    // 玉林好汉（68004）2026-10-30：换上自己的飞镖普攻 30716 + 精英猎手 30821。
+    // 它与上面那批「只换特效」的独立行不同 —— 节拍（每 10 秒）、强化目标（30821）都是角色定制的，
+    // 所以这里断言的是**这一条链本身**，而不是与源行逐字段相等。
+    const dart = resolveUnitDefinition('68004').attackProfile;
+    assert.equal(dart.skillId, 30716, '玉林好汉必须走自己的飞镖普攻行（原 30715 是玉米射手的）');
+    assert.equal(dart.trigger, 'every_seconds', '精英猎手是「主动-冷却 10 秒」，必须走时间触发');
+    assert.equal(dart.cooldown, 10, '设计案 100404 的冷却就是 10 秒');
+    assert.equal(dart.empoweredSkillId, 30821, '强化那一击必须换用精英猎手 30821');
+    assert.equal(String(skillRows.get(30716)!.effectPrefabPath),
+        'units/projectiles/玉林好汉_飞镖普攻/玉林好汉_飞镖普攻', '普攻必须用新做的飞镖三件套');
+    // 「子弹大小 ×3」不在弹道参数里做，而是强化那一击换一张 `_lscale` 更大的同源 prefab
+    // （尺寸真源只能是 prefab 根 `_lscale`，见 `docs/zcds-表现层与领地规范.md` §1.10）。
+    assert.equal(String(skillRows.get(30821)!.effectPrefabPath),
+        'units/projectiles/玉林好汉_飞镖普攻_强化/玉林好汉_飞镖普攻_强化',
+        '精英猎手必须换成放大版 prefab，而不是在代码里 setScale');
+    // 30715 仍是玉米射手自己的普攻行，不能被这次改动带走。
+    assert.ok(skillRows.get(30715), '30715（玉米射手普攻）必须保留');
+    assert.equal(String(skillRows.get(30715)!.effectPrefabPath),
+        'units/projectiles/玉米射手_普攻/玉米射手_普攻', '30715 的特效不能被玉林好汉劫持');
+
+    //  2026-10-30（花果 / 僵尸技能落地）：吞噬大嘴花 30712 与运动霸 30713 也变成了
+    //  「角色定制链」—— 独立行不再只是换特效，节拍与强化目标都指向自己的主动技。
+    //  它们的特效预设仍是自己的序列帧，源职业行的特效也回退成了 r340 原值。
+    const mouth = skillRows.get(30712)!;
+    assert.deepEqual([mouth.trigger, mouth.empoweredEvery, mouth.empoweredSkillId],
+        ['every_n_attacks', 5, 30842], '吞噬大嘴花：每 5 次普攻 → 穿刺利刃 30842');
+    assert.ok(String(mouth.effectPrefabPath).endsWith('吞噬大嘴花_普攻/吞噬大嘴花_普攻'));
+    assert.ok(String(skillRows.get(30221)!.effectPrefabPath).endsWith('长戟兵_撕裂/长戟兵_撕裂'),
+        '30221 长戟兵普攻的特效必须还是自己的');
+
+    const athlete = skillRows.get(30713)!;
+    assert.deepEqual([athlete.trigger, athlete.cooldown, athlete.empoweredSkillId, athlete.secondarySkillId],
+        ['every_seconds', 14, 30853, 30852], '运动霸：14 秒 → 天外飞石 30853，副轨能量光束 30852');
+    assert.ok(String(athlete.effectPrefabPath).endsWith('消灭学霸_普攻/消灭学霸_普攻'));
+    assert.ok(String(skillRows.get(30241)!.effectPrefabPath).endsWith('重骑兵_践踏/重骑兵_践踏'),
+        '30241 重骑兵普攻的特效必须还是自己的');
     // `projectileKey` / `effectKey` 是**老客户端**的技能事件标识，指向 skillEffect / skillView 里的资源。
     // 30701–30715 是这批新素材，旧表里根本没有对应事件（grep 三张旧表全 0）——所以复制源行时
     // 这两个字段必须清空。留着的代价是**静默**的：值照样能跑、表现层也没人读这列
@@ -1300,9 +1369,10 @@ test('技能伤害倍率：武将技那一击按 pvpSkill.damageRate 放大伤�
     assert.equal(militia.attackProfile.damageRate, undefined, '普攻行必须留空（= 1 倍）');
     assert.equal(militia.empoweredProfile?.damageRate, 2.4, '民兵武将技应为 2.4 倍');
 
-    const fire = resolveUnitDefinition('68003');             // 火法师（远程 projectile）
-    assert.equal(fire.attackProfile.damageRate, undefined, '普攻行必须留空（= 1 倍）');
-    assert.equal(fire.empoweredProfile?.damageRate, 0.8, '火法师武将技应为 0.8 倍');
+    const remote = resolveUnitDefinition('68035');          // 科学家（远程 projectile）
+    assert.equal(remote.attackProfile.damageRate, undefined, '普攻行必须留空（= 1 倍）');
+    //  2026-10-30：68035 的强化槽从「弓兵武将技 36151（0.6 倍）」换成自己的「轨道打击 30857（2.0 倍）」。
+    assert.equal(remote.empoweredProfile?.damageRate, 2, '轨道打击应为 2.0 倍');
 
     // ② 近战路径：`unitDamage` 直接算最终伤害，倍率乘在最后
     checkRate(collectAttacks('68023', 20, 5).events, 2.4, '近战（民兵）');
@@ -1311,7 +1381,11 @@ test('技能伤害倍率：武将技那一击按 pvpSkill.damageRate 放大伤�
     //    ⚠️ projectile 的伤害在命中时才结算（`resolveProjectileHit`：`baseDamage × 克制系数`），
     //    倍率若只加在事件的 `damage` 字段上、没进 `baseDamage`，远程职业会**静默全额失效**
     //    （事件里看着有倍率、真扣血没有）。这条专门钉住那条路。
-    checkRate(collectAttacks('68003', 40, 0).events, 0.8, '远程（火法师）');
+    //    ⚠️ 2026-10-30 起不能用 68003（火焰树妖）：它的强化击改成了 area 持续区域，
+    //    走的是「建 zone 后直接 return」那条路，不再产生可直接比对的强化伤害事件。
+    //    2026-10-30 起 68035 的强化击是 30857「轨道打击」（area，2.0 倍）：它仍会先结算
+    //    主目标伤害再结算溅射，所以强化的伤害事件照样可比。
+    checkRate(collectAttacks('68035', 40, 0).events, 2, '远程（科学家）');
 
     // ④ 必须是**表驱动**：把武将技行的倍率改成 0.5，伤害立刻跟着变。
     //    没有这条，「代码里写死 2.4 / 写死 0.8」也能让 ②③ 通过。
@@ -1666,7 +1740,13 @@ test('近战单位追击同格内格心射程外的敌人', () => {
     assert.equal(game.snapshot.units[0].battleState, 'move');
     assert.ok(game.snapshot.units[0].freeX > pursuer.freeX);
     assert.ok(game.snapshot.units[0].freeY > pursuer.freeY);
-    game.tick(0.2);
+    // 战士/坦克射程压到 45 之后（2026-10-30），同格内的起步间距相对射程变大，
+    // 一拍 0.2s 追不进来；这里改成「最多再给 10 拍，必须追进射程」，只考行为不卡时长。
+    for (let tick = 0; tick < 10; tick += 1) {
+        if (Math.hypot(game.snapshot.units[0].freeX - target.freeX,
+            game.snapshot.units[0].freeY - target.freeY) <= reach) break;
+        game.tick(0.2);
+    }
     assert.ok(Math.hypot(game.snapshot.units[0].freeX - target.freeX,
         game.snapshot.units[0].freeY - target.freeY) <= reach);
 });

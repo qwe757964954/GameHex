@@ -31,10 +31,12 @@ test('英雄等级自动选择 accumulate/replace 技能升级档并编译被动
     const config = prepare();
     const catalogs = getZCModifierCatalogs();
     const selected = selectZCSkillPlans('68001', 24, catalogs);
+    //  100104「豌豆机关枪」自 2026-10-29 起启用（设计案2），兵种 24 级落在 II 级档（91001042）。
     assert.deepEqual(selected.map((row) => row.modifierId), [
         91001011, 91001012, 91001013,
         91001023,
         91001033,
+        91001042,
     ]);
     const currentSkillId = config.units.find((item) => item.unitId === '68001')?.attackProfile?.skillId;
     assert.ok(currentSkillId);

@@ -4683,14 +4683,14 @@ message SlgGameActionInfo {
 message SlgCampSimpleInfo {
   required uint32 campId = 1;      // 据点id
   required uint32 opType = 2;      // 占领状态: 0=尚未占领(黄色) 1=已占领(红色)
-  required uint32 state = 3;       // 据点状态: 0=未开放 1=开放 2=攻城中 3=结算中
 }
 
 // 据点详细信息（点击据点弹窗展示）
 message SlgCampInfo {
-  required uint32 campId = 1;            // 据点id
-  required uint32 opType = 2;            // 占领状态: 0=尚未占领(黄色) 1=已占领(红色)
-  required uint32 state = 3;             // 据点状态: 0=未开放 1=开放 2=攻城中 3=结算中
+  required uint32 campId = 1;            //据点id
+  required uint32 opType = 2;            //占领状态: 0=尚未占领(黄色) 1=已占领(红色)
+  optional uint64 occupyRoleId = 3;      //占领的玩家id
+  optional string occupyRoleName = 4;    //占领的玩家名字
 }
 
 // 单个建筑信息

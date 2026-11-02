@@ -2,7 +2,6 @@ import type { IZCModelServices } from './ZCModelServices';
 import type { ZCUnitDefinition } from '../ZCCombatCatalog';
 import type {ZCCombatTarget, ZCUnitState} from '../ZCGameTypes';
 import type { ZCMatchMap } from '../ZCMatchConfig';
-import type { ZCMapGeometry } from '../ZCMapGeometry';
 import { ZCTargetingSystem, ZCPathWorkspace, type ZCTargetingContext } from './ZCTargetingSystem';
 import type { IZCUnitTargeting } from './ZCUnitSystem';
 
@@ -99,6 +98,27 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
         const from = this.context.unitPosition(unit);
         const reach = this.attackReach(this.context.effectiveDefinition(unit), target.bodyRadius);
         return ZCTargetingSystem.isOutOfRange(from, target, reach);
+    }
+
+    /**
+     * 本帧的移速倍率（冲刺）。
+     *
+     * 返回 **≥ 1** 的倍数：没配冲刺、没有目标、还没进入 `chargeDistance` 一律返回 1，
+     * 所以调用点可以直接乘、不需要再判空。
+     *
+     * 为什么不缓存成单位状态：这是「当前距离」的纯函数，缓一次就要在处理「目标换人 /
+     * 目标瞬移 / 单位被击退」时挨个失效，而每帧算一次只是一次 `hypot`。
+     */
+    chargeSpeedScale(unit: ZCUnitState): number {
+        const profile = this.context.effectiveDefinition(unit).attackProfile;
+        const distance = profile.chargeDistance;
+        const scale = profile.chargeSpeedScale;
+        if (!(distance && scale) || !(scale > 1)) return 1;
+        const target = this.current(unit);
+        if (!target) return 1;
+        const reach = ZCTargetingSystem.chargeReach(distance, target.bodyRadius, this.context.combatDistanceScale);
+        const from = this.context.unitPosition(unit);
+        return Math.hypot(from.x - target.x, from.y - target.y) <= reach ? scale : 1;
     }
 
     face(unit: ZCUnitState): void {

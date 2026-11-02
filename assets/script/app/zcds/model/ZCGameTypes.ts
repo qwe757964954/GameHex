@@ -35,6 +35,14 @@ export interface ZCDamageSource {
      * 的伤害源头就在这里，是唯一能把职业带到位的地方。**留空 ⇒ 不播受击特效**。
      */
     attackerTrait?: ZCAttackTrait;
+    /**
+     * 本次伤害是否算「远程」（投射物 / 范围 / 持续区域）。
+     *
+     * 2026-10-29 为藤盾（`damageTakenRangedPct`）而加。**不标记 ⇒ 按近战处理**，
+     * 所以存量伤害路径（近战挥击、建筑、神器）行为完全不变；只有
+     * `ZCAttackResolutionSystem` 里明确走弹道 / 溅射 / 区域的几处才置 `true`。
+     */
+    ranged?: boolean;
 }
 
 /**
@@ -165,6 +173,14 @@ export interface ZCUnitState {
     nextAttackAt: number;
     waitUntil: number;
     attackHitDone: boolean;
+    /**
+     * 本帧是否处于**冲刺**（`attackProfile.chargeDistance` 内，移速已乘 `chargeSpeedScale`）。
+     *
+     * 2026-10-31 运动霸「拳击冲撞」203301：纯派生值，`ZCUnitSystem` 每帧先清、只有 `move`
+     * 分支可能置真，**不进快照语义**（`ZCSnapshotCodec` 不解码它，回放也不依赖它）。
+     * 消费方只有表现层：冲刺期间把移动动作换成循环的攻击动作。
+     */
+    charging?: boolean;
     hatredUnitId: number | null;
     hatredUntil: number;
     facingRadians: number;
@@ -189,6 +205,63 @@ export interface ZCUnitState {
      * 在下一次普攻时触发一次。用绝对时刻而非累加器，是为了让快照/回放落在同一时间基准上。
      */
     empoweredReadyAt?: number;
+    /**
+     * 副轨主动（`attackProfile.secondarySkillId`）的下次可用时刻（秒，同 `empoweredReadyAt` 的绝对时间基准）。
+     *
+     * 2026-11-04 椰蛋战士「横扫」：一条普攻行只有一个强化槽（暴风占了），
+     * 冷却型的那条挂在副轨上，由 `ZCSkillTriggerSystem` 每步推进。
+     * 缺省 undefined ⇒ 首次推进时初始化为「当前 + CD」，开局不立刻放。
+     */
+    secondaryReadyAt?: number;
+    /**
+     * 护盾到期时刻（秒，同 `empoweredReadyAt` 的绝对时间基准）。
+     *
+     * 2026-10-29 给「亡者护盾」这类**有持续时间的吸收盾**用：`shield` 原本只是个数字，
+     * 没有到期概念，`applyShieldAura` 的护盾会一直留到被打完。缺省 undefined ⇒ 永不过期，
+     * 存量护盾行为不变（由 `ZCSkillTriggerSystem` 每步清理到期的那批）。
+     */
+    shieldExpireAt?: number;
+    /** 连发剩余发数（机关枪）。0 / 缺省 = 没有连发计划。 */
+    burstShotsLeft?: number;
+    /** 下一发连发的时刻（秒）。 */
+    burstNextAt?: number;
+    /** 连发间隔（秒）。 */
+    burstInterval?: number;
+    /** 连发每发的伤害倍率（相对普攻）。 */
+    burstDamageRate?: number;
+    /**
+     * 低血护体上次触发时刻（秒）。用于按 `lowHpCooldown` 判内置冷却；
+     * 缺省 = 从未触发（开局即可触发一次）。
+     */
+    lowHpGuardFiredAt?: number;
+    /** 常驻被动状态是否已挂（`passive_status`）；避免每步重复 apply。 */
+    passiveStatusApplied?: boolean;
+    /**
+     * 受击反弹减益：护体生效期间，每次被单位打中就按这个百分比降低**攻击者**的攻速
+     * （格挡 III 的「使攻击者攻击速度降低10%」）。缺省 0 ⇒ 受伤结算里整段不执行。
+     */
+    retaliateSlowPct?: number;
+    /** 受击反弹减益的截止时刻（秒）；与 `retaliateSlowPct` 成对出现。 */
+    retaliateUntil?: number;
+    /**
+     * 冷却型自身施法（`behaviorKey = 'self_cast'`）的下次可用时刻（秒，同 `empoweredReadyAt` 的绝对时间基准）。
+     *
+     * 2026-10-30「吃口菠萝 / 嗜血 / 迅击」这类**不出手**的主动：既占不到强化槽（那个给累计普攻的那条），
+     * 也占不到副轨（副轨只出扇形伤害），所以由 `ZCSkillTriggerSystem` 按这个时间自己推进。
+     * 缺省 undefined ⇒ 首次推进时初始化为「当前 + CD」，开局不立刻放。
+     */
+    selfCastReadyAt?: number;
+    /** 多点打击（`behaviorKey = 'random_strike'`，按 CD 触发）的下次可用时刻（秒）。 */
+    strikeReadyAt?: number;
+    /**
+     * 多点打击（按累计普攻触发）上一次触发时的 `completedAttackCount`。
+     * 缺省 undefined ⇒ 第一次推进时只记下当前计数，不立刻打一波。
+     */
+    strikeFiredCount?: number;
+    /** 多点打击的持续窗口结束时刻（秒）；配了 `strikeSeconds` 才会有。 */
+    strikeUntil?: number;
+    /** 持续窗口内下一波的时刻（秒）。 */
+    strikeNextAt?: number;
 }
 
 /** 逻辑层产生、视图层只读消费的短生命周期战斗表现事件。 */
@@ -238,6 +311,13 @@ export interface ZCProjectileState extends ZCCombatEvent {
     zoneDamage?: number;
     /** Number of additional enemy units this projectile may pass through after its first hit. */
     remainingPierces?: number;
+    /**
+     * 每次穿透后剩余伤害的相对衰减（0.2 = 每穿一人降 20%，2026-10-30 玉林好汉「精英猎手」）。
+     *
+     * 缺省 0 ⇒ 不衰减，行为与改动前逐字一致；衰减就地乘在 `baseDamage` 上，
+     * 因为命中结算（`resolveProjectileHit`）与溅射都只从 `baseDamage` 现算。
+     */
+    pierceFalloff?: number;
     /** Units already hit by this projectile; persisted so restore cannot hit the same unit twice. */
     hitUnitIds?: number[];
     /** Empowered-hit execute chance in the normalized 0..1 range. */
@@ -250,6 +330,14 @@ export interface ZCProjectileState extends ZCCombatEvent {
     legacyBuffs?: ZCLegacyBuffApplication[];
     /** Old skillEffect `伤害范围`, already converted to board units. */
     splashRadius?: number;
+    /**
+     * 溅射伤害比例（2026-10-30「爆囊扩散」100802/100902/103202）。
+     *
+     * 旧技能表的溅射一律按**全额** `baseDamage` 结算（`splashRadius` 有值就全套用），
+     * 而新被动要的是「命中对周围造成 30/40/50% 溅射」——倍率和半径是两件事。
+     * 缺省 1 ⇒ 既有溅射（旧 skillEffect）逐字不变。
+     */
+    splashDamageRate?: number;
 }
 
 /**
@@ -289,6 +377,17 @@ export interface ZCHitFx {
     trait: ZCAttackTrait;
     /** 被打一方的归属；预留给「只给敌对伤害播闪白」这类阵营过滤（当前不筛）。 */
     owner: ZCOwner;
+    /**
+     * **被打那一方的模型等比缩放**（`pvpCard.prefabSize`，基准 1）—— 受击特效按它跟着体型走。
+     *
+     * 2026-10-31 需求「各类受击特效需要匹配受击目标的模型大小」。
+     * 项目里「模型有多大」只剩这一个旋钮：spine 单位都按骨架 canvas 归一到可见高 67.27px，
+     * 序列帧单位的画布也都压到 ~67px，差别全在 `prefabSize`（0.8~1.2）。详见 `ZCCombatEffectScale`。
+     *
+     * 为什么放在**受击方**而不是攻击方：闪白是贴在被打的那个身体上的，
+     * 与「谁打的、用什么特效」无关（后者由 `trait` 决定）。
+     */
+    targetScale: number;
     /** 特效锚点的世界坐标（=被打单位当前插值位置，与飘字同源）。 */
     x: number;
     y: number;
@@ -559,6 +658,24 @@ export interface ZCGroundZoneState {
     expireStatusId?: string;
     /** Per-instance status duration override in seconds. */
     expireStatusDuration?: number;
+    /**
+     * 区域的移动速度（世界坐标/秒，2026-11-04 椰蛋战士「暴风」）。
+     *
+     * 缺省 undefined ⇒ 原地不动，所有既有区域（暴风雪 / 灼热地带 / 火船）行为逐字不变。
+     * 给了速度就必须同时给 `hitUnitIds` + `maxHits` 这套「命中名额」，
+     * 否则会变成一个一路刷伤害的移动炮台。
+     */
+    moveVelocityX?: number;
+    moveVelocityY?: number;
+    /**
+     * 已经打过的单位 id（移动区域专用）：一个区域对**同一个敌人只结算一次**。
+     *
+     * 原地区域（波次伤害）不需要它 —— 那是有意每波重复打；移动区域表达的是
+     * 「风扫过路径上最多 N 个敌人」，同一个敌人被同一阵风连打三波是错的。
+     */
+    hitUnitIds?: number[];
+    /** 命中名额上限（移动区域专用）；打满就提前消散。缺省 0 = 不限。 */
+    maxHits?: number;
 }
 
 /**

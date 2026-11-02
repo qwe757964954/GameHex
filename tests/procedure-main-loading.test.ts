@@ -99,6 +99,7 @@ function loadProcedure(overrides: { noCover?: boolean; loadError?: Error } = {})
             if (name.endsWith('/LaunchProgressUI')) {
                 return { LaunchProgressUI: { ensure: () => (overrides.noCover ? null : cover) } };
             }
+            if (name.endsWith('/MainTabsComposition')) return { MainTabsComposition: class { dispose() {} } };
             if (name.endsWith('/MainTabHost')) {
                 return { MainTab: { Territory: 3, World: 6 }, MainTabHost: MockTabHost };
             }

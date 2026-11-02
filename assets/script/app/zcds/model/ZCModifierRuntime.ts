@@ -15,6 +15,7 @@ import {
     findZCTextModifierOverride,
     isZCTextAttackValue,
     parseZCModifierAdapterCatalogs,
+    STAT_TO_PATCH,
     type ZCModifierAdapterCatalogs,
     type ZCModifierAdapterTables,
     type ZCModifierSourceKind,
@@ -58,6 +59,25 @@ export interface ZCUnitStatPatch {
     attackSpeedPct?: number;
     attackDurationFlat?: number;
     attackHitTimeFlat?: number;
+    /**
+     * 最终伤害倍率修正（百分数整数，10 = 伤害 +10%，2026-10-30 玉林好汉「铁质飞镖」）。
+     *
+     * 与 `attackPct` 的区别：攻击力会抬高面板、也会被其它按攻击力算的公式二次吃到；
+     * 这个只在伤害结算处相乘一次，面板不变（设计案 100402 要求的「伤害倍率而非攻击力」）。
+     * 缺省 0 ⇒ 乘 1，既有单位行为逐字不变。
+     */
+    damageRatePct?: number;
+    /**
+     * 伤害转生命的比例（2026-11-04，椰蛋战士「生命汲取」100503）。0.02 = 造成伤害的 2% 回血。
+     *
+     * **比例不是百分数**：与上面那批 `xxxPct`（20 = +20%）口径不同，表里 `operation = add`、
+     * `value = 0.02` 就是这个字段。为什么不做成 `addRate`：`addRate` 走 `foldStatPatch` 的
+     * `rate * baseValue` 分支，而它没有基础值 ⇒ 恒 0（同 2026-10-13 那批的约束）。
+     *
+     * 结算口径：按 `damageUnit` 真正扣掉的血量（`applied`）反算，不是面板伤害 ——
+     * 打护盾 / 溢出 / 被 0 抵消时不该凭空回血。缺省 0 ⇒ 整段不执行，既有单位行为逐字不变。
+     */
+    lifestealRate?: number;
     //  以下 10 种对应 `pvpAttrMap` 里 2026-10-13 补齐的数值属性。带 Pct 的一律是「百分数整数」（20 = +20%）。
     /** 暴击率修正（20 = +20% 暴击率）；直接进 `criticalMultiplier` 判定。 */
     critRatePct?: number;
@@ -219,7 +239,27 @@ function typedToLegacyPatch(modifiers: readonly ZCTypedModifier[]): ZCUnitStatPa
             case 'attackSpeed': if (rate) add('attackSpeedPct', item.value * 100); break;
             case 'attackDuration': if (!rate) add('attackDurationFlat', item.value); break;
             case 'attackHitTime': if (!rate) add('attackHitTimeFlat', item.value); break;
-            default: break;
+            //  伤害倍率（`damageRate`）只接受 addRate：它是「最终结算乘 1 + N%」，
+            //  没有对应的绝对值语义（`add` 会变成「+0.1 点伤害」，没有意义）。
+            case 'damageRate': if (rate) add('damageRatePct', item.value * 100); break;
+            //  吸血比例（2026-11-04）：**只接受 add**，值就是比例本身（0.02 = 2%）。
+            //  与 `damageRate` 相反 —— 那边只接受 addRate 是因为它没有基础值、用的是百分数口径。
+            case 'lifestealRate': if (!rate) add('lifestealRate', item.value); break;
+            default: {
+                //  扩展的 11 个 statId（`critRate` / `critDamage` / `bulletNum` / `bulletAngle` /
+                //  `attackCount` / `recruit*`，2026-10-30 补）：它们没有基础值，映射表在
+                //  `ZCStatSchema.STAT_TO_PATCH`，`applyZCTypedUnitModifiers` 早就在用它，
+                //  但这个 switch 是**第二套**折表逻辑、当时漏了这批 —— 结果是
+                //  「pvpSkillPlan 里填了 bulletNum / critRate，运行时读不到」。
+                const entry = STAT_TO_PATCH[item.statId];
+                if (!entry) break;
+                if (rate) {
+                    if (entry[1]) add(entry[1], item.value * 100);
+                } else {
+                    add(entry[0], item.value);
+                }
+                break;
+            }
         }
     }
     return patch;

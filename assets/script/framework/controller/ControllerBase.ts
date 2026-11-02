@@ -1,6 +1,8 @@
 import { scopeAssetService, type AssetService } from '../../core/asset/AssetService';
 import { ResourceScope } from '../../core/asset/ResourceScope';
 import type { GameContext } from '../../core/runtime/GameContext';
+import { EventMgr } from '../event/EventMgr';
+import type { EventBusHandler } from '../event/EventBus';
 
 export type IControllerContext = Pick<GameContext, 'assets' | 'configs' | 'sessionAssets'>;
 
@@ -14,6 +16,7 @@ export interface IControllerResources {
 
 export abstract class ControllerBase {
     readonly scope: ResourceScope;
+    private readonly lifetime = new ResourceScope('controller-inputs');
     private resolvedResources: IControllerResources | null = null;
     private readonly resolveContext: () => IControllerContext;
 
@@ -35,5 +38,20 @@ export abstract class ControllerBase {
         return this.resolvedResources;
     }
 
-    dispose(): void { this.scope.dispose(); }
+    get isDisposed(): boolean { return this.lifetime.disposed; }
+
+    protected own(stop: () => void): void { this.lifetime.defer(stop); }
+
+    protected listen(event: string, handler: EventBusHandler): void {
+        if (this.isDisposed) return;
+        EventMgr.instance.on(event, handler, this);
+        this.own(() => EventMgr.instance.off(event, handler, this));
+    }
+
+    protected releaseInputs(): void { this.lifetime.dispose(); }
+
+    dispose(): void {
+        this.releaseInputs();
+        this.scope.dispose();
+    }
 }

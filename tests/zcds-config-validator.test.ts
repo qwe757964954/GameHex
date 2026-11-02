@@ -54,14 +54,16 @@ test('技能行为绑定必须指向目标单位当前普攻技能', () => {
     const directory = fixture();
     try {
         const bindings = rows('pvpSkillBinding');
-        const binding = bindings.find((row) => row.targetUnitId === '68002' && row.pvpSkillId === 30171);
+        //  68002 巨力坚果自 2026-10-29 起改用专属普攻行 30802（原借 30171 长枪兵普攻）。
+        const binding = bindings.find((row) => row.targetUnitId === '68002' && row.pvpSkillId === 30802);
         assert.ok(binding);
-        binding.pvpSkillId = 30181;
+        //  30151 弓兵普攻不在 68002 的旧升星技能里 ⇒ 会报硬错误（旧升星那只降级成警告）。
+        binding.pvpSkillId = 30151;
         writeFileSync(join(directory, 'pvpSkillBinding.json'), `${JSON.stringify(bindings)}\n`, 'utf8');
 
         const result = validateSkillPipeline(directory);
         assert.equal(result.ok, false);
-        assert.match(result.errors.join('\n'), /pvpSkillBinding.*68002.*30181.*30171/);
+        assert.match(result.errors.join('\n'), /pvpSkillBinding.*68002.*30151.*30802/);
     } finally {
         rmSync(directory, { recursive: true, force: true });
     }

@@ -1,3 +1,4 @@
+import { MainTab, mainTabTarget } from '../assets/script/app/main/MainTabModel';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
@@ -7,29 +8,29 @@ test('challenge tab stays visible but cannot open the old adventure page', () =>
     const source = readFileSync(new URL('../assets/script/app/main/MainTabHost.ts', import.meta.url), 'utf8');
     // 旧挑战入口仍保留在底栏，但不再绑定切页回调或章节地图 prefab。
     // 世界格 2026-10-21 起改为大地图入口（不再是锁定态），锁定只剩挑战。
-    assert.match(source, /const isLocked = type === MainTab\.Challenge;/);
-    assert.match(source, /button\.bindSelect\(isLocked \? null : \(\) => \{ void this\.switchTab\(type\); \}\);/);
+    assert.deepEqual(mainTabTarget(MainTab.Challenge), { kind: 'locked' });
+    assert.match(source, /button\.setEnabled\(type !== MainTab\.Challenge\)/);
     assert.doesNotMatch(source, /if \(index === MainTab\.Challenge\) return this\.adventurePage;/);
     assert.doesNotMatch(source, /adventurePage/, '旧章节地图 prefab 入口应移除');
     const mainRoot = readFileSync(assetUrl('ui/main/MainRoot.prefab'), 'utf8');
     assert.doesNotMatch(mainRoot, /adventurePage|1a6ca85d-9a57-444a-abb7-0c7915f07dc0/,
         'MainRoot 不得残留失效的 TerritoryPage prefab 引用');
-    assert.match(source, /getComponentInChildren\(MainTerritoryMap\)/);
+    const composition = readFileSync('assets/script/app/bootstrap/main/MainPageComposition.ts', 'utf8');
+    assert.match(composition, /getComponentInChildren\(MainTerritoryMap\)/);
     assert.doesNotMatch(source, /if \(index === MainTab\.Adventure\) return this\.roleMainPage;/);
 });
 
 test('领地格 = 主城页（内嵌领地图），章节 HUD 由主城顶栏替代', () => {
     const source = readFileSync(new URL('../assets/script/app/main/MainTabHost.ts', import.meta.url), 'utf8');
     // 「领地之后就是主城」：领地格加载主城页 `ArenaRoot`（里面嵌了 MainTerritoryMap 实例）。
-    assert.match(source, /if \(index === MainTab\.Territory\) return 'ui\/main\/ArenaRoot';/);
+    assert.deepEqual(mainTabTarget(MainTab.Territory), { kind: 'page', path: 'ui/main/ArenaRoot' });
     // 主城嵌入 map-only 页面，并在激活前注入资源。
-    assert.match(source, /getComponentInChildren\(MainTerritoryMap\)/);
-    assert.match(source, /mainTerritoryMap\.initialize\(this\.controller\.resources\)/);
-    // showPage：注入必须在该方法内 setParent 之前。
-    const showPageBody = source.slice(source.indexOf('private showPage('));
-    assert.ok(showPageBody.indexOf('mainTerritoryMap.initialize(this.controller.resources)')
-        < showPageBody.indexOf('page.setParent(this.content)'),
-        'AssetService 必须在页面激活前注入');
+    const composition = readFileSync('assets/script/app/bootstrap/main/MainPageComposition.ts', 'utf8');
+    assert.match(composition, /getComponentInChildren\(MainTerritoryMap\)/);
+    assert.match(composition, /territory\.initialize\(entry\.controller\.resources, entry\.saveOwner\)/);
+    const tabs = readFileSync('assets/script/app/bootstrap/main/MainTabsComposition.ts', 'utf8');
+    assert.ok(tabs.indexOf('new MainPageComposition') < tabs.indexOf('this.host.mountPage(node)'),
+        '展示资源和业务控制器必须在页面激活前组装');
     assert.doesNotMatch(source, /setHudVisible/);
 });
 

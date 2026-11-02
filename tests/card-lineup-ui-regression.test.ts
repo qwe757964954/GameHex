@@ -1,3 +1,4 @@
+const controllerSource = readFileSync('assets/script/app/card/CardLineupController.ts', 'utf8');
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -72,10 +73,9 @@ test('站台默认外观必须是空台：不带「N级」文案、不带预设�
 });
 
 test('首屏先收起站台再取数，且走「快照 → 权威值」两段式', () => {
-    assert.match(source, /this\.renderLoading\(\);\s*\n\s*void this\.bootstrap\(\)/,
-        'start() 必须先 renderLoading()（收起 8 个站台）再 bootstrap()，否则首帧会露 prefab 默认外观');
-    assert.match(source, /private async bootstrap\(\)[\s\S]{0,200}?loadLineupSnapshot\(\)[\s\S]{0,200}?await this\.refresh\(\)/,
-        'bootstrap 必须是「先本地快照、再权威值」；只 await refresh 会丢掉快照秒开');
+    assert.ok(source.indexOf('this.renderLoading();') < source.indexOf("phase: 'ready'"));
+    assert.match(controllerSource, /loadLineupSnapshot\(\)/);
+    assert.ok(controllerSource.indexOf('this.publish(snapshot)') < controllerSource.indexOf('void this.refresh()'));
     assert.match(source, /cards\.length > 0 \? this\.preparePool/,
         '快照的 catalog 为空，卡库必须跳过而不是清空（否则卡库会先被刷成 0 条再刷回来）');
     assert.doesNotMatch(source, /slotsRevision/,
@@ -168,7 +168,7 @@ test('布阵保存结果走事件，不再用 session.saved + onClose 回调', (
         'CardLineupPage 不许再用 session.saved 判断「这轮存没存」—— 那是共享可变字段');
     assert.doesNotMatch(source, /onClose:\s*\(/,
         'CardLineupPage 不许再传 onClose 回调（框架契约只有一个 reason，装不下业务结果）');
-    assert.match(source, /EventMgr\.instance\.on\(CardLineupEvent\.DeckSaved, this\.onDeckSaved, this\)/,
+    assert.match(controllerSource, /this\.listen\(CardLineupEvent\.DeckSaved, this\.onDeckSaved\)/,
         '订阅要挂在 start() 里，且 target 传 this（不然 offTarget 摘不掉）');
     assert.match(source, /EventMgr\.instance\.offTarget\(this\)/,
         'onDestroy 必须 offTarget(this)：EventMgr 是全局单例，页面切 tab 就销毁重建');
@@ -272,7 +272,7 @@ test('升级结果走事件，不再用 onUpgraded 回调', () => {
         'ICardUpgradeOpenData 不许再有 onUpgraded：弹窗不该持有调用方闭包');
     assert.match(upgradePageSource, /EventMgr\.instance\.emit\(CardLineupEvent\.HeroUpgraded/,
         '升级成功要当场派发，不要等弹窗关闭（这条在弹窗自己身上，不再有 Presenter）');
-    assert.match(source, /EventMgr\.instance\.on\(CardLineupEvent\.HeroUpgraded, this\.onHeroUpgraded, this\)/,
+    assert.match(controllerSource, /this\.listen\(CardLineupEvent\.HeroUpgraded, this\.onHeroUpgraded\)/,
         '卡牌页要在 start() 里订阅，target 传 this（offTarget 才摘得掉）');
     assert.doesNotMatch(source, /onUpgraded:/,
         'openUpgrade 不许再传回调，userData 只带 card / cardId / level');
@@ -369,14 +369,14 @@ test('条目 prefab 的 Hero / HeadIcon 不许预置图片', () => {
 // 页面在 `start()/onOpen()` 里订阅、`onDestroy()/onClose()` 里 `offTarget` —— 判活由订阅生命周期兜。
 // ============================================================================
 
-test('没有 Presenter 层：四个页面自己取数、自己渲染，事件只剩跨对象的三个', () => {
+test('阵容取数归 Controller，其余弹窗沿用已有取数，均有异步轮次保护', () => {
     assert.doesNotMatch(presentationsSource, /export class \w*Presenter/,
         'CardPresentations 里不许再有 Presenter 类（它现在只剩展示模型的类型定义）');
     assert.doesNotMatch(presentationsSource, /isAlive/, '不许再出现 isAlive 契约');
 
     //  四个页面各自持有取数逻辑与轮次校验：`cardRepository.<method>` 直接出现在页面里。
     const pages: Array<[string, RegExp]> = [
-        ['CardLineupPage.ts', /cardRepository\.loadLineup\(/],
+        ['CardLineupController.ts', /this\.options\.repository\.loadLineup\(/],
         ['LineupBoardPage.ts', /cardRepository\.loadBoard\(/],
         ['CardSkillPage.ts', /cardRepository\.loadSkillList\(/],
         ['CardUpgradePage.ts', /cardRepository\.loadUpgradeStatus\(/],
@@ -384,7 +384,7 @@ test('没有 Presenter 层：四个页面自己取数、自己渲染，事件只
     for (const [fileName, pattern] of pages) {
         const pageSource = readFileSync(`assets/script/app/card/${fileName}`, 'utf8');
         assert.match(pageSource, pattern, `${fileName} 应自己调 repository 取数`);
-        assert.match(pageSource, /Revision\b/, `${fileName} 要有轮次校验字段`);
+        assert.match(pageSource, /[Rr]evision\b/, `${fileName} 要有轮次校验字段`);
         assert.doesNotMatch(pageSource, /this\.presenter\b/, `${fileName} 不许再有 presenter 字段`);
     }
 

@@ -1,5 +1,4 @@
 import type { IZCModelServices } from './ZCModelServices';
-import type { ZCUnitDefinition } from '../ZCCombatCatalog';
 import type { ZCCombatTarget, ZCUnitState } from '../ZCGameTypes';
 import { ZCCombatSystem } from './ZCCombatSystem';
 

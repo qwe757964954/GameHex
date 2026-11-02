@@ -10,7 +10,6 @@ export class Func {
         let string = ""
         let i = 0
         let c = 0
-        let c1 = 0
         let c2 = 0
         let c3 = 0
         while (i < utfText.length) {

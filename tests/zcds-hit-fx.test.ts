@@ -43,7 +43,9 @@ import { loadViews } from './helpers/zcds-view-fixtures';
  *     回收就是「闪完了还剩一坨末帧杵在角色身上」（Normal 只播一遍 ⇒ 停在末帧）；
  *  2. **总时长固定 0.15s**：`AnimationState.speed = clip.duration / 0.15`。资产**不动**
  *     （仍是 18fps 的美术真值 0.4444/0.7222s），走 `speed` 才是加速而不是截断；
- *  3. **尺寸统一 ×0.7**：屏上宽 110→**77**、战士 88→**61.6**（`_lscale` 直接乘，不在代码里 setScale）。
+ *  3. **尺寸统一 ×0.7**：屏上宽 110→**77**、战士 88→**61.6**（`_lscale` 直接乘）。
+ *     ⚠️ 2026-10-31 起 `playHitFx` **会**写 `scale`，但写的是「Prefab 烘焙值 × `zcHitFxScale(targetScale)`」
+ *     的**绝对值**（每次从基准重算）—— 见 `tests/zcds-hit-fx-size.test.ts`。
  */
 
 /** 受击特效根目录（美术源 `0通用-受击` 的五个子目录）。 */
@@ -62,7 +64,8 @@ const HIT_FX_BASELINE_WIDTH = 110;
  * 受击特效的整体缩放倍数 —— 2026-10-17 反馈「统一缩小为当前大小 ×0.7」。
  *
  *  只掰这一个数，所有受击（含尚未接入的「中毒受击」）等比跟着变：
- *  `_lscale` 是唯一旋钮，乘在美术烘焙值上，不在运行时代码里 `setScale`
+ *  `_lscale` 是唯一旋钮，乘在美术烘焙值上；运行时的 `setScale` 只做「烘焙值 × 目标体型」这一层
+ *  （绝对值，不累乘），见 `ZCEffectPool.hitFxBakedScales`
  *  （会覆盖烘焙值 + 池化复用逐次缩水，见 `ZCEffectPool.playHitFx` 的注释）。
  */
 const HIT_FX_SIZE_FACTOR = 0.7;

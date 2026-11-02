@@ -89,10 +89,8 @@ import {
     ILeagueP4Config,
     ILeagueStoreRowView,
     ILeagueUnionDiscountRow,
-    ILeagueUnionShopRow,
     leagueShopBuyTimesOf,
     LEAGUE_ITEM_TABLE,
-    LEAGUE_P4_CONFIG_DEFAULTS,
     LEAGUE_UNION_DISCOUNT_TABLE,
     LEAGUE_UNION_SHOP_TABLE,
     parseLeagueP4Config,
@@ -126,9 +124,7 @@ import {
     ILeagueReward,
     ILeagueNorthRankRowView,
     ILeagueNorthRewardRowView,
-    ILeagueUnionRankAwardRow,
     LeagueNorthRankTab,
-    LeagueNorthRewardTab,
     leagueActSelfStats,
     leagueNorthBossOf,
     leagueNorthBuffText,
@@ -145,7 +141,7 @@ import {
     LEAGUE_MONSTER_TABLE,
     LEAGUE_NORTH_RANK_SHOW_NUM,
     LEAGUE_NORTH_RANK_TYPE,
-    LEAGUE_UNION_RANK_AWARD_TABLE,
+    LEAGUE_UNION_RANK_AWARD_TABLE
 } from './LeagueTable';
 import {
     RequestUnionAppoint,

@@ -9,15 +9,17 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
     DEFAULT_BIGMAP_CITY_SCHEDULE,
+    applyBigMapScheduleOverrides,
     bigMapCityAttackGate,
     bigMapCityTimeline,
     parseBigMapClockTime,
     type BigMapCityPhase,
 } from '../assets/script/app/bigmap/model/BigMapCitySchedule';
 import type { BigMapCityState } from '../assets/script/app/bigmap/model/BigMapTypes';
-import { loadBigMapConfig } from './helpers/bigmap-fixtures';
+import { decompressBigMapRows, parseBigMapCitySchedule } from '../assets/script/app/bigmap/model/BigMapConfig';
 
 const OFFSET = DEFAULT_BIGMAP_CITY_SCHEDULE.utcOffsetSeconds;
 
@@ -50,7 +52,7 @@ test('remainSeconds 指向下一阶段，且 closed 段跨到次日 09:00', () =
     assert.equal(locked.remainSeconds, 10 * 60, '锁榜到结算 = 10 分钟');
 
     const settling = bigMapCityTimeline(DEFAULT_BIGMAP_CITY_SCHEDULE, atLocal(21 * 3600 + 10 * 60));
-    assert.equal(settling.remainSeconds, 50 * 60);
+    assert.equal(settling.remainSeconds, 20 * 60, '21:10 停攻到 21:30 结算完成 = 20 分钟');
 
     // 22:00 之后到今天结束，再到次日 09:00：2h + 9h = 11h。
     const night = bigMapCityTimeline(DEFAULT_BIGMAP_CITY_SCHEDULE, atLocal(22 * 3600));
@@ -123,11 +125,20 @@ test('城池攻击门：五态与日程合起来只放行「已开放 + 阶段�
     assert.match(night[states.indexOf('open')].reason, /休战/, '休战期要给出可读原因');
 });
 
-test('配置表解析出的日程与兜底常量同值（表改漏了这条先红）', () => {
-    const config = loadBigMapConfig();
-    assert.deepEqual(config.schedule, DEFAULT_BIGMAP_CITY_SCHEDULE);
-    // 兜底常量只是夹具，真源在表里：两者必须一致，否则「表改了但代码没跟」查不出来。
-    assert.equal(config.schedule.utcOffsetSeconds, 8 * 3600);
+test('配置表 + gameConfig 覆盖后的日程与兜底常量同值（任一处改漏这条先红）', () => {
+    // 只读 `bigmapSchedule` 一张表：走整包解析时，别的表一坏这条守卫就跟着红，判据不干净。
+    const rows = decompressBigMapRows(JSON.parse(
+        readFileSync(new URL('../assets/remoteRef/bigmapSchedule.json', import.meta.url), 'utf8'),
+    ));
+    // 时点分两处配：表给四个时点，`gameConfig` 覆盖停攻/发奖并补跨天禁攻。
+    // 断言覆盖后的结果 —— 只比表值会被「表没跟、配置跟了」骗过去（反过来也一样）。
+    const gameConfigRows = JSON.parse(
+        readFileSync(new URL('../assets/remoteRef/gameConfig.json', import.meta.url), 'utf8'),
+    );
+    const schedule = applyBigMapScheduleOverrides(parseBigMapCitySchedule(rows[0]), gameConfigRows);
+    assert.deepEqual(schedule, DEFAULT_BIGMAP_CITY_SCHEDULE);
+    // 兜底常量只是夹具，真源在配置里：两者必须一致，否则「表改了但代码没跟」查不出来。
+    assert.equal(schedule.utcOffsetSeconds, 8 * 3600);
 });
 
 test('"HH:MM" 解析严格：错格式 / 越界当场抛错', () => {
@@ -138,4 +149,54 @@ test('"HH:MM" 解析严格：错格式 / 越界当场抛错', () => {
     for (const bad of ['9', '9:0', '25:00', '12:60', '', 'ab:cd', '12:0a']) {
         assert.throws(() => parseBigMapClockTime(bad), /HH:MM|23:59/, `应拒绝 ${JSON.stringify(bad)}`);
     }
+});
+
+test('gameConfig 覆盖攻城时点：21:10 停攻 / 21:30 发奖 / 跨天前后 60 分钟禁攻', () => {
+    const schedule = applyBigMapScheduleOverrides(DEFAULT_BIGMAP_CITY_SCHEDULE, [
+        { key: 'bigMapStartCountRankTime', value: [21, 10] },
+        { key: 'bigMapRankRewardTime', value: [21, 30] },
+        { key: 'bigMapReFreshRankStopTime', value: 60 },
+    ]);
+    assert.equal(schedule.settleAt, 21 * 3600 + 10 * 60, 'bigMapStartCountRankTime → 停止攻城');
+    assert.equal(schedule.snapshotAt, 21 * 3600 + 30 * 60, 'bigMapRankRewardTime → 结算完成发奖');
+    assert.equal(schedule.crossDayStopMinutes, 60);
+    // 没配的两项仍来自 `bigmapSchedule` 表，覆盖层不许顺手改别的。
+    assert.equal(schedule.openAt, 9 * 3600);
+    assert.equal(schedule.lockAt, 21 * 3600);
+});
+
+test('gameConfig 缺键 / 脏值退回表值，不抛错（另一张表不该让世界页打不开）', () => {
+    const base = {
+        ...DEFAULT_BIGMAP_CITY_SCHEDULE,
+        settleAt: 21 * 3600, snapshotAt: 22 * 3600, crossDayStopMinutes: 0,
+    };
+    assert.deepEqual(applyBigMapScheduleOverrides(base, null), base);
+    assert.deepEqual(applyBigMapScheduleOverrides(base, undefined), base);
+    assert.deepEqual(applyBigMapScheduleOverrides(base, []), base);
+    assert.deepEqual(applyBigMapScheduleOverrides(base, [
+        { key: 'bigMapStartCountRankTime', value: [25, 10] },
+        { key: 'bigMapRankRewardTime', value: 'abc' },
+        { key: 'bigMapReFreshRankStopTime', value: -1 },
+    ]), base);
+    // 覆盖后倒挂（停攻 21:10 晚于表里的锁榜 21:00 不算倒挂；把停攻改成 20:00 才算）⇒ 整包退回。
+    assert.deepEqual(applyBigMapScheduleOverrides(base, [
+        { key: 'bigMapStartCountRankTime', value: [20, 0] },
+    ]), base);
+});
+
+test('跨天结算前后禁攻：23:00~01:00 任何阶段都不能打', () => {
+    const schedule = { ...DEFAULT_BIGMAP_CITY_SCHEDULE, crossDayStopMinutes: 60 };
+    for (const local of [0, 30 * 60, 3599, 23 * 3600, 23 * 3600 + 59 * 60]) {
+        const timeline = bigMapCityTimeline(schedule, atLocal(local));
+        assert.equal(timeline.crossDayLock, true, `${local} 秒处应在跨天禁攻窗口内`);
+        assert.equal(timeline.canAttack, false);
+        const gate = bigMapCityAttackGate('open', timeline);
+        assert.equal(gate.canAttack, false);
+        assert.match(gate.reason, /跨天/, '原因必须说明是跨天结算，不能让玩家以为是没解锁');
+    }
+    assert.equal(bigMapCityTimeline(schedule, atLocal(3600)).crossDayLock, false, '01:00 整已出窗口');
+    // 半径配 0 = 不限制（老区 / 没配这条键时的行为）。
+    const none = { ...DEFAULT_BIGMAP_CITY_SCHEDULE, crossDayStopMinutes: 0 };
+    assert.equal(bigMapCityTimeline(none, atLocal(23 * 3600)).crossDayLock, false);
+    assert.equal(bigMapCityTimeline(none, atLocal(15 * 3600)).canAttack, true);
 });

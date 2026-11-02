@@ -2,7 +2,7 @@
 
 > **定位与适用范围**：
 > - 本文档是 Cocos Creator 3.8 + TypeScript 项目的**全局架构、工程实现、Prefab 规范与美术配表工具链总纲**。
-> - 日常开发与 AI 会话入口摘要见根目录 [AGENTS.md](https://www.google.com/search?q=..%2FAGENTS.md)；对局表现层（`app/zcds/view`）与「冒险」领地页（`app/territory`）的详细规格（原 §7.3.3 ~ §7.3.11）已拆分为独立文档 [docs/zcds-表现层与领地规范.md](https://www.google.com/search?q=.%2Fzcds-%E8%A1%A8%E7%8E%B0%E5%B1%82%E4%B8%8E%E9%A2%86%E5%9C%B0%E8%A7%84%E8%8C%83.md)。
+> - 日常开发与 AI 会话入口摘要见根目录 [AGENTS.md](../AGENTS.md)；对局表现层（`app/zcds/view`）与「冒险」领地页（`app/territory`）的详细规格（原 §7.3.3 ~ §7.3.11）已拆分为独立文档 [docs/zcds-表现层与领地规范.md](zcds-表现层与领地规范.md)。
 
 ## 1. 开发工作流与导航约定
 
@@ -10,6 +10,12 @@
 2. **优先使用 Codegraph**：仓库存在 `.codegraph/` 时，先通过 `codegraph explore` 追踪符号定义、调用链与关联单测，定位后再打开目标文件，避免大范围盲目搜索。
 3. **工作区安全**：下刀前检查 `git status` / `svn status`；严禁覆盖、格式化或回退与当前任务无关的用户改动；严禁手改 `library/`、`temp/`、`build/`、`native/` 及生成产物。
 4. **复用既有设施**：优先复用工程内已有的 Presenter 模式、端口定义、文本常量表、`AssetService` 加载器与测试夹具（Test Fixtures），禁止平行造轮子。
+
+### 1.1 工程约束、业务规格与历史说明
+
+- 本文规定分层、依赖、生命周期与验证方式，不替代功能决策。业务规格仅在对应任务中读取；历史参数、旧范围与修复记录仅供追溯，不能升级为全工程永久禁令。
+- Agent 不自行添加未确认的业务需求。本次明确要求改变的行为，应同步修改实现、配置与相关测试，不以旧参数或旧测试拒绝变更；无关行为沿用现状。
+- 当前需求与协议、资源或规格冲突时，先核实可执行契约并说明差异；目标仍不明确时再询问。需求变更不自动改变服务端能力，也不能只改单侧契约。
 
 ## 2. 分层架构与依赖硬约束
 
@@ -25,7 +31,7 @@ framework（通用 UI 基类 / 弹窗 / 路由机制）       -> core
 
 | 层级 / 目录 | 允许依赖 | 严禁依赖 / 严禁行为 |
 | :--- | :--- | :--- |
-| `core/**` | 仅限 `core/**` 内部纯 TS 模块 | 严禁 `import 'cc'`、`framework`、`app`、`platform`；严禁直接 I/O（网络/本地存储）与全局可变单例 |
+| `core/**` | 仅限 `core/**` 内部纯 TS 模块 | 严禁 `import 'cc'`、`framework`、`app`、`platform`；禁止直接 I/O 或直接创建/获取运行期全局服务，依赖通过参数或端口传入 |
 | `framework/**` | `core/**`、`cc` | 严禁依赖任何具体业务 `app/<feature>` 或具体 `Procedure*` |
 | `platform/**` | `core/**`、引擎或底层 SDK | 只实现 `core` 端口（Adapter），严禁混入具体业务规则或 UI 状态 |
 | `app/<feature>/model` 或 `application` | `core/**`、本 feature 内部纯契约 | 纯 TS 的 Presenter / Model 剥掉 `import type` 后不得依赖 `cc` 或直接调 `resources.load` |
@@ -68,6 +74,8 @@ ZCSettlementPage.open({ onConfirm: () => this.returnToMain(), onGrowEntry: (key)
   - `renderItemFn` / `onItemClickFn` 是**普通属性赋值**，不是事件订阅 ⇒ 重复赋同一个函数不叠加，同样不需要门闩。
   - **必须留下的门闩**：用来做「当前是否绑着」**解绑判断**的（`PopupBase._blankBound` 在 `_unbindBlankClose` 里）、跨场景全局单例（`GameNet._reconnectEventsBound`）、绑/解成对且会被反复调用的（`MainTerritoryMap.mapInsetResizeBound`，`onDestroy` 里有 `off` 配对）。
   - 存量：2026-10-30 清了 **17 个文件 / 20 处**（12 个弹窗页的 `if (!x) { … }` 形态 + 5 个 `if (x) return` 形态）。剩余 12 处 `bound` 仍在「行组件 `bind()` / `bindButtons()`」这类可能反复调用的方法里，要先核 handler 引用是否稳定再删。
+
+- **Page 不拥有业务控制器**：Page 不创建、保存或释放 Controller / Entry，不通过回调反向调用控制器。由 `app/bootstrap` 的组合对象持有控制器与 View，流程持有组合对象。挂载前注入展示资源和展示数据；Page 以作用域明确的生命周期事件报告 ready / enabled / disabled / destroyed，外部组合层启动、取消和释放业务。展示资源契约可以持有，控制器对象和其退出闭包不可持有。主界面参考 `app/bootstrap/main/MainTabsComposition.ts` 与 `MainPageComposition.ts`。
 
 ### 2.1.1 释放即解除事件，不在同步回调重复判断 disposed（2026-10-30）
 
@@ -162,10 +170,11 @@ GameNet.instance.removeCaller(this);
 - **单属性唯一写入口**：同一节点的 `scale`、`position`、`color`、`parent`、`customMaterial` 在视图类中必须收拢到**唯一私有方法**写入（例如 `applyBuildingScale`、`applyIconPosition`、`applyPulseMaterial`），杜绝多处直接写 `node.setScale` 导致静态刷新拍平动态动画。
 - **内容指纹闸门（Content Signature）**：静态高频渲染应通过 `contentSignature()` 比对指纹跳过无变化重绘；若动态特写（如扩散波 `setClaimWave`）绕过闸门直写属性，收工时必须清空 `contentKey = ''` 强制下一帧常规重绘。
 
-### 3.4 帧循环（`update`）与状态管理禁令
+### 3.4 帧循环（`update`）与状态作用域
 - **严禁在 `update` 中**：加载资源、查询全局配置表、每帧 `new` 临时数组/对象/节点、或混入业务结算规则。
-- **动静分离节流**：短周期逐帧动画（如 0.1s~0.4s 的抖动、过渡波、金矿闪烁）必须挂在逐帧执行的 `renderDynamic` 上；低频状态同步挂在节流的 `renderStatic`（如 0.15s）上。
-- **严禁新增全局可变状态**：禁止新增全局单例或 `static` 暂存区。跨流程传值一律走显式的 `entry params / context`；确需临时桥接时，必须保证**单次消费、读取即清空**，并配套单测守卫。
+- **动静分离节流**：逐帧动画走既有 `renderDynamic`，低频状态同步走节流的 `renderStatic`；具体间隔按对应模块当前规格与性能要求确定，不将示例数值作为全工程固定参数。
+- **单例与共享服务**：允许生命周期内确实唯一的共享服务使用单例；优先复用既有 EventMgr / CacheMgr / PopupManager 等入口，不因单例形式重构稳定实现。新增时明确唯一性、初始化归属、状态作用域与必要的重置/释放策略；core 的纯度边界仍有效，详见[单例与状态作用域](agent/单例与状态作用域.md)。
+- **业务状态归属**：页面、对局、实体状态默认由相应宿主持有实例；共享会话服务须处理切账号/退出/重开。禁止无归属的全局或 static 暂存，以及借单例绕过分层。跨流程传值优先使用 entry params / context；必要的临时桥接须单次消费、读取即清空，并配套验证。
 
 ## 4. 命名、类型与代码风格规范
 

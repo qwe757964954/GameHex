@@ -601,7 +601,13 @@ export class ZCGameLoader {
         const effectPaths = definitions
             .flatMap((definition) => [
                 definition.attackProfile.effectPrefabPath,
+                //  命中附加表现（运动霸「拳击冲撞」203301 的「气浪」）：它既不是出手特效、
+                //  也不在任何 skillId 的 effectPrefabPath 上，漏掉就是「气浪永远不出现、一条错都不报」。
+                definition.attackProfile.impactEffectPrefabPath,
                 definition.empoweredProfile?.effectPrefabPath,
+                //  2026-11-04：副轨技能行（椰蛋战士「横扫」）也要预加载 ——
+                //  它既不是普攻行、也不在 `empoweredSkillId` 上，漏掉就是「横扫的刀光第一次永远不播」。
+                definition.secondaryProfile?.effectPrefabPath,
             ])
             .filter(Boolean) as string[];
         if (heroIds === undefined) {
@@ -787,7 +793,10 @@ export class ZCGameLoader {
                 const prefab = await this.resources.assets.load(url, Prefab, this.battleOptions(scope));
                 if (prefab) prefabs.set(trait, prefab);
             } catch (error) {
-                if (ZCDC_LOG_WARNINGS) console.warn(`[ZCGameLoader] 受击特效加载失败：${url}`, error);
+                //  2026-11-04：从 warn 提到 error，并把职业名写进消息 ——
+                //  这条静默下去的后果是「法师受击一次都不出现，但结算一切正常」，
+                //  warn 级别太容易被日志过滤掉。渲染侧同口径的诊断见 `ZCEffectPool.hitFxMissingWarned`。
+                if (ZCDC_LOG_WARNINGS) console.error(`[ZCGameLoader] 受击特效加载失败：职业「${trait}」← ${url}`, error);
             }
         }));
         return prefabs;

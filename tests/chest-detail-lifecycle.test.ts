@@ -33,7 +33,10 @@ function createPage() {
     } });
     const page = new exports.MainPage();
     page.isValid = true;
-    return { page, context, setPanel: (value: typeof panel) => { panel = value; } };
+    const { ComponentController } = componentControllerModule(context);
+    const composition = new ComponentController('test-main-page-composition');
+    page.initialize(composition.resources);
+    return { page, context, composition, setPanel: (value: typeof panel) => { panel = value; } };
 }
 
 test('未激活宝箱显示配置等待时长并允许开启，激活后立即刷新倒计时', async () => {
@@ -59,7 +62,7 @@ test('未激活宝箱显示配置等待时长并允许开启，激活后立即�
 });
 
 test('详情图标和品质框持有独立资源作用域，页面销毁后释放', async () => {
-    const { page, context } = createPage();
+    const { page, context, composition } = createPage();
     const frame = { isValid: true, refs: 0 };
     Object.assign(context.assets, { load: async (_path: string, _type: unknown, options: { scope?: ResourceScope }) => {
         assert.ok(options.scope, '缓存的 SpriteFrame 必须持有资源作用域');
@@ -70,6 +73,7 @@ test('详情图标和品质框持有独立资源作用域，页面销毁后释�
     assert.equal(await page.loadChestFrame('image/item'), frame);
     assert.equal(await page.loadChestFrame('image/item'), frame);
     assert.equal(frame.refs, 1);
+    composition.dispose();
     page.onDestroy();
     assert.equal(frame.refs, 0);
 });

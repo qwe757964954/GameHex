@@ -52,6 +52,27 @@ export interface ZCStatusStatMods {
     critDamagePct?: number;
     /** 受到伤害百分比修正（25 = 受到的伤害 +25%，-10 = -10%）；在受伤结算时一次性乘算。 */
     damageTakenPct?: number;
+    /**
+     * 受到**远程**伤害百分比修正（2026-10-29，藤盾）。
+     *
+     * 与 `damageTakenPct` 分开而不是相加，是因为语义不同：后者对所有伤害生效，
+     * 前者只对「远程投射 / 范围」生效，近战与持续伤害不吃这一层。结算时若伤害来源
+     * 未标记 `ZCDamageSource.ranged`，本字段整份不参与计算 ⇒ 存量状态行为不变。
+     */
+    damageTakenRangedPct?: number;
+    /**
+     * 造成伤害的百分比修正（2026-10-30，僵尸「嗜血」100703）。
+     *
+     * 与 `attackPct` 的区别同 `ZCUnitStatPatch.damageRatePct`：它不抬面板，只在
+     * `ZCAttackResolutionSystem.unitDamage` 的最终结算处相乘一次。缺省 0 ⇒ 乘 1。
+     */
+    damageRatePct?: number;
+    /**
+     * 伤害转生命的比例（2026-10-30，僵尸「嗜血」100703）。**比例不是百分数**：
+     * 0.10 = 造成伤害的 10% 回血。与 `ZCUnitStatPatch.lifestealRate` 同一口径，
+     * 在 `lifestealRatioOf` 里与 unit 域的值**相加**。缺省 0 ⇒ 整段不执行。
+     */
+    lifestealRate?: number;
 }
 
 /** 硬控类别：受控单位不能移动/攻击/施放，差异主要在视觉表现（详见 ZCUnitSystem 受控闸门）。 */

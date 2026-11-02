@@ -86,11 +86,12 @@ test('运行时 ConfigService 解压数据经过同一加载入口，保留新�
             return decompressBigMapRows(tables[name]) as readonly T[];
         },
     });
-    // 12 张 bigmap 表按 `BIGMAP_TABLE` 的顺序读完；资源表配了 `itemId` 时会再补读一张
-    // `item`（拿背包图标，见 `attachBigMapResourceItemIcons`）—— 多读的只能是这一张。
+    // 12 张 bigmap 表按 `BIGMAP_TABLE` 的顺序读完；之后还会补读两张全局表：
+    // `gameConfig`（攻城时点覆盖，见 `applyBigMapScheduleOverrides`）与
+    // `item`（资源表配了 `itemId` 时拿背包图标）。
     const tableOrder = Object.values(BIGMAP_TABLE);
     assert.deepEqual(requested.slice(0, tableOrder.length), tableOrder);
-    assert.deepEqual(requested.slice(tableOrder.length), ['item']);
+    assert.deepEqual(requested.slice(tableOrder.length), ['gameConfig', 'item']);
     assert.equal(config.monsters.get(8001)?.battle?.battleId, 30001);
     assert.equal(config.monsters.get(9001)?.occupyHex, 4);
 });

@@ -103,6 +103,16 @@ function decodeRgba(buffer: Buffer): { width: number; height: number; pixels: Bu
 }
 
 /**
+ * 逐行 RGBA（**行序自上而下**，`pixels[(row * width + x) * 4 + channel]`）。
+ *
+ * 给需要看**颜色**的用例用（例如「火焰被染成树妖紫」）。只看包围盒的话用
+ * {@link readPngAlphaBox} 就够了，不用解整张图。
+ */
+export function decodePngRgba(filePath: string): { width: number; height: number; pixels: Buffer } {
+    return decodeRgba(readFileSync(filePath));
+}
+
+/**
  * 量一张 PNG 的 alpha 包围盒（`alpha > threshold` 的像素才算"可见"）。
  *
  * 返回的 `left/bottom` 含、`right/top` 不含，且 **y 轴已翻成从下往上**（与 Cocos 的

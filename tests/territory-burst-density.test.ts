@@ -99,13 +99,33 @@ test('粒子数变化不改变单颗轨迹（同一 index 同一时刻位置一�
 // 接线：随机格走喷射、资源点走开箱
 // ============================================================
 
+const MODEL_PATH = 'assets/script/app/territory/application/TerritoryModel.ts';
+
+/**
+ * 取 Model 里某个方法的方法体（签名 → 下一个同缩进成员）。
+ *
+ * ⚠️ 别再用 `src.slice(indexOf(A), indexOf(B))` 这种"两个字符串当边界"的写法：
+ * `handleUnlockThenPass` / `randomResourceOpenCheck` 这两个名字在**注释里**也各出现一次
+ * （第 241 / 509 行），先命中的是注释 ⇒ 切出来的是两条注释之间的正文，
+ * 里面当然没有 `showRewards`，断言永远红却看起来像业务坏了。这条早就踩过一次。
+ */
+function modelMethodBody(signature: string): string {
+    const src = readFileSync(MODEL_PATH, 'utf8');
+    const start = src.indexOf(signature);
+    assert.ok(start >= 0, `Model 里找不到方法 ${signature}`);
+    const next = src.indexOf('\n    private ', start + signature.length);
+    return src.slice(start, next < 0 ? src.length : next);
+}
+
 test('Presenter 给随机格标 `chest: false`（页面据此不放开箱）', () => {
-    const src = readFileSync('assets/script/app/territory/application/TerritoryModel.ts', 'utf8');
-    assert.ok(src.includes('chest: false'), '随机格必须显式要求"不要宝箱"');
+    assert.ok(modelMethodBody('private async openRandomResourceCell(').includes('chest: false'),
+        '随机格必须显式要求"不要宝箱"');
 
     // 固定资源点那一路仍然走默认（开箱），不能被顺手改成 burst
-    const fixedClaim = src.slice(src.indexOf('handleUnlockThenPass'), src.indexOf('randomResourceOpenCheck'));
+    const fixedClaim = modelMethodBody('private async handleUnlockThenPass(');
+    assert.ok(fixedClaim.length > 200, `切片异常短（${fixedClaim.length} 字），锚点八成又只命中注释了`);
     assert.ok(fixedClaim.includes('showRewards(result.rewards, site.cellId)'), '资源点领取仍走默认开箱');
+    assert.ok(!fixedClaim.includes('chest: false'), '资源点不许被顺手改成喷射');
 });
 
 test('页面按 `chest: false` 直接结算（喷射），不判格子类型', () => {

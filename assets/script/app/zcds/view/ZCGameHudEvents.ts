@@ -26,6 +26,9 @@
 
 /** 本工程界面层向外派发的全部意图。 */
 export enum ZCGameUiEvent {
+    /** GM：设置本局我方后续翻格的指定卡；同步返回 DebugDrawCardResult。 */
+    DebugDrawCard = 'zcgame-debug-draw-card',
+    DebugDrawCardResult = 'zcgame-debug-draw-card-result',
     /** HUD：神器（能不能用由模型判 —— 充能 / 冷却）。 */
     UseArtifact = 'zcgame-ui-use-artifact',
     /** HUD：打开战斗指南。 */
@@ -57,4 +60,13 @@ export enum ZCGameUiEvent {
     ReturnToMain = 'zcgame-ui-return-to-main',
     /** 棋盘：点了某一格（**payload = 格子 id**）；派发方是 `ZCGameRenderWorld`（它才知道是哪一格）。 */
     HexClick = 'zcgame-ui-hex-click',
+}
+
+export interface IZCDebugDrawCardIntent {
+    readonly cardId: string;
+    readonly count: number;
+}
+
+export interface IZCDebugDrawCardResult {
+    readonly message: string;
 }

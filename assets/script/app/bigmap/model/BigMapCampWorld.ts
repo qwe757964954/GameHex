@@ -15,7 +15,10 @@ export function withBigMapCampCities(config: IBigMapConfig): IBigMapConfig {
         const level = levels.filter((item) => item.level <= camp.chapter).pop() ?? levels[0];
         cities.set(camp.campId, {
             cityId: camp.campId, name: camp.name, layer: camp.occupyType,
-            available: camp.occupyType === 1, cityLevel: level.level,
+            // `bigMapCamp` 表里的行**就是**本期开放的据点，层级差异由 `occupyType` 表达。
+            // ⚠️ 不能写成 `occupyType === 1`：表里 81 座有 58 座是军团层（2）、1 座王座层（4），
+            // 按个人层卡会把它们全判成「未开放」（2026-10-30 反馈）。
+            available: true, cityLevel: level.level,
             unlockChapter: camp.chapter, openDay: camp.openDay, staminaCost: camp.staminaCost,
             defenseHp: legacy?.defenseHp ?? level.defenseHp,
             radiateCapacity: legacy?.radiateCapacity ?? 1,

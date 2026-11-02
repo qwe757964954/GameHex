@@ -1,5 +1,5 @@
 import { _decorator, Button, Component, Node, Sprite, SpriteFrame } from 'cc';
-import { ComponentController } from '../../framework/controller/ComponentController';
+import type { IControllerResources } from '../../framework/controller/ControllerBase';
 import { ResourceScope } from '../../core/asset/ResourceScope';
 import { GameRoute } from '../../core/runtime/GameRoute';
 import { ProcedureManager } from '../../framework/procedure/ProcedureManager';
@@ -74,16 +74,17 @@ export class MainPage extends Component {
     @property({ type: ChestBar, tooltip: 'ChestBar：底部宝箱栏（4 格，蓝湖「塔防主界面-2」）' })
     chestBar: ChestBar = null;
 
-    private findCurrentBoss: (() => void) | null = null;
+    hasTerritoryMap = false;
     private readonly treasureRepository = new NewTreasureRepository();
     /** 详情弹窗当前对应的槽位（1~4）与那颗按钮要发的动作；`0` = 没开。 */
     private detailSlot = 0;
     private detailAction: ChestSlotAction = ChestSlotAction.Open;
-    private get assets() { return this.controller.resources.assets; }
+    private get assets() { return this.presentationResources.assets; }
     /** 图标按路径缓存（同一批奖励反复加载同一张图不值得）。 */
     private readonly chestIconCache = new Map<string, SpriteFrame>();
-    private readonly controller = new ComponentController('main:chest-detail-art');
-    private get chestArtScope(): ResourceScope { return this.controller.scope; }
+    private presentationResources: IControllerResources = null!;
+    initialize(resources: IControllerResources): void { this.presentationResources = resources; }
+    private get chestArtScope(): ResourceScope { return this.presentationResources.scope; }
     private readonly emptyChestSlots: readonly IChestSlotData[] = Array.from({ length: CHEST_SLOT_COUNT }, (_, index) => ({
         index: index + 1,
         state: ChestSlotState.Empty,
@@ -112,11 +113,6 @@ export class MainPage extends Component {
         EventMgr.instance.on(CHEST_EVENTS.OPEN, this.onChestDetailOpen, this);
     }
 
-    /** 由主界面宿主接入同页地图，避免快速寻敌另开战斗流程。 */
-    bindFindCurrentBoss(handler: () => void): void {
-        this.findCurrentBoss = handler;
-    }
-
     start(): void {
         this.renderChests(this.emptyChestSlots);
         this.chestBar.setOpen(false, false);
@@ -134,10 +130,8 @@ export class MainPage extends Component {
 
     onDestroy(): void {
         if (this.detailSlot > 0) PopupManager.inst.get(ChestDetailPanel)?.close();
-        this.controller.dispose();
         this.chestIconCache.clear();
         EventMgr.instance.offTarget(this);
-        this.findCurrentBoss = null;
         this.treasureRepository.dispose();
         GameNet.instance.removeCaller(this);
     }
@@ -161,11 +155,11 @@ export class MainPage extends Component {
     }
 
     private onStartGame(): void {
-        if (!this.findCurrentBoss) {
+        if (!this.hasTerritoryMap) {
             FW.showTip(MAIN_PAGE_TEXTS.bossMapUnavailable);
             return;
         }
-        this.findCurrentBoss();
+        EventMgr.instance.emit(TerritoryUiEvent.Intent, { intent: { kind: 'focusLevel' } });
     }
 
     private onTerritoryRender(event: ITerritoryRenderEvent): void {

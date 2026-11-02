@@ -32,6 +32,10 @@ export type ZCStatId =
     | 'bannerTargetCount'
     | 'bannerCritRate'
     | 'empoweredEvery'
+    //  2026-11-04 椰蛋战士「生命汲取」（100503）：造成伤害的 N% 转回自身生命。
+    //  与 `damageRate` 的差别：那个改的是**打出去多少**，这个改的是**打完回多少**，
+    //  所以不能共用一个键 —— 否则「伤害 +10%」的卡会顺手变成「吸血 10%」。
+    | 'lifestealRate'
     //  以下 9 种对应 `pvpAttrMap` 里 `sourceUnit !== 'text'` 的数值属性（2026-10-13 表补齐）。
     //  文本类（`type` / `model` / `attackType`）走独立 schema，不进入纯数值的 `ZCUnitStatPatch`。
     | 'attackCount'
@@ -180,6 +184,8 @@ export interface ZCSkillBinding {
     stateMode: ZCSkillStateMode;
     parameterKey?: string;
     parameterStatId?: ZCStatId;
+    /** 命中时挂给被打者的状态（`on_hit_status`）或开局挂给自己的常驻状态（`passive_status`）。 */
+    statusId?: string;
     enabled: boolean;
 }
 
@@ -214,6 +220,17 @@ export interface ZCSkillPlanRecord {
     replacementSkillId?: number;
     cooldown?: number;
     maxTriggers?: number;
+    /**
+     * 技能数值参数（2026-10-29）。键名与 `ZCAttackResolutionSystem` 读的
+     * `skillRuntime.parameters` 完全一致（`projectileCount` / `damageRate` /
+     * `burstCount` / `burstSeconds` / `selfShieldRatio` / `shieldSeconds` /
+     * `lowHpThreshold` / `lowHpReducePct` / `lowHpSeconds` / `lowHpCooldown`）。
+     *
+     * 为什么需要它：`skillRuntime.parameters` 原本只能由 `domain='skill'` 的修改器喂，
+     * 而计划行的 `statId/operation/value` 一律进 `domain='unit'`，所以「机关枪 3/5/7 发」
+     * 这类**按等级变化的技能参数**此前没有落点。留空 ⇒ 空对象，既有行为不变。
+     */
+    skillParams?: Readonly<Record<string, number>>;
 }
 
 export interface ZCStatusConfigRecord {
@@ -301,11 +318,29 @@ const STAT_IDS = new Set<ZCStatId>([
     'attackDuration', 'attackHitTime', 'projectileCount', 'damageRate', 'pierceCount',
     'executeChance', 'impactDamageRate', 'explosionDamageRate', 'zoneCount', 'slowRatio',
     'expireDamageRate', 'freezeDuration', 'shieldRatio', 'directionCount', 'moveSpeedBoost',
-    'bannerTargetCount', 'bannerCritRate', 'empoweredEvery',
+    'bannerTargetCount', 'bannerCritRate', 'empoweredEvery', 'lifestealRate',
     'attackCount', 'bulletNum', 'bulletAngle', 'critRate', 'critDamage',
     'recruitCd', 'recruitMaxNum', 'singleRecruitNum', 'singleRecruitLegionCount',
 ]);
-const SKILL_BEHAVIORS = new Set(['empowered_attack', 'multi_projectile', 'periodic_damage', 'on_hit_status']);
+const SKILL_BEHAVIORS = new Set([
+    'empowered_attack', 'multi_projectile', 'periodic_damage', 'on_hit_status',
+    //  2026-10-29：只带数据、不带结算的两条（见 ZCSkillRuntimeRegistry 构造函数注释）。
+    'skill_params', 'passive_status',
+    //  2026-11-04 椰蛋战士「暴风」（100504）：强化那一击的收招阶段不改打当前目标，
+    //  而是从施法者朝目标抛出 N 个**会移动**的地面区域（见 ZCAttackResolutionSystem 的 zone 分支）。
+    'on_cast_end_spawn_zone',
+    //  2026-10-30 僵尸「共生信号」系列（103001 / 103002 / 103003）：以施法者为圆心、
+    //  给半径内同阵营友军挂一个**随本体移动**的常驻增益状态（见 `ZCSkillTriggerSystem.applyTeamAura`）。
+    //  和 `passive_status` 分开：那个把状态挂给**自己**，这个是挂给**周围的友军**。
+    'team_aura',
+    //  2026-10-30「第二个主动」：冷却到点给**自己**开一段限时增益，可选带自愈 / 友军治疗 / 净化。
+    //  为什么不做成强化槽或副轨：一条普攻行只有「一强化 + 一副轨（扇形伤害）」两个出手位，
+    //  而这类技能既不出弹也不打人，走的是 `ZCSkillTriggerSystem.applySelfCast` 自己的 CD。
+    'self_cast',
+    //  2026-10-30「第二个主动」：冷却到点在半径内挑 N 个敌人各结算一发（最近优先 / 随机），
+    //  见 `ZCSkillTriggerSystem.applyRandomStrike` 与 `ZCAttackResolutionSystem.strikeTargets`。
+    'random_strike',
+]);
 const STATUS_HANDLERS = new Set([
     'none', 'periodic_damage', 'periodic_heal', 'on_hit_status',
     'legacy_dot', 'legacy_knockback', 'legacy_traction',
@@ -383,6 +418,25 @@ function overrideValueObject(value: unknown, path: string): Record<string, unkno
 
 function hasConfiguredValue(value: unknown): boolean {
     return value != null && value !== '';
+}
+
+/**
+ * `pvpSkillPlan.skillParamJson` → 技能数值参数。
+ *
+ * 留空 / 空串 ⇒ `undefined`（**不是**空对象）：调用方据此判断「这一档没有额外参数」，
+ * 避免把空对象合并进 `skillRuntime.parameters` 时覆盖掉别的档位。
+ * 键名不做白名单校验 —— 参数名是 `ZCAttackResolutionSystem` 与表之间的约定，
+ * 写错的效果是「参数没人读」，与白名单外抛错相比更容易在调表时发现。
+ */
+function parseSkillParams(value: unknown, path: string): Readonly<Record<string, number>> | undefined {
+    if (!hasConfiguredValue(value)) return undefined;
+    const raw = jsonValue(value, path);
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+        throw new Error(`[ZCStatSchema] ${path} 必须是对象 JSON`);
+    }
+    const entries = Object.entries(raw as Record<string, unknown>);
+    if (!entries.length) return undefined;
+    return Object.fromEntries(entries.map(([key, child]) => [text(key, `${path}.key`), number(child, `${path}.${key}`)]));
 }
 
 function resolveOverrideValueField(
@@ -723,10 +777,11 @@ export function parseZCModifierAdapterCatalogs(
             parameterStatId: row.parameterStatId == null || row.parameterStatId === ''
                 ? undefined
                 : enumValue(row.parameterStatId, STAT_IDS, `${path}.parameterStatId`),
+            statusId: typeof row.statusId === 'string' && row.statusId.trim() ? row.statusId.trim() : undefined,
             enabled: bool(row.enabled),
         };
         const key = `${record.targetUnitId}:${record.pvpSkillId}:${record.behaviorKey}`
-            + `:${record.parameterKey ?? ''}:${record.parameterStatId ?? ''}`;
+            + `:${record.parameterKey ?? ''}:${record.parameterStatId ?? ''}:${record.statusId ?? ''}`;
         if (bindingKeys.has(key)) throw new Error(`[ZCStatSchema] 技能映射重复：${key}`);
         bindingKeys.add(key);
         skillBindings.push(record);
@@ -861,6 +916,7 @@ export function parseZCModifierAdapterCatalogs(
             replacementSkillId: optionalNumber(row.replacementSkillId, `${path}.replacementSkillId`),
             cooldown: optionalNumber(row.cooldown, `${path}.cooldown`),
             maxTriggers: optionalNumber(row.maxTriggers, `${path}.maxTriggers`),
+            skillParams: parseSkillParams(row.skillParamJson, `${path}.skillParamJson`),
         });
     }
 
@@ -884,6 +940,8 @@ const UNIT_STAT_IDS: readonly ZCStatId[] = [
     'critRate', 'critDamage', 'bulletNum', 'bulletAngle',
     'attackCount', 'recruitCd', 'recruitMaxNum',
     'singleRecruitNum', 'singleRecruitLegionCount',
+    //  2026-11-04：同样没有基础值，表里用 `add` 直接给比例（0.02 = 2%）。
+    'lifestealRate',
 ];
 
 /**
@@ -891,7 +949,7 @@ const UNIT_STAT_IDS: readonly ZCStatId[] = [
  * 第二个是 `addRate` 的去处（`null` = 该 statId 没有百分数口径）。
  * 已有的 8 种不在这里 —— 它们由 `typedToLegacyPatch` 负责。
  */
-const STAT_TO_PATCH: Readonly<Record<string, [keyof ZCUnitStatPatch, keyof ZCUnitStatPatch | null]>> = {
+export const STAT_TO_PATCH: Readonly<Record<string, [keyof ZCUnitStatPatch, keyof ZCUnitStatPatch | null]>> = {
     critRate: ['critRatePct', null],
     critDamage: ['critDamagePct', null],
     bulletNum: ['bulletNumFlat', null],
@@ -901,6 +959,10 @@ const STAT_TO_PATCH: Readonly<Record<string, [keyof ZCUnitStatPatch, keyof ZCUni
     recruitMaxNum: ['recruitMaxNumFlat', null],
     singleRecruitNum: ['singleRecruitNumFlat', null],
     singleRecruitLegionCount: ['singleRecruitLegionCountFlat', null],
+    //  2026-11-04：`add` 直接写比例（0.02 = 2%），**不要**写成 2 —— 这个字段是比例不是百分数，
+    //  与 `critRatePct` 那批「20 = +20%」的口径不同。`addRate` 在这里没有意义
+    //  （rate 分支要乘 `baseValue`，而它没有基础值 ⇒ 恒 0）。
+    lifestealRate: ['lifestealRate', null],
 };
 
 /** 把一次结算出的 statId 明细折成 `ZCUnitStatPatch`；空 patch 不写键（下游按缺省走）。 */

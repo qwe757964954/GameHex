@@ -107,6 +107,13 @@ export class ZCProjectileSystem {
                     && context.now + 1e-9 < projectile.startedAt + projectile.durationSeconds) {
                     projectile.hitUnitIds = [...hitUnitIds, target.id];
                     projectile.remainingPierces = Math.max(0, (projectile.remainingPierces ?? 0) - 1);
+                    //  穿透衰减（2026-10-30 玉林好汉「精英猎手」：每穿一人伤害 -20%）：
+                    //  就地乘 `baseDamage` —— 命中与溅射都只从它现算，所以衰减天然生效。
+                    //  缺省 0 ⇒ 不衰减；老弹道（火船/箭矢）行为逐字不变。
+                    const falloff = projectile.pierceFalloff ?? 0;
+                    if (falloff > 0) {
+                        projectile.baseDamage *= Math.max(0, 1 - Math.min(1, falloff));
+                    }
                     projectiles[kept++] = projectile;
                 }
             } else {

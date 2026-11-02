@@ -1,6 +1,7 @@
 import type { AssetLoadOptions, AssetService, AssetType } from './AssetService';
 import { ResourceScope } from './ResourceScope';
 import { bundleForPath, RESOURCES_BUNDLE } from './BundleCatalog';
+import { ResourceLoadQueue } from './ResourceLoadQueue';
 
 export interface IScopedAssetCacheOptions {
     readonly maxEntries: number;
@@ -24,8 +25,7 @@ export class ScopedAssetCache implements AssetService {
     private readonly entries: IAssetCacheEntry[] = [];
     private hits = 0;
     private misses = 0;
-    private activeLoads = 0;
-    private readonly queuedLoads: Array<{ start: () => void; priority: () => number }> = [];
+    private readonly loadQueue: ResourceLoadQueue | null;
 
     constructor(private readonly delegate: AssetService,
         private readonly options: IScopedAssetCacheOptions,
@@ -37,6 +37,7 @@ export class ScopedAssetCache implements AssetService {
             && (!Number.isSafeInteger(options.maxConcurrentLoads) || options.maxConcurrentLoads < 1)) {
             throw new Error('无效的资源加载并发预算');
         }
+        this.loadQueue = options.maxConcurrentLoads === undefined ? null : new ResourceLoadQueue(options.maxConcurrentLoads);
     }
 
     get stats(): { readonly entries: number; readonly hits: number; readonly misses: number } {
@@ -135,39 +136,9 @@ export class ScopedAssetCache implements AssetService {
         if (entry.users === 0) entry.scope.dispose();
     }
 
-    private dispatchNext(): void {
-        if (!this.queuedLoads.length) return;
-        let next = 0;
-        for (let index = 1; index < this.queuedLoads.length; index++) {
-            if (this.queuedLoads[index].priority() > this.queuedLoads[next].priority()) next = index;
-        }
-        this.queuedLoads.splice(next, 1)[0].start();
-    }
-
     private dispatch<T>(scope: ResourceScope | undefined, load: (scope: ResourceScope | undefined, priority: number) => Promise<T>,
         priority: () => number, hasUsers?: () => boolean): Promise<T> {
-        const limit = this.options.maxConcurrentLoads;
-        if (limit === undefined) return load(scope, priority());
-        return new Promise<T>((resolve, reject) => {
-            const start = (): void => {
-                if (scope?.disposed || (hasUsers && !hasUsers())) {
-                    reject(new Error('资源加载已取消'));
-                    this.dispatchNext();
-                    return;
-                }
-                this.activeLoads++;
-                // 根资源自身还会派发依赖下载；限制根请求，避免多个大动画图集同时争抢解析。
-                void (async () => {
-                    try { resolve(await load(scope, priority())); }
-                    catch (error) { reject(error); }
-                    finally {
-                        this.activeLoads--;
-                        this.dispatchNext();
-                    }
-                })();
-            };
-            if (this.activeLoads < limit) start();
-            else this.queuedLoads.push({ start, priority });
-        });
+        if (!this.loadQueue) return load(scope, priority());
+        return this.loadQueue.run(() => load(scope, priority()), scope, priority, hasUsers);
     }
 }

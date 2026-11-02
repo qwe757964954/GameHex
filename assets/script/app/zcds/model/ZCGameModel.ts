@@ -25,6 +25,7 @@ import { ZCEconomyContext, ZCEconomySystem } from './systems/ZCEconomySystem';
 import { ZCGroundZoneSystem, type IZCGroundZoneContext } from './systems/ZCGroundZoneSystem';
 import { ZCLegacyCombatSystem, type IZCLegacyCombatContext } from './systems/ZCLegacyCombatSystem';
 import { ZCOutcomeSystem, type IZCOutcomeContext } from './systems/ZCOutcomeSystem';
+import { ZCSkillTriggerSystem, type IZCSkillTriggerContext } from './systems/ZCSkillTriggerSystem';
 import { ZCStatusResolutionSystem, type IZCStatusResolutionContext } from './systems/ZCStatusResolutionSystem';
 import type { ZCTargetingContext } from './systems/ZCTargetingSystem';
 import {
@@ -34,6 +35,8 @@ import {
 } from './ZCBattlePresentationQueue';
 import {
     cardCounterMultiplier,
+    cardTypeToBuilding,
+    findCatalogCard,
     luckTextOfTier,
     ZC_RARITY_RANK,
     ZCAttackTrait,
@@ -215,6 +218,8 @@ export interface ZCDefenceWaveProgress {
 
 export class ZCGameModel {
     private state: ZCSnapshot;
+    private debugDraw: { card: ZCDeckCard; remaining: number } | null = null;
+    private readonly debugCards = new Map<string, ZCDeckCard>();
     /** 服务端完成战斗接口需要的操作记录，随结算 commands 一起上报。 */
     readonly frameEvents: Array<{ frameId: number; unitId: number; op: number; params: number[] }> = [];
     private readonly config: ZCMatchConfig;
@@ -253,6 +258,7 @@ export class ZCGameModel {
     private readonly statusResolutionContext: IZCStatusResolutionContext;
     private readonly damageResolutionContext: IZCDamageResolutionContext;
     private readonly developmentContext: IZCDevelopmentContext;
+    private readonly skillTriggerContext: IZCSkillTriggerContext;
     private createAttackResolutionContext(): IZCAttackResolutionContext {
         return {
             rules: this.services.rules,
@@ -277,6 +283,11 @@ export class ZCGameModel {
             damageWall: (source, wall, damage) => this.damageWall(source, wall, damage),
             damageBuilding: (source, building, damage) => this.damageBuilding(source, building, damage),
             unitsInRadius: (id, radius) => this.unitsInRadius(id, radius),
+            //  2026-11-04 椰蛋战士：吸血回血 / 横扫击退。两者都复用既有实现，
+            //  不在这里另写一套 —— 回血的上限与飘字口径要跟状态表 `periodic_heal` 一致，
+            //  击退的撞墙/不可走格吞噬要与 `legacy_knockback` 一致。
+            healUnit: (unit, amount) => ZCStatusResolutionSystem.healUnit(unit, amount, this.statusResolutionContext),
+            applyKnockback: (target, source, amount) => this.applyLegacyKnockback(target, source, amount),
         };
     }
     private readonly legacyCombatContext: IZCLegacyCombatContext = {
@@ -376,6 +387,7 @@ export class ZCGameModel {
         this.damageResolutionContext = this.buildDamageResolutionContext();
         this.developmentContext = this.buildDevelopmentContext();
         this.statusResolutionContext = this.buildStatusResolutionContext();
+        this.skillTriggerContext = this.buildSkillTriggerContext();
         this.registerRuntimeStatuses();
         this.economyContext = this.buildEconomyContext();
         this.movement = this.buildMovement();
@@ -424,6 +436,16 @@ export class ZCGameModel {
             ensureSlowStatus: (id, speedPct, duration) => this.ensureMoveSpeedStatus(id, speedPct, duration),
             applyStatus: (unit, id, options) => this.statusSystem.apply(String(unit.id), id, options),
             exportStatusEffects: () => this.statusSystem.exportSnapshot(),
+            //  区域波次的吸血（2026-11-04）：区域上下文只有「谁打的 + 这一跳掉多少」，
+            //  这里补回源单位，转给普攻同一条 applyLifesteal（比例取法完全同源）。
+            //  源单位已阵亡 / 已离场 ⇒ 直接跳过：区域还在飘、人已经没了，不该继续吸。
+            //  注意 `attackResolutionContext` 在本方法之后才构造，所以必须用闭包延迟取，
+            //  不能在 buildGroundZoneContext 里直接读它的字段。
+            lifestealFromHit: (sourceUnitId, hitText) => {
+                const source = this.units.byId.get(sourceUnitId);
+                if (!source || source.battleState === 'dead') return;
+                ZCAttackResolutionSystem.applyLifesteal(source, hitText, this.attackResolutionContext);
+            },
         };
     }
 
@@ -460,6 +482,7 @@ export class ZCGameModel {
             units: this.units,
             damageDealt: this.damageDealt,
             damageTaken: this.damageTaken,
+            random: () => this.random(),
         };
     }
 
@@ -602,6 +625,29 @@ export class ZCGameModel {
             targeting: this.unitTargeting,
             movement: this.movement,
             sendAttack: (unit) => ZCAttackResolutionSystem.sendAttack(this.state, unit, this.attackResolutionContext),
+        };
+    }
+
+    private buildSkillTriggerContext(): IZCSkillTriggerContext {
+        return {
+            statusSystem: this.statusSystem,
+            //  键口径与 `ZCAttackResolutionSystem.sendAttack` 完全一致（`${unitId}:${普攻 profile.skillId}`），
+            //  否则「配置里能查到、运行时查不到」会出现同一张卡在两条链路上行为不一致。
+            runtimeOf: (unit) => this.skillRuntime[unit.owner]
+                .get(`${unit.unitId}:${this.effectiveUnitDefinition(unit).attackProfile.skillId}`),
+            //  连发弹走 `sendBurstShot`，不进 `sendAttack`：后者会推进普攻节拍与强化 CD。
+            fireBurst: (unit) => ZCAttackResolutionSystem.sendBurstShot(this.state, unit, this.attackResolutionContext),
+            //  副轨主动（横扫）：走独立的扇形结算，不推进普攻节拍与强化 CD。
+            castSecondary: (unit) => ZCAttackResolutionSystem.castFanSkill(this.state, unit, this.attackResolutionContext),
+            //  友军光环半径的「表值 → 世界坐标」换算，与攻击距离 / 区域半径同一口径。
+            distanceScale: this.rules.combatDistanceScale,
+            //  自身施法的治疗（吃口菠萝 100603）：走与吸血同一条 `healUnit` 实现，
+            //  封顶 maxHp、死亡不生效、真回了才推 heal 飘字。
+            healUnit: (unit, amount) => ZCStatusResolutionSystem.healUnit(unit, amount, this.statusResolutionContext),
+            //  多点打击（戈壁狂箭 100804 / 追踪导弹 101003）：挑人、伤害、溅射、吸血、处决
+            //  全在攻击系统里，这里只做转发。
+            strike: (unit, options) => ZCAttackResolutionSystem.strikeTargets(
+                this.state, unit, options, this.attackResolutionContext),
         };
     }
 
@@ -942,6 +988,18 @@ export class ZCGameModel {
         return ZCTileSystem.canDevelopFor(this.state, this.config.map, hexId, owner);
     }
 
+    /** GM 覆盖本局后续我方抽卡；不改卡组、金币费用或 AI 抽卡。 */
+    setDebugDrawCard(cardId: string, count: number): ZCActionResult {
+        if (this.state.status !== 'playing') return this.fail('本局已经结束。');
+        if (!Number.isSafeInteger(count) || count <= 0) return this.fail('翻格次数必须为正整数。');
+        const card = this.cards[ZCOwner.Player].get(cardId) ?? findCatalogCard(cardId);
+        if (!card || !cardTypeToBuilding(card.type)) return this.fail(`战斗卡不存在或不能翻格生成：${cardId}`);
+        if (card.unitId && !this.definitions.has(card.unitId)) return this.fail(`本局未加载该卡的单位配置：${cardId}`);
+        this.debugCards.set(cardId, card);
+        this.debugDraw = { card, remaining: count };
+        return this.success(`后续 ${count} 次我方翻格必出【${card.name}】（${cardId}）`);
+    }
+
     developHex(hexId: number): ZCActionResult {
         if (this.state.status !== 'playing') return this.fail('本局已经结束。');
         const hex = this.hex(hexId);
@@ -985,6 +1043,8 @@ export class ZCGameModel {
     }
 
     reset(): void {
+        this.debugDraw = null;
+        this.debugCards.clear();
         this.state = ZCSnapshotCodec.createInitialState(this.config, this.random);
         this.statusSystem.restore(this.state.statusEffects);
         this.state.statusEffects = this.statusSystem.exportSnapshot();
@@ -1026,6 +1086,10 @@ export class ZCGameModel {
         ZCGroundZoneSystem.tick(this.state, dt, this.groundZoneContext);
         if (this.state.projectiles.length) this.projectileSystem.beginStep(this.state.units);
         this.updateUnits(dt);
+        //  技能时机（常驻被动 / 盾到期 / 连发 / 低血护体）：排在出手之后、弹道推进之前 ——
+        //  连发弹当帧就能开始飞，不会凭空多等一步。三类时机在缺省参数下整段不执行，
+        //  未配置这些技能的单位行为逐字不变。
+        ZCSkillTriggerSystem.tick(this.state, dt, this.skillTriggerContext);
         this.projectileSystem.update(this.state.projectiles, dt, this.projectileContext);
         this.captureSystem.update(this.state, dt, (hex, owner) => this.captureEmptyTile(hex, owner));
         this.refreshTileStates();
@@ -1278,6 +1342,9 @@ export class ZCGameModel {
             now: this.state.elapsedSeconds,
             trait,
             owner: target.owner,
+            // 受击特效跟着**被打的那只**的体型走（2026-10-31）。取不到定义就按 1（= 烘焙原样），
+            // 绝不因为查不到而把闪白缩成 0。
+            targetScale: this.definitions.get(target.unitId)?.prefabSize ?? 1,
             x: position.x,
             y: position.y,
             durationSeconds: HIT_FX_SECONDS,
@@ -1428,8 +1495,13 @@ export class ZCGameModel {
 
     private developFor(owner: ZCOwner, hex: ZCHexState): ZCActionResult {
         this.pushFrameEvent(FRAME_OP_DEVELOP, [hex.id]);
+        const forced = owner === ZCOwner.Player ? this.debugDraw : null;
         const result = ZCDevelopmentSystem.develop(
-            this.state, owner, hex, this.deckFor(owner), this.config, this.random, this.developmentContext);
+            this.state, owner, hex, this.deckFor(owner), this.config, this.random, this.developmentContext, forced?.card ?? null);
+        if (forced && result.card === forced.card && result.building) {
+            forced.remaining -= 1;
+            if (forced.remaining === 0) this.debugDraw = null;
+        }
         this.tileStatesDirty = true;
         this.invalidateTerrain();
         // 收场表现属于「开发这件事本身」，与**抽到什么无关**：
@@ -1627,7 +1699,7 @@ export class ZCGameModel {
     }
 
     private cardById(owner: ZCOwner, id: string): ZCDeckCard | undefined {
-        return this.cards[owner].get(id);
+        return this.cards[owner].get(id) ?? (owner === ZCOwner.Player ? this.debugCards.get(id) : undefined);
     }
 
     private unitDefinition(id: string): ZCUnitDefinition {

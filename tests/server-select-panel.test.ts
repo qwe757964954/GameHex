@@ -420,20 +420,15 @@ test('ServerSelectPanel.ts：不许按宿主槽位数截断服务器列表（虚
     );
 });
 
-test('ServerSelectItem.ts：initialize 必须【先 off 再 on】（对象池复用，否则点一下触发 N 次）', () => {
+test('ServerSelectItem binds CLICK once in onLoad; pooled initialization only replaces scoped data', () => {
     const src = stripComments(readFileSync(path.join(SCRIPT_DIR, 'ServerSelectItem.ts'), 'utf8'));
-    const initIdx = src.indexOf('initialize(');
-    assert.ok(initIdx >= 0, '没找到 initialize');
-    const offIdx = src.indexOf('this.node.off(Node.EventType.TOUCH_END', initIdx);
-    const onIdx = src.indexOf('this.node.on(Node.EventType.TOUCH_END', initIdx);
-    assert.ok(offIdx >= 0, 'initialize 里必须 off 一次（否则槽位每复用一次多挂一个监听）');
-    assert.ok(onIdx >= 0, 'initialize 里必须 on 一次');
-    assert.ok(offIdx < onIdx, '必须先 off 再 on');
-    // 每次复用都要把所有可变内容写满：名字 + 状态 + 底图着色
-    for (const write of ['this.nameLabel.string', 'this.statusLabel.string', 'this.background.color']) {
-        assert.ok(src.includes(write), `initialize 里必须回写 ${write}（否则残留上一条服务器的数据）`);
-    }
-    assert.ok(/this\.node\.name\s*=\s*`Server_\$\{server\.serverId\}`/.test(src), '节点名应回写为 Server_<id>，便于排查');
+    assert.equal([...src.matchAll(/this\.node\.on\(/g)].length, 1);
+    assert.match(src, /onLoad\(\)[\s\S]*?this\.node\.on\(Button\.EventType\.CLICK/);
+    assert.doesNotMatch(src.slice(src.indexOf('initialize(')), /this\.node\.on\(/);
+    for (const write of ['this.nameLabel.string', 'this.statusLabel.string', 'this.background.color']) assert.ok(src.includes(write));
+    const data = JSON.parse(readFileSync(assetPath('ui/login/ServerSelectItem.prefab'), 'utf8'));
+    const button = data.find((item: any) => item.__type__ === 'cc.Button');
+    assert.ok(button); assert.equal(button._transition, 0); assert.equal(button._target, null);
 });
 
 test('ServerSelectItem.ts：状态文案四档且「维护」优先（维护中的服不能显示成流畅）', () => {

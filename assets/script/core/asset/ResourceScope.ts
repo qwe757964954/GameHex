@@ -14,25 +14,31 @@ export class ResourceScope {
         return this._disposed;
     }
 
-    /** 由资源适配器登记一个幂等释放动作。 */
-    defer(release: () => void): void {
+    /** 登记释放动作；返回值只解除本次登记，不执行释放。 */
+    defer(release: () => void): () => void {
         if (this._disposed) {
             release();
-            return;
+            return () => {};
         }
-        this.releases.push(release);
+        const registered = () => release();
+        this.releases.push(registered);
+        return () => {
+            const index = this.releases.indexOf(registered);
+            if (index >= 0) this.releases.splice(index, 1);
+        };
     }
 
     dispose(): void {
         if (this._disposed) return;
         this._disposed = true;
-        for (let i = this.releases.length - 1; i >= 0; i--) {
+        // 先取出快照，释放回调解除其他登记时不会改变本轮遍历。
+        const releases = this.releases.splice(0);
+        for (let i = releases.length - 1; i >= 0; i--) {
             try {
-                this.releases[i]();
+                releases[i]();
             } catch (error) {
                 console.error(`[ResourceScope:${this.name}] 释放资源失败`, error);
             }
         }
-        this.releases.length = 0;
     }
 }

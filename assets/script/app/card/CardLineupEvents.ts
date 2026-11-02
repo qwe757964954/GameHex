@@ -1,3 +1,5 @@
+import type { CardLineupData } from './CardRepository';
+import type { ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
 /**
  * 「卡牌阵容 ↔ 布阵面板」这条链的**结果事件**契约（只放事件名与 payload 类型）。
  *
@@ -67,3 +69,14 @@ export interface ISkillStepPayload {
     readonly skillId: number;
     readonly direction: 1 | -1;
 }
+
+export const CardLineupUiEvent = {
+    Intent: 'card-lineup:intent', Render: 'card-lineup:render',
+} as const;
+/** owner 限定当前页；编辑与升级只报意图，数据更新由控制器发布。 */
+export interface ICardLineupIntent {
+    readonly owner: object;
+    readonly kind: 'edit' | 'upgrade' | 'refresh';
+    readonly card?: ZCDeckCard;
+}
+export interface ICardLineupRender { readonly owner: object; readonly data: CardLineupData; }

@@ -10772,11 +10772,6 @@
                           "rule": "required",
                           "type": "uint32",
                           "id": 2
-                        },
-                        "state": {
-                          "rule": "required",
-                          "type": "uint32",
-                          "id": 3
                         }
                       }
                     },
@@ -10792,10 +10787,13 @@
                           "type": "uint32",
                           "id": 2
                         },
-                        "state": {
-                          "rule": "required",
-                          "type": "uint32",
+                        "occupyRoleId": {
+                          "type": "uint64",
                           "id": 3
+                        },
+                        "occupyRoleName": {
+                          "type": "string",
+                          "id": 4
                         }
                       }
                     },

@@ -26,9 +26,12 @@ test('81 条城池参数完整进入配置，图片、尺寸和积分不再丢�
         assert.ok(camp);
         for (const field of ['chapter', 'gateNo', 'occupyType', 'campSize', 'openDay', 'dailyBattleLimit',
             'rankMinScore', 'warScoreRate', 'singleDamageScoreMax', 'maxScoreConfig', 'occupyScore',
-            'minOccupyScore', 'rankResetTime', 'warScoreReset', 'firstRewardId', 'buffConNum', 'buffRate'] as const) {
+            'minOccupyScore', 'rankResetTime', 'warScoreReset', 'buffConNum', 'buffRate'] as const) {
             assert.equal(camp[field], row[field], `${row.campId}.${field}`);
         }
+        // 2026-10-30：单个 `firstRewardId` 改成两列掉落数组，逐条对齐（resId / number / pro 都要在）。
+        assert.deepEqual(camp.firstReward, row.firstReward, `${row.campId}.firstReward`);
+        assert.deepEqual(camp.occupyReward, row.occupyReward, `${row.campId}.occupyReward`);
         assert.equal(camp.rallyOpen, row.rallyOpen === 1);
         assert.equal(camp.iconPath, row.campIcon);
         assert.ok(existsSync(`assets/bundles/bigmap/${camp.iconPath}.png`), camp.iconPath);

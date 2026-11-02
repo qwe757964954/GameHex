@@ -3,10 +3,27 @@ import { test } from 'node:test';
 import { ControllerBase } from '../assets/script/framework/controller/ControllerBase';
 import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
 import { createControllerContext } from './helpers/controller-context';
+import { EventMgr } from '../assets/script/framework/event/EventMgr';
 
 class Controller extends ControllerBase {
     constructor(context: ReturnType<typeof createControllerContext>) { super(context, 'test-controller'); }
+    register(stop: () => void): void { this.own(stop); }
+    subscribe(event: string, handler: () => void): void { this.listen(event, handler); }
 }
+
+test('controller detaches inputs before releasing resources and accepts late cleanup exactly once', () => {
+    const controller = new Controller(createControllerContext());
+    const calls: string[] = [];
+    controller.scope.defer(() => { EventMgr.instance.emit('controller-test'); calls.push('asset'); });
+    controller.subscribe('controller-test', () => calls.push('input'));
+    controller.register(() => calls.push('timer'));
+    EventMgr.instance.emit('controller-test');
+    controller.dispose(); controller.dispose();
+    controller.register(() => calls.push('late'));
+    EventMgr.instance.emit('controller-test');
+    assert.deepEqual(calls, ['input', 'timer', 'asset', 'late']);
+    assert.equal(controller.isDisposed, true);
+});
 
 test('controller resources always exist and default loads belong to the controller', async () => {
     const context = createControllerContext();

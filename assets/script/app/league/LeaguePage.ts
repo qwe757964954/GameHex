@@ -60,12 +60,11 @@ import {
     LEAGUE_ENTRANCES,
     LEAGUE_ENTRANCE_RED_DOT,
     LEAGUE_ENTRANCE_RED_DOT_SOURCE,
-    LEAGUE_INFO_NODES,
     LEAGUE_INFO_PLACEHOLDER,
     leagueEntranceByNode,
     type ILeagueEntrance,
     type ILeagueUnionRow,
-    type LeagueEntranceRedDotSource,
+    type LeagueEntranceRedDotSource
 } from './LeagueTable';
 import { LEAGUE_HALL_LV_SUFFIX, LEAGUE_TIP_NOT_OPEN, LEAGUE_UNION_MEMBER_PREFIX } from './LeagueTexts';
 import { openLeagueHelp } from './LeagueHelp';

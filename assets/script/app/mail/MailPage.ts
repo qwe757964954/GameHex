@@ -58,8 +58,7 @@ import {
     MAIL_TIP_OFFLINE,
     MAIL_TIP_REQUEST_FAILED,
     MAIL_TIP_TAKE_NONE,
-    MAIL_TIP_TAKE_OK,
-    MAIL_TITLE,
+    MAIL_TIP_TAKE_OK
 } from './MailTexts';
 
 const { ccclass, property } = _decorator;

@@ -60,7 +60,7 @@ export class ZCMovementSystem {
         this.syncOccupiedHex(unit);
     }
 
-    advanceUnitMovement(unit: ZCUnitState, dt: number): void {
+    advanceUnitMovement(unit: ZCUnitState, dt: number, speedScale = 1): void {
         if (unit.targetHexId === null) return;
         const target = this.context.map.hexes[unit.targetHexId];
         const current = this.position(unit);
@@ -69,7 +69,7 @@ export class ZCMovementSystem {
         const frozenMultiplier = unit.owner !== ZCOwner.Player && this.context.frozenSeconds() > 0
             ? this.context.rules.artifactEnemySpeedMultiplier : 1;
         const remaining = distance(current.x, current.y, target.x, target.y);
-        const step = definition.moveSpeed * bonuses.moveSpeedMultiplier * frozenMultiplier * dt;
+        const step = definition.moveSpeed * bonuses.moveSpeedMultiplier * frozenMultiplier * speedScale * dt;
         unit.facingRadians = Math.round(Math.atan2(target.y - current.y, target.x - current.x) / (Math.PI / 4)) * (Math.PI / 4);
         if (remaining > step && remaining > 0.001) {
             unit.freeX = current.x + (target.x - current.x) * step / remaining;
@@ -86,7 +86,7 @@ export class ZCMovementSystem {
     }
 
     /** 同格追击按目标实际坐标推进；格心可能始终落在近战射程之外。 */
-    advanceTowardUnit(unit: ZCUnitState, target: ZCUnitState, dt: number): void {
+    advanceTowardUnit(unit: ZCUnitState, target: ZCUnitState, dt: number, speedScale = 1): void {
         const current = this.position(unit);
         const destination = this.position(target);
         const remaining = distance(current.x, current.y, destination.x, destination.y);
@@ -94,7 +94,7 @@ export class ZCMovementSystem {
         const bonuses = this.context.bonuses(unit.owner);
         const frozenMultiplier = unit.owner !== ZCOwner.Player && this.context.frozenSeconds() > 0
             ? this.context.rules.artifactEnemySpeedMultiplier : 1;
-        const step = Math.min(remaining, definition.moveSpeed * bonuses.moveSpeedMultiplier * frozenMultiplier * dt);
+        const step = Math.min(remaining, definition.moveSpeed * bonuses.moveSpeedMultiplier * frozenMultiplier * speedScale * dt);
         unit.targetHexId = null;
         unit.progress = 0;
         if (remaining <= 0 || step <= 0) return;

@@ -1,153 +1,74 @@
-# AI 开发约定（必读）
+# 工程 Agent 约定
 
-本仓库是 Cocos Creator 3.8 + TypeScript 游戏。开始改代码前，先按下方**按需路由表**查阅对应规范：
-- 全局架构、生命周期、Prefab 陷阱与美术配表工具链：[docs/AI架构与代码规范.md](https://www.google.com/search?q=docs%2FAI%E6%9E%B6%E6%9E%84%E4%B8%8E%E4%BB%A3%E7%A0%81%E8%A7%84%E8%8C%83.md)
-- 对局表现层（`app/zcds/view`）与「冒险」领地页（`app/territory`）专项规格书：[docs/zcds-表现层与领地规范.md](https://www.google.com/search?q=docs%2Fzcds-%E8%A1%A8%E7%8E%B0%E5%B1%82%E4%B8%8E%E9%A2%86%E5%9C%B0%E8%A7%84%E8%8C%83.md)
+Cocos Creator 3.8.8 + TypeScript。
 
-## 先做什么
+## 工作方式
 
-1. **确认归属与边界**：先确认需求所属的 feature、流程、数据来源与资源生命周期，不要只按文件名猜测。
-2. **符号与调用链追踪**：仓库有 `.codegraph/` 时，先用 `codegraph explore` 追踪符号、调用链和已有测试，再读代码（定位控制在 1~2 次查询内，避免盲目全仓 grep）。
-3. **保护工作区**：修改前检查工作区状态；严禁覆盖、格式化或回退与当前任务无关的用户改动。
-4. **复用优先**：优先复用已有模式、类型、文本常量、资源加载器和测试夹具，禁止平行造第二套状态机或工具类。
+1. 修改前检查工作区；保留用户已有改动，不顺手格式化、重构或回退无关文件。
+2. 先明确 feature、流程、数据来源与资源归属，再定位实现。存在 `.codegraph/` 时先用 `codegraph_explore` / `codegraph explore`，1～2 次精准查询定位符号、调用链与测试；缺失/过期内容再用 `rg` / 定向读取。无索引则跳过，不自行建立。
+3. 不重复读取已有源码；只读相关规范章节。独立查询批量执行，输出限相关片段及失败信息。
+4. 优先复用已有模式、类型、文本常量、资源加载器与测试夹具；不另建平行状态机或工具类。
 
-## 按需规范路由与精准验证表
+## 工程约束与业务需求
 
-修改以下模块时，**必须先按需读取对应规范章节**，并在改完后运行绑定的最小单测集：
+- 工程约束规定实现方式，业务规格描述功能，历史记录仅供追溯。Agent 不自行补充业务需求，不把具体参数或旧范围升级为全工程红线。
+- 本次明确变更同步落实到代码、配置和相关测试；旧参数/旧测试不是拒绝变更的依据，无关行为保持原样。涉及协议或资源事实先核实契约，不能单侧修改。
+- 只读本次相关业务规格；发现规格、历史与当前需求冲突时说明差异，无法确定目标再询问。历史记录不作为必读规则。
 
-| 涉及模块 / 目录 | 必读规范章节 | 最小验证命令（`npx tsx --test <文件>`） |
-| :--- | :--- | :--- |
-| 全局分层 / 跨模块依赖 / `Procedure*` | `docs/AI架构与代码规范.md` §2 | 相关流程与边界单测 |
-| 视图 ↔ 控制器交互 / 弹窗按钮事件化 | `docs/AI架构与代码规范.md` §2.1 | `tests/view-intent-events.test.ts` |
-| 弹窗 / 异步加载 / 对象池 / 渲染节流 | `docs/AI架构与代码规范.md` §3 | 对应视图与生命周期单测 |
-| 美术碎图 `auto-atlas` / Spine / 导表 | `docs/AI架构与代码规范.md` §7.3.1 ~ §7.3.2 | `python tools/pvp_card_check.py` |
-| 棋盘图层 / 墙砖排序 (`ZCGameBoard`) | `docs/zcds-表现层与领地规范.md` §1.1 | `tests/zcds-progress.test.ts`、`tests/zcds-render-performance.test.ts` |
-| 地块图标 / 资源图标抬层 / 兵团预览 | `docs/zcds-表现层与领地规范.md` §1.2 | `tests/zcds-tile-icon-scale.test.ts`、`tests/zcds-resource-icon-layer.test.ts`、`tests/zcds-resource-unit-preview.test.ts` |
-| 地块激活（脉冲∥缩没 / 卡牌 / 建筑生长） | `docs/zcds-表现层与领地规范.md` §1.3、§8 | `tests/zcds-hex-activation.test.ts`、`tests/zcds-card-reveal-pop.test.ts`、`tests/territory-hex-flip.test.ts` |
-| 单位出生抖动 / 建筑产兵、产金与**冒险建筑生成**抖动 | `docs/zcds-表现层与领地规范.md` §1.4、§9.5、§3.4 | `tests/zcds-unit-spawn-shake.test.ts`、`tests/zcds-building-spawn-shake.test.ts`、`tests/territory-building-shake.test.ts` |
-| 新扩展邻格生成动画（与地块脉冲同起） | `docs/zcds-表现层与领地规范.md` §1.4、§9.2 | `tests/zcds-hex-neighbor-spawn.test.ts` |
-| 特效缩放（出生 / 受击 / 阵亡 `_lscale`） | `docs/zcds-表现层与领地规范.md` §1.5 | `tests/zcds-hit-fx.test.ts` |
-| 受击特效总时长锁 0.15s（加速、无定格） | `docs/zcds-表现层与领地规范.md` §1.6 | `tests/zcds-hit-fx.test.ts` |
-| 出生特效锁总时长 1.25s（`speed` 由 clip 反推 1.6×） | `docs/zcds-表现层与领地规范.md` §1.7 | `tests/zcds-spawn-fx.test.ts` |
-| 中立资源奖励**格心金币喷发**（`ZCNeutralRewardFx` / `model/ZCNeutralBurst`）+ 神器领取**格心爆炸**边长（`ZC_ARTIFACT_CLAIM_BURST_SIZE` = 90，≤ 一格顶面 123） | `docs/zcds-表现层与领地规范.md` §1.8 | `tests/zcds-neutral-reward-fx.test.ts`、`tests/zcds-artifact-claim-burst.test.ts` |
-| 🔴 代码建 Sprite 的**尺寸被原图回写**（`sizeMode` 必须先 CUSTOM 再赋 `spriteFrame`） | `docs/zcds-表现层与领地规范.md` §1.8 第五条；同坑 `app/gm/GMManager.ts`、`app/activity/ActivityProgressBox.ts` | `tests/zcds-artifact-claim-burst.test.ts` |
-| 传说卡出场横幅 (`ZCGameLegendBanner`) | `docs/zcds-表现层与领地规范.md` §2、§9.4 | `tests/zcds-legend-banner.test.ts` |
-| 「冒险」领地页 (`app/territory/**`) | `docs/zcds-表现层与领地规范.md` §3 | `tests/territory-presenter.test.ts`、`tests/territory-page-split.test.ts`、`tests/territory-cell-center-align.test.ts`、`tests/territory-hex-flip.test.ts`、`tests/territory-building-shake.test.ts`、`tests/territory-hex-spawn.test.ts` |
-| 领地关卡**气泡**：底图按通关状态分色（未通关红 `frame_02` / 已通关蓝 `frame_03`）+ 文案 `1-5` / `PVP` / `章节`；格面框普通关卡同首领红 | `docs/zcds-表现层与领地规范.md` §3.2 | `tests/territory-tile-frames.test.ts`、`tests/territory-level-bubble-style.test.ts`、`tests/territory-random-resource-render.test.ts` |
-| 领地地图**拖拽上下限**（顶部 HUD 底边 +15 / 底部挂件上沿 +50）**+ 通关返回居中到刚打的格**（`focusCellId` 单次口令） | `docs/zcds-表现层与领地规范.md` §3.10 | `tests/territory-map-bottom-inset.test.ts`、`tests/territory-cloud.test.ts`、`tests/territory-return-focus.test.ts` |
-| 领地**已通关关卡可点 / 可重复挑战 / 照常扣体力** + 按钮费用图标 = 体力 | `docs/zcds-表现层与领地规范.md` §3.13 | `tests/territory-presenter.test.ts`、`tests/territory-two-step-render.test.ts`、`tests/territory-tile-frames.test.ts`、`tests/territory-level-panels.test.ts` |
-| 领地奖励**图标解析**（`roleProperty` + `item` 两张表，`item` 图在 `main-pages` 分包）+ 随机格**读数合成一条** | `docs/zcds-表现层与领地规范.md` §3.6 | `tests/res-types.test.ts`、`tests/territory-resource-gain.test.ts` |
-| 宝箱图标**飞进资源栏**（按 `resId` 分落点）+ 资源栏跳动/数字滚动/整条闪光；HUD 两格 = 银币 + 体力（`resKeys = gold,end`）；开箱**层级**：箱口特效（`Stars`/`Rays`/`Glow`）在 `Chest` 之上、`Fountain` 之下，`Beam`/`Rainbow` 刻意留在箱体之下（顺序只活在 `ui/territory/TerritoryChest.prefab` 的 `_children`） | `docs/zcds-表现层与领地规范.md` §3.7；`docs/章节地图动画与点击反馈实现说明.md` §3.1.4 | `tests/main-resbar-feedback.test.ts`、`tests/main-resbar.test.ts`、`tests/territory-chest-animation.test.ts`、`tests/territory-chest-layer-order.test.ts`、`tests/territory-resource-gain.test.ts` |
-| 敌方单位暗色叠加 (`ZCUnitView`) | `docs/zcds-表现层与领地规范.md` §4 | `tests/zcds-unit-view-render.test.ts` |
-| 血条尺寸 / 扣血白条 (`ZCHealthBarDamageTrail`：0.13s 由右向左收没) | `docs/zcds-表现层与领地规范.md` §4.2、§4.3 | `tests/zcds-health-bar-damage-trail.test.ts`、`tests/zcds-progress.test.ts` |
-| 出局玩家**头像压黑** (`ZCGameHudPlayerRow` + `ZC_HUD_DEAD_AVATAR_TINT`) | `docs/zcds-表现层与领地规范.md` §4.4 | `tests/zcds-hud-dead-avatar-tint.test.ts` |
-| 自选主城 / 基地确认按钮 (`ZCSpawnSelection`) | `docs/zcds-表现层与领地规范.md` §5 | `tests/zcds-spawn-base-confirm.test.ts` |
-| 战斗飘字快进慢出 (`ZCFloatTextView`) | `docs/zcds-表现层与领地规范.md` §6 | `tests/zcds-float-text-gold-icon.test.ts`、`tests/zcds-progress.test.ts` |
-| 金币掉落 vs 建筑产金**两条反向飘字**（`gold` 落地缩没 / `goldincome` 从建筑顶升 50px 淡出） | `docs/zcds-表现层与领地规范.md` §6.3、§6.4 | `tests/zcds-float-text-gold-drop.test.ts`、`tests/zcds-float-text-gold-income.test.ts` |
-| 开局归属扩散波 (`ZCClaimWave`) | `docs/zcds-表现层与领地规范.md` §7 | `tests/zcds-territory-claim-wave.test.ts` |
-| 胜利结算三段式扫场 (`ZCVictorySweep`) | `docs/zcds-表现层与领地规范.md` §9.1 | `tests/zcds-progress.test.ts`、`tests/zcds-outline-layer.test.ts` |
-| 🔴 结算扫场**按胜方本色铺地**（`winner` 由 `ZCOutcomeSystem` 判、经 `renderFrame.winner` 下发；**禁止用 status 反推**） | `docs/zcds-表现层与领地规范.md` §9.1 第 0 条 | `tests/zcds-victory-sweep-winner-color.test.ts`、`tests/zcds-outcome-system.test.ts` |
-| 废墟地块**底色按归属方混合灰**（`zcRuinsFactionColor` = 阵营色 × 废墟灰 `0.45`；中立原样灰） | `docs/zcds-表现层与领地规范.md` §1.9 | `tests/zcds-ruins-tile-color.test.ts` |
-| 🔴 废墟建筑**不再产金**（主城收入原来无条件发钱、飘字挂在 `homeId`；金矿靠 `building !== 'mine'` 兜住） | `docs/zcds-表现层与领地规范.md` §1.9 | `tests/zcds-ruins-income.test.ts` |
-| 开局金矿整圈描边呼吸 (`renderNeutralHint` / `strokeHintOutline`) | `docs/zcds-表现层与领地规范.md` §9.3 | `tests/zcds-neutral-hint-outline.test.ts` |
-| 结算弹窗**资源区底框** (`RewardBg` 九宫格) + 标题 13sp/15.5dp/#FFFEFA | `docs/zcds-表现层与领地规范.md` §11 | `tests/zcds-settlement-reward-frame.test.ts` |
-| 奖励格统一用**公共** `ui/common/RewardItem.prefab`（结算页 / 宝箱详情 / 关卡界面 / 玩家关卡同源） | `docs/zcds-表现层与领地规范.md` §11.3 | `tests/reward-item.test.ts`、`tests/zcds-settlement-page.test.ts` |
+## 按风险选择流程
 
-## 架构硬约束
+本仓库按风险执行，不以宽泛技能触发词增加流程。
 
-依赖只可从外向内：
+- 文案、常量、局部样式、文档整理：定位 → 修改 → 针对性验证；不强制头脑风暴、书面设计/计划、TDD、多 Agent 或多轮审查。
+- 业务规则、状态、异步与生命周期：先明确输入、输出、错误/取消语义与不变量，再追踪调用链，新增/更新必要回归测试。
+- 跨模块、新系统或资源归属重构：先做简明设计与实施计划，再分步实现、验证边界；需求或方案已确认时不重复确认。
+- 技能只加载明确适用的部分。默认单 Agent；仅在用户明确要求或适用仓库约定要求时委派。
+- 先跑绑定的最小验证集；跨模块或公共契约变更再扩到受影响范围。检查通过且无新改动/疑点时不重复运行。纯文档修改检查迁移完整性和引用即可。
 
-```text
-app/bootstrap（组合根）
-  -> app/procedure、app/<feature>/application、app/<feature>/view
-  -> core（端口、运行时契约、纯规则）
-platform（Cocos/网络/配置/热更新适配器） -> core
-framework（通用 UI/流程机制）            -> core
-```
+## MVC 职责与数据流
 
-- `core/**` 必须是纯 TypeScript：禁止 import `cc`、`framework`、`app`、`platform`，禁止直接 I/O 和全局单例。
-- `framework/**` 不得依赖任何具体 `app` feature 或 `Procedure*`。
-- `platform/**` 只实现 `core` 端口；业务规则不放在 adapter 中。
-- 页面只能通过 `GameRoute` 导航，不得 import 或直接切换具体 `Procedure*`。
-- 正式流程的资源、配置、网络必须分别经 `AssetService`、`ConfigService`、`NetworkTransport`（或既有 repository/gateway）进入；禁止 feature 中直调 `resources.load`、`fetch`。
-- 新玩法的规则进入 feature 的 `model/domain` 或 `core`；Cocos `Component` 只负责生命周期、输入和渲染编排。
+新增/重构 feature 遵守以下职责；详见 [MVC 设计规范](docs/agent/MVC设计规范.md)。
 
-## 实现硬约束
+| 角色 | 负责 | 禁止 |
+| --- | --- | --- |
+| Model（M） | 业务状态、规则、不变量；输出状态变化 | 引用 Cocos 节点、控制视图、广播全局 UI 事件 |
+| View（V） | 生命周期、输入、幂等渲染；经 EventMgr 派发意图 | 持有 Controller/Entry、业务回调、业务扣费与网络请求 |
+| Controller（C） | 集中接收意图/推送，调用 Model 与仓库，输出展示数据/命令；管理请求、时钟与资源归属 | 堆积领域算法、用节点状态当业务真源 |
 
-- **契约先行**：先定义输入、输出、错误/取消语义和不变量，再写实现。外部数据一律在边界归一化、校验。
-- **异步安全**：异步操作必须能处理节点/弹窗已关闭、流程预加载已取消、重复点击、请求失败。tab 页（`MainPage` / 各 tab 页，换 tab 即 `destroy`）的 `await` 之后**必须判** `isValid`；弹窗默认 `cache=false`（关闭即 `destroy`）同样要判，只有显式 `cache:true` 才 `active=false` 复用。同步事件 / 缓存回调里**不判 `isValid`**（`onDestroy` 已摘除 + 事件层派发前判 `caller.destroyed`），只在 `await` 之后、`.then/catch/finally` 里、未随组件销毁解除的延迟调度里判；生命周期方法（`onLoad`/`start`/`onEnable`/`update`）与 `schedule` 回调内同样不判。详见全局规范 §3.2。`PopupBase` 子类使用 `nextPopupFrame()` 并在 `await` 后检查 `isValid`；流程预加载检查 `context.cancelled`。
-- **渲染幂等与纯函数时间轴**：UI `render` 必须是幂等的全量赋值，对象池/虚拟列表不得依赖上一次状态；动画与时间轴一律记录 `startedAt` 并由纯函数按 `now - startedAt` 计算进度，禁止在视图组件内零散建 `tween` 或靠 `dt` 累加状态。
-- **视图只派发意图（禁止回调穿透）**：视图 / 页面组件**严禁持有控制器回调**（`options.onXxx?.()`、`params.onSave?.()`），一律 `EventMgr` 派发 → 控制器集中订阅（`bind*Events()`）。需要用「接了没接」决定显隐/置灰时，userData 给 `hasXxx?: boolean` 门闩，**不要拿回调的有没有值当门闩**；同族入口（如三个按钮）用「一条事件 + payload」。详见 `docs/AI架构与代码规范.md` §2.1。事件语义只在契约文件（如 `ChestEvents.ts`）注释一次，`emit` / `on` 处不重复。
-  - **不写「只绑一次」门闩**：`onInit` / `onLoad` 每实例只跑一次（`PopupBase._inited` 保证），绑定放这里即可；`node.on` 随节点销毁释放、重复订阅也会按 `callback + target` 去重（handler 用箭头函数属性）。门闩只留给「解绑判断」和跨场景单例。详见全局规范 §2.1。
-  - **按钮点击回调禁止判 `interactable`**：`Button` 在 `interactable = false` 时本就不派发 `CLICK`，回调能进来必可点；置灰态由渲染时写 `interactable` 表达，回调内 `if (!btn.interactable) return;` 纯属冗余，一律去掉。要拦的是业务条件（次数 / 扣费 / 请求在途），门闩放控制器判；handler 若同时被键盘或代码直调，判业务门闩 `canXxx` 而不是 `interactable`。详见全局规范 §2.1.2。
-- **引用与类型红线**：Cocos Inspector 必填引用用 `null!`，允许为空的引用明确写 `| null` 并在边界处理；不得用 `as any`、非空断言或静默 optional chaining 掩盖必填绑定错误。
-  - **单例访问点非空**：`EventMgr.instance` / `CacheMgr.instance` / `PopupManager.inst` 返回非空类型，构造不出来就在 getter 里 throw；调用点写 `Xxx.inst.doThing()`，**不写 `inst?.` / `if (!mgr) return`**。`?.` 只留给真可能为空的查询（`inst.get(SomePanel)?.close()`）。详见全局规范 §4。
-  - 工程未开 `strictNullChecks`（`tsconfig.json` `"strict": false`），`getComponent(X)` / `getChildByName(name)` 返回类型本身非空：组件/节点查询**一律直接调用，禁止写 `!.`**（`getComponent(X)!` → `getComponent(X)`）。
-  - 可空字段（`| null`）使用处**禁止** `!.`：直接访问或先取局部变量再判空窄化；`await` 后属性窄化失效，必须把字段先取出再 `await`。
-  - 数据/配置查表不变量（算法或配表保证必有，如 `Map.get(key)` 命中必存在、实体 id 必有）同样**禁止 `!.`**，直接访问即可。
-  - **`@property` 绑死的引用不判空**：prefab 已绑的 `Node`/`Sprite`/`Label`/自定义组件直接 `.` 取用，不写 `if (this.x)` / `this.x?.`；例外是注释明示可选、多 prefab 复用非全绑、`getComponent` 懒取缓存、入参允许 null。详见全局规范 §4。
-- **回调归属对象直接传、退出时统一解除**：事件、缓存订阅和网络请求的 `caller` 直接传 `this` 或真实宿主对象，禁止 `as unknown as destroyable`、`caller as any`、`caller as never` 等断言；类型不兼容须修正 API 契约（归属参数为 `object`），不得伪造 `destroyed` / `destroy()`。网络请求和事件共用归属管理：普通组件销毁时 `GameNet.removeCaller(this)`；弹窗关闭/销毁与流程退出由基类/管理器统一解除。取消须释放请求回调并让 Promise 以 `false` 落定，禁止靠分发时检查组件 `isValid` 代替解除。详见全局规范 §2.2，守卫 `tests/callback-owner.test.ts`。
-- **帧循环禁令**：禁止在 `update` 里加载资源、查全局配置、创建临时数组/节点，或混入业务规则；高频渲染按已有节流策略（`renderDynamic` vs 0.15s `renderStatic`）执行。
-- **禁全局可变状态**：不引入新的全局可变状态或 static 暂存区。跨流程传值优先写入明确的 entry params / context；临时桥接必须单次消费、立刻清空并有测试。
-- **Prefab、资源与配表工具链**：
-  - 严禁修改生成文件、`library/`、`temp/`、`build/`、`native/`（除非用户明确要求）。
-  - **点击必须在 prefab 上挂 `cc.Button`**：交互节点在 prefab 挂 `cc.Button`（`transition=NONE`、`target=null`），代码只 `node.on(Button.EventType.CLICK, …)`；**禁止** `getComponent(Button) ? CLICK : TOUCH_END` 分流（缺 Button 绑 CLICK = 静默死按钮，兜底又把「掉了组件」变成静默无反应）。详见全局规范 §5。
-  - 工程的 Prefab 搭建与修改使用 Cocos MCP 定位和验证；修改 `.prefab`、`.scene` 后通过 MCP 刷新资源，生成 `.meta` 由引擎负责；手写或脚本生成 Prefab 节点必须显式包含 `cc.UITransform`，`CUSTOM` 尺寸 Sprite 必须设 `_isTrimmedMode = false`。
-  - 美术碎图目录每棵目录树**最外层**放一份 `auto-atlas.pac`（递归覆盖子目录，严禁父子同放或放在 `image/` 根目录）。
-  - Spine 单位目录固定 `<前缀>.atlas.txt` + `.png` + `.skel` + `<目录>.prefab`，节点 `layer = UI_2D`、`defaultAnimation = 'idle'`、`_enableBatch = true`。
-  - 改表后依次跑 `tools/config` → `tools/ref` → `tools/pvp_card_check.py`，产物落地后 refresh `db://assets/remoteRef`。
+事件流：View → Intent → Controller → Model/Repository → Controller → 只读 ViewState / 展示命令 → View。Model 的实例输出由 Controller 订阅，View 不直接修改 Model。
+组合层（bootstrap 的 Composition 或既有 Entry）创建并持有 M/C/V，流程持有组合对象；Page 不创建、保存或释放 Controller/Entry，只报告带作用域的生命周期事件。禁止回调穿透；可用性用 hasXxx/canXxx 数据表达，事件在 onInit/onLoad 绑定，不加“只绑一次”门闩，按钮 handler 不重复判 interactable。
 
-## 对局与领地表现层核心不变量速查（详情见专项规范）
+## 通用红线
 
-1. **棋盘图层 (`ZCGameBoard.prefab`)**：子节点顺序即渲染顺序，全层 `UI_2D`；城墙层插在 `OutlineLayer` 之后，且全盘墙砖按屏幕 `segment.y` 降序排列；`destroy()` 不得拆 board 与城墙层。
-2. **缩放权责分离（代码 vs Prefab）**：
-   - 地块类型图标（`TILE_ICON_SCALE = 0.8`）、资源图标（`resourceIconScale`）、建筑图标（`BUILDING_ICON_SCALE = 0.72`，唯一入口 `applyBuildingScale`）**由代码唯一写入**，改 Prefab `_lscale` 无效；金币 `priceIcon` 与数字 `iconLabel` 不参与。
-   - 出生/受击/阵亡特效的显示大小**由 Prefab 根 `_lscale` 唯一决定**（受击 = 110px 基准 **×0.7 ⇒ 77px**，战士再 ×0.8 = 61.6px；出生基准屏宽 ~110px；**阵亡特效唯一例外**，`0.16448` 屏上 `88×179.6`，严禁改回 110px）；`playSpawnFx` 禁写 `setPosition`，`playHitFx`/`playDeathFx` 禁写 `scale`。**播放速度另算**：出生特效锁总时长 `ZCEffectPool.SPAWN_FX_TARGET_SECONDS`（1.25s，美术原速 2.0s ⇒ `state.speed` 1.6×，回收时长也用它），只动 `speed`、**别去改资产 `_duration`**。
-   - 受击特效**总时长锁死 0.15s**：`ZCEffectPool.HIT_FX_TARGET_SECONDS` 与 `ZCGameModel.HIT_FX_SECONDS` 同值；加速只动 `state.speed = clip.duration / 0.15`（资产 `_duration` 仍是 18fps 美术真值，改它=截断），**回收点必须用 0.15**（用 `clip.duration` 就是末帧被 Normal 定住 = 定格），且渲染循环只能走 `syncHitFx`（逐帧 `play()` 会把动画 seek 回 0）。
-3. **资源图标抬层与落点**：中立资源图标由 `setResourceIconRaised` 抬至 `ResourceLayer`，坐标经 `applyIconPosition` 补偿；地块类型图标不抬（局部 `y = 4`）；兵团资源点 `RESOURCE_UNIT_POS_Y = 12`。
-4. **地块激活（1.856s = 点击动画 0.7s + 卡牌 1.156s）**：① 点击动画段**两阶段先后**（2026-10-19）—— **阶段 1** `[0, 0.2s)` 只播脉冲，格子连图标 + 价格**原尺寸不动**（`tileScale` 恒 1）；**阶段 2** `[0.2s, 0.7s]` 脉冲继续（0.5s 退场）同时格根原地缩到 0.1，起点 = 脉冲**中间帧**开始时刻 `HEX_PULSE_FRAME_SECONDS × 2`（不是 `WAVE/2`），跨度 0.5s，**段长仍恒 0.7s**（卡牌 / 首批兵 / 邻格按住窗都锚它，改段长会四处一起推后）；全程 `tileLift` 恒 0 零位移；脉冲层播 `effects/hex_pulse_seq` 的 **5 帧**美术序列 —— **放大与淡出已烘焙在图里**，视图只按 `hexPulseFx` 的 `pulseFrame` 换帧（10fps、一道波 0.5s，播完 `-1` 直接退场），**不许**再写 scale / opacity 动画；对齐靠静态换算 `x=123/164`、`y=90/142` 并把父节点缩放除回去，`contentSize` 按整张 320×320 给、离开段由 `restorePulseLayer` 写回 130×239；**染色 = 卡牌品阶**（`pulseTintForRarity`：1 绿 / 2 蓝 / 3 紫 / 4 金 / 0=没抽到卡也是绿，品阶来自 `ZCHexActivation.cardRarity`，每帧在 `renderActivation` 里写，别按 `state.tileType` 缓存）；旧 30 帧 `fkz_*` + `shaders/hex-pulse.effect` 的径向虚化 / 边缘抬亮**已整条退役**，别接回来；② 卡牌在 `ZC_CARD_START_SECONDS (0.7s)` 当帧显形并按 `elasticPopScale` 弹出（起点前 `node.active = false`）；③ 卡牌淡出窗（最后 38% = 0.43928s）内建筑同拍由 0.15 长到 1（0.36s）。
-5. **新扩展邻格生成动画 (row6 新口径 + row9)**：`canDevelop` 由假变真时**不留任何延迟**（旧的 `ZC_HEX_NEIGHBOR_HOLD_SECONDS` 0.9s 按住窗已删除），图标 / 价格 / 共享领地描边在点击那一拍就与脉冲同帧出现；同时 `buildingLayer` 播一段生成动画（`DEVELOPABLE_SPAWN_FROM_SCALE` 0.6 + `elasticPopScale` + `developableSpawnOpacity`，时长 `ZC_HEX_NEIGHBOR_SPAWN_SECONDS = HEX_PULSE_WAVE_SECONDS` 0.5s，与波同起同收），起点锚 `presentation.developPulseStartedAt`（脉冲起点），由 `ZCGameRenderWorld.renderDevelopableSpawns` 逐帧推进。
-6. **单位与建筑抖动 (row5 + row12 + row13)**：均走 `spawnShakePulse`（先 Y 后 X 各 0.12s）且挂 `renderDynamic`；单位出生拉伸 `0.1`（110%），建筑产兵（`barracks`）与产金（主城/金矿，挂 `economyContext.grantGold` 经 `drainBuildingShakes` 取走即空）拉伸 `0.2`（120%），乘入 `applyBuildingScale`。
-7. **开局归属扩散波 (row15)**：仅自选主城局 `finishSpawnSelection` 触发，**先 `render(model)` 再 `startTerritoryClaimWave(model, selection)`**；开局归属格（主城+6邻格）一帧到位**不入波**，本半区中立可通行格按 BFS 环号 + 极角 `(-π, π]` + 幂次 `r^0.65` 加速扩散，经 `setClaimWave` 绕过指纹闸门做 0.1s 过渡，收工清空 `contentKey`。
-8. **胜利结算三段式扫场 (row8)**：方向按**赢家身份**定（`player` 从下往上 `maxRow - row`，其余 `enemy/enemy2/enemy3` 从上往下 `row - minRow`）；① 深色铺场（`zcDeepFactionColor` 纯 RGB 先 clamp 再乘 `ZC_DEEP_DARKEN = 0.9`，叠加 0.15s 三角波 `zcTowardWhite` 闪烁）→ ② 铺过 `LEAD_ROWS = 2` 步（屏上 3 行深色带）即从起点回正（只偏深色端，`mix = 1` 自动停闪并剔出指纹）→ ③ 回正结束后在 `OutlineLayer` 扫过一道 4 档量化的线条脉冲（`PULSE_STEP_SECONDS = 0.035s/行`，轮廓探针步长 **4**，`MAX_BUCKETS = 16`）。
-9. **金矿提示 (row10) / 传说横幅 (row11) / 飘字 (row14) / 敌方置灰 / 自选基地 / 领地台面**：
-   - 金矿整圈描边**一直呼吸到被点**（`zcNeutralHintAlpha`，1.6s 一呼一吸、`1 ↔ 0.15`，**没有窗口**）。样式：绿色 `ZC_CLIENT_COLORS.hint`(#3EE36F)、线宽 **9**（领地 6px + 2px）、**内缩用自己的 `HINT_OUTLINE_INSET_SCALE = 0.94`**（领地轮廓是 0.98，9px 线共用 0.98 会压住邻格造价数字）、**两侧 2px 外发光 = 4 环叠加**（`ZC_HINT_GLOW_RING_ALPHAS`，宽度 13/12/11/10 由外到内递增透明度，最后画 9px 核心线；`Graphics` 描边没有渐变，只能多笔叠，系数必须严格递增否则出硬边；`lineCap = ROUND` 防顶点楔形缺口）。🔴 **必须画在棋盘最上层**：`ensureHintOutlineGraphics` 把共享画布挂到 `CooldownOverlay`（prefab 子节点序最后一层 + `setParent` 追加末尾），**别画回格子自带的 `TerritoryOutline`** —— 那份和地块同层，会被邻格底色/建筑盖掉半圈。提示目标是**金矿地块**（`canDevelop && tileType === mine`，即开局那圈画 `icon_jk` + 造价的那格），找不到才退到中立金矿**资源点**（`hintTargetKind` 区分判据）；收手只靠「目标被开发/被领走」或「对局结束」，目标 id 只找一次并缓存。**「这一帧没找到目标」不许结账** —— 开局头几帧 `canDevelop` 还没翻 true，一收手整局都起不来（2026-10-26 前两次就是这么"看不到效果"的）。
-   - 传说横幅（`tier === 4`）挂 HUD 根 `overlayLayer`，**宽度 = 屏幕宽**（`applyLayout` 把根节点写成 `viewWidth × 屏高/人数`、底板 `Banner` 写成 `viewWidth × 417` 并回 `x = 0`；只改根不改底板 ⇒ 右边留缝，底板连高度也拉 ⇒ 底边掉到屏幕中间，两种都踩过），一律从左往右扇入，结束后 `Role` 相对静止位（prefab 里的 `y`，现为 -21.798）从 `+80` 经 0.7s `easeOutCubic` 落回并改 `roleSprite.color.a`。
-   - 战斗飘字前 `0.45` 入场（位移/缩放/金币自转全喂 `enter`），后 `0.55` 线性淡出并带 `driftDistance = 7` 同向收尾漂移（与 `ZCGameFloatText.prefab` 序列化值同步）。时间表：伤害总 `0.85s`（入场 `0.3825` + 淡出 `0.4675`）；金币**不按 0.45 切分**，两条专用曲线各自成表 —— 掉落 `gold` 总 `0.62s`（落 30% / 停 15% / 缩没 55%），建筑产金 `goldincome` 总 `0.9s`（升 0~70% 走完 50px、30% 起淡出），`now >= startedAt + durationSeconds` 即回收；`easeOutCubic` 让 **10% 时间走完 53% 位移、20% 走完 83%**。文案（2026-10-17）：伤害类**不再带负号**（`-31` → `31`，`+` 只留给金币/治疗）；`暴击/克制/抵抗/秒杀` 前缀拆成**独立小字号 Label**（`Text/Prefix`，`PREFIX_FONT_RATIO = 0.5` ⇒ 数字 30→15、34→17，水平位按数字实宽反推 `-(宽/2 + 6 + 前缀宽/2)`）—— 单 Label 一条字符串只有**一个**字号，这条需求在单 Label 上无解。
-   - 其他玩家单位（`owner !== 'player'`）顶点色相乘 `#828282`（优先级：阵亡 > 其他玩家 > 原色，`if (sprite) ... else if (skeleton) ...`）。
-   - 敌我标识 (R25)：阵营**颜色 + 描边**分三处早已闭环 —— 领地填充 `zcFactionColor`（60%）、领地轮廓走**整盘共享的 `ZCOutlineLayer`**（100%）、单位外轮廓 `ZCUnitView.renderOutline` 的 `OWNER_EDGE_COLOR[owner]`（只给非我方未阵亡单位）；**血条四色**是本轮补的：`pickHealthBarFill(owner, player, enemy, enemy2, enemy3)` 五参穷举 `switch`（`default` 只兜 `neutral`），`ZCUnitView` / `ZCHexView` 各加 `@property barFillEnemy3`，紫图用**项目里已有但一直没人用的** `resources/image/buildings/jindutiao_p.png`（`#8b5af5`，与 `enemy3Edge` 同色相系）⇒ 不新增美术；另有一整套尺寸统一的 `buildings/jindutiao_{b,r,y,p}` 全未引用，**刻意不用**它们替换已验收的三张。尺寸（2026-10-26 表现层调整）：**单位条高度不动、宽缩到 80%**（`ZCUnitView.barWidth 76→60.8`、`barWidthHero 86→68.8`，填充仍 `barFillInset = 4` ⇒ 52.8 / 60.8），**城墙+建筑条高度 +2px、宽缩到 60%**（`ZCGameHex.prefab` 外框 94×17→56.4×19、填充 86×8→51.6×10、`_totalLength 86→51.6`、填充 `_lpos.x -43→-25.8`）。🔴 单位条改**脚本字段**不是只改 prefab —— `renderHealthBar` 是「脚本值变了才写 prefab」，只改 prefab 会被第一帧覆写回去；地块条没有对应字段，只改 prefab。**扣血白条**（2026-10-27）：`ZCHealthBarDamageTrail` 一份实现给两根条用，被扣掉那段先变白、`HEALTH_BAR_DAMAGE_TRAIL_SECONDS = 0.13` 内**由右向左**缩没（smoothstep，两端速度为 0）；白条左缘钉在填充条右缘、画布懒建在 `HealthBar` 第一个子节点（垫在填充下面）。🔴 单位条每帧喂（`renderDynamic`）；**地块条必须挂 `renderDynamic` 的 `renderHealthBarTrails`**（经 `healthBarTrailHexes` 登记/出队）—— 留在 `renderHexSystem`（0.15s 节流）里会比白条本身还长，直接"闪一帧就没"。**出局头像压黑**（2026-10-27）：「玩家被击杀后该玩家头像叠加一点颜色遮黑」⇒ `ZCGameHUD` 左侧玩家行的 `headIcon` + `headFrame` 走 `Sprite.color` **相乘**压到 `ZC_HUD_DEAD_AVATAR_TINT`（72,72,72，≈0.28），**不盖黑块、不调 `UIOpacity`**（前者洗掉圆盘席位色还要多挂节点，后者会把名字一起压暗）；`nameText` 仍按 `zcFactionColor(owner)` ⇒ 出局后仍认得出是谁。判据 `territoryCountOf(owner) <= 0`，由 `ZCGameHUDView.render` 复用**顶部四格红 X 那同一个 `counts[i]`** 经 `paintPlayerRows` 第三参注入（选点阶段不传 ⇒ 四行都不压黑）。🔴 只在**状态翻转**时写一次（`appliedDead` 缓存）：颜色乘进顶点色，每帧重写同一值也会一直标脏材质。
-   - 自选主城预置玩家默认落点（不消耗随机源），邻格深蓝 `#1D24C8`（alpha 170），借用 `ConfirmSpawn` 绿勾改挂 `mapLayer`（关 Widget、下方 `2 × 90` 行距、销毁前归还），显隐判据用 `isPlacing('player')`。顶栏 `SpawnInfoBand`（663×130）是**三行式**（2026-10-17 线框图）：倒计时数字 **48 号加粗 `y=+35`**（第一行、水平居中）→ 标题 **25 号 `y=-9`** → 进度条 **200×23 `y=-46`**（先按「−35% / −5%」到 259×30，再经用户两次手定 230×23 → 200×23，填充 194×16）。两个坑：① **按视觉高度配字号**，汉字满字高 ≈ 0.95em、数字只有大写高 ≈ 0.72em，所以「数字 30 + 标题 28」其实是标题看着更大（21.6 : 26.6）；② Label 是 `overflow = SHRINK`，框小会**静默把字号压回去**（旧标题框 221 装不下 8 字 × 28 号 ⇒ `_actualFontSize` 实测 22），换字号必须同时放宽框（300×38）且框高 ≥ `lineHeight`。
-   - 领地「冒险」页走 `ScrollView` + cellId 复用 + 纯 TS `TerritoryPresenter`；建筑落点 `cellCenter()` 为 `y + HEX_GRID_CONTENT_LIFT(12.5)`，并补偿 trim 偏移、归一可见宽为 `70`。
-   - 领地未解锁格「银币图标 + 数值」**成对居中**：图标 ×1.1、数值 ×1.5、间距**恒 2px**（按 `位数` 变长时往左长、图标跟着让位）。间距按**实测文本宽**算，所以数值在条件模式下 `overflow = NONE` + 写完字符串立刻 `Label.updateRenderData(true)` 把布局逼到同一帧；退出条件模式必须还原 `overflow` 与两个缩放（站点节点池化复用）。
-   - 领地「获得银币 / 体力」= **格心喷发 + 读数上移**（row17；喷发口径 2026-10-17 细化）：从**点击地块的中心点**（`hex.position.y + HEX_GRID_CONTENT_LIFT`，与 `cellCenter` 同源）喷出 `TERRITORY_GAIN_BURST_COUNT = 12` 个资源图标，**逐颗错峰 `STAGGER = 0.025s`**（12 颗铺开 0.275s ⇒ 绝不与首颗同帧）；出射方向以**屏幕竖直向上为轴左右各 `HALF_ANGLE = 26°`**（`phi = random(-1,1)·半顶角`、`vx = speed·sinφ`、`vy = speed·cosφ`），初速 `650 ±12%`、重力 `GRAVITY = 1500`，轨迹是**抛物线**（`x = vx·t`、`y = vy·t − ½g t²`，顶点 `vy/g`、落回台面 `2vy/g`）。**「倒锥」约束的是出射方向**（`|vx|/vy ≤ tan26°`），**不是**「任意时刻 `|x| ≤ y·tan`」（那是初版径向直线才成立的式子，抛物线上到顶点时 x/y 趋于无穷）；抛物线在落点的水平包络是 `2·tan半顶角·vy²/g`。飞行中 icon **绕自身水平轴上下翻面**：`scaleY = baseScale·cos(2π·flipHz·t + phase)`、`scaleX` 恒为 `baseScale`（余弦过零 = 侧立最窄，负值 = 倒面），`flipHz ∈ [2,4]`、初相随机、**正好用 `setScale(scaleX, scaleY, 1)`、禁正负硬切、禁叠平面自转**；基础缩放 0.8~1.2（初始缩放随机）。收尾**取先到的那条**：落回台面（`y ≤ 0`）即刻 `0.12s` 快速淡出且**位置冻在落点**（不穿模、不贴地滑），或生命 `1.1s ±15%` 到期走末段 `0.25s` 淡出。**图标 + 数字 ui** 在原点**上方 40px**（`TERRITORY_GAIN_START_LIFT_PX`）起飘 1.15s，多条奖励再按 `TERRITORY_GAIN_STACK_GAP_PX = 40` 错开。曲线真源 `model/TerritoryResourceGain`：出射参数 `territoryBurstLaunch(seed, index)`、逐帧 `territoryBurstParticle(seed, index, elapsed)`（零 `cc`；`seed` 每次点击自增，**不许用 `Math.random()`** —— 同一 seed 必须可复现；轨迹用**解析式**而非逐帧累加，否则落点依赖帧率），粒子组是 `view/TerritoryGainBurst`（**纯类**、非 `Component`，`ICON_SIZE = 64`，逐帧 `step` **禁 tween**，收尾判据是「一颗活的都没有」而不是死等上限），容器坐在 `GainLayer` 的**第一个子节点**（`ensureBurstRoot`，子节点顺序 = 渲染顺序 ⇒ 粒子画在读数之下）。**不建 prefab**：一粒只有「一张可换的图 + 位置 / 两个缩放 / 透明度」，图由 `setGainIcons` 注入。判据 `tests/territory-resource-gain.test.ts`（出射角/包络/抛物线/翻面余弦/落地不穿模/错峰 + 粒子组沙箱）。
-   - 领地随机资源格「翻开」= **原地快碎裂 → 新地皮从格心放大填充**（`hexShatterFx`，`HEX_SHATTER_SECONDS = 0.68s`）。全程 `tileLift / tileFlip / tileScale` 恒定（需求原文「**原地**」快碎裂），碎裂由 `shaders/hex-flip.effect` 的片元级碎块腐蚀做（`shatterParams.x` 是总开关，为 `0` 时**逐像素等价**「没有碎裂」；碎块划分用格内归一化坐标 `vQuad` = 世界坐标 ÷ 实际半尺寸，**不能用 `a_texCoord`**），新地皮放大写在子节点 `Reveal`（`sizeMode = RAW`，**不动格根**）。旧 / 新两张地皮由 `syncFlip` 显式传入（点击那一帧 `paintHexes` 已换成新地皮），换脸点取 `HEX_SHATTER_ERODE_END`（旧地皮已碎没那一帧）并**每帧重写**以自愈被 `paintHexes` 顶掉的帧。**2026-10-16 用户口径「只保留地块破碎效果的方案」** ⇒ 另一套（抬起后绕水平轴垂直翻转 360°：`hexTurnFx` / `HEX_TURN_*` / 随机点将 `pickHexFlipVariant` / `ZCHexFlipVariant` / `IZCHexFlipFx.tileSin` / `HEX_FLIP_PERSPECTIVE` / `hexFlipBodyGlow`）连同着色器里的**顶点 3D 旋转 + 透视除法 / 体积明暗 / 侧视淡出 / 正面开口补光**四段已**整条删除**（删除**逐像素等价**：碎裂全程 `cos ≡ 1`、`tileLift ≡ 0`；别只把曲线补回来 —— 着色器那几段已经不在了）。判据 `tests/territory-hex-flip.test.ts`（含「方案1 的符号 / uniform / shader 段一律不许残留」的删除守卫）。
-   - 领地**建筑生成抖动 + 建筑展示滞后**：随机格翻开时建筑**先不出现**，等这一格翻转播完才冒出来并抖一次。「先 Y 后 X」的 120% 脉冲真源在 **`core/hex/ShakePresentation`**（零 `cc`；`ZCGameViewUtil` 只做转发，领地不许反向依赖 `app/zcds`）。滞后载体是 `ITerritoryStationRender.hidden`（**不能**靠 `icon: null` —— 那会让名称底条/文字/角标三者全亮），只关四个视觉节点的 `active`（站点根节点早已没有视觉子树）；`renderMap` 里 `syncFlip` **必须排在 `syncStations` 之前**（否则建筑会闪一帧再消失），`update` 在 `hexFlip.step` 之后立刻解除待办（同一帧补建筑）。判据 `tests/territory-building-shake.test.ts`。
-   - 领地**新地块生成**（2026-10-22 第三轮：「整个节点由透明渐变 / 地块由小变大 / 多个地块出现有轻微的先后落差」）：真源 `model/TerritoryHexSpawn`（纯函数）+ `view/TerritoryHexSpawn`（纯类）。单格 `0.4s`、起手缩放 `0.55`、透明度在进度 **70%** 就铺满（后再长大的才是"实体"），一批新格的延迟按**到这批包围盒中心的距离**升序（先中心后外圈，等距按 `cellId` 兜底 ⇒ 完全可复现），档差 `0.055s`、**总上限 `0.3s`**（不封顶时十几格会排到 0.6s 以上，读成卡顿）。三坑：① **站点四块视觉挂的是另外四个层**（`StationIconLayer` / `StationCaptionLayer` / `StationTextLayer` / `StationBadgeLayer`），格节点的 `UIOpacity` 管不到 ⇒ 走 `TerritoryStationView.setSpawnOpacity()` 逐格挂；② `renderMap` 里站点比格节点**晚半拍**建出来 ⇒ `syncStations` 末尾 `applyHexSpawnFade()` 用 `opacityOf(node)` 追写当前进度，否则站点先闪一帧全不透明；③ 翻格自己就会「新地皮放大填充」，与生成抢同一格缩放 ⇒ `syncHexSpawn` 跳过 `hexFlip.isPlaying` 的格且 `syncFlip` 起播时 `hexSpawn.stop(node)`（**翻格优先**）。首帧只做快照（`spawnBootstrapped`），换图时 `reset()` + 快照清空。判据 `tests/territory-hex-spawn.test.ts`。
-10. **战斗相机 (R22)**：**倍率真源只有一份** —— 地图 JSON 的 `zoomMin` / `zoomMax` → `resolveZCMapZoom`（缺省 `0.6 / 1.2`，硬边界 `0.3 ~ 1.5`，**越界 / 非数字 / 上下限颠倒一律抛错、不夹取**）→ 模块级 `ZC_MAP_ZOOM_MIN/MAX` → `ZCMatchConfig.map` → `ZCGameHUDView.setMapZoomRange(min, max)`（HUD **不写第二份默认值**）。**改地图字段必须同时改编辑器两处白名单**（`tools/map-editor/app.js` 的导入 `applyLayout` 与导出 `buildJSON()`，白名单式重写，漏一处字段就被吃掉）。两条缩放输入路径（触摸双指 / 桌面滚轮 `× 1 ± ZC_MAP_ZOOM_WHEEL_STEP = 0.12`）共用 `applyMapZoom(scale, anchor?)`：先 `clampMapZoom` 再锚点钉住 `offset' = anchor - (anchor - offset) / scale · scale'`；**双指必须用 `EventTouch.getAllTouches()`**（`getTouches()` 在"一根按住不动、第二根刚落下"时只报第二根 ⇒ 拿不到指间距），参照在 `beginPinch`（落指当帧）记好，锚点必须走 `UITransform.convertToNodeSpaceAR`（`getUILocation()` 是 UI 世界坐标）。**一键复位 = 秒回、不做补间**，复用 `resetMapPosition()`（与开下一局同一条路径），并同时清 `settlementOverviewRequested/Done`，否则 `mapCameraBusy` 常挂、棋盘拖不动；复位点位 `mapOffsetY = -focus.y · scale - ZC_MAP_HOME_CENTER_OFFSET_Y(100)`（**屏幕 Y 轴向上为正**，需求「主城位于中心点下方 100px」）。**全景 / 结算镜头是脚本演出，刻意不受玩家缩放区间约束**（走 `mapOverviewScale` / `mapSettleScale`），否则 `zoomMin = 0.6` 的图看不到全图。视口 `UITransform` 全类只查一次（`mapViewportTransform` 缓存 getter，`initialize` 清缓存）；本工程禁「按名找节点」，`Background` 走 `@property mapBackground`。判据 `tests/zcds-map-declaration.test.ts` / `zcds-hud.test.ts` / `zcds-hud-multiteam.test.ts` / `zcds-rank-board-wiring.test.ts`。
-11. **大世界 / 基地建造 (BigMap，2026-10-17)**：范围只做**纯玩家个人战斗**（商店 / 赛季 / 联盟 / 战盟 / 托管 / 战斗加速一律不做）。三条硬约束：① **建筑解锁只来自冒险章节**（`BigMap-建筑配置.unlockChapter` → `bigMapBuildingUnlock`，别处不许再开第二条解锁来源）；② **世界地图是种子生成的纯函数** `buildBigMapWorld(config, seed)` —— 存档只存玩家状态（建筑 / 队列 / 资源 / 占领），**不存地图**，所以 `Math.random()` 在这里是禁区（同一份配置每次进页面地图不同，存档里的格子 id 会全指错）；③ **城池解锁 = 章节 + 开服天数 + 前置城池已占领**，`bigMapAttackCity` 刻意**不接** `IBigMapUnlockContext`（占领集合一律从 `battle.occupiedCityIds` 现取，两套状态各自维护迟早打架）。六边距离的 axial 转换必须是 `r = row - (column + (column & 1)) / 2`（偶数**列**下移半格 ⇒ 对角邻居在下一行；写成 `- (column & 1)` 会让 6 个邻居里有一个算成 2 环，`tests/bigmap-world.test.ts` 的「相邻格距离恒为 1」就是钉这个的）。配置表统一 `BigMap-<中文名>` 共 12 张，由 `tools/config/gen_bigmap_tables.py` **一次性推算生成**（本机无 eSon 源目录），脚本写盘前强校验「表头字段数 == 每行值个数」——字段数与值个数不一致会解压成**整行错位**的脏数据，运行时极难发现。战斗口径：`伤害 = (420 + 180×(主城等级-1)) × 势力范围系数(超出 radiateCapacity=10 格 ⇒ ×0.8)`、`战功 = 3000×(1-e^(-伤害/3000)) × 城池战功倍率 × 名次系数 × 拥挤系数`，**打穿城防 ≠ 占领**（还要 `战功 ≥ minOccupyWarScore`）。界面全代码线框（`BigMapTheme` 的 Graphics 工具 + 两个 View），美术到位只需替换绘制、不动布局；**UI 皮肤 2026-10-22 第二轮换成「领地页 HUD 那套」**（用户口径「将世界玩法的 UI 风格改成领地玩法的 ui 风格，按钮的样式，题头底板的样式，弹窗样式 / 删除植物大地图的文字」，第一轮的暖棕木牌已整条退役）——面板/弹窗走 `drawBigMapCardPanel`（近黑描边 2px + 深板岩卡面 + 铜金细线 1px，色值取自 `image/main/hud/hud_player_card.png`）、**题头不要底板也不要文字**（顶栏只浮一张 `ResourceCard` + 收取钮）、切换木牌仍是 `cu_ty_btn13/14` 122×96（与底栏七格同款同尺寸）、实心按钮统一 `image/main/city/btn_quick_fight`（领地页【快速寻敌】那颗 3D 金钮）、详情弹窗改成**居中模态**（暗底 `5,10,14,205` 与领地 `TerritorySiteDetail` 的 `Dim` 同值 + 居中卡），`concept/ui/*` 那张深铁框**不再贴面板**（详见 `docs/bigmap-系统实现说明.md` §5.2，判据 `tests/bigmap-hud-skin.test.ts`）；入口是主界面底栏第 7 格「世界」（`MainTabHost.openBigMap` → `BigMapEntry.open`，原右下角悬浮按钮已于 2026-10-21 删除），页面挂 Canvas 下做覆盖页、切 tab 不销毁。判据 `tests/bigmap-world.test.ts` / `bigmap-base.test.ts` / `bigmap-battle.test.ts` / `bigmap-presenter.test.ts`（共 49 条，断言到具体数值）。
+- 依赖从外向内：`app/bootstrap → app/procedure、app/<feature>/application、view → core`；`platform` / `framework → core`。`core` 为纯 TS，禁止引入 `cc/framework/app/platform`、直接 I/O 或全局服务访问；`framework` 不依赖 feature / `Procedure*`；adapter 不放业务规则。
+- 页面经 `GameRoute` 导航。正式流程资源、配置、网络经 `AssetService`、`ConfigService`、`NetworkTransport` 或既有 repository/gateway；feature 禁直调 `resources.load/fetch`。规则放 `model/domain` 或 `core`。
+- `await` / Promise 回调之后处理失效与取消：tab 换页销毁，弹窗默认 `cache=false`；`PopupBase` 用 `nextPopupFrame()` 后判 `isValid`，流程预加载判 `context.cancelled`。同步事件、生命周期与组件 `schedule` 回调不重复判 `isValid`。
+- caller 直接传真实宿主；退出时统一解除事件、缓存和网络请求。普通组件销毁时 `GameNet.removeCaller(this)`；取消须释放回调并让 Promise 以 `false` 落定。禁止伪造归属或靠派发时判有效代替解除。
+- render 幂等、全量赋值；动画用 `startedAt` + 纯函数计算进度，视图不零散建 tween 或累加 dt。`update` 不加载资源、查全局配置、创建临时数组/节点或混业务规则；遵守现有动态/静态节流。
+- 单例可用于生命周期内唯一的共享服务；明确初始化归属及必要的重置/释放策略。页面、对局、实体状态优先由宿主持有实例；禁止无归属 static 暂存或借单例绕过分层，详见[单例与状态作用域](docs/agent/单例与状态作用域.md)。
+- 必填 Inspector 引用用 `null!`，真可空字段用 `| null`；不以 `as any`、非空断言或静默 `?.` 掩盖错误。`strictNullChecks` 未开启：节点/组件查询及查表不变量直接访问；可空值先窄化，await 前保存局部引用。单例和 prefab 必绑引用直接访问。
+- 交互节点在 prefab 挂 `cc.Button`（NONE、target=null），代码只绑 CLICK；禁止 CLICK/TOUCH_END 兜底。Prefab/Scene 用 Cocos MCP 定位验证并刷新，meta 由引擎生成；脚本造节点须有 UITransform，CUSTOM Sprite 设 `_isTrimmedMode=false`。
+- 未经明确要求，不直接修改生成文件及 `library/temp/build/native`。改资源/配表遵守下表工具链。
 
-## 命名与风格
+## 按需读取（修改前必须命中对应项）
 
-- 文件/类：PascalCase 且同名；接口/类型 PascalCase **加 `I` 前缀**，`I` 在最前（`IMailRepository`、`IZCSnapshot`，不是 `ZCISnapshot`）；枚举成员 PascalCase；常量 UPPER_SNAKE_CASE。
-- 变量/函数：camelCase；布尔 `is/has/can` 开头；私有字段 `private` + camelCase，**TS 不用 `m_` 前缀**。
-- 对局玩法 `zcds` 内类统一 `ZC` 前缀；禁用拼音；禁止 `Utils.ts`/`Common.ts`/`Manager.ts` 收容箱。
-- 4 空格/单引号/分号；类型依赖用 `import type`；`unknown` 优于 `any`；玩家可见文案与魔法数移至常量/文本表。
+路径相对仓库根目录；进入子目录时显式打开对应规范，不假定子目录指令自动加载。
 
-## 代码风格与交付
+| 本次涉及 | 读取入口 |
+| --- | --- |
+| 单例、共享服务、状态作用域 | [单例与状态作用域](docs/agent/单例与状态作用域.md) |
+| MVC 职责划分、Model/View/Controller、Page 与组合层 | [MVC 设计规范](docs/agent/MVC设计规范.md)，再查架构规范中对应模块的归属章节 |
+| 分层、跨模块、Procedure、资源/控制器归属 | [架构规范](docs/AI架构与代码规范.md) §2 及对应模块归属章节 |
+| 视图事件、按钮、caller、异步、池化、渲染 | [架构规范](docs/AI架构与代码规范.md) §2.1、§2.2、§3；[开发细则](docs/agent/开发细则.md) 对应条目 |
+| 引用、类型、命名、风格 | [开发细则](docs/agent/开发细则.md) 的引用与类型、命名与风格 |
+| Prefab、Sprite、碎图、Spine、导表 | [架构规范](docs/AI架构与代码规范.md) §5、§7.3；[开发细则](docs/agent/开发细则.md) 工具链条目 |
+| 对局、领地、共享奖励/HUD 表现 | [规范路由与最小验证](docs/agent/规范路由与最小验证.md)仅定位相关规格与测试，不承载业务要求 |
+| 大地图、基地玩法 | [大地图实现说明](docs/bigmap-系统实现说明.md)相关章节，结合本次需求及当前协议/配置核对 |
+| 提交、发布或版本库操作 | [版本库约定](docs/agent/版本库约定.md)；Git/SVN 双库、中文日志、TortoiseProc 及人工确认要求均有效 |
 
-- 一个文件一个清晰职责；函数名描述意图（`load…`、`build…`、`present…`、`handle…`），避免 `doIt`、`data`、`temp`。
-- 注释只说明业务原因、引擎陷阱、兼容性或不变量，不要复述代码；兼容分支注明删除条件。
-- 有规则、边界、取消、资源或回归风险的改动必须新增/更新测试；最少运行与改动相关的单测子集或检查命令，并报告实际结果。
-- 完成时说明：改了什么、关键架构边界、验证命令与结果、尚未验证的风险。不要把“应该能运行”当作验证。
+## 验证与交付
 
-## 版本库（SVN 与 Git 并存）
-
-- 本仓库**双版本库**：SVN 工作副本根 `D:\City1001`（映射 `https://192.168.2.250:8440/svn/City1001/trunk/Demo3.8`）+ Git 仓库 `D:\City1001\Demo3.8\.git`（GitHub remote）。提交变更时**两库都提交**；SVN 一律走 TortoiseProc 图形通道（见下条），**不要用命令行 `svn commit`**。
-- 🔴 **SVN 提交日志：必须纯中文（2026-10-20 定）**：
-  - 日志**一律写中文**，不写英文、不中英混排。英文正文里夹一个中文词，只有中文那段会烂掉（r706 实测：英文句子里夹「阵营判断」，提交后变成 `so��Ӫ�� reads`），比整条中文更难排查。
-  - 命令行 `svn.exe`（1.14.5）把输入字节按 **Latin-1 逐字节映射** ⇒ **禁止 `svn commit -m 中文`**。命令行内联、`-F` UTF-8 文件、宽字符 argv 三条通道实测全乱码（r662–r665），没有一条可用。
-  - **唯一通道 = TortoiseProc GUI**：`"C:\Program Files\TortoiseSVN\bin\TortoiseProc.exe" /command:commit /path:"<待提交文件或目录>" /logmsg:"中文日志" /closeonend:2` —— 会预填日志与文件列表，但**提交按钮必须人工点**（AI 无法代点、也拿不到返回值）。所以 AI 交付时应给出这条命令并说明「窗口已弹出，请点确认」。
-  - 🔴 **乱码不可补救**：本项目服务器**未开 `pre-revprop-change` hook**，`svn propset --revprop -r N svn:log` 一律被拒（`svn: E175008`）⇒ 一旦写进历史就永久留着乱码。不是「写错再修」，是「一次都不能错」。
-  - `git commit` 不受此限（UTF-8 正常），但**日志与 SVN 侧用同一条中文**，便于两库对照。
-- `svn:ignore`（`Demo3.8` 目录属性）已与 `.gitignore` 对齐：`.superpowers/.codegraph/.codex-artifacts/.codex-tmp/.creative-design/.skill_tmp/.workbuddy/data/outputs`。新增本地工具目录时两处同步。
-
+- 视图意图改动跑 `npx tsx --test tests/view-intent-events.test.ts`；caller 改动跑 `npx tsx --test tests/callback-owner.test.ts`；其余按相关流程/模块测试及路由绑定集验证。
+- 测试直接 import 真实函数/常量，不复制算法；结构约束用守卫，业务规则用行为测试，复杂引擎行为用探针；详见架构规范 §6。
+- 交付简述修改文件、关键边界、实际验证命令/结果及未覆盖风险。未运行不声称通过；无依据不承诺 token 或耗时降幅。
+- 规则维护：入口只放 MVC 与通用约束；业务规格/历史记录按需读取，复用既有护栏。根文件维持 6～8 KiB。

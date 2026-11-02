@@ -36,6 +36,8 @@ export const BIGMAP_BATTLE_TEXT = {
     unavailable: '当前无法进入战斗',
     campMissing: '据点未配置战斗',
     campUnavailable: '当前据点不可攻打',
+    /** 服务器 `SlgCampSimpleInfo.opType = 1`：已有玩家占领，本场不可再打。 */
+    campOccupied: '该据点已被占领',
     monsterMissing: '野怪不存在',
     monsterUnavailable: '当前野怪不可挑战',
 } as const;
@@ -74,7 +76,8 @@ export function createBigMapBattleProgress(): IBigMapBattleProgress {
 export function bigMapUnlockContextOf(
     progress: IBigMapBattleProgress,
     adventureChapter: number,
-    openDay = 0,
+    /** 开服天数；`undefined` = 服务器还没下发，不做开服控制（见 `IBigMapUnlockContext.openDay`）。 */
+    openDay?: number,
 ): IBigMapUnlockContext {
     return {
         adventureChapter,
@@ -177,7 +180,7 @@ export interface IBigMapAttackOutcome {
 export interface IBigMapAttackOptions {
     /** 冒险已通关章节数。 */
     readonly adventureChapter: number;
-    /** 开服天数，缺省 0。 */
+    /** 开服天数（1 起）。**不传 = 服务器还没下发，不做开服控制**。 */
     readonly openDay?: number;
     /** 同城围攻人数，缺省 1（单机版恒为 1）。 */
     readonly attackers?: number;
@@ -228,14 +231,15 @@ export function bigMapAttackCity(
     distanceToCity: number,
     options: IBigMapAttackOptions,
 ): IBigMapAttackOutcome {
-    const openDay = options.openDay ?? 0;
+    const openDay = options.openDay;
     const attackers = options.attackers ?? 1;
     const rank = options.rank ?? 1;
     // 未开放 / 未解锁 / 已占领 都不允许再打。
     if (!city.available) return fail('该城池本期未开放');
     if (progress.occupiedCityIds.includes(city.cityId)) return fail('该城池已占领');
     if (options.adventureChapter < city.unlockChapter) return fail(`通关冒险第 ${city.unlockChapter} 章解锁`);
-    if (openDay < city.openDay) return fail(`开服第 ${city.openDay + 1} 天开放`);
+    // 没拿到开服天数（`undefined`）就先不控制 —— 与 `bigMapCityUnlock` 同一口径。
+    if (openDay !== undefined && openDay < city.openDay) return fail(`开服第 ${city.openDay} 天开放`);
     if (city.prevCityId !== 0 && !progress.occupiedCityIds.includes(city.prevCityId)) {
         return fail('需先占领前置城池');
     }
@@ -321,7 +325,6 @@ export function bigMapAttackMonster(
     if (!offline) return fail(BIGMAP_MONSTER_BATTLE_UNAVAILABLE);
     const unlock = bigMapMonsterUnlock(monster, {
         adventureChapter: 0,
-        openDay: 0,
         occupiedCityIds: new Set(progress.occupiedCityIds),
         maxClearedMonsterLevel: progress.clearedMonsterLevel,
     });

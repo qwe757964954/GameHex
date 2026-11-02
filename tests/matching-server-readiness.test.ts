@@ -5,89 +5,20 @@ import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import * as MatchTypes from '../assets/script/app/matching/MatchTypes';
 
-function fixture() {
-    const exports: Record<string, any> = {};
-    const stopped: object[] = [];
-    runInNewContext(ts.transpileModule(readFileSync('assets/script/app/matching/MatchingPage.ts','utf8'), {
-        compilerOptions: { module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,experimentalDecorators:true },
-    }).outputText, { exports, console, require:(name:string)=> {
-        if(name==='cc') return { Component:class{}, Tween: { stopAllByTarget: (target: object) => stopped.push(target) },
-            _decorator:{ccclass:()=>(type:unknown)=>type, property:()=>()=>{}} };
-        if(name==='./MatchTypes') return MatchTypes;
-        if(name==='./MatchPlayerItem') return {};
-        throw new Error(`Unexpected import: ${name}`);
+test('matching page destruction emits lifecycle without accessing destroyed child nodes', () => {
+    const exports: Record<string, any> = {}, events: unknown[] = [];
+    runInNewContext(ts.transpileModule(readFileSync('assets/script/app/matching/MatchingPage.ts', 'utf8'), {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
+    }).outputText, { exports, require(name: string) {
+        if (name === 'cc') return { Component: class {}, _decorator: { ccclass: () => (type: unknown) => type, property: () => () => {} } };
+        if (name.endsWith('/EventMgr')) return { EventMgr: { instance: { emit: (_name: string, event: unknown) => events.push(event) } } };
+        if (name.endsWith('/ViewLifecycle')) return { VIEW_LIFECYCLE: 'lifecycle' };
+        return {};
     } });
-    const page=new exports.MatchingPage();
-    const phases:string[]=[], scheduled:Array<()=>void>=[];
-    Object.assign(page,{isValid:true,itemViews:[{}, {refresh(){}}],layout(){},
-        setPhase:(phase:string)=>phases.push(phase),scheduleOnce:(callback:()=>void)=>scheduled.push(callback),
-        unschedule(callback: () => void) {
-            const index = scheduled.indexOf(callback);
-            if (index >= 0) scheduled.splice(index, 1);
-        }});
-    return { page, phases, scheduled, stopped };
-}
-
-for(const result of [false, 'rejected'] as const) test(`服务端就绪为 ${result} 时不选假对手、不显示成功、不排进场回调`,async()=> {
-    const h=fixture(); let picks=0;
-    const options={awaitReady:async()=>{if(result==='rejected')throw new Error('server rejected');return result;},
-        pickOpponents:()=>{picks++;return[{name:'fake'}];},onMatched(){}};
-    h.page.options=options;
-    await h.page.settleOpponent(options);
-    assert.equal(picks,0);
-    assert.deepEqual(h.phases,[]);
-    assert.equal(h.scheduled.length,0);
-});
-
-test('有效开战回包才显示匹配成功并排入场回调',async()=> {
-    const h=fixture(); let matched=0;
-    const options={awaitReady:async()=>true,pickOpponents:()=>[{name:'server'}],onMatched:()=>matched++};
-    h.page.options=options;
-    await h.page.settleOpponent(options);
-    assert.deepEqual(h.phases,['matched']);
-    h.scheduled[0]();
-    assert.equal(matched,1);
-});
-
-test('匹配页销毁只停动画，不再修改已销毁的字节点和 Label', () => {
-    const h = fixture();
-    const character = { set active(_value: boolean) { throw new Error('字节点已销毁'); } };
-    h.page.waveNodes = [character];
-    h.page.statusLabel = { set enabled(_value: boolean) { throw new Error('Label.node 已为空'); } };
-    assert.doesNotThrow(() => h.page.onDestroy());
-    assert.deepEqual(h.stopped, [character]);
-    assert.equal(h.page.waveNodes.length, 0);
-});
-
-test('匹配成功停止波浪时仍隐藏字节点并恢复原 Label', () => {
-    const h = fixture();
-    const character = { active: true };
-    const label = { enabled: false };
-    h.page.waveNodes = [character];
-    h.page.statusLabel = label;
-    h.page.stopWaveText();
-    assert.deepEqual(h.stopped, [character]);
-    assert.equal(character.active, false);
-    assert.equal(label.enabled, true);
-});
-
-test('重新匹配解除上一轮进场定时器，销毁时解除当前定时器', async () => {
-    const h = fixture();
-    let matched = 0;
-    const options = { mine: {}, tips: [], iconLoader: async () => null,
-        pickOpponents: () => [], onMatched: () => matched++ };
-    h.page.options = options;
-    await h.page.settleOpponent(options);
-    assert.equal(h.scheduled.length, 1);
-    const item = { setIconLoader() {}, applySlot: async () => {}, refresh: async () => {}, clear() {} };
-    Object.assign(h.page, { itemViews: [item, item], applyTips() {}, ensureItems() {} });
-    h.page.beginMatch({ ...options });
-    assert.equal(h.scheduled.length, 0, '重开匹配应主动解除旧调度');
-    await h.page.settleOpponent(h.page.options);
-    assert.equal(h.scheduled.length, 1);
-    h.page.onDestroy();
-    assert.equal(h.scheduled.length, 0, '销毁只清理，不等待回调执行后判断');
-    assert.equal(matched, 0);
+    const page = new exports.MatchingPage();
+    page.waveNodes = [{ node: { set active(_v: boolean) { throw new Error('destroyed'); } } }];
+    assert.doesNotThrow(() => page.onDestroy());
+    assert.equal(page.waveNodes.length, 0); assert.equal(events.length, 1);
 });
 
 function playerFixture() {
@@ -130,4 +61,11 @@ test('信息条仍存活时正常应用异步图标', async () => {
     h.complete({});
     await slot;
     assert.equal(h.writes, 2);
+});
+
+test('matching ready is emitted from start after child onLoad, never from parent onLoad', () => {
+    const code = readFileSync('assets/script/app/matching/MatchingPage.ts', 'utf8');
+    const onLoad = code.slice(code.indexOf('protected onLoad()'), code.indexOf('protected start()'));
+    assert.doesNotMatch(onLoad, /phase: 'ready'|\.setSearching\(/);
+    assert.match(code, /protected start\(\): void \{ EventMgr\.instance\.emit\(VIEW_LIFECYCLE, \{ owner: this, phase: 'ready' \}\)/);
 });

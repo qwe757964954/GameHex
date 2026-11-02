@@ -88,6 +88,18 @@ export class ZCTargetingSystem {
         return sourceReach * distanceScale;
     }
 
+    /**
+     * 冲刺触发距离（世界坐标）。
+     *
+     * 与 `attackReach` 的差别只有一处：**不走「射程 > 100 打 9 折」那条**。
+     * 那条是给远程投掷体算视觉落点的，冲刺距离纯粹是「跑到哪儿开始加速」，
+     * 打 9 折只会让冲锋莫名其妙提前 10%。碰撞半径照旧补上 —— 否则贴身时
+     * 「距离 ≤ 射程」和「距离 ≤ 冲刺距离」会给出互相矛盾的答案。
+     */
+    static chargeReach(chargeDistance: number, targetBodyRadius: number, distanceScale: number): number {
+        return (chargeDistance + targetBodyRadius) * distanceScale;
+    }
+
     static isInRange(from: ZCPoint, target: ZCPoint, reach: number): boolean {
         return Math.hypot(from.x - target.x, from.y - target.y) <= reach;
     }

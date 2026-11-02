@@ -12,6 +12,14 @@ export interface IZCDamageResolutionContext extends Pick<IZCModelServices, 'stat
     readonly units: ZCUnitRegistry;
     readonly damageDealt: Record<ZCOwner, number>;
     readonly damageTaken: Record<ZCOwner, number>;
+    /**
+     * 闪避判定用的随机源（2026-10-30「迅击」100903 的 `dodgePct`）。
+     *
+     * **只在目标的 `dodgePct > 0` 时才调用** —— 缺省单位一次都不抽，
+     * 所以既有对局的随机序列（强化 / 暴击 / 掉落都共用一个序列）逐字不变。
+     * 缺省 undefined ⇒ 视为没有闪避，整段不执行（单测里不传也能跑）。
+     */
+    readonly random?: () => number;
 }
 
 export interface IZCDamageResult {
@@ -25,7 +33,19 @@ export class ZCDamageResolutionSystem {
         source: ZCDamageSource, context: IZCDamageResolutionContext): IZCDamageResult | null {
         if (target.battleState === 'dead' || damage <= 0) return null;
         const takenMods = context.statusSystem.statModsOf(String(target.id));
-        let scaledDamage = damage * Math.max(0, 1 + (takenMods.damageTakenPct ?? 0) / 100);
+        //  闪避（2026-10-30「迅击」100903）：只对**单位打单位**的伤害生效 —— 城墙 / 建筑不吃，
+        //  持续伤害也不吃（那两类走的是别的入口，天然被排除）。
+        //  短路写法是刻意的：`dodgePct` 缺省 0 时一次随机都不抽，既有对局的随机序列不受影响。
+        const dodgeChance = Math.max(0, Math.min(1, takenMods.dodgePct ?? 0));
+        if (dodgeChance > 0 && source.kind === 'unit' && context.random && context.random() < dodgeChance) {
+            return { applied: 0, killed: false };
+        }
+        //  两个减免口径**相加**后再乘（与 `ZCStatusEffect` 里 pct 一律相加的约定一致）：
+        //  · `damageTakenPct`      —— 对所有伤害生效（格挡 / 护体）；
+        //  · `damageTakenRangedPct` —— 只对远程生效（藤盾），未标记 `ranged` 的伤害整份不计。
+        //  `source.ranged` 缺省 undefined ⇒ 后一项恒为 0，存量伤害路径逐字不变。
+        const rangedReduce = source.ranged ? (takenMods.damageTakenRangedPct ?? 0) : 0;
+        let scaledDamage = damage * Math.max(0, 1 + ((takenMods.damageTakenPct ?? 0) + rangedReduce) / 100);
         const absorbed = Math.min(target.shield ?? 0, scaledDamage);
         if (absorbed > 0) {
             target.shield = Math.max(0, (target.shield ?? 0) - absorbed);
@@ -43,6 +63,9 @@ export class ZCDamageResolutionSystem {
                 target.hatredUnitId = sender.id;
             }
             target.hatredUntil = state.elapsedSeconds + HATRED_SECONDS;
+            //  受击反弹减益（格挡 III）：护体生效期间被打中，反过来压攻击者 3 秒攻速。
+            //  未配 `retaliateSlowPct` 的单位恒为 0 ⇒ 存量受伤路径逐字不变。
+            this.applyRetaliate(state, target, sender, context);
         }
         if (target.hp > 0) return { applied, killed: false };
         target.hp = 0;
@@ -101,9 +124,30 @@ export class ZCDamageResolutionSystem {
         return { applied, killed: true };
     }
 
-    private static recordDamage(attacker: ZCOwner, defender: ZCOwner, amount: number,
+    /**
+     * 受击反弹减益（2026-10-29，格挡 III「并使攻击者攻击速度降低10%」）。
+     *
+     * 时机钉在**受伤结算**而不是护体触发那一刻：原文是「使攻击者」降低攻速，
+     * 只有真的有人打上来才知道攻击者是谁。减益本身复用状态系统
+     * （`attackIntervalPct` 为负 = 间隔变长 = 攻速下降），不新增战斗逻辑。
+     */
+    private static applyRetaliate(state: ZCSnapshot, target: ZCUnitState, sender: ZCUnitState,
         context: IZCDamageResolutionContext): void {
-        if (amount <= 0) return;
+        const pct = target.retaliateSlowPct ?? 0;
+        if (pct <= 0 || state.elapsedSeconds > (target.retaliateUntil ?? 0)) return;
+        const seconds = 3;
+        const id = `__retaliate:${pct.toFixed(4)}__`;
+        if (!context.statusSystem.hasDef(id)) {
+            context.statusSystem.register({
+                id, name: id, durationSeconds: seconds, refreshPolicy: 'refresh',
+                statMods: { attackIntervalPct: -pct }, behavior: { kind: 'none' },
+            });
+        }
+        context.statusSystem.apply(String(sender.id), id, { at: state.elapsedSeconds, durationSeconds: seconds });
+    }
+
+    private static recordDamage(attacker: ZCOwner, defender: ZCOwner, amount: number,
+        context: IZCDamageResolutionContext): void {        if (amount <= 0) return;
         context.damageDealt[attacker] += amount;
         context.damageTaken[defender] += amount;
     }

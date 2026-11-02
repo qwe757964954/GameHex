@@ -16,7 +16,7 @@ import { GameRunAway } from './ui/GameRunAway';
 import { ZCSettlementPage } from './ui/ZCSettlementPage';
 import { getCardBuildIcon, getEnemyDeck, getPlayerDeck, type ZCDeckCard, type ZCUnitId } from './model/ZCCombatCatalog';
 import { ZCGameHUDView } from './view/ZCGameHUDView';
-import { ZCGameUiEvent } from './view/ZCGameHudEvents';
+import { ZCGameUiEvent, type IZCDebugDrawCardIntent } from './view/ZCGameHudEvents';
 import type { Prefab } from 'cc';
 import { EventMgr } from '../../framework/event/EventMgr';
 import { ZCGuidePanel } from './ui/ZCGuidePanel';
@@ -653,6 +653,7 @@ export class ZCGame extends Component {
     private bindUiEvents(): void {
         // 棋盘点击（`ZCGameRenderWorld` 派发，payload = 格子 id）
         EventMgr.instance.on(ZCGameUiEvent.HexClick, this.onHexClick, this);
+        EventMgr.instance.on(ZCGameUiEvent.DebugDrawCard, this.onDebugDrawCard, this);
         // HUD
         EventMgr.instance.on(ZCGameUiEvent.UseArtifact, this.onHudUseArtifact, this);
         EventMgr.instance.on(ZCGameUiEvent.OpenGuide, this.onHudOpenGuide, this);
@@ -667,6 +668,13 @@ export class ZCGame extends Component {
         // 选点
         EventMgr.instance.on(ZCGameUiEvent.SpawnConfirm, this.onSpawnConfirm, this);
         EventMgr.instance.on(ZCGameUiEvent.SpawnToggleHints, this.onSpawnToggleHints, this);
+    }
+
+    private onDebugDrawCard(intent: IZCDebugDrawCardIntent): void {
+        const result = this.model
+            ? this.model.setDebugDrawCard(intent.cardId, intent.count)
+            : { message: '请先完成出生点选择' };
+        EventMgr.instance.emit(ZCGameUiEvent.DebugDrawCardResult, { message: result.message });
     }
 
     /** 神器：能不能用由模型判（充能 / 冷却），这里只把结果落到战报 / 吐司。 */

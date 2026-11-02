@@ -3,223 +3,59 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
+import { LoginController } from '../assets/script/app/login/LoginController';
+import { LoginUiEvent } from '../assets/script/app/login/LoginEvents';
+import { EventMgr } from '../assets/script/framework/event/EventMgr';
+import { createControllerContext } from './helpers/controller-context';
 
-test('LoginPage 可恢复 StatusLabel 绑定，销毁后忽略异步状态更新', () => {
-    const code = ts.transpileModule(readFileSync('assets/script/app/login/LoginPage.ts', 'utf8'), {
+test('LoginPage restores optional status binding, emits scoped inputs and fully renders button state', () => {
+    class Label { string = ''; color: unknown; }
+    const status = new Label();
+    const exports: Record<string, any> = {};
+    runInNewContext(ts.transpileModule(readFileSync('assets/script/app/login/LoginPage.ts', 'utf8'), {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
-    }).outputText;
-    class Color {
-        constructor(public r: number, public g: number, public b: number, public a: number) {}
-    }
-    class Label {
-        string = '';
-        color: Color | null = null;
-    }
-    const fallbackLabel = new Label();
-    const statusNode = { getComponent: (type: unknown) => type === Label ? fallbackLabel : null };
-    class Node {
-        static EventType = { TOUCH_END: 'touch-end' };
-        getChildByName(name: string) { return name === 'StatusLabel' ? statusNode : null; }
-    }
-    class Component {
-        node = new Node();
-        unscheduleAllCallbacks() {}
-    }
-    class LoginGateway {}
-    const toasts: string[] = [];
-    const dependencies: Record<string, unknown> = {
-        cc: {
-            _decorator: { ccclass: () => (value: unknown) => value, property: () => () => {} },
-            Color, Component, Label, Node,
-            resources: {},
-            sys: { localStorage: { getItem: () => null, setItem() {} } },
-        },
-        '../procedure/ProcedureMain': { ProcedureMain: class {} },
-        '../../framework/procedure/ProcedureManager': { ProcedureManager: { switchTo() {} } },
-        './LoginProtocol': {
-            canEnterServer: () => ({ ok: true }),
-            DEFAULT_VERSION_CONFIG: { version: 'test' },
-            LoginGateway,
-            selectRecommendedServer: () => null,
-        },
-        './ProtocolCodec': { ProtocolCodec: class {} },
-        './ServerSelectPanel': { ServerSelectPanel: class {} },
-        './ServerSelectItem': { serverStatusText: () => '' },
-        // 业务已抽到 `LoginRoot`（LoginPage.ts:65 `private rootLogic = new LoginRoot()`）。
-        // 本用例只验 **UI 层**（StatusLabel 回填 / 销毁后忽略异步），业务桩成空实现即可；
-        // 登录校验本身由 LoginRoot 那一侧覆盖。
-        './LoginRoot': {
-            LoginRoot: class {
-                isBusy = false;
-                protocolReady = false;
-                servers: unknown[] = [];
-                selectedServerId = null;
-                recentServerIds: string[] = [];
-                configureGateway(): void {}
-                bootstrap(): Promise<void> { return Promise.resolve(); }
-                dispose(): void {}
-                login(): Promise<boolean> { return Promise.resolve(false); }
-                register(): Promise<boolean> { return Promise.resolve(false); }
-                restoreAccount(): Promise<unknown> { return Promise.resolve(null); }
-                setSelectedServer(): void {}
-            },
-        },
-        '../common/Toast': { Toast: { show: (message: string) => toasts.push(message) } },
-    };
-    const context = {
-        exports: {} as { LoginPage: new () => any },
-        require: (name: string) => dependencies[name],
-        console: { warn() {}, error() {}, log() {} },
-    };
-    runInNewContext(code, context);
-
-    const page = new context.exports.LoginPage();
-    page.root = page.node;
-    page.statusLabel = null;
-    page.setStatus('连接中');
-    assert.equal(page.statusLabel, fallbackLabel);
-    assert.equal(fallbackLabel.string, '连接中');
-
-    page.onDestroy();
-    page.statusLabel = null;
-    assert.doesNotThrow(() => page.setStatus('过期的异步结果'));
-    assert.equal(fallbackLabel.string, '连接中');
-    assert.deepEqual(toasts, [], '销毁后不再弹任何提示');
+    }).outputText, { exports, require(name: string) {
+        if (name === 'cc') return { _decorator: { ccclass: () => (v: unknown) => v, property: () => () => {} },
+            Component: class { node = { getChildByName: () => ({ getComponent: () => status }) }; },
+            Button: { EventType: { CLICK: 'click' } }, Label, Color: class {} };
+        if (name.endsWith('/EventMgr')) return { EventMgr };
+        if (name.endsWith('/ViewLifecycle')) return { VIEW_LIFECYCLE: 'ui:view-lifecycle' };
+        if (name === './LoginEvents') return { LoginUiEvent };
+        if (name === './ServerSelectItem') return { serverStatusText: () => '流畅' };
+        throw new Error(name);
+    } });
+    const page = new exports.LoginPage();
+    const handlers = new Map<string, () => void>(), buttons = [true, true, true].map(() => ({ interactable: true }));
+    ['serverButton', 'loginButton', 'registerButton'].forEach((key, i) => {
+        page[key] = { on: (_event: string, fn: () => void) => handlers.set(key, fn), getComponent: () => buttons[i] };
+    });
+    Object.assign(page, { accountInput: { string: '' }, passwordInput: { string: '' }, versionLabel: new Label(), serverButtonLabel: new Label() });
+    const events: any[] = [], owner = {};
+    EventMgr.instance.on(LoginUiEvent.Intent, (event: unknown) => events.push(event), owner);
+    try {
+        page.onLoad(); assert.equal(page.statusLabel, status);
+        page.restoreCredentials({ account: 'a', password: 'secret' }); handlers.get('loginButton')();
+        assert.equal(events.length, 1); assert.equal(events[0].owner, page); assert.equal(events[0].password, 'secret');
+        page.render({ version: '1', status: 'ready', busy: true, server: null });
+        assert.equal(status.string, 'ready'); assert.ok(buttons.every(value => !value.interactable));
+        page.render({ version: '1', status: 'done', busy: false, server: null });
+        assert.ok(buttons.every(value => value.interactable));
+        assert.doesNotThrow(() => page.onDestroy());
+    } finally { EventMgr.instance.offTarget(owner); }
 });
 
-test('LoginPage 登录校验失败时只弹吐司（不再弹 CommonTips），状态栏不再写失败文案', async () => {
-    const code = ts.transpileModule(readFileSync('assets/script/app/login/LoginPage.ts', 'utf8'), {
-        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
-    }).outputText;
-    class Color {
-        constructor(public r: number, public g: number, public b: number, public a: number) {}
-    }
-    class Label {
-        string = '';
-        color: Color | null = null;
-    }
-    class Node {
-        static EventType = { TOUCH_END: 'touch-end' };
-        getChildByName() { return null; }
-    }
-    class Component {
-        node = new Node();
-        unscheduleAllCallbacks() {}
-    }
-    const toasts: string[] = [];
-    const dependencies: Record<string, unknown> = {
-        cc: {
-            _decorator: { ccclass: () => (value: unknown) => value, property: () => () => {} },
-            Color, Component, Label, Node,
-            resources: {},
-            sys: { localStorage: { getItem: () => null, setItem() {} } },
-        },
-        '../../core/runtime/GameRoute': { GameRoute: { Main: 'main' } },
-        '../../framework/procedure/ProcedureManager': { ProcedureManager: { navigate() {} } },
-        './LoginProtocol': {
-            canEnterServer: () => ({ ok: true }),
-            DEFAULT_VERSION_CONFIG: { version: 'test' },
-            LoginGateway: class {},
-            selectRecommendedServer: () => null,
-        },
-        './ProtocolCodec': { ProtocolCodec: class {} },
-        './ServerSelectPanel': { ServerSelectPanel: class {} },
-        './ServerSelectItem': { serverStatusText: () => '' },
-        '../net/GameNet': { GameNet: { instance: {} } },
-        '../generated/netProto/CmdInterface': { LoginStatus: {} },
-        '../generated/requestMsg/RequestRoleMsg': { RequestRoleLogin: class {} },
-        // 校验逻辑已搬到 `LoginRoot.login()`（LoginRoot.ts:129 空账号密码 ⇒ `{ok:false, reason:'请输入账号和密码'}`）。
-        // LoginPage 只剩「拿到 ok:false ⇒ showProblem ⇒ Toast」这一段 UI 责任，所以桩直接回那个失败结果，
-        // 断言口径不变：只弹一条吐司、状态栏留空。
-        './LoginRoot': {
-            LoginRoot: class {
-                isBusy = false;
-                protocolReady = false;
-                servers: unknown[] = [];
-                selectedServerId = null;
-                recentServerIds: string[] = [];
-                configureGateway(): void {}
-                bootstrap(): Promise<void> { return Promise.resolve(); }
-                dispose(): void {}
-                login(): Promise<{ ok: boolean; reason?: string }> {
-                    return Promise.resolve({ ok: false, reason: '请输入账号和密码' });
-                }
-                register(): Promise<boolean> { return Promise.resolve(false); }
-                restoreAccount(): Promise<unknown> { return Promise.resolve(null); }
-                setSelectedServer(): void {}
-            },
-        },
-        '../common/Toast': { Toast: { show: (message: string) => toasts.push(message) } },
-    };
-    const context = {
-        exports: {} as { LoginPage: new () => any },
-        // 刻意不铺 '../common/CommonTips' 的桩：登录页一旦重新 import 它，这里会直接抛 TypeError。
-        require: (name: string) => dependencies[name],
-        console: { warn() {}, error() {}, log() {} },
-    };
-    runInNewContext(code, context);
-
-    const page = new context.exports.LoginPage();
-    page.accountInput = { string: '' };
-    page.passwordInput = { string: '' };
-    page.statusLabel = new Label();
-
-    await page.login();
-
-    assert.deepEqual(toasts, ['请输入账号和密码'], '登录问题只走吐司，一条不多不少');
-    assert.equal(page.statusLabel.string, '', '状态栏不再承载失败文案');
-});
-
-/**
- * 状态栏口径防回归：StatusLabel 只承载白名单文案（成功 / 进行中）。
- * 任何新的过程态或失败文案写进状态栏 —— 也就是绕开吐司 —— 都会在这里被拦下。
- */
-test('LoginPage 状态栏只写白名单文案（登录过程态与失败一律走吐司）', () => {
-    const code = readFileSync('assets/script/app/login/LoginPage.ts', 'utf8');
-    const calls = [...code.matchAll(/this\.setStatus\((.+?)\);/g)].map((match) => match[1].trim());
-    assert.ok(calls.length > 0, '至少应统计到状态栏写入点（正则失效时报警）');
-
-    const allowed = new Set([
-        "'正在获取服务器列表…'",
-        "'服务器列表已就绪'",
-        '`已连接 ${label}，正在登录角色…`',
-        "'登录成功，正在进入游戏…'",
-        "'正在注册…'",
-        "'注册成功，点击登录即可进入游戏'",
-    ]);
-    for (const call of calls) {
-        assert.ok(allowed.has(call), `状态栏出现了白名单外的文案：${call}`);
-    }
-
-    // 回归点：bootstrap 成功分支必须给状态栏收尾。
-    // 少了这一句，状态栏会永远停在「正在获取服务器列表…」——安卓包上就是这么被误判成「没网络」的。
-    // ⚠️ 锚点已变：网络引导搬到 `LoginRoot.bootstrap()`（LoginRoot.ts:91），
-    //    页面这边只剩 `await this.rootLogic.bootstrap(versionConfig)` 和解包结果。
-    //    终点取到方法结束（`private loadVersionConfig`）：新结构是「先判 !result.ok 弹吐司并 return，
-    //    成功分支才 setStatus('服务器列表已就绪')」，拿 showProblem 当终点会切在 setStatus 之前。
-    const successPath = code.slice(
-        code.indexOf('await this.rootLogic.bootstrap('),
-        code.indexOf('private loadVersionConfig('),
-    );
-    assert.ok(successPath.length > 0, '未能定位 bootstrap 成功分支（正则失效时报警）');
-    assert.match(
-        successPath,
-        /this\.setStatus\('服务器列表已就绪'\)/,
-        '服务器列表拿到后必须收尾，不能一直停在「正在获取服务器列表…」',
-    );
-
-    // 被移除的登录过程态不得复活
-    for (const removed of ['正在校验网络协议', '正在验证账号', '正在准备网络协议', '正在连接 ${']) {
-        assert.ok(!code.includes(removed), `登录过程态「${removed}」应保持移除（改走吐司）`);
-    }
-
-    // 失败提示只走吐司：不得再弹 CommonTips，也不得写状态栏
-    const showProblem = code.slice(code.indexOf('private showProblem('));
-    assert.match(showProblem.slice(0, 600), /Toast\.show\(message\)/, '问题提示要走吐司');
-    assert.ok(!showProblem.slice(0, 600).includes('CommonTips'), '问题提示不得再弹 CommonTips 弹窗');
-    assert.ok(!showProblem.slice(0, 600).includes('setStatus'), '问题提示不得再写状态栏');
-    assert.ok(
-        !code.includes("from '../common/CommonTips'"),
-        '登录页不再依赖 CommonTips（连 import 一起清掉，避免又被接回去）',
-    );
+test('login failures only show a tip and leave successful bootstrap status intact', async () => {
+    const owner = {}, tips: string[] = [], states: any[] = [];
+    const controller = new LoginController(createControllerContext(), { owner,
+        service: { servers_: [], selectedServerId_: null, recentServerIds_: [], protocolReady_: true,
+            restoreAccount: () => ({ account: '', password: '' }), bootstrap: async () => ({ ok: true }),
+            login: async () => ({ ok: false, reason: '请输入账号和密码' }), register: async () => ({ ok: false }), setSelectedServer() {}, dispose() {} },
+        loadVersion: async () => ({ version: '1', url: '', index: '' }), restoreCredentials() {}, render: value => states.push(value),
+        tip: value => tips.push(value), openServers: async () => {}, closeServers() {}, schedule: () => () => {}, navigate() {},
+    });
+    try {
+        await controller.start(); EventMgr.instance.emit(LoginUiEvent.Intent, { owner, kind: 'login', account: '', password: '' });
+        await new Promise(resolve => setImmediate(resolve));
+        assert.deepEqual(tips, ['请输入账号和密码']); assert.equal(states[states.length - 1].status, '服务器列表已就绪');
+    } finally { controller.dispose(); }
 });

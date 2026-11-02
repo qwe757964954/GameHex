@@ -36,7 +36,8 @@ export interface IZCDevelopmentResult {
 /** Resolves paid development and neutral-resource acquisition against one match snapshot. */
 export class ZCDevelopmentSystem {
     static develop(state: ZCSnapshot, owner: ZCOwner, hex: ZCHexState, deck: readonly ZCDeckCard[],
-        config: ZCMatchConfig, random: () => number, context: IZCDevelopmentContext): IZCDevelopmentResult {
+        config: ZCMatchConfig, random: () => number, context: IZCDevelopmentContext,
+        forcedCard: ZCDeckCard | null = null): IZCDevelopmentResult {
         hex.captureOwner = null;
         hex.captureSeconds = 0;
         // The tile is acquired even when the draw is empty or produces a non-buildable card.
@@ -52,8 +53,9 @@ export class ZCDevelopmentSystem {
             hex.state = 'developed';
             return { card: null, building: hex.building, tier: hex.tier, tileType, pityTriggered: false };
         }
-        const result = drawPvpTile(deck, tileType, state.allRandomNonGoldDraws[owner], random,
-            config.tiles, config.goldPity);
+        const result = forcedCard
+            ? { card: forcedCard, pityTriggered: false, nextAllRandomNonGoldDraws: state.allRandomNonGoldDraws[owner] }
+            : drawPvpTile(deck, tileType, state.allRandomNonGoldDraws[owner], random, config.tiles, config.goldPity);
         state.allRandomNonGoldDraws[owner] = result.nextAllRandomNonGoldDraws;
         hex.developmentResolved = true;
         hex.wallMaxHp = context.rules.wallMaxHp;

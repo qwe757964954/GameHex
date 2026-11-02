@@ -14,7 +14,6 @@
  */
 import { hexGridNeighborIds } from '../../../core/hex/HexGridLayout';
 import {
-    BigMapBuildingKind,
     BigMapQueueState,
     BIGMAP_BUILD_RES,
     type BigMapResType,
@@ -23,7 +22,7 @@ import {
     type IBigMapConfig,
     type IBigMapBaseState,
     type IBigMapQueueSlot,
-    type IBigMapActionResult,
+    type IBigMapActionResult
 } from './BigMapTypes';
 import { bigMapBuildingUnlock, bigMapUpgradeUnlock, type IBigMapUnlockContext } from './BigMapUnlock';
 

@@ -1,0 +1,111 @@
+{
+  "__type__": "cc.AnimationClip",
+  "_name": "火焰树妖_灼热地带技能-loop",
+  "_objFlags": 0,
+  "_native": "",
+  "sample": 14,
+  "speed": 1,
+  "wrapMode": 2,
+  "events": [],
+  "_duration": 1,
+  "_keys": [],
+  "_stepness": 0,
+  "curveDatas": {},
+  "_curves": [],
+  "_commonTargets": [],
+  "_hash": 0,
+  "_tracks": [
+    {
+      "__type__": "cc.animation.ObjectTrack",
+      "_binding": {
+        "__type__": "cc.animation.TrackBinding",
+        "path": {
+          "__type__": "cc.animation.TrackPath",
+          "_paths": [
+            {
+              "__type__": "cc.animation.ComponentPath",
+              "component": "cc.Sprite"
+            },
+            "spriteFrame"
+          ]
+        },
+        "proxy": null
+      },
+      "_channel": {
+        "__type__": "cc.animation.Channel",
+        "_curve": {
+          "__type__": "cc.ObjectCurve",
+          "_times": [
+            0,
+            0.0714285714,
+            0.1428571429,
+            0.2142857143,
+            0.2857142857,
+            0.3571428571,
+            0.4285714286,
+            0.5,
+            0.5714285714,
+            0.6428571429,
+            0.7142857143,
+            0.7857142857,
+            0.8571428571,
+            0.9285714286
+          ],
+          "_values": [
+            {
+              "__uuid__": "22d33be0-a4b4-4eb9-94b0-3b6aac7e4635@f9941"
+            },
+            {
+              "__uuid__": "ad89c382-eeec-451e-b659-e98268c70806@f9941"
+            },
+            {
+              "__uuid__": "ec6450ad-22b2-47a3-ab0f-6721890ea9b9@f9941"
+            },
+            {
+              "__uuid__": "b599278c-acb6-42c8-b528-e8fe9fe31703@f9941"
+            },
+            {
+              "__uuid__": "b3adebd3-50ed-4f83-a62a-83f586890a4c@f9941"
+            },
+            {
+              "__uuid__": "cf936952-9c47-4f8f-b8c8-032645308af7@f9941"
+            },
+            {
+              "__uuid__": "d879a90d-9eec-443c-b553-88b542bcf7d8@f9941"
+            },
+            {
+              "__uuid__": "33732440-8638-49d8-a66a-7fabb0161495@f9941"
+            },
+            {
+              "__uuid__": "7ad4e5fa-7e8b-4c01-8cbe-3230218c7d04@f9941"
+            },
+            {
+              "__uuid__": "0af887e3-f13f-4e25-af2d-b3fe1348a3a3@f9941"
+            },
+            {
+              "__uuid__": "b55ffa06-f40e-4a11-a5a5-7834de2cc057@f9941"
+            },
+            {
+              "__uuid__": "e733a6e3-9c6c-43b5-960f-e151a3a3cac0@f9941"
+            },
+            {
+              "__uuid__": "0af8dccc-ebc8-4587-a934-f8db166be4d7@f9941"
+            },
+            {
+              "__uuid__": "85614000-f45e-4e1c-9168-49ba4136a9f7@f9941"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "_exoticAnimation": null,
+  "_events": [],
+  "_embeddedPlayers": [],
+  "_additiveSettings": {
+    "__type__": "cc.AnimationClipAdditiveSettings",
+    "enabled": false,
+    "refClip": null
+  },
+  "_auxiliaryCurveEntries": []
+}

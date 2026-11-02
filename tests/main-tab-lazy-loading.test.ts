@@ -1,3 +1,9 @@
+import { ControllerBase } from '../assets/script/framework/controller/ControllerBase';
+import { VIEW_LIFECYCLE } from '../assets/script/framework/ui/ViewLifecycle';
+import { MainTabController } from '../assets/script/app/main/MainTabController';
+import { MainTab } from '../assets/script/app/main/MainTabModel';
+import { MainTabEvent } from '../assets/script/app/main/MainTabEvents';
+import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { componentControllerModule } from './helpers/controller-context';
 import { createControllerContext } from './helpers/controller-context';
 import assert from 'node:assert/strict';
@@ -13,17 +19,29 @@ function harness(worldGate?: Promise<void>) {
     const scheduled: (() => void)[] = [];
     const afterDraw = new Set<() => void>();
     let worldOpened = false, warmups = 0, battleWarmups = 0, firstRechargeChecks = 0, pauses = 0, worldOpenCalls = 0;
-    const buttons: { tabType: number; select?: () => void; setEnabled(): void; bindSelect(callback: () => void): void; bindRedDotExpr(): void; node: { position: { x: number } } }[] = [6].map(tabType => ({ tabType, node: { position: { x: 0 } }, setEnabled() {}, bindSelect(callback) { this.select = callback; }, bindRedDotExpr() {} }));
+    let buttonSelect: (() => void) | undefined;
+    const buttons: { tabType: number; select?: () => void; setEnabled(): void; bindSelect(callback: () => void): void; bindRedDotExpr(): void; node: { position: { x: number }; on(event: string, handler: () => void): void } }[] = [6].map(tabType => ({ tabType, node: { position: { x: 0 }, on(_event, handler) { buttonSelect = handler; } }, setEnabled() {}, bindSelect(callback) { this.select = callback; }, bindRedDotExpr() {} }));
     const requests: { path: string; bundle: string | undefined; scope: ResourceScope; resolve(value: object): void; reject(error: Error): void }[] = [];
     const pages: { name: string; destroyed: boolean }[] = [];
     const createdNodes: { name: string; isValid: boolean }[] = [];
     const context = createControllerContext();
     let embeddedMap: { initialize(): void; onFirstReady(callback: () => void): void } | null = null;
     const selected: number[] = [];
-    const exports: Record<string, unknown> = {};
-    runInNewContext(ts.transpileModule(readFileSync('assets/script/app/main/MainTabHost.ts', 'utf8'), {
-        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
-    }).outputText, { exports, console: { warn() {} }, require(name: string) {
+    let host: InstanceType<HostType>;
+    type HostType = new () => { activateBackgroundWarmup(): void; onLoad(): void; navBar: unknown; defaultTab: number; switchTab(index: number): Promise<void>; onDestroy(): void; renderNav(index: number): void; currentTab: number; currentPage: unknown; whenFirstScreenReady: Promise<void>; };
+    const resolveImport = (name: string): unknown => {
+        if (name.endsWith('/ControllerBase')) return { ControllerBase };
+        if (name.endsWith('/ViewLifecycle')) return { VIEW_LIFECYCLE };
+        if (name.endsWith('/MainTabHost')) return { MainTabHost: host.constructor, MainTab };
+        if (name.endsWith('/MainPageComposition')) return { MainPageComposition: class {
+            territory = embeddedMap;
+            constructor(_context: unknown, _node: unknown, presented: () => void) { if (embeddedMap) { embeddedMap.initialize(); embeddedMap.onFirstReady(presented); } }
+            dispose() {}
+        } };
+        if (name.endsWith('/MainTabController')) return { MainTabController };
+        if (name.endsWith('/MainTabModel')) return { MainTab };
+        if (name.endsWith('/MainTabEvents')) return { MainTabEvent };
+        if (name.endsWith('/EventMgr')) return { EventMgr };
         if (name.endsWith('/ComponentController')) return componentControllerModule(context);
         if (name.endsWith('/GameNet')) return { GameNet: { instance: { removeCaller: (owner: object) => releasedOwners.push(owner) } } };
         if (name.endsWith('/ProcedureManager')) return { ProcedureManager: { instance: { context: createControllerContext() } } };
@@ -48,7 +66,7 @@ function harness(worldGate?: Promise<void>) {
                 setParent(): void {}
                 destroy(): void { this.isValid = false; }
             }
-            return { _decorator: { ccclass: () => (value: unknown) => value, property: () => () => {} },
+            return { Button: { EventType: { CLICK: 'click' } }, _decorator: { ccclass: () => (value: unknown) => value, property: () => () => {} },
                 Component: class {
                     isValid = true;
                     scheduleOnce(callback: () => void): void { scheduled.push(callback); }
@@ -105,7 +123,13 @@ function harness(worldGate?: Promise<void>) {
         if (name.endsWith('/MainTabItems')) return { mainTabItem: () => ({}) };
         if (name.endsWith('/FirstRechargeAutoOpen')) return { checkFirstRechargeOnEnterMain: async () => { firstRechargeChecks++; } };
         return {};
-    } });
+    };
+    const load = (path: string) => {
+        const exports: Record<string, unknown> = {};
+        runInNewContext(ts.transpileModule(readFileSync(path, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true } }).outputText, { exports, console: { warn() {} }, require: resolveImport });
+        return exports;
+    };
+    const exports = load('assets/script/app/main/MainTabHost.ts');
     const Host = exports.MainTabHost as new () => {
         activateBackgroundWarmup(): void;
         onLoad(): void; navBar: unknown; defaultTab: number;
@@ -113,12 +137,18 @@ function harness(worldGate?: Promise<void>) {
         renderNav(index: number): void; currentTab: number; currentPage: unknown;
         whenFirstScreenReady: Promise<void>;
     };
-    const host = new Host();host.renderNav = (index) => { selected.push(index); };
+    host = new Host();host.renderNav = (index) => { selected.push(index); };
     Object.assign(context.assets, { load: (path: string, _type: unknown, options: { scope: ResourceScope; bundle?: string }) => new Promise((resolve,reject) => {
         requests.push({path,bundle:options.bundle,scope:options.scope,resolve,reject});
     }) });
     host.navBar = { getComponentsInChildren: () => buttons };
     Object.assign(context.sessionAssets, { pauseWarmup() { pauses++; }, warmup: async () => { warmups++; }, warmupBattle: async () => { battleWarmups++; } });
+    const Composition = load('assets/script/app/bootstrap/main/MainTabsComposition.ts').MainTabsComposition as new (context: unknown, host: unknown) => { tabs: MainTabController<unknown> };
+    const composition = new Composition(context, host);
+    composition.tabs.start();
+    // The navigation tests call the external controller; actual view routes are tested separately.
+    host.switchTab = index => composition.tabs.switchTab(index);
+    Object.defineProperty(host, 'currentTab', { get: () => composition.tabs.snapshot.currentTab });
     const attachMap = () => {
         let ready: (() => void) | null = null;
         embeddedMap = {
@@ -127,7 +157,7 @@ function harness(worldGate?: Promise<void>) {
         };
         return { fireReady() { if (ready) ready(); } };
     };
-    return { releasedOwners, fireAfterDraw() { for (const cb of [...afterDraw]) { afterDraw.delete(cb); cb(); } }, host, requests, pages, selected, buttons, scheduled, createdNodes, attachMap, get pauses() { return pauses; }, get worldOpenCalls() { return worldOpenCalls; }, get warmups() { return warmups; }, get battleWarmups() { return battleWarmups; }, get firstRechargeChecks() { return firstRechargeChecks; }, get worldOpened() { return worldOpened; } };
+    return { clickWorld() { buttonSelect?.(); }, releasedOwners, fireAfterDraw() { for (const cb of [...afterDraw]) { afterDraw.delete(cb); cb(); } }, host, requests, pages, selected, buttons, scheduled, createdNodes, attachMap, get pauses() { return pauses; }, get worldOpenCalls() { return worldOpenCalls; }, get warmups() { return warmups; }, get battleWarmups() { return battleWarmups; }, get firstRechargeChecks() { return firstRechargeChecks; }, get worldOpened() { return worldOpened; } };
 }
 
 test('主界面宿主销毁时统一解除自身的网络回调', () => {
@@ -197,7 +227,8 @@ test('新页失败保留当前页，销毁宿主后迟到完成不能创建页�
 
 test('真实世界按钮取消未完成切页，迟到页不能覆盖世界高亮', async () => {
     const h = harness(); h.host.defaultTab = 3; h.host.onLoad();
-    await h.buttons[0].select!();
+    h.clickWorld();
+    await new Promise(resolve => setImmediate(resolve));
     assert.equal(h.requests[0].scope.disposed, true);
     h.requests[0].resolve({ name: 'late-arena' });
     await new Promise(resolve => setImmediate(resolve));

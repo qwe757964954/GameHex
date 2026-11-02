@@ -21,6 +21,8 @@ const PANEL_CID = 'bf856EjpalDq6B8iax9zQC3';
 const SLOT_CID = '854a5dTnHtCB5BhgTSD4G22';
 const VSCROLL_CID = '544earF5qRLB4JTuTnSr11+';
 const REWARD_ITEM = assetPath('ui/common/RewardItem.prefab');
+/** 「领地关卡」弹窗 —— 用户点名的**字号真源**（`BtnPrimary` 那颗按钮）。 */
+const LEVEL_INFO_PANEL = assetPath('ui/main/LevelInfoPanel.prefab');
 const LEGACY_CID = 'f3e6eFvndtG1IIA9yqo3RTp'; // BigMapTargetPanel（通用关卡弹窗，换组件后必须彻底消失）
 
 type Obj = Record<string, any>;
@@ -119,6 +121,76 @@ test('玩家关卡弹窗：两颗按钮各带一份货币费用，关闭按钮�
     for (const costNode of ['CostBg', 'CostIcon', 'CostLabel']) {
         const child = childNamed(close, costNode);
         if (child) assert.equal(child._active, false, `Close/${costNode} 必须收起（× 按钮不该带价格）`);
+    }
+});
+
+/**
+ * 2026-10-31 用户：「异步据点弹窗【侦查】【开始战斗】字体放大 1.5 倍，
+ * 开始战斗按钮的消耗资源的数字需要和侦查按钮的数字一样大」。
+ * 同日 17:56 改口（先只点名侦查，18:00 追认两颗）：「异步据点侦查按钮的字体需要和
+ * 关卡信息弹窗按钮的字体大小一致」→ **两颗按钮** 都回到 **30 / 41 / 1.8**
+ * （= `ui/main/LevelInfoPanel.prefab` 的 `BtnPrimary/Label`），上午的 1.5× 整条退役。
+ * 费用数字继续同号（那是另一条口径，没被收回）。
+ *
+ * ⚠️ 费用数字那半句**不是**字号不一致 —— 两颗 `CostLabel` 从来都是 24 号，
+ * 差别出在 `_overflow = SHRINK` + 框宽 28：`10` 约 27px 塞得下，`100` 约 40px 塞不下，
+ * 于是 `100` 被 SHRINK 按比例缩小。**只改字号是治不好的**（改了还是被缩），
+ * 必须让框宽装得下 3 位数。
+ */
+test('玩家关卡弹窗：两颗按钮字号都与「领地关卡」弹窗按钮一致，费用数字两颗同大', () => {
+    const panel = nodeByName('Panel');
+    assert.ok(panel);
+
+    // 参照 = `ui/main/LevelInfoPanel.prefab` 的 `BtnPrimary/Label` —— 用户说的是
+    // 「和关卡信息弹窗按钮的字体大小一致」，所以口径写死在**那张 prefab** 上，不抄一份数字：
+    // 以后关卡弹窗按钮再调字号，这条会跟着一起报红，提醒同步。
+    const levelObjects = JSON.parse(readFileSync(LEVEL_INFO_PANEL, 'utf8')) as Obj[];
+    const levelAt = (ref: Obj): Obj => levelObjects[ref.__id__];
+    const levelChildren = (node: Obj): Obj[] => (node._children ?? []).map(levelAt);
+    const levelPanel = levelObjects.find((o) => o?.__type__ === 'cc.Node' && o._name === 'Panel')!;
+    const levelPrimary = levelChildren(levelPanel).find((n) => n._name === 'BtnPrimary')!;
+    const levelLabelNode = levelChildren(levelPrimary).find((n) => n._name === 'Label')!;
+    const reference = (levelLabelNode._components ?? []).map(levelAt).find((c) => c?.__type__ === 'cc.Label')!;
+    const referenceSize = (levelLabelNode._components ?? []).map(levelAt)
+        .find((c) => c?.__type__ === 'cc.UITransform')!._contentSize;
+
+    for (const [name, caption] of [['BtnSecondary', '侦查'], ['BtnPrimary', '开始战斗']] as const) {
+        const labelNode = childNamed(childNamed(panel, name)!, 'Label');
+        const label = compOf(labelNode, 'cc.Label');
+        assert.ok(label, `${name}/Label 缺 cc.Label`);
+        assert.equal(label._fontSize, reference._fontSize,
+            `【${caption}】字号必须与「领地关卡」弹窗按钮一致（参照现在是 ${reference._fontSize}）`);
+        assert.equal(label._actualFontSize, reference._actualFontSize,
+            `${name}/Label 的 _actualFontSize 必须与参照同值（SHRINK 运行时读的是它）`);
+        assert.equal(label._lineHeight, reference._lineHeight, `${name}/Label 行高跟参照走`);
+        assert.equal(label._spacingX, reference._spacingX, `${name}/Label 字距跟参照走，否则同字号也看着不齐`);
+        // 具体数值也钉一遍：参照文件被改成别的数时，至少这里能说明"当时是 30 / 41 / 1.8"。
+        assert.equal(label._fontSize, 30, `2026-10-31 18:00 口径：${caption} = 领地关卡按钮 = 30`);
+        assert.equal(label._lineHeight, 41);
+        assert.equal(label._spacingX, 1.8);
+        const size = compOf(labelNode, 'cc.UITransform')!._contentSize;
+        assert.deepEqual([size.width, size.height], [referenceSize.width, referenceSize.height],
+            `${name}/Label 文本框尺寸也要和参照一致（框小了 SHRINK 会缩字，框高了文字会飘）`);
+        assert.ok(size.height >= label._lineHeight,
+            `${name}/Label 节点高 ${size.height} < 行高 ${label._lineHeight} ⇒ SHRINK 会把字反缩回去`);
+    }
+
+    const costLabels = ['BtnSecondary', 'BtnPrimary'].map((name) => ({
+        name,
+        label: compOf(childNamed(childNamed(panel, name)!, 'CostLabel'), 'cc.Label')!,
+        width: compOf(childNamed(childNamed(panel, name)!, 'CostLabel'), 'cc.UITransform')!._contentSize.width,
+    }));
+    assert.equal(costLabels[1].label._fontSize, costLabels[0].label._fontSize,
+        '开始战斗的费用数字必须和侦查同号（用户口径：一样大）');
+    // Arial 数字宽 ≈ 0.56em，取 0.6 留一档余量；3 位数 = 「100」这一档，再长就该换排版了
+    const DIGIT_WIDTH_RATIO = 0.6;
+    for (const { name, label, width } of costLabels) {
+        const needed = label._fontSize * DIGIT_WIDTH_RATIO * 3;
+        assert.ok(width >= needed,
+            `${name}/CostLabel 框宽 ${width} 装不下 3 位数（需 ≥ ${needed.toFixed(1)}）⇒ `
+            + '「100」会被 SHRINK 缩小，读起来就比侦查的「10」小');
+        assert.equal(label._overflow, 2, `${name}/CostLabel 必须保持 SHRINK（框宽是兜底，不是裁剪）`);
+        assert.equal(label._lineHeight, 21, `${name}/CostLabel 行高不变（这次只动框宽，没动字号）`);
     }
 });
 

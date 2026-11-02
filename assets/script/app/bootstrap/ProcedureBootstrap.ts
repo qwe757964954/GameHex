@@ -1,5 +1,6 @@
 import { _decorator, Component } from 'cc';
 import { GameRoute } from '../../core/runtime/GameRoute';
+import { ResourceLoadManager } from '../../core/asset/ResourceLoadManager';
 import { AudioMgr, bindAudioToFramework } from '../../framework/audio/AudioMgr';
 import { FW } from '../../framework/FW';
 import { ProcedureManager } from '../../framework/procedure/ProcedureManager';
@@ -22,6 +23,7 @@ import { GameNet } from '../net/GameNet';
 import { GameSocketBridge } from '../gm/GameSocketBridge';
 
 const { ccclass } = _decorator;
+const RESOURCE_LOAD_CONCURRENCY = 4;
 
 /**
  * 应用组合根：这是唯一可以同时了解 framework、platform 和具体业务流程的地方。
@@ -31,6 +33,7 @@ const { ccclass } = _decorator;
 @ccclass('ProcedureBootstrap')
 export class ProcedureBootstrap extends Component {
     public static __cname: string = 'ProcedureBootstrap';
+    private resourceLoads: ResourceLoadManager | null = null;
 
     /** 真实支付发货广播：`CmdRecharge.rewards` 才是本次到账明细。 */
     private readonly onRechargeSettled = (msg: CmdRechargeBroMsg): void => {
@@ -78,7 +81,8 @@ export class ProcedureBootstrap extends Component {
         registerRdVars();
 
         const manager = this.getComponent(ProcedureManager) ?? this.addComponent(ProcedureManager);
-        const assets = new CocosAssetService();
+        const assets = new ResourceLoadManager(new CocosAssetService(), { maxConcurrentLoads: RESOURCE_LOAD_CONCURRENCY });
+        this.resourceLoads = assets;
         const configs = new RefConfigService();
         const callbackOwners = GameNet.instance.callbackOwners;
         PopupManager.inst.initialize(assets, callbackOwners);
@@ -104,6 +108,8 @@ export class ProcedureBootstrap extends Component {
     }
 
     onDestroy(): void {
+        this.resourceLoads?.dispose();
+        this.resourceLoads = null;
         GameNet.instance.removeEvent('CmdRechargeBroMsg', this, this.onRechargeSettled);
     }
 }

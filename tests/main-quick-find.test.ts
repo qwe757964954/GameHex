@@ -1,3 +1,5 @@
+import { VIEW_LIFECYCLE } from '../assets/script/framework/ui/ViewLifecycle';
+import { MainTab } from '../assets/script/app/main/MainTabModel';
 import { CHEST_EVENTS } from '../assets/script/app/main/ChestEvents';
 import { componentControllerModule } from './helpers/controller-context';
 import { createControllerContext } from './helpers/controller-context';
@@ -29,7 +31,7 @@ function loadComponent<T>(name: string, imports: Record<string, unknown>): new (
             module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true,
         },
     }).outputText;
-    runInNewContext(code, { exports, require: (id: string) => id.endsWith('/ComponentController') ? componentControllerModule() : imports[id] ?? {} });
+    runInNewContext(code, { exports, require: (id: string) => id.endsWith('/EventMgr') ? { EventMgr } : id.endsWith('/ViewLifecycle') ? { VIEW_LIFECYCLE } : id.endsWith('/ComponentController') ? componentControllerModule() : imports[id] ?? {} });
     assert.ok(exports[name]);
     return exports[name];
 }
@@ -74,7 +76,7 @@ const cc = {
     },
 };
 
-test('quick-find button invokes the injected map action without navigating to matching', () => {
+test('quick-find button dispatches focusLevel without navigating to matching', () => {
     const routes: unknown[] = [];
     let findCount = 0;
     let click: (() => void) | undefined;
@@ -99,11 +101,14 @@ test('quick-find button invokes the injected map action without navigating to ma
         nextChapterButton: { active: false, on() {} },
         chestBar: { bindCollapse() {} },
     });
-    page.bindFindCurrentBoss(() => { findCount++; });
+    page.hasTerritoryMap = true;
+    const listener = {};
+    EventMgr.instance.on(mvcEvents.TerritoryUiEvent.Intent, () => { findCount++; }, listener);
     page.onLoad();
     assert.ok(click);
     click();
     assert.equal(findCount, 1);
+    EventMgr.instance.offTarget(listener);
     assert.deepEqual(routes, []);
     EventMgr.instance.offTarget(page);
 });
@@ -211,51 +216,25 @@ test('Boss focus stops map inertia and scrolls to the selected cell; missing tar
     });
     const owner = {};
     EventMgr.instance.on(mvcEvents.TerritoryUiEvent.Intent, (event: mvcEvents.ITerritoryIntentEvent) => {
-        assert.equal(event.intent.kind, 'focusBoss');
+        assert.equal(event.intent.kind, 'focusLevel');
         if (cellId !== null) (mapView as unknown as { onCommand(event: mvcEvents.ITerritoryCommandEvent): void }).onCommand({
             command: { kind: 'focusCell', cellId },
         });
     }, owner);
-    mapView.focusCurrentBoss();
+    mapView.focusCurrentLevel();
     const expected = territoryMapOffsetForCell(layout, 135, viewport);
     assert.deepEqual(calls, [['stop'], [expected.x, expected.y, 0]]);
     cellId = null;
-    mapView.focusCurrentBoss();
+    mapView.focusCurrentLevel();
     assert.equal(calls.length, 2);
     EventMgr.instance.offTarget(owner);
 });
 
-test('main tab host binds quick find to the embedded map before the page becomes active', () => {
-    let bound: (() => void) | undefined;
-    let focusCount = 0;
-    class MapStub {
-
-        initialize() {}
-        onFirstReady() {}
-        focusCurrentBoss() { focusCount++; }
-    }
-    class PageStub {
-        bindFindCurrentBoss(handler: () => void) { bound = handler; }
-    }
-    const map = new MapStub();
-    const mainPage = new PageStub();
-    const page = {
-        getComponentInChildren: () => map,
-        getComponent: (type: unknown) => type === PageStub ? mainPage : null,
-        setParent: () => assert.equal(typeof bound, 'function', 'binding must precede onLoad'),
-        setPosition() {},
-    };
-    const Host = loadComponent<{ showPage(prefab: unknown): void }>('MainTabHost', {
-        cc: { ...cc, instantiate: () => page, Vec3: { ZERO: {} } },
-        './MainTerritoryMap': { MainTerritoryMap: MapStub },
-        './MainPage': { MainPage: PageStub },
-    });
-    const host = new Host();
-    Object.assign(host, { content: {} });
-    host.showPage({});
-    assert.ok(bound);
-    bound();
-    assert.equal(focusCount, 1);
+test('composition connects quick find availability before mounting the page', () => {
+    const page = readFileSync('assets/script/app/bootstrap/main/MainPageComposition.ts', 'utf8');
+    const tabs = readFileSync('assets/script/app/bootstrap/main/MainTabsComposition.ts', 'utf8');
+    assert.match(page, /main\.hasTerritoryMap = true/);
+    assert.ok(tabs.indexOf('new MainPageComposition') < tabs.indexOf('this.host.mountPage(node)'));
 });
 
 test('battle return focus survives loading, is consumed once, and ignores another chapter', () => {

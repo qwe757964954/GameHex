@@ -43,9 +43,6 @@ import {
     QUALITY_FRAME_ROOT,
 } from '../activity/LayerActivityArt';
 
-/** 「品质档(1..4) → 品质框帧」。 */
-type QualityFrameMap = ReadonlyMap<number, SpriteFrame | null>;
-
 /** 一次预加载的结果句柄；所有取值方法都是**同步**的。 */
 export interface ILeagueRewardArt {
     /** 某个 `resId` 的图标帧（`null` = 没解析出 / 没加载上 ⇒ 格子里隐藏图标）。 */

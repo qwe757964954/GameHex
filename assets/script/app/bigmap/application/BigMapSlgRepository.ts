@@ -151,12 +151,29 @@ export class BigMapSlgRepository {
         const response = bigMapServerRecord(await this.request('CmdSlgActionUpdateReqMsg', {}));
         const remaining = bigMapServerUint(bigMapServerRecord(response?.info)?.nextRevertTime);
         if (this.isDisposed || remaining === null) return false;
-        // nextRevertTime 是剩余秒数，不是 Unix 时间，也不代表当前行动力数量。
+        // `nextRevertTime` 是**剩余秒数**，不是 Unix 时间，也不代表当前行动力数量 ——
+        // 协议里没有余额字段，界面只展示倒计时，不拿它反推总量。
+        // `0` = 当前没有恢复计划（体力满）⇒ `actionRecoverAt` 置 0，`tick` 据此停止轮询。
         this.actionRecoverAt = remaining > 0 ? this.now() + remaining : 0;
         this.emit();
         return true;
     }
 
+    /**
+     * 由 `BigMapController` 每 500ms 调一次（内部 5 秒节流）。
+     *
+     * 行动力是**轮询**的（2026-10-30 山猫口径）：`SlgGameActionInfo.nextRevertTime` 是
+     * 「距下次恢复的剩余**秒数**」，客户端折算成 `actionRecoverAt`；到点就再发一次
+     * `CmdSlgActionUpdateReqMsg`，回包重新设定下一次 —— 如此循环，直到服务端说「没有恢复计划」。
+     *
+     * 三个取舍：
+     * 1. `nextRevertTime = 0` ⇒ `actionRecoverAt = 0` ⇒ **停止轮询**。0 的含义是「当前没有待恢复」
+     *    （体力已满 / 服务端不给计划），继续轮询就是每 5 秒白打一次服务器。
+     * 2. 到点后**最多延迟 5 秒**才发（节流窗口），对分钟级的行动力恢复可接受；
+     *    要更准就调小这里的步长，但别去掉节流 —— `tick` 本身是 500ms 一次的。
+     * 3. 请求失败**不改** `actionRecoverAt`（`loadAction` 里 `remaining === null` 直接 return，
+     *    旧时间戳原地不动）⇒ 下一轮 tick 自然重试，不会把倒计时抹成 0 或 NaN。
+     */
     tick(): void {
         if (this.isDisposed || this.now() < this.nextPollAt) return;
         this.nextPollAt = this.now() + 5;

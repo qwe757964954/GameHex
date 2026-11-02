@@ -106,7 +106,9 @@ function createBattlePageProbe(presenter: TerritoryPresenter) {
 
 test('关卡按钮等有效开战回包后才收弹窗，关闭事件不能取消刚发出的请求', async () => {
     const gateway = createFakeGateway({ fetch: {
-        ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [367, 213], passCells: [367] },
+        // passCells 必须含 252：2026-10-31 起快速寻敌的目标是「推进到的那一关」，
+        // 不把 1-4 记为已通过的话它会停在 252（第 4 关），而不是 213（第 5 关 Boss）。
+        ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [367, 213], passCells: [367, 252] },
     } });
     let reply: (result: TerritoryStartBattleResult) => void = () => {};
     gateway.gateway.startBattle = () => new Promise((resolve) => { reply = resolve; });
@@ -114,7 +116,7 @@ test('关卡按钮等有效开战回包后才收弹窗，关闭事件不能取�
     const probe = createBattlePageProbe(h.presenter);
     try {
         await flush();
-        assert.equal(h.presenter.focusCurrentBoss(), 213);
+        assert.equal(h.presenter.focusCurrentLevel(), 213);
         probe.page.onDetailStart();
         assert.equal(probe.closes(), 0, '请求在途不能触发 DETAIL_CLOSE 并作废 requestId');
         reply({ ok: true, battle: fakeBattleStart });
@@ -130,7 +132,7 @@ test('关卡按钮等有效开战回包后才收弹窗，关闭事件不能取�
 
 test('关卡开战被拒绝时保留详情可重试，玩家主动关闭仍取消迟到回包', async () => {
     const gateway = createFakeGateway({ fetch: {
-        ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [367, 213], passCells: [367] },
+        ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [367, 213], passCells: [367, 252] },
     } });
     let reply: (result: TerritoryStartBattleResult) => void = () => {};
     let requests = 0;
@@ -139,7 +141,7 @@ test('关卡开战被拒绝时保留详情可重试，玩家主动关闭仍取�
     const probe = createBattlePageProbe(h.presenter);
     try {
         await flush();
-        h.presenter.focusCurrentBoss();
+        h.presenter.focusCurrentLevel();
         probe.page.onDetailStart();
         reply({ ok: false, reason: 'failed' });
         await flush();
@@ -240,11 +242,12 @@ function createBossFindLoader() {
 
 test('quick find opens current Boss detail without unlocking, charging, or starting battle', async () => {
     const h = createHarness({ loader: createBossFindLoader(), gateway: createFakeGateway({ fetch: {
-        ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [367, 213], passCells: [367] },
+        // 1-4 已通关 ⇒ 目标推进到第 5 关（Boss 213）
+        ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [367, 213], passCells: [367, 252] },
     } }) });
     h.presenter.start();
     await flush();
-    assert.equal(h.presenter.focusCurrentBoss(), 213);
+    assert.equal(h.presenter.focusCurrentLevel(), 213);
     assert.ok(h.presenter.state.detail.levelInfo, '关卡界面必须弹');
     assert.equal(h.presenter.state.detail.levelInfo?.title, '首领关卡  5');
     assert.equal(h.presenter.state.detail.levelInfo?.fightEnabled, true, 'server-unlocked Boss remains challengeable');
@@ -262,20 +265,51 @@ test('quick find opens current Boss detail without unlocking, charging, or start
     h.presenter.dispose();
 });
 
-test('locked Boss detail uses the existing unlock-then-start flow and cannot cancel an in-flight request', async () => {
+test('quick find stops at the unpassed ordinary level instead of skipping ahead to the Boss', async () => {
+    // 2026-10-31 用户：「跳到当前章节地图上最新一个未通过的关卡，如果没有未通过的关卡，
+    // 就打开已通过的关卡」。夹具里有第 4 关（普通关 252）和第 5 关（Boss 213）——
+    // 只通过起点时，目标必须是**第 4 关**，而不是老逻辑那样一步跳到第 5 关 Boss。
+    //
+    // 🔴 「只挑已解锁的」（同日追加）：`unlockCells` 必须真的把第 4 关解锁掉，否则 252 会被
+    //    `isLevelUnlocked` 过滤、一个候选都不剩（返回 `null`）。这不是夹具凑数——服务端解锁
+    //    `/ 通关后的邻格放行` 就是这个字段，测试里不给事实，就等于测「服务端什么都没解锁」。
     const h = createHarness({ loader: createBossFindLoader(), gateway: createFakeGateway({ fetch: {
-        ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [367, 252], passCells: [367, 252] },
+        ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [367, 252], passCells: [367] },
     } }) });
     h.presenter.start();
     await flush();
-    assert.equal(h.presenter.focusCurrentBoss(), 213);
+    assert.equal(h.presenter.focusCurrentLevel(), 252, '目标是推进到的那一关（第 4 关），不是后面的 Boss');
+    assert.equal(h.presenter.state.detail.levelInfo?.title, '领地关卡  4', '普通关同样要弹关卡界面');
+    assert.equal(h.gatewayCalls.unlock, 0, '快速寻敌只开详情，不代玩家解锁');
+    assert.equal(h.gatewayCalls.startBattle, 0);
+    assert.equal(h.gatewayCalls.pass, 0);
+    assert.equal(h.nav.length, 0);
+    h.presenter.dispose();
+});
+
+test('解锁状态没拉回来时快速寻敌照样敢选：详情「解锁后开战」，点头先解锁再开战', async () => {
+    // 「只挑已解锁的」用的是 `isUnlockable` 而**不是** `isCellUnlocked`（见
+    // `TerritoryProgress.isUnlockable`：服务端状态没确认过就一律放行）。
+    // 这条用例守的就是那个「不知道 ≠ 没解锁」的兜底 —— 弱网下如果直接按"没解锁"过滤，
+    // 快速寻敌会一个候选都没有、返回 `null`，按钮变死。
+    //
+    // 也正因为有这条兜底，「解锁后开战」这个文案不是死代码：拉不到解锁状态时，
+    // 快速寻敌仍可能选中一个实际锁着的关卡，详情就该老老实实写「解锁后开战」，
+    // 由「开始战斗」按钮先补一次解锁（`handleBattleStationStart` 第一步）。
+    const h = createHarness({ loader: createBossFindLoader(), gateway: createFakeGateway({ fetch:
+        { ok: false, reason: 'offline', state: emptyCellState(1) } }) });
+    h.presenter.start();
+    await flush();
+    assert.equal(h.presenter.state.progress?.serverStateKnown, false, '夹具前提：解锁状态确实没拉到');
+    // 夹具里只绑了第 4 / 5 / 10 关，所以「最前沿的未通关关卡」就是第 4 关 252。
+    assert.equal(h.presenter.focusCurrentLevel(), 252, '状态未知 ⇒ 照样给出最前沿的关卡，不许返回 null');
     assert.equal(h.presenter.state.detail.levelInfo?.fightCaption, '解锁后开战');
     h.presenter.requestBattle();
-    assert.equal(h.presenter.focusCurrentBoss(), null, 'quick find must not invalidate a pending write');
+    assert.equal(h.presenter.focusCurrentLevel(), null, 'quick find must not invalidate a pending write');
     await flush();
-    assert.equal(h.gatewayCalls.unlock, 1);
-    assert.equal(h.gatewayCalls.startBattle, 0);
-    assert.ok(h.presenter.state.detail.levelInfo, '关卡界面必须弹');
+    assert.equal(h.gatewayCalls.unlock, 1, '第一步只解锁');
+    assert.equal(h.gatewayCalls.startBattle, 0, '解锁回包不会顺手把战斗发出去');
+    assert.ok(h.presenter.state.detail.levelInfo, '关卡界面必须还开着');
     assert.equal(h.presenter.state.detail.levelInfo?.fightCaption, '开始战斗');
     h.presenter.requestBattle();
     await flush();
@@ -343,14 +377,19 @@ test('已通关的首领同样可重复挑战，弹窗按钮保持「开始战�
 
 test('quick find falls back to the latest cleared Boss and starts a server battle without unlocking again', async () => {
     const h = createHarness({ loader: createBossFindLoader(), gateway: createFakeGateway({ fetch: {
-        ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [367], passCells: [367, 193] },
+        ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [367], passCells: [367, 252, 193] },
     } }) });
     h.presenter.start();
     await flush();
-    assert.equal(h.presenter.focusCurrentBoss(), 105);
+    // 「没有未通过的关卡」= 整条关卡链都通了。夹具只回几个 passCells 表示不了这件事，
+    // 而剩下没通关的格子又都还锁着（`isLevelUnlocked` 会过滤）—— 所以这里像
+    // `territory-stage-binding` 的全通用例一样，直接把整张图的格子记成已通关。
+    const map = h.presenter.state.map!;
+    for (const site of map.sites) h.presenter.state.progress!.markCellPassed(site.cellId);
+    assert.equal(h.presenter.focusCurrentLevel(), 105);
     assert.equal(h.presenter.state.detail.levelInfo?.title, '首领关卡  10');
     h.presenter.state.progress!.markCellPassed(85);
-    assert.equal(h.presenter.focusCurrentBoss(), 105);
+    assert.equal(h.presenter.focusCurrentLevel(), 105);
     assert.ok(h.presenter.state.detail.levelInfo, '关卡界面必须弹');
     assert.equal(h.presenter.state.detail.levelInfo?.fightEnabled, true);
     h.presenter.requestBattle();
@@ -365,7 +404,7 @@ test('quick find falls back to the latest cleared Boss and starts a server battl
 
 test('quick find handles loading without requests or navigation', () => {
     const h = createHarness({ loader: createBossFindLoader() });
-    assert.equal(h.presenter.focusCurrentBoss(), null);
+    assert.equal(h.presenter.focusCurrentLevel(), null);
     assert.equal(h.tips.at(-1), '领地数据加载中，请稍候');
     h.presenter.dispose();
     assert.equal(h.gatewayCalls.startBattle, 0);
@@ -1882,7 +1921,7 @@ test('server pass cells are merged into local ownership', async () => {
 
 // ── 切章 / dispose ─────────────────────────────────────────────────────
 
-for (const update of ['broadcast', 'snapshot'] as const) test(`passing a nonrepresentative area cell via ${update} immediately unlocks the next chapter`, async () => {
+for (const update of ['broadcast', 'snapshot'] as const) test(`passing a nonrepresentative area cell via ${update} automatically enters the next chapter`, async () => {
     const loader = createFakeLoader();
     loader.loader.load = async (chapterId) => ({
         ...bundle,
@@ -1901,14 +1940,66 @@ for (const update of ['broadcast', 'snapshot'] as const) test(`passing a nonrepr
     });
     if (update === 'broadcast') h.presenter.applyPassCellsBro(1, [3]);
     else h.presenter.applyCellInfoState({ levelChapter: 1, rewardState: 0, unlockCells: [3], passCells: [3] });
-    assert.deepEqual(published, [true], 'publish the unlocked HUD immediately without reopening the page');
-    assert.equal(h.presenter.state.progress?.isOwned(1), false, 'do not invent ownership of representative cells');
-    assert.equal(h.presenter.state.progress?.isAreaPassed(1), true);
-    assert.equal(h.presenter.state.hud?.nextEnabled, true, 'use the same area completion rule as the map');
-    assert.match(h.presenter.state.hud?.chapterText ?? '', /已占领 1\/1/);
-    h.presenter.switchChapter(1);
+    assert.equal(published[0], true, 'publish completion before starting the next chapter');
     await flush();
     assert.equal(h.presenter.state.chapterId, 2);
+    assert.equal(h.presenter.state.ready, true);
+    assert.equal(h.presenter.state.progress?.isOwned(1), false, 'do not invent ownership of representative cells');
+    h.presenter.applyPassCellsBro(1, [3]);
+    assert.equal(h.presenter.state.chapterId, 2, 'late old chapter pushes cannot advance again');
+    h.presenter.dispose();
+});
+
+test('battle return advances a newly completed chapter but manual review stays in that chapter', async () => {
+    const loader = createFakeLoader();
+    loader.loader.load = async (chapterId) => ({ ...bundle, mapJson: { ...mapJson, chapterId } });
+    const gateway = createFakeGateway();
+    gateway.gateway.fetchChapterCells = async (chapterId) => ({ ok: true, state: {
+        levelChapter: chapterId, rewardState: 0, unlockCells: [1], passCells: chapterId === 1 ? [1] : [],
+    } });
+    const h = createHarness({ loader, gateway, chapters: [1, 2] });
+    h.presenter.start();
+    await flush();
+    assert.equal(h.presenter.state.chapterId, 2, 'fresh return snapshot should advance automatically');
+    h.presenter.switchChapter(-1);
+    await flush();
+    assert.equal(h.presenter.state.chapterId, 1, 'manual review must not immediately advance');
+    h.presenter.applyPassCellsBro(1, [1]);
+    await flush();
+    assert.equal(h.presenter.state.chapterId, 1, 'duplicate completion must not advance');
+    h.presenter.dispose();
+});
+
+test('auto advance stays on the final chapter and does not loop after a failed next chapter load', async () => {
+    const final = createHarness();
+    final.presenter.start();
+    await flush();
+    final.presenter.applyPassCellsBro(1, [1]);
+    await flush();
+    assert.equal(final.presenter.state.chapterId, 1);
+    assert.equal(final.presenter.state.ready, true);
+    final.presenter.dispose();
+
+    const loader = createFakeLoader();
+    let nextLoads = 0;
+    loader.loader.load = async (chapterId) => {
+        if (chapterId === 2) { nextLoads++; return null; }
+        return bundle;
+    };
+    const h = createHarness({ loader, chapters: [1, 2] });
+    h.presenter.start();
+    await flush();
+    h.presenter.applyPassCellsBro(1, [1]);
+    await flush();
+    assert.equal(nextLoads, 1);
+    assert.equal(h.presenter.state.chapterId, 1);
+    assert.equal(h.presenter.state.ready, true);
+    h.presenter.applyPassCellsBro(1, [1]);
+    await flush();
+    assert.equal(nextLoads, 1, 'duplicate push cannot create an automatic retry loop');
+    h.presenter.switchChapter(1);
+    await flush();
+    assert.equal(nextLoads, 2, 'manual arrow remains available to retry');
     h.presenter.dispose();
 });
 

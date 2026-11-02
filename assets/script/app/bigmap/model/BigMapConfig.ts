@@ -9,7 +9,7 @@ import {
     type IBigMapCityLevelConfig,
     type IBigMapConfig,
     type IBigMapMonsterConfig,
-    type IBigMapMonsterDrop,
+    type IBigMapDrop,
     type IBigMapProduceConfig,
     type IBigMapQueueConfig,
     type IBigMapRankConfig,
@@ -180,7 +180,7 @@ function resType(row: BigMapRow): BigMapResType {
  */
 export function parseBigMapConfig(tables: BigMapRawTables): IBigMapConfig {
     const world = parseWorld(table(tables, BIGMAP_TABLE.world)[0]);
-    const schedule = parseSchedule(table(tables, BIGMAP_TABLE.schedule)[0]);
+    const schedule = parseBigMapCitySchedule(table(tables, BIGMAP_TABLE.schedule)[0]);
     const buildingRows = table(tables, BIGMAP_TABLE.building);
     const buildings = new Map<number, IBigMapBuildingConfig>();
     let mainBuildingId = 0;
@@ -303,14 +303,20 @@ export function attachBigMapResourceItemIcons(
  *
  * 解析与校验放同一条链上（`parseBigMapClockTime` → `validateBigMapCitySchedule`），
  * 保证「表写错」和「代码里手写常量写错」炸在同一个地方。
+ *
+ * 对外导出是为了让单测能**只读 `bigmapSchedule` 一张表**验日程与兜底常量是否一致 ——
+ * 走整包 `parseBigMapConfig` 时，任何别的表坏了都会把这条守卫带红，判据就不干净了。
  */
-function parseSchedule(row: BigMapRow): IBigMapCitySchedule {
+export function parseBigMapCitySchedule(row: BigMapRow): IBigMapCitySchedule {
     const schedule: IBigMapCitySchedule = {
         utcOffsetSeconds: num(row, 'utcOffsetHours') * 3600,
         openAt: parseBigMapClockTime(text(row, 'openTime'), 'openTime'),
         lockAt: parseBigMapClockTime(text(row, 'lockTime'), 'lockTime'),
         settleAt: parseBigMapClockTime(text(row, 'settleTime'), 'settleTime'),
         snapshotAt: parseBigMapClockTime(text(row, 'snapshotTime'), 'snapshotTime'),
+        // 表里有这一列就用；没有（首版）先 0，真正的值由 `gameConfig.bigMapReFreshRankStopTime`
+        // 在 `applyBigMapScheduleOverrides` 里覆盖进来。
+        crossDayStopMinutes: optionalInt(row, 'crossDayStopMinutes', 0),
     };
     validateBigMapCitySchedule(schedule);
     return schedule;
@@ -644,7 +650,9 @@ function parseCamp(row: BigMapRow): IBigMapCampConfig {
         warScoreReset: campInt(row, 'warScoreReset', 0, Number.MAX_SAFE_INTEGER),
         buffGroupIds: campIds(row, 'buffGroupId'),
         buffEffectIds: campIds(row, 'buffEffectId'),
-        firstRewardId: campInt(row, 'firstRewardId', 0),
+        // 2026-10-30：单个 `firstRewardId` 换成两列掉落数组（首占 / 占领）。
+        firstReward: parseDropList(row, 'firstReward', '据点'),
+        occupyReward: parseDropList(row, 'occupyReward', '据点'),
         buffConNum: campInt(row, 'buffConNum', 0),
         buffRate: campNumber(row, 'buffRate'),
         iconPath: text(row, 'campIcon').trim(),
@@ -669,8 +677,8 @@ function parseMonster(row: BigMapRow): IBigMapMonsterConfig {
                 unlockValue: monsterInt(row, 'unlockValue', 0),
                 rallyOpen: monsterInt(row, 'rallyOpen', 0, 1) === 1,
                 rallyNum: monsterInt(row, 'rallyNum', 0),
-                firstKillDrops: parseMonsterDrops(row, 'firstKillDropId'),
-                normalDrops: parseMonsterDrops(row, 'normalDropId'),
+                firstKillDrops: parseDropList(row, 'firstKillDropId', '野怪'),
+                normalDrops: parseDropList(row, 'normalDropId', '野怪'),
                 iconPath: text(row, 'monsterHeaIcon'),
                 modelPath: text(row, 'monsterModel'),
             },
@@ -703,12 +711,18 @@ function monsterInt(row: BigMapRow, field: string, min: number, max = Number.MAX
     return value;
 }
 
-function parseMonsterDrops(row: BigMapRow, field: string): readonly IBigMapMonsterDrop[] {
+/**
+ * 掉落数组解析 —— **据点与野怪共用**（`firstReward` / `occupyReward` / `firstKillDropId` / `normalDropId`）。
+ *
+ * `owner` 只用于错误文案：配错时得能一眼看出是「据点」还是「野怪」的哪一列。
+ * 非数组直接抛：空数组是合法事实（没配奖励），字段缺失/写成对象则是配表事故。
+ */
+function parseDropList(row: BigMapRow, field: string, owner: string): readonly IBigMapDrop[] {
     const drops = row[field];
-    if (!Array.isArray(drops)) throw new Error(`[BigMap] 野怪字段 ${field} 必须为掉落数组`);
+    if (!Array.isArray(drops)) throw new Error(`[BigMap] ${owner}字段 ${field} 必须为掉落数组`);
     return drops.map((drop: unknown) => {
         if (!drop || typeof drop !== 'object' || Array.isArray(drop)) {
-            throw new Error(`[BigMap] 野怪字段 ${field} 存在非法掉落`);
+            throw new Error(`[BigMap] ${owner}字段 ${field} 存在非法掉落`);
         }
         const item = drop as BigMapRow;
         return {

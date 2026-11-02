@@ -23,11 +23,9 @@ export interface ITerritoryControllerOptions {
 /** Owns all business inputs and clocks. Views only send intents. */
 export class TerritoryController extends ControllerBase {
     private started = false;
-    private disposed = false;
     private stopping = false;
     private ticking = false;
     private stopOutput: (() => void) | null = null;
-    private readonly stops: Array<() => void> = [];
 
     private readonly model: TerritoryModel;
 
@@ -38,11 +36,12 @@ export class TerritoryController extends ControllerBase {
     }
 
     start(): void {
-        if (this.started || this.disposed) return;
+        if (this.started || this.isDisposed) return;
         this.started = true;
         this.stopOutput = this.model.onOutput((output) => this.onOutput(output));
         this.bindNetworkEvents();
-        this.stops.push(this.options.roleCache.subscribe(() => {
+        this.own(() => this.options.network.removeCaller(this));
+        this.own(this.options.roleCache.subscribe(() => {
             this.model.refreshWalletFromServer();
         }));
         this.bindUiEvents();
@@ -62,9 +61,9 @@ export class TerritoryController extends ControllerBase {
         if (state) this.model.applyCellInfoState(state);
     }
     private bindUiEvents(): void {
-        EventMgr.instance.on(TerritoryUiEvent.Intent, this.onIntent, this);
-        EventMgr.instance.on(TerritoryUiEvent.Ready, this.onReady, this);
-        EventMgr.instance.on(TerritoryUiEvent.Disposed, this.onDisposed, this);
+        this.listen(TerritoryUiEvent.Intent, this.onIntent);
+        this.listen(TerritoryUiEvent.Ready, this.onReady);
+        this.listen(TerritoryUiEvent.Disposed, this.onDisposed);
     }
     private onReady(): void {
         this.publish();
@@ -87,8 +86,8 @@ export class TerritoryController extends ControllerBase {
             case 'openLevelTip': this.model.openLevelTip(); break;
             case 'closeLevelTip': this.model.closeLevelTip(); break;
             case 'scout': this.command({ kind: 'tip', payload: { text: TERRITORY_TEXTS.asyncPlayerScoutUnavailable } }); break;
-            case 'focusBoss': {
-                const cellId = this.model.focusCurrentBoss();
+            case 'focusLevel': {
+                const cellId = this.model.focusCurrentLevel();
                 if (cellId !== null) this.command({ kind: 'focusCell', cellId });
                 break;
             }
@@ -107,8 +106,8 @@ export class TerritoryController extends ControllerBase {
         const state = this.model.state;
         if (state.ready && !this.ticking) {
             this.ticking = true;
-            this.stops.push(this.options.schedule(() => this.tick(false), 1));
-            this.stops.push(this.options.schedule(() => this.tick(true), 60));
+            this.own(this.options.schedule(() => this.tick(false), 1));
+            this.own(this.options.schedule(() => this.tick(true), 60));
         }
         EventMgr.instance.emit(TerritoryViewEvent.Render, { state: buildTerritoryViewState(state) });
     }
@@ -121,15 +120,12 @@ export class TerritoryController extends ControllerBase {
         EventMgr.instance.emit(TerritoryViewEvent.Command, { command });
     }
     dispose(): void {
-        if (this.disposed || this.stopping) return;
+        if (this.isDisposed || this.stopping) return;
         this.stopping = true;
-        EventMgr.instance.offTarget(this);
-        this.options.network.removeCaller(this);
-        for (const stop of this.stops.splice(0)) stop();
+        this.releaseInputs();
         this.model.dispose();
         this.stopOutput?.();
         this.stopOutput = null;
-        this.disposed = true;
         super.dispose();
     }
 }

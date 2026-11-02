@@ -51,7 +51,12 @@ export function buildZCBattleWarmupPaths(
     }
     for (const value of skills) {
         const row = rowOf(value);
-        if (row) add(row.effectPrefabPath);
+        if (row) {
+            add(row.effectPrefabPath);
+            //  命中附加表现（运动霸 203301「气浪」）：与 `ZCGameLoader` 的 effectPaths 同源，
+            //  两处都要收，否则「预下载清单里有、实战加载里没有」或反过来，都会让气浪首战缺席。
+            add(row.impactEffectPrefabPath);
+        }
     }
     for (const value of overrides) {
         const row = rowOf(value);

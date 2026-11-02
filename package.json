@@ -8,6 +8,10 @@
   },
   "scripts": {
     "test": "tsx --test tests/**/*.test.ts",
+    "verify": "node tools/verify/verify.mjs check",
+    "verify:full": "node tools/verify/verify.mjs full",
+    "verify:route": "node tools/verify/verify.mjs route",
+    "verify:baseline": "node tools/verify/verify.mjs baseline",
     "benchmark:zcds": "tsx tools/benchmark_zcds.ts",
     "test:hotupdate": "tsx --test tests/hot-update-core.test.ts",
     "test:hotupdate-native": "tsx --test tests/hot-update-native.test.ts",

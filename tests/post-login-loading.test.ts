@@ -209,7 +209,7 @@ test('会话基础资源合并并发 prepare，完成后可统一释放', async 
 });
 
 test('角色登录成功后先进入 PostLogin，由加载流程复用启动 UI 续走进度到 Main', () => {
-    const login = readFileSync('assets/script/app/login/LoginPage.ts', 'utf8');
+    const login = readFileSync('assets/script/app/login/LoginController.ts', 'utf8');
     const loading = readFileSync('assets/script/app/procedure/ProcedurePostLogin.ts', 'utf8');
     assert.match(login, /navigate\(GameRoute\.PostLogin/);
     assert.match(loading, /sessionAssets\.prepare/);

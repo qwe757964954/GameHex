@@ -1,8 +1,9 @@
 import { _decorator, Animation, Button, Component, Label, Node } from 'cc';
-import { FW } from '../../framework/FW';
 import { roleRepository } from './RoleRepository';
-import { ROLE_NAV_READY, isRoleBagTabReady } from './RoleTable';
-import { ROLE_TEXTS } from './RoleTexts';
+import { VIEW_LIFECYCLE } from '../../framework/ui/ViewLifecycle';
+import { RoleEvent } from './RoleEvents';
+import { EventMgr } from '../../framework/event/EventMgr';
+import type { IRoleSnapshot } from './RoleTypes';
 import { RedDot } from '../common/RedDot';
 import { CmdRedDotType } from '../generated/netProto/CmdInterface';
 import { readServerRedDot } from '../rd/RdServerVar';
@@ -11,7 +12,6 @@ import type { RoleBagTabId, RoleNavId } from './RoleTypes';
 import { RoleBagPanel } from './RoleBagPanel';
 import { RoleEquipSlot } from './RoleEquipSlot';
 import { loadRoleBagIcon, loadRoleQualityFrame } from './RoleArtLoader';
-import { MilitiaTalentPage } from './MilitiaTalentPage';
 
 const { ccclass, property } = _decorator;
 
@@ -21,9 +21,6 @@ const BAG_TAB_NODES: ReadonlyArray<readonly [string, RoleBagTabId]> = [
     ['BagTabEquip', 2],
     ['BagTabItem', 3],
 ];
-
-/** 民兵天赋的导航 id（`ROLE_NAV_READY` 白名单里唯一落地的一条）。 */
-const ROLE_NAV_TALENT: RoleNavId = 2;
 
 /** 左侧导航节点名 → nav id。 */
 const NAV_NODES: ReadonlyArray<readonly [string, RoleNavId]> = [
@@ -86,10 +83,10 @@ export class RolePage extends Component {
     //    声明成 `Label` / `RoleBagPanel` 会拿到一个 cc.Node（truthy），
     //    然后 `.node.on(...)` 抛 `Cannot read properties of undefined (reading 'on')`。
     @property({ type: Node, tooltip: 'BagPanel：背包列表面板节点（其上挂 RoleBagPanel）' })
-    bagPanel: Node = null;
+    bagPanel: Node = null!;
 
     @property({ type: Node, tooltip: 'PowerValue：战斗力数值节点（其上挂 cc.Label）' })
-    powerValue: Node = null;
+    powerValue: Node = null!;
 
     /** 当前选中的背包页签（null = 未选中）。 */
     private activeTab: RoleBagTabId | null = null;
@@ -98,19 +95,16 @@ export class RolePage extends Component {
     private readonly equipSlots: RoleEquipSlot[] = [];
 
     /** 宝石页签的红点（`BagTabGem/com_rd`，`RedDot` 组件）。 */
-    private gemTabRedDot: RedDot = null;
+    private gemTabRedDot: RedDot = null!;
 
     /** 缓存：BagPanel 节点上的面板组件（{@link ensureInit} 里取）。 */
-    private bagPanelComp: RoleBagPanel = null;
+    private bagPanelComp: RoleBagPanel = null!;
 
     /** 缓存：主角立绘上的 `cc.Animation`（进页面播 idle）。 */
-    private heroAnim: Animation = null;
+    private heroAnim: Animation = null!;
 
     /** 缓存：PowerValue 节点上的 Label。 */
-    private powerLabel: Label = null;
-
-    /** {@link ensureInit} 是否跑过（幂等标记）。 */
-    private inited = false;
+    private powerLabel: Label = null!;
 
     /** 每趟 `onEnable` 递增，丢弃过期的异步结果（切走时页面可能已被销毁）。 */
     private revision = 0;
@@ -124,6 +118,7 @@ export class RolePage extends Component {
 
     protected onLoad(): void {
         this.ensureInit();
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'ready' });
     }
 
     /**
@@ -133,28 +128,23 @@ export class RolePage extends Component {
      * 但同一个 tab 连点两次不会重建 —— 两种情况都要保证数据是最新的。
      */
     protected onEnable(): void {
-        void this.refresh();
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'enabled' });
     }
 
-    /**
-     * 取组件 + 接回调（幂等）。
-     *
-     * ⚠️ 不能只放在 `onLoad` 里一次性做完 —— 但也不能放 `onEnable`（会重复挂监听）。
-     * 这里保持「只跑一次」的语义，`onLoad` 调一次即可；写幂等是为了防将来有人
-     * 在 `onEnable` 里也调（重复挂监听是最难查的静默故障）。
-     */
+    selectBag(tab: RoleBagTabId): void { this.activeTab = tab; this.applyTabLook(); }
+    showBag(tab: RoleBagTabId): Promise<void> { return this.bagPanelComp.show(tab); }
+
+    /** 仅由 onLoad 取得 prefab 引用并绑定输入。 */
     private ensureInit(): void {
-        if (this.inited) return;
-        this.inited = true;
 
         for (const [name, tab] of BAG_TAB_NODES) {
             const button = this.node.getChildByName(name)?.getComponent(Button);
-            button?.node.on(Button.EventType.CLICK, () => void this.onClickBag(tab), this);
+            button?.node.on(Button.EventType.CLICK, () => EventMgr.instance.emit(RoleEvent.Intent, { owner: this, kind: 'bag', tab }), this);
         }
 
         for (const [name, navId] of NAV_NODES) {
             const button = this.node.getChildByName(name)?.getComponent(Button);
-            button?.node.on(Button.EventType.CLICK, () => this.onClickNav(navId), this);
+            button?.node.on(Button.EventType.CLICK, () => EventMgr.instance.emit(RoleEvent.Intent, { owner: this, kind: 'nav', navId }), this);
         }
 
         // prefab 已绑好，不判空：绑错应当场抛出来，而不是静默留个死界面。
@@ -180,10 +170,8 @@ export class RolePage extends Component {
     }
 
     /** 刷数据：攻击力 / 主角 idle / 装备栏 / 背包列表 / 红点。 */
-    private async refresh(): Promise<void> {
-        const rev = (this.revision += 1);
-        const snapshot = await roleRepository.load();
-        if (!this.alive || rev !== this.revision) return;
+    async renderSnapshot(snapshot: IRoleSnapshot): Promise<void> {
+        const rev = ++this.revision;
 
         // 攻击力**无条件写**（规则 82）：0 也显示成 "0" —— 留白会被误读成"压根没接"。
         this.powerLabel.string = String(snapshot.power);
@@ -203,18 +191,18 @@ export class RolePage extends Component {
         // ⇒ 那些红点保持不亮（`RedDot` 默认收起），等口径定下来再接。
         this.gemTabRedDot.setRedDot(readServerRedDot(CmdRedDotType.GEM_COMPOSE));
 
-        const tab: RoleBagTabId = 1;
-        this.activeTab = tab;
-        await this.bagPanelComp.show(tab);
-        this.applyTabLook();
-
-        // 气泡最后起（老端 enter() 的最后一步也是 showQiPao）—— 等级读缓存，与加载时序无关。
         this.showQipao();
+    }
+
+    protected onDestroy(): void {
+        this.stopQipao();
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'destroyed' });
     }
 
     protected onDisable(): void {
         // 切 tab / 关页面：把面板收掉、红点归零（`RedDot` 复用不留残影）。
         this.revision += 1;
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'disabled' });
         this.bagPanelComp?.hide();
         this.activeTab = null;
         this.gemTabRedDot?.setRedDot(0);
@@ -224,17 +212,6 @@ export class RolePage extends Component {
     // ============================================================
     // 内部
     // ============================================================
-
-    /** 点背包页签：未落地给提示，已落地打开面板。 */
-    private async onClickBag(tab: RoleBagTabId): Promise<void> {
-        if (!isRoleBagTabReady(tab)) {
-            FW.showTip(ROLE_TEXTS.bagTabMissing);
-            return;
-        }
-        this.activeTab = tab;
-        this.applyTabLook();
-        await this.bagPanelComp.show(tab);
-    }
 
     /**
      * 装备栏 6 格：图标 + 品质框 + `Lv.x`。
@@ -269,15 +246,6 @@ export class RolePage extends Component {
      * ⚠️ `ROLE_NAV_READY` 只表示「这条落地了」，**打开哪个界面由这里分发** ——
      * 别把 prefab 路径塞进表里（视图层的事归视图层）。
      */
-    private onClickNav(navId: RoleNavId): void {
-        if (navId === ROLE_NAV_TALENT) {
-            void MilitiaTalentPage.open();
-            return;
-        }
-        if (ROLE_NAV_READY.has(navId)) return;
-        FW.showTip(ROLE_TEXTS.navMissing);
-    }
-
     /** 页签选中观感：当前页签放大 1.08，其余 1。 */
     private applyTabLook(): void {
         for (const [name, tab] of BAG_TAB_NODES) {

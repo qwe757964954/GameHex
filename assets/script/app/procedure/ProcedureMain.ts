@@ -7,6 +7,8 @@ import { MainTab, MainTabHost } from '../main/MainTabHost';
 import { MAIN_LOADING_EVENTS } from '../main/MainLoadingEvents';
 import type { IMainLoadingProgress } from '../main/MainLoadingEvents';
 
+import { MainTabsComposition } from '../bootstrap/main/MainTabsComposition';
+
 const MAIN_ROOT_URL = 'ui/main/MainRoot';
 /** MainRoot prefab 加载完成的进度节点（其余进度在主城首屏渲染完成后一次到 1）。 */
 const MAIN_ROOT_PROGRESS = 0.3;
@@ -42,6 +44,7 @@ export class ProcedureMain extends ProcedureBase {
 
     /** 当前主界面节点实例（登录预加载阶段提前挂载，切出时销毁）。 */
     private mainNode: Node | null = null;
+    private mainComposition: MainTabsComposition | null = null;
 
     /** 无登录图遮挡的返回流程：保持节点激活以准备首屏，正式进入时再显示。 */
     private mainOpacity: UIOpacity | null = null;
@@ -75,6 +78,7 @@ export class ProcedureMain extends ProcedureBase {
                 };
             }
             this.mainNode = node;
+            if (tabHost) this.mainComposition = new MainTabsComposition({ assets: this.assets, configs: this.configs, sessionAssets: this.sessionAssets }, tabHost);
             const launchCover = LaunchProgressUI.ensure(this.host);
             if (!launchCover) {
                 // 战斗仍是当前流程；挂载前隐藏整个外壳，避免异步子页尚未就绪时盖住战斗。
@@ -122,6 +126,8 @@ export class ProcedureMain extends ProcedureBase {
 
     /** 销毁主界面节点并清空加载引用（取消/离开/失败兜底）。 */
     private destroyMainNode(): void {
+        this.mainComposition?.dispose();
+        this.mainComposition = null;
         if (this.mainNode) {
             this.mainNode.destroy();
             this.mainNode = null;

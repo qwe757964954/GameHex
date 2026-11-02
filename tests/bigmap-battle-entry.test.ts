@@ -32,7 +32,7 @@ test('据点战斗配置来自 bigMapCamp，严格保留 campId 与 campBattleId
 });
 
 function fixture(start?: (type: number, id: number, isCurrent: () => boolean) => Promise<{ ok: boolean; message: string }>,
-    campResponse: unknown = { infos: [{ campId: 101, opType: 0, state: 1 }] }) {
+    campResponse: unknown = { infos: [{ campId: 101, opType: 0 }] }) {
     const repository = new BigMapCampRepository({
         fetchSimple: async () => campResponse,
         fetchDetail: async () => campResponse,
@@ -104,7 +104,7 @@ test('雾隐堡 205 的 1004 参数使用城池配置 ID 205，不传关联战�
     const { presenter } = fixture(async (type, id) => {
         calls.push([type, id]);
         return { ok: true, message: '' };
-    }, { infos: [{ campId: 205, opType: 0, state: 1 }] });
+    }, { infos: [{ campId: 205, opType: 0 }] });
     assert.equal(loadBigMapConfig().camps.get(205)?.battleId, 50027);
     await presenter.refreshCampDetail(205);
     assert.equal((await presenter.requestAttackCity(205)).ok, true);
@@ -112,23 +112,46 @@ test('雾隐堡 205 的 1004 参数使用城池配置 ID 205，不传关联战�
     presenter.dispose();
 });
 
-test('明确收到未开放、已占领、结算中状态时，详情查询后仍禁止开战', async () => {
-    for (const info of [{ opType: 0, state: 0 }, { opType: 1, state: 1 }, { opType: 0, state: 3 }]) {
-        let calls = 0;
-        const { presenter, setCampResponse } = fixture(async () => { calls += 1; return { ok: true, message: '' }; },
-            { infos: [{ campId: 101, ...info }] });
-        await presenter.refreshCampDetail(101);
-        assert.equal(presenter.cityView(101)?.canAttack, false);
-        assert.equal((await presenter.requestAttackCity(101)).ok, false);
-        assert.equal(calls, 0);
-        setCampResponse(null);
-        await presenter.refreshCampDetail(101);
-        assert.equal(presenter.cityView(101)?.campDetailStatus, 'failed');
-        assert.equal(presenter.cityView(101)?.canAttack, false, '查询失败不能绕过已知的禁止攻击状态');
-        assert.equal((await presenter.requestAttackCity(101)).ok, false);
-        assert.equal(calls, 0);
-        presenter.dispose();
-    }
+test('已占领的据点详情查询后仍禁止开战', async () => {
+    let calls = 0;
+    const { presenter, setCampResponse } = fixture(async () => { calls += 1; return { ok: true, message: '' }; },
+        { infos: [{ campId: 101, opType: 1 }] });
+    await presenter.refreshCampDetail(101);
+    assert.equal(presenter.cityView(101)?.state, 'occupied');
+    assert.equal(presenter.cityView(101)?.canAttack, false);
+    assert.match(presenter.cityView(101)?.attackReason ?? '', /已被占领/);
+    assert.equal((await presenter.requestAttackCity(101)).ok, false);
+    assert.equal(calls, 0);
+    setCampResponse(null);
+    await presenter.refreshCampDetail(101);
+    assert.equal(presenter.cityView(101)?.campDetailStatus, 'failed');
+    assert.equal(presenter.cityView(101)?.canAttack, false, '查询失败不能绕过已知的禁止攻击状态');
+    assert.equal((await presenter.requestAttackCity(101)).ok, false);
+    assert.equal(calls, 0);
+    presenter.dispose();
+});
+
+test('非攻城时段即使已开放也不许开战（协议不再下发「开放/攻城中」，由日程兜住）', async () => {
+    let calls = 0;
+    const repository = new BigMapCampRepository({
+        fetchSimple: async () => ({ infos: [{ campId: 101, opType: 0 }] }),
+        fetchDetail: async () => ({ infos: [{ campId: 101, opType: 0 }] }),
+        fetchRoles: async (campId: number) => ({ campId, infos: [] }),
+        requestMove: async () => null,
+    });
+    // 957600 = 11 天又 02:00（UTC），+8 时区 = 10:00 本地（可打）；拨到 14:00 UTC = 22:00 本地（休战）。
+    const presenter = new BigMapPresenter({
+        config: loadBigMapConfig(), storage: createMemoryBigMapStorage(), saveKey: 'battle-entry-night',
+        adventureChapter: () => 3, now: () => 957600 + 12 * 3600, campRepository: repository,
+        startBattle: async () => { calls += 1; return { ok: true, message: '' }; },
+    });
+    await presenter.refreshCampDetail(101);
+    assert.equal(presenter.cityView(101)?.state, 'open', '未占领就是已开放');
+    assert.equal(presenter.cityView(101)?.canAttack, false);
+    assert.match(presenter.cityView(101)?.attackReason ?? '', /休战/);
+    assert.equal((await presenter.requestAttackCity(101)).ok, false);
+    assert.equal(calls, 0);
+    presenter.dispose();
 });
 
 test('开战拒绝重复点击；关页后校验失效，迟到结果不能报告开战成功', async () => {

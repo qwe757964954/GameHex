@@ -43,11 +43,10 @@ export function loadBigMapLayout(name = 'world_01'): IBigMapLayout {
     return parseBigMapLayout(JSON.parse(readFileSync(url, 'utf8')));
 }
 
-/** 造一份解锁上下文，未传的字段给「全新号」默认值。 */
+/** 造一份解锁上下文，未传的字段给「全新号」默认值。`openDay` 不填 = 服务器还没下发（不做开服控制）。 */
 export function makeUnlockContext(patch: Partial<IBigMapUnlockContext> = {}): IBigMapUnlockContext {
     return {
         adventureChapter: 0,
-        openDay: 0,
         occupiedCityIds: new Set<number>(),
         maxClearedMonsterLevel: 0,
         ...patch,

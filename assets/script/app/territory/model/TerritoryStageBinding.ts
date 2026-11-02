@@ -14,8 +14,31 @@ export interface TerritoryChapterCompletion {
     complete: boolean;
 }
 
-/** 优先定位推进中的 Boss；全部通关后回到最高关卡，同区域优先定位建筑格。 */
-export function findCurrentTerritoryBoss(
+/**
+ * 快速寻敌的目标：**当前章节关卡链上「推进到的那一关」**（2026-10-31 用户口径）。
+ *
+ *   > 「快速寻敌功能的逻辑是跳到当前章节地图上最新一个未通过的关卡，
+ *   >   如果没有未通过的关卡，就打开已通过的关卡，其他镜头逻辑不变。」
+ *
+ * 「最新一个未通过的关卡」= 关卡序号最小的**未通过**关卡。关卡链是线性的
+ * （`applyTerritoryStageUnlocks` 把每一关的前置写成上一格，见本文件下半段），
+ * 所以「序号最小的未通过」和「玩家接下来该打的那一关」是同一关。
+ *
+ * 🔴 2026-10-31 之前这里**只收 Boss**（`site.type === boss || stage.isBoss`）：
+ *   一章有两个 Boss（chapter_01 = stage 5 / stage 10）时，快速寻敌会跳过前面所有普通关卡
+ *   直接怼到 Boss 上 —— 玩家还没打 1-1 就被丢到 1-5。现在**普通关卡与 Boss 一视同仁**。
+ *
+ * 全部通关（没有未通过的）⇒ 退回**关卡序号最高**的那一关（打开详情，可重复挑战）。
+ * 同一关绑了多格（`expandBindingsToAreaSites`）⇒ 优先取**带建筑**的那格、再按 cellId 升序：
+ * 定位结果不许依赖入参 `sites` 的遍历顺序。
+ *
+ * 🔴 **只挑已解锁的**（2026-10-31 用户追加「只挑已解锁的」）：锁着的关卡被选中时，
+ *   详情只能显示「解锁后开战」，玩家点了也打不了 —— 那不是"快速寻敌"，是"快速看价目表"。
+ *   判据见 {@link isLevelUnlocked}：与点击路径同口径，**区域已通关也算解锁**。
+ *
+ * ⚠️ `asyncPvp`（异步据点）**不算**关卡：它不进线性推进链，当成终点会把玩家带去 PVP 格子。
+ */
+export function findCurrentTerritoryLevel(
     sites: readonly TerritorySite[],
     stageByCell: ReadonlyMap<number, TerritoryCampaignStage>,
     progress: TerritoryProgress,
@@ -23,9 +46,10 @@ export function findCurrentTerritoryBoss(
     const candidates: TerritoryStageBinding[] = [];
     for (const site of sites) {
         const stage = stageByCell.get(site.cellId);
-        if (!stage || (site.type !== TERRITORY_SITE_TYPE.boss
-            && !(site.type === TERRITORY_SITE_TYPE.stage && stage.isBoss))) continue;
+        if (!stage) continue;
+        if (site.type !== TERRITORY_SITE_TYPE.stage && site.type !== TERRITORY_SITE_TYPE.boss) continue;
         if (progress.isDisabled(site.cellId)) continue;
+        if (!isLevelUnlocked(progress, site.cellId)) continue;
         candidates.push({ site, stage });
     }
     const unpassed = candidates.filter(({ site }) => !progress.isAreaPassed(site.cellId));
@@ -34,6 +58,20 @@ export function findCurrentTerritoryBoss(
     targets.sort((a, b) => direction * (a.stage.stage - b.stage.stage || a.stage.levelId - b.stage.levelId)
         || Number(!!b.site.buildingId) - Number(!!a.site.buildingId) || a.site.cellId - b.site.cellId);
     return targets[0] ?? null;
+}
+
+/**
+ * 这一格关卡**能不能直接打**（快速寻敌的准入条件）。
+ *
+ * 两条与点击路径 `TerritoryModel.selectSite` 完全同源：
+ *  1. **区域已通关也算解锁** —— 那种格子不会再走解锁请求（见 `isAreaPassed` 的注释），
+ *     只判"本格在 `unlockCells` 里"会把「区域通了但这格没单独解锁」的关卡漏掉；
+ *  2. 用 `isUnlockable` 而不是 `isCellUnlocked`：前者在**服务端格子状态还没拉回来**时一律放行，
+ *     后者是严格集合。首帧快照未到就严格过滤，快速寻敌会直接变成「暂无可定位的关卡」——
+ *     一个按钮在弱网 / 请求失败时变成死的，比偶尔落在锁着的关卡上更糟。
+ */
+function isLevelUnlocked(progress: TerritoryProgress, cellId: number): boolean {
+    return progress.isAreaPassed(cellId) || progress.isUnlockable(cellId);
 }
 
 /** Current map stations are the completion authority; unbound table rows do not block a chapter. */

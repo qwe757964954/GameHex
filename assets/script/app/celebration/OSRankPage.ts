@@ -19,10 +19,9 @@ import {
 } from './CelebrationRepository';
 import type {
     CelebrationBuyResult,
-    ICelebrationRankRow,
     ICelebrationShopRow,
     ICelebrationSnapshot,
-    ICelebrationTargetRow,
+    ICelebrationTargetRow
 } from './CelebrationRepository';
 import { CL_TEXTS } from './CelebrationTexts';
 import { ECelebrationTargetRewardType } from './CelebrationTable';

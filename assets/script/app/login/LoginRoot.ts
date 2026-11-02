@@ -1,5 +1,8 @@
 import { sys } from 'cc';
+import type { GameNet } from '../net/GameNet';
+type LoginNetwork = Pick<GameNet, 'prepare' | 'connectServer' | 'closeSocket' | 'sendNow' | 'configureReconnectLogin' | 'removeCaller'>;
 import {
+    ActionLogin,
     canEnterServer,
     createClientInfo,
     DEFAULT_VERSION_CONFIG,
@@ -24,16 +27,13 @@ export interface LoginFlowResult {
     user?: UserInfo;
 }
 
-/** 选服变更回调 */
-export type ServerSelectCallback = (server: ServerInfoData) => void;
-
 /**
  * 登录业务根（LoginRoot）：纯业务逻辑，不继承 Component、不碰 UI。
  *
  * 负责：版本配置加载、协议校验、服务器列表获取、账号登录/注册、
  * 游戏服连接、角色登录、本地账号密码缓存。
  *
- * UI 层（LoginPage）只负责：读输入框、调本类方法、把结果渲染到控件。
+ * 由 LoginController 调用；LoginPage 仅派发意图、渲染快照。
  */
 export class LoginRoot {
     gateway: LoginGateway | null = null;
@@ -46,6 +46,9 @@ export class LoginRoot {
     private protocolReady = false;
     private busy = false;
     private disposed = false;
+    private network: LoginNetwork | null = null;
+    private connecting = false;
+    private authenticated = false;
 
     // ---- 状态查询 ----
     get isBusy(): boolean { return this.busy; }
@@ -56,11 +59,14 @@ export class LoginRoot {
     get recentServerIds_(): number[] { return this.recentServerIds; }
     get version_(): string { return this.versionConfig.version; }
     get channel_(): string { return this.gameConfig?.channel ?? ''; }
-    get channelCode_(): string { return this.gameConfig?.channelCode ?? ''; }
+    get channelCode_(): string { return String(this.gameConfig?.channelCode ?? ''); }
     get isWss_(): boolean { return !!this.gameConfig?.isWss; }
 
     dispose(): void {
+        if (this.disposed) return;
         this.disposed = true;
+        this.network?.removeCaller(this);
+        if (this.connecting && !this.authenticated) this.network?.closeSocket();
     }
 
     configureGateway(gateway: LoginGateway): void {
@@ -93,6 +99,7 @@ export class LoginRoot {
         reason?: string;
         servers: ServerInfoData[];
     }> {
+        if (this.disposed) return { ok: false, reason: 'disposed', servers: [] };
         if (!this.gateway) return { ok: false, reason: '登录网络服务尚未装配', servers: [] };
 
         if (versionConfigJson) this.versionConfig = versionConfigJson;
@@ -108,11 +115,13 @@ export class LoginRoot {
 
         try {
             const result = await this.gateway.bootstrap(this.versionConfig);
+            if (this.disposed) return { ok: false, reason: 'disposed', servers: [] };
             this.gameConfig = result.background.gameConfig;
             this.servers = result.servers;
             this.selectedServerId = selectRecommendedServer(this.servers);
             return { ok: true, servers: this.servers };
         } catch (error) {
+            if (this.disposed) return { ok: false, reason: 'disposed', servers: [] };
             console.warn('[LoginRoot] 获取登录配置或服务器列表失败', error);
             this.gameConfig = null;
             this.servers = [];
@@ -124,7 +133,7 @@ export class LoginRoot {
     get protocolReady_(): boolean { return this.protocolReady; }
 
     // ---- 登录 ----
-    async login(account: string, password: string, net: any): Promise<LoginFlowResult> {
+    async login(account: string, password: string, net: LoginNetwork): Promise<LoginFlowResult> {
         if (this.busy || this.disposed) return { ok: false, reason: 'busy' };
         if (!account || !password) return { ok: false, reason: '请输入账号和密码' };
         const config = this.gameConfig;
@@ -138,22 +147,28 @@ export class LoginRoot {
         if (!allowed.ok) return { ok: false, reason: allowed.reason || '当前服务器不可进入' };
 
         this.busy = true;
+        this.network = net;
+        const serverId = this.selectedServerId;
         try {
             const user = await gateway.loginAccount(config, account, password);
             if (this.disposed) return { ok: false, reason: 'disposed' };
 
             const recent = await gateway.queryRecentServers(config, user);
-            this.recentServerIds = recent.roleServerList || recent.roleList?.map((i: any) => i.selectServerId) || [];
+            if (this.disposed) return { ok: false, reason: 'disposed' };
+            this.recentServerIds = recent.roleServerList || recent.roleList?.map((i) => i.selectServerId) || [];
             if (this.selectedServerId == null) {
                 this.selectedServerId = selectRecommendedServer(this.servers, recent.recentServerId, this.recentServerIds);
             }
             const allowedAfter = canEnterServer(selected, this.recentServerIds, recent.state === 1);
             if (!allowedAfter.ok) return { ok: false, reason: allowedAfter.reason };
 
-            await gateway.loginServer(config, user, this.selectedServerId);
-            const session = await gateway.enterServer(config, user, this.selectedServerId);
+            await gateway.loginServer(config, user, serverId);
+            if (this.disposed) return { ok: false, reason: 'disposed' };
+            const session = await gateway.enterServer(config, user, serverId);
+            if (this.disposed) return { ok: false, reason: 'disposed' };
 
             const connected = await this.connectGameServer(user, session, net);
+            if (this.disposed) return { ok: false, reason: 'disposed' };
             if (!connected.ok) return { ok: false, reason: connected.reason };
 
             CenterPaymentService.current?.configure({
@@ -183,6 +198,7 @@ export class LoginRoot {
         this.busy = true;
         try {
             await gateway.registerAccount(config, account, password);
+            if (this.disposed) return { ok: false, reason: 'disposed' };
             sys.localStorage.setItem('account_num', account);
             sys.localStorage.setItem('password_num', password);
             return { ok: true };
@@ -194,7 +210,7 @@ export class LoginRoot {
     }
 
     // ---- 游戏服连接 ----
-    private async connectGameServer(user: UserInfo, session: any, net: any): Promise<{ ok: boolean; reason?: string }> {
+    private async connectGameServer(user: UserInfo, session: ActionLogin, net: LoginNetwork): Promise<{ ok: boolean; reason?: string }> {
         const address: ServerAddress = session?.serverAddress;
         if (!address || !address.host || !address.port) {
             return { ok: false, reason: '登录中心未返回游戏服地址' };
@@ -210,27 +226,31 @@ export class LoginRoot {
             return { ok: false, reason: `网络协议初始化失败：${e instanceof Error ? e.message : String(e)}` };
         }
 
+        if (this.disposed) return { ok: false, reason: 'disposed' };
+        this.connecting = true;
         const connected = await net.connectServer(host, port, useWss);
+        if (this.disposed) return { ok: false, reason: 'disposed' };
         if (!connected) {
             net.closeSocket();
             return { ok: false, reason: `连接游戏服 ${label} 失败` };
         }
 
         const roleOk = await this.playerLogin(net, user, session, false);
+        if (this.disposed) return { ok: false, reason: 'disposed' };
         if (!roleOk.ok) {
             net.closeSocket();
             return roleOk;
         }
-        if (typeof net.configureReconnectLogin === 'function') {
-            net.configureReconnectLogin(() => this.playerLogin(net, user, session, true));
-        }
+        this.authenticated = true;
+        this.connecting = false;
+        net.configureReconnectLogin(() => this.playerLogin(net, user, session, true));
         return { ok: true };
     }
 
     private async playerLogin(
-        net: any,
+        net: LoginNetwork,
         user: UserInfo,
-        session: any,
+        session: ActionLogin,
         reconnect: boolean,
     ): Promise<{ ok: boolean; reason?: string }> {
         const config = this.gameConfig;
@@ -253,16 +273,17 @@ export class LoginRoot {
             selectServerId: session.selectServerId ?? this.selectedServerId,
         };
 
-        let rsp: any = null;
+        let rsp: CmdRoleLoginRspMsg | null = null;
         try {
-            const caller = this as unknown as { destroy(): void; destroyed: boolean };
-            await net.sendNow(new RequestRoleLogin(param, caller, (response: any) => { rsp = response; }));
+            const caller = reconnect ? net : this;
+            await net.sendNow(new RequestRoleLogin(param, caller, (response) => { rsp = response; }));
         } catch (e) {
             return { ok: false, reason: `角色登录请求失败：${e instanceof Error ? e.message : String(e)}` };
         }
 
+        if (!reconnect && this.disposed) return { ok: false, reason: 'disposed' };
         if (rsp == null) return { ok: false, reason: '角色登录无响应' };
-        const loginStatus = rsp.loginStatus as unknown as number;
+        const loginStatus = Number(rsp.loginStatus);
         if (loginStatus === LoginStatus.WEI_HU) return { ok: false, reason: '游戏服维护中，请稍后再试' };
         if (loginStatus === LoginStatus.BAN) return { ok: false, reason: '该账号已被封禁' };
         return { ok: true };

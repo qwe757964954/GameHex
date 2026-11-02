@@ -36,6 +36,16 @@ export interface ZCAttackProfile {
     areaRadius?: number;
     empoweredEvery?: number;
     empoweredSkillId?: number;
+    /**
+     * 副技能行（2026-11-04，椰蛋战士「横扫」100502）。
+     *
+     * 一条普攻行只有 `empoweredSkillId` 这**一个**强化槽，而 68005 同时有两条主动
+     * （横扫 CD 8s / 暴风每 5 次普攻）。强化槽留给「累计次数」那条（暴风），
+     * 冷却那条从本字段指向自己的技能行，由 `ZCSkillTriggerSystem` 的副轨单独推进。
+     *
+     * 留空 = 没有副轨，`ZCAttackResolutionSystem.castFanSkill` 整段不执行。
+     */
+    secondarySkillId?: number;
     /** 强化触发方式；留空按次数。 */
     trigger?: ZCSkillTrigger;
     /** trigger=every_seconds 的时间间隔（秒）。 */
@@ -43,6 +53,28 @@ export interface ZCAttackProfile {
     /** 伤害倍率：最终伤害 = 基准伤害 × 本值；普攻/技能行各自携带。 */
     damageRate?: number;
     effectPrefabPath?: string;
+    /**
+     * 冲刺（2026-10-31，运动霸「拳击冲撞」203301）。
+     *
+     * 「距敌多近开始冲」= **设定 px**，与 `attackRange` 同一套数（都要乘
+     * `rules.combatDistanceScale` 才是世界坐标）。留空 = 这个技能不冲刺。
+     * 判据是「到当前目标的距离 ≤ `chargeDistance`」，**不做滞回**：一出这个距离就回到普通速度，
+     * 因为冲刺只在接近段有意义，进射程后状态机本来就切成 idle / attack 了。
+     */
+    chargeDistance?: number;
+    /**
+     * 冲刺阶段的**移速**倍率（4 = 四倍速）。`chargeDistance` 生效期间乘在各条移动推进上，
+     * 与 `moveSpeed`、卡组加成、冰冻减速**相乘**（不是覆盖），所以「被冻住时冲锋」仍然慢。
+     * 留空 / 1 = 不加速；< 1 会被 `optionalPositiveNumber` 之外的守卫挡掉（见 parser）。
+     */
+    chargeSpeedScale?: number;
+    /**
+     * 命中时**额外**播一次的表现（pvpSkill「命中附加特效」）。只影响表现、不参与伤害，
+     * 由 `ZCAttackResolutionSystem` 在真正的命中事件之后补一条 `area` 事件，
+     * 落在受击点、走地面层（`zcCombatEffectLayerOf('area') = 'ground'`）。
+     * 运动霸用 `重骑兵_践踏` 当「气浪」—— 项目里没有名为「气浪」的美术资源。
+     */
+    impactEffectPrefabPath?: string;
     /** area 持续秒数；0=一次性。 */
     durationSeconds?: number;
     waves?: number;
@@ -83,6 +115,13 @@ export interface ZCUnitDefinition {
     attackProfile: ZCAttackProfile;
     /** 强化那击对应技能行档案；未配置强化时 undefined。 */
     empoweredProfile?: ZCAttackProfile;
+    /**
+     * 副技能行档案（`attackProfile.secondarySkillId` 指过去的那一行）；没配副轨时 undefined。
+     *
+     * 只给 `ZCAttackResolutionSystem.castFanSkill` 取表现路径 / 半径 / 名字用 ——
+     * 它的**数值**一律走技能计划行的 `skillParamJson`（三档不同），不读这里的 `damageRate`。
+     */
+    secondaryProfile?: ZCAttackProfile;
 }
 
 /**

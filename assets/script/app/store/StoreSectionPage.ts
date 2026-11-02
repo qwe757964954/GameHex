@@ -17,7 +17,10 @@ import {
 import { loadStoreIcon } from './StoreArt';
 import { resolveDrawCost } from './StoreCostTable';
 import { storeRepository } from './StoreRepository';
-import { storeAction, type StoreActionKind } from './StoreActions';
+import type { IStoreActionContext, StoreActionKind } from './StoreActions';
+import { StoreEvent } from './StoreEvents';
+import { StorePage } from './StorePage';
+import { EventMgr } from '../../framework/event/EventMgr';
 
 const { ccclass, property } = _decorator;
 
@@ -120,7 +123,7 @@ export class StoreSectionPage extends Component {
 
     /** 背包 / 钱包变化 ⇒ 重刷宝箱段（老端 `VOBag.OnChanged` → `RenderBox` 的对应物）。 */
     private readonly onChestWalletChanged = (): void => {
-        if (!this.isValid || this.sectionKey !== 'gem') return;
+        if (this.sectionKey !== 'gem') return;
         this.refreshGem();
     };
 
@@ -318,7 +321,7 @@ export class StoreSectionPage extends Component {
     }
 
     /** 给一个节点挂 `click`（节点缺失 / 没挂 `cc.Button` 时只打一条 warn，不抛）。 */
-    private onClick(path: string, kind: StoreActionKind, ctx: Parameters<typeof storeAction>[1]): void {
+    private onClick(path: string, kind: StoreActionKind, ctx: IStoreActionContext): void {
         const node = this.find(path);
         if (!node) {
             console.warn(`[StoreSectionPage] ${this.sectionKey} 段找不到按钮节点 ${path}（节点名约定变了？）`);
@@ -334,7 +337,12 @@ export class StoreSectionPage extends Component {
         //    显式补上自己是最省事的兜底（缺 target 时部分引擎版本会直接抛）。
         if (!button.target) button.target = node;
         // `storeAction` 是 async（要读表 / 等广告 / 发包）⇒ 显式 `void`，不把 Promise 交给事件系统。
-        node.on(Button.EventType.CLICK, () => { void storeAction(kind, ctx); }, this);
+        node.on(Button.EventType.CLICK, () => {
+            let root: Node | null = this.node;
+            while (root && !root.getComponent(StorePage)) root = root.parent;
+            if (!root) throw new Error('StoreSectionPage requires StorePage');
+            EventMgr.instance.emit(StoreEvent.Action, { owner: root.getComponent(StorePage), kind, context: ctx });
+        }, this);
     }
 
     // ============================================================

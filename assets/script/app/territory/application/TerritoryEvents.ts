@@ -8,7 +8,7 @@ export const TerritoryViewEvent = { Render: 'territory:render', Command: 'territ
 export type TerritoryIntent =
     | { readonly kind: 'siteTap' | 'randomTap'; readonly cellId: number }
     | { readonly kind: 'chapter'; readonly offset: number }
-    | { readonly kind: 'battle' | 'closeDetail' | 'openLevelTip' | 'closeLevelTip' | 'scout' | 'focusBoss' };
+    | { readonly kind: 'battle' | 'closeDetail' | 'openLevelTip' | 'closeLevelTip' | 'scout' | 'focusLevel' };
 export interface ITerritoryIntentEvent { readonly intent: TerritoryIntent }
 export type TerritoryViewCommand = Exclude<TerritoryModelOutput, { readonly kind: 'changed' }>
     | { readonly kind: 'focusCell'; readonly cellId: number }

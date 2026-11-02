@@ -52,6 +52,18 @@ export class BigMapCampRepository {
         return this.snapshots.get(campId) ?? null;
     }
 
+    /**
+     * 已知被占领的据点 id（`opType = 1`）。
+     *
+     * 只覆盖「客户端刷到过」的据点 —— 服务器不下发全量归属，所以它是**下界**：
+     * 用来补 `occupiedCityIds` 判前置城池，不能当成全服占领表。
+     */
+    occupiedCampIds(): readonly number[] {
+        const ids: number[] = [];
+        for (const info of this.snapshots.values()) if (info.opType === 1) ids.push(info.campId);
+        return ids;
+    }
+
     /** 已缓存的角色列表；`null` = 还没成功查过（与「查过、确实没人」的空数组不同）。 */
     rolesOf(campId: number): readonly IBigMapCampRoleInfo[] | null {
         return this.roleSnapshots.get(campId) ?? null;
@@ -221,7 +233,7 @@ export class BigMapCampRepository {
                 READ_TIMEOUT_MS, () => null,
             );
             if (this.isDisposed) return false;
-            const infos = normalizeBigMapCampInfos(response);
+            const infos = normalizeBigMapCampInfos(response, isDetail);
             if (!infos) return false;
             const requested = new Set(ids);
             let received = false;
@@ -229,7 +241,7 @@ export class BigMapCampRepository {
                 if (!requested.has(info.campId)) continue;
                 received = true;
                 if (revision < (this.appliedRevisions.get(info.campId) ?? 0)) continue;
-                this.snapshots.set(info.campId, info);
+                this.snapshots.set(info.campId, this.merge(info));
                 this.appliedRevisions.set(info.campId, revision);
                 this.updatedAt.set(info.campId, this.now());
             }
@@ -237,5 +249,24 @@ export class BigMapCampRepository {
         } catch {
             return false;
         }
+    }
+
+    /**
+     * 简略包只覆盖 `opType`，详情包整条替换。
+     *
+     * 两份协议字段不同：简略包没有占领者。直接 `set` 会让一次可见范围刷新把已经查到的
+     * 占领者名字抹掉（表现为「弹窗刷新一下就变成未占领 · 无名」）。
+     */
+    private merge(next: IBigMapCampInfo): IBigMapCampInfo {
+        const old = this.snapshots.get(next.campId);
+        if (next.detailed || !old) return next;
+        return {
+            ...old,
+            campId: next.campId,
+            opType: next.opType,
+            // 简略包说「没人占」时占领者必须跟着清空，否则留下「未占领 · 张三」的僵尸字段。
+            occupyRoleId: next.opType === 1 ? old.occupyRoleId : '',
+            occupyRoleName: next.opType === 1 ? old.occupyRoleName : '',
+        };
     }
 }

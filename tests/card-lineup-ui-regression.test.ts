@@ -173,7 +173,7 @@ test('布阵保存结果走事件，不再用 session.saved + onClose 回调', (
     assert.match(source, /EventMgr\.instance\.offTarget\(this\)/,
         'onDestroy 必须 offTarget(this)：EventMgr 是全局单例，页面切 tab 就销毁重建');
 
-    assert.match(boardPageSource, /EventMgr\.instance\.emit\(CardLineupEvent\.DeckSaved/,
+    assert.match(readFileSync('assets/script/app/card/LineupBoardController.ts', 'utf8'), /EventMgr\.instance\.emit\(CardLineupEvent\.DeckSaved/,
         '面板保存成功后要当场派发，不要等关闭');
     assert.doesNotMatch(boardPageSource, /saved\s*=\s*true/,
         '面板不许再往共享对象上写 saved');
@@ -270,7 +270,7 @@ const presentationsSource = readFileSync('assets/script/app/card/CardPresentatio
 test('升级结果走事件，不再用 onUpgraded 回调', () => {
     assert.doesNotMatch(presentationsSource, /onUpgraded/,
         'ICardUpgradeOpenData 不许再有 onUpgraded：弹窗不该持有调用方闭包');
-    assert.match(upgradePageSource, /EventMgr\.instance\.emit\(CardLineupEvent\.HeroUpgraded/,
+    assert.match(readFileSync('assets/script/app/card/CardUpgradeController.ts', 'utf8'), /EventMgr\.instance\.emit\(CardLineupEvent\.HeroUpgraded/,
         '升级成功要当场派发，不要等弹窗关闭（这条在弹窗自己身上，不再有 Presenter）');
     assert.match(controllerSource, /this\.listen\(CardLineupEvent\.HeroUpgraded, this\.onHeroUpgraded\)/,
         '卡牌页要在 start() 里订阅，target 传 this（offTarget 才摘得掉）');
@@ -369,24 +369,19 @@ test('条目 prefab 的 Hero / HeadIcon 不许预置图片', () => {
 // 页面在 `start()/onOpen()` 里订阅、`onDestroy()/onClose()` 里 `offTarget` —— 判活由订阅生命周期兜。
 // ============================================================================
 
-test('阵容取数归 Controller，其余弹窗沿用已有取数，均有异步轮次保护', () => {
-    assert.doesNotMatch(presentationsSource, /export class \w*Presenter/,
-        'CardPresentations 里不许再有 Presenter 类（它现在只剩展示模型的类型定义）');
-    assert.doesNotMatch(presentationsSource, /isAlive/, '不许再出现 isAlive 契约');
-
-    //  四个页面各自持有取数逻辑与轮次校验：`cardRepository.<method>` 直接出现在页面里。
-    const pages: Array<[string, RegExp]> = [
-        ['CardLineupController.ts', /this\.options\.repository\.loadLineup\(/],
-        ['LineupBoardPage.ts', /cardRepository\.loadBoard\(/],
-        ['CardSkillPage.ts', /cardRepository\.loadSkillList\(/],
-        ['CardUpgradePage.ts', /cardRepository\.loadUpgradeStatus\(/],
-    ];
-    for (const [fileName, pattern] of pages) {
-        const pageSource = readFileSync(`assets/script/app/card/${fileName}`, 'utf8');
-        assert.match(pageSource, pattern, `${fileName} 应自己调 repository 取数`);
-        assert.match(pageSource, /[Rr]evision\b/, `${fileName} 要有轮次校验字段`);
-        assert.doesNotMatch(pageSource, /this\.presenter\b/, `${fileName} 不许再有 presenter 字段`);
+test('升级和布阵取数归外部控制器，Page 只保留呈现状态', () => {
+    for (const [pageName, controllerName, method] of [
+        ['LineupBoardPage', 'LineupBoardController', 'loadBoard'],
+        ['CardUpgradePage', 'CardUpgradeController', 'loadUpgradeStatus'],
+    ]) {
+        const page = readFileSync(`assets/script/app/card/${pageName}.ts`, 'utf8');
+        const controller = readFileSync(`assets/script/app/card/${controllerName}.ts`, 'utf8');
+        assert.doesNotMatch(page, /cardRepository|Controller|new LineupDraftStore|saveFormation|upgradeHero/);
+        assert.match(page, /CardPopupEvent/);
+        assert.match(controller, new RegExp(`repository\\.${method}\\(`));
+        assert.match(controller, /this.isDisposed/);
     }
+    assert.doesNotMatch(presentationsSource, /readonly draft:/);
 
     //  数据 Ready 事件是"Presenter 通知 View"的产物，层没了就该一起消失。
     const eventsSource = readFileSync('assets/script/app/card/CardLineupEvents.ts', 'utf8');

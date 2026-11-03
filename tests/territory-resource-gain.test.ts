@@ -16,15 +16,17 @@ import {
     TERRITORY_GAIN_ICON_TEXT_GAP_PX,
     TERRITORY_GAIN_BURST_COUNT,
     TERRITORY_GAIN_BURST_FADE_SECONDS,
-    TERRITORY_GAIN_BURST_FLIP_MAX_HZ,
-    TERRITORY_GAIN_BURST_FLIP_MIN_HZ,
     TERRITORY_GAIN_BURST_GRAVITY,
+    TERRITORY_GAIN_BURST_GROW_SECONDS,
+    TERRITORY_GAIN_BURST_GROW_START_SCALE,
     TERRITORY_GAIN_BURST_HALF_ANGLE_DEG,
     TERRITORY_GAIN_BURST_LIFE_JITTER,
     TERRITORY_GAIN_BURST_LIFE_SECONDS,
     TERRITORY_GAIN_BURST_SCALE_JITTER,
     TERRITORY_GAIN_BURST_SPEED,
     TERRITORY_GAIN_BURST_SPEED_JITTER,
+    TERRITORY_GAIN_BURST_SPIN_MAX_HZ,
+    TERRITORY_GAIN_BURST_SPIN_MIN_HZ,
     TERRITORY_GAIN_BURST_STAGGER_SECONDS,
     TERRITORY_GAIN_BURST_SURFACE_FADE_SECONDS,
     TERRITORY_GAIN_BURST_TOTAL_SECONDS,
@@ -42,6 +44,8 @@ import {
     territoryWalletResKeyOf,
 } from '../assets/script/app/territory/model/TerritoryResourceGain';
 import { assetPath } from './helpers/asset-paths';
+import * as territoryLevelBubbleModule from '../assets/script/app/territory/model/TerritoryLevelBubble';
+import * as territoryBattleApproachModule from '../assets/script/app/territory/model/TerritoryBattleApproach';
 
 const read = (path: string): string => readFileSync(path, 'utf8');
 
@@ -444,58 +448,80 @@ test('喷发：重力抛物线 —— 先升后降、顶点在 vy/g、落回台�
     assert.ok(maxY > 80, `喷得最高的那颗也太矮了（实测 ${maxY.toFixed(1)}px）`);
 });
 
-test('喷发：icon 绕自身水平轴翻面 —— scaleX 恒定、scaleY 走余弦、能看到侧立最窄且无硬切', () => {
-    const sawFront = { value: false };
-    const sawBack = { value: false };
-    const sawSideOn = { value: false };
+test('喷发：由小变大 + 持续自转 —— 横纵等比、0.18s 长满后恒定、rotation 匀速累加', () => {
+    let sawGrowing = 0;
+    let sawGrown = 0;
     for (const seed of SEEDS) {
         for (let index = 0; index < TERRITORY_GAIN_BURST_COUNT; index += 1) {
             const launch = territoryBurstLaunch(seed, index)!;
             const delay = index * TERRITORY_GAIN_BURST_STAGGER_SECONDS;
             const dt = 1 / 60;
-            let previousY = Number.NaN;
-            let previousScaleY = Number.NaN;
+            let previousScale = Number.NaN;
+            let previousRotation = Number.NaN;
             for (let t = delay; t < delay + TERRITORY_GAIN_BURST_LIFE_SECONDS; t += dt) {
                 const fx = territoryBurstParticle(seed, index, t);
                 if (!fx) continue;
                 const local = t - delay;
-                // scaleX 恒为基础缩放（翻面不许把宽度也压掉）。
-                assert.equal(fx.scaleX, launch.baseScale, 'scaleX 必须恒等于基础缩放');
-                // scaleY 就是余弦曲线本身（需求的实现方式）。
-                const expected = launch.baseScale
-                    * Math.cos(launch.flipHz * Math.PI * 2 * local + launch.phase);
-                assert.ok(Math.abs(fx.scaleY - expected) < 1e-9, `scaleY 与余弦式不符：${fx.scaleY} ≠ ${expected}`);
-                assert.ok(Math.abs(fx.scaleY) <= launch.baseScale + 1e-9, '|scaleY| 不许超过基础缩放');
-                // 相邻帧不许硬切（正负互跳必须经过 0 附近的小值）。
-                if (Number.isFinite(previousScaleY)) {
-                    assert.ok(Math.abs(fx.scaleY - previousScaleY) <= launch.baseScale * 0.75,
-                        `翻面出现硬切：${previousScaleY.toFixed(3)} → ${fx.scaleY.toFixed(3)}`);
+                // ── 生长（需求 2026-11-02：取消翻面，改成由小变大）──
+                //  期望值按 easeOutCubic 推：`GROW_START → 1`，0.18s 之后恒 1。
+                const growProgress = Math.min(1, local / TERRITORY_GAIN_BURST_GROW_SECONDS);
+                const growEased = 1 - (1 - growProgress) ** 3;
+                const expectedGrow = TERRITORY_GAIN_BURST_GROW_START_SCALE
+                    + (1 - TERRITORY_GAIN_BURST_GROW_START_SCALE) * growEased;
+                const expectedScale = launch.baseScale * expectedGrow;
+                assert.ok(Math.abs(fx.scale - expectedScale) < 1e-9, `scale 与生长式不符：${fx.scale} ≠ ${expectedScale}`);
+                // 缩放**永远为正**：这正是「翻面」被删掉的直接证据（旧版 scaleY 会跑到负数）。
+                assert.ok(fx.scale > 0, `scale 必须恒正（翻面已取消），实测 ${fx.scale}`);
+                assert.ok(fx.scale <= launch.baseScale + 1e-9, `scale 不许超过基础缩放，实测 ${fx.scale}`);
+                // 出生那一帧必须明显小于满尺寸（否则等于"啪一下整颗跳出来"）。
+                if (local < 1e-9) {
+                    assert.ok(Math.abs(fx.scale / launch.baseScale - TERRITORY_GAIN_BURST_GROW_START_SCALE) < 1e-9,
+                        `出生缩放必须正好是生长起点，实测系数 ${(fx.scale / launch.baseScale).toFixed(4)}`);
                 }
-                // 正 / 负 / 侧立三种状态在一颗的生命里都要出现。
-                if (fx.scaleY > launch.baseScale * 0.9) sawFront.value = true;
-                if (fx.scaleY < -launch.baseScale * 0.9) sawBack.value = true;
-                if (Math.abs(fx.scaleY) < launch.baseScale * 0.05) sawSideOn.value = true;
-                previousScaleY = fx.scaleY;
-                previousY = fx.offsetY;
+                // 单调不减（缓出曲线不会回抽），且相邻帧不许跳变（60fps 下一帧涨不到总量的 1/4）。
+                if (Number.isFinite(previousScale)) {
+                    assert.ok(fx.scale >= previousScale - 1e-9,
+                        `生长段出现回缩：${previousScale.toFixed(4)} → ${fx.scale.toFixed(4)}`);
+                    assert.ok(fx.scale - previousScale <= launch.baseScale * 0.3, '生长出现硬切（一帧涨太多）');
+                }
+                // ── 自转（平面旋转，只改角度、不改形状）──
+                const expectedRotation = launch.spinHz * 360 * local + (launch.phase * 180) / Math.PI;
+                assert.ok(Math.abs(fx.rotation - expectedRotation) < 1e-6,
+                    `rotation 与自转式不符：${fx.rotation} ≠ ${expectedRotation}`);
+                if (Number.isFinite(previousRotation)) {
+                    // **不取模**：取模会在 360° 回绕那一帧被引擎读成"倒转回去"。
+                    assert.ok(fx.rotation > previousRotation,
+                        `rotation 必须严格递增（不许取模归零）：${previousRotation.toFixed(2)} → ${fx.rotation.toFixed(2)}`);
+                    assert.ok(Math.abs(fx.rotation - previousRotation - launch.spinHz * 360 * dt) < 1e-6,
+                        '自转必须是匀速的（角度增量 = spinHz·360·dt）');
+                }
+                if (fx.scale < launch.baseScale - 1e-6) sawGrowing += 1;
+                else sawGrown += 1;
+                previousScale = fx.scale;
+                previousRotation = fx.rotation;
             }
-            assert.ok(Number.isFinite(previousY));
-            // 翻面频率落在 2~4 次/秒。
-            assert.ok(launch.flipHz >= TERRITORY_GAIN_BURST_FLIP_MIN_HZ - 1e-9
-                && launch.flipHz <= TERRITORY_GAIN_BURST_FLIP_MAX_HZ + 1e-9, `flipHz=${launch.flipHz} 越界`);
+            assert.ok(Number.isFinite(previousRotation));
+            // 自转速度落在 0.6~1.1 圈/秒。
+            assert.ok(launch.spinHz >= TERRITORY_GAIN_BURST_SPIN_MIN_HZ - 1e-9
+                && launch.spinHz <= TERRITORY_GAIN_BURST_SPIN_MAX_HZ + 1e-9, `spinHz=${launch.spinHz} 越界`);
+            // 一颗 1.1s 的生命里至少转半圈 —— 转不出来等于没做自转。
+            assert.ok(launch.spinHz * launch.life >= 0.5, `这颗只转了 ${(launch.spinHz * launch.life).toFixed(2)} 圈`);
         }
     }
-    assert.ok(sawFront.value, '必须看到「正面」');
-    assert.ok(sawBack.value, '必须看到「倒面」（scaleY 为负）');
-    assert.ok(sawSideOn.value, '必须看到「侧立最窄」的中间态（余弦过零）');
+    assert.ok(sawGrowing > 0, '必须出现「还没长满」的帧（否则由小变大等于没做）');
+    assert.ok(sawGrown > 0, '也必须出现「已经长满并保持」的帧（否则全程都在变大小）');
 });
 
-test('喷发：各粒子翻面节奏不同步（频率与初相都随机），基础缩放落在 0.8~1.2', () => {
+test('喷发：各粒子自转节奏不同步（转速与初相都随机），基础缩放落在 0.8~1.2', () => {
     const launches = Array.from({ length: TERRITORY_GAIN_BURST_COUNT }, (_, index) => territoryBurstLaunch(7, index)!);
     assert.equal(new Set(launches.map((launch) => launch.phase.toFixed(6))).size, TERRITORY_GAIN_BURST_COUNT,
-        '12 颗的初始相位必须两两不同（同步翻面一眼就假）');
-    assert.equal(new Set(launches.map((launch) => launch.flipHz.toFixed(6))).size, TERRITORY_GAIN_BURST_COUNT,
-        '12 颗的翻面频率必须两两不同');
+        '12 颗的初始相位必须两两不同（同步自转一眼就假）');
+    assert.equal(new Set(launches.map((launch) => launch.spinHz.toFixed(6))).size, TERRITORY_GAIN_BURST_COUNT,
+        '12 颗的自转速度必须两两不同');
     for (const launch of launches) {
+        assert.ok(launch.spinHz >= TERRITORY_GAIN_BURST_SPIN_MIN_HZ - 1e-9
+            && launch.spinHz <= TERRITORY_GAIN_BURST_SPIN_MAX_HZ + 1e-9,
+            `spinHz=${launch.spinHz} 越出 ${TERRITORY_GAIN_BURST_SPIN_MIN_HZ}~${TERRITORY_GAIN_BURST_SPIN_MAX_HZ}`);
         assert.ok(launch.baseScale >= 1 - TERRITORY_GAIN_BURST_SCALE_JITTER - 1e-9
             && launch.baseScale <= 1 + TERRITORY_GAIN_BURST_SCALE_JITTER + 1e-9,
             `baseScale=${launch.baseScale} 越出 0.8~1.2`);
@@ -578,6 +604,8 @@ class FakeNode {
     readonly components: FakeComponent[] = [];
     position = { x: 0, y: 0, z: 0 };
     scale = { x: 1, y: 1, z: 1 };
+    /** 平面旋转角（度）——2026-11-02 起喷发粒子会写它（`node.angle = rotation`）。 */
+    angle = 0;
 
     constructor(name = '') {
         this.name = name;
@@ -716,6 +744,24 @@ function loadBurstModule(): Record<string, unknown> {
                 TERRITORY_CLOUD_SCALE: 1,
                 TERRITORY_CLOUD_ART_OFFSET_Y: -21,
             };
+            // 宝箱提示气泡 / 前置宝箱跳动（2026-11-02）：本用例关注的分支与它无关 ⇒ 给「不挂气泡、
+            // 不跳」的退化桩（三条规则在 `territory-chest-hint` 里按**真模块**测）。
+            // 气泡文案真源（2026-11-02 起搬进 model）：直接给**真模块**，别抄一份拼法 ——
+            // 抄一遍就等于两边各改一半也能一起绿。
+            if (id === '../model/TerritoryLevelBubble') return territoryLevelBubbleModule;
+            // 战斗过场曲线（2026-11-02）：纯函数、与本文件判据无关 ⇒ 给真模块，别抄一份常量。
+            if (id === '../model/TerritoryBattleApproach') return territoryBattleApproachModule;
+            // 2026-11-02 整页过场：地图视图新增的云盖层依赖。这组用例不演过场 ⇒ 给个空壳，
+            // 千万别写 `throw` 兜底就完事（新增 import 必须同步补桩，见 `Unexpected dependency`）。
+            if (id === './TerritoryBattleCover') {
+                return { TerritoryBattleCover: class { setFrame() {} build() { return false; } apply() {} clear() {} destroy() {} dispose() {} } };
+            }
+            if (id === '../model/TerritoryChestHint') return {
+                TERRITORY_CHEST_HINT_SECONDS: 1.5,
+                territoryChestHintBounceOffset: () => 0,
+                territoryChestHintCell: () => null,
+                territoryPrerequisiteChestCell: () => null,
+            };
             throw new Error(`Unexpected dependency: ${id}`);
         },
     });
@@ -760,7 +806,7 @@ test('粒子组：一个原点容器 + COUNT 颗粒子（每颗独立 UIOpacity�
     assert.equal(burst.node.children[2].componentOf(FakeSprite)?.spriteFrame, SILVER);
 });
 
-test('粒子组：逐帧写节点 = 模型的 scaleX / scaleY，落点不穿模，错峰可见，放完提前收起', () => {
+test('粒子组：逐帧写节点 = 模型的 scale / rotation，横纵等比、落点不穿模，错峰可见，放完提前收起', () => {
     const TerritoryGainBurst = loadBurstClass();
     const burst = new TerritoryGainBurst(new FakeNode('GainLayer'));
     const seed = 21;
@@ -770,9 +816,11 @@ test('粒子组：逐帧写节点 = 模型的 scaleX / scaleY，落点不穿模�
     let frames = 0;
     let elapsed = 0;
     let sawStagger = false;
-    let sawFlipSideOn = false;
-    let sawNegativeScaleY = false;
+    let sawBirthSmall = false;
+    let sawFullScale = false;
+    /** 每颗：满尺寸（模型 baseScale）与上一帧的角度 ⇒ 用来判「长满了没」「转没转」。 */
     const baseScaleOf: number[] = [];
+    const previousAngle: number[] = [];
     while (burst.step(dt)) {
         elapsed += dt;
         frames += 1;
@@ -784,26 +832,34 @@ test('粒子组：逐帧写节点 = 模型的 scaleX / scaleY，落点不穿模�
             if (!child.active) continue;
             const fx = territoryBurstParticle(seed, index, elapsed);
             assert.ok(fx, '视图点亮的粒子必须在模型里也是活的');
-            // 视图不许自己算曲线：位置与两个缩放都要逐位等于模型。
+            // 视图不许自己算曲线：位置、缩放、角度都要逐位等于模型。
             assert.ok(Math.abs(child.position.x - fx.offsetX) < 1e-9, '横向位移必须来自模型');
             assert.ok(Math.abs(child.position.y - fx.offsetY) < 1e-9, '纵向位移必须来自模型');
             assert.ok(child.position.y >= 0, '粒子只能停在台面之上（不穿模）');
-            assert.equal(child.scale.x, fx.scaleX, 'scaleX 必须逐位等于模型（翻面不许压宽度）');
-            assert.equal(child.scale.y, fx.scaleY, 'scaleY 必须逐位等于模型（翻面走余弦）');
+            assert.equal(child.scale.x, fx.scale, 'scaleX 必须逐位等于模型的 scale');
+            assert.equal(child.scale.y, fx.scale, 'scaleY 必须与 scaleX 同一个值（横纵等比，翻面已取消）');
             assert.notEqual(child.scale.z, 0);
-            // 同一颗粒子逐帧的 scaleX 必须**一个值都不变**（翻面只压 y）。
-            if (baseScaleOf[index] === undefined) baseScaleOf[index] = child.scale.x;
-            else assert.equal(child.scale.x, baseScaleOf[index], `第 ${index} 颗的 scaleX 逐帧变了（翻面不该压宽度）`);
-            if (Math.abs(child.scale.y) < child.scale.x * 0.05) sawFlipSideOn = true;
-            if (child.scale.y < 0) sawNegativeScaleY = true;
-            // 不存在平面自转：旋转角恒为 0（节点桩没有 angle 字段 ⇒ 视图不该去写它）。
-            assert.equal((child as unknown as { angle?: number }).angle ?? 0, 0, '不许叠平面自转');
+            assert.ok(child.scale.x > 0, '缩放恒正（不许再出现翻到背面的负 scaleY）');
+            assert.equal(child.angle, fx.rotation, 'angle 必须逐位等于模型的 rotation（自转只写角度）');
+            // 生长：出生那一帧明显小于满尺寸，之后涨到 `baseScale` 并保持。
+            const baseScale = territoryBurstLaunch(seed, index)!.baseScale;
+            if (baseScaleOf[index] === undefined) {
+                baseScaleOf[index] = fx.scale;
+                if (fx.scale < baseScale * 0.5) sawBirthSmall = true;
+            }
+            if (fx.scale >= baseScale - 1e-6) sawFullScale = true;
+            if (previousAngle[index] === undefined) previousAngle[index] = child.angle;
+            else {
+                assert.ok(child.angle > previousAngle[index],
+                    `第 ${index} 颗的角度必须逐帧递增（持续自转、不取模）：${previousAngle[index]} → ${child.angle}`);
+                previousAngle[index] = child.angle;
+            }
         }
     }
     assert.ok(frames > 0, '至少推进过一帧');
     assert.ok(sawStagger, '需要出现「只亮了一部分粒子」的中间帧 —— 那颗就是还在错峰等待的');
-    assert.ok(sawFlipSideOn, '必须出现「侧立最窄」的帧（scaleY 过零）');
-    assert.ok(sawNegativeScaleY, '必须出现翻到背面的帧（scaleY 为负）');
+    assert.ok(sawBirthSmall, '出生那一帧必须明显小于满尺寸（由小变大）');
+    assert.ok(sawFullScale, '长满之后必须停在满尺寸上（否则一直在变大小）');
     assert.equal(burst.node.active, false, '放完要整喷收起（回收只改 active，不销毁节点）');
 });
 

@@ -5,66 +5,61 @@ import { runInNewContext } from 'node:vm';
 import * as ts from 'typescript';
 import { ControllerBase } from '../assets/script/framework/controller/ControllerBase';
 import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
-import { ZCGamePreload } from '../assets/script/app/zcds/application/ZCGamePreload';
+import { loadBattlePreparation } from './helpers/battle-composition';
+import type { ZCBattleController } from '../assets/script/app/zcds/application/ZCBattleController';
 import { createControllerContext, createControllerResources } from './helpers/controller-context';
 import { bundleForPath } from '../assets/script/core/asset/BundleCatalog';
 import { spriteFramePathOf } from '../assets/script/app/ArtPaths';
 
 function preparationFixture(failure = false) {
-    const owners: ControllerBase[] = [];
+    const context = createControllerContext();
     let released = 0;
-    class ComponentController extends ControllerBase {
-        constructor(name: string) { super(createControllerContext(), name); owners.push(this); }
-    }
-    const exports: Record<string, Function> = {};
-    runInNewContext(ts.transpileModule(readFileSync('assets/script/app/zcds/application/ZCBattlePreparation.ts', 'utf8'), {
-        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
-    }).outputText, { exports, Date, console: { info() {} }, require(name: string) {
-        if (name.endsWith('/ComponentController')) return { ComponentController };
-        if (name === '../ZCGame') return { MAP_DIRECTORY: 'config/maps' };
-        if (name === './ZCGamePreload') return { ZCGamePreload };
-        if (name === './ZCGameLoader') return { ZCGameLoader: class {
+    const preparation = loadBattlePreparation({
+        '../ZCGame': { MAP_DIRECTORY: 'config/maps' },
+        './ZCBattleEntryBuilder': { buildZCBattleEntry() {}, resolveZCBattlePlayerCount() {} },
+        '../../territory/application/TerritorySaveStoreAdapter': { createTerritorySaveStore() {} },
+        './ZCGameLoader': { ZCGameLoader: class {
             async prepare(scope: ResourceScope) {
                 scope.defer(() => released++);
                 if (failure) throw new Error('battle art failed');
                 return {};
             }
-        } };
-        throw new Error(`Unexpected import: ${name}`);
-    } });
-    return { create: (battle: Promise<null>) => exports.createZCBattlePreload(battle) as ZCGamePreload,
-        owners, released: () => released };
+        } },
+    });
+    const source = new ResourceScope('map-entry');
+    return { create: (battle: Promise<null>) => preparation.createZCBattleSession(context, { owner: source, battle }) as ZCBattleController<never>,
+        source, released: () => released };
 }
 
-test('战斗准备控制器随资源移交；匹配退出保持，战斗退出只释放一次', async () => {
+test('准备会话在战斗流程接管后保持资源，来源退出不释放，战斗退出只释放一次', async () => {
     const h = preparationFixture();
-    const preload = h.create(Promise.resolve(null));
-    await preload.ready;
+    const session = h.create(Promise.resolve(null));
+    await session.ready;
     const battle = new ResourceScope('battle');
-    preload.transferTo(battle);
-    preload.releaseFromMatching();
-    assert.equal(h.owners[0].scope.disposed, false);
+    await session.adopt(undefined, { resources: battle, cancelled: false });
+    h.source.dispose();
+    assert.equal(session.scope.disposed, false);
     battle.dispose(); battle.dispose();
-    assert.equal(h.owners[0].scope.disposed, true);
+    assert.equal(session.scope.disposed, true);
     assert.equal(h.released(), 1);
 });
 
-test('回包前取消释放准备控制器，迟到回包不开始资源加载', async () => {
+test('回包前取消释放同一会话，迟到回包不开始资源加载', async () => {
     const h = preparationFixture();
     let reply: (value: null) => void = () => {};
-    const preload = h.create(new Promise(resolve => { reply = resolve; }));
-    preload.releaseFromMatching();
-    assert.equal(h.owners[0].scope.disposed, true);
+    const session = h.create(new Promise(resolve => { reply = resolve; }));
+    h.source.dispose();
+    assert.equal(session.scope.disposed, true);
     reply(null);
-    await assert.rejects(preload.ready, /取消/);
+    await assert.rejects(session.ready, /取消/);
     assert.equal(h.released(), 0);
 });
 
-test('准备失败同时释放已加载资源与准备控制器', async () => {
+test('准备失败立即释放会话持有的资源', async () => {
     const h = preparationFixture(true);
-    const preload = h.create(Promise.resolve(null));
-    await assert.rejects(preload.ready, /battle art failed/);
-    assert.equal(h.owners[0].scope.disposed, true);
+    const session = h.create(Promise.resolve(null));
+    await assert.rejects(session.ready, /battle art failed/);
+    assert.equal(session.scope.disposed, true);
     assert.equal(h.released(), 1);
 });
 

@@ -2,10 +2,20 @@ import type { IZCModelServices } from './ZCModelServices';
 import type { ZCUnitDefinition } from '../ZCCombatCatalog';
 import type {ZCCombatTarget, ZCUnitState} from '../ZCGameTypes';
 import type { ZCMatchMap } from '../ZCMatchConfig';
+import { sweptCircleHit } from './ZCProjectileSystem';
 import { ZCTargetingSystem, ZCPathWorkspace, type ZCTargetingContext } from './ZCTargetingSystem';
 import type { IZCUnitTargeting } from './ZCUnitSystem';
 
 const STRUCTURE_TARGET_BODY_RADIUS = 80;
+
+/** 冲刺撞到的那个对象：`x/y` 是最早接触点（冲刺停在这里）。 */
+export interface IZCDashHit {
+    /** `unit` = 撞到敌方单位；`wall` / `building` = 撞到城墙 / 建筑（同一个地块 id）。 */
+    readonly kind: 'unit' | 'wall' | 'building';
+    readonly id: number;
+    readonly x: number;
+    readonly y: number;
+}
 
 export interface IZCUnitTargetingContext extends Pick<IZCModelServices, 'geometry' | 'effectiveDefinition' | 'unitPosition' | 'hex' | 'hasExposedWall'> {
     readonly map: ZCMatchMap;
@@ -101,10 +111,14 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
     }
 
     /**
-     * 本帧的移速倍率（冲刺）。
+     * 本帧的冲刺倍率 / 冲刺门槛。
      *
      * 返回 **≥ 1** 的倍数：没配冲刺、没有目标、还没进入 `chargeDistance` 一律返回 1，
      * 所以调用点可以直接乘、不需要再判空。
+     *
+     * 2026-11-02 起它不再只是「移速倍率」，`> 1` 等于**可以起冲**：`ZCUnitSystem` 用它当
+     * 冲刺的门槛条件之一（另外两条是「有目标」「本次攻击冷却已就绪」）。
+     * 2026-11-03 起城墙 / 建筑目标也走冲刺，所以这里不再区分目标种类。
      *
      * 为什么不缓存成单位状态：这是「当前距离」的纯函数，缓一次就要在处理「目标换人 /
      * 目标瞬移 / 单位被击退」时挨个失效，而每帧算一次只是一次 `hypot`。
@@ -119,6 +133,56 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
         const reach = ZCTargetingSystem.chargeReach(distance, target.bodyRadius, this.context.combatDistanceScale);
         const from = this.context.unitPosition(unit);
         return Math.hypot(from.x - target.x, from.y - target.y) <= reach ? scale : 1;
+    }
+
+    /**
+     * 冲刺这一步**会撞到的第一个东西**（线段上最先接触的那个）。
+     *
+     * 2026-11-02「冲刺改成真·撞击」：用户拍板的命中对象是「路径上第一个进碰撞圈的敌人」，
+     * 而不是「只认锁定目标」—— 冲锋撞到谁算谁，与画面上看到的一致。
+     *
+     * 2026-11-03 起**城墙 / 建筑也算**（用户口径「城墙 / 建筑目标也需要走冲刺，撞到就停止」）：
+     * 结构静止不动，但冲上去一样要停在它面前、结算一次普攻，所以和单位共用同一条扫掠判定。
+     * 结构只在**它是当前锁定目标**时才参与 —— 冲锋路过一面墙不该被它截住，
+     * 那面墙本身也已经由 `dashStep` 的「进不了敌方墙格」兜住了。
+     *
+     * 判定用线段扫掠圆，半径取**自己的近战 reach**（`attackReach`），而不是双方
+     * `bodyRadius` 求和：`bodyRadius` 是给弹道算「贴脸」用的（表里常是 0/6px，换算到世界
+     * 坐标才 0~1.8），拿它当冲撞判定会变成「必须精确踩到对方脚心」，画面上看就是反复穿人。
+     * 近战 reach 本来就是「手心够得到哪儿」，与冲撞的直觉一致；改 `attackRange` 时冲撞手感
+     * 会跟着走，不会多出第二套互不相干的手感参数。
+     *
+     * 返回 `null` ⇒ 这一步没撞到东西，继续冲。
+     */
+    dashFirstHit(unit: ZCUnitState, fromX: number, fromY: number, toX: number, toY: number): IZCDashHit | null {
+        const definition = this.context.baseDefinition(unit.unitId);
+        const from = { x: fromX, y: fromY };
+        const to = { x: toX, y: toY };
+        let hit: IZCDashHit | null = null;
+        let nearest = Infinity;
+        const consider = (kind: IZCDashHit['kind'], id: number, center: { x: number; y: number }, bodyRadius: number): void => {
+            const t = sweptCircleHit(from, to, center, this.attackReach(definition, bodyRadius));
+            if (t === null) return;
+            // 同一个 t 上有多人（挤成一团）时取 id 小的，保证回放可复现。
+            if (t > nearest || (t === nearest && id >= (hit?.id ?? Infinity))) return;
+            nearest = t;
+            hit = { kind, id, x: fromX + (toX - fromX) * t, y: fromY + (toY - fromY) * t };
+        };
+
+        for (const other of this.context.units.values()) {
+            if (other.id === unit.id || other.owner === unit.owner) continue;
+            if (other.battleState === 'dead' || other.hp <= 0) continue;
+            const otherDefinition = this.context.baseDefinition(other.unitId);
+            if (otherDefinition.flying && !definition.canAttackAir) continue;
+            consider('unit', other.id, this.context.unitPosition(other), otherDefinition.bodyRadius);
+        }
+
+        //  城墙 / 建筑：`current()` 已经把「还是不是合法目标」判完了（墙拆了、建筑没了都会返回 null）。
+        const structure = this.current(unit);
+        if (structure && structure.kind !== 'unit') {
+            consider(structure.kind, structure.id, structure, structure.bodyRadius);
+        }
+        return hit;
     }
 
     face(unit: ZCUnitState): void {

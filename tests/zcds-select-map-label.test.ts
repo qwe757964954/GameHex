@@ -172,7 +172,7 @@ test('spawn region hint overlay clears after selection and on render-world teard
     assert.match(renderWorld, /clearSpawnRegionHints\(\): void/);
     assert.match(renderWorld, /spawnRegionHintOverlay\?\.clear\(\)/);
     assert.match(renderWorld, /destroy\(\): void[\s\S]*?clearSpawnRegionHints\(\)/);
-    assert.match(game, /finishSpawnSelection\(\): void[\s\S]*?clearSpawnRegionHints\(\)/);
+    assert.match(game, /startPlaying\([\s\S]*?clearSpawnRegionHints\(\)/);
     assert.match(hintOverlay, /render\(hints: readonly IZCSpawnRegionHint\[\], visible: boolean, mapScale: number\): void/);
     assert.match(hintOverlay, /clear\(\): void/);
 });

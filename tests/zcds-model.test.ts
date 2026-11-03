@@ -2176,7 +2176,7 @@ test('战斗帧上报只按协议 op 口径采集：翻格带格子 id、单位�
     const hexId = firstDevelopable(game);
     assert.equal(game.developHex(hexId).ok, true);
     assert.equal(game.frameEvents.length, 1, '一次翻格 = 恰好一条');
-    assert.deepEqual({ ...game.frameEvents[0] }, { frameId: 0, unitId: 0, op: 1, params: [hexId] },
+    assert.deepEqual({ ...game.frameEvents[0] }, { frameId: 0, owner: 'player', op: 1, params: [hexId] },
         'op=1 的 params 必须是格子 id');
 
     // 推进一段时间：兵营会出兵、单位会移动 / 交战甚至阵亡 —— 这些都不是协议里的「操作」。
@@ -2186,13 +2186,13 @@ test('战斗帧上报只按协议 op 口径采集：翻格带格子 id、单位�
     // 推进期间**敌方 AI 也会翻格**，那是 legit 的上报 ⇒ 要守的是「每一条都符合协议 op 口径」，不是「数量不变」。
     assert.ok(game.frameEvents.length > before, 'AI 的开发操作同样要上报');
     assert.ok(game.frameEvents.every((event) => event.op === 1 || event.op === 2), 'op 只有 1=翻格 / 2=释放技能');
-    assert.ok(game.frameEvents.every((event) => event.unitId === 0), '操作类事件不对应单位，unitId 恒 0');
+    assert.ok(game.frameEvents.slice(before).some((event) => event.owner === 'enemy'), 'AI 翻格保留敌方归属');
 
     // 结构守卫：append 只允许出现在 pushFrameEvent 一处，且两类采集都用命名常量。
     const source = readFileSync('assets/script/app/zcds/model/ZCGameModel.ts', 'utf8');
     assert.equal((source.match(/frameEvents\.push\(/g) ?? []).length, 1, 'frameEvents 只能在 pushFrameEvent 里 push');
-    assert.match(source, /this\.pushFrameEvent\(FRAME_OP_DEVELOP, \[hex\.id\]\)/);
-    assert.match(source, /this\.pushFrameEvent\(FRAME_OP_SKILL, \[\]\)/);
+    assert.match(source, /this\.pushFrameEvent\(owner, FRAME_OP_DEVELOP, \[hex\.id\]\)/);
+    assert.match(source, /this\.pushFrameEvent\(ZCOwner\.Player, FRAME_OP_SKILL, \[\]\)/);
 });
 
 test('卡类型只有一份清单：英文 key + 集合判定 + 无 legacy 别名', () => {

@@ -19,7 +19,6 @@ function stubHexView(load: (name: string) => any, cc: any, bar: () => any): any 
         'goldResourceFrame', 'mineResourceFrame', 'chestResourceFrame']) view[key] = { name: key };
     view.buildingLayer = bar().node;
     view.iconLabel = { node: bar().node, string: '', enabled: true, color: null };
-    view.outlineGraphics = new cc.Graphics();
     view.healthBar = bar();
     view.cooldownBar = bar();
     return view;
@@ -86,8 +85,8 @@ test('选点后同步抽签结果，为已有资源格补上兵团模型并清�
 
 test('选点结束必须在首次战斗渲染前同步资源抽签结果', () => {
     const source = readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8');
-    const finish = source.slice(source.indexOf('private finishSpawnSelection()'), source.indexOf('private applyResult('));
-    const sync = finish.indexOf('this.renderWorld.syncResolvedResources(matchConfig.map.resolvedResources ?? []);');
+    const finish = source.slice(source.indexOf('startPlaying('), source.indexOf('private presentationResources'));
+    const sync = finish.indexOf('this.renderWorld.syncResolvedResources(config.map.resolvedResources ?? []);');
     assert.ok(sync >= 0 && sync < finish.indexOf('this.renderWorld.render('));
 });
 

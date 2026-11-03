@@ -20,7 +20,10 @@ import {
 } from './ChestTypes';
 import type { IChestDetailData, IChestSlotData } from './ChestTypes';
 import { NewTreasureRepository } from './NewTreasureRepository';
+import type { MainTerritoryMap } from './MainTerritoryMap';
 import { GameNet } from '../net/GameNet';
+import { ChapterSelectPanel } from './ChapterSelectPanel';
+import { loadChapterSelectRows } from '../territory/application/ChapterSelectLoader';
 import { TerritoryUiEvent, TerritoryViewEvent, type ITerritoryRenderEvent } from '../territory/application/TerritoryEvents';
 
 const { ccclass, property } = _decorator;
@@ -44,10 +47,10 @@ export class MainPage extends Component {
     @property({ type: Node, tooltip: 'BeginGame：快速寻敌按钮' })
     startButton: Node = null;
 
-    @property({ type: Node, tooltip: 'BeginGame/PreviousChapter：上一章' })
+    @property({ type: Node, tooltip: 'BeginGame/PreviousChapter：章节选择入口（左侧）' })
     previousChapterButton: Node = null!;
 
-    @property({ type: Node, tooltip: 'BeginGame/NextChapter：下一章（当前章通关后显示）' })
+    @property({ type: Node, tooltip: 'BeginGame/NextChapter：章节选择入口（右侧）' })
     nextChapterButton: Node = null!;
 
     @property({ type: Node, tooltip: 'ChestEntry：打开 / 收起底部宝箱栏' })
@@ -75,7 +78,20 @@ export class MainPage extends Component {
     chestBar: ChestBar = null;
 
     hasTerritoryMap = false;
+    /**
+     * 领地地图页（整页过场的执行者）；`null` = 这个宿主没挂领地地图。
+     *
+     * 只用来借它的 `playMatchingIntro`：宝箱栏的「战斗」格进的是匹配，而推 UI、缩地块、
+     * 盖雾这一整套过场**只有地图页拿得到**（HUD 是它的兄弟节点、雾盖层挂在它的覆盖层上）。
+     * 所以这里不复制一份过场，只把"我要去匹配"这件事交给它 —— 全项目仍然只有一处
+     * `ProcedureManager.navigate(GameRoute.Matching, …)` 在过场里。
+     */
+    territoryMap: MainTerritoryMap | null = null;
     private readonly treasureRepository = new NewTreasureRepository();
+    /** 运行时当前章节（来自 `TerritoryViewEvent.Render` 的 `state.chapterId`），弹窗标「当前章」用。 */
+    private currentChapterId = 0;
+    /** 章节弹窗行数据在途标记：挡连点，避免同一次点击并发拉两次地图。 */
+    private chapterSelectLoading = false;
     /** 详情弹窗当前对应的槽位（1~4）与那颗按钮要发的动作；`0` = 没开。 */
     private detailSlot = 0;
     private detailAction: ChestSlotAction = ChestSlotAction.Open;
@@ -97,10 +113,16 @@ export class MainPage extends Component {
 
     onLoad(): void {
         this.startButton.on(Button.EventType.CLICK, this.onStartGame, this);
-        this.previousChapterButton.on(Button.EventType.CLICK, this.onPreviousChapter, this);
-        this.nextChapterButton.on(Button.EventType.CLICK, this.onNextChapter, this);
+        this.previousChapterButton.on(Button.EventType.CLICK, this.onOpenChapterSelect, this);
+        this.nextChapterButton.on(Button.EventType.CLICK, this.onOpenChapterSelect, this);
+        // 🔴 需求 2026-11-03：快速寻敌两侧的三角**关闭**（用户第 2 条）。
+        //    章节选择的入口改成地图上那颗「章节」建筑（含气泡），见下面的 `ChapterSelect` 订阅。
+        //    节点与点击绑定保留在 prefab 上（不删 `@property`，否则反序列化会丢掉引用），
+        //    只是永久隐藏；将来若要恢复，把 `onTerritoryRender` 里的两行还回去即可。
         this.previousChapterButton.active = false;
         this.nextChapterButton.active = false;
+        // 需求 2026-11-03：点地图上的章节建筑 / 它的「章节」气泡 ⇒ 打开章节选择弹窗。
+        EventMgr.instance.on(TerritoryUiEvent.ChapterSelect, this.onOpenChapterSelect, this);
         EventMgr.instance.on(TerritoryViewEvent.Render, this.onTerritoryRender, this);
         this.chestToggle.on(Button.EventType.CLICK, this.onToggleChestPanel, this);
         // 宝箱栏意图：语义见 `ChestEvents.ts`，页面只订阅、退出时统一 offTarget(this)
@@ -163,17 +185,28 @@ export class MainPage extends Component {
     }
 
     private onTerritoryRender(event: ITerritoryRenderEvent): void {
-        const { ready, hud } = event.state;
-        this.previousChapterButton.active = ready && !!hud?.previousEnabled;
-        this.nextChapterButton.active = ready && !!hud?.nextEnabled;
+        const { chapterId } = event.state;
+        this.currentChapterId = chapterId;
+        // ⚠️ 原来这里按 `ready` 把两侧三角显示出来（它们是章节选择入口）。2026-11-03 起
+        //    入口改成地图上的章节建筑，三角一律隐藏 —— 所以这里**什么都不做**。
+        //    别"顺手"把 `active = ready` 加回来：那会让三角重新出现在快速寻敌两侧。
     }
 
-    private onPreviousChapter(): void {
-        EventMgr.instance.emit(TerritoryUiEvent.Intent, { intent: { kind: 'chapter', offset: -1 } });
-    }
+    /** 打开章节选择弹窗（行数据由 `loadChapterSelectRows` 组装，弹窗只负责铺行）。 */
+    private readonly onOpenChapterSelect = (): void => { void this.openChapterSelect(); };
 
-    private onNextChapter(): void {
-        EventMgr.instance.emit(TerritoryUiEvent.Intent, { intent: { kind: 'chapter', offset: 1 } });
+    private async openChapterSelect(): Promise<void> {
+        if (!this.hasTerritoryMap || this.chapterSelectLoading) return;
+        if (PopupManager.inst.get(ChapterSelectPanel)) return;
+        this.chapterSelectLoading = true;
+        try {
+            const rows = await loadChapterSelectRows(this.assets, this.currentChapterId);
+            if (!this.isValid || PopupManager.inst.get(ChapterSelectPanel)) return;
+            const currentIndex = rows.findIndex((row) => row.current);
+            void ChapterSelectPanel.open({ userData: { rows, currentIndex } });
+        } finally {
+            this.chapterSelectLoading = false;
+        }
     }
 
     private renderChests(data: readonly IChestSlotData[]): void {
@@ -216,6 +249,10 @@ export class MainPage extends Component {
                 battleType: ZC_BATTLE_TYPE_CHAPTER,
                 battleParams: [String(ZC_CHAPTER_BATTLE_SUB_TREASURE)],
             };
+            // 宝箱栏的「战斗」格进的是**匹配**，与领地格点开战走同一套整页过场
+            // （用户 2026-11-02：「宝箱匹配也要接」）。过场接手了就直接返回 ——
+            // 它到点自己跳，这里再跳一次等于两份匹配请求。
+            if (this.territoryMap?.playMatchingIntro(entry)) return;
             ProcedureManager.navigate(GameRoute.Matching, entry);
             return;
         }

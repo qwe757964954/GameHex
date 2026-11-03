@@ -266,15 +266,15 @@ test('基地详情次按钮：收不了的角色给「移动」，施工中的�
             }]]),
             isServerBase: false,
         });
-        page.refreshInfoContent();
-        return page;
+        Object.defineProperty(page, 'size', { value: { width: 720, height: 1280 } });
+        return page.buildInfoPopupContent(page.data);
     };
 
     const idle = build(-1);
-    assert.equal(idle.secondaryButton.node.active, true);
-    assert.equal(idle.secondaryButton.text, '移动');
+    assert.ok(idle.secondary);
+    assert.equal(idle.secondary.text, '移动');
 
     // 施工中的格子既收不了也搬不了 —— 宁可藏掉，也别给一颗点了就报错的钮。
     const busy = build(0);
-    assert.equal(busy.secondaryButton.node.active, false);
+    assert.equal(busy.secondary, null);
 });

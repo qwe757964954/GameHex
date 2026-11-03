@@ -1,0 +1,83 @@
+
+xrz.png
+size: 428,428
+format: RGBA8888
+filter: Linear,Linear
+repeat: none
+hua
+  rotate: false
+  xy: 186, 204
+  size: 67, 52
+  orig: 67, 52
+  offset: 0, 0
+  index: -1
+shetou
+  rotate: false
+  xy: 388, 273
+  size: 26, 21
+  orig: 26, 21
+  offset: 0, 0
+  index: -1
+st
+  rotate: false
+  xy: 2, 198
+  size: 182, 226
+  orig: 182, 226
+  offset: 0, 0
+  index: -1
+yingzi
+  rotate: false
+  xy: 255, 215
+  size: 92, 41
+  orig: 92, 41
+  offset: 0, 0
+  index: -1
+ys
+  rotate: true
+  xy: 216, 37
+  size: 165, 207
+  orig: 165, 207
+  offset: 0, 0
+  index: -1
+ys1
+  rotate: true
+  xy: 2, 2
+  size: 194, 212
+  orig: 194, 212
+  offset: 0, 0
+  index: -1
+yy
+  rotate: true
+  xy: 388, 382
+  size: 42, 31
+  orig: 42, 31
+  offset: 0, 0
+  index: -1
+yz
+  rotate: true
+  xy: 388, 296
+  size: 45, 20
+  orig: 45, 20
+  offset: 0, 0
+  index: -1
+yz1
+  rotate: true
+  xy: 388, 343
+  size: 37, 29
+  orig: 37, 29
+  offset: 0, 0
+  index: -1
+zs
+  rotate: true
+  xy: 186, 258
+  size: 166, 200
+  orig: 166, 200
+  offset: 0, 0
+  index: -1
+zy
+  rotate: true
+  xy: 349, 223
+  size: 33, 38
+  orig: 35, 45
+  offset: 0, 7
+  index: -1

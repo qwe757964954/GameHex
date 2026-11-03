@@ -11,7 +11,9 @@ export type BigMapIntent =
     | { readonly kind: 'harvest'; readonly instanceId: number }
     | { readonly kind: 'visibleCamps'; readonly campIds: readonly number[] }
     | { readonly kind: 'mode'; readonly mode: 'world' | 'base' }
-    | { readonly kind: 'primary' | 'secondary' | 'clear' | 'toggleBuildMenu' | 'harvestAll' };
+    | { readonly kind: 'primary' | 'secondary' | 'clear' | 'toggleBuildMenu' | 'harvestAll' }
+    /** 「探索」：选中并定位到当前可挑战、距离玩家基地最近的野怪。 */
+    | { readonly kind: 'searchMonster' };
 
 export interface IBigMapIntentEvent { readonly intent: BigMapIntent }
 export type BigMapViewCommand =

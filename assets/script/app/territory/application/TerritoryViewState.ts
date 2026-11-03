@@ -23,5 +23,11 @@ export function buildTerritoryViewState(state: ITerritoryViewState): ITerritoryR
             checkUnlock: (id: number, power: number) => snapshot.checkUnlock(id, power),
         });
     }
-    return Object.freeze({ ...state, progress });
+    return Object.freeze({
+        ...state,
+        // 钱包同 `progress` 一样要**拍快照**：延迟一帧的渲染若读到已经扣过费的实时钱包，
+        // 银币数字会在同一帧里从红变白（玩家看到"闪一下"），红/白也就不再对应付款前的事实。
+        wallet: Object.freeze({ silver: state.wallet.silver, stamina: state.wallet.stamina }),
+        progress,
+    });
 }

@@ -7,6 +7,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { BigMapPresenter } from '../assets/script/app/bigmap/application/BigMapPresenter';
+import { BigMapCampRepository } from '../assets/script/app/bigmap/application/BigMapCampRepository';
 import { createMemoryBigMapStorage, BIGMAP_SAVE_KEY } from '../assets/script/app/bigmap/application/BigMapSaveKeys';
 import type { IBigMapStorage, IBigMapPresenterDeps } from '../assets/script/app/bigmap/application/BigMapPresenter';
 import type { IBigMapCityRankBoard } from '../assets/script/app/bigmap/model/BigMapRank';
@@ -273,6 +274,36 @@ test('榜单端口抛错不炸界面：回退本地 NPC 榜', async () => {
     const board = broken.presenter.cityRankBoard(101);
     assert.equal(board.entries.some((entry) => entry.isPlayer), true, '回退后仍要有玩家自己');
     assert.ok(board.entries.length > 1, '回退的是 NPC 榜，不是单人兜底');
+});
+
+test('联机榜单初始为空，个人积分和名单来自服务器，失败保留旧榜且退出丢弃迟到结果', async () => {
+    const repository = new BigMapCampRepository({ fetchSimple: async () => null, fetchDetail: async () => null,
+        fetchRoles: async () => null, requestMove: async () => null });
+    let finish: (board: IBigMapCityRankBoard | null) => void = () => {};
+    let disposed = false;
+    const { presenter } = makeHarness(3, createMemoryBigMapStorage(), CLOCK_PREPARE, null, {
+        campRepository: repository,
+        rankProvider: { fetchCityRank: () => new Promise((resolve) => { finish = resolve; }), dispose: () => { disposed = true; } },
+    });
+    assert.equal(presenter.cityRankBoard(101).entries.length, 0);
+    assert.equal(presenter.cityView(101).playerRank, 0);
+    const board: IBigMapCityRankBoard = { cityId: 101, playerRank: 51, playerWarScore: 200,
+        attackerCount: 1, topWarScore: 900, entries: [{ rank: 1, warScore: 900, isPlayer: false, name: '榜首' }] };
+    let task = presenter.refreshCityRank(101);
+    finish(board);
+    await task;
+    assert.equal(presenter.cityView(101).warScore, 200);
+    assert.equal(presenter.cityView(101).rankEntries[0].name, '榜首');
+    task = presenter.refreshCityRank(101);
+    finish(null);
+    await task;
+    assert.equal(presenter.cityRankBoard(101), board);
+    task = presenter.refreshCityRank(101);
+    presenter.dispose();
+    finish({ ...board, playerWarScore: 999 });
+    await task;
+    assert.equal(disposed, true);
+    assert.equal(presenter.cityRankBoard(101), board);
 });
 
 test('打城之后名次会跟着战功变（榜单重算）', async () => {

@@ -280,7 +280,6 @@ function stubHexView(load: (name: string) => unknown, cc: any, bar: () => any): 
     view.tileSprite.color = null;
     view.buildingLayer = bar().node;
     view.iconLabel = { node: bar().node, string: '', enabled: true, color: null };
-    view.outlineGraphics = new cc.Graphics();
     view.healthBar = bar();
     view.cooldownBar = bar();
     return view;
@@ -449,12 +448,12 @@ test('接线：扩散波挂在 renderDynamic（每帧），不跟地块系统的
 
 test('接线：只在自选主城局（选点确认）起波，且先渲染真实归属再压回半区色', () => {
     const source = readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8');
-    const at = source.indexOf('private finishSpawnSelection(): void {');
-    assert.ok(at > 0, '找不到 finishSpawnSelection');
+    const at = source.indexOf('startPlaying(model:');
+    assert.ok(at > 0, '找不到选点结束展示入口 startPlaying');
     const body = source.slice(at, source.indexOf('\n    }', at));
-    assert.match(body, /startTerritoryClaimWave\(this\.model, selection\)/,
+    assert.match(body, /startTerritoryClaimWave\(frame, selection\)/,
         '波只由选点确认那条路径起，且必须把选点对象（半区口径的出处）一起传进去');
-    const renderAt = body.indexOf('this.renderWorld.render(this.model)');
+    const renderAt = body.indexOf('this.renderWorld.render(frame, events)');
     const waveAt = body.indexOf('startTerritoryClaimWave');
     assert.ok(renderAt > 0 && renderAt < waveAt,
         '必须先渲染再起波：归属格不入波，它们的底色只由这次 render 画出来，反了会停在选点的深蓝高亮上');

@@ -1,4 +1,3 @@
-import { createZCBattlePreload } from '../zcds/application/ZCBattlePreparation';
 import {
     _decorator,
     Component,
@@ -27,15 +26,11 @@ import {
     TERRITORY_RANDOM_GAIN_READOUT_ART,
 } from '../ArtPaths';
 import { GameRoute } from '../../core/runtime/GameRoute';
-import type { ZCBattleStart } from '../battle/BattleStartModel';
+import { ZC_BATTLE_TYPE_CHAPTER } from '../battle/BattleStartModel';
 import { ProcedureManager } from '../../framework/procedure/ProcedureManager';
 import { FW } from '../../framework/FW';
 import { EventMgr } from '../../framework/event/EventMgr';
-import {
-    TERRITORY_DEFAULT_PLAYER_COUNT
-} from '../territory/application/TerritoryTexts';
 import type { ITerritoryRewardPresentation } from '../territory/application/TerritoryEvents';
-import type { ZCGamePreload } from '../zcds/application/ZCGamePreload';
 import type {
     TerritoryIdleRewardGain,
 } from '../territory/model/TerritoryIdleReward';
@@ -70,7 +65,32 @@ import {
 } from '../territory/model/TerritoryMapLayout';
 import type { ITerritoryMapLayout } from '../territory/model/TerritoryMapLayout';
 import type { ITerritorySaveOwner } from '../territory/model/TerritorySaveStore';
+import {
+    TERRITORY_BATTLE_PRELUDE_APPROACH_SECONDS,
+    territoryBattlePreludeApproachSettled,
+    territoryBattlePreludeSpawnSettled,
+} from '../territory/model/TerritoryBattleApproach';
+import {
+    TERRITORY_BATTLE_INTRO_HOLD_MAX_SECONDS,
+    TERRITORY_BATTLE_INTRO_READY_MAX_SECONDS,
+    TERRITORY_BATTLE_INTRO_RESTORE_FALLBACK_SECONDS,
+    TERRITORY_BATTLE_INTRO_TARGETS,
+    territoryBattleIntroDirVector,
+    territoryBattleIntroHoldFx,
+    territoryBattleIntroInFx,
+    territoryBattleIntroOutFx,
+    territoryBattleIntroPushPx,
+    type ITerritoryBattleIntroFx,
+} from '../territory/model/TerritoryBattleIntro';
+import type { IMatchingEntryParams } from '../matching/MatchTypes';
+import { TERRITORY_TEXTS } from '../territory/application/TerritoryTexts';
 import { TerritoryMapView } from '../territory/view/TerritoryMapView';
+import {
+    acquireIntroHud,
+    applyIntroHud,
+    releaseIntroHud,
+    type ITerritoryBattleIntroHud,
+} from '../territory/view/TerritoryBattleIntroHud';
 import { BigMapPlayerLevelPanel } from '../territory/view/BigMapPlayerLevelPanel';
 import type {
     IBigMapPlayerLevelContent,
@@ -142,6 +162,47 @@ function findDescendantByName(root: Node, name: string): Node | null {
 }
 
 /**
+ * 整页过场"到点了要把玩家送去哪"。
+ *
+ * 两条路都从这里走同一个 `commitBattleNav`（保证全项目只有一处 `ProcedureManager.navigate`）：
+ *
+ * · `battle`：领地格点开战 —— 要等**服务器回包**（`navigate` 命令）才有 payload，
+ *   过场正好把这段等待盖住；
+ * · `matching`：宝箱栏的「战斗」格 —— 纯本地跳转，没有在途请求，所以起演那一刻就
+ *   把这条记下来（`hold` 段立刻结束），过场退化成"推进去、再散开"。
+ */
+type ITerritoryBattleIntroNav =
+    | { readonly route: 'battle'; readonly payload: ITerritoryNavigateBattlePayload }
+    | { readonly route: 'matching'; readonly entry: IMatchingEntryParams };
+
+/** 整页过场的运行时状态（时间轴在 page 里推进，曲线在 `model/TerritoryBattleIntro`）。 */
+interface IBattleIntroState {
+    phase: 'out' | 'hold' | 'in';
+    /** 当前段的进度秒数。 */
+    elapsed: number;
+    /** `hold` 段"等回包"累计多久（超 `TERRITORY_BATTLE_INTRO_HOLD_MAX_SECONDS` 就取消）。 */
+    held: number;
+    /** 要把玩家送去哪（`navigate` 到达时才填）。 */
+    nav: ITerritoryBattleIntroNav | null;
+    /**
+     * 目标页的资源是否就绪（`true` = 可以散场）。
+     *
+     * `nav` 到达只说明"知道去哪"，不说明"那边画得出来"：战场首帧资源实测要 5 秒
+     * （`[BattleLoading] 首帧资源准备完成 5079ms`）。云必须盖到它好为止，
+     * 否则玩家看到的是"云散开 → 一片空屏 5 秒 → 战场突然出现"。
+     */
+    ready: boolean;
+    /** `nav` 到达之后又等了多久（等资源），与 `held`（等回包）分开记。 */
+    waited: number;
+    /** 已经发起过 `commitBattleNav`（`in` 段只许跳一次）。 */
+    navigated: boolean;
+    /** 推出去的 HUD 句柄（基准 / 方向 / 透明度都在 `TerritoryBattleIntroHud` 里）。 */
+    hud: ITerritoryBattleIntroHud[];
+    /** 推出距离（px），开演时按视口算一次。 */
+    pushPx: number;
+}
+
+/**
  * 「冒险」页的 Passive View。
  *
  *  本类只做引擎生命周期、接线与渲染编排；状态、流程、规则全部在纯 TS 的
@@ -201,14 +262,40 @@ export class MainTerritoryMap extends Component {
     private get assets(): AssetService { return this.controllerResources.assets; }
     private get configs(): GameContext['configs'] { return this.controllerResources.configs; }
     private get sessionAssets(): GameContext['sessionAssets'] { return this.controllerResources.sessionAssets; }
+    private battleReady: Promise<unknown> | null = null;
     /**
-     * 对局资源预加载（与匹配页 `ZCGamePreload` 同款）：开战请求在途时并行启动，
-     * 回包后 navigate 直接复用 —— 消除「服务端已回 `CmdStartBattleRspMsg` 还要等
-     * 资源加载才进游戏」的延迟。navigate 后置空（资源已移交战斗页），下次开战重建。
+     * 「遭遇敌人」过场正在播（或排队中）⇒ 丢弃后续的 navigate 命令。
+     *
+     *  过场期间地图输入是锁着的（`playBattleApproach` 里 `setInputLocked(true)`），正常点不出第二个格子；
+     *  这道闸是给「服务端推送 / 上一笔迟到回包」兜底的 —— 真跳两次会让战斗流程收到两份 `pve`。
      */
-    private battlePreload: ZCGamePreload | null = null;
-    /** 预加载失败标记：失败时 navigate 不带 preload，战斗页按原逻辑当场加载（不回退阻塞）。 */
-    private battlePreloadFailed = false;
+    private battleApproachPending = false;
+    /**
+     * 「进战斗 / 匹配」整页过场（`null` = 没在演）。
+     *
+     *  三段：`out`（UI 推出 + 地块隐藏 + 云合拢）→ `hold`（云静止，等服务器回包）→ `in`（云散开）。
+     *  时间轴与曲线全在 `model/TerritoryBattleIntro`，这里只做三件事：
+     *  ① 扣 `dt` 换段；② 写 HUD 节点的位移 / 透明度；③ 把同一帧的 `fx` 交给地图视图。
+     *
+     *  ⚠️ HUD 的基准位置在**开演那一刻**量一次（`base`）：Widget 会在布局事件里改 position，
+     *    每帧重量会把"已经被推出去的"位置当成基准，越推越远。
+     */
+    private battleIntro: IBattleIntroState | null = null;
+    /**
+     * 跳转已经发出、页面还没被销毁时留的"现场"（`null` = 没有欠账）。
+     *
+     *  `in` 段播完就跳转，但页面要等预加载完才销毁 —— 这段时间**故意不还原**主界面
+     *  （还原会整片闪回来，过场白做）。留一份现场挂个兜底定时器：真没跳走就还回去。
+     */
+    private battleIntroLeftover: { hud: ITerritoryBattleIntroHud[] } | null = null;
+    /**
+     * 上一次 `busyBattle` 被过场接管、**没有真的弹全屏 loading**。
+     *
+     *  起演时故意不 `LoadingPopup.show`（它在弹窗层最上面，会把 `out` / `hold` 盖掉），
+     *  但 `busy = false` 那条收尾还在 ⇒ 用这个标志把"没 show 过的那一次"配掉，
+     *  否则会多减一次全局引用计数、把别的请求的遮罩提前撤掉。
+     */
+    private battleBusyHiddenLoading = false;
     /** `canvas-resize` 只挂一次（页面复用时不重复累积回调）。 */
     private mapInsetResizeBound = false;
     /**
@@ -244,17 +331,23 @@ export class MainTerritoryMap extends Component {
     }
 
     /**
-     * 「未解锁云」的四套图：`image/territory/cloud/` 下按前缀分四组。
+     * 「云」的几套图：`image/territory/cloud/` 下按前缀分组。
      *
-     * · `cloud_body_0` / `cloud_shadow_0` = 未解锁的**静止**云体与影子（各一张，不轮播）；
-     * · `cloud_dissolve_body_0…1` / `cloud_dissolve_shadow_0…1` = 解锁消散（各两帧）。
+     * · `cloud_body_0` / `cloud_shadow_0` = 未解锁的**静止**云体与影子（地图用，各一张）；
+     * · `cloud_dissolve_body_0…1` / `cloud_dissolve_shadow_0…1` = 解锁消散（地图用，各两帧）；
+     * · `cloud_idle_0…4` = 美术源图（= 云体 + 影子烤在一起的合并图，**运行时不用**）。
      *
      * ⚠️ **必须按前缀分开、各自按文件名排序**：`loadDir` 返回顺序不保证（同族坑见
      * `loadHexFlipAssets`），混在一个数组里按名排序会让 `cloud_dissolve_*` 排到
      * `cloud_body_*` 之前，帧序就整体错位了。
      *
-     * 一张都取不到 ⇒ 整条表现关闭（地图照常渲染），并打一条 warn —— 刚加的图忘了
-     * 刷新资源库时能一眼看到原因，而不是"云神秘消失"。
+     * 🔴 盖层（过场那层）用**云体** `cloud_body_*`，不是 `cloud_idle_*`：
+     *    合并图把影子烤进了每朵云里，密铺时每朵的黑影都盖在邻居的白云体上 ⇒ 整屏发灰
+     *    （用户 2026-11-02 晚上实机截图，整屏均值 147；领地正常页 231）。
+     *    地图不显灰是因为它把影子**全部抽到云体之下**（`CloudShadow` 一层），而不是逐朵叠。
+     *
+     * 一张都取不到 ⇒ 整条表现关闭（地图照常渲染、过场退回推镜），并打一条 warn ——
+     * 刚加的图忘了刷新资源库时能一眼看到原因，而不是"云神秘消失"。
      */
     private async loadCloudArt(): Promise<void> {
         const groups = {
@@ -274,16 +367,19 @@ export class MainTerritoryMap extends Component {
             .filter((frame) => frame.name.startsWith(prefix))
             .sort((a, b) => a.name.localeCompare(b.name));
         if (!this.isValid) return;
-        if (!pick(groups.body).length) {
+        const body = pick(groups.body);
+        if (!body.length) {
             console.warn('[MainTerritoryMap] 未解锁云帧缺失（image/territory/cloud/'
                 + 'cloud_body_0 / cloud_shadow_0…），章节地图不盖云；若是刚加的图，请在资源管理器里刷新一次让编辑器导入');
         }
         this.mapView.setCloudFrames({
-            body: pick(groups.body),
+            body,
             shadow: pick(groups.shadow),
             dissolveBody: pick(groups.dissolveBody),
             dissolveShadow: pick(groups.dissolveShadow),
         });
+        // 盖层与地图云体**同一组帧**：要的正是"白的那一层"，不是 `cloud_idle_*` 合并图。
+        this.mapView.setBattleCloudFrames(body);
     }
 
     /**
@@ -433,12 +529,13 @@ export class MainTerritoryMap extends Component {
     onDestroy(): void {
         EventMgr.instance.emit(TerritoryUiEvent.Disposed);
         EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'destroyed' });
+        // 「等流程接手」的订阅必须自己摘：它是挂在全局 ProcedureManager 上的，
+        // 页面都没了还留着，下一次别的流程切换失败会回调到一个死节点上。
+        this.stopBattleSwitchWatch();
         this.closePopup(LevelTipPanel);
         this.closePopup(LevelInfoPanel);
         EventMgr.instance.offTarget(this);
-        // 预加载资源未移交（没进战斗）⇒ 释放，避免常驻内存；已移交则归战斗页 scope。
-        this.battlePreload?.releaseFromMatching();
-        this.battlePreload = null;
+        this.battleReady = null;
         // 开箱表演正在播 ⇒ 收起（`stop` 不回调结算；页面都要没了，结算已由 Controller 落库）。
         this.mapView?.stopChestPlay();
         // `view` 是全局单例，不摘会随页面复用累积回调（每次进来多跑一次重量）。
@@ -447,21 +544,6 @@ export class MainTerritoryMap extends Component {
         // ⚠️ 这里不再对子节点调 `off(...)`：`Node._onPreDestroyBase()` 先销毁子节点、
         // 再跑本函数，节点销毁时 EventTarget 已释放，监听不泄漏；引擎这版 `Node.off` 不判空，
         // 手动摘必抛。同族规则见 docs/AI架构与代码规范.md §7.2。
-    }
-
-    /**
-     * 回包后按实际阵容和本关波次准备资源，将同一个 preload 移交战斗流程。
-     * 失败静默回退：标记失败后 navigate 不带 preload，战斗页按原逻辑当场加载。
-     */
-    private ensureBattlePreload(battle: ZCBattleStart | null, waveCardIds: readonly number[]): void {
-        if (this.battlePreload && !this.battlePreloadFailed) return;
-        this.battlePreloadFailed = false;
-        const preload = createZCBattlePreload(
-            Promise.resolve(battle), { playerCount: TERRITORY_DEFAULT_PLAYER_COUNT, waveCardIds });
-        void preload.ready.catch(() => {
-            if (this.battlePreload === preload) this.battlePreloadFailed = true;
-        });
-        this.battlePreload = preload;
     }
 
     // ============================================================
@@ -480,7 +562,7 @@ export class MainTerritoryMap extends Component {
     private onCommand(event: ITerritoryCommandEvent): void {
         const command = event.command;
         switch (command.kind) {
-            case 'navigate': this.onNavigateToBattle(command.payload); break;
+            case 'navigate': this.battleReady = command.ready ?? null; this.onNavigateToBattle(command.payload); break;
             case 'tip': this.onShowTip(command.payload); break;
             case 'rewards': this.onShowRewards(command.payload); break;
             case 'busy': this.onSetBusy(command.payload); break;
@@ -490,26 +572,225 @@ export class MainTerritoryMap extends Component {
     }
 
     private onNavigateToBattle(payload: ITerritoryNavigateBattlePayload): void {
-        const { pve, battle } = payload;
         // 有效回包已被 Controller 接受，此时关闭详情不会作废在途开战请求。
         // 弹窗挂在全局 PopupManager 下，必须在战斗流程接手时主动收起。
         this.closePopup(LevelTipPanel);
         this.closePopup(LevelInfoPanel);
-        this.ensureBattlePreload(battle ?? null, pve.waves.map((wave) => wave.pvpCardId));
-        const preload = this.battlePreloadFailed ? undefined : this.battlePreload;
-        // 无论移交成功与否，本次都用掉了：下次开战按 busyBattle 重建。
-        this.battlePreload = null;
-        this.battlePreloadFailed = false;
-        ProcedureManager.navigate(GameRoute.Battle, {
-            pve: { ...pve, territorySaveOwner: this.saveOwner },
-            battle,
-            selfRoleId: this.saveOwner?.roleId,
-            preload,
+        // 一次开战只跳一次：过场 / 前奏期间再来一条 navigate（服务端推送 / 迟到回包）一律丢弃。
+        if (this.battleApproachPending) return;
+        // 🔴 首次解锁直开（`approach`）：「① 关卡地块生成 → ② 镜头推进 + 提示条 → ③ 云层过场」
+        //    （用户 2026-11-02）。这条分支必须排在 `startBattleIntro()` **之前** ——
+        //    云一旦先盖上来，前两段就全在云后面演，玩家什么都看不见。
+        if (payload.approach) {
+            this.beginBattlePrelude(payload);
+            return;
+        }
+        // 过场已经开演（请求在途时由 `busy` 起的手）⇒ 交给它，回包就是"可以走了"的信号。
+        if (this.battleIntro) {
+            this.releaseBattleIntro({ route: 'battle', payload });
+            return;
+        }
+        // 手按开战这条没有在途请求 ⇒ 就地开演（`out` 0.55s 后自己进 `in`，不等任何人）。
+        if (this.startBattleIntro()) {
+            this.releaseBattleIntro({ route: 'battle', payload });
+            return;
+        }
+        // 云盖层建不出来（云美术没加载上 / 拿不到地图中心）⇒ 没有过场可播，直接走。
+        this.commitBattleNav({ route: 'battle', payload });
+    }
+
+    /**
+     * 「首次解锁直开」的前奏（用户 2026-11-02）：
+     *
+     * > 1. 首先播放关卡地块生成
+     * > 2. 镜头推进，播放触发战斗提示条
+     * > 3. 再播放云层的过渡动画
+     *
+     * 为什么单独一段：这条路的解锁回包**同时**带来"一批新地块"和"马上开战"。旧代码在
+     * `busy` 那一刻就把云盖上了（`onSetBusy`），于是地块生成整段都在云后面演 —— 白做；
+     * 而推镜 + 提示条也被云顶掉（`out` 段就把 HUD 推出去了）。现在按顺序排开，
+     * 云留在最后，正好接上"云散开露出战场"那一段。
+     */
+    private battlePrelude: {
+        stage: 'spawn' | 'approach';
+        elapsed: number;
+        payload: ITerritoryNavigateBattlePayload;
+        /** 宽限期里**见过**地块生成在播（见过就必须等它播完）。 */
+        seenSpawn: boolean;
+    } | null = null;
+
+    private beginBattlePrelude(payload: ITerritoryNavigateBattlePayload): void {
+        // 🔴 极端并发：别的开战请求（同屏另一格）已经把云盖上来了、整页过场正在演。
+        //    前两段这时候补不了（云已经挡住画面），但也**绝不能干等** —— 过场的 `hold`
+        //    在等 `nav`，这里不交出去就要硬等到 `HOLD_MAX` 3s 然后判取消、把界面还回去，
+        //    玩家等于点了一下没进去。 ⇒ 直接把去向交给它，让它自己散场。
+        if (this.battleIntro) {
+            this.releaseBattleIntro({ route: 'battle', payload });
+            return;
+        }
+        if (this.battlePrelude) return;
+        this.battleApproachPending = true;
+        // 弹窗先关（与整页过场同一口径：「先关闭弹窗，再播放过场动画」）。
+        this.closeBattleIntroPopups();
+        // 前奏两段都不许再点：推镜自己会锁输入，地块生成那 0.7s 没有镜头动画，
+        // 只靠 `setInputLocked` 会被下一帧的自动解锁放掉 ⇒ 用前奏那把锁。
+        this.mapView?.setPreludeLock(true);
+        this.battlePrelude = { stage: 'spawn', elapsed: 0, payload, seenSpawn: false };
+    }
+
+    /** 前奏每帧推进；它跑的时候整页过场还没开演（`battleIntro` 为空）。 */
+    private stepBattlePrelude(
+        prelude: NonNullable<typeof this.battlePrelude>,
+        step: number,
+    ): void {
+        const mapView = this.mapView;
+        prelude.elapsed += step;
+        if (prelude.stage === 'spawn') {
+            // ① 等这一批新地块播完（`0` = 没在播：宽限期过了就认"这一局没有新地块"）。
+            const remaining = mapView?.hexSpawnRemainingSeconds() ?? 0;
+            if (remaining > 0) prelude.seenSpawn = true;
+            if (!territoryBattlePreludeSpawnSettled(prelude.elapsed, remaining, prelude.seenSpawn)) return;
+            // ② 镜头推进 + 「遭遇敌人，即将开始战斗」提示条（同一刻起）。
+            prelude.stage = 'approach';
+            prelude.elapsed = 0;
+            FW.showTip(TERRITORY_TEXTS.battleApproach);
+            const started = mapView?.playBattleApproach(prelude.payload.pve.territoryCellId) ?? false;
+            // 播不了（格子不在视口 / 覆盖层没建）⇒ 不白等 1.2 秒，直接进第三段。
+            if (!started) prelude.elapsed = TERRITORY_BATTLE_PRELUDE_APPROACH_SECONDS;
+            return;
+        }
+        // ② → ③ 的交界必须确认推镜**已经收尾**：它和云写的是同一个 `MapLayer`，
+        // 推镜还没还原就去量基准，云会盖在一张被放大过的地图上。
+        if (!territoryBattlePreludeApproachSettled(prelude.elapsed, mapView?.isBattleApproachPlaying ?? false)) return;
+        // ③ 云层过场（原来 `onNavigateToBattle` 里那条路，顺序没变，只是被推迟到这里）。
+        const nav: ITerritoryBattleIntroNav = { route: 'battle', payload: prelude.payload };
+        this.battlePrelude = null;
+        this.battleApproachPending = false;
+        // 前奏这把锁交给过场：`beginBattleIntro` 自己会 `setInputLocked(true)`。
+        this.mapView?.setPreludeLock(false);
+        if (this.startBattleIntro()) {
+            this.releaseBattleIntro(nav);
+            return;
+        }
+        // 云美术没加载上 ⇒ 没有过场可播。推镜已经播过了，直接走。
+        this.commitBattleNav(nav);
+    }
+
+    /** 真正把玩家交给流程（过场前后都走这一条，保证只有一处 `ProcedureManager.navigate`）。 */
+    /**
+     * 这条去向要"把云交接过去"吗（而不是自己散场后再跳）？
+     *
+     * 只有**领地普通关**是：它去匹配页，而匹配页底下要铺同一屏云。其余两条不走这条：
+     *  · 塔防 / boss 关（`mode = defence`）直进战场，没有匹配页，云得自己散完再跳；
+     *  · 宝箱栏的「战斗」格是 PVP 匹配，跟领地无关，没有云可交接。
+     */
+    private isCoverHandover(nav: ITerritoryBattleIntroNav): boolean {
+        return nav.route === 'battle' && nav.payload.pve.mode === 'match' && !!nav.payload.battleParams;
+    }
+
+    private commitBattleNav(nav: ITerritoryBattleIntroNav): void {
+        // 宝箱匹配：没有战报 payload、也没有要移交的预加载，直接进匹配页。
+        if (nav.route === 'matching') {
+            ProcedureManager.navigate(GameRoute.Matching, nav.entry);
+        } else if (nav.payload.pve.mode === 'match' && nav.payload.battleParams) {
+            // 普通关（`mode = match`）先进**匹配界面**（用户 2026-11-02：「点击关卡后没有进到
+            // 匹配界面，直接进了战场」）。开战请求由匹配页发，领地只把 `battleParams` 交出去。
+            //
+            // `pve` 必须原样捎上：匹配页自己不认识它，只在跳战场时透传
+            // （见 `MatchingComposition.mount` 的 `navigate` 包装）。没有它，战斗页拿不到
+            // 波次 / 敌阵 / `territorySaveOwner` ⇒ 打完这一关也不回写领地进度。
+            ProcedureManager.navigate(GameRoute.Matching, {
+                battleType: ZC_BATTLE_TYPE_CHAPTER,
+                battleParams: nav.payload.battleParams,
+                pve: nav.payload.pve,
+                // 待机步进带过去，匹配页那层云接着同一拍循环 —— 不带的话切过去整屏云会"换一次脸"。
+                coverStep: this.mapView?.battleIntroCoverStep ?? 0,
+                // 视口尺寸也要带：领地这边量的是地图视口，和 `view.getVisibleSize()` 不一定相等。
+                coverViewport: this.mapView?.battleIntroCoverSize,
+            });
+        } else {
+            // 首领关（`mode = defence`，塔防类）不经过匹配，直进战场（用户同日补充）。
+            EventMgr.instance.emit(TerritoryUiEvent.Intent, { intent: { kind: 'enterBattle', payload: nav.payload } });
+        }
+        // ⚠️ 订阅必须在 `navigate` **之后**（同一帧）：`changeProcedure` 开头会
+        //    `cancelPendingSwitch()`，那一下会把**上一次**切换的失败同步播给所有订阅者 ——
+        //    先订阅就会把它误读成本次失败，白白把过场收掉。
+        this.watchBattleSwitch();
+    }
+
+    /** 「已发出跳转、等流程接手」阶段的订阅句柄（`null` = 没在等）。 */
+    private battleSwitchWatch: (() => void) | null = null;
+
+    /**
+     * 盯住这次流程切换的**落定**结果。
+     *
+     * 为什么必须有：`navigate` 只是把切换排上，真正切走要等预加载。以前这段失败是**静默**的
+     * —— 只有一条 `[ProcedureManager] 流程预加载失败`，玩家那边是「雾停在半空、过一会儿
+     * 又回到领地」（兜底定时器还原），看起来和"点了没反应"没区别。
+     * 现在要么切走（什么都不用做），要么当场把主界面还回去 + 说一句为什么没进去。
+     */
+    private watchBattleSwitch(): void {
+        this.stopBattleSwitchWatch();
+        this.battleSwitchWatch = ProcedureManager.onSwitchSettled((entered) => {
+            this.stopBattleSwitchWatch();
+            if (entered) {
+                // 真的切走了：主界面马上会被 `onLeave` 卸掉，留个兜底定时器反而可能在
+                // 交接的空档把 UI 弹回来，先把它作废。
+                this.battleIntroLeftover = null;
+                return;
+            }
+            // 预加载失败 / 被别的切换顶掉 / 路由没注册 —— 这一局是进不去了。
+            this.failBattleIntro('战斗流程没有接手（预加载失败或被其他切换顶掉）');
         });
     }
 
+    private stopBattleSwitchWatch(): void {
+        this.battleSwitchWatch?.();
+        this.battleSwitchWatch = null;
+    }
+
+    /**
+     * 战斗（或匹配）页最终没起来：把主界面**立刻**还回去，并让玩家知道这一下没成。
+     *
+     * 三件事缺一不可：
+     *  · 把 HUD / 地块 / 云盖层复位、放开输入锁；
+     *  · `cancelBattleStart` —— model 侧的 `startingBattle` 不复位的话，
+     *    `requestBattle` 第一道 `if (this.startingBattle) return` 会把「开始战斗」变成死按钮；
+     *  · 提示 —— 不然玩家只会看到"过场演完了我又回到领地了"。
+     */
+    private failBattleIntro(reason: string): void {
+        console.warn(`[BattleIntro] ${reason}，退回领地界面`);
+        // 兜底定时器那条路进来时订阅还挂着，这里一并摘掉（幂等）。
+        this.stopBattleSwitchWatch();
+        // 前奏（地块生成 / 推镜）里失败也要收干净：它那把输入锁不是过场那把。
+        this.abortBattlePrelude();
+        // 两种时机都要兜住：`in` 段还没播完（`battleIntro` 还在），或者已经交给
+        // `abandonBattleIntro`（只剩 `battleIntroLeftover`）。HUD 句柄必须原样传回去，
+        // 否则被推出去的底栏 / 顶栏永远回不来。
+        const hud = this.battleIntro?.hud ?? this.battleIntroLeftover?.hud ?? [];
+        this.battleIntro = null;
+        this.battleIntroLeftover = null;
+        this.restoreBattleIntroScene(hud);
+        this.sendIntent({ kind: 'cancelBattleStart' });
+        FW.showTip(TERRITORY_TEXTS.battleEnterFailed);
+    }
+
     private onShowTip(payload: ITerritoryShowTipPayload): void {
+        // 前奏里收到提示 ⇒ 这条开战链路已经断了（服务端拒绝 / 资源不足），别让地块生成
+        // 和推镜继续演下去，直接把画面还给玩家。
+        if (this.battlePrelude) this.abortBattlePrelude();
+        // 过场还盖着整屏、输入也锁着 ⇒ 此刻的提示只可能来自这条开战链路
+        // （资源不足 / 被服务端拒绝）。没有"反向过场"这种少见路径要演，直接复位放开玩家。
+        if (this.battleIntro && !this.battleIntro.navigated) this.finishBattleIntro();
         FW.showTip(payload.text);
+    }
+
+    /** 丢掉前奏状态并放开那把输入锁（失败 / 被打断时用；幂等）。 */
+    private abortBattlePrelude(): void {
+        if (!this.battlePrelude) return;
+        this.battlePrelude = null;
+        this.battleApproachPending = false;
+        this.mapView?.setPreludeLock(false);
     }
 
     private onShowRewards(payload: ITerritoryShowRewardsPayload): void {
@@ -520,10 +801,338 @@ export class MainTerritoryMap extends Component {
         // 写请求在途 = 全屏 loading 遮挡（引用计数，多个并发请求只显一层）：
         // 请求期间玩家点不到地图/按钮，从源头防「服务端还没响应就快速连点」。
         if (payload.busy) {
+            // 「开战校验」这条请求在途 ⇒ 先把整页过场演起来（需求 2026-11-02 第 3 条：
+            // 雾合拢后**静止等回包**）。按文案认这条请求：`busyBattle` 只在领地 model 层的
+            // `startBattle` / `unlockThenStartBattle` 里出现过，别的请求各有各的文案。
+            //
+            // 🔴 但「首次解锁直开」那一路例外（`payload.approach`）：它回包后要先播
+            // 「① 关卡地块生成 → ② 镜头推进 + 提示条 → ③ 云层过场」（用户 2026-11-02），
+            // 云必须留到最后 —— 这里盖上去，前两段就全在云后面演了。
+            if (payload.text === TERRITORY_TEXTS.busyBattle && payload.approach !== true && this.startBattleIntro()) {
+                // 🔴 过场接手了就不再叠全屏 loading（弹窗层在最上面）：
+                //    它会把 `out`（UI 推出 + 雾合拢）和 `hold`（静止等回包）整段盖掉，
+                //    玩家只看得见最后那点雾散 —— 等于过场白做。遮罩原本干的"挡连点"这件事，
+                //    过场已经用 `setInputLocked(true)` 接管了（`beginBattleIntro` 里）。
+                this.battleBusyHiddenLoading = true;
+                return;
+            }
             LoadingPopup.show(payload.text);
-        } else {
-            LoadingPopup.hide();
+            return;
         }
+        // 上一次 `busyBattle` 由过场接管、**没真的 show** ⇒ 这一次也不许 hide：
+        // `LoadingPopup` 是全局引用计数，多减一次会把别的请求的遮罩提前撤掉。
+        if (this.battleBusyHiddenLoading) {
+            this.battleBusyHiddenLoading = false;
+            return;
+        }
+        LoadingPopup.hide();
+    }
+
+    // ============================================================
+    // 「进战斗 / 匹配」整页过场（需求 2026-11-02）
+    // ============================================================
+
+    /**
+     * 每帧推进整页过场。没在演时只有一次 `null` 判断。
+     *
+     * 三段的状态机在这里，**曲线与常量全在** `model/TerritoryBattleIntro`：
+     *
+     *  · `out`：扣到 0.55s 后转 `hold`，并把 `hold` 的定格帧再写一次
+     *    （保证"停在合拢末帧"这件事是显式的，不依赖上一帧恰好写到哪）；
+     *  · `hold`：**位置/透明度一个都不写**（云停在合拢末帧），只有盖层的待机循环在换帧
+     *    （`stepBattleIntroCover`）。`hold` 内部再分两段：
+     *      - 没拿到 `nav` ⇒ 等服务器回包，超 `HOLD_MAX` 3s 判**取消**；
+     *      - 拿到 `nav` 但目标页还没 ready ⇒ 继续盖着等资源，超 `READY_MAX` 12s **不判失败**、
+     *        照样散场跳转（让战场页自己显示加载态）。
+     *  · `in`：云散开；过 60% 发起跳转（只一次），播完复位。
+     */
+    update(dt: number): void {
+        const step = Number.isFinite(dt) && dt > 0 ? dt : 0;
+        // 「首次解锁直开」的前奏（地块生成 → 推镜 → 盖云）排在整页过场之前：
+        // 它跑的时候 `battleIntro` 还没建，两段不会同时写 `MapLayer`。
+        const prelude = this.battlePrelude;
+        if (prelude) {
+            this.stepBattlePrelude(prelude, step);
+            return;
+        }
+        const intro = this.battleIntro;
+        if (!intro) return;
+        // 云盖层的待机循环**三段都要推**（尤其 `hold`：位置不动、云在呼吸）。
+        // 只换帧、不碰位置，所以放在相位判断之前没有任何副作用。
+        this.mapView?.stepBattleIntroCover(step);
+        if (intro.phase === 'out') {
+            intro.elapsed += step;
+            const fx = territoryBattleIntroOutFx(intro.elapsed);
+            this.writeBattleIntroFx(fx);
+            if (fx.done) {
+                intro.phase = 'hold';
+                intro.held = 0;
+                this.writeBattleIntroFx(territoryBattleIntroHoldFx());
+            }
+            return;
+        }
+        if (intro.phase === 'hold') {
+            // 普通关（`mode = match`）：云**不散**，直接交给匹配页。
+            // 匹配页在界面底下重建同一屏云（点阵确定性 + 待机步进接上），所以切过去那一帧
+            // 画面不变；玩家看到的匹配界面始终盖在云上面，等匹配成功才露出云、再散开。
+            // 这一段之前是"先散场再跳"，结果云散完到匹配页画出来之间会露出裸露的地图和底色
+            // —— 用户 2026-11-02 拍的正是那一帧。
+            if (intro.nav && this.isCoverHandover(intro.nav)) {
+                this.commitBattleNav(intro.nav);
+                if (!this.isValid) return;
+                this.abandonBattleIntro();
+                return;
+            }
+            if (intro.nav) {
+                // 去向已知，但目标页可能还在加载（战场首帧实测 5 秒）⇒ 云继续盖着静止等，
+                // 这一段**不套用** `HOLD_MAX`（那是"等回包"的超时）。
+                if (intro.ready) {
+                    intro.phase = 'in';
+                    intro.elapsed = 0;
+                    return;
+                }
+                intro.waited += step;
+                if (intro.waited >= TERRITORY_BATTLE_INTRO_READY_MAX_SECONDS) {
+                    // 超时不判失败：照样散、照样跳，让战场页自己显示加载态 ——
+                    // 取消反而会把已经扣掉的资源白扣。
+                    console.warn(`[BattleIntro] 等目标页资源超过 ${TERRITORY_BATTLE_INTRO_READY_MAX_SECONDS}s，先散场`);
+                    intro.phase = 'in';
+                    intro.elapsed = 0;
+                }
+                return;
+            }
+            intro.held += step;
+            if (intro.held >= TERRITORY_BATTLE_INTRO_HOLD_MAX_SECONDS) this.finishBattleIntro();
+            return;
+        }
+        intro.elapsed += step;
+        const fx = territoryBattleIntroInFx(intro.elapsed);
+        this.writeBattleIntroFx(fx);
+        if (fx.navigate && !intro.navigated && intro.nav) {
+            intro.navigated = true;
+            this.commitBattleNav(intro.nav);
+            if (!this.isValid) return;
+        }
+        if (fx.done) {
+            // 已经交给战斗流程 ⇒ 不把主界面弹回来（预加载可能还要几十帧），只留兜底还原。
+            // 没跳转（理论上不会有这条：`in` 只在有 payload 时才进）⇒ 立刻复位。
+            if (intro.navigated) this.abandonBattleIntro();
+            else this.finishBattleIntro();
+        }
+    }
+
+    /**
+     * 开演整页过场。
+     *
+     * @returns `true` = 已经开演（或本来就在演）；`false` = 演不了，
+     *          调用方应退回推镜过场或直接跳转 —— 绝不能让云盖住一个不动的画面。
+     */
+    private startBattleIntro(): boolean {
+        if (this.battleIntro) return true;
+        if (!this.mapView?.isValid) return false;
+        // 地图那半先起手（它会量基准、锁输入、建雾盖层）；失败就整个过场不做。
+        if (!this.mapView.beginBattleIntro()) return false;
+        // 用户 2026-11-02：「从弹窗这部分走过程需要先关闭弹窗，再播放过场动画」。
+        // 弹窗不关，`out`（UI 推出 + 雾合拢）整段都在它后面 —— 玩家只看得见最后那点雾散。
+        // 位置在 `beginBattleIntro()` **之后**：播不了时别白关玩家正在看的弹窗。
+        this.closeBattleIntroPopups();
+        this.battleIntro = {
+            phase: 'out',
+            elapsed: 0,
+            held: 0,
+            nav: null,
+            ready: true,
+            waited: 0,
+            navigated: false,
+            hud: this.collectBattleIntroHud(),
+            pushPx: territoryBattleIntroPushPx(...this.battleIntroViewport()),
+        };
+        this.battleApproachPending = true;
+        this.writeBattleIntroFx(territoryBattleIntroOutFx(0));
+        return true;
+    }
+
+    /**
+     * 关掉挡在过场前面的三个弹窗（关卡界面 / 关卡提示 / 玩家关卡面板）。
+     *
+     * 用户 2026-11-02：「从弹窗这部分走过程需要先关闭弹窗，再播放过场动画」。
+     * 三个入口都汇到 `startBattleIntro` 这一处，所以这里关一次就全覆盖：
+     *  · 弹窗里的「开始战斗」→ 请求在途时 `busy` 起演；
+     *  · 地块上直接开战 → `navigate` 起演；
+     *  · 宝箱栏的匹配格 → 本来就没有弹窗，`closePopup` 是空转。
+     *
+     * 关得掉的前提是 `PopupManager.close` **同步**（出栈 → 回收 / `destroy`），所以
+     * 同一帧里"弹窗没了 + 过场第一帧（fx(0)，画面未动）"是连续的，读作"先关窗、再起演"。
+     */
+    private closeBattleIntroPopups(): void {
+        // 🔴 顺序是硬要求：**先说「这是程序关的」，再关**。
+        //    关卡界面的 `onClose` 会发 `closeDetail`，model 那边对它的默认解释是
+        //    「玩家放弃了这一格」⇒ 换交互号 ⇒ 在途的开战回包被 `runCellWrite` 判成过期丢掉
+        //    ⇒ 没有 `navigate` ⇒ 过场在 `hold` 干等 3 秒超时 ⇒ 复位回领地。
+        //    2026-11-02 实测就是这个：回包日志明明打出来了，人却没进战斗。
+        this.sendIntent({ kind: 'keepBattleRequest' });
+        this.closePopup(LevelInfoPanel);
+        this.closePopup(LevelTipPanel);
+        // 玩家关卡面板不是 `PopupBase`（自带 `isOpen` / `close()`），单独关。
+        if (this.playerStagePanel?.isOpen) this.playerStagePanel.close();
+    }
+
+    /**
+     * 宝箱栏「战斗」格（→ 匹配）也走同一套整页过场（需求 2026-11-02 追加）。
+     *
+     * 与领地格点开战的区别只有一处：这条**没有在途请求**（`MainPage.onChestAction` 原本
+     * 是直接 `ProcedureManager.navigate`），所以没有"等服务器回包"要盖 —— 起演那一刻
+     * 就把去向记下来，`out` 播完直接进 `in`。玩家看到的仍然是
+     * "UI 推出去、雾合上、雾散开，人已经在匹配页"。
+     *
+     * @returns `true` = 已经交给过场（调用方**不许**再自己 `navigate`）；
+     *          `false` = 过场播不了（雾贴图缺失 / 拿不到地图中心），调用方直接跳转
+     */
+    playMatchingIntro(entry: IMatchingEntryParams): boolean {
+        // 已经在演（领地开战正在等回包）⇒ 吞掉这一下：此刻再跳一次会把两条流程撞在一起。
+        if (this.battleIntro) return true;
+        if (!this.startBattleIntro()) return false;
+        this.releaseBattleIntro({ route: 'matching', entry });
+        return true;
+    }
+
+    /**
+     * 服务器回包 / 本地跳转确定 ⇒ 交给过场。
+     *
+     * 在 `out` 段到达时**不打断**它（雾还没盖住就散开，等于什么也没发生），只在 `hold` 段切 `in`。
+     */
+    private releaseBattleIntro(nav: ITerritoryBattleIntroNav): void {
+        const intro = this.battleIntro;
+        if (!intro || intro.nav) return;
+        intro.nav = nav;
+        intro.ready = this.awaitBattleIntroAssets(intro, nav);
+    }
+
+    /**
+     * 目标页资源没好就先别散场（用户 2026-11-02：「需要等待战场资源加载后，云雾才散开」）。
+     *
+     * @returns `true` = 不用等，可以立刻进 `in`
+     */
+    private awaitBattleIntroAssets(
+        intro: IBattleIntroState,
+        nav: ITerritoryBattleIntroNav,
+    ): boolean {
+        // 匹配页自己 preload（`MatchingController.createSession`），页面这边拿不到它的 promise；
+        // 它只加载一个 prefab + 几张图标，不铺战场那 5 秒的美术，按"不用等"处理。
+        if (nav.route !== 'battle') return true;
+        const ready = this.battleReady;
+        if (!ready) return true;
+        // 成败都算"等完了"：失败时流程切换会自己报错，`watchBattleSwitch` 那边收尾。
+        void ready.then(() => undefined, () => undefined).then(() => {
+            if (this.battleIntro === intro) intro.ready = true;
+        });
+        return false;
+    }
+
+    /**
+     * 收工 / 取消：把 HUD 与地图**一次性复位**，放开输入锁。
+     *
+     * 被拒那条路不做反向过场（`tip` 到达时直接复位）：过场每局最多一次、被拒更是少见，
+     * 为它多写一条"倒着演"的时间轴不值当 —— 而且倒演期间玩家会看着一个"从没发生过的动画"。
+     *
+     * 顺带复位 model 侧的在途开战态（`cancelBattleStart`）：过场一旦不是"跳走"而是"收掉"，
+     * 这一局就没开成 —— `startingBattle` 留着真值会让「开始战斗」变成死按钮。
+     * 覆盖三条：`hold` 等回包超时、开战被拒（`tip`）、`in` 段没有去向的兜底。
+     */
+    private finishBattleIntro(): void {
+        const intro = this.battleIntro;
+        this.battleIntro = null;
+        this.battleIntroLeftover = null;
+        if (intro) this.restoreBattleIntroScene(intro.hud);
+        else this.restoreBattleIntroScene([]);
+        this.sendIntent({ kind: 'cancelBattleStart' });
+    }
+
+    /**
+     * 跳转已发、`in` 段播完：**不还原**画面（云已散尽，接下来应该是战斗 / 匹配页），
+     * 只留一份现场 + 一个兜底定时器。
+     *
+     * 🔴 为什么不在这里直接复位：预加载还没完，此时把 UI 复位、地块还原，
+     *    主界面会整片闪回来一下 —— 玩家会看到"过场演完了，又回到主城，然后才进战斗"。
+     *
+     * 主路径是 `watchBattleSwitch()` 的落定回调：切走 ⇒ 作废 `battleIntroLeftover`（这里
+     * 的定时器就变成空转）；没切走 ⇒ 当场 `failBattleIntro()`。这条定时器只剩
+     * "连落定信号都没收到"那种情况（路由注册漏了 / 切换被永久挂起）。
+     */
+    private abandonBattleIntro(): void {
+        const intro = this.battleIntro;
+        if (!intro) return;
+        this.battleIntro = null;
+        this.battleIntroLeftover = { hud: intro.hud };
+        this.scheduleOnce(() => {
+            if (!this.isValid || !this.battleIntroLeftover) return;
+            this.failBattleIntro(`等了 ${TERRITORY_BATTLE_INTRO_RESTORE_FALLBACK_SECONDS} 秒仍没等到流程切换落定`);
+        }, TERRITORY_BATTLE_INTRO_RESTORE_FALLBACK_SECONDS);
+    }
+
+    /** 把 HUD 摆回开演前的位置 / 透明度，并收掉地图那半（地块倍率、不透明度、云盖层、输入锁）。 */
+    private restoreBattleIntroScene(hud: readonly ITerritoryBattleIntroHud[]): void {
+        for (const handle of hud) releaseIntroHud(handle);
+        if (this.mapView?.isValid) this.mapView.endBattleIntro();
+        this.battleApproachPending = false;
+    }
+
+    /** 写一帧：HUD 沿各自方向位移 + 淡出，并把同一帧交给地图（地块 / 云盖层）。 */
+    private writeBattleIntroFx(fx: ITerritoryBattleIntroFx): void {
+        const intro = this.battleIntro;
+        if (!intro) return;
+        const distance = intro.pushPx * fx.uiPush;
+        for (const handle of intro.hud) applyIntroHud(handle, distance, fx.uiOpacity);
+        if (this.mapView?.isValid) this.mapView.applyBattleIntro(fx);
+    }
+
+    /**
+     * 点名要推出去的 HUD（清单在 `TERRITORY_BATTLE_INTRO_TARGETS`）。
+     *
+     * 基准位置在这里**量一次**：Widget 会在布局事件里改 `position`，每帧重量会把
+     * "已经被推出去的"位置当成基准，越推越远（再也回不来）。
+     * 找不到 / 已隐藏的节点直接跳过 —— 宿主页结构变了只是少推一件，不是过场失败。
+     */
+    private collectBattleIntroHud(): ITerritoryBattleIntroHud[] {
+        const out: ITerritoryBattleIntroHud[] = [];
+        const host = this.node.parent;
+        if (!host?.isValid) return out;
+        for (const target of TERRITORY_BATTLE_INTRO_TARGETS) {
+            const node = findDescendantByName(host, target.name) ?? this.findUpwardSibling(host, target.name);
+            if (!node?.isValid || !node.activeInHierarchy) continue;
+            const handle = acquireIntroHud(node, target.dir);
+            if (handle) out.push(handle);
+        }
+        return out;
+    }
+
+    /**
+     * 再往上找几层同名节点（`BottomNav` 挂在 `MainRoot` 上，不在本页的宿主 `ArenaRoot` 里）。
+     *
+     * 只往上找 4 层并且用 `getChildByName`（不是 `cc.find` 的绝对路径）：宿主页结构一动，
+     * 这里最多是"推不出去"，不会抛错、也不会推错节点。
+     */
+    private findUpwardSibling(host: Node, name: string): Node | null {
+        let parent = host.parent;
+        for (let depth = 0; depth < 4 && parent?.isValid; depth += 1) {
+            const hit = parent.getChildByName(name);
+            if (hit) return hit;
+            parent = parent.parent;
+        }
+        return null;
+    }
+
+    /**
+     * 过场用的视口尺寸（推出距离按长边算）。
+     *
+     * 先用页面自己的 `UITransform`（HUD 的 `position` 就在这套坐标里），拿不到再退到
+     * 设计分辨率的可视尺寸 —— 绝不给 0（0 ⇒ 推出距离 0 ⇒ UI 只会淡掉、不会"被推走"）。
+     */
+    private battleIntroViewport(): [number, number] {
+        const size = this.node.getComponent(UITransform)?.contentSize;
+        if (size && size.width > 0 && size.height > 0) return [size.width, size.height];
+        const visible = view.getVisibleSize();
+        return [visible?.width ?? 0, visible?.height ?? 0];
     }
 
     private renderAll(): void {
@@ -549,6 +1158,10 @@ export class MainTerritoryMap extends Component {
             randomResourceOpenableCells: state.randomResourceOpenableCells,
             pendingRandomResourceCells: state.pendingRandomResourceCells,
             pendingFixedResourceCells: state.pendingFixedResourceCells,
+            // 「胜利通过」收进来的那几格 ⇒ 地图上的进场动画走更重的节奏档（2026-11-03）。
+            victoryClaimCells: state.victoryClaimCells,
+            // 钱包 ⇒ 判「银币 / 体力数字要不要染红」（2026-11-03）。
+            wallet: state.wallet,
         });
         if (resetScroll) {
             const focus = this.focusCell;

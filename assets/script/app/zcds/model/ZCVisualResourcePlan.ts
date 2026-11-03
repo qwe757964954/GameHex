@@ -1,3 +1,6 @@
+import type { ZCUnitDefinition } from './ZCCombatCatalog';
+import type { ZCCompiledModifierLoadout } from './ZCModifierRuntime';
+
 export interface IZCVisualDependency {
     readonly unitId: string;
     readonly details: unknown;
@@ -24,4 +27,52 @@ export function resolveZCVisualUnitIds(
         for (const dependency of dependencies) if (dependency.unitId === unitId) visit(dependency.details);
     }
     return required;
+}
+
+type ZCVisualUnit = Pick<ZCUnitDefinition, 'unitId' | 'prefabPath'> & {
+    readonly attackProfile: Pick<ZCUnitDefinition['attackProfile'], 'effectPrefabPath' | 'impactEffectPrefabPath'>;
+    readonly empoweredProfile?: Pick<ZCUnitDefinition['attackProfile'], 'effectPrefabPath'>;
+    readonly secondaryProfile?: Pick<ZCUnitDefinition['attackProfile'], 'effectPrefabPath'>;
+};
+type ZCVisualLoadout = Pick<ZCCompiledModifierLoadout, 'targetUnitId'> & {
+    readonly textModifiers?: readonly { readonly statId: string; readonly value: string }[];
+};
+
+/** 纯计算本局模型与特效清单；不加载资源，不读取全局目录。 */
+export function buildZCVisualResourcePlan<T extends ZCVisualUnit>(
+    all: readonly T[],
+    adapters: {
+        readonly skillPlans?: readonly { readonly enabled: boolean; readonly unitId: string }[];
+        readonly textOverrides: ReadonlyMap<string, { readonly enabled: boolean; readonly statId: string; readonly value: string }>;
+    },
+    heroIds?: readonly number[],
+    modifiers?: Readonly<Record<string, readonly ZCVisualLoadout[] | undefined>>,
+): { readonly units: readonly T[]; readonly effectPaths: readonly string[] } {
+    const loadouts = Object.values(modifiers ?? {}).flatMap(items => items ?? []);
+    const required = heroIds === undefined ? null : resolveZCVisualUnitIds(all.map(unit => unit.unitId), heroIds, [
+        ...all.map(unit => ({ unitId: unit.unitId, details: unit })),
+        ...(adapters.skillPlans ?? []).filter(plan => plan.enabled).map(plan => ({ unitId: plan.unitId, details: plan })),
+        ...loadouts.map(item => ({ unitId: item.targetUnitId, details: item })),
+    ]);
+    const units = required ? all.filter(unit => required.has(unit.unitId)) : all;
+    // 普攻、命中附加、强化与副轨技能都可能声明独立表现。
+    const effects = new Set(units.flatMap(unit => [
+        unit.attackProfile.effectPrefabPath,
+        unit.attackProfile.impactEffectPrefabPath,
+        unit.empoweredProfile?.effectPrefabPath,
+        unit.secondaryProfile?.effectPrefabPath,
+    ]).filter((path): path is string => !!path));
+    if (required === null) {
+        for (const override of adapters.textOverrides.values()) {
+            if (override.enabled && override.statId === 'model') effects.add(override.value);
+        }
+    } else {
+        for (const loadout of loadouts) {
+            if (!required.has(loadout.targetUnitId)) continue;
+            for (const modifier of loadout.textModifiers ?? []) {
+                if (modifier.statId === 'model') effects.add(modifier.value);
+            }
+        }
+    }
+    return { units, effectPaths: Array.from(effects) };
 }

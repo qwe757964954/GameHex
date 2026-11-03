@@ -1,5 +1,5 @@
-import { createZCBattlePreload } from '../../zcds/application/ZCBattlePreparation';
-import { director, Layers, Node, SpriteFrame, UITransform, view, Widget } from 'cc';
+import { createZCBattleSession } from '../../zcds/application/ZCBattlePreparation';
+import { director, Layers, Node, SpriteFrame, UIOpacity, UITransform, view, Widget } from 'cc';
 import type { GameContext } from '../../../core/runtime/GameContext';
 import type { ConfigService } from '../../../core/config/ConfigService';
 import { GameRoute } from '../../../core/runtime/GameRoute';
@@ -15,6 +15,7 @@ import { createTerritorySaveStore } from '../../territory/application/TerritoryS
 import { loadBigMapConfig } from './BigMapConfigLoader';
 import { loadBigMapLayout } from './BigMapLayoutLoader';
 import { NpcBigMapRankProvider } from './NpcBigMapRankProvider';
+import { RemoteBigMapRankProvider } from './RemoteBigMapRankProvider';
 import { BigMapModel } from './BigMapModel';
 import { BigMapController } from './BigMapController';
 import { GameNet } from '../../net/GameNet';
@@ -102,10 +103,13 @@ export class BigMapEntry {
         this.saveOwner = owner;
         const revision = ++this.openRevision;
         try {
-            const config = await this.ensureConfig(configs);
+            const sourceConfig = await this.ensureConfig(configs);
             if (revision !== this.openRevision || !this.isSaveOwnerCurrent(owner)) return;
-            const layout = await this.ensureLayout(config);
+            const layout = await this.ensureLayout(sourceConfig);
             if (revision !== this.openRevision || !this.isSaveOwnerCurrent(owner)) return;
+            const config = layout
+                ? { ...sourceConfig, world: { ...sourceConfig.world, rows: layout.rows, cols: layout.columns } }
+                : sourceConfig;
             const host = options?.parent && options.parent.isValid ? options.parent : null;
             const canvas = host ? null : this.findCanvas();
             if (!host && !canvas) {
@@ -177,8 +181,8 @@ export class BigMapEntry {
                 // 离线 / 预览态没有背包，Presenter 会退回存档值。
                 itemCounts: () => readItemCounts(),
                 now: () => Math.floor(Date.now() / 1000),
-                // 单机档：NPC 模拟榜。联机版换成走服务器的 provider，这里一行不改。
-                rankProvider: new NpcBigMapRankProvider(config),
+                rankProvider: owner ? new RemoteBigMapRankProvider(owner.roleId,
+                    () => revision === this.openRevision && this.isSaveOwnerCurrent(owner)) : new NpcBigMapRankProvider(config),
                 campRepository,
                 startBattle: owner ? async (battleType, targetConfigId, isPresenterCurrent) => {
                     const isCurrent = (): boolean => revision === this.openRevision && root.isValid
@@ -188,7 +192,9 @@ export class BigMapEntry {
                     const battle = await startBattle(battleType, [String(targetConfigId)], root, isCurrent);
                     if (!isCurrent()) return { ok: false, message: BIGMAP_BATTLE_TEXT.closed };
                     if (!battle) return { ok: false, message: BIGMAP_BATTLE_TEXT.failed };
-                    const preload = createZCBattlePreload( Promise.resolve(battle));
+                    const session = createZCBattleSession(this.context, { owner: this.controller.scope, battle: Promise.resolve(battle), params: {
+                        slgBattleType: battleType, selfRoleId: owner.roleId,
+                    } });
                     // 🔴 别在这里立刻 `close()`：`navigate` 是「预加载 → 进入」两阶段，
                     // 战斗资源没就绪之前当前界面一直不动。提前关掉世界页，露出来的就是
                     // 主界面的 `currentTab`（默认 tab = 领地）⇒ 玩家看到的是
@@ -210,7 +216,7 @@ export class BigMapEntry {
                     ProcedureManager.navigate(GameRoute.Battle, {
                         battle,
                         slgBattleType: battleType,
-                        preload,
+                        session,
                         selfRoleId: owner.roleId,
                     });
                     return { ok: true, message: '' };
@@ -219,8 +225,11 @@ export class BigMapEntry {
             });
 
             const controller = new BigMapController(model, { context: this.context, network: GameNet.instance, campRepository, slgRepository });
+            // Graphics 在 onEnable 中初始化材质。准备期间保持节点激活，避免提前绘制
+            // 缓存空材质并在原生 UIModelProxy.activeSubModels 中崩溃；用透明度隐藏成品前的页面。
+            const opacity = root.addComponent(UIOpacity);
+            opacity.opacity = 0;
             const page = root.addComponent(BigMapPage);
-            root.active = false;
             const navigation = options?.navigation;
             const navigationHeight = navigation?.isValid ? navigation.getComponent(UITransform)?.height ?? 0 : 0;
             this.root = root;
@@ -258,7 +267,7 @@ export class BigMapEntry {
                 return;
             }
             if (navigation?.isValid) this.navigationRestore = mountBigMapNavigation(navigation, root).restore;
-            root.active = true;
+            opacity.opacity = 255;
         } catch (error) {
             if (revision === this.openRevision) this.close();
             throw error;

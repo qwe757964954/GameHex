@@ -1645,7 +1645,14 @@ test('接线：页面按**四个**前缀分组加载（混在一起排序会让�
         assert.ok(source.includes(prefix), `页面没有按 \`${prefix}\` 分组（云体 / 影子必须分开注入）`);
     }
     // 大前缀会连影子一起捞：`cloud_dissolve_` 同时命中 `cloud_dissolve_shadow_0`。
-    assert.doesNotMatch(source, /'(cloud_idle|cloud_dissolve)_'/, '不许再用大前缀分组');
+    assert.doesNotMatch(source, /'cloud_dissolve_'/, '不许用大前缀分组（会把影子一起捞进来）');
+    // 🔴 2026-11-02 晚上（第五版）：盖层改用**云体** `cloud_body_*`，不再用 `cloud_idle_*`。
+    //    原因：`cloud_idle_*` 是「云体 + 影子」烤在一起的合并图，密铺时每朵自带的黑影会盖到
+    //    邻居的白色云体上 ⇒ 整屏发灰（实机整屏均值 147，领地正常页 231）。
+    //    换成纯云体后按同一点阵合成为 225 —— 与领地那层云同一个白。
+    assert.ok(source.includes('setBattleCloudFrames('), '盖层帧必须注入给过场（不是给地图云）');
+    assert.ok(source.includes('setBattleCloudFrames(body)'), '盖层必须用**云体**那一组（白的那层）');
+    assert.doesNotMatch(source, /idle:\s*'cloud_idle_'/, '盖层不许再走「云体+影子」合并图（会发灰）');
 });
 
 // ============================================================
@@ -1866,9 +1873,21 @@ test('接线：MapLayer 用 (1+(fit-1)·zoom, zoom) 推镜头，输入锁与还�
     assert.ok(/this\.cloudDollyOrigin = center;/.test(source),
         '对焦点只取一次（镜头一动它每帧都在变，每帧重量就是反馈环）');
     assert.ok(/this\.setInputLocked\(true\)/.test(source), '推镜头时必须锁拖动（MapLayer 是 content）');
-    // 收尾只留一条：`cameraBusy` 同时管开箱与散场，谁在播都不还原。
-    assert.ok(/const cameraBusy = this\.chestView\?\.isPlaying === true \|\| this\.clouds\.dollyActive;/.test(source),
+    // 收尾只留一条：`cameraBusyLocked` 同时管开箱、散场与战斗过场，谁在播都不还原。
+    // 2026-11-02 起多了一路「首次解锁直开的镜头过场」（§3.15）：漏掉它，起播那一帧
+    // 就会被 `restoreChestCamera` 按回原位 ⇒ 提示条弹了、画面却纹丝不动。
+    // 表达式活在 getter 里（`update` 只剩 `const cameraBusy = this.cameraBusyLocked;`）。
+    const getterAt = source.indexOf('private get cameraBusyLocked(): boolean {');
+    assert.ok(getterAt > 0, '缺 `cameraBusyLocked` 这条唯一的收尾判据');
+    const getterBody = source.slice(getterAt, source.indexOf('\n    }', getterAt));
+    const busy = getterBody.replace(/\s+/g, ' ');
+    assert.ok(/this\.chestView\?\.isPlaying === true/.test(busy) && /this\.clouds\.dollyActive/.test(busy),
         '开箱与散场共用同一套镜头基准，还原判据必须同时看两边');
+    assert.ok(/this\.battleApproach !== null/.test(busy),
+        '战斗过场也写同一套 scale/position，必须一起纳入 `cameraBusy`');
+    assert.ok(/this\.battleIntroActive/.test(busy), '整页过场（云合拢/散开）同样在推镜');
+    assert.ok(source.includes('const cameraBusy = this.cameraBusyLocked;'),
+        '`update` 必须取这条 getter，不许自己再拼一份');
     // 散场要排在 `clouds.step` 之后：拿到的才是这一帧的拉远程度。
     const updateAt = source.indexOf('update(dt: number): void {');
     assert.ok(updateAt > 0);

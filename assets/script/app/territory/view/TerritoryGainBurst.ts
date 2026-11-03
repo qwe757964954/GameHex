@@ -13,12 +13,16 @@ import {
  *     图标和数字 ui 增加上移的动画放在例子效果坐标点的**上方间隔 40px**」
  *
  *   细化口径：12 颗 / 错峰 0.025s / 出射 ±26° 的倒锥 / 初速 650±12% / 重力 1500 /
- *   飞行中 icon **绕自身水平轴上下翻面**（`scaleY = baseScale·cos(ωt+phase)`，`scaleX` 恒定）/
+ *   飞行中 icon **由小变大**（横纵等比，0.18s 长到满）且**持续自转**（0.6~1.1 圈/秒）/
  *   落回台面即 0.12s 快速淡出、不穿模。
+ *
+ *   ⚠️ 2026-11-02 用户改口径：**取消**了 2026-10-17 那版「绕自身水平轴上下翻面」
+ *   （`scaleY = baseScale·cos(ωt+phase)`）。现在横纵只共用一个 `scale`，旋转只写 `angle`，
+ *   两者不要混 —— 混着做会变成"既翻面又自转"。
  *
  * ## 本文件负责哪半句
  *
- *  · 「喷发多个图标」+「限制在倒圆锥」+「喷发坐标点」+「翻面」+「落地淡出」 → **这里**
+ *  · 「喷发多个图标」+「限制在倒圆锥」+「喷发坐标点」+「由小变大 / 自转」+「落地淡出」 → **这里**
  *    （一把粒子 + 原点容器；曲线全在 `model/TerritoryResourceGain`）；
  *  · 「图标和数字 ui …上方 40px 上移」        → `TerritoryResourceGainView`（另一条时间线，
  *    起点由 `TerritoryMapView.playResourceGain` 摆在原点上方 40px）。
@@ -182,9 +186,12 @@ export class TerritoryGainBurst {
             alive = true;
             if (!node.active) node.active = true;
             node.setPosition(fx.offsetX, fx.offsetY, 0);
-            // 需求原话：`setScale(baseScale, baseScale * cos(...), 1)` —— 翻面只压 `y`，
-            // 横向宽度必须保持原样，否则「翻面」会读成「整体缩小」。
-            node.setScale(fx.scaleX, fx.scaleY, 1);
+            // 需求 2026-11-02：**取消垂直反转**（旧版 `setScale(baseScale, baseScale·cos(...), 1)`），
+            // 改成「由小变大 + 持续自转」：
+            //  · 横纵**等比**，同一帧读到 x ≠ y 就是错的（那正是旧版的翻面）；
+            //  · `angle` 是绕屏幕法线的平面旋转（度），由模型累加给出 ⇒ 这里直接写，不取模。
+            node.setScale(fx.scale, fx.scale, 1);
+            node.angle = fx.rotation;
             const alpha = Math.max(0, Math.min(255, Math.round(fx.opacity * 255)));
             if (opacity.opacity !== alpha) opacity.opacity = alpha;
         }

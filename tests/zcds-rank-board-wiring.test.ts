@@ -14,7 +14,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { assetPath } from './helpers/asset-paths';
 
 const GAME_SRC = readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8');
-const PROC_SRC = readFileSync('assets/script/app/procedure/ProcedureGame.ts', 'utf8');
+const CONTROLLER_SRC = readFileSync('assets/script/app/zcds/application/ZCBattleRuntimeController.ts', 'utf8');
+const PROC_SRC = readFileSync('assets/script/app/zcds/application/ZCBattleEntryBuilder.ts', 'utf8');
 const HUD_SRC = readFileSync('assets/script/app/zcds/view/ZCGameHUDView.ts', 'utf8');
 const WORLD_SRC = readFileSync('assets/script/app/zcds/view/ZCGameRenderWorld.ts', 'utf8');
 
@@ -23,63 +24,14 @@ function stripComments(source: string): string {
     return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 }
 
-test('★★RankBtn 必须真的接到 openRankBoard（视图 emit + 控制器订阅，缺一就是点了没反应）', () => {
-    // 实测踩过：`bind(this.rankButton, …)` 与 `openRankBoard()` 早就都在，但两者之间的接线
-    // **漏了** ⇒ `leftPanel/RankBtn` 点了没反应、零报错。接线从「initialize 里传回调」改成
-    // 「视图 emit 意图事件 + 控制器订阅」之后，这个坑仍然是静默的 ⇒ 三处都要钉住。
-    //
-    // 视图侧：按钮 → 具名 handler → 在 HUD 根节点 emit 意图（规范 §7.5 配套第 3 条：具名方法 + this target）。
-    assert.ok(
-        /rankButton\.node\.on\(Button\.EventType\.CLICK,\s*this\.onRankClick,\s*this\)/.test(HUD_SRC),
-        '★rankButton 必须绑到 onRankClick —— 声明了不绑等于没这按钮',
-    );
-    assert.ok(
-        /private onRankClick\(\): void \{\s*EventMgr\.instance\.emit\(ZCGameUiEvent\.OpenRank\);/.test(HUD_SRC),
-        '★onRankClick 必须 emit ZCGameUiEvent.OpenRank —— 只绑不发等于按钮永远点不动',
-    );
-    // 反向：视图不该再持有上层回调（意图一律走事件）。
-    assert.ok(
-        !/ZCHudActions/.test(HUD_SRC),
-        '★视图不该再有回调契约 —— `initialize({ openRank: () => … })` 那套已换成 `ZCHudEvent`',
-    );
-
-    // 控制器侧：六个意图**逐个**订阅（少订阅一个 = 那个按钮点了没反应且零报错）。
-    for (const [event, handler] of [
-        ['UseArtifact', 'onHudUseArtifact'],
-        ['OpenGuide', 'onHudOpenGuide'],
-        ['OpenDamageStats', 'onHudOpenDamageStats'],
-        ['OpenRank', 'onHudOpenRank'],
-        ['Retreat', 'onHudRetreat'],
-        // R22 相机：镜头一键复位。纯表现动作也走中控 —— 破了这条就会退回
-        // 「视图持有控制器回调」的老路，漏接一个按钮同样是点了没反应。
-        ['ResetCamera', 'onHudResetCamera'],
-    ]) {
-        assert.ok(
-            new RegExp(`EventMgr\\.instance\\.on\\(ZCGameUiEvent\\.${event},\\s*this\\.${handler},\\s*this\\)`).test(GAME_SRC),
-            `★ZCGame.bindHudEvents 必须订阅 ZCGameUiEvent.${event} → ${handler}`,
-        );
+test('★★HUD 意图由外部运行控制器集中订阅，视图仅派发', () => {
+    for (const event of ['UseArtifact', 'OpenGuide', 'OpenDamageStats', 'OpenRank', 'Retreat', 'ResetCamera']) {
+        assert.match(CONTROLLER_SRC, new RegExp(`this\\.listen\\(ZCGameUiEvent\\.${event},`));
+        assert.match(HUD_SRC, new RegExp(`emit\\(ZCGameUiEvent\\.${event}`));
     }
-    // R22 相机：两条新的「按钮 → handler → emit」都要在，缺一环就是点了没反应。
-    assert.ok(
-        /resetCameraButton\.node\.on\(Button\.EventType\.CLICK,\s*this\.onResetCameraClick,\s*this\)/.test(HUD_SRC),
-        '★resetCameraButton 必须绑到 onResetCameraClick —— 声明了不绑等于没这按钮',
-    );
-    assert.ok(
-        /private onResetCameraClick\(\): void \{\s*EventMgr\.instance\.emit\(ZCGameUiEvent\.ResetCamera\);/.test(HUD_SRC),
-        '★onResetCameraClick 必须 emit ZCGameUiEvent.ResetCamera',
-    );
-    assert.ok(
-        /private onHudResetCamera\(\): void \{\s*this\.hudView\.resetCamera\(\);/.test(GAME_SRC),
-        '★onHudResetCamera 必须转给 hudView.resetCamera() —— 订阅了不转等于白订',
-    );
-    assert.ok(
-        /private openRankBoard\(\)/.test(GAME_SRC),
-        'openRankBoard 方法不该被删 —— 它是排行榜的入口',
-    );
-    assert.ok(
-        /private onHudOpenRank\(\): void \{\s*this\.openRankBoard\(\);/.test(GAME_SRC),
-        '★onHudOpenRank 必须调 openRankBoard —— 订阅了不转给流程动作等于白订',
-    );
+    assert.match(CONTROLLER_SRC, /this\.ports\.openRank\(/);
+    assert.match(CONTROLLER_SRC, /this\.view\.resetCamera\(\)/);
+    assert.doesNotMatch(HUD_SRC, /new .*Controller|ZCHudActions/);
 });
 
 test('★★席位档案必须随单局 entry 交接（缺失 = 排行榜全是兜底名「我方/敌方」）', () => {
@@ -98,7 +50,7 @@ test('★★席位档案必须随单局 entry 交接（缺失 = 排行榜全是�
         /this\.seatProfiles\s*=\s*new Map\(entry\.seatProfiles\)/.test(GAME_SRC),
         'ZCGame.initialize 必须从 entry 接收完整席位表',
     );
-    assert.ok(/initialize\(entry: IZCGameEntry\)/.test(GAME_SRC), '对局组件必须提供显式的实例初始化入口');
+    assert.ok(/initialize\(entry: IZCGameEntry, resources: IControllerResources, model: IZCBattleRenderModel/.test(GAME_SRC), '对局组件必须提供显式的实例初始化入口');
 });
 
 test('★★排行榜数据源在 model 上有出口（territoryCount 私有着拿不到）', () => {
@@ -111,7 +63,7 @@ test('★★排行榜数据源在 model 上有出口（territoryCount 私有着�
         'ZCGameModel 要暴露 territoryCountOf(owner) —— 排行榜按席位取数用',
     );
     assert.ok(
-        /territoryCountOf\(owner\)/.test(GAME_SRC),
+        /territoryCountOf\(owner\)/.test(CONTROLLER_SRC),
         'openRankBoard 必须走 territoryCountOf(owner) 逐席取数，不能用合并值',
     );
 });
@@ -581,12 +533,12 @@ test('★★★contentNodes 必须是数组形态（MCP 往数组属性传单值
 
 test('★棋盘点击走事件（渲染世界 emit + 控制器订阅），不再往渲染世界传回调', () => {
     const world = stripComments(WORLD_SRC);
-    const game = stripComments(GAME_SRC);
+    const game = stripComments(CONTROLLER_SRC);
     // 渲染世界：只派发意图（带 hexId），谁处理由控制器订阅 —— 上层不再塞回调进来。
     assert.doesNotMatch(world, /onHexClick:\s*\(hexId/, '渲染世界的 options 不该再收 onHexClick 回调');
     assert.match(world, /EventMgr\.instance\.emit\(ZCGameUiEvent\.HexClick, config\.id\)/);
     // 控制器：订阅 + 拿 payload 当 hexId（`onHexClick(hexId: number)`）。
-    assert.match(game, /EventMgr\.instance\.on\(ZCGameUiEvent\.HexClick, this\.onHexClick, this\)/);
+    assert.match(game, /this\.listen\(ZCGameUiEvent\.HexClick, this\.onHexClick\)/);
     assert.match(game, /private onHexClick\(hexId: number\): void \{/);
     assert.doesNotMatch(game, /onHexClick: \(hexId\) => this\.onHexClick\(hexId\)/, '那个回调参数已经删了');
 });

@@ -1,3 +1,6 @@
+import { ZC_BATTLE_EVENTS } from '../assets/script/app/zcds/application/ZCBattleEvents';
+import { buildZCVisualResourcePlan } from '../assets/script/app/zcds/model/ZCVisualResourcePlan';
+import { loadBattleComposition } from './helpers/battle-composition';
 import { ControllerBase } from '../assets/script/framework/controller/ControllerBase';
 import { MatchingController } from '../assets/script/app/matching/MatchingController';
 import { MatchingModel } from '../assets/script/app/matching/MatchingModel';
@@ -14,7 +17,8 @@ import * as HeadArtModel from '../assets/script/app/HeadArtModel';
 import * as BattleStartModel from '../assets/script/app/battle/BattleStartModel';
 import type { ZCBattleStart, ZCBattleUnit } from '../assets/script/app/battle/BattleStartModel';
 import * as PvpInfoModel from '../assets/script/app/battle/PvpInfoModel';
-import { ZCGamePreload } from '../assets/script/app/zcds/application/ZCGamePreload';
+import { ZCBattleController } from '../assets/script/app/zcds/application/ZCBattleController';
+import { createControllerContext } from './helpers/controller-context';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import type { ZCGamePreparedResources } from '../assets/script/app/zcds/application/ZCGameLoader';
 
@@ -39,48 +43,17 @@ const prepared = {
 } as unknown as ZCGamePreparedResources;
 const flush = () => new Promise<void>(resolve => setImmediate(resolve));
 
-test('匹配预加载只启动一次，移交后匹配退出保留资源，对局退出释放', async () => {
-    let calls = 0, released = 0;
-    const preload = new ZCGamePreload({ prepare: async scope => { calls++; scope!.defer(() => released++); return prepared; } });
-    assert.equal(calls, 1);
-    assert.equal(await preload.ready, prepared);
-    assert.equal(await preload.ready, prepared);
-    const battle = new ResourceScope('battle'); preload.transferTo(battle);
-    preload.releaseFromMatching(); assert.equal(released, 0);
-    assert.throws(() => preload.transferTo(battle), /已移交/);
-    battle.dispose(); battle.dispose(); assert.equal(released, 1);
-});
-
-test('匹配期间离开立即释放，迟到加载也会释放，不能移交已取消资源', async () => {
-    let released = 0; let scope!: ResourceScope;
-    const pending = deferred<ZCGamePreparedResources>();
-    const preload = new ZCGamePreload({ prepare: current => { scope = current!; scope.defer(() => released++); return pending.promise; } });
-    preload.releaseFromMatching(); assert.equal(released, 1);
-    scope.defer(() => released++); assert.equal(released, 2);
-    pending.resolve(prepared); await preload.ready;
-    assert.throws(() => preload.transferTo(new ResourceScope('battle')), /取消/);
-});
-
-test('后台预加载提前失败时释放资源，之后对局仍能收到原始错误', async () => {
+test('后台准备失败保留原始错误并立即释放单局 scope', async () => {
     let released = 0;
     const pending = deferred<ZCGamePreparedResources>();
-    const preload = new ZCGamePreload({ prepare: scope => { scope!.defer(() => released++); return pending.promise; } });
+    const session = new ZCBattleController(createControllerContext(), {
+        prepareDirect: scope => { scope.defer(() => released++); return pending.promise; },
+        buildEntry: () => { throw new Error('not mounting'); }, resolvePveResult() {},
+    }, { owner: new ResourceScope('matching') });
+    const ready = session.ready;
     pending.reject(new Error('missing battle asset')); await flush();
     assert.equal(released, 1);
-    await assert.rejects(preload.ready, /missing battle asset/);
-});
-
-test('回包前不准备地图和表现，回包后将阵容原样交给加载器；取消后不再启动', async () => {
-    const response=deferred<ZCBattleStart | null>();let calls=0;let received:unknown;
-    const preload=new ZCGamePreload({prepare:async (_scope,battle)=>{calls++;received=battle;return prepared;}},response.promise);
-    assert.equal(calls,0);
-    const battle={battleId:'id',seed:'1',version:'1',units:[]} as ZCBattleStart;
-    response.resolve(battle);await preload.ready;assert.equal(calls,1);assert.equal(received,battle);
-    preload.releaseFromMatching();
-    const late=deferred<ZCBattleStart | null>();
-    const cancelled=new ZCGamePreload({prepare:async()=>{calls++;return prepared;}},late.promise);
-    cancelled.releaseFromMatching();late.resolve(battle);
-    await assert.rejects(cancelled.ready,/取消/);assert.equal(calls,1);
+    await assert.rejects(ready, /missing battle asset/);
 });
 
 test('服务端拒绝宝箱开战时结束匹配回主城，不加载或进入本地战斗', async () => {
@@ -97,22 +70,6 @@ test('服务端拒绝宝箱开战时结束匹配回主城，不加载或进入�
     h.options[0].onMatched([{ name: 'late' }]);
     assert.equal(h.navigations.filter(n => n.route === 'battle').length, 0, '迟到的匹配动画也不能放行');
     h.matching.onLeave();
-});
-
-test('失败返回主城时立即释放已接管的会话预加载', async () => {
-    let released = 0;
-    const preload = new ZCGamePreload({ prepare: async scope => {
-        scope!.defer(() => released++); return prepared;
-    } });
-    const h = procedures(preload);
-    h.setServerBattleStart(null);
-    await h.matching.onPreload(undefined, { resources: new ResourceScope('rejected-preload'), cancelled: false });
-    h.matching.onEnter();
-    await h.options[0].awaitReady(); await flush();
-    assert.equal(released, 1, '不用等主城加载完成再释放失败局的资源');
-    assert.equal(h.navigations[0].route, 'main');
-    h.matching.onLeave();
-    assert.equal(released, 1);
 });
 
 test('开战失败后重新匹配，旧界面回调不能启动新局，新回包可正常进入', async () => {
@@ -139,13 +96,14 @@ test('开战失败后重新匹配，旧界面回调不能启动新局，新回�
     await flush();
 });
 
-function procedures(sessionPreload: ZCGamePreload | null = null) {
+function procedures() {
     const loads: Array<ReturnType<typeof deferred<ZCGamePreparedResources>>> = [];
     const scopes: ResourceScope[] = [];
     const options: any[] = [];
     /** 匹配过程中 `page.updateMine()` 收到的我方数据（服务端回包到达后刷新用）。 */
     const mineUpdates: any[] = [];
     const navigations: any[] = [];
+    const tips: string[] = [];
     /** 图标加载器收到的每次请求（`{name, root}`），用来断言预取范围。 */
     const iconRequests: { name: string; root: string }[] = [];
     let released = 0, destroyed = 0, staged: any;
@@ -197,7 +155,7 @@ function procedures(sessionPreload: ZCGamePreload | null = null) {
     };
     class Base {
         assets = { load: async () => ({}) };
-        sessionAssets = { takeBattlePreload: () => sessionPreload };
+        sessionAssets = {};
         configs = {};
         scope: ResourceScope | null = null;
         host = { addComponent: () => ({ initialize: (entry: any) => { staged = entry; stagedSeed = entry.battleSeed; }, shutdown() {}, destroy() {} }) };
@@ -209,8 +167,10 @@ function procedures(sessionPreload: ZCGamePreload | null = null) {
     }
     const dependencies: Record<string, unknown> = {
         '../../framework/event/EventMgr': { EventMgr: { instance: bus } },
+        '../../framework/FW': { FW: { showTip: (message: string) => tips.push(message) } },
         '../model/ZCGameResourcePlan': resourcePlan,
-        cc: { Prefab: class {}, Node: class {}, Vec3: { ZERO: {} }, instantiate: () => ({ isValid: true, setParent() { bus.emit('ui:view-lifecycle', { owner: page, phase: 'ready' }); }, setPosition() {}, getComponent: () => page, destroy: () => destroyed++ }) },
+        '../model/ZCVisualResourcePlan': { buildZCVisualResourcePlan },
+        cc: { Prefab: class {}, Node: class {}, SpriteFrame: class {}, Vec3: { ZERO: {} }, director: { getDeltaTime: () => 1 / 60 }, view: { getVisibleSize: () => ({ width: 750, height: 1334 }) }, instantiate: () => ({ isValid: true, setParent() { bus.emit('ui:view-lifecycle', { owner: page, phase: 'ready' }); }, setPosition() {}, getComponent: () => page, destroy: () => destroyed++ }) },
         '../../core/runtime/GameRoute': { GameRoute: { Battle: 'battle', Main: 'main' } },
         '../../framework/procedure/ProcedureBase': { ProcedureBase: Base },
         // 用真模块（ArtPaths 不 import cc，Node 里能直接读），免得根目录改名后这里静默变 undefined
@@ -309,15 +269,54 @@ function procedures(sessionPreload: ZCGamePreload | null = null) {
         '../zcds/ZCGame': { MAP_DIRECTORY: 'config/maps', ZCGame: class ZCGame {} },
         '../zcds/application/ZCGameLoader': { ZCGameLoader: Loader },
         '../../framework/controller/ComponentController': componentControllerModule(),
-        '../zcds/application/ZCBattlePreparation': { createZCBattlePreload: (battle: Promise<ZCBattleStart | null>) => new ZCGamePreload(new Loader(), battle) },
-        '../zcds/application/ZCGamePreload': { ZCGamePreload },
         '../zcds/application/ZCClientCombatConfig': { buildZCClientCombatConfig: (config: unknown) => ({ config, skipped: [] }) },
         '../zcds/application/ZCPveCombatConfig': { buildZCPveEnemyDecks: () => ({}) },
         '../zcds/model/ZCMatchConfig': { captureZCMatchConfig: (config: unknown) => config ?? { map: {}, enemyDeck: [] } },
         '../zcds/model/ZCRankBoard': { buildSeatProfiles: () => new Map(), buildSeatUnitIds: () => new Map() },
-        '../territory/model/TerritorySaveStore': { TerritorySaveStore: { resolveBattle() {} } },
         '../territory/application/TerritorySaveStoreAdapter': { createTerritorySaveStore: () => ({ resolveBattle() {} }) },
+        // 领地过场云层（`MatchingComposition` 在 `pve` 分支里用）：本文件只验"匹配/战斗资源
+        // 所有权"这条线，云层给一个记账用的替身即可 —— 但**必须在白名单里**，否则整个文件的
+        // 用例会因为 `Unexpected composition dependency` 一起红。
+        '../territory/model/TerritoryBattleIntro': { TERRITORY_BATTLE_INTRO_READY_MAX_SECONDS: 12 },
+        '../territory/view/TerritoryBattleCover': {
+            TerritoryBattleCover: class {
+                layerNode: unknown = null;
+                count = 0;
+                size = { width: 0, height: 0 };
+                frameStep = -1;
+                constructor(_host: unknown, _frames: readonly unknown[]) {}
+                build() { return false; }
+                setBaseStep() {}
+                apply() {}
+                startRelease() { return 0.27; }
+                tick() {}
+                step() {}
+                clear() {}
+                destroy() {}
+            },
+        },
+        // 云层的跨流程宿主（"先切战场、再散云"那条路的接管者）。同上：只需在白名单里。
+        '../territory/view/TerritoryBattleCoverOverlay': {
+            TerritoryBattleCoverOverlay: class {
+                static create() { return null; }
+                arm() {}
+                get covering() { return false; }
+            },
+        },
+        '../territory/application/TerritorySaveStoreAdapter': { createTerritorySaveStore: () => ({ resolveBattle() {} }) },
+        // 本局几个人（2/3/4）：`MatchingComposition.mount` 用它决定信息条条数。
+        // 这里给真实现（纯函数 + 一个可能为 null 的本地覆盖），不装假数据。
+        '../matching/MatchSlots': {
+            resolveMatchSeats: (entry: unknown, local: unknown) => {
+                const pick = (value: unknown) => (value === 2 || value === 3 || value === 4 ? value : null);
+                const a = pick(entry), b = pick(local);
+                if (a !== null && b !== null) return Math.max(a, b);
+                return a ?? b ?? null;
+            },
+        },
+        '../zcds/model/ZCMapConfig': { getZCLocalPlayerCountOverride: () => null },
     };
+    dependencies['../bootstrap/battle/BattleComposition'] = loadBattleComposition(dependencies);
     const compositionExports: Record<string, any> = {};
     runInNewContext(ts.transpileModule(readFileSync('assets/script/app/bootstrap/matching/MatchingComposition.ts', 'utf8'), {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
@@ -342,7 +341,7 @@ function procedures(sessionPreload: ZCGamePreload | null = null) {
         const code = ts.transpileModule(readFileSync(`assets/script/app/procedure/${name}.ts`, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
         runInNewContext(code, context); return new context.exports[name]();
     };
-    return { matching: load('ProcedureMatching'), battle: load('ProcedureGame'), loads, scopes, options, mineUpdates, navigations, iconRequests,
+    return { matching: load('ProcedureMatching'), battle: load('ProcedureGame'), loads, scopes, options, mineUpdates, navigations, iconRequests, tips,
         setServerBattleStart(value: ZCBattleStart | null) { serverResponse = value; },
         setPvpInfo(value: PvpInfoModel.ZCPvpInfo | null) { pvpInfoResponse = value; },
         get lastBattleStart() { return lastResult; },
@@ -381,34 +380,6 @@ test('匹配开始即加载，对局等待同一 Promise，界面退出后战斗
     fixture.battle.onLeave(); assert.equal(fixture.released, 1);
 });
 
-test('匹配直接接管登录后完成的对局预加载，不再启动第二次加载', async () => {
-    let released = 0;
-    const loginPreload = new ZCGamePreload({
-        prepare: async scope => {
-            scope!.defer(() => released++);
-            return prepared;
-        },
-    });
-    await loginPreload.ready;
-    const fixture = procedures(loginPreload);
-    const matchingScope = new ResourceScope('matching');
-    await fixture.matching.onPreload(undefined, { resources: matchingScope, cancelled: false });
-    fixture.matching._adoptResourceScope(matchingScope);
-    fixture.matching.onEnter();
-    assert.equal(fixture.loads.length, 0, '登录后已准备资源时不能再调用 ZCGameLoader');
-
-    assert.equal(await fixture.options[0].awaitReady(), true);
-    fixture.options[0].onMatched([{ name: 'enemy', power: 100 }]);
-    const battleScope = new ResourceScope('battle');
-    await fixture.battle.onPreload(fixture.navigations[0].params, { resources: battleScope, cancelled: false });
-    fixture.matching.onLeave();
-    assert.equal(released, 0, '匹配退出不能释放已经移交给对局的资源');
-    fixture.battle._adoptResourceScope(battleScope);
-    fixture.battle.onEnter();
-    fixture.battle.onLeave();
-    assert.equal(released, 1);
-});
-
 test('等待战斗资源期间取消导航，流程立即释放未移交资源且匹配离开幂等', async () => {
     const fixture = procedures();
     await fixture.matching.onPreload(undefined, { resources: new ResourceScope('matching'), cancelled: false });
@@ -420,7 +391,7 @@ test('等待战斗资源期间取消导航，流程立即释放未移交资源�
     const ready = fixture.battle.onPreload(fixture.navigations[0].params, context);
     context.cancelled = true; context.resources.dispose(); fixture.battle.onPreloadCancelled();
     fixture.loads[0].resolve(prepared); await ready;
-    assert.equal(fixture.battle.preparedResources, null); assert.equal(fixture.staged, undefined);
+    assert.throws(() => fixture.battle.onEnter(), /对局资源/); assert.equal(fixture.staged, undefined);
     assert.equal(fixture.released, 1, '取消不能依赖来源页面稍后离开，否则大地图预加载没有释放者');
     fixture.matching.onLeave(); assert.equal(fixture.released, 1);
 });
@@ -437,9 +408,10 @@ test('旧匹配回调不能启动新战局，重新匹配创建新预加载，�
     const directScope = new ResourceScope('direct-battle');
     const ready = fixture.battle.onPreload(undefined, { resources: directScope, cancelled: false });
     assert.equal(fixture.loads.length, 3);
-    assert.equal(fixture.scopes[2], directScope);
+    assert.equal(fixture.scopes[2].disposed, false);
     fixture.loads[2].resolve(prepared); await ready;
-    assert.equal(fixture.battle.preparedResources, prepared);
+    fixture.battle.onEnter(); assert.equal(fixture.staged.resources, prepared);
+    fixture.battle.onLeave(); assert.equal(fixture.scopes[2].disposed, true);
 });
 
 test('管理器销毁匹配流程时释放后台资源，迟到回调不能进入战斗', async () => {
@@ -631,6 +603,7 @@ function loaderFixture(assets: any, configs = { initialize: async () => {}, getT
     let configured = 0, injected = 0;
     const dependencies: Record<string, unknown> = {
         '../model/ZCGameResourcePlan': resourcePlan,
+        '../model/ZCVisualResourcePlan': { buildZCVisualResourcePlan },
         '../../../core/asset/BundleCatalog': { BATTLE_BUNDLE: 'battle' },
         '../model/ZCMatchConfig': { captureZCMatchConfig: () => ({ map: {}, playerDeck: [], enemyDeck: [] }) },
         '../model/ZCModifierRuntime': { getZCModifierCatalogs: () => ({ adapters: { textOverrides: new Map(), skillPlans: [] } }) },
@@ -659,10 +632,16 @@ function loaderFixture(assets: any, configs = { initialize: async () => {}, getT
             getZCNeutralResourceCatalog: () => ({ items: new Map() }),
         },
         '../model/ZCGameRuntimeConfig': {
+            // 这些用例验证首次进对局的完整加载与取消：未预编译，返回 false 走完整路径。
+            isZCRuntimeCompiled: () => false,
             loadPvpTables: () => injected++,
             assertDeckUnitsPlayable() {},
             // `loadArtifactIconFrame` 用它取神器图标名（真源 = `pvpArtifact` 第一行的 `icon`）。
             getPvpRuntimeRules: () => ({ artifactIcon: '霜封冰刃' }),
+        },
+        './ZCRuntimePrecompiler': {
+            // 预编译模块内部安装运行时表；桩里复用同一注入计数，取消用例在 checkActive 处即拦截。
+            ensureZCRuntimeCompiled: async () => injected++,
         },
     };
     const context = { exports: {} as any, require: (name: string) => dependencies[name], console: { info() {}, error() {}, warn() {} } };
@@ -672,7 +651,7 @@ function loaderFixture(assets: any, configs = { initialize: async () => {}, getT
         get configured() { return configured; }, get injected() { return injected; } };
 }
 
-test('配置就绪后单位和特效与首屏 Prefab 并行加载，不等待外壳先完成', async () => {
+test('PVE 本地局首帧只加载单位模型与首屏 Prefab，特效与序列帧走首帧后补', async () => {
     const shell = deferred<object>();
     const paths: string[] = [];
     const fixture = loaderFixture({
@@ -681,26 +660,29 @@ test('配置就绪后单位和特效与首屏 Prefab 并行加载，不等待外
     });
     const ready = fixture.loader.prepare(new ResourceScope('battle'));
     await flush();
-    assert.ok(paths.includes('visual/unit')); assert.ok(paths.includes('visual/effect'));
-    // 12 张战斗 Prefab（棋盘图层 ZCGameBoard + 抽卡展示卡牌 ZCGameCardReveal + 装饰条目 ZCGameDecor
-    // + 自选主城 HUD ZCSpawnSelection + 传说卡出场横幅 ZCGameLegendBanner）+ 2 张单位/特效视觉 Prefab。
+    // 单位模型与首屏外壳同批并行，不等待外壳先完成。
+    assert.ok(paths.includes('visual/unit'));
     assert.ok(paths.includes('ui/game/ZCGameBoard'), '棋盘图层容器与首屏 Prefab 同批并行加载');
     assert.ok(paths.includes('ui/game/ZCGameCardReveal'));
     assert.ok(paths.includes('ui/game/ZCGameDecor'), '装饰条目 prefab 与首屏 Prefab 同批并行加载');
     assert.ok(paths.includes('ui/game/ZCGameLegendBanner'), '传说卡横幅与首屏 Prefab 同批并行加载');
-    // +1 =本局携带神器的图标（中立资源点「神器充能」格显示它，2026-10-08 起随首屏一起加载）。
-    assert.ok(
-        paths.includes('image/artifact/霜封冰刃/spriteFrame'),
-        '神器图标与首屏资源同批并行加载（png 走 SpriteFrame 子资源，路径带 /spriteFrame）',
-    );
-    // 19 = 上面逐项 includes 过的那批 + 4 个只参与计数、没单列 includes 的路径
-    // （`shaders/unit-outline-copy`、`ui/game/ZCBossPanel`、桩里的 `visual/unit` 与 `visual/effect`）。
-    assert.equal(paths.length, 25);
+    // 无 battle 时 hasBossPanel 恒为 true，首领面板槽位随首屏装配。
+    assert.ok(paths.includes('ui/game/ZCBossPanel'));
+    // 神器图标与首屏资源同批并行加载（png 走 SpriteFrame 子资源，路径带 /spriteFrame）。
+    assert.ok(paths.includes('image/artifact/霜封冰刃/spriteFrame'));
+    // 弹道、公共特效、序列帧与装饰全部移出首帧，由 loadDeferredArt 首帧后补齐。
+    assert.ok(!paths.includes('visual/effect'), '弹道特效不进首帧');
+    assert.ok(!paths.some(p => p.startsWith('units/effects/')), '出生/死亡/建筑摧毁/受击特效不进首帧');
+    assert.ok(!paths.some(p => p.includes('image/effects/')), '序列帧不进首帧');
+    // 17 = 12 张外壳（含 BossPanel）+ 单位模型 + 2 个 shader + 神器图标 + 金币贴图。
+    assert.equal(paths.length, 17);
     assert.ok(!paths.includes('image/gameui/whh/spriteFrame'), '固定主城不用选点图');
     assert.ok(!paths.includes('image/spawn-region/frame_01/spriteFrame'));
     shell.resolve({});
     const result = await ready;
-    assert.equal(result.unitVisualPrefabs.size, 1); assert.equal(result.effectVisualPrefabs.size, 1);
+    assert.equal(result.unitVisualPrefabs.size, 1);
+    assert.equal(result.effectVisualPrefabs.size, 0, '弹道特效首帧为空，等待后补');
+    assert.equal(typeof result.loadDeferredArt, 'function', 'PVE 局必须拿到首帧后补入口');
 });
 
 test('取消后迟到的地图加载不能覆盖当前地图配置', async () => {
@@ -724,4 +706,58 @@ test('配置初始化期间取消，不继续读表或注入过期配置', async
     scope.dispose(); initialization.resolve();
     await assert.rejects(ready, /取消/);
     assert.equal(tablesRead, 0); assert.equal(fixture.injected, 0);
+});
+
+test('直接进入已取消或已释放的战斗流程不启动资源加载', async () => {
+    for (const cancelled of [true, false]) {
+        const h = procedures();
+        const scope = new ResourceScope('expired-battle');
+        if (!cancelled) scope.dispose();
+        await h.battle.onPreload(undefined, { resources: scope, cancelled });
+        assert.equal(h.loads.length, 0);
+        h.battle.onPreloadCancelled();
+    }
+});
+
+test('战斗流程只消费本局通知，销毁和换局后旧宿主事件失效', async t => {
+    const h = procedures();
+    const off = t.mock.method(EventMgr.instance, 'off');
+    const enter = async () => {
+        const scope = new ResourceScope('event-battle');
+        const pending = h.battle.onPreload(undefined, { resources: scope, cancelled: false });
+        h.loads.at(-1).resolve(prepared); await pending;
+        h.battle.onEnter();
+        return h.battle.composition.current;
+    };
+    const owner = await enter();
+    EventMgr.instance.emit(ZC_BATTLE_EVENTS.SHOW_TIP, { owner: {}, message: 'wrong' });
+    EventMgr.instance.emit(ZC_BATTLE_EVENTS.SHOW_TIP, { owner, message: 'current' });
+    assert.deepEqual(h.tips, ['current']);
+    EventMgr.instance.emit(ZC_BATTLE_EVENTS.RETURN_TO_MAIN, { owner: {} });
+    assert.equal(h.navigations.length, 0);
+    EventMgr.instance.emit(ZC_BATTLE_EVENTS.RETURN_TO_MAIN, { owner });
+    assert.equal(h.navigations.length, 1);
+    assert.equal(h.navigations[0].route, 'main');
+    const composition = h.battle.composition;
+    EventMgr.instance.emit(ZC_BATTLE_EVENTS.RUNTIME_DESTROYED, { owner });
+    for (const event of [ZC_BATTLE_EVENTS.RETURN_TO_MAIN, ZC_BATTLE_EVENTS.SHOW_TIP]) {
+        assert.ok(off.mock.calls.some(call => call.arguments[0] === event && call.arguments[2] === composition), '会话销毁立即退订通知');
+    }
+    EventMgr.instance.emit(ZC_BATTLE_EVENTS.RETURN_TO_MAIN, { owner });
+    assert.equal(h.navigations.length, 1);
+    h.battle.onLeave();
+    EventMgr.instance.emit(ZC_BATTLE_EVENTS.SHOW_TIP, { owner, message: 'destroyed' });
+    const nextOwner = await enter();
+    EventMgr.instance.emit(ZC_BATTLE_EVENTS.SHOW_TIP, { owner, message: 'old' });
+    EventMgr.instance.emit(ZC_BATTLE_EVENTS.SHOW_TIP, { owner: nextOwner, message: 'next' });
+    assert.deepEqual(h.tips, ['current', 'next']);
+    EventMgr.instance.emit(ZC_BATTLE_EVENTS.RETURN_TO_MAIN, { owner });
+    assert.equal(h.navigations.length, 1);
+    EventMgr.instance.emit(ZC_BATTLE_EVENTS.RETURN_TO_MAIN, { owner: nextOwner });
+    assert.equal(h.navigations.length, 2);
+    h.battle.onLeave();
+    EventMgr.instance.emit(ZC_BATTLE_EVENTS.RETURN_TO_MAIN, { owner: nextOwner });
+    assert.equal(h.navigations.length, 2);
+    EventMgr.instance.emit(ZC_BATTLE_EVENTS.SHOW_TIP, { owner: nextOwner, message: 'left' });
+    assert.deepEqual(h.tips, ['current', 'next']);
 });

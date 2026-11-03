@@ -1,4 +1,4 @@
-import { _decorator, Animation, Color, Component, Graphics, instantiate, Label, Material, Node, Prefab, ProgressBar, sp, Sprite, SpriteFrame, UITransform, Vec3 } from 'cc';
+import { _decorator, Animation, Color, Component, instantiate, Label, Material, Node, Prefab, ProgressBar, sp, Sprite, SpriteFrame, UITransform, Vec3 } from 'cc';
 import type { ZCUnitDefinition } from '../model/ZCCombatCatalog';
 import type { ZCUnitState } from '../model/ZCGameModel';
 import { ZCOwner } from '../model/ZCMapConfig';
@@ -21,7 +21,7 @@ export interface IZCUnitPresentation {
 /**
  * Rendering behaviour owned by ZCGameUnit.prefab.
  *
- * 六个引用（`rootTransform` / `visualRoot` / `sprite` / `fallback` / `fallbackLabel` / `healthBar`）
+ * 七个引用（`rootTransform` / `visualRoot` / `sprite` / `fallback` / `fallbackTransform` / `fallbackLabel` / `healthBar`）
  * 连同 `VisualRoot`、`HealthBar` 两个容器节点都声明在 `ZCGameUnit.prefab` 里 ——
  * 这里不再 `getChildByName` 兜底，也不为「旧场景」现建 `VisualRoot`：
  * 那种兼容分支只会让一个「Inspector 全空」的视图静默存活。
@@ -29,7 +29,7 @@ export interface IZCUnitPresentation {
 @ccclass('ZCUnitView')
 export class ZCUnitView extends Component {
     /**
-     * 各席位兜底圆点的描边色。
+     * 各席位兜底色块的阵营色。
      * 原在 `ZCTheme.zcOwnerEdgeColor` 导出，但全工程唯一消费类是 ZCUnitView ——
      * 按 §6.2 第 12 条内聚为私有静态；颜色仍读共享主题 `ZC_CLIENT_COLORS`，不复制值。
      */
@@ -75,7 +75,7 @@ export class ZCUnitView extends Component {
     private static readonly TINT_OTHER_PLAYER = 1;
     private static readonly TINT_DEAD = 2;
 
-    /** 兜底圆点的尺寸（没有可用美术 prefab 时）。 */
+    /** 兜底色块的尺寸（没有可用美术 prefab 时）。 */
     private static readonly FOOT_SIZE_HERO = 46;
     private static readonly FOOT_SIZE_UNIT = 34;
     private static readonly FALLBACK_RADIUS_HERO = 13;
@@ -110,6 +110,25 @@ export class ZCUnitView extends Component {
     }
 
     /**
+     * 「首屏清单里没有这个兵的美术」要说一声（2026-11-02 运动霸 68033）。
+     *
+     * 这条路径原本**一条日志都没有**：`ZCGameLoader` 的告警只覆盖「load 抛了」，覆盖不到
+     * 「压根没被要求加载」（`heroIds` 过滤 / GM 工具临时加兵），于是「美术没交图」「表配错路径」
+     * 「预加载漏了」三种故障在战场上长得一模一样 —— 都是一个「将」字占位色块。
+     *
+     * 现在漏掉的兵会走 {@link ZCGame.requestUnitPrefab} 按需补载，所以这里只留一行 **info**
+     * （一次/兵种，静态集合跨局去重），把 `prefabPath` 打出来便于对表；补载真失败由控制器告警。
+     */
+    private static readonly reportedMissingPrefabs = new Set<string>();
+
+    private static reportMissingPrefab(definition: Readonly<ZCUnitDefinition>): void {
+        if (ZCUnitView.reportedMissingPrefabs.has(definition.unitId)) return;
+        ZCUnitView.reportedMissingPrefabs.add(definition.unitId);
+        console.info(`[ZCUnitView] 兵种 ${definition.unitId}（${definition.name}）不在首屏美术清单里，`
+            + `按需补载 pvpCard.unitPrefabPath = ${definition.prefabPath || '空'}（到货前画「将」字占位色块）`);
+    }
+
+    /**
      * 骨架的 canvas 高度（设计单位），用来算 spine 单位的缩放。
      * 必须走 `getRuntimeData()`，不能读美术 prefab 上的 `UITransform`（尺寸不可信）。
      */
@@ -127,8 +146,11 @@ export class ZCUnitView extends Component {
     @property({ type: Sprite })
     sprite: Sprite = null;
 
-    @property({ type: Graphics })
-    fallback: Graphics = null;
+    @property({ type: Sprite })
+    fallback: Sprite = null!;
+
+    @property({ type: UITransform, tooltip: 'FallbackBackground：占位色块尺寸' })
+    fallbackTransform: UITransform = null!;
 
     @property({ type: Label })
     fallbackLabel: Label = null;
@@ -180,6 +202,8 @@ export class ZCUnitView extends Component {
 
     private visualNode: Node | null = null;
     private visualPrefab: Prefab | null = null;
+    /** 出生时没有美术 ⇒ 已经向控制器发过补载请求（别每帧重发，控制器侧也会按兵种去重）。 */
+    private deferredPrefabRequested = false;
     private visualAnimation: Animation | null = null;
     private visualSprite: Sprite | null = null;
     /** 非 null = 这条兵种美术是 spine（`resources/skel/**`），动作走 `setAnimation` 而不是 `Animation`。 */
@@ -279,8 +303,10 @@ export class ZCUnitView extends Component {
      *   · `prefabSize` 本来就是这份 `definition` 上的策划数据（`pvpCard.prefabSize`）。
      */
     initialize(definition: Readonly<ZCUnitDefinition>): void {
-        const prefab = ProcedureGame.current?.resolveUnitPrefab(definition.unitId) ?? null;
+        //  先清缓存再取美术：`resolveVisual` 会按「这个兵种已经发过补载请求没有」决定是否再发，
+        //  而这个标记归 `resetForReuse` 管，顺序反了就会带着上一局的标记。
         this.resetForReuse(definition.prefabSize);
+        const prefab = this.resolveVisual(definition);
         if (this.visualNode?.isValid && this.visualPrefab === prefab) {
             this.visualNode.active = true;
             this.applyVisualSize();
@@ -292,16 +318,57 @@ export class ZCUnitView extends Component {
         this.clearVisual();
         this.visualPrefab = prefab;
         if (!prefab) return;
+        this.mountVisual(prefab);
+    }
+
+    /**
+     * 取这个兵种的美术 prefab；取不到就**向控制器要一次补载**（同一兵种只发一次）。
+     *
+     * 为什么不能只靠 `initialize` 那一刻：首屏清单是按后端英雄名单生成的，GM 工具临时加兵、
+     * 召唤链/波次漏登记的兵都不在里面 ⇒ 出生时必然取不到。补载是异步的，到货后由
+     * {@link attachDeferredVisual} 在下一帧 `render` 里接上。
+     */
+    private resolveVisual(definition: Readonly<ZCUnitDefinition>): Prefab | null {
+        const prefab = ProcedureGame.current?.resolveUnitPrefab(definition.unitId) ?? null;
+        if (prefab) return prefab;
+        if (!this.deferredPrefabRequested) {
+            this.deferredPrefabRequested = true;
+            ZCUnitView.reportMissingPrefab(definition);
+            //  控制器侧方法用可选调用：测试桩/半初始化状态下 `current` 可能是个只有
+            //  `resolveUnitPrefab` 的假控制器，缺这个方法不该把渲染打断。
+            ProcedureGame.current?.requestUnitPrefab?.(definition);
+        }
+        return null;
+    }
+
+    /**
+     * 把一份美术**真挂上去**：`initialize` 与「补载到货」共用这一段，避免两处顺序漂移
+     * （`attachVisual` 建子树+建轮廓副本 → 写缩放 → 探测动作名 → 起播 idle）。
+     */
+    private mountVisual(prefab: Prefab): void {
+        this.visualPrefab = prefab;
         this.attachVisual(prefab);
         this.applyVisualSize();
         this.configureAnimationClips();
         this.playClip(this.idleClip, true);
     }
 
+    /**
+     * 补载到货：挂上美术。不动节点、不动单位状态（hp / 血条 / 抖动窗口都不重来），
+     * `renderFallback` 的指纹含 `visualNode` 有无 ⇒ 下一段会隐藏「将」字占位色块。
+     */
+    private attachDeferredVisual(definition: Readonly<ZCUnitDefinition>): void {
+        const prefab = this.resolveVisual(definition);
+        if (!prefab) return;
+        this.mountVisual(prefab);
+    }
+
     private resetForReuse(prefabSize: number): void {
         this.fallbackKey = -1;
         this.currentClip = '';
         this.lastAttackCount = -1;
+        // 上一个个体（可能是别的兵种）的补载标记不能带过来。
+        this.deferredPrefabRequested = false;
         // A pooled node must not inherit the previous unit's damage window or cached writes.
         this.observedHp = null;
         this.lastDamagedAt = null;
@@ -428,6 +495,9 @@ export class ZCUnitView extends Component {
             this.appliedRootX = x;
             this.appliedRootY = y;
         }
+
+        //  美术是补载来的（首屏清单没覆盖这个兵）：到货就挂上，这之前这一段是空的、只画「将」字占位色块。
+        if (!this.visualNode) this.attachDeferredVisual(definition);
 
         if (this.visualNode) {
             // 滞回判定：超过死区才翻转朝向，防止在 ~90°/270° 附近微调时每帧左右抽搐。
@@ -635,8 +705,8 @@ export class ZCUnitView extends Component {
     }
 
     /**
-     * 没有可用美术 prefab 时的兜底：圆点 + 「兵 / 弓 / 将」字。
-     * 形态与归属没变就不重画（`fallbackKey` 是这三者的指纹）。
+     * 没有可用美术 prefab 时的兜底：white 色块 + 「兵 / 弓 / 将」字。
+     * 形态与归属没变就不重复赋值（`fallbackKey` 是这三者的指纹）。
      */
     private renderFallback(unit: Readonly<ZCUnitState>, definition: Readonly<ZCUnitDefinition>): void {
         // 指纹用**位掩码**而不是模板字符串：这段每帧每单位都会跑，
@@ -650,16 +720,15 @@ export class ZCUnitView extends Component {
         this.fallbackKey = key;
         this.sprite.enabled = false;
         this.sprite.spriteFrame = null;
-        this.fallback.clear();
+        this.fallback.enabled = this.visualNode === null;
         this.fallbackLabel.enabled = this.visualNode === null;
         if (this.visualNode) return;
         const radius = definition.hero
             ? ZCUnitView.FALLBACK_RADIUS_HERO : ZCUnitView.FALLBACK_RADIUS_UNIT;
         this.fallback.node.setPosition(0, radius, 0);
         this.fallbackLabel.node.setPosition(0, radius + 1, 0);
-        this.fallback.fillColor = ZCUnitView.OWNER_EDGE_COLOR[unit.owner];
-        this.fallback.circle(0, 0, radius);
-        this.fallback.fill();
+        this.fallbackTransform.setContentSize(radius * 2, radius * 2);
+        this.fallback.color = ZCUnitView.OWNER_EDGE_COLOR[unit.owner];
         this.fallbackLabel.string = definition.hero ? '将' : definition.attackRange > 100 ? '弓' : '兵';
     }
 

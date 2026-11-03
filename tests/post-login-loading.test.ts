@@ -7,55 +7,75 @@ import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
+import { ControllerBase } from '../assets/script/framework/controller/ControllerBase';
+import { PostLoginController } from '../assets/script/app/loading/PostLoginController';
+import { resolvePostLoginIdentity } from '../assets/script/app/loading/PostLoginContract';
+import { createControllerContext } from './helpers/controller-context';
 import { assetPath } from './helpers/asset-paths';
 
-function loadPostLogin() {
-    const bus = new EventMgr();
-    const ratios: number[] = [];
-    const statuses: string[] = [];
+function loadPostLogin(options: { startRatio?: number; saved?: string; load?: () => Promise<object>; missingUI?: boolean } = {}) {
+    const bus = EventMgr.instance;
+    const ratios: number[] = [], statuses: string[] = [];
     const navigations: Array<{ route: string; params: unknown }> = [];
+    const owners: string[][] = [];
+    let releases = 0, oldReleases = 0, audio = 0, reads = 0;
     const ui = {
-        show() {},
+        show() {}, release() { releases++; },
         setStatus(message: string) { statuses.push(message); },
         setProgress(ratio: number) { ratios.push(ratio); },
     };
-    const context = {
-        exports: {} as { ProcedurePostLogin: new () => {
-            onPreload(): Promise<void>; onEnter(): void; onLeave(): void; onDestroy(): void;
-        } },
-        console: { warn() {}, error() {} },
-        require(name: string) {
-            if (name === 'cc') return { Prefab: class {}, sys: { localStorage: { getItem: () => null } } };
-            if (name.endsWith('/EventMgr')) return { EventMgr: { instance: bus } };
-            if (name.endsWith('/MainLoadingEvents')) return require('../assets/script/app/main/MainLoadingEvents');
-            if (name.endsWith('/GameRoute')) return { GameRoute: { Main: 'main' } };
-            if (name.endsWith('/AudioMgr')) return { AudioMgr: { instance: { init() {} } } };
-            if (name.endsWith('/TerritoryChapterInfoRepository')) return {};
+    const services = createControllerContext();
+    services.assets.load = async (_path, Type) => { if (options.load) await options.load(); return new Type(); };
+    services.sessionAssets.prepare = async report => { report?.({ ratio: 1, completed: 1, total: 1, message: 'unused' }); };
+    const modules: Record<string, any> = {};
+    function load(path: string) {
+        const exports = {};
+        const context = { exports, console: { warn() {}, error() {} }, require(name: string) {
+            if (name === 'cc') return { Prefab: class {}, sys: { localStorage: { getItem() { reads++; return options.saved ?? null; } } } };
+            if (name.endsWith('/ControllerBase')) return { ControllerBase };
+            if (name.endsWith('/PostLoginController')) return { PostLoginController };
+            if (name.endsWith('/PostLoginContract')) return { resolvePostLoginIdentity };
+            if (name.endsWith('/PostLoginComposition')) return modules.composition;
+            if (name.endsWith('/ProcedureManager')) return { ProcedureManager: { navigate: (route: string, params?: unknown) => navigations.push({ route, params }) } };
+            if (name.endsWith('/AudioMgr')) return { AudioMgr: { instance: { init() { audio++; } } } };
+            if (name.endsWith('/TerritoryChapterInfoRepository')) return { TerritoryChapterInfoRepository: { instance: {
+                bindOwner: (...values: string[]) => owners.push(values), refresh: async () => {},
+            } } };
             if (name.endsWith('/LaunchProgressUI')) return {
                 LAUNCH_UPDATE_WEIGHT: 0.6,
-                LaunchProgressUI: { ensure: () => null, createFromPrefab: () => ui },
+                LaunchProgressUI: {
+                    ensure: () => options.startRatio === undefined ? null : { currentRatio: options.startRatio, release() { oldReleases++; } },
+                    createFromPrefab: () => options.missingUI ? null : ui,
+                },
             };
             if (name.endsWith('/ProcedureBase')) return { ProcedureBase: class {
                 protected host = {};
-                protected assets = { load: async () => ({}) };
-                protected sessionAssets = { prepare: async (report: (progress: { ratio: number }) => void) => report({ ratio: 1 }) };
-                protected navigate(route: string, params?: unknown) { navigations.push({ route, params }); }
+                protected assets = services.assets;
+                protected configs = services.configs;
+                protected sessionAssets = services.sessionAssets;
                 protected releaseResourceScope() {}
                 protected onDestroy() {}
             } };
             throw new Error(`unexpected dependency: ${name}`);
-        },
-    };
-    const code = ts.transpileModule(readFileSync('assets/script/app/procedure/ProcedurePostLogin.ts', 'utf8'), {
-        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
-    }).outputText;
-    runInNewContext(code, context);
-    return { procedure: new context.exports.ProcedurePostLogin(), bus, ratios, statuses, navigations };
+        } };
+        const code = ts.transpileModule(readFileSync(path, 'utf8'), {
+            compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+        }).outputText;
+        runInNewContext(code, context);
+        return exports as any;
+    }
+    modules.composition = load('assets/script/app/bootstrap/login/PostLoginComposition.ts');
+    const module = load('assets/script/app/procedure/ProcedurePostLogin.ts');
+    const procedure = new module.ProcedurePostLogin();
+    const preload = new ResourceScope('post-login-test');
+    return { procedure, bus, ratios, statuses, navigations, owners,
+        preload: (context = { resources: preload, cancelled: false }) => procedure.onPreload(undefined, context),
+        get releases() { return releases; }, get oldReleases() { return oldReleases; }, get audio() { return audio; }, get reads() { return reads; } };
 }
 
 test('PostLogin 导航 Main 只传入口数据，加载事件继续推进同一条进度', async () => {
     const h = loadPostLogin();
-    await h.procedure.onPreload();
+    await h.preload();
     h.procedure.onEnter();
     await new Promise<void>((resolve) => setImmediate(resolve));
     assert.deepEqual(h.navigations, [{ route: 'main', params: undefined }]);
@@ -63,11 +83,13 @@ test('PostLogin 导航 Main 只传入口数据，加载事件继续推进同一�
     const expected = [0.6, 0.88, 0.88, 0.916, 1];
     assert.equal(h.ratios.length, expected.length);
     h.ratios.forEach((ratio, index) => assert.ok(Math.abs(ratio - expected[index]) < 1e-10));
+    h.procedure.onLeave();
+    assert.equal(h.releases, 0, "Main 首屏完成后按原契约交接遮罩");
 });
 
 test('PostLogin 订阅 Main 失败事件显示错误，离开后不再接收加载通知', async () => {
     const h = loadPostLogin();
-    await h.procedure.onPreload();
+    await h.preload();
     h.procedure.onEnter();
     h.bus.emit('main-loading:failed', 'asset failure');
     assert.equal(h.statuses.at(-1), '加载失败，请重新进入游戏');
@@ -80,7 +102,7 @@ test('PostLogin 订阅 Main 失败事件显示错误，离开后不再接收加�
 
 test('销毁 PostLogin 会解除事件订阅并取消未完成的会话准备', async () => {
     const h = loadPostLogin();
-    await h.procedure.onPreload();
+    await h.preload();
     h.procedure.onEnter();
     h.procedure.onDestroy();
     const counts = [h.ratios.length, h.statuses.length];
@@ -156,14 +178,7 @@ test('会话基础资源合并并发 prepare，完成后可统一释放', async 
     }).outputText;
     let configCalls = 0;
     let releaseCalls = 0;
-    let battleReleaseCalls = 0;
-    let battleLoads = 0;
     const loaded: string[] = [];
-    class BattlePreload {
-        constructor() { battleLoads += 1; }
-        readonly ready = Promise.resolve({ prepared: true });
-        releaseFromMatching() { battleReleaseCalls += 1; }
-    }
     const context = {
         exports: {} as { AppSessionAssetService: new (configs: any) => any },
         require: (name: string) => {
@@ -176,9 +191,6 @@ test('会话基础资源合并并发 prepare，完成后可统一释放', async 
                 loadCommonArt: async (asset: string) => { loaded.push(asset); return { asset }; },
                 releaseArtCache: () => { releaseCalls += 1; },
             };
-            if (name === '../zcds/ZCGame') return { MAP_DIRECTORY: 'config/maps' };
-            if (name === '../zcds/application/ZCGameLoader') return { ZCGameLoader: class {} };
-            if (name === '../zcds/application/ZCGamePreload') return { ZCGamePreload: BattlePreload };
             throw new Error(`unexpected dependency: ${name}`);
         },
         console, setTimeout, clearTimeout,
@@ -198,36 +210,54 @@ test('会话基础资源合并并发 prepare，完成后可统一释放', async 
     assert.equal(loaded.length, 3, '导航图标已经序列化在 TabButton prefab 实例，不应加入登录动态加载队列');
     assert.equal(ratios.at(-1), 1);
     assert.equal(service.ready, true);
-    assert.equal(battleLoads, 0, '登录只准备基础资源，不选地图或构筑战斗');
-    assert.equal(service.takeBattlePreload(), null);
+    assert.equal('takeBattlePreload' in service, false);
     service.clear();
     service.clear();
     assert.equal(service.ready, false);
     assert.equal(releaseCalls, 1);
-    assert.equal(battleReleaseCalls, 0, '接管后不再由会话服务释放');
-    assert.equal(battleReleaseCalls, 0);
 });
 
-test('角色登录成功后先进入 PostLogin，由加载流程复用启动 UI 续走进度到 Main', () => {
+test('PostLogin 流程只转发生命周期，外部组合层拥有加载与身份适配器', () => {
     const login = readFileSync('assets/script/app/login/LoginController.ts', 'utf8');
-    const loading = readFileSync('assets/script/app/procedure/ProcedurePostLogin.ts', 'utf8');
+    const procedure = readFileSync('assets/script/app/procedure/ProcedurePostLogin.ts', 'utf8');
+    const composition = readFileSync('assets/script/app/bootstrap/login/PostLoginComposition.ts', 'utf8');
+    const controller = readFileSync('assets/script/app/loading/PostLoginController.ts', 'utf8');
     assert.match(login, /navigate\(GameRoute\.PostLogin/);
-    assert.match(loading, /sessionAssets\.prepare/);
-    assert.match(loading, /navigate\(GameRoute\.Main/);
-    assert.doesNotMatch(loading, /progress\.message/);
-    // 共用同一个启动 UI：热更留下的节点因资源作用域已释放而失效，销毁前先读其实际进度
-    // （热更走完续走 0.6；跳过/异常则从 0 起步），再以本流程预加载的同一 prefab 重建。
-    assert.match(loading, /LaunchProgressUI\.ensure\(this\.host\)/);
-    assert.match(loading, /existed\.currentRatio/);
-    assert.match(loading, /existed\.release\(\)/);
-    assert.match(loading, /createFromPrefab\(this\.launchPrefab, this\.host\)/);
-    // 登录后所有预加载合并为一条 [startRatio, 1]：会话资源占 0.7、Main 加载占 0.3，
-    // 中途不提前满 100%（避免「到 100 再 100%」）。
-    assert.match(loading, /this\.startRatio \+ progress\.ratio \* remain \* 0\.7/);
-    assert.match(loading, /remain \* \(0\.7 \+ ratio \* 0\.3\)/);
-    assert.doesNotMatch(loading, /setProgress\(1\)/);
-    // 首包 prefab 预载：热更期未实例化时，登录后加载阶段兜底 load 启动 UI。
-    assert.match(loading, /load\('ui\/loading\/LaunchProgress', Prefab/);
-    // 旧 PostLoginRoot 预制体/组件已废弃。
-    assert.doesNotMatch(loading, /PostLoginRoot|PostLoginLoadingPage|POST_LOGIN_ROOT_URL/);
+    assert.match(procedure, /PostLoginComposition/);
+    assert.doesNotMatch(procedure, /sys|localStorage|AudioMgr|EventMgr|TerritoryChapterInfoRepository|sessionAssets.prepare|LaunchProgressUI/);
+    assert.match(composition, /sessionAssets.prepare/);
+    assert.match(composition, /existed.currentRatio/);
+    assert.match(composition, /load\('ui\/loading\/LaunchProgress', Prefab/);
+    assert.match(controller, /navigate\(GameRoute.Main\)/);
+    assert.doesNotMatch(controller, /from 'cc'|progress.message/);
+});
+
+test('PostLogin 取消预加载后迟到 prefab 不得挂载，再次进入使用独立会话', async () => {
+    let resolve: (value: object) => void = () => {};
+    const h = loadPostLogin({ load: () => new Promise(yes => { resolve = yes; }) });
+    const context = { resources: new ResourceScope('cancelled-preload'), cancelled: false };
+    const ready = h.preload(context);
+    context.cancelled = true;
+    h.procedure.onPreloadCancelled();
+    resolve({}); await ready; h.procedure.onEnter();
+    assert.equal(h.audio, 0); assert.deepEqual(h.ratios, []);
+    h.procedure.onDestroy(); context.resources.dispose();
+});
+
+test('PostLogin 复用热更实际进度、入口身份优先；失败退出释放 UI，重进不复用旧控制器', async () => {
+    const h = loadPostLogin({ startRatio: 0, saved: JSON.stringify({ roleId: 8, selectServerId: 9 }) });
+    await h.preload(); h.procedure.onEnter({ session: { roleId: 1, selectServerId: 2 } });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(h.ratios[0], 0); assert.equal(h.oldReleases, 1);
+    assert.deepEqual(h.owners, [['1', '2']]); assert.equal(h.reads, 0);
+    h.procedure.onLeave(); assert.equal(h.releases, 1);
+    await h.preload(); h.procedure.onEnter(); await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(h.owners, [['1', '2'], ['8', '9']]); assert.equal(h.audio, 2);
+    h.procedure.onDestroy(); assert.equal(h.releases, 2);
+});
+
+test('PostLogin 缺少 UI 时明确失败且不启动资源和导航', async () => {
+    const h = loadPostLogin({ missingUI: true });
+    await h.preload(); assert.throws(() => h.procedure.onEnter(), /LaunchProgress/);
+    h.procedure.onDestroy(); assert.equal(h.audio, 0); assert.deepEqual(h.navigations, []);
 });

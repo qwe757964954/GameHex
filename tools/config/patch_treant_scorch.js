@@ -17,7 +17,9 @@ const NEW_ROW = {
     areaRadius: 60,             // 表值 × combatDistanceScale(0.3) = 世界半径；沿用冰雕/龙卷风口径
     empoweredEvery: 0,
     empoweredSkillId: 0,
-    effectPrefabPath: 'units/projectiles/火法师_火船/火法师_火船', // 复用火船，橙红调天然契合
+    // 早期复用「火法师_火船」（橙红调契合）；后来出了专属美术，改用灼热地带自己的预制，
+    // 与 Excel `PVP-技能.xlsx` J 列、`json/client/pvpSkill.json` 现值一致（2026-11-02 对齐）。
+    effectPrefabPath: 'units/projectiles/火焰树妖_灼热地带技能/火焰树妖_灼热地带技能',
     cooldown: 0,
     effectKey: '',
     trigger: null,

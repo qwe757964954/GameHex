@@ -224,22 +224,20 @@ test('顶栏保留透明 Header、独立资源卡和收取按钮', () => {
     assert.ok(prefabNode('HarvestAll'));
 });
 
-test('详情卡是居中模态，暗底拦截输入并关闭选择', () => {
-    const dim = prefabNode('InfoDim');
-    const panel = prefabNode('InfoPanel');
-    assert.ok(prefabComponent(dim, 'cc.BlockInputEvents'));
-    assert.ok(prefabComponent(panel, 'cc.BlockInputEvents'));
-    assert.equal(panel._lpos.x, 0);
-    assert.equal(panel._lpos.y, 0);
-    const style = dim._components.map((ref: { __id__: number }) => PAGE_PREFAB[ref.__id__]).find((item: object) => 'fill' in item);
-    assert.deepEqual([style.fill.r, style.fill.g, style.fill.b, style.fill.a], [5, 10, 14, 205]);
-    assert.match(PAGE_SOURCE, /this\.infoDim\.on\(Node\.EventType\.TOUCH_END, this\.clearSelection, this\)/);
-    assert.match(PAGE_SOURCE, /this\.infoDim\.active = visible/);
+test('详情模态交给独立PopupBase，页面不再挂InfoDim和InfoPanel', () => {
+    assert.equal(prefabNode('InfoDim'), undefined);
+    assert.equal(prefabNode('InfoPanel'), undefined);
+    assert.match(PAGE_SOURCE, /BigMapInfoPopup.open/);
+    assert.match(readFileSync('assets/script/app/bigmap/view/BigMapInfoPopup.ts', 'utf8'), /extends PopupBase/);
 });
 
 test('实心按钮使用 HUD 金钮，模式按钮的三层结构在 Prefab 中维护', () => {
-    assert.match(PAGE_SOURCE, /for \(const button of this\.skinButtons\) button\.setSkin\(art\.hud\.get\('button'\)/);
-    assert.match(PAGE_SOURCE, /this\.primaryButton\.setSkin\(art\.hud\.get\('button'\)/);
+    for (const name of ['HarvestAll', 'BuildMenu']) {
+        const button = prefabNode(name);
+        assert.ok(prefabComponent(button, 'cc.Button'));
+        const art = button._children.map((ref: { __id__: number }) => PAGE_PREFAB[ref.__id__]).find((item: any) => item._name === 'ButtonArt');
+        assert.equal(prefabComponent(art, 'cc.Sprite')._spriteFrame.__uuid__, '016f4b94-22b3-4aeb-9d87-e3b5d2b9fd88@f9941');
+    }
     const toggle = prefabNode('BaseWorldToggle');
     const names = toggle._children.map((ref: { __id__: number }) => PAGE_PREFAB[ref.__id__]._name);
     assert.deepEqual(names, ['ModeFrameFallback', 'ModeFrame', 'ModeIcon', 'ModeLabel']);
@@ -251,8 +249,8 @@ test('实心按钮使用 HUD 金钮，模式按钮的三层结构在 Prefab 中�
     assert.equal(label._isBold, true);
     assert.equal(label._enableOutline, true);
     assert.equal(label._outlineWidth, 2);
-    assert.match(PAGE_SOURCE, /this\.art\.hud\.get\(this\.mode === 'world' \? 'mode_base' : 'mode_world'\)/);
-    assert.match(PAGE_SOURCE, /fitBigMapSprite\(this\.modeButton\.icon, icon, MODE_ICON_SIZE, 0, MODE_ICON_Y\)/);
+    assert.match(readFileSync('assets/script/app/bigmap/view/BigMapPageLayout.ts', 'utf8'), /this\.art\.hud\.get\(mode === 'world' \? 'mode_base' : 'mode_world'\)/);
+    assert.match(readFileSync('assets/script/app/bigmap/view/BigMapPageLayout.ts', 'utf8'), /fitBigMapSprite\(this\.modeIcon, icon, MODE_ICON_SIZE, 0, MODE_ICON_Y\)/);
 });
 
 test('页面不再给面板贴深铁概念图，也不再引用木牌皮肤', () => {

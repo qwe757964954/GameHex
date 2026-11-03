@@ -1,7 +1,8 @@
 import { ControllerBase, type IControllerResources } from '../../../framework/controller/ControllerBase';
 import type { IControllerContext } from '../../../framework/controller/ControllerBase';
 import { EventMgr } from '../../../framework/event/EventMgr';
-import type { TerritoryModel, TerritoryModelOutput } from './TerritoryModel';
+import type { ResourceScope } from '../../../core/asset/ResourceScope';
+import type { ITerritoryNavigateBattlePayload, TerritoryModel, TerritoryModelOutput } from './TerritoryModel';
 import type { TerritoryCellRepository } from './TerritoryCellRepository';
 import { TerritoryUiEvent, TerritoryViewEvent, type ITerritoryIntentEvent,
     type TerritoryViewCommand } from './TerritoryEvents';
@@ -18,6 +19,10 @@ export interface ITerritoryControllerOptions {
     readonly cells: Pick<TerritoryCellRepository, 'readPassCellsBro' | 'readCellInfo'>;
     readonly schedule: (callback: () => void, seconds: number) => () => void;
     readonly now?: () => number;
+    readonly battle?: {
+        prepare(payload: ITerritoryNavigateBattlePayload, owner: ResourceScope): Promise<unknown> | undefined;
+        enter(payload: ITerritoryNavigateBattlePayload): void;
+    };
 }
 
 /** Owns all business inputs and clocks. Views only send intents. */
@@ -81,8 +86,16 @@ export class TerritoryController extends ControllerBase {
             }
             case 'randomTap': this.model.selectRandomResource(intent.cellId); break;
             case 'chapter': this.model.switchChapter(intent.offset); break;
+            case 'selectChapter': this.model.selectChapter(intent.chapterId); break;
+            case 'enterBattle': {
+                if (!this.options.battle) throw new Error('领地战斗入口尚未装配');
+                this.options.battle.enter(intent.payload);
+                break;
+            }
             case 'battle': this.command({ kind: 'prepareBattle' }); this.model.requestBattle(); break;
             case 'closeDetail': this.model.closeDetail(); break;
+            case 'keepBattleRequest': this.model.keepBattleRequest(); break;
+            case 'cancelBattleStart': this.model.cancelBattleStart(); break;
             case 'openLevelTip': this.model.openLevelTip(); break;
             case 'closeLevelTip': this.model.closeLevelTip(); break;
             case 'scout': this.command({ kind: 'tip', payload: { text: TERRITORY_TEXTS.asyncPlayerScoutUnavailable } }); break;
@@ -99,7 +112,10 @@ export class TerritoryController extends ControllerBase {
             if (output.kind === 'busy' && !output.payload.busy) this.command(output);
             return;
         }
-        if (output.kind === 'changed') this.publish();
+        if (output.kind === 'navigate') {
+            const ready = this.options.battle?.prepare(output.payload, this.scope);
+            this.command({ ...output, ready });
+        } else if (output.kind === 'changed') this.publish();
         else this.command(output);
     }
     private publish(): void {

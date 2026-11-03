@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { loadViews } from './helpers/zcds-view-fixtures';
 import { assetPath } from './helpers/asset-paths';
@@ -158,13 +158,13 @@ test('ZCGameLegendBanner 绑定：六个组件引用指对节点，四套玩家�
     assert.equal(titleSprite._spriteFrame.__uuid__, artUuid('legend_title'));
 });
 
-test('视图按owner 选四色底板与头像环，立绘**保持 256 原生尺寸不缩放**，进度曲线驱动滑入与淡出', () => {
+test('视图按owner 选四色底板与头像环，立绘**等比放大到横幅立绘区**，进度曲线驱动滑入与淡出', () => {
     const { load, FakeNode, cc } = loadViews();
-    const { ZCGameLegendBannerView } = load('./ZCGameLegendBannerView');
+    const { ZCGameLegendBannerView, LEGEND_ROLE_TARGET_HEIGHT } = load('./ZCGameLegendBannerView');
     const view = buildView(new ZCGameLegendBannerView(), FakeNode);
     // Role 节点 sizeMode=RAW：UITransform.height 同步为 spriteFrame.originalSize.height（256）。
     view.roleSprite.node.components.set(cc.UITransform, { height: 256 });
-    const unitArt = { height: 256, name: 'unit-idle' };
+    const unitArt = { height: 256, name: 'unit-idle', originalSize: { width: 256, height: 256 } };
     const portrait = { height: 204, name: 'head' };
     view.setArtResolver(() => unitArt);
     view.setPortraitResolver(() => portrait);
@@ -179,10 +179,14 @@ test('视图按owner 选四色底板与头像环，立绘**保持 256 原生尺�
     assert.equal(view.ringSprite.spriteFrame, view.ringEnemy2);
     assert.equal(view.headSprite.spriteFrame, portrait);
     assert.equal(view.nameLabel.string, '吐豌豆骑手');
-    // 立绘**不缩放**（2026-10-10 山猫口径「不用放大了，就用 256×256 不考虑拉伸」）：
-    // 曾经按「横幅高 × 333/417」等比缩放（2 人局会放到 511 高），已删除。
-    assert.equal(view.roleSprite.node.scale.x, 1, '立绘 x 不该被缩放');
-    assert.equal(view.roleSprite.node.scale.y, 1, '立绘 y 不该被缩放');
+    // 立绘**等比放大**到横幅立绘区（2026-11-02「萨尔等旧角色，模型也要匹配 banner 的高度」）：
+    // 256 见方的卡面 ⇒ scale = 280/256；x / y 同一个系数（方形原图不许被拉扁）。
+    // ⚠️ 2026-10-10 那版「不缩放、就用 256×256」已作废 —— 84 见方的老头像在 417 高的横幅里
+    // 只占 20%，正是这次反馈的画面。
+    const expectedScale = LEGEND_ROLE_TARGET_HEIGHT / 256;
+    assert.ok(Math.abs(view.roleSprite.node.scale.x - expectedScale) < 1e-6,
+        `立绘 x 应放大到 ${expectedScale}，实际 ${view.roleSprite.node.scale.x}`);
+    assert.equal(view.roleSprite.node.scale.y, view.roleSprite.node.scale.x, '必须等比，不许单轴缩放');
 
     // 换一方：底板与环跟着换，文案独立。
     const other = { ...reveal, id: 2, owner: 'player', cardName: '精灵弓箭手' };
@@ -205,6 +209,111 @@ test('视图按owner 选四色底板与头像环，立绘**保持 256 原生尺�
     assert.ok(view.bannerOpacity.opacity < 255 && view.bannerOpacity.opacity > 0);
     view.render(other, 10 + 2.2);
     assert.equal(view.bannerOpacity.opacity, 0);
+});
+
+/** 读 PNG 的 IHDR 宽高（只解文件头，不解像素 —— 这条用例要扫整个 cardHead 目录）。 */
+function pngSize(filePath: string): { width: number; height: number } {
+    const buffer = readFileSync(filePath);
+    return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
+}
+
+/**
+ * 2026-11-02 需求：「萨尔等旧角色，模型也要匹配 banner 的高度，放大对应的模型让它与 UI 等高」。
+ *
+ * 横幅左格取的是**卡面静态图**（`resolveLegendArt` ①），而 `cardHead` 目录里同时躺着两种
+ * 画布规格：新的本地卡面 256×256、旧角色走的老头像 84×84。`sizeMode = RAW` 会把节点
+ * 直接定成画布尺寸 ⇒ 84 那批在 417 高的横幅里只占 20%，截图里萨尔小得像个图标。
+ *
+ * 判据三条：
+ *  ① 不论哪档画布，`画布高 × scale` 恒等于 `LEGEND_ROLE_TARGET_HEIGHT`（视觉等高）；
+ *  ② 静止位让**底边**贴在底板可见区下沿（`LEGEND_ROLE_BOTTOM_Y`），不是让中心对齐；
+ *  ③ 换卡换画布时**重算而不是累乘**（节点来自对象池，scale 有残留）。
+ */
+test('★立绘按画布规格等比放大到横幅立绘区：84 老头像与 256 卡面放大后一样高、底边对齐', () => {
+    const { load, FakeNode } = loadViews();
+    const {
+        ZCGameLegendBannerView, legendRoleScaleOf, legendRoleRestY,
+        LEGEND_ROLE_TARGET_HEIGHT, LEGEND_ROLE_BOTTOM_Y,
+    } = load('./ZCGameLegendBannerView');
+
+    // ── ① 纯函数：按画布高归一 ──────────────────────────────────────────
+    assert.equal(LEGEND_ROLE_TARGET_HEIGHT, 280, '目标高 = 立绘区可用高 291 × 96%（斜切留余量）');
+    assert.equal(LEGEND_ROLE_BOTTOM_Y, -188, '底板可见区下沿（四张底图实测 -186 ~ -191）');
+    for (const canvasHeight of [256, 84]) {
+        const scale = legendRoleScaleOf(canvasHeight);
+        assert.ok(Math.abs(canvasHeight * scale - LEGEND_ROLE_TARGET_HEIGHT) < 1e-9,
+            `画布 ${canvasHeight} 放大后应占满 ${LEGEND_ROLE_TARGET_HEIGHT}，实际 ${canvasHeight * scale}`);
+    }
+    assert.equal(legendRoleScaleOf(84), 10 / 3, '84 见方的老头像要放大 3.33 倍');
+    // 非法值一律回 1：`setScale(NaN)` 会让立绘**静默消失**（节点缩放变 NaN，不报错）。
+    for (const bad of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, null, undefined]) {
+        assert.equal(legendRoleScaleOf(bad as number), 1, `非法画布高 ${String(bad)} 应回落到 1`);
+    }
+
+    // ── ② 静止位：底边贴下沿，不是中心对齐 ──────────────────────────────
+    const restY = legendRoleRestY();
+    assert.equal(restY - LEGEND_ROLE_TARGET_HEIGHT / 2, LEGEND_ROLE_BOTTOM_Y, '静止位要让**底边**落在下沿');
+    assert.equal(restY, -48, '中心锚点 + 目标高 280 ⇒ 静止位 -48');
+    // 顶边也必须留在丝带内：立绘所在那一列（png x = 168）可见区上沿在 y = 101。
+    assert.ok(restY + LEGEND_ROLE_TARGET_HEIGHT / 2 <= 101,
+        `顶边不许顶穿上沿（101），实际 ${restY + LEGEND_ROLE_TARGET_HEIGHT / 2}`);
+
+    // ── ③ 换卡换画布：重算，不累乘 ──────────────────────────────────────
+    const view = buildView(new ZCGameLegendBannerView(), FakeNode);
+    const art = { height: 256, originalSize: { width: 256, height: 256 } };
+    view.setArtResolver(() => art);
+    const reveal = (id: number, cardId: string): Raw => ({
+        id, cardId, owner: 'player', building: 'barracks', tier: 4,
+        cardName: '萨尔', unitId: null, luckText: '', hexId: 1,
+        x: 0, y: 0, startedAt: 0, durationSeconds: 2.2,
+    });
+    view.render(reveal(1, '68016'), 0.5);
+    assert.ok(Math.abs(view.roleSprite.node.scale.x - 280 / 256) < 1e-6, '256 画布 ⇒ 1.09375');
+
+    // 切成旧角色的 84 画布（解析器返回另一张图 ⇒ 内容键变 ⇒ 重算）。
+    const oldArt = { height: 84, originalSize: { width: 84, height: 84 } };
+    view.setArtResolver(() => oldArt);
+    view.render(reveal(2, '68017'), 0.5);
+    assert.ok(Math.abs(view.roleSprite.node.scale.x - 280 / 84) < 1e-6,
+        `换到 84 画布应重算成 3.333（不是 1.09375 × 3.333），实际 ${view.roleSprite.node.scale.x}`);
+    assert.equal(view.roleSprite.node.scale.y, view.roleSprite.node.scale.x, '必须等比');
+    // 再切回来一次：仍回到 1.09375（累乘的话这里会变成 1.09375³）。
+    view.setArtResolver(() => art);
+    view.render(reveal(3, '68016'), 0.5);
+    assert.ok(Math.abs(view.roleSprite.node.scale.x - 280 / 256) < 1e-6,
+        `切回 256 画布应回到 1.09375，实际 ${view.roleSprite.node.scale.x}`);
+
+    // 解析器拿不到图时必须显式写回 1（否则池里复用回来还带着上一张卡的放大倍数）。
+    view.setArtResolver(() => null);
+    view.render(reveal(4, '68018'), 0.5);
+    assert.equal(view.roleSprite.node.scale.x, 1, '没有立绘时应回到 1');
+
+    // ── ③b 静止位**不读 prefab**：节点上残留着旧的 `Role.y` 也要被算出来的值顶掉 ──
+    // （内容键不变时 `renderContent` 会短路，所以这里只校验 `renderRoleGenerate` 的落位。）
+    view.setArtResolver(() => art);
+    view.render(reveal(5, '68016'), 0.5);
+    view.roleSprite.node.setPosition(-192, -21.798, 0); // prefab 的旧静止位
+    view.render(reveal(5, '68016'), 5); // 扇入播完 ⇒ 落到静止位
+    assert.ok(Math.abs(view.roleSprite.node.position.y - restY) < 1e-6,
+        `落位必须用算出来的 ${restY}，不许沿用节点上的旧值 -21.798；实际 ${view.roleSprite.node.position.y}`);
+
+    // ── ④ 真实美术：两档画布的图都真的存在，且都不是「放大到超出丝带」的规格 ──
+    const cardHeadDir = assetPath('icons/cardHead');
+    const files = readdirSync(cardHeadDir).filter((name: string) => name.endsWith('.png'));
+    const buckets = new Map<number, string[]>();
+    for (const name of files) {
+        const { height } = pngSize(`${cardHeadDir}/${name}`);
+        const list = buckets.get(height) ?? [];
+        list.push(name);
+        buckets.set(height, list);
+    }
+    assert.deepEqual([...buckets.keys()].sort((a, b) => a - b), [84, 256],
+        '卡面图只有 84（旧角色头像）与 256（本地卡面）两档画布 —— 出现新规格时这条会红，需要复核归一是否符合预期');
+    for (const height of buckets.keys()) {
+        assert.ok(Math.abs(legendRoleScaleOf(height) * height - LEGEND_ROLE_TARGET_HEIGHT) < 1e-9,
+            `${height} 画布放大后必须是 ${LEGEND_ROLE_TARGET_HEIGHT} 高`);
+    }
+    assert.ok((buckets.get(84) ?? []).length >= 20, '84 档应包含旧角色那批 tx_icon_*（20 张以上）');
 });
 
 test('立绘/头像解析器晚于横幅弹出注入时，已经弹出的那一条会立刻补上', () => {
@@ -433,19 +542,20 @@ test('竖排按人数均分屏高：我方恒定最下（与棋盘方位一致�
     assert.equal(bannerHeightOf(VH, 1), 640, '人数 1 夹回 2');
 });
 
-test('横幅高度真的写进了节点 UITransform，且立绘跟着同一个比例缩放', () => {
+test('横幅高度真的写进了节点 UITransform，且立绘的缩放**与人数无关**（只认画布规格）', () => {
     const { load, FakeNode, cc } = loadViews();
-    const { ZCGameLegendBannerView, bannerHeightOf } = load('./ZCGameLegendBannerView');
+    const { ZCGameLegendBannerView, bannerHeightOf, LEGEND_ROLE_TARGET_HEIGHT } = load('./ZCGameLegendBannerView');
     const view = buildView(new ZCGameLegendBannerView(), FakeNode);
     // 立绘的原生尺寸（sizeMode=RAW ⇒ UITransform.height 同步为 spriteFrame.originalSize）。
     view.roleSprite.node.components.set(cc.UITransform, { height: 256 });
+    view.setArtResolver(() => ({ height: 256, originalSize: { width: 256, height: 256 } }));
     const reveal = (owner: string): Raw => ({
         id: 1, cardId: '68001', owner, building: 'barracks', tier: 4,
         cardName: '精灵弓箭手', unitId: null, luckText: '', hexId: 1,
         x: 0, y: 0, startedAt: 0, durationSeconds: 2.2,
     });
     const VH = 1280;
-    // 每个人数下立绘**应有**的高度 —— 口径是「恒为256 原生」，收集起来只为最后那条不变性断言。
+    // 每个人数下立绘缩放系数 —— 收集起来只为最后那条不变性断言（应恒为 280/256）。
     const targets: number[] = [];
 
     // ⚠️ 计数用的 UITransform 桩必须在**第一次 render 之前**注册好。
@@ -481,19 +591,20 @@ test('横幅高度真的写进了节点 UITransform，且立绘跟着同一个�
         // 不许把底板也拉伸 —— 拉过之后底边会掉到屏幕中间（2026-10-19 的反馈）。
         assert.equal(view.bannerSprite.node.size.height, 417,
             n + ' 人：底板高度必须保持 prefab 的 417，实际 ' + view.bannerSprite.node.size.height);
-        // 立绘**恒为 256 原生**，不随横幅高度变（2026-10-10 口径「不用放大了，就用 256×256」）。
-        //
-        // 曾经的旧口径是「立绘 = 横幅高 × 333/417 等比缩放」（2 人局放到 511 高），已删。
-        // 这里反过来钉：底板在 640→426→320 变，立绘的scale 必须一直是 1。
-        assert.equal(view.roleSprite.node.scale.y, 1,
-            n + ' 人：立绘不该被缩放（scale 恒为 1），实际 ' + view.roleSprite.node.scale.y);
-        assert.equal(view.roleSprite.node.scale.x, 1, n + ' 人：立绘不该被横向缩放');
-        targets.push(256);
+        // 🔴 立绘缩放**不随横幅高度 / 人数变**：它只认「卡面图的画布高」（280/画布高）。
+        // 底板在 640→426→320 变，立绘系数必须一直是 280/256。
+        // 旧口径是「立绘 = 横幅高 × 333/417 等比缩放」（2 人局放到 511 高），2026-11-02 又改成
+        // 「按画布归一到立绘区」—— 两次都不是「跟着人数走」，这条不变性两条口径下都成立。
+        const fixedScale = LEGEND_ROLE_TARGET_HEIGHT / 256;
+        assert.ok(Math.abs(view.roleSprite.node.scale.y - fixedScale) < 1e-6,
+            n + ' 人：立绘系数应为 ' + fixedScale + '，实际 ' + view.roleSprite.node.scale.y);
+        assert.equal(view.roleSprite.node.scale.x, view.roleSprite.node.scale.y, n + ' 人：立绘必须等比');
+        targets.push(fixedScale);
     }
-    // 立绘高度**不随人数变** —— 旧口径下这里应是递减序列（2人>3人>4人）。
+    // 立绘系数**不随人数变** —— 旧口径下这里应是递减序列（2人>3人>4人）。
     assert.ok(
         targets[0] === targets[1] && targets[1] === targets[2],
-        '立绘高度应恒定（不跟横幅高度走），实际 ' + targets.join(' / '),
+        '立绘系数应恒定（不跟横幅高度走），实际 ' + targets.join(' / '),
     );
 
     // 高度没变的那几帧**不重写尺寸**（setContentSize 会置脏标记，而 render 是每帧调的）。
@@ -711,12 +822,13 @@ test('ZCGame 预扫本局卡组的 headIcon 并注入（与卡牌阵容同一条
 test('★row11 role 生成动画：扇入播完才开始，0.7s 内从静止位上方 80px 落位并淡入', () => {
     const { load, FakeNode } = loadViews();
     const {
-        ZCGameLegendBannerView, legendRoleProgress, legendRoleEase,
+        ZCGameLegendBannerView, legendRoleProgress, legendRoleEase, legendRoleRestY,
         LEGEND_ROLE_DROP_Y, LEGEND_ROLE_GENERATE_SECONDS,
     } = load('./ZCGameLegendBannerView');
     const view = buildView(new ZCGameLegendBannerView(), FakeNode);
-    // prefab 里 Role 的静止位（设计稿量测值）。
-    const REST_Y = -28.24;
+    // 静止位不再来自 prefab 的 `Role.y`（`-21.798` 是「256 原生不缩放」时代的位）：
+    // 2026-11-02 起立绘放大到 `LEGEND_ROLE_TARGET_HEIGHT`，静止位由「底板下沿 + 目标高」算出。
+    const REST_Y = legendRoleRestY();
     const REST_X = -192;
     view.roleSprite.node.setPosition(REST_X, REST_Y, 0);
 
@@ -762,7 +874,7 @@ test('★row11 role 生成动画：扇入播完才开始，0.7s 内从静止位�
     view.render(reveal(), SLIDE_SECONDS + LEGEND_ROLE_GENERATE_SECONDS);
     assert.equal(roleAlpha(), 255, '0.7s 走完必须完全不透明');
     assert.ok(Math.abs(roleY() - REST_Y) < 1e-6,
-        `0.7s 走完必须**正好落在 prefab 的静止位**（不是绝对 0），实际 ${roleY()}`);
+        `0.7s 走完必须**正好落在静止位**（不是绝对 0），实际 ${roleY()}`);
     assert.equal(view.roleSprite.node.position.x, REST_X, 'X 轴不参与动画（跟着父节点走）');
 
     // 全程 X 都不动。

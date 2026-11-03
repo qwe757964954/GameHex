@@ -12,6 +12,7 @@ export const CARD_LINEUP_TEXTS = {
     boardSaved: '已保存',
     boardSaveOffline: '未连接服务器',
     boardSaveFailed: '保存失败',
+    boardLoadFailed: '布阵数据加载失败，请重新打开',
     onField: '已出战！',
     progressSeparator: '/',
     navShops: '商店',

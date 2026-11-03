@@ -29,7 +29,8 @@ test('单位出生抖动：先 Y 拉 110% 回落、再 X 拉 110% 回落，结�
     view.rootTransform = { setContentSize() {} };
     view.visualRoot = new FakeNode();
     view.sprite = { enabled: true, spriteFrame: null };
-    view.fallback = { node: new FakeNode(), clear() {}, circle() {}, fill() {} };
+    view.fallback = { node: new FakeNode(), enabled: false, color: null };
+    view.fallbackTransform = { setContentSize: (width: number, height: number) => { view.fallback.node.size = { width, height }; } };
     view.fallbackLabel = { node: new FakeNode(), enabled: true, string: '' };
     view.healthBar = bar();
     // 序列帧形态：Sprite + Animation（canvas 归一系数为 1 ⇒ 基准缩放 = 1）。

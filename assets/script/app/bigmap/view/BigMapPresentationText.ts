@@ -24,6 +24,11 @@ export const BIGMAP_PRESENTATION_TEXT = {
     harvest: '收取',
     /** 开战回包已到、战斗资源还在预加载：世界页留着并盖一层遮罩，别露出主界面的领地页。 */
     enteringBattle: '正在进入战斗…',
+    /** 城池弹窗（蓝湖「城池弹窗3」）：增益效果段标题。 */
+    buffTitle: '增益效果',
+    /** 弹窗底部那颗大按钮（设计稿写「进攻」，与旧面板的「攻打」是同一件事）。 */
+    attack: '进攻',
+    cannotAttack: '不可进攻',
 } as const;
 
 export function formatBigMapPlotDetail(detail: IBigMapPlotDetailView): string {

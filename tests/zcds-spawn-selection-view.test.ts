@@ -8,7 +8,7 @@ import { assetPath } from './helpers/asset-paths';
  *
  * 这一版是**蓝湖「落点选择」稿**的切图版：顶部信息带 / 绿勾 / 左下「收回提示」全部用设计稿导出的
  * 单图（`image/gameui/` 下的 `bg_01`、`btn_01`、`btn_gou`、`jiantou_01`、`progress_b_01/02`），
- * 只有设计稿里没有的吐司仍用 `cc.Graphics` 画。
+ * 吐司底板使用 prefab 中的 white Sprite。
  *
  * 判据分四层：
  *   ① 源码里不许再退回「代码搭节点 / 代码画面板底」；
@@ -96,9 +96,9 @@ test('视图脚本不再自己建节点 / 不再用 Graphics 画面板底', () =
     assert.doesNotMatch(code, /new Node\(/, '节点必须来自 prefab，不再 new Node');
     assert.doesNotMatch(code, /\.addComponent\(/, '组件必须挂在 prefab 上，不再 addComponent');
     assert.doesNotMatch(code, /removeAllChildren/, '宿主节点由 prefab 提供，不再清空子节点');
-    // 面板底 / 进度条 / 按钮底都换成设计稿切图 ⇒ 只剩吐司还用 Graphics
+    // 静态底板由 prefab 提供，吐司也不再走路径绘制。
     assert.doesNotMatch(code, /drawPanelBackground|drawProgress/, '面板底与进度条不再由 Graphics 画');
-    assert.match(code, /toastBackground\.roundRect/, '吐司底仍归 Graphics（设计稿里没有吐司）');
+    assert.doesNotMatch(code, /Graphics|drawToastBackground|toastBackground/, '吐司底板样式完全交给 prefab');
     // 反过来正面确认：脚本确实按 @property 消费这些引用。
     for (const key of ['hintLabel', 'progressFill', 'confirmIcon', 'toggleArrow', 'toastNode']) {
         assert.match(code, new RegExp(`this\\.${key}\\b`), `${key} 应当被直接使用（而不是先判空）`);
@@ -297,7 +297,7 @@ test('prefab 的 prefabInfo / fileId 形态正确（手改 JSON 最容易崩的�
     }
 });
 
-test('prefab 上 12 个 @property 全部绑到正确类型的对象', () => {
+test('prefab 上 11 个 @property 全部绑到正确类型的对象', () => {
     const cid = cidOf(viewMeta.uuid);
     assert.equal(cid, 'b4482r88UpOjZZJQIWKostE', 'cid 必须与生成脚本里写的那个一致');
     const script = objects.find((o) => o.__type__ === cid);
@@ -314,7 +314,6 @@ test('prefab 上 12 个 @property 全部绑到正确类型的对象', () => {
         toggleLabel: 'cc.Label',
         toggleArrow: 'cc.Node',
         toastNode: 'cc.Node',
-        toastBackground: 'cc.Graphics',
         toastLabel: 'cc.Label',
     };
     for (const [prop, type] of Object.entries(expected)) {
@@ -330,7 +329,6 @@ test('prefab 上 12 个 @property 全部绑到正确类型的对象', () => {
     };
     const sameNode = (a: string, b: string) => ownerNodeId(script[a].__id__) === ownerNodeId(script[b].__id__);
     assert.ok(sameNode('confirmButton', 'confirmIcon'), 'confirmButton 与 confirmIcon 必须同节点');
-    assert.ok(sameNode('toastNode', 'toastBackground'), 'toastNode 与 toastBackground 必须同节点');
     // 进度填充在进度节点**下**：隐藏整条时填充要跟着走。
     const fillOwner = objects[script.progressFill.__id__].node.__id__;
     assert.equal(objects[fillOwner]._name, 'ProgressFill');
@@ -370,7 +368,7 @@ test('自选主城 HUD 走实例化路径，并进了对局预加载清单', () 
     //  `this.cachedSpawnSelectionPrefab` 那套缓存字段已经删了 ⇒ 断言同步到新写法（口径不变：必须实例化、禁运行时挂脚本）。
     assert.match(game, /instantiate\(prepared\.spawnSelectionPrefab\)/, '必须实例化 prefab');
     assert.doesNotMatch(game, /addComponent\(ZCSpawnSelectionView\)/, '不再运行时挂脚本');
-    assert.match(game, /getComponent\(ZCSpawnSelectionView\)!/, '取组件失败应当场抛');
+    assert.match(game, /getComponent\(ZCSpawnSelectionView\)/, '取组件失败应当场抛');
 
     assert.match(loaderSource, /const SPAWN_SELECTION_URL = 'ui\/game\/ZCSpawnSelection'/);
     assert.match(loaderSource, /this\.assets\.load\(SPAWN_SELECTION_URL, Prefab/);
@@ -378,23 +376,15 @@ test('自选主城 HUD 走实例化路径，并进了对局预加载清单', () 
 });
 
 
-test('选点展示计时走 scheduleOnce，不许在 update 里拿 dt 累加（2026-10-16）', () => {
-    // 「全部确认后停留 1 秒展示主城落点」原先写在 `update` 里 `spawnShowcaseLeft -= dt`：
-    // 手写倒计时在低帧率下会被拉长，而且把"还要等多久"藏进逐帧状态里。
-    // 口径 = 计时交给引擎调度器（同 `ZCGameHUDView` 的金币栏闪烁、`ZCSpawnSelectionView` 的吐司）。
-    const game = stripComments(gameSource);
-    assert.match(game, /this\.scheduleOnce\(this\.finishSpawnSelection, SPAWN_SHOWCASE_SECONDS\)/,
-        '展示计时必须是 scheduleOnce 排的');
-    assert.match(game, /private scheduleSpawnShowcase\(\): void \{\s*if \(this\.spawnShowcaseScheduled\) return;/,
-        '逐帧检测会反复命中"已完成" ⇒ 必须有幂等标记，否则每帧重排、永远不到期');
-    assert.match(game, /private cancelSpawnShowcase\(\): void \{\s*this\.spawnShowcaseScheduled = false;\s*this\.unschedule\(this\.finishSpawnSelection\);/,
-        '进战斗 / 拆对局都要撤定时器');
-    assert.match(game, /if \(this\.spawnSelection\.snapshot\.finished\) this\.scheduleSpawnShowcase\(\);/,
-        'update 只负责检测"已完成"，计时另计');
-    assert.doesNotMatch(game, /spawnShowcaseLeft/, '旧的 dt 累加字段必须删干净');
-    assert.doesNotMatch(game, /spawnShowcaseLeft -= dt/, '不许再出现 dt 累加式倒计时');
+test('选点展示计时由控制器持有，通过引擎端口调度并在退出时取消', () => {
+    const controller = stripComments(readFileSync('assets/script/app/zcds/application/ZCBattleRuntimeController.ts', 'utf8'));
+    const composition = stripComments(readFileSync('assets/script/app/bootstrap/battle/BattleComposition.ts', 'utf8'));
+    assert.match(controller, /snapshot\.finished && !this\.stopShowcase/);
+    assert.match(controller, /this\.ports\.schedule\(\(\) => this\.finishSpawnSelection\(\), 1\)/);
+    assert.match(controller, /this\.stopShowcase\?\.\(\)/);
+    assert.match(composition, /view\.scheduleOnce\(callback, seconds\)/);
+    assert.doesNotMatch(controller, /spawnShowcaseLeft/);
 });
-
 
 test('选点的两个意图走事件派发（视图 emit + 控制器订阅），不再传回调（2026-10-16）', () => {
     const view = stripComments(viewSource);
@@ -411,14 +401,30 @@ test('选点的两个意图走事件派发（视图 emit + 控制器订阅），
     assert.match(view, /private onToggleHintsClick\(\): void \{\s*EventMgr\.instance\.emit\(ZCGameUiEvent\.SpawnToggleHints\);/);
     assert.ok(!/IZCSpawnSelectionActions/.test(view), '视图不该再有回调契约');
     assert.ok(!/TOUCH_END, \(\) =>/.test(view), '按钮监听不许再用内联箭头闭包');
+    const controller = stripComments(readFileSync('assets/script/app/zcds/application/ZCBattleRuntimeController.ts', 'utf8'));
     // 控制器侧：两个意图都要订阅上（少一个就是那个按钮点了没反应、且零报错）。
     assert.match(game, /this\.spawnSelectionView\.initialize\(\);/);
     for (const [event, handler] of [['SpawnConfirm', 'onSpawnConfirm'], ['SpawnToggleHints', 'onSpawnToggleHints']] as const) {
         assert.ok(
-            new RegExp(`EventMgr\\.instance\\.on\\(ZCGameUiEvent\\.${event}, this\\.${handler}, this\\)`).test(game),
+            new RegExp(`this\\.listen\\(ZCGameUiEvent\\.${event}, this\\.${handler}\\)`).test(controller),
             `★ZCGame 必须订阅 ZCGameUiEvent.${event} → ${handler}`,
         );
     }
-    assert.match(game, /private onSpawnConfirm\(\): void \{\s*this\.confirmSpawnSelection\(\);/);
-    assert.match(game, /private onSpawnToggleHints\(\): void \{\s*this\.spawnHintsVisible = !this\.spawnHintsVisible;\s*this\.renderSpawnSelection\(\);/);
+    assert.match(controller, /private onSpawnConfirm\(\): void/);
+    assert.match(controller, /this\.selection\.confirm\(ZCOwner\.Player\)/);
+    assert.match(controller, /this\.hints = !this\.hints/);
+});
+
+
+test('SpawnToast 纯色底板使用 white Sprite，尺寸和透明度声明在 prefab', () => {
+    const toast = nodeNamed('SpawnToast', 'ZCSpawnSelection');
+    const sprite = spriteOf(toast);
+    assert.ok(sprite);
+    assert.equal(componentOf(toast, 'cc.Graphics'), undefined);
+    assert.equal(sprite._spriteFrame.__uuid__, 'fbe1f245-51ca-46cb-a726-e3bda54f8dd6@f9941');
+    assert.equal(sprite._sizeMode, 0);
+    assert.equal(sprite._isTrimmedMode, false);
+    assert.deepEqual([sprite._color.r, sprite._color.g, sprite._color.b, sprite._color.a], [22, 31, 45, 244]);
+    assert.deepEqual(sizeOf(toast), [520, 64]);
+    assert.ok(!objects.some((entry) => 'toastBackground' in entry), '不保留未使用的脚本组件引用');
 });

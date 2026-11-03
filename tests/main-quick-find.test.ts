@@ -113,7 +113,7 @@ test('quick-find button dispatches focusLevel without navigating to matching', (
     EventMgr.instance.offTarget(page);
 });
 
-test('chapter arrows follow territory readiness and dispatch chapter intents', () => {
+test('两侧箭头**不再**是章节入口（2026-11-03 关闭）：恒隐藏，入口改成地图上的章节建筑', () => {
     const Page = loadComponent<MainPage>('MainPage', {
         cc,
         './ChestTypes': chestTypes,
@@ -136,28 +136,28 @@ test('chapter arrows follow territory readiness and dispatch chapter intents', (
     EventMgr.instance.on(mvcEvents.TerritoryUiEvent.Intent, (event: unknown) => intents.push(event), owner);
     page.onLoad();
     assert.deepEqual([previous.active, next.active], [false, false]);
-    const render = (ready: boolean, previousEnabled: boolean, nextEnabled: boolean) => {
+    const render = (ready: boolean) => {
         EventMgr.instance.emit(mvcEvents.TerritoryViewEvent.Render,
-            { state: { ready, hud: ready ? { previousEnabled, nextEnabled } : null } });
+            { state: { ready, chapterId: ready ? 2 : 0, hud: null } });
     };
-    render(true, false, false);
+    // 🔴 2026-11-03（用户）：*「关闭快速寻敌的左右侧的三角形按钮 UI」* ⇒ 它们恒隐藏。
+    //    章节选择的入口改成地图起始格那颗「章节」建筑（含气泡），
+    //    见 `territory-chapter-entry.test.ts`。所以 `render` 不再动这两个节点。
+    render(true);
+    assert.deepEqual([previous.active, next.active], [false, false],
+        '渲染回调不许再把三角显示出来');
+    // 弹窗标「当前章」要用渲染帧里的 chapterId（private 字段，用例里按运行时形状读）
+    assert.equal((page as unknown as { currentChapterId: number }).currentChapterId, 2);
+    render(false);
     assert.deepEqual([previous.active, next.active], [false, false]);
-    render(true, false, true);
-    assert.deepEqual([previous.active, next.active], [false, true]);
-    render(true, true, false);
-    assert.deepEqual([previous.active, next.active], [true, false]);
+    render(true);
     clicks[0]();
     clicks[1]();
-    assert.deepEqual(JSON.parse(JSON.stringify(intents)), [
-        { intent: { kind: 'chapter', offset: -1 } },
-        { intent: { kind: 'chapter', offset: 1 } },
-    ]);
-    render(false, true, true);
-    assert.deepEqual([previous.active, next.active], [false, false]);
+    // 点击不再派发 `chapter` 意图（那是旧的翻页语义）；选章改由弹窗发 `selectChapter`。
+    // `hasTerritoryMap` 默认 false ⇒ 这里连弹窗数据都不拉，正好用来钉「不再直连意图」。
+    assert.deepEqual(JSON.parse(JSON.stringify(intents)), []);
     EventMgr.instance.offTarget(page);
     EventMgr.instance.offTarget(owner);
-    render(true, true, true);
-    assert.deepEqual([previous.active, next.active], [false, false]);
 });
 
 test('ArenaRoot binds opposite hud arrows beneath BeginGame so chest expansion hides them together', () => {

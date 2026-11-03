@@ -1,3 +1,5 @@
+import { createControllerResources } from './helpers/controller-context';
+import { resolveZCBattlePlayerCount, buildZCBattleReturnParams } from '../assets/script/app/zcds/application/ZCBattleEntryBuilder';
 import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
 import { componentControllerModule } from './helpers/controller-context';
 import assert from 'node:assert/strict';
@@ -5,7 +7,6 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
-import { ZCBattlePhaseController, ZCBattlePhase } from '../assets/script/app/zcds/application/ZCBattlePhaseController';
 import { BIGMAP_TABLE, decompressBigMapRows, parseBigMapConfig } from '../assets/script/app/bigmap/model/BigMapConfig';
 import { BigMapPresenter } from '../assets/script/app/bigmap/application/BigMapPresenter';
 import { BigMapCampRepository } from '../assets/script/app/bigmap/application/BigMapCampRepository';
@@ -189,100 +190,18 @@ test('开战失败可重试，未配置入口的预览仍拒绝新版战斗', as
     preview.presenter.dispose();
 });
 
-function gameFixture(battleType: 1003 | 1004) {
-    const events: string[] = [];
-    const popups: { userData: { victory: boolean; rewards: unknown[]; rankName?: string; scoreText?: string } }[] = [];
-    const routes: { route: string; params: { initialTab: string } }[] = [];
-    let complete: (result: object) => void = () => {};
-    const exports: Record<string, unknown> = {};
-    runInNewContext(ts.transpileModule(readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8'), {
-        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
-    }).outputText, { exports, require(name: string) {
-            if (name.endsWith('/ComponentController')) return componentControllerModule();
-        if (name === 'cc') return { _decorator: { ccclass: () => (value: unknown) => value }, Component: class { node = {}; isValid = true; } };
-        if (name.endsWith('/ZCBattlePhaseController')) return { ZCBattlePhaseController, ZCBattlePhase };
-        if (name.endsWith('/BattleResultService')) return { BattleResultService: {
-            ensureListening() {},
-            waitForBattleResult(type: number) { events.push(`wait:${type}`); return new Promise(resolve => { complete = resolve; }); },
-        } };
-        if (name.endsWith('/BattleStartService')) return { BATTLE_RESULT_WIN: 1, BATTLE_RESULT_LOSE: 2,
-            finishBattle() { events.push('finish'); return Promise.resolve({ code: 1 }); },
-        };
-        if (name.endsWith('/RewardFrames')) return { resolveCmdGoodsFrames: async () => [] };
-        if (name.endsWith('/ZCSettlementPage')) return { ZCSettlementPage: { open: async (options: typeof popups[number]) => { popups.push(options); return null; } } };
-        if (name.endsWith('/PopupDef')) return { PopupLayer: { SYSTEM: 1 } };
-        if (name.endsWith('/GameRoute')) return { GameRoute: { Main: 'main' } };
-        if (name.endsWith('/ProcedureManager')) return { ProcedureManager: { navigate: (route: string, params: { initialTab: string }) => routes.push({ route, params }) } };
-        return {};
-    } });
-    interface IGame {
-        phase: ZCBattlePhaseController;
-        model: object;
-        createGame(): void;
-        buildStatistics(): unknown[];
-        initialize(entry: object): void;
-        openSettlement(retreated?: boolean): void;
-        returnToMain(): void;
-    }
-    const Game = exports.ZCGame as new () => IGame;
-    const game = new Game();
-    game.createGame = () => {
-        game.model = { snapshot: { status: 'victory', elapsedSeconds: 10 }, frameEvents: [] };
-        game.phase.startPlaying();
-    };
-    game.buildStatistics = () => [];
-    game.initialize({ resources: {}, pveContext: null, slgBattleType: battleType, seatProfiles: [] });
-    return { game, events, popups, routes, complete: (result: object) => complete(result) };
-}
-
-test('SLG 对局先建立对应结算等待器再上报结束，采用服务端胜负与战功并返回世界页', async () => {
-    for (const battleType of [1003, 1004] as const) {
-        const h = gameFixture(battleType);
-        h.game.openSettlement();
-        h.game.openSettlement();
-        assert.deepEqual(h.events, [`wait:${battleType}`, 'finish']);
-        assert.equal(h.popups.length, 0);
-        h.complete({ code: 2, goods: [], treasureId: 0, ...(battleType === 1004 ? { warScore: 27 } : {}) });
-        await new Promise(resolve => setImmediate(resolve));
-        assert.equal(h.popups.length, 1);
-        assert.equal(h.popups[0].userData.victory, false, '本地模拟胜利不能覆盖服务器失败');
-        assert.equal(h.popups[0].userData.rankName, battleType === 1004 ? '战功' : undefined);
-        assert.equal(h.popups[0].userData.scoreText, battleType === 1004 ? '27' : undefined);
-        h.game.returnToMain();
-        assert.equal(h.routes[0].route, 'main');
-        assert.equal(h.routes[0].params.initialTab, 'world');
-    }
+test('SLG 结算返回世界页，领地返回单次章节与格子焦点', () => {
+    for (const slgBattleType of [1003, 1004] as const) assert.deepEqual(buildZCBattleReturnParams({ slgBattleType, pveContext: null }), { initialTab: 'world' });
+    assert.deepEqual(buildZCBattleReturnParams({ pveContext: { chapterId: 2, levelId: 3, territoryCellId: 44 } }), { initialTab: 'territory', focusChapterId: 2, focusCellId: 44 });
+    assert.equal(buildZCBattleReturnParams({ pveContext: null }), undefined);
 });
 
-test('SLG 等待结算期间已离场，迟到结果不再打开结算弹窗', async () => {
-    const h = gameFixture(1004);
-    h.game.openSettlement();
-    h.game.phase.leave();
-    h.complete({ code: 1, goods: [], treasureId: 0, warScore: 100 });
-    await new Promise(resolve => setImmediate(resolve));
-    assert.equal(h.popups.length, 0);
-});
-
-test('SLG 预加载按服务端参战人数挑选地图，缺失战斗或非法人数拒绝进入本地假局', async () => {
-    const counts: unknown[] = [];
-    const exports: Record<string, unknown> = {};
-    runInNewContext(ts.transpileModule(readFileSync('assets/script/app/procedure/ProcedureGame.ts', 'utf8'), {
-        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
-    }).outputText, { exports, require(name: string) {
-            if (name.endsWith('/ComponentController')) return componentControllerModule();
-        if (name.endsWith('/ProcedureBase')) return { ProcedureBase: class { sessionAssets = {}; log() {} } };
-        if (name.endsWith('/ZCGame')) return { MAP_DIRECTORY: 'config/maps' };
-        if (name.endsWith('/ZCGameLoader')) return { ZCGameLoader: class {
-            constructor(_resources: unknown, _dir: string, _random: unknown, playerCount: unknown) { counts.push(playerCount); }
-            async prepare() { return {}; }
-        } };
-        return {};
-    } });
-    const Procedure = exports.ProcedureGame as new () => { onPreload(params: object, context: object): Promise<void> };
+test('SLG 预加载按服务端参战人数挑选地图，缺失战斗或非法人数拒绝进入本地假局', () => {
     for (const count of [2, 3, 4]) {
-        await new Procedure().onPreload({ slgBattleType: 1004, battle: { units: Array.from({ length: count }, () => ({})) } }, { resources: new ResourceScope('test-battle'), cancelled: false });
+        assert.equal(resolveZCBattlePlayerCount({ slgBattleType: 1004, battle: { units: Array.from({ length: count }, () => ({})) } } as Parameters<typeof resolveZCBattlePlayerCount>[0]), count);
     }
-    assert.deepEqual(counts, [2, 3, 4]);
-    await assert.rejects(new Procedure().onPreload({ slgBattleType: 1004 }, {}), /SLG/);
-    assert.equal(counts.length, 3);
+    assert.throws(() => resolveZCBattlePlayerCount({ slgBattleType: 1004 }), /SLG/);
+    for (const count of [0, 1, 5]) {
+        assert.throws(() => resolveZCBattlePlayerCount({ slgBattleType: 1004, battle: { units: Array(count).fill({}) } } as Parameters<typeof resolveZCBattlePlayerCount>[0]), /SLG/);
+    }
 });

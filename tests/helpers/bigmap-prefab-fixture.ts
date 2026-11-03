@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
 
 /** 用真实 Prefab 的层级和引用装配引擎桩，避免测试继续复制旧版 UI 构建代码。 */
-export function bigMapPrefabFixture(types: Record<string, new (...args: any[]) => any>) {
-    const objects = JSON.parse(readFileSync('assets/bundles/bigmap/ui/bigmap/BigMapPage.prefab', 'utf8'));
-    const scriptNames = ['BigMapPageLayout', 'BigMapBaseView', 'BigMapBasePlot', 'BigMapBuildRow', 'BigMapButton', 'BigMapPanel'];
+export function bigMapPrefabFixture(types: Record<string, new (...args: any[]) => any>, path = 'assets/bundles/bigmap/ui/bigmap/BigMapPage.prefab') {
+    const objects = JSON.parse(readFileSync(path, 'utf8'));
+    const scriptNames = ['BigMapPageLayout', 'BigMapBaseView', 'BigMapBasePlot', 'BigMapBuildRow', 'BigMapButton', 'BigMapPanel', 'BigMapInfoPopup'];
     const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
     const constructors = { ...types };
     for (const name of scriptNames) {

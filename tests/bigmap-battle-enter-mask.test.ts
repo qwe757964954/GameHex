@@ -140,7 +140,6 @@ function loadPageClass(): new () => Record<string, unknown> {
 function pageFixture() {
     const page = new (loadPageClass())() as any;
     const taps: number[] = [];
-    page.enterMask = { active: false, setSiblingIndex: () => undefined, isValid: true };
     page.layout = { node: { children: [] } };
     page.node = { children: new Array(3).fill(null) };
     page.worldView = { occupantAt: (hexId: number) => { taps.push(hexId); return { kind: 'empty' }; } };
@@ -158,16 +157,14 @@ function pageFixture() {
     return { page, taps };
 }
 
-test('开战成功后盖遮罩，并拦掉地图点击（避免预加载期间再发请求）', () => {
+test('开战成功后锁输入，预加载失败后允许重新点击', () => {
     const { page, taps } = pageFixture();
     page.render({ ...page.data, ui: { ...page.data?.ui, enteringBattle: true } });
-    assert.equal(page.enterMask.active, true);
     page.onWorldTap(42);
     page.onPlotTap(42);
     assert.deepEqual(taps, [], '遮罩期间不该再走选中/开战');
     // 预加载失败时撤掉，玩家可以重新点。
     page.render({ ...page.data, ui: { ...page.data?.ui, enteringBattle: false } });
-    assert.equal(page.enterMask.active, false);
     page.onWorldTap(42);
     assert.deepEqual(taps, [42]);
     EventMgr.instance.offTarget(page);
@@ -184,35 +181,32 @@ test('开战入口不再立刻关世界页：源码上必须走落定钩子', ()
 });
 
 
-test('开战输入层透明，后台更新不能重新盖上详情暗底', () => {
+test('移除独立入战遮罩，等待期间关闭两类详情弹窗', () => {
     const source = readFileSync('assets/script/app/bigmap/view/BigMapPage.ts', 'utf8');
     const prefab = JSON.parse(readFileSync('assets/bundles/bigmap/ui/bigmap/BigMapPage.prefab', 'utf8'));
-    const mask = prefab.find((item: Record<string, unknown>) => item.__type__ === 'cc.Node' && item._name === 'EnteringBattleMask');
-    const types = mask._components.map((ref: { __id__: number }) => prefab[ref.__id__].__type__);
-    assert.equal(types.includes('cc.Graphics'), false);
-    assert.equal(types.includes('cc.BlockInputEvents'), true);
-    const refresh = source.slice(source.indexOf('private refreshInfo():'), source.indexOf('private refreshInfoContent():'));
+    assert.equal(prefab.some((item: any) => item._name === 'EnteringBattleMask'), false);
+    assert.doesNotMatch(source, /enterMask/);
+    const refresh = source.slice(source.indexOf('private refreshInfo('), source.indexOf('private showCityPopup'));
     assert.match(refresh, /this.enteringBattle/);
-    assert.match(refresh, /this.setInfoVisible\(false\)/);
+    assert.match(refresh, /this.closeInfoPopup\(\)/);
+    assert.match(refresh, /this.closeCityPopup\(\)/);
 });
-
 
 test('等待时隐藏详情，取消后重新渲染选中目标且恢复模态', () => {
     const Page = loadPageClass();
     const page = new Page() as any;
     let visible = true, refreshed = 0;
-    page.setInfoVisible = (value: boolean) => { visible = value; };
+    page.closeInfoPopup = () => { visible = false; };
+    page.closeCityPopup = () => {};
     page.refreshInfoContent = () => { visible = true; refreshed++; };
-    page.applyInfoLayout = () => undefined;
-    page.enterMask = { active: false, isValid: true, setSiblingIndex() {} };
     page.layout = { node: { children: [] } };
     page.node = { children: [] };
     page.data = bigMapViewStateFixture();
     page.applyMode = () => {};
     page.setBuildMenuVisible = () => {};
-    page.refreshAll = () => page.refreshInfo();
-    page.render({ ...page.data, ui: { ...page.data?.ui, enteringBattle: true } }); page.refreshInfo();
+    page.refreshAll = () => page.refreshInfo(page.data);
+    page.render({ ...page.data, ui: { ...page.data?.ui, enteringBattle: true } }); page.refreshInfo(page.data);
     assert.equal(visible, false); assert.equal(refreshed, 0);
     page.render({ ...page.data, ui: { ...page.data?.ui, enteringBattle: false } });
-    assert.equal(visible, true); assert.equal(refreshed, 1); assert.equal(page.enterMask.active, false);
+    assert.equal(visible, true); assert.equal(refreshed, 1);
 });

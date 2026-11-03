@@ -31,6 +31,12 @@ export const MAP_MARKER_BUBBLE_HEIGHT = 45;
  */
 export const MAP_MARKER_BUBBLE_FRAME_PASSED_PATH = 'image/spawn-region/frame_03/spriteFrame';
 export const MAP_MARKER_BUBBLE_FRAME_PENDING_PATH = 'image/spawn-region/frame_02/spriteFrame';
+/**
+ * ⚠️ 同目录还有一张 **`frame_04`**（77×87 竖向水滴），但**不属于这里**：
+ * 它是领地里「固定宝箱提示气泡」的底图，内容排版是「icon 在上、数字在下」两行，
+ * 与本文这套 94×45 横向胶囊（一行编号）不是一回事 —— 常量在
+ * `app/territory/model/TerritoryChestBubble`，别往这里搬。
+ */
 
 /**
  * 编号气泡的文字样式（2026-10-28 按美术效果图对齐）。
@@ -63,13 +69,18 @@ export function mapMarkerBadgeY(visibleTop: number, height = MAP_MARKER_BADGE_HE
     return visibleTop + height / 2 + 3;
 }
 
-export function paintMapMarkerBadge(graphics: Graphics, tint: Color, outline: Color): void {
+export function paintMapMarkerBadge(
+    graphics: Graphics,
+    tint: Color,
+    outline: Color,
+    width = MAP_MARKER_BADGE_WIDTH,
+    height = MAP_MARKER_BADGE_HEIGHT,
+): void {
     graphics.clear();
     graphics.fillColor = tint;
     graphics.strokeColor = outline;
     graphics.lineWidth = 2;
-    graphics.roundRect(-MAP_MARKER_BADGE_WIDTH / 2, -MAP_MARKER_BADGE_HEIGHT / 2,
-        MAP_MARKER_BADGE_WIDTH, MAP_MARKER_BADGE_HEIGHT, 8);
+    graphics.roundRect(-width / 2, -height / 2, width, height, 8);
     graphics.fill();
     graphics.stroke();
 }

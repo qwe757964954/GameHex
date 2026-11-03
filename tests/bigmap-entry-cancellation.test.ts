@@ -37,7 +37,7 @@ test('加载配置期间切走页面，取消的世界入口不能稍后弹出�
     assert.equal(canvasLookups, 0);
 });
 
-function createOwnerHarness(config: Promise<object> = Promise.resolve({}), layout: Promise<null> = Promise.resolve(null)) {
+function createOwnerHarness(config: Promise<object> = Promise.resolve({}), layout: Promise<object | null> = Promise.resolve(null)) {
     const context = createControllerContext();
     let role = { id: '9007199254740993', selectServerId: '1' };
     const owners: unknown[] = [];
@@ -97,7 +97,7 @@ function createOwnerHarness(config: Promise<object> = Promise.resolve({}), layou
     }
     let unlockRefreshes = 0;
     class FakePresenter {
-        constructor(public deps: { adventureChapter(): number;
+        constructor(public deps: { config?: { world: { rows: number; cols: number } }; adventureChapter(): number;
             startBattle(type: number, id: number, isCurrent: () => boolean): Promise<{ ok: boolean }> }) { presenters.push(this); }
         initializeSlg(): Promise<boolean> { slgRequests += 1; return slgWait; }
         refreshUnlockContext(): void { unlockRefreshes += 1; }
@@ -112,7 +112,7 @@ function createOwnerHarness(config: Promise<object> = Promise.resolve({}), layou
         if (name === 'cc') return { Node: FakeNode, UITransform: Transform, Widget,
             Layers: { Enum: { UI_2D: 33554432 } }, view: { getVisibleSize: () => ({ width: 720, height: 1280 }) },
             director: { getScene: () => ({ getChildByName: () => ({ getChildByName: () => null }) }) } };
-        if (name.endsWith('/ZCBattlePreparation')) return { createZCBattlePreload: (battle: unknown) => { const preload = { battle }; preloads.push(preload); return preload; } };
+        if (name.endsWith('/ZCBattlePreparation')) return { createZCBattleSession: (_context: unknown, { battle }: { battle: unknown }) => { const preload = { battle }; preloads.push(preload); return preload; } };
         if (name.endsWith('/MainRoleRow')) return { readRoleRow: () => role };
         // 背包读取链（ItemBag → CacheMgr → … → cc）在沙箱里不打桩会直接 require 'cc' 失败。
         if (name.endsWith('/ItemBag')) return { readItemCounts: () => new Map<string, number>() };
@@ -149,6 +149,7 @@ function createOwnerHarness(config: Promise<object> = Promise.resolve({}), layou
         } };
         if (name.endsWith('/BigMapPage')) return { BigMapPage: Page };
         if (name === './NpcBigMapRankProvider') return { NpcBigMapRankProvider: class {} };
+        if (name === './RemoteBigMapRankProvider') return { RemoteBigMapRankProvider: class {} };
         if (name === './BigMapCampRepository') return { BigMapCampRepository: class {} };
         if (name === './GameNetBigMapCampGateway') return { GameNetBigMapCampGateway: class {} };
         if (name === './BigMapSlgRepository') return { BigMapSlgRepository: class {} };
@@ -392,5 +393,17 @@ test('大地图回包后把统一预加载移交战斗入口', async () => {
     h.finishBattle(battle); assert.equal((await attacking).ok, true);
     assert.equal(h.preloads.length, 1);
     assert.equal(await h.preloads[0].battle, battle);
-    assert.equal(h.routes[0].params.preload, h.preloads[0]);
+    assert.equal(h.routes[0].params.session, h.preloads[0]);
+});
+
+
+test('入口按正式布局尺寸创建模型，不修改共享配置快照', async () => {
+    const source = { world: { rows: 40, cols: 40 } };
+    const h = createOwnerHarness(Promise.resolve(source), Promise.resolve({ rows: 100, columns: 100 }));
+    await h.entry.open({});
+    assert.equal(h.presenters.length, 1);
+    assert.equal(h.presenters[0].deps.config?.world.rows, 100);
+    assert.equal(h.presenters[0].deps.config?.world.cols, 100);
+    assert.equal(source.world.rows, 40);
+    h.entry.close();
 });

@@ -60,21 +60,39 @@ test('世界视图只引用独立模板资产，层级中不含 Templates 或模
     }
     const marker = templates.find((item) => 'icon' in item && 'badge' in item);
     assert.ok(marker);
-    for (const field of ['badgeBackground', 'portraitRoot', 'portrait', 'portraitBackground']) {
+    for (const field of ['badgeBackground', 'portraitRoot', 'portrait',
+        'nameLabel', 'occupantRoot', 'occupantFlag', 'occupantLabel']) {
         const ref = marker[field] as IPrefabRef;
         assert.ok(ref && templates[ref.__id__], `地图标记未绑定：${field}`);
     }
+    const portraitRoot = templates[(marker.portraitRoot as IPrefabRef).__id__];
+    assert.equal(portraitRoot._components.some((ref) => templates[ref.__id__].__type__ === 'cc.Graphics'), false);
+    const portraitBackground = portraitRoot._components.map((ref) => templates[ref.__id__]).find((item) => item.__type__ === 'cc.Sprite');
+    assert.ok(portraitBackground);
+    assert.equal((portraitBackground._spriteFrame as { __uuid__: string }).__uuid__, 'fbe1f245-51ca-46cb-a726-e3bda54f8dd6@f9941');
+    assert.equal(portraitBackground._sizeMode, 0);
+    assert.equal(portraitBackground._isTrimmedMode, false);
     for (const field of ['icon', 'badge', 'label']) {
         const ref = marker[field] as IPrefabRef;
         assert.ok(ref && templates[ref.__id__], `模板内未绑定：${field}`);
+    }
+    // 名条（蓝湖「大地图3」）的四个引用必须绑到**组件**上，绑成节点会让运行时静默不显示。
+    for (const [field, type] of [['nameLabel', 'cc.Label'], ['occupantFlag', 'cc.Sprite'], ['occupantLabel', 'cc.Label'],
+        ['occupantRoot', 'cc.Node']] as const) {
+        assert.equal(templates[(marker[field] as IPrefabRef).__id__].__type__, type, `${field} 绑到了错误的类型`);
     }
     const badge = templates[(marker.badge as IPrefabRef).__id__];
     assert.equal(templates[(badge.node as IPrefabRef).__id__]._lpos.y, BIGMAP_MARKER_BADGE_Y);
     const label = templates[(marker.label as IPrefabRef).__id__];
     assert.ok(label);
-    assert.equal(label._fontSize, 15);
+    assert.equal(label._fontSize, 20);
     assert.equal(label._overflow, 2);
     assert.equal(label._enableOutline, true);
+    // 名字左边缘对齐：anchorPoint.x = 0，否则超长名字会往右顶出条外。
+    const nameNode = templates[(templates[(marker.nameLabel as IPrefabRef).__id__].node as IPrefabRef).__id__];
+    const nameTransform = templates[nameNode._components.map((ref) => ref.__id__)
+        .find((id) => templates[id].__type__ === 'cc.UITransform')!];
+    assert.equal(nameTransform._anchorPoint.x, 0);
     for (const sprite of templates.filter((item) => item.__type__ === 'cc.Sprite' && item._sizeMode === 0)) {
         assert.equal(sprite._isTrimmedMode, false);
     }
@@ -137,7 +155,8 @@ test('编辑器预制体绑定视口、地图图层、操作按钮和三种池�
     const badge = templates[(templates[markerBindings.badge.__id__].node as IPrefabRef).__id__];
     const label = templates[(templates[markerBindings.label.__id__].node as IPrefabRef).__id__];
     assert.equal(badge._lpos.y, BIGMAP_MARKER_BADGE_Y, '可见角标必须与点击范围使用同一落点');
-    assert.equal(label._lpos.x, 0);
+    // 徽章数字落在名条左端的徽章位（设计稿「大地图3」：菱形/圆形徽章中心都在条中心左 70px）。
+    assert.equal(label._lpos.x, -70);
     assert.equal(label._lpos.y, 0);
     for (const [field, width, height] of [['zoomInButton', 40, 40], ['zoomOutButton', 40, 40], ['focusButton', 56, 34]] as const) {
         const node = objects[(objects[view[field].__id__].node as IPrefabRef).__id__];

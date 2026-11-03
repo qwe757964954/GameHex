@@ -221,7 +221,7 @@ export class ZCGameModel {
     private debugDraw: { card: ZCDeckCard; remaining: number } | null = null;
     private readonly debugCards = new Map<string, ZCDeckCard>();
     /** 服务端完成战斗接口需要的操作记录，随结算 commands 一起上报。 */
-    readonly frameEvents: Array<{ frameId: number; unitId: number; op: number; params: number[] }> = [];
+    readonly frameEvents: Array<{ frameId: number; owner: ZCOwner; op: number; params: number[] }> = [];
     private readonly config: ZCMatchConfig;
     private readonly activeOwners: readonly ZCOwner[];
     private readonly geometry: ZCMapGeometry;
@@ -1026,7 +1026,7 @@ export class ZCGameModel {
         }
         this.removeDeadUnits();
         // 释放技能：神器是全局技，没有落点 ⇒ `params` 不传（协议注明「如无不用传」）。
-        this.pushFrameEvent(FRAME_OP_SKILL, []);
+        this.pushFrameEvent(ZCOwner.Player, FRAME_OP_SKILL, []);
         return this.success(`神器【${this.rules.artifactName}】发动：敌军受创并冻结 ${this.rules.artifactFreezeSeconds} 秒！`);
     }
 
@@ -1474,10 +1474,12 @@ export class ZCGameModel {
         }
     }
 
-    /** 选点结束、正式模型建立后记录我方最终出生格；重复通知不重复入队。 */
+    /** 选点结束、正式模型建立后记录各方最终出生格；重复通知不重复入队。 */
     recordSpawnSelection(): void {
-        if (this.frameEvents.some((event) => event.op === FRAME_OP_SPAWN)) return;
-        this.pushFrameEvent(FRAME_OP_SPAWN, [this.homeId(ZCOwner.Player)]);
+        for (const owner of this.activeOwners) {
+            if (this.frameEvents.some((event) => event.op === FRAME_OP_SPAWN && event.owner === owner)) continue;
+            this.pushFrameEvent(owner, FRAME_OP_SPAWN, [this.homeId(owner)]);
+        }
     }
 
     /**
@@ -1485,16 +1487,15 @@ export class ZCGameModel {
      *
      * `op` 口径由协议 `CmdBattleFrameInfo` 定死：**1=翻格（`params`=[格子 id]）、
      * 2=释放技能（`params`=[技能位置]，无位置就不传）、4=出生点（`params`=[格子 id]）**。
-     * `unitId` 恒 0 —— 这些都是「某一方的操作」，不对应任何单位；协议里是 required 字段，只能用 0 占位
-     * （与 `ZCGame.buildStatistics` 的 `unitId: 0` 同一约定）。
+     * 保留操作方 owner，结算时由控制器映射到开战回包的战斗单元 unitId。
      * `frameId` 沿用毫秒时间戳的既有口径（协议注释写「帧 id」，但那会改变已经在上报的格式，未动）。
      */
-    private pushFrameEvent(op: number, params: number[]): void {
-        this.frameEvents.push({ frameId: Math.round(this.state.elapsedSeconds * 1000), unitId: 0, op, params });
+    private pushFrameEvent(owner: ZCOwner, op: number, params: number[]): void {
+        this.frameEvents.push({ frameId: Math.round(this.state.elapsedSeconds * 1000), owner, op, params });
     }
 
     private developFor(owner: ZCOwner, hex: ZCHexState): ZCActionResult {
-        this.pushFrameEvent(FRAME_OP_DEVELOP, [hex.id]);
+        this.pushFrameEvent(owner, FRAME_OP_DEVELOP, [hex.id]);
         const forced = owner === ZCOwner.Player ? this.debugDraw : null;
         const result = ZCDevelopmentSystem.develop(
             this.state, owner, hex, this.deckFor(owner), this.config, this.random, this.developmentContext, forced?.card ?? null);

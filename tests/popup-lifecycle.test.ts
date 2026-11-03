@@ -6,6 +6,7 @@ import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import * as PopupDef from '../assets/script/framework/ui/PopupDef';
+import { PopupCompositionHost } from '../assets/script/framework/ui/PopupCompositionHost';
 import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
 
 function loadModule(path: string, dependencies: Record<string, unknown>): any {
@@ -13,6 +14,7 @@ function loadModule(path: string, dependencies: Record<string, unknown>): any {
         exports: {} as any,
         console,
         require: (name: string) => {
+            if (name.endsWith('/PopupCompositionHost')) return { PopupCompositionHost };
             if (name.endsWith('/ResourceScope')) return { ResourceScope };
             if (name.endsWith('/AssetService')) return { scopeAssetService };
             if (name.endsWith('/ProcedureManager')) return dependencies[name] ?? { ProcedureManager: { instance: null } };
@@ -334,13 +336,23 @@ test('PopupManager 缓存实例时保留 prefab 资源到缓存节点销毁', as
     let loads = 0;
     let releases = 0;
     let created = 0;
+    let sessions = 0;
+    let disposed = 0;
+    let pending = false;
+    let fail = false;
+    const ownerCleanups = new Map<object, () => void>();
+    const owners = {
+        addCallerCleanup(owner: object, cleanup: () => void) { ownerCleanups.set(owner, cleanup); return () => { ownerCleanups.delete(owner); }; },
+        removeCallerListener(owner: object) { ownerCleanups.get(owner)?.(); ownerCleanups.delete(owner); },
+    };
     class CachedPopup {
         static prefabPath = 'ui/test/CachedPopup';
         popupLayer = PopupDef.PopupLayer.NORMAL;
         node!: Node;
         className = 'CachedPopup';
+        _bindCallbackOwners(): void {}
         _internalOpen(): Promise<void> { return Promise.resolve(); }
-        _internalClose(): void {}
+        _internalClose(): void { assert.equal(disposed, sessions, '外部会话先于 View 关闭释放'); }
         _internalDepthChanged(): void {}
         _internalCover(): void {}
         _internalReveal(): void {}
@@ -360,12 +372,18 @@ test('PopupManager 缓存实例时保留 prefab 资源到缓存节点销毁', as
             options?.scope?.defer(() => { releases += 1; });
             return prefab;
         },
+    }, owners, () => {
+        sessions++;
+        return { open: () => fail ? Promise.reject(new Error('open failed')) : pending ? new Promise<void>(() => {}) : Promise.resolve(), dispose: () => { disposed++; } };
     });
 
     const first = await manager.openAsync(CachedPopup, { cache: true });
     assert.ok(first);
     const cachedNode = first!.node;
+    assert.equal(sessions, 1);
     manager.close(first!);
+    assert.equal(disposed, 1);
+    assert.equal(ownerCleanups.size, 0);
     assert.equal(cachedNode.isValid, true, '关闭时节点进入缓存');
     assert.equal(releases, 0, '节点仍可能引用 prefab 资源，关闭时不释放');
 
@@ -373,7 +391,32 @@ test('PopupManager 缓存实例时保留 prefab 资源到缓存节点销毁', as
     assert.ok(second);
     assert.equal(second!.node, cachedNode, '再次打开复用缓存节点');
     assert.equal(loads, 1, '复用缓存时不重复加载 prefab');
+    assert.equal(sessions, 2);
+    manager.close(second!);
+    pending = true;
+    const opening = manager.openAsync(CachedPopup, { cache: true });
+    await flushMicrotasks();
+    const third = manager.get(CachedPopup);
+    assert.ok(third);
+    manager.close(third);
+    assert.equal(await opening, null, '关闭立即取消未完成的组合首屏');
+    const rawOpening = manager.openAsync(CachedPopup, { cache: true });
+    await flushMicrotasks();
+    const raw = manager.get(CachedPopup);
+    owners.removeCallerListener(raw);
+    assert.equal(await rawOpening, null, '直接销毁宿主也取消组合会话');
+    assert.equal(disposed, 4);
+    manager.close(raw);
+    fail = true;
+    assert.equal(await manager.openAsync(CachedPopup, { cache: true }), null, '组合失败不得留在弹窗栈');
+    assert.equal(manager.get(CachedPopup), null);
+    assert.equal(disposed, 5);
+    fail = false;
+    const destroyedOpening = manager.openAsync(CachedPopup, { cache: true });
+    await flushMicrotasks();
     manager.onDestroy();
+    assert.equal(await destroyedOpening, null, '管理器销毁取消组合等待');
+    assert.equal(disposed, 6);
     assert.equal(cachedNode.isValid, false, '管理器销毁时销毁缓存节点');
     assert.equal(releases, 1, '缓存节点销毁后释放 prefab 资源');
 });

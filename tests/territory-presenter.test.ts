@@ -61,7 +61,6 @@ function createBattlePageProbe(presenter: TerritoryPresenter) {
             ccclass: () => (type: unknown) => type, property: () => () => {},
         } },
         '../../core/asset/ResourceScope': { ResourceScope },
-        '../zcds/application/ZCBattlePreparation': { createZCBattlePreload: () => ({ ready: Promise.resolve() }) },
         '../../framework/event/EventMgr': { EventMgr },
         '../territory/application/TerritoryEvents': territoryEvents,
         './LevelInfoPanel': { LevelInfoPanel },
@@ -69,6 +68,10 @@ function createBattlePageProbe(presenter: TerritoryPresenter) {
         '../../core/runtime/GameRoute': { GameRoute: { Battle: 'battle' } },
         '../../framework/procedure/ProcedureManager': { ProcedureManager: {
             navigate: (_route: string, params: unknown) => routes.push(params),
+            // 页面在 `commitBattleNav` 之后会订阅「流程切换落定」，用来把
+            // 「跳转发了但战斗流程没接手」这种情况当场收尾（2026-11-02 需求）。
+            // 这个探针不模拟流程，给一个空订阅即可。
+            onSwitchSettled: () => () => {},
         } },
         '../../framework/ui/PopupManager': { PopupManager: { inst: {
             get: (type: unknown) => type === LevelInfoPanel && opened ? { close: () => {
@@ -88,6 +91,7 @@ function createBattlePageProbe(presenter: TerritoryPresenter) {
         roleCache: { subscribe: () => () => {} },
         cells: { readCellInfo: () => null, readPassCellsBro: () => null },
         schedule: () => () => {},
+        battle: { prepare: () => undefined, enter: payload => routes.push(payload) },
     });
     EventMgr.instance.on(TerritoryViewEvent.Command,
         (event: territoryEvents.ITerritoryCommandEvent) => {
@@ -159,8 +163,43 @@ test('关卡开战被拒绝时保留详情可重试，玩家主动关闭仍取�
     }
 });
 
-// ── 夹具 ───────────────────────────────────────────────────────────────
+/**
+ * 2026-11-02 用户实测：「雾静止等回包，但是没有进入战斗，又重新返回了领地界面」。
+ *
+ * 过场为了露出来会先关掉关卡界面，而关卡界面的 `onClose` 发的是 `closeDetail` ——
+ * model 当时的解释是「玩家放弃这一格」⇒ 换交互号 ⇒ 在途开战回包被判成过期丢掉。
+ * 页面据此在关窗**之前**发 `keepBattleRequest`，把这两种"关详情"分开。
+ */
+test('★★★过场接手的关详情不许作废在途开战请求（否则回包到了也没人接）', async () => {
+    const gateway = createFakeGateway({ fetch: {
+        ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [367, 213], passCells: [367, 252] },
+    } });
+    let reply: (result: TerritoryStartBattleResult) => void = () => {};
+    let requests = 0;
+    gateway.gateway.startBattle = () => { requests++; return new Promise((resolve) => { reply = resolve; }); };
+    const h = createHarness({ loader: createBossFindLoader(), gateway });
+    const probe = createBattlePageProbe(h.presenter);
+    try {
+        await flush();
+        h.presenter.focusCurrentLevel();
+        probe.page.onDetailStart();
+        assert.equal(requests, 1);
+        // 页面起演整页过场：先声明「这一下是程序关的」，再关掉挡路的关卡界面。
+        EventMgr.instance.emit(TerritoryUiEvent.Intent, { intent: { kind: 'keepBattleRequest' } });
+        probe.page.onDetailClose();
+        assert.equal(h.presenter.state.detail.levelInfo, null, '弹窗该关还是要关（要演过场）');
+        assert.equal(h.presenter.state.detail.siteId ?? null, null, '详情状态也要收掉');
+        reply({ ok: true, battle: fakeBattleStart });
+        await flush();
+        assert.equal(h.nav.length, 1, '★回包到达后必须交接到战斗流程');
+        assert.equal(probe.routes.length, 1, '★页面要真的发出跳转');
+    } finally {
+        probe.dispose();
+        h.presenter.dispose();
+    }
+});
 
+// ── 夹具 ───────────────────────────────────────────────────────────────
 const mapJson = {
     version: 1,
     mapKind: 'territoryChapter',
@@ -313,8 +352,11 @@ test('解锁状态没拉回来时快速寻敌照样敢选：详情「解锁后�
     assert.equal(h.presenter.state.detail.levelInfo?.fightCaption, '开始战斗');
     h.presenter.requestBattle();
     await flush();
-    assert.equal(h.gatewayCalls.startBattle, 1);
+    // 🔴 普通关（`mode = match`）不再由领地发开战请求 —— 用户 2026-11-02 口径：交给匹配页发。
+    assert.equal(h.gatewayCalls.startBattle, 0, '普通关的请求交给匹配页');
     assert.equal(h.nav.length, 1);
+    assert.deepEqual(h.battleParams[0], ['1', '1', '252'], 'battleParams 要原样交给匹配页');
+    assert.equal(h.battles[0], undefined, '没有 battleId —— 由匹配页自己发请求拿');
     h.presenter.dispose();
 });
 
@@ -348,12 +390,12 @@ test('已通关的普通关卡：弹窗照常打开，「开始战斗」可点�
     // 真按下去要真的发开战请求（`handleBattleStationStart` 对已通关的普通关卡不再提前 return）。
     h.presenter.requestBattle();
     await flush();
-    assert.equal(h.gatewayCalls.startBattle, 1, '已通关的普通关卡再打一次照样请求服务端');
-    const params = h.gatewayCalls.battleParamsList;
-    assert.equal(params[params.length - 1]?.[0], '1',
+    // 普通关（`mode = match`）的请求交给匹配页 ⇒ 领地这一侧**一次都不发**。
+    assert.equal(h.gatewayCalls.startBattle, 0, '已通关的普通关卡也不再由领地请求服务端');
+    assert.equal(h.battleParams[0]?.[0], '1',
         '主线 stage/boss 恒为格子战斗子类型 1（宝箱战斗子类型 2 只属于已通关的 asyncPvp）');
     assert.equal(h.gatewayCalls.unlock, 0, '已通关 ⇒ 不再重复解锁');
-    assert.equal(h.nav.length, 1, '开战成功后进入战斗');
+    assert.equal(h.nav.length, 1, '仍然要进匹配界面');
     h.presenter.dispose();
 });
 
@@ -564,9 +606,10 @@ test('an initially locked stage unlocks and starts the battle on the first click
     await flush();
     assert.equal(h.gatewayCalls.unlock, 1, '未解锁 ⇒ 先发解锁');
     assert.deepEqual(h.gatewayCalls.unlockedCells, [site.cellId]);
-    assert.equal(h.gatewayCalls.startBattle, 1, '解锁成功 ⇒ 同一交互内立刻发开战请求');
-    assert.deepEqual(h.gatewayCalls.battleParamsList, [['1', '1', String(site.cellId)]],
-        'battleParams = [子类型(1=格子战斗), 章节id, cellId]');
+    // 🔴 普通关（`mode = match`）：解锁成功 ⇒ 同一交互内直接交给匹配页，**领地不发**开战请求。
+    assert.equal(h.gatewayCalls.startBattle, 0, '请求交给匹配页发（用户 2026-11-02 口径）');
+    assert.deepEqual(h.battleParams[0], ['1', '1', String(site.cellId)],
+        'battleParams = [子类型(1=格子战斗), 章节id, cellId]，必须原样交给匹配页');
     assert.equal(h.gatewayCalls.pass, 0, '关卡绝不发通关请求');
     assert.equal(h.storeCalls.beginBattle, 1, '开战回包成功后进战斗');
     assert.equal(h.nav.length, 1);
@@ -575,21 +618,31 @@ test('an initially locked stage unlocks and starts the battle on the first click
     h.presenter.selectSite(site);
     assert.ok(h.presenter.state.detail.levelInfo, '已解锁 ⇒ 点一下打开关卡界面');
     await flush();
-    assert.equal(h.gatewayCalls.startBattle, 1, '第二次点击不许再自动开战（要等弹窗按钮）');
+    assert.equal(h.nav.length, 1, '第二次点击不许再自动开战（要等弹窗按钮）');
     // 弹窗里的「开始战斗」照旧可用。
     h.presenter.requestBattle();
     await flush();
-    assert.equal(h.gatewayCalls.startBattle, 2);
+    assert.equal(h.nav.length, 2, '窗里的按钮照样能把人送进匹配');
     assert.equal(h.gatewayCalls.unlock, 1, '开战不再重复解锁');
 });
 
 // 首次解锁直开被服务端拒绝：解锁已确认（照常记账），但玩家停在原地 —— 不进战斗、不扣本地资源，
 // 下一次点击回到「弹关卡界面」，不会因为一次拒绝就把这格锁死。
-test('★首次解锁直开被拒：只提示不进战斗，格子已解锁，再点回到关卡界面', async () => {
-    const h = createHarness({ gateway: createFakeGateway({
-        fetch: { ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [0], passCells: [0] } },
-        start: { ok: false, reason: TERRITORY_REQUEST_STATUS.rejected },
-    }) });
+//
+// 🔴 2026-11-02 起这条**只对首领关（`mode = defence`，塔防类）成立**：普通关（`match`）的
+//    开战请求由匹配页发，领地这一侧根本没有"被拒"这个回包（玩家会在匹配页里看到失败）。
+//    所以夹具显式把这一关改成 defence，否则这条用例测的是一条已经不存在的路径。
+test('★首次解锁直开被拒（首领关）：只提示不进战斗，格子已解锁，再点回到关卡界面', async () => {
+    const h = createHarness({
+        loader: createFakeLoader({
+            ...bundle,
+            campaign: { ...bundle.campaign, stages: [{ ...stage, isBoss: true, mode: 'defence' }] },
+        }),
+        gateway: createFakeGateway({
+            fetch: { ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [0], passCells: [0] } },
+            start: { ok: false, reason: TERRITORY_REQUEST_STATUS.rejected },
+        }),
+    });
     h.presenter.start();
     await flush();
     const site = h.presenter.state.map!.sites[0];
@@ -637,7 +690,9 @@ test('chapterLevelAutoStartConfig = 0：锁着的关卡点一下只解锁，不�
     assert.ok(h.presenter.state.detail.levelInfo);
     h.presenter.requestBattle();
     await flush();
-    assert.equal(h.gatewayCalls.startBattle, 1, '窗里「开始战斗」照常发请求');
+    // 普通关：窗里「开始战斗」照常可用，只是请求由匹配页发。
+    assert.equal(h.nav.length, 1, '窗里「开始战斗」照常把人送进匹配');
+    assert.equal(h.gatewayCalls.startBattle, 0, '领地不发开战请求');
 });
 
 test('an already unlocked stage starts without sending a duplicate unlock', async () => {
@@ -874,8 +929,15 @@ function createOutputSpy() {
     const rewardOrigins: (number | null | undefined)[] = [];
     const nav: ITerritoryBattleNavParams[] = [];
     const battles: (ZCBattleStart | undefined)[] = [];
+    /**
+     * 每次 `navigate` 带上的 `battleParams`（普通关交给匹配页发请求用的那组）。
+     *
+     * 🔴 2026-11-02：普通关（`mode = match`）**不再由领地发** `CmdStartBattleReqMsg`，
+     * 所以"开战参数对不对"这件事从 `gatewayCalls.battleParamsList` 挪到这里断言。
+     */
+    const battleParams: (readonly string[] | undefined)[] = [];
     const busy: Array<{ busy: boolean; text?: string }> = [];
-    return { tips, rewards, rewardOrigins, nav, battles, busy };
+    return { tips, rewards, rewardOrigins, nav, battles, battleParams, busy };
 }
 
 interface HarnessOptions {
@@ -904,7 +966,11 @@ function createHarness(options: HarnessOptions = {}) {
     presenter.onOutput((event) => {
         switch (event.kind) {
             case 'changed': stateChanges++; break;
-            case 'navigate': spy.nav.push(event.payload.pve); spy.battles.push(event.payload.battle); break;
+            case 'navigate':
+                spy.nav.push(event.payload.pve);
+                spy.battles.push(event.payload.battle);
+                spy.battleParams.push(event.payload.battleParams);
+                break;
             case 'tip': spy.tips.push(event.payload.text); break;
             case 'rewards':
                 spy.rewards.push(event.payload.rewards.map(g => ({ resId: g.resId, amount: g.amount })));
@@ -1365,10 +1431,11 @@ test('selectSite on a bound stage opens the level panel first, battle starts fro
     assert.ok(h.presenter.state.detail.levelInfo, '关卡点击后弹关卡界面');
     assert.ok(h.presenter.state.detail.levelInfo, '关卡界面内容必须给出');
     assert.equal(h.gatewayCalls.startBattle, 0, '只弹窗，不开战');
-    // 面板上的「开始战斗」= 原来的开战入口。
+    // 面板上的「开始战斗」= 原来的开战入口（普通关 → 进匹配，请求由匹配页发）。
     h.presenter.requestBattle();
     await flush();
-    assert.equal(h.gatewayCalls.startBattle, 1, '点开始战斗才发开战请求');
+    assert.equal(h.nav.length, 1, '点开始战斗才进匹配');
+    assert.equal(h.gatewayCalls.startBattle, 0, '普通关的开战请求交给匹配页');
 });
 
 test('selectSite on an unbound site opens nothing (站点详情面板已移除)', async () => {
@@ -1651,10 +1718,9 @@ test('two-step stage 327 unlocks and starts the battle on the first click, later
     assert.deepEqual(h.gatewayCalls.unlockedCells, [327]);
     assert.deepEqual(h.gatewayCalls.passedCells, [],
         '关卡绝不发通关请求（服务端会回「章节格子非资源类型」）');
-    assert.equal(h.gatewayCalls.startBattle, 1, '解锁成功 ⇒ 立刻发一次开战请求');
-    assert.deepEqual(h.gatewayCalls.battleTypes, [1002],
-        'battleType 必须是章节战斗类型 1002，不是 site.configId（10001）');
-    assert.deepEqual(h.gatewayCalls.battleParamsList, [['1', '1', '327']],
+    // 🔴 普通关（`mode = match`）：解锁成功 ⇒ 立刻交给匹配页；**领地不发**开战请求。
+    assert.equal(h.gatewayCalls.startBattle, 0, '请求交给匹配页发（用户 2026-11-02 口径）');
+    assert.deepEqual(h.battleParams[0], ['1', '1', '327'],
         'battleParams = [子类型(1=格子战斗), 章节id, cellId]');
     assert.equal(h.storeCalls.beginBattle, 1, '开战回包成功后进战斗');
     assert.equal(h.nav.length, 1);
@@ -1664,12 +1730,12 @@ test('two-step stage 327 unlocks and starts the battle on the first click, later
     h.presenter.selectSite(site);
     assert.ok(h.presenter.state.detail.levelInfo, '已解锁 ⇒ 点一下打开关卡界面');
     await flush();
-    assert.equal(h.gatewayCalls.startBattle, 1, '★第二次点击不许再自动开战');
+    assert.equal(h.nav.length, 1, '★第二次点击不许再自动开战');
     h.presenter.requestBattle();
     await flush();
     assert.equal(h.gatewayCalls.unlock, 1, '开战阶段不再重复解锁');
-    assert.equal(h.gatewayCalls.startBattle, 2, '已解锁的关卡应发一次开战请求');
-    assert.deepEqual(h.gatewayCalls.battleParamsList, [['1', '1', '327'], ['1', '1', '327']]);
+    assert.equal(h.nav.length, 2, '已解锁的关卡再按一次照旧进匹配');
+    assert.deepEqual([...h.battleParams], [['1', '1', '327'], ['1', '1', '327']]);
     // 第三步：战斗已发起（fake 不真切场景）⇒ 再点 = 战斗未结算返回重打。
     // 🔴 2026-10-21 口径：`bossBattleStart` 不再参与防连点（防连点 = pending 判重 + loading），
     // 未通关格允许再次开战（打输 / 未打完可重打）。
@@ -1677,7 +1743,7 @@ test('two-step stage 327 unlocks and starts the battle on the first click, later
     h.presenter.requestBattle();
     await flush();
     assert.equal(h.gatewayCalls.unlock, 1, '重打不夹带解锁请求');
-    assert.equal(h.gatewayCalls.startBattle, 3, '开战后未通关可重打（再次发开战请求）');
+    assert.equal(h.nav.length, 3, '开战后未通关可重打（再进一次匹配）');
 });
 
 test('two-step stage 327 skips the battle flow entirely (no detail, no start battle)', async () => {
@@ -1779,7 +1845,7 @@ test('closeDetail closes the open panel', async () => {
 
 // ── 开战 ───────────────────────────────────────────────────────────────
 
-test('a stage click starts the server battle and navigates with the bound level', async () => {
+test('a stage click hands the battle over to the matching page with the bound level', async () => {
     const h = createHarness({ gateway: createFakeGateway({ fetch: {
         ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [1], passCells: [] },
     } }) });
@@ -1789,10 +1855,12 @@ test('a stage click starts the server battle and navigates with the bound level'
     h.presenter.selectSite(h.presenter.state.map!.sites[0]);
     h.presenter.requestBattle();
     await flush();
-    assert.equal(h.gatewayCalls.startBattle, 1, '关卡必须发 CmdStartBattleReqMsg（拿 battleId/seed）');
-    assert.deepEqual(h.gatewayCalls.battleTypes, [1002]);
-    assert.equal(h.storeCalls.beginBattle, 1);
+    // 🔴 2026-11-02：普通关（`mode = match`）不再由领地发 `CmdStartBattleReqMsg` ——
+    // 它先进匹配界面，请求由 `MatchingController` 带着 `battleParams` 发。
+    assert.equal(h.gatewayCalls.startBattle, 0, '请求交给匹配页发');
+    assert.equal(h.storeCalls.beginBattle, 1, '本地钱包照扣（银币 / 体力在领地里就扣）');
     assert.equal(h.nav.length, 1);
+    assert.deepEqual(h.battleParams[0], ['1', '1', '1']);
     assert.equal(h.nav[0].levelId, 1001);
     assert.deepEqual(h.nav[0].enemyTeamCardIds, [[11]]);
     assert.equal(h.nav[0].enemyCardIds[0], 11);
@@ -2145,7 +2213,7 @@ for (const [siteType, isBoss, mode] of [
     // 这条以前被 `handleBattleStationStart` 的「已通关 ⇒ return」挡住，现在是必须绿的主路径。
     ['stage', false, 'match'],
 ] as const) {
-    test(`已通关 ${siteType}/${mode} 缺少 unlockCells 时仍可重复挑战，连点只发一次服务端开战`, async () => {
+    test(`已通关 ${siteType}/${mode} 缺少 unlockCells 时仍可重复挑战，连点只进一次`, async () => {
         const h = createHarness({
             loader: createFakeLoader({
                 ...bundle,
@@ -2167,16 +2235,25 @@ for (const [siteType, isBoss, mode] of [
         h.presenter.requestBattle();
         h.presenter.requestBattle();
         await flush();
-        assert.deepEqual(h.gatewayCalls.battleParamsList, [['1', '1', '1']]);
+        // 判据按 `mode`（不是站点类型）：defence 由领地自己发请求（参数走网关调用），
+        // match 交给匹配页（参数走 `navigate` 载荷）。
+        if (mode === 'defence') {
+            assert.deepEqual(h.gatewayCalls.battleParamsList, [['1', '1', '1']],
+                'defence：battleParams 必须跟着网关请求发出去');
+        } else {
+            assert.deepEqual(h.battleParams[0], ['1', '1', '1'],
+                'match：battleParams 必须跟着 navigate 交出去');
+        }
         assert.equal(h.gatewayCalls.unlock, 0);
         assert.equal(h.gatewayCalls.pass, 0);
-        assert.equal(h.nav.length, 1, '重复点击不得取消正在请求的战斗');
+        assert.equal(h.nav.length, 1, '同一帧连点两次只该进一次');
         h.presenter.selectSite(site);
         await flush();
         h.presenter.requestBattle();
         await flush();
-        assert.equal(h.gatewayCalls.startBattle, 2, '返回后再次挑战仍请求服务端');
-        assert.equal(h.nav.length, 2);
+        assert.equal(h.gatewayCalls.startBattle, mode === 'defence' ? 2 : 0,
+            'defence 自己发两次请求；match 一次都不发（交给匹配页）');
+        assert.equal(h.nav.length, 2, '返回后再次挑战仍能再进一次');
         h.presenter.dispose();
     });
 }
@@ -2232,11 +2309,12 @@ test('asyncPvp sites sharing configId unlock independently then start their conf
     h.presenter.requestBattle();
     await flush();
     assert.equal(h.gatewayCalls.unlock, 3, '已解锁的异步格再次点击不重复请求解锁');
-    assert.equal(h.gatewayCalls.startBattle, 1, '已解锁异步据点应走章节战斗请求');
+    // asyncPvp 也是走匹配（`mode = match`）⇒ 请求交给匹配页，领地这一侧不发。
+    assert.equal(h.gatewayCalls.startBattle, 0, '请求交给匹配页发');
     // 🔴 asyncPvp 子类型按**通关状态**分流（山猫 2026-10-21 细化）：未通关首次挑战 = 格子
     // 战斗子类型 1（`chapterCellBattleParams`）；已通关重复挑战才切宝箱战斗子类型 2。
     // 372 在这里只解锁没通关 ⇒ 子类型 1（服务端按 0 位分流，打过的格传 2 会回「配置错误」）。
-    assert.deepEqual(h.gatewayCalls.battleParamsList, [['1', '1', '372']]);
+    assert.deepEqual(h.battleParams[0], ['1', '1', '372']);
     assert.equal(h.storeCalls.beginBattle, 1);
     assert.equal(h.nav[0]?.levelId, 20001, '开战应使用 levelInfo.json 中的 20001');
     assert.equal(h.nav[0]?.territoryCellId, 372);
@@ -2295,10 +2373,18 @@ test('boss start battle failure shows a tip and does not enter battle', async ()
     assert.equal(h.presenter.lastBossBattleStart, null);
 });
 
+// 🔴 只有首领关（`mode = defence`）会拿到服务端 `battle`（battleId / seed）—— 普通关走匹配，
+//    `battle` 由匹配页自己发请求拿。这条守的是"服务端回的那整份 battle 必须原样透传"。
 test('chapter start forwards the complete server battle to navigation', async () => {
-    const h = createHarness({ gateway: createFakeGateway({ fetch: {
-        ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [0, 1], passCells: [0] },
-    } }) });
+    const h = createHarness({
+        loader: createFakeLoader({
+            ...bundle,
+            campaign: { ...bundle.campaign, stages: [{ ...stage, isBoss: true, mode: 'defence' }] },
+        }),
+        gateway: createFakeGateway({ fetch: {
+            ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [0, 1], passCells: [0] },
+        } }),
+    });
     h.presenter.start();
     await flush();
     h.presenter.selectSite(h.presenter.state.map!.sites[0]);
@@ -2308,11 +2394,16 @@ test('chapter start forwards the complete server battle to navigation', async ()
     assert.deepEqual(h.battles[0], fakeBattleStart);
 });
 
-test('territory page passes battle and current role to the game route', () => {
+test('territory page sends entry intent while composition supplies battle and captured account', () => {
     const page = readFileSync('assets/script/app/main/MainTerritoryMap.ts', 'utf8');
-    assert.match(page, /onNavigateToBattle\(payload: ITerritoryNavigateBattlePayload\)[\s\S]*?ProcedureManager\.navigate\(GameRoute\.Battle, \{[\s\S]*?battle,[\s\S]*?selfRoleId: this\.saveOwner\?\.roleId/);
+    const entry = readFileSync('assets/script/app/territory/application/TerritoryEntry.ts', 'utf8');
+    assert.match(page, /kind: 'enterBattle', payload: nav.payload/);
+    assert.doesNotMatch(page, /ProcedureManager\.navigate\(GameRoute\.Battle/);
+    assert.match(entry, /battle: payload.battle/);
+    assert.match(entry, /selfRoleId: this\.saveOwner\?\.roleId/);
 });
 
+// 🔴 同样只管首领关（`mode = defence`）：普通关根本没有在途的开战请求可"作废"。
 test('chapter start ignores repeat clicks while in flight and stale response after selection changes', async () => {
     const gateway = createFakeGateway({ fetch: {
         ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [0, 1, 2], passCells: [0] },
@@ -2322,7 +2413,13 @@ test('chapter start ignores repeat clicks while in flight and stale response aft
         gateway.calls.startBattle++;
         return new Promise(resolve => pending.push(resolve));
     };
-    const h = createHarness({ gateway });
+    const h = createHarness({
+        loader: createFakeLoader({
+            ...bundle,
+            campaign: { ...bundle.campaign, stages: [{ ...stage, isBoss: true, mode: 'defence' }] },
+        }),
+        gateway,
+    });
     h.presenter.start();
     await flush();
     const site = h.presenter.state.map!.sites[0];
@@ -2431,9 +2528,10 @@ test('★★★★真机口径：只打通 328，点 309 解锁后必须立刻�
     assert.deepEqual(h.gatewayCalls.unlockedCells, [309],
         '★必须发 CmdCityChapterPassCellReqMsg 类解锁请求 —— 曾经这里是 0 次请求');
     assert.ok(!h.tips.includes('前置领地尚未占领'), '不能再被前置判定挡住');
-    assert.equal(h.gatewayCalls.startBattle, 1, '★解锁成功必须立刻发开战请求（这一下就是进战斗）');
-    assert.deepEqual(h.gatewayCalls.battleParamsList, [['1', '1', '309']]);
-    assert.equal(h.nav.length, 1, '★解锁即开战 ⇒ 直接进战斗');
+    // 普通关（`mode = match`）⇒ 解锁成功立刻交出去，但**请求由匹配页发**。
+    assert.equal(h.gatewayCalls.startBattle, 0, '★请求交给匹配页（领地这一侧一个开战协议都不发）');
+    assert.deepEqual(h.battleParams[0], ['1', '1', '309'], '★但要立刻交出去 —— 以前这里是 0 次 navigate');
+    assert.equal(h.nav.length, 1, '★解锁即开战 ⇒ 直接进匹配');
     assert.equal(h.presenter.state.detail.levelInfo, null, '中途不弹关卡界面');
     assert.ok(!h.tips.includes('已解锁，点击查看关卡'), '直开路径没有「已解锁」这一步提示');
 });
@@ -2465,8 +2563,9 @@ test('解锁请求在途：loading 在网关调用前显示，解锁回包后同
     assert.equal(h.busy.length, 2, '★两段请求之间 loading 不许归零（只有一对 show/hide）');
     assert.equal(h.busy[1].busy, false, '请求结束 ⇒ busy=false');
     assert.equal(unlockCount, 1, '全程只发一次解锁请求');
-    assert.equal(h.gatewayCalls.startBattle, 1, '解锁成功 ⇒ 同一交互内继续发开战请求');
-    assert.equal(h.nav.length, 1);
+    // 普通关：解锁回包后直接交给匹配页（领地不再发开战请求），loading 照样在同一层收掉。
+    assert.equal(h.gatewayCalls.startBattle, 0, '开战请求交给匹配页');
+    assert.equal(h.nav.length, 1, '解锁回包后同一交互内就去匹配');
 });
 
 // 🔴 两个写请求**并发**时 loading 必须严格配对（show 几次就 hide 几次）：
@@ -2661,19 +2760,21 @@ test('★asyncPvp 已通关可重复挑战：再次点击重新发开战请求�
     h.presenter.requestBattle();
     await flush();
     assert.equal(h.gatewayCalls.unlock, 0, '已通关格不重复发解锁');
-    assert.equal(h.gatewayCalls.startBattle, 1, '★已通关 asyncPvp 可再次开战');
+    assert.equal(h.gatewayCalls.startBattle, 0, '★请求交给匹配页（asyncPvp 也是 mode = match）');
     // asyncPvp = 宝箱战斗子类型（battleParams[0] = 2），不是主线的格子战斗子类型 1。
-    assert.deepEqual(h.gatewayCalls.battleParamsList, [['2', '1', '372']],
+    assert.deepEqual(h.battleParams[0], ['2', '1', '372'],
         'asyncPvp 用宝箱战斗子类型（服务端按 battleParams[0] 分流）');
-    assert.equal(h.nav.length, 1, '开战成功进入战斗');
-    assert.equal(h.busy.length, 2, '开战请求全程 loading 遮挡（true → false）');
+    assert.equal(h.nav.length, 1, '开战成功进入匹配');
+    // 普通关（`mode = match`）在领地这一侧**一个请求都不发** ⇒ 也没有 loading 可遮。
+    // 遮挡改由匹配页自己负责（它发请求、它等回包）。
+    assert.equal(h.busy.length, 0, '领地不发请求 ⇒ 不该出现 loading');
     // 返回领地后再点（模拟上一局已结算、battleId 已清）⇒ 可无限重复挑战。
     h.presenter.selectSite(site);
     await flush();
     h.presenter.requestBattle();
     await flush();
-    assert.equal(h.gatewayCalls.startBattle, 2, '★重复挑战：第二次点击再次发开战请求');
-    assert.deepEqual(h.gatewayCalls.battleParamsList,
+    assert.equal(h.nav.length, 2, '★重复挑战：第二次点击照样再进一次匹配');
+    assert.deepEqual([...h.battleParams],
         [['2', '1', '372'], ['2', '1', '372']], '重复挑战每次都用同一组宝箱战斗参数');
     assert.equal(h.nav.length, 2, '再次进入战斗');
     assert.equal(h.gatewayCalls.unlock, 0, '重复挑战不夹带解锁请求');
@@ -2694,8 +2795,8 @@ test('★asyncPvp 已通关但快照没给 unlockCells：点击跳过解锁直�
     h.presenter.requestBattle();
     await flush();
     assert.equal(h.gatewayCalls.unlock, 0, '不因缺 unlockable 发解锁请求');
-    assert.equal(h.gatewayCalls.startBattle, 1, '已通关 asyncPvp 直接开战');
-    assert.deepEqual(h.gatewayCalls.battleParamsList, [['2', '1', '372']],
+    assert.equal(h.gatewayCalls.startBattle, 0, '请求交给匹配页');
+    assert.deepEqual(h.battleParams[0], ['2', '1', '372'],
         '已通关 asyncPvp 用宝箱战斗子类型 2');
     assert.equal(h.nav.length, 1);
 });
@@ -2721,8 +2822,8 @@ test('★asyncPvp 未通关：首次挑战用格子战斗子类型 1（通关后
     await flush();
     h.presenter.requestBattle(); // 再点「开始战斗」→ 开战步
     await flush();
-    assert.equal(h.gatewayCalls.startBattle, 1, '解锁后可开战');
-    assert.deepEqual(h.gatewayCalls.battleParamsList, [['1', '1', '372']],
+    assert.equal(h.gatewayCalls.startBattle, 0, '请求交给匹配页');
+    assert.deepEqual(h.battleParams[0], ['1', '1', '372'],
         '未通关 asyncPvp 用格子战斗子类型 1（服务端对没打过的格按格子战斗分流）');
     assert.equal(h.nav.length, 1);
 });
@@ -2751,8 +2852,8 @@ test('★asyncPvp 本地旧档残留通关但服务端未确认：子类型按�
     h.presenter.requestBattle();
     await flush();
     // isServerOwned=false ⇒ 首次挑战 ⇒ 子类型 1（修复前用 isOwned ⇒ 传 2 ⇒ 服务端「配置错误」）
-    assert.equal(h.gatewayCalls.startBattle, 1);
-    assert.deepEqual(h.gatewayCalls.battleParamsList, [['1', '1', '372']],
+    assert.equal(h.gatewayCalls.startBattle, 0, '请求交给匹配页');
+    assert.deepEqual(h.battleParams[0], ['1', '1', '372'],
         '旧档残留不算通关：asyncPvp 按服务端确认分流，未确认传格子战斗子类型 1');
     assert.equal(h.nav.length, 1);
 });

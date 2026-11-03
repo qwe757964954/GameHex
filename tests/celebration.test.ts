@@ -642,8 +642,8 @@ test("庆祝 F'1｜ArenaRoot 根下有 OSRankEntry，结构与 ChatEntry 同构"
     const entryId = nodeIndex(o, 'OSRankEntry', rootId);
     assert.notEqual(entryId, -1, 'ArenaRoot 根下缺 OSRankEntry');
 
-    // 🔴 规则 86：_active 必须烘 true（烘 false ⇒ onLoad 不跑 ⇒ 永久不可见且不报错）
-    assert.equal(o[entryId]._active, true, 'OSRankEntry 的 _active 必须烘 true');
+    // 暂停展示入口；父节点关闭后，子按钮的快照刷新不能重新显示整块入口。
+    assert.equal(o[entryId]._active, false, '开服庆典入口暂时隐藏，恢复时再启用 OSRankEntry');
 
     // 与 ChatEntry 同构：子节点序 [Btn, RedDot]
     const kids = (o[entryId]._children ?? []).map((c: any) => o[c.__id__]._name);

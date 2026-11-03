@@ -4,8 +4,9 @@ import type { ResourceScope } from '../../../core/asset/ResourceScope';
 import { bundleForPath } from '../../../core/asset/BundleCatalog';
 import type { BigMapResType, IBigMapBuildingConfig, IBigMapCampConfig } from '../model/BigMapTypes';
 import {
-    BIGMAP_BASE_BACKGROUND, BIGMAP_BUILDING_ART, BIGMAP_CONCEPT_ROOT, BIGMAP_HUD_UI_FILES, BIGMAP_HUD_UI_KEYS, BIGMAP_UI_KEYS,
-    type IBigMapHudUiKey, type IBigMapUiKey,
+    BIGMAP_BASE_BACKGROUND, BIGMAP_BUILDING_ART, BIGMAP_CONCEPT_ROOT, BIGMAP_HUD_UI_FILES, BIGMAP_HUD_UI_KEYS,
+    BIGMAP_PLATE_FILES, BIGMAP_PLATE_FLAG_FILE, BIGMAP_PLATE_KEYS, BIGMAP_UI_KEYS,
+    type IBigMapHudUiKey, type IBigMapPlateKey, type IBigMapUiKey,
 } from './BigMapArtCatalog';
 
 export interface IBigMapArt {
@@ -24,6 +25,9 @@ export interface IBigMapArt {
     readonly buildings: ReadonlyMap<number, SpriteFrame | null>;
     readonly camps: ReadonlyMap<number, SpriteFrame | null>;
     readonly ui: ReadonlyMap<IBigMapUiKey, SpriteFrame | null>;
+    /** 据点名条（按归属四选一）与「谁占着」小旗。缺图时标记退回手画角标，不影响布局。 */
+    readonly plates: ReadonlyMap<IBigMapPlateKey, SpriteFrame | null>;
+    readonly plateFlag: SpriteFrame | null;
     /** 领地页 HUD 同款按钮 / 模式木牌（`image/common` + `image/main/city`）。缺图时上层退回手画底，不影响布局。 */
     readonly hud: ReadonlyMap<IBigMapHudUiKey, SpriteFrame | null>;
     readonly resources: ReadonlyMap<BigMapResType, SpriteFrame | null>;
@@ -48,7 +52,14 @@ export async function loadBigMapArt(
         try {
             const framePath = `${path}/spriteFrame`;
             const options = { scope, bundle: bundleForPath(path) };
-            if (scope.disposed || !(await assets.has(framePath, SpriteFrame, options)) || scope.disposed) return null;
+            if (scope.disposed) return null;
+            // ⚠️ 这里原来 `has()` 为 false 时**静默 return null**，日志里什么都看不到 ——
+            // 排查「美术没显示」时会被误导成「加载没问题」。未命中必须留痕。
+            if (!(await assets.has(framePath, SpriteFrame, options))) {
+                console.warn(`[BigMap] 资源未命中（has=false）：${framePath} bundle=${options.bundle}`);
+                return null;
+            }
+            if (scope.disposed) return null;
             const frame = await assets.load(framePath, SpriteFrame, options);
             return scope.disposed ? null : frame;
         } catch (error) {
@@ -116,15 +127,22 @@ export async function loadBigMapArt(
         load(BIGMAP_BASE_BACKGROUND), sprite('construction'), sprite('fortress'),
         sprite('mutant_camp'), sprite('rocks'), sprite('grass'),
     ]);
+    // 名条原尺寸贴图：**不**走 `uiTask`，那组会统一覆写九宫边（见 `BIGMAP_PLATE_KEYS` 注释）。
+    const plateTask = Promise.all(BIGMAP_PLATE_KEYS.map(async (key) => (
+        [key, await load(BIGMAP_PLATE_FILES[key])] as const
+    )));
+    const plateFlagTask = load(BIGMAP_PLATE_FLAG_FILE);
     const [[backdrop, groundVariants, home, city, monster, rock, grass, tiledBackground], buildingEntries, uiEntries,
-        hudEntries, resourceEntries, [baseBackground, construction, fortress, mutantCamp, conceptRock, conceptGrass], campEntries] =
-        await Promise.all([terrainTask, buildingTask, uiTask, hudTask, resourceTask, baseTask, campTask]);
+        hudEntries, resourceEntries, [baseBackground, construction, fortress, mutantCamp, conceptRock, conceptGrass], campEntries,
+        plateEntries, plateFlag] = await Promise.all([
+        terrainTask, buildingTask, uiTask, hudTask, resourceTask, baseTask, campTask, plateTask, plateFlagTask,
+    ]);
     const buildings = new Map(buildingEntries);
     return { background: backdrop, tiledBackground, ground: groundVariants.find((frame) => frame !== null) ?? null,
         groundVariants, home: home ?? buildings.get(71001) ?? null, city: city ?? fortress, monster: monster ?? mutantCamp,
         rock: conceptRock ?? rock, grass: conceptGrass ?? grass,
         baseBackground, construction, buildings,
         camps: new Map(campEntries.map(([id, frame]) => [id, frame ?? city ?? fortress])),
-        ui: new Map(uiEntries), hud: new Map(hudEntries),
+        ui: new Map(uiEntries), hud: new Map(hudEntries), plates: new Map(plateEntries), plateFlag,
         resources: new Map(resourceEntries) };
 }

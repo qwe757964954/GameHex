@@ -46,6 +46,15 @@ export const TERRITORY_TEXTS = {
     requireChapterComplete: (occupied: number, total: number) =>
         `请先占领本章全部站点（${occupied}/${total}）`,
 
+    /**
+     * 首次解锁关卡 ⇒ 自动进战斗时的提示条（需求 2026-11-02）。
+     *
+     * 这条入口是**系统替玩家按下的开战**（他没看过关卡界面），所以要在推镜头的同一时刻
+     * 交代一句「为什么要进战斗」。与 `model/TerritoryBattleApproach` 的过场时长配套：
+     * 页面在起播时弹它，1.2s 后跳战斗页。
+     */
+    battleApproach: '遭遇敌人，即将开始战斗',
+
     // 站点状态 reason（Progress.checkExplore 返回）
     cellOutOfMap: '格子不在本章领地内',
     cellAlreadyOwned: '该格已经占领',
@@ -55,7 +64,24 @@ export const TERRITORY_TEXTS = {
     cellNotUnlocked: '该格尚未解锁',
     footprintAlreadyOwned: '该地块已经占领',
     footprintLocked: '该地块暂不可探索',
+    /**
+     * 前置没满足的**兜底**文案（2026-11-02 起只在"叫不出名字"时用）。
+     *
+     * 玩家能看到的提示优先由 `model/TerritoryPrerequisite` 拼出具体对象：
+     * 关卡用它的气泡文案（`1-1 关卡通关后解锁`），宝箱用 `前置宝箱未打开`。
+     * 仍然保留这句，是因为前置格可能是**不属于任何站点的普通地块**（`chapter_01` 有 4 处），
+     * 那种情况没有任何名字可说。
+     */
     prerequisiteNotOwned: '前置领地尚未占领',
+    /**
+     * 前置是关卡：`names` 是**一个**关卡的气泡文案（如 `1-1` / `PVP`）。
+     *
+     * ⚠️ 口径 2026-11-02：**只报第一个前置**，所以这里不会收到「1-1、1-2」这种名单
+     * （见 `model/TerritoryPrerequisite`）。要改回全列，得同时动那边。
+     */
+    prerequisiteStageLocked: (names: string) => `${names} 关卡通关后解锁`,
+    /** 前置是固定奖励宝箱（还没解锁 / 已解锁未领取，对玩家都是"没打开"）。 */
+    prerequisiteChestLocked: '前置宝箱未打开',
     combatPowerNotEnough: '战力不足',
 
     // 地图上站点角标 / 底条
@@ -96,6 +122,9 @@ export const TERRITORY_TEXTS = {
     bossBattleReady: '可开战',
     bossBattleClaimed: '已通关',
     bossBattleStartFailed: '开战失败，请稍后重试',
+    // 过场演完、跳转也发了，但战斗流程没接手（预加载失败 / 路由没注册）。
+    // 这一条必须给：以前是静默等兜底定时器把玩家甩回领地，看起来像"点了没反应"。
+    battleEnterFailed: '进入战斗失败，请稍后重试',
     bossBattleConfigMissing: '该关卡缺少战斗配置',
     // 库存
     emptyInventory: '暂无道具',

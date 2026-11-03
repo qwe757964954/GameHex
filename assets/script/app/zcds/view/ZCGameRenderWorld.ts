@@ -608,10 +608,6 @@ export class ZCGameRenderWorld {
         // 对局逻辑坐标为兼容旧快照保留取整；整个棋盘只差一个固定原点偏移。
         const originX = firstHex && firstPoint ? mapToViewX(firstHex.x) - firstPoint.x : 0;
         const originY = firstHex && firstPoint ? mapToViewY(firstHex.y) - firstPoint.y : 0;
-        const minX = -layout.width / 2 + originX;
-        const maxX = layout.width / 2 + originX;
-        const minY = -layout.height / 2 + originY;
-        const maxY = layout.height / 2 + originY;
         // 图层结构（水面 / 地块 / 装饰 / 建筑 / 状态条）声明在 `ZCGameBoard.prefab` 里，这里只按名取引用。
         // 层序 = prefab 的子节点顺序 —— 原来那套 `setSiblingIndex` 现算有个隐藏错位：
         // `decorSlotIndex = 地块数 + 1` 没算上 wallLayer 占掉的那个位置，装饰层实际被插到了
@@ -625,10 +621,8 @@ export class ZCGameRenderWorld {
         // 中立资源图标层（2026-10-14 加）。不带 `!` 断言：棋盘 prefab 万一还没补这一层，
         // 退化成「图标留在格节点里」就行 —— 表现为图标仍会被邻格切，但不该整局开不起来。
         this.resourceLayer = this.options.board.getChildByName('ResourceLayer') ?? null;
-        const surface = water.getComponent(Graphics);
-        surface.fillColor = new Color(30, 151, 215, 0);
-        surface.rect(minX, minY, maxX - minX, maxY - minY);
-        surface.fill();
+        water.setPosition(originX, originY, 0);
+        water.getComponent(UITransform).setContentSize(layout.width, layout.height);
         // 2.5D 地块有侧壁，渲染顺序须由共享布局给出；y 小的格子后画。
         const placedById = new Map<number, ZCPlacedHex>();
         for (const config of this.map) {
@@ -1702,7 +1696,7 @@ export class ZCGameRenderWorld {
      *
      * 调用点：`renderHexSystem`（正式对局）和 `renderSpawnSelection`（选点阶段）。
      * 两者都只在**内容变化**时被调（见各自的 `contentKey` / 选点状态机），
-     * 不是每帧。`ZCHexView` 自己那份 per-cell `cc.Graphics` 已不再绘制。
+     * 不是每帧。`ZCHexView` 不再挂载逐格轮廓画布。
      */
     private redrawSharedOutline(
         //  具名类型用现成的 `ZCHexConfig`（两个调用点传的就是它）—— 不再内联形状、

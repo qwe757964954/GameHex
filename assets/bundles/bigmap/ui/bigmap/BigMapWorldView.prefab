@@ -194,7 +194,7 @@
     "_contentSize": {
       "__type__": "cc.Size",
       "width": 696,
-      "height": 1168
+      "height": 1064
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -327,7 +327,7 @@
     "_contentSize": {
       "__type__": "cc.Size",
       "width": 696,
-      "height": 1168
+      "height": 1064
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -1055,7 +1055,7 @@
     "_contentSize": {
       "__type__": "cc.Size",
       "width": 696,
-      "height": 1168
+      "height": 1064
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -1243,7 +1243,7 @@
     "_lpos": {
       "__type__": "cc.Vec3",
       "x": 318,
-      "y": -488,
+      "y": -436,
       "z": 0
     },
     "_lrot": {
@@ -1642,7 +1642,7 @@
     "_lpos": {
       "__type__": "cc.Vec3",
       "x": 318,
-      "y": -534,
+      "y": -482,
       "z": 0
     },
     "_lrot": {
@@ -2041,7 +2041,7 @@
     "_lpos": {
       "__type__": "cc.Vec3",
       "x": 306,
-      "y": 560,
+      "y": 508,
       "z": 0
     },
     "_lrot": {
@@ -2421,7 +2421,7 @@
     "_contentSize": {
       "__type__": "cc.Size",
       "width": 696,
-      "height": 1168
+      "height": 1064
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -2461,7 +2461,7 @@
     "_isAbsHorizontalCenter": true,
     "_isAbsVerticalCenter": true,
     "_originalWidth": 696,
-    "_originalHeight": 1168,
+    "_originalHeight": 1064,
     "_alignMode": 2,
     "_lockFlags": 0,
     "_id": ""
@@ -2498,7 +2498,7 @@
     "_contentSize": {
       "__type__": "cc.Size",
       "width": 696,
-      "height": 1168
+      "height": 1064
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",

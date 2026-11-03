@@ -26,19 +26,21 @@
 
 ## Task 1: 登录
 
-- [ ] 写所有权/登录取消/意图作用域/选服/连点测试并观察 RED。
-- [ ] LoginController、LoginComposition、纯 View 与选服意图契约；修正 LoginRoot 归属和 await 取消边界。
-- [ ] 验证登录协议、生命周期、选服、断线重连及视图意图守卫。
+- [x] 写所有权/登录取消/意图作用域/选服/连点测试并观察 RED。
+- [x] LoginController、LoginComposition、纯 View 与选服意图契约；修正 LoginRoot 归属和 await 取消边界。
+- [x] 验证登录协议、生命周期、选服、断线重连及视图意图守卫。
 
 ## Task 2: 匹配
 
-- [ ] 写最短搜索/权威回包/失败退出/资料交错/资源移交测试并观察 RED。
-- [ ] MatchingModel/MatchingController/MatchingComposition，Procedure 与 Page 去业务回调。
-- [ ] 验证匹配资源、资料、UI、开战与退出生命周期。
+- [x] 写最短搜索/权威回包/失败退出/资料交错/资源移交测试并观察 RED。
+- [x] MatchingModel/MatchingController/MatchingComposition，Procedure 与 Page 去业务回调。
+- [x] 验证匹配资源、资料、UI、开战与退出生命周期。
 
 ## Task 3: 工程规范与交付
 
-- [ ] 工程规范增加所有权、依赖、生命周期、迁移范例和最小验证入口；新增架构守卫。
-- [ ] Cocos 资源刷新、类型诊断、定向测试、全量测试快照、独立审查，记录真实限制。
+- [x] 工程规范增加所有权、依赖、生命周期、迁移范例和最小验证入口；新增架构守卫。
+- [x] Cocos 资源刷新、类型诊断、定向测试、全量测试快照、独立审查，记录真实限制。
 
 用户明确要求沿用同一设计并执行；沿用当前分支，不另建工作区，不再次审批已确定的架构。
+
+后续业务迁移范围见 `docs/工程架构迁移清单.md`。本计划完成状态仅指登录、匹配两条链路；全量测试与类型诊断的限制以验证记录为准。

@@ -11,6 +11,15 @@ import {
     MAP_MARKER_BADGE_TEXT_Y,
     MAP_MARKER_BADGE_WIDTH,
 } from '../assets/script/app/common/MapMarkerBadge';
+import { territoryLevelBubbleText } from '../assets/script/app/territory/model/TerritoryLevelBubble';
+import type { TerritoryCampaignStage } from '../assets/script/app/territory/model/TerritoryCampaignConfig';
+import type { TerritorySiteType } from '../assets/script/app/territory/model/TerritoryMapConfig';
+
+/** 造一个"只需要 `type`"的站点（`territoryLevelBubbleText` 的入参就是这么窄）。 */
+const siteOf = (type: TerritorySiteType) => ({ type });
+/** 造一个只用得上 `chapterId` / `stage` 的关卡。 */
+const stageOf = (chapterId: number, stage: number) =>
+    ({ chapterId, stage } as unknown as TerritoryCampaignStage);
 
 /**
  * 关卡编号气泡（`1-1`）的文字样式，2026-10-28 按美术效果图对齐。
@@ -27,6 +36,9 @@ const stationView = (): string =>
     readFileSync('assets/script/app/territory/view/TerritoryStationView.ts', 'utf8');
 const mapView = (): string =>
     readFileSync('assets/script/app/territory/view/TerritoryMapView.ts', 'utf8');
+/** 气泡文案的唯一真源（2026-11-02 从 `TerritoryMapView` 搬进 model）。 */
+const levelBubble = (): string =>
+    readFileSync('assets/script/app/territory/model/TerritoryLevelBubble.ts', 'utf8');
 
 /**
  * 从源码里取 `export const X = '…';` 的字面量。
@@ -60,11 +72,16 @@ test('加粗到顶后靠描边补厚度：outlineWidth 必须由代码覆盖', (
 test('字距走 spacingX，不许靠字符串里的空格凑', () => {
     assert.ok(MAP_MARKER_BADGE_SPACING_X < 0,
         'Arial 数字侧边距偏大，`1-1` 会显得松，要用负字距收紧');
-    const source = mapView();
+    // 2026-11-02：文案拼法搬进 `model/TerritoryLevelBubble`（点击提示要「名字同气泡文案」，
+    // 两处必须同源）。判据跟着搬，但口径不变：连字符两侧不许有空格。
+    const source = levelBubble();
     assert.ok(source.includes('`${stage.chapterId}-${stage.stage}`'),
         '美术稿是 `1-1`，连字符两侧不留空格');
     assert.ok(!source.includes('`${stage.chapterId} - ${stage.stage}`'),
         '⛔ 空格宽度跟字号绑定，塞进字符串后换字号 / 换字体就会漂 —— 间距只能交给 spacingX');
+    // 反向钉住"视图不许再自己拼一份"：拼法只许有一个出处。
+    assert.ok(!mapView().includes('${stage.chapterId}-${stage.stage}'),
+        'MapView 又自己拼了一遍编号 ⇒ 与提示文案各改一半就会对不上');
 });
 
 test('renderLevelBubble 必须把字重 / 字距 / 行高 / 抬升真的写进 Label', () => {
@@ -113,17 +130,22 @@ test('初始点位必须挂「章节」气泡，且与站点气泡同一套底�
 });
 
 test('异步据点的气泡文案必须是 PVP，不许再显示章节-关卡编号', () => {
-    const source = mapView();
+    const source = levelBubble();
     assert.equal(textConst(source, 'TERRITORY_ASYNC_PVP_BUBBLE_TEXT'), 'PVP');
     // 判据必须在**编号之前**：异步据点也绑了 `stage`（configId 2000x），
     // 先算编号的话只有"没绑关卡"的异步据点才会变 —— 看起来像没改。
-    const at = source.indexOf('levelBubble: isAsyncPvp');
+    const at = source.indexOf('site?.type === TERRITORY_SITE_TYPE.asyncPvp');
     assert.ok(at > 0, '异步据点的判定要排在章节-关卡的模板串之前');
     assert.ok(at < source.indexOf('`${stage.chapterId}-${stage.stage}`'),
         '一旦把 `isAsyncPvp` 挪到编号后面，线上还是显示 `1-4`');
-    // 反向：`isAsyncPvp` 那一支不许再拼编号。
-    const branch = source.slice(at, source.indexOf('? TERRITORY_ASYNC_PVP_BUBBLE_TEXT', at));
+    // 反向：`asyncPvp` 那一支不许再拼编号。
+    const branch = source.slice(at, source.indexOf("return TERRITORY_ASYNC_PVP_BUBBLE_TEXT", at));
     assert.doesNotMatch(branch, /chapterId/);
+    // 行为口径（沙箱里拼源码之后，真函数也跑一遍 —— 上面几条只是防"有人在别处又拼一份"）。
+    assert.equal(territoryLevelBubbleText(siteOf('asyncPvp'), stageOf(2, 4)), 'PVP');
+    assert.equal(territoryLevelBubbleText(siteOf('stage'), stageOf(2, 4)), '2-4');
+    assert.equal(territoryLevelBubbleText(siteOf('fixedResource'), stageOf(2, 4)), '2-4');
+    assert.equal(territoryLevelBubbleText(siteOf('stage'), null), undefined);
 });
 
 test('「章节」两字必须装得进气泡（不触发 SHRINK 缩字）', () => {

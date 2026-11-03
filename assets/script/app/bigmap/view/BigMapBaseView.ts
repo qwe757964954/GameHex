@@ -1,13 +1,13 @@
-import { _decorator, Component, EventMouse, EventTouch, Graphics, instantiate, isValid, Label, Node, Sprite, UITransform, Vec2, Vec3 } from 'cc';
+import { _decorator, Component, EventMouse, EventTouch, Graphics, instantiate, Label, Node, Sprite, UITransform, Vec2, Vec3 } from 'cc';
 import type { IBigMapArt } from '../application/BigMapArtLoader';
-import type { IBigMapViewState, IBigMapPlotCellView } from '../application/BigMapViewState';
+import type { IBigMapPlotCellView, IBigMapViewState } from '../application/BigMapViewState';
 import {
     buildBigMapBaseLayout, clampBigMapBaseCamera, pickBigMapBasePlot, zoomBigMapBaseCamera,
     type IBigMapBaseCamera, type IBigMapBaseLayout,
 } from './BigMapBasePresentation';
+import { BIGMAP_PRESENTATION_TEXT } from './BigMapPresentationText';
 import { BIGMAP_SKIN_COLORS, fitBigMapSprite, requireBigMapTransform } from './BigMapSkin';
 import { BIGMAP_COLORS } from './BigMapTheme';
-import { BIGMAP_PRESENTATION_TEXT } from './BigMapPresentationText';
 
 import { BigMapBasePlot } from './BigMapBasePlot';
 
@@ -53,6 +53,15 @@ export class BigMapBaseView extends Component {
     private pendingBuildingId = 0;
 
 
+    protected onLoad(): void {
+        const viewport = this.viewport.node;
+        viewport.on(Node.EventType.TOUCH_START, this.onTouchStart, this);
+        viewport.on(Node.EventType.TOUCH_MOVE, this.onTouchMove, this);
+        viewport.on(Node.EventType.TOUCH_END, this.onTouchEnd, this);
+        viewport.on(Node.EventType.TOUCH_CANCEL, this.onTouchCancel, this);
+        viewport.on(Node.EventType.MOUSE_WHEEL, this.onWheel, this);
+    }
+
     build(data: IBigMapViewState, width: number, height: number): void {
         this.data = data;
         this.currentWidth = width;
@@ -74,13 +83,6 @@ export class BigMapBaseView extends Component {
                 status: bindings.status, resource: bindings.resource,
             });
         }
-        const viewport = this.viewport.node;
-        viewport.targetOff(this);
-        viewport.on(Node.EventType.TOUCH_START, this.onTouchStart, this);
-        viewport.on(Node.EventType.TOUCH_MOVE, this.onTouchMove, this);
-        viewport.on(Node.EventType.TOUCH_END, this.onTouchEnd, this);
-        viewport.on(Node.EventType.TOUCH_CANCEL, this.onTouchCancel, this);
-        viewport.on(Node.EventType.MOUSE_WHEEL, this.onWheel, this);
         this.resize(width, height);
         this.camera = { zoom: Math.min(1, width / 600), x: 0, y: 0 };
         const main = this.cells.find((cell) => cell.buildingId === data.mainBuildingId);
@@ -314,9 +316,6 @@ export class BigMapBaseView extends Component {
     protected onDisable(): void { this.onTouchCancel(); }
 
     protected onDestroy(): void {
-        // viewport 是本节点的子节点，引擎销毁顺序是「子节点 → 自身组件」，走到这里它已销毁，
-        // `viewport.node` 已被 `_destruct` 置 null；`if (this.viewport)` 挡不住已销毁对象，必须用 isValid。
-        if (isValid(this.viewport)) this.viewport.node.targetOff(this);
         this.data = null;
         this.art = null;
         this.slots.clear();

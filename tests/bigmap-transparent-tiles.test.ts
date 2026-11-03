@@ -6,6 +6,7 @@ import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import * as geometry from '../assets/script/app/bigmap/view/BigMapWorldLayout';
+import * as territoryColor from '../assets/script/app/bigmap/model/BigMapTerritoryColor';
 
 class Color {
     static WHITE = new Color(255, 255, 255);
@@ -59,7 +60,7 @@ function fixture(ground: unknown = { name: 'opaque-ground' }) {
     }, instantiate: () => new Node(), _decorator: { ccclass: () => (value: unknown) => value, property: () => () => {} } };
     const theme = load('assets/script/app/bigmap/view/BigMapTheme.ts', { cc });
     const { BigMapWorldView } = load('assets/script/app/bigmap/view/BigMapWorldView.ts', {
-        cc, '../../../framework/event/EventMgr': { EventMgr }, '../application/BigMapEvents': mvcEvents, '../model/BigMapWorld': {}, '../model/BigMapTerritoryColor': {},
+        cc, '../../../framework/event/EventMgr': { EventMgr }, '../application/BigMapEvents': mvcEvents, '../model/BigMapWorld': {}, '../model/BigMapTerritoryColor': territoryColor,
         './BigMapWorldLayout': geometry, './BigMapTheme': theme, './BigMapWorldMarker': {},
         './BigMapWorldTemplates': {}, './BigMapBackgroundLayout': {},
     });
@@ -76,6 +77,86 @@ function fixture(ground: unknown = { name: 'opaque-ground' }) {
     });
     return { view, terrain, marker, theme };
 }
+
+function playerMarkerFixture() {
+    const { view } = fixture();
+    const playerBase = { baseId: 'player', hexId: 5050, isPlayer: true };
+    Object.assign(view.data, {
+        playerBaseHexId: 5050, playerCampId: 101, territories: [], monsters: new Map(),
+        cities: new Map([
+            [101, { cityId: 101, hexId: 5050, level: 3, name: '城池甲', state: 'open', territoryOwner: 'neutral' }],
+            [102, { cityId: 102, hexId: 5051, level: 4, name: '城池乙', state: 'open', territoryOwner: 'neutral' }],
+        ]),
+    });
+    Object.assign(view.data.world, { monsters: [], playerBase, bases: [playerBase,
+        { baseId: 'npc', hexId: 5052, isPlayer: false, name: '其他基地' }] });
+    Object.assign(view.art, { home: { name: 'home' }, city: { name: 'city' }, camps: new Map(),
+        plates: new Map([['self', { name: 'self' }], ['city', { name: 'city-plate' }]]) });
+    view.playerPortrait = { name: 'portrait' };
+    view.paintTerritory = () => {};
+    view.addMarker = (kind: string, id: number | string, hexId: number) => {
+        const point = view.layout.points.get(hexId);
+        view.markers.push({ kind, id, hexId, icon: {},
+            node: { active: true, position: point, destroyed: false,
+                destroy() { this.destroyed = true; }, setSiblingIndex() {} },
+            view: { hitArea: { height: 200 }, portrait: null,
+                setPortrait(frame: unknown) { this.portrait = frame; } },
+        });
+    };
+    view.applyMarker = (marker: { appearance?: unknown }, appearance: unknown) => { marker.appearance = appearance; };
+    return view;
+}
+
+test('玩家基地与城池同格时只有一个标记，显示主城与头像且保留城池查询', () => {
+    const view = playerMarkerFixture();
+    view.refresh();
+    const overlapping = view.markers.filter((marker: { hexId: number }) => marker.hexId === 5050);
+    assert.equal(overlapping.length, 1);
+    const marker = overlapping[0];
+    assert.equal(marker.kind, 'city');
+    assert.equal(marker.id, 101);
+    assert.equal(marker.appearance.frame, view.art.home);
+    assert.equal(marker.appearance.name, '主城');
+    assert.equal(marker.appearance.level, '');
+    assert.equal(marker.appearance.plate, view.art.plates.get('self'));
+    assert.equal(marker.view.portrait, view.playerPortrait);
+    assert.ok(view.markers.some((entry: { id: string }) => entry.id === 'npc'));
+    const received: number[][] = [];
+    const owner = {};
+    EventMgr.instance.on(mvcEvents.BigMapUiEvent.Intent, (event: mvcEvents.IBigMapIntentEvent) => {
+        if (event.intent.kind === 'visibleCamps') received.push(Array.from(event.intent.campIds));
+    }, owner);
+    try {
+        view.isValid = true;
+        view.node = { activeInHierarchy: true };
+        view.reportVisibleCamps();
+        assert.ok(received[0].includes(101));
+    } finally { EventMgr.instance.offTarget(owner); }
+});
+
+test('基地位置回包后重建唯一主城，原位置恢复城池；无同格城池时显示独立基地', () => {
+    const view = playerMarkerFixture();
+    view.refresh();
+    const oldMarkers = [...view.markers];
+    view.data = { ...view.data, playerBaseHexId: 5051, playerCampId: 102 };
+    view.refresh();
+    assert.ok(oldMarkers.every((marker) => marker.node.destroyed));
+    assert.equal(view.markers.filter((marker: { hexId: number }) => marker.hexId === 5051).length, 1);
+    const previousCity = view.markers.find((marker: { id: number }) => marker.id === 101);
+    assert.equal(previousCity.appearance.name, '城池甲');
+    assert.equal(previousCity.appearance.frame, view.art.city);
+    assert.equal(previousCity.view.portrait, null);
+    const home = view.markers.find((marker: { id: number }) => marker.id === 102);
+    assert.equal(home.appearance.name, '主城');
+    assert.equal(home.view.portrait, view.playerPortrait);
+    view.data = { ...view.data, playerBaseHexId: 5053, playerCampId: 0 };
+    view.refresh();
+    const standalone = view.markers.filter((marker: { hexId: number }) => marker.hexId === 5053);
+    assert.equal(standalone.length, 1);
+    assert.equal(standalone[0].kind, 'base');
+    assert.equal(standalone[0].appearance.name, '主城');
+    assert.equal(standalone[0].view.portrait, view.playerPortrait);
+});
 
 test('无缝背景上使用透明色格和淡格线，不再铺不透明沙地 Sprite', () => {
     const { view, terrain } = fixture();

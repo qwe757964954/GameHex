@@ -42,7 +42,6 @@ function stubHexView(load: (name: string) => any, cc: any, bar: () => any): any 
     view.groundGlow = { ...sprite(), color: { r: 255, g: 255, b: 255, a: 180 }, customMaterial: null };
     view.buildingLayer = bar().node;
     view.iconLabel = { node: bar().node, string: '', enabled: true, color: null };
-    view.outlineGraphics = new cc.Graphics();
     view.healthBar = bar();
     view.cooldownBar = bar();
     return view;

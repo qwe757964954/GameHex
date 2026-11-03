@@ -29,14 +29,14 @@ export function loadBigMapConfig(offlineMonsters = false): IBigMapConfig {
 }
 
 /**
- * 读取一份大地图布局（默认 `world_01`，即**线上真正在用的那份**）。
+ * 读取一份大地图布局（默认历史 `world_01`，供旧版 40×40 回归；正式世界已采用 `bigMap`）。
  *
  * 走的是与运行时同一条解析入口 `parseBigMapLayout`，所以「策划把布局改坏了」会在单测里当场炸。
  * 需要垫图布局数据（势力范围 `rangeHex`、邻接 `adjacentCityIds`）的用例都用这个，
  * 不要手搓 —— 手搓的数据永远比盘上的干净，测不出真问题。
  *
  * @param name `bigmap-maps/` 下的文件名（不带 `.json`）。`dadi_tuchugao` 是 100×100 的设计稿，
- *             与 40×40 的线上配置尺寸不同，只能做**纯布局层**断言，不能拿去 `buildBigMapWorldFromLayout`。
+ *             与旧版 40×40 配表尺寸不同；构建世界前需采用布局尺寸，正式入口已做此装配。
  */
 export function loadBigMapLayout(name = 'world_01'): IBigMapLayout {
     const url = new URL(`../../assets/resources/config/bigmap-maps/${name}.json`, import.meta.url);

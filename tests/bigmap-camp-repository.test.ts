@@ -257,12 +257,12 @@ test('联机表 81 座据点全部可用：军团层不会被 available 判成�
 });
 
 test('真实配置 + 真实布局下，点城池必须真的发出详情请求', async () => {
-    // 线上布局档是 `world_01`（25 座、cityId 101~401），`bigMapCamp` 是 81 座（campId 101~801）——
-    // 另一份 `bigMap.json` / `dadi_tuchugao.json` 用的是 cityId 2001~2081，与 campId **零交集**。
-    // 装配层（`completeBigMapCampLayout`）要把世界重建成 campId 口径，否则 `world.cities.has(campId)`
-    // 恒假 ⇒ `refreshCampDetail` 静默 return，一个 `CmdSlgCampInfoReqMsg` 都不发（2026-10-30 反馈）。
-    const config = withBigMapCampCities(loadBigMapConfig());
-    const layout = completeBigMapCampLayout(config, loadBigMapLayout());
+    const source = loadBigMapLayout('bigMap');
+    const baseConfig = loadBigMapConfig();
+    const config = withBigMapCampCities({ ...baseConfig,
+        world: { ...baseConfig.world, rows: source.rows, cols: source.columns },
+    });
+    const layout = completeBigMapCampLayout(config, source);
     const called: string[] = [];
     const repository = new BigMapCampRepository({
         fetchSimple: async (ids) => { called.push(`simple:${ids.join(',')}`); return { infos: [] }; },

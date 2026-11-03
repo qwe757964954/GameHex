@@ -20,7 +20,7 @@ export interface LineupDraftSnapshot {
 export class LineupDraftStore {
     private readonly presets: ZCDeckCard[][];
     private selected = 0;
-    private changed = false;
+    private readonly changed = new Set<number>();
 
     /**
      * @param initial       兜底卡组：没给 `presets` 时，全部方案都用它做种子
@@ -66,7 +66,7 @@ export class LineupDraftStore {
             cards,
             deployedIds: new Set(cards.map((card) => card.id)),
             selectedPreset: this.selected,
-            dirty: this.changed,
+            dirty: this.changed.size > 0,
         };
     }
 
@@ -78,7 +78,7 @@ export class LineupDraftStore {
     reset(): LineupDraftSnapshot {
         if (this.current().length > 0) {
             this.presets[this.selected] = [];
-            this.changed = true;
+            this.changed.add(this.selected);
         }
         return this.snapshot();
     }
@@ -89,7 +89,7 @@ export class LineupDraftStore {
         const target = Math.max(0, Math.min(this.maxSlots - 1, Math.floor(slot)));
         next.splice(Math.min(target, next.length), 0, card);
         this.presets[this.selected] = next.slice(0, this.maxSlots);
-        this.changed = true;
+        this.changed.add(this.selected);
         return this.snapshot();
     }
 
@@ -98,14 +98,14 @@ export class LineupDraftStore {
         const next = current.filter((card) => card.id !== cardId);
         if (next.length !== current.length) {
             this.presets[this.selected] = next;
-            this.changed = true;
+            this.changed.add(this.selected);
         }
         return this.snapshot();
     }
 
     /** 标记当前草稿已保存，并返回稳定的上阵 id 顺序。 */
     commit(): readonly string[] {
-        this.changed = false;
+        this.changed.delete(this.selected);
         return this.current().map((card) => card.id);
     }
 

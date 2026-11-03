@@ -14,7 +14,8 @@ test('静止帧不重复写位置、血条和染色，受伤与死亡仍即时�
     view.rootTransform = { setContentSize() {} };
     view.visualRoot = new FakeNode();
     view.sprite = { enabled: true, spriteFrame: null };
-    view.fallback = { node: new FakeNode(), clear() {}, circle() {}, fill() {} };
+    view.fallback = { node: new FakeNode(), enabled: false, color: null };
+    view.fallbackTransform = { setContentSize: (width: number, height: number) => { view.fallback.node.size = { width, height }; } };
     view.fallbackLabel = { node: new FakeNode(), enabled: true, string: '' };
     view.healthBar = bar();
     // 血条阵营不再走 `color` 染色，改成换填充图 —— 这里统计的是 `spriteFrame` 的写入次数。
@@ -93,7 +94,8 @@ test('对象池复用同一美术或切到无美术时，重置受伤窗口、�
     view.rootTransform = { setContentSize() {} };
     view.visualRoot = new FakeNode();
     view.sprite = { enabled: true, spriteFrame: null };
-    view.fallback = { node: new FakeNode(), clear() {}, circle() {}, fill() {} };
+    view.fallback = { node: new FakeNode(), enabled: false, color: null };
+    view.fallbackTransform = { setContentSize: (width: number, height: number) => { view.fallback.node.size = { width, height }; } };
     view.fallbackLabel = { node: new FakeNode(), enabled: true, string: '' };
     view.healthBar = bar();
     const visualSprite = { color: null as unknown };
@@ -130,7 +132,8 @@ test('Spine 尚未就绪时下一帧重试 idle，保持脚点和画布缩放', 
     view.rootTransform = { setContentSize() {} };
     view.visualRoot = new FakeNode();
     view.sprite = { enabled: true, spriteFrame: null };
-    view.fallback = { node: new FakeNode(), clear() {}, circle() {}, fill() {} };
+    view.fallback = { node: new FakeNode(), enabled: false, color: null };
+    view.fallbackTransform = { setContentSize: (width: number, height: number) => { view.fallback.node.size = { width, height }; } };
     view.fallbackLabel = { node: new FakeNode(), enabled: true, string: '' };
     view.healthBar = bar();
     let attempts = 0;
@@ -156,4 +159,43 @@ test('Spine 尚未就绪时下一帧重试 idle，保持脚点和画布缩放', 
     assert.equal(attempts, 2);
     view.render(presentation);
     assert.equal(attempts, 2);
+});
+
+
+test('white 兜底 Sprite 随兵种尺寸和阵营更新，有美术时隐藏，复用后恢复', () => {
+    const { load, FakeNode } = loadViews();
+    const { ZCUnitView } = load('./ZCUnitView');
+    const view = new ZCUnitView();
+    view.sprite = { enabled: true, spriteFrame: {} };
+    const node = new FakeNode();
+    view.fallback = { node, enabled: false, color: null };
+    view.fallbackTransform = { setContentSize: (width: number, height: number) => { view.fallback.node.size = { width, height }; } };
+    view.fallbackLabel = { node: new FakeNode(), enabled: false, string: '' };
+    const unit = { owner: 'player' };
+    const definition = { hero: false, attackRange: 20 };
+    view.renderFallback(unit, definition);
+    assert.equal(view.fallback.enabled, true);
+    assert.deepEqual(node.size, { width: 18, height: 18 });
+    assert.equal(node.position.y, 9);
+    assert.equal(view.fallbackLabel.string, '兵');
+    const playerColor = view.fallback.color;
+    unit.owner = 'enemy';
+    definition.hero = true;
+    view.renderFallback(unit, definition);
+    assert.deepEqual(node.size, { width: 26, height: 26 });
+    assert.equal(node.position.y, 13);
+    assert.equal(view.fallbackLabel.string, '将');
+    assert.notDeepEqual(view.fallback.color, playerColor);
+    view.visualNode = new FakeNode();
+    view.renderFallback(unit, definition);
+    assert.equal(view.fallback.enabled, false);
+    assert.equal(view.fallbackLabel.enabled, false);
+    view.visualNode = null;
+    definition.hero = false;
+    definition.attackRange = 120;
+    view.renderFallback(unit, definition);
+    assert.equal(view.fallback.enabled, true);
+    assert.equal(view.fallbackLabel.enabled, true);
+    assert.deepEqual(node.size, { width: 18, height: 18 });
+    assert.equal(view.fallbackLabel.string, '弓');
 });

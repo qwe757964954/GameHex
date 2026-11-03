@@ -84,3 +84,27 @@ test('序列帧目录加载失败时返回空数组并记录目录', async () =>
     assert.equal(warnings[0][0], '[ZCGameLoader] 测试序列帧加载失败：image/effects/test');
     assert.equal(warnings[0][1], failure);
 });
+
+for (const fails of [false, true]) {
+    test(`序列帧在途取消${fails ? '失败' : '成功'}均拒绝且不报缺图`, async () => {
+        const warnings: unknown[][] = [];
+        let finish!: () => void;
+        const pending = new Promise<void>(resolve => { finish = resolve; });
+        const scope = { disposed: false };
+        const loader = createLoader({ loadDir: async () => {
+            await pending;
+            if (fails) throw new Error('late failure');
+            return [{ name: 'late' }];
+        } }, warnings);
+        const result = loadSortedSpriteFrames(loader)('frames', '测试', scope);
+        scope.disposed = true; finish();
+        await assert.rejects(result, /取消/);
+        assert.equal(warnings.length, 0);
+    });
+}
+test('已释放作用域不派发可选序列帧加载', async () => {
+    let loads = 0;
+    const loader = createLoader({ loadDir: async () => { loads++; return []; } });
+    await assert.rejects(loadSortedSpriteFrames(loader)('frames', '测试', { disposed: true }), /取消/);
+    assert.equal(loads, 0);
+});

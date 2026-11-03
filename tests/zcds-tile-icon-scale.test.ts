@@ -40,7 +40,6 @@ function stubHexView(load: (name: string) => any, cc: any, bar: () => any): any 
         'goldResourceFrame', 'mineResourceFrame', 'chestResourceFrame']) view[key] = { name: key };
     view.buildingLayer = bar().node;
     view.iconLabel = { node: bar().node, string: '', enabled: true, color: null };
-    view.outlineGraphics = new cc.Graphics();
     view.healthBar = bar();
     view.cooldownBar = bar();
     // 把金币 / 数字的缩放还原成 prefab 值：桩默认给 1，不还原的话「保持不变」这条判据恒真、

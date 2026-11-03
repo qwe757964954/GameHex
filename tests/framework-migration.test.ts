@@ -82,10 +82,10 @@ test('旧 framework/asset 门面已移除，RefUtil 直接使用 remoteRef bundl
 test('对局加载已从 Component 下沉到应用服务并只依赖端口', () => {
     const component = readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8');
     const loader = readFileSync('assets/script/app/zcds/application/ZCGameLoader.ts', 'utf8');
-    const procedure = readFileSync('assets/script/app/procedure/ProcedureGame.ts', 'utf8');
+    const procedure = readFileSync('assets/script/app/bootstrap/battle/BattleComposition.ts', 'utf8');
 
     assert.doesNotMatch(component, /static async prepareResources/);
-    assert.match(procedure, /new ZCGameLoader\(this\.assets, this\.configs, MAP_DIRECTORY\)/);
+    assert.match(procedure, /new ZCGameLoader\(resources, MAP_DIRECTORY/);
     assert.doesNotMatch(loader, /framework\//);
     assert.doesNotMatch(loader, /platform\//);
 });

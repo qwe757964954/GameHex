@@ -75,6 +75,22 @@ test('意图派发中关闭控制器，当前派发中的旧意图监听也立�
     } finally { h.dispose(); EventMgr.instance.offTarget(closer); }
 });
 
+test('点击联机城池同时查询详情与排行榜，不再跳过榜单请求', () => {
+    const repository = new BigMapCampRepository({ fetchSimple: async () => null, fetchDetail: async () => null,
+        fetchRoles: async () => null, requestMove: async () => null });
+    const h = create(repository);
+    const city = [...h.model.world.cities.values()][0];
+    const details: number[] = [];
+    const ranks: number[] = [];
+    h.model.refreshCampDetail = async (id) => { details.push(id); };
+    h.model.refreshCityRank = async (id) => { ranks.push(id); };
+    try {
+        h.intent({ kind: 'worldTap', hexId: city.anchorHexId });
+        assert.deepEqual(details, [city.cityId]);
+        assert.deepEqual(ranks, [city.cityId]);
+    } finally { h.dispose(); }
+});
+
 test('角色网络广播经 Controller 归一化、提交 Model 后以 Render 事件刷新详情，关闭后不再更新', async () => {
     let position = 0;
     const repository = new BigMapCampRepository({

@@ -1,3 +1,4 @@
+import type { IZCBattleRenderModel } from '../application/ZCBattleRuntimeContract';
 import { _decorator, Button, Color, Component, EventMouse, EventTouch, Label, Layout, Node, ScrollView, Sprite, SpriteFrame, UITransform, Vec3 } from 'cc';
 import { tween, type Tween } from 'cc';
 import { Widget } from 'cc';
@@ -11,7 +12,7 @@ import type { ZCOwner } from '../model/ZCMapConfig';
 // 迟早有一天两边对不上，而"哪边是对的"从表现上看不出来。
 import { ZC_MAP_ZOOM_MAX_DEFAULT, ZC_MAP_ZOOM_MIN_DEFAULT } from '../model/ZCMapConfig';
 import { getPlayerDeck } from '../model/ZCCombatCatalog';
-import { ZCGameModel, ZC_HEX_CONFIG } from '../model/ZCGameModel';
+import { ZC_HEX_CONFIG } from '../model/ZCGameModel';
 import { mapToViewX, mapToViewY, ZC_HEX_VIEW_WIDTH, ZC_HEX_VIEW_HEIGHT, ZC_MAP_PRESENTATION_SCALE } from './ZCGameViewUtil';
 import { ZCGameUiEvent } from './ZCGameHudEvents';
 import { EventMgr } from '../../../framework/event/EventMgr';
@@ -452,7 +453,7 @@ private fillPlayerRow(node: Node, index: number): void {
         });
     }
 
-    render(model: ZCGameModel): void {
+    render(model: IZCBattleRenderModel): void {
         const state = model.snapshot;
         const defence = model.defenceWaveProgress;
         // 守城（塔防）局：顶部信息带（计时 + 四格）整体收起 —— 蓝湖「BOSS」稿那一帧只有左上角的首领条，

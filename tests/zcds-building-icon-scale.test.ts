@@ -40,7 +40,6 @@ function stubHexView(load: (name: string) => any, cc: any, bar: () => any): any 
         'goldResourceFrame', 'mineResourceFrame', 'chestResourceFrame']) view[key] = { name: key };
     view.buildingLayer = bar().node;
     view.iconLabel = { node: bar().node, string: '', enabled: true, color: null };
-    view.outlineGraphics = new cc.Graphics();
     view.healthBar = bar();
     view.cooldownBar = bar();
     return view;

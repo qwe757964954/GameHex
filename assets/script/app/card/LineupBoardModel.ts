@@ -1,0 +1,55 @@
+import type { LineupBoardData } from './CardRepository';
+import { LineupDraftStore } from './LineupDraftStore';
+import { buildPresetDecks } from './LineupPresets';
+import type { LineupBoardPresentation } from './CardPresentations';
+import { CARD_LINEUP_TEXTS } from './CardLineupTexts';
+
+export interface FormationSubmission {
+    readonly formationId: number;
+    readonly heroIds: readonly number[];
+    readonly revision: number;
+}
+export class LineupBoardModel {
+    private draft: LineupDraftStore | null = null;
+    private data: LineupBoardData | null = null;
+    private revision = 0;
+    private saving = false;
+    private saveText: string = CARD_LINEUP_TEXTS.boardSave;
+    constructor(private readonly presetCount: number, private readonly defaultPreset: number) {}
+    load(data: LineupBoardData): void {
+        this.data = data;
+        const selected = data.formations?.find(entry => entry.selected);
+        this.draft = new LineupDraftStore(data.deck, 8, this.presetCount,
+            selected ? selected.formationId - 1 : this.defaultPreset, buildPresetDecks(data, this.presetCount));
+    }
+    get snapshot(): LineupBoardPresentation | null {
+        if (!this.draft || !this.data) return null;
+        return { ...this.data, ...this.draft.snapshot(), saving: this.saving, canSave: !this.saving, saveText: this.saveText };
+    }
+    selectPreset(index: number): void { if (!this.draft) return; this.draft.selectPreset(index); this.edited(); }
+    reset(): void { if (!this.draft) return; this.draft.reset(); this.edited(); }
+    toggle(cardId: string): void {
+        if (!this.draft || !this.data) return;
+        const card = this.data.pool.find(entry => entry.id === cardId) ?? this.data.deck.find(entry => entry.id === cardId);
+        if (!card) return;
+        if (this.draft.snapshot().deployedIds.has(cardId)) this.draft.remove(cardId);
+        else this.draft.put(card);
+        this.edited();
+    }
+    private edited(): void { this.revision++; if (!this.saving) this.saveText = CARD_LINEUP_TEXTS.boardSave; }
+    beginSave(): FormationSubmission | null {
+        if (!this.draft || this.saving) return null;
+        const heroIds = this.draft.snapshot().cards.map(card => Number(card.id));
+        if (heroIds.some(id => !Number.isSafeInteger(id) || id <= 0)) return null;
+        this.saving = true; this.saveText = CARD_LINEUP_TEXTS.boardSaving;
+        return { formationId: this.draft.selectedFormationId, heroIds, revision: this.revision };
+    }
+    finishSave(submission: FormationSubmission, result: 'success' | 'offline' | 'failed'): boolean {
+        this.saving = false;
+        const unchanged = submission.revision === this.revision;
+        if (result === 'success' && unchanged) this.draft?.commit();
+        this.saveText = result === 'success' ? (unchanged ? CARD_LINEUP_TEXTS.boardSaved : CARD_LINEUP_TEXTS.boardSave)
+            : result === 'offline' ? CARD_LINEUP_TEXTS.boardSaveOffline : CARD_LINEUP_TEXTS.boardSaveFailed;
+        return unchanged;
+    }
+}

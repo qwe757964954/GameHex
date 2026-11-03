@@ -20,6 +20,8 @@
 | 受击特效总时长锁 0.15s（加速、无定格） | `ZCEffectPool.HIT_FX_TARGET_SECONDS` / `state.speed`、`ZCGameModel.HIT_FX_SECONDS` | `tests/zcds-hit-fx.test.ts` |
 | 出生特效锁总时长 1.25s（speed 由 clip 反推） | `ZCEffectPool.SPAWN_FX_TARGET_SECONDS` / `state.speed` | `tests/zcds-spawn-fx.test.ts` |
 | 传说卡出场横幅（金卡 tier 4） | `ZCGameLegendBanner.prefab` / `legendRoleProgress`、`legendRoleEase` | `tests/zcds-legend-banner.test.ts` |
+| **战斗技能特效：锚点 / 层级 / 飞行段 / 朝向**（2026-11-02） | `ZCCombatEffectPlacement.ts` / `ZCCombatEffectFlight.ts`（均按 prefab 路径配）/ `ZCCombatEffectView.render` | `tests/zcds-combat-effect-placement.test.ts`、`tests/zcds-combat-effect-flight.test.ts` |
+| **冲刺（运动霸「拳击冲撞」）**（2026-11-02 接线） | `ZCUnitSystem`（`chargeSpeedScale` → `speedScale` + `unit.charging`）/ `ZCUnitTargeting.chargeSpeedScale` / `ZCUnitView` 动作切换 | `tests/zcds-charge.test.ts` |
 | 「冒险」领地页与台面中心对齐 | `TerritoryPresenter.ts` / `TerritoryMapView.cellCenter`、`applyIconPlacement` | `tests/territory-presenter.test.ts`、`tests/territory-page-split.test.ts`、`tests/territory-cell-center-align.test.ts` |
 | 敌方单位顶点色置灰 | `ZCUnitView.applyVisualTint` | `tests/zcds-unit-view-render.test.ts` |
 | 自选主城（选择基地模式） | `ZCSpawnSelection.defaultHexFor`、`isPlacing` / `borrowSpawnConfirmButton` | `tests/zcds-spawn-base-confirm.test.ts` |
@@ -32,8 +34,12 @@
 | 对局中立资源奖励**格心金币喷发**（12 枚 · ±26° · 翻面）+ 读数在上方 40px（2026-10-26，替换旧「飞向金币栏」） | `model/ZCNeutralBurst.zcNeutralBurstLaunch / zcNeutralBurstParticle / zcNeutralBurstLabelFrame` / `view/ZCNeutralRewardFx`（金币段） / `ZCBattlePresentationQueue.ZC_NEUTRAL_REWARD_TOTAL_SECONDS` | `tests/zcds-neutral-reward-fx.test.ts` |
 | 领地随机资源格「翻开」（**原地碎裂**，2026-10-16 起只剩这一套） | `core/hex/HexFlipPresentation.hexShatterFx` / `TerritoryHexFlip.applyFace`、`applyReveal` | `tests/territory-hex-flip.test.ts` |
 | 领地建筑**生成抖动**（先 Y 后 X，120%）+ **展示滞后到翻转结束** | `core/hex/ShakePresentation` / `TerritoryStationView.playBuildingShake`、`TerritoryMapView.pendingBuildingReveal`、`ITerritoryStationRender.hidden` | `tests/territory-building-shake.test.ts` |
-| 领地「获得银币 / 体力」**格心抛物线喷发（12 颗 · ±26° · 自身上下翻面）** + 读数在其**上方 40px**（row17，2026-10-17 细化） | `model/TerritoryResourceGain.territoryBurstLaunch / territoryBurstParticle` / `view/TerritoryGainBurst` / `TerritoryMapView.playResourceGain`、`ensureBurstRoot` | `tests/territory-resource-gain.test.ts` |
+| 领地**新地块进场**动画（两档：普通生成 / **胜利通过更重**，2026-11-03） | `model/TerritoryHexSpawn.territoryHexSpawnFrame`（`peakScale` 过冲）/ `…Delays` / `TERRITORY_HEX_SPAWN_(VICTORY_)TIMING` / `view/TerritoryHexSpawn.play(…, timing)` / `TerritoryMapView.syncHexSpawn` / `TerritoryModel.victoryClaimCells` | `tests/territory-hex-spawn.test.ts`、`tests/territory-battle-prelude.test.ts` |
+| 领地**资源不足**的数字变红（银币 / 体力各判各的，2026-11-03） | `model/TerritoryCostShortfall.territoryUnlockShortfall` / `TerritoryMapView.stationRenderOf`（`conditionTextColor` · `levelBubbleTextColor`）/ `TerritoryStationView.renderLevelBubble` / `TerritoryModel.buildState`（`wallet`） | `tests/territory-wallet-shortfall.test.ts`、`tests/territory-random-resource-render.test.ts` |
+| 领地「获得银币 / 体力」**格心抛物线喷发（12 颗 · ±26° · 由小变大 + 持续自转）** + 读数在其**上方 40px**（row17；粒子自身动画 2026-11-02 改口径，旧的「上下翻面」已作废） | `model/TerritoryResourceGain.territoryBurstLaunch / territoryBurstParticle`（`scale` / `rotation`） / `view/TerritoryGainBurst` / `TerritoryMapView.playResourceGain`、`ensureBurstRoot` | `tests/territory-resource-gain.test.ts` |
+| **宝箱气泡底图 / 排版**（`frame_04` 竖向水滴，icon 在上、数字在下；2026-11-02 两轮） | `model/TerritoryChestBubble.territoryChestBubbleLayout`（尺寸 / icon / 字号 / 描边） / `TerritoryStationView.renderLevelBubble`、`themeLevelBubbleLabel`、`applyLevelBubbleLayout` / `TerritoryPageAssets`（`chestBubbleFrame`） | `tests/territory-chest-bubble.test.ts` |
 | 领地奖励**图标解析**：`roleProperty` + `item` **两张表**、`item` 图在 `main-pages` 分包 + 随机格**读数合成一条**（2026-10-26） | `ResTypes.resBarCellOfRefId` / `ResTypes.resBarIconSpritePath` / `MainTerritoryMap.ensureRewardIcon`、`refRows` / `TerritoryMapView.playResourceGain` 的 `readout` | `tests/res-types.test.ts`、`tests/territory-resource-gain.test.ts` |
+| **资源栏「扣除」反馈**（数字显红 → 跳一下 → 才扣；2026-11-02） | `main/MainResBarFeedback.resBarSpendFx / resBarSpendColor` / `main/MainResBarSlot.playSpendFeedback` / `common/ResBar.reload`（`spendDeltaOf` 自动检测） | `tests/main-resbar-spend.test.ts`、`tests/main-resbar-feedback.test.ts`、`tests/militia-talent-ui.test.ts` |
 
 ## 对局资源与控制器生命周期（2026-10-30）
 
@@ -53,7 +59,7 @@
 ```text
 mapLayer（= ZCGameHUD.prefab 的 content）
 └─ ZCGameBoard          ← ui/game/ZCGameBoard.prefab（ZCGameLoader 加载 → ZCGame 实例化后挂进来）
-   ├─ MapWater          水面：cc.Graphics，矩形在 initialize 里按地图包围盒画
+   ├─ MapWater          水面：white Sprite，透明色在 prefab 配置，initialize 只按地图包围盒设置位置与尺寸
    ├─ HexLayer          地块实例挂这里
    ├─ OutlineLayer      整盘共享的领地轮廓：一个 cc.Graphics（ZCOutlineLayer 逐边描线）
    ├─ (ZCGameWallLayer) ← 城墙砖层来自独立 prefab，initialize 时插到 OutlineLayer 之后（outlineLayer.getSiblingIndex() + 1）
@@ -297,6 +303,153 @@ mapLayer（= ZCGameHUD.prefab 的 content）
 - 判据：`tests/zcds-ruins-income.test.ts` —— 主城废墟 + 旁边活金矿 ⇒ 主城坐标 0 条产金飘字、
   金币增量**恰好**等于金矿飘出的数值之和；金矿废墟同理；外加 `tickIncome` 的赋值顺序守卫。
 
+### 1.10 战斗技能特效（`ZCCombatEffectView`）：锚点 / 层级 / 飞行段 / 朝向都**按 prefab 路径**配
+
+技能特效（`pvpSkill.effectPrefabPath` 指向的那份 prefab）在 `ZCCombatEffectView` 里逐帧定位。
+四件「画在哪、画在哪层、要不要飞、朝哪边」的事都是**纯表现配置**，一律不进 `ZCSnapshot`（快照只带
+`fromX/fromY/toX/toY/durationSeconds` 这些逻辑事实）：
+
+| 表现项 | 唯一真源 | 认法 | 判据 |
+| :--- | :--- | :--- | :--- |
+| 播放锚点 | `view/ZCCombatEffectPlacement.ts` 的 `ANCHOR_BY_PREFAB_PATH` | 特效 prefab 路径 | `tests/zcds-combat-effect-placement.test.ts` |
+| 图层（地面 / 顶层） | 同上 `zcCombatEffectLayerOf` | **事件类型**（`area` ⇒ ground） | 同上 |
+| 飞行段（位置 + 寿命 + 转角） | `model/ZCCombatEffectFlight.ts` 的 `FLIGHT_BY_PREFAB_PATH` | 特效 prefab 路径 | `tests/zcds-combat-effect-flight.test.ts` |
+| 朝向（**只**转角，不飞） | 同上 `FACING_BY_PREFAB_PATH` | 特效 prefab 路径 | 同上 ⑥ |
+
+**为什么按 prefab 路径认、而不是技能 id**：真正决定「该贴谁身上 / 该不该飞 / 该朝哪边」的是**画出来的是哪张图**。
+同一个 prefab 被两条技能行复用时（30802 坚果重砸 / 30803 亡者护盾共用 `巨力坚果_普攻`）配一次就都对了。
+
+**飞行段与朝向必须分两张表**：飞行段的记录里带着 `speed / min / max`，它同时决定**事件寿命**
+（`zcCombatEffectTravelSeconds` 会把它喂给 `durationSeconds`）。把「只是想转个身」的效果登记进飞行表，
+会顺手改掉它活多久 —— 这就是 `FACING_BY_PREFAB_PATH` 单独存在的唯一理由（`zcCombatEffectFacingOffsetOf`
+里飞行段的偏移**优先**，同一个 prefab 不允许两张表给出两个答案）。
+
+**猎头者普攻（2026-11-02 需求「特效需要匹配射程，改成像子弹一样飞向目标」）**：
+
+| 事实 | 值 |
+| :--- | :--- |
+| 卡 | `pvpCard` 68012 猎头者，`unitSkillId = 30271`，`unitAttackRange = 500` |
+| 技能行 | `pvpSkill` 30271 —— 名字叫「斧盾兵普攻」，**`mode = 'melee'`**，特效 `斧盾兵_反击气刃`（150×61 月牙，单帧） |
+| 改前的两条硬伤 | ① `attackTravelSeconds` 对 melee 返回**固定 0.32s**（与距离无关）⇒「和射程对不上」；② 视图把特效**钉在锚点上播一次** ⇒ 没有飞行过程 |
+| 改后 | 登记飞行段 `speed 420 / min 0.14 / max 0.6 / facingOffsetDegrees 0`：时长 = `距离 / speed`（满射程 150px ⇒ 0.357s），视图沿 `from → to` 插值并转角 |
+
+- 🔴 **朝向 = 让箭头的「正面」沿弹道指着目标**，`facingOffsetDegrees` 只有一个含义：
+  美术的正面画在哪个方向。美术 150×61，**亮白弧顶在右、速度线拖在左** ⇒ 正面就是 `+X` ⇒ 填 **`0`**
+  （转角 = 弹道方向本身）。
+- ⚠️ **别改回 90**。2026-11-02 第一轮曾按「长轴的法线朝目标」登记 `90`，实战截图里箭头变成
+  **侧着飞**（正面朝上、敌人却在右边，见 `tmp/_crescent_shot_4x.png`），用户要求「顺时针再旋转 90°」
+  —— 顺时针 = 负方向，`90 → 0` 正好 90°。判据只有一条：**明亮的弧顶那一头必须冲着目标**。
+- 美术正面若画在 `+Y`（朝上），填 `-90`；一句话记法：**正面朝右填 0，正面朝上填 -90，逆时针为正**。
+  - 转角算式 `zcCombatEffectFacingDegrees(弹道角, flight)` 是纯函数；弹道角**必须用视图坐标**算
+    （`mapToViewX/Y` 的 x / y 缩放比不同，拿逻辑坐标直接 `atan2` 会算歪）。
+  - 只影响转角，不影响位置与时长；同一个 prefab 的所有持有者共用这**一个**值 ——
+    换成竖版美术（长轴本来就竖直）时记得把它调回 0。
+
+- 🔴 **不改表**：`pvpSkill` 走 `RefUtil` 从远端 `refSmallAll` 拉，`assets/remoteRef/*.json` 只是拆分副本，
+  单侧改会被覆盖（`tests/zcds-combat-effect-flight.test.ts` ⑤ 专门守着「30271 仍是 melee」）。
+- 🔴 **`durationSeconds` 是纯表现**：melee 的伤害在 `state.combatEvents.push(event)` **之后立刻**
+  `context.damageUnit(...)` 结算，`durationSeconds` 只决定事件存活多久（`ZCGameModel.advance` 按它剔除）。
+  所以在这里按距离拉长是安全的 —— 但也意味着**它不能拿来调伤害节奏**。
+- 🔴 不在 `FLIGHT_BY_PREFAB_PATH` 里登记的特效逐字不变（22 条近战特效保持原地播）。
+  想登记一条之前先确认：美术是「能朝目标飞的形状」（月牙 / 箭矢 / 飞镖），正面砸地的爆炸类不要登记；
+  以及这张图还被哪几条技能行引用 —— **同一张图的所有持有者会一起开始飞**（30271 另外还挂在
+  饥饿战士 50030、艺术家 50033、怪物猎头者 50014 身上）。
+- 实现细节：视图里飞行分支与 projectile 分支**共用同一套角度算式**，别各写一份；
+  起点仍走 `ZCCombatEffectPlacement` 的锚点（渲染层建节点时的初值），所以第一帧不会闪。
+
+**运动霸普攻 / 能量光束（2026-11-02 需求「技能特效没有朝向目标，现在的朝向是反的」）**：
+
+| 事实 | 值 |
+| :--- | :--- |
+| 卡 | `pvpCard` 68033 运动霸，`unitSkillId = 30713`，`unitAttackRange = 45`，`unitMoveSpeed = 25` |
+| 引用同一张图的行 | 30713「运动霸普攻」（`melee`）+ 30852「能量光束」（`area`）⇒ 换朝向两边一起生效 |
+| 美术 | `消灭学霸_普攻` 228×256、15 帧绿色气刃：**亮白汇聚点在画布左侧**（最亮 15% 质心 x≈25~40，画布中心 114 ⇒ 根节点尺度下约 -37px），刃口向**右**散开 ⇒ 正前方 = `+X`，偏移 **0°** |
+| 改前 | `ZCCombatEffectView` 对 melee / area 一律 `setRotationFromEuler(0,0,0)` ⇒ 美术朝哪边就朝哪边：目标站左边时正好反 180°，站上下时是「横着扫」 |
+| 改后 | 登记 `FACING_BY_PREFAB_PATH[...]= 0`，转角 = 弹道方向（`zcCombatEffectHeadingDegrees`） |
+
+- 只登记**美术本身有明确正前方**的效果。左右镜像对称的（`重骑兵_践踏` 那种横向冲击波）转不转都一样。
+- `from === to` 的原地爆（气浪 / 扇形技 / 多点落点）返回 `null` 不转 —— 没有方向可言。
+  `NaN` 也返回 `null`：`NaN` 流进 `setRotationFromEuler` 会让节点矩阵变 `NaN`，特效静默消失且不报错。
+- ⚠️ 已知取舍：这张图的**汇聚点不在画布中心**（偏左约 37px），所以绕节点中心旋转时「出拳点」会以
+  半径 ~40px 绕着角色转。气刃本身 114×128（视图 px）比近战射程（45×0.3 ≈ 13.5 世界 px）大一圈，
+  所以观感上仍盖得住目标；若要彻底校正，得把 `消灭学霸_普攻.prefab` 里 `offset` 节点的 `_lpos`
+  调到 `(80, 21)`（让汇聚点落到节点原点）—— 那是改美术摆位，未做。对照图：`tmp/sport-attack-facing.png`。
+
+### 1.11 冲刺（运动霸「拳击冲撞」）：**真·撞击**，撞到才算伤害；冲刺＝普攻本身（2026-11-03）
+
+设计案口径：「挥拳冲撞当前目标，近战判定，命中结算 1 次伤害，距离敌人 120px 时开始冲刺，
+冲刺阶段的移动速度 ×4」「开始冲刺时播放**循环的攻击动作**」。
+
+> 🔴 **老实现（2026-10-31 ~ 11-01）是错的，已整体替换**：那时冲刺只是「距敌 `chargeDistance` 内
+> 把移速乘 4」，`move` 分支仍一路 `advanceTowardUnit / advanceUnitMovement` **追着目标走**，
+> 只要进了近战射程就必定结算 ⇒ **结构上不可能 miss**，冲刺也就没有躲的余地。
+> 用户 2026-11-02 原话：「现在是会索敌的」。新语义见下表，各条均由用户逐条拍板。
+
+| 环节 | 唯一真源 | 说明 |
+| :--- | :--- | :--- |
+| 起冲判定 | `ZCUnitSystem.tryStartDash()`（`updateUnit` 里 `attack` 之后、`waitAttack/idle/move` 之前） | 四个门槛**缺一不可**：有目标（**单位 / 城墙 / 建筑都算**）+ `chargeSpeedScale() > 1`（在 `chargeDistance` 内）+ `now >= nextAttackAt`（冷却就绪）+ 上下文真的给了 `dashStep/placeAt` |
+| 终点 | `unit.dashX / dashY`（起冲时拍的**快照**） | 不是每帧读目标位置 —— 读现算值就等于没改，冲刺又会变成必中 |
+| 推进 | `ZCMovementSystem.dashStep()` → `placeAt()` | 直线、不寻路、不改道；`dashStep` 只给**预测**落点，判完碰撞才 `placeAt` 落盘 |
+| 命中 | `ZCUnitTargeting.dashFirstHit()` → `IZCDashHit.kind` | 线段扫掠圆，取**路径上第一个**进圈的对象（单位 / 城墙 / 建筑统一扫掠，不是只认锁定目标） |
+| 收场 | 撞到 → 停在接触点并结算 1 次普攻；冲空 → **零伤害** | **四种收场都进 0.7s 冷却**，但只有「撞到」结算伤害 |
+| 冷却 | `startDashCooldown()`：`nextAttackAt = now + attackInterval`、`dashRecoverUntil = nextAttackAt` | 从**撞上 / 冲空那一刻**起算（不是起冲）；时长就是这张卡的攻速 |
+
+- 🔴 **冲刺＝普攻本身，不是额外的加速 buff**（2026-11-03 用户口径：「冲刺是运动霸的普通攻击，
+  每次普通攻击都会有 0.7 秒的冷却时间，冷却时间静止在原地播放待机动作」）。
+  所以 0.7s **没有新加一列**，直接改 `pvpCard 68033.unitAttackInterval`（原 1.8）：
+  冲锋段（≈0.51s）是这一拳的动作，收场起算 0.7s 原地待机，然后下一次冲锋。
+  好处是表源只有一处、`nextAttackAt` 只有一套时钟、快照不用加字段。
+- 🔴 **起冲不扣冷却，收场才扣**（这条推翻过上一版）：`startDash` 只写 `dashX/dashY/dashUntil`。
+  若在起冲处扣，中途被硬控打断 / 超时兜底这些路径就要靠「起冲时扣过」自证，
+  而 0.7s 起算点也会比画面上「撞上」的时刻早约 0.5s。
+- 🔴 **`dashRecoverUntil` 与 `nextAttackAt` 是同一时刻的两个用途**，必须一起写：
+  前者管「这 0.7s 站住别动」（`updateUnit` 里放在 `born` 之后、**索敌之前**，冷却期间连
+  `acquire` 都不做），后者管「什么时候能再出手」。只写前者会一边等一边挪窝，只写后者则
+  冷却期间会追着目标走 —— 都不是「静止在原地播待机动作」。
+- 🔴 **冷却期间 `charging === false`、`battleState === 'idle'`**：`charging` 是「本帧正在冲刺」
+  的派生量，`ZCUnitView` 靠它把移动动作换成循环攻击动作；待机时还挂着它，播的就是出拳而不是待机。
+- 🔴 **`charging` 每帧先清**：它不能是记忆量。不清的话，离开冲刺的那一帧（撞上 / 目标死亡 /
+  被硬控）会把这个标记带进 idle，单位就会停在出拳姿势上。
+- 🔴 **冲刺分支抢在所有状态之前**（`updateUnit` 里紧跟硬控闸门之后）。塞进 `move` 分支里是不够的：
+  目标中途死亡 / 跑出射程都会让 `move` 提前 return，冲锋就半路刹车了 —— 真·撞击的前提是
+  「冲出去就收不回来」。
+- 🔴 **碰撞半径用近战 `reach`，不是双方 `bodyRadius` 求和**。`bodyRadius` 是给弹道算「贴脸」的
+  （表里常是 6px，换算到世界坐标才 1.8），拿它当冲撞判定会变成「必须精确踩到对方脚心」，
+  画面上看就是反复穿人。取 `attackReach` 还顺带把「改 `attackRange` 时冲撞手感跟着走」这条焊死。
+  - 单位目标 `bodyRadius = 6` ⇒ `reach = 15.3`；**结构目标 `bodyRadius = 80`**（`STRUCTURE_TARGET_BODY_RADIUS`）
+    ⇒ `reach = (45 + 80) × 0.3 = 37.5`，所以冲城墙时停在离地块心 37.5 处，不会钻进墙里。
+- ⚠️ **城墙 / 建筑目标也走冲刺**（2026-11-03 用户口径「城墙 / 建筑目标也需要走冲刺，撞到就停止，
+  撞到单位目标也会停止」）：撞到就停在接触点、结算一次，然后同样进 0.7s 待机。
+  - 结构只在**它是当前锁定目标**时才参与扫掠 —— 冲锋路过一面无关的墙不该被它截住；
+    那面墙本身由 `dashStep` 的「进不了敌方墙格」兜住。
+  - `current()` 已经把合法性判完（墙要 `hasExposedWall`、建筑要 `hp > 0 && wallHp <= 0 && owner` 合法），
+    墙被拆平 / 建筑爆了 ⇒ 返回 null ⇒ 不会冲过去撞空气。
+  - 撞到后把 `targetWallHexId / targetBuildingHexId` 写成那个地块，`sendAttack` 据此分流到
+    `damageWall / damageBuilding`。
+- ⚠️ **`dashStep` 要放行「本次冲刺目标所在的那一格」**（`unit.targetWallHexId ?? unit.targetBuildingHexId`）：
+  否则冲进目标城墙时，会被自己的「进不了敌方墙格」兜底提前截停，永远撞不到墙上。
+- ⚠️ **冲空 / 超时 / 被硬控打断同责**：都不结算伤害，但**都要进 0.7s 冷却**。
+  这三条以前靠「起冲就扣过」蒙对；改成收场扣之后必须各自显式调 `startDashCooldown`，
+  漏一条就会出现「零成本冲锋」（硬控解掉下一帧立刻再冲）。`dashUntil` 只是超时兜底
+  （终点不可达时别让冲刺永远挂着），正常收场靠「撞到」或「到点」。
+- 📐 **看得见的冲锋段 = `chargeDistance × combatDistanceScale − 近战 reach`**：
+  `220 × 0.3 = 66` 起点、`reach = 15.3` 终点 ⇒ 冲锋段 ≈ 50.7 世界 px，
+  按 `moveSpeed 25 × 4 = 100 px/s` 约 **0.51s**（30fps 下 15 帧），「起冲 → 追过去 → 撞上」三段才读得出来。
+  冲锋段（0.51s）**必须短于攻速（0.7s）**，否则收场瞬间冷却就到期，画面上根本看不到待机那一段。
+  - 表值 `chargeDistance` 已于 **2026-11-02 由设计案的 120 改成 220**（`tools/config/set_yundongba_dash_distance.py`
+    三处同写：表源 xlsx S 列 + `json/client/pvpSkill.json` + `assets/remoteRef/pvpSkill.json`）。
+    这一条**偏离了设计案原值**，需要策划同步到 `pvpSkill` 真源，否则下次拉远端 ref 会被打回 120。
+  - `unitAttackInterval` 于 **2026-11-03 由 1.8 改成 0.7**（`tools/config/set_yundongba_attack_interval.py`
+    + `tools/config/write_card_interval.js`，同样是表源 + 两份 json 三处同写）。
+- ⚠️ `chargeDistance` / `unitAttackInterval` / `attackRange` 都是 `pvpSkill` / `pvpCard` 的**远端表值**
+  （`assets/remoteRef/*.json` 只是本地副本，`RefUtil` 拉的是 `refSmallAll`）—— 单侧改会被覆盖。
+- **判据**：`tests/zcds-charge.test.ts`（27 条）—— ①起手距离几何 ②三个门槛各自失效 ③碰撞半径 /
+  第一个目标 / 友军尸体跳过 ④`dashStep` 直线与撞墙、`placeAt` 朝向 ⑤起冲 / 命中 /
+  **冲空零伤害照吃冷却** / 路径上第一个 / 冷却没好不起冲 / 硬控打断 / 超时兜底
+  ⑤b**城墙与建筑也走冲刺、停在 37.5 处、作废结构不再冲** ⑥气浪仍是纯表现
+  ⑦两处配表同值（`chargeDistance 220` / `unitAttackInterval 0.7`）+ 冲锋段 ≥ 0.4s 且短于攻速。
+
+
 ## 2. 抽到金卡的「传说卡出场横幅」（`ZCGameLegendBanner.prefab`）
 
 抽到 `tier === 4`（金卡/传说）时，除地块上的小卡牌（`ZCGameCardReveal`，挂 `mapLayer`）外，同时在 **HUD 根节点 `options.overlayLayer`** 弹出全屏出场横幅 `ui/game/ZCGameLegendBanner.prefab`（四色底板与头像环按 `ZC_CLIENT_COLORS` 色相匹配 `owner`）。
@@ -313,9 +466,23 @@ mapLayer（= ZCGameHUD.prefab 的 content）
 
 - **四条静默失效硬约束**：
   1. **严禁挂 `mapLayer`**：必须挂 `options.overlayLayer`（HUD 根），否则会随棋盘 ScrollView 拖动并被 Mask 裁切。
-  2. **立绘原尺寸**（2026-10-10 口径「不用放大了，就用 256×256」）：23 个兵种立绘均为 256×256 方形原图 ⇒
-     `Role` 节点 `sizeMode = RAW(2)`、中心锚点、**视图一行都不写 `scale`**（恒 1）。
-     早前「按 `frame.height` 等比缩放到高度 333」的口径已废弃（固定框会把方形原图纵向拉扁 30%）。
+  2. **立绘按画布规格等比放大到立绘区**（2026-11-02 需求「萨尔等旧角色，模型也要匹配 banner 的高度，
+     放大对应的模型让它与 UI 等高」）：`Role` 节点 `sizeMode = RAW(2)`、中心锚点，
+     **视图写的是等比 `scale = LEGEND_ROLE_TARGET_HEIGHT / 画布高`**，不是写死 UITransform 尺寸。
+     - 目标高 **280**、静止位由 `legendRoleRestY()` = `LEGEND_ROLE_BOTTOM_Y(-188) + 280/2 = -48` 算出（脚踩下沿往上长）。
+     - 为什么是 280 而不是底板的 417：底板是**右边高、左边斜切**的丝带（`legend_banner_02` 实测 `x=0` 处可见 252 高、
+       `x=719` 处 363）。立绘落在 `x=-192`（png `x=168`），那一列可见区 `y ∈ [-189, 101]`、**291 高** —— 按 417 定高会顶穿丝带。
+       280 = 291 × 96%；逐列实测最坏只探出 **6.7px**（`MF_BFS_YUREN` 的左肩），256 画布那批还富余 9~44px。
+     - 为什么能做到「等高」：横幅左格取的是**卡面静态图**（`resolveLegendArt` ①），`cardHead` 里躺着两种画布 ——
+       本地卡面 **256×256**（17 张）、旧角色走的老头像 **84×84**（27 张，`tx_icon_*`）。
+       `sizeMode = RAW` 会把节点直接定成画布尺寸 ⇒ 84 那批只占 417 的 20%，截图里「萨尔小得像个图标」就是这么来的。
+       84 档放大 **3.33 倍**、256 档 1.09 倍，视觉高一致。
+     - 为什么按**画布**高归一而不是可见高：运行时的 `SpriteFrame` 只给 `rect` / `originalSize`（`.meta` 是 `trimType: none`
+       ⇒ 都是整块画布），**拿不到 alpha 包围盒**。同画布内可见高的差异（256 那批 221~249、84 那批 81~84）是美术本身的高矮，
+       不是该抹平的偏差。
+     - ⚠️ 节点来自 `ZCNodePool` ⇒ 每次**绝对赋值**；解析器拿不到图时必须显式写回 1，否则复用回来还带着上一张卡的倍数。
+     - ⚠️ 必须是 `setScale(s, s)` 等比。早前废弃的「按 `frame.height` 缩放到高度 333」是把**固定框 × 方形图**拼在一起，
+       才会纵向压扁 30%；等比放大不会。2026-10-10 的「不缩放、就用 256×256」也已作废。
   3. **禁 Trim 尺寸覆写**：`CUSTOM` 尺寸的 Sprite 必须 `_isTrimmedMode = false`。
   4. **头像圆裁**：`Head` 节点挂载工程既有的 `CircleAvatar`（shader `circle-avatar`），禁止用 `cc.Mask`。
 - **扇入与 Role 下落动画（row11）**：详见第 9.4 节。
@@ -447,11 +614,13 @@ mapLayer（= ZCGameHUD.prefab 的 content）
 
 `tests/territory-building-shake.test.ts`（8 条）：core 零依赖 + 对局侧转发逐项相等 + 领地不出现 `zcds`；120% 与「先 Y 后 X」、段外恒 1；抖动**乘**在归一化基准缩放上、播完复位、`dispose` 停表；`hidden` 只关四个视觉节点（并反向钉「关根节点没用」）；翻开登记待办 → 翻转期间 `hidden` → 播完同一帧补建筑并抖一次；没翻格不登记；换章清空；`renderMap` / `update` 的顺序守卫。
 
-### 3.5 领地「获得银币 / 体力」：格心喷发（抛物线倒锥 + 自身上下翻面）+ 读数在其上方 40px（row17，喷发口径 2026-10-17 细化）
+### 3.5 领地「获得银币 / 体力」：格心喷发（抛物线倒锥 + 由小变大 + 持续自转）+ 读数在其上方 40px（row17，喷发口径 2026-11-02 改）
 
 需求原文（2026-10-16）：「获得银币或者体力时，播放**喷发**的效果，喷发**多个图标**，多个图片的喷发范围限制在一个**倒圆锥**的图形，喷发的坐标点对应**点击地块的中心点坐标**，图标和数字 ui 增加上移的动画放在例子效果坐标点的**上方间隔 40px**」。
 
-2026-10-17 用户把喷发单独细化成一整套物理口径（12 颗 / 错峰 0.025s / ±26° / 初速 650±12% / 重力 1500 / 抛物线 / icon 自身上下翻面 / 落回台面 0.12s 淡出且不穿模），**喷发段已按新口径重写**，读数那条 1.15s 时间线一行没动。
+2026-10-17 用户把喷发单独细化成一整套物理口径（12 颗 / 错峰 0.025s / ±26° / 初速 650±12% / 重力 1500 / 抛物线 / 落回台面 0.12s 淡出且不穿模），**喷发段已按新口径重写**，读数那条 1.15s 时间线一行没动。
+
+🔴 **2026-11-02 又改了一次粒子自身动画**：用户原话「优化【种族经验】粒子的发射动画优化，**取消垂直反转效果**，改成粒子**由小变大生成**，同时伴随**持续的旋转效果**」 ⇒ 2026-10-17 那版「绕自身水平轴上下翻面」（`scaleY = baseScale·cos(ωt+phase)`）**整段作废**。轨迹、错峰、淡出三条一个字没动，只换了「每颗粒子自己怎么变大小 / 怎么转」。
 
 #### 一、一句话分工：喷发一半，读一半
 
@@ -461,7 +630,7 @@ mapLayer（= ZCGameHUD.prefab 的 content）
 | 「限制在倒圆锥」 | `TERRITORY_GAIN_BURST_HALF_ANGLE_DEG = 26` —— **出射方向**与屏幕竖直轴夹角的上限 |
 | 「喷发坐标点 = 点击地块的中心点」 | `TerritoryMapView.playResourceGain`：`originY = hex.position.y + HEX_GRID_CONTENT_LIFT` |
 | 「图标和数字 ui … 上方间隔 40px」 | `baseY = originY + TERRITORY_GAIN_START_LIFT_PX`（该常量就是 `40`），仍由 `TerritoryResourceGainView` 升起 1.15s |
-| 「icon 自身持续上下翻转」 | `territoryBurstParticle` 的 `scaleX / scaleY`（见第三节），视图只写 `setScale(scaleX, scaleY, 1)` |
+| 「icon 由小变大 + 持续旋转」（2026-11-02 取代旧的「上下翻转」） | `territoryBurstParticle` 的 `scale` / `rotation`（见第三节），视图只写 `setScale(s, s, 1)` + `angle = rotation` |
 | 「落回地块表面即淡出、不穿模」 | 抛物线落点 + `SURFACE_FADE_SECONDS = 0.12` + 位置冻在落点 |
 
 🔴 **两处都必须加 `HEX_GRID_CONTENT_LIFT`（12.5），而且只加一次**：`hex.position` 是**蜂窝几何的布局点**，人眼看到的台面中心才在它上面 12.5px（`cellCenter()` 同一个口径）。读数的起点因此是「格心 + 40」，**不是**「格心 + 30」也不再是「布局点 + 70」—— 判据里有一条反向守卫钉死这个加法结构。
@@ -491,29 +660,32 @@ vx  = speed · sin(phi)        vy = speed · cos(phi)
 | `TERRITORY_GAIN_BURST_FADE_SECONDS` | `0.25` —— **生命先到期**时的末段淡出 |
 | `TERRITORY_GAIN_BURST_SURFACE_FADE_SECONDS` | `0.12` —— **落回台面**后的快速淡出 |
 | `TERRITORY_GAIN_BURST_BASE_SCALE` / `_SCALE_JITTER` | `1` / `0.2` ⇒ 基础缩放 0.8~1.2 |
-| `TERRITORY_GAIN_BURST_FLIP_MIN_HZ` / `_MAX_HZ` | `2` / `4` —— 翻面频率区间 |
+| `TERRITORY_GAIN_BURST_GROW_SECONDS` / `_GROW_START_SCALE` | `0.18` / `0.15` —— 由小变大的时长与出生系数（0.18s 后恒为 1） |
+| `TERRITORY_GAIN_BURST_SPIN_MIN_HZ` / `_MAX_HZ` | `0.6` / `1.1` —— 自转速度区间（**圈/秒**） |
 | `TERRITORY_GAIN_BURST_TOTAL_SECONDS` | `1.54` = 最后一颗的出发时刻 + **最长**生命。⚠️ 只是**硬上限**，视图真正的收尾判据是「一颗活的都没有」（实际 ≈1.2s） |
-| `territoryBurstLaunch(seed, index)` | 纯函数：出射参数 `{ phi, speed, vx, vy, baseScale, flipHz, phase, life }`，同一 `(seed, index)` 恒等 |
+| `territoryBurstLaunch(seed, index)` | 纯函数：出射参数 `{ phi, speed, vx, vy, baseScale, spinHz, phase, life }`，同一 `(seed, index)` 恒等 |
 | `territoryBurstParticle(seed, index, elapsed)` | 纯函数（零 `cc`）：`null` = 这颗**还没出发**或**已经消失**；`index` 不在 `[0, COUNT)` 整数值、`elapsed` 非有限/为负 ⇒ `null` |
 
 🔴 **轨迹用解析式 `y = vy·t − ½g t²`，不要写成逐帧累加**：两者数学上等价，但累加会让落点随帧率变（30fps 两帧 ≠ 60fps 四帧），违反「动画一律 记录 startedAt + 纯函数算进度」这条全局约束。
 
 ⚠️ 抖动**不用 `Math.random()`**：同一 `(seed, index)` 必须给出同一组参数，否则倒锥判据没法验、池化复用的问题也没法复现。「每次点击不一样」由 `TerritoryMapView.burstSeed`（每次点击自增）提供。
 
-#### 三、icon 自身上下翻面（「垂直反转」的实现）
+#### 三、粒子自身：由小变大 + 持续自转（2026-11-02 取代旧的「上下翻面」）
 
-需求原话：视觉循环是 **正面 → 侧立（最窄）→ 倒面 → 侧立 → 正面**，每帧令 `scaleY = baseScale · cos(ωt + phase)`、`scaleX` 始终 `baseScale`。
+用户改口径：「取消垂直反转效果，改成粒子由小变大生成，同时伴随持续的旋转效果」。
 
 ```
-scaleX = baseScale
-scaleY = baseScale · cos(2π · flipHz · t + phase)      flipHz ∈ [2, 4]，phase ∈ [0, 2π) 每颗独立
+grow     = GROW_START + (1 − GROW_START) · easeOutCubic(min(1, t / 0.18))     GROW_START = 0.15
+scale    = baseScale · grow                                                 ← 横纵**同一个值**
+rotation = 360 · spinHz · t + phase°                                        spinHz ∈ [0.6, 1.1] 圈/秒
 ```
 
-- 余弦**过零即侧立最窄**的中间态 ⇒ 不需要额外画「侧面」帧；负值即「倒面」。
-- 🔴 **禁止在正负缩放之间硬切**（会跳变）—— 余弦天然连续，判据里按 1/60s 采样验「相邻帧 `ΔscaleY` 不超过 `0.75·baseScale`」。
-- 🔴 `scaleX` **不许跟着压**：翻面只压 `y`。写成 `setScale(s, s·cos, 1)` 而不是 `setScale(s·cos, s·cos, 1)`，否则读成「整体缩小」。
-- 🔴 **不做平面自转**（不叠加 `angle`）：与翻面同帧叠加会读成「一边翻一边歪」。
-- 12 颗的 `flipHz` 与 `phase` 都两两不同（各取一次哈希）⇒ 不会同步翻。
+- **横纵等比**：`scale` 只有一个标量，视图写 `setScale(fx.scale, fx.scale, 1)`。旧版的 `scaleX / scaleY` 字段已**删除** —— 留着就有人会再写一次「压扁 y」。
+- **出生就看得见**：起点不取 `0`，取 `0.15`。取 0 会让「出现」的第一帧完全是空的，看起来像掉帧。
+- **0.18s 之后恒为 1**：再长会盖住错峰（相邻两颗只差 0.025s），0.18s ≈ 11 帧，正好「看得出它长出来」。
+- **自转匀速、不取模**：`rotation` 随 `t` 一直累加。取 `% 360` 会在回绕那一帧被引擎读成「倒转回去」，观感是转一下卡一下。
+- 🔴 **翻面 ≠ 自转**：前者压 `scaleY`（会翻到背面、宽度不变），后者只写 `node.angle`（图标永远正面朝上）。两者**不能**同时叠加，混着做会得到"既翻又转"的怪相。
+- 12 颗的 `spinHz` 与 `phase` 都两两不同（各取一次哈希）⇒ 不会同步转。
 
 #### 四、怎么收：先到的那条说了算
 
@@ -536,17 +708,17 @@ scaleY = baseScale · cos(2π · flipHz · t + phase)      flipHz ∈ [2, 4]，p
 - 逐帧 `step(dt)` 由 `TerritoryMapView.update` 推进，**禁用 tween**（池化复用的节点上挂 tween 会在回收后继续跑，规则 106 / 247）。`stop()` 把容器**和每颗粒子**一起复位（只收容器会留下上一喷的残影）。
 - `step` 的收尾判据是 `apply()` 返回「还有没有活着的粒子」，`TOTAL_SECONDS` 只作硬上限兜底 —— 死等上限会让容器白挂 0.3s 空帧。
 - 🔴 **粒子层必须是 `GainLayer` 的第一个子节点**（`TerritoryMapView.ensureBurstRoot` 里 `setSiblingIndex(0)`）：子节点顺序 = 渲染顺序，飘字节点是后建的，排在后面 ⇒ 粒子画在「+N 读数」**之下**；这条顺序只在建层那一刻定一次，之后两个池都不再动兄弟序。
-- **为什么不建 prefab**：一粒粒子只有「一张可换的图 + 位置 / 两个缩放 / 透明度」，没有任何图集布局参数，而图本来就要由页面注入（飘字 prefab 里「帧由代码注入，prefab 里不许写死」的同一理由）⇒ 建 prefab 等于把同一张图的占位写十二遍。
+- **为什么不建 prefab**：一粒粒子只有「一张可换的图 + 位置 / 缩放 / 角度 / 透明度」，没有任何图集布局参数，而图本来就要由页面注入（飘字 prefab 里「帧由代码注入，prefab 里不许写死」的同一理由）⇒ 建 prefab 等于把同一张图的占位写十二遍。
 
 #### 六、判据
 
-`tests/territory-resource-gain.test.ts`（26 条，其中喷发占 15 条）：
+`tests/territory-resource-gain.test.ts`（39 条，其中喷发占 17 条）：
 - 出射：12 颗 / 0.025s 错峰 / 绝不与首颗同帧 / 总时长 = 出发时刻 + 最长生命；
 - 倒锥：`|phi| ≤ 半顶角`、`vx = speed·sinφ`、`vy = speed·cosφ`、`|vx|/vy ≤ tan26°`、初速 ±12%、左右都铺开且**200 次喷发整体无水平偏向**；
 - 抛物线：上升段单调、不穿模（`y ≥ 0`）、峰值 ≈ `vy²/2g`、横向不越过 `2·tan·vy²/g`；
-- 翻面：`scaleX` 恒等、`scaleY` 逐位等于余弦式、`|scaleY| ≤ baseScale`、相邻帧无硬切、正面/倒面/侧立三态都出现、12 颗频率与初相两两不同；
+- 生长 + 自转：`scale` 逐位等于生长式、**恒正**（翻面的直接反证）、出生帧 = `GROW_START`、单调不减且相邻帧不硬切、`rotation` 逐位等于自转式且**严格递增**（不取模）、角度增量 = `spinHz·360·dt`、12 颗转速与初相两两不同、一颗生命里至少转半圈；
 - 收尾：落台面 0.12s（位置冻在落点）与生命末段 0.25s 两条分支各自命中、收尾帧几乎全透明；
-- 确定性、脏输入全 `null`；粒子组沙箱（真代码 + `cc` 打桩）验容器落在原点、粒子数 = 常量、逐帧节点值逐位等于模型、错峰可见、放完提前收起、复用能重新点亮；接线守卫（`originY` / `baseY` 的加法结构、喷发只喷一次且排在飘字之前、`setSiblingIndex(0)`、`stepBursts`）、以及「粒子组不许 instantiate prefab / 不许出现 tween」。
+- 确定性、脏输入全 `null`；粒子组沙箱（真代码 + `cc` 打桩）验容器落在原点、粒子数 = 常量、逐帧节点值逐位等于模型（含 `scale.x === scale.y === fx.scale`、`angle === fx.rotation`）、错峰可见、出生帧明显小于满尺寸、放完提前收起、复用能重新点亮；接线守卫（`originY` / `baseY` 的加法结构、喷发只喷一次且排在飘字之前、`setSiblingIndex(0)`、`stepBursts`）、以及「粒子组不许 instantiate prefab / 不许出现 tween」。
 
 ### 3.6 领地奖励图标：**必须查两张表**，`item` 的图在 `main-pages` 分包（2026-10-26）
 
@@ -788,6 +960,47 @@ TerritoryChestView.step() → fireLandings(t) 到达时刻 = flyStart + i×stagg
   另加一条「两格图标跟 `resKeys` 走」——**宿主不许再覆盖 `iconOverride`**、
   `Icon` 的占位 `_spriteFrame` 必须逐字等于 `roleProperty` 里 `gold`/`end` 那张图的 uuid、
   `Icon` 尺寸必须 `44×44`。
+
+#### 五（补）、**扣除**也走同一套单格反馈：显红 → 跳一下 → **然后**才扣（2026-11-02）
+
+用户原话（附顶部资源栏截图，红框圈着 `2670` 银币 / `137/30` 体力）：
+
+> 「当发生资源扣除时，对应资源栏的数字显红，跳动再扣除」
+
+**难点全在顺序上，不在画面上**：数值真值来自 `CmdRole`，服务端一推、`reload` 一跑，
+label 上就已经是**扣后**的值了 —— 什么都不做的话玩家看到的是「数字直接掉下去、然后才红一下」，
+与需求正好相反。所以这条反馈必须把 label **先钉回扣前值**、演完红与跳，最后才滚到扣后值。
+
+| 阶段 | 时间 | 数字文本 | 颜色 | 缩放 / 位移 |
+| :--- | :--- | :--- | :--- | :--- |
+| ① 显红 + 跳 | `0 ~ 0.34s`（`SPEND_HOLD`） | **一动不动**（还是扣前值） | 0.1s 内变红 | 单峰弹跳（图标 +12%、数字 +20%）+ 上跳 6px |
+| ② 扣减 | `0.34 ~ 0.90s` | 从扣前滚到扣后 | 保持红 | 已归位，不再动 |
+| ③ 收尾 | 最后 `0.24s`（与 ② 重叠） | 落到扣后值 | 红 → 常态色 | 归位 |
+
+🔴 **①的「一动不动」是这条需求的机器判据**：`resBarSpendFx(elapsed).countRatio`
+在前 `SPEND_HOLD_SECONDS` 内**恒为 0**。把它改成"边红边扣"这一条立刻红。
+
+**为什么不用在花钱的地方一处处调**：扣除的唯一入口是 `ResBar.reload` 里的
+`slot.spendDeltaOf(next.valueText)` —— 每格自己记着「上次落定的数值」(`settledValue`)，
+新值比它小就是一次扣除。这样**所有**来源（挑战扣体力、商城买东西、GM 改值）自动覆盖，
+不需要谁记得调一次（漏一处就少一处反馈，而且零报错）。
+`ResBar.playSpendFeedback(key, amount)` 仍然公开，只给「值已落地、但不会再走 `render`」的边角用。
+
+**两个坑**：
+
+1. **顺序**：`spendDeltaOf` / `playSpendFeedback` 必须排在 `slot.render(...)` **之前**
+   （`tests/main-resbar-spend` 有源码守卫钉死）。反过来的话 label 已被写成新值，
+   动画只能"先扣再变红" —— 而且**看起来仍然有动画**，最容易被当成做对了。
+2. **字色必须从这一格自己的常态色混过来**（`resBarSpendColor(base, strength)`），
+   不能写死常量红：收尾要混回原值，否则资源栏会留一格红数字（`finishSpend` / `cancelSpend`
+   两处都得复原，`render(null)` 整格隐藏时也要复原）。
+
+**判据**：`tests/main-resbar-spend.test.ts`（13 条）——
+曲线口径（窗口外 `null`、前 `HOLD` 段 `countRatio` 恒 0、弹跳单峰、红色升→保持→淡回、
+混色 `strength=0` 逐位等于原色）+ **真代码沙箱**（`cc` 打桩跑 `MainResBarSlot`）：
+第一帧不许掉数字、定格段数字不变但已红已跳、收尾精确落在扣后值且颜色/位移/缩放全复原、
+反馈途中来推包只暂存、整格隐藏要复原、加/扣两条时间轴互斥；外加两条源码契约
+（`reload` 里「判扣除」先于 `render`；单格不许自己挂 `update`、不许用 tween）。
 
 ### 3.8 建筑体量倍率 `buildSize`（表「模型大小」，**可以是小数**）（2026-10-27）
 
@@ -1212,6 +1425,597 @@ revealed = owned ∪ unlocked ∪ 前置满足的站点 ∪ **前沿可见的随
 - `tests/territory-hex-spawn.test.ts`：源码钉住 `unlockedSnapshot` 的三件事
   （首帧快照 / 每帧推新 / 换章清空）+ `entered` 去重 + 「刚解锁要进场」那一条判据。
 
+### 3.13 固定奖励宝箱：气泡提示 + 同屏唯一 + 「还没点我」跳动（2026-11-02）
+
+需求原文（三句，一次提完）：
+
+> 1. 领地玩法内的固定奖励配置的宝箱 **增加一个气泡UI提示**（气泡样式同章节），气泡内的提示UI是 **体力 icon + 需要消耗的数量值**；
+> 2. 同屏内多个宝箱时，**只展示 1 个气泡**，气泡优先展示在**解锁 id 最大**的宝箱上；
+> 3. 当玩家点击地块，地块的**前置宝箱已激活、未点击**时播放宝箱未通过的提示动画：对应的宝箱**原地跳动 1.5s** 提示玩家点击，播放动画时**隐藏宝箱的提示气泡**。
+
+三条规则**建在同一个状态上**：`isCellUnlocked(cellId) && !isOwned(cellId)` —— 也就是「已激活、还没点」。
+这一对判据与 `stationRenderOf` 里「前置宝箱未领取 ⇒ 后继格银币数字染红」**同源**（都读 `progress`），
+别在视图里另写一套「宝箱领没领」。
+
+#### 一、真源：`app/territory/model/TerritoryChestHint.ts`（零 cc 纯函数）
+
+| 符号 | 作用 |
+| :--- | :--- |
+| `territoryChestShowsHint(site, progress)` | 这一格该不该挂气泡：`type === fixedResource` + 已激活 + 未领取 |
+| `territoryChestHintCell(sites, progress, revealed)` | 同屏**唯一**那只气泡挂哪：候选里解锁序号最大者，无候选 `null` |
+| `territoryPrerequisiteChestCell(site, sites, progress)` | 点这一格时该跳哪只宝箱：`unlock.requiredCells` 里「已激活未领取」的固定宝箱 |
+| `territoryChestUnlockId(site)` | 解锁序号 = `fixedResource_<N>` 的 `N`（兜底 `cellId`） |
+| `territoryChestHintBounceOffset(elapsed)` | 跳动曲线：`elapsed` 秒时相对原位的纵向偏移 |
+
+视图只收结果：`TerritoryMapView.syncStations` 一轮算一次 `chestHintCell` 透传给 `stationRenderOf`，
+`TerritoryStationView` 只负责把「偏移 / 气泡可见」写进节点。
+
+#### 二、气泡：样式复用章节那颗，内容是「体力图标 + 消耗数」
+
+- **底图**用 `art.levelBubbleFrame`（已通关那张蓝底 `frame_03`，与章节关卡编号同一张、同一套圆角与尾巴）。
+  🔴 别按 `claimed` 去取未通关红：宝箱本来就还没领，取红会读成「被打败了」。
+- **文字** = `site.unlock.staminaCost`；**图标** = `art.staminaIcon`（`RESOURCE_ICON_ART_ROOT/图标_体力`，
+  与领奖飘字同一张，别在领地目录另存一份）。
+- 图标与数字**成对居中**（`applyLevelBubbleLayout`，唯一写入口）：
+  ```
+  总宽 = 26(图标) + 2(间距) + 实测文本宽
+  图标中心 x = −总宽/2 + 13
+  数字中心 x = +总宽/2 − 文本宽/2
+  ```
+  做法是 `overflow` 在 `NONE`（有图标，要实测文本宽）与 `SHRINK`（纯文字，编号居中）之间切 ——
+  切 `NONE` 才量得到真实字宽，`SHRINK` 下 `contentSize` 恒是框宽。
+- **拿不到图标 ⇒ 退化成纯数字**（美术没到位时宁可少个图标，也不能让宝箱没有提示）。
+
+#### 三、同屏唯一：「同屏」= 本轮渲染出来的格子
+
+- 地图是整张 ScrollView 内容层、**没有视口裁剪** ⇒ 「渲染出来的 = 玩家可能看到的」，
+  不再算屏幕矩形（算了反而会有「滚到边缘气泡忽隐忽现」的抖动）。
+- 排序：解锁序号大者优先；**同号**（数据脏了）取 `cellId` 小的那个 —— 保证结果与 `sites`
+  的遍历顺序无关、可重复。已领取 / 未激活 / 未露出的格子一律**不参选**。
+- 序号取 `fixedResource_<N>` 的 `N`（编辑器建点顺序）。已核对 `chapter_01~07` + `chapter_smile`：
+  固定宝箱 id 全部合规且**同章不重号**，判据钉在 `tests/territory-chest-hint.test.ts`。
+
+#### 四、跳动 1.5s + 播放期间藏气泡
+
+| 常量 | 值 | 说明 |
+| :--- | :--- | :--- |
+| `TERRITORY_CHEST_HINT_SECONDS` | `1.5` | 需求原文的时长 |
+| `TERRITORY_CHEST_HINT_HOPS` | `3` | 3 跳 × 0.5s，节奏够"催"，不会读成抽搐 |
+| `TERRITORY_CHEST_HINT_HEIGHT` | `14` | 第一跳抬起高度（地图像素） |
+| `TERRITORY_CHEST_HINT_HOP_DECAY` | `0.25` | 逐跳 ×0.75，收得住；1.5s 末端正好回 0 |
+
+- 曲线是每跳一条**半正弦** `sin(π·phase)`：起跳与落地都为 0（不瞬移），1.5s 结束精确落回原位
+  —— 所以**不需要"复位动画"**，播完把偏移写 0 就落地。
+- 非法入参（`NaN` / 负数 / 已播完）一律返 0：站点每秒会被刷一次，宁可"这一帧没跳"，
+  也不能把 `NaN` 写进节点坐标（那是整只宝箱消失，且零报错）。
+- 🔴 **偏移必须走唯一坐标出口** `writeIconPosition()`（`iconBaseY + chestHintOffsetY`）：
+  `applyIconPlacement` 每秒会重排一次位置，动画里直接 `setPosition` 会被"按回地面"。
+- 🔴 **藏气泡必须走开关** `setHintBubbleSuppressed(bool)`，判据落在 `renderLevelBubble` 的
+  `visible` 表达式里（`&& !this.hintBubbleSuppressed`）。直接 `node.active = false` 会在下一轮
+  `syncStations` 重画时被**重新打开** —— 动画还在播，气泡却回来了。
+- 触发在 `onStationClick`（`playTapFeedback` 之后、转发意图之前：转发会弹全屏 loading）。
+  三条守卫：① 本格自己**还没开**（已解锁/已拥有时前置宝箱不再挡路，跳了是误导）；
+  ② 拿不到站点视图 ⇒ 不播；③ 同一只连点 ⇒ **重新起跳**（催一次，不排队播 N 次）。
+- 🔴 跳动判据是 **`!isOwned`**，不是「已激活未领取」（2026-11-02 追加）：
+  `isPrerequisiteComplete` 对固定资源的口径是「**解锁即算完成**」，所以「宝箱还锁着」那种情况
+  **不会**被前置判定拦住、却同样把玩家堵在门外。两种状态对玩家都是"这个宝箱还没打开"
+  （提示文案统一写「前置宝箱未打开」），跳动目标自然也要覆盖两态 —— 否则玩家读到提示抬头看，
+  地图上一点反馈都没有。⚠️ **气泡的判据不跟着放宽**：气泡写的是"花多少体力领"，
+  箱子没激活时挂上去只会让人以为现在就能点。
+- 收尾只有一条路径：`stepChestHint` 扣到 1.5s ⇒ `clearChestHint()`（偏移归零 + 解禁气泡 + 清表）。
+  换章（`syncGrid` 换图分支）也走它 —— 否则半空的偏移与"气泡抑制"会挂到新图同名 `cellId` 上
+  （症状：某只宝箱一直浮着、气泡永远不出现）。
+
+#### 五、判据
+
+`tests/territory-chest-hint.test.ts`（26 条）：
+
+- 气泡：只挂「已激活未领取」；非宝箱站点不挂；用**本格**解锁而不是区域通关。
+- 唯一：留解锁 id 最大者；已领取 / 未露出不参选；结果与输入顺序无关（含同号取小）；
+  真表守卫（八张图的宝箱 id 合规 + 同章不重号）。
+- 跳动：判据落在前置格上；**已领取不跳、未解锁也跳**；`footprint` 命中也要认；多只取序号最大；
+  1.5s 三跳起点落点为 0、峰值 = 抬起高度、逐跳衰减、整段非负且不超首跳。
+- 接线守卫：`update` 第一条仍是 `hexFlip.step` 且调了 `stepChestHint`；`onStationClick` 起跳、
+  `syncGrid` 收尾；`visible` 里含 `hintBubbleSuppressed`；Icon 的 `setPosition` 只剩一个出口；
+  `staminaIcon` 从资源加载一路接到 `levelBubbleIcon`。
+
+⚠️ 桩型用例（`territory-building-shake` / `territory-random-resource-render` /
+`territory-resource-gain` / `territory-theme` / `territory-tile-frames`）的 require 桩里必须加
+`'../model/TerritoryChestHint'` 与 `'../model/TerritoryLevelBubble'` 两个分支，否则会在沙箱
+`require` 阶段直接
+`Unexpected dependency`（看起来像产品代码炸了）。
+
+### 3.14 「前置没满足」的提示要指名道姓（2026-11-02）
+
+需求原文（截图里那条「前置领地尚未占领」太笼统）：
+
+> · **前置地块未解锁提示具体的前置地块的名字**；
+> · **关卡地块**提示关卡的名字 `【数字-数字 关卡通关后解锁】`，**名字同气泡文案**；
+> · **宝箱地块**则播放宝箱的动画，并且提示文案改为 `【前置宝箱未打开】`。
+
+**只报第一个**（2026-11-02 用户定口径：`chapter_01` 有前置 5 格的格子，全列出来 toast 会跨两行压住地图）：
+
+| 第一个能命名的前置是 | 玩家看到的那句话 | 依据 |
+| :--- | :--- | :--- |
+| 没打完的关卡 / 首领 / 异步据点 | `1-1 关卡通关后解锁` | 名字 = 该格**气泡文案** |
+| 没打开的固定宝箱 | `前置宝箱未打开` | + 对应宝箱原地跳 1.5s（§3.13） |
+| （前几格都念不出名字）普通地块 | `前置领地尚未占领`（兜底） | `chapter_01` 有 4 处这种前置 |
+
+"第一个"= `requiredCells` 的**书写顺序**（编辑器连线顺序），不排序、不挑"更重要"的；
+念不出名字的格子（不属于任何站点的普通地块）**跳过**看下一个。多个前置就分多次提示：
+玩家按提示做掉一个、再点一次，自然看到下一个 —— 比一句话塞三段好读。
+
+#### 一、名字：与气泡文案**同一个函数**
+
+`model/TerritoryLevelBubble.territoryLevelBubbleText(site, stage)` —— 2026-11-02 把气泡文案从
+`TerritoryMapView` 搬到这里，就是为这一条：气泡写什么，提示就说什么。
+
+- 主线 / 首领 ⇒ `${chapterId}-${stage}`（`1-1`，连字符两侧不留空格）；
+- 异步据点 ⇒ `PVP`。🔴 它是可重复挑战，编号会被读成"第 4 关打一次就过"；提示里若自己拼
+  `${chapterId}-${stage}`，地图上根本没有那个编号 —— 玩家会去找一个不存在的关卡。
+
+`TerritoryMapView` 现在只剩 `levelBubble: territoryLevelBubbleText(site, stage)`，
+`exports TERRITORY_ASYNC_PVP_BUBBLE_TEXT` 是**转发**（旧引用不断），值只存在于 model。
+
+#### 二、清单：与拦截判据**同源**
+
+`TerritoryProgress.prerequisiteBlockers(cellId)` 返回「还没满足的前置格」，`checkUnlock` 的
+拦截直接调它 ⇒ 不会出现"拦了却说不清拦在哪"或"提示列了个其实不挡路的格"。
+
+🔴 一个容易想反的点：**固定资源的"完成"是「解锁即完成」**（`isPrerequisiteComplete` 的特例）。
+所以「宝箱前置」只有**还没解锁**时才进这张清单；「已解锁、还没领取」的宝箱**不拦人**，
+那种情况走的是另一条表现（后继格银币数字染红 + 点击时宝箱跳动，见 §3.13）。
+两条需求各管一段，别合并成一条判据。
+
+#### 三、拼法（`model/TerritoryPrerequisite`，零 cc）
+
+- `territoryPrerequisiteText(blockerCellIds, sites, stageByCell)`：一步到位（查站点 → 取名 → 拼句）；
+- `territoryPrerequisiteBlockText(blockers)`：只负责拼，纯数据进出，单测直接钉字符串；
+- **只输出一句**：按清单顺序找第一个「宝箱」或「能命名的关卡」，命中即返回 ——
+  不存在「1-1、1-2」这种名单，也不存在「关卡 + 宝箱」拼两句（有守卫钉着：真表扫一遍，
+  结果里不许出现 `、` / `，` / `等`）；
+- 叫不出名字 ⇒ 返回**空串**，由 `TerritoryModel` 退回 `TERRITORY_TEXTS.prerequisiteNotOwned`。
+- 只有「前置没满足」这一条 reason 被改写；战力不足 / 在探索 / 已占领等 reason **原样透出**
+  （它们本来就够具体，套一层反而更糊）。
+
+#### 四、判据
+
+`tests/territory-prerequisite-text.test.ts`（13 条）：
+
+- 拼装：只有关卡 / 只有宝箱 / 混合只报第一个（两种顺序各测一次）/ 多个关卡只报第一个 /
+  念不出来的跳过 / 无名返空串。
+- 取名：`3-12`、`PVP`、没绑关卡返 `undefined`；并钉住「`TerritoryPrerequisite` 里不许再出现
+  `${chapterId}-` 这种本地拼法」。
+- 真表 + 真进度：`chapter_01` 全站点扫一遍 —— 每个被拦的站点，`prerequisiteBlockers` 非空且
+  `checkUnlock` 确实拦；拼出来的句子只能是那几种合法形态（含 `PVP 关卡通关后解锁`）；
+  空串**只**出现在"前置全是不属于站点的普通地块"时。
+- 接线守卫：`canAffordUnlock` 走 `unlockBlockTip`；`prerequisiteBlockText` 只喂数据、不自己扫表。
+
+⚠️ 桩型用例的 require 桩里要补 `'../model/TerritoryLevelBubble'`（`TerritoryMapView` 新增了这条
+import），否则整组会以 `Unexpected dependency` 红。
+
+### 3.15 首次解锁关卡自动开战：推一下镜头 + 一句话（2026-11-02）
+
+需求原文：
+
+> **首次解锁关卡自动进入战斗时，镜头推进**（类似宝箱第二档奖励的效果），**同时弹出提示条**，
+> 文案 `【遭遇敌人，即将开始战斗】`。
+
+要拆成三件事看，缺一条就会做歪：
+
+| # | 需求 | 落到哪 |
+| --- | --- | --- |
+| 1 | **只在「首次解锁 ⇒ 自动开战」这条入口播** | `TerritoryModel.handleUnlockThenBattle` 是**唯一**传 `approach = true` 的地方 |
+| 2 | 镜头推进 = 宝箱**第二档**的观感 | `TERRITORY_BATTLE_APPROACH_ZOOM = 1.35` |
+| 3 | 同时弹提示条，文案逐字 | `TERRITORY_TEXTS.battleApproach`，页面 `FW.showTip` |
+
+🔴 第 1 条是本次最容易做错的地方：玩家在 `LevelInfoPanel` 里**自己按**「开始战斗」时**不播**。
+他刚刚亲手点了按钮、本来就等着跳场景，再拖 1.2 秒纯属卡顿；而"首次解锁"是**系统替他按的**
+开战键 —— 不推一下、不说一句，玩家会以为误触，场景就切走了。
+
+#### 一、曲线（`model/TerritoryBattleApproach`，零 cc）
+
+```
+0 ──0.6s──▶ 1.35 ──保持──▶ 1.0s ──0.2s──▶ 1.0（复位）
+    easeOutCubic              easeInQuad
+```
+
+| 常量 | 值 | 作用 |
+| --- | --- | --- |
+| `TERRITORY_BATTLE_APPROACH_SECONDS` | **1.2** | 总时长；页面延迟跳转用的就是它（**两处同源**，改一个不用两边改） |
+| `TERRITORY_BATTLE_APPROACH_IN_SECONDS` | 0.6 | 推到位 |
+| `TERRITORY_BATTLE_APPROACH_HOLD_UNTIL` | 1.0 | 保持到的时刻 |
+| `TERRITORY_BATTLE_APPROACH_OUT_SECONDS` | 0.2 | 收回 = 总时长 − 保持点（算出来的，别手写） |
+| `TERRITORY_BATTLE_APPROACH_ZOOM` | **1.35** | = `TERRITORY_CHEST_CAMERA_ZOOM_MEDIUM`（宝箱第二档） |
+
+输出 `{ scale, focus, done }` —— 与 `territoryChestCameraFx` **同一套语义**（`focus` 是"目标格往
+屏幕中心挪多少"，0 = 原位、1 = 正中），所以 `TerritoryMapView` 一行新公式都没写，只是换条曲线喂
+同样的 `applyChestCamera(scale, focus, origin)`。
+
+三个容易踩的点：
+
+- **起点必须恒为 1**（`t = 0` ⇒ `scale 1 / focus 0`）：点下去那一帧的画面要和静止时逐像素同大，
+  不能"点一下突然弹大一圈"（宝箱那边 2026-10-22 踩过同一个坑）。
+- **收尾必须回 1**：过场结束就跳战斗页，但地图节点已被放大 + 平移，不还原的话页面晚销毁一帧就会
+  「啪」地缩回去；而且带着放大的 content 去开 `ScrollView`，滚动边界会按错的尺寸算（§3.1.1）。
+- **非法入参按 `t = 0`**：`NaN` / 负数不能写进节点 scale —— 那是整张地图消失，且零报错。
+
+#### 二、视图：复用开箱那套基准，不许新写推镜
+
+| 环节 | 做法 |
+| --- | --- |
+| 取格心 | `cellPointInOverlay(cellId)`（与开箱同一入口）；拿不到 ⇒ **返回 `false`**，不播 |
+| 量基准 | `captureChestCamera(point)` —— 必须在第一帧写位置**之前**量，否则量到的是"已经被推过"的地图 |
+| 每帧 | `stepBattleApproach(dt)` → `applyChestCamera(fx.scale, fx.focus, origin)` |
+| 收尾 | 只把 `battleApproach` 置 `null`，还原与解锁交给 `update` 里那条唯一的收尾路径 |
+
+🔴 **`cameraBusy` 必须三合一**：
+
+```ts
+const cameraBusy = this.chestView?.isPlaying === true || this.clouds.dollyActive
+    || this.battleApproach !== null;
+```
+
+漏掉最后一项的后果很具体：过场刚开始的那一帧 `cameraBusy` 为假 ⇒ `restoreChestCamera()` 立刻
+把地图按回原位，镜头根本推不动（表现为"提示条弹了，但画面没反应"）。
+
+`stepBattleApproach` 的位置也有讲究：必须排在 `update` 的 `stepCloudDolly()` **之后**、`cameraBusy`
+判定**之前** —— 晚一帧写 `applyChestCamera` 就会和云的那套推镜抢同一帧的 `scale`。
+
+另外两处要清状态（先清再 `restoreChestCamera`，否则它还会继续写位置）：`stopChestPlay()`、
+`syncGrid` 的换图分支。同时 `playBattleApproach` 里 `chestView?.isPlaying` 为真就直接 `false` ——
+两套镜头同时写 `scale` 会互相打架。
+
+#### 三、页面：延一帧起播、播不了就立刻跳
+
+```ts
+if (!payload.approach) { this.commitBattleNav(payload); return; }   // 玩家手按的那条，原样直跳
+if (this.battleApproachPending) return;
+this.battleApproachPending = true;
+this.scheduleOnce(() => {                                            // ① 延一帧
+    const started = this.mapView?.playBattleApproach(pve.territoryCellId) ?? false;
+    if (started) FW.showTip(TERRITORY_TEXTS.battleApproach);
+    this.scheduleOnce(() => { …; this.commitBattleNav(payload); },   // ② 推迟一个总时长
+        started ? TERRITORY_BATTLE_APPROACH_SECONDS : 0);
+}, 0);
+```
+
+- **① 为什么延一帧**：写请求的全屏 `LoadingPopup` 是在 model 的 `finally` 里才收的，同一帧起播会被
+  全屏 loading 整个盖住（玩家只看到提示条、看不到推镜）。
+- **② `started ? 时长 : 0`**：格子不在视口 / 覆盖层没建 ⇒ `playBattleApproach` 返回 `false`，
+  这时**别白等 1.2 秒**，立刻跳。
+- **单一跳转出口**：过场前后都走 `commitBattleNav(payload)`，
+  `ProcedureManager.navigate(GameRoute.Battle` 全文件**只有这一处**（守卫钉着），避免两条分支
+  各写一份导致 preload 处理漂移。
+- **预热不跟着延后**：`ensureBattlePreload` 在分支之前就调了，1.2 秒正好用来等资源。
+- **过场期间丢弃后续 navigate**（`battleApproachPending`）：地图已被 `setInputLocked(true)` 锁住，
+  正常也点不出第二格；这条只是兜住协议侧的重发。
+
+#### 四、载荷：`approach` 是可选的、只在为真时挂上
+
+`TerritoryModel.navigateToBattle`：
+
+```ts
+this.publish({ kind: 'navigate', payload: approach ? { pve, battle, approach } : { pve, battle } });
+```
+
+不写成 `{ pve, battle, approach: false }` 是为了不动既有断言 —— 老用例是整对象深比较的。
+链路：`applyBattleStart(site, stage, result, approach = false)` → `beginBattle(…)` → `navigateToBattle(…)`；
+`handleUnlockThenBattle` 的回包里传 `true`，是**全文件唯一**带 `true` 的调用点。
+
+#### 五、判据
+
+`tests/territory-battle-approach.test.ts`（13 条）：
+
+- 曲线：起点 `1 / 0`、推到头 `1.35` 且 `focus = 1`、保持段恒 `1.35`、结束回 `1` 且 `done`、
+  推入段单调有界、非法入参按原位、总时长落在 1~2s。
+- 文案：`TERRITORY_TEXTS.battleApproach === '遭遇敌人，即将开始战斗'`（逐字）。
+- 接线守卫：`applyBattleStart` 只有 2 处调用且只有 1 处带 `, true`；navigate 载荷是三元表达式；
+  页面有 `if (!payload.approach)` 分支 + `playBattleApproach(pve.territoryCellId)` +
+  `FW.showTip(TERRITORY_TEXTS.battleApproach)` + `started ? … : 0`；
+  `ProcedureManager.navigate(GameRoute.Battle` 只剩 1 处；
+  视图里 `stepBattleApproach` 在 `update` 内、`cameraBusy` 含 `|| this.battleApproach !== null;`、
+  起点写的是 `applyChestCamera(1, 0, point)` + `setInputLocked(true)`。
+
+⚠️ 桩型用例的 require 桩若报 `Unexpected dependency: ../model/TerritoryBattleApproach`，
+说明页面新增了这条 import，补桩即可（`MainTerritoryMap` 只取那个 `_SECONDS` 常量）。
+
+### 3.16 宝箱气泡换 `frame_04`：竖向水滴 + 图标在上、数字在下（2026-11-02）
+
+需求原文（用户附美术资源树截图 + 美术参考图）：
+
+> 「宝箱的气泡框使用新的美术资源 **`frame_04`**，图标内 icon 和数字的排版参考 screenshot-2 的美术图」
+
+#### 一、为什么不能沿用「章节」气泡那套
+
+| | 章节 / 关卡编号气泡 | 宝箱提示气泡 |
+| --- | --- | --- |
+| 底图 | `frame_03` 蓝 / `frame_02` 红，**94×45 横向胶囊** | **`frame_04`，77×87 竖向水滴**（尖朝下指着宝箱） |
+| 内容 | 一行编号（`1-1` / `章节` / `PVP`） | **上下两行**：上 icon、下数字 |
+| 排版 | 图标与数字**并排**、整对居中 | 图标在上、数字在下，**各自**水平居中 |
+
+77 宽的水滴里并排放 36 的图标 + 两位数会顶到描边，而水滴的尖端只有 12px 宽 ——
+所以旧的「总宽 = 图标宽 + 间距 + 数值宽」那套（`LEVEL_BUBBLE_ICON_SIZE/GAP`、
+`readBubbleTextWidth`）随本次换图**一并删除**，别再加回来。
+
+#### 二、数值（`model/TerritoryChestBubble`，零 cc）
+
+| 常量 | 值 | 依据 |
+| --- | --- | --- |
+| `TERRITORY_CHEST_BUBBLE_WIDTH/HEIGHT` | **77 / 87** | `frame_04.png` 实测画布，按原尺寸渲染（缩放会让 1px 描边发虚） |
+| `..._ICON_SIZE` | **36** | 约占气泡宽 47%（美术稿里肉块与水滴同比例）。2026-11-02 第二轮「放大 5%」⇒ 34 × 1.05 = 35.7 → 36 |
+| `..._ICON_Y` | **+17** | 落点处 alpha 宽 ≥ 65（水滴最宽段），不顶圆顶；36 的图标占 y −1 ~ +35，最上一行 alpha 宽 53 ≥ 36 |
+| `..._TEXT_Y` | **−17** | 数字包围盒（含描边）占 y −3 ~ −31，第 75 行 alpha 宽 33 刚好装下两位数字；再往下压到尖端 |
+| `..._FONT_SIZE / LINE_HEIGHT` | **24 / 27** | 美术稿 `12` 的字高约占内区 20%（实测 10px / 51px）⇒ `87 × 0.20 ÷ 0.716 ≈ 24` |
+| `..._TEXT_COLOR` | **`#5A3A1E`** 深棕 | 底图奶白 `#F8F0E0`，**白字等于没字**；纯黑又比美术稿硬一档 |
+| `..._OUTLINE_WIDTH / _COLOR` | **1 / `#3A2410`** | 补字重：美术稿笔画约占字高 25%，实机只有 ~12%，`isBold` 到顶也补不满 ⇒ 叠一圈同色系更深的描边 |
+
+视图侧只读 `territoryChestBubbleLayout()`，`renderLevelBubble` / `themeLevelBubbleLabel` /
+`applyLevelBubbleLayout` 里**都不许再写数字**：换图后只要 PNG 变了，常量与用例会一起亮红。
+
+#### 二·补 2026-11-02 第二轮：icon +5%、字体「大小和粗细」对齐美术稿
+
+用户原话：「体力 icon 放大 5%，字体样式也要匹配原来的大小和粗细」。逐像素比对后结论：
+
+| 项 | 实机（改前） | 美术稿 | 处理 |
+| --- | --- | --- | --- |
+| icon 边长 | 34 | 略大一点 | **36**（+5.9%，5% 取整的必然） |
+| 数字字高 / 气泡内区高 | 10 / 44 = 22.7% | 10 / 51 = 19.6% | 字号 22 → **24**（按内区 20% 反推） |
+| 笔画 / 字高 | ~12%（细、发灰） | ~25%（厚） | `isBold` 已开 ⇒ 再叠 **描边 1**（同色系更深 `#3A2410`） |
+
+⚠️ 描边宽度**不要**图省事取 2：24 号字叠 2 会把 `12` 糊成一团（合成图对照美术稿明显偏粗）。
+⚠️ 两套气泡**共用同一个 Label** ⇒ 切回编号气泡时必须把 `outlineColor` 复位成 `Color.BLACK`
+（只改 `enableOutline` 的话会带着上一轮的深棕描边）。
+
+
+#### 三、视图的三处关键改动
+
+1. **尺寸每帧刷**：`UITransform` 与 `Sprite.type` 都按「有没有 icon」重算 ——
+   宝箱用 `SIMPLE`（成品水滴无九宫格切边）、编号用 `SLICED`（胶囊靠切边保圆角）。
+   创建时定死会在「同一格从编号气泡变成宝箱提示」时留下错尺寸。
+2. **定位读实际高度**：`applyLevelBubblePosition` 不再写死 `MAP_MARKER_BUBBLE_HEIGHT(45)`，
+   改成读节点 `contentSize.height` —— 否则 87 高的水滴会把尖扎进地块 / 整体飘高一截。
+3. **文字样式收进唯一入口** `themeLevelBubbleLabel(chest)`：两套口径差别很大
+   （深棕 + 深棕描边 vs 白字压黑描边），创建与复用都走它，避免只改一处；
+   切到编号气泡时要**同时**复位 `outlineColor`（共用一个 Label）。
+
+#### 四、判据
+
+`tests/territory-chest-bubble.test.ts`（12 条）：
+
+- **底图**：常量路径就是 `image/spawn-region/frame_04/spriteFrame`；宽高与 PNG 画布一致；
+  高 > 宽（拿成横向胶囊会立刻红）。
+- **不溢出**：解 PNG 逐行 alpha 区间，icon 方框与数字方框（**含描边**扩边）的**每一行**
+  都必须被不透明区间盖住（变异验证：`ICON_SIZE` 改成 52，这条与「上下不重叠」「+5%」一起红）。
+- **顺序与颜色**：`iconY > textY` 且两者不交叠；底图平均亮度 > 200 ⇒ 文字亮度必须 < 110。
+- **第二轮口径**：`iconSize ∈ [34, 36]`（5% 取整区间）、icon 占宽 44%~50%、
+  描边宽度 1~3 且**描边色比文字色更深**（否则等于没加粗）。
+- **接线**：页面 `loadFrame(assets, TERRITORY_CHEST_BUBBLE_FRAME_PATH)` 且 `return` 带
+  `chestBubbleFrame`；地图视图取 `input.art.chestBubbleFrame ?? input.art.levelBubbleFrame`；
+  视图有 `icon.node.setPosition(0, chest.iconY, 0)`、`badgeLabel.node.setPosition(0, chest.textY, 0)`、
+  `const spriteType = chest ? Sprite.Type.SIMPLE : Sprite.Type.SLICED;`；
+  描边三件（`enableOutline = chest.outlineWidth > 0` / `outlineWidth` / `outlineColor`）都在
+  `themeLevelBubbleLabel` 里接线，且有 `outlineColor = Color.BLACK` 的复位；
+  反向钉住 `LEVEL_BUBBLE_ICON_GAP` / `readBubbleTextWidth` **不许回来**。
+
+⚠️ 桩型用例：`TerritoryStationView` 新增了 `../model/TerritoryChestBubble` 这条 import，
+`tests/helpers/territory-station-fixtures.ts` 的 require 桩必须以**真模块**补上，
+`TerritoryPageAssets` 的桩（`territory-random-resource-render`）同理 —— 否则整组会以
+`Unexpected require/dependency` 红，看起来像产品代码炸了。
+
+### 3.17 「胜利通过」的地块进场比普通生成**更重**（2026-11-03）
+
+用户原话：*「胜利通过的地块动画节奏感需要比普通的地块生成动画更强，更明显」*。
+
+#### 一、为什么必须分两档，而不是把普通档调重
+
+同一支动画服务两件性质不同的事：
+
+| 场景 | 性质 | 节奏该多重 |
+| :-- | :-- | :-- |
+| 云散开 / 解锁一片 / 章节推进露出 | **背景事件**，常常一次十几格 | 轻。重了就是挡视线 |
+| 打完这一关、地盘归我 | **主动作的收尾**，玩家视线就在这一格 | 重。要让"收地"有一下落地的声音 |
+
+所以不是改参数，是**分档**：曲线完全共用（`easeOutCubic`），只有 `ITerritoryHexSpawnTiming`
+里的七个数不同。改一处曲线两边一起变，档位差异一眼能比对（见 `model/TerritoryHexSpawn.ts` 的表）。
+
+#### 二、两档的具体差异
+
+| 维度 | 普通 `TERRITORY_HEX_SPAWN_TIMING` | 胜利 `…_VICTORY_TIMING` | 为什么 |
+| :-- | --: | --: | :-- |
+| 单格时长 | 0.40s | **0.62s** | 过冲要有时间收尾，否则读成"抖了一下" |
+| 起手缩放 | 0.55 | **0.28** | 起手更小 ⇒ "从地里长出来"的落差更大 |
+| 过冲峰值 | 无（`peakScale = 1`） | **1.14 @ 72%** | 长过头再收回 = "砸下去"；只放不弹就只是普通缓出 |
+| 错峰间隔 | 0.055s | **0.14s** | 一格一格分得开才听得出节拍（普通档几乎同时冒头） |
+| 错峰上限 | 0.30s | **0.62s** | 十几格也让它真的排完；"同时一坨"就没有节奏了 |
+| 透明度铺满 | 70% | **50%** | 先亮起来再长大，亮的那一下正好压在过冲上 |
+
+- 透明度**仍然先于缩放铺满**（这条两档共用，`opacityPortion < 1` 是硬口径）。
+- 过冲是**连续**的：`t = peakPortion` 时两支都取到 `peakScale`（`easeOutCubic` 端点精确），
+  不会在切换点跳一下；`t >= seconds` 一律回 `{ scale: 1, opacity: 1 }`（`assert.deepEqual` 钉住）。
+- 普通档 `peakScale = 1 / peakPortion = 1` ⇒ `territoryHexSpawnFrame` 走"缓出长到底"那一支，
+  **不是**靠 `if (victory)` 分支 —— 两档共用同一条代码路径。
+
+#### 三、哪一批算「胜利通过」
+
+模型侧两个字段（`TerritoryModel`）：
+
+| 字段 | 语义 |
+| :-- | :-- |
+| `victoryPending` | 「刚打完一场胜仗，等一下收进来的那批要放大播」—— 由 `applyStoredBattleResult()` 在 **`result.ok`** 时置位 |
+| `victoryClaimCells` | 这一批具体是哪几格 —— 由 `settleProgress()` 在 `claimed.length > 0` 时兑现，**兑现即清标记** |
+
+- 🔴 标记必须挂在 `result.ok` 上：`ok === false`（这一格已经在探索中 / 不满足条件）时并没有
+  "新收进地盘"，放大播一遍纯属噪音。
+- 🔴 `settleProgress` **每次进来先清空** `victoryClaimCells`：它只服务于紧接着的那一次渲染，
+  留着不放会让后面无关的生成批次也走重档。
+- 🔴 `claimed` 为空（只是"没到期"）时**不能消费** `victoryPending`，否则真正的收地那批反而丢档。
+- 🔴 切章节（`loadChapter`）与 `dispose()` 都要复位两个字段：否则新章第一次普通生成会被
+  当成"胜利通过"放大播。
+
+视图侧选档（`TerritoryMapView.syncHexSpawn`）：
+
+```ts
+const celebrate = input.victoryClaimCells;
+const victory = celebrate.length > 0 && fresh.some((cell) => celebrate.includes(cell.cellId));
+const timing = victory ? TERRITORY_HEX_SPAWN_VICTORY_TIMING : TERRITORY_HEX_SPAWN_TIMING;
+const delays = territoryHexSpawnDelays(fresh, timing.stagger, timing.staggerMax);
+```
+
+- **整批同档**：同一批里只要有一格来自胜利格，整批都走重档 —— 混档播没有节拍。
+- ⚠️ `territoryHexSpawnDelays` 的第 2/3 参必须跟着 `timing` 走。只改时长不改错峰，
+  格子还是挤在一起，玩家看到的只是"变慢了"而不是"更有节奏"（用例专门钉这一条）。
+- 首帧建快照（`spawnBootstrapped`）**不播**：进页面时不该放大播一遍存档里已有的格子。
+- `TerritoryHexSpawn`（视图）按**格**记 `timing`：同一批可能混档，`remainingSeconds()` 也要
+  按每格自己的档位算剩余（页面靠它决定"新地块生成播完再盖云"）。
+
+#### 四、判据
+
+`tests/territory-hex-spawn.test.ts`：
+
+- `★★★胜利档每一项都比普通档更重` —— 时长 / 起手 / 错峰 / 上限 / 透明度五条全部**单向**比较；
+  普通档 `peakScale === 1`（不许有过冲）。
+- `★★★唯一过冲峰值精确等于 peakScale，末帧精确回到 1` —— 200 点采样：不越界、
+  只允许**一个**拐点、峰值落在 `peakPortion ± 1.5 步`、`peakPortion` 处取到精确值、
+  `t >= seconds` 回到 `{1,1}`。
+- `★透明度在 opacityPortion 就已铺满` —— 铺满那一刻缩放仍在半路（"亮"与"长大"是两段）。
+- `★一批的总时长长于普通档` + `★错峰间隔按胜利档算且仍按簇心铺开`。
+- `视图 play 第 4 参把档位带进每一格` —— 起手帧用该档 `fromScale`、`remainingSeconds` 用该档时长、
+  普通档到点时胜利档还在播。
+- `★★★地图视图：胜利那一批整批走重档` / `★首帧不播胜利档` —— 源码守卫。
+- `★★★模型：只有 result.ok 才置标记` / `只兑现一次` / `切章与销毁都复位` / `状态透出`。
+
+### 3.18 体力 / 银币不够时，**对应的**那个数字变红（2026-11-03）
+
+用户原话：*「体力不足或银币不足时，对应的数字 UI 显示红色」*。
+
+#### 一、三个数字，两套判据
+
+| 数字 | 在哪 | 判据 |
+| :-- | :-- | :-- |
+| **银币**消耗（未解锁格左上「银币 + 15」） | `stationRenderOf` 的 `!isOpened` 分支 → `conditionTextColor` | `wallet.silver < site.unlock.silverCost` |
+| **体力**消耗（宝箱水滴气泡里「体力 + 1」） | `fixedResource` 分支 → `levelBubbleTextColor` | `wallet.stamina < site.unlock.staminaCost` |
+| 银币消耗（随机资源格） | `syncStations` 的随机格分支 | `wallet.silver < randomSites.triggerSilver` |
+
+判据只有一个入口：**`model/TerritoryCostShortfall.territoryUnlockShortfall(wallet, cost)`**
+（两项分开返回 —— 这就是"对应"的全部意思）。
+
+#### 二、银币数字的三条红法（缺一条都读错）
+
+```ts
+const short = territoryUnlockShortfall(input.wallet, site.unlock);
+const silverRed = short.silver                        // ① 银币确实不够
+    || unclaimedFixedPrereq                           // ② 前置宝箱还没领（2026-10-21 口径）
+    || (!isOpenable && !short.stamina);               // ③ 这格开不了，但不是因为体力
+```
+
+- ① 是本次需求；
+- ② 是既有口径，必须留着（否则"宝箱没领"这条提示消失）；
+- ③ 保留旧读法（前置没打 / 战力不够时数字跟着红），但**把「体力不足」这一种排除掉** ——
+  体力不够却把银币染红，等于告诉玩家"钱不够"，他会去攒错东西。
+- 🔴 因此**不能**再写成 `isOpenable && !unclaimedFixedPrereq ? 白 : 红`：那样一体力不足就整片红。
+
+#### 三、边界（都写在纯函数里，用例逐条钉住）
+
+| 情况 | 结论 | 为什么 |
+| :-- | :-- | :-- |
+| `cost <= 0`（免费格 / 表里填 0） | 不算不足 | 否则整张图红一片，而玩家点得进去 |
+| `cost` 非有限数（`NaN` / `∞`） | 不算不足 | 配表脏数据不该由表现层兜（配表侧有校验线） |
+| 余额未知（`NaN` / 缺 `wallet`） | 不算不足 | 红是"确定不够"的断言，读不到就染红只是噪音 |
+| 刚好够（`balance === cost`） | 不算不足 | 能开就是能开 |
+
+#### 四、接线（少一跳就静默不变红）
+
+```text
+TerritoryModel.buildState()            → wallet: { silver, stamina }        （存档兜底 0，与 buildHud 同口径）
+TerritoryViewState.buildTerritoryViewState() → wallet 拍快照（Object.freeze）
+MainTerritoryMap.renderAll()           → renderMap({ …, wallet: state.wallet })
+TerritoryMapView.stationRenderOf()     → conditionTextColor / levelBubbleTextColor
+TerritoryStationView.renderLevelBubble() → 覆盖 badgeLabel.color
+```
+
+- ⚠️ 快照必须冻结：延迟一帧的渲染若读到**已经扣过费**的实时钱包，银币数字会在同一帧里
+  红→白闪一下，红/白也就不再对应"付款前"的事实。
+- ⚠️ 气泡覆盖色必须排在 `themeLevelBubbleLabel` **之后**：那一支每帧都会把颜色写回
+  「宝箱深棕 / 编号白」，写在前面等于被它盖掉（表现：体力不足但数字仍是深棕）。
+
+#### 五、判据
+
+`tests/territory-wallet-shortfall.test.ts`（12 条）：
+
+- 纯函数：刚好够 / 差 1 / 免费 / 脏消耗 / 余额未知 / 两项各判各的 / 大数（`MAX_SAFE_INTEGER`）。
+- 接线守卫：银币那颗只读 `short.silver`、体力那颗只读 `.stamina`、随机格同口径、
+  覆盖色在 `themeLevelBubbleLabel` 之后、钱包从模型一路透到地图（含快照冻结）。
+- **行为**（沙箱真跑 `syncStations`）：未解锁站点格四条 —— 都够白 / 银币差 1 红 /
+  **只缺体力 ⇒ 银币白** / 两项都缺 ⇒ 红。截图里那几颗「银币 15」走的正是这条路径，
+  不能靠随机格那份用例"顺带证明"（两条渲染路径）。
+
+`tests/territory-random-resource-render.test.ts`（行为，同一套沙箱）：
+
+- `★★★银币不够 ⇒ 银币数字红；体力不够（银币够）⇒ 银币数字白` —— 随机格同四条。
+
+⚠️ `TerritoryMapView` 的沙箱桩表已抽到 `tests/helpers/territory-map-view-sandbox.ts`
+（`loadTerritoryMapViewClass`）：新增 MapView 的 import 时**只补这一处**，
+否则所有引用者一起以 `Unexpected dependency` 红。
+
+### 3.19 「章节选择」的入口 = 地图上的章节建筑（含气泡）；两侧三角关闭（2026-11-03）
+
+用户两句话（配两张图）：
+
+> 1. 「章节弹窗对应的打开按钮是章节建筑（包括气泡部分」
+> 2. 「关闭快速寻敌的左右侧的三角形按钮 UI」
+
+这是同一件事的两半：**入口搬家**。原来入口是快速寻敌（`BeginGame`）两侧那两颗
+`PreviousChapter` / `NextChapter` 三角；现在改成地图起始格那颗**章节建筑**，以及它头上那颗
+「章节」**气泡**。只做一半就会出现「弹窗没有入口」或「两个入口同时存在」。
+
+#### 一、视图侧：起始格是「章节入口」
+
+| 位置 | 改动 |
+| :-- | :-- |
+| `TerritoryMapView` 起始格渲染 | `chapterEntry: true` + `interactive: true` |
+| `ensureStartView()` | `initialize(layers)`（原来传 `false` = 不可点） |
+| `TerritoryStationView.handleClick` | 先判 `chapterEntry` 发 `TerritoryUiEvent.ChapterSelect`，否则走 `STATION_TAP` |
+| `ITerritoryStationRender.chapterEntry` | 每帧从内容写（站点节点池化复用，不写会带着上一格的身份） |
+
+- **气泡为什么自动就能点**：`renderLevelBubble` 给气泡节点挂的那颗 Button 用的是
+  `visible && content.interactive` —— 与建筑共用同一个 `interactive`。
+  所以「包括气泡部分」不需要第二个开关，`interactive: true` 一处就够。
+- ⚠️ 章节入口**不能**塞进 `STATION_TAP`：那条链的下游（`onStationClick`）要真站点去算
+  `cellId`、播点击反馈、发解锁 intent，起始格 `site === null` 会让整条链空转。
+- ⚠️ 只有 `clickable` 但 `site` 为空的组合是**合法**的（就是起始格），别再按
+  「`site` 有值才发事件」一刀切 —— 那正是这次改之前点不动的原因。
+
+#### 二、页面侧：三角关闭 + 订阅新入口
+
+| 位置 | 改动 |
+| :-- | :-- |
+| `MainPage.onLoad` | 两个三角 `active = false`；`EventMgr.on(TerritoryUiEvent.ChapterSelect, this.onOpenChapterSelect, this)` |
+| `MainPage.onTerritoryRender` | **删掉** `active = ready` 两行（那正是让三角重新出现的地方） |
+
+- 节点与点击绑定**保留**在 prefab 上（不删 `@property`，否则反序列化会丢掉引用），
+  只是永久隐藏；将来要恢复就还那两行。
+- 三角与建筑开的是**同一个方法**（`onOpenChapterSelect` → `openChapterSelect` → `ChapterSelectPanel.open`），
+  不许各写一套 open，否则两套「当前章 / 完成度」数据迟早不一致。
+- `TerritoryUiEvent.ChapterSelect` 定义在 `application/TerritoryEvents.ts`：章节选择不是领地模型的状态
+  （不进 `TerritoryModel`、不需要规则），所以走 UI 事件让**页**去开，不给模型加空 intent。
+
+#### 三、判据
+
+`tests/territory-chapter-entry.test.ts`（8 条）：
+
+- 行为（`helpers/territory-station-fixtures` 里真跑视图）：
+  ① 章节建筑点了只发 `ChapterSelect`、不发 `STATION_TAP`；
+  ② 同一视图改回普通站点后发 `STATION_TAP`（池化复位）；
+  ③ `interactive` 同时管住建筑那颗 Button（气泡共用同一字段，源码钉住共用关系）。
+- 源码守卫：起始格 `chapterEntry: true` + `interactive: true`、`ensureStartView` 不再传 `false`、
+  事件常量不撞名、`MainPage` 订阅且 `onTerritoryRender` 不再动三角、`onStartGame` 仍只发 `focusLevel`。
+- `tests/main-quick-find.test.ts`：原来那条「两侧箭头常驻」已按新需求改写为「恒隐藏」。
+
+⚠️ 夹具坑（已修）：`tests/helpers/territory-station-fixtures.ts` 的 `./TerritoryEvents` 桩
+原来手抄了一份常量表，停在 `STATION_CLICK` 那一代 —— 真视图发 `STATION_TAP` 时桩里没这个键，
+`emit(undefined)` 也算"发了事件"，等于把验收放空。现在改为**真模块**。
+
 ## 4. 其他玩家席位的视觉区分：顶点色相乘灰
 - **统一判据**：`owner !== 'player'`（与领地染色、城墙敌我同口径）。
 - **实现方式**：在 `ZCUnitView.applyVisualTint` 中通过 `Sprite.color` / `Skeleton.color` 顶点色相乘叠 `#828282`（`OTHER_PLAYER_TINT = 0x82`），保留美术明暗体积，不额外建节点。
@@ -1539,7 +2343,7 @@ revealed = owned ∪ unlocked ∪ 前置满足的站点 ∪ **前沿可见的随
   - 🔴 **目标是「金矿地块」而不是只认资源点**（2026-10-26 二次修）：`findMineHintTarget` 先找 `canDevelop && tileType === ZCPvpTileType.Mine` 的格子（就是开局那圈里画 `icon_jk` + 造价「50」的那一格 —— 玩家口中的「初始生成的金矿图标」），找不到才退到中立金矿**资源点**（`neutralResourceVisualOf(neutralResourceId) === ZCNeutralResourceVisual.Mine`）。判据随目标类型走（`hintTargetKind: 'tile' | 'resource'`）：地块类看「还 `canDevelop` 吗」，资源类看「`neutralResourceId` 还是金矿吗」。
     - 旧口径只认资源点，而实战地图的金矿主要表现成**地块类型** ⇒ 目标一次都没找到，描边一格都没闪过（用户反馈「没看到效果」的根因）。
   - 🔴 **画在棋盘最上层的共享画布上**（2026-10-26 三次改，用户口径「描边需要覆盖在最上层」）：`ZCGameRenderWorld.ensureHintOutlineGraphics` 惰性建一个 `ZCHintOutline` 节点（`cc.Graphics`）挂到 **`CooldownOverlay`** —— prefab 子节点序的**最后一个图层**（`MapWater / HexLayer / OutlineLayer / ResourceLayer / DecorLayer / BuildingOverlay / CooldownOverlay`），`setParent` 追加到该层子节点序末尾 ⇒ 一定压在所有地块、城墙、资源图标、建筑与冷却环之上。画布节点位置每帧跟着**目标格心**走（顶点是格心局部坐标），整局复用一份。
-    - 旧做法画在单格自带的 `TerritoryOutline` 上 —— 那份和地块同层，相邻格的底色与建筑按绘制顺序把提示线盖掉半圈（用户截图里线被切掉）。该 `Graphics` 现在**永久停用**（`initialize` 里 `clear + enabled = false`），只留字段承接 prefab 已序列化引用。
+    - 旧做法画在单格自带的 `TerritoryOutline` 上 —— 那份和地块同层，相邻格的底色与建筑按绘制顺序把提示线盖掉半圈（用户截图里线被切掉）。该逐格节点、`Graphics` 及 Inspector 字段现已一并移除，不再为每个地块创建闲置画布。
   - 样式（2026-10-26 用户口径「换成绿色更显眼、描边大小增加 2px、提示线用 0.94 左右」）：颜色 `ZC_CLIENT_COLORS.hint`（`#3EE36F` 绿，原金色在中立土黄底上同色系看不见），线宽 **9**（领地轮廓 6px + 2px），顶点仍复用 `ZC_OUTLINE_HEX_POINTS` 但**内缩用自己的 `HINT_OUTLINE_INSET_SCALE = 0.94`**（不是领地轮廓的 `OWNED_OUTLINE_INSET_SCALE = 0.98`）：9px 的线在 0.98 下外沿会探出格界 4~5px、盖住邻格的造价数字，0.94 让外沿基本落在格界内侧。几何在 `ZCHexView.strokeHintOutline(graphics, alpha, previousAlpha)`（画布由调用方给，视图只负责 6 条边），带 2% 死区与 `graphics.enabled` 闸门。
   - **外发光（2026-10-26 用户口径「增加 2px 左右的边缘发光」）**：`cc.Graphics` 的描边**没有渐变**（`strokeColor` 只有一个颜色），项目里也没有适用于矢量线的发光材质 / 后处理 ⇒ 按用户给的第二方案「叠加透明度过渡到边缘」实现：同一圈六边形按 **4 环 + 1 核心**共描 5 笔，宽度 `13 / 12 / 11 / 10 / 9`（核心 9 + 单侧 2px），透明度系数 `ZC_HINT_GLOW_RING_ALPHAS = [0.08, 0.11, 0.15, 0.20]`（由外到内递增）再乘呼吸值。核心线**最后画**，压在光晕之上。
     - 5 笔共用**同一份顶点**（`traceHexEdges(graphics, inset)`），否则光晕会在格角错开。
@@ -1555,7 +2359,11 @@ revealed = owned ∪ unlocked ∪ 前置满足的站点 ∪ **前沿可见的随
 - **统一方向**：一律从屏幕左侧外部（`-viewWidth / 2 - halfWidth`）往右扇入，已删除敌我分方向的 `isLeftSide`。
 - **Role 节点生成时序（`legendRoleProgress(elapsed, slideSeconds)`）**：
   - 横幅扇入期间 Role 进度恒为 `0`（完全透明）；扇入完成后在 `LEGEND_ROLE_GENERATE_SECONDS = 0.7s` 内按**已用秒数**线性推进 `0 → 1`，下落与淡入共用缓动 `legendRoleEase = easeOutCubic`。
-  - 🔴 **Y 轴 `LEGEND_ROLE_DROP_Y = 80 → 0` 是相对 Prefab 静止位的偏移**：Role 节点静止位 `roleRestY = -28.24` 在首次写入前惰性捕获，实际写入 `roleRestY + 80 * (1 - ease)`（写成绝对 0 会把角色永久抬高 28px）。
+  - 🔴 **Y 轴 `LEGEND_ROLE_DROP_Y = 80 → 0` 是相对立绘静止位的偏移**：静止位由 `legendRoleRestY()` 算出
+    （`LEGEND_ROLE_BOTTOM_Y(-188) + LEGEND_ROLE_TARGET_HEIGHT(280)/2 = -48`），实际写入 `roleRestY + 80 * (1 - ease)`。
+    ⚠️ 2026-11-02 起**不再惰性捕获 prefab 的 `Role.y`**（那个 `-21.798` 是「256 原生不缩放」时代的位，
+    放大到 280 后沿用会让立绘整体上浮、狼头戳出丝带上沿）。写成绝对 `0` 同样错 —— 角色会浮在半空。
+  - 立绘尺寸与下落动画互不干扰：尺寸只在 `renderContent` 换卡时按 `applyRoleScale()` 重算一次，每帧路径只动 y 与 alpha。
   - 透明度直接写 `roleSprite.color.a`（不挂 `UIOpacity`，且与 `renderContent` 互不冲突）。
 - **判据**：`tests/zcds-legend-banner.test.ts`（★row11 采样用例）。
 

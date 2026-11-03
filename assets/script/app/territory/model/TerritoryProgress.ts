@@ -386,7 +386,7 @@ export class TerritoryProgress {
             return { ok: false, reason: TERRITORY_TEXTS.footprintLocked };
         }
         const unlock = site?.unlock ?? this.map.defaults;
-        if (unlock.requiredCells.some((cell) => !this.isPrerequisiteComplete(cell))) {
+        if (this.prerequisiteBlockers(cellId).length) {
             return { ok: false, reason: TERRITORY_TEXTS.prerequisiteNotOwned };
         }
         if (!Number.isFinite(combatPower) || combatPower < unlock.combatPower) {
@@ -455,6 +455,22 @@ export class TerritoryProgress {
 
     private siteForCell(cellId: number): TerritorySite | null {
         return this.map.sites.find((site) => site.footprint.includes(cellId)) ?? null;
+    }
+
+    /**
+     * 这一格**还没满足的前置格**（`requiredCells` 里 `isPrerequisiteComplete` 为假的那些）。
+     *
+     * 判据与 {@link checkUnlock} 的拦截**同源**（那边直接调本方法），所以「被拦截」与
+     * 「提示里列出来的那几格」永远是一回事 —— 不会出现"拦了但说不出拦在哪"。
+     *
+     * 用途：玩家看得见的提示要具体到前置对象（需求 2026-11-02），由
+     * `TerritoryModel` 翻译成 `1-1 关卡通关后解锁` / `前置宝箱未打开`。
+     * 返回**去重**后的 cellId；顺序沿用配置里的书写顺序（编辑器里的连线顺序）。
+     */
+    prerequisiteBlockers(cellId: number): number[] {
+        const site = this.siteForCell(cellId);
+        const required = site?.unlock?.requiredCells ?? this.map.defaults.requiredCells ?? [];
+        return Array.from(new Set(required)).filter((cell) => !this.isPrerequisiteComplete(cell));
     }
 
     private isPrerequisiteComplete(cellId: number): boolean {

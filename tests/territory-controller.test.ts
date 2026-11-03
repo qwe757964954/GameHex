@@ -10,7 +10,8 @@ function harness() {
     const calls: unknown[] = [];
     let output: (event: TerritoryModelOutput) => void = () => {};
     const model = {
-        state: { ready: false, map: null, progress: null, detail: {}, layout: {} } as ITerritoryViewState,
+        state: { ready: false, map: null, progress: null, detail: {}, layout: {},
+            wallet: { silver: 0, stamina: 0 } } as ITerritoryViewState,
         onOutput(listener: typeof output) { output = listener; return () => { calls.push('unsub'); output = () => {}; }; },
         start() { calls.push('start'); }, dispose() { calls.push('dispose'); },
         selectRandomResource(id: number) { calls.push(['random', id]); },

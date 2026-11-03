@@ -180,6 +180,15 @@ export class ResBar extends Component {
             // 槽位数 = keys 数（1~3）：宿主**绑几格就渲染几格**（见 `hostSlots()`）。
             // keys 少于槽位时（如 3 格宿主只配了 2 个货币）多出来的传 null ⇒ 那一格整格隐藏。
             this.hostSlots().forEach((slot, i) => {
+                const cell = slots[i];
+                // 扣除了就演一次「显红 + 跳动 + 再扣」（2026-11-02）。
+                // ⚠️ 必须在 `render` **之前**调：那一刻 label 上还是扣前的值，
+                //    `render` 会把新值塞进待落地暂存，两条时间线的口径才对得上。
+                const spent = cell ? slot.spendDeltaOf(cell.valueText) : 0;
+                if (cell && spent > 0) {
+                    slot.playSpendFeedback(spent, cell.valueText);
+                    this.feedbackActive = true;
+                }
                 slot.render(slots[i] ?? null);
             });
             this.keys = keys;
@@ -203,7 +212,7 @@ export class ResBar extends Component {
     }
 
     // ============================================================
-    // 被奖励击中的反馈（宝箱图标飞进来那一刻，见 `TerritoryChestView`）
+    // 单格反馈：加（宝箱图标飞进来）/ 扣（2026-11-02 显红 + 跳动 + 再扣）
     // ============================================================
 
     /**
@@ -244,6 +253,30 @@ export class ResBar extends Component {
         if (!slot) return;
         slot.playGainFeedback(amount);
         this.flash(slot);
+        this.feedbackActive = true;
+    }
+
+    /**
+     * 某一格**被扣除**：数字显红 + 跳一下，**跳完才**把数字扣下去（2026-11-02 需求）。
+     *
+     * ## 为什么这个方法通常**不用**你调
+     *
+     * `CmdRole` 的数值变小 ⇒ `reload` 里逐格比对 `spendDeltaOf` 就会自动演一遍。
+     * 这条自动路才是主路：它覆盖**所有**扣除来源（挑战扣体力、商城买东西、GM 改值…），
+     * 不需要每个花钱的地方各自记得调一次（漏一处就少一处反馈，而且零报错）。
+     *
+     * 手动调只用于「值已经落地、但不会再走 `render`」的边角（例如本页自己扣本地钱包、
+     * `CmdRole` 不跟着变）。⚠️ 调用时机必须是**值已经扣完之后** —— 与 `playGainFeedback`
+     * 同一个前提，否则会先滚到一个"还没扣"的数再弹回来。
+     *
+     * @param key    `roleProperty.key`；不在本条栏的 `keys` 里 ⇒ 静默跳过。
+     * @param amount 扣了多少（`<= 0` / 非有限数 ⇒ 整段跳过）。
+     */
+    playSpendFeedback(key: string, amount: number): void {
+        if (!Number.isFinite(amount) || amount <= 0) return;
+        const slot = this.slotOfKey(key);
+        if (!slot) return;
+        slot.playSpendFeedback(amount);
         this.feedbackActive = true;
     }
 

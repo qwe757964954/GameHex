@@ -8,12 +8,12 @@ import { assetPath } from './helpers/asset-paths';
  *
  * 这个视图曾经在 `initialize()` 里做三件事：`getChildByName('HealthBar')` 找血条、
  * `getChildByName('VisualRoot')` 找美术容器、**找不到就 `new Node('VisualRoot')` 现搭一个**。
- * 现在六个引用（含 `VisualRoot` / `HealthBar` 两个容器）全部由 prefab 绑定 ——
+ * 现在七个引用（含 `VisualRoot` / `HealthBar` 两个容器）全部由 prefab 绑定 ——
  * 这一组用例锁的就是「别再退回运行时兜底」。
  *
  * 判据三层：① 源码里不许有 `new Node` / `getChildByName` / `addComponent`；
- * ② 六个 `@property` 声明为 `null!` 且代码里不再判空 / 带 `?.`；
- * ③ prefab 上这六个引用都能反解到正确类型的对象（漏绑 = 运行时空指针）。
+ * ② 七个 `@property` 声明为 `null!` 且代码里不再判空 / 带 `?.`；
+ * ③ prefab 上这七个引用都能反解到正确类型的对象（漏绑 = 运行时空指针）。
  */
 const source = readFileSync('assets/script/app/zcds/view/ZCUnitView.ts', 'utf8');
 const objects: any[] = JSON.parse(readFileSync(assetPath('ui/game/ZCGameUnit.prefab'), 'utf8'));
@@ -28,7 +28,8 @@ const REFS: Record<string, string> = {
     rootTransform: 'cc.UITransform',
     visualRoot: 'cc.Node',
     sprite: 'cc.Sprite',
-    fallback: 'cc.Graphics',
+    fallback: 'cc.Sprite',
+    fallbackTransform: 'cc.UITransform',
     fallbackLabel: 'cc.Label',
     healthBar: 'cc.ProgressBar',
 };
@@ -40,7 +41,7 @@ test('单位视图不再自己建节点、也不再运行时找子节点', () =>
     assert.doesNotMatch(code, /\.addComponent\(/, '组件必须挂在 prefab 上');
 });
 
-test('六个 @property 声明为必填，且代码里不再判空或带 ?.', () => {
+test('七个 @property 声明为必填，且代码里不再判空或带 ?.', () => {
     const code = stripComments(source);
     for (const key of Object.keys(REFS)) {
         assert.match(code, new RegExp(`\\b${key}: \\w+ = null!;`), `${key} 应声明为 null!`);
@@ -50,7 +51,7 @@ test('六个 @property 声明为必填，且代码里不再判空或带 ?.', () 
     }
 });
 
-test('ZCGameUnit.prefab 上六个引用都绑到正确类型的对象', () => {
+test('ZCGameUnit.prefab 上七个引用都绑到正确类型的对象', () => {
     const script = objects.find((entry) => entry.rootTransform && entry.healthBar && entry.visualRoot);
     assert.ok(script, 'prefab 上应当挂着单位视图脚本');
     for (const [prop, type] of Object.entries(REFS)) {
@@ -69,4 +70,29 @@ test('ZCGameUnit.prefab 上六个引用都绑到正确类型的对象', () => {
     // 根节点就是 `rootTransform` 所属的那个节点（脚点尺寸写在它身上）。
     const rootIndex = objects.findIndex((entry) => entry.__type__ === 'cc.Node');
     assert.equal(objects[script.rootTransform.__id__].node.__id__, rootIndex);
+});
+
+
+test('FallbackBackground 使用 prefab white Sprite，不挂 Graphics', () => {
+    const node = objects.find((entry) => entry.__type__ === 'cc.Node' && entry._name === 'FallbackBackground');
+    const components = node._components.map((ref: any) => objects[ref.__id__]);
+    assert.ok(!components.some((entry: any) => entry.__type__ === 'cc.Graphics'));
+    const sprite = components.find((entry: any) => entry.__type__ === 'cc.Sprite');
+    assert.equal(sprite._spriteFrame.__uuid__, 'fbe1f245-51ca-46cb-a726-e3bda54f8dd6@f9941');
+    assert.equal(sprite._sizeMode, 0);
+    assert.equal(sprite._isTrimmedMode, false);
+    assert.equal(sprite._enabled, false, '渲染单位状态前不显示占位底板');
+});
+
+
+test('占位图与尺寸组件使用 Inspector 绑定，不再恢复 Graphics 绘制', () => {
+    const view = objects.find((entry) => entry.rootTransform && entry.healthBar && entry.visualRoot);
+    const sprite = objects[view.fallback.__id__];
+    const transform = objects[view.fallbackTransform.__id__];
+    assert.equal(sprite.__type__, 'cc.Sprite');
+    assert.equal(transform.__type__, 'cc.UITransform');
+    assert.equal(sprite.node.__id__, transform.node.__id__);
+    const code = stripComments(source);
+    assert.doesNotMatch(code, /\bGraphics\b|this\.fallback\.(?:clear|circle|fill|getComponent)\(/);
+    assert.match(code, /this\.fallbackTransform\.setContentSize\(/);
 });

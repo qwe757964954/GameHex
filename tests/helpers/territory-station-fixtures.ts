@@ -15,6 +15,9 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import * as MapMarkerBadge from '../../assets/script/app/common/MapMarkerBadge';
+import * as TerritoryChestBubble from '../../assets/script/app/territory/model/TerritoryChestBubble';
+import * as TerritoryUiEvents from '../../assets/script/app/territory/application/TerritoryEvents';
+import * as TerritoryViewEvents from '../../assets/script/app/territory/view/TerritoryEvents';
 
 type Listener = { readonly callback: (...args: unknown[]) => void; readonly target: unknown };
 
@@ -286,18 +289,17 @@ export function loadTerritoryStationModule(): Record<string, unknown> {
             // 曲线真源：转译真模块（不是抄数字）。
             if (id.endsWith('/ShakePresentation')) return loadShakeCore();
             if (id.endsWith('/MapMarkerBadge')) return MapMarkerBadge;
-            // 事件契约：纯常量表，直接给桩（与 `view/TerritoryEvents.ts` 同值）。
-            if (id === './TerritoryEvents') {
-                return {
-                    TERRITORY_EVENTS: {
-                        STATION_CLICK: 'territory:station-click',
-                        PREVIOUS_CHAPTER: 'territory:previous-chapter',
-                        NEXT_CHAPTER: 'territory:next-chapter',
-                        DETAIL_CLOSE: 'territory:detail-close',
-                        DETAIL_START: 'territory:detail-start',
-                    },
-                };
-            }
+            // 宝箱气泡的底图尺寸 / 排版常量（2026-11-02 换 `frame_04` 时新增）⇒ 给**真模块**。
+            // 抄一份常量会让「视图用的尺寸」和「用例钉的尺寸」各自漂。
+            if (id.endsWith('/TerritoryChestBubble')) return TerritoryChestBubble;
+            // 「章节入口」那条 UI 事件（2026-11-03）：给**真模块** —— 用例要按真常量断言
+            // `emit` 出去的字符串，桩里抄一份就会"改了一边两边都绿"。
+            if (id === '../application/TerritoryEvents') return TerritoryUiEvents;
+            // 事件契约：给**真模块**（纯常量、零依赖）。
+            // ⚠️ 原来这里手抄了一份常量表，抄的还停在 `STATION_CLICK` 那一代 ——
+            //    真视图发 `STATION_TAP` 时桩里没有这个键 ⇒ `emit(undefined)`，
+            //    用例看到的是「发了事件」但名字是空，等于把这层验收放空了。
+            if (id === './TerritoryEvents') return TerritoryViewEvents;
             //  事件统一走 `EventMgr` 全局中控：`emit` 记进 `stationEmitLog`，用例据此断言「点了发事件」。
             if (id.includes('event/EventMgr')) {
                 return { EventMgr: { instance: {

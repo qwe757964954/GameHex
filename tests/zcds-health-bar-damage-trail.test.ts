@@ -14,7 +14,8 @@ function unitWatch() {
     view.rootTransform = { setContentSize: () => {} };
     view.visualRoot = healthBar.node;
     view.sprite = { enabled: true, spriteFrame: null };
-    view.fallback = { node: healthBar.node, clear: () => {}, circle: () => {}, fill: () => {} };
+    view.fallback = { node: healthBar.node, enabled: false, color: null };
+    view.fallbackTransform = { setContentSize: (width: number, height: number) => { view.fallback.node.size = { width, height }; } };
     view.fallbackLabel = { node: healthBar.node, enabled: true, string: '' };
     view.healthBar = healthBar;
     return { view, healthBar, cc, load };

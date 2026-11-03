@@ -10,7 +10,6 @@ import {
 import { PopupBase } from '../../framework/ui/PopupBase';
 import type { ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
 import { cardArtProvider } from './CardArtProvider';
-import { cardRepository } from './CardRepository';
 import { CARD_LINEUP_TEXTS } from './CardLineupTexts';
 import {
     tallyDeckClasses,
@@ -22,14 +21,8 @@ import { LineupBoardClassItem } from './LineupBoardClassItem';
 import { LineupBoardSlot } from './LineupBoardSlot';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
 import type { LineupBoardPresentation } from './CardPresentations';
-import { LineupDraftStore } from './LineupDraftStore';
-import type { LineupDraftSnapshot } from './LineupDraftStore';
-import { buildPresetDecks } from './LineupPresets';
-import { Toast } from '../common/Toast';
-import { selectFormation } from './FormationService';
 import { CardUnitPreviewAssets } from './CardUnitPreviewAssets';
-import { CardLineupEvent } from './CardLineupEvents';
-import type { ICardDeckSavedPayload } from './CardLineupEvents';
+import { CardPopupEvent } from './CardPopupEvents';
 import { EventMgr } from '../../framework/event/EventMgr';
 
 const { ccclass, property } = _decorator;
@@ -42,7 +35,7 @@ const { ccclass, property } = _decorator;
  * 底部「品质加成 / 一键下阵 / 保存」。
  *
  * 版式全部由 prefab 按设计稿坐标摆好（容器 667×1048，居中于 720×1280），
- * 本组件只做三件事：读数据 → 备图 → 灌数据。
+ * 本组件负责输入与渲染，取数、草稿和保存由外部组合会话管理。
  *
  * 容器分工：
  *   - `arenaArea` 下的 `Slots` 挂 `cc.Layout`（GRID 4×2、cellSize 125×148、间距 25/6），
@@ -52,21 +45,21 @@ const { ccclass, property } = _decorator;
  *   - `poolArea` 下的 `PoolList` 是 `VirtualScrollView` 虚拟列表（5 列，
  *     `itemPrefab = LineupBoardCard`），行节点运行时创建、滚出可视区即回收；
  *     卡池条数跟随后端英雄列表变化，**不用再动 prefab**；
- *   - 上阵区仍用 `gridOrder()` 按坐标排序后填数据，**不依赖节点树顺序**
- *     （Layout 只保证位置，兄弟顺序仍可能被编辑器打乱）。
+ *   - 上阵区直接按节点树顺序填数据，与 Layout 的排列一致。
  *
  * 数据来源：
  *   - 各方案的上阵卡组       ← `CmdFormationInfoReqMsg`（`formations`），页签下标 i → `formationId = i + 1`；
  *                             没有后端数据（未连接/失败/编辑器预览）时所有页签都退回本地八卡
  *   - 卡池                   ← `CmdPvpHeroInfoListReqMsg` ∩ `pvpCard`，等级上限读 `cardLevelUp.json`
- *   - 保存                   ← `CmdFormationOpReqMsg`（整份阵型覆盖），见 `onSave()`
+ *   - 保存                   ← 外部会话调用 `CmdFormationOpReqMsg`（整份阵型覆盖）
  *
  * 交互：点一下卡池里的卡即上阵到第一个空位（再点一下下阵），不再支持拖拽。
  */
 @ccclass('LineupBoardPage')
 export class LineupBoardPage extends PopupBase implements IBoardCardHost {
-    /** 取数轮次：慢的那次回来不许覆盖快的（这职责原来在 `LineupBoardPresenter` 里）。 */
-    private boardRevision = 0;
+    private renderRevision = 0;
+    private poolRevision = 0;
+    private classRevision = 0;
     private previewAssets: CardUnitPreviewAssets<Prefab> | null = null;
     private arenaRevision = 0;
 
@@ -74,40 +67,40 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
     static prefabPath = 'ui/card/LineupBoard';
 
     @property({ type: Label, tooltip: 'Title/Ribbon/Label：标题「布阵」' })
-    titleLabel: Label = null;
+    titleLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'Footer/QualityLabel：左下角「品质加成」' })
-    qualityLabel: Label = null;
+    qualityLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'Footer/BtnReset/Label：「一键下阵」' })
-    resetLabel: Label = null;
+    resetLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'Footer/BtnSave/Label：「保存」（发包期间改成「保存中…」，结果就地反馈）' })
-    saveLabel: Label = null;
+    saveLabel: Label = null!;
 
     @property({ type: Node, tooltip: 'Arena：上阵区容器（其下 Slots 挂 cc.Layout，8 个站台由 Layout 自动排）' })
-    arenaArea: Node = null;
+    arenaArea: Node = null!;
 
     @property({ type: Node, tooltip: 'Pool：卡池容器（Panel 背景 + ClassRow + PoolList）' })
-    poolArea: Node = null;
+    poolArea: Node = null!;
 
     @property({ type: VirtualScrollView, tooltip: 'Pool/PoolList：卡池虚拟列表（本 prefab 内的普通节点，Inspector 已绑定）' })
-    poolList: VirtualScrollView = null;
+    poolList: VirtualScrollView = null!;
 
     @property({ type: Node, tooltip: 'Pool/ClassRow：4 个 LineupBoardClassItem 的容器（挂 cc.Layout 水平排位，代码仍按 x 排序取用）' })
-    classBar: Node = null;
+    classBar: Node = null!;
 
     @property({ type: Node, tooltip: 'Arena/PresetRow：4 个布阵方案页签（顺序由 x 决定，第 i 格 = formationId i+1）' })
-    presetBar: Node = null;
+    presetBar: Node = null!;
 
     @property({ type: Button, tooltip: 'Footer/BtnReset 上的 cc.Button（**绑组件不绑节点**）' })
-    resetButton: Button = null;
+    resetButton: Button = null!;
 
     @property({ type: Button, tooltip: 'Footer/BtnSave 上的 cc.Button（**绑组件不绑节点**）' })
-    saveButton: Button = null;
+    saveButton: Button = null!;
 
     @property({ type: Button, tooltip: 'CloseBtn 上的 cc.Button（**绑组件不绑节点**）' })
-    closeButton: Button = null;
+    closeButton: Button = null!;
 
     @property({ tooltip: '后端没有该卡等级时，站台「N级」使用的兜底值' })
     fallbackLevel = 3;
@@ -132,7 +125,6 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
 
     /** 当前选中的布阵方案下标。 */
     private presetIndex = 0;
-    private draft: LineupDraftStore | null = null;
 
     /**
      * 卡池数据 + 预先备好的美术。
@@ -140,14 +132,13 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
      * 不能在里 await，所以美术必须在灌数据前全部缓存好。
      */
     private poolCards: readonly ZCDeckCard[] = [];
-    private deployedIds: Set<string> = new Set();
+    private deployedIds: ReadonlySet<string> = new Set();
     private poolArt = new Map<string, ZCBoardCardFrames>();
     private heroLevels: ReadonlyMap<string, number> = new Map();
     private heroLevelCaps: ReadonlyMap<string, number> = new Map();
 
-    /** 上阵区站台（按 `gridOrder` 排好，下标 = 卡组下标）。节点树不变，取一次就够。 */
+    /** 上阵区站台，下标 = 卡组下标，顺序与 Layout 一致。 */
     private arenaSlotCache: LineupBoardSlot[] | null = null;
-    private saving = false;
 
     /**
      * 按「从上到下、从左到右」排同组实例（一行内 y 相同，所以先比 y 再比 x）。
@@ -185,67 +176,26 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
         }
     }
 
-    protected onOpen(): void | Promise<void> {
-        this.saving = false;
-        this.setSaveButtonEnabled(true);
-        //  8 个站台先收起：`LineupBoardSlot.prefab` 的 `Unit` 组默认就是收起的，
-        //  这里再显式收一遍 —— 面板是复用打开的（关了再开），别让上一轮的卡停在新面板上。
+    protected onOpen(): void {
+        this.saveButton.interactable = false;
+        this.saveLabel.string = CARD_LINEUP_TEXTS.boardSave;
+        this.poolCards = [];
+        this.poolArt.clear();
         for (const slot of this.arenaSlots()) slot.setEmpty(true);
-        return this.refresh();
     }
 
-    /**
-     * 取一次数据并渲染整块面板。
-     *
-     *  本面板自己干：取数 → 组草稿 → 渲染，不再有 Presenter 中转。
-     *  渲染途中的每次 `await` 之后仍要判 `this.alive`：面板被 `PopupManager.close()`
-     *  直接 `destroy()` 时，实测会崩在 `LineupBoardSlot.render` 里 `this.disc` 为 null。
-     */
-    async refresh(): Promise<void> {
+    async render(data: LineupBoardPresentation): Promise<void> {
         const scope = this.resourceScope;
-        const presetCount = Math.max(1, this.presetBar.children.length);
-        const revision = ++this.boardRevision;
-        const data = await cardRepository.loadBoard(this.autoLoadDecks);
-        if (revision !== this.boardRevision) return;
-        if (scope.disposed || !this.alive) return;
-        // 每个页签的初始卡组来自后端阵型（`formationId = 页签下标 + 1`）；
-        // 没有后端数据时 `buildPresetDecks` 会让所有页签都用本地卡组。
-        const decks = buildPresetDecks(data, presetCount);
-        // 优先用服务端返回的选中阵型，没有再用默认页签
-        let initialPreset = this.defaultPreset;
-        if (data.formations) {
-            const selectedFormation = data.formations.find((f) => f.selected);
-            if (selectedFormation) {
-                initialPreset = selectedFormation.formationId - 1;
-            }
-        }
-        await this.presentBoard({
-            ...data,
-            draft: new LineupDraftStore(data.deck, 8, presetCount, initialPreset, decks),
-        });
-    }
-
-    private async presentBoard(data: LineupBoardPresentation): Promise<void> {
-        const scope = this.resourceScope;
-        this.draft = data.draft;
+        const revision = ++this.renderRevision;
         this.heroLevels = data.heroLevels;
         this.heroLevelCaps = data.heroLevelCaps;
-        const deck = data.draft.snapshot().cards;
-        if (scope.disposed || !this.alive) return;
-        const snapshot = data.draft.snapshot();
-        //  卡组为空的两种情况要分开：**没有后端阵型数据**时 store 用的是本地八卡（不会为空，
-        // 除非表本身读不到）；有后端数据但这一格是空的，则本来就该显示「没有上阵卡」。
-        // 所以这里不再像改动前那样「空就保持占位外观」，只对「表都读不到」出声。
-        if (deck.length === 0 && data.formations === null) {
-            console.warn('[LineupBoardPage] 卡组为空（既没有后端阵型也没有本地卡表），保持 prefab 占位外观');
-        }
-        this.applySnapshot(snapshot);
-        if (scope.disposed || !this.alive) return;
-        await Promise.all([this.renderArena(deck), this.renderPool(data.pool)]);
-        if (scope.disposed || !this.alive) return;
-        await this.renderClassRow(deck);
-        if (scope.disposed || !this.alive) return;
-        this.updatePresetTabs(snapshot.selectedPreset);
+        this.deployedIds = data.deployedIds;
+        this.saveButton.interactable = data.canSave;
+        this.saveLabel.string = data.saveText;
+        this.updatePresetTabs(data.selectedPreset);
+        await Promise.all([this.renderArena(data.cards), this.renderPool(data.pool), this.renderClassRow(data.cards)]);
+        if (scope.disposed || !this.alive || revision !== this.renderRevision) return;
+        this.rerenderPoolItems();
     }
 
     /**
@@ -276,11 +226,10 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
         const revision = ++this.arenaRevision;
         const slots = this.arenaSlots();
         const previewAssets = this.unitPreviewAssets();
-        const ready = await Promise.all(deck.slice(0, slots.length).map(async (card) => ({
-            card,
-            frames: await cardArtProvider.loadBoardSlot(card),
-            prefab: await previewAssets.load(card),
-        })));
+        const ready = await Promise.all(deck.slice(0, slots.length).map(async (card) => {
+            const [frames, prefab] = await Promise.all([cardArtProvider.loadBoardSlot(card), previewAssets.load(card)]);
+            return { card, frames, prefab };
+        }));
         if (scope.disposed || !this.alive || revision !== this.arenaRevision) return;
         for (let index = 0; index < slots.length; index += 1) {
             // 站台实例是 prefab 预建的、长期存活；tapHost 每次刷新都重指一次，
@@ -313,7 +262,9 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
      * 「已上阵」仍按当前八卡 id 集合判断。
      */
     private async renderPool(pool: readonly ZCDeckCard[]): Promise<void> {
+        if (pool === this.poolCards && this.poolArt.size > 0) { this.rerenderPoolItems(); return; }
         const scope = this.resourceScope;
+        const revision = ++this.poolRevision;
         this.poolCards = pool;
 
         // 按 key 去重后并发预加载（同一张图只 load 一次）
@@ -321,11 +272,11 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
         await Promise.all(pool.map(async (card) => {
             art.set(card.id, await cardArtProvider.loadBoardCard(card));
         }));
-        this.poolArt = art;
 
         //  预加载期间面板可能已经关了。必须在这里挡：节点一销毁，`poolList` 也会被释放，
         // 再往下走就会往已释放的列表上写，把真正的原因盖掉。
-        if (scope.disposed || !this.alive) return;
+        if (scope.disposed || !this.alive || revision !== this.poolRevision) return;
+        this.poolArt = art;
 
         const list = this.poolList;
         if (!list.node.isValid) return;
@@ -333,7 +284,7 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
         // `VirtualScrollView` 的槽位是在 start() 里建的，而 onOpen 早于 start。
         // 统一走 PopupBase 的取消安全帧等待：关闭期间会返回 false，不留下悬空 Promise。
         if (!await this.nextPopupFrame()) return;
-        if (scope.disposed || !this.alive || !list.node.isValid) return;
+        if (scope.disposed || !this.alive || revision !== this.poolRevision || !list.node.isValid) return;
         list.setTotalCount(pool.length);
     }
 
@@ -366,13 +317,14 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
     /** 中间那行「职业图标 + 数量」，顺序固定为 `ZC_CARD_CLASSES`。 */
     private async renderClassRow(deck: readonly ZCDeckCard[]): Promise<void> {
         const scope = this.resourceScope;
+        const revision = ++this.classRevision;
         const tallies = tallyDeckClasses(deck);
         //  ClassRow 挂的是水平 Layout，顺序 = 节点树顺序（同 `arenaSlots`：坐标是 Layout 算的，别反推）。
         const items = this.classBar.getComponentsInChildren(LineupBoardClassItem);
         for (let index = 0; index < items.length; index += 1) {
             const cardClass = ZC_CARD_CLASSES[index];
             const { on } = await cardArtProvider.loadClassFrames(cardClass);
-            if (scope.disposed || !this.alive) return;
+            if (scope.disposed || !this.alive || revision !== this.classRevision) return;
             items[index].render(tallies[index] ?? null, on);
         }
     }
@@ -383,20 +335,8 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
         return cap == null ? level : Math.min(level, cap);
     }
 
-    /** 切换布阵方案页签：换一份草稿（各方案的上阵卡互不影响），同时通知服务端选中该阵型。 */
     selectPreset(index: number): void {
-        const snapshot = this.draft?.selectPreset(index);
-        this.updatePresetTabs(snapshot?.selectedPreset ?? index);
-        if (!snapshot) return;
-        this.applySnapshot(snapshot);
-        void this.renderArena(snapshot.cards);
-        void this.renderClassRow(snapshot.cards);
-        this.rerenderPoolItems();
-        // // 告诉服务端：当前选中的是这个阵型
-        // if (this.draft) {
-        //     const formationId = this.draft.formationIdOf(index);
-        //     void selectFormation(formationId, this);
-        // }
+        EventMgr.instance.emit(CardPopupEvent.BoardIntent, { owner: this, kind: 'preset', index });
     }
 
     private updatePresetTabs(index: number): void {
@@ -411,128 +351,29 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
         }
     }
 
-    /** 一键下阵：清空当前方案的上阵区并摘掉卡池的「已上阵」标（只改本地草稿，落库在「保存」）。 */
     onResetAll(): void {
-        const snapshot = this.draft?.reset();
-        if (!snapshot) return;
-        this.applySnapshot(snapshot);
-        void this.renderArena(snapshot.cards);
-        void this.renderClassRow(snapshot.cards);
-        this.rerenderPoolItems();
-        console.log('[LineupBoardPage] 当前方案已全部下阵');
+        EventMgr.instance.emit(CardPopupEvent.BoardIntent, { owner: this, kind: 'reset' });
     }
 
-    /** 右上角 CloseBtn：经 PopupManager 统一出栈关闭（reason = CloseButton）。 */
-    private onCloseClick(): void {
-        this.closeByButton();
+    private onCloseClick(): void { this.closeByButton(); }
+
+    onSave(): void {
+        EventMgr.instance.emit(CardPopupEvent.BoardIntent, { owner: this, kind: 'save' });
     }
 
-    // ========================================================================
-    // 保存（CmdFormationOpReqMsg）
-    // ========================================================================
-
-    /**
-     * 保存当前方案：把整份阵型（`formationId` + 完整 `heroId` 列表）覆盖式发给服务端。
-     *
-     *  发包期间按钮置灰并显示「保存中…」（既是反馈，也是防连点）；结果就地写在按钮文案上：
-     * 成功 `已保存`、未连接 `未连接服务器`、失败 `保存失败`。
-     * **失败时不 `commit()`** —— 草稿仍然算"未保存"，用户可以再点一次。
-     */
-    async onSave(): Promise<void> {
-        const scope = this.resourceScope;
-        if (this.saving) return;
-        const draft = this.draft;
-        if (!draft) return;
-
-        const snapshot = draft.snapshot();
-        const heroIds: number[] = [];
-        for (const card of snapshot.cards) {
-            const heroId = Number(card.id);
-            if (!Number.isSafeInteger(heroId) || heroId <= 0) {
-                console.warn('[LineupBoardPage] 上阵卡 id 不是合法英雄编号，已取消保存', card.id);
-                this.renderSaveResult(CARD_LINEUP_TEXTS.boardSaveFailed);
-                return;
-            }
-            heroIds.push(heroId);
-        }
-
-        const formationId = draft.formationIdOf(this.presetIndex);
-        this.saving = true;
-        this.setSaveButtonEnabled(false);
-        // 保存反馈就地写在按钮上（置灰 + 「保存中…」），不弹全屏 LoadingPopup。
-        this.renderSaveResult(CARD_LINEUP_TEXTS.boardSaving);
-
-        const result = await cardRepository.saveFormation(formationId, heroIds, this);
-
-        if (scope.disposed || !this.alive) return;
-        this.saving = false;
-        this.setSaveButtonEnabled(true);
-
-        if (result.kind !== 'success') {
-            this.renderSaveResult(CARD_LINEUP_TEXTS.boardSave);
-            Toast.show(result.kind === 'offline'
-                ? CARD_LINEUP_TEXTS.boardSaveOffline
-                : CARD_LINEUP_TEXTS.boardSaveFailed);
-            return;
-        }
-        // 服务端已经存下了，本地草稿才算干净。
-        draft.commit();
-        //  派发「阵型已保存」：卡牌阵容页的八卡读的是服务端「选中阵型」，而本次保存把它置成了
-        // 选中（`select = 1`），所以它必须重刷。**当场派发，不等关闭** —— 面板挂着的时候
-        // 保存过一次就已经生效了。谁关心谁订阅，面板不需要知道外面有谁（见 `CardLineupEvents`）。
-        EventMgr.instance.emit(CardLineupEvent.DeckSaved, {
-            formationId,
-            heroIds,
-        } satisfies ICardDeckSavedPayload);
-        console.log('[LineupBoardPage] 阵型已保存', formationId, heroIds);
-        this.renderSaveResult(CARD_LINEUP_TEXTS.boardSaved);
-        Toast.show(CARD_LINEUP_TEXTS.boardSaved);
-        if (this.closeAfterSave) this.close();
-    }
-
-    private renderSaveResult(text: string): void {
-        if (!this.alive) return;
-        this.saveLabel.string = text;
-    }
-
-    private setSaveButtonEnabled(enabled: boolean): void {
-        // 字段本身就是 `cc.Button`，直接写 `interactable` —— 不用再 getComponent、也不用判空。
-        this.saveButton.interactable = enabled;
-    }
-
-    private applySnapshot(snapshot: LineupDraftSnapshot): void {
-        this.deployedIds = new Set(snapshot.deployedIds);
-        this.presetIndex = snapshot.selectedPreset;
-        // 草稿一变，「已保存 / 保存失败」就不再代表现状了 —— 恢复成可保存的文案。
-        if (!this.saving) this.renderSaveResult(CARD_LINEUP_TEXTS.boardSave);
-    }
-
-    // ========================================================================
-    // 卡池点击上阵 / 下阵（IBoardCardHost）
-    // ========================================================================
-
-    /**
-     * 短按点击：已上阵 → 下阵；未上阵 → 上阵到第一个空位。
-     */
     onCardTap(card: ZCDeckCard): void {
-        if (!this.alive || !this.draft) return;
-        const snapshot = this.deployedIds.has(card.id)
-            ? this.draft.remove(card.id)
-            : this.draft.put(card);
-        this.applySnapshot(snapshot);
-        void this.renderArena(snapshot.cards);
-        void this.renderClassRow(snapshot.cards);
-        this.rerenderPoolItems();
+        EventMgr.instance.emit(CardPopupEvent.BoardIntent, { owner: this, kind: 'toggle', cardId: card.id });
     }
 
     protected onClose(): void {
-        this.saving = false;
+        this.renderRevision++;
+        this.arenaRevision++;
+        this.poolRevision++;
+        this.classRevision++;
         this.previewAssets = null;
     }
 
     onDestroy(): void {
-        // 摘掉订阅（`DeckSaved` 等）：`EventMgr` 是全局单例，面板每次关闭都销毁重建。
-        EventMgr.instance.offTarget(this);
         this.arenaSlotCache = null;
         super.onDestroy();
     }

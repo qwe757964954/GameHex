@@ -7,7 +7,6 @@ import ts from 'typescript';
 import { configureZCMap, ZC_HEX_CONFIG } from '../assets/script/app/zcds/model/ZCMapConfig';
 import { ZC_HEX_TOP_VERTICES } from '../assets/script/app/zcds/model/ZCHexTopGeometry';
 import { ZCNodePool } from '../assets/script/app/zcds/view/ZCNodePool';
-import { ZCBattlePhaseController, ZCBattlePhase } from '../assets/script/app/zcds/application/ZCBattlePhaseController';
 import { ZCPathWorkspace, ZCTargetingSystem } from '../assets/script/app/zcds/model/systems/ZCTargetingSystem';
 import { loadViews } from './helpers/zcds-view-fixtures';
 import { assetPath } from './helpers/asset-paths';
@@ -608,48 +607,13 @@ test('BFS 工作区与原算法在阻挡变化、排序平局和标记溢出时�
     assert.equal(workspace.generation, 1);
 });
 
-test('游戏每帧更新动态表现，地块和 HUD 保持 0.15 秒节奏', () => {
-    const { cc } = loadViews();
-    const context = {
-        exports: {} as any,
-        require: (name: string) => name.endsWith('/ComponentController') ? componentControllerModule() : name === 'cc' ? cc
-            : name === './application/ZCBattlePhaseController' ? { ZCBattlePhaseController, ZCBattlePhase }
-                : {},
-    };
-    const code = ts.transpileModule(readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true } }).outputText;
-    runInNewContext(code, context);
-    const game = new context.exports.ZCGame();
-    game.isValid = true;
-    let ticks = 0, dynamic = 0, terrain = 0, hud = 0, drained = 0;
-    const snapshot = { status: 'playing' };
-    const event = { id: 1, hexId: 4 };
-    let pendingEvents = { buildingShakes: [event], buildingDestructions: [] };
-    const receivedEvents: Array<{ buildingShakes: typeof event[]; buildingDestructions: unknown[] }> = [];
-    game.model = {
-        snapshot,
-        tick: () => ticks++,
-        createRenderFrame: () => ({ snapshot }),
-        drainPresentationEvents: () => {
-            drained++;
-            const events = pendingEvents;
-            pendingEvents = { buildingShakes: [], buildingDestructions: [] };
-            return events;
-        },
-    };
-    game.renderWorld = {
-        renderDynamic: (_frame: unknown, events: { buildingShakes: typeof event[] }) => {
-            dynamic++;
-            receivedEvents.push(events);
-        },
-        renderStatic: () => terrain++,
-    };
-    game.hudView = { render: () => hud++ };
-    for (let frame = 0; frame < 60; frame++) game.update(1 / 60);
-    assert.equal(ticks, 60); assert.equal(dynamic, 60);
-    assert.equal(terrain, 6); assert.equal(hud, 6);
-    assert.equal(drained, 60, '对局编排层每次模拟更新只取一次表现事件');
-    assert.deepEqual(receivedEvents[0].buildingShakes, [event]);
-    assert.ok(receivedEvents.slice(1).every(events => events.buildingShakes.length === 0), '事件不会在后续渲染帧重复播放');
+test('游戏帧循环由运行控制器推进，组件只派发帧事件', () => {
+    const view = readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8');
+    const controller = readFileSync('assets/script/app/zcds/application/ZCBattleRuntimeController.ts', 'utf8');
+    assert.doesNotMatch(view, /model\.tick\(|drainPresentationEvents\(/);
+    assert.match(view, /emit\(ZC_BATTLE_EVENTS\.FRAME, \{ owner: this, dt \}\)/);
+    assert.match(controller, /model\.tick\(dt\)/);
+    assert.match(controller, /this\.renderClock >= 0\.15/);
 });
 
 test('城墙边→邻格匹配不得把同一个邻格分给两条边（阈值 ≥0.85）', () => {

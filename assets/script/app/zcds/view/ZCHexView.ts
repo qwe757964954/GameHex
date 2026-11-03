@@ -474,18 +474,6 @@ export class ZCHexView extends Component {
     @property({ type: SpriteFrame, group: '地块底图', tooltip: '统一六边格蒙版：hex_flat（130×119 画布 / 面 123×90，扁平纯白）' })
     tileFrame: SpriteFrame | null = null;
 
-    /**
-     * `TerritoryOutline` 的 `cc.Graphics` —— **领地轮廓不再用它**：轮廓由 `ZCOutlineLayer`
-     * 整盘一个 Graphics 画。字段保留（删了 prefab 已序列化引用会悬空），`initialize` 里
-     * `enabled = false`，防止漏网调用路径画出与共享层重叠的第二份线。
-     *
-     * ⚠️ 2026-10-26 起**连「点击金矿」提示也不再用它**：这份画布和地块同层，提示线会被相邻格
-     * 的底色 / 建筑按绘制顺序盖掉半圈。提示改画到 `ZCGameRenderWorld` 挂在棋盘最上层
-     * （`CooldownOverlay`）的那份共享画布上，几何仍由 `ZCHexView.strokeHintOutline` 提供。
-     */
-    @property({ type: Graphics, group: '节点引用', tooltip: 'TerritoryOutline：已停用（领地轮廓走 OutlineLayer；金矿提示也改到棋盘最上层）' })
-    outlineGraphics: Graphics = null;
-
     @property({ type: Node, group: '节点引用', tooltip: 'BuildingLayer：开发图标和价格' })
     buildingLayer: Node = null;
 
@@ -779,10 +767,6 @@ export class ZCHexView extends Component {
         // 地块节点是对象池复用的：先摘再挂，避免同一实例上叠出多个监听。
         this.node.off(Node.EventType.TOUCH_END, this.onTouchEnd, this);
         this.node.on(Node.EventType.TOUCH_END, this.onTouchEnd, this);
-        // 轮廓已由 `OutlineLayer` 共享绘制（见字段注释）。关掉这份 per-cell 的，
-        // 避免漏网调用路径画出与共享层重叠的第二份线。
-        this.outlineGraphics.clear();
-        this.outlineGraphics.enabled = false;
         this.observedHp = null;
         this.observedWallHp = null;
         this.lastDamagedAt = null;
@@ -1537,7 +1521,7 @@ export class ZCHexView extends Component {
         // 棋盘底图透出来。格子边界靠 `OutlineLayer` 的矢量格线（那一层照常画）。
         this.setSprite(this.tileSprite, this.tileFrame, tint);
         // 领地轮廓由 `ZCGameRenderWorld.redrawSharedOutline` 统一画在 `OutlineLayer` 上，
-        // 这一格不自己描（`outlineGraphics` 已在 `initialize` 里关掉）。
+        // 这一格不自己描，领地轮廓统一由棋盘 OutlineLayer 绘制。
 
         const selectedOwner = presentation.selectedBy;
         // 主城外观与**正式对局同源**：走注入的 `buildingFrameResolver`（`hq` → `hq-base`），

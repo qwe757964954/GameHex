@@ -529,38 +529,17 @@ test('四个按钮只 emit 意图事件，页面不持有任何回调（视图�
     assert.doesNotMatch(code, /private options: IZCSettlementOptions/, '留一份 userData 没意义 —— 意图全派发出去了');
 });
 
-test('ZCGame：对局结束改弹 ZCSettlementPage（伤害统计仍走 GameRunAway）', () => {
-    const code = stripComments(gameSource);
-    assert.match(code, /import \{ ZCSettlementPage \} from '\.\/ui\/ZCSettlementPage'/);
-    // 弹页搬进 `showSettlement`（章节局要**先等结算广播**再弹），所以断言落在调用点上。
-    //  胜负口径要连着两步看：先算 `localVictory`（**撤退算失败**），再把胜负与章节等待器一起交给弹页
-    //（章节局要先等 `CmdBattleResultBroMsg` 才弹，见 ZCGame.showSettlement 的签名）。
-    assert.match(code, /const localVictory = !retreated && state\.status === 'victory'/, '胜负口径：撤退算失败');
-    //  实参是 `battleResult`：章节局那个 `chapterResult` 会被包一层（PVP 走 `waitForBattleResult`，
-    //  章节局直接用它），所以这里钉的是包好之后的那个名字。
-    assert.match(code, /void this\.showSettlement\(localVictory, battleResult\)/, '胜负与章节等待器一起交给弹页');
-    //  签名是多行的（`victory` + 章节等待器 `chapterResult`）⇒ 用 `\s*` 兼容换行。
-    assert.match(code, /private async showSettlement\(\s*localVictory: boolean,/);
-    assert.match(code, /ZCSettlementPage\.open\(\{/);
-    // 确定**不再走 userData 回调**：结算页派发 `ZCGameUiEvent.SettlementConfirm`，控制器订阅后收尾。
-    assert.match(code, /import \{ ZCGameUiEvent \} from '\.\/view\/ZCGameHudEvents'/);
-    assert.match(code, /EventMgr\.instance\.on\(ZCGameUiEvent\.SettlementConfirm, this\.onSettlementConfirm, this\)/,
-        '★ZCGame 必须订阅结算页的确定事件 —— 漏了就「点了没反应」（页面自己不会关）');
-    //  确定 = ① 先收页面 ② 再回主界面（切流程是「预加载 → 进入」两段，弹窗不能等 onLeave 才消失）
-    //  ③ 切流被取消时按同一份 userData 把页面补回来（否则 phase 已 Settlement ⇒ 卡死）。
-    assert.match(code, /private onSettlementConfirm\(\): void \{\s*if \(this\.leaving\) return;\s*this\.closeSettlementPopup\(\);/,
-        '确定必须先关弹窗再导航 —— 顺序反了就是「点了没反应」');
-    assert.doesNotMatch(code, /private onSettlementConfirm\(\): void \{\s*if \(!this\.leaving\) this\.returnToMain\(\);/,
-        '不许退回「不关页、直接导航」的旧写法（伤害统计那条 `onDamageStatsReturnToMain` 不在本次范围）');
-    assert.match(code, /ProcedureManager\.onSwitchSettled\(\(entered\) => \{[\s\S]{0,200}?if \(!entered\) this\.reopenSettlement\(\)/,
-        '切流被取消必须把结算页补回来');
-    assert.match(code, /private reopenSettlement\(\): void \{[\s\S]{0,200}?this\.openSettlementPopup\(this\.settlementOptions\)/,
-        '重开复用首次那份 userData（奖励帧已解析好，不必再等广播）');
-    assert.doesNotMatch(code, /onConfirm: \(\)/, '不该再往结算页塞收尾回调');
-    assert.match(code, /private settlementPopup: ZCSettlementPage \| null = null/);
-    // 伤害统计弹窗没被顺手删掉（HUD 的伤害按钮还在用它）
-    assert.match(code, /GameRunAway\.open\(\{/);
-    assert.match(code, /private damagePopup: GameRunAway \| null = null/);
+test('外部战斗控制器装配结算页与伤害统计，ZCGame 只保留展示', () => {
+    const composition = readFileSync('assets/script/app/bootstrap/battle/BattleComposition.ts', 'utf8');
+    const runtime = readFileSync('assets/script/app/zcds/application/ZCBattleRuntimeController.ts', 'utf8');
+    const settlement = readFileSync('assets/script/app/zcds/application/ZCBattleSettlementController.ts', 'utf8');
+    assert.match(composition, /ZCSettlementPage\.open\(\{/);
+    assert.match(composition, /GameRunAway\.open\(\{/);
+    assert.match(runtime, /localVictory: !retreated && model\.snapshot\.status === 'victory'/);
+    assert.match(runtime, /this\.listen\(ZCGameUiEvent\.SettlementConfirm, this\.onSettlementConfirm\)/);
+    assert.match(runtime, /this\.settlement\.confirm\(\)/);
+    assert.ok(settlement.indexOf("popup?.close('manual');") < settlement.indexOf('this.ports.navigate();'));
+    assert.doesNotMatch(stripComments(gameSource), /ZCSettlementPage|finishBattle|ProcedureManager|settlementPopup/);
     assert.match(pageSource, /static prefabPath = 'ui\/game\/ZCSettlement'/);
     assert.match(pageSource, /export class ZCSettlementPage extends PopupBase/);
 });

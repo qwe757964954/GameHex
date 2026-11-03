@@ -250,9 +250,14 @@ export class ZCSnapshotCodec {
                 'secondaryReadyAt',
                 'shieldExpireAt', 'burstShotsLeft', 'burstNextAt', 'burstInterval', 'burstDamageRate', 'lowHpGuardFiredAt',
                 'retaliateSlowPct', 'retaliateUntil', 'selfCastReadyAt', 'strikeReadyAt', 'strikeFiredCount',
-                'strikeUntil', 'strikeNextAt']) {
+                'strikeUntil', 'strikeNextAt',
+                // 冲刺（2026-11-02 真·撞击）：截止时刻 + 终点快照；2026-11-03 再加「撞完原地待机」的
+                // 冷却截止。四个都是可选的，没在冲刺的单位身上不该出现；
+                // 进了快照就要能被校验，否则脏值悄悄过校验。
+                'dashUntil', 'dashRecoverUntil']) {
                 check(optional(unit[key], nonnegative), `${path}.${key}`);
             }
+            for (const key of ['dashX', 'dashY']) check(optional(unit[key], Number.isFinite), `${path}.${key}`);
             check(optional(unit.passiveStatusApplied, (v) => typeof v === 'boolean'), `${path}.passiveStatusApplied`);
             for (const key of ['freeX', 'freeY', 'facingRadians']) check(optional(unit[key], Number.isFinite), `${path}.${key}`);
             check(optional(unit.marchAngle, (v) => v === null || Number.isFinite(v)), `${path}.marchAngle`);
@@ -396,6 +401,15 @@ export class ZCSnapshotCodec {
                 data.freeX = source.x + (target.x - source.x) * progress;
                 data.freeY = source.y + (target.y - source.y) * progress;
             }
+            //  冲刺（2026-11-02）：三个字段是一个整体 —— 没有截止时刻就没有这次冲刺，
+            //  残留的终点快照必须一起清掉，否则下次起冲会沿用上一场的旧终点。
+            //  `dashRecoverUntil` 同理：不在冲刺也没有待机窗口时留着它，单位会一直站桩。
+            if (!Number.isFinite(data.dashUntil)) {
+                data.dashUntil = undefined;
+                data.dashX = undefined;
+                data.dashY = undefined;
+            }
+            if (!Number.isFinite(data.dashRecoverUntil)) data.dashRecoverUntil = undefined;
         }
         const snapshot = state as ZCSnapshot & Record<string, unknown>;
         if (!Array.isArray(snapshot.combatEvents)) snapshot.combatEvents = [];

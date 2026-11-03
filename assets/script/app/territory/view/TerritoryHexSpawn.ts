@@ -1,13 +1,16 @@
 import { Node, UIOpacity } from 'cc';
 import {
-    TERRITORY_HEX_SPAWN_SECONDS,
+    TERRITORY_HEX_SPAWN_TIMING,
     territoryHexSpawnFrame,
+    type ITerritoryHexSpawnTiming,
 } from '../model/TerritoryHexSpawn';
 
 /** 一格正在播的生成动画。`elapsed` 从**负的延迟**起算，跨过 0 才开始长。 */
 interface ITerritoryHexSpawnActive {
     readonly node: Node;
     readonly opacity: UIOpacity;
+    /** 这一格用的节奏档位（普通 / 胜利通过）—— 同一批里可能混着，所以按格记。 */
+    readonly timing: ITerritoryHexSpawnTiming;
     /** 已用时（秒）：`< 0` = 还在等自己的档期。 */
     elapsed: number;
     /** 最近一帧的不透明度（0~1）—— `opacityOf` 用它回答"现在淡到几成"。 */
@@ -55,18 +58,42 @@ export class TerritoryHexSpawn {
     }
 
     /**
+     * 这一批还要播多久（秒）；`0` = 没有在播的。
+     *
+     * 页面用它决定"**新地块生成播完再盖云**"（首次解锁直开那条前奏）：
+     * 每格的 `elapsed` 从**负的档期**起算，所以剩余 = `SPAWN_SECONDS - elapsed`，
+     * 取所有在播的格子里最大的那个。
+     */
+    remainingSeconds(): number {
+        let remaining = 0;
+        for (const active of this.actives) {
+            const left = active.timing.seconds - active.elapsed;
+            if (left > remaining) remaining = left;
+        }
+        return remaining;
+    }
+
+    /**
      * 开始播一格。
      *
      * @param delay   这一格的档期（秒，`>= 0`）。同批格子由 `territoryHexSpawnDelays` 算出来。
      * @param onFrame 同帧通知（可选）：站点图标/文字不在格节点下，靠它把同一档透明度递过去。
+     * @param timing  节奏档位：缺省普通生成；「胜利通过」那批传
+     *                `TERRITORY_HEX_SPAWN_VICTORY_TIMING`（更长、带过冲）。
      * @returns 是否真的开始（同一格已经在播 ⇒ `false`，不重置它的进度）
      */
-    play(node: Node, delay = 0, onFrame: ((opacity: number) => void) | null = null): boolean {
+    play(
+        node: Node,
+        delay = 0,
+        onFrame: ((opacity: number) => void) | null = null,
+        timing: ITerritoryHexSpawnTiming = TERRITORY_HEX_SPAWN_TIMING,
+    ): boolean {
         if (!node || !node.isValid || this.isPlaying(node)) return false;
         const opacity = node.getComponent(UIOpacity) ?? node.addComponent(UIOpacity);
         const active: ITerritoryHexSpawnActive = {
             node,
             opacity,
+            timing: timing?.seconds > 0 ? timing : TERRITORY_HEX_SPAWN_TIMING,
             elapsed: -(Number.isFinite(delay) && delay > 0 ? delay : 0),
             lastOpacity: 0,
             onFrame,
@@ -119,7 +146,7 @@ export class TerritoryHexSpawn {
                 continue;
             }
             active.elapsed += dt;
-            if (active.elapsed >= TERRITORY_HEX_SPAWN_SECONDS) {
+            if (active.elapsed >= active.timing.seconds) {
                 this.settle(active);
                 this.actives.splice(index, 1);
                 continue;
@@ -131,7 +158,7 @@ export class TerritoryHexSpawn {
 
     /** 写一帧：把模型给的 `scale / opacity` 落到节点上（值没变就不写）。 */
     private apply(active: ITerritoryHexSpawnActive, seconds: number): void {
-        const frame = territoryHexSpawnFrame(seconds);
+        const frame = territoryHexSpawnFrame(seconds, active.timing);
         active.lastOpacity = frame.opacity;
         const node = active.node;
         if (node.scale.x !== frame.scale || node.scale.y !== frame.scale) {

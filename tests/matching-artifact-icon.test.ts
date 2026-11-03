@@ -108,7 +108,9 @@ test('我方神器不得读从未订阅的 CmdArtifact 推送缓存（那条恒�
         + 'getTlCmdArtifact 是未订阅的推送缓存，恒为空 ⇒ artifactIcon 永远拿不到值',
     );
     // 正向：确实走了 applyUnitToPlayerView 这条合并点。
-    assert.match(readFileSync('assets/script/app/matching/MatchingModel.ts', 'utf8'), /applyUnitToPlayerView\(withPvp,\s*teams\?\.mine \?\? null,\s*this\.lookup\)/,
+    // ⚠️ 2026-11-02：我方单元先落到 `mineUnit`（原来直接写 `teams?.mine ?? null`）——
+    //    因为「除我方之外的人」要按**对象引用**从 `units` 里排掉。归并点没变。
+    assert.match(readFileSync('assets/script/app/matching/MatchingModel.ts', 'utf8'), /applyUnitToPlayerView\(withPvp,\s*mineUnit,\s*this\.lookup\)/,
         '我方神器应由 refreshMineView 的 applyUnitToPlayerView 统一合并上屏');
 });
 

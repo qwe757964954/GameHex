@@ -56,12 +56,14 @@ function createView() {
         if (name === 'cc') return cc;
         // 淡出起点必须取自真源：地块回场时机与它同值（见 `ZC_CARD_FADE_START_PROGRESS`）。
         if (name === '../model/ZCBattlePresentationQueue') return { ZC_CARD_FADE_START_PROGRESS };
+        if (name === '../../procedure/ProcedureGame') return { ProcedureGame: { current: null } };
+        if (name === '../ZCDCLogSwitch') return { ZCDC_LOG_WARNINGS: false };
         assert.equal(name, './ZCGameViewUtil');
         // 真源模块：定位映射与**共用的生成曲线**都从它拿，别在这里另写一份。
         return util;
     }, loaded, loaded.exports);
 
-    /** 与引擎同义：getComponent 按 class 查、addComponent 挂上后能再查到（否则每帧重复挂）。 */
+    /** prefab 预挂的组件由测试显式绑定；运行时查询/补挂会让用例失败。 */
     const makeNode = () => {
         const components: any[] = [];
         return {
@@ -70,13 +72,17 @@ function createView() {
             position: { x: 0, y: 0, z: 0 },
             setScale(x: number) { this.scale = { x, y: x, z: 1 }; },
             setPosition(x: number, y: number) { this.position = { x, y, z: 0 }; },
-            getComponent: (type: unknown) => components.find((c) => c instanceof type) ?? null,
-            addComponent: (type: any) => { const c = new type(); components.push(c); return c; },
+            getComponent: () => { throw new Error('静态组件应通过 Inspector 绑定'); },
+            addComponent: () => { throw new Error('静态组件应在 prefab 预挂'); },
         };
     };
     const view = new loaded.exports.ZCCardRevealView();
     const node = makeNode();
     const luckNode = makeNode();
+    view.cardOpacity = new UIOpacity();
+    view.luckOpacityComp = new UIOpacity();
+    node.components.push(view.cardOpacity);
+    luckNode.components.push(view.luckOpacityComp);
     (view as unknown as { node: unknown }).node = node;
     // luckSprite 有图（问号地块才有评语）；卡框 / 卡面不设也能跑（setSprite 判空跳过）。
     view.luckSprite = { node: luckNode, spriteFrame: { name: 'luck' } as never, enabled: true };

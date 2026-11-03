@@ -1,3 +1,5 @@
+import { ZC_BATTLE_EVENTS } from '../assets/script/app/zcds/application/ZCBattleEvents';
+import { createControllerResources } from './helpers/controller-context';
 import { componentControllerModule } from './helpers/controller-context';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -8,7 +10,9 @@ import ts from 'typescript';
 interface IGameInstance {
     createGame: (prepared: unknown) => void;
     readonly preparedResources: unknown;
-    initialize(entry: unknown): void;
+    initialize(entry: unknown, resources: unknown): void;
+    update(dt: number): void;
+    onDestroy(): void;
     onLoad(): void;
     shutdown(): void;
     renderBossPanel(model: unknown): void;
@@ -18,7 +22,7 @@ interface IGameClass {
     new (): IGameInstance;
 }
 
-function loadGame(instantiate: (prefab: unknown) => unknown): IGameClass {
+function loadGame(instantiate: (prefab: unknown) => unknown, emit = (_event: string, _data: unknown) => {}): IGameClass {
     const source = readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8');
     const code = ts.transpileModule(source, {
         compilerOptions: {
@@ -31,6 +35,7 @@ function loadGame(instantiate: (prefab: unknown) => unknown): IGameClass {
         exports: {} as { ZCGame?: IGameClass },
         console: { error() {} },
         require: (name: string): unknown => {
+            if (name.endsWith('/ZCBattleEvents')) return { ZC_BATTLE_EVENTS };
             if (name.endsWith('/ComponentController')) return componentControllerModule();
             if (name === 'cc') return {
                 _decorator: { ccclass: () => (component: unknown) => component },
@@ -52,27 +57,10 @@ function loadGame(instantiate: (prefab: unknown) => unknown): IGameClass {
             if (name === '../../framework/event/EventMgr') return {
                 // 中控订阅全挂在全局唯一的 `EventMgr.instance` 上（ZCGame.ts:316/629+）：
                 // `on` 订阅 11 次、`offTarget(this)` 在 shutdown 里摘一次。
-                EventMgr: { instance: { on(): void {}, offTarget(): void {} } },
+                EventMgr: { instance: { on(): void {}, offTarget(): void {}, emit } },
             };
             if (name === '../battle/BattleResultService') return {
                 BattleResultService: { ensureListening() {} },
-            };
-            // ⚠️ `ZCBattlePhaseController` 已从 `./view/` 迁到 `./application/`（ZCGame.ts:38）。
-            //    不显式桩上就会落到下面的 `return {}`，`new undefined()` ⇒
-            //    `ZCBattlePhaseController is not a constructor`，整个文件的两条用例全废。
-            //    这里只桩**接口形状**（阶段状态 + 几个推进方法），phase 的状态机行为
-            //    由 `tests/zcds-progress.test.ts` 覆盖，不靠这个桩兜。
-            if (name === './application/ZCBattlePhaseController') return {
-                ZCBattlePhase: { Settlement: 'settlement' },
-                ZCBattlePhaseController: class {
-                    current = '';
-                    isLeaving = false;
-                    beginSettlementPresentation(): void {}
-                    leave(): boolean { return true; }
-                    startPlaying(): void {}
-                    startSpawnSelection(): void {}
-                    openSettlement(): boolean { return true; }
-                },
             };
             return {};
         },
@@ -95,19 +83,19 @@ test('对局组件在 onLoad 后通过实例入口接收本局数据，并在退
 
     game.onLoad();
     assert.equal(received, null, 'onLoad 不应从全局暂存区启动对局');
-    game.initialize(entry);
+    game.initialize(entry, createControllerResources());
     assert.equal(received, prepared);
     assert.equal(game.preparedResources, prepared);
     assert.equal(game.matchConfig, matchConfig);
     assert.equal(game.playerAvatars, playerAvatars);
     assert.notEqual(game.seatProfiles, seatProfiles, '组件持有自己的席位 Map，不保留调用方数组');
-    assert.throws(() => game.initialize(entry), /已初始化/);
+    assert.throws(() => game.initialize(entry, createControllerResources()), /已初始化/);
 
     game.shutdown();
     assert.equal(game.preparedResources, null);
     assert.equal(game.matchConfig, null);
     assert.equal(game.playerAvatars, null);
-    assert.equal(game.pveContext, null);
+    assert.equal('pveContext' in game, false);
     assert.equal(game.seatProfiles.size, 0);
 
     const nextGame = new ZCGame();
@@ -129,7 +117,7 @@ test('守城首领条延迟创建时使用本局预加载的 Prefab', () => {
     game.createGame = () => {};
     const resources = { bossPanelPrefab };
     game.onLoad();
-    game.initialize({ resources });
+    game.initialize({ resources }, createControllerResources());
     // 首领条要 `setParent(hudView.node)` 并继承它的 layer；`hudView` 是 `createGame` 里建的，
     // 上面把它桩成空函数 ⇒ 这里补一个最小 HUD 宿主（真 HUD 的渲染行为由 zcds-hud* 覆盖）。
     (game as unknown as { hudView: unknown }).hudView = {
@@ -141,4 +129,18 @@ test('守城首领条延迟创建时使用本局预加载的 Prefab', () => {
     assert.deepEqual(instantiated, [bossPanelPrefab]);
     assert.equal(rendered.length, 1);
     assert.equal(rendered[0][0], progress);
+});
+
+test('view emits frames and destruction with its own owner, without owning business results', () => {
+    const events: Array<{ event: string; payload: unknown }> = [];
+    const ZCGame = loadGame(() => ({}), (event, payload) => events.push({ event, payload }));
+    const game = new ZCGame();
+    game.createGame = () => {};
+    game.initialize({ resources: {}, seatProfiles: [], pveContext: { chapterId: 1, levelId: 2, territoryCellId: 3 } }, createControllerResources());
+    game.update(0.1);
+    game.onDestroy();
+    assert.deepEqual(events.map(value => value.event), [ZC_BATTLE_EVENTS.FRAME, ZC_BATTLE_EVENTS.RUNTIME_DESTROYED]);
+    assert.equal((events[0].payload as { owner: object }).owner, game);
+    assert.equal((events[0].payload as { dt: number }).dt, 0.1);
+    assert.equal((events[1].payload as { owner: object }).owner, game);
 });

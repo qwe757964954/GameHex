@@ -7,7 +7,6 @@ import { buildZCBattleWarmupPaths, buildZCBattleParsePaths, ZC_BATTLE_DOWNLOAD_P
 import { ResourceScope } from '../../core/asset/ResourceScope';
 import { bundleForPath } from '../../core/asset/BundleCatalog';
 import { loadCommonArt, releaseArtCache } from '../card/CardLineupIcons';
-import type { ZCGamePreload } from '../zcds/application/ZCGamePreload';
 
 interface LoadTask {
     readonly message: string;
@@ -24,9 +23,13 @@ const BATTLE_CACHE_MAX_ENTRIES = 64;
 const BATTLE_CACHE_IDLE_MS = 10 * 60 * 1000;
 const BATTLE_LOAD_CONCURRENCY = 4;
 
-/** app 层能力：匹配流程接管登录后已经完成的对局预加载。 */
-export interface BattlePreloadProvider {
-    takeBattlePreload(): ZCGamePreload | null;
+/**
+ * 对局运行时预编译端口：由组合根注入，避免会话层静态依赖战斗模块（见公共预热守卫）。
+ * ensureCompiled 在空闲期完成配置解压与编译；reset 在退出登录时复位编译标志。
+ */
+export interface IRuntimePrecompilePort {
+    ensureCompiled(): Promise<void>;
+    reset(): void;
 }
 
 /** 应用登录会话内常驻的配置和首屏动态美术。 */
@@ -50,6 +53,7 @@ export class AppSessionAssetService implements SessionAssetService {
     constructor(
         private readonly assets: AssetService,
         private readonly configs: ConfigService,
+        private readonly runtimePrecompiler?: IRuntimePrecompilePort,
     ) {
         this.reusableAssets = new ScopedAssetCache(assets, {
             maxEntries: BATTLE_CACHE_MAX_ENTRIES,
@@ -111,6 +115,7 @@ export class AppSessionAssetService implements SessionAssetService {
 
     clear(): void {
         this.pauseWarmup();
+        this.runtimePrecompiler?.reset();
         this.warmedPaths.clear();
         this.parsedPaths.clear();
         this.pinnedPaths.clear();
@@ -126,11 +131,6 @@ export class AppSessionAssetService implements SessionAssetService {
         this._ready = false;
     }
 
-    /** 只允许匹配流程接管一次；接管后资源由匹配/对局流程负责释放。 */
-    takeBattlePreload(): ZCGamePreload | null {
-        return null;
-    }
-
     warmup(): Promise<void> {
         if (this.warmTask) return this.warmTask;
         const scope = this.scope;
@@ -141,6 +141,11 @@ export class AppSessionAssetService implements SessionAssetService {
         this.warmParseScope = parseScope;
         const isCurrent = (): boolean => this.scope === scope && !scope.disposed && revision === this.warmRevision;
         const task = (async () => {
+            // 空闲期先完成 PVP 运行时预编译（CPU 密集）；失败只告警，进对局时仍会兜底重编译。
+            await this.runtimePrecompiler?.ensureCompiled().catch((error) => {
+                console.warn('[SessionAssets] PVP 运行时预编译失败', error);
+            });
+            if (!isCurrent()) return;
             const plan = await this.loadWarmupPlan();
             if (!isCurrent()) return;
             const paths = plan.downloads;

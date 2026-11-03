@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
     buildBigMapBaseLayout, clampBigMapBaseCamera, pickBigMapBasePlot, zoomBigMapBaseCamera,
 } from '../assets/script/app/bigmap/view/BigMapBasePresentation';
+import { BIGMAP_TILE_HEIGHT, BIGMAP_TILE_WIDTH } from '../assets/script/app/bigmap/view/BigMapWorldLayout';
 
 const cells = (rows: number, cols: number) => Array.from({ length: rows * cols }, (_, id) => ({
     hexId: id + 1000, row: Math.floor(id / cols), column: id % cols,
@@ -11,8 +12,9 @@ const cells = (rows: number, cols: number) => Array.from({ length: rows * cols }
 test('20×20全部格心可拾取，位置ID原样保留，背景中央留出建筑区', () => {
     const layout = buildBigMapBaseLayout(cells(20, 20));
     assert.equal(layout.points.size, 400);
-    assert.equal(layout.tileWidth, 147);
-    assert.equal(layout.tileHeight, 96);
+    // 2026-11-02：地块按城池宽度对齐（山猫「地块没跟上」），格宽 = 建筑宽 235。
+    assert.equal(layout.tileWidth, BIGMAP_TILE_WIDTH);
+    assert.equal(layout.tileHeight, BIGMAP_TILE_HEIGHT);
     for (const [id, point] of layout.points) {
         assert.equal(pickBigMapBasePlot(layout, point.x, point.y), id);
         assert.ok(Math.abs(point.x) + layout.tileWidth / 2 <= layout.mapSize * 0.27);

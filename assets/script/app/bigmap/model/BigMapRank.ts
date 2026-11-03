@@ -17,6 +17,9 @@ import type { IBigMapConfig } from './BigMapTypes';
 
 /** 榜单一条：谁、多少战功、排第几。`isPlayer` 只给 UI 高亮用。 */
 export interface IBigMapCityRankEntry {
+    readonly roleId?: string;
+    readonly name?: string;
+    readonly avatarId?: string;
     readonly rank: number;
     readonly warScore: number;
     readonly isPlayer: boolean;
@@ -24,9 +27,10 @@ export interface IBigMapCityRankEntry {
 
 /** 一座城的榜单快照。 */
 export interface IBigMapCityRankBoard {
+    readonly playerWarScore?: number;
     readonly cityId: number;
     readonly entries: readonly IBigMapCityRankEntry[];
-    /** 玩家在这座城的名次（从 1 起；没上榜也有名次 = 榜尾 + 1）。 */
+    /** 玩家在这座城的名次（从 1 起；服务端未上榜为 0）。 */
     readonly playerRank: number;
     /** 同时在打的人数（含玩家），直接喂 `bigMapCrowdCoeff`。 */
     readonly attackerCount: number;
@@ -36,11 +40,12 @@ export interface IBigMapCityRankBoard {
 /**
  * 城池榜单端口。
  *
- * 联机版 = 服务器 `ReqBigMapCityInfo` 的榜单部分；单机版 = `buildBigMapCityRankBoard` 的 NPC 模拟。
+ * 联机版 = `CmdGetRankReqMsg` 的城池伤害榜；单机版 = `buildBigMapCityRankBoard` 的 NPC 模拟。
  * 端口是 async（真实实现必然走网络），但**不阻塞渲染**：Presenter 缓存上一份榜单、视图同步读。
  */
 export interface IBigMapRankProvider {
-    fetchCityRank(cityId: number, playerWarScore: number): Promise<IBigMapCityRankBoard>;
+    dispose?(): void;
+    fetchCityRank(cityId: number, playerWarScore: number): Promise<IBigMapCityRankBoard | null>;
 }
 
 /** 32 位混合哈希 —— 只用来把 `cityId` 打散成种子，不需要密码学强度。 */

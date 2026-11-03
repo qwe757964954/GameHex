@@ -3,7 +3,7 @@ import * as resourcePlan from '../assets/script/app/zcds/model/ZCGameResourcePla
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { bundleForPath } from '../assets/script/core/asset/BundleCatalog';
-import { resolveZCVisualUnitIds } from '../assets/script/app/zcds/model/ZCVisualResourcePlan';
+import { buildZCVisualResourcePlan, resolveZCVisualUnitIds } from '../assets/script/app/zcds/model/ZCVisualResourcePlan';
 
 test('本局英雄表现依赖沿召唤、换兵种传递闭包，循环引用终止，不加载无关单位', () => {
     const known = ['68001','68002','68003','68004'];
@@ -45,7 +45,8 @@ test('加载器按后端英雄、召唤链与波次选模型，离线保持完�
         '../model/ZCNeutralResourceGroup': { getZCNeutralResourceCatalog: () => ({ items: new Map([
             [1, { cardId: '92001', unitCount: 3 }],
         ]) }) },
-        '../model/ZCGameRuntimeConfig': { loadPvpTables() { configurationApplied = true; }, getPvpRuntimeRules: () => ({}) },
+        '../model/ZCGameRuntimeConfig': { isZCRuntimeCompiled: () => false, loadPvpTables() { configurationApplied = true; }, getPvpRuntimeRules: () => ({}) },
+        './ZCRuntimePrecompiler': { ensureZCRuntimeCompiled: async () => { configurationApplied = true; } },
         '../model/ZCGameModel': { configureZCMap() { assert.equal(configurationApplied, true, '地图必须等本局配置应用后再配置'); }, getZCLocalPlayerCountOverride: () => 4,
             isRandomMapCandidate: (_layout: unknown, count: unknown) => { counts.push(count); return true; } },
         '../model/ZCMatchConfig': { captureZCMatchConfig: () => base },
@@ -54,7 +55,7 @@ test('加载器按后端英雄、召唤链与波次选模型，离线保持完�
             textOverrides: new Map([['replacement', { enabled: true, statId: 'model', value: 'units/effects/probe/replacement' }], ['irrelevant', { enabled: true, statId: 'model', value: 'units/effects/probe/unused' }]]),
         } }) },
         './ZCClientCombatConfig': { buildZCClientCombatConfig: () => ({ config: { modifiers: { player: [{ targetUnitId: '68001', textModifiers: [{ statId: 'model', value: 'units/effects/probe/replacement' }] }] } } }) },
-        '../model/ZCVisualResourcePlan': { resolveZCVisualUnitIds },
+        '../model/ZCVisualResourcePlan': { buildZCVisualResourcePlan, resolveZCVisualUnitIds },
         '../ZCDCLogSwitch': { ZCDC_LOG_WARNINGS: false },
         './ZCGuideLoader': { ZCGuideLoader: class { async prepare() { guideLoads++; return {}; } } },
     };
@@ -199,4 +200,29 @@ test('加载器按后端英雄、召唤链与波次选模型，离线保持完�
     assert.equal(configurationApplied, false);
     finishConfig(); await rejectedMap; initialization = null; mapFailure = false;
 
+});
+
+test('表现清单纯计算覆盖召唤、副轨、命中、强化与覆盖模型并去重', () => {
+    const definitions = [
+        { unitId: '1', prefabPath: 'unit/1', attackProfile: { effectPrefabPath: 'normal', impactEffectPrefabPath: 'impact' },
+          empoweredProfile: { effectPrefabPath: 'enhanced' }, secondaryProfile: { effectPrefabPath: 'secondary' } },
+        { unitId: '2', prefabPath: 'unit/2', attackProfile: { effectPrefabPath: 'normal' } },
+        { unitId: '3', prefabPath: 'unit/3', attackProfile: { effectPrefabPath: 'unrelated' } },
+    ];
+    const adapters = { skillPlans: [{ enabled: true, unitId: '1', summonUnitId: '2' }],
+        textOverrides: new Map([
+            ['a', { enabled: true, statId: 'model', value: 'offline' }],
+            ['b', { enabled: false, statId: 'model', value: 'disabled' }],
+        ]) };
+    const modifiers = { player: [{ targetUnitId: '1', textModifiers: [{ statId: 'model', value: 'override' }] }] };
+    const plan = buildZCVisualResourcePlan(definitions, adapters, [1], modifiers);
+    assert.deepEqual(plan.units.map(unit => unit.unitId), ['1', '2']);
+    assert.deepEqual(plan.effectPaths, ['normal', 'impact', 'enhanced', 'secondary', 'override']);
+    definitions[0].secondaryProfile.effectPrefabPath = 'next-battle';
+    assert.ok(plan.effectPaths.includes('secondary'), '路径在计算时拍成快照');
+    const offline = buildZCVisualResourcePlan(definitions, adapters);
+    assert.equal(offline.units.length, 3);
+    assert.ok(offline.effectPaths.includes('offline'));
+    assert.ok(!offline.effectPaths.includes('disabled'));
+    assert.deepEqual(buildZCVisualResourcePlan(definitions, adapters, []).effectPaths, []);
 });

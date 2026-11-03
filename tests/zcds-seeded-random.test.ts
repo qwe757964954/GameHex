@@ -107,11 +107,11 @@ test('种子决定开局：同种子同一份初始地块，不同种子必然�
 });
 
 test('对局只有一个随机源构造点，且用的是本局种子', () => {
-    const source = readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8');
+    const source = readFileSync('assets/script/app/zcds/application/ZCBattleRuntimeController.ts', 'utf8');
     assert.ok(
-        /this\.matchRandom = createSeededRandom\(this\.battleSeed\)/.test(source)
-            && /new ZCGameModel\(null, this\.matchRandom, matchConfig\)/.test(source),
-        'ZCGame 必须用本局种子构造随机源并交给 ZCGameModel',
+        /this\.random = createSeededRandom\(entry\.battleSeed\)/.test(source)
+            && /new ZCGameModel\(null, this\.random,/.test(source),
+        '运行控制器必须用本局种子构造随机源并交给 ZCGameModel',
     );
     assert.equal(
         (source.match(/createSeededRandom\(/g) ?? []).length,

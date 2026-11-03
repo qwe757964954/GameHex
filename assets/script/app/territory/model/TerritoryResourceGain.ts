@@ -224,9 +224,14 @@ export function territoryGainFx(elapsed: number): ITerritoryGainFx | null {
 //   · 出射方向以**屏幕竖直向上为轴**，左右各 26°：
 //       `phi = random(-1, 1) · 半顶角`、`vx = speed · sin(phi)`、`vy = speed · cos(phi)`；
 //   · 初速 650 px/s ±12%，重力 1500 px/s²，轨迹是抛物线；
-//   · 每颗 icon 飞行中**绕自身水平轴上下翻面**：`scaleY = baseScale · cos(ωt + phase)`、
-//     `scaleX` 恒为 `baseScale`（余弦过零即「侧立最窄」，负值即「倒面」）；
-//     频率 2~4 次/秒、初相随机；**禁止正负硬切**，也**不做平面自转**（不叠 `angle`）；
+//   · 2026-11-02 用户改口径（本节的**现行**规则）：
+//       「取消垂直反转效果，改成粒子由小变大生成，同时伴随持续的旋转效果」
+//     ⇒ 旧版的「绕自身水平轴上下翻面」（`scaleY = baseScale·cos(ωt+phase)`、`scaleX` 恒定、
+//       频率 2~4 次/秒、**禁止平面自转**）**整段作废**，换成：
+//       `scale = baseScale · grow(t)`（横纵等比，`grow` 从 0.15 用 easeOutCubic 涨到 1，0.18s 完成）+
+//       `rotation = 360 · spinHz · t + phase`（0.6~1.1 圈/秒，匀速，不取模）。
+//     ⚠️ 「翻面」和「自转」是两件事：前者压 `scaleY`（会翻到背面、宽度不变），
+//       后者只转 `rotation`（图标永远正面朝上）。混着实现会得到"既翻又转"的怪相。
 //   · 每隔 1.1s ±15% 的生命，末段 0.25s `UIOpacity` 淡出；
 //     下落回到地块表面（`offsetY ≤ 0`）时立刻在 0.12s 内淡出并回收，**绝不穿进地块**。
 //
@@ -338,9 +343,33 @@ export const TERRITORY_GAIN_BURST_SURFACE_FADE_SECONDS = 0.12;
 export const TERRITORY_GAIN_BURST_BASE_SCALE = 1;
 export const TERRITORY_GAIN_BURST_SCALE_JITTER = 0.2;
 
-/** 翻面频率区间（次/秒）：每颗落在这个区间里的随机值，12 颗不会同步翻。 */
-export const TERRITORY_GAIN_BURST_FLIP_MIN_HZ = 2;
-export const TERRITORY_GAIN_BURST_FLIP_MAX_HZ = 4;
+/**
+ * 「由小变大」的膨大时长（秒）——需求 2026-11-02：
+ *
+ * > 「取消垂直反转效果，改成粒子由小变大生成，同时伴随持续的旋转效果」
+ *
+ * 0.18s 是「看得出它长出来、又不拖慢发射」的一档：60fps 下约 11 帧；
+ * 再长会盖住错峰（相邻两颗只差 {@link TERRITORY_GAIN_BURST_STAGGER_SECONDS} = 0.025s）。
+ */
+export const TERRITORY_GAIN_BURST_GROW_SECONDS = 0.18;
+
+/**
+ * 出生那一帧的缩放系数（相对 `baseScale`）。
+ *
+ *  不用 0：从 0 起会让「出现」的第一帧完全是空的，看起来像掉帧；
+ *  留 0.15 既保住了"小"的观感，又保证第一帧就看得见。
+ */
+export const TERRITORY_GAIN_BURST_GROW_START_SCALE = 0.15;
+
+/**
+ * 自转速度区间（**圈/秒**）：每颗取区间内的随机值，12 颗不会同步转。
+ *
+ *  ⚠️ 这是「平面自转」（绕屏幕法线），与旧版那套「绕水平轴翻面」完全不是一回事：
+ *    旧版压的是 `scaleY`（会翻到背面、宽度不变），现在只改 `rotation`，图标永远正面朝上。
+ *  0.6~1.1 圈/秒 ≈ 一颗 1.1s 生命里转 0.7~1.2 圈：转得出来又不至于晕。
+ */
+export const TERRITORY_GAIN_BURST_SPIN_MIN_HZ = 0.6;
+export const TERRITORY_GAIN_BURST_SPIN_MAX_HZ = 1.1;
 
 /**
  * 整次喷发的**上限**时长（秒）= 最后一颗的出发时刻 + 它可能达到的最长生命。
@@ -389,11 +418,11 @@ export interface ITerritoryBurstLaunch {
     readonly vx: number;
     /** 初速度的纵向分量（px/s，向上为正）。 */
     readonly vy: number;
-    /** 基础缩放（`1` = icon 设计边长）；翻面只在这上面给 `y` 乘余弦。 */
+    /** 基础缩放（`1` = icon 设计边长）；「由小变大」在这个值上乘生长系数。 */
     readonly baseScale: number;
-    /** 翻面频率（次/秒，2~4）。 */
-    readonly flipHz: number;
-    /** 翻面初始相位（弧度，0~2π）—— 每颗不同，避免 12 颗同步翻面。 */
+    /** 自转速度（**圈/秒**，0.6~1.1）。 */
+    readonly spinHz: number;
+    /** 自转初始相位（弧度，0~2π）—— 每颗不同，避免 12 颗同步转。 */
     readonly phase: number;
     /** 这一颗的存活时长（秒，1.1 ±15%）。 */
     readonly life: number;
@@ -425,8 +454,8 @@ export function territoryBurstLaunch(
         vy: speed * Math.cos(phi),
         baseScale: TERRITORY_GAIN_BURST_BASE_SCALE
             * (1 + (burstNoise(seed, index, 2) * 2 - 1) * TERRITORY_GAIN_BURST_SCALE_JITTER),
-        flipHz: TERRITORY_GAIN_BURST_FLIP_MIN_HZ
-            + burstNoise(seed, index, 3) * (TERRITORY_GAIN_BURST_FLIP_MAX_HZ - TERRITORY_GAIN_BURST_FLIP_MIN_HZ),
+        spinHz: TERRITORY_GAIN_BURST_SPIN_MIN_HZ
+            + burstNoise(seed, index, 3) * (TERRITORY_GAIN_BURST_SPIN_MAX_HZ - TERRITORY_GAIN_BURST_SPIN_MIN_HZ),
         phase: burstNoise(seed, index, 4) * Math.PI * 2,
         life: TERRITORY_GAIN_BURST_LIFE_SECONDS
             * (1 + (burstNoise(seed, index, 5) * 2 - 1) * TERRITORY_GAIN_BURST_LIFE_JITTER),
@@ -439,10 +468,16 @@ export interface ITerritoryBurstParticle {
     readonly offsetX: number;
     /** 相对喷发原点的纵向偏移（像素，向上为正；落回台面后恒 0）。 */
     readonly offsetY: number;
-    /** 横向缩放（**恒**等于基础缩放 —— 翻面不许影响宽度）。 */
-    readonly scaleX: number;
-    /** 纵向缩放 = `基础缩放 · cos(ωt + 相位)`；过零即「侧立最窄」，负值即「翻到背面」。 */
-    readonly scaleY: number;
+    /**
+     * 等比缩放（横纵**同一个值**）。
+     *
+     *  需求 2026-11-02 取消了旧的「绕水平轴翻面」——那套是 `scaleY = cos(...)`、
+     *  会翻到背面且横纵不等比。现在出生时小、0.18s 内长到 `baseScale`，
+     *  全程横纵等比 ⇒ 只留这一个标量，别再拆 `scaleX / scaleY`。
+     */
+    readonly scale: number;
+    /** 平面自转角度（度，可超过 360）. 持续累加，不归零 —— 归零会在回转点卡一帧。 */
+    readonly rotation: number;
     /** 0 → 1（每颗粒子各自淡出）。 */
     readonly opacity: number;
 }
@@ -494,14 +529,23 @@ export function territoryBurstParticle(
     const rawY = launch.vy * flightTime - 0.5 * gravity * flightTime * flightTime;
     const span = Math.max(1e-6, endTime - fadeStart);
     const opacity = local <= fadeStart ? 1 : 1 - (local - fadeStart) / span;
-    // 需求原话：每帧令 `scaleY = baseScale · cos(ωt + phase)`，`scaleX` 始终 `baseScale`。
-    const flip = launch.flipHz * Math.PI * 2 * local + launch.phase;
+    // 需求 2026-11-02：**由小变大**（去掉旧版的余弦翻面）+ **持续自转**。
+    //
+    //  · 生长：`GROW_START → 1` 用 easeOutCubic（前快后慢）——线性长大像"充气"，
+    //    缓出才像"啵"地一下弹出来；0.18s 之后恒为 1，不再变。
+    //  · 自转：`rotation` 随 local 匀速累加、**不取模**。取模会在 360° 回绕的那一帧
+    //    被引擎当成"反向转回去"，观感是转一下卡一下。
+    const growProgress = Math.min(1, local / TERRITORY_GAIN_BURST_GROW_SECONDS);
+    const growEased = 1 - (1 - growProgress) ** 3;
+    const grow = TERRITORY_GAIN_BURST_GROW_START_SCALE
+        + (1 - TERRITORY_GAIN_BURST_GROW_START_SCALE) * growEased;
     return {
         offsetX: launch.vx * flightTime,
         // 落地那一刻起 y 就恒为 0：宁可「趴在表面淡出」，也不能往下穿进地块。
         offsetY: Math.max(0, rawY),
-        scaleX: launch.baseScale,
-        scaleY: launch.baseScale * Math.cos(flip),
+        scale: launch.baseScale * grow,
+        // 相位（弧度）换算成度：视图直接写 `node.angle`。
+        rotation: launch.spinHz * 360 * local + (launch.phase * 180) / Math.PI,
         opacity: Math.max(0, Math.min(1, opacity)),
     };
 }

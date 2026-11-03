@@ -95,16 +95,11 @@ export class ZCCardRevealView extends Component {
     private contentKey = '';
     /** 有没有运气评语切图可显（上方那行只由它决定）。 */
     private hasLuckText = false;
-    /**
-     * 整卡淡出走根节点 UIOpacity（opacity 级联到卡框 / 卡面 / 评语 / 卡名全部子节点），
-     * 懒取一次；prefab 上没挂时运行时补挂，不依赖编辑器接线。
-     */
-    private cardOpacity: UIOpacity | null = null;
-    /**
-     * 运气评语**自己的** UIOpacity（挂在 LuckSprite 节点上，懒取）：只承担「延迟出现」，
-     * 淡出仍由根节点级联 —— 这样文字和卡牌**消失时间必然一致**，两处各自独立可调。
-     */
-    private luckOpacityComp: UIOpacity | null = null;
+    @property({ type: UIOpacity, group: '节点引用', tooltip: '根节点：整卡淡出级联到所有子节点' })
+    cardOpacity: UIOpacity = null!;
+
+    @property({ type: UIOpacity, group: '节点引用', tooltip: 'LuckSprite：评语延迟淡入，淡出仍随根节点级联' })
+    luckOpacityComp: UIOpacity = null!;
     /**
      * 卡面图 / 建筑帧都**不再由渲染层注入闭包**：按 id 现取控制器的只读出口
      * （`ProcedureGame.current?.resolveCardArt / resolveBuildingFrame`）—— 数据本来就在控制器手里
@@ -182,12 +177,11 @@ export class ZCCardRevealView extends Component {
         const fade = progress <= this.fadeStartProgress
             ? 1
             : Math.max(0, 1 - (progress - this.fadeStartProgress) / (1 - this.fadeStartProgress));
-        this.getCardOpacity().opacity = Math.round(255 * fade);
+        this.cardOpacity.opacity = Math.round(255 * fade);
         // 运气评语延迟出现（LUCK_DELAY_SECONDS，略慢于生成动画），出现后保持 1 ——
         // 之后的淡出**只由根节点 UIOpacity 级联承担**，所以文字和卡牌消失时间必然一致。
         // 池复用/无评语时写 0，避免上一张卡的可见态残留。
-        const luck = this.getLuckOpacity();
-        if (!luck) return;
+        const luck = this.luckOpacityComp;
         if (!this.hasLuckText) {
             luck.opacity = 0;
             return;
@@ -195,22 +189,6 @@ export class ZCCardRevealView extends Component {
         const show = Math.max(0, Math.min(1,
             (elapsedSeconds - ZCCardRevealView.LUCK_DELAY_SECONDS) / ZCCardRevealView.LUCK_FADE_IN_SECONDS));
         luck.opacity = Math.round(255 * show);
-    }
-
-    private getCardOpacity(): UIOpacity {
-        if (this.cardOpacity) return this.cardOpacity;
-        this.cardOpacity = this.node.getComponent(UIOpacity) ?? this.node.addComponent(UIOpacity);
-        return this.cardOpacity;
-    }
-
-    /** 评语节点的 UIOpacity 懒取；prefab 没挂时运行时补挂（与 `getCardOpacity` 同惯例）。 */
-    private getLuckOpacity(): UIOpacity | null {
-        if (!this.luckSprite) return null;
-        if (!this.luckOpacityComp) {
-            this.luckOpacityComp = this.luckSprite.node.getComponent(UIOpacity)
-                ?? this.luckSprite.node.addComponent(UIOpacity);
-        }
-        return this.luckOpacityComp;
     }
 
     private setSprite(sprite: Sprite | null, frame: SpriteFrame | null): void {

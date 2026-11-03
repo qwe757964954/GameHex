@@ -42,7 +42,6 @@ function stubHexView(load: (name: string) => any, cc: any, bar: () => any): any 
         'goldResourceFrame', 'mineResourceFrame', 'chestResourceFrame']) view[key] = { name: key };
     view.buildingLayer = bar().node;
     view.iconLabel = { node: bar().node, string: '', enabled: true, color: null };
-    view.outlineGraphics = new cc.Graphics();
     view.healthBar = bar();
     view.cooldownBar = bar();
     return view;
@@ -55,7 +54,8 @@ function stubUnitView(load: (name: string) => any, bar: () => any): any {
     view.rootTransform = { setContentSize: () => {} };
     view.visualRoot = bar().node;
     view.sprite = { enabled: true, spriteFrame: null };
-    view.fallback = { node, clear: () => {}, circle: () => {}, fill: () => {} };
+    view.fallback = { node, enabled: false, color: null };
+    view.fallbackTransform = { setContentSize: (width: number, height: number) => { view.fallback.node.size = { width, height }; } };
     view.fallbackLabel = { node, enabled: true, string: '' };
     view.healthBar = bar();
     return view;
@@ -66,24 +66,17 @@ function stubUnitView(load: (name: string) => any, bar: () => any): any {
  * 外加根节点懒取的 UIOpacity（整卡淡出走它）。
  *
  * `luckSprite` 还必须有**带 getComponent / addComponent 的节点**：评语是一条独立的 UIOpacity
- * （只承担「延迟 0.13s 出现」，淡出仍随根级联），视图会往它的节点上懒挂。
+ * （只承担「延迟 0.13s 出现」，淡出仍随根级联），通过 Inspector 绑定。
  */
 function stubCardRevealView(load: (name: string) => any, cc: any): any {
     const view = new (load('./ZCCardRevealView').ZCCardRevealView)();
     const sprite = () => ({ enabled: true, spriteFrame: null, color: new cc.Color(255, 255, 255, 255) });
-    const nodeWithComponents = () => {
-        const components: any[] = [];
-        return {
-            components,
-            getComponent: (type: unknown) => components.find((c) => c instanceof (type as any)) ?? null,
-            addComponent: (type: any) => { const component = new type(); components.push(component); return component; },
-        };
-    };
     view.frameSprite = sprite();
     view.iconSprite = sprite();
-    view.luckSprite = { ...sprite(), node: nodeWithComponents() };
+    view.luckSprite = sprite();
     view.nameLabel = { string: '', enabled: true, color: new cc.Color(255, 255, 255, 255) };
     view.cardOpacity = { opacity: 255 };
+    view.luckOpacityComp = { opacity: 255 };
     view.greenFrame = { name: 'green-frame' };
     return view;
 }
@@ -299,8 +292,6 @@ test('占领地只保留外轮廓，中立共享线只绘制一次', () => {
 test('TileBackground 为阵营色 60%；轮廓不再由地块自己画（已并到 OutlineLayer 共享 Graphics）', () => {
     const { load, cc, bar } = loadViews();
     const view = stubHexView(load, cc, bar);
-    // TerritoryOutline 上的 Graphics 是 prefab 预挂 + Inspector 绑定（不再运行时 addComponent），
-    // stubHexView 已按同一形态给了一份；initialize() 现在只负责挂触摸监听 + 关掉这份 Graphics。
     view.initialize(() => {});
     view.tileFrame = { name: 'img_land_01_gray' };
     const state = { owner: 'player', state: 'occupied', building: 'none', tileType: ZCPvpTileType.Mine, developmentCost: 0, developmentResolved: true, hp: 0, maxHp: 0, tier: 1 };
@@ -314,11 +305,6 @@ test('TileBackground 为阵营色 60%；轮廓不再由地块自己画（已并�
     // 2026-10-08：领地轮廓合并到 `ZCGameBoard.prefab` 的 `OutlineLayer`（整盘一个 Graphics）。
     // 逐边描线的判据与配色**没有变**，只是搬家 —— 迁移后的等价性由
     // `tests/zcds-outline-layer.test.ts` 逐条比对线段集合来钉。
-    // 这里改成钉「搬家后最容易破的那条」：这份 per-cell Graphics 必须被关掉，
-    // 否则漏网调用路径会画出与共享层重叠的第二份轮廓（同色叠线 = 颜色加深 / 边界变粗）。
-    assert.equal(view.outlineGraphics.enabled, false, 'per-cell 轮廓 Graphics 必须停用，否则会与共享层叠线');
-    assert.deepEqual(view.outlineGraphics.commands, [], '停用前先 clear 干净，别留上一局的路径');
-
     for (const [owner, rgb] of Object.entries(factionColors)) {
         state.owner = owner;
         // boundaryMask=1：低 6 bit=1（edge0 是外边界），高 6 bit=0（无内部线）。
@@ -328,8 +314,6 @@ test('TileBackground 为阵营色 60%；轮廓不再由地块自己画（已并�
             [...rgb, 150],
             `${owner} TileBackground 应使用阵营色、60% 透明度`,
         );
-        // 换了 5 次 mask 也不能多出一条线 —— 轮廓已经不由这一格负责了。
-        assert.deepEqual(view.outlineGraphics.commands, [], `${owner}：地块视图不该再画轮廓`);
     }
 
     // 🔴 2026-10-16 口径（山猫）：「局内地图中立没有任何显示」。
@@ -341,7 +325,6 @@ test('TileBackground 为阵营色 60%；轮廓不再由地块自己画（已并�
     assert.equal(view.tileSprite.color.a, 0,
         `中立格填充 alpha 应为 0（2026-10-16 起），实际 alpha=${view.tileSprite.color.a}`);
     view.render({ state, canDevelop: false, playerGold: 0, cooldown: null, now: 0, boundaryMask: 0 });
-    assert.deepEqual(view.outlineGraphics.commands, [], '中立格同样不自己画轮廓');
 });
 
 test('血条使用 ProgressBar，裁切非法比例并按阵营换填充图', () => {
@@ -738,11 +721,16 @@ test('棋盘图层顺序声明在 ZCGameBoard.prefab 里，代码不再用 sibli
         // 漏了 UI_2D 的症状是整棵子树不渲染，且一条报错都没有。
         assert.equal(data[ref.__id__]._layer, 33554432, `${data[ref.__id__]._name} 的 layer`);
     }
-    // 水面原本是代码 `addComponent(Graphics)` 补的，现在烘在 prefab 上。
+    // 纯色水面使用 prefab 中的 white Sprite，保留原透明色。
     const water = data[root._children[0].__id__];
     const waterTypes = water._components.map((ref: any) => data[ref.__id__].__type__);
     assert.ok(waterTypes.includes('cc.UITransform'));
-    assert.ok(waterTypes.includes('cc.Graphics'));
+    assert.ok(!waterTypes.includes('cc.Graphics'));
+    const surface = water._components.map((ref: any) => data[ref.__id__]).find((item: any) => item.__type__ === 'cc.Sprite');
+    assert.equal(surface._spriteFrame.__uuid__, 'fbe1f245-51ca-46cb-a726-e3bda54f8dd6@f9941');
+    assert.equal(surface._sizeMode, 0);
+    assert.equal(surface._isTrimmedMode, false);
+    assert.deepEqual([surface._color.r, surface._color.g, surface._color.b, surface._color.a], [30, 151, 215, 0]);
     // 共享轮廓层必须真的挂着一个 Graphics —— 没有它整盘轮廓会完全不画（且零报错）。
     const outline = data[root._children[order.indexOf('OutlineLayer')].__id__];
     const outlineTypes = outline._components.map((ref: any) => data[ref.__id__].__type__);
@@ -937,7 +925,7 @@ test('新地块节点独立切换阵营、开发图标和建筑，保留 prefab 
     assert.equal(view.iconLabel.color.g, 255);
 });
 
-test('ZCGameHex 使用 hex_flat 扁平底图，TerritoryOutline 的 Graphics 由 prefab 预挂并绑定', () => {
+test('ZCGameHex 使用 hex_flat 扁平底图，资源绑定保持一致', () => {
     const data = JSON.parse(readFileSync(assetPath('ui/game/ZCGameHex.prefab'), 'utf8'));
     const root = data[1];
     const view = data[root._components.at(-1).__id__];
@@ -946,27 +934,12 @@ test('ZCGameHex 使用 hex_flat 扁平底图，TerritoryOutline 的 Graphics 由
     assert.equal(nodeOf('buildingSprite')._parent.__id__, 1);
     assert.equal(nodeOf('iconSprite')._parent.__id__, view.buildingLayer.__id__);
     const tileNode = nodeOf('tileSprite');
-    const outline = data.find((item: any) => item.__type__ === 'cc.Node' && item._name === 'TerritoryOutline');
-    const outlineCompTypes = outline._components.map((ref: any) => data[ref.__id__].__type__ as string);
     const sizeOf = (node: any) => data[node._components.map((ref: any) => ref.__id__).find((id: number) => data[id].__type__ === 'cc.UITransform')]._contentSize;
     // 地块图 2026-10-14 换成**扁平纯白蒙版** `hex_flat`（同画布 130×119 / 面 123×90，去掉立体侧壁与明暗）。
     // TileBackground 的 CUSTOM 尺寸必须等于整图，否则图会被非等比拉伸。
-    // 根节点与 TerritoryOutline 仍按整图 128×128（点击热区 / 描边画布）。
+    // 根节点保留 128×128 点击热区。
     assert.deepEqual([sizeOf(tileNode).width, sizeOf(tileNode).height], [130, 119]);
     assert.deepEqual([sizeOf(root).width, sizeOf(root).height], [128, 128]);
-    assert.deepEqual([sizeOf(outline).width, sizeOf(outline).height], [128, 128]);
-    // 轮廓线由 TerritoryOutline 上**预挂并绑定**的 Graphics 逐边画。
-    // 2026-09-30：原来是运行时 `getComponent(Graphics) ?? addComponent(Graphics)` —— 组件引用一律走
-    // Inspector 绑定（`outlineGraphics`），代码不再拼结构；同时删掉了那个永远取不到的 Sprite 兜底
-    // （prefab 上本来就只有 UITransform，`fullOutline` 恒为 null）。
-    const outlineComp = data[view.outlineGraphics.__id__];
-    assert.equal(outlineComp.__type__, 'cc.Graphics');
-    assert.equal(data[outlineComp.node.__id__], outline, 'outlineGraphics 必须指向 TerritoryOutline 自己身上的 Graphics');
-    assert.ok(outlineCompTypes.includes('cc.Graphics'), 'TerritoryOutline 必须预挂 Graphics');
-    // 也不能预挂完整六边形 Sprite：Sprite 与 Graphics 同为渲染组件，引擎直接报
-    // 「Can't add renderable component... already have one」；而且那张地块图还会画出
-    // 同阵营地块之间的内部重复边。
-    assert.ok(!outlineCompTypes.includes('cc.Sprite'), 'TerritoryOutline 不能预挂完整六边形 Sprite（与 Graphics 同为渲染组件）');
     for (const [key, name] of Object.entries({ tileFrame: 'hex_flat', mineIconFrame: 'icon_jk', barracksIconFrame: 'icon_by', mysteryFrame: 'icon_wh', ruinsFrame: 'fx' })) {
         const meta = JSON.parse(readFileSync(assetPath(`image/buildings/${name}.png.meta`), 'utf8'));
         assert.equal(view[key].__uuid__, meta.subMetas.f9941.uuid, key);
@@ -1931,4 +1904,12 @@ test('血条四色在 prefab 上绑齐：敌3 用紫色 jindutiao_p，四张两�
             assert.equal(frame?.__uuid__, `${uuid}@f9941`, `${prefab}.prefab 的 ${key} 应指向 ${uuid}`);
         }
     }
+});
+
+
+test('ZCGameHex 不再创建逐格轮廓 Graphics 或保存旧 Inspector 引用', () => {
+    const data = JSON.parse(readFileSync(assetPath('ui/game/ZCGameHex.prefab'), 'utf8'));
+    assert.ok(!data.some((item: any) => item.__type__ === 'cc.Node' && item._name === 'TerritoryOutline'));
+    assert.ok(!data.some((item: any) => item.__type__ === 'cc.Graphics'));
+    assert.ok(!data.some((item: any) => 'outlineGraphics' in item));
 });

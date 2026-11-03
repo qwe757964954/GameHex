@@ -1,8 +1,7 @@
+import { buildZCBattleEntry } from '../assets/script/app/zcds/application/ZCBattleEntryBuilder';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { runInNewContext } from 'node:vm';
-import ts from 'typescript';
 import type { ZCBattleStart } from '../assets/script/app/battle/BattleStartModel';
 import { parseBattleBuffs } from '../assets/script/app/battle/BattleStartModel';
 import { compileZCMatchRuntime } from '../assets/script/app/zcds/model/ZCMatchRuntimeCompiler';
@@ -222,31 +221,11 @@ test('SLG 守军八张卡按实际回包 id 和顺序构筑，不使用默认英
 
 test('服务端章节战斗阵容不再受本地关卡敌方卡牌名单裁剪', () => {
     const source = prepare(4);
-    const exports: Record<string, unknown> = {};
-    let initialized: { matchConfig: typeof source } | null = null;
-    class Base {
-        host = { addComponent: () => ({ initialize: (entry: { matchConfig: typeof source }) => { initialized = entry; } }) };
-        log(): void {} error(): void {}
-    }
-    runInNewContext(ts.transpileModule(readFileSync('assets/script/app/procedure/ProcedureGame.ts', 'utf8'), {
-        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
-    }).outputText, { exports, console, require(name: string) {
-        if (name.endsWith('/ProcedureBase')) return { ProcedureBase: Base };
-        if (name.endsWith('/ZCClientCombatConfig')) return { buildZCClientCombatConfig };
-        if (name.endsWith('/ZCPveCombatConfig')) return { buildZCPveEnemyDecks };
-        if (name.endsWith('/ZCMatchConfig')) return { captureZCMatchConfig };
-        if (name.endsWith('/ZCRankBoard')) return { buildSeatProfiles: () => new Map(), buildSeatUnitIds: () => new Map() };
-        if (name.endsWith('/ZCGame')) return { ZCGame: class {} };
-        return {};
-    } });
-    const Procedure = exports.ProcedureGame as new () => { preparedResources: object; onEnter(params: object): void };
-    const procedure = new Procedure();
-    procedure.preparedResources = { baseMatchConfig: source };
     const pve = {
         mode: 'match', chapterId: 1, levelId: 1, territoryCellId: 327, hpRate: 0.2, attackRate: 0.3,
         enemyCardIds: [68001], enemyTeamCardIds: [[68001], [68001], [68001]], waves: [], playerCount: 4,
     };
-    procedure.onEnter({ battle: battle([68001], [68002]), selfRoleId: 'self', pve });
+    const initialized = buildZCBattleEntry({ baseMatchConfig: source } as Parameters<typeof buildZCBattleEntry>[0], { battle: battle([68001], [68002]), selfRoleId: 'self', pve: { ...pve, playerCount: 2, stage: 1, enemyName: '', territorySaveOwner: null, mode: 'match' } });
     assert.ok(initialized);
     assert.deepEqual((initialized as { matchConfig: typeof source }).matchConfig.enemyDeck
         .filter((card) => card.unitId !== undefined).map((card) => Number(card.unitId)), [68002]);
@@ -257,14 +236,12 @@ test('服务端章节战斗阵容不再受本地关卡敌方卡牌名单裁剪',
     const server = { ...start, units: start.units.map((unit) => ({
         ...unit, buffs: parseBattleBuffs([{ source: 1, buffs: ['levelAttackRatio', '0.8', 'levelHpRatio', '0.8'] }]),
     })) };
-    procedure.preparedResources = { baseMatchConfig: source };
-    procedure.onEnter({ battle: server, selfRoleId: 'self', pve });
-    const combined = (initialized as { matchConfig: typeof source }).matchConfig;
+
+    const combined = buildZCBattleEntry({ baseMatchConfig: source } as Parameters<typeof buildZCBattleEntry>[0], { battle: server, selfRoleId: 'self', pve: { ...pve, playerCount: 2, stage: 1, enemyName: '', territorySaveOwner: null, mode: 'match' } }).matchConfig;
     assert.deepEqual(combined, buildZCClientCombatConfig(source, server, 'self').config,
         '服务端倍率与本地关卡参数同时存在时，也只采用服务端');
-    procedure.preparedResources = { baseMatchConfig: source };
-    procedure.onEnter({ selfRoleId: 'self', pve });
-    const local = (initialized as { matchConfig: typeof source }).matchConfig;
+
+    const local = buildZCBattleEntry({ baseMatchConfig: source } as Parameters<typeof buildZCBattleEntry>[0], { selfRoleId: 'self', pve: { ...pve, playerCount: 2, stage: 1, enemyName: '', territorySaveOwner: null, mode: 'match' } }).matchConfig;
     assert.deepEqual(local.ownerRates, {}, '没有服务端数据时不补本地倍率');
     assert.ok(Object.values(local.modifiers ?? {}).flat().every((loadout) => !loadout.sourceKey.startsWith('territory:')));
 });
@@ -313,4 +290,26 @@ test('自选主城配置可在显式预备模式下完成客户端构筑', () =>
     assert.equal(result.config.map.playerHomeId, -1);
     assert.equal(result.config.modifiers?.player?.length, 1);
     assert.equal(Object.isFrozen(result.config), true);
+});
+
+test('battle entry copies PVE navigation data without callbacks and normalizes defence wave order', () => {
+    const source = prepare(4);
+    const prepared = { baseMatchConfig: source } as Parameters<typeof buildZCBattleEntry>[0];
+    const pve: NonNullable<Parameters<typeof buildZCBattleEntry>[1]>['pve'] = {
+        mode: 'defence', chapterId: 2, levelId: 3, territoryCellId: 4, stage: 1,
+        territorySaveOwner: null, enemyName: '', enemyCardIds: [], enemyTeamCardIds: [],
+        playerCount: 2, hpRate: 1, attackRate: 1,
+        waves: [
+            { waveId: 2, showAtSeconds: 3, pvpCardId: 68001, monsterCount: 2, hpRate: 1, attackRate: 1 },
+            { waveId: 1, showAtSeconds: 0, pvpCardId: 68001, monsterCount: 1, hpRate: 1, attackRate: 1 },
+            { waveId: 3, showAtSeconds: -1, pvpCardId: 68001, monsterCount: 1, hpRate: 1, attackRate: 1 },
+        ],
+    };
+    const original = JSON.stringify(source), waves = JSON.stringify(pve.waves);
+    const entry = buildZCBattleEntry(prepared, { pve });
+    assert.deepEqual(entry.pveContext, { chapterId: 2, territoryCellId: 4, levelId: 3 });
+    assert.deepEqual(entry.matchConfig.pveDefence?.waves.map(wave => wave.waveId), [1, 2]);
+    assert.equal(JSON.stringify(source), original);
+    assert.equal(JSON.stringify(pve.waves), waves);
+    assert.equal(entry.battleSeed, null);
 });

@@ -206,14 +206,15 @@ test('④ 光束（镭射飞龙）：只缩粗细，x 恒 1 —— 长度由每�
         .find((entry) => entry.__type__ === 'cc.UITransform')!._contentSize.height;
     assert.equal(canvasHeight, 53, '光束画布高变了 ⇒ 下面两个像素值要重算');
 
-    // 普攻 30719：53 × 0.65 × 0.7 = 24.12px（改前 34.45）。带强化的「镭射死光」30845 挂的是
-    // 同一份美术（倍率 1.3），所以它也跟着变成 70% —— 这是用户知情接受的连带。
+    // 普攻 30719：53 × 1.8 × 0.7 = 66.78px。这是**画布高**（含大片柔光外圈），
+    // 真正不透明的亮芯约 9px —— 2026-11-02 用户反馈「子弹模型消失了」就是按整张画布的
+    // 长厚比取 0.65 时亮芯只剩 3px。带强化的「镭射死光」30845 挂同一份美术（倍率 1.3）。
     const thickness = (skillId: number): number =>
         canvasHeight * zcBeamWidthScaleOf(spec!, skillId) * scale.y;
-    assert.ok(Math.abs(thickness(30719) - 24.12) < 0.1, `普攻光柱粗 ${thickness(30719).toFixed(2)}px 应约 24.12`);
-    assert.ok(Math.abs(thickness(30845) - 31.35) < 0.1, `镭射死光粗 ${thickness(30845).toFixed(2)}px 应约 31.35`);
-    assert.ok(Math.abs(thickness(30719) / (canvasHeight * 0.65) - SHRINK) < 1e-6,
-        '普攻光柱必须正好是改前的 70%');
+    assert.ok(Math.abs(thickness(30719) - 66.78) < 0.1, `普攻光柱高 ${thickness(30719).toFixed(2)}px 应约 66.78`);
+    assert.ok(Math.abs(thickness(30845) - 86.81) < 0.1, `镭射死光高 ${thickness(30845).toFixed(2)}px 应约 86.81`);
+    assert.ok(Math.abs(thickness(30719) / (canvasHeight * zcBeamWidthScaleOf(spec!, 30719)) - SHRINK) < 1e-6,
+        '根节点 y 缩放（0.7）只许乘一次');
 
     // 别处不许再乘一遍根节点缩放 —— 乘两遍就成了 49%。
     const viewSource = readFileSync(join(ROOT, 'assets/script/app/zcds/view/ZCCombatEffectView.ts'), 'utf8');

@@ -77,6 +77,16 @@ ZCSettlementPage.open({ onConfirm: () => this.returnToMain(), onGrowEntry: (key)
 
 - **Page 不拥有业务控制器**：Page 不创建、保存或释放 Controller / Entry，不通过回调反向调用控制器。由 `app/bootstrap` 的组合对象持有控制器与 View，流程持有组合对象。挂载前注入展示资源和展示数据；Page 以作用域明确的生命周期事件报告 ready / enabled / disabled / destroyed，外部组合层启动、取消和释放业务。展示资源契约可以持有，控制器对象和其退出闭包不可持有。主界面参考 `app/bootstrap/main/MainTabsComposition.ts` 与 `MainPageComposition.ts`。
 
+### 登录、匹配与后续迁移范例
+
+- 所有权统一为 `Procedure → Composition → Controller + View + 适配器`。`app/bootstrap/login/LoginComposition.ts` 与 `app/bootstrap/matching/MatchingComposition.ts` 是流程页面范例；主 tab 参考 `app/bootstrap/main`。
+- 控制器继承 `ControllerBase`，通过 `listen` / `own` 集中拥有事件、请求归属、定时器、弹窗及资源。先解除输入和在途工作，再销毁节点、释放展示资源。
+- 页面仅接收展示数据和展示服务，派发带 `owner` 的意图与生命周期事件；业务用例、请求、取消和导航留在控制器。父页面首次渲染依赖子组件 `onLoad` 时，在 `start` 发 ready，不能在父 `onLoad` 内抢先驱动子组件。
+- 单轮业务响应由本轮 Model/Controller 直接持有；跨流程使用明确 entry params，不能读取全局“最近结果”反推当前轮次。匹配的权威开战回包与预加载对象必须一起移交，未移交资源随匹配退出释放。
+- 业务控制器与展示资源租约需按职责区分。只有加载图标、渲染样式的公共组件，不因类名出现 Controller 就机械拆出业务 Model。
+- 最小验证：`npx tsx --test tests/flow-architecture.test.ts tests/login-controller.test.ts tests/login-root-lifecycle.test.ts tests/matching-controller.test.ts tests/matching-server-readiness.test.ts tests/zcds-matching-preload.test.ts tests/view-intent-events.test.ts tests/callback-owner.test.ts`。
+- 后续迁移清单与边界见 [工程架构迁移清单](工程架构迁移清单.md)。清单中的“待迁移”不表示已经实现。
+
 ### 2.1.1 释放即解除事件，不在同步回调重复判断 disposed（2026-10-30）
 
 - Controller 在 `dispose()` 中统一 `EventMgr.offTarget(this)`、网络 `removeCaller(this)`、取消定时器及退订缓存 / Model。同步事件处理函数不再重复 `if (this.disposed) return`，定时器回调也依靠取消调度停止。
@@ -195,7 +205,7 @@ GameNet.instance.removeCaller(this);
   - 判据：`grep -rn "[A-Za-z0-9_)]!\." assets/script --include=*.ts` 恒为 0 命中（注释里讲解该规则的地方除外）。
 - **`@property` 绑死的引用直接用，不判空**：prefab 上已绑定的 `Node` / `Sprite` / `Label` / 自定义组件属**不变量** ⇒ 一律 `this.xxx.active` / `.string` / `.node` 直接取，**不写 `if (this.xxx)` / `this.xxx?.` / `if (this.xxx && …)`**。判空只会把「prefab 掉了组件」降级成「点了没反应」，查不出根因。
   - 「绑没绑」不靠直觉：读对应 prefab —— 找 `__type__` 等于该脚本 cid 的对象，看字段的 `__id__` 是否指向真实对象。公共组件常在一个 prefab 上挂**多个实例**，必须逐个核（如 `LeagueAdButton` 在 `LeagueDonate.prefab` 有 `BtnFree` / `BtnBuy` 两处，7 个字段都要存在）。
-  - **例外（判空要留）**：① 字段 tooltip / 注释明写「可选 / 老端兼容 / 接口先留好」；② 同一脚本被多个 prefab 复用、并非每个都绑；③ `getComponent` 懒取缓存（`if (!this.iconSprite)` 是缓存判断，不是防御）；④ 入参本身可为 `null`（`setCostIcon(frame: SpriteFrame | null)` 里的 `if (!frame) return` 是语义，不是冗余）。
+  - **例外（判空要留）**：① 字段 tooltip / 注释明写「可选 / 老端兼容 / 接口先留好」；② 同一脚本被多个 prefab 复用、并非每个都绑；③ 动态实例或第三方层级的 `getComponent` 查询缓存（固定 prefab 引用应改为 Inspector 绑定，见 §5）；④ 入参本身可为 `null`（`setCostIcon(frame: SpriteFrame | null)` 里的 `if (!frame) return` 是语义，不是冗余）。
   - 存量与判据：按「`@property` 字段名 × `if (this.x)` / `this.x?.` 形态」扫全仓，2026-10-30 为 **558 处 / 122 个文件**（Top：`OSRankPage` 29、`LeagueHallPage` 28、`HangPage` 19、`OSShopItem` 17、`BattleTokenPage` 17）。**不要一把梭**：按模块清，每清一个文件先把它的所有 prefab 实例对完账，再改用例护栏。
 
 ## 5. Cocos Creator 预制体（Prefab）与静默陷阱守卫
@@ -206,6 +216,8 @@ Cocos 引擎中许多配置错误**完全不报错但表现静默失效**，修�
 | :--- | :--- | :--- |
 | **图层位掩码 (`_layer`)** | 所有 UI 与棋盘子节点（含 `MapWater`、Spine 根与子节点）必须设为 `UI_2D` | UI 相机直接跳过渲染，画面缺失且控制台零报错 |
 | **手写/脚本生成 Prefab** | 每个节点必须显式包含 `cc.UITransform` 组件 | 手写 JSON 不会触发 `@requireComponent` 自动补挂，运行时取宽高或挂 Widget 崩溃 |
+| **纯色 UI 底板与缺图兜底** | 面板、遮罩、头像底板等可用 Sprite 表达的纯色 UI，统一复用 `image/common/white`（white 图片），颜色、透明度、尺寸在 prefab 配置；禁止为这类表现创建或挂载 Graphics，也不在代码中绘制底板。确需路径绘制的地图几何、轮廓等另按实际用途处理 | 避免重复绘制逻辑和额外 Graphics 渲染组件 |
+| **静态组件预挂与 Inspector 引用** | prefab / scene 中宿主固定、类型已知的组件（含 UIOpacity、UITransform、Button、Sprite 和自定义脚本）应在编辑器预挂，并通过 `@property` 直接绑定；必填引用用 `null!`。禁止用 `getComponent(...) ?? addComponent(...)` 掩盖漏挂，也不为固定引用写懒取 getter。确需查询动态实例或第三方层级时，在创建/初始化处集中获取并缓存，避免在 render/update 中重复查找或补挂 | 避免运行时拼组件、隐藏 prefab 配置错误及重复查询 |
 | **CUSTOM 尺寸 Sprite** | `sizeMode = CUSTOM(0)` 的 Sprite 必须设 `_isTrimmedMode = false` | 引擎在赋 `spriteFrame` 时把 `contentSize` 强行覆写为裁剪框大小，设计稿尺寸失效 |
 | **立绘等比缩放** | 方形原图（如 256×256 立绘）放进非方形设计框时，必须 `sizeMode = RAW(2)` 并由代码按 `frame.height` 等比算 scale | 设为固定框会把角色纵向拉伸变形 |
 | **借用带 Widget 的节点** | 跨父级借用节点（如借 `ConfirmSpawn` 绿勾到 `mapLayer`）必须先 `widget.enabled = false`，销毁前归还父级与 Widget | Widget 每帧按原父级边距把节点拽回屏幕底部，覆盖代码写入的世界坐标 |
@@ -268,8 +280,9 @@ Cocos 引擎中许多配置错误**完全不报错但表现静默失效**，修�
 - `ControllerBase` 统一管理必需的资源、配置、会话服务与 ResourceScope；未使用资源即销毁时，不读取运行时服务。
 - `ComponentController` 复用既有 `ProcedureManager.context`，首次使用服务时解析；未配置运行时即访问服务必须明确报错，不降级为可空资源入口。
 - 主界面宿主、主城宝箱、卡牌阵容和公共奖励格各自持有控制器，退出时调用 dispose。业务页面不再暴露独立的 setAssetService / setConfigService / setSessionAssetService / useAssets 注入接口，弹窗 userData 也不传资源服务。
-- `zcds` 入口统一调用 `createZCBattlePreload(battle, options)`，不再逐项传资源服务。战斗准备控制器从运行时取得必需资源契约，`ZCGameLoader` / `ZCGuideLoader` 只消费该契约，不自己查全局服务。
-- 对局资源分两段归属：预加载资源由匹配任务独立 scope 持有，成功后移交流程；头像、卡面、首领头像与结算补图由 `ZCGame` 持有的 `ComponentController` 管理，`shutdown()` 在拆除展示节点后统一释放。不可用来源地图的 scope 代替战斗 scope。
+- `zcds` 入口由组合层调用 `createZCBattleSession(context, { owner, battle, params })`，创建时登记必填 owner 并立即启动唯一准备任务，通过只读 `ready` 等待、`adopt(params, context)` 接管；注入现有资源服务；`ZCGameLoader` / `ZCGuideLoader` 只消费资源契约。调度、批量加载与复用继续走 `ResourceLoadManager` / `ScopedAssetCache`，不另建预加载管理器。
+- 对局从准备到退出由同一个 `ZCBattleController` scope 持有资源和唯一准备 Promise。来源 scope 登记会话释放；战斗流程预加载接管同一实例时，先解除来源登记，再登记目标流程释放，目标取消立即释放。`BattleComposition` 延迟到 mount 装配运行组件；直接加载和运行期补图同属单局 scope。领地会话由 `TerritoryEntry` 创建和持有，页面仅接收就绪 Promise 并派发进入意图。`ZCGame` 仅接收 `IControllerResources`，会话退出先 `shutdown()` 拆除展示节点、销毁组件，再统一释放资源。不可用来源地图的 scope 代替战斗 scope。
+- 对局运行期由 `BattleComposition` 外部装配 `ZCBattleRuntimeController` 和 `ZCBattleSettlementController`，返回窄 `start/dispose` 句柄交给会话先持有再启动；组合层不保存子控制器或提供反向释放回调。返回主界面、提示展示和 PVE 结果通过 `ZCBattleEvents` 数据事件传递，owner 为真实展示实例；组合层仅消费当前宿主的通知，订阅随会话释放解除。有返回值的服务调用和取消/退订端口继续显式注入。运行期持有结算，结算持有自身请求/弹窗；初始化失败与正常退出统一经会话释放，某层清理失败也继续清理剩余层级。两者职责为：前者持有规则模型、选点和既有阶段，消费 HUD 意图与带实例 owner 的帧事件；后者持有结算请求、等待、弹窗及导航订阅。`ZCGame` 只提供展示端口，不保存业务控制器或推进模型。退出先解除控制器与异步归属，再拆展示节点，最后释放单局资源。
 - `PopupBase` 统一提供必需的 `assets` / `configs` / `sessionAssets` 与本次打开的 `resourceScope`，服务首次使用时从已有 `ProcedureManager.context` 解析。弹窗子类（如 `LineupBoardPage`）直接使用继承入口，不为资源另建 `ComponentController`。
 - 弹窗关闭和销毁均由基类释放动态资源，`onClose` 先完成业务收尾；缓存弹窗每次重开创建新作用域。子类须清空本次加载缓存，加载闭包捕获本次资源服务，异步返回检查本次作用域是否已释放，防止旧任务借到新一轮作用域。关闭 / 销毁不再额外递增刷新版本号；版本号仅用于同一次打开期间重复刷新或切换阵容时防止旧结果覆盖新结果。`PopupManager` 负责 prefab 加载的原有作用域不变。
 - `PopupManager.initialize` 是组合根配置框架端口，仍由 Bootstrap 完成；不属于业务页面的依赖穿透。

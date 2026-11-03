@@ -1,3 +1,4 @@
+import { ZC_BATTLE_EVENTS } from '../assets/script/app/zcds/application/ZCBattleEvents';
 /**
  * 【战斗系统】选择基地模式（钉钉表「demo 体验反馈」2026-10-14 / 优化 / 优先级中）的回归。
  *
@@ -208,7 +209,6 @@ function stubHexView(load: (name: string) => any, cc: any, bar: () => any): any 
         'goldResourceFrame', 'mineResourceFrame', 'chestResourceFrame']) view[key] = { name: key };
     view.buildingLayer = bar().node;
     view.iconLabel = { node: bar().node, string: '', enabled: true, color: null };
-    view.outlineGraphics = new cc.Graphics();
     view.healthBar = bar();
     view.cooldownBar = bar();
     view.resourceUnitNodes = [];
@@ -273,19 +273,6 @@ function loadZCGameClass(): { ZCGame: any; Widget: unknown } {
         '../showReward/RewardFrames': { resolveCmdGoodsFrames: () => Promise.resolve([]) },
         '../itemdetail/ItemDetailTable': { itemNumberTextOf: (n: unknown) => String(n) },
         './model/ZCGameRuntimeConfig': {}, './model/ZCSeededRandom': {},
-        // 阶段机已从 `view/` 迁到 `application/`（ZCGame.ts:38 值导入）。只需接口形状。
-        './application/ZCBattlePhaseController': {
-            ZCBattlePhase: new Proxy({}, { get: (_t, key) => String(key) }),
-            ZCBattlePhaseController: class {
-                current = '';
-                isLeaving = false;
-                beginSettlementPresentation(): void {}
-                leave(): boolean { return true; }
-                startPlaying(): void {}
-                startSpawnSelection(): void {}
-                openSettlement(): boolean { return true; }
-            },
-        },
         // ZCGame.ts:14 值导入 `ZCDC_LOG_WARNINGS`（日志开关表）。缺桩 ⇒ `runInNewContext`
         // 里 `require('./ZCDCLogSwitch')` 直接断言失败，借/还按钮的 4 条用例整个不跑。
         './ZCDCLogSwitch': { ZCDC_LOG_WARNINGS: {} },
@@ -311,6 +298,8 @@ function loadZCGameClass(): { ZCGame: any; Widget: unknown } {
         '../battle/BattleStatisticsModel': { buildDamageStatistics: () => ({}) },
     };
     const context = { exports: {} as any, console, require: (name: string) => {
+        if (name.endsWith('/ZCBattleEvents')) return { ZC_BATTLE_EVENTS };
+        if (name.endsWith('/SpriteFrameCache')) return { createIconLoader: () => async () => null };
         assert.ok(name in dependencies, name);
         return dependencies[name];
     } };
@@ -487,8 +476,8 @@ test('按钮沿用 HUD 那颗绿勾：没有第二套 prefab，位置由世界�
 
     // 归还必须在拆选点 HUD **之前**（按钮此刻挂在棋盘层，不送回去就销毁不掉）。
     const finish = gameSource.slice(
-        gameSource.indexOf('private finishSpawnSelection()'),
-        gameSource.indexOf('private applyResult('),
+        gameSource.indexOf('startPlaying('),
+        gameSource.indexOf('private presentationResources'),
     );
     assert.ok(finish.indexOf('this.restoreSpawnConfirmButton()') < finish.indexOf('spawnSelectionView?.node.destroy()'),
         'finishSpawnSelection 里要先归还再销毁 HUD');

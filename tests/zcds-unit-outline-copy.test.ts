@@ -45,7 +45,8 @@ function setupView(load: (name: string) => any, bar: any, FakeNode: any) {
     view.rootTransform = { setContentSize() {} };
     view.visualRoot = new FakeNode('VisualRoot');
     view.sprite = { enabled: true, spriteFrame: null };
-    view.fallback = { node: new FakeNode(), clear() {}, circle() {}, fill() {} };
+    view.fallback = { node: new FakeNode(), enabled: false, color: null };
+    view.fallbackTransform = { setContentSize: (width: number, height: number) => { view.fallback.node.size = { width, height }; } };
     view.fallbackLabel = { node: new FakeNode(), enabled: true, string: '' };
     view.healthBar = bar();
     view.barFillPlayer = { name: 'player' };

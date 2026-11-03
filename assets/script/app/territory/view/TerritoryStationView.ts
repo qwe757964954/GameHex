@@ -14,7 +14,10 @@ import {
     spawnShakeScaleY,
 } from '../../../core/hex/ShakePresentation';
 import type { TerritorySite } from '../model/TerritoryMapConfig';
+import { territoryChestBubbleLayout } from '../model/TerritoryChestBubble';
+import type { ITerritoryChestBubbleLayout } from '../model/TerritoryChestBubble';
 import { TERRITORY_EVENTS } from './TerritoryEvents';
+import { TerritoryUiEvent } from '../application/TerritoryEvents';
 
 export interface ITerritoryRandomResourceTarget {
     readonly kind: 'randomResource';
@@ -32,6 +35,10 @@ const { ccclass, property } = _decorator;
  *  条件模式下 `type` 被切成 `SIMPLE` ⇒ 引擎把整帧铺满节点 ⇒ 节点宽就是图标可见宽。
  *  改 `contentSize` 会让「名称底条」分支（同一个节点、`SLICED`）跟着变形，缩放不会。
  */
+// 气泡内图标的尺寸 / 位置**全部**读 `model/TerritoryChestBubble`（新底图 frame_04 是
+// 77×87 竖向水滴，icon 在上、数字在下）。以前这里有一对 `LEVEL_BUBBLE_ICON_SIZE/GAP`
+// 给「图标 + 数字并排」用 —— 水滴气泡没有横向空间，2026-11-02 已随排版一起删掉。
+
 const CONDITION_ICON_SCALE = 1.1;
 
 /** 未解锁格「数值」的缩放（需求：**数字放大 1.5 倍**）。 */
@@ -184,9 +191,41 @@ export interface ITerritoryStationRender {
     readonly tint: Color;
     /** 站点角标已停用，调用方传空串。 */
     readonly badge: string;
-    /** 已解锁关卡的短编号气泡，缺省不显示。 */
+    /**
+     * 已解锁关卡的短编号气泡，缺省不显示。
+     *
+     * 2026-11-02 起同一个气泡还有**第二种用法**：固定奖励宝箱的「体力 icon + 消耗数」提示
+     * （此时 {@link levelBubbleIcon} 非空，文字就是消耗数，如 `'1'`）。
+     */
     readonly levelBubble?: string;
+    /**
+     * 气泡内**上方的图标**（2026-11-02：固定宝箱提示 = 体力 icon + 数量值）。
+     *
+     * 缺省 / `null` ⇒ 退回纯文字气泡（关卡编号那套，文字居中）；给了图 ⇒ 换成
+     * **竖向两行**：icon 在上、数字在下，各自水平居中（位置见 `model/TerritoryChestBubble`，
+     * 由 `applyLevelBubbleLayout` 落位）。2026-11-02 用户定稿：宝箱气泡底图换 `frame_04`，
+     * 内部按美术稿改成这种上下排版 —— 旧的「图标 + 数字并排」在 77 宽的水滴里放不下。
+     */
+    readonly levelBubbleIcon?: SpriteFrame | null;
     readonly levelBubbleFrame?: SpriteFrame | null;
+    /**
+     * 气泡文字的**覆盖色**（缺省 = 按底图那套默认色：宝箱深棕 / 编号白）。
+     *
+     * 目前只有一个用途：体力不够时把宝箱气泡里的消耗数染红（用户 2026-11-03
+     * 「体力不足或银币不足时，**对应的**数字 UI 显示红色」）。
+     *
+     * ⚠️ 每帧都要重新判：`themeLevelBubbleLabel` 每次都会把颜色写回默认值
+     * （气泡是同一个 Label 复用，宝箱/编号两套来回切），所以覆盖必须排在它**之后**。
+     */
+    readonly levelBubbleTextColor?: Color;
+    /**
+     * 这一格是**章节入口**（地图起始格的章节建筑 + 它头上那颗「章节」气泡）。
+     *
+     * 需求 2026-11-03：点它打开「章节选择」弹窗（原来挂在快速寻敌两侧的三角上）。
+     * `site` 恒为 `null`（起始格不属于任何站点）⇒ 点击走 `TerritoryUiEvent.ChapterSelect`，
+     * 不进 `STATION_TAP` 那条链。
+     */
+    readonly chapterEntry?: boolean;
     readonly interactive: boolean;
     readonly isLoading?: boolean;
     /**
@@ -254,6 +293,13 @@ export class TerritoryStationView extends Component {
 
     /** 当前节点代表的站点；点击时读它，不读闭包。起始格为 `null`。 */
     private site: TerritoryStationTarget | null = null;
+    /**
+     * 这一格是「章节」入口（地图上的章节建筑，以及它头上那颗「章节」气泡）。
+     *
+     * 需求 2026-11-03：章节选择弹窗的打开按钮改成它（原来挂在快速寻敌两侧的三角上）。
+     * 它与 `site` 互斥 —— 起始格不属于任何站点（`site === null`），所以点击要走另一条事件。
+     */
+    private chapterEntry = false;
     /** 起始格 `false`（不可点，不发点击事件）；常规站点 `true`。 */
     private clickable = true;
     private localOffsets: Readonly<{
@@ -273,6 +319,28 @@ export class TerritoryStationView extends Component {
     private mapY = 0;
     private mapZ = 0;
     private levelBubble: { readonly node: Node; readonly sprite: Sprite; readonly button: Button } | null = null;
+    /** 气泡里的那个图标节点（`levelBubbleIcon` 有值时惰性创建；复用同一个节点）。 */
+    private levelBubbleIcon: { readonly node: Node; readonly sprite: Sprite } | null = null;
+    /**
+     * 上一次 `render` 的入参 —— 只给「气泡抑制解除后按原样重画」用。
+     *
+     *  ⚠️ 站点每秒才被 `syncStations` 刷一次，而跳跳动只有 1.5s：不存这一份，
+     *  动画播完的气泡要等下一轮刷新才回来（最长 1s 的空窗，看着像"气泡被动画吃掉了"）。
+     */
+    private lastContent: ITerritoryStationRender | null = null;
+    /**
+     * 宝箱「还没点我」跳动的**纵向偏移**（地图像素，正数向上）。
+     *
+     *  由 `TerritoryMapView` 每帧推进曲线后写进来（视图不认识曲线，也不持有秒表 ——
+     *  一张图上百个站点，每个都挂一根时钟没必要）。
+     */
+    private chestHintOffsetY = 0;
+    /** 跳动期间**抑制提示气泡**（需求 2026-11-02 第 3 条）。 */
+    private hintBubbleSuppressed = false;
+    /** `Icon` 节点**未叠加跳动偏移**时的位置（`applyIconPlacement` 写，`writeIconPosition` 加偏移）。 */
+    private iconBaseX = 0;
+    private iconBaseY = 0;
+    private iconBaseZ = 0;
     private spawnOpacity = 1;
     /**
     /**
@@ -433,7 +501,7 @@ export class TerritoryStationView extends Component {
         if (!offsets) return;
         const nodeSize = this.iconTransform.contentSize;
         if (!(nodeSize.width > 0) || !(nodeSize.height > 0)) {
-            node.setPosition(this.mapX + offsets.icon.x, this.mapY + offsets.icon.y, this.mapZ + offsets.icon.z);
+            this.setIconBase(this.mapX + offsets.icon.x, this.mapY + offsets.icon.y, this.mapZ + offsets.icon.z);
             return;
         }
         const canvas = frame?.originalSize;
@@ -441,7 +509,7 @@ export class TerritoryStationView extends Component {
         // 帧缺失 / 画布或 trim 区尺寸非法（0）时，退回「只摆位置、不缩放」，不产出 NaN。
         if (!frame || !canvas || !trimmed || !(canvas.width > 0) || !(trimmed.width > 0)) {
             this.applyIconScale(1);
-            node.setPosition(this.mapX + offsets.icon.x, this.mapY + offsets.icon.y, this.mapZ + offsets.icon.z);
+            this.setIconBase(this.mapX + offsets.icon.x, this.mapY + offsets.icon.y, this.mapZ + offsets.icon.z);
             return;
         }
         const canvasScaleX = nodeSize.width / canvas.width;
@@ -462,7 +530,7 @@ export class TerritoryStationView extends Component {
             ? visibleHeight * scale * 0.5 - TERRITORY_BOTTOM_ANCHOR_DROP_PX
             : 0;
         this.applyIconScale(scale);
-        node.setPosition(
+        this.setIconBase(
             this.mapX + offsets.icon.x - shiftX,
             this.mapY + offsets.icon.y - shiftY + anchorLiftY,
             this.mapZ + offsets.icon.z,
@@ -476,6 +544,55 @@ export class TerritoryStationView extends Component {
      *  `基准 × 抖动因子`。拆成两步是因为抖动因子按帧变、基准只在换帧 / 摆位时变，
      *  两条路径都要能各自触发一次写入。
      */
+    /**
+     * 记录 `Icon` 的**基准位置**并落到节点上（跳动偏移叠在基准之上）。
+     *
+     *  ⚠️ 这是 `Icon` 位置的**唯一出口**：`applyIconPlacement` 的三条分支只负责算出基准，
+     *  真正 `setPosition` 只在这里发生 —— 否则跳动期间随便一次重排位（每秒都会来一次）
+     *  就会把偏移抹掉，表现为「宝箱跳一下、被刷新一按就停在地上」。
+     */
+    private setIconBase(x: number, y: number, z: number): void {
+        this.iconBaseX = x;
+        this.iconBaseY = y;
+        this.iconBaseZ = z;
+        this.writeIconPosition();
+    }
+
+    /** 基准位置 + 跳动偏移 ⇒ 节点位置（同值不写，避免整层标脏）。 */
+    private writeIconPosition(): void {
+        const node = this.iconSprite.node;
+        const y = this.iconBaseY + this.chestHintOffsetY;
+        const current = node.position;
+        if (current && current.x === this.iconBaseX && current.y === y && current.z === this.iconBaseZ) return;
+        node.setPosition(this.iconBaseX, y, this.iconBaseZ);
+    }
+
+    /**
+     * 宝箱「还没点我」的跳动偏移（需求 2026-11-02 第 3 条）—— 由 `TerritoryMapView` 每帧推。
+     *
+     *  曲线在 `model/TerritoryChestHint.territoryChestHintBounceOffset`（纯函数、可单测），
+     *  视图只负责把这一帧的偏移写到节点上。非法值（NaN）按 0 处理：写进坐标就是整只宝箱消失，
+     *  而且零报错。
+     */
+    setChestHintOffset(offsetY: number): void {
+        const next = Number.isFinite(offsetY) ? offsetY : 0;
+        if (this.chestHintOffsetY === next) return;
+        this.chestHintOffsetY = next;
+        this.writeIconPosition();
+    }
+
+    /**
+     * 跳动期间**隐藏提示气泡**（需求 2026-11-02 第 3 条：「播放动画时隐藏宝箱的提示气泡」）。
+     *
+     *  ⚠️ 必须走开关而不是直接把气泡 `node.active = false`：站点每秒会被 `syncStations` 重画一次，
+     *  直接关节点会在下一轮刷新时被**重新打开**（动画还在播，气泡却回来了）。
+     */
+    setHintBubbleSuppressed(suppressed: boolean): void {
+        if (this.hintBubbleSuppressed === suppressed) return;
+        this.hintBubbleSuppressed = suppressed;
+        if (this.lastContent) this.renderLevelBubble(this.lastContent);
+    }
+
     private applyIconScale(scale: number): void {
         this.iconBaseScale = scale;
         this.writeIconScale();
@@ -662,6 +779,10 @@ export class TerritoryStationView extends Component {
         //   关站点根节点只会关掉命中区，视觉照旧留在屏幕上。
         const isHidden = content.hidden === true;
         this.site = content.site;
+        // ⚠️ 每帧都写：站点节点是池化复用的，不写就会带着上一格的"能点进章节"或反过来。
+        this.chapterEntry = content.chapterEntry === true;
+        // 存一份：跳跳动结束 / 气泡抑制解除时按它重画气泡，不用等下一轮 `syncStations`。
+        this.lastContent = content;
         this.conditionMode = isCondition;
         // `buildSize` 必须在 `applyIconPlacement` 之前写进来 —— 它是归一系数的第二个因子。
         this.iconSizeScale = content.iconScale && content.iconScale > 0 ? content.iconScale : 1;
@@ -696,13 +817,28 @@ export class TerritoryStationView extends Component {
     private renderLevelBubble(content: ITerritoryStationRender): void {
         const text = content.levelBubble ?? '';
         const frame = content.levelBubbleFrame ?? null;
-        const visible = text !== '' && frame !== null && content.icon !== null && !content.isCondition && !content.hidden && !content.isLoading;
+        const iconFrame = content.levelBubbleIcon ?? null;
+        // 需求 2026-11-02 第 3 条：播放「宝箱还没点我」跳动时**隐藏**它的提示气泡。
+        // 判据走开关（`setHintBubbleSuppressed`），不是直接关节点 —— 站点每秒会被重画一次。
+        const visible = text !== '' && frame !== null && content.icon !== null && !content.isCondition
+            && !content.hidden && !content.isLoading && !this.hintBubbleSuppressed;
+        /**
+         * 两套排版，按**有没有体力图标**分流（2026-11-02 需求）：
+         *  · 有 icon ⇒ 宝箱提示气泡，底图 `frame_04` 77×87 竖向水滴，**icon 在上、数字在下**；
+         *  · 没 icon ⇒ 关卡编号 / 「章节」，94×45 胶囊，只有一行字。
+         *
+         * 尺寸与位置全读 `model/TerritoryChestBubble`，这里不许再写数字：
+         * 换图时只要那张图的自然尺寸变了，`UITransform` / 图标 / 文字位置会一起跟着走。
+         */
+        const chest = iconFrame ? territoryChestBubbleLayout() : null;
+        const bubbleWidth = chest ? chest.width : MAP_MARKER_BADGE_WIDTH;
+        const bubbleHeight = chest ? chest.height : MAP_MARKER_BUBBLE_HEIGHT;
         if (visible && !this.levelBubble) {
             const parent = this.badgeLabel.node.parent;
             if (!parent) throw new Error('关卡气泡缺少角标层');
             const node = new Node('LevelBubble');
             node.layer = this.badgeLabel.node.layer;
-            node.addComponent(UITransform).setContentSize(MAP_MARKER_BADGE_WIDTH, MAP_MARKER_BUBBLE_HEIGHT);
+            node.addComponent(UITransform).setContentSize(bubbleWidth, bubbleHeight);
             node.setParent(parent);
             const sprite = node.addComponent(Sprite);
             sprite.sizeMode = Sprite.SizeMode.CUSTOM;
@@ -713,12 +849,66 @@ export class TerritoryStationView extends Component {
             button.transition = Button.Transition.NONE;
             node.on(Button.EventType.CLICK, this.handleClick, this);
             this.badgeLabel.node.setParent(node);
-            this.badgeLabel.node.setPosition(0, MAP_MARKER_BADGE_TEXT_Y, 0);
-            const transform = this.badgeLabel.node.getComponent(UITransform);
-            if (!transform) throw new Error('关卡气泡文字缺少 UITransform');
-            transform.setContentSize(MAP_MARKER_BADGE_WIDTH, MAP_MARKER_BADGE_HEIGHT);
-            // 🔴 美术稿的 `1-1` 是「超粗 + 三字紧贴」，prefab 里的 12/16/常规体是给旧角标用的，
-            //   这里必须整组覆盖：只改 fontSize 会留下 prefab 的字距与字重（见 MapMarkerBadge 注释）。
+            this.themeLevelBubbleLabel(chest);
+            this.levelBubble = { node, sprite, button };
+            this.spawnOpacities = null;
+            this.setSpawnOpacity(this.spawnOpacity);
+        }
+        this.badgeLabel.string = text;
+        const bubble = this.levelBubble;
+        if (bubble) {
+            // 尺寸与 sprite 类型**每帧**都对一遍：同一格的状态可能从「编号气泡」变成
+            // 「宝箱提示」（换图 / 换章复用视图），创建时定死就会留下错尺寸。
+            const nodeTransform = bubble.node.getComponent(UITransform);
+            if (nodeTransform) nodeTransform.setContentSize(bubbleWidth, bubbleHeight);
+            // 水滴是一整张成品图（没有九宫格切边）⇒ `SIMPLE` 按节点尺寸铺满；
+            // 胶囊靠九宫格保圆角不变形 ⇒ `SLICED`。
+            const spriteType = chest ? Sprite.Type.SIMPLE : Sprite.Type.SLICED;
+            if (bubble.sprite.type !== spriteType) bubble.sprite.type = spriteType;
+        }
+        this.themeLevelBubbleLabel(chest);
+        // 🔴 覆盖色必须**排在 `themeLevelBubbleLabel` 之后**：那一支每帧都会把颜色写回
+        //    「宝箱深棕 / 编号白」，写在前面等于被它盖掉（表现：体力不足但数字仍是深棕）。
+        const bubbleTextColor = content.levelBubbleTextColor;
+        if (bubbleTextColor && !this.badgeLabel.color.equals(bubbleTextColor)) {
+            this.badgeLabel.color = bubbleTextColor;
+        }
+        this.badgeLabel.node.active = visible;
+        if (!bubble) return;
+        bubble.node.active = visible;
+        bubble.button.interactable = visible && content.interactive;
+        if (!visible) return;
+        if (bubble.sprite.spriteFrame !== frame) bubble.sprite.spriteFrame = frame;
+        this.applyLevelBubbleLayout(iconFrame);
+        this.applyLevelBubblePosition();
+    }
+
+    /**
+     * 气泡文字样式（**唯一写入口**，创建与复用都走这里）。
+     *
+     * 两套口径差别很大，别混着改：
+     *  · **宝箱气泡**：深棕数字（底图是奶白，白字等于没字）、字号/行高按水滴尺寸给，
+     *    字重靠 `isBold + 同色系深描边`补（2026-11-02 第二轮：要匹配美术稿的「大小和粗细」，
+     *    光 `isBold` 补不满 —— 见 `model/TerritoryChestBubble` 的 `OUTLINE_WIDTH` 注释），
+     *    文字框 = 整个气泡宽（水平居中就靠它），数字不参与测宽；
+     *  · **编号气泡**：白字压黑描边（美术稿的 `1-1` 是「超粗 + 三字紧贴」），
+     *    prefab 里的 12/16/常规体是给旧角标用的 ⇒ 必须整组覆盖（见 `MapMarkerBadge` 注释）。
+     */
+    private themeLevelBubbleLabel(chest: ITerritoryChestBubbleLayout | null): void {
+        const transform = this.badgeLabel.node.getComponent(UITransform);
+        if (chest) {
+            this.badgeLabel.fontSize = chest.fontSize;
+            this.badgeLabel.lineHeight = chest.lineHeight;
+            this.badgeLabel.isBold = true;
+            this.badgeLabel.spacingX = 0;
+            // 字重：`isBold` + 同色系深描边（描边色比文字色深一档，不是黑色 —— 奶白底上黑边会显硬）。
+            this.badgeLabel.enableOutline = chest.outlineWidth > 0;
+            this.badgeLabel.outlineWidth = chest.outlineWidth;
+            this.badgeLabel.outlineColor = new Color(
+                chest.outlineColor[0], chest.outlineColor[1], chest.outlineColor[2], 255);
+            this.badgeLabel.color = new Color(chest.textColor[0], chest.textColor[1], chest.textColor[2], 255);
+            if (transform) transform.setContentSize(chest.width, chest.lineHeight);
+        } else {
             this.badgeLabel.fontSize = MAP_MARKER_BADGE_FONT_SIZE;
             this.badgeLabel.lineHeight = MAP_MARKER_BADGE_LINE_HEIGHT;
             this.badgeLabel.isBold = MAP_MARKER_BADGE_BOLD;
@@ -726,42 +916,99 @@ export class TerritoryStationView extends Component {
             // 字重：系统字体只有常规/加粗两档，`isBold` 到顶后再加厚描边（见 MapMarkerBadge 注释）。
             this.badgeLabel.enableOutline = true;
             this.badgeLabel.outlineWidth = MAP_MARKER_BADGE_OUTLINE_WIDTH;
-            this.badgeLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
-            this.badgeLabel.verticalAlign = Label.VerticalAlign.CENTER;
-            this.badgeLabel.overflow = Label.Overflow.SHRINK;
+            // 描边色显式写回黑色：宝箱分支会把 `outlineColor` 改成深棕，共用同一个 Label
+            // ⇒ 不写回来，切到编号气泡时会带着上一轮的棕色描边。
+            this.badgeLabel.outlineColor = Color.BLACK;
             this.badgeLabel.color = Color.WHITE;
-            // 旧角标可能已参与生成淡入，改由新根统一承接，避免文字透明度被乘两次。
-            const opacity = this.badgeLabel.node.getComponent(UIOpacity);
-            if (opacity) opacity.opacity = 255;
-            this.levelBubble = { node, sprite, button };
-            this.spawnOpacities = null;
-            this.setSpawnOpacity(this.spawnOpacity);
+            if (transform) transform.setContentSize(MAP_MARKER_BADGE_WIDTH, MAP_MARKER_BADGE_HEIGHT);
         }
-        this.badgeLabel.string = text;
-        this.badgeLabel.node.active = visible;
+        this.badgeLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        this.badgeLabel.verticalAlign = Label.VerticalAlign.CENTER;
+        this.badgeLabel.overflow = Label.Overflow.SHRINK;
+        // 旧角标可能已参与生成淡入，改由新根统一承接，避免文字透明度被乘两次。
+        const opacity = this.badgeLabel.node.getComponent(UIOpacity);
+        if (opacity) opacity.opacity = 255;
+    }
+
+    /**
+     * 气泡内容排布（**唯一写入口**）。
+     *
+     *  · **宝箱气泡**（有体力图标）：icon 在上、数字在下，两者**各自水平居中**（x = 0）。
+     *    位置与尺寸全来自 `model/TerritoryChestBubble`：
+     *    ```
+     *    icon  中心 = (0, +iconY)      // 落在水滴最宽那一段，不顶圆顶
+     *    数字  中心 = (0, +textY)      // textY 为负；再往下就压到尖端
+     *    ```
+     *    ⚠️ 水滴**没有横向空间**：77 宽的气泡里并排放 36 的图标 + 两位数会顶到描边，
+     *       所以这里不能沿用「图标 + 数字并排」那套（旧实现，已随本次换图删掉）。
+     *  · **编号气泡**（无图标）：文字居中在 94×45 胶囊里，`MAP_MARKER_BADGE_TEXT_Y` 抬一点给小尾巴让位。
+     *
+     * ⚠️ 图标取不到时（美术没到）**退回纯数字**：宁可少个图标，也不能让宝箱没有提示。
+     */
+    private applyLevelBubbleLayout(iconFrame: SpriteFrame | null): void {
         const bubble = this.levelBubble;
         if (!bubble) return;
-        bubble.node.active = visible;
-        bubble.button.interactable = visible && content.interactive;
-        if (!visible) return;
-        if (bubble.sprite.spriteFrame !== frame) bubble.sprite.spriteFrame = frame;
-        this.applyLevelBubblePosition();
+        const icon = iconFrame ? this.ensureLevelBubbleIcon() : this.levelBubbleIcon;
+        if (!icon || !iconFrame) {
+            if (this.levelBubbleIcon) this.levelBubbleIcon.node.active = false;
+            this.badgeLabel.node.setPosition(0, MAP_MARKER_BADGE_TEXT_Y, 0);
+            return;
+        }
+        if (icon.sprite.spriteFrame !== iconFrame) icon.sprite.spriteFrame = iconFrame;
+        icon.node.active = true;
+        const chest = territoryChestBubbleLayout();
+        const iconTransform = icon.node.getComponent(UITransform);
+        if (iconTransform) iconTransform.setContentSize(chest.iconSize, chest.iconSize);
+        icon.node.setPosition(0, chest.iconY, 0);
+        this.badgeLabel.node.setPosition(0, chest.textY, 0);
+    }
+
+    /** 惰性创建气泡里的图标节点（挂在气泡根上，和文字同层）。 */
+    private ensureLevelBubbleIcon(): { readonly node: Node; readonly sprite: Sprite } | null {
+        if (this.levelBubbleIcon) return this.levelBubbleIcon;
+        const bubble = this.levelBubble;
+        if (!bubble) return null;
+        const chest = territoryChestBubbleLayout();
+        const node = new Node('LevelBubbleIcon');
+        node.layer = bubble.node.layer;
+        node.addComponent(UITransform).setContentSize(chest.iconSize, chest.iconSize);
+        node.setParent(bubble.node);
+        const sprite = node.addComponent(Sprite);
+        sprite.sizeMode = Sprite.SizeMode.CUSTOM;
+        sprite.trim = false;
+        sprite.type = Sprite.Type.SIMPLE;
+        sprite.color = Color.WHITE;
+        this.levelBubbleIcon = { node, sprite };
+        return this.levelBubbleIcon;
     }
 
     private applyLevelBubblePosition(): void {
         const bubble = this.levelBubble;
         const offsets = this.localOffsets;
         if (!bubble || !offsets) return;
+        // 气泡高度按**当前底图**取（胶囊 45 / 水滴 87）：`mapMarkerBadgeY` 是把气泡中心抬到
+        // 「可见顶部 + 半高 + 3」，用错高度会让水滴的尖扎进地块、或整体飘高一截。
+        const bubbleTransform = bubble.node.getComponent(UITransform);
+        const bubbleHeight = bubbleTransform && bubbleTransform.contentSize.height > 0
+            ? bubbleTransform.contentSize.height : MAP_MARKER_BUBBLE_HEIGHT;
         const frame = this.iconSprite.spriteFrame;
         const height = frame && frame.originalSize.height > 0
             ? frame.rect.height * this.iconTransform.contentSize.height / frame.originalSize.height * this.iconBaseScale : 0;
         const lift = this.bottomAnchored ? height / 2 - TERRITORY_BOTTOM_ANCHOR_DROP_PX : 0;
         bubble.node.setPosition(this.mapX + offsets.icon.x,
-            mapMarkerBadgeY(this.mapY + offsets.icon.y + lift + height / 2, MAP_MARKER_BUBBLE_HEIGHT), this.mapZ + offsets.icon.z);
+            mapMarkerBadgeY(this.mapY + offsets.icon.y + lift + height / 2, bubbleHeight), this.mapZ + offsets.icon.z);
     }
 
     private readonly handleClick = (): void => {
-        if (this.clickable && this.site) EventMgr.instance.emit(TERRITORY_EVENTS.STATION_TAP, { target: this.site });
+        if (!this.clickable) return;
+        // 章节入口（起始格的建筑 / 气泡）：没有 `site` 可带，单独发一条 UI 事件给宿主页开弹窗。
+        // ⚠️ 不能塞进 `STATION_TAP` —— 那一条的下游（`TerritoryMapView.onStationClick`）要
+        //    真站点去算 `cellId`、播点击反馈、发解锁 intent，拿 `null` 会整条链空转。
+        if (this.chapterEntry) {
+            EventMgr.instance.emit(TerritoryUiEvent.ChapterSelect);
+            return;
+        }
+        if (this.site) EventMgr.instance.emit(TERRITORY_EVENTS.STATION_TAP, { target: this.site });
     };
 
     private setIcon(frame: SpriteFrame | null): void {
@@ -793,6 +1040,12 @@ export class TerritoryStationView extends Component {
         }
         this.site = null;
         this.levelBubble = null;
+        // 图标节点挂在气泡根上（随它一起销毁），这里只清引用；跳动两项也要复位，
+        // 否则池化复用时会带着上一格的偏移 / 抑制状态借给下一个站点。
+        this.levelBubbleIcon = null;
+        this.lastContent = null;
+        this.chestHintOffsetY = 0;
+        this.hintBubbleSuppressed = false;
     }
 
     /**

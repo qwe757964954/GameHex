@@ -230,21 +230,21 @@ test('老回包没带 unitId ⇒ 收敛成 0（"不知道"，不是"0 号单元"
 // ============================================================================
 
 test('★ZCGame.buildStatistics 必须走 buildDamageStatistics，不许再自造 eventType / kv key', () => {
-    const game = codeOf('assets/script/app/zcds/ZCGame.ts');
+    const game = codeOf('assets/script/app/zcds/application/ZCBattleRuntimeController.ts');
     assert.match(game, /buildDamageStatistics\(/, '结算上报必须复用统计模块（口径单一真源）');
     assert.doesNotMatch(game, /eventType:\s*1\b/, '★eventType=1 是塔防波次，报伤害是错的（r862 明确）');
     assert.doesNotMatch(game, /player_dealt|enemy_taken/, '★旧的四个自造 key 已被协议废弃');
 });
 
 test('结算上报把统计数据传给 finishBattle（漏传 = 前端白算一整局）', () => {
-    const game = codeOf('assets/script/app/zcds/ZCGame.ts');
-    assert.match(game, /finishBattle\(\s*state\.elapsedSeconds,\s*result,\s*commands,\s*this\.buildStatistics\(\)/);
+    const game = codeOf('assets/script/app/bootstrap/battle/BattleComposition.ts');
+    assert.match(game, /finishBattle\(request\.elapsedSeconds,[\s\S]*request\.commands, request\.statistics, caller/);
     const service = codeOf('assets/script/app/battle/BattleStartService.ts');
     assert.match(service, /statisticsInfos:\s*statisticsInfos\.map\(/, '网络层必须把统计塞进请求载荷');
 });
 
 test('ProcedureGame 必须产出 seatUnitIds（否则 unitId 恒 0，服务端只能记到一个桶里）', () => {
-    const proc = codeOf('assets/script/app/procedure/ProcedureGame.ts');
+    const proc = codeOf('assets/script/app/zcds/application/ZCBattleEntryBuilder.ts');
     assert.match(proc, /buildSeatUnitIds\(battle\.units/, '★席位 unitId 必须随 entry 交接');
     assert.match(proc, /seatUnitIds,/, 'entry 里要真的带上这张表');
     const entry = codeOf('assets/script/app/zcds/application/ZCGameEntry.ts');

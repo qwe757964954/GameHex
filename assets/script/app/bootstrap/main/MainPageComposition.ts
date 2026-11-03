@@ -86,7 +86,11 @@ export class MainPageComposition extends ControllerBase {
                 this.own(() => entry.dispose());
                 territory.initialize(entry.controller.resources, entry.saveOwner);
                 this.pages.set(territory, { ready: () => entry.start() });
-                if (main) main.hasTerritoryMap = true;
+                if (main) {
+                    // 宝箱栏的「战斗」格要靠它演整页过场（见 `MainPage.territoryMap`）。
+                    main.territoryMap = territory;
+                    main.hasTerritoryMap = true;
+                }
             }
         } catch (error) { this.dispose(); throw error; }
     }

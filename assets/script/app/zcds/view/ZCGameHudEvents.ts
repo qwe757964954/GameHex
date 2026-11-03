@@ -1,5 +1,5 @@
 /**
- * 界面**意图事件**的唯一契约（**只有事件名**）：view 派发 → 控制器 `ZCGame` 订阅。
+ * 界面**意图事件**的唯一契约（**只有事件名**）：view 派发 → 控制器 `ZCBattleRuntimeController` 订阅。
  *
  * 三处界面的名字统一放这里：`ZCGameHUDView` / `ZCSettlementPage` / `ZCSpawnSelectionView`；
  * 棋盘点击（`HexClick`）由 `ZCGameRenderWorld` 派发。
@@ -47,7 +47,7 @@ export enum ZCGameUiEvent {
      * 结算页：「双倍奖励」。
      *
      * 本期**没有接线**（页面按 `hasDoubleReward` 把按钮置灰），事件先占位 ——
-     * 接功能时在 `ZCGame` 里订阅即可，页面不需要改。
+     * 接功能时在 `ZCBattleRuntimeController` 里订阅即可，页面不需要改。
      */
     SettlementDoubleReward = 'zcgame-ui-settlement-double-reward',
     /** 结算页：「变强途径」入口（**payload = `'equip' | 'hero' | 'rune'`**）。本期同样未接线。 */

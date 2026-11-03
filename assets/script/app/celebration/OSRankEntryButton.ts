@@ -48,7 +48,8 @@ const { ccclass, property } = _decorator;
  * | 整块显隐 | `snapshot.enabled`（≈ 老端 `ModelCelebration.Enabled()`：落在 `CmdRankItem` 时间窗内） |
  * | `RedDot` | `snapshot.rd !== 0`（= 老端 `GetRd()`，与页内「庆典目标」页签的红点是**同一个值**） |
  *
- * 🔴 **prefab 里 `OSRankEntry._active` 必须烘 `true`**（规则 86）：
+ * 2026-11-02：按需求暂时关闭父节点 `OSRankEntry`，恢复入口时再启用。
+ * 正常开放时 **prefab 里 `OSRankEntry._active` 烘 `true`**：
  * 烘 `false` ⇒ `onLoad` 永不执行 ⇒ `refresh()` 永不执行 ⇒ 就算活动真的开着也**永远不显示**
  * （死锁，且一条错都不报）。烘 `true` 后由 `applySnapshot()` 每趟**无条件**改写（规则 82）。
  *

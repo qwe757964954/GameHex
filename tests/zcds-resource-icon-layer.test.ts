@@ -49,7 +49,6 @@ function stubHexView(load: (name: string) => any, cc: any, bar: () => any): any 
         'goldResourceFrame', 'mineResourceFrame', 'chestResourceFrame']) view[key] = { name: key };
     view.buildingLayer = new cc.Node('BuildingLayer');
     view.iconLabel = { node: new cc.Node(), string: '', enabled: true, color: null };
-    view.outlineGraphics = new cc.Graphics();
     view.healthBar = bar();
     view.cooldownBar = bar();
     // 建视图时渲染层已经 `setPosition` 落好格子位置（`ZCGameRenderWorld` 那段），这里照抄。

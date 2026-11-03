@@ -1,5 +1,6 @@
 import { HEX_GRID_LOGICAL_ROW_STEP } from '../../../../core/hex/HexGridLayout';
 import { cardCounterMultiplier, ZCCombatEventType, type ZCAttackProfile, type ZCCounterRule, type ZCDeckBonuses, type ZCDeckCard } from '../ZCCombatCatalog';
+import { zcCombatEffectTravelSeconds } from '../ZCCombatEffectFlight';
 import type {
     ZCCombatEvent, ZCCombatFloatTextKind, ZCCombatTarget, ZCFloatText,
     ZCHexState, ZCProjectileState, ZCSnapshot, ZCUnitState
@@ -611,10 +612,15 @@ export class ZCAttackResolutionSystem {
             ? legacyAreaRadius
             : (activeProfile.areaRadius || 0) * context.rules.combatDistanceScale;
         const from = context.unitPosition(unit);
-        const travelSeconds = ZCCombatSystem.attackTravelSeconds(
+        //  事件寿命（**纯表现**）：登记了飞行段的近战特效按「距离 / 速度」算，
+        //  否则沿用固定 0.32s。伤害不在这里结算 —— 见下面 `state.combatEvents.push(event)`
+        //  之后紧接着的 `context.damageUnit(...)`，所以改它不影响任何数值。
+        //  需求 2026-11-02「猎头者的攻击特效需要匹配射程」（`ZCCombatEffectFlight`）。
+        const travelSeconds = zcCombatEffectTravelSeconds(
             activeProfile.mode,
             distance(from.x, from.y, target.x, target.y),
             activeProfile.projectileSpeed,
+            activeProfile.effectPrefabPath,
         );
         const event: ZCCombatEvent = {
             id: state.nextCombatEventId++,

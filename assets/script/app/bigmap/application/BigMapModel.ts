@@ -299,6 +299,7 @@ export interface IBigMapCityView {
     /** 同时在打的人数（喂拥挤系数）。 */
     readonly attackerCount: number;
     readonly topWarScore: number;
+    readonly rankEntries: IBigMapCityRankBoard['entries'];
     /** 只有联机入口注入 Repository；预览与旧离线测试保留原有数据链路。 */
     readonly isServerCamp: boolean;
     readonly campInfo: IBigMapCampInfo | null;
@@ -1057,6 +1058,7 @@ export class BigMapModel {
         this.deps.campRepository?.dispose();
         this.campIdByHex.clear();
         this.deps.slgRepository?.dispose();
+        this.deps.rankProvider?.dispose?.();
     }
 
     /**
@@ -1073,16 +1075,19 @@ export class BigMapModel {
     cityRankBoard(cityId: number): IBigMapCityRankBoard {
         const cached = this.rankBoards.get(cityId);
         if (cached) return cached;
+        if (this.deps.campRepository) return { cityId, entries: [], playerRank: 0,
+            playerWarScore: 0, attackerCount: 0, topWarScore: 0 };
         return buildSoloRankBoard(cityId, this.data.battle.cityWarScore[cityId] ?? 0);
     }
 
     /**
      * 刷新某座城的榜单 —— 进详情/进排行页时调，拿回来缓存住并通知重绘。
      *
-     * 端口失败不抛给界面（与「存档损坏退回新档」同一口径）：回退到本地 NPC 榜。
+     * 联机失败保留旧榜；离线样本仍回退到 NPC 榜。退出后不应用异步结果。
      */
     async refreshCityRank(cityId: number): Promise<void> {
-        if (!this.config.cities.has(cityId)) return;
+        if (this.isDisposed || !this.config.cities.has(cityId)) return;
+        if (this.deps.campRepository && !this.deps.rankProvider) return;
         const warScore = this.data.battle.cityWarScore[cityId] ?? 0;
         let board: IBigMapCityRankBoard;
         try {
@@ -1090,8 +1095,10 @@ export class BigMapModel {
                 ? await this.deps.rankProvider.fetchCityRank(cityId, warScore)
                 : buildBigMapCityRankBoard(this.config, cityId, warScore);
         } catch {
+            if (this.deps.campRepository) return;
             board = buildBigMapCityRankBoard(this.config, cityId, warScore);
         }
+        if (this.isDisposed || !board) return;
         this.rankBoards.set(cityId, board);
         this.emit();
     }
@@ -1174,7 +1181,8 @@ export class BigMapModel {
             state,
             reason,
             hpRatio: bigMapCityHpRatio(this.data.battle, city),
-            warScore: Math.round(this.data.battle.cityWarScore[city.cityId] ?? 0),
+            warScore: this.deps.campRepository ? board.playerWarScore ?? 0
+                : Math.round(this.data.battle.cityWarScore[city.cityId] ?? 0),
             minWarScore: this.deps.campRepository && camp ? camp.minOccupyScore
                 : this.config.cityLevels.get(city.cityLevel)?.minOccupyWarScore ?? 0,
             staminaCost: this.deps.campRepository && camp ? camp.staminaCost : city.staminaCost,
@@ -1194,6 +1202,7 @@ export class BigMapModel {
             playerRank: board.playerRank,
             attackerCount: board.attackerCount,
             topWarScore: board.topWarScore,
+            rankEntries: board.entries,
             isServerCamp: !!this.deps.campRepository,
             campInfo,
             campDetailStatus: this.campDetailStatuses.get(cityId) ?? 'idle',
@@ -1234,6 +1243,33 @@ export class BigMapModel {
             attackReason: !unlock.unlocked ? unlock.reason : this.isStartingBattle ? BIGMAP_BATTLE_TEXT.pending
                 : monster.battle && !this.deps.startBattle ? BIGMAP_MONSTER_BATTLE_UNAVAILABLE : '',
         };
+    }
+
+    /**
+     * 「探索」：挑当前可挑战、距离玩家基地最近的野怪。
+     *
+     * 「打得了」直接复用 `monsterView().canAttack`（那一处已经把「是否解锁 / 是否在刷新 /
+     * 是否正在开战 / 依赖是否就绪」四层判定都收进去了）—— 这里不另写一套口径，
+     * 否则两处判定迟早漂移，出现「探索能定位、点进去却打不了」。
+     *
+     * 同距离取 `instanceId` 最小的，保证同一份数据每次挑到同一只。
+     * 返回 `null` = 一只都打不了（全锁 / 全在刷新 / 正在开战）。
+     */
+    bestMonsterToFarm(): IBigMapMonsterView | null {
+        if (this.isStartingBattle || this.isDisposed) return null;
+        let best: IBigMapMonsterView | null = null;
+        let bestDistance = Number.POSITIVE_INFINITY;
+        for (const site of this.worldInstance.monsters) {
+            const view = this.monsterView(site.instanceId);
+            if (!view || !view.canAttack) continue;
+            const distance = this.distanceFromBase(view.hexId);
+            if (!best || distance < bestDistance
+                || (distance === bestDistance && view.instanceId < best.instanceId)) {
+                best = view;
+                bestDistance = distance;
+            }
+        }
+        return best;
     }
 
     async requestAttackCity(cityId: number): Promise<IBigMapActionFeedback> {

@@ -240,8 +240,11 @@ test('协议名、Repository 接线与两条引擎约束在源码里被写死（
     const board = readFileSync('assets/script/app/card/LineupBoardPage.ts', 'utf8');
     //  （接口名是 `IBoardCardHost`，不是 `IBoardCardDragHost` —— 后者全工程已不存在。）
     assert.match(board, /implements IBoardCardHost/);
-    assert.match(board, /cardRepository\.saveFormation\(formationId, heroIds, this\)/);
-    assert.match(board, /draft\.formationIdOf\(this\.presetIndex\)/);
+    const controller = readFileSync('assets/script/app/card/LineupBoardController.ts', 'utf8');
+    const model = readFileSync('assets/script/app/card/LineupBoardModel.ts', 'utf8');
+    assert.match(controller, /repository\.saveFormation\(submission\.formationId, submission\.heroIds, this\)/);
+    assert.match(model, /this\.draft\.selectedFormationId/);
+    assert.doesNotMatch(board, /saveFormation|LineupDraftStore/);
     //  原来这里还有两条「拖拽克隆体」断言（`view.enabled = false` /
     //  `ghost.setSiblingIndex(...)`）。2026-10-27 核对：全模块已搜不到 `ghost`、
     //  `setSiblingIndex`、「克隆」字样 —— 拖拽改成卡片与站台自己处理手势

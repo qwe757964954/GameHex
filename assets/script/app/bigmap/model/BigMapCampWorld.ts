@@ -32,6 +32,19 @@ export function withBigMapCampCities(config: IBigMapConfig): IBigMapConfig {
 
 /** 保留有效锚点、怪物与基地；新增城池复用原环位算法，重新分配相连且不重叠的势力范围。 */
 export function completeBigMapCampLayout(config: IBigMapConfig, layout: IBigMapLayout): IBigMapLayout {
+    // bigMap 的编辑器 ID 为 2001~2081，标签记录正式 campId；映射身份时保留手工几何。
+    const ids = new Map(layout.cities.map((city) => [city.cityId,
+        config.cities.has(city.cityId) ? city.cityId
+            : config.cities.has(Number(city.label)) ? Number(city.label) : city.cityId]));
+    if (layout.cities.some((city) => ids.get(city.cityId) !== city.cityId)) {
+        if (new Set(ids.values()).size !== ids.size) throw new Error('[BigMap] 布局城池标签映射到重复 campId');
+        layout = { ...layout,
+            cities: layout.cities.map((city) => ({ ...city, cityId: ids.get(city.cityId),
+                adjacentCityIds: city.adjacentCityIds.map((id) => ids.get(id) ?? id),
+            })),
+            spawnZones: layout.spawnZones.map((zone) => ({ ...zone, cityId: ids.get(zone.cityId) ?? zone.cityId })),
+        };
+    }
     const kept = layout.cities.filter((city) => config.cities.has(city.cityId));
     if (kept.length === layout.cities.length && kept.length === config.cities.size) return layout;
     const keptIds = new Set(kept.map((city) => city.cityId));

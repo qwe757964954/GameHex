@@ -9,6 +9,10 @@ import { buildBigMapViewState, type IBigMapUiState, type IBigMapViewState } from
 import type { BigMapModel, IBigMapActionFeedback } from './BigMapModel';
 import { BIGMAP_CAMP_REFRESH_SECONDS, type BigMapCampRepository } from './BigMapCampRepository';
 import type { BigMapSlgRepository } from './BigMapSlgRepository';
+/** 「探索」两颗提示：没目标 / 定位成功（后半截由等级拼出来）。 */
+export const BIGMAP_SEARCH_MONSTER_EMPTY = '暂无可挑战的野怪';
+export const BIGMAP_SEARCH_MONSTER_FOUND = '已定位到';
+
 
 export interface IBigMapNetworkEvents {
     addEvent(name: string, caller: object, listener: (message: unknown) => void): void;
@@ -119,6 +123,7 @@ export class BigMapController extends ControllerBase {
             case 'secondary': this.secondary(); break;
             case 'clear': this.clearSelection(); this.publish(); break;
             case 'toggleBuildMenu': this.ui.buildMenuVisible = !this.ui.buildMenuVisible; this.publish(); break;
+            case 'searchMonster': this.searchMonster(); break;
         }
     }
 
@@ -147,7 +152,7 @@ export class BigMapController extends ControllerBase {
             this.ui.selectedCityId = occupant.cityId;
             this.publish();
             if (this.model.cityView(occupant.cityId)?.isServerCamp) void this.model.refreshCampDetail(occupant.cityId);
-            else void this.model.refreshCityRank(occupant.cityId);
+            void this.model.refreshCityRank(occupant.cityId);
             return;
         }
         if (occupant.kind === 'monster') this.ui.selectedMonsterId = occupant.instanceId;
@@ -210,6 +215,26 @@ export class BigMapController extends ControllerBase {
         }
         const target = this.ui.selectedCityId ? this.model.cityView(this.ui.selectedCityId) : this.model.monsterView(this.ui.selectedMonsterId);
         if (target) this.command({ kind: 'focusWorld', hexId: target.hexId });
+    }
+
+    /**
+     * 选中态和「点地图上的野怪」走同一条路（`selectedMonsterId` + `focusWorld`），
+     * 所以定位完弹出来的详情面板、攻打按钮都是现成的，不用另开一套。
+     */
+    private searchMonster(): void {
+        const target = this.model.bestMonsterToFarm();
+        if (!target) {
+            this.feedback({ ok: false, message: BIGMAP_SEARCH_MONSTER_EMPTY });
+            return;
+        }
+        this.clearSelection();
+        this.ui.selectedMonsterId = target.instanceId;
+        this.ui.mode = 'world';
+        this.ui.pendingBuildingId = 0;
+        this.ui.buildMenuVisible = false;
+        this.publish();
+        this.command({ kind: 'focusWorld', hexId: target.hexId });
+        this.feedback({ ok: true, message: `${BIGMAP_SEARCH_MONSTER_FOUND}Lv.${target.level}` });
     }
 
     private async runAction(action: () => Promise<IBigMapActionFeedback>, onSuccess?: () => void): Promise<void> {

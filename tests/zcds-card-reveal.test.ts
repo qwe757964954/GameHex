@@ -81,6 +81,8 @@ test('卡牌小卡牌：组件引用的__id__ 必须指向对应类型的组件�
         iconSprite: 'cc.Sprite',
         luckSprite: 'cc.Sprite',
         nameLabel: 'cc.Label',
+        cardOpacity: 'cc.UIOpacity',
+        luckOpacityComp: 'cc.UIOpacity',
     };
     for (const [prop, type] of Object.entries(expected)) {
         const ref = comp[prop];
@@ -156,4 +158,18 @@ test('卡牌小卡牌：切图与prefab 绑定一致（品级 4 + 资源点 + �
         const meta = assetPath(`image/frame/${name}.png.meta`);
         assert.doesNotThrow(() => readFileSync(meta), `缺美术：${meta}`);
     }
+});
+
+
+test('卡牌透明度组件绑定到根节点和评语节点，不再运行时查询或补挂', () => {
+    const prefab = loadPrefab();
+    const view = prefab.find((entry) => entry.__type__ === VIEW_CID);
+    for (const [field, nodeName] of [['cardOpacity', 'ZCGameCardReveal'], ['luckOpacityComp', 'LuckSprite']]) {
+        const component = prefab[view[field].__id__];
+        assert.equal(component.__type__, 'cc.UIOpacity');
+        assert.equal(prefab[component.node.__id__]._name, nodeName);
+    }
+    const source = readFileSync(VIEW_PATH, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    assert.doesNotMatch(source, /\.(?:getComponent|addComponent)\(/);
+    assert.doesNotMatch(source, /getCardOpacity|getLuckOpacity/);
 });

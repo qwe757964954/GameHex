@@ -292,32 +292,22 @@ test('B10 非法胜负码不能确认本地领地胜利', async () => {
 // ============================================================
 
 const gameSource = readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8');
+const compositionSource = readFileSync('assets/script/app/bootstrap/battle/BattleComposition.ts', 'utf8');
+const runtimeSource = readFileSync('assets/script/app/zcds/application/ZCBattleRuntimeController.ts', 'utf8');
+const settlementSource = readFileSync('assets/script/app/zcds/application/ZCBattleSettlementController.ts', 'utf8');
 const pageSource = readFileSync('assets/script/app/zcds/ui/ZCSettlementPage.ts', 'utf8');
 
-test('C1 进对局就挂订阅（等到弹结算页再订阅会丢包）', () => {
-    const onLoad = gameSource.slice(gameSource.indexOf('onLoad(): void'), gameSource.indexOf('update(dt: number)'));
-    assert.match(onLoad, /BattleResultService\.ensureListening\(\)/,
-        '订阅必须在 onLoad 里、且在 `if (prepared)` 分支之前（那条分支会 return）');
-    assert.match(gameSource, /import \{ BattleResultService \} from '\.\.\/battle\/BattleResultService'/);
+test('C1 组合层在运行期启动前订阅结果广播', () => {
+    assert.ok(compositionSource.indexOf('BattleResultService.ensureListening()') < compositionSource.indexOf('runtime.start(entry, resources)'));
+    assert.doesNotMatch(gameSource, /BattleResultService|finishBattle/);
 });
 
-test('C2 章节局先等广播再弹；匹配局不等（1001 本轮没接）', () => {
-    assert.match(gameSource, /const chapterResult = this\.pveContext \? BattleResultService\.waitForChapterResult\(\) : null/,
-        '只有章节局（pveContext 非空）才等广播');
-    assert.match(gameSource, /BattleResultService\.waitForChapterResult\(\)/);
-    assert.match(gameSource, /resolveCmdGoodsFrames\(result\.goods\)/, '换算走共用的 RewardFrames');
-    // ★ 结算页奖励格改用**公共** `RewardItem` 后，格子自己解析图标/品质框/数量 ⇒
-    //   这里只传 `{resId, amount}`（数量是数字，格式化由公共件负责）。
-    assert.match(gameSource, /resId: entry\.resId,\s*\n\s*amount: entry\.number,/, '只喂 resId + amount');
-    assert.doesNotMatch(gameSource, /itemNumberTextOf/, '数量文案由公共奖励格自己算');
-    // 超时也照弹：await 之后只挡「已离开对局」，不许因为没奖励就不弹
-    // ⚠️ 别用「固定字符窗口」串两处代码 —— 中间加几行注释就失效（本次已踩到）。
-    //    改成**按出现顺序**断言：先等广播，后弹页。
-    const waitIdx = gameSource.indexOf('const result = chapterResult ? await chapterResult : null;');
-    const openIdx = gameSource.indexOf('ZCSettlementPage.open({');
-    assert.ok(waitIdx >= 0, '必须先等广播结果');
-    assert.ok(openIdx > waitIdx, '等待之后必须照样弹结算页');
-    assert.match(gameSource, /rewards,/, '奖励要真的传进结算页 userData');
+test('C2 结算等待和奖励解析位于控制器与组合层，匹配局不等待', () => {
+    assert.match(runtimeSource, /entry\.slgBattleType \?\? \(entry\.pveContext \? ZC_BATTLE_TYPE_CHAPTER : null\)/);
+    assert.match(settlementSource, /request\.battleType === null \? null : this\.ports\.waitResult/);
+    assert.match(compositionSource, /resolveCmdGoodsFrames\(result\.goods, resources\)/);
+    assert.match(compositionSource, /resId: reward\.resId, amount: reward\.number/);
+    assert.ok(settlementSource.indexOf('await pending') < settlementSource.indexOf('await this.open()'));
 });
 
 test('C3 换算链真复用：结算页与奖励弹窗共用一份 RewardFrames', () => {
@@ -341,22 +331,10 @@ test('C4 结算页不许自己再拉奖励表 / 解析 CmdGoods（数据由 ZCGa
     assert.doesNotMatch(pageSource, /GoodsBox/, '结算页不再自带奖励格实现');
 });
 
-test('C5 章节局也要发完成上报（`CmdFinishBattleReqMsg`）—— 漏了 1002 广播永远不来', () => {
-    const open = gameSource.slice(
-        gameSource.indexOf('private openSettlement'),
-        gameSource.indexOf('private async showSettlement'),
-    );
-    assert.ok(open.length > 200, '切片锚点没找到（openSettlement / showSettlement 改名了？）');
-    assert.match(open, /void finishBattle\(/, '完成上报要在 openSettlement 里发');
-    // 🔴 章节局（pveContext）**不许再被跳过**：它也是 `CmdStartBattleReqMsg(1002)` 开的局，
-    // 漏了服务端就不给这局收尾、不推 `CmdBattleResultBroMsg` ⇒ 结算页奖励恒空。
-    assert.doesNotMatch(open, /!\s*this\.pveContext/,
-        '章节局不许跳过完成上报（原来的「领地 PVE 是本地关卡、不向 PVP 接口误报」理由已不成立）');
-    assert.match(open, /const result = localVictory \? BATTLE_RESULT_WIN : BATTLE_RESULT_LOSE/, '撤退按失败上报');
-    assert.ok(open.indexOf('waitForChapterResult') < open.indexOf('finishBattle'),
-        '等待器必须先于完成上报建立，避免快速广播丢失');
-    assert.ok(open.indexOf('finishBattle') < open.indexOf('showSettlement('),
-        '先发上报、再等广播；顺序反了就是等一个没被触发的广播');
+test('C5 先等待再完成上报，章节局与撤退均不跳过上报', () => {
+    assert.ok(settlementSource.indexOf('this.ports.waitResult(') < settlementSource.indexOf('this.ports.finish('));
+    assert.match(compositionSource, /request\.localVictory \? BATTLE_RESULT_WIN : BATTLE_RESULT_LOSE/);
+    assert.doesNotMatch(settlementSource, /if \(.*pve.*\).*return/);
 });
 
 test('SLG 两种结果按对应协议解码：1003 奖励，1004 战功与奖励，其他类型不能唤醒等待器', async () => {
@@ -416,9 +394,20 @@ test('据点结算真实字节未携带 optional warScore 时，不把 protobuf 
     assert.equal(result.warScore, undefined);
 });
 
-test('C6 领地进度只在收到服务端章节胜负后回写', () => {
-    const open = gameSource.slice(gameSource.indexOf('private openSettlement'), gameSource.indexOf('private async showSettlement'));
-    const show = gameSource.slice(gameSource.indexOf('private async showSettlement'), gameSource.indexOf('private async loadChapterRewards'));
-    assert.doesNotMatch(open, /recordPveResult\(/);
-    assert.match(show, /if \(result\) this\.recordPveResult\(result\.code === BATTLE_RESULT_WIN\)/);
+test('C6 仅服务端结果驱动领地回写，退出后不消费迟到结果', () => {
+    assert.match(settlementSource, /if \(result\) this\.ports\.recordPveResult\(result\.code === 1\)/);
+    assert.ok(settlementSource.indexOf('if (this.isDisposed) return;') < settlementSource.indexOf('this.ports.recordPveResult('));
+    assert.match(compositionSource, /entry\.pveContext\) EventMgr\.instance\.emit/);
+});
+
+test('结算等待按真实 caller 取消，旧局取消不解除新局等待', async () => {
+    const { BattleResultService: service } = serviceFixture();
+    const oldOwner = {}, newOwner = {};
+    const old = service.waitForBattleResult(1002, 10000, oldOwner);
+    const current = service.waitForBattleResult(1002, 10000, newOwner);
+    assert.equal(await old, null);
+    let resolved = false; void current.then(() => { resolved = true; });
+    service.cancelWait(oldOwner); await Promise.resolve();
+    assert.equal(resolved, false);
+    service.cancelWait(newOwner); assert.equal(await current, null);
 });

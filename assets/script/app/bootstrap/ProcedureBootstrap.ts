@@ -21,6 +21,9 @@ import { Toast } from '../common/Toast';
 import { registerRdVars } from '../rd/RdRegistry';
 import { GameNet } from '../net/GameNet';
 import { GameSocketBridge } from '../gm/GameSocketBridge';
+import { createCardPopupComposition } from './card/CardPopupComposition';
+import { ensureZCRuntimeCompiled } from '../zcds/application/ZCRuntimePrecompiler';
+import { resetZCRuntime } from '../zcds/model/ZCGameRuntimeConfig';
 
 const { ccclass } = _decorator;
 const RESOURCE_LOAD_CONCURRENCY = 4;
@@ -85,8 +88,11 @@ export class ProcedureBootstrap extends Component {
         this.resourceLoads = assets;
         const configs = new RefConfigService();
         const callbackOwners = GameNet.instance.callbackOwners;
-        PopupManager.inst.initialize(assets, callbackOwners);
-        const sessionAssets = new AppSessionAssetService(assets, configs);
+        const sessionAssets = new AppSessionAssetService(assets, configs, {
+            // 组合根注入：会话空闲期预编译运行时目录，退出登录复位；会话层不静态依赖战斗模块。
+            ensureCompiled: () => ensureZCRuntimeCompiled(configs),
+            reset: () => resetZCRuntime(),
+        });
         manager.configure({
             assets,
             sessionAssets,
@@ -94,6 +100,7 @@ export class ProcedureBootstrap extends Component {
             network: new FetchNetworkTransport(),
             callbackOwners,
         });
+        PopupManager.inst.initialize(assets, callbackOwners, view => createCardPopupComposition(manager.context, view));
         manager.registerRoute(GameRoute.Update, ProcedureUpdate);
         manager.registerRoute(GameRoute.Login, ProcedureLogin);
         manager.registerRoute(GameRoute.PostLogin, ProcedurePostLogin);

@@ -72,6 +72,19 @@ let runtimeRules: Readonly<ZCRuntimeRules> | null = null;
 /** 旧客户端公式冻结表；loadPvpTables 注入。 */
 let legacySkillEffects: Readonly<ZCLegacySkillEffectConfig> | null = null;
 
+/** 运行时目录是否已完成编译安装；空闲期预编译与进对局复用同一标志。 */
+let runtimeCompiled = false;
+
+/** 运行时目录已就绪（getTable + compile + loadPvpTables 完成），进对局可直接复用。 */
+export function isZCRuntimeCompiled(): boolean {
+    return runtimeCompiled;
+}
+
+/** 退出登录时重置；下次进对局强制重新编译，避免跨会话复用旧配置。 */
+export function resetZCRuntime(): void {
+    runtimeCompiled = false;
+}
+
 /** 取运行时全局规则；配置未加载（初始化失败路径）时抛错，不做内置兜底。 */
 export function getPvpRuntimeRules(): Readonly<ZCRuntimeRules> {
     if (!runtimeRules) throw new Error('[ZCGameRuntimeConfig] PVP 全局配置未加载');
@@ -162,6 +175,7 @@ export function loadPvpTables(tables: ZCPvpTables): ZCConfigLoadResult {
     setZCModifierCatalogs(compiled.modifierCatalogs);
     runtimeRules = compiled.rules;
     legacySkillEffects = compiled.legacySkillEffects;
+    runtimeCompiled = true;
     return {
         schemaVersion: compiled.rules.schemaVersion,
         sourceSha256: compiled.rules.sourceSha256,

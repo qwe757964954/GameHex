@@ -2,6 +2,7 @@ import { JsonAsset, SpriteFrame } from 'cc';
 import type { AssetService } from '../../../core/asset/AssetService';
 import { RefUtil } from '../../../framework/ref/RefUtil';
 import { MAP_MARKER_BUBBLE_FRAME_PASSED_PATH, MAP_MARKER_BUBBLE_FRAME_PENDING_PATH } from '../../common/MapMarkerBadge';
+import { TERRITORY_CHEST_BUBBLE_FRAME_PATH } from '../model/TerritoryChestBubble';
 import {
     ART_ROOT,
     BUILDING_ART_ROOT,
@@ -35,6 +36,15 @@ export interface ITerritoryBattleArt {
      * 编号是这一格唯一的关卡标识）。
      */
     readonly levelBubblePendingFrame?: SpriteFrame | null;
+    /**
+     * **宝箱提示气泡**专用的底图：`image/spawn-region/frame_04`（77×87 竖向水滴，尖朝下）。
+     *
+     * 需求 2026-11-02：「宝箱的气泡框使用新的美术资源 `frame_04`，图标内 icon 和数字的排版参考美术图」。
+     * 与关卡编号气泡的 94×45 胶囊**不是同一套**（尺寸、形状、内容行数都不同，见
+     * `model/TerritoryChestBubble`）。取不到时视图回退到 {@link levelBubbleFrame} ——
+     * 宁可样子旧一点，也不能让宝箱没有提示。
+     */
+    readonly chestBubbleFrame?: SpriteFrame | null;
     /**
      * **未通关**格的地皮（未解锁 / 已解锁未通关 / 中立格都用它）：`img_land_02` 泥土块。
      *
@@ -73,6 +83,13 @@ export interface ITerritoryBattleArt {
     readonly randomResource: SpriteFrame | null;
     /** 随机资源候选格的开启条件银币图标。 */
     readonly randomSilverIcon: SpriteFrame | null;
+    /**
+     * 固定宝箱提示气泡里的**体力图标**（`roleProperty` 的 `图标_体力`，与领奖飘字同一张）。
+     *
+     * 需求 2026-11-02：「领地里固定奖励宝箱加气泡提示，气泡内是**体力 icon + 需要消耗的数量值**」。
+     * 与 {@link randomSilverIcon} 同一套取图口径（`RESOURCE_ICON_ART_ROOT` 下的中文图名）。
+     */
+    readonly staminaIcon: SpriteFrame | null;
     /** `bonus` 奖励据点。 */
     readonly bonus: SpriteFrame | null;
     readonly header: SpriteFrame | null;
@@ -237,7 +254,7 @@ export async function loadTerritoryBattleArt(
     assets: AssetService,
     backgroundPath: string,
 ): Promise<ITerritoryBattleArt> {
-    const [background, tileLocked, tileCleared, frameBoss, frameStage, frameAsyncPvp, frameChest, start, stage, boss, asyncPvp, fixedResource, randomResource, randomSilverIcon, bonus, header, navButton, actionButton, buildAssets, levelBubbleFrame, levelBubblePendingFrame] = await Promise.all([
+    const [background, tileLocked, tileCleared, frameBoss, frameStage, frameAsyncPvp, frameChest, start, stage, boss, asyncPvp, fixedResource, randomResource, randomSilverIcon, bonus, header, navButton, actionButton, buildAssets, levelBubbleFrame, levelBubblePendingFrame, chestBubbleFrame, staminaIcon] = await Promise.all([
         // 地图 JSON 有 background 就按它走（spriteFramePathOf 对已带后缀的路径幂等），否则用默认背景。
         // ⚠️ 默认图 zdbg1 在 `image/` **根目录**（不在 `image/territory/`）⇒ 走 `spriteFramePath(ART_ROOT, …)`；
         //    用 `spriteFramePathOf(TERRITORY_ART_ROOT/…)` 拼会在 bundle 索引里查不到
@@ -280,8 +297,15 @@ export async function loadTerritoryBattleArt(
         // `stationRenderOf` 的 `claimed` 决定；顺序必须与上面的解构对齐。
         loadFrame(assets, MAP_MARKER_BUBBLE_FRAME_PASSED_PATH),
         loadFrame(assets, MAP_MARKER_BUBBLE_FRAME_PENDING_PATH),
+        // 宝箱提示气泡的**新底图** `frame_04`（77×87 竖向水滴，2026-11-02 用户指定）。
+        // 与上面两张 94×45 的胶囊同目录，但不是同一套：宝箱气泡内是「icon 在上、数字在下」两行，
+        // 排版常量全在 `model/TerritoryChestBubble`，别再往 `MapMarkerBadge` 里塞。
+        loadFrame(assets, TERRITORY_CHEST_BUBBLE_FRAME_PATH),
+        // 固定宝箱提示气泡里的体力图标（需求 2026-11-02）。与「宝箱开出的体力飞进资源栏」
+        // 用的是同一张 `图标_体力`，别在领地目录里另存一份。
+        loadFrame(assets, spriteFramePath(RESOURCE_ICON_ART_ROOT, '图标_体力')),
     ]);
-    return { background, levelBubbleFrame, levelBubblePendingFrame, tileLocked, tileCleared, frameBoss, frameStage, frameAsyncPvp, frameChest, start, stage, boss, asyncPvp, fixedResource, randomResource, randomSilverIcon, bonus, header, navButton, actionButton, buildFrames: buildAssets.frames, buildScales: buildAssets.scales };
+    return { background, levelBubbleFrame, levelBubblePendingFrame, chestBubbleFrame, staminaIcon, tileLocked, tileCleared, frameBoss, frameStage, frameAsyncPvp, frameChest, start, stage, boss, asyncPvp, fixedResource, randomResource, randomSilverIcon, bonus, header, navButton, actionButton, buildFrames: buildAssets.frames, buildScales: buildAssets.scales };
 }
 
 /**

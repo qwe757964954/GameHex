@@ -1,4 +1,4 @@
-import { _decorator, Color, Component, Graphics, Label, Node, Sprite, UITransform } from 'cc';
+import { _decorator, Color, Component, Label, Node, Sprite } from 'cc';
 import type { ZCSpawnSelectionSnapshot } from '../model/ZCSpawnSelection';
 import { ZCGameUiEvent } from './ZCGameHudEvents';
 import { EventMgr } from '../../../framework/event/EventMgr';
@@ -41,10 +41,6 @@ export const SPAWN_HINT_CENTER_Y = 0;
 @ccclass('ZCSpawnSelectionView')
 export class ZCSpawnSelectionView extends Component {
     
-    /** 吐司底（设计稿没有吐司，这是即时反馈通道，保留）。 */
-    private static readonly TOAST_PANEL = new Color(22, 31, 45, 244);
-    /** 吐司圆角 = `min(26, 高度/4)`。 */
-    private static readonly PANEL_CORNER_RADIUS = 26;
     /** 吐司停留时长（秒）。 */
     private static readonly TOAST_VISIBLE_SECONDS = 1.8;
 
@@ -95,9 +91,6 @@ export class ZCSpawnSelectionView extends Component {
     @property({ type: Node, group: '节点引用', tooltip: 'SpawnToast：只在 flash() 期间 active' })
     toastNode: Node = null;
 
-    @property({ type: Graphics, group: '节点引用' })
-    toastBackground: Graphics = null;
-
     @property({ type: Label, group: '节点引用' })
     toastLabel: Label = null;
 
@@ -107,7 +100,6 @@ export class ZCSpawnSelectionView extends Component {
         // 失效态仍然接收点击，由状态机给出「为什么失效」；未选择态同样给明确反馈。
         this.toggleButton.on(Node.EventType.TOUCH_END, this.onToggleHintsClick, this);
         this.confirmButton.on(Node.EventType.TOUCH_END, this.onConfirmClick, this);
-        this.drawToastBackground();
         this.toastNode.active = false;
     }
 
@@ -160,16 +152,6 @@ export class ZCSpawnSelectionView extends Component {
 
     protected onDestroy(): void {
         this.unschedule(this.hideToast);
-    }
-
-    /** 吐司底：尺寸与圆角都从 prefab 上那个节点的 `UITransform` 读，代码不存宽高。 */
-    private drawToastBackground(): void {
-        const { width, height } = this.toastBackground.node.getComponent(UITransform).contentSize;
-        const radius = Math.min(ZCSpawnSelectionView.PANEL_CORNER_RADIUS, height / 4);
-        this.toastBackground.clear();
-        this.toastBackground.fillColor = ZCSpawnSelectionView.TOAST_PANEL;
-        this.toastBackground.roundRect(-width / 2, -height / 2, width, height, radius);
-        this.toastBackground.fill();
     }
 
     private hideToast = (): void => {

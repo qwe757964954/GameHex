@@ -27,7 +27,8 @@ class MockNode {
     setScale(x: number, y: number, z = 1) { this.scale = new Vec(x, y, z); }
     setSiblingIndex(_index: number) {}
     destroyAllChildren() { this.children = []; }
-    on() {}
+    on() { this.onCount += 1; }
+    onCount = 0;
     targetOff() { this.targetOffCount += 1; }
     targetOffCount = 0;
 }
@@ -65,6 +66,8 @@ interface IView {
     setPendingBuilding(id: number): void;
     setMoving(moving: boolean): void;
     onTouchStart(e: unknown): void; onTouchMove(e: unknown): void; onTouchEnd(e: unknown): void; onTouchCancel(): void;
+    onLoad(): void;
+    onDisable(): void;
 }
 function harness() {
     class Plot {}
@@ -77,7 +80,6 @@ function harness() {
         if (id.endsWith('/EventMgr')) return { EventMgr };
         if (id.endsWith('/BigMapEvents')) return mvcEvents;
         if (id === 'cc') return { _decorator: { ccclass: () => (c: unknown) => c, property: () => () => {} }, instantiate: (template: object) => instantiate(template), Color, Component: class {}, EventTouch: class {}, EventMouse: class {},
-            isValid: (value: unknown) => !!value && (value as { destroyed?: boolean }).destroyed !== true,
             Graphics, Label, Mask, Node: MockNode, Sprite, UITransform: Transform, Vec2: Vec, Vec3: Vec };
         if (id.endsWith('/BigMapBasePlot')) return { BigMapBasePlot: Plot };
         if (id.endsWith('/BigMapBasePresentation')) return geometry;
@@ -102,6 +104,7 @@ function harness() {
     view.node.setPosition(0, 0);
     const serialized = [...view.node.components.values()].find((item) => 'plotTemplate' in item)!;
     Object.assign(view, serialized);
+    view.onLoad();
     const cells = Array.from({ length: 400 }, (_, hexId) => ({ hexId, row: Math.floor(hexId / 20), column: hexId % 20,
         slot: hexId === 210 ? 'building' : 'empty', buildingId: hexId === 210 ? 1 : 0, instanceId: 7, level: 1,
         name: '主城', stored: hexId === 210 ? 12 : 0, resType: 'coin', remainSeconds: 0 }));
@@ -172,7 +175,7 @@ test('拖动、缩放及取消不触发建筑选择，普通点击仍准确拾�
     assert.deepEqual(taps, [210]);
 });
 
-test('销毁时 viewport 子节点已先行销毁，解绑不抛错', () => {
+test('销毁时不访问已销毁的 viewport，清空展示数据与槽位', () => {
     const { view } = harness();
     const viewport = (view as unknown as { viewport: Transform }).viewport;
     const node = viewport.node;
@@ -181,13 +184,21 @@ test('销毁时 viewport 子节点已先行销毁，解绑不抛错', () => {
     viewport.node = null as unknown as MockNode;
     (viewport as unknown as { destroyed: boolean }).destroyed = true;
     assert.doesNotThrow(() => (view as unknown as { onDestroy(): void }).onDestroy());
-    assert.equal(node.targetOffCount, 1);
+    assert.equal(node.targetOffCount, 0);
+    assert.equal(view.slots.size, 0);
+    const state = view as unknown as { data: unknown; art: unknown };
+    assert.equal(state.data, null);
+    assert.equal(state.art, null);
 });
 
-test('viewport 仍存活时销毁照常解绑同节点的触摸监听', () => {
-    const { view } = harness();
+test('重复构建与禁用再启用不重复绑定或移除 viewport 监听', () => {
+    const { view, cells } = harness();
     const viewport = (view as unknown as { viewport: Transform }).viewport;
-    const before = viewport.node.targetOffCount;
-    assert.doesNotThrow(() => (view as unknown as { onDestroy(): void }).onDestroy());
-    assert.equal(viewport.node.targetOffCount, before + 1);
+    assert.equal(viewport.node.onCount, 5);
+    view.build(bigMapViewStateFixture({ plots: cells, mainBuildingId: 1 }), 720, 900);
+    view.onTouchStart(touch(0, 0));
+    view.onDisable();
+    assert.equal(viewport.node.onCount, 5);
+    assert.equal(viewport.node.targetOffCount, 0);
+    assert.equal((view as unknown as { dragStart: Vec | null }).dragStart, null);
 });

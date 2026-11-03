@@ -9,7 +9,7 @@ test('published progress stays stable while live chapter state changes, and expo
     const map = configureTerritoryMap({ version: 1, mapKind: 'territoryChapter', id: 'snapshot', name: 'test',
         chapterId: 1, rows: 4, columns: 4, startCellId: 0, sites: [] });
     const progress = new TerritoryProgress(map);
-    const source = { map, progress } as ITerritoryViewState;
+    const source = { map, progress, wallet: { silver: 0, stamina: 0 } } as ITerritoryViewState;
     const before = buildTerritoryViewState(source);
     progress.markCellsUnlocked([1]);
     progress.markCellPassed(1);

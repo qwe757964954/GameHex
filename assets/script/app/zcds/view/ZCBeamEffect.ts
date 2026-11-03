@@ -21,14 +21,25 @@ export interface IZCBeamSpec {
     /** 发射口在**竖直方向**抬多少（视图单位，世界竖直、不跟弹道旋转）。 */
     readonly muzzleLift: number;
     /**
-     * 光柱的**基准**宽度倍率（乘在预制体原始高度上）。
+     * 画布内**实际线条**的起止位置（占画布宽度的比例）。
      *
-     * 定 0.65 的来历：原画是 1130x93 的一条横躺光束，长厚比 12.2:1；预制体画布 640x53。
-     * 让它落在「550 射程」那一档（视图长度 165×2.5625 ≈ 423）时还保持原画比例，就要求
-     * 厚度 ≈ 423 / 12.2 ≈ 35，而 35 / 53 ≈ 0.65。**只缩竖轴、不缩横轴** ——
-     * 横轴永远等于「长度 / 画布宽」，所以光柱不管是 1 格还是半个战场，粗细都是这一档。
+     * 美术给的 640×53 画布，线条只画在 x ∈ [32, 556] 这一段（两端是留白 + 柔光溢出）。
+     * 不做这个校正会有两处肉眼可见的错位：起点比发射口**晚 5%**（长射程下 ≈ 20px，
+     * 看起来"没从嘴里出来"）、终点比弹头**早 13%**（≈ 50px，看起来"没打到人"）。
+     */
+    readonly contentStart: number;
+    readonly contentEnd: number;
+    /**
+     * 光柱的**基准**宽度倍率（乘在预制体原始高度 53 上）。
+     *
+     * ⚠️ 不要按「整张画布的长厚比」定这个值。2026-11-02 实测：这张图 53px 高的画布里，
+     * **真正不透明的亮芯只有 5~9px**（`alpha > 200` 的像素高度），均值透明度 ≈ 100/255。
+     * 原来按画布比例取的 0.65 落到屏幕上 = 亮芯 **3px、四成透明**，在沙漠色地块上
+     * 等于「子弹模型消失了」。改成 1.8 后亮芯 ≈ 9px，柔光外圈才盖得住背景。
      */
     readonly widthScale: number;
+    /** 美术缺失时的兜底线宽（视图 px），与 `widthScale` 同一套追加倍率。 */
+    readonly coreWidth: number;
     /**
      * 按技能 id 追加的宽度**倍率**（在 `widthScale` 之上再乘）。
      *
@@ -46,12 +57,18 @@ export interface IZCBeamSpec {
  * 配一次两条都对；将来换成更长的光束也只改这一处。
  */
 const BEAM_BY_PREFAB_PATH: Readonly<Record<string, IZCBeamSpec>> = {
-    //  镭射飞龙（68010）。龙眼在骨架胸口以上、略偏前：前伸 34、上抬 16（视图单位，
-    //  1 个格距 ≈ 90）。数值不对就只改这两个数 —— 它们不参与任何结算。
+    //  镭射飞龙（68010）。⚠️ 单位根节点是**逻辑脚点**（`ZCUnitView` 口径：spine 骨架原点≈脚底），
+    //  不是身体中心 —— 所以「龙眼」要抬到 +44 才算头部，原来的 +16 其实是从脚踝射出来的。
+    //  抬到眼睛后，线自然从高处指向目标脚点，正好就是需求里「高处攻击低处」的倾斜感。
+    //  数值不对就只改这两个数 —— 它们不参与任何结算。
     'units/projectiles/镭射飞龙_普攻/镭射飞龙_普攻': {
-        muzzleForward: 34,
-        muzzleLift: 16,
-        widthScale: 0.65,
+        muzzleForward: 8,
+        muzzleLift: 44,
+        //  实测自 `atlas/zheerniyasi_buff-xian_loop_00.png` 的不透明包围盒：x ∈ [32, 556]。
+        contentStart: 32 / 640,
+        contentEnd: 556 / 640,
+        widthScale: 1.8,
+        coreWidth: 10,
         //  「镭射死光」= 同一根光束的加粗版（设计案 L1/L2/L3 的 1.0/1.3/1.6 先落到 1.3 这一档）。
         widthMultiplierBySkill: { 30845: 1.3 },
     },
@@ -62,8 +79,16 @@ export const ZC_BEAM_MIN_LENGTH = 6;
 
 /** 这条技能该用多粗：`widthScale × （该技能号的追加倍率 ?? 1）`。 */
 export function zcBeamWidthScaleOf(spec: IZCBeamSpec, skillId: number | undefined): number {
-    const multiplier = skillId === undefined ? 1 : (spec.widthMultiplierBySkill?.[skillId] ?? 1);
-    return spec.widthScale * multiplier;
+    return spec.widthScale * beamMultiplierOf(spec, skillId);
+}
+
+/** 美术没加载时那条兜底线该多粗（视图 px）。 */
+export function zcBeamCoreWidthOf(spec: IZCBeamSpec, skillId: number | undefined): number {
+    return spec.coreWidth * beamMultiplierOf(spec, skillId);
+}
+
+function beamMultiplierOf(spec: IZCBeamSpec, skillId: number | undefined): number {
+    return skillId === undefined ? 1 : (spec.widthMultiplierBySkill?.[skillId] ?? 1);
 }
 
 /** 特效路径 → 光束配置。未登记 = `null`（走通用弹道）。 */
@@ -114,4 +139,30 @@ export function zcBeamFrame(
         angleDegrees: angle * 180 / Math.PI,
         length: Math.max(ZC_BEAM_MIN_LENGTH, Math.hypot(to.x - x, to.y - y)),
     };
+}
+
+/** 光束预制体的拉伸参数（作用在美术子节点上，不是宿主节点）。 */
+export interface IZCBeamStretch {
+    /** 子节点 `scale.x`：让**画布里的可见段**正好等于 `length`。 */
+    readonly scaleX: number;
+    /** 子节点 `position.x`：把画布左侧的留白推到锚点外面，让线条起点落在锚点上。 */
+    readonly offsetX: number;
+}
+
+/**
+ * 「发射口 → 弹头」这一段长度 → 预制体的 `scaleX` 与横向位移。
+ *
+ * 为什么不能直接 `length / canvasWidth`：画布里线条只占 `[contentStart, contentEnd]`，
+ * 直接按画布宽拉伸会让可见段缩到 ~82%、并且整体晚起 5%（见 `IZCBeamSpec.contentStart`）。
+ * 这里按**可见段**归一化，顺带把左侧留白挪到锚点之外，于是「节点原点 = 发射口、
+ * 线条末端 = 弹头」两件事同时成立。
+ */
+export function zcBeamStretchOf(
+    spec: IZCBeamSpec,
+    canvasWidth: number,
+    length: number,
+): IZCBeamStretch {
+    const contentWidth = Math.max(1, (spec.contentEnd - spec.contentStart) * canvasWidth);
+    const scaleX = Math.max(ZC_BEAM_MIN_LENGTH, length) / contentWidth;
+    return { scaleX, offsetX: -spec.contentStart * canvasWidth * scaleX };
 }

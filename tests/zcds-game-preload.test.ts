@@ -1,3 +1,7 @@
+import { buildZCVisualResourcePlan } from '../assets/script/app/zcds/model/ZCVisualResourcePlan';
+import { ResourceLoadManager } from '../assets/script/core/asset/ResourceLoadManager';
+import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
+import type { AssetService } from '../assets/script/core/asset/AssetService';
 import * as resourcePlan from '../assets/script/app/zcds/model/ZCGameResourcePlan';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -75,6 +79,7 @@ test('对局流程在进入前准备地图、配置和全部首屏 Prefab', asyn
     };
     const dependencies: Record<string, unknown> = {
         '../model/ZCGameResourcePlan': resourcePlan,
+        '../model/ZCVisualResourcePlan': { buildZCVisualResourcePlan },
         cc,
         '../../../core/asset/BundleCatalog': { BATTLE_BUNDLE: 'battle' },
         '../../ArtPaths': {
@@ -125,11 +130,17 @@ test('对局流程在进入前准备地图、配置和全部首屏 Prefab', asyn
             },
         },
         '../model/ZCGameRuntimeConfig': {
+            // 本用例验证首次进对局的完整加载：未预编译，故返回 false，走 getTable + loadPvpTables。
+            isZCRuntimeCompiled: () => false,
             loadPvpTables: () => { pvpTablesLoaded = true; },
             // 跨表引用闸（assertDeckUnitsPlayable / findUndeployableDeckCards）已整体移除，
             // 改为构建期工具 tools/pvp_card_check.py 校验，预加载期不再做这条检查。
             // `loadArtifactIconFrame` 用它取神器图标名（真源 = `pvpArtifact` 第一行的 `icon`）。
             getPvpRuntimeRules: () => ({ artifactIcon: '霜封冰刃' }),
+        },
+        './ZCRuntimePrecompiler': {
+            // 预编译模块内部会安装运行时表；桩里复用同一注入效果，保证后续断言顺序不变。
+            ensureZCRuntimeCompiled: async () => { pvpTablesLoaded = true; },
         },
         '../model/ZCMatchConfig': {
             captureZCMatchConfig: (_source: unknown, options: { allowUnresolvedSelect?: boolean }) => {
@@ -202,4 +213,88 @@ test('对局流程在进入前准备地图、配置和全部首屏 Prefab', asyn
     assert.ok(prepared.wallFrames.has('rightUp'), '城墙砖帧按图片名索引');
     assert.ok(prepared.wallMaterial, '城墙砖接缝材质随对局资源预加载');
     assert.deepEqual((await prepared.loadGuide()).entries, [], '指南点击时加载，仍归属本局资源');
+});
+
+function shellLoader(assets: AssetService): {
+    loadShellPrefabs(scope: ResourceScope, selectSpawn: boolean, hasBossPanel: boolean): Promise<Record<string, { path: string } | null>>;
+} {
+    const source = readFileSync('assets/script/app/zcds/application/ZCGameLoader.ts', 'utf8');
+    const context = {
+        exports: {} as { ZCGameLoader: new (resources: unknown, directory: string) => ReturnType<typeof shellLoader> },
+        require: (name: string): unknown => {
+            if (name === '../model/ZCGameResourcePlan') return resourcePlan;
+            if (name === 'cc') return { Prefab: class {} };
+            if (name.endsWith('/BundleCatalog')) return { BATTLE_BUNDLE: 'battle' };
+            return {};
+        },
+    };
+    runInNewContext(ts.transpileModule(source, {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+    }).outputText, context);
+    return new context.exports.ZCGameLoader({ assets }, 'maps');
+}
+
+function shellAssets(beforeLoad = async (_path: string): Promise<void> => {}) {
+    const loaded: string[] = [];
+    let released = 0;
+    const delegate: AssetService = {
+        async load<T>(path, _type, options): Promise<T> {
+            loaded.push(path);
+            assert.equal(options.bundle, 'battle');
+            assert.equal(options.priority, 100);
+            await beforeLoad(path);
+            options.scope.defer(() => released++);
+            return { path } as T;
+        },
+        async loadDir() { return []; },
+        async has() { return true; },
+    };
+    return { assets: new ResourceLoadManager(delegate, { maxConcurrentLoads: 1 }), loaded, released: () => released };
+}
+
+test('首屏外壳复用资源管理器批次，保留条件槽位并随战斗释放', async () => {
+    for (const [selectSpawn, hasBossPanel] of [[false, false], [true, false], [false, true], [true, true]]) {
+        const h = shellAssets();
+        const scope = new ResourceScope('shells');
+        let batches = 0;
+        const loadBatch = h.assets.loadBatch.bind(h.assets);
+        h.assets.loadBatch = (requests, options) => { batches++; return loadBatch(requests, options); };
+        const values = await shellLoader(h.assets).loadShellPrefabs(scope, selectSpawn, hasBossPanel);
+        assert.equal(batches, 1);
+        assert.equal(Object.keys(values).length, 13);
+        assert.equal(values.hudPrefab?.path, resourcePlan.ZC_BATTLE_SHELL_PATHS.hud);
+        assert.equal(values.spawnSelectionPrefab?.path ?? null, selectSpawn ? resourcePlan.ZC_BATTLE_SHELL_PATHS.spawnSelection : null);
+        assert.equal(values.bossPanelPrefab?.path ?? null, hasBossPanel ? resourcePlan.ZC_BATTLE_SHELL_PATHS.bossPanel : null);
+        assert.equal(h.loaded.length, 11 + Number(selectSpawn) + Number(hasBossPanel));
+        assert.equal(h.released(), 0);
+        scope.dispose();
+        assert.equal(h.released(), h.loaded.length);
+        h.assets.dispose();
+    }
+});
+
+test('首屏外壳批次失败释放已加载资源并保留原始错误', async () => {
+    const failure = new Error('missing board');
+    const h = shellAssets(async path => { if (path === resourcePlan.ZC_BATTLE_SHELL_PATHS.board) throw failure; });
+    const scope = new ResourceScope('failed-shells');
+    await assert.rejects(shellLoader(h.assets).loadShellPrefabs(scope, true, true), error => error === failure);
+    assert.equal(h.released(), 1);
+    assert.equal(h.loaded.length, 2, '失败后不派发剩余排队资源');
+    scope.dispose();
+    h.assets.dispose();
+});
+
+test('取消首屏外壳批次停止排队资源，迟到结果仍被释放', async () => {
+    let finish!: () => void;
+    const pending = new Promise<void>(resolve => { finish = resolve; });
+    const h = shellAssets(() => pending);
+    const scope = new ResourceScope('cancelled-shells');
+    const result = shellLoader(h.assets).loadShellPrefabs(scope, true, true);
+    scope.dispose();
+    await assert.rejects(result, /取消/);
+    finish();
+    await new Promise<void>(resolve => setImmediate(resolve));
+    assert.equal(h.loaded.length, 1);
+    assert.equal(h.released(), 1);
+    h.assets.dispose();
 });

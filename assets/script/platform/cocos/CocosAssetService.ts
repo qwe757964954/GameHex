@@ -1,7 +1,8 @@
-import { Asset, assetManager, AssetManager, Director, director, resources } from 'cc';
+import { Asset, assetManager, AssetManager, Director, director, resources, SpriteFrame } from 'cc';
 import type { AssetLoadOptions, AssetService, AssetType } from '../../core/asset/AssetService';
 import { bundleForPath } from '../../core/asset/BundleCatalog';
 import { CocosBundleRegistry } from '../hotupdate/CocosBundleRegistry';
+import { reportDeadSpriteFrames } from './SpriteFrameGuard';
 
 const RESOURCES_BUNDLE = 'resources';
 
@@ -114,6 +115,12 @@ export class CocosAssetService implements AssetService {
             this.pendingReleases = [];
             this.releaseScheduled = false;
             for (const retained of releases) retained.decRef();
+            // 🔴 临时探针（2026-11-03）：释放之后扫一遍场景，把"还挂着已释放贴图"的 Sprite
+            //    按节点路径点名并置空，避免整屏崩在 `Batcher2D`（见 `SpriteFrameGuard`）。
+            //    只有这一批里**真的有 SpriteFrame** 才扫：预制体 / JSON 释放时不值得走一遍场景树。
+            if (releases.some((asset) => asset instanceof SpriteFrame)) {
+                reportDeadSpriteFrames(`释放 ${releases.length} 个资源后`);
+            }
         });
     }
 }

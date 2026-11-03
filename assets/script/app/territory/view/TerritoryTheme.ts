@@ -39,6 +39,14 @@ export const TERRITORY_COLORS = {
      * 否则满屏红会把「还差条件」和「待配表」混成一件事。
      */
     unbound: new Color(107, 93, 79, 255),
+    /**
+     * 「条件不满足 / 资源不够」的**数字文字色**（红）。
+     *
+     * 两处共用同一个红（2026-11-03）：
+     *  · 未解锁格的**银币**消耗数字（银币不够时）；
+     *  · 宝箱气泡里的**体力**消耗数字（体力不够时，`ITerritoryStationRender.levelBubbleTextColor`）。
+     * 判据统一走 `model/TerritoryCostShortfall`（两项各判各的，别在这里按 `isOpenable` 一刀切）。
+     */
     randomConditionText: new Color(230, 30, 24, 255),
     randomAvailableText: new Color(255, 255, 255, 255),
     // 🔴 原来的三个**格子底色** `mapNeutral / mapOwned / mapTarget`（米 / 绿 / 金）已于

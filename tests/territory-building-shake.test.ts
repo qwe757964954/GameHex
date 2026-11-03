@@ -36,6 +36,9 @@ import {
 // ⚠️ 两个都按**真模块** import（不是源码文本）：这一条要证明的是「对局侧转发的就是 core 那一份」。
 import * as shakeCore from '../assets/script/core/hex/ShakePresentation';
 import * as zcdsUtil from '../assets/script/app/zcds/view/ZCGameViewUtil';
+import * as territoryLevelBubbleModule from '../assets/script/app/territory/model/TerritoryLevelBubble';
+import * as territoryCostShortfallModule from '../assets/script/app/territory/model/TerritoryCostShortfall';
+import * as territoryBattleApproachModule from '../assets/script/app/territory/model/TerritoryBattleApproach';
 
 const STATION_SRC = readFileSync('assets/script/app/territory/view/TerritoryStationView.ts', 'utf8');
 const MAP_VIEW_SRC = readFileSync('assets/script/app/territory/view/TerritoryMapView.ts', 'utf8');
@@ -368,6 +371,27 @@ function makeMapView() {
                 return { EventMgr: { instance: { emit() {}, on() {}, offTarget() {} } } };
             }
             if (id === '../application/TerritoryEvents') return mvcEvents;
+            // 宝箱提示气泡 / 前置宝箱跳动（2026-11-02）：本用例关注的分支与它无关 ⇒ 给「不挂气泡、
+            // 不跳」的退化桩（三条规则在 `territory-chest-hint` 里按**真模块**测）。
+            // 气泡文案真源（2026-11-02 起搬进 model）：直接给**真模块**，别抄一份拼法 ——
+            // 抄一遍就等于两边各改一半也能一起绿。
+            if (id === '../model/TerritoryLevelBubble') return territoryLevelBubbleModule;
+            // 战斗过场曲线（2026-11-02）：纯函数、与本文件判据无关 ⇒ 给真模块，别抄一份常量。
+            if (id === '../model/TerritoryBattleApproach') return territoryBattleApproachModule;
+            // 2026-11-02 整页过场：地图视图新增的云盖层依赖。这组用例不演过场 ⇒ 给个空壳，
+            // 千万别写 `throw` 兜底就完事（新增 import 必须同步补桩，见 `Unexpected dependency`）。
+            if (id === './TerritoryBattleCover') {
+                return { TerritoryBattleCover: class { setFrame() {} build() { return false; } apply() {} clear() {} destroy() {} dispose() {} } };
+            }
+            if (id === '../model/TerritoryChestHint') return {
+                TERRITORY_CHEST_HINT_SECONDS: 1.5,
+                territoryChestHintBounceOffset: () => 0,
+                territoryChestHintCell: () => null,
+                territoryPrerequisiteChestCell: () => null,
+            };
+            // 「银币 / 体力够不够」的纯函数（2026-11-03）：给**真模块**，颜色判据不在这里验
+            // （专项在 `territory-wallet-shortfall`），但退化成"永远够"会让颜色断言假绿。
+            if (id === '../model/TerritoryCostShortfall') return territoryCostShortfallModule;
             throw new Error(`Unexpected dependency: ${id}`);
         },
     });

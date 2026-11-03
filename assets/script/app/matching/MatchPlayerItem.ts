@@ -1,7 +1,8 @@
-import { _decorator, Component, Label, Layout, Node, Sprite, SpriteFrame, UITransform, Vec3 } from 'cc';
+import { _decorator, Component, Label, Layout, Node, Sprite, SpriteFrame, Tween, tween, UITransform, Vec3 } from 'cc';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
 import { ARTIFACT_ART_ROOT, MATCH_ART_ROOT, MATCH_ICON_ART_ROOT, MATCH_SLOT_BARS, MATCH_SLOT_FRAMES } from '../ArtPaths';
 import type { MatchIconLoader } from './MatchIcons';
+import { MATCH_REVEAL_POP_SCALE, MATCH_REVEAL_POP_SECONDS } from './MatchReveal';
 import { MATCH_STAT_SLOTS } from './MatchTypes';
 import type { MatchPlayerData, MatchStat } from './MatchTypes';
 import { MatchStatItem } from './MatchStatItem';
@@ -189,6 +190,23 @@ export class MatchPlayerItem extends Component {
         this.searchOrbitAngle = 0;
         if (isSearching) this.applySearchOrbit();
         else this.searchIcon.node.setPosition(this.searchOrbitCenter);
+    }
+
+    /**
+     * 从"匹配中"切到"有数据"时的一次小回弹（0.92 → 1，{@link MATCH_REVEAL_POP_SECONDS} 秒）。
+     *
+     * 为什么要动一下：信息条是**逐条**揭示的（见 `MatchReveal`），只换内容不换形态的话，
+     * 玩家会读成"这一行刚才闪了一下"。回弹刚好落在"加载完成"这个动作上，且比最短间隔
+     * （0.15s）还短，两条不会叠在一起动。
+     */
+    popIn(): void {
+        const node = this.node;
+        if (!node?.isValid) return;
+        Tween.stopAllByTarget(node);
+        node.setScale(MATCH_REVEAL_POP_SCALE, MATCH_REVEAL_POP_SCALE, 1);
+        tween(node)
+            .to(MATCH_REVEAL_POP_SECONDS, { scale: new Vec3(1, 1, 1) }, { easing: 'backOut' })
+            .start();
     }
 
     /** 先强制刷新文字，再按子项宽度求和；同帧读取 Layout 尺寸可能仍是旧值。 */

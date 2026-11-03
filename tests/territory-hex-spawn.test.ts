@@ -10,6 +10,10 @@ import {
     TERRITORY_HEX_SPAWN_SECONDS,
     TERRITORY_HEX_SPAWN_STAGGER_MAX_SECONDS,
     TERRITORY_HEX_SPAWN_STAGGER_SECONDS,
+    TERRITORY_HEX_SPAWN_TIMING,
+    TERRITORY_HEX_SPAWN_VICTORY_SECONDS,
+    TERRITORY_HEX_SPAWN_VICTORY_STAGGER_MAX_SECONDS,
+    TERRITORY_HEX_SPAWN_VICTORY_TIMING,
     territoryHexSpawnBatchSeconds,
     territoryHexSpawnDelays,
     territoryHexSpawnFrame,
@@ -165,6 +169,102 @@ test('负 / 非法的 stagger 按 0 处理，不会倒序进场', () => {
 });
 
 // ============================================================
+// ② 胜利通过那一批：同一套曲线，节奏更重（2026-11-03）
+// ============================================================
+
+/**
+ * 需求原文：*「胜利通过的地块动画节奏感需要比普通的地块生成动画更强，更明显」*。
+ *
+ * 这里不测"好不好看"（那是验收的事），只钉住**可比较的量**：
+ * 更长、起手更小、有且只有一次过冲、错峰分得更开、亮得更早 —— 这五条任何一条被"优化"掉，
+ * 胜利档就和普通档没区别了。
+ */
+test('★★★胜利档每一项都比普通档更重（时长/起手/错峰/透明度）', () => {
+    const normal = TERRITORY_HEX_SPAWN_TIMING;
+    const victory = TERRITORY_HEX_SPAWN_VICTORY_TIMING;
+    assert.ok(victory.seconds > normal.seconds, `胜利档时长 ${victory.seconds} 必须长于 ${normal.seconds}`);
+    assert.ok(victory.fromScale < normal.fromScale, '起手必须更小（落差更大才读得出"从地里长出来"）');
+    assert.ok(victory.stagger > normal.stagger, '错峰必须更宽，否则一格一格分不开、听不出节拍');
+    assert.ok(victory.staggerMax > normal.staggerMax, '上限也要放宽，否则十几格会全挤在 0.3s 里变成"一坨"');
+    assert.ok(victory.opacityPortion < normal.opacityPortion, '透明度必须更早铺满（先亮起来再长大）');
+    // 过冲只在胜利档存在：普通档 `peakScale = 1 / peakPortion = 1` ⇒ 走"缓出长到底"那支。
+    assert.equal(normal.peakScale, 1, '普通档不得有过冲（背景事件，弹一下会挡视线）');
+    assert.equal(normal.peakPortion, 1);
+    assert.ok(victory.peakScale > 1, '胜利档必须长过头再收回');
+    assert.ok(victory.peakPortion > 0 && victory.peakPortion < 1, '过冲点必须在段中间，否则收不回来 / 看不出弹性');
+});
+
+test('★★★胜利档：唯一过冲峰值精确等于 peakScale，末帧精确回到 1', () => {
+    const timing = TERRITORY_HEX_SPAWN_VICTORY_TIMING;
+    const steps = 200;
+    let lastScale = -Infinity;
+    let peakIndex = -1;
+    for (let index = 0; index <= steps; index += 1) {
+        const t = (timing.seconds * index) / steps;
+        const frame = territoryHexSpawnFrame(t, timing);
+        assert.ok(frame.scale <= timing.peakScale + 1e-9, `t=${t} 越过了过冲峰值`);
+        assert.ok(frame.opacity <= 1 + 1e-9);
+        // 前段递增、后段递减 —— 中间只允许一个拐点（有第二个拐点就是"抖"，不是"砸"）。
+        if (index > 0 && frame.scale < lastScale - 1e-9 && peakIndex < 0) peakIndex = index;
+        if (peakIndex > 0) assert.ok(frame.scale <= lastScale + 1e-9, `t=${t} 过冲之后又涨回去了`);
+        lastScale = frame.scale;
+    }
+    assert.ok(peakIndex > 0, '必须存在峰值拐点');
+    const peakPortionAt = peakIndex / steps;
+    assert.ok(Math.abs(peakPortionAt - timing.peakPortion) < 1.5 / steps,
+        `峰值出现在 ${peakPortionAt}，应接近 peakPortion=${timing.peakPortion}`);
+    const peak = territoryHexSpawnFrame(timing.seconds * timing.peakPortion, timing);
+    assert.ok(Math.abs(peak.scale - timing.peakScale) < 1e-9, `峰值必须是精确的 ${timing.peakScale}`);
+
+    const start = territoryHexSpawnFrame(0, timing);
+    assert.equal(start.scale, timing.fromScale);
+    assert.equal(start.opacity, 0, '起手仍必须全透明');
+    const end = territoryHexSpawnFrame(timing.seconds, timing);
+    assert.deepEqual(end, { scale: 1, opacity: 1 }, '落位必须精确回到 1（否则格子会永久停在 1.14）');
+    assert.deepEqual(territoryHexSpawnFrame(timing.seconds + 3, timing), { scale: 1, opacity: 1 });
+});
+
+test('★胜利档透明度在 opacityPortion 就已铺满（先亮、后长大）', () => {
+    const timing = TERRITORY_HEX_SPAWN_VICTORY_TIMING;
+    const solidAt = timing.seconds * timing.opacityPortion;
+    assert.equal(territoryHexSpawnFrame(solidAt, timing).opacity, 1, '过半就该完全不透明');
+    assert.ok(territoryHexSpawnFrame(solidAt * 0.5, timing).opacity < 1, '前半段必须是渐显（不是一步到位）');
+    // 铺满的那一刻，缩放还在半路（说明"亮"与"长大"是两段，不是一起完成）。
+    const scaleAtSolid = territoryHexSpawnFrame(solidAt, timing).scale;
+    assert.ok(scaleAtSolid > timing.fromScale && scaleAtSolid < timing.peakScale,
+        `铺满时缩放应在半路，实际 ${scaleAtSolid}`);
+});
+
+test('★胜利档一批的总时长明显长于普通档（同格数对比）', () => {
+    for (const count of [1, 3, 8]) {
+        const normal = territoryHexSpawnBatchSeconds(count, TERRITORY_HEX_SPAWN_TIMING);
+        const victory = territoryHexSpawnBatchSeconds(count, TERRITORY_HEX_SPAWN_VICTORY_TIMING);
+        assert.ok(victory > normal, `${count} 格的胜利档 ${victory} 没有比普通档 ${normal} 长`);
+    }
+    // 单格就是自己的时长；多格才叠加错峰，且有上限。
+    assert.equal(territoryHexSpawnBatchSeconds(1, TERRITORY_HEX_SPAWN_VICTORY_TIMING),
+        TERRITORY_HEX_SPAWN_VICTORY_SECONDS);
+    assert.equal(territoryHexSpawnBatchSeconds(40, TERRITORY_HEX_SPAWN_VICTORY_TIMING),
+        TERRITORY_HEX_SPAWN_VICTORY_STAGGER_MAX_SECONDS + TERRITORY_HEX_SPAWN_VICTORY_SECONDS);
+});
+
+test('★胜利档错峰：间隔按胜利档算，且仍按簇心铺开', () => {
+    const cells = [0, 1, 2, 3, 4, 5, 6, 7, 8].map((index) => ({
+        cellId: index,
+        x: (index % 3) * 100,
+        y: Math.floor(index / 3) * 100,
+    }));
+    const timing = TERRITORY_HEX_SPAWN_VICTORY_TIMING;
+    const delays = territoryHexSpawnDelays(cells, timing.stagger, timing.staggerMax);
+    assert.equal(delays.get(4), 0, '簇心仍然第一个');
+    const sorted = [...delays.values()].sort((a, b) => a - b);
+    assert.ok(Math.abs(sorted[1] - sorted[0] - timing.stagger) < 1e-9,
+        `第二格必须晚 ${timing.stagger}s（不是普通档的 ${TERRITORY_HEX_SPAWN_STAGGER_SECONDS}）`);
+    assert.ok((delays.get(0) ?? 0) > (territoryHexSpawnDelays(cells).get(0) ?? 0),
+        '同一个角落在胜利档里必须更晚出现');
+});
+
+// ============================================================
 // 视图：逐帧写节点、收口、打断
 // ============================================================
 
@@ -275,4 +375,99 @@ test('站点视图：整站透明度覆盖四个视觉根，气泡背景与文�
     assert.match(source, /setSpawnOpacity\(value: number\): void/);
     assert.match(source, /iconSprite\.node, this\.captionSprite\.node, this\.captionLabel\.node, this\.levelBubble\?\.node \?\? this\.badgeLabel\.node/);
     assert.match(source, /private spawnOpacities: UIOpacity\[\] \| null = null;/);
+});
+
+test('视图：play 第 4 参把节奏档位带进每一格（同一批可能混档）', () => {
+    const Spawn = viewClass();
+    const spawn = new Spawn();
+    const node = fakeNode();
+    // 起手帧按**这一档**的 fromScale 写，不是普通档的 0.55。
+    assert.equal(spawn.play(node, 0, null, TERRITORY_HEX_SPAWN_VICTORY_TIMING), true);
+    assert.equal(node.scale.x, TERRITORY_HEX_SPAWN_VICTORY_TIMING.fromScale);
+    // 剩余时长也要按这一档算（页面靠它决定"播完再盖云"）。
+    assert.ok(Math.abs(spawn.remainingSeconds() - TERRITORY_HEX_SPAWN_VICTORY_SECONDS) < 1e-9,
+        `剩余时长应按胜利档 ${TERRITORY_HEX_SPAWN_VICTORY_SECONDS} 计`);
+    // 走到普通档该结束的时刻，胜利档必须还在播。
+    spawn.step(TERRITORY_HEX_SPAWN_SECONDS + 0.02);
+    assert.ok(spawn.isPlaying(node), '胜利档还没播完，不能提前收口');
+    spawn.step(TERRITORY_HEX_SPAWN_VICTORY_SECONDS);
+    assert.equal(node.scale.x, 1);
+    assert.equal(spawn.playingCount, 0);
+});
+
+test('★★★地图视图：胜利那一批整批走重档，不混着播', () => {
+    const source = readFileSync('assets/script/app/territory/view/TerritoryMapView.ts', 'utf8');
+    const start = source.indexOf('private syncHexSpawn(');
+    const body = source.slice(start, source.indexOf('private isCellPassed(', start));
+    // 同一批里只要有一格是胜利格 ⇒ 整批按胜利档（混档播没有节拍）。
+    assert.match(body, /fresh\.some\(\(cell\) => celebrate\.includes\(cell\.cellId\)\)/,
+        '判定必须看「这批里有没有胜利格」，不能只看数量或第一格');
+    assert.match(body, /TERRITORY_HEX_SPAWN_VICTORY_TIMING : TERRITORY_HEX_SPAWN_TIMING/,
+        '选档必须落到 model 的两个 timing 常量上（不要在这里写死数字）');
+    // ⚠️ 易错：`territoryHexSpawnDelays` 的第 2/3 参必须跟着档位走，否则时长是胜利档、
+    //    错峰还是普通档 ⇒ 格子仍然挤在一起，用户看到的只是"变慢了"而不是"更有节奏"。
+    assert.match(body, /territoryHexSpawnDelays\(fresh, timing\.stagger, timing\.staggerMax\)/,
+        '错峰参数必须跟着档位走');
+    assert.match(body, /this\.hexSpawn\.play\(cell\.node,[\s\S]*?timing\);/, '`play` 必须把 timing 传下去');
+});
+
+test('★地图视图：首帧（快照建立）不播胜利档，避免进页面就放大一遍', () => {
+    const source = readFileSync('assets/script/app/territory/view/TerritoryMapView.ts', 'utf8');
+    const start = source.indexOf('private syncHexSpawn(');
+    const bootstrap = source.slice(start, source.indexOf('const celebrate = input.victoryClaimCells;', start));
+    assert.ok(bootstrap.includes('return;'), '快照那一帧必须早退');
+    assert.ok(!bootstrap.includes('VICTORY_TIMING'), '首帧不得走胜利档');
+});
+
+
+// ============================================================
+// 模型：哪一批算「胜利通过」（读源码守卫，防"顺手简化"丢标记）
+// ============================================================
+
+test('★★★模型：只有「真的打赢且能开始探索」才置胜利标记', () => {
+    const source = readFileSync('assets/script/app/territory/application/TerritoryModel.ts', 'utf8');
+    const start = source.indexOf('private applyStoredBattleResult(');
+    const body = source.slice(start, source.indexOf('private settleProgress(', start));
+    // ⚠️ 不能无条件置标记：`result.ok === false`（这一格已经在探索中 / 不满足条件）时
+    //    并没有"新收进地盘"，放大播一遍纯属噪音。
+    assert.match(body, /if \(result\.ok\) this\.victoryPending = true;/, '胜利标记必须挂在 `result.ok` 上');
+    assert.match(source, /private victoryPending = false;/, '标记要有初值');
+    assert.match(source, /private victoryClaimCells: number\[\] = \[\];/);
+});
+
+test('★★★模型：胜利格只兑现一次，且每次结算都先清空', () => {
+    const source = readFileSync('assets/script/app/territory/application/TerritoryModel.ts', 'utf8');
+    const start = source.indexOf('private settleProgress(');
+    const body = source.slice(start, source.indexOf('\n    /**', start));
+    // ① 先清：上一次的胜利格不能漏到这一批（否则后面无关的生成也走重档）。
+    const clearAt = body.indexOf('this.victoryClaimCells = [];');
+    const claimAt = body.indexOf('if (this.victoryPending) {');
+    assert.ok(clearAt > 0, '每次结算开头必须清空上一批胜利格');
+    assert.ok(clearAt < claimAt, '必须先清空、再决定这一批要不要记');
+    // ② 只在真的收进格子时兑现：`claimed` 为空（只是"没到期"）不能把标记吃掉。
+    assert.ok(body.indexOf('if (claimed.length)') < claimAt, '兑现必须在 `claimed.length` 之内');
+    assert.match(body, /this\.victoryClaimCells = claimed\.slice\(\);/);
+    // ③ 兑现即消费：不清标记的话，下一批任意生成都会继续走重档。
+    assert.match(body, /this\.victoryPending = false;/, '兑现后必须清掉标记');
+});
+
+test('★★★模型：切章 / 销毁都复位胜利标记（不能漏到下一章）', () => {
+    const source = readFileSync('assets/script/app/territory/application/TerritoryModel.ts', 'utf8');
+    const reset = 'this.victoryClaimCells = [];';
+    const loadAt = source.indexOf('private async loadChapter(');
+    const bossResetAt = source.indexOf('this.bossBattleStart = null;', loadAt);
+    const loadBody = source.slice(loadAt, bossResetAt);
+    assert.ok(loadBody.includes(reset), '切章节必须清上一章的胜利格');
+    assert.ok(loadBody.includes('this.victoryPending = false;'), '切章节必须清标记');
+    assert.ok(source.indexOf(reset, loadAt) < bossResetAt,
+        '复位要跟着其它 pending 集合一起做（在导航/加载之前）');
+    const disposeAt = source.indexOf('dispose(): void {');
+    const disposeBody = source.slice(disposeAt, source.indexOf('this.outputs.clear();', disposeAt));
+    assert.ok(disposeBody.includes(reset), '销毁也要清（同一实例被重新 start 时不能带旧标记）');
+});
+
+test('★模型：视图状态里透出 victoryClaimCells（视图拿不到就没有档位可切）', () => {
+    const source = readFileSync('assets/script/app/territory/application/TerritoryModel.ts', 'utf8');
+    assert.match(source, /readonly victoryClaimCells: readonly number\[\];/, '渲染输入的类型要有这个字段');
+    assert.match(source, /victoryClaimCells: this\.victoryClaimCells,/, '状态里必须真的带上它');
 });

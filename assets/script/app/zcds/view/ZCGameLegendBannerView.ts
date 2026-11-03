@@ -71,6 +71,61 @@ export const LEGEND_ROLE_DROP_Y = 80;
 export const LEGEND_ROLE_GENERATE_SECONDS = 0.7;
 
 /**
+ * 立绘的**目标画布高**（px）：不论原图是 256 见方的卡面还是 84 见方的老头像，
+ * 放大后都占这么高（2026-11-02 需求「萨尔等旧角色，模型也要匹配 banner 的高度，
+ * 放大对应的模型让它与 UI 等高」）。
+ *
+ * ## 为什么是 280 而不是底板的 417
+ *
+ * 底板是一张**右边高、左边斜切**的丝带（`legend_banner_02` 实测：`x = 0` 处可见 252 高、
+ * `x = 719` 处 363 高）。立绘落在 `x = -192`（`png x = 168`），那一列的可见区是
+ * `y ∈ [-189, 101]`、**291 高** —— 拿 417 定高，狼头会顶穿丝带、脚也挂到框外。
+ * 280 = 291 × 96%，留 11px 余量给斜切与放大取整。
+ *
+ * ## 为什么按**画布**高归一，而不是按可见高
+ *
+ * 运行时的 `SpriteFrame` 只给 `rect` / `originalSize`（这些图的 `.meta` 是
+ * `trimType: none` ⇒ 两者都等于整块画布），**拿不到 alpha 包围盒**。而卡面图的画布
+ * 只有两种规格（`cardHead` 里 17 张 256×256 + 27 张 84×84），按画布归一的误差就是
+ * 「同一画布内可见高的差异」：256 那批 221~249（12%）、84 那批 81~84（4%）——
+ * 属于美术本身的高矮（巨力坚果就该比吉他手矮），不是需要抹平的偏差。
+ */
+export const LEGEND_ROLE_TARGET_HEIGHT = 280;
+
+/**
+ * 立绘**底边**该贴的 y（相对横幅根节点）。
+ *
+ * 底板可见区的下沿在四张图里是平的（`-186 ~ -191`，取 `-188`），
+ * 所以立绘一律「脚踩下沿往上长」，[`legendRoleRestY`] 由它 + 目标高算出静止位。
+ */
+export const LEGEND_ROLE_BOTTOM_Y = -188;
+
+/**
+ * 立绘缩放系数 = 目标高 / 画布高。
+ *
+ * 非法值（解析器还没注入、`spriteFrame` 为空、画布高为 0）一律返回 `1` ——
+ * 此时立绘画成原尺寸（256 高）而不是 `NaN`／`Infinity`：
+ * `setScale(NaN)` 会让节点整个消失且**不报错**。
+ */
+export function legendRoleScaleOf(frameHeight: number | null | undefined): number {
+    if (typeof frameHeight !== 'number' || !Number.isFinite(frameHeight) || frameHeight <= 0) return 1;
+    return LEGEND_ROLE_TARGET_HEIGHT / frameHeight;
+}
+
+/**
+ * 立绘的**静止位 y**：底边贴在 [`LEGEND_ROLE_BOTTOM_Y`]、往上长目标那么高。
+ *
+ * 中心锚点 ⇒ `底边 + 高 / 2`，而「高」恒为 `画布高 × 缩放系数 = 目标高`，
+ * 所以它是个常量，**不随卡面图规格变**（84 与 256 放大后底边对齐、顶边也齐）。
+ *
+ * ⚠️ 它取代了 prefab 里 `Role.y = -21.798`：那是「256 原生不缩放」时代的位置，
+ * 放大到 280 之后沿用会让立绘整体上浮 26px、狼头戳出丝带上沿。
+ */
+export function legendRoleRestY(): number {
+    return LEGEND_ROLE_BOTTOM_Y + LEGEND_ROLE_TARGET_HEIGHT / 2;
+}
+
+/**
  * role 生成段的进度（`0` = 还没开始 ⇒ 透明 + 高悬 80px；`1` = 落位 + 全不透明）。
  *
  * `elapsedSeconds` 从**横幅弹出那一刻**起算、`slideSeconds` 是扇入段时长：
@@ -179,11 +234,12 @@ export class ZCGameLegendBannerView extends Component {
      */
     private plateHeight: number | null = null;
     /**
-     * Role 节点的**静止位 y**（prefab 里写的那个值），生成动画是相对它做偏移。
+     * Role 节点**当前**的静止位 y，生成动画是相对它做偏移。
      *
-     * 懒捕一次：必须在**第一次写 y 之前**读，所以放在 `render` 里取、且只取一次。
-     * 节点来自对象池（`release` 只把节点置灰、位置保留），但捕到的是 prefab 原值 ——
-     * 组件实例与节点同生命周期，一局里只捕一次，之后复用不会读到"上一段动画的中间值"。
+     * 2026-11-02 起不再是「懒捕 prefab 原值」：立绘要放大到 [`LEGEND_ROLE_TARGET_HEIGHT`]，
+     * 静止位必须跟着缩放走（脚踩底板下沿），由 [`legendRoleRestY`] 算出。
+     * 仍然缓存一份，是为了让 `renderRoleGenerate` 每帧不必重算、也防止哪天有人
+     * 把 prefab 的 y 又调回去。
      */
     private roleRestY: number | null = null;
     /** 已写进 Role Sprite 的透明度；变了才写（透明度每帧都在变，但不必每帧都赋值）。 */
@@ -263,8 +319,8 @@ export class ZCGameLegendBannerView extends Component {
         const sprite = this.roleSprite;
         if (!sprite) return;
         const ease = legendRoleEase(legendRoleProgress(elapsedSeconds, slideSeconds));
-        // ⚠️ 先取静止位、再写 y：取的时候节点上还是 prefab 的原值（第一次调到这一步时）。
-        if (this.roleRestY === null) this.roleRestY = sprite.node.position.y;
+        // 静止位由「底板下沿 + 目标高」算出（见 `legendRoleRestY`），**不读 prefab 的 y**。
+        if (this.roleRestY === null) this.roleRestY = legendRoleRestY();
         const y = this.roleRestY + LEGEND_ROLE_DROP_Y * (1 - ease);
         if (Math.abs(sprite.node.position.y - y) > 0.01) {
             sprite.node.setPosition(sprite.node.position.x, y, sprite.node.position.z);
@@ -274,6 +330,38 @@ export class ZCGameLegendBannerView extends Component {
         this.appliedRoleOpacity = opacity;
         this.roleColorScratch.a = opacity;
         sprite.color = this.roleColorScratch;
+    }
+
+    /**
+     * 让立绘**统一占满横幅的立绘区**：`scale = 目标高 / 画布高`。
+     *
+     * ## 为什么必须缩放（2026-11-02 需求）
+     *
+     * 横幅左格取的是「卡面静态图」（`resolveLegendArt` ①），而这张图有两种画布规格：
+     * 新的本地卡面 256×256（17 张）、旧角色走的老头像 **84×84**（27 张）。
+     * `sizeMode = RAW` 会把节点直接定成画布尺寸 ⇒ 旧角色只有 84 高，
+     * 在 417 高的横幅里占 20%，截图里「萨尔小得像个图标」就是这么来的。
+     *
+     * ## ⚠️ 等比，不按单一轴
+     *
+     * 这里是 `setScale(s, s)`：方形原图等比放大不会拉扁 ——
+     * 早前废弃的那条口径（「按 `frame.height` 缩放到高度 333」）把**固定框 × 方形图**
+     * 拼在一起，才会纵向压扁 30%。别再退回「写死 UITransform 尺寸」的写法。
+     *
+     * ## 节点来自对象池 ⇒ 每次都**绝对赋值**
+     *
+     * `ZCNodePool.release` 只置 `active = false`，scale 残留；下一张卡若是另一档画布，
+     * 累乘会得到 `1.09^N`。所以解析器拿不到图（`frame = null`）时也要显式写回 1。
+     */
+    private applyRoleScale(): void {
+        const sprite = this.roleSprite;
+        if (!sprite) return;
+        const frame = sprite.spriteFrame;
+        // 有 `originalSize` 用它（`_isTrimmedMode = false` 时与 rect 同值，但它是原图尺寸、
+        // 不受 trim 影响）；桩 / 老格式兜底再看 `rect`。
+        const height = frame?.originalSize?.height || frame?.rect?.height || 0;
+        const scale = legendRoleScaleOf(height);
+        sprite.node.setScale(scale, scale, 1);
     }
 
     /**
@@ -335,6 +423,8 @@ export class ZCGameLegendBannerView extends Component {
         this.setSprite(this.bannerSprite, this.bannerFor(reveal.owner));
         this.setSprite(this.ringSprite, this.ringFor(reveal.owner));
         this.setSprite(this.roleSprite, this.artResolver?.(reveal) ?? null);
+        // 立绘尺寸只跟「换成了哪张图」有关 ⇒ 跟着内容键一起刷新，不进每帧路径。
+        this.applyRoleScale();
         this.setSprite(this.headSprite, this.portraitResolver?.(reveal.owner) ?? null);
         if (this.nameLabel.string !== reveal.cardName) this.nameLabel.string = reveal.cardName;
     }

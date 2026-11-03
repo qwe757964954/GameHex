@@ -44,7 +44,7 @@ test('territory stations open details and start a table-driven local PVE battle'
     const loader = readFileSync(new URL('../assets/script/app/territory/application/TerritoryChapterLoader.ts', import.meta.url), 'utf8');
     // 2026-09-30 拆分后：弹窗归 `LevelInfoPanel`，美术路径归 `TerritoryPageAssets`。
     const assets = readFileSync(new URL('../assets/script/app/territory/application/TerritoryPageAssets.ts', import.meta.url), 'utf8');
-    const game = readFileSync(new URL('../assets/script/app/procedure/ProcedureGame.ts', import.meta.url), 'utf8');
+    const game = readFileSync(new URL('../assets/script/app/zcds/application/ZCBattleEntryBuilder.ts', import.meta.url), 'utf8');
     // 章节战役由 ChapterLoader 加载（Page 不再直接调）。
     assert.match(loader, /loadTerritoryCampaign\(chapterId\)/);
     assert.match(page, /FALLBACK_CHAPTERS = \[1\]/);
@@ -83,10 +83,8 @@ test('territory stations open details and start a table-driven local PVE battle'
     assert.match(assets, /spriteFramePath\(BUILDING_ART_ROOT, 'img_land_02'\)/);
     assert.match(game, /requestedEnemyCards/);
     assert.match(game, /baseConfig\.enemyDeck\.filter/);
-    assert.match(game, /maxHpPct: \(pve\.hpRate - 1\) \* 100/);
-    assert.match(game, /attackPct: \(pve\.attackRate - 1\) \* 100/);
-    assert.match(game, /sourceModifiers\?\.enemy/);
-    assert.match(game, /captureZCMatchConfig\(\s*Object\.assign/);
+    assert.match(game, /buildZCClientCombatConfig/);
+    assert.doesNotMatch(game, /pve\.hpRate|pve\.attackRate/, '正式战斗倍率由服务端构筑，不叠加本地关卡倍率');
     assert.match(game, /pve\?\.mode === 'defence'/);
     assert.match(game, /pveDefence\?\.waves\.length/);
     assert.match(presenter, /playerCount: TERRITORY_DEFAULT_PLAYER_COUNT/);
@@ -96,11 +94,11 @@ test('territory stations open details and start a table-driven local PVE battle'
 });
 
 test('PVE settlement returns to the territory main tab', () => {
-    const game = readFileSync(new URL('../assets/script/app/zcds/ZCGame.ts', import.meta.url), 'utf8');
+    const builder = readFileSync(new URL('../assets/script/app/zcds/application/ZCBattleEntryBuilder.ts', import.meta.url), 'utf8');
+    const composition = readFileSync(new URL('../assets/script/app/bootstrap/battle/BattleComposition.ts', import.meta.url), 'utf8');
     const main = readFileSync(new URL('../assets/script/app/procedure/ProcedureMain.ts', import.meta.url), 'utf8');
-    // 2026-10-29 起入口参数多带「刚打的格子」（回来要居中看通关翻转），
-    // 所以不再是一行写完的 `{ initialTab: 'territory' }` —— 认分支而不是认整行字面量。
-    assert.match(game, /ProcedureManager\.navigate\(GameRoute\.Main, \{\s*initialTab: 'territory',/);
-    assert.match(game, /focusCellId: this\.pveContext\.territoryCellId/);
+    assert.match(builder, /initialTab: 'territory'/);
+    assert.match(builder, /focusCellId: pve\.territoryCellId/);
+    assert.match(composition, /ProcedureManager\.navigate\(GameRoute\.Main, buildZCBattleReturnParams\(entry\)\)/);
     assert.match(main, /params\.initialTab === 'territory' \? MainTab\.Territory/);
 });

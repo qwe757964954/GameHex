@@ -1,4 +1,6 @@
-import { componentControllerModule } from './helpers/controller-context';
+import { createControllerContext } from './helpers/controller-context';
+import { loadBattlePreparation } from './helpers/battle-composition';
+import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
@@ -17,36 +19,39 @@ test('主界面实际绘制后统一预下载，世界和详情不额外解析�
     assert.ok(!world.includes('warmupBattle'));
 });
 
-test('领地与大地图都移交统一预加载，所有战斗入口使用会话复用资产', () => {
-    const territory = readFileSync('assets/script/app/main/MainTerritoryMap.ts', 'utf8');
+test('领地组合层和大地图移交同一会话，View 不创建或持有业务控制器', () => {
+    const territory = readFileSync('assets/script/app/territory/application/TerritoryEntry.ts', 'utf8');
+    const view = readFileSync('assets/script/app/main/MainTerritoryMap.ts', 'utf8');
     const bigmap = readFileSync('assets/script/app/bigmap/application/BigMapEntry.ts', 'utf8');
-    const game = readFileSync('assets/script/app/procedure/ProcedureGame.ts', 'utf8');
-    assert.match(territory, /createZCBattlePreload/);
-    assert.match(bigmap, /createZCBattlePreload/);
-    assert.match(bigmap, /slgBattleType: battleType,[\s\S]*?preload/);
-    assert.match(game, /controller.resources/);
-    for (const source of [territory, bigmap]) assert.doesNotMatch(source, /createZCBattlePreload\([^)]*reusableAssets/);
-    assert.ok(!territory.includes('warmupBattle'));
-    assert.ok(!bigmap.includes('warmupBattle'));
+    assert.match(territory, /createZCBattleSession/);
+    assert.match(bigmap, /createZCBattleSession/);
+    assert.match(bigmap, /slgBattleType: battleType,[\s\S]*?session/);
+    assert.doesNotMatch(view, /createZCBattleSession|ZCBattleController|ZCGamePreload|battleSession/);
+    assert.match(view, /kind: 'enterBattle'/);
 });
 
-test('统一预加载原样传递战斗 Promise、波次与地图人数，不提前构筑', async () => {
-    const calls: unknown[] = [];
-    const exports: Record<string, any> = {};
-    runInNewContext(ts.transpileModule(readFileSync('assets/script/app/zcds/application/ZCBattlePreparation.ts', 'utf8'), {
-        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
-    }).outputText, { exports, Date, console: { info() {} }, require(name: string) {
-        if (name.endsWith('/ComponentController')) return componentControllerModule();
-        if (name === '../ZCGame') return { MAP_DIRECTORY: 'config/maps' };
-        if (name === './ZCGameLoader') return { ZCGameLoader: class { constructor(...args: unknown[]) { calls.push(args); } } };
-        if (name === './ZCGamePreload') return { ZCGamePreload: class { ready = Promise.resolve({}); constructor(...args: unknown[]) { calls.push(args); } } };
-        return {};
-    } });
-    const assets = {}, configs = {}, battle = Promise.resolve(null);
-    const preload = exports.createZCBattlePreload(battle, { playerCount: 2, waveCardIds: [91001] });
-    await preload.ready;
-    const loaderArgs = calls[0] as unknown[], preloadArgs = calls[1] as unknown[];
-    assert.ok((loaderArgs[0] as { assets: unknown }).assets); assert.equal(loaderArgs[1], 'config/maps');
-    assert.equal(loaderArgs[3], 2); assert.equal(preloadArgs[1], battle);
-    assert.deepEqual(Array.from(preloadArgs[2] as number[]), [91001]);
+test('统一会话等待回包，使用注入资源和本关波次、人数，不创建运行节点', async () => {
+    const context = createControllerContext(), owner = new ResourceScope('entry');
+    const calls: unknown[][] = [];
+    let reply: (value: null) => void = () => {};
+    const battle = new Promise<null>(resolve => { reply = resolve; });
+    const preparation = loadBattlePreparation({
+        '../ZCGame': { MAP_DIRECTORY: 'config/maps' },
+        './ZCBattleEntryBuilder': { buildZCBattleEntry() { throw new Error('提前构筑'); }, resolveZCBattlePlayerCount: (params: any) => params.pve.playerCount },
+        '../../territory/application/TerritorySaveStoreAdapter': { createTerritorySaveStore() {} },
+        './ZCGameLoader': { ZCGameLoader: class {
+            constructor(...args: unknown[]) { calls.push(args); }
+            async prepare(...args: unknown[]) { calls.push(args); return {}; }
+        } },
+    });
+    const session = preparation.createZCBattleSession(context, { owner, battle, params: { pve: { playerCount: 2, waves: [{ pvpCardId: 91001 }] } } });
+    assert.equal(calls.length, 0);
+    reply(null); await session.ready;
+    assert.equal(calls[0][0], session.resources);
+    assert.equal(calls[0][1], 'config/maps');
+    assert.equal(calls[0][3], 2);
+    assert.equal(calls[1][0], session.scope);
+    assert.deepEqual(Array.from(calls[1][2] as number[]), [91001]);
+    assert.equal(session.current, null);
+    owner.dispose();
 });

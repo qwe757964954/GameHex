@@ -4,11 +4,13 @@ import type {
 } from './CardRepository';
 import type { ZCArmySkill } from './CardSkillList';
 import type { ZCUpgradeStatus } from './CardUpgradeCost';
-import { LineupDraftStore } from './LineupDraftStore';
+import type { LineupDraftSnapshot } from './LineupDraftStore';
 
 
-export interface LineupBoardPresentation extends LineupBoardData {
-    readonly draft: LineupDraftStore;
+export interface LineupBoardPresentation extends LineupBoardData, LineupDraftSnapshot {
+    readonly saving: boolean;
+    readonly canSave: boolean;
+    readonly saveText: string;
 }
 
 

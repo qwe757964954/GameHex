@@ -362,6 +362,8 @@ npx tsx tools/preview_bigmap_info_layout_curves.ts && python tools/preview_bigma
 
 世界地图使用植物建筑、顶部短编号牌及主城头像气泡。`BigMapArtLoader` 优先用已有 `hq-base`、`barracks-default` 与 `territory_boss_v1`；概念建筑图继续用于基地生产建筑。脚底对齐台面，编号牌随可见建筑高度上移；编号牌与头像的显示、点击、裁剪共用标记几何。主城头像通过入口注入加载端口，复用 `HeadArt` 查表及 `AssetService` / `ResourceScope` 加载；缺失时保留主城编号牌。
 
+玩家基地与城池锚点同格时复用城池标记，显示一套主城建筑、名条与头像，保留原城池查询和点击语义；位置同步变更后原位置恢复城池外观。基地格没有城池时才创建独立基地标记。
+
 通过 Cocos MCP 接入两种现有预制体：
 
 - `BigMapLevelInfoPanel`：城池／野怪详情，显示真实名称、状态、行动力与挑战说明，提供定位、攻打、关闭。
@@ -628,6 +630,16 @@ npx tsx tools/preview_bigmap_info_layout_curves.ts && python tools/preview_bigma
 验证：`tests/bigmap-latest-camp-config.test.ts` 检查 81 座城完整加载、参数校验、图片实际存在、
 保留原锚点、无占位重叠、确定性及范围连通；配合城池开战、地图、表现与 Presenter 回归。
 
+#### 大世界采用 bigMap 布局（2026-11-03）
+
+世界 1 正式加载 `assets/resources/config/bigmap-maps/bigMap.json`，地图尺寸采用布局的 100×100；
+资源缺失或布局非法时仍按原配置回退种子生成，其余 worldId 沿用 `world_XX` 文件约定。
+`bigMap` 的编辑器城池 ID 为 2001～2081，标签已填写正式 campId（101～801）：
+加载时按标签映射城池身份、邻接和出生区归属，保留每座城的锚点、占格与势力范围，不重新生成位置。
+正式模型使用与布局一致的世界尺寸；布局源文件与生成配表保持原样。
+
+验证：`tests/bigmap-active-layout.test.ts`，以及布局、城池配置与 Entry 回归。
+
 ### 5.13 基地连续场景（2026-10-29）
 
 - 基地底图使用 `image/bigmap/base_background`，来源为美术目录「主基地地图/主基地BG.jpg」（2048×2048），经 Cocos MCP 导入 bigmap 分包，关闭整图 packable。基地不再加载 `concept/base_ground`，也不再创建每格 Foundation；世界页原有地形不受影响。
@@ -675,11 +687,23 @@ npx tsx --test tests/bigmap-info-layout.test.ts     # 15 条：详情弹窗排�
 
 ### 5.14 页面 UI 改为 Prefab 维护（2026-10-29）
 
-- 固定界面：`assets/bundles/bigmap/ui/bigmap/BigMapPage.prefab`。资源栏、模式切换、建造目录、详情卡、提示与开战遮罩均在此编辑；根组件 `BigMapPageLayout` 用 Inspector 引用接线。
+- 固定界面：`assets/bundles/bigmap/ui/bigmap/BigMapPage.prefab`。资源栏、模式切换、建造目录与队列条在此编辑。根组件 `BigMapPageLayout` 私有持有 Inspector 控件引用，负责渲染、重复行与点击意图；BigMapPage 通过 initialize、setArt、render 等接口交付数据，不直接操作内部控件。
 - `Templates/BuildRowTemplate` 是建造目录行，`Templates/PlotTemplate` 是基地地块模板。Templates 容器默认关闭，运行时只实例化两种重复项，不再创建 Node 或添加 UI 组件。修改模板会作用于所有实例。
 - 基地层级：`BaseView/BaseViewport/BaseContent` 下依次为 `BaseGround`、`BasePlots`；图层、Mask、UITransform、Sprite 尺寸模式由 Prefab 保存。`BigMapBaseView` 只负责地图状态、相机与拾取。
-- `BigMapPanel` 保存底板颜色/圆角及预挂 Graphics 引用，编辑器可预览；`BigMapButton` 保存 Label/皮肤/兜底底板引用。状态底色、选择轮廓等仍按数据绘制。页面布局适配集中在 `BigMapPageLayout.resize`，详情卡内部空间由既有纯布局模型分配。
+- 固定尺寸和边距在 prefab 的 Widget 中配置；Layout 仅注入宿主的导航高度。按钮使用原生 Button，代码绑定 CLICK；资源文字与建造行使用 Label、Sprite。野怪/建筑详情使用独立 BigMapInfoPopup（PopupBase），Dim 底板使用半透明 white Sprite，提示使用公共 Toast；等待入战保留输入锁，不挂独立遮罩。
 - 世界地图仍维护独立 `BigMapWorldView.prefab` 与 `BigMapWorldTemplates.prefab`。页面外壳和世界 Prefab 经 AssetService 并行加载，共用页面 ResourceScope；关闭后迟到的加载不会再实例化节点。
 - 删除 Theme/Skin 中旧建节点工厂及 Page 中已退役目标弹窗装配；bigmap/view 不再含运行时 `new Node`、`addComponent` 或 `destroyAllChildren`。
 
 验证：页面 Prefab 经 Cocos MCP 刷新、结构校验与真实实例引用检查；在引擎中执行 390×900 布局后，开战提示 y=290，控制台无错误。测试覆盖模板接线、禁用按钮、两个开建造菜单入口、400 格裁剪、拖拽/缩放/收取、并行加载取消、开战遮罩。完整游戏内视觉验收仍需登录后检查。
+
+### 城池伤害排行榜（2026-11-02）
+
+联机入口注入 `RemoteBigMapRankProvider`，点城池时并行查询详情与排行榜。复用 `RequestGetRank`：`rankType = SLG_CAMP_ROLE_HARM_RANK(53)`、`showNum = 50`、`type = campId`；此榜不传联盟上下文 `unionId`。回包 `rankInfo.rankList` 提供昵称、头像与积分，`myRank` 提供个人名次和积分（包含未进入前50名的玩家）。角色ID保留十进制字符串，头像经既有 HeadArt 与弹窗作用域资源入口加载。
+
+未上榜显示为空名次，联机初始不构造NPC榜。失败保留当前城池已有榜单；切城取消旧请求，同城在途请求合并，超时与关页解除真实caller，迟到回包不再写回。离线预览继续使用原NPC样本。榜单条数只代表返回名单数量，不能据此推断服务器总参战人数。
+
+### 页面公共展示收敛（2026-11-02）
+
+基地建筑与野怪详情迁入独立 `BigMapInfoPopup`（继承 `PopupBase`，默认不缓存），城池继续使用 `BigMapCityPopup`。尺寸、坐标、字体与排版保存在预制体：全屏根 Widget、居中 Panel、纵向 Layout、正文 RESIZE_HEIGHT、按钮横向 Layout；关闭按钮贴卡片右上。脚本只更新展示内容与按钮可用状态，经原有意图派发操作。空白关闭由 PopupBase 接管；主动关闭不清除刚切换的新目标，在途打开可取消且应用最新内容。
+
+反馈统一调用公共 `Toast.show`。页面预制体删除 InfoPanel、InfoDim、Toast、EnteringBattleMask 及相关绑定；入战期间保留既有输入锁并关闭详情弹窗，预加载失败恢复选中目标详情，不再使用独立遮罩。回归：`bigmap-info-layout`、`bigmap-page-bindings`、`bigmap-battle-enter-mask`、`bigmap-move`。

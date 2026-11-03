@@ -84,7 +84,7 @@ test('页面模板、世界地图与美术并行准备，完整美术就绪前�
     assert.equal(builds, 1);
 });
 
-for (const fails of [false, true]) test(`地图预制体加载期间关闭页面，迟到${fails ? '失败' : '资源'}不实例化节点或搭建页面`, async () => {
+for (const cancelledBy of ['page', 'scope'] as const) for (const fails of [false, true]) test(`${cancelledBy === 'page' ? '节点销毁' : '资源域先释放'}时，迟到${fails ? '失败' : '资源'}不实例化节点或搭建页面`, async () => {
     let finishPrefab: (value: object) => void = () => undefined;
     let failPrefab: (error: Error) => void = () => undefined;
     const prefabReady = new Promise<object>((resolve, reject) => { finishPrefab = resolve; failPrefab = reject; });
@@ -118,9 +118,11 @@ for (const fails of [false, true]) test(`地图预制体加载期间关闭页面
     const opening = page.initialize({}, { ...createControllerResources(), assets: { load: (path: string) => { paths.push(path); return prefabReady; } } });
     // 2026-10-27：`BigMapPlayerLevelPanel`（异步据点）和 `BigMapLevelInfoPanel`（关卡界面）
     // 都搬去领地页了，世界页这两个弹窗全部下线 ⇒ 页面外壳与世界地图两个预制体一起等待，取消须同时生效。
+    // 2026-11-02：城池弹窗改继承 `PopupBase`、由 `PopupManager` 按需打开，**不再并进页面初始化链**
+    // （它只在选中城池时才加载），所以这里仍然只有两个。
     assert.deepEqual(paths, ['ui/bigmap/BigMapPage', 'ui/bigmap/BigMapWorldView']);
-    page.isValid = false;
-    page.artScope.dispose();
+    if (cancelledBy === 'page') page.isValid = false;
+    else page.artScope.dispose();
     if (fails) failPrefab(new Error('load failed after close'));
     else finishPrefab({});
     await opening;
@@ -142,7 +144,14 @@ function createEntryHarness() {
         setContentSize(width: number, height: number) { this.width = width; this.height = height; }
     }
     class Widget {}
-    class Page { initialize() { return artReady; } }
+    class UIOpacity { opacity = 255; }
+    class Page {
+        node: FakeNode;
+        initialize() {
+            assert.equal(this.node.active, true, '准备阶段必须激活节点，让 Graphics 在绘制前初始化材质');
+            return artReady;
+        }
+    }
     class FakeNode {
         name: string;
         active = true;
@@ -153,6 +162,7 @@ function createEntryHarness() {
         children: FakeNode[] = [];
         addComponent<T>(Component: new () => T): T {
             const component = new Component();
+            if (component instanceof Page) component.node = this;
             this.components.set(Component, component);
             return component;
         }
@@ -187,7 +197,7 @@ function createEntryHarness() {
         require: (name: string) => {
             if (name.endsWith('/EventMgr')) return { EventMgr };
         if (name.endsWith('/BigMapEvents')) return mvcEvents;
-        if (name === 'cc') return { Node: FakeNode, UITransform, Widget,
+        if (name === 'cc') return { Node: FakeNode, UITransform, Widget, UIOpacity,
                 Layers: { Enum: { UI_2D: 1 } }, view: { getVisibleSize: () => ({ width: 720, height: 1466 }) },
                 director: { getScene: () => ({ getChildByName: () => canvas }) } };
             if (name === './BigMapConfigLoader') return { loadBigMapConfig: async () => ({}) };
@@ -203,6 +213,7 @@ function createEntryHarness() {
             if (name === './BigMapCampRepository') return { BigMapCampRepository: class {} };
             if (name === './GameNetBigMapCampGateway') return { GameNetBigMapCampGateway: class {} };
             if (name === './NpcBigMapRankProvider') return { NpcBigMapRankProvider: class {} };
+            if (name === './RemoteBigMapRankProvider') return { RemoteBigMapRankProvider: class {} };
             if (name === './BigMapStorage') return { createBigMapStorage: () => ({}) };
             if (name.endsWith('/MainRoleRow')) return { readRoleRow: () => null };
             // 世界页要按这个名字把根节点插到常驻 Popup 之前。
@@ -225,7 +236,7 @@ function createEntryHarness() {
         close(): void;
     };
     const entry = new Entry();
-    return { entry, navigation, canvas, popupRoot, finishArt, mounts: () => navigationMounts };
+    return { entry, navigation, canvas, popupRoot, finishArt, UIOpacity, mounts: () => navigationMounts };
 }
 
 test('美术准备期间隐藏线框页且不借走底栏，准备完成后一次显示成品页', async () => {
@@ -233,7 +244,8 @@ test('美术准备期间隐藏线框页且不借走底栏，准备完成后一�
     const opening = harness.entry.open({}, { navigation: harness.navigation });
     await new Promise((resolve) => setImmediate(resolve));
     try {
-        assert.equal(harness.entry.root?.active, false);
+        assert.equal(harness.entry.root?.active, true);
+        assert.equal(harness.entry.root?.getComponent(harness.UIOpacity).opacity, 0);
         assert.equal(harness.mounts(), 0);
         assert.equal(harness.navigation.parent, harness.canvas);
     } finally {
@@ -241,6 +253,7 @@ test('美术准备期间隐藏线框页且不借走底栏，准备完成后一�
         await opening;
     }
     assert.equal(harness.entry.root?.active, true);
+    assert.equal(harness.entry.root?.getComponent(harness.UIOpacity).opacity, 255);
     assert.equal(harness.mounts(), 1);
 });
 

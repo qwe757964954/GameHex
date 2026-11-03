@@ -16,6 +16,37 @@ export const BIGMAP_BUILDING_ART: Readonly<Record<number, string>> = {
 export const BIGMAP_UI_KEYS = ['header', 'detail', 'button', 'tab_idle', 'tab_active', 'badge', 'plot', 'stamina', 'home'] as const;
 export type IBigMapUiKey = typeof BIGMAP_UI_KEYS[number];
 
+/**
+ * 据点**名条**（地图上压在建筑下方的「徽章 + 名字」条）。
+ *
+ * 口径（2026-11-02 山猫：「将大地图升级到蓝湖」，设计稿「大地图3」）：
+ * 名条不再是手画圆角牌，改成**四张按归属分的整条贴图** —— 左端是徽章底
+ * （野怪/关卡菱形、玩家占领圆形），右侧留名字位：
+ * · `monster` 蓝（设计稿 `title_01`）= 野怪据点；
+ * · `city`    红（`title_02`）= 关卡 / 无主城池；
+ * · `self`    绿（`title_03`）= 己方占领；
+ * · `other`   深灰（`title_04`）= 其他玩家占领。
+ *
+ * 四张**尺寸不同**（两个 202×56、两个 193×54），所以尺寸从贴图自身取，
+ * 不要在代码里写死一个宽度 —— 换了图立刻错位。
+ *
+ * ⚠️ 不复用 `BIGMAP_UI_KEYS`：那一组是「九宫拉伸的通用面板件」，加载时会被统一
+ * 覆写 `insetLeft/Right/Top/Bottom = 28`；名条是整条原尺寸贴图，覆写九宫边
+ * 会把左右两端的圆角拉变形。
+ */
+export const BIGMAP_PLATE_KEYS = ['monster', 'city', 'self', 'other'] as const;
+export type IBigMapPlateKey = typeof BIGMAP_PLATE_KEYS[number];
+
+export const BIGMAP_PLATE_FILES: Readonly<Record<IBigMapPlateKey, string>> = {
+    monster: `${BIGMAP_CONCEPT_ROOT}/ui/plate_monster`,
+    city: `${BIGMAP_CONCEPT_ROOT}/ui/plate_city`,
+    self: `${BIGMAP_CONCEPT_ROOT}/ui/plate_self`,
+    other: `${BIGMAP_CONCEPT_ROOT}/ui/plate_other`,
+};
+
+/** 名条左端徽章外那颗小旗（设计稿 `icon_qizhi`）：标「谁占着这个据点」。 */
+export const BIGMAP_PLATE_FLAG_FILE = `${BIGMAP_CONCEPT_ROOT}/ui/plate_flag`;
+
 /** 通用 UI 图根目录 —— 与领地页（`TerritoryPageAssets`）同一个 `image/common`。 */
 export const BIGMAP_COMMON_ART_ROOT = 'image/common';
 

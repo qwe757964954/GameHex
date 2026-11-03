@@ -12,6 +12,7 @@ import {
 import type { BigMapCityState, BigMapTerrain } from '../model/BigMapTypes';
 import {
     BIGMAP_TILE_WIDTH, BIGMAP_TILE_HEIGHT, BIGMAP_COLUMN_STEP, BIGMAP_ROW_STEP,
+    BIGMAP_MARKER_CITY_WIDTH, BIGMAP_MARKER_BASE_WIDTH, BIGMAP_MARKER_MONSTER_WIDTH,
     bigMapGroundIndex, buildBigMapTerritoryEdges, buildBigMapWorldLayout, pickBigMapHex, pickBigMapMarker, visibleBigMapHexes,
     type IBigMapTerritoryEdge,
 } from './BigMapWorldLayout';
@@ -74,6 +75,19 @@ interface IWorldMarker {
     readonly node: Node;
     readonly icon: Sprite;
     readonly view: BigMapWorldMarker;
+}
+
+/** 一次标记绘制的全部显示数据（建筑图 + 名条 + 文案 + 兜底色）。 */
+interface IBigMapMarkerArt {
+    readonly frame: SpriteFrame | null;
+    readonly plate: SpriteFrame | null;
+    /** 名条左端徽章位：等级 / 关卡号；空串 = 只留名字。 */
+    readonly level: string;
+    readonly name: string;
+    /** 占据者名字；空串 = 不挂旗、不显示。 */
+    readonly occupant: string;
+    readonly tint: Color;
+    readonly width: number;
 }
 
 /** JSON 世界的表现：地块按视口复用，规则和落位只读 Presenter。 */
@@ -209,13 +223,6 @@ export class BigMapWorldView extends Component {
         this.background.node.setParent(art.tiledBackground ? this.content : this.viewport);
         this.background.node.setSiblingIndex(0);
         this.sand.node.active = !art.tiledBackground;
-        if (art.tiledBackground) {
-            this.background.node.setScale(1, 1, 1);
-        } else if (frame) {
-            const rect = frame.originalSize;
-            const scale = Math.max(this.viewportTransform.width / rect.width, this.viewportTransform.height / rect.height);
-            this.background.node.setScale(scale, scale, 1);
-        }
         this.syncBackground();
         this.paintTerrain();
         this.contentKey = '';
@@ -230,6 +237,10 @@ export class BigMapWorldView extends Component {
         if (!frame || !transform) return;
         const position = this.content.position;
         const rect = frame.originalSize;
+        // setArt 可能先于 build；始终按当前视口计算覆盖比例。
+        const scale = tiled ? 1 : Math.max(this.viewportTransform.width / rect.width,
+            this.viewportTransform.height / rect.height);
+        this.background.node.setScale(scale, scale, 1);
         const layout = tiled
             ? bigMapBackgroundLayout(this.viewportTransform.width, this.viewportTransform.height,
                 this.zoom, position.x, position.y, rect.width, rect.height)
@@ -421,12 +432,13 @@ export class BigMapWorldView extends Component {
         if (!data) return;
         for (const city of data.cities.values()) this.addMarker('city', city.cityId, city.hexId);
         for (const monster of data.world.monsters) this.addMarker('monster', monster.instanceId, monster.anchorHexId);
-        // NPC 基地按布局档落位；**玩家基地钉在服务器 `toCampId` 那座城的锚点上**（见 `playerBaseHexId`），
-        // 所以它永远只有一条标记，不再按 baseId 遍历 —— 否则会同时画出「布局格」和「城锚点」两个。
+        // NPC 基地按布局档落位；玩家基地只认 playerBaseHexId，不额外绘制布局档的旧位置。
         for (const base of data.world.bases) {
             if (!base.isPlayer) this.addMarker('base', base.baseId, base.hexId);
         }
-        this.addMarker('base', data.world.playerBase.baseId, data.playerBaseHexId);
+        // 基地落在城池锚点时复用城池标记，保留城池查询与点击，避免同格叠两套建筑和名条。
+        const playerCity = [...data.cities.values()].find((city) => city.hexId === data.playerBaseHexId);
+        if (!playerCity) this.addMarker('base', data.world.playerBase.baseId, data.playerBaseHexId);
         this.markers.sort((a, b) => this.centerOf(b.hexId).y - this.centerOf(a.hexId).y);
         this.markers.forEach((marker, index) => marker.node.setSiblingIndex(index));
     }
@@ -449,8 +461,9 @@ export class BigMapWorldView extends Component {
         this.markers.push({ kind, id, hexId, node, icon: marker.icon, view: marker });
     }
 
-    private applyMarker(marker: IWorldMarker, frame: SpriteFrame | null, title: string, tint: Color, width: number): void {
-        marker.view.render(frame, title, tint, width);
+    private applyMarker(marker: IWorldMarker, view: IBigMapMarkerArt): void {
+        marker.view.render(view.frame, view.plate, view.level, view.name, view.occupant, view.tint, view.width);
+        marker.view.setOccupantFlag(view.occupant ? this.art?.plateFlag ?? null : null);
     }
 
     setPlayerPortrait(frame: SpriteFrame | null): void {
@@ -503,8 +516,11 @@ export class BigMapWorldView extends Component {
         const monsters = data.world.monsters.map((site) => data.monsters.get(site.instanceId));
         // `playerCampId` 必须进 key：game 包到达后基地要换成所属城池的势力色，
         // 不带上它就会因为「其它内容没变」而早退，染色永远停在上一次。
-        const key = `${this.selectedHexId}|${data.playerCampId}|${cities.map((c) => `${c.cityId}:${c.state}:${c.campInfo?.opType}`).join(',')}|`
-            + monsters.map((m) => m ? `${m.instanceId}:${m.unlocked}:${m.respawnInSeconds > 0}` : '').join(',');
+        // `territoryOwner` 与 `occupyRoleName` 同理：名条贴图按归属四选一、占据者名字写在名条上方，
+        // 少任一字段都会出现「详情包已到、名字却停在空」的静默不刷新。
+        const key = `${this.selectedHexId}|${data.playerCampId}|`
+            + cities.map((c) => `${c.cityId}:${c.state}:${c.territoryOwner}:${c.campInfo?.opType}:${c.campInfo?.occupyRoleName}`).join(',')
+            + '|' + monsters.map((m) => m ? `${m.instanceId}:${m.unlocked}:${m.respawnInSeconds > 0}` : '').join(',');
         if (key === this.contentKey) return;
         this.contentKey = key;
         this.markerLayer.clear();
@@ -519,24 +535,46 @@ export class BigMapWorldView extends Component {
             if (marker.kind === 'city') {
                 const city = cities.find((entry) => entry.cityId === marker.id);
                 if (!city) continue;
+                const isPlayerBase = marker.hexId === data.playerBaseHexId;
                 // 地块叠势力色（相邻不同色），角标仍用状态色 —— 两套信息各走各的通道。
                 // 唯一例外：**己方占据**的城角标也跟着变绿（2026-10-28 口径「我占了这座城，
                 // 城池的颜色变成绿色」），否则会出现「一整片绿地里插着个红城头」。
-                const tint = city.territoryOwner === 'self'
+                const tint = isPlayerBase || city.territoryOwner === 'self'
                     ? BIGMAP_TERRITORY_SELF_COLOR
                     : city.isServerCamp
                         ? (city.campInfo ? (city.campInfo.opType === 1 ? BIGMAP_COLORS.campOccupied : BIGMAP_COLORS.campUnoccupied)
                             : BIGMAP_COLORS.locked)
                         : this.cityTint(city.state);
-                this.applyMarker(marker, this.art?.camps.get(city.cityId) ?? this.art?.city ?? null,
-                    String(city.cityId), tint, 110 + city.level * 3);
-                marker.icon.color = city.state === 'unavailable' ? new Color(130, 130, 130) : Color.WHITE;
+                // 名条按**归属**四选一（蓝湖「大地图3」）：己方绿 / 他人灰 / 其余走红色关卡条。
+                // ⚠️ 贴图自带颜色 ⇒ 不再承载「可攻打 / 锁定 / 未开放」的状态色，
+                //    那几态现在只由建筑图灰度（`icon.color`）表达 —— 两套信息别混。
+                const plateKey = isPlayerBase || city.territoryOwner === 'self' ? 'self'
+                    : city.territoryOwner === 'other' ? 'other' : 'city';
+                this.applyMarker(marker, {
+                    frame: isPlayerBase ? this.art?.home ?? null : this.art?.camps.get(city.cityId) ?? this.art?.city ?? null,
+                    plate: this.art?.plates.get(plateKey) ?? null,
+                    level: !isPlayerBase && city.level > 0 ? String(city.level) : '',
+                    name: isPlayerBase ? '主城' : city.name,
+                    // 只有**详情包**才带得到占领者名字（`detailed=false` 的简略包恒空串，
+                    // 见 `BigMapCampInfo`），拿不到就不挂旗，绝不显示「已占领 · 空名字」。
+                    occupant: city.campInfo?.opType === 1 ? city.campInfo.occupyRoleName : '',
+                    tint, width: isPlayerBase ? BIGMAP_MARKER_BASE_WIDTH : BIGMAP_MARKER_CITY_WIDTH,
+                });
+                marker.icon.color = !isPlayerBase && city.state === 'unavailable' ? new Color(130, 130, 130) : Color.WHITE;
+                if (isPlayerBase) marker.view.setPortrait(this.playerPortrait);
             } else if (marker.kind === 'monster') {
                 const monster = monsters.find((entry) => entry?.instanceId === marker.id);
                 if (!monster) continue;
-                this.applyMarker(marker, this.art?.monster ?? null,
-                    monster.respawnInSeconds > 0 ? '刷新中' : `Lv.${monster.level}`,
-                    monster.unlocked ? BIGMAP_COLORS.campOccupied : BIGMAP_COLORS.locked, 96);
+                this.applyMarker(marker, {
+                    frame: this.art?.monster ?? null,
+                    plate: this.art?.plates.get('monster') ?? null,
+                    level: String(monster.level),
+                    // 刷新中没得打：把「刷新中」放进名字位（徽章位留给等级，别让数字位忽大忽小）。
+                    name: monster.respawnInSeconds > 0 ? '刷新中' : monster.name,
+                    occupant: '',
+                    tint: monster.unlocked ? BIGMAP_COLORS.campOccupied : BIGMAP_COLORS.locked,
+                    width: BIGMAP_MARKER_MONSTER_WIDTH,
+                });
                 marker.icon.color = monster.respawnInSeconds > 0 ? new Color(100, 100, 100) : Color.WHITE;
             } else {
                 const base = data.world.bases.find((entry) => entry.baseId === marker.id) ?? data.world.playerBase;
@@ -554,7 +592,15 @@ export class BigMapWorldView extends Component {
                 this.paintTerritory([marker.hexId], tint,
                     this.baseTerritoryEdges.get(marker.hexId) ?? [],
                     base.isPlayer ? BIGMAP_TERRITORY_OWNED_FILL_ALPHA : BIGMAP_TERRITORY_FILL_ALPHA);
-                this.applyMarker(marker, this.art?.home ?? null, base.isPlayer ? '主城' : base.name, tint, base.isPlayer ? 150 : 110);
+                this.applyMarker(marker, {
+                    frame: this.art?.home ?? null,
+                    // 玩家主城 = 己方（绿），NPC 基地走关卡条（红）—— 名条颜色只表达归属。
+                    plate: this.art?.plates.get(base.isPlayer ? 'self' : 'city') ?? null,
+                    level: '',
+                    name: base.isPlayer ? '主城' : base.name,
+                    occupant: '',
+                    tint, width: BIGMAP_MARKER_BASE_WIDTH,
+                });
                 if (base.isPlayer) marker.view.setPortrait(this.playerPortrait);
             }
         }
@@ -578,8 +624,11 @@ export class BigMapWorldView extends Component {
         const halfWidth = this.viewportTransform.width / 2 + 130 * this.zoom;
         for (const marker of this.markers) {
             const hitArea = marker.view.hitArea;
-            const markerTop = (hitArea.badgeY ?? 0) + (hitArea.badgeHeight ?? 30) / 2;
-            const halfHeight = this.viewportTransform.height / 2 + Math.max(150, markerTop) * this.zoom;
+            // 名条已挪到建筑**下方**（`badgeY` 为负），裁剪余量要同时吃上下两头：
+            // 上 = 建筑顶（主城还要算头像），下 = 名条底。只算一头会让贴边的标记提前消失。
+            const iconTop = (hitArea.iconY ?? 0) + (hitArea.height ?? 0) / 2;
+            const plateBottom = (hitArea.badgeY ?? 0) - (hitArea.badgeHeight ?? 30) / 2;
+            const halfHeight = this.viewportTransform.height / 2 + Math.max(150, iconTop, -plateBottom) * this.zoom;
             marker.node.active = Math.abs(marker.node.position.x * this.zoom + position.x) < halfWidth
                 && Math.abs(marker.node.position.y * this.zoom + position.y) < halfHeight;
         }

@@ -82,7 +82,8 @@ function stubUnitView(load: (name: string) => any, bar: () => any): any {
     view.rootTransform = { setContentSize: () => {} };
     view.visualRoot = bar().node;
     view.sprite = { enabled: true, spriteFrame: null };
-    view.fallback = { node, clear: () => {}, circle: () => {}, fill: () => {} };
+    view.fallback = { node, enabled: false, color: null };
+    view.fallbackTransform = { setContentSize: (width: number, height: number) => { view.fallback.node.size = { width, height }; } };
     view.fallbackLabel = { node, enabled: true, string: '' };
     view.healthBar = bar();
     return view;

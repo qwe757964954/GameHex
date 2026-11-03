@@ -31,6 +31,7 @@ import type {
 import { configureTerritoryMap, TERRITORY_SITE_TYPE } from '../model/TerritoryMapConfig';
 import type { ITerritoryMapLayout } from '../model/TerritoryMapLayout';
 import { buildTerritoryMapLayout } from '../model/TerritoryMapLayout';
+import { territoryPrerequisiteText } from '../model/TerritoryPrerequisite';
 import type { TerritoryProgressData } from '../model/TerritoryProgress';
 import { TerritoryProgress } from '../model/TerritoryProgress';
 import { TERRITORY_REQUEST_STATUS } from '../model/TerritoryRequestStatus';
@@ -71,7 +72,13 @@ import {
  */
 interface ITerritoryUnlockThenBattleOutcome {
     readonly unlockedCellIds: readonly number[];
-    readonly battle: TerritoryStartBattleResult;
+    /**
+     * 服务端开战结果。
+     *
+     * `null` = **这一条没有发开战请求**：普通关（`mode = match`）要先过匹配界面，
+     * 开战请求归匹配页发（见 `ITerritoryNavigateBattlePayload.battleParams`）。
+     */
+    readonly battle: TerritoryStartBattleResult | null;
 }
 
 /** 一章的加载产物；loader 内部允许碰 cc / RefUtil，Presenter 只消费结构。 */
@@ -173,6 +180,24 @@ export interface ITerritoryBattleNavParams {
 export interface ITerritoryNavigateBattlePayload {
     readonly pve: ITerritoryBattleNavParams;
     readonly battle?: ZCBattleStart;
+    /**
+     * 这次是不是「**首次解锁 ⇒ 自动进战斗**」（需求 2026-11-02）。
+     *
+     * `true` ⇒ 页面先播一段镜头推进过场 + 弹「遭遇敌人，即将开始战斗」，过场结束再跳战斗页。
+     * 只有 `handleUnlockThenBattle` 会置真：两条入口里，`handleBattleStationStart`
+     * 是玩家在弹窗里自己按的「开始战斗」，那一下他早就在等跳转了，不能再拖 1.2 秒。
+     */
+    readonly approach?: boolean;
+    /**
+     * 普通关（`mode = 'match'`）交给**匹配页**发开战请求用的 `CmdStartBattleReqMsg.battleParams`
+     * （`[子类型, 章节id, 格子id]`，见 `battleParamsFor`）。
+     *
+     * 为什么要交出去：2026-11-02 用户口径「点击关卡后没有进到匹配界面，直接进了战场」
+     * + 「boss 关卡（塔防类模式）不进匹配界面」⇒ 普通关要先过匹配页，而匹配页本来就会自己发
+     * 开战请求。领地这边再发一次就是同一关两个 battleId，所以改由匹配页发、这里只传参数。
+     * 首领关（`defence`）走的是"先拿 battleId 再直进战场"，这一项为 `undefined`。
+     */
+    readonly battleParams?: readonly string[];
 }
 
 /** ShowTip 事件载荷。 */
@@ -200,6 +225,14 @@ export interface ITerritoryShowRewardsPayload {
 export interface ITerritorySetBusyPayload {
     readonly busy: boolean;
     readonly text?: string;
+    /**
+     * `true` = 这次写请求是**首次解锁直开**（解锁成功即开战，`approach` 那一路）。
+     *
+     * 为什么要提前告诉页面：其余开战请求在 `busy` 那一刻就把整页过场演起来了（云合拢、
+     * 静止等回包）；而这一路要在回包之后先播「关卡地块生成 → 镜头推进 + 提示条」，
+     * 云必须**最后**才盖上来。页面据此在 busy 阶段**不**起演过场。
+     */
+    readonly approach?: boolean;
 }
 
 /**
@@ -365,6 +398,21 @@ export interface ITerritoryViewState {
     readonly randomResourceOpenableCells: readonly number[];
     readonly pendingRandomResourceCells: readonly number[];
     readonly pendingFixedResourceCells: readonly number[];
+    /**
+     * 「胜利通过」收进来的格子（打完关卡 / 战斗胜利后新归我的那几格）。
+     *
+     * 只用来**挑动画节奏**：这批格子在 `TerritoryHexSpawn` 里走更重的那一档
+     * （更长、带过冲、错峰更分明），普通的"云散开 / 解锁一片"仍是轻档。
+     * 用户 2026-11-03：「胜利通过的地块动画节奏感需要比普通的地块生成动画更强，更明显」。
+     */
+    readonly victoryClaimCells: readonly number[];
+    /**
+     * 当前钱包（银币 / 体力）的只读快照 —— 供地图判「这颗消耗数字够不够」。
+     *
+     * 用户 2026-11-03：「体力不足或银币不足时，对应的数字 UI 显示红色」。
+     * ⚠️ 只读语义：视图拿它做**比较**，不在这里扣钱（扣费真源是 `TerritorySaveStore`）。
+     */
+    readonly wallet: Readonly<TerritoryWallet>;
     readonly hud: ITerritoryHudRender | null;
     readonly detail: ITerritoryDetailState;
 }
@@ -454,6 +502,8 @@ export class TerritoryModel {
         background: null,
         levelBubbleFrame: null,
         levelBubblePendingFrame: null,
+        // 宝箱提示气泡里的体力 icon（地图还没加载时页面会用这套空图，别让类型少一项）。
+        staminaIcon: null,
         // 地皮两态（未通关 / 已通关）+ 四张「已解锁未通关」的格面框，口径见 `TerritoryMapView.paintHexes`。
         tileLocked: null,
         tileCleared: null,
@@ -478,8 +528,35 @@ export class TerritoryModel {
         buildScales: new Map(),
     };
     private startingBattle = false;
+    /**
+     * 「开战流程已经接手，接下来这一下关详情是**程序关的**」。
+     *
+     * 交互号那条规则（换目标格才递增 ⇒ 旧回包作废）对「玩家关弹窗」是对的：玩家关掉详情 =
+     * 放弃这一格，迟到回包不该再把他拽进战斗。但**整页过场接手的关详情不是这个意思** ——
+     * 玩家刚刚按下的就是「开始战斗」，程序只是为了让过场露出来把弹窗收掉。
+     *
+     * 🔴 两者混在一起就是 2026-11-02 实测的那个 bug：点弹窗里的「开始战斗」
+     *   ⇒ `busy` 命令起演过场 ⇒ `startBattleIntro` 关掉关卡界面 ⇒ 弹窗 `onClose` 发
+     *   `closeDetail` ⇒ `cancelInteraction()` 把 `interactionId` 加一 ⇒ 回包到达时
+     *   `runCellWrite` 判成过期**直接丢弃**（一行日志都没有）⇒ 没有 `navigate` ⇒
+     *   过场在 `hold` 段干等 3 秒超时 ⇒ 复位回领地。
+     *   表现就是「雾静止等回包，回包到了却没进战斗，又退回领地」。
+     *
+     * 生命周期：`keepBattleRequest()` 置真；任一开战收尾（发布 `navigate` / 开战被拒 /
+     * 本地扣费失败 / 换交互 / 换章 / 销毁）置假。过场期间输入是锁着的（`setInputLocked(true)`），
+     * 玩家点不到东西，所以这个窗口不会被玩家操作穿过。
+     */
+    private battleHandoff = false;
     private pendingFixedResourceCells = new Set<number>();
     private pendingRandomResourceCells = new Set<number>();
+    /**
+     * 上一次结算里**「胜利通过」收进来的格子**（只给动画挑节奏用，不参与玩法判定）。
+     *
+     * 每次 `settleProgress` 重算：它是"这一批该重播"的一次性信号，不是账本。
+     */
+    private victoryClaimCells: number[] = [];
+    /** 已读到胜利存档、还没被 `settleProgress` 兑现过一次（见 `applyStoredBattleResult`）。 */
+    private victoryPending = false;
     /**
      * 当前交互号。**每次「换了目标格」才递增**（见 `beginInteraction`），回包靠它对号：
      * 号变了 = 玩家早已切走，结果不属于当前交互 ⇒ 不记账、不提示。
@@ -549,6 +626,10 @@ export class TerritoryModel {
         this.loadingPushes = null;
         this.stateCache = null;
         this.cancelInteraction();
+        this.battleHandoff = false;
+        // 页面销毁后实例不再复用，但清掉更安全（防止同一实例被重新 start 时带着旧胜利标记）。
+        this.victoryClaimCells = [];
+        this.victoryPending = false;
         // 🔴 写请求在途时页面被销毁 ⇒ 撤掉本页面贡献的每层 loading（enterBusy 的 show
         // 与这里逐次 hide 配对）。不清理会留下全屏遮罩：`LoadingPopup` 引用计数不为 0
         // 永不关闭，遮罩上的 `BlockInputEvents` 常驻吞点击，其他页面「点不动」。
@@ -679,10 +760,37 @@ export class TerritoryModel {
     }
 
     closeDetail(): void {
-        this.cancelInteraction();
+        // 🔴 过场接手的关详情 ≠ 玩家放弃（见 `battleHandoff` 的注释）：
+        // 这时候**不能**换交互号，否则在途的开战回包会被 `runCellWrite` 判成过期丢掉，
+        // 过场就只能等 `hold` 超时再把自己撤掉 —— 玩家看到的是「雾停住，然后退回领地」。
+        if (this.battleHandoff) this.battleHandoff = false;
+        else this.cancelInteraction();
         this.detailSite = null;
         this.detailStage = null;
         this.levelTipOpen = false;
+        this.emitStateChange();
+    }
+
+    /**
+     * 「整页过场已经接手这次开战」—— 接下来由程序关掉的详情**不算玩家放弃**。
+     *
+     * 页面在 `startBattleIntro()` 里、关弹窗**之前**发这条：`busy`（开战中）起演、
+     * 回包到达、跳转，这三段之间玩家按下的「开始战斗」都还是有效意图。
+     * 真正的玩家放弃仍然走 `closeDetail`（点空白 / 关闭按钮），照旧作废迟到回包。
+     */
+    keepBattleRequest(): void {
+        this.battleHandoff = true;
+    }
+
+    /**
+     * 战斗流程没接手（预加载失败 / 路由没注册 / 被别的切换顶掉）⇒ 复位在途态。
+     *
+     * 不复位的话 `startingBattle` 会永远停在真：`requestBattle` 第一道 `if (this.startingBattle) return`
+     * 把「开始战斗」变成死按钮，本地存档里那笔扣费也再没有第二次机会。
+     */
+    cancelBattleStart(): void {
+        this.battleHandoff = false;
+        this.startingBattle = false;
         this.emitStateChange();
     }
 
@@ -771,6 +879,20 @@ export class TerritoryModel {
         // 全局单值记录，navigate 后已消费并清空（见 `beginBattle`），拿它拦重复点击会把
         // 已通关格（asyncPvp 可重复挑战）在本章节里**永久锁死**；也不能用 `isOwned` 拦
         // （开战后到结算回报前本地不是 owned，拦不住连点，见下）。
+        // 🔴 2026-11-02（用户）：「点击关卡后没有进到匹配界面，直接进了战场」
+        //    ⇒ **普通关（`mode = match`）不在这里发开战请求**：它要先过匹配界面，
+        //      而匹配页本来就会自己发 `CmdStartBattleReqMsg`（`MatchingController.requestBattle`）。
+        //      领地只负责扣费 + 把 `battleParams` 交出去；这里再发一次 = 同一关两个 battleId。
+        // 🔴 同日补充：「boss 关卡（塔防类模式的关卡）不进匹配界面」
+        //    ⇒ `mode = defence` 没有匹配这一步，仍然先拿 battleId 再直进战场。
+        //    两条分支的判据就是 `stage.mode`，别按 `isBoss` / 站点类型另判一遍（两处判据迟早不一致）。
+        if (stage.mode === 'match') {
+            // 防连点靠 `navigateToBattle` 关详情（这一支**同步**落定、没有在途请求可拦），
+            // 不靠 `startingBattle`：那个闩是给"等回包"用的，普通关没有回包可等，
+            // 立起来反而要等页面发 `cancelBattleStart` 才解开（页面没播过场时永远解不开）。
+            this.beginBattle(site, stage);
+            return;
+        }
         await this.runCellWrite(
             site.cellId, this.pendingFixedResourceCells, TERRITORY_TEXTS.busyBattle,
             () => this.ports.gateway.startBattle(
@@ -805,18 +927,29 @@ export class TerritoryModel {
             : chapterCellBattleParams(chapterId, site.cellId);
     }
 
-    /** 开战回包的统一收尾：失败只提示；成功记下战斗信息并进战斗。 */
+    /**
+     * 开战回包的统一收尾：失败只提示；成功记下战斗信息并进战斗。
+     *
+     * `result = null` = **这一局没走服务端开战**（普通关交给匹配页发请求），
+     * 直接扣费进匹配。别把它当成失败：失败是 `{ ok: false }`。
+     */
     private applyBattleStart(
         site: TerritorySite,
         stage: TerritoryCampaignStage,
-        result: TerritoryStartBattleResult,
+        result: TerritoryStartBattleResult | null,
+        /** `true` = 首次解锁直开，页面对这次跳转播一段「遭遇敌人」过场（见 payload 的 `approach`）。 */
+        approach = false,
     ): void {
-        if (!result.ok) {
+        if (result && !result.ok) {
+            // 服务端没认这一局 ⇒ 过场会由页面的 `tip` 收掉，接管窗口在这里先关。
+            this.battleHandoff = false;
             this.showTip(TERRITORY_TEXTS.bossBattleStartFailed);
             return;
         }
-        this.bossBattleStart = { battleId: result.battle.battleId, seed: result.battle.seed };
-        this.beginBattle(site, stage, result.battle);
+        // `result?.ok` 缩窄成"有 battle"的那一支；别写成 `result.battle`（联合类型上取不到）。
+        const battle = result?.ok ? result.battle : undefined;
+        if (battle) this.bossBattleStart = { battleId: battle.battleId, seed: battle.seed };
+        this.beginBattle(site, stage, battle, approach);
     }
 
     /**
@@ -845,15 +978,20 @@ export class TerritoryModel {
         if (!this.canAffordUnlock(site)) return;
         await this.runCellWrite<ITerritoryUnlockThenBattleOutcome | null>(
             site.cellId, this.pendingFixedResourceCells, TERRITORY_TEXTS.busyBattle,
-            () => this.unlockThenStartBattle(site, map.chapterId),
+            () => this.unlockThenStartBattle(site, stage, map.chapterId),
             (outcome) => {
                 if (!outcome) return;
                 // 🔴 按**回包给的数组**逐格记账（服务端一次解锁整片区域），与 `handleUnlockOnly` 同口径。
                 progress.markCellsUnlocked(outcome.unlockedCellIds);
                 this.persistProgress();
                 this.refreshWalletFromServer(false);
-                this.applyBattleStart(site, stage, outcome.battle);
+                // 🔴 只有这条入口带 `approach`：解锁成功即开战是**系统替玩家做的决定**，
+                // 玩家连关卡界面都没看到就突然切场景，所以要一段"遭遇敌人"的过场交代一句。
+                this.applyBattleStart(site, stage, outcome.battle, true);
             },
+            // 🔴 同上：busy 那一刻**不要**让页面把云盖上来 —— 这一路要先看
+            // 「① 关卡地块生成 → ② 镜头推进 + 提示条 → ③ 云层过场」（用户 2026-11-02）。
+            true,
         );
     }
 
@@ -863,9 +1001,13 @@ export class TerritoryModel {
      * ⚠️ 这里**不做** `startBattle` 那种 fail-open：解锁状态是服务端权威，
      * 回包 `offline` / `failed` 时直接发开战会被服务端按「未解锁」拒掉，
      * 不如原地提示（`startBattle` 放行的是纯本地开战，不发 `CmdStartBattleReqMsg`，两者不是一回事）。
+     *
+     * ⚠️ 普通关（`mode = match`）第二段**不发**开战请求，`battle` 返回 `null`：
+     * 它要先过匹配界面，开战请求归匹配页（与 `handleBattleStationStart` 同一条口径）。
      */
     private async unlockThenStartBattle(
         site: TerritorySite,
+        stage: TerritoryCampaignStage,
         chapterId: number,
     ): Promise<ITerritoryUnlockThenBattleOutcome | null> {
         const unlock = await this.ports.gateway.unlockCell(
@@ -873,6 +1015,9 @@ export class TerritoryModel {
         if (!unlock.ok) {
             this.showTip(TERRITORY_TEXTS.bossUnlockFailed);
             return null;
+        }
+        if (stage.mode === 'match') {
+            return { unlockedCellIds: unlock.unlockedCellIds ?? [site.cellId], battle: null };
         }
         const battle = await this.ports.gateway.startBattle(
             ZC_BATTLE_TYPE_CHAPTER,
@@ -984,7 +1129,7 @@ export class TerritoryModel {
         if (!progress || !wallet) return false;
         const check = progress.checkUnlock(site.cellId, Number.MAX_SAFE_INTEGER);
         if (!check.ok) {
-            if ('reason' in check && !silent) this.showTip(check.reason);
+            if ('reason' in check && !silent) this.showTip(this.unlockBlockTip(check.reason, site));
             return false;
         }
         const shortfall = wallet.silver < site.unlock.silverCost ? TERRITORY_TEXTS.silverNotEnough
@@ -993,6 +1138,35 @@ export class TerritoryModel {
         if (!shortfall) return true;
         if (!silent) this.showTip(shortfall);
         return false;
+    }
+
+    /**
+     * 把 `checkUnlock` 的失败原因翻成**玩家看得懂的那句话**。
+     *
+     * 只有「前置没满足」需要改写（需求 2026-11-02）：原来一律弹「前置领地尚未占领」，
+     * 而玩家真正需要知道的是**卡在哪一块** —— 是几号关卡没打，还是哪只宝箱没打开。
+     * 其余 reason（战力不足 / 已在探索 / 已占领…）本来就够具体，原样返回。
+     */
+    private unlockBlockTip(reason: string, site: TerritorySite): string {
+        if (reason !== TERRITORY_TEXTS.prerequisiteNotOwned) return reason;
+        return this.prerequisiteBlockText(site);
+    }
+
+    /**
+     * 「先打完 1-1 关卡」还是「先把宝箱点开」—— 拼给玩家看的那一句。
+     *
+     * 只负责取数据（未满足的前置格 + 地图 + 关卡表），拼法与口径全在
+     * `model/TerritoryPrerequisite.territoryPrerequisiteText`（纯函数，按真数据单测）。
+     * 叫不出名字（前置是不属于任何站点的普通地块）⇒ 退回通用文案。
+     */
+    private prerequisiteBlockText(target: TerritorySite): string {
+        const progress = this.progress;
+        const map = this.map;
+        if (!progress || !map) return TERRITORY_TEXTS.prerequisiteNotOwned;
+        const text = territoryPrerequisiteText(
+            progress.prerequisiteBlockers(target.cellId), map.sites, this.stageByCell,
+        );
+        return text || TERRITORY_TEXTS.prerequisiteNotOwned;
     }
 
     /** 走「解锁 → 开战」的站点类型：关卡 / 首领 / 异步据点（资源点与纯装饰不算）。 */
@@ -1103,16 +1277,28 @@ export class TerritoryModel {
         busyText: string,
         request: () => Promise<T>,
         handle: (result: T) => void,
+        /** `true` = 这一路是首次解锁直开：busy 阶段只弹加载条，过场交给页面在回包后排。 */
+        approachBusy = false,
     ): Promise<void> {
         if (pending.has(cellId)) return;
         const loadId = this.loadId;
         const requestId = this.interactionId;
         pending.add(cellId);
         this.emitStateChange();
-        const exitBusy = this.enterBusy(busyText);
+        const exitBusy = this.enterBusy(busyText, approachBusy);
         try {
             const result = await request();
-            if (loadId !== this.loadId || requestId !== this.interactionId) return;
+            if (loadId !== this.loadId || requestId !== this.interactionId) {
+                // 🔴 这里静默 `return` 过一次实机事故（2026-11-02）：过场接手时关掉关卡界面
+                //    ⇒ `closeDetail` 换交互号 ⇒ 开战回包被当成过期丢掉 ⇒ 没有 `navigate`
+                //    ⇒ 过场干等 3 秒再复位。控制台里只有「收到开战回包」，看不出后半段没发生。
+                //    丢弃是**正常**路径（玩家确实切走了），但不该无迹可寻。
+                console.info(
+                    `[TerritoryModel] 第 ${this.map?.chapterId ?? '?'} 章格子 ${cellId} 的写回包被竞态作废`
+                    + `（交互号 ${requestId} → ${this.interactionId}），结果不记账`,
+                );
+                return;
+            }
             handle(result);
         } finally {
             pending.delete(cellId);
@@ -1132,7 +1318,7 @@ export class TerritoryModel {
      * 请求就不弹遮挡；同一帧内 enter 后立即 exit（校验分支 return）时 loading 来不及渲染，玩家无感。
      * 返回的退出函数幂等，引用计数让「两步式的一次操作」全程只显一层 loading。
      */
-    private enterBusy(text: string): () => void {
+    private enterBusy(text: string, approach = false): () => void {
         const release = () => {
             // 正常结束和宿主退出消费同一份释放动作，避免迟到 finally 重复撤回遮罩。
             if (!this.busyReleases.delete(release)) return;
@@ -1146,7 +1332,7 @@ export class TerritoryModel {
         };
         this.busyCount += 1;
         this.busyReleases.add(release);
-        this.setBusy(true, text);
+        this.setBusy(true, text, approach);
         return release;
     }
 
@@ -1169,6 +1355,8 @@ export class TerritoryModel {
         this.interactionId += 1;
         this.interactionCell = cellId;
         this.startingBattle = false;
+        // 换了目标格 ⇒ 上一次「开战接管」肯定已经过期，别把它留给下一次关详情。
+        this.battleHandoff = false;
         return this.interactionId;
     }
 
@@ -1239,7 +1427,13 @@ export class TerritoryModel {
     }
 
     /** 解锁已确认（或网络不可用决定放行）之后，真正扣资源 + 进战斗。 */
-    private beginBattle(site: TerritorySite, stage: TerritoryCampaignStage, battle?: ZCBattleStart): void {
+    private beginBattle(
+        site: TerritorySite,
+        stage: TerritoryCampaignStage,
+        battle?: ZCBattleStart,
+        /** `true` = 首次解锁直开，页面据此先播「遭遇敌人」过场再跳转。 */
+        approach = false,
+    ): void {
         if (!this.map || !this.saveState) return;
         const begin = this.ports.store.beginBattle(this.map.chapterId, {
             cellId: site.cellId,
@@ -1252,11 +1446,18 @@ export class TerritoryModel {
             const reason = 'reason' in begin ? begin.reason : TERRITORY_TEXTS.resourceNotEnoughFallback;
             this.bossBattleStart = null;
             this.startingBattle = false;
+            // 本地扣费没过 ⇒ 这一局压根没开：过场由 `tip` 收掉，接管窗口同步关。
+            this.battleHandoff = false;
             this.showTip(reason);
             this.emitStateChange();
             return;
         }
         this.emitStateChange();
+        // 普通关（`mode = match`）要先过匹配界面，而开战请求由匹配页发 ⇒ 把参数交出去。
+        // 首领关（`defence`）在这一步已经拿到 `battle`（battleId / 单元），不需要再带。
+        const battleParams = stage.mode === 'match'
+            ? this.battleParamsFor(site, this.map.chapterId)
+            : undefined;
         this.navigateToBattle({
             levelId: stage.levelId,
             chapterId: stage.chapterId,
@@ -1278,7 +1479,7 @@ export class TerritoryModel {
                 hpRate: wave.hpRate,
                 attackRate: wave.attackRate,
             }] : []),
-        }, battle);
+        }, battle, approach, battleParams);
     }
 
     switchChapter(offset: number): void {
@@ -1293,6 +1494,25 @@ export class TerritoryModel {
             }
         }
         void this.loadChapter(nextChapter, false);
+    }
+
+    /**
+     * 章节选择弹窗选章：按 `chapterId` 直接切（`switchChapter` 只够「翻一页」）。
+     *
+     * 门槛与「往后翻」一致：目标章排位在当前章之后、且当前章未通关 ⇒ 只出提示、不切章；
+     * 往回选旧章不设门槛（既有行为，见 `switchChapter` 的 `offset > 0` 分支）。
+     */
+    selectChapter(chapterId: number): void {
+        const chapters = this.ports.availableChapters;
+        if (chapterId === this.currentChapterId || !chapters.includes(chapterId)) return;
+        if (chapters.indexOf(chapterId) > chapters.indexOf(this.currentChapterId)) {
+            const completion = this.chapterCompletion();
+            if (!completion.complete) {
+                this.showTip(TERRITORY_TEXTS.requireChapterComplete(completion.occupied, completion.total));
+                return;
+            }
+        }
+        void this.loadChapter(chapterId, false);
     }
 
     private advanceCompletedChapter(): void {
@@ -1344,8 +1564,12 @@ export class TerritoryModel {
         this.loadingPushes = pushes;
         const loadId = ++this.loadId;
         this.cancelInteraction();
+        this.battleHandoff = false;
         this.pendingFixedResourceCells = new Set<number>();
         this.pendingRandomResourceCells = new Set<number>();
+        // 上一章的胜利标记不能漏到新章：否则新章第一次普通生成也会被当成「胜利通过」放大播。
+        this.victoryClaimCells = [];
+        this.victoryPending = false;
         // ⚠️ 切章节必须清上一章的开战记录：它是「防连点重发开战请求」的判据，
         // 不清的话换章后点新章的关卡会被当成「已经开过战」而永远拒绝。
         this.bossBattleStart = null;
@@ -1654,6 +1878,8 @@ export class TerritoryModel {
                 battle.resolvedAt ?? Date.now(),
             );
             this.resultNotice = result.ok ? TERRITORY_TEXTS.victory : TERRITORY_TEXTS.victoryNoExplore;
+            // 这一批格子是"打赢了才归我的"⇒ 记下来，下一次 `settle` 收到它们时走更重的进场节奏。
+            if (result.ok) this.victoryPending = true;
         } else if (battle.status === TERRITORY_BATTLE_STATUS.defeat) {
             this.resultNotice = TERRITORY_TEXTS.defeat;
         }
@@ -1663,7 +1889,14 @@ export class TerritoryModel {
     private settleProgress(now: number): number[] {
         if (!this.progress) return [];
         const claimed = this.progress.settle(now);
+        // 每次结算都重定这批"胜利格"：它只服务于**紧接着的那一次渲染**，
+        // 留着不放会让后面无关的生成批次也走重档。
+        this.victoryClaimCells = [];
         if (claimed.length) {
+            if (this.victoryPending) {
+                this.victoryClaimCells = claimed.slice();
+                this.victoryPending = false;
+            }
             this.resultNotice = TERRITORY_TEXTS.newlyOwned(claimed.length);
             if (this.chapterCompletion().complete) {
                 this.resultNotice += TERRITORY_TEXTS.chapterComplete;
@@ -1808,6 +2041,10 @@ export class TerritoryModel {
                 this.randomResourceOpenCheck(cellId, openedCells).ok) ?? [],
             pendingRandomResourceCells: Array.from(this.pendingRandomResourceCells),
             pendingFixedResourceCells: Array.from(this.pendingFixedResourceCells),
+            victoryClaimCells: this.victoryClaimCells,
+            // 地图拿它判「银币 / 体力数字要不要染红」。与 `buildHud` 同一个兜底：
+            // 存档还没读到时就当 0（此时 `ready` 为 false，站点根本不会渲染）。
+            wallet: { silver: wallet?.silver ?? 0, stamina: wallet?.stamina ?? 0 },
             hud: ready ? this.buildHud() : null,
             detail: {
                 // 站点详情面板已移除（2026-10-27 山猫：不需要了）⇒ `open` 只表示「有站点被选中」，
@@ -1975,8 +2212,27 @@ export class TerritoryModel {
         this.publish({ kind: 'changed' });
     }
 
-    private navigateToBattle(pve: ITerritoryBattleNavParams, battle?: ZCBattleStart): void {
-        this.publish({ kind: 'navigate', payload: { pve, battle } });
+    private navigateToBattle(
+        pve: ITerritoryBattleNavParams,
+        battle?: ZCBattleStart,
+        approach = false,
+        battleParams?: readonly string[],
+    ): void {
+        // 请求已经落定、去向也已经发布 ⇒ 过场接管窗口到此为止（此后关详情按玩家放弃处理）。
+        this.battleHandoff = false;
+        // 🔴 两个可选项**按需**才带：老断言是"载荷就是 `{ pve, battle }`"，
+        //    无条件塞 `approach: false` / `battleParams: undefined` 会把它们判成不相等。
+        const payload: ITerritoryNavigateBattlePayload = approach || battleParams
+            ? { pve, battle, approach, battleParams }
+            : { pve, battle };
+        // 🔴 交出去之后这一格的详情就作废了：普通关（`match`）是**同步**落定的，
+        //    没有任何在途请求能挡住"同一帧连点两次"（不关详情 ⇒ 两次过场、两次跳匹配页）。
+        //    与 `closeDetail` 的区别：这里不换交互号（不撤销任何东西，只是"这一格已经打过了"），
+        //    页面那边本来也会在 `navigate` 的同一帧把弹窗关掉。
+        this.detailSite = null;
+        this.detailStage = null;
+        this.levelTipOpen = false;
+        this.publish({ kind: 'navigate', payload });
     }
 
     private showTip(text: string): void {
@@ -1991,7 +2247,8 @@ export class TerritoryModel {
         this.publish({ kind: 'rewards', payload: { rewards, originCellId, options } });
     }
 
-    private setBusy(busy: boolean, text?: string): void {
-        this.publish({ kind: 'busy', payload: { busy, text } });
+    private setBusy(busy: boolean, text?: string, approach?: boolean): void {
+        // `approach` 只在"置忙"那一侧有意义；解除时不必重复带（页面只读 busy=true 那一次）。
+        this.publish({ kind: 'busy', payload: approach ? { busy, text, approach } : { busy, text } });
     }
 }

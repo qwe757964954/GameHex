@@ -55,6 +55,7 @@ import {
     PopupLayer,
 } from './PopupDef';
 import type { PopupBase } from './PopupBase';
+import { PopupCompositionHost, type IPopupCompositionFactory } from './PopupCompositionHost';
 
 const { ccclass } = _decorator;
 
@@ -70,6 +71,7 @@ export interface IPopupInfo {
     layer: PopupLayer;
     /** 关闭后是否回收进实例池。 */
     cache: boolean;
+    releaseCompositionOwner?: () => void;
 }
 
 interface IPopupOpening {
@@ -85,6 +87,9 @@ export class PopupManager extends Component {
     // ============================================================
     // 单例
     // ============================================================
+
+    private compositionFactory: IPopupCompositionFactory<PopupBase> | null = null;
+    private readonly compositions = new PopupCompositionHost<PopupBase>(view => this.compositionFactory?.(view) ?? null);
 
     private static _instance: PopupManager | null = null;
 
@@ -155,6 +160,7 @@ export class PopupManager extends Component {
         for (const opening of this._openings) opening.cancelled = true;
         const opened = this._stack.splice(0).reverse();
         for (const entry of opened) {
+            this.disposeComposition(entry);
             entry.popup._internalClose(PopupCloseReason.Force);
             if (entry.popup.node?.isValid) entry.popup.node.destroy();
         }
@@ -164,17 +170,20 @@ export class PopupManager extends Component {
             for (const node of pool) if (node.isValid) node.destroy();
         }
         this._cache.clear();
+        this.compositions.dispose();
+        this.compositionFactory = null;
         this._assetScope.dispose();
     }
 
     /** 由应用组合根注入资源端口；缓存节点与 Prefab 引用共用管理器生命周期。 */
-    initialize(assets: AssetService, callbackOwners?: ICallbackOwnerRegistry): void {
+    initialize(assets: AssetService, callbackOwners?: ICallbackOwnerRegistry, compositionFactory?: IPopupCompositionFactory<PopupBase>): void {
         if (this._disposed) {
             console.error('[PopupManager] 管理器已销毁，不能再注入资源服务');
             return;
         }
         this._assetService = assets;
         this._callbackOwners = callbackOwners ?? null;
+        this.compositionFactory = compositionFactory ?? null;
     }
 
     // ============================================================
@@ -282,6 +291,17 @@ export class PopupManager extends Component {
             return null;
         }
 
+        if (this.compositionFactory) {
+            entry.releaseCompositionOwner = this._callbackOwners?.addCallerCleanup(popup, () => this.compositions.close(popup));
+            try {
+                if (!await this.compositions.open(popup, params.userData)) return null;
+            } catch (error) {
+                console.error(`[PopupManager] ${opening.path} 组合会话打开失败`, error);
+                if (this._stack.indexOf(entry) >= 0) this.close(popup, PopupCloseReason.Force);
+                return null;
+            }
+            if (this._disposed || opening.cancelled || this._stack.indexOf(entry) < 0 || !node.isValid) return null;
+        }
         this._refreshDepth();
         this._refreshCover();
         return popup;
@@ -326,6 +346,7 @@ export class PopupManager extends Component {
         }
 
         const node = entry.popup.node;
+        this.disposeComposition(entry);
         entry.popup._internalClose(reason);
 
         if (entry.cache && node && node.isValid) {
@@ -339,6 +360,12 @@ export class PopupManager extends Component {
 
         this._refreshDepth();
         this._refreshCover();
+    }
+
+    private disposeComposition(entry: IPopupInfo): void {
+        entry.releaseCompositionOwner?.();
+        entry.releaseCompositionOwner = undefined;
+        this.compositions.close(entry.popup);
     }
 
     /** 关闭最上层弹窗。 */

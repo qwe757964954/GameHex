@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
+import * as territoryLevelBubbleModule from '../assets/script/app/territory/model/TerritoryLevelBubble';
+import * as territoryBattleApproachModule from '../assets/script/app/territory/model/TerritoryBattleApproach';
 
 /**
  * 领地配色真源 `view/TerritoryTheme.ts` 的判据。
@@ -45,6 +47,19 @@ function loadTheme(): IThemeExports {
                     stage: 'stage', boss: 'boss', asyncPvp: 'asyncPvp',
                     fixedResource: 'fixedResource', bonus: 'bonus',
                 },
+            };
+            // 宝箱提示气泡 / 前置宝箱跳动（2026-11-02）：本用例关注的分支与它无关 ⇒ 给「不挂气泡、
+            // 不跳」的退化桩（三条规则在 `territory-chest-hint` 里按**真模块**测）。
+            // 气泡文案真源（2026-11-02 起搬进 model）：直接给**真模块**，别抄一份拼法 ——
+            // 抄一遍就等于两边各改一半也能一起绿。
+            if (id === '../model/TerritoryLevelBubble') return territoryLevelBubbleModule;
+            // 战斗过场曲线（2026-11-02）：纯函数、与本文件判据无关 ⇒ 给真模块，别抄一份常量。
+            if (id === '../model/TerritoryBattleApproach') return territoryBattleApproachModule;
+            if (id === '../model/TerritoryChestHint') return {
+                TERRITORY_CHEST_HINT_SECONDS: 1.5,
+                territoryChestHintBounceOffset: () => 0,
+                territoryChestHintCell: () => null,
+                territoryPrerequisiteChestCell: () => null,
             };
             throw new Error(`Unexpected dependency: ${id}`);
         },

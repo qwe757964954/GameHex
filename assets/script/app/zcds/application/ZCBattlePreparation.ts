@@ -1,29 +1,27 @@
-import { ComponentController } from '../../../framework/controller/ComponentController';
-import type { ZCBattleStart } from '../../battle/BattleStartModel';
+import type { IControllerContext } from '../../../framework/controller/ControllerBase';
 import { MAP_DIRECTORY } from '../ZCGame';
+import type { ZCGame } from '../ZCGame';
 import { ZCGameLoader } from './ZCGameLoader';
-import { ZCGamePreload } from './ZCGamePreload';
+import { ZCBattleController, type IZCBattleSessionInput } from './ZCBattleController';
+import { buildZCBattleEntry, resolveZCBattlePlayerCount } from './ZCBattleEntryBuilder';
+import { createTerritorySaveStore } from '../../territory/application/TerritorySaveStoreAdapter';
 
-export interface IZCBattlePreparationOptions {
-    readonly waveCardIds?: readonly number[];
-    readonly playerCount?: 2 | 3 | 4;
-}
-
-/** 两种地图入口共用资源准备与单次移交；不保存战斗数据或节点。 */
-export function createZCBattlePreload(battle: Promise<ZCBattleStart | null>, options: IZCBattlePreparationOptions = {}): ZCGamePreload {
+/** 各入口创建同一单局会话；资源服务从组合入口注入，节点留到战斗流程挂载。 */
+export function createZCBattleSession(context: IControllerContext, input: IZCBattleSessionInput): ZCBattleController<ZCGame> {
     const startedAt = Date.now();
-    const controller = new ComponentController('battle:preparation');
-    let preload: ZCGamePreload;
-    try {
-        preload = new ZCGamePreload(new ZCGameLoader(controller.resources, MAP_DIRECTORY,
-            Math.random, options.playerCount), battle, options.waveCardIds, () => controller.dispose());
-    } catch (error) {
-        controller.dispose();
-        throw error;
-    }
-    void preload.ready.then(
+    const session = new ZCBattleController<ZCGame>(context, {
+        prepareDirect: (scope, entry, resources) => {
+            const loader = new ZCGameLoader(resources, MAP_DIRECTORY, Math.random, resolveZCBattlePlayerCount(entry));
+            return loader.prepare(scope, entry?.battle, entry?.pve?.waves.map(wave => wave.pvpCardId));
+        },
+        buildEntry: buildZCBattleEntry,
+        resolvePveResult: (pve, victory) => {
+            createTerritorySaveStore(pve.territorySaveOwner).resolveBattle(pve.chapterId, pve.territoryCellId, pve.levelId, victory);
+        },
+    }, input);
+    void session.ready.then(
         resources => console.info(`[BattleLoading] ${resources.loadDeferredArt ? '首帧资源准备完成' : '资源准备完成'} ${Math.max(0, Date.now() - startedAt)}ms`),
         () => {},
     );
-    return preload;
+    return session;
 }

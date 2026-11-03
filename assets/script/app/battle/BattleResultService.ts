@@ -44,6 +44,7 @@ class BattleResultServiceClass {
     /** 当前等待者；同一时刻只允许一个（新的会先把旧的按「没等到」兑现）。 */
     private waiter: ((result: IZCChapterBattleOutcome | null) => void) | null = null;
     private waiterBattleType: number | null = null;
+    private waiterOwner: object | null = null;
 
     /** 超时定时器。 */
     private timer: ReturnType<typeof setTimeout> | null = null;
@@ -69,11 +70,12 @@ class BattleResultServiceClass {
         return this.waitForBattleResult(ZC_BATTLE_TYPE_CHAPTER, timeoutMs);
     }
 
-    waitForBattleResult(battleType: number, timeoutMs: number = BATTLE_RESULT_WAIT_MS): Promise<IZCChapterBattleOutcome | null> {
+    waitForBattleResult(battleType: number, timeoutMs: number = BATTLE_RESULT_WAIT_MS, caller?: object): Promise<IZCChapterBattleOutcome | null> {
         // 上一轮的等待器先作废（否则它永远悬着，调用方 await 卡死）。
         this.finish(null);
         if (!battleResultMessageName(battleType)) return Promise.resolve(null);
         this.waiterBattleType = battleType;
+        this.waiterOwner = caller ?? null;
         return new Promise<IZCChapterBattleOutcome | null>((resolve) => {
             this.waiter = resolve;
             this.timer = setTimeout(() => {
@@ -81,6 +83,11 @@ class BattleResultServiceClass {
                 this.finish(null);
             }, Math.max(0, timeoutMs));
         });
+    }
+
+    /** 只解除当前调用方的等待，不影响后来进入的对局。 */
+    cancelWait(caller: object): void {
+        if (this.waiterOwner === caller) this.finish(null);
     }
 
     /** 广播只能唤醒正在等待同一种战斗的对局；不缓存历史结果。 */
@@ -127,6 +134,7 @@ class BattleResultServiceClass {
         const waiter = this.waiter;
         this.waiter = null;
         this.waiterBattleType = null;
+        this.waiterOwner = null;
         if (waiter) waiter(result);
     }
 }

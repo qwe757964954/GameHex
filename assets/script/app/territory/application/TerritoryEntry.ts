@@ -1,3 +1,10 @@
+import { createZCBattleSession } from '../../zcds/application/ZCBattlePreparation';
+import type { ZCBattleController } from '../../zcds/application/ZCBattleController';
+import type { ZCGame } from '../../zcds/ZCGame';
+import type { ZCGameEntryParams } from '../../zcds/application/ZCGameEntry';
+import type { ITerritoryNavigateBattlePayload } from './TerritoryModel';
+import { ProcedureManager } from '../../../framework/procedure/ProcedureManager';
+import { GameRoute } from '../../../core/runtime/GameRoute';
 import type { IControllerContext } from '../../../framework/controller/ControllerBase';
 import { readRoleRow } from '../../main/MainRoleRow';
 import { CacheMgr } from '../../net/CacheMgr';
@@ -9,12 +16,14 @@ import { TerritoryChapterLoader } from './TerritoryChapterLoader';
 import { TerritoryCellRepository } from './TerritoryCellRepository';
 import { TerritoryChapterInfoRepository } from './TerritoryChapterInfoRepository';
 import { TerritorySaveStoreAdapter } from './TerritorySaveStoreAdapter';
-import { TERRITORY_FALLBACK_WALLET } from './TerritoryTexts';
+import { TERRITORY_DEFAULT_PLAYER_COUNT, TERRITORY_FALLBACK_WALLET } from './TerritoryTexts';
 import type { ITerritorySaveOwner, TerritoryWallet } from '../model/TerritorySaveStore';
 
 /** Composition root, one instance per mounted chapter page. */
 export class TerritoryEntry {
     readonly controller: TerritoryController;
+    private battleSession: ZCBattleController<ZCGame> | null = null;
+    private battlePayload: ITerritoryNavigateBattlePayload | null = null;
     readonly saveOwner: ITerritorySaveOwner | null;
 
     constructor(context: IControllerContext, schedule: (callback: () => void, seconds: number) => () => void) {
@@ -36,6 +45,26 @@ export class TerritoryEntry {
             get lifecycleHost() { return controller; },
         }), {
             context,
+            battle: {
+                prepare: (payload, owner) => {
+                    if (payload.pve.mode === 'match') return undefined;
+                    this.battleSession?.dispose();
+                    const params = this.battleParams(payload);
+                    const session = createZCBattleSession(context, { owner, battle: Promise.resolve(payload.battle ?? null), params });
+                    this.battleSession = session;
+                    this.battlePayload = payload;
+                    return session.ready;
+                },
+                enter: payload => {
+                    if (payload !== this.battlePayload) return;
+                    const session = this.battleSession;
+                    this.battleSession = null;
+                    this.battlePayload = null;
+                    ProcedureManager.navigate(GameRoute.Battle, {
+                        ...this.battleParams(payload), session: session?.isDisposed ? undefined : session,
+                    });
+                },
+            },
             cells, network: GameNet.instance, schedule,
             roleCache: { subscribe: (callback) => {
                 CacheMgr.instance.setEventUpdate('CmdRole', controller, callback);
@@ -43,6 +72,10 @@ export class TerritoryEntry {
             } },
         });
         this.controller = controller;
+    }
+    private battleParams(payload: ITerritoryNavigateBattlePayload): ZCGameEntryParams {
+        return { pve: { ...payload.pve, playerCount: TERRITORY_DEFAULT_PLAYER_COUNT, territorySaveOwner: this.saveOwner }, battle: payload.battle,
+            selfRoleId: this.saveOwner?.roleId };
     }
     start(): void { this.controller.start(); }
     dispose(): void { this.controller.dispose(); }

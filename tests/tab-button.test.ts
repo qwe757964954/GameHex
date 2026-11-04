@@ -289,10 +289,16 @@ test('C3 红点回路：`TabButton` 持 `RdExprBinding`，销毁时**必须**解
     assert.match(code, /ensureInit\(\): void/, '初始化要幂等（宿主 active=false ⇒ onLoad 会晚跑）');
 });
 
-test('C4 挑战保持可见并禁用，世界作为可用覆盖入口', () => {
+test('C4 角色 / 联盟 / 挑战同属未开放：保持可见并禁用，世界作为可用覆盖入口', () => {
     const host = stripComments(readFileSync('assets/script/app/main/MainTabHost.ts', 'utf8'));
     const tab = stripComments(readFileSync('assets/script/app/common/TabButton.ts', 'utf8'));
-    assert.match(host, /button\.setEnabled\(type !== MainTab\.Challenge\)/);
+    const model = stripComments(readFileSync('assets/script/app/main/MainTabModel.ts', 'utf8'));
+    // 「未开放」只有一份名单（`MainTabModel.LOCKED_TABS`），宿主不许再自己写 `type !== xxx`
+    assert.match(model, /const LOCKED_TABS[\s\S]{0,120}MainTab\.Role, MainTab\.Alliance, MainTab\.Challenge/,
+        '角色 / 联盟 / 挑战都该在 LOCKED_TABS 里');
+    assert.match(model, /export function isMainTabLocked\(tab: number\): boolean/);
+    assert.match(host, /button\.setEnabled\(!isMainTabLocked\(type\)\)/);
+    assert.doesNotMatch(host, /type !== MainTab\.Challenge/, '宿主里别再单独判挑战');
     assert.match(tab, /setEnabled\(enabled: boolean\): void/);
     assert.match(tab, /if \(!this\.isEnabled\) return/);
     assert.match(tab, /const tint = this\.isEnabled \? TAB_ENABLED_TINT : TAB_DISABLED_TINT/);

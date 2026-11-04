@@ -24,11 +24,13 @@ test('territory campaign joins chapter levels, NPC teams and monster cards', () 
         rows('defenceModWave'),
         [...rows('item'), ...rows('roleProperty')],
     );
-    assert.equal(campaign.stages.length, 14);
-    assert.deepEqual(campaign.stages.map((stage) => stage.levelId), [
-        10001, 10002, 10003, 10004, 20001, 20002, 20003, 20004,
-        10005, 10006, 10007, 10008, 10009, 10010,
-    ]);
+    // 2026-11 关卡表重做后第一章扩到 129 关（新增 30001+ 普通关、50001+ 首领）。
+    // 不再逐条钉 129 个 levelId，改钉「顺序口径」：主线按 chapterStage 排，
+    // 异步据点紧跟在首批主线之后、10006~10010 殿后。
+    assert.equal(campaign.stages.length, 129);
+    const levelIds = campaign.stages.map((stage) => stage.levelId);
+    assert.deepEqual(levelIds.slice(0, 8), [10001, 10002, 10003, 10004, 20001, 20002, 20003, 20004]);
+    assert.deepEqual(levelIds.slice(-5), [10006, 10007, 10008, 10009, 10010]);
     assert.equal(campaign.stages[0].mode, 'match');
     assert.equal(campaign.stages[0].opponentCount, 1);
     assert.deepEqual(campaign.stages[0].enemyTeamIds, [2001]);
@@ -49,12 +51,24 @@ test('territory campaign joins chapter levels, NPC teams and monster cards', () 
     assert.equal(firstBoss.waves.length, 7);
     assert.equal(firstBoss.waves[0].monsterName, '豌豆游侠');
     assert.ok(firstBoss.enemies.length >= 4);
-    assert.ok(firstBoss.enemies.every((enemy) => Number.isInteger(enemy.pvpCardId)));
+    // 🔴 真实缺口（2026-11-03 发现）：`pvpCard` 只补到 68001~68035 的 18 只，
+    //    新怪（狼骑兵 50021 / 乌瑞恩 50025 / 冰霜巨龙 50012…）只进了 `monsterCard`，
+    //    没有同名 pvpCard 可映射 ⇒ `projectCard` 落进 `monster:` 兜底分支，`pvpCardId` 缺失。
+    //    这里**不放宽**：缺卡就是缺卡，报错点名到「哪只怪」。修法在服务端补 pvpCard 行。
+    const unmapped = (enemies: typeof firstBoss.enemies): string => enemies
+        .filter((enemy) => !Number.isInteger(enemy.pvpCardId))
+        .map((enemy) => `${enemy.name}(${enemy.cardId})`)
+        .join('、');
+    assert.equal(unmapped(firstBoss.enemies), '', `首领 10005 有怪没映射到 pvpCard：${unmapped(firstBoss.enemies)}`);
     assert.equal(firstBoss.idleRewards[0].name, '银币');
     assert.equal(campaign.stages.find((stage) => stage.levelId === 10010)?.isBoss, true);
+    const allUnmapped = new Set<string>();
     for (const stage of campaign.stages) {
         assert.equal(stage.opponentCount, 1, `level ${stage.levelId} must be a two-player battle`);
         assert.ok(stage.enemies.some((enemy) => Number.isInteger(enemy.pvpCardId)), `level ${stage.levelId} has no battle card`);
+        for (const enemy of stage.enemies) {
+            if (!Number.isInteger(enemy.pvpCardId)) allUnmapped.add(`${enemy.name}(${enemy.cardId})`);
+        }
         if (stage.mode === 'defence') {
             assert.ok(stage.waves.length > 0, `level ${stage.levelId} has no defence wave`);
             assert.ok(stage.waves.every((wave) => Number.isInteger(wave.pvpCardId)), `level ${stage.levelId} has an unmapped wave`);
@@ -64,6 +78,7 @@ test('territory campaign joins chapter levels, NPC teams and monster cards', () 
             assert.ok(stage.enemyTeamCardIds.every((cards) => cards.length > 0), `level ${stage.levelId} has an empty NPC deck`);
         }
     }
+    assert.equal(allUnmapped.size, 0, `这些怪在 monsterCard 里但没有同名 pvpCard：${[...allUnmapped].join('、')}`);
     assert.ok(campaign.playerCardCount > 0);
 });
 

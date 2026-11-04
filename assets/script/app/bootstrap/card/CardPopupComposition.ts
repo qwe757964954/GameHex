@@ -15,55 +15,82 @@ import { LoadingPopup } from '../../common/LoadingPopup';
 import { Toast } from '../../common/Toast';
 import { CARD_LINEUP_TEXTS } from '../../card/CardLineupTexts';
 
-function upgradeData(value: unknown): ICardUpgradeOpenData {
-    if (!value || typeof value !== 'object' || !('cardId' in value) || !('level' in value) || !('card' in value)) {
-        throw new Error('卡牌升级缺少入口数据');
-    }
-    const cardId = String(value.cardId);
-    const level = Number(value.level);
-    const card = value.card;
-    if (!cardId || !Number.isSafeInteger(level) || level < 0 ||
-        (card !== null && (typeof card !== 'object' || !('id' in card) || String(card.id) !== cardId || !('name' in card)))) {
-        throw new Error('卡牌升级入口数据无效');
-    }
-    return { cardId, level, card: card as ICardUpgradeOpenData['card'] };
-}
-
 /** PopupManager owns this session; pages only expose rendering and serialized configuration. */
 class CardPopupComposition implements IPopupComposition {
     private controller: ControllerBase | null = null;
     constructor(private readonly context: IControllerContext, private readonly view: CardUpgradePage | LineupBoardPage) {}
     async open(userData: unknown): Promise<void> {
+        if (this.controller) throw new Error('卡牌会话不可重复启动');
+        const controller = this.createController(userData);
+        this.controller = controller;
+        try { await controller.start(); }
+        catch (error) {
+            try { this.dispose(); }
+            catch (cleanupError) { console.error('[CardPopupComposition] 初始化失败后的清理失败', cleanupError); }
+            throw error;
+        }
+    }
+    private createController(userData: unknown): CardUpgradeController | LineupBoardController {
         const view = this.view;
-        const failed = (error: unknown): void => { console.error('[CardPopupComposition] 卡牌会话失败', error); };
-        const removeCaller = (caller: object): void => GameNet.instance.removeCaller(caller);
-        if (view instanceof CardUpgradePage) {
-            const model = new CardUpgradeModel(upgradeData(userData));
-            const controller = new CardUpgradeController(this.context, {
-                owner: view, model, repository: cardRepository, render: state => view.render(state), removeCaller, failed,
-                close: () => view.close(),
-                openSkills: data => { void CardSkillPage.open({ userData: data }).catch(failed); },
+        return view instanceof CardUpgradePage ? this.createUpgradeController(view, userData as ICardUpgradeOpenData) : this.createBoardController(view);
+    }
+    private createUpgradeController(view: CardUpgradePage, userData: ICardUpgradeOpenData): CardUpgradeController {
+        const model = new CardUpgradeModel(userData);
+        return new CardUpgradeController(this.context, {
+            owner: view,
+            model,
+            repository: cardRepository,
+            failed: reportCardPopupFailure,
+            view: {
+                render: state => view.render(state),
+                close: () => view.close()
+            },
+            loading: {
                 beginLoading: () => {
                     LoadingPopup.show(model.snapshot.level === 0 ? CARD_LINEUP_TEXTS.upgradeUnlocking : CARD_LINEUP_TEXTS.upgradeSending);
                     return () => LoadingPopup.hide();
-                },
-            });
-            this.controller = controller;
-            await controller.start();
-        } else {
-            const controller = new LineupBoardController(this.context, {
-                owner: view, model: new LineupBoardModel(view.presetBar.children.length, view.defaultPreset),
-                repository: cardRepository, autoLoadDecks: view.autoLoadDecks, closeAfterSave: view.closeAfterSave,
-                render: state => view.render(state), tip: text => Toast.show(text), removeCaller, failed,
-                close: () => view.close(),
-            });
-            this.controller = controller;
-            await controller.start();
-        }
+                }
+            },
+            requests: {
+                removeCaller: removeCardPopupCaller
+            },
+            popups: {
+                openSkills: data => { void CardSkillPage.open({ userData: data }).catch(reportCardPopupFailure); },
+                openEditor: () => { void LineupBoardPage.open().catch(reportCardPopupFailure); },
+                openDetail: data => { void CardUpgradePage.open({ userData: data }).catch(reportCardPopupFailure); },
+            },
+        });
     }
-    dispose(): void { this.controller?.dispose(); this.controller = null; }
+    private createBoardController(view: LineupBoardPage): LineupBoardController {
+        return new LineupBoardController(this.context, {
+            owner: view,
+            model: new LineupBoardModel(view.presetBar.children.length, view.defaultPreset),
+            repository: cardRepository,
+            autoLoadDecks: view.autoLoadDecks,
+            closeAfterSave: view.closeAfterSave,
+            failed: reportCardPopupFailure,
+            view: {
+                render: state => view.render(state),
+                close: () => view.close()
+            },
+            feedback: {
+                tip: text => Toast.show(text)
+            },
+            requests: {
+                removeCaller: removeCardPopupCaller
+            },
+        });
+    }
+    dispose(): void {
+        const controller = this.controller;
+        this.controller = null;
+        controller?.dispose();
+    }
 }
 
 export function createCardPopupComposition(context: IControllerContext, view: PopupBase): IPopupComposition | null {
     return view instanceof CardUpgradePage || view instanceof LineupBoardPage ? new CardPopupComposition(context, view) : null;
 }
+
+function reportCardPopupFailure(error: unknown): void { console.error('[CardPopupComposition] 卡牌会话失败', error); }
+function removeCardPopupCaller(caller: object): void { GameNet.instance.removeCaller(caller); }

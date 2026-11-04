@@ -58,7 +58,9 @@ export class CardUnitPreview {
         const sourceHeight = skeleton?.skeletonData?.getRuntimeData(true)?.height
             ?? visual.getComponent(UITransform)?.height ?? FRAME_FALLBACK_HEIGHT;
         const visibleRatio = skeleton ? SPINE_VISIBLE_HEIGHT_RATIO : FRAME_VISIBLE_HEIGHT_RATIO;
-        const factor = this.visibleHeight / Math.max(1, sourceHeight * visibleRatio);
+        // 模型挂在立绘节点下；RAW 立绘已归一缩放，模型高度必须抵消宿主缩放。
+        const hostScale = Math.abs(this.hero.node.scale.y);
+        const factor = this.visibleHeight / (Math.max(1, sourceHeight * visibleRatio) * hostScale);
         const scale = visual.scale;
         visual.setScale(scale.x * factor, scale.y * factor, scale.z);
         visual.setPosition(0, footY + (skeleton ? 0 : FRAME_FOOT_FROM_CENTER_Y * factor), 0);

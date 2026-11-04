@@ -1,18 +1,16 @@
-import { _decorator, Component, Label, Prefab, Sprite, SpriteFrame, UIOpacity } from 'cc';
+import { _decorator, Component, Label, Prefab, Sprite, SpriteFrame, UIOpacity, UITransform } from 'cc';
 import { ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
-import { applyCardHeadArt } from './CardHeadView';
+import { applyCardHeroArt } from './CardHeroView';
 import { CARD_LINEUP_TEXTS } from './CardLineupTexts';
 import { CardUnitPreview } from './CardUnitPreview';
 
 const { ccclass, property } = _decorator;
 
-/** 站台一次渲染要的四张图（前三张按品级+职业复用，头像按卡）。 */
+/** 站台一次渲染要的三张图（前三张按品级+职业复用，头像按卡）。 */
 export interface ZCSlotFrames {
     disc: SpriteFrame | null;
     hero: SpriteFrame | null;
     badge: SpriteFrame | null;
-    /** 该卡头像；null = 没配，保留 hero 立绘。 */
-    head: SpriteFrame | null;
 }
 
 /**
@@ -31,8 +29,9 @@ export class CardLineupSlot extends Component {
     @property({ type: Sprite, tooltip: 'Hero：四职业营地雕像' })
     hero: Sprite = null;
 
-    @property({ type: Sprite, tooltip: 'HeadIcon：该卡头像（与 Hero 互斥）' })
-    headIcon: Sprite = null;
+    @property({ type: UITransform, tooltip: 'Hero：立绘展示框' })
+    heroTransform: UITransform = null!;
+
 
     @property({ type: Sprite, tooltip: 'ClassBadge：职业角标' })
     classBadge: Sprite = null;
@@ -55,16 +54,30 @@ export class CardLineupSlot extends Component {
     render(card: ZCDeckCard, frames: ZCSlotFrames, level?: number, prefab?: Prefab | null): void {
         if (frames.disc) this.disc.spriteFrame = frames.disc;
         if (frames.badge) this.classBadge.spriteFrame = frames.badge;
-        if (prefab && (this.preview ??= new CardUnitPreview(this.hero, this.previewHeight)).show(prefab)) {
-            this.headIcon.node.active = false;
-        } else {
-            this.preview?.clear();
-            applyCardHeadArt(this, frames.hero, frames.head);
-        }
+        if (!this.applyPreview(prefab ?? null)) applyCardHeroArt(this.hero, this.heroTransform, frames.hero);
         //  每次显式写 255：渲染幂等，不依赖上一次的透明度。
         this.opacityOf().opacity = 255;
         this.levelLabel.string = `${Math.max(1, Math.round(level ?? this.fallbackLevel))}${CARD_LINEUP_TEXTS.levelSuffix}`;
     }
+
+    /**
+     * 只补单位模型（站台图与等级已经画好之后再调）。
+     *
+     * 单位预制体是 `sp.Skeleton`，一次实例化实测 ~1.4~2.7ms（2026-11-03 探针）；
+     * 八卡和整页数据一起提交会把 20ms 压进同一帧。页面因此拆成两步：先画静态立绘，
+     * 再逐帧补模型 —— 数据完全一致，只是视觉上「立绘 → 模型」。
+     *
+     * 返回 `false` = 这个预制体给不了待机动画（`CardUnitPreview.show` 内部会销毁它），
+     * 调用方据此保留静态立绘；已经在画立绘的站台不需要再补图。
+     */
+    applyPreview(prefab: Prefab | null): boolean {
+        if (prefab && (this.preview ??= new CardUnitPreview(this.hero, this.previewHeight)).show(prefab)) {
+            return true;
+        }
+        this.preview?.clear();
+        return false;
+    }
+
 
     private opacityOf(): UIOpacity {
         return (this.enterOpacity ??= this.node.getComponent(UIOpacity) ?? this.node.addComponent(UIOpacity));

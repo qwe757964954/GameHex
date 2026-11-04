@@ -21,6 +21,11 @@ function resolveUpgradeRow(
 /** cardLevelUp 一行（已归一化）。 */
 export interface ZCCardLevelUpRow {
     id: string;
+    /**
+     * 卡牌名（K-卡牌升级表 B 列，已按 pvpCard 对齐）。
+     * 界面材料位直接显示它；老卡可能没名字，空串由调用方回退到通用文案。
+     */
+    name: string;
     /** 目标等级。 */
     level: number;
     costCardID: string;
@@ -38,6 +43,8 @@ export interface ZCUpgradeRequirement {
     key: 'card' | 'exp';
     /** card=消耗卡牌id；exp=通用经验id。 */
     itemId: string;
+    /** card=卡牌名（表里没配则为空串）；exp 行恒为空串。 */
+    name: string;
     owned: number;
     need: number;
     enough: boolean;
@@ -80,6 +87,7 @@ export function parseCardLevelUpRow(value: unknown): ZCCardLevelUpRow | null {
     const row = value as Record<string, unknown>;
 
     const id = toId(row.id);
+    const name = toId(row.name) ?? '';
     const level = toCount(row.level);
     const costCardID = toId(row.costCardID);
     const costCardNum = toCount(row.costCardNum);
@@ -89,7 +97,7 @@ export function parseCardLevelUpRow(value: unknown): ZCCardLevelUpRow | null {
     if (id === null || level === null || costCardID === null || costCardNum === null) return null;
     if (armyId === null || generalId === null || costArmyLevelNum === null) return null;
 
-    return { id, level, costCardID, costCardNum, costArmyLevelID: armyId, costGeneralLevelID: generalId, costArmyLevelNum };
+    return { id, name, level, costCardID, costCardNum, costArmyLevelID: armyId, costGeneralLevelID: generalId, costArmyLevelNum };
 }
 
 /** 建「卡牌 → (等级 → 行)」两级表。重复行后值覆盖。 */
@@ -169,8 +177,8 @@ export function evaluateUpgrade(
     const expEnough = expOwned >= row.costArmyLevelNum;
 
     const requirements: ZCUpgradeRequirement[] = [
-        { key: 'card', itemId: row.costCardID, owned: cardOwned, need: row.costCardNum, enough: cardEnough },
-        { key: 'exp', itemId: row.costGeneralLevelID, owned: expOwned, need: row.costArmyLevelNum, enough: expEnough },
+        { key: 'card', itemId: row.costCardID, name: row.name, owned: cardOwned, need: row.costCardNum, enough: cardEnough },
+        { key: 'exp', itemId: row.costGeneralLevelID, name: '', owned: expOwned, need: row.costArmyLevelNum, enough: expEnough },
     ];
 
     const missing: string[] = [];

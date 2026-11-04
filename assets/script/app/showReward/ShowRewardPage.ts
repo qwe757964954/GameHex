@@ -199,6 +199,7 @@ export class ShowRewardPage extends PopupBase {
         if (!entry || !(entry.resId > 0)) return;
         void ItemDetailPage.open({
             userData: { resId: entry.resId, number: entry.number },
+            layer: this.popupLayer,
             allowMultiple: true,
         });
     }

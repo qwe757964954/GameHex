@@ -761,6 +761,9 @@ test('D5｜点一格 → 物品详情：必须传 resId **和 number** + `allowM
     assert.ok(/resId: entry\.resId/.test(PAGE_SRC), 'onItemClick 要传 resId');
     assert.ok(/number: entry\.number/.test(PAGE_SRC), 'onItemClick 要传 number');
     assert.ok(/allowMultiple: true/.test(PAGE_SRC));
+    const openCall = stripComments(PAGE_SRC).match(/ItemDetailPage\.open\(\{[\s\S]*?\}\)/);
+    assert.ok(openCall && /layer:\s*this\.popupLayer/.test(openCall[0]),
+        '物品详情须继承奖励弹窗层级，否则 NORMAL 详情会被 SYSTEM 奖励窗遮挡');
 });
 
 test('D6｜Grid：槽位用 TOUCH_END（不是 Button.CLICK）、只绑一次、闭包捕获槽位序号', () => {

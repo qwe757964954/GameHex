@@ -54,7 +54,7 @@ const RESOURCES = 'assets/resources';
 /** 断言 `<root>/<name>.png` 真实存在。 */
 function assertSpriteExists(root: string, name: string, hint: string): void {
     assert.ok(name, `${hint}：资源名为空`);
-    const file = `${RESOURCES}/${root}/${name}.png`;
+    const file = assetPath(`${root}/${name}.png`);
     assert.ok(existsSync(file), `${hint}：缺少美术 ${file}（根目录来自 ArtPaths，别在别处另写一份）`);
 }
 
@@ -66,7 +66,8 @@ function assertUsesArtPaths(source: string, hint: string): void {
 /**
  * 卡牌阵容 / 布阵两页用到的图分三个根目录，**不能一律按 `image/card` 找**：
  *   - `image/card`：卡面、站台底座、品级垫盘；
- *   - `image/icon/card`：立绘（`camp_*` / `char_0*`）、职业角标（`class_*`）、中栏图标；
+ *   - `icons/card`：营地雕像（`camp_*`）、职业角标（`class_*`）、中栏图标；
+ *   - `icons/cardHead`：角色立绘与兵种头像；
  *   - `image/frame`：布阵卡池卡框（`common_img_pzk_*`）。
  *
  *  2026-09-15 美术收编时 `camp_*` / `class_*` 从 `card` 挪到了 `icon`，但代码里
@@ -88,13 +89,13 @@ test('卡牌阵容 / 布阵的每张图都在它自己的根目录下', () => {
         assertSpriteExists(ICON_ART_ROOT, CLASS_ICON_ON_ART[cardClass], `中栏亮态（${cardClass}）`);
         assertSpriteExists(ICON_ART_ROOT, CLASS_ICON_OFF_ART[cardClass], `中栏灰态（${cardClass}）`);
         assertSpriteExists(ICON_ART_ROOT, resolveHeroArt(cardClass), `营地雕像（${cardClass}）`);
-        assertSpriteExists(ICON_ART_ROOT, BOARD_HERO_ART[cardClass], `布阵站台立绘（${cardClass}）`);
+        assertSpriteExists(ArtPaths.CARD_HEAD_ART_ROOT, BOARD_HERO_ART[cardClass], `布阵站台立绘（${cardClass}）`);
     }
     // 四职业各用自己的雕像，别写成同一张
     const heroArts = ZC_CARD_CLASSES.map((cardClass) => resolveHeroArt(cardClass));
     assert.equal(new Set(heroArts).size, ZC_CARD_CLASSES.length);
 
-    // 布阵页与卡牌阵容页的立绘是两套资源（`char_0*` vs `camp_*`），别互相串
+    // 布阵占位复用角色图，卡牌阵容页的职业占位仍是营地雕像。
     for (const cardClass of ZC_CARD_CLASSES) {
         assert.notEqual(BOARD_HERO_ART[cardClass], resolveHeroArt(cardClass), '布阵立绘不该直接用地形雕像名');
     }

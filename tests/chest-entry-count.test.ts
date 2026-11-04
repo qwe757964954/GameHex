@@ -37,6 +37,8 @@ function createHarness() {
     runInNewContext(code, { exports, require: (name: string) => {
         if (name.endsWith('/ComponentController')) return componentControllerModule();
         if (name === '../net/GameNet') return { GameNet: { instance: { removeCaller: (owner: object) => releasedOwners.push(owner) } } };
+        // `onDestroy` 会退订关卡缓存（战斗宝箱入口的开启动条件看 `CmdBattleLevel`）
+        if (name === '../net/CacheMgr') return { CacheMgr: { instance: { setEventUpdate: () => undefined, removeEventUpdate: () => undefined } } };
         if (name === '../../core/asset/ResourceScope') return { ResourceScope };
         if (name === 'cc') return {
             _decorator: { ccclass: () => (type: unknown) => type, property: () => () => {} },
@@ -52,7 +54,11 @@ function createHarness() {
     const Page = exports.MainPage;
     const createPage = () => {
         const page = new Page();
-        const cells = Array.from({ length: chestTypes.CHEST_SLOT_COUNT }, () => ({ spriteFrame: null as unknown }));
+        // 数量格除了填色还会被整格显隐（`setChestCellsVisible`），桩要带上 node
+        const cells = Array.from({ length: chestTypes.CHEST_SLOT_COUNT }, () => ({
+            spriteFrame: null as unknown,
+            node: { active: true },
+        }));
         Object.assign(page, {
             isValid: true,
             chestCell0: cells[0], chestCell1: cells[1], chestCell2: cells[2], chestCell3: cells[3],

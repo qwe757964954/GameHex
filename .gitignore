@@ -34,6 +34,7 @@ node_modules/
 .workbuddy/
 .worktrees/
 data/
+output/
 outputs/
 tmp/
 

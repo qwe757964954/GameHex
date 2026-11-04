@@ -1,46 +1,22 @@
+import { buildZCBattleReturnParams } from '../assets/script/app/zcds/application/ZCBattleEntryBuilder';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-/**
- * 通关返回章节页：相机要**居中到刚打的那一格**。
- *
- * 🔴 2026-10-29 用户：「通过关卡是回到章节页面，相机不会停在初始位置，需要将地块居中
- *    观看关卡地块的通关翻转效果」。
- *
- * 现状：`ZCGame.returnToMain` 只带 `initialTab: 'territory'`，页面是**整页新建**的
- * （`ProcedureMain.onPreload` 才发现 `mainNode` 为空 ⇒ 重新实例化），于是
- * `lastRenderedChapter === -1` ⇒ `resetScroll` 为真 ⇒ 相机滚到 `startCellId`。
- * 而这一格远在天边，服务端紧接着推来的「通关格子」广播（`CmdCityChapterPassCellBroMsg`）
- * 就在屏幕外把那颗格子翻掉了 —— 玩家什么都看不见。
- *
- * 口令链路（单次消费，全程不落全局变量）：
- *   `ZCGame`（`pveContext.territoryCellId`）→ `ProcedureMain` 入口参数
- *   → `MainTabHost.focusCellId`（`setParent` 之前交给页面）→ `MainTerritoryMap.setFocusCell`
- *   → 首屏 `renderAll` 居中后立刻清空。
- */
+/** 返回参数由入口构筑函数生成，经主界面宿主在激活前单次交给领地图。 */
 
 const read = (p: string): string => readFileSync(new URL(`../assets/script/app/${p}`, import.meta.url), 'utf8');
 
-const game = (): string => read('zcds/ZCGame.ts');
 const procedure = (): string => read('procedure/ProcedureMain.ts');
 const host = (): string => read('main/MainTabHost.ts');
 const page = (): string => read('main/MainTerritoryMap.ts');
 
 test('结算回主界面：领地分支必须带上「刚打的格子 + 章节」', () => {
-    const source = game();
-    const at = source.indexOf('private returnToMain(');
-    assert.ok(at > 0, '要有 returnToMain');
-    const body = source.slice(at, source.indexOf('\n    private ', at + 10));
-    // 领地分支（pveContext）必须把两样都写进 entry params。
-    assert.match(body, /initialTab: 'territory'/);
-    assert.match(body, /focusCellId: this\.pveContext\.territoryCellId/,
-        '不带格子 id ⇒ 页面只能滚回初始点位，翻转在屏幕外播');
-    assert.match(body, /focusChapterId: this\.pveContext\.chapterId/,
-        '带上章节才能校验「这颗格子属于当前渲染的章」，否则跨章存局会把相机甩到角落');
-    // 世界（SLG）分支不该被顺手套上领地焦点。
-    const worldBranch = body.slice(body.indexOf("initialTab: 'world'"), body.indexOf("initialTab: 'territory'"));
-    assert.doesNotMatch(worldBranch, /focusCellId/, '大地图返回不经过领地图，别塞焦点格');
+    assert.deepEqual(buildZCBattleReturnParams({ slgBattleType: undefined,
+        pveContext: { chapterId: 2, territoryCellId: 7 } as Parameters<typeof buildZCBattleReturnParams>[0]['pveContext'],
+    }), { initialTab: 'territory', focusChapterId: 2, focusCellId: 7 });
+    assert.deepEqual(buildZCBattleReturnParams({ slgBattleType: 1003, pveContext: null }), { initialTab: 'world' });
+    assert.equal(buildZCBattleReturnParams({ slgBattleType: undefined, pveContext: null }), undefined);
 });
 
 test('ProcedureMain：入口参数转发到宿主，且早于 setParent', () => {

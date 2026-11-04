@@ -4,7 +4,7 @@ import type { ZCBoardCardFrames } from './LineupBoardCard';
 import type { ZCBoardSlotFrames } from './LineupBoardSlot';
 import type { ZCCardFrames } from './CardLineupCard';
 import type { ZCSlotFrames } from './CardLineupSlot';
-import { loadCardHeadArt, loadFrameArt, loadIconArt, loadLineupArt } from './CardLineupIcons';
+import { loadCardHeroArt, loadFrameArt, loadIconArt, loadLineupArt } from './CardLineupIcons';
 import {
     BOARD_HERO_ART,
     CAMP_ICON_ON_ART,
@@ -15,6 +15,7 @@ import {
     CLASS_ICON_ON_ART,
     POOL_FRAME_ART,
     resolveCardClass,
+    resolveCardHeroArt,
     resolveHeroArt,
     STAGE_DISC_ART,
     ZCCardCamp,
@@ -44,10 +45,9 @@ export class CardArtProvider {
             const cardClass = resolveCardClass(card);
             task = Promise.all([
                 loadLineupArt(STAGE_DISC_ART[card.rarity]),
-                loadIconArt(resolveHeroArt(cardClass)),
+                this.loadHeroArt(card, resolveHeroArt(cardClass)),
                 loadIconArt(CLASS_BADGE_ART[cardClass]),
-                loadCardHeadArt(card.headIcon),
-            ]).then(([disc, hero, badge, head]) => ({ disc, hero, badge, head }));
+            ]).then(([disc, hero, badge]) => ({ disc, hero, badge }));
             this.lineupSlots.set(key, task);
         }
         return task;
@@ -60,10 +60,9 @@ export class CardArtProvider {
             const cardClass = resolveCardClass(card);
             task = Promise.all([
                 loadLineupArt(CARD_FACE_ART[card.rarity]),
-                loadIconArt(resolveHeroArt(cardClass)),
+                this.loadHeroArt(card, resolveHeroArt(cardClass)),
                 loadIconArt(CLASS_BADGE_ART[cardClass]),
-                loadCardHeadArt(card.headIcon),
-            ]).then(([face, hero, badge, head]) => ({ face, hero, badge, head }));
+            ]).then(([face, hero, badge]) => ({ face, hero, badge }));
             this.lineupCards.set(key, task);
         }
         return task;
@@ -76,7 +75,7 @@ export class CardArtProvider {
             const cardClass = resolveCardClass(card);
             task = Promise.all([
                 loadLineupArt(STAGE_DISC_ART[card.rarity]),
-                loadIconArt(BOARD_HERO_ART[cardClass]),
+                this.loadHeroArt(card, BOARD_HERO_ART[cardClass], loadCardHeroArt),
                 loadIconArt(CLASS_BADGE_ART[cardClass]),
             ]).then(([disc, hero, badge]) => ({ disc, hero, badge }));
             this.boardSlots.set(key, task);
@@ -91,13 +90,22 @@ export class CardArtProvider {
             const cardClass = resolveCardClass(card);
             task = Promise.all([
                 loadFrameArt(POOL_FRAME_ART[card.rarity]),
-                loadIconArt(BOARD_HERO_ART[cardClass]),
+                this.loadHeroArt(card, BOARD_HERO_ART[cardClass], loadCardHeroArt),
                 loadIconArt(CLASS_BADGE_ART[cardClass]),
-                loadCardHeadArt(card.headIcon),
-            ]).then(([frame, hero, badge, head]) => ({ frame, hero, badge, head }));
+            ]).then(([frame, hero, badge]) => ({ frame, hero, badge }));
             this.boardCards.set(key, task);
         }
         return task;
+    }
+
+    /** 专属图统一从 cardHead 取；缺图沿用各界面的占位，缩放由视图负责。 */
+    private loadHeroArt(
+        card: ZCDeckCard,
+        fallbackName: string,
+        loadFallback: (name: string) => Promise<SpriteFrame | null> = loadIconArt,
+    ): Promise<SpriteFrame | null> {
+        const heroName = resolveCardHeroArt(card);
+        return heroName ? loadCardHeroArt(heroName) : loadFallback(fallbackName);
     }
 
     loadClassFrames(cardClass: ZCCardClass): Promise<CardClassFrames> {
@@ -112,32 +120,21 @@ export class CardArtProvider {
         return task;
     }
 
-    /**
-     * 图标行一项的那枚图标（只有一个了）。
-     *
-     *  职业与阵营各查各的表（`CLASS_ICON_ON_ART` / `CAMP_ICON_ON_ART`），缓存键带上 `kind`
-     *  以免两套 key 撞名。阵营那套图**美术还没出**，这里会拿到 `null` —— 属于预期内的降级，
-     *  调用方按「`null` 就保留占位图」处理。
-     *
-     *  返回裸 `SpriteFrame` 而不是 `CardClassFrames`：条目 2026-09-22 起只剩一枚图标，
-     *  「亮 / 灰」不再是两枚，别为了对齐类型再塞一个永远为 `null` 的字段。
-     */
+    /** 职业与阵营分别查图，并复用同一条目的加载请求。 */
     loadTallyFrames(item: ZCCardTally): Promise<SpriteFrame | null> {
         const key = `${item.kind}|${item.key}`;
         let task = this.tallyFrames.get(key);
         if (!task) {
-            task = item.kind === 'class'
-                ? loadIconArt(CLASS_ICON_ON_ART[item.key as ZCCardClass])
-                : loadIconArt(CAMP_ICON_ON_ART[item.key as ZCCardCamp]);
+            const name = item.kind === 'class'
+                ? CLASS_ICON_ON_ART[item.key as ZCCardClass]
+                : CAMP_ICON_ON_ART[item.key as ZCCardCamp];
+            task = name ? loadIconArt(name) : Promise.resolve(null);
             this.tallyFrames.set(key, task);
         }
         return task;
     }
 
-    /**
-     * 缓存键：**必须带上 `headIcon`**（口径与判据都在 `CardLineupTypes.cardArtKey`，
-     * 那边是零引擎依赖的纯函数，单测直接钉住「只差头像的两张卡不能同键」）。
-     */
+    /** 品级、职业与卡牌 id 共同决定美术缓存。 */
     private key(card: ZCDeckCard): string {
         return cardArtKey(card);
     }

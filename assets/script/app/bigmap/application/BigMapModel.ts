@@ -484,11 +484,10 @@ export class BigMapModel {
         };
         const server = this.deps.slgRepository;
         if (!server) return merged;
-        // 联机版的击杀进度在服务器（`SlgGameInfo.maxMonsterLevel`），本地存档是空的；
-        // 不覆盖会把野外怪全部锁死（`preLevel > 0` 一律不放行）。
+        // 联机版只认服务器击杀进度，避免本地进度放行服务器尚未解锁的野怪。
         return {
             ...merged,
-            maxClearedMonsterLevel: Math.max(merged.maxClearedMonsterLevel, server.maxClearedMonsterLevel),
+            maxClearedMonsterLevel: server.maxClearedMonsterLevel,
         };
     }
 
@@ -523,7 +522,7 @@ export class BigMapModel {
 
     /**
      * 资源类型 → 背包道具图标路径（`item.icon`）。没配 itemId / 图标为空时是空表，
-     * 视图退回 `image/bigmap/concept/sprites/<resType>` 概念图。
+     * 视图退回 `image/concept/sprites/<resType>` 概念图。
      */
     get resourceIcons(): ReadonlyMap<BigMapResType, string> {
         return this.config.resourceIcons;

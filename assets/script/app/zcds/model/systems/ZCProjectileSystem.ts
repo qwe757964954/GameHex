@@ -8,6 +8,14 @@ export interface ZCProjectileContext extends Pick<IZCModelServices, 'effectiveDe
     distanceScale: number;
     structureTarget(projectile: ZCProjectileState): ZCCombatTarget | null;
     hit(projectile: ZCProjectileState, target: ZCCombatTarget): void;
+    /**
+     * 这颗弹道**这一帧就要消失**（命中后被丢弃 / 到点没打到东西）时的回调。
+     *
+     * 可选：不接就与改前逐字一致。目前唯一的消费者是「定格光束」——
+     * 镭射飞龙的光束需要保留命中点、再花 0.18s 淡出（需求 2026-11-03）。
+     * 也可以在这里顺手清理。
+     */
+    linger?(projectile: ZCProjectileState): void;
 }
 
 /** 线段扫掠圆：返回第一次接触的位置比例，双方重叠时为 0。 */
@@ -100,8 +108,9 @@ export class ZCProjectileSystem {
                 if (t !== null && t < first) { first = t; target = structure; }
             }
             if (target) {
-                projectile.x = from.x + (to.x - from.x) * first;
-                projectile.y = from.y + (to.y - from.y) * first;
+                //  2026-11-03 表现：光柱/弹体末端落到目标模型中心，而不是边界接触点。
+                projectile.x = target.x;
+                projectile.y = target.y;
                 context.hit(projectile, target);
                 if (target.kind === 'unit' && (projectile.remainingPierces ?? 0) > 0
                     && context.now + 1e-9 < projectile.startedAt + projectile.durationSeconds) {
@@ -115,10 +124,15 @@ export class ZCProjectileSystem {
                         projectile.baseDamage *= Math.max(0, 1 - Math.min(1, falloff));
                     }
                     projectiles[kept++] = projectile;
+                } else {
+                    //  命中即回收：先给上层一次「留个念想」的机会（定格光束的 0.18s 渐隐）。
+                    context.linger?.(projectile);
                 }
             } else {
                 projectile.x = to.x; projectile.y = to.y;
                 if (context.now + 1e-9 < projectile.startedAt + projectile.durationSeconds) projectiles[kept++] = projectile;
+                //  到点没打到人（射程末端 / 目标已走开）：同理，别让光柱凭空闪没。
+                else context.linger?.(projectile);
             }
         }
         projectiles.length = kept;

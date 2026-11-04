@@ -269,7 +269,7 @@ export function parseBigMapConfig(tables: BigMapRawTables): IBigMapConfig {
  * 读 `item` 表属于「配置加载编排」的活，放 loader 侧才不破坏纯函数。
  *
  * `item.icon` 为空（例如策划还没配图）⇒ 这一项不进来，视图退回
- * `image/bigmap/concept/sprites/<resType>` 概念图，不会出现空图标。
+ * `image/concept/sprites/<resType>` 概念图，不会出现空图标。
  */
 export function attachBigMapResourceItemIcons(
     config: IBigMapConfig,

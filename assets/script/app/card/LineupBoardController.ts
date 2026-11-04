@@ -7,23 +7,29 @@ import { CardPopupEvent, type LineupBoardIntent } from './CardPopupEvents';
 import { CardLineupEvent } from './CardLineupEvents';
 import { CARD_LINEUP_TEXTS } from './CardLineupTexts';
 
-export interface LineupBoardControllerOptions {
+export interface ILineupBoardControllerOptions {
     readonly owner: object;
     readonly model: LineupBoardModel;
     readonly repository: Pick<ICardRepository, 'loadBoard' | 'saveFormation'>;
     readonly autoLoadDecks: boolean;
     readonly closeAfterSave: boolean;
-    readonly render: (state: LineupBoardPresentation) => void | Promise<void>;
-    readonly tip: (text: string) => void;
-    readonly removeCaller: (caller: object) => void;
-    readonly close: () => void;
     readonly failed: (error: unknown) => void;
+    readonly view: {
+        readonly render: (state: LineupBoardPresentation) => void | Promise<void>;
+        readonly close: () => void;
+    };
+    readonly feedback: {
+        readonly tip: (text: string) => void;
+    };
+    readonly requests: {
+        readonly removeCaller: (caller: object) => void;
+    };
 }
 export class LineupBoardController extends ControllerBase {
     private started = false;
-    constructor(context: IControllerContext, private readonly options: LineupBoardControllerOptions) {
+    constructor(context: IControllerContext, private readonly options: ILineupBoardControllerOptions) {
         super(context, 'lineup-board');
-        this.own(() => options.removeCaller(this));
+        this.own(() => options.requests.removeCaller(this));
     }
     async start(): Promise<void> {
         if (this.started || this.isDisposed) return;
@@ -34,12 +40,12 @@ export class LineupBoardController extends ControllerBase {
             if (this.isDisposed) return;
             this.options.model.load(data); await this.publish();
         } catch (error) {
-            if (!this.isDisposed) { this.options.failed(error); this.options.tip(CARD_LINEUP_TEXTS.boardLoadFailed); }
+            if (!this.isDisposed) { this.options.failed(error); this.options.feedback.tip(CARD_LINEUP_TEXTS.boardLoadFailed); }
         }
     }
     private async publish(): Promise<void> {
         const state = this.options.model.snapshot;
-        if (state && !this.isDisposed) await this.options.render(state);
+        if (state && !this.isDisposed) await this.options.view.render(state);
     }
     private onIntent(event: LineupBoardIntent): void {
         if (event.owner !== this.options.owner || !this.options.model.snapshot) return;
@@ -61,14 +67,14 @@ export class LineupBoardController extends ControllerBase {
             if (result.kind === 'success') {
                 EventMgr.instance.emit(CardLineupEvent.DeckSaved, { formationId: submission.formationId, heroIds: submission.heroIds });
                 if (this.isDisposed) return;
-                this.options.tip(CARD_LINEUP_TEXTS.boardSaved);
-                if (unchanged && this.options.closeAfterSave) { this.options.close(); return; }
-            } else this.options.tip(result.kind === 'offline' ? CARD_LINEUP_TEXTS.boardSaveOffline : CARD_LINEUP_TEXTS.boardSaveFailed);
+                this.options.feedback.tip(CARD_LINEUP_TEXTS.boardSaved);
+                if (unchanged && this.options.closeAfterSave) { this.options.view.close(); return; }
+            } else this.options.feedback.tip(result.kind === 'offline' ? CARD_LINEUP_TEXTS.boardSaveOffline : CARD_LINEUP_TEXTS.boardSaveFailed);
             await this.publish();
         } catch (error) {
             if (this.isDisposed) return;
             model.finishSave(submission, 'failed'); this.options.failed(error);
-            this.options.tip(CARD_LINEUP_TEXTS.boardSaveFailed); await this.publish();
+            this.options.feedback.tip(CARD_LINEUP_TEXTS.boardSaveFailed); await this.publish();
         }
     }
 }

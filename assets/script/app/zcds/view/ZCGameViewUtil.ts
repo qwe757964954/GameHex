@@ -1,3 +1,4 @@
+import type { IZCBattlePresentationArt } from '../application/ZCBattleRuntimeContract';
 import {ProgressBar, SpriteFrame} from 'cc';
 import {
     HEX_GRID_CONTENT_LIFT,
@@ -1101,3 +1102,12 @@ export function buildDecorPlacements(
     return placements;
 }
 
+
+/** 卡牌专属建筑图优先，随后沿用主城/兵营的通用外观。 */
+export function zcBuildingArt(art: IZCBattlePresentationArt, cardId: string | null, building: string): SpriteFrame | null {
+    const configured = cardId ? art.buildingFramesByCardId.get(cardId) : null;
+    if (configured) return configured;
+    if (building === 'hq') return art.buildingFrames.get('hq-base') ?? null;
+    if (building === 'barracks') return art.buildingFrames.get('barracks-default') ?? null;
+    return null;
+}

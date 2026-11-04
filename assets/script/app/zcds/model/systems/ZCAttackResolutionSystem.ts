@@ -44,6 +44,16 @@ export interface IZCAttackResolutionContext extends Pick<IZCModelServices, 'rule
      * 所以「技能表直接推一次击退」和「挂个击退 buff」落点完全一致（撞墙/不可走格子会被吞）。
      */
     applyKnockback(target: ZCUnitState, source: ZCUnitState, rawDistance: number): void;
+    /**
+     * 把一个弹道写进 `state.projectiles`（追踪导弹 101003 走这条：不立即结算，
+     * 而是发一颗会沿弧线飞、撞到才停的弹体）。
+     *
+     * 为什么不直接在 `strikeTargets` 里 `state.projectiles.push`：弹道的完整字段
+     * （`sourceCardId` / `baseDamage` / `effectPrefabPath` / 克制系数）都在攻击方上下文里，
+     * 而且普通弹道那一条 `sendAttack` 已经有一套「从出手点到目标」的构造口径，
+     * 这里让宿主（`ZCGameModel`）补一个回调，复用同一份 `state` 写入口径，避免两套 push 代码漂移。
+     */
+    pushProjectile(projectile: ZCProjectileState): void;
 }
 
 /**
@@ -67,6 +77,19 @@ export interface IZCStrikeOptions {
     readonly splashDamageRate?: number;
     /** 命中挂的状态 id；缺省不挂。 */
     readonly statusId?: string;
+    /**
+     * 「追踪导弹」模式：不发即结算，而是每挑一个目标发一颗**弧线导弹**。
+     *
+     *   · `missilePrefabPath` —— 飞行段的弹体特效（`镭射飞龙_导弹技能`）；
+     *   · `impactPrefabPath`  —— 停下后播的爆炸（`镭射飞龙_导弹技能命中`）；
+     *   · `arcOffset`         —— 出手点到目标点中段的横向偏移（世界坐标，造出"三条不同弧线"）。
+     *
+     * 命中判定、伤害、溅射仍走既有 `resolveProjectileHit` + `splashRadius` 那套，
+     * 只是把「挑到人就立即扣血」换成「发一颗会飞过去的弹体」。
+     */
+    readonly missilePrefabPath?: string;
+    readonly impactPrefabPath?: string;
+    readonly arcOffset?: number;
 }
 
 function damageFloatTextKind(critical: boolean, counterMultiplier = 1): ZCCombatFloatTextKind {    if (critical) return 'critical';
@@ -403,6 +426,73 @@ export class ZCAttackResolutionSystem {
         const splashRadius = Math.max(0, options.splashRadius ?? 0);
         const splashRate = Math.max(0, options.splashDamageRate ?? 0);
         const criticalMultiplier = this.criticalMultiplier(unit, context);
+
+        //  ── 追踪导弹：挑到人就发「会飞过去的弹体」，不在这里立即扣血 ──
+        //  需求 2026-11-03：「触发技能发射出 3 个技能特效，每个特效瞄准一个目标，
+        //  特效呈弧线飞向目标（3 条不同的弧线），中途触碰到任意目标都会造成 1 次伤害并停止飞行，
+        //  到达目标的坐标也会停止飞行，停止飞行后播放爆炸特效」。
+        //  弹体直线飞向各自目标（碰撞扫掠天然覆盖"中途碰到谁"），弧线只作用在视觉上
+        //  （`arcOffset` 由视图层施加），这样「直线扫掠碰撞」这条既有硬逻辑一行都不用改。
+        if (options.missilePrefabPath) {
+            let fired = 0;
+            const speed = profile.projectileSpeed || 500;
+            for (let index = 0; index < victims.length; index += 1) {
+                const { unit: victim } = victims[index];
+                const point = context.unitPosition(victim);
+                const from = context.unitPosition(unit);
+                const dx = point.x - from.x;
+                const dy = point.y - from.y;
+                const length = Math.hypot(dx, dy);
+                //  三条不同的弧线：偏移量随下标错开（0 / ±arcOffset），方向也交替正负。
+                const arc = options.arcOffset ?? 0;
+                const sign = index % 2 === 0 ? 1 : -1;
+                const arcOffset = arc > 0 ? arc * sign * (0.5 + 0.5 * (index % 2)) : 0;
+                const heading = length > 0 ? Math.atan2(dy, dx) : unit.facingRadians;
+                context.pushProjectile({
+                    id: state.nextCombatEventId++,
+                    type: 'projectile',
+                    owner: unit.owner,
+                    sourceUnitId: unit.id,
+                    targetUnitId: victim.id,
+                    skillId: profile.skillId,
+                    skillName: profile.name,
+                    effectKey: null,
+                    projectileKey: null,
+                    effectPrefabPath: options.missilePrefabPath,
+                    fromX: from.x,
+                    fromY: from.y,
+                    toX: point.x,
+                    toY: point.y,
+                    radius: 0,
+                    damage: 0,
+                    empowered: false,
+                    startedAt: state.elapsedSeconds,
+                    durationSeconds: ZCCombatSystem.attackTravelSeconds(
+                        ZCCombatEventType.Projectile, length, speed),
+                    targetKind: 'unit',
+                    targetId: victim.id,
+                    sourceCardId: unit.cardId,
+                    baseDamage: this.unitDamage(context, unit, victim.owner, victim.cardId, options.damageRate),
+                    x: from.x,
+                    y: from.y,
+                    previousX: from.x,
+                    previousY: from.y,
+                    velocityX: Math.cos(heading) * speed,
+                    velocityY: Math.sin(heading) * speed,
+                    collisionRadius: (profile.collisionRadius ?? 3) * context.rules.combatDistanceScale,
+                    canHitAir: context.effectiveDefinition(unit).canAttackAir,
+                    remainingPierces: 0,
+                    hitUnitIds: [],
+                    splashRadius: splashRadius > 0 ? splashRadius : undefined,
+                    splashDamageRate: splashRate > 0 ? splashRate : undefined,
+                    impactEffectPrefabPath: options.impactPrefabPath ?? null,
+                    arcOffset,
+                });
+                fired += 1;
+            }
+            return fired;
+        }
+
         let hits = 0;
         for (const { unit: victim } of victims) {
             const targetOwner = victim.owner;
@@ -645,6 +735,19 @@ export class ZCAttackResolutionSystem {
             startedAt: state.elapsedSeconds,
             durationSeconds: travelSeconds,
         };
+        //  镭射死光（30845）：表现终点沿目标方向 18 格（756 逻辑单位），
+        //  弹道寿命也按 18 格 / 速度 算，确保射线穿透所有敌人并飞到屏幕外。
+        const LASER_DEATH_RANGE = 18 * 42;
+        if (profile.skillId === 30845) {
+            const dx = target.x - from.x;
+            const dy = target.y - from.y;
+            const len = Math.hypot(dx, dy);
+            const nx = len > 0 ? dx / len : Math.cos(unit.facingRadians);
+            const ny = len > 0 ? dy / len : Math.sin(unit.facingRadians);
+            event.toX = from.x + nx * LASER_DEATH_RANGE;
+            event.toY = from.y + ny * LASER_DEATH_RANGE;
+            event.durationSeconds = LASER_DEATH_RANGE / (activeProfile.projectileSpeed || 500);
+        }
         const parameters = skillRuntime?.parameters;
         if (empowered && parameters && parameters.shieldRatio > 0) {
             this.applyShieldAura(state, unit, parameters.shieldRatio);
@@ -1012,8 +1115,12 @@ export class ZCAttackResolutionSystem {
             empowered: projectile.empowered,
             targetUnitId: target.kind === 'unit' ? target.id : null,
             fromX: projectile.x, fromY: projectile.y, toX: projectile.x, toY: projectile.y,
-            effectPrefabPath: null, effectKey: 'hit', projectileKey: null,
-            radius: 4, damage, startedAt: state.elapsedSeconds, durationSeconds: .18,
+            //  追踪导弹：命中后播爆炸（`镭射飞龙_导弹技能命中`）而不是通用受击；
+            //  普通弹道仍是 `effectKey: 'hit'` + null（走通用命中表现）。
+            effectPrefabPath: projectile.impactEffectPrefabPath ?? null,
+            effectKey: projectile.impactEffectPrefabPath ? null : 'hit',
+            projectileKey: null,
+            radius: 4, damage, startedAt: state.elapsedSeconds, durationSeconds: projectile.impactEffectPrefabPath ? 0.5 : .18,
         });
         // 投射物命中后在落点创建持续区域（火船/风龙：命中后才烧）
         if ((projectile.zoneDuration ?? 0) > 0 && projectile.radius > 0) {

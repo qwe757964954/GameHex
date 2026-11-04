@@ -1,10 +1,10 @@
 /**
  * 章节选择弹窗的行数据（纯逻辑，**零 `cc` 依赖**，供 Node 用例直接 import）。
  *
- * 口径（2026-11-02 与山猫确认）：
+ * 口径（2026-11-03 与用户确认）：
  * - 可切章节 = `TerritoryChapterInfoRepository.availableChapters`（服务端下发）；
- * - 列表范围 = `1 .. 最高可切章节 + 1`，**多出来的那一章是「下一章预告」**（锁定行）；
- *   没有地图的未解锁章节直接不出现，避免号段空洞刷出空行；
+ * - 列表范围 = `1 .. 全部章节数`（配表 chapterName 定义全集，缺省回落旧口径
+ *   「最高可切章节 + 1」）；**未解锁的章节一律占行并显示为锁定**，不做号段空洞跳过；
  * - 行完成度 = 「已占领站点数 / 该章站点总数」（站点 = 地图 `sites[].cellId`），
  *   与 HUD 的「已占领 x/y」同一类占领口径，但分母换成了**本章站点数**（HUD 用的是关卡数）；
  * - 100% 视同通关（`cleared`，金色状态块），其余可切章节是 `progress`（绿色），
@@ -68,30 +68,32 @@ export function chapterPercentOf(
  * @param currentChapterId 当前章节（画金环）
  * @param maps 已加载到的地图信息；**缺项 = 该章没有地图资源**
  * @param ownedCellsByChapter 各章本地存档的已占领格
+ * @param chapterNames 配表中的章节名称，以 chapterId 对应
+ * @param totalChapters 展示的章节总数（配表全集）；缺省回落「最高可切章节 + 1（下一章预告）」旧口径
  */
 export function buildChapterSelectRows(
     availableChapters: readonly number[],
     currentChapterId: number,
     maps: ReadonlyMap<number, IChapterSelectMapInfo>,
     ownedCellsByChapter: ReadonlyMap<number, readonly number[]>,
+    chapterNames: ReadonlyMap<number, string> = new Map(),
+    totalChapters?: number,
 ): IChapterSelectRow[] {
     const available = new Set(availableChapters);
     let highest = 0;
     for (const chapterId of available) if (chapterId > highest) highest = chapterId;
-    if (highest === 0) highest = 1;
+    const upper = totalChapters ?? Math.max(highest + 1, 1);
 
     const rows: IChapterSelectRow[] = [];
-    for (let chapterId = 1; chapterId <= highest + 1; chapterId++) {
+    for (let chapterId = 1; chapterId <= upper; chapterId++) {
         const unlocked = available.has(chapterId);
         const map = maps.get(chapterId) ?? null;
-        // 未解锁且没有地图 = 这个号段还没做内容，不占一行。
-        // 第 1 章例外：服务端一条都没下发时列表至少要有它，否则弹窗是空的。
-        if (!unlocked && !map && chapterId > 1) continue;
+        // 全部章节都占行：未解锁一律显示为锁定；地图有无只影响完成度分母，不影响是否展示。
         const percent = unlocked ? chapterPercentOf(map, ownedCellsByChapter.get(chapterId) ?? []) : 0;
         rows.push({
             chapterId,
             index: rows.length + 1,
-            title: map?.name ?? fallbackChapterTitle(chapterId),
+            title: chapterNames.get(chapterId) ?? map?.name ?? fallbackChapterTitle(chapterId),
             percent,
             state: !unlocked
                 ? CHAPTER_SELECT_STATE.locked

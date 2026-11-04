@@ -1,8 +1,8 @@
 import {
     Color,
     Graphics,
+    instantiate,
     Label,
-    LabelOutline,
     Node,
     Sprite,
     SpriteFrame,
@@ -37,12 +37,15 @@ import { BUILDING_VISIBLE_WIDTH } from './TerritoryStationView';
 /**
  * 章节宝箱开箱的**表现层**（三档共用一套节点，参数走 `model/TerritoryChestAnimation`）。
  *
- * ## prefab 与代码的分工（2026-10-28 改）
+ * ## prefab 与代码的分工（2026-10-28 改；2026-11-03 FlySlot 模板化）
  *
  * 节点树 + `Graphics` / `Sprite` / `UIOpacity` 全在 `ui/territory/TerritoryChest.prefab` 里
  * （页面 instantiate 后把根节点传进来）—— 在 Inspector 里看得见、能对着设计稿调层级。
- * 代码只负责**每帧重画**：光柱 / 彩虹 / 光条 / 星光的形状是 `Graphics` 现画的，本来就序列化不了；
- * 池化的 `FountainSlot_*` / `FlySlot_*` 数量按奖励总量变（5 / 15 / 30），仍由代码建。
+ * 代码只负责**每帧重画**：光柱 / 彩虹 / 光条 / 星光的形状是 `Graphics` 现画的，本来就序列化不了。
+ * 池化槽位数量按奖励总量变（5 / 15 / 30）：
+ *  - `Fly/FlySlot` 是 prefab 里的**模板**（active=false，图标 + 数量 Label + 描边全在预制体配），
+ *    代码 `ensureFlySlots` 只实例化 + 按奖励量布局；
+ *  - `FountainSlot_*` 仍由代码建（没有需要序列化的静态表现）。
  *
  * 早前这套层级是构造函数里 `new Node` + `addComponent` 拼出来的，当时给的理由是
  * 「宝箱补帧换图、光效全是 Graphics 现画、图标按 resId 注入 ⇒ 都不适合塞进 prefab」——
@@ -226,6 +229,8 @@ export class TerritoryChestView {
     private readonly chestOpacity: UIOpacity;
     private readonly fountain: Node;
     private readonly flyLayer: Node;
+    /** 飞向资源栏粒子的模板（`Fly/FlySlot`，prefab 里配好图标 + 数量文字 + 描边；代码只实例化）。 */
+    private readonly flyTemplate: Node;
 
     private readonly fountainSlots: IChestParticleSlot[] = [];
     private readonly flySlots: IFlySlot[] = [];
@@ -349,6 +354,9 @@ export class TerritoryChestView {
         this.chestTransform = this.chestArt.getComponent(UITransform);
         this.fountain = this.stage.getChildByName('Fountain');
         this.flyLayer = root.getChildByName('Fly');
+        // 飞向栏位的粒子模板：图标、数量文字与描边都在 prefab 里配（`Fly/FlySlot`，active=false），
+        // `ensureFlySlots` 只负责实例化 + 按奖励量布局，不写任何静态表现属性。
+        this.flyTemplate = this.flyLayer.getChildByName('FlySlot');
     }
 
     /** 注入宝箱美术（页面在资源就绪后调一次）。 */
@@ -904,31 +912,23 @@ export class TerritoryChestView {
         const size = FLY_ICON_BASE_SIZE * FLY_ICON_SCALE;
         while (this.flySlots.length < count) {
             const index = this.flySlots.length;
-            const node = makeNode(`FlySlot_${index}`, this.flyLayer);
-            node.active = false;
+            // 结构 + 静态表现（图标 Sprite、数量 Label、描边、字号/颜色/对齐）全在 prefab 的
+            // `Fly/FlySlot` 模板里；这里只实例化并按奖励量做**动态布局**。
+            const node = instantiate(this.flyTemplate);
+            node.name = `FlySlot_${index}`;
+            node.setParent(this.flyLayer);
             node.getComponent(UITransform).setContentSize(size, size);
-            const sprite = node.addComponent(Sprite);
-            sprite.trim = false;
-            sprite.sizeMode = Sprite.SizeMode.CUSTOM;
-            const labelNode = makeNode('Amount', node);
+            const labelNode = node.getChildByName('Amount');
             labelNode.getComponent(UITransform).setContentSize(120, 26);
             // 数量文字挂在粒子**底边之下**：图标变大后（44 → 59.4）固定 -30 会被压住，
             // 所以按当前边长推到 `size/2 + 12`，放大前后都留 12px 间隙。
             labelNode.setPosition(0, -(size / 2 + 12), 0);
-            const label = labelNode.addComponent(Label);
-            label.fontSize = 20;
-            label.lineHeight = 22;
-            label.color = new Color(255, 246, 214);
-            label.horizontalAlign = Label.HorizontalAlign.CENTER;
-            const outline = labelNode.addComponent(LabelOutline);
-            outline.color = new Color(46, 32, 22);
-            outline.width = 2;
             this.flySlots.push({
                 node,
-                sprite,
-                opacity: node.addComponent(UIOpacity),
+                sprite: node.getComponent(Sprite),
+                opacity: node.getComponent(UIOpacity),
                 transform: node.getComponent(UITransform),
-                label,
+                label: labelNode.getComponent(Label),
             });
         }
         // 图标按奖励条目**轮流取**（与 `applyFly` / 喷发同一口径）：粒子数可能多于奖励条目数

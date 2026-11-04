@@ -129,7 +129,8 @@ test('C7 蓝卡计时条保留时钟图标，时间文字与图标同排', () =>
 
 test('C8 宝箱入口展开宝箱栏时隐藏快速寻敌按钮，收起时恢复', () => {
     const page = readFileSync('assets/script/app/main/MainPage.ts', 'utf8');
-    assert.match(page, /chestToggle: Node = null!/);
+    // `null!` 与 `null` 都算数：这里守的是「属性声明了」，不是「断言运算符在不在」
+    assert.match(page, /chestToggle: Node = null!?;/);
     assert.match(page, /this\.chestToggle\.on\(Button\.EventType\.CLICK, this\.onToggleChestPanel, this\)/);
     assert.match(page, /setChestPanelOpen\(open: boolean\): void/);
     assert.match(page, /this\.chestBar\.setOpen\(open\)/);

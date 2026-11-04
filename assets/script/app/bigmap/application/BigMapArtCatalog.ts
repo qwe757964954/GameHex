@@ -1,5 +1,7 @@
-export const BIGMAP_CONCEPT_ROOT = 'image/bigmap/concept';
-export const BIGMAP_BASE_BACKGROUND = 'image/bigmap/base_background';
+// 2026-11-04：`assets/bundles/bigmap/image/bigmap/` 整目录上提成 `assets/bundles/bigmap/image/`，
+// 所以 bundle 内路径少了一层 `bigmap`。服务器下发的旧路径由 `toBigMapArtPath()` 归一（见 `BigMapArtLoader`）。
+export const BIGMAP_CONCEPT_ROOT = 'image/concept';
+export const BIGMAP_BASE_BACKGROUND = 'image/base_background';
 
 /** 按 `baseBuilding.baseBuildType` 回退，不能再按旧版八个建筑 ID 对图。 */
 export const BIGMAP_BUILDING_ART: Readonly<Record<number, string>> = {

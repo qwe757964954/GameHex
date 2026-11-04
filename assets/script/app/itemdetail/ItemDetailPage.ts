@@ -401,6 +401,7 @@ export class ItemDetailPage extends PopupBase {
         if (resId === undefined || !Number.isFinite(resId) || resId <= 0) return;
         void ItemDetailPage.open({
             userData: { resId, number: 0 } as IItemDetailOpenParams,
+            layer: this.popupLayer,
             allowMultiple: true,
         });
     }

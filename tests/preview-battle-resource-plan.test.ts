@@ -226,3 +226,38 @@ test('表现清单纯计算覆盖召唤、副轨、命中、强化与覆盖模�
     assert.ok(!offline.effectPaths.includes('disabled'));
     assert.deepEqual(buildZCVisualResourcePlan(definitions, adapters, []).effectPaths, []);
 });
+
+test('追踪导弹的弹体/爆炸路径必须进资源清单（代码常量表登记，纯表扫描收不到）', () => {
+    //  2026-11-03 用户反馈「镭射飞龙的追踪导弹特效没有了」：导弹两个 prefab 只登记在
+    //  `ZCCombatEffectFlight.MISSILE_FX_BY_UNIT`，pvpSkill 任何一行都不携带，
+    //  旧版 `buildZCVisualResourcePlan` 只认 attackProfile 的四个字段 ⇒ 永远不加载。
+    const MISSILE = 'units/projectiles/镭射飞龙_导弹技能/镭射飞龙_导弹技能';
+    const IMPACT = 'units/projectiles/镭射飞龙_导弹技能命中/镭射飞龙_导弹技能命中';
+
+    const laserDragon = {
+        unitId: '68010', prefabPath: 'unit/laser',
+        attackProfile: { effectPrefabPath: 'units/projectiles/镭射飞龙_普攻/镭射飞龙_普攻' },
+    };
+    const other = {
+        unitId: '68033', prefabPath: 'unit/boxer',
+        attackProfile: { effectPrefabPath: 'units/projectiles/消灭学霸_普攻/消灭学霸_普攻' },
+    };
+
+    //  上阵镭射飞龙 ⇒ 导弹两件套都要在。
+    const online = buildZCVisualResourcePlan([laserDragon, other], { skillPlans: [], textOverrides: new Map() }, [68010], {});
+    assert.ok(online.effectPaths.includes(MISSILE), '实战清单必须有导弹弹体');
+    assert.ok(online.effectPaths.includes(IMPACT), '实战清单必须有导弹爆炸');
+
+    //  只上运动霸 ⇒ 不带导弹（按需加载，不因一个单位拖全量）。
+    const boxerOnly = buildZCVisualResourcePlan([laserDragon, other], { skillPlans: [], textOverrides: new Map() }, [68033], {});
+    assert.ok(!boxerOnly.effectPaths.includes(MISSILE), '没上镭射飞龙就不该收导弹');
+
+    //  离线预热（不传 heroIds）⇒ 全量。
+    const offline = buildZCVisualResourcePlan([laserDragon], { skillPlans: [], textOverrides: new Map() });
+    assert.ok(offline.effectPaths.includes(MISSILE) && offline.effectPaths.includes(IMPACT), '离线清单全量带导弹');
+
+    //  预下载清单也要收（与 effectPaths 同源两处都收，缺一边就是首战缺席）。
+    const warmup = resourcePlan.buildZCBattleWarmupPaths([], [], []);
+    assert.ok(warmup.includes(MISSILE), '预下载清单必须有导弹弹体');
+    assert.ok(warmup.includes(IMPACT), '预下载清单必须有导弹爆炸');
+});

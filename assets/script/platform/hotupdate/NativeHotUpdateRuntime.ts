@@ -440,11 +440,14 @@ export class NativeHotUpdateRuntime {
                     // `EventAssetsManager` 暴露的方法可能不全，断言等于在**原生回调线程**
                     // 上直接抛 TypeError，而那条链没有 JS 栈可读，只会看到 SIGSEGV。
                     const message = event.getMessage?.();
+                    // Creator 3.8.8 的事件返回 0~1，应用层进度契约使用 0~100。
+                    const ratio = event.getPercent?.();
+                    const fileRatio = event.getPercentByFile?.();
                     onProgress?.({
                         phase: 'downloading',
                         message: message ? `正在更新：${message}` : '正在下载资源更新',
-                        percent: event.getPercent?.(),
-                        percentByFile: event.getPercentByFile?.(),
+                        percent: ratio === undefined ? undefined : ratio * 100,
+                        percentByFile: fileRatio === undefined ? undefined : fileRatio * 100,
                         downloadedBytes: event.getDownloadedBytes?.(),
                         totalBytes: event.getTotalBytes?.(),
                         downloadedFiles: event.getDownloadedFiles?.(),

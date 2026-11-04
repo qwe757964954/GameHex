@@ -9,6 +9,22 @@ import {
     type IBigMapHudUiKey, type IBigMapPlateKey, type IBigMapUiKey,
 } from './BigMapArtCatalog';
 
+/**
+ * bundle 内旧前缀 —— 2026-11-04 `assets/bundles/bigmap/image/bigmap/` 整目录上提成
+ * `assets/bundles/bigmap/image/`，bundle 内路径少了一层 `bigmap`。
+ *
+ * 只有**服务器下发**的路径还可能是旧的（`bigMapCamp.campIcon`、`bigMapLayout.background`）：
+ * 客户端不能单方面改配置表，所以在加载入口统一归一。新配置直接用 `image/...` 也照常通过。
+ */
+const LEGACY_BUNDLE_IMAGE_PREFIX = 'image/bigmap/';
+
+/** 旧前缀 `image/bigmap/x` → 新前缀 `image/x`；已是新前缀的原样返回（幂等）。 */
+export function toBigMapArtPath(path: string): string {
+    return path.startsWith(LEGACY_BUNDLE_IMAGE_PREFIX)
+        ? `image/${path.slice(LEGACY_BUNDLE_IMAGE_PREFIX.length)}`
+        : path;
+}
+
 export interface IBigMapArt {
     readonly background: SpriteFrame | null;
     /** 世界坐标连续平铺底图；缺失时回退布局背景，地皮仍独立绘制。 */
@@ -37,7 +53,7 @@ export interface IBigMapArt {
  * 只装配表现资源；世界视图优先连续底图，缺图时回退 JSON 背景；地图坐标和规则只来自布局链。
  *
  * @param resourceIcons 资源类型 → **背包道具图标路径**（`item.icon`，来自 `bigmapResource.itemId`）。
- *   有就走背包那份图，没有 / 加载失败退回 `image/bigmap/concept/sprites/<resType>` 概念图。
+ *   有就走背包那份图，没有 / 加载失败退回 `image/concept/sprites/<resType>` 概念图。
  * @param buildingConfigs 基地建筑配置。只按类型使用现有图片，尚未入库的 baseBuildIcon 不接入加载。
  */
 export async function loadBigMapArt(
@@ -68,8 +84,10 @@ export async function loadBigMapArt(
         }
     };
     const requests = new Map<string, Promise<SpriteFrame | null>>();
-    const load = (path: string): Promise<SpriteFrame | null> => {
+    const load = (rawPath: string): Promise<SpriteFrame | null> => {
         if (scope.disposed) return Promise.resolve(null);
+        // 归一化放在**去重之前**：同一张图新旧两种写法只加载一次。
+        const path = toBigMapArtPath(rawPath);
         const existing = requests.get(path);
         if (existing) return existing;
         const request = fetchFrame(path);
@@ -77,14 +95,14 @@ export async function loadBigMapArt(
         return request;
     };
     const terrainTask = Promise.all([
-        load(background || 'image/bigmap/wasteland_background'),
-        Promise.all([1, 2, 3, 4, 5, 6].map((index) => load(`image/bigmap/grounds/ground_${String(index).padStart(2, '0')}`))),
+        background && toBigMapArtPath(background) !== 'image/wasteland_background'
+            ? load(background) : Promise.resolve(null),
         load('image/buildings/hq-base'),
         load('image/buildings/barracks-default'),
         load('image/territory/buildings/territory_boss_v1'),
         load('image/decor/wasteland/st2'),
         load('image/decor/wasteland/cao'),
-        load('image/bigmap/bigMapBG'),
+        load('image/bigMapBG'),
     ]);
     const sprite = (name: string): Promise<SpriteFrame | null> => load(`${BIGMAP_CONCEPT_ROOT}/sprites/${name}`);
     const buildingTask = Promise.all([...buildingConfigs.values()].map(async (building) => {
@@ -132,14 +150,14 @@ export async function loadBigMapArt(
         [key, await load(BIGMAP_PLATE_FILES[key])] as const
     )));
     const plateFlagTask = load(BIGMAP_PLATE_FLAG_FILE);
-    const [[backdrop, groundVariants, home, city, monster, rock, grass, tiledBackground], buildingEntries, uiEntries,
+    const [[backdrop, home, city, monster, rock, grass, tiledBackground], buildingEntries, uiEntries,
         hudEntries, resourceEntries, [baseBackground, construction, fortress, mutantCamp, conceptRock, conceptGrass], campEntries,
         plateEntries, plateFlag] = await Promise.all([
         terrainTask, buildingTask, uiTask, hudTask, resourceTask, baseTask, campTask, plateTask, plateFlagTask,
     ]);
     const buildings = new Map(buildingEntries);
-    return { background: backdrop, tiledBackground, ground: groundVariants.find((frame) => frame !== null) ?? null,
-        groundVariants, home: home ?? buildings.get(71001) ?? null, city: city ?? fortress, monster: monster ?? mutantCamp,
+    return { background: backdrop, tiledBackground, ground: null,
+        groundVariants: [], home: home ?? buildings.get(71001) ?? null, city: city ?? fortress, monster: monster ?? mutantCamp,
         rock: conceptRock ?? rock, grass: conceptGrass ?? grass,
         baseBackground, construction, buildings,
         camps: new Map(campEntries.map(([id, frame]) => [id, frame ?? city ?? fortress])),

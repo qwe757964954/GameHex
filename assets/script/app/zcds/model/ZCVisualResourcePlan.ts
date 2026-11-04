@@ -1,5 +1,6 @@
 import type { ZCUnitDefinition } from './ZCCombatCatalog';
 import type { ZCCompiledModifierLoadout } from './ZCModifierRuntime';
+import { zcMissileFxOf } from './ZCCombatEffectFlight';
 
 export interface IZCVisualDependency {
     readonly unitId: string;
@@ -61,6 +62,12 @@ export function buildZCVisualResourcePlan<T extends ZCVisualUnit>(
         unit.attackProfile.impactEffectPrefabPath,
         unit.empoweredProfile?.effectPrefabPath,
         unit.secondaryProfile?.effectPrefabPath,
+        //  追踪导弹（2026-11-03）：弹体/爆炸路径只登记在 `ZCCombatEffectFlight` 的
+        //  代码常量表里，pvpSkill 任何一行都不携带 ⇒ 上面四个字段收不到。
+        //  漏收的后果：`ZCGameLoader` 不加载 ⇒ `effectVisualPrefabs.get()` 返回 null
+        //  ⇒ 导弹弹体与爆炸凭空消失且一条错都不报（2026-11-03 用户反馈「特效没有了」）。
+        zcMissileFxOf(unit.unitId)?.missilePrefabPath,
+        zcMissileFxOf(unit.unitId)?.impactPrefabPath,
     ]).filter((path): path is string => !!path));
     if (required === null) {
         for (const override of adapters.textOverrides.values()) {

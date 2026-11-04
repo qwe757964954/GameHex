@@ -40,6 +40,7 @@ import {
     isEntranceRowVisible,
 } from './MainEntranceVisible';
 import type { EntrancePlayerState } from './MainEntranceVisible';
+import { isLevelPassed } from './BattleLevelPassed';
 
 const { ccclass, property } = _decorator;
 
@@ -371,16 +372,7 @@ export class MainEntranceList extends Component {
 // 可见性取数（读坏了也不抛的降级口径）
 // ============================================================
 
-/** 某关是否已通关：CmdBattleLevel.star >= 1。 */
-function isLevelPassed(level: number): boolean {
-    try {
-        const row = CacheMgr.instance.getCmdBattleLevel(level);
-        return row != null && toCount(row.star) >= 1;
-    } catch (error) {
-        console.warn('[MainEntranceList] 读 CmdBattleLevel 失败', error);
-        return false;
-    }
-}
+/** 某关是否已通关：`CmdBattleLevel.star >= 1`。与底部宝箱入口共用一份（见 `BattleLevelPassed`）。 */
 
 /** 创角第几天（1-based）；拿不到创角时间返回 0。 */
 function createdDaysOf(createTimeMs: number, nowMs: number): number {

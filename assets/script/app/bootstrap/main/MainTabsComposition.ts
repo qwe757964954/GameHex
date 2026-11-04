@@ -21,19 +21,35 @@ export class MainTabsComposition extends ControllerBase {
 
     constructor(private readonly context: IControllerContext, private readonly host: MainTabHost) {
         super(context, 'main-tabs-composition');
-        this.tabs = new MainTabController(context, {
-            owner: host, assetType: Prefab,
-            showPage: prefab => this.showPage(prefab), renderNav: tab => host.renderNav(tab),
-            openWorld: () => BigMapEntry.shared().open(context.configs, { navigation: host.navBar, onClose: () => this.tabs.worldClosed() }),
-            closeWorld: () => BigMapEntry.shared().close(), isWorldOpen: () => BigMapEntry.shared().isOpen,
-            beforeSwitch: () => { this.cancelBackgroundWarmup(); context.sessionAssets.pauseWarmup?.(); },
-            settled: () => this.scheduleBackgroundWarmup(),
-            prefetchHero: () => { void fetchFormations({ label: '切角色 tab 预取' }); },
-            reportClick: tab => { void reportGameViewClick(tab === MainTab.World ? GAME_VIEW_MARK.World : GAME_VIEW_MARK.Other, host); },
-            failed: (tab, error) => console.warn(`[MainTabsComposition] 页面加载失败：${tab}`, error),
-        });
+        this.tabs = this.createController();
         this.listen(VIEW_LIFECYCLE, this.onLifecycle);
         this.listen(MainTabEvent.Warmup, this.onWarmup);
+    }
+    private createController(): MainTabController<Prefab> {
+        return new MainTabController(this.context, {
+            owner: this.host,
+            assetType: Prefab,
+            failed: (tab, error) => console.warn(`[MainTabsComposition] 页面加载失败：${tab}`, error),
+            view: {
+                showPage: prefab => this.showPage(prefab),
+                renderNav: tab => this.host.renderNav(tab)
+            },
+            world: {
+                openWorld: () => BigMapEntry.shared().open(this.context.configs, { navigation: this.host.navBar, onClose: () => this.tabs.worldClosed() }),
+                closeWorld: () => BigMapEntry.shared().close(),
+                isWorldOpen: () => BigMapEntry.shared().isOpen
+            },
+            warmup: {
+                beforeSwitch: () => { this.cancelBackgroundWarmup(); this.context.sessionAssets.pauseWarmup?.(); },
+                settled: () => this.scheduleBackgroundWarmup()
+            },
+            hero: {
+                prefetchHero: () => { void fetchFormations({ label: '切角色 tab 预取' }); }
+            },
+            telemetry: {
+                reportClick: tab => { void reportGameViewClick(tab === MainTab.World ? GAME_VIEW_MARK.World : GAME_VIEW_MARK.Other, this.host); }
+            },
+        });
     }
     private onLifecycle(event: IViewLifecycle): void {
         if (event.owner !== this.host) return;
@@ -63,7 +79,13 @@ export class MainTabsComposition extends ControllerBase {
                 if (focus) map.setFocusCell(focus.chapterId, focus.cellId);
             }
             this.host.mountPage(node);
-        } catch (error) { next?.dispose(); node.destroy(); throw error; }
+        } catch (error) {
+            try { next?.dispose(); }
+            catch (cleanupError) { console.error('[MainTabsComposition] 页面装配失败后的控制器清理失败', cleanupError); }
+            try { node.destroy(); }
+            catch (cleanupError) { console.error('[MainTabsComposition] 页面装配失败后的节点清理失败', cleanupError); }
+            throw error;
+        }
         this.page?.dispose();
         this.page = next;
     }
@@ -91,12 +113,18 @@ export class MainTabsComposition extends ControllerBase {
     dispose(): void {
         if (this.isDisposed) return;
         this.releaseInputs();
-        this.cancelBackgroundWarmup();
-        this.context.sessionAssets.pauseWarmup?.();
-        GameNet.instance.removeCaller(this.host);
-        this.page?.dispose();
+        const page = this.page;
         this.page = null;
-        this.tabs.dispose();
-        super.dispose();
+        try {
+            this.cancelBackgroundWarmup();
+            this.context.sessionAssets.pauseWarmup?.();
+            GameNet.instance.removeCaller(this.host);
+        } finally {
+            try { this.tabs.dispose(); }
+            finally {
+                try { page?.dispose(); }
+                finally { super.dispose(); }
+            }
+        }
     }
 }

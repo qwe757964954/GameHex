@@ -38,16 +38,23 @@ export interface IMatchingHandoff {
 
 export interface IMatchingControllerOptions {
     readonly model: MatchingModel;
-    readonly requestBattle: (caller: object, isCurrent: () => boolean) => Promise<ZCBattleStart | null>;
-    readonly createSession: (battle: Promise<ZCBattleStart | null>, owner: ResourceScope) => IMatchingBattleSession;
-    readonly fetchPvp: (caller: object) => Promise<ZCPvpInfo | null>;
-    readonly render: (state: IMatchingViewState) => void;
-    readonly navigate: (route: string, params?: unknown) => void;
-    readonly schedule: (callback: () => void, seconds: number) => () => void;
-    readonly removeCaller: (caller: object) => void;
     readonly failed: (error: unknown) => void;
-    /** 有它 ⇒ 走"露出底下的云"这条路（领地普通关）；没有 ⇒ 老的直接切战场（PVP）。 */
     readonly handoff?: IMatchingHandoff;
+    readonly battle: {
+        readonly requestBattle: (caller: object, isCurrent: () => boolean) => Promise<ZCBattleStart | null>;
+        readonly createSession: (battle: Promise<ZCBattleStart | null>, owner: ResourceScope) => IMatchingBattleSession;
+        readonly fetchPvp: (caller: object) => Promise<ZCPvpInfo | null>;
+        readonly removeCaller: (caller: object) => void;
+    };
+    readonly view: {
+        readonly render: (state: IMatchingViewState) => void;
+    };
+    readonly navigation: {
+        readonly navigate: (route: string, params?: unknown) => void;
+    };
+    readonly clock: {
+        readonly schedule: (callback: () => void, seconds: number) => () => void;
+    };
 }
 /** 搜索至少 3 秒；服务端确认后展示 1.4 秒（够逐条揭示完）再进入同一份对局。 */
 export class MatchingController extends ControllerBase {
@@ -57,17 +64,17 @@ export class MatchingController extends ControllerBase {
     private session: IMatchingBattleSession | null = null;
     constructor(context: IControllerContext, private readonly options: IMatchingControllerOptions) {
         super(context, 'matching');
-        this.own(() => options.removeCaller(this));
+        this.own(() => options.battle.removeCaller(this));
     }
     start(): void {
         if (this.started || this.isDisposed) return;
         this.started = true;
         this.render();
         try {
-            const task = this.options.requestBattle(this, () => !this.isDisposed && !this.finished);
-            this.session = this.options.createSession(task, this.scope);
+            const task = this.options.battle.requestBattle(this, () => !this.isDisposed && !this.finished);
+            this.session = this.options.battle.createSession(task, this.scope);
             void this.session.ready.catch(error => { if (!this.isDisposed && !this.finished) this.options.failed(error); });
-            this.own(this.options.schedule(() => { this.minimumElapsed = true; this.match(); }, 3));
+            this.own(this.options.clock.schedule(() => { this.minimumElapsed = true; this.match(); }, 3));
             void task.then(battle => {
                 if (this.isDisposed || this.finished) return;
                 this.options.model.battle = battle;
@@ -75,7 +82,7 @@ export class MatchingController extends ControllerBase {
                 this.render();
                 this.match();
             }).catch(error => { if (!this.isDisposed && !this.finished) this.fail(error); });
-            void this.options.fetchPvp(this).then(info => {
+            void this.options.battle.fetchPvp(this).then(info => {
                 if (this.isDisposed || this.finished || !info) return;
                 this.options.model.pvp = info;
                 this.render();
@@ -87,7 +94,7 @@ export class MatchingController extends ControllerBase {
         if (this.isDisposed || this.finished || !this.minimumElapsed || !model.battle || model.phase === 'matched') return;
         model.phase = 'matched';
         this.render();
-        this.own(this.options.schedule(() => {
+        this.own(this.options.clock.schedule(() => {
             if (this.isDisposed || this.finished) return;
             this.finished = true;
             const handoff = this.options.handoff;
@@ -138,20 +145,20 @@ export class MatchingController extends ControllerBase {
                 if (this.isDisposed) return;
                 // 资源没准备好就进战场只会炸在战场页里 —— 回主界面并说明，与老路径一致。
                 this.options.failed(error);
-                this.options.navigate(GameRoute.Main);
+                this.options.navigation.navigate(GameRoute.Main);
                 // 回去也要散：否则一屏云会一直盖在主界面上。
                 handoff.releaseCover();
             });
         }
         // ③ 上限：加载卡死 / 断网时不能永远盖着一屏云。
-        this.own(this.options.schedule(enter, handoff.readyTimeout));
+        this.own(this.options.clock.schedule(enter, handoff.readyTimeout));
     }
 
     /** 切战场（唯一出口，两条路共用 —— 保证载荷形状只有一份）。 */
     private navigateToBattle(): void {
         const model = this.options.model;
         const state = model.snapshot();
-        this.options.navigate(GameRoute.Battle, { battle: model.battle, session: this.session,
+        this.options.navigation.navigate(GameRoute.Battle, { battle: model.battle, session: this.session,
             opponent: state.opponents[0], opponents: state.opponents, selfRoleId: model.selfRoleId });
     }
     private fail(error: unknown): void {
@@ -159,7 +166,7 @@ export class MatchingController extends ControllerBase {
         this.finished = true;
         this.options.failed(error);
         this.dispose();
-        this.options.navigate(GameRoute.Main);
+        this.options.navigation.navigate(GameRoute.Main);
     }
-    private render(): void { this.options.render(this.options.model.snapshot()); }
+    private render(): void { this.options.view.render(this.options.model.snapshot()); }
 }

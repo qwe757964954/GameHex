@@ -43,20 +43,33 @@ test('chapter two keeps the current editor site format in sync with the publishe
     const config = configureTerritoryMap(chapterTwo);
     const preset = JSON.parse(readFileSync(new URL('../tools/map-editor/presets/territory/chapter_02.json', import.meta.url), 'utf8'));
     assert.equal(config.chapterId, 2);
-    assert.equal(config.name, '第二章');
-    assert.equal(config.sites.length, 35);
-    assert.ok(config.sites.every((site) => /^(fixedResource|stage|asyncPvp)_\d+$/.test(site.configId)));
+    // 章节名是**内容**（随美术命名走：笑脸章 / 飞机章 / 十字章…），这里只守「有名字」；
+    // 真正的不变量是下面的 preset ≡ published，名字单独钉死只会每次重做地图就红一次。
+    assert.equal(typeof config.name, 'string');
+    assert.ok(config.name.length > 0);
+    assert.equal(config.sites.length, 104);
+    // configId 两种口径（2026-10 之后的地图）：固定宝箱 `fixedResource_<n>`，
+    // 关卡 / Boss / 异步据点直接存**数值关卡号**（10011…）。别再用一条
+    // `^(fixedResource|stage|asyncPvp)_\d+$` 一刀切 —— 那会把 stage/boss 全判死。
+    const configIdOf = (type: string, configId: unknown) => (type === TERRITORY_SITE_TYPE.fixedResource
+        ? /^fixedResource_\d+$/.test(String(configId))
+        : /^\d+$/.test(String(configId)));
+    for (const site of config.sites) {
+        assert.ok(configIdOf(site.type, site.configId),
+            `${site.type} 的 configId 不合口径：${String(site.configId)}`);
+    }
     assert.deepEqual(preset, chapterTwo);
     assert.equal(existsSync(assetUrl('config/territory-maps/chapter_02.json.meta')), true);
 });
 
-test('published later chapter names stay aligned with their current map presets', () => {
-    for (const [chapterId, name] of [[3, '第三章'], [4, '第四章']] as const) {
+test('published later chapters stay byte-identical to their editor presets', () => {
+    for (const chapterId of [3, 4] as const) {
         const file = `chapter_${String(chapterId).padStart(2, '0')}.json`;
         const published = JSON.parse(readFileSync(new URL(`../assets/resources/config/territory-maps/${file}`, import.meta.url), 'utf8'));
         const preset = JSON.parse(readFileSync(new URL(`../tools/map-editor/presets/territory/${file}`, import.meta.url), 'utf8'));
-        assert.equal(published.name, name);
-        assert.deepEqual(published, preset);
+        assert.equal(published.chapterId, chapterId);
+        assert.ok(String(published.name).length > 0, `${file} 没名字`);
+        assert.deepEqual(published, preset, `${file} 的编辑器预设与发布版不一致`);
     }
 });
 

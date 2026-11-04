@@ -19,7 +19,7 @@
     "build:hotupdate-manifest": "node tools/hotupdate/build_hotupdate.mjs",
     "hotupdate:manifest": "node tools/hotupdate/hotupdate_manifest.js",
     "publish:hotupdate": "python tools/hotupdate/publish_hotupdate.py",
-    "config:export": "node tools/config/export_tafang.mjs",
+    "config:export": "node tools/config/export_tafang.mjs && node tools/config/fix_pvp_skill_numeric_ids.js",
     "config:project-skill": "node tools/config/project_skill_plan.mjs",
     "config:validate": "node tools/config/export_tafang.mjs --validate-only",
     "map:publish-territory": "python tools/map-editor/copy_territory_maps.py",

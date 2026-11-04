@@ -13,7 +13,7 @@ import { resolvePostLoginIdentity } from '../assets/script/app/loading/PostLogin
 import { createControllerContext } from './helpers/controller-context';
 import { assetPath } from './helpers/asset-paths';
 
-function loadPostLogin(options: { startRatio?: number; saved?: string; load?: () => Promise<object>; missingUI?: boolean } = {}) {
+function loadPostLogin(options: { startRatio?: number; saved?: string; load?: () => Promise<object>; missingUI?: boolean; controllerError?: Error } = {}) {
     const bus = EventMgr.instance;
     const ratios: number[] = [], statuses: string[] = [];
     const navigations: Array<{ route: string; params: unknown }> = [];
@@ -33,7 +33,8 @@ function loadPostLogin(options: { startRatio?: number; saved?: string; load?: ()
         const context = { exports, console: { warn() {}, error() {} }, require(name: string) {
             if (name === 'cc') return { Prefab: class {}, sys: { localStorage: { getItem() { reads++; return options.saved ?? null; } } } };
             if (name.endsWith('/ControllerBase')) return { ControllerBase };
-            if (name.endsWith('/PostLoginController')) return { PostLoginController };
+            if (name.endsWith('/PostLoginController')) return options.controllerError
+                ? { PostLoginController: class { constructor() { throw options.controllerError; } } } : { PostLoginController };
             if (name.endsWith('/PostLoginContract')) return { resolvePostLoginIdentity };
             if (name.endsWith('/PostLoginComposition')) return modules.composition;
             if (name.endsWith('/ProcedureManager')) return { ProcedureManager: { navigate: (route: string, params?: unknown) => navigations.push({ route, params }) } };
@@ -260,4 +261,15 @@ test('PostLogin 缺少 UI 时明确失败且不启动资源和导航', async () 
     const h = loadPostLogin({ missingUI: true });
     await h.preload(); assert.throws(() => h.procedure.onEnter(), /LaunchProgress/);
     h.procedure.onDestroy(); assert.equal(h.audio, 0); assert.deepEqual(h.navigations, []);
+});
+
+test('PostLogin 控制器装配失败释放已创建遮罩，保留原始错误且离开幂等', async () => {
+    const failure = new Error('post-login assembly failed');
+    const h = loadPostLogin({ controllerError: failure });
+    await h.preload();
+    assert.throws(() => h.procedure.onEnter(), error => error === failure);
+    assert.equal(h.releases, 1);
+    h.procedure.onLeave();
+    assert.equal(h.releases, 1);
+    assert.equal(h.navigations.length, 0);
 });

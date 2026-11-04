@@ -9,6 +9,7 @@ import { LoginController } from '../../login/LoginController';
 import { LoginRoot } from '../../login/LoginRoot';
 import { LoginPage } from '../../login/LoginPage';
 import { LoginGateway, DEFAULT_VERSION_CONFIG, type VersionConfig } from '../../login/LoginProtocol';
+import type { ILoginService, IServerSelectContent } from '../../login/LoginEvents';
 import { LoginUiEvent } from '../../login/LoginEvents';
 import { ServerSelectPanel } from '../../login/ServerSelectPanel';
 import { GameNet } from '../../net/GameNet';
@@ -32,30 +33,7 @@ export class LoginComposition extends ControllerBase {
             const node = instantiate(this.prefab);
             this.node = node;
             const page = node.getComponent(LoginPage);
-            const root = new LoginRoot();
-            root.configureGateway(new LoginGateway(this.network));
-            const controller = new LoginController(this.resources, {
-                owner: page,
-                service: {
-                    get servers_() { return root.servers_; }, get selectedServerId_() { return root.selectedServerId_; },
-                    get recentServerIds_() { return root.recentServerIds_; }, get protocolReady_() { return root.protocolReady_; },
-                    restoreAccount: () => root.restoreAccount(), bootstrap: version => root.bootstrap(version),
-                    login: (account, password) => root.login(account, password, GameNet.instance),
-                    register: (account, password) => root.register(account, password),
-                    setSelectedServer: id => root.setSelectedServer(id), dispose: () => root.dispose(),
-                },
-                loadVersion: () => this.loadVersion(), restoreCredentials: value => page.restoreCredentials(value),
-                render: state => page.render(state), tip: text => FW.showTip(text),
-                openServers: async content => {
-                    if (this.panel) return;
-                    const panel = await ServerSelectPanel.open({ userData: content });
-                    if (this.isDisposed) { if (panel?.isValid) panel.close(); return; }
-                    if (panel?.isValid) this.panel = panel;
-                },
-                closeServers: () => this.closeServers(),
-                schedule: (callback, seconds) => { page.scheduleOnce(callback, seconds); return () => page.unschedule(callback); },
-                navigate: (route, params) => ProcedureManager.navigate(route, params),
-            });
+            const controller = this.createController(page);
             this.own(() => controller.dispose());
             this.listen(LoginUiEvent.ServerClosed, (event: { owner: object; panel: ServerSelectPanel }) => {
                 if (event.owner === page && event.panel === this.panel) this.panel = null;
@@ -67,7 +45,42 @@ export class LoginComposition extends ControllerBase {
             });
             node.setPosition(Vec3.ZERO);
             node.setParent(this.host);
-        } catch (error) { this.dispose(); throw error; }
+        } catch (error) {
+            try { this.dispose(); }
+            catch (cleanupError) { console.error('[LoginComposition] 初始化失败后的清理失败', cleanupError); }
+            throw error;
+        }
+    }
+    private createController(page: LoginPage): LoginController {
+        const root = new LoginRoot();
+        root.configureGateway(new LoginGateway(this.network));
+        return new LoginController(this.resources, {
+            owner: page,
+            service: createLoginService(root),
+            config: {
+                loadVersion: () => this.loadVersion()
+            },
+            view: page,
+            feedback: {
+                tip: text => FW.showTip(text)
+            },
+            servers: {
+                openServers: content => this.openServers(content),
+                closeServers: () => this.closeServers(),
+            },
+            clock: {
+                schedule: (callback, seconds) => { page.scheduleOnce(callback, seconds); return () => page.unschedule(callback); }
+            },
+            navigation: {
+                navigate: (route, params) => ProcedureManager.navigate(route, params)
+            },
+        });
+    }
+    private async openServers(content: IServerSelectContent): Promise<void> {
+        if (this.panel) return;
+        const panel = await ServerSelectPanel.open({ userData: content });
+        if (this.isDisposed) { if (panel?.isValid) panel.close(); return; }
+        if (panel?.isValid) this.panel = panel;
     }
     private closeServers(): void {
         const panel = this.panel;
@@ -78,11 +91,7 @@ export class LoginComposition extends ControllerBase {
         try {
             const asset = await this.resources.assets.load('config/app_version', JsonAsset);
             if (this.isDisposed) return DEFAULT_VERSION_CONFIG;
-            const value: unknown = asset.json;
-            if (typeof value !== 'object' || value === null) throw new Error('版本配置无效');
-            const data = value as Record<string, unknown>;
-            if (typeof data.index !== 'string' || typeof data.url !== 'string' || typeof data.version !== 'string') throw new Error('版本配置字段无效');
-            return { index: data.index, url: data.url, version: data.version };
+            return asset.json as VersionConfig;
         } catch (error) {
             if (!this.isDisposed) console.warn('[LoginComposition] 使用默认版本配置', error);
             return DEFAULT_VERSION_CONFIG;
@@ -92,8 +101,19 @@ export class LoginComposition extends ControllerBase {
         this.releaseInputs();
         const node = this.node;
         this.node = null;
-        if (node?.isValid) node.destroy();
         this.prefab = null;
-        super.dispose();
+        try { if (node?.isValid) node.destroy(); }
+        finally { super.dispose(); }
     }
+}
+
+function createLoginService(root: LoginRoot): ILoginService {
+    return {
+        get servers_() { return root.servers_; }, get selectedServerId_() { return root.selectedServerId_; },
+        get recentServerIds_() { return root.recentServerIds_; }, get protocolReady_() { return root.protocolReady_; },
+        restoreAccount: () => root.restoreAccount(), bootstrap: version => root.bootstrap(version),
+        login: (account, password) => root.login(account, password, GameNet.instance),
+        register: (account, password) => root.register(account, password),
+        setSelectedServer: id => root.setSelectedServer(id), dispose: () => root.dispose(),
+    };
 }

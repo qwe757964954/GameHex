@@ -12,10 +12,10 @@ import {
 } from 'cc';
 import type { ZCGamePreparedResources } from './application/ZCGameLoader';
 import type { IZCGameEntry } from './application/ZCGameEntry';
-import { getCardBuildIcon, getEnemyDeck, getPlayerDeck, type ZCDeckCard, type ZCUnitDefinition, type ZCUnitId } from './model/ZCCombatCatalog';
+import { getEnemyDeck, getPlayerDeck, type ZCDeckCard, type ZCUnitId } from './model/ZCCombatCatalog';
 import { ZCGameHUDView } from './view/ZCGameHUDView';
 import { EventMgr } from '../../framework/event/EventMgr';
-import type { IZCBattleRenderModel } from './application/ZCBattleRuntimeContract';
+import type { IZCBattleRenderModel, IZCBattlePresentationArt } from './application/ZCBattleRuntimeContract';
 import { ZCGameRenderWorld } from './view/ZCGameRenderWorld';
 import type { ZCGameRenderFrame, ZCBattlePresentationEvents } from './model/ZCGameRenderFrame';
 import { buildDecorPlacements, buildPlayerHomeFocus } from './view/ZCGameViewUtil';
@@ -129,11 +129,11 @@ export class ZCGame extends Component {
     private preparedResources: ZCGamePreparedResources | null = null;
     /**
      * 本局角色卡面图（卡表 `headIcon` → `icons/cardHead/**`）；异步加载，整局一份。
-     * 视图侧按 id 现取（`ProcedureGame.current?.resolveCardArt`），不再由渲染层往下传闭包。
+     * 视图通过注入的本局只读资源表按 id 取图。
      */
-    private legendCardArtFrames: ReadonlyMap<string, SpriteFrame> = new Map();
+    private readonly legendCardArtFrames: Map<string, SpriteFrame> = new Map();
     /** 本局玩家头像帧（owner → `images/head` 那套）；异步加载，拿不到就只显示头像环。 */
-    private legendPortraitFrames: ReadonlyMap<string, SpriteFrame> = new Map();
+    private readonly legendPortraitFrames: Map<string, SpriteFrame> = new Map();
     /** 守城局的首领条实例（只在 `model.defenceWaveProgress` 非空时存在）。 */
     private bossPanel: ZCHudBossPanel | null = null;
     /** 波次怪的头像帧（键 = 卡 id）；与名字一起喂给首领条，异步填、拿不到就留空框。 */
@@ -221,13 +221,13 @@ export class ZCGame extends Component {
         this.hudView?.node.destroy();
         this.hudView = null;
         this.preparedResources = null;
-        this.lazyUnitPrefabs.clear();
-        this.lazyUnitRequests.clear();
+        this.unitVisualPrefabs.clear();
+        this.buildingFramesByCardId.clear();
         this.matchConfig = null;
         this.playerAvatars = null;
         this.seatProfiles.clear();
-        this.legendCardArtFrames = new Map();
-        this.legendPortraitFrames = new Map();
+        this.legendCardArtFrames.clear();
+        this.legendPortraitFrames.clear();
         this.bossPortraits.clear();
         this.presentationResources = null;
         this.iconLoader = null;
@@ -258,7 +258,7 @@ export class ZCGame extends Component {
             const portraits = new Map<string, SpriteFrame>();
             if (player) portraits.set(ZCOwner.Player, player);
             if (enemy) portraits.set(ZCOwner.Enemy, enemy);
-            this.legendPortraitFrames = portraits;
+            for (const [owner, frame] of portraits) this.legendPortraitFrames.set(owner, frame);
             this.renderWorld.refreshLegendCardArt();
         });
     }
@@ -304,105 +304,28 @@ export class ZCGame extends Component {
             const frames = new Map<string, SpriteFrame>();
             for (const [cardId, frame] of entries) if (frame) frames.set(cardId, frame);
             if (!frames.size) return;
-            // 帧表落在控制器上（视图按 id 现取）；这里只通知渲染世界重刷**已经弹出来**的卡牌/横幅。
-            this.legendCardArtFrames = frames;
+            // 原位合并本局展示表，再刷新已经弹出的卡牌和横幅。
+            for (const [cardId, frame] of frames) this.legendCardArtFrames.set(cardId, frame);
             this.renderWorld.refreshLegendCardArt();
         });
     }
 
-    /**
-     * 玩家头像（owner → 头像帧；取不到返回 null，横幅只留四个玩家色的头像环）。
-     *
-     * 与 {@link resolveCardArt} 同一条口径：`images/head` 要过 head/icon 表 + 控制器 AssetService，
-     * 属于"可能慢一步"的资源 —— 数据放控制器、视图按 owner 现取，不必让渲染层再包一层闭包。
-     */
-    resolveLegendPortrait(owner: string): SpriteFrame | null {
-        return this.legendPortraitFrames.get(owner) ?? null;
+    private readonly unitVisualPrefabs = new Map<ZCUnitId, Prefab>();
+    private readonly buildingFramesByCardId = new Map<string, SpriteFrame>();
+
+    applyUnitPrefab(unitId: string, prefab: Prefab): void {
+        this.unitVisualPrefabs.set(unitId, prefab);
     }
 
     /**
-     * 首屏清单之外的兵种美术（GM 造兵 / 召唤链 / 波次兵）**补载**回来的结果。
+     * 特效美术按需补载到货 → 交给渲染世界合并进本局特效表（下一帧由它补挂到在飞的特效节点上）。
      *
-     * `ZCGameLoader.loadVisualPrefabs` 的清单只按后端 `units[].heroes` + 召唤链 + 波次/中立卡生成
-     * ⇒ 不在清单里的兵进战场时 `resolveUnitPrefab` 是 null，视图只能画「将」字圆圈
-     * （2026-11-02 运动霸 68033 就是这么"消失"的：GM 工具临时加的兵没有预加载）。
-     * 这里放补载结果，{@link resolveUnitPrefab} 一并查，视图下一帧就能接上。
+     * 为什么不在这里持一份 Map：渲染世界会因为后补 job 而**整体换掉** `effectVisualPrefabs`
+     * 的快照（`applyDeferredArt` 里 `new Map([...])`），视图侧留一份引用必然指向旧表 ⇒ 合到幽灵里。
+     * 唯一持有者就是渲染世界，入口也只有它一个。
      */
-    private readonly lazyUnitPrefabs = new Map<ZCUnitId, Prefab>();
-    /** 正在补载的兵种 id（同一兵种只发一次请求）。 */
-    private readonly lazyUnitRequests = new Set<ZCUnitId>();
-
-    /**
-     * 兵种 id → 兵种美术 prefab（预加载表优先，其次补载表，都没有返回 null）。
-     *
-     * 与 {@link resolveCardArt} 同一条口径：数据在控制器手里，视图按 id 现取，不再由渲染层注入。
-     */
-    resolveUnitPrefab(unitId: string): Prefab | null {
-        const id = unitId as ZCUnitId;
-        return this.preparedResources?.unitVisualPrefabs.get(id) ?? this.lazyUnitPrefabs.get(id) ?? null;
-    }
-
-    /**
-     * 兵种美术的**按需补载** —— 首屏预加载清单漏掉时的兜底。
-     *
-     * 什么时候会漏：GM 工具临时加兵（后端 `units[].heroes` 里没有它）、技能/召唤链没登记到的兵、
-     * 以及任何"清单外冒出来"的单位。以前这些一律静默退回「将」字圆圈，看不出是没加载还是没美术。
-     *
-     * 口径：
-     *  · 同一兵种只发一次（`lazyUnitRequests`）—— 视图是每帧调一次的，重入必须挡住；
-     *  · 成功写进 `lazyUnitPrefabs`，视图下一帧 `render` 自己接上（不重建节点、不打断状态）；
-     *  · 失败只告警、不抛：这一局这个兵继续画圆圈，但至少控制台有条带路径的错。
-     */
-    requestUnitPrefab(definition: Readonly<ZCUnitDefinition>): void {
-        const unitId = definition.unitId;
-        const path = definition.prefabPath;
-        if (!path || this.leaving) return;
-        if (this.lazyUnitRequests.has(unitId) || this.lazyUnitPrefabs.has(unitId)) return;
-        if (this.preparedResources?.unitVisualPrefabs.has(unitId)) return;
-        const presentation = this.presentationResources;
-        if (!presentation) return;
-        this.lazyUnitRequests.add(unitId);
-        void presentation.assets.load(path, Prefab, { scope: presentation.scope })
-            .then((prefab) => {
-                //  退出对局后不要再往表里塞 —— 那一局的视图已经销毁，下一局会重新预加载。
-                if (prefab && !this.leaving) this.lazyUnitPrefabs.set(unitId, prefab);
-            })
-            .catch((error: unknown) => {
-                console.warn(`[ZCGame] 兵种 ${unitId}（${definition.name}）的美术 prefab 补载失败：${path}`, error);
-            })
-            .finally(() => { this.lazyUnitRequests.delete(unitId); });
-    }
-
-    /**
-     * 卡牌 id → 角色卡面图（取不到返回 null，视图回退建筑图）。
-     *
-     * 跨模块只读出口：视图通过 `ProcedureGame.current?.resolveCardArt(...)` 拿，不用再被上层注入闭包。
-     */
-    resolveCardArt(cardId: string): SpriteFrame | null {
-        return this.legendCardArtFrames.get(cardId) ?? null;
-    }
-
-    /**
-     * 卡牌 id / 建筑类型 → 建筑帧（卡表 `buildIcon` 优先，再回退 `hq-base` / `barracks-default`）。
-     *
-     * 原先住在 `ZCGameRenderWorld`（那边只为了喂给视图）；数据本来就在展示适配器手里（`preparedResources`），
-     * 所以搬到这里，视图与渲染世界都按上面的同一口径取。
-     */
-    resolveBuildingFrame(cardId: string | null, building: string): SpriteFrame | null {
-        const frames = this.preparedResources?.buildingFrames;
-        const lookup = typeof (frames as { get?: unknown })?.get === 'function'
-            ? (icon: string) => (frames as ReadonlyMap<string, SpriteFrame>).get(icon) ?? null
-            : (): SpriteFrame | null => null;
-        if (cardId) {
-            const icon = getCardBuildIcon(cardId);
-            if (icon) {
-                const frame = lookup(icon);
-                if (frame) return frame;
-            }
-        }
-        if (building === 'hq') return lookup('hq-base');
-        if (building === 'barracks') return lookup('barracks-default');
-        return null;
+    applyEffectPrefab(path: string, prefab: Prefab): void {
+        this.renderWorld?.applyEffectPrefab(path, prefab);
     }
 
     /** 这里只做同步实例化和首帧渲染；异步工作必须在调用前全部完成。 */
@@ -453,13 +376,28 @@ export class ZCGame extends Component {
         wallLayer.setParent(this.hudView.mapLayer);
         wallLayer.setPosition(Vec3.ZERO);
 
+        for (const [id, prefab] of prepared.unitVisualPrefabs) this.unitVisualPrefabs.set(id, prefab);
+        const decks = [getPlayerDeck(), getEnemyDeck(), ...ZC_OWNER_ORDER.map(owner =>
+            setupConfig.ownerDecks?.[owner] ?? (owner === ZCOwner.Player ? setupConfig.playerDeck : setupConfig.enemyDeck))];
+        for (const deck of decks) for (const card of deck) {
+            const frame = card.buildIcon ? prepared.buildingFrames.get(card.buildIcon) : null;
+            if (frame) this.buildingFramesByCardId.set(card.id, frame);
+        }
+        const presentationArt: IZCBattlePresentationArt = {
+            unitVisualPrefabs: this.unitVisualPrefabs,
+            cardArtFrames: this.legendCardArtFrames,
+            buildingFramesByCardId: this.buildingFramesByCardId,
+            buildingFrames: prepared.buildingFrames,
+            legendPortraitFrames: this.legendPortraitFrames,
+        };
         this.renderWorld = new ZCGameRenderWorld({
+            owner: this, presentationArt,
             mapLayer: this.hudView.mapLayer,
             board,
             wallLayer,
             hexPrefab: prepared.hexPrefab,
             unitPrefab: prepared.unitPrefab,
-            unitVisualPrefabs: prepared.unitVisualPrefabs,
+            unitVisualPrefabs: this.unitVisualPrefabs,
             buildingFrames: prepared.buildingFrames,
             wallFrames: prepared.wallFrames,
             wallMaterial: prepared.wallMaterial,

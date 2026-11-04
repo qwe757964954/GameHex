@@ -23,35 +23,49 @@ export class PostLoginComposition extends ControllerBase {
         if (this.isDisposed || this.controller) return;
         const prefab = this.prefab;
         if (!prefab) throw new Error('LaunchProgress 尚未预加载');
+        try {
+            const { ui, startRatio } = this.createView(prefab);
+            const controller = this.createController(ui, startRatio);
+            this.controller = controller;
+            this.own(() => controller.dispose());
+            void controller.start(params);
+        } catch (error) {
+            try { this.dispose(); }
+            catch (cleanupError) { console.error('[PostLoginComposition] 初始化失败后的清理失败', cleanupError); }
+            throw error;
+        }
+    }
+    private createView(prefab: Prefab): {
+        ui: LaunchProgressUI;
+        startRatio: number;
+    } {
         const existed = LaunchProgressUI.ensure(this.host);
         const startRatio = existed ? existed.currentRatio : LAUNCH_UPDATE_WEIGHT;
         existed?.release();
         const ui = LaunchProgressUI.createFromPrefab(prefab, this.host);
-        if (!ui) throw new Error('LaunchProgress 缺少有效视图');
+        if (!ui)
+            throw new Error('LaunchProgress 缺少有效视图');
         this.ui = ui;
         ui.show();
-        const controller = new PostLoginController(this.resources, {
-            startRatio, prepare: report => this.resources.sessionAssets.prepare(report),
-            bootstrapIdentity: data => this.bootstrapIdentity(data), initAudio: () => AudioMgr.instance.init(),
-            setProgress: ratio => ui.setProgress(ratio), setStatus: message => ui.setStatus(message),
-            navigate: route => ProcedureManager.navigate(route),
-            failed: error => console.error('[PostLoginComposition] 登录后资源加载失败', error),
-        });
-        this.controller = controller;
-        this.own(() => controller.dispose());
-        void controller.start(params);
+        return { ui, startRatio };
     }
-    private bootstrapIdentity(params: unknown): void {
-        let owner = resolvePostLoginIdentity(params, null);
-        if (!owner) {
-            try { owner = resolvePostLoginIdentity(null, sys.localStorage.getItem('login_session')); }
-            catch (error) { console.warn('[PostLoginComposition] 读取身份缓存失败', error); }
-        }
-        if (!owner) { console.warn('[PostLoginComposition] 缺少有效角色身份，跳过章节汇总拉取'); return; }
-        const repository = TerritoryChapterInfoRepository.instance;
-        repository.bindOwner(owner.roleId, owner.serverId);
-        // 账号仓库持有共享后台同步，流程退出不清空其快照。
-        void repository.refresh().catch(error => console.warn('[PostLoginComposition] 章节汇总刷新失败', error));
+    private createController(ui: LaunchProgressUI, startRatio: number): PostLoginController {
+        return new PostLoginController(this.resources, {
+            startRatio,
+            failed: error => console.error('[PostLoginComposition] 登录后资源加载失败', error),
+            session: {
+                prepare: report => this.resources.sessionAssets.prepare(report),
+                bootstrapIdentity: bootstrapPostLoginIdentity,
+                initAudio: () => AudioMgr.instance.init()
+            },
+            view: {
+                setProgress: ratio => ui.setProgress(ratio),
+                setStatus: message => ui.setStatus(message)
+            },
+            navigation: {
+                navigate: route => ProcedureManager.navigate(route)
+            },
+        });
     }
     leave(): void { this.release(this.controller?.mainReady ?? false); }
     dispose(): void { this.release(false); }
@@ -60,8 +74,28 @@ export class PostLoginComposition extends ControllerBase {
         this.controller = null;
         const ui = this.ui;
         this.ui = null;
-        if (ui && !handoff) ui.release();
         this.prefab = null;
-        super.dispose();
+        try { if (ui && !handoff) ui.release(); }
+        finally { super.dispose(); }
     }
+}
+
+function bootstrapPostLoginIdentity(params: unknown): void {
+    let owner = resolvePostLoginIdentity(params, null);
+    if (!owner) {
+        try {
+            owner = resolvePostLoginIdentity(null, sys.localStorage.getItem('login_session'));
+        }
+        catch (error) {
+            console.warn('[PostLoginComposition] 读取身份缓存失败', error);
+        }
+    }
+    if (!owner) {
+        console.warn('[PostLoginComposition] 缺少有效角色身份，跳过章节汇总拉取');
+        return;
+    }
+    const repository = TerritoryChapterInfoRepository.instance;
+    repository.bindOwner(owner.roleId, owner.serverId);
+    // 账号仓库持有共享后台同步，流程退出不清空其快照。
+    void repository.refresh().catch(error => console.warn('[PostLoginComposition] 章节汇总刷新失败', error));
 }

@@ -1,12 +1,12 @@
-import type { TerritoryProgressData } from './TerritoryProgress';
-import { idleRewardDestinationOf, settleTerritoryIdleRewards, TERRITORY_IDLE_REWARD_DESTINATION } from './TerritoryIdleReward';
-import type { TerritoryIdleRewardGain, TerritoryIdleRewardSource } from './TerritoryIdleReward';
-import { TERRITORY_BATTLE_STATUS, type TerritoryBattleStatus } from './TerritoryBattleStatus';
 import {
     TERRITORY_LAST_CHAPTER_KEY,
     TERRITORY_STORAGE_PREFIX,
     TERRITORY_TEXTS,
 } from '../application/TerritoryTexts';
+import { TERRITORY_BATTLE_STATUS, type TerritoryBattleStatus } from './TerritoryBattleStatus';
+import type { TerritoryIdleRewardGain, TerritoryIdleRewardSource } from './TerritoryIdleReward';
+import { idleRewardDestinationOf, settleTerritoryIdleRewards, TERRITORY_IDLE_REWARD_DESTINATION } from './TerritoryIdleReward';
+import type { TerritoryProgressData } from './TerritoryProgress';
 
 export interface ITerritorySaveOwner {
     readonly roleId: string;
@@ -239,9 +239,9 @@ export class TerritorySaveStore {
         const save = source ? clone(source) : this.load(chapterId);
         const silverCost = amount(request.silverCost);
         const staminaCost = amount(request.staminaCost);
-        if (save.wallet.silver < silverCost) {
-            return { ok: false, reason: TERRITORY_TEXTS.silverNotEnough, save };
-        }
+        // if (save.wallet.silver < silverCost) {
+        //     return { ok: false, reason: TERRITORY_TEXTS.silverNotEnough, save };
+        // }
         if (save.wallet.stamina < staminaCost) {
             return { ok: false, reason: TERRITORY_TEXTS.staminaNotEnough, save };
         }

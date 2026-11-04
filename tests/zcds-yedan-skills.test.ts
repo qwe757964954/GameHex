@@ -125,10 +125,12 @@ test('椰蛋战士：12 行技能计划（4 条链 × 3 档），三档数值逐
     assert.deepEqual(sweep.map((p) => p.secondaryFanDeg), [120, 120, 120]);
     for (const tier of byChain(100502)) assert.equal(tier.behaviorKey, 'skill_params');
 
-    // 100504 暴风：3 道、夹角 30°、持续 3/4/4s、最多 3/4/5 人、80/100/120%
+    // 100504 暴风：3 道、夹角 50°、持续 3/4/4s、最多 3/4/5 人、80/100/120%
     const storm = byChain(100504).map((row) => JSON.parse(String(row.skillParamJson)) as Record<string, number>);
     assert.deepEqual(storm.map((p) => p.zoneCount), [3, 3, 3]);
-    assert.deepEqual(storm.map((p) => p.zoneSpreadDeg), [30, 30, 30]);
+    //  2026-11-03 需求「初始生成夹角要增加大 20°，更扩散一点」⇒ 总夹角 30° → 50°
+    //  （三道的方向从 −15°/0°/+15° 变成 −25°/0°/+25°）。
+    assert.deepEqual(storm.map((p) => p.zoneSpreadDeg), [50, 50, 50]);
     assert.deepEqual(storm.map((p) => p.zoneDuration), [3, 4, 4]);
     assert.deepEqual(storm.map((p) => p.zoneMaxHits), [3, 4, 5]);
     assert.deepEqual(storm.map((p) => p.damageRate), [0.8, 1.0, 1.2]);

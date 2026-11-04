@@ -98,13 +98,19 @@ test('parseCardLevelUpRow：坏行返回 null，不抛异常', () => {
     }), null);
     // 正常行：id / 数量都归一化成字符串 / 整数
     const ok = parseCardLevelUpRow({
-        id: 66001, level: '1', costCardID: 18003, costCardNum: '10',
+        id: 66001, name: '精灵弓箭手', level: '1', costCardID: 18003, costCardNum: '10',
         costArmyLevelID: 16003, costGeneralLevelID: 16000, costArmyLevelNum: '20',
     });
     assert.deepEqual(ok, {
-        id: '66001', level: 1, costCardID: '18003', costCardNum: 10,
+        id: '66001', name: '精灵弓箭手', level: 1, costCardID: '18003', costCardNum: 10,
         costArmyLevelID: '16003', costGeneralLevelID: '16000', costArmyLevelNum: 20,
     });
+    // 表里没配名称的老行：name 归一化成空串（不是 undefined，界面可直接判断）
+    const noName = parseCardLevelUpRow({
+        id: 66001, level: 1, costCardID: 18003, costCardNum: 10,
+        costArmyLevelID: 16003, costGeneralLevelID: 16000, costArmyLevelNum: 20,
+    });
+    assert.equal(noName?.name, '');
 });
 
 test('升级读的是「目标等级」那一行（level 列 = 到达该等级）', () => {
@@ -328,4 +334,46 @@ test('升级 loading 由组合根提供，控制器成对释放并在退出时�
     assert.match(composition, /upgradeSending/);
     assert.match(controller, /this.own\(\(\) => this.stopLoading\(\)\)/);
     assert.match(controller, /finally \{ this.stopLoading\(\); \}/);
+});
+
+test('卡牌名称：表里每行都带名，且与卡牌表 pvpCard 完全一致', () => {
+    // 回归 K-卡牌升级 的历史坑：
+    //   ① B 列（卡牌名称）导出标志被写成 0 + 字段名空 ⇒ eSon 不导出，`cardLevelUp.json` 没有 name；
+    //   ② 表里 35 张卡有 23 张名称还是旧项目英雄名（女猎手 / 冰霜巨龙 / 希尔瓦娜斯…）。
+    // 两者都只会在界面上表现为「材料位没有名字」，零报错 —— 所以用真实表钉住。
+    const rows = readCardLevelUp();
+    const withName = rows.filter((row) => String(row.name ?? '').trim().length > 0);
+    assert.equal(withName.length, rows.length, `有 ${rows.length - withName.length} 行没有 name`);
+
+    const pvp = JSON.parse(readFileSync('assets/remoteRef/pvpCard.json', 'utf8')) as {
+        k: string[]; v: unknown[][];
+    };
+    const cardName = new Map<string, string>();
+    for (const row of pvp.v) {
+        const entry = {} as Record<string, unknown>;
+        pvp.k.forEach((key, index) => { entry[key] = row[index]; });
+        cardName.set(String(entry.id), String(entry.name));
+    }
+    const mismatched = rows.filter((row) => cardName.get(String(row.id)) !== row.name);
+    assert.deepEqual(mismatched.slice(0, 3), [], '名称必须与 pvpCard 对齐（样例）');
+    assert.equal(mismatched.length, 0);
+
+    // 判定结果把名字带出去，页面直接显示（不再回退通用文案「卡牌」）
+    const status = evaluateUpgrade(TABLE, LIVE_ARCHER, 0, bagOf({}));
+    assert.equal(status.requirements[0].name, '豌豆游侠');
+    assert.equal(status.requirements[1].name, '', '经验行没有卡名');
+});
+
+test('材料位显示卡牌表名称，不再写死通用文案', () => {
+    const page = readFileSync('assets/script/app/card/CardUpgradePage.ts', 'utf8');
+    assert.match(
+        page,
+        /this\.matCardItemLabel\.string = cardRow\.name \|\| texts\.upgradeCardRow;/,
+        '材料卡名必须读 cardRow.name，只在表里没配时才回退通用文案',
+    );
+    assert.doesNotMatch(
+        page,
+        /this\.matCardItemLabel\.string = texts\.upgradeCardRow;/,
+        '这里退回写死文案就是本 bug 的原形态',
+    );
 });

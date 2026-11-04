@@ -29,6 +29,8 @@ function createPage() {
         if (name === '../itemdetail/ItemDetailArt') return { qualityFrameArtPath: () => 'frame' };
         if (name === '../../framework/event/EventMgr') return { EventMgr: { instance: { offTarget() {} } } };
         if (name === '../net/GameNet') return { GameNet: { instance: { removeCaller() {} } } };
+        // `onDestroy` 会退订关卡缓存（战斗宝箱入口的开启动条件看 `CmdBattleLevel`）
+        if (name === '../net/CacheMgr') return { CacheMgr: { instance: { setEventUpdate() {}, removeEventUpdate() {} } } };
         return {};
     } });
     const page = new exports.MainPage();

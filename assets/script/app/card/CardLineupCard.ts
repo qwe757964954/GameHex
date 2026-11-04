@@ -1,17 +1,15 @@
-import { _decorator, Component, Label, Node, ProgressBar, Sprite, SpriteFrame } from 'cc';
+import { _decorator, Component, Label, Node, ProgressBar, Sprite, SpriteFrame, UITransform } from 'cc';
 import type { ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
-import { applyCardHeadArt } from './CardHeadView';
+import { applyCardHeroArt } from './CardHeroView';
 import { CARD_LINEUP_TEXTS } from './CardLineupTexts';
 
 const { ccclass, property } = _decorator;
 
-/** 卡牌一次渲染要的四张图。 */
+/** 卡牌一次渲染要的三张图。 */
 export interface ZCCardFrames {
     readonly face: SpriteFrame | null;
     readonly hero: SpriteFrame | null;
     readonly badge: SpriteFrame | null;
-    /** 该卡头像；null = 没配（金矿/主城等），保留 hero 立绘。 */
-    readonly head: SpriteFrame | null;
 }
 
 /**
@@ -60,8 +58,9 @@ export class CardLineupCard extends Component {
     @property({ type: Sprite, tooltip: 'Hero：营地雕像' })
     hero: Sprite = null;
 
-    @property({ type: Sprite, tooltip: 'HeadIcon：该卡头像（与 Hero 互斥）' })
-    headIcon: Sprite = null;
+    @property({ type: UITransform, tooltip: 'Hero：立绘展示框' })
+    heroTransform: UITransform = null!;
+
 
     @property({ type: Node, tooltip: 'OnField：已出战标（未上阵隐藏）' })
     onField: Node = null;
@@ -99,7 +98,7 @@ export class CardLineupCard extends Component {
         //  会把上一张卡的职业框 / 角标留在这一张上（串图）。`this.face` 等是必绑组件。
         this.face.spriteFrame = frames.face;
         this.badge.spriteFrame = frames.badge;
-        applyCardHeadArt(this, frames.hero, frames.head);
+        applyCardHeroArt(this.hero, this.heroTransform, frames.hero);
 
         const normalizedLevel = Math.max(0, Math.round(level ?? 0));
         this.levelPlate.active = normalizedLevel > 0;

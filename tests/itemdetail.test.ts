@@ -984,6 +984,8 @@ test('物品 E6｜`openItemDetail` 必须 `allowMultiple: true`（否则点内�
     const m = body.match(/ItemDetailPage\.open\(\{[\s\S]*?\}\)/);
     assert.ok(m, '找不到 openItemDetail 里的 open 调用');
     assert.ok(/allowMultiple:\s*true/.test(m[0]), 'PopupManager 默认「同类已打开则复用」，不放开就等于点了没反应');
+    assert.ok(/layer:\s*this\.popupLayer/.test(m[0]),
+        '内容物品的详情须继承当前详情层级，避免从 SYSTEM 层重新落回 NORMAL 层');
 });
 
 test('物品 E7｜`jumpTo` 只提示「未接入」，不假装跳成功', () => {

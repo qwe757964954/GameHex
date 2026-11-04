@@ -1,5 +1,5 @@
 /**
- * 资源栏「被奖励击中」的反馈曲线 —— **纯函数，零引擎依赖**。
+ * 资源栏「被奖励击中 / 被扣除」的反馈曲线 —— **纯函数，零引擎依赖**。
  *
  * ## 为什么单独一个文件
  *
@@ -8,7 +8,7 @@
  *  | 反馈 | 载体 | 曲线 |
  *  |---|---|---|
  *  | 单格（加） | 图标放大 / 数字滚动 | {@link resBarHitFx} |
- *  | 单格（**扣**） | 数字**显红** + 跳动，跳完才扣 | {@link resBarSpendFx} |
+ *  | 单格（**扣**） | 数字**白色闪烁** + 跳动，跳完才扣；同时上方飘一条 `-N` | {@link resBarSpendFx} + {@link resBarSpendFloatFx} |
  *  | 单格 | 这一格的底色闪光 | {@link resBarFlashFx} |
  *
  *  ⚠️ 闪光的作用域是**被命中的那一格**（2026-10-26 改口径：原先闪整条，用户看不出到底哪个资源涨了）。
@@ -97,37 +97,51 @@ export function resBarFlashFx(elapsed: number): number | null {
 }
 
 // ============================================================
-// 扣除（花钱）的反馈：数字显红 → 跳一下 → **然后**才扣
+// 扣除（花钱）的反馈：白色闪烁 → 跳一下 → **然后**才扣 + 上方飘 `-N`
 // ============================================================
 //
-// 需求（2026-11-02 用户，附顶部资源栏截图）：
-//   > 「当发生资源扣除时，对应资源栏的数字显红，跳动再扣除」
+// 需求（2026-11-03 用户，附顶部资源栏截图 —— 上一版是「显红」，这次改口径）：
+//   > 「1. 数字不显示红色，白色闪烁
+//   >  2. 在资源栏的上方 2px 的位置，播放【-】符号和扣除数字 UI 一起上移消失的提示」
+//
+// ## 为什么"白"要靠**透明度**做，而不是只改字色
+//
+// 资源栏的数字本来就是**纯白**（`ResBar.prefab` 的 `Value` 是 `#FFFFFF`）⇒ 把字色混向白
+// 等于什么都没变。真正看得见的是**闪烁**：白度（`whiteStrength`）负责"如果是深色字，先变白"，
+// 透明度（`labelAlpha`）负责"白字闪两下"。两个输出分开给，视图各写各的，别在模型里耦合。
 //
 // ## 三段的先后顺序是有意的，别改成一锅
 //
-// | 阶段 | 时间 | 数字文本 | 颜色 | 缩放 / 位移 |
+// | 阶段 | 时间 | 数字文本 | 颜色 / 透明度 | 缩放 / 位移 |
 // | --- | --- | --- | --- | --- |
-// | ① 显红 + 跳 | `0 ~ HOLD(0.34)` | **一动不动**（还是扣之前那个值） | 0.1s 内变红 | 单峰弹跳 + 向上跳 6px |
-// | ② 扣减 | `HOLD ~ 0.90` | 从「扣前」滚到「扣后」 | 保持红 | 已经归位，不再动 |
-// | ③ 收尾 | 最后 0.24s（与 ② 重叠） | 落到扣后值 | 红 → 常态色 | 归位 |
+// | ① 闪烁 + 跳 | `0 ~ HOLD(0.34)` | **一动不动**（还是扣之前那个值） | 白度 0→1，透明度闪 2 下 | 单峰弹跳 + 向上跳 6px |
+// | ② 扣减 | `HOLD ~ 0.9` | 从「扣前」滚到「扣后」 | 回到常态色 / 全不透明 | 已经归位，不再动 |
 //
-// 🔴 **①的「一动不动」是这条需求的核心**：数字一上来就掉下去、红字只是"事后变个色"，
-//   玩家读到的顺序就是「先扣了、再变红」，与需求相反。所以 `countRatio` 在前 HOLD 段恒 0。
+// 🔴 **①的「一动不动」是这条需求的核心**：数字一上来就掉下去、闪烁只是"事后闪一下"，
+//   玩家读到的顺序就是「先扣了、再闪」，与需求相反。所以 `countRatio` 在前 HOLD 段恒 0。
 //
-// 🔴 **红色必须淡回去**（③）：真值早就是新值了，红色是「这一下是扣的」的临时标签，
-//   留成常驻会把整个资源栏读成"欠费"。
+// 🔴 **闪烁必须收在 ① 之内**：数字一边滚一边闪，读数会被打断（玩家看不清扣到多少）。
 
 /** 扣除反馈的总时长（秒）。比「被奖励击中」长一档：它多了一段「先不扣」的定格。 */
 export const RES_BAR_SPEND_SECONDS = 0.9;
 
-/** ①「显红 + 跳」的定格段（秒）：这段时间数字**一点不动**，之后才开始往下滚。 */
+/** ①「闪烁 + 跳」的定格段（秒）：这段时间数字**一点不动**，之后才开始往下滚。 */
 export const RES_BAR_SPEND_HOLD_SECONDS = 0.34;
 
-/** 变红用多久（秒）：颜色比位移敏感，起手 0.1s 就该看得出红了。 */
-export const RES_BAR_SPEND_RED_RISE_SECONDS = 0.1;
+/** 闪烁窗口（秒）—— 与定格段同长：闪完正好开始扣。 */
+export const RES_BAR_SPEND_FLASH_SECONDS = RES_BAR_SPEND_HOLD_SECONDS;
 
-/** 红色淡回去的时长（秒，在总时长**末尾**）。 */
-export const RES_BAR_SPEND_RED_FADE_SECONDS = 0.24;
+/** 白度升到 1 用多久（秒）：颜色比位移敏感，起手 0.05s 就该看出变白。 */
+export const RES_BAR_SPEND_FLASH_RISE_SECONDS = 0.05;
+
+/** 白度在闪烁窗口**末尾**淡回常态色用多久（秒）。 */
+export const RES_BAR_SPEND_FLASH_FADE_SECONDS = 0.08;
+
+/** 闪几下（窗口内完整「亮 → 暗 → 亮」的次数）。2 下 ≈ 5.9Hz：像"闪"，再多就像信号故障。 */
+export const RES_BAR_SPEND_BLINKS = 2;
+
+/** 闪到最暗时的不透明度（`1` = 不闪）。别取 0 —— 数字整段消失会被读成"扣没了"。 */
+export const RES_BAR_SPEND_BLINK_MIN_ALPHA = 0.25;
 
 /** 扣除时图标的峰值放大比例（比奖励那档克制：扣东西不该像中奖）。 */
 export const RES_BAR_SPEND_ICON_POP = 0.12;
@@ -139,12 +153,12 @@ export const RES_BAR_SPEND_LABEL_POP = 0.2;
 export const RES_BAR_SPEND_LABEL_HOP = 6;
 
 /**
- * 扣除时数字的目标颜色（红）。
+ * 闪烁时数字混向的**目标色**（纯白）。
  *
- * ⚠️ 「显红」在国内是**涨**的语义，但这里不是涨跌色 —— 它是「**正在扣你钱**」的警示，
- * 与股票涨跌无关（资源栏只有扣这一侧会用到它）。
+ * 与上一版的红（`#E83B30`）互斥 —— 用户 2026-11-03 明确「数字不显示红色」。
+ * 资源栏只有"扣"这一侧会用到它，与涨跌色无关。
  */
-export const RES_BAR_SPEND_RED: readonly [number, number, number] = [0xe8, 0x3b, 0x30];
+export const RES_BAR_SPEND_FLASH: readonly [number, number, number] = [0xff, 0xff, 0xff];
 
 /** 一帧的扣除状态。 */
 export interface IResBarSpendFx {
@@ -156,18 +170,20 @@ export interface IResBarSpendFx {
     readonly labelHop: number;
     /** 数字滚动进度 `0..1`（前 {@link RES_BAR_SPEND_HOLD_SECONDS} 秒恒 0）。 */
     readonly countRatio: number;
-    /** 红色强度 `0..1`（视图按它把字色从常态色混向 {@link RES_BAR_SPEND_RED}）。 */
-    readonly redStrength: number;
+    /** 字色白度 `0..1`（视图按它把字色从常态色混向 {@link RES_BAR_SPEND_FLASH}）。 */
+    readonly whiteStrength: number;
+    /** 数字不透明度 `0..1`（闪烁时在 `1 ↔ RES_BAR_SPEND_BLINK_MIN_ALPHA` 之间摆）。 */
+    readonly labelAlpha: number;
 }
 
 /**
  * 扣除反馈在 `elapsed` 秒时的状态；`null` = 没在播（视图据此复原）。
  *
- * 采样口径（判据钉的就是这三条）：
- *  · `countRatio` 在 `[0, HOLD]` 内**恒为 0**，之后单调不减、`HOLD` 之后才开始涨；
- *  · `redStrength` 起手 0 → `RISE` 秒到 1 → 定格到末段 → 窗口末尾回到 0；
- *  · `iconScale / labelScale / labelHop` 都是**单峰**，`0` 与窗口末尾恒为 1 / 0，
- *    所以起手与收尾都不需要额外的归位帧。
+ * 采样口径（判据钉的就是这四条）：
+ *  · `countRatio` 在 `[0, HOLD]` 内**恒为 0**，之后单调不减；
+ *  · `labelAlpha` 在闪烁窗口内摆动 `RES_BAR_SPEND_BLINKS` 次，窗口起点 / 终点都是 1（不残留半透明）；
+ *  · `whiteStrength` 起手 0 → `RISE` 秒到 1 → 窗口末尾淡回 0，扣减段恒 0；
+ *  · `iconScale / labelScale / labelHop` 都是**单峰**，`0` 与窗口末尾恒为 1 / 0。
  */
 export function resBarSpendFx(elapsed: number): IResBarSpendFx | null {
     if (!Number.isFinite(elapsed) || elapsed < 0 || elapsed >= RES_BAR_SPEND_SECONDS) return null;
@@ -176,42 +192,116 @@ export function resBarSpendFx(elapsed: number): IResBarSpendFx | null {
     const pop = elapsed < hold ? Math.sin(Math.PI * clamp01(elapsed / hold)) : 0;
     // ② 扣减：HOLD 之前一步都不走（这就是「跳动**再**扣除」）。
     const countProgress = elapsed <= hold ? 0 : clamp01((elapsed - hold) / (RES_BAR_SPEND_SECONDS - hold));
-    // ③ 红：升 → 定格 → 末段淡回。
-    const fadeStart = RES_BAR_SPEND_SECONDS - RES_BAR_SPEND_RED_FADE_SECONDS;
-    let redStrength: number;
-    if (elapsed < RES_BAR_SPEND_RED_RISE_SECONDS) {
-        redStrength = clamp01(elapsed / RES_BAR_SPEND_RED_RISE_SECONDS);
-    } else if (elapsed <= fadeStart) {
-        redStrength = 1;
-    } else {
-        redStrength = clamp01((RES_BAR_SPEND_SECONDS - elapsed) / RES_BAR_SPEND_RED_FADE_SECONDS);
-    }
     return {
         iconScale: 1 + RES_BAR_SPEND_ICON_POP * pop,
         labelScale: 1 + RES_BAR_SPEND_LABEL_POP * pop,
         labelHop: RES_BAR_SPEND_LABEL_HOP * pop,
         countRatio: easeOutCubic(countProgress),
-        redStrength,
+        whiteStrength: resBarSpendWhiteStrength(elapsed),
+        labelAlpha: resBarSpendBlinkAlpha(elapsed),
     };
 }
 
+/** 白度：`0 →1`（RISE）→ 保持 → 窗口末尾淡回 0；闪烁窗口之外恒 0。 */
+function resBarSpendWhiteStrength(elapsed: number): number {
+    if (!(elapsed >= 0) || elapsed >= RES_BAR_SPEND_FLASH_SECONDS) return 0;
+    if (elapsed < RES_BAR_SPEND_FLASH_RISE_SECONDS) {
+        return clamp01(elapsed / RES_BAR_SPEND_FLASH_RISE_SECONDS);
+    }
+    const fadeStart = RES_BAR_SPEND_FLASH_SECONDS - RES_BAR_SPEND_FLASH_FADE_SECONDS;
+    if (elapsed <= fadeStart) return 1;
+    return clamp01((RES_BAR_SPEND_FLASH_SECONDS - elapsed) / RES_BAR_SPEND_FLASH_FADE_SECONDS);
+}
+
 /**
- * 字色混合：`strength = 0` ⇒ 原色，`1` ⇒ {@link RES_BAR_SPEND_RED}。
+ * 闪烁：`|sin(BLINKS·π·p)|` 的波峰处最暗。
  *
- * 为什么不直接把字改成写死的红：资源栏的常态字色来自 prefab（可能是纯白、也可能是深色），
- * 换成常量红之后再换回来就对不上原值了 ⇒ 必须**从这个格子自己的底色出发**混。
+ * 用 `|sin|` 而不是方波：方波在开关那一帧会硬切，TTF 字的抗锯齿边缘会跳一下；
+ * `|sin|` 两端都贴 0 ⇒ 起点 / 终点天然是"全不透明"，不需要额外归位帧。
  */
-export function resBarSpendColor(
+function resBarSpendBlinkAlpha(elapsed: number): number {
+    if (!(elapsed >= 0) || elapsed >= RES_BAR_SPEND_FLASH_SECONDS) return 1;
+    const p = clamp01(elapsed / RES_BAR_SPEND_FLASH_SECONDS);
+    const wave = Math.abs(Math.sin(RES_BAR_SPEND_BLINKS * Math.PI * p));
+    return 1 - (1 - RES_BAR_SPEND_BLINK_MIN_ALPHA) * wave;
+}
+
+/**
+ * 字色混合：`strength = 0` ⇒ 原色，`1` ⇒ {@link RES_BAR_SPEND_FLASH}（纯白）。
+ *
+ * 为什么不直接把字写死成白：资源栏的常态字色来自 prefab，换成常量白之后再换回来就对不上原值
+ * ⇒ 必须**从这个格子自己的底色出发**混（同上一版显红的做法，只是目标色换了）。
+ */
+export function resBarSpendFlashColor(
     base: readonly [number, number, number],
     strength: number,
 ): [number, number, number] {
     const t = clamp01(strength);
     const from = [toChannel(base?.[0]), toChannel(base?.[1]), toChannel(base?.[2])];
     return [
-        Math.round(from[0] + (RES_BAR_SPEND_RED[0] - from[0]) * t),
-        Math.round(from[1] + (RES_BAR_SPEND_RED[1] - from[1]) * t),
-        Math.round(from[2] + (RES_BAR_SPEND_RED[2] - from[2]) * t),
+        Math.round(from[0] + (RES_BAR_SPEND_FLASH[0] - from[0]) * t),
+        Math.round(from[1] + (RES_BAR_SPEND_FLASH[1] - from[1]) * t),
+        Math.round(from[2] + (RES_BAR_SPEND_FLASH[2] - from[2]) * t),
     ];
+}
+
+// ============================================================
+// 上方飘字：`-30` 从「资源栏上沿 + 2px」起，上移 + 淡出
+// ============================================================
+//
+// 需求原文第 2 条：「在资源栏的上方 2px 的位置，播放【-】符号和扣除数字 UI 一起上移消失的提示」。
+//
+// ## 为什么飘字和数字闪烁是**两条**曲线
+//
+//  数字闪烁在格子里、只演 0.34s（要在扣减开始前收掉），飘字要飘满整个窗口才读得完
+//  「扣了多少」。共用一个 `elapsed`（都是 `spendElapsed`），但曲线各自算 —— 别合并成一个 fx。
+
+/** 飘字的总时长（秒）：与扣除反馈同窗口，扣完它正好飘没。 */
+export const RES_BAR_SPEND_FLOAT_SECONDS = RES_BAR_SPEND_SECONDS;
+
+/** 飘字起点 = **格子（资源栏）上沿再往上 2px** —— 需求原文给的数。 */
+export const RES_BAR_SPEND_FLOAT_GAP = 2;
+
+/** 整个窗口里向上飘多少像素。 */
+export const RES_BAR_SPEND_FLOAT_RISE = 46;
+
+/** 飘到几成时开始淡出（`0.45` = 前段看得清、后段让位给扣减）。 */
+export const RES_BAR_SPEND_FLOAT_FADE_FROM = 0.45;
+
+/** 一帧的飘字状态。 */
+export interface IResBarSpendFloatFx {
+    /** 相对起点的**向上**位移（像素，0 = 还压在"上沿 + 2px"处）。 */
+    readonly rise: number;
+    /** 不透明度 `0..1`。 */
+    readonly alpha: number;
+}
+
+/**
+ * 飘字在 `elapsed` 秒时的状态；`null` = 没在飘（视图据此把节点藏起来）。
+ *
+ * 曲线：`rise` 用 `EaseOutCubic`（起手窜出去、尾巴慢慢停 —— 线性上移像"被推上去"）；
+ * `alpha` 前 `FADE_FROM` 保持 1，之后线性收到 0，窗口末尾正好不可见。
+ */
+export function resBarSpendFloatFx(elapsed: number): IResBarSpendFloatFx | null {
+    if (!Number.isFinite(elapsed) || elapsed < 0 || elapsed >= RES_BAR_SPEND_FLOAT_SECONDS) return null;
+    const p = clamp01(elapsed / RES_BAR_SPEND_FLOAT_SECONDS);
+    return {
+        rise: easeOutCubic(p) * RES_BAR_SPEND_FLOAT_RISE,
+        alpha: p <= RES_BAR_SPEND_FLOAT_FADE_FROM
+            ? 1
+            : clamp01((1 - p) / (1 - RES_BAR_SPEND_FLOAT_FADE_FROM)),
+    };
+}
+
+/**
+ * 飘字的文本：`-` 符号 + 扣除数字（需求原文「【-】符号和扣除数字」）。
+ *
+ * 不带千分位 —— 与资源栏自身的数字同口径（`formatResBarCountText` 也不加），
+ * 上下两处排版一致才不会让人以为不是同一笔账。
+ */
+export function formatResBarSpendFloat(amount: number): string {
+    const value = Number.isFinite(amount) ? Math.round(Math.abs(amount)) : 0;
+    return `-${value}`;
 }
 
 /** 取 0~255 的整数通道（脏值归 0，别把 `undefined` 混进颜色里变成 NaN）。 */

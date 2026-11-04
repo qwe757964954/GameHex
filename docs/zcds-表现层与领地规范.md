@@ -39,7 +39,9 @@
 | 领地「获得银币 / 体力」**格心抛物线喷发（12 颗 · ±26° · 由小变大 + 持续自转）** + 读数在其**上方 40px**（row17；粒子自身动画 2026-11-02 改口径，旧的「上下翻面」已作废） | `model/TerritoryResourceGain.territoryBurstLaunch / territoryBurstParticle`（`scale` / `rotation`） / `view/TerritoryGainBurst` / `TerritoryMapView.playResourceGain`、`ensureBurstRoot` | `tests/territory-resource-gain.test.ts` |
 | **宝箱气泡底图 / 排版**（`frame_04` 竖向水滴，icon 在上、数字在下；2026-11-02 两轮） | `model/TerritoryChestBubble.territoryChestBubbleLayout`（尺寸 / icon / 字号 / 描边） / `TerritoryStationView.renderLevelBubble`、`themeLevelBubbleLabel`、`applyLevelBubbleLayout` / `TerritoryPageAssets`（`chestBubbleFrame`） | `tests/territory-chest-bubble.test.ts` |
 | 领地奖励**图标解析**：`roleProperty` + `item` **两张表**、`item` 图在 `main-pages` 分包 + 随机格**读数合成一条**（2026-10-26） | `ResTypes.resBarCellOfRefId` / `ResTypes.resBarIconSpritePath` / `MainTerritoryMap.ensureRewardIcon`、`refRows` / `TerritoryMapView.playResourceGain` 的 `readout` | `tests/res-types.test.ts`、`tests/territory-resource-gain.test.ts` |
-| **资源栏「扣除」反馈**（数字显红 → 跳一下 → 才扣；2026-11-02） | `main/MainResBarFeedback.resBarSpendFx / resBarSpendColor` / `main/MainResBarSlot.playSpendFeedback` / `common/ResBar.reload`（`spendDeltaOf` 自动检测） | `tests/main-resbar-spend.test.ts`、`tests/main-resbar-feedback.test.ts`、`tests/militia-talent-ui.test.ts` |
+| **资源栏「扣除」反馈**（数字**白色闪烁** → 跳一下 → 才扣 + 上方飘 `-N`；2026-11-02 立项，2026-11-03 改口径去掉红色） | `main/MainResBarFeedback.resBarSpendFx / resBarSpendFloatFx / resBarSpendFlashColor` / `main/MainResBarSlot.playSpendFeedback`、`ensureSpendFloat` / `common/ResBar.reload`（`spendDeltaOf` 自动检测） | `tests/main-resbar-spend.test.ts`、`tests/main-resbar-feedback.test.ts`、`tests/militia-talent-ui.test.ts` |
+| **「章节选择」行排版**（金边即底框 / 区块留白 / 挂锁 ×1.3 / 序号块与完成度块缩 90%+上抬 / 章节名居中 / 挂锁两轴跟随；2026-11-03/04 五轮） | `ChapterSelectPanel.prefab` 的 `CurrentRing` · `NumBlock` · `StatusBlock` · `LockIcon` · `NameLabel` 几何 / `main/ChapterSelectItem.render` | `tests/chapter-select.test.ts` |
+| **战斗宝箱入口开启条件**（pvp 20001 通关才显示 + `0→1.15→1` 生成动画 + `Cell0..Cell3` 同进同出；2026-11-03） | `open.json` `refId=701`「战斗掉落宝箱」的 `visibleCondition` / `main/ChestEntryGate.ts` / `main/BattleLevelPassed.ts` / `MainPage.onLoad`、`applyChestEntryGate`、`setChestCellsVisible` | `tests/chest-entry-gate.test.ts` |
 
 ## 对局资源与控制器生命周期（2026-10-30）
 
@@ -961,24 +963,35 @@ TerritoryChestView.step() → fireLandings(t) 到达时刻 = flyStart + i×stagg
   `Icon` 的占位 `_spriteFrame` 必须逐字等于 `roleProperty` 里 `gold`/`end` 那张图的 uuid、
   `Icon` 尺寸必须 `44×44`。
 
-#### 五（补）、**扣除**也走同一套单格反馈：显红 → 跳一下 → **然后**才扣（2026-11-02）
+#### 五（补）、**扣除**也走同一套单格反馈：白色闪烁 → 跳一下 → **然后**才扣 + 上方飘 `-N`（2026-11-02 立项，2026-11-03 改口径）
 
-用户原话（附顶部资源栏截图，红框圈着 `2670` 银币 / `137/30` 体力）：
+两版需求原文（都在说同一件事：**扣**的时候先给一拍确认，再动数字）：
 
-> 「当发生资源扣除时，对应资源栏的数字显红，跳动再扣除」
+| 日期 | 用户原话 | 落地 |
+| :--- | :--- | :--- |
+| 2026-11-02 | 「当发生资源扣除时，对应资源栏的数字显红，跳动再扣除」 | 数字**显红** + 跳，跳完才扣 |
+| 2026-11-03 | 「1. 数字不显示红色，白色闪烁；2. 在资源栏的上方 2px 的位置，播放【-】符号和扣除数字 UI 一起上移消失的提示」 | 红**整条退役** → 数字**白色闪烁**（白度 + 透明度），另加一条 `-N` 飘字 |
 
 **难点全在顺序上，不在画面上**：数值真值来自 `CmdRole`，服务端一推、`reload` 一跑，
-label 上就已经是**扣后**的值了 —— 什么都不做的话玩家看到的是「数字直接掉下去、然后才红一下」，
-与需求正好相反。所以这条反馈必须把 label **先钉回扣前值**、演完红与跳，最后才滚到扣后值。
+label 上就已经是**扣后**的值了 —— 什么都不做的话玩家看到的是「数字直接掉下去、然后才闪一下」，
+与需求正好相反。所以这条反馈必须把 label **先钉回扣前值**、演完闪与跳，最后才滚到扣后值。
 
-| 阶段 | 时间 | 数字文本 | 颜色 | 缩放 / 位移 |
+**为什么"白"要靠透明度做**：资源栏的数字本来就是纯白（`ResBar.prefab` 的 `Value` = `#FFFFFF`），
+把字色混向白等于什么都没变 ⇒ 看得见的只有**闪**。所以模型给两个输出：
+`whiteStrength`（深色字的宿主才看得见）与 `labelAlpha`（白字靠它闪），视图各写各的。
+
+| 阶段 | 时间 | 数字文本 | 颜色 / 透明度 | 缩放 / 位移 |
 | :--- | :--- | :--- | :--- | :--- |
-| ① 显红 + 跳 | `0 ~ 0.34s`（`SPEND_HOLD`） | **一动不动**（还是扣前值） | 0.1s 内变红 | 单峰弹跳（图标 +12%、数字 +20%）+ 上跳 6px |
-| ② 扣减 | `0.34 ~ 0.90s` | 从扣前滚到扣后 | 保持红 | 已归位，不再动 |
-| ③ 收尾 | 最后 `0.24s`（与 ② 重叠） | 落到扣后值 | 红 → 常态色 | 归位 |
+| ① 白闪 + 跳 | `0 ~ 0.34s`（`SPEND_HOLD`） | **一动不动**（还是扣前值） | 白度 0.05s 升到 1；透明度闪 **2 下**（`1 ↔ 0.25`） | 单峰弹跳（图标 +12%、数字 +20%）+ 上跳 6px |
+| ② 扣减 | `0.34 ~ 0.90s` | 从扣前滚到扣后 | 回到常态色 + 全不透明 | 已归位，不再动 |
+| ③ 飘字 | `0 ~ 0.90s`（整窗） | `-30` | 45% 之后线性淡出 | 起点「槽位上沿 **+2px**」，全程上移 46px（`EaseOutCubic`） |
 
 🔴 **①的「一动不动」是这条需求的机器判据**：`resBarSpendFx(elapsed).countRatio`
-在前 `SPEND_HOLD_SECONDS` 内**恒为 0**。把它改成"边红边扣"这一条立刻红。
+在前 `SPEND_HOLD_SECONDS` 内**恒为 0**。把它改成"边闪边扣"这一条立刻红。
+
+🔴 **闪烁必须收在 ① 之内**（`RES_BAR_SPEND_FLASH_SECONDS === RES_BAR_SPEND_HOLD_SECONDS`）：
+数字一边滚一边闪，玩家读不出扣到多少。
+
 
 **为什么不用在花钱的地方一处处调**：扣除的唯一入口是 `ResBar.reload` 里的
 `slot.spendDeltaOf(next.valueText)` —— 每格自己记着「上次落定的数值」(`settledValue`)，
@@ -986,20 +999,27 @@ label 上就已经是**扣后**的值了 —— 什么都不做的话玩家看�
 不需要谁记得调一次（漏一处就少一处反馈，而且零报错）。
 `ResBar.playSpendFeedback(key, amount)` 仍然公开，只给「值已落地、但不会再走 `render`」的边角用。
 
-**两个坑**：
+**三个坑**：
 
 1. **顺序**：`spendDeltaOf` / `playSpendFeedback` 必须排在 `slot.render(...)` **之前**
    （`tests/main-resbar-spend` 有源码守卫钉死）。反过来的话 label 已被写成新值，
-   动画只能"先扣再变红" —— 而且**看起来仍然有动画**，最容易被当成做对了。
-2. **字色必须从这一格自己的常态色混过来**（`resBarSpendColor(base, strength)`），
-   不能写死常量红：收尾要混回原值，否则资源栏会留一格红数字（`finishSpend` / `cancelSpend`
-   两处都得复原，`render(null)` 整格隐藏时也要复原）。
+   动画只能"先扣再闪" —— 而且**看起来仍然有动画**，最容易被当成做对了。
+2. **白度必须从这一格自己的常态色混过来**（`resBarSpendFlashColor(base, strength)`），
+   不能写死常量白：收尾要混回原值。透明度同理必须在 `finishSpend` / `cancelSpend` /
+   `render(null)` 三处都复原点（漏一处，资源栏就会留一格半透明数字）。
+3. **飘字是懒建的**（`ensureSpendFloat`，第一次扣才 `new Node` + `addComponent(Label)`）：
+   它是纯反馈件、没有美术资产、也没有交互，排版必须和 `Value` **完全一致** ——
+   复制 `valueLabel` 的字体/字号，比在 prefab 里手抄三份再靠人肉对版本可靠。
+   锚点 `(0.5, 0)` + 起点 `槽位半高 + RES_BAR_SPEND_FLOAT_GAP(2)`；
+   白色描边（`LabelOutline` 2px）是因为它悬在地图上，白字直接压在浅色地格会糊。
 
-**判据**：`tests/main-resbar-spend.test.ts`（13 条）——
-曲线口径（窗口外 `null`、前 `HOLD` 段 `countRatio` 恒 0、弹跳单峰、红色升→保持→淡回、
-混色 `strength=0` 逐位等于原色）+ **真代码沙箱**（`cc` 打桩跑 `MainResBarSlot`）：
-第一帧不许掉数字、定格段数字不变但已红已跳、收尾精确落在扣后值且颜色/位移/缩放全复原、
-反馈途中来推包只暂存、整格隐藏要复原、加/扣两条时间轴互斥；外加两条源码契约
+**判据**：`tests/main-resbar-spend.test.ts`（16 条）——
+曲线口径（窗口外 `null`、前 `HOLD` 段 `countRatio` 恒 0、弹跳单峰、白度升→保持→淡回、
+透明度闪 2 下且起止为 1、混色 `strength=0` 逐位等于原色、飘字单调上移 + 45% 后淡出 +
+`-N` 文本不带千分位）+ **真代码沙箱**（`cc` 打桩跑 `MainResBarSlot`）：
+第一帧不许掉数字、定格段数字不变但已在闪在跳、飘字压在「上沿 + 2px」且与数字同列、
+收尾精确落在扣后值且颜色/透明度/位移/缩放/飘字全复原、反馈途中来推包只暂存、
+整格隐藏要复原、加/扣两条时间轴互斥；外加两条源码契约
 （`reload` 里「判扣除」先于 `render`；单格不许自己挂 `update`、不许用 tween）。
 
 ### 3.8 建筑体量倍率 `buildSize`（表「模型大小」，**可以是小数**）（2026-10-27）
@@ -1960,6 +1980,8 @@ TerritoryStationView.renderLevelBubble() → 覆盖 badgeLabel.color
 
 ### 3.19 「章节选择」的入口 = 地图上的章节建筑（含气泡）；两侧三角关闭（2026-11-03）
 
+章节列表名称由 `PVP-关卡.xlsx` 导出的 `chapterName.json` 提供：经 `ConfigService` 读取，按 `chapterId` 对应并显示 `chapterName`（例如第一章“枯菌穹顶”、第二章“僵笑面具”）。缺少对应项时沿用地图名称，再兜底为章节序号；名称配置不改变章节开放范围、锁定态或站点完成度。
+
 用户两句话（配两张图）：
 
 > 1. 「章节弹窗对应的打开按钮是章节建筑（包括气泡部分」
@@ -2015,6 +2037,311 @@ TerritoryStationView.renderLevelBubble() → 覆盖 badgeLabel.color
 ⚠️ 夹具坑（已修）：`tests/helpers/territory-station-fixtures.ts` 的 `./TerritoryEvents` 桩
 原来手抄了一份常量表，停在 `STATION_CLICK` 那一代 —— 真视图发 `STATION_TAP` 时桩里没这个键，
 `emit(undefined)` 也算"发了事件"，等于把验收放空。现在改为**真模块**。
+
+### 3.20 「章节选择」一行的排版：选中行的底框是**金边**，不是 `RowBg`（2026-11-03）
+
+用户三条（配当前截图 + 效果图）：
+
+> 1. 「橙色的选中描边是外描边，调小 1 个像素」
+> 2. 「代表数字的框要对齐，底框囊括了其他部分在内，不要超出底框范围」
+> 3. 「锁的 icon 可以放大 130%，比效果图略大」
+
+三条都落在 `ChapterSelectPanel.prefab` 的行模板上，不涉及脚本（`ChapterSelectItem.render`
+只换帧和文字，不碰 transform）。
+
+#### 一、第 2 条的关键：底框到底是哪个节点
+
+直觉上「底框」= `RowBg`（552×140），照这个算，序号块 126 高摆在 140 里还留 7px，怎么都够。
+但实测素材后结论相反 —— **选中行真正的外框是那圈金色高亮环**：
+
+| 素材 | art | 可见实体 | 说明 |
+| :-- | :-- | :-- | :-- |
+| `row_base.png` | 742×221 | art y=1..206 | 底下 15px 是烘焙好的投影 ⇒ 摆进 552×140 的节点后**可见体只有 130 高、视觉中心比节点中心高 4.4** |
+| `row_current_ring.png` | 744×233 | 描边 14px，洞 = art x14..729 / y14..207 | 换算到 553×147 的节点上，**洞只有 532×122**，比 `RowBg` 本体还小一圈 |
+
+也就是说：金边会盖掉 `RowBg` 自己那圈深色内边线，还往内啃 ~10px。序号块 / 状态块按
+`RowBg` 的 140 去摆，横向就被金边压住（截图上的「数字框顶出底框」）。
+**判据要按洞算，不能按 `RowBg` 算。**
+
+#### 二、三条的落地值
+
+| 节点 | 改前 | 改后 | 依据 |
+| :-- | :-- | :-- | :-- |
+| `CurrentRing` | 554×148 | **553×147** | 外描边整体收 1px |
+| `NumBlock` | 98×126 @y=0 | **98×112 @y=3.8** | 塞进洞里，上下各留 ~4.9 |
+| `StatusBlock` | 144×126 @y=0 | **144×112 @y=3.8** | 同上；左 5.2 / 右 5.2 留白相等 |
+| `LockIcon` | 62×70 @y=0 | **81×91 @y=3.8** | 62×70 × 1.3；与状态块同列必须一起位移 |
+
+- **y=3.8 不是随手取的**：环的洞中心在 art y=110.5、art 中心在 116.5，差 6 art px ×
+  (147/233) = 3.8。挂锁、序号块、状态块三块共用这一个值 —— 少写一个就会出现
+  「锁飘在状态块下沿」。
+- **只压高度、不动宽度**：宽度动了序号字号和「完成度」两行的换行位置都得跟着调；
+  98×112 的形变约 5%，肉眼看不出来，超过 10% 木纹就开始糊。
+- 效果图里块与底板的留白比 ≈ 92%（83/90）。按洞算出来 112/122 ≈ 92%，对得上；
+  按 `RowBg` 算会是 120/130 ≈ 92% 但会被金边吃掉 —— 两个 92% 长一样，必须看洞。
+
+#### 三、判据
+
+`tests/chapter-select.test.ts` 新增「行内区块落在金色描边的洞里、四周留白均匀」：
+
+- 从 `CurrentRing` 的节点尺寸 + 素材里洞的位置**反推**洞的半宽/半高/中心（不硬编码 532×122，
+  改环尺寸时自动跟着走）；
+- 上下留白 ≥4px 且两侧相差 ≤2px；
+- 序号块贴左、状态块贴右，左右留白也要相等（差 2px 肉眼就看得出）；
+- 形变 ≤10%、挂锁 = `round(62×1.3) × round(70×1.3)`。
+
+⚠️ 素材尺寸是**判据的一部分**，换 `row_current_ring.png` / `row_base.png` 时必须重算
+`RING_ART` 与 y 偏移，否则测试仍绿但画面会歪。
+
+#### 四、第四轮（2026-11-03 提，2026-11-04 实机定稿）：缩到 90% + 上抬到 y=12
+
+需求原文：
+
+> 「章节序号框上移1px，缩小成95%，需要和底框是居中对齐，还有章节名称也需要居中对齐，
+> 完成度的整个框也要轻微缩小在底框内」
+
+**为什么 112 高还嫌大**：上面那个「洞 532×122」是**整体等比**换算的结果。引擎实际走
+九宫格、`spriteFrame.insetTop/Bottom = 32` 是**按 1:1** 画的，洞的真实可见高度只有
+约 112 —— 和序号块一样高。实测 `tmp/_cur_row1.png`（引擎真实渲染）里：
+
+| 量的是什么 | 截图读数 | 结论 |
+| :-- | :-- | :-- |
+| 金边洞上下内沿 | y=28..151（124px，比例尺 ≈1.107） | 洞 ≈ **112** 设计单位 |
+| 绿块 `StatusBlock` | y=28..151 | 与洞**等高** ⇒ 顶天立地、零留白 |
+| 木块 `NumBlock` | y≈30..151 | 比洞低 1~2px ⇒ 用户说的「偏下 1px」 |
+
+所以：**不缩就是顶着金边**，「缩到 95%」后才各有 ~7px 余量；**且实际渲染比等比模型
+低约 1px**，这才是「上移 1px」的来源 —— 不是模型算错，是模型看不见九宫格的 1:1 边框。
+
+| 节点 | 改前 | 四轮初版 | **最终（2026-11-04 实机定稿）** |
+| :-- | :-- | :-- | :-- |
+| `NumBlock` | `y=3.8` · `scale=1` · `x=-211.5` | `y=4.8` · `0.95` | **`y=12` · `0.9` · `x=-212`** |
+| `StatusBlock` | `y=3.8` · `scale=1` · `x=188.5` | `y=4.8` · `0.95` | **`y=12` · `0.9` · `x=194`** |
+| `LockIcon` | `y=3.8` · `scale=1` · `x=188.5` | `y=4.8` | **`y=12` · `x=194`**（只挪不缩） |
+| `NameLabel` | `_horizontalAlign=0`（LEFT） | `1`（CENTER） | `1`（CENTER），`y=14.2` |
+
+- `NameLabel` 的标签框本来就居中于两块之间（框心 −23.5 / 空隙心 −23），是**文字**左对齐
+  才显得没居中 ⇒ 只翻对齐方式，没动 x。
+- `LockIcon` 的两轴都必须跟 `StatusBlock` 一致：**y 同基线、x 同轴线**。它俩同列但互斥显示
+  （锁定行藏状态块显示锁），差一点就是「锁飘在状态块下沿 / 偏左」。
+  2026-11-04 编辑器里只动了状态块的 y/x，锁没跟上，已补齐。
+
+改完的实际留白（`_lscale` 计入；金边洞按 `RING_ART` 等比换算 = 531×122 @ 中心 3.79）：
+
+| 块 | 渲染尺寸 | 上 / 下留白 | 左 / 右留白 |
+| :-- | :-- | :-- | :-- |
+| `NumBlock` | 88.2 × 100.8 @y=12 | **2.3 / 18.7** | 9.4 |
+| `StatusBlock` | 129.6 × 100.8 @y=12 | **2.3 / 18.7** | 6.7 |
+
+⚠️ **块是刻意偏上的，不是居中**。用户看着实机明暗分界把它抬到了 `y=12`（洞中心 3.8 + 8.2），
+上留白只剩 2.3px。所以判据**不再要求上下留白相等**，只要求：
+
+1. 不扎进金边（上下留白都 ≥1）；
+2. 不偏到另一侧去（`top < bottom`，反了说明基线该往上调）；
+3. 不溢出 `RowBg` 的 140 高节点矩形（±70），否则会压到相邻行。
+
+⚠️ 120 高的洞 + 100.8 的块，理论居中是 `y=3.8`（8.7/8.7）；`y=12` 是**实机目视**结果。
+换基线时三块必须一起改，测试常量 `BLOCK_BASELINE_Y` / `BLOCK_SCALE` 也要跟着改。
+
+#### 五、判据（第四轮补充）
+
+`tests/chapter-select.test.ts`：
+
+- **必须把 `_lscale` 算进「渲染尺寸」** —— 原来直接拿 `_contentSize` 比，缩放一改
+  测试就看不见了（仍绿但实际上块已经缩了）。新增 `renderedOf()`。
+- 上下不再判「留白相等」（块是刻意偏上的），改判「不扎金边 + 不偏到另一侧」。
+- 左右容差 `≤3`：0.9 缩放会把原始 x 上那 1.2px 的差放大到 2.7px。
+- 新增一条用例锁三件事：两块 `_lscale = 0.9`（且 x/y 等比）、挂锁 `_scale = 1`、
+  `NameLabel._horizontalAlign = 1`。
+
+#### 六、⚠️ 编辑器重存会把行模板点亮（2026-11-04 踩到）
+
+在 Cocos 里调这一行时必须先把 `Content/Item` 设成 active 才看得见，调完**忘了关**，
+就会留下 `Item._active = true` —— 它是虚拟列表的模板、`Content` 的第一个子节点，
+`VirtualScrollView.start()` 摘走它之前会先渲染一帧，表现为**进面板闪一行空白行**。
+`tests/chapter-select.test.ts` 的「行模板默认隐藏」就是拦这个的，这次报了红。
+
+同类痕迹：编辑器拖拽会把 `scale` 拖成 `0.898` 这种浮点毛刺，两块本该一样却差 0.2%，
+已归一成 `0.9`。**手工调完记得跑一遍 `npx tsx --test tests/chapter-select.test.ts`。**
+
+### 3.21 「战斗宝箱入口」的开启条件：pvp 20001 通关才长出来（2026-11-03）
+
+需求原文：
+
+> 「在功能开启表中补充完整战斗宝箱掉落的开启条件，只有当 pvp 节点 20001 胜利通过后，
+> 才展示出战斗宝箱入口 icon，播放 icon 生成的缩放动画」
+
+#### 一、条件写在表里（`open.json` `refId = 701`「战斗掉落宝箱」）
+
+⚠️ **用策划表里本来就有的那一行**（2026-11-03 用户指明「补充到 701 对应行内」）。
+当时先临时开过一行 `refId=504`，已撤 —— 表重新导出时多出来的行会被冲掉，而代码会静默变成
+「入口永远不显示」（`rowMissing` → fail-closed）。
+第二轮又发现只改 json 不改 Excel 是同一个坑的另一种形态：`G-功能开启.xlsx` 的 701 行
+条件三格本来是空的，现已补上（`territoryLevel` / `{"resId":20001}` / `通关第20001关后解锁`），
+并顺带补了 `name`（`V` 列，原为空）。
+
+| 字段 | 值 | 为什么 |
+| :-- | :-- | :-- |
+| `name` / `resShowType` | `战斗掉落宝箱` / `[10, 7]` | 策划表原样（货币条口径 = 金币 + 体力），留着备查 |
+| `visibleCondition` | `[{ "param": { "resId": 20001 }, "type": "territoryLevel" }]` | 与主界面两侧入口**同一套**判定框架（`MainEntranceVisible`），只是换了个条件类型；⚠️ **不能写成 `battleLevel`** —— 见下 |
+| `belond` | `0` | 底部 HUD 的节点，**不是**左右两列活动入口；`collectEntranceItems` 只收 `2 / 3`，`0` 让它只当「条件载体」（同 `refId=13` 聊天入口） |
+| `url` / `icon` | 都不填 | 没有对应界面；图标是 prefab 上 `BottomHud/ChestEntry` 自带的 `hud_chest.png`，不按表加载 |
+| `type` | `2` | **照抄策划表「界面类型」列**（2 = layer 界面）。客户端不读这个字段（`belond=0` 不进两侧列表），但漏掉它 json 就和表对不上了 |
+| `tipShow` | `通关第20001关后解锁` | 策划对表 / 将来做「未解锁提示」用，客户端当前不读 |
+
+⚠️ **四层链路，改哪一层决定了改动活多久**（2026-11-03 一小时内踩过两次）：
+
+| 层 | 文件 | 说明 |
+| :-- | :-- | :-- |
+| ① 真源 | `doc/塔防数据配置/G-功能开启.xlsx`（第 71 行 = `refId 701`） | **只改这一层才算改表**；列 `I = visibleCondition#type`、`J = visibleCondition#param`、`K = tipShow`、`V = name` |
+| ② 中间产物 | `doc/塔防数据配置/json/client/open.json` | `npm run config:export` 从 ① 生成 |
+| ③ **压缩产物** | `assets/remoteRef/refSmallAll.json` 里的 `open` | `tools/ref/ref_compress_json.py` 从 ② 生成 —— **运行时读的就是这一份** |
+| ④ 死文件 | `assets/remoteRef/open.json` | 历史残留，改它对运行时毫无影响（原因见下） |
+
+⚠️ **运行时只认 ③**：`open` 在 `tools/ref/small.txt` 里是合并表成员，
+`RefUtil.loadRefSmallAll()` 把 refSmallAll 里出现的每个表名注册进 `tmMergeRef`；
+之后 `getRefAll('open')` 走合并表分支，`getResData` 见到合并表成员**直接返回 `null`**，
+`open.json` 连被打开的机会都没有。2026-11-03 实机现象就是
+「表读到了、却报 `找不到 refId=701` 的战斗宝箱行」。
+
+只改 ②③④ 不改 ① ⇒ 下次导表条件没了；改了 ①②④ 却不重跑压缩脚本 ⇒ 运行时照样没有。
+和「自己另开一行 `refId=504`」是同一个坑的三种形态。用例 `chest-entry-gate` 会同时校验
+③ 与 ④ 行数一致、且 ③ 里确有 701。
+
+#### 二、客户端只做三件事
+
+| 位置 | 干什么 |
+| :-- | :-- |
+| `main/ChestEntryGate.ts` | 纯函数：捞出 `refId=701` 那一行 → 交给 `isEntranceRowVisible` 判 → 给 `{ unlocked, rowMissing }` |
+| `main/BattleLevelPassed.ts` | `isLevelPassed` 的**唯一**实现（`CmdBattleLevel.star >= 1`），两侧入口与宝箱入口共用 |
+| `main/MainPage.ts` | `onLoad` 里先 `active = false` 再判；解锁才 `active = true` + 播生成动画；`setEventUpdate('CmdBattleLevel')` 让 20001 打完那一刻就长出来，不必等重进主城 |
+
+三条硬口径：
+
+1. **`MainPage` 里不许出现 `20001`**（含代码，注释不算）—— 条件只有表里那一份，
+   用例 `chest-entry-gate` 会扫源码。
+2. **表缺行 / 整表读失败 ⇒ 不显示**（fail-closed），但 `rowMissing` 单独报出来：
+   「没配表」和「条件没满足」混成一个 `false` 之后就没法排障。
+3. **庆祝标记必须是 `static`**：主城页每从一局回来都会重建（`start()` 重拉宝箱队列），
+   放实例字段则 icon 的「生成」动画每次都重播 —— 那就不叫生成了。
+
+#### 二（补）条件类型是 `territoryLevel`，不是 `battleLevel`（2026-11-03 实机根因）
+
+实机日志：
+
+```
+[MainPage] 战斗宝箱入口未解锁: battleLevel(20001) => fail（CmdBattleLevel 里没有 level=20001 这一行）
+```
+
+**pvp 据点通关，服务端不写 `CmdBattleLevel`。** 两张表各管一段：
+
+| 条件类型 | 数据源 | 覆盖 |
+| :-- | :-- | :-- |
+| `battleLevel` | `CmdBattleLevel.star >= 1` | 主线 / 章节关卡 |
+| `territoryLevel` | 领地格子 `CmdCityChapterCellInfo.passCells` | 领地据点，含 pvp 异步据点（2000x） |
+
+类型与数据源**必须成对**：`battleLevel` 配据点关卡 = 永远打不开（用例有对照断言）。
+
+判定实现（`MainPage`）：
+
+- 取数靠领地渲染快照 —— `MainPage` 本来就订阅了 `TerritoryViewEvent.Render`，
+  顺手存下 `stageByCell`（cellId → 关卡）与 `progress`。
+- 判定用领地自己的口径 **`progress.isAreaPassed(cellId)`**：同 `configId` 的格子任一个 owned
+  就算整片通关（山猫 2026-10 定的区域口径）。一片战斗区域常横跨好几格，只认其中一格会误判。
+- 快照没到（领地还没渲染 / 宿主没挂地图）按「没通过」—— 宁可晚显示，也不在没打过时摆出来。
+- 领地每渲染一帧就重算一次 ⇒ pvp 地块打完那一刻 icon 就长出来，不用等重进主城。
+
+排障：`warnChestEntryBlocked` 对 `territoryLevel` 会打印「领地有没有这一关的格子 / 那几格通没通」。
+
+#### 二（补2）四个数量格跟着入口 icon 同进同出（2026-11-03）
+
+需求原文：*「这几个图标是和宝箱 icon 同步展示的，宝箱未解锁时不展示」*
+
+`BottomHud/Cell0..Cell3`（4 个 25×20 的小格，排在 `ChestEntry` 正下方）是**入口 icon 的一部分**，
+不是独立 UI —— 只藏 icon 会留下 4 个孤零零的格子。
+
+| 位置 | 干什么 |
+| :-- | :-- |
+| `MainPage.chestCells()` | 四个格子的**唯一**集合定义；`renderChests` 填色和 `setChestCellsVisible` 显隐都走它，免得将来只改一边 |
+| `MainPage.setChestCellsVisible` | 整组 `node.active` 一起开关 |
+| `MainPage.onLoad` | 判条件之前先 `false`（`onLoad` 早于首帧渲染，未解锁的号一帧都瞥不见） |
+| `MainPage.applyChestEntryGate` | 解锁 ⇒ `true`；未解锁 ⇒ `false`（和 `chestToggle.active` 成对写） |
+| `ArenaRoot.prefab` | `Cell0..Cell3` 的 `_active` 默认 `false` —— 与 `ChestEntry` 同一个 fail-closed 口径 |
+
+⚠️ 引用是 Inspector 上的，`chestCells()` 里过滤掉没绑的格子：个别宿主（测试桩）不绑这 4 个引用，
+少绑一个不该把整个主城页带崩。
+
+#### 三、生成动画：`0 → 1.15 → 1`
+
+- 时长 `CHEST_ENTRY_POP_SECONDS = 0.34s`，前 **65%** 长到峰值、后 35% 落回（`easeOutCubic`）。
+- 峰值 `1.15` 与领地宝箱 `TERRITORY_CHEST_POP_OVERSHOOT` **同一个数**：两处「弹出来」的手感
+  必须像一家人，用例会对拍这两个常量。
+- 落位即停（`elapsed >= 时长` 直接返回 `1` 并 `unschedule`），不留空转；播到一半被切走时
+  `onDisable` 把缩放收干净，别把 0.4 倍留在屏幕上。
+
+#### 四、判据
+
+`tests/chest-entry-gate.test.ts`（11 条）：
+
+- 表：`refId=701`「战斗掉落宝箱」存在、`name` / `resShowType=[10,7]` / `type=2` 与策划表一致、
+  条件就是 `territoryLevel(20001)`、`belond=0`、无 `url/icon`、`tipShow` 提到 20001，且 `504` 不许再回来；
+  并且它在 `belond=2/3` 的列表里**收不到**；
+- 判定：未过 20001 ⇒ 不显示（且不 warn）；过 ⇒ 显示；只过 20000 不算；表缺行 ⇒ 不显示但 warn 到 `refId`；
+- 动画：`t=0 → 0`、峰值 1.15 @ 65%、`t≥0.34 → 1`、上升/回落段都单调、峰值常量与领地宝箱一致；
+- 接线：`onLoad` 先藏再判、庆祝标记是静态、`CmdBattleLevel` 订阅/退订成对、prefab 上
+  `chestToggle` 指向 `BottomHud/ChestEntry` 且 `_active = false`（兜底：任何一步抛错都不会漏出 icon）；
+- 数量格：解锁/未解锁两支都写了 `setChestCellsVisible`、格子列表在源码里只出现一次、
+  `chestCell0..3` 绑在 `BottomHud/Cell0..Cell3` 上且四格 `_active` 默认都为 `false`。
+
+#### 五、实机结果 + 「假失败」修正（2026-11-03 20:30）
+
+用户实机确认 **icon 已经出现**（打完 pvp 地块后 `godCells` 到位 339 格，重算即解锁）。
+但日志里 icon 出现**之前**刷了两行：
+
+```
+[MainPage] 战斗宝箱入口未解锁: territoryLevel(20001) => fail（…领地这一章…当前章节 0 格）
+```
+
+这两行是假失败，根因值得记一笔：**`stageByCell` 在主城页 `onLoad` 时是「空 Map」而不是 `null`**，
+所以走不到「还没渲染过」那条分支，直接落到「这一章没有 `levelId=20001` 的格子」——
+一句话把排障方向指到「关卡号配错 / 章节没格子」上去，实际只是数据还没到。
+（`onLoad` + 关卡缓存推送各触发一次，所以是两行。）
+
+修正（语义分层，不是简单静音）：
+
+| 层 | 做法 |
+| :-- | :-- |
+| 纯函数 | `ChestEntryGate.isChestEntryVerdictProvisional(reports, ready)`：只要条件里有 `territoryLevel` 且快照没到位 ⇒ 这条 fail 是「暂缓」 |
+| `MainPage` | 打 warn 前先问它；暂缓时只打**一条** `console.log`（`chestEntryWaitingLogged` 静态去重，主城页会重建） |
+| `territorySnapshotReady()` | `stageByCell != null && size > 0` —— **空表也算没到** |
+| `territoryLevelDetail` | 空表分支改口为「领地格子还没到」，不再说成「这一章没有这关」 |
+
+⚠️ 只有 `territoryLevel` 参与这个「暂缓」判定：`battleLevel` 读的是同步的 `CmdBattleLevel`，
+缺行就是硬失败，必须照常 warn —— 否则真配错关卡号时反而查不出来。真失败的 warn 一行没删。
+
+判据加 1 条（`tests/chest-entry-gate.test.ts` 17 条）：暂缓/真失败的分界、`battleLevel` 不受影响、
+空 `visibleCondition` 不被吞、`MainPage` 的四处接线（含 `size > 0` 和静态去重标记）都在。
+
+#### 六、⚠️ SVN 合并会把 701 冲掉（2026-11-04 第二次踩到）
+
+现象：合并后进游戏，宝箱入口和四个数量格全不见，日志回到那句
+`[ChestEntryGate] open.json 里找不到 refId=701 的战斗宝箱行`。**代码一行没动**，
+是 ③ 层数据被合并覆盖回旧版（64 行，701 消失）。
+
+| 层 | 合并后 | 说明 |
+| :-- | :-- | :-- |
+| ① Excel / ② 中间产物 / ④ `open.json` | **都完好** | 所以「看着没丢」——但 ④ 是死文件，运行时根本不读 |
+| ③ `refSmallAll.json` 的 `open` | **被冲回 64 行** | 运行时只认这一份 ⇒ 功能整体消失 |
+
+⚠️ **`refSmallAll.json` 是生成物**（Excel → 中间产物 → `ref_compress_json.py`）。
+冲突时**不要挑边**，挑哪边都是错的；正确做法是保留文件结构、重跑压缩把 `open` 重建成最新版：
+`tmp/restore_open701_refsmallall.py`（只换 `open` 键，其余 79 张表深比较证明未动；
+先验证 `indent=0 + separators=(',',':') + CRLF` 能字节级还原才开始改）。
+
+⚠️ 那句 warn 写的是 `open.json`，容易让人去改死文件 —— 真正该看的是 `refSmallAll.json` 的 `open` 块。
+
+**合并后自检（一条就够）**：`npx tsx --test tests/chest-entry-gate.test.ts`，
+里面有「`refSmallAll` 的 `open` 里也要有 701」的守卫，被冲掉会直接报红。
 
 ## 4. 其他玩家席位的视觉区分：顶点色相乘灰
 - **统一判据**：`owner !== 'player'`（与领地染色、城墙敌我同口径）。

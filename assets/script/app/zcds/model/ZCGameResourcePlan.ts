@@ -1,3 +1,5 @@
+import { zcMissileFxPaths } from './ZCCombatEffectFlight';
+
 /** 战斗外壳路径唯一声明；预热只取公共子集，不构筑任何对局状态。 */
 export const ZC_BATTLE_SHELL_PATHS = {
     hud: 'ui/game/ZCGameHUD', board: 'ui/game/ZCGameBoard', hex: 'ui/game/ZCGameHex',
@@ -61,6 +63,12 @@ export function buildZCBattleWarmupPaths(
     for (const value of overrides) {
         const row = rowOf(value);
         if (row && row.enabled === 1 && row.statId === 'model') add(row.value);
+    }
+    //  追踪导弹（2026-11-03）：弹体/爆炸路径只登记在 `ZCCombatEffectFlight.MISSILE_FX_BY_UNIT`
+    //  代码常量表里，pvpSkill 任何一行都不携带 ⇒ 上面的表扫描收不到。与 effectPaths 同源两处都要收：
+    //  预热清单里没有只会让导弹首战现加载（慢一拍），但漏了实战清单则是彻底消失。
+    for (const fx of zcMissileFxPaths()) {
+        paths.add(fx);
     }
     return [...paths];
 }

@@ -203,13 +203,18 @@ const BOXER_PREFAB = 'assets/bundles/battle/units/projectiles/消灭学霸_普�
 /**
  * 运动霸：特效**没有朝向目标、现在是反的**（需求 2026-11-02）。
  *
- * ## 为什么是「反的」
+ * ## 为什么要转身
  *
  * `ZCCombatEffectView` 对 melee / area 原本一律 `setRotationFromEuler(0,0,0)` ——
- * 转角恒 0 就等于「美术朝哪边，屏上就朝哪边」。而这张图
- * （`消灭学霸_普攻`，228×256、15 帧）是一把**朝右扇开**的绿色气刃：亮白的汇聚点压在
- * 画布左侧（x≈35/228），刃口向右散。所以目标站右边时是对的，站左边时**正好反 180°**，
- * 站上下时是「横着扫」。
+ * 转角恒 0 就等于「美术朝哪边，屏上就朝哪边」。这张图
+ * （`消灭学霸_普攻`，228×256、15 帧）是一把绿色气刃，目标站在正上方时屏幕上却是
+ * 「朝左下喷」的，站左右两侧是「横着扫」。所以必须转角 = 弹道方向。
+ *
+ * ## 偏移为什么是 180°（2026-11-03 实测改口）
+ *
+ * 曾经按图集肉眼判断「亮白的汇聚点在左、刃口朝右」⇒ 偏移登记 0°。
+ * 实战截图证伪：那一撮亮白是**尾焰**，气刃朝它收拢，真正的刃口在反方向
+ * ⇒ 美术正前方是 `-X`，偏移 **180°**。
  *
  * ## 为什么只转、不飞
  *
@@ -222,18 +227,18 @@ test('⑥ 运动霸普攻/能量光束：特效转身对着目标，但仍在原
     // ── 表：只登记转角，不能顺手把它变成飞行物 ──
     assert.equal(zcCombatEffectFlightOf(BOXER_EFFECT), null,
         '转身不等于会飞 —— 进了飞行表就会连带改掉事件寿命');
-    assert.equal(zcCombatEffectFacingOffsetOf(BOXER_EFFECT), 0,
-        '美术正前方就是 +X（刃口朝右）⇒ 偏移 0°，转角 = 弹道方向本身');
+    assert.equal(zcCombatEffectFacingOffsetOf(BOXER_EFFECT), 180,
+        '美术正前方是 -X（亮白那撮是尾焰、不是刃口）⇒ 偏移 180°');
     // 飞行段自带偏移的优先，不许两张表给出两个答案。
     // 它的偏移是 0（正面朝向 = 弹道方向），与「只转身」那张表的语义对齐。
     assert.equal(zcCombatEffectFacingOffsetOf(HUNTER_EFFECT), 0);
 
-    // ── 纯函数：四个方向 ──
+    // ── 纯函数：四个方向（= 弹道方向 + 180°，这里不做归一化）──
     // 视图 y 与逻辑 y 同号（`mapToViewY` 是正系数）⇒「目标在上」= 视图 +y。
-    assert.equal(zcCombatEffectHeadingDegrees(100, 0, BOXER_EFFECT), 0, '目标在右 ⇒ 0°');
-    assert.equal(zcCombatEffectHeadingDegrees(0, 100, BOXER_EFFECT), 90, '目标在上 ⇒ 90°');
-    assert.equal(Math.abs(zcCombatEffectHeadingDegrees(-100, 0, BOXER_EFFECT)!), 180, '目标在左 ⇒ 180°（就是改前出错的那一版）');
-    assert.equal(zcCombatEffectHeadingDegrees(0, -100, BOXER_EFFECT), -90, '目标在下 ⇒ -90°');
+    assert.equal(zcCombatEffectHeadingDegrees(100, 0, BOXER_EFFECT), 180, '目标在右 ⇒ 180°');
+    assert.equal(zcCombatEffectHeadingDegrees(0, 100, BOXER_EFFECT), 270, '目标在上 ⇒ 270°');
+    assert.equal(Math.abs(zcCombatEffectHeadingDegrees(-100, 0, BOXER_EFFECT)!), 360, '目标在左 ⇒ 360°（≡ 0°）');
+    assert.equal(zcCombatEffectHeadingDegrees(0, -100, BOXER_EFFECT), 90, '目标在下 ⇒ 90°');
 
     // 三个 null 出口：未登记 / 原地爆 / NaN
     assert.equal(zcCombatEffectHeadingDegrees(100, 0, 'units/projectiles/普攻爆炸/普攻爆炸'), null,
@@ -247,10 +252,10 @@ test('⑥ 运动霸普攻/能量光束：特效转身对着目标，但仍在原
     // ── 视图：目标在右下，节点真的转了 ──
     const { view, load } = buildEffectView();
     const { mapToViewX, mapToViewY } = load('./ZCGameViewUtil');
-    const expected = Math.atan2(mapToViewY(60), mapToViewX(120)) * 180 / Math.PI;
+    const expected = Math.atan2(mapToViewY(60), mapToViewX(120)) * 180 / Math.PI + 180;
     view.render(meleeEvent(100, 100, 220, 160, BOXER_EFFECT), 0.1, undefined, 1);
     assert.ok(Math.abs(view.node.rotation.z - expected) < 1e-6,
-        `转角应等于弹道方向 ${expected.toFixed(1)}°，实际 ${view.node.rotation.z}`);
+        `转角应等于弹道方向 + 180° = ${expected.toFixed(1)}°，实际 ${view.node.rotation.z}`);
     // 转身**不改锚点**：近战特效仍贴出手点。
     assert.ok(Math.abs(view.node.position.x - mapToViewX(100)) < 1e-6,
         `转身不该把特效挪走，实际 ${view.node.position.x}`);

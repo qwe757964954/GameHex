@@ -77,6 +77,14 @@ ZCSettlementPage.open({ onConfirm: () => this.returnToMain(), onGrowEntry: (key)
 
 - **Page 不拥有业务控制器**：Page 不创建、保存或释放 Controller / Entry，不通过回调反向调用控制器。由 `app/bootstrap` 的组合对象持有控制器与 View，流程持有组合对象。挂载前注入展示资源和展示数据；Page 以作用域明确的生命周期事件报告 ready / enabled / disabled / destroyed，外部组合层启动、取消和释放业务。展示资源契约可以持有，控制器对象和其退出闭包不可持有。主界面参考 `app/bootstrap/main/MainTabsComposition.ts` 与 `MainPageComposition.ts`。
 
+### bootstrap 统一装配方式
+
+- `ProcedureBootstrap` 按展示出口、支付、音频、运行服务、弹窗和路由分具名步骤配置；各 `Composition` 的生命周期入口只编排步骤，通过 `createXxxController` / `createXxxEntry` 等具名方法创建对象。
+- 初始化参数中的 owner、Model、配置值与能力依赖分开表达；能力按实际职责组织为 repository/service、view、popups、clock、navigation 等对象。已有独立服务直接复用，异步返回、取消及退订保持显式契约，不通过事件传回调。
+- 创建后先保存句柄或经 `own` 登记释放，再启动控制器或激活节点；View 继续只报告意图和带 owner 的生命周期。组合对象之间可以连接首屏完成等生命周期能力，业务流程留在 Controller。
+- 退出先断输入和控制器，再释放当前持有的视图、时钟及资源；释放前清空句柄，保持幂等。登录遮罩、匹配云层等显式交接后由接收方释放。某层释放失败也继续后续资源清理，装配失败保留原错误。
+- 复用 `ControllerBase` / `ResourceScope`；新增入口沿用本约定，不为统一形式添加通用组合基类或平行服务。
+
 ### 登录、匹配与后续迁移范例
 
 - 所有权统一为 `Procedure → Composition → Controller + View + 适配器`。`app/bootstrap/login/LoginComposition.ts` 与 `app/bootstrap/matching/MatchingComposition.ts` 是流程页面范例；主 tab 参考 `app/bootstrap/main`。
@@ -282,7 +290,8 @@ Cocos 引擎中许多配置错误**完全不报错但表现静默失效**，修�
 - 主界面宿主、主城宝箱、卡牌阵容和公共奖励格各自持有控制器，退出时调用 dispose。业务页面不再暴露独立的 setAssetService / setConfigService / setSessionAssetService / useAssets 注入接口，弹窗 userData 也不传资源服务。
 - `zcds` 入口由组合层调用 `createZCBattleSession(context, { owner, battle, params })`，创建时登记必填 owner 并立即启动唯一准备任务，通过只读 `ready` 等待、`adopt(params, context)` 接管；注入现有资源服务；`ZCGameLoader` / `ZCGuideLoader` 只消费资源契约。调度、批量加载与复用继续走 `ResourceLoadManager` / `ScopedAssetCache`，不另建预加载管理器。
 - 对局从准备到退出由同一个 `ZCBattleController` scope 持有资源和唯一准备 Promise。来源 scope 登记会话释放；战斗流程预加载接管同一实例时，先解除来源登记，再登记目标流程释放，目标取消立即释放。`BattleComposition` 延迟到 mount 装配运行组件；直接加载和运行期补图同属单局 scope。领地会话由 `TerritoryEntry` 创建和持有，页面仅接收就绪 Promise 并派发进入意图。`ZCGame` 仅接收 `IControllerResources`，会话退出先 `shutdown()` 拆除展示节点、销毁组件，再统一释放资源。不可用来源地图的 scope 代替战斗 scope。
-- 对局运行期由 `BattleComposition` 外部装配 `ZCBattleRuntimeController` 和 `ZCBattleSettlementController`，返回窄 `start/dispose` 句柄交给会话先持有再启动；组合层不保存子控制器或提供反向释放回调。返回主界面、提示展示和 PVE 结果通过 `ZCBattleEvents` 数据事件传递，owner 为真实展示实例；组合层仅消费当前宿主的通知，订阅随会话释放解除。有返回值的服务调用和取消/退订端口继续显式注入。运行期持有结算，结算持有自身请求/弹窗；初始化失败与正常退出统一经会话释放，某层清理失败也继续清理剩余层级。两者职责为：前者持有规则模型、选点和既有阶段，消费 HUD 意图与带实例 owner 的帧事件；后者持有结算请求、等待、弹窗及导航订阅。`ZCGame` 只提供展示端口，不保存业务控制器或推进模型。退出先解除控制器与异步归属，再拆展示节点，最后释放单局资源。
+- 对局运行期由 `BattleComposition` 外部装配 `ZCBattleRuntimeController` 和 `ZCBattleSettlementController`，返回窄 `start/dispose` 句柄交给会话先持有再启动；组合层不保存子控制器或提供反向释放回调。返回主界面、提示展示和 PVE 结果通过 `ZCBattleEvents` 数据事件传递，owner 为真实展示实例；组合层仅消费当前宿主的通知，订阅随会话释放解除。有返回值的服务调用和取消/退订端口继续显式注入。初始化使用具名创建方法；运行期依赖按美术资源、弹窗、时钟组织，结算依赖按结果请求、奖励、弹窗、流程切换组织。无状态适配器复用既有服务，资源与时钟适配器按局绑定真实 scope/宿主，不捕获组合对象或转交业务流程；构造只注入依赖，start 接收本局数据。运行期持有结算，结算持有自身请求/弹窗；初始化失败与正常退出统一经会话释放，某层清理失败也继续清理剩余层级。两者职责为：前者持有规则模型、选点和既有阶段，消费 HUD 意图与带实例 owner 的帧事件；后者持有结算请求、等待、弹窗及导航订阅。`ZCGame` 只提供展示端口，不保存业务控制器或推进模型。退出先解除控制器与异步归属，再拆展示节点，最后释放单局资源。
+- 对局美术通过 `IZCBattlePresentationArt` 只读表注入 `ZCGameRenderWorld` 及单位、卡牌视图；异步结果原位合并，视图不经 `ProcedureGame.current` 查询或发起加载。缺少兵种美术时派发带真实展示 owner 的 `RequestUnitArt`，运行控制器按本局配置解析路径、合并在途请求，组合层用单局 AssetService/scope 加载，离场迟到结果不再发布。
 - `PopupBase` 统一提供必需的 `assets` / `configs` / `sessionAssets` 与本次打开的 `resourceScope`，服务首次使用时从已有 `ProcedureManager.context` 解析。弹窗子类（如 `LineupBoardPage`）直接使用继承入口，不为资源另建 `ComponentController`。
 - 弹窗关闭和销毁均由基类释放动态资源，`onClose` 先完成业务收尾；缓存弹窗每次重开创建新作用域。子类须清空本次加载缓存，加载闭包捕获本次资源服务，异步返回检查本次作用域是否已释放，防止旧任务借到新一轮作用域。关闭 / 销毁不再额外递增刷新版本号；版本号仅用于同一次打开期间重复刷新或切换阵容时防止旧结果覆盖新结果。`PopupManager` 负责 prefab 加载的原有作用域不变。
 - `PopupManager.initialize` 是组合根配置框架端口，仍由 Bootstrap 完成；不属于业务页面的依赖穿透。

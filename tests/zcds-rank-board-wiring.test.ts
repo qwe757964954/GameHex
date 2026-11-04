@@ -148,16 +148,10 @@ test('★★美术路径必须走 ArtPaths 拼 /spriteFrame（裸路径报的是
         /export const GAME_RANK_ART_ROOT = `\$\{ART_ROOT\}\/GameRank`/.test(artPaths),
         'ArtPaths 要导出 GAME_RANK_ART_ROOT（规则 137：image/** 是唯一入口）',
     );
-    assert.ok(
-        /spriteFramePath\(GAME_RANK_ART_ROOT,\s*name\)/.test(boardTs),
-        '★加载切图必须用 spriteFramePath 拼 /spriteFrame —— 裸路径 load 报的 '
-        + '`Bundle resources doesn\'t contain ...` 不是 404，极易误判成「美术没交图」（规则 142）',
-    );
-    assert.ok(
-        /frame\.addRef\(\)/.test(boardTs),
-        '★SpriteFrame 必须 addRef —— 引用计数为 0 会被 ReleaseManager 回收，'
-        + '仍挂在 Sprite 上渲染的行会炸（规则 81）',
-    );
+    assert.match(boardTs, /createIconLoader\(this\.assets, scope\)/,
+        '切图和头像复用 PopupBase 的资源作用域与统一路径入口');
+    assert.doesNotMatch(stripComments(boardTs), /resources\.load|\.addRef\(|\.decRef\(/,
+        '帧引用统一归 AssetService，不在弹窗手工管理');
 });
 
 test('★★11 张切图都在磁盘上（缺图是静默的：只 warn + 留白）', () => {

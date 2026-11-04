@@ -14,10 +14,22 @@ function fixture() {
     const session = { ready: Promise.resolve() };
     const controller = new MatchingController(createControllerContext(), {
         model: new MatchingModel(LOCAL_PLAYER, '1', null),
-        requestBattle: () => request.promise, createSession: (_task, owner) => { owner.defer(() => releases++); return session; }, fetchPvp: async () => null,
-        render: value => states.push(value), navigate: (route, params) => routes.push({ route, params }),
-        schedule: (fn, seconds) => { timers.set(seconds, fn); return () => { timers.delete(seconds); }; },
-        removeCaller: () => { removed++; }, failed: () => {},
+        failed: () => {},
+        battle: {
+            requestBattle: () => request.promise,
+            createSession: (_task, owner) => { owner.defer(() => releases++); return session; },
+            fetchPvp: async () => null,
+            removeCaller: () => { removed++; }
+        },
+        view: {
+            render: value => states.push(value)
+        },
+        navigation: {
+            navigate: (route, params) => routes.push({ route, params })
+        },
+        clock: {
+            schedule: (fn, seconds) => { timers.set(seconds, fn); return () => { timers.delete(seconds); }; }
+        },
     });
     return { controller, request, states, routes, timers, session, get releases() { return releases; }, get removed() { return removed; } };
 }
@@ -72,18 +84,26 @@ function handoffFixture(ready: Promise<unknown>) {
     const calls: string[] = [];
     const controller = new MatchingController(createControllerContext(), {
         model: new MatchingModel(LOCAL_PLAYER, '1', null),
-        requestBattle: async () => battle(),
-        createSession: () => ({ ready }),
-        fetchPvp: async () => null,
-        render: () => {},
-        navigate: (route, params) => { calls.push(`go:${route}`); routes.push({ route, params }); },
-        schedule: (fn, seconds) => { timers.set(seconds, fn); return () => { timers.delete(seconds); }; },
-        removeCaller: () => {},
         failed: () => calls.push('failed'),
         handoff: {
             closeInstantly: () => calls.push('close'),
             releaseCover: () => calls.push('release'),
             readyTimeout: 12,
+        },
+        battle: {
+            requestBattle: async () => battle(),
+            createSession: () => ({ ready }),
+            fetchPvp: async () => null,
+            removeCaller: () => {}
+        },
+        view: {
+            render: () => {}
+        },
+        navigation: {
+            navigate: (route, params) => { calls.push(`go:${route}`); routes.push({ route, params }); }
+        },
+        clock: {
+            schedule: (fn, seconds) => { timers.set(seconds, fn); return () => { timers.delete(seconds); }; }
         },
     });
     return { controller, routes, timers, calls };

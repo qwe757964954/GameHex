@@ -477,7 +477,7 @@ test('特效节点按视觉类型复用，初始化重置，表现时间包含�
         nodes.push(node); return node;
     } };
     const visual = {};
-    const world = new (load('./ZCGameRenderWorld').ZCGameRenderWorld)({ mapLayer: new FakeNode(), effectPrefab: prefab, effectVisualPrefabs: new Map([['arrow', visual]]) });
+    const world = new (load('./ZCGameRenderWorld').ZCGameRenderWorld)({ board: new FakeNode(), mapLayer: new FakeNode(), effectPrefab: prefab, effectVisualPrefabs: new Map([['arrow', visual]]) });
     const event = { id: 1, skillId: 'test', fromX: 0, fromY: 0, effectPrefabPath: 'arrow' };
     const model = { snapshot: { combatEvents: [event], elapsedSeconds: 1, pendingSeconds: .025, status: 'playing' } };
     world.renderEffectSystem(model);
@@ -499,7 +499,7 @@ test('特效节点按视觉类型复用，初始化重置，表现时间包含�
 
 test('复用单位和特效视觉子树，同时从头播放动画', () => {
     for (const name of ['ZCUnitView', 'ZCCombatEffectView']) {
-        const { load, FakeNode, procedureGame } = loadViews();
+        const { load, FakeNode, setArtQueries } = loadViews();
         let created = 0, played = 0, stopped = 0;
         const prefab = { make: () => {
             created++;
@@ -513,7 +513,7 @@ test('复用单位和特效视觉子树，同时从头播放动画', () => {
         if (name === 'ZCUnitView') view.visualRoot = new FakeNode('VisualRoot');
         else view.graphics = { clear() {} };
         const definition = { unitId: 'probe', prefabSize: 1 };
-        if (name === 'ZCUnitView') procedureGame.current = { resolveUnitPrefab: () => prefab };
+        if (name === 'ZCUnitView') setArtQueries({ resolveUnitPrefab: () => prefab });
         view.initialize(name === 'ZCUnitView' ? definition : prefab);
         if (name === 'ZCUnitView') {
             assert.equal(view.visualRoot.position.y, 45.7);
@@ -524,7 +524,7 @@ test('复用单位和特效视觉子树，同时从头播放动画', () => {
         assert.equal(played, 2, name);
         assert.ok(stopped >= 1, name);
         const previous = view.visualNode;
-        if (name === 'ZCUnitView') procedureGame.current = null;
+        if (name === 'ZCUnitView') setArtQueries({});
         view.initialize(name === 'ZCUnitView' ? definition : null);
         assert.equal(previous.isValid, false, name);
     }

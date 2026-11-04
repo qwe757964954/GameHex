@@ -1,8 +1,9 @@
-import { _decorator, Component, EventTouch, Label, Node, Prefab, Sprite, SpriteFrame, Vec2 } from 'cc';
+import { _decorator, Component, EventTouch, Label, Node, Prefab, Sprite, SpriteFrame, UITransform, Vec2 } from 'cc';
 import { ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
 import { CARD_LINEUP_TEXTS } from './CardLineupTexts';
 import type { IBoardCardHost } from './LineupBoardCard';
 import { CardUnitPreview } from './CardUnitPreview';
+import { applyCardHeroArt } from './CardHeroView';
 
 const { ccclass, property } = _decorator;
 
@@ -16,7 +17,7 @@ export interface ZCBoardSlotFrames {
 /**
  * 布阵面板上阵区一个站台。
  * 层次：木台底座 → 品级垫盘 → 职业 Q 版立绘 → 职业角标 + N级。
- * 与页面 CardLineupSlot 版式不同（立绘用 char_0X，不是 camp_*），不要互用。
+ * 与页面 CardLineupSlot 版式不同；角色图复用 cardHead，缺专属图时沿用布阵占位。
  *
  * ── 交互 ─────────────────────────────────────────────────────────────
  * 点已上阵的卡 → 下阵（复用卡池同一条 `IBoardCardHost.onCardTap`：页面收到
@@ -35,6 +36,9 @@ export class LineupBoardSlot extends Component {
 
     @property({ type: Sprite, tooltip: 'Hero：职业 Q 版立绘' })
     hero: Sprite = null;
+
+    @property({ type: UITransform, tooltip: 'Hero：立绘展示框' })
+    heroTransform: UITransform = null!;
 
     @property({ type: Sprite, tooltip: 'ClassBadge：职业角标' })
     classBadge: Sprite = null;
@@ -100,7 +104,7 @@ export class LineupBoardSlot extends Component {
     /** @param frames null 项保留 prefab 现图；level 不传用 fallbackLevel。 */
     render(card: ZCDeckCard, frames: ZCBoardSlotFrames, level?: number, prefab?: Prefab | null): void {
         if (frames.disc) this.disc.spriteFrame = frames.disc;
-        if (frames.hero) this.hero.spriteFrame = frames.hero;
+        if (frames.hero) applyCardHeroArt(this.hero, this.heroTransform, frames.hero);
         if (frames.badge) this.classBadge.spriteFrame = frames.badge;
         if (prefab) {
             (this.preview ??= new CardUnitPreview(this.hero, this.previewHeight)).show(prefab);

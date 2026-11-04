@@ -153,9 +153,9 @@ test('C3 解析层：建筑卡（无单位预设）整行跳过，不因缺 pref
 // ==================== 视图层 ====================
 
 test('V1 视图层：prefabSize 真的乘进了节点的实际缩放', () => {
-    const { load, bar, FakeNode, procedureGame } = loadViews();
+    const { load, bar, FakeNode, setArtQueries } = loadViews();
     const view = stubUnitView(load, bar);
-    procedureGame.current = { resolveUnitPrefab: () => framePrefab(FakeNode) };
+    setArtQueries({ resolveUnitPrefab: () => framePrefab(FakeNode) });
     view.initialize(unitDefinition(1));
     assert.equal(view.visualNode.scale.x, 1, '系数 1 ⇒ 原样');
 
@@ -168,14 +168,14 @@ test('V1 视图层：prefabSize 真的乘进了节点的实际缩放', () => {
 });
 
 test('V2 视图层：与 spine 的 canvas 归一**相乘**，不是互相覆盖', () => {
-    const { load, bar, FakeNode, procedureGame } = loadViews();
+    const { load, bar, FakeNode, setArtQueries } = loadViews();
     // 基准：SPINE_CANVAS_TARGET_HEIGHT = 69.4（ZCUnitView 模块常量），canvas 高 916.29
     // ⇒ 归一系数 ≈ 0.07574。prefabSize=1.2 应该在它之上再乘 1.2，而不是把它顶掉。
     const canvasHeight = 916.29;
     const base = 69.4 / canvasHeight;
 
     //  prefab 由视图向控制器现取（`ProcedureGame.current`），这里把它钉成同一个 spine prefab。
-    procedureGame.current = { resolveUnitPrefab: () => spinePrefab(FakeNode, canvasHeight) };
+    setArtQueries({ resolveUnitPrefab: () => spinePrefab(FakeNode, canvasHeight) });
     const plain = stubUnitView(load, bar);
     plain.initialize(unitDefinition(1));
     const withSize = stubUnitView(load, bar);
@@ -188,14 +188,14 @@ test('V2 视图层：与 spine 的 canvas 归一**相乘**，不是互相覆盖'
 });
 
 test('V3 视图层：血条 Y 跟着体型走（不缩的话 1.2 倍的兵血条会陷进头顶）', () => {
-    const { load, bar, FakeNode, procedureGame } = loadViews();
+    const { load, bar, FakeNode, setArtQueries } = loadViews();
     const presentation = () => ({
         unit: { hp: 100, maxHp: 100, battleState: 'idle', facingRadians: 0, completedAttackCount: 0, owner: 'player' },
         definition: { hero: false, attackRange: 50, prefabSize: 1 },
         x: 0, y: 0, now: 0,
     });
 
-    procedureGame.current = { resolveUnitPrefab: () => framePrefab(FakeNode) };
+    setArtQueries({ resolveUnitPrefab: () => framePrefab(FakeNode) });
     const big = stubUnitView(load, bar);
     big.initialize(unitDefinition(1.2));
     big.render(presentation() as any);

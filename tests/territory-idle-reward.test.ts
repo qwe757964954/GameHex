@@ -268,6 +268,11 @@ const adapterSrc = readFileSync(
     new URL('../assets/script/app/territory/application/TerritorySaveStoreAdapter.ts', import.meta.url),
     'utf8',
 );
+// 定时器随 Passive View 化从页面搬进 Controller（页面不再自己 `schedule`）
+const controllerSrc = readFileSync(
+    new URL('../assets/script/app/territory/application/TerritoryController.ts', import.meta.url),
+    'utf8',
+);
 
 test('save store routes each settlement through the destination table and persists only on change', () => {
     assert.match(saveStoreSrc, /idleRewardDestinationOf\(reward\.resId\)/);
@@ -280,19 +285,28 @@ test('save store routes each settlement through the destination table and persis
 test('territory page settles idle rewards after occupation, with only owned sites as sources', () => {
     // 2026-10-09 抽 Presenter 后：编排断言读 Presenter；store 委托断言读适配器；
     // 定时器 / 奖励弹窗仍在 Page（Passive View 的渲染侧）。
-    assert.match(presenterSrc, /this\.idleRewardMaxHours = campaign\.idleRewardMaxHours/);
+    // 2026-11 再并一版：`TerritoryPresenter` 已是 `TerritoryModel` 的兼容再导出（4 行），
+    // 编排全在 Model 里 ⇒ presenterSrc 本来就指向 Model，不再另存一份上限值。
+    assert.match(presenterSrc, /idleRewardMaxHours: campaign\.idleRewardMaxHours/);
+    assert.match(presenterSrc, /this\.chapter\?\.idleRewardMaxHours/);
     assert.match(presenterSrc, /this\.progress\.isOwned\(item\.site\.cellId\)/);
     assert.match(adapterSrc, /this\.store\.settleIdleRewards\(/);
     assert.match(pageSrc, /FW\.ShowReward\(/);
-    assert.match(pageSrc, /this\.schedule\(this\.onSlowTick,\s*60\)/);
+    // 1 秒拍探索 / 60 秒拍挂机：调度在 Controller，两拍都得挂上
+    assert.match(controllerSrc, /schedule\(\(\) => this\.tick\(false\), 1\)/);
+    assert.match(controllerSrc, /schedule\(\(\) => this\.tick\(true\), 60\)/);
 
     // Occupation must happen before idle settlement so newly occupied sites get their
     // ledger initialized at this moment instead of earning time before ownership.
-    // 锚点要带相邻行（fastTick / slowTick 里也有同名调用，只搜单行会命中错误位置）。
-    const occupationAt = presenterSrc.indexOf('this.settleProgress(now);\n        this.persistProgress();');
-    const settlementAt = presenterSrc.indexOf('const idle = this.settleIdleRewards(now);\n        this.emitStateChange();');
+    // 锚点取 slowTick 方法体：fastTick 里 `settleProgress` 是内联 `.length` 早退形态，
+    // 没有「先 claim 再 persist」那两行，用同一串在两处都找不到。
+    const slowAt = presenterSrc.indexOf('slowTick(now: number)');
+    assert.ok(slowAt > 0, '要有 slowTick');
+    const slowBody = presenterSrc.slice(slowAt, presenterSrc.indexOf('\n    }', slowAt));
+    const claimedAt = slowBody.indexOf('this.settleProgress(now)');
+    const idleAt = slowBody.indexOf('this.settleIdleRewards(now)');
     assert.ok(
-        occupationAt >= 0 && settlementAt > occupationAt,
+        claimedAt >= 0 && idleAt > claimedAt,
         '占领必须在挂机结算之前：新站点账本才会从当前时刻起步',
     );
 });

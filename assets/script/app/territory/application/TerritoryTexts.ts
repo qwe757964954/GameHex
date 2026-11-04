@@ -205,12 +205,15 @@ export const TERRITORY_ENEMY_DISPLAY_LIMIT = 8;
 export const TERRITORY_ASYNC_REWARD_SLOTS = 3;
 
 /**
- * 「侦查」按钮的银币消耗（设计稿 = 10）。
+ * 「侦查」按钮的**体力**消耗（设计稿 = 10）。
  *
  * 🔴 服务端还没有侦查协议、也没有对应配置表 ⇒ 先按设计稿写常量。
  * 协议/配置到位后把它换成服务端下发的价格（只改 Presenter 一处，视图不用动）。
+ *
+ * 🔴 2026-11-04 山猫：「这里是扣体力不是扣银币」—— 弹窗两颗按钮的费用都是体力
+ * （原本按银币展示：侦查是这条常量、开战读 `unlock.silverCost`）。
  */
-export const TERRITORY_ASYNC_SCOUT_SILVER = 10;
+export const TERRITORY_ASYNC_SCOUT_STAMINA = 10;
 
 /** 存档 storage key 前缀。 */
 export const TERRITORY_STORAGE_PREFIX = 'territory.chapter.v1.';

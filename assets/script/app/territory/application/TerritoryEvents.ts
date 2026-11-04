@@ -3,6 +3,14 @@ import type { ITerritoryRenderState } from './TerritoryViewState';
 
 export const TerritoryUiEvent = {
     Intent: 'territory:ui-intent', Ready: 'territory:view-ready', Disposed: 'territory:view-disposed',
+    /**
+     * 章节入口（地图起始格的章节建筑 / 它头上的「章节」气泡）点了 ⇒ 宿主页开章节选择弹窗。
+     *
+     * 🔴 这一条**必须有名字**：`TerritoryStationView` 发它、`MainPage` 订阅它，谁都不知道对方。
+     *    少了这个键两边都拿 `undefined` 当事件名 —— `emit` / `on` 恰好都落在同一个空键上，
+     *    功能看着还能用，实际是「两条无关的 undefined 撞在一起」，加任何第三个事件就崩。
+     */
+    ChapterSelect: 'territory:chapter-select',
 } as const;
 export const TerritoryViewEvent = { Render: 'territory:render', Command: 'territory:view-command' } as const;
 export type TerritoryIntent =

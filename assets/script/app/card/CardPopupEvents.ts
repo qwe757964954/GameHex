@@ -6,7 +6,7 @@ export const CardPopupEvent = {
 /** owner isolates concurrently open popup instances. */
 export interface CardUpgradeIntent {
     readonly owner: object;
-    readonly kind: 'submit' | 'skills';
+    readonly kind: 'submit' | 'skills' | 'team' | 'previous' | 'next';
 }
 export type LineupBoardIntent = { readonly owner: object } & (
     { readonly kind: 'toggle'; readonly cardId: string } |

@@ -313,7 +313,7 @@ test('列表字段直接绑 VirtualScrollView，且不再多判一层节点存�
 
 const bondSource = readFileSync('assets/script/app/card/CardLineupBond.ts', 'utf8');
 const boardCardSource = readFileSync('assets/script/app/card/LineupBoardCard.ts', 'utf8');
-const headViewSource = readFileSync('assets/script/app/card/CardHeadView.ts', 'utf8');
+const headViewSource = readFileSync('assets/script/app/card/CardHeroView.ts', 'utf8');
 
 test('列表条目渲染无条件赋图（有条件的写法会在复用槽位上留下上一项的图）', () => {
     assert.doesNotMatch(bondSource, /if \(icon\)/,
@@ -324,23 +324,22 @@ test('列表条目渲染无条件赋图（有条件的写法会在复用槽位�
         'CardLineupCard：face / badge 必须无条件写');
     assert.doesNotMatch(boardCardSource, /if \(frames\./,
         'LineupBoardCard：frame / badge 必须无条件写');
-    assert.doesNotMatch(headViewSource, /if \(heroFrame\)/,
-        'applyCardHeadArt：两张图都没有时也要显式写 null（否则 hero 节点会显示上一张卡的立绘）');
-    assert.match(headViewSource, /slots\.hero\.spriteFrame = heroFrame;/,
-        'applyCardHeadArt 的 hero 赋值不带条件');
+    assert.match(headViewSource, /hero\.spriteFrame = frame;/, '立绘入口必须实际赋图');
+    assert.match(headViewSource, /hero\.spriteFrame = null;/, '缺图时必须清空复用槽位');
+    assert.doesNotMatch(headViewSource, /headIcon|headFrame|HeadArt/, '立绘入口不再保留头像分支');
 });
 // ============================================================================
 // 条目 prefab 也不许预置立绘 / 头像
 //
 // 跟 `LineupSlot` 同一条原则（347）：prefab 里存着的图会被编辑器预览、也会在
 // 「代码还没渲染」的那一帧被看见，而且它显示的是**别人**（camp 雕像），不是这张卡。
-// 运行期真正的图由 `applyCardHeadArt` 决定（`frames.hero` / `frames.head`）。
+// 运行期真正的图由 `applyCardHeroArt` 决定（`frames.hero`）。
 // ============================================================================
 
-test('条目 prefab 的 Hero / HeadIcon 不许预置图片', () => {
+test('条目 prefab 的 Hero 不许预置图片', () => {
     const cases: Array<[string, string[]]> = [
-        ['CardLineupCard', ['Hero', 'HeadIcon']],
-        ['LineupBoardCard', ['Hero', 'HeadIcon']],
+        ['CardLineupCard', ['Hero']],
+        ['LineupBoardCard', ['Hero']],
         ['LineupBoardSlot', ['Hero']],
         ['CardUpgrade', ['Hero']],
     ];
@@ -357,7 +356,7 @@ test('条目 prefab 的 Hero / HeadIcon 不许预置图片', () => {
                 .find((component: Record<string, any>) => component.__type__ === 'cc.Sprite');
             assert.ok(sprite, `${fileName}/${nodeName} 上应有 cc.Sprite`);
             assert.equal(sprite!._spriteFrame, null,
-                `${fileName}/${nodeName} 不许预置图：编辑器里会显示别人的立绘，实际由 applyCardHeadArt 决定`);
+                `${fileName}/${nodeName} 不许预置图：编辑器里会显示别人的立绘，实际由 applyCardHeroArt 决定`);
         }
     }
 });

@@ -143,6 +143,41 @@ test('Presenter：联机版野怪解锁吃服务器的 maxMonsterLevel，不读�
     repo.dispose();
 });
 
+test('联机搜索随服务器击杀进度更新，跳过最近的未解锁怪且攻打不发请求', async () => {
+    const gateway = new Gateway();
+    const repo = new BigMapSlgRepository(gateway, config, () => NOW, 100);
+    const battles: number[] = [];
+    const presenter = new BigMapPresenter({
+        config, storage: { read: () => null, write: () => {} },
+        saveKey: 'online-monster-search', adventureChapter: () => 10, now: () => NOW,
+        slgRepository: repo,
+        startBattle: async (_type, id) => { battles.push(id); return { ok: true, message: '' }; },
+    });
+    try {
+        await repo.refreshGame();
+        const views = presenter.world.monsters.map((site) => presenter.monsterView(site.instanceId));
+        const six = views.find((view) => view?.level === 6);
+        const seven = views.find((view) => view?.level === 7);
+        assert.ok(six);
+        assert.ok(seven);
+        presenter.distanceFromBase = (hexId) => hexId === seven.hexId ? 0 : hexId === six.hexId ? 1 : 10;
+        assert.equal(presenter.bestMonsterToFarm()?.instanceId, six.instanceId);
+        assert.equal((await presenter.requestAttackMonster(seven.instanceId)).ok, false);
+        assert.deepEqual(battles, []);
+        gateway.game = { info: { maxMonsterLevel: 6, toCampId: 101 } };
+        await repo.refreshGame();
+        assert.equal(presenter.bestMonsterToFarm()?.instanceId, seven.instanceId);
+        assert.equal((await presenter.requestAttackMonster(seven.instanceId)).ok, true);
+        assert.deepEqual(battles, [seven.monsterId]);
+        gateway.game = { info: { maxMonsterLevel: 0, toCampId: 101 } };
+        await repo.refreshGame();
+        assert.equal(presenter.bestMonsterToFarm()?.level, 1);
+    } finally {
+        presenter.dispose();
+        repo.dispose();
+    }
+});
+
 test('Presenter：离线档没有 toCampId，playerCampId 恒 0 且没有城池被标成本城', () => {
     const presenter = new BigMapPresenter({
         config, storage: { read: () => null, write: () => {} },

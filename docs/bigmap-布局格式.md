@@ -52,7 +52,7 @@
 | `blocked` | int[] | ✅（可空） | 障碍 / 禁放格：不能摆城、怪、基地、据点 |
 | `spawnZones` | array | ✅（可空） | 出生区块，见 3.6 |
 | `points` | array | ✅（可空） | 活动据点 / 挂机资源田 / 地图 BOSS，见 3.7 |
-| `background` | string | ✅（可空） | 背景图资源名（相对 `assets/resources`、不带扩展名，如 `image/bigmap/world_01`）。空串 = 无背景 |
+| `background` | string | ✅（可空） | 背景图资源名（相对 bundle 根、不带扩展名，如 `image/wasteland_background`；旧前缀 `image/bigmap/` 由 `toBigMapArtPath()` 归一）。空串 = 无背景 |
 
 ### 3.2 `terrainOverrides[]`
 

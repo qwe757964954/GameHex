@@ -12,9 +12,11 @@ export interface ICardLineupControllerOptions {
         loadLineupSnapshot(): CardLineupData | null;
         loadLineup(autoLoad: boolean): Promise<CardLineupData>;
     };
-    readonly openEditor: () => void;
-    readonly openUpgrade: (card: ZCDeckCard, level: number) => void;
     readonly failed: (error: unknown) => void;
+    readonly popups: {
+        readonly openEditor: () => void;
+        readonly openUpgrade: (card: ZCDeckCard, level: number) => void;
+    };
 }
 
 export class CardLineupController extends ControllerBase {
@@ -61,10 +63,10 @@ export class CardLineupController extends ControllerBase {
     private onIntent(event: ICardLineupIntent): void {
         if (event.owner !== this.options.owner) return;
         if (event.kind === 'refresh') { void this.refresh(); return; }
-        if (event.kind === 'edit') { this.options.openEditor(); return; }
+        if (event.kind === 'edit') { this.options.popups.openEditor(); return; }
         const card = event.card;
         if (!card) return;
         const level = this.data?.heroLevels.get(card.id) ?? (this.data?.heroListKnown ? 0 : this.options.fallbackLevel);
-        this.options.openUpgrade(card, level);
+        this.options.popups.openUpgrade(card, level);
     }
 }

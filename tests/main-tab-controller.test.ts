@@ -16,12 +16,28 @@ function harness() {
     let overlay = false;
     const owner = {};
     const controller = new MainTabController(context, {
-        owner, assetType: class {}, showPage: page => shown.push(page),
-        renderNav: tab => selected.push(tab),
-        openWorld: async () => { overlay = true; }, closeWorld: () => { overlay = false; },
-        isWorldOpen: () => overlay, beforeSwitch() {}, settled() {},
-        prefetchHero() {}, reportClick: tab => { reported.push(tab); },
+        owner,
+        assetType: class {},
         failed() {},
+        view: {
+            showPage: page => shown.push(page),
+            renderNav: tab => selected.push(tab)
+        },
+        world: {
+            openWorld: async () => { overlay = true; },
+            closeWorld: () => { overlay = false; },
+            isWorldOpen: () => overlay
+        },
+        warmup: {
+            beforeSwitch() {},
+            settled() {}
+        },
+        hero: {
+            prefetchHero() {}
+        },
+        telemetry: {
+            reportClick: tab => { reported.push(tab); }
+        },
     });
     controller.start();
     return { controller, requests, shown, selected, reported, owner };
@@ -30,25 +46,29 @@ function harness() {
 test('tab controller merges repeats, discards stale loads, preserves old page after failure', async () => {
     const h = harness();
     const a = h.controller.switchTab(MainTab.Shop), repeat = h.controller.switchTab(MainTab.Shop);
-    const b = h.controller.switchTab(MainTab.Role);
+    const b = h.controller.switchTab(MainTab.Territory);
     assert.equal(h.requests.length, 2);
     assert.equal(h.requests[0].scope.disposed, true);
-    h.requests[1].resolve({ name: 'role' }); await b;
+    h.requests[1].resolve({ name: 'territory' }); await b;
     h.requests[0].resolve({ name: 'shop' }); await Promise.all([a, repeat]);
-    assert.deepEqual(h.shown, [{ name: 'role' }]);
+    assert.deepEqual(h.shown, [{ name: 'territory' }]);
     const fail = h.controller.switchTab(MainTab.Hero);
     h.requests[2].reject(new Error('offline')); await fail;
-    assert.equal(h.controller.snapshot.currentTab, MainTab.Role);
+    assert.equal(h.controller.snapshot.currentTab, MainTab.Territory);
     const late = h.controller.switchTab(MainTab.Shop);
     h.controller.dispose(); h.requests[3].resolve({}); await late;
     assert.equal(h.shown.length, 1);
     assert.equal(h.requests[1].scope.disposed, true);
 });
 
-test('locked and invalid targets do not cancel valid load; only matching user intents report clicks', async () => {
+test('locked tabs (challenge / role / alliance) issue no load; invalid targets do not cancel valid load', async () => {
     const h = harness();
     const loading = h.controller.switchTab(MainTab.Territory);
-    await h.controller.switchTab(MainTab.Challenge); await h.controller.switchTab(99);
+    await h.controller.switchTab(MainTab.Challenge);
+    await h.controller.switchTab(MainTab.Role);
+    await h.controller.switchTab(MainTab.Alliance);
+    await h.controller.switchTab(99);
+    assert.equal(h.requests.length, 1, '未开放 / 无效的页签不该发起资源加载');
     assert.equal(h.requests[0].scope.disposed, false);
     EventMgr.instance.emit(MainTabEvent.Select, { owner: {}, tab: MainTab.World });
     assert.deepEqual(h.reported, []);

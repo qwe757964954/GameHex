@@ -3,9 +3,13 @@ import { LeagueTabEvent, type ILeagueJoinedEvent } from './LeagueTabEvents';
 
 export interface ILeagueTabControllerOptions {
     readonly owner: object;
-    readonly load: () => Promise<{ readonly joined: boolean }>;
-    readonly showPage: (joined: boolean) => void;
     readonly failed: (error: unknown) => void;
+    readonly repository: {
+        readonly load: () => Promise<{ readonly joined: boolean }>;
+    };
+    readonly view: {
+        readonly showPage: (joined: boolean) => void;
+    };
 }
 export class LeagueTabController extends ControllerBase {
     private revision = 0;
@@ -31,10 +35,10 @@ export class LeagueTabController extends ControllerBase {
         if (this.isDisposed) return;
         const revision = ++this.revision;
         try {
-            const snapshot = await this.options.load();
+            const snapshot = await this.options.repository.load();
             if (this.isDisposed || revision !== this.revision) return;
             if (!force && snapshot.joined === this.joined) return;
-            this.options.showPage(snapshot.joined);
+            this.options.view.showPage(snapshot.joined);
             this.joined = snapshot.joined;
         } catch (error) {
             if (!this.isDisposed && revision === this.revision) this.options.failed(error);

@@ -75,7 +75,6 @@ import {
     TERRITORY_BATTLE_INTRO_READY_MAX_SECONDS,
     TERRITORY_BATTLE_INTRO_RESTORE_FALLBACK_SECONDS,
     TERRITORY_BATTLE_INTRO_TARGETS,
-    territoryBattleIntroDirVector,
     territoryBattleIntroHoldFx,
     territoryBattleIntroInFx,
     territoryBattleIntroOutFx,
@@ -404,8 +403,9 @@ export class MainTerritoryMap extends Component {
         }));
         if (!this.isValid) return;
         this.mapView.setGainIcons(frames);
-        // 「玩家关卡」弹窗两颗按钮的费用图标 = 同一枚银币（页面统一加载，弹窗不解表）。
-        if (this.playerStagePanel) this.playerStagePanel.setCostIcon(frames.get(TERRITORY_SILVER_RES_ID) ?? null);
+        // 「玩家关卡」弹窗两颗按钮的费用图标 = **体力**（2026-11-04 山猫：「这里是扣体力不是扣银币」）。
+        // 与「关卡界面」主按钮同一枚图；页面统一加载，弹窗不解表。
+        if (this.playerStagePanel) this.playerStagePanel.setCostIcon(frames.get(TERRITORY_STAMINA_RES_ID) ?? null);
         // 「关卡界面」主按钮写的是**体力**消耗（2026-10-28 用户要求换图标）⇒ 存一份给 `levelInfoContentOf`。
         this.staminaIcon = frames.get(TERRITORY_STAMINA_RES_ID) ?? null;
         // 图标晚于弹窗到达（理论上不会，页面初始化就跑这条）⇒ 已开着的关卡界面重贴一次，

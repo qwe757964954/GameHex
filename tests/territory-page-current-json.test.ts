@@ -73,9 +73,11 @@ test('territory stations use dedicated 128px transparent building cuts instead o
     }
     // 概念稿切片（2.0 倍宽的大图）绝不能回流。
     for (const source of [assets, mapView, page]) assert.doesNotMatch(source, /territory-ui-v1\/slices/);
-    // 三张切图的原图都是 128×128 的透明底 —— 站点图标节点也用 128，不做二次缩放。
-    // ⚠️ meta 的 `subMetas.f9941.userData` 里 `width/height` 是 **trim 后**的可见尺寸
-    // （实测 `territory_home_v1` 是 118×120，`trimX/trimY` 有留白），**原图尺寸看 `rawWidth/rawHeight`**。
+    // 三张切图都是**正方形透明底**的专用切图。画布尺寸**不是**唯一口径：
+    // 2026-10 重出过一批 212×212（`territory-cell-center-align` 里明写「有 128 与 212 两种规格」），
+    // 站点图标节点固定 128 + `sizeMode=CUSTOM` 等比缩放 ⇒ 画布多大都不影响落位。
+    // ⚠️ meta 的 `subMetas.f9941.userData` 里 `width/height` 是 **trim 后**的可见尺寸，
+    // 原图尺寸看 `rawWidth/rawHeight`。
     for (const art of ['territory_home_v1', 'territory_outpost_v1', 'territory_boss_v1']) {
         const meta = JSON.parse(read(`../assets/resources/image/territory/buildings/${art}.png.meta`)) as {
             subMetas?: Record<string, {
@@ -83,8 +85,9 @@ test('territory stations use dedicated 128px transparent building cuts instead o
             }>;
         };
         const size = meta.subMetas?.f9941?.userData;
-        assert.equal(size?.rawWidth, 128, `${art} 原图不是 128 宽`);
-        assert.equal(size?.rawHeight, 128, `${art} 原图不是 128 高`);
+        assert.equal(size?.rawWidth, size?.rawHeight, `${art} 画布必须是正方形（非等比画布会被 CUSTOM 拉伸）`);
+        assert.ok([128, 212].includes(size!.rawWidth!),
+            `${art} 画布 ${size?.rawWidth} 不在已知规格 128 / 212 之内（2.0 倍概念稿切片不许回流）`);
         assert.equal(size?.trimType, 'auto', `${art} 应保留自动裁剪（切图是透明底的）`);
         assert.equal(size?.packable, true, `${art} 必须允许进入动态合图`);
     }

@@ -12,10 +12,20 @@ function fixture(startRatio = 0.6) {
     let resolve = () => {}, reject = (_error: Error) => {};
     const pending = new Promise<void>((yes, no) => { resolve = yes; reject = no; });
     const controller = new PostLoginController(createControllerContext(), {
-        startRatio, prepare: callback => { calls.push('prepare'); report = callback; return pending; },
-        bootstrapIdentity: data => calls.push(data), initAudio: () => calls.push('audio'),
-        setProgress: ratio => ratios.push(ratio), setStatus: message => statuses.push(message),
-        navigate: route => routes.push(route), failed: error => calls.push(error),
+        startRatio,
+        failed: error => calls.push(error),
+        session: {
+            prepare: callback => { calls.push('prepare'); report = callback; return pending; },
+            bootstrapIdentity: data => calls.push(data),
+            initAudio: () => calls.push('audio')
+        },
+        view: {
+            setProgress: ratio => ratios.push(ratio),
+            setStatus: message => statuses.push(message)
+        },
+        navigation: {
+            navigate: route => routes.push(route)
+        },
     });
     return { controller, ratios, statuses, routes, calls, resolve, reject, report: (ratio: number) => report({ ratio }) };
 }

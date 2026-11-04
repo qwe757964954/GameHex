@@ -1,17 +1,28 @@
-import { _decorator, Color, Component, Label, Node, Sprite, SpriteFrame } from 'cc';
+import { _decorator, Color, Component, Label, LabelOutline, Node, Sprite, SpriteFrame, UITransform } from 'cc';
 import type { ResBarSlot } from './MainResBarTypes';
 import { loadResBarSprite } from './MainResBarArt';
 import {
     formatResBarCountText,
+    formatResBarSpendFloat,
     parseResBarCountText,
     resBarCountValue,
     resBarHitFx,
-    resBarSpendColor,
+    resBarSpendFlashColor,
+    resBarSpendFloatFx,
     resBarSpendFx,
+    RES_BAR_SPEND_FLOAT_GAP,
     type IResBarCountText,
 } from './MainResBarFeedback';
 
 const { ccclass, property } = _decorator;
+
+/**
+ * 飘字描边宽度（px）。
+ *
+ * 资源栏的数字压在 `Bg` 底板上，白字不带描边也看得清；飘字却**悬在地图上方**，
+ * 白字直接压在浅色地格上会糊 —— 所以给它一圈黑边。要拿掉就把这个常量置 0。
+ */
+const SPEND_FLOAT_OUTLINE_WIDTH = 2;
 
 /**
  * 资源栏里的一个资源格。
@@ -21,7 +32,7 @@ const { ccclass, property } = _decorator;
  * | 反馈 | 入口 | 表现 |
  * |---|---|---|
  * | **加**（宝箱 / 飘字飞进来） | {@link playGainFeedback} | 图标弹一下 + 数字从「原值」滚到「新值」 |
- * | **扣**（2026-11-02） | {@link playSpendFeedback} | 数字**显红** + 跳一下，**跳完才**滚到扣后值 |
+ * | **扣**（2026-11-02，2026-11-03 改口径） | {@link playSpendFeedback} | 数字**白色闪烁** + 跳一下，**跳完才**滚到扣后值；同时上方飘一条 `-N` |
  *
  * 两条曲线都在 `MainResBarFeedback`（纯函数、零 cc），本文件只做「取 fx → 写节点」。
  *
@@ -74,15 +85,23 @@ export class MainResBarSlot extends Component {
     private iconBaseScale = 1;
     private labelBaseScale = 1;
 
-    // ── 扣：显红 + 跳动 + 再扣（`spendElapsed < 0` = 没在播）────────────────
+    // ── 扣：白色闪烁 + 跳动 + 再扣 + 上方飘 `-N`（`spendElapsed < 0` = 没在播）────────
     private spendElapsed = -1;
     private spendFrom = 0;
     private spendTo = 0;
     private spendBase: IResBarCountText = { value: 0, suffix: '' };
+    /** 这一笔扣了多少（飘字文本用）。 */
+    private spendAmount = 0;
     /** 数字节点的原始 y（`labelHop` 是相对它的位移）。 */
     private labelBaseY = 0;
-    /** 数字的**常态字色**（prefab 里那一档）—— 显红时从这个值混向红，收尾混回来。 */
+    /** 数字的**常态字色**（prefab 里那一档）—— 闪烁时从这个值混向纯白，收尾混回来。 */
     private readonly labelBaseColor = new Color(255, 255, 255, 255);
+    /** 上方飘字节点（懒建，见 {@link ensureSpendFloat}）。 */
+    private spendFloat: Node | null = null;
+    private spendFloatLabel: Label | null = null;
+    /** 飘字起点的本地坐标（`y` = 槽位半高 + {@link RES_BAR_SPEND_FLOAT_GAP}）。 */
+    private spendFloatStartY = 0;
+    private spendFloatX = 0;
     /**
      * 上一次**落定**在 label 上的数值（首帧前 / 整格隐藏后为 `null`）。
      *
@@ -145,14 +164,15 @@ export class MainResBarSlot extends Component {
     }
 
     /**
-     * 播一次「资源被扣除」：数字**先显红并跳一下**，跳完才从「扣前值」滚到「扣后值」。
+     * 播一次「资源被扣除」：数字**先白色闪烁并跳一下**，跳完才从「扣前值」滚到「扣后值」；
+     * 同时在这一格上方飘一条 `-N`（需求 2026-11-03 第 2 条）。
      *
      * @param amount 扣了多少（`<= 0` / 非有限数 ⇒ 整段跳过：没扣就别演）。
      * @param valueText 扣完之后的**显示文本**（带 `当前/上限` 那种后缀）。不传则用 label
      *   当前的文本当作"已经扣完"——只给「值已经落地、但走不到 `render`」的调用方用。
      *
-     * 🔴 顺序不能反：如果先把新值写进 label 再演，玩家看到的是「先扣、再变红」，
-     *    与需求「显红、跳动、**再**扣除」正好相反。所以这里立刻把 label 钉回 `spendFrom`。
+     * 🔴 顺序不能反：如果先把新值写进 label 再演，玩家看到的是「先扣、再闪」，
+     *    与需求「闪烁、跳动、**再**扣除」正好相反。所以这里立刻把 label 钉回 `spendFrom`。
      */
     playSpendFeedback(amount: number, valueText?: string): void {
         if (!this.node.active) return;
@@ -161,9 +181,11 @@ export class MainResBarSlot extends Component {
         const base = parseResBarCountText(valueText ?? this.valueLabel.string);
         this.spendBase = base;
         this.spendTo = base.value;
-        this.spendFrom = this.spendTo + Math.max(1, Math.round(amount));
+        this.spendAmount = Math.max(1, Math.round(amount));
+        this.spendFrom = this.spendTo + this.spendAmount;
         this.pendingValueText = valueText ?? null;
         this.spendElapsed = 0;
+        this.prepareSpendFloat();
         this.applySpend();
     }
 
@@ -194,6 +216,8 @@ export class MainResBarSlot extends Component {
     cancelFeedback(): void {
         this.cancelHit();
         this.cancelSpend();
+        // `cancelSpend` 没在播时会早退，飘字得单独收一次（它可能正飘着而时间轴刚结束）。
+        this.hideSpendFloat();
         this.pendingValueText = null;
         this.settledValue = null;
     }
@@ -257,18 +281,101 @@ export class MainResBarSlot extends Component {
         this.icon.node.setScale(this.iconBaseScale * fx.iconScale, this.iconBaseScale * fx.iconScale, 1);
         this.valueLabel.node.setScale(this.labelBaseScale * fx.labelScale, this.labelBaseScale * fx.labelScale, 1);
         this.valueLabel.node.setPosition(this.valueLabel.node.position.x, this.labelBaseY + fx.labelHop, 0);
-        const [r, g, b] = resBarSpendColor(
+        const [r, g, b] = resBarSpendFlashColor(
             [this.labelBaseColor.r, this.labelBaseColor.g, this.labelBaseColor.b],
-            fx.redStrength,
+            fx.whiteStrength,
         );
-        this.valueLabel.color = new Color(r, g, b, this.labelBaseColor.a);
+        // 透明度也走 `label.color`：Label 的顶点色带 alpha，白字"闪"就是靠它（见模型里的注释）。
+        const alpha = Math.round(this.labelBaseColor.a * fx.labelAlpha);
+        this.valueLabel.color = new Color(r, g, b, alpha);
         const value = resBarCountValue(this.spendFrom, this.spendTo, fx.countRatio);
         this.valueLabel.string = formatResBarCountText(this.spendBase, value);
+        this.applySpendFloat();
     }
 
-    /** 收尾：缩放 / 位移 / 字色全部复原，扣后值落地。 */
+    /**
+     * 上方的 `-N` 飘字：**懒建**在槽位下面（三格各一个），起点压在「槽位上沿 + 2px」。
+     *
+     * 为什么运行时建、不放进 prefab：它是纯反馈件（没有美术资产、没有交互），排版又必须和
+     * `Value` 完全一致 —— 复制 `valueLabel` 的字体 / 字号，比在 prefab 里手抄三份再靠人肉对版本
+     * 可靠得多。真要在编辑器里调，将来给它加一个 `@property` 覆盖即可。
+     */
+    private ensureSpendFloat(): Label | null {
+        if (this.spendFloatLabel) return this.spendFloatLabel;
+        const host = this.valueLabel?.node;
+        if (!host || !host.isValid) return null;
+        const transform = this.node.getComponent(UITransform);
+        // 「资源栏上方 2px」= 槽位上沿（半高）再往上 GAP。
+        this.spendFloatStartY = (transform ? transform.height / 2 : 0) + RES_BAR_SPEND_FLOAT_GAP;
+        // 与数字同一列：玩家读的是"哪个数字扣了多少"。
+        this.spendFloatX = host.position.x;
+
+        const node = new Node('SpendFloat');
+        node.layer = host.layer;
+        node.parent = this.node;
+        const ui = node.addComponent(UITransform);
+        ui.setAnchorPoint(0.5, 0);
+        const label = node.addComponent(Label);
+        this.copySpendFloatTypography(label);
+        const outline = node.addComponent(LabelOutline);
+        outline.color = new Color(0, 0, 0, 255);
+        outline.width = SPEND_FLOAT_OUTLINE_WIDTH;
+        node.active = false;
+
+        this.spendFloat = node;
+        this.spendFloatLabel = label;
+        return label;
+    }
+
+    /** 飘字排版照抄数字那一格（字体 / 字号 / 对齐），只有 `overflow` 改成 `NONE`：大额不许缩字。 */
+    private copySpendFloatTypography(label: Label): void {
+        const source = this.valueLabel;
+        label.useSystemFont = source.useSystemFont;
+        label.font = source.font;
+        label.fontFamily = source.fontFamily;
+        label.fontSize = source.fontSize;
+        label.lineHeight = source.lineHeight;
+        label.isBold = source.isBold;
+        label.isItalic = source.isItalic;
+        label.horizontalAlign = source.horizontalAlign;
+        label.verticalAlign = source.verticalAlign;
+        label.enableWrapText = false;
+        label.overflow = Label.Overflow.NONE;
+    }
+
+    /** 起播：写好文本、压回起点、显示出来。 */
+    private prepareSpendFloat(): void {
+        const label = this.ensureSpendFloat();
+        if (!label || !this.spendFloat) return;
+        label.string = formatResBarSpendFloat(this.spendAmount);
+        this.spendFloat.setPosition(this.spendFloatX, this.spendFloatStartY, 0);
+        this.spendFloat.active = true;
+    }
+
+    /** 每一帧：上移 + 淡出；飘完（或没在飘）就藏起来。 */
+    private applySpendFloat(): void {
+        const node = this.spendFloat;
+        if (!node) return;
+        const fx = resBarSpendFloatFx(this.spendElapsed);
+        if (!fx) {
+            node.active = false;
+            return;
+        }
+        node.setPosition(this.spendFloatX, this.spendFloatStartY + fx.rise, 0);
+        if (this.spendFloatLabel) {
+            this.spendFloatLabel.color = new Color(255, 255, 255, Math.round(255 * fx.alpha));
+        }
+    }
+
+    /** 收起飘字（收尾 / 中止都要调，否则下次进主城会看到一条没飘完的 `-N`）。 */
+    private hideSpendFloat(): void {
+        if (this.spendFloat) this.spendFloat.active = false;
+    }
+
+    /** 收尾：缩放 / 位移 / 字色 / 飘字全部复原，扣后值落地。 */
     private finishSpend(): void {
         this.spendElapsed = -1;
+        this.hideSpendFloat();
         this.icon.node.setScale(this.iconBaseScale, this.iconBaseScale, 1);
         this.valueLabel.node.setScale(this.labelBaseScale, this.labelBaseScale, 1);
         this.valueLabel.node.setPosition(this.valueLabel.node.position.x, this.labelBaseY, 0);
@@ -288,10 +395,11 @@ export class MainResBarSlot extends Component {
         this.valueLabel.node.setScale(this.labelBaseScale, this.labelBaseScale, 1);
     }
 
-    /** 中止「扣」的那条时间轴：字色 / 位移必须一起复原，否则会留一格红字。 */
+    /** 中止「扣」的那条时间轴：字色 / 透明度 / 位移 / 飘字必须一起复原，否则会留半透明白字。 */
     private cancelSpend(): void {
         if (this.spendElapsed < 0) return;
         this.spendElapsed = -1;
+        this.hideSpendFloat();
         this.icon.node.setScale(this.iconBaseScale, this.iconBaseScale, 1);
         this.valueLabel.node.setScale(this.labelBaseScale, this.labelBaseScale, 1);
         this.valueLabel.node.setPosition(this.valueLabel.node.position.x, this.labelBaseY, 0);

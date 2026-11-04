@@ -8,11 +8,11 @@ import { resolveZCMapResources, resolveZCSpawnMatchConfig, ZCSpawnSelection } fr
 import { buildDamageStatistics } from '../../battle/BattleStatisticsModel';
 import { ZC_BATTLE_TYPE_CHAPTER } from '../../battle/BattleStartModel';
 import { buildRankSeats } from '../model/ZCRankBoard';
-import { ZCGameUiEvent, type IZCDebugDrawCardIntent } from '../view/ZCGameHudEvents';
+import { ZCGameUiEvent, type IZCRequestUnitArtIntent, type IZCRequestEffectArtIntent, type IZCDebugDrawCardIntent } from '../view/ZCGameHudEvents';
 import type { IZCBattlePhase } from './ZCBattleController';
 import { ZC_BATTLE_EVENTS, type IZCBattleFrame } from './ZCBattleEvents';
 import type { IZCGameEntry } from './ZCGameEntry';
-import type { IZCBattleView, IZCBattleAuxiliaryPorts } from './ZCBattleRuntimeContract';
+import type { IZCBattleView, IZCBattleRuntimeServices } from './ZCBattleRuntimeContract';
 import { ZCBattleSettlementController, type IZCBattlePopup } from './ZCBattleSettlementController';
 
 /** 每局唯一的规则编排入口；组件只提供帧脉冲及展示端口。 */
@@ -25,9 +25,14 @@ export class ZCBattleRuntimeController extends ControllerBase {
     private hints = true;
     private stopShowcase: (() => void) | null = null;
     private readonly popups = new Map<'guide' | 'damage' | 'rank', IZCBattlePopup>();
+    private readonly pendingUnitArt = new Set<string>();
+    private readonly loadedUnitArt = new Set<string>();
+    /** 特效美术按需补载：在飞的（path → Promise）与已到货的（路径集合）。 */
+    private readonly pendingEffectArt = new Map<string, Promise<void>>();
+    private readonly loadedEffectArt = new Set<string>();
     get currentModel(): ZCGameModel | null { return this.model; }
     constructor(context: IControllerContext, private readonly view: IZCBattleView,
-        private readonly settlement: ZCBattleSettlementController, private readonly ports: IZCBattleAuxiliaryPorts,
+        private readonly settlement: ZCBattleSettlementController, private readonly services: IZCBattleRuntimeServices,
         private readonly phase: IZCBattlePhase) {
         super(context, 'battle-runtime');
     }
@@ -52,6 +57,8 @@ export class ZCBattleRuntimeController extends ControllerBase {
     }
     private bindUiEvents(): void {
         this.listen(ZC_BATTLE_EVENTS.FRAME, this.onFrame);
+        this.listen(ZCGameUiEvent.RequestUnitArt, this.onRequestUnitArt);
+        this.listen(ZCGameUiEvent.RequestEffectArt, this.onRequestEffectArt);
         this.listen(ZCGameUiEvent.HexClick, this.onHexClick);
         this.listen(ZCGameUiEvent.DebugDrawCard, this.onDebugDrawCard);
         this.listen(ZCGameUiEvent.UseArtifact, this.onUseArtifact);
@@ -71,7 +78,7 @@ export class ZCBattleRuntimeController extends ControllerBase {
             this.selection.tick(dt);
             this.renderSpawn();
             if (this.selection.snapshot.finished && !this.stopShowcase) {
-                this.stopShowcase = this.ports.schedule(() => this.finishSpawnSelection(), 1);
+                this.stopShowcase = this.services.clock.schedule(() => this.finishSpawnSelection(), 1);
             }
             return;
         }
@@ -109,6 +116,43 @@ export class ZCBattleRuntimeController extends ControllerBase {
         this.model = model;
         this.phase.startPlaying();
         this.view.startPlaying(model, config, selection, model.createRenderFrame(), model.drainPresentationEvents());
+    }
+    private async onRequestUnitArt({ owner, unitId }: IZCRequestUnitArtIntent): Promise<void> {
+        if (owner !== this.view || this.pendingUnitArt.has(unitId) || this.loadedUnitArt.has(unitId)) return;
+        const definition = this.entry?.matchConfig.units.find(unit => unit.unitId === unitId);
+        if (!definition?.prefabPath) return;
+        this.pendingUnitArt.add(unitId);
+        try {
+            const prefab = await this.services.art.loadUnitPrefab(definition.prefabPath);
+            if (this.isDisposed || !prefab) return;
+            this.loadedUnitArt.add(unitId);
+            this.view.applyUnitPrefab(unitId, prefab);
+        } catch (error) { if (!this.isDisposed) this.services.failed(error); }
+        finally { this.pendingUnitArt.delete(unitId); }
+    }
+    /**
+     * 特效美术按需补载（与 {@link onRequestUnitArt} 同型，缺口在**特效**那条链上）。
+     *
+     * 本局特效清单由 `buildZCVisualResourcePlan(heroIds)` 按后端英雄名单过滤 ⇒ 兵营产兵 /
+     * 波次兵 / GM 临时加的兵不在名单里，它们的普攻与技能特效路径**一条都不会被加载**。
+     * 单位模型早就有这条补载，特效侧一直空着 ⇒ 那两类兵的子弹**永久**消失，且连「加载失败」
+     * 都不会报（压根没被要求加载）。派发方 `ZCGameRenderWorld` 在第一次取不到时发一次，
+     * 到货后由它下一帧补挂（{@link IZCBattleView.applyEffectPrefab}）。
+     */
+    private onRequestEffectArt({ owner, path }: IZCRequestEffectArtIntent): void {
+        if (owner !== this.view || this.isDisposed || !path) return;
+        if (this.loadedEffectArt.has(path) || this.pendingEffectArt.has(path)) return;
+        //  同一路径可能同时有好几发子弹在飞（弹幕），共享一个 Promise，不重复打加载。
+        const task = (async () => {
+            try {
+                const prefab = await this.services.art.loadEffectPrefab(path);
+                if (this.isDisposed || !prefab) return;
+                this.loadedEffectArt.add(path);
+                this.view.applyEffectPrefab(path, prefab);
+            } catch (error) { if (!this.isDisposed) this.services.failed(error); }
+            finally { this.pendingEffectArt.delete(path); }
+        })();
+        this.pendingEffectArt.set(path, task);
     }
     private onHexClick(hexId: number): void {
         if (this.phase.isSettled || this.view.dragMoved) return;
@@ -164,15 +208,15 @@ export class ZCBattleRuntimeController extends ControllerBase {
         try {
             const content = await entry.resources.loadGuide();
             if (this.isDisposed) return;
-            await this.trackPopup('guide', this.ports.openGuide(content));
-        } catch (error) { if (!this.isDisposed) this.ports.failed(error); }
+            await this.trackPopup('guide', this.services.popups.openGuide(content));
+        } catch (error) { if (!this.isDisposed) this.services.failed(error); }
     }
     private onOpenDamage(): void {
         const model = this.model, entry = this.entry;
         if (!model || !entry || this.phase.isSettled) return;
         const profiles = new Map(entry.seatProfiles), stats = model.damageStats;
         const opponents = Object.entries(stats).filter(([owner]) => owner !== ZCOwner.Player);
-        void this.trackPopup('damage', this.ports.openDamage({
+        void this.trackPopup('damage', this.services.popups.openDamage({
             mine: { name: profiles.get(ZCOwner.Player)?.name || '我方', damage: stats.player.dealt, damageTaken: stats.player.taken },
             enemy: { name: profiles.get(ZCOwner.Enemy)?.name || '敌方', damage: opponents.reduce((sum, [, value]) => sum + value.dealt, 0), damageTaken: opponents.reduce((sum, [, value]) => sum + value.taken, 0) },
         }));
@@ -181,14 +225,14 @@ export class ZCBattleRuntimeController extends ControllerBase {
         const model = this.model, entry = this.entry;
         if (!model || !entry) return;
         const profiles = new Map(entry.seatProfiles);
-        void this.trackPopup('rank', this.ports.openRank(buildRankSeats(model.owners, owner => model.territoryCountOf(owner), profiles, model.snapshot.status !== 'playing'), profiles));
+        void this.trackPopup('rank', this.services.popups.openRank(buildRankSeats(model.owners, owner => model.territoryCountOf(owner), profiles, model.snapshot.status !== 'playing'), profiles));
     }
     private async trackPopup(kind: 'guide' | 'damage' | 'rank', pending: Promise<IZCBattlePopup | null>): Promise<void> {
         try {
             const popup = await pending;
             if (!popup) return;
             if (this.isDisposed) popup.close(); else this.popups.set(kind, popup);
-        } catch (error) { if (!this.isDisposed) this.ports.failed(error); }
+        } catch (error) { if (!this.isDisposed) this.services.failed(error); }
     }
     private closePopups(): void {
         const popups = Array.from(this.popups.values());
@@ -213,6 +257,7 @@ export class ZCBattleRuntimeController extends ControllerBase {
             finally {
                 try { this.closePopups(); }
                 finally {
+                    this.pendingUnitArt.clear(); this.loadedUnitArt.clear();
                     this.model = null; this.selection = null; this.entry = null;
                     super.dispose();
                 }

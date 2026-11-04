@@ -163,12 +163,29 @@ test('产物里的 buildingIds 按 cellId 升序，不受输入顺序影响', ()
     );
 });
 
-// ── 真实地图：已发布的 chapter_01 没有这个键时不该凭空造出来 ──────────────
-test('没有 buildingIds 的既有地图解析后不多出该键', async () => {
+// ── 没配这个键的地图：解析后不该凭空造出来 ──────────────────────────────
+// 🔴 别再拿 chapter_01 当「没有这个键」的样本：逐格建筑 ID 已经铺到真图上（93 格）。
+//    样本必须自己造 —— 这条守的是「缺键 ⇒ 归一侧也不补」，与内容无关。
+test('配置里没有 buildingIds 时解析后不凭空造出这个键', () => {
+    const sample = baseMap();
+    assert.equal((sample.randomSites as Record<string, unknown>).buildingIds, undefined, '样本本身不该有这个键');
+    assert.equal('buildingIds' in (normalizeTerritoryMap(sample).map.randomSites as object), false);
+    assert.equal(configureTerritoryMap(sample).randomSites?.buildingIds, undefined);
+});
+
+// ── 真图：逐格 ID 一格格带过来，不是「整张图一个值」────────────────────
+test('已发布地图的逐格建筑 ID 原样带到客户端', async () => {
     const { readFileSync } = await import('node:fs');
-    const sample = JSON.parse(readFileSync(
-        assetUrl('config/territory-maps/chapter_01.json'), 'utf8'));
-    assert.equal(sample.randomSites.buildingIds, undefined, '样本本身不该有这个键');
-    const config = configureTerritoryMap(sample);
-    assert.equal(config.randomSites?.buildingIds, undefined);
+    const sample = JSON.parse(readFileSync(assetUrl('config/territory-maps/chapter_01.json'), 'utf8'));
+    const ids = sample.randomSites.buildingIds as Record<string, string>;
+    assert.ok(Object.keys(ids).length > 0, 'chapter_01 应已配逐格建筑 ID');
+    const client = configureTerritoryMap(sample);
+    const carried = client.randomSites?.buildingIds ?? {};
+    // 客户端把键归一成 number，条数与值必须一格不差
+    assert.equal(Object.keys(carried).length, Object.keys(ids).length);
+    for (const [cellId, buildingId] of Object.entries(ids)) {
+        assert.equal(carried[Number(cellId)], buildingId, `格 ${cellId} 的建筑 ID 丢了`);
+    }
+    // 反例守卫：不许退化成整图单值
+    assert.ok(Object.keys(carried).length > 1);
 });

@@ -5,6 +5,7 @@ import ts from 'typescript';
 import { ControllerBase } from '../../assets/script/framework/controller/ControllerBase';
 import { ZCBattleController } from '../../assets/script/app/zcds/application/ZCBattleController';
 import { EventMgr } from '../../assets/script/framework/event/EventMgr';
+import { bundleForPath } from '../../assets/script/core/asset/BundleCatalog';
 
 function loadModule(path: string, resolve: (name: string) => unknown) {
     const exports: Record<string, any> = {};
@@ -25,7 +26,7 @@ export function loadBattlePreparation(dependencies: Record<string, unknown>) {
 }
 
 /** Run the real composition and entry builder while replacing only engine/I/O edges. */
-export function loadBattleComposition(dependencies: Record<string, unknown>) {
+export function loadBattleComposition(dependencies: Record<string, unknown>, overrides: Record<string, unknown> = {}) {
     const builder = loadModule('assets/script/app/zcds/application/ZCBattleEntryBuilder.ts', name => {
         const key = name.startsWith('./') ? '../zcds/application/' + name.slice(2) : '../zcds/' + name.slice(3);
         if (!(key in dependencies)) throw new Error(`Missing entry dependency ${key}`);
@@ -33,6 +34,9 @@ export function loadBattleComposition(dependencies: Record<string, unknown>) {
     });
     dependencies['../zcds/application/ZCBattlePreparation'] = loadBattlePreparation({ ...dependencies, './ZCBattleEntryBuilder': builder });
     return loadModule('assets/script/app/bootstrap/battle/BattleComposition.ts', name => {
+        if (name in overrides) return overrides[name];
+        if (name === 'cc') return { Prefab: class Prefab {} };
+        if (name.endsWith('/BundleCatalog')) return { bundleForPath };
         if (name.endsWith('/ControllerBase')) return { ControllerBase };
         if (name.endsWith('/ZCBattleController')) return { ZCBattleController };
         if (name.endsWith('/ZCBattleEntryBuilder')) return builder;

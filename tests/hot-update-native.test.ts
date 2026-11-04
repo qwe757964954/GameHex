@@ -143,8 +143,8 @@ class FakeAssetsManager implements INativeAssetsManager {
                 return;
             }
             this.callback?.(event(ENVIRONMENT.UPDATE_PROGRESSION, {
-                getPercent: () => 50,
-                getPercentByFile: () => 40,
+                getPercent: () => 0.5,
+                getPercentByFile: () => 0.4,
                 getDownloadedBytes: () => 512,
                 getTotalBytes: () => 1024,
                 getDownloadedFiles: () => 2,
@@ -422,6 +422,17 @@ test('下载完成后前置搜索路径、持久化并重启游戏', async () =>
     // 🔴 不得把 JS 版本比较器交给引擎：它会在原生下载线程上被同步调用 ⇒ SIGSEGV
     assert.equal(manager.versionCompareHandle, undefined,
         '不得把 JS 比较器交给引擎（引擎会在下载线程上调用它）');
+});
+
+test('Cocos 3.8.8 的字节和文件进度比例转换为应用层百分数', async () => {
+    const { runtime } = createRuntime({ behavior: 'new-then-finish' });
+    const progress: Array<{ percent?: number; percentByFile?: number }> = [];
+    await runtime.run(config(), (item) => {
+        if (item.phase === 'downloading' && item.totalBytes) progress.push(item);
+    });
+    assert.equal(progress.length, 1);
+    assert.equal(progress[0].percent, 50);
+    assert.equal(progress[0].percentByFile, 40);
 });
 
 test('下载失败保留断点：续传只调 downloadFailedAssets，成功后仍要重启', async () => {

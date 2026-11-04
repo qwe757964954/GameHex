@@ -61,7 +61,10 @@ export const COMMON_ICON_ART_ROOT = `icons/common`;
 /** 卡牌阵容页大图：卡面 / 站台 / 垫盘 / 品级框。 */
 export const CARD_ART_ROOT = `${ART_ROOT}/card`;
 
-/** 卡牌阵容 / 布阵页图标：营地雕像、Q 版立绘、职业角标。 */
+/** 卡牌详情页整套透明切图（面板 / 六边形 / 图标 / 按钮）。 */
+export const CARD_DETAIL_ART_ROOT = `${ART_ROOT}/carddetail`;
+
+/** 卡牌阵容 / 布阵页图标：营地雕像与职业角标。 */
 export const ICON_ART_ROOT = `icons/card`;
 
 /** 布阵卡池卡框。 */
@@ -115,7 +118,7 @@ export const SPAWN_REGION_ART_ROOT = `${ART_ROOT}/spawn-region`;
 /** 玩家头像。 */
 export const HEAD_ART_ROOT = `icons/head`;
 
-/** 兵种头像（Q 版单位头像）。 */
+/** 兵种头像与卡牌专属角色图，共用同一份图片和自动图集。 */
 export const CARD_HEAD_ART_ROOT = `icons/cardHead`;
 
 /** 主界面活动入口图标。 */

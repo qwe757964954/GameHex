@@ -146,7 +146,7 @@ export interface IBigMapLayout {
     readonly blocked: readonly number[];
     readonly spawnZones: readonly IBigMapSpawnZone[];
     readonly points: readonly IBigMapLayoutPoint[];
-    /** 背景图资源名（相对 `assets/resources`、不带扩展名，如 `image/bigmap/world_01`）。空串 = 无背景。 */
+    /** 自定义背景图资源名（相对 bundle 根、不带扩展名）。空串 = 无布局背景，废弃的荒地背景不再加载。旧前缀 `image/bigmap/` 由 `toBigMapArtPath()` 归一。 */
     readonly background: string;
 }
 

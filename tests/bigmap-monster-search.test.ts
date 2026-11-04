@@ -35,6 +35,23 @@ test('探索选择距玩家基地最近的可挑战怪物', () => {
     assert.equal(best.instanceId, Math.min(...sameDistance.map((view) => view.instanceId)));
 });
 
+test('附近高等级野怪未解锁时，搜索最近的一级怪且拒绝直接攻打高等级怪', async () => {
+    const model = makeModel();
+    const views = model.world.monsters.map((site) => model.monsterView(site.instanceId));
+    const high = views.find((view) => view?.level === 19);
+    const first = views.find((view) => view?.level === 1);
+    assert.ok(high);
+    assert.ok(first);
+    model.distanceFromBase = (hexId) => hexId === high.hexId ? 0 : hexId === first.hexId ? 1 : 10;
+    assert.equal(model.bestMonsterToFarm()?.instanceId, first.instanceId);
+    assert.equal(high.unlocked, false);
+    assert.equal(high.canAttack, false);
+    assert.equal(high.attackReason, '需先通关 18 级野怪');
+    const result = await model.requestAttackMonster(high.instanceId);
+    assert.equal(result.ok, false);
+    assert.equal(result.message, high.attackReason);
+});
+
 test('距离优先于等级，跳过不能挑战的目标，同距离稳定选择', () => {
     const model = makeModel();
     const sites = model.world.monsters;

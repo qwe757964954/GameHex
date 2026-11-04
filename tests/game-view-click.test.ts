@@ -1,7 +1,7 @@
 import { createControllerContext } from './helpers/controller-context';
 import { VIEW_LIFECYCLE } from '../assets/script/framework/ui/ViewLifecycle';
 import { MainTabController } from '../assets/script/app/main/MainTabController';
-import { MainTab } from '../assets/script/app/main/MainTabModel';
+import { MainTab, isMainTabLocked } from '../assets/script/app/main/MainTabModel';
 import { MainTabEvent } from '../assets/script/app/main/MainTabEvents';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { componentControllerModule } from './helpers/controller-context';
@@ -235,7 +235,7 @@ test('底栏实际点击：世界报 2，其他可用入口报 1；初始化和�
     const hostModule = loadModule('assets/script/app/main/MainTabHost.ts', (name) => {
         if (name.endsWith('/ViewLifecycle')) return { VIEW_LIFECYCLE };
         if (name.endsWith('/MainTabController')) return { MainTabController };
-        if (name.endsWith('/MainTabModel')) return { MainTab };
+        if (name.endsWith('/MainTabModel')) return { MainTab, isMainTabLocked };
         if (name.endsWith('/MainTabEvents')) return { MainTabEvent };
         if (name.endsWith('/EventMgr')) return { EventMgr };
         if (name.endsWith('/FormationService')) return { fetchFormations: async () => {} };
@@ -266,10 +266,28 @@ test('底栏实际点击：世界报 2，其他可用入口报 1；初始化和�
     host.showPage = () => {};
     host.renderNav = index => switches.push(index);
     const controller = new MainTabController(createControllerContext(), {
-        owner: host, assetType: class {}, showPage() {}, renderNav: tab => switches.push(tab),
-        openWorld: async () => {}, closeWorld() {}, isWorldOpen: () => false,
-        beforeSwitch() {}, settled() {}, prefetchHero() {}, failed: assert.fail,
-        reportClick: tab => { reports.push({ mark: tab === MainTab.World ? service.GAME_VIEW_MARK.World : service.GAME_VIEW_MARK.Other, caller: host }); },
+        owner: host,
+        assetType: class {},
+        failed: assert.fail,
+        view: {
+            showPage() {},
+            renderNav: tab => switches.push(tab)
+        },
+        world: {
+            openWorld: async () => {},
+            closeWorld() {},
+            isWorldOpen: () => false
+        },
+        warmup: {
+            beforeSwitch() {},
+            settled() {}
+        },
+        hero: {
+            prefetchHero() {}
+        },
+        telemetry: {
+            reportClick: tab => { reports.push({ mark: tab === MainTab.World ? service.GAME_VIEW_MARK.World : service.GAME_VIEW_MARK.Other, caller: host }); }
+        },
     });
     controller.start();
     host.onLoad();
@@ -278,7 +296,8 @@ test('底栏实际点击：世界报 2，其他可用入口报 1；初始化和�
     assert.equal(reports.length, 0, '默认页初始化不算点击');
     switches.length = 0;
 
-    for (const [tabType, mark] of [[0, 1], [1, 1], [2, 1], [3, 1], [5, 1], [6, 2]]) {
+    // 2026-11-04 角色(2) / 联盟(5) 与挑战(4) 一起进未开放名单 ⇒ 可点入口只剩 0/1/3/6。
+    for (const [tabType, mark] of [[0, 1], [1, 1], [3, 1], [6, 2]]) {
         const button = buttons[tabType];
         assert.equal(button.enabled, true);
         assert.ok(button.select);
@@ -291,9 +310,11 @@ test('底栏实际点击：世界报 2，其他可用入口报 1；初始化和�
         reports.length = 0;
         switches.length = 0;
     }
-    assert.equal(buttons[4].enabled, false);
-    buttons[4].select?.();
-    assert.equal(reports.length, 0, '控制器拒绝未开放的挑战入口');
+    for (const lockedTab of [2, 4, 5]) {
+        assert.equal(buttons[lockedTab].enabled, false, `未开放的 ${lockedTab} 必须压暗挂锁`);
+        buttons[lockedTab].select?.();
+        assert.equal(reports.length, 0, `控制器拒绝未开放的 ${lockedTab} 入口`);
+    }
     host.switchToTab(0);
     await Promise.resolve();
     assert.equal(reports.length, 0, '程序跳转不计入点击');

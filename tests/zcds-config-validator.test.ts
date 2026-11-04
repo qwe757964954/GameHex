@@ -114,3 +114,27 @@ test('技能导表校验拦截老 Client 未注册行为和越权公式', () => 
         rmSync(directory, { recursive: true, force: true });
     }
 });
+
+test('技能表的 id 列必须是数字：字符串化就拦在导表产物上', () => {
+    // 回归 2026-11-04：`PVP-技能.xlsx` 的 `secondarySkillId` 第 6 行类型声明写成 `string`，
+    // eSon 把 30832 导成 `"30832"`，运行时 `ZCPvpTableParser.optionalPositiveNumber` 直接抛
+    // `skills.30707.secondarySkillId 必须是大于 0 的数字`，整张技能表编译失败。
+    const current = validateSkillPipeline(resolve('assets/remoteRef'));
+    assert.equal(current.ok, true, current.errors.join('\n'));
+
+    const directory = fixture();
+    try {
+        const skills = rows('pvpSkill');
+        const target = skills.find((row) => String(row.skillId) === '30707');
+        assert.ok(target, '30707（椰蛋战士普攻）必须在表里');
+        target.secondarySkillId = '30832';
+        writeFileSync(join(directory, 'pvpSkill.json'), `${JSON.stringify(skills)}\n`, 'utf8');
+
+        const result = validateSkillPipeline(directory);
+        assert.equal(result.ok, false);
+        assert.match(result.errors.join('\n'), /pvpSkill\[\d+\]\.secondarySkillId 导成了字符串「30832」/);
+        assert.match(result.errors.join('\n'), /第 6 行的类型声明/);
+    } finally {
+        rmSync(directory, { recursive: true, force: true });
+    }
+});

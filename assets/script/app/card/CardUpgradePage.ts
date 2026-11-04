@@ -1,12 +1,26 @@
-import { _decorator, Button, Color, Label, Sprite } from 'cc';
+import { _decorator, Button, Color, Label, Node, Prefab, Sprite, SpriteFrame, UITransform } from 'cc';
+import { VirtualScrollView } from '../../vscrollview/VScrollView';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { cardArtProvider } from './CardArtProvider';
 import { CARD_LINEUP_TEXTS } from './CardLineupTexts';
 import { upgradeButtonText } from './CardUpgradeCost';
 import type { ZCUpgradeStatus } from './CardUpgradeCost';
-import { applyCardHeadArt } from './CardHeadView';
+import { applyCardHeroArt } from './CardHeroView';
+import { loadCardDetailArt } from './CardLineupIcons';
+import { CardUnitPreview } from './CardUnitPreview';
+import { CardUnitPreviewAssets } from './CardUnitPreviewAssets';
+import { CardDetailHexSlot } from './CardDetailHexSlot';
+import { CardDetailMilestoneRow } from './CardDetailMilestoneRow';
 import { CardPopupEvent } from './CardPopupEvents';
 import { EventMgr } from '../../framework/event/EventMgr';
+import { itemDetailRepository } from '../itemdetail/ItemDetailRepository';
+import { loadItemIconArt } from '../itemdetail/ItemDetailArtLoader';
+import { resolveCardCamp, resolveCardClass, ZC_CARD_CAMP_NAMES, ZC_CARD_CLASS_NAMES } from './CardLineupTypes';
+import type {
+    CardDetailPresentation,
+    CardDetailSkillSlot,
+    CardDetailStatLine,
+} from './CardDetailPresenter';
 import type {
     CardUpgradePhase,
     CardUpgradePresentation,
@@ -16,128 +30,228 @@ export type { ICardUpgradeOpenData } from './CardPresentations';
 
 const { ccclass, property } = _decorator;
 
-/** 卡牌升级视图：渲染外部会话快照，按钮仅派发意图。 */
+/** 品级 → 详情页品质菱形切图（image/carddetail）。 */
+const DIAMOND_ART: Readonly<Record<string, string>> = {
+    绿: 'diamond_green', 蓝: 'diamond_blue', 紫: 'quality_purple', 金: 'diamond_gold',
+};
+
+/** 六维属性的写入器：key → (valueLabel, gainLabel) 的页面字段名。 */
+type StatKey = 'hp' | 'attack' | 'buildHp' | 'spawn' | 'range' | 'speed';
+
+/** 卡牌详情视图：渲染外部会话快照，按钮仅派发意图。 */
 @ccclass('CardUpgradePage')
 export class CardUpgradePage extends PopupBase {
     private artRevision = 0;
+    private renderRevision = 0;
+    private preview: CardUnitPreview | null = null;
+    private previewAssets: CardUnitPreviewAssets<Prefab> | null = null;
+    private heroKey: string | null = null;
     /** 弹窗预制体在 resources 下的路径（`PopupManager` 用它加载）。 */
     static prefabPath = 'ui/card/CardUpgrade';
 
-    @property({ type: Label, tooltip: 'Title/Label：标题「卡牌升级」' })
-    titleLabel: Label = null!;
-
-    @property({ type: Button, tooltip: 'CloseBtn 上的 cc.Button（**绑组件不绑节点**）' })
-    closeButton: Button = null!;
-
-    @property({ type: Sprite, tooltip: 'Card/Face：卡面底图（common_img_kp_01..04，按品级换图）' })
-    cardFace: Sprite = null!;
-
-    @property({ type: Sprite, tooltip: 'Card/Badge：左上角职业角标（class_*）' })
-    cardBadge: Sprite = null!;
-
-    @property({ type: Sprite, tooltip: 'Card/Hero：职业营地雕像（camp_*）' })
-    cardHero: Sprite = null!;
-
-    @property({ type: Sprite, tooltip: 'Card/HeadIcon：该卡自己的头像（84×84，与 Hero 互斥显示）' })
-    cardHeadIcon: Sprite = null!;
-
-    @property({ type: Label, tooltip: 'Info/NameLabel：卡牌名（如「精灵弓箭手」）' })
+    @property({ group: '基本信息', type: Label, tooltip: 'Header/NameLabel：卡牌名（如「椰蛋战士」）' })
     nameLabel: Label = null!;
 
-    @property({ type: Label, tooltip: 'Info/LevelLabel：等级，写成「3级 → 4级」；已满级时只写当前等级' })
-    levelLabel: Label = null!;
+    @property({ group: '基本信息', type: Sprite, tooltip: 'Header/QualityDiamond：品质菱形（diamond_*，按品级换图）' })
+    qualitySprite: Sprite = null!;
 
-    @property({ type: Label, tooltip: 'CostCard/NameLabel：消耗行名称「卡牌」' })
-    cardCostNameLabel: Label = null!;
+    @property({ group: '基本信息', type: Label, tooltip: 'Header/QualityLabel：菱形中央品质字（史诗 等）' })
+    qualityLabel: Label = null!;
 
-    @property({ type: Label, tooltip: 'CostCard/CountLabel：卡牌数量「持有/需要」' })
-    cardCostCountLabel: Label = null!;
+    @property({ group: '基本信息', type: Label, tooltip: 'Header/TagCamp/Label：种族标签字（花果 等）' })
+    tagCampLabel: Label = null!;
 
-    @property({ type: Label, tooltip: 'CostCard/ItemLabel：小字，写被消耗卡牌的道具 id' })
-    cardCostItemLabel: Label = null!;
+    @property({ group: '基本信息', type: Node, tooltip: '无阵营的建筑卡隐藏整个阵营标签' })
+    campTagRoot: Node = null!;
 
-    @property({ type: Label, tooltip: 'CostExp/NameLabel：消耗行名称「经验」' })
-    expCostNameLabel: Label = null!;
+    @property({ group: '基本信息', type: Label, tooltip: 'Header/TagClass/Label：职业标签字（战士 等）' })
+    tagClassLabel: Label = null!;
 
-    @property({ type: Label, tooltip: 'CostExp/CountLabel：经验数量「合计持有/需要」（通用 + 兵种）' })
-    expCostCountLabel: Label = null!;
+    @property({ group: '角色展示', type: Sprite, tooltip: 'Header/Hero：角色立绘（cardHead 专属图 / 职业雕像兜底）' })
+    heroSprite: Sprite = null!;
 
-    @property({ type: Label, tooltip: 'CostExp/ItemLabel：小字，写「通用 16000 + 兵种 16003」' })
-    expCostItemLabel: Label = null!;
+    @property({ group: '角色展示', type: UITransform, tooltip: 'Header/Hero：立绘展示框' })
+    heroTransform: UITransform = null!;
 
-    @property({ type: Label, tooltip: 'Hint：底部提示（材料不足原因 / 未连接 / 已满级）' })
+    @property({ group: '基本信息', type: Label, tooltip: 'Header/PowerPill/PowerLabel：战力数值（战力系统未落地，占位）' })
+    powerLabel: Label = null!;
+
+    @property({ group: '基本信息', type: Label, tooltip: 'SkillChain/LevelPlate/LevelLabel：等级牌数字' })
+    levelBigLabel: Label = null!;
+
+    @property({ group: '技能天赋', type: Node, tooltip: 'SkillChain：技能链容器（CardDetailHexSlot 从这里收集）' })
+    chainRoot: Node = null!;
+
+    @property({ group: '升级操作', type: Label, tooltip: '升级按钮下方的当前等级与目标等级' })
+    levelTransitionLabel: Label = null!;
+
+    @property({ group: '技能天赋', type: VirtualScrollView, tooltip: '技能天赋不等高虚拟列表' })
+    milestoneScroll: VirtualScrollView = null!;
+
+    @property({ group: '基础属性', type: Label, tooltip: 'StatsPanel/StatHp/ValueLabel：兵种血量' })
+    statHpValue: Label = null!;
+
+    @property({ group: '基础属性', type: Label, tooltip: 'StatsPanel/StatHp/GainLabel：兵种血量增量' })
+    statHpGain: Label = null!;
+
+    @property({ group: '基础属性', type: Label, tooltip: 'StatsPanel/StatAttack/ValueLabel：攻击力' })
+    statAttackValue: Label = null!;
+
+    @property({ group: '基础属性', type: Label, tooltip: 'StatsPanel/StatAttack/GainLabel：攻击力增量' })
+    statAttackGain: Label = null!;
+
+    @property({ group: '基础属性', type: Label, tooltip: 'StatsPanel/StatBuildHp/ValueLabel：建筑血量' })
+    statBuildHpValue: Label = null!;
+
+    @property({ group: '基础属性', type: Label, tooltip: 'StatsPanel/StatBuildHp/GainLabel：建筑血量增量' })
+    statBuildHpGain: Label = null!;
+
+    @property({ group: '基础属性', type: Label, tooltip: 'StatsPanel/StatSpawn/ValueLabel：生产时间' })
+    statSpawnValue: Label = null!;
+
+    @property({ group: '基础属性', type: Label, tooltip: 'StatsPanel/StatRange/ValueLabel：攻击范围' })
+    statRangeValue: Label = null!;
+
+    @property({ group: '基础属性', type: Label, tooltip: 'StatsPanel/StatRange/GainLabel：攻击范围增量' })
+    statRangeGain: Label = null!;
+
+    @property({ group: '基础属性', type: Label, tooltip: 'StatsPanel/StatSpeed/ValueLabel：移动速度' })
+    statSpeedValue: Label = null!;
+
+    @property({ group: '基础属性', type: Label, tooltip: 'StatsPanel/StatSpeed/GainLabel：移动速度增量' })
+    statSpeedGain: Label = null!;
+
+    @property({ group: '升级操作', type: Label, tooltip: 'UpgradePanel/Hint：提示（材料不足原因 / 未连接 / 已满级）' })
     hintLabel: Label = null!;
 
-    @property({ type: Button, tooltip: 'BtnUpgrade 上的 cc.Button（**绑组件不绑节点**）' })
+    @property({ group: '升级操作', type: Button, tooltip: 'UpgradePanel/BtnUpgrade 上的 cc.Button（**绑组件不绑节点**）' })
     upgradeButton: Button = null!;
 
-    @property({ type: Label, tooltip: 'BtnUpgrade/Label：按钮文案' })
+    @property({ group: '升级操作', type: Label, tooltip: 'UpgradePanel/BtnUpgrade/Label：按钮文案' })
     upgradeLabel: Label = null!;
 
+    @property({ group: '升级材料', type: Label, tooltip: 'UpgradePanel/MatCard/CountLabel：卡牌数量「持有/需要」' })
+    matCardCountLabel: Label = null!;
+
+    @property({ group: '升级材料', type: Label, tooltip: 'UpgradePanel/MatCardName：材料卡名（读 cardLevelUp.name，如「豌豆游侠」）' })
+    matCardItemLabel: Label = null!;
+
+    @property({ group: '升级材料', type: Sprite, tooltip: '卡牌材料图标，复用消耗物品的 item.icon' })
+    matCardIcon: Sprite = null!;
+
+    @property({ group: '升级材料', type: Sprite, tooltip: '经验材料图标，复用通用经验或兵种经验的 item.icon' })
+    matExpIcon: Sprite = null!;
+
+    @property({ group: '升级材料', type: Label, tooltip: 'UpgradePanel/MatExp/CountLabel：经验数量「合计持有/需要」' })
+    matExpCountLabel: Label = null!;
+
+    @property({ group: '升级材料', type: Label, tooltip: 'UpgradePanel/MatExp/ItemLabel：小字，写「通用 16000 + 兵种 16003」' })
+    matExpItemLabel: Label = null!;
+
+    @property({ group: '导航按钮', type: Button, tooltip: '左上角返回/CloseBtn 上的 cc.Button（**绑组件不绑节点**）' })
+    closeButton: Button = null!;
+
+    @property({ group: '导航按钮', type: Button })
+    teamButton: Button = null!;
+
+    @property({ group: '导航按钮', type: Button })
+    previousButton: Button = null!;
+
+    @property({ group: '导航按钮', type: Button })
+    nextButton: Button = null!;
+
     /**
-     * 「技能」按钮：打开独立的技能面板弹窗。
-     *
-     * 技能列表**不塞进本弹窗**：本弹窗纵向已被卡面 / 信息 / 消耗 / 经验 / 提示 /
-     * 升级按钮占满（背景 651×982），硬塞会与「卡牌」「经验」两行文字重叠。
-     * 允许为空 —— 没配这个按钮时技能入口就只从卡牌页走。
+     * 「技能」按钮：打开独立的技能面板弹窗（详情页技能链格子也可进入）。
+     * 允许为空 —— 没配这个按钮时技能入口就只从技能链格子走。
      */
-    @property({ type: Button, tooltip: 'BtnSkill 上的 cc.Button（**绑组件不绑节点**；可留空）' })
+    @property({ group: '技能天赋', type: Button, tooltip: '可选的技能入口按钮（**绑组件不绑节点**；可留空）' })
     skillButton: Button | null = null;
 
-    @property({ type: Color, tooltip: '材料已满足时的文字颜色（样式放 Inspector，代码不写死）' })
+    @property({ group: '材料状态色', type: Color, tooltip: '材料已满足时的文字颜色（样式放 Inspector，代码不写死）' })
     enoughColor: Color = new Color(104, 218, 59, 255);
 
-    @property({ type: Color, tooltip: '材料不足时的文字颜色' })
+    @property({ group: '材料状态色', type: Color, tooltip: '材料不足时的文字颜色' })
     lackColor: Color = new Color(226, 88, 74, 255);
 
-    @property({ type: Color, tooltip: '已满级 / 无配置时的文字颜色' })
+    @property({ group: '材料状态色', type: Color, tooltip: '已满级 / 无配置时的文字颜色' })
     idleColor: Color = new Color(176, 168, 150, 255);
 
-    protected onInit(): void {
-        this.titleLabel.string = CARD_LINEUP_TEXTS.upgradeTitle;
-        this.cardCostNameLabel.string = CARD_LINEUP_TEXTS.upgradeCardRow;
-        this.expCostNameLabel.string = CARD_LINEUP_TEXTS.upgradeExpRow;
-        //  打开瞬间的初始文案由 render 按真实等级覆盖。
-        //  按「1 级」写，于是仍然是「升级」；走同一个函数是为了让按钮文案**只有一个来源**，
-        //  否则 0 级卡在打开的第一帧会闪一下「升级」。
-        this.upgradeLabel.string = upgradeButtonText(1, false);
+    /** 技能链格子（onInit 收集一次，按节点名 Hex0..4 排序）。 */
+    private hexSlots: readonly CardDetailHexSlot[] = [];
 
-        //  CLICK 是挂在**节点**上的（Button 自身没有 on），别写成 button.on(...)。
+    private milestones: CardDetailPresentation['milestones'] = [];
+
+    protected onInit(): void {
+        this.upgradeLabel.string = upgradeButtonText(1, false);
+        //  打开瞬间的初始文案由 render 按真实等级覆盖。
+        //  按「1 级」写，于是仍然是「升级」；走同一个函数是为了让按钮文案**只有一个来源**。
         this.closeButton.node.on(Button.EventType.CLICK, this.onCloseClick, this);
+        this.teamButton.node.on(Button.EventType.CLICK, this.onTeamClick, this);
+        this.previousButton.node.on(Button.EventType.CLICK, this.onPreviousClick, this);
+        this.nextButton.node.on(Button.EventType.CLICK, this.onNextClick, this);
         this.upgradeButton.node.on(Button.EventType.CLICK, this.onUpgradeClick, this);
         this.skillButton?.node.on(Button.EventType.CLICK, this.onSkillClick, this);
+
+        // 技能链按节点名排序，里程碑交给虚拟列表复用。
+        this.hexSlots = this.chainRoot.getComponentsInChildren(CardDetailHexSlot)
+            .slice()
+            .sort((a, b) => a.node.name.localeCompare(b.node.name));
+        for (const slot of this.hexSlots) slot.node.on(Button.EventType.CLICK, this.onSkillClick, this);
+        this.milestoneScroll.getItemTypeIndexFn = () => 0;
+        this.milestoneScroll.renderItemFn = (node, index) => {
+            node.getComponent(CardDetailMilestoneRow).render(this.milestones[index]);
+        };
     }
 
     protected onOpen(): void {
         this.upgradeButton.interactable = false;
-        this.cardFace.spriteFrame = null;
-        this.cardBadge.spriteFrame = null;
-        applyCardHeadArt({ hero: this.cardHero, headIcon: this.cardHeadIcon }, null, null);
+        this.heroSprite.spriteFrame = null;
+        this.qualitySprite.spriteFrame = null;
+        applyCardHeroArt(this.heroSprite, this.heroTransform, null);
     }
 
     private readonly onSkillClick = (): void => {
         EventMgr.instance.emit(CardPopupEvent.UpgradeIntent, { owner: this, kind: 'skills' });
     };
 
-    /** 唯一的写 UI 入口：卡面 → 升级状态。 */
+    private readonly onTeamClick = (): void => {
+        EventMgr.instance.emit(CardPopupEvent.UpgradeIntent, { owner: this, kind: 'team' });
+    };
+
+    private readonly onPreviousClick = (): void => {
+        EventMgr.instance.emit(CardPopupEvent.UpgradeIntent, { owner: this, kind: 'previous' });
+    };
+
+    private readonly onNextClick = (): void => {
+        EventMgr.instance.emit(CardPopupEvent.UpgradeIntent, { owner: this, kind: 'next' });
+    };
+
+    /** 唯一的写 UI 入口：头部 + 详情区 + 升级状态。 */
     render(data: CardUpgradePresentation): void {
-        this.nameLabel.string = data.data.card?.name ?? data.cardId;
-        this.renderCardFace(data);
+        this.renderRevision++;
+        this.renderHeader(data);
+        this.levelBigLabel.string = `${CARD_LINEUP_TEXTS.detailMilestonePrefix}${data.level}`;
+        this.levelTransitionLabel.string = `${CARD_LINEUP_TEXTS.detailTabLevel} ${data.level}`;
+        const navigating = data.phase !== 'submitting';
+        this.teamButton.interactable = navigating;
+        this.previousButton.interactable = navigating;
+        this.nextButton.interactable = navigating;
+        this.renderDetail(data.detail);
         if (data.status) {
             this.renderStatus(data.status, data.phase);
             return;
         }
         this.upgradeButton.interactable = false;
-        //  提交中按钮文案保持常态（「升级」/「解锁」）：进行中的状态提示由通用 loading 全屏承担，
-        //  按钮不再显示「升级中…」，避免 loading 遮罩下按钮文案与 loading 文字重复。
+        //  提交中按钮文案保持常态（「升级」/「解锁」）：进行中的状态提示由通用 loading 全屏承担。
         this.upgradeLabel.string = upgradeButtonText(data.level, false);
-        this.levelLabel.string = `${data.level}${CARD_LINEUP_TEXTS.levelSuffix}`;
-        this.cardCostCountLabel.string = '';
-        this.cardCostItemLabel.string = '';
-        this.expCostCountLabel.string = '';
-        this.expCostItemLabel.string = '';
-        this.cardCostCountLabel.color = this.idleColor;
-        this.expCostCountLabel.color = this.idleColor;
+        this.matCardCountLabel.string = '';
+        this.matCardItemLabel.string = '';
+        this.matExpCountLabel.string = '';
+        this.matExpItemLabel.string = '';
+        this.matCardIcon.spriteFrame = null;
+        this.matExpIcon.spriteFrame = null;
+        this.matCardCountLabel.color = this.idleColor;
+        this.matExpCountLabel.color = this.idleColor;
         this.hintLabel.color = this.lackColor;
         this.hintLabel.string = data.phase === 'failed' ? CARD_LINEUP_TEXTS.upgradeFailed : '';
     }
@@ -147,63 +261,183 @@ export class CardUpgradePage extends PopupBase {
         return !!this.node && this.node.isValid;
     }
 
-    /** 卡面四张图：与卡库里那张卡同一套映射（品级 → 卡面，职业 → 角标 / 雕像，头像 → 按卡）。 */
-    private renderCardFace(data: CardUpgradePresentation): void {
+    // ------------------------------------------------------------------
+    // 头部：名字 / 品质 / 种族职业 / 立绘 / 战力
+    // ------------------------------------------------------------------
+
+    private renderHeader(data: CardUpgradePresentation): void {
         const card = data.data.card;
-        const scope = this.resourceScope;
-        const revision = ++this.artRevision;
-        if (!card) {
-            this.cardFace.spriteFrame = null;
-            this.cardBadge.spriteFrame = null;
-            applyCardHeadArt({ hero: this.cardHero, headIcon: this.cardHeadIcon }, null, null);
-            return;
+        const texts = CARD_LINEUP_TEXTS;
+        this.nameLabel.string = card?.name ?? data.cardId;
+        if (card) {
+            const camp = resolveCardCamp(card);
+            this.campTagRoot.active = camp !== null;
+            if (camp) this.tagCampLabel.string = ZC_CARD_CAMP_NAMES[camp];
+            const cardClass = resolveCardClass(card);
+            this.tagClassLabel.string = ZC_CARD_CLASS_NAMES[cardClass];
+            this.qualityLabel.string = `${card.rarity}${texts.detailQualityGrade}`;
+            const diamond = DIAMOND_ART[card.rarity];
+            if (diamond) this.loadDetailFrame(diamond, (frame) => { if (frame) this.qualitySprite.spriteFrame = frame; });
+        } else {
+            this.campTagRoot.active = false;
+            this.tagClassLabel.string = '';
+            this.qualityLabel.string = '';
         }
-        void cardArtProvider.loadLineupCard(card).then((frames) => {
-            if (scope.disposed || !this.alive || revision !== this.artRevision) return;
-            this.cardFace.spriteFrame = frames.face;
-            this.cardBadge.spriteFrame = frames.badge;
-            // 与卡库同一入口：有头像铺头像、没头像退回雕像立绘（互斥显隐）。
-            //  本类的两个 Sprite 叫 `cardHero` / `cardHeadIcon`（不是 `hero` / `headIcon`），
-            //  结构上不满足 `CardHeadSlots`，所以显式组一个 —— 别为了少写这行去改名，
-            //  这两个属性名是 prefab 上已绑的。
-            applyCardHeadArt({ hero: this.cardHero, headIcon: this.cardHeadIcon }, frames.hero, frames.head);
-        }).catch(error => { if (!scope.disposed && this.alive) console.error('[CardUpgradePage] 卡面加载失败', error); });
+        // 战力系统未落地：占位（Inspector 的 powerLabel 预置文案 / 数据为空显示占位符）。
+        this.powerLabel.string = `${texts.detailPower} ${data.detail?.powerText || '--'}`;
+        this.renderHero(card);
     }
 
-    /** 把判定结果铺到界面上（这是本弹窗**唯一**的写 UI 入口）。 */
+    /** 优先展示对应兵种的循环待机，缺少模型或 idle 时保留原立绘。 */
+    private renderHero(card: CardUpgradePresentation['data']['card']): void {
+        const key = card ? `${card.id}|${card.rarity}|${card.unitId}|${card.unitPrefabPath}` : null;
+        if (key !== null && key === this.heroKey) return;
+        this.heroKey = key;
+        const scope = this.resourceScope;
+        const revision = ++this.artRevision;
+        this.preview?.clear();
+        applyCardHeroArt(this.heroSprite, this.heroTransform, null);
+        if (!card) {
+            return;
+        }
+        if (!this.previewAssets) {
+            const assets = this.assets;
+            this.previewAssets = new CardUnitPreviewAssets((path) => assets.load(path, Prefab));
+        }
+        // 立绘先展示；模型仍并行加载，挂载时等待立绘归一缩放完成。
+        const artReady = cardArtProvider.loadLineupCard(card).then(frames => {
+            if (scope.disposed || !this.alive || revision !== this.artRevision) return;
+            applyCardHeroArt(this.heroSprite, this.heroTransform, frames.hero);
+        });
+        void Promise.all([artReady, this.previewAssets.load(card)]).then(([, prefab]) => {
+            if (scope.disposed || !this.alive || revision !== this.artRevision) return;
+            if (!this.preview) {
+                const preview = new CardUnitPreview(this.heroSprite, 270);
+                this.preview = preview;
+                scope.defer(() => { preview.clear(); });
+            }
+            this.preview.show(prefab);
+        }).catch(error => { if (!scope.disposed && this.alive) console.error('[CardUpgradePage] 待机预览加载失败', error); });
+    }
+
+    // ------------------------------------------------------------------
+    // 详情区：六维 / 技能链 / 里程碑
+    // ------------------------------------------------------------------
+
+    private renderDetail(detail: CardDetailPresentation | null): void {
+        const texts = CARD_LINEUP_TEXTS;
+        if (!detail) {
+            for (const label of this.statValueLabels().values()) label.string = '--';
+            for (const label of this.statGainLabels().values()) label.string = '';
+            this.levelBigLabel.string = this.levelBigLabel.string || '0';
+            for (const slot of this.hexSlots) this.renderHexSlot(slot, null);
+            this.milestones = [];
+            this.milestoneScroll.refreshList(0);
+            return;
+        }
+        const values = this.statValueLabels();
+        const gains = this.statGainLabels();
+        for (const line of detail.stats) {
+            const valueLabel = values.get(line.key);
+            if (valueLabel) valueLabel.string = line.value;
+            const gainLabel = gains.get(line.key);
+            if (gainLabel) gainLabel.string = line.gain;
+        }
+        this.hexSlots.forEach((slot, index) => this.renderHexSlot(slot, detail.chain[index] ?? null));
+        this.milestones = detail.milestones;
+        // 数据改变后清除旧行高，实际可见行由虚拟列表测量并复用。
+        this.milestoneScroll.refreshList(0);
+        this.milestoneScroll.refreshList(this.milestones.length);
+        this.milestoneScroll.scrollToTop(false);
+    }
+
+    private renderHexSlot(slot: CardDetailHexSlot, data: CardDetailSkillSlot | null): void {
+        const texts = CARD_LINEUP_TEXTS;
+        if (!data || data.empty) {
+            slot.interactable = false;
+            this.loadDetailFrame('hex_lock', (frame) => { if (frame) slot.hexSprite.spriteFrame = frame; });
+            slot.nameLabel.string = texts.detailChainLocked;
+            slot.nameLabel.color = this.idleColor;
+            if (slot.badgeSprite) slot.badgeSprite.node.active = false;
+            if (slot.badgeLabel) slot.badgeLabel.string = '';
+            return;
+        }
+        slot.interactable = true;
+        const art = data.unlocked ? (slot.node.name === 'Hex0' ? 'hex_counter' : 'hex_passive') : 'hex_lock';
+        this.loadDetailFrame(`${art}`, (frame) => { if (frame) slot.hexSprite.spriteFrame = frame; });
+        slot.nameLabel.string = data.name || texts.detailChainLocked;
+        slot.nameLabel.color = data.unlocked ? slot.unlockedColor : this.idleColor;
+        if (slot.badgeSprite) slot.badgeSprite.node.active = data.unlockLevel > 0;
+        if (slot.badgeLabel) slot.badgeLabel.string = data.unlockLevel > 0 ? `${data.unlockLevel}` : '';
+    }
+
+    private statValueLabels(): ReadonlyMap<StatKey, Label> {
+        return new Map<StatKey, Label>([
+            ['hp', this.statHpValue],
+            ['attack', this.statAttackValue],
+            ['buildHp', this.statBuildHpValue],
+            ['spawn', this.statSpawnValue],
+            ['range', this.statRangeValue],
+            ['speed', this.statSpeedValue],
+        ]);
+    }
+
+    private statGainLabels(): ReadonlyMap<StatKey, Label> {
+        return new Map<StatKey, Label>([
+            ['hp', this.statHpGain],
+            ['attack', this.statAttackGain],
+            ['buildHp', this.statBuildHpGain],
+            ['range', this.statRangeGain],
+            ['speed', this.statSpeedGain],
+        ]);
+    }
+
+    /** 升级可能改变技能锁定态，旧渲染的迟到切图不能覆盖新状态。 */
+    private loadDetailFrame(name: string, apply: (frame: SpriteFrame | null) => void): void {
+        const scope = this.resourceScope;
+        const revision = this.renderRevision;
+        void loadCardDetailArt(name).then((frame) => {
+            if (scope.disposed || !this.alive || revision !== this.renderRevision) return;
+            apply(frame);
+        }).catch(error => { if (!scope.disposed && this.alive) console.error('[CardUpgradePage] 详情切图加载失败', name, error); });
+    }
+
+    // ------------------------------------------------------------------
+    // 固定底栏：原升级判定与提示语义保持不变
+    // ------------------------------------------------------------------
+
+    /** 把判定结果铺到升级面板（这是升级侧**唯一**的写 UI 入口）。 */
     private renderStatus(status: ZCUpgradeStatus, phase: CardUpgradePhase): void {
         const texts = CARD_LINEUP_TEXTS;
-
-        // ---- 等级：可升时写「3级 → 4级」，满级 / 无配置只写当前等级 ----
-        const current = `${status.level}${texts.levelSuffix}`;
-        if (status.configured && !status.maxed) {
-            this.levelLabel.string = `${current}${texts.upgradeLevelArrow}${status.targetLevel}${texts.levelSuffix}`;
-        } else {
-            this.levelLabel.string = current;
-        }
+        this.renderMaterialIcon(this.matCardIcon, [status.requirements.find(row => row.key === 'card')?.itemId ?? '']);
+        this.renderMaterialIcon(this.matExpIcon, [status.generalExpItemId, status.armyExpItemId]);
+        this.levelTransitionLabel.string = status.maxed
+            ? texts.upgradeMaxed
+            : `${texts.detailTabLevel} ${status.level}${texts.upgradeLevelArrow}${status.targetLevel}`;
 
         // ---- 两行材料 ----
         const [cardRow, expRow] = status.requirements;
         if (cardRow) {
-            this.cardCostCountLabel.string = `${cardRow.owned}${texts.progressSeparator}${cardRow.need}`;
-            this.cardCostCountLabel.color = cardRow.enough ? this.enoughColor : this.lackColor;
-            this.cardCostItemLabel.string = `ID ${cardRow.itemId}`;
+            this.matCardCountLabel.string = `${cardRow.owned}${texts.progressSeparator}${cardRow.need}`;
+            this.matCardCountLabel.color = cardRow.enough ? this.enoughColor : this.lackColor;
+            // 卡牌名读 `cardLevelUp.name`（表里已按 pvpCard 对齐）；老表没名字时退回通用文案。
+            this.matCardItemLabel.string = cardRow.name || texts.upgradeCardRow;
         } else {
-            this.cardCostCountLabel.string = `${texts.progressSeparator}${texts.progressSeparator}`;
-            this.cardCostCountLabel.color = this.idleColor;
-            this.cardCostItemLabel.string = '';
+            this.matCardCountLabel.string = `${texts.progressSeparator}${texts.progressSeparator}`;
+            this.matCardCountLabel.color = this.idleColor;
+            this.matCardItemLabel.string = '';
         }
         if (expRow) {
-            this.expCostCountLabel.string = `${expRow.owned}${texts.progressSeparator}${expRow.need}`;
-            this.expCostCountLabel.color = expRow.enough ? this.enoughColor : this.lackColor;
+            this.matExpCountLabel.string = `${expRow.owned}${texts.progressSeparator}${expRow.need}`;
+            this.matExpCountLabel.color = expRow.enough ? this.enoughColor : this.lackColor;
             // 经验是「通用 + 兵种」合计 —— 把拆分写在下面，否则玩家看不懂这个和是怎么来的。
-            this.expCostItemLabel.string =
+            this.matExpItemLabel.string =
                 `${texts.upgradeExpDetail} ${status.generalExpOwned}` +
                 `${texts.upgradeExpDetailJoin}${status.armyExpOwned}`;
         } else {
-            this.expCostCountLabel.string = `${texts.progressSeparator}${texts.progressSeparator}`;
-            this.expCostCountLabel.color = this.idleColor;
-            this.expCostItemLabel.string = '';
+            this.matExpCountLabel.string = `${texts.progressSeparator}${texts.progressSeparator}`;
+            this.matExpCountLabel.color = this.idleColor;
+            this.matExpItemLabel.string = '';
         }
 
         // ---- 按钮与提示 ----
@@ -221,8 +455,7 @@ export class CardUpgradePage extends PopupBase {
             return;
         }
         const submitting = phase === 'submitting';
-        //  提交中按钮文案保持常态：进行中由通用 loading 提示，
-        //  不显示「升级中…」（`submitting` 仍用于按钮置灰与提示分支）。
+        //  提交中按钮文案保持常态：进行中由通用 loading 提示，不显示「升级中…」。
         this.upgradeLabel.string = upgradeButtonText(status.level, false);
         if (phase === 'offline' || phase === 'failed') {
             this.hintLabel.string = phase === 'offline' ? texts.upgradeOffline : texts.upgradeFailed;
@@ -235,6 +468,27 @@ export class CardUpgradePage extends PopupBase {
         this.upgradeButton.interactable = status.canUpgrade && !submitting;
     }
 
+    /** 经验合计优先通用经验，未配图时取兵种经验；始终复用物品表图标。 */
+    private renderMaterialIcon(sprite: Sprite, itemIds: readonly string[]): void {
+        const scope = this.resourceScope;
+        const revision = this.renderRevision;
+        sprite.spriteFrame = null;
+        void (async () => {
+            for (const id of itemIds) {
+                if (!id) continue;
+                const item = await itemDetailRepository.loadItemRow(Number(id));
+                if (scope.disposed || !this.alive || revision !== this.renderRevision) return;
+                if (!item || !item.icon) continue;
+                const frame = await loadItemIconArt(item.icon);
+                if (scope.disposed || !this.alive || revision !== this.renderRevision) return;
+                sprite.spriteFrame = frame;
+                return;
+            }
+        })().catch(error => {
+            if (!scope.disposed && this.alive) console.error('[CardUpgradePage] 物品图标加载失败', error);
+        });
+    }
+
     private onCloseClick(): void {
         this.closeByButton();
     }
@@ -243,5 +497,12 @@ export class CardUpgradePage extends PopupBase {
         EventMgr.instance.emit(CardPopupEvent.UpgradeIntent, { owner: this, kind: 'submit' });
     };
 
-    protected onClose(): void { this.artRevision++; }
+    protected onClose(): void {
+        this.artRevision++;
+        this.renderRevision++;
+        this.preview?.clear();
+        this.preview = null;
+        this.previewAssets = null;
+        this.heroKey = null;
+    }
 }

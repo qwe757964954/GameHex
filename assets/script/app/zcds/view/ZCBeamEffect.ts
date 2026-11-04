@@ -41,6 +41,30 @@ export interface IZCBeamSpec {
     /** 美术缺失时的兜底线宽（视图 px），与 `widthScale` 同一套追加倍率。 */
     readonly coreWidth: number;
     /**
+     * 末端**竖直**再抬多少（视图 px，世界竖直、不跟弹道旋转）。
+     *
+     * 2026-11-03 需求：「光柱尾端命中目标的判断不够准，应该再长一点，和目标角色的模型的中心坐标」。
+     * 两件事叠在一起才看得出「没打到人」：
+     *   ① 碰撞判定用的是**受击圈**，弹道被摘掉时钉在圈的**边缘**而不是圆心；
+     *   ② 单位根节点是**脚点**，而模型中心在脚点上方几十像素。
+     * 所以末端要沿竖直方向补这一截，让线头落在身体上而不是脚下。
+     *
+     * 只改终点、不改发射口 —— 长射程下角度几乎不动，短射程时会自然抬高成一个上挑角度，
+     * 正好就是「瞄准身上」的观感。
+     */
+    readonly tailLift?: number;
+    /**
+     * 「超长射线」的固定长度（视图 px）：登记了它的技能**不看实际到达点**，一律拉这么长。
+     *
+     * 2026-11-03 需求：「镭射死光的起始位置应该是镭射飞龙的眼睛位置，终点位置才是屏幕位置
+     * （或者是一个超长的单位距离 18 个格子长），但是尾端的方向需要朝向目标」。
+     * 18 格 × 90px/格 = 1620 —— 比一屏还长，所以"打到屏幕外"天然成立。
+     *
+     * 方向仍由调用方给的瞄准点决定：视图这一支传**目标坐标**而不是弹头坐标，
+     * 否则第一帧弹头还在发射口、方向算出来是"朝右"（`span = 0` 的退化分支）。
+     */
+    readonly overShootBySkill?: Readonly<Record<number, number>>;
+    /**
      * 按技能 id 追加的宽度**倍率**（在 `widthScale` 之上再乘）。
      *
      * 为什么需要：普攻（30719）与「镭射死光」（30845，走 `empoweredSkillId`）**共用同一份美术**，
@@ -67,10 +91,15 @@ const BEAM_BY_PREFAB_PATH: Readonly<Record<string, IZCBeamSpec>> = {
         //  实测自 `atlas/zheerniyasi_buff-xian_loop_00.png` 的不透明包围盒：x ∈ [32, 556]。
         contentStart: 32 / 640,
         contentEnd: 556 / 640,
-        widthScale: 1.8,
+        widthScale: 1.26,
         coreWidth: 10,
+        //  末端补到**模型中心**（2026-11-03 用户截图：线头停在目标脚下，看着"没打到人"）。
+        //  30 是「脚点 → 胸口」的视图距离；改这个数只影响线头高低，不参与任何结算。
+        tailLift: 30,
         //  「镭射死光」= 同一根光束的加粗版（设计案 L1/L2/L3 的 1.0/1.3/1.6 先落到 1.3 这一档）。
         widthMultiplierBySkill: { 30845: 1.3 },
+        //  「镭射死光」是一道贯穿全屏的超长射线：18 格 × 90px/格 = 1620（比一屏还长）。
+        overShootBySkill: { 30845: 1620 },
     },
 };
 
@@ -89,6 +118,13 @@ export function zcBeamCoreWidthOf(spec: IZCBeamSpec, skillId: number | undefined
 
 function beamMultiplierOf(spec: IZCBeamSpec, skillId: number | undefined): number {
     return skillId === undefined ? 1 : (spec.widthMultiplierBySkill?.[skillId] ?? 1);
+}
+
+/** 这条技能是不是「超长射线」，是的话固定拉多长（视图 px）；0 = 不是。 */
+export function zcBeamOvershootOf(spec: IZCBeamSpec, skillId: number | undefined): number {
+    if (skillId === undefined) return 0;
+    const reach = spec.overShootBySkill?.[skillId] ?? 0;
+    return Number.isFinite(reach) && reach > 0 ? reach : 0;
 }
 
 /** 特效路径 → 光束配置。未登记 = `null`（走通用弹道）。 */
@@ -122,9 +158,13 @@ export function zcBeamFrame(
     from: Readonly<{ x: number; y: number }>,
     to: Readonly<{ x: number; y: number }>,
     spec: IZCBeamSpec,
+    skillId?: number,
 ): IZCBeamFrame {
-    const dx = to.x - from.x;
-    const dy = to.y - from.y;
+    //  末端抬到模型中心（尾端「再长一点」）；缺省 0 ⇒ 与改前逐字一致。
+    const endX = to.x;
+    const endY = to.y + (spec.tailLift ?? 0);
+    const dx = endX - from.x;
+    const dy = endY - from.y;
     const span = Math.hypot(dx, dy);
     // 两端重合（刚出手那一帧）时没有方向可言，按"朝右"退化成一条最短的线。
     const angle = span === 0 ? 0 : Math.atan2(dy, dx);
@@ -133,11 +173,17 @@ export function zcBeamFrame(
     const forward = Math.min(spec.muzzleForward, span * 0.5);
     const x = from.x + Math.cos(angle) * forward;
     const y = from.y + Math.sin(angle) * forward + spec.muzzleLift;
+    //  超长射线（镭射死光）：长度写死，不看实际到达点 —— 它要的是"一路射到屏幕外"，
+    //  而不是"打到谁就停在谁身上"。方向仍来自 `to`（调用方传的是目标坐标）。
+    const overshoot = zcBeamOvershootOf(spec, skillId);
+    const length = overshoot > 0
+        ? overshoot
+        : Math.max(ZC_BEAM_MIN_LENGTH, Math.hypot(endX - x, endY - y));
     return {
         x,
         y,
         angleDegrees: angle * 180 / Math.PI,
-        length: Math.max(ZC_BEAM_MIN_LENGTH, Math.hypot(to.x - x, to.y - y)),
+        length,
     };
 }
 

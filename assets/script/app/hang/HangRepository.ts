@@ -144,7 +144,7 @@ export const HJ_AD_TYPE_SWEEP = 11;
  *
  * | 事实 | 出处 |
  * |---|---|
- * | 策划源表 `doc/塔防数据配置/json/client/open.json`（64 行）**没有** `LayerHang` 行 | 全量枚举过 |
+ * | 策划源表 `doc/塔防数据配置/json/client/open.json`（65 行）**没有** `LayerHang` 行 | 全量枚举过 |
  * | 老端 `client/assets/remoteRef/open.json` 也没有 | 同上 |
  * | 老端打开征收走的是跳转：`ViewJump.ts:40` `case JUMP_TYPE.HANG: CtrlHang.openLayerHang()` | 另有 `GObjChapterSelect.ts:469` 直接 `openLayerHang()` |
  *

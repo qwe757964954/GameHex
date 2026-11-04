@@ -1,7 +1,7 @@
 import { ControllerBase } from '../assets/script/framework/controller/ControllerBase';
 import { VIEW_LIFECYCLE } from '../assets/script/framework/ui/ViewLifecycle';
 import { MainTabController } from '../assets/script/app/main/MainTabController';
-import { MainTab } from '../assets/script/app/main/MainTabModel';
+import { MainTab, isMainTabLocked } from '../assets/script/app/main/MainTabModel';
 import { MainTabEvent } from '../assets/script/app/main/MainTabEvents';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { componentControllerModule } from './helpers/controller-context';
@@ -39,7 +39,7 @@ function harness(worldGate?: Promise<void>) {
             dispose() {}
         } };
         if (name.endsWith('/MainTabController')) return { MainTabController };
-        if (name.endsWith('/MainTabModel')) return { MainTab };
+        if (name.endsWith('/MainTabModel')) return { MainTab, isMainTabLocked };
         if (name.endsWith('/MainTabEvents')) return { MainTabEvent };
         if (name.endsWith('/EventMgr')) return { EventMgr };
         if (name.endsWith('/ComponentController')) return componentControllerModule(context);
@@ -207,12 +207,13 @@ test('MainRoot 不再强引用五个功能页，首屏只请求主城页', async
 });
 
 test('快速切页和重复点击只显示最后目标，过期资源释放', async () => {
-    const h=harness();const first=h.host.switchTab(0),duplicate=h.host.switchTab(0),last=h.host.switchTab(2);
+    // 2026-11-04 角色格进未开放名单 ⇒ 这里改写「未锁的最后一格」= 领地(3)，语义不变。
+    const h=harness();const first=h.host.switchTab(0),duplicate=h.host.switchTab(0),last=h.host.switchTab(3);
     assert.equal(h.requests.length,2);
     assert.equal(h.requests[0].scope.disposed,true);
-    h.requests[1].resolve({name:'role'});await last;
+    h.requests[1].resolve({name:'arena'});await last;
     h.requests[0].resolve({name:'shop'});await Promise.all([first,duplicate]);
-    assert.deepEqual(h.pages.map(p=>p.name),['role']);assert.deepEqual(h.selected,[2]);
+    assert.deepEqual(h.pages.map(p=>p.name),['arena']);assert.deepEqual(h.selected,[3]);
     h.host.onDestroy();assert.equal(h.requests[1].scope.disposed,true);
 });
 
@@ -220,7 +221,8 @@ test('新页失败保留当前页，销毁宿主后迟到完成不能创建页�
     const h=harness();const first=h.host.switchTab(3);h.requests[0].resolve({name:'arena'});await first;
     const failed=h.host.switchTab(0);h.requests[1].reject(new Error('offline'));await failed;
     assert.equal(h.pages[0].destroyed,false);assert.equal(h.host.currentTab,3);
-    const late=h.host.switchTab(2);h.host.onDestroy();h.requests[2].resolve({name:'role'});await late;
+    // 迟到的那次也走未锁的商店格（角色格已锁，locked 不发请求 ⇒ 断不到「迟到完成」）
+    const late=h.host.switchTab(0);h.host.onDestroy();h.requests[2].resolve({name:'store'});await late;
     assert.equal(h.pages.length,1);assert.equal(h.requests[2].scope.disposed,true);
 });
 
@@ -241,14 +243,14 @@ test('真实世界按钮取消未完成切页，迟到页不能覆盖世界高�
 test('首屏失败或被另一前台切页取消后不弹首充、不重新派发预热', async () => {
     for (const cancelled of [false, true]) {
         const h = harness(); h.host.defaultTab = 3; h.host.onLoad();
-        const other = cancelled ? h.host.switchTab(2) : null;
+        const other = cancelled ? h.host.switchTab(0) : null;
         if (cancelled) h.requests[0].resolve({ name: 'late-arena' });
         else h.requests[0].reject(new Error('offline'));
         await new Promise(resolve => setImmediate(resolve));
         for (const callback of h.scheduled) callback();
         assert.equal(h.firstRechargeChecks, 0);
         assert.equal(h.warmups, 0);
-        if (other) { h.requests[1].resolve({ name: 'role' }); await other; }
+        if (other) { h.requests[1].resolve({ name: 'store' }); await other; }
         h.host.onDestroy();
     }
 });

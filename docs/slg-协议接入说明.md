@@ -76,7 +76,7 @@
 
 - **势力范围只认 `toCampId`**。`BigMapSlgRepository.campId` 是「我在哪座城」的唯一真源，`bigMapWithinCityRange(city, distance, campId)` 在 `campId > 0` 时只判断「目标城是不是我这座城」，与距离无关；`campId === 0`（还没收到包 / 服务端明确未归属）才回退 `radiateCapacity` 距离，保证离线档与包未到达时不误判。
 - **玩家基地位置也认 `toCampId`**。`BigMapPresenter.playerBaseHexId` = 该城的 `anchorHexId`（2026-10-23 用户确认「玩家基地就固定在 toCampId 那座城的锚点上」），距离显示、回城定位、基地标记、单格染色全部经它；布局档 `bases[].isPlayer.hexId` 只在未归属/城不在图上时兜底。基地与城占格重叠 ⇒ `bigMapOccupantOf(world, hexId, playerBaseHexId)` 在该格**先返回基地**（否则城占格优先，「点自己的基地回基地」永远走不到）；基地位置变化时 `BigMapWorldView` 会重建标记并作废 `contentKey`。
-- **野怪逐级解锁吃 `maxMonsterLevel`**。联机存档是空的（`parseBigMapSave(null)`），本地 `clearedMonsterLevel` 恒 0 会把 `preLevel > 0` 的野怪全锁死；`Presenter.unlockContext` 现在取服务器值与本地值的较大者。
+- **野怪逐级解锁吃 `maxMonsterLevel`**。联机 `unlockContext` 只取服务器最高击杀等级；新表 N 级野怪需最高击杀等级至少为 N−1，`unlockType=0` 不跳过逐级前置。搜索、详情与攻打共用此判定，搜索按基地距离选择最近的可挑战目标。
 - 坏回包（缺字段、越界、非整数）整包作废且**不清空**已有值，避免一次超时把「所处城池」抹成 0；`game` 广播除刷新行动力外同时重拉 `GameInfo`。
 
 ## 验证

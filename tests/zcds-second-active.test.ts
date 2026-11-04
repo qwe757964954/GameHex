@@ -122,8 +122,9 @@ test('六条第二个主动：计划行的 behaviorKey / 关键参数都在', ()
 
     assert.equal(behaviorOf(101003), 'random_strike', '追踪导弹 = 就近多目标 + 落点爆炸');
     assert.deepEqual(
-        [paramsOf(101003).strikeCount, paramsOf(101003).strikeNearest, paramsOf(101003).strikeSplashRadius],
-        [3, 1, 100], 'L1：最近的 3 个 / 爆炸半径 100');
+        [paramsOf(101003).strikeCount, paramsOf(101003).strikeNearest, paramsOf(101003).strikeSplashRadius,
+            paramsOf(101003).strikeSplashDamageRate],
+        [3, 1, 80, 0.5], 'L1：最近的 3 个 / 爆炸半径 80 / 溅射 50%（2026-11-03 需求，由 100/0.3333 上调口径）');
 
     assert.equal(behaviorOf(103103), 'self_cast', '舞王召唤本轮是替代口径（折算成限时增伤）');
 

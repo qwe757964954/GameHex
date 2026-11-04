@@ -2893,8 +2893,8 @@ test('★异步据点点击弹「玩家关卡」弹窗：标题/占领奖励/双
     assert.deepEqual(content.rewards,
         [{ resId: 7, amount: 75 }, { resId: 16014, amount: 8 }, { resId: 12, amount: 8 }],
         '按概率过滤空位、最多 3 格、顺序照配置表');
-    assert.equal(content.scoutCost, 10, '侦查 = 设计稿 10 银币（服务端暂无配置）');
-    assert.equal(content.fightCost, 10, '开战 = 站点 unlock.silverCost');
+    assert.equal(content.scoutCost, 10, '侦查 = 设计稿 10 体力（服务端暂无配置）');
+    assert.equal(content.fightCost, 5, '开战 = 关卡配置的体力（levelInfo.levelCost），不再读解锁银币价');
     assert.equal(content.fightCaption, '开始战斗');
     assert.equal(content.fightEnabled, true);
     assert.equal(h.gatewayCalls.startBattle, 0, '只弹窗，不发开战请求');

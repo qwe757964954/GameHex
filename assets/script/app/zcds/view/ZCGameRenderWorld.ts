@@ -16,7 +16,7 @@ import {
 } from './ZCCombatEffectPlacement';
 import { ZCFloatTextView } from './ZCFloatTextView';
 import { ZCCardRevealView } from './ZCCardRevealView';
-import { ProcedureGame } from '../../procedure/ProcedureGame';
+import type { IZCBattlePresentationArt } from '../application/ZCBattleRuntimeContract';
 import { ZCGameLegendBannerView } from './ZCGameLegendBannerView';
 import { ZCHexView } from './ZCHexView';
 import { ZCGameUiEvent } from './ZCGameHudEvents';
@@ -40,6 +40,7 @@ import type { ZCBattlePresentationEvents, ZCGameRenderFrame } from '../model/ZCG
 import { ZCUnitView } from './ZCUnitView';
 import { ZCUnitRenderInterpolator } from './ZCUnitRenderInterpolator';
 import {
+    zcBuildingArt,
     buildTerritoryBoundaryMasks,
     mapToViewX,
     mapToViewY,
@@ -67,6 +68,15 @@ type ZCRenderEntityKind = 'hex' | 'unit' | 'effect' | 'float' | 'cardReveal' | '
 
 /** 旧测试 frame 缺 `neutralRewards` 字段时的共享空数组（渲染层只读，永不修改）。 */
 const EMPTY_NEUTRAL_REWARDS: readonly Readonly<ZCNeutralReward>[] = [];
+
+/**
+ * 一条技能特效路径「第一次取不到美术」之后，等多久还没到货才值得**告警**（战斗秒）。
+ *
+ * 不能一取不到就 warn：渐进局首帧 `effectVisualPrefabs` 必然是空 Map，后补 job 还要排十几个
+ * 才轮到特效 ⇒ 一开局就刷一屏「技能特效美术取不到」全是假告警（2026-11-04 用户截图里就是它）。
+ * 3s 足够覆盖后补队列 + 一次按需补载；超过它还没到，才是真故障（没交图 / 路径错 / 加载失败）。
+ */
+const EFFECT_ART_MISSING_WARN_SECONDS = 3;
 
 /**
  * 开局「点击金矿」提示挂在哪一类格子上。
@@ -171,6 +181,8 @@ interface ZCSceneComponent {
 }
 
 interface ZCRenderWorldOptions {
+    owner: object;
+    presentationArt: IZCBattlePresentationArt;
     mapLayer: Node;
     /**
      * Board layer order comes from ZCGameBoard.prefab; the wall layer is inserted after OutlineLayer.
@@ -379,6 +391,18 @@ export class ZCGameRenderWorld {
     private effectVisualPrefabs: ReadonlyMap<string, Prefab>;
     private readonly effectPool: ZCEffectPool;
     private readonly effectViews = new Map<number, ZCCombatEffectView>();
+    /** 「这条技能特效路径一直没取到美术」已经警告过（一路径一条，避免每帧刷屏）。 */
+    private readonly missingEffectArtWarned = new Set<string>();
+    /**
+     * 「这条技能特效路径还没取到美术」已经**请求过按需补载**（一路径一次）。
+     *
+     * 与 {@link missingEffectArtWarned} 分开是必须的：请求要在**第一次**取不到时就发（否则第一发
+     * 子弹早飞完了），但告警要等到「补载也该到货了」还没到才发 —— 否则渐进局里首帧必然刷一堆
+     * 假告警（后补 job 本来就还没轮到这条路径）。
+     */
+    private readonly missingEffectArtRequested = new Set<string>();
+    /** 每条路径**第一次**取不到美术的时刻（战斗秒）；配合 {@link missingEffectArtWarned} 判超时。 */
+    private readonly missingEffectArtSince = new Map<string, number>();
     private readonly floatTextViews = new Map<number, ZCFloatTextView>();
     private readonly cardRevealViews = new Map<number, ZCCardRevealView>();
     private readonly legendBannerViews = new Map<number, ZCGameLegendBannerView>();
@@ -1255,7 +1279,7 @@ export class ZCGameRenderWorld {
                 node.name = `CardReveal_${reveal.id}`;
                 // 同上：视图组件在 ZCGameCardReveal.prefab 上。
                 const view = node.getComponent(ZCCardRevealView);
-                // 卡面图 / 建筑帧由视图自己按 id 向控制器取（`ProcedureGame.current`）⇒ 这里不再注入闭包。
+                view.setPresentationArt(this.options.presentationArt);
                 entityId = this.createEntity('cardReveal', reveal.id, node);
                 this.pooledEntityKeys.set(entityId, 'cardReveal');
                 this.cardRevealViews.set(entityId, view);
@@ -1308,8 +1332,8 @@ export class ZCGameRenderWorld {
                 // 同上：视图组件在 ZCGameLegendBanner.prefab 上。
                 const view = node.getComponent(ZCGameLegendBannerView);
                 view.setArtResolver((item) => this.resolveLegendArt(item));
-                //  头像帧在控制器上（`ProcedureGame.current`）⇒ 闭包每帧现取，晚到也能吃上。
-                view.setPortraitResolver((owner) => ProcedureGame.current?.resolveLegendPortrait(owner) ?? null);
+                // 每帧读取本局表，头像晚到后自动显示。
+                view.setPortraitResolver((owner) => this.options.presentationArt.legendPortraitFrames.get(owner) ?? null);
                 entityId = this.createEntity('legendBanner', reveal.id, node);
                 this.pooledEntityKeys.set(entityId, 'legendBanner');
                 this.legendBannerViews.set(entityId, view);
@@ -1372,7 +1396,7 @@ export class ZCGameRenderWorld {
         // ① 卡牌阵容那边的静态图：卡表 `headIcon` → `icons/cardHead/**`（阵容页「非spine」时
         //    铺在 Hero 位的就是同一张）。横幅是**这张卡**的出场，左格该长成阵容里那张卡的样子，
         //    而不是它产出兵种的 idle 图。由 `ZCGame` 预加载本局卡组后注入。
-        const cardArt = ProcedureGame.current?.resolveCardArt(reveal.cardId) ?? null;
+        const cardArt = this.options.presentationArt.cardArtFrames.get(reveal.cardId) ?? null;
         if (cardArt) return cardArt;
         // ② 老链：兵种 idle 立绘。
         if (reveal.unitId) {
@@ -1448,9 +1472,9 @@ export class ZCGameRenderWorld {
         return this.unitFrames.get(unitId) ?? null;
     }
 
-    /** 建筑帧查表搬去了控制器（`ZCGame.resolveBuildingFrame`）；这里只按同一口径转发。 */
+    /** 地块、卡牌和横幅共用同一份本局建筑选图规则。 */
     private resolveBuildingFrame(cardId: string | null, building: string): SpriteFrame | null {
-        return ProcedureGame.current?.resolveBuildingFrame(cardId, building) ?? null;
+        return zcBuildingArt(this.options.presentationArt, cardId, building);
     }
 
     /** 飘字使用连续表现时间，过期节点进入有界复用池。 */
@@ -1900,7 +1924,8 @@ export class ZCGameRenderWorld {
             // 第二个参数是卡表 `pvpCard.prefabSize`（美术等比缩放，解析层永远给值、
             // 表里留空按 1）。 从 `definition` 取、不是从 prefab 取：同一个 prefab
             // 可能被多张卡共用（女猎手/泰兰德、冰法师/吉安娜…），体型是**按卡**配的。
-            //  视图自己按 `definition.unitId` 向控制器取美术 prefab（`prefabSize` 也在 definition 上）。
+            // 注入本局资源表；尺寸仍读取 definition.prefabSize。
+            view.setPresentationArt(this.options.presentationArt, this.options.owner);
             view.initialize(definition);
             entityId = this.createEntity('unit', unit.id, node);
             this.pooledEntityKeys.set(entityId, key);
@@ -2047,8 +2072,66 @@ export class ZCGameRenderWorld {
             }
             const projectile = event.type === 'projectile' && 'velocityX' in event ? event as Readonly<ZCProjectileState> : undefined;
             const alpha = frame.interpolationAlpha;
-            this.effectViews.get(entityId)?.render(event, this.visualTime(frame), projectile, alpha);
+            const now = this.visualTime(frame);
+            const view = this.effectViews.get(entityId);
+            if (view && !view.hasVisual && event.effectPrefabPath) {
+                this.resolveMissingEffectArt(view, event.effectPrefabPath, now);
+            }
+            view?.render(event, now, projectile, alpha);
         }
+    }
+
+    /**
+     * 特效美术「到货即挂」＋「没在清单就按需补载」，两个缺口合在这一个入口。
+     *
+     * 它们在战场上的表现**完全一样**（子弹整段飞行只剩一条 18px 通用短线，或彻底不可见），
+     * 但成因不同，必须分别处理：
+     *
+     * 1. **后补没挂**：渐进局首帧 `effectVisualPrefabs` 是空 Map，节点以 `visualNode === null`
+     *    建出来，而本方法所在的渲染循环原来只在建节点那一刻调一次 `initialize` ⇒ 后补 job 到货
+     *    也没有任何人再挂。（2026-11-04 上午）
+     * 2. **压根没被要求加载**：本局特效清单由 `buildZCVisualResourcePlan(heroIds)` 按后端英雄
+     *    名单过滤，兵营产兵 / 波次兵 / GM 临时加的兵不在名单里 ⇒ 路径一条都没进清单，后补也
+     *    永远不会到货。单位模型早就有同型的按需补载（`ZCUnitView.resolveVisual` → `RequestUnitArt`），
+     *    特效侧一直空着 —— 所以那两类兵的子弹是**永久**消失，且连「加载失败」都不报。
+     *    （2026-11-04 下午：`ZCUnitView` 已报「兵种 68022 不在首屏美术清单里」，同一只兵的
+     *    `磁电菇_子弹攻击` / `雷法师_武将闪电` 两条特效路径也同时取不到，就是这条。）
+     */
+    private resolveMissingEffectArt(view: ZCCombatEffectView, path: string, now: number): void {
+        const late = this.effectVisualPrefabs.get(path);
+        if (late) { view.attachVisualPrefab(late); return; }
+        const since = this.missingEffectArtSince.get(path);
+        if (since === undefined) {
+            this.missingEffectArtSince.set(path, now);
+            if (!this.missingEffectArtRequested.has(path)) {
+                this.missingEffectArtRequested.add(path);
+                //  请求在**第一次**取不到时就发（此刻正有一发子弹在飞，晚一帧就飞完了）；
+                //  控制器去重（pending / loaded 两个集合），失败也不会反复重试打网络。
+                EventMgr.instance.emit(ZCGameUiEvent.RequestEffectArt, { owner: this.options.owner, path });
+                console.info(`[ZCGameRenderWorld] 本局特效清单里没有这条美术，已按需补载：${path}`);
+            }
+            return;
+        }
+        if (!this.missingEffectArtWarned.has(path) && now - since >= EFFECT_ART_MISSING_WARN_SECONDS) {
+            this.missingEffectArtWarned.add(path);
+            console.warn('[ZCGameRenderWorld] 技能特效美术补载后仍取不到，只能画通用短线'
+                + `（${EFFECT_ART_MISSING_WARN_SECONDS}s 仍未到货：没交图 / 路径写错 / 加载失败）：${path}`);
+        }
+    }
+
+    /**
+     * 按需补载到货：把 prefab 并进本局特效表，下一次 {@link resolveMissingEffectArt} 就会挂上。
+     *
+     * 只做**表内合并**，不直接找节点挂：同一路径此刻可能有好几发子弹在飞（AOE 弹幕），
+     * 由各自的渲染循环在下一帧统一补挂，避免这里找不到节点、或在销毁中的节点上操作。
+     */
+    applyEffectPrefab(path: string, prefab: Prefab): void {
+        if (!path || !prefab) return;
+        if (this.effectVisualPrefabs.get(path) === prefab) return;
+        this.effectVisualPrefabs = new Map([...this.effectVisualPrefabs, [path, prefab]]);
+        this.missingEffectArtRequested.delete(path);
+        this.missingEffectArtSince.delete(path);
+        this.missingEffectArtWarned.delete(path);
     }
 
     private visualTime(frame: ZCGameRenderFrame): number {

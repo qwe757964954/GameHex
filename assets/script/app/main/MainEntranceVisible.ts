@@ -38,6 +38,14 @@ export interface EntrancePlayerState {
     readonly dailyShareShow: boolean;
     readonly osRankShow: boolean;
     readonly isLevelPassed: (level: number) => boolean;
+    /**
+     * 领地据点（`levelInfo.levelId`，异步据点是 2000x）那一片格子通了没有。
+     *
+     * ⚠️ 与 `isLevelPassed` **不是同一张表**：pvp 据点通关服务端**不写** `CmdBattleLevel`
+     * （2026-11-03 实机验证：`CmdBattleLevel 里没有 level=20001 这一行`），
+     * 它的状态在领地格子（`CmdCityChapterCellInfo.passCells`）里。
+     */
+    readonly isTerritoryLevelPassed: (levelId: number) => boolean;
 }
 
 /** 什么都没拿到时的兜底：带条件入口一律不显示。 */
@@ -55,6 +63,7 @@ export const EMPTY_ENTRANCE_PLAYER_STATE: EntrancePlayerState = {
     dailyShareShow: false,
     osRankShow: false,
     isLevelPassed: () => false,
+    isTerritoryLevelPassed: () => false,
 };
 
 // ============================================================
@@ -90,6 +99,11 @@ export function evaluateEntranceCondition(
         case 'battleLevel':
             if (resId == null) return missingParam(type, 'resId');
             return state.isLevelPassed(resId) ? 'pass' : 'fail';
+        case 'territoryLevel':
+            // 领地据点（含 pvp 异步据点）。与 `battleLevel` 分开：前者查 `CmdBattleLevel`，
+            // 后者查领地格子 —— 两张表服务端各写各的，合成一个类型会让判定在两个数据源之间摇摆。
+            if (resId == null) return missingParam(type, 'resId');
+            return state.isTerritoryLevelPassed(resId) ? 'pass' : 'fail';
         case 'roleCreateDays': {
             if (resId == null || value == null) return missingParam(type, 'resId/value');
             return state.createdDays >= resId && state.createdDays <= value ? 'pass' : 'fail';

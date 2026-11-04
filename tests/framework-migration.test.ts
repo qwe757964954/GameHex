@@ -85,9 +85,14 @@ test('对局加载已从 Component 下沉到应用服务并只依赖端口', () 
     const procedure = readFileSync('assets/script/app/bootstrap/battle/BattleComposition.ts', 'utf8');
 
     assert.doesNotMatch(component, /static async prepareResources/);
-    assert.match(procedure, /new ZCGameLoader\(resources, MAP_DIRECTORY/);
-    assert.doesNotMatch(loader, /framework\//);
-    assert.doesNotMatch(loader, /platform\//);
+    assert.match(procedure, /createZCBattleSession/);
+    const preparation = readFileSync('assets/script/app/zcds/application/ZCBattlePreparation.ts', 'utf8');
+    assert.match(preparation, /new ZCGameLoader\(resources, MAP_DIRECTORY/);
+    const runtimeLoader = ts.transpileModule(loader, {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+    }).outputText;
+    assert.doesNotMatch(runtimeLoader, /framework\//);
+    assert.doesNotMatch(runtimeLoader, /platform\//);
 });
 
 test('RefConfigService 合并并发初始化并缓存结果', async () => {

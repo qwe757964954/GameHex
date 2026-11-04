@@ -25,9 +25,9 @@ export interface IBigMapPlayerLevelContent {
     readonly chestText: string;
     /** 第二条占领奖励的图标格（最多 3 个）。 */
     readonly rewards: readonly IRewardItemData[];
-    /** 「侦查」按钮的货币消耗；`<= 0` 不显示费用角标。 */
+    /** 「侦查」按钮的**体力**消耗；`<= 0` 不显示费用角标。 */
     readonly scoutCost: number;
-    /** 「开始战斗」按钮的货币消耗；`<= 0` 不显示费用角标。 */
+    /** 「开始战斗」按钮的**体力**消耗；`<= 0` 不显示费用角标。 */
     readonly fightCost: number;
     readonly fightCaption: string;
     readonly fightEnabled: boolean;
@@ -105,9 +105,19 @@ export class BigMapPlayerLevelPanel extends Component {
     private inited = false;
 
     /**
+     * 上一次 `open` 的内容。
+     *
+     * 只为一件事留着：**费用图标晚于弹窗到达**。页面在 `onLoad` 里 `initialize(..., null)`
+     * （那时体力图还在异步加载），`setCostIcon` 补帧后要能把已开着的角标重算一遍，
+     * 否则本轮会一直停在"有数字、没图标"。
+     */
+    private lastContent: IBigMapPlayerLevelContent | null = null;
+
+    /**
      * 绑一次交互并做屏幕适配；重复调用无副作用（页面在 `onLoad` 里调一次）。
      *
-     * `costIcon` 是银币图标：弹窗自己不解表（避免视图里出现配置读取），由页面加载后注入。
+     * `costIcon` 是**体力**图标（2026-11-04 山猫：「这里是扣体力不是扣银币」）：
+     * 弹窗自己不解表（避免视图里出现配置读取），由页面加载后注入。
      */
     initialize(width: number, height: number, costIcon: SpriteFrame | null): void {
         this.dropList.renderItemFn = this.renderReward;
@@ -143,13 +153,15 @@ export class BigMapPlayerLevelPanel extends Component {
     }
 
     /**
-     * 费用角标的货币图标（两个按钮共用同一张）。
+     * 费用角标的货币图标（两个按钮共用同一张，内容是**体力**）。
      *
-     * 页面加载完银币图后单独补一次：`onLoad` 里实例化时图还在异步加载，那时只能给 `null`。
+     * 页面加载完体力图后单独补一次：`onLoad` 里实例化时图还在异步加载，那时只能给 `null`。
      */
     setCostIcon(frame: SpriteFrame | null): void {
         this.scoutCostIcon.spriteFrame = frame;
         this.fightCostIcon.spriteFrame = frame;
+        // 图补到时弹窗可能已经开着 ⇒ 立刻重算两颗角标，别等玩家关掉再点开
+        if (this.lastContent && this.node.active) this.applyCosts(this.lastContent);
     }
 
     /** 打开并全量赋值（幂等：连续两次 `open` 与一次等价）。 */
@@ -164,11 +176,12 @@ export class BigMapPlayerLevelPanel extends Component {
 
         this.scoutLabel.string = '侦查';
         this.scoutButton.interactable = true;
-        this.applyCost(this.scoutCostRoot, this.scoutCostLabel, content.scoutCost);
 
         this.fightLabel.string = content.fightCaption;
         this.fightButton.interactable = content.fightEnabled;
-        this.applyCost(this.fightCostRoot, this.fightCostLabel, content.fightCost);
+
+        this.lastContent = content;
+        this.applyCosts(content);
 
         this.node.active = true;
         this.node.setSiblingIndex(this.node.parent ? this.node.parent.children.length - 1 : 0);
@@ -176,12 +189,23 @@ export class BigMapPlayerLevelPanel extends Component {
 
     close(): void {
         this.node.active = false;
+        this.lastContent = null;
     }
 
-    private applyCost(root: Node, label: Label, cost: number): void {
+    /** 两颗按钮的费用角标（数字 + 底色 + **体力图标**一起显隐）。 */
+    private applyCosts(content: IBigMapPlayerLevelContent): void {
+        this.applyCost(this.scoutCostRoot, this.scoutCostIcon, this.scoutCostLabel, content.scoutCost);
+        this.applyCost(this.fightCostRoot, this.fightCostIcon, this.fightCostLabel, content.fightCost);
+    }
+
+    private applyCost(root: Node, icon: Sprite, label: Label, cost: number): void {
         const has = Number.isFinite(cost) && cost > 0;
         label.string = has ? String(Math.round(cost)) : '';
         root.active = has;
+        // ⚠️ `CostIcon` 是按钮的**直接子节点**（与 `CostBg` / `CostLabel` 平级），
+        // 不跟着 `CostBg` 一起关 ⇒ 少了这行会留一颗没有数字的体力图标挂在按钮上。
+        // 帧还没加载到（`null`）时只少一颗图标，数字照常显示。
+        icon.node.active = has && icon.spriteFrame !== null;
     }
 
     private handleScout(): void {

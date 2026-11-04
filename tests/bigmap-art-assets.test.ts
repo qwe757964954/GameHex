@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { BIGMAP_BUILDING_ART, BIGMAP_CONCEPT_ROOT, BIGMAP_UI_KEYS } from '../assets/script/app/bigmap/application/BigMapArtCatalog';
-import { assetExists, assetPath } from './helpers/asset-paths';
+import { assetPath } from './helpers/asset-paths';
 
 const root = assetPath(BIGMAP_CONCEPT_ROOT);
 
@@ -28,7 +28,9 @@ test('实际配置建筑与所有运行时图标均有资源，自动图集只�
     for (const name of ['grain', 'wood', 'iron', 'coin', 'fortress', 'mutant_camp']) {
         assert.ok(existsSync(join(root, 'sprites', `${name}.png`)), name);
     }
-    assert.ok(assetExists('image/bigmap/auto-atlas.pac'));
+    // 自动图集只能贴在 bundle 的 `image/` 根上（`bigmap` 分包内路径，2026-11-04 上提后少一层 `bigmap`）。
+    // 这里**不能用 `assetExists`** —— 它按分包根顺序探测，会先命中 main-pages 的同名 pac，断言就失去意义。
+    assert.ok(existsSync('assets/bundles/bigmap/image/auto-atlas.pac'));
     for (const directory of [root, join(root, 'sprites'), join(root, 'ui')]) {
         assert.equal(existsSync(join(directory, 'auto-atlas.pac')), false, directory);
     }

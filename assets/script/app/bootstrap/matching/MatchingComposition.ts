@@ -1,4 +1,4 @@
-import { director, instantiate, Node, Prefab, SpriteFrame, Vec3, view } from 'cc';
+import { game, instantiate, Node, Prefab, SpriteFrame, Vec3, view } from 'cc';
 import { ControllerBase, type IControllerContext } from '../../../framework/controller/ControllerBase';
 import type { ProcedurePreloadContext } from '../../../framework/procedure/ProcedureBase';
 import { ProcedureManager } from '../../../framework/procedure/ProcedureManager';
@@ -77,44 +77,7 @@ export class MatchingComposition extends ControllerBase {
             this.node = node;
             const page = node.getComponent(MatchingPage);
             page.initialize(this.iconLoader, this.tips);
-            const identity = readSelfIdentity();
-            // 本局几个人：入口声明（按模式）与本地固定人数取大者；都没有就 `null`，
-            // 让模型按最小值铺，等服务端回包再按真实人数重排（口径见 `MatchSlots`）。
-            const seats = resolveMatchSeats(params?.participants, getZCLocalPlayerCountOverride());
-            const model = new MatchingModel(buildSelfPlayerData(identity, this.lookup), identity?.roleId, this.lookup, seats);
-            model.pvp = getLastPvpInfo();
-            clearLastBattleStart();
-            this.own(() => clearLastBattleStart());
-            const controller = new MatchingController(this.resources, {
-                model, requestBattle: (caller, isCurrent) => startBattle(params?.battleType ?? ZC_BATTLE_TYPE_PVP, params?.battleParams ?? [], caller, isCurrent),
-                createSession: (task, owner) => createZCBattleSession(this.resources, { owner, battle: task.then(battle => {
-                    if (!battle) throw new Error('服务端未确认开战');
-                    return battle;
-                }), params: { pve: params?.pve, selfRoleId: identity?.roleId } }),
-                fetchPvp: caller => fetchPvpInfo(caller), render: state => page.render(state),
-                removeCaller: caller => GameNet.instance.removeCaller(caller),
-                schedule: (callback, seconds) => { page.scheduleOnce(callback, seconds); return () => page.unschedule(callback); },
-                // 领地普通关的 `pve` 在这里透传：匹配页不认识它，但战斗流程要靠它拿波次表 /
-                // 敌阵 / `territorySaveOwner`（战报回写）。丢了这一项，打完这一关领地进度不动。
-                navigate: (route, entry) => {
-                    const pve = params?.pve;
-                    ProcedureManager.navigate(route, pve && entry && typeof entry === 'object'
-                        ? { ...(entry as Record<string, unknown>), pve }
-                        : entry);
-                },
-                failed: error => console.error('[MatchingComposition]', error),
-                // 领地普通关：匹配成功后不直接切战场，而是「关界面 → 露云 → 等资源 → 散云 → 跳」。
-                // 云是这一页自己的子节点，所以这三件事只能在这里做（那边的主界面已经销毁了）。
-                handoff: params?.pve
-                    ? {
-                        closeInstantly: () => this.handOverCover(),
-                        // 顺序是"先切场、再散云"：`releaseCover` 在 `navigate` 之后才被调，
-                        // 云这时已经搬到跨流程的顶层，等战场挂上才开始散（见 overlay）。
-                        releaseCover: () => this.handoffOverlay?.arm(),
-                        readyTimeout: TERRITORY_BATTLE_INTRO_READY_MAX_SECONDS,
-                    }
-                    : undefined,
-            });
+            const controller = this.createController(page, params);
             this.own(() => controller.dispose());
             this.listen(VIEW_LIFECYCLE, (event: IViewLifecycle) => {
                 if (event.owner !== page) return;
@@ -124,7 +87,62 @@ export class MatchingComposition extends ControllerBase {
             node.setPosition(Vec3.ZERO);
             node.setParent(this.host);
             this.buildCover(node, page, params);
-        } catch (error) { this.dispose(); throw error; }
+        } catch (error) {
+            try { this.dispose(); }
+            catch (cleanupError) { console.error('[MatchingComposition] 初始化失败后的清理失败', cleanupError); }
+            throw error;
+        }
+    }
+    private createController(page: MatchingPage, params?: IMatchingEntryParams): MatchingController {
+        const identity = readSelfIdentity();
+        // 本局几个人：入口声明（按模式）与本地固定人数取大者；都没有就 `null`，
+        // 让模型按最小值铺，等服务端回包再按真实人数重排（口径见 `MatchSlots`）。
+        const seats = resolveMatchSeats(params?.participants, getZCLocalPlayerCountOverride());
+        const model = new MatchingModel(buildSelfPlayerData(identity, this.lookup), identity?.roleId, this.lookup, seats);
+        model.pvp = getLastPvpInfo();
+        clearLastBattleStart();
+        this.own(() => clearLastBattleStart());
+        return new MatchingController(this.resources, {
+            model,
+            failed: error => console.error('[MatchingComposition]', error),
+            // 领地普通关：匹配成功后不直接切战场，而是「关界面 → 露云 → 等资源 → 散云 → 跳」。
+            // 云是这一页自己的子节点，所以这三件事只能在这里做（那边的主界面已经销毁了）。
+            handoff: params?.pve
+                ? {
+                    closeInstantly: () => this.handOverCover(),
+                    // 顺序是"先切场、再散云"：`releaseCover` 在 `navigate` 之后才被调，
+                    // 云这时已经搬到跨流程的顶层，等战场挂上才开始散（见 overlay）。
+                    releaseCover: () => this.handoffOverlay?.arm(),
+                    readyTimeout: TERRITORY_BATTLE_INTRO_READY_MAX_SECONDS,
+                }
+                : undefined,
+            battle: {
+                requestBattle: (caller, isCurrent) => startBattle(params?.battleType ?? ZC_BATTLE_TYPE_PVP, params?.battleParams ?? [], caller, isCurrent),
+                createSession: (task, owner) => createZCBattleSession(this.resources, { owner, battle: task.then(battle => {
+                        if (!battle)
+                            throw new Error('服务端未确认开战');
+                        return battle;
+                    }), params: { pve: params?.pve, selfRoleId: identity?.roleId } }),
+                fetchPvp: caller => fetchPvpInfo(caller),
+                removeCaller: caller => GameNet.instance.removeCaller(caller)
+            },
+            view: {
+                render: state => page.render(state)
+            },
+            navigation: {
+                // 领地普通关的 `pve` 在这里透传：匹配页不认识它，但战斗流程要靠它拿波次表 /
+                // 敌阵 / `territorySaveOwner`（战报回写）。丢了这一项，打完这一关领地进度不动。
+                navigate: (route, entry) => {
+                    const pve = params?.pve;
+                    ProcedureManager.navigate(route, pve && entry && typeof entry === 'object'
+                        ? { ...(entry as Record<string, unknown>), pve }
+                        : entry);
+                }
+            },
+            clock: {
+                schedule: (callback, seconds) => { page.scheduleOnce(callback, seconds); return () => page.unschedule(callback); }
+            },
+        });
     }
     /**
      * 取过场用那几张**云体**（`image/territory/cloud/cloud_body_*`）。
@@ -179,10 +197,9 @@ export class MatchingComposition extends ControllerBase {
         cover.setBaseStep(params.coverStep ?? 0);
         cover.apply(1, 1, 0);
         this.cover = cover;
-        // 交接出去之后 `this.cover` 会被置空（所有权归 overlay），这里不能再销毁它。
-        this.own(() => { if (this.cover === cover) cover.dispose(); });
         // 菜单页不会给"每帧回调"，用组件的调度器（interval=0 ⇒ 每帧）。
-        page.schedule(() => cover.tick(director.getDeltaTime()), 0);
+        // `game.deltaTime` 而非 `director.getDeltaTime()`：后者自 3.3 起废弃（3.8 每帧刷 deprecated 告警）。
+        page.schedule(() => cover.tick(game.deltaTime), 0);
     }
 
     /** 匹配界面**瞬间**消失：只把 UI 那几棵子树关掉，云留着（它就是"被露出来的底"）。 */
@@ -210,28 +227,28 @@ export class MatchingComposition extends ControllerBase {
         const overlay = TerritoryBattleCoverOverlay.create(this.host, cover);
         if (!overlay) return;
         this.handoffOverlay = overlay;
-        // 所有权转交：`dispose` 里的销毁与这里注册的清理都按 `this.cover` 判断，置空即可。
+        // 所有权转交：`dispose` 里的销毁与这里都按 `this.cover` 判断，置空即可。
         this.cover = null;
     }
 
     dispose(): void {
         this.releaseInputs();
-        // `dispose()` 而不是 `destroy()`：这一页真的要没了，盖层自己持有的那几帧引用要一起放掉。
-        this.cover?.dispose();
+        const cover = this.cover;
         this.cover = null;
-        // 交接出去的那一层**不在这里销毁**：它要活到战场挂上、散完自己收
-        // （`TerritoryBattleCoverOverlay.finish`）。这里只放掉引用。
-        //
-        // 但"已经交接、却始终没人调 releaseCover"（例如交接途中被别的导航顶掉）会让一屏云
-        // 永远盖在画面上 —— 所以这里补一次 `arm()`：已 arm 过是空操作，没 arm 过的会在
-        // 超时兜底里自己散掉。
-        this.handoffOverlay?.arm();
+        const overlay = this.handoffOverlay;
         this.handoffOverlay = null;
-        this.cloudFrames = [];
         const node = this.node;
         this.node = null;
-        if (node?.isValid) node.destroy();
+        this.cloudFrames = [];
         this.prefab = null; this.iconLoader = null; this.lookup = null; this.tips = [];
-        super.dispose();
+        try { cover?.dispose(); }
+        finally {
+            // 已交接的云归 overlay；离开时 arm 保证中断导航也能超时散场。
+            try { overlay?.arm(); }
+            finally {
+                try { if (node?.isValid) node.destroy(); }
+                finally { super.dispose(); }
+            }
+        }
     }
 }

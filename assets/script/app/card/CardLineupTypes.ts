@@ -25,11 +25,9 @@ export function resolveCardClass(card: ZCDeckCard): ZCCardClass {
     return ATTACK_TRAIT_CLASS[card.traits?.attack ?? ''] ?? 'tank';
 }
 
-/**
- * 卡牌美术复用键。头像按卡区分，键里必须带 headIcon，否则同品级同职业会串头像。
- */
+/** 卡牌立绘按 id 区分；头像字段不参与卡牌展示和缓存。 */
 export function cardArtKey(card: ZCDeckCard): string {
-    return `${card.rarity}|${resolveCardClass(card)}|${card.headIcon ?? ''}`;
+    return `${card.rarity}|${resolveCardClass(card)}|${String(card.id)}`;
 }
 
 /** 职业 → 营地雕像（icons/card 下）。 */
@@ -37,9 +35,54 @@ export function resolveHeroArt(cardClass: ZCCardClass): string {
     return `camp_${cardClass}`;
 }
 
-/** 职业 → 布阵 Q 版立绘。目前只有两张，按物理/法术二分，美术补齐后只改此表。 */
+/**
+ * 卡牌 id → 专属角色图名（`icons/cardHead` 下的图片名，不含扩展名）。
+ *
+ * 键是 **`pvpCard.id`**（字符串），不是卡名 —— 立绘文件名是美术侧的拼音（`huolongguo` 对应卡名
+ * 「镭射飞龙」、`xiaomiexueba` 对应「运动霸」），跟卡名不同源，靠名字推不出来，只能显式映射。
+ *
+ * 目前 27 张（美术 2026-11-03 交付）；剩余 8 张兵营卡（冰冻菇 / 猎头者 / 玛法 / 驭兽师 /
+ * 阿尔萨斯 / 萨尔 / 泰兰德 / 九头蛇）仍走职业雕像 `camp_*` 兜底 —— 这不是缺陷，
+ * `resolveCardHeroArt` 返回 null 就是「该退回职业图」的语义。
+ */
+export const CARD_HERO_ART: Readonly<Record<string, string>> = {
+    68001: 'wandouyouxia',
+    68002: 'julijianguo',
+    68003: 'huoyanshuyao',
+    68004: 'yulinhaohan',
+    68005: 'yedanzhanshi',
+    68006: 'boliao',
+    68007: 'tunshidazuihua',
+    68008: 'jiekeou',
+    68009: 'xiantaoxingzhe',
+    68010: 'huolongguo',
+    68019: 'woguaren',
+    68020: 'sanyexiaochou',
+    68021: 'xianrenshiwei',
+    68022: 'leijiao',
+    68023: 'nanguazhanshen',
+    68024: 'jidonggua',
+    68025: 'daweitianlu',
+    68026: 'malatieguo',
+    68027: 'baochuilianwang',
+    68028: 'jiezhanshi',
+    68029: 'jinfalaoban',
+    68030: 'lanqiushaonian',
+    68031: 'yishujia',
+    68032: 'jitashou',
+    68033: 'xiaomiexueba',
+    68034: 'moshushi',
+    68035: 'kexuejia',
+};
+
+/** 该卡有没有专属立绘；没有返回 `null`，调用方退回 `resolveHeroArt(cardClass)`。 */
+export function resolveCardHeroArt(card: ZCDeckCard): string | null {
+    return CARD_HERO_ART[String(card.id)] ?? null;
+}
+
+/** 职业 → 布阵缺少专属立绘时的占位；复用 cardHead 角色图，不另存 char 副本。 */
 export const BOARD_HERO_ART: Readonly<Record<ZCCardClass, string>> = {
-    warrior: 'char_01', archer: 'char_01', mage: 'char_02', tank: 'char_02',
+    warrior: 'wandouyouxia', archer: 'wandouyouxia', mage: 'jiezhanshi', tank: 'jiezhanshi',
 };
 
 /** 品级 → 布阵卡池卡框。 */
@@ -92,10 +135,7 @@ export function resolveCardCamp(card: ZCDeckCard): ZCCardCamp | null {
     return CAMP_TRAIT_CAMP[card.traits?.camp ?? ''] ?? null;
 }
 
-/**
- * 阵营 → 图标行图标。美术补齐后只改此表。
- * 加载失败时条目保留占位图（已知降级）。
- */
+/** 阵营 → 图标行图标，与职业图标保持独立。 */
 export const CAMP_ICON_ON_ART: Readonly<Record<ZCCardCamp, string>> = {
     huaguo: 'common_img_huaguo', mogu: 'common_img_mogu',
     penzai: 'common_img_penzai', jiangshi: 'common_img_jiangshi',

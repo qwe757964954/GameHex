@@ -24,8 +24,16 @@ export const BUNDLE_DIRECTORIES: Readonly<Record<string, readonly string[]>> = {
         'image/gameui',
         'image/settlement',
     ],
+    // ⚠️ 2026-11-04 bundle 内 `image/bigmap/` **上提**成 `image/`，原来那条
+    // `'image/bigmap'` 前缀隔离一起没了 —— 首包 `resources` 也有 `image/`，所以
+    // **不能再登记 `'image'`**（会连带吞掉 `image/buildings`、`image/territory`、
+    // `image/common` 等首包目录，`tests/bundle-scope.test.ts` 会直接红）。
+    // 只能逐条登记 bigmap bundle 里**真实存在**的条目；新增图片务必同步这里，
+    // 漏了就是「图不显示 + 零报错」（`tests/bigmap-bundle-coverage.test.ts` 兜底）。
     [BIGMAP_BUNDLE]: [
-        'image/bigmap',
+        'image/concept',
+        'image/base_background',
+        'image/bigMapBG',
         'ui/bigmap',
     ],
     [MAIN_PAGES_BUNDLE]: [
@@ -33,7 +41,7 @@ export const BUNDLE_DIRECTORIES: Readonly<Record<string, readonly string[]>> = {
         'ui/Chat', 'ui/Mail', 'ui/PlayerInfo', 'ui/Hang', 'ui/Activity', 'ui/SevenDay',
         'ui/Celebration', 'ui/FirstRecharge', 'ui/LimitTimeAct', 'ui/MonthCardGift', 'ui/ShowReward',
         'ui/ItemDetail', 'ui/gm', 'ui/vscroll',
-        'image/role', 'image/league', 'image/store', 'image/card', 'image/gift', 'image/battletoken',
+        'image/role', 'image/league', 'image/store', 'image/card', 'image/carddetail', 'image/gift', 'image/battletoken',
         'image/friend', 'image/chat', 'image/mail', 'image/playerinfo', 'image/hang', 'image/activity',
         'image/activityIcon', 'image/sevenDay', 'image/celebration', 'image/firstRecharge',
         'image/limitTimeAct', 'image/monthcard', 'image/showReward', 'image/itemdetail',

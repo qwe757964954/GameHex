@@ -10,7 +10,9 @@ export interface INativeAssetsManagerEvent {
     getEventCode(): number;
     getMessage?(): string;
     getAssetId?(): string;
+    /** Creator 3.8.8 返回 0~1 的字节比例。 */
     getPercent?(): number;
+    /** Creator 3.8.8 返回 0~1 的文件比例。 */
     getPercentByFile?(): number;
     getDownloadedBytes?(): number;
     getTotalBytes?(): number;

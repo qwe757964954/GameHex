@@ -1,19 +1,17 @@
-import { _decorator, Component, EventTouch, Label, Node, Sprite, SpriteFrame, Vec2 } from 'cc';
+import { _decorator, Component, EventTouch, Label, Node, Sprite, SpriteFrame, UITransform, Vec2 } from 'cc';
 import { ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
-import { applyCardHeadArt } from './CardHeadView';
+import { applyCardHeroArt } from './CardHeroView';
 
 const { ccclass, property } = _decorator;
 
-/** 卡池单卡一次渲染需要的四张图（前三张按「品级 + 职业」复用，头像按卡）。 */
+/** 卡池单卡一次渲染需要的三张图。 */
 export interface ZCBoardCardFrames {
     /** 品级卡框 `common_img_pzk_01..04`（`image/frame`）。 */
     frame: SpriteFrame | null;
-    /** 职业 Q 版立绘 `char_0X`（`image/icon/card`）。 */
+    /** 卡牌角色图（`icons/cardHead`）。 */
     hero: SpriteFrame | null;
     /** 左上角职业角标 `class_*`（`image/icon/card`）。 */
     badge: SpriteFrame | null;
-    /** 该卡自己的头像；`null` = 没配头像，保留 `hero` 立绘。 */
-    head: SpriteFrame | null;
 }
 
 /**
@@ -50,17 +48,12 @@ export class LineupBoardCard extends Component {
     @property({ type: Sprite, tooltip: 'Badge：左上角职业角标（class_*）' })
     badge: Sprite = null;
 
-    @property({ type: Sprite, tooltip: 'Hero：职业 Q 版立绘（char_0X）' })
+    @property({ type: Sprite, tooltip: 'Hero：cardHead 角色图' })
     hero: Sprite = null;
 
-    /**
-     * `HeadIcon`：**该卡自己的头像**（57×57，`PVP-卡牌.headIcon` 解出来的图）。
-     *
-     *  尺寸比卡库那处小（卡池卡只有 99×100），但**同为方图**，所以同一张 84×84 的头像
-     *  在两边都是等比缩放、不会变形。
-     */
-    @property({ type: Sprite, tooltip: 'HeadIcon：该卡的头像（57×57，与 Hero 互斥显示）' })
-    headIcon: Sprite = null;
+    @property({ type: UITransform, tooltip: 'Hero：立绘展示框' })
+    heroTransform: UITransform = null!;
+
 
     @property({ type: Node, tooltip: 'Dim：整卡压暗遮罩（已上阵时显示），压在角标/立绘之上、对勾之下' })
     dim: Node = null;
@@ -111,8 +104,7 @@ export class LineupBoardCard extends Component {
         //  卡框 / 角标留在这一张上（串图）。`this.frame` 等是必绑组件，不用判。
         this.frame.spriteFrame = frames.frame;
         this.badge.spriteFrame = frames.badge;
-        // 头像一个入口、互斥显隐（`frames.head` 为 null 时自动退回 Hero 立绘）。
-        applyCardHeadArt(this, frames.hero, frames.head);
+        applyCardHeroArt(this.hero, this.heroTransform, frames.hero);
         this.levelLabel.string = String(Math.max(1, Math.round(level ?? this.fallbackLevel)));
         this.setOnField(onField);
         this.currentCard = card;

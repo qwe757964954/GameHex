@@ -12,17 +12,25 @@ export interface IZCBattleSettlementRequest {
     readonly statistics: readonly CmdBattleStatisticsInfo[];
     readonly battleType: number | null;
 }
-export interface IZCBattleSettlementPorts {
-    readonly waitResult: (battleType: number, caller: object) => Promise<IZCChapterBattleOutcome | null>;
-    readonly finish: (request: IZCBattleSettlementRequest, caller: object) => Promise<unknown>;
-    readonly loadRewards: (result: IZCChapterBattleOutcome) => Promise<IZCSettlementReward[]>;
-    readonly open: (options: IZCSettlementOptions) => Promise<IZCBattlePopup | null>;
-    readonly watchSwitch: (callback: (entered: boolean) => void) => () => void;
-    readonly cancelRequests: (caller: object) => void;
-    readonly failed: (error: unknown) => void;
+export interface IZCBattleSettlementServices {
+    readonly results: {
+        waitResult(battleType: number, caller: object): Promise<IZCChapterBattleOutcome | null>;
+        finish(request: IZCBattleSettlementRequest, caller: object): Promise<unknown>;
+        cancelRequests(caller: object): void;
+    };
+    readonly rewards: {
+        loadRewards(result: IZCChapterBattleOutcome): Promise<IZCSettlementReward[]>;
+    };
+    readonly popup: {
+        open(options: IZCSettlementOptions): Promise<IZCBattlePopup | null>;
+    };
+    readonly flow: {
+        watchSwitch(callback: (entered: boolean) => void): () => void;
+    };
+    failed(error: unknown): void;
 }
 
-/** 结算用例独立于 Cocos：等待、上报、奖励、弹窗与导航均由组合层提供端口。 */
+/** 结算编排只依赖服务契约，自身持有请求、弹窗和退订句柄。 */
 export class ZCBattleSettlementController extends ControllerBase {
     private started = false;
     private popup: IZCBattlePopup | null = null;
@@ -30,7 +38,7 @@ export class ZCBattleSettlementController extends ControllerBase {
     private opening = false;
     private returning = false;
     private stopSwitch: (() => void) | null = null;
-    constructor(context: IControllerContext, private readonly ports: IZCBattleSettlementPorts,
+    constructor(context: IControllerContext, private readonly services: IZCBattleSettlementServices,
         private readonly host: { readonly owner: object; readonly hasPveContext: boolean }) {
         super(context, 'battle-settlement');
     }
@@ -38,9 +46,9 @@ export class ZCBattleSettlementController extends ControllerBase {
         if (this.started || this.isDisposed) return;
         this.started = true;
         // 等待必须早于上报，避免同步广播丢失。
-        const result = request.battleType === null ? null : this.ports.waitResult(request.battleType, this);
-        void this.ports.finish(request, this).catch(error => { if (!this.isDisposed) this.ports.failed(error); });
-        void this.present(request.localVictory, result).catch(error => { if (!this.isDisposed) this.ports.failed(error); });
+        const result = request.battleType === null ? null : this.services.results.waitResult(request.battleType, this);
+        void this.services.results.finish(request, this).catch(error => { if (!this.isDisposed) this.services.failed(error); });
+        void this.present(request.localVictory, result).catch(error => { if (!this.isDisposed) this.services.failed(error); });
     }
     private async present(localVictory: boolean, pending: Promise<IZCChapterBattleOutcome | null> | null): Promise<void> {
         const result = pending ? await pending : null;
@@ -49,7 +57,7 @@ export class ZCBattleSettlementController extends ControllerBase {
         if (result && this.host.hasPveContext) {
             EventMgr.instance.emit(ZC_BATTLE_EVENTS.PVE_RESULT, { owner: this.host.owner, victory: result.code === 1 });
         }
-        const rewards = result ? await this.ports.loadRewards(result) : [];
+        const rewards = result ? await this.services.rewards.loadRewards(result) : [];
         if (this.isDisposed) return;
         this.options = {
             victory: result ? result.code === 1 : localVictory, rewards,
@@ -64,7 +72,7 @@ export class ZCBattleSettlementController extends ControllerBase {
         if (this.isDisposed || this.opening || this.popup || !this.options) return;
         this.opening = true;
         try {
-            const popup = await this.ports.open(this.options);
+            const popup = await this.services.popup.open(this.options);
             if (this.isDisposed) { popup?.close(); return; }
             this.popup = popup;
         } finally { this.opening = false; }
@@ -76,12 +84,12 @@ export class ZCBattleSettlementController extends ControllerBase {
         this.popup = null;
         popup?.close('manual');
         this.stopSwitch?.();
-        const stop = this.ports.watchSwitch(entered => {
+        const stop = this.services.flow.watchSwitch(entered => {
             stop();
             if (this.stopSwitch === stop) this.stopSwitch = null;
             if (!this.isDisposed && !entered) {
                 this.returning = false;
-                void this.open().catch(error => { if (!this.isDisposed) this.ports.failed(error); });
+                void this.open().catch(error => { if (!this.isDisposed) this.services.failed(error); });
             }
         });
         this.stopSwitch = stop;
@@ -97,7 +105,7 @@ export class ZCBattleSettlementController extends ControllerBase {
         this.options = null;
         try { stopSwitch?.(); }
         finally {
-            try { this.ports.cancelRequests(this); }
+            try { this.services.results.cancelRequests(this); }
             finally {
                 try { popup?.close(); }
                 finally { super.dispose(); }

@@ -100,7 +100,7 @@ function captureWarn(): { lines: string[]; restore: () => void } {
 }
 
 test('小卡牌卡面用角色卡牌图，不再用这张卡产出的兵种立绘', () => {
-    const { load, cc, procedureGame } = loadViews();
+    const { load, cc, setArtQueries } = loadViews();
     const view = stubCardRevealView(load, cc);
     const cardArt = { name: 'card-head-julijianguo' };
     const unitArt = { name: 'unit-idle-peashooter' };
@@ -108,10 +108,10 @@ test('小卡牌卡面用角色卡牌图，不再用这张卡产出的兵种立�
     // 即便注入器还在（横幅回退链仍用），小卡牌也**不许**去问它。
     (view as any).unitFrameResolver = () => { unitResolverCalls += 1; return unitArt; };
     //  卡面图由控制器按 id 现取（原先是被渲染层注入 resolver）。
-    procedureGame.current = {
+    setArtQueries({
         resolveCardArt: (cardId: string) => (cardId === '68001' ? cardArt : null),
         resolveBuildingFrame: () => null,
-    };
+    });
     view.render(revealOf({ unitId: '68011' }), 0);
     assert.equal(view.iconSprite.spriteFrame, cardArt, '卡面必须是角色卡牌图');
     assert.equal(unitResolverCalls, 0, '不能回退去问兵种立绘解析器');
@@ -119,18 +119,18 @@ test('小卡牌卡面用角色卡牌图，不再用这张卡产出的兵种立�
 });
 
 test('卡面图取不到才回退建筑图，并打出能回查卡表的日志', () => {
-    const { load, cc, procedureGame } = loadViews();
+    const { load, cc, setArtQueries } = loadViews();
     const view = stubCardRevealView(load, cc);
     const configuredFrame = { name: 'barracks-peashooter' };
     let resolved: unknown[] = [];
     //  卡面图 / 建筑帧由控制器按 id 现取（原先是被渲染层注入 resolver）。
-    procedureGame.current = {
+    setArtQueries({
         resolveCardArt: () => null,
         resolveBuildingFrame: (cardId: string, building: string) => {
             resolved = [cardId, building];
             return configuredFrame;
         },
-    };
+    });
     const warn = captureWarn();
     try {
         // 多渲几帧。日志**不该按帧刷屏**：`renderContent` 有 `contentKey` 短路，
@@ -150,17 +150,17 @@ test('卡面图取不到才回退建筑图，并打出能回查卡表的日志',
 });
 
 test('卡面图晚到：invalidateArt 要作废内容键，已经弹出的卡下一帧换成卡面图', () => {
-    const { load, cc, procedureGame } = loadViews();
+    const { load, cc, setArtQueries } = loadViews();
     const view = stubCardRevealView(load, cc);
     const buildingFrame = { name: 'barracks-peashooter' };
     const cardArt = { name: 'card-head-julijianguo' };
-    procedureGame.current = { resolveCardArt: () => null, resolveBuildingFrame: () => buildingFrame };
+    setArtQueries({ resolveCardArt: () => null, resolveBuildingFrame: () => buildingFrame });
     const warn = captureWarn();
     try {
         view.render(revealOf({ unitId: '68011' }), 0);
         assert.equal(view.iconSprite.spriteFrame, buildingFrame, '图还没到时先显示回退图');
         // 异步资源到位（横幅那条链就是这个时序）。
-        procedureGame.current = { resolveCardArt: () => cardArt, resolveBuildingFrame: () => buildingFrame };
+        setArtQueries({ resolveCardArt: () => cardArt, resolveBuildingFrame: () => buildingFrame });
         // 帧到齐后由渲染世界调 `invalidateArt()`（原先是 setCardArtResolver 里顺手作废 contentKey）。
         view.invalidateArt();
         view.render(revealOf({ unitId: '68011' }), 0.1);
@@ -172,19 +172,19 @@ test('卡面图晚到：invalidateArt 要作废内容键，已经弹出的卡下
 });
 
 test('弹卡建筑图按 cardId 走 buildIcon 解析器，不再依赖 prefab 固定兵营图', () => {
-    const { load, cc, procedureGame } = loadViews();
+    const { load, cc, setArtQueries } = loadViews();
     const view = stubCardRevealView(load, cc);
     const configuredFrame = { name: 'barracks-peashooter' };
     let resolved: unknown[] = [];
     // 这条钉的是**回退链**：注入一个恒返回 null 的卡面解析器，逼它落到建筑图。
     //  卡面图 / 建筑帧由控制器按 id 现取（原先是被渲染层注入 resolver）。
-    procedureGame.current = {
+    setArtQueries({
         resolveCardArt: () => null,
         resolveBuildingFrame: (cardId: string, building: string) => {
             resolved = [cardId, building];
             return configuredFrame;
         },
-    };
+    });
     const warn = captureWarn();
     try {
         view.render(revealOf({ unitId: null }), 0);

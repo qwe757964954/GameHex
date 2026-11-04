@@ -211,7 +211,10 @@ test('★★★剩余时长要从地块生成那只时钟读，不许页面自�
     const remainAt = spawnView.indexOf('remainingSeconds(): number {');
     assert.ok(remainAt > 0, '缺 `remainingSeconds`');
     const remain = spawnView.slice(remainAt, spawnView.indexOf('\n    }', remainAt));
-    assert.ok(remain.includes('TERRITORY_HEX_SPAWN_SECONDS - active.elapsed'), '剩余时长要按单格时长减已播');
+    // 2026-11 起单格时长挂在 `active.timing` 上（普通档 / 胜利档两套），
+    // 所以剩余 = 该格的 `timing.seconds` 减已播 —— 别再回头用全局常量。
+    assert.ok(remain.includes('active.timing.seconds - active.elapsed'),
+        '剩余时长要按**这一格**的档位时长减已播（普通档 / 胜利档时长不同）');
     assert.ok(remain.includes('if (left > remaining) remaining = left;'), '必须取最大值（错峰时最后一格才最晚收）');
 });
 

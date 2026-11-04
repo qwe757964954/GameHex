@@ -39,6 +39,7 @@ protected _RefMgrcelebrationRank:RefMgrcelebrationRankBase<IRefcelebrationRank>;
 protected _RefMgrcelebrationShop:RefMgrcelebrationShopBase<IRefcelebrationShop>;
 protected _RefMgrcelebrationTarget:RefMgrcelebrationTargetBase<IRefcelebrationTarget>;
 protected _RefMgrchapterAttrAddition:RefMgrchapterAttrAdditionBase<IRefchapterAttrAddition>;
+protected _RefMgrchapterName:RefMgrchapterNameBase<IRefchapterName>;
 protected _RefMgrchapterRankAward:RefMgrchapterRankAwardBase<IRefchapterRankAward>;
 protected _RefMgrciFu:RefMgrciFuBase<IRefciFu>;
 protected _RefMgrdayChallengeActTask:RefMgrdayChallengeActTaskBase<IRefdayChallengeActTask>;
@@ -243,6 +244,7 @@ get RefMgrcelebrationRank(){if(!this._RefMgrcelebrationRank){this._RefMgrcelebra
 get RefMgrcelebrationShop(){if(!this._RefMgrcelebrationShop){this._RefMgrcelebrationShop=new RefMgrcelebrationShopBase<IRefcelebrationShop>()}return this._RefMgrcelebrationShop}
 get RefMgrcelebrationTarget(){if(!this._RefMgrcelebrationTarget){this._RefMgrcelebrationTarget=new RefMgrcelebrationTargetBase<IRefcelebrationTarget>()}return this._RefMgrcelebrationTarget}
 get RefMgrchapterAttrAddition(){if(!this._RefMgrchapterAttrAddition){this._RefMgrchapterAttrAddition=new RefMgrchapterAttrAdditionBase<IRefchapterAttrAddition>()}return this._RefMgrchapterAttrAddition}
+get RefMgrchapterName(){if(!this._RefMgrchapterName){this._RefMgrchapterName=new RefMgrchapterNameBase<IRefchapterName>()}return this._RefMgrchapterName}
 get RefMgrchapterRankAward(){if(!this._RefMgrchapterRankAward){this._RefMgrchapterRankAward=new RefMgrchapterRankAwardBase<IRefchapterRankAward>()}return this._RefMgrchapterRankAward}
 get RefMgrciFu(){if(!this._RefMgrciFu){this._RefMgrciFu=new RefMgrciFuBase<IRefciFu>()}return this._RefMgrciFu}
 get RefMgrdayChallengeActTask(){if(!this._RefMgrdayChallengeActTask){this._RefMgrdayChallengeActTask=new RefMgrdayChallengeActTaskBase<IRefdayChallengeActTask>()}return this._RefMgrdayChallengeActTask}
@@ -449,6 +451,7 @@ export class RefMgrcelebrationRankBase<T extends IRefBase> extends RefMgrBase<T>
 export class RefMgrcelebrationShopBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("celebrationShop")}}
 export class RefMgrcelebrationTargetBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("celebrationTarget")}}
 export class RefMgrchapterAttrAdditionBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("chapterAttrAddition")}}
+export class RefMgrchapterNameBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("chapterName")}}
 export class RefMgrchapterRankAwardBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("chapterRankAward")}}
 export class RefMgrciFuBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("ciFu")}}
 export class RefMgrdayChallengeActTaskBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("dayChallengeActTask")}}

@@ -1,7 +1,7 @@
 /**
  * 主界面「活动入口」可见性判定的单测。
  *
- * 覆盖的事：**`open` 表里 64 行不是全都会显示** —— 老端 `GObjEntrance.Init()` 逐行判
+ * 覆盖的事：**`open` 表里那几十行不是全都会显示** —— 老端 `GObjEntrance.Init()` 逐行判
  * `SystemObject.GetVisibleConditionSet().GetBool()`，判不过的不进列表。本工程等价物是
  * `MainEntranceVisible`，这里把它逐条钉住，并用**真实 `open.json`** 跑三态玩家：
  *

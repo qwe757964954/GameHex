@@ -2,9 +2,9 @@ import { _decorator, Color, Component, Label, Sprite, SpriteFrame, UIOpacity } f
 import type { ZCBuildingType, ZCCardReveal } from '../model/ZCGameTypes';
 import type { ZCOwner } from '../model/ZCMapConfig';
 import { ZC_CARD_FADE_START_PROGRESS } from '../model/ZCBattlePresentationQueue';
-import { ProcedureGame } from '../../procedure/ProcedureGame';
+import type { IZCBattlePresentationArt } from '../application/ZCBattleRuntimeContract';
 import { ZCDC_LOG_WARNINGS } from '../ZCDCLogSwitch';
-import { elasticPopScale, mapToViewX, mapToViewY, POP_FROM_SCALE } from './ZCGameViewUtil';
+import { zcBuildingArt, elasticPopScale, mapToViewX, mapToViewY, POP_FROM_SCALE } from './ZCGameViewUtil';
 
 const { ccclass, property } = _decorator;
 
@@ -100,15 +100,15 @@ export class ZCCardRevealView extends Component {
 
     @property({ type: UIOpacity, group: '节点引用', tooltip: 'LuckSprite：评语延迟淡入，淡出仍随根节点级联' })
     luckOpacityComp: UIOpacity = null!;
-    /**
-     * 卡面图 / 建筑帧都**不再由渲染层注入闭包**：按 id 现取控制器的只读出口
-     * （`ProcedureGame.current?.resolveCardArt / resolveBuildingFrame`）—— 数据本来就在控制器手里
-     * （`legendCardArtFrames` / `preparedResources.buildingFrames`），少一层逐实例闭包。
-     */
+    /** 异步资源到货后作废内容键，下次 render 从本局只读资源表重新选图。 */
     invalidateArt(): void {
         // 卡面图是异步加载的，可能晚于小卡牌弹出才到 —— 不作废内容键，那条卡会一直停在建筑图上。
         this.contentKey = '';
     }
+
+    private presentationArt: IZCBattlePresentationArt | null = null;
+
+    setPresentationArt(art: IZCBattlePresentationArt): void { this.presentationArt = art; }
 
     render(reveal: Readonly<ZCCardReveal>, now: number): void {
         const duration = Math.max(0.001, reveal.durationSeconds);
@@ -215,7 +215,7 @@ export class ZCCardRevealView extends Component {
 
     /** 卡面主图优先角色图；金矿已确定使用建筑图，缺角色图不再告警。 */
     private frameForArt(reveal: Readonly<ZCCardReveal>): SpriteFrame | null {
-        const cardArt = ProcedureGame.current?.resolveCardArt(reveal.cardId) ?? null;
+        const cardArt = this.presentationArt?.cardArtFrames.get(reveal.cardId) ?? null;
         if (cardArt) return cardArt;
         // if (ZCDC_LOG_WARNINGS) {
         //     console.warn(
@@ -223,7 +223,7 @@ export class ZCCardRevealView extends Component {
         //         + '；请检查卡表 headIcon 是否配置、或图片是否已进包',
         //     );
         // }
-        const configured = ProcedureGame.current?.resolveBuildingFrame(reveal.cardId, reveal.building) ?? null;
+        const configured = this.presentationArt ? zcBuildingArt(this.presentationArt, reveal.cardId, reveal.building) : null;
         return configured ?? this.frameForBuilding(reveal.building, reveal.owner);
     }
 

@@ -44,23 +44,32 @@ export class ProcedureBootstrap extends Component {
     };
 
     onLoad(): void {
+        this.configurePresentation();
+        this.configurePayment(new FetchNetworkTransport());
+        this.configureAudioAndIndicators();
+        const manager = this.createProcedureManager();
+        this.configureServices(manager);
+        this.configurePopups(manager);
+        this.registerRoutes(manager);
+        manager.navigate(GameRoute.Update);
+        GameSocketBridge.install();
+    }
+    private configurePresentation(): void {
         // framework 的提示出口 → app 层吐司。
         // 放在组合根而不是 FW.ts 里，是为了守住「framework 不反向依赖 app」这条线；
         // 赋值是幂等的，重复进场景也不会出问题。
         FW.showTip = (tip: string) => { Toast.show(tip); };
-
         // 「获得奖励」弹窗出口 → app 层的 `ShowRewardPage`。放在组合根的原因同 `showTip`
         // （framework 不反向依赖 app）。`ShowRewardPage` 内部只走 `PopupManager`，没有前置依赖；
         // 没有 `PopupManager` 时 `PopupBase.open` 会打一条 error 并返 null，不会抛。
         FW.showReward = (goods, isGold) => {
             void ShowRewardPage.open({ userData: { goods, isGold } });
         };
-
         // 对齐 2.0 `ModelStore.enter()`：支付请求/中心服开单本身不代表发货，必须等游戏服
         // `CmdRechargeBroMsg`。首充、灵玉直充等所有充值入口共用这一条全局结算出口。
         GameNet.instance.addEvent('CmdRechargeBroMsg', this, this.onRechargeSettled);
-
-        const network = new FetchNetworkTransport();
+    }
+    private configurePayment(network: FetchNetworkTransport): void {
         const payment = CenterPaymentService.instance(network);
         // 支付出口：中心服开单/内部账号发货已经落地；真实渠道扣款由 PaymentService 的平台处理器注入。
         FW.pay = (payChannelId, fromType, fromId) => {
@@ -70,20 +79,23 @@ export class ProcedureBootstrap extends Component {
                 FW.showTip(message);
             });
         };
-
+    }
+    private configureAudioAndIndicators(): void {
         // 音频：读本地存档（`setting_music/setting_sound<account>`）+ 建常驻 AudioRoot，
         // 并把 `FW.playSound` 从空实现接到真播放（framework 层自己不敢 import，
         // `FW → AudioMgr → ResourceMgr → FW` 是循环引用）。
         // 幂等：重复进场景只是再读一次存档。
         AudioMgr.instance.init();
         bindAudioToFramework(FW);
-
         // 红点变量注册 —— 必须早于任何界面调 `ToolSet.AddScriptListener(expr)`，
         // 否则表达式里的 `[RDXxx]` 找不到类、静默退化成 0（见 RdRegistry 文件头）。
         // 幂等，重复进场景重复调无副作用。
         registerRdVars();
-
-        const manager = this.getComponent(ProcedureManager) ?? this.addComponent(ProcedureManager);
+    }
+    private createProcedureManager(): ProcedureManager {
+        return this.getComponent(ProcedureManager) ?? this.addComponent(ProcedureManager);
+    }
+    private configureServices(manager: ProcedureManager): void {
         const assets = new ResourceLoadManager(new CocosAssetService(), { maxConcurrentLoads: RESOURCE_LOAD_CONCURRENCY });
         this.resourceLoads = assets;
         const configs = new RefConfigService();
@@ -100,23 +112,23 @@ export class ProcedureBootstrap extends Component {
             network: new FetchNetworkTransport(),
             callbackOwners,
         });
-        PopupManager.inst.initialize(assets, callbackOwners, view => createCardPopupComposition(manager.context, view));
+    }
+    private configurePopups(manager: ProcedureManager): void {
+        PopupManager.inst.initialize(manager.context.assets, GameNet.instance.callbackOwners, view => createCardPopupComposition(manager.context, view));
+    }
+    private registerRoutes(manager: ProcedureManager): void {
         manager.registerRoute(GameRoute.Update, ProcedureUpdate);
         manager.registerRoute(GameRoute.Login, ProcedureLogin);
         manager.registerRoute(GameRoute.PostLogin, ProcedurePostLogin);
         manager.registerRoute(GameRoute.Main, ProcedureMain);
         manager.registerRoute(GameRoute.Matching, ProcedureMatching);
         manager.registerRoute(GameRoute.Battle, ProcedureGame);
-        manager.navigate(GameRoute.Update);
-
-        // 浏览器控制台协议调试入口（`window.GameSocket`），复用游戏内连接与登录态；
-        // 幂等安装，仅在有 window 的平台挂载。
-        GameSocketBridge.install();
     }
 
     onDestroy(): void {
-        this.resourceLoads?.dispose();
+        const resourceLoads = this.resourceLoads;
         this.resourceLoads = null;
-        GameNet.instance.removeEvent('CmdRechargeBroMsg', this, this.onRechargeSettled);
+        try { resourceLoads?.dispose(); }
+        finally { GameNet.instance.removeEvent('CmdRechargeBroMsg', this, this.onRechargeSettled); }
     }
 }

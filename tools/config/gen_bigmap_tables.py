@@ -201,7 +201,7 @@ WORLD_MAP = [[1, "植物大地图", 40, 40, 18, 12, 10, 18, 16, 11]]
 # `itemId` 指向 `W-物品表` 的背包道具（18501 粮食 / 18502 木材 / 18503 矿石 /
 # 18504 钻石 / 18505 行动力）：顶栏图标优先按 `item.icon` 走背包那套加载
 # （`icons/item/xxx` + `spriteFramePathOf` + `main-pages` 分包），
-# `item.icon` 为空时退回 `image/bigmap/concept/sprites/<resType>` 概念图。
+# `item.icon` 为空时退回 `image/concept/sprites/<resType>` 概念图。
 # `resName` 与背包道具名保持一致（矿石 / 钻石），避免同一个东西两套叫法。
 RESOURCES = [
     ["grain", "粮食", "ui/bigmap/icon_grain", 800, 1, 18501],

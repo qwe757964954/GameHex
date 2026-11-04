@@ -2,8 +2,8 @@ import { EventMgr } from '../../assets/script/framework/event/EventMgr';
 import { ZC_BATTLE_EVENTS } from '../../assets/script/app/zcds/application/ZCBattleEvents';
 import { readFileSync } from 'node:fs';
 import { ZCBattleRuntimeController } from '../../assets/script/app/zcds/application/ZCBattleRuntimeController';
-import { ZCBattleSettlementController, type IZCBattleSettlementRequest, type IZCBattleSettlementPorts } from '../../assets/script/app/zcds/application/ZCBattleSettlementController';
-import type { IZCBattleView, IZCBattleAuxiliaryPorts } from '../../assets/script/app/zcds/application/ZCBattleRuntimeContract';
+import { ZCBattleSettlementController, type IZCBattleSettlementRequest, type IZCBattleSettlementServices } from '../../assets/script/app/zcds/application/ZCBattleSettlementController';
+import type { IZCBattleView, IZCBattleRuntimeServices } from '../../assets/script/app/zcds/application/ZCBattleRuntimeContract';
 import type { IZCGameEntry } from '../../assets/script/app/zcds/application/ZCGameEntry';
 import { loadPvpTables, type ZCPvpTables } from '../../assets/script/app/zcds/model/ZCGameRuntimeConfig';
 import { configureZCMap } from '../../assets/script/app/zcds/model/ZCMapConfig';
@@ -18,7 +18,9 @@ export function deferred<T>() {
     return { promise, resolve, reject };
 }
 export const flush = () => new Promise<void>(resolve => setImmediate(resolve));
-export function runtimeFixture(overrides: Partial<IZCBattleSettlementPorts> = {}, selecting = false, slgBattleType?: 1003 | 1004, auxiliary: Partial<IZCBattleAuxiliaryPorts> = {}) {
+type ISettlementFixtureMethods = IZCBattleSettlementServices['results'] & IZCBattleSettlementServices['rewards'] & IZCBattleSettlementServices['popup'] & IZCBattleSettlementServices['flow'] & Pick<IZCBattleSettlementServices, 'failed'>;
+type IRuntimeFixtureMethods = IZCBattleRuntimeServices['art'] & IZCBattleRuntimeServices['popups'] & IZCBattleRuntimeServices['clock'] & Pick<IZCBattleRuntimeServices, 'failed'>;
+export function runtimeFixture(overrides: Partial<ISettlementFixtureMethods> = {}, selecting = false, slgBattleType?: 1003 | 1004, auxiliary: Partial<IRuntimeFixtureMethods> = {}) {
     const names = ['pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond', 'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams', 'pvpBaseTeamWeight', 'skillAttrModifier', 'generalStar', 'pvpAttrMap', 'pvpModifierOverride', 'pvpUnitGrowth', 'pvpSkillBinding', 'pvpStatus'];
     const tables = Object.fromEntries(names.map(name => {
         const data = JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8'));
@@ -31,14 +33,14 @@ export function runtimeFixture(overrides: Partial<IZCBattleSettlementPorts> = {}
     const calls: string[] = [], requests: IZCBattleSettlementRequest[] = [], pages: unknown[] = [], persisted: boolean[] = [];
     let hold = false, scheduled: (() => void) | null = null, switchCallback = (_entered: boolean) => {};
     const view: IZCBattleView & { dragMoved: boolean } = {
-        dragMoved: false, initialize: () => calls.push('mount'), startPlaying: () => calls.push('startPlaying'),
+        dragMoved: false, applyUnitPrefab() {}, applyEffectPrefab() {}, initialize: () => calls.push('mount'), startPlaying: () => calls.push('startPlaying'),
         renderBattle: (_model, _frame, _events, mode) => calls.push(mode), renderSpawnSelection: () => calls.push('spawn'),
         advanceSettlementPresentation: () => { calls.push('sweep'); return hold; },
         flashSpawn: message => calls.push(message), flashInsufficientGold: () => calls.push('gold'), resetCamera: () => calls.push('camera'),
     };
     const context = createControllerContext();
     const session = createBattleSession(context);
-    const settlement = new ZCBattleSettlementController(context, {
+    const settlementMethods: ISettlementFixtureMethods = {
         waitResult: async type => { calls.push(`wait:${type}`); return null; },
         finish: async request => { calls.push('finish'); requests.push(request); },
         loadRewards: async () => [],
@@ -46,12 +48,21 @@ export function runtimeFixture(overrides: Partial<IZCBattleSettlementPorts> = {}
         watchSwitch: callback => { switchCallback = callback; return () => calls.push('unwatch'); },
         cancelRequests: () => calls.push('cancel'), failed: () => calls.push('failed'),
         ...overrides,
+    };
+    const settlement = new ZCBattleSettlementController(context, {
+        results: settlementMethods, rewards: settlementMethods, popup: settlementMethods,
+        flow: settlementMethods, failed: settlementMethods.failed,
     }, { owner: view, hasPveContext: false });
-    const runtime = new ZCBattleRuntimeController(context, view, settlement, {
+    const runtimeMethods: IRuntimeFixtureMethods = {
+        loadUnitPrefab: async () => null,
+        loadEffectPrefab: async () => null,
         openGuide: async () => ({ close: () => calls.push('guideClose') }),
         openDamage: async () => ({ close: () => calls.push('damageClose') }),
         openRank: async () => ({ close: () => calls.push('rankClose') }),
         schedule: callback => { scheduled = callback; return () => { scheduled = null; }; }, failed: () => calls.push('failed'), ...auxiliary,
+    };
+    const runtime = new ZCBattleRuntimeController(context, view, settlement, {
+        art: runtimeMethods, popups: runtimeMethods, clock: runtimeMethods, failed: runtimeMethods.failed,
     }, session);
     const entry: IZCGameEntry = {
         resources: { loadGuide: async () => ({ entries: [], params: {}, iconFrames: new Map() }) } as IZCGameEntry['resources'],

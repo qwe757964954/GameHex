@@ -55,7 +55,7 @@ def main():
     parser.add_argument('--details', type=Path)
     parser.add_argument('--ui', type=Path, required=True)
     parser.add_argument('--background', type=Path, required=True)
-    parser.add_argument('--output', type=Path, default=Path('assets/resources/image/bigmap/concept'))
+    parser.add_argument('--output', type=Path, default=Path('assets/bundles/bigmap/image/concept'))
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     records = slice_sheet(args.sprites, BUILDINGS, 4, args.output, 'sprites')

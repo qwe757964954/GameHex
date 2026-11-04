@@ -22,11 +22,12 @@ function fixture() {
         dispose() { disposed++; },
     };
     const options = { owner, service,
-        loadVersion: async () => ({ version: '1', url: 'url', index: 'index' }),
-        restoreCredentials: (value: unknown) => credentials.push(value), render: (state: ILoginViewState) => states.push(state),
-        tip: (message: string) => tips.push(message), openServers: async () => { opened++; }, closeServers: () => { closed++; },
-        schedule: (callback: () => void, _seconds: number) => { timers.add(callback); return () => { timers.delete(callback); }; },
-        navigate: (_route: string, params?: unknown) => routes.push(params),
+        config: { loadVersion: async () => ({ version: '1', url: 'url', index: 'index' }) },
+        view: { restoreCredentials: (value: unknown) => credentials.push(value), render: (state: ILoginViewState) => states.push(state) },
+        feedback: { tip: (message: string) => tips.push(message) },
+        servers: { openServers: async () => { opened++; }, closeServers: () => { closed++; } },
+        clock: { schedule: (callback: () => void, _seconds: number) => { timers.add(callback); return () => { timers.delete(callback); }; } },
+        navigation: { navigate: (_route: string, params?: unknown) => routes.push(params) },
     };
     const controller = new LoginController(createControllerContext(), options);
     const intent = (kind: 'login' | 'register' | 'servers' | 'select', extra = {}) => EventMgr.instance.emit(LoginUiEvent.Intent, { owner, kind, account: ' a ', password: 'secret', ...extra });

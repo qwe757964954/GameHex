@@ -65,4 +65,17 @@ export const CARD_LINEUP_TEXTS = {
     skillUpgradeButton: '升级',
     skillUpgradeOffline: '未连接服务器',
     skillUpgradeFailed: '技能升级失败',
+    // ---- 卡牌详情页（2026-11-03 改版：CardUpgrade 弹窗整体换成详情页外观）----
+    /** 底部页签两个状态的名字。 */
+    detailTabInfo: '详情',
+    detailTabLevel: '等级',
+    detailPower: '战力',
+    detailChainLocked: '未解锁',
+    /** 升级奖励条前缀（后缀由配置/里程碑拼接，当前表里没有奖励列时只显示前缀）。 */
+    detailRewardPrefix: '升级奖励：',
+    /** 里程碑行等级前缀（效果图 `Lv.3` 形态）。 */
+    detailMilestonePrefix: 'Lv.',
+    /** 品质字（菱形中央）：品级中文名（普通/稀有/史诗/传说）。 */
+    detailQualityPrefix: '',
+    detailQualityGrade: '品',
 } as const;

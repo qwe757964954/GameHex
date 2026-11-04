@@ -313,6 +313,21 @@ export interface ZCCombatEvent {
     empowered: boolean;
     startedAt: number;
     durationSeconds: number;
+    /**
+     * 「定格光束」：这一条**只是**命中后的余韵，长度已经不动，只负责淡出。
+     *
+     * 2026-11-03 需求「镭射飞龙的普通攻击…触碰到第一个敌人时就会停止延长，造成 1 次伤害，
+     * 特效缓慢变透消失，0.18s 内消失」。
+     *
+     * 弹道在命中那一拍就被 `ZCProjectileSystem` 摘掉（否则会再打一次），所以「定格 + 渐隐」
+     * 只能另起一条纯表现事件：`from` = 出手点、`to` = **命中点**、`durationSeconds` = 淡出秒数
+     * （见 `ZCCombatEffectFlight.zcCombatEffectFadeSecondsOf`）。
+     * 视图看到这个标记就按满长画，并把整体透明度按 `progress` 压到 0；
+     * 不结算任何伤害，也不参与命中判定。
+     *
+     * ⚠️ `combatEvents` 不进存档（`ZCSnapshotCodec.restore` 会把整列清空），所以加字段不影响兼容。
+     */
+    beamHold?: boolean;
 }
 
 /** 在途弹道属于可恢复的战斗状态，碰撞后才产生伤害。坐标均为棋盘逻辑坐标。 */
@@ -366,6 +381,16 @@ export interface ZCProjectileState extends ZCCombatEvent {
      * 缺省 1 ⇒ 既有溅射（旧 skillEffect）逐字不变。
      */
     splashDamageRate?: number;
+    /**
+     * 命中后（或到点后）播放的爆炸特效路径（镭射飞龙「追踪导弹」101003）。
+     *
+     * 与弹道本身的 `effectPrefabPath`（飞行段的弹体）是两个 prefab：
+     * 弹体飞到头 / 撞到人那一刻，视图按这个路径换播爆炸（`镭射飞龙_导弹技能命中`）。
+     * 缺省 ⇒ 与既有弹道一致，只把 `effectPrefabPath` 那一个特效播到底。
+     */
+    impactEffectPrefabPath?: string | null;
+    /** 弧线飞行：出手点到目标点之间的**中段最大横向偏移**（世界坐标，缺省 0 = 直线）。 */
+    arcOffset?: number;
 }
 
 /**

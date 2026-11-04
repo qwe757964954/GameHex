@@ -80,7 +80,7 @@ function makeWorldView() {
         setTimeout: (callback: () => void) => { const id = ++timerId; timers.set(id, callback); return id; },
         clearTimeout: (id: number) => timers.delete(id),
     });
-    interface IMarker { kind: string; id: number; node: { active: boolean; position: { x: number; y: number } }; icon: object;
+    interface IMarker { kind: string; id: number; node: { active: boolean; position: { x: number; y: number }; setPosition(x: number, y: number, z: number): void }; icon: object;
         view: { hitArea: { badgeY: number; badgeHeight: number; iconY?: number; height?: number } } }
     interface IView extends Component {
         data: object; viewportTransform: object; content: object; markers: IMarker[];
@@ -98,9 +98,9 @@ function makeWorldView() {
     view.content = { position: { x: 0, y: 0 }, setScale() {}, setPosition(x: number, y: number) { this.position = { x, y }; } };
     const markerView = { hitArea: { badgeY: 70, badgeHeight: 30 } };
     view.markers = [
-        { kind: 'city', id: 101, node: { active: true, position: { x: 0, y: 0 } }, icon: {}, view: markerView },
-        { kind: 'city', id: 102, node: { active: true, position: { x: 2000, y: 0 } }, icon: {}, view: markerView },
-        { kind: 'monster', id: 7, node: { active: true, position: { x: 0, y: 0 } }, icon: {}, view: markerView },
+        { kind: 'city', id: 101, node: { active: true, position: { x: 0, y: 0 }, setPosition(x: number, y: number) { this.position = { x, y }; } }, icon: {}, view: markerView },
+        { kind: 'city', id: 102, node: { active: true, position: { x: 2000, y: 0 }, setPosition(x: number, y: number) { this.position = { x, y }; } }, icon: {}, view: markerView },
+        { kind: 'monster', id: 7, node: { active: true, position: { x: 0, y: 0 }, setPosition(x: number, y: number) { this.position = { x, y }; } }, icon: {}, view: markerView },
     ];
     return { view, timers, colors, flush: () => {
         const callbacks = [...timers.values()]; timers.clear(); callbacks.forEach((callback) => callback());

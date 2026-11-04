@@ -42,6 +42,8 @@ interface IMageAttack {
     readonly after: { x: number; y: number };
     /** 光束：`scaleX` 每帧被长度覆盖，只缩 `y`。 */
     readonly beam?: boolean;
+    /** 2026-11-03 SVN 换皮：美术直接烘焙终值，70% 两段式比例断言不适用。 */
+    readonly rebaked?: boolean;
 }
 
 /**
@@ -61,15 +63,18 @@ const MAGES: readonly IMageAttack[] = [
         before: { x: 1, y: 1 }, after: { x: 1, y: 0.7 }, beam: true,
     },
     {
-        unitId: 68011, name: '冰冻菇', skillId: 30261,
+        unitId: 68011, name: '水手菇', skillId: 30261,
         prefab: 'units/projectiles/冰法师_冰锥/冰法师_冰锥',
         // `x` 是**负数**（镜像朝向）；缩放只改大小，必须保留符号。
+        // 2026-11-03 SVN：这张卡换皮改名（旧名「冰冻菇」），特效与缩放口径未变。
         before: { x: -0.4, y: 0.4 }, after: { x: -0.28, y: 0.28 },
     },
     {
         unitId: 68022, name: '雷蕉', skillId: 30231,
-        prefab: 'units/projectiles/雷法师_雷电/雷法师_雷电',
-        before: { x: 0.5142857, y: 0.5142857 }, after: { x: 0.36, y: 0.36 },
+        // 2026-11-03 SVN：美术整体换皮，`雷法师_雷电` ⇒ `磁电菇_子弹攻击`，
+        // 且新 prefab 的 scale 由美术直接烘焙成 0.4 终值（旧 70% 两段式不再适用）。
+        prefab: 'units/projectiles/磁电菇_子弹攻击/磁电菇_子弹攻击',
+        before: { x: 0.4, y: 0.4 }, after: { x: 0.4, y: 0.4 }, rebaked: true,
     },
     {
         unitId: 68024, name: '急冻瓜', skillId: 30671,
@@ -102,11 +107,11 @@ const MELEE_MAGE = { unitId: 68015, name: '阿尔萨斯', skillId: 30241, prefab
 
 /**
  * 被连带的**非法师**单位（用户已知情接受）：
- * 冰冻菇的 30261 就是弩兵普攻（冰锥），雷蕉的 30231 就是雷法师普攻（雷电），
- * 这两个技能同时被射手泰兰德、战士萨尔引用。哪天要拆成专属 prefab，这条会先红。
+ * 水手菇（旧名「冰冻菇」）的 30261 就是弩兵普攻（冰锥），雷蕉的 30231 就是雷法师普攻，
+ * 这两个技能同时被射手毒箭蘑菇（旧名「泰兰德」）、战士萨尔引用。哪天要拆成专属 prefab，这条会先红。
  */
 const COLLATERAL = [
-    { unitId: 68017, name: '泰兰德', role: '射手', skillId: 30261, sharedBy: '冰冻菇' },
+    { unitId: 68017, name: '毒箭蘑菇', role: '射手', skillId: 30261, sharedBy: '水手菇' },
     { unitId: 68016, name: '萨尔', role: '战士', skillId: 30231, sharedBy: '雷蕉' },
 ];
 
@@ -174,17 +179,17 @@ test('② 缩放：8 个 prefab 的尺寸节点 = 改前 × 70%（绝对值 + �
         assert.ok(near(scale.x, mage.after.x) && near(scale.y, mage.after.y),
             `${mage.name}（${mage.prefab}）${scale.name} 是 ${scale.x}/${scale.y}，应为 ${mage.after.x}/${mage.after.y}`);
         // 关系也要守住：以后谁把基线改了却忘了 70%，绝对值那条可能刚好还绿。
-        const ratioX = mage.beam ? 1 : scale.x / mage.before.x;
-        const ratioY = scale.y / mage.before.y;
-        assert.ok(near(ratioX, mage.beam ? 1 : SHRINK, 1e-4),
-            `${mage.name} x 缩放比例 ${ratioX.toFixed(4)} 应为 ${mage.beam ? 1 : SHRINK}`);
-        assert.ok(near(ratioY, SHRINK, 1e-4),
-            `${mage.name} y 缩放比例 ${ratioY.toFixed(4)} 应为 ${SHRINK}`);
+        const ratioX = mage.beam || mage.rebaked ? 1 : scale.x / mage.before.x;
+        const ratioY = mage.rebaked ? 1 : scale.y / mage.before.y;
+        assert.ok(near(ratioX, mage.beam || mage.rebaked ? 1 : SHRINK, 1e-4),
+            `${mage.name} x 缩放比例 ${ratioX.toFixed(4)} 应为 ${mage.beam || mage.rebaked ? 1 : SHRINK}`);
+        assert.ok(near(ratioY, mage.rebaked ? 1 : SHRINK, 1e-4),
+            `${mage.name} y 缩放比例 ${ratioY.toFixed(4)} 应为 ${mage.rebaked ? 1 : SHRINK}`);
     }
 });
 
 test('③ 冰锥的负号必须留着（x<0 是镜像朝向，不是「大小」）', () => {
-    const cone = MAGES.find((mage) => mage.name === '冰冻菇')!;
+    const cone = MAGES.find((mage) => mage.name === '水手菇')!;
     const scale = spriteNodeScale(cone.prefab);
     assert.ok(scale.x < 0, `冰锥 x 应仍为负（镜像），实际 ${scale.x}`);
     assert.ok(near(scale.y, -scale.x), `镜像要等比：|x| ${-scale.x} 应等于 y ${scale.y}`);
@@ -200,26 +205,29 @@ test('④ 光束（镭射飞龙）：只缩粗细，x 恒 1 —— 长度由每�
     const spec = zcBeamSpecOf(dragon.prefab);
     assert.ok(spec, 'ZCBeamEffect 没登记这个路径 ⇒ 它其实是普通子弹，x 就有意义了');
 
-    // 真正的算式：粗细 = 画布高 × widthScale ×（技能号倍率）× 根节点 y。
+    // 真正的算式（2026-11-03 新口径）：粗细 = 画布高 × widthScale。
+    // 0.7 已 **bake 进** widthScale（1.8 × 0.7 = 1.26），`applyBeamStretch` 把它作为
+    // **绝对值**写到 visualNode.scaleY —— prefab 根节点的 0.7 被覆盖而不是相乘，
+    // 否则池化复用下从旧 scale.y 读值会累乘污染（0.7→1.26→2.27…）。
+    // 普攻 30719：53 × 1.26 = 66.78px（与旧口径 53 × 1.8 × 0.7 数值一致）。
+    // 带强化的「镭射死光」30845 挂同一份美术（倍率 1.3 ⇒ 86.81px）。
     // 画布高从 prefab 的 UITransform 现取，不从注释里抄。
     const canvasHeight = (readJson(prefabFile(dragon.prefab)) as Array<Record<string, any>>)
         .find((entry) => entry.__type__ === 'cc.UITransform')!._contentSize.height;
     assert.equal(canvasHeight, 53, '光束画布高变了 ⇒ 下面两个像素值要重算');
-
-    // 普攻 30719：53 × 1.8 × 0.7 = 66.78px。这是**画布高**（含大片柔光外圈），
-    // 真正不透明的亮芯约 9px —— 2026-11-02 用户反馈「子弹模型消失了」就是按整张画布的
-    // 长厚比取 0.65 时亮芯只剩 3px。带强化的「镭射死光」30845 挂同一份美术（倍率 1.3）。
-    const thickness = (skillId: number): number =>
-        canvasHeight * zcBeamWidthScaleOf(spec!, skillId) * scale.y;
+    const thickness = (skillId: number): number => canvasHeight * zcBeamWidthScaleOf(spec!, skillId);
     assert.ok(Math.abs(thickness(30719) - 66.78) < 0.1, `普攻光柱高 ${thickness(30719).toFixed(2)}px 应约 66.78`);
     assert.ok(Math.abs(thickness(30845) - 86.81) < 0.1, `镭射死光高 ${thickness(30845).toFixed(2)}px 应约 86.81`);
-    assert.ok(Math.abs(thickness(30719) / (canvasHeight * zcBeamWidthScaleOf(spec!, 30719)) - SHRINK) < 1e-6,
-        '根节点 y 缩放（0.7）只许乘一次');
+    assert.ok(near(zcBeamWidthScaleOf(spec!, 30719) / 1.8, SHRINK, 1e-6),
+        '美术目标粗细 1.8 中的 0.7 已 bake 进 widthScale（1.26），只 bake 一次');
 
     // 别处不许再乘一遍根节点缩放 —— 乘两遍就成了 49%。
+    // （`beamBaseScaleY` 只允许出现在注释里 —— 字段本身已被移除。）
     const viewSource = readFileSync(join(ROOT, 'assets/script/app/zcds/view/ZCCombatEffectView.ts'), 'utf8');
-    assert.match(viewSource, /this\.beamBaseScaleY = visual\.scale\.y \|\| 1;/, '粗细的取值口径变了');
-    assert.match(viewSource, /this\.beamBaseScaleY \* zcBeamWidthScaleOf\(/, '粗细的算式变了 ⇒ 0.7 要重推');
+    assert.ok(!/beamBaseScaleY\s*[=.]/.test(viewSource),
+        'beamBaseScaleY 的赋值/读取必须移除（读旧 scale.y 会累乘污染，0.7 bake 进 widthScale）');
+    assert.match(viewSource, /setScale\(\s*stretch\.scaleX,\s*zcBeamWidthScaleOf\(this\.beamSpec, skillId\)/,
+        'applyBeamStretch 必须把宽度作为绝对值写入 scaleY（覆盖 prefab 的 0.7）');
 });
 
 test('⑤ 连带影响是**已知取舍**：冰锥/雷电同时被泰兰德、萨尔用着，他们也一起变小了', () => {

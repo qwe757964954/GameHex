@@ -156,6 +156,29 @@ function assertUnique(rows, makeKey, label, errors) {
     });
 }
 
+/** `pvpSkill` 里运行时一律按数字读的列 —— 出现在表里就是「类型行写错了」。 */
+const SKILL_NUMERIC_FIELDS = [
+    'skillId', 'empoweredEvery', 'empoweredSkillId', 'secondarySkillId',
+    'cooldown', 'projectileSpeed', 'areaRadius', 'chargeDistance', 'chargeSpeedScale',
+];
+
+/**
+ * 拦住「数字被导成字符串」的 id 列。
+ * 只认纯数字串：`onHitStatusId` 这类本来就该是字符串 key 的列不在清单里。
+ */
+function assertNumericSkillIds(rows, errors) {
+    rows.forEach((row, index) => {
+        for (const field of SKILL_NUMERIC_FIELDS) {
+            const value = row[field];
+            if (typeof value !== 'string' || !/^-?\d+(\.\d+)?$/.test(value.trim())) continue;
+            errors.push(
+                `pvpSkill[${index}].${field} 导成了字符串「${value}」：`
+                + '检查 PVP-技能.xlsx 该列第 6 行的类型声明（应为 int / float，不是 string）',
+            );
+        }
+    });
+}
+
 function assertConsistentAttrMappings(rows, errors) {
     const seen = new Map();
     rows.forEach((row, index) => {
@@ -187,6 +210,13 @@ export function validateSkillPipeline(clientDirectory, options = {}) {
     tables.pvpSkillPlan = readTable(directory, 'pvpSkillPlan', false, errors, warnings);
 
     assertUnique(tables.pvpSkill, (row) => key(row.skillId), 'pvpSkill.skillId', errors);
+    // 技能表的 id 列必须是**数字**（2026-11-04 从表上修掉）：`PVP-技能.xlsx` 的
+    // `secondarySkillId` 第 6 行类型声明一度是 `string`，eSon 会把单元格里的 30832 导成
+    // `"30832"`，而运行时 `ZCPvpTableParser` 一律按数字读（`optionalPositiveNumber`）⇒
+    // 整张技能表编译失败、所有 `loadPvpTables` 的用例连锁红（症状是
+    // `skills.30707.secondarySkillId 必须是大于 0 的数字`）。
+    // 这里在导表产物上拦，比等运行时抛错早一步；修法是改**表里的类型行**，不是改 JSON。
+    assertNumericSkillIds(tables.pvpSkill, errors);
     assertUnique(tables.pvpStatus, (row) => key(row.statusId), 'pvpStatus.statusId', errors);
     assertConsistentAttrMappings(tables.pvpAttrMap, errors);
     // 旧 J 表里已有少量重复 ID，运行时沿用“后行覆盖前行”。先告警兼容，

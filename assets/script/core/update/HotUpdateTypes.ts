@@ -187,7 +187,7 @@ export type NativeHotUpdatePhase = 'checking' | 'validating' | 'downloading' | '
 export interface INativeHotUpdateProgress {
     readonly phase: NativeHotUpdatePhase;
     readonly message: string;
-    /** 字节进度 0~100（与官方 event.getPercent() 同为百分数）。 */
+    /** 字节进度 0~100，由平台适配层将引擎比例转换为百分数。 */
     readonly percent?: number;
     /** 文件进度 0~100。 */
     readonly percentByFile?: number;

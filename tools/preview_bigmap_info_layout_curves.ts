@@ -18,7 +18,7 @@ const PANEL_WIDTH = 560;
 const PANEL_HEIGHT = 400;
 /** 详情图标请求的显示宽度（`refreshInfoContent` 里 city / monster 用 112，建筑用 110）。 */
 const ICON_REQUEST_WIDTH = 112;
-const CITY_ICON_PNG = 'assets/resources/image/bigmap/concept/sprites/fortress.png';
+const CITY_ICON_PNG = 'assets/bundles/bigmap/image/concept/sprites/fortress.png';
 
 /** 按「请求宽度」铺开后的可见高度 —— 与 `applyInfoLayout` 里那行算法逐字一致。 */
 function naturalIconHeight(file: string, width: number): number {

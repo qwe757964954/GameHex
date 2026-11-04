@@ -72,7 +72,9 @@ test('出错之后继续编辑会重算标记（不用每次手动再点校验�
     assert.match(source, /markErrorsStale\(\);\s+\/\/ 改完数据让格子上的 error 标签跟着重算/);
     assert.match(source, /function restore\(value\) \{ map = value; selectedCell = null;[^}]*markErrorsStale\(\);/);
     assert.match(source, /staminaCost: Number\(\$\('staminaCost'\)\.value\) \};\s*markErrorsStale\(\);\s*render\(\);/);
-    assert.match(source, /map\.sites = map\.sites\.filter\(\(site\) => site\.cellId !== selectedCell\); selectedCell = null; markErrorsStale\(\); render\(\); \}\)/);
+    // 删站点：按 **footprint** 命中（2026-10 起站点可是多格），删完照样重算标记
+    // ⚠️ `territory-app.js` 是 CRLF ⇒ 跨行一律用 `\s*`，别写 `\n`
+    assert.match(source, /map\.sites = map\.sites\.filter\(\(site\) => !\(site\.footprint \|\| \[site\.cellId\]\)\.includes\(selectedCell\)\);\s*selectedCell = null;\s*markErrorsStale\(\);\s*render\(\);\s*\}\)/);
     assert.match(source, /setDirty\(true\);\s*\n\s*markErrorsStale\(\);\s*\n\s*render\(\);/);
     // 换图时旧格号作废
     assert.match(source, /function clearErrorMarkers\(\)/);

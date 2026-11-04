@@ -46,12 +46,31 @@ test('LoginPage restores optional status binding, emits scoped inputs and fully 
 
 test('login failures only show a tip and leave successful bootstrap status intact', async () => {
     const owner = {}, tips: string[] = [], states: any[] = [];
-    const controller = new LoginController(createControllerContext(), { owner,
+    const controller = new LoginController(createControllerContext(), {
+        owner,
         service: { servers_: [], selectedServerId_: null, recentServerIds_: [], protocolReady_: true,
             restoreAccount: () => ({ account: '', password: '' }), bootstrap: async () => ({ ok: true }),
             login: async () => ({ ok: false, reason: '请输入账号和密码' }), register: async () => ({ ok: false }), setSelectedServer() {}, dispose() {} },
-        loadVersion: async () => ({ version: '1', url: '', index: '' }), restoreCredentials() {}, render: value => states.push(value),
-        tip: value => tips.push(value), openServers: async () => {}, closeServers() {}, schedule: () => () => {}, navigate() {},
+        config: {
+            loadVersion: async () => ({ version: '1', url: '', index: '' })
+        },
+        view: {
+            restoreCredentials() {},
+            render: value => states.push(value)
+        },
+        feedback: {
+            tip: value => tips.push(value)
+        },
+        servers: {
+            openServers: async () => {},
+            closeServers() {}
+        },
+        clock: {
+            schedule: () => () => {}
+        },
+        navigation: {
+            navigate() {}
+        },
     });
     try {
         await controller.start(); EventMgr.instance.emit(LoginUiEvent.Intent, { owner, kind: 'login', account: '', password: '' });

@@ -54,11 +54,15 @@ test('最新表不要求旧字段；缺失或非法的新字段仍会报告配�
     }
 });
 
-test('新表 unlockType=0 不再沿用旧表逐级解锁；新版野怪不走旧血量模拟结算', () => {
+test('新表 unlockType=0 仍需逐级解锁；新版野怪不走旧血量模拟结算', () => {
     const config = loadBigMapConfig();
     const monster = config.monsters.get(8010);
     assert.ok(monster);
-    assert.equal(bigMapMonsterUnlock(monster, makeUnlockContext()).unlocked, true);
+    assert.equal(bigMapMonsterUnlock(monster, makeUnlockContext()).unlocked, false);
+    assert.equal(bigMapMonsterUnlock(monster, makeUnlockContext()).reason, '需先通关 9 级野怪');
+    assert.equal(bigMapMonsterUnlock(monster, makeUnlockContext({ maxClearedMonsterLevel: 8 })).unlocked, false);
+    assert.equal(bigMapMonsterUnlock(monster, makeUnlockContext({ maxClearedMonsterLevel: 9 })).unlocked, true);
+    assert.equal(bigMapMonsterUnlock(config.monsters.get(8001)!, makeUnlockContext()).unlocked, true);
     const storage = createMemoryBigMapStorage();
     const presenter = new BigMapPresenter({ config, storage, saveKey: 'latest-monster',
         adventureChapter: () => 3, now: () => 957600 });

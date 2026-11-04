@@ -1,5 +1,6 @@
 import { JsonAsset } from 'cc';
 import type { AssetService } from '../../../core/asset/AssetService';
+import type { IControllerResources } from '../../../framework/controller/ControllerBase';
 import { readRoleRow } from '../../main/MainRoleRow';
 import { toIdString } from '../../net/RequestGuard';
 import { configureTerritoryMap } from '../model/TerritoryMapConfig';
@@ -10,12 +11,17 @@ import type { IChapterSelectMapInfo, IChapterSelectRow } from '../model/ChapterS
 import { TerritoryChapterInfoRepository } from './TerritoryChapterInfoRepository';
 import { territoryMapPath } from './TerritoryPageAssets';
 
+interface IChapterNameConfig {
+    readonly chapterId: number;
+    readonly chapterName: string;
+}
+
 /**
  * 章节选择弹窗的数据装配（**唯一允许碰资源加载的地方**，消费方只拿归一后的行）。
  *
  * 三步：
  * 1. `TerritoryChapterInfoRepository.availableChapters` 决定哪些章可切；
- * 2. 逐章读地图 JSON（只取 `name` + 站点格）—— 读不到就当「这章还没做内容」；
+ * 2. 读取 chapterName 配表；逐章读地图 JSON（名称兜底 + 站点格）；
  * 3. 逐章读本地存档的已占领格，交给 {@link buildChapterSelectRows} 算百分比与状态。
  *
  * 资源用 `has()` 预检：Cocos 对不在索引里的路径抛的是
@@ -50,22 +56,28 @@ async function loadMapInfo(
 /**
  * 组装弹窗列表。
  *
- * @param assets MainPage 的展示资源入口（带页面作用域，页面销毁时自动释放）
+ * @param resources MainPage 的展示资源与配置入口（资源带页面作用域）
  * @param currentChapterId 运行时当前章节（模型输出的 `state.chapterId`）
  */
 export async function loadChapterSelectRows(
-    assets: AssetService,
+    resources: Pick<IControllerResources, 'assets' | 'configs'>,
     currentChapterId: number,
 ): Promise<IChapterSelectRow[]> {
     const availableChapters = TerritoryChapterInfoRepository.instance.availableChapters;
+    // 全部章节数 = 配表 chapterName 的最大 chapterId（配表是章节全集）；配表缺失或
+    // 服务端可切章节超出配表范围时，以两者较大者为准，保证已解锁的章一定有行。
+    const chapterConfigs = await resources.configs.getTable<IChapterNameConfig>('chapterName');
+    let totalChapters = 0;
+    for (const row of chapterConfigs) if (row.chapterId > totalChapters) totalChapters = row.chapterId;
     let highest = 0;
     for (const chapterId of availableChapters) if (chapterId > highest) highest = chapterId;
-    if (highest === 0) highest = 1;
+    if (totalChapters < highest) totalChapters = highest;
+    if (totalChapters === 0) totalChapters = 1;
 
-    const chapterIds = Array.from({ length: highest + 1 }, (_, index) => index + 1);
+    const chapterIds = Array.from({ length: totalChapters }, (_, index) => index + 1);
     const store = new TerritorySaveStore(readSaveOwner());
     const [infos, ownedCells] = await Promise.all([
-        Promise.all(chapterIds.map((chapterId) => loadMapInfo(assets, chapterId))),
+        Promise.all(chapterIds.map((chapterId) => loadMapInfo(resources.assets, chapterId))),
         Promise.resolve(chapterIds.map((chapterId) => store.load(chapterId).progress.ownedCells ?? [])),
     ]);
 
@@ -76,5 +88,6 @@ export async function loadChapterSelectRows(
         if (info) maps.set(chapterId, info);
         cells.set(chapterId, ownedCells[index]);
     });
-    return buildChapterSelectRows(availableChapters, currentChapterId, maps, cells);
+    const chapterNames = new Map(chapterConfigs.map((row) => [row.chapterId, row.chapterName]));
+    return buildChapterSelectRows(availableChapters, currentChapterId, maps, cells, chapterNames, totalChapters);
 }

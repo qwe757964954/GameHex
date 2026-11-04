@@ -115,7 +115,7 @@
   "blocked":  [ 111, 112, 113 ],                 // 障碍/禁放
   "spawnZones": [ { "zoneId": 1, "cityId": 101, "cells": "b64:...", "capacity": 10 } ],
 
-  "background": "image/bigmap/world_01",
+  "background": "image/wasteland_background",
   "artMeta": { "poiIcons": { "city_1": "img/city_lv1" } }
 }
 ```

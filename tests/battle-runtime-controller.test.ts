@@ -9,6 +9,79 @@ import { ZCGameUiEvent } from '../assets/script/app/zcds/view/ZCGameHudEvents';
 import type { IZCChapterBattleOutcome } from '../assets/script/app/battle/BattleResultService';
 import type { IZCBattlePopup } from '../assets/script/app/zcds/application/ZCBattleSettlementController';
 
+test('missing unit art is scoped to its real view, deduplicated and ignored after disposal', async () => {
+    const pending = deferred<any>();
+    const loads: string[] = [];
+    const h = runtimeFixture({}, false, undefined, {
+        loadUnitPrefab: path => { loads.push(path); return pending.promise; },
+    });
+    const applied: unknown[] = [];
+    h.view.applyUnitPrefab = (...args) => applied.push(args);
+    const definition = h.entry.matchConfig.units.find(unit => unit.prefabPath);
+    assert.ok(definition);
+    const intent = { owner: h.view, unitId: definition.unitId };
+    try {
+        EventMgr.instance.emit(ZCGameUiEvent.RequestUnitArt, { ...intent, owner: {} });
+        EventMgr.instance.emit(ZCGameUiEvent.RequestUnitArt, { owner: h.view, unitId: 'unknown-unit' });
+        await flush();
+        assert.equal(loads.length, 0);
+        EventMgr.instance.emit(ZCGameUiEvent.RequestUnitArt, intent);
+        EventMgr.instance.emit(ZCGameUiEvent.RequestUnitArt, intent);
+        assert.deepEqual(loads, [definition.prefabPath]);
+        h.dispose();
+        pending.resolve({});
+        await flush();
+        assert.deepEqual(applied, []);
+        EventMgr.instance.emit(ZCGameUiEvent.RequestUnitArt, intent);
+        assert.equal(loads.length, 1);
+    } finally { h.dispose(); }
+});
+
+test('successful unit art is published once and failed requests allow a later retry', async () => {
+    let attempts = 0;
+    const prefab = {};
+    const h = runtimeFixture({}, false, undefined, {
+        loadUnitPrefab: async () => { if (++attempts === 1) throw new Error('load failed'); return prefab; },
+    });
+    const applied: unknown[] = [];
+    h.view.applyUnitPrefab = (...args) => applied.push(args);
+    const unitId = h.entry.matchConfig.units.find(unit => unit.prefabPath).unitId;
+    try {
+        EventMgr.instance.emit(ZCGameUiEvent.RequestUnitArt, { owner: h.view, unitId });
+        await flush();
+        EventMgr.instance.emit(ZCGameUiEvent.RequestUnitArt, { owner: h.view, unitId });
+        await flush();
+        EventMgr.instance.emit(ZCGameUiEvent.RequestUnitArt, { owner: h.view, unitId });
+        assert.equal(attempts, 2);
+        assert.deepEqual(applied, [[unitId, prefab]]);
+    } finally { h.dispose(); }
+});
+
+test('effect art is loaded on demand, deduplicated per path and published to the view', async () => {
+    const loads: string[] = [];
+    const prefab = {};
+    const path = 'units/projectiles/磁电菇_子弹攻击/磁电菇_子弹攻击';
+    const h = runtimeFixture({}, false, undefined, {
+        loadEffectPrefab: async (requested: string) => { loads.push(requested); return prefab; },
+    });
+    const applied: unknown[] = [];
+    h.view.applyEffectPrefab = (...args) => applied.push(args);
+    try {
+        // 别的视图发的请求不能落进来（同一个 EventMgr 里可能同时有多局）。
+        EventMgr.instance.emit(ZCGameUiEvent.RequestEffectArt, { owner: {}, path });
+        // 弹幕：同一路径同一帧发多次，只加载一次。
+        EventMgr.instance.emit(ZCGameUiEvent.RequestEffectArt, { owner: h.view, path });
+        EventMgr.instance.emit(ZCGameUiEvent.RequestEffectArt, { owner: h.view, path });
+        await flush();
+        assert.deepEqual(loads, [path]);
+        assert.deepEqual(applied, [[path, prefab]]);
+        // 到货之后再问不会重复加载。
+        EventMgr.instance.emit(ZCGameUiEvent.RequestEffectArt, { owner: h.view, path });
+        await flush();
+        assert.deepEqual(loads, [path]);
+    } finally { h.dispose(); }
+});
+
 test('settlement waits before report, closes before navigation and restores on cancelled switch', async t => {
     const calls: string[] = [], pages: object[] = [];
     let settled = (_entered: boolean) => {};
@@ -17,12 +90,15 @@ test('settlement waits before report, closes before navigation and restores on c
     EventMgr.instance.on(ZC_BATTLE_EVENTS.RETURN_TO_MAIN, event => { if (event.owner === owner) calls.push('navigate'); }, target);
     t.after(() => EventMgr.instance.offTarget(target));
     const controller = new ZCBattleSettlementController(createControllerContext(), {
-        waitResult: () => { calls.push('wait'); return Promise.resolve({ code: 2, goods: [] }); },
-        finish: async () => { calls.push('finish'); },
-        loadRewards: async () => [],
-        open: async options => { pages.push(options); calls.push('open'); return { close: reason => { calls.push('close'); calls.push(`reason:${reason}`); } }; },
-        watchSwitch: callback => { settled = callback; return () => calls.push('unwatch'); },
-        cancelRequests: () => calls.push('cancel'), failed: () => {},
+        results: {
+            waitResult: () => { calls.push('wait'); return Promise.resolve({ code: 2, goods: [] }); },
+            finish: async () => { calls.push('finish'); },
+            cancelRequests: () => calls.push('cancel'),
+        },
+        rewards: { loadRewards: async () => [] },
+        popup: { open: async options => { pages.push(options); calls.push('open'); return { close: reason => { calls.push('close'); calls.push(`reason:${reason}`); } }; } },
+        flow: { watchSwitch: callback => { settled = callback; return () => calls.push('unwatch'); } },
+        failed: () => {},
     }, { owner, hasPveContext: true });
     controller.start({ localVictory: true, elapsedSeconds: 1, commands: [], statistics: [], battleType: 1002 });
     controller.start({ localVictory: true, elapsedSeconds: 1, commands: [], statistics: [], battleType: 1002 });

@@ -7,9 +7,19 @@ import { assetUrl } from './helpers/asset-paths';
 test('challenge tab stays visible but cannot open the old adventure page', () => {
     const source = readFileSync(new URL('../assets/script/app/main/MainTabHost.ts', import.meta.url), 'utf8');
     // 旧挑战入口仍保留在底栏，但不再绑定切页回调或章节地图 prefab。
-    // 世界格 2026-10-21 起改为大地图入口（不再是锁定态），锁定只剩挑战。
+    // 世界格 2026-10-21 起改为大地图入口（不再是锁定态）。
+    // 2026-11-04 起「角色 / 联盟」与挑战一起进未开放名单（名单唯一真源 = `MainTabModel.LOCKED_TABS`）。
     assert.deepEqual(mainTabTarget(MainTab.Challenge), { kind: 'locked' });
-    assert.match(source, /button\.setEnabled\(type !== MainTab\.Challenge\)/);
+    assert.deepEqual(mainTabTarget(MainTab.Role), { kind: 'locked' });
+    assert.deepEqual(mainTabTarget(MainTab.Alliance), { kind: 'locked' });
+    assert.deepEqual(
+        [MainTab.Shop, MainTab.Hero, MainTab.Territory].map(tab => mainTabTarget(tab)?.kind),
+        ['page', 'page', 'page'],
+        '商店 / 英雄 / 领地必须仍可切',
+    );
+    assert.match(source, /button\.setEnabled\(!isMainTabLocked\(type\)\)/);
+    assert.doesNotMatch(source, /button\.setEnabled\(type !== MainTab\.Challenge\)/,
+        '锁定判定必须读名单，不许在宿主里单独判挑战');
     assert.doesNotMatch(source, /if \(index === MainTab\.Challenge\) return this\.adventurePage;/);
     assert.doesNotMatch(source, /adventurePage/, '旧章节地图 prefab 入口应移除');
     const mainRoot = readFileSync(assetUrl('ui/main/MainRoot.prefab'), 'utf8');
@@ -99,6 +109,7 @@ test('PVE settlement returns to the territory main tab', () => {
     const main = readFileSync(new URL('../assets/script/app/procedure/ProcedureMain.ts', import.meta.url), 'utf8');
     assert.match(builder, /initialTab: 'territory'/);
     assert.match(builder, /focusCellId: pve\.territoryCellId/);
-    assert.match(composition, /ProcedureManager\.navigate\(GameRoute\.Main, buildZCBattleReturnParams\(entry\)\)/);
+    assert.match(composition, /this\.returnParams = buildZCBattleReturnParams\(entry\)/);
+    assert.match(composition, /ProcedureManager\.navigate\(GameRoute\.Main, this\.returnParams\)/);
     assert.match(main, /params\.initialTab === 'territory' \? MainTab\.Territory/);
 });

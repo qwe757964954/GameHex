@@ -57,6 +57,17 @@ const FACE_WIDTH = 123;
  */
 const MAX_VISIBLE_HEIGHT_RATIO = 0.85;
 
+/**
+ * 装饰件（`territory_decor_*`）的可见高上限 —— 与建筑不是一套口径。
+ *
+ * 装饰件是树 / 草丛 / 宝箱屋这类**场景道具**，本来就会高过台面；实测（可见宽归一到 84）：
+ * `decor_06` 136.6% ＞ `decor_05` 130.8% ＞ `decor_04` 112.2% ＞ `decor_12` 102.8% ＞ `decor_03` 100.1%。
+ *
+ * 取值 `1.4`：比当前最高的 136.6% 留 3.4% 余量 —— 够吸收小改图，又能在「又放大一圈」时红。
+ * 🔴 别再用 0.85 套装饰件：那会让这条护栏常年红着，最后没人看它。
+ */
+const DECOR_MAX_VISIBLE_HEIGHT_RATIO = 1.4;
+
 interface MetaTrim {
     readonly rawWidth: number;
     readonly rawHeight: number;
@@ -255,6 +266,11 @@ test('★★★代码里的目标可见宽必须与判据一致（防两边各�
 test('★★归一后建筑必须明显小于台面（不许「顶满格子」）', () => {
     // 🔴 这条是 2026-10-15 看截图后补的：建筑可见高若接近台面高 90，视觉上就是「撑满格子」，
     // 会被读成「偏下」，但根因是尺寸。横向与纵向都要留出呼吸空间。
+    //
+    // ⚠️ 2026-11-03 按资产类别拆开：`territory_decor_*` 是**装饰件**（树 / 草丛 / 宝箱屋…），
+    //    天生比功能建筑高，实测 5 件在 100%~137% 之间（最狠 decor_06 = 136.6%）。
+    //    把它们塞进 0.85 会让这条长期红着而失去意义 —— 但它们也不能无限长，
+    //    所以单列一条 `DECOR_MAX_VISIBLE_HEIGHT_RATIO` 硬上限（当前最高值 + 余量）。
     for (const name of buildingNames) {
         const meta = readTrim(name);
         const placement = visiblePlacement(meta);
@@ -263,10 +279,24 @@ test('★★归一后建筑必须明显小于台面（不许「顶满格子」�
         const height = placement.visibleHeight * scale;
         assert.ok(width <= FACE_WIDTH * 0.95,
             `${name} 归一后可见宽 ${width.toFixed(1)} 超出台面宽 123 的九成五，会压到邻格`);
-        assert.ok(height <= FACE_HEIGHT * MAX_VISIBLE_HEIGHT_RATIO,
+        const isDecor = name.startsWith('territory_decor_');
+        const ceiling = isDecor ? DECOR_MAX_VISIBLE_HEIGHT_RATIO : MAX_VISIBLE_HEIGHT_RATIO;
+        assert.ok(height <= FACE_HEIGHT * ceiling,
             `${name} 归一后可见高 ${height.toFixed(1)} 超过台面高 ${FACE_HEIGHT} 的 `
-            + `${MAX_VISIBLE_HEIGHT_RATIO * 100}%（截图上会读成「顶满格子 / 偏下」）`);
+            + `${(ceiling * 100).toFixed(0)}%（截图上会读成「顶满格子 / 偏下」）`);
     }
+    // 装饰件单独一组：至少要把当前最矮/最高摸清楚，别让「反正 exempt」变成没人看的数
+    const decorHeights = buildingNames
+        .filter((name) => name.startsWith('territory_decor_'))
+        .map((name) => {
+            const meta = readTrim(name);
+            const placement = visiblePlacement(meta);
+            return placement.visibleHeight * (TARGET_VISIBLE_WIDTH / placement.visibleWidth);
+        });
+    assert.ok(decorHeights.length > 0, '装饰件一个都没读到');
+    // 最高的那件已经贴着上限 ⇒ 再放大就必须回来改这条（而不是悄悄过）
+    assert.ok(Math.max(...decorHeights) > FACE_HEIGHT * (DECOR_MAX_VISIBLE_HEIGHT_RATIO - 0.05),
+        '装饰件普遍缩小了 ⇒ 上限该跟着收紧，否则等于没管');
 });
 
 test('★★trim 偏移补偿量必须与 meta 实测一致（防止公式被改坏却看不出来）', () => {

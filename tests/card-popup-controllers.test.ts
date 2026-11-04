@@ -10,7 +10,7 @@ import { CardLineupController } from '../assets/script/app/card/CardLineupContro
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { createControllerContext } from './helpers/controller-context';
 import type { ZCDeckCard } from '../assets/script/app/zcds/model/ZCCombatCatalog';
-import type { UpgradeHeroResult, LineupBoardData } from '../assets/script/app/card/CardRepository';
+import type { UpgradeHeroResult, LineupBoardData, CardLineupData } from '../assets/script/app/card/CardRepository';
 import type { FormationSaveResult } from '../assets/script/app/card/FormationService';
 import { buildCardLevelUpTable, evaluateUpgrade, upgradeButtonText } from '../assets/script/app/card/CardUpgradeCost';
 const card = (id: string) => ({ id, name: id }) as ZCDeckCard;
@@ -18,19 +18,115 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
 function deferred<T>() { let resolve: (value: T) => void = () => {}; const promise = new Promise<T>(yes => { resolve = yes; }); return { promise, resolve }; }
 function upgradeStatus(level = 0) { return { cardId: '1', level, targetLevel: level + 1, configured: true, maxLevel: 10, maxed: false,
     armyExpItemId: '16003', generalExpItemId: '16000', armyExpOwned: 99, generalExpOwned: 99, requirements: [], canUpgrade: true, blockedReason: '' }; }
+
+test('详情与升级状态独立展示；升级后忽略上一等级迟到的详情', async () => {
+    const h = upgradeFixture();
+    const oldDetail = deferred<any>();
+    const newDetail = { stats: [], chain: [], milestones: [], powerText: 'new' };
+    h.repository.loadCardDetail = async (_id, level) => level === 0 ? oldDetail.promise : newDetail;
+    try {
+        const opening = h.controller.start(); await tick();
+        assert.equal(h.states.at(-1).phase, 'ready', '升级状态无需等待技能详情');
+        h.intent();
+        h.pending.resolve({ kind: 'success', heroId: 1, level: 1 }); await tick();
+        assert.equal(h.states.at(-1).detail, newDetail);
+        const count = h.states.length;
+        oldDetail.resolve({ ...newDetail, powerText: 'old' }); await opening;
+        assert.equal(h.states.length, count);
+        assert.equal(h.states.at(-1).detail, newDetail);
+    } finally { h.finish(); }
+});
+
+test('技能详情先就绪时立即展示，不等待升级配置', async () => {
+    const h = upgradeFixture(); const status = deferred<any>();
+    h.repository.loadUpgradeStatus = async () => status.promise;
+    const detail = { stats: [], chain: [], milestones: [], powerText: 'ready' };
+    h.repository.loadCardDetail = async () => detail;
+    try {
+        const opening = h.controller.start(); await tick();
+        assert.equal(h.states.at(-1).detail, detail);
+        assert.equal(h.states.at(-1).status, null);
+        status.resolve(upgradeStatus()); await opening;
+    } finally { h.finish(); }
+});
+
+test('详情左右切卡沿用卡库顺序与真实等级，升级在途禁止跳转', async () => {
+    const h = upgradeFixture();
+    h.repository.loadDetailNavigation = async () => ({
+        catalog: [card('1'), card('2'), card('3')], heroLevels: new Map([['2', 7]]),
+        heroListKnown: true,
+    });
+    try {
+        await h.controller.start();
+        h.intent('next', {});
+        assert.equal(h.details.length, 0, '其他详情实例的意图不能串入');
+        h.intent('next');
+        await tick();
+        assert.equal(h.details[0].cardId, '2');
+        assert.equal(h.details[0].level, 7);
+        h.intent('previous');
+        await tick();
+        assert.equal(h.details[1].cardId, '3');
+        assert.equal(h.details[1].level, 0, '未解锁的卡不能借用上一张的等级');
+        h.intent('submit');
+        h.intent('next'); h.intent('team'); h.intent('skills');
+        assert.equal(h.details.length, 2);
+        assert.equal(h.editors, 0);
+        assert.equal(h.skills.length, 0);
+        h.pending.resolve({ kind: 'failed' });
+        await tick();
+        h.intent('team');
+        assert.equal(h.editors, 1);
+    } finally { h.finish(); }
+});
+
+test('完整卡库为空时不关闭，不跳到虚构卡牌', async () => {
+    const h = upgradeFixture();
+    try {
+        await h.controller.start();
+        h.intent('previous'); h.intent('next');
+        await tick();
+        assert.equal(h.details.length, 0);
+        assert.equal(h.closed, 0);
+    } finally { h.finish(); }
+});
 function upgradeFixture() {
-    const owner = {}, states: any[] = [], results: any[] = [], applied: any[] = [], skills: any[] = [];
+    const owner = {}, states: any[] = [], results: any[] = [], applied: any[] = [], skills: any[] = [], details: any[] = [];
+    const failures: unknown[] = [];
+    let editors = 0;
     let calls = 0, loads = 0, releases = 0, loading = 0, removed = 0, closed = 0;
     const pending = deferred<UpgradeHeroResult>();
     const repository = { loadUpgradeStatus: async (_id: string, level: number) => { loads++; return upgradeStatus(level); },
+        loadLineupSnapshot: (): CardLineupData | null => null,
+        loadDetailNavigation: async () => ({ catalog: [] as readonly ZCDeckCard[], heroLevels: new Map<string, number>(), heroListKnown: true }),
+        loadCardDetail: async () => ({ stats: [], powerText: '', chain: [], milestones: [] }),
         upgradeHero: async (_id: number, caller: object) => { calls++; assert.equal(caller, controller); return pending.promise; },
         applyHeroLevel: (id: number, level: number) => applied.push({ id, level }) };
-    const controller = new CardUpgradeController(createControllerContext(), { owner, model: new CardUpgradeModel({ card: card('1'), cardId: '1', level: 0 }), repository,
-        render: state => states.push(state), beginLoading: () => { loading++; return () => { releases++; }; },
-        removeCaller: () => { removed++; }, close: () => { closed++; }, openSkills: value => skills.push(value), failed() {} });
+    const controller = new CardUpgradeController(createControllerContext(), {
+        owner,
+        model: new CardUpgradeModel({ card: card('1'), cardId: '1', level: 0 }),
+        repository,
+        failed: error => failures.push(error),
+        view: {
+            render: state => states.push(state),
+            close: () => { closed++; }
+        },
+        loading: {
+            beginLoading: () => { loading++; return () => { releases++; }; }
+        },
+        requests: {
+            removeCaller: () => { removed++; }
+        },
+        popups: {
+            openSkills: value => skills.push(value),
+            openEditor: () => { editors++; },
+            openDetail: value => details.push(value),
+        },
+    });
     EventMgr.instance.on(CardLineupEvent.HeroUpgraded, value => results.push(value), owner);
     const intent = (kind = 'submit', eventOwner = owner) => EventMgr.instance.emit(CardPopupEvent.UpgradeIntent, { owner: eventOwner, kind });
-    return { owner, controller, repository, states, results, applied, skills, pending, intent,
+    return { owner, controller, repository, states, results, applied, skills, details, pending, intent, failures,
+        get editors() { return editors; },
         finish() { controller.dispose(); EventMgr.instance.offTarget(owner); },
         get calls() { return calls; }, get loads() { return loads; }, get releases() { return releases; }, get loading() { return loading; }, get removed() { return removed; }, get closed() { return closed; } };
 }
@@ -69,8 +165,24 @@ function boardFixture(closeAfterSave = false) {
     const pending = deferred<FormationSaveResult>();
     const repository = { loadBoard: async () => boardData(), saveFormation: async (id: number, heroIds: readonly number[], caller: object) => {
         assert.equal(caller, controller); submissions.push({ id, heroIds }); return pending.promise; } };
-    const controller = new LineupBoardController(createControllerContext(), { owner, model: new LineupBoardModel(2, 0), repository, autoLoadDecks: true, closeAfterSave,
-        render: state => states.push(state), tip: value => tips.push(value), removeCaller: () => { removed++; }, close: () => { closed++; }, failed() {} });
+    const controller = new LineupBoardController(createControllerContext(), {
+        owner,
+        model: new LineupBoardModel(2, 0),
+        repository,
+        autoLoadDecks: true,
+        closeAfterSave,
+        failed() {},
+        view: {
+            render: state => states.push(state),
+            close: () => { closed++; }
+        },
+        feedback: {
+            tip: value => tips.push(value)
+        },
+        requests: {
+            removeCaller: () => { removed++; }
+        },
+    });
     EventMgr.instance.on(CardLineupEvent.DeckSaved, value => events.push(value), owner);
     const intent = (kind: string, data = {}, eventOwner = owner) => EventMgr.instance.emit(CardPopupEvent.BoardIntent, { owner: eventOwner, kind, ...data });
     return { controller, repository, pending, states, events, submissions, tips, intent,
@@ -121,11 +233,18 @@ test('board close during load or save removes caller and rejects late view/resul
 test('upgrade and formation results refresh the live lineup controller; disposed lineup stops subscribing', async () => {
     let loads = 0;
     const lineup = new CardLineupController(createControllerContext(), {
-        owner: {}, autoLoadDecks: true, fallbackLevel: 1,
+        owner: {},
+        autoLoadDecks: true,
+        fallbackLevel: 1,
         repository: { loadLineupSnapshot: () => null, loadLineup: async () => {
             loads++;
             return { deck: [], pool: [], heroLevels: new Map(), heroLevelCaps: new Map(), heroListKnown: true };
-        } }, openEditor() {}, openUpgrade() {}, failed(error) { throw error; },
+        } },
+        failed(error) { throw error; },
+        popups: {
+            openEditor() {},
+            openUpgrade() {}
+        },
     });
     const upgrade = upgradeFixture(), board = boardFixture();
     try {
@@ -199,5 +318,39 @@ test('thrown save failure restores the submission gate and retains the draft', a
         assert.equal(h.states[h.states.length - 1].dirty, true);
         assert.equal(h.states[h.states.length - 1].canSave, true);
         assert.equal(h.events.length, 0); assert.equal(h.tips.length, 1);
+    } finally { h.finish(); }
+});
+
+
+test('详情切卡加载期间拒绝重复切换与升级，关闭后迟到的卡库不打开弹窗', async () => {
+    const h = upgradeFixture();
+    const pending = deferred<{ catalog: readonly ZCDeckCard[]; heroLevels: Map<string, number>; heroListKnown: boolean }>();
+    let loads = 0;
+    h.repository.loadDetailNavigation = () => { loads++; return pending.promise; };
+    try {
+        await h.controller.start();
+        h.intent('next'); h.intent('previous'); h.intent('submit');
+        assert.equal(loads, 1);
+        assert.equal(h.calls, 0);
+        h.controller.dispose();
+        pending.resolve({ catalog: [card('1'), card('2')], heroLevels: new Map(), heroListKnown: true });
+        await tick();
+        assert.equal(h.closed, 0);
+        assert.equal(h.details.length, 0);
+    } finally { h.finish(); }
+});
+
+test('切卡失败保留当前详情并允许重试，不依赖首帧阵容快照', async () => {
+    const h = upgradeFixture();
+    const failure = new Error('catalog unavailable');
+    h.repository.loadDetailNavigation = async () => { throw failure; };
+    try {
+        await h.controller.start(); h.intent('next'); await tick();
+        assert.equal(h.closed, 0);
+        assert.deepEqual(h.failures, [failure]);
+        h.repository.loadDetailNavigation = async () => ({ catalog: [card('1'), card('2')], heroLevels: new Map([['2', 9]]), heroListKnown: true });
+        h.intent('next'); await tick();
+        assert.equal(h.details[0].cardId, '2');
+        assert.equal(h.details[0].level, 9);
     } finally { h.finish(); }
 });

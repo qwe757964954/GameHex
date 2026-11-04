@@ -193,6 +193,26 @@ export async function loadArmySkillLevelUpRows(): Promise<readonly unknown[]> {
     return readRows('armySkillLevelUp');
 }
 
+/**
+ * 读 `pvpCard` 里指定卡（按 id）的**原始行**；没有返回 `null`。
+ *
+ * 详情页的六维属性要用 `unitMaxHp` / `unitAttack` 等未进 `ZCDeckCard` 的列，
+ * 与 `loadCardLevelUpRows` 同一条「原始行」口径，不另写一套解析。
+ */
+export async function loadPvpCardRawRow(cardId: string): Promise<Record<string, unknown> | null> {
+    for (const row of await readRows('pvpCard')) {
+        if (!row || typeof row !== 'object' || Array.isArray(row)) continue;
+        const record = row as Record<string, unknown>;
+        if (String(record.id) === String(cardId)) return record;
+    }
+    return null;
+}
+
+/** 读 `pvpUnitGrowth` 的原始行（详情页兵种成长）。 */
+export async function loadPvpUnitGrowthRows(): Promise<readonly unknown[]> {
+    return readRows('pvpUnitGrowth');
+}
+
 /** 当前阵容的羁绊加成（供加成条展示）。deck 为空时返回中性值。 */
 export function currentDeckBonuses(deck: readonly ZCDeckCard[]): ZCDeckBonuses {
     return calculateDeckBonuses(deck);

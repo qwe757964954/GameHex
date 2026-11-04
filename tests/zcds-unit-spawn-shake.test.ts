@@ -21,7 +21,7 @@ test('spawnShakePulse：单段内 1 → 1.1 → 1，段外 clamp', () => {
 });
 
 test('单位出生抖动：先 Y 拉 110% 回落、再 X 拉 110% 回落，结束回基准', () => {
-    const { load, bar, cc, FakeNode, procedureGame } = loadViews();
+    const { load, bar, cc, FakeNode, setArtQueries } = loadViews();
     const view = new (load('./ZCUnitView').ZCUnitView)();
     // 组件宿主节点：attachVisual 里会 `visual.layer = this.node.layer`，缺了就是
     // 「Cannot set properties of undefined (setting 'layer')」。
@@ -46,7 +46,7 @@ test('单位出生抖动：先 Y 拉 110% 回落、再 X 拉 110% 回落，结�
     // ⚠️ `initialize` 签名变了（2026-10-16）：不再从入参收 prefab / prefabSize，
     //    改为 `ProcedureGame.current?.resolveUnitPrefab(definition.unitId)` 现取 + `definition.prefabSize`。
     //    继续传第二参会被忽略 ⇒ prefab 取不到 ⇒ `visualNode` 永远是 null ⇒ 读 `.scale` 直接崩。
-    procedureGame.current = { resolveUnitPrefab: () => prefab };
+    setArtQueries({ resolveUnitPrefab: () => prefab });
     view.initialize({ unitId: 'test-unit', hero: false, attackRange: 20, prefabSize: 1 });
     const unit = { hp: 100, maxHp: 100, owner: 'player', battleState: 'idle', facingRadians: 0, completedAttackCount: 0 };
     const definition = { unitId: 'test-unit', hero: false, attackRange: 20, prefabSize: 1 };

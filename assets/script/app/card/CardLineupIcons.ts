@@ -2,13 +2,14 @@ import type { SpriteFrame } from 'cc';
 import { createRoutedSpriteFrameCache } from '../common/SpriteFrameCache';
 import {
     CARD_ART_ROOT,
+    CARD_DETAIL_ART_ROOT,
+    CARD_HEAD_ART_ROOT,
     COMMON_ART_ROOT,
     FRAME_ART_ROOT,
     ICON_ART_ROOT,
 } from '../ArtPaths';
-import { HeadArt } from '../HeadArt';
 
-/** 卡牌图标归会话缓存；目录与头像查表由本模块负责。 */
+/** 卡牌图标归会话缓存；资源目录由本模块负责。 */
 const artCache = createRoutedSpriteFrameCache('ArtIcons');
 
 export function loadArt(name: string, root: string): Promise<SpriteFrame | null> {
@@ -29,8 +30,13 @@ export function loadLineupArt(name: string): Promise<SpriteFrame | null> {
     return loadArt(name, CARD_ART_ROOT);
 }
 
+/** 卡牌详情页切图（`image/carddetail`）：面板 / 六边形 / 品质菱形 / 图标 / 按钮。 */
+export function loadCardDetailArt(name: string): Promise<SpriteFrame | null> {
+    return loadArt(name, CARD_DETAIL_ART_ROOT);
+}
+
 /**
- * 立绘与职业图标（`image/icon/card`）：`camp_*` / `char_0*` / `class_*` / `common_img_{职业}0*`。
+ * 营地雕像与职业图标（`icons/card`）：`camp_*` / `class_*` / `common_img_{职业}0*`。
  *
  *  这几类图**不在** `image/card` 里，用 `loadLineupArt` 取会静默返回 `null`
  * （只打一条 warn，界面留着 prefab 占位图）—— 2026-09-15 美术收编时踩过。
@@ -39,6 +45,11 @@ export function loadLineupArt(name: string): Promise<SpriteFrame | null> {
  */
 export function loadIconArt(name: string): Promise<SpriteFrame | null> {
     return loadArt(name, ICON_ART_ROOT);
+}
+
+/** 专属角色图与兵种头像统一归 `icons/cardHead`，共用其自动图集。 */
+export function loadCardHeroArt(name: string): Promise<SpriteFrame | null> {
+    return loadArt(name, CARD_HEAD_ART_ROOT);
 }
 
 /** 布阵卡池卡框（`image/frame`）：`common_img_pzk_01..04`。 */
@@ -61,20 +72,3 @@ export function preloadLineupArt(names: readonly string[]): Promise<void> {
     return loadLineupArtList(names).then(() => undefined);
 }
 
-/**
- * 卡牌头像：收的是 **`PVP-卡牌.headIcon` 那个「图标名」本身**，不是资源名。
- *
- *  ⚠️ **不能走上面的 `loadIconArt`** —— 那一套是「给我一个资源名、我去 `image/icon/card` 找」，
- *  而头像这一列的类型是「`icon.json` 的 `key`」：要先查表解出资源名、**并且目录由包名决定**
- *  （`兵种_头像_*` → `image/icon/cardHead`，`图标_头像_*` → `image/icon/head`）。
- *  自己拼路径的写法会在**一半的卡**上静默留白（只打一条 warn），正是 `[ArtIcons] 图标加载失败`
- *  那类报错的来源。
- *
- *  解表 / 判目录 / 拼路径 / 缓存 / 失败返回 `null` 全在 `HeadArt.loadHeadIconFrame()` 里，
- *  本函数只是把它挂到卡牌这条加载器链上，让 `CardArtProvider` 不需要知道 `headIcon` 与
- *  其它美术名**不是同一种东西**。
- */
-export function loadCardHeadArt(iconKey: string | undefined): Promise<SpriteFrame | null> {
-    if (!iconKey) return Promise.resolve(null);
-    return HeadArt.loadHeadIconFrame(iconKey);
-}

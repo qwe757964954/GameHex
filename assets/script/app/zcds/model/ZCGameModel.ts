@@ -11,6 +11,7 @@ import type { ZCBattlePresentationEvents, ZCGameRenderFrame, ZCGameRenderHex } f
 import { ZCMapGeometry } from './ZCMapGeometry';
 import { captureZCMatchConfig, ZCMatchConfig, ZCPveDefenceConfig } from './ZCMatchConfig';
 import { ZCSnapshotCodec } from './ZCSnapshotCodec';
+import { zcCombatEffectFadeSecondsOf } from './ZCCombatEffectFlight';
 
 /** 20 Hz 固定逻辑步长；每次最多接受 5 秒，限制后台恢复时的主线程阻塞。 */
 export const ZC_SIMULATION_STEP_SECONDS = 0.05;
@@ -252,6 +253,7 @@ export class ZCGameModel {
     private tileStatesDirty = true;
     private topologyRevision = 0;
     private readonly connectedDevelopedCache = new Map<number, readonly number[]>();
+    private hexRenderMap: ReadonlyMap<number, ZCGameRenderHex> | null = null;
     private readonly unitContext: IZCUnitContext;
     private readonly groundZoneContext: IZCGroundZoneContext;
     private readonly attackResolutionContext: IZCAttackResolutionContext;
@@ -288,6 +290,9 @@ export class ZCGameModel {
             //  击退的撞墙/不可走格吞噬要与 `legacy_knockback` 一致。
             healUnit: (unit, amount) => ZCStatusResolutionSystem.healUnit(unit, amount, this.statusResolutionContext),
             applyKnockback: (target, source, amount) => this.applyLegacyKnockback(target, source, amount),
+            //  追踪导弹：把攻击系统构造好的弹体写进对局状态（复用既有 `state.projectiles` 口径，
+            //  弹道飞行 / 碰撞 / 命中结算都在 `ZCProjectileSystem` + `resolveProjectileHit` 里完成）。
+            pushProjectile: (projectile) => { this.state.projectiles.push(projectile); },
         };
     }
     private readonly legacyCombatContext: IZCLegacyCombatContext = {
@@ -473,7 +478,77 @@ export class ZCGameModel {
             effectiveDefinition: this.services.effectiveDefinition,
             structureTarget: (projectile) => this.projectileStructureTarget(projectile),
             hit: (projectile, target) => this.resolveProjectileHit(projectile, target),
+            linger: (projectile) => this.lingerBeam(projectile),
         };
+    }
+
+    /**
+     * 弹道消失的同一拍，补一条**定格光束**的表现事件（镭射飞龙）。
+     *
+     * 2026-11-03 需求：「朝着目标发射一条逐渐延长的射线，触碰到第一个敌人时就会停止延长，
+     * 造成 1 次伤害，特效缓慢变透消失，0.18s 内消失」。
+     *
+     * 前两句本来就是既有行为（长度只跟弹头走、命中即回收，所以「不再伸长」是天然的）；
+     * 缺的是最后那句 —— 弹道被摘掉的同时整条光柱也消失了，看着像「闪一下」。
+     *
+     * 这里补的是一条 `beamHold` 事件：`from` / `to` 取**出手点 / 命中点**（弹道被丢弃前
+     * 已经被 `ZCProjectileSystem` 钉在接触点上，所以落点精确，不靠猜），
+     * 寿命 = 配表里登记的淡出秒数，视图据此按满长画、逐帧压透明度。
+     *
+     * 不结算任何伤害 —— 伤害在弹道命中那一拍已经结完了；这条事件也不参与任何碰撞，
+     * 它只是 `state.combatEvents` 里的一段表演。
+     */
+    private lingerBeam(projectile: Readonly<ZCProjectileState>): void {
+        //  追踪导弹到点（没撞到人、飞到头）：在末端播爆炸，而不是光束淡出。
+        if (projectile.impactEffectPrefabPath) {
+            this.state.combatEvents.push({
+                id: this.state.nextCombatEventId++,
+                type: 'area',
+                owner: projectile.owner,
+                sourceUnitId: projectile.sourceUnitId,
+                targetUnitId: null,
+                skillId: projectile.skillId,
+                skillName: projectile.skillName,
+                effectKey: null,
+                projectileKey: null,
+                effectPrefabPath: projectile.impactEffectPrefabPath,
+                fromX: projectile.x,
+                fromY: projectile.y,
+                toX: projectile.x,
+                toY: projectile.y,
+                radius: 0,
+                damage: 0,
+                empowered: projectile.empowered,
+                startedAt: this.state.elapsedSeconds,
+                durationSeconds: 0.5,
+            });
+            return;
+        }
+        const fadeSeconds = zcCombatEffectFadeSecondsOf(projectile.effectPrefabPath);
+        if (!(fadeSeconds > 0)) return;
+        this.state.combatEvents.push({
+            id: this.state.nextCombatEventId++,
+            type: 'projectile',
+            owner: projectile.owner,
+            sourceUnitId: projectile.sourceUnitId,
+            targetUnitId: null,
+            skillId: projectile.skillId,
+            skillName: projectile.skillName,
+            effectKey: projectile.effectKey,
+            projectileKey: projectile.projectileKey,
+            effectPrefabPath: projectile.effectPrefabPath ?? null,
+            fromX: projectile.fromX,
+            fromY: projectile.fromY,
+            //  命中点（弹道已定格在接触点）；没打中就是射程末端。
+            toX: projectile.x,
+            toY: projectile.y,
+            radius: 0,
+            damage: 0,
+            empowered: projectile.empowered,
+            startedAt: this.state.elapsedSeconds,
+            durationSeconds: fadeSeconds,
+            beamHold: true,
+        });
     }
 
     private buildDamageResolutionContext(): IZCDamageResolutionContext {
@@ -713,8 +788,8 @@ export class ZCGameModel {
             // 胜方身份随帧下发：结算扫场要按**胜方本色**铺地。为 null（未定 / 平局）时
             // 视图按 status 兜底，见 `ZCGame.beginVictorySweep`。
             winner: this.matchWinner,
-            hexesById: this.buildHexRenderMap(),
-            unitDefinitionsById: this.buildUnitDefinitionMap(),
+            hexesById: this.hexRenderMap ??= this.buildHexRenderMap(),
+            unitDefinitionsById: this.definitions,
             floatTexts: this.presentation.floatTexts,
             hitFxs: this.presentation.hitFxs,
             cardReveals: this.presentation.cardReveals,
@@ -723,8 +798,7 @@ export class ZCGameModel {
         };
     }
 
-    // 每帧渲染帧的两张查找表：格子状态与单位定义。逐格/逐兵查询都在这两张表上做，
-    // 所以必须每帧重建（`canDevelop` / `cooldown` / `activation` 都随 tick 变化）。
+    // 逻辑步和同步业务操作才改变这些派生值；不足一步的显示帧只更新插值余量。
     private buildHexRenderMap(): Map<number, ZCGameRenderHex> {
         const hexesById = new Map<number, ZCGameRenderHex>();
         for (const state of this.state.hexes) {
@@ -737,17 +811,6 @@ export class ZCGameModel {
             });
         }
         return hexesById;
-    }
-
-    // 按 unitId 去重：同一兵种场上多个单位只查一次定义表。
-    private buildUnitDefinitionMap(): Map<string, ZCUnitDefinition> {
-        const unitDefinitionsById = new Map<string, ZCUnitDefinition>();
-        for (const unit of this.state.units) {
-            if (!unitDefinitionsById.has(unit.unitId)) {
-                unitDefinitionsById.set(unit.unitId, this.definitionForUnit(unit.unitId));
-            }
-        }
-        return unitDefinitionsById;
     }
 
     /** 一次性表现通知的唯一消费入口；由对局编排层取走后交给动态渲染。 */
@@ -767,6 +830,7 @@ export class ZCGameModel {
     }
 
     private invalidateTerrain(): void {
+        this.hexRenderMap = null;
         this.topologyRevision++;
         this.connectedDevelopedCache.clear();
         this.unitTargeting.invalidateTerrain();
@@ -970,7 +1034,7 @@ export class ZCGameModel {
         // 用 `Array.from` 而非 `[...connected]`：release 构建会把展开降级成
         // `[].concat(set)`，而 concat 不展开迭代器，整套领土连通性会静默算错。
         const result = Array.from(connected);
-        this.connectedDevelopedCache.set(hexId, result);
+        for (const id of result) this.connectedDevelopedCache.set(id, result);
         return result;
     }
 
@@ -1010,6 +1074,7 @@ export class ZCGameModel {
         if (this.goldOf(ZCOwner.Player) < hex.developmentCost) {
             return this.fail(`金币不足，需要 ${hex.developmentCost}。`, 'insufficientGold');
         }
+        this.hexRenderMap = null;
         this.setGold(ZCOwner.Player, this.goldOf(ZCOwner.Player) - hex.developmentCost);
         this.chargeArtifactFromDevelopment();
         return this.developFor(ZCOwner.Player, hex);
@@ -1021,6 +1086,7 @@ export class ZCGameModel {
         if (activation.ok === false) {
             return this.fail(activation.reason === 'cooldown' ? '神器正在冷却。' : '神器尚未充满。');
         }
+        this.hexRenderMap = null;
         for (const unit of this.state.units) {
             if (unit.owner !== ZCOwner.Player && unit.battleState !== 'dead') this.damageUnit(unit, this.rules.artifactDamage, { owner: ZCOwner.Player, kind: 'artifact' });
         }
@@ -1069,6 +1135,7 @@ export class ZCGameModel {
     }
 
     private advance(dt: number): void {
+        this.hexRenderMap = null;
         this.captureSystem.beginStep(this.state.units);
         this.state.elapsedSeconds = Math.round((this.state.elapsedSeconds + dt) * 1e9) / 1e9;
         this.flushDeferredBarracksSpawns();

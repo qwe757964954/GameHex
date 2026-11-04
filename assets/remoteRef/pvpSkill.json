@@ -18,9 +18,9 @@
 "slowRatio",
 "secondarySkillId",
 "onHitStatusId",
+"impactEffectPrefabPath",
 "chargeDistance",
-"chargeSpeedScale",
-"impactEffectPrefabPath"
+"chargeSpeedScale"
 ],
 "v":[
 [
@@ -263,7 +263,7 @@ null
 10,
 36231,
 5,
-"units/projectiles/雷法师_雷电/雷法师_雷电",
+"units/projectiles/磁电菇_子弹攻击/磁电菇_子弹攻击",
 "",
 "every_seconds",
 null,
@@ -272,7 +272,7 @@ null,
 null,
 null,
 "paralysis",
-null,
+"units/projectiles/磁电菇_子弹命中/磁电菇_子弹命中",
 null,
 null
 ],
@@ -1077,9 +1077,9 @@ null,
 null,
 30852,
 null,
+"units/projectiles/重骑兵_践踏/重骑兵_践踏",
 220,
-4,
-"units/projectiles/重骑兵_践踏/重骑兵_践踏"
+4
 ],
 [
 30714,

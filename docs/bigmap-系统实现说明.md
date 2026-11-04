@@ -275,7 +275,7 @@ npx tsx tools/map-editor/verify_bigmap_world.ts                  # 校验布局�
 删除植物大地图的文字」*。追问后确认：**走领地页顶部 HUD 那套深色卡，不是底部菜单栏的木牌**
 （第一轮曾按「和底部菜单栏保持统一」做过木牌，本轮整条替换）。
 
-改之前世界页贴的是 `image/bigmap/concept/ui/*.png` 那张**深色铁框 + 铆钉**概念图；现在照抄领地页语法：
+改之前世界页贴的是 `image/concept/ui/*.png` 那张**深色铁框 + 铆钉**概念图；现在照抄领地页语法：
 **地图顶到屏幕边，只有几张浮在上面的深色卡**（玩家卡 / 资源条），没有任何通栏底板。
 
 | 元素 | 用什么 | 出处 / 尺寸 |
@@ -402,7 +402,7 @@ npx tsx tools/preview_bigmap_info_layout_curves.ts && python tools/preview_bigma
 联机走 `repository.move`，离线预览走本地 `bigMapMove` + 落盘，两条路同一套校验。
 
 **野怪击杀进度** —— `SlgGameInfo.maxMonsterLevel` 早就喂了逐级解锁（`unlockContext`
-取 `max(本地, 服务器)`），但 view 层 0 引用，玩家看不到「打到第几级」。现在并进详情**首行**：
+联机只取服务器值；新版 N 级野怪需先通关 N−1 级，`unlockType=0` 仍受此约束），并进详情**首行**：
 
 ```
 状态：已解锁　已通关最高 3 级
@@ -495,7 +495,7 @@ npx tsx tools/preview_bigmap_info_layout_curves.ts && python tools/preview_bigma
 | --- | --- |
 | `parseBigMapConfig` | **仍是纯函数**，只多解析一列 `itemId`（缺列给 0）；`resourceIcons` 先给空表 |
 | `attachBigMapResourceItemIcons` | 唯一读 `item` 表的地方，在 `BigMapConfigLoader` 里调用。`item.icon` 为空 / 行缺失 ⇒ 不并 |
-| `BigMapArtLoader` | 有背包图标就用，`null` 就退回 `image/bigmap/concept/sprites/<resType>`；**绝不留空图标** |
+| `BigMapArtLoader` | 有背包图标就用，`null` 就退回 `image/concept/sprites/<resType>`；**绝不留空图标** |
 
 ⚠️ 三个坑：
 
@@ -642,7 +642,7 @@ npx tsx tools/preview_bigmap_info_layout_curves.ts && python tools/preview_bigma
 
 ### 5.13 基地连续场景（2026-10-29）
 
-- 基地底图使用 `image/bigmap/base_background`，来源为美术目录「主基地地图/主基地BG.jpg」（2048×2048），经 Cocos MCP 导入 bigmap 分包，关闭整图 packable。基地不再加载 `concept/base_ground`，也不再创建每格 Foundation；世界页原有地形不受影响。
+- 基地底图使用 `image/base_background`，来源为美术目录「主基地地图/主基地BG.jpg」（2048×2048），经 Cocos MCP 导入 bigmap 分包，关闭整图 packable。基地不再加载 `concept/base_ground`，也不再创建每格 Foundation；世界页原有地形不受影响。
 - `BigMapBasePresentation` 固定格距147×96，逻辑格和建筑顶部留在背景中央54%内；背景、建筑、格子拾取共用一个 BaseContent 坐标系。行列配置范围3～20（允许偶数），默认仍5×5，保留既有服务端位置编号，不自动扩列重排旧建筑。
 - 基地支持单指拖动、双指锚点缩放和鼠标滚轮缩放；纯函数约束缩放与边界，防止露底。进入基地定位主城，正常浏览隐藏空地文本与格线，建造/搬移时显示空位提示。
 - 所有建筑与收取图标共用手势判定，拖动距离超过12或发生双指操作时松手不触发点击。建筑按屏幕纵向排序，视口外节点隐藏；关闭/切换模式清理手势状态。
@@ -707,3 +707,15 @@ npx tsx --test tests/bigmap-info-layout.test.ts     # 15 条：详情弹窗排�
 基地建筑与野怪详情迁入独立 `BigMapInfoPopup`（继承 `PopupBase`，默认不缓存），城池继续使用 `BigMapCityPopup`。尺寸、坐标、字体与排版保存在预制体：全屏根 Widget、居中 Panel、纵向 Layout、正文 RESIZE_HEIGHT、按钮横向 Layout；关闭按钮贴卡片右上。脚本只更新展示内容与按钮可用状态，经原有意图派发操作。空白关闭由 PopupBase 接管；主动关闭不清除刚切换的新目标，在途打开可取消且应用最新内容。
 
 反馈统一调用公共 `Toast.show`。页面预制体删除 InfoPanel、InfoDim、Toast、EnteringBattleMask 及相关绑定；入战期间保留既有输入锁并关闭详情弹窗，预加载失败恢复选中目标详情，不再使用独立遮罩。回归：`bigmap-info-layout`、`bigmap-page-bindings`、`bigmap-battle-enter-mask`、`bigmap-move`。
+
+### 城池聚焦：点选后只留这一座（2026-11-03）
+
+用户口径（两轮）：*「在大地图点击城池据点后，隐藏其他的城池据点和玩家基地以及野怪模型，只展示该城池据点，城池据点连带着名称和等级的UI节点上移200px（底部与当前城主的上沿对齐即可）」*；同日第二轮 *「还需要上移100px，并且是在地图放大到接近极限的85%的相机位置」* ⇒ **总量 300**（85% 机位 ≈ zoom 1.38，`MIN_ZOOM=0.15`/`MAX_ZOOM=1.6` 线性内插）。
+
+实现全在 `BigMapWorldView`，两条规则：
+
+- **隐藏**走 `cullMarkers`（平移 / 缩放共用入口，口径不会分叉）：`focusedCityHexId`（选中格是某座城池的锚点才算，选野怪 / 基地不聚焦）非 -1 时，除选中城外其余标记 `active = false` —— 同帧不可点（命中区按 active 过滤）、不进可见城池上报（`reportVisibleCamps`），聚焦解除由 `syncMarkers` → `cullMarkers` 恢复。
+- **上移**走 `applyFocusIsolation`：名条 / 等级 / 占领旗都是标记节点（`BigMapWorldMarker`）的子节点，把节点按 `layout.points` **幂等重摆**（聚焦 +300 = `BIGMAP_FOCUSED_CITY_LIFT`，解除写回原位，不残留偏移）。`selectedHexId` 在 contentKey 里，选中态一变 `syncMarkers` 必然重跑。
+
+300 是**内容系**坐标（zoom=1 即屏幕 300px；在 85% 机位 zoom≈1.38 下屏幕位移 ≈ 415px）：「当前城主」徽章在 `BigMapCityPopup` 城主区（屏幕系、贴面板顶），地图可平移缩放，两边没法长期精确对齐，所以落固定值、以默认机位观感为准。坑：重摆**直接读 `layout.points`**，不走 `centerOf`（它每次 `new Vec2`，最小 cc 桩的测试会炸）。判据：`tests/bigmap-focus-city.test.ts`。
+

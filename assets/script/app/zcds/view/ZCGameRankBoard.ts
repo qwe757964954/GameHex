@@ -1,9 +1,11 @@
-import { _decorator, Node, Sprite, SpriteFrame, resources } from 'cc';
+import { _decorator, Node, Sprite, SpriteFrame } from 'cc';
 import { PopupBase } from '../../../framework/ui/PopupBase';
 import { VirtualScrollView } from '../../../vscrollview/VScrollView';
-import { GAME_RANK_ART_ROOT, spriteFramePath } from '../../ArtPaths';
+import { GAME_RANK_ART_ROOT } from '../../ArtPaths';
 import { HeadArt } from '../../HeadArt';
 import { ZCDC_LOG_WARNINGS } from '../ZCDCLogSwitch';
+import { createIconLoader } from '../../common/SpriteFrameCache';
+import type { ResourceScope } from '../../../core/asset/ResourceScope';
 import type { IRankSeat, RankSeatProfiles } from '../model/ZCRankBoard';
 import { ZCGameRankRow, type IRankRowFrames } from './ZCGameRankRow';
 
@@ -35,15 +37,15 @@ export interface IZCRankBoardParams {
  * ##  美术要先加载完再设条数
  *
  * 行的 `render(seat, frames)` 依赖帧表；帧没到位就设条数 ⇒ 虚拟列表先用空帧渲染一遍
- * 再刷，表现为**先闪一帧默认头像**。所以 `loadFrames()` 失败也要把列表设成 0 条，
- * 不能停在"没设过"的中间态。
+ * 再刷，表现为**先闪一帧默认头像**。缺失切图使用空帧，资源批次结束后统一设置条数；
+ * 已关闭的加载批次不再更新列表。
  */
 @ccclass('ZCGameRankBoard')
 export class ZCGameRankBoard extends PopupBase {
     static prefabPath = 'ui/game/ZCGameRankBoard';
 
     @property({ type: VirtualScrollView, tooltip: 'List：排行虚拟列表（纵向）' })
-    list: VirtualScrollView = null;
+    list: VirtualScrollView = null!;
 
     @property({ type: Node, tooltip: 'CloseBtn：关闭按钮（**设计稿没有，留空**；本弹窗靠点空白关闭）' })
     closeBtn: Node | null = null;
@@ -52,12 +54,6 @@ export class ZCGameRankBoard extends PopupBase {
     private seats: readonly IRankSeat[] = [];
     /** 加载好的帧；`null` = 还没加载完（此时不设条数）。 */
     private frames: IRankRowFrames | null = null;
-    /**
-     * 所有手动 addRef 的帧（含直接设到 Bg/Title 上的）。
-     * onDestroy 时统一 decRef，防止引用计数只增不减导致内存泄漏。
-     */
-    private readonly loadedFrames = new Set<SpriteFrame>();
-
     protected onInit(): void {
         //  `closeBtn` 是**真实可选**引用（`Node | null`）：设计稿没有关闭按钮，prefab 里
         //  也没有 `CloseBtn` 节点 ⇒ 它恒为 null，本弹窗靠 `closeOnBlank` 点空白关闭。
@@ -69,99 +65,56 @@ export class ZCGameRankBoard extends PopupBase {
     }
 
     protected async onOpen(userData?: IZCRankBoardParams): Promise<void> {
-        this.seats = userData?.seats ?? [];
+        const seats = userData?.seats ?? [];
+        const scope = this.resourceScope;
+        this.seats = seats;
+        const content = await this.loadFrames(scope, seats);
+        if (!this.isValid || scope.disposed || !content) return;
+        this.frames = content.frames;
+        if (content.bg) this.setSprite('Panel/Bg', content.bg);
+        if (content.title) this.setSprite('Panel/Title', content.title);
 
-        const frames = await this.loadFrames();
-        if (!this.isValid || !this.node.isValid) return;
-        this.frames = frames;
-
-        // 美术没加载出来也把条数设成 0：停在"没设过"会让列表保持上一个弹窗的行数。
         if (!await this.nextPopupFrame()) return;
-        if (!this.isValid || !this.node.isValid) return;
-        //  跨了 `await`：节点可能已被销毁 ⇒ 这里只判 `isValid`，不判 `list` 本身
-        //  （它是 prefab 必填引用，判它是重复判空）。
-        const list = this.list;
-        if (!list.node.isValid) return;
-        list.setTotalCount(this.seats.length);
-        list.scrollToTop(false);
+        if (!this.isValid || scope.disposed) return;
+        this.list.setTotalCount(seats.length);
+        this.list.scrollToTop(false);
     }
 
-    /**
-     * 加载全部帧。
-     *
-     *  单张 png 的路径必须 `spriteFramePath(root, name)` 拼 `/spriteFrame`（规则 142）：
-     * 裸路径 `resources.load` 报的是 `Bundle resources doesn't contain ...`（**不是 404**），
-     * 极易误判成「美术没交图」。这里统一走 ArtPaths 的拼法。
-     */
-    private async loadFrames(): Promise<IRankRowFrames> {
-        //  这里**不加载** `common_txk`（头像圆框）：它已经硬绑在
-        // `ZCGameRankRow.prefab` 的 `HeadFrame` 上了 —— 行是 prefab 实例，
-        // 节点不在这棵 prefab 树里，`getChildByPath('Panel/List/RowTemplate/HeadFrame')`
-        // 恒为 null（2026-10-09 真机日志实证）。
-        const [listFirst, listNormal, badge1, badge2, badge3, tile, countNormal, countPlaying] =
+    private async loadFrames(scope: ResourceScope, seats: readonly IRankSeat[]): Promise<{
+        frames: IRankRowFrames; bg: SpriteFrame | null; title: SpriteFrame | null;
+    } | null> {
+        // 捕获本次打开的端口；旧任务即使跨过重开，也不能借用新的资源作用域。
+        const loadIcon = createIconLoader(this.assets, scope);
+        const configs = this.configs;
+        const [listFirst, listNormal, badge1, badge2, badge3, tile, countNormal, countPlaying, bg, title] =
             await Promise.all([
-                this.loadArt('phb_list_01'),
-                this.loadArt('phb_list_02'),
-                this.loadArt('icon_01'),
-                this.loadArt('icon_02'),
-                this.loadArt('icon_03'),
-                this.loadArt('icon_tile'),
-                this.loadArt('di_01'),
-                this.loadArt('di_02'),
-            ]);
-        // 底板与标题走 prefab 上声明的 Sprite（`Panel/Bg`、`Panel/Title`）。
-        const [bg, title] = await Promise.all([this.loadArt('bg_01'), this.loadArt('title')]);
-        if (bg) this.setSprite('Panel/Bg', bg);
-        if (title) this.setSprite('Panel/Title', title);
+                'phb_list_01', 'phb_list_02', 'icon_01', 'icon_02', 'icon_03',
+                'icon_tile', 'di_01', 'di_02', 'bg_01', 'title',
+            ].map(name => loadIcon(name, GAME_RANK_ART_ROOT)));
+        if (!this.isValid || scope.disposed) return null;
 
-        // 头像按席位逐个取。
-        //  **必须用 `HeadArt.loadHeadFrame` 而不是 `HeadArt.loadHeadSprite`**：`headKey` 存的是
-        // **角色 id**（后端 `showInfo.img`，如 `70001`），要先经 `head` 表翻译成图标名。
-        // 直接 `HeadArt.loadHeadSprite('70001')` 会把 id 当图标名去 `icons/head/70001` 找 ——
-        // 那目录只有图标名、没有 id ⇒ 必然失败（实测报
-        // `Bundle resources doesn't contain icons/head/70001/spriteFrame`）。
         const head: Record<string, SpriteFrame> = {};
-        await Promise.all(Array.from(new Set(this.seats.map((seat) => seat.headKey).filter(Boolean)))
-            .map(async (key) => {
-                const sprite = await HeadArt.loadHeadFrame(key);
-                if (sprite) {
-                    // HeadArt 从缓存取帧，弹窗期间 addRef 防止被自动回收，关闭时随 loadedFrames 统一 decRef。
-                    sprite.addRef();
-                    this.loadedFrames.add(sprite);
-                    head[key] = sprite;
-                }
-            }));
-
+        const keys = Array.from(new Set(seats.map(seat => seat.headKey).filter(Boolean)));
+        if (keys.length) {
+            const resolver = await HeadArt.loadHeadArtResolver(configs);
+            if (!this.isValid || scope.disposed) return null;
+            const portraits = await Promise.all(keys.map(key => HeadArt.loadHeadFrame(key, loadIcon, resolver)));
+            if (!this.isValid || scope.disposed) return null;
+            keys.forEach((key, index) => { if (portraits[index]) head[key] = portraits[index]; });
+        }
         return {
-            rowBg: { first: listFirst, normal: listNormal },
-            rankBadge: { 1: badge1, 2: badge2, 3: badge3 },
-            head,
-            tileIcon: tile,
-            countBg: { normal: countNormal, playing: countPlaying },
+            bg, title,
+            frames: {
+                rowBg: { first: listFirst, normal: listNormal },
+                rankBadge: { 1: badge1, 2: badge2, 3: badge3 },
+                head, tileIcon: tile, countBg: { normal: countNormal, playing: countPlaying },
+            },
         };
     }
 
-    /**
-     * 取一张切图；缺失只 `console.warn` 不抛（美术没交不该让整个弹窗打不开）。
-     *
-     *  `addRef()` 必加（规则 81）：模块级缓存里的 SpriteFrame 不参与引擎引用计数，
-     * 引用计数为 0 时会被 `ReleaseManager` 自动回收（`_destruct()` 把 uv 置 null），
-     * 而仍挂在 Sprite 上渲染的行会炸 ——「Simple.updateUVs: Cannot read properties of null」。
-     */
-    private loadArt(name: string): Promise<SpriteFrame | null> {
-        const path = spriteFramePath(GAME_RANK_ART_ROOT, name);
-        return new Promise((resolve) => {
-            resources.load(path, SpriteFrame, (error, frame) => {
-                if (error || !frame) {
-                    if (ZCDC_LOG_WARNINGS) console.warn(`[ZCGameRankBoard] 美术缺失：${path}`, error);
-                    resolve(null);
-                    return;
-                }
-                frame.addRef();
-                this.loadedFrames.add(frame);
-                resolve(frame);
-            });
-        });
+    protected onClose(): void {
+        this.frames = null;
+        this.seats = [];
     }
 
     /** 按相对路径找 Sprite 并赋值；找不到只 warn（prefab 结构由人保证，这里不兜底造节点）。 */
@@ -176,20 +129,6 @@ export class ZCGameRankBoard extends PopupBase {
 
     private _onClose(): void {
         this.closeByButton();
-    }
-
-    /**
-     * 弹窗销毁时释放所有手动 addRef 的帧。
-     * 不释放的话，模块缓存里的 SpriteFrame 引用计数只增不减，
-     * 长期反复打开排行榜会导致内存泄漏。
-     */
-    onDestroy(): void {
-        for (const frame of this.loadedFrames) {
-            frame.decRef();
-        }
-        this.loadedFrames.clear();
-        this.frames = null;
-        super.onDestroy();
     }
 
     /** 把第 `index` 行灌进（新建或回收的）行节点。**必须同步**。 */

@@ -1,3 +1,5 @@
+import type { ZCUnitId } from './ZCCombatCatalog';
+
 /**
  * 战斗特效的**飞行段与朝向**（纯表现配置，刻意不进 `ZCSnapshot`）。
  *
@@ -7,6 +9,7 @@
  * | :-- | :-- | :-- |
  * | `FLIGHT_BY_PREFAB_PATH` | 位置（跟着飞）+ 事件寿命（`durationSeconds`）+ 转角 | `ZCAttackResolutionSystem` / `ZCCombatEffectView` |
  * | `FACING_BY_PREFAB_PATH` | **只影响转角**（原地播、不飞） | `ZCCombatEffectView` |
+ * | `FADE_BY_PREFAB_PATH` | 消失前**淡出多久**（弹道丢弃后补一条定格事件） | `ZCProjectileSystem` 的回调 → `ZCGameModel` → 视图 |
  *
  * ## 为什么需要飞行段
  *
@@ -115,8 +118,8 @@ export function zcCombatEffectFlightOf(
  *
  * `ZCCombatEffectView` 原本对 melee / area 一律 `setRotationFromEuler(0,0,0)` ——
  * 转角恒 0 意味着「美术朝哪边，屏上就朝哪边」。运动霸普攻的美术（`消灭学霸_普攻`）
- * 是一把**朝右**（`+X`）扇开的绿色气刃，汇聚点在画布左侧；目标站在左边时它就正好朝反了，
- * 目标在上/下时则是「横着扫」。登记之后转角 = 弹道方向，这张图就始终朝着目标喷。
+ * 是一把绿色气刃，目标站在左边时它就正好朝反了；目标在上/下时则是「横着扫」。
+ * 登记之后转角 = 弹道方向，这张图就始终朝着目标喷。
  *
  * ⚠️ 只登记**美术本身有明确正前方**的效果。左右镜像对称的（`重骑兵_践踏` 那种横向冲击波）
  * 转不转都一样，登记了只是多一次 `atan2`；原地爆的（`from === to`）也没有朝向可言 ——
@@ -124,9 +127,15 @@ export function zcCombatEffectFlightOf(
  */
 const FACING_BY_PREFAB_PATH: Readonly<Record<string, number>> = {
     // 30713「运动霸普攻」（melee）与 30852「能量光束」（area）共用这一张图，两边都要转身。
-    // 美术：228×256、15 帧的绿色气刃，汇聚点（亮白那撮）在画布**左侧**、刃口朝**右**扇开
-    // ⇒ 正前方就是 `+X`，偏移 **0°**（转角 = 弹道方向本身）。
-    'units/projectiles/消灭学霸_普攻/消灭学霸_普攻': 0,
+    //
+    // 美术：228×256、15 帧的绿色气刃，图集上看着像「汇聚点在左、刃口朝右」。
+    // 2026-11-03 实战校对：玩家截图里目标在**正上方**、气刃却朝**左下**喷出去 —— 正好差 180°。
+    // 说明画布里那撮「亮白」其实是**尾焰**（气刃的能量在向它收拢），真正的刃口在另一头。
+    // ⇒ 美术正前方是 `-X`，偏移 **180°**（把「朝右」掰成「朝左」再叠弹道方向）。
+    //
+    // ⚠️ 别按图集肉眼改回 0：图集是「打击瞬间的定格」，看不出运动方向，
+    // 只有实战里对着目标看才分得清刃口和尾焰。
+    'units/projectiles/消灭学霸_普攻/消灭学霸_普攻': 180,
 };
 
 /**
@@ -209,4 +218,99 @@ export function zcCombatEffectTravelSeconds(
     return mode === ZCCombatEventType.Projectile
         ? Math.max(1e-6, (Number.isFinite(distance) ? distance : 0) / (projectileSpeed || 500))
         : 0.32;
+}
+
+/**
+ * 弹道消失后**再留多久**把「定格画面」演完（秒，0 = 当场消失）。
+ *
+ * ## 需求
+ *
+ * 2026-11-03：「镭射飞龙的普通攻击修改成，朝着目标发射一条逐渐延长的射线，触碰到第一个敌人时
+ * 就会停止延长，造成 1 次伤害，**特效缓慢变透消失，0.18s 内消失**」。
+ *
+ * ## 「停止延长」为什么不用写逻辑
+ *
+ * 射线本来就是「每帧把预制体从发射口拉到弹头」（见 `ZCBeamEffect`），长度只跟弹头走到哪有关。
+ * 而弹道在**命中那一拍**就被 `ZCProjectileSystem` 摘掉了 —— 摘掉前它恰好被钉在接触点上，
+ * 于是「碰到第一个敌人就不再伸长」是既有行为的自然结果，唯一的问题是它同时**瞬间消失**。
+ *
+ * ## 所以这里登记的是「消失要多慢」
+ *
+ * `ZCProjectileSystem` 丢弃弹道时会回调 `context.linger(projectile)`，模型据此补一条
+ * **纯表现事件**（`ZCCombatEvent.beamHold = true`，寿命 = 本表的秒数，`from`/`to` 取
+ * **出手点 / 命中点**）：视图拿到它就按满长画、并且随 `progress` 把整体透明度压到 0。
+ *
+ * 用「补一条事件」而不是「让弹道多活 0.18s」，是因为后者会让这颗弹道继续参与碰撞
+ * （同一发打两下）—— 而它已经是打完了的。
+ */
+const FADE_BY_PREFAB_PATH: Readonly<Record<string, number>> = {
+    // 30719「镭射飞龙普攻」与 30845「镭射死光」共用这份光束美术；死光带 pierceCount 99，
+    // 每次穿透都不会丢弃弹道，只有最后一穿 / 到点才触发定格，所以这里配一次两条都成立。
+    'units/projectiles/镭射飞龙_普攻/镭射飞龙_普攻': 0.18,
+};
+
+/**
+ * 这张特效消失前要淡出多少秒；`0` = 当场消失（不补表现事件）。
+ *
+ * 非法值（`NaN` / 负数 / 非数字）一律当 `0`：宁可闪没，也不能让一条 `NaN` 寿命的事件
+ * 永远挂在 `state.combatEvents` 里（它会每帧被渲染、且永远不被剔除）。
+ */
+export function zcCombatEffectFadeSecondsOf(effectPrefabPath: string | null | undefined): number {
+    if (!effectPrefabPath) return 0;
+    const seconds = FADE_BY_PREFAB_PATH[effectPrefabPath];
+    if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds <= 0) return 0;
+    return seconds;
+}
+
+/**
+ * 「追踪导弹」类的多点打击特效（纯表现配置）。
+ *
+ * 2026-11-03 需求：「追踪导弹技能…改用特效【镭射飞龙导弹技能】触发技能发射出 3 个技能特效，
+ * 每个特效瞄准一个目标，特效呈弧线飞向目标（3 条不同的弧线）…停止飞行后播放
+ * 【镭射飞龙导弹技能命中】的爆炸特效」。
+ *
+ * 与「普通弹道」不同，导弹有两个特效：飞行段的**弹体**（`镭射飞龙_导弹技能`，循环）与
+ * 停下后的**爆炸**（`镭射飞龙_导弹技能命中`，单次）。用 `unitId` 登记，因为「追踪导弹」
+ * 这个行为是**镭射飞龙（68010）专属**的，与技能 id 无关（它挂在普攻 30719 的
+ * `random_strike` 上，`pvpSkillId` 是普攻的号）。
+ */
+export interface IZCMissileFxSpec {
+    /** 飞行段的弹体特效路径。 */
+    readonly missilePrefabPath: string;
+    /** 停下后播的爆炸特效路径。 */
+    readonly impactPrefabPath: string;
+    /** 弧线的**中段最大横向偏移**（世界坐标）；3 条弧线靠下标错开（0 / ±arc）。 */
+    readonly arcOffset: number;
+}
+
+const MISSILE_FX_BY_UNIT: Readonly<Record<string, IZCMissileFxSpec>> = {
+    // 镭射飞龙（68010）「追踪导弹」101003。
+    '68010': {
+        missilePrefabPath: 'units/projectiles/镭射飞龙_导弹技能/镭射飞龙_导弹技能',
+        impactPrefabPath: 'units/projectiles/镭射飞龙_导弹技能命中/镭射飞龙_导弹技能命中',
+        //  一格格距约 42px（逻辑），36 个世界单位 ≈ 半格多一点的横向甩出；
+        //  三条弧线由下标错开（index 0 / 1 / 2 → +arc / -arc / +0.5arc）。
+        arcOffset: 36,
+    },
+};
+
+/** 单位 → 导弹特效配置；未登记 = `null`（不是导弹，走普通多点打击）。 */
+export function zcMissileFxOf(unitId: ZCUnitId): IZCMissileFxSpec | null {
+    return MISSILE_FX_BY_UNIT[unitId] ?? null;
+}
+
+/**
+ * 所有登记过的导弹特效路径（弹体 + 爆炸，去重）。
+ *
+ * 给两套资源清单用（`ZCVisualResourcePlan` 的实战加载 / `ZCGameResourcePlan` 的预下载）：
+ * 这些路径在 pvpSkill 任何一行都不出现，纯表扫描收不到 —— 漏收的后果是
+ * 「导弹特效凭空消失且不报错」（2026-11-03 用户反馈）。
+ */
+export function zcMissileFxPaths(): readonly string[] {
+    const paths = new Set<string>();
+    for (const fx of Object.values(MISSILE_FX_BY_UNIT)) {
+        paths.add(fx.missilePrefabPath);
+        paths.add(fx.impactPrefabPath);
+    }
+    return [...paths];
 }

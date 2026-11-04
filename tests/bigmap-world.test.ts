@@ -265,11 +265,11 @@ test('下一个攻略目标：优先等级最低的已开放城池', () => {
     assert.equal(bigMapNextTargetCity(config, makeUnlockContext({ adventureChapter: 0 })), null);
 });
 
-test('新版野怪按 unlockType 开放，不附加旧表的逐级解锁限制', () => {
+test('新版野怪仍需逐级解锁，最高击杀等级达到前一级才开放', () => {
     const levelOne = [...config.monsters.values()].find((monster) => monster.level === 1)!;
     const levelFive = [...config.monsters.values()].find((monster) => monster.level === 5)!;
     assert.equal(bigMapMonsterUnlock(levelOne, makeUnlockContext()).unlocked, true);
-    assert.equal(bigMapMonsterUnlock(levelFive, makeUnlockContext({ maxClearedMonsterLevel: 3 })).unlocked, true);
+    assert.equal(bigMapMonsterUnlock(levelFive, makeUnlockContext({ maxClearedMonsterLevel: 3 })).unlocked, false);
     assert.equal(bigMapMonsterUnlock(levelFive, makeUnlockContext({ maxClearedMonsterLevel: 4 })).unlocked, true);
 });
 

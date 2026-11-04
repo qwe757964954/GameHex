@@ -190,9 +190,24 @@ export function loadViews() {
         },
         instantiate: (prefab: any) => prefab.make(),
     };
-    //  假控制器：视图（卡牌揭示）按 id 向 `ProcedureGame.current` 取卡面图 / 建筑帧。
-    // 用例通过 `loadViews()` 返回值拿到它，按需设置 / 复位（缺省 null ⇒ 视图回退建筑图）。
-    const procedureGameStub = { current: null as unknown };
+    const presentationOwner = {};
+    const presentationArt = {
+        unitVisualPrefabs: new Map<string, any>(), cardArtFrames: new Map<string, any>(),
+        buildingFramesByCardId: new Map<string, any>(), buildingFrames: new Map<string, any>(),
+        legendPortraitFrames: new Map<string, any>(),
+    };
+    /** 用例注入资源查询端口，夹具不再伪造当前 Procedure。 */
+    function setArtQueries(queries: {
+        resolveUnitPrefab?: (id: string) => any; resolveCardArt?: (id: string) => any;
+        resolveBuildingFrame?: (id: string | null, building: string) => any;
+        resolveLegendPortrait?: (owner: string) => any;
+    }) {
+        presentationArt.unitVisualPrefabs.get = queries.resolveUnitPrefab ?? (() => undefined);
+        presentationArt.cardArtFrames.get = queries.resolveCardArt ?? (() => undefined);
+        presentationArt.buildingFramesByCardId.get = id => queries.resolveBuildingFrame?.(id, 'barracks');
+        presentationArt.buildingFrames.get = key => queries.resolveBuildingFrame?.(null, key === 'hq-base' ? 'hq' : 'barracks');
+        presentationArt.legendPortraitFrames.get = queries.resolveLegendPortrait ?? (() => undefined);
+    }
     const cache: Record<string, any> = {
         cc,
         '../model/ZCGameModel': { ZC_HEX_CONFIG, ZC_SIMULATION_STEP_SECONDS: 0.05 },
@@ -208,7 +223,6 @@ export function loadViews() {
         '../model/ZCNeutralResourceGroup': { neutralResourceItemOf, neutralResourceVisualOf, ZCNeutralResourceVisual },
         //  视图会值导入 `ProcedureGame`（卡面图 / 建筑帧改由控制器按 id 现取，2026-10-16）—— 夹具给一个
         //  **可写的假控制器**：用例按需 `ProcedureGame.current = fakeController`，缺省 null（视图回退建筑图）。
-        '../../procedure/ProcedureGame': { ProcedureGame: procedureGameStub },
         '../model/ZCCombatCatalog': {
             findCatalogCard: () => undefined,
             resolveUnitDefinition: () => ({}),
@@ -258,6 +272,20 @@ export function loadViews() {
         // 而代码其实在正常打日志。
         const context = { exports: {} as any, require: load, console };
         runInNewContext(code, context);
+        // 渲染测试的装配边界与正式运行一致，独立组件使用每个 fixture 自己的资源表。
+        const viewName = name === './ZCUnitView' ? 'ZCUnitView' : name === './ZCCardRevealView' ? 'ZCCardRevealView' : null;
+        if (viewName) {
+            const View = context.exports[viewName];
+            context.exports[viewName] = class extends View {
+                constructor() { super(); this.setPresentationArt(presentationArt, presentationOwner); }
+            };
+        }
+        if (name === './ZCGameRenderWorld') {
+            const World = context.exports.ZCGameRenderWorld;
+            context.exports.ZCGameRenderWorld = class extends World {
+                constructor(options: object) { super({ owner: presentationOwner, presentationArt, ...options }); }
+            };
+        }
         return cache[name] = context.exports;
     };
     // `spriteFrame` 是血条按阵营换图后新增的读取点（原来只读 `color` 染色）。
@@ -345,5 +373,5 @@ export function loadViews() {
         return { renderer, wallGeometry, wallLayer, tiles };
     }
 
-    return { load, bar, FakeNode, cc, procedureGame: procedureGameStub, makeEffectPool, makeWallRenderer };
+    return { load, bar, FakeNode, cc, setArtQueries, presentationArt, makeEffectPool, makeWallRenderer };
 }

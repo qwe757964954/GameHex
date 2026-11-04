@@ -43,7 +43,18 @@ export const FORMATION_REQUEST_TIMEOUT_MS = 3000;
  */
 export const FORMATION_SAVE_TIMEOUT_MS = 5000;
 
+/**
+ * 「预取刚拉过」的新鲜期（毫秒），给 `fetchFormations({ maxAgeMs })` 用。
+ *
+ * 切 tab 的链路是「点击 → `prefetchHero` 发请求 → 加载页面 prefab（实测 20~250ms）→
+ * 页面自己再取一次数」，两段之间只隔一次 prefab 加载。这个窗口内复用预取结果，
+ * 页面就不会为了同一份阵型再等一个 RTT；窗口再长就有吃旧数据的风险，1500ms 够了。
+ */
+export const FORMATION_PREFETCH_FRESH_MS = 1500;
+
 let cachedFormations: readonly ZCFormation[] | null = null;
+/** `cachedFormations` 是什么时候拿到的（毫秒时间戳）；用于 `maxAgeMs` 的新鲜期判定。 */
+let cachedAt = 0;
 let pendingRequest: Promise<readonly ZCFormation[] | null> | null = null;
 
 /** `fetchFormations()` 的等待策略（不传 = 老口径 3000ms）。 */
@@ -52,6 +63,15 @@ export interface FormationFetchOptions {
     readonly timeoutMs?: number;
     /** 超时日志里的调用方名字，用来区分是哪个界面在等。 */
     readonly label?: string;
+    /**
+     * 缓存新鲜期（毫秒）：`cachedFormations` 在此时长内**直接复用，不再发请求**。
+     *
+     * 切 tab 时 `MainTabsComposition` 已经预取过一次（`prefetchHero`），页面自己再拉一遍
+     * 就是两个一模一样的请求；而预取的那份就在几百毫秒之内，够新。
+     * 给首屏一个短新鲜期即可合掉，又不会长期吃旧数据 ——
+     * 保存阵型会走 `applyFormation` 重置时间戳，所以「保存完再进页面」一定拿新的。
+     */
+    readonly maxAgeMs?: number;
 }
 
 /**
@@ -64,6 +84,11 @@ export interface FormationFetchOptions {
  */
 export function fetchFormations(options: FormationFetchOptions = {}): Promise<readonly ZCFormation[] | null> {
     const timeoutMs = Math.max(1, Math.round(options.timeoutMs ?? FORMATION_REQUEST_TIMEOUT_MS));
+    // 新鲜期内直接复用：不发请求、也不动 `pendingRequest`（可能正被别的调用方用着）。
+    const maxAgeMs = Math.max(0, Math.round(options.maxAgeMs ?? 0));
+    if (maxAgeMs > 0 && cachedFormations !== null && Date.now() - cachedAt <= maxAgeMs) {
+        return Promise.resolve(cachedFormations);
+    }
     if (!pendingRequest) {
         pendingRequest = requestFormations().finally(() => {
             pendingRequest = null;
@@ -95,6 +120,8 @@ export function applyFormation(formation: ZCFormation): void {
     const replaced = current.map((entry) => (entry.formationId === formation.formationId ? formation : entry));
     if (!current.some((entry) => entry.formationId === formation.formationId)) replaced.push(formation);
     cachedFormations = replaced.slice().sort((a, b) => a.formationId - b.formationId);
+    // 刚保存过的缓存算「新鲜」，否则 `maxAgeMs` 会把玩家自己刚改的结果挡掉。
+    cachedAt = Date.now();
 }
 
 /**
@@ -209,6 +236,7 @@ export async function selectFormation(formationId: number, caller?: object): Pro
                 ...entry,
                 selected: entry.formationId === normalizedId,
             }));
+            cachedAt = Date.now();
         }
         return true;
     } catch (error) {
@@ -239,5 +267,6 @@ async function requestFormations(): Promise<readonly ZCFormation[] | null> {
     //  类型就被收窄成 `never` 了。运行时是好的，只是检查器读不出来。
     //  （`sendFormationOp` 里对 `CmdFormationOpRspMsg` 用的是同一套写法。）
     cachedFormations = normalizeFormations((response as CmdFormationInfoRspMsg).infos);
+    cachedAt = Date.now();
     return cachedFormations;
 }

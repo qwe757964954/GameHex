@@ -25,6 +25,21 @@ import { GameNet } from '../net/GameNet';
 import { ChapterSelectPanel } from './ChapterSelectPanel';
 import { loadChapterSelectRows } from '../territory/application/ChapterSelectLoader';
 import { TerritoryUiEvent, TerritoryViewEvent, type ITerritoryRenderEvent } from '../territory/application/TerritoryEvents';
+import type { ITerritoryProgressView } from '../territory/application/TerritoryViewState';
+import type { TerritoryCampaignStage } from '../territory/model/TerritoryCampaignConfig';
+import { RefUtil } from '../../framework/ref/RefUtil';
+import { CacheMgr } from '../net/CacheMgr';
+import { toCount } from '../net/RequestGuard';
+import { battleLevelPassDetail, isLevelPassed } from './BattleLevelPassed';
+import {
+    CHEST_ENTRY_POP_SECONDS,
+    chestEntryPopScale,
+    inspectChestEntryConditions,
+    isChestEntryVerdictProvisional,
+    resolveChestEntryGate,
+} from './ChestEntryGate';
+import { EMPTY_ENTRANCE_PLAYER_STATE } from './MainEntranceVisible';
+import type { EntrancePlayerState, EntranceVisibleRow } from './MainEntranceVisible';
 
 const { ccclass, property } = _decorator;
 
@@ -44,6 +59,21 @@ const MAIN_PAGE_TEXTS = {
  */
 @ccclass('MainPage')
 export class MainPage extends Component {
+    /**
+     * 本次登录是否已经庆祝过「战斗宝箱解锁」。
+     *
+     * **必须是静态的**：主城页每从一局回来都会重建（`start()` 重新拉宝箱队列），
+     * 放实例字段会让 icon 的生成动画每次都重播一遍 —— 那就不叫"生成"了。
+     */
+    private static chestEntryCelebrated = false;
+    /**
+     * 「领地格子还没到，先别判」这条 log 只打一次。
+     *
+     * 快照到之前 `refreshChestEntry` 会被调好几次（`onLoad`、关卡缓存推送），
+     * 不去重就是同一条刷屏 —— 但也不能完全静默，否则「icon 一直不出现」时
+     * 日志里连「还在等数据」都看不到。同样要静态：主城页会重建。
+     */
+    private static chestEntryWaitingLogged = false;
     @property({ type: Node, tooltip: 'BeginGame：快速寻敌按钮' })
     startButton: Node = null;
 
@@ -95,6 +125,15 @@ export class MainPage extends Component {
     /** 详情弹窗当前对应的槽位（1~4）与那颗按钮要发的动作；`0` = 没开。 */
     private detailSlot = 0;
     private detailAction: ChestSlotAction = ChestSlotAction.Open;
+    /** 战斗宝箱入口开没开（`open.json` `refId=701`「战斗掉落宝箱」的条件）；`false` = icon 不显示。 */
+    private chestEntryUnlocked = false;
+    /** 领地最新一帧的「格子 → 关卡」映射（判 pvp 据点通没通要用）。 */
+    private territoryStageByCell: ReadonlyMap<number, TerritoryCampaignStage> | null = null;
+    /** 领地最新一帧的进度快照（冻结过的，读 `isAreaPassed` 不会读到半更新状态）。 */
+    private territoryProgress: ITerritoryProgressView | null = null;
+    /** 生成缩放动画的起播时刻（秒）；`chestEntryPopping` 为假时不看它。 */
+    private chestEntryPopStartedAt = 0;
+    private chestEntryPopping = false;
     private get assets() { return this.presentationResources.assets; }
     /** 图标按路径缓存（同一批奖励反复加载同一张图不值得）。 */
     private readonly chestIconCache = new Map<string, SpriteFrame>();
@@ -133,12 +172,28 @@ export class MainPage extends Component {
         EventMgr.instance.on(CHEST_EVENTS.CLOSE, this.onChestDetailClose, this);
         EventMgr.instance.on(CHEST_EVENTS.FAST_OPEN, this.onChestDetailFastOpen, this);
         EventMgr.instance.on(CHEST_EVENTS.OPEN, this.onChestDetailOpen, this);
+        // 关卡通关状态变化 ⇒ 重算宝箱入口开没开（20001 打完那一刻就该长出来，不必等重进主城）。
+        // `setEventUpdate` 内部会 `getCache` → `new GameCache` → 读协议描述表，表没就绪时会抛
+        // （`GameCacheMgr.peekCache` 的注释里有完整复盘）。订阅失败只丢「实时」这一个便利，
+        // 不该连累整个主城页 —— 下次进主城照样重算。
+        try {
+            CacheMgr.instance.setEventUpdate('CmdBattleLevel', this, this.onBattleLevelCacheUpdate);
+        } catch (error) {
+            console.warn('[MainPage] 订阅 CmdBattleLevel 失败，宝箱入口改为下次进主城再判', error);
+        }
+        // 入口默认是藏的：先压下去再判，未解锁的号一帧都不该瞥见它（`onLoad` 早于首帧渲染）。
+        // 四个数量格是入口的一部分，同步藏 —— 只藏 icon 会留下 4 个孤零零的格子。
+        this.chestToggle.active = false;
+        this.setChestCellsVisible(false);
+        this.refreshChestEntry();
     }
 
     start(): void {
         this.renderChests(this.emptyChestSlots);
         this.chestBar.setOpen(false, false);
         this.startButton.active = true;
+        // 队列照拉：`open.json` 的开启条件是**客户端显示闸**，服务端不看它；
+        // 提前把队列焐热，20001 一过 icon 长出来就有数据，不用再等一次往返。
         void this.loadTreasureQueue();
     }
 
@@ -148,15 +203,223 @@ export class MainPage extends Component {
 
     onDisable(): void {
         this.unschedule(this.refreshTreasureDisplay);
+        // 播到一半被切走（进战斗 / 切页）：收干净，别把 0.4 倍缩放留在屏幕上
+        this.unschedule(this.stepChestEntryPop);
+        if (this.chestEntryPopping) {
+            this.chestEntryPopping = false;
+            this.chestToggle.setScale(1, 1, 1);
+        }
     }
 
     onDestroy(): void {
+        CacheMgr.instance.removeEventUpdate('CmdBattleLevel', this, this.onBattleLevelCacheUpdate);
         if (this.detailSlot > 0) PopupManager.inst.get(ChestDetailPanel)?.close();
         this.chestIconCache.clear();
         EventMgr.instance.offTarget(this);
         this.treasureRepository.dispose();
         GameNet.instance.removeCaller(this);
     }
+
+    private readonly onBattleLevelCacheUpdate = (): void => { this.refreshChestEntry(); };
+
+    // ========================================================
+    // 战斗宝箱入口：开启条件（open.json refId=701「战斗掉落宝箱」）+ 生成动画
+    // ========================================================
+
+    /**
+     * 重算「战斗宝箱入口」开没开。
+     *
+     * 条件写在 `open.json` 的 `refId=701`（`battleLevel` + `resId=20001`），这里**不认关卡号**，
+     * 只把整张表交给 `ChestEntryGate` 判 —— 策划换关卡 / 叠条件都不用动客户端。
+     *
+     * 表没进缓存时走异步：`getRefAll` 返回 `undefined` 才是"没缓存"，不能当成"表里没这一行"。
+     */
+    private refreshChestEntry(): void {
+        let rows: readonly EntranceVisibleRow[] | null = null;
+        try {
+            rows = (RefUtil.instance.getRefAll('open') ?? null) as readonly EntranceVisibleRow[] | null;
+        } catch (error) {
+            console.warn('[MainPage] 读 open 表缓存失败', error);
+        }
+        if (rows) {
+            this.applyChestEntryGate(rows);
+            return;
+        }
+        void this.loadOpenTableThenGate();
+    }
+
+    private async loadOpenTableThenGate(): Promise<void> {
+        let rows: readonly EntranceVisibleRow[] | null = null;
+        try {
+            rows = (await RefUtil.instance.getRefAllAsync('open')) as readonly EntranceVisibleRow[];
+        } catch (error) {
+            console.warn('[MainPage] 拉 open 表失败，战斗宝箱入口先不显示', error);
+        }
+        if (!this.isValid) return;
+        this.applyChestEntryGate(rows ?? null);
+    }
+
+    /**
+     * 四个宝箱数量格（`BottomHud/Cell0..Cell3`）—— 它们是入口 icon 的一部分，不是独立 UI：
+     * 需求 2026-11-03 要求「和宝箱 icon 同步展示」，所以显隐只在这一处定义，
+     * 填色（`renderChests`）也走同一份集合，免得将来只改了一边。
+     *
+     * 引用是 Inspector 上的，个别宿主（测试桩）不绑就为空 —— 少绑一个不该带崩整个主城页。
+     */
+    private chestCells(): Sprite[] {
+        return [this.chestCell0, this.chestCell1, this.chestCell2, this.chestCell3].filter((cell) => cell != null);
+    }
+
+    /** 数量格跟着入口 icon 同进同出：没解锁 ⇒ 一并藏掉。 */
+    private setChestCellsVisible(visible: boolean): void {
+        for (const cell of this.chestCells()) cell.node.active = visible;
+    }
+
+    /**
+     * 按判定结果落状态：解锁 ⇒ 显示 icon（**本次登录首次**播一遍生成动画）+ 数量格；
+     * 未解锁 ⇒ 藏起来，连点击都不接。
+     */
+    private applyChestEntryGate(openRows: readonly EntranceVisibleRow[] | null): void {
+        const state = this.chestEntryPlayerState();
+        const gate = resolveChestEntryGate(openRows, state);
+        this.chestEntryUnlocked = gate.unlocked;
+
+        if (!gate.unlocked) {
+            this.unschedule(this.stepChestEntryPop);
+            this.chestEntryPopping = false;
+            this.chestToggle.active = false;
+            this.setChestCellsVisible(false);
+            // `rowMissing` 已经在 `resolveChestEntryGate` 里报过了，这里只补「行在、条件没过」的细节。
+            if (!gate.rowMissing) this.warnChestEntryBlocked(openRows, state);
+            return;
+        }
+
+        this.chestToggle.active = true;
+        this.setChestCellsVisible(true);
+        if (!this.chestEntryPopping) this.chestToggle.setScale(1, 1, 1);
+        if (MainPage.chestEntryCelebrated) return;
+        MainPage.chestEntryCelebrated = true;
+        this.startChestEntryPop();
+    }
+
+    /**
+     * 「行在表里、但条件没过」时打一条诊断。
+     *
+     * 三种情况在 `unlocked=false` 上长得一模一样，日志必须能分开：
+     * 关卡号配错 / `CmdBattleLevel` 里没这一关 / 有这一关但 0 星。
+     * 关卡号从表里读，不写死（用例扫源码不许出现 20001）。
+     */
+    private warnChestEntryBlocked(
+        openRows: readonly EntranceVisibleRow[] | null,
+        state: EntrancePlayerState,
+    ): void {
+        const reports = inspectChestEntryConditions(openRows, state);
+        if (!reports.length) {
+            console.warn('[MainPage] 战斗宝箱入口未解锁：701 行没有 visibleCondition');
+            return;
+        }
+        // ⚠️ 领地快照没到时 `territoryLevel` 必然 fail，但那是「还没数据」不是「没通关」。
+        // 2026-11-03 实机：icon 出现前先刷了两行假的「未解锁 …=> fail（当前章节 0 格）」，
+        // 看着像关卡号配错。这里只留一条说明，等 `TerritoryViewEvent.Render` 再判。
+        if (isChestEntryVerdictProvisional(reports, this.territorySnapshotReady())) {
+            if (!MainPage.chestEntryWaitingLogged) {
+                MainPage.chestEntryWaitingLogged = true;
+                console.log('[MainPage] 战斗宝箱入口：领地格子还没到，等地图刷一帧后再判（不是没通关）');
+            }
+            return;
+        }
+        for (const report of reports) {
+            let detail = '';
+            if (report.type === 'battleLevel' && report.resId != null) {
+                detail = `（${battleLevelPassDetail(report.resId)}）`;
+            } else if (report.type === 'territoryLevel' && report.resId != null) {
+                detail = `（${this.territoryLevelDetail(report.resId)}）`;
+            }
+            console.warn(`[MainPage] 战斗宝箱入口未解锁：${report.type}(${String(report.resId)}) => ${report.verdict}${detail}`);
+        }
+    }
+
+    /** 排障用：这一关在领地里对应的格子通了没有、为什么。 */
+    private territoryLevelDetail(levelId: number): string {
+        const stageByCell = this.territoryStageByCell;
+        // ⚠️ 空表 ≠ 没数据。`onLoad` 时快照是空 Map，别报成「这一章没有这关」。
+        if (!stageByCell || stageByCell.size === 0) {
+            return '领地格子还没到（stageByCell 为空），等地图刷一帧后再判';
+        }
+        const cells = [...stageByCell].filter(([, stage]) => stage.levelId === levelId).map(([cellId]) => cellId);
+        if (!cells.length) return `领地这一章没有 levelId=${levelId} 的格子（当前章共 ${stageByCell.size} 格）`;
+        const progress = this.territoryProgress;
+        if (!progress) return `格子 ${cells.join('/')} 在，但领地进度快照还没到`;
+        return `格子 ${cells.join('/')}：${cells.map((id) => (progress.isAreaPassed(id) ? '已通关' : '未通关')).join('、')}`;
+    }
+
+    /** 领地格子快照到位了没有 —— **空表也算没到**，不是「这一章没有这关」。 */
+    private territorySnapshotReady(): boolean {
+        const stageByCell = this.territoryStageByCell;
+        return stageByCell != null && stageByCell.size > 0;
+    }
+
+    /**
+     * 领地据点（`levelInfo.levelId`，pvp 异步据点是 2000x）那一片格子打完了没有。
+     *
+     * 判定用领地自己的口径：**同 `configId` 的格子任一个 owned ⇒ 整片算通关**
+     * （`TerritoryProgress.isAreaPassed`，山猫 2026-10 定的）—— 一片战斗区域往往横跨好几格，
+     * 只认其中一格会在"打完了但那格不是被记的那一格"时误判成没通过。
+     *
+     * 快照没到（领地还没渲染 / 这个宿主没挂地图）一律按没通过 —— 宁可晚一点显示，
+     * 也不要在没打过时把入口摆出来。
+     */
+    private readonly isTerritoryLevelPassed = (levelId: number): boolean => {
+        const stageByCell = this.territoryStageByCell;
+        const progress = this.territoryProgress;
+        if (!stageByCell || !progress) return false;
+        for (const [cellId, stage] of stageByCell) {
+            if (stage.levelId === levelId && progress.isAreaPassed(cellId)) return true;
+        }
+        return false;
+    };
+
+    /**
+     * 条件判定要的玩家状态。
+     *
+     * 两个取数口都给：`battleLevel` 查 `CmdBattleLevel`（主线关卡），
+     * `territoryLevel` 查领地格子（pvp 据点）—— 前者服务端对据点不写，后者才能判 20001。
+     * 其余字段与主界面两侧入口同源，将来表上叠 `roleLevel` 之类也能直接生效。
+     */
+    private chestEntryPlayerState(): EntrancePlayerState {
+        let role: CmdRole | null = null;
+        try {
+            role = (CacheMgr.instance.getTlCmdRole() ?? []).find((row) => row != null) ?? null;
+        } catch (error) {
+            console.warn('[MainPage] 读 CmdRole 缓存失败', error);
+        }
+        return {
+            ...EMPTY_ENTRANCE_PLAYER_STATE,
+            hasRole: role != null,
+            roleLevel: role ? toCount(role.lv) : 0,
+            isLevelPassed,
+            isTerritoryLevelPassed: this.isTerritoryLevelPassed,
+        };
+    }
+
+    /** 播「生成」缩放动画（`0 → 1.15 → 1`）；只在解锁那一次调。 */
+    private startChestEntryPop(): void {
+        this.chestEntryPopStartedAt = Date.now() / 1000;
+        this.chestEntryPopping = true;
+        this.chestToggle.setScale(0, 0, 1);
+        this.unschedule(this.stepChestEntryPop);
+        this.schedule(this.stepChestEntryPop, 0);
+    }
+
+    /** 生成动画的一帧（只在起播后按帧推进；落位即停，不留空转）。 */
+    private readonly stepChestEntryPop = (): void => {
+        const elapsed = Date.now() / 1000 - this.chestEntryPopStartedAt;
+        const scale = chestEntryPopScale(elapsed);
+        this.chestToggle.setScale(scale, scale, 1);
+        if (elapsed < CHEST_ENTRY_POP_SECONDS) return;
+        this.chestEntryPopping = false;
+        this.unschedule(this.stepChestEntryPop);
+    };
 
     private async loadTreasureQueue(): Promise<void> {
         const result = await this.treasureRepository.load(this, (slots) => this.renderChests(slots));
@@ -166,6 +429,8 @@ export class MainPage extends Component {
     }
 
     private onToggleChestPanel(): void {
+        // 入口没解锁时节点是藏着的；这里再挡一道，双保险（事件可能被别人转发进来）。
+        if (!this.chestEntryUnlocked) return;
         this.setChestPanelOpen(!this.chestBar.opened);
     }
 
@@ -190,6 +455,12 @@ export class MainPage extends Component {
         // ⚠️ 原来这里按 `ready` 把两侧三角显示出来（它们是章节选择入口）。2026-11-03 起
         //    入口改成地图上的章节建筑，三角一律隐藏 —— 所以这里**什么都不做**。
         //    别"顺手"把 `active = ready` 加回来：那会让三角重新出现在快速寻敌两侧。
+
+        // 留一份领地快照给宝箱入口的开启条件用（pvp 据点通关不写 `CmdBattleLevel`，
+        // 只能查领地格子）。快照是渲染帧冻结过的，`isAreaPassed` 读它不会读到半更新的状态。
+        this.territoryStageByCell = event.state.stageByCell ?? null;
+        this.territoryProgress = event.state.progress ?? null;
+        this.refreshChestEntry();
     }
 
     /** 打开章节选择弹窗（行数据由 `loadChapterSelectRows` 组装，弹窗只负责铺行）。 */
@@ -200,7 +471,7 @@ export class MainPage extends Component {
         if (PopupManager.inst.get(ChapterSelectPanel)) return;
         this.chapterSelectLoading = true;
         try {
-            const rows = await loadChapterSelectRows(this.assets, this.currentChapterId);
+            const rows = await loadChapterSelectRows(this.presentationResources, this.currentChapterId);
             if (!this.isValid || PopupManager.inst.get(ChapterSelectPanel)) return;
             const currentIndex = rows.findIndex((row) => row.current);
             void ChapterSelectPanel.open({ userData: { rows, currentIndex } });
@@ -211,7 +482,7 @@ export class MainPage extends Component {
 
     private renderChests(data: readonly IChestSlotData[]): void {
         const count = data.reduce((total, slot) => total + Number(slot.state !== ChestSlotState.Empty), 0);
-        const cells = [this.chestCell0, this.chestCell1, this.chestCell2, this.chestCell3];
+        const cells = this.chestCells();
         for (let index = 0; index < cells.length; index++) {
             cells[index].spriteFrame = index < count ? this.chestCellFilled : this.chestCellEmpty;
         }

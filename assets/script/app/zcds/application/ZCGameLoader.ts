@@ -479,7 +479,12 @@ export class ZCGameLoader {
                         return { hitFxPrefabs: new Map([...art.hitFxPrefabs, [trait, prefab]]) };
                     }),
                     ...effectPaths.map(path => async () => {
-                        const prefab = await this.resources.assets.load(path, Prefab, { scope, priority: BATTLE_DEFERRED_PRIORITY });
+                        //  ⚠️ 这里必须自己带路径的 label：外层循环那条 `loadOptional` 的文案是
+                        //  「后补特效失败，保留通用表现」，不带路径 ⇒ 十几条特效里哪一条挂了看不出来，
+                        //  战场上只表现为「这个兵的子弹不见了」（2026-11-04 萨尔/萨满）。
+                        const prefab = await this.loadOptional(scope, `技能特效加载失败：${path}`,
+                            () => this.resources.assets.load(path, Prefab, { scope, priority: BATTLE_DEFERRED_PRIORITY }), null);
+                        if (!prefab) return {};
                         return { effectVisualPrefabs: new Map([...art.effectVisualPrefabs, [path, prefab]]) };
                     }),
                     async () => ({ spawnFxPrefab: await this.resources.assets.load(SPAWN_FX_URL, Prefab, { ...this.battleOptions(scope), priority: BATTLE_DEFERRED_PRIORITY }) }),

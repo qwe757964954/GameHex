@@ -143,14 +143,19 @@ export function bigMapNextTargetCity(
     return open.length > 0 ? open[0] : null;
 }
 
-/** 野怪解锁：必须逐级通关（`preLevel = 0` 的 1 级怪无门槛）。 */
+/** 野怪逐级通关；新表等级减一为前置等级，旧表使用 preLevel。 */
 export function bigMapMonsterUnlock(
     monster: IBigMapMonsterConfig,
     context: IBigMapUnlockContext,
 ): IBigMapUnlockResult {
     if (monster.battle) {
-        if (monster.battle.unlockType === 0) return OK;
-        return bigMapLocked('野怪解锁条件待服务端确认');
+        if (monster.battle.unlockType !== 0) return bigMapLocked('野怪解锁条件待服务端确认');
+        // unlockType=0 只表示没有额外配表条件，逐级挑战仍受最高击杀等级约束。
+        const preLevel = monster.level - 1;
+        if (preLevel > context.maxClearedMonsterLevel) {
+            return bigMapLocked(`需先通关 ${preLevel} 级野怪`);
+        }
+        return OK;
     }
     const offline = monster.offlineBattle;
     if (!offline) return bigMapLocked('野怪配置缺少战斗信息');

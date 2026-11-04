@@ -60,6 +60,18 @@ export enum ZCGameUiEvent {
     ReturnToMain = 'zcgame-ui-return-to-main',
     /** 棋盘：点了某一格（**payload = 格子 id**）；派发方是 `ZCGameRenderWorld`（它才知道是哪一格）。 */
     HexClick = 'zcgame-ui-hex-click',
+    /** 展示缺图请求；owner 为本局 ZCGame，控制器按兵种配置解析资源路径。 */
+    RequestUnitArt = 'zcgame-ui-request-unit-art',
+    /**
+     * 展示缺**技能特效**美术请求；owner 为本局 ZCGame，payload 直接带 prefab 路径。
+     *
+     * 与 `RequestUnitArt` 同型但缺口在另一条链上：本局特效清单由
+     * `buildZCVisualResourcePlan(heroIds)` 按后端英雄名单算，兵营产兵 / 波次兵 / GM 临时加的兵
+     * 不在名单里 ⇒ 它们的普攻与技能特效路径**一条都不会被加载**，战场上就是「这个兵的子弹不见了」，
+     * 而且连「加载失败」都不会报（压根没被要求加载）。
+     * 派发方是 `ZCGameRenderWorld`（它才知道哪条路径取不到）。
+     */
+    RequestEffectArt = 'zcgame-ui-request-effect-art',
 }
 
 export interface IZCDebugDrawCardIntent {
@@ -69,4 +81,15 @@ export interface IZCDebugDrawCardIntent {
 
 export interface IZCDebugDrawCardResult {
     readonly message: string;
+}
+
+export interface IZCRequestUnitArtIntent {
+    readonly owner: object;
+    readonly unitId: string;
+}
+
+export interface IZCRequestEffectArtIntent {
+    readonly owner: object;
+    /** 资源路径（= `effectVisualPrefabs` 的 key，如 `units/projectiles/磁电菇_子弹攻击/磁电菇_子弹攻击`）。 */
+    readonly path: string;
 }

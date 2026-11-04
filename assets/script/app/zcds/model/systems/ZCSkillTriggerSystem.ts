@@ -21,6 +21,7 @@ import type { ZCSkillRuntimeDefinition } from '../ZCSkillRuntime';
 import type { ZCSnapshot, ZCUnitState } from '../ZCGameTypes';
 import { type ZCStatusStatMods, type ZCStatusSystem } from '../ZCStatusEffect';
 import type { IZCStrikeOptions } from './ZCAttackResolutionSystem';
+import { zcMissileFxOf } from '../ZCCombatEffectFlight';
 
 export interface IZCSkillTriggerContext {
     readonly statusSystem: ZCStatusSystem;
@@ -456,6 +457,7 @@ export class ZCSkillTriggerSystem {
         const every = Math.max(0, params?.strikeEvery ?? 0);
         if (!(cooldown > 0) && !(every > 0)) return;
         const scale = Math.max(1e-6, context.distanceScale ?? 1);
+        const missileFx = zcMissileFxOf(unit.unitId);
         const fire = (): boolean => {
             const options: IZCStrikeOptions = {
                 count: Math.round(count),
@@ -464,6 +466,10 @@ export class ZCSkillTriggerSystem {
                 nearest: (params?.strikeNearest ?? 0) > 0,
                 splashRadius: Math.max(0, params?.strikeSplashRadius ?? 0) * scale,
                 splashDamageRate: Math.max(0, params?.strikeSplashDamageRate ?? 0),
+                //  追踪导弹（镭射飞龙 68010）：挑到人就发会飞的导弹，不立即结算。
+                missilePrefabPath: missileFx?.missilePrefabPath,
+                impactPrefabPath: missileFx?.impactPrefabPath,
+                arcOffset: missileFx?.arcOffset ?? 0,
             };
             return context.strike!(unit, options) > 0;
         };

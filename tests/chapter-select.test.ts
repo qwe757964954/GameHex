@@ -15,6 +15,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
+import { runInNewContext } from 'node:vm';
+import ts from 'typescript';
 
 import {
     CHAPTER_SELECT_STATE,
@@ -101,33 +103,40 @@ test('chapterPercentOf：没有地图 / 空站点时给 0，不给 NaN', () => {
     assert.equal(chapterPercentOf({ name: 'x', siteCells: [] }, [11]), 0);
 });
 
-test('buildChapterSelectRows：可切章节 + 下一章预告（锁定）', () => {
+test('buildChapterSelectRows：展示全部章节，未解锁一律锁定', () => {
     const maps = new Map<number, IChapterSelectMapInfo>([
         [1, { name: '第一章', siteCells: [1, 2] }],
         [2, { name: '笑脸章', siteCells: [3, 4] }],
         [3, { name: '飞机章', siteCells: [5, 6] }],
     ]);
     const owned = new Map<number, readonly number[]>([[1, [1, 2]], [2, [3]]]);
-    const rows = buildChapterSelectRows([1, 2], 2, maps, owned);
+    // 配表定义 4 章全集：1、2 可切，3、4 未解锁也占行并锁定。
+    const rows = buildChapterSelectRows([1, 2], 2, maps, owned, new Map(), 4);
 
-    assert.equal(rows.length, 3, '服务端给 1、2 ⇒ 列表 1、2 + 预告的 3');
-    assert.deepEqual(rows.map((row) => row.chapterId), [1, 2, 3]);
-    assert.deepEqual(rows.map((row) => row.index), [1, 2, 3]);
-    assert.deepEqual(rows.map((row) => row.title), ['第一章', '笑脸章', '飞机章']);
-    assert.deepEqual(rows.map((row) => row.percent), [100, 50, 0]);
+    assert.equal(rows.length, 4, '全部章节都占行');
+    assert.deepEqual(rows.map((row) => row.chapterId), [1, 2, 3, 4]);
+    assert.deepEqual(rows.map((row) => row.index), [1, 2, 3, 4]);
+    assert.deepEqual(rows.map((row) => row.title), ['第一章', '笑脸章', '飞机章', '第 4 章']);
+    assert.deepEqual(rows.map((row) => row.percent), [100, 50, 0, 0]);
     assert.deepEqual(rows.map((row) => row.state), [
         CHAPTER_SELECT_STATE.cleared,
         CHAPTER_SELECT_STATE.progress,
         CHAPTER_SELECT_STATE.locked,
+        CHAPTER_SELECT_STATE.locked,
     ]);
-    assert.deepEqual(rows.map((row) => row.current), [false, true, false]);
+    assert.deepEqual(rows.map((row) => row.current), [false, true, false, false]);
 });
 
-test('buildChapterSelectRows：没有地图的未解锁章节不占行', () => {
+test('buildChapterSelectRows：没有地图的未解锁章节仍占行（锁定）', () => {
     const maps = new Map<number, IChapterSelectMapInfo>([[1, { name: '第一章', siteCells: [1] }]]);
-    const rows = buildChapterSelectRows([1], 1, maps, new Map([[1, [1]]]));
-    assert.equal(rows.length, 1, '第 2 章没有地图（还没做内容）⇒ 不显示');
-    assert.equal(rows[0].state, CHAPTER_SELECT_STATE.cleared);
+    // 第 2、3 章没有地图也没解锁：不再跳过，显示为锁定行。
+    const rows = buildChapterSelectRows([1], 1, maps, new Map([[1, [1]]]), new Map(), 3);
+    assert.equal(rows.length, 3, '没有地图的未解锁章节也占行');
+    assert.deepEqual(rows.map((row) => row.state), [
+        CHAPTER_SELECT_STATE.cleared,
+        CHAPTER_SELECT_STATE.locked,
+        CHAPTER_SELECT_STATE.locked,
+    ]);
 });
 
 test('buildChapterSelectRows：服务端空列表也至少给第 1 章', () => {
@@ -136,6 +145,63 @@ test('buildChapterSelectRows：服务端空列表也至少给第 1 章', () => {
     assert.equal(rows[0].chapterId, 1);
     assert.equal(rows[0].title, '第 1 章', '没有地图时用兜底标题');
     assert.equal(rows[0].state, CHAPTER_SELECT_STATE.locked);
+});
+
+test('buildChapterSelectRows：按章节 ID 使用配表名称，保留进度、锁定和缺项兜底', () => {
+    const maps = new Map<number, IChapterSelectMapInfo>([[1, MAP], [2, MAP], [3, MAP]]);
+    const names = new Map([[2, '僵笑面具'], [1, '枯菌穹顶'], [4, '尚未开放']]);
+    const rows = buildChapterSelectRows([1], 1, maps, new Map([[1, [11, 12]]]), names);
+    assert.deepEqual(rows.map(row => row.title), ['枯菌穹顶', '僵笑面具']);
+    assert.deepEqual(rows.map(row => row.percent), [50, 0]);
+    assert.deepEqual(rows.map(row => row.state), ['progress', 'locked']);
+    assert.deepEqual(rows.map(row => row.current), [true, false]);
+    assert.equal(buildChapterSelectRows([3], 3, maps, new Map(), names)[2].title, MAP.name);
+    assert.equal(buildChapterSelectRows([1], 1, new Map(), new Map(), names)[0].title, '枯菌穹顶');
+});
+
+test('loadChapterSelectRows：通过配置入口读取导出的 chapterName，而非地图名', async () => {
+    const table = JSON.parse(readFileSync(path.join(ROOT, 'assets/remoteRef/chapterName.json'), 'utf8'));
+    const chapterConfigs = table.v.map((values: unknown[]) => Object.fromEntries(
+        table.k.map((key: string, index: number) => [key, values[index]]),
+    ));
+    assert.deepEqual(chapterConfigs.map((row: { chapterId: number }) => row.chapterId), [1, 2, 3, 4, 5, 6, 7]);
+    const requested: string[] = [];
+    const dependencies: Record<string, unknown> = {
+        cc: { JsonAsset: class {} },
+        '../../main/MainRoleRow': { readRoleRow: () => null },
+        '../../net/RequestGuard': { toIdString: String },
+        '../model/TerritoryMapConfig': { configureTerritoryMap: (value: unknown) => value },
+        '../model/TerritorySaveStore': { TerritorySaveStore: class {
+            load() { return { progress: { ownedCells: [11] } }; }
+        } },
+        '../model/ChapterSelectRows': { buildChapterSelectRows },
+        './TerritoryChapterInfoRepository': { TerritoryChapterInfoRepository: { instance: { availableChapters: [1] } } },
+        './TerritoryPageAssets': { territoryMapPath: (id: number) => `chapter_${id}` },
+    };
+    const exports: Record<string, Function> = {};
+    const source = readFileSync(path.join(ROOT, 'assets/script/app/territory/application/ChapterSelectLoader.ts'), 'utf8');
+    runInNewContext(ts.transpileModule(source, {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    }).outputText, { exports, require: (name: string) => {
+        assert.ok(name in dependencies, `Unexpected dependency: ${name}`);
+        return dependencies[name];
+    }, console });
+    const rows = await exports.loadChapterSelectRows({
+        assets: {
+            has: async () => true,
+            load: async () => ({ json: { name: '旧地图标题', sites: [{ cellId: 11 }, { cellId: 12 }] } }),
+        },
+        configs: { getTable: async (name: string) => { requested.push(name); return chapterConfigs; } },
+    }, 1);
+    assert.deepEqual(requested, ['chapterName']);
+    // 配表 chapterName 定义 7 章全集：全部占行，未解锁（2..7）显示为锁定。
+    assert.equal(rows.length, 7, '配表定义的全部章节都展示');
+    assert.deepEqual(Array.from(rows, (row: { title: string }) => row.title),
+        ['枯菌穹顶', '僵笑面具', '坠机残港', '钢骨十字', '铁壁盾堡', '棱晶裂谷', '熔岩之心']);
+    assert.equal(rows[0].percent, 50);
+    assert.equal(rows[1].state, 'locked');
+    assert.deepEqual(Array.from(rows, (row: { state: string }) => row.state),
+        ['progress', 'locked', 'locked', 'locked', 'locked', 'locked', 'locked']);
 });
 
 // ============================================================
@@ -180,41 +246,136 @@ test('ChapterSelectPanel.prefab：关键节点尺寸与位置', () => {
 });
 
 /**
- * `row_base.png`（742×221）底下烘了一圈投影，可见实体只占 art 的 y=1..206，
- * 因此它的**视觉中心比节点中心高 4.4 设计像素**（(110.5−103.5)×140/221）。
- * 序号块 / 状态块 / 挂锁都按这个中心对齐 —— 按节点中心摆会看着偏低，
- * 底部压到行底板的内边线（截图上的表现就是「数字框顶出底框」）。
+ * 选中行的「底框」其实是那圈金色高亮环，**不是** `RowBg`。
+ *
+ * `row_current_ring.png` 是 744×233，描边厚 14px，中间的洞只占 art 的
+ * x=14..729 / y=14..207；换算到 553×147 的节点上洞只有 532×122 高，
+ * 比行底板本体（552×140，可见 130）还小一圈。所以序号块 / 状态块压到金边上，
+ * 就是截图里「数字框顶出底框」的样子。洞的视觉中心比节点中心高 3.8
+ * （art 中心 116.5 vs 洞中心 110.5）。
+ *
+ * ⚠️ 这个换算是**整体等比**模型（洞 122 高）。引擎实际走九宫格、边框按 1:1 画，
+ * 渲染出来和模型有几像素差 —— 用户 2026-11-03/04 两轮都是照实机目视定的基线，
+ * 最后定在 `BLOCK_BASELINE_Y = 12`（见下）。模型只用来算「有没有扎出洞」，不用来定位置。
  */
-const ROW_BODY_CENTER_Y = 4.4;
+const RING_ART = {
+    width: 744,
+    height: 233,
+    holeLeft: 14,
+    holeRight: 729,
+    holeTop: 14,
+    holeBottom: 207,
+} as const;
+const RING_HOLE_CENTER_Y = 3.8;
+/**
+ * 序号块 / 状态块 / 挂锁 共用的垂直基线 —— 少写一个就会出现「锁飘在状态块下沿」。
+ *
+ * ⚠️ 2026-11-04 用户实机定稿：从 4.8 上抬到 **12**（洞中心 3.8 + 8.2），
+ * 并缩到 **0.9**。这是用户对着实机明暗分界调的，**不是**「数学上居中」——
+ * 所以下面不再要求上下留白相等，只要求「整体不扎进金边」。
+ * 换这条基线时必须三块一起改（挂锁与状态块同列）。
+ */
+const BLOCK_BASELINE_Y = 12;
+/** 序号块 /「完成度」整块缩到 90%：两块 112 高、洞里约 122，不缩就是顶天立地。 */
+const BLOCK_SCALE = 0.9;
 
-test('ChapterSelectPanel.prefab：行内区块对齐底板视觉中心、且都不越出底板', () => {
+test('ChapterSelectPanel.prefab：行内区块落在金色描边的洞里、四周留白均匀', () => {
     const data = loadPrefab();
     const lpos = (name: string): { x: number; y: number } =>
         data[nodeIndexOf(data, name)]._lpos as { x: number; y: number };
     const boxOf = (name: string): { width: number; height: number } =>
         componentOf(data, name, 'cc.UITransform')._contentSize as { width: number; height: number };
+    const scaleOf = (name: string): number => {
+        const value = (data[nodeIndexOf(data, name)] as { _lscale?: { x: number } })._lscale;
+        assert.ok(value, `${name} 没有 _lscale`);
+        return value.x;
+    };
+    /** 实际渲染尺寸 = 节点尺寸 × 缩放（`_lscale` 会连同子节点一起放大缩小）。 */
+    const renderedOf = (name: string): { width: number; height: number } => {
+        const box = boxOf(name);
+        const scale = scaleOf(name);
+        return { width: box.width * scale, height: box.height * scale };
+    };
 
     // 三块共用同一套垂直对齐：挂锁和状态块同列，错开就会「锁飘在中间偏下」
     for (const name of ['NumBlock', 'StatusBlock', 'LockIcon']) {
-        assert.equal(lpos(name).y, ROW_BODY_CENTER_Y, `${name} 没对齐底板的视觉中心`);
+        assert.equal(lpos(name).y, BLOCK_BASELINE_Y, `${name} 没对齐金边的视觉中心`);
     }
 
-    // 底板可见高度 = 140 × (205/221) ≈ 129.9；块高必须留出内边距，不能顶到底板内边线
-    const bodyHeight = 140 * (205 / 221);
+    // 从环的节点尺寸 + 素材里洞的位置，反推洞的半宽 / 半高 / 中心
+    const ring = boxOf('CurrentRing');
+    const scaleX = ring.width / RING_ART.width;
+    const scaleY = ring.height / RING_ART.height;
+    const halfW = ((RING_ART.holeRight - RING_ART.holeLeft) / 2) * scaleX;
+    const halfH = ((RING_ART.holeBottom - RING_ART.holeTop) / 2) * scaleY;
+    const centerY = (RING_ART.height / 2 - (RING_ART.holeTop + RING_ART.holeBottom) / 2) * scaleY;
+    assert.ok(Math.abs(centerY - RING_HOLE_CENTER_Y) < 0.05, `洞中心算出来是 ${centerY.toFixed(2)}`);
+
+    // 上下：整块必须落在洞里 —— 上沿尤其不能扎进金边（用户把块刻意上抬，上留白天生比下留白小）
     for (const name of ['NumBlock', 'StatusBlock']) {
-        const margin = (bodyHeight - boxOf(name).height) / 2;
-        assert.ok(margin >= 4 && margin <= 8,
-            `${name} 与底板的内边距 ${margin.toFixed(1)}px 不在 4~8 之间（会顶出底板或缩成一条缝）`);
+        const box = renderedOf(name);
+        const pos = lpos(name);
+        const top = centerY + halfH - (pos.y + box.height / 2);
+        const bottom = pos.y - box.height / 2 - (centerY - halfH);
+        assert.ok(top >= 1 && bottom >= 1,
+            `${name} 扎进金边了（上 ${top.toFixed(1)}px / 下 ${bottom.toFixed(1)}px）`);
+        // 偏心是用户在实机上定过的，不判「相等」；只防「偏到另一侧去了」
+        assert.ok(top < bottom, `${name} 变成偏下了，基线该往上调（上 ${top.toFixed(1)} / 下 ${bottom.toFixed(1)}）`);
     }
 
-    // 序号块 / 状态块按素材原比例摆放，压扁会让木纹和「完成度」小字变形
+    // 再兜一层：不能溢出到行底板的节点矩形（140 高，±70）—— 否则会压到相邻行
+    for (const name of ['NumBlock', 'StatusBlock']) {
+        const box = renderedOf(name);
+        const pos = lpos(name);
+        assert.ok(pos.y + box.height / 2 <= 70 && pos.y - box.height / 2 >= -70,
+            `${name} 超出 RowBg 的 140 高节点矩形`);
+    }
+
+    // 左右：序号块贴左、状态块贴右，两侧留白要一样宽
+    // （0.9 缩放会把原始 x 上那 1.2px 的差放大到 2.3px，容差取 3）
+    const num = renderedOf('NumBlock');
+    const st = renderedOf('StatusBlock');
+    const leftGap = lpos('NumBlock').x - num.width / 2 + halfW;
+    const rightGap = halfW - (lpos('StatusBlock').x + st.width / 2);
+    assert.ok(leftGap >= 4 && rightGap >= 4,
+        `左右贴到金边了（左 ${leftGap.toFixed(1)}px / 右 ${rightGap.toFixed(1)}px）`);
+    assert.ok(Math.abs(leftGap - rightGap) <= 3,
+        `左右留白不均（左 ${leftGap.toFixed(1)}px / 右 ${rightGap.toFixed(1)}px）`);
+
+    // 只允许为「塞进洞里」轻微压扁，超过 10% 木纹和「完成度」小字就开始变形
     const ratio = (name: string) => boxOf(name).width / boxOf(name).height;
-    assert.ok(Math.abs(ratio('NumBlock') - 139 / 167) < 0.01, `NumBlock 变形了：比例 ${ratio('NumBlock')}`);
-    assert.ok(Math.abs(ratio('StatusBlock') - 200 / 167) < 0.01, `StatusBlock 变形了：比例 ${ratio('StatusBlock')}`);
+    assert.ok(Math.abs(ratio('NumBlock') / (139 / 167) - 1) < 0.1, `NumBlock 变形了：比例 ${ratio('NumBlock')}`);
+    assert.ok(Math.abs(ratio('StatusBlock') / (200 / 167) - 1) < 0.1, `StatusBlock 变形了：比例 ${ratio('StatusBlock')}`);
 
     // 挂锁比效果图略大（美术要求：在 62×70 基础上放大到 130%）
     assert.deepEqual([boxOf('LockIcon').width, boxOf('LockIcon').height],
         [Math.round(62 * 1.3), Math.round(70 * 1.3)]);
+});
+
+test('ChapterSelectPanel.prefab：序号块与完成度块缩到 90%、章节名居中（2026-11-03）', () => {
+    const data = loadPrefab();
+    const scaleOf = (name: string) => {
+        const value = (data[nodeIndexOf(data, name)] as { _lscale?: { x: number; y: number } })._lscale;
+        assert.ok(value, `${name} 没有 _lscale`);
+        return value;
+    };
+
+    // 「缩小成 95%」：两块等比缩，不缩宽度只缩宽度会拧坏木纹和「完成度」两行
+    for (const name of ['NumBlock', 'StatusBlock']) {
+        const scale = scaleOf(name);
+        assert.equal(scale.x, BLOCK_SCALE, `${name} 没缩到 95%`);
+        assert.equal(scale.y, BLOCK_SCALE, `${name} 横向纵向必须等比缩`);
+    }
+    // 挂锁是字形不是底板，不跟着缩（只在锁定时出现，缩了会比序号块小一圈）
+    assert.equal(scaleOf('LockIcon').x, 1);
+
+    // 「章节名称也需要居中对齐」：`_horizontalAlign` 0 = LEFT / 1 = CENTER
+    assert.equal(componentOf(data, 'NameLabel', 'cc.Label')._horizontalAlign, 1,
+        '章节名还是左对齐（文字会贴着序号块，看着像没居中）');
+
+    // 状态块里的两行字跟着父节点一起缩，不能再单独改它们的字号
+    assert.equal(scaleOf('PercentLabel').x, 1);
+    assert.equal(scaleOf('CompleteLabel').x, 1);
 });
 
 test('ChapterSelectPanel.prefab：行模板默认隐藏，避免复制前闪一行', () => {

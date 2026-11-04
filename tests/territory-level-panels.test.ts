@@ -278,13 +278,13 @@ test('两个弹窗走 PopupBase（页面不再绑 prefab），世界页不再引
     const tipSrc = readFileSync('assets/script/app/main/LevelTipPanel.ts', 'utf8');
     assert.match(infoSrc, /static prefabPath = 'ui\/main\/LevelInfoPanel'/, '关卡界面必须声明 prefabPath');
     assert.match(tipSrc, /static prefabPath = 'ui\/main\/LevelTipPanel'/, '关卡提示必须声明 prefabPath');
-    // 世界页不再加载这两个弹窗：`loadTargetPanels` 已是空实现（注释里提到旧路径不算）
+    // 世界页不再加载这两个弹窗：那两条并行预载链（`loadTargetPanels`）已整体移除 ——
+    // 弹窗改由 `PopupManager` 按 `prefabPath` 现取，世界页连路径都不该再出现。
     const bigMapPage = readFileSync('assets/script/app/bigmap/view/BigMapPage.ts', 'utf8');
-    const start = bigMapPage.indexOf('private async loadTargetPanels');
-    assert.ok(start > 0, 'loadTargetPanels 必须还在（initialize 里那条并行链不拆）');
-    const body = bigMapPage.slice(start, bigMapPage.indexOf('\n    }', start));
-    assert.equal(/assets\.load|BIGMAP_BUNDLE/.test(body), false,
-        '世界页不再加载任何目标弹窗预制体（它们都搬去领地页了）');
+    assert.doesNotMatch(bigMapPage, /LevelInfoPanel|LevelTipPanel/,
+        '世界页不该再引用搬去领地页的两个弹窗');
+    assert.equal(/\bloadTargetPanels\b/.test(bigMapPage), false,
+        '预载链已删，别再长回来（会和 PopupManager 的现取打架）');
 });
 
 // ============================================================

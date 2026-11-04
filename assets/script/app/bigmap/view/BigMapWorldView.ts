@@ -35,6 +35,20 @@ export const WORLD_ROW_STEP = BIGMAP_ROW_STEP;
 const MIN_ZOOM = 0.15;
 const MAX_ZOOM = 1.6;
 /**
+ * 选中城池据点后，那座城的标记整体上移的量。
+ *
+ * 🔴 2026-11-03 用户口径（两轮）：
+ *  · 第一轮：*「城池据点连带着名称和等级的UI节点上移200px（底部与当前城主的上沿对齐即可）」*；
+ *  · 第二轮：*「还需要上移100px，并且是在地图放大到接近极限的85%的相机位置」*
+ *    ⇒ **总量 300**（`MIN_ZOOM=0.15`、`MAX_ZOOM=1.6`，85% ≈ zoom 1.38，即用户验收的机位）。
+ *
+ * 名条 / 等级 / 占领旗都是标记节点（`BigMapWorldMarker`）的子节点，**挪节点一棵全跟着走**。
+ * 「当前城主」徽章在 `BigMapCityPopup` 的城主区（屏幕系、贴面板顶上方），地图是可平移缩放的
+ * 内容系，两边没法长期精确对齐 —— 所以落成**固定 300（内容系坐标）**，
+ * 以 85% 机位（zoom ≈ 1.38，屏幕位移 ≈ 415px）的观感为准；要微调只改这一个值。
+ */
+const BIGMAP_FOCUSED_CITY_LIFT = 300;
+/**
  * 地形色（**乘算**叠在 `grounds/ground_0x.png` 上，所以只能压暗、不能提亮）。
  *
  * 口径（2026-10-21 用户口径：「地块默认颜色如图 2」）：默认**一律是沙地本色**，
@@ -610,7 +624,41 @@ export class BigMapWorldView extends Component {
             this.hexPath(this.markerLayer, this.selectedHexId);
             this.markerLayer.stroke();
         }
+        this.applyFocusIsolation();
         this.cullMarkers();
+    }
+
+    /**
+     * 是否处于「城池聚焦」态：选中格是某座**城池**的锚点才算。
+     * 选野怪 / 玩家基地不聚焦（2026-11-03 口径只提了城池据点）；没选中也不聚焦。
+     */
+    private get focusedCityHexId(): number {
+        if (this.selectedHexId < 0 || !this.data) return -1;
+        for (const city of this.data.cities.values()) {
+            if (city.hexId === this.selectedHexId) return this.selectedHexId;
+        }
+        return -1;
+    }
+
+    /**
+     * 城池聚焦的两件事（2026-11-03 用户：*「在大地图点击城池据点后，隐藏其他的城池据点和
+     * 玩家基地以及野怪模型，只展示该城池据点，城池据点连带着名称和等级的UI节点上移200px」*）：
+     *
+     * 1. **只留选中的那座**：隐藏走 `cullMarkers`（平移 / 缩放也会走到，两处口径必须一致）；
+     * 2. **选中的城标记上移 200**：标记位置只在 `addMarker` 落过一次位，这里按 `centerOf`
+     *    **幂等重摆** —— 聚焦解除时把 y 写回原位，绝不残留上一次的偏移
+     *    （`selectedHexId` 在 contentKey 里，选中态一变 `syncMarkers` 必然重跑）。
+     */
+    private applyFocusIsolation(): void {
+        const focus = this.focusedCityHexId;
+        for (const marker of this.markers) {
+            // 直接读布局点，不走 centerOf：那里每次都 new Vec2，最小 cc 桩的测试会炸
+            //（坐标语义与 addMarker 的 centerOf 完全一致：查不到点 = 原点）。
+            const point = this.layout.points.get(marker.hexId);
+            const x = point ? point.x : 0;
+            const y = (point ? point.y : 0) + (marker.hexId === focus ? BIGMAP_FOCUSED_CITY_LIFT : 0);
+            marker.node.setPosition(x, y, 0);
+        }
     }
 
     private cityTint(state: BigMapCityState): Color {
@@ -622,7 +670,15 @@ export class BigMapWorldView extends Component {
     private cullMarkers(): void {
         const position = this.content.position;
         const halfWidth = this.viewportTransform.width / 2 + 130 * this.zoom;
+        // 城池聚焦态：其余城池 / 玩家基地 / 野怪标记全部隐藏（2026-11-03 口径）。
+        // 隐藏 = active false ⇒ 同一帧内不可点（hitAreas 按 active 过滤）、不进可见城池上报
+        // （`reportVisibleCamps`），聚焦解除后由 syncMarkers → cullMarkers 恢复。
+        const focus = this.focusedCityHexId;
         for (const marker of this.markers) {
+            if (focus >= 0 && !(marker.kind === 'city' && marker.hexId === focus)) {
+                marker.node.active = false;
+                continue;
+            }
             const hitArea = marker.view.hitArea;
             // 名条已挪到建筑**下方**（`badgeY` 为负），裁剪余量要同时吃上下两头：
             // 上 = 建筑顶（主城还要算头像），下 = 名条底。只算一头会让贴边的标记提前消失。

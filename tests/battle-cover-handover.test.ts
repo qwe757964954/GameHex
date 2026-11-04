@@ -66,7 +66,7 @@ test('★★★匹配页要在自己底下重建同一屏云（第 0 个子节�
     // 云帧缺了只是"没有云"，不许把匹配本身搞挂
     assert.ok(COMPOSITION.includes('this.cloudFrames = [];'), '加载失败要降级成空数组');
     // 换流程时把云一起带走（`dispose` 而不是 `destroy`：盖层自持的帧引用也要还回去）
-    assert.ok(COMPOSITION.includes('this.cover?.dispose()'), 'dispose 没销毁云层');
+    assert.ok(COMPOSITION.includes('const cover = this.cover;') && COMPOSITION.includes('cover?.dispose()'), 'dispose 没销毁云层');
 });
 
 test('★★★「瞬间关闭」只藏 UI：云留着，界面不留半张', () => {
@@ -91,7 +91,7 @@ test('★★★匹配成功后：关界面 → 等资源 → **先切战场** �
     // 资源没到就切场 = 战场自己弹加载态（用调用点判断，别按文本先后比 —— `enter` 是闭包，定义在前）。
     assert.ok(body.includes('this.session?.ready'), '没有等战场资源');
     assert.ok(body.includes('void ready.then(enter'), '资源到了才切场');
-    assert.ok(body.includes('this.options.schedule(enter, handoff.readyTimeout)'), '超时兜底也要切场');
+    assert.ok(body.includes('this.options.clock.schedule(enter, handoff.readyTimeout)'), '超时兜底也要切场');
     assert.ok(body.includes('handoff.readyTimeout'), '没有超时兜底');
     assert.ok(body.includes('GameRoute.Main'), '资源失败要有去处（回主界面）');
     // 失败那条路也要散：云已经交接出去了，不散就一直盖着主界面
@@ -112,7 +112,7 @@ test('★★★云必须被搬出匹配页：留在页里就活不过 navigate�
     assert.ok(COMPOSITION.includes('closeInstantly: () => this.handOverCover()'), '交接没走搬云那一步');
     assert.ok(COMPOSITION.includes('releaseCover: () => this.handoffOverlay?.arm()'), '散云没交给宿主');
     // dispose 里那份清理也要按"还是不是自己的云"判断，否则交接完又被销毁
-    assert.ok(COMPOSITION.includes('if (this.cover === cover) cover.dispose()'),
+    assert.ok(COMPOSITION.includes('const cover = this.cover;') && COMPOSITION.includes('this.cover = null;') && COMPOSITION.includes('cover?.dispose()'),
         'dispose 会销毁已经交接出去的那层云');
     assert.ok(!COMPOSITION.includes('this.handoffOverlay?.destroy') &&
         !COMPOSITION.includes('this.handoffOverlay!.destroy'), '交接层的销毁归它自己（散完自收）');

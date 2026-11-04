@@ -108,7 +108,7 @@ node tools/map-editor/server.mjs           # 只起服务，手动访问 http://
 | CSV | `<预设 ID>-cities.csv` | 城池清单：id/名称/等级/层级/坐标/环/占格数/范围格数/相邻。带 BOM，Excel 打开中文不乱码 |
 | 导出 JSON | `<预设 ID>.json` | 当前工作稿原文 |
 
-背景图：左侧「显示 → 背景图」填资源名（相对 `assets/resources`、不带扩展名，如 `image/bigmap/world_01`），
+背景图：左侧「显示 → 背景图」填资源名（相对 bundle 根、不带扩展名，如 `image/wasteland_background`；旧前缀 `image/bigmap/` 仍兼容），
 点「应用」。编辑器通过 `/bg/` 路由读工程里的图，所见即游戏里那张。
 
 ---

@@ -285,12 +285,11 @@ test('图标行 8 项 = 4 职业 + 4 阵营（阵营按 traits.camp 算，顺序
     assert.equal(resolveCardCamp({ ...noTraits, traits: { camp: '没这个阵营' } } as unknown as ZCDeckCard), null,
         '认不出的 camp 取值不落默认档（宁可空着，也不要瞎归一类）');
 
-    // 美术名映射：4 个阵营各有独立的图标名，且与职业那套不撞名
-    //  （撞名的症状不是报错，而是「图能出来但出的是另一张」）
-    //  2026-09-22：条目合并成一枚图标后只剩亮态这一套，「灰态」名字已删除。
+    // 四个阵营均有独立图标，不与职业图标混用。
     const campOn = ZC_CARD_CAMPS.map((camp) => CAMP_ICON_ON_ART[camp]);
-    assert.equal(new Set(campOn).size, 4);
-    assert.equal(campOn.filter((name) => !name).length, 0);
+    assert.equal(campOn.length, 4);
+    assert.ok(campOn.every((name) => typeof name === 'string' && name.length > 0));
+    assert.equal(new Set(campOn).size, campOn.length);
     const classOn = ZC_CARD_CLASSES.map((cardClass) => CLASS_ICON_ON_ART[cardClass]);
     assert.equal(campOn.filter((name) => classOn.includes(name)).length, 0, '阵营与职业不能共用同一张图');
 });

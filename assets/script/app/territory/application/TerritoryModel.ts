@@ -53,7 +53,7 @@ import type { TerritoryCellFetchResult, TerritoryStartBattleResult, TerritoryWri
 import type { ITerritoryBattleArt } from './TerritoryPageAssets';
 import {
     TERRITORY_ASYNC_REWARD_SLOTS,
-    TERRITORY_ASYNC_SCOUT_SILVER,
+    TERRITORY_ASYNC_SCOUT_STAMINA,
     TERRITORY_DEFAULT_PLAYER_COUNT,
     TERRITORY_LEVEL_DROP_SLOTS,
     TERRITORY_TEXTS,
@@ -359,14 +359,16 @@ export interface ITerritoryPlayerStageReward {
  * 异步据点「玩家关卡」弹窗的呈现数据。
  *
  * 字段对齐蓝湖「玩家关卡」设计稿：标题木牌 + 两条占领奖励（第二条是图标格）+ 侦查/开战双按钮。
- * 两个按钮各带一份**银币**消耗 —— 数值全部来自配置与存档，视图不自己造数。
+ * 两个按钮各带一份**体力**消耗 —— 数值全部来自配置与存档，视图不自己造数。
  */
 export interface ITerritoryPlayerStageContent {
     readonly title: string;
     /** 第一条占领奖励的文案；空串 = 整条隐藏（没有卡牌宝箱奖励的据点）。 */
     readonly chestText: string;
     readonly rewards: readonly ITerritoryPlayerStageReward[];
+    /** 「侦查」按钮的**体力**消耗。 */
     readonly scoutCost: number;
+    /** 「开始战斗」按钮的**体力**消耗（= 关卡表的 `levelCost`，与主线「关卡界面」同源）。 */
     readonly fightCost: number;
     readonly fightCaption: string;
     readonly fightEnabled: boolean;
@@ -2155,9 +2157,14 @@ export class TerritoryModel {
      * - **占领奖励**：第一条是固定的「1 个卡牌宝箱」（设计稿口径，本期所有异步据点都一样）；
      *   第二条起取 `PVP-关卡.idleReward`（与「占领挂机产出」同一份配置），按万分比概率
      *   过滤掉 `pro == 0` 的行 —— 那些是策划留的空位，展示出来等于骗玩家。
-     * - **侦查**：`TERRITORY_ASYNC_SCOUT_SILVER` 常量（服务端还没有侦查协议/配置；
+     * - **侦查**：`TERRITORY_ASYNC_SCOUT_STAMINA` 常量（服务端还没有侦查协议/配置；
      *   等协议到位替换成服务端下发的价格，视图侧不用改）。
-     * - **开始战斗**：`site.unlock.silverCost`（= 真正的解锁价，与现有点击开战扣的是同一笔）。
+     * - **开始战斗**：`stage.staminaCost`（= 关卡表 `levelCost`，与「关卡界面」弹窗同一份口径）。
+     *
+     * 🔴 2026-11-04 山猫：「这里是扣体力不是扣银币」（截图里两颗按钮挂的是银币图标 + 银币数字）。
+     *   原来开战读的是 `site.unlock.silverCost`（据点解锁价，第一版按"开战即解锁"理解），
+     *   那笔银子只在**首次解锁**时由服务端扣，玩家每打一次真正消耗的是关卡体力
+     *   ⇒ 按钮口径改体力。银子仍会在解锁那一步扣，但那是解锁价，不进这个按钮。
      */
     private playerStageContent(): ITerritoryPlayerStageContent | null {
         const site = this.detailSite;
@@ -2175,8 +2182,10 @@ export class TerritoryModel {
             title: TERRITORY_UNBOUND_TYPE_NAMES.asyncPvp,
             chestText: TERRITORY_TEXTS.asyncPlayerChestReward,
             rewards,
-            scoutCost: TERRITORY_ASYNC_SCOUT_SILVER,
-            fightCost: Math.max(0, Math.round(site.unlock.silverCost)),
+            scoutCost: TERRITORY_ASYNC_SCOUT_STAMINA,
+            // 与「关卡界面」的 `levelInfoContent.staminaCost` 同一条口径：关卡配多少体力就显示多少。
+            // 绑不到关卡 ⇒ 0（视图按 `<= 0` 不显示费用角标），不拿解锁价顶替。
+            fightCost: stage ? Math.max(0, Math.round(stage.staminaCost)) : 0,
             fightCaption: TERRITORY_TEXTS.asyncPlayerFight,
             // 绑不到关卡 = 没有可开战的战斗参数，按钮直接灰掉（与 `handleUnlockOnly` 的兜底同口径）；
             // 解锁/开战请求在途时也灰掉，防连点。

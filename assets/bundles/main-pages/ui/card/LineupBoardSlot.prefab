@@ -462,7 +462,7 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 78,
+      "width": 108,
       "height": 108
     },
     "_anchorPoint": {
@@ -509,7 +509,7 @@
     },
     "_fillStart": 0,
     "_fillRange": 0,
-    "_isTrimmedMode": true,
+    "_isTrimmedMode": false,
     "_useGrayscale": false,
     "_atlas": null,
     "_id": ""
@@ -915,6 +915,9 @@
     },
     "hero": {
       "__id__": 18
+    },
+    "heroTransform": {
+      "__id__": 16
     },
     "classBadge": {
       "__id__": 24

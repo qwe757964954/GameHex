@@ -5,7 +5,9 @@ import { ZCOwner } from '../model/ZCMapConfig';
 import { ZC_CLIENT_COLORS } from './ZCTheme';
 import { isHealthBarVisible, pickHealthBarFill, spawnShakePulse, SPAWN_SHAKE_PHASE_SECONDS, updateHealthBar, healthBarRatio } from './ZCGameViewUtil';
 import { ZCHealthBarDamageTrail } from './ZCHealthBarDamageTrail';
-import { ProcedureGame } from '../../procedure/ProcedureGame';
+import type { IZCBattlePresentationArt } from '../application/ZCBattleRuntimeContract';
+import { EventMgr } from '../../../framework/event/EventMgr';
+import { ZCGameUiEvent } from './ZCGameHudEvents';
 
 const { ccclass, property } = _decorator;
 
@@ -116,7 +118,7 @@ export class ZCUnitView extends Component {
      * 「压根没被要求加载」（`heroIds` 过滤 / GM 工具临时加兵），于是「美术没交图」「表配错路径」
      * 「预加载漏了」三种故障在战场上长得一模一样 —— 都是一个「将」字占位色块。
      *
-     * 现在漏掉的兵会走 {@link ZCGame.requestUnitPrefab} 按需补载，所以这里只留一行 **info**
+     * 缺图意图由运行控制器按需补载，所以这里只留一行 **info**
      * （一次/兵种，静态集合跨局去重），把 `prefabPath` 打出来便于对表；补载真失败由控制器告警。
      */
     private static readonly reportedMissingPrefabs = new Set<string>();
@@ -289,19 +291,15 @@ export class ZCUnitView extends Component {
         this.spawnShakeStartedAt = now;
     }
 
-    /**
-     * @param prefabSize 卡表 `pvpCard.prefabSize`（美术等比缩放）。
-     *   **不给默认值**：漏传要在编译期报「少了实参」，而不是静默按 1 渲染 ——
-     *   表里配了 1.2 的兵看起来没变大，正是本工程反复踩的那类静默失效。
-     */
-    /**
-     * 绑定一个兵种的表现。
-     *
-     *  两个入参都**不再从外部传**（2026-10-16）：
-     *   · 美术 prefab 按 `definition.unitId` 向控制器现取（`ProcedureGame.current?.resolveUnitPrefab`）——
-     *     「按兵种不同」的东西进不了 `@property`，也没必要让渲染层再包一层；
-     *   · `prefabSize` 本来就是这份 `definition` 上的策划数据（`pvpCard.prefabSize`）。
-     */
+    /** 当前宿主注入的本局只读资源表；独立预览未注入时使用占位表现。 */
+    private presentationArt: IZCBattlePresentationArt | null = null;
+    private presentationOwner: object | null = null;
+
+    setPresentationArt(art: IZCBattlePresentationArt, owner: object): void {
+        this.presentationArt = art;
+        this.presentationOwner = owner;
+    }
+
     initialize(definition: Readonly<ZCUnitDefinition>): void {
         //  先清缓存再取美术：`resolveVisual` 会按「这个兵种已经发过补载请求没有」决定是否再发，
         //  而这个标记归 `resetForReuse` 管，顺序反了就会带着上一局的标记。
@@ -329,14 +327,16 @@ export class ZCUnitView extends Component {
      * {@link attachDeferredVisual} 在下一帧 `render` 里接上。
      */
     private resolveVisual(definition: Readonly<ZCUnitDefinition>): Prefab | null {
-        const prefab = ProcedureGame.current?.resolveUnitPrefab(definition.unitId) ?? null;
+        const prefab = this.presentationArt?.unitVisualPrefabs.get(definition.unitId) ?? null;
         if (prefab) return prefab;
         if (!this.deferredPrefabRequested) {
             this.deferredPrefabRequested = true;
             ZCUnitView.reportMissingPrefab(definition);
-            //  控制器侧方法用可选调用：测试桩/半初始化状态下 `current` 可能是个只有
-            //  `resolveUnitPrefab` 的假控制器，缺这个方法不该把渲染打断。
-            ProcedureGame.current?.requestUnitPrefab?.(definition);
+            if (this.presentationOwner) {
+                EventMgr.instance.emit(ZCGameUiEvent.RequestUnitArt, {
+                    owner: this.presentationOwner, unitId: definition.unitId,
+                });
+            }
         }
         return null;
     }

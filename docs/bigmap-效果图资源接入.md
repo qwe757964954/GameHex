@@ -2,11 +2,11 @@
 
 ## 资源与分层
 
-资源入口：`assets/resources/image/bigmap/concept/`，共 26 张 PNG：16 张建筑、场景及资源图标，9 张界面素材，1 张无建筑的基地背景。
+资源入口：`assets/bundles/bigmap/image/concept/`（2026-11-04 从 `assets/bundles/bigmap/image/bigmap/concept/` 上提，bundle 内路径去掉一层 `bigmap`），共 26 张 PNG：16 张建筑、场景及资源图标，9 张界面素材，1 张无建筑的基地背景。
 
 这些资源由效果图风格重新分层生成，再切分透明图集；没有把带文字、等级与按钮的整屏截图当成游戏背景。图集源保留在本机 Codex 的 `generated_images` 目录，运行资源全部落在工程内。
 
-`manifest.json` 记录切图尺寸、源图单元格位置及 SHA-256。所有 `.meta` 由 Cocos 资源刷新生成。父目录 `image/bigmap/auto-atlas.pac` 递归覆盖，子目录不再放第二份自动图集。
+`manifest.json` 记录切图尺寸、源图单元格位置及 SHA-256。所有 `.meta` 由 Cocos 资源刷新生成。父目录 `image/auto-atlas.pac`（bundle 内 `image/auto-atlas.pac`）递归覆盖，子目录不再放第二份自动图集。
 
 建筑图与配置分开：`BigMapArtCatalog` 仅映射配置 id 到图，不增加建筑类型、不改变数值。当前实际配置为主城、粮食田、木材田、铁矿田、货币田、科技树、建造队列、装饰雕像；效果图中的兵营素材同时保留为独立美术资源，没有为配合插画新增兵营规则。
 
@@ -42,7 +42,7 @@
 python tools/slice_bigmap_art.py --sprites <建筑图集.png> --details <资源图集.png> --ui <界面图集.png> --background <基地背景.png>
 ```
 
-然后通过 Cocos MCP 刷新 `db://assets/resources/image/bigmap` 和 `db://assets/script/app/bigmap`。
+然后通过 Cocos MCP 刷新 `db://assets/bundles/bigmap/image` 和 `db://assets/script/app/bigmap`。
 
 ## 验证与边界
 

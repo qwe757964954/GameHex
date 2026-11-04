@@ -98,7 +98,9 @@ function playerMarkerFixture() {
         const point = view.layout.points.get(hexId);
         view.markers.push({ kind, id, hexId, icon: {},
             node: { active: true, position: point, destroyed: false,
-                destroy() { this.destroyed = true; }, setSiblingIndex() {} },
+                destroy() { this.destroyed = true; }, setSiblingIndex() {},
+                // 城池聚焦会把标记按布局点幂等重摆（applyFocusIsolation），桩节点要能接 setPosition
+                setPosition(x: number, y: number) { this.position = { x, y }; } },
             view: { hitArea: { height: 200 }, portrait: null,
                 setPortrait(frame: unknown) { this.portrait = frame; } },
         });

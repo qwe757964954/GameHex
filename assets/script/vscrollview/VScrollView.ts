@@ -1125,7 +1125,6 @@ export class VirtualScrollView extends Component {
 
   private async _initDynamicSizeMode() {
     if (this.getItemHeightFn) {
-      console.log('[VirtualScrollView] 使用外部提供的 getItemHeightFn');
       this._itemSizes = [];
       for (let i = 0; i < this.totalCount; i++) {
         this._itemSizes.push(this.getItemHeightFn(i));
@@ -1133,17 +1132,14 @@ export class VirtualScrollView extends Component {
       this._buildPrefixSum();
       // Node 模式
       if (this.itemCreationMode === ItemCreationMode.NODE && this.itemNodes.length > 0) {
-        console.log('[VirtualScrollView] 初始化节点池（Node 模式）');
         this._nodePool = new InternalNodePool([], this.itemNodes);
       }
       // Prefab 模式
       else if (this.itemCreationMode === ItemCreationMode.PREFAB && this.itemPrefabs.length > 0) {
-        console.log('[VirtualScrollView] 初始化节点池（Prefab 模式）');
         this._nodePool = new InternalNodePool(this.itemPrefabs);
       }
       // 兼容旧版本
       else if (this.itemPrefabs.length > 0) {
-        console.log('[VirtualScrollView] 初始化节点池（兼容模式）');
         this._nodePool = new InternalNodePool(this.itemPrefabs);
       } else {
         console.error('[VirtualScrollView] 需要至少一个 itemNode 或 itemPrefab');
@@ -1166,9 +1162,6 @@ export class VirtualScrollView extends Component {
 
     // 根据模式选择模板源
     const templates = useNodeMode && hasNodes ? this.itemNodes : this.itemPrefabs;
-    const modeName = useNodeMode && hasNodes ? 'Node' : 'Prefab';
-
-    console.log(`[VirtualScrollView] 使用采样模式（从 ${modeName} 采样尺寸）`);
 
     // 初始化节点池
     if (useNodeMode && hasNodes) {
@@ -1185,7 +1178,6 @@ export class VirtualScrollView extends Component {
       const size = this._isVertical() ? uit?.height || 100 : uit?.width || 100;
       this._prefabSizeCache.set(i, size);
       sampleNode.destroy();
-      console.log(`[VirtualScrollView] ${modeName}[${i}] 采样尺寸: ${size}`);
     }
     this._itemSizes = [];
     for (let i = 0; i < this.totalCount; i++) {
@@ -1215,7 +1207,6 @@ export class VirtualScrollView extends Component {
     this._slotPrefabIndices = new Array(this._slots).fill(-1);
     this._slotFirstIndex = 0;
     this._layoutSlots(this._slotFirstIndex, true);
-    console.log(`[VScrollView] 初始化槽位: ${this._slots} (总数据: ${this.totalCount}, 视口尺寸: ${this._viewportSize})`);
   }
 
   private _buildPrefixSum() {
@@ -1614,7 +1605,6 @@ export class VirtualScrollView extends Component {
         this._slotNodes.push(null);
         this._slotPrefabIndices.push(-1);
       }
-      console.log(`[VScrollView] 槽位扩展: ${oldSlots} -> ${this._slots} (总数据: ${this.totalCount})`);
     }
   }
 

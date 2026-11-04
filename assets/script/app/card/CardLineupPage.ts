@@ -30,7 +30,8 @@ const { ccclass, property } = _decorator;
 interface IPreparedSlot {
     readonly card: ZCDeckCard;
     readonly frames: ZCSlotFrames;
-    readonly prefab: Prefab | null;
+    /** 模型后台加载，不参与首屏静态数据的等待。 */
+    readonly prefab: Promise<Prefab | null>;
 }
 
 /** 卡库一次提交要的全部数据（图与进度都已在手，`renderItemFn` 里只做同步赋值）。 */
@@ -46,6 +47,9 @@ interface IPreparedIcons {
     readonly items: readonly ZCCardTally[];
     readonly frames: ReadonlyMap<string, SpriteFrame | null>;
 }
+
+/** 每帧最多补几个上阵模型：`sp.Skeleton` 实例化实测 ~1.4~2.7ms/个，八个别挤进一帧。 */
+const SLOT_PREVIEWS_PER_FRAME = 2;
 
 /**
  * 「卡牌阵容」页面主控（`assets/resources/ui/card/CardLineup.prefab`）。
@@ -91,6 +95,18 @@ export class CardLineupPage extends Component {
 
     /** 上阵区站台（顺序 = 节点树顺序 = Layout 排列顺序，下标 = 卡组下标）。取一次就够。 */
     private arenaSlotCache: CardLineupSlot[] | null = null;
+
+    /** 还没补上单位模型的站台：`commitSlots` 只画静态立绘，模型由 `flushPreviews` 逐帧补。 */
+    private pendingPreviews: Array<{ readonly slot: CardLineupSlot; readonly prefab: Prefab }> = [];
+    private previewFlushScheduled = false;
+    /**
+     * 最近一次打开的备图耗时（毫秒），三段各记一份，`presentLineup` 打完日志就不再读。
+     *
+     * 记在成员上而不是在 `Promise.all` 外面包一层计时器：`tests/card-lineup-ui-regression.test.ts`
+     * 拿 `cards.length > 0 ? this.preparePool` 这个**源码形态**钉住「快照 catalog 为空要跳过卡库」，
+     * 包一层就把守卫顶掉了。
+     */
+    private readonly prepareMs = { slots: 0, pool: 0, icons: 0 };
 
     @property({ type: Label, tooltip: 'TopBar/QualityLabel：品质星下方小字' })
     qualityLabel: Label = null;
@@ -183,6 +199,8 @@ export class CardLineupPage extends Component {
         EventMgr.instance.offTarget(this);
         this.presentRevision += 1;
         this.arenaSlotCache = null;
+        this.pendingPreviews.length = 0;
+        this.previewFlushScheduled = false;
         EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'destroyed' });
     }
 
@@ -223,6 +241,12 @@ export class CardLineupPage extends Component {
         this.heroLevels = data.heroLevels;
         const deployedIds = new Set(deck.map((card) => card.id));
 
+        //  打开耗时打点（2026-11-03）：一次打开打一行。三段耗时由各 `prepare*` 自己记，
+        //  **不能包一层 `time(...)` 包住调用** —— `tests/card-lineup-ui-regression.test.ts`
+        //  用 `cards.length > 0 ? this.preparePool` 这个源码形态钉住「快照 catalog 为空要跳过卡库」，
+        //  包一层就把那条守卫顶掉了。
+        const startedAt = performance.now();
+
         const [slots, pool, icons] = await Promise.all([
             this.prepareSlots(deck),
             // 快照只负责「上阵八卡」这一块，卡库等权威数据再画（见 `loadLineupSnapshot`）。
@@ -230,34 +254,56 @@ export class CardLineupPage extends Component {
             this.prepareIcons(deck),
         ]);
         if (!this.isValid || revision !== this.presentRevision) return;
+        const preparedAt = performance.now();
 
         this.commitSlots(slots);
         if (pool) this.commitPool(pool);
         this.commitIcons(icons);
         this.renderBondBanner(data.bonuses);
+
+        const doneAt = performance.now();
+        //  三段并发跑，各自耗时**不能相加**（相加会大于总计）：看「谁最长」就是这屏的瓶颈。
+        console.log(
+            `[CardLineup][耗时] 备图 ${Math.round(preparedAt - startedAt)}ms`
+            + `（站台 ${Math.round(this.prepareMs.slots)} / 卡库 ${Math.round(this.prepareMs.pool)}`
+            + ` / 图标行 ${Math.round(this.prepareMs.icons)}，并发）`
+            + ` · 提交 ${Math.round(doneAt - preparedAt)}ms`
+            + ` · 首屏合计 ${Math.round(doneAt - startedAt)}ms`
+            + ` · 卡库 ${cards.length} 张 / 站台 ${deck.length} 位（模型后台加载、分帧补齐）`,
+        );
     }
 
     // ========================================================================
     // 上阵站台：prepare（备图）→ commit（同步全量写）
     // ========================================================================
 
-    /** 按八卡顺序把 8 个站台要的数据备齐（`null` = 该位空着）。**不写节点**。 */
+    /** 备齐站台静态图，模型并行启动但不阻塞首屏（`null` = 该位空着）。不写节点。 */
     private async prepareSlots(deck: readonly ZCDeckCard[]): Promise<ReadonlyArray<IPreparedSlot | null>> {
+        const at = performance.now();
         const slots = this.arenaSlots();
         const previewAssets = this.unitPreviewAssets();
-        const ready = await Promise.all(deck.slice(0, slots.length).map(async (card) => ({
-            card,
-            frames: await cardArtProvider.loadLineupSlot(card),
-            prefab: await previewAssets.load(card),
-        })));
+        const ready = await Promise.all(deck.slice(0, slots.length).map(async (card) => {
+            const prefab = previewAssets.load(card);
+            const frames = await cardArtProvider.loadLineupSlot(card);
+            return { card, frames, prefab };
+        }));
         const items: Array<IPreparedSlot | null> = [];
         for (let index = 0; index < slots.length; index += 1) items.push(ready[index] ?? null);
+        this.prepareMs.slots = performance.now() - at;
         return items;
     }
 
     /** 同步写 8 个站台：有卡就整格重画，没卡就收起（不留上一轮的残留）。 */
     private commitSlots(items: ReadonlyArray<IPreparedSlot | null>): void {
         const slots = this.arenaSlots();
+        const revision = this.presentRevision;
+        // 新一轮提交同时作废上一轮的分帧计时器：只清队列会让 `previewFlushScheduled`
+        // 仍为 true，迟到模型到达时 `schedulePreviews()` 直接 return，而旧计时器可能已被
+        // 停用/解绑 ⇒ 模型永远补不上，且零报错。解除后由新模型自己重新注册。
+        this.unschedule(this.flushPreviews);
+        this.previewFlushScheduled = false;
+        // 作废上一轮还没补完的模型（否则旧卡的模型会挂到新阵容的站台上）。
+        this.pendingPreviews.length = 0;
         for (let index = 0; index < slots.length; index += 1) {
             const item = items[index];
             if (!item) {
@@ -265,9 +311,45 @@ export class CardLineupPage extends Component {
                 continue;
             }
             slots[index].node.active = true;
-            slots[index].render(item.card, item.frames, this.levelOf(item.card), item.prefab);
+            //  先画静态立绘（**不传 `prefab`**），单位模型交给 `flushPreviews` 逐帧补：
+            //  八个 `sp.Skeleton` 实例化约 20ms，和整页数据挤在同一帧就是那一下卡顿。
+            slots[index].render(item.card, item.frames, this.levelOf(item.card));
+            void item.prefab.then(prefab => {
+                // 快照 / 权威阵容会交错，迟到模型不得进入新一轮站台或销毁页面。
+                if (!this.isValid || revision !== this.presentRevision || !prefab) return;
+                this.pendingPreviews.push({ slot: slots[index], prefab });
+                this.schedulePreviews();
+            }).catch(error => {
+                // 静态立绘已在，模型只是降级项；但不能让 rejection 漏到全局（生产环境会
+                // 触发未处理拒绝上报，甚至被宿主当成崩溃）。当前 loader 自带兜底，这里是
+                // 对 `Promise<Prefab|null>` 这条跨模块契约的显式防御。
+                if (this.isValid) console.warn('[CardLineup] 单位模型加载失败，保留静态立绘', error);
+            });
         }
     }
+
+    private schedulePreviews(): void {
+        if (this.previewFlushScheduled || this.pendingPreviews.length === 0) return;
+        this.previewFlushScheduled = true;
+        this.schedule(this.flushPreviews);
+    }
+
+    /**
+     * 每帧补 `SLOT_PREVIEWS_PER_FRAME` 个上阵模型，补完就停。
+     *
+     * 用组件逐帧调度，队列耗尽后停止；销毁时引擎解除，停用时暂停。
+     * 不在 scheduleOnce 回调里重注册自身：引擎会在回调返回后删除同一个计时器。
+     */
+    private readonly flushPreviews = (): void => {
+        for (let count = 0; count < SLOT_PREVIEWS_PER_FRAME && this.pendingPreviews.length > 0; count += 1) {
+            const next = this.pendingPreviews.shift();
+            next.slot.applyPreview(next.prefab);
+        }
+        if (this.pendingPreviews.length === 0) {
+            this.unschedule(this.flushPreviews);
+            this.previewFlushScheduled = false;
+        }
+    };
 
     /**
      * 8 个站台，下标 = 卡组下标。**顺序取节点树顺序**。
@@ -306,6 +388,7 @@ export class CardLineupPage extends Component {
      * （id 位于当前八卡集合里才显示）。
      */
     private async preparePool(cards: readonly ZCDeckCard[], deployedIds: ReadonlySet<string>): Promise<IPreparedPool> {
+        const at = performance.now();
         const frames = new Map<string, ZCCardFrames>();
         await Promise.all(cards.map(async (card) => {
             frames.set(card.id, await cardArtProvider.loadLineupCard(card));
@@ -325,6 +408,7 @@ export class CardLineupPage extends Component {
                 maxed: status.maxed || !status.configured,
             });
         }));
+        this.prepareMs.pool = performance.now() - at;
         return { cards, frames, fragments, deployedIds };
     }
 
@@ -383,11 +467,13 @@ export class CardLineupPage extends Component {
      *  （阵营那几张现在拿不到图，是美术缺口，见 `CAMP_ICON_ON_ART`）。
      */
     private async prepareIcons(deck: readonly ZCDeckCard[]): Promise<IPreparedIcons> {
+        const at = performance.now();
         const items = visibleIconTallies(deck);
         const frames = new Map<string, SpriteFrame | null>();
         await Promise.all(items.map(async (item) => {
             frames.set(`${item.kind}|${item.key}`, await cardArtProvider.loadTallyFrames(item));
         }));
+        this.prepareMs.icons = performance.now() - at;
         return { items, frames };
     }
 

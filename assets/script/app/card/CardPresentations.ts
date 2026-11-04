@@ -5,6 +5,7 @@ import type {
 import type { ZCArmySkill } from './CardSkillList';
 import type { ZCUpgradeStatus } from './CardUpgradeCost';
 import type { LineupDraftSnapshot } from './LineupDraftStore';
+import type { CardDetailPresentation } from './CardDetailPresenter';
 
 
 export interface LineupBoardPresentation extends LineupBoardData, LineupDraftSnapshot {
@@ -65,6 +66,11 @@ export interface CardUpgradePresentation {
     readonly level: number;
     readonly status: ZCUpgradeStatus | null;
     readonly phase: CardUpgradePhase;
+    /**
+     * 详情页展示数据（六维 / 技能链 / 里程碑）。
+     * `null` = 还没加载到或加载失败（详情区保持占位，不影响升级面板）。
+     */
+    readonly detail: CardDetailPresentation | null;
 }
 
 

@@ -19,7 +19,7 @@ function load(path: string, dependencies: Record<string, unknown>) {
 
 test('分包目录清单与路由表一致，命中前缀走对应 bundle', () => {
     assert.equal(BUNDLE_DIRECTORIES[BATTLE_BUNDLE].length, 7);
-    assert.equal(BUNDLE_DIRECTORIES[BIGMAP_BUNDLE].length, 2);
+    assert.equal(BUNDLE_DIRECTORIES[BIGMAP_BUNDLE].length, 4);
     assert.ok(BUNDLE_DIRECTORIES[MAIN_PAGES_BUNDLE].length >= 20);
     // 战斗
     assert.equal(bundleForPath('units/archer/archer'), BATTLE_BUNDLE);
@@ -29,9 +29,14 @@ test('分包目录清单与路由表一致，命中前缀走对应 bundle', () =
     assert.equal(bundleForPath('image/spawn-region/frame_01'), BATTLE_BUNDLE);
     assert.equal(bundleForPath('image/gameui/whh'), BATTLE_BUNDLE);
     assert.equal(bundleForPath('image/settlement/title_victory'), BATTLE_BUNDLE);
-    // 大世界
-    assert.equal(bundleForPath('image/bigmap/wasteland_background'), BIGMAP_BUNDLE);
+    // 大世界（2026-11-04 bundle 内 `image/bigmap/` 上提成 `image/`，只能逐条登记）
+    assert.equal(bundleForPath('image/concept/sprites/farm'), BIGMAP_BUNDLE);
+    assert.equal(bundleForPath('image/concept/ui/tab_active'), BIGMAP_BUNDLE);
+    assert.equal(bundleForPath('image/base_background'), BIGMAP_BUNDLE);
+    assert.equal(bundleForPath('image/bigMapBG'), BIGMAP_BUNDLE);
     assert.equal(bundleForPath('ui/bigmap/BigMapWorldView'), BIGMAP_BUNDLE);
+    // ⚠️ 上提后 `image/` 前缀不再被 bigmap 独占，首包同前缀目录必须仍走 resources
+    assert.equal(bundleForPath('image/conceptx/foo'), undefined);
     // 功能页
     assert.equal(bundleForPath('ui/Role/Role'), MAIN_PAGES_BUNDLE);
     assert.equal(bundleForPath('ui/League/LeagueTab'), MAIN_PAGES_BUNDLE);

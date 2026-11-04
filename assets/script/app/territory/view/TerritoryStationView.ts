@@ -18,6 +18,7 @@ import { territoryChestBubbleLayout } from '../model/TerritoryChestBubble';
 import type { ITerritoryChestBubbleLayout } from '../model/TerritoryChestBubble';
 import { TERRITORY_EVENTS } from './TerritoryEvents';
 import { TerritoryUiEvent } from '../application/TerritoryEvents';
+import { TERRITORY_TEXTS } from '../application/TerritoryTexts';
 
 export interface ITerritoryRandomResourceTarget {
     readonly kind: 'randomResource';
@@ -46,6 +47,7 @@ const CONDITION_VALUE_SCALE = 1.5;
 
 /** 数值左缘与银币图标右缘之间的间距（像素）——需求：**间隔 2 个像素**。 */
 const CONDITION_GAP = 2;
+const RANDOM_PENDING_DELAY_MS = 400;
 
 /**
  * 数值宽度的**采纳上限** —— 必须**严格小于** prefab 里 `CaptionLabel` 的出厂宽 `92`。
@@ -228,6 +230,7 @@ export interface ITerritoryStationRender {
     readonly chapterEntry?: boolean;
     readonly interactive: boolean;
     readonly isLoading?: boolean;
+    readonly randomPending?: boolean;
     /**
      * 本帧**整站不显示**（照常摆位、照常算缩放，只是没有可见的节点）。
      *
@@ -389,6 +392,7 @@ export class TerritoryStationView extends Component {
      *  `presentation.now`，也没必要为了一个 0.24s 的抖动再引一条时钟。
      */
     private buildingShakeElapsed = -1;
+    private randomPendingStartedAt: number | null = null;
 
     /**
      * 「新地块生成」期间整站乘透明度用的四个 `UIOpacity`（`Icon` / `CaptionBg` / `CaptionLabel` /
@@ -636,6 +640,7 @@ export class TerritoryStationView extends Component {
      *  播完**显式复位**到 1：否则建筑会停在被拉长的姿态 —— 没有别的地方会把它改回来。
      */
     update(deltaTime: number): void {
+        if (!this.isDisposed && this.randomPendingStartedAt !== null) this.applyRandomPending(Date.now());
         // ⚠️ `isDisposed` 也要挡：`dispose()` 会把四个视觉节点当场 `destroy()`，
         //    而站点根节点是**帧末**才销毁的 ⇒ 不挡就会对已销毁的节点写缩放。
         if (this.isDisposed || this.buildingShakeElapsed < 0) return;
@@ -696,6 +701,11 @@ export class TerritoryStationView extends Component {
     private applyCaptionPlacement(): void {
         const offsets = this.localOffsets;
         if (!offsets) return;
+        if (this.randomPendingStartedAt !== null && this.captionLabel.string === TERRITORY_TEXTS.busyOpen) {
+            this.applyCaptionScale(this.captionLabel.node, 1);
+            this.captionLabel.node.setPosition(this.mapX, this.mapY, this.mapZ);
+            return;
+        }
         const isCondition = this.conditionMode;
         const { x, y, z } = this.node.position;
         // 条件格的宽度依赖「盒子随文本自适应」，其余分支回到 prefab 的固定框。
@@ -783,6 +793,9 @@ export class TerritoryStationView extends Component {
         this.chapterEntry = content.chapterEntry === true;
         // 存一份：跳跳动结束 / 气泡抑制解除时按它重画气泡，不用等下一轮 `syncStations`。
         this.lastContent = content;
+        if (content.randomPending) {
+            if (this.randomPendingStartedAt === null) this.randomPendingStartedAt = Date.now();
+        } else this.randomPendingStartedAt = null;
         this.conditionMode = isCondition;
         // `buildSize` 必须在 `applyIconPlacement` 之前写进来 —— 它是归一系数的第二个因子。
         this.iconSizeScale = content.iconScale && content.iconScale > 0 ? content.iconScale : 1;
@@ -808,10 +821,22 @@ export class TerritoryStationView extends Component {
         if (this.captionLabel.string !== content.caption) this.captionLabel.string = content.caption;
         this.applyCaptionPlacement();
         this.captionLabel.node.active = !isHidden && !isLoading && isCondition;
-        const textColor = isCondition ? content.conditionTextColor ?? defaultTextColor : defaultTextColor;
+        const textColor = isCondition && !content.randomPending ? content.conditionTextColor ?? defaultTextColor : defaultTextColor;
         if (!this.captionLabel.color.equals(textColor)) this.captionLabel.color = textColor;
         this.renderLevelBubble(content);
         this.button.interactable = content.interactive && !isLoading && !isHidden;
+        if (this.randomPendingStartedAt !== null) this.applyRandomPending(Date.now());
+    }
+
+    private applyRandomPending(now: number): void {
+        const startedAt = this.randomPendingStartedAt;
+        if (startedAt === null) return;
+        const visible = !this.lastContent?.hidden && now - startedAt >= RANDOM_PENDING_DELAY_MS;
+        this.captionSprite.node.active = false;
+        this.captionLabel.node.active = visible;
+        if (!visible) return;
+        this.captionLabel.string = TERRITORY_TEXTS.busyOpen;
+        this.applyCaptionPlacement();
     }
 
     private renderLevelBubble(content: ITerritoryStationRender): void {

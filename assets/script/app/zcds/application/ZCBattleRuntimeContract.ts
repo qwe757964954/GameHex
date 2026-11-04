@@ -13,6 +13,7 @@ import type { IZCBattlePopup } from './ZCBattleSettlementController';
 export interface IZCBattlePresentationArt {
     readonly unitVisualPrefabs: ReadonlyMap<string, Prefab>;
     readonly cardArtFrames: ReadonlyMap<string, SpriteFrame>;
+    readonly legendRoleArtFrames: ReadonlyMap<string, SpriteFrame>;
     readonly buildingFramesByCardId: ReadonlyMap<string, SpriteFrame>;
     readonly buildingFrames: ReadonlyMap<string, SpriteFrame>;
     readonly legendPortraitFrames: ReadonlyMap<string, SpriteFrame>;

@@ -1353,11 +1353,94 @@ test('random candidate keeps one pending request and stays closed after server r
     h.presenter.selectRandomResource(4);
     assert.equal(requests, 1);
     assert.deepEqual(h.presenter.state.pendingRandomResourceCells, [4]);
+    assert.deepEqual(h.busy, [], '随机格只使用局部等待，不贡献全屏 loading');
     finish({ ok: false, reason: 'rejected' });
     await flush();
     assert.equal(h.presenter.state.progress?.isCellUnlocked(4), false);
     assert.deepEqual(h.presenter.state.pendingRandomResourceCells, []);
     assert.deepEqual(h.presenter.state.randomResourceOpenableCells, [4]);
+});
+
+test('random pending blocks other cell writes and quick find without invalidating the first response', async () => {
+    const randomBundle: ITerritoryChapterBundle = {
+        ...bundle, mapJson: { ...mapJson, randomSites: {
+            triggerSilver: 10, rewardPoolId: '2001', candidateCells: [4, 5], maxActive: 1,
+        } },
+    };
+    let finish: (result: TerritoryWriteResult) => void = () => {};
+    let requests = 0;
+    const gateway = createFakeGateway();
+    gateway.gateway.unlockCell = () => { requests++; return new Promise(resolve => { finish = resolve; }); };
+    const h = createHarness({ loader: createFakeLoader(randomBundle), gateway });
+    h.presenter.start();
+    await flush();
+    h.presenter.selectRandomResource(4);
+    h.presenter.selectRandomResource(5);
+    h.presenter.selectSite(h.presenter.state.map.sites[0]);
+    assert.equal(h.presenter.focusCurrentLevel(), null);
+    h.presenter.closeDetail();
+    assert.equal(requests, 1);
+    assert.equal(h.presenter.state.progress.isCellUnlocked(4), false);
+    assert.deepEqual(h.rewards, []);
+    finish({ ok: true, unlockedCellIds: [4], rewards: [{ resId: 7, amount: 15 }] });
+    await flush();
+    assert.equal(h.presenter.state.progress.isOwned(4), true);
+    assert.deepEqual(h.presenter.state.pendingRandomResourceCells, []);
+    assert.deepEqual(h.rewards, [[{ resId: 7, amount: 15 }]]);
+    assert.deepEqual(h.busy, []);
+    h.presenter.dispose();
+});
+
+test('random network failure reconciles server state before allowing another open', async () => {
+    const randomBundle: ITerritoryChapterBundle = {
+        ...bundle, mapJson: { ...mapJson, randomSites: {
+            triggerSilver: 10, rewardPoolId: '2001', candidateCells: [4], maxActive: 1,
+        } },
+    };
+    const gateway = createFakeGateway({ unlock: { ok: false, reason: 'failed' } });
+    const h = createHarness({ loader: createFakeLoader(randomBundle), gateway });
+    h.presenter.start();
+    await flush();
+    gateway.gateway.fetchChapterCells = async () => ({ ok: true, state: {
+        levelChapter: 1, rewardState: 0, unlockCells: [0, 4], passCells: [0, 4],
+    } });
+    h.presenter.selectRandomResource(4);
+    await flush();
+    assert.equal(h.presenter.state.progress.isCellUnlocked(4), true);
+    assert.deepEqual(h.presenter.state.pendingRandomResourceCells, []);
+    assert.deepEqual(h.tips, []);
+    assert.deepEqual(h.rewards, [], '状态核对不伪造或重复派发奖励');
+    h.presenter.selectRandomResource(4);
+    await flush();
+    assert.equal(h.gatewayCalls.unlock, 1);
+    h.presenter.dispose();
+});
+
+test('disposing a random request ignores late success and failure without resync or rewards', async () => {
+    for (const result of [{ ok: true, unlockedCellIds: [4] }, { ok: false, reason: 'failed' }] as TerritoryWriteResult[]) {
+        const randomBundle: ITerritoryChapterBundle = {
+            ...bundle, mapJson: { ...mapJson, randomSites: {
+                triggerSilver: 10, rewardPoolId: '2001', candidateCells: [4], maxActive: 1,
+            } },
+        };
+        let finish: (value: TerritoryWriteResult) => void = () => {};
+        const gateway = createFakeGateway();
+        gateway.gateway.unlockCell = () => new Promise(resolve => { finish = resolve; });
+        const h = createHarness({ loader: createFakeLoader(randomBundle), gateway });
+        h.presenter.start();
+        await flush();
+        h.presenter.selectRandomResource(4);
+        h.presenter.dispose();
+        const changes = h.stateChanges();
+        const fetches = h.gatewayCalls.fetch;
+        finish(result);
+        await flush();
+        assert.equal(h.stateChanges(), changes);
+        assert.equal(h.gatewayCalls.fetch, fetches);
+        assert.deepEqual(h.busy, []);
+        assert.deepEqual(h.rewards, []);
+        assert.deepEqual(h.tips, []);
+    }
 });
 
 test('random candidate shows a resource tip without opening details when silver or stamina is insufficient', async () => {

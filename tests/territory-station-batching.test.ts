@@ -29,6 +29,38 @@ import {
 /** 本文件只关心「节点摆放 + 排布」，名字沿用旧调用点。 */
 const loadStationView = loadTerritoryStationView;
 
+test('随机格仅在等待超过 400ms 后显示局部文字，重复渲染和失败恢复保持正确', () => {
+    const { view, caption, text, captionLabel } = makeStationView();
+    const pending = view as StationView & {
+        randomPendingStartedAt: number | null;
+        applyRandomPending(now: number): void;
+    };
+    view.setMapPosition(100, 200);
+    const content = { site: null, icon: null, isCondition: true, isLoading: true,
+        randomPending: true, caption: '', conditionIcon: {},
+        tint: new FakeColor(255, 255, 255, 255), badge: '', interactive: false };
+    view.render(content);
+    const startedAt = pending.randomPendingStartedAt;
+    assert.equal(caption.active, false);
+    assert.equal(text.active, false, '快请求不闪等待文字');
+    pending.applyRandomPending(startedAt + 399);
+    assert.equal(text.active, false);
+    pending.applyRandomPending(startedAt + 400);
+    assert.equal(text.active, true);
+    assert.equal(captionLabel.string, '开启中…');
+    assert.equal(text.position.x, 100);
+    assert.equal(text.position.y, 200);
+    view.render(content);
+    assert.equal(pending.randomPendingStartedAt, startedAt, '全量重绘不重启等待计时');
+    view.render({ ...content, site: {}, randomPending: false, isLoading: false,
+        caption: '10', interactive: true });
+    assert.equal(pending.randomPendingStartedAt, null);
+    assert.equal(caption.active, true);
+    assert.equal(text.active, true);
+    assert.equal(captionLabel.string, '10');
+    assert.equal(view.button.interactable, true);
+});
+
 test('已解锁关卡气泡显示编号、贴在可见建筑上方，点击沿用站点事件且复用会隐藏', () => {
     const { view, badge, icon } = makeStationView();
     withTransform(badge, 88, 30);

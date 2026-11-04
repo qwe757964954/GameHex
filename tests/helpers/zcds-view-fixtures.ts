@@ -193,17 +193,20 @@ export function loadViews() {
     const presentationOwner = {};
     const presentationArt = {
         unitVisualPrefabs: new Map<string, any>(), cardArtFrames: new Map<string, any>(),
+        legendRoleArtFrames: new Map<string, unknown>(),
         buildingFramesByCardId: new Map<string, any>(), buildingFrames: new Map<string, any>(),
         legendPortraitFrames: new Map<string, any>(),
     };
     /** 用例注入资源查询端口，夹具不再伪造当前 Procedure。 */
     function setArtQueries(queries: {
         resolveUnitPrefab?: (id: string) => any; resolveCardArt?: (id: string) => any;
+        resolveLegendRoleArt?: (id: string) => any;
         resolveBuildingFrame?: (id: string | null, building: string) => any;
         resolveLegendPortrait?: (owner: string) => any;
     }) {
         presentationArt.unitVisualPrefabs.get = queries.resolveUnitPrefab ?? (() => undefined);
         presentationArt.cardArtFrames.get = queries.resolveCardArt ?? (() => undefined);
+        presentationArt.legendRoleArtFrames.get = queries.resolveLegendRoleArt ?? (() => undefined);
         presentationArt.buildingFramesByCardId.get = id => queries.resolveBuildingFrame?.(id, 'barracks');
         presentationArt.buildingFrames.get = key => queries.resolveBuildingFrame?.(null, key === 'hq-base' ? 'hq' : 'barracks');
         presentationArt.legendPortraitFrames.get = queries.resolveLegendPortrait ?? (() => undefined);

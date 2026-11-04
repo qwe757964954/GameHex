@@ -456,6 +456,8 @@ mapLayer（= ZCGameHUD.prefab 的 content）
 
 抽到 `tier === 4`（金卡/传说）时，除地块上的小卡牌（`ZCGameCardReveal`，挂 `mapLayer`）外，同时在 **HUD 根节点 `options.overlayLayer`** 弹出全屏出场横幅 `ui/game/ZCGameLegendBanner.prefab`（四色底板与头像环按 `ZC_CLIENT_COLORS` 色相匹配 `owner`）。
 
+- **角色图来源（2026-11-04）**：横幅与卡牌阵容页一致，按 `resolveCardHeroArt(card)` 取 `CARD_HEAD_ART_ROOT` 下的专属图；未配置专属图时按 `resolveHeroArt(resolveCardClass(card))` 取 `ICON_ART_ROOT` 下的职业雕像。由本局资源作用域预载并经 `legendRoleArtFrames` 只读表注入；离场后不回填。地块翻牌继续使用独立的 `cardArtFrames`（`headIcon`）表。新立绘含 390×300 等宽幅画布，仍按画布高等比缩放到 280，底边对齐；下文 84 / 256 为旧资源样本，非规格限制。
+
 - **宽度 = 屏幕宽度**（2026-10-19 用户口径「传说牌弹出的 UI 提示应该对齐屏幕的宽度」）：
   `applyLayout` 里 **根节点** = `viewWidth × (屏高 / 人数)`（它是「布局格子」，落位按它算），
   **底板 `Banner`** = `viewWidth × 417` —— 只跟宽度走，**高度永远是 prefab 的 417**，
@@ -548,6 +550,8 @@ mapLayer（= ZCGameHUD.prefab 的 content）
 - **判据**：`tests/territory-cell-center-align.test.ts`、`tests/territory-map-layout.test.ts`、`tests/territory-map-config.test.ts`、`tests/territory-page-split.test.ts`、`tests/territory-presenter.test.ts`、`tests/territory-station-batching.test.ts`（间距恒 2px / 1·3·5 位数 / 出厂宽那一帧 / 退出模式还原）、`tmp/_territory_probe.mjs`。
 
 ### 3.3 随机资源格「翻开」：原地快碎裂（2026-10-16）
+
+- 随机格请求（2026-11-04）：点击立即沿用按压/光圈反馈，等待服务器期间不弹全屏 loading；格内等待超过 400ms 才显示「开启中…」。一次只处理一个随机格，期间保留地图拖动，拒绝其他格点击和快速定位，防止改交互号丢弃已发写请求。回包成功后才翻地、展示建筑和实际奖励；失败恢复点击并提示，网络失败先重拉章节快照核对是否已经解锁。切章/退出仍按会话作废旧结果。关卡解锁、开战和固定资源点保持原有等待流程。
 
 需求原文：「地块反转动画优化，**两种方案都做，点击后随机播放**，让我根据播放的结果判断只保留哪一种方案」⇒ 用户看完两套后拍板「**只保留地块破碎效果的方案**」。
 

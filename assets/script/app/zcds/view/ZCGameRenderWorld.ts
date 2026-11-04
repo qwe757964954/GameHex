@@ -1391,12 +1391,9 @@ export class ZCGameRenderWorld {
         }
     }
 
-    /** 横幅立绘（横幅**左边那一格**）：与卡牌阵容同一条链的静态卡面图优先，取不到才回退兵种 / 建筑图。 */
+    /** 横幅使用阵容页的专属立绘 / 职业占位；资源尚未到货时回退兵种或建筑图。 */
     private resolveLegendArt(reveal: Readonly<ZCCardReveal>): SpriteFrame | null {
-        // ① 卡牌阵容那边的静态图：卡表 `headIcon` → `icons/cardHead/**`（阵容页「非spine」时
-        //    铺在 Hero 位的就是同一张）。横幅是**这张卡**的出场，左格该长成阵容里那张卡的样子，
-        //    而不是它产出兵种的 idle 图。由 `ZCGame` 预加载本局卡组后注入。
-        const cardArt = this.options.presentationArt.cardArtFrames.get(reveal.cardId) ?? null;
+        const cardArt = this.options.presentationArt.legendRoleArtFrames.get(reveal.cardId) ?? null;
         if (cardArt) return cardArt;
         // ② 老链：兵种 idle 立绘。
         if (reveal.unitId) {

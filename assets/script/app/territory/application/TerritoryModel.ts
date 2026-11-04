@@ -658,7 +658,7 @@ export class TerritoryModel {
      * 只开详情，**不**走点击站点的解锁 / 开战流程；镜头仍是既有的 `focusCell` 命令链，一行没动。
      */
     focusCurrentLevel(): number | null {
-        if (this.startingBattle || this.busyCount > 0) return null;
+        if (this.startingBattle || this.busyCount > 0 || this.pendingRandomResourceCells.size > 0) return null;
         if (!this.map || !this.progress || this.map.chapterId !== this.currentChapterId) {
             this.showTip(TERRITORY_TEXTS.loadingChapter);
             return null;
@@ -677,7 +677,7 @@ export class TerritoryModel {
     }
 
     selectSite(site: TerritorySite): void {
-        if (this.loadingPushes) return;
+        if (this.loadingPushes || this.pendingRandomResourceCells.size > 0) return;
         // 先行换号：**点哪个格子**就是玩家的最新意图，哪怕这一格还没露出 / 点不动。
         // 在途的旧回包必须作废（否则会出现「点 A 在途 → 点了点不动的 B → A 的回包把界面解锁了」）。
         // 同一格连点是 no-op，所以「连点同一格仍要记账」的那两条用例不受影响。
@@ -753,7 +753,8 @@ export class TerritoryModel {
 
     /** 点随机格直接开启；资源校验、失败提示和防连点统一由开启流程处理。 */
     selectRandomResource(cellId: number): void {
-        if (this.loadingPushes || !this.map?.randomSites?.candidateCells.includes(cellId)) return;
+        if (this.loadingPushes || this.busyCount > 0 || this.pendingRandomResourceCells.size > 0
+            || !this.map?.randomSites?.candidateCells.includes(cellId)) return;
         this.beginInteraction(cellId);
         this.detailSite = null;
         this.detailStage = null;
@@ -766,7 +767,7 @@ export class TerritoryModel {
         // 这时候**不能**换交互号，否则在途的开战回包会被 `runCellWrite` 判成过期丢掉，
         // 过场就只能等 `hold` 超时再把自己撤掉 —— 玩家看到的是「雾停住，然后退回领地」。
         if (this.battleHandoff) this.battleHandoff = false;
-        else this.cancelInteraction();
+        else if (this.pendingRandomResourceCells.size === 0) this.cancelInteraction();
         this.detailSite = null;
         this.detailStage = null;
         this.levelTipOpen = false;
@@ -1231,11 +1232,19 @@ export class TerritoryModel {
             return;
         }
         await this.runCellWrite(
-            cellId, this.pendingRandomResourceCells, TERRITORY_TEXTS.busyOpen,
-            () => this.ports.gateway.unlockCell(map.chapterId, cellId, this.ports.lifecycleHost),
+            cellId, this.pendingRandomResourceCells, null,
+            async () => {
+                const loadId = this.loadId;
+                const result = await this.ports.gateway.unlockCell(map.chapterId, cellId, this.ports.lifecycleHost);
+                // 写请求超时不代表服务器没执行，先用既有章节快照合并流程核对。
+                if (loadId === this.loadId && 'reason' in result && result.reason === TERRITORY_REQUEST_STATUS.failed) {
+                    await this.mergeServerState(map.chapterId, loadId, this.ports.lifecycleHost);
+                }
+                return result;
+            },
             (result) => {
                 if (!result.ok) {
-                    this.showTip(TERRITORY_TEXTS.randomOpenFailed);
+                    if (!progress.isCellUnlocked(cellId)) this.showTip(TERRITORY_TEXTS.randomOpenFailed);
                     return;
                 }
                 // 🔴 随机格「解锁即通关」：服务端在解锁回包时已发奖，没有通关请求。
@@ -1276,7 +1285,7 @@ export class TerritoryModel {
     private async runCellWrite<T>(
         cellId: number,
         pending: Set<number>,
-        busyText: string,
+        busyText: string | null,
         request: () => Promise<T>,
         handle: (result: T) => void,
         /** `true` = 这一路是首次解锁直开：busy 阶段只弹加载条，过场交给页面在回包后排。 */
@@ -1287,7 +1296,7 @@ export class TerritoryModel {
         const requestId = this.interactionId;
         pending.add(cellId);
         this.emitStateChange();
-        const exitBusy = this.enterBusy(busyText, approachBusy);
+        const exitBusy = busyText === null ? null : this.enterBusy(busyText, approachBusy);
         try {
             const result = await request();
             if (loadId !== this.loadId || requestId !== this.interactionId) {
@@ -1304,7 +1313,7 @@ export class TerritoryModel {
             handle(result);
         } finally {
             pending.delete(cellId);
-            exitBusy();
+            if (exitBusy) exitBusy();
             // 🔴 收尾渲染必须在 `finally` 里，不能写在 try 之后：竞态丢弃（`return`）会跳过 try
             // 之后那行 ⇒ `stateCache` 不作废 ⇒ 界面继续读「pending 还在」的旧 state，
             // 按钮停在禁用帧点不动（2026-10-28 实测：随机格被丢弃后 `pendingRandomResourceCells`

@@ -30,6 +30,8 @@ import { HeadArt } from '../HeadArt';
 import type { IControllerResources } from '../../framework/controller/ControllerBase';
 import { ZC_BATTLE_EVENTS } from './application/ZCBattleEvents';
 import { createIconLoader, type IIconLoader } from '../common/SpriteFrameCache';
+import { resolveCardClass, resolveCardHeroArt, resolveHeroArt } from '../card/CardLineupTypes';
+import { CARD_HEAD_ART_ROOT, ICON_ART_ROOT } from '../ArtPaths';
 
 const { ccclass } = _decorator;
 
@@ -132,6 +134,8 @@ export class ZCGame extends Component {
      * 视图通过注入的本局只读资源表按 id 取图。
      */
     private readonly legendCardArtFrames: Map<string, SpriteFrame> = new Map();
+    /** 横幅使用阵容页立绘；与地块翻牌的 headIcon 分开，资源仍归本局作用域。 */
+    private readonly legendRoleArtFrames = new Map<string, SpriteFrame>();
     /** 本局玩家头像帧（owner → `images/head` 那套）；异步加载，拿不到就只显示头像环。 */
     private readonly legendPortraitFrames: Map<string, SpriteFrame> = new Map();
     /** 守城局的首领条实例（只在 `model.defenceWaveProgress` 非空时存在）。 */
@@ -227,6 +231,7 @@ export class ZCGame extends Component {
         this.playerAvatars = null;
         this.seatProfiles.clear();
         this.legendCardArtFrames.clear();
+        this.legendRoleArtFrames.clear();
         this.legendPortraitFrames.clear();
         this.bossPortraits.clear();
         this.presentationResources = null;
@@ -264,7 +269,7 @@ export class ZCGame extends Component {
     }
 
     /**
-     * **卡面静态图**（卡表 `headIcon` → `icons/cardHead/**`）：传说横幅左格与对局小卡牌**共用**。
+     * 本局展示图预扫：地块翻牌保留卡表 headIcon，横幅使用阵容页专属立绘 / 职业占位。
      *
      *  口径与 `loadLegendPortraits` 完全一致：卡面图要过 icon 表 + 控制器 AssetService，是**异步**的，
      *  而 `createGame` 是同步路径（首帧必须画出来）⇒ 这里 fire-and-forget；拿到就注入解析器
@@ -289,23 +294,29 @@ export class ZCGame extends Component {
             getPlayerDeck(),
             getEnemyDeck(),
         ];
-        const icons = new Map<string, string>();
+        const cards = new Map<string, ZCDeckCard>();
         for (const deck of decks) {
             for (const card of deck) {
-                if (card.headIcon) icons.set(card.id, card.headIcon);
+                cards.set(card.id, card);
             }
         }
-        if (!icons.size) return;
-        void Promise.all(Array.from(icons).map(async ([cardId, icon]) => (
-            [cardId, await this.loadHeadIconFrame(icon).catch(() => null)] as const
-        ))).then((entries) => {
+        const loadIcon = this.loadIcon;
+        void Promise.all(Array.from(cards.values()).map(async (card) => {
+            const hero = resolveCardHeroArt(card);
+            const [frame, role] = await Promise.all([
+                card.headIcon ? this.loadHeadIconFrame(card.headIcon).catch(() => null) : Promise.resolve(null),
+                loadIcon(hero ?? resolveHeroArt(resolveCardClass(card)), hero ? CARD_HEAD_ART_ROOT : ICON_ART_ROOT)
+                    .catch(() => null),
+            ]);
+            return { cardId: card.id, frame, role };
+        })).then((entries) => {
             //  同上：`leaving` 已经盖住「renderWorld 被收走」这件事。
             if (this.leaving) return;
-            const frames = new Map<string, SpriteFrame>();
-            for (const [cardId, frame] of entries) if (frame) frames.set(cardId, frame);
-            if (!frames.size) return;
             // 原位合并本局展示表，再刷新已经弹出的卡牌和横幅。
-            for (const [cardId, frame] of frames) this.legendCardArtFrames.set(cardId, frame);
+            for (const { cardId, frame, role } of entries) {
+                if (frame) this.legendCardArtFrames.set(cardId, frame);
+                if (role) this.legendRoleArtFrames.set(cardId, role);
+            }
             this.renderWorld.refreshLegendCardArt();
         });
     }
@@ -386,6 +397,7 @@ export class ZCGame extends Component {
         const presentationArt: IZCBattlePresentationArt = {
             unitVisualPrefabs: this.unitVisualPrefabs,
             cardArtFrames: this.legendCardArtFrames,
+            legendRoleArtFrames: this.legendRoleArtFrames,
             buildingFramesByCardId: this.buildingFramesByCardId,
             buildingFrames: prepared.buildingFrames,
             legendPortraitFrames: this.legendPortraitFrames,
@@ -593,7 +605,7 @@ export class ZCGame extends Component {
     /**
      * 波次怪可能来自任一参战席位或完整卡牌目录；按与单位模型一致的卡 id 收集头像与名字。
      *
-     * 与 `loadLegendCardArt` 同一套口径：卡面走卡表 `headIcon`，异步加载完再落表；
+     * 头像走卡表 `headIcon`，异步加载完再落表；
      * 一张都拿不到就留空框，**不阻断对局**。
      */
     private loadDefenceBossArt(): void {

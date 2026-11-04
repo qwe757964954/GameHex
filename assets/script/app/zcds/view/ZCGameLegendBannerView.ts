@@ -71,7 +71,7 @@ export const LEGEND_ROLE_DROP_Y = 80;
 export const LEGEND_ROLE_GENERATE_SECONDS = 0.7;
 
 /**
- * 立绘的**目标画布高**（px）：不论原图是 256 见方的卡面还是 84 见方的老头像，
+ * 立绘的**目标画布高**（px）：兼容方形旧图及 390×300 等宽幅阵容立绘，
  * 放大后都占这么高（2026-11-02 需求「萨尔等旧角色，模型也要匹配 banner 的高度，
  * 放大对应的模型让它与 UI 等高」）。
  *
@@ -86,7 +86,7 @@ export const LEGEND_ROLE_GENERATE_SECONDS = 0.7;
  *
  * 运行时的 `SpriteFrame` 只给 `rect` / `originalSize`（这些图的 `.meta` 是
  * `trimType: none` ⇒ 两者都等于整块画布），**拿不到 alpha 包围盒**。而卡面图的画布
- * 只有两种规格（`cardHead` 里 17 张 256×256 + 27 张 84×84），按画布归一的误差就是
+ * 存在多种规格，按画布归一的误差就是
  * 「同一画布内可见高的差异」：256 那批 221~249（12%）、84 那批 81~84（4%）——
  * 属于美术本身的高矮（巨力坚果就该比吉他手矮），不是需要抹平的偏差。
  */
@@ -167,47 +167,47 @@ export class ZCGameLegendBannerView extends Component {
     private static readonly FADE_START_PROGRESS = 0.78;
 
     @property({ type: UIOpacity, group: '节点引用', tooltip: '根节点上的 UIOpacity：整条横幅的淡入淡出由它一个组件承担' })
-    bannerOpacity: UIOpacity = null;
+    bannerOpacity: UIOpacity = null!;
 
     @property({ type: Sprite, group: '节点引用', tooltip: 'Banner：底板，按 owner 换图（四色）' })
-    bannerSprite: Sprite = null;
+    bannerSprite: Sprite = null!;
 
-    @property({ type: Sprite, group: '节点引用', tooltip: 'Role：立绘，运行时按卡注入（兵种 idle / 建筑图）' })
-    roleSprite: Sprite = null;
+    @property({ type: Sprite, group: '节点引用', tooltip: 'Role：阵容页角色立绘，未到货时回退兵种 idle / 建筑图' })
+    roleSprite: Sprite = null!;
 
     @property({ type: Sprite, group: '节点引用', tooltip: 'Title：固定的「传说卡牌」标题图' })
-    titleSprite: Sprite = null;
+    titleSprite: Sprite = null!;
 
     @property({ type: Sprite, group: '节点引用', tooltip: 'Portrait/Ring：头像环，按 owner 换图（四色）' })
-    ringSprite: Sprite = null;
+    ringSprite: Sprite = null!;
 
     @property({ type: Sprite, group: '节点引用', tooltip: 'Portrait/Ring/Head：玩家头像（CircleAvatar 圆裁）；拿不到头像时只留色环' })
-    headSprite: Sprite = null;
+    headSprite: Sprite = null!;
 
     @property({ type: Label, group: '节点引用', tooltip: 'Name：卡名（卡表 name，如「吐豌豆骑手」）' })
-    nameLabel: Label = null;
+    nameLabel: Label = null!;
 
     @property({ type: SpriteFrame, group: '玩家配色', tooltip: '我方（player，蓝）：legend_banner_02' })
-    bannerPlayer: SpriteFrame = null;
+    bannerPlayer: SpriteFrame = null!;
     @property({ type: SpriteFrame, group: '玩家配色', tooltip: '2 号（enemy，红）：legend_banner_01' })
-    bannerEnemy: SpriteFrame = null;
+    bannerEnemy: SpriteFrame = null!;
     @property({ type: SpriteFrame, group: '玩家配色', tooltip: '3 号（enemy2，黄）：legend_banner_04' })
-    bannerEnemy2: SpriteFrame = null;
+    bannerEnemy2: SpriteFrame = null!;
     @property({ type: SpriteFrame, group: '玩家配色', tooltip: '4 号（enemy3，紫）：legend_banner_03' })
-    bannerEnemy3: SpriteFrame = null;
+    bannerEnemy3: SpriteFrame = null!;
 
     @property({ type: SpriteFrame, group: '玩家配色', tooltip: '我方头像环（蓝）：legend_ring_02' })
-    ringPlayer: SpriteFrame = null;
+    ringPlayer: SpriteFrame = null!;
     @property({ type: SpriteFrame, group: '玩家配色', tooltip: '2 号头像环（红）：legend_ring_01' })
-    ringEnemy: SpriteFrame = null;
+    ringEnemy: SpriteFrame = null!;
     @property({ type: SpriteFrame, group: '玩家配色', tooltip: '3 号头像环（黄）：legend_ring_04' })
-    ringEnemy2: SpriteFrame = null;
+    ringEnemy2: SpriteFrame = null!;
     @property({ type: SpriteFrame, group: '玩家配色', tooltip: '4 号头像环（紫）：legend_ring_03' })
-    ringEnemy3: SpriteFrame = null;
+    ringEnemy3: SpriteFrame = null!;
 
     /** 上一次 render 到的内容组合；没变就跳过选图选字，只在首帧与换卡时写。 */
     private contentKey = '';
-    /** 立绘解析：与卡面同一条链（兵种 idle → 建筑图），由渲染层注入一次。 */
+    /** 展示资源查询由渲染层注入，视图不发起加载。 */
     private artResolver: ((reveal: Readonly<ZCCardReveal>) => SpriteFrame | null) | null = null;
     /** 头像解析：玩家头像 SpriteFrame，由渲染层注入（拿不到就返回 null，只留色环）。 */
     private portraitResolver: ((owner: ZCOwner) => SpriteFrame | null) | null = null;
@@ -317,7 +317,6 @@ export class ZCGameLegendBannerView extends Component {
      */
     private renderRoleGenerate(elapsedSeconds: number, slideSeconds: number): void {
         const sprite = this.roleSprite;
-        if (!sprite) return;
         const ease = legendRoleEase(legendRoleProgress(elapsedSeconds, slideSeconds));
         // 静止位由「底板下沿 + 目标高」算出（见 `legendRoleRestY`），**不读 prefab 的 y**。
         if (this.roleRestY === null) this.roleRestY = legendRoleRestY();
@@ -337,8 +336,7 @@ export class ZCGameLegendBannerView extends Component {
      *
      * ## 为什么必须缩放（2026-11-02 需求）
      *
-     * 横幅左格取的是「卡面静态图」（`resolveLegendArt` ①），而这张图有两种画布规格：
-     * 新的本地卡面 256×256（17 张）、旧角色走的老头像 **84×84**（27 张）。
+     * 横幅优先取阵容立绘，画布包含 390×300；回退图也可能是 256×256 或 84×84。
      * `sizeMode = RAW` 会把节点直接定成画布尺寸 ⇒ 旧角色只有 84 高，
      * 在 417 高的横幅里占 20%，截图里「萨尔小得像个图标」就是这么来的。
      *
@@ -355,7 +353,6 @@ export class ZCGameLegendBannerView extends Component {
      */
     private applyRoleScale(): void {
         const sprite = this.roleSprite;
-        if (!sprite) return;
         const frame = sprite.spriteFrame;
         // 有 `originalSize` 用它（`_isTrimmedMode = false` 时与 rect 同值，但它是原图尺寸、
         // 不受 trim 影响）；桩 / 老格式兜底再看 `rect`。
@@ -394,14 +391,13 @@ export class ZCGameLegendBannerView extends Component {
         this.appliedHeight = height;
         // 根节点是**布局格子**：高 = 屏高 / 人数，落位（`layoutYOf`）按它算。
         this.writeSize(this.node, width, height);
-        const plate = this.bannerSprite?.node;
-        if (!plate) return;
+        const plate = this.bannerSprite.node;
         // 🔴 底板只跟着**改宽**，高度必须保持 prefab 的 417：
         // 「格子高」是多人分屏用的，2 人局是 640 —— 把底板也拉到 640，横幅会平白长高一截、
         // 底边掉到屏幕中间去（2026-10-19 反馈「横幅底部的高度被修改了」就是这个）。
         if (this.plateHeight === null) {
             const transform = plate.getComponent(UITransform);
-            this.plateHeight = transform ? transform.contentSize.height : BANNER_HEIGHT;
+            this.plateHeight = transform.contentSize.height;
         }
         this.writeSize(plate, width, this.plateHeight);
         if (Math.abs(plate.position.x - BANNER_X) > 0.01) {
@@ -409,10 +405,8 @@ export class ZCGameLegendBannerView extends Component {
         }
     }
 
-    /** 写 `UITransform.contentSize`；取不到组件就跳过（测试桩 / prefab 损坏都不该抛）。 */
-    private writeSize(node: Node | null, width: number, height: number): void {
-        const transform = node?.getComponent(UITransform);
-        if (transform) transform.setContentSize(width, height);
+    private writeSize(node: Node, width: number, height: number): void {
+        node.getComponent(UITransform).setContentSize(width, height);
     }
 
     /** 底板 / 环 / 立绘 / 头像 / 卡名只在换卡时写一次；每帧只动位置与透明度。 */

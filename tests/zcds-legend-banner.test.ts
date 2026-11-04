@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
+import { runInNewContext } from 'node:vm';
+import ts from 'typescript';
+import * as cardTypes from '../assets/script/app/card/CardLineupTypes';
+import { CARD_HEAD_ART_ROOT, ICON_ART_ROOT } from '../assets/script/app/ArtPaths';
 import { loadViews } from './helpers/zcds-view-fixtures';
 import { assetPath } from './helpers/asset-paths';
 
@@ -229,7 +233,7 @@ function pngSize(filePath: string): { width: number; height: number } {
  *  ② 静止位让**底边**贴在底板可见区下沿（`LEGEND_ROLE_BOTTOM_Y`），不是让中心对齐；
  *  ③ 换卡换画布时**重算而不是累乘**（节点来自对象池，scale 有残留）。
  */
-test('★立绘按画布规格等比放大到横幅立绘区：84 老头像与 256 卡面放大后一样高、底边对齐', () => {
+test('立绘按画布规格等比缩放：旧方形图与 390×300 阵容图等高、底边对齐', () => {
     const { load, FakeNode } = loadViews();
     const {
         ZCGameLegendBannerView, legendRoleScaleOf, legendRoleRestY,
@@ -239,7 +243,7 @@ test('★立绘按画布规格等比放大到横幅立绘区：84 老头像与 2
     // ── ① 纯函数：按画布高归一 ──────────────────────────────────────────
     assert.equal(LEGEND_ROLE_TARGET_HEIGHT, 280, '目标高 = 立绘区可用高 291 × 96%（斜切留余量）');
     assert.equal(LEGEND_ROLE_BOTTOM_Y, -188, '底板可见区下沿（四张底图实测 -186 ~ -191）');
-    for (const canvasHeight of [256, 84]) {
+    for (const canvasHeight of [256, 84, 300]) {
         const scale = legendRoleScaleOf(canvasHeight);
         assert.ok(Math.abs(canvasHeight * scale - LEGEND_ROLE_TARGET_HEIGHT) < 1e-9,
             `画布 ${canvasHeight} 放大后应占满 ${LEGEND_ROLE_TARGET_HEIGHT}，实际 ${canvasHeight * scale}`);
@@ -277,6 +281,12 @@ test('★立绘按画布规格等比放大到横幅立绘区：84 老头像与 2
     assert.ok(Math.abs(view.roleSprite.node.scale.x - 280 / 84) < 1e-6,
         `换到 84 画布应重算成 3.333（不是 1.09375 × 3.333），实际 ${view.roleSprite.node.scale.x}`);
     assert.equal(view.roleSprite.node.scale.y, view.roleSprite.node.scale.x, '必须等比');
+    const wideArt = { originalSize: { width: 390, height: 300 } };
+    view.setArtResolver(() => wideArt);
+    view.render(reveal(20, '68001'), 1.5);
+    assert.equal(view.roleSprite.node.scale.x, LEGEND_ROLE_TARGET_HEIGHT / 300);
+    assert.equal(view.roleSprite.node.scale.y, view.roleSprite.node.scale.x, '宽幅立绘也必须等比');
+    assert.equal(view.roleSprite.node.position.y - 300 * view.roleSprite.node.scale.y / 2, LEGEND_ROLE_BOTTOM_Y);
     // 再切回来一次：仍回到 1.09375（累乘的话这里会变成 1.09375³）。
     view.setArtResolver(() => art);
     view.render(reveal(3, '68016'), 0.5);
@@ -307,8 +317,7 @@ test('★立绘按画布规格等比放大到横幅立绘区：84 老头像与 2
         list.push(name);
         buckets.set(height, list);
     }
-    assert.deepEqual([...buckets.keys()].sort((a, b) => a - b), [84, 256],
-        '卡面图只有 84（旧角色头像）与 256（本地卡面）两档画布 —— 出现新规格时这条会红，需要复核归一是否符合预期');
+    assert.ok(buckets.has(300), '新阵容立绘包含 390×300 画布，归一必须覆盖实际资源');
     for (const height of buckets.keys()) {
         assert.ok(Math.abs(legendRoleScaleOf(height) * height - LEGEND_ROLE_TARGET_HEIGHT) < 1e-9,
             `${height} 画布放大后必须是 ${LEGEND_ROLE_TARGET_HEIGHT} 高`);
@@ -740,7 +749,7 @@ function buildView(view: Raw, FakeNode: new (name?: string) => Raw): Raw {
     return view;
 }
 
-test('★横幅左边那格优先取「卡牌阵容」那条静态卡面图（cardId → headIcon），取不到才回退兵种/建筑', () => {
+test('横幅优先取阵容角色立绘，取不到才回退兵种 / 建筑', () => {
     const { load, FakeNode, setArtQueries } = loadViews();
     const { ZCGameRenderWorld } = load('./ZCGameRenderWorld');
     const { ZCGameLegendBannerView } = load('./ZCGameLegendBannerView');
@@ -788,25 +797,94 @@ test('★横幅左边那格优先取「卡牌阵容」那条静态卡面图（ca
     // ⚠️ 渠道已变：早前 ，现在渲染层  直接
     //     现取（ZCGameRenderWorld 的 resolveLegendArt ①）。
     setArtQueries({
-        resolveCardArt: (cardId: string) => (cardId === '68001' ? cardArt : null),
+        resolveLegendRoleArt: (cardId: string) => (cardId === '68001' ? cardArt : null),
+        resolveCardArt: () => ({ name: 'headIcon' }),
         // 同一条链的另外两个出口（头像 / 建筑回退）本用例不关心，但必须存在，否则调用即崩。
         resolveLegendPortrait: () => null,
         resolveBuildingFrame: () => null,
     });
     assert.equal(view.artResolver(reveal(1, '68001')), cardArt,
-        '★横幅左边的卡面必须用「卡牌阵容」那张静态图（cardId → headIcon）');
+        '横幅使用阵容立绘表，不读取地块翻牌的 headIcon 表');
     // 没配头像的卡（金矿 / 主城这类）解析为 null ⇒ 自然落回兵种 / 建筑链。
     assert.equal(view.artResolver(reveal(2, '69001')), null, '卡组里没有的卡应回退老链');
 });
 
-test('ZCGame 预扫本局卡组的 headIcon 并注入（与卡牌阵容同一条静态图链）', () => {
+test('ZCGame 分别注入阵容立绘与翻牌头像，横幅只读阵容立绘表', () => {
     const source = readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8');
     assert.match(source, /this\.loadLegendCardArt\(\);/, '★预扫入口必须真被调用（只定义不调 = 横幅永远走老链）');
     assert.match(source, /card\.headIcon/, '键要从卡表 `headIcon` 取（不是资源名）');
-    assert.match(source, /loadHeadIconFrame\(/, '★必须走 `loadHeadIconFrame`（包名决定目录 cardHead / head），与阵容页同链');
+    assert.match(source, /loadHeadIconFrame\(/, '翻牌头像继续走既有 headIcon 加载链');
     assert.match(source, /cardArtFrames: this\.legendCardArtFrames/, '本局预扫表通过只读资源契约注入展示层');
+    assert.match(source, /legendRoleArtFrames: this\.legendRoleArtFrames/);
+    assert.match(source, /this\.legendRoleArtFrames\.clear\(\)/, '退出释放本局立绘表');
     const world = readFileSync('assets/script/app/zcds/view/ZCGameRenderWorld.ts', 'utf8');
-    assert.match(world, /presentationArt\.cardArtFrames\.get\(reveal\.cardId\)/, '横幅从本局预扫表按卡 id 取图');
+    assert.match(world, /presentationArt\.legendRoleArtFrames\.get\(reveal\.cardId\)/, '横幅从本局预扫表按卡 id 取图');
+});
+
+/** 执行真实展示宿主，只替换引擎与资源端口；不复制预扫算法。 */
+function buildArtHost(cards: readonly Raw[]): Raw {
+    const moduleExports: Raw = {};
+    runInNewContext(ts.transpileModule(readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8'), {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
+    }).outputText, {
+        exports: moduleExports,
+        require: (id: string) => {
+            if (id === 'cc') return { Component: class { isValid = true; }, _decorator: { ccclass: () => (value: unknown) => value } };
+            if (id === '../card/CardLineupTypes') return cardTypes;
+            if (id === '../ArtPaths') return { CARD_HEAD_ART_ROOT, ICON_ART_ROOT };
+            if (id === './model/ZCCombatCatalog') return { getPlayerDeck: () => cards, getEnemyDeck: () => [] };
+            if (id === './model/ZCMapConfig') return { ZC_OWNER_ORDER: ['player', 'enemy'], ZCOwner: { Player: 'player' } };
+            return {};
+        },
+    });
+    const host = new moduleExports.ZCGame();
+    host.renderWorld = { refreshLegendCardArt: () => {} };
+    return host;
+}
+
+test('横幅预扫复用阵容专属图与职业占位，翻牌仍保留 headIcon，缺图不阻断其他卡', async () => {
+    const cards = [
+        { id: '68001', headIcon: 'old-head', traits: { attack: '战士' } },
+        { id: 'missing', traits: { attack: '法师' } },
+        { id: '68002', headIcon: 'failed-head', traits: { attack: '坦克' } },
+    ];
+    const host = buildArtHost(cards);
+    const requests: string[] = [];
+    const frames = new Map<string, object>();
+    host.iconLoader = async (name: string, root: string) => {
+        requests.push(`${root}/${name}`);
+        if (name === cardTypes.resolveCardHeroArt(cards[2] as Parameters<typeof cardTypes.resolveCardHeroArt>[0])) throw new Error('缺图');
+        const frame = { name };
+        frames.set(name, frame);
+        return frame;
+    };
+    const head = { name: 'old-head' };
+    host.loadHeadIconFrame = async (icon: string) => {
+        if (icon === 'failed-head') throw new Error('缺头像');
+        return head;
+    };
+    let refreshes = 0;
+    host.renderWorld.refreshLegendCardArt = () => { refreshes++; };
+    host.loadLegendCardArt();
+    await new Promise<void>(resolve => setImmediate(resolve));
+    assert.deepEqual(requests, [`${CARD_HEAD_ART_ROOT}/wandouyouxia`, `${ICON_ART_ROOT}/camp_mage`, `${CARD_HEAD_ART_ROOT}/julijianguo`]);
+    assert.equal(host.legendRoleArtFrames.get('68001'), frames.get('wandouyouxia'));
+    assert.equal(host.legendRoleArtFrames.get('missing'), frames.get('camp_mage'));
+    assert.equal(host.legendRoleArtFrames.has('68002'), false);
+    assert.equal(host.legendCardArtFrames.get('68001'), head);
+    assert.equal(refreshes, 1);
+});
+
+test('离场后到货的横幅立绘不回填、不刷新视图', async () => {
+    const host = buildArtHost([{ id: '68001' }]);
+    let complete: (frame: object) => void = () => {};
+    host.iconLoader = () => new Promise<object>(resolve => { complete = resolve; });
+    host.renderWorld.refreshLegendCardArt = () => assert.fail('离场后不应刷新');
+    host.loadLegendCardArt();
+    host.stopped = true;
+    complete({ name: 'late-art' });
+    await new Promise<void>(resolve => setImmediate(resolve));
+    assert.equal(host.legendRoleArtFrames.size, 0);
 });
 
 /**

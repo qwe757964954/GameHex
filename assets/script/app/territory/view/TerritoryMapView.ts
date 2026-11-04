@@ -2323,7 +2323,7 @@ export class TerritoryMapView extends Component {
                 //    `renderLevelBubble` 给气泡节点挂的那颗 Button（`visible && content.interactive`）
                 //    ⇒ 点建筑、点「章节」气泡都能进弹窗（用户原话「包括气泡部分」）。
                 chapterEntry: true,
-                interactive: true,
+                interactive: input.pendingRandomResourceCells.length === 0,
                 // 🔴 2026-10-28 山猫：初始点位也要有气泡，提示这里是「章节」入口。
                 // 底图走 `levelBubbleFrame`（已通关那张蓝 `frame_03`，2026-10-29 起未通关才是红）——
                 // 初始点从开局就属于玩家，不该跟"待挑战"的格子长得不一样。
@@ -2349,6 +2349,7 @@ export class TerritoryMapView extends Component {
             const performing = this.chestPlayingCell === site.cellId;
             const content = {
                 ...base,
+                interactive: base.interactive && input.pendingRandomResourceCells.length === 0,
                 iconScale: this.buildScaleOf(site, input.art),
                 // 四棵棕榈（69010~69013）走「底边对齐格心」而不是居中 —— 与 `iconScale` 同源
                 // 判据（`site.buildingId` 在地图 JSON 里是**字符串**，必须 `Number(...)`）。
@@ -2400,6 +2401,7 @@ export class TerritoryMapView extends Component {
                 bottomAnchor: Number.isFinite(buildingId) && territoryUsesBottomAnchor(buildingId),
                 isCondition: !isOpened,
                 isLoading: isPending,
+                randomPending: isPending,
                 conditionIcon: input.art.randomSilverIcon,
                 conditionTextColor: randomSilverRed
                     ? TERRITORY_COLORS.randomConditionText : TERRITORY_COLORS.randomAvailableText,
@@ -2412,7 +2414,7 @@ export class TerritoryMapView extends Component {
                 tint: isOpened ? TERRITORY_COLORS.cleared
                     : isOpenable ? TERRITORY_COLORS.gold : TERRITORY_COLORS.locked,
                 badge: '',
-                interactive: !isOpened && !isPending,
+                interactive: !isOpened && input.pendingRandomResourceCells.length === 0,
             };
             if (this.pendingBuildingReveal.has(cellId)) {
                 // 需求 2026-10-16 row14：**建筑展示滞后到地块翻转结束**。

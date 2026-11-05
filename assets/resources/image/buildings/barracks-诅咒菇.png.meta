@@ -1,0 +1,134 @@
+{
+  "ver": "1.0.27",
+  "importer": "image",
+  "imported": true,
+  "uuid": "c9d5a632-d713-48a8-9449-7ec7a1854fbf",
+  "files": [
+    ".json",
+    ".png"
+  ],
+  "subMetas": {
+    "6c48a": {
+      "importer": "texture",
+      "uuid": "c9d5a632-d713-48a8-9449-7ec7a1854fbf@6c48a",
+      "displayName": "barracks-诅咒菇",
+      "id": "6c48a",
+      "name": "texture",
+      "userData": {
+        "wrapModeS": "clamp-to-edge",
+        "wrapModeT": "clamp-to-edge",
+        "imageUuidOrDatabaseUri": "c9d5a632-d713-48a8-9449-7ec7a1854fbf",
+        "isUuid": true,
+        "visible": false,
+        "minfilter": "linear",
+        "magfilter": "linear",
+        "mipfilter": "none",
+        "anisotropy": 0
+      },
+      "ver": "1.0.22",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "f9941": {
+      "importer": "sprite-frame",
+      "uuid": "c9d5a632-d713-48a8-9449-7ec7a1854fbf@f9941",
+      "displayName": "barracks-诅咒菇",
+      "id": "f9941",
+      "name": "spriteFrame",
+      "userData": {
+        "trimThreshold": 1,
+        "rotated": false,
+        "offsetX": 1,
+        "offsetY": -3.5,
+        "trimX": 36,
+        "trimY": 45,
+        "width": 142,
+        "height": 129,
+        "rawWidth": 212,
+        "rawHeight": 212,
+        "borderTop": 0,
+        "borderBottom": 0,
+        "borderLeft": 0,
+        "borderRight": 0,
+        "packable": true,
+        "pixelsToUnit": 100,
+        "pivotX": 0.5,
+        "pivotY": 0.5,
+        "meshType": 0,
+        "vertices": {
+          "rawPosition": [
+            -71,
+            -64.5,
+            0,
+            71,
+            -64.5,
+            0,
+            -71,
+            64.5,
+            0,
+            71,
+            64.5,
+            0
+          ],
+          "indexes": [
+            0,
+            1,
+            2,
+            2,
+            1,
+            3
+          ],
+          "uv": [
+            36,
+            167,
+            178,
+            167,
+            36,
+            38,
+            178,
+            38
+          ],
+          "nuv": [
+            0.16981132075471697,
+            0.1792452830188679,
+            0.839622641509434,
+            0.1792452830188679,
+            0.16981132075471697,
+            0.7877358490566038,
+            0.839622641509434,
+            0.7877358490566038
+          ],
+          "minPos": [
+            -71,
+            -64.5,
+            0
+          ],
+          "maxPos": [
+            71,
+            64.5,
+            0
+          ]
+        },
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "c9d5a632-d713-48a8-9449-7ec7a1854fbf@6c48a",
+        "atlasUuid": "",
+        "trimType": "auto"
+      },
+      "ver": "1.0.12",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    }
+  },
+  "userData": {
+    "type": "sprite-frame",
+    "fixAlphaTransparencyArtifacts": false,
+    "hasAlpha": true,
+    "redirect": "c9d5a632-d713-48a8-9449-7ec7a1854fbf@6c48a"
+  }
+}

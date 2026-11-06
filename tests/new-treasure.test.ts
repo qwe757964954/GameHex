@@ -44,8 +44,10 @@ async function loadTreasure(infos: readonly ITreasureInfo[], nowSeconds: number)
                 if (['item', 'roleProperty', 'itemBoxPro'].includes(table)) return [];
                 assert.equal(table, 'newTreasureBoxConfig');
                 return [
-                    { cardBoxID: 19001, cardBoxOpenTime: 10 },
-                    { cardBoxID: 19002, cardBoxOpenTime: 30 },
+                    { cardBoxID: 19001, cardBoxOpenTime: 10, cardBoxName: '幼苗初级箱' },
+                    { cardBoxID: 19002, cardBoxOpenTime: 30, cardBoxName: '幼苗中级箱' },
+                    // 19003 故意不填 cardBoxName：守「表里缺名称时回落到 宝箱{id}」
+                    { cardBoxID: 19003, cardBoxOpenTime: 10 },
                 ];
             },
         } } };
@@ -158,6 +160,16 @@ test('openTime 为零的宝箱必须先激活，即使当前时间已远超配�
     assert.equal(slot.state, chestTypes.ChestSlotState.Ready);
     assert.equal(slot.remainSeconds, 10);
     assert.equal(slot.totalSeconds, 10);
+});
+
+test('宝箱名取配置表 cardBoxName（详情与宝箱栏同一份），表里缺名称才回落到 宝箱{id}', async () => {
+    const { repository } = await loadTreasure([
+        { cardBoxID: 19001, openTime: 0, index: 1 },
+        { cardBoxID: 19003, openTime: 0, index: 2 },
+    ], 1792495000);
+    assert.equal(repository.slots[0].name, '幼苗初级箱');
+    assert.equal(repository.detailOf(1)?.name, '幼苗初级箱');
+    assert.equal(repository.slots[1].name, '宝箱19003');
 });
 
 for (const { cardBoxID, duration } of [{ cardBoxID: 19001, duration: 10 }, { cardBoxID: 19002, duration: 30 }]) {

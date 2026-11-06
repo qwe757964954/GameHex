@@ -49,7 +49,7 @@ test('后补等真实 after-draw，离场或换局后不派发和刷新', async 
     const exports: Record<string, any> = {};
     runInNewContext(ts.transpileModule(`export class Harness { ${method.getText(source)} }`, { compilerOptions: {
         module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020,
-    } }).outputText, { exports, console, Director: { EVENT_AFTER_DRAW: 'draw' }, director: {
+    } }).outputText, { exports, console, ZCDC_LOG_DIAGNOSTICS: false, ZCDC_LOG_WARNINGS: true, Director: { EVENT_AFTER_DRAW: 'draw' }, director: {
         once(event: string, callback: () => void) { assert.equal(event, 'draw'); afterDraw = callback; },
     } });
     for (const closeBeforeDraw of [false, true]) {

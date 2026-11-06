@@ -6,6 +6,8 @@ import type { ZCArmySkill } from './CardSkillList';
 import type { ZCUpgradeStatus } from './CardUpgradeCost';
 import type { LineupDraftSnapshot } from './LineupDraftStore';
 import type { CardDetailPresentation } from './CardDetailPresenter';
+import type { ICardDetailArt } from './CardArtProvider';
+import type { ICardLineupCatalog } from './CardArtConfig';
 
 
 export interface LineupBoardPresentation extends LineupBoardData, LineupDraftSnapshot {
@@ -71,6 +73,12 @@ export interface CardUpgradePresentation {
      * `null` = 还没加载到或加载失败（详情区保持占位，不影响升级面板）。
      */
     readonly detail: CardDetailPresentation | null;
+}
+
+export interface ICardUpgradeViewState extends CardUpgradePresentation {
+    readonly art: ICardDetailArt | null;
+    /** 维度名称与 traits 归一化（表 `name` 列）；未加载到时为 null，标签区保持空。 */
+    readonly lineup: ICardLineupCatalog | null;
 }
 
 

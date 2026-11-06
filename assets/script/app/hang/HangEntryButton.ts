@@ -1,16 +1,16 @@
 /**
  * 主城左下角金币车入口，挂在 ArenaRoot/BottomHud/HangRewardEntry。
  *
- * 复用挂机 Repository、累计时长和可领取提示，点击通过 HangPage.open 打开奖励弹窗。
+ * 消费领地账本计时，点击征收当前章节产出；不依赖旧主线解锁数据。
  * 容器覆盖图标、底板和时间文字；显隐整体更新，摇摆只作用于 HangIcon。
  * 不登记 open.url：挂机奖励沿用主城常驻入口。
  */
 
 import { _decorator, Button, Component, Label, Node, Tween, tween, Vec3 } from 'cc';
-import { hangRepository } from './HangRepository';
-import type { IHangSnapshot } from './HangRepository';
-import { HangPage } from './HangPage';
-import { canClaim, formatHms, idleCappedMs, idleElapsedMs, idleReachedMax } from './HangTable';
+import { EventMgr } from '../../framework/event/EventMgr';
+import { TerritoryUiEvent, TerritoryViewEvent, type ITerritoryRenderEvent } from '../territory/application/TerritoryEvents';
+import { TERRITORY_IDLE_REWARD_INTERVAL_MS } from '../territory/model/TerritoryIdleReward';
+import { formatHms } from './HangTable';
 
 const { ccclass, property } = _decorator;
 
@@ -26,19 +26,19 @@ export class HangEntryButton extends Component {
         type: Node,
         tooltip: 'HangIcon：金币车图标，时间文字不参与摇摆',
     })
-    shakeNode: Node = null;
+    shakeNode: Node = null!;
 
     @property({ type: Label, tooltip: 'HangTime：累计挂机时长' })
-    timeLabel: Label = null;
+    timeLabel: Label = null!;
 
     @property({
         type: Node,
         tooltip: 'RedDot：红点占位（FGUI `com_rd`）。老端从不点亮，本轮不接；接的时候用 setRedDot()。',
     })
-    redDot: Node = null;
+    redDot: Node = null!;
 
-    /** 挂机起点（毫秒）；老端 `refreshLastTime` 的 `startTime`（0 时退到「现在」）。 */
-    private _startMs: number = 0;
+    private _startMs: number | null = null;
+    private maxMs = 0;
 
     /** 摇摆 tween 是否在跑（只用来保证 `_startShake` 幂等，不参与任何节点状态的「缓存比较」）。 */
     private _shaking: boolean = false;
@@ -55,10 +55,14 @@ export class HangEntryButton extends Component {
             // 与 `ChatEntryButton` 同一处置：只说一声、不静默。缺 `cc.Button` 时
             // `Button.EventType.CLICK` 永远不会被 emit，表现是「点了毫无反应且不报错」。
             console.error(`[Hang] ${this.node.name} 上没有 cc.Button，主界面入口点击不会生效`);
-        } else {
-            button.node.on(Button.EventType.CLICK, this.onClick, this);
+            return;
         }
-        void this.refresh();
+        button.node.on(Button.EventType.CLICK, this.onClick, this);
+        this.node.active = true;
+        button.interactable = false;
+        this.timeLabel.string = formatHms(0);
+        EventMgr.instance.on(TerritoryViewEvent.Render, this.applySnapshot, this);
+        EventMgr.instance.emit(TerritoryUiEvent.Ready);
     }
 
     /**
@@ -69,6 +73,7 @@ export class HangEntryButton extends Component {
      * 不 `off` 是安全的：`Node._onPreDestroyBase` 会先 `_eventProcessor.destroy()` 清空监听。
      */
     protected onDestroy(): void {
+        EventMgr.instance.offTarget(this);
         this.unscheduleAllCallbacks();
         this._stopShake();
     }
@@ -77,50 +82,23 @@ export class HangEntryButton extends Component {
     // 公开入口
     // ============================================================
 
-    /** 打开征收弹窗。`PopupManager` 同类单实例 ⇒ 连点不会叠出第二个面板。 */
     onClick(): void {
-        void HangPage.open();
+        EventMgr.instance.emit(TerritoryUiEvent.Intent, { intent: { kind: 'claimIdleRewards' } });
     }
 
-    /** 重读一次数据并铺一次（显隐 / 文案 / 摇摆）。 */
-    async refresh(): Promise<void> {
-        this.applySnapshot(await hangRepository.load());
-    }
-
-    /**
-     * 用给定快照铺一次 —— `refresh()` 的**同步核心**。
-     *
-     * 单独暴露是为了让端到端探针（`tmp/_hang_probe.mjs`）能注入替身快照：
-     * 离线预览里 `sweetLevel` 恒 `null`（见文件头），不注入就永远验不到「可见态」。
-     */
-    applySnapshot(snapshot: IHangSnapshot): void {
-        // ---- ① 显隐：老端 `有无扫荡` controller（见文件头）----
-        // 🔴 `active` **无条件写**（规则 82）：prefab 里烘的是 `true`（为了 `onLoad` 能跑起来，
-        //    见文件头），一旦写成「只在翻转时写」（`if (v !== this._visible) { … }`），
-        //    首次调用 `v === true === 缓存初值` 就会**短路不写** ⇒ 不可见的新号永远停在可见态。
-        //    代价可忽略：`cc.Node.active` 的 setter 自己会 `if (this._active !== value)` 早退。
-        const visible = snapshot.sweetLevel !== null;
-        this.node.active = visible;
-        if (!visible) {
-            this.unscheduleAllCallbacks();
-            this._stopShake();
-            return;
-        }
-
-        // ---- ② 起点：老端 `lastIdleRewardTime || now` ----
-        // 为 0 时退到「现在」，否则进度/时长会从 1970 年算起（直接顶到 8h）。
-        const start = snapshot.role ? snapshot.role.lastIdleRewardTimeMs : 0;
-        this._startMs = start > 0 ? start : Date.now();
-
-        // ---- ③ 文案 + ④ 摇摆 + ⑤ 每秒心跳 ----
-        this._tick();
+    applySnapshot({ state }: ITerritoryRenderEvent): void {
+        this.node.active = true;
+        this.node.getComponent(Button).interactable = state.ready;
+        this._startMs = state.idleRewardStartedAt;
+        this.maxMs = state.idleRewardMaxHours * TERRITORY_IDLE_REWARD_INTERVAL_MS;
         this.unschedule(this._tick);
         this.schedule(this._tick, 1);
+        this._tick();
     }
 
     /** 红点显隐的唯一入口（本轮不接，接口先留好）。 */
     setRedDot(visible: boolean): void {
-        if (this.redDot) this.redDot.active = visible;
+        this.redDot.active = visible;
     }
 
     // ============================================================
@@ -130,16 +108,15 @@ export class HangEntryButton extends Component {
     /**
      * 每秒一跳：刷时长文案、按「能不能领」开关摇摆。
      *
-     * 到顶（8h）后文案定格在 `08:00:00`、摇摆也已经是循环态 ⇒ 停表
-     * （与 `HangPage._tick` 到 `MAX` 就 `unschedule` 同一处置，别让主界面白跑一辈子定时器）。
+     * 到配置上限后文案定格并停表；征收或切章后的新快照会重启计时。
      */
     private _tick(): void {
-        const elapsed = idleElapsedMs(this._startMs, Date.now());
-        if (this.timeLabel) this.timeLabel.string = formatHms(idleCappedMs(elapsed));
+        const elapsed = this._startMs === null ? 0 : Math.max(0, Date.now() - this._startMs);
+        this.timeLabel.string = formatHms(Math.min(elapsed, this.maxMs));
 
-        if (canClaim(elapsed)) {
+        if (elapsed >= TERRITORY_IDLE_REWARD_INTERVAL_MS) {
             this._startShake();
-            if (idleReachedMax(elapsed)) this.unschedule(this._tick);
+            if (elapsed >= this.maxMs) this.unschedule(this._tick);
         } else {
             this._stopShake();
         }

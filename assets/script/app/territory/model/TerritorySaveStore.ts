@@ -1,5 +1,6 @@
 import {
     TERRITORY_LAST_CHAPTER_KEY,
+    TERRITORY_PASSED_LEVELS_KEY,
     TERRITORY_STORAGE_PREFIX,
     TERRITORY_TEXTS,
 } from '../application/TerritoryTexts';
@@ -123,6 +124,37 @@ export class TerritorySaveStore {
         } catch (error) {
             console.warn('[TerritorySaveStore] 无法保存最近章节，本次会话改用内存记录', error);
         }
+    }
+
+    /**
+     * 账号级「已通关的领地关卡」（**不分章节**，见 {@link TERRITORY_PASSED_LEVELS_KEY}）。
+     *
+     * 存档损坏 / 写成非数组时给空表而不是抛：它只决定「某个入口晚一点出现」，
+     * 不该连累领地页整页加载失败。
+     */
+    loadPassedLevels(): number[] {
+        const parsed = this.readJson(this.passedLevelsKey());
+        if (!Array.isArray(parsed)) return [];
+        return parsed.filter((levelId): levelId is number => Number.isSafeInteger(levelId) && levelId > 0);
+    }
+
+    /**
+     * 把这几关记成「已通关」，返回这次**真正新增**的那些（幂等）。
+     *
+     * 幂等是必须的：条件判定每次渲染都会走一遍，没有新增就不该写盘。
+     */
+    markLevelsPassed(levelIds: readonly number[]): number[] {
+        const passed = this.loadPassedLevels();
+        const known = new Set(passed);
+        const added: number[] = [];
+        for (const levelId of levelIds) {
+            if (!Number.isSafeInteger(levelId) || levelId <= 0 || known.has(levelId)) continue;
+            known.add(levelId);
+            added.push(levelId);
+        }
+        if (!added.length) return added;
+        this.writeRaw(this.passedLevelsKey(), JSON.stringify([...passed, ...added]));
+        return added;
     }
 
     load(
@@ -292,6 +324,43 @@ export class TerritorySaveStore {
     save(chapterId: number, state: TerritoryChapterSave): void {
         const key = this.key(chapterId);
         const raw = JSON.stringify(state);
+        TerritorySaveStore.memoryFallback.set(key, raw);
+        try {
+            this.storage?.setItem(key, raw);
+        } catch (error) {
+            console.warn('[TerritorySaveStore] localStorage 不可用，本次会话改用内存存档', error);
+        }
+    }
+
+    /**
+     * 账号级成就的 key：**故意不带 chapterId**。
+     *
+     * 带章节 = 切章就查不到（2026-11-04 战斗宝箱入口消失的根因），见 `TERRITORY_PASSED_LEVELS_KEY`。
+     */
+    private passedLevelsKey(): string {
+        return `${TERRITORY_PASSED_LEVELS_KEY}.${this.namespace}`;
+    }
+
+    /** 读原始串：先看内存兜底（storage 不可用时 `save` 只写了内存）。 */
+    private readRaw(key: string): string | null {
+        try {
+            return TerritorySaveStore.memoryFallback.get(key) ?? this.storage?.getItem(key) ?? null;
+        } catch {
+            return TerritorySaveStore.memoryFallback.get(key) ?? null;
+        }
+    }
+
+    private readJson(key: string): unknown {
+        const raw = this.readRaw(key);
+        if (!raw) return null;
+        try {
+            return JSON.parse(raw) as unknown;
+        } catch {
+            return null;
+        }
+    }
+
+    private writeRaw(key: string, raw: string): void {
         TerritorySaveStore.memoryFallback.set(key, raw);
         try {
             this.storage?.setItem(key, raw);

@@ -103,6 +103,25 @@ export function resetAssetPathCache(): void {
 }
 
 /**
+ * 顶层目录下的**实际路径并集**（跨所有分包根，按 {@link BUNDLE_ROOTS} 顺序）。
+ *
+ * 什么时候用：需要对整个目录做递归扫描（例如 `ui/**\/*.prefab`）时，
+ * {@link assetPath} 只返回**第一个命中**的根，其余分包的同名目录会被整片漏掉 ——
+ * 表现为清单规模退化、守卫假红，且红的原因离现场很远。批量扫描一律先拿全路径再逐个递归。
+ *
+ * 与 {@link assetDirNames} 的区别：那个返回「条目名并集」（用于断言目录里有什么），
+ * 本函数返回「目录路径列表」（用于真的去读文件）。
+ */
+export function assetDirPaths(rel: string): string[] {
+    const out: string[] = [];
+    for (const root of BUNDLE_ROOTS) {
+        const dir = `${root}/${rel}`;
+        if (existsSync(dir)) out.push(dir);
+    }
+    return out;
+}
+
+/**
  * 目录下的**条目名并集**（跨所有分包根合并、去重）。
  *
  * 为什么要单独一个函数：`ui`、`image` 这两个**顶层目录**是分裂的

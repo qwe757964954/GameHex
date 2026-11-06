@@ -23,7 +23,7 @@ const MODEL_PATH = 'assets/script/app/territory/application/TerritoryModel.ts';
 const VIEW_STATE_PATH = 'assets/script/app/territory/application/TerritoryViewState.ts';
 const PAGE_PATH = 'assets/script/app/main/MainTerritoryMap.ts';
 
-const read = (path: string): string => readFileSync(path, 'utf8');
+const read = (path: string): string => readFileSync(path, 'utf8').replace(/\r\n/g, '\n');
 
 // ============================================================
 // ① 纯函数：够不够
@@ -189,6 +189,8 @@ test('★★★未解锁站点格：银币不够红 / 体力不够但银币够 �
             revealedCells: [1],
             siteOpenableCells: openable ? [1] : [],
             pendingFixedResourceCells: [],
+            // `ITerritoryMapRenderInput` 的必填项：起始格/站点的 `interactive` 都要读它。
+            pendingRandomResourceCells: [],
             stageByCell: new Map(),
             progress: { isCellUnlocked: () => false, isOwned: () => false },
             art: { randomSilverIcon: silverIcon },

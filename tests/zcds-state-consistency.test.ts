@@ -221,7 +221,7 @@ test('注入配置会独立拷贝；原配置后续修改不影响建筑与神�
 test('敌方防御塔伤害与击杀奖励归敌方；reset 清空双向伤害和飘字', () => {
     const source: ZCMatchConfig = structuredClone(config);
     const tower: ZCDeckCard = {
-        id: 'test-tower', name: '测试塔', type: ZCCardType.Tower, rarity: '绿',
+        id: 'test-tower', name: '测试塔', type: ZCCardType.Tower, rarity: 'green',
         baseHp: 100, cycleSeconds: 0.05, cycleBaseValue: 99999,
     };
     source.enemyDeck = [...source.enemyDeck, tower];

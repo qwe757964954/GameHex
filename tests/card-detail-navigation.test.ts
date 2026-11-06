@@ -22,6 +22,8 @@ test('真实详情仓库返回完整卡库与最新缓存等级，不借用卡�
         return {};
     } });
     const repository = new exports.RuntimeCardRepository();
+    assert.equal(repository.loadLineupSnapshot(), null, '配置未就绪前不发布不完整快照');
+    repository.artConfig = {};
     assert.equal(repository.loadLineupSnapshot().catalog.length, 0);
     const data = await repository.loadDetailNavigation();
     assert.equal(data.catalog, catalog);

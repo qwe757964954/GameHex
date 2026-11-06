@@ -4666,6 +4666,7 @@ message SlgGameCameRoleInfo {
   required uint64 img       = 4; // 玩家头像
   required uint32 defenseHp = 5; // 血量
   required uint32 pos       = 6; // 所在格子
+  required uint32 buildLevel = 7;// 建筑等级
 }
 
 //slg玩法 游戏信息

@@ -64,6 +64,7 @@ Cocos Creator 3.8.8 + TypeScript。
 | Prefab、Sprite、碎图、Spine、导表 | [架构规范](docs/AI架构与代码规范.md) §5、§7.3；[开发细则](docs/agent/开发细则.md) 工具链条目 |
 | 对局、领地、共享奖励/HUD 表现 | [规范路由与最小验证](docs/agent/规范路由与最小验证.md)仅定位相关规格与测试，不承载业务要求 |
 | 大地图、基地玩法 | [大地图实现说明](docs/bigmap-系统实现说明.md)相关章节，结合本次需求及当前协议/配置核对 |
+| 代码审查标准、流程与报告模板 | [代码审查规范](docs/agent/代码审查规范.md) |
 | 提交、发布或版本库操作 | [版本库约定](docs/agent/版本库约定.md)；Git/SVN 双库、中文日志、TortoiseProc 及人工确认要求均有效 |
 
 ## 验证与交付

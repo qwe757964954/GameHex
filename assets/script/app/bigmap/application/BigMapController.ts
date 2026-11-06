@@ -3,6 +3,7 @@ import type { IControllerContext } from '../../../framework/controller/Controlle
 import { EventMgr } from '../../../framework/event/EventMgr';
 import { bigMapOccupantOf } from '../model/BigMapWorld';
 import { normalizeBigMapRoleEvent } from '../model/BigMapCampRoleInfo';
+import { BIGMAP_CAMP_MOVE_TEXT } from '../model/BigMapCampMove';
 import { BIGMAP_MOVE_HINT, BigMapUiEvent, BigMapViewEvent, type BigMapIntent, type IBigMapIntentEvent,
     type BigMapViewCommand } from './BigMapEvents';
 import { buildBigMapViewState, type IBigMapUiState, type IBigMapViewState } from './BigMapViewState';
@@ -36,6 +37,7 @@ export class BigMapController extends ControllerBase {
         mode: 'world', selectedCityId: 0, selectedMonsterId: 0, selectedPlotHexId: -1, selectedBaseHexId: -1,
         pendingBuildingId: 0, pendingMoveInstanceId: 0, baseActionPending: false,
         enteringBattle: false, buildMenuVisible: false,
+        campRolesVisible: false, campRoleIndex: 0, pendingCampMoveId: 0,
     };
 
     constructor(private readonly model: BigMapModel, private readonly options: IBigMapControllerOptions) { super(options.context, 'bigmap-controller'); }
@@ -104,8 +106,15 @@ export class BigMapController extends ControllerBase {
         const intent = event.intent;
         // 视口反馈不依赖战斗/写请求锁；它只更新下次轮询的可见集合。
         if (intent.kind === 'visibleCamps') {
-            this.visibleCampIds = [...new Set(intent.campIds)].filter((id) => this.model.world.cities.has(id));
-            if (this.ui.mode === 'world' && !this.ui.enteringBattle) void this.refreshVisibleCamps();
+            const next = [...new Set(intent.campIds)].filter((id) => this.model.world.cities.has(id));
+            // 只有「视野里出现了新的城」才算变了 —— 少掉一座城不用重拉。
+            const added = next.some((id) => !this.visibleCampIds.includes(id));
+            this.visibleCampIds = next;
+            // 🔴 同一集合的重复上报（拖动/缩放，视图侧 150ms 防抖）必须走 `nextCampRefreshAt` 节流：
+            // 这里以前是无条件 `refreshVisibleCamps()`，于是每帧的相机移动都会让每个可见城
+            // 各发一条 `CmdSlgCampRoleInfosReqMsg`，5 秒的轮询设计被绕过成 ~150ms 一轮。
+            const due = (this.options.now ?? Date.now)() >= this.nextCampRefreshAt;
+            if (this.ui.mode === 'world' && !this.ui.enteringBattle && (added || due)) void this.refreshVisibleCamps();
             return;
         }
         if (this.ui.enteringBattle || this.ui.baseActionPending) return;
@@ -124,6 +133,13 @@ export class BigMapController extends ControllerBase {
             case 'clear': this.clearSelection(); this.publish(); break;
             case 'toggleBuildMenu': this.ui.buildMenuVisible = !this.ui.buildMenuVisible; this.publish(); break;
             case 'searchMonster': this.searchMonster(); break;
+            case 'campRoles':
+                if (this.model.cityView(this.ui.selectedCityId)?.isServerCamp) {
+                    this.ui.campRolesVisible = true;
+                    this.ui.campRoleIndex = 0;
+                    this.publish();
+                }
+                break;
         }
     }
 
@@ -139,6 +155,9 @@ export class BigMapController extends ControllerBase {
         if (main) this.command({ kind: 'focusBase', hexId: main.hexId });
     }
     private clearSelection(): void {
+        this.ui.campRolesVisible = false;
+        this.ui.campRoleIndex = 0;
+        this.ui.pendingCampMoveId = 0;
         this.ui.pendingMoveInstanceId = 0;
         this.ui.selectedCityId = 0;
         this.ui.selectedMonsterId = 0;
@@ -146,8 +165,25 @@ export class BigMapController extends ControllerBase {
         this.ui.selectedBaseHexId = -1;
     }
     private selectWorld(hexId: number): void {
+        if (this.ui.pendingCampMoveId > 0) {
+            if (!this.model.canMoveToCampPos(this.ui.pendingCampMoveId, hexId)) {
+                this.feedback({ ok: false, message: BIGMAP_CAMP_MOVE_TEXT.invalidPosition });
+                return;
+            }
+            this.ui.selectedBaseHexId = hexId;
+            this.publish();
+            return;
+        }
         const occupant = bigMapOccupantOf(this.model.world, hexId, this.model.playerBaseHexId);
         this.clearSelection();
+        const roleCity = this.model.allCityViews().find((city) => city.campRoles.some((role) => role.pos === hexId));
+        if (roleCity && occupant.kind !== 'city') {
+            this.ui.selectedCityId = roleCity.cityId;
+            this.ui.campRolesVisible = true;
+            this.ui.campRoleIndex = roleCity.campRoles.findIndex((role) => role.pos === hexId);
+            this.publish();
+            return;
+        }
         if (occupant.kind === 'city') {
             this.ui.selectedCityId = occupant.cityId;
             this.publish();
@@ -190,6 +226,22 @@ export class BigMapController extends ControllerBase {
         this.feedback({ ok: true, message: picking ? '已取消选择' : `点击空地放置${entry.name}` });
     }
     private primary(): void {
+        if (this.ui.pendingCampMoveId > 0) {
+            const campId = this.ui.pendingCampMoveId;
+            const pos = this.ui.selectedBaseHexId;
+            if (!this.model.canMoveToCampPos(campId, pos)) return;
+            void this.runAction(() => this.model.requestMoveCamp(campId, pos), () => this.clearSelection());
+            return;
+        }
+        if (this.ui.campRolesVisible) {
+            const campId = this.ui.selectedCityId;
+            if (!this.model.canMoveToCamp(campId)) return;
+            this.clearSelection();
+            this.ui.pendingCampMoveId = campId;
+            this.publish();
+            this.feedback({ ok: true, message: BIGMAP_CAMP_MOVE_TEXT.pickHint });
+            return;
+        }
         if (this.ui.mode === 'base') {
             const detail = this.model.plotDetail(this.ui.selectedPlotHexId);
             if (detail) void this.runAction(() => detail.queueSlotIndex >= 0
@@ -201,6 +253,13 @@ export class BigMapController extends ControllerBase {
         } else this.feedback({ ok: false, message: '先在地图上选一座城池或一只野怪' });
     }
     private secondary(): void {
+        if (this.ui.pendingCampMoveId > 0) { this.clearSelection(); this.publish(); return; }
+        if (this.ui.campRolesVisible) {
+            const count = this.model.cityView(this.ui.selectedCityId)?.campRoles.length ?? 0;
+            this.ui.campRoleIndex = count > 0 ? (this.ui.campRoleIndex + 1) % count : 0;
+            this.publish();
+            return;
+        }
         if (this.ui.mode === 'base') {
             const detail = this.model.plotDetail(this.ui.selectedPlotHexId);
             if (!detail) return;

@@ -17,7 +17,17 @@ export type TerritoryIntent =
     | { readonly kind: 'siteTap' | 'randomTap'; readonly cellId: number }
     | { readonly kind: 'enterBattle'; readonly payload: import('./TerritoryModel').ITerritoryNavigateBattlePayload }
     | { readonly kind: 'chapter'; readonly offset: number }
+    /**
+     * 章节选择弹窗里点了某一行 ⇒ 按 `chapterId` 直接切（`chapter` 只够「翻一页」）。
+     *
+     * 🔴 2026-11-04 补：这条一直是**运行时**在用（`ChapterSelectPanel` 发、
+     *    `TerritoryController` 收），但没写进联合类型 —— 结果控制器那个 `case` 是死分支，
+     *    TS 也帮不上忙。加回来之后「回到已通过的章节」这条路才有类型保障。
+     */
+    | { readonly kind: 'selectChapter'; readonly chapterId: number }
     | { readonly kind: 'battle' | 'closeDetail' | 'openLevelTip' | 'closeLevelTip' | 'scout' | 'focusLevel'
+        /** 金币车征收：领取当前章节已占领据点的累计产出并展示奖励。 */
+        | 'claimIdleRewards'
         /** 整页过场接手开战：此后程序关掉详情不作废在途开战请求（见 `TerritoryModel.battleHandoff`）。 */
         | 'keepBattleRequest'
         /** 战斗流程没接手 ⇒ 复位在途开战态，别让「开始战斗」变成死按钮。 */

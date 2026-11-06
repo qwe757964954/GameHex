@@ -417,3 +417,42 @@ test('★★★银币不够 ⇒ 银币数字红；体力不够（银币够）⇒
     // ④ 银币够、也没有体力问题，只是这格现在开不了（相邻没通 / 前置没打）⇒ 仍按旧读法红。
     assert.equal(render({ silver: 1000, stamina: 50 }, false), 'red', '其它原因开不了时数字仍是红');
 });
+
+/**
+ * 🔴 2026-11-05 山猫：「上锁下方的银币与字就不要显示了」。
+ *
+ * 锁 + 价格并排会读成「交钱就能开」，与锁的语义（被前置/相邻卡住）矛盾。
+ * 实现走 `isCondition = false` —— `TerritoryStationView.render` 里它同时关掉
+ * `captionSprite`（银币图标）与 `captionLabel`（数量）两个节点。
+ */
+test('a lock-blocked cell hides both the silver icon and the amount', () => {
+    const MapView = loadTerritoryMapViewClass() as new () => {
+        createStation: (target: unknown) => unknown;
+        syncStations: (input: unknown) => void;
+    };
+    const mapView = new MapView();
+    const rendered = new Map<number, Record<string, unknown>>();
+    mapView.createStation = (target: { cellId: number }) => ({
+        setMapPosition() {},
+        render(content: Record<string, unknown>) { rendered.set(target.cellId, content); },
+    });
+    const silverIcon = { name: 'silver icon' };
+    mapView.syncStations({
+        map: { startCellId: 0, sites: [], defaults: { staminaCost: 5 },
+            randomSites: { candidateCells: [4, 5], triggerSilver: 399 } },
+        layout: { points: new Map([[4, { x: 10, y: 20 }], [5, { x: 30, y: 40 }]]) },
+        // 4 现在能开、5 被相邻条件卡住。
+        randomResourceOpenableCells: [4],
+        lockBlockedCells: [5],
+        revealedCells: [4, 5],
+        pendingRandomResourceCells: [],
+        progress: { isCellUnlocked: () => false },
+        art: { randomSilverIcon: silverIcon },
+    });
+    // 能开的格照旧：银币图标 + 数量。
+    assert.equal(rendered.get(4)?.isCondition, true);
+    assert.equal(rendered.get(4)?.caption, '399');
+    // 上锁的格：整条条件摘掉（`isCondition=false` ⇒ 两个节点都关）。
+    assert.equal(rendered.get(5)?.isCondition, false);
+    assert.equal(rendered.get(5)?.caption, '');
+});

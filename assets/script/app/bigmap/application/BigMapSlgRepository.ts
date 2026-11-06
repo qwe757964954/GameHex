@@ -59,7 +59,7 @@ export class BigMapSlgRepository {
         else void this.refreshBuildInfo(true);
         if (kind === 'game') {
             // 广播还带游戏信息（所处城池会变），不能只刷行动力。
-            void this.refreshGame();
+            void this.refreshGame(true);
             void this.refreshAction();
         }
     }
@@ -100,9 +100,9 @@ export class BigMapSlgRepository {
      * 解析失败**不清空**已有值：坏回包只会让这次刷新返回 false，
      * 否则一次超时就能把「我在哪座城」从界面上抹掉。
      */
-    refreshGame(): Promise<boolean> {
+    refreshGame(force = false): Promise<boolean> {
         if (this.isDisposed) return Promise.resolve(false);
-        if (this.gameTask) return this.gameTask;
+        if (this.gameTask) return force ? this.gameTask.then(() => this.refreshGame()) : this.gameTask;
         this.gameTask = this.loadGame().finally(() => { this.gameTask = null; });
         return this.gameTask;
     }

@@ -27,8 +27,12 @@ import {
     inspectChestEntryConditions,
     isChestEntryUnlocked,
     isChestEntryVerdictProvisional,
+    isTerritoryLevelPassedInTerritory,
+    passedTerritoryLevelIds,
     resolveChestEntryGate,
+    territoryLevelCellsInChapter,
 } from '../assets/script/app/main/ChestEntryGate';
+import type { ChestEntryTerritoryView } from '../assets/script/app/main/ChestEntryGate';
 import { EMPTY_ENTRANCE_PLAYER_STATE } from '../assets/script/app/main/MainEntranceVisible';
 import type { EntrancePlayerState, EntranceVisibleRow } from '../assets/script/app/main/MainEntranceVisible';
 import { collectEntranceItems, EntranceBelond } from '../assets/script/app/main/MainEntranceTypes';
@@ -179,6 +183,69 @@ test('表上如果退回 battleLevel，领地数据再全也救不回来 —— 
         : row));
     assert.equal(isChestEntryUnlocked(rows, realServer), false,
         '类型和数据源必须成对：battleLevel 配领地据点 = 永远打不开');
+});
+
+// ============================================================
+// ②-2 跨章节：一次性成就
+// ============================================================
+
+/** 第 2 章的领地快照：**没有** 20001（它属第 1 章），并且一格都没通。 */
+function chapterTwoView(): ChestEntryTerritoryView {
+    const stageByCell = new Map<number, { levelId: number }>();
+    for (let index = 0; index < 16; index += 1) stageByCell.set(100 + index, { levelId: 10011 + index });
+    return { stageByCell, isAreaPassed: () => false };
+}
+
+test('切到第 2 章后，第 1 章通关的据点仍然算通关（2026-11-04 实机：入口又丢了）', () => {
+    const chapterTwo = chapterTwoView();
+    // 第 2 章里根本没有 20001 —— 只看当前章 ⇒ 恒 false，正是那个 bug
+    assert.deepEqual(territoryLevelCellsInChapter(chapterTwo, 20001), []);
+    assert.equal(isTerritoryLevelPassedInTerritory(20001, chapterTwo, null), false);
+
+    // 账号级的「已通关」是跨章成就 ⇒ 切到哪一章都算过
+    assert.equal(isTerritoryLevelPassedInTerritory(20001, chapterTwo, new Set([20001])), true);
+    assert.equal(isTerritoryLevelPassedInTerritory(20002, chapterTwo, new Set([20001])), false,
+        '只认记过的那些关卡号，不能一条成就放行所有关卡');
+
+    // 挂到入口判定上：条件一个字没改，只是数据源变成「跨章成就 || 当前章快照」
+    const archived = new Set([20001]);
+    const crossChapter = {
+        ...stateTerritoryPassed(),
+        isTerritoryLevelPassed: (levelId: number) => isTerritoryLevelPassedInTerritory(levelId, chapterTwo, archived),
+    };
+    assert.equal(isChestEntryUnlocked(openRows, crossChapter), true);
+
+    const noArchive = {
+        ...crossChapter,
+        isTerritoryLevelPassed: (levelId: number) => isTerritoryLevelPassedInTerritory(levelId, chapterTwo, null),
+    };
+    assert.equal(isChestEntryUnlocked(openRows, noArchive), false,
+        '既没有落盘成就、当前章又没有这一关 ⇒ 锁着（查不到不等于通过）');
+});
+
+test('第 1 章的现场判定不变：同一关的格子任一个通关就算通关', () => {
+    // 一片战斗区域横跨好几格，只有第 2 格被记成通关 —— 区域内归并由
+    // `TerritoryProgress.isAreaPassed` 负责，这里只钉「有格子 ⇒ 看格子通没通」这一层。
+    const view: ChestEntryTerritoryView = {
+        stageByCell: new Map<number, { levelId: number }>([
+            [7, { levelId: 20001 }], [8, { levelId: 20001 }], [9, { levelId: 10011 }],
+        ]),
+        isAreaPassed: (cellId) => cellId === 8,
+    };
+    assert.deepEqual(territoryLevelCellsInChapter(view, 20001), [7, 8]);
+    assert.equal(isTerritoryLevelPassedInTerritory(20001, view, null), true);
+
+    // 「这一章已通关的关卡」= MainPage 每帧整批记进账号成就的那份清单（去重）
+    assert.deepEqual(passedTerritoryLevelIds(view), [20001]);
+    assert.deepEqual(passedTerritoryLevelIds(chapterTwoView()), [], '一格都没通 ⇒ 没有可记的');
+    assert.deepEqual(passedTerritoryLevelIds({ stageByCell: null, isAreaPassed: () => true }), []);
+    assert.deepEqual(passedTerritoryLevelIds({ stageByCell: view.stageByCell, isAreaPassed: null }), []);
+    assert.equal(isTerritoryLevelPassedInTerritory(10011, view, null), false, '没通的那一关不能算');
+    assert.equal(isTerritoryLevelPassedInTerritory(30001, view, null), false, '这一章没有的关卡');
+
+    // 快照没到（null）也走不动，但绝不抛
+    assert.equal(isTerritoryLevelPassedInTerritory(20001, { stageByCell: null, isAreaPassed: () => true }, null), false);
+    assert.equal(isTerritoryLevelPassedInTerritory(20001, { stageByCell: view.stageByCell, isAreaPassed: null }, null), false);
 });
 
 test('排障快照：逐条给出条件的关卡号与判定结果（2026-11-03 实机没长出来时加的探针）', () => {
@@ -384,4 +451,34 @@ test('领地快照没到时那是「还没数据」不是「没通关」—— �
     // 真失败的诊断不许被顺手删掉
     assert.match(code, /console\.warn\(`\[MainPage\] 战斗宝箱入口未解锁：\$\{report\.type\}/,
         '真失败的 warn 还在 —— 只是「暂缓」时才跳过');
+});
+
+test('MainPage 把判定接到账号级成就上：切章不回退，且只有一处落盘点（2026-11-04）', () => {
+    const code = codeOnly(readFileSync(READ_PATH, 'utf8'));
+
+    // ① 判定本身走纯函数（跨章 + 当前章），不再自己 for 一遍 stageByCell
+    assert.match(code, /isTerritoryLevelPassedInTerritory\(levelId, \{/,
+        '判领地据点通没通必须走 ChestEntryGate 的跨章版本');
+    assert.equal(/for \(const \[cellId, stage\] of stageByCell\)/.test(code), false,
+        'MainPage 里又自己遍历格子了 —— 那样只看当前章，切到第 2 章就会丢入口');
+
+    // ② 观察到的通关整批落盘，且发生在**判条件之前**（onTerritoryRender 里）
+    assert.match(code, /this\.rememberPassedTerritoryLevels\(\);[\s\S]{0,80}?this\.refreshChestEntry\(\);/,
+        '领地渲染时要先把这一章已通关的关卡记下来，再判入口 —— 顺序反了，切章那一笔会漏');
+    assert.match(code, /this\.territoryArchive\(\)\.markLevelsPassed\(Array\.from\(passed\)\)/,
+        '落盘要传 `Array.from(set)` —— release 构建把 `[...set]` 降级成 `[].concat(set)`，静默一条都记不上');
+    assert.equal(/markLevelsPassed\(\[\.\.\./.test(code), false,
+        '别对 Set 用展开：`assets/script` 不许 [...set]（打包后静默失效）');
+    assert.match(code, /private passedTerritoryLevelSet\(\): Set<number> \{[\s\S]*?loadPassedLevels\(\)/,
+        '内存镜像要从 TerritorySaveStore.loadPassedLevels 起手（账号级、不分章节）');
+    assert.match(code, /createTerritorySaveStore\(readTerritorySaveOwner\(\)\)/,
+        '存档作用域必须复用 readTerritorySaveOwner —— 别在 MainPage 里另拼一份 server:role:');
+
+    // ③ 幂等：已经记过的关卡不该反复写盘（内存 Set 先挡）
+    assert.match(code, /\.filter\(\(levelId\) => !passed\.has\(levelId\)\)/,
+        '落盘前要按内存镜像过滤新增（判定每帧都可能走好几遍）');
+    assert.match(code, /if \(!fresh\.length\) return;/);
+
+    // ④ 排障文案要能指出「当前章没有 + 成就里也没有」，否则下次还是分不清
+    assert.match(code, /跨章成就里也没记过它/, 'territoryLevelDetail 少了跨章那一句');
 });

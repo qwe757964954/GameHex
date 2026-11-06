@@ -1,4 +1,5 @@
 import { zcMissileFxPaths } from './ZCCombatEffectFlight';
+import { ZC_ATTACK_TRAITS } from './ZCCombatCatalog';
 
 /** 战斗外壳路径唯一声明；预热只取公共子集，不构筑任何对局状态。 */
 export const ZC_BATTLE_SHELL_PATHS = {
@@ -24,7 +25,7 @@ export const ZC_BATTLE_DOWNLOAD_PREFABS = [
 
 const ZC_BATTLE_COMMON_FX_PREFABS = [
     ZC_BATTLE_FX_PATHS.spawn, ZC_BATTLE_FX_PATHS.death, ZC_BATTLE_FX_PATHS.buildingDestroy,
-    ...['射手', '战士', '法师', '坦克'].map(trait => `${ZC_BATTLE_FX_PATHS.hitDirectory}/${trait}受击/${trait}受击`),
+    ...ZC_ATTACK_TRAITS.map(trait => `${ZC_BATTLE_FX_PATHS.hitDirectory}/${trait}受击/${trait}受击`),
 ] as const;
 
 export const ZC_BATTLE_COMMON_PREFABS = [

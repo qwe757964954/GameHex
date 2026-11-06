@@ -106,6 +106,32 @@ test('目标离开直线弹道后可以躲避，飞到终点过期不会补扣�
     assert.equal(model.damageStats.player.dealt, 0);
 });
 
+test('真实卡表的单位轻微调整站位后停下，覆盖身体的子弹仍应命中', () => {
+    // 录像中的目标只偏移很小距离；使用真表半径，避免夹具 bodyRadius=4 掩盖空值问题。
+    const match: ZCMatchConfig = {
+        ...captured,
+        rules: { ...captured.rules, enemyAiIntervalSeconds: 10000 },
+        units: captured.units.map(def => ({ ...def, moveSpeed: 0 })),
+    };
+    const missed: string[] = [];
+    for (const target of match.units) {
+        const source = unit(1, 'player', -40, -23);
+        source.unitId = target.flying ? '68004' : '68001'; source.cardId = source.unitId;
+        const victim = unit(2, 'enemy', 40);
+        victim.unitId = target.unitId; victim.cardId = target.unitId;
+        const model = game([source, victim], match);
+        launch(model);
+        model.tick(.05);
+        const shifted = model.exportSnapshot();
+        shifted.units[1].freeY += 2;
+        const restored = new ZCGameModel(shifted, () => .1, match);
+        restored.tick(1);
+        if (restored.snapshot.units[1].hp === victim.hp) missed.push(target.unitId);
+        assert.equal(restored.snapshot.projectiles.length, 0, target.unitId);
+    }
+    assert.deepEqual(missed, [], '身体碰撞范围不能因配置留空退化成一个点');
+});
+
 test('攻击者死亡并被移除后子弹仍命中，击杀奖励和伤害统计归发射方', () => {
     const enemy = unit(2, 'enemy', 40); enemy.hp = 1;
     const model = game([unit(1, 'player', -80), enemy]);
@@ -244,8 +270,68 @@ test('空气攻击过滤和同位置 ID 平局稳定，已死单位不能阻挡�
     assert.equal(run(true), 2);
 });
 
+test('穿透弹在到期的同一拍经过多个静止目标，仍逐个命中并结算伤害', () => {
+    const first = unit(2, 'enemy', 20), second = unit(3, 'enemy', 60), third = unit(4, 'enemy', 90);
+    const system = new ZCProjectileSystem();
+    system.beginStep([first, second, third]);
+    const shots = [projectile({ remainingPierces: 1, pierceFalloff: .2, hitUnitIds: [] })];
+    const hits: number[] = [];
+    system.update(shots, .05, {
+        now: .05, units: [third, second, first], distanceScale: 1,
+        effectiveDefinition: () => definition, structureTarget: () => null,
+        hit: (shot, target) => {
+            hits.push(target.id);
+            (target.id === first.id ? first : second).hp -= shot.baseDamage;
+        },
+    });
+    assert.deepEqual(hits, [2, 3]);
+    assert.equal(first.hp, 990);
+    assert.equal(second.hp, 992);
+    assert.equal(third.hp, 1000);
+    assert.equal(shots.length, 0);
+});
+
+test('模型恢复的高速穿透弹在最后一拍对两个静止敌人实际扣血', () => {
+    const fast = { ...config, units: config.units.map(def => ({ ...def,
+        attackProfile: { ...def.attackProfile, projectileSpeed: 2000 },
+    })) };
+    const model = game([unit(1, 'player', 0), unit(2, 'enemy', 60), unit(3, 'enemy', 20)], fast);
+    launch(model);
+    const snapshot = model.exportSnapshot();
+    snapshot.projectiles[0].baseDamage = 100;
+    snapshot.projectiles[0].remainingPierces = 1;
+    snapshot.projectiles[0].pierceFalloff = .2;
+    const restored = new ZCGameModel(snapshot, () => .1, fast);
+    restored.tick(.05);
+    assert.equal(restored.snapshot.units.find(entry => entry.id === 3).hp, 900);
+    assert.equal(restored.snapshot.units.find(entry => entry.id === 2).hp, 920);
+    assert.equal(restored.damageStats.player.dealt, 180);
+    assert.equal(restored.snapshot.projectiles.length, 0);
+});
+
+test('穿透后继续走完本拍距离，同位置目标按 ID 命中且后续拍不重复受伤', () => {
+    const first = unit(2, 'enemy', 20), tied = unit(3, 'enemy', 20), second = unit(4, 'enemy', 60);
+    const units = [second, tied, first];
+    const system = new ZCProjectileSystem();
+    system.beginStep(units);
+    const shots = [projectile({ durationSeconds: .15, remainingPierces: 3, hitUnitIds: [] })];
+    const hits: number[] = [];
+    const context = { now: .05, units, distanceScale: 1, effectiveDefinition: () => definition,
+        structureTarget: () => null, hit: (_shot: ZCProjectileState, target: ZCCombatTarget) => hits.push(target.id) };
+    system.update(shots, .05, context);
+    assert.deepEqual(hits, [2, 3, 4]);
+    assert.equal(shots[0].x, 100);
+    assert.equal(shots[0].remainingPierces, 0);
+    assert.deepEqual(shots[0].hitUnitIds, hits);
+    context.now = .1;
+    system.beginStep(units);
+    system.update(shots, .05, context);
+    assert.deepEqual(hits, [2, 3, 4]);
+    assert.equal(shots[0].x, 200);
+});
+
 test('piercing projectile hits distinct enemies in deterministic order and survives the configured extra hits', () => {
-    const first = unit(2, 'enemy', 20), second = unit(3, 'enemy', 60);
+    const first = unit(2, 'enemy', 20), second = unit(3, 'enemy', 140);
     const system = new ZCProjectileSystem();
     system.beginStep([first, second]);
     const shots = [projectile({ durationSeconds: .15, remainingPierces: 1, hitUnitIds: [] })];
@@ -391,12 +477,12 @@ test('连续碰撞涵盖起点重叠、擦边、零移动及高速跨过，不�
 
 test('渲染使用逻辑弹道插值，碰撞移除后回收节点，单位显示中心等于逻辑中心', () => {
     const { load, FakeNode } = loadViews();
-    const world = new (load('./ZCGameRenderWorld').ZCGameRenderWorld)({ mapLayer: new FakeNode(), effectPrefab: { make: () => {
+    const world = new (load('./ZCGameRenderWorld').ZCGameRenderWorld)({ mapLayer: new FakeNode(), board: new FakeNode(), effectPrefab: { make: () => {
         const node = new FakeNode(); node.getComponent = (() => ({ initialize() {}, render: (...args: any[]) => { rendered = args; } })) as any; return node;
     } }, effectVisualPrefabs: new Map() });
     let rendered: any[] = [];
     const shot = projectile({ previousX: 20, x: 30 });
-    const model = { snapshot: { combatEvents: [], projectiles: [shot], status: 'playing', elapsedSeconds: .05, pendingSeconds: .025 } };
+    const model = { interpolationAlpha: .5, snapshot: { combatEvents: [], projectiles: [shot], status: 'playing', elapsedSeconds: .05, pendingSeconds: .025 } };
     world.renderEffectSystem(model);
     assert.equal(rendered[2], shot); assert.equal(rendered[3], .5);
     const node = [...world.scene.values()][0].node;

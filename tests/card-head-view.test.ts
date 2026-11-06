@@ -3,7 +3,6 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import type { Sprite, SpriteFrame, UITransform } from 'cc';
 import { applyCardHeroArt } from '../assets/script/app/card/CardHeroView';
-import { cardArtKey } from '../assets/script/app/card/CardLineupTypes';
 import type { ZCDeckCard } from '../assets/script/app/zcds/model/ZCCombatCatalog';
 
 function fixture() {
@@ -39,12 +38,6 @@ test('角色立绘反复复用：方图与宽图保持原始比例、展示尺�
     applyCardHeroArt(hero, transform, null);
     assert.equal(hero.spriteFrame, null, '缺图必须清空复用项，不能残留上一张卡');
     assert.equal(hero.enabled, true, '静态展示须从骨骼隐藏 Sprite 的状态恢复');
-});
-
-test('卡牌美术缓存按卡牌 id 区分，已去除头像依赖', () => {
-    const card = { id: 'a', rarity: '绿', traits: { attack: '法师' }, headIcon: 'old-avatar' } as ZCDeckCard;
-    assert.equal(cardArtKey(card), cardArtKey({ ...card, headIcon: 'another-avatar' }));
-    assert.notEqual(cardArtKey(card), cardArtKey({ ...card, id: 'b' }));
 });
 
 for (const name of ['CardLineupCard', 'LineupSlot', 'LineupBoardCard', 'LineupBoardSlot', 'CardUpgrade']) {

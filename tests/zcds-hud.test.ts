@@ -598,8 +598,8 @@ test('视口组件由 prefab 保证：全类只在缓存 getter 里查一次，�
     // 不收敛的话，每多一个调用点就多一次「顺手判个空」的机会，这条用例也就守不住了。
     const probes = HUD_SRC.match(/mapViewport\.getComponent\(UITransform\)/g) ?? [];
     assert.equal(probes.length, 1, `只该有 1 处（mapViewportTransform getter），实际 ${probes.length} 处`);
-    // 唯一那一处必须是 `!`：判空不赚功力、只多一次 getComponent，且不留「判了不用」的死代码。
-    assert.equal((HUD_SRC.match(/mapViewport\.getComponent\(UITransform\)!/g) ?? []).length, 1, '这一处应写 `!`');
+    assert.equal((HUD_SRC.match(/mapViewport\.getComponent\(UITransform\)!/g) ?? []).length, 0,
+        '组件查询直接访问，不使用非空断言');
     assert.match(
         HUD_SRC, /private get mapViewportTransform\(\): UITransform/,
         '视口查询要收在 mapViewportTransform getter 里（缓存 + 唯一入口）',

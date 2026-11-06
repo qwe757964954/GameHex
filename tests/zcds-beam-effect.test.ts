@@ -313,22 +313,22 @@ test('弹道被丢弃时回调一次 linger：命中即丢、到点即丢；穿�
 
     // 穿透续飞：命中那一拍不丢弃 ⇒ 不回调（否则路径上会叠出一排定格光柱）；
     // 只有寿命到点才补一条，而且落点必须在**第一个敌人之后**（说明它确实穿过去了）。
-    // 落点会差一个逻辑步的推进量（穿透那一拍剩下的位移不补，既有口径），所以不锁死 100。
+    // 穿透后走完本拍剩余位移，寿命到点停在射程末端。
     const pierced = run({ pierces: 3, reach: 1 });
     assert.equal(pierced.hits, 1);
     assert.equal(pierced.lingers.length, 1, '穿透时只有最后一拍（寿命到点）才定格');
-    assert.ok(pierced.lingers[0] > 90,
-        `穿透后续飞、到点才定格（≈100），实际 ${pierced.lingers[0]}`);
+    assert.ok(Math.abs(pierced.lingers[0] - 100) < 1e-9,
+        `穿透后续飞、到点才定格在 100，实际 ${pierced.lingers[0]}`);
 });
 
-test('源码守卫：两条丢弃分支都回调 linger，模型据此补 `beamHold` 事件', () => {
+test('源码守卫：统一丢弃入口回调 linger，模型据此补 `beamHold` 事件', () => {
     const code = (relative: string): string => readFileSync(relative, 'utf8')
         .replace(/\/\*[\s\S]*?\*\//g, '')
         .replace(/\/\/[^\n]*/g, '');
     const projectiles = code('assets/script/app/zcds/model/systems/ZCProjectileSystem.ts');
-    // 命中即丢 + 到点即丢，两条分支都要回调；漏一条就会出现「打中的人才有渐隐、打空的闪没」。
+    // 命中与到期统一回收，避免漏掉打空后的渐隐，也避免穿透时重复定格。
     const lingerCalls = projectiles.match(/context\.linger\?\.\(projectile\)/g) ?? [];
-    assert.equal(lingerCalls.length, 2, '命中丢弃 / 寿命到点 两条分支各一次');
+    assert.equal(lingerCalls.length, 1, '命中丢弃 / 寿命到点共用回收入口');
 
     const model = code('assets/script/app/zcds/model/ZCGameModel.ts');
     assert.match(model, /linger:\s*\(projectile\)\s*=>\s*this\.lingerBeam\(projectile\)/,

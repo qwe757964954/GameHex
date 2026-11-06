@@ -133,6 +133,14 @@ export interface ITerritoryMapArt {
     /** **已通关**格的地皮：`img_land_01` 草地块。 */
     readonly tileCleared: SpriteFrame | null;
     /**
+     * 未解锁格的锁标（`image/territory/icon_lock`，31×43 原样显示）。
+     *
+     * 画在「露出来 + 还没开」的格上（见 {@link TerritoryMapView} 的 `isHexLockCell`），
+     * 不区分这一格有没有建筑/价格 —— 锁只说明「没开」。
+     * 取不到就整支不显示 —— 不要退回别的图标（别的锁图尺寸/配色都对不上泥土台面）。
+     */
+    readonly lockIcon: SpriteFrame | null;
+    /**
      * 「已解锁但还没通关」的**格面高亮框**，按站点类型四选一；通关后一律摘掉。
      *
      *  ⚠️ 四张框都是 124×92 的六边形描边图，**贴地皮、不贴建筑** —— 它作为格子节点的子节点
@@ -277,6 +285,16 @@ type TerritoryFrameKey = 'frameBoss' | 'frameStage' | 'frameAsyncPvp' | 'frameCh
 const HEX_FRAME_NODE_NAME = 'Frame';
 
 /**
+ * 未解锁**锁标层**的节点名（运行时建、`MapLayer` 的子节点）。
+ *
+ * 为什么不挂在格子节点下：`MapLayer` 的兄弟顺序是
+ * `GridLayer → StationIconLayer → StationCaptionLayer → StationTextLayer → StationBadgeLayer → StationHitLayer`，
+ * 锁挂在格子里会被建筑图、银币数字、关卡编号整片压住 ⇒ 只剩空地上看得见锁。
+ * 这一层排在 `StationBadgeLayer` 之前（压住建筑/价格/编号）、`StationHitLayer` 之前（不挡点击）。
+ */
+export const TERRITORY_HEX_LOCK_LAYER = 'HexLockLayer';
+
+/**
  * 宝箱「生成」抖动比地块那一下**晚多少秒**（需求 2026-10-22 §3：
  * 「宝箱生成动画需要比地块生成动画稍晚展示」）。
  *
@@ -326,6 +344,14 @@ export interface ITerritoryMapRenderInput {
     readonly progress: ITerritoryProgressView;
     readonly revealedCells: readonly number[];
     readonly siteOpenableCells: readonly number[];
+    /**
+     * 「被结构性条件卡住、现在开不了」的格 —— 未解锁锁标**只认这一份**（2026-11-05 山猫配图）：
+     * 站点格 = 前置没打通（「PVP 关卡通关后解锁」那种）；随机候选格 = 四周没有已开格。
+     *
+     * 🔴 **不含「银币 / 体力不够」**：缺钱靠价格数字变红表达，整图上锁会让玩家
+     *   每花一笔银子就看见一片锁。模型侧同口径，见 `ITerritoryViewState.lockBlockedCells`。
+     */
+    readonly lockBlockedCells: readonly number[];
     /** cellId → 已绑定的关卡；固定资源点不绑定战斗关卡。 */
     readonly stageByCell: ReadonlyMap<number, TerritoryCampaignStage>;
     readonly randomResourceOpenableCells: readonly number[];
@@ -347,6 +373,22 @@ export interface ITerritoryMapRenderInput {
      * 判据走 `model/TerritoryCostShortfall`，**不要**在这里另写比较。
      */
     readonly wallet: Readonly<TerritoryWallet>;
+    /**
+     * 本章**已通关**（= 通过本章最后一个首领关卡，见 `chapterCompletion`）。
+     *
+     * 通关那一刻要演「整章云散」：`sync` 里那条 `isMapCleared` 判的是"全图都打通了"，
+     * 而新口径下通关时可能还剩几个异步据点没打 —— 只靠老判据，玩家永远等不到散雾
+     * （用户 2026-11-04「完成章节云层消散的动画没有了」）。
+     */
+    readonly chapterCleared: boolean;
+    /**
+     * 本章**刚刚**通关（一次性信号，模型发一拍就消费掉）。
+     *
+     * `chapterCleared` 是持久状态，`chapterClearPending` 是边沿：散雾只给首次通关演，
+     * 切回已通过的章节时前者仍为 `true`、后者为 `false` ⇒ 直接把雾收掉、不演
+     * （用户 2026-11-05：「通过的动画只有首次通关章节播放，切换章节后获取到通过状态也不用播放」）。
+     */
+    readonly chapterClearPending: boolean;
 }
 
 /**
@@ -448,6 +490,15 @@ export class TerritoryMapView extends Component {
      *  （见 `syncGrid` 的淘汰段）。
      */
     private readonly hexFrames = new Map<number, Sprite>();
+    /**
+     * cellId → 未解锁锁标的 Sprite（住在 `HexLockLayer` 里，见 {@link TERRITORY_HEX_LOCK_LAYER}）。
+     *
+     *  与 `hexNodes` 同一个生命周期：`paintHexes` 建/开关，`syncGrid` 淘汰时删缓存。
+     *  锁层自己不持有「格子 → 节点」的映射，位置每轮由 `layout.points` 写。
+     */
+    private readonly hexLocks = new Map<number, Sprite>();
+    /** 锁标层（懒建一次；`MapLayer` 的子节点，排在 `StationHitLayer` 之前）。 */
+    private hexLockLayer: Node | null = null;
     /** cellId → 站点视图（含「起点」以外的全部站点）。 */
     private readonly stationViews = new Map<number, TerritoryStationView>();
     /** 起始格单独一个实例：唯一、不可点、不参与池化。 */
@@ -645,6 +696,19 @@ export class TerritoryMapView extends Component {
      * 只按 `cameraBusy` 判的话会在下一帧就把锁放掉。
      */
     private preludeLocked = false;
+    /**
+     * 切章转场那把锁（`setChapterSwitchActive`）+ 转场用的地图位移。
+     *
+     * 同样不参与 `cameraBusyLocked`：转场期间没有任何"镜头时间轴"在写 `MapLayer`
+     * （云盖层不碰地图），所以只能靠这把锁把输入按住、靠 `chapterSwitchOffsetY`
+     * 演「世界往下走」。
+     */
+    private chapterSwitchActive = false;
+    private chapterSwitchOffsetY = 0;
+    /** 转场前 `MapLayer` 的 y（第一次写偏移时量，归位用它；`null` = 没有位移要还原）。 */
+    private chapterSwitchRestY: number | null = null;
+    /** 云盖层这会儿是不是**切章转场**在用（收工时别把整页过场那层一起藏了）。 */
+    private chapterSwitchCoverOwned = false;
     /**
      * 锁滚动容器的端口（页面注入）：`locked = true` 时关掉 `ScrollView`。
      *
@@ -1279,6 +1343,106 @@ export class TerritoryMapView extends Component {
         else if (this.inputLocked && !this.cameraBusyLocked) this.setInputLocked(false);
     }
 
+    // ============================================================
+    // 章节切换转场（2026-11-04：「镜头快速上移，把新章节居中」）
+    // ============================================================
+
+    /**
+     * 切章转场期间的输入锁（页面驱动）。
+     *
+     * 为什么另开一把而不是复用 {@link setPreludeLock}：那把是「首次解锁直开」的语义，
+     * 两者可能各自独立地开合；共用会让"前奏结束"顺手解掉转场的锁。
+     *
+     * 与 `update` 收尾的关系：`update` 是「没有镜头动画在播就解锁」，而转场期间
+     * `cameraBusyLocked` 可能为假（云盖层不写 `MapLayer`）⇒ 必须在收尾判定里也认这把锁，
+     * 否则玩家能在云还盖着的时候拖动地图。
+     */
+    setChapterSwitchActive(active: boolean): void {
+        this.chapterSwitchActive = active === true;
+        if (this.chapterSwitchActive) this.setInputLocked(true);
+        else if (this.inputLocked && !this.cameraBusyLocked && !this.preludeLocked) this.setInputLocked(false);
+    }
+
+    /**
+     * 把整张地图沿 y 抬 `offset`（px，正数 = 往上；0 = 归位）。
+     *
+     * 表现「镜头快速上移」：世界往下走 = 镜头上移，新章从上方落进来。
+     * 只写 `MapLayer` 的 position（与开箱 / 散场 / 推镜**同一个节点**），所以：
+     *  · 有别的镜头在演（`chestCameraActive`）时直接让位，绝不与它抢同一个位置；
+     *  · 基点在**第一次调用时**量一次，之后 `offset = 0` 就精确回到原位。
+     *
+     * 🔴 基点会随换章重测，别把它当常量：`MapLayer` 是 ScrollView 的 content，
+     *   换章时 `syncGrid` → `resetChapterSwitchOffset()` 把基点清空，紧接着
+     *   `scrollToCell` 会把 content 滚到新章的起始格。揭幕段的第一帧再量一次，
+     *   拿到的才是**新章**的真实位置 —— 不重测就会把地图拽回旧章的滚动位置。
+     */
+    setChapterSwitchOffset(offset: number): void {
+        if (!this.node?.isValid || this.chestCameraActive) return;
+        if (this.chapterSwitchRestY === null) this.chapterSwitchRestY = this.node.position.y;
+        this.chapterSwitchOffsetY = Number.isFinite(offset) ? offset : 0;
+        const position = this.node.position;
+        this.node.setPosition(position.x, this.chapterSwitchRestY + this.chapterSwitchOffsetY, position.z);
+    }
+
+    /** 转场收工 / 被打断：把 `MapLayer` 放回原位（幂等，重复调不会把地图推走）。 */
+    resetChapterSwitchOffset(): void {
+        this.chapterSwitchOffsetY = 0;
+        const rest = this.chapterSwitchRestY;
+        this.chapterSwitchRestY = null;
+        if (rest === null || !this.node?.isValid || this.chestCameraActive) return;
+        const position = this.node.position;
+        this.node.setPosition(position.x, rest, position.z);
+    }
+
+    /**
+     * 切章转场**起手**：把云盖层建出来并盖满，但**不动**地图（不缩、不淡）。
+     *
+     * 与 {@link beginBattleIntro} 的区别只有这一点：那条是"进战斗"的过场，要顺手把地块
+     * 缩小变透明；换章不需要 —— 旧图马上就要被整张换掉，缩它没有意义，而且会与
+     * `syncGrid` 的归位抢同一套 scale。
+     *
+     * @returns `false` = 云美术没加载上 / 拿不到覆盖层 ⇒ **演不了**。
+     *          调用方必须直接换章：宁可没有转场，也不要让一片空底色顶在屏幕上。
+     */
+    beginChapterSwitch(): boolean {
+        if (this.chapterSwitchCoverOwned) return true;
+        // 同一个 `MapLayer` / 同一层云只能被一条流程持有：整页过场、推镜过场在演时都不许插进来
+        // （推镜那条本来 1.2s 后就要跳战斗，换章插进去只会把两个去向撞在一起）。
+        if (this.battleIntroActive || this.battleApproach !== null) return false;
+        const host = this.ensureOverlayHost();
+        if (!host) return false;
+        if (!this.battleCover) this.battleCover = new TerritoryBattleCover(host, this.battleCloudFrames);
+        else this.battleCover.setFrames(this.battleCloudFrames);
+        const size = this.readCoverSize();
+        if (!this.battleCover.build(size.width, size.height) || this.battleCover.count <= 0) {
+            this.battleCover.clear();
+            return false;
+        }
+        this.chapterSwitchCoverOwned = true;
+        this.setChapterSwitchActive(true);
+        return true;
+    }
+
+    /** 写一帧切章转场的云（合拢与揭幕共用这一层，位置 / 淡出由页面按曲线喂进来）。 */
+    applyChapterSwitchCover(spread: number, opacity: number, release: number = 0): void {
+        if (!this.chapterSwitchCoverOwned) return;
+        this.battleCover?.apply(spread, opacity, release);
+    }
+
+    /** 推进转场云的**待机循环**（只换帧、不动位置）：等新章加载那几秒画面不至于冻住。 */
+    stepChapterSwitchCover(dt: number): void {
+        if (!this.chapterSwitchCoverOwned) return;
+        this.battleCover?.step(dt);
+    }
+
+    /** 转场收工：藏云、放回地图位置、解锁输入（幂等；加载失败 / 中途打断也走它）。 */
+    endChapterSwitch(): void {
+        this.chapterSwitchCoverOwned = false;
+        this.battleCover?.clear();
+        this.resetChapterSwitchOffset();
+        this.setChapterSwitchActive(false);
+    }
+
     /**
      * 新地块生成动画还要播多久（秒）；`0` = 没在播。
      *
@@ -1412,7 +1576,10 @@ export class TerritoryMapView extends Component {
         // 开箱播完（或被 `stop()` 收掉）⇒ 立刻放开输入。放在 `step` 之后而不是 `onDone` 里：
         // `stop()` 不走 `onDone`，锁必须由「还在不在播」这个状态来释放，才不会有漏放的路径。
         // 前奏那把锁例外：它由页面在"生成 / 推镜"之间显式开关（`setPreludeLock`）。
-        if (this.inputLocked && !cameraBusy && !this.preludeLocked) this.setInputLocked(false);
+        // 切章转场同理（`setChapterSwitchActive`）：云盖层不写 `MapLayer`，`cameraBusy` 判不出来。
+        if (this.inputLocked && !cameraBusy && !this.preludeLocked && !this.chapterSwitchActive) {
+            this.setInputLocked(false);
+        }
         // 表演结束 ⇒ 解开"摘掉地图宝箱"的标记（结算已经把进度改成已领取，格子自然不再画宝箱；
         // 若是被打断/降级导致没结算，这里也让宝箱回到格子上）。
         if (this.chestPlayingCell !== null && !this.chestView?.isPlaying) this.chestPlayingCell = null;
@@ -1656,6 +1823,8 @@ export class TerritoryMapView extends Component {
             this.cloudCells.push(...territoryCloudCells(input.map, input.layout.points));
             // 铺满层要知道「哪些格已经有真实云」—— 否则格网里的空格要么叠两朵、要么一格云都没有
             // （2026-10-26 那条"左侧空了一块背景图"就是后者）。只在换图 / 换章时重算一次。
+            // ⚠️ 2026-11-05：**不要**把 `revealed` 并进来。锁标只叠在「本来就会露出来」的格上，
+            //    空格继续留在云里（山猫：「不该多露空格」）。
             this.clouds.setFillOccupied(this.cloudCells.map((cell) => cell.cellId));
         }
         const revealed = new Set(input.revealedCells);
@@ -1666,7 +1835,28 @@ export class TerritoryMapView extends Component {
         // 再 sync —— 第四个参数是**激活探针**（见 `isCellActivated`）。
         this.clouds.setDollyFitScale(territoryCloudDollyFitScale(
             input.layout.width, input.layout.height, this.viewportWidth, this.viewportHeight));
+        // 通关即整章散雾（2026-11-04）：`sync` 里的 `isMapCleared` 只在"全图都打通了"时成立，
+        // 而新通关口径是「通过最后一个首领关卡」—— 剩下的异步据点 / 没打的普通关还盖着云，
+        // 那时也得散，否则切章后玩家看不到这段演出。
+        // 🔴 必须**排在 `sync` 之前**：`sync` 每帧都会重算"该不该有雾"，外力散掉的雾
+        //    下一帧就被它按回退复原了（见 `TerritoryCloudView.setChapterCleared`）。
+        // 🔴 也必须**每帧都写**（含 `false`）：两章布局键相同时 `syncGrid` 会早退、不重建云，
+        //    粘住的旧标记会让新一章的雾一上来就是散的。
+        // 🔴 第二个参数是"刚通关"这条**一次性边沿**：只有它才配演完整散场，切回已通过的
+        //    章节时它是 `false` ⇒ 直接收掉（2026-11-05 用户：「通过的动画只有首次通关
+        //    章节播放，切换章节后获取到通过状态也不用播放」）。
+        this.clouds.setChapterCleared(input.chapterCleared, input.chapterClearPending);
         this.clouds.sync(this.cloudCells, revealed, pockets, (cellId) => this.isCellActivated(cellId, input));
+    }
+
+    /**
+     * 整章云散**是否还在演**（页面据此把换图往后压一帧，别让 `syncGrid` 把它掐断）。
+     *
+     * 详见 `TerritoryCloudView.dismissing`：用户 2026-11-04「SVG 合并之后，完成章节云层
+     * 消散的动画没有了，重新找回」。
+     */
+    get chapterClearPlaying(): boolean {
+        return this.clouds.dismissing;
     }
 
     /**
@@ -1880,6 +2070,9 @@ export class TerritoryMapView extends Component {
         // 整页过场同理（云盖层是真的盖住整屏，不作废会一直挡着新章节）。
         this.endBattleIntro();
         this.restoreChestCamera();
+        // 网格被重建 ⇒ 上一条转场留下的位移没有意义了（新图要按自己的基准摆）。
+        // 转场本身在 `renderAll` **之后**才重新写偏移，所以这里归零不会打架。
+        this.resetChapterSwitchOffset();
         this.tapFeedback?.stop();
         this.openedRandomCells.clear();
         this.hexFlipBootstrapped = false;
@@ -1907,6 +2100,13 @@ export class TerritoryMapView extends Component {
             // 框的 Sprite 缓存与格子节点同进同出，漏删会让下一章复用错格子的引用。
             this.hexFrames.delete(cellId);
             node.destroy();
+        }
+        // 锁标住在独立的 `HexLockLayer` 里，不会跟着格子节点一起销毁 —— 单独清。
+        // ⚠️ 本轮没露出来（`seen` 里有、只是 `active = false`）的格要留着节点，别当淘汰。
+        for (const [cellId, sprite] of this.hexLocks) {
+            if (seen.has(cellId)) continue;
+            this.hexLocks.delete(cellId);
+            sprite.node.destroy();
         }
         // 共享布局把 y 小的地块排在后面，让立体侧壁被下一格顶面遮住。
         let paintIndex = 0;
@@ -2035,11 +2235,24 @@ export class TerritoryMapView extends Component {
         const revealed = new Set(input.revealedCells);
         const siteByCell = new Map(input.map.sites.map((site) => [site.cellId, site]));
         const candidateCells = new Set(input.map.randomSites?.candidateCells ?? []);
+        const lockFrame = input.art.lockIcon;
+        // 锁只挂在「结构性阻塞」的格上（前置没打通 / 随机格四周没开）。
+        // ⚠️ 不拿 `siteOpenableCells` 反推：那份含「银币/体力够不够」，会把缺钱也画成锁。
+        const lockCells = new Set<number>(input.lockBlockedCells ?? []);
         const recolors: ITerritoryHexRecolorPending[] = [];
         for (const [cellId, node] of this.hexNodes) {
             node.active = revealed.has(cellId);
             if (!node.active) continue;
+            // ⚠️ `?.`：渲染输入的 `layout` 在「只测地皮/框」的用例里是缺的（它们不关心坐标）。
+            const point = input.layout?.points?.get(cellId);
             const passed = this.isCellPassed(cellId, input, siteByCell, candidateCells);
+            // 未解锁格：格面正中一枚锁（露出来但还没开的格才有它，见 `isHexLockCell`）。
+            // ⚠️ 锁住在独立的 `HexLockLayer` 上（不是格子子节点）—— 否则会被建筑/价格/编号压住。
+            this.applyHexLock(
+                cellId,
+                !!lockFrame && !!point && this.isHexLockCell(cellId, input, passed, lockCells),
+                lockFrame,
+                point);
             const nextFrame = passed ? input.art.tileCleared : input.art.tileLocked;
             const ground = node.getComponent(Sprite);
             // 换色判据要的是「**写之前**那一帧」—— `applyTileFrame` 一写就没有可 diff 的东西了。
@@ -2047,7 +2260,6 @@ export class TerritoryMapView extends Component {
             const recoloring = this.shouldRecolor(cellId, node, ground, nextFrame);
             this.applyTileFrame(node, nextFrame);
             if (recoloring) {
-                const point = input.layout.points.get(cellId);
                 recolors.push({
                     cellId,
                     node,
@@ -2063,6 +2275,100 @@ export class TerritoryMapView extends Component {
         // 破冰：**首帧只做快照**（进页面 / 换章时整图的地皮帧都会"从 null 变成正式帧"）。
         this.recolorBootstrapped = true;
         this.syncHexSpawn(input, revealed);
+    }
+
+    /**
+     * 这一格要不要显示「未解锁」锁标（2026-11-05 蓝湖新版大地图）。
+     *
+     * 锁表达的是「**被条件卡住、打不开**」，不是「还没开」、更不是「钱不够」。判据：
+     *  ① 露出来了（`paintHexes` 循环本就只走 revealed）；
+     *  ② 没通关（`passed` ⇒ 草地，压锁会读成「又被锁回去」）；
+     *  ③ 没解锁 / 没占领；
+     *  ④ 在 `lockBlockedCells` 里 —— 前置没打通（配图那种「PVP 关卡通关后解锁」）
+     *     或随机格四周没有已开格。
+     *
+     * 🔴 **不许**拿「可开启集合取反」当判据：`siteOpenableCells` / `randomResourceOpenableCells`
+     *   含银币/体力，取反 ⇒ 缺钱就整图上锁（山猫 2026-11-05：「随机格子能点的也上锁了」）。
+     * 🔴 也不按「有没有内容」过滤：带建筑、带银币价格的被卡住格同样叠锁。
+     * ⚠️ 锁标帧缺失（美术没交 / 进包失败）⇒ 整支不显示，只留泥土台面；不要退回别的图。
+     */
+    private isHexLockCell(
+        cellId: number,
+        input: ITerritoryMapRenderInput,
+        passed: boolean,
+        lockCells: ReadonlySet<number>,
+    ): boolean {
+        if (passed) return false;
+        if (!lockCells.has(cellId)) return false;
+        // `pending` 的格是在请求里（loading），不是锁着 —— 模型那一份还没被服务端确认。
+        if ((input.pendingRandomResourceCells ?? []).includes(cellId)) return false;
+        if ((input.pendingFixedResourceCells ?? []).includes(cellId)) return false;
+        return !input.progress.isCellUnlocked(cellId) && !input.progress.isOwned(cellId);
+    }
+
+    /**
+     * 懒建锁标层：`MapLayer` 的子节点，插在 `StationHitLayer` 之前。
+     *
+     * 为什么不挂在格子节点下：`MapLayer` 的兄弟顺序是
+     * `GridLayer → StationIconLayer → StationCaptionLayer → StationTextLayer → StationBadgeLayer → StationHitLayer`，
+     * 挂在格子里会被建筑图、银币数字、关卡编号整片压住 ⇒ 只剩空地上看得见锁。
+     * 插在命中层**之前**：锁压住内容，但不抢点击（点击仍由 `StationHitLayer` 兜）。
+     *
+     * 只在第一次建的时候排一次序 —— 反复 `setSiblingIndex` 会因为基准节点自己也在挪而漂移。
+     */
+    private ensureHexLockLayer(): Node | null {
+        if (this.hexLockLayer?.isValid) return this.hexLockLayer;
+        const parent = this.gridLayer?.parent;
+        if (!parent) return null;
+        let layer = parent.getChildByName(TERRITORY_HEX_LOCK_LAYER);
+        if (!layer) {
+            layer = new Node(TERRITORY_HEX_LOCK_LAYER);
+            layer.layer = this.gridLayer.layer;
+            layer.setParent(parent);
+            layer.addComponent(UITransform);
+            // 新节点 append 在末尾（index 最大）⇒ 挪到命中层当前下标 = 插在它前面。
+            const hit = this.stationHitLayer;
+            if (hit && hit.parent === parent) layer.setSiblingIndex(hit.getSiblingIndex());
+        }
+        this.hexLockLayer = layer;
+        return layer;
+    }
+
+    /**
+     * 写一格锁标的显隐 / 位置 / 帧。幂等，可重复调用。
+     *
+     * @param point 格心（`layout.points` 里的格根坐标，不是台面中心）
+     */
+    private applyHexLock(
+        cellId: number,
+        show: boolean,
+        frame: SpriteFrame | null,
+        point: ITerritoryMapPoint | undefined,
+    ): void {
+        let sprite = this.hexLocks.get(cellId);
+        if (!show || !frame || !point) {
+            if (sprite) sprite.node.active = false;
+            return;
+        }
+        const layer = this.ensureHexLockLayer();
+        if (!layer) return;
+        if (!sprite) {
+            const node = new Node(`Lock_${cellId}`);
+            node.layer = layer.layer;
+            node.setParent(layer);
+            node.addComponent(UITransform);
+            const created = node.addComponent(Sprite);
+            // `RAW`：31×43 按帧原样显示，别写死宽高（换图不用改代码）。
+            created.trim = false;
+            created.sizeMode = Sprite.SizeMode.RAW;
+            sprite = created;
+            this.hexLocks.set(cellId, sprite);
+        }
+        if (sprite.node.parent !== layer) sprite.node.setParent(layer);
+        sprite.node.active = true;
+        // 与格面框同轴：2.5D 台面的视觉中心（格根 + `HEX_GRID_CONTENT_LIFT`），不是格根。
+        sprite.node.setPosition(point.x, point.y + HEX_GRID_CONTENT_LIFT, 0);
+        if (sprite.spriteFrame !== frame) sprite.spriteFrame = frame;
     }
 
     /**
@@ -2305,6 +2611,10 @@ export class TerritoryMapView extends Component {
     /** 站点：按 cellId diff 复用，逐个全量赋值（同一章内每秒都会走一遍）。 */
     private syncStations(input: ITerritoryMapRenderInput): void {
         const revealed = new Set(input.revealedCells);
+        // 上锁的格不显示解锁条件（银币图标 + 数量）：锁已经说明「被卡住」，
+        // 再挂一条价格会读成「交钱就能开」，与锁自相矛盾（山猫 2026-11-05
+        // 「上锁下方的银币与字就不要显示了」）。
+        const lockCells = new Set<number>(input.lockBlockedCells ?? []);
         // 首轮只做快照、不播任何「刚生成」的动效（见 `syncChestSpawnView`）。
         const firstPass = !this.stationsReady;
         const startPoint = input.layout.points.get(input.map.startCellId);
@@ -2347,6 +2657,10 @@ export class TerritoryMapView extends Component {
             // 逐个加字段容易漏；包一层只动一个点，且 site 本来就在手边。
             const base = this.stationRenderOf(site, input, chestHintCell);
             const performing = this.chestPlayingCell === site.cellId;
+            // 🔴 上锁的格把「银币图标 + 数量」整条摘掉（`isCondition = false` ⇒ 视图把
+            //    `captionSprite` 与 `captionLabel` 两个节点都关掉，见 `TerritoryStationView.render`）。
+            //    锁 + 价格并排会读成「交钱就能开」，与锁的语义矛盾（山猫 2026-11-05）。
+            const locked = lockCells.has(site.cellId);
             const content = {
                 ...base,
                 interactive: base.interactive && input.pendingRandomResourceCells.length === 0,
@@ -2357,6 +2671,7 @@ export class TerritoryMapView extends Component {
                 bottomAnchor: territoryUsesBottomAnchor(Number(site.buildingId)),
                 // 开箱表演期间摘掉地图上那只（见 `chestPlayingCell`：不摘会在收尾淡出时透出来）。
                 icon: performing ? null : base.icon,
+                isCondition: locked ? false : base.isCondition,
             };
             view.render(content);
             // 站点比格节点晚一拍建出来 ⇒ 补写一次当前的生成进度，免得先以全不透明闪一帧。
@@ -2389,6 +2704,8 @@ export class TerritoryMapView extends Component {
                 staminaCost: input.map.defaults?.staminaCost ?? 0,
             });
             const randomSilverRed = !isOpened && (randomShort.silver || (!isOpenable && !randomShort.stamina));
+            // 上锁的随机格同样摘掉「银币图标 + 数量」（与站点格同一条口径）。
+            const lockedRandom = lockCells.has(cellId);
             const content: ITerritoryStationRender = {
                 site: isOpened || isPending ? null : target,
                 // 没配 buildingId（或查不到帧）⇒ **不给建筑图**，只留绿色地块表现已开启。
@@ -2399,13 +2716,12 @@ export class TerritoryMapView extends Component {
                 // 与站点路同一条判定：`buildingId` 可能是 `undefined`（这一格没配建筑）⇒ 先挡非有限值，
                 // 否则 `undefined` 会一路传进白名单判定。
                 bottomAnchor: Number.isFinite(buildingId) && territoryUsesBottomAnchor(buildingId),
-                isCondition: !isOpened,
+                isCondition: !isOpened && !lockedRandom,
                 isLoading: isPending,
-                randomPending: isPending,
                 conditionIcon: input.art.randomSilverIcon,
                 conditionTextColor: randomSilverRed
                     ? TERRITORY_COLORS.randomConditionText : TERRITORY_COLORS.randomAvailableText,
-                caption: isOpened ? ''
+                caption: isOpened || lockedRandom ? ''
                     : isPending ? ''
                         : String(input.map.randomSites?.triggerSilver ?? 0),
                 // 随机格只展示银币图标与银币数量；开启后用绿色地块/建筑表达状态，不再叠加文字。

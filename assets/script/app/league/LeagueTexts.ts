@@ -155,7 +155,7 @@ export const LEAGUE_EDIT_REJECTED_PLACEHOLDER = '***';
  *
  * ⚠️ 目前**发不出来**：老端的违禁词校验走 `SDKMgr.checkMessage`，而 Demo3.8
  *    **没有 SDK 层**（同 `app/chat/ChatTexts.sensitiveWord` 处的说明）⇒ 编辑信息面板
- *    暂不做校验（见 `LeagueEditPage` 的类头第 4 条）。留着这条文案是为了将来补上校验时
+ *    暂不做校验。留着这条文案是为了将来补上校验时
  *    不用再回老端查字 —— 那时把 `checkMessage` 的失败分支接上即可。
  */
 export const LEAGUE_EDIT_SENSITIVE_TIP = '聊天：有违禁词';

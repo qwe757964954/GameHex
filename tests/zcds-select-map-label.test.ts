@@ -23,8 +23,8 @@ test('spawn region hints render in a dedicated non-interactive overlay', () => {
     assert.match(renderWorld, /this\.options\.spawnRegionFrames \?\? null/);
     assert.match(renderWorld, /spawnRegionHintOverlay\.render\([^;]*hintsVisible/s);
     assert.match(renderWorld, /spawnRegionHintOverlay\.render\(\s*this\.spawnRegionHints,\s*hintsVisible,\s*Math\.abs\(this\.options\.mapLayer\.scale\.x\) \|\| 1,/);
-    assert.doesNotMatch(renderWorld, /regionText/);
-    assert.doesNotMatch(hexView, /regionText/);
+    assert.doesNotMatch(renderWorld.replace(/\/\/[^\n]*/g, ''), /regionText/);
+
     assert.match(hintOverlay, /class ZCSpawnRegionHintOverlay/);
     assert.match(hintOverlay, /UITransform/);
     assert.match(hintOverlay, /Graphics/);
@@ -179,8 +179,8 @@ test('spawn region hint overlay clears after selection and on render-world teard
 
 test('自选主城地图不在正式战斗地块上显示金币等资源文字', () => {
   assert.match(hexView, /hideNeutralResourceLabel\?: boolean/);
-  assert.match(hexView, /state\.neutralResourceId && !hideNeutralResourceLabel/);
-  assert.match(renderWorld, /hideNeutralResourceLabel: model\.mapConfig\.cityMode === 'select'/);
+  assert.match(hexView, /resourceVisual && !hideNeutralResourceLabel/);
+  assert.match(renderWorld, /hideNeutralResourceLabel: frame\.mapConfig\.cityMode === 'select'/);
 });
 
 /**

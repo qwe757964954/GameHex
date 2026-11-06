@@ -12,6 +12,7 @@ export const TERRITORY_TEXTS = {
     loadingResourceMissing: '领地资源未就绪',
     loadingChapter: '领地数据加载中，请稍候',
     noLevelTarget: '暂无可定位的关卡',
+    noIdleRewards: '暂无可征收奖励',
     loadFailed: '领地数据加载失败\n请检查关卡与怪物卡牌配置',
 
     // 站点详情 - 状态
@@ -43,8 +44,13 @@ export const TERRITORY_TEXTS = {
     defeat: '挑战失败，站点未占领',
     battleIncomplete: '上次挑战未完成',
     newlyOwned: (count: number) => `已占领 ${count} 个新地块`,
-    requireChapterComplete: (occupied: number, total: number) =>
-        `请先占领本章全部站点（${occupied}/${total}）`,
+    /**
+     * 往后切章被拦的提示（2026-11-04 用户口径：**通过本章最后一个首领关卡**就算通关）。
+     *
+     * 不再报「已占领 x/y」：占领率与通关条件已经不是一回事（异步据点不参与判定），
+     * 报占领进度会让人以为"再占几格就能进"。
+     */
+    requireChapterComplete: () => '请先通关本章最后一个首领关卡',
 
     /**
      * 首次解锁关卡 ⇒ 自动进战斗时的提示条（需求 2026-11-02）。
@@ -218,6 +224,17 @@ export const TERRITORY_ASYNC_SCOUT_STAMINA = 10;
 /** 存档 storage key 前缀。 */
 export const TERRITORY_STORAGE_PREFIX = 'territory.chapter.v1.';
 export const TERRITORY_LAST_CHAPTER_KEY = 'territory.lastChapter.v1';
+/**
+ * 「已通关的领地关卡」storage key（**账号级，不带 chapterId**）。
+ *
+ * 为什么不能按章节分：`levelInfo.levelChapter` 决定关卡归属哪一章 —— 20001 属于第 1 章，
+ * 而第 2 章（10011~20007）里根本没有它。若通关状态只活在「当前章的格子」里，
+ * 玩家一切到第 2 章，`stageByCell` 就查不到 20001 ⇒ 依赖它的功能（战斗宝箱入口）
+ * 会在「已经解锁过」之后突然消失（2026-11-04 实机）。
+ *
+ * 所以「通关」在这里按**一次性成就**落盘：过了就永远算过，与当前在哪个章节无关。
+ */
+export const TERRITORY_PASSED_LEVELS_KEY = 'territory.passedLevels.v1';
 
 // ============================================================
 // 「关卡界面」/「关卡提示」（蓝湖，2026-10-27）

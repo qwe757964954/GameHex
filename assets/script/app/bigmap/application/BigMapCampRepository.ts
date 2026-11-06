@@ -75,11 +75,12 @@ export class BigMapCampRepository {
      * 返回 `true` = 这次真的拿到了（哪怕是空列表）；`false` = 超时/断线/坏包/已销毁 ——
      * 调用方据此决定「维持原样」还是「显示失败」，**不要**用 `false` 去清空已有列表。
      */
-    refreshRoles(campId: number): Promise<boolean> {
+    refreshRoles(campId: number, force = false): Promise<boolean> {
         if (this.isDisposed || !isBigMapCampId(campId)) return Promise.resolve(false);
         const key = `roles:${campId}`;
         const pending = this.pending.get(key);
-        if (pending) return pending;
+        if (force) this.roleRevisions.set(campId, ++this.revision);
+        if (pending) return force ? pending.then(() => this.refreshRoles(campId)) : pending;
         const revision = ++this.revision;
         const request = this.loadRoles(campId, revision).finally(() => this.pending.delete(key));
         this.pending.set(key, request);
@@ -177,7 +178,14 @@ export class BigMapCampRepository {
         return this.refresh(campIds, false);
     }
 
-    refreshDetail(campIds: readonly number[]): Promise<boolean> {
+    refreshDetail(campIds: readonly number[], force = false): Promise<boolean> {
+        if (force) {
+            const revision = ++this.revision;
+            for (const id of campIds) this.appliedRevisions.set(id, revision);
+            const key = `detail:${[...new Set(campIds.filter(isBigMapCampId))].sort((a, b) => a - b).join(',')}`;
+            const pending = this.pending.get(key);
+            if (pending) return pending.then(() => this.refreshDetail(campIds));
+        }
         return this.refresh(campIds, true);
     }
 
@@ -198,14 +206,17 @@ export class BigMapCampRepository {
     private refresh(campIds: readonly number[], isDetail: boolean): Promise<boolean> {
         if (this.isDisposed) return Promise.resolve(false);
         const ids = [...new Set(campIds.filter(isBigMapCampId))].sort((a, b) => a - b);
-        const key = `${isDetail ? 'detail' : 'simple'}:${ids.join(',')}`;
+        if (ids.length === 0) return Promise.resolve(false);
+        // 🔴 只发「没缓存或已过期」的城：视野集合一变（快速滑动/缩放）时，旧城不再跟着重发。
+        // 否则 `campIds` 每变一次就把整批城重查一遍 —— 日志里表现为同一批 campId 反复刷屏。
+        const due = isDetail ? ids : ids.filter((id) => this.now() - (this.updatedAt.get(id) ?? -Infinity)
+            >= BIGMAP_CAMP_REFRESH_SECONDS * 1000);
+        if (due.length === 0) return Promise.resolve(false);
+        const key = `${isDetail ? 'detail' : 'simple'}:${due.join(',')}`;
         const pending = this.pending.get(key);
         if (pending) return pending;
-        if (ids.length === 0) return Promise.resolve(false);
-        if (!isDetail && ids.every((id) => this.now() - (this.updatedAt.get(id) ?? -Infinity)
-            < BIGMAP_CAMP_REFRESH_SECONDS * 1000)) return Promise.resolve(false);
         const revision = ++this.revision;
-        const request = this.load(ids, isDetail, revision).finally(() => this.pending.delete(key));
+        const request = this.load(due, isDetail, revision).finally(() => this.pending.delete(key));
         this.pending.set(key, request);
         return request;
     }

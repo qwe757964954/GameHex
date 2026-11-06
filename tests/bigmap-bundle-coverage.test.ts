@@ -23,7 +23,9 @@ function toBundlePath(name: string): string {
 test('bigmap 分包 image/ 下的资源条目全部登记到 BIGMAP_BUNDLE', () => {
     const entries = readdirSync(IMAGE_ROOT)
         .filter((name) => !name.endsWith('.meta') && !NON_RESOURCE.has(name));
-    assert.ok(entries.length >= 3, `没扫到资源条目，目录是不是又搬了：${IMAGE_ROOT}`);
+    // `bigMapBG`（2048×2048 大背景）已刻意移到 bundle 顶层、不进 `image/` 图集子树，
+    // 所以这里只剩 concept / base_background 两条，由 `bundleForPath('bigMapBG')` 单独路由。
+    assert.ok(entries.length >= 2, `没扫到资源条目，目录是不是又搬了：${IMAGE_ROOT}`);
     for (const name of entries) {
         const path = toBundlePath(name);
         assert.equal(bundleForPath(path), BIGMAP_BUNDLE, `${path} 未登记到 BundleCatalog.BUNDLE_DIRECTORIES`);

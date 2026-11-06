@@ -117,7 +117,10 @@ export function getCachedFormations(): readonly ZCFormation[] | null {
  */
 export function applyFormation(formation: ZCFormation): void {
     const current = cachedFormations ?? [];
-    const replaced = current.map((entry) => (entry.formationId === formation.formationId ? formation : entry));
+    const replaced = current.map((entry) => {
+        if (entry.formationId === formation.formationId) return formation;
+        return formation.selected ? { ...entry, selected: false } : entry;
+    });
     if (!current.some((entry) => entry.formationId === formation.formationId)) replaced.push(formation);
     cachedFormations = replaced.slice().sort((a, b) => a.formationId - b.formationId);
     // 刚保存过的缓存算「新鲜」，否则 `maxAgeMs` 会把玩家自己刚改的结果挡掉。

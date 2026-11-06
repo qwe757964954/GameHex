@@ -53,7 +53,9 @@ function decodeRoundTrip(payload: object): unknown {
 
 test('★协议：SlgGameCameRoleInfo 字段号/类型与 proto 一致（pos 是 r880 补的 6 号）', () => {
     const role = root.lookupType(`${CMD}.SlgGameCameRoleInfo`);
-    assert.deepEqual(Object.keys(role.fields), ['roleId', 'serverId', 'roleName', 'img', 'defenseHp', 'pos']);
+    assert.deepEqual(Object.keys(role.fields), ['roleId', 'serverId', 'roleName', 'img', 'defenseHp', 'pos', 'buildLevel']);
+    assert.equal(role.fields.buildLevel.id, 7);
+    assert.equal(role.fields.buildLevel.type, 'uint32');
     assert.equal(role.fields.roleId.id, 1);
     assert.equal(role.fields.roleId.type, 'uint64');
     assert.equal(role.fields.serverId.id, 2);
@@ -107,8 +109,8 @@ test('归一化：三个 uint64 走字符串，pos=0 保留，按 pos 升序去�
         ],
     }, 205);
     assert.deepEqual(infos, [
-        { roleId: '1', serverId: '3001', roleName: '甲', avatarId: '2001', defenseHp: 10, pos: 0 },
-        { roleId: '3', serverId: '3003', roleName: '丙', avatarId: '2003', defenseHp: 30, pos: 9 },
+        { roleId: '1', serverId: '3001', roleName: '甲', avatarId: '2001', defenseHp: 10, pos: 0, buildLevel: 0 },
+        { roleId: '3', serverId: '3003', roleName: '丙', avatarId: '2003', defenseHp: 30, pos: 9, buildLevel: 0 },
     ]);
 });
 
@@ -144,11 +146,11 @@ test('★归一化坏包：campId 与请求不符 / 结构不对一律 null（�
 test('归一化接受真解码结果（Long → 十进制字符串，不丢精度）', () => {
     const decoded = decodeRoundTrip({
         campId: 205,
-        infos: [{ roleId: '9007199254740993', serverId: '3002', roleName: '山猫', img: '9007199254740995', defenseHp: 7, pos: 12 }],
+        infos: [{ roleId: '9007199254740993', serverId: '3002', roleName: '山猫', img: '9007199254740995', defenseHp: 7, pos: 12, buildLevel: 15 }],
     });
     const infos = normalizeBigMapCampRoleInfos(decoded, 205);
     assert.deepEqual(infos, [{
-        roleId: '9007199254740993', serverId: '3002', roleName: '山猫', avatarId: '9007199254740995', defenseHp: 7, pos: 12,
+        roleId: '9007199254740993', serverId: '3002', roleName: '山猫', avatarId: '9007199254740995', defenseHp: 7, pos: 12, buildLevel: 15,
     }]);
 });
 

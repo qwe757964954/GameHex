@@ -21,7 +21,8 @@ const MAP_VIEW_PATH = 'assets/script/app/territory/view/TerritoryMapView.ts';
 const STATION_VIEW_PATH = 'assets/script/app/territory/view/TerritoryStationView.ts';
 const MAIN_PAGE_PATH = 'assets/script/app/main/MainPage.ts';
 
-const read = (path: string): string => readFileSync(path, 'utf8');
+// 行尾归一化：SVN 合并后这几个文件是 CRLF，而下面的接线断言都按 `\n` 切块 / 匹配多行。
+const read = (path: string): string => readFileSync(path, 'utf8').replace(/\r\n/g, '\n');
 
 // ============================================================
 // 一、视图：章节建筑 / 气泡点了发「章节入口」事件
@@ -80,13 +81,16 @@ test('★★★`interactive` 同时管住建筑与气泡两处点击', () => {
     assert.match(source, /bubble\.button\.interactable = visible && content\.interactive;/);
 });
 
-test('★★地图：起始格渲染 `chapterEntry: true` + `interactive: true`，且不再禁止点击', () => {
+test('★★地图：起始格渲染 `chapterEntry: true` + 可交互（只在有待领随机格时让位）', () => {
     const source = read(MAP_VIEW_PATH);
     const start = source.indexOf("levelBubble: TERRITORY_START_BUBBLE_TEXT,");
     assert.ok(start > 0, '没找到起始格渲染');
     const block = source.slice(source.lastIndexOf('view.render({', start), start);
     assert.match(block, /chapterEntry: true,/, '起始格没标成章节入口 ⇒ 点了没反应');
-    assert.match(block, /interactive: true,/, '未放开交互 ⇒ 建筑与气泡都点不动');
+    // 2026-11-04：`interactive` 不再是写死的 `true`，而是「没有待领取的随机资源格」。
+    // 随机格待领期间铺着全屏遮罩，此时还能点开章节弹窗就会叠两层；闲时必须可点。
+    assert.match(block, /interactive: input\.pendingRandomResourceCells\.length === 0,/,
+        '未放开交互 ⇒ 建筑与气泡都点不动（闲时必须是可点的）');
     assert.ok(!/interactive: false,\s*$/m.test(block), '起始格不许再写 `interactive: false`');
     // `ensureStartView` 原来传 `false`（不可点）⇒ 现在必须走默认值。
     const ensure = source.slice(source.indexOf('private ensureStartView()'), source.indexOf('private getStationLayers()'));

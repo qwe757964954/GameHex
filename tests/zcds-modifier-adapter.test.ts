@@ -40,6 +40,17 @@ function actualCatalogs() {
     });
 }
 
+/** 只替换 pvpUnitGrowth 的 catalogs，用来单独验证成长 rate 与 flat 的先后顺序。 */
+function catalogsWithGrowth(rows: Array<Record<string, unknown>>) {
+    return parseZCModifierCatalogs(readRows('skillAttrModifier'), readRows('generalStar'), {
+        pvpAttrMap: readRows('pvpAttrMap'),
+        pvpModifierOverride: readRows('pvpModifierOverride'),
+        pvpUnitGrowth: rows,
+        pvpSkillBinding: readRows('pvpSkillBinding'),
+        pvpStatus: readRows('pvpStatus'),
+    });
+}
+
 test('68001 一星旧攻击 80 经 PVP 覆盖变为 8，并保留技能参数', () => {
     const loadout = compileZCGeneralStarLoadout({ generalId: 68001, star: 1 }, [unit], actualCatalogs());
     assert.equal(loadout.rawAttributes.攻击力, 80);
@@ -50,17 +61,33 @@ test('68001 一星旧攻击 80 经 PVP 覆盖变为 8，并保留技能参数', 
     assert.equal(resolveZCUnitDefinition(unit, [loadout]).attack, 20);
 });
 
-test('等级、升星合并后按 flat → rate 计算，并产生 UI 属性明细', () => {
+test('等级、升星合并后按 flat 累加，并产生 UI 属性明细', () => {
     const loadouts = compileZCCombatBuild({
         unitId: '68001', level: 4, generalStar: { generalId: 68001, star: 1 },
     }, [unit], actualCatalogs());
     const resolved = resolveZCUnitDefinition(unit, loadouts);
-    assert.equal(resolved.attack, 23);
-    assert.equal(resolved.maxHp, 69);
+    // 成长表现在按 cardLevelUp.attrList 的绝对差配置：Lv4 attackFlat=5 / maxHpFlat=18，升星再 +8 攻击。
+    assert.equal(resolved.attack, 25);
+    assert.equal(resolved.maxHp, 78);
     const attack = getZCUnitStatBreakdown(unit, loadouts).find((item) => item.statId === 'attack');
     assert.deepEqual({ base: attack?.base, flat: attack?.flat, rate: attack?.rate, effective: attack?.effective }, {
-        base: 12, flat: 8, rate: 0.15, effective: 23,
+        base: 12, flat: 13, rate: 0, effective: 25,
     });
+});
+
+test('成长 rate 与 flat 并存时先加 flat 再乘 rate', () => {
+    const catalogs = catalogsWithGrowth([{
+        unitId: '68001', level: 4, attackFlat: 5, attackRate: 0.15,
+        maxHpFlat: 18, maxHpRate: 0, moveSpeedRate: 0, attackRangeFlat: 0, enabled: 1,
+    }]);
+    const loadouts = compileZCCombatBuild({
+        unitId: '68001', level: 4, generalStar: { generalId: 68001, star: 1 },
+    }, [unit], catalogs);
+    const attack = getZCUnitStatBreakdown(unit, loadouts).find((item) => item.statId === 'attack');
+    // (12 基础 + 5 成长 + 8 升星) × 1.15 = 28.75：rate 只作用于 flat 累加后的结果。
+    assert.equal(attack?.flat, 13);
+    assert.equal(attack?.rate, 0.15);
+    assert.ok(Math.abs((attack?.effective ?? 0) - 28.75) < 1e-9, `effective=${attack?.effective}`);
 });
 
 test('技能参数进入显式行为注册表，计数技能不执行旧脚本', () => {

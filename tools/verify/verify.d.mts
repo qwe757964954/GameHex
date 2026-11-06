@@ -35,3 +35,30 @@ export declare function matchRoute(row: IVerifyRouteRow, file: string): boolean;
 export declare function selectTests(files: readonly string[]): IVerifySelection;
 export declare function printRouteHits(selection: IVerifySelection, files: readonly string[]): number;
 export declare function runCli(argv: readonly string[]): number;
+export declare function changedFiles(): string[];
+export declare function writeGateReport(
+    files: readonly string[],
+    outputs: readonly { name: string; label: string; code: number; out: string }[],
+    bad: number,
+    outDir?: string | null,
+): string;
+export declare function runGate(files: readonly string[]): number;
+
+export interface IDefinitionIssue {
+    file: string;
+    target: string;
+    name: string;
+    reason: string;
+}
+
+export interface IDefinitionResult {
+    checked: number;
+    skipped: number;
+    issues: IDefinitionIssue[];
+}
+
+export declare function exportedNamesOf(source: string): Set<string> | null;
+export declare function checkDefinitions(
+    changedFiles: readonly string[],
+    opts?: { read?: (file: string) => string; headOf?: (target: string) => string | null },
+): IDefinitionResult;

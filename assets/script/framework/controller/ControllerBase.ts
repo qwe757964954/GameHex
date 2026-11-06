@@ -45,10 +45,12 @@ export abstract class ControllerBase {
     protected listen(event: string, handler: EventBusHandler): void {
         if (this.isDisposed) return;
         EventMgr.instance.on(event, handler, this);
-        this.own(() => EventMgr.instance.off(event, handler, this));
     }
 
-    protected releaseInputs(): void { this.lifetime.dispose(); }
+    protected releaseInputs(): void {
+        EventMgr.instance.offTarget(this);
+        this.lifetime.dispose();
+    }
 
     dispose(): void {
         this.releaseInputs();

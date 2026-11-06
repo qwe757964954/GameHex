@@ -1,3 +1,4 @@
+import { cardArtConfig } from './helpers/card-art-config';
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
@@ -18,7 +19,7 @@ function deferred<T>() {
     return { promise, resolve };
 }
 function lineupData(known: boolean): CardLineupData {
-    return { deck: [], catalog: [], heroLevels: new Map(), heroLevelCaps: new Map(), heroListKnown: known,
+    return { art: cardArtConfig, deck: [], catalog: [], heroLevels: new Map(), heroLevelCaps: new Map(), heroListKnown: known,
         formationsKnown: known, bonuses: { activeBonds: [], unitHpMultiplier: 1, unitAttackMultiplier: 1,
             moveSpeedMultiplier: 1, towerAttackMultiplier: 1, incomeBonus: 0, spawnIntervalMultiplier: 1 } };
 }
@@ -98,7 +99,7 @@ test('hero snapshot publishes before authority and only latest refresh survives;
         owner,
         autoLoadDecks: true,
         fallbackLevel: 3,
-        repository: { loadLineupSnapshot: () => snapshot, loadLineup: () => { const gate = deferred<CardLineupData>(); requests.push(gate); return gate.promise; } },
+        repository: { loadArtConfig: async () => cardArtConfig, loadLineupSnapshot: () => snapshot, loadLineup: () => { const gate = deferred<CardLineupData>(); requests.push(gate); return gate.promise; } },
         failed: assert.fail,
         popups: {
             openEditor() {},
@@ -119,6 +120,7 @@ test('hero upgrade immediately updates reopening level while authoritative refre
         autoLoadDecks: true,
         fallbackLevel: 3,
         repository: {
+            loadArtConfig: async () => cardArtConfig,
             loadLineupSnapshot: () => ({ ...lineupData(true), heroLevels: new Map([['101', 3]]) }),
             loadLineup: () => new Promise(() => {}),
         },
@@ -133,4 +135,35 @@ test('hero upgrade immediately updates reopening level while authoritative refre
     EventMgr.instance.emit(CardLineupUiEvent.Intent, { owner, kind: 'upgrade', card: { id: '101' } });
     assert.deepEqual(levels, [4]);
     controller.dispose();
+});
+
+test('冷配置就绪后先发布完整快照；迟到快照不能覆盖权威数据或已关闭页面', async () => {
+    for (const order of ['snapshot', 'authority', 'dispose']) {
+        const art = deferred<typeof cardArtConfig>(), live = deferred<CardLineupData>();
+        const snapshot = lineupData(false), authority = lineupData(true);
+        const owner = {}, observer = {}, seen: CardLineupData[] = [];
+        let ready = false;
+        EventMgr.instance.on(CardLineupUiEvent.Render, event => { if (event.owner === owner) seen.push(event.data); }, observer);
+        const controller = new CardLineupController(createControllerContext(), {
+            owner, autoLoadDecks: true, fallbackLevel: 1,
+            repository: {
+                loadArtConfig: () => art.promise.then(value => { ready = true; return value; }),
+                loadLineupSnapshot: () => ready ? snapshot : null,
+                loadLineup: () => live.promise,
+            },
+            failed: assert.fail, popups: { openEditor() {}, openUpgrade() {} },
+        });
+        try {
+            controller.start();
+            assert.equal(seen.length, 0);
+            if (order === 'authority') { live.resolve(authority); await tick(); }
+            if (order === 'dispose') controller.dispose();
+            art.resolve(cardArtConfig); await tick();
+            if (order === 'snapshot') {
+                assert.deepEqual(seen, [snapshot]);
+                live.resolve(authority); await tick();
+                assert.deepEqual(seen, [snapshot, authority]);
+            } else assert.deepEqual(seen, order === 'authority' ? [authority] : []);
+        } finally { controller.dispose(); EventMgr.instance.offTarget(observer); }
+    }
 });

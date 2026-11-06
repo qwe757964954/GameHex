@@ -82,6 +82,8 @@ export interface ZCPveDefenceWave {
 
 export interface ZCPveDefenceConfig {
     waves: readonly ZCPveDefenceWave[];
+    /** 波次卡资料随本局冻结，仅供战斗查表，不参与抽卡与羁绊。 */
+    cards?: readonly ZCDeckCard[];
 }
 
 /** 服务端下发的阵营倍率；缺失字段不修改对应属性。 */

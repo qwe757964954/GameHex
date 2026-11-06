@@ -193,7 +193,7 @@ test('轮廓顶点表与地块顶面同源（写成 FACE 常量的算式，不�
  */
 test('地块按屏幕 y 做画家排序（立体地块的侧壁层次不能靠 id 序碰运气）', () => {
     const source = readFileSync('assets/script/app/zcds/view/ZCGameRenderWorld.ts', 'utf8');
-    const start = source.indexOf('initialize(source?:');
+    const start = source.indexOf('initialize(mapConfig: ZCMatchMap)');
     assert.ok(start > 0, '没读到 initialize');
     const body = source.slice(start, source.indexOf('\n    }\n', start));
     assert.match(body, /layout\.paintOrder\.flatMap\(/, '对局地块应消费共享布局的绘制顺序');

@@ -89,6 +89,9 @@ export class ConnectedNetState extends BaseNetState {
 
         let clientIndex = serverCmdData.clientIndex
         let networkRequest = this.requestMap.get(clientIndex);
+        // 回包耗时：`sentAt` 是请求真正发出的墙钟时刻，这里取的是 `requestMap.delete` 之前的
+        // 最后一次机会（下面那个「有请求」的分支会把它从 map 里摘掉）。
+        const costText = this.costTextOf(networkRequest);
 
         let msgEventProxy = NetSocket.msgEventProxy;
 
@@ -152,7 +155,7 @@ export class ConnectedNetState extends BaseNetState {
                     }
                 }
                 if (rspMsgName != NetSocket.heartbeatMsgRspName)
-                    this.log("recived", rspMsgName, clientIndex, rspData)
+                    this.log("recived", rspMsgName, clientIndex, rspData, costText)
                     
                 msgEventProxy.execute(rspMsgName, rspData, this.socket.socketName)
                 //msgEventProxy.dispatchEvent("receive", rspMsgName, this.socket.socketName)
@@ -189,7 +192,7 @@ export class ConnectedNetState extends BaseNetState {
             for (let i = 0, len = messageIds.length; i < len; i++) {
                 let rspMsgName = protoMgr.getRspMsg(messageIds[i])
                 if (rspMsgName) {
-                    let receiveTip = "receive error: " + rspMsgName + " " + clientIndex;
+                    let receiveTip = "receive error: " + rspMsgName + " " + clientIndex + " " + costText;
                     this.warn(receiveTip)
                 }
             }
@@ -202,6 +205,18 @@ export class ConnectedNetState extends BaseNetState {
         return clientIndex
     }
 
+    /**
+     * 回包耗时文案（毫秒）：`sentAt` → 现在。
+     *
+     * 广播 / 缓存推送这类**没有对应请求**的包标 `push`，不拿累计时钟硬凑一个数字出来
+     * （凑出来的数字看着像耗时，实际毫无意义，排查时会把人带偏）。
+     */
+    private costTextOf(request: NetworkRequest<any, any> | null): string {
+        if (request == null || !request.sentAt) return "push";
+        const cost = Date.now() - request.sentAt;
+        return "cost " + Math.max(0, Math.round(cost)) + "ms";
+    }
+
     addNetworkRequest(request: NetworkRequest<any, any>, isSendNow: boolean = false) {
         let t = this;
         if (request.canSend && !request.canSend()) {
@@ -212,6 +227,7 @@ export class ConnectedNetState extends BaseNetState {
             t.requestMap.set(request.index, request);
             t.requestMapState.set(request, isSendNow)
             request.timeStamp = t.timeStamp;
+            request.sentAt = Date.now();
             this._tmTryReSend.set(request, 0)
             // return t.socket.sendData(request.data);
             let isOK = t.socket.sendRequest(request);
@@ -238,6 +254,8 @@ export class ConnectedNetState extends BaseNetState {
             return;
         }
         request.timeStamp = this.timeStamp
+        // 重发后重新计时：回包耗时算的是「最后一次发出 → 回包」，不是首发那次。
+        request.sentAt = Date.now();
         let times: number = this._tmTryReSend.get(request) + 1
         this._tmTryReSend.set(request, times)
         this.socket.sendRequest(request)

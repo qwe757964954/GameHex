@@ -298,13 +298,15 @@ const settlementSource = readFileSync('assets/script/app/zcds/application/ZCBatt
 const pageSource = readFileSync('assets/script/app/zcds/ui/ZCSettlementPage.ts', 'utf8');
 
 test('C1 组合层在运行期启动前订阅结果广播', () => {
-    assert.ok(compositionSource.indexOf('BattleResultService.ensureListening()') < compositionSource.indexOf('runtime.start(entry, resources)'));
+    const listening = compositionSource.indexOf('BattleResultService.ensureListening()');
+    const runtime = compositionSource.indexOf('new ZCBattleRuntimeController(');
+    assert.ok(listening >= 0 && runtime > listening);
     assert.doesNotMatch(gameSource, /BattleResultService|finishBattle/);
 });
 
 test('C2 结算等待和奖励解析位于控制器与组合层，匹配局不等待', () => {
     assert.match(runtimeSource, /entry\.slgBattleType \?\? \(entry\.pveContext \? ZC_BATTLE_TYPE_CHAPTER : null\)/);
-    assert.match(settlementSource, /request\.battleType === null \? null : this\.ports\.waitResult/);
+    assert.match(settlementSource, /request\.battleType === null \? null : this\.services\.results\.waitResult/);
     assert.match(compositionSource, /resolveCmdGoodsFrames\(result\.goods, resources\)/);
     assert.match(compositionSource, /resId: reward\.resId, amount: reward\.number/);
     assert.ok(settlementSource.indexOf('await pending') < settlementSource.indexOf('await this.open()'));
@@ -314,7 +316,9 @@ test('C3 换算链真复用：结算页与奖励弹窗共用一份 RewardFrames'
     const frames = readFileSync('assets/script/app/showReward/RewardFrames.ts', 'utf8');
     assert.match(frames, /export async function resolveCmdGoodsFrames/);
     assert.match(frames, /rewardEntryOf\(one, tables\.items, tables\.resources\)/);
-    assert.match(frames, /loadQualityFrameArt\(qualityFrameSuffixOf\(entry\.quality\)\)/);
+    assert.match(frames, /const suffix = qualityFrameSuffixOf\(entry\.quality\)/);
+    assert.match(frames, /loadQualityFrameArt\(suffix\)/);
+    assert.match(frames, /loadControllerRewardFrame\(resources, idFramePathOf\(qualityFrameArtPath\(suffix\)\)\)/);
     // 「获得奖励」弹窗改走共用件：不许再自己 getRefAllAsync('item')
     const rewardPage = readFileSync('assets/script/app/showReward/ShowRewardPage.ts', 'utf8');
     assert.doesNotMatch(rewardPage, /getRefAllAsync\('item'\)/, '两处各自拉表 = 两份换算迟早漂移');
@@ -332,7 +336,8 @@ test('C4 结算页不许自己再拉奖励表 / 解析 CmdGoods（数据由 ZCGa
 });
 
 test('C5 先等待再完成上报，章节局与撤退均不跳过上报', () => {
-    assert.ok(settlementSource.indexOf('this.ports.waitResult(') < settlementSource.indexOf('this.ports.finish('));
+    const wait = settlementSource.indexOf('this.services.results.waitResult(');
+    assert.ok(wait >= 0 && wait < settlementSource.indexOf('this.services.results.finish('));
     assert.match(compositionSource, /request\.localVictory \? BATTLE_RESULT_WIN : BATTLE_RESULT_LOSE/);
     assert.doesNotMatch(settlementSource, /if \(.*pve.*\).*return/);
 });
@@ -395,9 +400,10 @@ test('据点结算真实字节未携带 optional warScore 时，不把 protobuf 
 });
 
 test('C6 仅服务端结果驱动领地回写，退出后不消费迟到结果', () => {
-    assert.match(settlementSource, /if \(result\) this\.ports\.recordPveResult\(result\.code === 1\)/);
-    assert.ok(settlementSource.indexOf('if (this.isDisposed) return;') < settlementSource.indexOf('this.ports.recordPveResult('));
-    assert.match(compositionSource, /entry\.pveContext\) EventMgr\.instance\.emit/);
+    assert.match(settlementSource, /if \(result && this\.host\.hasPveContext\)/);
+    assert.match(settlementSource, /emit\(ZC_BATTLE_EVENTS\.PVE_RESULT, \{ owner: this\.host\.owner, victory: result\.code === 1 \}\)/);
+    const guard = settlementSource.indexOf('if (this.isDisposed) return;');
+    assert.ok(guard >= 0 && guard < settlementSource.indexOf('emit(ZC_BATTLE_EVENTS.PVE_RESULT'));
 });
 
 test('结算等待按真实 caller 取消，旧局取消不解除新局等待', async () => {

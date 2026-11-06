@@ -2180,17 +2180,18 @@ test('⚠️ `HangEntryButton` 源码口径（它 import `cc` ⇒ 只能读文�
         .replace(/@property\(\{[\s\S]*?\}\)/g, '');
     assert.ok(code.includes('applySnapshot'), '剥完注释应当还剩下代码文本（不然下面的断言全是假绿）');
 
-    // ---- ① 可见性：`sweetLevel !== null`（老端 `有无扫荡` controller）----
-    assert.match(code, /const visible = snapshot\.sweetLevel !== null;/);
+    // 征收入口不再依赖旧主线通关；计时消费领地快照。
+    assert.doesNotMatch(code, /sweetLevel|hangRepository|HangPage/);
     // 🔴 无条件写（规则 82）：prefab 烘的是 `true`（见上一条），写成「只在翻转时写」就会
     //    因为「新值 === 缓存初值」短路 ⇒ 新号永久停在可见态。
-    assert.match(code, /this\.node\.active = visible;/);
+    assert.match(code, /this\.node\.active = true;/);
     assert.equal(/this\._visible\b/.test(code), false, '不许引入「上一次的可见性」缓存字段 —— 那就是「只在翻转时写」');
 
     // ---- ② 点击：挂在金币车容器的 cc.Button 上，覆盖图标和时间 ----
     assert.match(code, /this\.node\.getComponent\(Button\)/);
     assert.match(code, /button\.node\.on\(Button\.EventType\.CLICK, this\.onClick, this\);/);
-    assert.match(code, /void HangPage\.open\(\);/);
+    assert.match(code, /EventMgr\.instance\.emit\(TerritoryUiEvent\.Intent, \{ intent: \{ kind: 'claimIdleRewards' \} \}\);/);
+    assert.match(code, /EventMgr\.instance\.on\(TerritoryViewEvent\.Render, this\.applySnapshot, this\);/);
 
     // ---- ③ 规则 71：`onDestroy` 里**禁** `off(`（会抛 TypeError 并中断销毁链）----
     const destroy = /protected onDestroy\(\): void \{([\s\S]*?)\n {4}\}/.exec(code);
@@ -2198,6 +2199,7 @@ test('⚠️ `HangEntryButton` 源码口径（它 import `cc` ⇒ 只能读文�
     assert.equal(/\.off\(/.test(destroy![1]!), false, '规则 71：`onDestroy` 里 off 会抛 TypeError 并中断销毁链');
     assert.match(destroy![1]!, /this\.unscheduleAllCallbacks\(\);/);
     assert.match(destroy![1]!, /this\._stopShake\(\);/);
+    assert.match(destroy![1]!, /EventMgr\.instance\.offTarget\(this\);/);
 
     // ---- ④ 摇摆：FGUI `t0` = `0 → +8° → −8° → 0`，每段 12 帧 @60fps = 0.2s ----
     assert.match(code, /export const HJ_ENTRY_SHAKE_SEGMENT_SECONDS = 0\.2;/);
@@ -2212,12 +2214,12 @@ test('⚠️ `HangEntryButton` 源码口径（它 import `cc` ⇒ 只能读文�
     assert.match(stop![1]!, /target\.setRotationFromEuler\(0, 0, 0\);/);
 
     // ---- ⑤ 计时：起点 `lastIdleRewardTimeMs || now`、每秒一跳、到顶停表 ----
-    assert.match(code, /const start = snapshot\.role \? snapshot\.role\.lastIdleRewardTimeMs : 0;/);
-    assert.match(code, /this\._startMs = start > 0 \? start : Date\.now\(\);/);
+    assert.match(code, /this\._startMs = state\.idleRewardStartedAt;/);
+    assert.match(code, /state\.idleRewardMaxHours \* TERRITORY_IDLE_REWARD_INTERVAL_MS/);
     assert.match(code, /this\.schedule\(this\._tick, 1\);/);
-    assert.match(code, /this\.timeLabel\.string = formatHms\(idleCappedMs\(elapsed\)\);/);
-    assert.match(code, /if \(canClaim\(elapsed\)\) \{/);
-    assert.match(code, /if \(idleReachedMax\(elapsed\)\) this\.unschedule\(this\._tick\);/);
+    assert.match(code, /this\.timeLabel\.string = formatHms\(Math\.min\(elapsed, this\.maxMs\)\);/);
+    assert.match(code, /if \(elapsed >= TERRITORY_IDLE_REWARD_INTERVAL_MS\) \{/);
+    assert.match(code, /if \(elapsed >= this\.maxMs\) this\.unschedule\(this\._tick\);/);
     // 不可领取时不许留 tween 在跑（否则一直摇）
     assert.match(code, /\} else \{[\s\S]{0,40}this\._stopShake\(\);/);
 

@@ -34,7 +34,7 @@ configureZCMap(layout);
 function installMapDecorBody(): string {
     const start = GAME_SRC.indexOf('private installMapDecor');
     assert.ok(start >= 0, 'ZCGame 里找不到 installMapDecor');
-    const end = GAME_SRC.indexOf('\n    }\n', start);
+    const end = GAME_SRC.indexOf('\n    }', start);
     assert.ok(end > start, 'installMapDecor 的方法体没解析出来');
     return GAME_SRC.slice(start, end);
 }

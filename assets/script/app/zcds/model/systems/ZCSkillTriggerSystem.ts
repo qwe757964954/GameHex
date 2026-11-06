@@ -22,6 +22,7 @@ import type { ZCSnapshot, ZCUnitState } from '../ZCGameTypes';
 import { type ZCStatusStatMods, type ZCStatusSystem } from '../ZCStatusEffect';
 import type { IZCStrikeOptions } from './ZCAttackResolutionSystem';
 import { zcMissileFxOf } from '../ZCCombatEffectFlight';
+import { missileLogChanging, missileLogOnce } from '../../ZCMissileSkillDiagnostics';
 
 export interface IZCSkillTriggerContext {
     readonly statusSystem: ZCStatusSystem;
@@ -458,6 +459,16 @@ export class ZCSkillTriggerSystem {
         if (!(cooldown > 0) && !(every > 0)) return;
         const scale = Math.max(1e-6, context.distanceScale ?? 1);
         const missileFx = zcMissileFxOf(unit.unitId);
+        //  诊断②：参数快照 + 每次开火结果。打空时 `fire()` 每帧都会被叫一遍（`if (!fire()) return;`
+        //  不推进冷却），所以用「值变化才打」的通道，失败只留第一条、转成功再补一条。
+        if (missileFx) {
+            missileLogOnce(`strike-params:${unit.unitId}`,
+                '模型',
+                `单位 ${unit.unitId} 拿到导弹参数：strikeCount=${count} strikeRadius=${radius}`
+                + `（世界 ${(radius * scale).toFixed(1)}）cooldown=${cooldown} every=${every}`
+                + ` nearest=${params?.strikeNearest ?? 0} splash=${params?.strikeSplashRadius ?? 0}`
+                + ` | 弹体=${missileFx.missilePrefabPath} 爆炸=${missileFx.impactPrefabPath}`);
+        }
         const fire = (): boolean => {
             const options: IZCStrikeOptions = {
                 count: Math.round(count),
@@ -471,7 +482,16 @@ export class ZCSkillTriggerSystem {
                 impactPrefabPath: missileFx?.impactPrefabPath,
                 arcOffset: missileFx?.arcOffset ?? 0,
             };
-            return context.strike!(unit, options) > 0;
+            const hits = context.strike!(unit, options);
+            if (missileFx) {
+                missileLogChanging(`strike-fire:${unit.id}`,
+                    '模型',
+                    hits > 0
+                        ? `单位 ${unit.unitId}#${unit.id} 开火成功：命中/发出 ${hits} 个（搜索半径 ${options.radius.toFixed(1)}）`
+                        : `单位 ${unit.unitId}#${unit.id} 开火失败：搜索半径 ${options.radius.toFixed(1)} 内没有可用目标`
+                        + `（包围盒内敌人不足 / 全在半径外）⇒ strike() 返回 0 ⇒ 冷却不推进，会每帧重试`);
+            }
+            return hits > 0;
         };
         const windowSeconds = Math.max(0, params?.strikeSeconds ?? 0);
         const interval = Math.max(0.05, params?.strikeInterval ?? 1);

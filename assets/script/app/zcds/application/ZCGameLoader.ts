@@ -4,7 +4,7 @@ import type { AssetLoadOptions } from '../../../core/asset/AssetService';
 import type { ResourceScope } from '../../../core/asset/ResourceScope';
 import { BATTLE_BUNDLE } from '../../../core/asset/BundleCatalog';
 import type { IControllerResources } from '../../../framework/controller/ControllerBase';
-import { findCatalogCard, getAllUnitDefinitions } from '../model/ZCCombatCatalog';
+import { findCatalogCard, getAllUnitDefinitions, setCardRarityMeta, ZC_ATTACK_TRAITS } from '../model/ZCCombatCatalog';
 import type { ZCAttackTrait, ZCUnitId } from '../model/ZCCombatCatalog';
 import { configureZCMap, getZCLocalPlayerCountOverride, isRandomMapCandidate } from '../model/ZCGameModel';
 import type { ZCMapLayout } from '../model/ZCGameModel';
@@ -13,7 +13,7 @@ import { getZCModifierCatalogs } from '../model/ZCModifierRuntime';
 import { captureZCMatchConfig } from '../model/ZCMatchConfig';
 import type { ZCMatchConfig } from '../model/ZCMatchConfig';
 import { decorFramePath, GAMEUI_ART_ROOT, NEUTRAL_RESOURCE_UNKNOWN_ICON_NAME, ARTIFACT_CLAIM_BURST_ART_ROOT, HEX_FLIP_PULSE_ART_ROOT, HEX_GROUND_GLOW_ART_ROOT, MAP_RESOURCE_ART_ROOT, SPAWN_REGION_ART_ROOT, spriteFramePath } from '../../ArtPaths';
-import { ZCDC_LOG_WARNINGS } from '../ZCDCLogSwitch';
+import { ZCDC_LOG_DIAGNOSTICS, ZCDC_LOG_WARNINGS } from '../ZCDCLogSwitch';
 import { ZCGuideLoader } from './ZCGuideLoader';
 import type { ZCGuidePreparedContent } from './ZCGuideLoader';
 import type { IZCSpawnRegionHintFrames } from '../view/ZCSpawnRegionHintOverlay';
@@ -22,6 +22,7 @@ import { buildZCClientCombatConfig } from './ZCClientCombatConfig';
 import { ensureZCRuntimeCompiled } from './ZCRuntimePrecompiler';
 import { buildZCVisualResourcePlan } from '../model/ZCVisualResourcePlan';
 import { getZCNeutralResourceCatalog } from '../model/ZCNeutralResourceGroup';
+import { CARD_ART_TABLES, parseCardArtConfig, type ICardArtConfig } from '../../card/CardArtConfig';
 
 const BATTLE_ENTRY_PRIORITY = 100;
 const BATTLE_DEFERRED_PRIORITY = 10;
@@ -90,7 +91,7 @@ const HIT_FX_DIRECTORY = ZC_BATTLE_FX_PATHS.hitDirectory;
  *
  *  目录名/ prefab 名约定 = `<职业>受击`（与美术源目录 `0通用-受击/<职业>受击` 同名）。
  */
-const HIT_FX_TRAITS: readonly ZCAttackTrait[] = ['射手', '战士', '法师', '坦克'];
+const HIT_FX_TRAITS: readonly ZCAttackTrait[] = ZC_ATTACK_TRAITS;
 /** 自选主城阶段的常驻 HUD（顶部信息带 + 底部按钮组 + 吐司）。 */
 const SPAWN_SELECTION_URL = ZC_BATTLE_SHELL_PATHS.spawnSelection;
 // 波次怪守城（塔防）左上角的首领条（蓝湖「BOSS」稿）。
@@ -166,6 +167,7 @@ export interface IZCDeferredBattleArt {
 
 /** 进入对局前准备好的首帧资源；loadDeferredArt 显式补齐可后补表现。 */
 export interface ZCGamePreparedResources {
+    readonly cardArtConfig: ICardArtConfig;
     /** 配置表与本次随机地图合成后冻结的基础战斗配置。 */
     baseMatchConfig: ZCMatchConfig;
     hudPrefab: Prefab;
@@ -259,10 +261,13 @@ export interface ZCGamePreparedResources {
      */
     unknownResourceFrame: SpriteFrame | null;
     /**
-     * 中立资源「金币」图标帧（`image/map-resource/gold`）—— 金币飞行特效的贴图。
+     * 中立资源「金币」图标帧（`image/map-resource/coin_icon`）—— 飞向 HUD 金币栏的那把金币贴图。
      *
-     * 与格子内金币图标**同一张**（换图两边一起变）。拿不到时为 `null` —— 金币仍照常飞
-     * （透明图），不崩不空。
+     * 与格子内金币图标**同一张**（换图两边一起变）。
+     *
+     * 🔴 拿不到时为 `null` ⇒ 粒子节点仍会建、仍按曲线飞，但 `Sprite.spriteFrame` 为空
+     * **屏上什么都不画**（不是"透明图"，是压根不渲染）—— 这时只剩「+N」读数可见。
+     * 排查「金币没动画」先看这里有没有加载成功（失败会 warn `金币图标加载失败`）。
      */
     goldCoinFrame: SpriteFrame | null;
     /**
@@ -333,14 +338,14 @@ export class ZCGameLoader {
         void mapFiles.catch(() => {});
         await this.loadPvpRuntimeConfig(scope);
         const configReadyAt = Date.now();
-        console.info(`[BattleLoading] 战斗配置准备 ${configReadyAt - startedAt}ms`);
+        if (ZCDC_LOG_DIAGNOSTICS) console.info(`[BattleLoading] 战斗配置准备 ${configReadyAt - startedAt}ms`);
         const count = battle?.units.length;
         const battlePlayerCount = count === 2 || count === 3 || count === 4 ? count : undefined;
         const mapReady = await this.loadRandomMap(scope, battlePlayerCount, mapFiles);
         this.checkActive(scope);
         if (!mapReady) throw new Error(`地图目录中没有可用配置：${this.mapDirectory}`);
         const mapReadyAt = Date.now();
-        console.info(`[BattleLoading] 地图准备 ${mapReadyAt - configReadyAt}ms`);
+        if (ZCDC_LOG_DIAGNOSTICS) console.info(`[BattleLoading] 地图准备 ${mapReadyAt - configReadyAt}ms`);
         const baseMatchConfig = captureZCMatchConfig(undefined, { allowUnresolvedSelect: true });
         // 波次和中立奖励可从完整目录产兵，不受后端参战卡池限制。
         // 兵团类资源项要产的兵同样从完整目录来（不走后端参战卡池）；表里没配时为空。
@@ -371,6 +376,7 @@ export class ZCGameLoader {
             [spawnFxPrefab, deathFxPrefab, buildingDestroyFxPrefab, hitFxPrefabs],
             visualPrefabs,
             [buildingFrames, wallFrames, wallMaterial, unitOutlineCopyEffect, hexGroundGlowFrames, hexPulseFrames, artifactClaimBurstFrames, decorFrames, artifactIconFrame, unknownResourceFrame, goldCoinFrame, spawnRegionFrames],
+            cardArtConfig,
         ] = await Promise.all([
             this.traceArt('公共外壳', this.loadShellPrefabs(scope, baseMatchConfig.map.cityMode === 'select', !battle || waveCardIds.length > 0)),
             progressive ? Promise.resolve([null, null, null, new Map<ZCAttackTrait, Prefab>()] as const) : this.traceArt('公共特效', Promise.all([
@@ -394,9 +400,23 @@ export class ZCGameLoader {
                 this.loadGoldCoinFrame(scope),
                 baseMatchConfig.map.cityMode === 'select' ? this.loadSpawnRegionFrames(scope) : Promise.resolve(null),
             ])),
+            Promise.all([
+                this.resources.configs.getTable(CARD_ART_TABLES.rarity),
+                this.resources.configs.getTable(CARD_ART_TABLES.cardClass),
+                this.resources.configs.getTable(CARD_ART_TABLES.camp),
+                this.resources.configs.getTable('icon'),
+            ]).then(([rarity, cardClass, camp, icons]) => {
+                const art = parseCardArtConfig({
+                    rarity: rarity ?? [],
+                    cardClass: cardClass ?? [],
+                    camp: camp ?? [],
+                }, icons);
+                setCardRarityMeta(art.lineup.rarities);
+                return art;
+            }),
         ]);
         this.checkActive(scope);
-        console.info(`[BattleLoading] ${progressive ? '首帧美术准备' : '战斗美术准备'} ${Date.now() - mapReadyAt}ms`);
+        if (ZCDC_LOG_DIAGNOSTICS) console.info(`[BattleLoading] ${progressive ? '首帧美术准备' : '战斗美术准备'} ${Date.now() - mapReadyAt}ms`);
         let guideTask: Promise<ZCGuidePreparedContent> | null = null;
         const loadGuide = (): Promise<ZCGuidePreparedContent> => {
             this.checkActive(scope);
@@ -408,6 +428,7 @@ export class ZCGameLoader {
         };
 
         return {
+            cardArtConfig,
             baseMatchConfig,
             artifactIconFrame,
             unknownResourceFrame,
@@ -507,7 +528,7 @@ export class ZCGameLoader {
                     art = { ...art, ...patch };
                     onUpdate(art);
                 }
-                console.info(`[BattleLoading] 完整特效准备 ${Date.now() - startedAt}ms（首帧后）`);
+                if (ZCDC_LOG_DIAGNOSTICS) console.info(`[BattleLoading] 完整特效准备 ${Date.now() - startedAt}ms（首帧后）`);
             })();
             return task;
         };
@@ -516,7 +537,7 @@ export class ZCGameLoader {
     private async traceArt<T>(label: string, task: Promise<T>): Promise<T> {
         const startedAt = Date.now();
         try { return await task; }
-        finally { console.info(`[BattleLoading] ${label}等待 ${Math.max(0, Date.now() - startedAt)}ms`); }
+        finally { if (ZCDC_LOG_DIAGNOSTICS) console.info(`[BattleLoading] ${label}等待 ${Math.max(0, Date.now() - startedAt)}ms`); }
     }
 
     /** 加载候选地图并跳过损坏项；全部无效时返回 false。 */
@@ -641,13 +662,15 @@ export class ZCGameLoader {
     }
 
     /**
-     * 金币飞行特效的贴图：`image/map-resource/coin_icon`（**单枚金币 icon**，与 HUD 金币栏 /
+     * 格心喷发那束金币的贴图：`image/map-resource/coin_icon`（**单枚金币 icon**，与 HUD 金币栏 /
      * 格子金币资源图标同款视觉）。
      *
      * ⚠️ **别用 `image/map-resource/gold`** —— 那是一张「金币堆 + 钱袋」的装饰插画，
-     * 一颗颗飞过去像在飞装饰。2026-10-20 已切到 `coin_icon`。
+     * 一颗颗飞出去像在撒装饰。2026-10-20 已切到 `coin_icon`。
      *
-     * 失败不阻断整局：返回 `null`，金币飞行仍照常播（透明图 + 上飘数字照旧）。
+     * 失败不阻断整局：返回 `null`，粒子照常建、照常按曲线跑，但屏上**没有图**
+     * （`Sprite` 无 `spriteFrame` 不渲染，不是"透明图"）—— 此时只剩「+N」读数。
+     * 所以「金币没动画」的现场排查顺序是：先看这条 warn，再看事件有没有入队。
      */
     private async loadGoldCoinFrame(scope?: ResourceScope): Promise<SpriteFrame | null> {
         const path = spriteFramePath(MAP_RESOURCE_ART_ROOT, 'coin_icon');

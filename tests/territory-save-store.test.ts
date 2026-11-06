@@ -103,3 +103,56 @@ test('server wallet refresh persists without changing territory progress', () =>
     assert.equal(h.create('wallet-refresh').load(1).wallet.silver, 90);
     assert.equal(h.create('wallet-refresh').load(1).wallet.stamina, 15);
 });
+
+// ============================================================
+// 账号级「已通关的领地关卡」（战斗宝箱入口的开启条件靠它活过切章）
+// ============================================================
+
+test('已通关关卡记在账号上，不跟章节走 —— 切到第 2 章照样读得到 20001', () => {
+    const h = harness();
+    const store = h.create('passed-a');
+    assert.deepEqual([...store.loadPassedLevels()], [], '新号没有任何通关记录');
+
+    assert.deepEqual([...store.markLevelsPassed([20001])], [20001], '首次记录要回「新增的」');
+    assert.deepEqual([...store.markLevelsPassed([20001])], [], '重复记录没有新增 ⇒ 不返回，也不该写盘');
+    assert.deepEqual([...store.markLevelsPassed([20001, 20002])], [20002]);
+
+    // 切章：第 2 章的章节存档怎么建都不该影响这份成就
+    store.load(2, { silver: 0, stamina: 0 });
+    store.saveProgress(2, { ownedCells: [3] }, store.load(2));
+    assert.deepEqual([...h.create('passed-a').loadPassedLevels()].sort(), [20001, 20002]);
+    // 只有**一个** key，且不带 chapterId（带了就等于切章失忆）
+    const keys = [...h.memory.keys()].filter((key) => key.startsWith(texts.TERRITORY_PASSED_LEVELS_KEY));
+    assert.equal(keys.length, 1, `已通关关卡只能有一份存档，实际 ${keys.length} 份：${keys.join(' / ')}`);
+    assert.equal(keys[0], `${texts.TERRITORY_PASSED_LEVELS_KEY}.server:1:role:passed-a:`,
+        'key 必须是「账号作用域」，不能拼 chapterId');
+});
+
+test('已通关关卡按角色/区服隔离，脏数据不炸也不放行', () => {
+    const h = harness();
+    h.create('passed-b').markLevelsPassed([20001]);
+
+    assert.deepEqual([...h.create('passed-b', '2').loadPassedLevels()], [], '换区服就是另一份成就');
+    assert.deepEqual([...h.create('passed-c').loadPassedLevels()], [], '换角色就是另一份成就');
+
+    // 脏数据必须用**新开的 harness**（新的一份 storage + 空的进程内兜底）：同一个 harness 里
+    // 读盘会先命中上一次写进去的内存兜底，改 storage 根本看不见（这是既有的读盘口径）。
+    const key = `${texts.TERRITORY_PASSED_LEVELS_KEY}.server:1:role:passed-b:`;
+    const broken = harness();
+    broken.memory.set(key, 'not json');
+    assert.deepEqual([...broken.create('passed-b').loadPassedLevels()], [],
+        '存档损坏按「没有记录」处理，不能抛');
+
+    const dirty = harness();
+    dirty.memory.set(key, JSON.stringify([20001, -1, 2.5, '20002', 0]));
+    assert.deepEqual([...dirty.create('passed-b').loadPassedLevels()], [20001],
+        '只认正整数关卡号，别让字符串/小数混进条件判定');
+});
+
+test('localStorage 不可用时，本次会话内照样记得住（内存兜底）', () => {
+    const h = harness(true);
+    const store = h.create('passed-offline');
+    store.markLevelsPassed([20001]);
+    assert.deepEqual([...store.loadPassedLevels()], [20001]);
+    assert.deepEqual([...store.markLevelsPassed([20001])], [], '内存兜底下同样要幂等');
+});

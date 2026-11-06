@@ -18,7 +18,7 @@ function sources(directory: string): string[] {
 
 test('bootstrap lifecycle entry points delegate controller/model construction to named factories', () => {
     const files = sources(root);
-    assert.equal(files.filter(file => file.endsWith('Composition.ts')).length, 7);
+    assert.equal(files.filter(file => file.endsWith('Composition.ts')).length, 8);
     for (const file of files) {
         const source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
         function inspect(node: ts.Node): void {
@@ -42,6 +42,7 @@ test('controller initialization contracts group operational dependencies by resp
         ['role/RoleController', 'IRoleControllerOptions'], ['league/LeagueTabController', 'ILeagueTabControllerOptions'],
         ['card/CardLineupController', 'ICardLineupControllerOptions'], ['card/CardUpgradeController', 'ICardUpgradeControllerOptions'],
         ['card/LineupBoardController', 'ILineupBoardControllerOptions'],
+        ['league/LeagueEditController', 'ILeagueEditControllerOptions'],
         ['zcds/application/ZCBattleRuntimeContract', 'IZCBattleRuntimeServices'],
         ['zcds/application/ZCBattleSettlementController', 'IZCBattleSettlementServices'],
     ];

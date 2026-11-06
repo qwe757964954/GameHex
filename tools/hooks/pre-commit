@@ -1,0 +1,15 @@
+#!/bin/sh
+# Git 提交前门禁。启用（仓库根执行一次，不自动改用户 git 配置）：
+#   chmod +x tools/hooks/pre-commit
+#   git config core.hooksPath tools/hooks
+#
+# SVN 提交走 TortoiseProc 图形通道，没有客户端 pre-commit 钩子；
+# SVN 侧由人工按 docs/agent/代码审查规范.md §2.1 执行 `node tools/verify/verify.mjs gate`。
+
+root=$(git rev-parse --show-toplevel 2>/dev/null) || {
+    echo "[pre-commit] 不在 Git 工作树内，跳过"
+    exit 0
+}
+cd "$root" || exit 1
+
+node tools/verify/verify.mjs gate

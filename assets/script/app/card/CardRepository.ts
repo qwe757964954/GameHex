@@ -1,5 +1,5 @@
 import type { ZCDeckBonuses, ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
-import { getPlayerDeck } from '../zcds/model/ZCCombatCatalog';
+import { getPlayerDeck, setCardRarityMeta } from '../zcds/model/ZCCombatCatalog';
 import { RequestPvpHeroUpLevel, RequestPvpHeroUpSkill } from '../generated/requestMsg/RequestPvpMsg';
 import { GameNet } from '../net/GameNet';
 import {
@@ -15,6 +15,7 @@ import {
 } from './CardLineupDecks';
 import { buildCardLevelUpTable, evaluateUpgrade } from './CardUpgradeCost';
 import type { ZCCardLevelUpTable, ZCUpgradeStatus } from './CardUpgradeCost';
+import { resolveCardLevelAttrsPair } from './CardLevelAttr';
 import { buildArmySkillTable } from './CardSkillList';
 import type { ZCArmySkillTable } from './CardSkillList';
 import {
@@ -39,8 +40,12 @@ import {
     normalizePvpHeroInfos,
 } from './PvpHeroService';
 import type { PvpHeroInfo, PvpHeroSkillLevel } from './PvpHeroService';
+import { RefUtil } from '../../framework/ref/RefUtil';
+import { CARD_ART_TABLES, parseCardArtConfig, type ICardArtConfig } from './CardArtConfig';
+import { cardArtProvider, type ICardDetailArt } from './CardArtProvider';
 
 export interface CardLineupData {
+    readonly art: ICardArtConfig;
     readonly deck: readonly ZCDeckCard[];
     readonly catalog: readonly ZCDeckCard[];
     readonly heroLevels: ReadonlyMap<string, number>;
@@ -58,6 +63,7 @@ export interface CardLineupData {
 export type CardDetailNavigationData = Pick<CardLineupData, 'catalog' | 'heroLevels' | 'heroListKnown'>;
 
 export interface LineupBoardData {
+    readonly art: ICardArtConfig;
     readonly deck: readonly ZCDeckCard[];
     readonly pool: readonly ZCDeckCard[];
     readonly heroLevels: ReadonlyMap<string, number>;
@@ -101,6 +107,8 @@ export type UpgradeHeroSkillResult =
 
 /** 页面 Presenter 依赖的统一数据端口；测试可以注入内存实现。 */
 export interface ICardRepository {
+    loadArtConfig(): Promise<ICardArtConfig>;
+    loadDetailArt(card: ZCDeckCard | null): Promise<ICardDetailArt>;
     loadLineup(autoLoadDecks: boolean): Promise<CardLineupData>;
     /**
      * 首帧用的**本地阵容快照**（同步，命中才有值）。
@@ -127,6 +135,35 @@ export interface ICardRepository {
 
 /** 生产环境 Repository：统一封装 Ref 表、后端英雄列表、背包与升级请求。 */
 export class RuntimeCardRepository implements ICardRepository {
+    // 只缓存与账号无关的不可变配置，随应用中的 Repository 实例存活。
+    private artConfig: ICardArtConfig | null = null;
+    private artTask: Promise<ICardArtConfig> | null = null;
+
+    loadArtConfig(): Promise<ICardArtConfig> {
+        if (this.artConfig) return Promise.resolve(this.artConfig);
+        if (!this.artTask) {
+            this.artTask = Promise.all([
+                RefUtil.instance.getRefAllAsync(CARD_ART_TABLES.rarity),
+                RefUtil.instance.getRefAllAsync(CARD_ART_TABLES.cardClass),
+                RefUtil.instance.getRefAllAsync(CARD_ART_TABLES.camp),
+                RefUtil.instance.getRefAllAsync('icon'),
+            ]).then(([rarity, cardClass, camp, icons]) => {
+                const art = parseCardArtConfig({
+                    rarity: rarity ?? [],
+                    cardClass: cardClass ?? [],
+                    camp: camp ?? [],
+                }, icons ?? []);
+                this.artConfig = art;
+                setCardRarityMeta(art.lineup.rarities);
+                return art;
+            }).finally(() => { this.artTask = null; });
+        }
+        return this.artTask;
+    }
+
+    async loadDetailArt(card: ZCDeckCard | null): Promise<ICardDetailArt> {
+        return cardArtProvider.loadDetail(card, await this.loadArtConfig());
+    }
     /**
      * `cardLevelUp` 的建表结果（卡库一次要 36 张卡的进度，每张都建一遍表就是 36 次全表解析）。
      *
@@ -156,7 +193,7 @@ export class RuntimeCardRepository implements ICardRepository {
         // 刚升级成功时 `applyPvpHeroLevel` 已经把新等级写进缓存，布阵保存不影响等级，
         // 所以重刷本页不需要重新拉一次权威列表。
         const cached = getCachedPvpHeroInfos();
-        const [tableDeck, heroInfos, heroLevelCaps, catalog, formations] = await Promise.all([
+        const [tableDeck, heroInfos, heroLevelCaps, catalog, formations, art] = await Promise.all([
             autoLoadDecks ? ensureLineupDecks() : Promise.resolve(getPlayerDeck()),
             cached === null ? fetchPvpHeroInfos() : Promise.resolve(cached),
             loadPvpHeroLevelCaps(),
@@ -165,6 +202,7 @@ export class RuntimeCardRepository implements ICardRepository {
             //  `maxAgeMs`：切 tab 时 `MainTabsComposition.prefetchHero` 已经预取过一次，
             //  几百毫秒内的这份就是它拉回来的 —— 再发一遍是纯重复请求（首屏白等一个 RTT）。
             fetchFormations({ label: '阵容页首屏阵型', maxAgeMs: FORMATION_PREFETCH_FRESH_MS }),
+            this.loadArtConfig(),
         ]);
         const heroLevels = this.levels(heroInfos);
         const selectedDeck = resolveSelectedDeck({ deck: tableDeck, pool: catalog, formations });
@@ -175,6 +213,7 @@ export class RuntimeCardRepository implements ICardRepository {
         //  拿到但里面没有选中阵型 → 用本地卡表的「玩家默认」八卡。
         const deck = formations === null ? [] : (selectedDeck ?? tableDeck);
         return {
+            art,
             deck,
             catalog,
             heroLevels,
@@ -192,11 +231,14 @@ export class RuntimeCardRepository implements ICardRepository {
      * 抢首帧既慢又没必要 —— 快照的职责只是「别让玩家看到一个假的阵容」。
      */
     loadLineupSnapshot(): CardLineupData | null {
+        const art = this.artConfig;
+        if (!art) return null;
         const snapshot = readLineupSnapshot();
         if (!snapshot || snapshot.cards.length === 0) return null;
         const heroLevels = new Map<string, number>();
         for (const [key, value] of Object.entries(snapshot.levels)) heroLevels.set(key, value);
         return {
+            art,
             deck: snapshot.cards,
             catalog: [],
             heroLevels,
@@ -217,11 +259,12 @@ export class RuntimeCardRepository implements ICardRepository {
 
     async loadBoard(autoLoadDecks: boolean): Promise<LineupBoardData> {
         const cached = getCachedPvpHeroInfos();
-        const [deck, heroInfos, heroLevelCaps, formations] = await Promise.all([
+        const [deck, heroInfos, heroLevelCaps, formations, art] = await Promise.all([
             autoLoadDecks ? ensureLineupDecks() : Promise.resolve(getPlayerDeck()),
             cached === null ? fetchPvpHeroInfos() : Promise.resolve(cached),
             loadPvpHeroLevelCaps(),
             fetchFormations(),
+            this.loadArtConfig(),
         ]);
         const pool = heroInfos === null ? deck : await loadPvpHeroCards(heroInfos);
         //  卡池为空是"面板看起来没内容"的头号原因，而它有两种完全不同的成因，日志必须能一眼分开。
@@ -234,7 +277,7 @@ export class RuntimeCardRepository implements ICardRepository {
                     : `后端给了 ${heroInfos.length} 个英雄，但没一个能在 pvpCard 里对上号（先看 [CardLineupDecks] 那条列 id 的告警）`),
             );
         }
-        return { deck, pool, heroLevels: this.levels(heroInfos), heroLevelCaps, formations };
+        return { art, deck, pool, heroLevels: this.levels(heroInfos), heroLevelCaps, formations };
     }
 
     async loadUpgradeStatus(cardId: string, level: number): Promise<ZCUpgradeStatus> {
@@ -250,18 +293,29 @@ export class RuntimeCardRepository implements ICardRepository {
      * 组装在 `CardDetailPresenter`（纯函数、可单测），这里只取数与编排。
      */
     async loadCardDetail(cardId: string, level: number): Promise<CardDetailPresentation> {
-        const [rawRow, growthRaw, skillRaw, cards] = await Promise.all([
+        const [rawRow, growthRaw, skillRaw, cards, levelUpRaw] = await Promise.all([
             loadPvpCardRawRow(cardId),
             loadPvpUnitGrowthRows(),
             loadArmySkillLevelUpRows(),
             loadPvpCatalogCards(),
+            loadCardLevelUpRows(),
         ]);
         const card = cards.find((item) => item.id === String(cardId)) ?? null;
         const skillIds = card?.skillIds ?? [];
         const table = buildArmySkillTable(skillRaw);
+        // 等级属性走 cardLevelUp.attrList（绝对值）；这张卡没配时 pair 两个都是 null，
+        // buildDetailStats 内部回落 pvpUnitGrowth，老行为不变。
+        const levelAttrs = resolveCardLevelAttrsPair(this.levelUpTableOf(levelUpRaw), String(cardId), level);
         const heroLevel = getCachedPvpHeroInfo(Number(cardId))?.level ?? 0;
         return {
-            stats: buildDetailStats(detailBaseOfRow(rawRow), parseGrowthRows(growthRaw), String(card?.unitId ?? ''), level),
+            stats: buildDetailStats(
+                detailBaseOfRow(rawRow),
+                parseGrowthRows(growthRaw),
+                String(card?.unitId ?? ''),
+                level,
+                levelAttrs.current,
+                levelAttrs.next,
+            ),
             powerText: '',
             chain: buildDetailChain(table, skillIds, heroLevel),
             milestones: buildDetailMilestones(table, skillIds, heroLevel),

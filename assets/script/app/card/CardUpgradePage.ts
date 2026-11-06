@@ -1,7 +1,6 @@
 import { _decorator, Button, Color, Label, Node, Prefab, Sprite, SpriteFrame, UITransform } from 'cc';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
 import { PopupBase } from '../../framework/ui/PopupBase';
-import { cardArtProvider } from './CardArtProvider';
 import { CARD_LINEUP_TEXTS } from './CardLineupTexts';
 import { upgradeButtonText } from './CardUpgradeCost';
 import type { ZCUpgradeStatus } from './CardUpgradeCost';
@@ -15,25 +14,20 @@ import { CardPopupEvent } from './CardPopupEvents';
 import { EventMgr } from '../../framework/event/EventMgr';
 import { itemDetailRepository } from '../itemdetail/ItemDetailRepository';
 import { loadItemIconArt } from '../itemdetail/ItemDetailArtLoader';
-import { resolveCardCamp, resolveCardClass, ZC_CARD_CAMP_NAMES, ZC_CARD_CLASS_NAMES } from './CardLineupTypes';
+import { cardCampName, cardClassName, cardRarityName, resolveCardCamp, resolveCardClass } from './CardLineupTypes';
 import type {
     CardDetailPresentation,
     CardDetailSkillSlot,
-    CardDetailStatLine,
 } from './CardDetailPresenter';
 import type {
     CardUpgradePhase,
     CardUpgradePresentation,
+    ICardUpgradeViewState,
 } from './CardPresentations';
 
 export type { ICardUpgradeOpenData } from './CardPresentations';
 
 const { ccclass, property } = _decorator;
-
-/** 品级 → 详情页品质菱形切图（image/carddetail）。 */
-const DIAMOND_ART: Readonly<Record<string, string>> = {
-    绿: 'diamond_green', 蓝: 'diamond_blue', 紫: 'quality_purple', 金: 'diamond_gold',
-};
 
 /** 六维属性的写入器：key → (valueLabel, gainLabel) 的页面字段名。 */
 type StatKey = 'hp' | 'attack' | 'buildHp' | 'spawn' | 'range' | 'speed';
@@ -46,6 +40,7 @@ export class CardUpgradePage extends PopupBase {
     private preview: CardUnitPreview | null = null;
     private previewAssets: CardUnitPreviewAssets<Prefab> | null = null;
     private heroKey: string | null = null;
+    private hasRenderedStatus = false;
     /** 弹窗预制体在 resources 下的路径（`PopupManager` 用它加载）。 */
     static prefabPath = 'ui/card/CardUpgrade';
 
@@ -204,6 +199,7 @@ export class CardUpgradePage extends PopupBase {
     }
 
     protected onOpen(): void {
+        this.hasRenderedStatus = false;
         this.upgradeButton.interactable = false;
         this.heroSprite.spriteFrame = null;
         this.qualitySprite.spriteFrame = null;
@@ -227,7 +223,7 @@ export class CardUpgradePage extends PopupBase {
     };
 
     /** 唯一的写 UI 入口：头部 + 详情区 + 升级状态。 */
-    render(data: CardUpgradePresentation): void {
+    render(data: ICardUpgradeViewState): void {
         this.renderRevision++;
         this.renderHeader(data);
         this.levelBigLabel.string = `${CARD_LINEUP_TEXTS.detailMilestonePrefix}${data.level}`;
@@ -239,11 +235,13 @@ export class CardUpgradePage extends PopupBase {
         this.renderDetail(data.detail);
         if (data.status) {
             this.renderStatus(data.status, data.phase);
+            this.hasRenderedStatus = true;
             return;
         }
         this.upgradeButton.interactable = false;
         //  提交中按钮文案保持常态（「升级」/「解锁」）：进行中的状态提示由通用 loading 全屏承担。
         this.upgradeLabel.string = upgradeButtonText(data.level, false);
+        if (this.hasRenderedStatus && data.phase === 'loading') return;
         this.matCardCountLabel.string = '';
         this.matCardItemLabel.string = '';
         this.matExpCountLabel.string = '';
@@ -265,19 +263,17 @@ export class CardUpgradePage extends PopupBase {
     // 头部：名字 / 品质 / 种族职业 / 立绘 / 战力
     // ------------------------------------------------------------------
 
-    private renderHeader(data: CardUpgradePresentation): void {
+    private renderHeader(data: ICardUpgradeViewState): void {
         const card = data.data.card;
         const texts = CARD_LINEUP_TEXTS;
         this.nameLabel.string = card?.name ?? data.cardId;
         if (card) {
-            const camp = resolveCardCamp(card);
+            const lineup = data.lineup;
+            const camp = lineup ? resolveCardCamp(card, lineup) : null;
             this.campTagRoot.active = camp !== null;
-            if (camp) this.tagCampLabel.string = ZC_CARD_CAMP_NAMES[camp];
-            const cardClass = resolveCardClass(card);
-            this.tagClassLabel.string = ZC_CARD_CLASS_NAMES[cardClass];
-            this.qualityLabel.string = `${card.rarity}${texts.detailQualityGrade}`;
-            const diamond = DIAMOND_ART[card.rarity];
-            if (diamond) this.loadDetailFrame(diamond, (frame) => { if (frame) this.qualitySprite.spriteFrame = frame; });
+            if (camp && lineup) this.tagCampLabel.string = cardCampName(camp, lineup);
+            this.tagClassLabel.string = lineup ? cardClassName(resolveCardClass(card, lineup), lineup) : '';
+            this.qualityLabel.string = lineup ? `${cardRarityName(card.rarity, lineup)}${texts.detailQualityGrade}` : '';
         } else {
             this.campTagRoot.active = false;
             this.tagClassLabel.string = '';
@@ -285,18 +281,19 @@ export class CardUpgradePage extends PopupBase {
         }
         // 战力系统未落地：占位（Inspector 的 powerLabel 预置文案 / 数据为空显示占位符）。
         this.powerLabel.string = `${texts.detailPower} ${data.detail?.powerText || '--'}`;
-        this.renderHero(card);
+        this.qualitySprite.spriteFrame = data.art?.diamond ?? null;
+        this.renderHero(card, data.art?.hero ?? null);
     }
 
     /** 优先展示对应兵种的循环待机，缺少模型或 idle 时保留原立绘。 */
-    private renderHero(card: CardUpgradePresentation['data']['card']): void {
+    private renderHero(card: CardUpgradePresentation['data']['card'], hero: SpriteFrame | null): void {
         const key = card ? `${card.id}|${card.rarity}|${card.unitId}|${card.unitPrefabPath}` : null;
         if (key !== null && key === this.heroKey) return;
         this.heroKey = key;
         const scope = this.resourceScope;
         const revision = ++this.artRevision;
         this.preview?.clear();
-        applyCardHeroArt(this.heroSprite, this.heroTransform, null);
+        applyCardHeroArt(this.heroSprite, this.heroTransform, hero);
         if (!card) {
             return;
         }
@@ -304,12 +301,7 @@ export class CardUpgradePage extends PopupBase {
             const assets = this.assets;
             this.previewAssets = new CardUnitPreviewAssets((path) => assets.load(path, Prefab));
         }
-        // 立绘先展示；模型仍并行加载，挂载时等待立绘归一缩放完成。
-        const artReady = cardArtProvider.loadLineupCard(card).then(frames => {
-            if (scope.disposed || !this.alive || revision !== this.artRevision) return;
-            applyCardHeroArt(this.heroSprite, this.heroTransform, frames.hero);
-        });
-        void Promise.all([artReady, this.previewAssets.load(card)]).then(([, prefab]) => {
+        void this.previewAssets.load(card).then(prefab => {
             if (scope.disposed || !this.alive || revision !== this.artRevision) return;
             if (!this.preview) {
                 const preview = new CardUnitPreview(this.heroSprite, 270);
@@ -345,10 +337,8 @@ export class CardUpgradePage extends PopupBase {
         }
         this.hexSlots.forEach((slot, index) => this.renderHexSlot(slot, detail.chain[index] ?? null));
         this.milestones = detail.milestones;
-        // 数据改变后清除旧行高，实际可见行由虚拟列表测量并复用。
-        this.milestoneScroll.refreshList(0);
+        // 可见行会重新测量高度，原位刷新以保留节点和阅读位置。
         this.milestoneScroll.refreshList(this.milestones.length);
-        this.milestoneScroll.scrollToTop(false);
     }
 
     private renderHexSlot(slot: CardDetailHexSlot, data: CardDetailSkillSlot | null): void {
@@ -472,7 +462,6 @@ export class CardUpgradePage extends PopupBase {
     private renderMaterialIcon(sprite: Sprite, itemIds: readonly string[]): void {
         const scope = this.resourceScope;
         const revision = this.renderRevision;
-        sprite.spriteFrame = null;
         void (async () => {
             for (const id of itemIds) {
                 if (!id) continue;
@@ -484,6 +473,7 @@ export class CardUpgradePage extends PopupBase {
                 sprite.spriteFrame = frame;
                 return;
             }
+            sprite.spriteFrame = null;
         })().catch(error => {
             if (!scope.disposed && this.alive) console.error('[CardUpgradePage] 物品图标加载失败', error);
         });

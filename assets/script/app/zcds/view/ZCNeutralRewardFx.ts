@@ -10,19 +10,36 @@ import { neutralResourceVisualOf, ZCNeutralResourceVisual } from '../model/ZCNeu
 import type { ZCNeutralReward } from '../model/ZCGameTypes';
 
 /**
- * 中立资源获取特效（2026-10-20 需求）：
- *   · 金币（金币堆 / 宝箱）：一把金币从格子**飞向金币栏**，落地后「+N」原地升起并淡出；
+ * 中立资源获取特效（2026-10-20 需求；2026-11-04 恢复金币飞行口径）。
+ *
+ *   · 金币（金币堆 / 宝箱）：一把金币从格子**飞向 HUD 金币栏 `CoinPanel`**，落地后
+ *     「+N」在金币栏上方升起并淡出；
  *   · 神器（神器充能）：格心**原地炸一下**蓝色爆炸（18 帧序列帧），同时神器图标从格子
  *     **飞向神器按钮**，落地小幅放大后淡出；
  *   · 金矿：走「建筑被开发」的激活动画（模型推 `hexActivation`），不进本类；
  *   · 兵力：直接产兵、走出生表现，不进本类。
+ *
+ * ## 金币落点为什么必须是 `CoinPanel`
+ *
+ * 2026-10-26 曾把金币改成「格心就地喷发」（曲线在 `model/ZCNeutralBurst`）并删掉 HUD 挂点，
+ * 但视图金币分支仍按旧口径读 `targets.goldCounter` ⇒ `null` ⇒ 整条 `continue`，
+ * 实机上金币**一条都没播、零报错**。2026-11-04 用户口径明确「金币粒子飞到金币栏
+ * `ZCGameHUD` / `CoinPanel`」⇒ 恢复飞行曲线，落点由 `ZCGameRenderWorld` 把
+ * `BottomInfoPanel/CoinPanel` 的世界坐标换算成 overlay 局部坐标后传进来。
+ *
+ * ⚠️ 目标是**整个 CoinPanel 面板**，不是 `GoldLabel` / `coin` 子图标：面板中心才是
+ *    「金币栏」的视觉重心。节点没绑 / 没进场景 ⇒ `coinPanel` 为 `null` ⇒ 金币不播，
+ *    排查先看 `ZCGameHUDView.coinPanel` 的 prefab 绑定。
+ *
+ * `model/ZCNeutralBurst` 那份喷发曲线**当前不接线**（保留备用），事件时长与视图都按
+ * 本文件的飞行 / 读数时间轴走 —— 别再按它那份需求注释把 HUD 落点删掉。
  *
  * 与 `TerritoryGainBurst` 同一套口径：**纯类、非 Component、逐帧 `render`、禁 tween**，
  * 曲线全部写成可复现的纯函数（同一 seed 每帧结果一致），节点在构造时建好、动画里只写
  * position / scale / opacity。
  *
  * 坐标口径：入参 `start` / `target` 都是 **host（全屏演出层）局部坐标**，由渲染层把
- * 格子世界坐标 / 金币栏世界坐标换算过来；本类只管在 host 下的局部位移。
+ * 格子世界坐标 / HUD 节点世界坐标换算过来；本类只管在 host 下的局部位移。
  */
 export const ZC_NEUTRAL_REWARD_COIN_SIZE = 34;
 /** 每颗金币在起点附近的最大随机偏移（px，双轴）。 */
@@ -254,9 +271,14 @@ export function neutralRewardArtifactFrame(
     return { ...point, scale, opacity, visible: true };
 }
 
-/** 飞行目标（host 局部坐标）；`null` = 该目标不可用（HUD 节点缺失时整条飞行不播）。 */
+/**
+ * 飞行目标（host 局部坐标）；`null` = 该目标不可用（HUD 节点缺失时整条飞行不播）。
+ *
+ * `coinPanel` = `ZCGameHUD/BottomInfoPanel/CoinPanel` 面板中心（金币落点）；
+ * `artifactSlot` = `ArtifactButton`（神器落点）。
+ */
 export interface IZCNeutralRewardFxTargets {
-    readonly goldCounter: Readonly<{ x: number; y: number }> | null;
+    readonly coinPanel: Readonly<{ x: number; y: number }> | null;
     readonly artifactSlot: Readonly<{ x: number; y: number }> | null;
 }
 
@@ -345,7 +367,7 @@ export class ZCNeutralRewardFx {
             if (!entry) {
                 const start = resolveStart(event.hexId);
                 if (!start) continue;
-                const target = kind === 'gold' ? targets.goldCounter : targets.artifactSlot;
+                const target = kind === 'gold' ? targets.coinPanel : targets.artifactSlot;
                 if (!target) continue;
                 entry = this.buildEntry(event, kind, start, target);
                 if (!entry) continue;

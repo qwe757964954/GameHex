@@ -28,6 +28,7 @@ import type {
     TerritoryChapterSave,
     TerritoryWallet,
 } from '../assets/script/app/territory/model/TerritorySaveStore';
+import { TerritorySaveStore } from '../assets/script/app/territory/model/TerritorySaveStore';
 import type { TerritoryProgressData } from '../assets/script/app/territory/model/TerritoryProgress';
 import type { ZCBattleStart } from '../assets/script/app/battle/BattleStartModel';
 import type {
@@ -937,7 +938,14 @@ function createOutputSpy() {
      */
     const battleParams: (readonly string[] | undefined)[] = [];
     const busy: Array<{ busy: boolean; text?: string }> = [];
-    return { tips, rewards, rewardOrigins, nav, battles, battleParams, busy };
+    /**
+     * 「玩家主动切章」的转场通知（`chapterSwitch`）。
+     *
+     * 用户 2026-11-04：「玩家只能通过章节按钮播放切换动画」⇒ 这条命令**只该在玩家点章节时出现**，
+     * 通关后自动推进一定会让 `chapterId` 变，但绝不能出现在这里。
+     */
+    const chapterSwitches: Array<{ from: number; to: number }> = [];
+    return { tips, rewards, rewardOrigins, nav, battles, battleParams, busy, chapterSwitches };
 }
 
 interface HarnessOptions {
@@ -976,6 +984,9 @@ function createHarness(options: HarnessOptions = {}) {
                 spy.rewards.push(event.payload.rewards.map(g => ({ resId: g.resId, amount: g.amount })));
                 spy.rewardOrigins.push(event.payload.originCellId); break;
             case 'busy': spy.busy.push({ ...event.payload }); break;
+            case 'chapterSwitch':
+                spy.chapterSwitches.push({ from: event.fromChapterId, to: event.toChapterId });
+                break;
         }
     });
     return {
@@ -2101,6 +2112,166 @@ for (const update of ['broadcast', 'snapshot'] as const) test(`passing a nonrepr
     h.presenter.dispose();
 });
 
+// ── 章节通关判据：本章最后一个首领关卡（2026-11-04 用户口径）────────────
+
+/** `createBossFindLoader` 用的是真 chapter_01：只绑 1-4(252) / 1-5 首领(213) / 1-10 首领(105)。 */
+const FINAL_BOSS_CELL = 105;
+const MID_BOSS_CELL = 213;
+
+test('★★★只通关本章最后一个首领 ⇒ 就算通关（异步据点不参与）', async () => {
+    const h = createHarness({
+        loader: createBossFindLoader(),
+        chapters: [1, 2],
+        gateway: createFakeGateway({ fetch: {
+            ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [MID_BOSS_CELL, FINAL_BOSS_CELL], passCells: [] },
+        } }),
+    });
+    h.presenter.start();
+    await flush();
+    assert.equal(h.presenter.state.chapterId, 1);
+    assert.equal(h.presenter.state.hud?.nextEnabled, false, '开局当然还没通关');
+    const published: boolean[] = [];
+    h.presenter.onOutput((output) => {
+        if (output.kind === 'changed') published.push(h.presenter.state.hud?.nextEnabled ?? false);
+    });
+    // 只推「1-10 这一个首领通过」——占领率口径下这一章只有 1/3，按新判据已经通关。
+    h.presenter.applyPassCellsBro(1, [FINAL_BOSS_CELL]);
+    assert.equal(published[0], true, '通关必须先把 nextEnabled=true 发布出去，再切章');
+    await flush();
+    assert.equal(h.presenter.state.chapterId, 2, '通关就要自动进下一章');
+    h.presenter.dispose();
+});
+
+test('★★★只通关中间那个首领（1-5）⇒ 还不算通关', async () => {
+    const h = createHarness({
+        loader: createBossFindLoader(),
+        chapters: [1, 2],
+        gateway: createFakeGateway({ fetch: {
+            ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [MID_BOSS_CELL, FINAL_BOSS_CELL], passCells: [] },
+        } }),
+    });
+    h.presenter.start();
+    await flush();
+    h.presenter.applyPassCellsBro(1, [MID_BOSS_CELL]);
+    await flush();
+    assert.equal(h.presenter.state.hud?.nextEnabled, false, '1-5 不是链尾那个首领');
+    assert.equal(h.presenter.state.chapterId, 1, '不许因为通了中间的首领就切章');
+    // 再补上链尾那个 ⇒ 立刻通关并切章。
+    h.presenter.applyPassCellsBro(1, [FINAL_BOSS_CELL]);
+    await flush();
+    assert.equal(h.presenter.state.chapterId, 2);
+    h.presenter.dispose();
+});
+
+test('★★★异步据点全没通也算通关（它根本不进关卡链）', async () => {
+    const loader = createFakeLoader();
+    const stages = [
+        { ...stage, levelId: 1001, stage: 1 },
+        { ...stage, levelId: 1002, stage: 2, isBoss: true, mode: 'defence' as const },
+    ];
+    loader.loader.load = async (chapterId) => ({
+        ...bundle,
+        campaign: { ...bundle.campaign, stages },
+        mapJson: { ...mapJson, chapterId, sites: [
+            { id: 'stage_1', type: 'stage', cellId: 1, footprint: [1], configId: '1001' },
+            { id: 'boss_2', type: 'boss', cellId: 3, footprint: [3], configId: '1002' },
+            // 异步据点：解锁都没解，`unlockCells` 与 `passCells` 里都没有它。
+            { id: 'async_3', type: 'asyncPvp', cellId: 4, footprint: [4], configId: '20001' },
+        ] },
+    });
+    const h = createHarness({ loader, chapters: [1, 2] });
+    h.presenter.start();
+    await flush();
+    assert.equal(h.presenter.state.hud?.nextEnabled, false);
+    h.presenter.applyPassCellsBro(1, [3]);
+    await flush();
+    assert.equal(h.presenter.state.chapterId, 2,
+        '异步据点没通不该拦住通关 —— 拿打不了的格子当门槛会把这一章锁死');
+    h.presenter.dispose();
+});
+
+test('★★★切章命令只发给「玩家点的章节按钮」：自动推进不发（用户 2026-11-04）', async () => {
+    const loader = createFakeLoader();
+    loader.loader.load = async (chapterId) => ({ ...bundle, mapJson: { ...mapJson, chapterId } });
+    const gateway = createFakeGateway();
+    gateway.gateway.fetchChapterCells = async (chapterId) => ({ ok: true, state: {
+        levelChapter: chapterId, rewardState: 0, unlockCells: [1], passCells: chapterId === 1 ? [] : [],
+    } });
+    const h = createHarness({ loader, gateway, chapters: [1, 2] });
+    h.presenter.start();
+    await flush();
+    assert.equal(h.presenter.state.chapterId, 1);
+
+    // ① 通关 ⇒ 模型自动进下一章。这条路上**不许**播转场（否则玩家什么都没点就演了一段）。
+    h.presenter.applyPassCellsBro(1, [1]);
+    await flush();
+    assert.equal(h.presenter.state.chapterId, 2, '自动推进照常发生');
+    assert.deepEqual(h.chapterSwitches, [], '自动推进不许发 chapterSwitch');
+
+    // ② 玩家在章节选择弹窗里回到已通过的章节 ⇒ 必须发（含"往回选"这条路）。
+    h.presenter.selectChapter(1);
+    await flush();
+    assert.deepEqual(h.chapterSwitches, [{ from: 2, to: 1 }],
+        '回到已通过的章节也要演转场 —— 用户原话就是这么说的');
+    assert.equal(h.presenter.state.chapterId, 1);
+
+    // ③ 翻页切章（`chapter` 意图走的那条）同样要发。
+    h.chapterSwitches.length = 0;
+    h.presenter.switchChapter(1);
+    await flush();
+    assert.deepEqual(h.chapterSwitches, [{ from: 1, to: 2 }]);
+    h.presenter.dispose();
+});
+
+test('★★★被门槛拦下的切章不许先演一段转场再回退', async () => {
+    // 当前章没通关 ⇒ 「往后翻」被拦，只出提示 —— 此时一条 `chapterSwitch` 都不许发，
+    // 否则页面会白合拢一次云，等半天等不到新章。
+    const h = createHarness({ chapters: [1, 2] });
+    h.presenter.start();
+    await flush();
+    assert.equal(h.presenter.state.chapterId, 1);
+    h.presenter.switchChapter(1);
+    await flush();
+    assert.equal(h.presenter.state.chapterId, 1, '没通关进不去下一章');
+    assert.deepEqual(h.chapterSwitches, []);
+    assert.match(h.tips[h.tips.length - 1], /请先通关本章最后一个首领关卡/);
+
+    // 弹窗选章走同一条门槛（目标章在后）。
+    h.presenter.selectChapter(2);
+    await flush();
+    assert.deepEqual(h.chapterSwitches, []);
+    assert.equal(h.presenter.state.chapterId, 1);
+    h.presenter.dispose();
+});
+
+test('★★★一章一个可打的首领都没有 ⇒ 退回「全部站点占领」判定（别当成已通关）', async () => {
+    const loader = createFakeLoader();
+    const stages = [
+        { ...stage, levelId: 1001, stage: 1 },
+        { ...stage, levelId: 1002, stage: 2 },
+    ];
+    loader.loader.load = async (chapterId) => ({
+        ...bundle,
+        campaign: { ...bundle.campaign, stages },
+        mapJson: { ...mapJson, chapterId, sites: [
+            { id: 'stage_1', type: 'stage', cellId: 1, footprint: [1], configId: '1001' },
+            { id: 'stage_2', type: 'stage', cellId: 3, footprint: [3], configId: '1002' },
+        ] },
+    });
+    const h = createHarness({ loader, chapters: [1, 2] });
+    h.presenter.start();
+    await flush();
+    h.presenter.applyPassCellsBro(1, [3]);
+    await flush();
+    assert.equal(h.presenter.state.hud?.nextEnabled, false, '只通了一关，另一关还没占领');
+    assert.equal(h.presenter.state.chapterId, 1);
+    h.presenter.applyPassCellsBro(1, [1]);
+    await flush();
+    assert.equal(h.presenter.state.chapterId, 2, '两格都占领 ⇒ 旧口径通关');
+    h.presenter.dispose();
+});
+
+
 test('battle return advances a newly completed chapter but manual review stays in that chapter', async () => {
     const loader = createFakeLoader();
     loader.loader.load = async (chapterId) => ({ ...bundle, mapJson: { ...mapJson, chapterId } });
@@ -2160,7 +2331,8 @@ test('switching to the next chapter before completion shows a tip', async () => 
     await flush();
     h.presenter.switchChapter(1);
     assert.equal(h.tips.length, 1);
-    assert.match(h.tips[0], /请先占领本章全部站点/);
+    // 2026-11-04 口径：通关 = 通过本章最后一个首领关卡（不再是"占领全部站点"）
+    assert.match(h.tips[0], /请先通关本章最后一个首领关卡/);
 });
 
 test('dispose releases the chapter context without publishing another state', async () => {
@@ -2571,11 +2743,49 @@ test('挂机产出没有来源格：originCellId 为空（页面回落到起始�
     h.presenter.start();
     await flush();
     h.presenter.slowTick(Date.now());
-    // 进页面时也会结算一次挂机（loadChapter 末尾），所以这里可能有 1~2 条。
-    assert.ok(h.rewards.length >= 1, '挂机产出必须发出来');
+    h.presenter.fastTick(Date.now());
+    assert.equal(h.storeCalls.settleIdle, 0, '进入页面与定时拍都不能消费挂机产出');
+    assert.equal(h.rewards.length, 0);
+    h.presenter.claimIdleRewards(Date.now());
+    assert.equal(h.storeCalls.settleIdle, 1);
+    assert.equal(h.rewards.length, 1, '仅点击征收后发奖');
     assert.ok(h.rewards.every((batch) => batch.some((g) => g.resId === 9 && g.amount === 3)));
     assert.ok(h.rewardOrigins.every((origin) => origin === undefined || origin === null),
         '挂机产出按关卡结算，不该带格子');
+});
+
+test('征收保留离线累计，领取推进真实账本，连点与重进均不重复发奖', async (t) => {
+    let clock = Date.now();
+    t.mock.method(Date, 'now', () => clock);
+    const store = createFakeStore({ ownedCells: [1] });
+    const realStore = new TerritorySaveStore(null);
+    store.store.settleIdleRewards = (id, sources, cap, now, source) => {
+        const result = realStore.settleIdleRewards(id, sources, cap, now, source, () => 0);
+        store.store.saveProgress(id, result.save.progress, result.save);
+        return result;
+    };
+    const h = createHarness({ store });
+    h.presenter.start();
+    await flush();
+    const start = h.presenter.state.idleRewardStartedAt;
+    assert.equal(typeof start, 'number', '占领后立即建立计时，不能等第一次征收才开始');
+    const now = start + 90 * 60 * 1000;
+    clock = now;
+    h.presenter.slowTick(now);
+    assert.equal(h.rewards.length, 0);
+    assert.equal(h.presenter.state.idleRewardStartedAt, start);
+    h.presenter.claimIdleRewards(now);
+    assert.equal(h.rewards.length, 1);
+    assert.equal(h.presenter.state.idleRewardStartedAt, start + 60 * 60 * 1000);
+    h.presenter.claimIdleRewards(now);
+    assert.equal(h.rewards.length, 1, '连点不会重复发奖');
+    h.presenter.dispose();
+    const reopened = createHarness({ store });
+    reopened.presenter.start();
+    await flush();
+    reopened.presenter.claimIdleRewards(now);
+    assert.equal(reopened.rewards.length, 0, '重进后不能重复领取已结算小时');
+    reopened.presenter.dispose();
 });
 
 test('★★★★真机口径：只打通 328，点 309 解锁后必须立刻发开战协议', async () => {
@@ -3061,4 +3271,49 @@ test('★点关卡/首领弹「关卡界面」：占据奖励取硬币、掉落�
     await flush();
     assert.equal(h.presenter.state.detail.levelInfo, null);
     assert.equal(h.presenter.state.detail.levelTip, null);
+});
+
+/**
+ * 🔴 2026-11-05 山猫（配图：「PVP 关卡通关后解锁」那种格）：「只有这种才需要上锁」。
+ *
+ * 锁标 = 「被**结构性条件**卡住」的格（前置没打通 / 随机格四周没有已开格），
+ * **不是**「现在开不了」：缺银币 / 缺体力是钱包问题，价格数字变红才是它的表达。
+ * 拿 `siteOpenableCells` 取反当判据就会把缺钱画成锁 —— 玩家每花一笔银子就看见整图上锁。
+ */
+test('unlock lock marker ignores wallet shortfall: openable false but not lock-blocked', async () => {
+    const fixedBundle: ITerritoryChapterBundle = {
+        ...bundle,
+        mapJson: { ...mapJson, sites: [...mapJson.sites, {
+            id: 'fixed_4', type: 'fixedResource', cellId: 4, footprint: [4], rewardId: 1011,
+            unlock: { requiredCells: [0], combatPower: 0, silverCost: 10,
+                staminaCost: 1, exploreSeconds: 1 },
+        }] },
+    };
+    // 前置（起点 0 已占领）满足，但银币 9 < 10 ⇒ 开不了。
+    const h = createHarness({ loader: createFakeLoader(fixedBundle),
+        store: createFakeStore({ silver: 9, stamina: 1 }) });
+    h.presenter.start();
+    await flush();
+    assert.equal(h.presenter.state.siteOpenableCells.includes(4), false, '缺钱 ⇒ 不在可开启集合');
+    assert.equal(h.presenter.state.lockBlockedCells.includes(4), false, '缺钱 ≠ 被前置卡住，不上锁');
+});
+
+test('unlock lock marker never overlaps cells that can be opened right now', async () => {
+    const publishedMap = JSON.parse(readFileSync(
+        assetPath('config/territory-maps/chapter_01.json'), 'utf8'));
+    const h = createHarness({
+        loader: createFakeLoader({ ...bundle, mapJson: publishedMap }),
+        gateway: createFakeGateway({ fetch: {
+            ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [367], passCells: [367] },
+        } }),
+    });
+    h.presenter.start();
+    await flush();
+    const lockBlocked = new Set(h.presenter.state.lockBlockedCells);
+    for (const cellId of h.presenter.state.siteOpenableCells) {
+        assert.equal(lockBlocked.has(cellId), false, `站点格 ${cellId} 能开却被上锁`);
+    }
+    for (const cellId of h.presenter.state.randomResourceOpenableCells) {
+        assert.equal(lockBlocked.has(cellId), false, `随机格 ${cellId} 能开却被上锁`);
+    }
 });

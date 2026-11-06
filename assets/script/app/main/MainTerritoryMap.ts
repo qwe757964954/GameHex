@@ -77,11 +77,25 @@ import {
     TERRITORY_BATTLE_INTRO_TARGETS,
     territoryBattleIntroHoldFx,
     territoryBattleIntroInFx,
+    territoryBattleIntroInFxAt,
     territoryBattleIntroOutFx,
+    territoryBattleIntroOutFxAt,
     territoryBattleIntroPushPx,
     type ITerritoryBattleIntroFx,
 } from '../territory/model/TerritoryBattleIntro';
 import type { IMatchingEntryParams } from '../matching/MatchTypes';
+import {
+    TERRITORY_CHAPTER_SWITCH_WAIT_MAX_SECONDS,
+    territoryChapterSwitchCoverProgress,
+    territoryChapterSwitchLeadProgress,
+    territoryChapterSwitchReadyToReveal,
+    territoryChapterSwitchRevealOffset,
+    territoryChapterSwitchRevealProgress,
+    territoryChapterSwitchRise,
+    territoryChapterSwitchSinkDistance,
+    territoryChapterSwitchSinkOffset,
+    territoryChapterSwitchWanted,
+} from '../territory/model/TerritoryChapterSwitch';
 import { TERRITORY_TEXTS } from '../territory/application/TerritoryTexts';
 import { TerritoryMapView } from '../territory/view/TerritoryMapView';
 import {
@@ -124,7 +138,9 @@ const { ccclass, property } = _decorator;
 /**
  * 顶部 HUD（个人信息框 + 好友 / 邮件 / 排行榜 / 邀请）的节点名。
  *
- * 它与本页**同级**（都在宿主页 `ArenaRoot` 下），不在地图 prefab 里 ⇒ 只能按名字往上找。
+ * 它**不在**地图 prefab 里：层级是 `ArenaRoot / MapRoot / MainTerritoryMap`，
+ * 而 `TopHud` 是 `ArenaRoot` 的孩子 ⇒ 与地图页**隔了一层 `MapRoot`**，只能按名字往上找
+ * （见 `hostPageRoot`）。
  * ⚠️ 尺寸不许抄 prefab 数字：它挂 `Widget` + 长屏适配（`MainHudLayout` 按安全区改 `top`），
  *    底边随屏幕比例变，抄死数值在长屏上会差几十像素。
  */
@@ -202,6 +218,32 @@ interface IBattleIntroState {
 }
 
 /**
+ * 章节切换转场的运行时状态（时间轴在 page 里推进，曲线在 `model/TerritoryChapterSwitch`）。
+ *
+ * 需求 2026-11-04：「镜头快速上移，移动到新章节的位置，将新章节居中，
+ * 玩家只能通过章节按钮播放切换动画，回到已通过的章节」。
+ *
+ * 三段：`cover`（云合拢 + 旧图被带着往下走）→ `wait`（黑场里换图，等新章画上来）
+ * → `reveal`（新章从上方落回居中，云散开）。
+ */
+interface IChapterSwitchState {
+    readonly from: number;
+    readonly to: number;
+    /**
+     * `lead` 相机先行 → `cover` 云合拢 → `wait` 换图 → `reveal` 揭幕。
+     *
+     * `lead` 是 2026-11-05 用户补的：「相机先向上快速移动 0.1s 后，云层遮挡动画再开始播放」。
+     * 那一段**云还没出来**，只有 `MapLayer` 在动 —— 所以它必须是独立的一段，并进 `cover`
+     * 就变成"云一边合拢、镜头一边慢慢走"。
+     */
+    phase: 'lead' | 'cover' | 'wait' | 'reveal';
+    /** 当前段的进度秒数。 */
+    elapsed: number;
+    /** 新章落位的总距离（px，按视口高度算；0 = 只演云不演位移）。 */
+    readonly rise: number;
+}
+
+/**
  * 「冒险」页的 Passive View。
  *
  *  本类只做引擎生命周期、接线与渲染编排；状态、流程、规则全部在纯 TS 的
@@ -254,6 +296,19 @@ export class MainTerritoryMap extends Component {
     /** 领地存档归属（roleId/serverId），进入对局时随 pve 一并下发。 */
     private saveOwner: ITerritorySaveOwner | null = null;
     private lastRenderedChapter = -1;
+    /**
+     * 上一帧的"换图"被压住了（整章云散还在演）。
+     *
+     * 用户 2026-11-04：「SVG 合并之后，完成章节云层消散的动画没有了」。真因不是动画被删，
+     * 而是**通关那一刻模型立刻换章**，而 `syncGrid` 换章第一件事就是 `clouds.reset()` ——
+     * 云散刚起手就被掐掉。修法是把"换图"这个动作压到演出演完（模型不用等，它已经换成新章了，
+     * 只是页面先不画），所以需要这个标记在 `update` 里补一次渲染。
+     */
+    private chapterSwapPending = false;
+    /**
+     * 章节切换转场（`null` = 没在演）。只有玩家点章节按钮才会起（模型发的 `chapterSwitch`）。
+     */
+    private chapterSwitch: IChapterSwitchState | null = null;
     private focusCell: { readonly chapterId: number; readonly cellId: number } | null = null;
     /** 首次完整绘制后报告 presented，组合层据此确认首屏就绪。 */
     private firstReadyNotified = false;
@@ -516,11 +571,6 @@ export class MainTerritoryMap extends Component {
         EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'ready' });
     }
 
-    /** 主城快速寻敌：打开当前 Boss 详情，并将地图移到同一个格子。 */
-    focusCurrentBoss(): void {
-        this.sendIntent({ kind: 'focusBoss' });
-    }
-
     /** 宿主在挂载前传入返回地块，首个就绪画面消费一次。 */
     setFocusCell(chapterId: number, cellId: number): void {
         this.focusCell = { chapterId, cellId };
@@ -568,6 +618,8 @@ export class MainTerritoryMap extends Component {
             case 'busy': this.onSetBusy(command.payload); break;
             case 'prepareBattle': this.sessionAssets.pauseWarmup?.(); break;
             case 'focusCell': if (this.state) this.scrollToCell(command.cellId, this.state.layout); break;
+            // 玩家点了章节按钮（含章节选择弹窗里回到已通过的章节）⇒ 播「镜头上移、新章居中」。
+            case 'chapterSwitch': this.beginChapterSwitch(command.fromChapterId, command.toChapterId); break;
         }
     }
 
@@ -576,8 +628,14 @@ export class MainTerritoryMap extends Component {
         // 弹窗挂在全局 PopupManager 下，必须在战斗流程接手时主动收起。
         this.closePopup(LevelTipPanel);
         this.closePopup(LevelInfoPanel);
-        // 一次开战只跳一次：过场 / 前奏期间再来一条 navigate（服务端推送 / 迟到回包）一律丢弃。
-        if (this.battleApproachPending) return;
+        // 一次开战只跳一次：过场 / 前奏已经拿到去向之后再来一条 navigate
+        //（服务端推送 / 迟到回包）一律丢弃。
+        // 🔴 别用 `battleApproachPending` 当这道判据：`onSetBusy` 在**开战请求在途**时
+        //    就起演了整页过场并将它置 true，回包后本该交给过场的那条 navigate 会被一起吞掉
+        //    ⇒ 过场 `hold` 等不到 nav、3s 后判取消；而会话资源照常加载完（日志停在
+        //    「[BattleLoading] 首帧资源准备完成」），玩家却永远进不了战斗、全程零报错。
+        //    症状是「首次解锁直开那一波能进，之后重复挑战 / 下一关都进不去」。
+        if (this.battleIntro?.nav || this.battlePrelude) return;
         // 🔴 首次解锁直开（`approach`）：「① 关卡地块生成 → ② 镜头推进 + 提示条 → ③ 云层过场」
         //    （用户 2026-11-02）。这条分支必须排在 `startBattleIntro()` **之前** ——
         //    云一旦先盖上来，前两段就全在云后面演，玩家什么都看不见。
@@ -618,6 +676,141 @@ export class MainTerritoryMap extends Component {
         /** 宽限期里**见过**地块生成在播（见过就必须等它播完）。 */
         seenSpawn: boolean;
     } | null = null;
+
+    // ============================================================
+    // 章节切换转场（2026-11-04）
+    // ============================================================
+
+    /**
+     * 起演「镜头上移、新章居中」的切章转场。
+     *
+     * 只有**玩家点章节按钮**（含章节选择弹窗里回到已通过的章节）才会走到这里：
+     * 模型发的 `chapterSwitch` 命令只在 `switchChapter` / `selectChapter` 里发，
+     * 通关后自动推进那条路**不发**（用户原话：「玩家只能通过章节按钮播放切换动画」）。
+     *
+     * 演不了（云美术没加载 / 在演整页过场）就**什么都不做** —— 模型那边已经把章换了，
+     * 页面照常换图，只是没有这段动画。宁可没动画，也不要盖一片空底色。
+     */
+    private beginChapterSwitch(fromChapterId: number, toChapterId: number): void {
+        if (!territoryChapterSwitchWanted(fromChapterId, toChapterId)) return;
+        if (!this.mapView?.isValid) return;
+        if (this.chapterSwitch) return;
+        if (!this.mapView.beginChapterSwitch()) return;
+        const [, height] = this.battleIntroViewport();
+        this.chapterSwitch = {
+            from: fromChapterId,
+            to: toChapterId,
+            // 先走相机（云还没出来），再合拢 —— 2026-11-05 用户口径。
+            phase: 'lead',
+            elapsed: 0,
+            rise: territoryChapterSwitchRise(height),
+        };
+        // 第一帧就写：`lead(0)` 是"云还在画面外、地图没动"的原样，读作无缝起手。
+        this.writeChapterSwitchLead(0);
+    }
+
+    /** 转场每帧推进（`update` 里调；它自己不碰 `battleIntro` / `battlePrelude` 的任何字段）。 */
+    private stepChapterSwitch(step: number): void {
+        const transition = this.chapterSwitch;
+        if (!transition) return;
+        // 云在等新章的那几秒也不能冻住（`cloud_idle_*` 待机循环，只换帧不动位置）。
+        this.mapView?.stepChapterSwitchCover(step);
+        transition.elapsed += step;
+        if (transition.phase === 'lead') {
+            const progress = territoryChapterSwitchLeadProgress(transition.elapsed);
+            this.writeChapterSwitchLead(progress);
+            if (progress >= 1) {
+                transition.phase = 'cover';
+                transition.elapsed = 0;
+            }
+            return;
+        }
+        if (transition.phase === 'cover') {
+            const progress = territoryChapterSwitchCoverProgress(transition.elapsed);
+            this.writeChapterSwitchFx(progress);
+            if (progress >= 1) {
+                transition.phase = 'wait';
+                transition.elapsed = 0;
+            }
+            return;
+        }
+        if (transition.phase === 'wait') {
+            // 新章**画上来了**才揭幕（判据见 `territoryChapterSwitchReadyToReveal`：
+            // 看的是 `lastRenderedChapter`，不是 `state.chapterId` —— 后者在加载一开始就改了）。
+            if (territoryChapterSwitchReadyToReveal(this.lastRenderedChapter, transition.to)) {
+                transition.phase = 'reveal';
+                transition.elapsed = 0;
+                return;
+            }
+            // 加载失败：模型把章号退回旧章 ⇒ 当这次没发生，收场（云不能永远盖着）。
+            const state = this.state;
+            if (state && state.ready && state.chapterId === transition.from) {
+                this.endChapterSwitch();
+                return;
+            }
+            if (transition.elapsed >= TERRITORY_CHAPTER_SWITCH_WAIT_MAX_SECONDS) {
+                console.warn('[ChapterSwitch] 等新章节加载超时，直接收场');
+                this.endChapterSwitch();
+            }
+            return;
+        }
+        const progress = territoryChapterSwitchRevealProgress(transition.elapsed);
+        this.writeChapterSwitchFx(1, progress);
+        if (progress >= 1) this.endChapterSwitch();
+    }
+
+    /**
+     * 写一帧「相机先行」姿态（`lead` 段）。
+     *
+     * 这一段**云还在画面外**（`cover` 进度恒 0：`spread` 保持初始、透明度 0），只有整张
+     * 地图在快速上移。用户 2026-11-05：「相机先向上快速移动 0.1s 后，云层遮挡动画再开始播放」
+     * —— 先让玩家看见"画面被带着往上走"，再让云盖上来，两件事分开读得清。
+     *
+     * @param progress `lead` 段进度（0~1）
+     */
+    private writeChapterSwitchLead(progress: number): void {
+        const transition = this.chapterSwitch;
+        const mapView = this.mapView;
+        if (!transition || !mapView) return;
+        const fx = territoryBattleIntroOutFxAt(0);
+        mapView.applyChapterSwitchCover(fx.coverSpread, 0, 0);
+        mapView.setChapterSwitchOffset(territoryChapterSwitchSinkOffset(progress, transition.rise));
+    }
+
+    /**
+     * 写一帧转场姿态。
+     *
+     * @param coverProgress `cover` 段进度（0~1）
+     * @param revealProgress `reveal` 段进度（0~1）；`undefined` = 还在合拢段
+     *
+     * 合拢段与揭幕段共用 `TerritoryBattleIntro` 的两条云曲线（`out` / `in`）：
+     * 同一个云盖层、同一批点阵，换一段只是把 `(spread, opacity, release)` 换一条曲线，
+     * 不用第二套美术，也不会出现"两种云"。
+     */
+    private writeChapterSwitchFx(coverProgress: number, revealProgress?: number): void {
+        const transition = this.chapterSwitch;
+        const mapView = this.mapView;
+        if (!transition || !mapView) return;
+        if (revealProgress === undefined) {
+            // 合拢：云从画面外收到就位（`spread` 2.2 → 1、透明度 0 → 1）。
+            const fx = territoryBattleIntroOutFxAt(coverProgress);
+            mapView.applyChapterSwitchCover(fx.coverSpread, fx.coverOpacity, 0);
+            // 相机在 `lead` 段已经走到位了，这里**每帧写同一个常量**（停下不动）。
+            // 🔴 别换成按 `coverProgress` 再插值一次 —— 那会从 0 重新算起，画面往回弹一下。
+            mapView.setChapterSwitchOffset(territoryChapterSwitchSinkDistance(transition.rise));
+            return;
+        }
+        // 揭幕：新章从上方落回居中，云同时往四周散开 + 逐朵淡出。
+        const fx = territoryBattleIntroInFxAt(revealProgress);
+        mapView.applyChapterSwitchCover(fx.coverSpread, 1, fx.coverRelease);
+        mapView.setChapterSwitchOffset(territoryChapterSwitchRevealOffset(revealProgress, transition.rise));
+    }
+
+    /** 转场收工（正常播完 / 加载失败 / 页面被销毁都走它，幂等）。 */
+    private endChapterSwitch(): void {
+        this.chapterSwitch = null;
+        this.mapView?.endChapterSwitch();
+    }
 
     private beginBattlePrelude(payload: ITerritoryNavigateBattlePayload): void {
         // 🔴 极端并发：别的开战请求（同屏另一格）已经把云盖上来了、整页过场正在演。
@@ -737,6 +930,10 @@ export class MainTerritoryMap extends Component {
                 // 真的切走了：主界面马上会被 `onLeave` 卸掉，留个兜底定时器反而可能在
                 // 交接的空档把 UI 弹回来，先把它作废。
                 this.battleIntroLeftover = null;
+                // 🔴 一次性门闩在**成功**路径也要复位：旧实现只在失败/收工
+                //    （`restoreBattleIntroScene`）里清，成功切走时留着 true ⇒ 页面若被复用，
+                //    下一次开战的 navigate 会被静默丢掉。
+                this.battleApproachPending = false;
                 return;
             }
             // 预加载失败 / 被别的切换顶掉 / 路由没注册 —— 这一局是进不去了。
@@ -848,6 +1045,19 @@ export class MainTerritoryMap extends Component {
      */
     update(dt: number): void {
         const step = Number.isFinite(dt) && dt > 0 ? dt : 0;
+        // ① 整章云散演完了 ⇒ 把压住的那一帧新章补画上来（排在所有早退之前：
+        //    换图这件事不能因为"过场在演"之类的分支被跳过）。
+        if (this.chapterSwapPending) {
+            if (this.mapView?.chapterClearPlaying) return;
+            this.chapterSwapPending = false;
+            this.renderAll();
+            if (!this.isValid) return;
+        }
+        // ② 切章转场（玩家点的）。它自己要靠新章画上来才能揭幕，所以排在①之后。
+        if (this.chapterSwitch) {
+            this.stepChapterSwitch(step);
+            if (!this.isValid) return;
+        }
         // 「首次解锁直开」的前奏（地块生成 → 推镜 → 盖云）排在整页过场之前：
         // 它跑的时候 `battleIntro` 还没建，两段不会同时写 `MapLayer`。
         const prelude = this.battlePrelude;
@@ -1095,7 +1305,9 @@ export class MainTerritoryMap extends Component {
      */
     private collectBattleIntroHud(): ITerritoryBattleIntroHud[] {
         const out: ITerritoryBattleIntroHud[] = [];
-        const host = this.node.parent;
+        // 起点同样是 `hostPageRoot()`（= `ArenaRoot`）：`TopHud` / `BottomHud` 都不是
+        // `MapRoot` 的后代，拿 `this.node.parent` 起头等于一棵一棵白找（见 `hostPageRoot`）。
+        const host = this.hostPageRoot();
         if (!host?.isValid) return out;
         for (const target of TERRITORY_BATTLE_INTRO_TARGETS) {
             const node = findDescendantByName(host, target.name) ?? this.findUpwardSibling(host, target.name);
@@ -1138,6 +1350,16 @@ export class MainTerritoryMap extends Component {
     private renderAll(): void {
         const state = this.state;
         if (!state || !state.ready || !state.map || !state.progress) return;
+        // 🔴 整章云散还在演 ⇒ 这一帧**先别换图**（用户 2026-11-04「完成章节云层消散的动画
+        //    没有了」）。模型通关后立刻换章，`syncGrid` 换章第一件事是 `clouds.reset()` +
+        //    `restoreChestCamera()`，云散 1.1s 拉远 + 2.0s 逐朵淡会被掐在第一帧。
+        //    `state` 已经是新章了也没关系：地图保持旧章不动，等演出完再画（`update` 里补）。
+        //    转场（玩家点的切章）例外：它自己要靠新章画上来才能揭幕。
+        if (state.chapterId !== this.lastRenderedChapter && !this.chapterSwitch
+            && this.mapView?.chapterClearPlaying) {
+            this.chapterSwapPending = true;
+            return;
+        }
         // 首次成功渲染即通知宿主首屏就绪（一次性，之后切章不再触发）。
         if (!this.firstReadyNotified) {
             this.firstReadyNotified = true;
@@ -1154,6 +1376,8 @@ export class MainTerritoryMap extends Component {
             progress: state.progress,
             revealedCells: state.revealedCells,
             siteOpenableCells: state.siteOpenableCells,
+            // 锁标只认「结构性阻塞」（前置没打通 / 随机格四周没开），见 `ITerritoryViewState.lockBlockedCells`。
+            lockBlockedCells: state.lockBlockedCells,
             stageByCell: state.stageByCell,
             randomResourceOpenableCells: state.randomResourceOpenableCells,
             pendingRandomResourceCells: state.pendingRandomResourceCells,
@@ -1162,6 +1386,12 @@ export class MainTerritoryMap extends Component {
             victoryClaimCells: state.victoryClaimCells,
             // 钱包 ⇒ 判「银币 / 体力数字要不要染红」（2026-11-03）。
             wallet: state.wallet,
+            // 通关 ⇒ 整章云散（2026-11-04：通关口径改成"最后一个首领"后，
+            // 老判据「全图都打通了」可能永远不成立，得由状态显式告诉地图）。
+            chapterCleared: state.chapterCleared,
+            // 只给**首次通关**演的那一拍（一次性边沿）：切回已通过的章节时它是 false，
+            // 地图只把雾收掉、不重演（2026-11-05）。
+            chapterClearPending: state.chapterClearPending,
         });
         if (resetScroll) {
             const focus = this.focusCell;
@@ -1407,13 +1637,49 @@ export class MainTerritoryMap extends Component {
     }
 
     /**
-     * 从**宿主页**找顶部 HUD（它与本页同级，不在地图 prefab 里）。
+     * 宿主页里**挂着 HUD 的那一层**（现结构是 `ArenaRoot`）。
      *
-     * ⚠️ 只能按名字往上找：地图页是 `MainTabHost` 动态挂上去的，HUD 是宿主的兄弟节点，
-     *    没有引用可拿；`MainTopHudToggle` 那套同名查找也是这个口径。
+     * ## 为什么不能只认 `this.node.parent`
+     *
+     * 🔴 2026-11-05 用户截图「最上沿的地块还是被 UI 遮挡」—— 根因就在这一句：
+     * 地图页实际的层级是 `ArenaRoot / MapRoot / MainTerritoryMap`（`MapRoot` 是那个
+     * 嵌套 prefab 实例的宿主层），而 `TopHud` / `BottomHud` / `BeginGame` / `ChestBar`
+     * 全都挂在 `ArenaRoot` 上。只查 `this.node.parent`（= `MapRoot`）一个都找不到 ⇒
+     * `hudBottom` 恒 **0** ⇒ `padTop` 只剩 `15 + 45 + 60 = 120`，第一排地块停在离屏幕顶
+     * **75** 的位置，正好落在 146 高的 `TopHud` 后面 —— 读起来就是"根本拖不下来"。
+     *
+     * 底部那侧一直没暴露同一个 bug：量不到会退到兜底 {@link TERRITORY_MAP_BOTTOM_INSET}
+     * （300），与真实 305 只差 5px，肉眼看不出来。
+     *
+     * ⚠️ 往上最多找 4 层、逐层 `getChildByName`：宿主页再套一层容器也不会断；
+     *    真找不到就退回 `this.node.parent`（= 老行为，退化但不抛错）。
+     *    口径与 {@link findUpwardSibling}（过场推 HUD 那套）一致 —— 它早就为同一件事
+     *    加过"往上找"的兜底，这里是同一个坑的第二次踩。
+     */
+    private hostPageRoot(): Node | null {
+        const direct = this.node.parent;
+        if (!direct?.isValid) return null;
+        let node: Node | null = direct;
+        let top: Node = direct;
+        for (let depth = 0; depth < 4 && node?.isValid; depth += 1) {
+            if (node.getChildByName(TOP_HUD_NODE_NAME)) return node;
+            top = node;
+            node = node.parent;
+        }
+        // 兜底：HUD 被人塞进某层容器里（不是直接孩子）时，从能到的最高一层按子树找一次。
+        return findDescendantByName(top, TOP_HUD_NODE_NAME) ? top : direct;
+    }
+
+    /**
+     * 从**宿主页**找顶部 HUD（它不在地图 prefab 里，只按名字找，没有引用可拿）。
+     *
+     * ⚠️ 起点必须是 {@link hostPageRoot} 而不是 `this.node.parent`：后者是 `MapRoot`，
+     *    见那个方法里的 2026-11-05 复盘。
      */
     private findTopHud(): Node | null {
-        return this.node.parent?.getChildByName(TOP_HUD_NODE_NAME) ?? null;
+        const host = this.hostPageRoot();
+        if (!host?.isValid) return null;
+        return host.getChildByName(TOP_HUD_NODE_NAME) ?? findDescendantByName(host, TOP_HUD_NODE_NAME);
     }
 
     /**
@@ -1422,7 +1688,11 @@ export class MainTerritoryMap extends Component {
      * 两个 `getBoundingBoxToWorld()` 相减：一个取 HUD 的底边（`box.yMin`），一个取视口的顶边
      * （`box.yMax`）。都是世界坐标 ⇒ 不受中间节点的缩放 / 锚点影响。
      *
-     * @returns 找不到 HUD / 视口时返回 0（= 退化成「没有 HUD 遮挡」那一档）。
+     * 🔴 返回 0 **不是**"没有遮挡"这么温和的意思：0 ⇒ `padTop` 只剩 120 ⇒ 第一排地块停在
+     * 离屏幕顶 75 的位置，正好在 146 高的 `TopHud` 后面（2026-11-05 用户截图就是这个症状）。
+     * 所以"量不到"必须当成**待修的 bug**看，别拿它当合法退化。
+     *
+     * @returns 找不到 HUD / 视口时返回 0；正常结构下应是 `TopHud` 顶边距 + HUD 高（720×1280 上 146）。
      */
     private topHudBottom(viewport: UITransform): number {
         const hud = this.findTopHud();
@@ -1443,6 +1713,9 @@ export class MainTerritoryMap extends Component {
      * 🔴 基准是**视口**底边，不是屏幕底边：`MapViewport` 底边离屏幕底还有 168px，
      *    拿屏幕底量会把这段也算进去，`pad` 直接大 168（底排又被压回挂件下面）。
      *
+     * ⚠️ 起点同样要用 {@link hostPageRoot}：`MainTaskEntry` 在 `BottomHud` 里、
+     *    `BeginGame` / `ChestBar` 是 `ArenaRoot` 的孩子，没有一个是 `MapRoot` 的后代。
+     *
      * 几个挂件的高度都会变（任务入口有红点、宝箱栏有展开态、快速寻敌换文案），
      * 所以每次都得重量 —— 这也是它跟 `canvas-resize` 一起重算的原因。
      *
@@ -1450,7 +1723,7 @@ export class MainTerritoryMap extends Component {
      *          {@link TERRITORY_MAP_BOTTOM_INSET}，而不是当成 0（0 = 底排被挂件压住）。
      */
     private bottomHudInset(viewport: UITransform): number | null {
-        const host = this.node.parent;
+        const host = this.hostPageRoot();
         const viewportBox = viewport?.getBoundingBoxToWorld();
         if (!host?.isValid || !viewportBox) return null;
         let top: number | null = null;

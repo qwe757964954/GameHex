@@ -1,3 +1,4 @@
+import { ZCDC_LOG_DIAGNOSTICS, ZCDC_LOG_WARNINGS } from './ZCDCLogSwitch';
 import {
     _decorator,
     Component,
@@ -30,8 +31,8 @@ import { HeadArt } from '../HeadArt';
 import type { IControllerResources } from '../../framework/controller/ControllerBase';
 import { ZC_BATTLE_EVENTS } from './application/ZCBattleEvents';
 import { createIconLoader, type IIconLoader } from '../common/SpriteFrameCache';
-import { resolveCardClass, resolveCardHeroArt, resolveHeroArt } from '../card/CardLineupTypes';
-import { CARD_HEAD_ART_ROOT, ICON_ART_ROOT } from '../ArtPaths';
+import { resolveCardClass } from '../card/CardLineupTypes';
+import type { ICardArtConfig } from '../card/CardArtConfig';
 
 const { ccclass } = _decorator;
 
@@ -285,7 +286,7 @@ export class ZCGame extends Component {
      *  这里若只扫全局 `getPlayerDeck()/getEnemyDeck()`，那些局会一张卡面都取不到，
      *  然后每张卡都刷「没有角色卡面图」的日志。宁可多扫，不可漏扫。
      */
-    private loadLegendCardArt(): void {
+    private loadLegendCardArt(art: ICardArtConfig): void {
         const config = this.matchConfig;
         const decks: ReadonlyArray<readonly ZCDeckCard[]> = [
             ...(config ? ZC_OWNER_ORDER.map((owner) => (
@@ -302,13 +303,19 @@ export class ZCGame extends Component {
         }
         const loadIcon = this.loadIcon;
         void Promise.all(Array.from(cards.values()).map(async (card) => {
-            const hero = resolveCardHeroArt(card);
-            const [frame, role] = await Promise.all([
-                card.headIcon ? this.loadHeadIconFrame(card.headIcon).catch(() => null) : Promise.resolve(null),
-                loadIcon(hero ?? resolveHeroArt(resolveCardClass(card)), hero ? CARD_HEAD_ART_ROOT : ICON_ART_ROOT)
-                    .catch(() => null),
-            ]);
-            return { cardId: card.id, frame, role };
+            // 立绘真源 = pvpCard.headIcon（icon.json 解析到 icons/cardHead 资源名）；
+            // 无 headIcon 或缺图时回退职业雕像，与列表条目同一条解析链。
+            const heroFrame = card.headIcon
+                ? await this.loadHeadIconFrame(card.headIcon).catch(() => null)
+                : null;
+            let role = heroFrame;
+            if (!role) {
+                if (this.leaving) return { cardId: card.id, frame: heroFrame, role: null };
+                const path = art.paths.get(`hero.${resolveCardClass(card, art.lineup)}`);
+                const cut = path.lastIndexOf('/');
+                role = await loadIcon(path.slice(cut + 1), path.slice(0, cut)).catch(() => null);
+            }
+            return { cardId: card.id, frame: heroFrame, role };
         })).then((entries) => {
             //  同上：`leaving` 已经盖住「renderWorld 被收走」这件事。
             if (this.leaving) return;
@@ -318,7 +325,7 @@ export class ZCGame extends Component {
                 if (role) this.legendRoleArtFrames.set(cardId, role);
             }
             this.renderWorld.refreshLegendCardArt();
-        });
+        }).catch(error => { if (ZCDC_LOG_WARNINGS) console.warn('[ZCGame] 卡牌展示图预加载失败', error); });
     }
 
     private readonly unitVisualPrefabs = new Map<ZCUnitId, Prefab>();
@@ -430,10 +437,12 @@ export class ZCGame extends Component {
             artifactIconFrame: prepared.artifactIconFrame,
             // 自选地图局的中立资源格盖成问号（资源进游戏才随机，别剧透是箱子还是金矿）。
             unknownResourceFrame: prepared.unknownResourceFrame,
-            // 中立资源获取特效：格子上喷发的金币贴图（`image/map-resource/coin_icon`）。
+            // 中立资源获取特效：飞向 HUD 金币栏的那把金币贴图。
             goldCoinFrame: prepared.goldCoinFrame,
             // 自选主城区域气泡底图（frame_01 绿 / frame_02 红，九宫格）。
             spawnRegionFrames: prepared.spawnRegionFrames,
+            // 金币粒子落点 = 整个 CoinPanel 面板（不是 GoldLabel / coin 子图标）。
+            coinPanelNode: this.hudView.coinPanel,
             artifactButtonNode: this.hudView.artifactButton.node,
             decorPrefab: prepared.decorPrefab,
             spawnFxPrefab: prepared.spawnFxPrefab,
@@ -443,7 +452,7 @@ export class ZCGame extends Component {
             wallPrefab: prepared.wallPrefab,
         });
         this.loadLegendPortraits();
-        this.loadLegendCardArt();
+        this.loadLegendCardArt(prepared.cardArtConfig);
         this.loadDefenceBossArt();
         if (selection) {
             this.renderWorld.initialize(setupConfig.map);
@@ -464,7 +473,7 @@ export class ZCGame extends Component {
         const afterDraw = (): void => {
             this.deferredAfterDraw = null;
             if (!isCurrent()) return;
-            console.info('[BattleLoading] 首帧已绘制，开始后补特效');
+            if (ZCDC_LOG_DIAGNOSTICS) console.info('[BattleLoading] 首帧已绘制，开始后补特效');
             let decorFrames = prepared.decorFrames;
             void load(art => {
                 if (!isCurrent()) return;
@@ -474,7 +483,7 @@ export class ZCGame extends Component {
                     this.installMapDecor(map, decorFrames);
                 }
             }).catch(error => {
-                if (isCurrent()) console.warn('[BattleLoading] 后补特效中断', error);
+                if (isCurrent()) if (ZCDC_LOG_WARNINGS) console.warn('[BattleLoading] 后补特效中断', error);
             });
         };
         this.deferredAfterDraw = afterDraw;
@@ -626,7 +635,7 @@ export class ZCGame extends Component {
         for (const [cardId, icon] of Array.from(icons)) {
             void this.loadHeadIconFrame(icon).then((frame) => {
                 if (!this.leaving && frame?.isValid) this.bossPortraits.set(cardId, frame);
-            }).catch((error) => console.warn(`[ZCGame] 波次怪头像加载失败：${icon}`, error));
+            }).catch((error) => { if (ZCDC_LOG_WARNINGS) console.warn(`[ZCGame] 波次怪头像加载失败：${icon}`, error); });
         }
     }
 

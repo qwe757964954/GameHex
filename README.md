@@ -16,10 +16,10 @@
 
 1. 使用 Cocos Creator **3.8.8** 打开 `D:\City1001\Demo3.8`。
 2. 等待首次资源导入完成。
-3. 打开 `assets/Test.scene`。
+3. 打开 `assets/Root.scene`（工程唯一场景，也是各平台构建配置的 `startScene`）。
 4. 点击预览运行。
 
-`Test.scene` 原有的 `UIDemo` 组件 UUID 被保留为兼容启动器，它会先加载 3.8 原生登录页；线上登录成功或点击“离线试玩”后进入 `assets/script/app/zcds/ZCGame.ts`。无需在编辑器里重新挂脚本。
+启动链由 `Root.scene` 进入 3.8 原生登录页；线上登录成功或点击“离线试玩”后进入 `assets/script/app/zcds/ZCGame.ts`。无需在编辑器里重新挂脚本。
 
 编辑器预览时，浏览器会受到旧后台 CORS 策略限制。另开一个终端运行下面的本地代理即可读取真实配置和服务器列表：
 
@@ -53,7 +53,7 @@ assets/script/app/login/
 
 assets/resources/subproto/  # 从 client 同步的完整业务协议与缓存描述
 
-assets/script/main/UIDemo.ts  # Test.scene 的兼容启动入口
+# 启动入口见「运行」：assets/Root.scene → 登录页 → ZCGame.ts（工程内无 Test.scene / UIDemo.ts）
 tests/zcds-model.test.ts      # 核心玩法单元测试
 ```
 

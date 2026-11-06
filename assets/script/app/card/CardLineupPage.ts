@@ -6,9 +6,10 @@ import { VIEW_LIFECYCLE } from '../../framework/ui/ViewLifecycle';
 import { ResourceScope } from '../../core/asset/ResourceScope';
 import type { ZCDeckBonuses, ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
 import { cardArtProvider } from './CardArtProvider';
+import type { ICardArtConfig } from './CardArtConfig';
 import { CardLineupBond } from './CardLineupBond';
 import { CardLineupCard } from './CardLineupCard';
-import type { ZCCardFrames, ZCCardFragmentProgress } from './CardLineupCard';
+import type { ZCCardArtLoader, ZCCardFrames, ZCCardFragmentProgress } from './CardLineupCard';
 import { cardRepository } from './CardRepository';
 import type { CardLineupData } from './CardRepository';
 import { CardLineupSlot } from './CardLineupSlot';
@@ -18,7 +19,9 @@ import { CardUnitPreviewAssets } from './CardUnitPreviewAssets';
 import {
     activeBondTitle,
     bondPercentTotal,
+    sortLineupCards,
     visibleIconTallies,
+    visibleLineupCards,
 } from './CardLineupTypes';
 import type { ZCCardTally } from './CardLineupTypes';
 import { CardLineupUiEvent, type ICardLineupRender } from './CardLineupEvents';
@@ -26,26 +29,25 @@ import { EventMgr } from '../../framework/event/EventMgr';
 
 const { ccclass, property } = _decorator;
 
-/** 上阵区一个站台**备好的**数据（`null` = 空位）；先备齐、再一次性写，见 `presentLineup`。 */
+/** 上阵区一个站台的数据（`null` = 空位）。`frames = null` = 图还在路上，先画空台 + 等级。 */
 interface IPreparedSlot {
     readonly card: ZCDeckCard;
-    readonly frames: ZCSlotFrames;
-    /** 模型后台加载，不参与首屏静态数据的等待。 */
-    readonly prefab: Promise<Prefab | null>;
+    readonly frames: ZCSlotFrames | null;
 }
 
-/** 卡库一次提交要的全部数据（图与进度都已在手，`renderItemFn` 里只做同步赋值）。 */
+/** 站台图未就绪时喂给 `CardLineupSlot.render` 的空图：三项都缺、不得留上一轮的残留。 */
+const EMPTY_SLOT_FRAMES: ZCSlotFrames = { disc: null, hero: null, badge: null };
+
+/** 卡库一次提交要的数据：图**不在这儿**，由条目自己取（见 `commitPool`）。 */
 interface IPreparedPool {
     readonly cards: readonly ZCDeckCard[];
-    readonly frames: ReadonlyMap<string, ZCCardFrames>;
     readonly fragments: ReadonlyMap<string, ZCCardFragmentProgress>;
     readonly deployedIds: ReadonlySet<string>;
 }
 
-/** 图标行一次提交要的全部数据。 */
+/** 图标行一次提交要的数据：同理，图标由条目自取。 */
 interface IPreparedIcons {
     readonly items: readonly ZCCardTally[];
-    readonly frames: ReadonlyMap<string, SpriteFrame | null>;
 }
 
 /** 每帧最多补几个上阵模型：`sp.Skeleton` 实例化实测 ~1.4~2.7ms/个，八个别挤进一帧。 */
@@ -69,7 +71,7 @@ const SLOT_PREVIEWS_PER_FRAME = 2;
  *   - 八卡 ← 服务端**选中阵型**（`CmdFormationInfo.select === 1`），经 `resolveSelectedDeck()`
  *     映射成卡；拿不到（未连接 / 失败 / 没有选中）才退回本地 `pvpCard.json` 的默认八卡。
  *     布阵面板保存会把阵型置为选中，所以关面板后本页要重刷（见 `onDeckSaved`）。
- *   - 卡库 ← `pvpCard.json` **全表**（图鉴口径，与拥有关系无关，断网也是完整一屏）。
+ *   - 卡库 ← `pvpCard.json` 全表排除金矿；按上阵、解锁与碎片状态排序。
  *   - 等级 / 上限 ← `CmdPvpHeroInfoListReqMsg` 按 `heroId` 关联 `pvpCard.id` + `cardLevelUp.json`。
  *   - 图标计数 ← 八卡按 `traits.attack`（职业）+ `traits.camp`（阵营）推导。
  *   - 羁绊百分比 ← `pvpBond.json` + `calculateDeckBonuses()`。
@@ -99,14 +101,8 @@ export class CardLineupPage extends Component {
     /** 还没补上单位模型的站台：`commitSlots` 只画静态立绘，模型由 `flushPreviews` 逐帧补。 */
     private pendingPreviews: Array<{ readonly slot: CardLineupSlot; readonly prefab: Prefab }> = [];
     private previewFlushScheduled = false;
-    /**
-     * 最近一次打开的备图耗时（毫秒），三段各记一份，`presentLineup` 打完日志就不再读。
-     *
-     * 记在成员上而不是在 `Promise.all` 外面包一层计时器：`tests/card-lineup-ui-regression.test.ts`
-     * 拿 `cards.length > 0 ? this.preparePool` 这个**源码形态**钉住「快照 catalog 为空要跳过卡库」，
-     * 包一层就把守卫顶掉了。
-     */
-    private readonly prepareMs = { slots: 0, pool: 0, icons: 0 };
+    /** 静态首屏提交后下一帧才启动模型加载，避免冷加载争抢 UI 图片的下载与解析。 */
+    private previewLoadTask: (() => void) | null = null;
 
     @property({ type: Label, tooltip: 'TopBar/QualityLabel：品质星下方小字' })
     qualityLabel: Label = null;
@@ -199,6 +195,7 @@ export class CardLineupPage extends Component {
         EventMgr.instance.offTarget(this);
         this.presentRevision += 1;
         this.arenaSlotCache = null;
+        this.cancelPreviewLoads();
         this.pendingPreviews.length = 0;
         this.previewFlushScheduled = false;
         EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'destroyed' });
@@ -224,16 +221,24 @@ export class CardLineupPage extends Component {
     /**
      * 页面唯一的写节点入口：只渲染，不取数。
      *
-     * **一次原子提交**：三块内容（站台 / 卡库 / 图标行）先在 `prepare*` 里备齐，再同步写完，
+     * **一次原子提交**：三块内容（站台 / 卡库 / 图标行）先在 `prepare*` 里备齐**数据**，再同步写完，
      * 最后写羁绊条。分头写会出现「站台已是新阵容、图标行还是旧值」，看起来就是页面抖两下。
+     *
+     *  图**不进这条关键路径**：站台 8 张图若已预热好就同步带上，没好就先画空台 + 等级、
+     *  由 `fillSlotArt` 后台补；卡库图与图标行图标由条目自取（见 `commitPool` / `commitIcons`）。
+     *  改之前三段都在 `Promise.all` 里等图，卡库 35 张 × 3 张图实测 817ms、
+     *  冷启动站台 8 张 26ms，整页被压到 800ms+ 空白 —— 而虚拟列表首屏只用得到十来个槽位。
      */
     private async presentLineup(data: CardLineupData): Promise<void> {
+        this.art = data.art;
         const revision = ++this.presentRevision;
-        const { deck, catalog: cards } = data;
+        this.cancelPreviewLoads();
+        const deck = visibleLineupCards(data.deck);
+        const cards = visibleLineupCards(data.catalog);
         //  `deck` 为空有两种成因，必须分开（与 `presentBoard` 同款口径）：
         //   ① 本地卡表没读到 → 保持空台；② 服务端说「选中阵型没上人」→ 渲染成空站台。
         //  补 `!heroListKnown` 是因为快照路径的 `catalog` 也空，但那是**已知**的数据，不能当 ① 早退。
-        if (deck.length === 0 && cards.length === 0 && !data.heroListKnown) {
+        if (data.deck.length === 0 && data.catalog.length === 0 && !data.heroListKnown) {
             console.warn('[CardLineupPage] 卡表未读到（deck / catalog 都为空且后端英雄列表不可用），保持空台');
             return;
         }
@@ -241,62 +246,75 @@ export class CardLineupPage extends Component {
         this.heroLevels = data.heroLevels;
         const deployedIds = new Set(deck.map((card) => card.id));
 
-        //  打开耗时打点（2026-11-03）：一次打开打一行。三段耗时由各 `prepare*` 自己记，
-        //  **不能包一层 `time(...)` 包住调用** —— `tests/card-lineup-ui-regression.test.ts`
-        //  用 `cards.length > 0 ? this.preparePool` 这个源码形态钉住「快照 catalog 为空要跳过卡库」，
-        //  包一层就把那条守卫顶掉了。
-        const startedAt = performance.now();
-
+        //  三段**并发**跑：站台与图标行只依赖本地表，卡库要等权威数据（快照 catalog 为空时跳过）。
+        //  `tests/card-lineup-ui-regression.test.ts` 拿 `data.catalog.length > 0 ? this.preparePool`
+        //  这个源码形态钉住「快照 catalog 为空要跳过卡库」—— 别包一层函数把它藏起来。
         const [slots, pool, icons] = await Promise.all([
             this.prepareSlots(deck),
             // 快照只负责「上阵八卡」这一块，卡库等权威数据再画（见 `loadLineupSnapshot`）。
-            cards.length > 0 ? this.preparePool(cards, deployedIds) : Promise.resolve(null),
+            data.catalog.length > 0 ? this.preparePool(cards, deployedIds) : Promise.resolve(null),
             this.prepareIcons(deck),
         ]);
         if (!this.isValid || revision !== this.presentRevision) return;
-        const preparedAt = performance.now();
 
         this.commitSlots(slots);
         if (pool) this.commitPool(pool);
         this.commitIcons(icons);
         this.renderBondBanner(data.bonuses);
-
-        const doneAt = performance.now();
-        //  三段并发跑，各自耗时**不能相加**（相加会大于总计）：看「谁最长」就是这屏的瓶颈。
-        console.log(
-            `[CardLineup][耗时] 备图 ${Math.round(preparedAt - startedAt)}ms`
-            + `（站台 ${Math.round(this.prepareMs.slots)} / 卡库 ${Math.round(this.prepareMs.pool)}`
-            + ` / 图标行 ${Math.round(this.prepareMs.icons)}，并发）`
-            + ` · 提交 ${Math.round(doneAt - preparedAt)}ms`
-            + ` · 首屏合计 ${Math.round(doneAt - startedAt)}ms`
-            + ` · 卡库 ${cards.length} 张 / 站台 ${deck.length} 位（模型后台加载、分帧补齐）`,
-        );
     }
 
     // ========================================================================
-    // 上阵站台：prepare（备图）→ commit（同步全量写）
+    // 上阵站台：prepare（只取已就绪的图）→ commit（同步画等级 / 空台）→ 图后台补
     // ========================================================================
 
-    /** 备齐站台静态图，模型并行启动但不阻塞首屏（`null` = 该位空着）。不写节点。 */
+    /**
+     * 站台图缓存（`id → 已就绪的三张图`）。
+     *
+     * 页面实例级，跨 `refresh` 复用；放着是为了让「预热已跑完」的第二次进页**同步**拿图，
+     * 不必再走一次异步补。生命周期跟页面走，不碰 `CardArtProvider` 的会话缓存。
+     */
+    private readonly slotFrames = new Map<string, ZCSlotFrames>();
+    private art: ICardArtConfig;
+
+    private loadSlotFrames(card: ZCDeckCard): Promise<ZCSlotFrames> {
+        const cached = this.slotFrames.get(card.id);
+        if (cached) return Promise.resolve(cached);
+        return cardArtProvider.loadLineupSlot(card, this.art).then((frames) => {
+            this.slotFrames.set(card.id, frames);
+            return frames;
+        });
+    }
+
+    /**
+     * **不再等图**：只把已经加载好的图带进提交，没好的留 `null` 由 `fillSlotArt` 后台补。
+     *
+     * 冷启动第一版这里要等 8 张站台图（实测 26ms）—— 切 tab 的 `prefetchHero` 其实已经
+     * 发了同样的请求，但冷启动资源下载来不及赶在点击前完成，于是首屏得等它剩下的那段。
+     * 现在改成「有就画、没有就先出等级牌」，26ms 从关键路径上彻底消失。
+     */
     private async prepareSlots(deck: readonly ZCDeckCard[]): Promise<ReadonlyArray<IPreparedSlot | null>> {
-        const at = performance.now();
         const slots = this.arenaSlots();
-        const previewAssets = this.unitPreviewAssets();
-        const ready = await Promise.all(deck.slice(0, slots.length).map(async (card) => {
-            const prefab = previewAssets.load(card);
-            const frames = await cardArtProvider.loadLineupSlot(card);
-            return { card, frames, prefab };
-        }));
         const items: Array<IPreparedSlot | null> = [];
-        for (let index = 0; index < slots.length; index += 1) items.push(ready[index] ?? null);
-        this.prepareMs.slots = performance.now() - at;
+        for (let index = 0; index < slots.length; index += 1) {
+            const card = deck[index];
+            items.push(card ? { card, frames: this.slotFrames.get(card.id) ?? null } : null);
+        }
         return items;
+    }
+
+    /** 图没赶上的站台：后台加载，回来了只补图（等级牌已经在 `commitSlots` 里画好）。 */
+    private fillSlotArt(card: ZCDeckCard, slot: CardLineupSlot): void {
+        const revision = this.presentRevision;
+        void this.loadSlotFrames(card).then((frames) => {
+            // 快照 / 权威阵容交错、或页面已销毁 ⇒ 旧阵容的迟到图不许盖到新站台上。
+            if (!this.isValid || revision !== this.presentRevision) return;
+            slot.applyStaticArt(frames);
+        }).catch(() => undefined);
     }
 
     /** 同步写 8 个站台：有卡就整格重画，没卡就收起（不留上一轮的残留）。 */
     private commitSlots(items: ReadonlyArray<IPreparedSlot | null>): void {
         const slots = this.arenaSlots();
-        const revision = this.presentRevision;
         // 新一轮提交同时作废上一轮的分帧计时器：只清队列会让 `previewFlushScheduled`
         // 仍为 true，迟到模型到达时 `schedulePreviews()` 直接 return，而旧计时器可能已被
         // 停用/解绑 ⇒ 模型永远补不上，且零报错。解除后由新模型自己重新注册。
@@ -313,19 +331,40 @@ export class CardLineupPage extends Component {
             slots[index].node.active = true;
             //  先画静态立绘（**不传 `prefab`**），单位模型交给 `flushPreviews` 逐帧补：
             //  八个 `sp.Skeleton` 实例化约 20ms，和整页数据挤在同一帧就是那一下卡顿。
-            slots[index].render(item.card, item.frames, this.levelOf(item.card));
-            void item.prefab.then(prefab => {
-                // 快照 / 权威阵容会交错，迟到模型不得进入新一轮站台或销毁页面。
-                if (!this.isValid || revision !== this.presentRevision || !prefab) return;
-                this.pendingPreviews.push({ slot: slots[index], prefab });
-                this.schedulePreviews();
-            }).catch(error => {
-                // 静态立绘已在，模型只是降级项；但不能让 rejection 漏到全局（生产环境会
-                // 触发未处理拒绝上报，甚至被宿主当成崩溃）。当前 loader 自带兜底，这里是
-                // 对 `Promise<Prefab|null>` 这条跨模块契约的显式防御。
-                if (this.isValid) console.warn('[CardLineup] 单位模型加载失败，保留静态立绘', error);
-            });
+            slots[index].render(item.card, item.frames ?? EMPTY_SLOT_FRAMES, this.levelOf(item.card));
+            if (!item.frames) this.fillSlotArt(item.card, slots[index]);
         }
+        this.schedulePreviewLoads(items, slots);
+    }
+
+    private cancelPreviewLoads(): void {
+        if (this.previewLoadTask) this.unschedule(this.previewLoadTask);
+        this.previewLoadTask = null;
+    }
+
+    private schedulePreviewLoads(items: ReadonlyArray<IPreparedSlot | null>, slots: readonly CardLineupSlot[]): void {
+        if (!items.some(item => item !== null)) return;
+        const revision = this.presentRevision;
+        const load = (): void => {
+            this.previewLoadTask = null;
+            const previewAssets = this.unitPreviewAssets();
+            for (let index = 0; index < items.length; index += 1) {
+                const item = items[index];
+                if (!item) continue;
+                void previewAssets.load(item.card).then(prefab => {
+                    // 快照 / 权威阵容会交错，迟到模型不得进入新一轮站台或销毁页面。
+                    if (!this.isValid || revision !== this.presentRevision || !prefab) return;
+                    this.pendingPreviews.push({ slot: slots[index], prefab });
+                    this.schedulePreviews();
+                }).catch(error => {
+                    if (this.isValid && revision === this.presentRevision) {
+                        console.warn('[CardLineup] 单位模型加载失败，保留静态立绘', error);
+                    }
+                });
+            }
+        };
+        this.previewLoadTask = load;
+        this.scheduleOnce(load);
     }
 
     private schedulePreviews(): void {
@@ -380,24 +419,15 @@ export class CardLineupPage extends Component {
      *  列表参数（行/列数、主副方向间距、缓冲、滚动风格…）**全部绑在 prefab 的 Inspector 上**
      * （项目约定：同一份配置不散在代码和 prefab 两处），代码只覆盖 `renderItemFn` + 总条数。
      *
-     * 三张图先按整份英雄卡库预加载完再喂列表：`renderItemFn` 是**同步**回调，里面不能 `await`，
-     * 否则槽位复用到新索引时会先闪一帧上一张卡的图。
+     *  ⚠️ 这里**只备数据**（碎片 + 排序），不再全量备图：35 张卡 × 3 张图实测 817ms，
+     *  而虚拟列表首屏只用得到十来个槽位 —— 全量备图是在为看不见的卡付首屏时间。
+     *  图改由条目自取（`commitPool` 传 `this.loadPoolFrames`），已加载过的同步命中缓存。
      *
-     * 条目 = `pvpCard` **全表**（`loadPvpCatalogCards()`，配置驱动，不按后端拥有关系过滤）；
-     * 后端英雄列表只决定两件事：等级（未拥有 → 0 级）与「已出战！」标
-     * （id 位于当前八卡集合里才显示）。
+     *  条目来自 `pvpCard` 全表并排除金矿；碎片备齐后按状态、品质、等级、职业排序。
      */
     private async preparePool(cards: readonly ZCDeckCard[], deployedIds: ReadonlySet<string>): Promise<IPreparedPool> {
-        const at = performance.now();
-        const frames = new Map<string, ZCCardFrames>();
-        await Promise.all(cards.map(async (card) => {
-            frames.set(card.id, await cardArtProvider.loadLineupCard(card));
-        }));
-
-        // 碎片进度（已持有/所需）**先取好**再进 `renderItemFn`。
-        // ⚠️ `renderItemFn` 是**同步**回调（槽位复用，await 会闪上一张卡的图，注释见下），
-        //    所以不能在里面 `await loadUpgradeStatus`。
-        // 卡库进度显示升级所需的本卡数量；经验是升级弹窗里的另一项材料。
+        // 碎片进度（已持有/所需）**先取好**再进 `renderItemFn`：它是排序的分组依据
+        // （已上阵 → 已解锁 → 解锁中 → 未拥有），不是可以后补的展示细节。
         const fragments = new Map<string, ZCCardFragmentProgress>();
         await Promise.all(cards.map(async (card) => {
             const status = await cardRepository.loadUpgradeStatus(card.id, this.levelOf(card));
@@ -408,20 +438,57 @@ export class CardLineupPage extends Component {
                 maxed: status.maxed || !status.configured,
             });
         }));
-        this.prepareMs.pool = performance.now() - at;
-        return { cards, frames, fragments, deployedIds };
+        const sortedCards = sortLineupCards(cards, deployedIds, this.heroLevels, fragments, this.art.lineup,
+            this.heroListKnown ? 0 : this.fallbackLevel);
+        return { cards: sortedCards, fragments, deployedIds };
     }
+
+    /**
+     * 卡库图缓存：`id → 已就绪的三张图`。
+     *
+     * 页面实例级（跨 `refresh` 复用，同 id 同图）；条目在虚拟列表里被复用 / 回收时，
+     * 再次滚回来能**同步**命中，不出现「先空白再出图」。
+     */
+    private readonly poolFrames = new Map<string, ZCCardFrames>();
+
+    private readonly loadPoolFrames: ZCCardArtLoader = (card) => {
+        const cached = this.poolFrames.get(card.id);
+        if (cached) return Promise.resolve(cached);
+        return cardArtProvider.loadLineupCard(card, this.art).then((frames) => {
+            this.poolFrames.set(card.id, frames);
+            return frames;
+        });
+    };
+
+    /**
+     * 上一次提交给卡库的数据指纹。`null` = 从未提交过（**不能用空串**：纯金矿卡库的
+     * 指纹就是空串，那样会把「清空旧列表」误判成「没变化」而跳过 `refreshList`）。
+     *
+     * `refreshList` 会 `setTotalCount` → `_updateVisible(true)` 强制重画所有可见槽位；
+     * 数据没变时这一趟纯属白跑，所以指纹相同就只重绑回调、不重建列表。
+     */
+    private poolSignature: string | null = null;
+    private poolCount = -1;
 
     /** 同步写卡库列表（回调与总条数一起设，避免列表先按旧条数刷一遍）。 */
     private commitPool(data: IPreparedPool): void {
-        const { cards, frames, fragments, deployedIds } = data;
+        const { cards, fragments, deployedIds } = data;
+        const signature = cards.map((card) => {
+            const progress = fragments.get(card.id);
+            return `${card.id}:${this.levelOf(card)}:${deployedIds.has(card.id) ? 1 : 0}`
+                + `:${progress?.owned ?? 0}:${progress?.need ?? 0}:${progress?.maxed ? 1 : 0}`;
+        }).join('|');
 
+        //  两个回调**每轮都要重绑**：它们闭包捕获本轮的 `cards`，不重绑的话滚动时
+        //  槽位复用会拿上一轮的数组（甚至点开升级弹窗点到旧卡）。
         this.cardGrid.renderItemFn = (node, index) => {
             const card = cards[index];
             if (!card) return;
             //  条目 prefab 上必挂 `CardLineupCard`（`CardLineupCard.prefab`），绑错当场抛栈。
-            node.getComponent(CardLineupCard).render(card, frames.get(card.id), deployedIds.has(card.id),
-                this.levelOf(card), fragments.get(card.id));
+            //  已备好的图同步写；没备好的先清空占位，由条目自己按 `loadPoolFrames` 补 ——
+            //  `renderItemFn` 仍是同步回调，`await` 移进了条目内部（带 token 防串图）。
+            node.getComponent(CardLineupCard).render(card, this.poolFrames.get(card.id) ?? null,
+                deployedIds.has(card.id), this.levelOf(card), fragments.get(card.id), this.loadPoolFrames);
         };
         // 点卡库里的任意一张 → 打开卡牌升级弹窗。
         //  回调接在 `onItemClickFn` 上而不是给条目预制体挂 Button：条目是虚拟列表
@@ -432,6 +499,10 @@ export class CardLineupPage extends Component {
             const card = cards[index];
             if (card) EventMgr.instance.emit(CardLineupUiEvent.Intent, { owner: this, kind: 'upgrade', card });
         };
+        const unchanged = signature === this.poolSignature && cards.length === this.poolCount;
+        this.poolSignature = signature;
+        this.poolCount = cards.length;
+        if (unchanged) return;
         this.cardGrid.refreshList(cards.length);
     }
 
@@ -442,7 +513,7 @@ export class CardLineupPage extends Component {
      * `onHeroUpgraded` 里订阅（见 `start()`）。这样弹窗不需要知道外面谁想听，
      * 也不会出现「漏传回调 ⇒ 升级完页面等级不更新且零报错」。
      */
-    /** 金矿等非英雄卡没有后端等级，继续使用 prefab 上的兜底值。 */
+    /** 后端列表已知时，未拥有的卡按 0 级显示；离线预览沿用占位等级。 */
     private levelOf(card: ZCDeckCard): number {
         const level = this.heroLevels.get(card.id);
         if (level !== undefined) return level;
@@ -455,37 +526,43 @@ export class CardLineupPage extends Component {
     /**
      * 图标行：驱动 `MidBar/BondList` 的**横向**虚拟列表。
      *
-     *  条目 = `visibleIconTallies(deck)` —— 职业与阵营混排、**卡数为 0 的维度不进列表**
-     *  （所以条数是变的：满编八卡通常 5 项左右，不是固定 8）。顺序即设计稿从左到右，
-     *  以后要加维度只改 `CardLineupTypes` 那两个纯函数。
+     *  条目 = `visibleIconTallies(deck, art.lineup)` —— 职业与阵营混排、**卡数为 0 的维度不进列表**
+     *  （所以条数是变的：满编八卡通常 5 项左右，不是固定 8）。顺序即表内维度行序，
+     *  以后要加维度只改 `PVP-卡牌美术.xlsx` 对应 sheet。
      *
      *  列表参数（方向 / 条目预制体 / 间距 / 缓冲…）全部绑在 prefab 的 Inspector 上
      *  （项目约定：同一份配置不散在代码和 prefab 两处），代码只覆盖 `renderItemFn` + 总条数。
      *
-     *  与 `renderCards` 同款：先把这些项的图标**全部异步备好**再喂列表 ——
-     *  `renderItemFn` 是**同步**回调，里面不能 `await`，否则槽位复用到新下标时会先闪一帧上一项的图
-     *  （阵营那几张现在拿不到图，是美术缺口，见 `CAMP_ICON_ON_ART`）。
+     *  与 `preparePool` 同款：条目数据先到就提交，图标由条目自取（`loadIconFrame`）。
+     *  `renderItemFn` 是**同步**回调，里面不能 `await`，`await` 因此在条目内部（带 token 防串图）。
      */
     private async prepareIcons(deck: readonly ZCDeckCard[]): Promise<IPreparedIcons> {
-        const at = performance.now();
-        const items = visibleIconTallies(deck);
-        const frames = new Map<string, SpriteFrame | null>();
-        await Promise.all(items.map(async (item) => {
-            frames.set(`${item.kind}|${item.key}`, await cardArtProvider.loadTallyFrames(item));
-        }));
-        this.prepareMs.icons = performance.now() - at;
-        return { items, frames };
+        const items = visibleIconTallies(deck, this.art.lineup);
+        return { items };
     }
+
+    /** 图标缓存：`${kind}|${key} → 图标`（`null` 也要缓存 —— 阵营缺图是已知缺口，别反复重试）。 */
+    private readonly iconFrames = new Map<string, SpriteFrame | null>();
+
+    private readonly loadIconFrame = (item: ZCCardTally): Promise<SpriteFrame | null> => {
+        const key = `${item.kind}|${item.key}`;
+        if (this.iconFrames.has(key)) return Promise.resolve(this.iconFrames.get(key) ?? null);
+        return cardArtProvider.loadTallyFrames(item, this.art).then((frame) => {
+            this.iconFrames.set(key, frame);
+            return frame;
+        });
+    };
 
     /** 同步写图标行。条数跟着阵容走：空阵容就是 0，列表清空 —— 别回退成 8。 */
     private commitIcons(data: IPreparedIcons): void {
-        const { items, frames } = data;
+        const { items } = data;
         this.iconList.renderItemFn = (node, index) => {
             const item = items[index];
             if (!item) return;
             //  条目 prefab 上必挂 `CardLineupBond`（`CardLineupBond.prefab`），绑错就当场抛栈 ——
             //  不写 `if (!view) return`：那只会让列表静默空白，把配置错误藏起来。
-            node.getComponent(CardLineupBond).render(item, frames.get(`${item.kind}|${item.key}`) ?? null);
+            const key = `${item.kind}|${item.key}`;
+            node.getComponent(CardLineupBond).render(item, this.iconFrames.get(key) ?? null, this.loadIconFrame);
         };
         this.iconList.refreshList(items.length);
     }

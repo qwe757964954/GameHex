@@ -20,7 +20,15 @@ const FOOTPRINT_SAMPLE_STEP = 2;
  */
 export class ZCCaptureSystem {
     private readonly occupants = new Map<number, Occupants>();
-    private readonly previousFootPosition = new Map<number, readonly [number, number]>();
+    /** 驻留计数对象池：每帧归还复用，替代为每个有兵格新建 `{}`。 */
+    private readonly occupantsPool: Occupants[] = [];
+    /** 脚点拆成两个平行 Map，替代每单位每帧一个 `[x, y]` 临时数组。 */
+    private readonly previousFootX = new Map<number, number>();
+    private readonly previousFootY = new Map<number, number>();
+    /** 帧内补给缓存 + 回收池：Set 和 BFS 队列跨帧复用，每帧只清空内容。 */
+    private readonly supplied = new Map<ZCOwner, Set<number>>();
+    private readonly supplyPool: Set<number>[] = [];
+    private readonly supplyQueue: number[] = [];
     /** [ZCCapture] 临时诊断节流计数（随诊断代码一起删）。 */
     private diagStep = 0;
 
@@ -32,16 +40,23 @@ export class ZCCaptureSystem {
 
     /** 在移动和战斗结算前记录脚点，update 时用来覆盖本拍完整位移轨迹。 */
     beginStep(units: readonly ZCUnitState[]): void {
-        this.previousFootPosition.clear();
+        this.previousFootX.clear();
+        this.previousFootY.clear();
         for (const unit of units) {
-            if (isActive(unit)) this.previousFootPosition.set(unit.id, [unit.freeX, unit.freeY]);
+            if (!isActive(unit)) continue;
+            this.previousFootX.set(unit.id, unit.freeX);
+            this.previousFootY.set(unit.id, unit.freeY);
         }
     }
 
     update(state: ZCSnapshot, dt: number, capture: (hex: ZCHexState, owner: ZCOwner) => void): void {
         this.collectFootprints(state.units);
-        // 只有真的有某阵营尝试推进敌方格时才做该阵营 BFS；空局和纯防守帧不付连通性成本。
-        const supplied: Partial<Record<ZCOwner, Set<number>>> = {};
+        // 回收上一帧的补给集合：缓存只在帧内有效，避免跨帧复用过期连通性。
+        for (const set of this.supplied.values()) {
+            set.clear();
+            this.supplyPool.push(set);
+        }
+        this.supplied.clear();
 
         for (const hex of state.hexes) {
             if (!this.canBeCaptured(hex)) {
@@ -49,29 +64,40 @@ export class ZCCaptureSystem {
                 continue;
             }
             const occupants = this.occupants.get(hex.id);
-            const present = ZC_OWNER_ORDER
-                .map((owner) => ({ owner, count: occupants?.[owner] ?? 0 }))
-                .filter((entry) => entry.count > 0);
+            // 标量扫描替代 `ZC_OWNER_ORDER.map(...).filter(...)`：
+            // 下游只用到「驻留阵营数」与「第一个阵营及其人数」，原写法每格要造
+            // 1 个数组 + 4 个对象字面量 + 2 个闭包，是全帧最大的短命对象来源。
+            let presentCount = 0;
+            let firstOwner: ZCOwner = ZC_OWNER_ORDER[0];
+            let firstCount = 0;
+            for (let oi = 0; oi < ZC_OWNER_ORDER.length; oi += 1) {
+                const owner = ZC_OWNER_ORDER[oi];
+                const count = occupants?.[owner] ?? 0;
+                // 与 `filter(entry => entry.count > 0)` 逐字等价：NaN 也必须被排除。
+                if (!(count > 0)) continue;
+                if (presentCount === 0) { firstOwner = owner; firstCount = count; }
+                presentCount += 1;
+            }
 
             // 废墟：一方小兵经过即变成该方占有（双方同格争夺时不归属），不累计驻留时间；
             // 即使废墟已经归属该方，经过也要把废墟「激活」成占有地（废墟图消失）。
             if (hex.state === 'ruins') {
-                if (present.length === 1) {
-                    capture(hex, present[0].owner);
+                if (presentCount === 1) {
+                    capture(hex, firstOwner);
                     this.clearProgress(hex);
                 }
                 continue;
             }
 
             // 两个及以上阵营同格属于争夺状态：保留但不推进任何一方的进度。
-            if (present.length > 1) continue;
-            if (present.length === 0) {
+            if (presentCount > 1) continue;
+            if (presentCount === 0) {
                 this.reduceProgress(hex, dt * this.rules.captureDecayMultiplier);
                 continue;
             }
 
-            const { owner, count } = present[0];
-            const speed = this.speedMultiplier(count);
+            const owner = firstOwner;
+            const speed = this.speedMultiplier(firstCount);
 
             // 原地块所属方驻留时，按防守倍率清除正在形成的敌方进度。
             if (hex.owner === owner) {
@@ -79,9 +105,10 @@ export class ZCCaptureSystem {
                 continue;
             }
 
-            if (this.rules.captureRequireSupply && !supplied[owner]) supplied[owner] = this.suppliedHexes(state, owner);
-            const hasSupply = !this.rules.captureRequireSupply
-                || this.map.hexes[hex.id].neighbors.some((id) => supplied[owner].has(id));
+            if (this.rules.captureRequireSupply && !this.supplied.has(owner)) {
+                this.supplied.set(owner, this.suppliedHexes(state, owner));
+            }
+            const hasSupply = !this.rules.captureRequireSupply || this.hasSuppliedNeighbor(hex.id, owner);
             if (!hasSupply) {
                 this.reduceProgress(hex, dt * this.rules.captureDecayMultiplier);
                 continue;
@@ -134,6 +161,7 @@ export class ZCCaptureSystem {
             if (this.rules.captureRequireSupply) {
                 const supplied = this.suppliedHexes(state, ZCOwner.Player);
                 const ok = this.map.hexes[hex.id].neighbors.some((id) => supplied.has(id));
+                this.supplyPool.push(supplied);
                 if (!ok) {
                     const near = this.map.hexes[hex.id].neighbors
                         .map((id) => `${id}:${state.hexes[id].owner}`).join(',');
@@ -151,7 +179,10 @@ export class ZCCaptureSystem {
 
     reset(): void {
         this.occupants.clear();
-        this.previousFootPosition.clear();
+        this.previousFootX.clear();
+        this.previousFootY.clear();
+        this.supplied.clear();
+        this.supplyQueue.length = 0;
     }
 
     /**
@@ -159,12 +190,16 @@ export class ZCCaptureSystem {
      * 单拍轨迹是直线、六边形是凸多边形，因此格 ID 只需连续去重，不必为每个单位分配 Set。
      */
     private collectFootprints(units: readonly ZCUnitState[]): void {
+        for (const counts of this.occupants.values()) {
+            // 赋 undefined 而非 delete：保住 hidden class，且 `?? 0` 与诊断读值都与改前一致。
+            for (let oi = 0; oi < ZC_OWNER_ORDER.length; oi += 1) counts[ZC_OWNER_ORDER[oi]] = undefined;
+            this.occupantsPool.push(counts);
+        }
         this.occupants.clear();
         for (const unit of units) {
             if (!isActive(unit)) continue;
-            const from = this.previousFootPosition.get(unit.id);
-            const fromX = from?.[0] ?? unit.freeX;
-            const fromY = from?.[1] ?? unit.freeY;
+            const fromX = this.previousFootX.get(unit.id) ?? unit.freeX;
+            const fromY = this.previousFootY.get(unit.id) ?? unit.freeY;
             const dx = unit.freeX - fromX;
             const dy = unit.freeY - fromY;
             const samples = Math.max(1, Math.ceil(Math.hypot(dx, dy) / FOOTPRINT_SAMPLE_STEP));
@@ -176,7 +211,7 @@ export class ZCCaptureSystem {
                 previousHexId = id;
                 let counts = this.occupants.get(id);
                 if (!counts) {
-                    counts = {};
+                    counts = this.occupantsPool.pop() ?? {};
                     this.occupants.set(id, counts);
                 }
                 counts[unit.owner] = (counts[unit.owner] ?? 0) + 1;
@@ -184,15 +219,32 @@ export class ZCCaptureSystem {
         }
     }
 
+    /** 手写循环替代 `neighbors.some(id => ...)`，去掉每格一个闭包。 */
+    private hasSuppliedNeighbor(hexId: number, owner: ZCOwner): boolean {
+        const supplied = this.supplied.get(owner);
+        if (!supplied) return false;
+        const neighbors = this.map.hexes[hexId].neighbors;
+        for (let index = 0; index < neighbors.length; index += 1) {
+            if (supplied.has(neighbors[index])) return true;
+        }
+        return false;
+    }
+
     private suppliedHexes(state: ZCSnapshot, owner: ZCOwner): Set<number> {
         const ownerIndex = ZC_OWNER_ORDER.indexOf(owner);
         const homeId = this.map.homes?.[ownerIndex]
             ?? (owner === ZCOwner.Player ? this.map.playerHomeId : this.map.enemyHomeId);
-        if (state.hexes[homeId]?.owner !== owner) return new Set<number>();
-        const supplied = new Set<number>([homeId]);
-        const queue = [homeId];
+        const supplied = this.supplyPool.pop() ?? new Set<number>();
+        supplied.clear();
+        if (state.hexes[homeId]?.owner !== owner) return supplied;
+        supplied.add(homeId);
+        const queue = this.supplyQueue;
+        queue.length = 0;
+        queue.push(homeId);
         for (let head = 0; head < queue.length; head += 1) {
-            for (const neighborId of this.map.hexes[queue[head]].neighbors) {
+            const neighbors = this.map.hexes[queue[head]].neighbors;
+            for (let index = 0; index < neighbors.length; index += 1) {
+                const neighborId = neighbors[index];
                 if (supplied.has(neighborId) || state.hexes[neighborId].owner !== owner) continue;
                 supplied.add(neighborId);
                 queue.push(neighborId);

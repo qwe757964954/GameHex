@@ -1,4 +1,3 @@
-import { requireChild } from '../../framework/ui/RequireComponent';
 import { _decorator, Button, Color, Label, Node, SpriteFrame } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { loadArt, loadFrameArt } from '../card/CardLineupIcons';

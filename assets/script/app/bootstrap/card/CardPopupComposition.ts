@@ -57,7 +57,6 @@ class CardPopupComposition implements IPopupComposition {
             popups: {
                 openSkills: data => { void CardSkillPage.open({ userData: data }).catch(reportCardPopupFailure); },
                 openEditor: () => { void LineupBoardPage.open().catch(reportCardPopupFailure); },
-                openDetail: data => { void CardUpgradePage.open({ userData: data }).catch(reportCardPopupFailure); },
             },
         });
     }

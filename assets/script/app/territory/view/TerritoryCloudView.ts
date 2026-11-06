@@ -6,6 +6,7 @@ import {
     TERRITORY_CLOUD_POCKET_SCALE,
     TERRITORY_CLOUD_SCALE,
     territoryCloudArtOffsetY,
+    territoryCloudClearAction,
     territoryCloudDissolveFrame,
     territoryCloudDollyFadeDue,
     territoryCloudDollyTotalSeconds,
@@ -312,6 +313,14 @@ export class TerritoryCloudView {
     private fillFadeSeconds = TERRITORY_CLOUD_FILL_FADE_SECONDS;
     /** 铺满层已经退完（此时 `active = false`，连绘制都省掉）。 */
     private fillDismissed = false;
+    /**
+     * 「本章已通关 ⇒ 不管还有没有没激活的格，整片雾都要散」（2026-11-04）。
+     *
+     * 记成**状态**而不是一次性的动作：`sync` 每次都会重算"该不该有雾"，
+     * 只做一次动作的话，下一次 `renderMap` 就把雾按回退复原回来了（表现为雾一闪一闪）。
+     * 换章（`reset`）/ 真的回退时才清掉。
+     */
+    private dismissForced = false;
     /**
      * 「全解锁 ⇒ 镜头拉远看雾散」的已用时（秒）；`< 0` = 没在演。
      *
@@ -697,6 +706,75 @@ export class TerritoryCloudView {
     }
 
     /**
+     * 整章云散**是否还在演**（镜头拉远 + 铺满层逐朵淡出，见 {@link startDismiss}）。
+     *
+     * 页面用它决定「这一帧能不能换图」：`TerritoryMapView.syncGrid` 换章第一件事就是
+     * `reset()`，云一散场就被掐掉 —— 用户 2026-11-04「SVG 合并之后，完成章节云层消散的动画
+     * 没有了」就是这条。`fillDismissed` 之后才算播完（淡完了才 `active = false`）。
+     */
+    get dismissing(): boolean {
+        if (this.dollyElapsed >= 0) return true;
+        return this.fillFadeElapsed >= 0 && !this.fillDismissed;
+    }
+
+    /**
+     * 这一章**是否已通关** ⇒ 是的话整片雾一起散（2026-11-04）。
+     *
+     * 与 `sync` 里那条 `isMapCleared` 是两回事：那条判「全图都打通了」，而新通关口径是
+     * 「通过最后一个首领关卡」—— 异步据点、没打的普通关可能还盖着云，但这一章已经结束了。
+     * 不在这里强行收掉，切章后那半张雾会跟着消失，玩家只觉得"动画又没了"。
+     *
+     * 🔴 **写成"每帧写入的状态"，不是一次性动作**：
+     *  · `sync` 每次都会重算"该不该有雾"，判据不成立就按回退复原（`writeFillOpacity(1)`），
+     *    只做一次动作的话雾会一闪一闪；
+     *  · 反过来，光粘住也不行：换章时 `syncGrid` **可能不重建网格**（两章布局键相同时它
+     *    直接早退，`reset` 不会跑），粘住的旧标记会让新一章的雾一上来就是散的。
+     *    所以 `cleared = false` 就撤掉标记 —— 谁写谁负责，地图每帧都写。
+     *
+     * 幂等：已经在演（或已经淡完）就什么都不做，重复的 `renderMap` 不会把演出重启一遍。
+     *
+     * ## 🔴 只有**首次通关**才演（2026-11-05 用户补的口径）
+     *
+     * 「通过的动画只有首次通关章节播放，切换章节后获取到通过状态也不用播放」。
+     * `chapterCleared` 是**持久状态**：切回早通了的章节、存档里就通着的章节，进页面
+     * 第一帧它已经是 `true` —— 只看电平就会"一进本章雾自己演一遍散场"。
+     * 判据交给模型（它知道"这一拍之前通没通"），这里只执行 {@link territoryCloudClearAction}
+     * 给的三选一：`animate` 演完整散场、`instant` 直接收掉、`none` 不动。
+     *
+     * @param cleared 本章是否已通关（持久状态）
+     * @param animate 这一拍是不是"刚打通"（模型的一次性信号，切回旧章时恒 `false`）
+     */
+    setChapterCleared(cleared: boolean, animate: boolean): void {
+        if (!cleared) {
+            this.dismissForced = false;
+            return;
+        }
+        this.dismissForced = true;
+        if (!this.idleFrame) return;
+        const action = territoryCloudClearAction(
+            cleared,
+            animate,
+            this.fillDismissed || this.fillFadeElapsed >= 0 || this.dollyElapsed >= 0,
+        );
+        if (action === 'animate') this.startDismiss();
+        else if (action === 'instant') this.dismissFillNow();
+    }
+
+    /**
+     * 把铺满层**直接收掉**（不演散场）—— 「进这一章的时候它本来就该是散开的」那一路。
+     *
+     * 只写终态：镜头不回拉（`dollyElapsed = -1`）、不编波次（`fillFadeElapsed = -1`）、
+     * 铺满层判为已退（`fillDismissed = true` ⇒ `applyFillActive` 会把整层 `active = false`）。
+     * 与演完散场之后的终态**完全一致**，所以后续每一拍 `sync` 都当它已经收过了。
+     */
+    private dismissFillNow(): void {
+        this.dollyElapsed = -1;
+        this.fillFadeElapsed = -1;
+        this.fillDismissed = true;
+        this.applyFillActive();
+    }
+
+    /**
      * 镜头「拉远程度」：0 = 初始高度、1 = 整张图入画。
      *
      * ⚠️ 没在演时恒 0（= 初始高度），地图视图可以无脑每帧拿它当插值参数。
@@ -761,7 +839,7 @@ export class TerritoryCloudView {
         //  · 第一轮：收工从"瞬间 `active = false`"改成一条淡出时间轴；
         //  · 第二轮（本次）：判据从 `revealed` 换成「全部内容格**已激活**」，且开场先演镜头
         //    （拉远 → 雾淡 → 拉回）。这里只负责"起跑 / 取消"，推进在 `step` 里。
-        if (this.isMapCleared(revealed)) {
+        if (this.dismissForced || this.isMapCleared(revealed)) {
             // 幂等：已经在淡的那一遍不会被后面的 `sync` 重置（`renderMap` 会反复调）。
             if (!this.fillDismissed && this.fillFadeElapsed < 0 && this.dollyElapsed < 0) {
                 this.startDismiss();
@@ -773,6 +851,8 @@ export class TerritoryCloudView {
             this.fillDismissed = false;
             this.dollyElapsed = -1;
             this.fillFadeSeconds = TERRITORY_CLOUD_FILL_FADE_SECONDS;
+            // 真的回退了（撤销解锁 / 快照改口径）⇒ 连"强制散"的意图一起撤，雾该回来就回来。
+            this.dismissForced = false;
             this.writeFillOpacity(1);
         }
         this.applyFillActive();
@@ -1077,6 +1157,8 @@ export class TerritoryCloudView {
         this.shown.clear();
         this.dissolving.clear();
         this.cells = [];
+        // 换章 / 收起 ⇒ 「通关所以整片散」这个意图作废（新一章有它自己的雾）。
+        this.dismissForced = false;
         this.clearKeepOut();
         this.clearFill();
         this.clearPocket();

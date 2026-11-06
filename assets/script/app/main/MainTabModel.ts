@@ -15,12 +15,15 @@ export type IMainTabTarget =
  * ⚠️ **这是「未开放」的唯一真源**：`MainTabHost`（决定要不要 `setEnabled(false)`）与
  * `mainTabTarget`（决定 controller 拦不拦）都只读这一份，别在宿主里再写一个 `type !== xxx`。
  *
- * 开放某一格时：从这里删掉，并在 `mainTabTarget` 里补回它的页面路径 ——
+ * 2026-11-05 起「角色」「联盟」恢复开放，名单只剩「挑战」；两格的页面路径见下方 switch：
  *   - `Role`     → `ui/Role/Role`（`MAIN_PAGES_BUNDLE`）
  *   - `Alliance` → `ui/League/LeagueTab`（`MAIN_PAGES_BUNDLE`）
  *   - `Challenge`→ 老章节地图已移除，暂无目标页（见 `tests/main-tab-adventure-route.test.ts`）
+ *
+ * 再开放某一格时：从这里删掉，并在 `mainTabTarget` 里补回它的页面路径 —— 只删名单不补路径会
+ * 落到 `default: null`，表现是「锁没了、点了却毫无反应」，零报错。
  */
-const LOCKED_TABS: ReadonlySet<number> = new Set<number>([MainTab.Role, MainTab.Alliance, MainTab.Challenge]);
+const LOCKED_TABS: ReadonlySet<number> = new Set<number>([MainTab.Challenge]);
 
 /** 该页签是否处于「未开放」状态（底栏锁与点击拦截同源）。 */
 export function isMainTabLocked(tab: number): boolean {
@@ -32,7 +35,9 @@ export function mainTabTarget(tab: number): IMainTabTarget | null {
     switch (tab) {
         case MainTab.Shop: return { kind: 'page', path: 'ui/Store/Store', bundle: MAIN_PAGES_BUNDLE };
         case MainTab.Hero: return { kind: 'page', path: 'ui/card/CardLineup', bundle: MAIN_PAGES_BUNDLE };
+        case MainTab.Role: return { kind: 'page', path: 'ui/Role/Role', bundle: MAIN_PAGES_BUNDLE };
         case MainTab.Territory: return { kind: 'page', path: 'ui/main/ArenaRoot' };
+        case MainTab.Alliance: return { kind: 'page', path: 'ui/League/LeagueTab', bundle: MAIN_PAGES_BUNDLE };
         case MainTab.World: return { kind: 'overlay' };
         default: return null;
     }

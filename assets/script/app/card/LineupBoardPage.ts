@@ -10,6 +10,7 @@ import {
 import { PopupBase } from '../../framework/ui/PopupBase';
 import type { ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
 import { cardArtProvider } from './CardArtProvider';
+import type { ICardArtConfig } from './CardArtConfig';
 import { CARD_LINEUP_TEXTS } from './CardLineupTexts';
 import {
     tallyDeckClasses,
@@ -136,6 +137,7 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
     private poolArt = new Map<string, ZCBoardCardFrames>();
     private heroLevels: ReadonlyMap<string, number> = new Map();
     private heroLevelCaps: ReadonlyMap<string, number> = new Map();
+    private art: ICardArtConfig;
 
     /** 上阵区站台，下标 = 卡组下标，顺序与 Layout 一致。 */
     private arenaSlotCache: LineupBoardSlot[] | null = null;
@@ -185,6 +187,7 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
     }
 
     async render(data: LineupBoardPresentation): Promise<void> {
+        this.art = data.art;
         const scope = this.resourceScope;
         const revision = ++this.renderRevision;
         this.heroLevels = data.heroLevels;
@@ -227,7 +230,7 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
         const slots = this.arenaSlots();
         const previewAssets = this.unitPreviewAssets();
         const ready = await Promise.all(deck.slice(0, slots.length).map(async (card) => {
-            const [frames, prefab] = await Promise.all([cardArtProvider.loadBoardSlot(card), previewAssets.load(card)]);
+            const [frames, prefab] = await Promise.all([cardArtProvider.loadBoardSlot(card, this.art), previewAssets.load(card)]);
             return { card, frames, prefab };
         }));
         if (scope.disposed || !this.alive || revision !== this.arenaRevision) return;
@@ -270,7 +273,7 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
         // 按 key 去重后并发预加载（同一张图只 load 一次）
         const art = new Map<string, ZCBoardCardFrames>();
         await Promise.all(pool.map(async (card) => {
-            art.set(card.id, await cardArtProvider.loadBoardCard(card));
+            art.set(card.id, await cardArtProvider.loadBoardCard(card, this.art));
         }));
 
         //  预加载期间面板可能已经关了。必须在这里挡：节点一销毁，`poolList` 也会被释放，
@@ -314,16 +317,16 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
         }
     }
 
-    /** 中间那行「职业图标 + 数量」，顺序固定为 `ZC_CARD_CLASSES`。 */
+    /** 中间那行「职业图标 + 数量」，顺序取表内 `cardUiArtClass` 的行序（`lineup.classes`）。 */
     private async renderClassRow(deck: readonly ZCDeckCard[]): Promise<void> {
         const scope = this.resourceScope;
         const revision = ++this.classRevision;
-        const tallies = tallyDeckClasses(deck);
+        const tallies = tallyDeckClasses(deck, this.art.lineup);
         //  ClassRow 挂的是水平 Layout，顺序 = 节点树顺序（同 `arenaSlots`：坐标是 Layout 算的，别反推）。
         const items = this.classBar.getComponentsInChildren(LineupBoardClassItem);
         for (let index = 0; index < items.length; index += 1) {
-            const cardClass = ZC_CARD_CLASSES[index];
-            const { on } = await cardArtProvider.loadClassFrames(cardClass);
+            const cardClass = this.art.lineup.classes[index]?.id ?? ZC_CARD_CLASSES[index];
+            const { on } = await cardArtProvider.loadClassFrames(cardClass, this.art);
             if (scope.disposed || !this.alive || revision !== this.classRevision) return;
             items[index].render(tallies[index] ?? null, on);
         }

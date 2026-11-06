@@ -182,7 +182,7 @@ test('★row12/row13 ZCGameModel：产金真的发出去才推通知，且 takeB
     assert.match(source, /killReward|击杀/, '文件应仍有击杀奖励那条私有路径（对照，确认两者分开）');
     // ③ 出口转发给队列。
     assert.match(source,
-        /takeBuildingShakes\(\): readonly Readonly<ZCBuildingShake>\[\] \{[\s\S]{0,120}?return this\.presentation\.drainBuildingShakes\(\);/,
+        /drainPresentationEvents\(\): ZCBattlePresentationEvents \{[\s\S]{0,180}?buildingShakes: this\.presentation\.drainBuildingShakes\(\)/,
         'takeBuildingShakes 必须转发到 drainBuildingShakes（取走即空）');
 });
 
@@ -195,7 +195,7 @@ test('ZCGameRenderWorld：兵营产兵时登记建筑抖动，并在 renderDynam
     assert.ok(start > 0 && end > start, 'renderUnitEntity 必须存在');
     const body = source.slice(start, end);
     assert.match(body,
-        /if \(isBirth && model\) \{[\s\S]*?triggerBuildingShake\(unit\.sourceHexId, presentation\.now\)/,
+        /if \(isBirth\) \{[\s\S]*?triggerBuildingShake\(unit\.sourceHexId, presentation\.now\)/,
         '单位首次出现（isBirth）时必须登记建筑抖动');
 
     // ② 只对兵营触发（主城 / 金矿的抖动走产金那条通知，两者别混）。
@@ -205,9 +205,9 @@ test('ZCGameRenderWorld：兵营产兵时登记建筑抖动，并在 renderDynam
 
     // ③ renderDynamic 必须每帧推进（renderStatic 是 0.15s 节流，播不出 0.24s 的抖动），
     //    并且推进前先取走模型攒下的产金通知。
-    assert.match(source, /renderHexActivations\(model\);[\s\S]*?renderBuildingShakes\(model\);/,
+    assert.match(source, /renderHexActivations\(frame\);[\s\S]*?renderBuildingShakes\(frame, events\);/,
         'renderDynamic 必须每帧推进建筑抖动');
     assert.match(source,
-        /private renderBuildingShakes\(model: ZCGameModel\): void \{[\s\S]{0,200}?model\.takeBuildingShakes\(\)/,
+        /private renderBuildingShakes\(frame: ZCGameRenderFrame, events: ZCBattlePresentationEvents\): void \{[\s\S]{0,200}?events\.buildingShakes/,
         'renderBuildingShakes 必须先取走产金通知（抖动不幂等）');
 });

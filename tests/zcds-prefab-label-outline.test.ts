@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { assetPath } from './helpers/asset-paths';
+import { BUNDLE_ROOTS } from './helpers/asset-paths';
 
 /**
  * 预制体卫生：**全工程不许出现 `cc.LabelOutline`**。
@@ -21,7 +21,7 @@ import { assetPath } from './helpers/asset-paths';
  * 同口径见 `tests/league.test.ts:570`、`tests/league-hall.test.ts:491`、`tests/league-hall-sub.test.ts:541`
  * （那三条覆盖 League 那几个；这条覆盖 assetPath(`ui/**`) 全部，避免只在某一批里守）。
  */
-const UI_ROOT = assetPath('ui');
+const UI_ROOTS = BUNDLE_ROOTS.map(root => `${root}/ui`).filter(existsSync);
 
 function collectPrefabs(dir: string, out: string[] = []): string[] {
     for (const entry of readdirSync(dir)) {
@@ -33,7 +33,7 @@ function collectPrefabs(dir: string, out: string[] = []): string[] {
 }
 
 test('★预制体一律不许有已废弃的 cc.LabelOutline（描边走 Label 内建）', () => {
-    const prefabs = collectPrefabs(UI_ROOT);
+    const prefabs = UI_ROOTS.flatMap(root => collectPrefabs(root));
     assert.ok(prefabs.length >= 100, `扫到的 prefab 太少（${prefabs.length}）—— 目录结构可能变了`);
 
     const offenders: string[] = [];

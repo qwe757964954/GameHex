@@ -702,6 +702,14 @@ npx tsx --test tests/bigmap-info-layout.test.ts     # 15 条：详情弹窗排�
 
 未上榜显示为空名次，联机初始不构造NPC榜。失败保留当前城池已有榜单；切城取消旧请求，同城在途请求合并，超时与关页解除真实caller，迟到回包不再写回。离线预览继续使用原NPC样本。榜单条数只代表返回名单数量，不能据此推断服务器总参战人数。
 
+### 大地图玩家协议闭环（2026-11-05）
+
+联机可见城池查询 `CmdSlgCampRoleInfos`；`CmdSlgGameRoleInfoBroMsg` 更新已知名单，未知名单补查服务器完整快照。广播发生于首次查询期间时，旧回包作废并补发查询，避免玩家出生被漏掉。角色跨城后从旧名单移除；失败不清空已有快照。
+
+地图使用真实玩家 `pos` 显示名称、头像、建筑等级和防御血量，联机不再绘制布局 NPC 基地。城池弹窗的“驻守 / 迁城”入口逐位查看全部玩家，包含角色 ID、区服、名称、头像、建筑等级、HP 与位置；uint64 ID 保持字符串。名单态解除城池聚焦隔离，头像通过 HeadArt 与页面资源作用域加载，退出后迟到结果不再写入。新增 `buildLevel=7` 同步经既有生成工具更新随包静态编解码模块。
+
+迁城先选择目标城池，再点该城范围内未被已知玩家占用的有效格，最后确认提交原始 `pos`。Controller 串行写入，迁城请求不自动重试，排队请求超过时限不再发送，退出解除 caller。结果后重新查询 game 与迁出、迁入城池，强制回查排在已有查询之后，避免旧快照覆盖迁城结果；服务端仍决定最终可迁入条件。
+
 ### 页面公共展示收敛（2026-11-02）
 
 基地建筑与野怪详情迁入独立 `BigMapInfoPopup`（继承 `PopupBase`，默认不缓存），城池继续使用 `BigMapCityPopup`。尺寸、坐标、字体与排版保存在预制体：全屏根 Widget、居中 Panel、纵向 Layout、正文 RESIZE_HEIGHT、按钮横向 Layout；关闭按钮贴卡片右上。脚本只更新展示内容与按钮可用状态，经原有意图派发操作。空白关闭由 PopupBase 接管；主动关闭不清除刚切换的新目标，在途打开可取消且应用最新内容。
@@ -714,8 +722,8 @@ npx tsx --test tests/bigmap-info-layout.test.ts     # 15 条：详情弹窗排�
 
 实现全在 `BigMapWorldView`，两条规则：
 
-- **隐藏**走 `cullMarkers`（平移 / 缩放共用入口，口径不会分叉）：`focusedCityHexId`（选中格是某座城池的锚点才算，选野怪 / 基地不聚焦）非 -1 时，除选中城外其余标记 `active = false` —— 同帧不可点（命中区按 active 过滤）、不进可见城池上报（`reportVisibleCamps`），聚焦解除由 `syncMarkers` → `cullMarkers` 恢复。
-- **上移**走 `applyFocusIsolation`：名条 / 等级 / 占领旗都是标记节点（`BigMapWorldMarker`）的子节点，把节点按 `layout.points` **幂等重摆**（聚焦 +300 = `BIGMAP_FOCUSED_CITY_LIFT`，解除写回原位，不残留偏移）。`selectedHexId` 在 contentKey 里，选中态一变 `syncMarkers` 必然重跑。
+- **隐藏**走 `cullMarkers`（平移 / 缩放共用入口，口径不会分叉）：`focusedCityHexId`（选中格是某座城池的锚点才算，选野怪 / 基地不聚焦）非 -1 时，保留选中城及其 `CmdSlgCampRoleInfosRspMsg.campId` 对应名单内的玩家，其他城池、玩家和野怪标记 `active = false`。玩家归属按城池名单中的 roleId 判定，不用 pos 反推或覆盖回包归属；本城玩家仍受视口裁剪。隐藏标记同帧不可点，聚焦解除后恢复。
+- **上移**走 `applyFocusIsolation`：仅选中城池标记按 `layout.points` 幂等重摆（聚焦 +300 = `BIGMAP_FOCUSED_CITY_LIFT`，解除写回原位），其名条 / 等级 / 占领旗跟随。玩家仍在原始 pos，不跟随城池展示位移。选中态与各城名单身份进入 contentKey，玩家归属变化也触发重绘。
 
 300 是**内容系**坐标（zoom=1 即屏幕 300px；在 85% 机位 zoom≈1.38 下屏幕位移 ≈ 415px）：「当前城主」徽章在 `BigMapCityPopup` 城主区（屏幕系、贴面板顶），地图可平移缩放，两边没法长期精确对齐，所以落固定值、以默认机位观感为准。坑：重摆**直接读 `layout.points`**，不走 `centerOf`（它每次 `new Vec2`，最小 cc 桩的测试会炸）。判据：`tests/bigmap-focus-city.test.ts`。
 

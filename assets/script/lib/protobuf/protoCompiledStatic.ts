@@ -52890,6 +52890,7 @@ SlgGameCameRoleInfo.prototype.roleName = "";
 SlgGameCameRoleInfo.prototype.img = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 SlgGameCameRoleInfo.prototype.defenseHp = 0;
 SlgGameCameRoleInfo.prototype.pos = 0;
+SlgGameCameRoleInfo.prototype.buildLevel = 0;
 SlgGameCameRoleInfo.create = function create(properties) {
 return new SlgGameCameRoleInfo(properties);
 };
@@ -52906,6 +52907,7 @@ writer.uint32(  26).string(message.roleName);
 writer.uint32(  32).uint64(message.img);
 writer.uint32(  40).uint32(message.defenseHp);
 writer.uint32(  48).uint32(message.pos);
+writer.uint32(  56).uint32(message.buildLevel);
 return writer;
 };
 SlgGameCameRoleInfo.decode = function decode(reader, length, error, long) {
@@ -52945,6 +52947,10 @@ case 6: {
 message.pos = reader.uint32();
 break;
 }
+case 7: {
+message.buildLevel = reader.uint32();
+break;
+}
 default:
 reader.skipType(tag & 7, long);
 break;
@@ -52962,6 +52968,8 @@ if (!message.hasOwnProperty("defenseHp"))
 throw $util.ProtocolError("missing required 'defenseHp'", { instance: message });
 if (!message.hasOwnProperty("pos"))
 throw $util.ProtocolError("missing required 'pos'", { instance: message });
+if (!message.hasOwnProperty("buildLevel"))
+throw $util.ProtocolError("missing required 'buildLevel'", { instance: message });
 return message;
 };
 SlgGameCameRoleInfo.getTypeUrl = function getTypeUrl(typeUrlPrefix) {

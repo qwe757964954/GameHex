@@ -13,6 +13,7 @@
 import type { ZCArmySkill, ZCArmySkillTable } from './CardSkillList';
 import { computeDetailStats, parseUnitGrowthRow } from './CardDetailStats';
 import type { ZCCardDetailBase, ZCUnitGrowthRow } from './CardDetailStats';
+import type { ZCCardLevelAttrs } from './CardLevelAttr';
 
 /** 卡库顺序循环切换；找不到当前卡或卡库只有一张时不跳转。 */
 export function resolveDetailNeighbor<T extends { readonly id: string }>(
@@ -73,8 +74,15 @@ function gainText(gain: number, format: (value: number) => string): string {
 }
 
 /** 组装六维属性行；`hasUnit = false`（纯建筑卡）时兵种四维 value 也照常显示（为 0）。 */
-export function buildDetailStats(base: ZCCardDetailBase, growthRows: readonly ZCUnitGrowthRow[], unitId: string, level: number): readonly CardDetailStatLine[] {
-    const stats = computeDetailStats(base, growthRows, unitId, level);
+export function buildDetailStats(
+    base: ZCCardDetailBase,
+    growthRows: readonly ZCUnitGrowthRow[],
+    unitId: string,
+    level: number,
+    levelAttrs?: ZCCardLevelAttrs | null,
+    nextLevelAttrs?: ZCCardLevelAttrs | null,
+): readonly CardDetailStatLine[] {
+    const stats = computeDetailStats(base, growthRows, unitId, level, levelAttrs, nextLevelAttrs);
     return [
         { key: 'hp', value: formatInt(stats.unitHp.value), gain: gainText(stats.unitHp.gain, formatInt) },
         { key: 'attack', value: formatInt(stats.unitAttack.value), gain: gainText(stats.unitAttack.gain, formatInt) },

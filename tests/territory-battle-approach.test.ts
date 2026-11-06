@@ -97,9 +97,18 @@ test('★★提示条文案与需求原文逐字一致', () => {
 // ③ 接线
 // ---------------------------------------------------------------------------
 
-const modelSource = readFileSync('assets/script/app/territory/application/TerritoryModel.ts', 'utf8');
-const mapViewSource = readFileSync('assets/script/app/territory/view/TerritoryMapView.ts', 'utf8');
-const pageSource = readFileSync('assets/script/app/main/MainTerritoryMap.ts', 'utf8');
+/**
+ * 读源码做接线断言时**必须先把行尾归一化成 LF**。
+ *
+ * SVN 合并把 `TerritoryModel.ts` / `TerritoryMapView.ts` / `MainTerritoryMap.ts`
+ * 变成了 CRLF，而这里的 needle 全是多行模板串（`\n` 分隔）—— 不归一化就永远
+ * 匹配不上，断言会静默变成"永远红"或"永远绿"。
+ */
+const readText = (path: string): string => readFileSync(path, 'utf8').replace(/\r\n/g, '\n');
+
+const modelSource = readText('assets/script/app/territory/application/TerritoryModel.ts');
+const mapViewSource = readText('assets/script/app/territory/view/TerritoryMapView.ts');
+const pageSource = readText('assets/script/app/main/MainTerritoryMap.ts');
 
 test('★★★只有「首次解锁直开」带 approach，弹窗里自己按的「开始战斗」不许拖 1.2 秒', () => {
     // 直开那条：`handleUnlockThenBattle` 的回包里必须是 `applyBattleStart(..., true)`。

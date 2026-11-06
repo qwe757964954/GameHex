@@ -1,8 +1,10 @@
 import { _decorator, Component } from 'cc';
+import { DEBUG } from 'cc/env';
 import { GameRoute } from '../../core/runtime/GameRoute';
 import { ResourceLoadManager } from '../../core/asset/ResourceLoadManager';
 import { AudioMgr, bindAudioToFramework } from '../../framework/audio/AudioMgr';
 import { FW } from '../../framework/FW';
+import { Log } from '../../framework/log/Log';
 import { ProcedureManager } from '../../framework/procedure/ProcedureManager';
 import { PopupManager } from '../../framework/ui/PopupManager';
 import { CocosAssetService } from '../../platform/cocos/CocosAssetService';
@@ -22,6 +24,7 @@ import { registerRdVars } from '../rd/RdRegistry';
 import { GameNet } from '../net/GameNet';
 import { GameSocketBridge } from '../gm/GameSocketBridge';
 import { createCardPopupComposition } from './card/CardPopupComposition';
+import { createLeaguePopupComposition } from './LeaguePopupComposition';
 import { ensureZCRuntimeCompiled } from '../zcds/application/ZCRuntimePrecompiler';
 import { resetZCRuntime } from '../zcds/model/ZCGameRuntimeConfig';
 
@@ -44,6 +47,10 @@ export class ProcedureBootstrap extends Component {
     };
 
     onLoad(): void {
+        // 发布构建收口日志：cc/env 的 DEBUG 只在发布构建里为 false。
+        // 编辑器 / 预览为 true；Node 单测沙箱把 cc/env mock 成空对象（undefined）。
+        // 两种情况都不触发，避免误关测试与开发期日志。hideLog 保留 warn / error。
+        if (DEBUG === false) Log.hideLog();
         this.configurePresentation();
         this.configurePayment(new FetchNetworkTransport());
         this.configureAudioAndIndicators();
@@ -114,7 +121,8 @@ export class ProcedureBootstrap extends Component {
         });
     }
     private configurePopups(manager: ProcedureManager): void {
-        PopupManager.inst.initialize(manager.context.assets, GameNet.instance.callbackOwners, view => createCardPopupComposition(manager.context, view));
+        PopupManager.inst.initialize(manager.context.assets, GameNet.instance.callbackOwners, view =>
+            createCardPopupComposition(manager.context, view) ?? createLeaguePopupComposition(manager.context, view));
     }
     private registerRoutes(manager: ProcedureManager): void {
         manager.registerRoute(GameRoute.Update, ProcedureUpdate);

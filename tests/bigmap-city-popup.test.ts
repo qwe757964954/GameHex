@@ -6,6 +6,7 @@ import ts from 'typescript';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import * as mvcEvents from '../assets/script/app/bigmap/application/BigMapEvents';
 import { assetPath } from './helpers/asset-paths';
+import { formatBigMapCityOpening } from '../assets/script/app/bigmap/view/BigMapPresentationText';
 
 /**
  * 城池弹窗（蓝湖「城池弹窗3」）判据。
@@ -63,7 +64,10 @@ test('城池弹窗按设计稿 1:1：面板 692×397、进攻按钮 277×108，�
     const single: Record<string, string> = {
         warScoreLabel: 'cc.Label', warScoreFillTransform: 'cc.UITransform', lordNameLabel: 'cc.Label',
         lordScoreLabel: 'cc.Label', lordPerson: 'cc.Sprite', fightButton: 'cc.Button',
-        fightLabel: 'cc.Label', staminaLabel: 'cc.Label', staminaIcon: 'cc.Sprite',
+        emptyLordLabel: 'cc.Label', lordScoreRoot: 'cc.Node',
+        fullRankRoot: 'cc.Node',
+        openingLabel: 'cc.Label',
+        fightLabel: 'cc.Label', staminaLabel: 'cc.Label', staminaIcon: 'cc.Sprite', playerActionsButton: 'cc.Button',
     };
     for (const [field, type] of Object.entries(single)) {
         const ref = component[field] as IPrefabRef;
@@ -206,11 +210,11 @@ test('文字颜色 / 描边 / 字号逐项对齐蓝湖量测值', () => {
     };
     const spec: Record<string, { font: number; color: [number, number, number]; outline: boolean }> = {
         RankNo: { font: 30, color: [255, 255, 255], outline: true },
-        RankName: { font: 20, color: [255, 255, 255], outline: true },
-        RankScoreTag: { font: 20, color: [248, 160, 50], outline: true },
-        RankScoreValue: { font: 20, color: [248, 160, 50], outline: true },
+        RankName: { font: 22, color: [255, 255, 255], outline: true },
+        RankScoreTag: { font: 22, color: [248, 160, 50], outline: true },
+        RankScoreValue: { font: 22, color: [248, 160, 50], outline: true },
         FullRank: { font: 18, color: [114, 184, 255], outline: true },
-        WarText: { font: 23, color: [255, 255, 255], outline: true },
+        WarText: { font: 26, color: [255, 255, 255], outline: true },
         WarMin: { font: 22, color: [255, 111, 114], outline: true },
         BuffTitle: { font: 22, color: [56, 44, 39], outline: false },
         BuffDesc: { font: 20, color: [56, 44, 39], outline: false },
@@ -313,6 +317,8 @@ function makePopup(headArt: object = {}) {
     popup.rankScoreTags = [label('st0'), label('st1'), label('st2')];
     popup.rankScoreValues = [label('sc0'), label('sc1'), label('sc2')];
     popup.rankAvatars = [sprite('av0'), sprite('av1'), sprite('av2')];
+    popup.fullRankRoot = makeNode('fullRank');
+    popup.openingLabel = label('opening');
     popup.warScoreLabel = label('war');
     // 战功条改成**直接拖 UITransform**（不再 getComponent），桩要给出真尺寸。
     const fillTransform = { width: 249, height: 21, setContentSize(w: number, h: number) { fillTransform.width = w; fillTransform.height = h; } };
@@ -320,7 +326,10 @@ function makePopup(headArt: object = {}) {
     popup.lordNameLabel = label('lord');
     popup.lordScoreLabel = label('lordScore');
     popup.lordPerson = sprite('person');
+    popup.emptyLordLabel = label('emptyLord');
+    popup.lordScoreRoot = makeNode('lordScoreRoot');
     popup.fightButton = { node: makeNode('fight'), interactable: true };
+    popup.playerActionsButton = { node: makeNode('playerActions'), interactable: true };
     popup.fightLabel = label('fight');
     popup.staminaLabel = label('stamina');
     popup.staminaIcon = sprite('staminaIcon');
@@ -353,6 +362,87 @@ test('排行头像同ID不重复加载，换城清空及关闭后迟到头像不
     assert.equal(popup.rankAvatars[0].spriteFrame, null);
 });
 
+test('城主形象按ID加载，换城和关闭后迟到结果不回填，积分使用缩写', async () => {
+    const loads: ((frame: object) => void)[] = [];
+    const { popup } = makePopup({ loadHeadFrame: () => new Promise((resolve) => loads.push(resolve)) });
+    popup.isValid = true;
+    const content = { buffs: [], ranks: [{ rank: 2, name: '玩家', score: '27634000', avatar: null }],
+        warScore: 0, minOccupyScore: 4200, lordName: '城主', lordScore: '1512916', lordAvatarId: '1001',
+        staminaCost: 20, fightCaption: '进攻', fightEnabled: true };
+    popup.render(content);
+    popup.render(content);
+    assert.equal(loads.length, 1);
+    assert.equal(popup.lordScoreLabel.string, '积分 1512K');
+    assert.equal(popup.rankScoreValues[0].string, '27634K');
+    const frame = {};
+    loads[0](frame);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(popup.lordPerson.spriteFrame, frame);
+    assert.equal(popup.lordPerson.node.active, true);
+    popup.render({ ...content, lordAvatarId: '1002' });
+    popup.render({ ...content, lordName: '', lordAvatarId: '' });
+    loads[1]({});
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(popup.lordPerson.spriteFrame, null);
+    assert.equal(popup.lordPerson.node.active, false);
+    popup.render(content);
+    popup.onClose(0);
+    loads[2]({});
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(popup.lordPerson.spriteFrame, null);
+});
+
+test('讲台先于城主人物绘制，不能遮掉人物下沿', () => {
+    const { rows } = loadPrefab();
+    const root = rows.find((row) => row.__type__ === 'cc.Node' && row._name === 'BigMapCityPopup');
+    const names = root._children.map((ref) => rows[ref.__id__]._name);
+    assert.ok(names.indexOf('LordBase') < names.indexOf('LordPerson'));
+});
+
+test('排行榜头像槽固定72像素CUSTOM尺寸并以圆形裁切，换大图不撑开', () => {
+    const { rows, component } = loadPrefab();
+    for (const ref of component.rankAvatars as IPrefabRef[]) {
+        const sprite = rows[ref.__id__];
+        assert.equal(sprite._sizeMode, 0, '头像使用CUSTOM，不随SpriteFrame切换恢复RAW原图尺寸');
+        assert.equal(sprite._isTrimmedMode, false);
+        const node = rows[(sprite.node as IPrefabRef).__id__];
+        const transform = node._components.map((entry) => rows[entry.__id__])
+            .find((entry) => entry.__type__ === 'cc.UITransform');
+        assert.equal(transform._contentSize.width, 72);
+        assert.equal(transform._contentSize.height, 72);
+        const parent = rows[(node._parent as IPrefabRef).__id__];
+        const mask = parent._components.map((entry) => rows[entry.__id__]).find((entry) => entry.__type__ === 'cc.Mask');
+        assert.equal(mask._type, 1, 'GRAPHICS_ELLIPSE 圆形裁切');
+    }
+});
+
+test('驻守玩家按钮绑定真实Button且以意图进入玩家操作，离线城池隐藏入口', () => {
+    const { rows, component } = loadPrefab();
+    const button = rows[(component.playerActionsButton as IPrefabRef).__id__];
+    assert.equal(button.__type__, 'cc.Button');
+    assert.equal(button._transition, 0);
+    assert.equal(button._target, null);
+    const buttonNode = rows[(button.node as IPrefabRef).__id__];
+    const widget = buttonNode._components.map((ref: IPrefabRef) => rows[ref.__id__])
+        .find((row: { __type__: string }) => row.__type__ === 'cc.Widget');
+    assert.ok(typeof widget._bottom === 'number' && widget._bottom >= 300,
+        '驻守入口须位于弹窗面板内，不覆盖底部导航');
+    const { popup, listeners } = makePopup();
+    const calls: string[] = [];
+    EventMgr.instance.on(mvcEvents.BigMapUiEvent.Intent, (event: mvcEvents.IBigMapIntentEvent) => calls.push(event.intent.kind), popup);
+    try {
+        popup.onInit();
+        const content = { buffs: [], ranks: [], warScore: 0, minOccupyScore: 0,
+            lordName: '', lordScore: '', staminaCost: 0, fightCaption: '', fightEnabled: false, hasPlayerActions: true };
+        popup.render(content);
+        assert.equal(popup.playerActionsButton.node.active, true);
+        listeners.get('playerActions:click')?.();
+        assert.deepEqual(calls, ['campRoles']);
+        popup.render({ ...content, hasPlayerActions: false });
+        assert.equal(popup.playerActionsButton.node.active, false);
+    } finally { EventMgr.instance.offTarget(popup); }
+});
+
 test('弹窗复用同一实例时全量覆盖：空槽位隐藏、战功条按比例改宽、进攻按钮只在可打时派发意图', () => {
     const { popup, listeners } = makePopup();
     const calls: string[] = [];
@@ -374,6 +464,7 @@ test('弹窗复用同一实例时全量覆盖：空槽位隐藏、战功条按�
     assert.equal(popup.buffDescs[0].string, '资源产出 +10%');
     assert.equal(popup.rankRoots[0].active, true);
     assert.equal(popup.rankRoots[1].active, false);
+    assert.equal(popup.fullRankRoot.active, true);
     assert.equal(popup.rankNumbers[0].string, '1');
     // 「积分」和数值是两个节点（设计稿 x=553 / x=607 两段）。
     assert.equal(popup.rankScoreTags[0].string, '积分');
@@ -394,21 +485,78 @@ test('弹窗复用同一实例时全量覆盖：空槽位隐藏、战功条按�
     assert.equal(popup.buffRoots[0].active, false);
     assert.equal(popup.buffDescs[0].string, '');
     assert.equal(popup.rankRoots[0].active, false);
+    assert.equal(popup.fullRankRoot.active, false);
     assert.equal(popup.rankNames[0].string, '');
     assert.equal(popup.rankScoreValues[0].string, '');
     assert.equal(popup.warScoreLabel.string, '0/0');
     assert.equal(popup.warScoreFillTransform.width, 0);
     assert.equal(popup.lordNameLabel.string, '');
     assert.equal(popup.lordPerson.node.active, false);
+    assert.equal(popup.emptyLordLabel.node.active, true);
+    assert.equal(popup.lordNameLabel.node.active, false);
+    assert.equal(popup.lordScoreRoot.active, false);
+    assert.equal(popup.fightButton.node.active, false);
     assert.equal(popup.staminaLabel.node.active, false);
     assert.equal(popup.staminaIcon.node.active, false);
-    // 已禁用时点进攻不派发 —— 否则「灰着但点了才报错」。
-    listeners.get('fight:click')?.();
+    // 禁用按钮由 cc.Button 拦截，测试不绕过组件直接执行 handler。
+    assert.equal(popup.fightButton.interactable, false);
     assert.deepEqual(calls, ['primary']);
 
     // 点空白关闭由 PopupBase 的 `__BlankClose` 层实现（prefab 里已没有 Dim），
     // 因此这里只验「关闭时补发 clear」这条约定。
-    popup.onClose(1);
+    popup.onClose(0);
     assert.deepEqual(calls, ['primary', 'clear']);
     EventMgr.instance.offTarget(popup);
+});
+
+test('无人占据时隐藏可用的进攻按钮，切回有城主时恢复展示', () => {
+    const { popup } = makePopup();
+    const content = {
+        buffs: [], ranks: [], warScore: 0, minOccupyScore: 28000,
+        lordName: '', lordScore: '900', staminaCost: 20,
+        fightCaption: '进攻', fightEnabled: true,
+    };
+    popup.render(content);
+    assert.equal(popup.fightButton.node.active, false);
+    assert.equal(popup.emptyLordLabel.node.active, true);
+    assert.equal(popup.lordPerson.node.active, false);
+    assert.equal(popup.lordScoreRoot.active, false);
+    assert.equal(popup.lordScoreLabel.string, '');
+    popup.render({ ...content, lordName: '城主' });
+    assert.equal(popup.fightButton.node.active, true);
+    assert.equal(popup.emptyLordLabel.node.active, false);
+    assert.equal(popup.lordNameLabel.node.active, true);
+    assert.equal(popup.lordNameLabel.string, '城主');
+    assert.equal(popup.lordScoreRoot.active, true);
+    assert.equal(popup.lordScoreLabel.string, '积分 900');
+});
+
+test('无人占据文案居中叠在右侧人形上，积分区绑定到完整背景节点', () => {
+    const { rows, component } = loadPrefab();
+    const label = rows[(component.emptyLordLabel as IPrefabRef).__id__];
+    const node = rows[(label.node as IPrefabRef).__id__];
+    const person = rows.find((row) => row._name === 'LordPerson');
+    assert.equal(label._string, '无人占据');
+    assert.equal(node._lpos.x, person?._lpos.x);
+    assert.equal(node._lpos.y, person?._lpos.y);
+    assert.equal(rows[(component.lordScoreRoot as IPrefabRef).__id__]._name, 'LordScoreBg');
+});
+
+test('未开放显示配置开放日，空榜隐藏完整榜单，切城后清空旧文案并恢复榜单入口', () => {
+    const { popup } = makePopup();
+    const content = {
+        buffs: [], ranks: [], warScore: 0, minOccupyScore: 28000,
+        lordName: '', lordScore: '', staminaCost: 20,
+        fightCaption: '进攻', fightEnabled: false,
+        openingText: formatBigMapCityOpening(6),
+    };
+    popup.render(content);
+    assert.equal(popup.openingLabel.node.active, true);
+    assert.equal(popup.openingLabel.string, '未开放\n开服第6天开放');
+    assert.equal(popup.fullRankRoot.active, false);
+    popup.render({ ...content, openingText: '', ranks: [{ rank: 1, name: '榜首', score: '10', avatar: null }] });
+    assert.equal(popup.openingLabel.node.active, false);
+    assert.equal(popup.openingLabel.string, '');
+    assert.equal(popup.fullRankRoot.active, true);
+    assert.equal(formatBigMapCityOpening(0), '未开放', '没有开放日时不编造倒计时');
 });

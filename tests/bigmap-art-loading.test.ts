@@ -37,7 +37,7 @@ test('同一作用域中的重复建筑资源仅加载一次，布局指定背�
     const art = await artLoader()(assets, { disposed: false }, 'custom/world');
     assert.equal(calls.filter((path) => path.endsWith('/construction/spriteFrame')).length, 1);
     assert.equal(art.background.path, 'custom/world/spriteFrame');
-    assert.equal(art.tiledBackground.path, 'image/bigMapBG/spriteFrame');
+    assert.equal(art.tiledBackground.path, 'bigMapBG/spriteFrame');
     assert.equal(art.baseBackground.path, 'image/base_background/spriteFrame');
     assert.ok(!calls.some((path) => path.includes('/base_ground/')));
     assert.equal(art.buildings.size, 23);
@@ -81,7 +81,7 @@ test('页面加载前关闭不会发起资源请求，加载途中关闭不会�
 
 test('连续背景缺失时保留自定义布局背景，不再加载旧地皮', async () => {
     const art = await artLoader()({
-        has: async (path: string) => !path.includes('/bigMapBG/'),
+        has: async (path: string) => !path.startsWith('bigMapBG'),
         load: async (path: string) => ({ path }),
     }, { disposed: false }, 'custom/world');
     assert.equal(art.tiledBackground, null);
@@ -101,7 +101,7 @@ test('废弃荒地背景和六张旧地皮完全不探测、不加载，旧配�
         assert.equal(art.background, null);
         assert.equal(art.ground, null);
         assert.equal(art.groundVariants.length, 0);
-        assert.equal(art.tiledBackground.path, 'image/bigMapBG/spriteFrame');
+        assert.equal(art.tiledBackground.path, 'bigMapBG/spriteFrame');
     }
 });
 

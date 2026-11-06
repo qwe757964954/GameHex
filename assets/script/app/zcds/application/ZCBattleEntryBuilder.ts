@@ -31,6 +31,7 @@ export function buildZCBattleEntry(prepared: ZCGamePreparedResources, entry?: ZC
         ? baseConfig.enemyDeck.filter((card) => requestedEnemyCards.has(card.id))
         : baseConfig.enemyDeck;
     const pveDefence = pve?.mode === 'defence' && pve.waves.length > 0 ? {
+        cards: baseConfig.enemyDeck.filter(card => pve.waves.some(wave => String(wave.pvpCardId) === card.id)),
         waves: pve.waves
             .filter((wave) => wave.monsterCount > 0 && wave.showAtSeconds >= 0)
             .sort((a, b) => a.showAtSeconds - b.showAtSeconds || a.waveId - b.waveId)

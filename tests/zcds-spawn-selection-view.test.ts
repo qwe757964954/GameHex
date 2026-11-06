@@ -370,9 +370,9 @@ test('自选主城 HUD 走实例化路径，并进了对局预加载清单', () 
     assert.doesNotMatch(game, /addComponent\(ZCSpawnSelectionView\)/, '不再运行时挂脚本');
     assert.match(game, /getComponent\(ZCSpawnSelectionView\)/, '取组件失败应当场抛');
 
-    assert.match(loaderSource, /const SPAWN_SELECTION_URL = 'ui\/game\/ZCSpawnSelection'/);
-    assert.match(loaderSource, /this\.assets\.load\(SPAWN_SELECTION_URL, Prefab/);
-    assert.match(loaderSource, /spawnSelectionPrefab: Prefab;/);
+    assert.match(loaderSource, /const SPAWN_SELECTION_URL = ZC_BATTLE_SHELL_PATHS\.spawnSelection/);
+    assert.match(loaderSource, /spawnSelectionPrefab: selectSpawn \? SPAWN_SELECTION_URL : null/);
+    assert.match(loaderSource, /spawnSelectionPrefab: Prefab \| null;/);
 });
 
 
@@ -380,7 +380,7 @@ test('选点展示计时由控制器持有，通过引擎端口调度并在退�
     const controller = stripComments(readFileSync('assets/script/app/zcds/application/ZCBattleRuntimeController.ts', 'utf8'));
     const composition = stripComments(readFileSync('assets/script/app/bootstrap/battle/BattleComposition.ts', 'utf8'));
     assert.match(controller, /snapshot\.finished && !this\.stopShowcase/);
-    assert.match(controller, /this\.ports\.schedule\(\(\) => this\.finishSpawnSelection\(\), 1\)/);
+    assert.match(controller, /this\.services\.clock\.schedule\(\(\) => this\.finishSpawnSelection\(\), 1\)/);
     assert.match(controller, /this\.stopShowcase\?\.\(\)/);
     assert.match(composition, /view\.scheduleOnce\(callback, seconds\)/);
     assert.doesNotMatch(controller, /spawnShowcaseLeft/);

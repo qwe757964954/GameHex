@@ -1129,3 +1129,43 @@ test('★★★跨流程交接：`setBaseStep` 接着同一步、`startRelease` 
     for (let index = 0; index < 40; index += 1) cover.tick(1 / 60);
     assert.equal(layer.active, false, '散完没藏起来');
 });
+
+// ---------------------------------------------------------------------------
+// ⑥ 连续开战（2026-11-04 实机：首领关第一波能进、第二波进不去）
+// ---------------------------------------------------------------------------
+
+test('★★★busy 起演的过场必须收得下回包那条 navigate：不许拿 battleApproachPending 判重', () => {
+    const source = stripped(PAGE);
+    const start = source.indexOf('private onNavigateToBattle');
+    const end = source.indexOf('private beginBattlePrelude');
+    assert.ok(start > 0 && end > start, '找不到 onNavigateToBattle 的实现（切片为空不许判绿）');
+    const navigate = source.slice(start, end);
+    assert.ok(!/if \(this\.battleApproachPending\) return;/.test(navigate),
+        '请求在途时 startBattleIntro 已把门闩置 true，用它判重会吞掉回包后第一条 navigate');
+    assert.ok(navigate.includes('this.battleIntro?.nav'), '要按「本次过场是否已拿到去向」判重');
+    assert.ok(navigate.includes('this.battlePrelude'), '前奏在跑时仍要挡住迟到回包');
+    // 守卫不能挡在「把 nav 交给过场」之前：否则过场永远等不到去向、3s 后判取消。
+    assert.ok(navigate.indexOf('this.releaseBattleIntro') > navigate.indexOf('if (this.battleIntro)'),
+        '过场已起演时必须把回包的去向交给它');
+});
+
+test('★★★流程切走落定后要复位过场门闩（成功路径不复位 ⇒ 页面复用时第二次开战静默失效）', () => {
+    const source = stripped(PAGE);
+    const start = source.indexOf('private watchBattleSwitch()');
+    const end = source.indexOf('private stopBattleSwitchWatch()');
+    assert.ok(start > 0 && end > start, '找不到 watchBattleSwitch 的实现（切片为空不许判绿）');
+    const watch = source.slice(start, end);
+    const from = watch.indexOf('if (entered)');
+    const to = watch.indexOf('this.failBattleIntro');
+    assert.ok(from > 0 && to > from, '找不到 entered 分支');
+    const entered = watch.slice(from, to);
+    assert.ok(entered.includes('this.battleApproachPending = false;'), '成功落定必须复位一次性门闩');
+});
+
+test('★前奏仍要立起 battleApproachPending（修守卫不许顺手删掉前奏的并发判据）', () => {
+    const source = stripped(PAGE);
+    const start = source.indexOf('private beginBattlePrelude');
+    const end = source.indexOf('private stepBattlePrelude');
+    assert.ok(start > 0 && end > start, '找不到 beginBattlePrelude 的实现');
+    assert.ok(source.slice(start, end).includes('this.battleApproachPending = true'));
+});

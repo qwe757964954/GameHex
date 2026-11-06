@@ -45,32 +45,29 @@ function bagOf(counts: Record<string, number>): ZCItemCounter {
 
 const TABLE: ZCCardLevelUpTable = buildCardLevelUpTable(readCardLevelUp());
 
-// 精灵弓箭手（66001）：卡牌 18003 / 兵种经验 16003 / 通用经验 16000。
-// ⚠️ `66001` 是**重编号前的旧 id**，现表里已经查不到 —— 本文件里用它做的断言目前是红的。
-// **新增用例请用 `LIVE_ARCHER`**，需求值也从表里动态取，不要写死数字。
-const ARCHER = '66001';
+// 精灵弓箭手（68001）：卡牌 18003 / 兵种经验 16003 / 通用经验 16000。
+// ⚠️ `66001` 是**重编号前的旧 id**，现表里已经查不到 —— 只用于断言「不该进表」。
 /** 现表（`assets/remoteRef/cardLevelUp.json`）里精灵弓箭手的真实 id。 */
 const LIVE_ARCHER = '68001';
+const ARCHER = LIVE_ARCHER;
+const LEGACY_ARCHER = '66001';
 const ARCHER_CARD_ITEM = '18003';
 const ARCHER_ARMY_EXP = '16003';
 const GENERAL_EXP = '16000';
 
-test('cardLevelUp：真实表能解析出 34 张卡，等级列全空的卡被丢弃', () => {
-    // 源表里有 35 个 id，但希尔瓦娜斯（68001）的 `level` 列**一个都没填**
-    // （转出来的 JSON 是 `null`）—— 这种行必须丢掉，否则会被当成 `level = 0`
-    // 而给出一份不存在的升级档。
-    assert.equal(TABLE.size, 34);
-    assert.equal(TABLE.has('68001'), false, '68001（希尔瓦娜斯）等级列全空，不该进表');
-    assert.equal(TABLE.has(ARCHER), true);
+test('cardLevelUp：真实表能解析出 35 张卡（68001~68035），每张 51 档', () => {
+    assert.equal(TABLE.size, 35);
+    assert.equal(TABLE.has(ARCHER), true, '精灵弓箭手（68001）应当在表里');
     assert.equal(TABLE.has('68013'), true);
+    assert.equal(TABLE.has(LEGACY_ARCHER), false, '66001 是重编号前的旧 id，现表已查不到');
 });
 
 test('cardLevelUp：等级档位连续，上限与源表一致', () => {
-    // 66001：0..30 共 31 档
-    assert.equal(TABLE.get(ARCHER)?.size, 31);
-    assert.equal(resolveMaxLevel(TABLE, ARCHER), 30);
-    // 68013（雷克萨）：源表只到 26 级
-    assert.equal(resolveMaxLevel(TABLE, '68013'), 26);
+    // 68001：0..50 共 51 档
+    assert.equal(TABLE.get(ARCHER)?.size, 51);
+    assert.equal(resolveMaxLevel(TABLE, ARCHER), 50);
+    // 68013（雷克萨）：现表同样铺满 0..50
+    assert.equal(resolveMaxLevel(TABLE, '68013'), 50);
     // 没配置的卡
     assert.equal(resolveMaxLevel(TABLE, '99999'), 0);
 
@@ -118,70 +115,70 @@ test('升级读的是「目标等级」那一行（level 列 = 到达该等级�
     // `max(level)` 当作**等级上限**当进度条分母，所以 `level` 必须是「可到达的等级」。
     // 于是「从 L 升到 L+1」要读的是 `level = L + 1` 那一行。
     //
-    // 精灵弓箭手（66001）的档位：
-    //   level 1 → 卡牌 10 / 经验 20       level 2 → 卡牌 20 / 经验 60
-    //   level 3 → 卡牌 30 / 经验 120      level 0 → 卡牌 10 / 经验 0（初始态，不可达）
+    // 精灵弓箭手（68001）的档位：
+    //   level 1 → 卡牌 27 / 经验 53       level 2 → 卡牌 53 / 经验 160
+    //   level 3 → 卡牌 80 / 经验 319      level 0 → 卡牌 10 / 经验 0（初始态，不可达）
 
     // 0 → 1：读 level=1 行
-    const atZero = evaluateUpgrade(TABLE, ARCHER, 0, bagOf({ [ARCHER_CARD_ITEM]: 10, [GENERAL_EXP]: 20 }));
+    const atZero = evaluateUpgrade(TABLE, ARCHER, 0, bagOf({ [ARCHER_CARD_ITEM]: 27, [GENERAL_EXP]: 53 }));
     assert.equal(atZero.targetLevel, 1);
-    assert.equal(atZero.requirements[0].need, 10);
-    assert.equal(atZero.requirements[1].need, 20);
+    assert.equal(atZero.requirements[0].need, 27);
+    assert.equal(atZero.requirements[1].need, 53);
     assert.equal(atZero.canUpgrade, true);
 
     // 弹药刚好差一点 → 不能升（证明读的不是 level=0 那行「0 经验」）
-    const zeroShort = evaluateUpgrade(TABLE, ARCHER, 0, bagOf({ [ARCHER_CARD_ITEM]: 10, [GENERAL_EXP]: 19 }));
-    assert.equal(zeroShort.requirements[1].need, 20);
-    assert.equal(zeroShort.canUpgrade, false, '0→1 也要 20 经验，不是 0');
+    const zeroShort = evaluateUpgrade(TABLE, ARCHER, 0, bagOf({ [ARCHER_CARD_ITEM]: 27, [GENERAL_EXP]: 52 }));
+    assert.equal(zeroShort.requirements[1].need, 53);
+    assert.equal(zeroShort.canUpgrade, false, '0→1 也要 53 经验，不是 0');
 
-    // 1 → 2：读 level=2 行（卡牌 20 / 经验 60）
-    const atOne = evaluateUpgrade(TABLE, ARCHER, 1, bagOf({ [ARCHER_CARD_ITEM]: 20 }));
+    // 1 → 2：读 level=2 行（卡牌 53 / 经验 160）
+    const atOne = evaluateUpgrade(TABLE, ARCHER, 1, bagOf({ [ARCHER_CARD_ITEM]: 53 }));
     assert.equal(atOne.targetLevel, 2);
-    assert.equal(atOne.requirements[0].need, 20);
-    assert.equal(atOne.requirements[1].need, 60);
+    assert.equal(atOne.requirements[0].need, 53);
+    assert.equal(atOne.requirements[1].need, 160);
     assert.equal(atOne.canUpgrade, false, '只有卡、没经验，不该能升');
 
-    // 2 → 3：读 level=3 行（卡牌 30 / 经验 120）
-    const atTwo = evaluateUpgrade(TABLE, ARCHER, 2, bagOf({ [ARCHER_CARD_ITEM]: 30 }));
-    assert.equal(atTwo.requirements[0].need, 30);
-    assert.equal(atTwo.requirements[1].need, 120);
+    // 2 → 3：读 level=3 行（卡牌 80 / 经验 319）
+    const atTwo = evaluateUpgrade(TABLE, ARCHER, 2, bagOf({ [ARCHER_CARD_ITEM]: 80 }));
+    assert.equal(atTwo.requirements[0].need, 80);
+    assert.equal(atTwo.requirements[1].need, 319);
 });
 
 test('经验按「通用 + 兵种」合计判定', () => {
-    // 0 → 1 那一档需要 20 经验
+    // 0 → 1 那一档需要 53 经验
     const need = evaluateUpgrade(TABLE, ARCHER, 0, bagOf({})).requirements[1].need;
-    assert.equal(need, 20);
+    assert.equal(need, 53);
 
     // 一边够、另一边不够，但合计刚好够 → 可以升
     const split = evaluateUpgrade(TABLE, ARCHER, 0, bagOf({
-        [ARCHER_CARD_ITEM]: 10, [GENERAL_EXP]: 5, [ARCHER_ARMY_EXP]: 15,
+        [ARCHER_CARD_ITEM]: 27, [GENERAL_EXP]: 5, [ARCHER_ARMY_EXP]: 48,
     }));
     assert.equal(split.generalExpOwned, 5);
-    assert.equal(split.armyExpOwned, 15);
-    assert.equal(split.requirements[1].owned, 20, '经验行的 owned 是两者之和');
-    assert.equal(split.canUpgrade, true, '5 通用 + 15 兵种 满足 20 经验');
+    assert.equal(split.armyExpOwned, 48);
+    assert.equal(split.requirements[1].owned, 53, '经验行的 owned 是两者之和');
+    assert.equal(split.canUpgrade, true, '5 通用 + 48 兵种 满足 53 经验');
 
     // 合计差 1 → 不能升
     const short = evaluateUpgrade(TABLE, ARCHER, 0, bagOf({
-        [ARCHER_CARD_ITEM]: 10, [GENERAL_EXP]: 5, [ARCHER_ARMY_EXP]: 14,
+        [ARCHER_CARD_ITEM]: 27, [GENERAL_EXP]: 5, [ARCHER_ARMY_EXP]: 47,
     }));
-    assert.equal(short.requirements[1].owned, 19);
+    assert.equal(short.requirements[1].owned, 52);
     assert.equal(short.canUpgrade, false);
     assert.match(short.blockedReason, /经验不足/);
 
     // 只有通用经验、没有兵种经验 → 也算（合计口径）
     const generalOnly = evaluateUpgrade(TABLE, ARCHER, 0, bagOf({
-        [ARCHER_CARD_ITEM]: 10, [GENERAL_EXP]: 20,
+        [ARCHER_CARD_ITEM]: 27, [GENERAL_EXP]: 53,
     }));
     assert.equal(generalOnly.canUpgrade, true);
 });
 
 test('卡牌数量是独立条件，经验再多也补不了', () => {
     const status = evaluateUpgrade(TABLE, ARCHER, 0, bagOf({
-        [ARCHER_CARD_ITEM]: 9, [GENERAL_EXP]: 999999, [ARCHER_ARMY_EXP]: 999999,
+        [ARCHER_CARD_ITEM]: 26, [GENERAL_EXP]: 999999, [ARCHER_ARMY_EXP]: 999999,
     }));
-    assert.equal(status.requirements[0].need, 10);
-    assert.equal(status.requirements[0].owned, 9);
+    assert.equal(status.requirements[0].need, 27);
+    assert.equal(status.requirements[0].owned, 26);
     assert.equal(status.requirements[0].enough, false);
     assert.equal(status.requirements[1].enough, true);
     assert.equal(status.canUpgrade, false);
@@ -189,7 +186,7 @@ test('卡牌数量是独立条件，经验再多也补不了', () => {
 });
 
 test('已满级 / 超出上限 / 无配置 三种不可升形态', () => {
-    const maxed = evaluateUpgrade(TABLE, ARCHER, 30, bagOf({ [ARCHER_CARD_ITEM]: 9999 }));
+    const maxed = evaluateUpgrade(TABLE, ARCHER, 50, bagOf({ [ARCHER_CARD_ITEM]: 9999 }));
     assert.equal(maxed.configured, true);
     assert.equal(maxed.maxed, true);
     assert.equal(maxed.canUpgrade, false);
@@ -198,12 +195,12 @@ test('已满级 / 超出上限 / 无配置 三种不可升形态', () => {
     assert.equal(maxed.targetLevel, maxed.level);
 
     // 后端给的等级超过了表里的上限（表改小过）—— 同样按「不能再升」处理
-    const beyond = evaluateUpgrade(TABLE, ARCHER, 40, bagOf({}));
+    const beyond = evaluateUpgrade(TABLE, ARCHER, 55, bagOf({}));
     assert.equal(beyond.maxed, true);
-    assert.equal(beyond.maxLevel, 30);
+    assert.equal(beyond.maxLevel, 50);
 
-    // 表里查无此卡（例如希尔瓦娜斯那批 level 全空的行）
-    const missing = evaluateUpgrade(TABLE, '68001', 3, bagOf({}));
+    // 表里查无此卡（例如重编号前的旧 id 66001）
+    const missing = evaluateUpgrade(TABLE, LEGACY_ARCHER, 3, bagOf({}));
     assert.equal(missing.configured, false);
     assert.equal(missing.maxed, false);
     assert.equal(missing.canUpgrade, false);

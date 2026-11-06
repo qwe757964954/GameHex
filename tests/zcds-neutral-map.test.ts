@@ -61,7 +61,7 @@ test('v2 中立格可通行、参与邻接并以可占据状态进入对局，�
         assert.equal(game.enemyTerritoryCount, 16);
         assert.equal(game.snapshot.hexes.filter((hex) => hex.owner === 'neutral' && ZC_HEX_CONFIG[hex.id].playable).length, 12);
         assert.ok(neutral.every((config) => game.snapshot.hexes[config.id].state === 'occupiable'));
-        assert.ok(neutral.every((config) => typeof game.snapshot.hexes[config.id].tileType === 'string'));
+        assert.ok(neutral.every((config) => typeof game.snapshot.hexes[config.id].tileType === 'number'));
         assert.ok(voids.every((config) => game.snapshot.hexes[config.id].tileType === null));
         assert.equal(ZCGameModel.isValidSnapshot(game.exportSnapshot()), true);
     } finally {

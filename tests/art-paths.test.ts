@@ -26,17 +26,8 @@ import {
     BUILDING_ART_ROOT,
 } from '../assets/script/app/ArtPaths';
 import { CARD_LINEUP_TEXTS } from '../assets/script/app/card/CardLineupTexts';
-import {
-    BOARD_HERO_ART,
-    CARD_FACE_ART,
-    CLASS_BADGE_ART,
-    CLASS_ICON_OFF_ART,
-    CLASS_ICON_ON_ART,
-    POOL_FRAME_ART,
-    resolveHeroArt,
-    STAGE_DISC_ART,
-    ZC_CARD_CLASSES,
-} from '../assets/script/app/card/CardLineupTypes';
+import { ZC_CARD_CLASSES } from '../assets/script/app/card/CardLineupTypes';
+import { cardArtConfig } from './helpers/card-art-config';
 import * as ArtPaths from '../assets/script/app/ArtPaths';
 import {
     RL_ART_ALL_KEYS,
@@ -47,9 +38,7 @@ import {
 } from '../assets/script/app/role/RoleArt';
 import { MILITIA_ARMY_ID } from '../assets/script/app/role/MilitiaTypes';
 import { getGuideIconPath } from '../assets/script/app/zcds/model/ZCGuideConfig';
-import { assetPath } from './helpers/asset-paths';
-
-const RESOURCES = 'assets/resources';
+import { assetExists, assetPath } from './helpers/asset-paths';
 
 /** 断言 `<root>/<name>.png` 真实存在。 */
 function assertSpriteExists(root: string, name: string, hint: string): void {
@@ -75,29 +64,14 @@ function assertUsesArtPaths(source: string, hint: string): void {
  * （`resources.load` 只打一条 warn），这条用例是当时唯一的报警点。
  */
 test('卡牌阵容 / 布阵的每张图都在它自己的根目录下', () => {
-    for (const [rarity, name] of Object.entries(CARD_FACE_ART)) {
-        assertSpriteExists(CARD_ART_ROOT, name, `卡面底图（${rarity}）`);
+    for (const [key, path] of cardArtConfig.paths) {
+        const cut = path.lastIndexOf('/');
+        assertSpriteExists(path.slice(0, cut), path.slice(cut + 1), key);
     }
-    for (const [rarity, name] of Object.entries(STAGE_DISC_ART)) {
-        assertSpriteExists(CARD_ART_ROOT, name, `站台垫盘（${rarity}）`);
-    }
-    for (const [rarity, name] of Object.entries(POOL_FRAME_ART)) {
-        assertSpriteExists(FRAME_ART_ROOT, name, `布阵卡池卡框（${rarity}）`);
-    }
-    for (const cardClass of ZC_CARD_CLASSES) {
-        assertSpriteExists(ICON_ART_ROOT, CLASS_BADGE_ART[cardClass], `角标（${cardClass}）`);
-        assertSpriteExists(ICON_ART_ROOT, CLASS_ICON_ON_ART[cardClass], `中栏亮态（${cardClass}）`);
-        assertSpriteExists(ICON_ART_ROOT, CLASS_ICON_OFF_ART[cardClass], `中栏灰态（${cardClass}）`);
-        assertSpriteExists(ICON_ART_ROOT, resolveHeroArt(cardClass), `营地雕像（${cardClass}）`);
-        assertSpriteExists(ArtPaths.CARD_HEAD_ART_ROOT, BOARD_HERO_ART[cardClass], `布阵站台立绘（${cardClass}）`);
-    }
-    // 四职业各用自己的雕像，别写成同一张
-    const heroArts = ZC_CARD_CLASSES.map((cardClass) => resolveHeroArt(cardClass));
-    assert.equal(new Set(heroArts).size, ZC_CARD_CLASSES.length);
-
-    // 布阵占位复用角色图，卡牌阵容页的职业占位仍是营地雕像。
-    for (const cardClass of ZC_CARD_CLASSES) {
-        assert.notEqual(BOARD_HERO_ART[cardClass], resolveHeroArt(cardClass), '布阵立绘不该直接用地形雕像名');
+    const heroes = ZC_CARD_CLASSES.map(key => cardArtConfig.paths.get(`hero.${key}`));
+    assert.equal(new Set(heroes).size, ZC_CARD_CLASSES.length);
+    for (const key of ZC_CARD_CLASSES) {
+        assert.notEqual(cardArtConfig.paths.get(`boardHero.${key}`), cardArtConfig.paths.get(`hero.${key}`));
     }
 });
 
@@ -139,10 +113,10 @@ test('主城七格文案配置与 prefab 绑定的新图标资源齐全', () => 
         'btm_arena_n', 'btm_arena_s', 'btm_char_n', 'btm_char_s', 'btm_shop_n', 'btm_shop_s',
         'btn_adventure_n', 'btn_adventure_s', 'btn_alliance_n', 'btn_alliance_s', 'btn_territory_n', 'btn_territory_s',
     ]) {
-        assert.equal(existsSync(assetPath(`image/main/${oldIcon}.png`)), false, `${oldIcon} 旧底栏资源应已删除`);
-        assert.equal(existsSync(assetPath(`image/main/${oldIcon}.png.meta`)), false, `${oldIcon} 旧资源 meta 应随资源删除`);
+        assert.equal(assetExists(`image/main/${oldIcon}.png`), false, `${oldIcon} 旧底栏资源应已删除`);
+        assert.equal(assetExists(`image/main/${oldIcon}.png.meta`), false, `${oldIcon} 旧资源 meta 应随资源删除`);
     }
-    assert.equal(existsSync('assets/resources/ui/card/CardLineupNav.prefab'), false,
+    assert.equal(assetExists('ui/card/CardLineupNav.prefab'), false,
         '旧主城导航 prefab 应已由共用 TabButton 取代');
     assert.equal(existsSync('assets/script/app/card/CardLineupNav.ts'), false,
         '旧私有导航视图类应已移除，主城只保留文案配置');
@@ -227,8 +201,8 @@ test('指南表里每个 icon 键都能解析出真实存在的图', () => {
     for (const key of keys) {
         const path = getGuideIconPath(key);
         assert.ok(path, `zcGuide.json 的 icon「${key}」没有登记在 GUIDE_ICON_PATHS 里（会静默无图标）`);
-        const file = `${RESOURCES}/${path.replace(/\/spriteFrame$/, '.png')}`;
-        assert.ok(existsSync(file), `指南图标「${key}」缺少美术 ${file}`);
+        const rel = path.replace(/\/spriteFrame$/, '.png');
+        assert.ok(assetExists(rel), `指南图标「${key}」缺少美术 ${rel}`);
     }
 });
 
@@ -249,9 +223,9 @@ test('角色模块的每张图都按自己的根拼出了真实存在的路径�
         } else {
             assert.ok(rel.startsWith(`${RL_ART_ROOT}/`), `${key}（${value}）应拼上 ${RL_ART_ROOT}/ 前缀`);
         }
-        // 拼出来的路径必须在 resources 下真有这张图（png / jpg 都算）
-        const hit = ['png', 'jpg', 'jpeg'].some((ext) => existsSync(`${RESOURCES}/${rel}.${ext}`));
-        if (!hit) bad.push(`${key} → assets/resources/${rel} 磁盘上不存在`);
+        // 拼出来的路径必须在任一分包根下真有这张图（png / jpg 都算）
+        const hit = ['png', 'jpg', 'jpeg'].some((ext) => assetExists(`${rel}.${ext}`));
+        if (!hit) bad.push(`${key} → ${rel} 在任何分包根下都不存在`);
     }
     assert.deepEqual(bad, [], '装配路径不对 / 缺图');
     assert.equal(iconCount, 2, 'RL_ART_NAMES 里 icons/ 那两条（锻造页签图标）应还在，改口径要连这里一起改');
@@ -293,8 +267,8 @@ test('民兵天赋图标：配置表用到的每个 key 在 icons/militia 下都
     const missing: string[] = [];
     for (const base of bases) {
         for (const state of ['_0', '_1']) {
-            const file = `${RESOURCES}/icons/militia/${base}${state}.png`;
-            if (!existsSync(file)) missing.push(file);
+            const rel = `icons/militia/${base}${state}.png`;
+            if (!assetExists(rel)) missing.push(rel);
         }
     }
     assert.deepEqual(missing, [], `缺图（共需 ${bases.length * 2} 张）`);

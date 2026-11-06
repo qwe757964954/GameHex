@@ -289,14 +289,21 @@ test('C3 红点回路：`TabButton` 持 `RdExprBinding`，销毁时**必须**解
     assert.match(code, /ensureInit\(\): void/, '初始化要幂等（宿主 active=false ⇒ onLoad 会晚跑）');
 });
 
-test('C4 角色 / 联盟 / 挑战同属未开放：保持可见并禁用，世界作为可用覆盖入口', () => {
+test('C4 只有挑战未开放：角色 / 联盟恢复可用且各有目标页，禁用态仍走同一份名单', () => {
     const host = stripComments(readFileSync('assets/script/app/main/MainTabHost.ts', 'utf8'));
     const tab = stripComments(readFileSync('assets/script/app/common/TabButton.ts', 'utf8'));
     const model = stripComments(readFileSync('assets/script/app/main/MainTabModel.ts', 'utf8'));
     // 「未开放」只有一份名单（`MainTabModel.LOCKED_TABS`），宿主不许再自己写 `type !== xxx`
-    assert.match(model, /const LOCKED_TABS[\s\S]{0,120}MainTab\.Role, MainTab\.Alliance, MainTab\.Challenge/,
-        '角色 / 联盟 / 挑战都该在 LOCKED_TABS 里');
+    assert.match(model, /new Set<number>\(\[MainTab\.Challenge\]\)/,
+        '2026-11-05 起未开放名单只该剩挑战');
+    assert.doesNotMatch(model, /new Set<number>\(\[[^\]]*MainTab\.Role/,
+        '角色不该还留在锁名单里');
     assert.match(model, /export function isMainTabLocked\(tab: number\): boolean/);
+    // 只删名单不补路径 ⇒ `default: null` ⇒ 锁没了但点了零反应，必须同时守住两格的目标页。
+    assert.match(model, /case MainTab\.Role: return \{ kind: 'page', path: 'ui\/Role\/Role', bundle: MAIN_PAGES_BUNDLE \}/,
+        '角色格恢复开放必须补回页面路径');
+    assert.match(model, /case MainTab\.Alliance: return \{ kind: 'page', path: 'ui\/League\/LeagueTab', bundle: MAIN_PAGES_BUNDLE \}/,
+        '联盟格恢复开放必须补回页面路径');
     assert.match(host, /button\.setEnabled\(!isMainTabLocked\(type\)\)/);
     assert.doesNotMatch(host, /type !== MainTab\.Challenge/, '宿主里别再单独判挑战');
     assert.match(tab, /setEnabled\(enabled: boolean\): void/);

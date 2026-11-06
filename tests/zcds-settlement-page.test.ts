@@ -300,7 +300,7 @@ test('奖励格用公共 RewardItem（不自带 GoodsBox / 静态槽位）', () 
     }
     // 页面侧：只喂 {resId, amount}，格子自己解析
     assert.match(pageSource, /import \{ RewardItemView, type IRewardItemData \} from '\.\.\/\.\.\/common\/RewardItemView'/);
-    assert.match(pageSource, /node\.getComponent\(RewardItemView\)!\.render\(this\.rewards\[index\]\)/);
+    assert.match(pageSource, /node\.getComponent\(RewardItemView\)\.render\(this\.rewards\[index\]\)/);
     assert.doesNotMatch(pageSource, /GoodsBox/, '结算页不再使用 GoodsBox');
     // 数量文案由公共件自己算（`amount` 数字），页面不自己拼字符串
     assert.doesNotMatch(pageSource, /itemNumberTextOf/);
@@ -454,7 +454,7 @@ test('页面逻辑：整组显隐 / 虚拟列表喂条数 + 按下标现取 / �
     assert.match(code, /this\.rewards = rewards/);
     assert.match(code, /this\.rewardList\.setTotalCount\(rewards\.length\)/);
     // 按下标现取本趟数据（★ 公共奖励格：只喂 resId+amount，图标/品质框/数量由格子自己解析）
-    assert.match(code, /node\.getComponent\(RewardItemView\)!\.render\(this\.rewards\[index\]\)/,
+    assert.match(code, /node\.getComponent\(RewardItemView\)\.render\(this\.rewards\[index\]\)/,
         '按下标现取本趟数据');
     assert.match(code, /this\.rewardList\.scrollToTop\(false\)/);
     // ⚠️ 禁闭包捕获「本趟」的数组：`renderItemFn` 只在首次铺列表时绑一次，捕获了下一局还是旧数据
@@ -538,7 +538,8 @@ test('外部战斗控制器装配结算页与伤害统计，ZCGame 只保留展�
     assert.match(runtime, /localVictory: !retreated && model\.snapshot\.status === 'victory'/);
     assert.match(runtime, /this\.listen\(ZCGameUiEvent\.SettlementConfirm, this\.onSettlementConfirm\)/);
     assert.match(runtime, /this\.settlement\.confirm\(\)/);
-    assert.ok(settlement.indexOf("popup?.close('manual');") < settlement.indexOf('this.ports.navigate();'));
+    const close = settlement.indexOf("popup?.close('manual');");
+    assert.ok(close >= 0 && close < settlement.indexOf('emit(ZC_BATTLE_EVENTS.RETURN_TO_MAIN'));
     assert.doesNotMatch(stripComments(gameSource), /ZCSettlementPage|finishBattle|ProcedureManager|settlementPopup/);
     assert.match(pageSource, /static prefabPath = 'ui\/game\/ZCSettlement'/);
     assert.match(pageSource, /export class ZCSettlementPage extends PopupBase/);

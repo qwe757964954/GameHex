@@ -29,7 +29,7 @@ test('★★HUD 意图由外部运行控制器集中订阅，视图仅派发', (
         assert.match(CONTROLLER_SRC, new RegExp(`this\\.listen\\(ZCGameUiEvent\\.${event},`));
         assert.match(HUD_SRC, new RegExp(`emit\\(ZCGameUiEvent\\.${event}`));
     }
-    assert.match(CONTROLLER_SRC, /this\.ports\.openRank\(/);
+    assert.match(CONTROLLER_SRC, /this\.services\.popups\.openRank\(/);
     assert.match(CONTROLLER_SRC, /this\.view\.resetCamera\(\)/);
     assert.doesNotMatch(HUD_SRC, /new .*Controller|ZCHudActions/);
 });

@@ -187,9 +187,12 @@ test('★★★第一段没有镜头动画，必须靠前奏那把锁撑住（�
     assert.ok(body.includes('if (this.preludeLocked) this.setInputLocked(true);'), '上锁要顺手锁输入');
     assert.ok(body.includes('else if (this.inputLocked && !this.cameraBusyLocked) this.setInputLocked(false);'),
         '解锁不许无条件放行：镜头还在忙时要留给它自己收');
-    // 自动解锁那条判据必须认得这把锁。
-    assert.ok(/if \(this\.inputLocked && !cameraBusy && !this\.preludeLocked\) this\.setInputLocked\(false\);/
+    // 自动解锁那条判据必须认得这把锁（2026-11-04 起还要认得切章转场那把）。
+    assert.ok(/if \(this\.inputLocked && !cameraBusy && !this\.preludeLocked && !this\.chapterSwitchActive\) \{/
         .test(mapViewSource), '`update` 的自动解锁漏了 `preludeLocked` ⇒ 地块生成那 0.7s 玩家能点地图');
+    // 🔴 两把页面锁是并列的：谁在演都不许自动解锁。少一个条件，对应那段空窗就会被放掉。
+    assert.ok(mapViewSource.includes('!this.preludeLocked && !this.chapterSwitchActive'),
+        '切章转场的锁也必须进"自动解锁"的排除名单');
     // 页面上开关必须成对：起手开、收尾关、中断也关。
     assert.ok(pageSource.includes('this.mapView?.setPreludeLock(true)'), '前奏起手没上锁');
     const step = pageSource.slice(pageSource.indexOf('private stepBattlePrelude('));

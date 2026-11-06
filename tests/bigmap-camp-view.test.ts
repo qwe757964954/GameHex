@@ -8,7 +8,9 @@ import ts from 'typescript';
 import * as geometry from '../assets/script/app/bigmap/view/BigMapWorldLayout';
 import * as campModel from '../assets/script/app/bigmap/model/BigMapCampInfo';
 import * as BigMapCampRoleInfo from '../assets/script/app/bigmap/model/BigMapCampRoleInfo';
+import * as BigMapCampMove from '../assets/script/app/bigmap/model/BigMapCampMove';
 import { BIGMAP_CAMP_REFRESH_SECONDS } from '../assets/script/app/bigmap/application/BigMapCampRepository';
+import { createControllerResources } from './helpers/controller-context';
 
 function loadModule(path: string, require: (name: string) => unknown, globals: object = {}) {
     const source = readFileSync(path, 'utf8');
@@ -19,6 +21,92 @@ function loadModule(path: string, require: (name: string) => unknown, globals: o
     runInNewContext(code, { exports, require, ...globals });
     return exports;
 }
+
+test('玩家详情展示全部身份字段及头像，循环索引不越界，迁城确认保留原始格ID', () => {
+    const exports = loadModule('assets/script/app/bigmap/view/BigMapPage.ts', (name) => {
+        if (name === 'cc') return { _decorator: { ccclass: () => (value: unknown) => value }, Component: class {} };
+        if (name.endsWith('/BigMapCampRoleInfo')) return BigMapCampRoleInfo;
+        if (name.endsWith('/BigMapCampMove')) return BigMapCampMove;
+        return {};
+    });
+    interface IContent { title: string; body: string; icon: unknown; primary: { enabled: boolean }; secondary: { enabled: boolean } }
+    interface IPage {
+        mode: string; selectedCityId: number; baseActionPending: boolean;
+        rolePortraits: Map<string, unknown>;
+        closeCityPopup(): void; closeInfoPopup(): void; showInfoPopup(content: IContent): void;
+        refreshInfoContent(data: object): void; buildInfoPopupContent(data: object): IContent;
+    }
+    const Page = exports.BigMapPage as new () => IPage;
+    const page = new Page();
+    page.mode = 'world'; page.selectedCityId = 101;
+    page.closeCityPopup = () => {}; page.closeInfoPopup = () => {};
+    let content: IContent;
+    page.showInfoPopup = (value) => { content = value; };
+    const frame = {};
+    page.rolePortraits.set('1001', frame);
+    const city = { name: '营地', campRolesStatus: 'ready', campRoles: [
+        { roleId: '9007199254740993', serverId: '9007199254740995', roleName: '玩家甲',
+            avatarId: '1001', pos: 0, defenseHp: 0, buildLevel: 12 },
+        { roleId: '2', serverId: '3', roleName: '乙', avatarId: '', pos: 7, defenseHp: 100 },
+    ] };
+    const data = { ui: { campRolesVisible: true, campRoleIndex: 8, pendingCampMoveId: 0, selectedBaseHexId: -1 },
+        cities: new Map([[101, city]]) };
+    page.refreshInfoContent(data);
+    assert.match(content.title, /1\/2/);
+    for (const text of ['玩家甲', '9007199254740993', '9007199254740995', '建筑等级：12', 'HP：0', '所在格：0']) assert.ok(content.body.includes(text));
+    assert.equal(content.icon, frame);
+    assert.equal(content.secondary.enabled, true);
+    data.ui.campRoleIndex = 1;
+    page.refreshInfoContent(data);
+    assert.ok(content.body.includes('乙'));
+    assert.equal(content.icon, null, '下一位无头像时不能留上一个玩家头像');
+    page.baseActionPending = true;
+    const confirmation = page.buildInfoPopupContent({ ...data, ui: { pendingCampMoveId: 101, selectedBaseHexId: 0 } });
+    assert.ok(confirmation.body.includes('目标格：0'));
+    assert.equal(confirmation.primary.enabled, false);
+    assert.equal(confirmation.secondary.enabled, false);
+});
+
+test('玩家头像按ID合并加载，资源域释放后迟到结果不回填地图或弹窗', async () => {
+    const pending: ((frame: object) => void)[] = [];
+    const exports = loadModule('assets/script/app/bigmap/view/BigMapPage.ts', (name) => {
+        if (name === 'cc') return { _decorator: { ccclass: () => (value: unknown) => value }, Component: class {} };
+        if (name.endsWith('/HeadArt')) return { HeadArt: { loadHeadFrame: () => new Promise((resolve) => pending.push(resolve)) } };
+        return {};
+    });
+    interface IPage {
+        isValid: boolean; controllerResources: ReturnType<typeof createControllerResources>;
+        worldView: { setRolePortrait(id: string, frame: object): void };
+        rolePortraits: Map<string, object | null>; loadRolePortraits(data: object): void;
+    }
+    const Page = exports.BigMapPage as new () => IPage;
+    const page = new Page();
+    page.isValid = true;
+    const resources = createControllerResources();
+    page.controllerResources = resources;
+    let written = 0;
+    page.worldView = { setRolePortrait: () => { written++; } };
+    const data = { ui: { campRolesVisible: false }, cities: new Map([[101, {
+        rankEntries: [{ rank: 1, avatarId: '1001' }, { rank: 2, avatarId: '1002' }],
+        campRoles: [{ avatarId: '1003' }, { avatarId: '1004' }],
+    }]]) };
+    page.loadRolePortraits(data);
+    page.loadRolePortraits(data);
+    assert.equal(pending.length, 1);
+    const frame = {};
+    pending[0](frame);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(written, 1, '榜首头像加载后交给地图');
+    assert.equal(page.rolePortraits.get('1001'), frame);
+    data.cities.get(101).rankEntries = [{ rank: 1, avatarId: '1005' }];
+    page.loadRolePortraits(data);
+    assert.equal(pending.length, 2, '换榜首后加载新头像，不预载驻守名单');
+    resources.scope.dispose();
+    pending[1]({});
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(written, 1);
+    assert.equal(page.rolePortraits.get('1005'), null);
+});
 
 test('真实 GameNet 适配器发送两种请求及 campIds，无连接与发送失败均返回空', async () => {
     class RequestMsg {
@@ -81,7 +169,7 @@ function makeWorldView() {
         clearTimeout: (id: number) => timers.delete(id),
     });
     interface IMarker { kind: string; id: number; node: { active: boolean; position: { x: number; y: number }; setPosition(x: number, y: number, z: number): void }; icon: object;
-        view: { hitArea: { badgeY: number; badgeHeight: number; iconY?: number; height?: number } } }
+        view: { hitArea: { badgeY: number; badgeHeight: number; iconY?: number; height?: number }; setPortrait?(frame: unknown): void } }
     interface IView extends Component {
         data: object; viewportTransform: object; content: object; markers: IMarker[];
         art: { background: { originalSize: { width: number; height: number } } };
@@ -126,7 +214,7 @@ test('整图背景在视口尺寸更新后重新等比铺满，不沿用模板�
 test('相机变化合并查询，只传实际可见据点；停用地图取消定时刷新', () => {
     const h = makeWorldView();
     const calls: number[][] = [];
-    h.view.data = { world: {} };
+    h.view.data = { ui: {}, world: {} };
     EventMgr.instance.on(mvcEvents.BigMapUiEvent.Intent, (event: mvcEvents.IBigMapIntentEvent) => {
         if (event.intent.kind === 'visibleCamps') calls.push(Array.from(event.intent.campIds));
     }, h.view);
@@ -149,7 +237,7 @@ test('相机变化合并查询，只传实际可见据点；停用地图取消�
 
 test('建筑根已离开视口但主城头像仍在屏内时保留标记，完全离屏后才隐藏', () => {
     const h = makeWorldView();
-    h.view.data = { world: {}, refreshVisibleCamps: () => undefined };
+    h.view.data = { ui: {}, world: {}, refreshVisibleCamps: () => undefined };
     const marker = h.view.markers[0];
     marker.node.position.y = -380;
     // 名条已挪到建筑下方（2026-11-02 蓝湖「大地图3」），裁剪余量改由
@@ -167,7 +255,8 @@ test('据点名条兜底色按 opType 红黄显示，opType 未变时不重绘',
     let opType = 0;
     const tints: unknown[] = [];
     h.view.markers = [h.view.markers[0]];
-    h.view.data = { world: { monsters: [] }, playerBaseHexId: -1, territories: [],
+    h.view.markers[0].view.setPortrait = () => undefined;
+    h.view.data = { ui: {}, world: { monsters: [] }, playerBaseHexId: -1, territories: [],
         get cities() { return new Map([[101, { cityId: 101, name: '营地', state: 'open', level: 1, isServerCamp: true,
             campInfo: { campId: 101, opType, occupyRoleId: '', occupyRoleName: '', detailed: false } }]]); },
     };
@@ -236,8 +325,11 @@ test('点击据点打开城池弹窗（PopupBase），占领者进弹窗，并�
     let campDetailStatus = 'ready';
     let campRoles: { roleId: string; serverId: string; roleName: string; avatarId: string; defenseHp: number; pos: number }[] = [];
     let campRolesStatus = 'ready';
-    page.data = { get cities() { return new Map([[101, { name: '营地', level: 1, desc: '简介', isServerCamp: true, canAttack, staminaCost: 20,
-        campInfo, campDetailStatus, attackReason: '', campRoles, campRolesStatus, rankEntries: [] }]]); },
+    page.data = { ui: {}, get cities() { return new Map([[101, { name: '营地', level: 1, desc: '简介', isServerCamp: true, canAttack, staminaCost: 20,
+        campInfo, campDetailStatus, attackReason: '', campRoles, campRolesStatus, rankEntries: [
+            { roleId: '9007199254740993', rank: 1, name: '甲玩家', avatarId: '1001', warScore: 1512916 },
+            { roleId: 'other', rank: 2, name: '乙玩家', avatarId: '1002', warScore: 1000000 },
+        ] }]]); },
     };
     page.worldView = { occupantAt: () => ({ kind: 'city', cityId: 101 }) };
     page.infoThumbnail = { node: { active: false } };
@@ -260,6 +352,10 @@ test('点击据点打开城池弹窗（PopupBase），占领者进弹窗，并�
     // ② 城池详情走弹窗：占领者进弹窗数据（旧文字面板不再被写）
     assert.equal(popupContents.length, 1, '选中据点应当打开城池弹窗');
     assert.equal(popupContents[0].lordName, '甲玩家');
+    assert.equal(popupContents[0].lordAvatarId, '1001');
+    assert.equal(popupContents[0].lordScore, '1512916');
+    assert.deepEqual(Array.from(popupContents[0].ranks as { rank: number }[], (row) => row.rank), [2],
+        '城主单独展示，榜单保留其他玩家真实名次');
     assert.equal(page.infoBody.string, '', '城池不再走文字面板');
     // 攻打能力由弹窗的进攻按钮承载（旧的 primaryButton 已不参与城池详情）。
     assert.equal(popupContents[0].fightEnabled, false);

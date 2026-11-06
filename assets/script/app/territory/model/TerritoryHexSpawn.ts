@@ -26,6 +26,8 @@
  *  翻格自带「新地皮放大填充」，再叠一层整格淡入只会糊（视图里 `syncFlip` 会掐掉同格的生成动画）。
  */
 
+import { territoryHexStaggerDelays } from './TerritoryHexStagger';
+
 /** 单格生成动画的总时长（秒）。0.4s ≈ 手感临界点：再慢就挡视线，再快就看不清渐变。 */
 export const TERRITORY_HEX_SPAWN_SECONDS = 0.4;
 
@@ -223,32 +225,9 @@ export function territoryHexSpawnDelays(
     stagger: number = TERRITORY_HEX_SPAWN_STAGGER_SECONDS,
     staggerMax: number = TERRITORY_HEX_SPAWN_STAGGER_MAX_SECONDS,
 ): ReadonlyMap<number, number> {
-    const delays = new Map<number, number>();
-    if (cells.length === 0) return delays;
-    let minX = Infinity;
-    let maxX = -Infinity;
-    let minY = Infinity;
-    let maxY = -Infinity;
-    for (const cell of cells) {
-        if (cell.x < minX) minX = cell.x;
-        if (cell.x > maxX) maxX = cell.x;
-        if (cell.y < minY) minY = cell.y;
-        if (cell.y > maxY) maxY = cell.y;
-    }
-    const centerX = (minX + maxX) / 2;
-    const centerY = (minY + maxY) / 2;
     const gap = Number.isFinite(stagger) && stagger > 0 ? stagger : 0;
     const cap = Number.isFinite(staggerMax) && staggerMax > 0 ? staggerMax : 0;
-    const ordered = cells
-        .map((cell) => ({
-            cell,
-            distance: (cell.x - centerX) * (cell.x - centerX) + (cell.y - centerY) * (cell.y - centerY),
-        }))
-        .sort((a, b) => (a.distance !== b.distance ? a.distance - b.distance : a.cell.cellId - b.cell.cellId));
-    ordered.forEach((entry, index) => {
-        delays.set(entry.cell.cellId, Math.min(cap, index * gap));
-    });
-    return delays;
+    return territoryHexStaggerDelays(cells, gap, cap);
 }
 
 /**

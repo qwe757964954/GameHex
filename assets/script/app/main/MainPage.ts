@@ -1,4 +1,4 @@
-import { _decorator, Button, Component, Node, Sprite, SpriteFrame } from 'cc';
+import { _decorator, Button, Component, EventTouch, Node, Sprite, SpriteFrame, UITransform, Vec2 } from 'cc';
 import type { IControllerResources } from '../../framework/controller/ControllerBase';
 import { ResourceScope } from '../../core/asset/ResourceScope';
 import { GameRoute } from '../../core/runtime/GameRoute';
@@ -23,7 +23,9 @@ import { NewTreasureRepository } from './NewTreasureRepository';
 import type { MainTerritoryMap } from './MainTerritoryMap';
 import { GameNet } from '../net/GameNet';
 import { ChapterSelectPanel } from './ChapterSelectPanel';
-import { loadChapterSelectRows } from '../territory/application/ChapterSelectLoader';
+import { loadChapterSelectRows, readTerritorySaveOwner } from '../territory/application/ChapterSelectLoader';
+import { createTerritorySaveStore } from '../territory/application/TerritorySaveStoreAdapter';
+import type { TerritorySaveStore } from '../territory/model/TerritorySaveStore';
 import { TerritoryUiEvent, TerritoryViewEvent, type ITerritoryRenderEvent } from '../territory/application/TerritoryEvents';
 import type { ITerritoryProgressView } from '../territory/application/TerritoryViewState';
 import type { TerritoryCampaignStage } from '../territory/model/TerritoryCampaignConfig';
@@ -36,12 +38,27 @@ import {
     chestEntryPopScale,
     inspectChestEntryConditions,
     isChestEntryVerdictProvisional,
+    isTerritoryLevelPassedInTerritory,
+    passedTerritoryLevelIds,
     resolveChestEntryGate,
+    territoryLevelCellsInChapter,
 } from './ChestEntryGate';
 import { EMPTY_ENTRANCE_PLAYER_STATE } from './MainEntranceVisible';
 import type { EntrancePlayerState, EntranceVisibleRow } from './MainEntranceVisible';
 
 const { ccclass, property } = _decorator;
+
+/**
+ * 宝箱栏展开时补出来的「空白接收层」节点名（运行时创建，不落 prefab）。
+ * `__` 前缀同 `PopupBase.POPUP_BLANK_CATCHER`，一眼能看出是引擎无关的辅助层。
+ */
+const CHEST_BLANK_CATCHER = '__ChestBlankClose';
+
+/**
+ * 按下 → 抬起之间超过这个 UI 位移就不算「点空白」（与 `POPUP_BLANK_TOLERANCE` 同口径）。
+ * 主城地图现在没有拖拽/缩放，留着是防将来加手势时误收。
+ */
+const CHEST_BLANK_TOUCH_TOLERANCE = 12;
 
 const MAIN_PAGE_TEXTS = {
     treasureUnavailable: '宝箱数据暂不可用',
@@ -74,6 +91,13 @@ export class MainPage extends Component {
      * 日志里连「还在等数据」都看不到。同样要静态：主城页会重建。
      */
     private static chestEntryWaitingLogged = false;
+    /**
+     * 逐条「未解锁 => fail」细节是否打印。
+     *
+     * 领地侧 `onTerritoryRender` 每次 `mergeServerState` 都会重判入口，打开后实机同一条
+     * 会刷满控制台（2026-11-05 实测：格子 373/372/392 那行反复出现）。默认关，排障时临时改 true。
+     */
+    private static readonly chestEntryDetailLog = false;
     @property({ type: Node, tooltip: 'BeginGame：快速寻敌按钮' })
     startButton: Node = null;
 
@@ -125,12 +149,26 @@ export class MainPage extends Component {
     /** 详情弹窗当前对应的槽位（1~4）与那颗按钮要发的动作；`0` = 没开。 */
     private detailSlot = 0;
     private detailAction: ChestSlotAction = ChestSlotAction.Open;
+    /** 宝箱栏展开期间的空白接收层（懒建，收起后只置 `active=false`，不反复 new）。 */
+    private chestBlankCatcher: Node | null = null;
+    private readonly chestBlankTouchStart = new Vec2();
     /** 战斗宝箱入口开没开（`open.json` `refId=701`「战斗掉落宝箱」的条件）；`false` = icon 不显示。 */
     private chestEntryUnlocked = false;
     /** 领地最新一帧的「格子 → 关卡」映射（判 pvp 据点通没通要用）。 */
     private territoryStageByCell: ReadonlyMap<number, TerritoryCampaignStage> | null = null;
     /** 领地最新一帧的进度快照（冻结过的，读 `isAreaPassed` 不会读到半更新状态）。 */
     private territoryProgress: ITerritoryProgressView | null = null;
+    /**
+     * 账号级存档（读「已通关的领地关卡」用）。懒建：预览 / 没角色的宿主不需要它。
+     */
+    private territorySaveStore: TerritorySaveStore | null = null;
+    /**
+     * 账号级「已通关的领地关卡」的内存镜像（源在 `TerritorySaveStore.loadPassedLevels`）。
+     *
+     * 它是**跨章节的一次性成就**：`levelInfo.levelChapter` 决定了关卡归属哪一章，
+     * 只看当前章的格子，切到别的章就查不到（2026-11-04 战斗宝箱入口消失的根因）。
+     */
+    private passedTerritoryLevels: Set<number> | null = null;
     /** 生成缩放动画的起播时刻（秒）；`chestEntryPopping` 为假时不看它。 */
     private chestEntryPopStartedAt = 0;
     private chestEntryPopping = false;
@@ -214,6 +252,10 @@ export class MainPage extends Component {
     onDestroy(): void {
         CacheMgr.instance.removeEventUpdate('CmdBattleLevel', this, this.onBattleLevelCacheUpdate);
         if (this.detailSlot > 0) PopupManager.inst.get(ChestDetailPanel)?.close();
+        // 接收层是运行时补在 ArenaRoot 下的，不跟着本组件走 ⇒ 必须自己收掉，
+        // 否则主城页换了、它还盖在地图上吃点击（全透明，零报错，最难受的那种）。
+        if (this.chestBlankCatcher?.isValid) this.chestBlankCatcher.destroy();
+        this.chestBlankCatcher = null;
         this.chestIconCache.clear();
         EventMgr.instance.offTarget(this);
         this.treasureRepository.dispose();
@@ -328,6 +370,8 @@ export class MainPage extends Component {
             }
             return;
         }
+        // 逐条 fail 细节默认不打印：判定每次领地渲染都会重走，日志会刷屏。
+        if (!MainPage.chestEntryDetailLog) return;
         for (const report of reports) {
             let detail = '';
             if (report.type === 'battleLevel' && report.resId != null) {
@@ -346,8 +390,12 @@ export class MainPage extends Component {
         if (!stageByCell || stageByCell.size === 0) {
             return '领地格子还没到（stageByCell 为空），等地图刷一帧后再判';
         }
-        const cells = [...stageByCell].filter(([, stage]) => stage.levelId === levelId).map(([cellId]) => cellId);
-        if (!cells.length) return `领地这一章没有 levelId=${levelId} 的格子（当前章共 ${stageByCell.size} 格）`;
+        const cells = territoryLevelCellsInChapter({ stageByCell, isAreaPassed: null }, levelId);
+        // 走到这里说明落盘的跨章成就里也没有它 —— 否则判定早就不是 fail 了。
+        if (!cells.length) {
+            return `领地这一章没有 levelId=${levelId} 的格子（当前章共 ${stageByCell.size} 格），`
+                + '跨章成就里也没记过它';
+        }
         const progress = this.territoryProgress;
         if (!progress) return `格子 ${cells.join('/')} 在，但领地进度快照还没到`;
         return `格子 ${cells.join('/')}：${cells.map((id) => (progress.isAreaPassed(id) ? '已通关' : '未通关')).join('、')}`;
@@ -366,18 +414,63 @@ export class MainPage extends Component {
      * （`TerritoryProgress.isAreaPassed`，山猫 2026-10 定的）—— 一片战斗区域往往横跨好几格，
      * 只认其中一格会在"打完了但那格不是被记的那一格"时误判成没通过。
      *
-     * 快照没到（领地还没渲染 / 这个宿主没挂地图）一律按没通过 —— 宁可晚一点显示，
-     * 也不要在没打过时把入口摆出来。
+     * ⚠️ **必须跨章节**：关卡归属哪一章由 `levelInfo.levelChapter` 决定，第 2 章（10011~20007）
+     * 里根本没有第 1 章的 20001。只查当前章的 `stageByCell` ⇒ 玩家一切到第 2 章，
+     * 战斗宝箱入口就会在「已经解锁过」之后消失（2026-11-04 实机）。
+     * 所以账号级存档里那些「已通关」的关卡先算数（一次性成就），当前章快照只用来
+     * **发现新的通关** —— 发现与落盘都在 `rememberPassedTerritoryLevels`，本函数是纯的。
+     *
+     * 两条来源都没有（领地还没渲染 / 这个宿主没挂地图 / 真没打过）才按没通过 ——
+     * 宁可晚一点显示，也不要在没打过时把入口摆出来。
      */
     private readonly isTerritoryLevelPassed = (levelId: number): boolean => {
-        const stageByCell = this.territoryStageByCell;
         const progress = this.territoryProgress;
-        if (!stageByCell || !progress) return false;
-        for (const [cellId, stage] of stageByCell) {
-            if (stage.levelId === levelId && progress.isAreaPassed(cellId)) return true;
-        }
-        return false;
+        return isTerritoryLevelPassedInTerritory(levelId, {
+            stageByCell: this.territoryStageByCell,
+            isAreaPassed: progress ? (cellId: number) => progress.isAreaPassed(cellId) : null,
+        }, this.passedTerritoryLevelSet());
     };
+
+    /** 已通关关卡的集合（懒读盘：主城页每局重建，但一次会话只读一次）。 */
+    private passedTerritoryLevelSet(): Set<number> {
+        if (!this.passedTerritoryLevels) {
+            this.passedTerritoryLevels = new Set(this.territoryArchive().loadPassedLevels());
+        }
+        return this.passedTerritoryLevels;
+    }
+
+    /**
+     * 把当前章**已通关**的关卡整批记进账号成就（跨章节，切章不回退）。
+     *
+     * 落盘只在这一处（`onTerritoryRender` 每帧调），条件判定那边保持纯函数 ——
+     * 判定每帧都可能走好几遍，把写盘塞进谓词里迟早写出重复写盘的虫子。
+     * **幂等**：内存 `Set` 先挡一道，没有新增就不碰 localStorage。
+     */
+    private rememberPassedTerritoryLevels(): void {
+        const progress = this.territoryProgress;
+        if (!progress) return;
+        const passed = this.passedTerritoryLevelSet();
+        const fresh = passedTerritoryLevelIds({
+            stageByCell: this.territoryStageByCell,
+            isAreaPassed: (cellId: number) => progress.isAreaPassed(cellId),
+        }).filter((levelId) => !passed.has(levelId));
+        if (!fresh.length) return;
+        for (const levelId of fresh) passed.add(levelId);
+        // ⚠️ 必须 `Array.from`：release 构建把 `[...set]` 降级成 `[].concat(set)`，
+        //    展开不了迭代器 ⇒ 传进去的是「装着 Set 本身」的数组，静默一条都记不上。
+        const added = this.territoryArchive().markLevelsPassed(Array.from(passed));
+        if (added.length) {
+            console.log(`[MainPage] 领地关卡 ${added.join('/')} 已通关，记成跨章成就（切章后战斗宝箱入口不再丢）`);
+        }
+    }
+
+    /** 账号级存档句柄（与章节存档同一命名空间，见 `readTerritorySaveOwner`）。 */
+    private territoryArchive(): TerritorySaveStore {
+        if (!this.territorySaveStore) {
+            this.territorySaveStore = createTerritorySaveStore(readTerritorySaveOwner());
+        }
+        return this.territorySaveStore;
+    }
 
     /**
      * 条件判定要的玩家状态。
@@ -439,7 +532,80 @@ export class MainPage extends Component {
         if (!this.chestBar) return;
         this.chestBar.setOpen(open);
         this.startButton.active = !open;
+        this.applyChestBlankCatcher(open);
     }
+
+    // ========================================================
+    // 宝箱栏：点空白收起
+    // ========================================================
+
+    /**
+     * 显示 / 收起宝箱栏的**空白接收层**。
+     *
+     * 需求（2026-11-04）：宝箱栏展开后点空白也要能收纳，不只左边那颗返回箭头。
+     *
+     * 为什么不给地图挂点击：地图上的地块 / 活动入口自带点击语义，逐个视图去派发
+     * 「收起宝箱栏」既漏（没监听的空白处）又脏（一个动作散落十几处）。这里补一层
+     * 全屏透明节点，命中即收起。
+     */
+    private applyChestBlankCatcher(open: boolean): void {
+        // 收起且从没建过 ⇒ 什么都不用做（首次进主城就是这个路径）
+        if (!open && !this.chestBlankCatcher) return;
+        const catcher = this.ensureChestBlankCatcher();
+        if (catcher) catcher.active = open;
+    }
+
+    /**
+     * 懒建空白接收层，插在 **`TopHud` 之前**。
+     *
+     * 引擎按「最上层命中的节点」派发触摸，所以：
+     *   · `TopHud`（好友 / 邮件 / 排行 / 邀请）、`BottomHud`（页签 / 宝箱入口 / 聊天）、
+     *     `ChestBar` 本身都比它晚 ⇒ 照常可点；
+     *   · 只有「地图 + 活动入口」这一层被接住 ⇒ 点那里先收起，不会同时触发地块/活动。
+     *
+     * 尺寸取 `ArenaRoot`（全屏 720×1280）而不是宝箱栏自身 —— 接收层要盖整屏，
+     * 否则「点地图上方空白」根本不会命中（`PopupBase` 类头对这条有完整复盘）。
+     */
+    private ensureChestBlankCatcher(): Node | null {
+        if (this.chestBlankCatcher?.isValid) return this.chestBlankCatcher;
+        const bar = this.chestBar;
+        const arena = bar?.node?.parent ?? null;
+        if (!bar || !arena) return null;
+
+        const catcher = new Node(CHEST_BLANK_CATCHER);
+        catcher.layer = arena.layer;
+        const arenaUi = arena.getComponent(UITransform);
+        catcher.addComponent(UITransform).setContentSize(
+            arenaUi?.width ?? 720,
+            arenaUi?.height ?? 1280,
+        );
+
+        // 插入位置由「谁必须压在遮罩之上」决定，逐级兜底，最差也只退化到多盖一层 HUD，
+        // 绝不会插到宝箱栏之后（那会把栏内按钮全盖死 ⇒ 只能靠左箭头收）。
+        const topHud = arena.getChildByName('TopHud');
+        const bottomHud = this.chestCell0?.node?.parent ?? null;
+        const index = topHud
+            ? topHud.getSiblingIndex()
+            : (bottomHud && bottomHud.parent === arena ? bottomHud.getSiblingIndex() : bar.node.getSiblingIndex());
+        arena.insertChild(catcher, index);
+
+        catcher.on(Node.EventType.TOUCH_START, this.onChestBlankTouchStart, this);
+        catcher.on(Node.EventType.TOUCH_END, this.onChestBlankTouchEnd, this);
+        catcher.active = false;
+        this.chestBlankCatcher = catcher;
+        return catcher;
+    }
+
+    private readonly onChestBlankTouchStart = (event: EventTouch): void => {
+        event.getUILocation(this.chestBlankTouchStart);
+    };
+
+    /** 点空白 = 收起；位移超阈值（拖拽）不算。 */
+    private readonly onChestBlankTouchEnd = (event: EventTouch): void => {
+        const end = event.getUILocation();
+        if (Vec2.distance(end, this.chestBlankTouchStart) > CHEST_BLANK_TOUCH_TOLERANCE) return;
+        EventMgr.instance.emit(CHEST_EVENTS.COLLAPSE);
+    };
 
     private onStartGame(): void {
         if (!this.hasTerritoryMap) {
@@ -460,6 +626,9 @@ export class MainPage extends Component {
         // 只能查领地格子）。快照是渲染帧冻结过的，`isAreaPassed` 读它不会读到半更新的状态。
         this.territoryStageByCell = event.state.stageByCell ?? null;
         this.territoryProgress = event.state.progress ?? null;
+        // 先把这一章已通关的关卡记进账号成就，再判条件 —— 顺序反了会让「刚打完的那一帧」
+        // 只靠快照通过，万一这一帧之后立刻切章，那一笔就永远没落盘。
+        this.rememberPassedTerritoryLevels();
         this.refreshChestEntry();
     }
 

@@ -12,6 +12,10 @@
  *   node tools/verify/verify.mjs check       跑 diff 命中的最小用例集 + tsc，对比基线（推荐，快）
  *   node tools/verify/verify.mjs full        全量用例 + tsc，对比基线
  *   node tools/verify/verify.mjs baseline    重算并落盘基线快照
+ *   node tools/verify/verify.mjs defs        改动集内互相引用的符号是否都有导出
+ *   node tools/verify/verify.mjs gate       提交前一键：route → defs → check，并归档原始输出
+ *
+ * VERIFY_CHANGED_FILES：换行分隔的改动文件列表，供 CI 传 PR diff；设置后优先于 svn/git status。
  *
  * 退出码：0 = 相对基线零新增；1 = 有新增；2 = 工具自身出错
  *
@@ -71,6 +75,11 @@ const run = (cmd, opts = {}) =>
 // ---------------------------------------------------------------- 改动文件
 
 function changedFiles() {
+  // CI 里工作树是干净的，必须允许把 PR diff 显式喂进来；否则 route/defs 会查 0 个文件（假绿）。
+  const injected = process.env.VERIFY_CHANGED_FILES;
+  if (injected && injected.trim()) {
+    return injected.split(/\r?\n/).map((l) => norm(l.trim())).filter(Boolean);
+  }
   const svn = run('svn status');
   if (svn.status === 0 && svn.stdout.trim()) {
     return svn.stdout
@@ -207,6 +216,73 @@ function resolveSpec(fromFile, spec) {
     try { if (fs.statSync(cand).isFile()) return norm(path.relative(ROOT, cand)); } catch {}
   }
   return null;
+}
+
+// -------------------------------- 跨文件定义完整性（规则 402：中间态必须能跑）
+
+const NAMED_IMPORT_RE = /import\s+(?:type\s+)?\{([^}]+)\}\s*from\s*['"](\.[^'"]+)['"]/g;
+const EXPORT_DECL_RE = /export\s+(?:declare\s+)?(?:abstract\s+)?(?:const|let|var|function|class|interface|type|enum)\s+([A-Za-z_$][\w$]*)/g;
+
+/** 源文件对外导出的具名符号；`export *` 不可判定，返回 null 让调用方跳过。 */
+function exportedNamesOf(source) {
+  if (/export\s+\*\s+from/.test(source)) return null;
+  const names = new Set();
+  for (const m of source.matchAll(EXPORT_DECL_RE)) names.add(m[1]);
+  for (const m of source.matchAll(/export\s+(?:type\s+)?\{([^}]+)\}/g)) {
+    for (const part of m[1].split(',')) {
+      const name = part.trim().replace(/^type\s+/, '').split(/\s+as\s+/).pop().trim();
+      if (name) names.add(name);
+    }
+  }
+  if (/export\s+default/.test(source)) names.add('default');
+  return names;
+}
+
+/**
+ * 跨文件改动「先写定义再写调用点」的静态护栏。
+ *
+ * 只看 changedFiles 内**互相引用**的相对 import —— 这类组合正是同事整包提交时最容易只带一半的。
+ * opts.read 可注入，便于用例构造夹具；opts.headOf(target) 返回该文件在 HEAD 版本的内容（可选，
+ * 为 null 表示「HEAD 里还没有这个文件」，此时不做入库判断）。
+ */
+function checkDefinitions(changedFiles, opts = {}) {
+  const read = opts.read || ((f) => fs.readFileSync(path.join(ROOT, f), 'utf8'));
+  const headOf = opts.headOf;
+  const scope = new Set(changedFiles.map(norm).filter((f) => f.endsWith('.ts') || f.endsWith('.mjs')));
+  const issues = [];
+  let checked = 0;
+  let skipped = 0;
+  for (const file of [...scope].sort()) {
+    let source;
+    try { source = read(file); } catch { continue; }
+    for (const m of source.matchAll(NAMED_IMPORT_RE)) {
+      const target = resolveSpec(path.join(ROOT, file), m[2]);
+      if (!target || !scope.has(target)) continue;
+      let targetSource;
+      try { targetSource = read(target); } catch { continue; }
+      const exported = exportedNamesOf(targetSource);
+      if (!exported) { skipped++; continue; }
+      for (const raw of m[1].split(',')) {
+        const name = raw.trim().replace(/^type\s+/, '').split(/\s+as\s+/)[0].trim();
+        if (!name || name === 'default' || name.startsWith('*')) { skipped++; continue; }
+        checked++;
+        if (!exported.has(name)) {
+          issues.push({ file, target, name, reason: '目标文件没有导出该符号' });
+          continue;
+        }
+        if (headOf) {
+          const head = headOf(target);
+          if (head != null) {
+            const headExported = exportedNamesOf(head);
+            if (headExported && !headExported.has(name)) {
+              issues.push({ file, target, name, reason: '定义尚未入库（HEAD 里没有），调用点先提交会跑不起来' });
+            }
+          }
+        }
+      }
+    }
+  }
+  return { checked, skipped, issues };
 }
 
 let _importsOf = null;
@@ -425,6 +501,81 @@ function printRouteHits(sel, files) {
   return uncovered.length;
 }
 
+// ------------------------------------------------------- 提交前一键门禁 + 归档
+
+const GATE_STEPS = [
+    { name: 'route', label: '路由覆盖' },
+    { name: 'defs', label: '定义完整性' },
+    { name: 'check', label: '相对基线零新增' },
+];
+
+/** 把门禁原始输出与判据汇总归档到 outputs/audit-<日期>/，并按需生成审查报告骨架。 */
+function writeGateReport(files, outputs, bad, outDir = null) {
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const day = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
+    const time = `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    const dir = outDir || path.join(ROOT, 'outputs', `audit-${day}`);
+    fs.mkdirSync(dir, { recursive: true });
+
+    const lines = [
+        `# 提交前门禁记录 ${now.toLocaleString('zh-CN')}`,
+        '',
+        `> 由 \`node tools/verify/verify.mjs gate\` 自动生成。改动文件 ${files.length} 个。`,
+        '> 共享工作副本时按[代码审查规范](../../docs/agent/代码审查规范.md) §2.1 手写「本轮改动白名单」，不要直接把 svn status 全量当本轮改动集。',
+        '',
+        '## 判据汇总',
+        '',
+        '| 门 | 命令 | 退出码 | 结果 |',
+        '| --- | --- | --- | --- |',
+        ...outputs.map((o) => `| ${o.label} | \`verify ${o.name}\` | ${o.code} | ${o.code === 0 ? 'PASS' : 'FAIL'} |`),
+        '',
+        `**结论：${bad ? `FAIL（${bad} 道门未过）` : 'PASS（三道门全过）'}**`,
+        '',
+        '## 改动文件（前 50 条）',
+        '',
+        ...files.slice(0, 50).map((f) => `- \`${norm(f)}\``),
+        ...(files.length > 50 ? [`- …… 其余 ${files.length - 50} 个省略`] : []),
+        '',
+        '## 原始输出',
+        '',
+    ];
+    for (const o of outputs) {
+        lines.push(`### ${o.label}（verify ${o.name}，退出码 ${o.code}）`, '', '```text', o.out.trimEnd(), '```', '');
+    }
+
+    const report = path.join(dir, `gate-${time}.md`);
+    fs.writeFileSync(report, lines.join('\n') + '\n', 'utf8');
+
+    const skeleton = path.join(dir, '审查报告.md');
+    if (!fs.existsSync(skeleton)) {
+        const template = path.join(ROOT, 'docs', 'agent', '审查报告模板.md');
+        if (fs.existsSync(template)) {
+            fs.writeFileSync(skeleton, fs.readFileSync(template, 'utf8'), 'utf8');
+        }
+    }
+    return report;
+}
+
+/** 提交前一键：逐道门跑一遍，汇总退出码并归档；任一门非 0 即不放行。 */
+function runGate(files) {
+    const script = norm(path.join(ROOT, 'tools', 'verify', 'verify.mjs'));
+    const outputs = [];
+    let bad = 0;
+    for (const step of GATE_STEPS) {
+        const r = run(`node "${script}" ${step.name}`);
+        const out = `${r.stdout || ''}${r.stderr || ''}`;
+        const code = r.status == null ? 2 : r.status;
+        if (code !== 0) bad++;
+        console.log(`[gate] ${step.label} (verify ${step.name}) → 退出码 ${code}`);
+        outputs.push({ ...step, code, out });
+    }
+    const report = writeGateReport(files, outputs, bad);
+    console.log(`[gate] 报告已归档 ${norm(path.relative(ROOT, report))}`);
+    console.log(bad === 0 ? '✅ PASS：三道门全过' : `❌ FAIL：${bad} 道门未过（详见归档报告）`);
+    return bad === 0 ? 0 : 1;
+}
+
 /** CLI 主体，返回退出码（0 零新增 / 1 有新增 / 2 工具自身出错）。 */
 function runCli(argv) {
   const mode = argv[2] || 'check';
@@ -436,6 +587,24 @@ function runCli(argv) {
     console.log(`\n应跑 ${sel.tests.length} 个用例：`);
     sel.tests.forEach((t) => console.log(`  ${t}`));
     return sel.routeOk ? 0 : 2;
+  }
+
+  if (mode === 'defs') {
+    // 主流程的 files 只看 ts/json/prefab/meta；定义检查还要覆盖 tests → tools/**/*.mjs 这类组合。
+    const defsFiles = changedFiles().filter((f) => /\.(ts|mjs)$/.test(f));
+    const result = checkDefinitions(defsFiles);
+    console.log(`[verify] 定义完整性：检查 ${result.checked} 个跨文件引用，跳过 ${result.skipped} 个`);
+    if (!result.issues.length) {
+      console.log('✅ 无缺失定义（改动集内互相引用的符号都能在目标文件找到导出）');
+      return 0;
+    }
+    result.issues.forEach((i) => console.log(
+      `   ❌ ${norm(i.file)} → ${norm(i.target)} 缺 ${i.name}：${i.reason}`));
+    return 1;
+  }
+
+  if (mode === 'gate') {
+    return runGate(files);
   }
 
   if (!['check', 'full', 'baseline'].includes(mode)) {
@@ -510,7 +679,7 @@ function runCli(argv) {
   return bad === 0 ? 0 : 1;
 }
 
-export { runCli, printRouteHits, parseRoutes, parseRows, routeSources, matchRoute, selectTests, norm };
+export { runCli, printRouteHits, parseRoutes, parseRows, routeSources, matchRoute, selectTests, norm, changedFiles, runGate, writeGateReport, checkDefinitions, exportedNamesOf };
 
 // 直接 `node tools/verify/verify.mjs …` 才跑 CLI；被 import 时只导出（供用例断言）。
 const invokedDirectly = process.argv[1]

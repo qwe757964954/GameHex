@@ -12,6 +12,9 @@ export interface ZCCardFrames {
     readonly badge: SpriteFrame | null;
 }
 
+/** 条目自取图的入口：返回已就绪的图，失败同样按 `null` 项降级。 */
+export type ZCCardArtLoader = (card: ZCDeckCard) => Promise<ZCCardFrames>;
+
 /**
  * 卡牌进度（碎片）的显示口径 —— **纯数据**，由页面算好后传进来。
  *
@@ -86,30 +89,66 @@ export class CardLineupCard extends Component {
     @property({ tooltip: '所需碎片数占位值' })
     fallbackNeed = 10;
 
-    /** @param frames null 项保留 prefab 现图；progress 不传用占位值。 */
+    /**
+     * 本条目「当前画的是哪一次渲染」。
+     *
+     * 静态图改由条目自取后，图可能在槽位换成另一张卡之后才到（虚拟列表复用 + 滚动），
+     * 每次 `render` 自增一次，迟到的图与当前 token 不符就丢弃，否则会把上一张卡的立绘
+     * 贴到这一张上 —— 而且是永久错到底，直到这张被再次渲染。
+     */
+    private artToken = 0;
+
+    /**
+     * 上一次 `render` 的输入指纹。
+     *
+     * `VScrollView.refreshList` 会**同步重画所有可见槽位**（`_updateVisible(true)` →
+     * `_layoutSlots`），而 `Sprite.spriteFrame` / `Label.string` / `ProgressBar.progress`
+     * 即使赋的是同一个值也会标脏、下一帧重新合批。数据没变时重复写这十来个属性，
+     * 就是「列表刷新一下就顿一下」的主要来源。
+     *
+     * 指纹含 `card.id`：槽位复用给另一张卡时必然不同，不会误跳过。
+     */
+    private lastRenderKey = '';
+    private lastFrames: ZCCardFrames | null = null;
+
+    /**
+     * @param frames 已备好的图；`null` = 还没到，先清空占位（**不能保留上一张的**），
+     *   有 `loader` 就由条目自己异步补。
+     * @param loader 条目自取图的入口。页面不再等 35 张卡库图才提交列表 —— 那是首屏
+     *   800ms 的来源（实测 2026-11-04：卡库 817ms / 整页 822ms），且虚拟列表只用得到
+     *   可见的十来个槽位，全量备图本来就在为看不见的卡付钱。
+     * @param progress 不传用占位值。
+     */
     render(
         card: ZCDeckCard,
-        frames: ZCCardFrames,
+        frames: ZCCardFrames | null,
         onField: boolean,
         level?: number,
         progress?: ZCCardFragmentProgress,
+        loader?: ZCCardArtLoader,
     ): void {
-        //  两张图**无条件赋值**：本组件由虚拟列表复用，`null` 时若跳过赋值，
-        //  会把上一张卡的职业框 / 角标留在这一张上（串图）。`this.face` 等是必绑组件。
-        this.face.spriteFrame = frames.face;
-        this.badge.spriteFrame = frames.badge;
-        applyCardHeroArt(this.hero, this.heroTransform, frames.hero);
-
         const normalizedLevel = Math.max(0, Math.round(level ?? 0));
+        const owned = Math.max(0, Math.round(progress?.owned ?? this.fallbackOwned));
+        const need = Math.max(0, Math.round(progress?.need ?? this.fallbackNeed));
+        const maxed = progress?.maxed ?? need <= 0;
+        const key = `${card.id}|${onField ? 1 : 0}|${normalizedLevel}|${owned}|${need}|${maxed ? 1 : 0}`;
+        //  图按**引用**比：池图异步补完后是另一个 `ZCCardFrames` 对象，必须重画。
+        //  短路时**故意不自增 artToken** —— 上一次 render 发起的 loader 还在飞，
+        //  让它到达时仍能认领这个槽位（否则图永远不会补上来）。
+        if (key === this.lastRenderKey && frames === this.lastFrames) return;
+        this.lastRenderKey = key;
+        this.lastFrames = frames;
+
+        //  三张图**无条件赋值**：本组件由虚拟列表复用，`null` 时若跳过赋值，
+        //  会把上一张卡的职业框 / 角标留在这一张上（串图）。`this.face` 等是必绑组件。
+        this.applyArt(card, frames, loader);
+
         this.levelPlate.active = normalizedLevel > 0;
         this.levelLabel.string = String(normalizedLevel);
         this.onField.active = onField;
         this.onFieldLabel.string = CARD_LINEUP_TEXTS.onField;
 
-        const owned = Math.max(0, Math.round(progress?.owned ?? this.fallbackOwned));
-        const need = Math.max(0, Math.round(progress?.need ?? this.fallbackNeed));
         // 满级 / 无需求 ⇒ 进度走满、文案说「已满级」，别显示成 `12/0`。
-        const maxed = progress?.maxed ?? need <= 0;
         this.cardFragmentLabel.string = maxed
             ? CARD_LINEUP_TEXTS.upgradeMaxed
             : `${owned}${CARD_LINEUP_TEXTS.progressSeparator}${need}`;
@@ -117,5 +156,28 @@ export class CardLineupCard extends Component {
         //   ProgressBar 自己在 `updateBarStatus()` 里按 anchorX 算填充宽度，
         //   外面改宽度会被它下一次刷新覆盖回去（两处写同一个值 = 谁赢看时序）。
         this.progressBar.progress = maxed ? 1 : need > 0 ? Math.min(1, owned / need) : 0;
+    }
+
+    /**
+     * 画图：已就绪的同步写，没到的先清空再由 loader 异步补。
+     *
+     * 清空这一步不能省：虚拟列表把槽位换给下一张卡时，留着上一张的卡面比空白更像「卡错了」。
+     */
+    private applyArt(card: ZCDeckCard, frames: ZCCardFrames | null, loader?: ZCCardArtLoader): void {
+        const token = ++this.artToken;
+        this.applyFrames(frames);
+        if (frames || !loader) return;
+        void loader(card).then((next) => {
+            //  槽位已被复用给另一张卡 / 页面已销毁 ⇒ 这张图到此为止。
+            if (token !== this.artToken || !this.isValid) return;
+            this.applyFrames(next);
+        }).catch(() => undefined);
+    }
+
+    /** 三张图**无条件**全量赋值；`null` = 缺图，写空而不是跳过。 */
+    private applyFrames(frames: ZCCardFrames | null): void {
+        this.face.spriteFrame = frames ? frames.face : null;
+        this.badge.spriteFrame = frames ? frames.badge : null;
+        applyCardHeroArt(this.hero, this.heroTransform, frames ? frames.hero : null);
     }
 }

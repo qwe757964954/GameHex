@@ -34,7 +34,7 @@
  * 是注释状态 ⇒ 本轮**不摆这个背景**（图仍备在目录里，`bt_bg.jpg`）。
  */
 
-import { FRAME_ART_ROOT, spriteFramePath } from '../ArtPaths';
+import { spriteFramePath } from '../ArtPaths';
 
 /** 战令自有图目录（运行时时相对 `resources` 的路径）。 */
 export const BT_ART_ROOT = 'image/battletoken';
@@ -134,27 +134,21 @@ export function btSharedPath(ref: { readonly root: string; readonly name: string
 // 品质框（与七日 / 礼包 / 活动同一套）
 // ============================================================
 
-const QUALITY_FRAME_LEVELS = 4;
+/** 品质框统一在 `common/QualityFrameArt`，这里只转发，不重算。 */
+import {
+    QUALITY_FRAME_NAMES,
+    QUALITY_FRAME_ROOT,
+    qualityFrameLevel,
+    qualityFrameName,
+} from '../common/QualityFrameArt';
 
-/** 品质档 → 框档（1..4）。与 `SevenDayArt.qualityFrameLevel` 同算法。 */
-export function qualityFrameLevel(quality: number): number {
-    const raw = Math.floor(quality) - 1;
-    return Math.min(QUALITY_FRAME_LEVELS, Math.max(1, raw > 0 ? raw : 1));
-}
-
-/** 品质档 → 框资源名（不带扩展名）。 */
-export function qualityFrameName(quality: number): string {
-    return `common_img_pzk_0${qualityFrameLevel(quality)}`;
-}
+export { qualityFrameLevel, qualityFrameName };
 
 /** 品质框目录。 */
-export const BT_QUALITY_FRAME_ROOT = FRAME_ART_ROOT;
+export const BT_QUALITY_FRAME_ROOT = QUALITY_FRAME_ROOT;
 
 /** 全部品质框名（按框档枚举，恰好 4 张）。 */
-export const BT_QUALITY_FRAME_NAMES: readonly string[] = Array.from(
-    { length: QUALITY_FRAME_LEVELS },
-    (_unused, index) => `common_img_pzk_0${index + 1}`,
-);
+export const BT_QUALITY_FRAME_NAMES: readonly string[] = QUALITY_FRAME_NAMES;
 
 /** 品质框装配路径。 */
 export function qualityFramePath(quality: number): string {

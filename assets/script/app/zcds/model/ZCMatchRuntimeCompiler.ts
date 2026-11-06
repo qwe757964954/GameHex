@@ -91,6 +91,9 @@ export function compileZCMatchRuntime(config: Readonly<ZCMatchConfig>): IZCMatch
         deckBonuses[owner] = calculateDeckBonuses(deck);
         for (const card of deck) cards.set(card.id, card);
     }
+    for (const card of config.pveDefence?.cards ?? []) {
+        if (!cards.has(card.id)) cards.set(card.id, card);
+    }
 
     return { definitions, effectiveDefinitions, unitStatPatches, cards, skillRuntime, legacyAttributes, deckBonuses };
 }

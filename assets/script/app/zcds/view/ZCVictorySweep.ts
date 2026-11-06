@@ -3,6 +3,8 @@ import type { ZCHexView } from './ZCHexView';
 import {
     buildVictorySweepPlan, victorySweepDuration, victorySweepLitStep,
     victorySweepRevertCursor, victorySweepRevertMix,
+    victorySweepPulseCursor, victorySweepPulseLevel, victorySweepPulseMix,
+    victorySweepShimmer, victorySweepShimmerTick,
 } from './ZCGameViewUtil';
 
 interface VictorySweepState {
@@ -13,6 +15,8 @@ interface VictorySweepState {
     litStep: number;
     /** 回正游标（见 `victorySweepRevertCursor`）：整数 = 已回正到第几步，小数 = 行内过渡比例。 */
     revertCursor: number;
+    shimmerTick: number;
+    pulseCursor: number;
 }
 
 /**
@@ -22,13 +26,7 @@ interface VictorySweepState {
  * 每铺到一格就把那格的 `ZCHexView.sweepOwner` 设成胜利方 —— **不回写模型**，
  * 所以战报与领地统计读到的仍是真实归属。
  *
- * 🔴 2026-10-15 row8 起轴上是**两段、且重叠**（见 `ZCGameViewUtil` 的两段常量）：
- *  - ① 填充：整行铺**深饱和**阵营色，一行接一行；
- *  - ② 回正：铺到最后两行时从**起点**整行推回去，每格从深饱和色过渡到阵营**当前色**
- *    （`setSweepOwner(owner, mix)` 的 `mix`）。
- *
- * 回正段每帧都在变（行内是连续过渡），所以 `advance` 的「要不要重画」判据同时看
- * 填充步号与回正游标两个量 —— 只比填充步号的话，回正会整段不刷新。
+ * 深色铺场与回正重叠，回正结束后播放共享轮廓脉冲；时序统一取自 `ZCGameViewUtil`。
  */
 export class ZCVictorySweep {
     private state: VictorySweepState | null = null;
@@ -57,6 +55,8 @@ export class ZCVictorySweep {
             elapsed: 0,
             litStep: -1,
             revertCursor: -1,
+            shimmerTick: 0,
+            pulseCursor: -1,
         };
         // litStep = -1 ⇒ 这一趟只会把每格的覆盖显式清成「无」（顺带兜掉可能的残留），
         // 不会染色。
@@ -67,9 +67,7 @@ export class ZCVictorySweep {
     /**
      * 推进扫场，返回视图覆盖是否变化；调用方据此重绘，播放状态通过 isPlaying 查询。
      *
-     * 只在「填充跨到新的一行」或「回正游标动了」时才重画：整盘 200 来格的 spriteFrame 赋值，
-     * 每帧无条件刷会白白吃掉结算这几秒。回正段虽然每帧游标都会动，但 `ZCHexView.render`
-     * 自己用 `contentKey` 挡掉了无变化的格 —— 实际只有正在过渡的那一两行会真的换图。
+     * 填充、回正、闪烁相位或脉冲波前变化时重画；各格再用 contentKey 跳过未变的内容。
      */
     advance(dt: number): boolean {
         const sweep = this.state;
@@ -77,9 +75,14 @@ export class ZCVictorySweep {
         sweep.elapsed += Math.max(0, dt);
         const lit = victorySweepLitStep(sweep.elapsed, sweep.stepCount);
         const cursor = victorySweepRevertCursor(sweep.elapsed, sweep.stepCount);
-        if (lit !== sweep.litStep || cursor !== sweep.revertCursor) {
+        const shimmerTick = cursor < sweep.stepCount ? victorySweepShimmerTick(sweep.elapsed) : -1;
+        const pulseCursor = Math.min(sweep.stepCount, victorySweepPulseCursor(sweep.elapsed, sweep.stepCount));
+        if (lit !== sweep.litStep || cursor !== sweep.revertCursor
+            || shimmerTick !== sweep.shimmerTick || pulseCursor !== sweep.pulseCursor) {
             sweep.litStep = lit;
             sweep.revertCursor = cursor;
+            sweep.shimmerTick = shimmerTick;
+            sweep.pulseCursor = pulseCursor;
             this.applyViews();
             return true;
         }
@@ -108,6 +111,13 @@ export class ZCVictorySweep {
         const step = sweep.steps.get(hexId);
         if (step === undefined) return null;
         return step <= sweep.litStep ? sweep.winner : null;
+    }
+
+    pulseLevelOf(hexId: number): number {
+        const sweep = this.state;
+        if (!sweep) return 0;
+        const step = sweep.steps.get(hexId);
+        return step === undefined ? 0 : victorySweepPulseLevel(victorySweepPulseMix(sweep.pulseCursor, step));
     }
 
     /** 是否持有扫场覆盖；播放结束后保留覆盖，直到调用 clear。 */
@@ -140,6 +150,7 @@ export class ZCVictorySweep {
             this.hexViews.get(entityId)?.setSweepOwner(
                 painted ? sweep.winner : null,
                 painted ? victorySweepRevertMix(sweep.revertCursor, step) : 0,
+                painted ? victorySweepShimmer(sweep.elapsed, step) : 0,
             );
         }
     }

@@ -34,7 +34,7 @@ export interface IBoardCardHost {
  * Sprite 上**（样式在 prefab、代码只切显隐），与项目既有约定一致。
  *
  *  卡框 99×100 来自 `image/frame`，与页面那套 155×195 的 `common_img_kp_*` 不是同一张，
- * 别把 `CARD_FACE_ART` 拿来这里用。
+ * 别把 `cardUiArt.face` 拿来这里用。
  *
  * ── 交互 ─────────────────────────────────────────────────────────────
  * 只保留短按点击：按下后位移超过 `pressSlop` 判定为滑动列表，不触发；

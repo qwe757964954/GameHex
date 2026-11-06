@@ -18,6 +18,32 @@ function resolveUpgradeRow(
     return levels?.get(currentLevel + 1);
 }
 
+/** `cardLevelUp.attrList` 的一条：属性键 + 该等级的**绝对值**（不是增量）。 */
+export interface ZCCardAttrEntry {
+    readonly statId: string;
+    readonly value: number;
+}
+
+/**
+ * 解析一行里的 `attrList`：`[{"statId":"maxHp","value":40}, …]`。
+ *
+ * 坏条目（缺 statId / value 非数字）逐条跳过，整列不是数组就给空数组 ——
+ * 空数组代表「这张卡还没配等级属性」，调用方回落 `pvpUnitGrowth`，不在这里兜底数值。
+ */
+export function parseCardAttrList(value: unknown): readonly ZCCardAttrEntry[] {
+    const list: ZCCardAttrEntry[] = [];
+    if (!Array.isArray(value)) return list;
+    for (const raw of value) {
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+        const entry = raw as Record<string, unknown>;
+        const statId = typeof entry.statId === 'string' ? entry.statId.trim() : '';
+        const num = Number(entry.value);
+        if (statId.length === 0 || !Number.isFinite(num)) continue;
+        list.push({ statId, value: num });
+    }
+    return list;
+}
+
 /** cardLevelUp 一行（已归一化）。 */
 export interface ZCCardLevelUpRow {
     id: string;
@@ -34,6 +60,15 @@ export interface ZCCardLevelUpRow {
     costGeneralLevelID: string;
     /** 经验消耗（通用 + 兵种合计）。 */
     costArmyLevelNum: number;
+    /**
+     * 该等级的绝对属性（`cardLevelUp.attrList`）。
+     *
+     * **没有配时这个键不出现**（不是空数组）—— 这样 `parseCardLevelUpRow` 对老行的
+     * 返回结构与引入本字段之前逐字相同，`deepEqual` 类断言不受影响。
+     * 调用方判 `row.attrList?.length` 即可：缺键 / 空数组都按「没配」处理 ⇒
+     * 回落 `pvpUnitGrowth` 的百分比成长。
+     */
+    attrList?: readonly ZCCardAttrEntry[];
 }
 
 export type ZCCardLevelUpTable = ReadonlyMap<string, ReadonlyMap<number, ZCCardLevelUpRow>>;
@@ -97,7 +132,14 @@ export function parseCardLevelUpRow(value: unknown): ZCCardLevelUpRow | null {
     if (id === null || level === null || costCardID === null || costCardNum === null) return null;
     if (armyId === null || generalId === null || costArmyLevelNum === null) return null;
 
-    return { id, name, level, costCardID, costCardNum, costArmyLevelID: armyId, costGeneralLevelID: generalId, costArmyLevelNum };
+    const attrList = parseCardAttrList(row.attrList);
+
+    return {
+        id, name, level, costCardID, costCardNum,
+        costArmyLevelID: armyId, costGeneralLevelID: generalId, costArmyLevelNum,
+        // 只有真配了才带上这个键，老行返回结构保持不变。
+        ...(attrList.length > 0 ? { attrList } : {}),
+    };
 }
 
 /** 建「卡牌 → (等级 → 行)」两级表。重复行后值覆盖。 */

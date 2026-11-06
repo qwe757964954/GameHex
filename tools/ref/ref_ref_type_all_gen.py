@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import re
 
 # 脚本位于 <项目根>/tools/ref/，项目根 = 上两级目录
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -21,6 +22,13 @@ ref_gen_path = os.path.join(PROJECT_ROOT, "assets", "script", "app", "generated"
 # 定义目录和文件路径
 ref_json_path = os.path.join(client_config_path, r"refSmallAll.json")
 output_file_path = os.path.join(ref_gen_path, r"ref_type_all.d.ts")
+
+# 单表迁移保留其他表已生成的类型，避免旧源表覆盖工作区已有改动。
+selected_table = None
+if len(sys.argv) > 2:
+    if len(sys.argv) != 4 or sys.argv[2] != '--table':
+        raise ValueError('用法: ref_ref_type_all_gen.py <JSON目录> [--table 表名]')
+    selected_table = sys.argv[3]
 
 begin_content = ""
 end_content = ""
@@ -166,6 +174,28 @@ try:
     # 将生成的枚举内容写入 enum.ts 文件
     if result_contents:
         os.makedirs(ref_gen_path, exist_ok=True)
+        if selected_table:
+            if selected_table not in ref_data:
+                raise ValueError('找不到配置表: ' + selected_table)
+            with open(output_file_path, 'r', encoding='utf-8', newline='') as source:
+                content = source.read()
+            if content.count('type TRefName=') != 1 or content.count('type TRefName2=') != 1:
+                raise ValueError('已有类型文件缺少唯一的 TRefName / TRefName2，停止单表更新')
+            block = parse_json(selected_table, ref_data[selected_table])
+            pattern = r'interface IRef' + re.escape(selected_table) + r' extends.*?(?=interface IRef|type TRefName=)'
+            content, count = re.subn(pattern, lambda _: block + '\n\n', content, flags=re.S)
+            if not count:
+                content = content.replace('type TRefName=', block + '\n\n' + 'type TRefName=', 1)
+            for alias, name in [('TRefName', selected_table + '.json'), ('TRefName2', selected_table)]:
+                pattern = r'(type ' + alias + r'=)([^\r\n]+)'
+                def add_name(match):
+                    value = '"' + name + '"'
+                    return match.group(0) if value in match.group(2).split('|') else match.group(0) + '|' + value
+                content = re.sub(pattern, add_name, content)
+            with open(output_file_path, 'w', encoding='utf-8', newline='') as target:
+                target.write(content)
+            print('已更新单表类型: ' + selected_table)
+            sys.exit(0)
         with open(output_file_path, 'w', encoding='utf-8') as output_file:
             output_file.write(begin_content)
             output_file.write('\n\n'.join(result_contents))

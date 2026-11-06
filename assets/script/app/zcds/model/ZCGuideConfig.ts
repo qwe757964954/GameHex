@@ -1,6 +1,6 @@
 import { BUILDING_ART_ROOT, GAMEUI_ART_ROOT, spriteFramePath } from '../../ArtPaths';
 
-/** 奖励品级，与 ZCPvpTileRules.ZCPvpDrawRarity 对齐（'空' = 抽空/空地）。 */
+/** 奖励品级：来自 `guide` 表的中文 key（`'空'` = 无品级）；卡牌品级是另一套英文 id（见 `ZCCardRarity`）。 */
 export type ZCGuideRarity = '空' | '绿' | '蓝' | '紫' | '金';
 
 export interface ZCGuideReward {

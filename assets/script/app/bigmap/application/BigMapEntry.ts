@@ -222,6 +222,7 @@ export class BigMapEntry {
                     return { ok: true, message: '' };
                 } : undefined,
                 slgRepository,
+                selfRoleId: owner?.roleId ?? '',
             });
 
             const controller = new BigMapController(model, { context: this.context, network: GameNet.instance, campRepository, slgRepository });

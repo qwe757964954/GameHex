@@ -10735,6 +10735,11 @@
                           "rule": "required",
                           "type": "uint32",
                           "id": 6
+                        },
+                        "buildLevel": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 7
                         }
                       }
                     },

@@ -165,6 +165,8 @@ export class ZCGameLegendBannerView extends Component {
     private static readonly FADE_IN_PROGRESS = 0.08;
     /** 尾段整体淡出。 */
     private static readonly FADE_START_PROGRESS = 0.78;
+    /** 淡出段在进度轴上占的窗口长度 = 1 - FADE_START_PROGRESS。 */
+    private static readonly FADE_OUT_WINDOW = 1 - ZCGameLegendBannerView.FADE_START_PROGRESS;
 
     @property({ type: UIOpacity, group: '节点引用', tooltip: '根节点上的 UIOpacity：整条横幅的淡入淡出由它一个组件承担' })
     bannerOpacity: UIOpacity = null!;
@@ -207,6 +209,8 @@ export class ZCGameLegendBannerView extends Component {
 
     /** 上一次 render 到的内容组合；没变就跳过选图选字，只在首帧与换卡时写。 */
     private contentKey = '';
+    /** owner → 底板/色环 查表，首次用到时按当前 @property 构建一次。 */
+    private ownerFrames: Record<ZCOwner, { banner: SpriteFrame; ring: SpriteFrame }> | null = null;
     /** 展示资源查询由渲染层注入，视图不发起加载。 */
     private artResolver: ((reveal: Readonly<ZCCardReveal>) => SpriteFrame | null) | null = null;
     /** 头像解析：玩家头像 SpriteFrame，由渲染层注入（拿不到就返回 null，只留色环）。 */
@@ -244,6 +248,8 @@ export class ZCGameLegendBannerView extends Component {
     private roleRestY: number | null = null;
     /** 已写进 Role Sprite 的透明度；变了才写（透明度每帧都在变，但不必每帧都赋值）。 */
     private appliedRoleOpacity = -1;
+    /** 已写进根节点 UIOpacity 的透明度；同上，变了才写。 */
+    private appliedBannerOpacity = -1;
     /** 写 `Sprite.color` 用的复用实例（每帧新建 Color 属于 update 路径分配）。取色板的原色：白。 */
     private readonly roleColorScratch = new Color(255, 255, 255, 255);
 
@@ -274,11 +280,16 @@ export class ZCGameLegendBannerView extends Component {
         this.artResolver = resolver ?? null;
         // 解析器可能在横幅已经弹出来之后才注入（立绘要等单位的 Prefab 池）；
         // 作废内容键强制下一帧重画，否则那一条横幅会一直空着立绘。
-        this.contentKey = '';
+        this.invalidateContent();
     }
 
     setPortraitResolver(resolver: ((owner: ZCOwner) => SpriteFrame | null) | undefined): void {
         this.portraitResolver = resolver ?? null;
+        this.invalidateContent();
+    }
+
+    /** 作废内容键，强制下一帧重选图、重写字段。 */
+    private invalidateContent(): void {
         this.contentKey = '';
     }
 
@@ -301,7 +312,11 @@ export class ZCGameLegendBannerView extends Component {
         // 终点 y 是各自的竖向格心（按人数均分屏高）。
         const targetY = layoutYOf(reveal.owner, this.playerCount, this.viewHeight);
         this.node.setPosition(startX + (0 - startX) * eased, targetY, 0);
-        this.bannerOpacity.opacity = Math.round(255 * this.alphaOf(progress));
+        const bannerOpacity = Math.round(255 * this.alphaOf(progress));
+        if (bannerOpacity !== this.appliedBannerOpacity) {
+            this.appliedBannerOpacity = bannerOpacity;
+            this.bannerOpacity.opacity = bannerOpacity;
+        }
         // ── 立绘生成动画：扇入**播完**才开始（时长以秒计，不随 reveal 时长缩放）──
         const slideSeconds = ZCGameLegendBannerView.SLIDE_PROGRESS * duration;
         this.renderRoleGenerate(now - reveal.startedAt, slideSeconds);
@@ -321,8 +336,9 @@ export class ZCGameLegendBannerView extends Component {
         // 静止位由「底板下沿 + 目标高」算出（见 `legendRoleRestY`），**不读 prefab 的 y**。
         if (this.roleRestY === null) this.roleRestY = legendRoleRestY();
         const y = this.roleRestY + LEGEND_ROLE_DROP_Y * (1 - ease);
-        if (Math.abs(sprite.node.position.y - y) > 0.01) {
-            sprite.node.setPosition(sprite.node.position.x, y, sprite.node.position.z);
+        const pos = sprite.node.position;
+        if (Math.abs(pos.y - y) > 0.01) {
+            sprite.node.setPosition(pos.x, y, pos.z);
         }
         const opacity = Math.round(255 * ease);
         if (opacity === this.appliedRoleOpacity) return;
@@ -414,8 +430,9 @@ export class ZCGameLegendBannerView extends Component {
         const key = `${reveal.cardId}|${reveal.owner}|${reveal.cardName}|${reveal.unitId ?? ''}`;
         if (key === this.contentKey) return;
         this.contentKey = key;
-        this.setSprite(this.bannerSprite, this.bannerFor(reveal.owner));
-        this.setSprite(this.ringSprite, this.ringFor(reveal.owner));
+        const frames = this.framesFor(reveal.owner);
+        this.setSprite(this.bannerSprite, frames.banner);
+        this.setSprite(this.ringSprite, frames.ring);
         this.setSprite(this.roleSprite, this.artResolver?.(reveal) ?? null);
         // 立绘尺寸只跟「换成了哪张图」有关 ⇒ 跟着内容键一起刷新，不进每帧路径。
         this.applyRoleScale();
@@ -427,32 +444,27 @@ export class ZCGameLegendBannerView extends Component {
         const fadeIn = Math.min(1, progress / ZCGameLegendBannerView.FADE_IN_PROGRESS);
         const fadeOut = progress <= ZCGameLegendBannerView.FADE_START_PROGRESS
             ? 1
-            : Math.max(0, 1 - (progress - ZCGameLegendBannerView.FADE_START_PROGRESS) / (1 - ZCGameLegendBannerView.FADE_START_PROGRESS));
+            : Math.max(0, 1 - (progress - ZCGameLegendBannerView.FADE_START_PROGRESS) / ZCGameLegendBannerView.FADE_OUT_WINDOW);
         return fadeIn * fadeOut;
     }
 
     /**
-     * 四色底板。设计稿给的是四张固定底图，与工程里 `ZC_CLIENT_COLORS` 的四个玩家色一一对应：
+     * 四色底板与色环：设计稿给的是四张固定底图，与工程里 `ZC_CLIENT_COLORS` 的四个玩家色一一对应：
      * 蓝（`player` #7e82ff ↔ legend_banner_02 蓝）、红（`enemy` ↦ 01）、
      * 黄（`enemy2` ↦ 04）、紫（`enemy3` ↦ 03）—— 按**色相**对齐而不是按设计稿组序，
      * 因为设计稿的组序（红蓝紫黄）与 `ZC_OWNER_ORDER`（我/2/3/4）不同。
      */
-    private bannerFor(owner: ZCOwner): SpriteFrame | null {
-        switch (owner) {
-            case ZCOwner.Player: return this.bannerPlayer;
-            case ZCOwner.Enemy: return this.bannerEnemy;
-            case ZCOwner.Enemy2: return this.bannerEnemy2;
-            default: return this.bannerEnemy3;
+    private framesFor(owner: ZCOwner): { banner: SpriteFrame; ring: SpriteFrame } {
+        if (!this.ownerFrames) {
+            this.ownerFrames = {
+                [ZCOwner.Player]: { banner: this.bannerPlayer, ring: this.ringPlayer },
+                [ZCOwner.Enemy]: { banner: this.bannerEnemy, ring: this.ringEnemy },
+                [ZCOwner.Enemy2]: { banner: this.bannerEnemy2, ring: this.ringEnemy2 },
+                [ZCOwner.Enemy3]: { banner: this.bannerEnemy3, ring: this.ringEnemy3 },
+            };
         }
-    }
-
-    private ringFor(owner: ZCOwner): SpriteFrame | null {
-        switch (owner) {
-            case ZCOwner.Player: return this.ringPlayer;
-            case ZCOwner.Enemy: return this.ringEnemy;
-            case ZCOwner.Enemy2: return this.ringEnemy2;
-            default: return this.ringEnemy3;
-        }
+        // 未知 owner 兜底到紫（原 default 分支行为）。
+        return this.ownerFrames[owner] ?? this.ownerFrames[ZCOwner.Enemy3];
     }
 
     /**

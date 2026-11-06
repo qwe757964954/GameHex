@@ -33,7 +33,10 @@ export const BUNDLE_DIRECTORIES: Readonly<Record<string, readonly string[]>> = {
     [BIGMAP_BUNDLE]: [
         'image/concept',
         'image/base_background',
-        'image/bigMapBG',
+        // 2048×2048 大背景，**刻意放在 bundle 顶层、不进 `image/` 的图集子树**：
+        // `image/` 根的 pac 递归收一切 png，这么大的图塞进任何一页都会被缩糊；
+        // 单个 spriteFrame 独立采样、不进图集也零损失。
+        'bigMapBG',
         'ui/bigmap',
     ],
     [MAIN_PAGES_BUNDLE]: [

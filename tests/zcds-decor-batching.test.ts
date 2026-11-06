@@ -106,7 +106,7 @@ test('城墙 4 张砖图同在 image/walls 图集 ⇒ 「按方向分组让同�
     // ⇒ 打包后合成同一张图集，换 spriteFrame **不断批**。
     // 墙砖是贴图**实例化**出来的独立 Sprite（`ZCGameWallLayer`），但只要纹理相同就能合批 ——
     // 旋转 / 镜像 / 缩放改的是矩阵，不改纹理。
-    const WALL_ATLAS_META = 'assets/resources/image/walls/auto-atlas.pac.meta';
+    const WALL_ATLAS_META = assetPath('image/buildings/auto-atlas.pac.meta');
     assert.ok(existsSync(WALL_ATLAS_META), 'walls/auto-atlas.pac.meta 不存在，城墙图集没配');
     const meta = JSON.parse(readFileSync(WALL_ATLAS_META, 'utf8'));
     assert.equal(meta.importer, 'auto-atlas');
@@ -116,7 +116,7 @@ test('城墙 4 张砖图同在 image/walls 图集 ⇒ 「按方向分组让同�
         + '此时「按方向分组」才可能真有收益，需要重新评估。',
     );
     // 4 张砖图必须都在 walls 树内（挪出去就变成独立纹理）。
-    const dir = 'assets/resources/image/walls';
+    const dir = assetPath('image/buildings/walls');
     for (const art of ['rightUp', 'up', 'rightDown', 'down']) {
         assert.ok(existsSync(`${dir}/${art}.png`), `${art}.png 不在 ${dir} 里了？`);
     }

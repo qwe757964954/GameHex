@@ -602,6 +602,7 @@ test('PVP 信息与「开始游戏」回包并行到达时叠加，不互相整�
 function loaderFixture(assets: any, configs = { initialize: async () => {}, getTable: async (_name: string) => [] }) {
     let configured = 0, injected = 0;
     const dependencies: Record<string, unknown> = {
+        '../../card/CardArtConfig': { parseCardArtConfig: () => ({ paths: new Map() }) },
         '../model/ZCGameResourcePlan': resourcePlan,
         '../model/ZCVisualResourcePlan': { buildZCVisualResourcePlan },
         '../../../core/asset/BundleCatalog': { BATTLE_BUNDLE: 'battle' },
@@ -719,9 +720,8 @@ test('直接进入已取消或已释放的战斗流程不启动资源加载', as
     }
 });
 
-test('战斗流程只消费本局通知，销毁和换局后旧宿主事件失效', async t => {
+test('战斗流程只消费本局通知，销毁和换局后旧宿主事件失效', async () => {
     const h = procedures();
-    const off = t.mock.method(EventMgr.instance, 'off');
     const enter = async () => {
         const scope = new ResourceScope('event-battle');
         const pending = h.battle.onPreload(undefined, { resources: scope, cancelled: false });
@@ -738,11 +738,9 @@ test('战斗流程只消费本局通知，销毁和换局后旧宿主事件失�
     EventMgr.instance.emit(ZC_BATTLE_EVENTS.RETURN_TO_MAIN, { owner });
     assert.equal(h.navigations.length, 1);
     assert.equal(h.navigations[0].route, 'main');
-    const composition = h.battle.composition;
     EventMgr.instance.emit(ZC_BATTLE_EVENTS.RUNTIME_DESTROYED, { owner });
-    for (const event of [ZC_BATTLE_EVENTS.RETURN_TO_MAIN, ZC_BATTLE_EVENTS.SHOW_TIP]) {
-        assert.ok(off.mock.calls.some(call => call.arguments[0] === event && call.arguments[2] === composition), '会话销毁立即退订通知');
-    }
+    EventMgr.instance.emit(ZC_BATTLE_EVENTS.SHOW_TIP, { owner, message: 'after destroy' });
+    assert.deepEqual(h.tips, ['current'], '会话销毁后立即停止接收通知');
     EventMgr.instance.emit(ZC_BATTLE_EVENTS.RETURN_TO_MAIN, { owner });
     assert.equal(h.navigations.length, 1);
     h.battle.onLeave();

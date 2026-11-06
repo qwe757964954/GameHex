@@ -1,3 +1,4 @@
+import { ZCDC_LOG_WARNINGS } from '../ZCDCLogSwitch';
 import { ControllerBase, type IControllerContext, type IControllerResources } from '../../../framework/controller/ControllerBase';
 import type { ProcedurePreloadContext } from '../../../framework/procedure/ProcedureBase';
 import type { ZCBattleStart } from '../../battle/BattleStartModel';
@@ -165,7 +166,7 @@ export class ZCBattleController<T extends IZCBattleRuntime> extends ControllerBa
             this.prepared = null;
         } catch (error) {
             try { this.dispose(); }
-            catch (cleanupError) { console.error('[ZCBattleController] 初始化失败后的清理失败', cleanupError); }
+            catch (cleanupError) { if (ZCDC_LOG_WARNINGS) console.error('[ZCBattleController] 初始化失败后的清理失败', cleanupError); }
             throw error;
         }
     }

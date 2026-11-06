@@ -1,6 +1,11 @@
 import { createControllerContext } from './helpers/controller-context';
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
+import { readFileSync } from 'node:fs';
+import { runInNewContext } from 'node:vm';
+import ts from 'typescript';
+import { formatHms } from '../assets/script/app/hang/HangTable';
+import { TERRITORY_IDLE_REWARD_INTERVAL_MS } from '../assets/script/app/territory/model/TerritoryIdleReward';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { TerritoryController } from '../assets/script/app/territory/application/TerritoryController';
 import type { TerritoryModel, TerritoryModelOutput, ITerritoryViewState } from '../assets/script/app/territory/application/TerritoryModel';
@@ -10,7 +15,8 @@ function harness() {
     const calls: unknown[] = [];
     let output: (event: TerritoryModelOutput) => void = () => {};
     const model = {
-        state: { ready: false, map: null, progress: null, detail: {}, layout: {},
+        state: { ready: false, idleRewardStartedAt: null, idleRewardMaxHours: 8,
+            map: null, progress: null, detail: {}, layout: {},
             wallet: { silver: 0, stamina: 0 } } as ITerritoryViewState,
         onOutput(listener: typeof output) { output = listener; return () => { calls.push('unsub'); output = () => {}; }; },
         start() { calls.push('start'); }, dispose() { calls.push('dispose'); },
@@ -22,6 +28,7 @@ function harness() {
         applyPassCellsBro(chapter: number, ids: number[]) { calls.push(['pass', chapter, ids]); },
         applyCellInfoState(state: unknown) { calls.push(['cells', state]); },
         focusCurrentLevel() { return 7; },
+        claimIdleRewards(now: number) { calls.push(['claimIdleRewards', now]); },
     };
     const listeners = new Map<string, { caller: object; handler: (msg: unknown) => void }>();
     let cache: (() => void) | null = null;
@@ -38,6 +45,69 @@ function harness() {
     });
     return { model, controller, calls, listeners, timers, emit: (event: TerritoryModelOutput) => output(event), cache: () => cache?.() };
 }
+
+test('征收意图只交给当前控制器，并使用控制器时钟', () => {
+    const h = harness();
+    h.controller.start();
+    EventMgr.instance.emit(TerritoryUiEvent.Intent, { intent: { kind: 'claimIdleRewards' } });
+    assert.deepEqual(h.calls.at(-1), ['claimIdleRewards', 42]);
+    h.controller.dispose();
+    const count = h.calls.length;
+    EventMgr.instance.emit(TerritoryUiEvent.Intent, { intent: { kind: 'claimIdleRewards' } });
+    assert.equal(h.calls.length, count);
+});
+
+test('真实金币车组件无旧主线数据也保持可见，点击派发征收并随销毁退订', () => {
+    const h = harness();
+    let click = () => {};
+    const button = { interactable: true, node: {
+        on(_event: string, handler: () => void, owner: object) { click = () => handler.call(owner); },
+    } };
+    const node = { active: false, getComponent: () => button };
+    const label = { string: '' };
+    interface IEntryProbe {
+        node: typeof node;
+        timeLabel: typeof label;
+        shakeNode: { isValid: boolean };
+        onLoad(): void;
+        onDestroy(): void;
+    }
+    const exports: { HangEntryButton?: new () => IEntryProbe } = {};
+    const imports: Record<string, unknown> = {
+        cc: {
+            Component: class { schedule() {} unschedule() {} unscheduleAllCallbacks() {} },
+            Button: { EventType: { CLICK: 'click' } },
+            _decorator: { ccclass: () => (type: unknown) => type, property: () => () => {} },
+        },
+        '../../framework/event/EventMgr': { EventMgr },
+        '../territory/application/TerritoryEvents': { TerritoryUiEvent, TerritoryViewEvent },
+        '../territory/model/TerritoryIdleReward': { TERRITORY_IDLE_REWARD_INTERVAL_MS },
+        './HangTable': { formatHms },
+    };
+    runInNewContext(ts.transpileModule(readFileSync('assets/script/app/hang/HangEntryButton.ts', 'utf8'), {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
+    }).outputText, { exports, require: (id: string) => imports[id], Date });
+    const entry = new exports.HangEntryButton();
+    Object.assign(entry, { node, timeLabel: label, shakeNode: { isValid: false } });
+    try {
+        h.controller.start();
+        entry.onLoad();
+        assert.equal(node.active, true);
+        assert.equal(button.interactable, false);
+        EventMgr.instance.emit(TerritoryViewEvent.Render, { state: {
+            ready: true, idleRewardStartedAt: Date.now() - 30 * 60 * 1000, idleRewardMaxHours: 8,
+        } });
+        assert.equal(node.active, true);
+        assert.equal(button.interactable, true);
+        assert.equal(label.string, '00:30:00');
+        click();
+        assert.deepEqual(h.calls.at(-1), ['claimIdleRewards', 42]);
+    } finally { entry.onDestroy(); h.controller.dispose(); }
+    EventMgr.instance.emit(TerritoryViewEvent.Render, { state: {
+        ready: false, idleRewardStartedAt: null, idleRewardMaxHours: 8,
+    } });
+    assert.equal(button.interactable, true, '销毁后不再接收领地渲染');
+});
 
 test('closing and reopening routes ordinary intents only to the active controller', () => {
     const a = harness(), b = harness();

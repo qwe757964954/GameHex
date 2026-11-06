@@ -1,3 +1,5 @@
+import { cardArtConfig } from './helpers/card-art-config';
+import type { ICardDetailArt } from '../assets/script/app/card/CardArtProvider';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { CardUpgradeController } from '../assets/script/app/card/CardUpgradeController';
@@ -59,18 +61,19 @@ test('详情左右切卡沿用卡库顺序与真实等级，升级在途禁止�
     try {
         await h.controller.start();
         h.intent('next', {});
-        assert.equal(h.details.length, 0, '其他详情实例的意图不能串入');
+        assert.equal(h.states.at(-1).cardId, '1', '其他详情实例的意图不能串入');
         h.intent('next');
         await tick();
-        assert.equal(h.details[0].cardId, '2');
-        assert.equal(h.details[0].level, 7);
+        assert.equal(h.closed, 0, '切卡不能销毁整个弹窗');
+        assert.equal(h.states.at(-1).cardId, '2');
+        assert.equal(h.states.at(-1).level, 7);
         h.intent('previous');
         await tick();
-        assert.equal(h.details[1].cardId, '3');
-        assert.equal(h.details[1].level, 0, '未解锁的卡不能借用上一张的等级');
+        assert.equal(h.states.at(-1).cardId, '1');
+        assert.equal(h.states.at(-1).level, 0, '未解锁的卡不能借用上一张的等级');
         h.intent('submit');
         h.intent('next'); h.intent('team'); h.intent('skills');
-        assert.equal(h.details.length, 2);
+        assert.equal(h.states.at(-1).cardId, '1');
         assert.equal(h.editors, 0);
         assert.equal(h.skills.length, 0);
         h.pending.resolve({ kind: 'failed' });
@@ -86,20 +89,20 @@ test('完整卡库为空时不关闭，不跳到虚构卡牌', async () => {
         await h.controller.start();
         h.intent('previous'); h.intent('next');
         await tick();
-        assert.equal(h.details.length, 0);
+        assert.equal(h.states.at(-1).cardId, '1');
         assert.equal(h.closed, 0);
     } finally { h.finish(); }
 });
 function upgradeFixture() {
-    const owner = {}, states: any[] = [], results: any[] = [], applied: any[] = [], skills: any[] = [], details: any[] = [];
+    const owner = {}, states: any[] = [], results: any[] = [], applied: any[] = [], skills: any[] = [];
     const failures: unknown[] = [];
     let editors = 0;
     let calls = 0, loads = 0, releases = 0, loading = 0, removed = 0, closed = 0;
     const pending = deferred<UpgradeHeroResult>();
-    const repository = { loadUpgradeStatus: async (_id: string, level: number) => { loads++; return upgradeStatus(level); },
+    const repository = { loadDetailArt: async (_card: ZCDeckCard | null): Promise<ICardDetailArt> => ({ hero: null, diamond: null }), loadUpgradeStatus: async (_id: string, level: number) => { loads++; return upgradeStatus(level); }, loadArtConfig: async () => cardArtConfig,
         loadLineupSnapshot: (): CardLineupData | null => null,
         loadDetailNavigation: async () => ({ catalog: [] as readonly ZCDeckCard[], heroLevels: new Map<string, number>(), heroListKnown: true }),
-        loadCardDetail: async () => ({ stats: [], powerText: '', chain: [], milestones: [] }),
+        loadCardDetail: async (_id: string, _level: number) => ({ stats: [], powerText: '', chain: [], milestones: [] }),
         upgradeHero: async (_id: number, caller: object) => { calls++; assert.equal(caller, controller); return pending.promise; },
         applyHeroLevel: (id: number, level: number) => applied.push({ id, level }) };
     const controller = new CardUpgradeController(createControllerContext(), {
@@ -108,7 +111,7 @@ function upgradeFixture() {
         repository,
         failed: error => failures.push(error),
         view: {
-            render: state => states.push(state),
+            render: state => { states.push(state); },
             close: () => { closed++; }
         },
         loading: {
@@ -120,16 +123,59 @@ function upgradeFixture() {
         popups: {
             openSkills: value => skills.push(value),
             openEditor: () => { editors++; },
-            openDetail: value => details.push(value),
         },
     });
     EventMgr.instance.on(CardLineupEvent.HeroUpgraded, value => results.push(value), owner);
     const intent = (kind = 'submit', eventOwner = owner) => EventMgr.instance.emit(CardPopupEvent.UpgradeIntent, { owner: eventOwner, kind });
-    return { owner, controller, repository, states, results, applied, skills, details, pending, intent, failures,
+    return { owner, controller, repository, states, results, applied, skills, pending, intent, failures,
         get editors() { return editors; },
         finish() { controller.dispose(); EventMgr.instance.offTarget(owner); },
         get calls() { return calls; }, get loads() { return loads; }, get releases() { return releases; }, get loading() { return loading; }, get removed() { return removed; }, get closed() { return closed; } };
 }
+
+test('详情切卡等待新美术就绪后连同数据一次提交，期间保留原卡完整画面', async () => {
+    const h = upgradeFixture();
+    const art = deferred<ICardDetailArt>();
+    h.repository.loadDetailNavigation = async () => ({ catalog: [card('1'), card('2')], heroLevels: new Map(), heroListKnown: true });
+    try {
+        await h.controller.start();
+        const original = h.states.at(-1), count = h.states.length;
+        h.repository.loadDetailArt = () => art.promise;
+        h.intent('next'); await tick();
+        assert.equal(h.states.length, count);
+        assert.equal(h.states.at(-1), original);
+        const prepared: ICardDetailArt = { hero: null, diamond: null };
+        art.resolve(prepared); await tick();
+        assert.equal(h.states.length, count + 1);
+        assert.equal(h.states.at(-1).cardId, '2');
+        assert.equal(h.states.at(-1).art, prepared);
+        assert.equal(h.closed, 0);
+    } finally { h.finish(); }
+});
+
+test('切卡美术加载失败保留原卡，可重试；关闭后迟到美术不发布', async () => {
+    for (const exit of ['failure', 'dispose']) {
+        const h = upgradeFixture();
+        const art = deferred<ICardDetailArt>();
+        h.repository.loadDetailNavigation = async () => ({ catalog: [card('1'), card('2')], heroLevels: new Map(), heroListKnown: true });
+        try {
+            await h.controller.start();
+            const original = h.states.at(-1), count = h.states.length;
+            const failure = new Error('美术加载失败');
+            h.repository.loadDetailArt = () => exit === 'failure' ? Promise.reject(failure) : art.promise;
+            h.intent('next'); await tick();
+            if (exit === 'dispose') { h.controller.dispose(); art.resolve({ hero: null, diamond: null }); await tick(); }
+            assert.equal(h.states.length, count);
+            assert.equal(h.states.at(-1), original);
+            if (exit === 'failure') {
+                assert.equal(h.failures.at(-1), failure);
+                h.repository.loadDetailArt = async () => ({ hero: null, diamond: null });
+                h.intent('next'); await tick();
+                assert.equal(h.states.at(-1).cardId, '2');
+            }
+        } finally { h.finish(); }
+    }
+});
 test('upgrade isolates intents, gates duplicate submits and publishes confirmed level before refreshing costs', async () => {
     const h = upgradeFixture(); try {
         await h.controller.start(); h.intent('submit', {}); h.intent(); h.intent();
@@ -157,7 +203,7 @@ test('failed upgrade retains level and allows retry; skill navigation comes from
         h.intent('skills'); assert.equal(h.closed, 1); assert.deepEqual(h.skills, [{ heroId: 1, cardName: '1' }]);
     } finally { h.finish(); }
 });
-const boardData = (): LineupBoardData => ({ deck: [card('1')], pool: [card('1'), card('2'), card('3')], heroLevels: new Map(), heroLevelCaps: new Map(),
+const boardData = (): LineupBoardData => ({ art: cardArtConfig, deck: [card('1')], pool: [card('1'), card('2'), card('3')], heroLevels: new Map(), heroLevelCaps: new Map(),
     formations: [{ formationId: 1, heroIds: [1], selected: true }, { formationId: 2, heroIds: [2], selected: false }] });
 function boardFixture(closeAfterSave = false) {
     const owner = {}, states: any[] = [], events: any[] = [], submissions: any[] = [], tips: string[] = [];
@@ -173,7 +219,7 @@ function boardFixture(closeAfterSave = false) {
         closeAfterSave,
         failed() {},
         view: {
-            render: state => states.push(state),
+            render: state => { states.push(state); },
             close: () => { closed++; }
         },
         feedback: {
@@ -236,9 +282,11 @@ test('upgrade and formation results refresh the live lineup controller; disposed
         owner: {},
         autoLoadDecks: true,
         fallbackLevel: 1,
-        repository: { loadLineupSnapshot: () => null, loadLineup: async () => {
+        repository: { loadArtConfig: async () => cardArtConfig, loadLineupSnapshot: () => null, loadLineup: async () => {
             loads++;
-            return { deck: [], pool: [], heroLevels: new Map(), heroLevelCaps: new Map(), heroListKnown: true };
+            return { art: cardArtConfig, deck: [], catalog: [], heroLevels: new Map(), heroLevelCaps: new Map(), heroListKnown: true,
+                formationsKnown: true, bonuses: { activeBonds: [], unitHpMultiplier: 1, unitAttackMultiplier: 1,
+                    moveSpeedMultiplier: 1, towerAttackMultiplier: 1, incomeBonus: 0, spawnIntervalMultiplier: 1 } };
         } },
         failed(error) { throw error; },
         popups: {
@@ -336,7 +384,7 @@ test('详情切卡加载期间拒绝重复切换与升级，关闭后迟到的�
         pending.resolve({ catalog: [card('1'), card('2')], heroLevels: new Map(), heroListKnown: true });
         await tick();
         assert.equal(h.closed, 0);
-        assert.equal(h.details.length, 0);
+        assert.equal(h.states.at(-1).cardId, '1');
     } finally { h.finish(); }
 });
 
@@ -350,7 +398,83 @@ test('切卡失败保留当前详情并允许重试，不依赖首帧阵容快�
         assert.deepEqual(h.failures, [failure]);
         h.repository.loadDetailNavigation = async () => ({ catalog: [card('1'), card('2')], heroLevels: new Map([['2', 9]]), heroListKnown: true });
         h.intent('next'); await tick();
-        assert.equal(h.details[0].cardId, '2');
-        assert.equal(h.details[0].level, 9);
+        assert.equal(h.states.at(-1).cardId, '2');
+        assert.equal(h.states.at(-1).level, 9);
+        assert.equal(h.closed, 0);
+    } finally { h.finish(); }
+});
+
+test('切卡数据全部就绪后原位提交，等待期间不闪空且关闭后不发布', async () => {
+    for (const close of [false, true]) {
+        const h = upgradeFixture();
+        const status = deferred<ReturnType<typeof upgradeStatus>>();
+        const detail = deferred<{ stats: []; powerText: string; chain: []; milestones: [] }>();
+        try {
+            await h.controller.start();
+            h.repository.loadDetailNavigation = async () => ({ catalog: [card('1'), card('2')],
+                heroLevels: new Map([['2', 7]]), heroListKnown: true });
+            h.repository.loadUpgradeStatus = () => status.promise;
+            h.repository.loadCardDetail = () => detail.promise;
+            const count = h.states.length;
+            h.intent('next'); await tick();
+            assert.equal(h.states.length, count, '备数据期间保留当前完整详情');
+            status.resolve({ ...upgradeStatus(7), cardId: '2' }); await tick();
+            assert.equal(h.states.length, count, '只到升级状态时不能提前切换标题和卡面');
+            if (close) h.controller.dispose();
+            detail.resolve({ stats: [], powerText: 'card-2', chain: [], milestones: [] }); await tick();
+            assert.equal(h.states.length, count + (close ? 0 : 1));
+            assert.equal(h.closed, 0);
+            if (!close) {
+                assert.equal(h.states.at(-1).cardId, '2');
+                assert.equal(h.states.at(-1).status.cardId, '2');
+                assert.equal(h.states.at(-1).detail.powerText, 'card-2');
+                assert.equal(h.states.at(-1).phase, 'ready');
+                h.intent('skills');
+                assert.deepEqual(h.skills, [{ heroId: 2, cardName: '2' }]);
+            }
+        } finally { h.finish(); }
+    }
+});
+
+test('下一张卡升级状态加载失败时保留旧详情并允许重试', async () => {
+    const h = upgradeFixture();
+    try {
+        await h.controller.start();
+        h.repository.loadDetailNavigation = async () => ({ catalog: [card('1'), card('2')],
+            heroLevels: new Map(), heroListKnown: true });
+        const failure = new Error('status unavailable');
+        h.repository.loadUpgradeStatus = async () => { throw failure; };
+        const count = h.states.length;
+        h.intent('next'); await tick();
+        assert.equal(h.states.length, count);
+        assert.equal(h.closed, 0);
+        assert.deepEqual(h.failures, [failure]);
+        h.repository.loadUpgradeStatus = async () => ({ ...upgradeStatus(), cardId: '2' });
+        h.intent('next'); await tick();
+        assert.equal(h.states.at(-1).cardId, '2');
+    } finally { h.finish(); }
+});
+
+test('原位切卡后旧卡迟到详情不能覆盖新卡，详情失败仍保留新卡升级功能', async () => {
+    const h = upgradeFixture();
+    const oldDetail = deferred<{ stats: []; powerText: string; chain: []; milestones: [] }>();
+    h.repository.loadCardDetail = async (id?: string) => {
+        if (id === '1') return oldDetail.promise;
+        throw new Error('detail unavailable');
+    };
+    h.repository.loadDetailNavigation = async () => ({ catalog: [card('1'), card('2')],
+        heroLevels: new Map([['2', 3]]), heroListKnown: true });
+    try {
+        const opening = h.controller.start(); await tick();
+        h.intent('next'); await tick();
+        assert.equal(h.closed, 0);
+        assert.equal(h.states.at(-1).cardId, '2');
+        assert.equal(h.states.at(-1).level, 3);
+        assert.equal(h.states.at(-1).phase, 'ready');
+        assert.equal(h.states.at(-1).detail, null);
+        const count = h.states.length;
+        oldDetail.resolve({ stats: [], powerText: 'old-card', chain: [], milestones: [] });
+        await opening;
+        assert.equal(h.states.length, count);
     } finally { h.finish(); }
 });

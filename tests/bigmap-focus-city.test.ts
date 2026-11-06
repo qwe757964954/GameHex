@@ -4,6 +4,7 @@ import { runInNewContext } from 'node:vm';
 import test from 'node:test';
 import ts from 'typescript';
 import * as geometry from '../assets/script/app/bigmap/view/BigMapWorldLayout';
+import { normalizeBigMapCampRoleInfos, type IBigMapCampRoleInfo } from '../assets/script/app/bigmap/model/BigMapCampRoleInfo';
 
 /**
  * 城池聚焦口径（2026-11-03 用户：*「在大地图点击城池据点后，隐藏其他的城池据点和玩家基地
@@ -36,13 +37,13 @@ function loadViewClass() {
 }
 
 interface IFakeMarker {
-    kind: 'city' | 'monster' | 'base';
-    id: number;
+    kind: 'city' | 'monster' | 'base' | 'role';
+    id: number | string;
     hexId: number;
     node: { active: boolean; position: { x: number; y: number }; setPosition(x: number, y: number, z: number): void };
 }
 
-function makeMarker(kind: IFakeMarker['kind'], id: number, hexId: number): IFakeMarker {
+function makeMarker(kind: IFakeMarker['kind'], id: number | string, hexId: number): IFakeMarker {
     return {
         kind, id, hexId,
         node: {
@@ -60,9 +61,11 @@ function makeView() {
         viewportTransform: { width: number; height: number };
         content: { position: { x: number; y: number } };
         zoom: number;
-        data: { cities: Map<number, { hexId: number }> } | null;
+        data: { ui: object; cities: Map<number, { hexId: number; campRoles?: readonly IBigMapCampRoleInfo[] }> } | null;
         selectedHexId: number;
         markers: IFakeMarker[];
+        cullMarkers(): void;
+        applyFocusIsolation(): void;
     };
     view.viewportTransform = { width: 800, height: 800 };
     view.content = { position: { x: 0, y: 0 } };
@@ -73,7 +76,7 @@ function makeView() {
         makeMarker('monster', 7, 9),
         makeMarker('base', 3, 10),
     ];
-    view.data = { cities: new Map([[1, { hexId: 5 }], [2, { hexId: 8 }]]) };
+    view.data = { ui: {}, cities: new Map([[1, { hexId: 5 }], [2, { hexId: 8 }]]) };
     return view;
 }
 
@@ -99,6 +102,41 @@ test('选中的是野怪或基地时不聚焦：所有标记保持可见（口�
         assert.deepEqual(view.markers.map((marker) => marker.node.active), [true, true, true, true],
             `selectedHexId=${hexId} 不是城池锚点，不该触发聚焦`);
     }
+});
+
+test('campId=114的136名玩家回包后，聚焦只显示选中城池，不显示名单角色标记', () => {
+    const view = makeView();
+    const roles = normalizeBigMapCampRoleInfos({ campId: 114, infos: Array.from({ length: 136 }, (_, i) => ({
+        roleId: String(9000 + i), serverId: '2', roleName: `玩家${i}`, img: '1',
+        defenseHp: 4400, pos: 100 + i, buildLevel: 10,
+    })) }, 114);
+    assert.equal(roles.length, 136);
+    view.data.cities = new Map([[114, { hexId: 5, campRoles: [] }], [115, { hexId: 8, campRoles: [] }]]);
+    view.selectedHexId = 5;
+    view.cullMarkers();
+    view.data.cities.get(114).campRoles = roles;
+    view.markers.push(...roles.map((role) => makeMarker('role', role.roleId, role.pos)));
+    const foreign = makeMarker('role', 'other-city', roles[0].pos);
+    view.markers.push(foreign);
+    view.cullMarkers();
+    assert.equal(view.markers.filter((marker) => marker.kind === 'role' && marker.node.active).length, 0);
+    assert.equal(foreign.node.active, false, '相同pos不能替代回包campId归属');
+    const own = view.markers.find((marker) => marker.id === roles[0].roleId);
+    own.node.position.x = 9000;
+    view.cullMarkers();
+    assert.equal(own.node.active, false, '本城玩家离开视口仍被裁剪');
+    view.selectedHexId = 8;
+    view.cullMarkers();
+    assert.equal(view.markers.filter((marker) => marker.kind === 'role' && marker.node.active).length, 0);
+});
+
+test('与城池同格的玩家仍保持原始pos，不跟随城池展示位移', () => {
+    const view = makeView();
+    const role = makeMarker('role', 'self', 5);
+    view.markers.push(role);
+    view.selectedHexId = 5;
+    view.applyFocusIsolation();
+    assert.equal(role.node.position.y, 0);
 });
 
 test('聚焦的城标记上移 300（名条/等级是子节点，跟着一起走），解除后写回原位', () => {

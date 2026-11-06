@@ -12,6 +12,9 @@ export interface IBigMapUiState {
     readonly baseActionPending: boolean;
     readonly enteringBattle: boolean;
     readonly buildMenuVisible: boolean;
+    readonly campRolesVisible: boolean;
+    readonly campRoleIndex: number;
+    readonly pendingCampMoveId: number;
 }
 
 /** 数据消息不携带 Model、Controller 或业务回调。 */
@@ -21,6 +24,7 @@ export interface IBigMapViewState {
     readonly mainBuildingId: number;
     readonly playerBaseHexId: number;
     readonly playerCampId: number;
+    readonly selfRoleId: string;
     readonly isServerBase: boolean;
     readonly actionRecoverSeconds: number | null;
     readonly canHarvest: boolean;
@@ -59,7 +63,7 @@ export function buildBigMapViewState(model: BigMapModel, ui: IBigMapUiState): IB
     }
     return {
         ui: { ...ui }, world: model.world, mainBuildingId: model.mainBuildingId,
-        playerBaseHexId: model.playerBaseHexId, playerCampId: model.playerCampId,
+        playerBaseHexId: model.playerBaseHexId, playerCampId: model.playerCampId, selfRoleId: model.selfRoleId,
         isServerBase: model.isServerBase, actionRecoverSeconds: model.actionRecoverSeconds,
         canHarvest: model.canHarvest, adventureChapter: model.adventureChapter,
         resourceIcons: model.resourceIcons, buildingConfigs: model.buildingConfigs, campConfigs: model.campConfigs,

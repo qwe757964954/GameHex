@@ -2311,8 +2311,10 @@ export class VirtualScrollView extends Component {
       const previousIndex = node.getComponent(VScrollViewItem)?.dataIndex ?? -1;
       const shouldInit = !node.active || previousIndex !== idx;
       const appearContext = this._createItemAppearContext(idx, previousIndex >= 0 && previousIndex !== idx);
-      if (shouldInit) this._markItemNeedsEnterCallback(idx);
-      node.active = false;
+      if (shouldInit) {
+        this._markItemNeedsEnterCallback(idx);
+        node.active = false;
+      }
       const stride = this.itemMainSize + this.spacing;
       const line = Math.floor(idx / this.gridCount);
       const gridPos = idx % this.gridCount;
@@ -2386,7 +2388,6 @@ export class VirtualScrollView extends Component {
       this._updateItemClickHandler(node, idx);
       if (this.renderItemFn) this.renderItemFn(node, idx);
       if (shouldInit) this._prepareItemBeforeShow(node, idx, appearContext);
-      else node.active = true;
       if (this._needAnimateIndices.has(idx)) {
         if (this.playItemAppearAnimationFn) this.playItemAppearAnimationFn(node, idx, appearContext);
         else this._playDefaultItemAppearAnimation(node, idx);
@@ -2444,7 +2445,7 @@ export class VirtualScrollView extends Component {
         if (this.onItemLongPressFn) this.onItemLongPressFn(node, idx);
       };
     }
-    itemScript.setDataIndex(index);
+    if (itemScript.dataIndex !== index) itemScript.setDataIndex(index);
   }
 
   private _layoutSlots(firstIndex: number, forceRender: boolean) {

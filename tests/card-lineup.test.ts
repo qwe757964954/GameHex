@@ -1,3 +1,4 @@
+import { cardArtConfig } from './helpers/card-art-config';
 /**
  * 「卡牌阵容」页的单测。
  *
@@ -23,11 +24,8 @@ import test from 'node:test';
 import {
     activeBondTitle,
     bondPercentTotal,
-    CAMP_ICON_ON_ART,
-    CLASS_ICON_ON_ART,
     resolveCardCamp,
     resolveCardClass,
-    resolveHeroArt,
     tallyDeckClasses,
     tallyDeckIcons,
     visibleIconTallies,
@@ -220,18 +218,18 @@ test('玩家默认八卡按 traits.attack 推出职业计数 战士2 / 法师1 /
     assert.equal(player.length, 8);
     assert.equal(enemy.length, 8);
 
-    const tallies = tallyDeckClasses(player);
+    const tallies = tallyDeckClasses(player, cardArtConfig.lineup);
     assert.deepEqual(tallies.map((entry) => entry.cardClass), [...ZC_CARD_CLASSES]);
     assert.deepEqual(tallies.map((entry) => entry.count), [2, 1, 2, 3]);
     assert.ok(tallies.every((entry) => entry.reached));
 
     // 分类口径：表里 traits.attack 直接就是职业名（一一对应），不再按 type 推导
     const byName = (name: string) => player.find((card) => card.name === name)!;
-    assert.equal(resolveCardClass(byName('熊猫人')), 'warrior', 'attack=战士 → 战士');
-    assert.equal(resolveCardClass(byName('火法师')), 'mage', 'attack=法师 → 法师');
-    assert.equal(resolveCardClass(byName('精灵弓箭手')), 'archer', 'attack=射手 → 射手');
-    assert.equal(resolveCardClass(byName('骷髅战士')), 'tank', 'attack=坦克 → 坦克');
-    assert.equal(resolveCardClass(byName('金矿')), 'tank', '没有 traits 的卡（金矿）归坦克占位');
+    assert.equal(resolveCardClass(byName('熊猫人'), cardArtConfig.lineup), 'warrior', 'attack=战士 → 战士');
+    assert.equal(resolveCardClass(byName('火法师'), cardArtConfig.lineup), 'mage', 'attack=法师 → 法师');
+    assert.equal(resolveCardClass(byName('精灵弓箭手'), cardArtConfig.lineup), 'archer', 'attack=射手 → 射手');
+    assert.equal(resolveCardClass(byName('骷髅战士'), cardArtConfig.lineup), 'tank', 'attack=坦克 → 坦克');
+    assert.equal(resolveCardClass(byName('金矿'), cardArtConfig.lineup), 'tank', '没有 traits 的卡（金矿）归坦克占位');
 
     // 八张卡各自引用的单位 id（2026-09-17 起 **卡 id == 它代表的单位源表 id**：
     // 武将卡=general.id、兵种卡=army.id、怪物卡=monster.id、近卫卡=guards.id、建筑=2001/2002）
@@ -246,18 +244,18 @@ test('玩家默认八卡按 traits.attack 推出职业计数 战士2 / 法师1 /
     );
 
     // 四职业各自使用对应的营地雕像
-    assert.equal(resolveHeroArt('warrior'), 'camp_warrior');
-    assert.equal(resolveHeroArt('tank'), 'camp_tank');
-    assert.equal(resolveHeroArt('archer'), 'camp_archer');
-    assert.equal(resolveHeroArt('mage'), 'camp_mage');
+    assert.equal(cardArtConfig.paths.get('hero.warrior'), 'icons/card/camp_warrior');
+    assert.equal(cardArtConfig.paths.get('hero.tank'), 'icons/card/camp_tank');
+    assert.equal(cardArtConfig.paths.get('hero.archer'), 'icons/card/camp_archer');
+    assert.equal(cardArtConfig.paths.get('hero.mage'), 'icons/card/camp_mage');
 
     // 品级是中文色名（表里是 1/2/3/4）
-    assert.deepEqual([...new Set(player.map((card) => card.rarity))].sort(), ['绿', '蓝', '紫', '金'].sort() as never);
+    assert.deepEqual([...new Set(player.map((card) => card.rarity))].sort(), ['green', 'blue', 'purple', 'gold'].sort() as never);
 });
 
 test('图标行 8 项 = 4 职业 + 4 阵营（阵营按 traits.camp 算，顺序即 ZC_CARD_CAMPS）', () => {
     const { player, enemy } = buildDecksFromTables();
-    const items = tallyDeckIcons(player);
+    const items = tallyDeckIcons(player, cardArtConfig.lineup);
 
     assert.equal(items.length, 8, '4 职业 + 4 阵营');
     assert.deepEqual(items.slice(0, 4).map((item) => item.kind), ['class', 'class', 'class', 'class']);
@@ -276,21 +274,21 @@ test('图标行 8 项 = 4 职业 + 4 阵营（阵营按 traits.camp 算，顺序
     assert.equal(items.slice(4).reduce((sum, item) => sum + item.count, 0), 7);
 
     // 敌方八卡（68008..68015）花果 3 / 蘑菇 5 —— 阵营这一维确实是按表算出来的，不是恒定值
-    assert.deepEqual(tallyDeckIcons(enemy).slice(4).map((item) => item.count), [3, 5, 0, 0]);
+    assert.deepEqual(tallyDeckIcons(enemy, cardArtConfig.lineup).slice(4).map((item) => item.count), [3, 5, 0, 0]);
 
     // 取维度值的口径
-    assert.equal(resolveCardCamp(player.find((card) => card.name === '熊猫人')!), 'huaguo');
+    assert.equal(resolveCardCamp(player.find((card) => card.name === '熊猫人')!, cardArtConfig.lineup), 'huaguo');
     const noTraits = player.find((card) => card.name === '金矿')!;
-    assert.equal(resolveCardCamp(noTraits), null, '没有 traits 的卡没有阵营');
-    assert.equal(resolveCardCamp({ ...noTraits, traits: { camp: '没这个阵营' } } as unknown as ZCDeckCard), null,
+    assert.equal(resolveCardCamp(noTraits, cardArtConfig.lineup), null, '没有 traits 的卡没有阵营');
+    assert.equal(resolveCardCamp({ ...noTraits, traits: { camp: '没这个阵营' } } as unknown as ZCDeckCard, cardArtConfig.lineup), null,
         '认不出的 camp 取值不落默认档（宁可空着，也不要瞎归一类）');
 
     // 四个阵营均有独立图标，不与职业图标混用。
-    const campOn = ZC_CARD_CAMPS.map((camp) => CAMP_ICON_ON_ART[camp]);
+    const campOn = ZC_CARD_CAMPS.map((camp) => cardArtConfig.paths.get(`camp.${camp}`));
     assert.equal(campOn.length, 4);
     assert.ok(campOn.every((name) => typeof name === 'string' && name.length > 0));
     assert.equal(new Set(campOn).size, campOn.length);
-    const classOn = ZC_CARD_CLASSES.map((cardClass) => CLASS_ICON_ON_ART[cardClass]);
+    const classOn = ZC_CARD_CLASSES.map((cardClass) => cardArtConfig.paths.get(`iconOn.${cardClass}`));
     assert.equal(campOn.filter((name) => classOn.includes(name)).length, 0, '阵营与职业不能共用同一张图');
 });
 
@@ -298,7 +296,7 @@ test('图标行只列卡数 > 0 的维度（0 项不进虚拟列表）', () => {
     const { player, enemy } = buildDecksFromTables();
 
     // 职业那 4 维在玩家八卡里全部命中；阵营只有花果 7，后 3 个是 0 → 整项不出现。
-    const items = visibleIconTallies(player);
+    const items = visibleIconTallies(player, cardArtConfig.lineup);
     assert.equal(items.length, 5, '4 职业 + 1 阵营（花果）——条数跟着阵容走，不是固定 8');
     assert.deepEqual(items.slice(0, 4).map((item) => item.key), Array.from(ZC_CARD_CLASSES));
     assert.deepEqual(items.slice(4).map((item) => item.key), ['huaguo']);
@@ -306,13 +304,13 @@ test('图标行只列卡数 > 0 的维度（0 项不进虚拟列表）', () => {
     assert.ok(items.every((item) => item.count > 0), '列出来的每一项都必须是命中的');
 
     // 全量统计口径不受影响：`tallyDeckIcons` 仍然是 8 项，过滤只发生在展示层
-    assert.equal(tallyDeckIcons(player).length, 8);
+    assert.equal(tallyDeckIcons(player, cardArtConfig.lineup).length, 8);
 
     // 敌方八卡（68008..68015）职业是 战士2 / 法师4 / 射手2 —— **没有坦克**，
     //  所以职业侧也只列 3 项；阵营侧花果 3 / 蘑菇 5 命中 → 共 5 项。
     //  顺序仍是 `ZC_CARD_CLASSES` 的序（warrior→mage→archer→tank），
     //  坦克被滤掉不会让它后面的项前移或重排。
-    const enemyItems = visibleIconTallies(enemy);
+    const enemyItems = visibleIconTallies(enemy, cardArtConfig.lineup);
     assert.equal(enemyItems.length, 5);
     assert.deepEqual(enemyItems.map((item) => `${item.kind}|${item.key}`), [
         'class|warrior', 'class|mage', 'class|archer', 'camp|huaguo', 'camp|mogu',
@@ -324,7 +322,7 @@ test('图标行只列卡数 > 0 的维度（0 项不进虚拟列表）', () => {
         ['class|warrior', 'class|mage', 'class|archer', 'class|tank', 'camp|huaguo']);
 
     // 空阵容 → 0 项 → 列表要清空（`refreshList(0)`），不能回退成 8 个占位
-    assert.deepEqual(visibleIconTallies([]), []);
+    assert.deepEqual(visibleIconTallies([], cardArtConfig.lineup), []);
 });
 
 type PrefabObject = Record<string, unknown>;

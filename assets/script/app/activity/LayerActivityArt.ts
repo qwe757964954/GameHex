@@ -26,7 +26,6 @@
 
 import {
     COMMON_ART_ROOT,
-    FRAME_ART_ROOT,
     RESOURCE_ICON_ART_ROOT as ART_RESOURCE_ICON_ROOT,
     spriteFramePath,
 } from '../ArtPaths';
@@ -116,27 +115,13 @@ export function buttonArtKey(tone: 'green' | 'blue' | 'red' | 'gray'): string {
 // 奖励格：品质框 + 道具图标
 // ============================================================
 
-const QUALITY_FRAME_LEVELS = 4;
-
-/** 品质档 → 框档（1..4）。与 `SevenDayArt.qualityFrameLevel` 同算法。 */
-export function qualityFrameLevel(quality: number): number {
-    const raw = Math.floor(quality) - 1;
-    return Math.min(QUALITY_FRAME_LEVELS, Math.max(1, raw > 0 ? raw : 1));
-}
-
-/** 品质档 → 框资源名（不带扩展名）。 */
-export function qualityFrameName(quality: number): string {
-    return `common_img_pzk_0${qualityFrameLevel(quality)}`;
-}
-
-/** 品质框目录（与七日狂欢 / 礼包共用 `image/frame/`）。 */
-export const QUALITY_FRAME_ROOT = FRAME_ART_ROOT;
-
-/** 全部品质框名（按框档枚举，恰好 4 张）。 */
-export const QUALITY_FRAME_NAMES: readonly string[] = Array.from(
-    { length: QUALITY_FRAME_LEVELS },
-    (_unused, index) => `common_img_pzk_0${index + 1}`,
-);
+/** 品质框统一在 `common/QualityFrameArt`，这里只转发，不重算。 */
+export {
+    QUALITY_FRAME_ROOT,
+    QUALITY_FRAME_NAMES,
+    qualityFrameLevel,
+    qualityFrameName,
+} from '../common/QualityFrameArt';
 
 /**
  * 道具图标口径 —— **`item` 那一支与七日狂欢完全一致**（资源路径直通 + 只认 `icons/` 前缀）。

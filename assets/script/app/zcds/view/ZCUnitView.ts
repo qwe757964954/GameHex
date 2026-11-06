@@ -1,3 +1,4 @@
+import { ZCDC_LOG_DIAGNOSTICS } from '../ZCDCLogSwitch';
 import { _decorator, Animation, Color, Component, instantiate, Label, Material, Node, Prefab, ProgressBar, sp, Sprite, SpriteFrame, UITransform, Vec3 } from 'cc';
 import type { ZCUnitDefinition } from '../model/ZCCombatCatalog';
 import type { ZCUnitState } from '../model/ZCGameModel';
@@ -126,7 +127,7 @@ export class ZCUnitView extends Component {
     private static reportMissingPrefab(definition: Readonly<ZCUnitDefinition>): void {
         if (ZCUnitView.reportedMissingPrefabs.has(definition.unitId)) return;
         ZCUnitView.reportedMissingPrefabs.add(definition.unitId);
-        console.info(`[ZCUnitView] 兵种 ${definition.unitId}（${definition.name}）不在首屏美术清单里，`
+        if (ZCDC_LOG_DIAGNOSTICS) console.info(`[ZCUnitView] 兵种 ${definition.unitId}（${definition.name}）不在首屏美术清单里，`
             + `按需补载 pvpCard.unitPrefabPath = ${definition.prefabPath || '空'}（到货前画「将」字占位色块）`);
     }
 
@@ -140,13 +141,13 @@ export class ZCUnitView extends Component {
     }
 
     @property({ type: UITransform })
-    rootTransform: UITransform = null;
+    rootTransform: UITransform = null!;
 
     @property({ type: Node, tooltip: '兵种美术容器；原点相对单位逻辑脚点上移 45.7px' })
-    visualRoot: Node = null;
+    visualRoot: Node = null!;
 
     @property({ type: Sprite })
-    sprite: Sprite = null;
+    sprite: Sprite = null!;
 
     @property({ type: Sprite })
     fallback: Sprite = null!;
@@ -155,25 +156,25 @@ export class ZCUnitView extends Component {
     fallbackTransform: UITransform = null!;
 
     @property({ type: Label })
-    fallbackLabel: Label = null;
+    fallbackLabel: Label = null!;
 
     @property({ type: ProgressBar, group: '状态条', tooltip: 'HealthBar：单位生命值' })
-    healthBar: ProgressBar = null;
+    healthBar: ProgressBar = null!;
 
     // 血条填充图：按阵营各一张 —— 我方蓝 / 敌红 / 敌2 黄 / 敌3 紫（R25「不同阵营区分不同的血条」）。
     // 紫图取自项目里已有但一直没人用的 `buildings/jindutiao_p.png`，不需要新美术；
     // 四家的取值口径见 `ZCGameViewUtil.pickHealthBarFill`。
     @property({ type: SpriteFrame, group: '状态条', tooltip: '血条填充：我方（蓝）' })
-    barFillPlayer: SpriteFrame = null;
+    barFillPlayer: SpriteFrame = null!;
 
     @property({ type: SpriteFrame, group: '状态条', tooltip: '血条填充：敌方（红）' })
-    barFillEnemy: SpriteFrame = null;
+    barFillEnemy: SpriteFrame = null!;
 
     @property({ type: SpriteFrame, group: '状态条', tooltip: '血条填充：敌方 2（黄）' })
-    barFillEnemy2: SpriteFrame = null;
+    barFillEnemy2: SpriteFrame = null!;
 
     @property({ type: SpriteFrame, group: '状态条', tooltip: '血条填充：敌方 3（紫）' })
-    barFillEnemy3: SpriteFrame = null;
+    barFillEnemy3: SpriteFrame = null!;
 
     // 兵种视觉 prefab 的画布统一是 256×256、节点 98×98，可见身体约 56~74 宽 × 69 高。
     // 单位根节点现在是逻辑脚点，VisualRoot 上移 45.7px 后，美术脚底正好落在原点；

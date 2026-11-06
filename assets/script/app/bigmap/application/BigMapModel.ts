@@ -128,6 +128,7 @@ export interface IBigMapModelDeps {
     readonly rankProvider?: IBigMapRankProvider;
     readonly campRepository?: BigMapCampRepository;
     readonly slgRepository?: BigMapSlgRepository;
+    readonly selfRoleId?: string;
     /** 发起服务端战斗并通过 GameRoute 导航；不得回退本地结算。 */
     readonly startBattle?: (battleType: IZCSlgBattleType, targetConfigId: number, isCurrent: () => boolean) => Promise<IBigMapActionFeedback>;
 }
@@ -415,7 +416,18 @@ export class BigMapModel {
 
     applyRoleEvent(event: import('../model/BigMapCampRoleInfo').IBigMapRoleEvent): void {
         if (this.isDisposed) return;
-        this.deps.campRepository?.applyRoleEvent(this.campIdByHex.get(event.role.pos) ?? 0, event);
+        const campId = this.campIdByHex.get(event.role.pos) ?? 0;
+        const repository = this.deps.campRepository;
+        repository?.applyRoleEvent(campId, event);
+        if (campId > 0 && repository && repository.rolesOf(campId) === null) void this.refreshCampDetail(campId, true);
+    }
+
+    get selfRoleId(): string { return this.deps.selfRoleId ?? ''; }
+    canMoveToCamp(campId: number): boolean { return !!this.deps.campRepository && this.worldInstance.cities.has(campId); }
+    canMoveToCampPos(campId: number, pos: number): boolean {
+        return this.canMoveToCamp(campId) && this.worldInstance.tileById.has(pos)
+            && this.campIdByHex.get(pos) === campId
+            && !(this.deps.campRepository?.rolesOf(campId) ?? []).some((role) => role.pos === pos);
     }
 
     // -------------------------------------------------------------- 基础访问
@@ -992,10 +1004,19 @@ export class BigMapModel {
     async refreshVisibleCamps(campIds: readonly number[]): Promise<void> {
         if (this.isDisposed || !this.deps.campRepository) return;
         const ids = campIds.filter((id) => this.worldInstance.cities.has(id));
-        if (await this.deps.campRepository.refreshSimple(ids)) this.emit();
+        const repository = this.deps.campRepository;
+        // 🔴 角色名单只在「这座城还没成功查过」时补一次：
+        // `CmdSlgCampRoleInfosReqMsg` 一次只能带一个 campId（协议限制），跟着 5 秒轮询走
+        // 会变成「每座可见城每 5 秒一条」；而角色的血量/位置/进出已经有
+        // `CmdSlgGameRoleInfoBroMsg` 四种事件在推（事件都带完整 `SlgGameCameRoleInfo`）。
+        // 失败（超时/坏包）不会写快照 ⇒ `rolesOf` 仍是 null，下一轮自动重试。
+        const rolesMissing = ids.filter((id) => repository.rolesOf(id) === null);
+        const loaded = await Promise.all([repository.refreshSimple(ids), ...rolesMissing.map((id) => repository.refreshRoles(id))]);
+        if (this.isDisposed) return;
+        if (loaded.some(Boolean)) this.emit();
     }
 
-    async refreshCampDetail(campId: number): Promise<void> {
+    async refreshCampDetail(campId: number, force = false): Promise<void> {
         const repository = this.deps.campRepository;
         if (this.isDisposed) return;
         if (!repository) return;
@@ -1006,15 +1027,15 @@ export class BigMapModel {
                 `已知城池数=${this.worldInstance.cities.size}`);
             return;
         }
-        if (this.campDetailStatuses.get(campId) === 'loading') return;
+        if (!force && this.campDetailStatuses.get(campId) === 'loading') return;
         this.campDetailStatuses.set(campId, 'loading');
         this.campRoleStatuses.set(campId, 'loading');
         this.emit();
         // 两条协议并行：据点状态（占领/开放）与角色列表互不依赖，
         // 串行会把详情面板的等待时间翻倍，且任一条失败不该拖住另一条。
         const [detailLoaded, rolesLoaded] = await Promise.all([
-            repository.refreshDetail([campId]),
-            repository.refreshRoles(campId),
+            repository.refreshDetail([campId], force),
+            repository.refreshRoles(campId, force),
         ]);
         if (this.isDisposed) return;
         this.campDetailStatuses.set(campId, detailLoaded ? 'ready' : 'failed');
@@ -1040,11 +1061,13 @@ export class BigMapModel {
         if (this.isDisposed) return { ok: false, message: BIGMAP_CAMP_MOVE_TEXT.disposed };
         const repository = this.deps.campRepository;
         if (!repository) return { ok: false, message: BIGMAP_CAMP_MOVE_TEXT.offline };
+        const oldCampId = this.playerCampId;
         const result = await repository.moveCamp(campId, pos);
         if (this.isDisposed) return { ok: false, message: BIGMAP_CAMP_MOVE_TEXT.disposed };
-        if (!result.ok) return result;
-        void this.deps.slgRepository?.refreshGame();
-        void this.refreshCampDetail(campId);
+        // 未确认也重拉：超时并不代表服务端没有迁城，写请求不能靠重发恢复。
+        void this.deps.slgRepository?.refreshGame(true);
+        if (oldCampId > 0 && oldCampId !== campId) void this.refreshCampDetail(oldCampId, true);
+        void this.refreshCampDetail(campId, true);
         return result;
     }
 

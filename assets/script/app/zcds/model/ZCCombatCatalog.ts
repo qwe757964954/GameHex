@@ -166,14 +166,32 @@ export function cardTypeToBuilding(type: ZCCardType): ZCCardBuilding | null {
     return 'hq';
 }
 
-export type ZCCardRarity = '绿' | '蓝' | '紫' | '金';
+/**
+ * 品级 id（英文，与 `PVP-卡牌美术.xlsx` 品级 sheet 首列一致）；`pvpCard.rarity` 里仍是数字 1..4。
+ *
+ * 这里是**唯一**一份字面量：类型由它推导，卡牌侧 `CardLineupTypes` 直接 re-export 这个数组，
+ * 不再各存一份 id 集合。顺序取展示序（金→绿），对局档位不看顺序，而是由表 `sort` 反推（见 `rarityRank`）。
+ */
+const RARITY_IDS = ['gold', 'purple', 'blue', 'green'] as const;
+export type ZCCardRarity = (typeof RARITY_IDS)[number];
+export const ZC_CARD_RARITIES: readonly ZCCardRarity[] = RARITY_IDS;
 
 /**
  * 卡牌标签两维：attack（职业）、camp（阵营）。
- * 这两组值是表里原字符串，表里改词表时这里、pvpCounter、pvpBond 三处一起改。
+ *
+ * 值是 `pvpCard.traits` 的原文，也是 `PVP-卡牌美术.xlsx` 职业 / 阵营 sheet 的 `name` 列；
+ * 表里改词表时这里、`pvpCounter`、`pvpBond` 三处一起改（守卫见 `tests/card-dimensions-single-source.test.ts`）。
+ *
+ * 顺序即**受击特效目录**的约定顺序（`<职业>受击`）：`ZCGameLoader` 与 `ZCGameResourcePlan`
+ * 直接遍历这份数组拼路径，别在别处再手写一遍这四个中文。
  */
-export type ZCAttackTrait = '射手' | '坦克' | '法师' | '战士';
-export type ZCCampTrait = '花果' | '蘑菇' | '盆栽' | '僵尸';
+const ATTACK_TRAIT_IDS = ['射手', '战士', '法师', '坦克'] as const;
+export type ZCAttackTrait = (typeof ATTACK_TRAIT_IDS)[number];
+export const ZC_ATTACK_TRAITS: readonly ZCAttackTrait[] = ATTACK_TRAIT_IDS;
+
+const CAMP_TRAIT_IDS = ['花果', '蘑菇', '盆栽', '僵尸'] as const;
+export type ZCCampTrait = (typeof CAMP_TRAIT_IDS)[number];
+export const ZC_CAMP_TRAITS: readonly ZCCampTrait[] = CAMP_TRAIT_IDS;
 
 export interface ZCCardTraits {
     attack: ZCAttackTrait;
@@ -252,19 +270,72 @@ export function getCardBuildIcon(cardId: string | null | undefined): string {
     return '';
 }
 
-export const ZC_RARITY_RANK: Readonly<Record<ZCCardRarity, number>> = { 绿: 1, 蓝: 2, 紫: 3, 金: 4 };
+/**
+ * 品级元数据，与表 `cardUiArtRarity` 的 `rarity / name / sort` 三列同形。
+ *
+ * `sort` 是列表展示权重（0 最前）；对局里的**品级档位**（1=绿 … 4=金，用于建筑耐久与产出加成）
+ * 由它在表里的反序位置派生（`rarityRank`），代码不再单独维护一份 rank 常量 —— 改表 `sort`，档位自动跟随。
+ */
+export interface ZCCardRarityMeta {
+    readonly id: ZCCardRarity;
+    readonly name: string;
+    readonly sort: number;
+}
 
-/** 品级（1..4）→ 品级键，ZC_RARITY_RANK 反表，两表一起改。 */
-export const ZC_RARITY_BY_RANK: readonly ZCCardRarity[] = ['绿', '蓝', '紫', '金'];
+/** 表尚未加载时（纯 model 单测、无 UI 配置的场景）的兜底，与 `cardUiArtRarity` 现值一致。 */
+const DEFAULT_CARD_RARITY_META: readonly ZCCardRarityMeta[] = [
+    { id: 'gold', name: '传说', sort: 0 },
+    { id: 'purple', name: '史诗', sort: 1 },
+    { id: 'blue', name: '稀有', sort: 2 },
+    { id: 'green', name: '普通', sort: 3 },
+];
 
-/** 品级 → 展示中文名（绿=普通、蓝=稀有、紫=史诗、金=传说）。 */
-export const ZC_RARITY_NAMES: Readonly<Record<ZCCardRarity, string>> = {
-    绿: '普通', 蓝: '稀有', 紫: '史诗', 金: '传说',
-};
+/** 已按 `sort` 升序排列，`rarityRank` / `rarityOfTier` 依赖这个不变量。 */
+let rarityMeta: readonly ZCCardRarityMeta[] = DEFAULT_CARD_RARITY_META;
+
+/**
+ * 注入品级元数据（`CardRepository.loadArtConfig()` 与 `ZCGameLoader` 解析三表后调用）。
+ * 未提到的品级沿用兜底；空数组回退整张兜底表，不留残值。
+ */
+export function setCardRarityMeta(source: readonly ZCCardRarityMeta[]): void {
+    if (source.length === 0) {
+        rarityMeta = DEFAULT_CARD_RARITY_META;
+        return;
+    }
+    const merged = new Map<ZCCardRarity, ZCCardRarityMeta>(DEFAULT_CARD_RARITY_META.map((meta) => [meta.id, meta]));
+    for (const meta of source) if (meta.name) merged.set(meta.id, meta);
+    rarityMeta = Array.from(merged.values()).sort((a, b) => a.sort - b.sort);
+}
+
+/** 当前品级元数据（`sort` 升序），卡牌侧读它做列表排序。 */
+export function cardRarityMeta(): readonly ZCCardRarityMeta[] {
+    return rarityMeta;
+}
+
+export function rarityDisplayName(rarity: ZCCardRarity): string {
+    return rarityMeta.find((meta) => meta.id === rarity)?.name ?? '';
+}
+
+/**
+ * 品级 → 对局档位（1..4，绿最小）。
+ *
+ * `sort` 越大越靠后（金 0 最前、绿 3 最后），所以档位 = `长度 - 位序`：
+ * 绿(3)→1、蓝(2)→2、紫(1)→3、金(0)→4。表里改权重，档位自动跟随，无需第二张表。
+ */
+export function rarityRank(rarity: ZCCardRarity): number {
+    const index = rarityMeta.findIndex((meta) => meta.id === rarity);
+    return index < 0 ? 0 : rarityMeta.length - index;
+}
+
+/** 对局档位（1..4）→ 品级 id；越界返回 undefined。 */
+export function rarityOfTier(tier: number): ZCCardRarity | undefined {
+    const index = rarityMeta.length - tier;
+    return index >= 0 && index < rarityMeta.length ? rarityMeta[index].id : undefined;
+}
 
 export function rarityNameOfTier(tier: number): string {
-    const rarity = ZC_RARITY_BY_RANK[tier - 1];
-    return rarity ? ZC_RARITY_NAMES[rarity] : '';
+    const rarity = rarityOfTier(tier);
+    return rarity ? rarityDisplayName(rarity) : '';
 }
 
 /** 问号地块运气评语，按品级；蓝品级刻意无文案（all-random 抽不到蓝卡）。 */

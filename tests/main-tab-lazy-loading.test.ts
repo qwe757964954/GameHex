@@ -122,6 +122,7 @@ function harness(worldGate?: Promise<void>) {
         if (name.endsWith('/GameViewClickService')) return { GAME_VIEW_MARK: { World: 2 }, reportGameViewClick: () => Promise.resolve(true) };
         if (name.endsWith('/MainTabItems')) return { mainTabItem: () => ({}) };
         if (name.endsWith('/FirstRechargeAutoOpen')) return { checkFirstRechargeOnEnterMain: async () => { firstRechargeChecks++; } };
+        if (name.endsWith('/CardRepository')) return { cardRepository: { loadArtConfig: async () => ({}), loadLineupSnapshot: () => null } };
         return {};
     };
     const load = (path: string) => {
@@ -207,7 +208,7 @@ test('MainRoot 不再强引用五个功能页，首屏只请求主城页', async
 });
 
 test('快速切页和重复点击只显示最后目标，过期资源释放', async () => {
-    // 2026-11-04 角色格进未开放名单 ⇒ 这里改写「未锁的最后一格」= 领地(3)，语义不变。
+    // 2026-11-05 角色格恢复开放；这里仍取「最后一格」= 领地(3) 作覆盖，与锁名单无关。
     const h=harness();const first=h.host.switchTab(0),duplicate=h.host.switchTab(0),last=h.host.switchTab(3);
     assert.equal(h.requests.length,2);
     assert.equal(h.requests[0].scope.disposed,true);
@@ -221,7 +222,7 @@ test('新页失败保留当前页，销毁宿主后迟到完成不能创建页�
     const h=harness();const first=h.host.switchTab(3);h.requests[0].resolve({name:'arena'});await first;
     const failed=h.host.switchTab(0);h.requests[1].reject(new Error('offline'));await failed;
     assert.equal(h.pages[0].destroyed,false);assert.equal(h.host.currentTab,3);
-    // 迟到的那次也走未锁的商店格（角色格已锁，locked 不发请求 ⇒ 断不到「迟到完成」）
+    // 迟到的那次也走已开放的商店格（locked 不发请求 ⇒ 断不到「迟到完成」）
     const late=h.host.switchTab(0);h.host.onDestroy();h.requests[2].resolve({name:'store'});await late;
     assert.equal(h.pages.length,1);assert.equal(h.requests[2].scope.disposed,true);
 });

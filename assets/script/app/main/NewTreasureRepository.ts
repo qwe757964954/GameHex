@@ -53,11 +53,8 @@ interface IBoxConfig {
     readonly cardBoxOpenNow?: unknown;
     /** 抽卡池权重：`[{ poolId, pro }]`，`pro` 是**百分比**。 */
     readonly cardDropRate?: unknown;
-}
-
-interface IBoxItemConfig {
-    readonly resId: number;
-    readonly name: string;
+    /** 宝箱显示名（`X-新宝箱配置` 的「宝箱名称」列）。详情弹窗与宝箱栏都用它。 */
+    readonly cardBoxName?: unknown;
 }
 
 /** `itemBoxPro` 的一行：`boxResId` 池里出 `resId` 道具。 */
@@ -324,27 +321,25 @@ export class NewTreasureRepository {
 
     private async loadConfig(): Promise<void> {
         if (this.configs.size > 0) return;
-        // 四张表一次并行：配置（时长/价格/池权重）+ 名称 + 图标/品质（两张表）+ 池内容。
+        // 四张表一次并行：配置（名称/时长/价格/池权重）+ 图标/品质（两张表）+ 池内容。
         // 任何一张读不到都只是「详情里少一块」，不阻断宝箱栏本身。
         const [rows, items, props, boxPro] = await Promise.all([
             RefUtil.instance.getRefAllAsync('newTreasureBoxConfig').catch(() => null) as Promise<IBoxConfig[] | null>,
-            RefUtil.instance.getRefAllAsync(ITEM_TABLE).catch(() => null) as Promise<IBoxItemConfig[] | null>,
+            RefUtil.instance.getRefAllAsync(ITEM_TABLE).catch(() => null) as Promise<IItemRefRow[] | null>,
             RefUtil.instance.getRefAllAsync(ROLE_PROPERTY_TABLE).catch(() => null) as Promise<IResPropertyRow[] | null>,
             RefUtil.instance.getRefAllAsync('itemBoxPro').catch(() => null) as Promise<IBoxProRow[] | null>,
         ]);
         for (const row of rows ?? []) {
-            if (Number.isSafeInteger(row.cardBoxID) && row.cardBoxID > 0) {
-                this.configs.set(row.cardBoxID, row);
-            }
+            if (!Number.isSafeInteger(row.cardBoxID) || row.cardBoxID <= 0) continue;
+            this.configs.set(row.cardBoxID, row);
+            // 宝箱名以配置表 `cardBoxName` 为唯一真源（`item` 表那套「青铜宝箱/白银宝箱」
+            // 是道具名，不是这一版宝箱的显示名 —— 两份并存必然漂移）。
+            const name = typeof row.cardBoxName === 'string' ? row.cardBoxName.trim() : '';
+            if (name) this.names.set(row.cardBoxID, name);
         }
-        this.itemRows = (items ?? []) as readonly IItemRefRow[];
+        this.itemRows = items ?? [];
         this.propRows = props ?? [];
         this.boxProRows = boxPro ?? [];
-        for (const item of items ?? []) {
-            if (this.configs.has(item.resId) && typeof item.name === 'string' && item.name.trim()) {
-                this.names.set(item.resId, item.name.trim());
-            }
-        }
     }
 
     private readonly onBroadcast = (message: unknown): void => {

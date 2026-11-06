@@ -34,6 +34,9 @@ protected _RefMgrbigNum:RefMgrbigNumBase<IRefbigNum>;
 protected _RefMgrbuild:RefMgrbuildBase<IRefbuild>;
 protected _RefMgrbuySta:RefMgrbuyStaBase<IRefbuySta>;
 protected _RefMgrcardLevelUp:RefMgrcardLevelUpBase<IRefcardLevelUp>;
+protected _RefMgrcardUiArtCamp:RefMgrcardUiArtCampBase<IRefcardUiArtCamp>;
+protected _RefMgrcardUiArtClass:RefMgrcardUiArtClassBase<IRefcardUiArtClass>;
+protected _RefMgrcardUiArtRarity:RefMgrcardUiArtRarityBase<IRefcardUiArtRarity>;
 protected _RefMgrcelebrationConfig:RefMgrcelebrationConfigBase<IRefcelebrationConfig>;
 protected _RefMgrcelebrationRank:RefMgrcelebrationRankBase<IRefcelebrationRank>;
 protected _RefMgrcelebrationShop:RefMgrcelebrationShopBase<IRefcelebrationShop>;
@@ -239,6 +242,9 @@ get RefMgrbigNum(){if(!this._RefMgrbigNum){this._RefMgrbigNum=new RefMgrbigNumBa
 get RefMgrbuild(){if(!this._RefMgrbuild){this._RefMgrbuild=new RefMgrbuildBase<IRefbuild>()}return this._RefMgrbuild}
 get RefMgrbuySta(){if(!this._RefMgrbuySta){this._RefMgrbuySta=new RefMgrbuyStaBase<IRefbuySta>()}return this._RefMgrbuySta}
 get RefMgrcardLevelUp(){if(!this._RefMgrcardLevelUp){this._RefMgrcardLevelUp=new RefMgrcardLevelUpBase<IRefcardLevelUp>()}return this._RefMgrcardLevelUp}
+get RefMgrcardUiArtCamp(){if(!this._RefMgrcardUiArtCamp){this._RefMgrcardUiArtCamp=new RefMgrcardUiArtCampBase<IRefcardUiArtCamp>()}return this._RefMgrcardUiArtCamp}
+get RefMgrcardUiArtClass(){if(!this._RefMgrcardUiArtClass){this._RefMgrcardUiArtClass=new RefMgrcardUiArtClassBase<IRefcardUiArtClass>()}return this._RefMgrcardUiArtClass}
+get RefMgrcardUiArtRarity(){if(!this._RefMgrcardUiArtRarity){this._RefMgrcardUiArtRarity=new RefMgrcardUiArtRarityBase<IRefcardUiArtRarity>()}return this._RefMgrcardUiArtRarity}
 get RefMgrcelebrationConfig(){if(!this._RefMgrcelebrationConfig){this._RefMgrcelebrationConfig=new RefMgrcelebrationConfigBase<IRefcelebrationConfig>()}return this._RefMgrcelebrationConfig}
 get RefMgrcelebrationRank(){if(!this._RefMgrcelebrationRank){this._RefMgrcelebrationRank=new RefMgrcelebrationRankBase<IRefcelebrationRank>()}return this._RefMgrcelebrationRank}
 get RefMgrcelebrationShop(){if(!this._RefMgrcelebrationShop){this._RefMgrcelebrationShop=new RefMgrcelebrationShopBase<IRefcelebrationShop>()}return this._RefMgrcelebrationShop}
@@ -446,6 +452,9 @@ export class RefMgrbigNumBase<T extends IRefBase> extends RefMgrBase<T>{construc
 export class RefMgrbuildBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("build")}}
 export class RefMgrbuyStaBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("buySta")}}
 export class RefMgrcardLevelUpBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("cardLevelUp")}}
+export class RefMgrcardUiArtCampBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("cardUiArtCamp")}}
+export class RefMgrcardUiArtClassBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("cardUiArtClass")}}
+export class RefMgrcardUiArtRarityBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("cardUiArtRarity")}}
 export class RefMgrcelebrationConfigBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("celebrationConfig")}}
 export class RefMgrcelebrationRankBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("celebrationRank")}}
 export class RefMgrcelebrationShopBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("celebrationShop")}}

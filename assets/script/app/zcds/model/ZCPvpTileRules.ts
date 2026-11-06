@@ -20,7 +20,8 @@ export type ZCPvpTileType = (typeof ZCPvpTileType)[keyof typeof ZCPvpTileType];
 /** 五种地块类型枚举，供运行时配置完整性校验使用（程序逻辑，非策划数值）。 */
 export const ZC_PVP_TILE_TYPES: readonly ZCPvpTileType[] = Object.values(ZCPvpTileType);
 
-export type ZCPvpDrawRarity = '空' | ZCCardRarity;
+/** 抽牌结果品级：`empty` 是「抽空/空地」，其余是卡牌品级 id。 */
+export type ZCPvpDrawRarity = 'empty' | ZCCardRarity;
 
 export interface ZCPvpTileConfig {
     type: ZCPvpTileType;
@@ -200,7 +201,9 @@ export function createPvpTileTypes(random: () => number, config: ZCMatchConfig):
     for (const hex of hexes) {
         if (!hex.playable) continue;
         if (hex.id > hex.mirrorId) continue;
-        if (homeSet.has(hex.id)) continue;
+        // 自选主城不一定互为镜像；只有两端都是主城才能跳过整对，
+        // 否则另一端普通格会缺类型，运行时只剩默认价格而没有图标。
+        if (homeSet.has(hex.id) && homeSet.has(hex.mirrorId)) continue;
         if (result[hex.id] !== undefined) continue;
         assign(hex.id, selectPvpTileType(random, weights, excludedFor(false), counts));
     }
@@ -227,13 +230,13 @@ export function drawPvpTile(
                 ? [ZCCardType.Mine, ZCCardType.Barracks, ZCCardType.Tower]
                 : [ZCCardType.Barracks]);
     const eligibleCards = deck.filter((card) => eligibleTypes.has(card.type));
-    const goldCards = eligibleCards.filter((card) => card.rarity === '金');
+    const goldCards = eligibleCards.filter((card) => card.rarity === 'gold');
     const pityTriggered = tileType === ZCPvpTileType.AllRandom
         && allRandomNonGoldDraws >= goldPity - 1
         && goldCards.length > 0;
     if (pityTriggered) {
         const card = goldCards[Math.floor(clampRandom(random()) * goldCards.length)];
-        return { card, rarity: '金', pityTriggered: true, nextAllRandomNonGoldDraws: 0 };
+        return { card, rarity: 'gold', pityTriggered: true, nextAllRandomNonGoldDraws: 0 };
     }
 
     const cardsByRarity = new Map<ZCCardRarity, ZCDeckCard[]>();
@@ -242,18 +245,18 @@ export function drawPvpTile(
         cards.push(card);
         cardsByRarity.set(card.rarity, cards);
     }
-    const rarities: readonly ZCCardRarity[] = ['绿', '蓝', '紫', '金'];
-    const configuredTotal = config.rarityWeights.空
+    const rarities: readonly ZCCardRarity[] = ['green', 'blue', 'purple', 'gold'];
+    const configuredTotal = config.rarityWeights.empty
         + rarities.reduce((sum, rarity) => sum + config.rarityWeights[rarity], 0);
     if (configuredTotal <= 0) {
         const next = tileType === ZCPvpTileType.AllRandom ? allRandomNonGoldDraws + 1 : allRandomNonGoldDraws;
-        return { card: null, rarity: '空', pityTriggered: false, nextAllRandomNonGoldDraws: next };
+        return { card: null, rarity: 'empty', pityTriggered: false, nextAllRandomNonGoldDraws: next };
     }
 
     const roll = clampRandom(random()) * configuredTotal;
-    if (roll < config.rarityWeights.空) {
+    if (roll < config.rarityWeights.empty) {
         const next = tileType === ZCPvpTileType.AllRandom ? allRandomNonGoldDraws + 1 : allRandomNonGoldDraws;
-        return { card: null, rarity: '空', pityTriggered: false, nextAllRandomNonGoldDraws: next };
+        return { card: null, rarity: 'empty', pityTriggered: false, nextAllRandomNonGoldDraws: next };
     }
 
     const availableRarities = rarities.filter((rarity) => (
@@ -262,10 +265,10 @@ export function drawPvpTile(
     const availableTotal = availableRarities.reduce((sum, rarity) => sum + config.rarityWeights[rarity], 0);
     if (availableTotal <= 0) {
         const next = tileType === ZCPvpTileType.AllRandom ? allRandomNonGoldDraws + 1 : allRandomNonGoldDraws;
-        return { card: null, rarity: '空', pityTriggered: false, nextAllRandomNonGoldDraws: next };
+        return { card: null, rarity: 'empty', pityTriggered: false, nextAllRandomNonGoldDraws: next };
     }
-    const configuredNonEmptyTotal = configuredTotal - config.rarityWeights.空;
-    let rarityRoll = clampRandom((roll - config.rarityWeights.空) / configuredNonEmptyTotal) * availableTotal;
+    const configuredNonEmptyTotal = configuredTotal - config.rarityWeights.empty;
+    let rarityRoll = clampRandom((roll - config.rarityWeights.empty) / configuredNonEmptyTotal) * availableTotal;
     let selectedRarity = availableRarities[availableRarities.length - 1];
     for (const rarity of availableRarities) {
         if (rarityRoll < config.rarityWeights[rarity]) {
@@ -278,11 +281,11 @@ export function drawPvpTile(
     const selectedCard = rarityCards[Math.floor(clampRandom(random()) * rarityCards.length)];
     if (!selectedCard) {
         const next = tileType === ZCPvpTileType.AllRandom ? allRandomNonGoldDraws + 1 : allRandomNonGoldDraws;
-        return { card: null, rarity: '空', pityTriggered: false, nextAllRandomNonGoldDraws: next };
+        return { card: null, rarity: 'empty', pityTriggered: false, nextAllRandomNonGoldDraws: next };
     }
     const next = tileType !== ZCPvpTileType.AllRandom
         ? allRandomNonGoldDraws
-        : selectedRarity === '金' ? 0 : allRandomNonGoldDraws + 1;
+        : selectedRarity === 'gold' ? 0 : allRandomNonGoldDraws + 1;
     return {
         card: selectedCard,
         rarity: selectedRarity,

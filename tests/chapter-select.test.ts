@@ -21,6 +21,7 @@ import ts from 'typescript';
 import {
     CHAPTER_SELECT_STATE,
     buildChapterSelectRows,
+    chapterClearedOf,
     chapterPercentOf,
 } from '../assets/script/app/territory/model/ChapterSelectRows';
 import type { IChapterSelectMapInfo } from '../assets/script/app/territory/model/ChapterSelectRows';
@@ -103,6 +104,64 @@ test('chapterPercentOf：没有地图 / 空站点时给 0，不给 NaN', () => {
     assert.equal(chapterPercentOf({ name: 'x', siteCells: [] }, [11]), 0);
 });
 
+// 2026-11-05 用户口径：「章节完成度指的是章节内的所有格子已经都是通关状态，
+// 计算已通过的格子数和占据总格子数的比例」。
+// ⇒ 分子按**格子外观的同一判据**数（自己通了，或同一片战斗区域里有一格通了）。
+// 否则地图上每一格都显示"已通关"，完成度却停在 6 成（chapter_01 有 15 组区域、多出 60 格）。
+
+test('★★★chapterPercentOf：同一片战斗区域打一格 ⇒ 整片都算通关（与地图外观同口径）', () => {
+    // 一个关卡占多格（chapter_01 的 boss 10005 占 7 格），打任意一格整片都变已通关外观。
+    const map: IChapterSelectMapInfo = { name: '第一章', siteCells: [11, 12, 13], areaGroups: [[11, 12, 13]] };
+    assert.equal(chapterPercentOf(map, [13]), 100, '一片区域打一格，三格全算通关');
+    assert.equal(chapterPercentOf(map, []), 0);
+
+    const pair: IChapterSelectMapInfo = { name: '第一章', siteCells: [11, 12, 13, 14], areaGroups: [[11, 12]] };
+    assert.equal(chapterPercentOf(pair, [12]), 50, '组内任一格通 ⇒ 11、12 都算 ⇒ 2/4');
+    assert.equal(chapterPercentOf(pair, [12, 13]), 75);
+    assert.equal(chapterPercentOf(pair, [13]), 25, '组外格不跟着扩散');
+    // 分母仍是**全部**格子：组外那两格永远要单独打通。
+    assert.equal(chapterPercentOf({ ...pair, areaGroups: [] }, [12]), 25);
+});
+
+test('★★★chapterPercentOf：资源据点的同 configId 多格不参与扩散', () => {
+    // chapter_01 的 `fixedResource_173` 占 173/195/174 —— 它们是三个独立据点。
+    // 扩散组只由加载器按战斗类型构建（见 `buildAreaGroups`），这里给定空组 = 不扩散。
+    const map: IChapterSelectMapInfo = { name: '第一章', siteCells: [173, 195, 174], areaGroups: [] };
+    assert.equal(chapterPercentOf(map, [173]), 33, '只占一个资源据点 ⇒ 只算一格');
+    assert.equal(chapterPercentOf(map, [173, 195, 174]), 100);
+});
+
+// 2026-11-04 用户口径：「章节通关条件，通过该章节的最后 1 个 boss 关卡」（异步据点不参与）
+// ⇒ 弹窗的金牌（`cleared`）必须和 HUD 的 `nextEnabled` 同源，不能再按占领率 100% 判。
+
+test('★★★chapterClearedOf：只打通首领就算通关（占领率才 25%）', () => {
+    const map: IChapterSelectMapInfo = { name: '第一章', siteCells: [11, 12, 13, 14], finalBossCells: [14] };
+    assert.equal(chapterPercentOf(map, [14]), 25);
+    assert.equal(chapterClearedOf(map, [14]), true, '首领通了就是通关，别看占领率');
+    // 同区域的另一格也算（服务端只下发区域里的某一格时不许判成"没通"）。
+    assert.equal(chapterClearedOf({ ...map, finalBossCells: [13, 14] }, [13]), true);
+    // 只占了普通关 / 据点 ⇒ 没通。
+    assert.equal(chapterClearedOf(map, [11, 12, 13]), false);
+    assert.equal(chapterClearedOf(map, []), false);
+});
+
+test('★★★chapterClearedOf：判不出首领格时退回「占领率 100%」', () => {
+    // 缺数据是"判不出来"，不是"没首领"：宁可晚一格发金牌，也不许把没打完的章标成已通关。
+    assert.equal(chapterClearedOf(MAP, [11, 12, 13, 14]), true);
+    assert.equal(chapterClearedOf(MAP, [11, 12]), false);
+    assert.equal(chapterClearedOf({ ...MAP, finalBossCells: [] }, [11, 12, 13, 14]), true, '空数组等同缺省');
+    assert.equal(chapterClearedOf(null, [11]), false);
+});
+
+test('★★★buildChapterSelectRows：金牌行可以不是 100%（占领率只喂进度数字）', () => {
+    const maps = new Map<number, IChapterSelectMapInfo>([
+        [1, { name: '第一章', siteCells: [11, 12, 13, 14], finalBossCells: [14] }],
+    ]);
+    const rows = buildChapterSelectRows([1], 1, maps, new Map([[1, [14]]]), new Map(), 1);
+    assert.equal(rows[0].percent, 25, '进度数字仍是占领率');
+    assert.equal(rows[0].state, CHAPTER_SELECT_STATE.cleared, '状态走首领判据');
+});
+
 test('buildChapterSelectRows：展示全部章节，未解锁一律锁定', () => {
     const maps = new Map<number, IChapterSelectMapInfo>([
         [1, { name: '第一章', siteCells: [1, 2] }],
@@ -159,23 +218,37 @@ test('buildChapterSelectRows：按章节 ID 使用配表名称，保留进度、
     assert.equal(buildChapterSelectRows([1], 1, new Map(), new Map(), names)[0].title, '枯菌穹顶');
 });
 
-test('loadChapterSelectRows：通过配置入口读取导出的 chapterName，而非地图名', async () => {
-    const table = JSON.parse(readFileSync(path.join(ROOT, 'assets/remoteRef/chapterName.json'), 'utf8'));
-    const chapterConfigs = table.v.map((values: unknown[]) => Object.fromEntries(
-        table.k.map((key: string, index: number) => [key, values[index]]),
-    ));
-    assert.deepEqual(chapterConfigs.map((row: { chapterId: number }) => row.chapterId), [1, 2, 3, 4, 5, 6, 7]);
+/**
+ * 在独立 realm 里跑真 `ChapterSelectLoader`（它 `import { JsonAsset } from 'cc'`，
+ * 直接在 Node 里 import 会炸）。返回行数据 + 配置表被请求的顺序。
+ */
+async function runChapterSelectLoader(options: {
+    chapterConfigs: readonly Record<string, unknown>[];
+    levelRows?: readonly Record<string, unknown>[];
+    sites?: ReadonlyArray<{ cellId: number; configId?: string; type?: string }>;
+    ownedCells?: readonly number[];
+    availableChapters?: readonly number[];
+    currentChapterId?: number;
+}): Promise<{ rows: any[]; requested: string[] }> {
     const requested: string[] = [];
     const dependencies: Record<string, unknown> = {
         cc: { JsonAsset: class {} },
         '../../main/MainRoleRow': { readRoleRow: () => null },
         '../../net/RequestGuard': { toIdString: String },
-        '../model/TerritoryMapConfig': { configureTerritoryMap: (value: unknown) => value },
+        '../model/TerritoryMapConfig': {
+            configureTerritoryMap: (value: unknown) => value,
+            // 加载器靠它认「战斗区域」（区域关占多格 ⇒ 完成度整片算），必须与真实常量同值。
+            TERRITORY_SITE_TYPE: {
+                stage: 'stage', boss: 'boss', asyncPvp: 'asyncPvp', fixedResource: 'fixedResource', bonus: 'bonus',
+            },
+        },
         '../model/TerritorySaveStore': { TerritorySaveStore: class {
-            load() { return { progress: { ownedCells: [11] } }; }
+            load() { return { progress: { ownedCells: options.ownedCells ?? [11] } }; }
         } },
         '../model/ChapterSelectRows': { buildChapterSelectRows },
-        './TerritoryChapterInfoRepository': { TerritoryChapterInfoRepository: { instance: { availableChapters: [1] } } },
+        './TerritoryChapterInfoRepository': {
+            TerritoryChapterInfoRepository: { instance: { availableChapters: options.availableChapters ?? [1] } },
+        },
         './TerritoryPageAssets': { territoryMapPath: (id: number) => `chapter_${id}` },
     };
     const exports: Record<string, Function> = {};
@@ -189,11 +262,34 @@ test('loadChapterSelectRows：通过配置入口读取导出的 chapterName，�
     const rows = await exports.loadChapterSelectRows({
         assets: {
             has: async () => true,
-            load: async () => ({ json: { name: '旧地图标题', sites: [{ cellId: 11 }, { cellId: 12 }] } }),
+            load: async () => ({
+                json: { name: '旧地图标题', sites: options.sites ?? [{ cellId: 11 }, { cellId: 12 }] },
+            }),
         },
-        configs: { getTable: async (name: string) => { requested.push(name); return chapterConfigs; } },
-    }, 1);
-    assert.deepEqual(requested, ['chapterName']);
+        // 除 chapterName / levelInfo 之外的配表一律给空表。
+        configs: {
+            getTable: async (name: string) => {
+                requested.push(name);
+                if (name === 'chapterName') return options.chapterConfigs;
+                if (name === 'levelInfo') return options.levelRows ?? [];
+                return [];
+            },
+        },
+    }, options.currentChapterId ?? 1);
+    return { rows, requested };
+}
+
+test('loadChapterSelectRows：通过配置入口读取导出的 chapterName，而非地图名', async () => {
+    const table = JSON.parse(readFileSync(path.join(ROOT, 'assets/remoteRef/chapterName.json'), 'utf8'));
+    const chapterConfigs = table.v.map((values: unknown[]) => Object.fromEntries(
+        table.k.map((key: string, index: number) => [key, values[index]]),
+    ));
+    assert.deepEqual(chapterConfigs.map((row: { chapterId: number }) => row.chapterId), [1, 2, 3, 4, 5, 6, 7]);
+    // levelInfo 给空表 ⇒ `finalBossCells` 判不出来，本用例专心守
+    // 「标题取配表、未解锁占行锁定、完成度按占领率」这三件事（首领判据见下一条）。
+    const { rows, requested } = await runChapterSelectLoader({ chapterConfigs });
+    assert.deepEqual(requested, ['chapterName', 'levelInfo'],
+        'chapterName 给标题、levelInfo 认首领关卡 —— 两张表都要走配置入口');
     // 配表 chapterName 定义 7 章全集：全部占行，未解锁（2..7）显示为锁定。
     assert.equal(rows.length, 7, '配表定义的全部章节都展示');
     assert.deepEqual(Array.from(rows, (row: { title: string }) => row.title),
@@ -204,10 +300,60 @@ test('loadChapterSelectRows：通过配置入口读取导出的 chapterName，�
         ['progress', 'locked', 'locked', 'locked', 'locked', 'locked', 'locked']);
 });
 
+test('★★★loadChapterSelectRows：从 levelInfo 认出「本章最后一个首领」，只打通它就算通关', async () => {
+    const chapterConfigs = [{ chapterId: 1, chapterName: '枯菌穹顶' }];
+    // 第 1 章配了三个关：1-1(普通) / 1-4(普通) / 1-9(首领，levelMod=2)。
+    // 🔴 顺序故意打乱：判据不许依赖配表行序。
+    const levelRows = [
+        { levelId: 10009, levelChapter: 1, chapterStage: 9, levelMod: 2 },
+        { levelId: 10001, levelChapter: 1, chapterStage: 1, levelMod: 1 },
+        { levelId: 10004, levelChapter: 1, chapterStage: 4, levelMod: 1 },
+        // 别的章的首领不许串台
+        { levelId: 20009, levelChapter: 2, chapterStage: 9, levelMod: 2 },
+    ];
+    const sites = [
+        { cellId: 11, configId: '10001' },
+        { cellId: 12, configId: '10004' },
+        { cellId: 13, configId: '10009' },
+        { cellId: 14, configId: '10009' }, // 同一关占两格（整片区域）
+    ];
+    // 只占了一格（占领率 25%），但占的正是首领那一片 ⇒ 金牌。
+    const bossOnly = await runChapterSelectLoader({ chapterConfigs, levelRows, sites, ownedCells: [14] });
+    assert.equal(bossOnly.rows[0].percent, 25);
+    assert.equal(bossOnly.rows[0].state, CHAPTER_SELECT_STATE.cleared,
+        '通关 = 通过最后一个首领关卡，占领率只有 25% 也算');
+    // 普通关占满、首领没打 ⇒ 不算通关。
+    const noBoss = await runChapterSelectLoader({ chapterConfigs, levelRows, sites, ownedCells: [11, 12] });
+    assert.equal(noBoss.rows[0].percent, 50);
+    assert.equal(noBoss.rows[0].state, CHAPTER_SELECT_STATE.progress,
+        '没打首领就不发金牌（哪怕占了别的格）');
+});
+
+test('★★★loadChapterSelectRows：区域关占多格 ⇒ 完成度按整片算，地图全通才 100%', async () => {
+    const chapterConfigs = [{ chapterId: 1, chapterName: '枯菌穹顶' }];
+    const sites = [
+        // 同一关占两格（整片区域一起变已通关外观）
+        { cellId: 11, configId: '10001', type: 'stage' },
+        { cellId: 12, configId: '10001', type: 'stage' },
+        { cellId: 13, configId: '10002', type: 'stage' },
+        // 资源据点的同 configId 多格是**各自独立**的据点，不扩散
+        { cellId: 14, configId: 'fixedResource_9', type: 'fixedResource' },
+    ];
+    // 只打了 12（整片 {11,12} 都变通）⇒ 2/4，不是 1/4。
+    const partial = await runChapterSelectLoader({ chapterConfigs, sites, ownedCells: [12] });
+    assert.equal(partial.rows[0].percent, 50, '同区域打一格 ⇒ 11、12 都算通关');
+    // 每一格（含资源据点）都通了 ⇒ 才是 100%。
+    const all = await runChapterSelectLoader({ chapterConfigs, sites, ownedCells: [11, 13, 14] });
+    assert.equal(all.rows[0].percent, 100);
+    assert.equal(all.rows[0].state, CHAPTER_SELECT_STATE.cleared);
+    // 资源据点没占 ⇒ 差一格，不许四舍五入成 100%。
+    const missingResource = await runChapterSelectLoader({ chapterConfigs, sites, ownedCells: [11, 13] });
+    assert.equal(missingResource.rows[0].percent, 75);
+});
+
 // ============================================================
 // prefab 结构
 // ============================================================
-
 test('ChapterSelectPanel.prefab：27 节点、layer 全 UI_2D、fileId 22 位唯一', () => {
     const data = loadPrefab();
     const nodes = data.filter((item) => item.__type__ === 'cc.Node');

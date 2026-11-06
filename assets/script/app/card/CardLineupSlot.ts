@@ -50,14 +50,30 @@ export class CardLineupSlot extends Component {
     /** 落位淡入用的透明度组件（首次需要时补挂，Prefab 里不预置 —— 常态不需要它）。 */
     private enterOpacity: UIOpacity | null = null;
 
-    /** @param frames null 项保留 prefab 现图；level 不传用 fallbackLevel。 */
+    /** @param frames null 项清空旧图；level 不传用 fallbackLevel。 */
     render(card: ZCDeckCard, frames: ZCSlotFrames, level?: number, prefab?: Prefab | null): void {
-        if (frames.disc) this.disc.spriteFrame = frames.disc;
-        if (frames.badge) this.classBadge.spriteFrame = frames.badge;
+        this.disc.spriteFrame = frames.disc;
+        this.classBadge.spriteFrame = frames.badge;
         if (!this.applyPreview(prefab ?? null)) applyCardHeroArt(this.hero, this.heroTransform, frames.hero);
         //  每次显式写 255：渲染幂等，不依赖上一次的透明度。
         this.opacityOf().opacity = 255;
         this.levelLabel.string = `${Math.max(1, Math.round(level ?? this.fallbackLevel))}${CARD_LINEUP_TEXTS.levelSuffix}`;
+    }
+
+    /**
+     * 静态图**晚到**时只补图：等级牌、透明度这些 `render` 已经画好了，别再动。
+     *
+     * 冷启动第一屏不等 8 张站台图（实测 26ms），页面先把空台 + 等级提交出去，
+     * 图由 `CardLineupPage.fillSlotArt` 在这里补齐。站台是固定的 8 个节点、不复用，
+     * 所以不需要虚拟列表那种防串图 token；「旧阵容迟到图盖到新阵容」由页面 revision 挡。
+     */
+    applyStaticArt(frames: ZCSlotFrames): void {
+        this.disc.spriteFrame = frames.disc;
+        this.classBadge.spriteFrame = frames.badge;
+        // 模型正在展示时 `CardUnitPreview.show` 会把 Hero Sprite 置为 disabled；
+        // `clear()` 又把它 enabled 回来。用这个状态判，比 `this.preview != null` 准
+        // （`clear()` 之后 preview 对象还在，但已经没在展示了）。
+        if (this.hero.enabled) applyCardHeroArt(this.hero, this.heroTransform, frames.hero);
     }
 
     /**

@@ -92,8 +92,17 @@ const NODE_SCALE_BY_PREFAB_PATH: Readonly<Record<string, number>> = {
     'units/projectiles/椰蛋战士_暴风/椰蛋战士_暴风': 0.8,
     // 镭射飞龙「追踪导弹」的爆炸（`镭射飞龙_导弹技能命中`，225×215 单帧画布）。
     // 需求 2026-11-03：「爆炸范围约 80px，特效大小需要匹配范围」。
-    // 80 ÷ 225 ≈ 0.356 —— 与配表 `strikeSplashRadius` 80 同一个数，改半径只改这一处 + 配表。
-    'units/projectiles/镭射飞龙_导弹技能命中/镭射飞龙_导弹技能命中': 80 / 225,
+    //
+    // 2026-11-05 修正口径：原值是 `80 / 225`（≈0.356），错在三处 ——
+    //   ① 把 `strikeSplashRadius` 的**逻辑 px** 当成屏上 px（漏乘 `combatDistanceScale` 与 `view/logical`）；
+    //   ② 把**半径**当成直径；③ 拿 225 的**画布**当可见宽度（实际可见内容只占 202）。
+    // 正确换算走项目统一口径（docs §1.11；`火焰树妖_灼热地带技能` 的 `AOE_W = 92.25` 同样是
+    // 「可见并集宽 = 范围宽」，可作对照）：
+    //   屏上 px = 逻辑 px × combatDistanceScale(0.3) × view/logical(2.5625) = 逻辑 px × 0.76875
+    // `strikeSplashRadius = 80` 是**半径** ⇒ 直径 160 逻辑 = **屏上 123px**。
+    // 分母取 202（第 10/11 帧 `alpha ≥ 8` 的可见内容宽，不是 225 画布）⇒ 123 ÷ 202 ≈ 0.609。
+    // 改爆炸半径时只改这一段（配表 `strikeSplashRadius` 同步）。
+    'units/projectiles/镭射飞龙_导弹技能命中/镭射飞龙_导弹技能命中': 123 / 202,
 };
 
 /**

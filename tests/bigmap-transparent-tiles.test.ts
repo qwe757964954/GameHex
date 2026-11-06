@@ -82,7 +82,7 @@ function playerMarkerFixture() {
     const { view } = fixture();
     const playerBase = { baseId: 'player', hexId: 5050, isPlayer: true };
     Object.assign(view.data, {
-        playerBaseHexId: 5050, playerCampId: 101, territories: [], monsters: new Map(),
+        ui: {}, playerBaseHexId: 5050, playerCampId: 101, territories: [], monsters: new Map(),
         cities: new Map([
             [101, { cityId: 101, hexId: 5050, level: 3, name: '城池甲', state: 'open', territoryOwner: 'neutral' }],
             [102, { cityId: 102, hexId: 5051, level: 4, name: '城池乙', state: 'open', territoryOwner: 'neutral' }],
@@ -136,11 +136,50 @@ test('玩家基地与城池同格时只有一个标记，显示主城与头像�
     } finally { EventMgr.instance.offTarget(owner); }
 });
 
+test('136条驻守信息不生成玩家基地，城池只显示真实第一名头像并随换榜清空', () => {
+    const view = playerMarkerFixture();
+    view.data.isServerBase = true;
+    view.data.selfRoleId = 'self';
+    const city = view.data.cities.get(101);
+    city.campRoles = Array.from({ length: 136 }, (_, index) => ({ roleId: String(index), serverId: '9',
+        roleName: '驻守者', avatarId: '1003', defenseHp: 100, pos: 5053 + index, buildLevel: 8 }));
+    city.rankEntries = [{ rank: 2, roleId: 'second', avatarId: '1002' }, { rank: 1, roleId: 'first', avatarId: '1001' }];
+    view.refresh();
+    assert.equal(view.markers.some((marker) => marker.id === 'npc'), false);
+    assert.equal(view.markers.some((marker) => marker.kind === 'role'), false);
+    const marker = view.markers.find((marker) => marker.kind === 'city' && marker.id === 101);
+    const frame = { name: 'first' };
+    view.setRolePortrait('1002', { name: 'second' });
+    view.setRolePortrait('1001', frame);
+    assert.equal(marker.view.portrait, frame, '使用rank=1，不能用数组第一条或infos第一条');
+    city.rankEntries = [{ rank: 1, roleId: 'new-first', avatarId: '1004' }];
+    view.refresh();
+    assert.equal(marker.view.portrait, null, '新榜首头像未加载时清掉旧头像');
+    const next = { name: 'new-first' };
+    view.setRolePortrait('1004', next);
+    assert.equal(marker.view.portrait, next);
+    city.rankEntries = [];
+    view.refresh();
+    assert.notEqual(marker.view.portrait, next, '清榜后不残留旧榜首');
+});
+
+test('同城普通详情切换驻守名单时立即解除地图聚焦，不等待镜头或数据变化', () => {
+    const view = playerMarkerFixture();
+    view.selectedHexId = view.data.cities.get(101).hexId;
+    let focus = 0;
+    view.applyFocusIsolation = () => { focus = view.focusedCityHexId; };
+    view.refresh();
+    assert.equal(focus, view.selectedHexId);
+    view.data.ui.campRolesVisible = true;
+    view.refresh();
+    assert.equal(focus, -1);
+});
+
 test('基地位置回包后重建唯一主城，原位置恢复城池；无同格城池时显示独立基地', () => {
     const view = playerMarkerFixture();
     view.refresh();
     const oldMarkers = [...view.markers];
-    view.data = { ...view.data, playerBaseHexId: 5051, playerCampId: 102 };
+    view.data = { ui: {}, ...view.data, playerBaseHexId: 5051, playerCampId: 102 };
     view.refresh();
     assert.ok(oldMarkers.every((marker) => marker.node.destroyed));
     assert.equal(view.markers.filter((marker: { hexId: number }) => marker.hexId === 5051).length, 1);
@@ -151,7 +190,7 @@ test('基地位置回包后重建唯一主城，原位置恢复城池；无同�
     const home = view.markers.find((marker: { id: number }) => marker.id === 102);
     assert.equal(home.appearance.name, '主城');
     assert.equal(home.view.portrait, view.playerPortrait);
-    view.data = { ...view.data, playerBaseHexId: 5053, playerCampId: 0 };
+    view.data = { ui: {}, ...view.data, playerBaseHexId: 5053, playerCampId: 0 };
     view.refresh();
     const standalone = view.markers.filter((marker: { hexId: number }) => marker.hexId === 5053);
     assert.equal(standalone.length, 1);

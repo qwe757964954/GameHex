@@ -4,7 +4,7 @@ import type { ZCDeckCard } from '../assets/script/app/zcds/model/ZCCombatCatalog
 import { buildZCPveEnemyDecks } from '../assets/script/app/zcds/application/ZCPveCombatConfig';
 
 function card(id: string, unitId?: string): ZCDeckCard {
-    return { id, name: id, type: unitId ? 2 : 1, rarity: '绿', unitId };
+    return { id, name: id, type: unitId ? 2 : 1, rarity: 'green', unitId };
 }
 
 test('PVE 队伍超过本地 NPC 席位数时明确报错', () => {

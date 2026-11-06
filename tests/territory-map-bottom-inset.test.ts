@@ -273,6 +273,43 @@ test('★★★页面必须从宿主页找 TopHud 并量世界包围盒（不抄
         '必须量世界包围盒 —— TopHud 挂 Widget + 长屏适配，抄死尺寸在长屏上会差几十像素');
 });
 
+/**
+ * 🔴 2026-11-05 回归：地图页的层级是 `ArenaRoot / MapRoot / MainTerritoryMap`，
+ * 而 `TopHud` 是 `ArenaRoot` 的孩子 ⇒ 只查 `this.node.parent`（= `MapRoot`）**永远找不到**，
+ * `hudBottom` 恒 0，`padTop` 只剩 120，第一排地块停在离屏幕顶 75 的位置、正好被 146 高的
+ * `TopHud` 挡住 —— 用户截图「最上沿的地块还是被 UI 遮挡」。
+ *
+ * 判据钉两件事：
+ *  1. 找 HUD 的起点必须**往上走**（`hostPageRoot`），不许直接用 `this.node.parent`；
+ *  2. 底部挂件（`MainTaskEntry` / `BeginGame` / `ChestBar`）同源 —— 它们也没有一个是
+ *     `MapRoot` 的后代，之前一直靠兜底 300（真实 305）蒙混过去。
+ */
+test('★★★找 HUD / 挂件的起点必须往上走（不能只认 this.node.parent）', () => {
+    const code = stripComments(PAGE_SRC);
+    const hostAt = code.indexOf('private hostPageRoot(');
+    assert.ok(hostAt > 0, '要有 hostPageRoot —— 宿主页不是 this.node.parent');
+    const hostBody = code.slice(hostAt, code.indexOf('\n    }', hostAt));
+    assert.match(hostBody, /this\.node\.parent/,
+        '起点是本页的父节点');
+    assert.match(hostBody, /node = node\.parent;/,
+        '找不到就继续往上 —— 地图页与 TopHud 之间隔着 MapRoot');
+    assert.match(hostBody, /depth < 4/, '往上要有限深（宿主页结构再变也不至于扫到场景根）');
+
+    // 两个基准线都必须从 hostPageRoot 起步。
+    const topAt = code.indexOf('private findTopHud(');
+    assert.ok(topAt > 0, '要有 findTopHud');
+    assert.match(code.slice(topAt, code.indexOf('\n    }', topAt)), /this\.hostPageRoot\(\)/,
+        '顶部 HUD 必须从宿主页根找，否则量成 0（= 第一排永远被 HUD 压住）');
+    const insetAt = code.indexOf('private bottomHudInset(');
+    assert.ok(insetAt > 0, '要有 bottomHudInset');
+    assert.match(code.slice(insetAt, code.indexOf('\n    }', insetAt)), /this\.hostPageRoot\(\)/,
+        '底部挂件也要从宿主页根找（MainTaskEntry 在 BottomHud 里、BeginGame/ChestBar 在 ArenaRoot 上）');
+
+    // 反证：直接拿 this.node.parent 当宿主页 = 这次 bug 的写法。
+    assert.doesNotMatch(code, /private findTopHud\(\)[^}]*return this\.node\.parent\?\.getChildByName/,
+        '别改回 `this.node.parent.getChildByName(TOP_HUD_NODE_NAME)` —— 那是 2026-11-05 的病根');
+});
+
 test('★★★注入必须发生在 initialize 之前，并跟屏幕变化重算', () => {
     const code = stripComments(PAGE_SRC);
     const insetAt = code.indexOf('this.syncMapInsets();');

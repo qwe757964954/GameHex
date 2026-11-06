@@ -7,6 +7,23 @@ import { createMemoryBigMapStorage } from '../assets/script/app/bigmap/applicati
 import { withBigMapCampCities, completeBigMapCampLayout } from '../assets/script/app/bigmap/model/BigMapCampWorld';
 import { loadBigMapConfig, loadBigMapLayout } from './helpers/bigmap-fixtures';
 
+test('迁城强制刷新等待旧查询结束并再查，旧名单不能作为迁城后的最终事实', async () => {
+    const releases: ((value: unknown) => void)[] = [];
+    const repository = new BigMapCampRepository({ fetchSimple: async () => null, fetchDetail: async () => null,
+        requestMove: async () => null, fetchRoles: () => new Promise((resolve) => releases.push(resolve)) });
+    const old = repository.refreshRoles(101);
+    const fresh = repository.refreshRoles(101, true);
+    assert.equal(releases.length, 1);
+    releases[0]({ campId: 101, infos: [{ roleId: '1', serverId: '1', roleName: '旧角色', img: '1', pos: 1, defenseHp: 100 }] });
+    assert.equal(await old, false);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(releases.length, 2);
+    releases[1]({ campId: 101, infos: [] });
+    assert.equal(await fresh, true);
+    assert.deepEqual(repository.rolesOf(101), []);
+    repository.dispose();
+});
+
 function deferred() {
     let resolve: (value: unknown) => void = () => undefined;
     const promise = new Promise<unknown>((finish) => { resolve = finish; });
@@ -110,6 +127,25 @@ test('缓存短期复用，过期后重新查询；详情不受简略缓存限�
     assert.equal(count, 2);
     assert.equal(await repository.refreshDetail([101]), true);
     assert.equal(count, 3);
+});
+
+test('可见集合变化时只补新增/过期的据点，已缓存的城不跟着整批重发', async () => {
+    let now = 0;
+    const sent: number[][] = [];
+    const repository = new BigMapCampRepository({
+        fetchSimple: async (ids) => { sent.push([...ids]); return { infos: ids.map((campId) => ({ campId, opType: 0 })) }; },
+        fetchDetail: async () => null,
+    }, () => now);
+    await repository.refreshSimple([110, 102]);
+    assert.deepEqual(sent, [[102, 110]], '首次两座一起发');
+    // 快速滑动滑进一座新城：只补 119，老的两座不再跟着重发
+    await repository.refreshSimple([110, 102, 119]);
+    assert.deepEqual(sent, [[102, 110], [119]], '★集合变化只发增量');
+    assert.equal(await repository.refreshSimple([102, 110, 119]), false, '5 秒内同批不重发');
+    assert.equal(sent.length, 2);
+    now = 5000;
+    await repository.refreshSimple([102, 110, 119]);
+    assert.deepEqual(sent[2], [102, 110, 119], '全部过期后整批重查');
 });
 
 test('后发简略先到时，合法详情不能被误报为请求失败', async () => {

@@ -15,6 +15,8 @@
  * 时增量为 0，由视图按「满级不显示增量」处理。
  */
 
+import type { ZCCardLevelAttrs } from './CardLevelAttr';
+
 /** `pvpUnitGrowth` 一行（已归一化）。 */
 export interface ZCUnitGrowthRow {
     readonly unitId: string;
@@ -121,14 +123,47 @@ export function growthMaxLevel(rows: readonly ZCUnitGrowthRow[], unitId: string)
 }
 
 /**
+ * 用 `cardLevelUp.attrList` 的绝对属性覆盖血量 / 攻击 / 建筑血量三项。
+ *
+ * **只覆盖这三项**：射程与移速不在 attrList 里，继续沿用 `pvpUnitGrowth` 那条路算出来的值。
+ * `current` 为空（这张卡没配等级属性）⇒ 原样返回，行为与本函数引入前逐字一致。
+ *
+ * `gain` 取下一级减当前级；下一级没配（满级）时给 0，视图按「满级不显示增量」处理。
+ */
+function applyLevelAttrs(
+    stats: ZCCardDetailStats,
+    current: ZCCardLevelAttrs | null | undefined,
+    next: ZCCardLevelAttrs | null | undefined,
+): ZCCardDetailStats {
+    if (!current) return stats;
+    const line = (cur: number, nxt: number | undefined): ZCDetailStatValue => ({
+        value: cur,
+        gain: nxt === undefined ? 0 : Math.max(0, nxt - cur),
+    });
+    return {
+        ...stats,
+        unitHp: line(current.maxHp, next?.maxHp),
+        unitAttack: line(current.attack, next?.attack),
+        buildHp: line(current.buildingHp, next?.buildingHp),
+        maxed: !next,
+    };
+}
+
+/**
  * 算一张卡的详情属性。`base` 取自 pvpCard 原始行；`unitId` 为空（纯建筑卡）时
  * 兵种三维按 0 处理（视图整块隐藏）。
+ *
+ * `levelAttrs` / `nextLevelAttrs` 是本级与下一级的 `cardLevelUp.attrList` 绝对值。
+ * 传了就优先用它们（卡牌等级成长走配置表）；不传或为 `null` 时走原来的
+ * `pvpUnitGrowth` 增量口径 —— 两条路并存，老卡不配 attrList 也照旧能显示。
  */
 export function computeDetailStats(
     base: ZCCardDetailBase,
     growthRows: readonly ZCUnitGrowthRow[],
     unitId: string,
     level: number,
+    levelAttrs?: ZCCardLevelAttrs | null,
+    nextLevelAttrs?: ZCCardLevelAttrs | null,
 ): ZCCardDetailStats {
     const lv = Math.max(0, Math.floor(Number(level) || 0));
     const spawnSeconds = Math.max(0, base.spawnSeconds);
@@ -136,10 +171,10 @@ export function computeDetailStats(
     const emptyStat: ZCDetailStatValue = { value: 0, gain: 0 };
 
     if (unitId.length === 0) {
-        return {
+        return applyLevelAttrs({
             unitHp: emptyStat, unitAttack: emptyStat, buildHp: buildHpValue,
             spawnSeconds, attackRange: emptyStat, moveSpeed: emptyStat, maxed: true,
-        };
+        }, levelAttrs, nextLevelAttrs);
     }
 
     const sum = resolveGrowthRow(growthRows, unitId, lv);
@@ -153,7 +188,7 @@ export function computeDetailStats(
         return { value, gain };
     };
 
-    return {
+    return applyLevelAttrs({
         unitHp: stat((s) => ({ flat: s.maxHpFlat, rate: s.maxHpRate }), Math.max(0, base.unitMaxHp)),
         unitAttack: stat((s) => ({ flat: s.attackFlat, rate: s.attackRate }), Math.max(0, base.unitAttack)),
         buildHp: buildHpValue,
@@ -161,5 +196,5 @@ export function computeDetailStats(
         attackRange: stat((s) => ({ flat: s.attackRangeFlat, rate: 0 }), Math.max(0, base.unitAttackRange)),
         moveSpeed: stat((s) => ({ flat: 0, rate: s.moveSpeedRate }), Math.max(0, base.unitMoveSpeed)),
         maxed,
-    };
+    }, levelAttrs, nextLevelAttrs);
 }

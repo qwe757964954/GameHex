@@ -39,7 +39,8 @@ import {
     cardTypeToBuilding,
     findCatalogCard,
     luckTextOfTier,
-    ZC_RARITY_RANK,
+    rarityDisplayName,
+    rarityRank,
     ZCAttackTrait,
     ZCDeckBonuses,
     ZCDeckCard,
@@ -1582,7 +1583,7 @@ export class ZCGameModel {
         // 脉冲染色跟着「抽到的卡」走（2026-10-19）：没抽到卡时传 0（视图按绿处理）。
         // ⚠️ 抽到卡但建不上（`!result.building`）时仍有品阶 —— 用户要的是「对应获得的卡牌品阶」，
         // 与 `hasCardReveal`（有没有卡牌揭示）不是同一个判据。
-        this.pushHexActivation(hex.id, result.building !== null, result.card ? ZC_RARITY_RANK[result.card.rarity] : 0);
+        this.pushHexActivation(hex.id, result.building !== null, result.card ? rarityRank(result.card.rarity) : 0);
         if (!result.card) {
             this.refreshTileStates();
             return this.success();
@@ -1607,7 +1608,7 @@ export class ZCGameModel {
         this.refreshTileStates();
         // 首批兵推到「翻面段」播完再出（见 `deferredBarracksSpawns`）。
         if (hex.constructionRemainingSeconds <= 0) this.scheduleFirstBarracksUnit(hex.id);
-        return this.success(`抽到${card.rarity}卡【${card.name}】`);
+        return this.success(`抽到${rarityDisplayName(card.rarity)}卡【${card.name}】`);
     }
 
     private spawnFirstBarracksUnit(hex: ZCHexState): void {

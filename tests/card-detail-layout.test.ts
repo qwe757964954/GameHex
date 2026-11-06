@@ -156,6 +156,7 @@ function createPage() {
     const page = new exports.CardUpgradePage();
     for (const field of ['statHpValue', 'statAttackValue', 'statBuildHpValue', 'statSpawnValue', 'statRangeValue',
         'statSpeedValue', 'statHpGain', 'statAttackGain', 'statBuildHpGain', 'statRangeGain', 'statSpeedGain', 'levelBigLabel']) page[field] = {};
+    page.qualitySprite = { spriteFrame: null };
     page.hexSlots = [];
     const counts: number[] = [];
     page.milestoneScroll = { refreshList: count => counts.push(count), scrollToTop() {} };
@@ -175,7 +176,7 @@ test('材料图标复用物品表与共用加载器，通用经验缺图时取�
     const flush = () => new Promise(resolve => setImmediate(resolve));
     const sprite = { spriteFrame: 'old' };
     page.renderMaterialIcon(sprite, ['16000', '16003']);
-    assert.equal(sprite.spriteFrame, null);
+    assert.equal(sprite.spriteFrame, 'old', '新图标就绪前保留当前图标');
     assert.equal(itemRows[0].id, 16000);
     itemRows[0].resolve({ icon: '' }); await flush();
     assert.equal(itemRows[1].id, 16003);
@@ -184,6 +185,7 @@ test('材料图标复用物品表与共用加载器，通用经验缺图时取�
     itemIcons[0].resolve('shared-exp'); await flush();
     assert.equal(sprite.spriteFrame, 'shared-exp');
     page.renderMaterialIcon(sprite, ['18003']);
+    assert.equal(sprite.spriteFrame, 'shared-exp');
     itemRows[2].resolve({ icon: 'icons/item/card' }); await flush();
     page.renderRevision++;
     page.renderMaterialIcon(sprite, ['18004']);
@@ -193,7 +195,11 @@ test('材料图标复用物品表与共用加载器，通用经验缺图时取�
     page.renderMaterialIcon(sprite, ['18005']);
     itemRows[4].resolve({ icon: 'icons/item/late' }); await flush();
     page.onClose(); itemIcons[3].resolve('closed'); await flush();
-    assert.equal(sprite.spriteFrame, null);
+    assert.equal(sprite.spriteFrame, 'current');
+    const { page: emptyPage } = createPage();
+    const emptySprite = { spriteFrame: 'old' };
+    emptyPage.renderMaterialIcon(emptySprite, []); await flush();
+    assert.equal(emptySprite.spriteFrame, null, '没有材料时仍须清除旧图标');
     for (const [field, name] of [['matCardIcon', 'CardIcon'], ['matExpIcon', 'ExpIcon']]) {
         const bound = prefab[pageBinding[field].__id__];
         assert.equal(bound.__type__, 'cc.Sprite');
@@ -225,7 +231,7 @@ test('里程碑交给虚拟列表：百条数据不逐条建节点，复用行�
         unlockLevel: index + 1, desc: `技能说明 ${index}`, unlocked: index < 2,
     }));
     page.renderDetail({ stats: [], chain: [], milestones });
-    assert.deepEqual(counts, [0, 100]);
+    assert.deepEqual(counts, [100], '数据刷新不先清空列表');
     const row = makeRow();
     page.milestoneScroll.renderItemFn(row.node, 99);
     assert.equal(row.rowTransform.height, 118);
@@ -241,6 +247,36 @@ test('里程碑交给虚拟列表：百条数据不逐条建节点，复用行�
     page.renderDetail(null);
     assert.equal(counts.at(-1), 0);
     assert.equal(page.milestones.length, 0);
+});
+
+test('升级等待新消耗时保留原材料展示，刷新技能不清空列表或重置滚动', () => {
+    const { page, counts } = createPage();
+    for (const field of ['nameLabel', 'levelTransitionLabel', 'tagClassLabel', 'qualityLabel', 'powerLabel',
+        'matCardCountLabel', 'matCardItemLabel', 'matExpCountLabel', 'matExpItemLabel', 'hintLabel',
+        'matCardIcon', 'matExpIcon', 'campTagRoot']) page[field] = {};
+    page.renderMaterialIcon = () => {};
+    let scrolls = 0;
+    page.milestoneScroll.scrollToTop = () => { scrolls++; };
+    const detail = { stats: [], chain: [], milestones: [{ unlockLevel: 2, desc: '技能', unlocked: false }] };
+    const state = { data: { cardId: '1', level: 1 }, cardId: '1', level: 1, detail, phase: 'ready', status: {
+        configured: true, maxed: false, level: 1, targetLevel: 2, canUpgrade: true,
+        requirements: [{ key: 'card', itemId: '18003', name: '卡牌', owned: 100, need: 53, enough: true }],
+        generalExpItemId: '16000', armyExpItemId: '16003', generalExpOwned: 100, armyExpOwned: 100,
+    } };
+    page.render({ ...state, status: null, phase: 'loading' });
+    assert.equal(page.matCardCountLabel.string, '', '首次加载仍清除占位材料');
+    page.render(state);
+    assert.equal(page.matCardCountLabel.string, '100/53');
+    page.render({ ...state, phase: 'submitting' });
+    page.render({ ...state, status: null, phase: 'loading', level: 2 });
+    assert.equal(page.matCardCountLabel.string, '100/53', '刷新期间不能闪空');
+    assert.equal(page.upgradeButton.interactable, false, '新消耗未就绪时禁止再次升级');
+    page.render({ ...state, level: 2, status: { ...state.status, level: 2, targetLevel: 3,
+        requirements: [{ ...state.status.requirements[0], owned: 47, need: 60, enough: false }], canUpgrade: false } });
+    assert.equal(page.matCardCountLabel.string, '47/60');
+    assert.equal(page.upgradeButton.interactable, false);
+    assert.ok(counts.every(count => count === 1));
+    assert.equal(scrolls, 0, '同弹窗刷新保留当前阅读位置');
 });
 
 test('旧技能切图迟到或弹窗关闭后，不覆盖当前渲染', async () => {
@@ -261,21 +297,21 @@ test('旧技能切图迟到或弹窗关闭后，不覆盖当前渲染', async ()
 
 test('详情使用当前卡模型待机，迟到的上一张模型与关闭后的加载均不能挂回页面', async () => {
     const { page, heroLoads, modelLoads, shown, releases, clearCount } = createPage();
-    page.renderHero({ unitPrefabPath: 'old' });
-    page.renderHero({ unitPrefabPath: 'current' });
-    modelLoads[1]('current-model'); heroLoads[1]({ hero: 'current-art' });
+    page.renderHero({ unitPrefabPath: 'old' }, 'old-art');
+    page.renderHero({ unitPrefabPath: 'current' }, 'current-art');
+    modelLoads[1]('current-model');
     await new Promise(resolve => setImmediate(resolve));
     assert.deepEqual(shown, ['current-model']);
     assert.equal(page.heroSprite.spriteFrame, 'current-art');
-    modelLoads[0]('old-model'); heroLoads[0]({ hero: 'old-art' });
+    modelLoads[0]('old-model');
     await new Promise(resolve => setImmediate(resolve));
     assert.deepEqual(shown, ['current-model']);
     assert.equal(page.heroSprite.spriteFrame, 'current-art');
-    page.renderHero({ unitPrefabPath: 'late' });
+    page.renderHero({ unitPrefabPath: 'late' }, 'late-art');
     page.onClose();
     assert.equal(clearCount(), 2, '切卡与关闭分别清除预览');
     assert.equal(page.previewAssets, null);
-    modelLoads[2]('late-model'); heroLoads[2]({ hero: 'late-art' });
+    modelLoads[2]('late-model');
     await new Promise(resolve => setImmediate(resolve));
     assert.deepEqual(shown, ['current-model']);
     releases.forEach(release => release());
@@ -285,28 +321,27 @@ test('详情使用当前卡模型待机，迟到的上一张模型与关闭后�
 test('详情立绘先显示，不等待骨骼；同卡刷新不重复备图或挂载模型', async () => {
     const { page, heroLoads, modelLoads, shown } = createPage();
     const card = { id: '1', unitPrefabPath: 'current' };
-    page.renderHero(card);
-    heroLoads[0]({ hero: 'ready-art' });
+    page.renderHero(card, 'ready-art');
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(page.heroSprite.spriteFrame, 'ready-art');
     assert.equal(shown.length, 0, '骨骼尚未加载完时保留立绘');
-    page.renderHero({ ...card });
-    assert.equal(heroLoads.length, 1);
+    page.renderHero({ ...card }, 'ready-art');
+    assert.equal(heroLoads.length, 0, 'View 不再发起卡牌图或配置加载');
     assert.equal(modelLoads.length, 1);
     modelLoads[0]('ready-model');
     await new Promise(resolve => setImmediate(resolve));
-    page.renderHero(card);
+    page.renderHero(card, 'ready-art');
     assert.deepEqual(shown, ['ready-model']);
 });
 
 test('详情没有兵种模型时保留当前卡立绘，空卡清除旧模型', async () => {
     const { page, heroLoads, modelLoads, shown, clearCount } = createPage();
-    page.renderHero({ unitPrefabPath: null });
-    modelLoads[0](null); heroLoads[0]({ hero: 'fallback' });
+    page.renderHero({ unitPrefabPath: null }, 'fallback');
+    modelLoads[0](null);
     await new Promise(resolve => setImmediate(resolve));
     assert.deepEqual(shown, [null]);
     assert.equal(page.heroSprite.spriteFrame, 'fallback');
-    page.renderHero(null);
+    page.renderHero(null, null);
     assert.equal(clearCount(), 1);
     assert.equal(page.heroSprite.spriteFrame, null);
 });

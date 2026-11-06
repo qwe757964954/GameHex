@@ -89,11 +89,11 @@ export class ZCGameHUDView extends Component {
 
     // 必填引用由 `ZCGameHUD.prefab` 提供；缺绑定应在使用时尽早暴露。
     @property({ type: ScrollView, group: '地图', tooltip: 'MapScrollView；对局期间由 HUD 统一处理二维拖动' })
-    mapScrollView: ScrollView = null;
+    mapScrollView: ScrollView = null!;
     @property({ type: Node, group: '地图', tooltip: 'MapScrollView/view：裁切和触摸区域' })
-    mapViewport: Node = null;
+    mapViewport: Node = null!;
     @property({ type: Node, group: '地图', tooltip: 'MapScrollView/view/content：地块、单位和城墙挂载点' })
-    mapLayer: Node = null;
+    mapLayer: Node = null!;
     /**
      * `MapScrollView/view/content/Background` 那张铺底图。
      *
@@ -103,62 +103,73 @@ export class ZCGameHUDView extends Component {
      * 取不到就是 prefab 错，在绑定层就炸。
      */
     @property({ type: Node, group: '地图', tooltip: 'MapScrollView/view/content/Background：铺底大图，按全景倍率 cover 铺满' })
-    mapBackground: Node = null;
+    mapBackground: Node = null!;
 
     // 顶部四格（设计稿「多队伍」）：逐席位显示地块数；**地块数 = 0 视为该玩家已战斗结束** ⇒ 显示红 X。
     //  用四个独立 `@property` 而不是 `[ZCGameHudScoreSlot]` 数组 —— MCP 设不了数组属性
     //   （见 `cocos-mcp-build-prefab` 技能铁律 3：传单值会把数组写坏成 `{__id__:N}`）。
     @property({ type: Layout, group: '顶部信息', tooltip: 'TopInfoPanel/ScoreLayout：居中的分数格排列' })
-    scoreLayout: Layout = null;
+    scoreLayout: Layout = null!;
     @property({ type: ZCGameHudScoreSlot, group: '顶部信息', tooltip: 'TopInfoPanel/ScoreLayout/Score1：第 1 席地块数' })
-    scoreSlot1: ZCGameHudScoreSlot = null;
+    scoreSlot1: ZCGameHudScoreSlot = null!;
     @property({ type: ZCGameHudScoreSlot, group: '顶部信息', tooltip: 'TopInfoPanel/ScoreLayout/Score2：第 2 席地块数' })
-    scoreSlot2: ZCGameHudScoreSlot = null;
+    scoreSlot2: ZCGameHudScoreSlot = null!;
     @property({ type: ZCGameHudScoreSlot, group: '顶部信息', tooltip: 'TopInfoPanel/ScoreLayout/Score3：第 3 席地块数' })
-    scoreSlot3: ZCGameHudScoreSlot = null;
+    scoreSlot3: ZCGameHudScoreSlot = null!;
     @property({ type: ZCGameHudScoreSlot, group: '顶部信息', tooltip: 'TopInfoPanel/ScoreLayout/Score4：第 4 席地块数' })
-    scoreSlot4: ZCGameHudScoreSlot = null;
+    scoreSlot4: ZCGameHudScoreSlot = null!;
     @property({ type: Label, group: '顶部信息', tooltip: 'TopInfoPanel/time/timeLab：剩余时间 mm:ss' })
-    timeLabel: Label = null;
+    timeLabel: Label = null!;
 
     // 左侧玩家列表（设计稿「多队伍」）：逐席位显示圆盘 / 头像 / 名字 / 兵力 / buff×2。
     // 走**虚拟列表**：条目统一 308×88，圆盘与头像的尺寸、名字颜色都由条目脚本按 `owner` 现取
     // （设计稿我方那一行更大）。这样人数 2~4 变化时不用改 prefab 结构。
     @property({ type: VirtualScrollView, group: '玩家列表', tooltip: 'PlayerList：左侧玩家列表（纵向虚拟列表）' })
-    playerList: VirtualScrollView = null;
+    playerList: VirtualScrollView = null!;
 
+    /**
+     * 金币栏面板本体（`BottomInfoPanel/CoinPanel`）。
+     *
+     * 中立资源金币粒子的**飞行落点**：`ZCGameRenderWorld` 把它的世界坐标换算成
+     * 全屏演出层局部坐标后传给 `ZCNeutralRewardFx`。取整个面板而不是 `GoldLabel` /
+     * `coin` 子图标，是因为面板中心才是「金币栏」的视觉重心。
+     *
+     * ⚠️ 这个引用必须绑在 prefab 上：绑不到就是 `null` ⇒ 金币飞行动画整条不播、零报错。
+     */
+    @property({ type: Node, group: '底部信息', tooltip: 'BottomInfoPanel/CoinPanel：金币栏面板，中立资源金币飞行的落点' })
+    coinPanel: Node = null!;
     @property({ type: Node, group: '底部信息', tooltip: 'BottomInfoPanel/CoinPanel/coin：金币图标，金币不足时跳动' })
-    goldIcon: Node = null;
+    goldIcon: Node = null!;
     @property({ type: Label, group: '底部信息', tooltip: 'BottomInfoPanel/CoinPanel/GoldLabel：只显示金币数' })
-    goldLabel: Label = null;
+    goldLabel: Label = null!;
     @property({ type: Button, group: '底部信息', tooltip: 'BottomInfoPanel/ArtifactButton' })
-    artifactButton: Button = null;
+    artifactButton: Button = null!;
     @property({ type: Sprite, group: '底部信息', tooltip: 'ArtifactButton/ArtifactIcon：不可释放时置灰' })
-    artifactIcon: Sprite = null;
+    artifactIcon: Sprite = null!;
     @property({ type: Sprite, group: '底部信息', tooltip: 'ArtifactButton/ArtifactChargeFill：充能进度环' })
-    artifactProgress: Sprite = null;
+    artifactProgress: Sprite = null!;
     @property({ type: Label, group: '底部信息', tooltip: 'ArtifactButton/ArtifactCountLabel：已存次数 ×N' })
-    artifactCountLabel: Label = null;
+    artifactCountLabel: Label = null!;
 
     @property({ type: Button, group: '左侧功能', tooltip: 'leftPanel/RankBtn' })
-    rankButton: Button = null;
+    rankButton: Button = null!;
     @property({ type: Button, group: '左侧功能', tooltip: 'leftPanel/ZhiNanBtn' })
-    guideButton: Button = null;
+    guideButton: Button = null!;
     @property({ type: Button, group: '左侧功能', tooltip: 'leftPanel/HurtBtn' })
-    damageButton: Button = null;
+    damageButton: Button = null!;
     @property({ type: Button, group: '左侧功能', tooltip: 'leftPanel/RunAwayBtn：不等同于重开' })
-    retreatButton: Button = null;
+    retreatButton: Button = null!;
     @property({ type: Button, group: '左侧功能', tooltip: 'leftPanel/ResetCameraBtn：镜头一键复位到初始点位' })
-    resetCameraButton: Button = null;
+    resetCameraButton: Button = null!;
 
     // 选点阶段要整体收起的三个面板。原来按名字 `getChildByName` 找 —— 名字写错或节点改名
     // 会静默什么都不发生（面板照样盖在棋盘上），改成 prefab 绑定后缺一个就尽早炸。
     @property({ type: Node, group: '选点收起', tooltip: 'TopInfoPanel：选点阶段整体隐藏' })
-    topInfoPanel: Node = null;
+    topInfoPanel: Node = null!;
     @property({ type: Node, group: '选点收起', tooltip: 'BottomInfoPanel：选点阶段整体隐藏' })
-    bottomInfoPanel: Node = null;
+    bottomInfoPanel: Node = null!;
     @property({ type: Node, group: '选点收起', tooltip: 'leftPanel：选点阶段整体隐藏' })
-    leftPanel: Node = null;
+    leftPanel: Node = null!;
 
     /** 本局席位档案（键 = 席位序，与 `ZC_OWNER_ORDER` 一致）；由 `setSeatProfiles` 注入。 */
     private seatProfiles: Map<ZCOwner, IRankSeatProfile> = new Map();

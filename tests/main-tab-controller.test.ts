@@ -2,16 +2,17 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { MainTabController } from '../assets/script/app/main/MainTabController';
 import { MainTab } from '../assets/script/app/main/MainTabModel';
+import { MAIN_PAGES_BUNDLE } from '../assets/script/core/asset/BundleCatalog';
 import { createControllerContext } from './helpers/controller-context';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { MainTabEvent } from '../assets/script/app/main/MainTabEvents';
 
 function harness() {
     const context = createControllerContext();
-    const requests: { resolve(value: object): void; reject(error: Error): void; scope: { disposed: boolean } }[] = [];
+    const requests: { path: string; bundle?: string; resolve(value: object): void; reject(error: Error): void; scope: { disposed: boolean } }[] = [];
     const shown: object[] = [], selected: number[] = [], reported: number[] = [];
-    context.assets.load = (_path, _type, options) => new Promise((resolve, reject) => {
-        requests.push({ resolve: value => resolve(value as InstanceType<typeof _type>), reject, scope: options.scope });
+    context.assets.load = (path, _type, options) => new Promise((resolve, reject) => {
+        requests.push({ path, bundle: options?.bundle, resolve: value => resolve(value as InstanceType<typeof _type>), reject, scope: options.scope });
     });
     let overlay = false;
     const owner = {};
@@ -61,12 +62,10 @@ test('tab controller merges repeats, discards stale loads, preserves old page af
     assert.equal(h.requests[1].scope.disposed, true);
 });
 
-test('locked tabs (challenge / role / alliance) issue no load; invalid targets do not cancel valid load', async () => {
+test('only challenge stays locked; invalid targets do not cancel a valid load', async () => {
     const h = harness();
     const loading = h.controller.switchTab(MainTab.Territory);
     await h.controller.switchTab(MainTab.Challenge);
-    await h.controller.switchTab(MainTab.Role);
-    await h.controller.switchTab(MainTab.Alliance);
     await h.controller.switchTab(99);
     assert.equal(h.requests.length, 1, '未开放 / 无效的页签不该发起资源加载');
     assert.equal(h.requests[0].scope.disposed, false);
@@ -80,6 +79,24 @@ test('locked tabs (challenge / role / alliance) issue no load; invalid targets d
     h.controller.dispose();
     EventMgr.instance.emit(MainTabEvent.Select, { owner: h.owner, tab: MainTab.Shop });
     assert.deepEqual(h.reported, [6]);
+});
+
+test('role / alliance are unlocked and each loads its own main-pages prefab', async () => {
+    const h = harness();
+    const role = h.controller.switchTab(MainTab.Role);
+    assert.equal(h.requests.length, 1, '角色格解锁后必须真的发起页面加载');
+    assert.equal(h.requests[0].path, 'ui/Role/Role');
+    assert.equal(h.requests[0].bundle, MAIN_PAGES_BUNDLE);
+    h.requests[0].resolve({}); await role;
+    assert.equal(h.controller.snapshot.currentTab, MainTab.Role);
+
+    const alliance = h.controller.switchTab(MainTab.Alliance);
+    assert.equal(h.requests.length, 2, '联盟格解锁后必须真的发起页面加载');
+    assert.equal(h.requests[1].path, 'ui/League/LeagueTab');
+    assert.equal(h.requests[1].bundle, MAIN_PAGES_BUNDLE);
+    h.requests[1].resolve({}); await alliance;
+    assert.equal(h.controller.snapshot.currentTab, MainTab.Alliance);
+    h.controller.dispose();
 });
 
 test('closing world before a failed tab restores the retained page highlight', async () => {

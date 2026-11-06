@@ -862,10 +862,10 @@ function readPvpRows(name: string): Array<Record<string, unknown>> {
 }
 
 function readClientRows(name: string): Array<Record<string, unknown>> {
-    return JSON.parse(readFileSync(`D:/Alan/Project/POW/doc/塔防数据配置/json/client/${name}.json`, 'utf8'));
+    return JSON.parse(readFileSync(`../doc/塔防数据配置/json/client/${name}.json`, 'utf8'));
 }
 
-test('配表：只有 30713 配了冲刺三件套，其余行一律为空', () => {
+test('配表：运动霸普攻的冲刺三件套完整，其余冲刺技能参数合法', () => {
     const rows = readPvpRows('pvpSkill');
     const boxer = rows.find((row) => Number(row.skillId) === 30713);
     assert.ok(boxer, 'pvpSkill 里必须有 30713');
@@ -878,12 +878,16 @@ test('配表：只有 30713 配了冲刺三件套，其余行一律为空', () =
     // 设计案写「P1 沿用」，所以出手特效仍是消灭学霸_普攻。
     assert.match(String(boxer.effectPrefabPath), /消灭学霸_普攻/);
     const others = rows.filter((row) => Number(row.skillId) !== 30713
-        && (row.chargeDistance != null || row.chargeSpeedScale != null || row.impactEffectPrefabPath != null));
-    assert.deepEqual(others.map((row) => row.skillId), [], '别的技能行不该被带上冲刺/气浪');
+        && (row.chargeDistance != null || row.chargeSpeedScale != null));
+    for (const row of others) {
+        assert.ok(Number(row.chargeDistance) > 0, `${row.skillId} 冲刺距离`);
+        assert.ok(Number(row.chargeSpeedScale) >= 1, `${row.skillId} 冲刺倍率`);
+        assert.equal(row.mode, 'melee', `${row.skillId} 冲刺使用近战判定`);
+    }
 });
 
 test('两份 pvpSkill 的冲刺参数同值（表源与运行时不能各说各话）', () => {
-    for (const path of ['assets/remoteRef/pvpSkill.json', 'D:/Alan/Project/POW/doc/塔防数据配置/json/client/pvpSkill.json']) {
+    for (const path of ['assets/remoteRef/pvpSkill.json', '../doc/塔防数据配置/json/client/pvpSkill.json']) {
         const rows = path.includes('remoteRef') ? readPvpRows('pvpSkill') : readClientRows('pvpSkill');
         const row = rows.find((item) => Number(item.skillId) === 30713);
         assert.ok(row, `${path} 里没有 30713`);
@@ -895,7 +899,7 @@ test('两份 pvpSkill 的冲刺参数同值（表源与运行时不能各说各�
 test('配表：0.7s 就是运动霸的普攻间隔，两份 pvpCard 同值', () => {
     //  「冲刺是普通攻击，每次普通攻击都会有 0.7 秒冷却」⇒ 不新增「冲刺冷却」列，
     //  直接改 `unitAttackInterval`：表源一处、`nextAttackAt` 一套时钟。
-    for (const path of ['assets/remoteRef/pvpCard.json', 'D:/Alan/Project/POW/doc/塔防数据配置/json/client/pvpCard.json']) {
+    for (const path of ['assets/remoteRef/pvpCard.json', '../doc/塔防数据配置/json/client/pvpCard.json']) {
         const rows = path.includes('remoteRef') ? readPvpRows('pvpCard') : readClientRows('pvpCard');
         const row = rows.find((item) => Number(item.id) === 68033);
         assert.ok(row, `${path} 里没有卡 68033`);

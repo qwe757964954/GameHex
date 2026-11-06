@@ -7,6 +7,7 @@ import * as cardTypes from '../assets/script/app/card/CardLineupTypes';
 import { CARD_HEAD_ART_ROOT, ICON_ART_ROOT } from '../assets/script/app/ArtPaths';
 import { loadViews } from './helpers/zcds-view-fixtures';
 import { assetPath } from './helpers/asset-paths';
+import { cardArtConfig } from './helpers/card-art-config';
 
 const PREFAB_PATH = assetPath('ui/game/ZCGameLegendBanner.prefab');
 // ⚠️ 横幅美术从 `image/gameui/legend` 搬到了 `image/legend`（gameui 目录清理时随批迁出），
@@ -811,7 +812,7 @@ test('横幅优先取阵容角色立绘，取不到才回退兵种 / 建筑', ()
 
 test('ZCGame 分别注入阵容立绘与翻牌头像，横幅只读阵容立绘表', () => {
     const source = readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8');
-    assert.match(source, /this\.loadLegendCardArt\(\);/, '★预扫入口必须真被调用（只定义不调 = 横幅永远走老链）');
+    assert.match(source, /this\.loadLegendCardArt\(prepared\.cardArtConfig\);/, '预扫必须使用本局已加载的卡牌美术配置');
     assert.match(source, /card\.headIcon/, '键要从卡表 `headIcon` 取（不是资源名）');
     assert.match(source, /loadHeadIconFrame\(/, '翻牌头像继续走既有 headIcon 加载链');
     assert.match(source, /cardArtFrames: this\.legendCardArtFrames/, '本局预扫表通过只读资源契约注入展示层');
@@ -842,7 +843,7 @@ function buildArtHost(cards: readonly Raw[]): Raw {
     return host;
 }
 
-test('横幅预扫复用阵容专属图与职业占位，翻牌仍保留 headIcon，缺图不阻断其他卡', async () => {
+test('横幅预扫复用阵容立绘与职业占位，翻牌仍保留 headIcon，缺图不阻断其他卡', async () => {
     const cards = [
         { id: '68001', headIcon: 'old-head', traits: { attack: '战士' } },
         { id: 'missing', traits: { attack: '法师' } },
@@ -853,7 +854,7 @@ test('横幅预扫复用阵容专属图与职业占位，翻牌仍保留 headIco
     const frames = new Map<string, object>();
     host.iconLoader = async (name: string, root: string) => {
         requests.push(`${root}/${name}`);
-        if (name === cardTypes.resolveCardHeroArt(cards[2] as Parameters<typeof cardTypes.resolveCardHeroArt>[0])) throw new Error('缺图');
+        if (name === 'camp_tank') throw new Error('职业图缺');
         const frame = { name };
         frames.set(name, frame);
         return frame;
@@ -865,10 +866,11 @@ test('横幅预扫复用阵容专属图与职业占位，翻牌仍保留 headIco
     };
     let refreshes = 0;
     host.renderWorld.refreshLegendCardArt = () => { refreshes++; };
-    host.loadLegendCardArt();
+    host.loadLegendCardArt(cardArtConfig);
     await new Promise<void>(resolve => setImmediate(resolve));
-    assert.deepEqual(requests, [`${CARD_HEAD_ART_ROOT}/wandouyouxia`, `${ICON_ART_ROOT}/camp_mage`, `${CARD_HEAD_ART_ROOT}/julijianguo`]);
-    assert.equal(host.legendRoleArtFrames.get('68001'), frames.get('wandouyouxia'));
+    // 立绘真源 = headIcon（icon.json 解析）；无 headIcon / 头像缺 → 回退职业雕像。
+    assert.deepEqual(requests, [`${ICON_ART_ROOT}/camp_mage`, `${ICON_ART_ROOT}/camp_tank`]);
+    assert.equal(host.legendRoleArtFrames.get('68001'), head);
     assert.equal(host.legendRoleArtFrames.get('missing'), frames.get('camp_mage'));
     assert.equal(host.legendRoleArtFrames.has('68002'), false);
     assert.equal(host.legendCardArtFrames.get('68001'), head);
@@ -880,7 +882,7 @@ test('离场后到货的横幅立绘不回填、不刷新视图', async () => {
     let complete: (frame: object) => void = () => {};
     host.iconLoader = () => new Promise<object>(resolve => { complete = resolve; });
     host.renderWorld.refreshLegendCardArt = () => assert.fail('离场后不应刷新');
-    host.loadLegendCardArt();
+    host.loadLegendCardArt(cardArtConfig);
     host.stopped = true;
     complete({ name: 'late-art' });
     await new Promise<void>(resolve => setImmediate(resolve));

@@ -6,6 +6,7 @@ import { ControllerBase } from '../../assets/script/framework/controller/Control
 import { ZCBattleController } from '../../assets/script/app/zcds/application/ZCBattleController';
 import { EventMgr } from '../../assets/script/framework/event/EventMgr';
 import { bundleForPath } from '../../assets/script/core/asset/BundleCatalog';
+import * as zcdsLogSwitch from '../../assets/script/app/zcds/ZCDCLogSwitch';
 
 function loadModule(path: string, resolve: (name: string) => unknown) {
     const exports: Record<string, any> = {};
@@ -16,6 +17,7 @@ function loadModule(path: string, resolve: (name: string) => unknown) {
 }
 export function loadBattlePreparation(dependencies: Record<string, unknown>) {
     return loadModule('assets/script/app/zcds/application/ZCBattlePreparation.ts', name => {
+        if (name === '../ZCDCLogSwitch') return zcdsLogSwitch;
         if (name === './ZCBattleController') return { ZCBattleController };
         if (name in dependencies) return dependencies[name];
         const key = name === '../ZCGame' ? '../zcds/ZCGame'

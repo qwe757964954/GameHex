@@ -9,6 +9,8 @@ import { captureZCMatchConfig, ZCMatchConfig } from '../assets/script/app/zcds/m
 import { createPvpTileTypes, ZCPvpTileType } from '../assets/script/app/zcds/model/ZCPvpTileRules';
 import { createSeededRandom } from '../assets/script/app/zcds/model/ZCSeededRandom';
 import { assetPath } from './helpers/asset-paths';
+import { resolveZCSpawnMatchConfig, ZCSpawnSelection } from '../assets/script/app/zcds/model/ZCSpawnSelection';
+import { ZCSnapshotCodec } from '../assets/script/app/zcds/model/ZCSnapshotCodec';
 
 /**
  * 初始地块的「金矿保底」口径（2026-09-30 由「全场合计」改成「每席位各保底」）。
@@ -42,6 +44,45 @@ const candidateLayouts = readdirSync(assetPath(`${MAP_DIRECTORY}`))
 const SEEDS = 24;
 const seedOf = (seed: number): string => `初始地块保底-${seed}`;
 
+test('每张候选图的非主城可玩格都有合法类型；自选主城移位也不能留下只有价格的空白格', (t) => {
+    let checked = 0;
+    let matches = 0;
+    for (const layout of candidateLayouts) {
+        configureZCMap(layout);
+        const base = captureZCMatchConfig(undefined, { allowUnresolvedSelect: true });
+        for (let seed = 1; seed <= SEEDS; seed += 1) {
+            let match = base;
+            if (base.map.cityMode === 'select') {
+                const selection = new ZCSpawnSelection(base.map, createSeededRandom(seedOf(seed)));
+                const legal = selection.legalHexes('player');
+                assert.equal(selection.select('player', legal[(seed * 7) % legal.length]).ok, true);
+                assert.equal(selection.confirm('player').ok, true);
+                selection.tick(10);
+                assert.ok(selection.result, `${layout.id}: 选点应已结束`);
+                match = resolveZCSpawnMatchConfig(base, selection.result);
+            }
+            const types = createPvpTileTypes(createSeededRandom(seedOf(seed)), match);
+            const snapshot = ZCSnapshotCodec.createInitialState(match, createSeededRandom(seedOf(seed)));
+            const homes = new Set(match.map.homes);
+            for (const hex of match.map.hexes) {
+                if (!hex.playable || homes.has(hex.id)) continue;
+                assert.ok(match.tiles[types[hex.id]],
+                    `${layout.id} seed=${seed} hex=${hex.id} mirror=${hex.mirrorId} homes=${[...homes]}: 缺失地块类型`);
+                const state = snapshot.hexes[hex.id];
+                if (!state.neutralResourceId) {
+                    assert.equal(state.tileType, types[hex.id], '初始快照必须保留普通格类型');
+                    assert.equal(state.developmentCost, match.tiles[state.tileType].price, '价格必须来自该格类型配置');
+                }
+                checked += 1;
+            }
+            matches += 1;
+        }
+    }
+    assert.ok(checked > 0, '必须覆盖真实地图');
+    assert.ok(candidateLayouts.some((layout) => layout.cityMode === 'select'), '必须覆盖自选主城移位');
+    t.diagnostic(`${candidateLayouts.length} 张真实地图，${matches} 个种子开局，${checked} 个普通格类型检查`);
+});
+
 /** 按「席位」列出主城邻格里的 `mine` 个数（自选主城图开局无固定 homes，返回空数组）。 */
 function ringMineCounts(seed: number, guaranteedOverride?: number): number[] {
     const config = captureZCMatchConfig(undefined);
@@ -61,8 +102,8 @@ test('保底按「每席位」下发：每张候选图的每个席位都有可�
     let seatsChecked = 0;
     for (const layout of candidateLayouts) {
         configureZCMap(layout);
-        // 自选主城图开局没有固定 homes（主城由选点产生），它的保底在选点结束后才跑，这里跳过。
-        if (!ZC_MAP_HOMES.length) continue;
+        // 自选主城图的 homes 只是默认位置；其保底在选点结束后才跑，不能直接建模。
+        if (!ZC_MAP_HOMES.length || layout.cityMode === 'select') continue;
         const homeCount = ZC_MAP_HOMES.length;
         for (let seed = 1; seed <= SEEDS; seed += 1) {
             const counts = ringMineCounts(seed);

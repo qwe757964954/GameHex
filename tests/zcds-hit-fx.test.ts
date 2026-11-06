@@ -333,16 +333,19 @@ test('阵亡特效 prefab：CUSTOM + trim 关 + 锚点底边（人物倒下时�
  */
 test('受击特效：加载侧只点名四个职业，「中毒」不进映射（它是状态不是职业）', () => {
     const loader = readFileSync('assets/script/app/zcds/application/ZCGameLoader.ts', 'utf8');
-    const match = /HIT_FX_TRAITS: readonly ZCAttackTrait\[\] = \[([^\]]+)\]/.exec(loader);
-    assert.ok(match, '找不到 HIT_FX_TRAITS 清单（加载侧的唯一真源）');
-    const listed = [...match[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
-    assert.deepEqual(listed.sort(), ['法师', '射手', '战士', '坦克'].sort(),
-        'HIT_FX_TRAITS 必须是射手/战士/法师/坦克四个职业');
-    assert.ok(!listed.includes('中毒受击'), '「中毒受击」是状态不是职业，不该进职业映射');
-    // 职业类型本身也只有这四个（卡表 traits.attack 的取值集合）
+    // 加载侧不能自己再抄一份中文：`HIT_FX_TRAITS` 直接复用模型层的职业词表（唯一真源）。
+    const assignment = /HIT_FX_TRAITS: readonly ZCAttackTrait\[\] = ([^;]+);/.exec(loader);
+    assert.ok(assignment, '找不到 HIT_FX_TRAITS 赋值（加载侧的唯一真源）');
+    assert.equal(assignment[1].trim(), 'ZC_ATTACK_TRAITS',
+        'HIT_FX_TRAITS 必须复用 ZC_ATTACK_TRAITS，手写第二份职业清单会让表里加职业时加载侧静默漏配');
+
+    // 词表本身只有四个职业，顺序即受击特效目录（`<职业>受击`）的约定顺序。
     const catalog = readFileSync('assets/script/app/zcds/model/ZCCombatCatalog.ts', 'utf8');
-    assert.match(catalog, /export type ZCAttackTrait = '射手' \| '坦克' \| '法师' \| '战士'/,
-        'ZCAttackTrait 的取值变了，加载侧清单要同步');
+    const match = /ATTACK_TRAIT_IDS = \[([^\]]+)\] as const/.exec(catalog);
+    assert.ok(match, '找不到 ATTACK_TRAIT_IDS 词表（ZCAttackTrait 的唯一真源）');
+    const listed = [...match[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+    assert.deepEqual(listed, ['射手', '战士', '法师', '坦克'], '职业词表必须正好是这四个、且保持目录约定顺序');
+    assert.ok(!listed.includes('中毒'), '「中毒受击」是状态不是职业，不该进职业映射');
 });
 
 /**

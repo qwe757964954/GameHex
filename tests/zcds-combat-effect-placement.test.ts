@@ -52,14 +52,12 @@ test('② 中点口径：两端坐标的算术中点，caster 时完全忽略目
     assert.deepEqual(zcCombatEffectAnchorPoint(same, 'midpoint'), { x: 42, y: 7 });
 });
 
-test('③ 尺寸：改回「prefab 根 _lscale 说了算」，巨力坚果是原来的 30%', () => {
+test('③ 尺寸：改回「prefab 根 _lscale 说了算」，巨力坚果保留美术根缩放', () => {
     const data = JSON.parse(readFileSync(join(ROOT, NUT_PREFAB), 'utf8')) as Array<Record<string, any>>;
     const root = data.find((entry) => entry.__type__ === 'cc.Node' && entry._parent === null);
     assert.ok(root, 'prefab 要有根节点');
-    // 改前 (2.0, 2.0, 1)：屏上 168px × 2.0 ≈ 336px ≈ 2.7 格，比一格顶面（123px）还大得多。
-    // 30% ⇒ 0.6 —— 屏上约 101px ≈ 0.82 格。
-    assert.deepEqual([root!._lscale.x, root!._lscale.y, root!._lscale.z], [0.6, 0.6, 1]);
-    assert.equal(0.6, 2.0 * 0.3, '0.6 必须正好是改前 2.0 的 30%（改比例时两处一起改）');
+    // 屏上大小由当前 prefab 根缩放决定，视图不再额外乘尺寸常量。
+    assert.deepEqual([root!._lscale.x, root!._lscale.y, root!._lscale.z], [0.75, 0.75, 1]);
     // 摆位偏移归零：`_lpos` 的 y=66.536 是「让特效抬到巨力坚果身上」的补偿，
     // 现在锚点换成两点中点，再抬 0.74 格就不在中点上了。
     assert.deepEqual([root!._lpos.x, root!._lpos.y, root!._lpos.z], [0, 0, 0]);

@@ -10,8 +10,12 @@ import {
     hasUnitDefinition,
     luckTextOfTier,
     rarityNameOfTier,
+    setCardRarityMeta,
     resolveUnitDefinition,
     ZCCardType,
+    type ZCDeckCard,
+    type ZCCounterRule,
+    type ZCBondRule,
 } from '../assets/script/app/zcds/model/ZCCombatCatalog';
 import {
     configureZCMap,
@@ -51,6 +55,8 @@ import {
     loadPvpTables,
     ZCPvpTables,
 } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
+import { parseCardCatalogRow } from '../assets/script/app/zcds/model/ZCPvpTableParser';
+import { captureZCMatchConfig } from '../assets/script/app/zcds/model/ZCMatchConfig';
 import { assetPath } from './helpers/asset-paths';
 
 function readPvpRef(name: string): Array<Record<string, unknown>> {
@@ -212,7 +218,7 @@ test('新对局使用测试地图 JSON，双方各占半场且没有中立地块
     assert.equal(initial.filter((hex) => hex.tileType === ZCPvpTileType.BarracksCommon).length, 2);
 });
 
-test('11 列河道配置进入对局：水域不可通行，双方各占 82 格', () => {
+test('11 列河道配置进入对局：水域不可通行，双方仅占主城与邻格', () => {
     configureZCMap(readLayout('river'));
     try {
         assert.equal(ZC_MAP_COLUMNS, 11);
@@ -231,12 +237,12 @@ test('11 列河道配置进入对局：水域不可通行，双方各占 82 格'
             assert.ok(config.neighbors.every((id) => ZC_HEX_CONFIG[id].playable));
         }
         const game = new ZCGameModel(null, () => 0.1);
-        assert.equal(game.playerTerritoryCount, 82);
-        assert.equal(game.enemyTerritoryCount, 82);
-        assert.equal(game.snapshot.hexes.filter((hex) => hex.owner === 'neutral').length, 56);
+        assert.equal(game.playerTerritoryCount, 7);
+        assert.equal(game.enemyTerritoryCount, 7);
+        assert.equal(game.snapshot.hexes.filter((hex) => hex.owner === 'neutral').length, ZC_HEX_CONFIG.length - 14);
         assert.ok(game.snapshot.hexes.every((hex) => ZC_HEX_CONFIG[hex.id].playable || hex.tileType === null));
         assert.ok(game.snapshot.hexes.every((hex) => !ZC_HEX_CONFIG[hex.id].playable
-            || hex.building === 'hq' || typeof hex.tileType === 'string'));
+            || hex.building === 'hq' || typeof hex.tileType === 'number'));
         assert.equal(ZCGameModel.isValidSnapshot(cloneSnapshot(game)), true);
     } finally {
         configureZCMap(legacyLayout);
@@ -463,30 +469,30 @@ test('PVP 五类地块价格与品级基础概率符合配置表', () => {
 
 test('品级概率不乘同品级卡牌数量，empty=0.7 始终保持七成抽空', () => {
     const barracks = getPlayerDeck().filter((card) => card.type === ZCCardType.Barracks);
-    const green = barracks.find((card) => card.rarity === '绿');
-    const purple = barracks.filter((card) => card.rarity === '紫').slice(0, 2);
+    const green = barracks.find((card) => card.rarity === 'green');
+    const purple = barracks.filter((card) => card.rarity === 'purple').slice(0, 2);
     assert.ok(green);
     assert.equal(purple.length, 2);
     const quantityDeck = [green, ...purple];
 
-    assert.equal(drawPvpTile(quantityDeck, ZCPvpTileType.AllRandom, 0, () => 0.69).rarity, '空');
-    assert.equal(drawPvpTile(quantityDeck, ZCPvpTileType.AllRandom, 0, () => 0.75).rarity, '绿');
+    assert.equal(drawPvpTile(quantityDeck, ZCPvpTileType.AllRandom, 0, () => 0.69).rarity, 'empty');
+    assert.equal(drawPvpTile(quantityDeck, ZCPvpTileType.AllRandom, 0, () => 0.75).rarity, 'green');
 
     // 兵营-高级（紫 0.9 / 金 0.1）先抽品级，再在该品级阵容卡中等概率选一张。
     const advanced = drawPvpTile(getPlayerDeck(), ZCPvpTileType.BarracksAdvanced, 0, () => 0.05);
     assert.equal(advanced.card?.type, ZCCardType.Barracks);
-    assert.equal(advanced.rarity, '紫');
+    assert.equal(advanced.rarity, 'purple');
 
     // 金矿地块只抽 mine 卡，且金矿卡是绿品级
     const mine = drawPvpTile(getPlayerDeck(), ZCPvpTileType.Mine, 0, () => 0.5);
     assert.equal(mine.card?.type, ZCCardType.Mine);
-    assert.equal(mine.rarity, '绿');
+    assert.equal(mine.rarity, 'green');
 });
 
 test('全类型随机连续 15 次未出金时触发金色保底并重置计数', () => {
     const result = drawPvpTile(getPlayerDeck(), ZCPvpTileType.AllRandom, getAllRandomGoldPity() - 1, () => 0);
     assert.equal(result.pityTriggered, true);
-    assert.equal(result.rarity, '金');
+    assert.equal(result.rarity, 'gold');
     assert.equal(result.nextAllRandomNonGoldDraws, 0);
 });
 
@@ -635,9 +641,9 @@ test('兵营新兵在兵营格内出生：落点离建筑中心半个格距，�
     assert.equal(angleAt(0.37), angleAt(0.37), '同一个随机源下出兵方向可复现');
 });
 
-// 首批数量 = 卡表 `cycleBaseValue`（2026-09-30 起）：68001 豌豆游侠产 3、68002 巨力坚果产 1。
+// 首批数量 = 卡表 `cycleBaseValue`（2026-09-30 起）：68001 豌豆游侠产 2、68002 巨力坚果产 1。
 // **两条都要在** —— 缺省口径（cycleBaseValue = 1）不能因为引入批量而回退。
-for (const [cardId, cycleBaseValue, cycleSeconds] of [['68001', 3, 8], ['68002', 1, 6]] as const) {
+for (const [cardId, cycleBaseValue, cycleSeconds] of [['68001', 2, 8], ['68002', 1, 6]] as const) {
     test(`兵营建造完成即出首批 ${cycleBaseValue} 个兵（${cardId}），之后才按 cycleSeconds 进入产兵倒计时`, () => {
         const { snapshot, barracksId } = barracksSnapshot(cardId, 1);
         const game = new ZCGameModel(snapshot, () => 0);
@@ -724,19 +730,27 @@ test('问号地块抽到的卡弹一张小卡牌：入队、按 2.4 秒过期、
     assert.equal(game.cardReveals.length, 0, '小卡牌应当自动过期');
 });
 
+test('品级展示名由表注入，覆盖 model 兜底且不再需要两处同步', () => {
+    setCardRarityMeta([{ id: 'gold', name: '金卡', sort: 0 }]);
+    assert.equal(rarityNameOfTier(4), '金卡', '注入后 tier 映射跟着表走');
+    assert.equal(rarityNameOfTier(1), '普通', '表未提到的品级沿用兜底');
+    setCardRarityMeta([]);
+    assert.equal(rarityNameOfTier(4), '传说', '空注入回退内置兜底，不留残值');
+});
+
 test('运气评语只给问号地块抽得到的绿/紫/金三档：小有收获 / 大吉大利 / 欧皇降临', () => {
     assert.equal(luckTextOfTier(1), '小有收获');
     assert.equal(luckTextOfTier(3), '大吉大利');
     assert.equal(luckTextOfTier(4), '欧皇降临');
     // 蓝品级刻意没有评语，依据是地块配置而不是拍脑袋：
-    assert.equal(getPvpTileConfigs()[ZCPvpTileType.AllRandom].rarityWeights.蓝, 0,
+    assert.equal(getPvpTileConfigs()[ZCPvpTileType.AllRandom].rarityWeights.blue, 0,
         '问号地块的蓝品级权重应当是 0 —— 抽不到蓝卡，所以不需要它的文案');
     assert.equal(luckTextOfTier(2), '', '蓝品级没有评语');
     assert.equal(luckTextOfTier(0), '', '越界品级回退空串，调用方据此换回品级名');
     assert.equal(luckTextOfTier(5), '');
 });
 
-test('只有问号地块（25）才弹小卡牌；确定地块翻出高品级卡也不弹', () => {
+test('问号与确定地块均弹小卡牌，仅问号显示运气评语', () => {
     const goldPity = getAllRandomGoldPity();
     assert.ok(goldPity > 0, 'pvpPity 应给问号地块配了金色保底');
 
@@ -774,11 +788,9 @@ test('只有问号地块（25）才弹小卡牌；确定地块翻出高品级卡
     assert.equal(mysteryReveal.tier, 4, '顶到保底线后问号地块必出金卡');
     assert.equal(mysteryReveal.luckText, '欧皇降临', '问号地块的金卡要带「欧皇降临」');
 
-    // 确定地块（高级兵营只出紫/金）：照样翻得出高品级卡，但**根本不弹卡牌** ——
-    // 判据是「这格翻出什么可不可预期」，不是品级高不高。确定地块的结果本就明摆着，
-    // 弹卡只是噪音（2026-10-10 口径：旧版是「都弹、只有问号给评语」）。
     const certain = developOn(ZCPvpTileType.BarracksAdvanced);
-    assert.equal(certain.cardReveals.length, 0, '确定地块不该弹小卡牌');
+    assert.equal(certain.cardReveals.length, 1, '确定地块同样展示抽到的卡牌');
+    assert.equal(certain.cardReveals[0].luckText, '', '确定地块不显示运气评语');
     const hexId = firstDevelopable(new ZCGameModel(null, () => 0.1));
     const certainHex = certain.snapshot.hexes[hexId];
     assert.ok(certainHex.tier > 0, '确定地块照样正常出卡、记录品级 —— 只是不弹卡');
@@ -820,48 +832,51 @@ test('buildSeconds = 0 的兵营：开格那拍不出兵，脉冲段播完才落
 });
 
 test('两维卡牌形成循环克制时伤害倍率为 130%，金矿不参与', () => {
-    const card = (id: string) => getPlayerDeck().find((entry) => entry.id === id)!;
-    const archer = card('66001');   // 精灵弓箭手：射手 / 花果
-    const tank = card('60016');      // 骷髅战士：坦克 / 花果
-    const mage = card('66003');    // 火法师：法师 / 花果
-    const mine = card('2001');             // 金矿：没有 traits
-
-    // 攻击维成环：坦克 → 战士 → 射手 → 法师 → 坦克
-    assert.equal(cardCounterMultiplier(archer, mage), 1.3, '射手克法师');
-    assert.equal(cardCounterMultiplier(mage, tank), 1.3, '法师克坦克');
-    assert.equal(cardCounterMultiplier(tank, archer), 1, '坦克克战士，不克射手');
-    assert.equal(cardCounterMultiplier(archer, archer), 1, '同标签不互克');
-
-    // 阵营维成环：花果 → 蘑菇 → 盆栽 → 僵尸 → 花果
-    const mushroom = getEnemyDeck().find((entry) => entry.id === '66002')!; // 猎头者：战士 / 蘑菇
-    assert.equal(cardCounterMultiplier(archer, mushroom), 1.3, '花果克蘑菇');
-
-    // 金矿没有 traits，两个方向都不参与
-    assert.equal(cardCounterMultiplier(mine, archer), 1);
-    assert.equal(cardCounterMultiplier(archer, mine), 1);
+    const base = getPlayerDeck().find(card => card.traits);
+    assert.ok(base);
+    const card = (attack: ZCDeckCard['traits']['attack'], camp: ZCDeckCard['traits']['camp']): ZCDeckCard => ({
+        ...base, traits: { attack, camp },
+    });
+    const rules: ZCCounterRule[] = [
+        { trait: 'attack', attacker: '射手', defender: '法师', damageMultiplier: 1.3 },
+        { trait: 'attack', attacker: '法师', defender: '坦克', damageMultiplier: 1.3 },
+        { trait: 'attack', attacker: '坦克', defender: '战士', damageMultiplier: 1.3 },
+        { trait: 'camp', attacker: '花果', defender: '蘑菇', damageMultiplier: 1.3 },
+    ];
+    const archer = card('射手', '花果'), tank = card('坦克', '花果'), mage = card('法师', '花果');
+    assert.equal(cardCounterMultiplier(archer, mage, rules), 1.3, '射手克法师');
+    assert.equal(cardCounterMultiplier(mage, tank, rules), 1.3, '法师克坦克');
+    assert.equal(cardCounterMultiplier(tank, archer, rules), 1);
+    assert.equal(cardCounterMultiplier(archer, archer, rules), 1);
+    assert.equal(cardCounterMultiplier(archer, card('战士', '蘑菇'), rules), 1.3);
+    const mine = { ...base, traits: undefined };
+    assert.equal(cardCounterMultiplier(mine, archer, rules), 1);
+    assert.equal(cardCounterMultiplier(archer, mine, rules), 1);
 });
 
-test('阵容羁绊按 pvpBond 的两维六条计算，玩家 / 敌方各自生效', () => {
-    assert.equal(getPlayerDeck().length, 8);
-    assert.equal(getEnemyDeck().length, 8);
-    const player = calculateDeckBonuses(getPlayerDeck());
-    const enemy = calculateDeckBonuses(getEnemyDeck());
-
-    // 玩家：七个兵营全是「花果」，攻击标签 射手2 / 坦克2 / 法师1 / 战士2
-    assert.deepEqual([...player.activeBonds], ['花果同心', '破阵先锋']);
-    assert.equal(player.unitHpMultiplier, 1.08, '花果同心：单位生命 +8%');
-    assert.equal(player.moveSpeedMultiplier, 1.08, '破阵先锋：单位移动速度 +8%');
-    assert.equal(player.unitAttackMultiplier, 1, '「蘑菇军团」不生效（阵容里没有蘑菇）');
-    assert.equal(player.incomeBonus, 0, '「万箭齐发」要任一攻击标签满 3 张');
-
-    // 敌方：花果 3 / 蘑菇 5，法系 4 张 → 四条生效
-    assert.deepEqual([...enemy.activeBonds], ['花果同心', '蘑菇军团', '破阵先锋', '万箭齐发']);
-    assert.equal(enemy.unitAttackMultiplier, 1.08, '蘑菇军团：单位攻击 +8%');
-    assert.equal(enemy.incomeBonus, 1, '万箭齐发：基础金币收入 +1/秒');
-    // 「僵尸狂潮」的 effectValue 在表里是 0（文案写的是「产兵间隔倍率 -10%」），
-    // 所以倍率停在 1 而不是 0.9 —— 表数据问题，这里只钉住现状。
-    assert.equal(enemy.spawnIntervalMultiplier, 1);
-    assert.equal(enemy.activeBonds.includes('僵尸狂潮'), false);
+test('阵容羁绊按两维标签计算，玩家 / 敌方各自生效', () => {
+    const base = getPlayerDeck().find(card => card.traits);
+    assert.ok(base);
+    const card = (id: number, attack: ZCDeckCard['traits']['attack'], camp: ZCDeckCard['traits']['camp']): ZCDeckCard => ({
+        ...base, id: String(id), traits: { attack, camp },
+    });
+    const rules: ZCBondRule[] = [
+        { id: 'hp', name: '花果同心', trait: 'camp', target: '花果', threshold: 3, effectType: 'unitHp', effectValue: .08 },
+        { id: 'attack', name: '蘑菇军团', trait: 'camp', target: '蘑菇', threshold: 3, effectType: 'unitAttack', effectValue: .08 },
+        { id: 'speed', name: '破阵先锋', trait: 'attack', target: 'any', threshold: 2, effectType: 'moveSpeed', effectValue: .08 },
+        { id: 'income', name: '万箭齐发', trait: 'attack', target: 'any', threshold: 3, effectType: 'income', effectValue: 1 },
+    ];
+    const player = calculateDeckBonuses([card(1, '射手', '花果'), card(2, '射手', '花果'), card(3, '坦克', '花果')], rules);
+    const enemy = calculateDeckBonuses([card(4, '法师', '蘑菇'), card(5, '法师', '蘑菇'), card(6, '法师', '蘑菇')], rules);
+    assert.deepEqual(player.activeBonds, ['花果同心', '破阵先锋']);
+    assert.equal(player.unitHpMultiplier, 1.08);
+    assert.equal(player.moveSpeedMultiplier, 1.08);
+    assert.equal(player.unitAttackMultiplier, 1);
+    assert.equal(player.incomeBonus, 0);
+    assert.deepEqual(enemy.activeBonds, ['蘑菇军团', '破阵先锋', '万箭齐发']);
+    assert.equal(enemy.unitHpMultiplier, 1);
+    assert.equal(enemy.unitAttackMultiplier, 1.08);
+    assert.equal(enemy.incomeBonus, 1);
 });
 
 test('神器充满后转换成可用次数，释放后扣除一次并进入 1 秒冷却', () => {
@@ -1524,8 +1539,8 @@ test('pvpCard 里配了单位预设的兵种卡都有可加载的父 Prefab 和�
 test('运行时 JSON 驱动卡组、单位数值、建筑建造及产金倒计时', () => {
     const loaded = loadPvpTables(readPvpTables());
     assert.equal(loaded.schemaVersion, 2);
-    assert.equal(loaded.cardCount, 16);
-    assert.equal(resolveUnitDefinition('66001').attackInterval, 2);
+    assert.equal(loaded.cardCount, getPlayerDeck().length + getEnemyDeck().length);
+    assert.equal(resolveUnitDefinition('68001').attackInterval, Number(readPvpRef('pvpCard').find(row => String(row.id) === '68001').unitAttackInterval));
     assert.equal(getPvpRuntimeRules().combatDamageMultiplier, 1.2);
     assert.equal(getPvpRuntimeRules().combatDistanceScale, 0.3);
     assert.equal(getPvpRuntimeRules().towerAttackInterval, 0.8);
@@ -1551,31 +1566,12 @@ test('运行时 JSON 驱动卡组、单位数值、建筑建造及产金倒计�
 });
 
 test('pvpCard.json 数字 rarity 1/2/3/4 对应绿/蓝/紫/金', () => {
-    const rows = readPvpRows('pvpCard');
-    // 卡表是「卡池 + 出战 + 1 行主城」混排：卡池行没 `deck`，主城行有 `deck` 但不进卡组
-    const deckRows = rows.filter((row) => typeof row.deck === 'string' && (row.deck as string).trim().length > 0);
-    // 主城挂在「玩家默认」slot=0 只是为了过转表器（首列 `deck` 空的行不导出）；
-    // 它不在卡组里，所以这里要摘掉才是「玩家默认 8 + PVE敌方 8」。
-    const lineupRows = deckRows.filter((row) => Number(row.type) !== ZCCardType.Hq);
-    assert.equal(deckRows.length, 17, '16 张出战 + 1 行主城');
-    assert.equal(lineupRows.length, 16, '玩家默认 8 + PVE敌方 8');
-    const oldTables = readPvpTables();
-    try {
-        assert.equal(loadPvpTables({ ...oldTables, pvpCard: rows }).cardCount, 16, 'cardCount 只数出战卡，不含主城');
-        const rarityNames = ['', '绿', '蓝', '紫', '金'];
-        for (const row of lineupRows) {
-            const deck = row.deck === '玩家默认' ? getPlayerDeck() : getEnemyDeck();
-            //  表里 `id` 是**整数**（2026-09-20 起，`PVP-卡牌.xlsx` 的 id 列改成了 int），
-            // 而解析出来的 `card.id` 一律是字符串 —— 比较前必须先归一。直接 `card.id === row.id`
-            // 在类型不同的时候严格相等恒为 false，`find` 会**静默**返回 undefined，
-            // 症状是断言里 rarity 变成 undefined（报错信息只写 `2001 / undefined !== '绿'`）。
-            assert.equal(deck.find((card) => card.id === String(row.id))?.rarity, rarityNames[row.rarity as number], String(row.id));
-        }
-        assert.throws(() => loadPvpTables({ ...oldTables, pvpCard: rows.map((row, index) =>
-            index === 0 ? { ...row, rarity: 5 } : row) }), /cards\[\]\.rarity/);
-    } finally {
-        loadPvpTables(oldTables);
+    const row = readPvpRows('pvpCard').find(row => Number(row.type) === ZCCardType.Barracks);
+    assert.ok(row, '卡表至少包含一张兵营卡');
+    for (const [rarity, name] of [[1, 'green'], [2, 'blue'], [3, 'purple'], [4, 'gold']] as const) {
+        assert.equal(parseCardCatalogRow({ ...row, rarity }).rarity, name);
     }
+    assert.throws(() => parseCardCatalogRow({ ...row, rarity: 5 }), /cards\[\]\.rarity/);
 });
 
 test('索敌按敌方单位、城墙、建筑分级，并在每一级选择最近目标', () => {
@@ -2013,7 +2009,7 @@ test('击杀敌方单位与摧毁敌方建筑都给击杀方加金币，并飘�
     enemyHex.developmentResolved = true;
     enemyHex.building = 'barracks';
     enemyHex.tier = 1;
-    enemyHex.cardId = '66001';
+    enemyHex.cardId = '68001';
     enemyHex.hp = 1;
     enemyHex.maxHp = 1000;
     enemyHex.wallHp = 0;
@@ -2021,6 +2017,8 @@ test('击杀敌方单位与摧毁敌方建筑都给击杀方加金币，并飘�
     enemyHex.constructionRemainingSeconds = 0;
     enemyHex.constructionTotalSeconds = 0;
     const attacker = makeUnit(1, 'player', sourceId);
+    attacker.unitId = '68002';
+    attacker.cardId = '68002';
     attacker.nextAttackAt = 0;
     attacker.hp = 5;
     attacker.maxHp = 5;
@@ -2029,7 +2027,9 @@ test('击杀敌方单位与摧毁敌方建筑都给击杀方加金币，并飘�
     const destroyGame = new ZCGameModel(destroySnapshot, () => 0.1);
     const goldBefore = destroyGame.snapshot.playerGold;
 
-    destroyGame.tick(1.5);
+    for (let step = 0; step < 100 && destroyGame.snapshot.hexes[enemyHexId].state !== 'ruins'; step++) {
+        destroyGame.tick(ZC_SIMULATION_STEP_SECONDS);
+    }
     assert.equal(destroyGame.snapshot.hexes[enemyHexId].state, 'ruins');
     // 摧毁奖励同样按位置锁定在被摧毁的格子上（主城收入也在这个时段飘）。
     const rewardHex = ZC_HEX_CONFIG[enemyHexId];
@@ -2048,18 +2048,22 @@ test('击杀敌方单位与摧毁敌方建筑都给击杀方加金币，并飘�
     playerHex.developmentResolved = true;
     playerHex.building = 'barracks';
     playerHex.tier = 1;
-    playerHex.cardId = '66001';
+    playerHex.cardId = '68001';
     playerHex.hp = 1;
     playerHex.maxHp = 1000;
     playerHex.wallHp = 0;
     playerHex.wallMaxHp = wallMaxHp();
     const enemyUnit = makeUnit(1, 'enemy', enemyHexId);
+    enemyUnit.unitId = '68002';
+    enemyUnit.cardId = '68002';
     enemyUnit.nextAttackAt = 0;
     mirrorSnapshot.units = [enemyUnit];
     mirrorSnapshot.nextUnitId = 2;
     mirrorSnapshot.enemyGold = 1000;
     const mirrorGame = new ZCGameModel(mirrorSnapshot, () => 0.1);
-    mirrorGame.tick(1.5);
+    for (let step = 0; step < 100 && mirrorGame.snapshot.hexes[sourceId].state !== 'ruins'; step++) {
+        mirrorGame.tick(ZC_SIMULATION_STEP_SECONDS);
+    }
     const mirrorHex = ZC_HEX_CONFIG[sourceId];
     const mirrorReward = mirrorGame.floatTexts.filter((text) => text.kind === 'gold'
         && text.x === mirrorHex.x && text.y === mirrorHex.y);
@@ -2090,13 +2094,17 @@ test('飘字是瞬时表现：会过期清理，也不写进快照', () => {
 
 test('圆形进度数据覆盖主城和金矿产金、兵营出兵、箭塔攻击 CD', () => {
     const seed = new ZCGameModel();
+    const base = captureZCMatchConfig();
+    const tower: ZCDeckCard = { ...getPlayerDeck()[0], id: 'test-tower', type: ZCCardType.Tower, cycleSeconds: .8 };
+    const config = { ...base, playerDeck: [...base.playerDeck, tower],
+        ownerDecks: { ...base.ownerDecks, player: [...base.playerDeck, tower] } };
     const snapshot = cloneSnapshot(seed);
     snapshot.incomeClock = 0.5;
     const [mineId, barracksId, towerId] = ZC_HEX_CONFIG[ZC_PLAYER_HOME_ID].neighbors;
     const setups = [
         { id: mineId, building: 'mine' as const, cardId: '2001', clock: 1 },
-        { id: barracksId, building: 'barracks' as const, cardId: '66001', clock: 3.45 },
-        { id: towerId, building: 'tower' as const, cardId: '66011', clock: 0.4 },
+        { id: barracksId, building: 'barracks' as const, cardId: '68001', clock: 3.45 },
+        { id: towerId, building: 'tower' as const, cardId: tower.id, clock: 0.4 },
     ];
     for (const setup of setups) {
         const hex = snapshot.hexes[setup.id];
@@ -2111,7 +2119,7 @@ test('圆形进度数据覆盖主城和金矿产金、兵营出兵、箭塔攻�
         hex.constructionRemainingSeconds = 0;
         snapshot.spawnClocks[`${setup.building}:${setup.id}`] = setup.clock;
     }
-    const game = new ZCGameModel(snapshot, () => 0);
+    const game = new ZCGameModel(snapshot, () => 0, config);
     assert.deepEqual(
         [ZC_PLAYER_HOME_ID, mineId, barracksId, towerId].map((id) => game.buildingCooldown(id)?.phase),
         ['income', 'income', 'spawn', 'attack'],

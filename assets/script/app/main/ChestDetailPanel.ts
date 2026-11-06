@@ -8,6 +8,18 @@ import { formatChestCountdown } from './ChestTypes';
 
 const { ccclass, property } = _decorator;
 
+/**
+ * 「打开」按钮的两种排版（蓝湖设计稿 = **带倒计时的两行态**）：
+ * · 有倒计时 → 文案在上（y = 21.5），倒计时胶囊在下（y = -22.5）；
+ * · 无倒计时 → 胶囊隐藏，文案必须回到按钮正中（按钮高 108，中心 y = 0），
+ *   否则下半截全空、字看着偏上没居中（2026-11-05 实机截图）。
+ *
+ * x 沿用 prefab 的 4（设计稿原值，含胶囊同一条竖轴），不动。
+ */
+const OPEN_LABEL_X = 4;
+const OPEN_LABEL_Y_TWO_LINE = 21.5;
+const OPEN_LABEL_Y_CENTER = 0;
+
 /** 弹窗内容，全部由 `NewTreasureRepository` 的数据 + 配置算出。 */
 export interface IChestDetailContent {
     readonly name: string;
@@ -171,8 +183,12 @@ export class ChestDetailPanel extends PopupBase {
     };
 
     private updateCountdownText(text: string): void {
+        const hasCountdown = text !== '';
         this.openCostLabel.string = text;
-        this.openCostRoot.active = text !== '';
+        this.openCostRoot.active = hasCountdown;
+        // 两态全量赋值：倒计时一藏，就把「打开」放回按钮正中；下一次 applyContent /
+        // 每秒 updateCountdown 都会重算，幂等，不会累加偏移。
+        this.openLabel.node.setPosition(OPEN_LABEL_X, hasCountdown ? OPEN_LABEL_Y_TWO_LINE : OPEN_LABEL_Y_CENTER);
     }
 
     private handleFastOpen(): void {

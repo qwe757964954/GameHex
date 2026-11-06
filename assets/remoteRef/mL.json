@@ -3209,6 +3209,11 @@
 641,
 "SLG_CAN_NOT_SETTLEMENT_TIME",
 "结算期间无法战斗"
+],
+[
+642,
+"CHAPTER_PRE_UNLOCK",
+"前置地块未解锁"
 ]
 ],
 "c":1

@@ -76,7 +76,7 @@ export class MainTabHost extends Component {
 
         for (const button of this.navItems) {
             const type = button.tabType;
-            // 未开放的格子（角色 / 联盟 / 挑战）保持可见但压暗 + 挂锁，点击不派发切页。
+            // 未开放的格子（挑战）保持可见但压暗 + 挂锁；事件照派发，由 controller 拦下不切页。
             button.setEnabled(!isMainTabLocked(type));
             button.bindRedDotExpr(mainTabItem(type)?.rdExpr);
             button.node.on(Button.EventType.CLICK, () => {
@@ -117,8 +117,8 @@ export class MainTabHost extends Component {
      * 「应该类似 CardLineup，不是弹窗」），`open.json` 里 `TabRoleMain` 那个入口
      * 就不能再 `PopupManager.openAsync` 了 —— 走这里切 tab。
      *
-     * ⚠️ 2026-11-04 起「角色」与「联盟」跟「挑战」一样**未开放**（见 `MainTabModel.isMainTabLocked`），
-     * 这里切不过去：`MainTabController` 拿到 `locked` 直接返回，页面与选中态保持不变。
+     * ⚠️ 2026-11-05 起「角色」与「联盟」恢复开放（名单见 `MainTabModel.isMainTabLocked`，
+     * 只剩挑战锁着），这里能正常切到角色页；未开放的格子仍由 controller 拦下，页面与选中态不变。
      */
     switchToRoleMain(): void {
         // 2026-10-19 起「角色主界面」是第 2 格（Role）；第 3 格 Territory 已改成主城/领地图。

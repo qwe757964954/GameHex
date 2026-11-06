@@ -38,7 +38,7 @@ test('单位出生抖动：先 Y 拉 110% 回落、再 X 拉 110% 回落，结�
         make: () => {
             const node = new FakeNode();
             const animation = { clips: [{ name: 'unit-idle' }], defaultClip: null, play() {}, stop() {} };
-            node.getComponent = ((type: unknown) => type === cc.Sprite ? { color: null }
+            node.getComponent = ((type: unknown) => type === cc.Sprite ? { node, color: null }
                 : type === cc.Animation ? animation : null) as typeof node.getComponent;
             return node;
         },

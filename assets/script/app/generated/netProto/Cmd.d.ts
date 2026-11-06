@@ -5921,6 +5921,7 @@
         img: Long;
         defenseHp: number;
         pos: number;
+        buildLevel: number;
     }
 
     

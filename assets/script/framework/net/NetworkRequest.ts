@@ -13,6 +13,16 @@ export class NetworkRequest<CmdReqMsg, CmdRspMsg> extends ScriptObject {
     /**使用中 */
     public isInUse: boolean;
     public timeStamp: number;
+    /**
+     * 请求**真正发出**的时刻（`Date.now()`，毫秒），只用于 `recived` 日志里的「回包耗时」。
+     *
+     * 不复用 `timeStamp`：那个是网络状态机的**累计时钟**（`ConnectedNetState.update` 里
+     * `+= deltaTime`），拿来判超时（`requestTimeout = 3000`）；一旦 dt 的秒/毫秒口径变了，
+     * 耗时数字就整体错位。日志打点要的是真实墙钟差值，所以单独记一份。
+     *
+     * `0` = 没记过（广播 / 缓存推送这类没有对应请求的包）。
+     */
+    public sentAt = 0;
     /**服务器时间 */
     public serverTime: number;
     /**异步 */
@@ -37,6 +47,7 @@ export class NetworkRequest<CmdReqMsg, CmdRspMsg> extends ScriptObject {
         this.data = null;
         this.isInUse = false;
         this.timeStamp = null;
+        this.sentAt = 0;
         this.serverTime = null;
         this.promise = null;
         this.resolve = null;

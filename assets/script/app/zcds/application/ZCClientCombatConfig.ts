@@ -5,7 +5,7 @@ import { ZCOwner, ZCPlayerCount } from '../model/ZCMapConfig';
 import { ownersForPlayerCount } from '../model/ZCMapConfig';
 import { captureZCMatchConfig, type ZCMatchConfig, type IZCBattleRates } from '../model/ZCMatchConfig';
 import type { ZCCompiledModifierLoadout } from '../model/ZCModifierRuntime';
-import { compileZCCombatBuild, getZCModifierCatalogs } from '../model/ZCModifierRuntime';
+import { compileZCCombatBuild, getZCModifierCatalogs, type ZCModifierCatalogs } from '../model/ZCModifierRuntime';
 
 export interface ZCClientCombatConfigResult {
     readonly config: ZCMatchConfig;
@@ -175,6 +175,26 @@ export function clientHeroIdsByOwner(
     return mapClientRosterOwners(context, (owner, unit) => clientHeroIdsForOwner(config, owner, unit, context.usesServerRoster));
 }
 
+/**
+ * 卡牌等级 → 成长表选取项。
+ *
+ * `pvpUnitGrowth` 从 1 级起（1 级 flat 全 0，数值等于卡牌基础值），而卡牌等级从 0 起，
+ * 所以 0 级按 1 级取 —— 保住「已解锁未升级」这一档，取到的仍是基础值。
+ *
+ * 表里没有该等级（这类卡还没配成长）时**不传 level**：退回只吃技能档位与星级，
+ * 行为与引入等级成长之前完全一致。这里必须判空，不能交给 `compileGrowthLoadout`
+ * 抛错 —— 那里的异常会被上层记成 skipped，把这只武将的技能和星级一起丢掉。
+ */
+function growthSelectionOf(
+    catalogs: ZCModifierCatalogs,
+    generalId: number,
+    level: number,
+): { level?: number } {
+    const lv = Math.max(1, Math.floor(Number(level) || 1));
+    const row = catalogs.adapters.growth.get(`${generalId}:${lv}`);
+    return row?.enabled ? { level: lv } : {};
+}
+
 function compileOwnerLoadouts(
     owner: ZCOwner,
     heroes: readonly ZCBattleHero[],
@@ -190,6 +210,7 @@ function compileOwnerLoadouts(
         try {
             loadouts.push(...compileZCCombatBuild({
                 unitId: String(generalId),
+                ...growthSelectionOf(catalogs, generalId, hero.level),
                 heroLevel: hero.level,
                 generalStar: { generalId, star: 1 },
             }, config.units, catalogs));

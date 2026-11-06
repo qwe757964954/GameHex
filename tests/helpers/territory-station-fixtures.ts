@@ -14,7 +14,6 @@
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
-import * as TerritoryTexts from '../../assets/script/app/territory/application/TerritoryTexts';
 import * as MapMarkerBadge from '../../assets/script/app/common/MapMarkerBadge';
 import * as TerritoryChestBubble from '../../assets/script/app/territory/model/TerritoryChestBubble';
 import * as TerritoryUiEvents from '../../assets/script/app/territory/application/TerritoryEvents';
@@ -195,7 +194,6 @@ export interface StationRenderContent {
     readonly levelBubbleFrame?: unknown;
     readonly interactive: boolean;
     readonly isLoading?: boolean;
-    readonly randomPending?: boolean;
     /** 需求 row14：建筑展示滞后期间整站不显示（见 `ITerritoryStationRender.hidden`）。 */
     readonly hidden?: boolean;
 }
@@ -297,7 +295,6 @@ export function loadTerritoryStationModule(): Record<string, unknown> {
             // 「章节入口」那条 UI 事件（2026-11-03）：给**真模块** —— 用例要按真常量断言
             // `emit` 出去的字符串，桩里抄一份就会"改了一边两边都绿"。
             if (id === '../application/TerritoryEvents') return TerritoryUiEvents;
-            if (id === '../application/TerritoryTexts') return TerritoryTexts;
             // 事件契约：给**真模块**（纯常量、零依赖）。
             // ⚠️ 原来这里手抄了一份常量表，抄的还停在 `STATION_CLICK` 那一代 ——
             //    真视图发 `STATION_TAP` 时桩里没有这个键 ⇒ `emit(undefined)`，

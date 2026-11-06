@@ -113468,6 +113468,7 @@ $root.com = (function() {
                      * @property {Long} img SlgGameCameRoleInfo img
                      * @property {number} defenseHp SlgGameCameRoleInfo defenseHp
                      * @property {number} pos SlgGameCameRoleInfo pos
+                     * @property {number} buildLevel SlgGameCameRoleInfo buildLevel
                      */
 
                     /**
@@ -113534,6 +113535,14 @@ $root.com = (function() {
                     SlgGameCameRoleInfo.prototype.pos = 0;
 
                     /**
+                     * SlgGameCameRoleInfo buildLevel.
+                     * @member {number} buildLevel
+                     * @memberof com.xkhy.tafang.cmd.SlgGameCameRoleInfo
+                     * @instance
+                     */
+                    SlgGameCameRoleInfo.prototype.buildLevel = 0;
+
+                    /**
                      * Creates a new SlgGameCameRoleInfo instance using the specified properties.
                      * @function create
                      * @memberof com.xkhy.tafang.cmd.SlgGameCameRoleInfo
@@ -113567,6 +113576,7 @@ $root.com = (function() {
                         writer.uint32(/* id 4, wireType 0 =*/32).uint64(message.img);
                         writer.uint32(/* id 5, wireType 0 =*/40).uint32(message.defenseHp);
                         writer.uint32(/* id 6, wireType 0 =*/48).uint32(message.pos);
+                        writer.uint32(/* id 7, wireType 0 =*/56).uint32(message.buildLevel);
                         return writer;
                     };
 
@@ -113618,6 +113628,10 @@ $root.com = (function() {
                                     message.pos = reader.uint32();
                                     break;
                                 }
+                            case 7: {
+                                    message.buildLevel = reader.uint32();
+                                    break;
+                                }
                             default:
                                 reader.skipType(tag & 7, long);
                                 break;
@@ -113635,6 +113649,8 @@ $root.com = (function() {
                             throw $util.ProtocolError("missing required 'defenseHp'", { instance: message });
                         if (!message.hasOwnProperty("pos"))
                             throw $util.ProtocolError("missing required 'pos'", { instance: message });
+                        if (!message.hasOwnProperty("buildLevel"))
+                            throw $util.ProtocolError("missing required 'buildLevel'", { instance: message });
                         return message;
                     };
 

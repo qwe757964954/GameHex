@@ -11,6 +11,27 @@ class Controller extends ControllerBase {
     subscribe(event: string, handler: () => void): void { this.listen(event, handler); }
 }
 
+test('controller detaches all event inputs before cleanup can emit or subscribe again', () => {
+    const controller = new Controller(createControllerContext());
+    const calls: string[] = [];
+    const event = 'controller-cleanup-test';
+    controller.subscribe(event, () => calls.push('input'));
+    EventMgr.instance.on(event, () => calls.push('owned-input'), controller);
+    controller.register(() => {
+        calls.push('cleanup');
+        EventMgr.instance.emit(event);
+        controller.subscribe(event, () => calls.push('late-input'));
+    });
+    try {
+        controller.dispose();
+        controller.dispose();
+        EventMgr.instance.emit(event);
+        assert.deepEqual(calls, ['cleanup']);
+    } finally {
+        EventMgr.instance.offTarget(controller);
+    }
+});
+
 test('controller detaches inputs before releasing resources and accepts late cleanup exactly once', () => {
     const controller = new Controller(createControllerContext());
     const calls: string[] = [];

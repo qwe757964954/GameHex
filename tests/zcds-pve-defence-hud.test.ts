@@ -103,7 +103,7 @@ test('波次头像从本局所有席位和完整卡表获取，并按当前波�
     const game = new exports.ZCGame!();
     Object.assign(game, { matchConfig: { playerDeck: [], enemyDeck: [], ownerDecks: {
         player: [{ id: '1', name: '怪一', headIcon: 'a' }], enemy: [],
-    } }, isValid: true });
+    } }, presentationResources: { configs: {} }, isValid: true });
     Reflect.get(game, 'loadDefenceBossArt').call(game);
     await new Promise((resolve) => setTimeout(resolve, 0));
     const portraits = Reflect.get(game, 'bossPortraits') as Map<string, unknown>;

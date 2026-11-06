@@ -7,10 +7,6 @@ import type { ZCOwner } from './ZCMapConfig';
 import {
     HEX_PULSE_WAVE_SECONDS
 } from '../../../core/hex/HexFlipPresentation';
-import {
-    ZC_NEUTRAL_BURST_COUNT,
-    zcNeutralBurstTotalSeconds,
-} from './ZCNeutralBurst';
 
 const FLOAT_TEXT_CAP = 96;
 const CARD_REVEAL_CAP = 24;
@@ -54,28 +50,32 @@ const NEUTRAL_REWARD_CAP = 16;
  * 中立资源获取表现的**时长口径**（秒）—— 队列生命周期与视图动画共用的真源。
  *
  * 两条通道各自的时间轴，事件总长取**较长的那条**（prune 按它摘，视图同时收节点）：
- *   ① 神器（2026-10-20 需求）：飞行段 `ZC_NEUTRAL_REWARD_FLY_SECONDS` + 落地淡出；
- *   ② 金币（2026-10-26 改口径）：**格心喷发** —— 12 枚错峰出发 + 最长生命，
- *      见 `model/ZCNeutralBurst.zcNeutralBurstTotalSeconds`（含「+N」读数的 1.15s)。
+ *   ① 神器：飞行段 `ZC_NEUTRAL_REWARD_FLY_SECONDS` + 落地淡出（0.8s），同拍的
+ *      18 帧 / 24fps = 0.75s 格心爆炸也在窗内；
+ *   ② 金币（2026-11-04 恢复飞 `CoinPanel` 的口径）：**最后一颗金币出发 → 飞完 →
+ *      「+N」读完**，即 `FLY + STAGGER×(COUNT−1) + RISE` = 1.4s。
  *
- * ⚠️ 别为了让 total 变短去压 ②：喷发还没落干净就被 prune 摘掉，实机就是
- *    「粒子刚出来就整束消失」——这是 UID 上一个正是本次要修的现象。
+ * ⚠️ 别为了让 total 变短去压 ②：金币还在飞 / 读数还没飘完就被 prune 摘掉，
+ *    实机就是「粒子飞到一半整把消失」。10-26 那份格心喷发曲线
+ *    （`model/ZCNeutralBurst`，1.54s）**当前不接线**，时长不按它算。
  */
 export const ZC_NEUTRAL_REWARD_FLY_SECONDS = 0.6;
-/** 金币事件的老上飘段（保留给曲线自身的引用）；现在的事件总长已改由喷发那条决定。 */
+/** 「+N」读数上飘段（等最后一颗金币落地后开始）。 */
 export const ZC_NEUTRAL_REWARD_RISE_SECONDS = 0.6;
 /** 金币逐枚出发的错峰（秒）。 */
 export const ZC_NEUTRAL_REWARD_COIN_STAGGER = 0.04;
 /** 金币堆 / 宝箱共用的一把飞行金币数。 */
 export const ZC_NEUTRAL_REWARD_COIN_COUNT = 6;
-/** 神器那条通道的时长（飞行 + 落地淡出）。 */
-const ZC_NEUTRAL_REWARD_ARTIFACT_TOTAL_SECONDS =
+/** 金币通道总时长：最后一颗落地 + 「+N」读完。 */
+const ZC_NEUTRAL_REWARD_COIN_TOTAL_SECONDS =
     ZC_NEUTRAL_REWARD_FLY_SECONDS
     + ZC_NEUTRAL_REWARD_COIN_STAGGER * (ZC_NEUTRAL_REWARD_COIN_COUNT - 1)
     + ZC_NEUTRAL_REWARD_RISE_SECONDS;
+/** 神器通道总时长（飞行 + 落地淡出 0.2s，见 `ZCNeutralRewardFx`）。 */
+const ZC_NEUTRAL_REWARD_ARTIFACT_TOTAL_SECONDS = ZC_NEUTRAL_REWARD_FLY_SECONDS + 0.2;
 export const ZC_NEUTRAL_REWARD_TOTAL_SECONDS = Math.max(
+    ZC_NEUTRAL_REWARD_COIN_TOTAL_SECONDS,
     ZC_NEUTRAL_REWARD_ARTIFACT_TOTAL_SECONDS,
-    zcNeutralBurstTotalSeconds(ZC_NEUTRAL_BURST_COUNT),
 );
 
 /**

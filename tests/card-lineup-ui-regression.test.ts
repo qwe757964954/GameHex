@@ -76,7 +76,7 @@ test('首屏先收起站台再取数，且走「快照 → 权威值」两段式
     assert.ok(source.indexOf('this.renderLoading();') < source.indexOf("phase: 'ready'"));
     assert.match(controllerSource, /loadLineupSnapshot\(\)/);
     assert.ok(controllerSource.indexOf('this.publish(snapshot)') < controllerSource.indexOf('void this.refresh()'));
-    assert.match(source, /cards\.length > 0 \? this\.preparePool/,
+    assert.match(source, /data\.catalog\.length > 0 \? this\.preparePool/,
         '快照的 catalog 为空，卡库必须跳过而不是清空（否则卡库会先被刷成 0 条再刷回来）');
     assert.doesNotMatch(source, /slotsRevision/,
         '旧的 slotsRevision 早退已由 presentRevision 取代，别把它加回来（它挡不住快照与权威值交错）');

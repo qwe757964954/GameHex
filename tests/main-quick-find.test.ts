@@ -187,6 +187,9 @@ test('ArenaRoot binds opposite hud arrows beneath BeginGame so chest expansion h
 });
 
 test('Boss focus stops map inertia and scrolls to the selected cell; missing target leaves scroll alone', () => {
+    // 2026-11-04：入口搬到主城顶栏（`MainPage.onStartGame` 发 `focusLevel` 意图），
+    // 所以这里直接发那条意图 —— 钉的是「意图 → focusCell 命令 → scrollToCell」这条线，
+    // 不依赖按钮挂在哪个组件上。
     const MapView = loadComponent<MainTerritoryMap>('MainTerritoryMap', {
         cc,
         '../../core/asset/ResourceScope': { ResourceScope },
@@ -221,11 +224,11 @@ test('Boss focus stops map inertia and scrolls to the selected cell; missing tar
             command: { kind: 'focusCell', cellId },
         });
     }, owner);
-    mapView.focusCurrentLevel();
+    EventMgr.instance.emit(mvcEvents.TerritoryUiEvent.Intent, { intent: { kind: 'focusLevel' } });
     const expected = territoryMapOffsetForCell(layout, 135, viewport);
     assert.deepEqual(calls, [['stop'], [expected.x, expected.y, 0]]);
     cellId = null;
-    mapView.focusCurrentLevel();
+    EventMgr.instance.emit(mvcEvents.TerritoryUiEvent.Intent, { intent: { kind: 'focusLevel' } });
     assert.equal(calls.length, 2);
     EventMgr.instance.offTarget(owner);
 });

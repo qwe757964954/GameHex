@@ -1,6 +1,7 @@
 import { HEX_GRID_LOGICAL_ROW_STEP } from '../../../../core/hex/HexGridLayout';
 import { cardCounterMultiplier, ZCCombatEventType, type ZCAttackProfile, type ZCCounterRule, type ZCDeckBonuses, type ZCDeckCard } from '../ZCCombatCatalog';
 import { zcCombatEffectTravelSeconds } from '../ZCCombatEffectFlight';
+import { missileLog } from '../../ZCMissileSkillDiagnostics';
 import type {
     ZCCombatEvent, ZCCombatFloatTextKind, ZCCombatTarget, ZCFloatText,
     ZCHexState, ZCProjectileState, ZCSnapshot, ZCUnitState
@@ -490,6 +491,9 @@ export class ZCAttackResolutionSystem {
                 });
                 fired += 1;
             }
+            //  诊断③：弹体真的推进 `state.projectiles` 了吗（视图侧只认这个队列）。
+            missileLog('模型', `导弹分支已推进 ${fired} 个弹体`
+                + `（目标数 ${victims.length}，弧线偏移基准 ${(options.arcOffset ?? 0).toFixed(1)}，速度 ${speed}）`);
             return fired;
         }
 

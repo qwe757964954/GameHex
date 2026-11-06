@@ -9,6 +9,10 @@ import type { TerritoryProgress } from './TerritoryProgress';
  * 只要 `requiredCells` 全部已解锁/已占领就揭示，不要求与已开格相邻——否则配置里
  * 「依赖主城 367」的 fixedResource_326 会被相邻揭示过滤掉（它与主城中心距 ≈169px，隔 1.7 格）。
  * 无前置（`requiredCells` 为空，如 bonus）的站点与随机候选格仍按相邻揭示。
+ *
+ * ⚠️ **只揭示有内容的格**（2026-11-05 山猫）：前沿上「没有站点、没有随机候选」的空格
+ *   一律留在云里，不要为了放锁标把它们露出来 —— 那会让地图边缘凭空长出一整排灰地块。
+ *   锁标只叠在**本来就会显示**的未解锁格上（见 `TerritoryMapView.isHexLockCell`）。
  */
 export function territoryRevealedCells(
     map: TerritoryMapConfig,

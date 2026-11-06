@@ -334,7 +334,7 @@
 },
 "configId":"fixedResource_267",
 "buildingId":"",
-"rewardId":1014
+"rewardId":1001
 },
 {
 "id":"fixedResource_18",
@@ -433,7 +433,7 @@
 },
 "configId":"fixedResource_173",
 "buildingId":"",
-"rewardId":1014
+"rewardId":1015
 },
 {
 "id":"fixedResource_31",
@@ -966,7 +966,7 @@
 },
 "configId":"fixedResource_153",
 "buildingId":"",
-"rewardId":1014
+"rewardId":1015
 },
 {
 "id":"fixedResource_57",
@@ -1514,7 +1514,7 @@
 },
 "configId":"fixedResource_201",
 "buildingId":"",
-"rewardId":1014
+"rewardId":1015
 },
 {
 "id":"fixedResource_104",
@@ -1791,7 +1791,7 @@
 },
 "configId":"fixedResource_394",
 "buildingId":"",
-"rewardId":1014
+"rewardId":1015
 },
 {
 "id":"fixedResource_114",
@@ -2788,7 +2788,7 @@
 },
 "configId":"fixedResource_102",
 "buildingId":"",
-"rewardId":1014
+"rewardId":1015
 },
 {
 "id":"fixedResource_154",

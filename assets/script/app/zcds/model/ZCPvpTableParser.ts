@@ -1,3 +1,4 @@
+import { ZCDC_LOG_WARNINGS } from '../ZCDCLogSwitch';
 import type {
     ZCAttackProfile,
     ZCAttackTrait, ZCBondEffectType, ZCBondRule, ZCCampTrait, ZCCardRarity, ZCCardTraits,
@@ -111,7 +112,7 @@ function parseTraits(value: unknown): ZCCardTraits | undefined {
 }
 
 function parseCardRarity(value: unknown): ZCCardRarity {
-    const rarities: ZCCardRarity[] = ['绿', '蓝', '紫', '金'];
+    const rarities: ZCCardRarity[] = ['green', 'blue', 'purple', 'gold'];
     if (typeof value === 'number' && Number.isInteger(value)) {
         const rarity = rarities[value - 1];
         if (rarity) return rarity;
@@ -120,7 +121,7 @@ function parseCardRarity(value: unknown): ZCCardRarity {
         const rarity = value.trim() as ZCCardRarity;
         if (rarities.includes(rarity)) return rarity;
     }
-    throw new Error('cards[].rarity 必须是 1=绿、2=蓝、3=紫、4=金');
+    throw new Error('cards[].rarity 必须是 1=green、2=blue、3=purple、4=gold');
 }
 
 /** 数字形式的 type（配表里部读到数字或字符串都要过这关）——从枚举派生，加类型不用同步。 */
@@ -167,14 +168,14 @@ function parseCardCycleSeconds(raw: Record<string, unknown>, type: ZCCardType): 
 function parseSkillIds(value: unknown, field: string): number[] {
     if (value === null || value === undefined || value === '') return [];
     if (!Array.isArray(value)) {
-        console.warn(`${field} 不是数组，按空技能表处理：${JSON.stringify(value)}`);
+        if (ZCDC_LOG_WARNINGS) console.warn(`${field} 不是数组，按空技能表处理：${JSON.stringify(value)}`);
         return [];
     }
     const ids: number[] = [];
     for (const entry of value) {
         const skillId = Number(entry);
         if (!Number.isSafeInteger(skillId) || skillId <= 0) {
-            console.warn(`${field} 里有非法技能编号，已跳过：${JSON.stringify(entry)}`);
+            if (ZCDC_LOG_WARNINGS) console.warn(`${field} 里有非法技能编号，已跳过：${JSON.stringify(entry)}`);
             continue;
         }
         ids.push(skillId);
@@ -414,11 +415,11 @@ export function parseTileConfigs(value: unknown): Readonly<Record<ZCPvpTileType,
             name: text(raw.name, `pvpTiles.configs.${type}.name`),
             price: number(raw.price, `pvpTiles.configs.${type}.price`),
             rarityWeights: {
-                空: number(weights.empty, `${type}.empty`, 0, true),
-                绿: number(weights.green, `${type}.green`, 0, true),
-                蓝: number(weights.blue, `${type}.blue`, 0, true),
-                紫: number(weights.purple, `${type}.purple`, 0, true),
-                金: number(weights.gold, `${type}.gold`, 0, true),
+                empty: number(weights.empty, `${type}.empty`, 0, true),
+                green: number(weights.green, `${type}.green`, 0, true),
+                blue: number(weights.blue, `${type}.blue`, 0, true),
+                purple: number(weights.purple, `${type}.purple`, 0, true),
+                gold: number(weights.gold, `${type}.gold`, 0, true),
             },
             eligibleCardTypes: parseCardTypeList(raw.eligibleCardTypes, `${type}.eligibleCardTypes`),
         };

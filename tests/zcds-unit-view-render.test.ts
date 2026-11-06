@@ -3,7 +3,7 @@ import test from 'node:test';
 import { loadViews } from './helpers/zcds-view-fixtures';
 
 test('静止帧不重复写位置、血条和染色，受伤与死亡仍即时更新', () => {
-    const { load, bar, cc, FakeNode } = loadViews();
+    const { load, bar, cc, FakeNode, presentationArt } = loadViews();
     const view = new (load('./ZCUnitView').ZCUnitView)();
     const writes = { root: 0, barPosition: 0, progress: 0, barFrame: 0, active: 0, tint: 0 };
     const rootPosition = view.node.setPosition.bind(view.node);
@@ -42,7 +42,7 @@ test('静止帧不重复写位置、血条和染色，受伤与死亡仍即时�
         get: () => active,
         set: (value: boolean) => { writes.active++; active = value; },
     });
-    const visualSprite = { color: null as unknown };
+    const visualSprite = { node: new FakeNode(), color: null as unknown };
     Object.defineProperty(visualSprite, 'color', {
         get: () => null,
         set: () => { writes.tint++; },
@@ -54,7 +54,8 @@ test('静止帧不重复写位置、血条和染色，受伤与死亡仍即时�
             : type === cc.Animation ? animation : null) as typeof node.getComponent;
         return node;
     } };
-    view.initialize(prefab, 1);
+    presentationArt.unitVisualPrefabs.set('test-unit', prefab);
+    view.initialize({ unitId: 'test-unit', prefabSize: 1 });
     const unit = { hp: 100, maxHp: 100, owner: 'player', battleState: 'idle', facingRadians: 0, completedAttackCount: 0 };
     const definition = { hero: false, attackRange: 20 };
     const render = (now: number, x = 10) => view.render({ unit, definition, x, y: 20, now });
@@ -89,7 +90,7 @@ test('静止帧不重复写位置、血条和染色，受伤与死亡仍即时�
 });
 
 test('对象池复用同一美术或切到无美术时，重置受伤窗口、染色与血条偏移', () => {
-    const { load, bar, cc, FakeNode } = loadViews();
+    const { load, bar, cc, FakeNode, presentationArt } = loadViews();
     const view = new (load('./ZCUnitView').ZCUnitView)();
     view.rootTransform = { setContentSize() {} };
     view.visualRoot = new FakeNode();
@@ -98,7 +99,7 @@ test('对象池复用同一美术或切到无美术时，重置受伤窗口、�
     view.fallbackTransform = { setContentSize: (width: number, height: number) => { view.fallback.node.size = { width, height }; } };
     view.fallbackLabel = { node: new FakeNode(), enabled: true, string: '' };
     view.healthBar = bar();
-    const visualSprite = { color: null as unknown };
+    const visualSprite = { node: new FakeNode(), color: null as unknown };
     const prefab = { make: () => {
         const node = new FakeNode();
         node.getComponent = ((type: unknown) => type === cc.Sprite ? visualSprite : null) as typeof node.getComponent;
@@ -107,27 +108,29 @@ test('对象池复用同一美术或切到无美术时，重置受伤窗口、�
     const unit = { hp: 100, maxHp: 100, owner: 'player', battleState: 'idle', facingRadians: 0, completedAttackCount: 0 };
     const definition = { hero: false, attackRange: 20 };
     const render = (now: number) => view.render({ unit, definition, x: 0, y: 0, now });
-    view.initialize(prefab, 1);
+    presentationArt.unitVisualPrefabs.set('test-unit', prefab);
+    view.initialize({ unitId: 'test-unit', prefabSize: 1 });
     render(0);
     unit.hp = 50;
     unit.battleState = 'dead';
     render(.1);
     assert.equal(view.healthBar.node.active, false);
-    view.initialize(prefab, 1.2);
+    view.initialize({ unitId: 'test-unit', prefabSize: 1.2 });
     unit.hp = 100;
     unit.battleState = 'idle';
     render(.2);
     assert.equal(view.healthBar.node.active, false);
     assert.equal(view.healthBar.node.position.y, view.barOffsetY * 1.2);
     assert.equal(visualSprite.color, cc.Color.WHITE);
-    view.initialize(null, .8);
+    presentationArt.unitVisualPrefabs.delete('test-unit');
+    view.initialize({ unitId: 'test-unit', prefabSize: .8 });
     render(.3);
     assert.equal(view.healthBar.node.active, false);
     assert.equal(view.healthBar.node.position.y, view.barOffsetY * .8);
 });
 
 test('Spine 尚未就绪时下一帧重试 idle，保持脚点和画布缩放', () => {
-    const { load, bar, cc, FakeNode } = loadViews();
+    const { load, bar, cc, FakeNode, presentationArt } = loadViews();
     const view = new (load('./ZCUnitView').ZCUnitView)();
     view.rootTransform = { setContentSize() {} };
     view.visualRoot = new FakeNode();
@@ -138,6 +141,7 @@ test('Spine 尚未就绪时下一帧重试 idle，保持脚点和画布缩放', 
     view.healthBar = bar();
     let attempts = 0;
     const skeleton = {
+        node: new FakeNode(),
         color: null,
         skeletonData: { getRuntimeData: () => ({ height: 916, animations: [{ name: 'idle' }, { name: 'move' }, { name: 'attack' }] }) },
         setAnimation: () => { attempts++; return attempts === 1 ? null : {}; },
@@ -147,7 +151,8 @@ test('Spine 尚未就绪时下一帧重试 idle，保持脚点和画布缩放', 
         node.getComponent = ((type: unknown) => type === cc.sp.Skeleton ? skeleton : null) as typeof node.getComponent;
         return node;
     } };
-    view.initialize(prefab, 1.2);
+    presentationArt.unitVisualPrefabs.set('test-unit', prefab);
+    view.initialize({ unitId: 'test-unit', prefabSize: 1.2 });
     assert.equal(view.visualRoot.position.y, 0);
     assert.ok(Math.abs(view.visualNode.scale.y - 69.4 / 916 * 1.2) < 1e-9);
     assert.equal(attempts, 1);

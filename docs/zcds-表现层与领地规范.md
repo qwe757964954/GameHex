@@ -31,7 +31,7 @@
 | **废墟地块底色按归属方混合灰**（2026-10-29） | `ZCTheme.zcRuinsFactionColor` / `ZCHexView.territoryTint`（`ZCHexView.TERRITORY_FILL_ALPHA`） | `tests/zcds-ruins-tile-color.test.ts` |
 | **废墟建筑不再产金**（主城那一路原来无条件发钱，2026-10-29） | `ZCEconomySystem.tickIncome` / `isIncomeSource`、`isBuildingOperational` | `tests/zcds-ruins-income.test.ts` |
 | 开局金矿格整圈描边呼吸（绿色 · 9px · 棋盘最上层） | `ZCGameViewUtil.zcNeutralHintAlpha` / `ZCHexView.strokeHintOutline` / `ZCGameRenderWorld.ensureHintOutlineGraphics` | `tests/zcds-neutral-hint-outline.test.ts` |
-| 对局中立资源奖励**格心金币喷发**（12 枚 · ±26° · 翻面）+ 读数在上方 40px（2026-10-26，替换旧「飞向金币栏」） | `model/ZCNeutralBurst.zcNeutralBurstLaunch / zcNeutralBurstParticle / zcNeutralBurstLabelFrame` / `view/ZCNeutralRewardFx`（金币段） / `ZCBattlePresentationQueue.ZC_NEUTRAL_REWARD_TOTAL_SECONDS` | `tests/zcds-neutral-reward-fx.test.ts` |
+| 对局中立资源奖励**金币飞向战斗金币栏**（6 枚错峰飞行 + 金币栏读数上飘，2026-11-04 恢复） | `ZCGame` 金币栏目标装配 / `view/ZCGameRenderWorld.renderNeutralRewards` / `view/ZCNeutralRewardFx` / `ZCBattlePresentationQueue.ZC_NEUTRAL_REWARD_TOTAL_SECONDS` | `tests/zcds-neutral-reward-fx.test.ts` |
 | 领地随机资源格「翻开」（**原地碎裂**，2026-10-16 起只剩这一套） | `core/hex/HexFlipPresentation.hexShatterFx` / `TerritoryHexFlip.applyFace`、`applyReveal` | `tests/territory-hex-flip.test.ts` |
 | 领地建筑**生成抖动**（先 Y 后 X，120%）+ **展示滞后到翻转结束** | `core/hex/ShakePresentation` / `TerritoryStationView.playBuildingShake`、`TerritoryMapView.pendingBuildingReveal`、`ITerritoryStationRender.hidden` | `tests/territory-building-shake.test.ts` |
 | 领地**新地块进场**动画（两档：普通生成 / **胜利通过更重**，2026-11-03） | `model/TerritoryHexSpawn.territoryHexSpawnFrame`（`peakScale` 过冲）/ `…Delays` / `TERRITORY_HEX_SPAWN_(VICTORY_)TIMING` / `view/TerritoryHexSpawn.play(…, timing)` / `TerritoryMapView.syncHexSpawn` / `TerritoryModel.victoryClaimCells` | `tests/territory-hex-spawn.test.ts`、`tests/territory-battle-prelude.test.ts` |
@@ -41,7 +41,10 @@
 | 领地奖励**图标解析**：`roleProperty` + `item` **两张表**、`item` 图在 `main-pages` 分包 + 随机格**读数合成一条**（2026-10-26） | `ResTypes.resBarCellOfRefId` / `ResTypes.resBarIconSpritePath` / `MainTerritoryMap.ensureRewardIcon`、`refRows` / `TerritoryMapView.playResourceGain` 的 `readout` | `tests/res-types.test.ts`、`tests/territory-resource-gain.test.ts` |
 | **资源栏「扣除」反馈**（数字**白色闪烁** → 跳一下 → 才扣 + 上方飘 `-N`；2026-11-02 立项，2026-11-03 改口径去掉红色） | `main/MainResBarFeedback.resBarSpendFx / resBarSpendFloatFx / resBarSpendFlashColor` / `main/MainResBarSlot.playSpendFeedback`、`ensureSpendFloat` / `common/ResBar.reload`（`spendDeltaOf` 自动检测） | `tests/main-resbar-spend.test.ts`、`tests/main-resbar-feedback.test.ts`、`tests/militia-talent-ui.test.ts` |
 | **「章节选择」行排版**（金边即底框 / 区块留白 / 挂锁 ×1.3 / 序号块与完成度块缩 90%+上抬 / 章节名居中 / 挂锁两轴跟随；2026-11-03/04 五轮） | `ChapterSelectPanel.prefab` 的 `CurrentRing` · `NumBlock` · `StatusBlock` · `LockIcon` · `NameLabel` 几何 / `main/ChapterSelectItem.render` | `tests/chapter-select.test.ts` |
+| **「章节选择」完成度 = 已通关格子 / 章节全部格子**（格子按区域关整片算通关、资源据点不扩散；空格不算；与金牌判据解耦；2026-11-05） | `model/ChapterSelectRows.chapterPercentOf`（+ `passedCellSet`）/ `IChapterSelectMapInfo.areaGroups` / `ChapterSelectLoader.buildAreaGroups`（与 `TerritoryProgress.areaPeers` 同源） | `tests/chapter-select.test.ts` |
 | **战斗宝箱入口开启条件**（pvp 20001 通关才显示 + `0→1.15→1` 生成动画 + `Cell0..Cell3` 同进同出；2026-11-03） | `open.json` `refId=701`「战斗掉落宝箱」的 `visibleCondition` / `main/ChestEntryGate.ts` / `main/BattleLevelPassed.ts` / `MainPage.onLoad`、`applyChestEntryGate`、`setChestCellsVisible` | `tests/chest-entry-gate.test.ts` |
+| **章节通关判据 = 通过本章最后一个首领关**（异步据点不参与；无首领退回全占领；2026-11-04） | `model/TerritoryStageBinding.chapterFinalBossCell`（取 `stage.stage` 最大，同级比 `levelId` 再比 `cellId`）/ `TerritoryModel.chapterCompletion`（`bossCellId` + `progress.isAreaPassed`）/ `model/ChapterSelectRows.chapterClearedOf` / `ChapterSelectLoader.finalBossLevelIdOf`（`levelMod === 2`）与 `finalBossCells` | `tests/territory-stage-binding.test.ts`、`tests/territory-presenter.test.ts`、`tests/chapter-select.test.ts` |
+| **整章云散回收 + 章节切换镜头 + 散雾只给首次通关演**（模型只发 `chapterSwitch` 命令 → 页面压住换图保住云散 → `cover/wait/reveal` 三段 + 只认按钮来源；散雾判**边沿**（`chapterClearPending`）不判电平；2026-11-04 / 11-05） | `model/TerritoryChapterSwitch`（四段时长 / `lead` 相机先行 / `rise` / `sink` / `reveal` 曲线）/ `model/TerritoryCloud.territoryCloudClearAction`（`none` / `animate` / `instant`）/ `TerritoryModel.noteChapterJustCleared`、`emitStateChange`（发一拍就消费）/ `MainTerritoryMap.beginChapterSwitch`、`stepChapterSwitch`（`lead`/`cover`/`wait`/`reveal`）、`writeChapterSwitchLead`、`renderAll`（`chapterSwapPending`）/ `TerritoryMapView.beginChapterSwitch`、`setChapterSwitchOffset`、`syncClouds` / `TerritoryCloudView.setChapterCleared(cleared, animate)`、`dismissFillNow`、`dismissing` | `tests/territory-chapter-switch.test.ts`、`tests/territory-cloud.test.ts`、`tests/territory-battle-prelude.test.ts` |
 
 ## 对局资源与控制器生命周期（2026-10-30）
 
@@ -180,68 +183,32 @@ mapLayer（= ZCGameHUD.prefab 的 content）
 - ⚠️ 尺寸 / 位置仍归 Prefab（§1.5），加速**只碰 `speed`**，别顺手写 `setScale`。
 - **判据**：`tests/zcds-spawn-fx.test.ts`（`state.speed === 1.6`、1.2s 不回收 / 1.25s 必回收）。
 
-### 1.8 中立资源奖励：**格心金币喷发**（2026-10-26，替换旧「飞向金币栏」）
+### 1.8 中立资源奖励：金币飞向战斗金币栏（2026-11-04 恢复）
 
-需求原文（2026-10-26 截图）：「点击地块后，资源奖励**粒子喷发**的动画丢失了，重新找回实现，
-喷射对应的粒子资源的动画」。
+本次用户明确要求恢复之前的动画：「金币飞到战斗游戏金币栏」。此要求替代 2026-10-26 的格心金币喷发口径。
 
-也就是：**点开出金币堆 / 宝箱那一格 ⇒ 从格心喷出一束金币（抛物线倒锥 + 自身上下翻面）**，
-「+N」读数在这一束的**上方 40px** 同步升起并淡出。
+#### 一、金币堆 / 宝箱
 
-#### 一、为什么动的是这一段
+- 玩家领取时，6 枚金币从资源格中心错峰飞向战斗 HUD 的**金币栏 `ZCGameHUD CoinPanel`（整个面板）**；每枚沿确定性弧线飞行，到达后淡出。
+- 最后一枚金币到达后，在金币栏位置显示实际奖励金额「+N」，向上飘并淡出。
+- 不叠加格心喷发；非玩家领取不向玩家金币栏飞行。金矿仍走建筑激活，兵力仍走单位出生表现。
 
-2026-10-20 那版是 `ZCNeutralRewardFx` 把一把金币从格子**拉到 HUD 金币栏**（`+N` 也在栏位上飘）。
-用户给的截图却是**格子原地喷一束**，读数也在格子上方 —— 和领地页 §3.5 那条喷发同一个观感。
-两条是**同一次反馈**，叠加播放会变成「喷完还要再飞一遍」，所以这里**替换而不是叠加**
-（2026-10-26 用户三选一确认：只要格心喷发）。
+#### 二、接线与坐标
 
-⇒ 结论：**金币段不再需要 HUD 落点**。`IZCNeutralRewardFxTargets` 里已经**没有** `goldCounter`，
-`ZCGameRenderWorld` 的 `goldCounterNode` 选项也已删掉（不要再加回来）；只有神器那条还飞向神器按钮。
+- ZCGame 将 `hudView.coinPanel` 注入 `ZCGameRenderWorld` 的 `coinPanelNode`，目标节点是**整个 CoinPanel，不是 `GoldLabel` / `coin` 子图标**；旧字段名 `goldCounterNode` 已废弃，表现口径以 2026-11-04 用户指令为准（规则 405），历史注释与 `ZCNeutralBurst` 备用曲线只作档案、当前不接线。
+- 渲染世界每帧用 `overlayLocalOf()` 把资源格中心与金币栏面板中心换算到 `overlayLayer` 局部坐标，再传给 `ZCNeutralRewardFx`。
+- 金币目标缺失时跳过金币飞行，神器目标独立处理。节点随事件过期或换局统一销毁。
+- HUD 挂点四段缺一不可：`ZCGameHUDView.coinPanel` 声明 → prefab 绑定 → `ZCGame.ts` 装配 `coinPanelNode` → `ZCGameRenderWorld.overlayLocalOf()`；任一断开金币整条不播、零报错。
 
-#### 二、分工表
+#### 三、时间轴
 
-| 需求里的东西 | 落点 |
-| :--- | :--- |
-| 「喷发多个图标」 | `ZC_NEUTRAL_BURST_COUNT = 12` 枚粒子（**每枚都是一张金币图**，不是一颗带动画的图） |
-| 「倒圆锥」 | `ZC_NEUTRAL_BURST_HALF_ANGLE_DEG = 26` —— 约束的是**出射方向**与竖直轴的夹角 |
-| 「喷发坐标点 = 点击地块中心」 | `ZCNeutralRewardFx.buildEntry`：金币段的根节点 `setPosition(start.x, start.y)`，其余位移都写子节点局部坐标 |
-| 「数字 ui 在上方间隔 40px」 | `ZC_NEUTRAL_BURST_LABEL_LIFT_PX = 40`，读数节点 `setPosition(0, 40 + rise.offsetY)` |
-| 「icon 自身上下翻面」 | `zcNeutralBurstParticle` 的 `scaleX / scaleY`，视图只 `setScale(scaleX, scaleY, 1)` |
+复用 ZCBattlePresentationQueue 的飞行、错峰和上飘常量，以及 ZCNeutralRewardFx 的现有纯函数曲线；记录 startedAt，逐帧按当前时间计算，禁止累加 dt 或新建 tween。
+事件存活时长必须覆盖飞行 + 最后一枚错峰 + 读数上飘的整段时间，不缩短现有队列保留时间。
 
-#### 三、曲线参数（与领地同值 —— 两张图共用 `core/hex/HexGridLayout` 的 123×90 格面）
+#### 四、验证
 
-| 符号（`model/ZCNeutralBurst`） | 值 |
-| :--- | :--- |
-| `ZC_NEUTRAL_BURST_COUNT` | `12` |
-| `ZC_NEUTRAL_BURST_HALF_ANGLE_DEG` | `26` |
-| `ZC_NEUTRAL_BURST_SPEED` / `_SPEED_JITTER` | `650` / `0.12` |
-| `ZC_NEUTRAL_BURST_GRAVITY` | `1500` |
-| `ZC_NEUTRAL_BURST_STAGGER_SECONDS` | `0.025`（12 枚铺开 0.275s，**绝不同一帧全冒出来**） |
-| `ZC_NEUTRAL_BURST_LIFE_SECONDS` / `_LIFE_JITTER` | `1.1` / `0.15` |
-| `ZC_NEUTRAL_BURST_FADE_SECONDS` / `_SURFACE_FADE_SECONDS` | `0.25` / `0.12` |
-| `ZC_NEUTRAL_BURST_SCALE_JITTER` | `0.2`（基础缩放 0.8~1.2） |
-| `ZC_NEUTRAL_BURST_FLIP_MIN_HZ` / `_MAX_HZ` | `2` / `4` |
-| `ZC_NEUTRAL_BURST_LABEL_*` | `SECONDS 1.15` / `RISE_PX 96` / `LIFT_PX 40` / `ENTRANCE_RATIO 0.32` / `POP 1.18` / `FROM 0.6` |
-
-🔴 **三条红线**（与 §3.5 同一套，别在对局里另出新口径）：
-
-1. 轨迹用**解析式** `y = vy·t − ½·g·t²`，**不写成逐帧累加**（落点会随帧率漂）。
-2. 抖动**不用 `Math.random()`**：同一 `(seed, index)` 必须恒等。`seed` 取事件 id（每次发奖都不同）。
-3. **翻面只压 `y`**：`setScale(baseScale, baseScale·cos, 1)`；叠 `angle` 会读成「一边翻一边歪」。
-   另外 **落地后位置冻住**（横向也不许再滑，否则读成「贴着地皮滑一段」）。
-
-⚠️ **金币事件的总时长必须盖住整段喷发**：`ZC_NEUTRAL_REWARD_TOTAL_SECONDS` 取「神器飞行」与
-`zcNeutralBurstTotalSeconds(12)`（≈1.54s）里**较长**的那条。旧值是 1.4s —— 比喷发还短，
-模型 `prune` 会先一步把事件摘掉 ⇒ 实机正是「粒子刚喷出来整束消失」。
-
-#### 四、判据
-
-`tests/zcds-neutral-reward-fx.test.ts`（19 条）：队列时长必须 ≥ 喷发上限；出射确定性 / `|phi| ≤ 26°`
-/ `|vx|/vy ≤ tan26°` / 初速 ±12% / 左右都铺开且 200 次喷发整体无水平偏向；抛物线上升段单调、
-`y ≥ 0` 不穿模、峰值 ≈ `vy²/2g`、落点横向不超 `4·tan·apex`；错峰（首帧最多 1 枚）；落地横向纵向
-都冻住且 0.12s 淡出后为 `null`；翻面三态齐全、`scaleX` 恒等、相邻帧无硬切、12 枚不同步；读数
-`t=0` 就在（**不等最后一枚落地**）、easeOut 上飘、末段淡出；特效类整喷落在格心、12 枚 + 1 label、
-无 HUD 落点也照喷、事件过期即销毁；源码级别不许出现 `tween(` / `instantiate(`。
+tests/zcds-neutral-reward-fx.test.ts 覆盖正式装配的金币栏目标、真实渲染入口中的金币堆 / 宝箱、全屏层坐标转换、金币飞行、金币栏读数上飘以及过期清理。
+神器仍保持格心爆炸 + 图标飞向神器按钮，见下节及 tests/zcds-artifact-claim-burst.test.ts。
 
 #### 五、神器领取的格心爆炸：屏上边长 **90px**（2026-10-27）
 
@@ -456,7 +423,7 @@ mapLayer（= ZCGameHUD.prefab 的 content）
 
 抽到 `tier === 4`（金卡/传说）时，除地块上的小卡牌（`ZCGameCardReveal`，挂 `mapLayer`）外，同时在 **HUD 根节点 `options.overlayLayer`** 弹出全屏出场横幅 `ui/game/ZCGameLegendBanner.prefab`（四色底板与头像环按 `ZC_CLIENT_COLORS` 色相匹配 `owner`）。
 
-- **角色图来源（2026-11-04）**：横幅与卡牌阵容页一致，按 `resolveCardHeroArt(card)` 取 `CARD_HEAD_ART_ROOT` 下的专属图；未配置专属图时按 `resolveHeroArt(resolveCardClass(card))` 取 `ICON_ART_ROOT` 下的职业雕像。由本局资源作用域预载并经 `legendRoleArtFrames` 只读表注入；离场后不回填。地块翻牌继续使用独立的 `cardArtFrames`（`headIcon`）表。新立绘含 390×300 等宽幅画布，仍按画布高等比缩放到 280，底边对齐；下文 84 / 256 为旧资源样本，非规格限制。
+- **角色图来源（2026-11-04）**：横幅与卡牌阵容页一致，按 `resolveCardHeroArt(card)` 取 `CARD_HEAD_ART_ROOT` 下的专属图；未配置专属图时按 `resolveHeroArt(resolveCardClass(card, art.lineup))` 取 `ICON_ART_ROOT` 下的职业雕像。由本局资源作用域预载并经 `legendRoleArtFrames` 只读表注入；离场后不回填。地块翻牌继续使用独立的 `cardArtFrames`（`headIcon`）表。新立绘含 390×300 等宽幅画布，仍按画布高等比缩放到 280，底边对齐；下文 84 / 256 为旧资源样本，非规格限制。
 
 - **宽度 = 屏幕宽度**（2026-10-19 用户口径「传说牌弹出的 UI 提示应该对齐屏幕的宽度」）：
   `applyLayout` 里 **根节点** = `viewWidth × (屏高 / 人数)`（它是「布局格子」，落位按它算），
@@ -515,6 +482,8 @@ mapLayer（= ZCGameHUD.prefab 的 content）
 
 ### 3.2 七条硬口径
 
+领地挂机产出通过主城左下角金币车征收入口点击领取，并弹出获得奖励。进入领地、占领结算及定时刷新只建立新据点的计时账本，不自动发奖或消费已有累计时间。入口不受旧主线 `CmdBattleLevel` / `CmdBattleChapter` 解锁条件控制；计时读取当前章节已占领据点的领地账本。整小时产出、配置上限及新占领据点不追溯历史时间的结算规则保持不变；重复点击不得重复领取。
+
 章节地图的关卡、首领和异步据点统一两步点击：未解锁且区域未通关时，点击先请求解锁；**主线关卡（stage / boss）解锁回包成功后立刻请求开战、直接进战斗**（2026-10-29 口径「只有解锁那一次直开」），异步据点与绑不到关卡的格子只解锁、不自动弹窗；再次点击**已解锁**站点才打开对应详情（异步据点为「玩家关卡」，主线为「关卡界面」）。已通关区域跳过重复解锁，保留重复挑战入口。验证见 `tests/territory-presenter.test.ts`。
 
 章节地图已解锁的关卡 / 首领 / 玩家据点在建筑上方显示短编号气泡（显示配置中的 `chapterId-stage`，例如 `1-5`，**连字符两侧不留空格**）。2026-10-28 用户指定底图 `image/spawn-region/frame_03`：使用蓝色带尖角原图，88×45、15 号白字，文字局部 y=5 对齐气泡正文；Sprite 先 CUSTOM + trim=false 再赋帧，采用 SLICED 保留边角，白色顶点色保留原图蓝色。同日按美术效果图校正文字样式：字重改**加粗**（美术稿笔画约占字高 25%，常规体只有 14%）、字距走 `spacingX = -1` 收紧（美术稿三字紧贴）、行高 20、字号 15 保持不变（实测字高/气泡高 0.50，美术稿 0.53，差的不是字号）。⚠️ 间距**不许写进字符串**：空格宽度跟字号 / 字体绑定，一旦换字号就会整体漂移；四个样式值统一从 `app/common/MapMarkerBadge` 导出（`MAP_MARKER_BADGE_FONT_SIZE` / `_LINE_HEIGHT` / `_SPACING_X` / `_BOLD` / `_TEXT_Y`），`renderLevelBubble` 必须整组覆盖 —— prefab 里的 `12 / 16 / 常规体` 是旧角标口径，只改字号会留下旧字重与旧字距。美术由 `TerritoryPageAssets` 经页面作用域的 AssetService 加载，`BundleCatalog` 路由到 battle 分包，不从视图加载。底部尖角距建筑可见顶边 3px；跟随 trim 和 `buildSize` 后的可见高度定位。大地图仍使用原有 88×30 编号牌，两边共用 `app/common/MapMarkerBadge` 的宽度、字号和定位函数。未解锁格保留银币条件，资源点及缺少有效建筑 / 气泡帧 / 关卡配置的站点不画气泡。气泡在共享角标层按需创建，`getStationLayers` 必须把角标层移至透明命中层之后，避免相邻行的 128×128 命中区抢走编号点击。点击沿用 `STATION_TAP`，隐藏 / 在途 / 生成淡入与站点同步，回收时统一销毁。判据：`tests/territory-station-batching.test.ts`、`tests/territory-tile-frames.test.ts`、`tests/territory-level-bubble-style.test.ts`（字重 / 字距 / 行高 / 抬升的常量守卫）、`tmp/territory-level-bubble-probe.mjs`（包含真实鼠标点击）。
@@ -551,7 +520,7 @@ mapLayer（= ZCGameHUD.prefab 的 content）
 
 ### 3.3 随机资源格「翻开」：原地快碎裂（2026-10-16）
 
-- 随机格请求（2026-11-04）：点击立即沿用按压/光圈反馈，等待服务器期间不弹全屏 loading；格内等待超过 400ms 才显示「开启中…」。一次只处理一个随机格，期间保留地图拖动，拒绝其他格点击和快速定位，防止改交互号丢弃已发写请求。回包成功后才翻地、展示建筑和实际奖励；失败恢复点击并提示，网络失败先重拉章节快照核对是否已经解锁。切章/退出仍按会话作废旧结果。关卡解锁、开战和固定资源点保持原有等待流程。
+- 随机格请求（2026-11-04）：点击立即沿用按压/光圈反馈，等待服务器期间不弹全屏 loading；等待期间不展示「开启中…」文字。一次只处理一个随机格，期间保留地图拖动，拒绝其他格点击和快速定位，防止改交互号丢弃已发写请求。回包成功后才翻地、展示建筑和实际奖励；失败恢复点击并提示，网络失败先重拉章节快照核对是否已经解锁。切章/退出仍按会话作废旧结果。关卡解锁、开战和固定资源点保持原有等待流程。
 
 需求原文：「地块反转动画优化，**两种方案都做，点击后随机播放**，让我根据播放的结果判断只保留哪一种方案」⇒ 用户看完两套后拍板「**只保留地块破碎效果的方案**」。
 
@@ -1144,13 +1113,15 @@ node.setPosition(mapX - shiftX, mapY - shiftY + anchorLiftY, mapZ);
 - 池化复用：先 `bottomAnchor: true` 再 `false`，抬升必须被完整清掉，且缺省与显式 `false` 逐像素等价；
 - 接线：`bottomAnchored` 的赋值早于 `applyIconPlacement()`；`TerritoryMapView` 两条路都传且渲染层**不许出现 id 字面量**。
 
-### 3.10 地图拖拽**上下**限：地块边缘停在个人信息框下方 15px（2026-10-27 三轮）
+### 3.10 地图拖拽**上下**限：地块边缘停在个人信息框下方 15px（2026-10-27 三轮 + 2026-11-05 修复）
 
 #### 一、用户口径
 
 > 第一轮：「最底部的地块可以被拖动到 UI 框的下方，间距约 15px」
 > 第二轮：「**顶部**的格子还是无法拖动到个人信息框的下方」
 > 第三轮：「当前顶部留白已经实现，但是仍然需要可以下拉多大约 **60px**」
+> 第四轮（2026-11-05，配图黄线）：「当前最上沿的地块能往下拖动的极限位置不够下，还是会被 UI 遮挡，
+> 应该能拖到黄线位置才不会被遮挡」
 
 ⇒ 滚到**下**极限时，地图**底边**停在「顶部 HUD 框底边 + 15px」；
    滚到**上**极限时，第一排地块的**可见顶边**停在「HUD 底边 + 15 + 60」。
@@ -1160,6 +1131,22 @@ node.setPosition(mapX - shiftX, mapY - shiftY + anchorLiftY, mapZ);
 | :-- | :-- | :-- |
 | 底部 | 地图包围盒底边 | `视口高 − hudBottom − 15` |
 | 顶部 | 第一排的**可见顶边** | `hudBottom + 15 + 半个格面高(45) + 呼吸量(60)` |
+
+🔴 **第四轮不是公式问题，是量错了基准**（`2026-11-05`）：
+三个常数一个都没少，但 `hudBottom` 一直量成 **0** —— `MainTerritoryMap.findTopHud()` 只查了
+`this.node.parent`，而地图页的层级是 `ArenaRoot / MapRoot / MainTerritoryMap`
+（`MapRoot` 是那个嵌套 prefab 实例的宿主层），`TopHud` 挂在 `ArenaRoot` 上 ⇒ 隔了一层就永远找不到。
+后果：`padTop` 只剩 `15 + 45 + 60 = 120`，第一排可见顶边停在离屏幕顶 **75**，正好钻进 146 高的
+`TopHud` 后面 —— 玩家的体感就是"拖到头了还在 UI 底下"。
+
+修法：新增 `hostPageRoot()`（往上最多 4 层、逐层 `getChildByName`），顶部 / 底部两条基准线
+都从它起步（`MainTaskEntry` 在 `BottomHud` 里、`BeginGame` / `ChestBar` 在 `ArenaRoot` 上，
+**没有一个是 `MapRoot` 的后代**）。底部那侧之前没暴露，是因为量不到会退到兜底 300，真实 305，差 5px 看不出来。
+
+> 教训：**"量不到"必须当成 bug，不能当合法退化**。顶部退化成 0 = 第一排被 HUD 挡住，
+> 底部退化成 300 ≈ 真实值 —— 同一个错误在两个方向上一个是响的、一个是哑的，
+> 所以判据里要钉"起点必须往上走"，而不是只钉常数。
+
 
 ⚠️ 顶部那两截**必须分开表达**，别合并成 `+105`：
 
@@ -1202,7 +1189,8 @@ node.setPosition(mapX - shiftX, mapY - shiftY + anchorLiftY, mapZ);
 
 ```text
 ArenaRoot/TopHud（四边 Widget，顶对齐 16）+ 长屏适配 MainHudLayout
-  → MainTerritoryMap.findTopHud()          （从本页往上找同名兄弟，和 BigMapEntry 同款）
+  → MainTerritoryMap.hostPageRoot()        （往上最多 4 层，找挂着 TopHud 的那一层）
+  → MainTerritoryMap.findTopHud()          （从宿主页根按名字找；**不能**用 this.node.parent）
   → topHudBottom()：两个 getBoundingBoxToWorld() 相减 = HUD 底边到视口顶部的距离
   → territoryMapContentPaddingBottom(viewport.height, hudBottom) / territoryMapContentPaddingTop(hudBottom)
   → TerritoryMapView.setContentPaddingBottom(pad) / setContentPaddingTop(padTop)
@@ -1212,6 +1200,8 @@ ArenaRoot/TopHud（四边 Widget，顶对齐 16）+ 长屏适配 MainHudLayout
        MainTerritoryMap.scrollToCell  → territoryMapOffsetForCell(..., { paddingBottom, paddingTop })
 ```
 
+⚠️ **起点是 `hostPageRoot()`，不是 `this.node.parent`**：层级 `ArenaRoot / MapRoot / MainTerritoryMap`
+⇒ 父节点是 `MapRoot`，`TopHud` 不在它下面（2026-11-05 的病根，见上）。
 ⚠️ **量世界包围盒，不抄 prefab 数字**：TopHud 挂 Widget + 长屏适配（`MainHudLayout` 按安全区改
 `top`）⇒ 底边随屏幕比例变，抄死数值在长屏上会差几十像素。
 ⚠️ **`canvas-resize` 回调要延一帧**再量：`MainHudLayout` 也在同一事件里排 TopHud 的 Widget，
@@ -1225,11 +1215,11 @@ ArenaRoot/TopHud（四边 Widget，顶对齐 16）+ 长屏适配 MainHudLayout
 | :-- | :-- |
 | `MapViewport` | 720 × **1112**（四边 Widget，bottom = 168） |
 | `TopHud` 底边到视口顶部 `hudBottom` | 16 + 130 = **146** |
-| 底部留白 `pad` | 1112 − 146 − 15 = **951**（旧值恒 300） |
-| 顶部留白 `padTop` | 146 + 15 + 45 + 60 = **266**（旧值恒 0 → 上轮 206） |
-| 内容层高（18 行图，1694） | 1694 + 951 + 266 = **2911**（旧 1994 → 上轮 2851） |
-| 内容层偏移 `shift` | (951 − 266) / 2 = **342.5**（旧 475.5 → 上轮 372.5） |
-| 拖到最底时地图底边距屏幕顶部 | **161**（= HUD 底边 146 + 15，不受顶部改动影响） |
+| 底部留白 `pad` | 挂件咬入 305 + 50 = **355**（2026-10-28 前是 `视口高 − hudBottom − 15` = 951） |
+| 顶部留白 `padTop` | 146 + 15 + 45 + 60 = **266**（2026-11-05 之前实际恒为 **120** —— `hudBottom` 量成 0） |
+| 内容层高（18 行图，1694） | 1694 + 355 + 266 = **2315** |
+| 内容层偏移 `shift` | (355 − 266) / 2 = **44.5** |
+| 拖到最底时地图底边距屏幕顶部 | **757**（= 视口高 1112 − pad 355；底排停在挂件上沿上方 50） |
 | 拖到最顶时第一排**可见顶边**距屏幕顶部 | **221**（= 146 + 15 + 60） |
 | 拖到最顶时格心距屏幕顶部 | 266（可见顶边再减 45） |
 
@@ -1239,7 +1229,7 @@ ArenaRoot/TopHud（四边 Widget，顶对齐 16）+ 长屏适配 MainHudLayout
 
 #### 五、判据
 
-`tests/territory-map-bottom-inset.test.ts`（17 条）：
+`tests/territory-map-bottom-inset.test.ts`（18 条）：
 
 - 两条反算公式与边界（HUD 高过视口 / 非有限值 / 负数一律夹到合法值）；
 - **两条不变量**：滚到最底地图底边 = `hudBottom + 15`；滚到最顶第一排**可见顶边**
@@ -1248,7 +1238,9 @@ ArenaRoot/TopHud（四边 Widget，顶对齐 16）+ 长屏适配 MainHudLayout
 - 顶部留白真的撑大了可滚上限（`scrollToOffset` 不被钳在半路）；
 - 视图 `contentPaddingTop` 字段 + `setContentPaddingTop` setter 都同步重写偏移；
 - 页面从宿主页找 TopHud 量包围盒、**两份留白用同一个 `hudBottom` 反算**、注入早于 `initialize`、
-  `scrollToCell` 两份都传。
+  `scrollToCell` 两份都传；
+- **找基准线的起点必须往上走**（`hostPageRoot`）：顶部与底部两个测量都从它起步，并反证
+  "`this.node.parent.getChildByName('TopHud')`" 不许回来 —— 2026-11-05 第一排钻到 HUD 后面的病根。
 
 ### 3.11 云层散场：判据用「已激活」，收工先演镜头，雾逐朵退场（2026-10-27）
 
@@ -2346,6 +2338,147 @@ TerritoryStationView.renderLevelBubble() → 覆盖 badgeLabel.color
 
 **合并后自检（一条就够）**：`npx tsx --test tests/chest-entry-gate.test.ts`，
 里面有「`refSmallAll` 的 `open` 里也要有 701」的守卫，被冲掉会直接报红。
+
+### 3.22 章节通关判据 = 通过最后一个首领关卡；云散不许被换章掐断 + 切章镜头（2026-11-04）
+
+需求两句：
+
+> 「完成章节云层消散的动画没有了，重新找回，并且增加一个章节的切换动画，
+> 镜头快速上移，移动到新章节的位置，将新章节居中，玩家只能通过章节按钮播放切换动画，
+> 回到已通过的章节」
+>
+> 「章节通关条件，通过该章节的最后 1 个 boss 关卡，但是不用通过所有的异步据点」
+
+#### 一、通关判据：`chapterFinalBossCell`
+
+| 项 | 口径 |
+| :-- | :-- |
+| 判据 | `bindTerritoryStages`（只绑 `stage` / `boss`，按 `levelId` 去重）里 **`stage.stage` 最大**的那个首领格；`progress.isAreaPassed(该格)` 为真 ⇒ 整章通关 |
+| 排序为什么不用 `levelId` | 它是全局号，同章内不单调（chapter_01 的 `20001` 排在 `10010` 后面）；而线性推进链 `applyTerritoryStageUnlocks` 就是按 `stage.stage` 排的 ⇒ 链尾那一关才是"最后"的那关 |
+| 异步据点 | **不参与**。`bindTerritoryStages` 本来就排除 `asyncPvp`；拿打不了的格子当门槛 = 这一章永远通不了、下一章永远锁着 |
+| 一章一个可打首领都没有 | `chapterFinalBossCell` 返回 `null` ⇒ **退回旧口径「全部站点占领」**。死锁比漏判严重 |
+| 唯一实现 | `model/TerritoryStageBinding.ts` 的纯函数；`TerritoryModel.chapterCompletion()` 拿它覆盖 `complete`，同时把 `occupied/total` 原样留着给 HUD 显示 |
+| 弹窗同源 | `ChapterSelectRows.chapterClearedOf`：地图信息带 `finalBossCells`（同 `configId` 的全部格子）就只看那几个格；带不到才退回「占领率 100%」。金牌行因此**可以不是 100%** |
+
+配套：`TERRITORY_TEXTS.requireChapterComplete` 不再报「已占领 x/y」——占领率与通关条件已经不是一回事，
+报占领进度会让人以为"再占几格就能进"。现在的文案是「请先通关本章最后一个首领关卡」。
+
+#### 二、云散为什么"没了"（不是被删，是被掐断）
+
+`TerritoryCloudView` 那套「整图打通 ⇒ 拉远 1.1s ⇒ 逐朵淡 2.0s ⇒ 拉回」一直都在。
+真因是**通关那一刻 `advanceCompletedChapter()` 立刻 `loadChapter(下一章)`**，而
+`TerritoryMapView.syncGrid` 换章第一件事就是 `clouds.reset()` + `restoreChestCamera()` ——
+演出起手不到一帧就被清掉。
+
+修法（不动模型时序，改**页面先不画**）：
+
+1. `ITerritoryViewState.chapterCleared` 把「本章已通关」交给地图；
+2. `syncClouds` **先** `clouds.setChapterCleared(...)` **再** `sync(...)`：
+   - `setChapterCleared` 写的是**状态**（`dismissForced`）而不是一次性动作 —— `sync` 每帧都重算
+     "该不该有雾"，判据不成立就按回退复原，只做动作会让雾一闪一闪；
+   - 每帧都写（含 `false`）：两章布局键相同时 `syncGrid` 会早退、不 `reset`，粘住的旧标记
+     会让新一章的雾一上来就是散的；
+   - 这也是新判据的必要条件：老 `isMapCleared` 要求"全部内容格已激活"，通关时还剩异步据点
+     / 没打的普通关时它**永远不成立**，只靠它玩家看不到散雾。
+3. `MainTerritoryMap.renderAll` 在换章那一帧判 `mapView.chapterClearPlaying`（= `clouds.dismissing`）：
+   还在演就 **`chapterSwapPending = true` 并 return**，地图保持旧章不动；`update` 每帧来补，
+   演完再 `renderAll()` 换图。`syncGrid` 里的 `clouds.reset()` **不要删** —— 它是对的，
+   要解决的是"别在演出中途调它"。
+
+#### 三、切章镜头：四段 1.0 秒
+
+内存里同时只有一张章节图，所以"镜头上移"不能靠两张图真的纵向排布。用
+`model/TerritoryChapterSwitch` 的纯曲线 + `TerritoryBattleCover` 那层云拼出来：
+
+| 段 | 时长 | 画面 |
+| :-- | :-- | :-- |
+| `lead` | **0.1s** | **相机先行**：整张地图快速往下走 25% rise（世界下移 = 镜头上移）。**云还在画面外**（`out(0)` 的 spread + 透明度 0），玩家先看见"画面被带着往上走" |
+| `cover` | 0.32s | 云从画面外合拢盖满；相机**保持**在 `lead` 走到的位置（每帧写同一个常量，不再动） |
+| `wait` | ≤ 6s | 黑场里换图（模型发命令后自己 `loadChapter`）。云保持合拢但**待机帧继续走**（`stepChapterSwitchCover`），不冻屏 |
+| `reveal` | 0.58s | 新章先抬到 `+45% 视口高`，再落回 0（= 居中）；云同时往四周散开 + 逐朵淡出 |
+
+`lead` 是 2026-11-05 用户补的口径：「相机先向上快速移动 0.1s 后，云层遮挡动画再开始播放」。
+它必须是**独立的一段**，不能并进 `cover` —— 并进去就变成"云一边合拢、镜头一边慢慢走"，
+与"先动完再盖"相反。
+
+| 关键约束 | 为什么 |
+| :-- | :-- |
+| **只有玩家点章节按钮才播** | 模型只在 `switchChapter` / `selectChapter` 里发 `chapterSwitch` 命令；`advanceCompletedChapter`（通关自动推进）**不发**。判据是事件来源，不是"猜这次是不是自动" |
+| 揭幕看 `lastRenderedChapter === to` | 模型在 `loadChapter` 开头就把 `chapterId` 改了，那时地图还是旧的 —— 按 `state.chapterId` 判会在旧图上揭幕 |
+| 演不了就**不演** | `beginChapterSwitch()` 返回 `false`（云美术没加载 / 整页过场或推镜过场正在演）时直接换章。宁可没动画，也不要盖一片空底色 |
+| `lead` 段云必须完全透明 | 这一段的目的是让位移单独被看见；云只要露一点，就又变回"云和位移同时开始" |
+| 合拢段写**常量**位移 | 相机在 `lead` 段就到位了。合拢段若按 `coverProgress` 再插值一次（从 0 起算），画面会**往回弹**一下，读成"走了一下又退回来" |
+| 位移只写 `MapLayer` 的 y，且让位 | 它与开箱 / 散场 / 推镜**同一个节点**；`chestCameraActive` 时不写。基点在第一次调用时量一次，换章由 `syncGrid → resetChapterSwitchOffset()` 清空后**重新量**（`MapLayer` 是 ScrollView 的 content，换章会滚到新章的起始格） |
+| 输入锁要进 `update` 的排除名单 | `update` 的收尾是"没有镜头动画在播就解锁"，而转场期间 `cameraBusyLocked` 为假 ⇒ 不认 `chapterSwitchActive` 的话，云还盖着玩家就能拖地图 |
+
+#### 四、散雾只给**首次通关**演（2026-11-05 补的口径）
+
+> 「通过该章节的动画只有首次通关章节播放，切换章节后获取到通过状态也不用播放」
+
+`chapterCleared` 是**持久状态**。如果按电平起演，玩家切回一个早就通了的章节、或者存档里就通着的
+章节，**进页面第一帧就要演一遍散场** —— 这是错的。所以把它拆成两个字段：
+
+| 字段 | 语义 | 谁判 |
+| :-- | :-- | :-- |
+| `chapterCleared` | **电平**：这一章通没通（持久） | 决定**要不要散**（散完的终态） |
+| `chapterClearPending` | **边沿**：这一拍是不是刚打通（一次性，发出去一拍就消费） | 决定**演不演** |
+
+模型侧：`wasComplete` 是各路径**动手之前**取的通关态（`fastTick` / `slowTick` / `loadChapter` /
+`applyPassCellsBro` / 格子信息合并），`noteChapterJustCleared(wasComplete)` 在
+`!wasComplete && 现在通了` 时置位，且**必须排在 `emitStateChange()` 之前** —— 状态是随这次广播
+发出去的，晚一拍页面就收不到置位。`emitStateChange()` 发完立刻把置位清掉（一次性）。
+
+视图侧：`territoryCloudClearAction(cleared, animate, resolved)` 三选一 ——
+`animate` 演完整散场、`instant` 直接收掉、`none` 不动；`resolved` 是"已经在演 / 已经淡完"，
+用它做幂等。
+
+三件容易做错的事：
+
+1. **判据不能是"这一拍通没通"，只能是"动手前 vs 动手后"**。战斗回来那条路上，服务端推送常常
+   在 `loadChapter` 的合并段就已经把首领格通掉了 —— 那时第一次广播的 `chapterCleared` 就已经是
+   `true`。按"上一拍 vs 这一拍"或"进页面第一帧"判，都会把这次首通吞掉（动画再也不播）。
+2. **`instant` 只写终态**（`dollyElapsed = -1`、`fillFadeElapsed = -1`、`fillDismissed = true` +
+   `applyFillActive()`），与演完之后完全一致 ⇒ 后续每拍 `sync` 都当它收过了，`dismissing` 也立刻
+   变 `false`（页面不会白等一个永远不来的演出）。真实云层仍盖着没解锁的格，别顺手清掉。
+3. **老判据 `isMapCleared` 保持原样**（"全图都打通了"的另一套庆祝）：进章时若 `chapterCleared`
+   为真，`instant` 已经把 `fillDismissed` 落定，`sync` 里那条 `if (!fillDismissed && …) startDismiss()`
+   自然被挡住，不会二次开演。
+
+#### 判据
+
+`tests/territory-chapter-switch.test.ts`（19 条：纯曲线 + 触发源 + 四处接线 + 首次通关判据 + 相机先行段）、
+`tests/territory-presenter.test.ts` 的「切章命令只发给玩家点的章节按钮」、
+`tests/territory-stage-binding.test.ts` 的四条判据用例、`tests/chapter-select.test.ts` 的弹窗同源用例。
+
+### 3.23 「章节选择」的完成度 = 已通关格子 / 章节全部格子（2026-11-05）
+
+> 「章节完成度指的是章节内的所有格子已经都是通关状态，计算已通过的格子数和占据总格子数的比例」
+
+弹窗每行右侧那个百分比，公式就一条：
+
+```
+完成度 = 处于通关状态的格子数 ÷ 本章全部格子数
+```
+
+| 项 | 口径 |
+| :-- | :-- |
+| 分母 | 地图 `sites[].cellId` —— **章节里所有格子**（普通关 / 首领 / 异步据点 / 资源据点 / 宝箱都算）。格网里的**空格不算**：空格没有"通关"这回事，算进分母 100% 就永远到不了 |
+| 分子 | 处于**通关状态**的格子：自己打通了，或同 `configId` 的那片战斗区域里有一格打通（= 地图上格子外观的同一判据 `TerritoryProgress.isAreaPassed`） |
+| 100% 的语义 | 章节里每一格都通关 —— 少一个资源据点也是 95%，不四舍五入 |
+| 与金牌的关系 | **两回事**。金牌（`cleared`）看「最后一个首领关卡」（§3.22 一），完成度看全格子 ⇒ 金牌行可以不是 100%，100% 也不代表一定发了金牌 |
+
+**为什么分子必须按区域扩散**：一章里大量关卡是「一次占多格」的（chapter_01 有 13 组、
+覆盖 69 格，光 `boss 10005` 就占 7 格 192/193/194/212/213/214/233）。打其中任意一格，
+地图上那 7 格**全部变成已通关外观**。若完成度只数"服务端记过的那一格"，就会出现
+「地图上每一格都显示已通关，完成度却只有六成」—— 这正是本条要修的。
+
+**为什么资源据点不扩散**：`fixedResource` 同样有同 `configId` 多格（chapter_01 的
+`fixedResource_173` 占 173/195/174），但它们是**三个独立据点**。扩散组由
+`ChapterSelectLoader.buildAreaGroups` 按 `type ∈ {stage, boss, asyncPvp}` + `configId` 是非空
+数字串构建，与 `TerritoryProgress.areaPeers` 完全同源 —— 两处口径必须一起改。
+
+判据：`tests/chapter-select.test.ts`（23 条，其中 3 条专守本条：区域扩散、资源据点不扩散、
+加载器按真实配表算出的 50% / 75% / 100%）。
 
 ## 4. 其他玩家席位的视觉区分：顶点色相乘灰
 - **统一判据**：`owner !== 'player'`（与领地染色、城墙敌我同口径）。

@@ -3,7 +3,10 @@ import { ResourceLoadManager } from '../assets/script/core/asset/ResourceLoadMan
 import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
 import type { AssetService } from '../assets/script/core/asset/AssetService';
 import * as resourcePlan from '../assets/script/app/zcds/model/ZCGameResourcePlan';
+import { ZC_ATTACK_TRAITS } from '../assets/script/app/zcds/model/ZCCombatCatalog';
 import assert from 'node:assert/strict';
+import * as cardArtModule from '../assets/script/app/card/CardArtConfig';
+import { cardArtConfig, readCardArtTables } from './helpers/card-art-config';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
@@ -75,9 +78,17 @@ test('对局流程在进入前准备地图、配置和全部首屏 Prefab', asyn
     ];
     const configService = {
         initialize: async () => {},
-        getTable: async (name: string) => [{ name }],
+        getTable: async (name: string) => {
+            if (name === cardArtModule.CARD_ART_TABLES.rarity) return readCardArtTables().rarity;
+            if (name === cardArtModule.CARD_ART_TABLES.cardClass) return readCardArtTables().cardClass;
+            if (name === cardArtModule.CARD_ART_TABLES.camp) return readCardArtTables().camp;
+            if (name === 'icon') return [];
+            return [{ name }];
+        },
     };
     const dependencies: Record<string, unknown> = {
+        '../../card/CardArtConfig': cardArtModule,
+        '../ZCDCLogSwitch': { ZCDC_LOG_DIAGNOSTICS: false, ZCDC_LOG_WARNINGS: true },
         '../model/ZCGameResourcePlan': resourcePlan,
         '../model/ZCVisualResourcePlan': { buildZCVisualResourcePlan },
         cc,
@@ -107,6 +118,10 @@ test('对局流程在进入前准备地图、配置和全部首屏 Prefab', asyn
             },
         },
         '../model/ZCCombatCatalog': {
+            setCardRarityMeta: () => {},
+            // 受击特效 prefab 清单按这份词表拼路径（`<职业>受击`），桩必须透传真值，
+            // 漏给时 loader 拿到 undefined，`ZCGameResourcePlan` 展开就会抛 TypeError。
+            ZC_ATTACK_TRAITS,
             getAllUnitDefinitions: () => {
                 assert.equal(pvpTablesLoaded, true, '单位表现资源必须在数值表注入后解析');
                 return definitions;
@@ -161,6 +176,7 @@ test('对局流程在进入前准备地图、配置和全部首屏 Prefab', asyn
 
     const loader = new context.exports.ZCGameLoader({ assets: assetService, configs: configService }, mapDirectory);
     const prepared = await loader.prepare();
+    assert.equal(prepared.cardArtConfig.paths.get('hero.mage'), cardArtConfig.paths.get('hero.mage'));
 
     assert.equal(prepared.baseMatchConfig.map.id, 'preloaded-map', '冻结配置快照随预加载结果移交');
     assert.equal(prepared.baseMatchConfig.configHash, 'loader-snapshot');

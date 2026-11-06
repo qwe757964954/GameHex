@@ -42,7 +42,7 @@ function fixture() {
         StoreController: { StoreController }, CardLineupController: { CardLineupController },
         RoleController: { RoleController }, LeagueTabController: { LeagueTabController },
         StoreActions: { storeAction: async () => { purchases++; } },
-        CardRepository: { cardRepository: { loadLineupSnapshot: () => null, loadLineup: async () => { loads++; return { heroLevels: new Map() }; } } },
+        CardRepository: { cardRepository: { loadArtConfig: async () => ({}), loadLineupSnapshot: () => null, loadLineup: async () => { loads++; return { heroLevels: new Map() }; } } },
         RoleRepository: { roleRepository: { load: () => new Promise(resolve => pendingRoles.push(resolve)) } },
         FW: { FW: { showTip() {} } },
     };

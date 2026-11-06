@@ -8,13 +8,14 @@
  *   B. 路由口径（`idleRewardDestinationOf`）—— 银币（resId 7）/ 体力（resId 9）直接入钱包，
  *      其余 resId 进入领地库存。
  *   C. 接线守护（读源码文本，`SaveStore` / `TerritoryPage` 含 `cc` 无法在 Node 直接加载）——
- *      页面在占领之后结算、来源只含已占领站点、8 小时上限来自 campaign、奖励弹窗与 60 秒在线周期。
+ *      点击征收才结算、来源只含已占领站点、8 小时上限来自 campaign，定时拍不发奖。
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
     idleRewardDestinationOf,
+    initializeTerritoryIdleRewards,
     settleTerritoryIdleRewards,
     TERRITORY_IDLE_REWARD_INTERVAL_MS,
     TERRITORY_SILVER_RES_ID,
@@ -274,6 +275,17 @@ const controllerSrc = readFileSync(
     'utf8',
 );
 
+test('初始化只补新据点起点，保留已有累计时间且不修改原账本', () => {
+    const ledger = { 10001: HOUR };
+    const sources = [makeSource(10001, [{ resId: 7 }]), makeSource(10002, [{ resId: 7 }])];
+    const next = initializeTerritoryIdleRewards(ledger, sources, 10 * HOUR);
+    assert.deepEqual(next, { 10001: HOUR, 10002: 10 * HOUR });
+    assert.deepEqual(ledger, { 10001: HOUR });
+    assert.deepEqual(initializeTerritoryIdleRewards(next, sources, 11 * HOUR), next);
+    assert.deepEqual(settleTerritoryIdleRewards(next, sources, 10 * HOUR, 8).rewards,
+        [{ resId: 7, name: 'res_7', amount: 8 }]);
+});
+
 test('save store routes each settlement through the destination table and persists only on change', () => {
     assert.match(saveStoreSrc, /idleRewardDestinationOf\(reward\.resId\)/);
     assert.match(saveStoreSrc, /save\.wallet\.silver \+= reward\.amount/);
@@ -282,31 +294,25 @@ test('save store routes each settlement through the destination table and persis
     assert.match(saveStoreSrc, /if \(settlement\.changed\) this\.save\(/);
 });
 
-test('territory page settles idle rewards after occupation, with only owned sites as sources', () => {
+test('征收来源只含已占领站点，定时拍不消费挂机奖励', () => {
     // 2026-10-09 抽 Presenter 后：编排断言读 Presenter；store 委托断言读适配器；
     // 定时器 / 奖励弹窗仍在 Page（Passive View 的渲染侧）。
     // 2026-11 再并一版：`TerritoryPresenter` 已是 `TerritoryModel` 的兼容再导出（4 行），
     // 编排全在 Model 里 ⇒ presenterSrc 本来就指向 Model，不再另存一份上限值。
     assert.match(presenterSrc, /idleRewardMaxHours: campaign\.idleRewardMaxHours/);
     assert.match(presenterSrc, /this\.chapter\?\.idleRewardMaxHours/);
-    assert.match(presenterSrc, /this\.progress\.isOwned\(item\.site\.cellId\)/);
+    assert.match(presenterSrc, /context\.progress\.isOwned\(item\.site\.cellId\)/);
     assert.match(adapterSrc, /this\.store\.settleIdleRewards\(/);
     assert.match(pageSrc, /FW\.ShowReward\(/);
-    // 1 秒拍探索 / 60 秒拍挂机：调度在 Controller，两拍都得挂上
+    // 两拍仍管理探索和随机资源，但不再自动征收。
     assert.match(controllerSrc, /schedule\(\(\) => this\.tick\(false\), 1\)/);
     assert.match(controllerSrc, /schedule\(\(\) => this\.tick\(true\), 60\)/);
 
-    // Occupation must happen before idle settlement so newly occupied sites get their
-    // ledger initialized at this moment instead of earning time before ownership.
-    // 锚点取 slowTick 方法体：fastTick 里 `settleProgress` 是内联 `.length` 早退形态，
-    // 没有「先 claim 再 persist」那两行，用同一串在两处都找不到。
+    // 初始化与征收分离，避免仅关闭弹窗却仍在后台消费奖励。
     const slowAt = presenterSrc.indexOf('slowTick(now: number)');
     assert.ok(slowAt > 0, '要有 slowTick');
     const slowBody = presenterSrc.slice(slowAt, presenterSrc.indexOf('\n    }', slowAt));
-    const claimedAt = slowBody.indexOf('this.settleProgress(now)');
-    const idleAt = slowBody.indexOf('this.settleIdleRewards(now)');
-    assert.ok(
-        claimedAt >= 0 && idleAt > claimedAt,
-        '占领必须在挂机结算之前：新站点账本才会从当前时刻起步',
-    );
+    assert.match(slowBody, /this\.settleProgress\(now\)/);
+    assert.doesNotMatch(slowBody, /settleIdleRewards|showRewards/);
+    assert.match(presenterSrc, /initializeTerritoryIdleRewards\(/);
 });

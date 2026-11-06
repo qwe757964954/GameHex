@@ -165,7 +165,6 @@ export class CardSkillPage extends PopupBase {
      * 失败时回退到服务端确认值。响应回来后整份重刷，新档位以服务端为准，不猜 `level + 1`。
      */
     async step(skillId: number, direction: 1 | -1, caller: object): Promise<void> {
-        console.log(`[CardSkillPage] step skill=${skillId} dir=${direction} busy=${this.skillBusy} rows=${this.skillRows.length} heroLevel=${this.skillHeroLevel}`);
         if (this.skillBusy) return;
         const row = this.skillRows.find((item) => item.skill.skillId === skillId);
         if (!row) {
@@ -211,9 +210,9 @@ export class CardSkillPage extends PopupBase {
         this.skillPhase = 'idle';
         this.emit();
 
-        console.log(`[CardSkillPage] 发包 heroId=${this.skillHeroId} skillId=${skillId}`);
+        const revision = this.skillRevision;
         const result = await cardRepository.upgradeHeroSkill(this.skillHeroId, skillId, caller);
-        console.log('[CardSkillPage] 回包', result.kind);
+        if (revision !== this.skillRevision || !this.alive) return;
 
         this.skillBusy = false;
         if (result.kind !== 'success') {
@@ -256,7 +255,6 @@ export class CardSkillPage extends PopupBase {
             console.warn('[CardSkillPage] skillList 为空，技能列表不会渲染');
             return;
         }
-        console.log(`[CardSkillPage] presentSkills rows=${data?.rows.length ?? 0}`);
         this.skillList.render(data);
         // 卡名由打开时带进来（`ICardSkillOpenData.cardName`），没带就留 prefab 原文案。
         const name = this.nameNode?.getComponent(Label);

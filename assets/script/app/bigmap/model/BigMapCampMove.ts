@@ -69,6 +69,11 @@ export const BIGMAP_CAMP_MOVE_TEXT = {
     failed: '迁城失败，请重试',
     disposed: '页面已关闭',
     offline: '当前未连接服务器，无法迁城',
+    invalidPosition: '请选择目标据点范围内未被玩家占用的格子',
+    pickHint: '点击目标据点范围内的空格，再确认迁城；返回可取消',
+    confirm: '确认迁城',
+    moveHere: '迁城到此据点',
+    cancel: '取消',
 } as const;
 
 /** `pos` 是 `uint32`；**0 合法**（同建造 `position=0` 口径），只拒负数/小数/超界。 */

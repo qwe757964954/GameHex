@@ -3,8 +3,11 @@ import { ResourceScope } from '../../../core/asset/ResourceScope';
 import type { IControllerResources } from '../../../framework/controller/ControllerBase';
 import { loadBigMapArt, type IBigMapArt } from '../application/BigMapArtLoader';
 import type { IBigMapCityView, IBigMapViewState } from '../application/BigMapViewState';
-import { BIGMAP_PRESENTATION_TEXT, formatBigMapMonsterDetail, formatBigMapPlotDetail } from './BigMapPresentationText';
+import { BIGMAP_PRESENTATION_TEXT, formatBigMapCityOpening, formatBigMapMonsterDetail, formatBigMapPlotDetail } from './BigMapPresentationText';
 import { BigMapWorldView } from './BigMapWorldView';
+import { HeadArt } from '../../HeadArt';
+import { BIGMAP_CAMP_ROLE_TEXT, formatBigMapCampRoleDetail } from '../model/BigMapCampRoleInfo';
+import { BIGMAP_CAMP_MOVE_TEXT } from '../model/BigMapCampMove';
 
 import { PopupCloseReason } from '../../../framework/ui/PopupDef';
 import { PopupManager } from '../../../framework/ui/PopupManager';
@@ -66,6 +69,7 @@ export class BigMapPage extends Component {
     private baseActionPending = false;
     private playerPortraitLoader: ((scope: ResourceScope) => Promise<SpriteFrame | null>) | null = null;
     private playerPortrait: SpriteFrame | null = null;
+    private readonly rolePortraits = new Map<string, SpriteFrame | null>();
 
     /** 由入口交付初始快照，之后只响应展示事件。 */
     async initialize(data: IBigMapViewState, resources: IControllerResources, background = '', navigationHeight = FOOTER_HEIGHT,
@@ -235,6 +239,7 @@ export class BigMapPage extends Component {
     // -------------------------------------------------------------- 刷新
 
     private refreshAll(data: IBigMapViewState): void {
+        this.loadRolePortraits(data);
         this.layout.render(data);
         this.refreshInfo(data);
         this.worldView.render(data);
@@ -267,7 +272,15 @@ export class BigMapPage extends Component {
         // `open` 是异步的（要读预制体），期间 `get` 仍返回 null ⇒ 不挡住的话每次 refresh 都会再压一层。
         if (this.cityPopupOpened) return;
         this.cityPopupOpened = true;
-        void BigMapCityPopup.open({ userData: content }).catch((error: unknown) => {
+        void BigMapCityPopup.open({ userData: content }).then((popup) => {
+            const data = this.data;
+            if (!this.isValid || !data || data.ui.campRolesVisible || data.ui.selectedCityId === 0 || data.ui.mode !== 'world') {
+                if (popup) popup.close(PopupCloseReason.Force);
+                return;
+            }
+            const current = data.cities.get(data.ui.selectedCityId);
+            if (current && popup) popup.render(this.buildCityPopupContent(current));
+        }).catch((error: unknown) => {
             this.cityPopupOpened = false;
             console.warn('[BigMapPage] 城池弹窗打开失败', error);
         });
@@ -288,15 +301,22 @@ export class BigMapPage extends Component {
      */
     private buildCityPopupContent(city: IBigMapCityView): IBigMapCityPopupContent {
         const desc = city.campConfig?.desc ?? city.desc;
+        const lordId = city.campInfo?.occupyRoleId;
+        const lordRank = lordId ? city.rankEntries.find((row) => row.roleId === lordId) : undefined;
+        const lordRole = lordId ? city.campRoles.find((role) => role.roleId === lordId) : undefined;
         return {
+            hasPlayerActions: city.isServerCamp,
             title: city.name,
+            openingText: city.state === 'unavailable' || city.state === 'locked'
+                ? formatBigMapCityOpening(city.campConfig?.openDay ?? 0) : '',
             buffs: desc ? [{ title: BIGMAP_PRESENTATION_TEXT.buffTitle, desc }] : [],
-            ranks: city.rankEntries.map((row) => ({ rank: row.rank, name: row.name ?? '',
+            ranks: city.rankEntries.filter((row) => !lordId || row.roleId !== lordId).map((row) => ({ rank: row.rank, name: row.name ?? '',
                 score: String(row.warScore), avatar: null, avatarId: row.avatarId ?? '' })),
             warScore: city.warScore,
             minOccupyScore: city.minWarScore,
             lordName: city.campInfo?.occupyRoleName ?? '',
-            lordScore: city.topWarScore > 0 ? String(city.topWarScore) : '',
+            lordScore: lordRank ? String(lordRank.warScore) : '',
+            lordAvatarId: lordRole?.avatarId || lordRank?.avatarId || '',
             staminaCost: city.staminaCost,
             fightCaption: city.canAttack ? BIGMAP_PRESENTATION_TEXT.attack : BIGMAP_PRESENTATION_TEXT.cannotAttack,
             fightEnabled: city.canAttack,
@@ -305,6 +325,22 @@ export class BigMapPage extends Component {
 
     private refreshInfoContent(data: IBigMapViewState): void {
         const city = this.mode === 'world' && this.selectedCityId !== 0 ? data.cities.get(this.selectedCityId) : null;
+        if (city && data.ui.campRolesVisible) {
+            this.closeCityPopup();
+            const roles = city.campRoles;
+            const index = roles.length > 0 ? data.ui.campRoleIndex % roles.length : 0;
+            const role = roles[index];
+            const empty = city.campRolesStatus === 'failed' ? BIGMAP_CAMP_ROLE_TEXT.failed
+                : city.campRolesStatus === 'ready' ? BIGMAP_CAMP_ROLE_TEXT.empty : BIGMAP_CAMP_ROLE_TEXT.pending;
+            this.showInfoPopup({
+                title: `${city.name} · 驻守玩家${role ? `（${index + 1}/${roles.length}）` : ''}`,
+                body: role ? formatBigMapCampRoleDetail(role) : empty,
+                icon: role ? this.rolePortraits.get(role.avatarId) ?? null : null,
+                primary: { text: BIGMAP_CAMP_MOVE_TEXT.moveHere, enabled: !this.baseActionPending },
+                secondary: { text: BIGMAP_CAMP_ROLE_TEXT.next, enabled: roles.length > 1 && !this.baseActionPending },
+            });
+            return;
+        }
         if (city) {
             this.closeInfoPopup();
             this.showCityPopup(city);
@@ -322,6 +358,14 @@ export class BigMapPage extends Component {
     }
 
     private buildInfoPopupContent(data: IBigMapViewState): IBigMapInfoPopupContent | null {
+        if (data.ui.pendingCampMoveId > 0 && data.ui.selectedBaseHexId >= 0) {
+            const city = data.cities.get(data.ui.pendingCampMoveId);
+            return {
+                title: BIGMAP_CAMP_MOVE_TEXT.confirm, body: `目标据点：${city?.name ?? data.ui.pendingCampMoveId}\n目标格：${data.ui.selectedBaseHexId}`,
+                icon: null, primary: { text: BIGMAP_CAMP_MOVE_TEXT.confirm, enabled: !this.baseActionPending },
+                secondary: { text: BIGMAP_CAMP_MOVE_TEXT.cancel, enabled: !this.baseActionPending },
+            };
+        }
         if (this.mode === 'base' && this.selectedPlotHexId >= 0) {
             const detail = data.plotDetails.get(this.selectedPlotHexId);
             if (!detail) return null;
@@ -381,6 +425,33 @@ export class BigMapPage extends Component {
         if (feedback.message) Toast.show(feedback.message);
     }
 
+    private loadRolePortraits(data: IBigMapViewState): void {
+        for (const [cityId, city] of data.cities) {
+            const avatarIds = [city.rankEntries.find((row) => row.rank === 1)?.avatarId];
+            if (data.ui.campRolesVisible && data.ui.selectedCityId === cityId) {
+                const roles = city.campRoles;
+                avatarIds.push(roles[data.ui.campRoleIndex % roles.length]?.avatarId);
+            }
+            for (const avatarId of avatarIds) {
+                if (!avatarId || this.rolePortraits.has(avatarId)) continue;
+                this.rolePortraits.set(avatarId, null);
+                void this.loadRolePortrait(avatarId);
+            }
+        }
+    }
+    private async loadRolePortrait(avatarId: string): Promise<void> {
+        const resources = this.controllerResources;
+        let frame: SpriteFrame | null = null;
+        try {
+            frame = await HeadArt.loadHeadFrame(avatarId, (name, root) =>
+                resources.assets.load(`${root}/${name}/spriteFrame`, SpriteFrame, { scope: resources.scope }));
+        } catch (error) { console.warn('[BigMapPage] 驻守玩家头像加载失败', error); }
+        if (!this.isValid || resources.scope.disposed) return;
+        this.rolePortraits.set(avatarId, frame);
+        this.worldView.setRolePortrait(avatarId, frame);
+        if (this.data) this.refreshInfo(this.data);
+    }
+
     onDestroy(): void {
         this.ready = false;
         this.closeInfoPopup();
@@ -388,5 +459,6 @@ export class BigMapPage extends Component {
         if (this.data) EventMgr.instance.emit(BigMapUiEvent.Disposed);
         EventMgr.instance.offTarget(this);
         this.data = null;
+        this.rolePortraits.clear();
     }
 }

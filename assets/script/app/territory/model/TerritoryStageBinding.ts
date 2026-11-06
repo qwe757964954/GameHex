@@ -86,6 +86,44 @@ export function territoryChapterCompletion(
 }
 
 /**
+ * 本章**最后一个首领关卡**的格子 —— 章节通关的判据（2026-11-04 用户口径）。
+ *
+ * > 「章节通关条件：通过该章节的最后 1 个 boss 关卡」*（异步据点**不**参与判定）*
+ *
+ * ## 为什么按 `stage.stage` 而不是 `levelId`
+ * `levelInfo` 的 `levelId` 是全局号，同一章里不一定单调（chapter_01 的 20001 排在 10010 之后）；
+ * 而 `stage.stage` 就是策划表里的「第几关」，**线性推进链**（`applyTerritoryStageUnlocks`）
+ * 也是按它排序的 ⇒ 取 `stage` 最大的那个 boss，才是链尾那一关。
+ * 同 `stage` 撞车时按 `levelId`、再按 `cellId` 兜底，结果不依赖入参顺序。
+ *
+ * ## 为什么只认 `bindings`
+ * `bindings` = `bindTerritoryStages`（stage + boss，按 `levelId` 去重）。它天然排除了两类
+ * **打不了**的站点：没绑关卡的（`configId` 缺 / 表里没这一行）和异步据点。
+ * 拿"打不了的格子"当通关门槛 = 这一章永远通不了、下一章永远锁着 —— 死锁比漏判严重得多。
+ *
+ * 一章配了多个 boss（chapter_01 有 stage 5 / stage 10）⇒ 取**最后**那个，
+ * 这也是「链尾打完才算通关」的本意：前面那个 boss 通不通不影响。
+ *
+ * @returns `null` = 本章一个可打的首领都没有（配置缺失）。调用方必须**退回**旧口径
+ *          「全部站点占领」，别把它当成"已经通关"。
+ */
+export function chapterFinalBossCell(bindings: readonly TerritoryStageBinding[]): number | null {
+    let best: TerritoryStageBinding | null = null;
+    for (const binding of bindings) {
+        if (binding.site.type !== TERRITORY_SITE_TYPE.boss) continue;
+        if (!best) {
+            best = binding;
+            continue;
+        }
+        const byStage = binding.stage.stage - best.stage.stage;
+        const byLevel = byStage || (binding.stage.levelId - best.stage.levelId);
+        const byCell = byLevel || (binding.site.cellId - best.site.cellId);
+        if (byCell > 0) best = binding;
+    }
+    return best ? best.site.cellId : null;
+}
+
+/**
  * Binds the current territory-map JSON to PVP levels without changing either table.
  * Only an explicit numeric configId on a stage or boss site can join linear progression.
  * Repeated IDs on display stations bind once, in map order.

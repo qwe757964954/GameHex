@@ -5,5 +5,11 @@
   /* Add your custom configuration here. */
   "compilerOptions": {
     "strict": false
-  }
+  },
+  /* 只排除 tmp：tests/ 与 extensions/ 下的 .d.ts 提供 lib 提升与 Long 全局类型，
+     排掉会让 tsc 退回 ES2015 lib，凭空多出 165 条 assets/script 伪错误。
+     node_modules 是 TS 默认排除项，显式写出以免被本字段覆盖。 */
+  "exclude": [
+    "tmp", "node_modules"
+  ]
 }

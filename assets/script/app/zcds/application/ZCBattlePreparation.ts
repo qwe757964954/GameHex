@@ -1,3 +1,4 @@
+import { ZCDC_LOG_DIAGNOSTICS } from '../ZCDCLogSwitch';
 import type { IControllerContext } from '../../../framework/controller/ControllerBase';
 import { MAP_DIRECTORY } from '../ZCGame';
 import type { ZCGame } from '../ZCGame';
@@ -20,7 +21,9 @@ export function createZCBattleSession(context: IControllerContext, input: IZCBat
         },
     }, input);
     void session.ready.then(
-        resources => console.info(`[BattleLoading] ${resources.loadDeferredArt ? '首帧资源准备完成' : '资源准备完成'} ${Math.max(0, Date.now() - startedAt)}ms`),
+        resources => {
+            if (ZCDC_LOG_DIAGNOSTICS) console.info(`[BattleLoading] ${resources.loadDeferredArt ? '首帧资源准备完成' : '资源准备完成'} ${Math.max(0, Date.now() - startedAt)}ms`);
+        },
         () => {},
     );
     return session;

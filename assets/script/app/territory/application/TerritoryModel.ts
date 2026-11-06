@@ -23,7 +23,7 @@ import type {
     TerritoryIdleRewardGain,
     TerritoryIdleRewardSource,
 } from '../model/TerritoryIdleReward';
-import { TERRITORY_SILVER_RES_ID } from '../model/TerritoryIdleReward';
+import { initializeTerritoryIdleRewards, TERRITORY_SILVER_RES_ID } from '../model/TerritoryIdleReward';
 import type {
     TerritoryMapConfig,
     TerritorySite,
@@ -45,10 +45,12 @@ import {
     applyTerritoryStageUnlocks,
     bindTerritoryBattleStages,
     bindTerritoryStages,
+    chapterFinalBossCell,
     expandBindingsToAreaSites,
     findCurrentTerritoryLevel,
     territoryChapterCompletion,
 } from '../model/TerritoryStageBinding';
+import type { TerritoryChapterCompletion } from '../model/TerritoryStageBinding';
 import type { TerritoryCellFetchResult, TerritoryStartBattleResult, TerritoryWriteResult } from './TerritoryCellRepository';
 import type { ITerritoryBattleArt } from './TerritoryPageAssets';
 import {
@@ -388,6 +390,8 @@ export interface ITerritoryHudRender {
 
 export interface ITerritoryViewState {
     readonly ready: boolean;
+    readonly idleRewardStartedAt: number | null;
+    readonly idleRewardMaxHours: number;
     readonly chapterId: number;
     readonly map: TerritoryMapConfig | null;
     readonly layout: ITerritoryMapLayout;
@@ -395,6 +399,17 @@ export interface ITerritoryViewState {
     readonly progress: TerritoryProgress | null;
     readonly revealedCells: readonly number[];
     readonly siteOpenableCells: readonly number[];
+    /**
+     * 「被**结构性条件**卡住、现在开不了」的格 —— 未解锁锁标（`icon_lock`）只认这一份。
+     *
+     *  · 站点格：`prerequisiteBlockers` 非空（前置关卡没打通 / 前置宝箱没领）；
+     *  · 随机候选格：`canOpenTerritoryRandomCell` 判 `needsNeighbor`（四周没有已开启格）。
+     *
+     * 🔴 **不含「银币 / 体力不够」**（山猫 2026-11-05：「只有这种才需要上锁」，配图是
+     *   「PVP 关卡通关后解锁」那种被前置卡住的格）。缺钱是钱包问题，价格数字变红才是它的表达 ——
+     *   把缺钱也上锁，玩家每花一笔银子就会看见整图上锁。
+     */
+    readonly lockBlockedCells: readonly number[];
     readonly stageByCell: ReadonlyMap<number, TerritoryCampaignStage>;
     readonly randomResourceCells: readonly number[];
     readonly randomResourceOpenableCells: readonly number[];
@@ -415,6 +430,23 @@ export interface ITerritoryViewState {
      * ⚠️ 只读语义：视图拿它做**比较**，不在这里扣钱（扣费真源是 `TerritorySaveStore`）。
      */
     readonly wallet: Readonly<TerritoryWallet>;
+    /**
+     * 本章是否**已通关**（= 通过本章最后一个首领关卡，见 {@link chapterCompletion}）。
+     *
+     * 给地图用：通关那一刻要演「整章云散」（用户 2026-11-04「完成章节云层消散的动画没有了」）。
+     * 🔴 与 `hud.nextEnabled` **不同源**：后者还要 `hasNextChapter`（最后一章没有下一章，
+     * 但同样该散雾），所以不能拿它反推。
+     */
+    readonly chapterCleared: boolean;
+    /**
+     * 「本章刚刚通关、云散还没演」—— **一次性**信号（发出去一拍就消费掉）。
+     *
+     * 与 {@link chapterCleared} 分开是为了区分「边沿」和「电平」：散雾只给首次通关演，
+     * 切回一个早就通了的章节时 `chapterCleared` 依然为真，但这里是 `false`
+     * ⇒ 地图直接把雾收掉、不演（用户 2026-11-05：「通过的动画只有首次通关章节播放，
+     * 切换章节后获取到通过状态也不用播放」）。
+     */
+    readonly chapterClearPending: boolean;
     readonly hud: ITerritoryHudRender | null;
     readonly detail: ITerritoryDetailState;
 }
@@ -460,7 +492,12 @@ export type TerritoryModelOutput =
     | { readonly kind: 'navigate'; readonly payload: ITerritoryNavigateBattlePayload }
     | { readonly kind: 'tip'; readonly payload: ITerritoryShowTipPayload }
     | { readonly kind: 'rewards'; readonly payload: ITerritoryShowRewardsPayload }
-    | { readonly kind: 'busy'; readonly payload: ITerritorySetBusyPayload };
+    | { readonly kind: 'busy'; readonly payload: ITerritorySetBusyPayload }
+    /**
+     * 玩家主动切章（点章节按钮 / 章节选择弹窗）⇒ 页面播「镜头上移、新章居中」的转场。
+     * 自动推进不发这条（见 `announceChapterSwitch`）。
+     */
+    | { readonly kind: 'chapterSwitch'; readonly fromChapterId: number; readonly toChapterId: number };
 
 export class TerritoryModel {
     private readonly outputs = new Set<(output: TerritoryModelOutput) => void>();
@@ -509,6 +546,8 @@ export class TerritoryModel {
         // 地皮两态（未通关 / 已通关）+ 四张「已解锁未通关」的格面框，口径见 `TerritoryMapView.paintHexes`。
         tileLocked: null,
         tileCleared: null,
+        // 前沿空锁格的锁标（`image/territory/icon_lock`）；空图 ⇒ 锁格只显示泥土台面。
+        lockIcon: null,
         frameBoss: null,
         frameStage: null,
         frameAsyncPvp: null,
@@ -559,6 +598,19 @@ export class TerritoryModel {
     private victoryClaimCells: number[] = [];
     /** 已读到胜利存档、还没被 `settleProgress` 兑现过一次（见 `applyStoredBattleResult`）。 */
     private victoryPending = false;
+    /**
+     * 「本章**刚刚**通关、整章云散还没演过」—— 一次性信号，只随状态发出去一拍。
+     *
+     * 🔴 与 `chapterCleared` 是**两回事**：那个是持久状态（这一章通没通），这个是**边沿**
+     * （这一次停留里是不是刚打通）。散雾是一段庆祝演出，只有首次通关才配播 ——
+     * 按状态起演的话，切回一个早就通了的章节、或者存档里就通着的章节，进页面第一帧就要
+     * 演一遍（用户 2026-11-05：「通过的动画只有首次通关章节播放，切换章节后获取到通过
+     * 状态也不用播放」）。
+     *
+     * 只在本页实例里判「看着它从没通变成通」：本页一进来它就已经通着（`wasComplete` 为真）
+     * ⇒ 永远不置位，跨会话/跨页面自然也不会重演，不需要额外落盘。
+     */
+    private chapterClearPending = false;
     /**
      * 当前交互号。**每次「换了目标格」才递增**（见 `beginInteraction`），回包靠它对号：
      * 号变了 = 玩家早已切走，结果不属于当前交互 ⇒ 不记账、不提示。
@@ -1500,10 +1552,11 @@ export class TerritoryModel {
         if (offset > 0) {
             const completion = this.chapterCompletion();
             if (!completion.complete) {
-                this.showTip(TERRITORY_TEXTS.requireChapterComplete(completion.occupied, completion.total));
+                this.showTip(TERRITORY_TEXTS.requireChapterComplete());
                 return;
             }
         }
+        this.announceChapterSwitch(nextChapter);
         void this.loadChapter(nextChapter, false);
     }
 
@@ -1519,11 +1572,26 @@ export class TerritoryModel {
         if (chapters.indexOf(chapterId) > chapters.indexOf(this.currentChapterId)) {
             const completion = this.chapterCompletion();
             if (!completion.complete) {
-                this.showTip(TERRITORY_TEXTS.requireChapterComplete(completion.occupied, completion.total));
+                this.showTip(TERRITORY_TEXTS.requireChapterComplete());
                 return;
             }
         }
+        this.announceChapterSwitch(chapterId);
         void this.loadChapter(chapterId, false);
+    }
+
+    /**
+     * 告诉页面「这一次换章是**玩家点的章节按钮**」⇒ 播「镜头上移、新章居中」的转场。
+     *
+     * 🔴 只有玩家点了才播（用户 2026-11-04：「玩家只能通过章节按钮播放切换动画」）：
+     *   自动推进（通关后 `advanceCompletedChapter`）走的是另一条路，那里**不发**这条命令，
+     *   页面就不会演转场 —— 两条路径的差别就在这里，不靠"猜这次是不是自动"。
+     *
+     * 时机在 `loadChapter` **之前**：页面要先把云合拢，新图才有地方"升进来"。
+     * 加载失败时模型会把 `chapterId` 退回旧章，页面看到"章号没变"就当没这回事收场。
+     */
+    private announceChapterSwitch(toChapterId: number): void {
+        this.publish({ kind: 'chapterSwitch', fromChapterId: this.currentChapterId, toChapterId });
     }
 
     private advanceCompletedChapter(): void {
@@ -1533,31 +1601,44 @@ export class TerritoryModel {
         if (nextChapter !== undefined) void this.loadChapter(nextChapter);
     }
 
+    /**
+     * 「这一拍通关了」⇒ 置位一次性演出信号（{@link chapterClearPending}）。
+     *
+     * 判据必须是**前后对比**（`wasComplete` 是这一拍动手**之前**取的），不能是"现在通没通"：
+     * 那个是持久状态，切回旧章一进页面就成立。而且比完要赶在 `emitStateChange` **之前**
+     * ——状态是随这次广播发出去的，晚一拍页面就收不到置位（下一拍起又都是 false）。
+     *
+     * @param wasComplete 这一拍开始**之前**的通关态（各调用点已经取好的那个局部量）
+     */
+    private noteChapterJustCleared(wasComplete: boolean): void {
+        if (wasComplete) return;
+        if (!this.chapterCompletion().complete) return;
+        this.chapterClearPending = true;
+    }
+
     /** 1 秒拍：仅在有探索进行时工作；探索到期且无新占领时早退（与旧 tickProgress 口径一致）。 */
     fastTick(now: number): void {
         if (this.loadingPushes || !this.progress || !this.progress.activeExplorations.length) return;
         const wasComplete = this.chapterCompletion().complete;
         if (!this.settleProgress(now).length) return;
-        const idle = this.settleIdleRewards(now);
         this.ensureRandomResources();
         this.persistProgress();
+        this.noteChapterJustCleared(wasComplete);
         this.emitStateChange();
-        if (idle?.rewards.length) this.showRewards(idle.rewards);
         if (!wasComplete) this.advanceCompletedChapter();
     }
 
-    /** 60 秒拍：每拍都结算探索与挂机产出（与旧 tickIdleRewards 口径一致）。 */
+    /** 60 秒拍：刷新探索和随机资源；挂机产出留到点击征收时领取。 */
     slowTick(now: number): void {
         if (this.loadingPushes) return;
         const wasComplete = this.chapterCompletion().complete;
         const claimed = this.settleProgress(now);
-        const idle = this.settleIdleRewards(now);
         const randomChanged = this.ensureRandomResources();
-        if (claimed.length || idle?.changed || randomChanged) {
+        if (claimed.length || randomChanged) {
             this.persistProgress();
+            this.noteChapterJustCleared(wasComplete);
             this.emitStateChange();
         }
-        if (idle?.rewards.length) this.showRewards(idle.rewards);
         void this.reportPendingPasses();
         if (!wasComplete) this.advanceCompletedChapter();
     }
@@ -1581,6 +1662,8 @@ export class TerritoryModel {
         // 上一章的胜利标记不能漏到新章：否则新章第一次普通生成也会被当成「胜利通过」放大播。
         this.victoryClaimCells = [];
         this.victoryPending = false;
+        // 通关演出的待播信号同理：它只属于"刚刚打通的那一章"，新章有它自己的命。
+        this.chapterClearPending = false;
         // ⚠️ 切章节必须清上一章的开战记录：它是「防连点重发开战请求」的判据，
         // 不清的话换章后点新章的关卡会被当成「已经开过战」而永远拒绝。
         this.bossBattleStart = null;
@@ -1679,6 +1762,7 @@ export class TerritoryModel {
 
         // 页面立即可用：先用本地存档渲染（地图/进度/随机点/角标都齐了）。
         // 不再等服务端格子状态 —— 服务端慢/超时不再整页锁屏（生产口径：失败不阻断、本地兜底）。
+        this.noteChapterJustCleared(wasComplete);
         this.emitStateChange();
 
         await this.mergeServerState(chapterId, loadId, lifecycleHost);
@@ -1688,9 +1772,8 @@ export class TerritoryModel {
         const now = Date.now();
         this.settleProgress(now);
         this.persistProgress();
-        const idle = this.settleIdleRewards(now);
+        this.noteChapterJustCleared(wasComplete);
         this.emitStateChange();
-        if (idle?.rewards.length) this.showRewards(idle.rewards);
         void this.reportPendingPasses();
         // 手动回看只展示旧章；战斗返回或新同步的通关结果才自动推进。
         if (autoAdvance && (!wasComplete || returningFromBattle)) this.advanceCompletedChapter();
@@ -1727,7 +1810,10 @@ export class TerritoryModel {
         const context = this.chapter;
         if (!context || chapterId !== context.map.chapterId) return;
         const wasComplete = this.chapterCompletion().complete;
-        if (this.mergePassCells(context, cellIds)) this.emitStateChange();
+        if (this.mergePassCells(context, cellIds)) {
+            this.noteChapterJustCleared(wasComplete);
+            this.emitStateChange();
+        }
         if (!wasComplete) this.advanceCompletedChapter();
     }
 
@@ -1779,7 +1865,10 @@ export class TerritoryModel {
         const context = this.chapter;
         if (!context || chapterId !== context.map.chapterId) return;
         const wasComplete = this.chapterCompletion().complete;
-        if (this.mergeCellInfo(context, state)) this.emitStateChange();
+        if (this.mergeCellInfo(context, state)) {
+            this.noteChapterJustCleared(wasComplete);
+            this.emitStateChange();
+        }
         if (!wasComplete) this.advanceCompletedChapter();
     }
 
@@ -1953,13 +2042,32 @@ export class TerritoryModel {
         }
     }
 
-    private chapterCompletion() {
+    /**
+     * 章节通关判定 + HUD 用的占领进度。
+     *
+     * ## 通关判据（2026-11-04 用户口径）
+     * **通过本章最后一个首领（boss）关卡**即算通关，**异步据点不参与判定**：
+     *
+     * > 「章节通关条件：通过该章节的最后 1 个 boss 关卡，但是不用通过所有的异步据点」
+     *
+     * `occupied / total` 仍然按「已占领的关卡站点数 / 关卡站点总数」算 —— 它们是 HUD 上
+     * 「已占领 x/y」的展示口径，与"通没通关"是两件事，别合成一个数。
+     *
+     * ⚠️ 本章一个可打的首领都没配（配置缺失）⇒ **退回**旧的「全部站点占领」口径：
+     * 那种情况按新判据永远不成立，会让下一章永远锁着（死锁比漏判严重）。
+     */
+    private chapterCompletion(): TerritoryChapterCompletion & { readonly bossCellId: number | null } {
         // 去重绑定只保留区域代表格；完成度与地图同用区域查询，不扩写实际占领存档。
         const progress = this.progress;
         const completedStageCells = this.stages
             .filter(({ site }) => progress?.isAreaPassed(site.cellId))
             .map(({ site }) => site.cellId);
-        return territoryChapterCompletion(this.stages, completedStageCells);
+        const completion = territoryChapterCompletion(this.stages, completedStageCells);
+        const bossCellId = chapterFinalBossCell(this.stages);
+        const complete = bossCellId === null
+            ? completion.complete
+            : progress != null && progress.isAreaPassed(bossCellId);
+        return { ...completion, complete, bossCellId };
     }
 
     private persistProgress(): void {
@@ -1967,23 +2075,36 @@ export class TerritoryModel {
     }
 
     private persistChapter(context: ITerritoryChapterContext): void {
+        context.saveState = {
+            ...context.saveState,
+            idleRewardAtByLevel: initializeTerritoryIdleRewards(
+                context.saveState.idleRewardAtByLevel, this.buildIdleRewardSources(context), Date.now()),
+        };
         context.saveState = this.ports.store.saveProgress(
             context.map.chapterId, context.progress.toJSON(), context.saveState,
         );
     }
 
     /** 收集已占领站点的挂机产出配置；禁用站点不在 ownedCells 里，无需额外过滤。 */
-    private buildIdleRewardSources(): TerritoryIdleRewardSource[] {
-        if (!this.progress) return [];
+    private buildIdleRewardSources(context = this.chapter): TerritoryIdleRewardSource[] {
+        if (!context) return [];
         const sources: TerritoryIdleRewardSource[] = [];
-        for (const item of this.stages) {
-            if (!this.progress.isOwned(item.site.cellId) || !item.stage.idleRewards.length) continue;
+        for (const item of context.stages) {
+            if (!context.progress.isOwned(item.site.cellId) || !item.stage.idleRewards.length) continue;
             sources.push({ levelId: item.stage.levelId, rewards: item.stage.idleRewards });
         }
         return sources;
     }
 
-    /** 结算离线/挂机产出；每个站点自带领取时间戳，账本里没有的站点从 now 起算，不补发占领前时间。 */
+    claimIdleRewards(now: number): void {
+        if (this.loadingPushes || !this.chapter) return;
+        const idle = this.settleIdleRewards(now);
+        this.emitStateChange();
+        if (idle?.rewards.length) this.showRewards(idle.rewards);
+        else this.showTip(TERRITORY_TEXTS.noIdleRewards);
+    }
+
+    /** 领取后推进每个据点的账本，重复点击不会再次领取同一小时。 */
     private settleIdleRewards(now: number): TerritoryIdleRewardSaveResult | null {
         if (!this.map || !this.saveState) return null;
         const result = this.ports.store.settleIdleRewards(
@@ -2037,8 +2158,30 @@ export class TerritoryModel {
         const openedCells = progress
             ? Array.from(new Set(progress.ownedCells.concat(progress.unlockedCells)))
             : [];
+        // 锁标只认「结构性阻塞」：站点格看前置、随机格看「四周有没有已开格」。
+        // 🔴 不含银币/体力 —— 见 `ITerritoryViewState.lockBlockedCells` 的口径说明。
+        const siteLockCells = map && progress ? map.sites
+            .filter((site) => revealedSet.has(site.cellId)
+                && !progress.isCellUnlocked(site.cellId)
+                && !progress.isOwned(site.cellId)
+                && progress.prerequisiteBlockers(site.cellId).length > 0)
+            .map((site) => site.cellId) : [];
+        const randomResourceOpenableCells = map?.randomSites?.candidateCells.filter((cellId) =>
+            this.randomResourceOpenCheck(cellId, openedCells).ok) ?? [];
+        const randomLockCells = map?.randomSites?.candidateCells.filter((cellId) => {
+            if (!revealedSet.has(cellId)) return false;
+            if (progress?.isCellUnlocked(cellId) || progress?.isOwned(cellId)) return false;
+            const check = this.randomResourceOpenCheck(cellId, openedCells);
+            return 'reason' in check && check.reason === 'needsNeighbor';
+        }) ?? [];
+        const idleRewardStartedAt = this.buildIdleRewardSources().reduce<number | null>((earliest, source) => {
+            const start = this.saveState.idleRewardAtByLevel[String(source.levelId)];
+            return start === undefined ? earliest : earliest === null ? start : Math.min(earliest, start);
+        }, null);
         return {
             ready,
+            idleRewardStartedAt,
+            idleRewardMaxHours: this.idleRewardMaxHours,
             chapterId: this.currentChapterId,
             map,
             layout: this.layout,
@@ -2046,16 +2189,22 @@ export class TerritoryModel {
             progress,
             revealedCells,
             siteOpenableCells,
+            // 锁标：前置没满足的站点格 + 四周没有已开格的随机候选格（见字段注释）。
+            lockBlockedCells: siteLockCells.concat(randomLockCells),
             stageByCell: this.stageByCell,
             randomResourceCells: this.randomResourceCells,
-            randomResourceOpenableCells: map?.randomSites?.candidateCells.filter((cellId) =>
-                this.randomResourceOpenCheck(cellId, openedCells).ok) ?? [],
+            randomResourceOpenableCells,
             pendingRandomResourceCells: Array.from(this.pendingRandomResourceCells),
             pendingFixedResourceCells: Array.from(this.pendingFixedResourceCells),
             victoryClaimCells: this.victoryClaimCells,
             // 地图拿它判「银币 / 体力数字要不要染红」。与 `buildHud` 同一个兜底：
             // 存档还没读到时就当 0（此时 `ready` 为 false，站点根本不会渲染）。
             wallet: { silver: wallet?.silver ?? 0, stamina: wallet?.stamina ?? 0 },
+            // 通关 ≈ 可以让地图演「整章云散」。未就绪（存档没读到）时一律 false：
+            // 拿半截进度判通关会在地图还没画出来的时候先把雾散了。
+            chapterCleared: ready ? this.chapterCompletion().complete : false,
+            // 只有"这一拍刚打通"才为真（见 `noteChapterJustCleared`），未就绪一律 false。
+            chapterClearPending: ready ? this.chapterClearPending : false,
             hud: ready ? this.buildHud() : null,
             detail: {
                 // 站点详情面板已移除（2026-10-27 山猫：不需要了）⇒ `open` 只表示「有站点被选中」，
@@ -2228,6 +2377,10 @@ export class TerritoryModel {
     private emitStateChange(): void {
         this.stateCache = null;
         this.publish({ kind: 'changed' });
+        // 「首次通关 ⇒ 整章云散」是**一次性**演出：这一拍已经随状态交给页面了
+        //（`publish` 是同步的，页面在返回前就渲染完了）⇒ 立刻消费掉，后面每一拍都不再带。
+        // 不消费的话，任何一次重绘都会把同一章的散雾重演一遍。
+        if (this.chapterClearPending && this.state.chapterCleared) this.chapterClearPending = false;
     }
 
     private navigateToBattle(

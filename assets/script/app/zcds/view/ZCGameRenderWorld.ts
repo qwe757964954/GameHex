@@ -1,5 +1,7 @@
+import { ZCDC_LOG_DIAGNOSTICS, ZCDC_LOG_WARNINGS } from '../ZCDCLogSwitch';
+import { missileLog } from '../ZCMissileSkillDiagnostics';
 import type { IZCDeferredBattleArt } from '../application/ZCGameLoader';
-import { Color, EffectAsset, Graphics, instantiate, Material, Node, Prefab, Sprite, SpriteFrame, UITransform, Vec3 } from 'cc';
+import { EffectAsset, Graphics, instantiate, Material, Node, Prefab, Sprite, SpriteFrame, UITransform, Vec3 } from 'cc';
 import { buildHexGridLayout } from '../../../core/hex/HexGridLayout';
 import { findCatalogCard, resolveUnitDefinition, ZCUnitId } from '../model/ZCCombatCatalog';
 import type { ZCAttackTrait } from '../model/ZCCombatCatalog';
@@ -47,10 +49,12 @@ import {
     spawnBaseConfirmPoint,
     territoryTintOwner,
     zcNeutralHintAlpha,
+    ZC_VICTORY_SWEEP_PULSE_LEVELS,
 } from './ZCGameViewUtil';
 import type { ZCDecorPlacement } from './ZCGameViewUtil';
 import {
     appendHexOutlineSegments,
+    appendHexPulseOutlineSegments,
     appendSelectedHexOutlineSegments,
     flushOutlineSegments,
     resetOutlineSegments,
@@ -63,6 +67,7 @@ import { ZCWallGeometry } from './ZCWallGeometry';
 import { ZCWallRenderer } from './ZCWallRenderer';
 import { ZCSpawnRegionHintOverlay, type IZCSpawnRegionHintFrames } from './ZCSpawnRegionHintOverlay';
 import { ZCNeutralRewardFx } from './ZCNeutralRewardFx';
+import { zcFactionColor, zcTowardWhite } from './ZCTheme';
 
 type ZCRenderEntityKind = 'hex' | 'unit' | 'effect' | 'float' | 'cardReveal' | 'legendBanner';
 
@@ -251,7 +256,12 @@ interface ZCRenderWorldOptions {
      * `hideNeutralResourceLabel` 分支）。缺省 ⇒ 退回"只显示地块图标"（旧表现）。
      */
     unknownResourceFrame?: SpriteFrame | null;
-    /** 金币飞行特效的贴图（`image/map-resource/gold`）；缺省 ⇒ 金币仍照常飞（透明图）。 */
+    /**
+     * 飞向 HUD 金币栏的那把金币贴图（`image/map-resource/coin_icon`）。
+     *
+     * 🔴 缺省 ⇒ 金币节点照建、曲线照跑，但 `Sprite` 没有 `spriteFrame` **屏上什么都不画**
+     *    （不是"透明图"），只剩「+N」读数可见。排查「金币没动画」先看这个有没有加载到。
+     */
     goldCoinFrame?: SpriteFrame | null;
     /**
      * 自选主城区域气泡底图（`image/spawn-region/frame_01` 绿 / `frame_02` 红，九宫格）。
@@ -259,11 +269,14 @@ interface ZCRenderWorldOptions {
      */
     spawnRegionFrames?: IZCSpawnRegionHintFrames | null;
     /**
-     * HUD 神器按钮（`BottomInfoPanel/ArtifactButton`）：神器飞行的目标挂点；缺省 ⇒ 不播神器飞行。
+     * HUD 金币栏面板（`BottomInfoPanel/CoinPanel`）：金币粒子的目标挂点；缺省 ⇒ 不播金币飞行。
      *
-     * ⚠️ 2026-10-26 起**没有**金币栏挂点：金币段改成「在格子上就地喷发」（不飞向 HUD），
-     *    所以这里不再需要 `goldCounterNode`，别再加回来。
+     * ⚠️ 必须是**面板**节点，不是 `GoldLabel` / `coin` 子图标 —— 用户口径（2026-11-04）
+     *    「金币粒子飞到金币栏 `ZCGameHUD` `CoinPanel`」。绑错 / 没绑 ⇒ `overlayLocalOf`
+     *    返回 `null` ⇒ 金币事件整条 `continue`，零报错。
      */
+    coinPanelNode?: Node | null;
+    /** HUD 神器按钮（`BottomInfoPanel/ArtifactButton`）：神器飞行的目标挂点；缺省 ⇒ 不播神器飞行。 */
     artifactButtonNode?: Node | null;
     /** 场景装饰条目 prefab（`sizeMode=CUSTOM` + 不裁边烘在它身上）；缺失时只少一层表现。 */
     decorPrefab?: Prefab | null;
@@ -316,9 +329,14 @@ export class ZCGameRenderWorld {
      *  顺序变了会导致探针数值错位；追加新阵营时**只许往后加**。
      */
     private static readonly FACTION_ORDER: readonly ZCFaction[] = ['neutral', ZCOwner.Player, ZCOwner.Enemy, ZCOwner.Enemy2, ZCOwner.Enemy3];
+    private static readonly SWEEP_PULSE_STYLES = ZCGameRenderWorld.FACTION_ORDER.map(owner =>
+        Array.from({ length: ZC_VICTORY_SWEEP_PULSE_LEVELS + 1 }, (_, level) => ({
+            lineWidth: 7,
+            color: zcTowardWhite(zcFactionColor(owner), 0.55 * level / ZC_VICTORY_SWEEP_PULSE_LEVELS),
+        })));
 
     /**
-     * 触发传说卡出场横幅的品级。`ZC_RARITY_BY_RANK` 的 `4 = 金`（`rarityNameOfTier` 叫「传说」），
+     * 触发传说卡出场横幅的品级。`rarityRank` 把 `gold` 排到档位 4（`rarityNameOfTier(4)` 叫「传说」），
      * 也是设计稿那四组横幅上写死的「传说卡牌」。
      */
     private static readonly LEGEND_BANNER_TIER = 4;
@@ -391,6 +409,8 @@ export class ZCGameRenderWorld {
     private effectVisualPrefabs: ReadonlyMap<string, Prefab>;
     private readonly effectPool: ZCEffectPool;
     private readonly effectViews = new Map<number, ZCCombatEffectView>();
+    /** 导弹诊断⑤：已经打印过首帧状态的实体（一条事件一行，跟着事件 id 走）。 */
+    private readonly missileDiagFrameLogged = new Set<number>();
     /** 「这条技能特效路径一直没取到美术」已经警告过（一路径一条，避免每帧刷屏）。 */
     private readonly missingEffectArtWarned = new Set<string>();
     /**
@@ -1010,8 +1030,9 @@ export class ZCGameRenderWorld {
         const rewards = frame.neutralRewards ?? EMPTY_NEUTRAL_REWARDS;
         if (!rewards.length && this.neutralRewardFx.size === 0) return;
         this.neutralRewardFx.render(rewards, this.visualTime(frame), (hexId) => this.neutralRewardStartLocal(hexId), {
-            // 只有神器还需要 HUD 落点（金币段改成就地喷发了 —— 见 `ZCNeutralRewardFx` 头注）；
-            // 目标节点不可用 ⇒ null ⇒ 不播对应飞行。
+            // 金币 → ZCGameHUD/BottomInfoPanel/CoinPanel；神器 → ArtifactButton。
+            // 任一 HUD 节点不可用 ⇒ 该条为 null ⇒ 只跳过对应那一类飞行，另一类照常播。
+            coinPanel: this.overlayLocalOf(this.options.coinPanelNode ?? null),
             artifactSlot: this.overlayLocalOf(this.options.artifactButtonNode ?? null),
         });
     }
@@ -1742,7 +1763,7 @@ export class ZCGameRenderWorld {
         // （AGENTS.md 禁 update 路径分配），而数字哈希又有碰撞风险 ——
         // 一次漏更新就是「领地底色和轮廓颜色对不上」这种极难查的视觉错。
         //
-        // 前三个数是阶段、玩家选中格与棋盘缩放；每格再压 id、阵营序号、mask。
+        // 前三个数是阶段、玩家选中格与棋盘缩放；每格再压 id、阵营序号、mask、脉冲档位。
         // 选点格变化时即使领地 mask 没变，也必须重画内缩高亮。
         const probe = this.outlineProbe;
         const mapScale = Math.abs(this.options.mapLayer.scale.x) || 1;
@@ -1753,11 +1774,13 @@ export class ZCGameRenderWorld {
         for (const hex of hexes) {
             if (!hex.playable) continue;
             const mask = boundaryMasks.get(hex.id);
-            if (!mask && hex.id !== selectedHexId) continue;
+            const pulseLevel = mode === 'battle' ? this.sweep.pulseLevelOf(hex.id) : 0;
+            if (!mask && hex.id !== selectedHexId && !pulseLevel) continue;
             probe[cursor] = hex.id;
             probe[cursor + 1] = ZCGameRenderWorld.FACTION_ORDER.indexOf(ownerForHex(hex.id)) + 1;
             probe[cursor + 2] = mask ?? 0;
-            cursor += 3;
+            probe[cursor + 3] = pulseLevel;
+            cursor += 4;
         }
         const drawn = this.outlineDrawn;
         if (cursor === drawn.length) {
@@ -1780,12 +1803,15 @@ export class ZCGameRenderWorld {
         for (const hex of hexes) {
             if (!hex.playable) continue;
             const mask = boundaryMasks.get(hex.id);
-            if (!mask && hex.id !== selectedHexId) continue;
+            const pulseLevel = mode === 'battle' ? this.sweep.pulseLevelOf(hex.id) : 0;
+            if (!mask && hex.id !== selectedHexId && !pulseLevel) continue;
             const x = mapToViewX(hex.x);
             const y = mapToViewY(hex.y);
             if (mask) appendHexOutlineSegments({
                 centerX: x, centerY: y, owner: ownerForHex(hex.id), boundaryMask: mask,
             });
+            if (pulseLevel) appendHexPulseOutlineSegments(x, y,
+                ZCGameRenderWorld.SWEEP_PULSE_STYLES[ZCGameRenderWorld.FACTION_ORDER.indexOf(ownerForHex(hex.id))][pulseLevel]);
             if (hex.id === selectedHexId) {
                 selectedX = x;
                 selectedY = y;
@@ -2066,6 +2092,14 @@ export class ZCGameRenderWorld {
                 this.pooledEntityKeys.set(entityId, key);
                 this.effectViews.set(entityId, view);
                 this.effectEntityBySource.set(event.id, entityId);
+                //  诊断④：导弹特效节点建出来的这一拍，本局特效清单里到底有没有这份美术。
+                if (event.effectPrefabPath && event.effectPrefabPath.includes('导弹')) {
+                    missileLog('视图', `创建导弹特效节点 #${event.id}（${event.type}）`
+                        + ` prefab=${this.effectVisualPrefabs.get(event.effectPrefabPath)?.name ?? '取不到（走按需补载）'}`
+                        + ` hasVisual=${view.hasVisual}`
+                        + ` pos=(${node.position.x.toFixed(1)},${node.position.y.toFixed(1)})`
+                        + ` sibling=${node.getSiblingIndex()} active=${node.active}`);
+                }
             }
             const projectile = event.type === 'projectile' && 'velocityX' in event ? event as Readonly<ZCProjectileState> : undefined;
             const alpha = frame.interpolationAlpha;
@@ -2075,6 +2109,20 @@ export class ZCGameRenderWorld {
                 this.resolveMissingEffectArt(view, event.effectPrefabPath, now);
             }
             view?.render(event, now, projectile, alpha);
+            //  诊断⑤：首帧渲染后的**节点真实状态**（挂上了却在屏幕外 / 缩放 0 / 子节点不激活，
+            //  三种都表现为「看不见」而日志一片安静）。
+            if (view && event.effectPrefabPath?.includes('导弹') && !this.missileDiagFrameLogged.has(event.id)) {
+                this.missileDiagFrameLogged.add(event.id);
+                const node = this.scene.get(entityId)?.node;
+                const child = node?.children[0];
+                missileLog('视图', `导弹特效首帧 #${event.id}`
+                    + ` 节点=${node?.name ?? 'null'} active=${node?.active}`
+                    + ` pos=(${node?.position.x.toFixed(1)},${node?.position.y.toFixed(1)})`
+                    + ` scale=(${node?.scale.x.toFixed(2)},${node?.scale.y.toFixed(2)})`
+                    + ` angle=${node?.angle.toFixed(1)}`
+                    + ` 子=${child ? `${child.name}/active=${child.active}/scale=${child.scale.x.toFixed(2)}` : '无'}`
+                    + ` hasVisual=${view.hasVisual}`);
+            }
         }
     }
 
@@ -2105,13 +2153,13 @@ export class ZCGameRenderWorld {
                 //  请求在**第一次**取不到时就发（此刻正有一发子弹在飞，晚一帧就飞完了）；
                 //  控制器去重（pending / loaded 两个集合），失败也不会反复重试打网络。
                 EventMgr.instance.emit(ZCGameUiEvent.RequestEffectArt, { owner: this.options.owner, path });
-                console.info(`[ZCGameRenderWorld] 本局特效清单里没有这条美术，已按需补载：${path}`);
+                if (ZCDC_LOG_DIAGNOSTICS) console.info(`[ZCGameRenderWorld] 本局特效清单里没有这条美术，已按需补载：${path}`);
             }
             return;
         }
         if (!this.missingEffectArtWarned.has(path) && now - since >= EFFECT_ART_MISSING_WARN_SECONDS) {
             this.missingEffectArtWarned.add(path);
-            console.warn('[ZCGameRenderWorld] 技能特效美术补载后仍取不到，只能画通用短线'
+            if (ZCDC_LOG_WARNINGS) console.warn('[ZCGameRenderWorld] 技能特效美术补载后仍取不到，只能画通用短线'
                 + `（${EFFECT_ART_MISSING_WARN_SECONDS}s 仍未到货：没交图 / 路径写错 / 加载失败）：${path}`);
         }
     }

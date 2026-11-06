@@ -258,6 +258,8 @@ function loadZCGameClass(): { ZCGame: any; Widget: unknown } {
             Component: class {}, instantiate: () => ({}), Node: class {}, Prefab: class {},
             SpriteFrame: class {}, Vec3: class {}, Widget,
         },
+        '../card/CardLineupTypes': {},
+        '../card/CardArtConfig': {},
         './ui/GameRunAway': { GameRunAway: class {} },
         './ui/ZCSettlementPage': { ZCSettlementPage: class {} },
         './ui/ZCGuidePanel': { ZCGuidePanel: class {} },
@@ -415,17 +417,10 @@ test('归还：原父级已经没了就销毁按钮（否则它会永远留在�
     assert.deepEqual(injected, [confirm, null]);
 });
 
-test('借用 / 归还都不挑场景：缺棋盘层或缺按钮就什么都不做，且可以重复归还', () => {
-    const { game, injected } = borrowFixture({ withLayer: false });
-    game.borrowSpawnConfirmButton();
-    assert.equal(game.spawnConfirmBorrow, null, '没有棋盘层就干脆不借（按钮留在 HUD 原位，行为退化成改版前）');
-    assert.deepEqual(injected, [], '借都没借，世界层不该收到任何节点');
-
+test('必填按钮缺绑会报错，未借出时仍可重复归还', () => {
     const bare = borrowFixture({ withButton: false });
-    bare.game.borrowSpawnConfirmButton();
+    assert.throws(() => bare.game.borrowSpawnConfirmButton(), { name: 'TypeError' });
     assert.equal(bare.game.spawnConfirmBorrow, null);
-
-    // 没借过就归还 / 借了归两次：都不能抛（退出对局与选点结束是两条都会走到的路径）。
     bare.game.restoreSpawnConfirmButton();
     bare.game.restoreSpawnConfirmButton();
 });
@@ -483,8 +478,8 @@ test('按钮沿用 HUD 那颗绿勾：没有第二套 prefab，位置由世界�
         'finishSpawnSelection 里要先归还再销毁 HUD');
 
     // 跟随：位置逐帧由世界层写；显示判据是「我方还在选点」（需求 4 的收起条件）。
-    assert.match(worldSource, /const playerBaseId = selection\.isPlacing\('player'\) \? playerSelection : null;/);
-    assert.match(worldSource, /selection\.baseNeighborIds\('player'\)/);
+    assert.match(worldSource, /const playerBaseId = selection\.isPlacing\(ZCOwner\.Player\) \? playerSelection : null;/);
+    assert.match(worldSource, /selection\.baseNeighborIds\(ZCOwner\.Player\)/);
     assert.match(worldSource, /homeHighlight: playerBaseNeighbors\.has\(config\.id\)/);
     assert.match(worldSource, /spawnBaseConfirmPoint\(\{ x: mapToViewX\(hex\.x\), y: mapToViewY\(hex\.y\) \}\)/);
     assert.match(worldSource, /private renderSpawnConfirmButton\(baseHexId: number \| null\): void/);

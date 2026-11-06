@@ -127,7 +127,7 @@ test('卡牌小卡牌：蓝卡暂借绿卡评语切图，但卡框仍按各自�
 
     // 卡框不能跟着借：四个品级必须各走各的字段
     const frameFn = methodBody('frameForTier');
-    for (const [field, label] of [['greenFrame', '绿'], ['blueFrame', '蓝'], ['purpleFrame', '紫'], ['goldFrame', '金']] as const) {
+    for (const [field, label] of [['greenFrame', 'green'], ['blueFrame', 'blue'], ['purpleFrame', 'purple'], ['goldFrame', 'gold']] as const) {
         assert.match(frameFn, new RegExp(`case [1-4]: return this\\.${field};`),
             `卡框 ${label} 品级应返回自己的 ${field}（卡框按各自评级，不跟评语一起借）`);
     }

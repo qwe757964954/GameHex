@@ -13,6 +13,7 @@
  * 共用图在各自迁入的那一轮已写好 —— **一个都不手抄**。
  */
 import { FRAME_ART_ROOT, spriteFramePath, spriteFramePathOf } from '../ArtPaths';
+import { qualityFrameNameOfLevel } from '../common/QualityFrameArt';
 import type { ICelebrationGoodsInfo } from './CelebrationTable';
 
 // ⚠️ 必须**单独 import 一次**进本地作用域：文件下方那句
@@ -213,9 +214,9 @@ export function osQualityFrameLevel(quality: number): number {
     return n;
 }
 
-/** 品质档 → 品质框名（`common_img_pzk_0N`）。 */
+/** 品质档 → 品质框名（`common_img_pzk_0N`），资源名统一取 `common/QualityFrameArt`。 */
 export function osQualityFrameName(quality: number): string {
-    return `common_img_pzk_0${osQualityFrameLevel(quality)}`;
+    return qualityFrameNameOfLevel(osQualityFrameLevel(quality));
 }
 
 /** 品质档 → 品质框的装配路径。 */

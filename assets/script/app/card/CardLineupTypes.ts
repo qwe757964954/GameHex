@@ -1,145 +1,96 @@
-import { ZCCardRarity, ZCDeckBonuses, ZCDeckCard, ZCCardTraits } from '../zcds/model/ZCCombatCatalog';
+import { ZCCardType } from '../zcds/model/ZCCombatCatalog';
+import type { ZCCardRarity, ZCDeckBonuses, ZCDeckCard, ZCCardTraits } from '../zcds/model/ZCCombatCatalog';
+import type { ICardLineupCatalog } from './CardArtConfig';
 import { CARD_LINEUP_TEXTS } from './CardLineupTexts';
 
 /**
  * 卡牌阵容界面视图契约与美术名映射。
- * 数据来自 pvpCard.json / pvpBond.json，这里只做美术名与卡牌分类翻译。
+ * 数据来自 pvpCard.json / pvpBond.json；维度名称、traits 归一化与列表排序权重来自
+ * `PVP-卡牌美术.xlsx` 的 `name` / `sort` 列（`ICardArtConfig.lineup`）。
  */
 
-/** 卡牌职业：战士 / 坦克 / 射手 / 法师。 */
-export type ZCCardClass = 'warrior' | 'tank' | 'archer' | 'mage';
+/**
+ * 卡牌职业：战士 / 坦克 / 射手 / 法师。
+ *
+ * 这份数组是**编译期白名单**：表 `cardUiArtClass` 的行集合必须与它一致，
+ * 少一行会在解析时报缺少映射，多一行报「未知职业」（`tests/card-art-config.test.ts` 双向核对）。
+ */
+const CARD_CLASS_IDS = ['warrior', 'mage', 'archer', 'tank'] as const;
+export type ZCCardClass = (typeof CARD_CLASS_IDS)[number];
+export const ZC_CARD_CLASSES: readonly ZCCardClass[] = CARD_CLASS_IDS;
 
-/** 固定顺序（设计稿从左到右：剑 / 法杖 / 弓 / 盾）。 */
-export const ZC_CARD_CLASSES: readonly ZCCardClass[] = ['warrior', 'mage', 'archer', 'tank'];
+/**
+ * 品级：唯一字面量在 `ZCCombatCatalog`（档位与展示名都在那儿，对局层也在用），
+ * 这里只 re-export 保持卡牌侧的引用面，不再存第二份数组。
+ */
+export { ZC_CARD_RARITIES } from '../zcds/model/ZCCombatCatalog';
 
-export const ZC_CARD_CLASS_NAMES: Readonly<Record<ZCCardClass, string>> = {
-    warrior: '战士', mage: '法师', archer: '射手', tank: '坦克',
-};
+/** 无 traits 的卡（金矿）与未知 traits 值的兜底职业。 */
+const FALLBACK_CARD_CLASS: ZCCardClass = 'tank';
 
-/** traits.attack 取值 → 职业。无 traits 的卡（金矿）归坦克占位。 */
-const ATTACK_TRAIT_CLASS: Readonly<Record<string, ZCCardClass>> = {
-    战士: 'warrior', 法师: 'mage', 射手: 'archer', 坦克: 'tank',
-};
-
-export function resolveCardClass(card: ZCDeckCard): ZCCardClass {
-    return ATTACK_TRAIT_CLASS[card.traits?.attack ?? ''] ?? 'tank';
+/** `traits.attack` 的中文名 → 职业，映射来自表内 `cardUiArtClass.name`。 */
+export function resolveCardClass(card: ZCDeckCard, lineup: ICardLineupCatalog): ZCCardClass {
+    return lineup.classOfTrait(card.traits?.attack ?? '') ?? FALLBACK_CARD_CLASS;
 }
 
-/** 卡牌立绘按 id 区分；头像字段不参与卡牌展示和缓存。 */
-export function cardArtKey(card: ZCDeckCard): string {
-    return `${card.rarity}|${resolveCardClass(card)}|${String(card.id)}`;
+/** 仅筛选阵容页展示，不修改实际出战阵型与对局卡库。 */
+export function visibleLineupCards(cards: readonly ZCDeckCard[]): ZCDeckCard[] {
+    return cards.filter(card => card.type !== ZCCardType.Mine);
 }
 
-/** 职业 → 营地雕像（icons/card 下）。 */
-export function resolveHeroArt(cardClass: ZCCardClass): string {
-    return `camp_${cardClass}`;
+/** 已上阵 > 已解锁 > 解锁中（未解锁但有碎片）> 未获得；同组依次比较品质、等级、职业。 */
+export function sortLineupCards(
+    cards: readonly ZCDeckCard[],
+    deployedIds: ReadonlySet<string>,
+    heroLevels: ReadonlyMap<string, number>,
+    fragments: ReadonlyMap<string, { readonly owned: number }>,
+    lineup: ICardLineupCatalog,
+    fallbackLevel = 0,
+): ZCDeckCard[] {
+    const levelOf = (card: ZCDeckCard): number => heroLevels.get(card.id) ?? fallbackLevel;
+    const groupOf = (card: ZCDeckCard): number => {
+        if (deployedIds.has(card.id)) return 0;
+        if (levelOf(card) > 0) return 1;
+        return (fragments.get(card.id)?.owned ?? 0) > 0 ? 2 : 3;
+    };
+    //  权重来自表 `sort` 列；表里没覆盖到的取值排到最后，不抛错（不阻断列表）。
+    const rarityRank = new Map(lineup.rarities.map((meta) => [meta.id, meta.sort]));
+    const classRank = new Map(lineup.classes.map((meta) => [meta.id, meta.sort]));
+    const rankOf = (ranks: ReadonlyMap<ZCCardRarity | ZCCardClass, number>, key: ZCCardRarity | ZCCardClass): number =>
+        ranks.get(key) ?? Number.MAX_SAFE_INTEGER;
+    return cards.slice().sort((a, b) => groupOf(a) - groupOf(b)
+        || rankOf(rarityRank, a.rarity) - rankOf(rarityRank, b.rarity)
+        || levelOf(b) - levelOf(a)
+        || rankOf(classRank, resolveCardClass(a, lineup)) - rankOf(classRank, resolveCardClass(b, lineup)));
 }
 
 /**
- * 卡牌 id → 专属角色图名（`icons/cardHead` 下的图片名，不含扩展名）。
- *
- * 键是 **`pvpCard.id`**（字符串），不是卡名 —— 立绘文件名是美术侧的拼音（`huolongguo` 对应卡名
- * 「镭射飞龙」、`xiaomiexueba` 对应「运动霸」），跟卡名不同源，靠名字推不出来，只能显式映射。
- *
- * 目前 27 张（美术 2026-11-03 交付）；剩余 8 张兵营卡（冰冻菇 / 猎头者 / 玛法 / 驭兽师 /
- * 阿尔萨斯 / 萨尔 / 泰兰德 / 九头蛇）仍走职业雕像 `camp_*` 兜底 —— 这不是缺陷，
- * `resolveCardHeroArt` 返回 null 就是「该退回职业图」的语义。
+ * 卡牌阵营（traits.camp）：花果 / 蘑菇 / 盆栽 / 僵尸。与职业是两个维度。
+ * 同样只保留一份字面量，类型由数组推导；表 `cardUiArtCamp` 的行集合必须与它一致。
  */
-export const CARD_HERO_ART: Readonly<Record<string, string>> = {
-    68001: 'wandouyouxia',
-    68002: 'julijianguo',
-    68003: 'huoyanshuyao',
-    68004: 'yulinhaohan',
-    68005: 'yedanzhanshi',
-    68006: 'boliao',
-    68007: 'tunshidazuihua',
-    68008: 'jiekeou',
-    68009: 'xiantaoxingzhe',
-    68010: 'huolongguo',
-    68019: 'woguaren',
-    68020: 'sanyexiaochou',
-    68021: 'xianrenshiwei',
-    68022: 'leijiao',
-    68023: 'nanguazhanshen',
-    68024: 'jidonggua',
-    68025: 'daweitianlu',
-    68026: 'malatieguo',
-    68027: 'baochuilianwang',
-    68028: 'jiezhanshi',
-    68029: 'jinfalaoban',
-    68030: 'lanqiushaonian',
-    68031: 'yishujia',
-    68032: 'jitashou',
-    68033: 'xiaomiexueba',
-    68034: 'moshushi',
-    68035: 'kexuejia',
-};
+const CARD_CAMP_IDS = ['huaguo', 'mogu', 'penzai', 'jiangshi'] as const;
+export type ZCCardCamp = (typeof CARD_CAMP_IDS)[number];
+export const ZC_CARD_CAMPS: readonly ZCCardCamp[] = CARD_CAMP_IDS;
 
-/** 该卡有没有专属立绘；没有返回 `null`，调用方退回 `resolveHeroArt(cardClass)`。 */
-export function resolveCardHeroArt(card: ZCDeckCard): string | null {
-    return CARD_HERO_ART[String(card.id)] ?? null;
+/** `traits.camp` 的中文名 → 阵营，映射来自表内 `cardUiArtCamp.name`。 */
+export function resolveCardCamp(card: ZCDeckCard, lineup: ICardLineupCatalog): ZCCardCamp | null {
+    return lineup.campOfTrait(card.traits?.camp ?? '');
 }
 
-/** 职业 → 布阵缺少专属立绘时的占位；复用 cardHead 角色图，不另存 char 副本。 */
-export const BOARD_HERO_ART: Readonly<Record<ZCCardClass, string>> = {
-    warrior: 'wandouyouxia', archer: 'wandouyouxia', mage: 'jiezhanshi', tank: 'jiezhanshi',
-};
-
-/** 品级 → 布阵卡池卡框。 */
-export const POOL_FRAME_ART: Readonly<Record<ZCCardRarity, string>> = {
-    金: 'common_img_pzk_01', 紫: 'common_img_pzk_02', 绿: 'common_img_pzk_03', 蓝: 'common_img_pzk_04',
-};
-
-/** 品级 → 卡面底图。01=金 02=紫 03=绿 04=蓝。 */
-export const CARD_FACE_ART: Readonly<Record<ZCCardRarity, string>> = {
-    金: 'common_img_kp_01', 紫: 'common_img_kp_02', 绿: 'common_img_kp_03', 蓝: 'common_img_kp_04',
-};
-
-/** 品级 → 站台彩色垫盘。 */
-export const STAGE_DISC_ART: Readonly<Record<ZCCardRarity, string>> = {
-    金: 'kpzr_di_01', 紫: 'kpzr_di_02', 绿: 'kpzr_di_03', 蓝: 'kpzr_di_04',
-};
-
-/** 职业 → 卡面左上角角标。 */
-export const CLASS_BADGE_ART: Readonly<Record<ZCCardClass, string>> = {
-    warrior: 'class_warrior', tank: 'class_tank', archer: 'class_archer', mage: 'class_mage',
-};
-
-/** 职业 → 中栏亮态图标。 */
-export const CLASS_ICON_ON_ART: Readonly<Record<ZCCardClass, string>> = {
-    warrior: 'common_img_zhanshi01', mage: 'common_img_fashi02',
-    archer: 'common_img_sheshou_01', tank: 'common_img_tanke_01',
-};
-
-/** 职业 → 中栏灰态图标。 */
-export const CLASS_ICON_OFF_ART: Readonly<Record<ZCCardClass, string>> = {
-    warrior: 'common_img_zhanshi02', mage: 'common_img_gh_fashi01',
-    archer: 'common_img_sheshou_02', tank: 'common_img_tanke_02',
-};
-
-/** 卡牌阵营（traits.camp）：花果 / 蘑菇 / 盆栽 / 僵尸。与职业是两个维度。 */
-export type ZCCardCamp = 'huaguo' | 'mogu' | 'penzai' | 'jiangshi';
-
-export const ZC_CARD_CAMPS: readonly ZCCardCamp[] = ['huaguo', 'mogu', 'penzai', 'jiangshi'];
-
-export const ZC_CARD_CAMP_NAMES: Readonly<Record<ZCCardCamp, string>> = {
-    huaguo: '花果', mogu: '蘑菇', penzai: '盆栽', jiangshi: '僵尸',
-};
-
-const CAMP_TRAIT_CAMP: Readonly<Record<string, ZCCardCamp>> = {
-    花果: 'huaguo', 蘑菇: 'mogu', 盆栽: 'penzai', 僵尸: 'jiangshi',
-};
-
-/** 无 traits 的卡返回 null（不参与统计）。 */
-export function resolveCardCamp(card: ZCDeckCard): ZCCardCamp | null {
-    return CAMP_TRAIT_CAMP[card.traits?.camp ?? ''] ?? null;
+/** 职业的中文显示名（表 `cardUiArtClass.name`）。 */
+export function cardClassName(cardClass: ZCCardClass, lineup: ICardLineupCatalog): string {
+    return lineup.classes.find((meta) => meta.id === cardClass)?.name ?? '';
 }
 
-/** 阵营 → 图标行图标，与职业图标保持独立。 */
-export const CAMP_ICON_ON_ART: Readonly<Record<ZCCardCamp, string>> = {
-    huaguo: 'common_img_huaguo', mogu: 'common_img_mogu',
-    penzai: 'common_img_penzai', jiangshi: 'common_img_jiangshi',
-};
+/** 阵营的中文显示名（表 `cardUiArtCamp.name`）。 */
+export function cardCampName(camp: ZCCardCamp, lineup: ICardLineupCatalog): string {
+    return lineup.camps.find((meta) => meta.id === camp)?.name ?? '';
+}
+
+/** 品级的中文显示名（表 `cardUiArtRarity.name`，普通/稀有/史诗/传说）。 */
+export function cardRarityName(rarity: ZCCardRarity, lineup: ICardLineupCatalog): string {
+    return lineup.rarities.find((meta) => meta.id === rarity)?.name ?? '';
+}
 
 /** 中栏一项：某职业在阵容里的卡数。 */
 export interface ZCClassTally {
@@ -148,10 +99,11 @@ export interface ZCClassTally {
     reached: boolean;
 }
 
-export function tallyDeckClasses(deck: readonly ZCDeckCard[]): ZCClassTally[] {
-    return ZC_CARD_CLASSES.map((cardClass) => {
-        const count = deck.filter((card) => resolveCardClass(card) === cardClass).length;
-        return { cardClass, count, reached: count > 0 };
+/** 遍历顺序即表行序（`lineup.classes`）。 */
+export function tallyDeckClasses(deck: readonly ZCDeckCard[], lineup: ICardLineupCatalog): ZCClassTally[] {
+    return lineup.classes.map((meta) => {
+        const count = deck.filter((card) => resolveCardClass(card, lineup) === meta.id).length;
+        return { cardClass: meta.id, count, reached: count > 0 };
     });
 }
 
@@ -164,22 +116,22 @@ export interface ZCCardTally {
     reached: boolean;
 }
 
-/** 图标行全部条目：先 4 职业、再 4 阵营。卡数之和不等于 8（一张卡同时贡献两类）。 */
-export function tallyDeckIcons(deck: readonly ZCDeckCard[]): ZCCardTally[] {
-    const classItems: ZCCardTally[] = tallyDeckClasses(deck).map((tally) => ({
-        kind: 'class', key: tally.cardClass, name: ZC_CARD_CLASS_NAMES[tally.cardClass],
-        count: tally.count, reached: tally.reached,
-    }));
-    const campItems: ZCCardTally[] = ZC_CARD_CAMPS.map((camp) => {
-        const count = deck.filter((card) => resolveCardCamp(card) === camp).length;
-        return { kind: 'camp', key: camp, name: ZC_CARD_CAMP_NAMES[camp], count, reached: count > 0 };
+/** 图标行全部条目：先职业、再阵营（顺序取表行序）。卡数之和不等于 8（一张卡同时贡献两类）。 */
+export function tallyDeckIcons(deck: readonly ZCDeckCard[], lineup: ICardLineupCatalog): ZCCardTally[] {
+    const classItems: ZCCardTally[] = lineup.classes.map((meta) => {
+        const count = deck.filter((card) => resolveCardClass(card, lineup) === meta.id).length;
+        return { kind: 'class', key: meta.id, name: meta.name, count, reached: count > 0 };
+    });
+    const campItems: ZCCardTally[] = lineup.camps.map((meta) => {
+        const count = deck.filter((card) => resolveCardCamp(card, lineup) === meta.id).length;
+        return { kind: 'camp', key: meta.id, name: meta.name, count, reached: count > 0 };
     });
     return classItems.concat(campItems);
 }
 
 /** 列表实际显示条目：滤掉卡数为 0 的。条目数跟着阵容变，不能写死。 */
-export function visibleIconTallies(deck: readonly ZCDeckCard[]): ZCCardTally[] {
-    return tallyDeckIcons(deck).filter((item) => item.count > 0);
+export function visibleIconTallies(deck: readonly ZCDeckCard[], lineup: ICardLineupCatalog): ZCCardTally[] {
+    return tallyDeckIcons(deck, lineup).filter((item) => item.count > 0);
 }
 
 /** 一条羁绊展示数据。 */

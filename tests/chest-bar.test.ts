@@ -137,3 +137,34 @@ test('C8 宝箱入口展开宝箱栏时隐藏快速寻敌按钮，收起时恢�
     assert.match(page, /this\.startButton\.active = !open/);
     assert.match(page, /this\.chestToggle\.on\(Button\.EventType\.CLICK, this\.onToggleChestPanel, this\);[\s\S]*?start\(\): void \{[\s\S]*?this\.chestBar\.setOpen\(false, false\)/);
 });
+
+/**
+ * C9 守护 2026-11-04 的需求：宝箱栏展开后**点空白也能收纳**。
+ *
+ * 形态说明（为什么不是「给地图挂点击」）：
+ *   `Cocos` 的触摸先做命中检测，触点没落在任何 `UITransform` 矩形里就谁也不通知。
+ *   所以「点空白」必须有一个**全屏**接收层兜底；尺寸取宝箱栏自身（720×317）
+ *   会漏掉地图上方整片 —— 那种漏法是零报错的，只有真机点一下才发现。
+ */
+test('C9 宝箱栏点空白收起：全屏接收层插在 TopHud 之前，命中即 emit COLLAPSE', () => {
+    const page = readFileSync('assets/script/app/main/MainPage.ts', 'utf8');
+    assert.match(page, /const CHEST_BLANK_CATCHER = '__ChestBlankClose';/);
+    assert.match(page, /private ensureChestBlankCatcher\(\): Node \| null/);
+
+    // 尺寸必须取所在层（ArenaRoot 720×1280），不能取宝箱栏自身
+    assert.match(page, /catcher\.addComponent\(UITransform\)\.setContentSize\(\s*arenaUi\?\.width \?\? 720,/, '接收层尺寸没取全屏');
+
+    // 层级：插在 TopHud 之前 ⇒ 顶栏 / 底栏（页签、宝箱入口）/ 宝箱栏都压在它上面，只有地图层被接住
+    assert.match(page, /const topHud = arena\.getChildByName\('TopHud'\)/, '没按 TopHud 定插入位置');
+    assert.match(page, /topHud\.getSiblingIndex\(\)/, '插入位置没取 TopHud 的兄弟序号');
+    assert.match(page, /arena\.insertChild\(catcher, index\)/);
+    // 兜底也不许插到宝箱栏之后（那会把栏内按钮全盖死，只剩左箭头能收）
+    assert.match(page, /: bar\.node\.getSiblingIndex\(\)/, '兜底插入位置不是「宝箱栏之前」');
+
+    // 开合跟随 + 点空白走与左箭头同一条意图
+    assert.match(page, /this\.applyChestBlankCatcher\(open\)/);
+    assert.match(page, /onChestBlankTouchEnd[\s\S]{0,260}CHEST_EVENTS\.COLLAPSE/, '点空白没有走 COLLAPSE 意图');
+
+    // 接收层是运行时补在 ArenaRoot 下的，不跟着 MainPage 走 ⇒ 必须自己收
+    assert.match(page, /if \(this\.chestBlankCatcher\?\.isValid\) this\.chestBlankCatcher\.destroy\(\)/, '销毁时没清理接收层');
+});

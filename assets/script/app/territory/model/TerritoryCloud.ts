@@ -412,6 +412,38 @@ export function territoryCloudFillWaveOpacity(
     return territoryCloudFillOpacity(seconds - window.delay, window.duration);
 }
 
+/** 「这一章通关了 ⇒ 整片雾收掉」这一拍该做什么，见 {@link territoryCloudClearAction}。 */
+export type TerritoryCloudClearAction = 'none' | 'animate' | 'instant';
+
+/**
+ * 通关散雾这一拍该做什么。纯函数。
+ *
+ * ## 为什么要一个单独的 `animate` 入参，不能只看「现在通没通」
+ *
+ * 散雾是一段**庆祝**（拉远 1.1s → 逐朵淡 2.0s → 拉回 0.7s），只有"这一次停留里刚打通"
+ * 那一下才配上它。而 `chapterCleared` 是**持久状态**：玩家切回一个早就通了的章节、
+ * 或者干脆是存档里就通着的章节，进页面第一帧它就是 `true` —— 只按状态起演，就是
+ * 「一进本章，雾自己演一遍散场」（用户 2026-11-05：「通过的动画只有首次通关章节播放，
+ * 切换章节后获取到通过状态也不用播放」）。
+ *
+ * 所以判据拆成两条：`cleared` 决定**要不要散**，`animate`（模型给的"刚通关"一次性边沿）
+ * 决定**演不演**。没有 `animate` 就是直接收掉 —— 收完之后的状态和演完一模一样，
+ * 玩家看到的只是"这一章的雾本来就没了"。
+ *
+ * @param cleared 本章是否已通关（持久状态）
+ * @param animate 这一拍是不是"刚打通"（模型的一次性信号）
+ * @param resolved 这一章的雾是不是已经收掉了（视图的 `fillDismissed`，含"正在收"）
+ */
+export function territoryCloudClearAction(
+    cleared: boolean,
+    animate: boolean,
+    resolved: boolean,
+): TerritoryCloudClearAction {
+    if (!cleared) return 'none';
+    if (resolved) return 'none';
+    return animate ? 'animate' : 'instant';
+}
+
 /** 一个二维点（只在本文件与视图之间传递，不引 `cc`）。 */
 export interface ITerritoryCloudPoint {
     readonly x: number;

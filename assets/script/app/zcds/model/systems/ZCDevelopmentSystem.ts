@@ -1,4 +1,4 @@
-import { cardTypeToBuilding, findCatalogCard, ZC_RARITY_RANK, type ZCDeckCard } from '../ZCCombatCatalog';
+import { cardTypeToBuilding, findCatalogCard, rarityRank, type ZCDeckCard } from '../ZCCombatCatalog';
 import type { ZCBuildingType, ZCHexState, ZCSnapshot } from '../ZCGameTypes';
 import type { ZCOwner } from '../ZCMapConfig';
 import type { ZCMatchConfig, ZCMatchMap } from '../ZCMatchConfig';
@@ -67,7 +67,7 @@ export class ZCDevelopmentSystem {
             hex.state = 'developed';
             return { card, building, tier: 0, tileType, pityTriggered: result.pityTriggered };
         }
-        const tier = ZC_RARITY_RANK[card.rarity];
+        const tier = rarityRank(card.rarity);
         hex.building = building;
         hex.state = 'developed';
         hex.tier = tier;
@@ -161,7 +161,7 @@ export class ZCDevelopmentSystem {
         if (!card?.unitId) return item;
         for (let i = 0; i < item.unitCount; i += 1) {
             if (context.unitCount(owner) >= context.rules.unitCapPerSide) break;
-            context.spawnUnit(owner, card, Math.max(1, ZC_RARITY_RANK[card.rarity]), hex.id);
+            context.spawnUnit(owner, card, Math.max(1, rarityRank(card.rarity)), hex.id);
         }
         return item;
     }

@@ -102,7 +102,7 @@ export async function loadBigMapArt(
         load('image/territory/buildings/territory_boss_v1'),
         load('image/decor/wasteland/st2'),
         load('image/decor/wasteland/cao'),
-        load('image/bigMapBG'),
+        load('bigMapBG'),
     ]);
     const sprite = (name: string): Promise<SpriteFrame | null> => load(`${BIGMAP_CONCEPT_ROOT}/sprites/${name}`);
     const buildingTask = Promise.all([...buildingConfigs.values()].map(async (building) => {

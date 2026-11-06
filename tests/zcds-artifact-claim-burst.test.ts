@@ -116,7 +116,7 @@ test('纯函数：同一 (startedAt, now) 结果可复现（逐帧渲染不会�
 // ============================================================
 
 const START = { x: 100, y: 200 };
-const TARGETS = { goldCounter: { x: 500, y: 50 }, artifactSlot: { x: 600, y: 50 } };
+const TARGETS = { coinPanel: { x: 500, y: 50 }, artifactSlot: { x: 600, y: 50 } };
 const resolveStart = () => START;
 
 function fakeFrames(count: number) {

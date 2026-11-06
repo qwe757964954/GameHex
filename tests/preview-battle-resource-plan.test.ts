@@ -4,6 +4,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { bundleForPath } from '../assets/script/core/asset/BundleCatalog';
 import { buildZCVisualResourcePlan, resolveZCVisualUnitIds } from '../assets/script/app/zcds/model/ZCVisualResourcePlan';
+import { ZC_ATTACK_TRAITS } from '../assets/script/app/zcds/model/ZCCombatCatalog';
+import * as cardArtModule from '../assets/script/app/card/CardArtConfig';
+import { readCardArtTables } from './helpers/card-art-config';
 
 test('本局英雄表现依赖沿召唤、换兵种传递闭包，循环引用终止，不加载无关单位', () => {
     const known = ['68001','68002','68003','68004'];
@@ -38,10 +41,13 @@ test('加载器按后端英雄、召唤链与波次选模型，离线保持完�
     const base = { playerDeck: [{ id: '91001', unitId: '68003' }], enemyDeck: [], map: {} };
     const dependencies: Record<string, unknown> = {
         '../model/ZCGameResourcePlan': resourcePlan,
+        // 加载器读 `CARD_ART_TABLES` 取三张美术矩阵表名，桩必须透传真实模块，漏给时
+        // `CARD_ART_TABLES` 是 undefined，报错点是 `prepare` 内部，看不出是桩的问题。
+        '../../card/CardArtConfig': cardArtModule,
         cc: { JsonAsset: class {}, Prefab: class {} },
         '../../../core/asset/BundleCatalog': { BATTLE_BUNDLE: 'battle' },
         '../../ArtPaths': { ...ArtPaths, spriteFramePath: (root: string, name: string) => `${root}/${name}/spriteFrame`, decorFramePath: (name: string) => `image/decor/${name}/spriteFrame` },
-        '../model/ZCCombatCatalog': { getAllUnitDefinitions: () => definitions, findCatalogCard: (id: string) => ({ unitId: id === '91001' ? '68003' : '68005' }) },
+        '../model/ZCCombatCatalog': { ZC_ATTACK_TRAITS, setCardRarityMeta: () => {}, getAllUnitDefinitions: () => definitions, findCatalogCard: (id: string) => ({ unitId: id === '91001' ? '68003' : '68005' }) },
         '../model/ZCNeutralResourceGroup': { getZCNeutralResourceCatalog: () => ({ items: new Map([
             [1, { cardId: '92001', unitCount: 3 }],
         ]) }) },
@@ -78,7 +84,18 @@ test('加载器按后端英雄、召唤链与波次选模型，离线保持完�
             if (path.startsWith('image/effects/')) return [{ name: 'frame_02' }, { name: 'frame_01' }];
             return path === 'maps' ? [{ name: 'map', json: { art: { freeDecor: [{ art: 'wasteland/st1' }] } } }] : [];
         },
-    }, configs: { initialize: async () => { if (initialization) await initialization; }, getTable: async () => [] } }, 'maps');
+    }, configs: {
+        initialize: async () => { if (initialization) await initialization; },
+        // 三张卡牌美术矩阵表必须透传真表行：空表会让 `parseCardArtConfig` 报「缺少映射：face.gold」，
+        // 报错点在加载器内部，看起来像缺美术，实际是桩没给数据。
+        getTable: async (name: string) => {
+            const tables = readCardArtTables();
+            if (name === cardArtModule.CARD_ART_TABLES.rarity) return tables.rarity;
+            if (name === cardArtModule.CARD_ART_TABLES.cardClass) return tables.cardClass;
+            if (name === cardArtModule.CARD_ART_TABLES.camp) return tables.camp;
+            return [];
+        },
+    } }, 'maps');
     const prepared = await loader.prepare(undefined, { units: [
         { heroes: [{ heroId: 68001 }], heroIds: [68004] }, { heroes: [], heroIds: [68004] },
     ] }, [91001]);

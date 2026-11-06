@@ -182,6 +182,87 @@ export function isChestEntryVerdictProvisional(
 }
 
 // ============================================================
+// 领地据点：「这一关通没通」要跨章节算
+// ============================================================
+
+/**
+ * 判「领地这一关通没通」要的两个快照。
+ *
+ * 结构类型而非直接 import `TerritoryCampaignStage` / `TerritoryProgress`：本模块要保持
+ * 零引擎依赖（Node 里直接跑用例），只认这里真的会用到的两个方法。
+ */
+export interface ChestEntryTerritoryView {
+    /** 当前章的「格子 → 关卡」映射；`null` = 快照还没到（注意空 Map 也是「没到」）。 */
+    readonly stageByCell: ReadonlyMap<number, { readonly levelId: number }> | null;
+    /** 领地进度：这一格（所在区域）通了没有。 */
+    readonly isAreaPassed: ((cellId: number) => boolean) | null;
+}
+
+/** 当前章里属于 `levelId` 的格子（一片战斗区域常常横跨好几格）。 */
+export function territoryLevelCellsInChapter(
+    view: ChestEntryTerritoryView,
+    levelId: number,
+): number[] {
+    const stageByCell = view.stageByCell;
+    if (!stageByCell) return [];
+    const cells: number[] = [];
+    for (const [cellId, stage] of stageByCell) {
+        if (stage.levelId === levelId) cells.push(cellId);
+    }
+    return cells;
+}
+
+/**
+ * 当前章里**已经通关**的关卡号（去重）。
+ *
+ * 给 `MainPage` 在领地每次渲染时整批记进账号成就用 —— 这样「记账」只有一处，
+ * 条件判定 `isTerritoryLevelPassedInTerritory` 保持纯函数（不写盘、无副作用）。
+ */
+export function passedTerritoryLevelIds(view: ChestEntryTerritoryView): number[] {
+    const stageByCell = view.stageByCell;
+    const isAreaPassed = view.isAreaPassed;
+    if (!stageByCell || !isAreaPassed) return [];
+    const passed = new Set<number>();
+    for (const [cellId, stage] of stageByCell) {
+        if (!passed.has(stage.levelId) && isAreaPassed(cellId)) passed.add(stage.levelId);
+    }
+    return Array.from(passed);
+}
+
+/**
+ * 领地据点（`levelInfo.levelId`）通关了没有 —— **跨章节**判。
+ *
+ * ## 为什么不能只看当前章
+ * `levelInfo.levelChapter` 决定了关卡归属哪一章：20001 属第 1 章，而第 2 章是
+ * 10011~20007，**根本不含 20001**。只看当前章的 `stageByCell`：
+ *
+ * ```
+ * 第 1 章：20001 通关 ⇒ 战斗宝箱入口长出来（✔ 2026-11-03 实机正常）
+ * 切到第 2 章：stageByCell 里没有 20001 ⇒ 判定恒 false ⇒ 入口消失（✘ 2026-11-04 实机）
+ * ```
+ *
+ * 所以「通关」是**一次性成就**：`archived` 是账号级落盘的已通关关卡集合
+ * （`TerritorySaveStore.loadPassedLevels`），命中就直接算过，与当前在哪个章节无关。
+ *
+ * 两条来源的先后**不能反**：先看落盘（不受切章影响），再看当前章快照（首次通关那一刻
+ * 只有快照知道 —— 落盘由 `MainPage` 在领地渲染时用 {@link passedTerritoryLevelIds} 整批做，
+ * 本函数是**纯的**，不写盘）。
+ */
+export function isTerritoryLevelPassedInTerritory(
+    levelId: number,
+    view: ChestEntryTerritoryView,
+    archived: { has(levelId: number): boolean } | null = null,
+): boolean {
+    if (archived?.has(levelId)) return true;
+    const isAreaPassed = view.isAreaPassed;
+    if (!isAreaPassed) return false;
+    for (const cellId of territoryLevelCellsInChapter(view, levelId)) {
+        if (isAreaPassed(cellId)) return true;
+    }
+    return false;
+}
+
+// ============================================================
 // 生成动画
 // ============================================================
 

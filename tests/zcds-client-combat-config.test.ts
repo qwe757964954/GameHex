@@ -10,6 +10,7 @@ import { buildZCPveEnemyDecks } from '../assets/script/app/zcds/application/ZCPv
 import { configureZCMap } from '../assets/script/app/zcds/model/ZCMapConfig';
 import { loadPvpTables, type ZCPvpTables } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
 import { captureZCMatchConfig } from '../assets/script/app/zcds/model/ZCMatchConfig';
+import { ZCGameModel } from '../assets/script/app/zcds/model/ZCGameModel';
 import { assetPath } from './helpers/asset-paths';
 
 function readRows(name: string): Array<Record<string, unknown>> {
@@ -71,10 +72,13 @@ test('正式客户端构筑为四个 owner 分别编译并冻结修改器', () =
     assert.deepEqual(result.skipped, []);
     for (const owner of ['player', 'enemy', 'enemy2', 'enemy3'] as const) {
         const loadouts = result.config.modifiers?.[owner] ?? [];
-        assert.equal(loadouts.length, 1, owner);
-        assert.equal(loadouts[0].generalId, 68001);
-        assert.equal(loadouts[0].star, 1);
-        assert.deepEqual(loadouts[0].unsupportedAttributes, []);
+        // 一名武将编译成「等级成长 + 升星」两条；将/星级归属只在升星那条上，所以按 generalId 挑出来断言。
+        assert.equal(loadouts.filter((loadout) => loadout.sourceKind === 'growth').length, 1, owner);
+        const generals = loadouts.filter((loadout) => loadout.generalId !== undefined);
+        assert.equal(generals.length, 1, owner);
+        assert.equal(generals[0].generalId, 68001);
+        assert.equal(generals[0].star, 1);
+        assert.deepEqual(generals[0].unsupportedAttributes, []);
     }
     assert.equal(Object.isFrozen(result.config), true);
 });
@@ -108,7 +112,7 @@ test('正式客户端卡池只采用后端每方最多八张英雄卡，并独�
         playerHeroIds.slice(0, 8),
     );
     assert.deepEqual(
-        result.config.modifiers?.player?.map((loadout) => loadout.generalId),
+        result.config.modifiers?.player?.map((loadout) => loadout.generalId).filter((id) => id !== undefined),
         playerHeroIds.slice(0, 8),
     );
     assert.deepEqual(
@@ -288,7 +292,10 @@ test('自选主城配置可在显式预备模式下完成客户端构筑', () =>
     });
     assert.equal(result.config.map.cityMode, 'select');
     assert.equal(result.config.map.playerHomeId, -1);
-    assert.equal(result.config.modifiers?.player?.length, 1);
+    assert.equal(
+        result.config.modifiers?.player?.filter((loadout) => loadout.generalId !== undefined).length,
+        1,
+    );
     assert.equal(Object.isFrozen(result.config), true);
 });
 
@@ -312,4 +319,60 @@ test('battle entry copies PVE navigation data without callbacks and normalizes d
     assert.equal(JSON.stringify(source), original);
     assert.equal(JSON.stringify(pve.waves), waves);
     assert.equal(entry.battleSeed, null);
+});
+
+test('领地首领波次卡不在服务端阵容中仍出怪，清空末波后才判胜', () => {
+    prepare(4);
+    configureZCMap(JSON.parse(readFileSync(assetPath('config/maps/standard.json'), 'utf8')));
+    const source = captureZCMatchConfig();
+    const entry = buildZCBattleEntry({ baseMatchConfig: source } as Parameters<typeof buildZCBattleEntry>[0], {
+        battle: battle([68001], [68001]), selfRoleId: 'self',
+        pve: {
+            mode: 'defence', chapterId: 1, levelId: 50001, territoryCellId: 4, stage: 4,
+            territorySaveOwner: null, enemyName: '', enemyCardIds: [68002, 68003], enemyTeamCardIds: [],
+            playerCount: 2, hpRate: 1, attackRate: 1,
+            waves: [
+                { waveId: 1, showAtSeconds: .1, pvpCardId: 68002, monsterCount: 2, hpRate: 1, attackRate: 1 },
+                { waveId: 2, showAtSeconds: 20, pvpCardId: 68003, monsterCount: 1, hpRate: 1, attackRate: 1 },
+            ],
+        },
+    });
+    const runtime = compileZCMatchRuntime(entry.matchConfig);
+    assert.equal(runtime.cards.has('68002'), true, '波次卡必须进入战斗查表');
+    assert.equal(runtime.cards.has('68003'), true);
+    for (const deck of Object.values(entry.matchConfig.ownerDecks ?? {})) {
+        assert.equal(deck.some(card => card.id === '68002' || card.id === '68003'), false,
+            '波次卡不能进入服务端抽卡卡池');
+    }
+    const model = new ZCGameModel(null, () => .25, entry.matchConfig);
+    model.tick(.1);
+    assert.equal(model.snapshot.status, 'playing', '首波缺席服务端阵容不能直接判胜');
+    assert.equal(model.defenceWaveProgress?.spawnedWaves, 1);
+    assert.deepEqual(model.snapshot.units.map(unit => unit.cardId), ['68002', '68002']);
+    for (const unit of model.snapshot.units) Object.assign(unit, { hp: 0, battleState: 'dead', deathRemoveAt: 100 });
+    model.tick(.05);
+    assert.equal(model.snapshot.status, 'playing', '第二波必须实际生成并等待击败');
+    assert.equal(model.defenceWaveProgress?.spawnedWaves, 2);
+    const boss = model.snapshot.units.find(unit => unit.battleState !== 'dead');
+    assert.equal(boss?.cardId, '68003');
+    assert.ok(boss);
+    const snapshot = model.exportSnapshot();
+    snapshot.projectiles.push({
+        id: snapshot.nextCombatEventId++, type: 'projectile', owner: 'player', sourceUnitId: snapshot.nextUnitId++,
+        targetUnitId: boss.id, targetKind: 'unit', targetId: boss.id, sourceCardId: '68001',
+        skillId: 1, skillName: 'test', effectKey: null, projectileKey: null,
+        fromX: boss.freeX - 10, fromY: boss.freeY, toX: boss.freeX, toY: boss.freeY,
+        x: boss.freeX - 10, y: boss.freeY, previousX: boss.freeX - 10, previousY: boss.freeY,
+        velocityX: 2000, velocityY: 0, radius: 0, collisionRadius: 1,
+        baseDamage: 10, damage: 10, canHitAir: true, empowered: false,
+        startedAt: snapshot.elapsedSeconds, durationSeconds: .05,
+    });
+    const restored = new ZCGameModel(snapshot, () => .25, entry.matchConfig);
+    restored.tick(.05);
+    assert.equal(restored.snapshot.units.find(unit => unit.id === boss.id)?.hp, boss.hp - 13,
+        '缺席阵容的波次卡仍按真实卡表结算 1.3 倍克制伤害');
+    assert.equal(restored.damageStats.player.dealt, 13);
+    for (const unit of model.snapshot.units) Object.assign(unit, { hp: 0, battleState: 'dead', deathRemoveAt: 100 });
+    model.tick(.05);
+    assert.equal(model.snapshot.status, 'victory');
 });

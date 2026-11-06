@@ -225,6 +225,11 @@ export class MainEntranceList extends Component {
             dailyShareShow: false,
             osRankShow: false,
             isLevelPassed,
+            // 2026-11-04 补齐：入口条件里有一条按「领地据点通关」判定（pvp 据点不写
+            // `CmdBattleLevel`，状态只在领地格子里）。这个列表**没有**领地快照，
+            // 所以按「未通关」处理 —— 与 `EMPTY_ENTRANCE_PLAYER_STATE` 同口径：
+            // 缺数据时宁可不显示（少一个入口），也不要凭空放行一个还没打通的活动。
+            isTerritoryLevelPassed: () => false,
         };
     }
 

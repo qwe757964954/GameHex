@@ -132,6 +132,7 @@ export class BigMapWorldView extends Component {
     private art: IBigMapArt | null = null;
     private backgroundTransform: UITransform | null = null;
     private playerPortrait: SpriteFrame | null = null;
+    private readonly rolePortraits = new Map<string, SpriteFrame | null>();
     private readonly tilePool: Sprite[] = [];
     private readonly decorPool: Sprite[] = [];
     private readonly markers: IWorldMarker[] = [];
@@ -448,7 +449,7 @@ export class BigMapWorldView extends Component {
         for (const monster of data.world.monsters) this.addMarker('monster', monster.instanceId, monster.anchorHexId);
         // NPC 基地按布局档落位；玩家基地只认 playerBaseHexId，不额外绘制布局档的旧位置。
         for (const base of data.world.bases) {
-            if (!base.isPlayer) this.addMarker('base', base.baseId, base.hexId);
+            if (!data.isServerBase && !base.isPlayer) this.addMarker('base', base.baseId, base.hexId);
         }
         // 基地落在城池锚点时复用城池标记，保留城池查询与点击，避免同格叠两套建筑和名条。
         const playerCity = [...data.cities.values()].find((city) => city.hexId === data.playerBaseHexId);
@@ -482,6 +483,12 @@ export class BigMapWorldView extends Component {
 
     setPlayerPortrait(frame: SpriteFrame | null): void {
         this.playerPortrait = frame;
+        this.contentKey = '';
+        this.refresh();
+    }
+
+    setRolePortrait(avatarId: string, frame: SpriteFrame | null): void {
+        this.rolePortraits.set(avatarId, frame);
         this.contentKey = '';
         this.refresh();
     }
@@ -532,8 +539,9 @@ export class BigMapWorldView extends Component {
         // 不带上它就会因为「其它内容没变」而早退，染色永远停在上一次。
         // `territoryOwner` 与 `occupyRoleName` 同理：名条贴图按归属四选一、占据者名字写在名条上方，
         // 少任一字段都会出现「详情包已到、名字却停在空」的静默不刷新。
-        const key = `${this.selectedHexId}|${data.playerCampId}|`
-            + cities.map((c) => `${c.cityId}:${c.state}:${c.territoryOwner}:${c.campInfo?.opType}:${c.campInfo?.occupyRoleName}`).join(',')
+        const key = `${this.selectedHexId}|${data.playerCampId}|${this.focusedCityHexId}|`
+            + cities.map((c) => `${c.cityId}:${c.state}:${c.territoryOwner}:${c.campInfo?.opType}:${c.campInfo?.occupyRoleName}:`
+                + (c.rankEntries ?? []).filter((row) => row.rank === 1).map((row) => `${row.roleId}:${row.avatarId}`).join(';')).join(',')
             + '|' + monsters.map((m) => m ? `${m.instanceId}:${m.unlocked}:${m.respawnInSeconds > 0}` : '').join(',');
         if (key === this.contentKey) return;
         this.contentKey = key;
@@ -575,7 +583,10 @@ export class BigMapWorldView extends Component {
                     tint, width: isPlayerBase ? BIGMAP_MARKER_BASE_WIDTH : BIGMAP_MARKER_CITY_WIDTH,
                 });
                 marker.icon.color = !isPlayerBase && city.state === 'unavailable' ? new Color(130, 130, 130) : Color.WHITE;
-                if (isPlayerBase) marker.view.setPortrait(this.playerPortrait);
+                const champion = city.rankEntries?.find((row) => row.rank === 1);
+                marker.view.setPortrait(champion?.avatarId
+                    ? this.rolePortraits.get(champion.avatarId) ?? null
+                    : isPlayerBase ? this.playerPortrait : null);
             } else if (marker.kind === 'monster') {
                 const monster = monsters.find((entry) => entry?.instanceId === marker.id);
                 if (!monster) continue;
@@ -633,6 +644,7 @@ export class BigMapWorldView extends Component {
      * 选野怪 / 玩家基地不聚焦（2026-11-03 口径只提了城池据点）；没选中也不聚焦。
      */
     private get focusedCityHexId(): number {
+        if (this.data?.ui.campRolesVisible || this.data?.ui.pendingCampMoveId > 0) return -1;
         if (this.selectedHexId < 0 || !this.data) return -1;
         for (const city of this.data.cities.values()) {
             if (city.hexId === this.selectedHexId) return this.selectedHexId;
@@ -644,7 +656,7 @@ export class BigMapWorldView extends Component {
      * 城池聚焦的两件事（2026-11-03 用户：*「在大地图点击城池据点后，隐藏其他的城池据点和
      * 玩家基地以及野怪模型，只展示该城池据点，城池据点连带着名称和等级的UI节点上移200px」*）：
      *
-     * 1. **只留选中的那座**：隐藏走 `cullMarkers`（平移 / 缩放也会走到，两处口径必须一致）；
+     * 1. 保留选中城与本城名单玩家：隐藏走 `cullMarkers`（平移 / 缩放共用）；
      * 2. **选中的城标记上移 200**：标记位置只在 `addMarker` 落过一次位，这里按 `centerOf`
      *    **幂等重摆** —— 聚焦解除时把 y 写回原位，绝不残留上一次的偏移
      *    （`selectedHexId` 在 contentKey 里，选中态一变 `syncMarkers` 必然重跑）。
@@ -656,7 +668,8 @@ export class BigMapWorldView extends Component {
             //（坐标语义与 addMarker 的 centerOf 完全一致：查不到点 = 原点）。
             const point = this.layout.points.get(marker.hexId);
             const x = point ? point.x : 0;
-            const y = (point ? point.y : 0) + (marker.hexId === focus ? BIGMAP_FOCUSED_CITY_LIFT : 0);
+            const y = (point ? point.y : 0)
+                + (marker.kind === 'city' && marker.hexId === focus ? BIGMAP_FOCUSED_CITY_LIFT : 0);
             marker.node.setPosition(x, y, 0);
         }
     }
@@ -670,7 +683,7 @@ export class BigMapWorldView extends Component {
     private cullMarkers(): void {
         const position = this.content.position;
         const halfWidth = this.viewportTransform.width / 2 + 130 * this.zoom;
-        // 城池聚焦态：其余城池 / 玩家基地 / 野怪标记全部隐藏（2026-11-03 口径）。
+        // 城池聚焦时只显示选中的城池，榜首头像随城池标记一起显示。
         // 隐藏 = active false ⇒ 同一帧内不可点（hitAreas 按 active 过滤）、不进可见城池上报
         // （`reportVisibleCamps`），聚焦解除后由 syncMarkers → cullMarkers 恢复。
         const focus = this.focusedCityHexId;

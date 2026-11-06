@@ -296,8 +296,8 @@ test('底栏实际点击：世界报 2，其他可用入口报 1；初始化和�
     assert.equal(reports.length, 0, '默认页初始化不算点击');
     switches.length = 0;
 
-    // 2026-11-04 角色(2) / 联盟(5) 与挑战(4) 一起进未开放名单 ⇒ 可点入口只剩 0/1/3/6。
-    for (const [tabType, mark] of [[0, 1], [1, 1], [3, 1], [6, 2]]) {
+    // 2026-11-05 角色(2) / 联盟(5) 恢复开放，未开放名单只剩挑战(4)。
+    for (const [tabType, mark] of [[0, 1], [1, 1], [2, 1], [3, 1], [5, 1], [6, 2]]) {
         const button = buttons[tabType];
         assert.equal(button.enabled, true);
         assert.ok(button.select);
@@ -310,7 +310,7 @@ test('底栏实际点击：世界报 2，其他可用入口报 1；初始化和�
         reports.length = 0;
         switches.length = 0;
     }
-    for (const lockedTab of [2, 4, 5]) {
+    for (const lockedTab of [4]) {
         assert.equal(buttons[lockedTab].enabled, false, `未开放的 ${lockedTab} 必须压暗挂锁`);
         buttons[lockedTab].select?.();
         assert.equal(reports.length, 0, `控制器拒绝未开放的 ${lockedTab} 入口`);

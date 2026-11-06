@@ -9,6 +9,7 @@ export interface ICardLineupControllerOptions {
     readonly autoLoadDecks: boolean;
     readonly fallbackLevel: number;
     readonly repository: {
+        loadArtConfig(): Promise<unknown>;
         loadLineupSnapshot(): CardLineupData | null;
         loadLineup(autoLoad: boolean): Promise<CardLineupData>;
     };
@@ -34,7 +35,18 @@ export class CardLineupController extends ControllerBase {
         this.listen(CardLineupEvent.HeroUpgraded, this.onHeroUpgraded);
         const snapshot = this.options.repository.loadLineupSnapshot();
         if (snapshot) this.publish(snapshot);
+        else void this.prepareSnapshot();
         void this.refresh();
+    }
+    private async prepareSnapshot(): Promise<void> {
+        try {
+            await this.options.repository.loadArtConfig();
+            if (this.isDisposed || this.data) return;
+            const snapshot = this.options.repository.loadLineupSnapshot();
+            if (snapshot) this.publish(snapshot);
+        } catch (error) {
+            // 权威数据刷新统一报告配置错误。
+        }
     }
     async refresh(): Promise<void> {
         if (this.isDisposed) return;

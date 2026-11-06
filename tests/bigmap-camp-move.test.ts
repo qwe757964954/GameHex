@@ -266,6 +266,7 @@ function makePresenter(overrides: { gameRefreshes?: { count: number } } = {}) {
     const counter = overrides.gameRefreshes ?? { count: 0 };
     // 只实现 Presenter 真正用到的两个入口：构造时 `onChanged` 订阅、迁城成功后 `refreshGame` 重拉。
     const slgRepository = {
+        dispose: () => {},
         onChanged: () => () => undefined,
         projectBase: () => null,
         refreshGame: () => { counter.count += 1; return Promise.resolve(true); },
@@ -300,13 +301,26 @@ test('★Presenter：迁城成功后重拉 GameInfo 与据点详情（否则界�
     assert.ok(h.presenter.cityView(205) !== null || true, '重拉链路已触发');
 });
 
-test('Presenter：迁城失败不重拉，文案原样透传', async () => {
+test('Presenter：迁城未确认仍重拉服务端事实，失败文案原样透传', async () => {
     const h = makePresenter();
     const pending = h.presenter.requestMoveCamp(205, 7);
     h.move.resolve({ succ: 0, req: { campId: 205, pos: 7, moveType: 1 } });
     const result = await pending;
     assert.deepEqual(result, { ok: false, message: BIGMAP_CAMP_MOVE_TEXT.failed });
-    assert.equal(h.gameRefreshes.count, 0);
+    assert.equal(h.gameRefreshes.count, 1);
+});
+
+test('迁城成功同时强制刷新迁出城、迁入城与所属城池信息', async () => {
+    const h = makePresenter();
+    Object.defineProperty(h.presenter, 'playerCampId', { value: 101 });
+    const calls: { campId: number; force: boolean }[] = [];
+    h.presenter.refreshCampDetail = async (campId, force) => { calls.push({ campId, force }); };
+    const pending = h.presenter.requestMoveCamp(205, 7);
+    h.move.resolve({ succ: 1, req: { campId: 205, pos: 7, moveType: 1 } });
+    assert.equal((await pending).ok, true);
+    assert.deepEqual(calls, [{ campId: 101, force: true }, { campId: 205, force: true }]);
+    assert.equal(h.gameRefreshes.count, 1);
+    h.presenter.dispose();
 });
 
 // ============================================================================

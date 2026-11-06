@@ -473,7 +473,7 @@ test('特效节点按视觉类型复用，初始化重置，表现时间包含�
     const nodes: any[] = [], calls: any[] = [];
     const prefab = { make: () => {
         const node = new FakeNode();
-        node.getComponent = (() => ({ initialize: (visual: any) => calls.push(['init', visual]), render: (event: any, now: number) => calls.push([event.id, now]) })) as any;
+        node.getComponent = (() => ({ initialize: (visual: any) => calls.push(['init', visual]), attachVisualPrefab() {}, render: (event: any, now: number) => calls.push([event.id, now]) })) as any;
         nodes.push(node); return node;
     } };
     const visual = {};

@@ -109,6 +109,29 @@ test('宝箱详情弹窗：全部节点 UI_2D 且有 UITransform；示例文案�
         '标题「宝箱详情」应写在 prefab 里');
 });
 
+test('宝箱详情「打开」按钮：两行态坐标与按钮中线对齐，代码常量不许和 prefab 脱节', () => {
+    const primary = nodeOf('BtnPrimary')!;
+    const children = (primary._children ?? []).map(at);
+    const label = children.find((c) => c?._name === 'Label')!;
+    const costLabel = children.find((c) => c?._name === 'CostLabel')!;
+    const tf = (primary._components ?? []).map(at).find((c) => c?.__type__ === 'cc.UITransform')!;
+    assert.equal(tf._anchorPoint.y, 0.5, '按钮锚点居中 ⇒ Label y=0 就是按钮正中');
+    assert.equal(tf._contentSize.height, 108);
+    assert.equal(label._lpos.x, 4, '水平沿用设计稿偏移，别顺手改');
+    assert.equal(label._lpos.y, 21.5, '两行态：文案在上半位');
+    assert.ok(costLabel._lpos.y < 0, '两行态：倒计时胶囊在下半位');
+
+    const src = readFileSync('assets/script/app/main/ChestDetailPanel.ts', 'utf8');
+    assert.match(src, /const OPEN_LABEL_X = 4;/);
+    assert.match(src, /const OPEN_LABEL_Y_TWO_LINE = 21\.5;/);
+    assert.match(src, /const OPEN_LABEL_Y_CENTER = 0;/);
+    assert.match(
+        src,
+        /this\.openLabel\.node\.setPosition\(OPEN_LABEL_X, hasCountdown \? OPEN_LABEL_Y_TWO_LINE : OPEN_LABEL_Y_CENTER\)/,
+        '只切胶囊显隐、不把文案放回中线 = 下半截留白（截图那颗「打开」偏上）',
+    );
+});
+
 test('宝箱详情走 PopupBase：页面不再绑 prefab，组件声明 prefabPath，Widget 已启用', () => {
     const page = JSON.parse(readFileSync(assetPath('ui/main/ArenaRoot.prefab'), 'utf8')) as Obj[];
     const mainPage = page.find((o) => o?.__type__ === '2395fnYYflA25GtoK/UxJXu');
@@ -185,9 +208,11 @@ test('弹窗组件：全量赋值、三颗按钮派发意图事件、倒计时�
     const PanelClass = loadPanelClass(emitted);
     const panel = new PanelClass();
     let closedByButton = 0;
+    const positions: number[][] = [];
     const node = () => ({
         active: true, children: [], parent: null,
-        setPosition() {}, setScale() {}, setSiblingIndex() {}, addComponent() {},
+        setPosition(x: number, y: number) { positions.push([x, y]); },
+        setScale() {}, setSiblingIndex() {}, addComponent() {},
         getComponent: () => ({ setContentSize() {} }),
         on: () => undefined,
     });
@@ -235,11 +260,13 @@ test('弹窗组件：全量赋值、三颗按钮派发意图事件、倒计时�
     assert.equal(panel.fastCostLabel.string, '10');
     assert.equal(panel.openCostLabel.string, '01:35:25');
     assert.equal(panel.openButton.interactable, false, '倒计时中不能点「打开」');
+    assert.deepEqual(positions[positions.length - 1], [4, 21.5], '带倒计时：文案留在两行态的上半位');
 
     panel.applyContent({ name: '宝箱', qualityText: '', countText: '', icon: null, qualityFrame: null,
         rewards: [], fastOpenCost: 0, fastOpenEnabled: true, openCaption: '打开', openCountdown: '',
         openEnabled: true, costIcon: null });
     assert.equal(panel.chestIcon.spriteFrame, fallbackIcon, '缺少配置图时还原预制体宝箱图');
+    assert.deepEqual(positions[positions.length - 1], [4, 0], '无倒计时：胶囊隐藏后「打开」必须回到按钮正中');
     // 禁用的「打开」：Cocos 的 Button 在 interactable=false 时不派发 CLICK，回调不会进来
     // （拦截在 Button 组件层，回调内不再判 interactable）——沙箱模拟该层，禁用时跳过回调调用。
     panel.openButton.interactable = false;
@@ -252,9 +279,11 @@ test('弹窗组件：全量赋值、三颗按钮派发意图事件、倒计时�
     panel.updateCountdown(0);
     assert.equal(panel.openCostRoot.active, false);
     assert.equal(panel.openButton.interactable, true);
+    assert.deepEqual(positions[positions.length - 1], [4, 0], '每秒刷新是幂等全量赋值，不累加偏移');
     panel.updateCountdown(3600, false);
     assert.equal(panel.openCostLabel.string, '01:00:00');
     assert.equal(panel.openButton.interactable, true, '未激活时展示所需时长但仍可启动');
+    assert.deepEqual(positions[positions.length - 1], [4, 21.5], '倒计时重新出现时回到两行态');
     panel.updateCountdown(3599, true);
     assert.equal(panel.openCostLabel.string, '00:59:59');
     assert.equal(panel.openButton.interactable, false, '计时中不能提前打开');

@@ -10,6 +10,7 @@ import {
     RESOURCE_ICON_ART_ROOT,
     spriteFramePath,
     spriteFramePathOf,
+    TERRITORY_ART_ROOT,
     TERRITORY_BUILDING_ART_ROOT,
 } from '../../ArtPaths';
 
@@ -53,6 +54,16 @@ export interface ITerritoryBattleArt {
     readonly tileLocked: SpriteFrame | null;
     /** **已通关**格的地皮：`img_land_01` 草地块。 */
     readonly tileCleared: SpriteFrame | null;
+    /**
+     * 未解锁格的锁标：`image/territory/icon_lock`（31×43，蓝湖 `大地图(1)` 同名切片）。
+     *
+     * 2026-11-05 蓝湖新版大地图：未解锁的格子地皮正中压一枚白锁。
+     * **只叠在「本来就会露出来」的格上** —— 不给它额外的揭示范围，空格继续留在云里
+     * （山猫：「不该多露空格」）。
+     *
+     * ⚠️ 尺寸按帧原样显示（`sizeMode = RAW`），设计稿 720 宽下锁就是 31×43，别在代码里写死宽高。
+     */
+    readonly lockIcon: SpriteFrame | null;
     /**
      * 「已解锁但还没通关」的**格面高亮框**，按站点类型四选一，叠在地皮之上。
      *
@@ -254,7 +265,7 @@ export async function loadTerritoryBattleArt(
     assets: AssetService,
     backgroundPath: string,
 ): Promise<ITerritoryBattleArt> {
-    const [background, tileLocked, tileCleared, frameBoss, frameStage, frameAsyncPvp, frameChest, start, stage, boss, asyncPvp, fixedResource, randomResource, randomSilverIcon, bonus, header, navButton, actionButton, buildAssets, levelBubbleFrame, levelBubblePendingFrame, chestBubbleFrame, staminaIcon] = await Promise.all([
+    const [background, tileLocked, tileCleared, lockIcon, frameBoss, frameStage, frameAsyncPvp, frameChest, start, stage, boss, asyncPvp, fixedResource, randomResource, randomSilverIcon, bonus, header, navButton, actionButton, buildAssets, levelBubbleFrame, levelBubblePendingFrame, chestBubbleFrame, staminaIcon] = await Promise.all([
         // 地图 JSON 有 background 就按它走（spriteFramePathOf 对已带后缀的路径幂等），否则用默认背景。
         // ⚠️ 默认图 zdbg1 在 `image/` **根目录**（不在 `image/territory/`）⇒ 走 `spriteFramePath(ART_ROOT, …)`；
         //    用 `spriteFramePathOf(TERRITORY_ART_ROOT/…)` 拼会在 bundle 索引里查不到
@@ -270,6 +281,9 @@ export async function loadTerritoryBattleArt(
         //    绿草地上再乘金色 tint 会发脏，状态全部交给「哪张地皮 + 哪个框」表达。
         loadFrame(assets, spriteFramePath(BUILDING_ART_ROOT, 'img_land_02')),
         loadFrame(assets, spriteFramePath(BUILDING_ART_ROOT, 'img_land_01')),
+        // 前沿空锁格的锁标（2026-11-05 蓝湖 `大地图(1)` 的 `icon_lock`，31×43 一像素不缩）。
+        // ⚠️ 放在 `image/territory/` 根目录 ⇒ 与地块同进 `auto-atlas.pac`，同帧的锁和地皮能合批。
+        loadFrame(assets, spriteFramePath(TERRITORY_ART_ROOT, 'icon_lock')),
         // 格面高亮框：124×92 的六边形描边图（正好盖住 123×90 的格面），只在「已解锁未通关」时出现。
         // ⚠️ 美术这批命名不统一，**逐字对照**别改：
         //    `frame_01`=首领(红) / `frame_03`=普通关卡(紫) / `frame_04`=异步关卡(金) / **`fram_02`=宝箱(蓝，少一个 e)**。
@@ -305,7 +319,7 @@ export async function loadTerritoryBattleArt(
         // 用的是同一张 `图标_体力`，别在领地目录里另存一份。
         loadFrame(assets, spriteFramePath(RESOURCE_ICON_ART_ROOT, '图标_体力')),
     ]);
-    return { background, levelBubbleFrame, levelBubblePendingFrame, chestBubbleFrame, staminaIcon, tileLocked, tileCleared, frameBoss, frameStage, frameAsyncPvp, frameChest, start, stage, boss, asyncPvp, fixedResource, randomResource, randomSilverIcon, bonus, header, navButton, actionButton, buildFrames: buildAssets.frames, buildScales: buildAssets.scales };
+    return { background, levelBubbleFrame, levelBubblePendingFrame, chestBubbleFrame, staminaIcon, tileLocked, tileCleared, lockIcon, frameBoss, frameStage, frameAsyncPvp, frameChest, start, stage, boss, asyncPvp, fixedResource, randomResource, randomSilverIcon, bonus, header, navButton, actionButton, buildFrames: buildAssets.frames, buildScales: buildAssets.scales };
 }
 
 /**

@@ -31,6 +31,11 @@ export const BIGMAP_PRESENTATION_TEXT = {
     cannotAttack: '不可进攻',
 } as const;
 
+/** 只有配置开放日时展示条件，不把配置天数当成剩余天数。 */
+export function formatBigMapCityOpening(openDay: number): string {
+    return openDay > 0 ? `未开放\n开服第${openDay}天开放` : '未开放';
+}
+
 export function formatBigMapPlotDetail(detail: IBigMapPlotDetailView): string {
     if (detail.queueSlotIndex >= 0) {
         return `建造中 · 剩余 ${detail.remainSeconds}s\n进度 ${Math.round(detail.progress * 100)}%\n取消将按原规则返还资源`;

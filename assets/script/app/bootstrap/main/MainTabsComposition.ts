@@ -7,6 +7,10 @@ import { MainTabEvent } from '../../main/MainTabEvents';
 import { MainPageComposition } from './MainPageComposition';
 import { BigMapEntry } from '../../bigmap/application/BigMapEntry';
 import { fetchFormations } from '../../card/FormationService';
+import { fetchPvpHeroInfos, getCachedPvpHeroInfos } from '../../card/PvpHeroService';
+import { cardRepository } from '../../card/CardRepository';
+import { cardArtProvider } from '../../card/CardArtProvider';
+import { visibleIconTallies, visibleLineupCards } from '../../card/CardLineupTypes';
 import { checkFirstRechargeOnEnterMain } from '../../firstRecharge/FirstRechargeAutoOpen';
 import { GAME_VIEW_MARK, reportGameViewClick } from '../../main/GameViewClickService';
 import { GameNet } from '../../net/GameNet';
@@ -44,12 +48,32 @@ export class MainTabsComposition extends ControllerBase {
                 settled: () => this.scheduleBackgroundWarmup()
             },
             hero: {
-                prefetchHero: () => { void fetchFormations({ label: '切角色 tab 预取' }); }
+                prefetchHero: () => this.prefetchHero()
             },
             telemetry: {
                 reportClick: tab => { void reportGameViewClick(tab === MainTab.World ? GAME_VIEW_MARK.World : GAME_VIEW_MARK.Other, this.host); }
             },
         });
+    }
+    /** 与页面 prefab 加载重叠；请求与图片复用既有会话缓存，不等待模型或网络才备图。 */
+    private prefetchHero(): void {
+        void fetchFormations({ label: '切角色 tab 预取' });
+        if (getCachedPvpHeroInfos() === null) void fetchPvpHeroInfos();
+        void this.warmHeroArt();
+    }
+    private async warmHeroArt(): Promise<void> {
+        const revision = this.tabs.snapshot.revision;
+        try {
+            const art = await cardRepository.loadArtConfig();
+            if (this.isDisposed || revision !== this.tabs.snapshot.revision) return;
+            const snapshot = cardRepository.loadLineupSnapshot();
+            if (!snapshot) return;
+            const deck = visibleLineupCards(snapshot.deck);
+            await Promise.all([
+                ...deck.map(card => cardArtProvider.loadLineupSlot(card, art)),
+                ...visibleIconTallies(deck, art.lineup).map(item => cardArtProvider.loadTallyFrames(item, art)),
+            ]);
+        } catch (error) { console.warn('[MainTabsComposition] 卡牌首屏图片预取失败', error); }
     }
     private onLifecycle(event: IViewLifecycle): void {
         if (event.owner !== this.host) return;
@@ -101,6 +125,7 @@ export class MainTabsComposition extends ControllerBase {
         const callback = (): void => {
             this.afterDrawWarmup = null;
             if (this.isDisposed || revision !== this.tabs.snapshot.revision || this.tabs.snapshot.loadingTab !== -1) return;
+            void this.warmHeroArt();
             void this.context.sessionAssets.warmup?.().catch(error => console.warn('[MainTabsComposition] 静默预下载失败', error));
         };
         this.afterDrawWarmup = callback;

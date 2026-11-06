@@ -165,9 +165,14 @@ export class MatchingPage extends Component {
 
     update(): void {
         const now = Date.now() / 1000;
-        if (this.phase === 'searching') this.waveNodes.forEach((wave, index) => {
-            wave.node.setPosition(wave.x, wave.y + matchingWaveOffset(now - this.waveStartedAt, index), 0);
-        });
+        if (this.phase === 'searching') {
+            // 手写循环替代 forEach 箭头函数：改前每帧新建一个闭包，改后 update 零临时对象。
+            const waves = this.waveNodes;
+            for (let index = 0; index < waves.length; index += 1) {
+                const wave = waves[index];
+                wave.node.setPosition(wave.x, wave.y + matchingWaveOffset(now - this.waveStartedAt, index), 0);
+            }
+        }
         const slide = this.slide;
         if (slide) {
             const progress = matchingTipProgress(now - slide.startedAt);

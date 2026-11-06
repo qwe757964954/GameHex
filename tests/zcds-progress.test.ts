@@ -118,7 +118,7 @@ test('小卡牌卡面用角色卡牌图，不再用这张卡产出的兵种立�
     assert.equal(view.iconSprite.enabled, true);
 });
 
-test('卡面图取不到才回退建筑图，并打出能回查卡表的日志', () => {
+test('卡面图取不到时回退本局建筑图，不告警正常的建筑卡', () => {
     const { load, cc, setArtQueries } = loadViews();
     const view = stubCardRevealView(load, cc);
     const configuredFrame = { name: 'barracks-peashooter' };
@@ -143,10 +143,7 @@ test('卡面图取不到才回退建筑图，并打出能回查卡表的日志',
     assert.deepEqual(resolved, ['68001', 'barracks'], '回退要走 buildIcon 解析器（建筑帧由控制器按 cardId 查）');
     assert.equal(view.iconSprite.spriteFrame, configuredFrame);
     assert.equal(view.iconSprite.enabled, true);
-    assert.equal(warn.lines.length, 1, `同一张卡只应打一次日志（contentKey 短路），实际 ${warn.lines.length} 次`);
-    assert.match(warn.lines[0], /68001/, '日志要带上卡牌 id，便于回查卡表');
-    assert.match(warn.lines[0], /豌豆游侠/, '日志要带上卡名');
-    assert.match(warn.lines[0], /headIcon/, '日志要指明是卡表 headIcon 缺失');
+    assert.equal(warn.lines.length, 0, '建筑卡缺少角色卡面属于正常回退');
 });
 
 test('卡面图晚到：invalidateArt 要作废内容键，已经弹出的卡下一帧换成卡面图', () => {
@@ -241,11 +238,11 @@ test('img_land_01 的 92.25 x 90 蜂窝间距同步单位位置，保持逻辑�
     world.unitViews.set(1, { render: (value: unknown) => { rendered = value; } });
     // id=4 has no formation offset; both movement paths should reach the tile center.
     const unit = { id: 4, kind: 'test', sourceHexId: source.id, targetHexId: column.id, progress: 1, marchAngle: null, freeX: column.x, freeY: column.y };
-    world.renderUnitEntity(unit);
+    world.renderUnitEntity(unit, { unitDefinitionsById: new Map(), interpolationAlpha: 1, simulationStepSeconds: .05, snapshot: { elapsedSeconds: 0, pendingSeconds: 0, status: 'playing' } });
     assert.equal(rendered.x, mapToViewX(column.x));
     assert.equal(rendered.y, mapToViewY(column.y));
     unit.marchAngle = 0;
-    world.renderUnitEntity(unit);
+    world.renderUnitEntity(unit, { unitDefinitionsById: new Map(), interpolationAlpha: 1, simulationStepSeconds: .05, snapshot: { elapsedSeconds: 0, pendingSeconds: 0, status: 'playing' } });
     assert.equal(rendered.x, mapToViewX(column.x));
     assert.equal(rendered.y, mapToViewY(column.y));
     assert.equal(column.x - source.x, 36);
@@ -831,7 +828,7 @@ test('新地块节点独立切换阵营、开发图标和建筑，保留 prefab 
     assert.equal(view.iconLabel.string, '25');
     assert.equal(view.priceIcon.enabled, true);
     assert.equal(view.buildingSprite.enabled, false);
-    for (const type of ['barracks-common', 'barracks-medium', 'barracks-advanced']) {
+    for (const type of [ZCPvpTileType.BarracksCommon, ZCPvpTileType.BarracksMedium, ZCPvpTileType.BarracksAdvanced]) {
         state.tileType = type; render();
         assert.equal(view.iconSprite.spriteFrame, view.barracksIconFrame);
     }
@@ -940,8 +937,8 @@ test('ZCGameHex 使用 hex_flat 扁平底图，资源绑定保持一致', () => 
     // 根节点保留 128×128 点击热区。
     assert.deepEqual([sizeOf(tileNode).width, sizeOf(tileNode).height], [130, 119]);
     assert.deepEqual([sizeOf(root).width, sizeOf(root).height], [128, 128]);
-    for (const [key, name] of Object.entries({ tileFrame: 'hex_flat', mineIconFrame: 'icon_jk', barracksIconFrame: 'icon_by', mysteryFrame: 'icon_wh', ruinsFrame: 'fx' })) {
-        const meta = JSON.parse(readFileSync(assetPath(`image/buildings/${name}.png.meta`), 'utf8'));
+    for (const [key, path] of Object.entries({ tileFrame: 'image/buildings/hex_flat', mineIconFrame: 'image/gameui/common_img_jinkuang', barracksIconFrame: 'image/gameui/common_img_shibing', mysteryFrame: 'image/gameui/common_img_wenhao', ruinsFrame: 'image/buildings/fx' })) {
+        const meta = JSON.parse(readFileSync(assetPath(`${path}.png.meta`), 'utf8'));
         assert.equal(view[key].__uuid__, meta.subMetas.f9941.uuid, key);
     }
     // 主城外观统一由 `buildingFrameResolver` 提供（对局与选点阶段同源，都是 `hq-base`）；
@@ -1051,7 +1048,7 @@ test('单位与地块的表现时间取自模型时钟，血条窗口才按真�
     };
     const model = {
         snapshot: { elapsedSeconds: 12, pendingSeconds: 0.25, status: 'playing' },
-        definitionForUnit: () => ({}),
+        unitDefinitionsById: new Map(),
     };
     world.renderUnitEntity(unit, model);
     assert.equal(seen.now, 12.25, 'now 必须是 elapsedSeconds + pendingSeconds');
@@ -1638,6 +1635,7 @@ test('结算扫场整行推进、播完才收手，且不读模型的地块归�
     const world: any = new ZCGameRenderWorld({ mapLayer: { scale: { x: 1 } } });
     world.outlineGraphics = new cc.Graphics();
     const map = ZC_HEX_CONFIG;
+    world.map = map;
     const playable = map.filter((hex) => hex.playable);
     const minRow = Math.min(...playable.map((hex) => hex.row));
     const plan = buildVictorySweepPlan(map, 'player');
@@ -1660,7 +1658,7 @@ test('结算扫场整行推进、播完才收手，且不读模型的地块归�
             },
         });
     }
-    const model = { snapshot: { hexes: [], elapsedSeconds: 0, status: 'victory', pendingSeconds: 0 } };
+    const model = { snapshot: { hexes: [], elapsedSeconds: 0, status: 'victory', pendingSeconds: 0 }, mapConfig: { hexes: map }, hexesById: new Map(), hexActivations: [] };
     const litIds = (): number[] => playable.filter((hex) => painted.get(hex.id) === 'player').map((hex) => hex.id);
     // 扫场是**累加式**推进（`elapsed += dt`），所以用例自己记进度、按绝对时刻推进 ——
     // 否则一旦回正起跑时刻前移，前后两次推进的差值就可能变成负数而被 `Math.max(0, dt)` 吃掉。
@@ -1678,6 +1676,9 @@ test('结算扫场整行推进、播完才收手，且不读模型的地块归�
     advanceTo(0);
     const firstRowIds = playable.filter((hex) => plan.steps.get(hex.id) === 0).map((hex) => hex.id).sort((a, b) => a - b);
     assert.deepEqual(litIds().sort((a, b) => a - b), firstRowIds);
+    advanceTo(0.01);
+    assert.deepEqual(litIds().sort((a, b) => a - b), firstRowIds);
+    assert.ok(firstRowIds.every(id => shimmerOf.get(id)! > 0), '同一填充行内也必须刷新闪烁');
     assert.ok(firstRowIds.length > 1, '第一行应该有多格同时亮');
     // 最靠敌方那一行这会儿一格都还没动。
     assert.ok(playable.filter((hex) => hex.row === minRow).every((hex) => painted.get(hex.id) === null));
@@ -1771,6 +1772,8 @@ test('结算扫场整行推进、播完才收手，且不读模型的地块归�
     assert.equal(world.sweep.pulseLevelOf(lastRowIds[0]), 0, '波前还没走到终点行，它不该亮');
     assert.equal(probeLevelOf(startRowIds[0]), ZC_VICTORY_SWEEP_PULSE_LEVELS,
         '共享轮廓层的探针必须记下脉冲档位，否则亮带会定格在那一帧不动');
+    assert.ok(world.outlineGraphics.commands.some((command: any) => command.kind === 'stroke' && command.lineWidth === 7),
+        '脉冲档位必须实际画成共享轮廓亮线');
 
     // 推进到波前压过中间某一行：那一行到最亮，起点行已经灭掉（带子扫过去了）。
     const midRow = Math.floor(stepCount / 2);
@@ -1796,6 +1799,8 @@ test('结算扫场整行推进、播完才收手，且不读模型的地块归�
         '收手时整盘脉冲必须归零（留一档亮线会永久糊在轮廓上）');
     assert.ok(playable.every((hex) => probeLevelOf(hex.id) === 0),
         '最后一帧也要把"档位归零"写进探针，否则轮廓会停在最后一次有亮带的样子');
+    assert.ok(!world.outlineGraphics.commands.some((command: any) => command.kind === 'stroke' && command.lineWidth === 7),
+        '播完必须清除脉冲亮线');
     assert.ok(victorySweepPulseCursor(victorySweepDuration(stepCount), stepCount) >= stepCount - 1,
         '收手时波前应已走出最后一行');
 

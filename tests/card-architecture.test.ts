@@ -4,7 +4,7 @@ import { LineupDraftStore } from '../assets/script/app/card/LineupDraftStore';
 
 // 控制器异步行为见 card-popup-controllers.test.ts；这里验证复用的纯草稿模型。
 
-const card = (id: string) => ({ id, name: id, rarity: '绿' }) as any;
+const card = (id: string) => ({ id, name: id, rarity: 'green' }) as any;
 
 test('LineupDraftStore 按方案隔离草稿，保存值不再从节点名反查', () => {
     const first = card('1');

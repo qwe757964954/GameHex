@@ -39,12 +39,17 @@ interface ISocket {
 function harness() {
     let sent = 0;
     let cacheUpdates = 0;
+    /** `ConnectedNetState.log` 实际打出的每一行（`recived` 的回包耗时就在里面）。 */
+    const logs: string[] = [];
     const fw = { FW: { ignoreShowloadingNet: [], Task: { delay: async () => {} },
         CacheMgr: { handleCmdCache: () => { cacheUpdates++; } } } };
     const Request = load('assets/script/framework/net/NetworkRequest.ts', (name) =>
         name.endsWith('/FW') ? fw : { ScriptObject: class {} }).NetworkRequest as new () => IRequest;
     const Connected = load('assets/script/framework/net/state/ConnectedNetState.ts', (name) => {
-        if (name.endsWith('/BaseNetState')) return { BaseNetState: class { isSwitchFinish = true; error() {} log() {} } };
+        if (name.endsWith('/BaseNetState')) return { BaseNetState: class {
+            isSwitchFinish = true; error() {}
+            log(...args: unknown[]) { logs.push(args.join(' ')); }
+        } };
         if (name.endsWith('/TDic')) return { TDic: class extends Map { remove(key: unknown) { this.delete(key); } } };
         if (name.endsWith('/NetSocket')) return { NetSocket: { heartbeatMsgName: 'heartbeat', msgEventProxy: { execute() {} } } };
         if (name.endsWith('/FW')) return fw;
@@ -72,7 +77,7 @@ function harness() {
         request.packageRequest(1, new Uint8Array([1]), { getReqMsgProtoName: () => 'TestReqMsg', allowRetry: retry, canSend }, false);
         return request;
     };
-    return { socket, state, makeRequest, sent: () => sent, cacheUpdates: () => cacheUpdates };
+    return { socket, state, makeRequest, sent: () => sent, cacheUpdates: () => cacheUpdates, logs };
 }
 
 test('取消排队请求立即结束等待，不发送；同队列下一条仍能发出', async () => {
@@ -106,6 +111,24 @@ test('已发送请求取消后迟到回包仍更新公共缓存，等待保持�
     assert.equal(h.cacheUpdates(), 1);
     assert.equal(await pending, false);
     assert.equal(h.sent(), 1);
+});
+
+test('recived 日志带「发出 → 回包」的耗时，没有对应请求的推送包标 push', () => {
+    const h = harness();
+    const request = h.makeRequest();
+    h.state.addNetworkRequest(request);
+    Object.assign(h.socket, { protoMgr: {
+        decode: () => ({ clientIndex: 1, result: true, cmdCaches: [], messageIds: [1], splits: [0], data: new Uint8Array() }),
+        getRspMsg: () => 'TestRspMsg', decodeDataById: () => ({}), isBro: () => false, isCacheApp: () => false,
+    } });
+
+    h.state.onReceiveMessage(new Uint8Array());
+    assert.match(h.logs[h.logs.length - 1] ?? '', /recived TestRspMsg 1 .* cost \d+ms$/,
+        '回包必须带上 sentAt → now 的真实差值');
+
+    // 同一个 clientIndex 已经 requestMap.delete，这条当推送处理：不能拿累计时钟凑一个假耗时。
+    h.state.onReceiveMessage(new Uint8Array());
+    assert.match(h.logs[h.logs.length - 1] ?? '', /push$/, '广播 / 缓存推送没有对应请求，应标 push');
 });
 
 test('禁止重试的请求经过真实NetworkRequest与Connected状态，超时只失败不再次发送', async () => {

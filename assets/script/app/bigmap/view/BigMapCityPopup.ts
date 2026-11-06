@@ -25,15 +25,18 @@ export interface IBigMapCityPopupRank {
 /** 城池弹窗的全部展示数据（由 Presenter 算好，视图只写节点）。 */
 export interface IBigMapCityPopupContent {
     readonly title: string;
+    readonly openingText?: string;
     readonly buffs: readonly IBigMapCityPopupBuff[];
     readonly ranks: readonly IBigMapCityPopupRank[];
     readonly warScore: number;
     readonly minOccupyScore: number;
     readonly lordName: string;
     readonly lordScore: string;
+    readonly lordAvatarId?: string;
     readonly staminaCost: number;
     readonly fightCaption: string;
     readonly fightEnabled: boolean;
+    readonly hasPlayerActions?: boolean;
 }
 
 /** 弹窗内固定槽位数量 —— 与 prefab 里预先摆好的节点数一致，多出来的数据直接丢弃。 */
@@ -41,6 +44,12 @@ export const BIGMAP_CITY_POPUP_BUFF_SLOTS = 2;
 export const BIGMAP_CITY_POPUP_RANK_SLOTS = 3;
 /** 排行榜每行「积分」前缀 —— 设计稿里是独立文本节点（与数值分两段）。 */
 export const BIGMAP_CITY_POPUP_SCORE_LABEL = '积分';
+
+/** 设计稿积分统一用 K，避免切到 M 后丢掉千位信息。 */
+function formatCityScore(score: string): string {
+    const value = Number(score);
+    return value >= 1000 ? `${Math.floor(value / 1000)}K` : score;
+}
 
 /**
  * 城池弹窗 —— 蓝湖「城池弹窗3」（山猫 2026-11-02 口径：*「弹窗按照设计稿，尺寸按照设计稿 1:1」*）。
@@ -95,10 +104,12 @@ export class BigMapCityPopup extends PopupBase {
     /** 积分数值（设计稿 x=607 起，左对齐）。 */
     @property({ type: [Label], group: '排行榜' }) private rankScoreValues: Label[] = [];
     @property({ type: [Sprite], group: '排行榜' }) private rankAvatars: Sprite[] = [];
+    @property({ type: Node, group: '排行榜' }) private fullRankRoot: Node = null!;
 
     @property({ type: [Node], group: '增益效果' }) private buffRoots: Node[] = [];
     @property({ type: [Label], group: '增益效果' }) private buffTitles: Label[] = [];
     @property({ type: [Label], group: '增益效果' }) private buffDescs: Label[] = [];
+    @property({ type: Label, group: '开放时间' }) private openingLabel: Label = null!;
 
     @property({ type: Label, group: '战功', tooltip: 'Panel/Progress/Label：当前 / 最低占领战功' })
     private warScoreLabel: Label = null;
@@ -109,11 +120,14 @@ export class BigMapCityPopup extends PopupBase {
     @property({ type: Label, group: '城主' }) private lordNameLabel: Label = null;
     @property({ type: Label, group: '城主' }) private lordScoreLabel: Label = null;
     @property({ type: Sprite, group: '城主' }) private lordPerson: Sprite = null;
+    @property({ type: Label, group: '城主' }) private emptyLordLabel: Label = null!;
+    @property({ type: Node, group: '城主' }) private lordScoreRoot: Node = null!;
 
     @property({ type: Button, group: '操作' }) private fightButton: Button = null;
     @property({ type: Label, group: '操作' }) private fightLabel: Label = null;
     @property({ type: Label, group: '操作' }) private staminaLabel: Label = null;
     @property({ type: Sprite, group: '操作' }) private staminaIcon: Sprite = null;
+    @property({ type: Button, group: '操作' }) private playerActionsButton: Button = null!;
 
     /** 战功进度条槽的原始宽度（设计稿 `progress_02` = 250）—— 按比例改宽度时不能读被改过的值。 */
     private warScoreTrackWidth = 250;
@@ -121,10 +135,12 @@ export class BigMapCityPopup extends PopupBase {
     private pending: IBigMapCityPopupContent | null = null;
     private readonly rankAvatarIds: string[] = [];
     private avatarRevision = 0;
+    private lordAvatarId: string | null = null;
 
     protected onInit(): void {
         // prefab 已绑好 ⇒ 不判空：绑错应当场抛出来，判空只会把它变成静默死界面。
         this.fightButton.node.on(Button.EventType.CLICK, this.handleFight, this);
+        this.playerActionsButton.node.on(Button.EventType.CLICK, this.handlePlayerActions, this);
     }
 
     protected onOpen(userData?: IBigMapCityPopupContent): void {
@@ -136,6 +152,7 @@ export class BigMapCityPopup extends PopupBase {
         this.pending = null;
         this.avatarRevision += 1;
         this.rankAvatarIds.length = 0;
+        this.lordAvatarId = null;
         if (reason !== PopupCloseReason.Force) this.sendIntent({ kind: 'clear' });
     }
 
@@ -143,13 +160,22 @@ export class BigMapCityPopup extends PopupBase {
     render(content: IBigMapCityPopupContent | null): void {
         if (!content) return;
         this.pending = content;
+        this.playerActionsButton.node.active = content.hasPlayerActions ?? false;
         this.renderBuffs(content.buffs);
         this.renderRanks(content.ranks);
+        this.openingLabel.string = content.openingText ?? '';
+        this.openingLabel.node.active = this.openingLabel.string !== '';
         this.renderWarScore(content.warScore, content.minOccupyScore);
+        const hasLord = content.lordName !== '';
         this.lordNameLabel.string = content.lordName;
-        this.lordScoreLabel.string = content.lordScore;
-        this.lordPerson.node.active = content.lordName !== '';
+        this.lordNameLabel.node.active = hasLord;
+        this.lordScoreLabel.string = hasLord && content.lordScore !== ''
+            ? `${BIGMAP_CITY_POPUP_SCORE_LABEL} ${formatCityScore(content.lordScore)}` : '';
+        this.lordScoreRoot.active = hasLord;
+        this.renderLordAvatar(hasLord ? content.lordAvatarId ?? '' : '');
+        this.emptyLordLabel.node.active = !hasLord;
         this.fightLabel.string = content.fightCaption;
+        this.fightButton.node.active = hasLord;
         this.fightButton.interactable = content.fightEnabled;
         const hasCost = content.staminaCost > 0;
         this.staminaLabel.string = hasCost ? String(content.staminaCost) : '';
@@ -167,6 +193,7 @@ export class BigMapCityPopup extends PopupBase {
     }
 
     private renderRanks(ranks: readonly IBigMapCityPopupRank[]): void {
+        this.fullRankRoot.active = ranks.length > 0;
         for (let index = 0; index < BIGMAP_CITY_POPUP_RANK_SLOTS; index += 1) {
             const row = ranks[index];
             const root = this.rankRoots[index];
@@ -186,7 +213,7 @@ export class BigMapCityPopup extends PopupBase {
             this.rankNames[index].string = row.name;
             // 「积分」和数值是**两个节点**（设计稿 x=553 / x=607 两段），拆开才能对上蓝湖的对齐。
             this.rankScoreTags[index].string = BIGMAP_CITY_POPUP_SCORE_LABEL;
-            this.rankScoreValues[index].string = row.score;
+            this.rankScoreValues[index].string = formatCityScore(row.score);
             const avatar = this.rankAvatars[index];
             if (avatar) {
                 const avatarId = row.avatarId ?? '';
@@ -216,6 +243,28 @@ export class BigMapCityPopup extends PopupBase {
         avatar.color = frame ? AVATAR_TINT : AVATAR_EMPTY_TINT;
     }
 
+    private renderLordAvatar(avatarId: string): void {
+        if (this.lordAvatarId === avatarId) return;
+        this.lordAvatarId = avatarId;
+        this.lordPerson.spriteFrame = null;
+        this.lordPerson.node.active = false;
+        if (avatarId) void this.loadLordAvatar(avatarId, this.avatarRevision);
+    }
+
+    private async loadLordAvatar(avatarId: string, revision: number): Promise<void> {
+        const assets = this.assets;
+        let frame: SpriteFrame | null = null;
+        try {
+            frame = await HeadArt.loadHeadFrame(avatarId, (name, root) =>
+                assets.load(`${root}/${name}/spriteFrame`, SpriteFrame));
+        } catch (error) {
+            console.warn('[BigMapCityPopup] 城主形象加载失败', error);
+        }
+        if (!this.isValid || revision !== this.avatarRevision || this.lordAvatarId !== avatarId) return;
+        this.lordPerson.spriteFrame = frame;
+        this.lordPerson.node.active = frame !== null;
+    }
+
     private renderWarScore(warScore: number, minScore: number): void {
         this.warScoreLabel.string = `${warScore}/${minScore}`;
         const ratio = minScore > 0 ? Math.min(1, Math.max(0, warScore / minScore)) : 0;
@@ -228,9 +277,9 @@ export class BigMapCityPopup extends PopupBase {
     }
 
     private handleFight(): void {
-        if (!this.fightButton.interactable) return;
         this.sendIntent({ kind: 'primary' });
     }
+    private handlePlayerActions(): void { this.sendIntent({ kind: 'campRoles' }); }
 }
 
 const AVATAR_TINT = Color.WHITE.clone();

@@ -33,7 +33,7 @@ test('分包目录清单与路由表一致，命中前缀走对应 bundle', () =
     assert.equal(bundleForPath('image/concept/sprites/farm'), BIGMAP_BUNDLE);
     assert.equal(bundleForPath('image/concept/ui/tab_active'), BIGMAP_BUNDLE);
     assert.equal(bundleForPath('image/base_background'), BIGMAP_BUNDLE);
-    assert.equal(bundleForPath('image/bigMapBG'), BIGMAP_BUNDLE);
+    assert.equal(bundleForPath('bigMapBG'), BIGMAP_BUNDLE);
     assert.equal(bundleForPath('ui/bigmap/BigMapWorldView'), BIGMAP_BUNDLE);
     // ⚠️ 上提后 `image/` 前缀不再被 bigmap 独占，首包同前缀目录必须仍走 resources
     assert.equal(bundleForPath('image/conceptx/foo'), undefined);

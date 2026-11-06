@@ -30,6 +30,8 @@
  * 同一格撞车时优先级：翻格 > 生成 > 换色（视图里按这个顺序互相 `stop`）。
  */
 
+import { territoryHexStaggerDelays } from './TerritoryHexStagger';
+
 /** 单格换色动画的总时长（秒）。0.36s：比"生成"（0.4s）略快 —— 它是旧东西退场，不该让人等。 */
 export const TERRITORY_HEX_RECOLOR_SECONDS = 0.36;
 
@@ -168,32 +170,8 @@ export function territoryHexRecolorDelays(
     cells: readonly ITerritoryHexRecolorCell[],
     stagger: number = TERRITORY_HEX_RECOLOR_STAGGER_SECONDS,
 ): ReadonlyMap<number, number> {
-    const delays = new Map<number, number>();
-    if (cells.length === 0) return delays;
-    let minX = Infinity;
-    let maxX = -Infinity;
-    let minY = Infinity;
-    let maxY = -Infinity;
-    for (const cell of cells) {
-        if (cell.x < minX) minX = cell.x;
-        if (cell.x > maxX) maxX = cell.x;
-        if (cell.y < minY) minY = cell.y;
-        if (cell.y > maxY) maxY = cell.y;
-    }
-    const centerX = (minX + maxX) / 2;
-    const centerY = (minY + maxY) / 2;
     const gap = Number.isFinite(stagger) && stagger > 0 ? stagger : 0;
-    const cap = TERRITORY_HEX_RECOLOR_STAGGER_MAX_SECONDS;
-    const ordered = cells
-        .map((cell) => ({
-            cell,
-            distance: (cell.x - centerX) * (cell.x - centerX) + (cell.y - centerY) * (cell.y - centerY),
-        }))
-        .sort((a, b) => (a.distance !== b.distance ? a.distance - b.distance : a.cell.cellId - b.cell.cellId));
-    ordered.forEach((entry, index) => {
-        delays.set(entry.cell.cellId, Math.min(cap, index * gap));
-    });
-    return delays;
+    return territoryHexStaggerDelays(cells, gap, TERRITORY_HEX_RECOLOR_STAGGER_MAX_SECONDS);
 }
 
 /**

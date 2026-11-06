@@ -53,6 +53,22 @@ function safeTimestamp(value: unknown): number | null {
     return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : null;
 }
 
+/** 只为新占领或迁移的据点建立起点，不消费已有累计时间，也不发奖。 */
+export function initializeTerritoryIdleRewards(
+    claimedAtByLevel: Readonly<Record<string, number>>,
+    sources: readonly TerritoryIdleRewardSource[],
+    now: number,
+): Record<string, number> {
+    const timestamp = Math.max(0, Math.floor(now));
+    const ledger = { ...claimedAtByLevel };
+    for (const source of sources) {
+        const key = String(source.levelId);
+        const previous = safeTimestamp(ledger[key]);
+        if (previous === null || previous > timestamp) ledger[key] = timestamp;
+    }
+    return ledger;
+}
+
 /**
  * Settles each occupied level independently. Missing ledger entries are initialized
  * at `now`, so migrated saves and newly occupied sites never earn retroactive rewards.

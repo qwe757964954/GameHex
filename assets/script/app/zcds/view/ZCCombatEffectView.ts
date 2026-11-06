@@ -6,6 +6,7 @@ import { zcCombatEffectFlightOf, zcCombatEffectFacingDegrees, zcCombatEffectHead
 import { zcBeamCoreWidthOf, zcBeamFrame, zcBeamSpecOf, zcBeamStretchOf, zcBeamWidthScaleOf } from './ZCBeamEffect';
 import type { IZCBeamSpec } from './ZCBeamEffect';
 import { zcCombatEffectNodeScaleOf } from './ZCCombatEffectScale';
+import { missileLog } from '../ZCMissileSkillDiagnostics';
 
 const { ccclass, property } = _decorator;
 const GENERIC_LINE_WIDTH = 3;
@@ -46,6 +47,8 @@ export class ZCCombatEffectView extends Component {
     /** 宿主节点上的 `UIOpacity`（懒取）：整棵子树一起淡，预制体有几层都不用逐层改。 */
     private nodeOpacity: UIOpacity | null = null;
     private readonly genericTint = new Color(255, 229, 148);
+    /** 诊断用：本节点对应的特效资源路径（只有 `initialize` 知道）。 */
+    private diagEffectPath = '';
 
     initialize(prefab: Prefab | null, allowGeneric = false, effectPrefabPath?: string | null): void {
         this.allowGeneric = allowGeneric && !prefab;
@@ -66,7 +69,15 @@ export class ZCCombatEffectView extends Component {
         //  整条光束凭空消失且不报错（2026-11-02 用户截图）。
         this.beamSpec = zcBeamSpecOf(effectPrefabPath);
         this.beamCanvasWidth = 0;
-        if (!prefab) return;
+        //  诊断：把这个特效节点对应的资源路径记住，`mountVisual` 里要用它决定打不打日志。
+        this.diagEffectPath = effectPrefabPath ?? '';
+        if (!prefab) {
+            if (this.diagEffectPath.includes('导弹')) {
+                missileLog('视图', `initialize 取不到 prefab：${this.diagEffectPath}`
+                    + `（allowGeneric=${allowGeneric} ⇒ ${this.allowGeneric ? '画通用短线' : '什么都不画'}）`);
+            }
+            return;
+        }
         this.mountVisual(prefab);
     }
 
@@ -115,6 +126,17 @@ export class ZCCombatEffectView extends Component {
         const animation = visual.getComponent(Animation) ?? visual.getComponentInChildren(Animation);
         const clipName = animation?.defaultClip?.name || animation?.clips?.[0]?.name;
         if (animation && clipName) { animation.stop(); animation.play(clipName); }
+        //  诊断⑤：美术挂上了、clip 起播了没。用户问的就是「导弹技能播放了没」，
+        //  这一行直接回答：prefab 名 / 节点名 / 尺寸 / clip 名 / 有没有动画组件。
+        if (this.diagEffectPath.includes('导弹')) {
+            const size = visual.getComponent(UITransform)?.contentSize;
+            missileLog('视图', `挂载美术 ${this.diagEffectPath}`
+                + ` | prefab=${prefab.name} visual=${visual.name} active=${visual.active}`
+                + ` scale=(${visual.scale.x.toFixed(3)},${visual.scale.y.toFixed(3)})`
+                + ` 画布=${size ? `${size.width}x${size.height}` : '无'}`
+                + ` 动画组件=${animation ? '有' : '无'} clip=${clipName ?? '无'}`
+                + ` 播放=${animation && clipName ? '已 play' : '未播放'}`);
+        }
     }
 
     render(event: Readonly<ZCCombatEvent>, now: number, projectile?: Readonly<ZCProjectileState>, alpha = 1): void {

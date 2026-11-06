@@ -13,6 +13,7 @@
  *   required uint64 img       = 4; // 玩家头像
  *   required uint32 defenseHp = 5; // 血量
  *   required uint32 pos       = 6; // 所在格子   ← r880 才加
+ *   required uint32 buildLevel = 7; // 建筑等级
  * }
  * message CmdSlgCampRoleInfosRspMsg { required uint32 campId = 1; repeated SlgGameCameRoleInfo infos = 2; }
  * ```
@@ -43,6 +44,8 @@ export interface IBigMapCampRoleInfo {
     readonly defenseHp: number;
     /** 所在格子 id（`uint32`，**0 合法**）。 */
     readonly pos: number;
+    /** 旧快照可缺省；最新协议归一化始终提供建筑等级。 */
+    readonly buildLevel?: number;
 }
 
 const UINT32_MAX = 0xffffffff;
@@ -56,10 +59,16 @@ export const BIGMAP_CAMP_ROLE_TEXT = {
     empty: '据点角色：暂无',
     pending: '据点角色：加载中',
     failed: '据点角色：获取失败，重新选择据点可重试',
+    next: '下一位',
     /** 单行角色描述：名字 · 血量 · 所在格。名字可能为空（SLG 守军允许空名），退回玩家 id。 */
     row: (name: string, fallbackId: string, hp: number, pos: number): string =>
         `· ${name || fallbackId}　HP ${hp}　格 ${pos}`,
 } as const;
+
+export function formatBigMapCampRoleDetail(role: IBigMapCampRoleInfo): string {
+    return `${role.roleName || role.roleId}\n角色 ID：${role.roleId}\n区服：${role.serverId}`
+        + `\n建筑等级：${role.buildLevel ?? 0}\nHP：${role.defenseHp}\n所在格：${role.pos}`;
+}
 
 /** 格子 id：整数且落在 uint32 内（0 合法）。 */
 function isHexId(value: unknown): value is number {
@@ -81,9 +90,9 @@ function normalizeHp(value: unknown): number {
  */
 export function normalizeBigMapCampRoleInfo(raw: unknown): IBigMapCampRoleInfo | null {
     if (!raw || typeof raw !== 'object') return null;
-    const { roleId, serverId, roleName, img, defenseHp, pos } = raw as {
+    const { roleId, serverId, roleName, img, defenseHp, pos, buildLevel } = raw as {
         roleId?: unknown; serverId?: unknown; roleName?: unknown;
-        img?: unknown; defenseHp?: unknown; pos?: unknown;
+        img?: unknown; defenseHp?: unknown; pos?: unknown; buildLevel?: unknown;
     };
     const id = toIdString(roleId);
     if (!id || !isHexId(pos)) return null;
@@ -94,6 +103,7 @@ export function normalizeBigMapCampRoleInfo(raw: unknown): IBigMapCampRoleInfo |
         avatarId: toIdString(img),
         defenseHp: normalizeHp(defenseHp),
         pos,
+        buildLevel: normalizeHp(buildLevel),
     };
 }
 

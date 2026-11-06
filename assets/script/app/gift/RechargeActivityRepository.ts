@@ -26,6 +26,7 @@
  */
 
 import { RefUtil } from '../../framework/ref/RefUtil';
+import { parseRechargeItemMap } from './RechargeItemMap';
 import { FW } from '../../framework/FW';
 import { GameNet } from '../net/GameNet';
 import { CacheMgr } from '../net/CacheMgr';
@@ -86,22 +87,6 @@ function readCmdActivities(): unknown[] {
     }
 }
 
-/** `item` 表 → 展示信息。 */
-function parseItemMap(rows: readonly unknown[]): Map<number, { quality: number; icon: string }> {
-    const map = new Map<number, { quality: number; icon: string }>();
-    for (const row of rows) {
-        if (!row || typeof row !== 'object' || Array.isArray(row)) continue;
-        const r = row as Record<string, unknown>;
-        const resId = Number(r.resId);
-        if (!Number.isSafeInteger(resId) || resId <= 0) continue;
-        map.set(resId, {
-            quality: Number(r.quality) || 1,
-            icon: typeof r.icon === 'string' ? r.icon : '',
-        });
-    }
-    return map;
-}
-
 export class RuntimeRechargeActivityRepository implements IRechargeActivityRepository {
     async load(nowMs: number = Date.now()): Promise<IRechargeActivitySnapshot> {
         const [tabRows, activityRows, planRowArr, itemRows] = await Promise.all([
@@ -124,7 +109,7 @@ export class RuntimeRechargeActivityRepository implements IRechargeActivityRepos
         return {
             pages,
             activities,
-            items: parseItemMap(itemRows),
+            items: parseRechargeItemMap(itemRows),
             advancedTabVisible: (pages.get(RECHARGE_TAB.advanced)?.advancedTabVisible) ?? false,
             hasRedDot: rechargeTotalRedDot(activities, planRows),
             now: nowMs,

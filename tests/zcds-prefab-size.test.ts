@@ -106,6 +106,7 @@ function spinePrefab(FakeNode: any, canvasHeight: number): any {
     return {
         make: () => {
             const node = new FakeNode('spine-visual');
+            skeleton.node = node;
             node.getComponent = (type: any) => (type?.name === 'Skeleton' ? skeleton : null);
             return node;
         },

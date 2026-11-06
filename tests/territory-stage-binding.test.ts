@@ -2,12 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { buildTerritoryCampaign } from '../assets/script/app/territory/model/TerritoryCampaignConfig';
-import { configureTerritoryMap } from '../assets/script/app/territory/model/TerritoryMapConfig';
+import { configureTerritoryMap, TERRITORY_SITE_TYPE } from '../assets/script/app/territory/model/TerritoryMapConfig';
 import { TerritoryProgress } from '../assets/script/app/territory/model/TerritoryProgress';
 import {
     applyTerritoryStageUnlocks,
     bindTerritoryBattleStages,
     bindTerritoryStages,
+    chapterFinalBossCell,
     expandBindingsToAreaSites,
     findCurrentTerritoryLevel,
     territoryChapterCompletion,
@@ -238,6 +239,59 @@ test('chapter completion uses only stations present and bound in the current map
     assert.deepEqual(completed, { occupied: 10, total: 10, complete: true });
     assert.deepEqual(territoryChapterCompletion([], []), { occupied: 0, total: 0, complete: false });
 });
+
+// ============================================================
+// 章节通关判据：**本章最后一个首领关卡**（2026-11-04 用户口径）
+// ============================================================
+
+test('★★★通关判据取「链尾那个首领」：chapter_01 是 105（第 10 关），不是 213（第 5 关）', () => {
+    const bindings = bindTerritoryStages(chapter(1).sites, campaign(1).stages);
+    const bosses = bindings.filter(({ site }) => site.type === TERRITORY_SITE_TYPE.boss);
+    assert.deepEqual(bosses.map(({ stage }) => stage.stage).sort((a, b) => a - b), [5, 10],
+        '第一章有两个首领（第 5 / 第 10 关）—— 少了这条用例就退化成"随便挑一个 boss"');
+    assert.equal(bosses.find(({ stage }) => stage.stage === 10)?.site.cellId, 105);
+    assert.equal(bosses.find(({ stage }) => stage.stage === 5)?.site.cellId, 213);
+
+    // 🔴 入参故意倒序：结果不许依赖 `sites` 的遍历顺序（第一章的绑定点就是乱序的）。
+    assert.equal(chapterFinalBossCell(bindings), 105);
+    assert.equal(chapterFinalBossCell([...bindings].reverse()), 105);
+});
+
+test('★★★一章没有可打的首领 ⇒ 返回 null（调用方必须退回「全部站点占领」，别当成已通关）', () => {
+    const bindings = bindTerritoryStages(chapter(1).sites, campaign(1).stages);
+    const noBoss = bindings.filter(({ site }) => site.type !== TERRITORY_SITE_TYPE.boss);
+    assert.ok(noBoss.length > 0, '夹具里应有普通关');
+    assert.equal(chapterFinalBossCell(noBoss), null);
+    assert.equal(chapterFinalBossCell([]), null);
+});
+
+test('★★★同 stage 撞车按 levelId、再按 cellId 兜底（三个字段全用上，不依赖入参顺序）', () => {
+    const site = (cellId: number, type: 'stage' | 'boss') => ({ cellId, type, id: `s${cellId}`, footprint: [cellId] });
+    const stageOf = (levelId: number, stage: number) => ({ levelId, stage });
+    const bindings = [
+        { site: site(7, 'boss'), stage: stageOf(9001, 6) },
+        { site: site(3, 'boss'), stage: stageOf(9002, 6) },
+        { site: site(5, 'boss'), stage: stageOf(9002, 6) },
+        { site: site(9, 'stage'), stage: stageOf(9999, 99) },
+    ] as any;
+    // 第 9 格的普通关 stage=99 再大也不算（只认 boss）；两个 boss 同为 stage 6 ⇒ levelId 9002 > 9001；
+    // 其中 3 与 5 的 levelId 也相同 ⇒ 取 cellId 大的 5。
+    assert.equal(chapterFinalBossCell(bindings), 5);
+    assert.equal(chapterFinalBossCell([...bindings].reverse()), 5);
+});
+
+test('★★★异步据点不是首领：`bindTerritoryStages` 压根不绑它，判据里也永远轮不到它', () => {
+    const map = chapter(1);
+    const asyncSites = map.sites.filter((site) => site.type === TERRITORY_SITE_TYPE.asyncPvp);
+    assert.ok(asyncSites.length > 0, 'chapter_01 应有异步据点');
+    const bindings = bindTerritoryStages(map.sites, campaign(1).stages);
+    const bound = new Set(bindings.map(({ site }) => site.cellId));
+    assert.equal(asyncSites.some((site) => bound.has(site.cellId)), false, '异步据点不许进关卡链');
+    assert.equal(chapterFinalBossCell(bindings), chapterFinalBossCell(
+        bindings.filter(({ site }) => site.type === TERRITORY_SITE_TYPE.boss),
+    ), '有没有把异步据点混进来，结果都一样');
+});
+
 
 // ============================================================
 // 同区域格子的关卡扩散（2026-10-12）

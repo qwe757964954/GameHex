@@ -15,6 +15,7 @@ class FakeSkeleton {
             animations: [{ name: 'idle' }, { name: 'move' }, { name: 'attack' }] }),
     };
     setAnimation(_track: number, name: string) { this.calls.push(name); return {}; }
+    getCurrent() { return { trackTime: 0 }; }
 }
 
 /** 每调一次 `make()` 就产出一份「美术实例 + 它的骨架」，便于区分主美术与轮廓副本。 */
@@ -22,6 +23,7 @@ function spinePrefab(cc: any, FakeNode: any, skeletons: FakeSkeleton[]) {
     return { make: () => {
         const node = new FakeNode('NutVisual');
         const skeleton = new FakeSkeleton();
+        Object.assign(skeleton, { node });
         skeletons.push(skeleton);
         node.getComponent = ((type: unknown) => (type === cc.sp.Skeleton ? skeleton : null)) as typeof node.getComponent;
         return node;
@@ -31,7 +33,7 @@ function spinePrefab(cc: any, FakeNode: any, skeletons: FakeSkeleton[]) {
 function framePrefab(cc: any, FakeNode: any) {
     return { make: () => {
         const node = new FakeNode('NutVisual');
-        const sprite = { color: null as unknown };
+        const sprite = { node, color: null as unknown };
         const animation = { clips: [{ name: 'nut-idle' }], defaultClip: null, play() {}, stop() {} };
         node.getComponent = ((type: unknown) => (type === cc.Sprite ? sprite
             : type === cc.Animation ? animation : null)) as typeof node.getComponent;
@@ -57,14 +59,15 @@ function setupView(load: (name: string) => any, bar: any, FakeNode: any) {
 }
 
 test('整体外轮廓 = 美术放大副本：子序在角色之下、同朝向同拍、只在非己方显示', () => {
-    const { load, bar, cc, FakeNode } = loadViews();
+    const { load, bar, cc, FakeNode, presentationArt } = loadViews();
     const { view } = setupView(load, bar, FakeNode);
     const copyMaterial = { name: 'outline-copy' };
     view.setOutlineCopyMaterial(copyMaterial);
 
     const skeletons: FakeSkeleton[] = [];
     const prefab = spinePrefab(cc, FakeNode, skeletons);
-    view.initialize(prefab, 1);
+    presentationArt.unitVisualPrefabs.set('test-unit', prefab);
+    view.initialize({ unitId: 'test-unit', prefabSize: 1 });
     const [main, copy] = skeletons;
     assert.equal(skeletons.length, 2, 'spine 美术要再建一份放大副本');
 
@@ -127,12 +130,13 @@ test('整体外轮廓 = 美术放大副本：子序在角色之下、同朝向�
 });
 
 test('对象池复用后副本跟着新体型/新阵营走；切到序列帧美术或不给材质时只关整体轮廓', () => {
-    const { load, bar, cc, FakeNode } = loadViews();
+    const { load, bar, cc, FakeNode, presentationArt } = loadViews();
     const { view } = setupView(load, bar, FakeNode);
     view.setOutlineCopyMaterial({ name: 'outline-copy' });
     const skeletons: FakeSkeleton[] = [];
     const prefab = spinePrefab(cc, FakeNode, skeletons);
-    view.initialize(prefab, 1);
+    presentationArt.unitVisualPrefabs.set('test-unit', prefab);
+    view.initialize({ unitId: 'test-unit', prefabSize: 1 });
     const unit: any = { hp: 100, maxHp: 100, owner: 'enemy', battleState: 'idle',
         facingRadians: 0, completedAttackCount: 0 };
     const definition = { hero: false, attackRange: 20 };
@@ -142,7 +146,7 @@ test('对象池复用后副本跟着新体型/新阵营走；切到序列帧美�
     const copy = skeletons[1];
 
     // 复用同一个 prefab（`initialize` 的早退分支）：副本不重建，但缩放要跟新体型、动画要重新对齐。
-    view.initialize(prefab, 1.2);
+    view.initialize({ unitId: 'test-unit', prefabSize: 1.2 });
     assert.equal(view.outlineCopyNode, copyNode, '复用同一份美术时副本也复用');
     assert.ok(Math.abs(copyNode.scale.y - view.visualNode.scale.y * 1.08) < 1e-9, '体型改了副本要跟');
     render();
@@ -155,7 +159,8 @@ test('对象池复用后副本跟着新体型/新阵营走；切到序列帧美�
     assert.equal(copy.customMaterial, null, '材质要真的从副本上摘掉');
 
     // 换成分件序列帧美术：没有整体外形可描 ⇒ 副本销毁，不留半成品节点。
-    view.initialize(framePrefab(cc, FakeNode), 1);
+    presentationArt.unitVisualPrefabs.set('test-unit', framePrefab(cc, FakeNode));
+    view.initialize({ unitId: 'test-unit', prefabSize: 1 });
     assert.equal(view.outlineCopyNode, null, '序列帧美术不建整体轮廓');
     assert.equal(view.visualRoot.children.filter((child: any) => child.name.endsWith('_OutlineCopy')).length, 0,
         '副本节点必须被销毁（否则留在美术层里当幽灵）');
@@ -163,7 +168,8 @@ test('对象池复用后副本跟着新体型/新阵营走；切到序列帧美�
         ['NutVisual'], '只剩美术');
 
     // 切到无美术：同样要把副本清干净。
-    view.initialize(null, 1);
+    presentationArt.unitVisualPrefabs.delete('test-unit');
+    view.initialize({ unitId: 'test-unit', prefabSize: 1 });
     assert.equal(view.outlineCopyNode, null);
     assert.equal(view.visualRoot.children.filter((child: any) => child.name.endsWith('_OutlineCopy')).length, 0);
 });

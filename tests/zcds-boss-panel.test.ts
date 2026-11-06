@@ -208,8 +208,8 @@ test('5 个 @property 全部绑到正确类型的对象', () => {
 
 test('接线条：守城局实例化首领条、非守城局销毁；顶部信息带在守城局收起', () => {
     const game = stripComments(gameSource);
-    assert.match(game, /instantiate\(this\.cachedBossPanelPrefab\)/, '必须实例化 prefab');
-    assert.match(game, /node\.getComponent\(ZCHudBossPanel\)!/, '取组件失败应当当场抛');
+    assert.match(game, /instantiate\(prepared\.bossPanelPrefab\)/, '必须实例化 prefab');
+    assert.match(game, /this\.bossPanel = node\.getComponent\(ZCHudBossPanel\);/, '取组件后直接使用');
     assert.match(game, /const progress = model\.defenceWaveProgress;\n?/, '按 defenceWaveProgress 判是否守城局');
     assert.match(game, /this\.bossPanel\?\.node\.destroy\(\)/, '非守城局要销毁（换局不能留残留）');
     assert.match(game, /this\.bossPanel\.render\(/, '每帧全量赋值');
@@ -220,7 +220,7 @@ test('接线条：守城局实例化首领条、非守城局销毁；顶部信�
     const hud = stripComments(hudSource);
     assert.match(hud, /this\.topInfoPanel\.active = defence === null && !this\.spawnSelectionMode/,
         '守城局收起顶部信息带（计时 + 四格）；选点阶段也不许被顶回来');
-    assert.match(loaderSource, /const BOSS_PANEL_URL = 'ui\/game\/ZCBossPanel'/);
-    assert.match(loaderSource, /this\.assets\.load\(BOSS_PANEL_URL, Prefab/);
-    assert.match(loaderSource, /bossPanelPrefab: Prefab;/);
+    assert.match(loaderSource, /const BOSS_PANEL_URL = ZC_BATTLE_SHELL_PATHS\.bossPanel/);
+    assert.match(loaderSource, /bossPanelPrefab: hasBossPanel \? BOSS_PANEL_URL : null/);
+    assert.match(loaderSource, /bossPanelPrefab: Prefab \| null;/);
 });

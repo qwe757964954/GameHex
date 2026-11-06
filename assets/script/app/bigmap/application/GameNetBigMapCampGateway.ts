@@ -59,6 +59,8 @@ export class GameNetBigMapCampGateway implements IBigMapCampGateway {
         // 迁城是**写操作**：重发可能真的执行两次（服务端按先到先得或直接拒），
         // 与「领取/建造」同一口径 —— 关掉超时重发与重连恢复，失败只让上层重拉事实。
         request.allowRetry = false;
+        const expiresAt = Date.now() + 5000;
+        request.canSend = () => !this.isDisposed && this.isOwnerCurrent() && Date.now() < expiresAt;
         const sent = await net.send(request, false);
         return sent && !this.isDisposed && this.isOwnerCurrent() ? response : null;
     }

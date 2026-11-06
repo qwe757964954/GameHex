@@ -1,5 +1,5 @@
 /**
- * 全屏弹窗「四边对齐 Widget」的回归网（assetPath(`ui/**`)）。
+ * 全屏弹窗「四边对齐 Widget」的回归网（跨分包 `ui/**`，见 assetDirPaths）。
  *
  * 背景：本工程弹窗统一挂在常驻节点 `Popup` 下，而 `Popup` 自己挂了四边对齐
  * Widget —— 长屏（本机预览 720×**1463.04**）下会被拉到可见高。面板 prefab 若
@@ -32,7 +32,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
-import { assetPath } from './helpers/asset-paths';
+import { assetDirPaths } from './helpers/asset-paths';
 
 // ============================================================
 // 口径常量
@@ -42,7 +42,12 @@ import { assetPath } from './helpers/asset-paths';
 const DESIGN_HEIGHT = 1280;
 /** 全屏子节点判定下界（宽）。 */
 const FULLSCREEN_MIN_WIDTH = 720;
-const UI_DIR = assetPath('ui');
+/**
+ * 🔴 顶层 `ui` 目录同时存在于四个分包根（main-pages / battle / bigmap / resources），
+ *    用 `assetPath('ui')` 只会锁定第一个命中，resources 下的 ServerSelectPanel 等
+ *    12 个面板会被整片漏掉 ⇒ A1/A2/A3 假红、B1/C1 只看到单个分包的缺口。
+ */
+const UI_DIRS = assetDirPaths('ui');
 /** 演示层目录：整目录排除（非业务弹窗）。 */
 const EXCLUDED_DIR_SEGMENT = '/uidemo/';
 /** 四边对齐：TOP(1)|BOT(4)|LEFT(8)|RIGHT(32)。 */
@@ -164,7 +169,7 @@ function collect(): { panels: PanelRow[]; children: ChildRow[]; skippedOverHeigh
     const children: ChildRow[] = [];
     const skippedOverHeight: string[] = [];
 
-    for (const p of walkPrefabs(UI_DIR)) {
+    for (const p of UI_DIRS.flatMap((dir) => walkPrefabs(dir))) {
         const rel = p.replace(/\\/g, '/');
         if (rel.includes(EXCLUDED_DIR_SEGMENT)) continue; // uidemo/ 演示层
         let objs: Obj[];
@@ -211,6 +216,8 @@ function assertHas(rows: { rel: string }[], suffix: string): void {
 
 test('A1 全屏业务弹窗清单非空且规模达标（口径退化时会直接暴露）', () => {
     // 实测 2026-09-29：26 个（25 个本次新增 + gm/GMPanel 既有范本）。
+    // 2026-11-05 修正扫描口径后 35 个：此前 `assetPath('ui')` 只扫 main-pages 一个根，
+    // 漏掉 resources/battle/bigmap 下 12 个面板，才把这里压到 23 造成假红。
     // 取 >= 26 而非 ==，允许新增面板；低于它说明 filter 条件被改坏了。
     assert.ok(panels.length >= 26, `全屏业务弹窗应 >= 26 个，实际 ${panels.length}（口径可能被改坏）`);
 });
@@ -231,6 +238,7 @@ test('A2 清单必须包含关键代表面板（防 filter 被改坏导致空转
 
 test('A3 全屏直接子节点清单规模达标且包含关键成员', () => {
     // 实测 2026-09-29：8 个（7 个本次新增 + gm/GMPanel/Bg 既有）。
+    // 2026-11-05 跨分包合并后 15 个（同上，旧口径只看到 7 个）。
     assert.ok(fullscreenChildren.length >= 8, `全屏直接子节点应 >= 8 个，实际 ${fullscreenChildren.length}`);
     for (const [panelSuffix, childName] of [
         ['login/ServerSelectPanel.prefab', 'Bg'],

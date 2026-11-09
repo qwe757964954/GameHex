@@ -19,7 +19,7 @@ const bigmapResourceDir = join(resourcesDir, 'config', 'bigmap-maps');
 const remoteRefDir = join(root, '..', '..', 'assets', 'remoteRef');
 const territoryAssetDir = join(resourcesDir, 'image', 'territory');
 const decorDir = join(resourcesDir, 'image', 'decor');
-const mapResourceDir = join(resourcesDir, 'image', 'map-resource');
+const mapResourceDir = join(root, '..', '..', 'assets', 'bundles', 'battle', 'image', 'map-resource');
 /**
  * 编辑器专用的资源图标回退（这两类在对局中不是静态图：unit_cap 是格内中立兵、
  * artifact_charge 是玩家本局携带的神器）。map-resource 目录没出图时，用工程内
@@ -28,6 +28,8 @@ const mapResourceDir = join(resourcesDir, 'image', 'map-resource');
 const mapResourceFallback = {
   unit_cap: join(resourcesDir, 'image', 'buildings', 'barracks-peashooter.png'),
   artifact_charge: join(resourcesDir, 'image', 'artifact', '阿哈利姆神杖.png'),
+  barracks: join(resourcesDir, 'image', 'buildings', 'barracks-peashooter.png'),
+  monster: join(resourcesDir, 'image', 'buildings', 'barracks-吞噬大嘴花.png'),
 };
 /** 装饰资源名的固定前缀（相对 resources、不带扩展名）。 */
 const decorPrefix = 'image/decor/';
@@ -568,6 +570,17 @@ await mkdir(presetDir, { recursive: true });
 await mkdir(territoryPresetDir, { recursive: true });
 await mkdir(bigmapPresetDir, { recursive: true });
 
+// 编辑器只预览候选类型；实际对局仍按组合权重随机抽取。
+const monsterRows = (await readRefRows('neutralResourceGroup')) ?? [];
+const previewCards = (await readRefRows('pvpCard')) ?? [];
+for (const row of monsterRows) {
+  if (Number(row.resourceType) !== 11) continue;
+  const resId = String(row.param?.resId ?? '');
+  const card = previewCards.find((entry) => String(entry.id) === resId);
+  if (!/^\d+$/.test(resId) || !card || typeof card.buildIcon !== 'string' || /[\\/]|\.\./.test(card.buildIcon)) continue;
+  mapResourceFallback[`monster_${resId}`] = join(resourcesDir, 'image', 'buildings', `${card.buildIcon}.png`);
+}
+
 const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', address);
@@ -770,6 +783,8 @@ const server = createServer(async (req, res) => {
             resourceType: Number(row.resourceType),
             weight: Number(row.weight) || 0,
             icon: typeof row.icon === 'string' ? row.icon : null,
+            effect: row.param && typeof row.param === 'object' ? row.param.effect : null,
+            resId: row.param && typeof row.param === 'object' ? row.param.resId : null,
           });
         }
         json(res, 200, { groups: Array.from(groups.values()).sort((a, b) => a.groupId - b.groupId) });
@@ -786,7 +801,7 @@ const server = createServer(async (req, res) => {
         const asset = mapResourcePrefix + id;
         if (!assets.includes(asset)) assets.push(asset);
       }
-      json(res, 200, { assets: assets.sort(), dir: 'assets/resources/image/map-resource' });
+      json(res, 200, { assets: assets.sort(), dir: 'assets/bundles/battle/image/map-resource' });
       return;
     }
     // 装饰贴图本体：画布上的装饰与清单缩略图都取这里，出了图就能直接看到。

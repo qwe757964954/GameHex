@@ -3,10 +3,9 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
 import * as ts from 'typescript';
-import type { Sprite, SpriteFrame, UITransform } from 'cc';
+import type { Sprite, SpriteFrame } from 'cc';
 import * as formationModel from '../assets/script/app/card/FormationModel';
 import { resolveSelectedDeck } from '../assets/script/app/card/LineupPresets';
-import { applyCardHeroArt } from '../assets/script/app/card/CardHeroView';
 import * as skillList from '../assets/script/app/card/CardSkillList';
 import { CARD_LINEUP_TEXTS } from '../assets/script/app/card/CardLineupTexts';
 import { CardLineupEvent } from '../assets/script/app/card/CardLineupEvents';
@@ -31,6 +30,31 @@ function loadRuntime<T>(file: string, dependencies: Record<string, unknown>): T 
 }
 
 const decorators = { ccclass: () => (value: unknown) => value, property: () => () => {} };
+
+test('布阵站台直接赋图，缺图清空，保留 prefab 的 RAW 与缩放', () => {
+    const module = loadRuntime<typeof import('../assets/script/app/card/LineupBoardSlot')>('LineupBoardSlot', {
+        cc: { Component: class {}, Vec2: class {}, _decorator: decorators },
+        '../zcds/model/ZCCombatCatalog': {},
+        './CardLineupTexts': { CARD_LINEUP_TEXTS }, './CardUnitPreview': {},
+    });
+    const slot = new module.LineupBoardSlot();
+    const frame = {} as SpriteFrame;
+    const scale = { x: 0.4, y: 0.4, z: 1 };
+    slot.disc = { spriteFrame: null } as Sprite;
+    slot.hero = { spriteFrame: null, sizeMode: 2, node: { scale } } as Sprite;
+    slot.classBadge = { spriteFrame: null } as Sprite;
+    slot.levelLabel = { string: '' } as typeof slot.levelLabel;
+    slot.unitGroup = { active: false } as typeof slot.unitGroup;
+    slot.render({ id: '68001' } as ZCDeckCard, { disc: frame, hero: frame, badge: frame });
+    assert.equal(slot.hero.spriteFrame, frame);
+    slot.render({ id: '68002' } as ZCDeckCard, { disc: null, hero: null, badge: null });
+    assert.equal(slot.disc.spriteFrame, null);
+    assert.equal(slot.hero.spriteFrame, null);
+    assert.equal(slot.classBadge.spriteFrame, null);
+    assert.equal(slot.hero.sizeMode, 2);
+    assert.deepEqual(slot.hero.node.scale, scale);
+    assert.equal(slot.unitGroup.active, true);
+});
 
 for (const existing of [false, true]) {
     test(`保存并选中方案 2 后，立即读缓存只能取到新阵容（${existing ? '覆盖' : '新增'}方案）`, async () => {
@@ -136,15 +160,14 @@ for (const kind of ['failed', 'offline', 'success'] as const) {
 test('站台换卡与空补图均清除旧品质盘和角标，模型展示不被补图打断', () => {
     const module = loadRuntime<typeof import('../assets/script/app/card/CardLineupSlot')>('CardLineupSlot', {
         cc: { Component: class {}, _decorator: decorators },
-        '../zcds/model/ZCCombatCatalog': {}, './CardHeroView': { applyCardHeroArt },
+        '../zcds/model/ZCCombatCatalog': {},
         './CardLineupTexts': { CARD_LINEUP_TEXTS }, './CardUnitPreview': {},
     });
     const slot = new module.CardLineupSlot();
     const frame = { originalSize: { width: 100, height: 100 } } as SpriteFrame;
     slot.disc = { spriteFrame: frame } as Sprite;
     slot.classBadge = { spriteFrame: frame } as Sprite;
-    slot.hero = { spriteFrame: frame, enabled: true, node: { active: true } } as Sprite;
-    slot.heroTransform = {} as UITransform;
+    slot.hero = { spriteFrame: frame, enabled: true, node: { active: true, setScale() {} } } as unknown as Sprite;
     Object.assign(slot, { node: { getComponent: () => ({ opacity: 255 }) }, levelLabel: { string: '' } });
     const empty = { disc: null, hero: null, badge: null };
     slot.render({ id: '68002' } as ZCDeckCard, empty, 4);
@@ -160,4 +183,7 @@ test('站台换卡与空补图均清除旧品质盘和角标，模型展示不�
     assert.equal(slot.classBadge.spriteFrame, null);
     assert.equal(slot.hero.enabled, false, '模型正在显示时不能重新启用静态立绘');
     assert.equal(slot.hero.spriteFrame, frame);
+    slot.hero.enabled = true;
+    slot.applyStaticArt(empty);
+    assert.equal(slot.hero.spriteFrame, null, '静态展示恢复后，缺图必须清空');
 });

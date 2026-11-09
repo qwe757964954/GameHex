@@ -37,16 +37,22 @@ const ROOT = process.cwd();
 const PREFAB_DIR = path.join(ROOT, assetPath('ui/login'));
 const SCRIPT_DIR = path.join(ROOT, 'assets/script/app/login');
 
-/** 弹窗皮「道具详情包」的取件表（uuid 前 8 位足以唯一化，全 32 位在 meta 里）。 */
+/**
+ * 弹窗皮的取件表（uuid 前 8 位足以唯一化，全 32 位在 meta 里）。
+ *
+ * 2026-11-06 起这一套全部落在 `image/common`：底板与标题条是从 `image/itemdetail`
+ * **移动**过来的（uuid 未变），关闭按钮与条目底改用 common 里**同字节同九宫**的副本
+ * —— 目的是让选服弹窗（含列表 item）不再拖 `image/itemdetail` / `image/login` 两个图集。
+ */
 const ART = {
-    /** id_panel_bg —— 底板九宫 620×656，九宫 164/164/155/155，中心 rgb(200,179,149) */
+    /** common/id_panel_bg —— 底板九宫 620×656，九宫 164/164/155/155，中心 rgb(200,179,149) */
     panelBg: 'd04d6e56',
-    /** id_title_gray —— 标题条九宫 344×81，九宫 26/34/170/146，中心 rgb(87,88,98) */
+    /** common/id_title_gray —— 标题条九宫 344×81，九宫 26/34/170/146，中心 rgb(87,88,98) */
     titleBg: '7a234c2b',
-    /** 公用_按钮_关闭01 —— 60×60，中心橙 rgb(229,104,60) */
-    close: 'c1716940',
-    /** id_row_bg —— 条目底九宫 407×103，九宫 25/28/101/104，中间 rgb(236,218,188) */
-    rowBg: '31bf229c',
+    /** common/cu_btn_close_01 —— 60×60，中心橙 rgb(229,104,60)（= login/公用_按钮_关闭01 同字节） */
+    close: 'f0066f4d',
+    /** common/cu_tycb_pt —— 条目底九宫 407×103，九宫 25/28/101/104，中间 rgb(236,218,188)（= itemdetail/id_row_bg 同字节） */
+    rowBg: '787634e8',
     /** 内置白图（用于画纯色遮罩） */
     white: '7d8f9b89',
 } as const;
@@ -163,21 +169,21 @@ test('黑遮罩 Bg：满屏 + 内置白图染 rgba(0,0,0,160)（与 GMPanel.Bg �
     assert.equal(findComp(objects, bg, 'cc.Button'), undefined, '遮罩不该有 Button');
 });
 
-test('换皮取件：PanelBg / TitleBg / CloseBtn 三张图与尺寸都对齐「道具详情包」', () => {
+test('换皮取件：PanelBg / TitleBg / CloseBtn 三张图与尺寸都对齐 common 通用套件', () => {
     const objects = loadPrefab('ServerSelectPanel.prefab');
 
     const panelBg = nodeByName(objects, 'PanelBg');
-    assert.equal(sfPrefix(objects, panelBg), ART.panelBg, 'PanelBg 应是 id_panel_bg');
+    assert.equal(sfPrefix(objects, panelBg), ART.panelBg, 'PanelBg 应是 common/id_panel_bg');
     assert.deepEqual(sizeOf(objects, panelBg), { width: 626, height: 866 }, '应与老端弹窗本体同尺寸');
     assert.equal(findComp(objects, panelBg, 'cc.Sprite')!._type, 1, '九宫图必须 SLICED(1)');
     assert.equal(findComp(objects, panelBg, 'cc.Sprite')!._sizeMode, 0, '口径：_sizeMode 一律 CUSTOM(0)');
 
     const titleBg = nodeByName(objects, 'TitleBg');
-    assert.equal(sfPrefix(objects, titleBg), ART.titleBg, 'TitleBg 应是 id_title_gray');
+    assert.equal(sfPrefix(objects, titleBg), ART.titleBg, 'TitleBg 应是 common/id_title_gray');
     assert.equal(findComp(objects, titleBg, 'cc.Sprite')!._sizeMode, 0);
 
     const closeBtn = nodeByName(objects, 'CloseBtn');
-    assert.equal(sfPrefix(objects, closeBtn), ART.close, 'CloseBtn 应是 公用_按钮_关闭01');
+    assert.equal(sfPrefix(objects, closeBtn), ART.close, 'CloseBtn 应是 common/cu_btn_close_01');
     assert.deepEqual(sizeOf(objects, closeBtn), { width: 60, height: 60 });
     assert.equal(findComp(objects, closeBtn, 'cc.Sprite')!._sizeMode, 0);
 });

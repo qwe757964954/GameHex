@@ -11,7 +11,7 @@ const { ccclass, property } = _decorator;
  * 其余样式 —— 字号 / 颜色 / 对齐 / SHRINK —— 全在 `ServerSelectItem.prefab` 上，
  * 本类不再覆盖，避免同一份配置散在代码和 prefab 两处。
  *
- * 底图是 `id_row_bg`（浅色九宫，与 `id_panel_bg` 同一套「道具详情包」皮），
+ * 底图是 `common/cu_tycb_pt`（浅色九宫，与物品详情的 `id_row_bg` 同字节同九宫），
  * 所以三档取值都是「在浅色底图上做乘法着色」，不是直接画深色块。
  */
 const ITEM_COLORS = {

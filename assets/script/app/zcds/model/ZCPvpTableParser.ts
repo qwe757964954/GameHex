@@ -221,6 +221,9 @@ export function parseCard(value: unknown): ZCDeckCard & { enabled: boolean } {
         rarity: parseCardRarity(raw.rarity),
         unitId,
         unitPrefabPath: assetPath(raw.unitPrefabPath, 'cards[].unitPrefabPath'),
+        // 兵种美术等比缩放：与 `parseUnits` 同一列、同一个解析口径（留空 1、0/负数抛）。
+        // 阵容页站台预览要按它体现体型差，所以卡这边也得带上。
+        prefabSize: parsePrefabSize(raw.prefabSize, 'cards[].prefabSize'),
         traits: parseTraits(raw.traits),
         buildSeconds: optionalNumber(raw.buildSeconds, 'cards[].buildSeconds'),
         cycleSeconds: parseCardCycleSeconds(raw, type),

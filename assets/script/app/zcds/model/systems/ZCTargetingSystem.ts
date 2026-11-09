@@ -1,6 +1,7 @@
 import type { IZCModelServices } from './ZCModelServices';
 import type { ZCUnitDefinition } from '../ZCCombatCatalog';
 import type { ZCCombatTargetKind, ZCHexState, ZCUnitState } from '../ZCGameTypes';
+import { isZCAwakeMonster } from './ZCNeutralFeatureSystem';
 
 export interface ZCPoint { readonly x: number; readonly y: number }
 export interface ZCTargetSelection { readonly kind: ZCCombatTargetKind; readonly id: number }
@@ -73,6 +74,10 @@ export class ZCTargetingSystem {
         }
         if (unitsOnly || (best && context.preferUnitTargets?.(unit))) return best;
         for (const hex of context.hexes) {
+            if (isZCAwakeMonster(hex)) {
+                consider('building', hex.id, context.hexPosition(hex.id));
+                continue;
+            }
             if (hex.owner === 'neutral' || hex.owner === unit.owner) continue;
             const point = context.hexPosition(hex.id);
             if (context.hasExposedWall(hex)) consider('wall', hex.id, point);

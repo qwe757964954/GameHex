@@ -358,6 +358,15 @@ export class TerritoryCloudView {
     private fillWidth = 0;
     private fillHeight = 0;
     /**
+     * 尺寸可用（`setFillArea` 至少调过一次）。
+     *
+     * ⚠️ 与 {@link fillKey} **不是一回事**：`fillKey` 是"按这套参数建出来的那批节点还在不在"
+     * 的指纹（`clearFill` 会清空它，逼下一次 `setFillArea` 重建）；而尺寸本身（行列 / 宽高）
+     * 在 `reset()` 之后**仍然有效** —— 换章那一帧 `setFillOccupied` 就靠它把铺满层当场建回来
+     * （见 {@link setFillOccupied}，2026-11-06 那条裸底图）。
+     */
+    private fillAreaReady = false;
+    /**
      * 已经由**真实云层**负责的格（`setFillOccupied` 注入）—— 铺满层要跳过它们。
      *
      * 空集合 = 铺满整张格网（含所有空格）。章节图里 400 格只有 ~117 格配了内容，
@@ -581,6 +590,9 @@ export class TerritoryCloudView {
         this.fillColumns = columns > 0 ? columns : 0;
         this.fillWidth = width > 0 ? width : 0;
         this.fillHeight = height > 0 ? height : 0;
+        // ⚠️ 先置位再看指纹：换章那一帧 `syncGrid` 的 `reset()` 就发生在这次 `setFillArea`
+        //    **之后**，紧随其后的 `setFillOccupied` 只认这个标记（见 `setFillOccupied`）。
+        this.fillAreaReady = true;
         if (key === this.fillKey) return;
         this.fillKey = key;
         this.rebuildFillPoints();
@@ -599,7 +611,15 @@ export class TerritoryCloudView {
         if (sameSet(next, this.fillOccupied)) return;
         this.fillOccupied = next;
         // 还没 `setFillArea`（尺寸未知）时先记账，等尺寸到了自然重算。
-        if (!this.fillKey) return;
+        //
+        // 🔴 判据必须是「**尺寸**知不知道」，不能是「`fillKey` 空不空」（2026-11-06）：
+        //    `TerritoryMapView.renderMap` 的顺序是
+        //      ① `syncContentSize` → `setFillArea(新章尺寸)`  ← 用旧已盖格白建一套
+        //      ② `syncGrid`        → `clouds.reset()`       ← 清空铺满层、`fillKey = ''`
+        //      ③ `syncClouds`      → `setFillOccupied(新格)` ← 这一帧**唯一**能重建的机会
+        //    按 `fillKey` 判就会把 ③ 挡掉：铺满层 `active = true` 但一朵都没有 ⇒ 整片背景
+        //    裸沙、零报错（用户：「chapter02 地图未通关，用来遮挡背景的云层丢失了」）。
+        if (!this.fillAreaReady) return;
         this.rebuildFillPoints();
     }
 
@@ -992,9 +1012,13 @@ export class TerritoryCloudView {
      * 铺满层的 `active` —— **唯一的写入口**（退场收尾 / 回退复原 / 重建都走它）。
      *
      * 退场**过程中**仍是 `true`（要画，只不过越来越透）；只有淡完了才 `active = false`。
+     *
+     * 🔴 还要**有节点**才算在展示（与 {@link rebuildFill} 同一个公式）：只看 `fillDismissed`
+     * 的话，节点被清空而没人重建时这一层是"开着但空着"—— 画面是整片裸底图，而 `fillVisible`
+     * 依然读 `true`（2026-11-06 chapter02 那条就是这么骗过所有人的）。宁可这里说 `false`。
      */
     private applyFillActive(): void {
-        const show = !this.fillDismissed;
+        const show = !this.fillDismissed && this.fillSprites.length > 0;
         if (this.fillLayer?.isValid && this.fillLayer.active !== show) this.fillLayer.active = show;
         if (this.fillShadowGroup?.isValid && this.fillShadowGroup.active !== show) {
             this.fillShadowGroup.active = show;
@@ -1323,6 +1347,9 @@ export class TerritoryCloudView {
         this.fillShadowSprites.length = 0;
         this.fillPoints = [];
         this.fillKey = '';
+        // ⚠️ `fillAreaReady` / 行列 / 宽高 **都不撤**：它们是"内容层多大"这件事实，换章后又没变。
+        //    撤掉就等于把裸底图放回来 —— `reset()` 在 `renderMap` 里排在 `setFillArea` 之后，
+        //    而这一帧再没人喂尺寸了（见 `setFillOccupied`，2026-11-06）。
         // 铺满层整个作废 ⇒ 退场时间轴也一并回到"从没淡过"（波次同理，节点都换了）。
         this.fillFadeElapsed = -1;
         this.fillDismissed = false;

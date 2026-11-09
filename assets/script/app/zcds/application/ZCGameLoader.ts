@@ -260,6 +260,7 @@ export interface ZCGamePreparedResources {
      *  拿不到时为 `null` —— 视图退回"只显示地块图标"，不会崩（只是回到"看不出有资源点"的旧表现）。
      */
     unknownResourceFrame: SpriteFrame | null;
+    neutralResourceFrames: ReadonlyMap<string, SpriteFrame>;
     /**
      * 中立资源「金币」图标帧（`image/map-resource/coin_icon`）—— 飞向 HUD 金币栏的那把金币贴图。
      *
@@ -350,7 +351,8 @@ export class ZCGameLoader {
         // 波次和中立奖励可从完整目录产兵，不受后端参战卡池限制。
         // 兵团类资源项要产的兵同样从完整目录来（不走后端参战卡池）；表里没配时为空。
         const neutralUnitCardIds = Array.from(getZCNeutralResourceCatalog().items.values())
-            .flatMap((item) => (item.cardId && item.unitCount > 0 ? [item.cardId] : []));
+            .flatMap((item) => item.feature?.resId ? [item.feature.resId]
+                : item.cardId && item.unitCount > 0 ? [item.cardId] : []);
         const additionalCardIds = battle ? [
             ...waveCardIds.map(String),
             ...neutralUnitCardIds,
@@ -375,7 +377,7 @@ export class ZCGameLoader {
             shellPrefabs,
             [spawnFxPrefab, deathFxPrefab, buildingDestroyFxPrefab, hitFxPrefabs],
             visualPrefabs,
-            [buildingFrames, wallFrames, wallMaterial, unitOutlineCopyEffect, hexGroundGlowFrames, hexPulseFrames, artifactClaimBurstFrames, decorFrames, artifactIconFrame, unknownResourceFrame, goldCoinFrame, spawnRegionFrames],
+            [buildingFrames, wallFrames, wallMaterial, unitOutlineCopyEffect, hexGroundGlowFrames, hexPulseFrames, artifactClaimBurstFrames, decorFrames, artifactIconFrame, unknownResourceFrame, goldCoinFrame, spawnRegionFrames, neutralResourceFrames],
             cardArtConfig,
         ] = await Promise.all([
             this.traceArt('公共外壳', this.loadShellPrefabs(scope, baseMatchConfig.map.cityMode === 'select', !battle || waveCardIds.length > 0)),
@@ -399,6 +401,7 @@ export class ZCGameLoader {
                 baseMatchConfig.map.cityMode === 'select' ? this.loadUnknownResourceFrame(scope) : Promise.resolve(null),
                 this.loadGoldCoinFrame(scope),
                 baseMatchConfig.map.cityMode === 'select' ? this.loadSpawnRegionFrames(scope) : Promise.resolve(null),
+                this.loadNeutralResourceFrames(scope),
             ])),
             Promise.all([
                 this.resources.configs.getTable(CARD_ART_TABLES.rarity),
@@ -432,6 +435,7 @@ export class ZCGameLoader {
             baseMatchConfig,
             artifactIconFrame,
             unknownResourceFrame,
+            neutralResourceFrames,
             goldCoinFrame,
             spawnRegionFrames,
             ...shellPrefabs,
@@ -615,6 +619,13 @@ export class ZCGameLoader {
             this.traceArt(`弹道特效(${effectTasks.length})`, Promise.all(effectTasks)),
         ]);
         return { units, effects, effectPaths: plan.effectPaths };
+    }
+
+    /** 中立资源图标由本局 scope 持有，缺图时视图保留文字提示。 */
+    private async loadNeutralResourceFrames(scope?: ResourceScope): Promise<ReadonlyMap<string, SpriteFrame>> {
+        const frames = await this.loadOptional(scope, '中立资源图标加载失败',
+            () => this.resources.assets.loadDir(MAP_RESOURCE_ART_ROOT, SpriteFrame, this.battleOptions(scope)), []);
+        return new Map(frames.map(frame => [frame.name, frame]));
     }
 
     /**

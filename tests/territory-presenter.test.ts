@@ -232,6 +232,7 @@ const stage: TerritoryCampaignStage = {
     idleRewards: [{ resId: 1, name: '银币', amount: 100, probability: 10000 }],
     staminaCost: 5,
     exploreSeconds: 2,
+    openGrideTime: 18,
     hpRate: 1,
     attackRate: 1,
 };
@@ -2403,6 +2404,7 @@ const bossStage: TerritoryCampaignStage = {
     idleRewards: [{ resId: 1, name: '银币', amount: 100, probability: 10000 }],
     staminaCost: 5,
     exploreSeconds: 2,
+    openGrideTime: 18,
     hpRate: 1,
     attackRate: 1,
 };

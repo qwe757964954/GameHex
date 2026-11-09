@@ -611,7 +611,9 @@
 
       <div class="group" id="groupResources" data-tool-category="resources" hidden>
         <div class="groupHeading"><h2>中立资源</h2><details class="helpTip"><summary aria-label="查看中立资源说明">?</summary><div class="helpBubble">地图只配置点位与组合 ID。奖励内容、数量和抽取权重在中立资源配置表中管理。可放在中立格及玩家分区，不能放在虚空或主城上；资源点间距至少 3 格（地图要求更大间距时沿用）。右键删除点位，点击已有点位会替换组合，可撤销。组合 ID 是否存在由程序接表后校验。</div></details></div>
-        <label class="row resourceGroupField" for="resourceGroupId">组合 ID <input id="resourceGroupId" type="number" min="1" max="2147483647" step="1" placeholder="填写表中的组合 ID"></label>
+        <label class="row resourceGroupField" for="resourceGroupId">组合 ID <input id="resourceGroupId" type="number" min="1" max="2147483647" step="1" list="resourceGroupOptions" placeholder="选择或填写组合 ID"></label>
+        <datalist id="resourceGroupOptions"></datalist>
+        <img id="resourceGroupPreview" width="80" height="80" alt="当前资源组合预览" style="object-fit:contain" hidden>
         <button class="btn" id="btnResourcePlace" type="button" aria-pressed="false">放置资源点</button>
         <p class="hint" id="resourceGroupStatus" aria-live="polite">填写配置表中的组合 ID，再点击放置。</p>
         <p class="hint">奖励与权重在中立资源配置表中配置。</p>

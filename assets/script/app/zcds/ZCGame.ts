@@ -437,6 +437,7 @@ export class ZCGame extends Component {
             artifactIconFrame: prepared.artifactIconFrame,
             // 自选地图局的中立资源格盖成问号（资源进游戏才随机，别剧透是箱子还是金矿）。
             unknownResourceFrame: prepared.unknownResourceFrame,
+            neutralResourceFrames: prepared.neutralResourceFrames,
             // 中立资源获取特效：飞向 HUD 金币栏的那把金币贴图。
             goldCoinFrame: prepared.goldCoinFrame,
             // 自选主城区域气泡底图（frame_01 绿 / frame_02 红，九宫格）。
@@ -579,14 +580,17 @@ export class ZCGame extends Component {
     }
 
     /**
-     * 守城（塔防）局的首领条：**按需实例化**，非守城局直接销毁。
+     * 守城（塔防）局的首领条：**按需实例化**，非守城局 / 非 BOSS 波直接销毁。
+     *
+     * 🔴 只有 BOSS 波才展示这条大血条（用户 2026-11-07）：普通小怪只留头顶血条。
+     * 判据是 `progress.currentWaveIsBoss`（表 `defenceModWave.monsterType=3`，缺列时按最后一波）。
      *
      * 头像与名字按 `currentWaveCardId` 查 `loadDefenceBossArt()` 预扫好的表（解析必须同步命中，
      * 否则会先闪一帧空框再换成怪图）；`render` 每帧全量赋值，面板侧不做增量。
      */
     private renderBossPanel(model: IZCBattleRenderModel): void {
         const progress = model.defenceWaveProgress;
-        if (!progress) {
+        if (!progress || !progress.currentWaveIsBoss) {
             this.bossPanel?.node.destroy();
             this.bossPanel = null;
             return;

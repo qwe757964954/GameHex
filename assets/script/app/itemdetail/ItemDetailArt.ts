@@ -17,12 +17,26 @@ export const ID_ART_DIR = 'itemdetail';
 /** 全部图的 key → 相对 `image/` 的路径。 */
 export const ID_ART_NAMES: Readonly<Record<string, string>> = {
     // ---------- 本模块自有（image/itemdetail）----------
-    /** 主底板 620×656（老端 `tybg`，九宫 155,164,310,328；FGUI 实例显示 515×709）。 */
-    panelBg: 'itemdetail/id_panel_bg',
+    /**
+     * 主底板 620×656（老端 `tybg`，九宫 155,164,310,328）。
+     *
+     * 实例尺寸 515×**830**（2026-11-06：原 709 装不下「上半区 + 获取途径 3 行列表
+     * + 前往按钮」，列表底会低出面板 17px 且整块盖住按钮 ⇒ 面板往下加长 121，
+     * 按钮同步下移到 y=-372）。九宫格上下边距固定、只拉中间，加高不会让边框变形。
+     *
+     * 2026-11-06 挪到 `image/common`：登录「选服」弹窗复用同一张窗体，
+     * 留在 `image/itemdetail` 会让 resources 的弹窗反向依赖 main-pages 图集。
+     */
+    panelBg: 'common/id_panel_bg',
     /** 行底 / 描述条 407×103（老端 `tycb_pt`，九宫 101,25,104,28；实例显示 469×70 / 466×61）。 */
     rowBg: 'itemdetail/id_row_bg',
-    /** 品质缎带 344×81 —— 7 档（FGUI 控制器「品质」的 gearIcon）。 */
-    titleGray: 'itemdetail/id_title_gray',
+    /**
+     * 品质缎带 344×81 —— 7 档（FGUI 控制器「品质」的 gearIcon）。
+     *
+     * 灰档与 `panelBg` 一起挪到 `image/common`（选服弹窗复用的就是这一档），
+     * 其余 6 档仍在 `image/itemdetail`。
+     */
+    titleGray: 'common/id_title_gray',
     titleGreen: 'itemdetail/id_title_green',
     titleBlue: 'itemdetail/id_title_blue',
     titlePurple: 'itemdetail/id_title_purple',

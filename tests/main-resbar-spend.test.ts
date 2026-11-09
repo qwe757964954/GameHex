@@ -569,3 +569,19 @@ test('★源码契约：单格不许自己挂 update，也不许用 tween（心�
     const restores = slotSrc.match(/this\.valueLabel\.color = new Color\(/g) ?? [];
     assert.ok(restores.length >= 3, `字色复原点只有 ${restores.length} 处（至少要：收尾 / 中止扣 / 切换）`);
 });
+
+/**
+ * 飘字描边：3.8 起 `LabelOutline` 组件已弃用，运行时读 `outline.width` 会刷
+ * `'LabelOutline.width' is deprecated. (Please use Label.outlineWidth instead.)`。
+ *
+ * 正确姿势是 Label 自带的三个属性，而且**必须一起给**：`outlineWidth` 只在
+ * `enableOutline = true` 时才参与渲染，只设宽度不设开关的话描边静默消失。
+ */
+test('飘字描边走 Label 自带属性，不再 addComponent(LabelOutline)', () => {
+    const slotSrc = readFileSync(SLOT, 'utf8');
+    assert.doesNotMatch(slotSrc, /addComponent\(\s*LabelOutline\s*\)/,
+        '别再挂已弃用的 LabelOutline 组件（会刷 width deprecated 警告）');
+    assert.match(slotSrc, /label\.enableOutline = true/, 'outlineWidth 只在 enableOutline=true 时才画');
+    assert.match(slotSrc, /label\.outlineColor = new Color\(0, 0, 0, 255\)/);
+    assert.match(slotSrc, /label\.outlineWidth = SPEND_FLOAT_OUTLINE_WIDTH/);
+});

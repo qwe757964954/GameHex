@@ -7,6 +7,7 @@ import { CardUnitPreviewAssets } from '../assets/script/app/card/CardUnitPreview
 import { sortLineupCards, visibleLineupCards } from '../assets/script/app/card/CardLineupTypes';
 import { ZCCardType } from '../assets/script/app/zcds/model/ZCCombatCatalog';
 import { CardLineupUiEvent } from '../assets/script/app/card/CardLineupEvents';
+import { formatPowerText } from '../assets/script/app/card/CardLineupPower';
 import { cardArtConfig } from './helpers/card-art-config';
 
 function deferred<T>() {
@@ -18,6 +19,30 @@ function deferred<T>() {
 const settle = () => new Promise<void>(done => setImmediate(done));
 type Card = { id: string; unitId: string; unitPrefabPath: string; type: number; rarity: string };
 const card = (id: string): Card => ({ id, unitId: id, unitPrefabPath: `skel/${id}`, type: ZCCardType.Barracks, rarity: 'green' });
+
+/**
+ * 把真实 `CardLineupCard` 源码跑起来：只替换 `cc` 的基类/装饰器/`Color` 与文本常量。
+ *
+ * 条目是纯视图，`@property` 上的组件在测试里用可写对象顶替（`face.color` 等），
+ * 这样「未解锁压暗 + 挂锁」这种状态逻辑能直接验行为，不必起引擎。
+ */
+function loadCardViewClass(): new () => Record<string, any> {
+    const moduleExports: Record<string, unknown> = {};
+    class Component { isValid = true; }
+    class Color {
+        constructor(public r: number, public g: number, public b: number, public a: number) {}
+    }
+    runInNewContext(ts.transpileModule(readFileSync('assets/script/app/card/CardLineupCard.ts', 'utf8'), {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
+    }).outputText, {
+        exports: moduleExports,
+        require: (id: string) => id === 'cc'
+            ? { Color, Component, _decorator: { ccclass: () => (target: unknown) => target, property: () => () => {} } }
+            : { CARD_LINEUP_TEXTS: { onField: '出战中', upgradeMaxed: '已满级', progressSeparator: '/' } },
+        console: { log() {}, warn() {} },
+    });
+    return moduleExports.CardLineupCard as new () => Record<string, any>;
+}
 
 /** 执行真实 Page 的备图、提交与调度；仅替换引擎和外部 I/O。 */
 function fixture(loadPrefab: (path: string) => Promise<unknown>,
@@ -68,6 +93,7 @@ function fixture(loadPrefab: (path: string) => Promise<unknown>,
         } },
         './CardRepository': { cardRepository: { loadUpgradeStatus } },
         './CardLineupEvents': { CardLineupUiEvent },
+        './CardLineupPower': { formatPowerText },
         './CardUnitPreviewAssets': { CardUnitPreviewAssets: previewAssetsOverride ?? CardUnitPreviewAssets },
         './CardLineupTypes': { visibleIconTallies: () => [], activeBondTitle: () => '', bondPercentTotal: () => 0,
             sortLineupCards, visibleLineupCards },
@@ -85,6 +111,7 @@ function fixture(loadPrefab: (path: string) => Promise<unknown>,
     });
     interface Page {
         isValid: boolean;
+        powerLabel: { string: string };
         initialize(resources: unknown): void;
         presentLineup(data: unknown): Promise<void>;
         onDestroy(): void;
@@ -104,9 +131,10 @@ function fixture(loadPrefab: (path: string) => Promise<unknown>,
         cardGrid,
         bondTitleLabel: { string: '' },
         bondValueLabel: { string: '' },
+        powerLabel: { string: '--' },
     });
-    const present = (deck: Card[], catalog: Card[] = [], heroLevels = new Map<string, number>()) => page.presentLineup({
-        deck, catalog, heroListKnown: true, heroLevels, bonuses: {}, art: cardArtConfig,
+    const present = (deck: Card[], catalog: Card[] = [], heroLevels = new Map<string, number>(), power?: number) => page.presentLineup({
+        deck, catalog, heroListKnown: true, heroLevels, bonuses: {}, art: cardArtConfig, power,
     });
     const flush = () => { for (const callback of scheduled) callback(); };
     const startModels = () => {
@@ -115,6 +143,18 @@ function fixture(loadPrefab: (path: string) => Promise<unknown>,
     return { page, present, flush, startModels, renders, previews, staticArt, scheduled, scheduledOnce,
         poolRenders, poolCalls, refreshCalls: () => refreshCalls, cardGrid, upgrades };
 }
+
+test('阵容页战力随渲染更新，空阵容清零，快照未计算时显示占位', async () => {
+    const f = fixture(async () => ({}));
+    await f.present([card('1')], [], new Map(), 171);
+    assert.equal(f.page.powerLabel.string, '171');
+    await f.present([card('2')], [], new Map(), 15980);
+    assert.equal(f.page.powerLabel.string, '15.98K');
+    await f.present([], [], new Map(), 0);
+    assert.equal(f.page.powerLabel.string, '0');
+    await f.present([card('1')]);
+    assert.equal(f.page.powerLabel.string, '--');
+});
 
 test('真实页面在备图前排除金矿，碎片加载完成后按状态排序并能清空纯金矿卡库', async () => {
     const requested: string[] = [];
@@ -222,26 +262,13 @@ test('卡库条目迟到图不能贴到复用了槽位的另一张卡上，且�
     const first = deferred<Record<string, unknown>>();
     const second = deferred<Record<string, unknown>>();
     const painted: Array<unknown> = [];
-    const moduleExports: Record<string, unknown> = {};
-    class Component { isValid = true; }
-    runInNewContext(ts.transpileModule(readFileSync('assets/script/app/card/CardLineupCard.ts', 'utf8'), {
-        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
-    }).outputText, {
-        exports: moduleExports,
-        require: (id: string) => id === 'cc'
-            ? { Component, _decorator: { ccclass: () => (target: unknown) => target, property: () => () => {} } }
-            : id === './CardHeroView'
-                ? { applyCardHeroArt: (_hero: unknown, _t: unknown, frame: unknown) => { painted.push(frame); } }
-                : { CARD_LINEUP_TEXTS: { onField: '出战中', upgradeMaxed: '已满级', progressSeparator: '/' } },
-        console: { log() {}, warn() {} },
-    });
-    const View = moduleExports.CardLineupCard as new () => Record<string, any>;
+    const View = loadCardViewClass();
     const view = new View();
     Object.assign(view, {
-        face: { spriteFrame: 'stale' },
-        badge: { spriteFrame: 'stale' },
-        hero: {},
-        heroTransform: {},
+        face: { spriteFrame: 'stale', color: null },
+        badge: { spriteFrame: 'stale', color: null },
+        hero: { color: null, set spriteFrame(frame: unknown) { painted.push(frame); } },
+        lock: { active: true },
         levelPlate: { active: true },
         levelLabel: { string: '' },
         onField: { active: true },
@@ -276,6 +303,42 @@ test('卡库条目迟到图不能贴到复用了槽位的另一张卡上，且�
     const ready = { face: 'B2', hero: 'B2', badge: 'B2' };
     view.render(card('b'), ready, false, 1);
     assert.equal(view.face.spriteFrame, 'B2', '图引用变了必须重画');
+});
+
+test('未解锁卡（0 级）整卡压暗 + 右上角挂锁，复用回已解锁卡时必须复原', () => {
+    const View = loadCardViewClass();
+    const view = new View();
+    /** 三张图各自收到的乘算色（`ChangeHeadItem` 同款做法：压暗靠 `Sprite.color`，不铺遮罩）。 */
+    const colors: Record<string, any> = {};
+    Object.assign(view, {
+        face: { spriteFrame: null, set color(value: unknown) { colors.face = value; } },
+        badge: { spriteFrame: null, set color(value: unknown) { colors.badge = value; } },
+        hero: { spriteFrame: null, set color(value: unknown) { colors.hero = value; } },
+        lock: { active: false },
+        levelPlate: { active: true },
+        levelLabel: { string: '' },
+        onField: { active: false },
+        onFieldLabel: { string: '' },
+        progressBar: { progress: 0 },
+        cardFragmentLabel: { string: '' },
+    });
+
+    view.render(card('locked'), null, false, 0);
+    assert.equal(view.lock.active, true, '0 级 = 未解锁，卡框右上角要挂锁');
+    assert.equal(view.levelPlate.active, false, '未解锁不显示等级底板（原有口径不变）');
+    const dim = colors.face;
+    assert.ok(dim && dim.r < 160 && dim.b < 160, `未解锁要压暗，实际 ${JSON.stringify(dim)}`);
+    assert.deepEqual(colors.badge, dim, '角标与卡面同一档压暗');
+    assert.deepEqual(colors.hero, dim, '立绘与卡面同一档压暗');
+
+    // 虚拟列表把同一个槽位复用给一张已解锁的卡：锁不能留着，颜色必须复原。
+    view.render(card('open'), null, false, 3);
+    assert.equal(view.lock.active, false, '已解锁的卡不能留着上一张卡的锁');
+    assert.equal(colors.face.r, 255, '已解锁要回到乘算白');
+    assert.equal(colors.face.g, 255);
+    assert.equal(colors.face.b, 255);
+    assert.equal(colors.badge.r, 255);
+    assert.equal(colors.hero.r, 255);
 });
 
 test('权威阵容提交后，快照的迟到模型不能覆盖新阵容', async () => {

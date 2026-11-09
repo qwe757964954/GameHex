@@ -4,11 +4,11 @@ import { RequestGetRank } from '../../generated/requestMsg/RequestRankMsg';
 import { CmdRankType } from '../../generated/netProto/CmdInterface';
 import type { IBigMapCityRankBoard, IBigMapCityRankEntry, IBigMapRankProvider } from '../model/BigMapRank';
 
-/** 当前查看城池的服务端伤害榜；换城、超时及退出均释放真实请求归属。 */
+/** 城池伤害榜按城去重并串行查询，共用真实宿主，避免视野预取相互取消。 */
 export class RemoteBigMapRankProvider implements IBigMapRankProvider {
-    private revision = 0;
     private isDisposed = false;
-    private pending: { cityId: number; task: Promise<IBigMapCityRankBoard | null> } | null = null;
+    private readonly pending = new Map<number, Promise<IBigMapCityRankBoard | null>>();
+    private queue: Promise<unknown> = Promise.resolve();
 
     constructor(private readonly roleId: string, private readonly isOwnerCurrent: () => boolean,
         private readonly timeoutMs = 5000) {}
@@ -16,36 +16,40 @@ export class RemoteBigMapRankProvider implements IBigMapRankProvider {
     dispose(): void {
         if (this.isDisposed) return;
         this.isDisposed = true;
-        this.revision += 1;
         GameNet.instance.removeCaller(this);
-        this.pending = null;
+        this.pending.clear();
     }
 
     fetchCityRank(cityId: number): Promise<IBigMapCityRankBoard | null> {
         if (this.isDisposed || !this.isOwnerCurrent() || !GameNet.instance.isConnected) return Promise.resolve(null);
-        if (this.pending?.cityId === cityId) return this.pending.task;
-        GameNet.instance.removeCaller(this);
-        const revision = ++this.revision;
-        const task = this.load(cityId, revision).finally(() => {
-            if (revision === this.revision) this.pending = null;
+        const pending = this.pending.get(cityId);
+        if (pending) return pending;
+        const task = this.queue.then(() => this.load(cityId)).finally(() => {
+            this.pending.delete(cityId);
         });
-        this.pending = { cityId, task };
+        this.pending.set(cityId, task);
+        this.queue = task.catch(() => null);
         return task;
     }
 
-    private async load(cityId: number, revision: number): Promise<IBigMapCityRankBoard | null> {
+    private async load(cityId: number): Promise<IBigMapCityRankBoard | null> {
         const net = GameNet.instance;
+        if (this.isDisposed || !this.isOwnerCurrent() || !net.isConnected) return null;
         let info: CmdRankData | null = null;
         // 53 的 type 承载 campId；unionId 是联盟上下文，此榜不传。
         const request = new RequestGetRank({ rankType: CmdRankType.SLG_CAMP_ROLE_HARM_RANK, showNum: 50, type: cityId },
             this, (rsp) => { info = rsp.rankInfo ?? null; });
         const expiresAt = Date.now() + this.timeoutMs;
-        request.canSend = () => !this.isDisposed && revision === this.revision
+        request.canSend = () => !this.isDisposed
             && this.isOwnerCurrent() && Date.now() < expiresAt;
         request.allowRetry = false;
-        const sent = await withTimeout(net.send(request, false), this.timeoutMs, () => false);
-        if (revision === this.revision) net.removeCaller(this);
-        if (this.isDisposed || revision !== this.revision || !this.isOwnerCurrent()) return null;
+        let sent: boolean;
+        try {
+            sent = await withTimeout(net.send(request, false), this.timeoutMs, () => false);
+        } finally {
+            net.removeCaller(this);
+        }
+        if (this.isDisposed || !this.isOwnerCurrent()) return null;
         if (!sent || !info) return null;
         const entry = (role: CmdRankRole): IBigMapCityRankEntry => ({
             roleId: toIdString(role.roleId), name: role.roleName ?? '', avatarId: toIdString(role.roleImg),

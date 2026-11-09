@@ -35,6 +35,46 @@
       "row": 8,
       "column": 5,
       "groupId": 13002
+    },
+    {
+      "row": 8,
+      "column": 2,
+      "groupId": 14009
+    },
+    {
+      "row": 8,
+      "column": 8,
+      "groupId": 14008
+    },
+    {
+      "row": 10,
+      "column": 0,
+      "groupId": 14006
+    },
+    {
+      "row": 6,
+      "column": 3,
+      "groupId": 14001
+    },
+    {
+      "row": 3,
+      "column": 2,
+      "groupId": 14007
+    },
+    {
+      "row": 5,
+      "column": 8,
+      "groupId": 14007
+    },
+    {
+      "row": 14,
+      "column": 2,
+      "groupId": 14007
+    },
+    {
+      "row": 11,
+      "column": 8,
+      "groupId": 14007
     }
   ],
   "art": {

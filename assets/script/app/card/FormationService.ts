@@ -181,9 +181,12 @@ async function sendFormationOp(
         //  而卡牌阵容页的八卡读的正是「选中阵型」（`LineupPresets.resolveSelectedDeck`），
         //  玩家会觉得「改了半天下阵/上阵，保存完界面没变」。
         //
-        //  这也解释了为什么独立的 `CmdFormationSelectReqMsg` 现在没有调用方：
-        //  `LineupBoardPage.selectPreset()` 里那段 `selectFormation(...)` 已注释掉，
-        //  切页签不再单独发包，**保存是同步选中状态的唯一时机**。别把这里改回 0。
+        //  这也解释了为什么这里必须带 `select: 1`：不改选中，服务端记着的「出阵阵型」仍旧是别的那一条，
+        //  玩家会觉得「改了半天下阵/上阵，保存完界面没变」。
+        //
+        //  切页签的「出战阵型」不走这里，走独立的 `CmdFormationSelectReqMsg`
+        //  （`selectFormation` ← `LineupBoardController.switchPreset`）。两者分工：
+        //  **保存 = 存卡组并顺带置选中**，**切页签 = 只换选中、不动卡组**。
         const ok = await GameNet.instance.send(new RequestFormationOp(
             { info: { formationId, heroId: heroIds, select: 1 } },
             caller,
@@ -210,42 +213,82 @@ async function sendFormationOp(
 }
 
 /**
- * 选中某个阵型（切换页签时调用）。
+ * 选中协议是否已经在 `MessageId` 里登记过（只在缺失时提示一次）。
+ *
+ * `GameNet.createCmdClientData` 是按「协议名 → MessageId 编号」发请求的，编号来自
+ * 服务端导出的 `protoCompiled.proto`。当前那份 MessageId 枚举里**只登记了**
+ * `CmdFormationInfoRspMsg` / `CmdFormationOpRspMsg`，`CmdFormationSelectRspMsg`
+ * 只有 message 定义、没有编号 —— 直接发会被判成「不存在协议 CmdFormationSelectReqMsg」，
+ * 而且 `GameNet` 那条是 error 级日志，每次切页签刷一屏。
+ *
+ * 所以发送前先探测（同 `NewTreasureRepository.open` 对 `CmdNewTreasureOpenReqMsg` 的做法）：
+ * 缺号就跳过，切页签只做本地同步。**服务端补号 + 重新导出 proto 后自动开始生效**，不用再改这里。
+ */
+let selectProtocolWarned = false;
+function hasSelectProtocol(): boolean {
+    if (GameNet.instance.protoMgr?.getMessageId('CmdFormationSelectReqMsg') != null) return true;
+    if (!selectProtocolWarned) {
+        selectProtocolWarned = true;
+        console.warn(
+            '[FormationService] MessageId 里没有 CmdFormationSelectRspMsg，切页签只做本地同步；'
+            + '服务端补上协议号并重新导出 proto 后会自动生效',
+        );
+    }
+    return false;
+}
+
+/**
+ * 选中某个阵型（切页签时调用）。
  *
  * 告诉服务端「当前出战的是这个阵型」，服务端会把其他阵型的 select 置 0，当前的置 1。
  * 成功后更新本地缓存的 selected 状态。
+ *
+ * **必须自己兜超时**：同 `saveFormation` —— `GameNet.send` 没有按请求的超时，
+ * 服务端不理这条消息的话 Promise 会一直悬着（布阵页的调用方在 await 它）。
+ * 超时按失败返回，调用方的本地页签切换不回滚。
  */
-export async function selectFormation(formationId: number, caller?: object): Promise<boolean> {
+export function selectFormation(formationId: number, caller?: object): Promise<boolean> {
     const net = GameNet.instance;
-    if (!net.isConnected) return false;
+    if (!net.isConnected) return Promise.resolve(false);
+    if (!hasSelectProtocol()) return Promise.resolve(false);
 
     const normalizedId = toPositiveInt(formationId);
     if (normalizedId === null) {
         console.warn('[FormationService] formationId 非法，已取消选中', formationId);
-        return false;
+        return Promise.resolve(false);
     }
 
+    return withTimeout(sendFormationSelect(normalizedId, caller), FORMATION_REQUEST_TIMEOUT_MS, () => {
+        console.warn(
+            `[FormationService] 选中阵型 ${FORMATION_REQUEST_TIMEOUT_MS}ms 无响应，按失败处理`
+            + '（本地页签已经切过去了，下次进界面再校正）',
+        );
+        return false;
+    });
+}
+
+async function sendFormationSelect(formationId: number, caller?: object): Promise<boolean> {
+    let response: CmdFormationSelectRspMsg | null = null;
     try {
-        let response: CmdFormationSelectRspMsg | null = null;
-        const ok = await net.send(new RequestFormationSelect(
-            { formationId: normalizedId },
+        const ok = await GameNet.instance.send(new RequestFormationSelect(
+            { formationId },
             caller,
             (rsp) => { response = rsp; },
         ), false);
         if (!ok || !response) return false;
-        // 更新本地缓存：其他阵型 selected=false，当前的 selected=true
-        if (cachedFormations) {
-            cachedFormations = cachedFormations.map((entry) => ({
-                ...entry,
-                selected: entry.formationId === normalizedId,
-            }));
-            cachedAt = Date.now();
-        }
-        return true;
     } catch (error) {
         console.warn('[FormationService] 选中阵型请求失败', error);
         return false;
     }
+    // 更新本地缓存：其他阵型 selected=false，当前的 selected=true
+    if (cachedFormations) {
+        cachedFormations = cachedFormations.map((entry) => ({
+            ...entry,
+            selected: entry.formationId === formationId,
+        }));
+        cachedAt = Date.now();
+    }
+    return true;
 }
 
 async function requestFormations(): Promise<readonly ZCFormation[] | null> {

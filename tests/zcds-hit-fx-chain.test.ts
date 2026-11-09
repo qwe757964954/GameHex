@@ -80,6 +80,10 @@ function runMageDuel(trait: '法师' | '射手') {
     for (let step = 0; step < 200 && seen.size < 2; step += 1) {
         game.tick(0.05);
         for (const fx of game.hitFxs) {
+            //  这一局是「法师 vs 战士靶子」，两边都站在**主城格**上 —— 2026-11-06 起
+            //  建筑 / 城墙受击也会推特效（靶子那只战士会去打主城城墙），
+            //  所以这里只挑打**单位**的那些；结构物那条由 `zcds-structure-hit-fx.test.ts` 单测。
+            if (fx.surface !== 'unit') continue;
             if (!seen.has(fx.id)) {
                 seen.set(fx.id, { trait: fx.trait, x: fx.x, y: fx.y, durationSeconds: fx.durationSeconds });
             }

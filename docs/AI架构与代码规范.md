@@ -300,7 +300,7 @@ Cocos 引擎中许多配置错误**完全不报错但表现静默失效**，修�
 
 - `ControllerBase` 从组合入口交付的必需 `GameContext` 统一取得资源、配置与会话服务，创建控制器 ResourceScope；页面只接收 `IControllerResources` 展示资源契约，不再单独注入可空 AssetService。资源加载默认归控制器，显式战斗 scope 原样传递，Controller dispose 时统一释放。
 - `BigMapEntry` 是组合入口，从既有 ProcedureManager 取得已配置 GameContext，创建 Model、Controller、仓库与 View，并在关闭时释放 Controller。
-- `BigMapController` 统一绑定网络广播、仓库/Model 变更和界面操作意图，管理操作锁、进入战斗状态与据点轮询。
+- `BigMapController` 统一绑定网络广播、仓库/Model 变更和界面操作意图，管理操作锁、进入战斗状态与据点视野批量调度。
 - `BigMapModel` 保留状态和业务规则；仓库仅负责请求及快照，网关不自行监听广播。原 `BigMapPresenter` 路径仅兼容导出同一份 Model。
 - `BigMapPage`、`BigMapWorldView`、`BigMapBaseView` 只消费 `IBigMapViewState`；用户操作经 `BigMapUiEvent.Intent` 派发，由 Controller 处理后发送 `BigMapViewEvent.Render/Command`。
 - 地图页面为单实例，界面事件只携带操作与展示数据；场景直接销毁页面时发送 `Disposed`，Controller 幂等停止时钟、解除全部监听、释放仓库和网络请求，迟到结果不得再通知界面。

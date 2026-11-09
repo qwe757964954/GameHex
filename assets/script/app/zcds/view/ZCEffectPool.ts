@@ -3,6 +3,7 @@ import { ZCDC_LOG_WARNINGS } from '../ZCDCLogSwitch';
 import type { ZCAttackTrait } from '../model/ZCCombatCatalog';
 import type { ZCHitFx } from '../model/ZCGameTypes';
 import { zcHitFxNodeScale } from './ZCCombatEffectScale';
+import { zcHitFxSurfaceLiftY } from './ZCCombatEffectPlacement';
 import { ZCNodePool } from './ZCNodePool';
 
 /** 资源在构造前准备好；对象池、挂载层和资源的所有权归调用方。 */
@@ -276,7 +277,12 @@ export class ZCEffectPool {
             );
         }
         // 必须过 mapToViewX/Y：ZCHitFx.x/y 是模型的棋盘坐标，node.setPosition 吃的是视图局部坐标。
-        node.setPosition(this.deps.mapToViewX(fx.x), this.deps.mapToViewY(fx.y), 0);
+        // 建筑 / 城墙的锚点补偿见 `zcHitFxSurfaceLiftY`（建筑图比格心高 15.65px，2026-11-06）。
+        node.setPosition(
+            this.deps.mapToViewX(fx.x),
+            this.deps.mapToViewY(fx.y) + zcHitFxSurfaceLiftY(fx.surface),
+            0,
+        );
         node.name = `HitFx_${fx.trait}_${fx.id}`;
         const animation = node.getComponent(Animation);
         const clip = animation?.defaultClip ?? null;

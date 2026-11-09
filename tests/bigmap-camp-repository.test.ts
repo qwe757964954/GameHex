@@ -96,6 +96,43 @@ test('可见据点去重排序，共享重复请求且不接收请求范围外�
     assert.equal(h.calls.length, 1);
 });
 
+test('滑动产生重叠可见集合时，已在途据点不重复发送', async () => {
+    const h = makeGateway();
+    const repository = new BigMapCampRepository(h.gateway);
+    const first = repository.refreshSimple([101, 102]);
+    const next = repository.refreshSimple([102, 103]);
+    assert.deepEqual(h.calls.map((call) => call.ids), [[101, 102], [103]]);
+    h.simple.resolve({ infos: [101, 102, 103].map((campId) => ({ campId, opType: 0 })) });
+    assert.deepEqual(await Promise.all([first, next]), [true, true]);
+    repository.dispose();
+});
+
+test('可见区域整批刷新包含未过期缓存，重叠在途时不拆成剩余单个据点', async () => {
+    let now = 0;
+    const calls: number[][] = [];
+    const response = deferred();
+    const h = makeGateway();
+    const repository = new BigMapCampRepository({ ...h.gateway,
+        fetchSimple: async (ids) => {
+            calls.push([...ids]);
+            if (calls.length === 1) return { infos: [{ campId: 101, opType: 0 }] };
+            return response.promise;
+        },
+    }, () => now);
+    await repository.refreshSimple([101]);
+    now = 100;
+    const loading = repository.refreshSimple([101, 102], true);
+    assert.deepEqual(calls, [[101], [101, 102]], '新缓存和未查询据点合为一个完整集合');
+    assert.equal(await repository.refreshSimple([102, 103], true), false);
+    assert.equal(calls.length, 2, '不拆出103单独发送');
+    response.resolve({ infos: [101, 102, 103].map((campId) => ({ campId, opType: 0 })) });
+    await loading;
+    now = 5000;
+    await repository.refreshSimple([102, 103], true);
+    assert.deepEqual(calls[2], [102, 103], '下一轮仍发送完整可见集合');
+    repository.dispose();
+});
+
 test('详情查询仅发送点击据点，迟到的简略回包不能覆盖更新的详情', async () => {
     const h = makeGateway();
     const repository = new BigMapCampRepository(h.gateway);
@@ -215,6 +252,7 @@ test('Presenter 以服务器状态展示据点，不改本地占领存档，也�
         adventureChapter: () => 0, now: () => 957600, campRepository: repository });
     const original = storage.read('server-camp');
     const loading = presenter.refreshVisibleCamps([101, 999999]);
+    h.roles.resolve({ campId: 101, infos: [] });
     h.simple.resolve({ infos: [{ campId: 101, opType: 0 }] });
     await loading;
     const view = presenter.cityView(101);
@@ -285,6 +323,7 @@ test('联机表 81 座据点全部可用：军团层不会被 available 判成�
     const presenter = new BigMapPresenter({ config: closed, storage: createMemoryBigMapStorage(),
         saveKey: 'camp-layer-state', adventureChapter: () => 1, now: () => 957600, campRepository: repository });
     const loading = presenter.refreshVisibleCamps([101, 102]);
+    h.roles.resolve(null);
     h.simple.resolve({ infos: [{ campId: 101, opType: 0 }, { campId: 102, opType: 1 }] });
     await loading;
     assert.equal(presenter.cityView(101)?.state, 'open', '服务器下发即已开放，不看配置的 available');

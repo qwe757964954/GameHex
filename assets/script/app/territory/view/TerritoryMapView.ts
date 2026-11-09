@@ -2056,6 +2056,10 @@ export class TerritoryMapView extends Component {
         this.hexRecolor.reset();
         this.recolorBootstrapped = false;
         // 云跟着重建：换章后 cellId 换了含义，留着旧图的云会飘在错误的格位上。
+        // ⚠️ 这里排在本帧 `syncContentSize`（`setFillArea`）**之后** ⇒ 铺满层刚按新尺寸建好
+        //    就被清空了。补回来的是紧随其后的 `syncClouds`：它因为 `cloudCellsKey` 被清空
+        //    而必然喂一次 `setFillOccupied`（判据见 `TerritoryCloudView.setFillOccupied`，
+        //    2026-11-06 那张"chapter02 整片裸底图"就是这条链子断了）。
         this.clouds.reset();
         this.cloudCells.length = 0;
         this.cloudCellsKey = '';

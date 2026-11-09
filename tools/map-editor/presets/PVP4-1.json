@@ -844,5 +844,27 @@
         "locked": false
       }
     ]
-  }
+  },
+  "resourcePoints": [
+    {
+      "row": 9,
+      "column": 3,
+      "groupId": 14009
+    },
+    {
+      "row": 9,
+      "column": 8,
+      "groupId": 14008
+    },
+    {
+      "row": 11,
+      "column": 2,
+      "groupId": 14006
+    },
+    {
+      "row": 5,
+      "column": 5,
+      "groupId": 14004
+    }
+  ]
 }

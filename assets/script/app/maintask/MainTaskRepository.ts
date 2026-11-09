@@ -73,17 +73,28 @@ export interface IHeroTaskSnapshot {
     readonly showRedDot: boolean;
 }
 
-/** 一个奖励格 —— `item` 表解析后的形状（详情弹窗的 `list_item` 用）。 */
+/** 一个奖励格 —— `item` / `roleProperty` 表解析后的形状（详情弹窗的 `list_item` 用）。 */
 export interface IRewardEntry {
     /** 物品 `resId`。 */
     readonly resId: number;
     /** 数量（表里 `reward[].number`）。 */
     readonly number: number;
-    /** 物品名（`item.name`；取不到为空串）。 */
+    /** 物品名（`item.name` / `roleProperty.name`；取不到为空串）。 */
     readonly name: string;
-    /** 图标路径（`item.icon`，相对 `assets/resources/`；取不到为空串）。 */
+    /**
+     * 图标：`item` 命中时是**相对 `assets/resources/` 的完整路径**（`icons/item/图标_兵书随机`）；
+     * `roleProperty` 命中时是 **FGUI 裸组件名**（`图标_铜币`）。
+     * 两者靠 {@link iconIsPath} 区分，一律交给 `activity/LayerActivityArt.resolveRewardIconRef` 解析。
+     */
     readonly icon: string;
-    /** 品质（`item.quality`；取不到为 `1`）。 */
+    /**
+     * `icon` 是不是资源路径。
+     *
+     * `item` 表 ⇒ `true`（路径直通）；`roleProperty` 表 ⇒ `false`（裸名，落 `icons/resource/`，
+     * 有 3 条例外见 `common/ResTypes.ROLE_PROPERTY_ICON_ROOT_OVERRIDE`）。
+     */
+    readonly iconIsPath: boolean;
+    /** 品质（`item.quality` / `roleProperty.quality`；取不到为 `1`）。 */
     readonly quality: number;
 }
 
@@ -202,29 +213,56 @@ function taskStateMap(rows: readonly unknown[]): Map<number, IMainTaskState> {
 }
 
 /**
- * 奖励物 → `item` 表解析出的形状。
+ * 奖励物 → `item` / `roleProperty` 两张表解析出的形状。
  *
  * 老端 `ModelGoods.CreateGoodsByCmd({number, resId})` 后再读 VO；本工程没有 Goods VO，
- * 直接查 `item` 表（键是 **`resId`**，不是 `id` —— 按 `id` 查会全 MISSING 且**不报错**）。
- * 查不到不是异常（表里没有该物品 / 未登录），返回只有 id + 数量的条目。
+ * 按老端 `ModelGoods.GetGoodsIconKeyByRefId` 的**两支**查：
+ *
+ *   ① `item`（键是 **`resId`**，不是 `id` —— 按 `id` 查会全 MISSING 且**不报错**）
+ *      ⇒ `icon` 是相对 `resources` 的完整路径，`iconIsPath = true`；
+ *   ② 查不到再查 `roleProperty`（货币 / 属性类，银币 7 / 体力 9 / 金币 10 …）
+ *      ⇒ `icon` 是 FGUI 裸组件名，`iconIsPath = false`，落 `icons/resource/`。
+ *
+ * 🔴 **只查 ① 是 2026-11-06 体验反馈「奖励 icon 缺失」的根因**：taskMain 的奖励里
+ * 货币占绝大多数（金币 47 条、银币 28 条），这些 resId 在 `item` 表里根本没有 ⇒
+ * `icon` 空串 ⇒ 详情弹窗一律画空白格，而且不报错。图其实一直在盘上，缺的是这条分支。
+ *
+ * 两张都查不到不是异常（表里没配 / 未登录 / 孤儿 id），返回只有 id + 数量的条目；
+ * 调用方按「画品质框不画图标」降级。
  */
 async function resolveRewardItem(resId: number, count: number): Promise<IRewardEntry> {
-    const fallback: IRewardEntry = { resId, number: count, name: '', icon: '', quality: 1 };
+    const fallback: IRewardEntry = { resId, number: count, name: '', icon: '', iconIsPath: true, quality: 1 };
     if (!(resId > 0)) return fallback;
     try {
         const item = await RefUtil.instance.getRefAsync('item', 'resId', resId);
-        if (!item || typeof item !== 'object') return fallback;
-        const r = item as Record<string, unknown>;
-        const q = Number(r.quality);
-        return {
-            resId,
-            number: count,
-            name: typeof r.name === 'string' ? r.name : '',
-            icon: typeof r.icon === 'string' ? r.icon : '',
-            quality: Number.isFinite(q) && q > 0 ? q : 1,
-        };
+        if (item && typeof item === 'object') {
+            const r = item as Record<string, unknown>;
+            const q = Number(r.quality);
+            return {
+                resId,
+                number: count,
+                name: typeof r.name === 'string' ? r.name : '',
+                icon: typeof r.icon === 'string' ? r.icon : '',
+                iconIsPath: true,
+                quality: Number.isFinite(q) && q > 0 ? q : 1,
+            };
+        }
+        const prop = await RefUtil.instance.getRefAsync('roleProperty', 'resId', resId);
+        if (prop && typeof prop === 'object') {
+            const r = prop as Record<string, unknown>;
+            const q = Number(r.quality);
+            return {
+                resId,
+                number: count,
+                name: typeof r.name === 'string' ? r.name : '',
+                icon: typeof r.icon === 'string' ? r.icon : '',
+                iconIsPath: false,
+                quality: Number.isFinite(q) && q > 0 ? q : 1,
+            };
+        }
+        return fallback;
     } catch (error) {
-        console.warn('[MainTask] 读 item 失败', error);
+        console.warn('[MainTask] 读 item / roleProperty 失败', error);
         return fallback;
     }
 }

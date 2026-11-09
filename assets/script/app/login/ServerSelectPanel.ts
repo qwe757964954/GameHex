@@ -14,8 +14,9 @@ const { ccclass, property } = _decorator;
  * 走工程的统一弹窗框架 `PopupBase` / `PopupManager`，与 MailDetail / ItemDetail 同一套：
  * 黑遮罩、点击空白关闭、栈式深度、层自动纠正都由基类负责，本类只管业务。
  *
- * 布局对齐 `ItemDetail.prefab` 那套皮（`id_panel_bg` 底板 + `id_title_gray` 标题条 +
- * `公用_按钮_关闭01`），列表是 `VirtualScrollView`（layout item + 对象池）：
+ * 布局与 `ItemDetail.prefab` 同一套皮，只不过图片都收在 `image/common`
+ * 通用套件里（`id_panel_bg` 底板 + `id_title_gray` 标题条 + `cu_btn_close_01` 关闭），
+ * 列表是 `VirtualScrollView`（layout item + 对象池）：
  * 格子数跟服务器条数走，不再预摆固定数量的槽位。
  */
 @ccclass('ServerSelectPanel')

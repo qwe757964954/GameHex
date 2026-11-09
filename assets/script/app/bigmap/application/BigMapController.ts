@@ -33,6 +33,7 @@ export class BigMapController extends ControllerBase {
     private started = false;
     private visibleCampIds: readonly number[] = [];
     private nextCampRefreshAt = 0;
+    private visibleCampRefreshPending = false;
     private ui: { -readonly [K in keyof IBigMapUiState]: IBigMapUiState[K] } = {
         mode: 'world', selectedCityId: 0, selectedMonsterId: 0, selectedPlotHexId: -1, selectedBaseHexId: -1,
         pendingBuildingId: 0, pendingMoveInstanceId: 0, baseActionPending: false,
@@ -104,17 +105,15 @@ export class BigMapController extends ControllerBase {
 
     private onIntent(event: IBigMapIntentEvent): void {
         const intent = event.intent;
-        // 视口反馈不依赖战斗/写请求锁；它只更新下次轮询的可见集合。
+        // 视口反馈不依赖战斗/写请求锁；它只更新下次批量查询的可见集合。
         if (intent.kind === 'visibleCamps') {
             const next = [...new Set(intent.campIds)].filter((id) => this.model.world.cities.has(id));
             // 只有「视野里出现了新的城」才算变了 —— 少掉一座城不用重拉。
             const added = next.some((id) => !this.visibleCampIds.includes(id));
             this.visibleCampIds = next;
-            // 🔴 同一集合的重复上报（拖动/缩放，视图侧 150ms 防抖）必须走 `nextCampRefreshAt` 节流：
-            // 这里以前是无条件 `refreshVisibleCamps()`，于是每帧的相机移动都会让每个可见城
-            // 各发一条 `CmdSlgCampRoleInfosReqMsg`，5 秒的轮询设计被绕过成 ~150ms 一轮。
+            // 相机上报只更新集合，由500ms时钟统一发送，避免新增城池绕过批量调度。
             const due = (this.options.now ?? Date.now)() >= this.nextCampRefreshAt;
-            if (this.ui.mode === 'world' && !this.ui.enteringBattle && (added || due)) void this.refreshVisibleCamps();
+            if (added || due) this.visibleCampRefreshPending = true;
             return;
         }
         if (this.ui.enteringBattle || this.ui.baseActionPending) return;
@@ -320,10 +319,12 @@ export class BigMapController extends ControllerBase {
     private tick(): void {
         this.options.slgRepository?.tick();
         this.model.tick(false);
-        if (this.ui.mode === 'world' && !this.ui.enteringBattle && (this.options.now ?? Date.now)() >= this.nextCampRefreshAt) void this.refreshVisibleCamps();
+        if (this.ui.mode === 'world' && !this.ui.enteringBattle
+            && (this.visibleCampRefreshPending || (this.options.now ?? Date.now)() >= this.nextCampRefreshAt)) void this.refreshVisibleCamps();
         this.publish();
     }
     private async refreshVisibleCamps(): Promise<void> {
+        this.visibleCampRefreshPending = false;
         if (this.visibleCampIds.length === 0) return;
         this.nextCampRefreshAt = (this.options.now ?? Date.now)() + BIGMAP_CAMP_REFRESH_SECONDS * 1000;
         await this.model.refreshVisibleCamps(this.visibleCampIds);

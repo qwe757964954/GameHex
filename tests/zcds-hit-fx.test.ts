@@ -428,12 +428,18 @@ test('受击特效：总时长 0.15s —— 池子与模型两处常量必须同
  */
 test('受击特效：攻击方职业按「实例 id → byId → cardId → 卡表」反查（两级 id 别搞混）', () => {
     const model = readFileSync('assets/script/app/zcds/model/ZCGameModel.ts', 'utf8');
-    const body = /private traitOfAttacker\([\s\S]*?\n    }/.exec(model)?.[0] ?? '';
-    assert.ok(body.length > 0, '找不到 traitOfAttacker 实现');
-    assert.ok(/units\.byId\.get\(source\.unitId\)/.test(body),
-        '必须先用 source.unitId（实例 id）经 units.byId 拿到单位实例 —— 直接拿实例 id 查卡表永远查不到');
+    //  2026-11-06 起查表本体抽到 `traitOfAttackerUnitId(unitId)`：单位受击走 `ZCDamageSource`、
+    //  城墙 / 建筑受击走出手单位的 `id`，两处共用同一段反查（`traitOfAttacker` 只剩一层转调）。
+    const body = /private traitOfAttackerUnitId\([\s\S]*?\n    }/.exec(model)?.[0] ?? '';
+    assert.ok(body.length > 0, '找不到 traitOfAttackerUnitId 实现');
+    assert.ok(/units\.byId\.get\(unitId\)/.test(body),
+        '必须先用实例 id 经 units.byId 拿到单位实例 —— 直接拿实例 id 查卡表永远查不到');
     assert.ok(/cards\[[^\]]+\]\.get\(attacker\.cardId\)/.test(body),
         '必须用实例的 cardId 查卡表（cards 的键是卡牌 id，不是实例 id）');
+    //  反查只能有一份：`traitOfAttacker` 必须转调，不许再抄一遍循环。
+    const sourcePath = /private traitOfAttacker\([\s\S]*?\n    }/.exec(model)?.[0] ?? '';
+    assert.ok(/this\.traitOfAttackerUnitId\(source\.unitId\)/.test(sourcePath),
+        'traitOfAttacker 必须转调 traitOfAttackerUnitId，别维护第二份反查');
     // 反过来钉死错误写法：不得直接拿 String(source.unitId) 当卡牌 id 查。
     // ⚠️ 只在**代码行**里查 —— 方法注释为了说明坑也写了这段字面量（自己踩过：判据把自己的注释当违规）。
     const codeLines = body.split('\n')

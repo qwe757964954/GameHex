@@ -108440,6 +108440,281 @@ $root.com = (function() {
                     return CmdPvpBuffInfo;
                 })();
 
+                cmd.CmdPvpAttrInfo = (function() {
+
+                    /**
+                     * Properties of a CmdPvpAttrInfo.
+                     * @memberof com.xkhy.tafang.cmd
+                     * @interface ICmdPvpAttrInfo
+                     * @property {string} attrId CmdPvpAttrInfo attrId
+                     * @property {string} value CmdPvpAttrInfo value
+                     */
+
+                    /**
+                     * Constructs a new CmdPvpAttrInfo.
+                     * @memberof com.xkhy.tafang.cmd
+                     * @classdesc Represents a CmdPvpAttrInfo.
+                     * @implements ICmdPvpAttrInfo
+                     * @constructor
+                     * @param {com.xkhy.tafang.cmd.ICmdPvpAttrInfo=} [properties] Properties to set
+                     */
+                    function CmdPvpAttrInfo(properties) {
+                        if (properties)
+                            for (var keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                                if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                                    this[keys[i]] = properties[keys[i]];
+                    }
+
+                    /**
+                     * CmdPvpAttrInfo attrId.
+                     * @member {string} attrId
+                     * @memberof com.xkhy.tafang.cmd.CmdPvpAttrInfo
+                     * @instance
+                     */
+                    CmdPvpAttrInfo.prototype.attrId = "";
+
+                    /**
+                     * CmdPvpAttrInfo value.
+                     * @member {string} value
+                     * @memberof com.xkhy.tafang.cmd.CmdPvpAttrInfo
+                     * @instance
+                     */
+                    CmdPvpAttrInfo.prototype.value = "";
+
+                    /**
+                     * Creates a new CmdPvpAttrInfo instance using the specified properties.
+                     * @function create
+                     * @memberof com.xkhy.tafang.cmd.CmdPvpAttrInfo
+                     * @static
+                     * @param {com.xkhy.tafang.cmd.ICmdPvpAttrInfo=} [properties] Properties to set
+                     * @returns {com.xkhy.tafang.cmd.CmdPvpAttrInfo} CmdPvpAttrInfo instance
+                     */
+                    CmdPvpAttrInfo.create = function create(properties) {
+                        return new CmdPvpAttrInfo(properties);
+                    };
+
+                    /**
+                     * Encodes the specified CmdPvpAttrInfo message. Does not implicitly {@link com.xkhy.tafang.cmd.CmdPvpAttrInfo.verify|verify} messages.
+                     * @function encode
+                     * @memberof com.xkhy.tafang.cmd.CmdPvpAttrInfo
+                     * @static
+                     * @param {com.xkhy.tafang.cmd.CmdPvpAttrInfo} message CmdPvpAttrInfo message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    CmdPvpAttrInfo.encode = function encode(message, writer, q) {
+                        if (!writer)
+                            writer = $Writer.create();
+                        if (q === undefined)
+                            q = 0;
+                        if (q > $util.recursionLimit)
+                            throw Error("max depth exceeded");
+                        writer.uint32(/* id 1, wireType 2 =*/10).string(message.attrId);
+                        writer.uint32(/* id 2, wireType 2 =*/18).string(message.value);
+                        return writer;
+                    };
+
+                    /**
+                     * Decodes a CmdPvpAttrInfo message from the specified reader or buffer.
+                     * @function decode
+                     * @memberof com.xkhy.tafang.cmd.CmdPvpAttrInfo
+                     * @static
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {com.xkhy.tafang.cmd.CmdPvpAttrInfo} CmdPvpAttrInfo
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    CmdPvpAttrInfo.decode = function decode(reader, length, error, long) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader.create(reader);
+                        if (long === undefined)
+                            long = 0;
+                        if (long > $Reader.recursionLimit)
+                            throw Error("maximum nesting depth exceeded");
+                        var end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdPvpAttrInfo();
+                        while (reader.pos < end) {
+                            var tag = reader.uint32();
+                            if (tag === error)
+                                break;
+                            switch (tag >>> 3) {
+                            case 1: {
+                                    message.attrId = reader.string();
+                                    break;
+                                }
+                            case 2: {
+                                    message.value = reader.string();
+                                    break;
+                                }
+                            default:
+                                reader.skipType(tag & 7, long);
+                                break;
+                            }
+                        }
+                        if (!message.hasOwnProperty("attrId"))
+                            throw $util.ProtocolError("missing required 'attrId'", { instance: message });
+                        if (!message.hasOwnProperty("value"))
+                            throw $util.ProtocolError("missing required 'value'", { instance: message });
+                        return message;
+                    };
+
+                    /**
+                     * Gets the default type url for CmdPvpAttrInfo
+                     * @function getTypeUrl
+                     * @memberof com.xkhy.tafang.cmd.CmdPvpAttrInfo
+                     * @static
+                     * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+                     * @returns {string} The default type url
+                     */
+                    CmdPvpAttrInfo.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                        if (typeUrlPrefix === undefined) {
+                            typeUrlPrefix = "type.googleapis.com";
+                        }
+                        return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdPvpAttrInfo";
+                    };
+
+                    return CmdPvpAttrInfo;
+                })();
+
+                cmd.CmdPvpHeroAttrInfo = (function() {
+
+                    /**
+                     * Properties of a CmdPvpHeroAttrInfo.
+                     * @memberof com.xkhy.tafang.cmd
+                     * @interface ICmdPvpHeroAttrInfo
+                     * @property {number} heroId CmdPvpHeroAttrInfo heroId
+                     * @property {Array.<com.xkhy.tafang.cmd.CmdPvpAttrInfo>|null} [attrs] CmdPvpHeroAttrInfo attrs
+                     */
+
+                    /**
+                     * Constructs a new CmdPvpHeroAttrInfo.
+                     * @memberof com.xkhy.tafang.cmd
+                     * @classdesc Represents a CmdPvpHeroAttrInfo.
+                     * @implements ICmdPvpHeroAttrInfo
+                     * @constructor
+                     * @param {com.xkhy.tafang.cmd.ICmdPvpHeroAttrInfo=} [properties] Properties to set
+                     */
+                    function CmdPvpHeroAttrInfo(properties) {
+                        this.attrs = [];
+                        if (properties)
+                            for (var keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                                if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                                    this[keys[i]] = properties[keys[i]];
+                    }
+
+                    /**
+                     * CmdPvpHeroAttrInfo heroId.
+                     * @member {number} heroId
+                     * @memberof com.xkhy.tafang.cmd.CmdPvpHeroAttrInfo
+                     * @instance
+                     */
+                    CmdPvpHeroAttrInfo.prototype.heroId = 0;
+
+                    /**
+                     * CmdPvpHeroAttrInfo attrs.
+                     * @member {Array.<com.xkhy.tafang.cmd.CmdPvpAttrInfo>} attrs
+                     * @memberof com.xkhy.tafang.cmd.CmdPvpHeroAttrInfo
+                     * @instance
+                     */
+                    CmdPvpHeroAttrInfo.prototype.attrs = $util.emptyArray;
+
+                    /**
+                     * Creates a new CmdPvpHeroAttrInfo instance using the specified properties.
+                     * @function create
+                     * @memberof com.xkhy.tafang.cmd.CmdPvpHeroAttrInfo
+                     * @static
+                     * @param {com.xkhy.tafang.cmd.ICmdPvpHeroAttrInfo=} [properties] Properties to set
+                     * @returns {com.xkhy.tafang.cmd.CmdPvpHeroAttrInfo} CmdPvpHeroAttrInfo instance
+                     */
+                    CmdPvpHeroAttrInfo.create = function create(properties) {
+                        return new CmdPvpHeroAttrInfo(properties);
+                    };
+
+                    /**
+                     * Encodes the specified CmdPvpHeroAttrInfo message. Does not implicitly {@link com.xkhy.tafang.cmd.CmdPvpHeroAttrInfo.verify|verify} messages.
+                     * @function encode
+                     * @memberof com.xkhy.tafang.cmd.CmdPvpHeroAttrInfo
+                     * @static
+                     * @param {com.xkhy.tafang.cmd.CmdPvpHeroAttrInfo} message CmdPvpHeroAttrInfo message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    CmdPvpHeroAttrInfo.encode = function encode(message, writer, q) {
+                        if (!writer)
+                            writer = $Writer.create();
+                        if (q === undefined)
+                            q = 0;
+                        if (q > $util.recursionLimit)
+                            throw Error("max depth exceeded");
+                        writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.heroId);
+                        if (message.attrs != null && message.attrs.length)
+                            for (var i = 0; i < message.attrs.length; ++i)
+                                $root.com.xkhy.tafang.cmd.CmdPvpAttrInfo.encode(message.attrs[i], writer.uint32(/* id 2, wireType 2 =*/18).fork(), q + 1).ldelim();
+                        return writer;
+                    };
+
+                    /**
+                     * Decodes a CmdPvpHeroAttrInfo message from the specified reader or buffer.
+                     * @function decode
+                     * @memberof com.xkhy.tafang.cmd.CmdPvpHeroAttrInfo
+                     * @static
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {com.xkhy.tafang.cmd.CmdPvpHeroAttrInfo} CmdPvpHeroAttrInfo
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    CmdPvpHeroAttrInfo.decode = function decode(reader, length, error, long) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader.create(reader);
+                        if (long === undefined)
+                            long = 0;
+                        if (long > $Reader.recursionLimit)
+                            throw Error("maximum nesting depth exceeded");
+                        var end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdPvpHeroAttrInfo();
+                        while (reader.pos < end) {
+                            var tag = reader.uint32();
+                            if (tag === error)
+                                break;
+                            switch (tag >>> 3) {
+                            case 1: {
+                                    message.heroId = reader.uint32();
+                                    break;
+                                }
+                            case 2: {
+                                    if (!(message.attrs && message.attrs.length))
+                                        message.attrs = [];
+                                    message.attrs.push($root.com.xkhy.tafang.cmd.CmdPvpAttrInfo.decode(reader, reader.uint32(), undefined, long + 1));
+                                    break;
+                                }
+                            default:
+                                reader.skipType(tag & 7, long);
+                                break;
+                            }
+                        }
+                        if (!message.hasOwnProperty("heroId"))
+                            throw $util.ProtocolError("missing required 'heroId'", { instance: message });
+                        return message;
+                    };
+
+                    /**
+                     * Gets the default type url for CmdPvpHeroAttrInfo
+                     * @function getTypeUrl
+                     * @memberof com.xkhy.tafang.cmd.CmdPvpHeroAttrInfo
+                     * @static
+                     * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+                     * @returns {string} The default type url
+                     */
+                    CmdPvpHeroAttrInfo.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                        if (typeUrlPrefix === undefined) {
+                            typeUrlPrefix = "type.googleapis.com";
+                        }
+                        return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdPvpHeroAttrInfo";
+                    };
+
+                    return CmdPvpHeroAttrInfo;
+                })();
+
                 cmd.CmdPvpInfo = (function() {
 
                     /**
@@ -109473,6 +109748,7 @@ $root.com = (function() {
                      * @property {number} unitId CmdBattleUnitInfo unitId
                      * @property {number|null} [unitType] CmdBattleUnitInfo unitType
                      * @property {Array.<com.xkhy.tafang.cmd.CmdPvpBuffInfo>|null} [buffInfo] CmdBattleUnitInfo buffInfo
+                     * @property {Array.<com.xkhy.tafang.cmd.CmdPvpHeroAttrInfo>|null} [attrs] CmdBattleUnitInfo attrs
                      */
 
                     /**
@@ -109486,6 +109762,7 @@ $root.com = (function() {
                     function CmdBattleUnitInfo(properties) {
                         this.heroInfos = [];
                         this.buffInfo = [];
+                        this.attrs = [];
                         if (properties)
                             for (var keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                                 if (properties[keys[i]] != null && keys[i] !== "__proto__")
@@ -109557,6 +109834,14 @@ $root.com = (function() {
                     CmdBattleUnitInfo.prototype.buffInfo = $util.emptyArray;
 
                     /**
+                     * CmdBattleUnitInfo attrs.
+                     * @member {Array.<com.xkhy.tafang.cmd.CmdPvpHeroAttrInfo>} attrs
+                     * @memberof com.xkhy.tafang.cmd.CmdBattleUnitInfo
+                     * @instance
+                     */
+                    CmdBattleUnitInfo.prototype.attrs = $util.emptyArray;
+
+                    /**
                      * Creates a new CmdBattleUnitInfo instance using the specified properties.
                      * @function create
                      * @memberof com.xkhy.tafang.cmd.CmdBattleUnitInfo
@@ -109597,6 +109882,9 @@ $root.com = (function() {
                         if (message.buffInfo != null && message.buffInfo.length)
                             for (var i = 0; i < message.buffInfo.length; ++i)
                                 $root.com.xkhy.tafang.cmd.CmdPvpBuffInfo.encode(message.buffInfo[i], writer.uint32(/* id 8, wireType 2 =*/66).fork(), q + 1).ldelim();
+                        if (message.attrs != null && message.attrs.length)
+                            for (var i = 0; i < message.attrs.length; ++i)
+                                $root.com.xkhy.tafang.cmd.CmdPvpHeroAttrInfo.encode(message.attrs[i], writer.uint32(/* id 9, wireType 2 =*/74).fork(), q + 1).ldelim();
                         return writer;
                     };
 
@@ -109658,6 +109946,12 @@ $root.com = (function() {
                                     if (!(message.buffInfo && message.buffInfo.length))
                                         message.buffInfo = [];
                                     message.buffInfo.push($root.com.xkhy.tafang.cmd.CmdPvpBuffInfo.decode(reader, reader.uint32(), undefined, long + 1));
+                                    break;
+                                }
+                            case 9: {
+                                    if (!(message.attrs && message.attrs.length))
+                                        message.attrs = [];
+                                    message.attrs.push($root.com.xkhy.tafang.cmd.CmdPvpHeroAttrInfo.decode(reader, reader.uint32(), undefined, long + 1));
                                     break;
                                 }
                             default:
@@ -118753,6 +119047,7 @@ $root.com = (function() {
                  * @property {number} CmdFirstRechargeRewardRspMsg=622072529 CmdFirstRechargeRewardRspMsg value
                  * @property {number} CmdFormationInfoRspMsg=1211220072 CmdFormationInfoRspMsg value
                  * @property {number} CmdFormationOpRspMsg=1506971931 CmdFormationOpRspMsg value
+                 * @property {number} CmdFormationSelectRspMsg=829295498 CmdFormationSelectRspMsg value
                  * @property {number} CmdFriendsApplyRspMsg=2057674506 CmdFriendsApplyRspMsg value
                  * @property {number} CmdFriendsAddRspMsg=552573225 CmdFriendsAddRspMsg value
                  * @property {number} CmdFriendsRefuseRspMsg=1262322162 CmdFriendsRefuseRspMsg value
@@ -119083,6 +119378,7 @@ $root.com = (function() {
                     values[valuesById[622072529] = "CmdFirstRechargeRewardRspMsg"] = 622072529;
                     values[valuesById[1211220072] = "CmdFormationInfoRspMsg"] = 1211220072;
                     values[valuesById[1506971931] = "CmdFormationOpRspMsg"] = 1506971931;
+                    values[valuesById[829295498] = "CmdFormationSelectRspMsg"] = 829295498;
                     values[valuesById[2057674506] = "CmdFriendsApplyRspMsg"] = 2057674506;
                     values[valuesById[552573225] = "CmdFriendsAddRspMsg"] = 552573225;
                     values[valuesById[1262322162] = "CmdFriendsRefuseRspMsg"] = 1262322162;

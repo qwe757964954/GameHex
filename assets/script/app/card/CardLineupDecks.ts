@@ -213,6 +213,22 @@ export async function loadPvpUnitGrowthRows(): Promise<readonly unknown[]> {
     return readRows('pvpUnitGrowth');
 }
 
+/**
+ * 读 `pvpCard` 的**全部原始行**（一次读表，按 id 现查）。
+ *
+ * 与 `loadPvpCardRawRow` 的区别：那个是「一次拿一张」，阵容战力要连算 8 张，
+ * 逐张调会读 8 遍整表。返回原样数组（含坏行），由调用方按 `String(row.id)` 建索引 ——
+ * 这里不做过滤，保持与 `RefUtil` 一致的口径。
+ */
+export async function loadPvpCardRawRows(): Promise<readonly Record<string, unknown>[]> {
+    const rows: Record<string, unknown>[] = [];
+    for (const row of await readRows('pvpCard')) {
+        if (!row || typeof row !== 'object' || Array.isArray(row)) continue;
+        rows.push(row as Record<string, unknown>);
+    }
+    return rows;
+}
+
 /** 当前阵容的羁绊加成（供加成条展示）。deck 为空时返回中性值。 */
 export function currentDeckBonuses(deck: readonly ZCDeckCard[]): ZCDeckBonuses {
     return calculateDeckBonuses(deck);

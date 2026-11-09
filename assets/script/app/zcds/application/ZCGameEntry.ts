@@ -64,6 +64,13 @@ export interface ZCGameEntryParams {
         playerCount: 2;
         hpRate: number;
         attackRate: number;
+        /**
+         * `levelInfo.openGrideTime`：「关卡翻地块频率」（秒，0 = 够钱就翻）。
+         *
+         * 对局内作为 **NPC 翻地块（AI 开发中立格）的最小间隔**：AI 再快也不能比这个字段更快。
+         * 缺省 / 0 ⇒ 只受全局 `enemyAiIntervalSeconds` 约束（旧行为）。
+         */
+        openGrideTime?: number;
         /** 塔防关卡的确定性出怪表；空数组表示该关卡尚无可用波次，回退普通守军 AI。 */
         waves: ReadonlyArray<{
             waveId: number;
@@ -72,6 +79,8 @@ export interface ZCGameEntryParams {
             monsterCount: number;
             hpRate: number;
             attackRate: number;
+            /** BOSS 波（`defenceModWave.monsterType=3`，即每组最后一波）。 */
+            isBoss?: boolean;
         }>;
     };
     /**

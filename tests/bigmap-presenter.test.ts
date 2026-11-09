@@ -306,6 +306,35 @@ test('联机榜单初始为空，个人积分和名单来自服务器，失败�
     assert.equal(presenter.cityRankBoard(101), board);
 });
 
+test('进入视野即预取真实榜一并缓存，多城均能更新且失败可重试', async () => {
+    const calls: number[] = [];
+    let fail = true;
+    const repository = new BigMapCampRepository({ fetchSimple: async () => ({ infos: [] }),
+        fetchDetail: async () => null, fetchRoles: async (campId) => ({ campId, infos: [] }),
+        requestMove: async () => null });
+    const { presenter } = makeHarness(3, createMemoryBigMapStorage(), CLOCK_PREPARE, null, {
+        campRepository: repository,
+        rankProvider: { fetchCityRank: async (cityId) => {
+            calls.push(cityId);
+            if (cityId === 102 && fail) return null;
+            return { cityId, playerRank: 0, attackerCount: 1, topWarScore: 900,
+                entries: [{ rank: 1, warScore: 900, isPlayer: false, roleId: String(cityId), avatarId: '1001' }] };
+        } },
+    });
+    try {
+        await presenter.refreshVisibleCamps([101, 102]);
+        assert.deepEqual(calls, [101, 102]);
+        assert.equal(presenter.cityView(101).rankEntries[0].avatarId, '1001');
+        assert.equal(presenter.cityView(102).rankEntries.length, 0);
+        fail = false;
+        await presenter.refreshVisibleCamps([101, 102]);
+        assert.deepEqual(calls, [101, 102, 102], '成功榜缓存，失败榜重试');
+        assert.equal(presenter.cityView(102).rankEntries[0].roleId, '102');
+        await presenter.refreshVisibleCamps([101, 102]);
+        assert.equal(calls.length, 3, '缓存后浏览不重查榜单');
+    } finally { presenter.dispose(); }
+});
+
 test('打城之后名次会跟着战功变（榜单重算）', async () => {
     const { presenter } = makeHarness(3);
     // 先刷一次拿真实 NPC 榜：不刷新时读到的是「兜底榜 = 独自一人第一名」，

@@ -4,6 +4,7 @@ import type { ZCHexState, ZCSnapshot, ZCUnitState } from '../ZCGameTypes';
 import { ZC_OWNER_ORDER, ZCOwner } from '../ZCMapConfig';
 import type { ZCMapGeometry } from '../ZCMapGeometry';
 import type { ZCMatchMap } from '../ZCMatchConfig';
+import { neutralResourceItemOf, ZCNeutralResourceType } from '../ZCNeutralResourceGroup';
 
 type Occupants = Partial<Record<ZCOwner, number>>;
 
@@ -261,6 +262,8 @@ export class ZCCaptureSystem {
     }
 
     private canBeCaptured(hex: ZCHexState): boolean {
+        const type = neutralResourceItemOf(hex.neutralResourceId)?.resourceType;
+        if (type === ZCNeutralResourceType.Monster || type === ZCNeutralResourceType.Extension || type === ZCNeutralResourceType.Horn) return false;
         return hex.building === 'none' && hex.wallHp <= 0;
     }
 

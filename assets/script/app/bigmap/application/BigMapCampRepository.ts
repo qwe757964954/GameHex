@@ -36,6 +36,7 @@ export class BigMapCampRepository {
     private readonly appliedRevisions = new Map<number, number>();
     private readonly updatedAt = new Map<number, number>();
     private readonly pending = new Map<string, Promise<boolean>>();
+    private readonly simplePendingIds = new Set<number>();
     /** 据点角色列表（`campId` → 该据点内的角色）。空数组是**有效事实**（据点里没人）。 */
     private readonly roleSnapshots = new Map<number, readonly IBigMapCampRoleInfo[]>();
     private readonly roleRevisions = new Map<number, number>();
@@ -174,8 +175,8 @@ export class BigMapCampRepository {
         }
     }
 
-    refreshSimple(campIds: readonly number[]): Promise<boolean> {
-        return this.refresh(campIds, false);
+    refreshSimple(campIds: readonly number[], fullBatch = false): Promise<boolean> {
+        return this.refresh(campIds, false, fullBatch);
     }
 
     refreshDetail(campIds: readonly number[], force = false): Promise<boolean> {
@@ -196,6 +197,7 @@ export class BigMapCampRepository {
         this.listeners = [];
         this.snapshots.clear();
         this.pending.clear();
+        this.simplePendingIds.clear();
         this.appliedRevisions.clear();
         this.updatedAt.clear();
         this.roleSnapshots.clear();
@@ -203,20 +205,31 @@ export class BigMapCampRepository {
         this.movingCampId = 0;
     }
 
-    private refresh(campIds: readonly number[], isDetail: boolean): Promise<boolean> {
+    private refresh(campIds: readonly number[], isDetail: boolean, fullBatch = false): Promise<boolean> {
         if (this.isDisposed) return Promise.resolve(false);
         const ids = [...new Set(campIds.filter(isBigMapCampId))].sort((a, b) => a - b);
         if (ids.length === 0) return Promise.resolve(false);
         // 🔴 只发「没缓存或已过期」的城：视野集合一变（快速滑动/缩放）时，旧城不再跟着重发。
         // 否则 `campIds` 每变一次就把整批城重查一遍 —— 日志里表现为同一批 campId 反复刷屏。
-        const due = isDetail ? ids : ids.filter((id) => this.now() - (this.updatedAt.get(id) ?? -Infinity)
+        let due = isDetail || fullBatch ? ids : ids.filter((id) => this.now() - (this.updatedAt.get(id) ?? -Infinity)
             >= BIGMAP_CAMP_REFRESH_SECONDS * 1000);
         if (due.length === 0) return Promise.resolve(false);
-        const key = `${isDetail ? 'detail' : 'simple'}:${due.join(',')}`;
+        let key = `${isDetail ? 'detail' : 'simple'}:${due.join(',')}`;
         const pending = this.pending.get(key);
         if (pending) return pending;
+        if (!isDetail) {
+            // 可见区域整批刷新不拆集合；重叠请求尚未完成时，留给下一轮重试。
+            if (fullBatch && due.some((id) => this.simplePendingIds.has(id))) return Promise.resolve(false);
+            due = due.filter((id) => !this.simplePendingIds.has(id));
+            if (due.length === 0) return Promise.resolve(false);
+            key = `simple:${due.join(',')}`;
+            for (const id of due) this.simplePendingIds.add(id);
+        }
         const revision = ++this.revision;
-        const request = this.load(due, isDetail, revision).finally(() => this.pending.delete(key));
+        const request = this.load(due, isDetail, revision).finally(() => {
+            this.pending.delete(key);
+            if (!isDetail) for (const id of due) this.simplePendingIds.delete(id);
+        });
         this.pending.set(key, request);
         return request;
     }

@@ -1,10 +1,9 @@
-import { _decorator, Button, Color, Label, Node, Prefab, Sprite, SpriteFrame, UITransform } from 'cc';
+import { _decorator, Button, Color, Label, Node, Prefab, Sprite, SpriteFrame } from 'cc';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { CARD_LINEUP_TEXTS } from './CardLineupTexts';
 import { upgradeButtonText } from './CardUpgradeCost';
 import type { ZCUpgradeStatus } from './CardUpgradeCost';
-import { applyCardHeroArt } from './CardHeroView';
 import { loadCardDetailArt } from './CardLineupIcons';
 import { CardUnitPreview } from './CardUnitPreview';
 import { CardUnitPreviewAssets } from './CardUnitPreviewAssets';
@@ -65,10 +64,8 @@ export class CardUpgradePage extends PopupBase {
     @property({ group: '角色展示', type: Sprite, tooltip: 'Header/Hero：角色立绘（cardHead 专属图 / 职业雕像兜底）' })
     heroSprite: Sprite = null!;
 
-    @property({ group: '角色展示', type: UITransform, tooltip: 'Header/Hero：立绘展示框' })
-    heroTransform: UITransform = null!;
 
-    @property({ group: '基本信息', type: Label, tooltip: 'Header/PowerPill/PowerLabel：战力数值（战力系统未落地，占位）' })
+    @property({ group: '基本信息', type: Label, tooltip: 'Header/PowerPill/PowerLabel：当前卡牌战力' })
     powerLabel: Label = null!;
 
     @property({ group: '基本信息', type: Label, tooltip: 'SkillChain/LevelPlate/LevelLabel：等级牌数字' })
@@ -203,7 +200,6 @@ export class CardUpgradePage extends PopupBase {
         this.upgradeButton.interactable = false;
         this.heroSprite.spriteFrame = null;
         this.qualitySprite.spriteFrame = null;
-        applyCardHeroArt(this.heroSprite, this.heroTransform, null);
     }
 
     private readonly onSkillClick = (): void => {
@@ -279,7 +275,6 @@ export class CardUpgradePage extends PopupBase {
             this.tagClassLabel.string = '';
             this.qualityLabel.string = '';
         }
-        // 战力系统未落地：占位（Inspector 的 powerLabel 预置文案 / 数据为空显示占位符）。
         this.powerLabel.string = `${texts.detailPower} ${data.detail?.powerText || '--'}`;
         this.qualitySprite.spriteFrame = data.art?.diamond ?? null;
         this.renderHero(card, data.art?.hero ?? null);
@@ -293,7 +288,7 @@ export class CardUpgradePage extends PopupBase {
         const scope = this.resourceScope;
         const revision = ++this.artRevision;
         this.preview?.clear();
-        applyCardHeroArt(this.heroSprite, this.heroTransform, hero);
+        this.heroSprite.spriteFrame = hero;
         if (!card) {
             return;
         }
@@ -304,6 +299,9 @@ export class CardUpgradePage extends PopupBase {
         void this.previewAssets.load(card).then(prefab => {
             if (scope.disposed || !this.alive || revision !== this.artRevision) return;
             if (!this.preview) {
+                // 这里**不乘** `pvpCard.prefabSize`：详情弹窗一次只展示一个兵种，没有并排对比，
+                // 归一化就够了；而 Hero 区只有 365px（Header 370 高），270 基准已经占满 74%，
+                // 乘 1.5 会画出 405px 顶出 Header。阵容页/布阵页那种并排场景才需要体型差。
                 const preview = new CardUnitPreview(this.heroSprite, 270);
                 this.preview = preview;
                 scope.defer(() => { preview.clear(); });

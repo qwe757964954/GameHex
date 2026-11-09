@@ -11,6 +11,7 @@ import { tileTypeFromLegacyHex } from '../ZCSnapshotCodec';
 import { ZCArtifactSystem } from './ZCArtifactSystem';
 import { ZCEconomySystem } from './ZCEconomySystem';
 import type { IZCModelServices } from './ZCModelServices';
+import { ZCNeutralFeatureSystem } from './ZCNeutralFeatureSystem';
 
 export interface IZCDevelopmentContext extends Pick<IZCModelServices, 'rules' | 'unitCount' | 'spawnUnit'> {
     goldOf(owner: ZCOwner): number;
@@ -68,7 +69,12 @@ export class ZCDevelopmentSystem {
             return { card, building, tier: 0, tileType, pityTriggered: result.pityTriggered };
         }
         const tier = rarityRank(card.rarity);
+        const extensionBuild = ZCNeutralFeatureSystem.canBuild(state, hex.id, owner);
         hex.building = building;
+        ZCNeutralFeatureSystem.consumeBuild(state, hex.id, owner);
+        if (extensionBuild) for (const id of config.map.hexes[hex.id].neighbors) {
+            if (state.hexes[id].owner === 'neutral' && !state.hexes[id].neutralResourceId) state.hexes[id].owner = owner;
+        }
         hex.state = 'developed';
         hex.tier = tier;
         hex.cardId = card.id;
@@ -107,6 +113,7 @@ export class ZCDevelopmentSystem {
         owners: readonly ZCOwner[], context: IZCDevelopmentContext,
         onClaim: (hexId: number, itemId: number) => void): void {
         for (const hex of state.hexes) {
+            if (neutralResourceItemOf(hex.neutralResourceId)?.feature) continue;
             if (!hex.neutralResourceId || hex.developmentResolved) continue;
             const config = map.hexes[hex.id];
             if (!config?.playable) continue;

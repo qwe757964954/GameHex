@@ -1,4 +1,4 @@
-import type { ZCAttackTrait, ZCCardType, ZCCombatEventType, ZCUnitId } from './ZCCombatCatalog';
+import type { ZCAttackTrait, ZCCardType, ZCCombatEventType, ZCUnitId, ZCUnitDefinition } from './ZCCombatCatalog';
 //  真源在 `ZCCombatCatalog`（攻击档案的领域），这里转出以保持既有 `from './ZCGameTypes'` 的取用路径。
 export type { ZCCombatEventType };
 import type { ZCFaction, ZCOwner } from './ZCMapConfig';
@@ -20,7 +20,7 @@ export const ZCDamageSourceKind = {
 export type ZCDamageSourceKind = (typeof ZCDamageSourceKind)[keyof typeof ZCDamageSourceKind];
 
 export interface ZCDamageSource {
-    owner: ZCOwner;
+    owner: ZCFaction;
     kind: ZCDamageSourceKind;
     unitId?: number;
     /** Old Client battle-text classification carried from cast to actual hit. */
@@ -118,6 +118,7 @@ export type ZCCombatFloatTextKind = (typeof ZCCombatFloatTextKind)[keyof typeof 
 export type ZCFloatTextKind = ZCCombatFloatTextKind | 'heal' | 'miss' | 'gold' | 'goldincome';
 
 export interface ZCHexState {
+    neutralFeature?: IZCNeutralFeatureState;
     id: number;
     owner: ZCFaction;
     state: ZCTileState;
@@ -150,6 +151,13 @@ export interface ZCHexState {
 }
 
 export interface ZCUnitState {
+    inheritedStats?: Pick<ZCUnitDefinition, 'attack' | 'moveSpeed' | 'attackInterval' | 'attackRange' | 'bodyRadius'>;
+    gateSize?: 'enlarge' | 'shrink';
+    gateScale?: number;
+    gateMoveMultiplier?: number;
+    gateAttackSpeedMultiplier?: number;
+    gateDamageMultiplier?: number;
+    gateHpFlat?: number;
     id: number;
     owner: ZCOwner;
     /** 单位 id（= `pvpCard.json` 卡行的 `unitId`，合表后同表自引用），用于查数值与父 Prefab。 */
@@ -290,6 +298,46 @@ export interface ZCUnitState {
     strikeUntil?: number;
     /** 持续窗口内下一波的时刻（秒）。 */
     strikeNextAt?: number;
+    /**
+     * 多点打击「这一帧打空了」之后的下次重试时刻（秒）。
+     *
+     * 打空时**不推进 CD**（跑位途中别把机会转掉），但也不能每帧重试 ——
+     * 多条镭射飞龙的导弹会因此同上同下：目标进入射程的那一帧**一起开火**，
+     * 屏幕上就是一波 6 个导弹（2026-11-05 用户反馈）。
+     * 改成「退避 0.2s + 按 `unit.id` 错峰」，齐射就被拆成先后两波。
+     */
+    strikeRetryAt?: number;
+    /**
+     * 移形换影（`behaviorKey = 'blink_strike'`，魔术师 103404）的下次可用时刻（秒）。
+     *
+     * 与 `selfCastReadyAt` / `strikeReadyAt` 同一套「绝对时刻」口径；缺省 undefined
+     * ⇒ 首次推进时初始化为「当前 + CD」，开局不立刻放。
+     */
+    blinkReadyAt?: number;
+    /**
+     * 分身的爆炸时刻（秒）；`blinkCloneX/Y` 是爆炸点（**施法时的原位**）。
+     *
+     * 为什么要单独记坐标：分身是「留在原地」的，本体闪现回来之后还会继续跑位，
+     * 拿 `unit.freeX/freeY` 当爆炸点会跟着本体漂走 —— 那就不是分身了。
+     */
+    blinkCloneAt?: number;
+    blinkCloneX?: number;
+    blinkCloneY?: number;
+}
+
+export interface IZCNeutralFeatureState {
+    claimed: boolean;
+    effect?: import('./ZCNeutralResourceGroup').IZCGateEffect;
+    readyAt?: number;
+    windowUntil?: number;
+    insideUnitIds?: readonly number[];
+    lineHexIds?: readonly number[];
+    buildOwner?: ZCOwner;
+    buildUsed?: boolean;
+    portalExitId?: number;
+    awake?: boolean;
+    targetUnitId?: number | null;
+    nextAttackAt?: number;
 }
 
 /** 逻辑层产生、视图层只读消费的短生命周期战斗表现事件。 */
@@ -328,6 +376,31 @@ export interface ZCCombatEvent {
      * ⚠️ `combatEvents` 不进存档（`ZCSnapshotCodec.restore` 会把整列清空），所以加字段不影响兼容。
      */
     beamHold?: boolean;
+    /**
+     * 「出现时由小长大」的时长（秒，2026-11-07 椰蛋战士「暴风」100504）。
+     *
+     * 需求原话：「生成后由小变大到当前的大小」。视图从 `0` 线性缓出到 `1`，再乘到节点缩放上，
+     * `growSeconds` 之后恒为 1 —— 所以「最终大小」仍然完全由 prefab 烘焙缩放（× `zcCombatEffectNodeScaleOf`）
+     * 决定，这里只补一段入场。
+     *
+     * 缺省 `undefined` ⇒ 不生长（一次性挂上就是最终大小），所有既有特效行为逐字不变。
+     *
+     * ⚠️ `combatEvents` 不进存档，加字段不影响兼容。
+     */
+    growSeconds?: number;
+    /**
+     * 这条特效该播哪一段骨架动画（`sp.Skeleton.setAnimation`，2026-11-07 鹿神守护）。
+     *
+     * 背景：小鹿区域是**两段式**的 —— 先以「接近」速度走（播 `move`），到位后冲刺（播 `attack`）。
+     * 动画名跟着事件走，而不是写死在视图里：视图只管「名字变了就切」，阶段判断留在模型
+     * （阶段是真状态，得进快照）。
+     *
+     * 缺省 `undefined` ⇒ 视图一次都不碰动画，预制体自带的 `defaultAnimation` 照旧播 ——
+     * 所有既有特效行为逐字不变。
+     *
+     * ⚠️ `combatEvents` 不进存档，加字段不影响兼容。
+     */
+    spineAnimation?: string;
 }
 
 /** 在途弹道属于可恢复的战斗状态，碰撞后才产生伤害。坐标均为棋盘逻辑坐标。 */
@@ -414,6 +487,16 @@ export interface ZCFloatText {
 }
 
 /**
+ * 受击特效的**锚点语义**：这一下打在什么东西上。
+ *
+ * 模型层只知道「打在单位 / 城墙 / 建筑上」，**不知道**那三样在屏幕上各自画在哪 ——
+ * 单位的锚点就是它自己的插值坐标，城墙铺在这一格的六条边上、建筑图则挂在格子 prefab 的
+ * `BuildingIcon`（比格心高 15.65px）。偏移量属于视图口径，落在 `ZCCombatEffectPlacement`
+ * 的 `zcHitFxSurfaceLiftY`，模型只透传这个语义。
+ */
+export type ZCHitFxSurface = 'unit' | 'building' | 'wall';
+
+/**
  * 逻辑层产生、视图层只读消费的**受击特效**展示项（美术 `units/effects/受击特效/<职业>受击`）。
  *
  * 与 `ZCFloatText` 同一套口径：**刻意不写进 ZCSnapshot** —— 一次性表现，混进存档会牵动
@@ -428,8 +511,18 @@ export interface ZCHitFx {
     id: number;
     /** 攻击方攻击职业；渲染层用它选 `受击特效/<trait>受击/<trait>受击` 的 prefab。 */
     trait: ZCAttackTrait;
-    /** 被打一方的归属；预留给「只给敌对伤害播闪白」这类阵营过滤（当前不筛）。 */
-    owner: ZCOwner;
+    /**
+     * 被打一方的归属；预留给「只给敌对伤害播闪白」这类阵营过滤（当前不筛）。
+     * 结构物（城墙 / 建筑）这边取 `hex.owner`，可能是 `'neutral'` ⇒ 用 {@link ZCFaction}。
+     */
+    owner: ZCFaction;
+    /**
+     * 打在什么上（2026-11-06 需求：建筑 / 城墙受击也要播**攻击方职业**的受击特效）。
+     *
+     * 视图按它决定锚点补偿：`unit` / `wall` 就是格心，`building` 要抬到建筑图的中心
+     * （`ZCGameHex.prefab` 的 `BuildingIcon` 在 +15.65px）。
+     */
+    surface: ZCHitFxSurface;
     /**
      * **被打那一方的模型等比缩放**（`pvpCard.prefabSize`，基准 1）—— 受击特效按它跟着体型走。
      *
@@ -729,6 +822,76 @@ export interface ZCGroundZoneState {
     hitUnitIds?: number[];
     /** 命中名额上限（移动区域专用）；打满就提前消散。缺省 0 = 不限。 */
     maxHits?: number;
+    /**
+     * 「每多命中一个目标，伤害再降 N」的递减系数（0~1，2026-11-06 魔术师「鹿神守护」103405）。
+     *
+     * 第 k 个被命中的目标吃 `damage × (1 - damageFalloff)^k`（k 从 0 起）。
+     * 设计口径是「每多一个目标减少 50%」，即 0.5 ⇒ 100% / 50% / 25% …… 逐级递减。
+     *
+     * 缺省 undefined ⇒ 不递减，所有既有区域（暴风雪 / 灼热地带 / 火船 / 暴风）行为逐字不变。
+     */
+    damageFalloff?: number;
+    /**
+     * 「整段持有视觉」（2026-11-07 魔术师「鹿神守护」103405 的小鹿冲刺）。
+     *
+     * 区域的表现事件有两种口径：
+     * - **按波次**（缺省，既有全部区域都是这个）：每一波在**当波位置**推一条
+     *   `durationSeconds = waveInterval` 的 `area` 事件 ⇒ 移动区域会沿路径闪成一串残影。
+     * - **整段持有**（本字段为 true）：区域创建后的第一拍推**一条**长效事件，`durationSeconds`
+     *   直接取其剩余寿命，之后每帧把事件坐标改写成区域当前位置 ⇒ 一个视觉跟着区域走完全程，
+     *   区域消散（含提前打满命中名额）时事件同步摘掉。
+     *
+     * 鹿神守护要的是「小鹿本体 + 上层循环火特效整段跟着冲刺」，一串残影做不到这件事。
+     * 缺省 undefined ⇒ 所有既有区域（暴风雪 / 灼热地带 / 火船 / 暴风）行为逐字不变。
+     */
+    holdVisual?: boolean;
+    /**
+     * 上面那条长效表现事件在 `combatEvents` 里的 id，由 `ZCGroundZoneSystem` 自己维护。
+     *
+     * 刻意**不进快照**（`combatEvents` 本来也不进存档，`ZCSnapshotCodec.restore` 会清空整列），
+     * 所以不需要在 `ZCSnapshotCodec` 的字段白名单里登记。
+     */
+    visualEventId?: number;
+    /**
+     * 视觉入场「由小长大」的秒数（2026-11-07 椰蛋战士「暴风」100504）。
+     *
+     * 只作用于「整段持有视觉」那条长效事件（见 `holdVisual`）：区域刚生成时视觉从 0 长到最终大小，
+     * 而不是凭空一次性糊上一整块。缺省 undefined ⇒ 不生长。
+     */
+    growSeconds?: number;
+    /**
+     * 「接近阶段」的移动速度（世界 px/秒，2026-11-07 魔术师「鹿神守护」103405 需求 2）。
+     *
+     * 给了它就进入**两段式移动**：
+     * 1. **接近**：朝 `approachTargetId` 走（每帧重算方向，目标会跑），速度 = 本字段；
+     *    期间**不扣** `remainingSeconds`、**不结算**任何一波伤害；
+     * 2. **冲刺**：与目标距离 ≤ `sprintRange`（或目标已倒下）时切段 —— 速度换成 `sprintSpeed`、
+     *    方向锁定切换那一刻的朝向，`remainingSeconds` 从满值开始扣、波次照旧结算。
+     *
+     * 缺省 undefined ⇒ 没有接近阶段，所有既有区域（暴风雪 / 灼热地带 / 火船 / 暴风）行为逐字不变。
+     */
+    approachSpeed?: number;
+    /** 接近阶段追的目标单位 id（`unit.id`）；目标倒下 / 找不到时立刻转冲刺。 */
+    approachTargetId?: number;
+    /** 与 `approachTargetId` 的距离 ≤ 它（世界 px）就转冲刺。缺省 0 ⇒ 一出生就冲。 */
+    sprintRange?: number;
+    /** 冲刺速度（世界 px/秒）；转段时写进 `moveVelocityX/Y`（世界 px/秒）。缺省 0 ⇒ 转段后原地不动。 */
+    sprintSpeed?: number;
+    /**
+     * 是否已经切到冲刺段。
+     *
+     * 缺省 / false ⇒ 仍在接近（或压根没有接近阶段）。**必须进快照**：存档还原后小鹿不能
+     * 又从出生点重新走一遍，也不能把「已经冲过的两秒」再冲一次。
+     */
+    sprinting?: boolean;
+    /**
+     * 当前该播的骨架动画名（`sp.Skeleton.setAnimation`，2026-11-07 鹿神守护）。
+     *
+     * 由区域系统按阶段改写，`syncHoldVisual` 每次把它抄进那条长效表现事件；
+     * 视图只在**名字变化**时才真的 `setAnimation`，否则每帧重播会把动画钉在第一帧。
+     * 缺省 undefined ⇒ 视图不碰动画（既有特效的预制自带 `defaultAnimation`，行为逐字不变）。
+     */
+    visualAnimation?: string;
 }
 
 /**

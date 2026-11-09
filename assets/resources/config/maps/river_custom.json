@@ -227,6 +227,46 @@
       "row": 5,
       "column": 8,
       "groupId": 13002
+    },
+    {
+      "row": 10,
+      "column": 3,
+      "groupId": 14009
+    },
+    {
+      "row": 9,
+      "column": 8,
+      "groupId": 14008
+    },
+    {
+      "row": 7,
+      "column": 2,
+      "groupId": 14006
+    },
+    {
+      "row": 5,
+      "column": 0,
+      "groupId": 14002
+    },
+    {
+      "row": 3,
+      "column": 1,
+      "groupId": 14007
+    },
+    {
+      "row": 3,
+      "column": 9,
+      "groupId": 14007
+    },
+    {
+      "row": 17,
+      "column": 2,
+      "groupId": 14007
+    },
+    {
+      "row": 12,
+      "column": 7,
+      "groupId": 14007
     }
   ],
   "art": {

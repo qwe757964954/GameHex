@@ -1,9 +1,9 @@
 import type { ZCAttackTrait } from './ZCCombatCatalog';
 import type {
     ZCBuildingDestruction, ZCBuildingShake, ZCBuildingType, ZCCardReveal, ZCFloatText, ZCFloatTextKind,
-    ZCHexActivation, ZCHitFx, ZCNeutralReward,
+    ZCHexActivation, ZCHitFx, ZCHitFxSurface, ZCNeutralReward,
 } from './ZCGameTypes';
-import type { ZCOwner } from './ZCMapConfig';
+import type { ZCFaction, ZCOwner } from './ZCMapConfig';
 import {
     HEX_PULSE_WAVE_SECONDS
 } from '../../../core/hex/HexFlipPresentation';
@@ -206,7 +206,12 @@ export interface IZCFloatTextOptions {
 export interface IZCHitFxOptions {
     readonly now: number;
     readonly trait: ZCAttackTrait;
-    readonly owner: ZCOwner;
+    readonly owner: ZCFaction;
+    /**
+     * 打在什么上；缺省 `'unit'`（老调用点不用改）。
+     * 结构物用 `'building'` / `'wall'`，视图据此把锚点从格心抬到建筑图中心。
+     */
+    readonly surface?: ZCHitFxSurface;
     /** 被打那一方的模型等比缩放（`pvpCard.prefabSize`）；缺省 1 = 保持 prefab 烘焙尺寸。 */
     readonly targetScale?: number;
     readonly x: number;
@@ -299,6 +304,8 @@ export class ZCBattlePresentationQueue {
             id: this.nextHitFxId++,
             trait: input.trait,
             owner: input.owner,
+            //  缺省 = 打在单位身上（老调用点行为逐字不变）。
+            surface: input.surface ?? 'unit',
             // 非有限值 / 非正数一律归 1：尺寸系数是渲染层直接乘进 `setScale` 的，
             // 混进 NaN 会让节点缩放变成 NaN（整只特效消失，且不报错）。
             targetScale: Number.isFinite(input.targetScale) && (input.targetScale as number) > 0

@@ -292,7 +292,7 @@ test('弹道被丢弃时回调一次 linger：命中即丢、到点即丢；穿�
             units,
             distanceScale: 1,
             effectiveDefinition: () => ({ bodyRadius: 2, flying: false }),
-            structureTarget: () => null,
+            structureTargets: () => {},
             hit: () => { hits += 1; },
             linger: (p: P) => lingers.push(p.x),
         } as any;

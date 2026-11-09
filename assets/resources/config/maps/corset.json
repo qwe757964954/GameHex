@@ -672,5 +672,47 @@
         "locked": false
       }
     ]
-  }
+  },
+  "resourcePoints": [
+    {
+      "row": 12,
+      "column": 3,
+      "groupId": 14009
+    },
+    {
+      "row": 11,
+      "column": 10,
+      "groupId": 14008
+    },
+    {
+      "row": 9,
+      "column": 2,
+      "groupId": 14006
+    },
+    {
+      "row": 7,
+      "column": 6,
+      "groupId": 14001
+    },
+    {
+      "row": 5,
+      "column": 2,
+      "groupId": 14007
+    },
+    {
+      "row": 8,
+      "column": 10,
+      "groupId": 14007
+    },
+    {
+      "row": 18,
+      "column": 2,
+      "groupId": 14007
+    },
+    {
+      "row": 15,
+      "column": 10,
+      "groupId": 14007
+    }
+  ]
 }

@@ -207,10 +207,12 @@ const boardData = (): LineupBoardData => ({ art: cardArtConfig, deck: [card('1')
     formations: [{ formationId: 1, heroIds: [1], selected: true }, { formationId: 2, heroIds: [2], selected: false }] });
 function boardFixture(closeAfterSave = false) {
     const owner = {}, states: any[] = [], events: any[] = [], submissions: any[] = [], tips: string[] = [];
+    const selects: { formationId: number }[] = [];
     let removed = 0, closed = 0;
     const pending = deferred<FormationSaveResult>();
     const repository = { loadBoard: async () => boardData(), saveFormation: async (id: number, heroIds: readonly number[], caller: object) => {
-        assert.equal(caller, controller); submissions.push({ id, heroIds }); return pending.promise; } };
+        assert.equal(caller, controller); submissions.push({ id, heroIds }); return pending.promise; },
+    selectFormation: async (formationId: number) => { selects.push({ formationId }); return true; } };
     const controller = new LineupBoardController(createControllerContext(), {
         owner,
         model: new LineupBoardModel(2, 0),
@@ -231,7 +233,7 @@ function boardFixture(closeAfterSave = false) {
     });
     EventMgr.instance.on(CardLineupEvent.DeckSaved, value => events.push(value), owner);
     const intent = (kind: string, data = {}, eventOwner = owner) => EventMgr.instance.emit(CardPopupEvent.BoardIntent, { owner: eventOwner, kind, ...data });
-    return { controller, repository, pending, states, events, submissions, tips, intent,
+    return { controller, repository, pending, states, events, submissions, tips, selects, intent,
         finish() { controller.dispose(); EventMgr.instance.offTarget(owner); }, get removed() { return removed; }, get closed() { return closed; } };
 }
 test('board owns independent preset drafts, toggles and reset; foreign intents are ignored', async () => {
@@ -242,6 +244,92 @@ test('board owns independent preset drafts, toggles and reset; foreign intents a
         h.intent('reset'); h.intent('preset', { index: 0 });
         assert.deepEqual(h.states[h.states.length - 1].cards.map((v: ZCDeckCard) => v.id), ['1', '2']);
         h.intent('toggle', { cardId: 'unknown' }); assert.equal(h.states[h.states.length - 1].cards.length, 2);
+    } finally { h.finish(); }
+});
+/**
+ * 8 张、4 个品级齐全的卡组（`isCompleteLineup` 的「完整阵容」口径）。
+ * `take` 用来只取前 N 张，构造「差一张」的半成品。
+ */
+const RARITIES = ['gold', 'purple', 'blue', 'green'] as const;
+const fullDeck = (take = 8) => Array.from({ length: take }, (_unused, index) => ({
+    id: String(index + 1), name: String(index + 1), rarity: RARITIES[index % RARITIES.length],
+}) as ZCDeckCard);
+const fullBoardData = (deck = fullDeck(8)): LineupBoardData => ({
+    art: cardArtConfig, deck, pool: fullDeck(8), heroLevels: new Map(), heroLevelCaps: new Map(),
+    formations: [
+        { formationId: 1, heroIds: deck.map((entry) => Number(entry.id)), selected: true },
+        { formationId: 2, heroIds: [1], selected: false },
+    ],
+});
+test('切页签：当前方案是「有改动的完整阵容」时先提交最新阵容，成功后才切', async () => {
+    const h = boardFixture(); try {
+        h.repository.loadBoard = async () => fullBoardData(fullDeck(7));
+        await h.controller.start();
+        h.intent('toggle', { cardId: '8' });
+        assert.equal(h.states[h.states.length - 1].cards.length, 8);
+        h.intent('preset', { index: 1 });
+        assert.equal(h.submissions.length, 1, '切走前必须先把最新阵容发给服务器');
+        assert.equal(h.submissions[0].id, 1);
+        assert.deepEqual(h.submissions[0].heroIds, [1, 2, 3, 4, 5, 6, 7, 8]);
+        assert.equal(h.states[h.states.length - 1].selectedPreset, 0, '回包前不能切页签');
+        h.pending.resolve({ kind: 'success', formation: { formationId: 1, heroIds: [1, 2, 3, 4, 5, 6, 7, 8], selected: true } });
+        await tick(); await tick();
+        assert.equal(h.states[h.states.length - 1].selectedPreset, 1);
+        assert.deepEqual(h.states[h.states.length - 1].cards.map((v: ZCDeckCard) => v.id), ['1']);
+        assert.deepEqual(h.events, [
+            { formationId: 1, heroIds: [1, 2, 3, 4, 5, 6, 7, 8] },
+            { formationId: 2, heroIds: [1] },
+        ], '自动提交与切页签各广播一次 DeckSaved');
+        assert.deepEqual(h.tips, [], '点的是页签，不该弹「已保存」');
+        assert.deepEqual(h.selects, [{ formationId: 2 }], '切过去要把出战阵型同步给服务器（CmdFormationSelectReqMsg）');
+    } finally { h.finish(); }
+});
+test('切页签：阵容不满编或品级不全时只做本地切换，不发包', async () => {
+    const cases: readonly { deck: readonly ZCDeckCard[]; edits: string[] }[] = [
+        // 满编差一张：加一张才满，但这里只在 7 张的基础上再删一张，始终保持不满编
+        { deck: fullDeck(7), edits: ['1'] },
+        // 满编但清一色 gold：删一张再加回来，仍是 8 张、仍然只有一个品级
+        { deck: fullDeck(8).map((entry) => ({ ...entry, rarity: 'gold' as const })), edits: ['1', '1'] },
+    ];
+    for (const entry of cases) {
+        const h = boardFixture(); try {
+            h.repository.loadBoard = async () => fullBoardData(entry.deck);
+            await h.controller.start();
+            for (const cardId of entry.edits) h.intent('toggle', { cardId });
+            assert.equal(h.states[h.states.length - 1].dirty, true);
+            h.intent('preset', { index: 1 });
+            await tick();
+            assert.equal(h.submissions.length, 0, '不完整的阵容没有「最新阵容」可提交');
+            assert.equal(h.states[h.states.length - 1].selectedPreset, 1);
+            assert.deepEqual(h.selects, [], '不满编/品级不全时一个包都不发');
+            assert.deepEqual(h.events, [], '没同步就不该广播 DeckSaved');
+        } finally { h.finish(); }
+    }
+});
+test('切页签：完整阵容但没改动时只同步选中，不重复提交卡组', async () => {
+    const h = boardFixture(); try {
+        h.repository.loadBoard = async () => fullBoardData(fullDeck(8));
+        await h.controller.start();
+        h.intent('preset', { index: 1 });
+        await tick();
+        assert.equal(h.submissions.length, 0, '没改动不用再存一遍');
+        assert.deepEqual(h.selects, [{ formationId: 2 }]);
+        assert.equal(h.states[h.states.length - 1].selectedPreset, 1);
+        assert.deepEqual(h.events, [{ formationId: 2, heroIds: [1] }]);
+    } finally { h.finish(); }
+});
+test('切页签：自动提交失败时停在原方案，草稿与 dirty 都保留', async () => {
+    const h = boardFixture(); try {
+        h.repository.loadBoard = async () => fullBoardData(fullDeck(7));
+        await h.controller.start();
+        h.intent('toggle', { cardId: '8' });
+        h.intent('preset', { index: 1 });
+        h.pending.resolve({ kind: 'failed' }); await tick(); await tick();
+        assert.equal(h.states[h.states.length - 1].selectedPreset, 0, '保存失败不能把页签切走');
+        assert.equal(h.states[h.states.length - 1].cards.length, 8);
+        assert.equal(h.states[h.states.length - 1].dirty, true);
+        assert.deepEqual(h.tips, ['保存失败']);
+        assert.deepEqual(h.selects, [], '没切过去就不该动服务端的出战阵型');
     } finally { h.finish(); }
 });
 test('failed board save preserves dirty draft and restores submission gate', async () => {
@@ -259,6 +347,7 @@ test('successful save publishes submitted snapshot; edits or switching while sav
             if (change === 'toggle') h.intent('toggle', { cardId: '3' });
             if (change === 'preset') h.intent('preset', { index: 1 });
             h.pending.resolve({ kind: 'success', formation: { formationId: 1, heroIds: [1, 2], selected: true } }); await tick();
+            //  这组卡只有 1~2 张，不满足「满 8 张」，切页签不发任何包（含选中），所以只有保存那一条。
             assert.deepEqual(h.events, [{ formationId: 1, heroIds: [1, 2] }]);
             assert.equal(h.states[h.states.length - 1].dirty, change !== 'none');
         } finally { h.finish(); }

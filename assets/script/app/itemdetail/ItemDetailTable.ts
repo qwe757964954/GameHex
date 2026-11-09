@@ -331,3 +331,78 @@ export function canComposOf(craft: IItemCraftRow | undefined | null, owned: numb
     if (!Number.isFinite(craft.number) || craft.number <= 0) return false;
     return Number.isFinite(owned) && owned >= craft.number;
 }
+
+// ============================================================
+// 弹窗纵向布局（按「获取途径」实际行数收放）
+
+/** 面板宽度（`PanelBg` 的 UITransform，九宫图横竖拉伸都不会变形）。 */
+export const ID_PANEL_WIDTH = 515;
+/** 面板顶边（根节点局部坐标，`anchor=(0,1)` ⇒ `y` 就是顶边）。 */
+export const ID_PANEL_TOP = 362;
+/** 获取途径列表顶边（同样 anchor=(0,1)）。 */
+export const ID_LIST_TOP = -111;
+/** 一行的高度（`ItemDetailRow.prefab` 469×70）。 */
+export const ID_ROW_HEIGHT = 70;
+/** 行间距（`VirtualScrollView.spacing`）。 */
+export const ID_ROW_GAP = 17;
+/** 列表最大高度（3 行：244 + 9 余量）。超过就滚动。 */
+export const ID_LIST_MAX_HEIGHT = 253;
+/** 列表底边到按钮顶边的留白。 */
+export const ID_LIST_BUTTON_GAP = 8;
+/** 按钮高度（160×60）。 */
+export const ID_BUTTON_HEIGHT = 60;
+/** 按钮底边到面板底边的留白。 */
+export const ID_BUTTON_BOTTOM_MARGIN = 36;
+/** 「内容」区（`ContentTitle` + `ContentBar`）占的纵向高度：`ContentTitle` 顶 84 → `AccessTitle` 顶 -67。 */
+export const ID_CONTENT_BLOCK_HEIGHT = 151;
+/** `AccessTitle` 的高度（`获取途径` 那行标题）。 */
+export const ID_ACCESS_TITLE_HEIGHT = 44;
+
+/** 一次渲染的纵向布局。 */
+export interface IItemDetailLayout {
+    /** 面板高度（`PanelBg` 的 contentSize.height）。 */
+    readonly panelHeight: number;
+    /** 获取途径列表高度。 */
+    readonly listHeight: number;
+    /** 获取途径列表顶边（`AccessList` 的 y）。 */
+    readonly listTop: number;
+    /** 「获取途径」标题的 y（贴列表顶边）。 */
+    readonly titleY: number;
+    /** `BtnGo` 的 y（`anchor=(0,1)`，所以就是它的顶边）。 */
+    readonly goY: number;
+    /** `BtnGo1` / `BtnCompos` 的 y（比 `goY` 低 2px，沿用 prefab 的原差值）。 */
+    readonly go1Y: number;
+}
+
+/**
+ * 按「获取途径」实际行数 + 「内容」区有没有，算纵向布局 —— **面板跟着内容收放，不留大片空**。
+ *
+ * 背景（2026-11-06，两轮反馈叠出来的）：
+ *   ① 为修「列表盖住前往按钮」，面板从 709 加到 830；但列表容器固定 253（3 行容量），
+ *      只有 1 行时下方空出 191px（改版前是 62px）；
+ *   ② 「内容」区（`ContentTitle` + `ContentBar`）没东西时只是把槽位 hide 了，容器还在，
+ *      于是「道具说明」和「获取途径」之间又空 151px。
+ * 所以这里把三样一起算：列表高度按行数、`获取途径` 块按内容区显隐上移、面板高度倒推。
+ *
+ * 行数取值：1 行 ⇒ 70、2 行 ⇒ 157、≥3 行 ⇒ 253（= prefab 原值，超出就滚动）。
+ * `hasContent = true` 且 3 行时，结果与 prefab 的静态布局（列表 253 / 按钮 -372 / 面板 830）
+ * 逐像素一致 —— 也就是说「内容多」的物品观感不变，只有内容少时才收。
+ */
+export function itemDetailLayoutOf(rowCount: number, hasContent = true): IItemDetailLayout {
+    const rows = Math.max(1, Math.floor(Number(rowCount) || 0));
+    const needed = rows * ID_ROW_HEIGHT + Math.max(0, rows - 1) * ID_ROW_GAP;
+    const listHeight = rows >= 3 ? ID_LIST_MAX_HEIGHT : Math.min(ID_LIST_MAX_HEIGHT, needed);
+    // 内容区藏起来时，「获取途径」整块上移到原 `ContentTitle` 的位置。
+    const listTop = hasContent ? ID_LIST_TOP : ID_LIST_TOP + ID_CONTENT_BLOCK_HEIGHT;
+    const listBottom = listTop - listHeight;
+    const buttonTop = listBottom - ID_LIST_BUTTON_GAP;
+    const panelBottom = buttonTop - ID_BUTTON_HEIGHT - ID_BUTTON_BOTTOM_MARGIN;
+    return {
+        panelHeight: ID_PANEL_TOP - panelBottom,
+        listHeight,
+        listTop,
+        titleY: listTop + ID_ACCESS_TITLE_HEIGHT,
+        goY: buttonTop,
+        go1Y: buttonTop - 2,
+    };
+}

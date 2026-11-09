@@ -218,7 +218,7 @@ function runPierce(falloff: number | undefined) {
             now,
             units: enemies,
             distanceScale: 0.3,
-            structureTarget: () => null,
+            structureTargets: () => {},
             hit: (shot, target) => { hits.push({ id: target.id, damage: Math.round(shot.baseDamage) }); },
             effectiveDefinition: () => ({ bodyRadius: 6, flying: false }) as never,
         });

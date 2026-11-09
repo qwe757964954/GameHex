@@ -11,6 +11,7 @@
  */
 // `import type` 在编译后完全擦除 ⇒ 不影响本文件「无运行时依赖」的约束。
 import type { ZCCombatEventType } from '../model/ZCCombatCatalog';
+import type { ZCHitFxSurface } from '../model/ZCGameTypes';
 
 /** 特效锚点：`caster` = 出手方（既有口径）、`midpoint` = 攻击者与受击目标的连线中点。 */
 export type ZCCombatEffectAnchor = 'caster' | 'midpoint';
@@ -81,6 +82,33 @@ export function zcCombatEffectLayerOf(type: ZCCombatEventType): ZCCombatEffectLa
 }
 
 /**
+ * 按**特效 prefab 路径**覆盖层级（2026-11-07）。
+ *
+ * 为什么需要：上面那条「`area` 一律铺地上」是按「一片火 / 一片雪」的物理语义定的，
+ * 但 `area` 事件也可以是**一只会跑的生物**——鹿神守护 103405 的小鹿冲刺就是
+ * 「小鹿 spine + 上层循环火特效」整段跟在区域上走。它按地面层插队会**压在所有单位之下**，
+ * 冲刺撞进敌群里时小鹿会被敌兵盖住，而它显然不是「脚底的一摊火」。
+ *
+ * 判定用路径而不是技能 id：同一条技能强化那一击可以换行（`empoweredProfile`），
+ * 画出来的是哪张图才决定它该在哪一层 —— 与 `ANCHOR_BY_PREFAB_PATH` 同一套口径。
+ */
+const LAYER_BY_PREFAB_PATH: Readonly<Record<string, ZCCombatEffectLayer>> = {
+    'units/projectiles/鹿神守护/鹿神守护': 'top',
+};
+
+/** 特效路径 → 层级覆盖；未登记 = 走 `zcCombatEffectLayerOf(事件类型)`。 */
+export function zcCombatEffectLayerOfPath(
+    type: ZCCombatEventType,
+    effectPrefabPath: string | null | undefined,
+): ZCCombatEffectLayer {
+    if (effectPrefabPath) {
+        const override = LAYER_BY_PREFAB_PATH[effectPrefabPath];
+        if (override) return override;
+    }
+    return zcCombatEffectLayerOf(type);
+}
+
+/**
  * 层级 → `mapLayer` 里的 `siblingIndex`。
  *
  * 🔴 `mapLayer`（`MapScrollView/view/content`）里**所有动态对象都是平铺的兄弟节点**，
@@ -100,4 +128,35 @@ export function zcCombatEffectSiblingIndex(
     if (layer === 'top') return last;
     // 棋盘之后第一个位置 = 地块之上、所有动态对象之下。
     return Math.max(0, Math.min(boardIndex + 1, last));
+}
+
+/**
+ * 受击特效的**锚点纵向补偿**（视图 px）——按"这一下打在什么上"。
+ *
+ * 2026-11-06 需求：「建筑单位或城墙单位受到攻击时，也要播放对应的职业的受击特效，
+ * 比如城墙被战士职业角色攻击，在**城墙图片的中心坐标点**播放战士受击」。
+ *
+ * 模型只给**格心**（`hexCenter`，与飘字同源），但三样东西在屏幕上并不都画在格心：
+ *
+ * | 打在哪 | 图在哪 | 补偿 |
+ * | :-- | :-- | :-- |
+ * | 单位 | 跟着 `freeX/freeY` 走 | 0（`ZCHitFx.x/y` 已经是单位本体坐标） |
+ * | 城墙 | 铺在本格六条边上，整圈的中心 = 格心 | 0 |
+ * | 建筑 | `ZCGameHex.prefab` 的 `BuildingIcon`，挂在 **(0, +15.651)** | +15.651 |
+ *
+ * 15.651 是那格 prefab 的**美术摆位**（`BuildingLayer` 在 +15.101，`BuildingIcon` 再 +0.55），
+ * 不是代码算出来的 —— 所以 `tests/zcds-structure-hit-fx.test.ts` 有一条守卫**直接读 prefab**
+ * 把这两个数对起来：美术挪了图、这里没跟着改，用例会红。
+ */
+const HIT_FX_SURFACE_LIFT_Y: Readonly<Record<ZCHitFxSurface, number>> = {
+    unit: 0,
+    wall: 0,
+    building: 15.651,
+};
+
+/** 受击特效的纵向补偿（视图 px）；未知语义 / 非法值 = 0（贴格心，绝不把特效甩飞）。 */
+export function zcHitFxSurfaceLiftY(surface: ZCHitFxSurface | null | undefined): number {
+    if (!surface) return 0;
+    const lift = HIT_FX_SURFACE_LIFT_Y[surface];
+    return typeof lift === 'number' && Number.isFinite(lift) ? lift : 0;
 }

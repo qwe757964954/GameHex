@@ -1,4 +1,4 @@
-import { ZCCardType } from '../zcds/model/ZCCombatCatalog';
+import { ZCCardType, ZC_CARD_RARITIES } from '../zcds/model/ZCCombatCatalog';
 import type { ZCCardRarity, ZCDeckBonuses, ZCDeckCard, ZCCardTraits } from '../zcds/model/ZCCombatCatalog';
 import type { ICardLineupCatalog } from './CardArtConfig';
 import { CARD_LINEUP_TEXTS } from './CardLineupTexts';
@@ -23,7 +23,7 @@ export const ZC_CARD_CLASSES: readonly ZCCardClass[] = CARD_CLASS_IDS;
  * 品级：唯一字面量在 `ZCCombatCatalog`（档位与展示名都在那儿，对局层也在用），
  * 这里只 re-export 保持卡牌侧的引用面，不再存第二份数组。
  */
-export { ZC_CARD_RARITIES } from '../zcds/model/ZCCombatCatalog';
+export { ZC_CARD_RARITIES };
 
 /** 无 traits 的卡（金矿）与未知 traits 值的兜底职业。 */
 const FALLBACK_CARD_CLASS: ZCCardClass = 'tank';
@@ -105,6 +105,19 @@ export function tallyDeckClasses(deck: readonly ZCDeckCard[], lineup: ICardLineu
         const count = deck.filter((card) => resolveCardClass(card, lineup) === meta.id).length;
         return { cardClass: meta.id, count, reached: count > 0 };
     });
+}
+
+/**
+ * 一份「完整阵容」：上阵数已达标，且 `ZC_CARD_RARITIES` 里每个品级至少一张。
+ *
+ * 布阵页切页签前用它决定要不要先把当前方案提交给服务器（见 `LineupBoardController.switchPreset`）。
+ * 品级取 `ZCDeckCard.rarity`（`pvpCard.rarity` 归一化后的英文 id），不看美术表 ——
+ * 表缺行不应该让「阵容是否完整」跟着变。
+ */
+export function isCompleteLineup(deck: readonly ZCDeckCard[], slotLimit: number): boolean {
+    if (deck.length < Math.max(1, Math.round(slotLimit))) return false;
+    const present = new Set(deck.map((card) => card.rarity));
+    return ZC_CARD_RARITIES.every((rarity) => present.has(rarity));
 }
 
 /** 图标行一项：某维度取值在阵容里的卡数。职业和阵营共用条目预制体。 */

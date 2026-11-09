@@ -1,6 +1,5 @@
-import { _decorator, Component, Label, Prefab, Sprite, SpriteFrame, UIOpacity, UITransform } from 'cc';
+import { _decorator, Component, Label, Prefab, Sprite, SpriteFrame, UIOpacity } from 'cc';
 import { ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
-import { applyCardHeroArt } from './CardHeroView';
 import { CARD_LINEUP_TEXTS } from './CardLineupTexts';
 import { CardUnitPreview } from './CardUnitPreview';
 
@@ -29,10 +28,6 @@ export class CardLineupSlot extends Component {
     @property({ type: Sprite, tooltip: 'Hero：四职业营地雕像' })
     hero: Sprite = null;
 
-    @property({ type: UITransform, tooltip: 'Hero：立绘展示框' })
-    heroTransform: UITransform = null!;
-
-
     @property({ type: Sprite, tooltip: 'ClassBadge：职业角标' })
     classBadge: Sprite = null;
 
@@ -47,14 +42,23 @@ export class CardLineupSlot extends Component {
 
     private preview: CardUnitPreview | null = null;
 
+    /**
+     * 这个站台当前这张卡的体型系数（`pvpCard.prefabSize`）。
+     *
+     * 模型是「先画立绘、后补模型」两段提交的，`applyPreview` 拿到的是预制体、没有卡数据，
+     * 所以系数得在 `render` 时记下来 —— 否则模型补上来时只能按 1 缩放，跟对局里的体型对不上。
+     */
+    private previewSize = 1;
+
     /** 落位淡入用的透明度组件（首次需要时补挂，Prefab 里不预置 —— 常态不需要它）。 */
     private enterOpacity: UIOpacity | null = null;
 
     /** @param frames null 项清空旧图；level 不传用 fallbackLevel。 */
     render(card: ZCDeckCard, frames: ZCSlotFrames, level?: number, prefab?: Prefab | null): void {
+        this.previewSize = card.prefabSize ?? 1;
         this.disc.spriteFrame = frames.disc;
         this.classBadge.spriteFrame = frames.badge;
-        if (!this.applyPreview(prefab ?? null)) applyCardHeroArt(this.hero, this.heroTransform, frames.hero);
+        if (!this.applyPreview(prefab ?? null)) this.hero.spriteFrame = frames.hero;
         //  每次显式写 255：渲染幂等，不依赖上一次的透明度。
         this.opacityOf().opacity = 255;
         this.levelLabel.string = `${Math.max(1, Math.round(level ?? this.fallbackLevel))}${CARD_LINEUP_TEXTS.levelSuffix}`;
@@ -73,7 +77,7 @@ export class CardLineupSlot extends Component {
         // 模型正在展示时 `CardUnitPreview.show` 会把 Hero Sprite 置为 disabled；
         // `clear()` 又把它 enabled 回来。用这个状态判，比 `this.preview != null` 准
         // （`clear()` 之后 preview 对象还在，但已经没在展示了）。
-        if (this.hero.enabled) applyCardHeroArt(this.hero, this.heroTransform, frames.hero);
+        if (this.hero.enabled) this.hero.spriteFrame = frames.hero;
     }
 
     /**
@@ -87,7 +91,8 @@ export class CardLineupSlot extends Component {
      * 调用方据此保留静态立绘；已经在画立绘的站台不需要再补图。
      */
     applyPreview(prefab: Prefab | null): boolean {
-        if (prefab && (this.preview ??= new CardUnitPreview(this.hero, this.previewHeight)).show(prefab)) {
+        if (prefab
+            && (this.preview ??= new CardUnitPreview(this.hero, this.previewHeight)).show(prefab, this.previewSize)) {
             return true;
         }
         this.preview?.clear();

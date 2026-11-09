@@ -11,6 +11,7 @@ import { compileZCMatchRuntime } from '../assets/script/app/zcds/model/ZCMatchRu
 import type { ZCGroundZoneState, ZCSnapshot, ZCUnitState } from '../assets/script/app/zcds/model/ZCGameTypes';
 import { ZCAttackResolutionSystem } from '../assets/script/app/zcds/model/systems/ZCAttackResolutionSystem';
 import { ZCGroundZoneSystem } from '../assets/script/app/zcds/model/systems/ZCGroundZoneSystem';
+import { zcCombatEffectGrowFactor } from '../assets/script/app/zcds/view/ZCCombatEffectScale';
 import { assetPath } from './helpers/asset-paths';
 
 /**
@@ -125,14 +126,18 @@ test('椰蛋战士：12 行技能计划（4 条链 × 3 档），三档数值逐
     assert.deepEqual(sweep.map((p) => p.secondaryFanDeg), [120, 120, 120]);
     for (const tier of byChain(100502)) assert.equal(tier.behaviorKey, 'skill_params');
 
-    // 100504 暴风：3 道、夹角 30°、持续 3/4/4s、最多 3/4/5 人、80/100/120%
+    // 100504 暴风（2026-11-07 改口径）：3 道、**总夹角 50°**、**三档统一 3 秒**、
+    // **100px/s**、最多 3/4/5 人、80/100/120%。
     const storm = byChain(100504).map((row) => JSON.parse(String(row.skillParamJson)) as Record<string, number>);
     assert.deepEqual(storm.map((p) => p.zoneCount), [3, 3, 3]);
-    assert.deepEqual(storm.map((p) => p.zoneSpreadDeg), [30, 30, 30]);
-    assert.deepEqual(storm.map((p) => p.zoneDuration), [3, 4, 4]);
+    assert.deepEqual(storm.map((p) => p.zoneSpreadDeg), [50, 50, 50], '三条旋风的总夹角');
+    assert.deepEqual(storm.map((p) => p.zoneDuration), [3, 3, 3], '三档都跑 3 秒');
     assert.deepEqual(storm.map((p) => p.zoneMaxHits), [3, 4, 5]);
     assert.deepEqual(storm.map((p) => p.damageRate), [0.8, 1.0, 1.2]);
-    assert.deepEqual(storm.map((p) => p.zoneMoveSpeed), [70, 70, 70]);
+    assert.deepEqual(storm.map((p) => p.zoneMoveSpeed), [100, 100, 100]);
+    //  「由小变大」只有走「整段持有视觉」才成立：逐波残影每条只活 0.15s，长不出来。
+    assert.deepEqual(storm.map((p) => p.zoneHoldVisual), [1, 1, 1]);
+    assert.deepEqual(storm.map((p) => p.zoneGrowSeconds), [0.3, 0.3, 0.3]);
     for (const tier of byChain(100504)) assert.equal(tier.behaviorKey, 'on_cast_end_spawn_zone');
 });
 
@@ -172,10 +177,13 @@ test('25 级：暴风 / 横扫 / 吸血三套参数都并进同一个运行时�
     } as never);
     const skill = runtime.skillRuntime[ZCOwner.Player].get('68005:30707');
     assert.ok(skill, '68005:30707 必须建出运行时（否则两条主动都读不到参数）');
-    // 暴风（L3）
+    // 暴风（L3，2026-11-07 改口径：三档统一 3 秒、100px/s、夹角 50°）
     assert.equal(skill!.parameters.zoneCount, 3);
     assert.equal(skill!.parameters.zoneMaxHits, 5);
-    assert.equal(skill!.parameters.zoneDuration, 4);
+    assert.equal(skill!.parameters.zoneDuration, 3);
+    assert.equal(skill!.parameters.zoneMoveSpeed, 100);
+    assert.equal(skill!.parameters.zoneSpreadDeg, 50);
+    assert.equal(skill!.parameters.zoneGrowSeconds, 0.3);
     assert.equal(skill!.parameters.damageRate, 1.2);
     // 横扫（L3）
     assert.equal(skill!.parameters.secondaryCooldown, 8);
@@ -570,4 +578,195 @@ test('暴风：源单位已阵亡时区域不再吸血（人没了还在飘的�
 
     ZCGroundZoneSystem.tick(state as never, 0.05, context as never);
     assert.deepEqual(healed, [], '源单位已阵亡，不该回血');
+});
+
+// ── 六、暴风 2026-11-07 改口径：从自身坐标出发 / 攻击朝向为中轴 / 由小变大 ──────────
+//
+// 需求原话：
+//   1. 三个飓风生成位置是从椰蛋战士的坐标
+//   2. 生成后由小变大到当前的大小，以椰蛋战士的攻击朝向为法线，3 个飓风夹角为 50°，
+//      飓风以 100px 的速度移动 3s，每个飓风根据技能 1/2/3 等级最多分别对 3/4/5 个敌人造成伤害，
+//      伤害次数达到上限后对应的飓风提前消失
+
+/** 让 `sendAttack` 走进「移动区域」分支的最小上下文：强化那一击 = 暴风（30831, mode area）。 */
+function stormHarness(options: {
+    facingRadians: number;
+    targetX: number;
+    targetY: number;
+    params: Record<string, number>;
+}) {
+    const caster = makeUnit(1, 10, 20, ZCOwner.Player);
+    caster.unitId = '68005';
+    caster.cardId = '68005';
+    caster.facingRadians = options.facingRadians;
+    //  普攻行是 `every_n_attacks` / every 5 ⇒ 第 5 次才是强化那一击。
+    caster.completedAttackCount = 4;
+
+    const attackProfile = {
+        skillId: 30707, name: '椰蛋战士普攻', mode: 'melee' as const,
+        trigger: 'every_n_attacks' as const, cooldown: 5, empoweredEvery: 5, empoweredSkillId: 30831,
+        effectPrefabPath: 'units/projectiles/椰蛋战士_普攻/椰蛋战士_普攻',
+    };
+    const definition = {
+        unitId: '68005', name: '椰蛋战士', maxHp: 600, attack: 30, moveSpeed: 40,
+        attackRange: 70, attackInterval: 1.8, attackDuration: 0.5, attackHitTime: 0.2,
+        bodyRadius: 26, spawnSeconds: 0, flying: false, canAttackAir: false, hero: true,
+        prefabPath: 'units/units/椰蛋战士', prefabSize: 1.2,
+        attackProfile,
+        empoweredProfile: {
+            skillId: 30831, name: '椰蛋战士·暴风', mode: 'area' as const, areaRadius: 30,
+            damageRate: 0.8, durationSeconds: 3, waves: 20,
+            effectPrefabPath: 'units/projectiles/椰蛋战士_暴风/椰蛋战士_暴风',
+        },
+    };
+    const bonuses = {
+        activeBonds: [], unitHpMultiplier: 1, unitAttackMultiplier: 1, moveSpeedMultiplier: 1,
+        towerAttackMultiplier: 1, incomeBonus: 0, spawnIntervalMultiplier: 1,
+    };
+    const context = {
+        rules: { combatDistanceScale: 0.3, combatDamageMultiplier: 1, unitAttackPerTier: 0.16, counterDamageMultiplier: 1.3 },
+        counters: [],
+        cards: { [ZCOwner.Player]: new Map(), [ZCOwner.Enemy]: new Map() },
+        deckBonuses: { [ZCOwner.Player]: bonuses, [ZCOwner.Enemy]: bonuses },
+        statPatches: { [ZCOwner.Player]: new Map(), [ZCOwner.Enemy]: new Map() },
+        skillRuntime: {
+            [ZCOwner.Player]: new Map([['68005:30707', { parameters: options.params }]]),
+            [ZCOwner.Enemy]: new Map(),
+        },
+        unitById: new Map([[caster.id, caster]]),
+        statusSystem: { statModsOf: () => ({}), controlOf: () => null },
+        geometry: { hexIdAt: () => 0 },
+        random: () => 1,
+        effectiveDefinition: () => definition,
+        unitPosition: (unit: ZCUnitState) => ({ x: unit.freeX, y: unit.freeY }),
+        currentTarget: () => ({
+            kind: 'unit', id: 99, x: options.targetX, y: options.targetY, bodyRadius: 6, cardId: '68001',
+        }),
+        evaluateLegacySkill: () => ({ buffs: [], hitCount: 0, hasDamageFormula: false }),
+        applyLegacySelfBuffs: () => [],
+        damageUnit: () => null,
+        tryExecuteUnit: () => undefined,
+        applyHitStatus: () => undefined,
+        applyLegacyBuffs: () => undefined,
+        damageWall: () => undefined,
+        damageBuilding: () => undefined,
+        unitsInRadius: () => [],
+        healUnit: () => undefined,
+        applyKnockback: () => undefined,
+    };
+    const state = {
+        version: 4, elapsedSeconds: 10, nextCombatEventId: 1,
+        units: [caster], projectiles: [], groundZones: [], combatEvents: [], hexes: {},
+    } as unknown as ZCSnapshot;
+    return { caster, state, context };
+}
+
+const STORM_L1 = {
+    zoneCount: 3, zoneSpreadDeg: 50, zoneMoveSpeed: 100, zoneDuration: 3,
+    zoneWaveInterval: 0.15, zoneMaxHits: 3, damageRate: 0.8,
+    zoneHoldVisual: 1, zoneGrowSeconds: 0.3,
+};
+
+test('暴风：三道旋风从椰蛋战士坐标生成，以攻击朝向为中轴、总夹角 50°', () => {
+    //  椰蛋战士在 (10, 20)，**朝上**（facingRadians = π/2）；目标在正右方 (110, 20)。
+    //  如果照着「指向目标」开扇，三道应该是 -25° / 0° / +25°；
+    //  按需求以**攻击朝向**为中轴，就该是 65° / 90° / 115°。
+    const harness = stormHarness({ facingRadians: Math.PI / 2, targetX: 110, targetY: 20, params: STORM_L1 });
+    ZCAttackResolutionSystem.sendAttack(
+        harness.state, harness.caster, harness.context as never,
+    );
+    const zones = harness.state.groundZones;
+    assert.equal(zones.length, 3, '3 道旋风');
+
+    //  ① 生成位置 = 椰蛋战士坐标（三道同一出发点，不散在目标点周围）
+    for (const zone of zones) {
+        assert.equal(zone.x, 10, 'x 必须等于施法者 x');
+        assert.equal(zone.y, 20, 'y 必须等于施法者 y');
+    }
+
+    //  ② 中轴 = 攻击朝向，总夹角 50°（±25°）
+    const degrees = zones
+        .map((zone) => Math.round(Math.atan2(zone.moveVelocityY!, zone.moveVelocityX!) * 180 / Math.PI))
+        .map((value) => (value + 360) % 360)
+        .sort((a, b) => a - b);
+    assert.deepEqual(degrees, [65, 90, 115], `期望 90°±25°，实际 ${degrees.join('/')}`);
+
+    //  ③ 速度 100px/s（表值 × combatDistanceScale 0.3 = 30 世界 px/s）
+    for (const zone of zones) {
+        const speed = Math.hypot(zone.moveVelocityX!, zone.moveVelocityY!);
+        assert.ok(Math.abs(speed - 30) < 1e-9, `速度应为 100 × 0.3 = 30，实际 ${speed}`);
+    }
+
+    //  ④ 持续 3 秒、每档名额 3/4/5、入场生长
+    for (const zone of zones) {
+        assert.equal(zone.remainingSeconds, 3, '三档统一跑 3 秒');
+        assert.equal(zone.maxHits, 3, 'L1 最多打 3 个');
+        assert.equal(zone.hitUnitIds?.length, 0);
+        assert.equal(zone.holdVisual, true, '整段一条长效视觉（否则逐波闪烁，长不大）');
+        assert.equal(zone.growSeconds, 0.3, '由小变大');
+    }
+});
+
+test('暴风：等级决定每个飓风的名额上限（3 / 4 / 5）', () => {
+    for (const [level, maxHits] of [[1, 3], [2, 4], [3, 5]] as const) {
+        const harness = stormHarness({
+            facingRadians: 0, targetX: 110, targetY: 20,
+            params: { ...STORM_L1, zoneMaxHits: maxHits, damageRate: [0.8, 1, 1.2][level - 1] },
+        });
+        ZCAttackResolutionSystem.sendAttack(harness.state, harness.caster, harness.context as never);
+        for (const zone of harness.state.groundZones) {
+            assert.equal(zone.maxHits, maxHits, `L${level} 每个飓风最多 ${maxHits} 个`);
+        }
+        assert.equal(harness.state.groundZones.length, 3);
+    }
+});
+
+test('暴风：一个飓风打满名额只消它自己，另外两个照常飞', () => {
+    const enemy = makeUnit(2, 0, 0);
+    const at = (x: number, maxHits: number, hitUnitIds: number[]): ZCGroundZoneState => makeZone({
+        x, y: 0, radius: 9, maxHits, hitUnitIds,
+        remainingSeconds: 5, wavesLeft: 40, nextWaveAt: 0, waveInterval: 0.1,
+    });
+    const saturated = at(0, 1, []);
+    const other = at(400, 1, []);
+    const third = at(800, 1, []);
+    const state = {
+        elapsedSeconds: 0, groundZones: [saturated, other, third],
+        combatEvents: [], nextCombatEventId: 1, statusEffects: undefined,
+    } as never;
+    const view = state as unknown as { groundZones: ZCGroundZoneState[]; elapsedSeconds: number };
+    ZCGroundZoneSystem.tick(state as never, 0.05, zoneContext([enemy]) as never);
+
+    assert.equal(saturated.hitUnitIds!.length, 1, '只打到 1 个（就是它名额上限）');
+    assert.deepEqual([other.hitUnitIds!.length, third.hitUnitIds!.length], [0, 0],
+        '离敌人远的两个不该被记名额');
+    assert.equal(view.groundZones.length, 2, '打满的那一道提前消失，另外两道还在');
+    assert.equal(view.groundZones.includes(saturated), false);
+});
+
+test('暴风：入场生长系数 0 → 1，之后恒 1（纯函数，与 prefab 尺寸解耦）', () => {
+    assert.equal(zcCombatEffectGrowFactor(0.3, 0), 0, '刚生成时是 0（由"无"长出来）');
+    assert.equal(zcCombatEffectGrowFactor(0.3, 0.15), 0.75, '过半时 ease-out 已经到 75%');
+    assert.equal(zcCombatEffectGrowFactor(0.3, 0.3), 1, '到点就是最终大小');
+    assert.equal(zcCombatEffectGrowFactor(0.3, 9), 1, '之后恒 1');
+    assert.equal(zcCombatEffectGrowFactor(undefined, 0.1), 1, '没配时长 ⇒ 不生长（既有特效逐字不变）');
+    assert.equal(zcCombatEffectGrowFactor(0, 0.1), 1);
+});
+
+test('暴风：生长时长经区域落到那条长效表现事件上', () => {
+    const zone = makeZone({
+        x: 0, y: 0, radius: 9, moveVelocityX: 30, moveVelocityY: 0,
+        hitUnitIds: [], maxHits: 3, remainingSeconds: 3, wavesLeft: 20,
+        effectPrefabPath: 'units/projectiles/椰蛋战士_暴风/椰蛋战士_暴风',
+        holdVisual: true, growSeconds: 0.3,
+    });
+    const state = {
+        elapsedSeconds: 0, groundZones: [zone], combatEvents: [],
+        nextCombatEventId: 1, statusEffects: undefined,
+    } as never;
+    ZCGroundZoneSystem.tick(state as never, 0.05, zoneContext([]) as never);
+    const visuals = (state as unknown as { combatEvents: Array<Record<string, unknown>> }).combatEvents;
+    assert.equal(visuals.length, 1, '整段持有 ⇒ 只有一条视觉事件（不是逐波 20 条）');
+    assert.equal(visuals[0].growSeconds, 0.3);
+    assert.equal(visuals[0].effectPrefabPath, 'units/projectiles/椰蛋战士_暴风/椰蛋战士_暴风');
 });

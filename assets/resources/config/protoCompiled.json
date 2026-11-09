@@ -10142,6 +10142,34 @@
                         }
                       }
                     },
+                    "CmdPvpAttrInfo": {
+                      "fields": {
+                        "attrId": {
+                          "rule": "required",
+                          "type": "string",
+                          "id": 1
+                        },
+                        "value": {
+                          "rule": "required",
+                          "type": "string",
+                          "id": 2
+                        }
+                      }
+                    },
+                    "CmdPvpHeroAttrInfo": {
+                      "fields": {
+                        "heroId": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 1
+                        },
+                        "attrs": {
+                          "rule": "repeated",
+                          "type": "CmdPvpAttrInfo",
+                          "id": 2
+                        }
+                      }
+                    },
                     "CmdPvpInfo": {
                       "fields": {
                         "grade": {
@@ -10298,6 +10326,11 @@
                           "rule": "repeated",
                           "type": "CmdPvpBuffInfo",
                           "id": 8
+                        },
+                        "attrs": {
+                          "rule": "repeated",
+                          "type": "CmdPvpHeroAttrInfo",
+                          "id": 9
                         }
                       }
                     },
@@ -11291,6 +11324,7 @@
                         "CmdFirstRechargeRewardRspMsg": 622072529,
                         "CmdFormationInfoRspMsg": 1211220072,
                         "CmdFormationOpRspMsg": 1506971931,
+                        "CmdFormationSelectRspMsg": 829295498,
                         "CmdFriendsApplyRspMsg": 2057674506,
                         "CmdFriendsAddRspMsg": 552573225,
                         "CmdFriendsRefuseRspMsg": 1262322162,

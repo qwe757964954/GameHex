@@ -70,6 +70,10 @@ export class ZCSkillRuntimeRegistry {
         //                      选目标与伤害结算分别落在 trigger system 与 `ZCAttackResolutionSystem`。
         this.register('self_cast', 'none');
         this.register('random_strike', 'none');
+        //  2026-11-06 魔术师「移形换影」（103404）：闪现 + 两端结算 + 可选分身爆炸。
+        //  同样只带数据 —— 推进在 `ZCSkillTriggerSystem.applyBlinkStrike`，位移由组合根
+        //  转给 `ZCMovementSystem.placeAt`，伤害复用 `ZCAttackResolutionSystem.strikeTargets`。
+        this.register('blink_strike', 'none');
     }
 
     register(key: string, stateMode: ZCSkillStateMode): this {

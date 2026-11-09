@@ -21,8 +21,10 @@ import type { ZCSkillRuntimeDefinition } from '../ZCSkillRuntime';
 import type { ZCSnapshot, ZCUnitState } from '../ZCGameTypes';
 import { type ZCStatusStatMods, type ZCStatusSystem } from '../ZCStatusEffect';
 import type { IZCStrikeOptions } from './ZCAttackResolutionSystem';
+import { ZCCombatEventType } from '../ZCCombatCatalog';
+import { ZC_BLINK_CAST_EFFECT_PREFAB_PATH, ZC_BLINK_CAST_EFFECT_SECONDS } from '../ZCBlinkCastFx';
 import { zcMissileFxOf } from '../ZCCombatEffectFlight';
-import { missileLogChanging, missileLogOnce } from '../../ZCMissileSkillDiagnostics';
+import { missileLog, missileLogChanging, missileLogOnce } from '../../ZCMissileSkillDiagnostics';
 
 export interface IZCSkillTriggerContext {
     readonly statusSystem: ZCStatusSystem;
@@ -67,6 +69,24 @@ export interface IZCSkillTriggerContext {
      * **0 ⇒ 这一帧没打到人，调用方不要消费 CD**（与副轨同口径）。
      */
     strike?(unit: ZCUnitState, options: IZCStrikeOptions): number;
+    /**
+     * 顺手把单位挪到指定**世界坐标**（2026-11-06 魔术师「移形换影」103404）。
+     *
+     * 由组合根转给 `ZCMovementSystem.placeAt`：那一份实现会同时更新
+     * `freeX/freeY`、`sourceHexId` 与格子占用，自己在这里改坐标会让「站在哪一格」
+     * 和「显示在哪」两套口径分叉（后续寻路、地形伤害、区域命中全都会跟着歪）。
+     *
+     * 缺省 ⇒ `blink_strike` 整段不执行（闪现是它的**全部**，动不了就没有意义）。
+     */
+    blinkTo?(unit: ZCUnitState, x: number, y: number): void;
+    /**
+     * 取单位的**世界坐标**。
+     *
+     * 与 `blinkTo` 成对：`strikeTargets` 用的是 `context.unitPosition`，这里挑「最近的敌人」
+     * 必须用同一份坐标，否则会出现「挑中了、打不到」。
+     * 缺省 ⇒ 退回 `freeX/freeY`（快照里一定有，只是可能落后于本帧的移动推进）。
+     */
+    unitPosition?(unit: ZCUnitState): { readonly x: number; readonly y: number };
 }
 
 /** 友军光环的刷新窗口（秒）：每步都重挂一次，离开半径后最多这么久失效。 */
@@ -80,6 +100,51 @@ const TEAM_AURA_SECONDS = 0.6;
  * 「攻 / 守 / 矩阵」三条独立被动只能靠下标分槽共存。
  */
 const TEAM_AURA_SLOTS = 3;
+
+/**
+ * 多点打击**打空之后**的重试间隔（秒）。
+ *
+ * 打空不推进 CD（跑位途中别把机会转掉），原来的写法是「下一帧再试」。
+ * 问题出在场上有**多条**镭射飞龙时：它们的 `strikeReadyAt` 会同时到点、同时打空、
+ * 同时进入每帧重试 —— 目标一进入射程，所有龙在**同一帧**集体开火。
+ * 单次施法恒定 3 颗 × 2 条龙 = 屏幕上一波 6 个导弹（2026-11-05 用户反馈）。
+ *
+ * 现在退避一小会儿，并按 `unit.id` 再加一份错峰（{@link STRIKE_RETRY_JITTER}），
+ * 两条龙的重试时刻就永久错开，齐射被拆成先后两波。
+ */
+const STRIKE_RETRY_SECONDS = 0.2;
+
+/**
+ * 每个 `unit.id` 槽位多加的退避（秒）：4 个槽 ⇒ 0.2 ~ 1.1s 的错峰。
+ *
+ * 0.2s 量级的错峰在 20Hz 模拟下只差 3~4 帧，两条龙的导弹仍然糊成一波（实测 0.15s）；
+ * 要"一眼看出是两波"就得拉到 0.3s 以上 —— 代价是打空的那条龙晚至多 0.9s 才补发，
+ * 对 12s CD 的技能无感。
+ */
+const STRIKE_RETRY_JITTER = 0.3;
+
+/** 错峰槽数（`unit.id % 它`）。 */
+const STRIKE_RETRY_SLOTS = 4;
+
+/**
+ * 移形换影的分身爆炸最多波及几个敌人（`blink_strike`）。
+ *
+ * 设计案只写了「范围伤害」，没给上限；取 6 与多点打击同量级 ——
+ * 既够覆盖一片，又不会让一个 12 秒 CD 的分身一发清场。
+ */
+const BLINK_CLONE_MAX_TARGETS = 6;
+
+/**
+ * 首次施法的**相位错开**步长（秒）：第 N 条龙的首轮冷却 = `cooldown + N × 它`。
+ *
+ * 两条龙如果同一帧出生，`strikeReadyAt` 会一模一样 ⇒ 第一次就齐射。
+ * 错开之后哪怕同帧出生，也会先后 0.3s 开火。只影响**第一波**的时刻，
+ * 之后各走各的 `now + cooldown`，平均 DPS 不变。
+ */
+const STRIKE_PHASE_STRIDE = 0.3;
+
+/** 相位错开最多用到第几个槽（`unit.id % 它`）：8 × 0.3s ⇒ 最多推迟 2.1s。 */
+const STRIKE_PHASE_SLOTS = 8;
 
 /**
  * 友军光环状态的 id：`__aura:<key=value,...>__`。
@@ -115,6 +180,7 @@ export class ZCSkillTriggerSystem {
             if (this.applyTeamAura(state, unit, runtime, context)) statusChanged = true;
             if (this.applySelfCast(state, unit, params, now, context)) statusChanged = true;
             this.applyRandomStrike(state, unit, params, now, context);
+            this.applyBlinkStrike(state, unit, params, now, context, runtime);
             this.expireShield(unit, now);
             this.advanceBurst(state, unit, now, context);
             this.advanceSecondary(unit, params, now, context);
@@ -481,6 +547,9 @@ export class ZCSkillTriggerSystem {
                 missilePrefabPath: missileFx?.missilePrefabPath,
                 impactPrefabPath: missileFx?.impactPrefabPath,
                 arcOffset: missileFx?.arcOffset ?? 0,
+                missileSpeed: missileFx?.speed,
+                //  恒定发数（策划口径 3 颗）：在这里只报一个上限，真正钳的是 `strikeTargets`。
+                missileCount: missileFx?.count,
             };
             const hits = context.strike!(unit, options);
             if (missileFx) {
@@ -512,9 +581,31 @@ export class ZCSkillTriggerSystem {
 
         if (cooldown > 0) {
             const readyAt = unit.strikeReadyAt;
-            if (readyAt === undefined) { unit.strikeReadyAt = now + cooldown; return; }
+            if (readyAt === undefined) {
+                //  首轮相位：导弹按 `unit.id` 错峰（见 `STRIKE_PHASE_STRIDE`），
+                //  其余 `random_strike` 保持「到点就打、不加相位」的旧口径。
+                const phase = missileFx
+                    ? (unit.id % STRIKE_PHASE_SLOTS) * STRIKE_PHASE_STRIDE
+                    : 0;
+                unit.strikeReadyAt = now + cooldown + phase;
+                //  诊断⑦：冷却挂上的那一刻。看到这行就说明「技能确实在跑」，只是还没到点；
+                //  之后每 `cooldown` 秒会尝试开一次（成败见上面两条）。
+                if (missileFx) {
+                    missileLog('模型', `#${unit.id} 追踪导弹冷却挂上：${now.toFixed(1)}s → `
+                        + `${(now + cooldown + phase).toFixed(1)}s 首次可开火`
+                        + `（cooldown=${cooldown}s + 错峰 ${phase.toFixed(2)}s）`);
+                }
+                return;
+            }
             if (now < readyAt) return;
-            if (!fire()) return;
+            //  打空后的退避：见 `STRIKE_RETRY_SECONDS`。没打空过（`strikeRetryAt` 缺省）⇒ 不停留。
+            if (now < (unit.strikeRetryAt ?? 0)) return;
+            if (!fire()) {
+                unit.strikeRetryAt = now + STRIKE_RETRY_SECONDS
+                    + (missileFx ? (unit.id % STRIKE_RETRY_SLOTS) * STRIKE_RETRY_JITTER : 0);
+                return;
+            }
+            delete unit.strikeRetryAt;
             unit.strikeReadyAt = now + cooldown;
             if (windowSeconds > 0) {
                 unit.strikeUntil = now + windowSeconds;
@@ -534,6 +625,157 @@ export class ZCSkillTriggerSystem {
             unit.strikeUntil = now + windowSeconds;
             unit.strikeNextAt = now + interval;
         }
+    }
+
+    // ────────────────────────────────────────── ⑧ 移形换影（2026-11-06）
+
+    /**
+     * ⑧ 移形换影（`behaviorKey = 'blink_strike'`，魔术师 103404）。
+     *
+     * 设计口径（技能设计案 103404 / 主动-冷却 12s）：
+     *   L1 向最近敌人闪现，造成 120% 伤害；
+     *   L2 往返各 100%，并在原位留下一个爆炸的分身，造成 60% 范围伤害；
+     *   L3 往返各 140%，分身持续 2 秒后爆炸，造成 100% 范围伤害。
+     *
+     * 参数（全部来自 `pvpSkillPlan.skillParamJson`，因此可逐档不同；半径一律**表值 px**，
+     * 内部乘 `distanceScale`，与攻击距离 / 区域半径同一套数）：
+     *   `blinkCooldown`        冷却秒；≤0 ⇒ 整段不执行
+     *   `blinkSearchRadius`    找最近敌人的搜索半径
+     *   `blinkDamageRate`      每一次落点结算的倍率（往返就是打两次）
+     *   `blinkRoundTrip`       1 = 闪回原位再打一次
+     *   `blinkStopDistance`    落点与目标之间留的空隙（缺省 30；不要设 0，会叠到敌人身上）
+     *   `blinkHitRadius`       落点判定半径（缺省 40）
+     *   `blinkCloneRadius` / `blinkCloneDamageRate` / `blinkCloneSeconds`
+     *                          分身爆炸的半径 / 倍率 / 延迟。倍率 0 ⇒ 不留分身。
+     *
+     * 三条刻意选择：
+     *   · **没目标不消费 CD**（与副轨 / 多点打击同口径）：跑位途中别把 12 秒的机会转掉；
+     *   · **分身记的是施法时的原位坐标**（`blinkCloneX/Y`），不跟本体漂移；
+     *   · **分身延迟 0 秒也走同一条定时器**（下一帧炸），不另开「立即炸」分支 ——
+     *     两套口径迟早会漂；
+     *   · **闪走的同一刻推一条纯表现事件**（2026-11-07 需求「在本体位置播放瞬间移动特效」）。
+     *     只推一条、只推在**出发地**：往返（II 级起）是同一个动作的「去」和「回」，
+     *     两头各闪一次会看着像连放两下技能；出发地那一下才是「人没了」的那一瞬。
+     *     事件类型取 `melee` 而不是 `area`：`area` 会按「铺在地上的一片火」插到棋盘层，
+     *     而这一下画在**魔术师身上**，被自己的模型盖住就没意义了（层级口径见
+     *     `ZCCombatEffectPlacement.zcCombatEffectLayerOf`）。
+     */
+    private static applyBlinkStrike(
+        state: ZCSnapshot,
+        unit: ZCUnitState,
+        params: Readonly<Record<string, number>> | undefined,
+        now: number,
+        context: IZCSkillTriggerContext,
+        runtime?: ZCSkillRuntimeDefinition,
+    ): void {
+        const cooldown = Math.max(0, params?.blinkCooldown ?? 0);
+        if (!(cooldown > 0)) return;
+        const scale = Math.max(1e-6, context.distanceScale ?? 1);
+        const posOf = (target: ZCUnitState): { x: number; y: number } => (context.unitPosition
+            ? { ...context.unitPosition(target) }
+            : { x: target.freeX, y: target.freeY });
+
+        //  ① 先结算到点的分身，再判本次 CD —— 反过来的话「闪回 + 分身同帧」会把爆炸推迟一轮。
+        const cloneAt = unit.blinkCloneAt;
+        if (cloneAt != null && now >= cloneAt) {
+            const radius = Math.max(0, params?.blinkCloneRadius ?? 0) * scale;
+            const rate = Math.max(0, params?.blinkCloneDamageRate ?? 0);
+            if (radius > 0 && rate > 0 && context.strike) {
+                context.strike(unit, {
+                    //  范围爆炸最多波及几个：设计案只写「范围伤害」，没给上限。
+                    //  取 6 与「多点打击」同量级：既够覆盖一片，又不会一发清场。
+                    count: BLINK_CLONE_MAX_TARGETS,
+                    radius,
+                    damageRate: rate,
+                    nearest: true,
+                    origin: {
+                        x: unit.blinkCloneX ?? unit.freeX,
+                        y: unit.blinkCloneY ?? unit.freeY,
+                    },
+                });
+            }
+            delete unit.blinkCloneAt;
+            delete unit.blinkCloneX;
+            delete unit.blinkCloneY;
+        }
+
+        if (!context.blinkTo || !context.strike) return;
+        const readyAt = unit.blinkReadyAt;
+        //  首次：从「当前 + CD」起算，开局不立刻闪（与副轨 / 自身施法同口径）。
+        if (readyAt === undefined) { unit.blinkReadyAt = now + cooldown; return; }
+        if (now < readyAt) return;
+
+        const searchRadius = Math.max(0, params?.blinkSearchRadius ?? 0) * scale;
+        if (!(searchRadius > 0)) return;
+        const self = posOf(unit);
+        let victim: ZCUnitState | undefined;
+        let best = Number.POSITIVE_INFINITY;
+        for (const candidate of state.units) {
+            if (candidate.owner === unit.owner || candidate.battleState === 'dead' || candidate.hp <= 0) continue;
+            const pos = posOf(candidate);
+            const gap = Math.hypot(pos.x - self.x, pos.y - self.y);
+            if (gap > searchRadius || gap >= best) continue;
+            best = gap;
+            victim = candidate;
+        }
+        //  没有目标 ⇒ 不消费 CD。闪现的全部意义就是「贴上去」，空闪只会浪费 12 秒。
+        if (!victim) return;
+
+        const target = posOf(victim);
+        const dx = target.x - self.x;
+        const dy = target.y - self.y;
+        const length = Math.hypot(dx, dy);
+        const stop = Math.max(0, params?.blinkStopDistance ?? 30) * scale;
+        const landX = length > stop && length > 1e-9 ? target.x - dx / length * stop : target.x;
+        const landY = length > stop && length > 1e-9 ? target.y - dy / length * stop : target.y;
+        const hitRadius = Math.max(1, Math.max(0, params?.blinkHitRadius ?? 40) * scale);
+        const damageRate = Math.max(0, params?.blinkDamageRate ?? 0);
+
+        //  出发地闪一下（需求 2026-11-07）。放在 `blinkTo` **之前**：这条事件用的是 `self`，
+        //  而 `self` 是闪走之前的坐标 —— 先位移再取，位置就成落点了。
+        state.combatEvents.push({
+            id: state.nextCombatEventId++,
+            type: ZCCombatEventType.Melee,
+            owner: unit.owner,
+            sourceUnitId: unit.id,
+            targetUnitId: null,
+            skillId: runtime?.skillId ?? 0,
+            skillName: runtime?.behaviorKey ?? 'blink_strike',
+            effectKey: null,
+            projectileKey: null,
+            effectPrefabPath: ZC_BLINK_CAST_EFFECT_PREFAB_PATH,
+            fromX: self.x,
+            fromY: self.y,
+            toX: self.x,
+            toY: self.y,
+            //  半径 / 伤害一律 0：这是一条**纯表现**事件，谁都不结算。
+            //  写成落点判定半径会让「闪走的地方」和「打到谁」在日志里混成一条。
+            radius: 0,
+            damage: 0,
+            empowered: false,
+            startedAt: now,
+            durationSeconds: ZC_BLINK_CAST_EFFECT_SECONDS,
+        });
+        context.blinkTo(unit, landX, landY);
+        if (damageRate > 0) {
+            context.strike(unit, { count: 1, radius: hitRadius, damageRate, nearest: true });
+        }
+        //  ② 往返（II 级起）：闪回原位再打同样一发。回位用**施法时**的坐标，
+        //     不是「当前位置」—— 否则闪过去之后回位点会跟着变。
+        if ((params?.blinkRoundTrip ?? 0) > 0) {
+            context.blinkTo(unit, self.x, self.y);
+            if (damageRate > 0) {
+                context.strike(unit, { count: 1, radius: hitRadius, damageRate, nearest: true });
+            }
+        }
+        //  ③ 分身：留在**原位**，到时爆炸。
+        const cloneRate = Math.max(0, params?.blinkCloneDamageRate ?? 0);
+        if (cloneRate > 0) {
+            unit.blinkCloneX = self.x;
+            unit.blinkCloneY = self.y;
+            unit.blinkCloneAt = now + Math.max(0, params?.blinkCloneSeconds ?? 0);
+        }
+        unit.blinkReadyAt = now + cooldown;
     }
 }
 

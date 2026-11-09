@@ -146,9 +146,9 @@ export class ZCDamageResolutionSystem {
         context.statusSystem.apply(String(sender.id), id, { at: state.elapsedSeconds, durationSeconds: seconds });
     }
 
-    private static recordDamage(attacker: ZCOwner, defender: ZCOwner, amount: number,
+    private static recordDamage(attacker: ZCOwner | 'neutral', defender: ZCOwner, amount: number,
         context: IZCDamageResolutionContext): void {        if (amount <= 0) return;
-        context.damageDealt[attacker] += amount;
+        if (attacker !== 'neutral') context.damageDealt[attacker] += amount;
         context.damageTaken[defender] += amount;
     }
 

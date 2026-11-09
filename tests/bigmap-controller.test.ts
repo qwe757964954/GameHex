@@ -24,12 +24,12 @@ class Network implements IBigMapNetworkEvents {
         for (const item of this.handlers.get(name) ?? []) item.callback.call(item.owner, message);
     }
 }
-function create(campRepository?: BigMapCampRepository) {
+function create(campRepository?: BigMapCampRepository, now?: () => number) {
     const model = new BigMapModel({ config, campRepository, storage: createMemoryBigMapStorage(), saveKey: 'mvc', now: () => 957600, adventureChapter: () => 3 });
     const network = new Network();
     let ticks = () => {};
     let stopped = 0;
-    const controller = new BigMapController(model, { context: createControllerContext(), network, campRepository,
+    const controller = new BigMapController(model, { context: createControllerContext(), network, campRepository, now,
         schedule: (callback) => { ticks = callback; return () => { stopped++; ticks = () => {}; }; } });
     const snapshots: IBigMapViewState[] = [];
     const recorder = {};
@@ -125,7 +125,7 @@ test('驻守玩家入口可翻页，迁城先选格确认且拒绝城外位置�
     } finally { h.dispose(); }
 });
 
-test('可见据点主动补齐玩家名单，已有快照不跟着轮询重拉，出生广播补查未知据点且列表可循环查看', async () => {
+test('出生广播补查未知据点且列表可循环查看，新视野预取名单', async () => {
     let queryCount = 0;
     let position = 0;
     const repository = new BigMapCampRepository({ fetchSimple: async () => ({ infos: [] }),
@@ -151,13 +151,12 @@ test('可见据点主动补齐玩家名单，已有快照不跟着轮询重拉�
         assert.equal(h.controller.snapshot.ui.campRoleIndex, 0);
         await new Promise((resolve) => setImmediate(resolve));
         const before = queryCount;
-        // 已有快照的城不再跟着 5 秒轮询重拉（`CmdSlgCampRoleInfosReqMsg` 一次只能带一个 campId，
-        // 每城每轮一条会把请求刷爆），但**新进视野**的城仍然主动补一次名单 —— 不是等用户点开才查。
+        // 名单不渲染地图角色，但仍在进入视野时预取。
         await h.model.refreshVisibleCamps([territory.id]);
         assert.equal(queryCount, before, '已有快照不重拉');
         const fresh = [...h.model.world.cities.keys()].find((id) => id !== territory.id);
         await h.model.refreshVisibleCamps([fresh]);
-        assert.equal(queryCount, before + 1, '★新城进视野主动补齐名单');
+        assert.equal(queryCount, before + 1, '新城进视野预取名单');
     } finally { h.dispose(); }
 });
 
@@ -228,32 +227,45 @@ test('写操作锁由 Controller 管理，重复点击不重复请求；失败�
     } finally { h.dispose(); }
 });
 
-test('可见据点轮询由 Controller 时钟驱动，基地模式不继续刷新世界据点', () => {
-    const h = create();
+test('可见据点每5秒刷新，基地模式停止轮询', () => {
+    let now = 0;
+    const h = create(undefined, () => now);
     let polls = 0;
     h.model.refreshVisibleCamps = async () => { polls++; };
     try {
         const campId = h.model.territoryRegions()[0].id;
         h.intent({ kind: 'visibleCamps', campIds: [campId, campId] });
+        assert.equal(polls, 0);
+        h.tick();
         assert.equal(polls, 1);
-        h.tick(); assert.equal(polls, 1);
+        for (let i = 0; i < 30; i++) {
+            now += 5000;
+            h.tick();
+        }
+        assert.equal(polls, 31, '静止150秒期间每5秒刷新一次');
+        h.intent({ kind: 'visibleCamps', campIds: [campId] });
+        h.tick();
+        assert.equal(polls, 31, '同一集合刚刷新过，不重复触发');
         h.intent({ kind: 'mode', mode: 'base' });
         h.intent({ kind: 'visibleCamps', campIds: [campId] });
-        h.tick(); assert.equal(polls, 1);
+        now += 5000;
+        h.tick(); assert.equal(polls, 31);
     } finally { h.dispose(); }
 });
 
 
-test('镜头在同一批可见城池上反复上报时按 5 秒节流，只有新城池进视野才立即重发', () => {
+test('快速滑动的多次视野上报合并到Controller时钟一次查询，使用最新可见集合', () => {
     const h = create();
     let polls = 0;
-    h.model.refreshVisibleCamps = async () => { polls++; };
+    const batches: number[][] = [];
+    h.model.refreshVisibleCamps = async (ids) => { polls++; batches.push([...ids]); };
     try {
         const all = [...h.model.world.cities.keys()];
         assert.ok(all.length >= 2, '夹具至少要有两座城才能区分「同集合」与「新增」');
         const ids = all.slice(0, all.length - 1);
         const extra = all[all.length - 1];
         h.intent({ kind: 'visibleCamps', campIds: ids });
+        h.tick();
         assert.equal(polls, 1);
         // 拖动/缩放：视图侧 150ms 防抖后又报同一批城，Controller 时钟没走 ⇒ 一条都不许再发
         //（以前这里是无条件刷新，等于每个可见城 ~150ms 一条 `CmdSlgCampRoleInfosReqMsg`）。
@@ -261,12 +273,52 @@ test('镜头在同一批可见城池上反复上报时按 5 秒节流，只有�
         h.intent({ kind: 'visibleCamps', campIds: [...ids].reverse() });
         assert.equal(polls, 1, '同一批城重复上报不许重发');
         h.intent({ kind: 'visibleCamps', campIds: all });
-        assert.equal(polls, 2, '新城进入视野立即刷新，不等满 5 秒');
+        assert.equal(polls, 1, '新城进入视野先合并，不立即发送');
+        h.intent({ kind: 'visibleCamps', campIds: [extra] });
+        h.intent({ kind: 'visibleCamps', campIds: all });
+        h.tick();
+        assert.equal(polls, 2);
+        assert.deepEqual(batches[1], all, '时钟统一发送最终可见集合');
     } finally { h.dispose(); }
 });
 
 
-test('可见城轮询只在首次补齐角色名单，拿到快照后不再跟着 5 秒轮询重拉', async () => {
+test('每轮Simple请求发送当前全部可见据点，缓存时间不同也不拆包', async () => {
+    let now = 0;
+    const batches: number[][] = [];
+    const repository = new BigMapCampRepository({
+        fetchSimple: async (ids) => {
+            batches.push([...ids]);
+            return { infos: ids.map((campId) => ({ campId, opType: 0 })) };
+        },
+        fetchDetail: async () => ({ infos: [] }),
+        fetchRoles: async (campId) => ({ campId, infos: [] }),
+        requestMove: async () => null,
+    }, () => now);
+    const h = create(repository, () => now);
+    const ids = [...h.model.world.cities.keys()].slice(0, 3);
+    try {
+        await repository.refreshSimple([ids[0]]);
+        batches.length = 0;
+        h.intent({ kind: 'visibleCamps', campIds: ids });
+        h.tick();
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.deepEqual(batches, [[...ids].sort((a, b) => a - b)]);
+        now = 5000;
+        h.tick();
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.equal(batches.length, 2);
+        assert.deepEqual(batches[1], batches[0], '定时轮询包含全部可见据点');
+        const next = ids.slice(1);
+        h.intent({ kind: 'visibleCamps', campIds: next });
+        now = 10000;
+        h.tick();
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.deepEqual(batches[2], [...next].sort((a, b) => a - b), '只查询最新可见区域');
+    } finally { h.dispose(); }
+});
+
+test('地图浏览预取驻守名单，空名单也缓存且打开直接展示', async () => {
     const roleCalls: number[] = [];
     const repository = new BigMapCampRepository({
         fetchSimple: async () => ({ infos: [] }),
@@ -278,13 +330,50 @@ test('可见城轮询只在首次补齐角色名单，拿到快照后不再跟�
     const campId = [...h.model.world.cities.keys()][0];
     try {
         await h.model.refreshVisibleCamps([campId]);
-        assert.deepEqual(roleCalls, [campId], '首次进视野补一次名单');
+        assert.deepEqual(roleCalls, [campId], '首次进视野预取名单');
         await h.model.refreshVisibleCamps([campId]);
         await h.model.refreshVisibleCamps([campId]);
-        assert.deepEqual(roleCalls, [campId], '★已有快照（哪怕是空名单）就不再重拉，靠广播维护');
+        assert.deepEqual(roleCalls, [campId], '空名单也缓存，持续浏览不重查');
+        const detail = h.model.refreshCampDetail(campId);
+        assert.equal(h.model.cityView(campId)?.campRolesStatus, 'ready');
+        await detail;
+        assert.deepEqual(roleCalls, [campId], '打开直接使用缓存');
     } finally { h.dispose(); }
 });
 
+
+test('视野名单失败可重试，打开共享在途查询，成功后直接展示缓存', async () => {
+    let calls = 0;
+    let complete: (value: unknown) => void = () => {};
+    const repository = new BigMapCampRepository({
+        fetchSimple: async () => ({ infos: [] }),
+        fetchDetail: async () => ({ infos: [] }),
+        fetchRoles: async () => {
+            calls++;
+            if (calls === 1) return null;
+            return new Promise((resolve) => { complete = resolve; });
+        },
+        requestMove: async () => null,
+    });
+    const h = create(repository);
+    const campId = [...h.model.world.cities.keys()][0];
+    try {
+        await h.model.refreshVisibleCamps([campId]);
+        assert.equal(repository.rolesOf(campId), null);
+        const prefetch = h.model.refreshVisibleCamps([campId]);
+        const repeated = h.model.refreshVisibleCamps([campId]);
+        const opening = h.model.refreshCampDetail(campId);
+        assert.equal(calls, 2, '重试后，滑动与打开共享同一请求');
+        complete({ campId, infos: [{ roleId: '1', serverId: '2', roleName: '甲', img: '1', pos: 0, defenseHp: 100 }] });
+        await Promise.all([prefetch, repeated, opening]);
+        assert.equal(h.model.cityView(campId)?.campRoles[0].roleName, '甲');
+        const reopening = h.model.refreshCampDetail(campId);
+        assert.equal(h.model.cityView(campId)?.campRolesStatus, 'ready');
+        assert.equal(h.model.cityView(campId)?.campRoles[0].roleName, '甲');
+        await reopening;
+        assert.equal(calls, 2, '再次打开不重查名单');
+    } finally { h.dispose(); }
+});
 
 test('关闭后重开只由新 Controller 接收事件，旧监听已解除', () => {
     const h = create();

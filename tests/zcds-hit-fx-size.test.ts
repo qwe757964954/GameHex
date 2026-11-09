@@ -126,6 +126,9 @@ function runDuelWith(victimCard: unknown): Array<{ trait: string; targetScale: n
     for (let step = 0; step < 200 && seen.size < 2; step += 1) {
         game.tick(0.05);
         for (const fx of game.hitFxs) {
+            //  两边都站在主城格上，2026-11-06 起城墙 / 建筑受击也会推特效（`surface` 为
+            //  `wall` / `building`，`targetScale` 恒 1）。这条只测「打单位」的尺寸口径。
+            if (fx.surface !== 'unit') continue;
             if (!seen.has(fx.id)) seen.set(fx.id, { trait: fx.trait, targetScale: fx.targetScale });
         }
     }

@@ -1,4 +1,4 @@
-import { _decorator, Color, Component, Label, LabelOutline, Node, Sprite, SpriteFrame, UITransform } from 'cc';
+import { _decorator, Color, Component, Label, Node, Sprite, SpriteFrame, UITransform } from 'cc';
 import type { ResBarSlot } from './MainResBarTypes';
 import { loadResBarSprite } from './MainResBarArt';
 import {
@@ -317,9 +317,12 @@ export class MainResBarSlot extends Component {
         ui.setAnchorPoint(0.5, 0);
         const label = node.addComponent(Label);
         this.copySpendFloatTypography(label);
-        const outline = node.addComponent(LabelOutline);
-        outline.color = new Color(0, 0, 0, 255);
-        outline.width = SPEND_FLOAT_OUTLINE_WIDTH;
+        // 描边走 Label 自己的属性（3.8 起 `LabelOutline` 组件已弃用，会刷
+        // `'LabelOutline.width' is deprecated` 警告）。三者必须一起给：
+        // `outlineWidth` 只在 `enableOutline = true` 时才参与渲染，否则静默不画。
+        label.enableOutline = true;
+        label.outlineColor = new Color(0, 0, 0, 255);
+        label.outlineWidth = SPEND_FLOAT_OUTLINE_WIDTH;
         node.active = false;
 
         this.spendFloat = node;

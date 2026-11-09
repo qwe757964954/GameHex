@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import type { ZCBattleStart } from '../assets/script/app/battle/BattleStartModel';
-import { parseBattleBuffs } from '../assets/script/app/battle/BattleStartModel';
+import { parseBattleBuffs, parseBattleHeroAttrs } from '../assets/script/app/battle/BattleStartModel';
+import type { ZCUnitState } from '../assets/script/app/zcds/model/ZCGameTypes';
+import { ZCCombatSystem } from '../assets/script/app/zcds/model/systems/ZCCombatSystem';
 import { compileZCMatchRuntime } from '../assets/script/app/zcds/model/ZCMatchRuntimeCompiler';
 import { buildZCClientCombatConfig, clientHeroIdsByOwner } from '../assets/script/app/zcds/application/ZCClientCombatConfig';
 import { buildZCPveEnemyDecks } from '../assets/script/app/zcds/application/ZCPveCombatConfig';
@@ -299,6 +301,55 @@ test('自选主城配置可在显式预备模式下完成客户端构筑', () =>
     assert.equal(Object.isFrozen(result.config), true);
 });
 
+test('服务端英雄属性覆盖本地成长后参与战斗，建筑血量与阵营隔离且构筑幂等', () => {
+    const source = prepare(4);
+    const original = JSON.stringify(source);
+    const start = battle();
+    const plain = compileZCMatchRuntime(buildZCClientCombatConfig(source, start, 'self').config);
+    const remote = { ...start, units: start.units.map((unit) => ({
+        ...unit,
+        heroes: [{ heroId: 68001, level: 10 }],
+        heroAttrs: parseBattleHeroAttrs(unit.roleId === 'self' ? [
+            { heroId: 68001, attrs: [
+                { attrId: 'attack', value: '123' }, { attrId: 'maxHp', value: '789' },
+                { attrId: 'buildingHp', value: '654' },
+            ] },
+            { heroId: 68002, attrs: [{ attrId: 'attack', value: '99999' }, { attrId: 'buildingHp', value: '99999' }] },
+        ] : unit.campId === 1 ? [{ heroId: 68001, attrs: [{ attrId: 'attack', value: '0' }] }] : []),
+        buffs: unit.roleId === 'self'
+            ? parseBattleBuffs([{ source: 1, buffs: ['levelAttackRatio', '2', 'levelHpRatio', '0.5'] }]) : [],
+    })) };
+    const result = buildZCClientCombatConfig(source, remote, 'self');
+    assert.deepEqual(result.skipped, []);
+    const runtime = compileZCMatchRuntime(result.config);
+    const player = runtime.effectiveDefinitions.player.get('68001');
+    assert.equal(player?.attack, 246);
+    assert.equal(player?.maxHp, 394.5);
+    assert.ok(player);
+    const game = new ZCGameModel(null, () => .1, result.config);
+    const spawned: ZCUnitState | null = Reflect.get(game, 'spawnUnit').call(game, 'player',
+        result.config.playerDeck.find((card) => card.unitId === '68001'), 1, result.config.map.playerHomeId);
+    assert.ok(spawned);
+    assert.equal(spawned.maxHp, 395);
+    assert.equal(ZCCombatSystem.unitDamage(spawned, player, runtime.deckBonuses.player, 1,
+        { ...result.config.rules, combatDamageMultiplier: 1 }), 246);
+    assert.equal(runtime.effectiveDefinitions.enemy.get('68001')?.attack, 0);
+    const withoutAttrs = compileZCMatchRuntime(buildZCClientCombatConfig(source, {
+        ...remote, units: remote.units.map((unit) => ({ ...unit, heroAttrs: [], buffs: [] })),
+    }, 'self').config);
+    assert.equal(runtime.effectiveDefinitions.enemy.get('68001')?.maxHp,
+        withoutAttrs.effectiveDefinitions.enemy.get('68001')?.maxHp);
+    assert.deepEqual(runtime.skillRuntime.player, withoutAttrs.skillRuntime.player);
+    assert.equal(result.config.playerDeck.find((card) => card.unitId === '68001')?.baseHp, 654);
+    assert.equal(result.config.enemyDeck.find((card) => card.unitId === '68001')?.baseHp,
+        source.enemyDeck.find((card) => card.unitId === '68001')?.baseHp);
+    assert.deepEqual(runtime.effectiveDefinitions.enemy2, withoutAttrs.effectiveDefinitions.enemy2);
+    assert.deepEqual(buildZCClientCombatConfig(result.config, remote, 'self').config, result.config);
+    assert.equal(JSON.stringify(source), original);
+    assert.equal(Object.isFrozen(result.config.modifiers?.player), true);
+    assert.notDeepEqual(runtime.effectiveDefinitions.player, plain.effectiveDefinitions.player);
+});
+
 test('battle entry copies PVE navigation data without callbacks and normalizes defence wave order', () => {
     const source = prepare(4);
     const prepared = { baseMatchConfig: source } as Parameters<typeof buildZCBattleEntry>[0];
@@ -319,6 +370,58 @@ test('battle entry copies PVE navigation data without callbacks and normalizes d
     assert.equal(JSON.stringify(source), original);
     assert.equal(JSON.stringify(pve.waves), waves);
     assert.equal(entry.battleSeed, null);
+});
+
+test('关卡 openGrideTime 与 BOSS 波标记随 PVE 参数进入对局配置', () => {
+    const source = prepare(4);
+    const prepared = { baseMatchConfig: source } as Parameters<typeof buildZCBattleEntry>[0];
+    const pveBase = {
+        mode: 'defence' as const, chapterId: 1, levelId: 10005, territoryCellId: 4, stage: 5,
+        territorySaveOwner: null, enemyName: '', enemyCardIds: [], enemyTeamCardIds: [],
+        playerCount: 2 as const, hpRate: 1, attackRate: 1,
+        waves: [
+            { waveId: 1, showAtSeconds: 3, pvpCardId: 68001, monsterCount: 5, hpRate: 1, attackRate: 1 },
+            { waveId: 2, showAtSeconds: 95, pvpCardId: 68002, monsterCount: 1, hpRate: 1, attackRate: 1, isBoss: true },
+        ],
+    };
+    const entry = buildZCBattleEntry(prepared, { pve: { ...pveBase, openGrideTime: 18 } });
+    assert.equal(entry.matchConfig.openGrideTime, 18, 'NPC 翻地块限速要带进对局');
+    assert.deepEqual(entry.matchConfig.pveDefence?.waves.map((wave) => [wave.waveId, wave.isBoss === true]),
+        [[1, false], [2, true]], 'BOSS 波标记必须原样投影（HUD 大血条与胜负都靠它）');
+
+    // 0 = 「够钱就翻」⇒ 不写进配置，避免把「不限速」当成 0 秒限速。
+    const uncapped = buildZCBattleEntry(prepared, { pve: { ...pveBase, openGrideTime: 0 } });
+    assert.equal(uncapped.matchConfig.openGrideTime, undefined);
+    const missing = buildZCBattleEntry(prepared, { pve: pveBase });
+    assert.equal(missing.matchConfig.openGrideTime, undefined);
+});
+
+test('首领塔防关拿到服务端开战回包也要按 npcCard 收紧敌方卡组（不能整池上阵）', () => {
+    prepare(4);
+    const source = captureZCMatchConfig();
+    const entry = buildZCBattleEntry({ baseMatchConfig: source } as Parameters<typeof buildZCBattleEntry>[0], {
+        battle: battle([68001], [68001]), selfRoleId: 'self',
+        pve: {
+            mode: 'defence', chapterId: 1, levelId: 10005, territoryCellId: 4, stage: 5,
+            territorySaveOwner: null, enemyName: '', enemyCardIds: [68001, 68002, 68003],
+            enemyTeamCardIds: [[68001, 68002, 68003]], playerCount: 2, hpRate: 1, attackRate: 1,
+            openGrideTime: 18,
+            waves: [
+                { waveId: 1, showAtSeconds: 3, pvpCardId: 68002, monsterCount: 5, hpRate: 1, attackRate: 1 },
+                { waveId: 2, showAtSeconds: 95, pvpCardId: 68003, monsterCount: 1, hpRate: 1, attackRate: 1, isBoss: true },
+            ],
+        },
+    });
+    const allowed = new Set(['68001', '68002', '68003']);
+    // 整份敌方卡池有 30+ 张，塔防关只认「npcCard + 出怪卡」这一份配置。
+    assert.ok(source.enemyDeck.length > 10);
+    assert.equal(entry.matchConfig.enemyDeck.length < source.enemyDeck.length, true, '敌方卡组必须被收紧');
+    assert.equal(entry.matchConfig.enemyDeck.every((card) => allowed.has(card.id)), true,
+        `敌方卡组混进了 npcCard 与出怪卡之外的卡：${entry.matchConfig.enemyDeck.map((card) => card.id).join(',')}`);
+    // 出怪卡即使没进敌方卡组也要能查表出怪（`pveDefence.cards` 兜底）。
+    const runtime = compileZCMatchRuntime(entry.matchConfig);
+    assert.equal(runtime.cards.has('68002'), true);
+    assert.equal(runtime.cards.has('68003'), true);
 });
 
 test('领地首领波次卡不在服务端阵容中仍出怪，清空末波后才判胜', () => {

@@ -210,6 +210,14 @@ export interface ZCDeckCard {
     unitId?: ZCUnitId;
     /** 本卡兵种的 resources 预制体路径；阵容上阵预览与对局使用同一资产。 */
     unitPrefabPath?: string;
+    /**
+     * 本卡兵种美术的等比缩放（`pvpCard.prefabSize`；表里留空 ⇒ 1）。
+     *
+     * 只给**表现层**的预览用：阵容页站台按它体现「这张卡的兵有多大」，否则所有兵种都被
+     * 归一到同一个高度、看不出体型差。对局里同一个系数由 `ZCUnitView.applyVisualSize`
+     * 乘在美术节点上 —— 两边同源（同一列），别在预览这边另立一套数值。
+     */
+    prefabSize?: number;
     traits?: ZCCardTraits;
     buildSeconds?: number;
     cycleSeconds?: number;

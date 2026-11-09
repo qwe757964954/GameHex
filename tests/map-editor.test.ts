@@ -948,6 +948,36 @@ test('导入地图接受玩家分区上的旧资源点且原样保留资源池',
     assert.deepEqual(JSON.parse(JSON.stringify(editor.buildJSON().resourcePoints)), [{ row: 3, column: 3, pool: { chest: 1 } }]);
 });
 
+test('组合预览使用最高正权重资源的图片，并提供组合名候选和画笔预览', async () => {
+    const { editor, element } = createEditor({ fetch: async (path: string) => ({
+        ok: true, json: async () => path === '/api/neutral-resource-groups' ? { groups: [
+            { groupId: 14001, name: '强化门', items: [
+                { resourceType: 1, weight: 0 }, { resourceType: 7, weight: 10, effect: 'shrink' }, { resourceType: 9, weight: 1 },
+            ] },
+            { groupId: 14007, name: '传送门', items: [{ resourceType: 9, weight: 1 }] },
+            { groupId: 14009, name: '野怪甲', items: [{ resourceType: 11, weight: 1, resId: '68007' }] },
+            { groupId: 14010, name: '野怪乙', items: [{ resourceType: 11, weight: 1, resId: '68008' }] },
+        ] } : { presets: [], assets: [] },
+    }) });
+    await new Promise((resolve) => setImmediate(resolve));
+    editor.applyLayout({ version: 3, rows: 12, columns: 20, playerCount: 2, cityMode: 'select', ascii: Array(12).fill('11111111111111111111') });
+    editor.addResourceGroupPoint(7, 10, 14001);
+    editor.addResourceGroupPoint(7, 14, 14007);
+    assert.match(editor.resourceMarkup(), /map-resource%2Fgate_shrink/);
+    assert.match(editor.resourceMarkup(), /map-resource%2Fportal/);
+    assert.match(element('resourceGroupOptions').innerHTML, /强化门/);
+    element('resourceGroupId').value = '14007';
+    element('btnResourcePlace').listeners.click();
+    assert.match(element('resourceGroupPreview').src, /map-resource%2Fportal/);
+    assert.equal(element('resourceGroupPreview').hidden, false);
+    for (const [groupId, resId] of [[14009, '68007'], [14010, '68008']]) {
+        element('resourceGroupId').value = String(groupId);
+        element('resourceGroupId').listeners.input();
+        element('btnResourcePlace').listeners.click();
+        assert.match(element('resourceGroupPreview').src, new RegExp('map-resource%2Fmonster_' + resId));
+    }
+});
+
 test('资源组合输入从空值开始，确认后显示统一资源图片和组合编号，数据只保存组合ID', () => {
     const { editor, element } = createEditor();
     editor.applyLayout({ version: 3, rows: 8, columns: 12, cityMode: 'select', ascii: Array(8).fill('000000000000') });

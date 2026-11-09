@@ -2,6 +2,7 @@ import { toCount, toIdString, toPositiveInt } from '../net/RequestGuard';
 import type { MatchPlayerData } from '../matching/MatchTypes';
 import { applyHeadArt, createHeadArtResolver } from '../HeadArtModel';
 import type { HeadArtResolver, HeadRow, IconRow } from '../HeadArtModel';
+import { CARD_LEVEL_ATTR_STAT, type ZCCardLevelAttrs } from '../card/CardLevelAttr';
 
 /**
  * 「开始游戏」数据模型与边界校验 —— 纯函数，零引擎依赖，可单测。
@@ -100,6 +101,12 @@ export interface ZCBattleHero {
     readonly level: number;
 }
 
+export interface ZCBattleHeroAttrs {
+    readonly heroId: number;
+    /** 与 cardLevelUp.attrList 同口径的绝对值，缺失项保留客户端计算结果。 */
+    readonly attributes: Readonly<Partial<ZCCardLevelAttrs>>;
+}
+
 /**
  * `CmdPvpBuffInfo.buffs` 里的一对 `key,value`（已校验）。
  *
@@ -164,6 +171,7 @@ export interface ZCBattleUnit {
     readonly heroIds: readonly number[];
     /** 保留 CmdPvpHeroInfo.level，供卡牌技能解锁/升级在开局前编译。 */
     readonly heroes?: readonly ZCBattleHero[];
+    readonly heroAttrs?: readonly ZCBattleHeroAttrs[];
     readonly artifactId: number;
     readonly artifactLevel: number;
     /**
@@ -325,7 +333,32 @@ export function normalizeBattleUnit(info: CmdBattleUnitInfo | null | undefined):
         artifactLevel: toCount(info.artifactLevel),
         unitType: normalizeBattleUnitType(info.unitType),
         buffs: parseBattleBuffs(info.buffInfo),
+        heroAttrs: parseBattleHeroAttrs(info.attrs),
     };
+}
+
+/** 协议数值只在边界转一次；重复英雄/属性按最后一条合法值覆盖。 */
+export function parseBattleHeroAttrs(infos: CmdPvpHeroAttrInfo[] | null | undefined): ZCBattleHeroAttrs[] {
+    const heroes = new Map<number, { -readonly [K in keyof ZCCardLevelAttrs]?: number }>();
+    for (const info of Array.isArray(infos) ? infos : []) {
+        if (!info) continue;
+        const heroId = toPositiveInt(info.heroId);
+        if (heroId === null) continue;
+        for (const attr of Array.isArray(info.attrs) ? info.attrs : []) {
+            if (!attr) continue;
+            const key = Object.prototype.hasOwnProperty.call(CARD_LEVEL_ATTR_STAT, attr.attrId)
+                ? CARD_LEVEL_ATTR_STAT[attr.attrId] : undefined;
+            const value = typeof attr.value === 'string' && attr.value.trim() !== '' ? Number(attr.value) : NaN;
+            if (!key || !Number.isFinite(value) || value < 0 || (key !== 'attack' && value === 0)) {
+                console.warn('[BattleStartModel] 无效英雄属性，已跳过', heroId, attr);
+                continue;
+            }
+            const attributes = heroes.get(heroId) ?? {};
+            attributes[key] = value;
+            heroes.set(heroId, attributes);
+        }
+    }
+    return Array.from(heroes, ([heroId, attributes]) => ({ heroId, attributes }));
 }
 
 /**

@@ -44,6 +44,14 @@ import {
     qualityNameOf,
     qualityTitleStepOf,
     typeStateOf,
+    itemDetailLayoutOf,
+    ID_LIST_BUTTON_GAP,
+    ID_CONTENT_BLOCK_HEIGHT,
+    ID_BUTTON_BOTTOM_MARGIN,
+    ID_LIST_MAX_HEIGHT,
+    ID_PANEL_TOP,
+    ID_ROW_GAP,
+    ID_ROW_HEIGHT,
 } from '../assets/script/app/itemdetail/ItemDetailTable';
 import type { IItemCraftRow, IViewTypeRow } from '../assets/script/app/itemdetail/ItemDetailTable';
 import { ITEM_DETAIL_TEXTS, formatText } from '../assets/script/app/itemdetail/ItemDetailTexts';
@@ -658,7 +666,11 @@ test('物品 D2｜ItemDetail 每个节点的矩形 == FGUI 原稿逐像素换算
     // 表 = FGUI XML 的 `xy`+`size`（画布 720×1280）。**禁抄 XML 的 xy 当屏坐标** ——
     // 这里的数字全部来自 `tmp/_probe_itemdetail_xml.mjs` 的布局引擎输出（已折入 relation / group）。
     const cases: [string, [number, number, number, number]][] = [
-        ['PanelBg',    [102, 278, 515, 709]],  // n34  tybg
+        // 2026-11-06：面板 709 → 830、三颗按钮 883/885 → 1012/1014。
+        // 原因：原高度装不下「上半区 + 获取途径 3 行(253) + 按钮(60)」，
+        // 列表底会低出面板 17px 且整块盖住「前往」按钮（体验反馈 row13）。
+        // 面板顶部不动、只往下长 121；按钮同步下移，列表底与按钮顶留 8px。
+        ['PanelBg',    [102, 278, 515, 830]],  // n34  tybg
         ['TitleBg',    [75, 275, 570, 81]],    // n35  title_gray
         ['Goods',      [129, 363, 84, 84]],    // com_goods  120×120 的 物品框 × 0.7
         ['QualityText', [278, 388, 88, 34]],   // quality「精良」
@@ -666,8 +678,8 @@ test('物品 D2｜ItemDetail 每个节点的矩形 == FGUI 原稿逐像素换算
         ['CountText',  [288, 420, 88, 34]],    // lab_count
         ['CountLabel', [207, 419, 70, 34]],    // n11「数量:」
         ['NameText',   [204, 284, 311, 44]],   // lab_name
-        ['BtnGo',      [280, 883, 160, 60]],
-        ['BtnGo1',     [280, 885, 160, 60]],
+        ['BtnGo',      [280, 1012, 160, 60]],
+        ['BtnGo1',     [280, 1014, 160, 60]],
         ['DescTitle',  [260, 456, 199, 39]],   // n13
         ['DescBg',     [127, 495, 466, 61]],   // n16  tycb_pt
         ['DescText',   [149, 509, 418, 29]],   // lab_desc
@@ -675,7 +687,7 @@ test('物品 D2｜ItemDetail 每个节点的矩形 == FGUI 原稿逐像素换算
         ['ContentBar', [125, 590, 469, 117]],  // list_ctx  flow_vt + vAlign=middle
         ['AccessTitle', [260, 707, 199, 44]],  // n23「获取途径」
         ['AccessList', [125, 751, 469, 253]],  // list  overflow=scroll, lineGap 17
-        ['BtnCompos',  [280, 885, 160, 60]],
+        ['BtnCompos',  [280, 1014, 160, 60]],
     ];
     for (const [name, rect] of cases) {
         assertRect(rects.get(name), fguiRect(...rect), name);
@@ -1175,4 +1187,70 @@ test('物品 G6｜HUD 的图与物品详情**同源**（同一份缓存，不开
     const hud = stripComments(HUD_SRC);
     assert.ok(/loadQualityFrameArt\(/.test(hud) && /loadItemIconArt\(/.test(hud));
     assert.ok(!/resources\.load\(/.test(hud), 'HUD 不该自己 resources.load —— 图必须走 ItemDetailArtLoader 的缓存（规则 81）');
+});
+
+// ============================================================
+// H. 弹窗纵向收放（获取途径行数 → 列表 / 按钮 / 面板）
+
+test('物品 H1｜面板高度随获取途径行数收，3 行及以上与 prefab 静态值一致', () => {
+    // 这是「列表只有 1 行时下方空一大片」的回归：面板写死 830 时，
+    // 1 行途径下按钮顶到 -372，而列表内容只到 -181 ⇒ 空出 191px。
+    const one = itemDetailLayoutOf(1);
+    assert.equal(one.listHeight, ID_ROW_HEIGHT);
+    assert.equal(one.panelHeight, 647);
+    // 列表底(-181) − 8 ⇒ 按钮顶 -189
+    assert.equal(one.goY, -189);
+    // 列表底 → 按钮顶 的留白必须恒定；按钮底 → 面板底 的留白也必须恒定。
+    const bottomGapOf = (l: { panelHeight: number; goY: number }): number =>
+        ID_PANEL_TOP - l.panelHeight - (l.goY - 60 - ID_BUTTON_BOTTOM_MARGIN);
+    for (const rows of [1, 2, 3, 5]) {
+        const layout = itemDetailLayoutOf(rows);
+        assert.equal(bottomGapOf(layout), 0, `${rows} 行的按钮底留白应当正好是 ${ID_BUTTON_BOTTOM_MARGIN}`);
+    }
+
+    const two = itemDetailLayoutOf(2);
+    assert.equal(two.listHeight, ID_ROW_HEIGHT * 2 + ID_ROW_GAP);
+    assert.equal(two.panelHeight, 734);
+
+    // 3 行及以上：与 prefab 的静态布局（列表 253 / 按钮 -372 / 面板 830）逐像素一致
+    for (const rows of [3, 4, 9]) {
+        const layout = itemDetailLayoutOf(rows);
+        assert.equal(layout.listHeight, ID_LIST_MAX_HEIGHT, `${rows} 行仍用 253（超出就滚动）`);
+        assert.equal(layout.goY, -372);
+        assert.equal(layout.panelHeight, 830);
+    }
+});
+
+test('物品 H2｜行数为 0 / 非法值时按 1 行算（不会算出负高度）', () => {
+    for (const value of [0, -3, Number.NaN]) {
+        const layout = itemDetailLayoutOf(value);
+        assert.equal(layout.listHeight, ID_ROW_HEIGHT);
+        assert.equal(layout.panelHeight, 647);
+        assert.ok(layout.panelHeight > 0);
+    }
+});
+
+test('物品 H3｜按钮两颗「前往」的 2px 原差值保持不变', () => {
+    for (const rows of [1, 2, 3]) {
+        const layout = itemDetailLayoutOf(rows);
+        assert.equal(layout.goY - layout.go1Y, 2, 'BtnGo1 / BtnCompos 比 BtnGo 低 2px（prefab 原值）');
+    }
+});
+
+test('物品 H4｜「内容」区没有东西时整块上移 151，面板同步收缩', () => {
+    // 内容区（ContentTitle 顶 84 → AccessTitle 顶 -67 = 151）没东西时，
+    // 光是 hide 槽位不够 —— 容器还在，会在「道具说明」和「获取途径」之间留一片死区。
+    const withContent = itemDetailLayoutOf(1, true);
+    const withoutContent = itemDetailLayoutOf(1, false);
+    assert.equal(withoutContent.listTop - withContent.listTop, ID_CONTENT_BLOCK_HEIGHT);
+    assert.equal(withoutContent.titleY - withContent.titleY, ID_CONTENT_BLOCK_HEIGHT);
+    assert.equal(withoutContent.listHeight, withContent.listHeight, '行数不变时列表高度不变');
+    assert.equal(withoutContent.panelHeight, withContent.panelHeight - ID_CONTENT_BLOCK_HEIGHT);
+
+    // 上移后的锚点：列表顶 = 40（原 AccessTitle 顶 84 再减标题高 44），标题顶 = 84
+    assert.equal(withoutContent.listTop, 40);
+    assert.equal(withoutContent.titleY, 84, '原 AccessTitle 顶 -67 上移 151 ⇒ 84（原 ContentTitle 的位置）');
+
+    // 内容多的时候同理：3 行 + 无内容区 ⇒ 面板 830 - 151 = 679
+    assert.equal(itemDetailLayoutOf(3, false).panelHeight, 830 - ID_CONTENT_BLOCK_HEIGHT);
 });

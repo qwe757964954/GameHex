@@ -20,6 +20,10 @@ import { ProcedureUpdate } from '../procedure/ProcedureUpdate';
 import { AppSessionAssetService } from '../session/AppSessionAssetService';
 import { ShowRewardPage } from '../showReward/ShowRewardPage';
 import { Toast } from '../common/Toast';
+import { EventMgr } from '../../framework/event/EventMgr';
+import { PopupLayer } from '../../framework/ui/PopupDef';
+import { REWARD_ITEM_DETAIL_INTENT, type IRewardItemDetailIntent } from '../common/RewardItemEvents';
+import { ItemDetailPage } from '../itemdetail/ItemDetailPage';
 import { registerRdVars } from '../rd/RdRegistry';
 import { GameNet } from '../net/GameNet';
 import { GameSocketBridge } from '../gm/GameSocketBridge';
@@ -40,6 +44,16 @@ const RESOURCE_LOAD_CONCURRENCY = 4;
 export class ProcedureBootstrap extends Component {
     public static __cname: string = 'ProcedureBootstrap';
     private resourceLoads: ResourceLoadManager | null = null;
+
+    private readonly onRewardItemDetail = (intent: IRewardItemDetailIntent): void => {
+        if (!Number.isSafeInteger(intent.resId) || intent.resId <= 0) return;
+        // 奖励为预览数量，不能当成背包持有量开启合成；SYSTEM 层保证压在战斗结算页之上。
+        void ItemDetailPage.open({
+            userData: { resId: intent.resId, number: 0 },
+            layer: PopupLayer.SYSTEM,
+            allowMultiple: true,
+        }).catch(error => { console.error('[RewardItem] 打开物品详情失败', error); });
+    };
 
     /** 真实支付发货广播：`CmdRecharge.rewards` 才是本次到账明细。 */
     private readonly onRechargeSettled = (msg: CmdRechargeBroMsg): void => {
@@ -75,6 +89,7 @@ export class ProcedureBootstrap extends Component {
         // 对齐 2.0 `ModelStore.enter()`：支付请求/中心服开单本身不代表发货，必须等游戏服
         // `CmdRechargeBroMsg`。首充、灵玉直充等所有充值入口共用这一条全局结算出口。
         GameNet.instance.addEvent('CmdRechargeBroMsg', this, this.onRechargeSettled);
+        EventMgr.instance.on(REWARD_ITEM_DETAIL_INTENT, this.onRewardItemDetail, this);
     }
     private configurePayment(network: FetchNetworkTransport): void {
         const payment = CenterPaymentService.instance(network);
@@ -134,6 +149,7 @@ export class ProcedureBootstrap extends Component {
     }
 
     onDestroy(): void {
+        EventMgr.instance.off(REWARD_ITEM_DETAIL_INTENT, this.onRewardItemDetail, this);
         const resourceLoads = this.resourceLoads;
         this.resourceLoads = null;
         try { resourceLoads?.dispose(); }

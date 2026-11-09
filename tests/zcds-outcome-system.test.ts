@@ -46,15 +46,29 @@ test('主城归零先按已开发地块结算，计时未到不提前比较分�
     });
 });
 
-test('塔防必须全部波次已出且无存活敌人，主城失守立即失败', () => {
+test('塔防只有击败 BOSS 才算胜利，中间波次清空不算；主城失守立即失败', () => {
     const defence: IZCOutcomeContext = { ...context, pveDefence: { waves: [{ waveId: 1 }] } as IZCOutcomeContext['pveDefence'] };
     assert.equal(ZCOutcomeSystem.checkOutcome(state(80, 30), defence, 0), null);
     assert.deepEqual(ZCOutcomeSystem.checkOutcome(state(80, 30), defence, 1), {
-        status: 'victory', reason: '塔防胜利：已击退全部 1 波守军。', winner: 'player',
+        status: 'victory', reason: '塔防胜利：BOSS 已被击败。', winner: 'player',
     });
     // 塔防没有 PvP 胜方：按敌方色铺场（= 既有表现），winner 必须是明确值而不是漏填 undefined。
     assert.deepEqual(ZCOutcomeSystem.checkOutcome(state(0, 30), defence, 1), {
         status: 'defeat', reason: '塔防失败：我方主城领地已失守。', winner: 'enemy',
+    });
+});
+
+test('塔防：BOSS 未出场 / BOSS 仍存活时都不结算，入场的小怪清空也不算赢', () => {
+    const defence: IZCOutcomeContext = {
+        ...context,
+        pveDefence: { waves: [{ waveId: 1 }, { waveId: 2, isBoss: true }] } as IZCOutcomeContext['pveDefence'],
+    };
+    // 只出到第 1 波、场上已无敌人：BOSS 还没来 ⇒ 继续打
+    assert.equal(ZCOutcomeSystem.checkOutcome(state(80, 30), defence, 1, { spawned: false, alive: false }), null);
+    // BOSS 已出场但还活着 ⇒ 继续打
+    assert.equal(ZCOutcomeSystem.checkOutcome(state(80, 30), defence, 2, { spawned: true, alive: true }), null);
+    assert.deepEqual(ZCOutcomeSystem.checkOutcome(state(80, 30), defence, 2, { spawned: true, alive: false }), {
+        status: 'victory', reason: '塔防胜利：BOSS 已被击败。', winner: 'player',
     });
 });
 

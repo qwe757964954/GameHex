@@ -54,8 +54,12 @@ test('对局流程在进入前准备地图、配置和全部首屏 Prefab', asyn
             loadedPrefabs.push(path);
             return new Prefab(path);
         },
-        loadDir: async (path: string, _type: unknown) => {
+        loadDir: async (path: string, _type: unknown, options: { bundle?: string }) => {
             loadedDirectories.push(path);
+            if (path === MAP_RESOURCE_ART_ROOT) {
+                assert.equal(options.bundle, 'battle', '中立图标从 battle 包加载');
+                return ['gate', 'extension', 'portal', 'horn'].map(name => new SpriteFrame(name));
+            }
             // 建筑外观目录返回假 SpriteFrame（带 name）；地图目录返回带 json 的地图资产。
             if (path === buildingDirectory) {
                 return [new SpriteFrame('hq-base'), new SpriteFrame('barracks-peashooter')];
@@ -180,9 +184,10 @@ test('对局流程在进入前准备地图、配置和全部首屏 Prefab', asyn
 
     assert.equal(prepared.baseMatchConfig.map.id, 'preloaded-map', '冻结配置快照随预加载结果移交');
     assert.equal(prepared.baseMatchConfig.configHash, 'loader-snapshot');
+    assert.equal(prepared.neutralResourceFrames.get('portal').name, 'portal');
     assert.deepEqual(
         loadedDirectories.slice().sort(),
-        [mapDirectory, buildingDirectory, wallDirectory, HEX_GROUND_GLOW_ART_ROOT, HEX_FLIP_PULSE_ART_ROOT, ARTIFACT_CLAIM_BURST_ART_ROOT].sort(),
+        [mapDirectory, buildingDirectory, wallDirectory, HEX_GROUND_GLOW_ART_ROOT, HEX_FLIP_PULSE_ART_ROOT, ARTIFACT_CLAIM_BURST_ART_ROOT, MAP_RESOURCE_ART_ROOT].sort(),
     );
     assert.deepEqual(configuredMaps, ['preloaded-map']);
     assert.deepEqual(loadedPrefabs.sort(), [

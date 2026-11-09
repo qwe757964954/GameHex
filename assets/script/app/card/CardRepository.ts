@@ -8,6 +8,7 @@ import {
     loadArmySkillLevelUpRows,
     loadCardLevelUpRows,
     loadPvpCardRawRow,
+    loadPvpCardRawRows,
     loadPvpCatalogCards,
     loadPvpHeroCards,
     loadPvpHeroLevelCaps,
@@ -15,7 +16,9 @@ import {
 } from './CardLineupDecks';
 import { buildCardLevelUpTable, evaluateUpgrade } from './CardUpgradeCost';
 import type { ZCCardLevelUpTable, ZCUpgradeStatus } from './CardUpgradeCost';
-import { resolveCardLevelAttrsPair } from './CardLevelAttr';
+import { resolveCardLevelAttrs, resolveCardLevelAttrsPair } from './CardLevelAttr';
+import { cardAttackOf, formatPowerText, lineupAttackTotal } from './CardLineupPower';
+import type { ICardPowerInput } from './CardLineupPower';
 import { buildArmySkillTable } from './CardSkillList';
 import type { ZCArmySkillTable } from './CardSkillList';
 import {
@@ -26,7 +29,7 @@ import {
     parseGrowthRows,
 } from './CardDetailPresenter';
 import type { CardDetailPresentation } from './CardDetailPresenter';
-import { fetchFormations, FORMATION_PREFETCH_FRESH_MS, saveFormation } from './FormationService';
+import { fetchFormations, FORMATION_PREFETCH_FRESH_MS, saveFormation, selectFormation } from './FormationService';
 import type { FormationSaveResult, ZCFormation } from './FormationService';
 import { readLineupSnapshot, writeLineupSnapshot } from './LineupSnapshot';
 import { createItemCounter } from './ItemBag';
@@ -45,6 +48,8 @@ import { CARD_ART_TABLES, parseCardArtConfig, type ICardArtConfig } from './Card
 import { cardArtProvider, type ICardDetailArt } from './CardArtProvider';
 
 export interface CardLineupData {
+    /** 当前上阵卡攻击力合计；快照或权威数据未就绪时不提供。 */
+    readonly power?: number;
     readonly art: ICardArtConfig;
     readonly deck: readonly ZCDeckCard[];
     readonly catalog: readonly ZCDeckCard[];
@@ -124,6 +129,13 @@ export interface ICardRepository {
     loadUpgradeStatus(cardId: string, level: number): Promise<ZCUpgradeStatus>;
     /** 详情页取数（六维属性 + 技能链 + 里程碑）；失败由调用方按 `null` 降级。英雄等级内部取后端缓存。 */
     loadCardDetail(cardId: string, level: number): Promise<CardDetailPresentation>;
+    /**
+     * 阵容战力 = 上阵卡攻击力之和（本地算，不发协议）。
+     *
+     * 口径见 `CardLineupPower`；返回 0 表示「阵容还没拿到」或「阵容里全是建筑卡」，
+     * 调用方据此决定要不要保留占位文案。
+     */
+    loadLineupPower(lineup?: Pick<CardLineupData, 'deck' | 'heroLevels'>): Promise<number>;
     upgradeHero(heroId: number, caller?: object): Promise<UpgradeHeroResult>;
     upgradeHeroSkill(heroId: number, skillId: number, caller?: object): Promise<UpgradeHeroSkillResult>;
     /** 技能面板取数（卡表技能顺序 + `armySkillLevelUp` + 该英雄技能等级）。 */
@@ -131,6 +143,13 @@ export interface ICardRepository {
     applyHeroLevel(heroId: number, level: number): void;
     /** 覆盖保存一个阵型；结果里带回服务端确认后的阵型。 */
     saveFormation(formationId: number, heroIds: readonly number[], caller?: object): Promise<FormationSaveResult>;
+    /**
+     * 把服务端的「出战阵型」指向某一条（`CmdFormationSelectReqMsg`），**不动卡组**。
+     *
+     * 布阵页切页签时用：页签切换本身就是「这条阵型出战」的意思，
+     * 卡组内容有没有改是另一件事（那才走 `saveFormation`）。
+     */
+    selectFormation(formationId: number, caller?: object): Promise<boolean>;
 }
 
 /** 生产环境 Repository：统一封装 Ref 表、后端英雄列表、背包与升级请求。 */
@@ -220,6 +239,7 @@ export class RuntimeCardRepository implements ICardRepository {
             heroLevelCaps,
             heroListKnown: heroInfos !== null,
             formationsKnown: formations !== null,
+            power: formations !== null && heroInfos !== null ? await this.loadLineupPower({ deck, heroLevels }) : undefined,
             bonuses: currentDeckBonuses(deck),
         };
     }
@@ -307,19 +327,63 @@ export class RuntimeCardRepository implements ICardRepository {
         // buildDetailStats 内部回落 pvpUnitGrowth，老行为不变。
         const levelAttrs = resolveCardLevelAttrsPair(this.levelUpTableOf(levelUpRaw), String(cardId), level);
         const heroLevel = getCachedPvpHeroInfo(Number(cardId))?.level ?? 0;
+        const base = detailBaseOfRow(rawRow);
+        const growthRows = parseGrowthRows(growthRaw);
+        const unitId = String(card?.unitId ?? '');
         return {
             stats: buildDetailStats(
-                detailBaseOfRow(rawRow),
-                parseGrowthRows(growthRaw),
-                String(card?.unitId ?? ''),
+                base,
+                growthRows,
+                unitId,
                 level,
                 levelAttrs.current,
                 levelAttrs.next,
             ),
-            powerText: '',
+            powerText: formatPowerText(cardAttackOf({ cardId, base, unitId, level, levelAttrs: levelAttrs.current }, growthRows)),
             chain: buildDetailChain(table, skillIds, heroLevel),
             milestones: buildDetailMilestones(table, skillIds, heroLevel),
         };
+    }
+
+    /**
+     * 阵容战力 = 上阵卡攻击力之和（**本地算、不发协议**，山猫 2026-11-06）。
+     *
+     * 与 `loadCardDetail` 共用同一批取数与同一个纯函数（`CardLineupPower`），
+     * 保证「主界面战力」和「卡牌详情里的攻击」不会各算一套。
+     *
+     * 三份表一次读全：`pvpCard`（基础值，按 id 建索引）、`pvpUnitGrowth`（成长）、
+     * `cardLevelUp`（等级绝对属性）。逐张卡 `loadPvpCardRawRow` 会读 8 遍整表，所以走批量版。
+     *
+     * ⚠️ 不能让这里抛错：主界面 HUD 刷新失败不该把整个玩家信息块拖垮。
+     * 读表异常 ⇒ 打 warn 返回 0，HUD 保留 prefab 上的占位文案。
+     */
+    async loadLineupPower(lineup?: Pick<CardLineupData, 'deck' | 'heroLevels'>): Promise<number> {
+        try {
+            if (!lineup) return (await this.loadLineup(false)).power ?? 0;
+            if (lineup.deck.length === 0) return 0;
+            const [cardRows, growthRaw, levelUpRaw] = await Promise.all([
+                loadPvpCardRawRows(),
+                loadPvpUnitGrowthRows(),
+                loadCardLevelUpRows(),
+            ]);
+            const rowById = new Map<string, Record<string, unknown>>();
+            for (const row of cardRows) rowById.set(String(row.id), row);
+            const table = this.levelUpTableOf(levelUpRaw);
+            const inputs: ICardPowerInput[] = lineup.deck.map((card) => {
+                const level = lineup.heroLevels.get(card.id) ?? 0;
+                return {
+                    cardId: card.id,
+                    base: detailBaseOfRow(rowById.get(String(card.id)) ?? null),
+                    unitId: String(card.unitId ?? ''),
+                    level,
+                    levelAttrs: resolveCardLevelAttrs(table, card.id, level),
+                };
+            });
+            return lineupAttackTotal(inputs, parseGrowthRows(growthRaw));
+        } catch (error) {
+            console.warn('[CardRepository] 阵容战力计算失败，保留占位', error);
+            return 0;
+        }
     }
 
     private levelUpTableOf(rows: readonly unknown[]): ZCCardLevelUpTable {
@@ -442,6 +506,10 @@ export class RuntimeCardRepository implements ICardRepository {
 
     saveFormation(formationId: number, heroIds: readonly number[], caller?: object): Promise<FormationSaveResult> {
         return saveFormation(formationId, heroIds, caller);
+    }
+
+    selectFormation(formationId: number, caller?: object): Promise<boolean> {
+        return selectFormation(formationId, caller);
     }
 
     private levels(infos: readonly PvpHeroInfo[] | null): ReadonlyMap<string, number> {

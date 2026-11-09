@@ -1,11 +1,12 @@
-import { _decorator, Animation, Color, Component, Graphics, instantiate, Node, Prefab, Sprite, UITransform, UIOpacity, Vec3 } from 'cc';
+import { _decorator, Animation, Color, Component, Graphics, instantiate, Node, Prefab, sp, Sprite, UITransform, UIOpacity, Vec3 } from 'cc';
 import { ZCCombatEvent, ZCProjectileState } from '../model/ZCGameModel';
 import { mapToViewX, mapToViewY } from './ZCGameViewUtil';
 import { zcCombatEffectAnchorOf, zcCombatEffectAnchorPoint } from './ZCCombatEffectPlacement';
 import { zcCombatEffectFlightOf, zcCombatEffectFacingDegrees, zcCombatEffectHeadingDegrees } from '../model/ZCCombatEffectFlight';
 import { zcBeamCoreWidthOf, zcBeamFrame, zcBeamSpecOf, zcBeamStretchOf, zcBeamWidthScaleOf } from './ZCBeamEffect';
 import type { IZCBeamSpec } from './ZCBeamEffect';
-import { zcCombatEffectNodeScaleOf } from './ZCCombatEffectScale';
+import { zcCombatEffectGrowFactor, zcCombatEffectNodeScaleOf } from './ZCCombatEffectScale';
+import { zcMissileTrailOf, zcMissileTrailQuads } from './ZCMissileTrail';
 import { missileLog } from '../ZCMissileSkillDiagnostics';
 
 const { ccclass, property } = _decorator;
@@ -46,6 +47,8 @@ export class ZCCombatEffectView extends Component {
     //  已 bake 进 `ZCBeamEffect.widthScale`（1.8→1.26），`applyBeamStretch` 直接写绝对值。
     /** 宿主节点上的 `UIOpacity`（懒取）：整棵子树一起淡，预制体有几层都不用逐层改。 */
     private nodeOpacity: UIOpacity | null = null;
+    /** 已经 `setAnimation` 过的骨架段名（池化复用下必须复位，见 `initialize`）。 */
+    private appliedSpineAnimation = '';
     private readonly genericTint = new Color(255, 229, 148);
     /** 诊断用：本节点对应的特效资源路径（只有 `initialize` 知道）。 */
     private diagEffectPath = '';
@@ -54,6 +57,8 @@ export class ZCCombatEffectView extends Component {
         this.allowGeneric = allowGeneric && !prefab;
         this.graphics.clear();
         this.renderedEventId = -1;
+        //  池化复用：上一任可能把骨架切到 `attack`，不复位的话下一只小鹿「一出生就在冲」。
+        this.appliedSpineAnimation = '';
         this.node.setRotationFromEuler(0, 0, 0);
         //  池化复用：上一任可能是淡到全透明的「定格光束」，不在这里复位的话，
         //  下一次借出来的特效会「一出生就是半透明」。
@@ -71,13 +76,12 @@ export class ZCCombatEffectView extends Component {
         this.beamCanvasWidth = 0;
         //  诊断：把这个特效节点对应的资源路径记住，`mountVisual` 里要用它决定打不打日志。
         this.diagEffectPath = effectPrefabPath ?? '';
-        if (!prefab) {
-            if (this.diagEffectPath.includes('导弹')) {
-                missileLog('视图', `initialize 取不到 prefab：${this.diagEffectPath}`
-                    + `（allowGeneric=${allowGeneric} ⇒ ${this.allowGeneric ? '画通用短线' : '什么都不画'}）`);
-            }
-            return;
+        //  取不到 prefab 就在这里留一句（`allowGeneric` 决定是画通用短线还是什么都不画）。
+        if (!prefab && this.diagEffectPath.includes('导弹')) {
+            missileLog('视图', `initialize 取不到 prefab：${this.diagEffectPath}`
+                + `（allowGeneric=${allowGeneric} ⇒ ${this.allowGeneric ? '画通用短线' : '什么都不画'}）`);
         }
+        if (!prefab) return;
         this.mountVisual(prefab);
     }
 
@@ -139,6 +143,37 @@ export class ZCCombatEffectView extends Component {
         }
     }
 
+    /**
+     * 入场「由小变大」的缩放系数（2026-11-07 椰蛋战士「暴风」100504）。
+     *
+     * 需求：「生成后由小变大到当前的大小」。缓动与钳位都在 `zcCombatEffectGrowFactor`（纯函数、可单测），
+     * 这里只负责把「事件年龄」换算出来。
+     *
+     * 走 `event.startedAt` 而不是节点创建时刻：池化复用下节点寿命比事件长得多，
+     * 用节点自身的时间会让第二个复用它的飓风「一上来就是满尺寸」。
+     */
+    private growFactorOf(event: Readonly<ZCCombatEvent>, now: number): number {
+        return zcCombatEffectGrowFactor(event.growSeconds, now - event.startedAt);
+    }
+
+    /**
+     * 按事件给的**阶段动画名**切骨架动画（2026-11-07 鹿神守护 103405 需求 2「播放对应的移动动画」）。
+     *
+     * 只在名字**变化**时才 `setAnimation`：它会把播放头拉回 0，每帧调一次等于把动画钉死在
+     * 第一帧 —— 小鹿会原地抽搐而不是走路。
+     *
+     * 用 `getComponentInChildren`：鹿神守护那份预制的骨架在子节点 `spine` 上，根节点只有一个
+     * UITransform。没有骨架的特效（磁电菇 / 雷弹那一类）直接跳过，不会被这条影响。
+     */
+    private applySpineAnimation(clip: string | null | undefined): void {
+        if (!clip || clip === this.appliedSpineAnimation) return;
+        const skeleton = this.visualNode?.getComponentInChildren(sp.Skeleton);
+        if (!skeleton) return;
+        this.appliedSpineAnimation = clip;
+        //  与 `ZCUnitView.playClip` / `CardUnitPreview` 同一口径：`(0, name, true)` 且由骨架循环。
+        skeleton.setAnimation(0, clip, true);
+    }
+
     render(event: Readonly<ZCCombatEvent>, now: number, projectile?: Readonly<ZCProjectileState>, alpha = 1): void {
         const progress = Math.max(0, Math.min(1, (now - event.startedAt) / event.durationSeconds));
         const firstRender = this.renderedEventId !== event.id;
@@ -164,6 +199,9 @@ export class ZCCombatEffectView extends Component {
             this.graphics.stroke();
         }
         if (this.visualNode) this.visualNode.active = true;
+        //  阶段动画（2026-11-07 鹿神守护：走过去播 `move`、冲刺播 `attack`）。
+        //  只有模型给了名字才切；没给的一次都不碰，预制体自带的 `defaultAnimation` 照旧播。
+        this.applySpineAnimation(event.spineAnimation);
 
         // ── 整体尺寸（按 prefab 路径登记的倍率，未登记 = 1）──
         //  需求 2026-11-03「龙卷风的特效范围和预制大小整体缩小成 80%」。
@@ -172,7 +210,12 @@ export class ZCCombatEffectView extends Component {
         //  ⚠️ 只缩**宿主节点**：光束分支改的是子节点（`visualNode`）的 scaleX/scaleY，
         //  两者相乘正是期望行为（宿主 0.8 × 光束自己的宽度倍率）。
         const nodeScale = zcCombatEffectNodeScaleOf(event.effectPrefabPath);
-        this.node.setScale(nodeScale, nodeScale, 1);
+        //  入场「由小变大」（2026-11-07 椰蛋战士「暴风」：生成后由小变大到当前大小）。
+        //  `growSeconds` 缺省 ⇒ 系数恒 1，所有既有特效逐字不变。
+        //  缓动用 ease-out quad（`1-(1-t)^2`）：0.3s 这种短入场里，线性会显得"一顿"，
+        //  out-back 又会在末段过冲、把飓风撑得比最终尺寸还大一圈。
+        const growFactor = this.growFactorOf(event, now);
+        this.node.setScale(nodeScale * growFactor, nodeScale * growFactor, 1);
         //  除「定格光束」外一律复位到全不透明：池化节点上一任可能正好淡到 0 才回池。
         if (!event.beamHold) this.resetOpacity();
 
@@ -235,6 +278,11 @@ export class ZCCombatEffectView extends Component {
                     0,
                 );
             }
+            //  锥形拖尾（2026-11-05 需求，11-06 纠正方向：宽端贴弹体、往外收成尖）：
+            //  画在**这一帧的最终位置 + 转角**定好之后，
+            //  所以必须放在所有 `setPosition` / `setRotationFromEuler` 之后 —— 它是本地坐标系里的
+            //  图形，跟宿主节点一起转、一起缩，位置写死在这里就自动跟着弧线飞。
+            this.drawMissileTrail(event.effectPrefabPath);
             return;
         }
 
@@ -285,6 +333,40 @@ export class ZCCombatEffectView extends Component {
             event.effectPrefabPath,
         );
         if (heading !== null) this.node.setRotationFromEuler(0, 0, heading);
+    }
+
+    /**
+     * 画弹道拖尾（锥形：宽端贴弹体、往外收成尖 + 向外渐隐）。
+     * 没登记拖尾的 prefab 直接返回，不动 `graphics`。
+     *
+     * 方向与尺寸都在 `ZCMissileTrail` 的配置里（本地 px），这里只管把梯形逐段填出来 ——
+     * 所以调宽窄/长短不用动视图（屏上 80px ⇒ 本地 100，因为宿主节点还吃 0.8 缩放）。
+     *
+     * 两个必须知道的点：
+     *  ① **每帧都要 `clear()`**：`render` 开头只对**首帧**清一次 `graphics`
+     *    （`if (firstRender || event.type !== 'projectile' ...)`），不清的话每帧都会把
+     *    上一帧的拖尾再叠一遍，飞一会儿就糊成一团实心色块；
+     *  ② 每段用一个新的 `Color` 实例：`Graphics` 是**按路径记录填充色**的
+     *    （同 `TerritoryChestView.applyRainbow` 的多色写法），复用同一个实例并改 alpha
+     *    在不同引擎版本上可能被"最后一次颜色覆盖全部路径"坑到。
+     */
+    private drawMissileTrail(prefabPath: string | null | undefined): void {
+        const trail = zcMissileTrailOf(prefabPath);
+        if (!trail) return;
+        const graphics = this.graphics;
+        if (!graphics?.isValid) return;
+        graphics.clear();
+        const [red, green, blue] = trail.color;
+        for (const quad of zcMissileTrailQuads(trail)) {
+            if (quad.alpha <= 0.004) continue;
+            graphics.fillColor = new Color(red, green, blue, Math.round(255 * quad.alpha));
+            graphics.moveTo(quad.x0, quad.halfWidth0);
+            graphics.lineTo(quad.x1, quad.halfWidth1);
+            graphics.lineTo(quad.x1, -quad.halfWidth1);
+            graphics.lineTo(quad.x0, -quad.halfWidth0);
+            graphics.close();
+            graphics.fill();
+        }
     }
 
     /**

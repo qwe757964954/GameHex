@@ -6,6 +6,7 @@ import {
     zcCombatEffectAnchorOf,
     zcCombatEffectAnchorPoint,
     zcCombatEffectLayerOf,
+    zcCombatEffectLayerOfPath,
     zcCombatEffectSiblingIndex,
 } from '../assets/script/app/zcds/view/ZCCombatEffectPlacement';
 
@@ -94,6 +95,14 @@ test('⑤ 层序：地面区域特效（type=area）压在所有角色之下，�
     assert.equal(zcCombatEffectLayerOf('projectile'), 'top');
     assert.equal(zcCombatEffectLayerOf('melee'), 'top');
 
+    //  按路径登记的例外（2026-11-07 鹿神守护）：`area` 事件里也会出现**生物本体**，
+    //  小鹿冲刺按地面层插队会被敌兵盖住，所以登记成 top。未登记路径一律回到事件类型口径。
+    assert.equal(zcCombatEffectLayerOfPath('area', 'units/projectiles/鹿神守护/鹿神守护'), 'top');
+    assert.equal(zcCombatEffectLayerOfPath('area', null), 'ground');
+    assert.equal(zcCombatEffectLayerOfPath('area', 'units/projectiles/暴风雪/暴风雪'), 'ground',
+        '没登记的 area 一律留在脚下，不能被这条例外带跑');
+    assert.equal(zcCombatEffectLayerOfPath('melee', 'units/projectiles/鹿神守护/鹿神守护'), 'top');
+
     // `mapLayer` 实况：Background(0) → board(1) → 动态对象(2..)。
     // ground ⇒ 紧贴棋盘之后（2）；top ⇒ 永远末尾。
     assert.equal(zcCombatEffectSiblingIndex('ground', 1, 9), 2,
@@ -107,7 +116,8 @@ test('⑤ 层序：地面区域特效（type=area）压在所有角色之下，�
     // 源码守卫：层序必须由这个函数决定，且 `renderEffectSystem` 里不能再无条件置顶。
     const world = codeOf(RENDER_WORLD);
     const body = world.slice(world.indexOf('private renderEffectSystem'));
-    assert.match(body, /zcCombatEffectLayerOf\(event\.type\)/, '层序判据必须来自事件类型');
+    assert.match(body, /zcCombatEffectLayerOfPath\(event\.type, event\.effectPrefabPath\)/,
+        '层序判据必须来自事件类型（+ 按路径登记的例外），不能靠创建顺序');
     assert.match(body, /this\.options\.board\.getSiblingIndex\(\)/,
         '地面特效要贴棋盘之后 —— 靠「新建置顶」会让后出生的角色把火盖回去');
     assert.doesNotMatch(body, /setSiblingIndex\(this\.options\.mapLayer\.children\.length - 1\)/,

@@ -257,6 +257,7 @@ export class ZCUnitView extends Component {
     /** 本兵最后一次实际扣血的表现时间；null = 还没挨过打，血条不显示。 */
     private lastDamagedAt: number | null = null;
     private fallbackKey = -1;
+    private fallbackGateScale = 1;
     private appliedRootSize = -1;
     private appliedRootX = Number.NaN;
     private appliedRootY = Number.NaN;
@@ -520,8 +521,8 @@ export class ZCUnitView extends Component {
                     this.spawnShakeStartedAt = null;
                 }
             }
-            const scaleX = this.visualBaseScale.x * facing * shakeX;
-            const scaleY = this.visualBaseScale.y * shakeY;
+            const scaleX = this.visualBaseScale.x * facing * shakeX * (unit.gateScale ?? 1);
+            const scaleY = this.visualBaseScale.y * shakeY * (unit.gateScale ?? 1);
             // 值没变就不写 setScale：引擎会因它置脏标记，每帧无条件写是纯浪费。
             if (scaleX !== this.appliedVisualScaleX || scaleY !== this.appliedVisualScaleY) {
                 this.appliedVisualScaleX = scaleX;
@@ -677,7 +678,7 @@ export class ZCUnitView extends Component {
         // 血条 Y 必须跟着 `prefabSize` 一起缩放：美术放大后头顶也跟着升
         // （基准 +69~+74，×1.2 就是 +83~+89），而条固定在 +80 就会**陷进脑袋里**。
         // 宽度不缩 —— 血条宽是「可读性」规格（56/64），跟着美术体型缩到 45 会读不出比例。
-        const barOffsetY = this.barOffsetY * this.visualSize;
+        const barOffsetY = this.barOffsetY * this.visualSize * (unit.gateScale ?? 1);
         if (barOffsetY !== this.barAppliedOffsetY) {
             this.healthBar.node.setPosition(0, barOffsetY, 0);
             this.barAppliedOffsetY = barOffsetY;
@@ -716,16 +717,19 @@ export class ZCUnitView extends Component {
         const key = (this.visualNode ? 1 : 0)
             | (unit.owner === ZCOwner.Player ? 2 : unit.owner === ZCOwner.Enemy ? 4 : unit.owner === ZCOwner.Enemy2 ? 8 : 16)
             | (definition.hero ? 32 : 0)
-            | (definition.attackRange > 100 ? 64 : 0);
-        if (key === this.fallbackKey) return;
+            | (definition.attackRange > 100 ? 64 : 0)
+            | (unit.gateSize === 'enlarge' ? 128 : unit.gateSize === 'shrink' ? 256 : 0);
+        const gateScale = unit.gateScale ?? 1;
+        if (key === this.fallbackKey && gateScale === this.fallbackGateScale) return;
         this.fallbackKey = key;
+        this.fallbackGateScale = gateScale;
         this.sprite.enabled = false;
         this.sprite.spriteFrame = null;
         this.fallback.enabled = this.visualNode === null;
         this.fallbackLabel.enabled = this.visualNode === null;
         if (this.visualNode) return;
-        const radius = definition.hero
-            ? ZCUnitView.FALLBACK_RADIUS_HERO : ZCUnitView.FALLBACK_RADIUS_UNIT;
+        const radius = (definition.hero
+            ? ZCUnitView.FALLBACK_RADIUS_HERO : ZCUnitView.FALLBACK_RADIUS_UNIT) * (unit.gateScale ?? 1);
         this.fallback.node.setPosition(0, radius, 0);
         this.fallbackLabel.node.setPosition(0, radius + 1, 0);
         this.fallbackTransform.setContentSize(radius * 2, radius * 2);

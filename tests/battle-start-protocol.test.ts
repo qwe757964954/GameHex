@@ -34,6 +34,7 @@ import protobuf from 'protobufjs/light.js';
 // 真 ProtoCoder：`GameNet` 判"能不能发"用的就是它 + 真静态协议模块。
 // 走**静态 import**（不用 `await import()`）：tsconfig 的 `--module` 不支持动态 import，会报 TS1323。
 import { ProtoCoder } from '../assets/script/framework/net/ProtoCoder';
+import protobufRoot from '../assets/script/lib/protobuf/protoCompiledStatic';
 import {
     ZC_BATTLE_TYPE_PVP,
     ZC_BATTLE_UNIT_TYPE,
@@ -134,6 +135,7 @@ test('运行时 protobuf 含开始战斗的 4 个 message，且字段号/类型�
         'unitType',
         // r936：PVP buff 列表（另有一条用例专门钉它的结构）
         'buffInfo',
+        'attrs',
     ]);
     assert.equal(unit.fields.showInfo.resolvedType, show);
     assert.equal(unit.fields.campId.type, 'uint32');
@@ -174,6 +176,41 @@ test('r936 新增 CmdPvpBuffInfo：source(uint32) + buffs(扁平字符串)，挂
     const round = buff.decode(buff.encode(buff.create({ source: 7, buffs: ['101', '30', '102', 'x'] })).finish());
     assert.equal(round.source, 7);
     assert.deepEqual([...(round.buffs ?? [])], ['101', '30', '102', 'x'], 'value 原样是字符串，不能在编解码层被转数字');
+});
+
+test('战斗单元 attrs=9：静态协议与反射协议互通，旧包缺省为空数组', () => {
+    const unit = root.lookupType(`${CMD}.CmdBattleUnitInfo`);
+    const heroAttr = root.lookupType(`${CMD}.CmdPvpHeroAttrInfo`);
+    const attr = root.lookupType(`${CMD}.CmdPvpAttrInfo`);
+    assert.equal(unit.fields.attrs.id, 9);
+    assert.equal(unit.fields.attrs.repeated, true);
+    assert.equal(unit.fields.attrs.resolvedType, heroAttr);
+    assert.equal(heroAttr.fields.heroId.id, 1);
+    assert.equal(heroAttr.fields.heroId.type, 'uint32');
+    assert.equal(heroAttr.fields.heroId.required, true);
+    assert.equal(heroAttr.fields.attrs.id, 2);
+    assert.equal(heroAttr.fields.attrs.repeated, true);
+    assert.equal(heroAttr.fields.attrs.resolvedType, attr);
+    assert.equal(attr.fields.attrId.id, 1);
+    assert.equal(attr.fields.attrId.type, 'string');
+    assert.equal(attr.fields.attrId.required, true);
+    assert.equal(attr.fields.value.id, 2);
+    assert.equal(attr.fields.value.type, 'string');
+    assert.equal(attr.fields.value.required, true);
+
+    const staticUnit = protobufRoot.com.xkhy.tafang.cmd.CmdBattleUnitInfo;
+    const payload = {
+        showInfo: { roleId: 1, serverId: 1, power: 0, name: '', img: 0, headFrame: 0, gradeId: 0, gradeScore: 0 },
+        campId: 1, artifactId: 0, artifactLevel: 0, unitId: 1,
+        attrs: [{ heroId: 101, attrs: [{ attrId: 'attack', value: '12.5' }, { attrId: 'custom', value: 'x' }] }],
+    };
+    const encoded = unit.encode(unit.create(payload)).finish();
+    assert.deepEqual(JSON.parse(JSON.stringify(staticUnit.decode(encoded).attrs)), payload.attrs);
+    const staticEncoded = staticUnit.encode(staticUnit.create(payload)).finish();
+    assert.deepEqual(Array.from(staticEncoded), Array.from(encoded));
+    assert.deepEqual(unit.toObject(unit.decode(staticEncoded)).attrs, payload.attrs);
+    const { attrs, ...oldPayload } = payload;
+    assert.deepEqual(staticUnit.decode(unit.encode(unit.create(oldPayload)).finish()).attrs, []);
 });
 
 test('开始战斗请求的编码口径（r259 抽子消息后，字段 1 是 message 不再是 uint32）', () => {
@@ -295,17 +332,7 @@ test('真 ProtoCoder 能解出服务端回包：code / seed / battleId / unitInf
     assert.equal(toIdString(decoded.unitInfos[1].showInfo.roleId), '10088');
 });
 
-/**
- * 已知「Rsp 没登记 id」的请求（= 现在一定发不出去）。
- *
- * 只允许放**别人负责补**的协议；补上后**必须把名字从这里删掉**，否则这份清单会变成
- * "永久豁免"，新加的协议就算漏登记 id 也没人发现。
- * 现状：`CmdFormationSelectReqMsg`（`FormationService.selectFormation`，切阵型页签时调）
- * —— 与开战协议同一批漏的，r256 只补了开战，2026-09-21 仍缺。
- */
-const KNOWN_UNSENDABLE = new Set(['CmdFormationSelectReqMsg']);
-
-test('工程内所有请求类都能发出去（已知例外必须在清单里）', async () => {
+test('工程内所有请求类都能发出去', async () => {
     const coder = new ProtoCoder();
     await coder.init();
 
@@ -313,25 +340,17 @@ test('工程内所有请求类都能发出去（已知例外必须在清单里�
     assert.ok(files.length > 0, '没扫到 requestMsg 目录，说明路径变了，这条用例已经失效');
 
     const actuallyUnsendable: string[] = [];
-    const exemptions: string[] = [];
     for (const file of files) {
         const src = readFileSync(`assets/script/app/generated/requestMsg/${file}`, 'utf8');
         for (const match of src.matchAll(/return\s+'(Cmd\w+ReqMsg)'/g)) {
             const reqName = match[1];
             if (coder.getMessageId(reqName) != null) continue;
-            if (KNOWN_UNSENDABLE.has(reqName)) {
-                exemptions.push(reqName);
-            } else {
-                actuallyUnsendable.push(`${reqName} (${file})`);
-            }
+            actuallyUnsendable.push(`${reqName} (${file})`);
         }
     }
 
     assert.deepEqual(actuallyUnsendable, [],
         '这些请求类发不出去：MessageId 缺对应的 <Base>RspMsg，或 protoCompiledStatic.ts 没重建');
-    // 例外一旦被补上就要从清单里删掉，这里反向盯住"清单过期"
-    assert.deepEqual(exemptions, ['CmdFormationSelectReqMsg'],
-        'KNOWN_UNSENDABLE 已过期：请把已补齐的名字移出清单');
 });
 
 // ============================================================================
@@ -412,6 +431,27 @@ test('响应归一化：code != 1、缺 battleId、无单元 都判为不可用'
     assert.equal(ok.battleId, '20260921_2_7_pvp');
     assert.equal(ok.seed, '1234567890123456789', 'uint64 必须走字符串，不能经 number 丢精度');
     assert.equal(ok.units.length, 2);
+});
+
+test('英雄附加属性按卡牌升级表归一化，坏值不覆盖合法值，重复英雄逐属性后覆盖', () => {
+    const info = unit({ unitId: 1, attrs: [
+        { heroId: 101, attrs: [
+            { attrId: 'maxHp', value: '120' }, { attrId: 'atk', value: '0' },
+            { attrId: 'buildingHp', value: '360' }, { attrId: 'unknown', value: '99' },
+        ] },
+        { heroId: 101, attrs: [
+            { attrId: 'hp', value: '180' }, { attrId: 'attack', value: 'NaN' },
+            { attrId: 'buildingHp', value: '-1' }, { attrId: 'maxHp', value: '' },
+        ] },
+        { heroId: 102, attrs: [{ attrId: 'attack', value: '12.5' }] },
+        { heroId: 103, attrs: [{ attrId: 'maxHp', value: '0' }, { attrId: 'attack', value: 'Infinity' }] },
+        { heroId: 0, attrs: [{ attrId: 'attack', value: '99' }] },
+    ] });
+    assert.deepEqual(normalizeBattleUnit(info as CmdBattleUnitInfo)?.heroAttrs, [
+        { heroId: 101, attributes: { maxHp: 180, attack: 0, buildingHp: 360 } },
+        { heroId: 102, attributes: { attack: 12.5 } },
+    ]);
+    assert.deepEqual(normalizeBattleUnit(unit({ unitId: 1 }) as CmdBattleUnitInfo)?.heroAttrs, []);
 });
 
 test('战斗单元归一化：campId 必需、heroId 去重且过滤非法', () => {

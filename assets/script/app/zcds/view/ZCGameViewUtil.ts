@@ -582,8 +582,9 @@ export const ZC_HINT_GLOW_RING_ALPHAS: readonly number[] = [0.08, 0.11, 0.15, 0.
 //  1. **方向**按胜利方身份定，不按每一格的真实归属定 ——「其他玩家」= 非我方 ⇒ 从最上方那行往下，
 //     「玩家自己」= 我方 ⇒ 从最下方那行往上。玩家那一侧**保持不变**（原文「依旧」）。
 //  2. 轴上是**三段**：① 填充（铺深色，整行推进）→ ② 回正（起点整行推回去，深色 → 当前色）
-//     → ③ **线条脉冲**（回正收手后，再有一道亮线沿同一方向扫过一遍，见 `PULSE_*`）。
-//     ② 的起跑时刻见 `REVERT_LEAD_ROWS`；③ 的起跑时刻 = ② 收手那一刻（`victorySweepRevertEndSeconds`）。
+//     → ③ **线条脉冲**（一道亮线沿同一方向扫过一遍，见 `PULSE_*`）。
+//     ② 的起跑时刻见 `REVERT_LEAD_ROWS`；③ 的起跑时刻见 `PULSE_LEAD_ROWS`
+//     —— 2026-11-07 起它跟着**铺色波前**走（落后 1~2 行），不再等 ② 收手。
 //  3. ① 期间已铺上的格子**闪烁**：颜色在同色系的**偏白**一端快速来回（`SHIMMER_*`），2026-10-16 新增。
 //  4. ② 收手后 ③ 亮的是**地块轮廓线**（不是底色）：③ 期间全盘已归胜利方、底色不再变，
 //     唯一还在动的就是这条线 —— 见 `ZCOutlineLayer.appendHexPulseOutlineSegments`。
@@ -652,15 +653,27 @@ export const ZC_VICTORY_SWEEP_SHIMMER_ROW_PHASE = 1 / 3;
 export const ZC_VICTORY_SWEEP_SHIMMER_STEPS = 16;
 
 /**
- * 线条脉冲（第 ③ 段）波前每推进一行的时长（2026-10-16 需求：「回正动画结束再增加一个
- * 线条波动的脉冲效果，类似回正动画的」）。
+ * 线条脉冲（第 ③ 段）**在铺色波前后面几行**起跑。
  *
- * 🔴 **故意比填充 / 回正的 0.06s 快**：那两段是「一格一格把颜色铺过去」，看得清每一行；
- * 脉冲是收尾的一道光，0.06 会让整段拖到 1.3s 以上（结算弹窗要一直等它）。
- * 0.035 下 20 行的盘约 0.7s —— 读起来是「唰」一下扫过，而不是第二遍铺场。
- * 「类似回正动画」指的是**方向与形态**（从起点整行扫到终点），不是速度。
+ * 2026-11-07 需求：「战斗胜利结算的格子高亮边框脉冲动画应该早一点播放，紧跟在叠色格子后
+ * 1~2 行即可」。改前它要等**回正整段收手**才动（20 行的盘约 1.32s 之后），结算弹窗还得为它
+ * 多等 0.7s；现在锚在**填充开头**、与回正同一个起跑点。
+ *
+ * 取 2 ⇒ 屏幕上看到的是「铺到第 2~3 行时，亮线从起点压上来」。口径与 `REVERT_LEAD_ROWS`
+ * 一致（需求是按行说的，不是按秒）：行数不足的盘退化成「铺满即起跑」。
  */
-export const ZC_VICTORY_SWEEP_PULSE_STEP_SECONDS = 0.035;
+export const ZC_VICTORY_SWEEP_PULSE_LEAD_ROWS = 2;
+/**
+ * 线条脉冲波前每推进一行的时长。
+ *
+ * 2026-11-07 起**与填充 / 回正同速**（0.06s）：三道波前（铺深色、回正、亮线）一起走，
+ * 亮线恒定落在铺色后 `PULSE_LEAD_ROWS` 行，读起来是「深色带往前推、亮线压在正在回正的那一行上」。
+ *
+ * 改前它是 0.035（故意更快），理由是那时脉冲独立占最后一段、需要「唰」一下收场（0.06 会让
+ * 整段拖到 1.3s 以上）。现在它嵌进铺场里跑，再比铺色快就会一路超车 —— 变成第二条波，
+ * 和「紧跟」正好相反。
+ */
+export const ZC_VICTORY_SWEEP_PULSE_STEP_SECONDS = 0.06;
 /**
  * 波带的半宽（行）：波前左右各 `BAND` 行内非零，峰在波前正压过的那一行。
  *
@@ -771,9 +784,10 @@ export function victorySweepRevertMix(cursor: number, step: number): number {
 /**
  * 回正段**收手**时刻（秒）= 回正起点 + 回正段总长。
  *
- * 也就是线条脉冲（第 ③ 段）的起跑时刻 —— 需求 2026-10-16：「回正动画结束再增加一个
- * 线条波动的脉冲效果」。分成单独一个函数而不是让脉冲去反推 `victorySweepDuration`：
- * 后者现在**含**脉冲段，拿它当脉冲起点就成自引用了。
+ * 单独一个函数而不是让别的段落去反推 `victorySweepDuration`：后者现在是
+ * 「回正收手」与「脉冲结束」两者的较晚者，拿它当某一段的边界就成自引用了。
+ *
+ * ⚠️ 2026-11-07 起它**不再等于**线条脉冲的起跑时刻（脉冲已提前到铺色 2 行处）。
  */
 export function victorySweepRevertEndSeconds(stepCount: number): number {
     if (!(stepCount > 0)) return 0;
@@ -794,10 +808,28 @@ export function victorySweepPulseSeconds(stepCount: number): number {
         * ZC_VICTORY_SWEEP_PULSE_STEP_SECONDS;
 }
 
-/** 整段演出总长（秒）= 回正收手 + 脉冲段。调用方（`ZCGame`）等它等到这一步才弹结算。 */
+/**
+ * 脉冲段起点（秒）= 填充铺过 `PULSE_LEAD_ROWS` 行的那一刻。
+ *
+ * 与 `victorySweepRevertStartSeconds` 同一套兜底：行数比它还少的盘退化成「铺满即起跑」，
+ * 不会算出负的起跑时刻。
+ */
+export function victorySweepPulseStartSeconds(stepCount: number): number {
+    if (!(stepCount > 0)) return 0;
+    const lead = ZC_VICTORY_SWEEP_PULSE_LEAD_ROWS * ZC_VICTORY_SWEEP_STEP_SECONDS;
+    return Math.min(victorySweepFillSeconds(stepCount), lead);
+}
+
+/** 整段演出总长（秒）= 回正收手与脉冲收尾里**较晚**的那个。调用方（`ZCGame`）等它等到这一步才弹结算。 */
 export function victorySweepDuration(stepCount: number): number {
     if (!(stepCount > 0)) return 0;
-    return victorySweepRevertEndSeconds(stepCount) + victorySweepPulseSeconds(stepCount);
+    //  2026-11-07 起脉冲嵌在铺场里跑（起点 = 铺色 2 行、同速），结束时刻可能早于回正收手
+    //  ⇒ 必须取较晚者。写成「回正收手 + 脉冲段长」会把结算硬拖到脉冲之后那段空白里，
+    //  正是这次需求要修掉的「等太久」。
+    return Math.max(
+        victorySweepRevertEndSeconds(stepCount),
+        victorySweepPulseStartSeconds(stepCount) + victorySweepPulseSeconds(stepCount),
+    );
 }
 
 /**
@@ -808,7 +840,7 @@ export function victorySweepDuration(stepCount: number): number {
  */
 export function victorySweepPulseCursor(elapsed: number, stepCount: number): number {
     if (!(stepCount > 0)) return -1;
-    const start = victorySweepRevertEndSeconds(stepCount);
+    const start = victorySweepPulseStartSeconds(stepCount);
     if (elapsed < start) return -1;
     return (elapsed - start) / ZC_VICTORY_SWEEP_PULSE_STEP_SECONDS;
 }

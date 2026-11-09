@@ -50495,6 +50495,135 @@ return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdPvpBuffInfo";
 };
 return CmdPvpBuffInfo;
 })();
+cmd.CmdPvpAttrInfo = (function() {
+function CmdPvpAttrInfo(properties) {
+if (properties)
+for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+if (properties[keys[i]] != null && keys[i] !== "__proto__")
+this[keys[i]] = properties[keys[i]];
+}
+CmdPvpAttrInfo.prototype.attrId = "";
+CmdPvpAttrInfo.prototype.value = "";
+CmdPvpAttrInfo.create = function create(properties) {
+return new CmdPvpAttrInfo(properties);
+};
+CmdPvpAttrInfo.encode = function encode(message, writer, q) {
+if (!writer)
+writer = $Writer.create();
+if (q === undefined)
+q = 0;
+if (q > $util.recursionLimit)
+throw Error("max depth exceeded");
+writer.uint32(  10).string(message.attrId);
+writer.uint32(  18).string(message.value);
+return writer;
+};
+CmdPvpAttrInfo.decode = function decode(reader, length, error, long) {
+if (!(reader instanceof $Reader))
+reader = $Reader.create(reader);
+if (long === undefined)
+long = 0;
+if (long > $Reader.recursionLimit)
+throw Error("maximum nesting depth exceeded");
+let end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdPvpAttrInfo();
+while (reader.pos < end) {
+let tag = reader.uint32();
+if (tag === error)
+break;
+switch (tag >>> 3) {
+case 1: {
+message.attrId = reader.string();
+break;
+}
+case 2: {
+message.value = reader.string();
+break;
+}
+default:
+reader.skipType(tag & 7, long);
+break;
+}
+}
+if (!message.hasOwnProperty("attrId"))
+throw $util.ProtocolError("missing required 'attrId'", { instance: message });
+if (!message.hasOwnProperty("value"))
+throw $util.ProtocolError("missing required 'value'", { instance: message });
+return message;
+};
+CmdPvpAttrInfo.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+if (typeUrlPrefix === undefined) {
+typeUrlPrefix = "type.googleapis.com";
+}
+return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdPvpAttrInfo";
+};
+return CmdPvpAttrInfo;
+})();
+cmd.CmdPvpHeroAttrInfo = (function() {
+function CmdPvpHeroAttrInfo(properties) {
+this.attrs = [];
+if (properties)
+for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+if (properties[keys[i]] != null && keys[i] !== "__proto__")
+this[keys[i]] = properties[keys[i]];
+}
+CmdPvpHeroAttrInfo.prototype.heroId = 0;
+CmdPvpHeroAttrInfo.prototype.attrs = $util.emptyArray;
+CmdPvpHeroAttrInfo.create = function create(properties) {
+return new CmdPvpHeroAttrInfo(properties);
+};
+CmdPvpHeroAttrInfo.encode = function encode(message, writer, q) {
+if (!writer)
+writer = $Writer.create();
+if (q === undefined)
+q = 0;
+if (q > $util.recursionLimit)
+throw Error("max depth exceeded");
+writer.uint32(  8).uint32(message.heroId);
+if (message.attrs != null && message.attrs.length)
+for (let i = 0; i < message.attrs.length; ++i)
+$root.com.xkhy.tafang.cmd.CmdPvpAttrInfo.encode(message.attrs[i], writer.uint32(  18).fork(), q + 1).ldelim();
+return writer;
+};
+CmdPvpHeroAttrInfo.decode = function decode(reader, length, error, long) {
+if (!(reader instanceof $Reader))
+reader = $Reader.create(reader);
+if (long === undefined)
+long = 0;
+if (long > $Reader.recursionLimit)
+throw Error("maximum nesting depth exceeded");
+let end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdPvpHeroAttrInfo();
+while (reader.pos < end) {
+let tag = reader.uint32();
+if (tag === error)
+break;
+switch (tag >>> 3) {
+case 1: {
+message.heroId = reader.uint32();
+break;
+}
+case 2: {
+if (!(message.attrs && message.attrs.length))
+message.attrs = [];
+message.attrs.push($root.com.xkhy.tafang.cmd.CmdPvpAttrInfo.decode(reader, reader.uint32(), undefined, long + 1));
+break;
+}
+default:
+reader.skipType(tag & 7, long);
+break;
+}
+}
+if (!message.hasOwnProperty("heroId"))
+throw $util.ProtocolError("missing required 'heroId'", { instance: message });
+return message;
+};
+CmdPvpHeroAttrInfo.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+if (typeUrlPrefix === undefined) {
+typeUrlPrefix = "type.googleapis.com";
+}
+return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdPvpHeroAttrInfo";
+};
+return CmdPvpHeroAttrInfo;
+})();
 cmd.CmdPvpInfo = (function() {
 function CmdPvpInfo(properties) {
 if (properties)
@@ -50975,6 +51104,7 @@ cmd.CmdBattleUnitInfo = (function() {
 function CmdBattleUnitInfo(properties) {
 this.heroInfos = [];
 this.buffInfo = [];
+this.attrs = [];
 if (properties)
 for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
 if (properties[keys[i]] != null && keys[i] !== "__proto__")
@@ -50988,6 +51118,7 @@ CmdBattleUnitInfo.prototype.artifactLevel = 0;
 CmdBattleUnitInfo.prototype.unitId = 0;
 CmdBattleUnitInfo.prototype.unitType = 0;
 CmdBattleUnitInfo.prototype.buffInfo = $util.emptyArray;
+CmdBattleUnitInfo.prototype.attrs = $util.emptyArray;
 CmdBattleUnitInfo.create = function create(properties) {
 return new CmdBattleUnitInfo(properties);
 };
@@ -51011,6 +51142,9 @@ writer.uint32(  56).uint32(message.unitType);
 if (message.buffInfo != null && message.buffInfo.length)
 for (let i = 0; i < message.buffInfo.length; ++i)
 $root.com.xkhy.tafang.cmd.CmdPvpBuffInfo.encode(message.buffInfo[i], writer.uint32(  66).fork(), q + 1).ldelim();
+if (message.attrs != null && message.attrs.length)
+for (let i = 0; i < message.attrs.length; ++i)
+$root.com.xkhy.tafang.cmd.CmdPvpHeroAttrInfo.encode(message.attrs[i], writer.uint32(  74).fork(), q + 1).ldelim();
 return writer;
 };
 CmdBattleUnitInfo.decode = function decode(reader, length, error, long) {
@@ -51060,6 +51194,12 @@ case 8: {
 if (!(message.buffInfo && message.buffInfo.length))
 message.buffInfo = [];
 message.buffInfo.push($root.com.xkhy.tafang.cmd.CmdPvpBuffInfo.decode(reader, reader.uint32(), undefined, long + 1));
+break;
+}
+case 9: {
+if (!(message.attrs && message.attrs.length))
+message.attrs = [];
+message.attrs.push($root.com.xkhy.tafang.cmd.CmdPvpHeroAttrInfo.decode(reader, reader.uint32(), undefined, long + 1));
 break;
 }
 default:
@@ -55397,6 +55537,7 @@ values[valuesById[1309919437] = "CmdFirstRechargesBuyRspMsg"] = 1309919437;
 values[valuesById[622072529] = "CmdFirstRechargeRewardRspMsg"] = 622072529;
 values[valuesById[1211220072] = "CmdFormationInfoRspMsg"] = 1211220072;
 values[valuesById[1506971931] = "CmdFormationOpRspMsg"] = 1506971931;
+values[valuesById[829295498] = "CmdFormationSelectRspMsg"] = 829295498;
 values[valuesById[2057674506] = "CmdFriendsApplyRspMsg"] = 2057674506;
 values[valuesById[552573225] = "CmdFriendsAddRspMsg"] = 552573225;
 values[valuesById[1262322162] = "CmdFriendsRefuseRspMsg"] = 1262322162;

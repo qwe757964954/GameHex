@@ -32,7 +32,7 @@ import { ZC_OUTLINE_HEX_POINTS } from './ZCOutlineLayer';
 import { ZCHealthBarDamageTrail } from './ZCHealthBarDamageTrail';
 import { ZCPvpTileType } from '../model/ZCPvpTileRules';
 import { ZCOwner } from '../model/ZCMapConfig';
-import { neutralResourceVisualOf, ZCNeutralResourceVisual } from '../model/ZCNeutralResourceGroup';
+import { neutralResourceVisualOf, ZCNeutralResourceVisual, type IZCGateEffect } from '../model/ZCNeutralResourceGroup';
 import {
     ZC_CARD_FADE_START_PROGRESS,
     ZC_CARD_REVEAL_SECONDS,
@@ -87,7 +87,8 @@ const BUILDING_SYMBOLS: Readonly<Record<ZCBuildingType, string>> = {
  */
 const NEUTRAL_RESOURCE_LABELS: Readonly<Record<string, string>> = {
     chest: '宝箱', gold: '金币', mine: '金矿', unit_cap: '兵力', artifact_charge: '神器',
-    barracks: '兵营', buff: 'Buff',
+    barracks: '兵营', buff: 'Buff', gate: '强化门', extension: '衍生地块',
+    portal: '传送门', horn: '号角', monster: '野怪',
 };
 // 三个「格内图标落点」下面的 y 都是 **BuildingLayer 内的局部坐标**。
 // 详见 docs/ZCHexView设计决策.md §1。
@@ -97,6 +98,10 @@ const NEUTRAL_RESOURCE_LABELS: Readonly<Record<string, string>> = {
  * 节点尺寸会被 `SpriteFrame.rect` 覆写，神器图是 230×230 会溢出格子，必须按最大边等比缩到本格。
  */
 const RESOURCE_ICON_TARGET_SIZE = 128;
+const NEUTRAL_FEATURE_ICON_SCALE = 0.85;
+const MONSTER_SLEEP_TINT = new Color(130, 150, 180, 255);
+const MONSTER_BADGE_POS = { x: 28, y: 38, z: 0 };
+const GATE_COOLDOWN_TINT = new Color(105, 105, 105, 255);
 
 /**
  * 自选阶段的中立资源**占位图**（`image/gameui/whh`）额外乘的缩放。
@@ -506,7 +511,7 @@ export class ZCHexView extends Component {
 
     /**
      * 中立资源点图标（`neutralResourceId` → 图），复用 `iconSprite` 节点，位置居中。
-     * 三张图统一在 `assets/resources/image/map-resource/`（同一套 212×212 画布，别换别处的同名图）；
+     * 图标在 `assets/bundles/battle/image/map-resource/`，运行时图集由本局 Loader 注入；
      * `artifact_charge` 不在这里绑（玩家携带、随配置变），由 `ZCGameLoader` 预加载后经 `setArtifactChargeFrame` 注入；
      * `unit_cap` 暂无美术图，走 `NEUTRAL_RESOURCE_LABELS` 文字兜底。
      */
@@ -591,6 +596,8 @@ export class ZCHexView extends Component {
      *  和 `artifactChargeFrame` 一样按运行时注入，避免在三个中立资源图旁边再多一个手工绑定项。
      */
     private unknownResourceFrame: SpriteFrame | null = null;
+    private neutralResourceFrames: ReadonlyMap<string, SpriteFrame> | null = null;
+    private gateCooldownSeconds = 0;
     /**
      * 兵力资源点表里配的**卡 id**（`rewardCardId`，如 `'68001'`）与**要站几个**
      * （`rewardUnitCount`），都由渲染层注入 —— 视图不读表，与 `setBuildingFrameResolver` 同款口径。
@@ -608,6 +615,7 @@ export class ZCHexView extends Component {
     private resourceUnitPrefabName = '';
     /** 本格当前挂着的骨骼节点（池化复用：格子 view 生命周期内只增不减，count 变小时多出来的隐藏）。 */
     private readonly resourceUnitNodes: Node[] = [];
+    private readonly resourceUnitSkeletons: (sp.Skeleton | null)[] = [];
     /** 骨骼节点的缓存键：`unitId@数量` —— 变了才重建。 */
     private resourceUnitCache = '';
     private contentKey = '';
@@ -971,6 +979,16 @@ export class ZCHexView extends Component {
         this.contentKey = '';
     }
 
+    /** 本局资源图标随宿主注入，晚到或池化重用时重绘内容。 */
+    setNeutralResourceFrames(frames: ReadonlyMap<string, SpriteFrame> | null): void {
+        this.neutralResourceFrames = frames;
+        this.contentKey = '';
+    }
+
+    setGateCooldownSeconds(seconds: number): void {
+        this.gateCooldownSeconds = seconds;
+    }
+
     /**
      * 注入「自选地图局的中立资源占位图」（`image/gameui/whh` 金色问号）。
      *
@@ -1041,6 +1059,17 @@ export class ZCHexView extends Component {
         this.renderCooldown(
             !canDevelop && state.state !== 'ruins' && state.building !== 'none' ? presentation.cooldown : null,
         );
+        if (state.neutralFeature?.effect && presentation.hideNeutralResourceLabel !== true) {
+            const gate = state.neutralFeature;
+            const active = gate.windowUntil > now;
+            const cooling = !active && gate.readyAt > now;
+            const bar = this.cooldownBar;
+            bar.node.active = active || cooling;
+            bar.progress = active ? 1 : this.gateCooldownSeconds > 0
+                ? clamp01(1 - (gate.readyAt - now) / this.gateCooldownSeconds) : 0;
+            const scale = active ? 2 : 1;
+            bar.node.setScale(scale, scale, 1);
+        }
         // 脉冲段（建筑还没长出来）里，格子仍按「开发前」的可开发外观渲染 —— 图标+价格数字
         // 跟着呼吸缩放，而不是让已经落地的建筑提前顶掉它们。建筑要等卡牌淡出那段才换上来。
         const showDevelopable = progress >= 0 && hasCardReveal && !fx.hidden && fx.buildingPopScale === 0;
@@ -1048,7 +1077,7 @@ export class ZCHexView extends Component {
         const key = this.contentSignature(state, presentation, canDevelop, affordable, showDevelopable);
         if (key === this.contentKey) return;
         this.renderTerrain(state, canDevelop);
-        this.renderContent(state, canDevelop, affordable, presentation.hideNeutralResourceLabel === true, showDevelopable);
+        this.renderContent(state, canDevelop, affordable, presentation.hideNeutralResourceLabel === true, showDevelopable, now);
         this.contentKey = key;
     }
 
@@ -1708,7 +1737,9 @@ export class ZCHexView extends Component {
             + `|${state.tileType}|${state.neutralResourceId ?? 0}|${state.tier}`
             + `|${state.developmentCost}|${state.developmentResolved}|${canDevelop}`
             + `|${affordable}|${presentation.hideNeutralResourceLabel === true}`
-            + `|${presentation.boundaryMask ?? 0}|${showDevelopable}`;
+            + `|${presentation.boundaryMask ?? 0}|${showDevelopable}`
+            + `|${state.neutralFeature?.awake}|${state.neutralFeature?.effect ?? ''}|${state.neutralFeature?.windowUntil > presentation.now
+                ? 'active' : state.neutralFeature?.readyAt > presentation.now ? 'cooling' : 'ready'}`;
     }
 
     /**
@@ -1827,6 +1858,7 @@ export class ZCHexView extends Component {
         affordable: boolean,
         hideNeutralResourceLabel: boolean,
         showDevelopable = false,
+        now = 0,
     ): void {
         const enemyCanDevelop = state.owner !== ZCOwner.Player && state.owner !== 'neutral' && state.state === 'developable'
             && state.building === 'none' && !state.developmentResolved;
@@ -1846,25 +1878,38 @@ export class ZCHexView extends Component {
         // ⚠️ 三元里必须给`&&` 加括号：裸写 `a && b ? x : y` 会被TS 解析成语法错误
         //（报TS1005/TS1389，指望不到具体行，容易误以为是别处坏了）。
         const resourceVisual = neutralResourceVisualOf(state.neutralResourceId);
-        const wantsResourceUnits = resourceVisual === ZCNeutralResourceVisual.UnitCap
+        const monster = resourceVisual === ZCNeutralResourceVisual.Monster;
+        const wantsResourceUnits = (resourceVisual === ZCNeutralResourceVisual.UnitCap || monster)
             && !hideNeutralResourceLabel;
         const resourceUnits = wantsResourceUnits
             ? this.rebuildResourceUnitsIfNeeded()
             : this.hideResourceUnits();
+        const sleepingMonster = monster && !state.neutralFeature?.awake;
+        for (const skeleton of this.resourceUnitSkeletons) {
+            if (!skeleton) continue;
+            skeleton.color = sleepingMonster ? MONSTER_SLEEP_TINT : Color.WHITE;
+            skeleton.timeScale = sleepingMonster ? 0.35 : 1;
+        }
         // 神器充能点（`artifact_charge`）：若 prefab 已挂 Spine 动画（六边形底 + 问号指示器），
         // 走 Spine 分支——不显示静态神器图标、也不写中文兜底。`null`（prefab 未挂 Spine）
         // 时回退到旧逻辑（`artifactChargeFrame` 静态图 / 文字兜底）。
         const useArtifactSpine = resourceVisual === ZCNeutralResourceVisual.ArtifactCharge
             && !hideNeutralResourceLabel && !!this.artifactHexSpine;
         const resourceFrame = resourceVisual && !hideNeutralResourceLabel && !useArtifactSpine
-            ? this.frameForResource(resourceVisual) : null;
+            ? monster
+                ? this.neutralResourceFrames?.get(sleepingMonster ? 'monster_sleep' : 'monster_awake') ?? null
+                : this.frameForResource(resourceVisual, state.neutralFeature?.effect)
+            : null;
+        const coolingGate = state.neutralFeature?.effect && state.neutralFeature.readyAt > now
+            && !(state.neutralFeature.windowUntil > now);
         this.setSprite(this.iconSprite,
-            resourceFrame ?? (enemyCanDevelop ? this.enemyDevelopFrame : effectiveCanDevelop ? this.frameForTileType(state.tileType) : null));
+            resourceFrame ?? (enemyCanDevelop ? this.enemyDevelopFrame : effectiveCanDevelop ? this.frameForTileType(state.tileType) : null),
+            coolingGate ? GATE_COOLDOWN_TINT : Color.WHITE);
         // 神器点 Spine 显隐与动画：六边形底播 `animation`（循环），问号指示器播 `ui_indicatorNPC`（循环）。
         this.applyArtifactSpineVisible(useArtifactSpine);
         // 资源点图标居中；敌方可开发时没有价格/数字，也居中；我方可开发时图标压在地块上半部、价格在底部配对。
         const iconPos = resourceFrame
-            ? ZCHexView.RESOURCE_ICON_POS
+            ? monster ? MONSTER_BADGE_POS : ZCHexView.RESOURCE_ICON_POS
             : enemyCanDevelop
                 ? ZCHexView.ENEMY_DEVELOP_ICON_POS
                 : ZCHexView.DEFAULT_TILE_ICON_POS;
@@ -1880,7 +1925,7 @@ export class ZCHexView extends Component {
         // 漏写任一条 = 沿用上一格留下的值，表现为「资源点旁边的地块图标大小不一」。
         // 金币图标（`priceIcon`）与数字（`iconLabel`）在另一组节点上，这里不碰它们的 scale。
         if (resourceFrame) {
-            const scale = resourceIconScale(resourceFrame);
+            const scale = resourceIconScale(resourceFrame) * (monster ? 0.25 : state.neutralFeature ? NEUTRAL_FEATURE_ICON_SCALE : 1);
             this.iconSprite.node.setScale(scale, scale, 1);
         } else if (this.iconSprite.node.scale.x !== TILE_ICON_SCALE) {
             this.iconSprite.node.setScale(TILE_ICON_SCALE, TILE_ICON_SCALE, 1);
@@ -1888,10 +1933,8 @@ export class ZCHexView extends Component {
         this.priceIcon.enabled = effectiveCanDevelop && !!this.priceIcon.spriteFrame;
 
         let text = '';
-        if (resourceVisual && !hideNeutralResourceLabel && !resourceFrame && !resourceUnits && !useArtifactSpine) {
-            // 有图标走图标（chest / gold / mine / barracks）；神器充能挂了 Spine 时走 Spine、不写文字；
-            // 兵团有骨骼（`resourceUnits`）⇒ 这里不会再落到中文「兵力」。
-            text = NEUTRAL_RESOURCE_LABELS[resourceVisual] ?? '';
+        if (resourceVisual && !hideNeutralResourceLabel && !state.neutralFeature && !resourceFrame && !resourceUnits && !useArtifactSpine) {
+            text = NEUTRAL_RESOURCE_LABELS[resourceVisual] || '';
         } else if (effectiveCanDevelop) text = String(state.developmentCost);
         else if (showBuilding && !buildingFrame) {
             // 没配外观图（旧存档 / 美术缺图）时才退「城/金/兵/塔」字 + 等级。
@@ -1901,7 +1944,7 @@ export class ZCHexView extends Component {
         // 骨骼挂在 `buildingLayer` 之外（根下），关掉它不影响骨骼；骨骼模式下建筑/价格层
         // 不该继续亮着（那是「可开发」的语义，与本格无关）。神器点 Spine 也挂在 BuildingLayer
         // 下，所以 Spine 显示时 BuildingLayer 必须 active。
-        this.buildingLayer.active = resourceUnits ? false
+        this.buildingLayer.active = resourceUnits && !monster ? false
             : enemyCanDevelop || effectiveCanDevelop || text !== '' || resourceFrame !== null || useArtifactSpine;
         this.iconLabel.enabled = text !== '';
         if (this.iconLabel.string !== text) this.iconLabel.string = text;
@@ -1977,6 +2020,7 @@ export class ZCHexView extends Component {
             if (node.isValid) node.destroy();
         }
         this.resourceUnitNodes.length = 0;
+        this.resourceUnitSkeletons.length = 0;
         this.resourceUnitCache = '';
     }
 
@@ -2008,6 +2052,7 @@ export class ZCHexView extends Component {
             visual.setScale(safe, safe, 1);
             this.playResourceUnitIdle(visual, skeleton);
             this.resourceUnitNodes.push(visual);
+            this.resourceUnitSkeletons.push(skeleton);
         }
     }
 
@@ -2103,7 +2148,13 @@ export class ZCHexView extends Component {
      * 中立资源点 → 图标。未登记的 id（`unit_cap` / `artifact_charge`）返回 null，
      * 调用方会退回 `NEUTRAL_RESOURCE_LABELS` 文字兜底 —— 加新图标只需补一个 `@property` + 一个 `case`。
      */
-    private frameForResource(id: string): SpriteFrame | null {
+    private frameForResource(id: string, effect?: IZCGateEffect): SpriteFrame | null {
+        if (id === 'gate' && effect) {
+            const gate = this.neutralResourceFrames?.get(`gate_${effect}`);
+            if (gate) return gate;
+        }
+        const frame = this.neutralResourceFrames?.get(id);
+        if (frame) return frame;
         switch (id) {
             case 'gold': return this.goldResourceFrame;
             case 'mine': return this.mineResourceFrame;
@@ -2119,6 +2170,7 @@ export class ZCHexView extends Component {
 
     private renderCooldown(cooldown: Readonly<ZCBuildingCooldownState> | null): void {
         const bar = this.cooldownBar;
+        if (bar.node.scale.x !== 1 || bar.node.scale.y !== 1) bar.node.setScale(1, 1, 1);
         bar.node.active = cooldown !== null;
         bar.progress = cooldown && Number.isFinite(cooldown.progress)
             ? Math.max(0, Math.min(1, cooldown.progress))

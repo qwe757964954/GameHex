@@ -35,6 +35,34 @@ test('等级底板包含等级标签，0 级时整体隐藏', () => {
 });
 
 // ============================================================================
+// 未解锁卡的「压暗 + 挂锁」
+//
+// 锁标是 prefab 上的固定节点：绑定漏了 = 未解锁卡永远看不到锁，且零报错（同 TeamEdit 那条）。
+// 默认**隐藏** —— 列表还没渲染就先挂一把锁，比空着更误导；压暗口径与排序分组同一把尺子
+// （`sortLineupCards` 也是「等级 > 0 才算已解锁」）。
+// ============================================================================
+
+test('未解锁卡：卡框右上角锁标挂在 prefab 上、默认隐藏，压暗与排序同口径', () => {
+    const lock = nodeNamed('Lock');
+    assert.ok(lock, 'CardLineupCard 里找不到 Lock 节点（卡框右上角的锁标）');
+    const sprite = components(lock!).find((component: Record<string, any>) => component.__type__ === 'cc.Sprite');
+    assert.ok(sprite, 'Lock 上要挂 cc.Sprite');
+    assert.equal(sprite!._spriteFrame?.__uuid__, 'ad50a988-7b1d-4a96-a882-db253db3589f@f9941',
+        'Lock 用的图是 main-pages/image/card/kpzr_lock（卡牌阵容专用锁标）');
+    assert.equal(lock!._active, false, 'Lock 默认隐藏：数据没到不许先挂一把锁');
+    assert.ok(lock!._lpos.x > 0 && lock!._lpos.y > 0, '锁标要贴在卡框右上角（x / y 均为正）');
+
+    const host = prefab.find((item) => item && typeof item === 'object' && 'lock' in item && 'face' in item);
+    assert.ok(host, 'prefab 里找不到 CardLineupCard 组件（字段改名了？）');
+    const bound = prefab[(host as Record<string, any>).lock.__id__];
+    assert.equal(bound._name, 'Lock', 'lock 字段必须绑到 Lock 节点');
+
+    assert.match(cardSource, /this\.applyLocked\(normalizedLevel <= 0\)/,
+        '未解锁口径 = 等级 0（与 sortLineupCards 的「等级 > 0 才算解锁」同一把尺子）');
+    assert.match(cardSource, /this\.lock\.active = locked/, '锁的显隐必须随未解锁态无条件写');
+});
+
+// ============================================================================
 // 上阵站台的空台默认值
 //
 // 背景（2026-10-27）：进角色页到服务端回包之间，8 个站台显示的是 `LineupSlot.prefab` 的
@@ -313,7 +341,6 @@ test('列表字段直接绑 VirtualScrollView，且不再多判一层节点存�
 
 const bondSource = readFileSync('assets/script/app/card/CardLineupBond.ts', 'utf8');
 const boardCardSource = readFileSync('assets/script/app/card/LineupBoardCard.ts', 'utf8');
-const headViewSource = readFileSync('assets/script/app/card/CardHeroView.ts', 'utf8');
 
 test('列表条目渲染无条件赋图（有条件的写法会在复用槽位上留下上一项的图）', () => {
     assert.doesNotMatch(bondSource, /if \(icon\)/,
@@ -324,16 +351,18 @@ test('列表条目渲染无条件赋图（有条件的写法会在复用槽位�
         'CardLineupCard：face / badge 必须无条件写');
     assert.doesNotMatch(boardCardSource, /if \(frames\./,
         'LineupBoardCard：frame / badge 必须无条件写');
-    assert.match(headViewSource, /hero\.spriteFrame = frame;/, '立绘入口必须实际赋图');
-    assert.match(headViewSource, /hero\.spriteFrame = null;/, '缺图时必须清空复用槽位');
-    assert.doesNotMatch(headViewSource, /headIcon|headFrame|HeadArt/, '立绘入口不再保留头像分支');
+    assert.match(boardCardSource, /this\.hero\.spriteFrame = frames\.hero;/);
+    assert.doesNotMatch(boardCardSource, /applyCardHeroArt|heroTransform|\.setScale\(|\.sizeMode\s*=/,
+        '布阵卡池立绘尺寸由 prefab 控制');
+    assert.match(cardSource, /this\.hero\.spriteFrame = frames \? frames\.hero : null;/, '缺图时必须清空复用槽位');
+    assert.doesNotMatch(cardSource, /applyCardHeroArt|\.setScale\(|\.sizeMode\s*=/, '卡库立绘尺寸由 prefab 控制');
 });
 // ============================================================================
 // 条目 prefab 也不许预置立绘 / 头像
 //
 // 跟 `LineupSlot` 同一条原则（347）：prefab 里存着的图会被编辑器预览、也会在
 // 「代码还没渲染」的那一帧被看见，而且它显示的是**别人**（camp 雕像），不是这张卡。
-// 运行期真正的图由 `applyCardHeroArt` 决定（`frames.hero`）。
+// 运行期图片由各组件按卡牌数据直接赋值。
 // ============================================================================
 
 test('条目 prefab 的 Hero 不许预置图片', () => {
@@ -356,7 +385,7 @@ test('条目 prefab 的 Hero 不许预置图片', () => {
                 .find((component: Record<string, any>) => component.__type__ === 'cc.Sprite');
             assert.ok(sprite, `${fileName}/${nodeName} 上应有 cc.Sprite`);
             assert.equal(sprite!._spriteFrame, null,
-                `${fileName}/${nodeName} 不许预置图：编辑器里会显示别人的立绘，实际由 applyCardHeroArt 决定`);
+                `${fileName}/${nodeName} 不许预置图：运行期按卡牌数据赋值`);
         }
     }
 });

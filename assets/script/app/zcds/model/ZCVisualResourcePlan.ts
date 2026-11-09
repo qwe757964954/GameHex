@@ -1,6 +1,7 @@
 import type { ZCUnitDefinition } from './ZCCombatCatalog';
 import type { ZCCompiledModifierLoadout } from './ZCModifierRuntime';
 import { zcMissileFxOf } from './ZCCombatEffectFlight';
+import { ZC_BLINK_CAST_EFFECT_PREFAB_PATH, zcBlinkCastEffectPath } from './ZCBlinkCastFx';
 
 export interface IZCVisualDependency {
     readonly unitId: string;
@@ -43,7 +44,12 @@ type ZCVisualLoadout = Pick<ZCCompiledModifierLoadout, 'targetUnitId'> & {
 export function buildZCVisualResourcePlan<T extends ZCVisualUnit>(
     all: readonly T[],
     adapters: {
-        readonly skillPlans?: readonly { readonly enabled: boolean; readonly unitId: string }[];
+        readonly skillPlans?: readonly {
+            readonly enabled: boolean;
+            readonly unitId: string;
+            /** 行为键：只有它能让「施法瞬间」这类**代码级**表现被认出来（见 `ZCBlinkCastFx`）。 */
+            readonly behaviorKey?: string;
+        }[];
         readonly textOverrides: ReadonlyMap<string, { readonly enabled: boolean; readonly statId: string; readonly value: string }>;
     },
     heroIds?: readonly number[],
@@ -56,12 +62,20 @@ export function buildZCVisualResourcePlan<T extends ZCVisualUnit>(
         ...loadouts.map(item => ({ unitId: item.targetUnitId, details: item })),
     ]);
     const units = required ? all.filter(unit => required.has(unit.unitId)) : all;
+    //  移形换影（`blink_strike`，2026-11-07）：施法瞬间在**本体位置**闪的那张
+    //  「瞬间移动特效」，路径只登记在代码常量里（行为技能在 `pvpSkill` 里没有造型槽），
+    //  所以下面那四个字段一个都收不到 —— 与追踪导弹同一类问题。
+    //  漏收的后果：`ZCGameLoader` 不加载 ⇒ 技能照常结算、屏幕上一次闪都没有、且不报错。
+    const blinkUnits = new Set((adapters.skillPlans ?? [])
+        .filter(plan => plan.enabled && zcBlinkCastEffectPath(plan.behaviorKey))
+        .map(plan => plan.unitId));
     // 普攻、命中附加、强化与副轨技能都可能声明独立表现。
     const effects = new Set(units.flatMap(unit => [
         unit.attackProfile.effectPrefabPath,
         unit.attackProfile.impactEffectPrefabPath,
         unit.empoweredProfile?.effectPrefabPath,
         unit.secondaryProfile?.effectPrefabPath,
+        blinkUnits.has(unit.unitId) ? ZC_BLINK_CAST_EFFECT_PREFAB_PATH : null,
         //  追踪导弹（2026-11-03）：弹体/爆炸路径只登记在 `ZCCombatEffectFlight` 的
         //  代码常量表里，pvpSkill 任何一行都不携带 ⇒ 上面四个字段收不到。
         //  漏收的后果：`ZCGameLoader` 不加载 ⇒ `effectVisualPrefabs.get()` 返回 null

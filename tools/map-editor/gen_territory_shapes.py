@@ -117,6 +117,10 @@ assert _expected == TARGET_PAINTED, f'笔刷数量与涂色总数对不上：{_e
 assert STAGE_COUNT * STAGE_MIN + BOSS_COUNT * BOSS_MIN <= CHAIN_CELLS <= \
     STAGE_COUNT * STAGE_MAX + BOSS_COUNT * BOSS_MAX, 'CHAIN_CELLS 落在上下限之外，分配不出来'
 
+# 🔴 `chapter_03` 已经**不是**这套配额了（2026-11-06）：用户让给它补 70 个固定格 + 70 个随机格，
+#    现在是 121 个 `fixedResource` / 122 个候选格 / 涂色 300 格，由 `fill_chapter03_cells.py` 补的。
+#    本脚本是从图形**重新生成**的，`--only 03` 会把那 140 格覆盖回 51 + 52 —— 别对它跑。
+
 # 战斗 id 与 BOSS 位次（照 ch02：链序第 5、10 个是 BOSS）
 BATTLE_IDS = [10011 + i for i in range(CHAIN_COUNT)]          # 10011 … 10020
 BOSS_INDEXES = (4, 9)                                          # 10015 / 10020 是 BOSS
@@ -1049,6 +1053,8 @@ def build(spec: dict) -> tuple[dict, list[str]]:
         return sum(xs) / len(xs), sum(ys) / len(ys)
 
     # ④ 定门（每对相邻链点一道，共 9 道）
+    #     ⚠️ `rewardId: 1011` 是占位值：2026-11-06 起七章的固定格已统一成 1015 + 章序，
+    #        重跑本脚本后要再跑 `retarget_chapter_rewards.py` 补回来。
     gate_by_pair = pick_gates(chain, mask - used)
     used |= set(gate_by_pair.values())
     gate_sites = [add('fixedResource', [cell],
@@ -1147,6 +1153,10 @@ def build(spec: dict) -> tuple[dict, list[str]]:
         'sites': sites,
         'randomSites': {
             'triggerSilver': 15,
+            # 🔴 生成器写的是**占位值**。2026-11-06 起七章已经按章递增：
+            #    固定格 = 1015 + 章序（1016~1022）、随机池 = 2001 + 章序（2002~2008）。
+            #    重跑本脚本会把这些值打回 1011 / 2001 ⇒ 跑完必须再跑一次
+            #    `retarget_chapter_rewards.py`。
             'rewardPoolId': '2001',
             'candidateCells': sorted(random_rest),
             'maxActive': 1,

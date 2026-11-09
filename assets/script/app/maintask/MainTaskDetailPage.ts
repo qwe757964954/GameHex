@@ -1,11 +1,8 @@
-import { _decorator, Label, Node, SpriteFrame } from 'cc';
+import { _decorator, Button, Label, Node } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { PopupCloseReason } from '../../framework/ui/PopupDef';
 import { Toast } from '../common/Toast';
-import { loadItemIconArt, loadQualityFrameArt } from '../itemdetail/ItemDetailArtLoader';
-import { GoodsBox } from '../itemdetail/GoodsBox';
-import { ItemDetailPage } from '../itemdetail/ItemDetailPage';
-import { qualityFrameSuffixOf } from '../itemdetail/ItemDetailTable';
+import { RewardItemView } from '../common/RewardItemView';
 import { mainTaskRepository } from './MainTaskRepository';
 import type { IMainTaskRepository, IMainTaskSnapshot } from './MainTaskRepository';
 import { MAIN_TASK_TEXTS } from './MainTaskTexts';
@@ -15,7 +12,7 @@ const { ccclass, property } = _decorator;
 /**
  * 奖励格边长 —— FGUI `list_item` 的 `defaultItem` 是
  * `ui://主界面_角色/组件_角色_道具分页item`（**110×110**，里面 `com_goods` 是 100×100
- * 的 `物品框` 实例、`xy="5,5"`）⇒ 槽位取 110，物品框取 100（`GoodsBox` 的 `k = 100/100 = 1`）。
+ * 的 `物品框` 实例、`xy="5,5"`）⇒ 槽位间距取 110，格内复用公共奖励框。
  */
 const SLOT_SIZE = 110;
 /** 一行最多几个 —— FGUI `list_item` 视口宽 442 ÷ 110 = 4.02 ⇒ 4 个。 */
@@ -23,12 +20,6 @@ const SLOT_COLUMNS = 4;
 /** 视口尺寸（FGUI `list_item` 的 `size="442,266"`）—— 居中排布要用，且必须与 prefab 一致。 */
 const VIEW_W = 442;
 const VIEW_H = 266;
-
-/** 一个奖励格要用的两张图（预加载好再铺，见 `present`）。 */
-interface IRewardFrames {
-    readonly qualityFrame: SpriteFrame | null;
-    readonly iconFrame: SpriteFrame | null;
-}
 
 /**
  * 「任务详情」弹窗 —— 老端 `LayerMainTaskDetail`（`LayerMainTaskDetailUI`），
@@ -70,37 +61,34 @@ export class MainTaskDetailPage extends PopupBase {
      */
     static prefabPath = 'ui/MainTask/MainTaskDetail';
 
-    @property({ type: Node, tooltip: 'CloseBtn：关闭按钮（点它收起，挂不挂 cc.Button 都行）' })
-    closeButton: Node = null;
+    @property({ type: Node, tooltip: 'CloseBtn：关闭按钮（点它收起，挂 cc.Button）' })
+    closeButton: Node = null!;
 
     @property({ type: Label, tooltip: 'TaskTitle：任务标题 `任务名 (x/y)`（老端 `lab_title`）' })
-    taskTitle: Label = null;
+    taskTitle: Label = null!;
 
-    @property({ type: Node, tooltip: 'RewardList：奖励格容器（子节点挂 GoodsBox，从左到右、每行居中）' })
-    rewardList: Node = null;
+    @property({ type: Node, tooltip: 'RewardList：奖励格容器（子节点挂公共 RewardItemView，从左到右、每行居中）' })
+    rewardList: Node = null!;
 
     @property({ type: Node, tooltip: 'BtnGo：「前往」按钮' })
-    btnGo: Node = null;
+    btnGo: Node = null!;
 
     /** 数据端口；测试 / 探针可替换。 */
     private repo: IMainTaskRepository = mainTaskRepository;
     /** 当前快照。 */
     private snapshot: IMainTaskSnapshot | null = null;
-    /** 每个奖励格的图（`presentRewards` 是同步的，不能在里面现加载）。 */
-    private frames: IRewardFrames[] = [];
+    private rewardSlots: RewardItemView[] = [];
     /** 每次「取数 / 铺界面」递增，用来丢弃过期的异步结果。 */
     private loadRevision = 0;
-    private presentRevision = 0;
 
     // ============================================================
     // 生命周期
     // ============================================================
 
     protected onInit(): void {
-        // 统一走节点触摸：不查 `cc.Button`、也不要求按钮节点必须挂它
-        // （FGUI 迁过来的 `<loader>`/`<image>` 本来就没有 `cc.Button`）
-        this.closeButton?.on(Node.EventType.TOUCH_END, this.handleClose, this);
-        this.btnGo?.on(Node.EventType.TOUCH_END, this.handleGo, this);
+        this.rewardSlots = this.rewardList.children.map(child => child.getComponent(RewardItemView));
+        this.closeButton.on(Button.EventType.CLICK, this.handleClose, this);
+        this.btnGo.on(Button.EventType.CLICK, this.handleGo, this);
     }
 
     private readonly handleClose = (): void => {
@@ -113,16 +101,13 @@ export class MainTaskDetailPage extends PopupBase {
 
     protected async onOpen(): Promise<void> {
         this.snapshot = null;
-        this.frames = [];
         await this.reload();
     }
 
     protected onClose(_reason: PopupCloseReason): void {
         // 让在途的 load / present 直接作废（它们醒来时页面已经关了）。
         this.loadRevision += 1;
-        this.presentRevision += 1;
         this.snapshot = null;
-        this.frames = [];
     }
 
     /** 供测试 / 探针注入替身 Repository。 */
@@ -133,16 +118,6 @@ export class MainTaskDetailPage extends PopupBase {
     /** 弹窗还活着吗（异步回来时页面可能已被关掉）。 */
     private get alive(): boolean {
         return !!this.node && this.node.isValid && this.isPopupOpen;
-    }
-
-    /** 奖励格（遍历容器子节点拿 `GoodsBox`，不逐个写 `@property` 引用）。 */
-    private get rewardSlots(): GoodsBox[] {
-        const out: GoodsBox[] = [];
-        for (const child of this.rewardList?.children ?? []) {
-            const box = child.getComponent(GoodsBox);
-            if (box) out.push(box);
-        }
-        return out;
     }
 
     // ============================================================
@@ -159,26 +134,12 @@ export class MainTaskDetailPage extends PopupBase {
         const snapshot = await this.repo.loadFirst();
         if (!this.alive || revision !== this.loadRevision) return;
         this.snapshot = snapshot;
-        await this.present();
+        this.present();
     }
 
-    private async present(): Promise<void> {
+    private present(): void {
         const snapshot = this.snapshot;
         if (!snapshot) return;
-        const revision = ++this.presentRevision;
-
-        // 图必须先 **await 完**再铺界面：`presentRewards` 是同步的，在里面现加载会先闪
-        // 一帧上一份的图；更糟的是预加载集合漏项时**静默留白**（不报错，规则 60/73）。
-        const frames = await Promise.all(snapshot.rewards.map(async (reward): Promise<IRewardFrames> => {
-            const [qualityFrame, iconFrame] = await Promise.all([
-                loadQualityFrameArt(qualityFrameSuffixOf(reward.quality)),
-                loadItemIconArt(reward.icon),
-            ]);
-            return { qualityFrame, iconFrame };
-        }));
-        if (!this.alive || revision !== this.presentRevision) return;
-        this.frames = frames;
-
         this.presentTitle(snapshot);
         this.presentRewards(snapshot);
     }
@@ -213,8 +174,7 @@ export class MainTaskDetailPage extends PopupBase {
             const slot = slots[index];
             if (index >= count) {
                 // 多出来的槽位一律藏掉（不是「留着空的」）
-                slot.onClick = null;
-                slot.hide();
+                slot.node.active = false;
                 continue;
             }
             const row = Math.floor(index / SLOT_COLUMNS);
@@ -230,30 +190,11 @@ export class MainTaskDetailPage extends PopupBase {
             );
 
             const reward = snapshot.rewards[index];
-            const frames = this.frames[index];
-            slot.render(
-                frames?.qualityFrame ?? null,
-                frames?.iconFrame ?? null,
-                String(reward.number),
-                true,
-            );
-            // ⚠️ 回调里按 **index 现取** `snapshot.rewards[index]`，不能闭包捕获 `reward`：
-            //    同一个槽位会被不同任务复用，捕获了就会一直开着第一条任务的物品（规则 55）。
-            slot.onClick = () => { void this.openRewardDetail(index); };
+            slot.render({ resId: reward.resId, amount: reward.number });
         }
     }
 
     // ---------- 交互 ----------
-
-    /** 点奖励格 → 打开该物品的详情弹窗（老端 `GObjGoods` 的默认 `onClickItem()`）。 */
-    private async openRewardDetail(index: number): Promise<void> {
-        const reward = this.snapshot?.rewards[index];
-        if (!reward || !(reward.resId > 0)) return;
-        await ItemDetailPage.open({
-            userData: { resId: reward.resId, number: reward.number },
-            allowMultiple: true,
-        });
-    }
 
     /**
      * 「前往」。

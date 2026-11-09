@@ -219,6 +219,15 @@ export function loadViews() {
         // 所以这里显式挂真源 —— 与文件顶部已经 import 的 `ZC_HEX_CONFIG` 同一个来源。
         '../model/ZCMapConfig': { ZC_OWNER_ORDER, ZCOwner, ownersForPlayerCount },
         '../model/ZCSpawnRegionHint': { resolveZCSpawnRegionHints },
+        //  诊断总开关：`ZCDCLogSwitch.ts` 在 **zcds 根目录**（不在 `view/` 也不在 `ui/`），
+        //  `load()` 只按名字查那两个目录 ⇒ 报「Missing view fixture module ./ZCDCLogSwitch」，
+        //  表现是**整组视图用例一起红**（2026-11-05 加导弹日志开关时踩到）。
+        //  用例里不需要打这些日志 ⇒ 全关。
+        './ZCDCLogSwitch': {
+            ZCDC_LOG_DIAGNOSTICS: false,
+            ZCDC_LOG_WARNINGS: true,
+            ZCDC_LOG_MISSILE: false,
+        },
         //  中立资源**必须挂真源**：`load()` 会把 `../model/X` 解析到 `zcds/model/X.ts`
         //  并**另跑一份模块**，那份的 `catalog` 是空的 ⇒ 用例 `installZCNeutralTestCatalog()`
         //  装进本进程目录的资源项，视图查不到（表现是资源格子退化成地块图标 / 0.8 缩放）。

@@ -60,6 +60,21 @@ export class LineupDraftStore {
         return presetFormationId(this.selected);
     }
 
+    /** 当前选中方案的下标（页签几何/比较用，外部不要直接改）。 */
+    get selectedIndex(): number {
+        return this.selected;
+    }
+
+    /** 单个方案的上阵上限（= 上阵区站台数，`LineupBoardModel` 判「满编」时要用）。 */
+    get slotLimit(): number {
+        return this.maxSlots;
+    }
+
+    /** 当前方案是否有尚未提交的改动（`snapshot().dirty` 是整个 Store 的口径）。 */
+    get currentDirty(): boolean {
+        return this.changed.has(this.selected);
+    }
+
     snapshot(): LineupDraftSnapshot {
         const cards = this.current().slice();
         return {

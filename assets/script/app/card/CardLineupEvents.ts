@@ -25,7 +25,12 @@ import type { ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
 
 /** 本链条对外派发的全部事件名。 */
 export const CardLineupEvent = {
-    /** 布阵面板保存成功（服务端已确认，`draft.commit()` 之后）。payload = `ICardDeckSavedPayload`。 */
+    /**
+     * 布阵面板改了「出战阵型」（服务端已确认）。payload = `ICardDeckSavedPayload`。
+     *
+     * 两个触发点：① 保存成功（`draft.commit()` 之后）；② 切页签选中成功（`CmdFormationSelectReqMsg`）——
+     * 切换会改服务端记着的选中阵型，卡牌阵容页的八卡读的就是它，所以两者共用同一个事件。
+     */
     DeckSaved: 'card-lineup-deck-saved',
     /**
      * 某张卡升级成功（服务端已确认）。payload = `IHeroUpgradedPayload`。
@@ -48,11 +53,11 @@ export const CardLineupEvent = {
 /** `CardLineupEvent` 的取值类型（`as const` 派生，别手写第二份字符串字面量）。 */
 export type CardLineupEventName = typeof CardLineupEvent[keyof typeof CardLineupEvent];
 
-/** 保存成功时带的业务数据：够订阅方决定「要不要刷、刷哪一格」。 */
+/** 出战阵型变更时带的业务数据：够订阅方决定「要不要刷、刷哪一格」。 */
 export interface ICardDeckSavedPayload {
-    /** 被保存并置为选中的阵型编号（1 起）。 */
+    /** 被保存或切换选中的阵型编号（1 起）。 */
     readonly formationId: number;
-    /** 保存后的完整英雄列表（服务端已确认）。 */
+    /** 该阵型当前的完整英雄列表（保存走服务端确认值，切页签走本地草稿）。 */
     readonly heroIds: readonly number[];
 }
 

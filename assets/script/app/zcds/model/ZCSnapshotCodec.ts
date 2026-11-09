@@ -11,6 +11,7 @@ import type { ZCMatchConfig } from './ZCMatchConfig';
 import { resolveZCUnitDefinition } from './ZCModifierRuntime';
 import { createPvpTileTypes, ZCPvpTileType } from './ZCPvpTileRules';
 import { ZCStatusSystem } from './ZCStatusEffect';
+import { ZC_GATE_EFFECTS, neutralResourceItemOf, ZCNeutralResourceType } from './ZCNeutralResourceGroup';
 
 export type ZCSnapshotLoadResult =
     | { ok: true; snapshot: ZCSnapshot }
@@ -211,6 +212,27 @@ export class ZCSnapshotCodec {
             if (nonnegative(hex.captureSeconds) && hex.captureSeconds > 0) check(typeof hex.captureOwner === 'string' && ownerSet.has(hex.captureOwner), `${path}.captureOwner`);
             check(hex.cardId === null || typeof hex.cardId === 'string', `${path}.cardId`);
             check(optional(hex.neutralResourceId, (v) => v === null || Number.isInteger(v)), `${path}.neutralResourceId`);
+            if (hex.neutralFeature !== undefined) {
+                const feature = hex.neutralFeature;
+                check(record(feature), `${path}.neutralFeature`);
+                if (record(feature)) {
+                    const prefix = `${path}.neutralFeature`;
+                    check(typeof feature.claimed === 'boolean', `${prefix}.claimed`);
+                    check(optional(feature.effect, v => oneOf(ZC_GATE_EFFECTS, v)), `${prefix}.effect`);
+                    for (const key of ['readyAt', 'windowUntil', 'nextAttackAt']) check(optional(feature[key], nonnegative), `${prefix}.${key}`);
+                    for (const key of ['buildUsed', 'awake']) check(optional(feature[key], v => typeof v === 'boolean'), `${prefix}.${key}`);
+                    check(optional(feature.buildOwner, v => typeof v === 'string' && ownerSet.has(v)), `${prefix}.buildOwner`);
+                    check(optional(feature.portalExitId, validHexId), `${prefix}.portalExitId`);
+                    check(optional(feature.targetUnitId, v => v === null || typeof v === 'number' && integer(v) && v > 0), `${prefix}.targetUnitId`);
+                    check(optional(feature.lineHexIds, v => Array.isArray(v) && v.every(validHexId)), `${prefix}.lineHexIds`);
+                    check(optional(feature.insideUnitIds, v => Array.isArray(v) && v.every(id => integer(id) && id > 0)), `${prefix}.insideUnitIds`);
+                    if (neutralResourceItemOf(hex.neutralResourceId)?.resourceType === ZCNeutralResourceType.Gate) {
+                        check(oneOf(ZC_GATE_EFFECTS, feature.effect), `${prefix}.effect`);
+                        check(nonnegative(feature.readyAt) && nonnegative(feature.windowUntil), `${prefix}.readyAt`);
+                        check(Array.isArray(feature.insideUnitIds), `${prefix}.insideUnitIds`);
+                    }
+                }
+            }
             check(optional(hex.tileType, (v) => v === null || typeof v === 'number' && Object.prototype.hasOwnProperty.call(config.tiles, v)), `${path}.tileType`);
             const mapHex = config.map.hexes[index];
             if (!mapHex.playable) {
@@ -240,6 +262,19 @@ export class ZCSnapshotCodec {
             for (const key of ['hp', 'maxHp', 'progress']) check(nonnegative(unit[key]), `${path}.${key}`);
             check(optional(unit.attackMultiplier, (value) => typeof value === 'number' && Number.isFinite(value) && value > 0), `${path}.attackMultiplier`);
             check(optional(unit.shield, nonnegative), `${path}.shield`);
+            check(optional(unit.gateSize, v => v === 'shrink' || v === 'enlarge'), `${path}.gateSize`);
+            for (const key of ['gateScale', 'gateMoveMultiplier', 'gateAttackSpeedMultiplier', 'gateDamageMultiplier']) {
+                check(optional(unit[key], v => nonnegative(v) && v > 0), `${path}.${key}`);
+            }
+            check(optional(unit.gateHpFlat, nonnegative), `${path}.gateHpFlat`);
+            if (unit.inheritedStats !== undefined) {
+                check(record(unit.inheritedStats), `${path}.inheritedStats`);
+                if (record(unit.inheritedStats)) for (const key of ['attack', 'moveSpeed', 'attackInterval', 'attackRange', 'bodyRadius']) {
+                    check(nonnegative(unit.inheritedStats[key]), `${path}.inheritedStats.${key}`);
+                }
+                if (record(unit.inheritedStats)) check(typeof unit.inheritedStats.attackInterval === 'number'
+                    && unit.inheritedStats.attackInterval > 0, `${path}.inheritedStats.attackInterval`);
+            }
             check(unit.progress <= 1, `${path}.progress`);
             check(optional(unit.battleState, (v) => oneOf(Object.values(ZCUnitBattleState), v)), `${path}.battleState`);
             for (const key of ['targetWallHexId', 'targetBuildingHexId']) check(optional(unit[key], reference), `${path}.${key}`);
@@ -250,14 +285,17 @@ export class ZCSnapshotCodec {
                 'secondaryReadyAt',
                 'shieldExpireAt', 'burstShotsLeft', 'burstNextAt', 'burstInterval', 'burstDamageRate', 'lowHpGuardFiredAt',
                 'retaliateSlowPct', 'retaliateUntil', 'selfCastReadyAt', 'strikeReadyAt', 'strikeFiredCount',
-                'strikeUntil', 'strikeNextAt',
+                'strikeUntil', 'strikeNextAt', 'strikeRetryAt',
                 // 冲刺（2026-11-02 真·撞击）：截止时刻 + 终点快照；2026-11-03 再加「撞完原地待机」的
                 // 冷却截止。四个都是可选的，没在冲刺的单位身上不该出现；
                 // 进了快照就要能被校验，否则脏值悄悄过校验。
-                'dashUntil', 'dashRecoverUntil']) {
+                'dashUntil', 'dashRecoverUntil',
+                // 移形换影（魔术师 103404，2026-11-06）：CD 截止 + 分身爆炸时刻。
+                // 与上面同一套「新增可选字段必须登记」的规矩；坐标在下面那一行按有限数校验。
+                'blinkReadyAt', 'blinkCloneAt']) {
                 check(optional(unit[key], nonnegative), `${path}.${key}`);
             }
-            for (const key of ['dashX', 'dashY']) check(optional(unit[key], Number.isFinite), `${path}.${key}`);
+            for (const key of ['dashX', 'dashY', 'blinkCloneX', 'blinkCloneY']) check(optional(unit[key], Number.isFinite), `${path}.${key}`);
             check(optional(unit.passiveStatusApplied, (v) => typeof v === 'boolean'), `${path}.passiveStatusApplied`);
             for (const key of ['freeX', 'freeY', 'facingRadians']) check(optional(unit[key], Number.isFinite), `${path}.${key}`);
             check(optional(unit.marchAngle, (v) => v === null || Number.isFinite(v)), `${path}.marchAngle`);
@@ -331,6 +369,16 @@ export class ZCSnapshotCodec {
             check(optional(zone.maxHits, v => integer(v) && (v as number) >= 0), `${path}.maxHits`);
             check(optional(zone.hitUnitIds, v => Array.isArray(v)
                 && v.every(id => integer(id) && (id as number) > 0)), `${path}.hitUnitIds`);
+            //  2026-11-06 逐目标递减（魔术师「鹿神守护」103405）：0~1 的比例。
+            check(optional(zone.damageFalloff, v => nonnegative(v) && (v as number) <= 1), `${path}.damageFalloff`);
+            //  2026-11-07 鹿神守护「先走近、再冲刺」：两段速度都要能还原，否则存档回来小鹿会
+            //  从出生点重新走一遍（或者把已经冲过的两秒再冲一次）。
+            check(optional(zone.approachSpeed, nonnegative), `${path}.approachSpeed`);
+            check(optional(zone.approachTargetId, v => integer(v) && (v as number) > 0), `${path}.approachTargetId`);
+            check(optional(zone.sprintRange, nonnegative), `${path}.sprintRange`);
+            check(optional(zone.sprintSpeed, nonnegative), `${path}.sprintSpeed`);
+            check(optional(zone.sprinting, v => typeof v === 'boolean'), `${path}.sprinting`);
+            check(optional(zone.visualAnimation, v => typeof v === 'string'), `${path}.visualAnimation`);
         });
         // 在途弹道复用战斗事件 ID，恢复时不能与后续表现事件冲突。
         check(optional(data.nextCombatEventId, (v) => integer(v) && (v as number) > 0), 'nextCombatEventId');

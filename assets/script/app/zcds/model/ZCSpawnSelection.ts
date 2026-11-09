@@ -1,5 +1,5 @@
 import type { ZCMatchConfig, ZCMatchMap } from './ZCMatchConfig';
-import { drawZCNeutralResourceItem, previewZCNeutralResourceItem } from './ZCNeutralResourceGroup';
+import { drawZCNeutralResourceItem, previewZCNeutralResourceItem, ZCNeutralResourceType } from './ZCNeutralResourceGroup';
 import {
     defaultZCSectionAt,
     ownersForPlayerCount,
@@ -383,19 +383,21 @@ export class ZCSpawnSelection {
  */
 export function resolveZCMapResources(map: ZCMatchMap, random: () => number): ZCMapResolvedResource[] {
     const resolved: ZCMapResolvedResource[] = [];
+    const monsters = new Map<number, number>();
     for (const point of map.resourcePoints ?? []) {
         // 投签 = 组内按 `weight` 抽一个资源项（权重全 0 的草稿组合抽不到东西 ⇒ 该点位本局无资源，
         // 不写进快照，格子上也就没有图标 —— 这不是错误，是配置里的「占位不投放」）。
         const item = drawZCNeutralResourceItem(point.groupId, random);
-        if (!item) continue;
+        if (!item || item.resourceType === ZCNeutralResourceType.Portal && (map.playerCount ?? 2) !== 2) continue;
         const hexId = point.row * map.columns + point.column;
         const depth = point.depth ?? depthForZCResource(map, hexId);
         resolved.push({
             hexId,
             section: point.section ?? sectionForZCResource(map, hexId),
             ...(depth === undefined ? {} : { depth }),
-            itemId: item.id,
+            itemId: item.resourceType === ZCNeutralResourceType.Monster ? monsters.get(point.groupId) ?? item.id : item.id,
         });
+        if (item.resourceType === ZCNeutralResourceType.Monster && !monsters.has(point.groupId)) monsters.set(point.groupId, item.id);
     }
     return resolved;
 }

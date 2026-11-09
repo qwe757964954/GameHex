@@ -247,7 +247,7 @@ export class NewTreasureRepository {
                 }),
                 WRITE_TIMEOUT_MS,
             );
-            return result === 'ok' && updated ? 'ok' : result === 'ok' ? 'failed' : result;
+            return this.settledResult(result, updated);
         });
     }
 
@@ -265,7 +265,7 @@ export class NewTreasureRepository {
                 }),
                 WRITE_TIMEOUT_MS,
             );
-            return result === 'ok' && succeeded ? 'ok' : result === 'ok' ? 'failed' : result;
+            return this.settledResult(result, succeeded);
         });
     }
 
@@ -286,7 +286,7 @@ export class NewTreasureRepository {
                 }),
                 WRITE_TIMEOUT_MS,
             );
-            return result === 'ok' && succeeded ? 'ok' : result === 'ok' ? 'failed' : result;
+            return this.settledResult(result, succeeded);
         });
     }
 
@@ -296,6 +296,12 @@ export class NewTreasureRepository {
             GameNet.instance.removeCallerEvent(this.eventCaller);
             this.isListening = false;
         }
+    }
+
+    /** `send` 的结论 + 响应是否真的改到数据 → 对外 `Result`；网络层失败原样透出。 */
+    private settledResult(result: Result, applied: boolean): Result {
+        if (result !== 'ok') return result;
+        return applied ? 'ok' : 'failed';
     }
 
     private async send<Req, Rsp>(request: RequestMsg<Req, Rsp>, timeoutMs: number): Promise<Result> {

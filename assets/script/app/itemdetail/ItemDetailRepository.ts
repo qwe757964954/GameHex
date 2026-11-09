@@ -9,6 +9,7 @@
  *   ② `viewtype`  —— `access` 的 id → 文案（老端 `render()` 逐行查）
  *   ③ `itemCraft` —— 碎片合成（老端 `UpdateComposBtn` 查 `itemCraft.id`）
  *   ④ `gameConfig.qualityname` —— 品质名 CSV（老端 `StringRef.GetQualityName`）
+ *   ⑤ `roleProperty` —— item 未命中时的货币/体力名称、说明、品质与图标。
  *
  * ## 老端打开这个界面时**不发请求**
  *
@@ -24,12 +25,14 @@
  */
 
 import { RefUtil } from '../../framework/ref/RefUtil';
+import { resBarCellOfRefId, resBarIconSpritePath } from '../common/ResTypes';
 import {
     accessRefsOf,
     canComposOf,
     itemNumberTextOf,
     parseItemCraftRows,
     parseItemRows,
+    parseItemRow,
     parseViewTypeRows,
     qualityNameOf,
     typeStateOf,
@@ -44,7 +47,7 @@ import type {
 
 /** 一次界面刷新要的全部数据。 */
 export interface IItemDetailSnapshot {
-    /** 这个 `resId` 在 `item` 表里的行；查不到为 `null`（界面显示空态）。 */
+    /** 物品行；item 未命中时读取 roleProperty，两表均未命中为 null。 */
     readonly row: IItemRow | null;
     /** 持有数量（调用方传入）。 */
     readonly number: number;
@@ -120,7 +123,17 @@ class ItemDetailRepositoryImpl implements IItemDetailRepository {
         const viewTypes = parseViewTypeRows(viewTypeRows);
         const crafts = parseItemCraftRows(craftRows);
 
-        const row = items.get(resId) ?? null;
+        let row = items.get(resId) ?? null;
+        if (!row) {
+            const properties = await readRows('roleProperty');
+            const raw = properties.find(value => value && typeof value === 'object'
+                && Number((value as Record<string, unknown>).resId) === resId);
+            if (raw) {
+                const property = raw as Record<string, unknown>;
+                const icon = resBarIconSpritePath(resBarCellOfRefId(resId, [property]));
+                row = parseItemRow({ ...property, desc: property.describe, icon, useJump: 0 });
+            }
+        }
         const accessRefs = row ? accessRefsOf(viewTypes, row.access) : [];
         const itemBox = row?.itemBox ?? [];
         const craft = crafts.get(resId);

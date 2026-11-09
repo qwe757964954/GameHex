@@ -698,11 +698,13 @@ npx tsx --test tests/bigmap-info-layout.test.ts     # 15 条：详情弹窗排�
 
 ### 城池伤害排行榜（2026-11-02）
 
-联机入口注入 `RemoteBigMapRankProvider`，点城池时并行查询详情与排行榜。复用 `RequestGetRank`：`rankType = SLG_CAMP_ROLE_HARM_RANK(53)`、`showNum = 50`、`type = campId`；此榜不传联盟上下文 `unionId`。回包 `rankInfo.rankList` 提供昵称、头像与积分，`myRank` 提供个人名次和积分（包含未进入前50名的玩家）。角色ID保留十进制字符串，头像经既有 HeadArt 与弹窗作用域资源入口加载。
+联机入口注入 `RemoteBigMapRankProvider`，城池进入视野时预取未缓存的排行榜，点城池时刷新详情与排行榜。复用 `RequestGetRank`：`rankType = SLG_CAMP_ROLE_HARM_RANK(53)`、`showNum = 50`、`type = campId`；此榜不传联盟上下文 `unionId`。回包 `rankInfo.rankList` 提供昵称、头像与积分，`myRank` 提供个人名次和积分（包含未进入前50名的玩家）。角色ID保留十进制字符串，头像经既有 HeadArt 与弹窗作用域资源入口加载。
 
-未上榜显示为空名次，联机初始不构造NPC榜。失败保留当前城池已有榜单；切城取消旧请求，同城在途请求合并，超时与关页解除真实caller，迟到回包不再写回。离线预览继续使用原NPC样本。榜单条数只代表返回名单数量，不能据此推断服务器总参战人数。
+未上榜显示为空名次，联机初始不构造NPC榜。失败保留当前城池已有榜单；多城榜单串行查询，同城在途请求合并，超时与关页解除真实caller，退出后的结果不再写回。地图头像读取真实 `rank=1`，驻守名单 `infos` 不含排名，不能用其第一条替代榜首。离线预览继续使用原NPC样本。榜单条数只代表返回名单数量，不能据此推断服务器总参战人数。
 
 ### 大地图玩家协议闭环（2026-11-05）
+
+视野上报由 Controller 的 500ms 时钟合并调度；世界模式下每 5 秒刷新当前可见区域，Simple 请求将全部可见据点放进同一个 campIds 集合，不按单城缓存到期时间拆分。若有重叠请求在途，本轮不拆出剩余据点，下轮重新提交最新完整集合。基地模式与进入战斗期间暂停查询。
 
 联机可见城池查询 `CmdSlgCampRoleInfos`；`CmdSlgGameRoleInfoBroMsg` 更新已知名单，未知名单补查服务器完整快照。广播发生于首次查询期间时，旧回包作废并补发查询，避免玩家出生被漏掉。角色跨城后从旧名单移除；失败不清空已有快照。
 

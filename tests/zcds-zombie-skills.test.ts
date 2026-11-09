@@ -72,7 +72,11 @@ test('僵尸八卡：普攻行各归各家，遗留的武将技线全部摘掉',
         '68031': { row: 30706, mode: 'melee', trigger: 'every_seconds', skill: 30849 },
         '68032': { row: 30708, mode: 'projectile', trigger: 'every_seconds', skill: 30851, secondary: 30850 },
         '68033': { row: 30713, mode: 'melee', trigger: 'every_seconds', skill: 30853, secondary: 30852 },
-        '68034': { row: 30710, mode: 'projectile', trigger: 'every_seconds', skill: 30854, secondary: 30855 },
+        //  2026-11-06：魔术师按新版设计案改链 —— 强化槽给「鹿神守护」（累计 8 次普攻，
+        //  所以 trigger 从 every_seconds 改成 every_n_attacks），原副轨「空间置换」下线
+        //  （设计案里的第四条技能换成了「移形换影」，走的是独立的 `blink_strike` 车道，
+        //  不占副槽），因此 secondary 变成 null。
+        '68034': { row: 30710, mode: 'projectile', trigger: 'every_n_attacks', skill: 30854 },
         '68035': { row: 30709, mode: 'projectile', trigger: 'every_seconds', skill: 30857, secondary: 30856 },
     };
     const legacy = [36271, 36211, 36151, 36201, 36241, 36401];

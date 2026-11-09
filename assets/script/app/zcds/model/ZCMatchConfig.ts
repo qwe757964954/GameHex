@@ -78,6 +78,13 @@ export interface ZCPveDefenceWave {
     cardId: string;
     monsterCount: number;
     tier: number;
+    /**
+     * BOSS 波（`defenceModWave.monsterType=3`，即每组最后一波）。
+     *
+     * 两处消费：HUD 那条**大血条**只在 BOSS 波显示（普通小怪只有头顶血条）；
+     * 胜负判定只认「BOSS 已出场且被清空」。缺省 `undefined` ⇒ 用「最后一波」兜底。
+     */
+    isBoss?: boolean;
 }
 
 export interface ZCPveDefenceConfig {
@@ -117,6 +124,14 @@ export interface ZCMatchConfig {
     legacySkillEffects?: Readonly<ZCLegacySkillEffectConfig>;
     /** 仅领地塔防局存在；普通 PVP / 异步匹配均为空。 */
     pveDefence?: Readonly<ZCPveDefenceConfig>;
+    /**
+     * `levelInfo.openGrideTime`：「关卡翻地块频率」（秒，0 = 够钱就翻）。
+     *
+     * 只约束 **NPC（本地 AI 席位）翻地块的速度**：AI 的开发间隔取
+     * `max(rules.enemyAiIntervalSeconds, openGrideTime)`，见 `ZCGameModel.advance`。
+     * 缺省 / 0 ⇒ 不额外限速（旧行为）。
+     */
+    openGrideTime?: number;
     configHash?: string;
 }
 

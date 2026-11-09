@@ -8,6 +8,128 @@ import { installZCNeutralTestCatalog, ZC_TEST_ITEM } from './helpers/zcds-neutra
 configureZCMap(JSON.parse(readFileSync('tests/fixtures/zcds-legacy-map.json', 'utf8')) as ZCMapLayout);
 installZCNeutralTestCatalog();
 
+test('强化门缩小图标，各阶段及缺图时都不显示资源文字', () => {
+    installZCNeutralTestCatalog([{ groupId: 14001, id: 1400101, groupName: '门', resourceType: 7, weight: 1,
+        param: { effect: 'multiply', mode: 'fixed', value: 2, cooldownSeconds: 10, windowSeconds: 0.3,
+            scale: 3, hpFlat: 1000, moveMultiplier: 1.5, attackSpeedMultiplier: 1.5, damageMultiplier: 0.5 } }]);
+    try {
+        const { load, cc, bar } = loadViews();
+        const view = stubHexView(load, cc, bar);
+        const gateFrame = { name: 'gate', originalSize: { width: 256, height: 256 } };
+        const frames = new Map(['gate', 'gate_add', 'gate_multiply', 'gate_shrink', 'gate_enlarge'].map(name =>
+            [name, { name, originalSize: { width: 256, height: 256 } }]));
+        frames.set('gate', gateFrame);
+        view.setNeutralResourceFrames(frames);
+        const world = new (load('./ZCGameRenderWorld').ZCGameRenderWorld)({});
+        world.hexEntityBySource.set(7, 1);
+        world.hexViews.set(1, view);
+        world.syncResolvedResources([{ hexId: 7, itemId: 1400101 }]);
+        const feature = { claimed: false, effect: 'multiply', readyAt: 0, windowUntil: 0, insideUnitIds: [] };
+        const presentation = { state: resourceHexState(1400101, { neutralFeature: feature }),
+            canDevelop: false, playerGold: 0, cooldown: null, now: 0 };
+        view.render(presentation);
+        for (const effect of ['add', 'multiply', 'shrink', 'enlarge', 'multiply']) {
+            feature.effect = effect;
+            view.render(presentation);
+            assert.equal(view.iconSprite.spriteFrame, frames.get(`gate_${effect}`), '随机门效果变化必须切换图形，不能被内容缓存拦住');
+        }
+        assert.ok(view.iconSprite.node.scale.x < load('./ZCHexView').resourceIconScale(gateFrame), '趣味图标比普通资源缩小一档');
+        assert.equal(view.iconLabel.string, '');
+        assert.equal(view.iconLabel.enabled, false);
+        feature.windowUntil = 0.3;
+        view.render(presentation);
+        assert.equal(view.iconLabel.string, '');
+        assert.equal(view.cooldownBar.node.active, true);
+        assert.equal(view.cooldownBar.progress, 1);
+        assert.equal(view.cooldownBar.node.scale.x, 2);
+        feature.windowUntil = 0;
+        feature.readyAt = 10.3;
+        presentation.now = 1;
+        view.render(presentation);
+        assert.equal(view.iconLabel.string, '');
+        assert.equal(view.iconSprite.color.r, 105);
+        assert.equal(view.cooldownBar.node.scale.x, 1);
+        presentation.now = 5.3;
+        view.render(presentation);
+        assert.ok(Math.abs(view.cooldownBar.progress - 0.5) < 1e-9, '冷却环依据配置总时长与快照截止时间计算');
+        view.render(presentation);
+        assert.ok(Math.abs(view.cooldownBar.progress - 0.5) < 1e-9, '重复渲染不重置冷却进度');
+        presentation.now = 10.3;
+        view.render(presentation);
+        assert.equal(view.cooldownBar.node.active, false);
+        assert.equal(view.iconSprite.color.r, 255);
+        view.setNeutralResourceFrames(null);
+        view.render(presentation);
+        assert.equal(view.iconSprite.spriteFrame, null, '清空注入后不残留旧图标');
+        assert.equal(view.iconLabel.string, '');
+        presentation.state = resourceHexState(null);
+        view.render(presentation);
+        assert.equal(view.cooldownBar.node.active, false);
+        assert.equal(view.cooldownBar.node.scale.x, 1);
+    } finally { installZCNeutralTestCatalog(); }
+});
+
+test('衍生、传送与号角显示对应图形，池化换格不会沿用上一种资源', () => {
+    const visuals = ['extension', 'portal', 'horn'];
+    installZCNeutralTestCatalog(visuals.map((visual, index) => ({
+        groupId: 14006 + index, id: 1400601 + index, groupName: visual,
+        resourceType: 8 + index, weight: 1, param: {},
+    })));
+    try {
+        const { load, cc, bar } = loadViews();
+        const view = stubHexView(load, cc, bar);
+        const frames = new Map(visuals.map(name => [name, { name, originalSize: { width: 256, height: 256 } }]));
+        view.setNeutralResourceFrames(frames);
+        for (let index = 0; index < visuals.length; index++) {
+            view.render({ state: resourceHexState(1400601 + index, { neutralFeature: { claimed: false } }),
+                canDevelop: false, playerGold: 0, cooldown: null, now: 0 });
+            assert.equal(view.iconSprite.spriteFrame, frames.get(visuals[index]));
+            assert.equal(view.iconLabel.enabled, false);
+            assert.equal(view.iconLabel.string, '');
+        }
+        view.render({ state: resourceHexState(null), canDevelop: false, playerGold: 0, cooldown: null, now: 0 });
+        assert.equal(view.iconSprite.spriteFrame, null);
+    } finally { installZCNeutralTestCatalog(); }
+});
+
+test('野怪用月牙与利爪区分状态，唤醒复用骨骼，击杀后收起', () => {
+    installZCNeutralTestCatalog([{ groupId: 14009, id: 1400901, groupName: '野怪', resourceType: 11, weight: 1,
+        param: { resId: '68001', wakeRange: 2, attackRange: 1 } }]);
+    try {
+        const { load, cc, bar } = loadViews();
+        const view = stubHexView(load, cc, bar);
+        const sleep = { name: 'monster_sleep', originalSize: { width: 256, height: 256 } };
+        const awake = { name: 'monster_awake', originalSize: { width: 256, height: 256 } };
+        view.setNeutralResourceFrames(new Map([['monster_sleep', sleep], ['monster_awake', awake]]));
+        const prefab = spinePrefab(load, cc);
+        const world = new (load('./ZCGameRenderWorld').ZCGameRenderWorld)({ unitVisualPrefabs: new Map([['68001', prefab]]) });
+        world.hexEntityBySource.set(7, 1);
+        world.hexViews.set(1, view);
+        world.syncResolvedResources([{ hexId: 7, itemId: 1400901 }]);
+        const feature = { claimed: false, awake: false };
+        const presentation = { state: resourceHexState(1400901, { neutralFeature: feature }),
+            canDevelop: false, playerGold: 0, cooldown: null, now: 0 };
+        view.render(presentation);
+        assert.equal(view.resourceUnitNodes.length, 1);
+        assert.equal(view.iconLabel.string, '');
+        const body = view.resourceUnitNodes[0];
+        assert.equal(view.iconSprite.spriteFrame, sleep);
+        assert.equal(body.__skeleton.timeScale, 0.35);
+        assert.ok(body.__skeleton.color.r < 255);
+        feature.awake = true;
+        view.render(presentation);
+        assert.equal(view.iconLabel.string, '');
+        assert.equal(view.iconSprite.spriteFrame, awake);
+        assert.equal(view.resourceUnitNodes[0], body);
+        assert.equal(body.__skeleton.timeScale, 1);
+        assert.equal(body.__skeleton.color.r, 255);
+        presentation.state = resourceHexState(null, { neutralFeature: { claimed: true, awake: true } });
+        view.render(presentation);
+        assert.ok(view.resourceUnitNodes.every((node: { active: boolean }) => !node.active));
+        assert.equal(view.iconSprite.spriteFrame, null);
+    } finally { installZCNeutralTestCatalog(); }
+});
+
 /** 与 `zcds-progress.test.ts` 同款：补齐 prefab 必填引用。 */
 function stubHexView(load: (name: string) => any, cc: any, bar: () => any): any {
     const view = new (load('./ZCHexView').ZCHexView)();
@@ -45,7 +167,7 @@ function spinePrefab(load: (name: string) => any, cc: any, name = '豌豆射手'
     return { name, make, played };
 }
 
-function resourceHexState(id: string, extra: Record<string, unknown> = {}): never {
+function resourceHexState(id: number | null, extra: Record<string, unknown> = {}): never {
     return {
         id: 7, owner: 'neutral', state: 'occupiable', building: 'none', tier: 0,
         hp: 0, maxHp: 0, wallHp: 0, wallMaxHp: 0, wallBreachedEdge: null,

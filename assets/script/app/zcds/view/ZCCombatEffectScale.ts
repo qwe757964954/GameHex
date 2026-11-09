@@ -103,6 +103,29 @@ const NODE_SCALE_BY_PREFAB_PATH: Readonly<Record<string, number>> = {
     // 分母取 202（第 10/11 帧 `alpha ≥ 8` 的可见内容宽，不是 225 画布）⇒ 123 ÷ 202 ≈ 0.609。
     // 改爆炸半径时只改这一段（配表 `strikeSplashRadius` 同步）。
     'units/projectiles/镭射飞龙_导弹技能命中/镭射飞龙_导弹技能命中': 123 / 202,
+    // 镭射飞龙「追踪导弹」的**弹体**（`镭射飞龙_导弹技能`，单节点 81×77、可见内容 79×75）。
+    // 需求 2026-11-05：「导弹预制体的 size 调成 0.8」。
+    // 宿上倍数 ⇒ 屏上约 63×60，仍比一格（92.25×90）小，与爆炸（0.609）放在一起不会"弹头比爆炸大"。
+    // ⚠️ 拖尾（`ZCMissileTrail`）画在**同一个宿主节点**上，也会一起吃这个 0.8，所以拖尾的
+    //    长度/宽度在那边是按「本地单位」写的，注释里给了屏上换算。
+    'units/projectiles/镭射飞龙_导弹技能/镭射飞龙_导弹技能': 0.8,
+    // 鹿神守护（`pvpSkill` 30854 / 计卡 103405）＝「魔术师召唤鹿」spine + 上层循环「火法师火船」。
+    // 需求 2026-11-07：「魔术师召唤的鹿 size 太大了，应该只有 100px」。
+    //
+    // 尺寸口径：`鹿神守护.prefab` 里 spine 节点的 `_lscale` 是 1，sp.Skeleton 的渲染尺寸
+    // 只认**骨架 canvas**（prefab 上的 UITransform 不参与渲染，与 `ZCUnitView` 注释同一结论）。
+    // `lu.skel` 的 canvas 从二进制头直接读出来是 **657 × 685**（大端 float：x=-236.2 / y=-6.15
+    // / w=657 / h=685，与美术预制上那个 UITransform 一致，可互校）⇒ 原来屏上约 657px 宽，
+    // 比一个兵（可见高 67px）大近十倍，所以「看着像一座山」。
+    //
+    // 取「画布高 685 → 100px」：100 / 685 = 0.146。
+    // 可见内容 ≈ 画布 × 0.970（`ZCUnitView.SPINE_CANVAS_TARGET_HEIGHT` 的实测比例）
+    // ⇒ 屏上可见约 97px，即需求说的「一只 100px 的鹿」。
+    //
+    // ⚠️ 火船特效是这个 prefab 的**子节点**，倍率挂在宿主上 ⇒ 鹿和火焰**一起按比例缩**，
+    //    相对摆位（`fx_火船` 的 92.2 / 150 偏移）与层序都不用跟着改。
+    //    只缩鹿、不缩火的话火焰会比鹿还大一圈 —— 那才是真正难调的那种错。
+    'units/projectiles/鹿神守护/鹿神守护': 100 / 685,
 };
 
 /**
@@ -118,4 +141,25 @@ export function zcCombatEffectNodeScaleOf(
     const scale = NODE_SCALE_BY_PREFAB_PATH[effectPrefabPath];
     if (typeof scale !== 'number' || !Number.isFinite(scale) || scale <= 0) return 1;
     return scale;
+}
+
+/**
+ * 入场「由小变大」的缩放系数（2026-11-07 椰蛋战士「暴风」100504 需求 2：生成后由小变大到当前的大小）。
+ *
+ * @param growSeconds 生长时长（秒）。`undefined` / `0` / 非法 ⇒ 返回 1（不生长，既有特效逐字不变）
+ * @param ageSeconds  事件年龄（`now - startedAt`）
+ *
+ * 缓动取 **ease-out quad**（`1 - (1-t)²`）：0.3s 这种短入场用线性会显得"一顿"，
+ * out-back 又会在末段过冲、把飓风撑得比最终尺寸还大一圈。
+ *
+ * 系数只乘**最终缩放**，不参与 prefab 尺寸推导 —— 所以美术调大调小仍然只改 prefab 烘焙值。
+ */
+export function zcCombatEffectGrowFactor(
+    growSeconds: number | null | undefined,
+    ageSeconds: number,
+): number {
+    if (typeof growSeconds !== 'number' || !Number.isFinite(growSeconds) || growSeconds <= 0) return 1;
+    if (!Number.isFinite(ageSeconds)) return 1;
+    const t = Math.max(0, Math.min(1, ageSeconds / growSeconds));
+    return 1 - (1 - t) * (1 - t);
 }

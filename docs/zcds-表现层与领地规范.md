@@ -45,6 +45,12 @@
 | **战斗宝箱入口开启条件**（pvp 20001 通关才显示 + `0→1.15→1` 生成动画 + `Cell0..Cell3` 同进同出；2026-11-03） | `open.json` `refId=701`「战斗掉落宝箱」的 `visibleCondition` / `main/ChestEntryGate.ts` / `main/BattleLevelPassed.ts` / `MainPage.onLoad`、`applyChestEntryGate`、`setChestCellsVisible` | `tests/chest-entry-gate.test.ts` |
 | **章节通关判据 = 通过本章最后一个首领关**（异步据点不参与；无首领退回全占领；2026-11-04） | `model/TerritoryStageBinding.chapterFinalBossCell`（取 `stage.stage` 最大，同级比 `levelId` 再比 `cellId`）/ `TerritoryModel.chapterCompletion`（`bossCellId` + `progress.isAreaPassed`）/ `model/ChapterSelectRows.chapterClearedOf` / `ChapterSelectLoader.finalBossLevelIdOf`（`levelMod === 2`）与 `finalBossCells` | `tests/territory-stage-binding.test.ts`、`tests/territory-presenter.test.ts`、`tests/chapter-select.test.ts` |
 | **整章云散回收 + 章节切换镜头 + 散雾只给首次通关演**（模型只发 `chapterSwitch` 命令 → 页面压住换图保住云散 → `cover/wait/reveal` 三段 + 只认按钮来源；散雾判**边沿**（`chapterClearPending`）不判电平；2026-11-04 / 11-05） | `model/TerritoryChapterSwitch`（四段时长 / `lead` 相机先行 / `rise` / `sink` / `reveal` 曲线）/ `model/TerritoryCloud.territoryCloudClearAction`（`none` / `animate` / `instant`）/ `TerritoryModel.noteChapterJustCleared`、`emitStateChange`（发一拍就消费）/ `MainTerritoryMap.beginChapterSwitch`、`stepChapterSwitch`（`lead`/`cover`/`wait`/`reveal`）、`writeChapterSwitchLead`、`renderAll`（`chapterSwapPending`）/ `TerritoryMapView.beginChapterSwitch`、`setChapterSwitchOffset`、`syncClouds` / `TerritoryCloudView.setChapterCleared(cleared, animate)`、`dismissFillNow`、`dismissing` | `tests/territory-chapter-switch.test.ts`、`tests/territory-cloud.test.ts`、`tests/territory-battle-prelude.test.ts` |
+| **铺满背景的雾（铺满层）**：盖住"没有内容"的空格与内容层那圈留白；换章那一帧必须**当场重建**（2026-10-26 / 11-06） | `model/TerritoryCloud.territoryCloudFillPoints` / `TerritoryCloudView.setFillArea`、`setFillOccupied`（判据是 `fillAreaReady`，**不是** `fillKey`）、`rebuildFill`、`applyFillActive` / `TerritoryMapView.syncContentSize`、`syncClouds`、`syncGrid`（`reset()`） | `tests/territory-cloud.test.ts` |
+| **塔防 BOSS 波识别**（`defenceModWave.monsterType`：`1` 普通 / `2` 精英 / `3` BOSS；客户端 JSON 必须含该列，缺列时按「每组最后一波」兜底，2026-11-07） | `model/TerritoryCampaignConfig.projectDefenceWaves`（→ `TerritoryCampaignWave.isBoss`）/ `ZCGameModel.defenceBossWaveIndex`、`isBossWave`、`ZCPveDefenceWave.isBoss` | `tests/territory-campaign-config.test.ts`、`tests/zcds-pve-defence.test.ts` |
+| **塔防胜负只认「BOSS 已被击败」**（中间波清空不算赢；拆 BOSS 建筑提前触发的跳末波逻辑保持不变，2026-11-07） | `ZCGameModel.defenceBossState`（账本空时按场上同卡单位兜底）→ `ZCOutcomeSystem.checkOutcome(state, context, nextWaveIndex, defenceBoss)` | `tests/zcds-outcome-system.test.ts`、`tests/zcds-pve-defence.test.ts` |
+| **塔防中间 UI 大血条只在 BOSS 波显示**（普通小怪只有头顶血条，2026-11-07） | `ZCGame.renderBossPanel`（判 `progress.currentWaveIsBoss`）/ `ZCHudBossPanel` | `tests/zcds-pve-defence-hud.test.ts` |
+| **NPC 翻地块限速不超过 `levelInfo.openGrideTime`**（「关卡翻地快频率(s)」；`0` = 不受限，2026-11-07） | `ZCGameModel.aiDevelopIntervalSeconds = max(rules.enemyAiIntervalSeconds, openGrideTime)` / `TerritoryCampaignStage.openGrideTime` → `ITerritoryBattleNavParams` → `ZCBattleEntryBuilder` | `tests/zcds-pve-defence.test.ts`、`tests/territory-campaign-config.test.ts` |
+| **塔防关 NPC 卡组按 `npcCard` 收紧**（服务端开战回包里带英雄也不能整池上阵，2026-11-07） | `ZCBattleEntryBuilder.buildZCBattleEntry`（`clipToLevelCards = requestedEnemyCards.size > 0 && (!battle \|\| pve?.mode === 'defence')`） | `tests/zcds-client-combat-config.test.ts` |
 
 ## 对局资源与控制器生命周期（2026-10-30）
 
@@ -1325,12 +1331,47 @@ distance → 波次    territoryCloudFillWaveOrder(distance, maxDistance)     //
 
 #### 三、判据
 
-`tests/territory-cloud.test.ts`（50 条）：三段时长与总时长、拉远曲线的形状与单调性、起淡时机、
+`tests/territory-cloud.test.ts`（51 条）：三段时长与总时长、拉远曲线的形状与单调性、起淡时机、
 入画倍率的独立复算与"只缩不放"与四个脏入参、视图里"拉远未到位雾不淡 / 起淡即 2s / 3.8s 收工回 0"、
 **前沿格不算激活（等 5 秒也不散）**、无余量不演镜头、回退与换章立刻收、演出中不接受新倍率、
 波次归一化与脏参数、波窗口的单调性与右端不越界（`STAGGER < SPREAD`）、
 波透明度"同一时刻近 < 中 < 远、整条走完全 0"、视图层逐朵错峰（近的比远的先散、最远的仍 255、
-收工全 0、影子同读数），以及接线（探针参数、`stepCloudDolly` 排在 `clouds.step` 之后、页面注入视口）。
+收工全 0、影子同读数）、**换章那一帧 `reset()` 之后铺满层必须当场重建**，
+以及接线（探针参数、`stepCloudDolly` 排在 `clouds.step` 之后、页面注入视口）。
+
+#### 四、🔴 换章那一帧：铺满层被清空、且当场没人补（2026-11-06）
+
+用户原话：「章节 chapter02 地图未通关，用来遮挡背景的云层丢失了」。截图里左上角还留着几朵
+真实云、格子簇也在，但**整片沙漠底图裸露**，零报错。
+
+根因不是云没建，而是**建了又被扔、扔了没人补**。`renderMap` 的三步顺序把 `reset()` 夹在两次
+"喂尺寸"之间：
+
+| 步 | 谁 | 干了什么 |
+| :-- | :-- | :-- |
+| ① | `syncContentSize` → `setFillArea(新章尺寸)` | 指纹变了 ⇒ 用**上一章**的已盖格白建一整套 |
+| ② | `syncGrid` → `clouds.reset()` | 铺满层清空、`fillKey = ''`、`fillPoints = []` |
+| ③ | `syncClouds` → `setFillOccupied(新章的格)` | 老判据 `if (!this.fillKey) return;` ⇒ **一朵都不重建** |
+
+终态：`fillLayer.active` 还是 ① 留下的 `true`、`fillSprites` 是 0 —— **"开着但空着"**，
+`fillVisible` 读出来还是 `true`，日志也干净，谁去查都以为雾在。
+
+为什么 chapter_01 看着没事：它通常是**首屏**，进图前后有多次 `StateChange`（资源就绪 / 首帧
+就绪），下一次 `renderAll` 的 `setFillArea` 把雾补回来了。换章只发一次渲染 ⇒ 停在原地就是永久裸底图。
+
+修法（判据换源，语义不动）：
+
+```text
+老：if (!this.fillKey) return;          // fillKey 是"那批节点还在不在"的指纹
+新：if (!this.fillAreaReady) return;    // 只问"尺寸知不知道"（行列 / 宽高还在，reset 也没撤）
+```
+
+`fillAreaReady` 由 `setFillArea` 置位、**`clearFill()` 不撤**（尺寸这件事换章后又没变），
+于是 ③ 那一帧就能用现成的尺寸当场重建。守卫的另一半照旧：从没 `setFillArea` 过 ⇒ 只记账、
+不建节点（建了也是铺在 0×0 上）。
+
+教训：「指纹」和「事实」是两种东西 —— 拿指纹去表达"我知不知道尺寸"，一旦某个流程在两次
+写入之间做了清空，就会把唯一一次补救挡掉，而且**不报错、状态还读着正常**。
 
 > 过程与"为什么不是这样"的长版见 `docs/章节地图动画与点击反馈实现说明.md` §8.14~§8.16。
 
@@ -2479,6 +2520,234 @@ TerritoryStationView.renderLevelBubble() → 覆盖 badgeLabel.color
 
 判据：`tests/chapter-select.test.ts`（23 条，其中 3 条专守本条：区域扩散、资源据点不扩散、
 加载器按真实配表算出的 50% / 75% / 100%）。
+
+### 3.24 「看得见」与「点得动」同源：前置关卡必须**通关**，不是「解锁」（2026-11-06）
+
+用户原话（chapter_02 两张截图）：
+
+> 1. chapter02，boss 关卡的解锁关系没有绑定到 2-9 的关卡中，**提前披露了**；
+> 2. **尚未通关就已经显示成已通过的蓝色气泡**，但是其他未通过的关卡显示是正确的。
+
+两条症状各自对应一条**不同**的运行时缺陷（数据侧是好的：七章的 stage/boss 前置一律是
+「上一关 + 一个宝箱」，chapter_02 的 `boss_2` 前置就是 `[314(stage_8 = 2-9), 292(fixedResource_9)]`）。
+
+#### 一、揭示门槛漏了「必须通关」
+
+`territoryRevealedCells` 原来把前置满足判成「前置格 ∈ `owned ∪ unlocked`」，
+而点击拦截 `checkUnlock` → `prerequisiteBlockers` → `isPrerequisiteComplete` 判的是
+**关卡前置必须通关**。两套口径 ⇒ 只要把 2-9 的格子**花银币解锁、一枪不打**，2-10 就露出来了。
+
+修法：揭示侧改问 `TerritoryProgress.isPrerequisiteComplete`（由 `private` 转 `public`），
+**唯一一份判据**：
+
+| 前置格是 | 算「完成」的条件 |
+| :--- | :--- |
+| 关卡 / 首领 / 异步据点 | `isAreaPassed`（同 `configId` 任一格通关即可） |
+| 固定资源（宝箱） | **解锁即可**（宝箱不进 `passCells`） |
+| 普通地块 / 起点 | `owned` |
+
+⇒ 从此「看得见」= 「点得动」：露出 2-10 的那个时刻，也是它能开战的时刻。
+
+#### 二、`markCellsPassed` 把整批解锁回包记成「通关」
+
+`openRandomResourceCell` 拿到 `unlockCell` 的回包后调
+`markCellsUnlocked(...)` + `markCellsPassed(result.unlockedCellIds ?? [cellId])`。
+回包的 `cellId` 是**一片区域一起解锁**的整批（实测请求 327 → 回 `[327, 328]`），
+于是只要回包里混进一个关卡 / 首领格，那格就变成「已通关」：
+
+- 地块变草地（`isCellPassed` → `isAreaPassed` → `owned`）；
+- **编号气泡变蓝**（同一判据）；
+- 因为 `owned ⊆ opened ⊆ revealed`，**后继关卡被提前揭示**。
+
+而玩家根本没打过那一关。修法：`markCellsPassed` 按 `randomSites.candidateCells` 白名单过滤 ——
+「解锁即通关」这条特例只在随机格成立（服务端在解锁时结算发奖）。
+⚠️ 没配 `randomSites` 的老地图白名单为空 ⇒ 不过滤，别把整章随机格搞失效。
+
+> 已经写进存档 / 服务端的历史脏数据不会自动消失：气泡仍是蓝的。核对办法是看
+> `passCells` 里有没有那一格 —— 没有就是脏数据，清掉该章本地存档（或等服端快照覆盖）即可。
+
+#### 三、判据
+
+`tests/territory-cell-reveal.test.ts` 新增 3 条：
+
+- 「前置关卡只解锁没通关时，后继关卡（首领）不许提前揭示」——解锁 2-9 ⇒ 2-10 不露；打完 ⇒ 露；
+- 「`markCellsPassed` 只把随机候选格记成通关，关卡 / 首领格一律不认」；
+- 「没配 `randomSites` 的老地图：`markCellsPassed` 保持原样全收（兼容）」。
+
+### 3.25 `chapter_03` 从 160 格铺到 300 格：+70 个固定资源 / +70 个随机格（2026-11-06）
+
+用户原话：
+
+> 使用章节地图编辑器，给 chapter03 增加 70 个固定格子，以及 70 个随机格子，
+> 不能改变顺序逻辑，可以填充形状的空白处。
+
+#### 一、为什么只能"往外长"
+
+`gen_territory_shapes.py` 的涂色配额是**算满**的：
+
+| 组成 | 格数 |
+| :--- | ---: |
+| 10 个链点（8 关 + 2 首领） | 44 |
+| 3 个异步据点 × 4 | 12 |
+| `fixedResource`（含 9 道门） | 51 |
+| `randomSites.candidateCells` | 52 |
+| 出生点 | 1 |
+| **合计（= `TARGET_PAINTED`）** | **160** |
+
+也就是说这 160 格里**一格空位都没有**，用户说的"形状的空白处"只能是剪影外面那 240 格。
+
+#### 二、第二版：先定**剖面**再塞格子（第一版是均匀外扩，被否了）
+
+第一版实现成「从现有涂色区一圈一圈均匀外扩」，出来的东西在第 0~6 行和第 16~19 行是齐平的
+—— **整团是个圆角矩形**。用户看图后：
+
+> 调整随机格的位置，让图形更对称，贴近飞机的形状
+
+并附了张红笔描后掠翼飞机的截图（机头在顶部中线收尖、翼尖顶到左右边缘、尾巴在底部收窄）。
+
+现在的口径反过来：**先写一个后掠翼剖面，再把新增的 140 格填进剖面剩下的空位**。
+剖面用「每行左边缩进 `L(r)`、区间 `[L, 19−L]`」表达（左右天然对称）：
+
+| 行 | 缩进 | 宽度 | 含义 |
+| ---: | ---: | ---: | :--- |
+| 0 | 8 | 4 | 机头收尖 |
+| 1~7 | 7 → 1 | 6 → 18 | 前缘后掠（每行各扩 2 格，≈45°） |
+| 8~15 | 0 | 20 | 主翼满幅 |
+| 16~19 | 2, 3, 4, 5 | 16, 14, 12, 10 | 尾巴收窄 |
+
+`Σ L = 50` ⇒ 剖面 = `400 − 2×50 = 300` 格 = 160（现有）+ **140（新增）**，
+且脚本里**断言**了「现有 160 格 + 66 个不可动格（链点 44 + 异步 12 + 9 道门 + 起点）全在剖面内」，
+所以「剖面 − 现有」正好 140 格，70 宝箱 + 70 随机格一格不多一格不少。
+
+**为什么第 8~15 行必须满幅**：左右翼尖是**链上的固定站点** —— `asyncPvp_2` 在
+(13,1)(14,0)(14,1)(15,0)、`asyncPvp_1` 在 (13,19)(14,17~19)、`asyncPvp_3` 在
+(10,18)(10,19)(11,18)(11,19)。要左右对称就得两边都够到边缘，中间这几行只能是满幅。
+这 6 行 = 120 格是剖面的硬底座，也决定了「300 格不可能是一架纤细飞机」——
+机头能收到 4 格，尾巴最窄只能到 10 格。
+
+改完逐行体检：`min(cols) + max(cols) == 19` 对**每一行都成立**（20 行全过），
+即每行都是绕 `u = 9.5` 的中轴区间。
+
+#### 三、`chapter_03` 现在的量（其余六章不变）
+
+| 项 | 改前 | 改后 |
+| :--- | ---: | ---: |
+| 涂色格 | 160 / 400（40%） | **300 / 400（75%）** |
+| `fixedResource` | 51（`_1`~`_51`） | **121**（新增 `_52`~`_121`） |
+| `randomSites.candidateCells` | 52 | **122** |
+| `randomSites.buildingIds` | 44 | **104** |
+| `stage` / `boss` / `asyncPvp` | 8 / 2 / 3 | **一格没动** |
+
+新增的 70 个宝箱与既有的同构：`rewardId 1014`、`configId fixedResource_<cellId>`、
+`buildingId ""`、`silverCost 15 / exploreSeconds 1 / staminaCost 1`。
+
+#### 四、"不能改变顺序逻辑"落在哪三条
+
+1. 既有 64 个站点的 `cellId` / `footprint` / `unlock.requiredCells` **一个字节都不改**
+   （核对方式：改后 `sites[:64]` 与原档 `deepEqual`）；
+2. 9 道门（`fixedResource_1..9`，夹在相邻链点之间）不挪、不改前置；
+3. 新增只**追加在 `sites` 末尾** —— 运行时靠这个顺序喂 `stageById` 和"书写顺序"的提示文案。
+
+新增宝箱的前置照抄既有 51 个的口径：**只从 19 个上游锚点里挑**（10 个链点 + 9 道门），
+取 `hex_distance` 最近的那个。既不会自指、不会成环，也不会把 70 个新格串成一条
+"宝箱挂宝箱"的依赖链（那样每开一格都要先开上一格，15 银币 × 70 层）。
+
+#### 五、随机格与建筑
+
+`candidateCells` 追加 70 格（全落在剖面内）、原 52 格原样保留；`buildingIds` 按既有比例
+（`44 / 52 ≈ 85%`）给新格补 60 个，池子仍是 `69008-69015` —— 新旧格摆在一张图上看不出批次。
+`triggerSilver / rewardPoolId / maxActive` 三个字段没动。
+哪 70 格当宝箱是**固定种子抽样**（不是「排序后一隔一」——那会排成规整横条，看着像贴图）。
+
+#### 六、随机格再重排：绕中轴左右对称 / 中间不扎堆 / 按行定额（同日晚些，第三版）
+
+用户第三次（截图红框圈住中间两列）：
+
+> 做到基于这两列去做左右侧的水平对称（尽可能，且只是随机格，中间不要这么多随机格，
+> 随机格的分布更均匀一点
+
+红框那两列就是中轴（`col 9 / col 10`，跨在 `u = 9.5` 上）。
+
+**先说清楚"只动随机格"为什么做不到**：一格要么是站点 footprint、要么是
+`candidateCells`，两者互斥而并集必须还是那 300 格。所以「把中间的随机格撤掉」= 那些格子
+必须由宝箱顶上 —— 随机格和宝箱是互补的两堆。于是第三版动的是**归属**，不是形状：
+
+| 不动 | 动 |
+| :--- | :--- |
+| 300 格的剖面（一格不差，脚本里有断言） | 234 个可分配格里谁是宝箱、谁是随机格 |
+| 链点 / 首领 / 异步据点 / 9 道门 / 起点（66 格） | 112 个宝箱格与 122 个随机格的位置 |
+| 站点数与 `id` 顺序、`rewardId`（`1014:118 / 1011:3`） | 每个宝箱的 `cellId` / `configId` / `requiredCells` |
+
+改前中间两列有 **20 个随机格**（其中 18 个是生成器原来发的，只有 2 个是我上一版加的），
+改后是 **0 个**。
+
+口径三条：
+
+1. **对称**：镜像对 `(r, 9−k) ↔ (r, 10+k)`，一对要么都是随机格、要么都是宝箱 ——
+   否则一侧就破了。⚠️ 六边形是 odd-q 错排（`v = r + 0.5×(col&1)`），跨中轴的镜像天然
+   **差半行**，所以是"每一行各自左右对称"，不是"上下也对称"；这是格子性质，不是没做。
+2. **中间不扎堆**：`k = 0`（那两列）一律给宝箱。
+3. **均匀 = 每行密度一致**（不是"格子间隔一致"）：按 `每行可选格数 × 122 / 212` 用最大余数法
+   分名额，行内再用分层抽样取下标，把它们摊开。
+
+踩过的两个坑（都在 `symmetrize_chapter03.py` 的注释里）：
+
+- 先做过「全局最远点插入」，结果第 17 行被补到 **11/14（79%）**、第 0~3 行一个没有 ——
+  均匀的度量选错了；
+- 补名额时按固定的"余数最大"顺序表加，同一行会被一路加到爆（第 11 行 6 → 11，密度 100%）——
+  必须每轮重算谁最缺。
+
+改完每行密度 50%~58%（首尾两行例外：机头只有 3 格可选、尾巴 10 格），
+`min(cols)+max(cols)` 与镜像检查逐行通过。
+
+#### 七、发布与回滚
+
+```bash
+python tools/map-editor/fill_chapter03_cells.py --dry-run   # ASCII 预览 + 统计，不写盘
+python tools/map-editor/fill_chapter03_cells.py             # 改预设 + 发布 4 处
+```
+
+写盘落点与其他章一致：预设 → `assets/resources/config/territory-maps/`（带 `.meta`，uuid 不动）
+→ 策划 `json/{sever,client}` → 单独补 `assets/remoteRef/chapter_03.json`（`indent=0` 紧凑格式）。
+改前备份在 `tools/map-editor/backups/chapter_03.pre-fill140-20261106.*`。
+
+🔴 **别对 `chapter_03` 跑 `gen_territory_shapes.py --only 03`**：它从图形重新生成，
+会把 121 + 122 覆盖回 51 + 52，140 格的补丁全丢。
+
+### 3.26 七章奖励 id 按章递增：固定格 `1015+章序` / 随机池 `2001+章序`（2026-11-06）
+
+原话：「chapter01 固定格的奖励id从1014改成1016　随机格改为2002　后续02章节到07章节也改成对应章节的奖励id」。
+
+| | 规则 | ch01 | ch02 | ch03 | ch04 | ch05 | ch06 | ch07 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `fixedResource.rewardId` | `1015 + 章序` | 1016 | 1017 | 1018 | 1019 | 1020 | 1021 | 1022 |
+| `randomSites.rewardPoolId` | `2001 + 章序` | 2002 | 2003 | 2004 | 2005 | 2006 | 2007 | 2008 |
+
+**口径三问（都已确认）**：
+
+1. **固定格按章递增**，不是七章共用 1016 —— 但不新增奖励表行就等于给空奖励，见下方红字。
+2. **`chapter_01` 整章统一**：不只换 `1014`，连 `1015×5`、`1011×3`、`1001×1` 一起覆盖成 `1016`（含已是 1016 的 `fixedResource_1/_3`）。
+   `chapter_02` 那 2 个原本没写 `rewardId` 的（`fixedResource_103/_104`，`cellId` 368/370）也一并补成 `1017`。
+3. **9 道门（`fixedResource_1..9`）也统一**：它们是同类型的 `fixedResource`、也带 `rewardId`（`chapter_03` 的门 9 原来是 `1011`）。
+
+**只动两个字段**。脚本 `tools/map-editor/retarget_chapter_rewards.py` 对「把这两个字段还原回去后
+整份 JSON 必须与改前完全相等」有硬断言 —— 站点数 / `id` 顺序 / `cellId` / `footprint` / `unlock` /
+`candidateCells` / `buildingIds` / `triggerSilver` / `maxActive` 一格都没动，脚本可重复跑。
+
+```bash
+python tools/map-editor/retarget_chapter_rewards.py --dry-run   # 打前后分布 + 待补奖励行清单
+python tools/map-editor/retarget_chapter_rewards.py             # 改预设 + 发布 4 处
+```
+
+改前备份：`tools/map-editor/backups/chapter_0{1..7}.pre-retarget-20261106.preset.json`。
+
+🔴 **奖励表缺 13 行，策划补齐并导表之前这七章是空奖励**：
+`levelMapGrideReward` 现在只有 `1001~1016` 与 `2001` 有 `rewardGroup`；`2002` 有一行但是空壳
+（`{"rewardId": 2002}`，没有 `rewardGroup` 键），`1017~1022` / `2003~2008` **整行不存在**。
+
+⚠️ **顺序**：`gen_territory_shapes.py`（门写 `1011`、池写 `2001`）和 `fill_chapter03_cells.py`
+（宝箱写 `1014`）里都是**占位值**。任何时候重跑它们，都必须再跑一次 `retarget_chapter_rewards.py`，
+否则奖励 id 会静默退回占位值。
 
 ## 4. 其他玩家席位的视觉区分：顶点色相乘灰
 - **统一判据**：`owner !== 'player'`（与领地染色、城墙敌我同口径）。

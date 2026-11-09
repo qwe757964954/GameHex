@@ -7,7 +7,19 @@ export interface ZCProjectileContext extends Pick<IZCModelServices, 'effectiveDe
     now: number;
     units: readonly ZCUnitState[];
     distanceScale: number;
-    structureTarget(projectile: ZCProjectileState): ZCCombatTarget | null;
+    /**
+     * 这一轮扫掠段（`from…to`）**可能碰到**的结构目标（墙体 / 建筑），写进 `out`（调用方每轮清空）。
+     *
+     * 2026-11-06 需求：「单位角色子弹攻击如果是只造成一次伤害的，只会伤害接触的单位
+     * （角色 / 城墙 / 建筑），不会穿透」⇒ 结构不再只看「子弹锁定的那一格」，
+     * 而是按**实际飞过的格子**给候选，圆判定仍在本系统里做（与单位同一套连续碰撞）。
+     * 一次给多个候选是因为一帧的飞行段可能跨格，谁先被碰到由 `t` 最小者决定。
+     */
+    structureTargets(
+        projectile: ZCProjectileState,
+        fromX: number, fromY: number, toX: number, toY: number,
+        out: ZCCombatTarget[],
+    ): void;
     hit(projectile: ZCProjectileState, target: ZCCombatTarget): void;
     /**
      * 这颗弹道**这一帧就要消失**（命中后被丢弃 / 到点没打到东西）时的回调。
@@ -50,6 +62,8 @@ export class ZCProjectileSystem {
     /** 每弹道复用，替代 `new Set(projectile.hitUnitIds ?? [])`。 */
     private readonly hitIds = new Set<number>();
     private readonly wideUnits: ZCUnitState[] = [];
+    /** 每轮复用的结构候选（墙体 / 建筑），由 `context.structureTargets` 填。 */
+    private readonly structures: ZCCombatTarget[] = [];
     private readonly cellSize = 42;
 
     // ---- 每帧/每弹道复用的临时量：只读字段引用，写其内部成员，不产生 GC ----
@@ -167,8 +181,10 @@ export class ZCProjectileSystem {
                     };
                 }
                 // 保留每轮重新查询：hit 可能破墙，结构目标会在同拍内变化，不能提到 while 外。
-                const structure = context.structureTarget(projectile);
-                if (structure) {
+                this.structures.length = 0;
+                context.structureTargets(projectile, from.x, from.y, to.x, to.y, this.structures);
+                for (let index = 0; index < this.structures.length; index += 1) {
+                    const structure = this.structures[index];
                     const t = sweptCircleHitScalars(
                         to.x - from.x, to.y - from.y,
                         from.x - structure.x, from.y - structure.y,
@@ -218,6 +234,7 @@ export class ZCProjectileSystem {
         this.candidates.clear();
         this.hitIds.clear();
         this.wideUnits.length = 0;
+        this.structures.length = 0;
         this.step = 0;
     }
 

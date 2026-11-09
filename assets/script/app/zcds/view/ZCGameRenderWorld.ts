@@ -14,6 +14,7 @@ import {
     zcCombatEffectAnchorOf,
     zcCombatEffectAnchorPoint,
     zcCombatEffectLayerOf,
+    zcCombatEffectLayerOfPath,
     zcCombatEffectSiblingIndex,
 } from './ZCCombatEffectPlacement';
 import { ZCFloatTextView } from './ZCFloatTextView';
@@ -256,6 +257,7 @@ interface ZCRenderWorldOptions {
      * `hideNeutralResourceLabel` 分支）。缺省 ⇒ 退回"只显示地块图标"（旧表现）。
      */
     unknownResourceFrame?: SpriteFrame | null;
+    neutralResourceFrames?: ReadonlyMap<string, SpriteFrame>;
     /**
      * 飞向 HUD 金币栏的那把金币贴图（`image/map-resource/coin_icon`）。
      *
@@ -710,6 +712,7 @@ export class ZCGameRenderWorld {
             // 自选地图局的中立资源格盖问号（资源进游戏才随机，别剧透）。非自选局视图根本不会
             // 用这张帧（`hideNeutralResourceLabel` 为假），喂进去也无副作用。
             view.setUnknownResourceFrame(this.options.unknownResourceFrame ?? null);
+            view.setNeutralResourceFrames(this.options.neutralResourceFrames ?? null);
             // 兵团资源点（表现键 `unit_cap`）按组合项站 N 个中立待机兵：卡 id + 数量来自
             // 该格**抽中的资源项**（`neutralResourceGroup`），所以逐格喂、不能共用一份。
             this.injectResourceUnits(view, config.id);
@@ -2007,11 +2010,14 @@ export class ZCGameRenderWorld {
      */
     private injectResourceUnits(view: ZCHexView, hexId: number): void {
         const item = neutralResourceItemOf(this.resourceItemByHex.get(hexId));
-        const cardId = item && item.visual === ZCNeutralResourceVisual.UnitCap ? item.cardId : null;
+        view.setGateCooldownSeconds(item?.feature?.cooldownSeconds ?? 0);
+        const monster = item?.visual === ZCNeutralResourceVisual.Monster;
+        const cardId = monster ? item.feature.resId
+            : item && item.visual === ZCNeutralResourceVisual.UnitCap ? item.cardId : null;
         const prefabs = this.options.unitVisualPrefabs as ReadonlyMap<ZCUnitId, Prefab> | undefined;
         const unitId = cardId ? this.unitIdOfCard(cardId) : null;
         const prefab = unitId ? prefabs?.get(unitId) ?? null : null;
-        view.setResourceUnits(cardId ?? '', prefab, item?.unitCount ?? 0);
+        view.setResourceUnits(cardId ?? '', prefab, monster ? 1 : item?.unitCount ?? 0);
     }
 
     /** 卡 id → unitId。卡表里两者同值，但别假设：用目录反查，查不到就按同值兜一次。 */
@@ -2069,8 +2075,10 @@ export class ZCGameRenderWorld {
                 // `mapLayer` 里没有「单位层」这种容器，单位 / 飘字 / 卡牌 / 受击特效全是平铺的兄弟节点，
                 // 规则是「新建就置顶」= 谁后创建谁在上 ⇒ 地面特效必须**显式插队到棋盘之后**，
                 // 靠创建顺序会出现"角色晚一帧出生就把火盖回去"的抖动。
+                // 2026-11-07：`area` 里也会出现**生物本体**（鹿神守护的小鹿），按路径登记了例外，
+                // 所以走 `zcCombatEffectLayerOfPath`；未登记路径的结果与只看事件类型逐字相同。
                 node.setSiblingIndex(zcCombatEffectSiblingIndex(
-                    zcCombatEffectLayerOf(event.type),
+                    zcCombatEffectLayerOfPath(event.type, event.effectPrefabPath),
                     this.options.board.getSiblingIndex(),
                     this.options.mapLayer.children.length,
                 ));

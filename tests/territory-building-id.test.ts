@@ -210,3 +210,53 @@ test('★★★ 建筑表必须走 RefUtil，不能用 AssetService（bundle 不
     assert.match(src, /const BUILD_TABLE_NAME = 'build';/,
         "表名应是 'build'（RefUtil 传的是表名，不是资源路径）");
 });
+
+/**
+ * 🔴 2026-11-06 用户：「chapter02~07 的地块上也需要和 chapter 01 一样，填写对应的关卡建筑 id、
+ * boss 建筑 id，以及异步据点 id」。
+ *
+ * 背景：`stationIconOf` 对 `stage` / `boss` / `asyncPvp` 是「**没配 `buildingId` ⇒ 不画建筑**」，
+ * 而 chapter_02~07 这三类站点**一个都没配** ⇒ 那几张图上一个关卡建筑都看不见。
+ *
+ * 判据钉的是**已发布产物**（`resources` 里那份，游戏真正加载的）而不是预设：
+ * 改预设忘了发布，玩家看到的就是这张图 —— 那正是这次要防的。
+ */
+test('★★★章节 02~07：每个 (type, configId) 组都要配建筑，且 id 与类型对得上（2026-11-06）', () => {
+    // 站点 type → (建筑 id, `build.json` 的 buildType)；与 `chapter_01` 的既有摆法一致。
+    const SITE_BUILDINGS: Record<string, { id: string; buildType: number }> = {
+        stage: { id: '69004', buildType: 4 },
+        boss: { id: '69003', buildType: 3 },
+        asyncPvp: { id: '69002', buildType: 2 },
+    };
+    const table = parseTerritoryBuildTable(JSON.parse(readFileSync(BUILD_TABLE, 'utf8')));
+
+    for (const chapter of [2, 3, 4, 5, 6, 7]) {
+        const path = `assets/resources/config/territory-maps/chapter_0${chapter}.json`;
+        const map = JSON.parse(readFileSync(path, 'utf8')) as Raw;
+        const groups = new Map<string, Raw[]>();
+        for (const site of map.sites) {
+            if (!SITE_BUILDINGS[site.type]) continue;
+            const key = `${site.type}:${site.configId}`;
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key)!.push(site);
+        }
+        assert.ok(groups.size > 0, `chapter_0${chapter} 应有关卡 / 首领 / 异步据点站点`);
+
+        for (const [key, sites] of groups) {
+            const type = key.split(':')[0];
+            const expected = SITE_BUILDINGS[type];
+            const withBuilding = sites.filter((site) => String(site.buildingId ?? '').trim());
+            // 一个组 = 一片战斗区域 = 一个关卡；配 0 个 ⇒ 建筑不显示，配 >1 个 ⇒ 满片同款建筑。
+            assert.equal(withBuilding.length, 1,
+                `chapter_0${chapter} 的 ${key} 有 ${withBuilding.length} 个站点配了 buildingId，必须恰好 1 个`);
+            const buildingId = String(withBuilding[0].buildingId);
+            assert.equal(buildingId, expected.id,
+                `chapter_0${chapter} 的 ${key} 应配 ${expected.id}(${type})，实际 ${buildingId}`);
+            // 表里查得到，且 buildType 与站点类型一致（配错 id 时建筑会张冠李戴，且零报错）
+            const row = table.get(Number(buildingId));
+            assert.ok(row, `chapter_0${chapter} 的 ${key} 配了 ${buildingId}，但 build 表里查不到`);
+            assert.equal(row!.buildType, expected.buildType,
+                `${buildingId} 在 build 表里是 buildType=${row!.buildType}，与 ${type} 不符`);
+        }
+    }
+});

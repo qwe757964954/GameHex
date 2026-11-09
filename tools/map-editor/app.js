@@ -31,6 +31,8 @@
   var partitionDepth = 'none';
   var RESOURCE_LABELS = { chest: '宝箱', gold: '金币', mine: '金矿', unit_cap: '兵力', artifact_charge: '神器' };
   var RESOURCE_ASSETS = { chest: 'image/map-resource/chest', gold: 'image/map-resource/gold', mine: 'image/map-resource/mine', unit_cap: 'image/map-resource/unit_cap', artifact_charge: 'image/map-resource/artifact_charge' };
+  ['gate', 'gate_add', 'gate_multiply', 'gate_shrink', 'gate_enlarge', 'extension', 'portal', 'horn', 'monster', 'barracks'].forEach(function (id) { RESOURCE_ASSETS[id] = 'image/map-resource/' + id; });
+  var RESOURCE_TYPE_VISUALS = { 1: 'chest', 2: 'mine', 3: 'unit_cap', 4: 'artifact_charge', 5: 'barracks', 7: 'gate', 8: 'extension', 9: 'portal', 10: 'horn', 11: 'monster' };
   var resourceBrush = '';
   var resourceGroupId = null;
   /**
@@ -270,6 +272,16 @@
     var pool = point && point.pool ? point.pool : {};
     return Object.keys(pool).find(function (id) { return typeof pool[id] === 'number' && pool[id] > 0; }) || '';
   }
+  function groupResourceVisual(groupId) {
+    var items = (neutralGroups[groupId] || {}).items || [];
+    var preview = null;
+    items.forEach(function (item) { if (item.weight > 0 && (!preview || item.weight > preview.weight)) preview = item; });
+    if (!preview) return 'chest';
+    if (preview.resourceType === 11 && RESOURCE_ASSETS['monster_' + preview.resId]) return 'monster_' + preview.resId;
+    if (preview.resourceType === 7 && RESOURCE_ASSETS['gate_' + preview.effect]) return 'gate_' + preview.effect;
+    return preview.resourceType === 1 && RESOURCE_ASSETS[preview.icon]
+      ? preview.icon : RESOURCE_TYPE_VISUALS[preview.resourceType] || 'chest';
+  }
   function resourcePointAt(row, column) {
     return resourcePoints.find(function (point) { return point.row === row && point.column === column; }) || null;
   }
@@ -310,6 +322,11 @@
       button.setAttribute('aria-pressed', active ? 'true' : 'false');
     }
     var status = $('resourceGroupStatus');
+    var preview = $('resourceGroupPreview');
+    if (preview) {
+      preview.hidden = resourceGroupId === null;
+      if (resourceGroupId !== null) preview.src = resourceImageUrl(groupResourceVisual(resourceGroupId));
+    }
     var groupName = resourceGroupId === null ? '' : (neutralGroups[resourceGroupId] || {}).name;
     if (status) status.textContent = resourceGroupId === null ? '填写配置表中的组合 ID，再点击放置。'
       : active ? '当前组合：' + resourceGroupId + (groupName ? '（' + groupName + '）' : '') + ' · 点击格子放置，右键删除。'
@@ -2131,9 +2148,9 @@
       var center = hexCenter(point.row, point.column);
       if (point.groupId !== undefined) {
         var labelWidth = Math.max(48, String(point.groupId).length * 7.5 + 12);
-        // 统一资源箱仅作编辑定位标记，实际奖励仍由 groupId 对应的配置表决定。
+        // 预览组内最高权重项，不消耗开局随机源；实际抽取仍由游戏完成。
         parts.push('<g class="resourceGroupMarker"><title>' + esc(resourceLabel(point)) + '</title>' +
-          '<image class="resourceGroupImage" href="' + esc(resourceImageUrl('chest')) + '" x="' + (center.x - 39).toFixed(1) +
+          '<image class="resourceGroupImage" href="' + esc(resourceImageUrl(groupResourceVisual(point.groupId))) + '" x="' + (center.x - 39).toFixed(1) +
           '" y="' + (center.y - 53).toFixed(1) + '" width="78" height="78" preserveAspectRatio="xMidYMid meet"></image>' +
           '<rect class="resourceGroupLabel" x="' + (center.x - labelWidth / 2).toFixed(1) + '" y="' + (center.y + 17).toFixed(1) + '" width="' + labelWidth + '" height="22" rx="5" fill="#111827" stroke="#fbbf24"></rect>' +
           '<text class="resourceGroupLabel" x="' + center.x.toFixed(1) + '" y="' + (center.y + 32).toFixed(1) + '" text-anchor="middle" font-size="13" font-weight="700" fill="#fde68a">' + point.groupId + '</text></g>');
@@ -3023,7 +3040,15 @@
       neutralGroups = {};
       (Array.isArray(result.groups) ? result.groups : []).forEach(function (group) {
         neutralGroups[group.groupId] = group;
+        (group.items || []).forEach(function (item) {
+          if (item.resourceType === 11 && /^\d+$/.test(String(item.resId))) {
+            RESOURCE_ASSETS['monster_' + item.resId] = 'image/map-resource/monster_' + item.resId;
+          }
+        });
       });
+      $('resourceGroupOptions').innerHTML = Object.keys(neutralGroups).map(function (id) {
+        return '<option value="' + id + '">' + esc(neutralGroups[id].name) + '</option>';
+      }).join('');
     } catch (error) {
       neutralGroups = {};
     }
@@ -3039,6 +3064,7 @@
       resourceImages = {};
     }
     renderResourcePanel();
+    drawResources();
   }
 
   function renderLibrary() {

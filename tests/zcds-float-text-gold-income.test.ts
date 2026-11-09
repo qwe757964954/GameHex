@@ -324,14 +324,14 @@ test('源码守卫：两条分支各走各的曲线，且产金分支显式写�
 
 // ---------------------------------------------------------------- 模型接线
 
-test('模型：只有主城 / 金矿产出走 goldincome，两个掉落点保持默认 gold', () => {
+test('模型：只有主城 / 金矿产出走 goldincome，击杀、拆建筑与野怪掉落保持默认 gold', () => {
     const src = readFileSync(MODEL_PATH, 'utf8');
     // 产金：economyContext.grantGold 唯一一处，且用独立的时长常量。
     assert.match(src, /this\.grantGold\(owner, amount, center\.x, center\.y,\s*\n?\s*FLOAT_TEXT_GOLD_INCOME_SECONDS, 'goldincome'\);/,
         '建筑产金必须显式传 goldincome');
-    // 掉落：击杀 / 拆建筑两处仍是 FLOAT_TEXT_GOLD_SECONDS，且**不传 kind**（默认 gold）。
+    // 掉落：击杀 / 拆建筑 / 野怪仍是 FLOAT_TEXT_GOLD_SECONDS，且不传 kind（默认 gold）。
     const drops = src.match(/this\.grantGold\([^)]*FLOAT_TEXT_GOLD_SECONDS\);/g) ?? [];
-    assert.equal(drops.length, 2, `击杀与拆建筑两处掉落应保持默认，实测 ${drops.length} 处`);
+    assert.equal(drops.length, 3, `击杀、拆建筑与野怪三处掉落应保持默认，实测 ${drops.length} 处`);
     assert.doesNotMatch(src, /this\.grantGold\([^)]*FLOAT_TEXT_GOLD_SECONDS, 'goldincome'\)/,
         '掉落不许被改成产金表现');
     // 时长：产金要比掉落从容（50px 塞进 0.62s 会像被弹出去）。

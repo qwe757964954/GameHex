@@ -27,7 +27,13 @@ export function buildZCBattleEntry(prepared: ZCGamePreparedResources, entry?: ZC
     const baseConfig = prepared.baseMatchConfig;
     const requestedEnemyCards = new Set((pve?.enemyCardIds ?? []).map(String));
     // 本地关卡名单仅供离线使用；提前裁剪会让正式回包中的英雄在构筑前就被丢掉。
-    const pveEnemyDeck = !battle && requestedEnemyCards.size > 0
+    //
+    // 🔴 例外是**塔防（首领）关**：它拿到 `battle` 也必须裁，否则「触发 npcCard 卡组」形同虚设 ——
+    //    整份敌方卡池（36 张）全上，羁绊 / 卡组加成按整池算，`extraCards.enemy → npcTeam.npcCard`
+    //    那套配置根本读不到（用户 2026-11-07）。塔防的敌人只有出怪表里的怪 + 首领，不靠玩家式英雄，
+    //    裁掉不会丢服务端阵容：出怪卡由 `pveDefence.cards` 兜底查表，见 `ZCMatchRuntimeCompiler`。
+    const clipToLevelCards = requestedEnemyCards.size > 0 && (!battle || pve?.mode === 'defence');
+    const pveEnemyDeck = clipToLevelCards
         ? baseConfig.enemyDeck.filter((card) => requestedEnemyCards.has(card.id))
         : baseConfig.enemyDeck;
     const pveDefence = pve?.mode === 'defence' && pve.waves.length > 0 ? {
@@ -42,11 +48,18 @@ export function buildZCBattleEntry(prepared: ZCGamePreparedResources, entry?: ZC
                 monsterCount: wave.monsterCount,
                 // 波次只决定出怪计划；战斗倍率统一来自服务端 buffInfo。
                 tier: 1,
+                // 只随配置走 `isBoss`：BOSS 波决定 HUD 大血条与「击败首领才算赢」。
+                ...(wave.isBoss ? { isBoss: true } : {}),
             })),
     } : undefined;
     let matchConfig = baseConfig;
     if (pve) {
         matchConfig = Object.assign({}, baseConfig);
+        // 关卡「翻地块频率」：只压 NPC 的翻地块速度（对局内 `runEnemyAI` 的最小间隔）。
+        const openGrideTime = Number(pve.openGrideTime);
+        if (Number.isFinite(openGrideTime) && openGrideTime > 0) {
+            matchConfig.openGrideTime = openGrideTime;
+        }
         if (pveEnemyDeck.length > 0) matchConfig.enemyDeck = pveEnemyDeck;
         if (!battle && pve.mode === 'match' && pve.enemyTeamCardIds.length > 0) {
             matchConfig.ownerDecks = buildZCPveEnemyDecks(baseConfig.enemyDeck, pve.enemyTeamCardIds);

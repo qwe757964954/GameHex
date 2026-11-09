@@ -69,6 +69,26 @@
       "row": 12,
       "column": 8,
       "groupId": 13002
+    },
+    {
+      "row": 9,
+      "column": 6,
+      "groupId": 14009
+    },
+    {
+      "row": 9,
+      "column": 9,
+      "groupId": 14008
+    },
+    {
+      "row": 9,
+      "column": 2,
+      "groupId": 14006
+    },
+    {
+      "row": 5,
+      "column": 5,
+      "groupId": 14003
     }
   ],
   "art": {

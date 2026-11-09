@@ -139,7 +139,6 @@ function createPage() {
         if (name === './CardArtProvider') return { cardArtProvider: {
             loadLineupCard: () => new Promise(resolve => heroLoads.push(resolve)),
         } };
-        if (name === './CardHeroView') return { applyCardHeroArt: (hero, _transform, frame) => { hero.spriteFrame = frame; } };
         if (name === './CardUnitPreviewAssets') return { CardUnitPreviewAssets: class {
             constructor(private loader) {}
             load(card) { return this.loader(card.unitPrefabPath); }
@@ -167,7 +166,6 @@ function createPage() {
     }
     page.onInit();
     page.heroSprite = {};
-    page.heroTransform = {};
     return { page, counts, makeRow, pending, heroLoads, modelLoads, shown, releases, itemRows, itemIcons, clearCount: () => cleared };
 }
 

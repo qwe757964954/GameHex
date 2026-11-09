@@ -14,11 +14,12 @@
  *
  * 前缀统一 `[导弹诊断]`，控制台过滤这 6 个字就能看完整条链路。
  *
- * ⚠️ 定位完把 {@link ZC_LOG_MISSILE_SKILL} 改回 `false`（或整文件删除）。
- * 它不挂在 `ZCDC_LOG_DIAGNOSTICS` 上：那个开关一开会把整局所有诊断刷屏，
- * 而这次只需要盯一个技能。
+ * ⚠️ 定位完把 `ZCDCLogSwitch.ZCDC_LOG_MISSILE` 改回 `false`（或整文件删除）。
+ * 开关放在 `ZCDCLogSwitch` 里而不是本文件自己定义：项目有护栏
+ * （`tests/zcds-log-switch.test.ts`）要求每一条 `console.*` 都挂在统一开关作用域内，
+ * 各模块自建布尔量会被判红。
  */
-export const ZC_LOG_MISSILE_SKILL = true;
+import { ZCDC_LOG_MISSILE } from './ZCDCLogSwitch';
 
 /**
  * 追踪导弹**测试用英雄等级**（0 = 关闭，按真实等级走）。
@@ -44,7 +45,8 @@ const ONCE_KEYS = new Set<string>();
 const LAST_VALUES = new Map<string, string>();
 
 function emit(scope: string, message: string, detail?: unknown): void {
-    if (!ZC_LOG_MISSILE_SKILL) return;
+    //  护栏形态二：方法首行 `if (!ZCDC_LOG_x) return;` ⇒ 后面整段都算「在开关作用域内」。
+    if (!ZCDC_LOG_MISSILE) return;
     if (detail === undefined) console.info(`[导弹诊断][${scope}] ${message}`);
     else console.info(`[导弹诊断][${scope}] ${message}`, detail);
 }
@@ -56,7 +58,7 @@ export function missileLog(scope: string, message: string, detail?: unknown): vo
 
 /** 同一个 `key` 全局只打一次。用于「每帧都会被问一遍」的参数快照。 */
 export function missileLogOnce(key: string, scope: string, message: string, detail?: unknown): void {
-    if (!ZC_LOG_MISSILE_SKILL || ONCE_KEYS.has(key)) return;
+    if (!ZCDC_LOG_MISSILE || ONCE_KEYS.has(key)) return;
     ONCE_KEYS.add(key);
     emit(scope, message, detail);
 }
@@ -68,7 +70,7 @@ export function missileLogOnce(key: string, scope: string, message: string, deta
  * 直接打就是每帧一行的洪水。这里按「结果串」去重：失败只留第一条，转成功时再补一条。
  */
 export function missileLogChanging(key: string, scope: string, message: string): void {
-    if (!ZC_LOG_MISSILE_SKILL) return;
+    if (!ZCDC_LOG_MISSILE) return;
     if (LAST_VALUES.get(key) === message) return;
     LAST_VALUES.set(key, message);
     emit(scope, message);

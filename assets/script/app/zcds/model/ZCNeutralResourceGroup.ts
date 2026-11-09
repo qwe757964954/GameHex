@@ -29,6 +29,11 @@ export const ZCNeutralResourceType = {
     ArtifactCharge: 4,
     Barracks: 5,
     BattleBuff: 6,
+    Gate: 7,
+    Extension: 8,
+    Portal: 9,
+    Horn: 10,
+    Monster: 11,
 } as const;
 export type ZCNeutralResourceType = (typeof ZCNeutralResourceType)[keyof typeof ZCNeutralResourceType];
 
@@ -50,6 +55,11 @@ export const ZCNeutralResourceVisual = {
     ArtifactCharge: 'artifact_charge',
     Barracks: 'barracks',
     Buff: 'buff',
+    Gate: 'gate',
+    Extension: 'extension',
+    Portal: 'portal',
+    Horn: 'horn',
+    Monster: 'monster',
 } as const;
 export type ZCNeutralResourceVisual = (typeof ZCNeutralResourceVisual)[keyof typeof ZCNeutralResourceVisual];
 
@@ -62,6 +72,7 @@ const ZC_NEUTRAL_ICON_KEYS: ReadonlySet<string> = new Set<string>([
 
 /** 一个资源项 = 表里的一行（同组多行组成一个抽取池）。 */
 export interface ZCNeutralResourceItem {
+    readonly feature?: IZCNeutralFeatureConfig;
     /** 资源项 id（表 `id` 列）；**全局唯一**，快照里存的就是它。 */
     readonly id: number;
     readonly groupId: number;
@@ -135,7 +146,7 @@ export function compileZCNeutralResourceCatalog(
         if (!groupName) throw new Error(`${where}.groupName 不能为空`);
         const resourceType = row.resourceType;
         if (typeof resourceType !== 'number' || !ZC_NEUTRAL_RESOURCE_TYPE_SET.has(resourceType)) {
-            throw new Error(`${where}.resourceType 必须是 1~6：${String(resourceType)}`);
+            throw new Error(`${where}.resourceType 不支持：${String(resourceType)}`);
         }
         const weight = row.weight;
         if (typeof weight !== 'number' || !Number.isFinite(weight) || weight < 0) {
@@ -155,6 +166,8 @@ export function compileZCNeutralResourceCatalog(
             cardId: parsed.cardId,
             unitCount: parsed.unitCount,
             buffKey: parsed.buffKey,
+            ...(resourceType >= ZCNeutralResourceType.Gate
+                ? { feature: parseNeutralFeature(resourceType, param, where, cards) } : {}),
             visual: neutralVisualOf(resourceType as ZCNeutralResourceType, icon),
         };
         items.set(item.id, item);
@@ -184,6 +197,11 @@ function neutralVisualOf(
     icon: string | null,
 ): ZCNeutralResourceVisual {
     switch (resourceType) {
+        case ZCNeutralResourceType.Gate: return ZCNeutralResourceVisual.Gate;
+        case ZCNeutralResourceType.Extension: return ZCNeutralResourceVisual.Extension;
+        case ZCNeutralResourceType.Portal: return ZCNeutralResourceVisual.Portal;
+        case ZCNeutralResourceType.Horn: return ZCNeutralResourceVisual.Horn;
+        case ZCNeutralResourceType.Monster: return ZCNeutralResourceVisual.Monster;
         case ZCNeutralResourceType.Unit: return ZCNeutralResourceVisual.UnitCap;
         case ZCNeutralResourceType.ArtifactCharge: return ZCNeutralResourceVisual.ArtifactCharge;
         case ZCNeutralResourceType.Barracks: return icon ? (icon as ZCNeutralResourceVisual) : ZCNeutralResourceVisual.Barracks;
@@ -192,6 +210,59 @@ function neutralVisualOf(
         case ZCNeutralResourceType.Chest:
         default: return icon ? (icon as ZCNeutralResourceVisual) : ZCNeutralResourceVisual.Chest;
     }
+}
+
+export type IZCGateEffect = 'add' | 'multiply' | 'shrink' | 'enlarge';
+export const ZC_GATE_EFFECTS: readonly IZCGateEffect[] = ['add', 'multiply', 'shrink', 'enlarge'];
+
+export interface IZCNeutralFeatureConfig {
+    readonly effect?: IZCGateEffect;
+    readonly mode?: 'fixed' | 'random';
+    readonly value?: number;
+    readonly cooldownSeconds?: number;
+    readonly windowSeconds?: number;
+    readonly scale?: number;
+    readonly hpFlat?: number;
+    readonly moveMultiplier?: number;
+    readonly attackSpeedMultiplier?: number;
+    readonly damageMultiplier?: number;
+    readonly resId?: string;
+    readonly wakeRange?: number;
+    readonly attackRange?: number;
+}
+
+function parseNeutralFeature(type: number, param: unknown, where: string,
+    cards: ReadonlyMap<string, ZCDeckCard>): IZCNeutralFeatureConfig {
+    if (!param || typeof param !== 'object' || Array.isArray(param)) throw new Error(`${where}.param 必须是对象`);
+    const data = param as Record<string, unknown>;
+    const allowed = type === ZCNeutralResourceType.Gate
+        ? ['effect', 'mode', 'value', 'cooldownSeconds', 'windowSeconds', 'scale', 'hpFlat', 'moveMultiplier', 'attackSpeedMultiplier', 'damageMultiplier']
+        : type === ZCNeutralResourceType.Monster ? ['resId', 'wakeRange', 'attackRange'] : [];
+    for (const key of Object.keys(data)) {
+        if (!allowed.includes(key)) throw new Error(`${where}.param 出现未知字段：${key}`);
+    }
+    if (type === ZCNeutralResourceType.Gate) {
+        if (!ZC_GATE_EFFECTS.includes(data.effect as IZCGateEffect)) throw new Error(`${where}.param.effect 无效`);
+        if (data.mode !== 'fixed' && data.mode !== 'random') throw new Error(`${where}.param.mode 无效`);
+        for (const key of allowed.slice(2)) {
+            if (typeof data[key] !== 'number' || !Number.isFinite(data[key]) || (data[key] as number) < 0) {
+                throw new Error(`${where}.param.${key} 必须是非负数`);
+            }
+        }
+        if (!Number.isSafeInteger(data.value) || (data.value as number) < 1 || (data.scale as number) <= 1
+            || (data.moveMultiplier as number) <= 0 || (data.attackSpeedMultiplier as number) <= 0
+            || (data.damageMultiplier as number) <= 0) throw new Error(`${where}.param 倍率或数量无效`);
+        if ((data.effect === 'multiply' || data.effect === 'shrink' || data.mode === 'random')
+            && (data.windowSeconds as number) <= 0) throw new Error(`${where}.param.windowSeconds 必须大于0`);
+    }
+    if (type === ZCNeutralResourceType.Monster) {
+        if (typeof data.resId !== 'string') throw new Error(`${where}.param.resId 必须是卡牌ID字符串`);
+        requireCard(String(data.resId ?? ''), ZCCardType.Barracks, where, cards);
+        for (const key of ['wakeRange', 'attackRange']) {
+            if (!Number.isSafeInteger(data[key]) || (data[key] as number) < 1) throw new Error(`${where}.param.${key} 必须是正整数`);
+        }
+    }
+    return data as IZCNeutralFeatureConfig;
 }
 
 interface IZCParsedParam {

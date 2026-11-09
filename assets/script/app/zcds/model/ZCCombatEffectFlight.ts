@@ -281,6 +281,23 @@ export interface IZCMissileFxSpec {
     readonly impactPrefabPath: string;
     /** 弧线的**中段最大横向偏移**（世界坐标）；3 条弧线靠下标错开（0 / ±arc）。 */
     readonly arcOffset: number;
+    /**
+     * 导弹自己的飞行速度（逻辑 px/秒）；缺省 = 复用该技能的 `projectileSpeed`。
+     *
+     * 普攻是**光束**，它的 `projectileSpeed`（500）是「光」的速度；导弹要「慢速滑翔」，
+     * 两者共用一个值就必然二选一，所以这里单独给导弹一个数。
+     * 200 ⇒ 最远一发（330 逻辑）飞 1.65s，弧线看得清；调大调小只改这一个数。
+     */
+    readonly speed?: number;
+    /**
+     * 一次施法**恒定发几颗**（覆盖配表 `strikeCount`）；缺省 = 听配表的。
+     *
+     * 为什么要有：101003 三档 `unlockHeroLevel` 9/18/24 的 `strikeCount` 是 3/4/5，
+     * 但策划口径是「导弹技能每次恒定 3 个」（2026-11-05 需求）。分档只该涨伤害倍率
+     * （`strikeDamageRate` 3/5/8），不该涨发数 —— 一次 5 颗在屏幕上读起来像"漏了几颗"。
+     * 要恢复分档就把 68010 这行删掉，逻辑侧不需要任何配套改动。
+     */
+    readonly count?: number;
 }
 
 const MISSILE_FX_BY_UNIT: Readonly<Record<string, IZCMissileFxSpec>> = {
@@ -291,6 +308,11 @@ const MISSILE_FX_BY_UNIT: Readonly<Record<string, IZCMissileFxSpec>> = {
         //  一格格距约 42px（逻辑），36 个世界单位 ≈ 半格多一点的横向甩出；
         //  三条弧线由下标错开（index 0 / 1 / 2 → +arc / -arc / +0.5arc）。
         arcOffset: 36,
+        //  慢速滑翔（2026-11-05 需求「强调弧线」）：普攻光速 500，导弹降到 200。
+        //  330 逻辑 = 技能最大搜索半径，飞完 1.65s；165（自身射程）0.83s。
+        speed: 200,
+        //  恒定 3 颗（2026-11-05 需求）：配表三档是 3/4/5，但演示口径是「每次都 3 个」。
+        count: 3,
     },
 };
 

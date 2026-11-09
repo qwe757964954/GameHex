@@ -30,7 +30,7 @@
         350
       ],
       "configId": "10011",
-      "buildingId": "",
+      "buildingId": "69004",
       "unlock": {
         "requiredCells": [
           369
@@ -53,7 +53,7 @@
         304
       ],
       "configId": "10012",
-      "buildingId": "",
+      "buildingId": "69004",
       "unlock": {
         "requiredCells": [
           328,
@@ -80,7 +80,7 @@
         202
       ],
       "configId": "10013",
-      "buildingId": "",
+      "buildingId": "69004",
       "unlock": {
         "requiredCells": [
           283,
@@ -106,7 +106,7 @@
         103
       ],
       "configId": "10014",
-      "buildingId": "",
+      "buildingId": "69004",
       "unlock": {
         "requiredCells": [
           161,
@@ -135,7 +135,7 @@
         70
       ],
       "configId": "10015",
-      "buildingId": "",
+      "buildingId": "69003",
       "unlock": {
         "requiredCells": [
           84,
@@ -159,7 +159,7 @@
         96
       ],
       "configId": "10016",
-      "buildingId": "",
+      "buildingId": "69004",
       "unlock": {
         "requiredCells": [
           49,
@@ -184,7 +184,7 @@
         178
       ],
       "configId": "10017",
-      "buildingId": "",
+      "buildingId": "69004",
       "unlock": {
         "requiredCells": [
           75,
@@ -209,7 +209,7 @@
         258
       ],
       "configId": "10018",
-      "buildingId": "",
+      "buildingId": "69004",
       "unlock": {
         "requiredCells": [
           157,
@@ -233,7 +233,7 @@
         315
       ],
       "configId": "10019",
-      "buildingId": "",
+      "buildingId": "69004",
       "unlock": {
         "requiredCells": [
           237,
@@ -260,7 +260,7 @@
         273
       ],
       "configId": "10020",
-      "buildingId": "",
+      "buildingId": "69003",
       "unlock": {
         "requiredCells": [
           314,
@@ -284,7 +284,7 @@
         127
       ],
       "configId": "20005",
-      "buildingId": "",
+      "buildingId": "69002",
       "unlock": {
         "requiredCells": [
           84
@@ -307,7 +307,7 @@
         154
       ],
       "configId": "20006",
-      "buildingId": "",
+      "buildingId": "69002",
       "unlock": {
         "requiredCells": [
           75
@@ -330,7 +330,7 @@
         210
       ],
       "configId": "20007",
-      "buildingId": "",
+      "buildingId": "69002",
       "unlock": {
         "requiredCells": [
           270
@@ -350,7 +350,7 @@
       ],
       "configId": "fixedResource_305",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           328
@@ -370,7 +370,7 @@
       ],
       "configId": "fixedResource_222",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           283
@@ -390,7 +390,7 @@
       ],
       "configId": "fixedResource_102",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           161
@@ -410,7 +410,7 @@
       ],
       "configId": "fixedResource_46",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           84
@@ -430,7 +430,7 @@
       ],
       "configId": "fixedResource_73",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           49
@@ -450,7 +450,7 @@
       ],
       "configId": "fixedResource_116",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           75
@@ -470,7 +470,7 @@
       ],
       "configId": "fixedResource_197",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           157
@@ -490,7 +490,7 @@
       ],
       "configId": "fixedResource_276",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           237
@@ -510,7 +510,7 @@
       ],
       "configId": "fixedResource_292",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           314
@@ -530,7 +530,7 @@
       ],
       "configId": "fixedResource_209",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           270
@@ -550,7 +550,7 @@
       ],
       "configId": "fixedResource_170",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           270
@@ -570,7 +570,7 @@
       ],
       "configId": "fixedResource_171",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           157
@@ -590,7 +590,7 @@
       ],
       "configId": "fixedResource_168",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           84
@@ -610,7 +610,7 @@
       ],
       "configId": "fixedResource_149",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           84
@@ -630,7 +630,7 @@
       ],
       "configId": "fixedResource_187",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           161
@@ -650,7 +650,7 @@
       ],
       "configId": "fixedResource_212",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           270
@@ -670,7 +670,7 @@
       ],
       "configId": "fixedResource_207",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           270
@@ -690,7 +690,7 @@
       ],
       "configId": "fixedResource_231",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           270
@@ -710,7 +710,7 @@
       ],
       "configId": "fixedResource_250",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           270
@@ -730,7 +730,7 @@
       ],
       "configId": "fixedResource_232",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           270
@@ -750,7 +750,7 @@
       ],
       "configId": "fixedResource_248",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           270
@@ -770,7 +770,7 @@
       ],
       "configId": "fixedResource_227",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           270
@@ -790,7 +790,7 @@
       ],
       "configId": "fixedResource_129",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           49
@@ -810,7 +810,7 @@
       ],
       "configId": "fixedResource_186",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           161
@@ -830,7 +830,7 @@
       ],
       "configId": "fixedResource_173",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           157
@@ -850,7 +850,7 @@
       ],
       "configId": "fixedResource_131",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           49
@@ -870,7 +870,7 @@
       ],
       "configId": "fixedResource_252",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           270
@@ -890,7 +890,7 @@
       ],
       "configId": "fixedResource_226",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           283
@@ -910,7 +910,7 @@
       ],
       "configId": "fixedResource_153",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           157
@@ -930,7 +930,7 @@
       ],
       "configId": "fixedResource_247",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           270
@@ -950,7 +950,7 @@
       ],
       "configId": "fixedResource_185",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           161
@@ -970,7 +970,7 @@
       ],
       "configId": "fixedResource_214",
       "buildingId": "",
-      "rewardId": 1011,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           237
@@ -990,7 +990,7 @@
       ],
       "configId": "fixedResource_165",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           161
@@ -1010,7 +1010,7 @@
       ],
       "configId": "fixedResource_109",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           49
@@ -1030,7 +1030,7 @@
       ],
       "configId": "fixedResource_234",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           237
@@ -1050,7 +1050,7 @@
       ],
       "configId": "fixedResource_253",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           270
@@ -1070,7 +1070,7 @@
       ],
       "configId": "fixedResource_225",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           283
@@ -1090,7 +1090,7 @@
       ],
       "configId": "fixedResource_290",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           270
@@ -1110,7 +1110,7 @@
       ],
       "configId": "fixedResource_266",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           283
@@ -1130,7 +1130,7 @@
       ],
       "configId": "fixedResource_288",
       "buildingId": "",
-      "rewardId": 1011,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           328
@@ -1150,7 +1150,7 @@
       ],
       "configId": "fixedResource_184",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           161
@@ -1170,7 +1170,7 @@
       ],
       "configId": "fixedResource_175",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           157
@@ -1190,7 +1190,7 @@
       ],
       "configId": "fixedResource_245",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           283
@@ -1210,7 +1210,7 @@
       ],
       "configId": "fixedResource_224",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           283
@@ -1230,7 +1230,7 @@
       ],
       "configId": "fixedResource_113",
       "buildingId": "",
-      "rewardId": 1011,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           75
@@ -1250,7 +1250,7 @@
       ],
       "configId": "fixedResource_289",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           270
@@ -1270,7 +1270,7 @@
       ],
       "configId": "fixedResource_235",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           237
@@ -1290,7 +1290,7 @@
       ],
       "configId": "fixedResource_291",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           270
@@ -1310,7 +1310,7 @@
       ],
       "configId": "fixedResource_144",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           161
@@ -1330,7 +1330,7 @@
       ],
       "configId": "fixedResource_106",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           84
@@ -1350,7 +1350,7 @@
       ],
       "configId": "fixedResource_87",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           84
@@ -1370,7 +1370,7 @@
       ],
       "configId": "fixedResource_90",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           49
@@ -1390,7 +1390,7 @@
       ],
       "configId": "fixedResource_265",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           283
@@ -1410,7 +1410,7 @@
       ],
       "configId": "fixedResource_135",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           157
@@ -1430,7 +1430,7 @@
       ],
       "configId": "fixedResource_196",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           237
@@ -1450,7 +1450,7 @@
       ],
       "configId": "fixedResource_88",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           49
@@ -1470,7 +1470,7 @@
       ],
       "configId": "fixedResource_163",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           161
@@ -1490,7 +1490,7 @@
       ],
       "configId": "fixedResource_93",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           75
@@ -1510,7 +1510,7 @@
       ],
       "configId": "fixedResource_124",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           84
@@ -1530,7 +1530,7 @@
       ],
       "configId": "fixedResource_92",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           75
@@ -1550,7 +1550,7 @@
       ],
       "configId": "fixedResource_114",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           75
@@ -1570,7 +1570,7 @@
       ],
       "configId": "fixedResource_223",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           283
@@ -1590,7 +1590,7 @@
       ],
       "configId": "fixedResource_311",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           270
@@ -1610,7 +1610,7 @@
       ],
       "configId": "fixedResource_275",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           237
@@ -1630,7 +1630,7 @@
       ],
       "configId": "fixedResource_285",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           283
@@ -1650,7 +1650,7 @@
       ],
       "configId": "fixedResource_243",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           283
@@ -1670,7 +1670,7 @@
       ],
       "configId": "fixedResource_307",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           328
@@ -1690,7 +1690,7 @@
       ],
       "configId": "fixedResource_284",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           283
@@ -1710,7 +1710,7 @@
       ],
       "configId": "fixedResource_136",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           157
@@ -1730,7 +1730,7 @@
       ],
       "configId": "fixedResource_72",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           49
@@ -1750,7 +1750,7 @@
       ],
       "configId": "fixedResource_263",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           283
@@ -1770,7 +1770,7 @@
       ],
       "configId": "fixedResource_331",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           328
@@ -1790,7 +1790,7 @@
       ],
       "configId": "fixedResource_66",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           84
@@ -1810,7 +1810,7 @@
       ],
       "configId": "fixedResource_296",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           314
@@ -1830,7 +1830,7 @@
       ],
       "configId": "fixedResource_218",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           237
@@ -1850,7 +1850,7 @@
       ],
       "configId": "fixedResource_201",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           161
@@ -1870,7 +1870,7 @@
       ],
       "configId": "fixedResource_221",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           161
@@ -1890,7 +1890,7 @@
       ],
       "configId": "fixedResource_277",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           237
@@ -1910,7 +1910,7 @@
       ],
       "configId": "fixedResource_333",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           314
@@ -1930,7 +1930,7 @@
       ],
       "configId": "fixedResource_316",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           314
@@ -1950,7 +1950,7 @@
       ],
       "configId": "fixedResource_241",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           283
@@ -1970,7 +1970,7 @@
       ],
       "configId": "fixedResource_325",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           328
@@ -1990,7 +1990,7 @@
       ],
       "configId": "fixedResource_324",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           283
@@ -2010,7 +2010,7 @@
       ],
       "configId": "fixedResource_31",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           49
@@ -2030,7 +2030,7 @@
       ],
       "configId": "fixedResource_138",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           157
@@ -2050,7 +2050,7 @@
       ],
       "configId": "fixedResource_97",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           75
@@ -2070,7 +2070,7 @@
       ],
       "configId": "fixedResource_199",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           157
@@ -2090,7 +2090,7 @@
       ],
       "configId": "fixedResource_219",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           237
@@ -2110,7 +2110,7 @@
       ],
       "configId": "fixedResource_347",
       "buildingId": "",
-      "rewardId": 1014,
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           328
@@ -2129,6 +2129,7 @@
         368
       ],
       "configId": "fixedResource_368",
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           369
@@ -2147,6 +2148,7 @@
         370
       ],
       "configId": "fixedResource_370",
+      "rewardId": 1017,
       "unlock": {
         "requiredCells": [
           369
@@ -2160,7 +2162,7 @@
   ],
   "randomSites": {
     "triggerSilver": 15,
-    "rewardPoolId": "2001",
+    "rewardPoolId": "2003",
     "candidateCells": [
       27,
       45,

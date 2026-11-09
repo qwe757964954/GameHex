@@ -54,7 +54,7 @@ test('基础贴图未完成时其他资源组已经发起，不串行等待六�
     } }, { disposed: false });
     await new Promise((resolve) => setImmediate(resolve));
     try {
-        for (const path of ['concept/sprites/farm', 'concept/ui/stamina', 'base_background', 'main/city/btn_quick_fight']) {
+        for (const path of ['concept/sprites/construction', 'concept/ui/stamina', 'base_background', 'main/city/btn_quick_fight']) {
             assert.ok(paths.some((entry) => entry.endsWith(`${path}/spriteFrame`)), `${path} 不应等待其他资源组`);
         }
     } finally { finish(); await loading; }
@@ -116,40 +116,64 @@ test('资源缺失走既有建筑兜底，缺失美术不会改变规则配置',
     assert.equal(art.baseBackground.path, 'image/base_background/spriteFrame');
 });
 
- test('世界标记优先使用现有植物建筑，概念图仅用于基地生产建筑', async () => {
+ test('基地建筑优先用表里的 baseBuildIcon，世界标记仍用植物建筑', async () => {
     const art = await artLoader()({ has: async () => true, load: async (path: string) => ({ path }) }, { disposed: false });
     assert.equal(art.home.path, 'image/buildings/hq-base/spriteFrame');
     assert.equal(art.city.path, 'image/buildings/barracks-default/spriteFrame');
     assert.equal(art.monster.path, 'image/territory/buildings/territory_boss_v1/spriteFrame');
-    assert.equal(art.buildings.get(71002).path, 'image/concept/sprites/farm/spriteFrame');
+    // 表里配了 `baseBuildIcon` ⇒ 用它（2026-11-06 之前这里被硬编码成概念图 farm）。
+    assert.equal(art.buildings.get(71002).path, 'image/buildings/barracks-pineapple/spriteFrame');
+    // 同类共用一张图：71003 该行原本是空列，已按「同类第 1 座」补齐。
+    assert.equal(art.buildings.get(71003).path, 'image/buildings/barracks-pineapple/spriteFrame');
+    // 全表唯一没配图的 71017（小玩法入口，没有同类可参照）仍回退概念图。
+    assert.equal(art.buildings.get(71017).path, 'image/concept/sprites/construction/spriteFrame');
 });
 
-test('23 座基地建筑只使用现有类型图片，不探测或加载未接入的配置图片', async () => {
+test('23 座基地建筑按表读图标，没配该列的唯一一座才回退概念图', async () => {
     const calls: string[] = [];
     const config = loadBigMapConfig();
     const art = await artLoader()({ has: async (path: string) => { calls.push(path); return true; }, load: async (path: string) => {
         calls.push(path); return { path };
     } }, { disposed: false }, '', new Map(), config.buildings);
-    assert.equal(config.buildings.get(71014)?.icon, 'ui/bigmap/building/71004');
+    assert.equal(config.buildings.get(71014)?.icon, 'image/buildings/barracks-coconut');
     assert.equal(config.buildings.get(71023)?.initialCellId, 1023);
     assert.equal(art.buildings.size, 23);
-    for (const [id, name] of [[71006, 'farm'], [71011, 'sawmill'], [71012, 'ironworks'], [71015, 'warehouse'], [71016, 'water_tower'], [71023, 'rocks']] as const) {
-        assert.equal(art.buildings.get(id).path, `image/concept/sprites/${name}/spriteFrame`);
+    // 配了图标的建筑走表里的图；同 type 共用同一张。
+    for (const [id, path] of [
+        [71001, 'image/buildings/barracks-peashooter'],
+        [71002, 'image/buildings/barracks-pineapple'],
+        [71006, 'image/buildings/barracks-pineapple'],
+        [71007, 'image/buildings/barracks-flame'],
+        [71011, 'image/buildings/barracks-flame'],
+        [71012, 'image/buildings/barracks-coconut'],
+        [71015, 'image/buildings/mine'],
+        [71016, 'image/territory/buildings/territory_random_resource_v1'],
+        [71018, 'image/territory/buildings/territory_home_v1'],
+        [71023, 'image/territory/buildings/territory_random_resource_v1'],
+    ] as const) {
+        assert.equal(art.buildings.get(id).path, `${path}/spriteFrame`);
     }
-    assert.equal(calls.some((path) => path.startsWith('ui/bigmap/building/')), false);
-    assert.equal(calls.filter((path) => path === 'image/concept/sprites/farm/spriteFrame').length, 2,
-        '同类型图片只探测一次、加载一次');
+    // 只有 71017（小玩法入口）没有配置图标。
+    const withoutIcon = [...config.buildings.values()].filter((b) => !b.icon).map((b) => b.id);
+    assert.deepEqual(withoutIcon, [71017]);
     assert.equal(art.buildings.get(71017).path, 'image/concept/sprites/construction/spriteFrame');
+    assert.equal(calls.some((path) => path.startsWith('ui/bigmap/building/')), false,
+        '表里的 baseBuildIcon 已改成真实路径，不该再出现旧的 71004 式拼法');
+    // 粮食田五座共用 `barracks-pineapple`：只探测一次、加载一次。
+    assert.equal(calls.filter((path) => path === 'image/buildings/barracks-pineapple/spriteFrame').length, 2,
+        '同类型共用一张图时只探测一次、加载一次');
     const own = new Map(config.buildings);
     const field = own.get(71003);
     assert.ok(field);
     own.set(71003, { ...field, icon: 'custom/field' });
     const custom = await artLoader()({ has: async () => true, load: async (path: string) => ({ path }) }, { disposed: false }, '', new Map(), own);
-    assert.equal(custom.buildings.get(71003).path, 'image/concept/sprites/farm/spriteFrame');
+    assert.equal(custom.buildings.get(71003).path, 'custom/field/spriteFrame');
 });
 
 test('新表图标尚未入库时每个建筑按类型回退，避免旧 ID 对错图', async () => {
-    const art = await artLoader()({ has: async (path: string) => !path.startsWith('ui/bigmap/building/'),
+    // 只让概念图命中：表里 `baseBuildIcon` 指向的目录（图还没出）全部 miss。
+    const art = await artLoader()({ has: async (path: string) => !path.startsWith('image/buildings/')
+        && !path.startsWith('image/territory/buildings/'),
         load: async (path: string) => ({ path }),
     }, { disposed: false }, '', new Map(), loadBigMapConfig().buildings);
     for (const [id, name] of [[71003, 'farm'], [71007, 'sawmill'], [71012, 'ironworks'], [71015, 'warehouse'], [71016, 'water_tower'], [71018, 'rocks']] as const) {

@@ -26,7 +26,9 @@ interface VictorySweepState {
  * 每铺到一格就把那格的 `ZCHexView.sweepOwner` 设成胜利方 —— **不回写模型**，
  * 所以战报与领地统计读到的仍是真实归属。
  *
- * 深色铺场与回正重叠，回正结束后播放共享轮廓脉冲；时序统一取自 `ZCGameViewUtil`。
+ * 深色铺场与回正重叠；**共享轮廓脉冲从铺色第 2 行起就跟上来**
+ * （2026-11-07 需求：「紧跟叠色格子后 1~2 行」），不再在末尾单独占一段。时序统一取自
+ * `ZCGameViewUtil`。
  */
 export class ZCVictorySweep {
     private state: VictorySweepState | null = null;

@@ -4419,6 +4419,18 @@ message CmdPvpBuffInfo {
    repeated string buffs   = 2;//[id,value,id,value]
 }
 
+//pvp 属性信息
+message CmdPvpAttrInfo {
+   required string attrId  = 1;//id
+   required string value   = 2;//数值
+}
+
+//pvp英雄属性信息
+message CmdPvpHeroAttrInfo {
+   required uint32 heroId  = 1;//英雄id
+   repeated CmdPvpAttrInfo attrs = 2;//属性集合
+}
+
 // pvp信息
 message CmdPvpInfo {
    required uint32 grade  = 1;//段位
@@ -4483,7 +4495,9 @@ message CmdBattleUnitInfo {
    optional uint32 unitType          = 7;//单元类型,1玩家2机器人3怪物
 
    //buff
-   repeated CmdPvpBuffInfo buffInfo  = 8;//buff   
+   repeated CmdPvpBuffInfo buffInfo  = 8;//buff  
+   //英雄的属性
+   repeated CmdPvpHeroAttrInfo attrs = 9;//英雄属性   
 }
 
 // 请求战斗信息
@@ -4988,6 +5002,7 @@ enum MessageId {
 	CmdFirstRechargeRewardRspMsg = 622072529; //领取首充奖励请求
     CmdFormationInfoRspMsg = 1211220072; //阵型信息请求
     CmdFormationOpRspMsg = 1506971931; //阵型操作请求	
+    CmdFormationSelectRspMsg = 829295498; //请求阵型选中
 	CmdFriendsApplyRspMsg = 2057674506; //好友申请
 	CmdFriendsAddRspMsg = 552573225; //通过好友申请
 	CmdFriendsRefuseRspMsg = 1262322162; //拒绝好友申请

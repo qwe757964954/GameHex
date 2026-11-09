@@ -2234,7 +2234,7 @@ interface refGen{levelInfo:IReflevelInfo}
 interface IReflevelMapGrideReward extends IRefBase
 {
 rewardId:number
-rewardGroup:any[]
+rewardGroup?:any[]
 }
 type IReflevelMapGrideReward_rewardId=number
 type IReflevelMapGrideReward_rewardGroup=any[]

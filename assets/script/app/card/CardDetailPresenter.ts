@@ -53,7 +53,7 @@ export interface CardDetailMilestone {
 /** 详情页一次渲染要的全部展示数据。 */
 export interface CardDetailPresentation {
     readonly stats: readonly CardDetailStatLine[];
-    /** 战力占位文案（战力系统未落地，Inspector 可覆盖）。 */
+    /** 当前等级的单卡战力文案，与详情攻击属性同源。 */
     readonly powerText: string;
     readonly chain: readonly CardDetailSkillSlot[];
     readonly milestones: readonly CardDetailMilestone[];

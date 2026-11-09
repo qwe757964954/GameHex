@@ -52,6 +52,8 @@ import { RefUtil } from '../../framework/ref/RefUtil';
 import { CacheMgr } from '../net/CacheMgr';
 import { HeadArt } from '../HeadArt';
 import { PlayerInfoPage } from '../playerinfo/PlayerInfoPage';
+import { cardRepository } from '../card/CardRepository';
+import { formatPowerText } from '../card/CardLineupPower';
 import { readRoleRow } from './MainRoleRow';
 import { buildResBarView, LevelRow, ResBarView } from './MainResBarTypes';
 
@@ -76,6 +78,15 @@ export class MainResBar extends Component {
 
     @property({ type: Sprite, tooltip: 'ExpFill：经验条（FILLED / HORIZONTAL，代码只改 fillRange）' })
     expFill: Sprite = null;
+
+    /**
+     * 战力（`TopHud/PowerLabel`）。
+     *
+     * 可空：本组件在别处（`MainRoot` 那条资源栏）也挂着，那里的 prefab 没有战力格。
+     * 值为「阵容内攻击力总和」，本地算（口径见 `card/CardLineupPower`），**不发协议**。
+     */
+    @property({ type: Label, tooltip: 'PowerLabel：战力（阵容内攻击力总和，本地计算）' })
+    powerLabel: Label | null = null;
 
     /** 防止 `reload` 重入（缓存落地 / 资源变化都可能触发）。 */
     private loading = false;
@@ -105,6 +116,7 @@ export class MainResBar extends Component {
         // 注：货币格由同一条 bar 上的 `common/ResBar` 订阅，两个监听者互不干扰。
         CacheMgr.instance.setEventUpdate('CmdRole', this, this.onRoleCacheUpdate);
         void this.reload();
+        void this.refreshPower();
     }
 
     onDestroy(): void {
@@ -153,6 +165,24 @@ export class MainResBar extends Component {
             console.error('[MainResBar] 资源栏刷新失败', error);
         } finally {
             this.loading = false;
+        }
+    }
+
+    /**
+     * 刷新战力文案（阵容内攻击力总和）。
+     *
+     * 算不出来（阵容还没拿到 / 表读失败）时**保留 prefab 上的占位**，不清成 `0` ——
+     * 玩家看到「战力 0」比看到旧数字更容易误判成「我的卡都没了」。
+     * 与 `reload` 同口径：失败只 warn、不抛。
+     */
+    private async refreshPower(): Promise<void> {
+        if (!this.powerLabel) return;
+        try {
+            const power = await cardRepository.loadLineupPower();
+            if (!this.isValid || !this.powerLabel) return;
+            if (power > 0) this.powerLabel.string = formatPowerText(power);
+        } catch (error) {
+            console.warn('[MainResBar] 战力刷新失败，保留占位', error);
         }
     }
 

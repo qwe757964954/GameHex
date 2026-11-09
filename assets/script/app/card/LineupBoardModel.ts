@@ -1,6 +1,7 @@
 import type { LineupBoardData } from './CardRepository';
 import { LineupDraftStore } from './LineupDraftStore';
-import { buildPresetDecks } from './LineupPresets';
+import { buildPresetDecks, presetFormationId } from './LineupPresets';
+import { isCompleteLineup } from './CardLineupTypes';
 import type { LineupBoardPresentation } from './CardPresentations';
 import { CARD_LINEUP_TEXTS } from './CardLineupTexts';
 
@@ -27,6 +28,43 @@ export class LineupBoardModel {
         return { ...this.data, ...this.draft.snapshot(), saving: this.saving, canSave: !this.saving, saveText: this.saveText };
     }
     selectPreset(index: number): void { if (!this.draft) return; this.draft.selectPreset(index); this.edited(); }
+
+    /** 当前选中方案的下标。 */
+    get selectedPreset(): number {
+        return this.draft ? this.draft.selectedIndex : this.defaultPreset;
+    }
+
+    /** 当前选中方案对应的后端阵型 id（切页签要把它同步给服务器）。 */
+    get selectedFormationId(): number {
+        return this.draft ? this.draft.selectedFormationId : presetFormationId(this.defaultPreset);
+    }
+
+    /** 目标页签（越界按夹紧后的口径）是否就是当前方案；是的话切页签无意义，也不用提交。 */
+    isCurrentPreset(index: number): boolean {
+        return !this.draft || this.draft.selectedFormationId === this.draft.formationIdOf(index);
+    }
+
+    /**
+     * 当前方案是否已是一份「完整阵容」：满编 + 每个品级至少一张（`isCompleteLineup`）。
+     *
+     * 布阵页的**发包门槛**：切页签时只有完整阵容才跟服务器打交道（不论是保存还是换选中）。
+     * 空方案 / 半成品留在本地 —— 它们没有「最新阵容」可同步，硬发还会把服务端的
+     * 出战阵型（`select = 1`）改到一条残缺阵型上。
+     */
+    get currentLineupComplete(): boolean {
+        if (!this.draft) return false;
+        return isCompleteLineup(this.draft.snapshot().cards, this.draft.slotLimit);
+    }
+
+    /**
+     * 切页签前是否要先把当前方案提交给服务器（`saveFormation`）。
+     *
+     * 比 `currentLineupComplete` 多一个条件：**有未提交改动**。
+     * 没改过还发保存，等于把服务端的出战阵型无谓地指到这条上。
+     */
+    get switchNeedsCommit(): boolean {
+        return !!this.draft && this.draft.currentDirty && this.currentLineupComplete;
+    }
     reset(): void { if (!this.draft) return; this.draft.reset(); this.edited(); }
     toggle(cardId: string): void {
         if (!this.draft || !this.data) return;

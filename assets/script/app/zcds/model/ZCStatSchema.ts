@@ -87,6 +87,7 @@ export const ZCSourceUnit = {
 export type ZCSourceUnit = (typeof ZCSourceUnit)[keyof typeof ZCSourceUnit];
 
 export const ZCModifierSourceKind = {
+    Server: 'server',
     GeneralStar: 'generalStar',
     Equipment: 'equipment',
     Gem: 'gem',
@@ -340,6 +341,10 @@ const SKILL_BEHAVIORS = new Set([
     //  2026-10-30「第二个主动」：冷却到点在半径内挑 N 个敌人各结算一发（最近优先 / 随机），
     //  见 `ZCSkillTriggerSystem.applyRandomStrike` 与 `ZCAttackResolutionSystem.strikeTargets`。
     'random_strike',
+    //  2026-11-06 魔术师「移形换影」（103404）：冷却到点闪现到最近敌人身前（II 级起往返），
+    //  两端各结算一次伤害，原位可选留一个到时爆炸的分身。
+    //  见 `ZCSkillTriggerSystem.applyBlinkStrike`；位移落点走 `ZCMovementSystem.placeAt`。
+    'blink_strike',
 ]);
 const STATUS_HANDLERS = new Set([
     'none', 'periodic_damage', 'periodic_heal', 'on_hit_status',

@@ -71,10 +71,12 @@ const MAGES: readonly IMageAttack[] = [
     },
     {
         unitId: 68022, name: '雷蕉', skillId: 30231,
-        // 2026-11-03 SVN：美术整体换皮，`雷法师_雷电` ⇒ `磁电菇_子弹攻击`，
-        // 且新 prefab 的 scale 由美术直接烘焙成 0.4 终值（旧 70% 两段式不再适用）。
-        prefab: 'units/projectiles/磁电菇_子弹攻击/磁电菇_子弹攻击',
-        before: { x: 0.4, y: 0.4 }, after: { x: 0.4, y: 0.4 }, rebaked: true,
+        // 2026-11-03 SVN：美术整体换皮，`雷法师_雷电` ⇒ `磁电菇_子弹攻击`；
+        // 2026-11-06 SVN：雷电系再次换皮，`磁电菇_子弹攻击` ⇒ `雷弹攻击`（电池弹体 + 雷弹命中受击）。
+        // 两轮都一样：新 prefab 的 scale 由美术/预制直接烘焙成终值（旧 70% 两段式不再适用），
+        // 所以走 `rebaked`（比例恒为 1，绝对值就是 prefab 根节点的 `_lscale`）。
+        prefab: 'units/projectiles/雷弹攻击/雷弹攻击',
+        before: { x: 0.78, y: 0.78 }, after: { x: 0.78, y: 0.78 }, rebaked: true,
     },
     {
         unitId: 68024, name: '急冻瓜', skillId: 30671,

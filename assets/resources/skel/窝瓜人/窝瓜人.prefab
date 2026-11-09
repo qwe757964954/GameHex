@@ -51,7 +51,7 @@
       "z": 1
     },
     "_mobility": 0,
-    "_layer": 1073741824,
+    "_layer": 33554432,
     "_euler": {
       "__type__": "cc.Vec3",
       "x": 0,
@@ -101,7 +101,7 @@
       "z": 1
     },
     "_mobility": 0,
-    "_layer": 1073741824,
+    "_layer": 33554432,
     "_euler": {
       "__type__": "cc.Vec3",
       "x": 0,
@@ -161,7 +161,8 @@
       "a": 255
     },
     "_skeletonData": {
-      "uuid": "d62b6200-657f-41e0-b96c-c5beadfb450e"
+      "__uuid__": "d62b6200-657f-41e0-b96c-c5beadfb450e",
+      "__expectedType__": "sp.SkeletonData"
     },
     "defaultSkin": "default",
     "defaultAnimation": "idle",

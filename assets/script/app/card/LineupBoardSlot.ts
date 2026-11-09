@@ -1,9 +1,8 @@
-import { _decorator, Component, EventTouch, Label, Node, Prefab, Sprite, SpriteFrame, UITransform, Vec2 } from 'cc';
+import { _decorator, Component, EventTouch, Label, Node, Prefab, Sprite, SpriteFrame, Vec2 } from 'cc';
 import { ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
 import { CARD_LINEUP_TEXTS } from './CardLineupTexts';
 import type { IBoardCardHost } from './LineupBoardCard';
 import { CardUnitPreview } from './CardUnitPreview';
-import { applyCardHeroArt } from './CardHeroView';
 
 const { ccclass, property } = _decorator;
 
@@ -17,7 +16,7 @@ export interface ZCBoardSlotFrames {
 /**
  * 布阵面板上阵区一个站台。
  * 层次：木台底座 → 品级垫盘 → 职业 Q 版立绘 → 职业角标 + N级。
- * 与页面 CardLineupSlot 版式不同；角色图复用 cardHead，缺专属图时沿用布阵占位。
+ * 与页面 CardLineupSlot 版式不同；角色图复用 cardHead，缺图时清空。
  *
  * ── 交互 ─────────────────────────────────────────────────────────────
  * 点已上阵的卡 → 下阵（复用卡池同一条 `IBoardCardHost.onCardTap`：页面收到
@@ -36,9 +35,6 @@ export class LineupBoardSlot extends Component {
 
     @property({ type: Sprite, tooltip: 'Hero：职业 Q 版立绘' })
     hero: Sprite = null;
-
-    @property({ type: UITransform, tooltip: 'Hero：立绘展示框' })
-    heroTransform: UITransform = null!;
 
     @property({ type: Sprite, tooltip: 'ClassBadge：职业角标' })
     classBadge: Sprite = null;
@@ -101,13 +97,15 @@ export class LineupBoardSlot extends Component {
         this.node.setScale(this.baseScaleX * ratio, this.baseScaleY * ratio, this.baseScaleZ);
     }
 
-    /** @param frames null 项保留 prefab 现图；level 不传用 fallbackLevel。 */
+    /** @param frames null 项清空旧图；level 不传用 fallbackLevel。 */
     render(card: ZCDeckCard, frames: ZCBoardSlotFrames, level?: number, prefab?: Prefab | null): void {
-        if (frames.disc) this.disc.spriteFrame = frames.disc;
-        if (frames.hero) applyCardHeroArt(this.hero, this.heroTransform, frames.hero);
-        if (frames.badge) this.classBadge.spriteFrame = frames.badge;
+        this.disc.spriteFrame = frames.disc;
+        this.hero.spriteFrame = frames.hero;
+        this.classBadge.spriteFrame = frames.badge;
         if (prefab) {
-            (this.preview ??= new CardUnitPreview(this.hero, this.previewHeight)).show(prefab);
+            // 体型跟阵容页同口径：归一之后乘 `prefabSize`（见 `CardPreviewScale`）。
+            (this.preview ??= new CardUnitPreview(this.hero, this.previewHeight))
+                .show(prefab, card.prefabSize ?? 1);
         } else {
             this.preview?.clear();
         }

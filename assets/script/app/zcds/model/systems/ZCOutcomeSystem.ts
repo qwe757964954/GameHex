@@ -10,6 +10,17 @@ export interface IZCOutcomeContext {
     homeId(owner: ZCOwner): number;
 }
 
+/**
+ * 塔防 BOSS 波进度（由模型按出怪账本给出）。
+ *
+ * - `spawned`：BOSS 波已经出来过（含「提前拆 boss 建筑直接召出末波」那条捷径）；
+ * - `alive`：BOSS 波里还有活着的单位（BOSS 波可能多于一只，全部清空才算击败）。
+ */
+export interface IZCDefenceBossState {
+    readonly spawned: boolean;
+    readonly alive: boolean;
+}
+
 export interface IZCOutcomeResult {
     readonly status: Exclude<ZCGameStatus, 'playing'>;
     readonly reason: string;
@@ -53,7 +64,12 @@ export class ZCOutcomeSystem {
         };
     }
 
-    static checkOutcome(state: IZCOutcomeState, context: IZCOutcomeContext, nextDefenceWaveIndex: number): IZCOutcomeResult | null {
+    static checkOutcome(
+        state: IZCOutcomeState,
+        context: IZCOutcomeContext,
+        nextDefenceWaveIndex: number,
+        defenceBoss?: IZCDefenceBossState,
+    ): IZCOutcomeResult | null {
         if (state.status !== 'playing') return null;
         if (context.pveDefence) {
             const playerHome = state.hexes[context.homeId(ZCOwner.Player)];
@@ -61,10 +77,16 @@ export class ZCOutcomeSystem {
                 // 塔防失败没有「PvP 胜方」，扫场仍按敌方色铺（= 现存行为），显式写出来免得被当成漏填。
                 return { status: 'defeat', reason: '塔防失败：我方主城领地已失守。', winner: ZCOwner.Enemy };
             }
-            const allWavesSpawned = nextDefenceWaveIndex >= context.pveDefence.waves.length;
-            const aliveEnemies = state.units.some((unit) => unit.owner !== ZCOwner.Player && unit.battleState !== 'dead');
-            return allWavesSpawned && !aliveEnemies
-                ? { status: 'victory', reason: `塔防胜利：已击退全部 ${context.pveDefence.waves.length} 波守军。`, winner: ZCOwner.Player }
+            // 🔴 只有**击败 BOSS** 才算赢（用户 2026-11-07）：中间波次清空、甚至把敌方主城拆了都不算，
+            // 否则「提前摧毁 boss 建筑 → 跳过中间波次 → 直接召出 BOSS」这条捷径就变成了跳过 BOSS 取胜。
+            // `defenceBoss` 由模型按账本给出（BOSS 波是否出场、是否还有活口）；没传时退回旧口径
+            // （全部波次出完 + 场上无敌人），只在单测直接调本方法时才会走到。
+            const boss = defenceBoss ?? {
+                spawned: nextDefenceWaveIndex >= context.pveDefence.waves.length,
+                alive: state.units.some((unit) => unit.owner !== ZCOwner.Player && unit.battleState !== 'dead'),
+            };
+            return boss.spawned && !boss.alive
+                ? { status: 'victory', reason: '塔防胜利：BOSS 已被击败。', winner: ZCOwner.Player }
                 : null;
         }
         const developedCount = (owner: ZCOwner): number => state.hexes.filter((hex) =>

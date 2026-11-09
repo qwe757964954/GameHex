@@ -86,17 +86,83 @@ test('territory campaign builds chapter two with independent configured opponent
     const campaign = buildTerritoryCampaign(
         rows('levelInfo'), rows('monsterCard'), rows('npcTeam'), rows('pvpCard'), 2, rows('defenceModWave'),
     );
-    assert.equal(campaign.stages.length, 10);
+    // 🔴 2026-11-06：第二章的关卡数从 10 变 **13** —— 关卡表里补了 3 个副本（异步据点）
+    //    20005 / 20006 / 20007（`levelType 2`，`chapterStage 4`，对应地图上的 asyncPvp_1~3），
+    //    与第一章「主线 + 20001~20004」同构：副本按 `chapterStage` 插在 10014 之后、10015 之前。
+    //    原来这里钉死 10，是因为当时还没这批行；而「16 ≠ 10」那次红是**另一回事**：
+    //    这 18 行（20005~20022）被整批贴了两遍，其中 6 行落在第二章 ⇒ 10 + 6 重复。
+    //    重复行已在 `assets/remoteRef/levelInfo.json` 与策划源表 `PVP-关卡.xlsx` 里清掉。
+    assert.equal(campaign.stages.length, 13);
     assert.deepEqual(campaign.stages.map((stage) => stage.levelId), [
-        10011, 10012, 10013, 10014, 10015, 10016, 10017, 10018, 10019, 10020,
+        10011, 10012, 10013, 10014, 20005, 20006, 20007, 10015, 10016, 10017, 10018, 10019, 10020,
     ]);
     assert.deepEqual(campaign.stages[0].enemyTeamIds, [2015]);
-    assert.equal(campaign.stages[4].enemyTeamId, 1003);
+    // ⚠️ 按 levelId 取，别用下标：上面插进 3 个副本之后 `stages[4]` 已经不是 10015 了。
+    assert.equal(campaign.stages.find((stage) => stage.levelId === 10015)?.enemyTeamId, 1003);
 });
 
 test('territory idle accumulation cap comes from the current gameConfig JSON shape', () => {
     assert.equal(readTerritoryIdleRewardMaxHours(rows('gameConfig')), 8);
     assert.equal(readTerritoryIdleRewardMaxHours([]), 8);
+});
+
+// ============================================================
+// 塔防 BOSS 波标记 + 关卡翻地块频率（2026-11-07 关卡功能检查）
+// ============================================================
+
+const levelRow = (over: Record<string, unknown>) => ({
+    levelId: 1, levelChapter: 9, chapterStage: 1, levelMod: 2, levelModValue: 9001,
+    levelHp: 1, levelAttack: 1, levelCost: 1, openGrideTime: 18, ...over,
+});
+const waveRow = (over: Record<string, unknown>) => ({
+    startId: 9001, waveId: 1, waveShowTime: 3, monsterId: 50003, monsterSize: 1,
+    monsterNum: 5, hpRate: 1, atkRate: 1, restMonsterNum: 1, ...over,
+});
+
+test('塔防每组只有最后一波是 BOSS：带 monsterType 时认 3，缺列时按最后一波兜底', () => {
+    const build = (waves: Array<Record<string, unknown>>, levelOver: Record<string, unknown> = {}) => buildTerritoryCampaign(
+        [levelRow(levelOver)] as never, [] as never, [] as never, [] as never, 9, waves as never,
+    ).stages[0];
+
+    // ① 表里带 monsterType（1 普通 / 3 BOSS）：只有 3 那波算 BOSS
+    const declared = build([
+        waveRow({ waveId: 1, monsterType: 1 }),
+        waveRow({ waveId: 2, monsterType: 1 }),
+        waveRow({ waveId: 3, monsterType: 3, monsterSize: 2, monsterNum: 1 }),
+    ]);
+    assert.deepEqual(declared.waves.map((wave) => wave.isBoss), [false, false, true]);
+
+    // ② 客户端 JSON 还没有这一列 ⇒ 按「每组最后一波」兜底（口径与策划表一致）
+    const fallback = build([waveRow({ waveId: 1 }), waveRow({ waveId: 2 })]);
+    assert.deepEqual(fallback.waves.map((wave) => wave.isBoss), [false, true]);
+
+    // ③ 一组里一个 3 都没有（忘填 / 脏数据）也必须是最后一波当 BOSS，
+    //    否则「击败 BOSS 才算胜利」会变成永远打不赢。
+    const dirty = build([waveRow({ waveId: 1, monsterType: 1 }), waveRow({ waveId: 2, monsterType: 1 })]);
+    assert.deepEqual(dirty.waves.map((wave) => wave.isBoss), [false, true]);
+});
+
+test('关卡 openGrideTime 原样带到战役投影（NPC 翻地块限速用）', () => {
+    const stage = buildTerritoryCampaign(
+        [levelRow({ openGrideTime: 18 })] as never, [] as never, [] as never, [] as never, 9, [] as never,
+    ).stages[0];
+    assert.equal(stage.openGrideTime, 18);
+    assert.equal(stage.exploreSeconds, 18, '通关后翻格时长与限速字段同源');
+});
+
+test('真表：每个塔防组都恰好有一波 BOSS，且必定是最后一波', () => {
+    const campaign = buildTerritoryCampaign(
+        rows('levelInfo'), rows('monsterCard'), rows('npcTeam'), rows('pvpCard'), 1,
+        rows('defenceModWave'), [...rows('item'), ...rows('roleProperty')],
+    );
+    const defence = campaign.stages.filter((stage) => stage.waves.length > 0);
+    assert.ok(defence.length > 0);
+    for (const stage of defence) {
+        const bossFlags = stage.waves.map((wave) => wave.isBoss);
+        assert.deepEqual(bossFlags.slice(0, -1), bossFlags.slice(0, -1).map(() => false),
+            `关卡 ${stage.levelId} 的中间波次里出现了 BOSS`);
+        assert.equal(bossFlags[bossFlags.length - 1], true, `关卡 ${stage.levelId} 的最后一波不是 BOSS`);
+    }
 });
 
 /**

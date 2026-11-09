@@ -1022,9 +1022,15 @@ test('remoteRef 与转表产物逐格一致：运行时读 remoteRef、用例读
     //  没有任何卡引用，**而全量用例全绿** —— 因为本文件的夹具读的是 doc 目录。
     //  两份数据从来没有互校过，这是那类「改了一半」缺陷唯一能自动拦住的地方。
     //  比对口径：按行取并集、逐格 `?? null` 归一（dense 列存写 `null`，行存形态省略空键）。
-    for (const name of ['pvpCard', 'pvpSkill']) {
-        const remote = new Map(readPvpRows(name).map((row) => [String(row.id ?? row.skillId), row]));
-        const source = new Map(readPvpRef(name).map((row) => [String(row.id ?? row.skillId), row]));
+    //
+    //  2026-11-07 又拦到一次（同一类，第 3 处）：`pvpCard.prefabSize` 的爆锤莲王 / 魔术师
+    //  只在 `remoteRef` 里调过（1.35→1.5 / 1→0.85），`json/client` 与 `PVP-卡牌.xlsx` 还是旧值
+    //  ⇒ 运行时是新体型、导表产物是旧体型，下次谁一导表就把调整**悄悄抹回去**。
+    //  `pvpSkillPlan` 一并纳入（2026-11-06 小鹿两段式就改的这张表），它的行键是 `modifierId`。
+    for (const name of ['pvpCard', 'pvpSkill', 'pvpSkillPlan']) {
+        const rowKey = (row: Record<string, unknown>) => String(row.id ?? row.skillId ?? row.modifierId);
+        const remote = new Map(readPvpRows(name).map((row) => [rowKey(row), row]));
+        const source = new Map(readPvpRef(name).map((row) => [rowKey(row), row]));
         assert.deepEqual(Array.from(remote.keys()).sort(), Array.from(source.keys()).sort(),
             `${name}：remoteRef 与转表产物的行集合必须相同`);
         const drift: string[] = [];

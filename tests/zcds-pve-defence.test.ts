@@ -63,6 +63,7 @@ test('territory defence spawns configured waves at deterministic times without l
         currentWaveMaxHp: 0,
         currentWaveHpRate: 1,
         currentWaveCardId: null,
+        currentWaveIsBoss: false,
     });
     largeStep.tick(.05);
     assert.equal(largeStep.snapshot.units.length, 0);
@@ -82,6 +83,8 @@ test('territory defence spawns configured waves at deterministic times without l
         currentWaveMaxHp: first.maxHp,
         currentWaveHpRate: 1,
         currentWaveCardId: first.cardId,
+        // 2 波配置里第 1 波是普通小怪：只有最后一波才是 BOSS
+        currentWaveIsBoss: false,
     });
 
     largeStep.tick(.1);
@@ -102,6 +105,7 @@ test('territory defence spawns configured waves at deterministic times without l
         currentWaveMaxHp: second.maxHp,
         currentWaveHpRate: 1,
         currentWaveCardId: second.cardId,
+        currentWaveIsBoss: true,
     });
 
     for (let index = 0; index < 4; index += 1) smallSteps.tick(.05);
@@ -219,6 +223,83 @@ test('territory defence disables ordinary enemy expansion while waves are pendin
     assert.equal(model.snapshot.units.length, 0);
 });
 
+/** 普通（非塔防）局面：AI 会翻地块，用它量「翻地块速度」。 */
+function aiConfig(openGrideTime?: number): ZCMatchConfig {
+    const base = captureZCMatchConfig();
+    return captureZCMatchConfig({ ...base, pveDefence: undefined, ...(openGrideTime === undefined ? {} : { openGrideTime }) });
+}
+
+/** `tick` 单次最多推进 5 秒，长时段要分批喂。 */
+function advanceBy(model: ZCGameModel, seconds: number): void {
+    let left = seconds;
+    while (left > 1e-9) {
+        const step = Math.min(left, 5);
+        model.tick(step);
+        left -= step;
+    }
+}
+
+function enemyDevelopedCount(model: ZCGameModel): number {
+    return model.snapshot.hexes.filter((hex) => hex.owner === 'enemy' && hex.developmentResolved).length;
+}
+
+test('NPC 翻地块速度不得超过关卡 openGrideTime：拦得住，也不会额外变慢', () => {
+    const capped = aiConfig(18);
+    const free = aiConfig();
+    // 兜底前提：不配 openGrideTime 时 AI 仍按全局间隔翻（否则这条用例量不到东西）。
+    const fast = new ZCGameModel(null, () => .1, free);
+    const before = enemyDevelopedCount(fast);
+    advanceBy(fast, free.rules.enemyAiIntervalSeconds + .1);
+    assert.ok(enemyDevelopedCount(fast) > before, '未配置时 AI 应该已经翻过地块');
+
+    const model = new ZCGameModel(null, () => .1, capped);
+    const start = enemyDevelopedCount(model);
+    // 3 秒：全局间隔（2.8s）早就到了，但关卡要求 18 秒 ⇒ 一格都不许翻。
+    advanceBy(model, 3);
+    assert.equal(enemyDevelopedCount(model), start, 'openGrideTime 内不许翻地块');
+    // 累计到 18 秒：放开一拍。
+    advanceBy(model, (capped.openGrideTime ?? 18) - 3 + .1);
+    assert.equal(enemyDevelopedCount(model), start + 1, '到点只翻一格');
+    // 再等不足 18 秒：不许接着翻。
+    advanceBy(model, 2.9);
+    assert.equal(enemyDevelopedCount(model), start + 1);
+});
+
+test('塔防 BOSS 被打死即结算，未清完的中间波残兵不再阻塞胜利', () => {
+    const base = captureZCMatchConfig();
+    const playable = base.enemyDeck.filter((card) => card.unitId).slice(0, 2);
+    assert.equal(playable.length, 2, 'test requires two spawnable enemy cards');
+    const [minion, boss] = playable;
+    const config = captureZCMatchConfig({
+        ...base,
+        enemyDeck: playable,
+        pveDefence: {
+            waves: [
+                { waveId: 1, showAtSeconds: .05, cardId: minion.id, monsterCount: 1, tier: 1 },
+                { waveId: 2, showAtSeconds: .05, cardId: boss.id, monsterCount: 1, tier: 1, isBoss: true },
+            ],
+        },
+    });
+    const model = new ZCGameModel(null, () => .25, config);
+    model.tick(.05);
+    const spawned = [...model.snapshot.units];
+    const bossUnit = spawned.find((unit) => unit.cardId === boss.id);
+    const minionUnit = spawned.find((unit) => unit.cardId === minion.id);
+    assert.ok(bossUnit && minionUnit, '两波都该出场');
+    assert.equal(model.snapshot.status, 'playing');
+
+    // 只打死小怪：BOSS 还活着 ⇒ 不结算。
+    Object.assign(minionUnit, { hp: 0, battleState: 'dead' });
+    model.tick(.05);
+    assert.equal(model.snapshot.status, 'playing', '清中间波不等于赢');
+
+    // 打死 BOSS：即便还有别的怪，也立即胜利（「只有击败 BOSS 才算胜利」）。
+    Object.assign(bossUnit, { hp: 0, battleState: 'dead' });
+    model.tick(.05);
+    assert.equal(model.snapshot.status, 'victory');
+    assert.match(model.snapshot.resultReason, /BOSS 已被击败/);
+});
+
 test('territory defence settles victory after the final live monster and defeat after the player base is lost', () => {
     const config = defenceConfig([
         { waveId: 1, showAtSeconds: .05, cardId: '', monsterCount: 1, tier: 1 },
@@ -232,7 +313,7 @@ test('territory defence settles victory after the final live monster and defeat 
     }
     const victory = new ZCGameModel(cleared, () => .1, config);
     assert.equal(victory.snapshot.status, 'victory');
-    assert.match(victory.snapshot.resultReason, /全部 1 波/);
+    assert.match(victory.snapshot.resultReason, /BOSS 已被击败/);
 
     const brokenBase = JSON.parse(JSON.stringify(new ZCGameModel(null, () => .1, config).exportSnapshot()));
     brokenBase.hexes[config.map.playerHomeId].hp = 0;

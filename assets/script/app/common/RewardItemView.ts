@@ -1,4 +1,6 @@
-import { _decorator, Component, Label, Sprite, SpriteFrame } from 'cc';
+import { _decorator, Button, Component, Label, Sprite, SpriteFrame } from 'cc';
+import { EventMgr } from '../../framework/event/EventMgr';
+import { REWARD_ITEM_DETAIL_INTENT } from './RewardItemEvents';
 import { ComponentController } from '../../framework/controller/ComponentController';
 import { ResourceScope } from '../../core/asset/ResourceScope';
 import { RefUtil } from '../../framework/ref/RefUtil';
@@ -64,6 +66,15 @@ export class RewardItemView extends Component {
     private readonly controller = new ComponentController('ui:reward-item');
     private get resourceScope(): ResourceScope { return this.controller.scope; }
     private readonly frameCache = new Map<string, Promise<SpriteFrame | null>>();
+
+    protected onLoad(): void {
+        this.node.on(Button.EventType.CLICK, this.onClick, this);
+    }
+
+    private onClick(): void {
+        if (!Number.isSafeInteger(this.currentResId) || this.currentResId <= 0) return;
+        EventMgr.instance.emit(REWARD_ITEM_DETAIL_INTENT, { resId: this.currentResId });
+    }
 
     private static async loadTables(): Promise<void> {
         const [props, items] = await Promise.all([

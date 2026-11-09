@@ -58,6 +58,7 @@ const wave = (over: Record<string, unknown> = {}) => ({
     currentWaveMaxHp: 400,
     currentWaveHpRate: 4,
     currentWaveCardId: '68010',
+    currentWaveIsBoss: true,
     ...over,
 }) as never;
 
@@ -120,6 +121,50 @@ test('波次头像从本局所有席位和完整卡表获取，并按当前波�
     assert.equal(boss.portraitIcon.spriteFrame, frames.b);
 });
 
+test('守城大血条只在 BOSS 波出现：普通小怪的波次不实例化面板', () => {
+    const created: unknown[] = [];
+    const destroyed: string[] = [];
+    const exports: { ZCGame?: typeof import('../assets/script/app/zcds/ZCGame').ZCGame } = {};
+    const code = ts.transpileModule(readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8'), {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
+    }).outputText;
+    runInNewContext(code, { exports, require: (name: string) => {
+            if (name.endsWith('/ComponentController')) return componentControllerModule();
+        if (name === 'cc') return {
+            ...STUB_CC,
+            instantiate: (prefab: unknown) => {
+                created.push(prefab);
+                return { layer: 0, setParent() {}, getComponent: () => ({ render() {} }) };
+            },
+        };
+        return {};
+    } });
+    const game = new exports.ZCGame!();
+    const prefab = { name: 'ZCBossPanel' };
+    Object.assign(game, {
+        isValid: true,
+        preparedResources: { bossPanelPrefab: prefab },
+        hudView: { node: { layer: 1, setParent() {}, destroy() {} } },
+    });
+    const render = (progress: Record<string, unknown>) => Reflect.get(game, 'renderBossPanel')
+        .call(game, { defenceWaveProgress: progress });
+
+    // 普通小怪波：不建面板 —— 「普通小怪只有头顶血条」。
+    render({ ...wave({ currentWaveIsBoss: false }) });
+    assert.deepEqual(created, [], '普通波不许拉大血条');
+    assert.equal(Reflect.get(game, 'bossPanel'), null);
+
+    // BOSS 波：建面板并渲染。
+    render(wave({ currentWaveIsBoss: true }));
+    assert.deepEqual(created, [prefab]);
+
+    // 掉回普通波（例如重开 / 换配置）：把手上的面板销毁掉，别留在屏幕上。
+    Object.assign(Reflect.get(game, 'bossPanel'), { node: { destroy: () => destroyed.push('panel') } });
+    render({ ...wave({ currentWaveIsBoss: false }) });
+    assert.deepEqual(destroyed, ['panel']);
+    assert.equal(Reflect.get(game, 'bossPanel'), null);
+});
+
 test('战斗主循环按 HUD 节奏刷新首领血条，受伤清零和换波都更新面板', () => {
     const exports: { ZCGame?: typeof import('../assets/script/app/zcds/ZCGame').ZCGame } = {};
     const code = ts.transpileModule(readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8'), {
@@ -140,7 +185,7 @@ test('战斗主循环按 HUD 节奏刷新首领血条，受伤清零和换波都
     Object.assign(boss, { hpFill, waveLabel, rateLabel, nameLabel: { string: '' }, portraitIcon: {} });
     const progress = { totalWaves: 8, spawnedWaves: 1, currentWaveId: 1, nextWaveId: 2,
         secondsUntilNextWave: 1, aliveEnemies: 2, currentWaveHp: 50, currentWaveMaxHp: 100,
-        currentWaveHpRate: 4, currentWaveCardId: '68010' };
+        currentWaveHpRate: 4, currentWaveCardId: '68010', currentWaveIsBoss: true };
     const model = { snapshot: { status: 'playing' }, defenceWaveProgress: progress, tick() {},
         createRenderFrame: () => ({}), drainPresentationEvents: () => ({}) };
     let hudRenders = 0;

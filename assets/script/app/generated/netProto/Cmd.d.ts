@@ -5657,6 +5657,20 @@
 
     
 
+    declare class CmdPvpAttrInfo {
+        attrId: string;
+        value: string;
+    }
+
+    
+
+    declare class CmdPvpHeroAttrInfo {
+        heroId: number;
+        attrs?: (CmdPvpAttrInfo[]|null);
+    }
+
+    
+
     declare class CmdPvpInfo {
         grade: number;
         score: number;
@@ -5719,6 +5733,7 @@
         unitId: number;
         unitType?: (number|null);
         buffInfo?: (CmdPvpBuffInfo[]|null);
+        attrs?: (CmdPvpHeroAttrInfo[]|null);
     }
 
     
@@ -6274,6 +6289,7 @@
         CmdFirstRechargeRewardRspMsg = 622072529,
         CmdFormationInfoRspMsg = 1211220072,
         CmdFormationOpRspMsg = 1506971931,
+        CmdFormationSelectRspMsg = 829295498,
         CmdFriendsApplyRspMsg = 2057674506,
         CmdFriendsAddRspMsg = 552573225,
         CmdFriendsRefuseRspMsg = 1262322162,
@@ -7411,6 +7427,8 @@ declare type MessageProtoName =
 | "CmdPvpArtifactSelectReqMsg"
 | "CmdPvpArtifactSelectRspMsg"
 | "CmdPvpBuffInfo"
+| "CmdPvpAttrInfo"
+| "CmdPvpHeroAttrInfo"
 | "CmdPvpInfo"
 | "CmdBattleStatisticsInfo"
 | "CmdPvpInfoReqMsg"

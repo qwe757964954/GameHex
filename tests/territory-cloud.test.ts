@@ -1537,6 +1537,58 @@ test('视图：`setFillOccupied` 会重算铺满格点 —— 有真实云的格
     assert.equal(view.fillCloudCount, count);
 });
 
+/**
+ * 🔴 2026-11-06 用户：「章节 chapter02 地图未通关，用来遮挡背景的云层丢失了」。
+ *
+ * 换章那一帧的三步是 `TerritoryMapView.renderMap` 的顺序决定的，而它**恰好**把
+ * `reset()` 夹在两次喂尺寸之间：
+ *
+ *  · ① `syncContentSize` → `setFillArea(新尺寸)` —— 用**上一章**的已盖格建了一整套，白建；
+ *  · ② `syncGrid` → `clouds.reset()` —— 铺满层清空、`fillKey = ''`、`fillPoints = []`；
+ *  · ③ `syncClouds` → `setFillOccupied(新章的格)` —— 老判据是 `if (!this.fillKey) return;`
+ *    ⇒ **一朵都不重建**，而 `fillLayer.active` 还是上一帧的 `true` ⇒ 整层"开着但空着"。
+ *
+ * 症状正是截图那样：少量真实云还在（左上那团、格子簇），其余背景**整片裸沙**，
+ * 零报错、`fillVisible` 仍读 `true`（谁去查都以为雾在）。
+ *
+ * 只有再来一次 `renderAll`（下一次状态变化）才会被 `setFillArea` 补回来 —— 玩家停在原地
+ * 就是永久裸底图。所以判据必须钉「`reset()` 之后这一帧就要重建」，不是"等下一次渲染"。
+ */
+test('🔴 换章那一帧：`reset()` 之后 `setFillOccupied` 必须把铺满层重建回来（否则整片背景裸奔）', () => {
+    const { view } = stage();
+    // 换章前：chapter_01 的铺满层是好的（已盖格交给真实云层）。
+    view.setFillArea(1882.8, 1874, 20, 20);
+    view.setFillOccupied([0, 1, 2, 3]);
+    assert.ok(view.fillCloudCount > 0, '前提：换章前铺满层是建了的');
+
+    // ① 新章的内容层尺寸（`syncContentSize`，此时还没 reset）。
+    view.setFillArea(1800, 1900, 20, 20);
+    // ② 换章：`syncGrid` 第一件事就是 `clouds.reset()`。
+    view.reset();
+    // ③ `syncClouds`：`cloudCellsKey` 被 reset 清掉 ⇒ 这一帧一定会喂一次新的已盖格。
+    view.setFillOccupied([10, 11, 12]);
+    assert.ok(view.fillCloudCount > 0,
+        '换章同一帧里铺满层必须重建 —— `reset()` 清了 `fillKey` 不许把 `setFillOccupied` 一起挡掉');
+    assert.equal(view.fillVisible, true, '未通关的章节进去必须盖着雾');
+    assert.ok(view.fillShadowCount > 0, '影子要跟着一起回来（不然整片雾没有厚度）');
+
+    // 守卫的另一半还得成立：**从没喂过尺寸**时 `setFillOccupied` 只记账、不建节点
+    // （建了也是铺在 0×0 上，等于白造几百个精灵）。
+    const fresh = stage();
+    fresh.view.setFillOccupied([1, 2, 3]);
+    assert.equal(fresh.view.fillCloudCount, 0, '尺寸未知时不许建铺满层');
+    fresh.view.setFillArea(900, 1200, 4, 5);
+    assert.ok(fresh.view.fillCloudCount > 0, '尺寸到了自然重算（先记账的已盖格要生效）');
+
+    // 顺带钉住"开着但空着"这个骗人的状态：节点没了 ⇒ `fillVisible` 必须老实读 `false`
+    // （老口径只看 `fillDismissed`，裸底图上它照样读 `true`，谁去查都以为雾在）。
+    const hollow = stage();
+    hollow.view.setFillArea(900, 1200, 4, 5);
+    hollow.view.reset();
+    hollow.view.sync([], new Set());
+    assert.equal(hollow.view.fillVisible, false, '铺满层一朵都没有时不许再读成"在展示"');
+});
+
 // ============================================================
 // 资源：拆图产物
 // ============================================================

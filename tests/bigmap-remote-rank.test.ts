@@ -55,6 +55,7 @@ function harness(timeout = 50) {
 test('真实排行请求使用53/type城池/50条，解析昵称、头像、Long积分与榜外个人名次', async () => {
     const h = harness();
     const task = h.provider.fetchCityRank(71001);
+    await Promise.resolve();
     const req = h.pending[0].request;
     assert.equal(req.getReqMsgProtoName(), 'CmdGetRankReqMsg');
     assert.deepEqual({ ...req.cmdReqMsg }, { rankType: 53, showNum: 50, type: 71001 });
@@ -76,6 +77,7 @@ test('真实排行请求使用53/type城池/50条，解析昵称、头像、Long
 test('空榜和未上榜保留服务器事实，不编造第一名', async () => {
     const h = harness();
     const task = h.provider.fetchCityRank(101);
+    await Promise.resolve();
     h.pending[0].finish(true, { rankInfo: { rankList: [], myRank: { rank: -1, roleId: '9007199254740993', value: 0 } } });
     const board = await task;
     assert.equal(board.entries.length, 0);
@@ -83,15 +85,23 @@ test('空榜和未上榜保留服务器事实，不编造第一名', async () =>
     assert.equal(board.playerWarScore, 0);
 });
 
-test('同城去重，换城取消旧请求，关页释放回调并使等待落定', async () => {
+test('同城去重，多城排队不相互取消，关页释放当前及排队查询', async () => {
     const h = harness();
-    const old = h.provider.fetchCityRank(101);
-    assert.equal(h.provider.fetchCityRank(101), old);
+    const first = h.provider.fetchCityRank(101);
+    assert.equal(h.provider.fetchCityRank(101), first);
     const next = h.provider.fetchCityRank(102);
-    assert.equal(await old, null);
+    const queued = h.provider.fetchCityRank(103);
+    await Promise.resolve();
     assert.equal(h.pending.length, 1);
+    assert.equal(h.pending[0].request.cmdReqMsg.type, 101);
+    h.pending[0].finish(true, { rankInfo: { rankList: [] } });
+    assert.equal((await first).cityId, 101);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(h.pending.length, 1);
+    assert.equal(h.pending[0].request.cmdReqMsg.type, 102);
     h.provider.dispose();
     assert.equal(await next, null);
+    assert.equal(await queued, null);
     assert.equal(h.pending.length, 0);
     assert.equal(await h.provider.fetchCityRank(102), null);
 });
@@ -101,12 +111,15 @@ test('超时释放底层请求；断线、换号、失败和缺少rankInfo返回
     assert.equal(await h.provider.fetchCityRank(101), null);
     assert.equal(h.pending.length, 0);
     let task = h.provider.fetchCityRank(101);
+    await Promise.resolve();
     h.pending[0].finish(true, {});
     assert.equal(await task, null);
     task = h.provider.fetchCityRank(101);
+    await Promise.resolve();
     h.pending[0].finish(false);
     assert.equal(await task, null);
     task = h.provider.fetchCityRank(101);
+    await Promise.resolve();
     h.switchOwner();
     h.pending[0].finish(true, { rankInfo: { rankList: [] } });
     assert.equal(await task, null);

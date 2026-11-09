@@ -168,6 +168,8 @@ export interface ITerritoryBattleNavParams {
     readonly playerCount: number;
     readonly hpRate: number;
     readonly attackRate: number;
+    /** `levelInfo.openGrideTime`：本关翻地块频率（秒），对局内用它压 NPC 翻地块的速度。 */
+    readonly openGrideTime: number;
     readonly waves: ReadonlyArray<{
         readonly waveId: number;
         readonly showAtSeconds: number;
@@ -175,6 +177,8 @@ export interface ITerritoryBattleNavParams {
         readonly monsterCount: number;
         readonly hpRate: number;
         readonly attackRate: number;
+        /** 塔防 BOSS 波（每组最后一波）：HUD 大血条与胜负判定都用它。 */
+        readonly isBoss: boolean;
     }>;
 }
 
@@ -1534,6 +1538,7 @@ export class TerritoryModel {
             playerCount: TERRITORY_DEFAULT_PLAYER_COUNT,
             hpRate: stage.hpRate,
             attackRate: stage.attackRate,
+            openGrideTime: stage.openGrideTime,
             waves: stage.waves.flatMap((wave) => wave.pvpCardId ? [{
                 waveId: wave.waveId,
                 showAtSeconds: wave.showAtSeconds,
@@ -1541,6 +1546,7 @@ export class TerritoryModel {
                 monsterCount: wave.monsterCount,
                 hpRate: wave.hpRate,
                 attackRate: wave.attackRate,
+                isBoss: wave.isBoss,
             }] : []),
         }, battle, approach, battleParams);
     }

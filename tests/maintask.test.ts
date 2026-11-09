@@ -37,6 +37,8 @@ import {
 import type { IMainTaskRow, IMainTaskState } from '../assets/script/app/maintask/MainTaskTable';
 import { GET_HERO_TEXTS, MAIN_TASK_TEXTS } from '../assets/script/app/maintask/MainTaskTexts';
 import { MT_ART_NAMES, MT_ART_SLICED, MT_ART_TILED } from '../assets/script/app/maintask/MainTaskArt';
+import { parseItemRows, parseRolePropertyRows, rewardGoodsOf } from '../assets/script/app/activity/LayerActivityTable';
+import { RESOURCE_ICON_ART_ROOT, resolveRewardIconRef } from '../assets/script/app/activity/LayerActivityArt';
 import { assetExists, assetPath } from './helpers/asset-paths';
 
 // ============================================================
@@ -525,7 +527,7 @@ test('D5 「前往」文字必须居中且铺满按钮宽 —— `autoSize="shri
     // 引擎把两条 relation 线性叠加 ⇒ 算出 `l = 72.5 + 262 = 334.5`（明显偏右，用户截图可证）。
 });
 
-test('D6 奖励格：8 个槽位、4 列 2 行、整块在视口内居中、每格挂 GoodsBox', () => {
+test('D6 奖励格：8 个槽位、4 列 2 行、整块在视口内居中、每格挂 RewardItemView', () => {
     const rects = collectRects(detail);
     const view = rects.get('RewardList');
     assert.ok(view, '没有 RewardList');
@@ -548,14 +550,14 @@ test('D6 奖励格：8 个槽位、4 列 2 行、整块在视口内居中、每�
     const topPad = view!.t - rectsOfSlots[0]!.t;
     const botPad = rectsOfSlots[4]!.b - view!.b;
     assert.ok(Math.abs(topPad - botPad) <= 0.6, `上下内边距不等：${topPad} vs ${botPad}`);
-    // 每个槽位都要挂 GoodsBox，且三件套都绑上
+    // 每个槽位都要挂 RewardItemView，且三件套都绑上
     const goodsBoxCid = scriptTypes(detail, rectsOfSlots[0]!.id)[0];
     assert.ok(goodsBoxCid, 'Slot1 上没挂脚本');
     for (const r of rectsOfSlots) {
         const cids = scriptTypes(detail, r!.id);
         assert.deepEqual(cids, [goodsBoxCid], `槽位 ${r!.name} 的脚本不对：${cids.join(',')}`);
         const comp = scriptOf(detail, r!.id, goodsBoxCid);
-        for (const prop of ['frame', 'icon', 'num']) {
+        for (const prop of ['frame', 'icon', 'num', 'rate']) {
             assert.equal(
                 typeof comp?.[prop]?.__id__, 'number',
                 `槽位 ${r!.name} 的 @property \`${prop}\` 没绑上（静默 null ⇒ 空格子）`,
@@ -625,11 +627,11 @@ test('D10 关闭按钮必须是真 `cc.Button`（否则 `CLICK` 事件永远不�
     }
 });
 
-test('D11 详情弹窗里所有节点都必须 `_active = true`（FGUI 默认页是「显示」）', () => {
+test('D11 详情弹窗节点默认显示，仅公共奖励框的概率标签隐藏', () => {
     const off: string[] = [];
     const rects = collectRects(detail);
     for (const [path, r] of rects) {
-        if (detail[r.id]._active === false) off.push(path);
+        if (detail[r.id]._active === false && !path.endsWith('/Rate')) off.push(path);
     }
     assert.deepEqual(off, [], `这些节点被烘成了隐藏（除了红点，本 prefab 一个都不该有）：\n  ${off.join('\n  ')}`);
 });
@@ -715,14 +717,12 @@ test('E1 详情弹窗的 prefabPath 与磁盘目录逐字一致（大小写敏�
         'prefabPath 指向的文件不存在（真机 resources.load 失败 ⇒ 空弹窗）');
 });
 
-test('E2 详情弹窗：两颗按钮统一绑 Node.TOUCH_END（不查 cc.Button、不做分流）', () => {
+test('E2 详情弹窗：已挂 Button 的关闭与前往按钮只绑定 CLICK', () => {
     const body = methodBody(DETAIL_SRC, 'onInit');
-    assert.ok(body.includes('Node.EventType.TOUCH_END'), '必须绑节点触摸');
-    assert.ok(body.includes('this.closeButton'), '关闭按钮要绑');
-    assert.ok(body.includes('this.btnGo'), '「前往」按钮要绑');
-    assert.equal(/bindButton/.test(DETAIL_SRC), false, '不该再有 bindButton 包装方法');
-    assert.equal(/Button\.EventType\.CLICK|getComponent\(Button\)/.test(DETAIL_SRC), false,
-        '不该再依赖 cc.Button（节点挂不挂都能点）');
+    assert.ok(body.includes('Button.EventType.CLICK'));
+    assert.ok(body.includes('this.closeButton'));
+    assert.ok(body.includes('this.btnGo'));
+    assert.ok(!body.includes('TOUCH_END'));
 });
 
 test('E3 详情弹窗：点「前往」只提示、**不关窗**（老端是跳转后 unload）', () => {
@@ -733,22 +733,21 @@ test('E3 详情弹窗：点「前往」只提示、**不关窗**（老端是跳�
     assert.ok(!body.includes('this.unload('), '老端的 unload 在本工程不存在');
 });
 
-test('E4 详情弹窗：奖励格回调按 **index 现取**，不闭包捕获 reward（规则 55）', () => {
+test('E4 详情弹窗：奖励格与结算页共用 RewardItemView，不再手动加载图或持有点击回调', () => {
     const body = methodBody(DETAIL_SRC, 'presentRewards');
-    assert.ok(body.includes('openRewardDetail(index)'), '回调应传 index');
-    assert.ok(!/openRewardDetail\(\s*reward\s*\)/.test(body), '不能把 reward 捕进闭包');
-    const openBody = methodBody(DETAIL_SRC, 'openRewardDetail');
-    assert.ok(openBody.includes('this.snapshot?.rewards[index]'),
-        'openRewardDetail 必须从**当前** snapshot 按 index 取');
+    assert.ok(body.includes('slot.render({ resId: reward.resId, amount: reward.number })'));
+    assert.ok(!DETAIL_SRC.includes('GoodsBox'));
+    assert.ok(!DETAIL_SRC.includes('slot.onClick'));
+    assert.ok(!DETAIL_SRC.includes('ItemDetailPage.open'));
+    assert.ok(!DETAIL_SRC.includes('loadQualityFrameArt'));
 });
 
-test('E5 详情弹窗：异步回来要查存活 + 修订号（否则关窗后还在写已销毁节点）', () => {
-    assert.ok(DETAIL_SRC.includes('loadRevision'), '缺少 loadRevision 护栏');
-    assert.ok(DETAIL_SRC.includes('presentRevision'), '缺少 presentRevision 护栏');
-    assert.ok(DETAIL_SRC.includes('this.alive'), '缺少存活检查（isValid + isPopupOpen）');
-    // 预加载必须先 await 完再铺界面：`presentRewards` 是同步的（规则 60/73 静默留白）
-    const present = methodBody(DETAIL_SRC, 'present');
-    assert.ok(present.includes('await Promise.all'), 'present 里必须先 await 预加载');
+test('E5 详情弹窗：异步取数回来检查存活与修订号，图片由奖励格自行加载', () => {
+    const body = methodBody(DETAIL_SRC, 'reload');
+    assert.ok(body.includes('await this.repo.loadFirst()'));
+    assert.ok(body.includes('!this.alive || revision !== this.loadRevision'));
+    assert.ok(body.indexOf('!this.alive') < body.indexOf('this.snapshot = snapshot'));
+    assert.ok(methodBody(DETAIL_SRC, 'onClose').includes('this.loadRevision += 1'));
 });
 
 test('E6 入口：显隐归属自己（`onLoad` 调 refresh，且**没有** onEnable 再调一次）', () => {
@@ -970,4 +969,94 @@ test('G7 GetHeroEntry（上一轮）的 Widget 也还好好的（没被生成器
     assert.equal(widget._alignFlags, 36);
     assert.equal(widget._right, 37);
     assert.equal(widget._bottom, 384);
+});
+
+// ============================================================
+// H. 奖励图标可解析（2026-11-06 体验反馈「奖励 icon 缺失」）
+
+/** `remoteRef` 的 `{k,v}` 列式表 → 对象数组（`item` / `roleProperty` 是普通数组，不走这里）。 */
+function readColumnTable(name: string): Record<string, unknown>[] {
+    const raw = JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8')) as { k: string[]; v: unknown[][] };
+    return raw.v.map((row) => {
+        const out: Record<string, unknown> = {};
+        raw.k.forEach((key, index) => { out[key] = row[index]; });
+        return out;
+    });
+}
+
+/**
+ * ⚠️ 真实 `taskMain` 的每个奖励都必须能解析出图标，且图真的在磁盘上。
+ *
+ * 这条对应 2026-11-06 的体验反馈「主线任务 奖励 icon 缺失」：奖励里绝大多数是**货币**
+ * （金币 10 共 47 条、银币 7 共 28 条、体力 9 共 3 条），它们在 `roleProperty` 表里、
+ * icon 是 FGUI 裸名。`MainTaskRepository` 当时只查 `item` 表 ⇒ 一律空白格、不报错。
+ *
+ * 这里按**运行时同一条口径**（`rewardGoodsOf` 两支 + `resolveRewardIconRef`）逐条对账，
+ * 策划以后往 `taskMain.reward` 里加新 resId 却忘了入表 / 配图，这条会当场红。
+ */
+test('H1 真实 taskMain 的每个奖励都解析得出图标，且文件在磁盘上', () => {
+    const items = parseItemRows(JSON.parse(readFileSync('assets/remoteRef/item.json', 'utf8')) as unknown[]);
+    const resources = parseRolePropertyRows(
+        JSON.parse(readFileSync('assets/remoteRef/roleProperty.json', 'utf8')) as unknown[],
+    );
+    const tasks = readColumnTable('taskMain');
+
+    /**
+     * 已知缺口：这几条 resId 在 `item` / `roleProperty` 里都查不到。
+     *
+     * `1042537` 只出现在 `taskMain`（任务 500001 的第二档奖励），全工程没有任何表定义它 ——
+     * 是**表数据缺口**，不是客户端能补的，需要策划确认该发什么或直接删掉。
+     * 策划修完后这条用例会红（`known` 里那条不再出现在缺失集合里）⇒ 届时把这里清空。
+     */
+    const knownOrphans = new Map<number, string>([
+        [1042537, 'taskMain 500001 的第二档奖励，item / roleProperty 都没有定义'],
+    ]);
+
+    const missing: string[] = [];
+    const seenRoots = new Set<string>();
+    for (const task of tasks) {
+        const taskId = Number(task.resId);
+        const rewards = Array.isArray(task.reward) ? task.reward as Record<string, unknown>[] : [];
+        for (const reward of rewards) {
+            const resId = Number(reward.resId);
+            if (!(resId > 0)) continue;
+            if (knownOrphans.has(resId)) continue;
+            const info = rewardGoodsOf(resId, items, resources);
+            if (!info) {
+                missing.push(`任务 ${taskId} 的奖励 resId=${resId} 在 item / roleProperty 里都查不到`);
+                continue;
+            }
+            const ref = resolveRewardIconRef(info);
+            assert.ok(ref, `任务 ${taskId} 的奖励 resId=${resId} 解析不出图标（icon="${info.icon}"）`);
+            const file = assetPath(`${ref!.root}/${ref!.name}.png`);
+            assert.ok(existsSync(file), `任务 ${taskId} 的奖励 resId=${resId} 图标文件不存在：${file}`);
+            seenRoots.add(ref!.root);
+        }
+    }
+    assert.deepEqual(missing, [], '奖励资源入表缺口');
+
+    // 两支都得被覆盖到：只搬 item 那一支时，货币奖励一格都画不出来。
+    assert.ok(seenRoots.has('icons/item'), '应该有用 item 表路径的奖励');
+    assert.ok(seenRoots.has(RESOURCE_ICON_ART_ROOT), '应该有用 roleProperty 兜的货币奖励（金币 10 / 银币 7 / 体力 9）');
+});
+
+/**
+ * 结构守卫：光有数据不够，**代码得真的去查那张表**。
+ *
+ * H1 只证明「表里的奖励都配得出图标」；`MainTaskRepository` 曾经只查 `item` 一样能过 H1。
+ * 这条盯住接线本身：解析奖励必须两支都查，详情页委托公共 RewardItemView
+ * （而不是把 `reward.icon` 当路径直接加载 —— 货币类的裸名当路径拼必然 404）。
+ */
+test('H2 奖励解析接线：仓储两支都查、详情页委托公共奖励格解析', () => {
+    const repo = readFileSync('assets/script/app/maintask/MainTaskRepository.ts', 'utf8');
+    assert.ok(repo.includes("getRefAsync('item'"), '奖励解析少了 item 这一支');
+    assert.ok(repo.includes("getRefAsync('roleProperty'"), '奖励解析少了 roleProperty 这一支（货币奖励会全空白）');
+    assert.ok(repo.includes('iconIsPath'), 'IRewardEntry 必须带 iconIsPath，否则裸名和路径分不开');
+
+    const page = readFileSync('assets/script/app/maintask/MainTaskDetailPage.ts', 'utf8');
+    assert.ok(page.includes('RewardItemView'), '详情页必须复用公共奖励格');
+    const rewardItem = readFileSync('assets/script/app/common/RewardItemView.ts', 'utf8');
+    assert.ok(rewardItem.includes('resBarCellOfRefId(resId, RewardItemView.propRows, RewardItemView.itemRows)'),
+        '公共奖励格必须同时支持 roleProperty 与 item');
+    assert.ok(!page.includes('loadItemIconArt('), '不能再用 loadItemIconArt 直连（它对 roleProperty 裸名无效）');
 });

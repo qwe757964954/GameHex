@@ -143,6 +143,26 @@ test('地图编辑器服务端：校验并保存自由装饰，拒绝非法尺�
     });
 });
 
+test('编辑器从 battle 包提供新旧资源贴图，组合接口保留类型与权重', async () => {
+    await withServer(async (base) => {
+        const library = await (await fetch(`${base}/api/map-resources`)).json();
+        for (const id of ['chest', 'gate', 'gate_add', 'gate_multiply', 'gate_shrink', 'gate_enlarge', 'extension', 'portal', 'horn', 'monster', 'monster_68007', 'monster_68008', 'monster_sleep', 'monster_awake']) {
+            assert.ok(library.assets.includes(`image/map-resource/${id}`), id);
+            const response = await fetch(`${base}/map-resource/${encodeURIComponent(`image/map-resource/${id}`)}`);
+            assert.equal(response.status, 200, id);
+            const bytes = new Uint8Array(await response.arrayBuffer());
+            assert.deepEqual([...bytes.slice(0, 4)], [137, 80, 78, 71], `${id} 必须是真实 PNG`);
+        }
+        const { groups } = await (await fetch(`${base}/api/neutral-resource-groups`)).json();
+        assert.deepEqual(groups.find((group: { groupId: number }) => group.groupId === 14009).items.map(
+            (item: { resId: string }) => item.resId).sort(), ['68007', '68008']);
+        assert.equal(groups.find((group: { groupId: number }) => group.groupId === 14003).items[0].effect, 'shrink');
+        assert.ok(groups.find((group: { groupId: number }) => group.groupId === 14007).items.some(
+            (item: { resourceType: number; weight: number }) => item.resourceType === 9 && item.weight > 0));
+        assert.equal((await fetch(`${base}/map-resource/${encodeURIComponent('image/map-resource/../secret')}`)).status, 404);
+    });
+});
+
 test('map editor server preserves weighted neutral-resource pools and home-candidate ranges', async () => {
     await withServer(async (base) => {
         const id = 'probe-map-metadata';

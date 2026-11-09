@@ -53,6 +53,29 @@ python tools/map-editor/randomize_random_sites.py --building-ids 69008-69015 --n
 - 改完依次落三处：预设（`indent=2` + LF）、`copy_territory_maps.copy_one`（资源目录 + 策划 JSON）、
   `assets/remoteRef/`（与 `tools/ref/ref_compress_json.py` 同款 `indent=0` 紧凑格式）。
 
+### 关卡 / 首领 / 异步据点的建筑 ID（2026-11-06 批量补齐）
+
+`stage` / `boss` / `asyncPvp` 这三类站点在 `stationIconOf` 里是「**没配 `buildingId` ⇒ 不画建筑**」，
+所以 `chapter_02~07` 原本一个建筑都看不到。口径与 `chapter_01` 一致，按**每个 `(type, configId)` 组填一格**：
+
+| 站点 `type` | `buildingId` | `build.json` 的 `buildType` |
+| :-- | :-- | :-- |
+| `stage` | `69004` | 4 普通关（`territory_outpost_v1`） |
+| `boss` | `69003` | 3 boss 关（`territory_boss_v1`） |
+| `asyncPvp` | `69002` | 2 异步据点（`territory_async_pvp_v1`） |
+
+```powershell
+python tools/map-editor/fill_site_buildings.py --dry-run      # 先看要补哪些格
+python tools/map-editor/fill_site_buildings.py                # chapter_01~07 全跑（01 会整章跳过）
+python tools/map-editor/fill_site_buildings.py --id chapter_03 --no-publish
+```
+
+- **幂等**：组里已经有一格配了建筑就整组跳过，`chapter_01` 跑一遍等于没跑；`--overwrite` 才重写；
+- 组内填在 **cellId 最小**的那一格（与遍历顺序无关，重跑结果一致）；
+- 为什么不是"每格都填"：同一片战斗区域的所有格子共享同一关，每格都画会长出满片同款建筑
+  （用户 2026-10-16 报的「327 和 328 长得一样」），`TerritoryStageBinding` 也优先挑带建筑的那格做代表；
+- 落盘与校验同 `copy_territory_maps.py`（预设 → 资源目录 + 策划 JSON → `assets/remoteRef`）。
+
 ---
 
 ## 六边几何与笔刷（2026-10-20 统一）
@@ -154,6 +177,72 @@ python tools/map-editor/gen_territory_shapes.py --check    # 只校验已落盘�
 | `asyncPvp` | 3 × 4 格 |
 | `stage` / `boss` | 8 / 2，合计 44 格 |
 | 出生点 | 1（不占 site） |
+
+### ⚠️ `chapter_03` 已经**不是**这套配额了（2026-11-06）
+
+用户：「使用章节地图编辑器，给 chapter03 增加 70 个固定格子，以及 70 个随机格子，
+不能改变顺序逻辑，可以填充形状的空白处」。
+
+`gen_territory_shapes.py` 的配额是**算满**的（160 = 44 + 12 + 51 + 52 + 1），那 160 格里
+一格空位都没有，所以"形状的空白处"只能往剪影外面吃。现在 `chapter_03` 是：
+
+| 项 | 数量 | 说明 |
+| --- | --- | --- |
+| 涂色格 | **300 / 400**（75%） | 按后掠翼剖面对齐，逐行左右对称（`min + max = 19`） |
+| `fixedResource` | **121**（1~9 门 + 10~51 原有 + **52~121 新增**） | 新增补的时候照 `1014`，现已统一成 `1018`（见下节），15 银币 / 1 体力 |
+| `randomSites.candidateCells` | **122** | 原 52 + 新增 70 |
+| `buildingIds` | **104** | 原 44 + 新增 60（85% 比例，池子还是 `69008-69015`） |
+| `stage` / `boss` / `asyncPvp` | 8 / 2 / 3（44 + 12 格） | **一格没动** |
+
+形状不是"往外长"长出来的，而是**先给剖面再填空位**：每行左边缩进
+`PROFILE_H = (8,7,6,5,4,3,2,1,0,0,0,0,0,0,0,0,2,3,4,5)`，区间 `[L, 19−L]`，
+`Σ L = 50` ⇒ 正好 300 格。第 8~15 行必须满幅——左右翼尖是链上的 `asyncPvp` 站点，
+要对称就得两边都够到边缘。（第一版用的是"从现有涂色区均匀外扩"，出来是个圆角矩形，
+用户看图否掉了。）
+
+新增是靠 `fill_chapter03_cells.py` 补的（剖面、前置口径都写在脚本头上）：
+
+```bash
+python tools/map-editor/fill_chapter03_cells.py --dry-run   # 打 ASCII 预览 + 剖面自检
+python tools/map-editor/fill_chapter03_cells.py             # 改预设 + 发布 4 处
+```
+
+**随机格的归属**由 `symmetrize_chapter03.py` 单独定（`fill` 之后再跑它）：
+
+```bash
+python tools/map-editor/symmetrize_chapter03.py --dry-run
+```
+
+它只改「谁是宝箱 / 谁是随机格」，**形状一格不差**（有断言）。口径：绕中轴 `u=9.5`
+镜像成对（`(r, 9−k) ↔ (r, 10+k)`，一对同类型）、中间两列 `k=0` 一律给宝箱、
+每行按 `可选格数 × 122 / 212` 分名额再用分层抽样摊开 —— 现在中间两列随机格 **0 个**。
+⚠️ 宝箱会跟着换位置（两者互补，动一堆必动另一堆），但站点数、`id` 顺序、`rewardId` 都不变。
+
+🔴 **别对 `chapter_03` 跑 `gen_territory_shapes.py --only 03`** —— 它是从图形重新生成的，
+会把 121 + 122 覆盖回 51 + 52，140 格的补丁全丢。其余四章仍是上面那套 51 + 52。
+
+### 七章的奖励 id：按章递增（2026-11-06 起）
+
+生成器写的是占位值（门 `1011`、宝箱 `1014`、池 `2001`），**重跑生成器会把这些打回去**。
+现在七章的真实口径由 `retarget_chapter_rewards.py` 统一：
+
+| | 规则 | ch01 | ch02 | ch03 | ch04 | ch05 | ch06 | ch07 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `fixedResource.rewardId` | `1015 + 章序` | 1016 | 1017 | 1018 | 1019 | 1020 | 1021 | 1022 |
+| `randomSites.rewardPoolId` | `2001 + 章序` | 2002 | 2003 | 2004 | 2005 | 2006 | 2007 | 2008 |
+
+```bash
+python tools/map-editor/retarget_chapter_rewards.py --dry-run   # 打前后分布 + 待补奖励行清单
+python tools/map-editor/retarget_chapter_rewards.py             # 改预设 + 发布 4 处
+```
+
+它只动这两个字段（有「除奖励字段外完全没变」的硬断言），站点数 / `cellId` / `footprint` /
+`candidateCells` / `buildingIds` 一格不动，可重复跑。
+
+⚠️ 顺序：**`fill` / `symmetrize` / `gen` 之后必须再跑一次 `retarget`**，否则奖励 id 会退回占位值。
+⚠️ 奖励表 `levelMapGrideReward` 目前只有 `1001~1016` 与 `2001` 有内容；`2002` 是空壳行
+（`{"rewardId": 2002}`，没有 `rewardGroup`），`1017~1022` / `2003~2008` 整行不存在。
+**这 13 行没补之前，七章的宝箱和随机格都是空奖励。**
 
 关卡顺序照 `chapter_02` 的口径：`configId` `10011…10020` 按链序递增，第 5、10 个是 BOSS；
 相邻两关地块之间恒隔 2 格，中间那格就是门（`fixedResource`，自己也挂在上一关下）。

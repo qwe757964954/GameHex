@@ -1,11 +1,11 @@
-import { _decorator, Button, Label, Node, Sprite, SpriteFrame } from 'cc';
+import { _decorator, Button, Label, Node, Sprite, SpriteFrame, UITransform } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { PopupCloseReason } from '../../framework/ui/PopupDef';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
 import { Toast } from '../common/Toast';
 import { GoodsBox } from './GoodsBox';
 import { ItemDetailRow } from './ItemDetailRow';
-import { qualityFrameSuffixOf, qualityTitleStepOf } from './ItemDetailTable';
+import { itemDetailLayoutOf, ID_PANEL_WIDTH, qualityFrameSuffixOf, qualityTitleStepOf } from './ItemDetailTable';
 import type { IItemAccessRef, IItemRow } from './ItemDetailTable';
 import { itemDetailRepository } from './ItemDetailRepository';
 import type { IItemDetailRepository, IItemDetailSnapshot } from './ItemDetailRepository';
@@ -76,6 +76,19 @@ export class ItemDetailPage extends PopupBase {
 
     @property({ type: Node, tooltip: 'CloseBtn：关闭按钮（挂 cc.Button）' })
     closeButton: Node = null;
+
+    /**
+     * `PanelBg`：主底板（九宫图）。
+     *
+     * 高度**按「获取途径」实际行数收放**（`itemDetailLayoutOf`）：内容少时面板跟着变矮，
+     * 不留一大片空。此前高度写死 830，只有 1 行途径时下方空出 191px。
+     */
+    @property({ type: Node, tooltip: 'PanelBg：主底板（高度按获取途径行数收放）' })
+    panelBg: Node = null;
+
+    /** `AccessTitle`：「获取途径」标题（内容区藏起来时整块上移）。 */
+    @property({ type: Node, tooltip: 'AccessTitle：「获取途径」标题（随内容区显隐移动）' })
+    accessTitle: Node = null;
 
     @property({ type: Sprite, tooltip: 'TitleBg：品质缎带（7 档，随品质换帧）' })
     titleBg: Sprite = null;
@@ -233,6 +246,39 @@ export class ItemDetailPage extends PopupBase {
         this.presentContent(snapshot);
         this.presentAccess(snapshot);
         this.presentButtons(snapshot);
+        this.applyLayout(this.accessRefs.length, this.contentResIds.length > 0);
+    }
+
+    /**
+     * 面板 / 「获取途径」块 / 三颗按钮的纵向位置，按**实际内容**一起收放。
+     *
+     * ⚠️ 顺序：必须排在 `presentAccess` 之后 —— 那里才把 `accessRefs` 定下来
+     * （途径查不到时会塞一行「暂无获取途径」占位，行数按 1 算）。
+     *
+     * 三样一起动的理由：只缩列表不改按钮，中间反而会空得更明显；
+     * 只缩面板不改按钮，按钮会跑到面板外。
+     */
+    private applyLayout(rowCount: number, hasContent: boolean): void {
+        const layout = itemDetailLayoutOf(rowCount, hasContent);
+        const panelTransform = this.panelBg?.getComponent(UITransform);
+        if (panelTransform) panelTransform.setContentSize(ID_PANEL_WIDTH, layout.panelHeight);
+        const listNode = this.accessList?.node;
+        const listTransform = listNode?.getComponent(UITransform);
+        if (listNode && listTransform) {
+            listTransform.setContentSize(listTransform.width, layout.listHeight);
+            listNode.setPosition(listNode.position.x, layout.listTop, listNode.position.z);
+        }
+        if (this.accessTitle) {
+            this.accessTitle.setPosition(this.accessTitle.position.x, layout.titleY, this.accessTitle.position.z);
+        }
+        const buttons: readonly [Node | null, number][] = [
+            [this.btnGo, layout.goY],
+            [this.btnGo1, layout.go1Y],
+            [this.btnCompos, layout.go1Y],
+        ];
+        for (const [button, y] of buttons) {
+            if (button) button.setPosition(button.position.x, y, button.position.z);
+        }
     }
 
     // ---------- 预加载 ----------
@@ -296,6 +342,12 @@ export class ItemDetailPage extends PopupBase {
     private presentContent(snapshot: IItemDetailSnapshot): void {
         const slots = this.contentSlots;
         this.contentResIds = snapshot.itemBox.slice();
+        // 「内容」区没有东西时整块收掉（标题 + 容器），否则会空出一块 151px 的死区 ——
+        // 槽位 `hide()` 只是把格子藏了，容器本身还在，视觉上就是「道具说明」和
+        // 「获取途径」之间一大片空白。位置由 `applyLayout` 统一补回来。
+        const hasContent = this.contentResIds.length > 0;
+        if (this.contentTitle) this.contentTitle.active = hasContent;
+        if (this.contentBar) this.contentBar.active = hasContent;
         for (let index = 0; index < slots.length; index++) {
             const slot = slots[index];
             const resId = this.contentResIds[index];

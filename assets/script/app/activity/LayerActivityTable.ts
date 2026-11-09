@@ -135,13 +135,19 @@ export type ActivityBoxPhase = 'locked' | 'claimable' | 'taken';
 // 表解析
 // ============================================================
 
+/** 配表原始条目 → 行对象；`null` / 非对象（脏行）返回 `null`，调用方跳过。 */
+function asRow(raw: unknown): Record<string, unknown> | null {
+    if (!raw || typeof raw !== 'object') return null;
+    return raw as Record<string, unknown>;
+}
+
 /** 读一条奖励数组；非法条目跳过。 */
 export function parseRewards(raw: unknown): IActivityReward[] {
     const out: IActivityReward[] = [];
     if (!Array.isArray(raw)) return out;
     for (const item of raw) {
-        if (!item || typeof item !== 'object') continue;
-        const row = item as Record<string, unknown>;
+        const row = asRow(item);
+        if (!row) continue;
         const resId = toCount(row.resId);
         const number = toCount(row.number);
         if (resId <= 0 || number <= 0) continue;
@@ -154,8 +160,8 @@ export function parseRewards(raw: unknown): IActivityReward[] {
 export function parseTaskRows(rows: readonly unknown[]): IActivityTaskRow[] {
     const out: IActivityTaskRow[] = [];
     for (const raw of rows ?? []) {
-        if (!raw || typeof raw !== 'object') continue;
-        const row = raw as Record<string, unknown>;
+        const row = asRow(raw);
+        if (!row) continue;
         const resId = toCount(row.resId);
         const name = typeof row.name === 'string' ? row.name : '';
         if (resId <= 0 || name.length === 0) continue;
@@ -188,8 +194,8 @@ export function parseTaskRows(rows: readonly unknown[]): IActivityTaskRow[] {
 export function parseProgressRows(rows: readonly unknown[]): IActivityProgressRow[] {
     const out: IActivityProgressRow[] = [];
     for (const raw of rows ?? []) {
-        if (!raw || typeof raw !== 'object') continue;
-        const row = raw as Record<string, unknown>;
+        const row = asRow(raw);
+        if (!row) continue;
         const id = toCount(row.id);
         const cost = toCount(row.cost);
         if (id <= 0 || cost <= 0) continue;
@@ -203,8 +209,8 @@ export function parseProgressRows(rows: readonly unknown[]): IActivityProgressRo
 export function parseTabRows(rows: readonly unknown[]): IActivityTabRow[] {
     const out: IActivityTabRow[] = [];
     for (const raw of rows ?? []) {
-        if (!raw || typeof raw !== 'object') continue;
-        const row = raw as Record<string, unknown>;
+        const row = asRow(raw);
+        if (!row) continue;
         const id = toCount(row.id);
         if (id <= 0) continue;
         const types: number[] = [];
@@ -235,8 +241,8 @@ export function parseTabRows(rows: readonly unknown[]): IActivityTabRow[] {
 export function parseItemRows(rows: readonly unknown[]): Map<number, IActivityGoodsInfo> {
     const map = new Map<number, IActivityGoodsInfo>();
     for (const raw of rows ?? []) {
-        if (!raw || typeof raw !== 'object') continue;
-        const row = raw as Record<string, unknown>;
+        const row = asRow(raw);
+        if (!row) continue;
         const resId = toCount(row.resId);
         if (resId <= 0) continue;
         map.set(resId, {
@@ -262,8 +268,8 @@ export function parseItemRows(rows: readonly unknown[]): Map<number, IActivityGo
 export function parseRolePropertyRows(rows: readonly unknown[]): Map<number, IActivityGoodsInfo> {
     const map = new Map<number, IActivityGoodsInfo>();
     for (const raw of rows ?? []) {
-        if (!raw || typeof raw !== 'object') continue;
-        const row = raw as Record<string, unknown>;
+        const row = asRow(raw);
+        if (!row) continue;
         const resId = toCount(row.resId);
         if (resId <= 0) continue;
         map.set(resId, {
@@ -319,16 +325,16 @@ export function normalizeActivityState(
 ): IActivityServerState {
     const typeByResId = new Map<number, number>();
     for (const raw of activityRows ?? []) {
-        if (!raw || typeof raw !== 'object') continue;
-        const row = raw as Record<string, unknown>;
+        const row = asRow(raw);
+        if (!row) continue;
         const resId = toCount(row.resId);
         if (resId <= 0) continue;
         typeByResId.set(resId, toCount(row.type));
     }
 
     for (const raw of activityCmds ?? []) {
-        if (!raw || typeof raw !== 'object') continue;
-        const cmd = raw as Record<string, unknown>;
+        const cmd = asRow(raw);
+        if (!cmd) continue;
         if (typeByResId.get(toCount(cmd.activityRefId)) !== DAY_CHALLENGE_ACT_TYPE) continue;
 
         const detailWrap = cmd.detail && typeof cmd.detail === 'object'
@@ -342,8 +348,8 @@ export function normalizeActivityState(
         const tasks = new Map<number, IActivityTaskState>();
         if (Array.isArray(detail?.tlDayChallengeTask)) {
             for (const item of detail.tlDayChallengeTask as unknown[]) {
-                if (!item || typeof item !== 'object') continue;
-                const row = item as Record<string, unknown>;
+                const row = asRow(item);
+                if (!row) continue;
                 const resId = toCount(row.resId);
                 if (resId <= 0) continue;
                 tasks.set(resId, { process: toCount(row.process), state: toCount(row.state) });
@@ -374,8 +380,9 @@ export function normalizeActivityState(
  */
 export function activityCoinOf(roleRows: readonly unknown[]): number {
     for (const raw of roleRows ?? []) {
-        if (!raw || typeof raw !== 'object') continue;
-        const coin = toCount((raw as Record<string, unknown>).activityCoin);
+        const row = asRow(raw);
+        if (!row) continue;
+        const coin = toCount(row.activityCoin);
         if (coin > 0) return coin;
     }
     return 0;

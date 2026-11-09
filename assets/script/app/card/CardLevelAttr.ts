@@ -28,7 +28,7 @@ export interface ZCCardLevelAttrs {
  * 只认这几个键：多写别名是为了容错（`hp` / `atk` / `buildHp` 都可能是手填变体），
  * 但**不认任意 statId** —— 认不得的键直接忽略，不猜数值。
  */
-const STAT_ALIAS: Readonly<Record<string, keyof ZCCardLevelAttrs>> = {
+export const CARD_LEVEL_ATTR_STAT: Readonly<Record<string, keyof ZCCardLevelAttrs>> = {
     maxHp: 'maxHp',
     hp: 'maxHp',
     attack: 'attack',
@@ -45,7 +45,7 @@ export function attrsOfEntries(entries: readonly ZCCardAttrEntry[]): ZCCardLevel
     };
     let hit = false;
     for (const entry of entries) {
-        const key = STAT_ALIAS[entry.statId];
+        const key = CARD_LEVEL_ATTR_STAT[entry.statId];
         if (!key) continue;
         result[key] = Math.max(0, entry.value);
         hit = true;

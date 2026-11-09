@@ -462,6 +462,16 @@ export class ZCStatusSystem {
         return this.instances.get(unitId) ?? [];
     }
 
+    cloneUnitStatuses(sourceId: string, targetId: string): void {
+        const source = this.instances.get(sourceId);
+        if (!source) return;
+        this.instances.set(targetId, source.map(instance => ({
+            ...cloneStatusInstance(instance),
+            uid: this.nextUid++,
+            sourceUnitId: instance.sourceUnitId === sourceId ? targetId : instance.sourceUnitId,
+        })));
+    }
+
     stacksOf(unitId: string, defId: string): number {
         return this.instancesOf(unitId).find((inst) => inst.defId === defId)?.stacks ?? 0;
     }

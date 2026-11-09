@@ -69,6 +69,7 @@ function battleUnitsByOwner(
 function buildBattleDeck(
     source: readonly ZCDeckCard[],
     heroes: readonly ZCBattleHero[],
+    unit: ZCBattleUnit | undefined,
 ): readonly ZCDeckCard[] {
     const systemCards = source.filter((card) => card.unitId === undefined);
     const heroCardsById = new Map<string, ZCDeckCard>();
@@ -82,7 +83,10 @@ function buildBattleDeck(
         seen.add(hero.heroId);
         if (seen.size > ZC_MAX_BATTLE_HERO_CARDS) break;
         const card = heroCardsById.get(String(hero.heroId));
-        if (card) selected.push(card);
+        if (card) {
+            const buildingHp = unit?.heroAttrs?.find((entry) => entry.heroId === hero.heroId)?.attributes.buildingHp;
+            selected.push(buildingHp === undefined ? card : { ...card, baseHp: buildingHp });
+        }
     }
     return [...selected, ...systemCards];
 }
@@ -200,19 +204,25 @@ function compileOwnerLoadouts(
     heroes: readonly ZCBattleHero[],
     config: ZCMatchConfig,
     skipped: Array<{ owner: ZCOwner; generalId: number; reason: string }>,
+    unit: ZCBattleUnit | undefined,
 ): readonly ZCCompiledModifierLoadout[] {
     const catalogs = getZCModifierCatalogs();
     const loadouts: ZCCompiledModifierLoadout[] = [];
     for (const hero of heroes) {
         const generalId = hero.heroId;
         // 当前协议只有英雄 id/等级，没有星级字段。本地 PVP 先按一星构筑；后端补星级后只改这里的输入。
-        if (!catalogs.generalStars.has(`${generalId}:1`)) continue;
+        const hasGeneral = catalogs.generalStars.has(`${generalId}:1`);
+        const serverAttributes = unit?.heroAttrs?.find((entry) => entry.heroId === generalId)?.attributes;
+        if (!hasGeneral && !serverAttributes) continue;
         try {
             loadouts.push(...compileZCCombatBuild({
                 unitId: String(generalId),
-                ...growthSelectionOf(catalogs, generalId, hero.level),
-                heroLevel: hero.level,
-                generalStar: { generalId, star: 1 },
+                ...(hasGeneral ? {
+                    ...growthSelectionOf(catalogs, generalId, hero.level),
+                    heroLevel: hero.level,
+                    generalStar: { generalId, star: 1 },
+                } : {}),
+                serverAttributes,
             }, config.units, catalogs));
         } catch (error) {
             skipped.push({
@@ -245,13 +255,13 @@ export function buildZCClientCombatConfig(
     const skipped: Array<{ owner: ZCOwner; generalId: number; reason: string }> = [];
     const modifiers: Partial<Record<ZCOwner, readonly ZCCompiledModifierLoadout[]>> = {};
     for (const owner of owners) {
-        modifiers[owner] = compileOwnerLoadouts(owner, roster[owner] ?? [], config, skipped);
+        modifiers[owner] = compileOwnerLoadouts(owner, roster[owner] ?? [], config, skipped, rosterContext.unitsByOwner[owner]);
     }
     const ownerDecks: Partial<Record<ZCOwner, readonly ZCDeckCard[]>> = {};
     for (const owner of owners) {
         const sourceDeck = config.ownerDecks?.[owner] ?? (owner === ZCOwner.Player ? config.playerDeck : config.enemyDeck);
         ownerDecks[owner] = rosterContext.usesServerRoster
-            ? buildBattleDeck(sourceDeck, roster[owner] ?? [])
+            ? buildBattleDeck(sourceDeck, roster[owner] ?? [], rosterContext.unitsByOwner[owner])
             : sourceDeck;
     }
     const ownerRates = mapClientRosterOwners(rosterContext, (_owner, unit) => ownerRatesOf(unit));

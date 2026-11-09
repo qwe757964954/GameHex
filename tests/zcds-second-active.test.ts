@@ -6,7 +6,7 @@ import { loadPvpTables, type ZCPvpTables } from '../assets/script/app/zcds/model
 import { captureZCMatchConfig } from '../assets/script/app/zcds/model/ZCMatchConfig';
 import type { ZCAttackProfile, ZCDeckBonuses, ZCUnitDefinition } from '../assets/script/app/zcds/model/ZCCombatCatalog';
 import { ZCCombatEventType } from '../assets/script/app/zcds/model/ZCCombatCatalog';
-import type { ZCDamageSource, ZCFloatText, ZCSnapshot, ZCUnitState } from '../assets/script/app/zcds/model/ZCGameTypes';
+import type { ZCDamageSource, ZCCombatEvent, ZCFloatText, ZCSnapshot, ZCUnitState } from '../assets/script/app/zcds/model/ZCGameTypes';
 import type { ZCSkillRuntimeDefinition } from '../assets/script/app/zcds/model/ZCSkillRuntime';
 import { ZCSkillRuntimeRegistry } from '../assets/script/app/zcds/model/ZCSkillRuntime';
 import type { ZCUnitStatPatch } from '../assets/script/app/zcds/model/ZCModifierRuntime';
@@ -17,6 +17,7 @@ import {
 import { ZCDamageResolutionSystem } from '../assets/script/app/zcds/model/systems/ZCDamageResolutionSystem';
 import { ZCUnitRegistry } from '../assets/script/app/zcds/model/systems/ZCUnitRegistry';
 import { ZCSkillTriggerSystem } from '../assets/script/app/zcds/model/systems/ZCSkillTriggerSystem';
+import { zcMissileFxOf } from '../assets/script/app/zcds/model/ZCCombatEffectFlight';
 import { assetPath } from './helpers/asset-paths';
 
 /**
@@ -311,6 +312,9 @@ function strikeContext(units: ZCUnitState[], random: () => number) {
         secondaryProfile: undefined,
     } as unknown as ZCUnitDefinition;
     const damaged: Array<{ id: number; damage: number }> = [];
+    //  导弹分支不在这里结算伤害，它只 `pushProjectile` —— 这条通道原来测试里是缺的，
+    //  「恒定 3 颗」那条用例要数弹体个数，所以补上（同时让上下文更贴近真实宿主）。
+    const pushed: ZCCombatEvent[] = [];
     const context: IZCAttackResolutionContext = {
         rules: { combatDistanceScale: 0.3, combatDamageMultiplier: 1, unitAttackPerTier: 0 } as IZCAttackResolutionContext['rules'],
         statusSystem: { statModsOf: () => ({}) } as unknown as IZCAttackResolutionContext['statusSystem'],
@@ -343,8 +347,9 @@ function strikeContext(units: ZCUnitState[], random: () => number) {
         unitsInRadius: () => [],
         healUnit: () => undefined,
         applyKnockback: () => undefined,
+        pushProjectile: (projectile) => { pushed.push(projectile); },
     };
-    return { context, damaged };
+    return { context, damaged, pushed };
 }
 
 test('多点打击：strikeNearest 挑最近的那几个，不碰远处与友军', () => {
@@ -381,6 +386,41 @@ test('多点打击：随机模式用同一套随机序列就能重演出同一�
         return damaged.map((item) => item.id).sort();
     };
     assert.deepEqual(run(), run(), '同一随机序列 → 同一批目标');
+});
+
+test('追踪导弹：一次施法恒定 3 颗（配表 strikeCount=5 被登记值钳掉）', () => {
+    //  2026-11-05 用户：「导弹技能有偶尔出现 6 个的情况，不符合技能设计恒定是 3 个」。
+    //  6 个的真实来源是**两条龙各发 3 颗**（挑人上限 = 表里 strikeCount，Lv3 是 5）；
+    //  单次施法本身必须恒定 3 颗，这一条钉住它。
+    const missile = zcMissileFxOf('68010');
+    assert.ok(missile, '镭射飞龙必须登记导弹弹体/爆炸 prefab');
+    assert.equal(missile.count, 3, '策划口径：每次恒定 3 颗');
+
+    const caster = makeUnit(1, ZCOwner.Player, 0, '68010');
+    //  6 个敌人全在半径内：配表 count=5 时有 5 个候选，钳到 3 之后只该发 3 颗。
+    const enemies = [2, 3, 4, 5, 6, 7].map((id) => makeUnit(id, ZCOwner.Enemy, (id - 1) * 15, '68028'));
+    const units = [caster, ...enemies];
+    const state = makeState(units, 5);
+    const { context, pushed } = strikeContext(units, () => 0.5);
+    const fire = (missileCount?: number): number => {
+        pushed.length = 0;
+        const fired = ZCAttackResolutionSystem.strikeTargets(state, caster, {
+            count: 5, radius: 336 * 0.3, damageRate: 8, nearest: true,
+            missilePrefabPath: missile.missilePrefabPath,
+            impactPrefabPath: missile.impactPrefabPath,
+            arcOffset: missile.arcOffset,
+            missileSpeed: missile.speed,
+            missileCount,
+        }, context);
+        assert.equal(fired, pushed.length, '返回的就是真正推出去的弹体数');
+        return fired;
+    };
+    assert.equal(fire(missile.count), 3, '恒定发数 3');
+    assert.deepEqual(pushed.map((item) => item.effectPrefabPath),
+        [missile.missilePrefabPath, missile.missilePrefabPath, missile.missilePrefabPath]);
+    assert.equal(new Set(pushed.map((item) => item.targetUnitId)).size, 3, '3 颗各瞄一个目标，不重复补发');
+    //  没登记恒定发数 ⇒ 听配表的 5：证明 3 来自登记值，而不是把 count 写死成 3。
+    assert.equal(fire(undefined), 5, '没登记时听配表 count=5');
 });
 
 // ── 五、状态域的两个消费点 ─────────────────────────────────────────────────────

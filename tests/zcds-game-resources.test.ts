@@ -124,7 +124,7 @@ test('守城首领条延迟创建时使用本局预加载的 Prefab', () => {
         node: { layer: 1, setParent() {}, destroy() {} },
     };
 
-    const progress = { currentWaveCardId: null };
+    const progress = { currentWaveCardId: null, currentWaveIsBoss: true };
     game.renderBossPanel({ defenceWaveProgress: progress });
     assert.deepEqual(instantiated, [bossPanelPrefab]);
     assert.equal(rendered.length, 1);

@@ -15,6 +15,7 @@ import type { CardLineupData } from './CardRepository';
 import { CardLineupSlot } from './CardLineupSlot';
 import type { ZCSlotFrames } from './CardLineupSlot';
 import { CARD_LINEUP_TEXTS } from './CardLineupTexts';
+import { formatPowerText } from './CardLineupPower';
 import { CardUnitPreviewAssets } from './CardUnitPreviewAssets';
 import {
     activeBondTitle,
@@ -77,7 +78,7 @@ const SLOT_PREVIEWS_PER_FRAME = 2;
  *   - 羁绊百分比 ← `pvpBond.json` + `calculateDeckBonuses()`。
  *
  * 底部 `TabBar`（兵种 / 神器 + `Lock`）是静态的：本组件不接管选中态，也不给点击回填。
- * 顶部队力「1716」仍是占位（战力系统未落地，走脚本属性 `previewPower`）。
+ * 顶部战力由仓库汇总当前上阵卡攻击力，随阵容和等级刷新。
  */
 @ccclass('CardLineupPage')
 export class CardLineupPage extends Component {
@@ -132,9 +133,6 @@ export class CardLineupPage extends Component {
     })
     cardGrid: VirtualScrollView = null;
 
-    @property({ tooltip: '队力占位值（战力系统未落地，设计稿上写的是 1716）' })
-    previewPower = 1716;
-
     @property({ tooltip: '后端没有该卡等级时的兜底值（编辑器独立预览 / 后端不可用；卡库里「未拥有」的卡按 0 级显示，不走这里）' })
     fallbackLevel = 3;
 
@@ -166,7 +164,7 @@ export class CardLineupPage extends Component {
     protected start(): void {
         this.qualityLabel.string = CARD_LINEUP_TEXTS.qualityBonus;
         this.bondTitleLabel.string = CARD_LINEUP_TEXTS.bondBonusTitle;
-        this.powerLabel.string = String(Math.max(0, Math.floor(this.previewPower)));
+        this.powerLabel.string = '--';
         this.bindTeamEdit();
         this.renderLoading();
         EventMgr.instance.on(CardLineupUiEvent.Render, this.onLineupRender, this);
@@ -239,6 +237,7 @@ export class CardLineupPage extends Component {
         //   ① 本地卡表没读到 → 保持空台；② 服务端说「选中阵型没上人」→ 渲染成空站台。
         //  补 `!heroListKnown` 是因为快照路径的 `catalog` 也空，但那是**已知**的数据，不能当 ① 早退。
         if (data.deck.length === 0 && data.catalog.length === 0 && !data.heroListKnown) {
+            this.powerLabel.string = '--';
             console.warn('[CardLineupPage] 卡表未读到（deck / catalog 都为空且后端英雄列表不可用），保持空台');
             return;
         }
@@ -257,6 +256,7 @@ export class CardLineupPage extends Component {
         ]);
         if (!this.isValid || revision !== this.presentRevision) return;
 
+        this.powerLabel.string = data.power === undefined ? '--' : formatPowerText(data.power);
         this.commitSlots(slots);
         if (pool) this.commitPool(pool);
         this.commitIcons(icons);

@@ -14,6 +14,23 @@ import { ZCCombatSystem } from './ZCCombatSystem';
 import type { IZCModelServices } from './ZCModelServices';
 import { ZCTargetingSystem } from './ZCTargetingSystem';
 
+/**
+ * 打城墙 / 打建筑的「出手方」。
+ *
+ * 为什么不是整只 `ZCUnitState`：投射物离手后施法者可能已经被移除，
+ * `resolveProjectileHit` 只能给出一个坐标壳（归属 + 出手点），而不是一个活着的实例。
+ *
+ * `id` 是**单位实例 id**（`ZCUnitState.id`，不是卡牌 unitId）—— 建筑 / 城墙的受击特效
+ * 要靠它反查攻击方职业（`pvpCard.traits.attack`）。**允许缺省**：拿不到时那一下不播闪白，
+ * 伤害与飘字照常。
+ */
+export interface IZCStructureDamageSource {
+    readonly owner: ZCOwner;
+    readonly freeX: number;
+    readonly freeY: number;
+    readonly id?: number;
+}
+
 export interface IZCAttackResolutionContext extends Pick<IZCModelServices, 'rules' | 'statusSystem' | 'geometry' | 'random' | 'effectiveDefinition' | 'unitPosition' | 'damageUnit'> {
     readonly counters: readonly ZCCounterRule[];
     readonly cards: Readonly<Record<ZCOwner, ReadonlyMap<string, ZCDeckCard>>>;
@@ -27,8 +44,8 @@ export interface IZCAttackResolutionContext extends Pick<IZCModelServices, 'rule
     tryExecuteUnit(target: ZCUnitState, chance: number | undefined, owner: ZCOwner, sourceId: number, precedingText?: ZCFloatText | null): void;
     applyHitStatus(target: ZCUnitState, statusId: string | undefined, sourceId?: number): void;
     applyLegacyBuffs(target: ZCUnitState, buffs: readonly ZCLegacyBuffApplication[], sourceId?: number): void;
-    damageWall(source: Pick<ZCUnitState, 'owner' | 'freeX' | 'freeY'>, wall: ZCHexState, damage: number): void;
-    damageBuilding(source: Pick<ZCUnitState, 'owner'>, building: ZCHexState, damage: number): void;
+    damageWall(source: IZCStructureDamageSource, wall: ZCHexState, damage: number): void;
+    damageBuilding(source: IZCStructureDamageSource, building: ZCHexState, damage: number): void;
     unitsInRadius(hexId: number, radiusHex: number): ZCUnitState[];
     /**
      * 给单位回血（2026-11-04 吸血用）。
@@ -76,6 +93,15 @@ export interface IZCStrikeOptions {
     readonly splashRadius?: number;
     /** 溅射伤害 = 直击伤害 × 本系数；0 / 缺省 = 不溅射。 */
     readonly splashDamageRate?: number;
+    /**
+     * 挑人的原点（**世界坐标**）；缺省 = 施法者当前位置。
+     *
+     * 为什么需要：移形换影（103404）的分身要在**施法时的原位**爆炸，而这段时间里本体
+     * 已经闪回去、甚至继续跑位了 —— 拿 `context.unitPosition(unit)` 当原点，分身会跟着
+     * 本体漂走。只改原点、不改挑选/结算逻辑，是为了让「分身爆炸」和「随机多点」共用
+     * 同一份伤害口径（暴击、克制、溅射、处决全都一致）。
+     */
+    readonly origin?: { readonly x: number; readonly y: number };
     /** 命中挂的状态 id；缺省不挂。 */
     readonly statusId?: string;
     /**
@@ -91,6 +117,23 @@ export interface IZCStrikeOptions {
     readonly missilePrefabPath?: string;
     readonly impactPrefabPath?: string;
     readonly arcOffset?: number;
+    /**
+     * 导弹自己的飞行速度（逻辑 px/秒）；缺省 = 复用 `profile.projectileSpeed`。
+     *
+     * 为什么单独给：镭射飞龙的普攻是一道光束，`projectileSpeed` 500 是**光束**的速度；
+     * 导弹要的是「慢速滑翔、看得清弧线」，两者共用一个值就必然二选一。
+     * 2026-11-05 需求：「慢速滑翔、强调弧线」⇒ 200（最远一发约 1.65s）。
+     */
+    readonly missileSpeed?: number;
+    /**
+     * 导弹一次施法的**恒定发数**（覆盖 `count`）；缺省 = 听 `count`。
+     *
+     * 来自 `ZCCombatEffectFlight` 的 `IZCMissileFxSpec.count`。钳在 `strikeTargets` 里而不是
+     * 调用方，是因为「最后到底推了几颗弹体」只有这里说了算 —— 调用方改 `count` 还得
+     * 记得同步改 `victims`，迟早会漂。**只对导弹分支生效**：戈壁狂箭那种「一次挑 N 个人
+     * 立即结算」的多点打击不受影响。
+     */
+    readonly missileCount?: number;
 }
 
 function damageFloatTextKind(critical: boolean, counterMultiplier = 1): ZCCombatFloatTextKind {    if (critical) return 'critical';
@@ -402,7 +445,7 @@ export class ZCAttackResolutionSystem {
         context: IZCAttackResolutionContext): number {
         const count = Math.max(1, Math.round(options.count));
         const radius = Math.max(1, options.radius);
-        const origin = context.unitPosition(unit);
+        const origin = options.origin ?? context.unitPosition(unit);
         const candidates: { unit: ZCUnitState; distance: number }[] = [];
         for (const candidate of state.units) {
             if (candidate.owner === unit.owner || candidate.battleState === 'dead' || candidate.hp <= 0) continue;
@@ -436,9 +479,17 @@ export class ZCAttackResolutionSystem {
         //  （`arcOffset` 由视图层施加），这样「直线扫掠碰撞」这条既有硬逻辑一行都不用改。
         if (options.missilePrefabPath) {
             let fired = 0;
-            const speed = profile.projectileSpeed || 500;
-            for (let index = 0; index < victims.length; index += 1) {
-                const { unit: victim } = victims[index];
+            //  导弹优先用自己的速度；没登记才退回普攻弹速。
+            const speed = options.missileSpeed ?? (profile.projectileSpeed || 500);
+            //  ── 恒定发数（2026-11-05「不符合技能设计恒定是 3 个」）──
+            //  配表 101003 三档 `strikeCount` 是 3/4/5，但技能口径是「每次恒定 3 颗」。
+            //  钳在**这里**：这是唯一知道"最后推了几颗弹体"的地方，调用方只报一个上限。
+            //  ⇒ 目标不足时仍然按实际数量发（不会对同一个目标补发凑数），多出来的绝不多发。
+            const volley = options.missileCount == null
+                ? victims
+                : candidates.slice(0, Math.max(1, Math.round(options.missileCount)));
+            for (let index = 0; index < volley.length; index += 1) {
+                const { unit: victim } = volley[index];
                 const point = context.unitPosition(victim);
                 const from = context.unitPosition(unit);
                 const dx = point.x - from.x;
@@ -493,7 +544,9 @@ export class ZCAttackResolutionSystem {
             }
             //  诊断③：弹体真的推进 `state.projectiles` 了吗（视图侧只认这个队列）。
             missileLog('模型', `导弹分支已推进 ${fired} 个弹体`
-                + `（目标数 ${victims.length}，弧线偏移基准 ${(options.arcOffset ?? 0).toFixed(1)}，速度 ${speed}）`);
+                + `（候选 ${candidates.length} / 本次上限 ${volley.length}，`
+                + `配表 count=${count}，恒定发数=${options.missileCount ?? '未登记'}，`
+                + `弧线偏移基准 ${(options.arcOffset ?? 0).toFixed(1)}，速度 ${speed}）`);
             return fired;
         }
 
@@ -886,21 +939,45 @@ export class ZCAttackResolutionSystem {
             const movingWaves = Math.max(1, Math.ceil(movingDuration / movingInterval));
             const maxHits = moving ? Math.max(0, Math.round(mParams?.zoneMaxHits ?? 0)) : 0;
             const spawnSpread = Math.max(0, mParams?.zoneSpreadDeg ?? 0) * Math.PI / 180;
-            const heading = Math.atan2(target.y - from.y, target.x - from.x);
+            //  移动区域的扇形**中轴**（2026-11-07 椰蛋战士「暴风」需求 3）：
+            //  「以椰蛋战士的攻击朝向为法线，3 个飓风夹角为 50°」。
+            //  所以基准取 `unit.facingRadians`（美术朝向，`ZCUnitTargeting.face()` 在每次 `startAttack`
+            //  时对齐到当前目标），**不是** `atan2(目标 - 自身)`：两者只在"目标在正对角"时相同，
+            //  而朝向是玩家眼睛看到的角色正面 —— 三条风要围着它对称张开才不歪。
+            //  `zoneSpreadDeg` 是**总夹角**（下面 `fanOffset` 取 ±spread/2），不是"相邻两条的夹角"。
+            const axis = moving ? unit.facingRadians : Math.atan2(target.y - from.y, target.x - from.x);
             //  自体中心区域（2026-10-30「斗气爆发」100604 / 「迪斯科旋风」103104 / 「死亡摇滚」103204）：
             //  这类技能的判定是「自身周围」，而区域默认落在**目标点**。给 `zoneSelfCentered = 1`
             //  就改成落在施法者脚下，半径与波次仍按 areaRadius / durationSeconds / waves 走。
             //  缺省 0 ⇒ 仍在目标点，暴风雪 / 灼热地带逐字不变。
             const selfCentered = !moving && (mParams?.zoneSelfCentered ?? 0) > 0;
+            //  出生点前移（2026-11-07 鹿神守护需求 1）：「小鹿初始位置在魔术师前进方向 30px 的位置」。
+            //  与攻击距离 / 区域半径同一套表值口径 ⇒ 乘 `combatDistanceScale`。
+            const spawnForward = moving
+                ? Math.max(0, mParams?.zoneSpawnForward ?? 0) * context.rules.combatDistanceScale
+                : 0;
+            //  两段式移动（2026-11-07 鹿神守护需求 2）：给了 `zoneApproachSpeed` 才走「先走再冲」，
+            //  缺省 0 ⇒ 一出生就按 `zoneMoveSpeed` 冲刺（暴风 / 既有移动区域逐字不变）。
+            const approachSpeed = moving
+                ? Math.max(0, mParams?.zoneApproachSpeed ?? 0) * context.rules.combatDistanceScale
+                : 0;
+            const sprintRange = Math.max(0, mParams?.zoneSprintRange ?? 0) * context.rules.combatDistanceScale;
             for (let index = 0; index < zoneCount; index += 1) {
-                //  扇形夹角：中间那道正对目标，其余按 `zoneSpreadDeg` 均分到两侧。
+                //  扇形夹角：移动区域的三条围绕 `axis`（攻击朝向）对称张开；
+                //  原地多道（迪斯科旋风一类）仍然绕着施法者均分一圈。
                 const fanOffset = zoneCount === 1 ? 0 : ((index / (zoneCount - 1)) * 2 - 1) * spawnSpread / 2;
-                const angle = moving ? heading + fanOffset
+                const angle = moving ? axis + fanOffset
                     : (zoneCount === 1 ? 0 : unit.facingRadians + Math.PI * 2 * index / zoneCount);
                 const offset = zoneCount === 1 || moving || selfCentered ? 0 : areaRadius * .45;
                 state.groundZones.push({
-                    x: moving || selfCentered ? from.x : target.x + Math.cos(angle) * offset,
-                    y: moving || selfCentered ? from.y : target.y + Math.sin(angle) * offset,
+                    //  移动区域的出生点 = 施法者坐标沿中轴前移 `zoneSpawnForward`
+                    //  （「小鹿在魔术师前进方向 30px」）。`zoneSpawnForward` 缺省 0 ⇒ 就是施法者本身。
+                    x: moving
+                        ? from.x + Math.cos(angle) * spawnForward
+                        : (selfCentered ? from.x : target.x + Math.cos(angle) * offset),
+                    y: moving
+                        ? from.y + Math.sin(angle) * spawnForward
+                        : (selfCentered ? from.y : target.y + Math.sin(angle) * offset),
                     radius: areaRadius,
                     owner: unit.owner,
                     sourceUnitId: unit.id,
@@ -923,6 +1000,32 @@ export class ZCAttackResolutionSystem {
                     moveVelocityY: moving ? Math.sin(angle) * moveSpeed * context.rules.combatDistanceScale : undefined,
                     hitUnitIds: maxHits > 0 ? [] : undefined,
                     maxHits: maxHits > 0 ? maxHits : undefined,
+                    //  逐目标递减（2026-11-06 魔术师「鹿神守护」103405）：第 k 个被命中的敌人吃
+                    //  `damage × (1 - zoneDamageFalloff)^k`。设计口径「每多一个目标减少 50%」
+                    //  就是 0.5。缺省 0 ⇒ 不递减，既有移动区域（暴风）行为逐字不变。
+                    damageFalloff: moving
+                        ? Math.max(0, Math.min(1, mParams?.zoneDamageFalloff ?? 0)) || undefined
+                        : undefined,
+                    //  整段持有视觉（2026-11-07 鹿神守护小鹿冲刺）：给了 `zoneHoldVisual = 1` 才开 ——
+                    //  开了以后区域只在创建时推**一条**跟着自己走的长效表现事件，
+                    //  不再按波次在每波位置频闪（见 `ZCGroundZoneSystem.syncHoldVisual`）。
+                    //  缺省 0 ⇒ 暴风仍是原来的「一串残影」，行为逐字不变。
+                    holdVisual: moving && (mParams?.zoneHoldVisual ?? 0) > 0 ? true : undefined,
+                    //  入场「由小变大」（2026-11-07 暴风需求 2）：只对整段持有视觉生效 ——
+                    //  逐波残影每条只活 0.15s，长不出来。
+                    growSeconds: moving
+                        ? Math.max(0, mParams?.zoneGrowSeconds ?? 0) || undefined
+                        : undefined,
+                    //  两段式移动（2026-11-07 鹿神守护需求 2）：先走近、再冲刺。
+                    //  `approachSpeed` 是世界 px/秒（表值 × combatDistanceScale），
+                    //  `sprintSpeed` 同样 —— 转段时由 `ZCGroundZoneSystem.startSprint` 写进 `moveVelocity`。
+                    approachSpeed: approachSpeed > 0 ? approachSpeed : undefined,
+                    //  追的目标就是这一击的攻击目标；目标是城墙 / 建筑（没有单位 id）时不给，
+                    //  区域会在第一帧「追不到目标」直接转冲刺，等于退回旧口径。
+                    approachTargetId: approachSpeed > 0 && target.kind === 'unit' ? target.id : undefined,
+                    sprintRange: approachSpeed > 0 ? sprintRange : undefined,
+                    sprintSpeed: approachSpeed > 0 ? moveSpeed * context.rules.combatDistanceScale : undefined,
+                    sprinting: approachSpeed > 0 ? false : undefined,
                 });
             }
             return;
@@ -1051,7 +1154,11 @@ export class ZCAttackResolutionSystem {
         const multiplier = cardCounterMultiplier(this.cardById(context, projectile.owner, projectile.sourceCardId), target.cardId ? this.cardById(context, targetOwner, target.cardId) : undefined, context.counters);
         const damage = Math.round(projectile.baseDamage * multiplier);
         const floatTextKind = damageFloatTextKind(projectile.criticalHit === true, multiplier);
-        const sender = { owner: projectile.owner, freeX: projectile.x, freeY: projectile.y };
+        //  打墙 / 打建筑只要「归属 + 落点」，受击特效还要**实例 id** 反查攻击方职业
+        //  （2026-11-06：结构物受击也要播攻击方职业的闪白）。
+        const sender: IZCStructureDamageSource = {
+            id: projectile.sourceUnitId, owner: projectile.owner, freeX: projectile.x, freeY: projectile.y,
+        };
         //  吸血要回给**真人**（`sender` 只是个用于打墙/打建筑的坐标壳），
         //  投射物离手后施法者可能已经死了 —— 查不到就不回。
         const shooter = context.unitById.get(projectile.sourceUnitId);

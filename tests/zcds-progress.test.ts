@@ -1381,7 +1381,7 @@ test('结算扫场是「先铺深色、再回正」：铺过 2 行即起跑，�
         buildVictorySweepPlan, victorySweepDuration, victorySweepFillSeconds,
         victorySweepLitStep, victorySweepRevertCursor, victorySweepRevertMix,
         victorySweepRevertStartSeconds, ZC_VICTORY_SWEEP_REVERT_LEAD_ROWS,
-        victorySweepRevertEndSeconds,
+        victorySweepRevertEndSeconds, victorySweepPulseSeconds,
         ZC_VICTORY_SWEEP_REVERT_STEP_SECONDS, ZC_VICTORY_SWEEP_STEP_SECONDS,
     } = load('./ZCGameViewUtil');
     const plan = buildVictorySweepPlan(ZC_HEX_CONFIG, 'player');
@@ -1425,8 +1425,13 @@ test('结算扫场是「先铺深色、再回正」：铺过 2 行即起跑，�
     const revertEndCursor = victorySweepRevertCursor(victorySweepRevertEndSeconds(stepCount), stepCount);
     assert.ok(Math.abs(revertEndCursor - stepCount) < 1e-9,
         `回正收手时游标应 = 行数 ${stepCount}，实际 ${revertEndCursor}`);
-    assert.ok(victorySweepDuration(stepCount) > victorySweepRevertEndSeconds(stepCount),
-        '整段总长必须比回正收手时刻长（后面还有脉冲段）');
+    //  2026-11-07 起脉冲已提前到铺场里（跟着铺色 2 行跑），不再单独占末尾一段 ⇒
+    //  总长 = max(回正收手, 脉冲收手)，不能再用「回正收手 + 脉冲段长」（那正是这次要修掉的空等）。
+    assert.ok(victorySweepDuration(stepCount) >= victorySweepRevertEndSeconds(stepCount),
+        '整段总长至少覆盖回正段（回正收手时整盘必须已经回正）');
+    assert.ok(victorySweepDuration(stepCount) < victorySweepRevertEndSeconds(stepCount)
+        + victorySweepPulseSeconds(stepCount),
+        '脉冲必须嵌在铺场里跑，不能把结算拖到「回正收手 + 整段脉冲」之后');
     const midCursor = victorySweepRevertCursor(revertStart + ZC_VICTORY_SWEEP_REVERT_STEP_SECONDS * 2.5, stepCount);
     assert.ok(Math.abs(midCursor - 2.5) < 1e-9, '游标 = 已回正行数 + 行内过渡比例');
 
@@ -1523,14 +1528,15 @@ test('★铺场闪烁：三角波在同色系偏白的一端快速来回，恒�
     assert.equal(victorySweepShimmerTick(-1), 0);
 });
 
-test('★线条脉冲：回正收手后从起点再扫一遍，三角波带、档位量化、整段恰好归零', () => {
+test('★线条脉冲：紧跟铺色 2 行起跑，三角波带、档位量化、整段恰好归零', () => {
     const { load } = loadViews();
     const {
         buildVictorySweepPlan, victorySweepDuration, victorySweepRevertEndSeconds,
         victorySweepPulseSeconds, victorySweepPulseCursor, victorySweepPulseMix,
-        victorySweepPulseLevel,
+        victorySweepPulseLevel, victorySweepPulseStartSeconds, victorySweepLitStep,
         ZC_VICTORY_SWEEP_PULSE_STEP_SECONDS, ZC_VICTORY_SWEEP_PULSE_BAND_ROWS,
-        ZC_VICTORY_SWEEP_PULSE_LEVELS,
+        ZC_VICTORY_SWEEP_PULSE_LEVELS, ZC_VICTORY_SWEEP_PULSE_LEAD_ROWS,
+        ZC_VICTORY_SWEEP_STEP_SECONDS,
     } = load('./ZCGameViewUtil');
 
     // 常量本身的合理性：波带必须窄（窄 = 共享层的桶数可控）、档位必须够少、速度必须比铺场快。
@@ -1545,14 +1551,32 @@ test('★线条脉冲：回正收手后从起点再扫一遍，三角波带、�
     const stepCount = plan.stepCount;
     assert.equal(stepCount, 20);
     const start = victorySweepRevertEndSeconds(stepCount);
+    const pulseStart = victorySweepPulseStartSeconds(stepCount);
     const pulseSeconds = victorySweepPulseSeconds(stepCount);
     const end = victorySweepDuration(stepCount);
 
-    // ① 起跑时刻**就是回正收手那一刻**（需求：「回正动画结束**再**增加」），两段不重叠。
+    // ① 起跑时刻跟着**铺色波前**走：铺过 `PULSE_LEAD_ROWS` 行就起跑（需求 2026-11-07
+    //    「脉冲动画应该早一点播放，紧跟在叠色格子后 1~2 行即可」）。
     assert.ok(pulseSeconds > 0, '脉冲段必须有长度');
-    assert.ok(Math.abs(end - start - pulseSeconds) < 1e-9, '总长 = 回正收手 + 脉冲段长');
-    assert.equal(victorySweepPulseCursor(start - 1e-6, stepCount), -1, '回正还没收手时脉冲不该起跑');
-    assert.equal(victorySweepPulseCursor(start, stepCount), 0, '起跑时波前正压在起点那一行（0 基）');
+    assert.ok(ZC_VICTORY_SWEEP_PULSE_LEAD_ROWS >= 1 && ZC_VICTORY_SWEEP_PULSE_LEAD_ROWS <= 2,
+        '需求给的是 1~2 行');
+    assert.ok(Math.abs(pulseStart - ZC_VICTORY_SWEEP_PULSE_LEAD_ROWS * ZC_VICTORY_SWEEP_STEP_SECONDS) < 1e-9,
+        `脉冲起跑应 = ${ZC_VICTORY_SWEEP_PULSE_LEAD_ROWS} × 填充步长，实际 ${pulseStart}`);
+    assert.ok(pulseStart < start, '脉冲必须比回正收手早得多（改前要等到回正整段收手才开始）');
+    // 🔴 需求原话的直译判据：「紧跟在叠色格子后 1~2 行」⇒ 起跑那一刻屏幕上只铺了 2~3 行。
+    //   这条是这次改动真正要守的东西，比"起跑时刻等于某个数"更抗参数调整。
+    const litAtPulseStart = victorySweepLitStep(pulseStart, stepCount);
+    assert.ok(litAtPulseStart >= ZC_VICTORY_SWEEP_PULSE_LEAD_ROWS
+        && litAtPulseStart <= ZC_VICTORY_SWEEP_PULSE_LEAD_ROWS + 1,
+        `脉冲起跑时应只铺了 ${ZC_VICTORY_SWEEP_PULSE_LEAD_ROWS}~${ZC_VICTORY_SWEEP_PULSE_LEAD_ROWS + 1} 行`
+        + `（实际 step=${litAtPulseStart}）`);
+    assert.ok(Math.abs(end - Math.max(start, pulseStart + pulseSeconds)) < 1e-9,
+        '总长 = max(回正收手, 脉冲收手)');
+    assert.equal(victorySweepPulseCursor(pulseStart - 1e-6, stepCount), -1, '铺色还没到 LEAD_ROWS 行时脉冲不该起跑');
+    assert.equal(victorySweepPulseCursor(pulseStart, stepCount), 0, '起跑时波前正压在起点那一行（0 基）');
+    // 与铺色同速 ⇒ 波前恒定落后铺色 `LEAD_ROWS` 行，这才是「紧跟」而不是「第二条波」。
+    assert.ok(Math.abs(ZC_VICTORY_SWEEP_PULSE_STEP_SECONDS - ZC_VICTORY_SWEEP_STEP_SECONDS) < 1e-9,
+        '脉冲必须与铺色同速，否则会一路超车、脱离那 1~2 行的距离');
 
     // ② 起跑那一刻起点行**满亮**：这里判 `cursor >= 0` 而不是 `> 0` 的全部意义。
     assert.equal(victorySweepPulseMix(0, 0), 1, '起跑那一帧起点行必须满亮（写成 cursor > 0 会漏掉它）');
@@ -1576,7 +1600,7 @@ test('★线条脉冲：回正收手后从起点再扫一遍，三角波带、�
     // ④ 波带**窄**：任意时刻亮着的行数不超过 `2 × BAND_ROWS` 行
     //    （波前落在两行之间时两侧各占一行，所以上界是 2×BAND 而不是 BAND）。
     let maxLitRows = 0;
-    for (let t = start; t <= end; t += ZC_VICTORY_SWEEP_PULSE_STEP_SECONDS / 8) {
+    for (let t = pulseStart; t <= end; t += ZC_VICTORY_SWEEP_PULSE_STEP_SECONDS / 8) {
         const cursor = victorySweepPulseCursor(t, stepCount);
         let lit = 0;
         for (let step = 0; step < stepCount; step += 1) {
@@ -1604,7 +1628,11 @@ test('★线条脉冲：回正收手后从起点再扫一遍，三角波带、�
     //    这是"最后一帧还要再刷一次轮廓"的原因 —— 少了那一帧，亮线会永久留在盘上。
     const finalCursor = victorySweepPulseCursor(end, stepCount);
     for (let step = 0; step < stepCount; step += 1) {
-        assert.equal(victorySweepPulseMix(finalCursor, step), 0, `收手时第 ${step} 行不该还亮着`);
+        //  判**档位**而不是 mix 本身：`end` 是几段浮点相加出来的，游标可能停在
+        //  `19.999999999999996` —— 那一格 mix 会残留 1e-15 量级的尾巴，但档位 `round` 后是 0，
+        //  屏幕上就是"不亮"。判 mix === 0 会把这种纯浮点噪声当成回归。
+        assert.equal(victorySweepPulseLevel(victorySweepPulseMix(finalCursor, step)), 0,
+            `收手时第 ${step} 行不该还亮着`);
     }
     // 波前走出最后一行所需的那个距离，恰好是 `PULSE_BAND_ROWS`。
     assert.ok(Math.abs(finalCursor - (stepCount - 1 + ZC_VICTORY_SWEEP_PULSE_BAND_ROWS)) < 1e-9,
@@ -1625,7 +1653,8 @@ test('结算扫场整行推进、播完才收手，且不读模型的地块归�
         buildVictorySweepPlan, ZC_VICTORY_SWEEP_STEP_SECONDS, ZC_VICTORY_SWEEP_REVERT_STEP_SECONDS,
         ZC_VICTORY_SWEEP_REVERT_LEAD_ROWS, victorySweepDuration, victorySweepRevertStartSeconds,
         victorySweepRevertCursor, victorySweepRevertEndSeconds, victorySweepPulseSeconds,
-        victorySweepPulseCursor, victorySweepPulseLevel, victorySweepPulseMix,
+        victorySweepPulseCursor, victorySweepPulseLevel, victorySweepPulseMix, victorySweepRevertMix,
+        victorySweepPulseStartSeconds,
         ZC_VICTORY_SWEEP_PULSE_STEP_SECONDS, ZC_VICTORY_SWEEP_PULSE_BAND_ROWS,
         ZC_VICTORY_SWEEP_PULSE_LEVELS,
     } = load('./ZCGameViewUtil');
@@ -1725,31 +1754,24 @@ test('结算扫场整行推进、播完才收手，且不读模型的地块归�
     // 但视图拿到的仍是同一个值 —— 真正「闪不闪」由 `sweepFill` 的权重决定，见视图用例）。
     assert.ok(litIds().every((id) => (shimmerOf.get(id) ?? 0) >= 0));
 
-    // 重开一趟，直接推进到「回正起点 + 两步」，逐行核对精确的 mix：
-    // 头部两行已经回正（mix 1）、第 2 行取行内比例 0.5、再往后仍是纯深色。
+    // 重开一趟：先验**脉冲起跑**（2026-11-07 起它跟着铺色走，比"回正两步"还早 ⇒ 必须先推进它），
+    // 再回到「回正起点 + 两步」逐行核对精确的 mix。
     assert.equal(world.advanceVictorySweep(model, 0), true);
     world.clearVictorySweep();
     assert.equal(world.startVictorySweep(model, 'player'), true);
     elapsed = 0;
-    advanceTo(victorySweepRevertStartSeconds(stepCount) + ZC_VICTORY_SWEEP_REVERT_STEP_SECONDS * 2.5);
-    for (const hex of playable) {
-        const step = plan.steps.get(hex.id)!;
-        if (step <= 1) assert.equal(mixOf.get(hex.id), 1, `第 ${step} 行应已回正`);
-        // `dt` 是逐次累加的，游标带了 1e-15 量级的浮点误差，按容差判。
-        if (step === 2) assert.ok(Math.abs(mixOf.get(hex.id)! - 0.5) < 1e-9, '正推的那一行取行内比例');
-        if (step > 3) assert.equal(mixOf.get(hex.id), 0, `第 ${step} 行不该已经回正`);
-    }
 
-    // ── ③ 线条脉冲段（2026-10-16 需求：「回正动画结束再增加一个线条波动的脉冲效果，
-    //    类似回正动画的」）────────────────────────────────────────────────────────
+    // ── ③ 线条脉冲段（2026-11-07 需求：「脉冲动画应该早一点播放，紧跟在叠色格子后 1~2 行即可」）──
     //
     //  它和 ①② 的观察面**不同**：①② 改的是每格底色（`setSweepOwner`），③ 一格底色都不改，
     //  动的是**共享轮廓层**上的亮线 —— 所以判据从 `world.sweep.pulseLevelOf` 取
     //  （轮廓层就是读它），顺带核对探针真的把这个档位记进去了（不记 ⇒ 亮带会定格不动）。
-    const pulseStart = victorySweepRevertEndSeconds(stepCount);
-    assert.ok(pulseStart < victorySweepDuration(stepCount), '脉冲段必须排在回正之后');
-    assert.ok(Math.abs(victorySweepDuration(stepCount) - pulseStart - victorySweepPulseSeconds(stepCount)) < 1e-9,
-        '整段总长 = 回正收手时刻 + 脉冲段长');
+    const pulseStart = victorySweepPulseStartSeconds(stepCount);
+    assert.ok(pulseStart < victorySweepRevertEndSeconds(stepCount),
+        '脉冲必须比回正收手早得多（改前要等回正整段收手才开始）');
+    assert.ok(Math.abs(victorySweepDuration(stepCount)
+        - Math.max(victorySweepRevertEndSeconds(stepCount), pulseStart + victorySweepPulseSeconds(stepCount))) < 1e-9,
+        '整段总长 = max(回正收手, 脉冲收手)');
     const probeLevelOf = (hexId: number): number => {
         const drawn: number[] = world.outlineDrawn;
         // 探针每格压 4 个数：id / 阵营序号 / mask / 脉冲档位（见 `redrawSharedOutline`）。
@@ -1761,10 +1783,10 @@ test('结算扫场整行推进、播完才收手，且不读模型的地块归�
     const startRowIds = firstRowIds;
     const lastRowIds = playable.filter((hex) => plan.steps.get(hex.id) === stepCount - 1).map((hex) => hex.id);
 
-    // 回正还没收手：一格都不该脉冲。
+    // 起跑之前：一格都不该脉冲（那会儿才铺了 0~1 行）。
     advanceTo(pulseStart - 1e-6);
     assert.ok(playable.every((hex) => world.sweep.pulseLevelOf(hex.id) === 0),
-        '回正段期间不该有脉冲（它是"回正结束后"才开始的一段）');
+        '铺色还没铺到 LEAD_ROWS 行时不该有亮线');
     // 起跑那一刻波前正压在**起点那一行**上 ⇒ 那一行最亮、终点那一行还是 0。
     assert.equal(advanceTo(pulseStart), true, '脉冲段还没播完，调用方要继续等');
     assert.equal(world.sweep.pulseLevelOf(startRowIds[0]), ZC_VICTORY_SWEEP_PULSE_LEVELS,
@@ -1774,6 +1796,17 @@ test('结算扫场整行推进、播完才收手，且不读模型的地块归�
         '共享轮廓层的探针必须记下脉冲档位，否则亮带会定格在那一帧不动');
     assert.ok(world.outlineGraphics.commands.some((command: any) => command.kind === 'stroke' && command.lineWidth === 7),
         '脉冲档位必须实际画成共享轮廓亮线');
+
+    // 回正游标走到「起点 + 两步」：头部两行已经回正（mix 1）、第 2 行取行内比例 0.5、
+    // 再往后仍是纯深色。脉冲此刻正压在游标那一行上（两者同速、落后 `LEAD_ROWS` 行）。
+    advanceTo(victorySweepRevertStartSeconds(stepCount) + ZC_VICTORY_SWEEP_REVERT_STEP_SECONDS * 2.5);
+    for (const hex of playable) {
+        const step = plan.steps.get(hex.id)!;
+        if (step <= 1) assert.equal(mixOf.get(hex.id), 1, `第 ${step} 行应已回正`);
+        // `dt` 是逐次累加的，游标带了 1e-15 量级的浮点误差，按容差判。
+        if (step === 2) assert.ok(Math.abs(mixOf.get(hex.id)! - 0.5) < 1e-9, '正推的那一行取行内比例');
+        if (step > 3) assert.equal(mixOf.get(hex.id), 0, `第 ${step} 行不该已经回正`);
+    }
 
     // 推进到波前压过中间某一行：那一行到最亮，起点行已经灭掉（带子扫过去了）。
     const midRow = Math.floor(stepCount / 2);
@@ -1790,8 +1823,14 @@ test('结算扫场整行推进、播完才收手，且不读模型的地块归�
             assert.equal(world.sweep.pulseLevelOf(hex.id), 0, `第 ${step} 行离波前太远，不该亮`);
         }
     }
-    // 底色全程一格都不再变（脉冲只动描边，不碰填充）——这是③和①②的区别。
-    assert.ok(playable.every((hex) => mixOf.get(hex.id) === 1), '脉冲段不该改动任何一格的底色');
+    // 脉冲只动描边、不碰填充：每格底色仍**恰好**等于回正游标给出的值（此刻底色还在推进，
+    // 所以不能断言"全是 1" —— 那在脉冲提前之后已经不成立了）。
+    const mixCursor = victorySweepRevertCursor(elapsed, stepCount);
+    for (const hex of playable) {
+        const step = plan.steps.get(hex.id)!;
+        assert.ok(Math.abs(mixOf.get(hex.id)! - victorySweepRevertMix(mixCursor, step)) < 1e-9,
+            `第 ${step} 行的底色必须只由回正游标决定，脉冲不许改它`);
+    }
 
     // 走到终点：整盘归零，`advance` 恰好在这里收手。
     assert.equal(advanceTo(victorySweepDuration(stepCount)), false, '播完就不该再让调用方等');
@@ -1806,7 +1845,10 @@ test('结算扫场整行推进、播完才收手，且不读模型的地块归�
 
     assert.equal(litIds().length, playable.length);
     // 收手时整盘都已经回正到阵营当前色（否则摘掉覆盖会看到一次跳色）。
-    assert.ok(playable.every((hex) => mixOf.get(hex.id) === 1), '播完必须整盘回正');
+    //  ⚠️ 按容差判：`elapsed` 是逐帧累加的，停在 `duration` 那一刻游标可能是 19.999999999999996；
+    //  真实播放里下一帧必然 ≥ `duration`、游标被钳到 `stepCount` ⇒ 恒 1。
+    assert.ok(playable.every((hex) => Math.abs(mixOf.get(hex.id)! - 1) < 1e-6),
+        '播完必须整盘回正');
 
     world.clearVictorySweep();
     assert.ok(playable.every((hex) => painted.get(hex.id) === null));

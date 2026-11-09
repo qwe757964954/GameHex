@@ -1005,15 +1005,19 @@ export class BigMapModel {
         if (this.isDisposed || !this.deps.campRepository) return;
         const ids = campIds.filter((id) => this.worldInstance.cities.has(id));
         const repository = this.deps.campRepository;
-        // 🔴 角色名单只在「这座城还没成功查过」时补一次：
-        // `CmdSlgCampRoleInfosReqMsg` 一次只能带一个 campId（协议限制），跟着 5 秒轮询走
-        // 会变成「每座可见城每 5 秒一条」；而角色的血量/位置/进出已经有
-        // `CmdSlgGameRoleInfoBroMsg` 四种事件在推（事件都带完整 `SlgGameCameRoleInfo`）。
-        // 失败（超时/坏包）不会写快照 ⇒ `rolesOf` 仍是 null，下一轮自动重试。
-        const rolesMissing = ids.filter((id) => repository.rolesOf(id) === null);
-        const loaded = await Promise.all([repository.refreshSimple(ids), ...rolesMissing.map((id) => repository.refreshRoles(id))]);
-        if (this.isDisposed) return;
-        if (loaded.some(Boolean)) this.emit();
+        await Promise.all([
+            ...ids.filter((id) => this.deps.rankProvider && !this.rankBoards.has(id))
+                .map((id) => this.refreshCityRank(id)),
+            repository.refreshSimple(ids, true).then((loaded) => {
+                if (!this.isDisposed && loaded) this.emit();
+            }),
+            ...ids.filter((id) => repository.rolesOf(id) === null).map(async (id) => {
+                const loaded = await repository.refreshRoles(id);
+                if (this.isDisposed) return;
+                this.campRoleStatuses.set(id, loaded ? 'ready' : 'failed');
+                this.emit();
+            }),
+        ]);
     }
 
     async refreshCampDetail(campId: number, force = false): Promise<void> {
@@ -1028,14 +1032,15 @@ export class BigMapModel {
             return;
         }
         if (!force && this.campDetailStatuses.get(campId) === 'loading') return;
+        const rolesCached = !force && repository.rolesOf(campId) !== null;
         this.campDetailStatuses.set(campId, 'loading');
-        this.campRoleStatuses.set(campId, 'loading');
+        this.campRoleStatuses.set(campId, rolesCached ? 'ready' : 'loading');
         this.emit();
         // 两条协议并行：据点状态（占领/开放）与角色列表互不依赖，
         // 串行会把详情面板的等待时间翻倍，且任一条失败不该拖住另一条。
         const [detailLoaded, rolesLoaded] = await Promise.all([
             repository.refreshDetail([campId], force),
-            repository.refreshRoles(campId, force),
+            rolesCached ? Promise.resolve(true) : repository.refreshRoles(campId, force),
         ]);
         if (this.isDisposed) return;
         this.campDetailStatuses.set(campId, detailLoaded ? 'ready' : 'failed');
@@ -1103,7 +1108,7 @@ export class BigMapModel {
     }
 
     /**
-     * 刷新某座城的榜单 —— 进详情/进排行页时调，拿回来缓存住并通知重绘。
+     * 刷新某座城的榜单 —— 进入视野/详情/排行页时调，缓存并通知重绘。
      *
      * 联机失败保留旧榜；离线样本仍回退到 NPC 榜。退出后不应用异步结果。
      */

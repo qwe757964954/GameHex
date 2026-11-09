@@ -254,14 +254,30 @@ export class TerritoryProgress {
      * ⚠️ 调用前仍需先调 {@link markCellsUnlocked}：服务端快照里随机格在 `unlockCells`，
      * 两个集合都保留，与已领取的 `fixedResource` 格「同时在 unlockable 与 owned」口径一致。
      *
+     * ## 🔴 只认随机候选格（2026-11-06 修 chapter_02 的「boss 没通关就变蓝」）
+     *
+     * 入参是**服务端的解锁回包**，而回包的 `cellId` 是「一片区域一起解锁」的整批
+     * （实测：请求 327 → 回 `[327, 328]`）。原实现对整批无差别地记 `owned`，于是只要回包里
+     * 混进一个关卡 / 首领格，那格就变成「已通关」—— 表现是**地块变草地 + 编号气泡变蓝
+     * （`isAreaPassed` 判 `owned`）+ `owned ⊆ opened` 直接把后继关卡提前揭示**，
+     * 而玩家根本没打过那一关（用户 2026-11-06：chapter_02 的 boss「尚未通关就已经显示成
+     * 已通过的蓝色气泡」「解锁关系没有绑到 2-9，提前披露了」）。
+     *
+     * 「解锁 = 通关」这条特例**只对随机格成立**（服务端在解锁时结算发奖），
+     * 关卡 / 首领 / 宝箱格必须走各自的 passCell 或战斗流程 ⇒ 这里按 `randomSites.candidateCells`
+     * 白名单过滤。⚠️ 老地图没有 `randomSites` 时（清单为空）保持原样全收，避免整章随机格失效。
+     *
      * @param cellIds 服务端回包给的格子清单（与解锁同一清单）。
      * @returns 实际新增占领的格子（升序），供调用方决定写盘 / 刷新。
      */
     markCellsPassed(cellIds: readonly number[]): number[] {
         const total = this.map.rows * this.map.columns;
+        const candidates = this.randomCandidateCells();
         const added: number[] = [];
         for (const cell of cellIds) {
             if (!Number.isInteger(cell) || cell < 0 || cell >= total) continue;
+            // 白名单为空 = 这张图没配随机点 ⇒ 不做过滤（老图兼容）；配了就必须是候选格。
+            if (candidates && !candidates.has(cell)) continue;
             this.explorations.delete(cell);
             this.disabled.delete(cell);
             if (this.owned.has(cell)) continue;
@@ -269,6 +285,15 @@ export class TerritoryProgress {
             added.push(cell);
         }
         return added.sort((a, b) => a - b);
+    }
+
+    /** 随机候选格集合（缓存）；`null` = 这张图没配 `randomSites`。 */
+    private randomCandidatesCache: Set<number> | null | undefined;
+    private randomCandidateCells(): Set<number> | null {
+        if (this.randomCandidatesCache !== undefined) return this.randomCandidatesCache;
+        const cells = this.map.randomSites?.candidateCells;
+        this.randomCandidatesCache = cells?.length ? new Set(cells) : null;
+        return this.randomCandidatesCache;
     }
 
     /**
@@ -453,8 +478,26 @@ export class TerritoryProgress {
         };
     }
 
+    /**
+     * 这个 cellId 落在哪个站点的 `footprint` 里（一格最多一个站点）。
+     *
+     * `map` 在实例生命周期内不变 ⇒ 建一次 `footprint → site` 索引后缓存：
+     * 它现在走**渲染热路径**（`isPrerequisiteComplete` ← `territoryRevealedCells` 每帧逐站点判），
+     * 原来的 `map.sites.find(...)` 是 O(站点数) 线性扫描，全量重渲染时是几千次数组遍历。
+     */
+    private siteByCellCache: Map<number, TerritorySite> | null = null;
     private siteForCell(cellId: number): TerritorySite | null {
-        return this.map.sites.find((site) => site.footprint.includes(cellId)) ?? null;
+        if (!this.siteByCellCache) {
+            const index = new Map<number, TerritorySite>();
+            for (const site of this.map.sites) {
+                for (const cell of site.footprint) {
+                    // 与原来的 `find` 同口径：一个格子只归**第一个**命中的站点。
+                    if (!index.has(cell)) index.set(cell, site);
+                }
+            }
+            this.siteByCellCache = index;
+        }
+        return this.siteByCellCache.get(cellId) ?? null;
     }
 
     /**
@@ -473,7 +516,18 @@ export class TerritoryProgress {
         return Array.from(new Set(required)).filter((cell) => !this.isPrerequisiteComplete(cell));
     }
 
-    private isPrerequisiteComplete(cellId: number): boolean {
+    /**
+     * 这一格**是否已经「完成」**（可以当作别人的前置了）。
+     *
+     * 🔴 **唯一口径**：点击拦截（{@link prerequisiteBlockers} ← `checkUnlock`）与
+     * **显示侧的揭示**（`territoryRevealedCells`）都走这一个方法。
+     *
+     * 2026-11-06 之前显示侧自己写的是「`owned ∪ unlocked` 里有就算满足」，
+     * 于是**只要把 2-9 的格子用银币解锁、根本不用打**，2-10（首领）就露出来了 ——
+     * 用户原话：「boss 关卡的解锁关系没有绑定到 2-9 的关卡中，提前披露了」。
+     * 拦截那一侧本来就是「必须通关」，两边不同源才是那个 bug 的根。
+     */
+    isPrerequisiteComplete(cellId: number): boolean {
         if (this.owned.has(cellId)) return true;
         const site = this.siteForCell(cellId);
         // 固定资源只进入 unlockCells，不进入 passCells；后继站点仍需把它视为已完成。

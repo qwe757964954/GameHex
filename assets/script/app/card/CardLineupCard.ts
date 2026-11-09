@@ -1,9 +1,14 @@
-import { _decorator, Component, Label, Node, ProgressBar, Sprite, SpriteFrame, UITransform } from 'cc';
+import { _decorator, Color, Component, Label, Node, ProgressBar, Sprite, SpriteFrame } from 'cc';
 import type { ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
-import { applyCardHeroArt } from './CardHeroView';
 import { CARD_LINEUP_TEXTS } from './CardLineupTexts';
 
 const { ccclass, property } = _decorator;
+
+/** 已解锁：乘算白 = 原色。 */
+const COLOR_NORMAL = new Color(255, 255, 255, 255);
+
+/** 未解锁：整卡压暗并略微偏冷，对齐参考图里那张被遮暗的灰蓝卡（压暗量级同 `ChangeHeadItem` 的置灰）。 */
+const COLOR_LOCKED = new Color(92, 98, 112, 255);
 
 /** 卡牌一次渲染要的三张图。 */
 export interface ZCCardFrames {
@@ -33,9 +38,9 @@ export interface ZCCardFragmentProgress {
 /**
  * 卡牌阵容页卡库的单张卡。
  *
- * 层次：卡面 → 职业角标 → 立绘/头像 → 已出战标 → 底部（等级/ 卡牌进度条+ 卡牌数）。
+ * 层次：卡面 → 职业角标 → 立绘/头像 → 已出战标 → 底部（等级/ 卡牌进度条+ 卡牌数）→ 未解锁锁标。
  *
- * ## 三处口径
+ * ## 四处口径
  *
  *  1. `LevelLabel` = **卡牌等级**（`heroLevels`，未拥有时隐藏等级底板）。
  *     ⚠️ 2026-10-10 之前这里放的是**品级数字**（绿1/蓝2/紫3/金4）：品级是静态配置、
@@ -45,6 +50,8 @@ export interface ZCCardFragmentProgress {
  *  3. 进度是**引擎 `cc.ProgressBar`**（2026-10-10 之前是手改 `ProgressFill` 的
  *     `contentSize.width`）—— 裸 Sprite 改宽度会在 `sizeMode=TRIMMED` 下被贴图原尺寸
  *     覆写回去（规则 129），而且拿不到引擎的进度动画。
+ *  4. 未解锁（等级 0）= 卡面 / 角标 / 立绘整体压暗 + 右上角 `Lock` 显形。压暗用
+ *     `Sprite.color` 乘算而非叠遮罩，理由见 `applyLocked`。
  *
  * @param card 这张卡。**当前渲染不用它的任何字段**（品级已交给 `ClassBadge` 图标），
  *   但保留在签名里：条目是虚拟列表复用槽位，「这张槽位正在画哪张卡」只能靠入参区分；
@@ -60,10 +67,6 @@ export class CardLineupCard extends Component {
 
     @property({ type: Sprite, tooltip: 'Hero：营地雕像' })
     hero: Sprite = null;
-
-    @property({ type: UITransform, tooltip: 'Hero：立绘展示框' })
-    heroTransform: UITransform = null!;
-
 
     @property({ type: Node, tooltip: 'OnField：已出战标（未上阵隐藏）' })
     onField: Node = null;
@@ -82,6 +85,9 @@ export class CardLineupCard extends Component {
 
     @property({ type: Label, tooltip: 'CardFragmentCountLabel：卡牌数「已持有/所需」' })
     cardFragmentLabel: Label = null;
+
+    @property({ type: Node, tooltip: 'Lock：未解锁锁标（卡框右上角，仅未解锁时显示）' })
+    lock: Node = null;
 
     @property({ tooltip: '碎片数占位值（页面没给进度时的兜底）' })
     fallbackOwned = 3;
@@ -118,6 +124,7 @@ export class CardLineupCard extends Component {
      *   800ms 的来源（实测 2026-11-04：卡库 817ms / 整页 822ms），且虚拟列表只用得到
      *   可见的十来个槽位，全量备图本来就在为看不见的卡付钱。
      * @param progress 不传用占位值。
+     * @param level 卡牌等级；`0` = 未解锁 —— 整卡压暗 + 右上角挂锁、不显示等级底板。
      */
     render(
         card: ZCDeckCard,
@@ -147,6 +154,8 @@ export class CardLineupCard extends Component {
         this.levelLabel.string = String(normalizedLevel);
         this.onField.active = onField;
         this.onFieldLabel.string = CARD_LINEUP_TEXTS.onField;
+        //  未解锁口径与排序分组同一把尺子：等级 > 0 才算已解锁（后端列表里没有这张卡 ⇒ 0 级）。
+        this.applyLocked(normalizedLevel <= 0);
 
         // 满级 / 无需求 ⇒ 进度走满、文案说「已满级」，别显示成 `12/0`。
         this.cardFragmentLabel.string = maxed
@@ -156,6 +165,21 @@ export class CardLineupCard extends Component {
         //   ProgressBar 自己在 `updateBarStatus()` 里按 anchorX 算填充宽度，
         //   外面改宽度会被它下一次刷新覆盖回去（两处写同一个值 = 谁赢看时序）。
         this.progressBar.progress = maxed ? 1 : need > 0 ? Math.min(1, owned / need) : 0;
+    }
+
+    /**
+     * 未解锁态：整卡压暗 + 右上角挂锁。**无条件写**（槽位复用，条件式赋值会把上一张的锁留在这一张上）。
+     *
+     * 压暗走 `Sprite.color` 乘算，而不是在卡框上铺一张黑色遮罩：这里的立绘是 `sizeMode=RAW`
+     * 的 256×256 原图，比卡框（155×195）大一圈，矩形遮罩只能压住卡框那一块，越界的头肩会
+     * 留在亮处；乘算跟着图走，没有接缝，也不用再为遮罩节点同步尺寸。
+     */
+    private applyLocked(locked: boolean): void {
+        const tint = locked ? COLOR_LOCKED : COLOR_NORMAL;
+        this.face.color = tint;
+        this.hero.color = tint;
+        this.badge.color = tint;
+        this.lock.active = locked;
     }
 
     /**
@@ -178,6 +202,6 @@ export class CardLineupCard extends Component {
     private applyFrames(frames: ZCCardFrames | null): void {
         this.face.spriteFrame = frames ? frames.face : null;
         this.badge.spriteFrame = frames ? frames.badge : null;
-        applyCardHeroArt(this.hero, this.heroTransform, frames ? frames.hero : null);
+        this.hero.spriteFrame = frames ? frames.hero : null;
     }
 }

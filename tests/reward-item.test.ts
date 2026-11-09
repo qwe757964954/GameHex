@@ -8,6 +8,10 @@ import ts from 'typescript';
 import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
 import type { AssetService, AssetLoadOptions } from '../assets/script/core/asset/AssetService';
 import { assetPath } from './helpers/asset-paths';
+import { EventMgr } from '../assets/script/framework/event/EventMgr';
+import { REWARD_ITEM_DETAIL_INTENT } from '../assets/script/app/common/RewardItemEvents';
+import * as itemDetailTable from '../assets/script/app/itemdetail/ItemDetailTable';
+import * as resTypes from '../assets/script/app/common/ResTypes';
 
 /**
  * **公共奖励格** `ui/common/RewardItem.prefab` 的判据。
@@ -88,6 +92,8 @@ function loadClass(overrides: Record<string, unknown> = {}): {
     class Label {}
     // 组件内部会读表 + 拼路径：这些纯函数在单测里给最小桩（帧加载走 `assets`，没注入就是 null）
     const stubs: Record<string, unknown> = {
+        '../../framework/event/EventMgr': { EventMgr },
+        './RewardItemEvents': { REWARD_ITEM_DETAIL_INTENT },
         '../../core/asset/ResourceScope': { ResourceScope },
         '../../framework/ref/RefUtil': { RefUtil: { instance: { getRefAllAsync: async () => [] } } },
         '../ArtPaths': { spriteFramePathOf: (path: string) => path },
@@ -105,6 +111,7 @@ function loadClass(overrides: Record<string, unknown> = {}): {
         if (request.endsWith('/ComponentController')) return componentControllerModule();
         return {
             Component, Sprite, Label,
+            Button: { EventType: { CLICK: 'click' } },
             _decorator: { ccclass: () => (value: unknown) => value, property: () => () => undefined },
         };
     } });
@@ -218,6 +225,138 @@ test('RewardItemView：只喂 {resId, amount} —— 数量/概率同步写，�
     assert.equal(view.rate.node.active, false, '不传概率就整行隐藏');
 
     // 条数由 `setTotalCount` 限死 ⇒ 不再需要「空位 clear」那条路径
+});
+
+test('公共奖励格点击派发当前物品意图，复用后不打开旧物品，非法 ID 不派发', () => {
+    const View = loadClass();
+    const view = new View();
+    const listeners = new Map<string, () => void>();
+    view.node = { active: true, on: (event: string, handler: () => void, owner: object) => listeners.set(event, handler.bind(owner)) };
+    view.num = { string: '' };
+    view.rate = { string: '', node: { active: false } };
+    view.frame = {}; view.icon = {};
+    view.applyFrames = async () => {};
+    const owner = {};
+    const seen: number[] = [];
+    EventMgr.instance.on(REWARD_ITEM_DETAIL_INTENT, intent => seen.push(intent.resId), owner);
+    try {
+        view.onLoad();
+        const click = listeners.get('click');
+        assert.ok(click);
+        click();
+        view.render({ resId: 16014, amount: 8 }); click();
+        view.render({ resId: 18003, amount: 10 }); click();
+        view.render({ resId: -1, amount: 10 }); click();
+        assert.deepEqual(seen, [16014, 18003]);
+        const button = (root._components ?? []).map(at).find(comp => comp?.__type__ === 'cc.Button');
+        assert.ok(button, '公共 prefab 必须挂 Button');
+        assert.equal(button._transition, 0);
+        assert.equal(button._target, null);
+    } finally { EventMgr.instance.offTarget(owner); view.onDestroy(); }
+});
+
+test('奖励详情由组合根响应，层级覆盖结算、预览不伪造背包数量，销毁后退订', async () => {
+    const exports: Record<string, any> = {};
+    const opened: Array<Record<string, any>> = [];
+    const code = ts.transpileModule(readFileSync('assets/script/app/bootstrap/ProcedureBootstrap.ts', 'utf8'), {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
+    }).outputText;
+    runInNewContext(code, { exports, console, require: name => {
+        if (name === 'cc') return { Component: class {}, _decorator: { ccclass: () => value => value } };
+        if (name.endsWith('/EventMgr')) return { EventMgr };
+        if (name.endsWith('/RewardItemEvents')) return { REWARD_ITEM_DETAIL_INTENT };
+        if (name.endsWith('/PopupDef')) return { PopupLayer: { SYSTEM: 1 } };
+        if (name.endsWith('/ItemDetailPage')) return { ItemDetailPage: { open: async options => { opened.push(options); } } };
+        if (name.endsWith('/GameNet')) return { GameNet: { instance: { addEvent() {}, removeEvent() {} } } };
+        if (name.endsWith('/FW')) return { FW: {} };
+        return {};
+    } });
+    const bootstrap = new exports.ProcedureBootstrap();
+    bootstrap.configurePresentation();
+    try {
+        EventMgr.instance.emit(REWARD_ITEM_DETAIL_INTENT, { resId: 16014 });
+        EventMgr.instance.emit(REWARD_ITEM_DETAIL_INTENT, { resId: -1 });
+        assert.equal(opened.length, 1);
+        assert.equal(opened[0].userData.resId, 16014);
+        assert.equal(opened[0].userData.number, 0);
+        assert.equal(opened[0].layer, 1);
+        assert.equal(opened[0].allowMultiple, true);
+    } finally { bootstrap.onDestroy(); }
+    EventMgr.instance.emit(REWARD_ITEM_DETAIL_INTENT, { resId: 18003 });
+    assert.equal(opened.length, 1);
+});
+
+test('奖励资源详情支持 roleProperty 名称、说明和图标，item 配置优先，未知 ID 保持空态', async () => {
+    const exports: Record<string, any> = {};
+    const tables = {
+        item: [{ resId: 18003, name: '卡牌碎片', desc: '碎片说明', icon: 'icons/item/card', quality: 2 }],
+        roleProperty: [
+            { resId: 7, name: '银币', describe: '通用货币', icon: '图标_铜币', quality: 3, access: [22], useJump: 8 },
+            { resId: 18003, name: '不应覆盖物品' },
+        ],
+        viewtype: [], itemCraft: [],
+    };
+    const code = ts.transpileModule(readFileSync('assets/script/app/itemdetail/ItemDetailRepository.ts', 'utf8'), {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+    }).outputText;
+    runInNewContext(code, { exports, console, require: name => {
+        if (name.endsWith('/RefUtil')) return { RefUtil: { instance: {
+            getRefAllAsync: async table => tables[table] ?? [], getRefAsync: async () => null,
+        } } };
+        if (name.endsWith('/ResTypes')) return resTypes;
+        if (name === './ItemDetailTable') return itemDetailTable;
+        return {};
+    } });
+    const repository = exports.itemDetailRepository;
+    const silver = await repository.load(7, 0);
+    assert.equal(silver.row.name, '银币');
+    assert.equal(silver.row.desc, '通用货币');
+    assert.equal(silver.row.quality, 3);
+    assert.equal(silver.row.icon, 'icons/resource/图标_铜币/spriteFrame');
+    assert.equal(silver.row.useJump, 0, '资源详情不开放物品使用操作');
+    assert.equal(silver.canCompos, false);
+    assert.equal((await repository.load(18003, 0)).row.name, '卡牌碎片');
+    assert.equal((await repository.load(1042537, 0)).row, null);
+});
+
+test('任务详情按当前奖励渲染公共框，复用清理多余格，旧请求和关窗后的结果不能覆盖', async () => {
+    const exports: Record<string, any> = {};
+    const renders: Array<{ resId: number; amount: number } | null> = Array(8).fill(null);
+    const slots = renders.map((_, index) => ({
+        node: { active: true, setPosition() {} },
+        render(data) { renders[index] = data; },
+    }));
+    const pending: Array<(snapshot: unknown) => void> = [];
+    const code = ts.transpileModule(readFileSync('assets/script/app/maintask/MainTaskDetailPage.ts', 'utf8'), {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
+    }).outputText;
+    runInNewContext(code, { exports, console, require: name => {
+        if (name === 'cc') return { Button: { EventType: { CLICK: 'click' } },
+            _decorator: { ccclass: () => value => value, property: () => () => {} } };
+        if (name.endsWith('/PopupBase')) return { PopupBase: class {} };
+        return {};
+    } });
+    const page = new exports.MainTaskDetailPage();
+    page.node = { isValid: true }; page.isPopupOpen = true;
+    page.taskTitle = { string: '' }; page.closeButton = { on() {} }; page.btnGo = { on() {} };
+    page.rewardList = { children: slots.map(slot => ({ getComponent: () => slot })) };
+    page.setRepository({ loadFirst: () => new Promise(resolve => pending.push(resolve)) });
+    page.onInit();
+    const first = page.refresh();
+    const latest = page.refresh();
+    pending[1]({ configured: true, detailTitle: '新任务', rewards: [{ resId: 7, number: 10 }, { resId: 18003, number: 2 }] });
+    await latest;
+    assert.equal(renders[0].resId, 7); assert.equal(renders[0].amount, 10);
+    assert.equal(renders[1].resId, 18003);
+    assert.equal(slots[2].node.active, false);
+    pending[0]({ configured: true, detailTitle: '旧任务', rewards: [] }); await first;
+    assert.equal(page.taskTitle.string, '新任务');
+    const reused = page.refresh();
+    pending[2]({ configured: true, detailTitle: '另一任务', rewards: [{ resId: 10, number: 3 }] }); await reused;
+    assert.equal(renders[0].resId, 10); assert.equal(slots[1].node.active, false);
+    const closed = page.refresh(); page.isPopupOpen = false; page.onClose();
+    pending[3]({ configured: true, detailTitle: '迟到任务', rewards: [] }); await closed;
+    assert.equal(page.taskTitle.string, '另一任务');
 });
 
 test('公共奖励格：品质框路径必须带 `image/` 前缀（`qualityFrameArtPath` 只给相对片段）', () => {

@@ -37,6 +37,8 @@ export interface ZCGeneralStarSelection {
 /** client/server 交给战斗编译器的构筑快照；修改器 id 仍会在开战前经过 PVP 白名单。 */
 export interface ZCCombatBuildSelection {
     unitId: string;
+    /** 服务端卡牌绝对属性；覆盖同项本地成长、星级与技能数值，阵营倍率仍在最后应用。 */
+    serverAttributes?: Readonly<Partial<Pick<ZCUnitDefinition, 'attack' | 'maxHp'>>>;
     level?: number;
     /** 英雄养成等级：用于按 unlockHeroLevel 自动选择 J 表中的技能升级档。 */
     heroLevel?: number;
@@ -621,6 +623,26 @@ export function compileZCCombatBuild(
     append(selection.equipmentModifierIds, 'equipment');
     append(selection.gemModifierIds, 'gem');
     append(selection.skillModifierIds, 'skill');
+    if (selection.serverAttributes) {
+        const typedModifiers: ZCTypedModifier[] = [];
+        for (const statId of ['attack', 'maxHp'] as const) {
+            const value = selection.serverAttributes[statId];
+            if (value === undefined) continue;
+            if (!Number.isFinite(value) || value < 0 || (statId === 'maxHp' && value === 0)) {
+                throw new Error(`[ZCModifierRuntime] 服务端英雄属性无效：${selection.unitId}:${statId}=${value}`);
+            }
+            typedModifiers.push({
+                sourceId: selection.unitId, sourceKind: 'server', targetUnitId: selection.unitId,
+                domain: 'unit', statId, operation: 'override', value, priority: 1000,
+            });
+        }
+        if (typedModifiers.length) result.push({
+            sourceKey: `serverAttrs:${selection.unitId}`, sourceKind: 'server', targetUnitId: selection.unitId,
+            appliedModifierIds: [], rawAttributes: {}, statPatch: {}, typedModifiers,
+            skillPlans: [], breakdown: applyZCTypedUnitModifiers(assertUnit(selection.unitId, units), typedModifiers).breakdown,
+            effects: [], unsupportedAttributes: [], configHash: catalogs.adapters.configHash,
+        });
+    }
     return result;
 }
 

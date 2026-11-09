@@ -1,5 +1,7 @@
 import { HEX_GRID_LOGICAL_ROW_STEP } from '../../../core/hex/HexGridLayout';
+import { missileLog } from '../ZCMissileSkillDiagnostics';
 import { ZCCaptureSystem } from './systems/ZCCaptureSystem';
+import { ZCNeutralFeatureSystem, isZCAwakeMonster } from './systems/ZCNeutralFeatureSystem';
 import type { IZCModelServices } from './systems/ZCModelServices';
 import { ZCMovementSystem } from './systems/ZCMovementSystem';
 import { ZCProjectileContext, ZCProjectileSystem } from './systems/ZCProjectileSystem';
@@ -19,7 +21,7 @@ export const ZC_MAX_TICK_SECONDS = 5;
 const EMPTY_CONNECTED_DEVELOPED_HEXES: readonly number[] = [];
 
 import { ZCArtifactSystem } from './systems/ZCArtifactSystem';
-import { ZCAttackResolutionSystem, type IZCAttackResolutionContext } from './systems/ZCAttackResolutionSystem';
+import { ZCAttackResolutionSystem, type IZCAttackResolutionContext, type IZCStructureDamageSource } from './systems/ZCAttackResolutionSystem';
 import { ZCDamageResolutionSystem, type IZCDamageResolutionContext } from './systems/ZCDamageResolutionSystem';
 import { ZCDevelopmentSystem, type IZCDevelopmentContext } from './systems/ZCDevelopmentSystem';
 import { ZCEconomyContext, ZCEconomySystem } from './systems/ZCEconomySystem';
@@ -59,6 +61,7 @@ import type { ZCSkillRuntimeDefinition } from './ZCSkillRuntime';
 import { ZCStatusSystem } from './ZCStatusEffect';
 
 import { ownersForPlayerCount, ZC_OWNER_ORDER, ZCOwner } from './ZCMapConfig';
+import type { ZCFaction } from './ZCMapConfig';
 import {
     isZCNeutralResourceBuilding, neutralResourceItemOf,
     type ZCNeutralResourceItem,
@@ -122,6 +125,7 @@ import type {
     ZCHexActivation,
     ZCHexState,
     ZCHitFx,
+    ZCHitFxSurface,
     ZCProjectileState,
     ZCScoreBreakdown,
     ZCSnapshot,
@@ -144,6 +148,13 @@ const FRAME_OP_SPAWN = 4;
 
 /** 城墙/建筑占据一格，近战单位可从相邻格继续靠近并攻击其边缘。 */
 const STRUCTURE_TARGET_BODY_RADIUS = 80;
+/**
+ * 弹道扫掠段找结构目标时的采样间隔（逻辑 px）。
+ *
+ * 格距 36×42、格内切半径约 21 ⇒ 取 8 能保证一帧的飞行段不会被"跳格"漏掉，
+ * 而每帧最多也只多算 2~3 个点（`hexIdAt` 是 3×3 邻域查表，代价可控）。
+ */
+const STRUCTURE_SAMPLE_STEP = 8;
 /** 平顶六边形相邻格中心距（视觉步长，与 hexDistance 归一单位一致）。 */
 const HEX_STEP = HEX_GRID_LOGICAL_ROW_STEP;
 /** 伤害飘字存活时长（秒）。 */
@@ -216,9 +227,17 @@ export interface ZCDefenceWaveProgress {
     currentWaveHpRate: number;
     /** 当前波用的卡 id（HUD 用它取首领头像与名字）；该波没生成过单位时为 null。 */
     currentWaveCardId: string | null;
+    /**
+     * 当前波是不是 **BOSS 波**。
+     *
+     * HUD 那条大血条（`ZCBossPanel`）只在它为真时展示；普通小怪只有头顶血条。
+     * 判据：`wave.isBoss`；表里没填时按「最后一波」兜底（口径见 `projectDefenceWaves`）。
+     */
+    currentWaveIsBoss: boolean;
 }
 
 export class ZCGameModel {
+    private readonly neutralFeatures: ZCNeutralFeatureSystem;
     private state: ZCSnapshot;
     private debugDraw: { card: ZCDeckCard; remaining: number } | null = null;
     private readonly debugCards = new Map<string, ZCDeckCard>();
@@ -227,6 +246,8 @@ export class ZCGameModel {
     private readonly config: ZCMatchConfig;
     private readonly activeOwners: readonly ZCOwner[];
     private readonly geometry: ZCMapGeometry;
+    /** 弹道找结构目标时复用（每次调用开头清空），避免每帧每弹道新建 Set。 */
+    private readonly structureHexScratch = new Set<number>();
     private readonly captureSystem: ZCCaptureSystem;
     /** 模型能力表：各系统 context 从这里取子集，见 `IZCModelServices`。 */
     private readonly services: IZCModelServices;
@@ -314,6 +335,14 @@ export class ZCGameModel {
     private readonly deckBonuses: Readonly<Record<ZCOwner, ZCDeckBonuses>>;
     private readonly pveDefence: Readonly<ZCPveDefenceConfig> | null;
     private readonly outcomeContext: IZCOutcomeContext;
+    /**
+     * NPC（本地 AI 席位）翻地块的最小间隔（秒）。
+     *
+     * 取 `max(rules.enemyAiIntervalSeconds, 关卡 openGrideTime)`：`openGrideTime` 是策划表
+     * 「关卡翻地块频率」，**AI 的执行速度不允许超过这个限制**（用户 2026-11-07）。
+     * 0 / 缺省 ⇒ 只受全局 AI 间隔约束。
+     */
+    private readonly aiDevelopIntervalSeconds: number;
     private nextDefenceWaveIndex = 0;
     /**
      * 本局**真正的胜方**（`draw` / 未定 = `null`），由 `ZCOutcomeSystem` 判定后写入。
@@ -367,6 +396,12 @@ export class ZCGameModel {
         for (const definition of this.config.statusDefinitions ?? []) this.statusSystem.register(definition);
         this.rules = this.config.rules;
         this.pveDefence = this.config.pveDefence?.waves.length ? this.config.pveDefence : null;
+        //  关卡「翻地块频率」只做**限速**：AI 原本 2.8s 一拍，关卡要求 18s 就按 18s 走。
+        //  0 表示「够钱就翻」⇒ 不额外压，保持全局节奏。
+        const openGrideTime = Number(this.config.openGrideTime);
+        this.aiDevelopIntervalSeconds = Number.isFinite(openGrideTime) && openGrideTime > 0
+            ? Math.max(this.rules.enemyAiIntervalSeconds, openGrideTime)
+            : this.rules.enemyAiIntervalSeconds;
         this.outcomeContext = {
             activeOwners: this.activeOwners,
             pveDefence: this.pveDefence,
@@ -399,6 +434,15 @@ export class ZCGameModel {
         this.movement = this.buildMovement();
         this.unitTargeting = this.buildUnitTargeting();
         this.unitContext = this.buildUnitContext();
+        this.neutralFeatures = new ZCNeutralFeatureSystem(this.config.map, {
+            random: this.random,
+            definition: unit => this.effectiveUnitDefinition(unit),
+            monsterDefinition: card => this.unitDefinition(card.unitId),
+            cloneUnit: unit => this.cloneGateUnit(unit),
+            spawnBatch: hex => this.spawnFirstBarracksUnit(hex),
+            damageUnit: (unit, damage) => { this.damageUnit(unit, damage, { owner: 'neutral', kind: 'building' }); },
+            changed: () => { this.tileStatesDirty = true; this.invalidateTerrain(); },
+        });
         this.restoreOrCreateState(snapshot);
     }
 
@@ -434,6 +478,9 @@ export class ZCGameModel {
 
     private buildGroundZoneContext(): IZCGroundZoneContext {
         return {
+            //  两段式移动的接近阶段要追着目标走（2026-11-07 鹿神守护 103405）：
+            //  给的是索引查询而不是 `state.units.find`，一个区域每帧一次，不该线性扫全表。
+            unitById: (id) => this.units.byId.get(id),
             hexStep: HEX_STEP,
             hexIdAt: (x, y) => this.geometry.hexIdAt(x, y),
             unitsInRadius: (hexId, radiusHex) => this.unitsInRadius(hexId, radiusHex),
@@ -477,7 +524,8 @@ export class ZCGameModel {
             get units() { return model.state.units; },
             distanceScale: this.rules.combatDistanceScale,
             effectiveDefinition: this.services.effectiveDefinition,
-            structureTarget: (projectile) => this.projectileStructureTarget(projectile),
+            structureTargets: (projectile, fromX, fromY, toX, toY, out) =>
+                this.projectileStructureTargets(projectile, fromX, fromY, toX, toY, out),
             hit: (projectile, target) => this.resolveProjectileHit(projectile, target),
             linger: (projectile) => this.lingerBeam(projectile),
         };
@@ -656,6 +704,7 @@ export class ZCGameModel {
             },
             unitCount: this.services.unitCount,
             spawnUnit: this.services.spawnUnit,
+            spawnHex: hex => this.neutralFeatures.spawnHex(this.state, hex),
             //  产兵四项修正（`pvpAttrMap` 的 recruitCd/recruitMaxNum/singleRecruitNum/
             //  singleRecruitLegionCount，2026-10-13）。建筑按卡的 `unitId` 找所属单位。
             recruitPatch: (owner, card) => (card.unitId
@@ -724,6 +773,11 @@ export class ZCGameModel {
             //  全在攻击系统里，这里只做转发。
             strike: (unit, options) => ZCAttackResolutionSystem.strikeTargets(
                 this.state, unit, options, this.attackResolutionContext),
+            //  移形换影（魔术师 103404）：位移交给 `placeAt`，那一份实现会同时更新连续坐标、
+            //  朝向与所在格索引；在这里直接改 `freeX/freeY` 会让「显示在哪」与「站在哪一格」分叉。
+            blinkTo: (unit, x, y) => { this.movement.placeAt(unit, x, y); },
+            //  挑「最近的敌人」必须与 `strikeTargets` 用同一份坐标，否则会挑中却打不到。
+            unitPosition: (unit) => this.services.unitPosition(unit),
         };
     }
 
@@ -745,6 +799,7 @@ export class ZCGameModel {
         this.statusSystem.restore(this.state.statusEffects);
         this.state.statusEffects = this.statusSystem.exportSnapshot();
         for (const unit of this.state.units) this.units.register(unit);
+        this.neutralFeatures.initialize(this.state);
         this.refreshTileStates();
         this.checkOutcome();
     }
@@ -944,7 +999,54 @@ export class ZCGameModel {
             currentWaveMaxHp: ledger?.maxHp ?? 0,
             currentWaveHpRate: current ? this.config.ownerRates?.enemy?.hpRate ?? 1 : 1,
             currentWaveCardId: current?.cardId ?? null,
+            currentWaveIsBoss: current ? this.isBossWave(this.nextDefenceWaveIndex - 1) : false,
         };
+    }
+
+    /**
+     * 第 `index` 波（0 基）是不是 BOSS 波。
+     *
+     * 先认表里的 `isBoss`（`monsterType=3`），表里没填时按「每组最后一波」兜底 ——
+     * 与 `projectDefenceWaves` 同一口径，保证 HUD、胜负判定、配置投影说的是同一件事。
+     */
+    private isBossWave(index: number): boolean {
+        return index === this.defenceBossWaveIndex();
+    }
+
+    /** BOSS 波序号；表里有标 `isBoss` 就认它，没有就按「最后一波」。无塔防 ⇒ -1。 */
+    private defenceBossWaveIndex(): number {
+        const waves = this.pveDefence?.waves;
+        if (!waves?.length) return -1;
+        for (let index = waves.length - 1; index >= 0; index -= 1) {
+            if (waves[index].isBoss) return index;
+        }
+        return waves.length - 1;
+    }
+
+    /**
+     * BOSS 波进度：`spawned` = 末波已经出场过，`alive` = 末波还有活着的单位。
+     *
+     * 胜负判定只认它（「只有击败 BOSS 才算胜利」）：中间波次清空不再算赢。
+     * 单位在死亡动画结束后会被摘掉，查不到按已死计。
+     */
+    private defenceBossState(): { spawned: boolean; alive: boolean } {
+        const defence = this.pveDefence;
+        const index = this.defenceBossWaveIndex();
+        if (!defence || index < 0 || this.nextDefenceWaveIndex <= index) return { spawned: false, alive: false };
+        const bossCardId = defence.waves[index].cardId;
+        const ids = this.defenceWaveLedger[index]?.ids ?? [];
+        const alive = ids.length
+            ? ids.some((id) => {
+                const unit = this.units.byId.get(id);
+                return !!unit && unit.battleState !== 'dead';
+            })
+            // ⚠️ 账本只活在内存里，快照恢复后是空的：这时按「场上还有没有 BOSS 波那张卡的怪」兜底，
+            // 不能因为账本没了就把 BOSS 判成已死（否则读档即胜利）。残留的小怪若与 BOSS 同卡，
+            // 会把胜利拖到清完为止 —— 宁可晚赢，也不能没打 BOSS 就赢。
+            : this.state.units.some((unit) => unit.owner !== ZCOwner.Player
+                && unit.cardId === bossCardId
+                && unit.battleState !== 'dead');
+        return { spawned: true, alive };
     }
 
     get playerTerritoryCount(): number {
@@ -1113,6 +1215,7 @@ export class ZCGameModel {
         this.debugDraw = null;
         this.debugCards.clear();
         this.state = ZCSnapshotCodec.createInitialState(this.config, this.random);
+        this.neutralFeatures.initialize(this.state);
         this.statusSystem.restore(this.state.statusEffects);
         this.state.statusEffects = this.statusSystem.exportSnapshot();
         this.tileStatesDirty = true;
@@ -1138,6 +1241,7 @@ export class ZCGameModel {
     private advance(dt: number): void {
         this.hexRenderMap = null;
         this.captureSystem.beginStep(this.state.units);
+        this.neutralFeatures.beginStep(this.state);
         this.state.elapsedSeconds = Math.round((this.state.elapsedSeconds + dt) * 1e9) / 1e9;
         this.flushDeferredBarracksSpawns();
         this.spawnDueDefenceWaves();
@@ -1154,6 +1258,7 @@ export class ZCGameModel {
         ZCGroundZoneSystem.tick(this.state, dt, this.groundZoneContext);
         if (this.state.projectiles.length) this.projectileSystem.beginStep(this.state.units);
         this.updateUnits(dt);
+        this.neutralFeatures.tick(this.state);
         //  技能时机（常驻被动 / 盾到期 / 连发 / 低血护体）：排在出手之后、弹道推进之前 ——
         //  连发弹当帧就能开始飞，不会凭空多等一步。三类时机在缺省参数下整段不执行，
         //  未配置这些技能的单位行为逐字不变。
@@ -1163,8 +1268,8 @@ export class ZCGameModel {
         this.refreshTileStates();
         if (!this.pveDefence) {
             this.state.aiClock = Math.round((this.state.aiClock + dt) * 1e9) / 1e9;
-            if (this.state.aiClock >= this.rules.enemyAiIntervalSeconds) {
-                this.state.aiClock -= this.rules.enemyAiIntervalSeconds;
+            if (this.state.aiClock >= this.aiDevelopIntervalSeconds) {
+                this.state.aiClock -= this.aiDevelopIntervalSeconds;
                 this.runEnemyAI();
             }
         }
@@ -1234,12 +1339,66 @@ export class ZCGameModel {
         ZCAttackResolutionSystem.sendAttack(this.state, unit, this.attackResolutionContext);
     }
 
-    /** 建筑目标在弹道飞行期间可能破墙或易主，命中时读取当前防御状态。 */
-    private projectileStructureTarget(projectile: ZCProjectileState): ZCCombatTarget | null {
-        if (projectile.targetKind === 'unit') return null;
-        const hex = this.hex(projectile.targetId);
-        if (!hex || hex.owner === 'neutral' || hex.owner === projectile.owner) return null;
+    /**
+     * 弹道这一轮的**结构候选**（墙体 / 建筑），写进 `out`。
+     *
+     * 2026-11-06 需求：「单位角色子弹攻击如果是只造成一次伤害的，只会伤害接触的单位
+     * （角色 / 城墙 / 建筑），不会穿透」。
+     *
+     * 改前只查**锁定格**，而且 `targetKind === 'unit'` 直接 `null` ⇒ 子弹锁定敌人时
+     * 城墙 / 建筑**完全不参与判定**，于是出现了「子弹穿过城墙上打到里面单位」。
+     * 现在两路都给：
+     *  ① 锁定格：打墙 / 打楼 / 追踪导弹钉在格上的既有口径原样保留；
+     *  ② 飞行段经过的每一格：墙体是沿格边围一圈的，所以「进入该格」≈「撞到墙」。
+     *
+     * **目标所在的格不算障碍**：子弹的终点就是那个单位，它脚下的那一圈墙属于"它的保护壳"，
+     * 不是子弹路上的障碍 —— 否则站在城墙 / 主城里的单位在破墙之前完全免疫远程，
+     * PVE 防御关的怪（刷在敌方主城格）会直接变成打不到。真正要拦的是**中途**的格。
+     *
+     * 谁先被碰到交给 `ZCProjectileSystem` 用扫掠 t 比较（与单位同一套连续碰撞），
+     * 本方法只负责「路上有哪些结构」，不做圆判定。
+     */
+    private projectileStructureTargets(
+        projectile: Readonly<ZCProjectileState>,
+        fromX: number, fromY: number, toX: number, toY: number,
+        out: ZCCombatTarget[],
+    ): void {
+        out.length = 0;
+        const seen = this.structureHexScratch;
+        seen.clear();
+        //  ① 锁定格（子弹原本要打的那一格）—— 与改前逐字一致。
+        if (projectile.targetKind !== 'unit') {
+            const locked = this.structureTargetOfHex(projectile.targetId, projectile.owner);
+            if (locked) { out.push(locked); seen.add(locked.id); }
+        }
+        //  目标单位的落脚格：跳过（见上面「目标所在的格不算障碍」）。
+        let targetHexId = -1;
+        if (projectile.targetKind === 'unit') {
+            const target = this.units.byId.get(projectile.targetId);
+            if (target) targetHexId = this.geometry.hexIdAt(target.freeX, target.freeY) ?? -1;
+        }
+        //  ② 飞行段扫过的格。段很短（一帧只飞十几个逻辑 px），采样点通常 1~3 个。
+        const dx = toX - fromX;
+        const dy = toY - fromY;
+        const samples = Math.max(1, Math.ceil(Math.hypot(dx, dy) / STRUCTURE_SAMPLE_STEP));
+        for (let index = 0; index <= samples; index += 1) {
+            const t = index / samples;
+            const hexId = this.geometry.hexIdAt(fromX + dx * t, fromY + dy * t);
+            if (hexId === null || hexId === targetHexId || seen.has(hexId)) continue;
+            seen.add(hexId);
+            const target = this.structureTargetOfHex(hexId, projectile.owner);
+            if (target) out.push(target);
+        }
+    }
+
+    /** 单格 → 结构目标；`null` = 这格对这颗子弹没有可打的结构（己方 / 中立 / 无墙无楼）。 */
+    private structureTargetOfHex(hexId: number, owner: ZCOwner): ZCCombatTarget | null {
+        const hex = this.hex(hexId);
+        if (!hex) return null;
         const center = this.hexCenter(hex.id);
+        //  中立怪（觉醒怪）谁都能打，且排在归属判定之前 —— 与改前一致。
+        if (isZCAwakeMonster(hex)) return { kind: 'building', id: hex.id, x: center.x, y: center.y, bodyRadius: STRUCTURE_TARGET_BODY_RADIUS, cardId: null };
+        if (hex.owner === 'neutral' || hex.owner === owner) return null;
         if (this.hasExposedWall(hex)) return { kind: 'wall', id: hex.id, x: center.x, y: center.y, bodyRadius: STRUCTURE_TARGET_BODY_RADIUS, cardId: null };
         if (hex.building !== 'none' && hex.hp > 0 && hex.wallHp <= 0) return { kind: 'building', id: hex.id, x: center.x, y: center.y, bodyRadius: STRUCTURE_TARGET_BODY_RADIUS, cardId: hex.cardId };
         return null;
@@ -1370,14 +1529,14 @@ export class ZCGameModel {
         const position = this.unitPosition(target);
         const floatText = this.pushFloatText({
             kind: source.floatTextKind ?? 'damage',
-            owner: source.owner,
+            owner: source.owner === 'neutral' ? target.owner : source.owner,
             value: result.applied + (source.floatTextValueOffset ?? 0),
             x: position.x,
             y: position.y,
             durationSeconds: FLOAT_TEXT_DAMAGE_SECONDS,
         });
         this.pushHitFx(target, result.applied, source, position);
-        if (result.killed) {
+        if (result.killed && source.owner !== 'neutral') {
             this.grantGold(source.owner, this.rules.killUnitGoldReward,
                 position.x, position.y, FLOAT_TEXT_GOLD_SECONDS);
         }
@@ -1410,6 +1569,7 @@ export class ZCGameModel {
             now: this.state.elapsedSeconds,
             trait,
             owner: target.owner,
+            surface: 'unit',
             // 受击特效跟着**被打的那只**的体型走（2026-10-31）。取不到定义就按 1（= 烘焙原样），
             // 绝不因为查不到而把闪白缩成 0。
             targetScale: this.definitions.get(target.unitId)?.prefabSize ?? 1,
@@ -1435,8 +1595,19 @@ export class ZCGameModel {
      * 卡表没这条）返回 `undefined`，由调用方决定不播。
      */
     private traitOfAttacker(source: ZCDamageSource): ZCAttackTrait | undefined {
-        if (source.unitId === undefined) return undefined;
-        const attacker = this.units.byId.get(source.unitId);
+        return this.traitOfAttackerUnitId(source.unitId);
+    }
+
+    /**
+     * 攻击方**实例 id** → 职业。
+     *
+     * 单独拆一层的原因：单位受击走的是 `ZCDamageSource`（只有 `unitId`），
+     * 而城墙 / 建筑的伤害入口 `context.damageWall/damageBuilding` 拿到的是**出手单位的本体**
+     * （`ZCUnitState`，`id` 才是实例 id）。两处共用同一段查表，别各写一份。
+     */
+    private traitOfAttackerUnitId(unitId: number | undefined): ZCAttackTrait | undefined {
+        if (unitId === undefined) return undefined;
+        const attacker = this.units.byId.get(unitId);
         // 实例可能已被 `removeDeadUnits` 摘掉（死亡后仍会被打到溅射）⇒ 这时不播。
         if (!attacker) return undefined;
         for (const owner of this.activeOwners) {
@@ -1445,6 +1616,44 @@ export class ZCGameModel {
             if (trait) return trait;
         }
         return undefined;
+    }
+
+    /**
+     * 建筑 / 城墙的受击特效（2026-11-06 需求）。
+     *
+     * 原话：「建筑单位或城墙单位受到攻击时，也要播放对应的职业的受击特效，
+     * 比如城墙被战士职业角色攻击，在城墙图片的中心坐标点播放战士受击」。
+     *
+     * 与打单位那条（{@link pushHitFx}）**同一套判据**：按**攻击方职业**选特效、`applied <= 0` 不播。
+     * 三处不同：
+     *  ① 攻击方是 `ZCUnitState` 本体（`damageWall/damageBuilding` 传的就是出手单位）而不是
+     *    `ZCDamageSource`，所以职业走 {@link traitOfAttackerUnitId}；
+     *  ② 锚点 = 该格**格心**（与飘字同源）。「建筑图比格心高 15.65px」属于视图口径，
+     *    由渲染层按 `surface` 补，模型不碰视图像素；
+     *  ③ `targetScale` 固定 1 —— 结构物没有 `pvpCard.prefabSize` 意义上的「模型缩放」
+     *    （建筑外观大小由 `ZCGameHex.prefab` 的 `BuildingIcon` 与卡面图标定），
+     *    拿兵种的 `prefabSize` 当房子的大小是错的。
+     */
+    private pushStructureHitFx(
+        attackerUnitId: number | undefined,
+        defender: ZCFaction,
+        applied: number,
+        position: { x: number; y: number },
+        surface: ZCHitFxSurface,
+    ): void {
+        if (applied <= 0) return;
+        const trait = this.traitOfAttackerUnitId(attackerUnitId);
+        if (!trait) return;
+        this.presentation.pushHitFx({
+            now: this.state.elapsedSeconds,
+            trait,
+            owner: defender,
+            surface,
+            targetScale: 1,
+            x: position.x,
+            y: position.y,
+            durationSeconds: HIT_FX_SECONDS,
+        });
     }
 
     private unitPosition(unit: ZCUnitState, result?: { x: number; y: number }): { x: number; y: number } {
@@ -1471,23 +1680,39 @@ export class ZCGameModel {
         this.targetHexes.length = 0;
         this.exposedWalls.clear();
         for (const hex of this.state.hexes) {
+            if (isZCAwakeMonster(hex)) { this.targetHexes.push(hex); continue; }
             const exposed = ZCTileSystem.hasExposedWall(this.state, this.config.map, hex);
             if (exposed) this.exposedWalls.add(hex.id);
             if (exposed || (hex.owner !== 'neutral' && hex.building !== 'none' && hex.hp > 0 && hex.wallHp <= 0)) this.targetHexes.push(hex);
         }
     }
 
-    private damageWall(unit: Pick<ZCUnitState, 'owner' | 'freeX' | 'freeY'>, wall: ZCHexState, damage: number): void {
+    private damageWall(unit: IZCStructureDamageSource, wall: ZCHexState, damage: number): void {
         const center = this.hexCenter(wall.id);
         const result = ZCDamageResolutionSystem.damageWall(
             wall, damage, unit, this.hasExposedWall(wall), center, this.damageResolutionContext);
         if (!result) return;
         this.pushFloatText({ kind: 'damage', owner: unit.owner, value: result.applied,
             x: center.x, y: center.y, durationSeconds: FLOAT_TEXT_DAMAGE_SECONDS });
+        //  城墙受击特效：与飘字同一坐标（格心），职业取攻击方（2026-11-06 需求）。
+        this.pushStructureHitFx(unit.id, wall.owner, result.applied, center, 'wall');
         if (result.killed) this.invalidateTerrain();
     }
 
-    private damageBuilding(unit: Pick<ZCUnitState, 'owner'>, building: ZCHexState, damage: number): void {
+    private damageBuilding(unit: IZCStructureDamageSource, building: ZCHexState, damage: number): void {
+        if (isZCAwakeMonster(building)) {
+            if (!Number.isFinite(damage) || damage <= 0) return;
+            building.hp = Math.max(0, building.hp - damage);
+            if (building.hp === 0) {
+                building.neutralFeature.claimed = true;
+                building.neutralResourceId = null;
+                const center = this.config.map.hexes[building.id];
+                this.grantGold(unit.owner, this.rules.killUnitGoldReward, center.x, center.y, FLOAT_TEXT_GOLD_SECONDS);
+                this.tileStatesDirty = true;
+                this.invalidateTerrain();
+            }
+            return;
+        }
         if (building.building === 'none' || building.hp <= 0) return;
         const summonsDefenceBoss = this.pveDefence && building.owner === ZCOwner.Enemy
             && building.id === this.homeId(ZCOwner.Enemy) && building.building === 'hq';
@@ -1498,6 +1723,10 @@ export class ZCGameModel {
         const center = this.hexCenter(building.id);
         this.pushFloatText({ kind: 'damage', owner: unit.owner, value: result.applied,
             x: center.x, y: center.y, durationSeconds: FLOAT_TEXT_DAMAGE_SECONDS });
+        //  建筑受击特效：锚点仍是格心，视图按 `surface = 'building'` 抬到建筑图中心
+        //  （`ZCGameHex.prefab` 的 `BuildingIcon` 在 +15.65px）—— 2026-11-06 需求。
+        //  `defender` 必须在伤害结算**之前**抓（拆掉那一拍 `building.owner` 已被改成攻方）。
+        this.pushStructureHitFx(unit.id, defender, result.applied, center, 'building');
         if (!result.killed) return;
         if (summonsDefenceBoss) this.spawnDueDefenceWaves(true);
         if (!this.pveDefence && this.developedCount(unit.owner) === 0) building.owner = 'neutral';
@@ -1726,9 +1955,44 @@ export class ZCGameModel {
         };
         this.units.register(unit);
         this.state.units.push(unit);
+        //  诊断⑥：镭射飞龙真的上场了没。没有这一行 ⇒ 后面所有 `[模型]` 日志都不会出现，
+        //  与「技能没触发」是两件事（这张卡是兵营卡，要先翻格建出来才会产兵）。
+        if (unit.unitId === '68010') {
+            missileLog('模型', `镭射飞龙上场：#${unit.id} owner=${unit.owner} hp=${maxHp}`
+                + ` 位置=(${spawnX.toFixed(1)},${spawnY.toFixed(1)}) t=${this.state.elapsedSeconds.toFixed(1)}s`);
+        }
         // 同上：单位出生不是协议里的「操作」（这里原本误报成 op=1=翻格，params 也不是格子 id）。
         this.state.nextUnitId += 1;
         return unit;
+    }
+
+    private cloneGateUnit(source: ZCUnitState): ZCUnitState | void {
+        const card = findCatalogCard(source.cardId);
+        if (!card) return;
+        const clone = this.spawnUnit(source.owner, card, source.tier, source.sourceHexId);
+        if (!clone) return;
+        const definition = source.inheritedStats ?? this.effectiveUnitDefinitionFor(source.owner, source.unitId);
+        clone.maxHp = clone.hp = source.maxHp;
+        clone.attackMultiplier = source.attackMultiplier;
+        clone.freeX = source.freeX;
+        clone.freeY = source.freeY;
+        clone.facingRadians = source.facingRadians;
+        clone.gateSize = source.gateSize;
+        clone.gateScale = source.gateScale;
+        clone.gateMoveMultiplier = source.gateMoveMultiplier;
+        clone.gateAttackSpeedMultiplier = source.gateAttackSpeedMultiplier;
+        clone.gateDamageMultiplier = source.gateDamageMultiplier;
+        clone.gateHpFlat = source.gateHpFlat;
+        clone.passiveStatusApplied = source.passiveStatusApplied;
+        this.statusSystem.cloneUnitStatuses(String(source.id), String(clone.id));
+        clone.inheritedStats = {
+            attack: definition.attack,
+            moveSpeed: definition.moveSpeed,
+            attackInterval: definition.attackInterval,
+            attackRange: definition.attackRange,
+            bodyRadius: definition.bodyRadius,
+        };
+        return clone;
     }
 
     /** 到配置时间或已出怪物全部被击退时，在敌方主城生成下一波；首波只按时间。 */
@@ -1778,7 +2042,15 @@ export class ZCGameModel {
     }
 
     private effectiveUnitDefinition(unit: ZCUnitState): ZCUnitDefinition {
-        const base = this.effectiveUnitDefinitionFor(unit.owner, unit.unitId);
+        const definition = this.effectiveUnitDefinitionFor(unit.owner, unit.unitId);
+        const original = unit.inheritedStats ? { ...definition, ...unit.inheritedStats } : definition;
+        const base = unit.gateSize ? {
+            ...original,
+            moveSpeed: original.moveSpeed * (unit.gateMoveMultiplier ?? 1),
+            attackInterval: original.attackInterval / (unit.gateAttackSpeedMultiplier ?? 1),
+            attack: original.attack * (unit.gateDamageMultiplier ?? 1),
+            prefabSize: original.prefabSize * (unit.gateScale ?? 1),
+        } : original;
         const mods = this.statusSystem.statModsOf(String(unit.id));
         if (!Object.keys(mods).length) return base;
         const attackDuration = base.attackDuration;
@@ -1879,6 +2151,7 @@ export class ZCGameModel {
     }
 
     private claimAdjacentNeutralResources(): void {
+        this.neutralFeatures.claim(this.state);
         ZCDevelopmentSystem.claimAdjacentNeutralResources(
             this.state, this.config.map, this.activeOwners, this.developmentContext, (hexId, itemId) => {
                 this.tileStatesDirty = true;
@@ -1917,7 +2190,8 @@ export class ZCGameModel {
     }
 
     private checkOutcome(): void {
-        const result = ZCOutcomeSystem.checkOutcome(this.state, this.outcomeContext, this.nextDefenceWaveIndex);
+        const result = ZCOutcomeSystem.checkOutcome(
+            this.state, this.outcomeContext, this.nextDefenceWaveIndex, this.defenceBossState());
         if (result) this.finish(result.status, result.reason, result.winner);
     }
 

@@ -10,6 +10,7 @@ export interface TerritoryLevelRow {
     levelHp: number;
     levelAttack: number;
     levelCost: number;
+    /** 「关卡翻地块频率（秒）」：本关地块翻开的间隔上限，0 = 够钱就翻。 */
     openGrideTime: number;
     extraCards?: { enemy?: number };
     idleReward?: TerritoryRewardRow[];
@@ -47,6 +48,13 @@ export interface TerritoryDefenceWaveRow {
     hpRate: number;
     atkRate: number;
     restMonsterNum: number;
+    /**
+     * `defenceModWave.monsterType`：`1` 普通 / `2` 精英 / `3` BOSS。
+     *
+     * 可选是因为客户端 JSON 目前还没有这一列（表里已按「每组最后一波 = 3」补齐，
+     * 但还没重新导表）。缺列时按「每组最后一波是 BOSS」兜底，见 {@link buildTerritoryCampaign}。
+     */
+    monsterType?: number;
 }
 
 export interface TerritoryRewardRow {
@@ -129,6 +137,8 @@ export interface TerritoryCampaignWave {
     hpRate: number;
     attackRate: number;
     restMonsterNum: number;
+    /** 本波是不是 BOSS 波（`monsterType=3`；表里没这一列时按「最后一波」兜底）。 */
+    isBoss: boolean;
 }
 
 export interface TerritoryCampaignReward {
@@ -156,6 +166,13 @@ export interface TerritoryCampaignStage {
     idleRewards: TerritoryCampaignReward[];
     staminaCost: number;
     exploreSeconds: number;
+    /**
+     * `levelInfo.openGrideTime`：本关「翻地块频率」（秒，0 = 够钱就翻）。
+     *
+     * 与 {@link exploreSeconds} 同源但**不同用途**：`exploreSeconds` 是通关后格子翻开要等的时长；
+     * 这一个要带进对局，作为 NPC 翻地块（AI 开发中立格）的速度上限。
+     */
+    openGrideTime: number;
     hpRate: number;
     attackRate: number;
 }
@@ -203,6 +220,43 @@ function teamMatchesLevel(team: TerritoryNpcTeamRow, levelId: number): boolean {
  * - 匹配战：从 `npcTeamType=1/3` 的匹配队伍里按 ID 取第一支，与玩家两人对战。
  * - 塔防：`levelModValue` → `defenceModWave.startId`，额外 BOSS 队伍来自 `extraCards.enemy`。
  */
+/**
+ * 塔防出怪表 → 战斗波次，并标出**哪一波是 BOSS 波**。
+ *
+ * 口径（策划表 `defenceModWave.monsterType`，1 普通 / 2 精英 / 3 BOSS）：
+ * 每组 `startId` 只有最后一波是 BOSS，其余都是普通小怪。两种数据形态都要成立：
+ *
+ * - 表里带了 `monsterType`：认 `3`；一组里一个 `3` 都没有（脏数据 / 忘填）时按最后一波兜底，
+ *   否则「击杀 BOSS 才算胜利」会变成永远打不赢。
+ * - 表里还没有这一列（当前客户端 JSON 就是这样）：直接按最后一波判 BOSS。
+ *
+ * ⚠️ BOSS 波是**胜负手**（见 `ZCOutcomeSystem` 的塔防分支），兜底宁可放宽也不能放宽成「没有 BOSS」。
+ */
+function projectDefenceWaves(
+    rows: readonly TerritoryDefenceWaveRow[],
+    projectCard: (cardId: number, level?: number) => TerritoryCampaignEnemy,
+): TerritoryCampaignWave[] {
+    const sorted = rows.slice().sort((a, b) => a.waveId - b.waveId);
+    const declared = sorted.filter((wave) => wave.monsterType === 3).length > 0;
+    const lastIndex = sorted.length - 1;
+    return sorted.map((wave, index): TerritoryCampaignWave => {
+        const enemy = projectCard(wave.monsterId);
+        return {
+            waveId: wave.waveId,
+            showAtSeconds: wave.waveShowTime,
+            monsterId: wave.monsterId,
+            ...(enemy.pvpCardId ? { pvpCardId: enemy.pvpCardId } : {}),
+            monsterName: enemy.name,
+            monsterSize: wave.monsterSize,
+            monsterCount: wave.monsterNum,
+            hpRate: wave.hpRate,
+            attackRate: wave.atkRate,
+            restMonsterNum: wave.restMonsterNum,
+            isBoss: declared ? wave.monsterType === 3 : index === lastIndex,
+        };
+    });
+}
+
 export function buildTerritoryCampaign(
     levelRows: readonly TerritoryLevelRow[],
     monsterRows: readonly TerritoryCardRow[],
@@ -267,24 +321,7 @@ export function buildTerritoryCampaign(
                     .slice(0, 1)
                 : bossTeamId && teams.has(bossTeamId) ? [teams.get(bossTeamId)] : [];
             const waves = mode === 'defence'
-                ? defenceWaveRows
-                    .filter((wave) => wave.startId === row.levelModValue)
-                    .sort((a, b) => a.waveId - b.waveId)
-                    .map((wave): TerritoryCampaignWave => {
-                        const enemy = projectCard(wave.monsterId);
-                        return {
-                            waveId: wave.waveId,
-                            showAtSeconds: wave.waveShowTime,
-                            monsterId: wave.monsterId,
-                            ...(enemy.pvpCardId ? { pvpCardId: enemy.pvpCardId } : {}),
-                            monsterName: enemy.name,
-                            monsterSize: wave.monsterSize,
-                            monsterCount: wave.monsterNum,
-                            hpRate: wave.hpRate,
-                            attackRate: wave.atkRate,
-                            restMonsterNum: wave.restMonsterNum,
-                        };
-                    })
+                ? projectDefenceWaves(defenceWaveRows.filter((wave) => wave.startId === row.levelModValue), projectCard)
                 : [];
             const projected = matchedTeams
                 .flatMap((team) => team.npcCard.map((entry) => {
@@ -330,6 +367,7 @@ export function buildTerritoryCampaign(
                 idleRewards,
                 staminaCost: row.levelCost,
                 exploreSeconds: Math.max(0, row.openGrideTime),
+                openGrideTime: Math.max(0, row.openGrideTime),
                 hpRate: row.levelHp,
                 attackRate: row.levelAttack,
             };

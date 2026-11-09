@@ -421,7 +421,7 @@
     },
     "_lpos": {
       "__type__": "cc.Vec3",
-      "x": -2.2,
+      "x": 2.578,
       "y": 20.25,
       "z": 0
     },
@@ -434,8 +434,8 @@
     },
     "_lscale": {
       "__type__": "cc.Vec3",
-      "x": 1,
-      "y": 1,
+      "x": 0.4,
+      "y": 0.4,
       "z": 1
     },
     "_mobility": 0,
@@ -462,8 +462,8 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 108,
-      "height": 108
+      "width": 256,
+      "height": 256
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -501,7 +501,7 @@
     "_spriteFrame": null,
     "_type": 0,
     "_fillType": 0,
-    "_sizeMode": 0,
+    "_sizeMode": 2,
     "_fillCenter": {
       "__type__": "cc.Vec2",
       "x": 0,
@@ -916,9 +916,6 @@
     "hero": {
       "__id__": 18
     },
-    "heroTransform": {
-      "__id__": 16
-    },
     "classBadge": {
       "__id__": 24
     },
@@ -931,6 +928,7 @@
     "fallbackLevel": 3,
     "previewHeight": 90,
     "dropTargetScale": 1.08,
+    "pressSlop": 16,
     "_id": ""
   },
   {

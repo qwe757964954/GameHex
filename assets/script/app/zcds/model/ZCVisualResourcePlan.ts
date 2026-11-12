@@ -59,10 +59,10 @@ export function buildZCVisualResourcePlan<T extends ZCVisualUnit>(
 ): { readonly units: readonly T[]; readonly effectPaths: readonly string[] } {
     const loadouts = Object.values(modifiers ?? {}).flatMap(items => items ?? []);
     const required = heroIds === undefined ? null : resolveZCVisualUnitIds(all.map(unit => unit.unitId), heroIds, [
-        ...all.map(unit => ({ unitId: unit.unitId, details: unit })),
-        ...(adapters.skillPlans ?? []).filter(plan => plan.enabled).map(plan => ({ unitId: plan.unitId, details: plan })),
-        ...loadouts.map(item => ({ unitId: item.targetUnitId, details: item })),
-    ]);
+        all.map(unit => ({ unitId: unit.unitId, details: unit })),
+        (adapters.skillPlans ?? []).filter(plan => plan.enabled).map(plan => ({ unitId: plan.unitId, details: plan })),
+        loadouts.map(item => ({ unitId: item.targetUnitId, details: item })),
+    ].flat());
     const units = required ? all.filter(unit => required.has(unit.unitId)) : all;
     //  移形换影（`blink_strike`，2026-11-07）：施法瞬间在**本体位置**闪的那张
     //  「瞬间移动特效」，路径只登记在代码常量里（行为技能在 `pvpSkill` 里没有造型槽），

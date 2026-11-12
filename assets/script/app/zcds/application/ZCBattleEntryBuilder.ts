@@ -2,6 +2,7 @@ import type { IZCGamePreparedResources } from './ZCGamePreparedResources';
 import type { IZCGameEntry } from './ZCGameEntry';
 import type { ZCGameEntryParams } from './ZCGameEntry';
 import { buildZCClientCombatConfig } from './ZCClientCombatConfig';
+import type { ZCPveDefenceWave } from '../model/ZCMatchConfig';
 import { buildSeatProfiles, buildSeatUnitIds } from '../model/ZCRankBoard';
 
 /** 单次返回参数随导航传递，领地页按章节与格子恢复焦点。 */
@@ -40,19 +41,21 @@ export function buildZCBattleEntry(prepared: IZCGamePreparedResources, entry?: Z
         waves: pve.waves
             .filter((wave) => wave.monsterCount > 0 && wave.showAtSeconds >= 0)
             .sort((a, b) => a.showAtSeconds - b.showAtSeconds || a.waveId - b.waveId)
-            .map((wave) => ({
-                waveId: wave.waveId,
-                showAtSeconds: wave.showAtSeconds,
-                cardId: String(wave.pvpCardId),
-                monsterCount: wave.monsterCount,
-                // 波次只决定出怪计划；战斗倍率统一来自服务端 buffInfo。
-                tier: 1,
-                // 只随配置走 `isBoss`：BOSS 波决定 HUD 大血条与「击败首领才算赢」。
-                ...(wave.isBoss ? { isBoss: true } : {}),
-                // 怪物体型（`defenceModWave.monsterSize`）只在 >1 时写：1 是普通体型，
-                // 写进去也只是让对局多做一次无效乘算。
-                ...(wave.monsterSize && wave.monsterSize > 1 ? { monsterSize: wave.monsterSize } : {}),
-            })),
+            .map((wave): ZCPveDefenceWave => {
+                const result: ZCPveDefenceWave = {
+                    waveId: wave.waveId,
+                    showAtSeconds: wave.showAtSeconds,
+                    cardId: String(wave.pvpCardId),
+                    monsterCount: wave.monsterCount,
+                    // 波次只决定出怪计划；战斗倍率统一来自服务端 buffInfo。
+                    tier: 1,
+                };
+                // BOSS 波决定 HUD 大血条与「击败首领才算赢」。
+                if (wave.isBoss) result.isBoss = true;
+                // 体型只在 >1 时写；1 是普通体型。
+                if (wave.monsterSize && wave.monsterSize > 1) result.monsterSize = wave.monsterSize;
+                return result;
+            }),
     } : undefined;
     let matchConfig = baseConfig;
     if (pve) {

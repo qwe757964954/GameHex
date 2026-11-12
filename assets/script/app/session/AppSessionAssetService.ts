@@ -84,12 +84,14 @@ export class AppSessionAssetService implements SessionAssetService {
 
         const tasks: LoadTask[] = [
             { message: '正在初始化基础配置', run: () => this.configs.initialize() },
-            ...COMMON_ART.map((name): LoadTask => ({
+        ];
+        for (const name of COMMON_ART) {
+            tasks.push({
                 message: `正在准备通用界面资源 ${name}`,
                 run: () => loadCommonArt(name),
                 validate: Boolean,
-            })),
-        ];
+            });
+        }
 
         const task = this.runTasks(tasks, onProgress)
             .then(() => {

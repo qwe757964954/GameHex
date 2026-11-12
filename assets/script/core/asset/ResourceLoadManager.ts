@@ -25,7 +25,7 @@ export class ResourceLoadManager implements AssetService {
     }
 
     preload(path: string, options: AssetLoadOptions = {}): Promise<void> {
-        const resolved = { ...options, priority: options.priority ?? -1 };
+        const resolved = Object.assign({}, options, { priority: options.priority ?? -1 });
         return this.queue.run(() => this.delegate.preload?.(path, resolved) ?? Promise.resolve(),
             resolved.scope, () => resolved.priority);
     }
@@ -52,7 +52,7 @@ export class ResourceLoadManager implements AssetService {
                 if (this.disposed || scope.disposed) { scope.dispose(); return false; }
                 notify();
                 const values = await Promise.all(requests.map(request => {
-                    return this.load(request.path, request.type, { ...request.options, scope }).then(value => {
+                    return this.load(request.path, request.type, Object.assign({}, request.options, { scope })).then(value => {
                         if (scope.disposed) throw new ResourceLoadCancelledError();
                         completed++;
                         try { notify(); }

@@ -294,13 +294,9 @@ export class ZCGame extends Component {
      */
     private loadLegendCardArt(art: ICardArtConfig): void {
         const config = this.matchConfig;
-        const decks: ReadonlyArray<readonly ZCDeckCard[]> = [
-            ...(config ? ZC_OWNER_ORDER.map((owner) => (
-                config.ownerDecks?.[owner] ?? (owner === ZCOwner.Player ? config.playerDeck : config.enemyDeck)
-            )) : []),
-            getPlayerDeck(),
-            getEnemyDeck(),
-        ];
+        const decks: ReadonlyArray<readonly ZCDeckCard[]> = (config ? ZC_OWNER_ORDER.map((owner) => (
+            config.ownerDecks?.[owner] ?? (owner === ZCOwner.Player ? config.playerDeck : config.enemyDeck)
+        )) : []).concat([getPlayerDeck(), getEnemyDeck()]);
         const cards = new Map<string, ZCDeckCard>();
         for (const deck of decks) {
             for (const card of deck) {
@@ -401,8 +397,8 @@ export class ZCGame extends Component {
         wallLayer.setPosition(Vec3.ZERO);
 
         for (const [id, prefab] of prepared.unitVisualPrefabs) this.unitVisualPrefabs.set(id, prefab);
-        const decks = [getPlayerDeck(), getEnemyDeck(), ...ZC_OWNER_ORDER.map(owner =>
-            setupConfig.ownerDecks?.[owner] ?? (owner === ZCOwner.Player ? setupConfig.playerDeck : setupConfig.enemyDeck))];
+        const decks = [getPlayerDeck(), getEnemyDeck()].concat(ZC_OWNER_ORDER.map(owner =>
+            setupConfig.ownerDecks?.[owner] ?? (owner === ZCOwner.Player ? setupConfig.playerDeck : setupConfig.enemyDeck)));
         for (const deck of decks) for (const card of deck) {
             const frame = card.buildIcon ? prepared.buildingFrames.get(card.buildIcon) : null;
             if (frame) this.buildingFramesByCardId.set(card.id, frame);
@@ -631,12 +627,9 @@ export class ZCGame extends Component {
      */
     private loadDefenceBossArt(): void {
         const config = this.matchConfig;
-        const decks: ReadonlyArray<readonly ZCDeckCard[]> = [
-            getEnemyDeck(),
-            ...(config ? ZC_OWNER_ORDER.map((owner) => (
-                config.ownerDecks?.[owner] ?? (owner === ZCOwner.Player ? config.playerDeck : config.enemyDeck)
-            )) : []),
-        ];
+        const decks: ReadonlyArray<readonly ZCDeckCard[]> = [getEnemyDeck()].concat(config ? ZC_OWNER_ORDER.map((owner) => (
+            config.ownerDecks?.[owner] ?? (owner === ZCOwner.Player ? config.playerDeck : config.enemyDeck)
+        )) : []);
         const icons = new Map<string, string>();
         for (const deck of decks) {
             for (const card of deck) {

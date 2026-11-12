@@ -43,10 +43,10 @@ test('loader 预加载 + 进 prepared（视图里不许直调 resources.load）'
     assert.match(loader, /loadUnknownResourceFrame\s*\(scope\?: ResourceScope\)/);
     assert.match(loader, /spriteFramePath\(GAMEUI_ART_ROOT,\s*NEUTRAL_RESOURCE_UNKNOWN_ICON_NAME\)/,
         '路径必须由 ArtPaths 常量拼');
-    assert.equal((loader.match(/unknownResourceFrame,/g) ?? []).length, 2,
-        'prepared 的解构 + return 两处都要带上 unknownResourceFrame');
+    assert.match(loader, /unknownResourceFrame:\s*icons\.unknownResourceFrame/,
+        'prepared 要显式接入地图图标组的中立资源占位帧');
     assert.match(loader, /this\.loadUnknownResourceFrame\(scope\)/,
-        '必须挂在 prepare 的 Promise.all 里（否则首屏没有这张图）');
+        '地图图标组必须加载占位帧（否则首屏没有这张图）');
 });
 
 test('接线：ZCGame → renderWorld options → 每个地块视图', () => {

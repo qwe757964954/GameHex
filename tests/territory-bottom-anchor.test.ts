@@ -23,6 +23,11 @@
  *
  * 白名单与判定函数都从**真实模块**取（`loadTerritoryStationModule`），不把 69008~69015
  * 抄进本文件 —— 抄一遍就等于两边各改一半也能一起绿。
+ *
+ * 🔴 2026-11-12 用户：「装饰节点是树这一类的 建筑id 69010~69013 统一往下挪动10px」。
+ *    按**增量**理解：保留 2026-10-27 的 4px 落地影子补偿，用户当天两次追加
+ *    （10px + 4px）⇒ 合计 `4 + 10 + 4 = 18px`。
+ *    抬升量数值随两轮增量同步：21.2→11.2→7.2 / 12.8→2.8→−1.2 / 16.16→6.16→2.16。
  */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -51,11 +56,12 @@ const {
 } = stationModule;
 
 /**
- * 底部对齐那一档的「往下修」像素（用户 2026-10-27 逐图验收：树干下的落地影子也算进了包围盒）。
+ * 底部对齐那一档的「往下修」像素：4px 落地影子补偿（2026-10-27）
+ * + 10px 整体下移 + 4px 追加（2026-11-12 用户两次）= **18px**。
  *
  * 手抄一份是**故意的**：实现改了而这里没改，下面所有数值断言会一起红 —— 这正是想要的。
  */
-const DROP = 4;
+const DROP = 18;
 
 const near = (actual: number, expected: number, tolerance = 1e-9): boolean =>
     Math.abs(actual - expected) <= tolerance;
@@ -129,59 +135,71 @@ test('★★★判定函数只认白名单内的 id，边界外与非有限值�
 });
 
 // ============================================================
-// 二、抬升量公式：可见高 × scale ÷ 2 − 4px
+// 二、抬升量公式：可见高 × scale ÷ 2 − 18px（4px 影子 + 10px + 4px）
 // ============================================================
 
-test('★★★抬升量 = 半个可见高 − 4px（落地影子占了包围盒底部）', () => {
+test('★★★抬升量 = 半个可见高 − 18px（4px 落地影子 + 10px + 4px）', () => {
     const { view } = makeStationView();
     view.setMapPosition(0, 0, 0);
     // 128×128 画布 / 可见区 100×60 ⇒ canvasScale = 1、visibleWidth = 100、visibleHeight = 60
-    // ⇒ scale = BUILDING_VISIBLE_WIDTH(84) / 100 = 0.84 ⇒ 抬升 = 60 × 0.84 ÷ 2 − 4 = 21.2。
+    // ⇒ scale = BUILDING_VISIBLE_WIDTH(84) / 100 = 0.84 ⇒ 抬升 = 60 × 0.84 ÷ 2 − 18 = 7.2。
     const frame = frameOf(100, 60);
     const centered = iconYOf(view, frame);
     const bottom = iconYOf(view, frame, { bottomAnchor: true });
 
-    assert.ok(near(bottom.y - centered.y, 21.2),
-        `抬升量应为 60 × 0.84 ÷ 2 − 4 = 21.2，实际 ${bottom.y - centered.y}`);
+    assert.ok(near(bottom.y - centered.y, 7.2),
+        `抬升量应为 60 × 0.84 ÷ 2 − 18 = 7.2，实际 ${bottom.y - centered.y}`);
     // 横向不许动：底部对齐只改纵向落点。
     assert.ok(near(bottom.x, centered.x), '底部对齐不许改变横向落点');
 });
 
-test('★★★「往下偏 4px」是常量，不跟 buildSize 一起缩', () => {
-    // 用户口径是按**屏幕像素**给的（「往下偏移 4px」），所以 0.8 倍体量的树也只偏 4px。
-    // 若有人把它乘进 scale，这条会红（会算成 3.2）。
+test('★★★「往下偏 18px」是常量，不跟 buildSize 一起缩', () => {
+    // 三笔用户口径都按**地图像素**给（4px 影子补偿 + 10px + 4px），
+    // 所以 0.8 倍体量的树也只偏 18px。若有人把它乘进 scale，这条会红。
     assert.equal(TERRITORY_BOTTOM_ANCHOR_DROP_PX, DROP);
-    assert.equal(DROP, 4);
+    assert.equal(DROP, 4 + 10 + 4);
+});
+
+test('★★2026-11-12 两轮增量：相对 10-27 的 4px 落点，四棵树共再往下 14px', () => {
+    const { view } = makeStationView();
+    view.setMapPosition(0, 0, 0);
+    const frame = frameOf(100, 60);
+    const centered = iconYOf(view, frame);
+    const now = iconYOf(view, frame, { bottomAnchor: true });
+    // 旧口径（2026-10-27）：半个可见高 25.2 − 影子补偿 4 = 21.2。
+    const oldY = centered.y + 25.2 - 4;
+    assert.ok(near(oldY - now.y, 14),
+        `必须在旧落点之下整整 14px（10 + 4），实际 ${oldY - now.y}`);
 });
 
 test('★★★抬升量随可见高变化（不同建筑的 trim 高不同）', () => {
     const { view } = makeStationView();
     view.setMapPosition(0, 0, 0);
-    // 同一宽度、可见高 40 ⇒ 抬升 = 40 × 0.84 ÷ 2 − 4 = 12.8（不是与 21.2 同值）。
+    // 同一宽度、可见高 40 ⇒ 抬升 = 40 × 0.84 ÷ 2 − 18 = −1.2（负抬升：比居中还低 1.2px）。
     const short = frameOf(100, 40);
     const delta = iconYOf(view, short, { bottomAnchor: true }).y - iconYOf(view, short).y;
-    assert.ok(near(delta, 12.8), `可见高 40 时应抬 12.8，实际 ${delta}`);
+    assert.ok(near(delta, -1.2), `可见高 40 时应抬 −1.2，实际 ${delta}`);
 });
 
 test('★★★buildSize 参与抬升量（小体量的树抬得少，否则底边会离格心）', () => {
     const { view } = makeStationView();
     view.setMapPosition(0, 0, 0);
     // 69010~69013 这四棵树 `buildSize = 0.8` ⇒ 半个可见高那项 ×0.8，但 **−4px 不缩**：
-    // 60 × 0.84 × 0.8 ÷ 2 − 4 = 16.16（若把 4 也乘进去会得到 12.16，这条会红）。
+    // 60 × 0.84 × 0.8 ÷ 2 − 18 = 2.16（−18 不随 buildSize 缩，误乘这条会红）。
     const frame = frameOf(100, 60);
     const delta = iconYOf(view, frame, { bottomAnchor: true, iconScale: 0.8 }).y
         - iconYOf(view, frame, { iconScale: 0.8 }).y;
-    assert.ok(near(delta, 16.16), `buildSize 0.8 时应抬 16.16，实际 ${delta}`);
+    assert.ok(near(delta, 2.16), `buildSize 0.8 时应抬 2.16，实际 ${delta}`);
 });
 
 test('★★trim 偏移与底部对齐互不干扰（两者是相加的两项）', () => {
     const { view } = makeStationView();
     view.setMapPosition(0, 0, 0);
-    // 同样的可见尺寸、但美术留白偏上（offsetY = −5）⇒ 抬升量必须仍是 21.2。
+    // 同样的可见尺寸、但美术留白偏上（offsetY = −5）⇒ 抬升量必须仍是 7.2。
     // 若把 `anchorLiftY` 误写进 `shiftY`（或反过来），这条会红。
     const shifted = frameOf(100, 60, 0, -5);
     const delta = iconYOf(view, shifted, { bottomAnchor: true }).y - iconYOf(view, shifted).y;
-    assert.ok(near(delta, 21.2), `trim 偏移不参与抬升量，应仍为 21.2，实际 ${delta}`);
+    assert.ok(near(delta, 7.2), `trim 偏移不参与抬升量，应仍为 7.2，实际 ${delta}`);
 });
 
 // ============================================================
@@ -200,7 +218,7 @@ test('★★★池化复用：上一格是底部对齐、这一格是居中，�
     const lifted = iconYOf(view, frame, { bottomAnchor: true });
     // 先确认这一帧**真的抬过** —— 否则下面那条「复用后回到基准」会被"两帧都没抬"蒙过去
     // （漏写 `this.bottomAnchored` 时正是这种巧合）。
-    assert.ok(near(lifted.y - baseline.y, 21.2), `底部对齐那一帧应抬 21.2，实际 ${lifted.y - baseline.y}`);
+    assert.ok(near(lifted.y - baseline.y, 7.2), `底部对齐那一帧应抬 7.2，实际 ${lifted.y - baseline.y}`);
     const afterReuse = iconYOf(view, frame, { bottomAnchor: false });
     assert.ok(near(afterReuse.y, baseline.y),
         `复用后居中的落点必须与基准一致（实际 ${afterReuse.y} vs ${baseline.y}）—— `

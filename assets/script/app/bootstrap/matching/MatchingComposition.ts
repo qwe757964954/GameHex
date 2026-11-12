@@ -64,7 +64,7 @@ export class MatchingComposition extends ControllerBase {
         this.tips = tips;
         this.lookup = lookup;
         await Promise.all([
-            preloadMatchIcons([LOCAL_PLAYER.avatarIcon, 'icon_fdj', ...MATCH_SLOT_BARS, ...MATCH_SLOT_FRAMES], MATCH_ART_ROOT, iconLoader),
+            preloadMatchIcons([LOCAL_PLAYER.avatarIcon, 'icon_fdj'].concat(MATCH_SLOT_BARS, MATCH_SLOT_FRAMES), MATCH_ART_ROOT, iconLoader),
             preloadMatchIcons(lookup.allArtifactIcons(), ARTIFACT_ART_ROOT, iconLoader),
             preloadHeadByIds([readSelfIdentity()?.avatarId ?? ''], lookup.headArt, iconLoader),
         ]);
@@ -135,7 +135,7 @@ export class MatchingComposition extends ControllerBase {
                 navigate: (route, entry) => {
                     const pve = params?.pve;
                     ProcedureManager.navigate(route, pve && entry && typeof entry === 'object'
-                        ? { ...(entry as Record<string, unknown>), pve }
+                        ? Object.assign({}, entry as Record<string, unknown>, { pve })
                         : entry);
                 }
             },

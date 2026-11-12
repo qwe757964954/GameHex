@@ -1,0 +1,145 @@
+{
+  "__type__": "cc.AnimationClip",
+  "_name": "科学家_陷阱爆炸",
+  "_objFlags": 0,
+  "_native": "",
+  "sample": 30,
+  "speed": 1,
+  "wrapMode": 1,
+  "events": [],
+  "_duration": 0.6,
+  "_keys": [],
+  "_stepness": 0,
+  "curveDatas": {},
+  "_curves": [],
+  "_commonTargets": [],
+  "_hash": 0,
+  "_tracks": [
+    {
+      "__type__": "cc.animation.ObjectTrack",
+      "_binding": {
+        "__type__": "cc.animation.TrackBinding",
+        "path": {
+          "__type__": "cc.animation.TrackPath",
+          "_paths": [
+            {
+              "__type__": "cc.animation.ComponentPath",
+              "component": "cc.Sprite"
+            },
+            "spriteFrame"
+          ]
+        },
+        "proxy": null
+      },
+      "_channel": {
+        "__type__": "cc.animation.Channel",
+        "_curve": {
+          "__type__": "cc.ObjectCurve",
+          "_times": [
+            0.0,
+            0.0333333333,
+            0.0666666667,
+            0.1,
+            0.1333333333,
+            0.1666666667,
+            0.2,
+            0.2333333333,
+            0.2666666667,
+            0.3,
+            0.3333333333,
+            0.3666666667,
+            0.4,
+            0.4333333333,
+            0.4666666667,
+            0.5,
+            0.5333333333,
+            0.5666666667
+          ],
+          "_values": [
+            {
+              "__uuid__": "775af819-28f8-4f2f-8421-c502b946bd45@f9941",
+              "__expectedType__": "cc.SpriteFrame"
+            },
+            {
+              "__uuid__": "e9aa4ba9-da61-4ccc-9cbf-03fd4802062f@f9941",
+              "__expectedType__": "cc.SpriteFrame"
+            },
+            {
+              "__uuid__": "002bc1be-3451-4392-83b1-fe253c7d706d@f9941",
+              "__expectedType__": "cc.SpriteFrame"
+            },
+            {
+              "__uuid__": "fe80bc3c-da15-4346-8652-4bb2084899b0@f9941",
+              "__expectedType__": "cc.SpriteFrame"
+            },
+            {
+              "__uuid__": "3ef72dac-1e2d-422f-915e-9f791d85e3c4@f9941",
+              "__expectedType__": "cc.SpriteFrame"
+            },
+            {
+              "__uuid__": "72c89a23-9b36-4983-bdae-bdae5b10cf4b@f9941",
+              "__expectedType__": "cc.SpriteFrame"
+            },
+            {
+              "__uuid__": "935d1c81-f559-4194-b77e-66c918f865fc@f9941",
+              "__expectedType__": "cc.SpriteFrame"
+            },
+            {
+              "__uuid__": "7d6181e2-19ca-46af-beb2-64e278a81216@f9941",
+              "__expectedType__": "cc.SpriteFrame"
+            },
+            {
+              "__uuid__": "83da89ca-5582-4eb6-9f6f-8acaa6f11e7d@f9941",
+              "__expectedType__": "cc.SpriteFrame"
+            },
+            {
+              "__uuid__": "88392837-0613-49fe-8d52-f4550d3ff9fa@f9941",
+              "__expectedType__": "cc.SpriteFrame"
+            },
+            {
+              "__uuid__": "2dfec4a7-7e4e-478b-95f2-6f500159398e@f9941",
+              "__expectedType__": "cc.SpriteFrame"
+            },
+            {
+              "__uuid__": "cd59299b-9efa-4466-87ff-8b8ccf04eb68@f9941",
+              "__expectedType__": "cc.SpriteFrame"
+            },
+            {
+              "__uuid__": "12b30807-8222-4681-916b-740c61b56597@f9941",
+              "__expectedType__": "cc.SpriteFrame"
+            },
+            {
+              "__uuid__": "7341286d-faa0-4966-b1ef-add981cef69d@f9941",
+              "__expectedType__": "cc.SpriteFrame"
+            },
+            {
+              "__uuid__": "d9adc0c2-9bf9-4b93-9eb7-86edb7038082@f9941",
+              "__expectedType__": "cc.SpriteFrame"
+            },
+            {
+              "__uuid__": "4ada1f36-62a8-417d-8064-b4b8079ce5e6@f9941",
+              "__expectedType__": "cc.SpriteFrame"
+            },
+            {
+              "__uuid__": "c2ee0cac-13c6-41da-8c4e-c82abbf385b4@f9941",
+              "__expectedType__": "cc.SpriteFrame"
+            },
+            {
+              "__uuid__": "11bd33ff-8fbc-4c65-85a5-95a036d36956@f9941",
+              "__expectedType__": "cc.SpriteFrame"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "_exoticAnimation": null,
+  "_events": [],
+  "_embeddedPlayers": [],
+  "_additiveSettings": {
+    "__type__": "cc.AnimationClipAdditiveSettings",
+    "enabled": false,
+    "refClip": null
+  },
+  "_auxiliaryCurveEntries": []
+}

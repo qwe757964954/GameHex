@@ -120,6 +120,7 @@ mapLayer（= ZCGameHUD.prefab 的 content）
 
 - **地块与建筑图标缩放由代码唯一决定（只改 Prefab `_lscale` 会被静默覆盖）**：
   - `iconSprite` 同时承载地块类型图标（`icon_jk/by/wh/em`）与中立资源点图标，唯一缩放写入口为 `ZCHexView.renderContent`：类型图标写 `TILE_ICON_SCALE = 0.8`，资源图标按 `resourceIconScale` 缩放到格子边长。
+  - 割草机静态使用 `map-resource/extension` 的左右镜像（朝左下）；运行时由 `renderMower` 按路线方向切换右上、右下、上、下四张图，左侧方向镜像右侧图，按当前帧尺寸等比缩放。启动帧及末段均取路线方向，不以当前位移是否为零判断。
   - 已建建筑唯一缩放写入口为 `applyBuildingScale`（基准 `BUILDING_ICON_SCALE = 0.72`）。
   - 金币图标 `BuildingLayer/PriceIcon` 与价格数字 `BuildingLayer/IconLabel` **不参与**上述缩放。
   - **判据**：`tests/zcds-tile-icon-scale.test.ts`、`tests/zcds-building-icon-scale.test.ts`、`tests/zcds-resource-icon-scale.test.ts`。
@@ -1088,24 +1089,44 @@ node.setPosition(mapX - shiftX, mapY - shiftY, mapZ);
 ```ts
 const visibleHeight = trimmed.height * canvasScaleY;          // 归一前的可见高
 const anchorLiftY  = this.bottomAnchored
-    ? visibleHeight * scale * 0.5 - TERRITORY_BOTTOM_ANCHOR_DROP_PX   // 4px
+    ? visibleHeight * scale * 0.5 - TERRITORY_BOTTOM_ANCHOR_DROP_PX   // 18px = 4px 影子 + 10px + 4px
     : 0;
 node.setPosition(mapX - shiftX, mapY - shiftY + anchorLiftY, mapZ);
 ```
 
 推导：可见中心原本被摆在格心 ⇒ 可见底边在「格心 − 可见高/2」；要让**底边 = 格心**，节点须再上抬「可见高/2」（缩放后）。
 
-再减 `TERRITORY_BOTTOM_ANCHOR_DROP_PX = 4`：树干底下还有一圈**落地影子**，影子算进了包围盒
-⇒ 严格按"可见底边"对齐时本体被抬起约 4px。用户 2026-10-27 验收：「69010~69013 的对齐中心点往下偏移 4px」。
-⚠️ 这 4px 是**地图像素**，不乘 `buildSize`（位置写在父节点空间，与 `Icon` 缩放无关）。
+再减 `TERRITORY_BOTTOM_ANCHOR_DROP_PX = 18`，**三笔叠加**（都是往下）：
+
+| 来源 | 数值 | 理由 |
+| :-- | :-- | :-- |
+| 2026-10-27 逐图验收 | 4px | 树干底下还有一圈**落地影子**，影子算进包围盒 ⇒ 严格按"可见底边"对齐时本体被抬起约 4px |
+| 2026-11-12 用户 | **+10px** | 「装饰节点是树这一类的 建筑id 69010~69013 统一往下挪动10px」 |
+| 2026-11-12 用户追加 | **+4px** | 「还可以再往下挪4个像素」 |
+
+⚠️ 三笔都是**地图像素**，不乘 `buildSize` / `scale`（位置写在父节点空间，与 `Icon` 缩放无关）。
+⚠️ 只改 `TERRITORY_BOTTOM_ANCHOR_DROP_PX` **这一个数**：`applyIconPlacement`（实心建筑 + 虚影）
+与 `applyLevelBubblePosition`（气泡抬升）同源，站点 / 随机格 / 虚影三条渲染路径同时生效，别在调用方各加一份。
 
 | 要点 | 口径 |
 | :-- | :-- |
-| 抬升量 | `可见高(trim × canvasScaleY) × scale ÷ 2 − 4`，前一项**含 `buildSize`**、后一项不含 |
+| 抬升量 | `可见高(trim × canvasScaleY) × scale ÷ 2 − 18`（4px 影子 + 10px + 4px），前一项**含 `buildSize`**、后一项不含 |
 | 影响面 | 只改**纵向落点**，横向与缩放完全不动（`tests/territory-bottom-anchor.test.ts` 逐项钉住） |
 | 白名单 | `TERRITORY_BOTTOM_ANCHOR_BUILD_IDS = 69010…69013`（**四棵棕榈树**），判定函数 `territoryUsesBottomAnchor()` |
 | 传参 | `ITerritoryStationRender.bottomAnchor?`，由 `TerritoryMapView` 两条路各传一次：站点 `Number(site.buildingId)`、随机格 `Number.isFinite(buildingId) && …` |
 | 写入时机 | `render()` 里必须在 **`applyIconPlacement()` 之前**写 `this.bottomAnchored`（站点节点池化复用，晚写就用上一格的口径） |
+
+#### 二-补、2026-11-12 增补：四棵树两轮共再往下 14px
+
+> 需求原文：①「装饰节点是树这一类的 建筑id 69010~69013 统一往下挪动10px」（附截图，红框圈出地图上的树）；
+> ② 同日追加「还可以再往下挪4个像素」。
+
+两轮都按**增量**执行：保留 10-27 的 4px 落地影子补偿，`4 → 14 → 18`。范围是
+`territoryUsesBottomAnchor()` 白名单内的四棵棕榈树（**没有**扩大到屋子 / 哨站 / 树桩），
+也没改缩放、横向落点、trim 补偿。
+同步改了三处真源：`TerritoryStationView.ts` 常量、`tests/territory-bottom-anchor.test.ts`
+全部抬升量数值、`tools/preview_decor_alignment.py` 的 `BOTTOM_ANCHOR_DROP`（逐图对位图脚本必须与线上同值）。
+⚠️ 若后续口径是「总偏移改成 N px」而不是「再往下 N px」，只需把这一个常量改成 N 并同步这两处。
 
 #### 三、🔴 不要走「让美术把内容往下平移」这条路
 
@@ -1120,10 +1141,10 @@ node.setPosition(mapX - shiftX, mapY - shiftY + anchorLiftY, mapZ);
 | :-- | :-- | :-- | :-- | :-- |
 | 69008 | `decor_01` 宝箱屋 | 1.0 | ✗ | **居中**（底边对齐把本体抬太高） |
 | 69009 | `decor_02` 圆顶哨站 | 1.0 | ✗ | **居中** |
-| 69010 | `decor_03` 棕榈 1 | 0.8 | ✓ | 底部对齐 −4px |
-| 69011 | `decor_04` 棕榈 2 | 0.8 | ✓ | 底部对齐 −4px |
-| 69012 | `decor_05` 棕榈 3 | 0.8 | ✓ | 底部对齐 −4px |
-| 69013 | `decor_06` 棕榈 4 | 0.8 | ✓ | 底部对齐 −4px |
+| 69010 | `decor_03` 棕榈 1 | 0.8 | ✓ | 底部对齐 −18px |
+| 69011 | `decor_04` 棕榈 2 | 0.8 | ✓ | 底部对齐 −18px |
+| 69012 | `decor_05` 棕榈 3 | 0.8 | ✓ | 底部对齐 −18px |
+| 69013 | `decor_06` 棕榈 4 | 0.8 | ✓ | 底部对齐 −18px |
 | 69014 | `decor_07` 树桩 | 1.0 | ✗ | **居中**（扁平对称，本身重心就在中间） |
 | 69015 | `decor_08` 树桩+草 | 1.0 | ✗ | **居中** |
 
@@ -1132,11 +1153,11 @@ node.setPosition(mapX - shiftX, mapY - shiftY + anchorLiftY, mapZ);
 
 #### 五、判据
 
-`tests/territory-bottom-anchor.test.ts`（11 条，真实模块 + 真实 VM 渲染）：
+`tests/territory-bottom-anchor.test.ts`（12 条，真实模块 + 真实 VM 渲染）：
 
 - 白名单恰好 `[69010, 69011, 69012, 69013]`；`69008 / 69009 / 69014 / 69015 / 69007 / 69016 / 0 / −1 / 69010.5 / NaN / ±Infinity` 一律 `false`；
-- 抬升量 = 21.2（可见高 60、scale 0.84、−4）、随可见高变（40 → 12.8）、随 `buildSize` 变（0.8 → 16.16，
-  **−4 不缩**，若误乘会得 12.16）、与 `trim` 偏移互不干扰；
+- 抬升量 = 7.2（可见高 60、scale 0.84、−18）、随可见高变（40 → −1.2，**负抬升**）、随 `buildSize` 变（0.8 → 2.16，
+  **−18 不缩**）、与 `trim` 偏移互不干扰；2026-11-12 增补一条「相对旧 4px 落点共再往下 14px」的增量守卫；
 - 池化复用：先 `bottomAnchor: true` 再 `false`，抬升必须被完整清掉，且缺省与显式 `false` 逐像素等价；
 - 接线：`bottomAnchored` 的赋值早于 `applyIconPlacement()`；`TerritoryMapView` 两条路都传且渲染层**不许出现 id 字面量**。
 
@@ -4854,6 +4875,94 @@ eSon 打表以 Excel 为准重生成 JSON，这 6 行会被整块刷掉。现已
 `PVP技能配置`（`patch_magdi_skill_rows_excel.py 101603 101604`，upsert）+ `K-卡牌升级.xlsx`
 B/C 列（`patch_magdi_mushroom_k.py`）+ 技能设计案 K80/P80
 （`patch_skill_design_magdi_round4.py`）。守卫 `zcds-magdi-mushroom` 32 条。
+
+### 14.8 磁电冲击跟随角色、固定在身前（2026-11-12 第九轮）
+
+用户口径：「68016 的磁电冲击技能应该跟随角色一起移动，固定在角色身前」。截图里角色已经走到光束
+右上方，光束还留在施法点 —— 因为 101604 一直配的是 `auraFollow = 0`（站桩）。
+
+**改法只有两处**：配表 `auraFollow` 0 → 1；代码 `followCaster` 原本只会「圆心拍在本体身上」，
+现在多认一个 `followForward`：
+
+```
+落点 = 本体坐标 + facingRadians × followForward
+angleDegrees = facingRadians（每帧同步刷新）
+```
+
+- `followForward` 直接取 `auraForward`（`castSelfAura` 里算），**不另开参数** ——
+  「出生时在身前 N px」和「之后一直悬在身前 N px」本来就是同一个数，开两个口径必然会配歪。
+  101604 的 `auraForward = auraRadius`（160/180/200）⇒ 光束左缘永远压在角色脚点、右缘到身前 320/360/400。
+- 🔴 **朝向必须跟着刷新**：落点沿朝向前移、矩形还朝旧角度的话，判定中心与画面上的光束立刻错开
+  （`syncHoldVisual` 每帧把 `zone.angleDegrees` 抄进事件，所以只要改这一个数，视觉就同步）。
+- 取 `facingRadians`（美术朝向，8 方向、45° 一档）而不是「指向目标」：玩家看到的「身前」是角色
+  的正面。量化误差对判定无影响 —— 磁电菇 `unitAttackRange = 45` 逻辑 px（≈13.5 世界 px），
+  贴脸目标在 22.5° 偏差下横向只偏 5 世界 px，远小于半宽 16.2。
+- `followForward` 缺省 0 ⇒ 圆心贴本体，无尘禁土 102503 与所有既有光环行为逐字不变；
+  它**必须进快照**（`ZCSnapshotCodec`），否则存档回来光柱会从「身前 160」跳回贴脚。
+
+配表/产物：`patch_magdi_shock_follow.js`（两份 JSON 的 `pvpSkillPlan` + `armySkillLevelUp`）→
+`patch_magdi_skill_rows_excel.py 101604`（J-技能表 upsert 3 行）→
+`patch_skill_k_desc_excel.py 101604`（K-卡牌升级 B/C，第 196~198 行）→
+`patch_skill_design_magdi_follow.py`（技能设计案第 81 行 K/L/M 补齐、N 换完整口径、O/P 补落地、S 已实现）。
+
+新描述：「累计 8 次普攻：朝目标方向喷出一道长 320、宽 108 的雷电束（起点在自身中心），
+持续 3 秒，**全程跟随角色移动、固定在角色身前**，每秒造成 250% 攻击力伤害，每波最多命中 5 个敌人」。
+
+守卫：`zcds-ground-zone-system` 新增 2 条（身前距离 + 朝向同步；`followForward` 缺省贴本体且不改角度）、
+`zcds-magdi-mushroom` 改 `auraFollow = 1` 并加 2 条源码接线守卫（`followForward` 落 zone、
+`followCaster` 刷新 `angleDegrees`）。
+
+### 14.9 🔴 `startedAt` 落在未来 ⇒ 视图整条不建节点（2026-11-12 第四轮，全表现层通用）
+
+用户第三次反馈：「五雷轰顶的技能还是没有按照先后出现，**视觉感官是同时出现的**」。
+
+前两轮一直在改配表（间距 30→45→60、间隔 0.1→0.18→0.15），判伤时刻早就是 0.15 / 0.30 / 0.45 /
+0.60 / 0.75 逐道错开的 —— **数值一直是对的，错在表现层**：
+
+```
+castBoltLine:  同一拍把 N 条 area 事件推进 combatEvents，
+               先后只写在 startedAt = now + index × boltInterval（未来时刻）上
+ZCAttackResolutionSystem → ZCGameModel 保留事件直到 startedAt + durationSeconds
+renderEffectSystem:  原来「看到事件就建节点」——
+               pool.acquire → initialize → mountVisual（animation.stop()/play(默认 clip)）
+ZCCombatEffectView.render:  progress = clamp((now − startedAt) / duration, 0, 1)
+                       ⇒ 未到点的事件被钳成 0 显示，且动画已经在节点建好那一帧起播
+```
+
+结果：**五道雷同一帧全部亮起、动画同拍**，只是各自的进度都停在 0 —— 用户看到的就是「同时出现」。
+这也是「改了几轮参数都没用」的原因：参数只改了判伤，没改到「什么时候建节点」。
+
+**修法（唯一闸门，放在视图侧，模型语义一个字没动）**：
+
+```ts
+// ZCGameViewUtil
+export function zcCombatEffectEntered(startedAt, now) {
+    if (typeof startedAt !== 'number' || !Number.isFinite(startedAt)) return true;  // 缺字段 = 立刻出现
+    return startedAt <= now;
+}
+// ZCGameRenderWorld.renderEffectSystem：先过闸，再 acquire
+for (const event of frame.snapshot.combatEvents) if (zcCombatEffectEntered(event.startedAt, now)) …
+// 延迟出发的 projectile 同一条
+```
+
+- 🔴 **闸门必须在 `pool.acquire` 之前**：`initialize → mountVisual` 会把 clip 从第 0 帧 `play` 起来，
+  建了节点就等于「已经出现了」，之后无论怎么隐藏/透明度压 0 都会漏出一次闪。
+- `now` 取 `visualTime(frame)` = `elapsedSeconds + pendingSeconds`（≥ 逻辑时刻）：出手那一拍的第一道
+  不能因为差了不足一逻辑步的余量而晚一帧出现；判据写 `<=`，写成 `<` 同样会吞掉第一帧。
+- 缺 `startedAt` 一律视为「已到点」：历史口径就是「立刻出现」，闸门不能把这类表现项整条吞掉
+  （`zcds-render-performance` 的手搓事件、老快照都靠这一条）。
+- 落地后：5 道雷在 0 / 0.15 / 0.30 / 0.45 / 0.60 秒依次亮起，全部到点 0.6s < 单道特效 0.667s
+  ⇒ 观感是「一道接一道砸下来」，而不是「一波齐射」。
+
+守卫：`zcds-magdi-mushroom` 新增 2 条 —— ① 时间轴上「已到点」的道数逐道 +1
+（`[0, 0.14, 0.15, 0.30, 0.45, 0.60]` ⇒ `1,1,2,3,4,5`）；② 源码顺序守卫（`zcCombatEffectEntered`
+必须在 `pool.acquire` 之前、且弹道也过同一条闸）。
+
+配表：**一行没改**。`boltSpacing 60 / boltInterval 0.15 / boltDelay 0.15 / boltCount 3·4·5 /
+boltDamageRate 1.6·2.0·2.5 / boltRadius 90` 在 `J-技能表`（`PVP技能配置` 行 2213 起）、
+`assets/remoteRef/pvpSkillPlan.json`、`doc/塔防数据配置/json/client/pvpSkillPlan.json` 三处已逐项一致
+（`armySkillLevelUp` 的卡面 desc 也是「出现间隔0.15秒」）—— 本轮只补了技能设计案第 80 行
+的 L/M/N/O 四格并在 P 追加第四轮复盘（`patch_skill_design_magdi_bolt.py`）。
 
 ## 15. 麻辣铁锅 68026：三段命中、滞空喷火与「第 26 帧」（2026-11-11）
 

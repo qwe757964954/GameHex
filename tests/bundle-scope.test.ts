@@ -32,7 +32,7 @@ test('分包目录清单与路由表一致，命中前缀走对应 bundle', () =
     assert.equal(bundleForPath('image/settlement/title_victory'), BATTLE_BUNDLE);
     // 大世界（2026-11-04 bundle 内 `image/bigmap/` 上提成 `image/`，只能逐条登记）
     assert.equal(bundleForPath('image/concept/sprites/grain'), BIGMAP_BUNDLE);
-    assert.equal(bundleForPath('image/concept/ui/tab_active'), BIGMAP_BUNDLE);
+    assert.equal(bundleForPath('image/concept/ui/stamina'), BIGMAP_BUNDLE);
     assert.equal(bundleForPath('image/base_background'), BIGMAP_BUNDLE);
     assert.equal(bundleForPath('bigMapBG'), BIGMAP_BUNDLE);
     assert.equal(bundleForPath('ui/bigmap/BigMapWorldView'), BIGMAP_BUNDLE);

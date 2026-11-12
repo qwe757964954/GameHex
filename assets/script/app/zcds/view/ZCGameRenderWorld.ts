@@ -50,6 +50,7 @@ import {
     portalFlightLift,
     spawnBaseConfirmPoint,
     territoryTintOwner,
+    zcCombatEffectEntered,
     zcNeutralHintAlpha,
     ZC_VICTORY_SWEEP_PULSE_LEVELS,
 } from './ZCGameViewUtil';
@@ -566,7 +567,9 @@ export class ZCGameRenderWorld {
         //  一回来就把首帧已加载的**技能特效 prefab 全冲掉**，之后靠后续 job 慢慢补。
         //  与 `ZCEffectPool.setArt` 同一口径：只加不降级。
         if (art.effectVisualPrefabs.size) {
-            this.effectVisualPrefabs = new Map([...this.effectVisualPrefabs, ...art.effectVisualPrefabs]);
+            const prefabs = new Map(this.effectVisualPrefabs);
+            for (const [path, prefab] of art.effectVisualPrefabs) prefabs.set(path, prefab);
+            this.effectVisualPrefabs = prefabs;
         }
         this.effectPool.setArt(art);
         if (art.hexGroundGlowFrames && art.hexGroundGlowFrames !== this.hexGroundGlowFrames) {
@@ -1044,7 +1047,8 @@ export class ZCGameRenderWorld {
                 if (from && to) {
                     const ratio = progress - index;
                     view.renderMower(from.position.x + (to.position.x - from.position.x) * ratio - view.node.position.x,
-                        from.position.y + (to.position.y - from.position.y) * ratio - view.node.position.y, progress < line.length);
+                        from.position.y + (to.position.y - from.position.y) * ratio - view.node.position.y, progress < line.length,
+                        to.position.x - view.node.position.x, to.position.y - view.node.position.y);
                 }
             }
             if (feature.portalAt !== undefined && now >= feature.portalAt
@@ -2128,10 +2132,28 @@ export class ZCGameRenderWorld {
         const activeIds = this.effectIds;
         activeIds.clear();
         this.effectStates.length = 0;
-        for (const event of frame.snapshot.combatEvents) this.effectStates.push(event);
+        //  🔴 「还没到点」的事件**整条不建节点**（2026-11-12 五雷轰顶「逐道出现」）。
+        //
+        //  `startedAt` 允许落在**未来**：`ZCAttackResolutionSystem.castBoltLine` 一口气推 5 条
+        //  `area` 事件，只靠 `startedAt = now + index × boltInterval` 排先后（判伤
+        //  `nextWaveAt` 也各自错开）。这里原来无条件 `acquire` + `initialize`，而
+        //  `initialize → mountVisual` 会立刻 `animation.stop()/play(默认 clip)` ⇒ 5 道雷在
+        //  **同一帧全部亮起、动画同拍**，`ZCCombatEffectView.render` 又把负进度钳成 0
+        //  ⇒ 用户看到的就是「视觉上同时出现」（2026-11-12 第三次反馈；间隔改 0.15s 只改到了判伤）。
+        //  到点后才建节点：出现时刻自然逐道错开，动画也从第 0 帧起播。
+        const now = this.visualTime(frame);
+        for (const event of frame.snapshot.combatEvents) {
+            if (!zcCombatEffectEntered(event.startedAt, now)) continue;
+            this.effectStates.push(event);
+        }
         const projectiles = frame.snapshot.projectiles;
         if (projectiles) {
-            for (const projectile of projectiles) this.effectStates.push(projectile);
+            //  弹道同理：`ZCProjectileSystem` 允许「延迟出发」（`startedAt` 落在未来，见其
+            //  `startedAt >= context.now` 分支），到点前不该先在屏幕上占一个弹头。
+            for (const projectile of projectiles) {
+                if (!zcCombatEffectEntered(projectile.startedAt, now)) continue;
+                this.effectStates.push(projectile);
+            }
         }
         for (const event of this.effectStates) activeIds.add(event.id);
         for (const [sourceId, entityId] of this.effectEntityBySource) {
@@ -2185,7 +2207,6 @@ export class ZCGameRenderWorld {
             }
             const projectile = event.type === 'projectile' && 'velocityX' in event ? event as Readonly<ZCProjectileState> : undefined;
             const alpha = frame.interpolationAlpha;
-            const now = this.visualTime(frame);
             const view = this.effectViews.get(entityId);
             if (view && !view.hasVisual && event.effectPrefabPath) {
                 this.resolveMissingEffectArt(view, event.effectPrefabPath, now);
@@ -2255,7 +2276,9 @@ export class ZCGameRenderWorld {
     applyEffectPrefab(path: string, prefab: Prefab): void {
         if (!path || !prefab) return;
         if (this.effectVisualPrefabs.get(path) === prefab) return;
-        this.effectVisualPrefabs = new Map([...this.effectVisualPrefabs, [path, prefab]]);
+        const prefabs = new Map(this.effectVisualPrefabs);
+        prefabs.set(path, prefab);
+        this.effectVisualPrefabs = prefabs;
         this.missingEffectArtRequested.delete(path);
         this.missingEffectArtSince.delete(path);
         this.missingEffectArtWarned.delete(path);

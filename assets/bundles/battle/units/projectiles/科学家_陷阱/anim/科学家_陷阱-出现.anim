@@ -1,0 +1,115 @@
+{
+  "__type__": "cc.AnimationClip",
+  "_name": "科学家_陷阱-出现",
+  "_objFlags": 0,
+  "_native": "",
+  "sample": 30,
+  "speed": 1,
+  "wrapMode": 1,
+  "events": [],
+  "_duration": 0.4,
+  "_keys": [],
+  "_stepness": 0,
+  "curveDatas": {},
+  "_curves": [],
+  "_commonTargets": [],
+  "_hash": 0,
+  "_tracks": [
+    {
+      "__type__": "cc.animation.ObjectTrack",
+      "_binding": {
+        "__type__": "cc.animation.TrackBinding",
+        "path": {
+          "__type__": "cc.animation.TrackPath",
+          "_paths": [
+            {
+              "__type__": "cc.animation.ComponentPath",
+              "component": "cc.Sprite"
+            },
+            "spriteFrame"
+          ]
+        },
+        "proxy": null
+      },
+      "_channel": {
+        "__type__": "cc.animation.Channel",
+        "_curve": {
+          "__type__": "cc.ObjectCurve",
+          "_times": [
+            0.0,
+            0.0333333333,
+            0.0666666667,
+            0.1,
+            0.1333333333,
+            0.1666666667,
+            0.2,
+            0.2333333333,
+            0.2666666667,
+            0.3,
+            0.3333333333,
+            0.3666666667
+          ],
+          "_values": [
+            {
+              "__uuid__": "7dd227d2-2dd1-49b6-9f33-0707e1c5fbdc@f9941",
+              "__expectedType__": "cc.SpriteFrame"
+            },
+            {
+              "__uuid__": "d90faa95-55ab-4678-9703-275056a79b41@f9941",
+              "__expectedType__": "cc.SpriteFrame"
+            },
+            {
+              "__uuid__": "037aae42-65a7-4888-ae21-d3dc5e5d196a@f9941",
+              "__expectedType__": "cc.SpriteFrame"
+            },
+            {
+              "__uuid__": "3720f973-833b-4372-9ad6-09f2e04714bb@f9941",
+              "__expectedType__": "cc.SpriteFrame"
+            },
+            {
+              "__uuid__": "7a41b6ff-f4e1-4522-ac91-79ef54e779cb@f9941",
+              "__expectedType__": "cc.SpriteFrame"
+            },
+            {
+              "__uuid__": "19936494-85fa-4a7c-8be7-91c7529f5b73@f9941",
+              "__expectedType__": "cc.SpriteFrame"
+            },
+            {
+              "__uuid__": "cff58369-a5dc-42fe-8369-49c4d2a86f9c@f9941",
+              "__expectedType__": "cc.SpriteFrame"
+            },
+            {
+              "__uuid__": "f4e41902-fcf2-4862-8050-ffbc890958bc@f9941",
+              "__expectedType__": "cc.SpriteFrame"
+            },
+            {
+              "__uuid__": "d0d5ac6c-aa5b-4f80-b7c2-a00c8388155a@f9941",
+              "__expectedType__": "cc.SpriteFrame"
+            },
+            {
+              "__uuid__": "67f8e840-f5a9-4a7a-8e90-f91ad9d52cf7@f9941",
+              "__expectedType__": "cc.SpriteFrame"
+            },
+            {
+              "__uuid__": "f228401e-fd0f-4634-8150-ca04f2d0410a@f9941",
+              "__expectedType__": "cc.SpriteFrame"
+            },
+            {
+              "__uuid__": "b3238067-5bf8-4fa8-a83d-8c7f1b8509ad@f9941",
+              "__expectedType__": "cc.SpriteFrame"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "_exoticAnimation": null,
+  "_events": [],
+  "_embeddedPlayers": [],
+  "_additiveSettings": {
+    "__type__": "cc.AnimationClipAdditiveSettings",
+    "enabled": false,
+    "refClip": null
+  },
+  "_auxiliaryCurveEntries": []
+}

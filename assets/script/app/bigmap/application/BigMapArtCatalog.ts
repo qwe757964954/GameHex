@@ -86,8 +86,18 @@ export function worldCampArtFor(iconPath: string, campId: number): string {
     return group[campId % group.length] ?? path;
 }
 
-export const BIGMAP_UI_KEYS = ['header', 'detail', 'button', 'tab_idle', 'tab_active', 'badge', 'plot', 'stamina', 'home'] as const;
-export type IBigMapUiKey = typeof BIGMAP_UI_KEYS[number];
+/**
+ * 体力图标（`ui/stamina`）—— 概念题花里唯一还在用的 UI 件。
+ *
+ * 2026-11-12 删掉 `BIGMAP_UI_KEYS`（header/detail/button/tab_idle/tab_active/badge/plot/home 共 8 张，
+ * 加 stamina 组成 9 张）：那 8 张在 `assets/script` 里**零消费点**（`IBigMapArt.ui` 从来没人读），
+ * 加载后还统一覆写 `insetLeft/Right/Top/Bottom = 28` 做九宫拉伸，而图自身 `.meta` 的 border 全是 0
+ * —— 两套真源并存，且和下方 `BIGMAP_HUD_UI_KEYS` 那段「九宫走 .meta、不在代码里覆写」的口径打架。
+ * 只保留 `stamina`：`BigMapArtLoader` 拿它给「体力」资源图标兜底（`item.icon` 缺失时）。
+ *
+ * → PNG 与 `manifest.json` 条目仍在库里（删图要同步裁清单和测试，属独立清理），代码侧只认这一张。
+ */
+export const BIGMAP_STAMINA_ART = `${BIGMAP_CONCEPT_ROOT}/ui/stamina`;
 
 /**
  * 据点**名条**（地图上压在建筑下方的「徽章 + 名字」条）。
@@ -106,7 +116,7 @@ export type IBigMapUiKey = typeof BIGMAP_UI_KEYS[number];
  * 四张**尺寸不同**（两个 202×56、两个 193×54），所以尺寸从贴图自身取，
  * 不要在代码里写死一个宽度 —— 换了图立刻错位。
  *
- * ⚠️ 不复用 `BIGMAP_UI_KEYS`：那一组是「九宫拉伸的通用面板件」，加载时会被统一
+ * ⚠️ 不复用 `BIGMAP_UI_KEYS`（2026-11-12 已删）：那一组原来是「九宫拉伸的通用面板件」，加载时会被统一
  * 覆写 `insetLeft/Right/Top/Bottom = 28`；名条是整条原尺寸贴图，覆写九宫边
  * 会把左右两端的圆角拉变形。
  */

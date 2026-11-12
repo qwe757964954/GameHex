@@ -3,17 +3,21 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
-import { BIGMAP_BASE_FALLBACK_ART, BIGMAP_CONCEPT_ROOT, BIGMAP_UI_KEYS } from '../assets/script/app/bigmap/application/BigMapArtCatalog';
+import {
+    BIGMAP_BASE_FALLBACK_ART, BIGMAP_CONCEPT_ROOT, BIGMAP_STAMINA_ART,
+} from '../assets/script/app/bigmap/application/BigMapArtCatalog';
 import { assetPath } from './helpers/asset-paths';
 
 const root = assetPath(BIGMAP_CONCEPT_ROOT);
 
-test('16 张在用设计切图与清单一致，建筑和 UI 保持真实透明通道', () => {
+test('8 张在用设计切图与清单一致，建筑和 UI 保持真实透明通道', () => {
     const manifest = JSON.parse(readFileSync(join(root, 'manifest.json'), 'utf8'));
-    // 2026-11-12：9 张基地/世界旧概念图（barracks/farm/fortress/headquarters/ironworks/
+    // 2026-11-12 第一刀：9 张基地/世界旧概念图（barracks/farm/fortress/headquarters/ironworks/
     // mutant_camp/sawmill/warehouse/water_tower）随新美术删库，清单同步裁到 16 条。
-    assert.equal(manifest.assets.length, 16);
-    assert.equal(new Set(manifest.assets.map((asset: { path: string }) => asset.path)).size, 16);
+    // 2026-11-12 第二刀：8 张零消费 UI 件（header/detail/button/tab_idle/tab_active/badge/plot/home）
+    // 已经 uuid 反查（prefab/scene/json 零命中）后连 PNG 一起删，清单裁到 8 条；只剩 stamina。
+    assert.equal(manifest.assets.length, 8);
+    assert.equal(new Set(manifest.assets.map((asset: { path: string }) => asset.path)).size, 8);
     for (const asset of manifest.assets) {
         const bytes = readFileSync(join(root, asset.path));
         assert.equal(createHash('sha256').update(bytes).digest('hex'), asset.sha256, asset.path);
@@ -27,7 +31,10 @@ test('16 张在用设计切图与清单一致，建筑和 UI 保持真实透明�
 test('实际配置建筑与所有运行时图标均有资源，自动图集只放在最外层', () => {
     // 通用建筑兜底图放在 resources 下（不走 concept 目录）。
     assert.equal(BIGMAP_BASE_FALLBACK_ART, 'image/buildings/camp_outpost');
-    for (const name of BIGMAP_UI_KEYS) assert.ok(existsSync(join(root, 'ui', `${name}.png`)), name);
+    // 2026-11-12：`BIGMAP_UI_KEYS` 那 8 张（header/detail/button/tab_*/badge/plot/home）零消费，
+    // 已从加载链摘除并**连 PNG 一起删**；只剩 `stamina` 还被资源图标兜底用 —— 就钉这一张。
+    assert.equal(BIGMAP_STAMINA_ART, `${BIGMAP_CONCEPT_ROOT}/ui/stamina`);
+    assert.ok(existsSync(assetPath(`${BIGMAP_STAMINA_ART}.png`)), BIGMAP_STAMINA_ART);
     // 剩下的 7 张 sprites：4 张资源图标 + 3 张基地/地形（建造中、石头、草）。
     for (const name of ['grain', 'wood', 'iron', 'coin', 'construction', 'rocks', 'grass']) {
         assert.ok(existsSync(join(root, 'sprites', `${name}.png`)), name);

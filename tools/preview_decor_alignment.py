@@ -35,8 +35,9 @@ OUT = os.path.join(ROOT, 'docs', OUT_NAME)
 
 # 🔴 与 `TerritoryStationView` 必须同值（那边是唯一真源）：
 #   `TERRITORY_BOTTOM_ANCHOR_BUILD_IDS` / `TERRITORY_BOTTOM_ANCHOR_DROP_PX`
+#   2026-11-12：4px 落地影子补偿 + 10px + 用户追加 4px = 18px
 BOTTOM_ANCHOR_IDS = frozenset((69010, 69011, 69012, 69013))
-BOTTOM_ANCHOR_DROP = 4
+BOTTOM_ANCHOR_DROP = 18
 
 VISIBLE_WIDTH = 84          # `TerritoryStationView.BUILDING_VISIBLE_WIDTH`
 FACE_WIDTH = 123            # `HEX_GRID_FACE_WIDTH`

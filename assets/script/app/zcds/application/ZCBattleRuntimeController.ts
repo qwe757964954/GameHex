@@ -63,9 +63,9 @@ export class ZCBattleRuntimeController extends ControllerBase {
             this.selection = new ZCSpawnSelection(config.map, this.random);
             this.phase.startSpawnSelection();
         } else {
-            const resolved = config.map.resolvedResources ? config : {
-                ...config, map: { ...config.map, resolvedResources: resolveZCMapResources(config.map, this.random) },
-            };
+            const resolved = config.map.resolvedResources ? config : Object.assign({}, config, {
+                map: Object.assign({}, config.map, { resolvedResources: resolveZCMapResources(config.map, this.random) }),
+            });
             this.model = new ZCGameModel(null, this.random, resolved);
             this.phase.startPlaying();
         }

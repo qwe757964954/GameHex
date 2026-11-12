@@ -3,6 +3,10 @@ import { cardCounterMultiplier, ZCCombatEventType, type ZCAttackProfile, type ZC
 import { zcCombatEffectTravelSeconds } from '../ZCCombatEffectFlight';
 import { ZC_SELF_AURA_EFFECT_PREFAB_PATH, ZC_SELF_AURA_BEHAVIOR_KEY, zcSelfAuraEffectPath } from '../ZCSelfAuraFx';
 import { ZC_BOLT_EFFECT_PREFAB_PATH, ZC_BOLT_EFFECT_SECONDS, ZC_BOLT_NUMB_STATUS_ID } from '../ZCBoltStrikeFx';
+import {
+    ZC_TRAP_EXPIRE_PREFAB_PATH, ZC_TRAP_EXPIRE_SECONDS,
+    ZC_TRAP_IDLE_PREFAB_PATH, ZC_TRAP_SPAWN_PREFAB_PATH, ZC_TRAP_SPAWN_SECONDS,
+} from '../ZCTrapFx';
 import { missileLog } from '../../ZCMissileSkillDiagnostics';
 import { skillCastLog, skillCastLogChanging, zcSkillCastWatched } from '../../ZCSkillCastDiagnostics';
 import type {
@@ -706,6 +710,144 @@ export class ZCAttackResolutionSystem {
                 + `间距 ${spacing.toFixed(1)}（表值 ${parameters?.boltSpacing}）`
                 + `，逐道 ${interval}s、延迟 ${delay}s 判伤，单道 ${damage}`
                 + `，麻痹 ${(numbChance * 100).toFixed(0)}% / ${numbSeconds}s`);
+        }
+        return true;
+    }
+
+    /**
+     * ⑩ 精密陷阱（2026-11-12，科学家 68035 / 技能 103504）。
+     *
+     * 设计口径（技能设计案第 175 行原文）：「在**原地坐标**留下一个持续时间为 15/18/23 秒的陷阱，
+     * 目标触碰到该陷阱会收到 1 次伤害 200%/250%/300%，陷阱会爆炸范围 100px 圆形，
+     * 造成 1 次额外的伤害，爆炸范围内所有敌人受到**均等**伤害 180%/220%/280%，
+     * 陷阱达到指定的秒数后也会主动爆炸」。
+     *
+     * 落地成什么：**一个地面区域**（`ZCGroundZoneSystem`），而不是新的实体系统 ——
+     * 它要的东西那片系统全都有：寿命读秒（`remainingSeconds`）、圆形判定（`radius`）、
+     * 到期一次性伤害（`expireDamage`，均等、无递减）、整段持有视觉（`holdVisual`）。
+     * 只补了两处这片系统原来没有的能力（见 `ZCGroundZoneState.contactRadius`）：
+     *
+     * 1. **触碰触发**：`contactRadius` 半径内出现敌方单位 ⇒ 该目标吃 `contactDamage`，
+     *    整片区域当场清零，走既有到期通道（爆炸伤害 + `expirePrefabPath` 的表现）。
+     * 2. **死亡那一拍的表现**：`expirePrefabPath` + `expireFxSeconds`。
+     *
+     * 参数（**距离全是表值逻辑 px**，内部乘 `combatDistanceScale`）：
+     *   `trapDuration`            陷阱存活秒数（15/18/23）
+     *   `trapRadius`              触碰判定半径（50）
+     *   `trapDamageRate`          触碰那一下的倍率（2.0/2.5/3.0）
+     *   `trapExplodeRadius`       爆炸半径（100）
+     *   `trapExplodeDamageRate`   爆炸均等伤害倍率（1.8/2.2/2.8）
+     *   `trapForward`             放置点相对本体的前移距离（缺省 0 = 原地，设计案口径）
+     *
+     * 返回 `true` = 真的放下了（调用方才消费 CD）。
+     */
+    static castTrap(state: ZCSnapshot, unit: ZCUnitState,
+        context: IZCAttackResolutionContext): boolean {
+        const definition = context.effectiveDefinition(unit);
+        const profile = definition.attackProfile;
+        const parameters = context.skillRuntime[unit.owner]
+            .get(`${unit.unitId}:${profile.skillId}`)?.parameters;
+        const scale = context.rules.combatDistanceScale;
+        const seconds = Math.max(0, parameters?.trapDuration ?? 0);
+        const contactTable = Math.max(0, parameters?.trapRadius ?? 0);
+        const contactRate = Math.max(0, parameters?.trapDamageRate ?? 0);
+        const explodeTable = Math.max(0, parameters?.trapExplodeRadius ?? 0);
+        const explodeRate = Math.max(0, parameters?.trapExplodeDamageRate ?? 0);
+        if (!(seconds > 0) || !(contactTable > 0) || !(contactRate > 0)
+            || !(explodeTable > 0) || !(explodeRate > 0)) {
+            if (zcSkillCastWatched(unit.unitId)) {
+                skillCastLogChanging(`trap-params:${unit.id}`, '施法',
+                    `${unit.unitId}#${unit.id} 精密陷阱参数不全：duration=${seconds}`
+                    + ` contact=${contactTable}/${contactRate} explode=${explodeTable}/${explodeRate}`
+                    + ` ⇒ 不放陷阱、不消费 CD`);
+            }
+            return false;
+        }
+
+        //  暴击 / 克制按**放下那一刻**的当前目标算一次，两份伤害（触碰 / 爆炸）共用 ——
+        //  与 `castSelfAura` / `castBoltLine` 同一口径：区域只存标量，逐帧重算会让
+        //  「同一片陷阱」一会儿暴一会儿不暴。触发时目标可能已经换了人，这是**刻意**的：
+        //  陷阱是「布置时灌注的能量」，不是「每次踩都重新掷一次骰」。
+        const target = context.currentTarget(unit);
+        const targetOwner = target ? this.targetOwner(state, target, context) : unit.owner;
+        const targetCardId = target?.cardId ?? null;
+        const criticalMultiplier = this.criticalMultiplier(unit, context);
+        const counterMultiplier = target
+            ? cardCounterMultiplier(
+                this.cardById(context, unit.owner, unit.cardId),
+                target.cardId ? this.cardById(context, this.targetOwner(state, target, context), target.cardId) : undefined,
+                context.counters)
+            : 1;
+        const floatTextKind = damageFloatTextKind(criticalMultiplier > 1, counterMultiplier);
+        const contactDamage = Math.round(
+            this.unitDamage(context, unit, targetOwner, targetCardId, contactRate) * criticalMultiplier);
+        const explodeDamage = Math.round(
+            this.unitDamage(context, unit, targetOwner, targetCardId, explodeRate) * criticalMultiplier);
+
+        const origin = context.unitPosition(unit);
+        //  放置点：设计案原文是「**原地坐标**」⇒ 缺省就压在脚下（`trapForward` 缺省 0）。
+        //  留这个参数是为了以后要「往前丢一格」时改配表就行，不用再动代码。
+        const forward = Math.max(0, parameters?.trapForward ?? 0) * scale;
+        const x = forward > 0 ? origin.x + Math.cos(unit.facingRadians) * forward : origin.x;
+        const y = forward > 0 ? origin.y + Math.sin(unit.facingRadians) * forward : origin.y;
+
+        state.groundZones.push({
+            x, y,
+            //  `radius` = **爆炸**半径（到期通道按它打全部敌人）；触碰用 `contactRadius`。
+            radius: explodeTable * scale,
+            owner: unit.owner,
+            sourceUnitId: unit.id,
+            skillId: profile.skillId,
+            skillName: profile.name,
+            //  常驻表现（`idle` 循环）跟着区域走，位置由 `syncHoldVisual` 每帧同步。
+            effectPrefabPath: ZC_TRAP_IDLE_PREFAB_PATH,
+            holdVisual: true,
+            //  生成动画先播 0.4s，常驻光环推后出场 —— 两段美术，同帧会双影。
+            visualDelaySeconds: ZC_TRAP_SPAWN_SECONDS,
+            remainingSeconds: seconds,
+            //  陷阱没有「波次」：伤害只在触碰 / 到期两个时刻各结算一次。
+            wavesLeft: 0,
+            nextWaveAt: state.elapsedSeconds + seconds,
+            waveInterval: Math.max(0.05, seconds),
+            damage: 0,
+            slowRatio: 0,
+            floatTextKind,
+            contactRadius: contactTable * scale,
+            contactDamage,
+            expireDamage: explodeDamage,
+            expirePrefabPath: ZC_TRAP_EXPIRE_PREFAB_PATH,
+            expireFxSeconds: ZC_TRAP_EXPIRE_SECONDS,
+        });
+
+        //  生成那一段是**独立的一条一次性表现**（`start00~11`），不是区域的持有视觉：
+        //  它只活 0.4s，与区域寿命无关。时长必须 ≥ 动画总长，否则尾段会被事件裁剪摘掉。
+        state.combatEvents.push({
+            id: state.nextCombatEventId++,
+            type: ZCCombatEventType.Area,
+            owner: unit.owner,
+            sourceUnitId: unit.id,
+            targetUnitId: target?.kind === 'unit' ? target.id : null,
+            skillId: profile.skillId,
+            skillName: profile.name,
+            effectKey: null,
+            projectileKey: null,
+            effectPrefabPath: ZC_TRAP_SPAWN_PREFAB_PATH,
+            fromX: x,
+            fromY: y,
+            toX: x,
+            toY: y,
+            radius: contactTable * scale,
+            //  纯表现：两份伤害分别由触碰与到期结算，这里给 0。
+            damage: 0,
+            empowered: false,
+            startedAt: state.elapsedSeconds,
+            durationSeconds: ZC_TRAP_SPAWN_SECONDS,
+        });
+
+        if (zcSkillCastWatched(unit.unitId)) {
+            skillCastLog('施法', `${unit.unitId}#${unit.id} 放下【精密陷阱】：`
+                + `存活 ${seconds}s、触碰 ${contactTable}px/${contactDamage}、`
+                + `爆炸 ${explodeTable}px/${explodeDamage}（均等、无递减）`);
         }
         return true;
     }

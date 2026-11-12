@@ -1036,7 +1036,18 @@ export class ZCHexView extends Component {
         return Math.max(0, now - startedAt) * this.mowerSpeed;
     }
 
-    renderMower(offsetX: number, offsetY: number, active: boolean): void {
+    renderMower(offsetX: number, offsetY: number, active: boolean,
+        directionX = offsetX, directionY = offsetY): void {
+        const vertical = Math.abs(directionX) < 0.001;
+        const frame = this.neutralResourceFrames?.get(vertical
+            ? directionY > 0 ? 'extension_up' : directionY < 0 ? 'extension_down' : 'extension'
+            : directionY > 0 ? 'extension_right_up' : 'extension');
+        if (frame) {
+            this.setSprite(this.iconSprite, frame);
+            const scale = resourceIconScale(frame) * NEUTRAL_FEATURE_ICON_SCALE;
+            const flip = directionX < 0 || (directionX === 0 && directionY === 0) ? -1 : 1;
+            this.iconSprite.node.setScale(scale * flip, scale, 1);
+        }
         const pos = ZCHexView.RESOURCE_ICON_POS;
         this.mowerOffset.set(pos.x + offsetX, pos.y + offsetY, pos.z);
         this.applyIconPosition(this.mowerOffset);
@@ -1662,7 +1673,8 @@ export class ZCHexView extends Component {
             const resourceScale = resourceFrame === this.unknownResourceFrame
                 ? base * UNKNOWN_RESOURCE_ICON_RATIO
                 : base;
-            this.iconSprite.node.setScale(resourceScale, resourceScale, 1);
+            this.iconSprite.node.setScale(!maskResource && visual === ZCNeutralResourceVisual.Extension
+                ? -resourceScale : resourceScale, resourceScale, 1);
         } else {
             // 选点阶段不画地块类型图标（只可能是「没有图标」或资源点图标），但这个节点与对局共用，
             // 复位值必须与对局基准同源：写成 1 就是第二个「静止值」，以后这里加了图标立刻大小不一。
@@ -1992,7 +2004,7 @@ export class ZCHexView extends Component {
         // 金币图标（`priceIcon`）与数字（`iconLabel`）在另一组节点上，这里不碰它们的 scale。
         if (resourceFrame) {
             const scale = resourceIconScale(resourceFrame) * (monster ? 0.25 : state.neutralFeature ? NEUTRAL_FEATURE_ICON_SCALE : 1);
-            this.iconSprite.node.setScale(scale, scale, 1);
+            this.iconSprite.node.setScale(resourceVisual === ZCNeutralResourceVisual.Extension ? -scale : scale, scale, 1);
         } else if (this.iconSprite.node.scale.x !== TILE_ICON_SCALE) {
             this.iconSprite.node.setScale(TILE_ICON_SCALE, TILE_ICON_SCALE, 1);
         }

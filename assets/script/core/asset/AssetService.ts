@@ -61,9 +61,7 @@ export interface AssetService {
 
 /** 页内动态资产默认归属页面；已明确指定的独立战斗作用域保持原样。 */
 export function scopeAssetService(assets: AssetService, scope: ResourceScope): AssetService {
-    const resolveOptions = (options: AssetLoadOptions = {}): AssetLoadOptions & { scope: ResourceScope } => ({
-        ...options, scope: options.scope ?? scope,
-    });
+    const resolveOptions = (options: AssetLoadOptions = {}): AssetLoadOptions & { scope: ResourceScope } => Object.assign({}, options, { scope: options.scope ?? scope });
     const checkActive = (owner: ResourceScope): void => {
         if (owner.disposed) throw new Error('资源作用域已释放，加载已取消');
     };

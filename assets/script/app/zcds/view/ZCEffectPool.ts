@@ -183,13 +183,17 @@ export class ZCEffectPool {
     setArt(patch: typeof this.art): void {
         const current = this.art;
         const hitFx = patch.hitFxPrefabs;
+        let hitFxPrefabs = current.hitFxPrefabs;
+        if (hitFx && hitFx.size) {
+            const merged = new Map(current.hitFxPrefabs);
+            for (const [trait, prefab] of hitFx) merged.set(trait, prefab);
+            hitFxPrefabs = merged;
+        }
         this.art = {
             spawnFxPrefab: patch.spawnFxPrefab ?? current.spawnFxPrefab,
             deathFxPrefab: patch.deathFxPrefab ?? current.deathFxPrefab,
             buildingDestroyFxPrefab: patch.buildingDestroyFxPrefab ?? current.buildingDestroyFxPrefab,
-            hitFxPrefabs: hitFx && hitFx.size
-                ? new Map([...current.hitFxPrefabs, ...hitFx])
-                : current.hitFxPrefabs,
+            hitFxPrefabs,
         };
     }
 

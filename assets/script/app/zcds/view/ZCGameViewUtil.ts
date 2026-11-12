@@ -35,6 +35,23 @@ export const ZC_MAP_SCALE_Y = ZC_HEX_ROW_SPACING / HEX_GRID_LOGICAL_ROW_STEP;
 export function mapToViewX(x: number): number { return x * ZC_MAP_SCALE_X; }
 export function mapToViewY(y: number): number { return y * ZC_MAP_SCALE_Y; }
 
+/**
+ * 战斗表现项「到点了没」的唯一判据：`startedAt` 落在**未来** ⇒ `false`。
+ *
+ * 逻辑层允许把 `startedAt` 推到未来（`castBoltLine` 的逐道落雷、`ZCProjectileSystem` 的延迟
+ * 出发），视图侧必须**照它整条不建节点**，否则 `ZCCombatEffectView.render` 会把负进度钳成 0
+ * ——效果就是「所有还没到点的特效在同一帧全部亮起」（2026-11-12 五雷轰顶反馈）。
+ *
+ * 判据放这里而不是散在调用点：`startedAt <= now` 这种比较写两遍，早晚会有一处写成 `<`。
+ *
+ * 取不到 `startedAt`（`undefined` / `NaN`：老快照、手搓事件、视图夹具）一律**视为已到点** ——
+ * 省略字段的历史口径是「立刻出现」，闸门不能把这类表现项整条吞掉。
+ */
+export function zcCombatEffectEntered(startedAt: number | undefined | null, now: number): boolean {
+    if (typeof startedAt !== 'number' || !Number.isFinite(startedAt)) return true;
+    return startedAt <= now;
+}
+
 export function portalFlightProgress(startedAt: number, now: number): number {
     return Math.max(0, Math.min(1, (now - startedAt) / ZC_PORTAL_FLIGHT_SECONDS));
 }

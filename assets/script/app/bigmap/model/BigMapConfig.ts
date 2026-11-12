@@ -1,4 +1,7 @@
 import {
+    readConfigArray, readConfigInteger, readConfigNumber, readConfigObject,
+} from '../../../core/config/ConfigValue';
+import {
     BigMapBuildingKind,
     BIGMAP_RES_ORDER,
     type BigMapResType,
@@ -94,11 +97,8 @@ function table(tables: BigMapRawTables, name: BigMapTableName): readonly BigMapR
 }
 
 function num(row: BigMapRow, field: string): number {
-    const value = Number(row[field]);
-    if (!Number.isFinite(value)) {
-        throw new Error(`[BigMap] 字段 ${field} 不是有效数字：${JSON.stringify(row)}`);
-    }
-    return value;
+    return readConfigNumber(Number(row[field]),
+        `[BigMap] 字段 ${field}（id=${row.id ?? row.worldId ?? row.cityId ?? row.monsterId ?? '-'}，原值=${String(row[field])}）`);
 }
 
 function int(row: BigMapRow, field: string): number {
@@ -123,11 +123,7 @@ function pickInt(row: BigMapRow, primary: string, fallback: string, defaultValue
     for (const field of [primary, fallback]) {
         const value = row[field];
         if (value === undefined || value === null || value === '') continue;
-        const parsed = Number(value);
-        if (!Number.isFinite(parsed)) {
-            throw new Error(`[BigMap] 字段 ${field} 不是有效数字：${JSON.stringify(row)}`);
-        }
-        return Math.round(parsed);
+        return int(row, field);
     }
     return defaultValue;
 }
@@ -136,11 +132,7 @@ function pickInt(row: BigMapRow, primary: string, fallback: string, defaultValue
 function optionalInt(row: BigMapRow, field: string, defaultValue = 0): number {
     const value = row[field];
     if (value === undefined || value === null || value === '') return defaultValue;
-    const parsed = Number(value);
-    if (!Number.isFinite(parsed)) {
-        throw new Error(`[BigMap] 字段 ${field} 不是有效数字：${JSON.stringify(row)}`);
-    }
-    return Math.round(parsed);
+    return int(row, field);
 }
 
 /** `baseBuildingLevel.preBuild`：`[{buildId,buildLevel}]`，可能是 JSON 字符串。 */
@@ -500,11 +492,7 @@ const BIGMAP_QUEUE_CLIENT_DEFAULTS = { offlineMaxHours: 8, plotRows: 5, plotCols
 
 function queueClientInt(row: BigMapRow, field: keyof typeof BIGMAP_QUEUE_CLIENT_DEFAULTS): number {
     if (!(field in row)) return BIGMAP_QUEUE_CLIENT_DEFAULTS[field];
-    const value = row[field];
-    if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
-        throw new Error(`[BigMap] 字段 ${field} 不是有效的非负整数：${JSON.stringify(row)}`);
-    }
-    return value;
+    return readConfigInteger(row[field], `[BigMap] ${BIGMAP_TABLE.queue}.${field}`, 0);
 }
 
 function parseQueue(row: BigMapRow): IBigMapQueueConfig {
@@ -598,17 +586,14 @@ function parseScoreRule(row: BigMapRow): IBigMapScoreRuleConfig {
 }
 
 function campInt(row: BigMapRow, field: string, min: number, max = 0xFFFFFFFF): number {
-    const value = row[field];
-    if (typeof value !== 'number' || !Number.isInteger(value) || value < min || value > max) {
-        throw new Error(`[BigMap] 据点字段 ${field} 必须为 ${min}~${max} 的整数`);
-    }
-    return value;
+    return readConfigInteger(row[field], `[BigMap] ${BIGMAP_TABLE.camp}[campId=${row.campId}].${field}`, min, max);
 }
 
 function campNumber(row: BigMapRow, field: string): number {
-    const value = row[field];
-    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
-        throw new Error(`[BigMap] 据点字段 ${field} 必须为非负有限数值`);
+    const path = `[BigMap] ${BIGMAP_TABLE.camp}[campId=${row.campId}].${field}`;
+    const value = readConfigNumber(row[field], path);
+    if (value < 0) {
+        throw new Error(`${path} 必须为非负有限数值，收到 ${value}`);
     }
     return value;
 }
@@ -619,10 +604,8 @@ function campIds(row: BigMapRow, field: string): readonly number[] {
         try { value = JSON.parse(value); }
         catch { throw new Error(`[BigMap] 据点字段 ${field} 不是有效 JSON`); }
     }
-    if (!Array.isArray(value) || value.some((id) => !Number.isSafeInteger(id) || id <= 0)) {
-        throw new Error(`[BigMap] 据点字段 ${field} 必须为正整数数组`);
-    }
-    return [...value];
+    const path = `[BigMap] ${BIGMAP_TABLE.camp}[campId=${row.campId}].${field}`;
+    return readConfigArray(value, path).map((id, index) => readConfigInteger(id, `${path}[${index}]`, 1));
 }
 
 function parseCamp(row: BigMapRow): IBigMapCampConfig {
@@ -651,8 +634,8 @@ function parseCamp(row: BigMapRow): IBigMapCampConfig {
         buffGroupIds: campIds(row, 'buffGroupId'),
         buffEffectIds: campIds(row, 'buffEffectId'),
         // 2026-10-30：单个 `firstRewardId` 换成两列掉落数组（首占 / 占领）。
-        firstReward: parseDropList(row, 'firstReward', '据点'),
-        occupyReward: parseDropList(row, 'occupyReward', '据点'),
+        firstReward: parseDropList(row, 'firstReward', BIGMAP_TABLE.camp),
+        occupyReward: parseDropList(row, 'occupyReward', BIGMAP_TABLE.camp),
         buffConNum: campInt(row, 'buffConNum', 0),
         buffRate: campNumber(row, 'buffRate'),
         iconPath: text(row, 'campIcon').trim(),
@@ -677,8 +660,8 @@ function parseMonster(row: BigMapRow): IBigMapMonsterConfig {
                 unlockValue: monsterInt(row, 'unlockValue', 0),
                 rallyOpen: monsterInt(row, 'rallyOpen', 0, 1) === 1,
                 rallyNum: monsterInt(row, 'rallyNum', 0),
-                firstKillDrops: parseDropList(row, 'firstKillDropId', '野怪'),
-                normalDrops: parseDropList(row, 'normalDropId', '野怪'),
+                firstKillDrops: parseDropList(row, 'firstKillDropId', BIGMAP_TABLE.monster),
+                normalDrops: parseDropList(row, 'normalDropId', BIGMAP_TABLE.monster),
                 iconPath: text(row, 'monsterHeaIcon'),
                 modelPath: text(row, 'monsterModel'),
             },
@@ -703,32 +686,26 @@ function parseMonster(row: BigMapRow): IBigMapMonsterConfig {
     };
 }
 
-function monsterInt(row: BigMapRow, field: string, min: number, max = Number.MAX_SAFE_INTEGER, prefix = ''): number {
-    const value = row[field];
-    if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < min || value > max) {
-        throw new Error(`[BigMap] 野怪字段 ${prefix}${field} 必须为 ${min}~${max} 的整数：${JSON.stringify(row)}`);
-    }
-    return value;
+function monsterInt(row: BigMapRow, field: string, min: number, max = Number.MAX_SAFE_INTEGER): number {
+    return readConfigInteger(row[field], `[BigMap] ${BIGMAP_TABLE.monster}[monsterId=${row.monsterId}].${field}`, min, max);
 }
 
 /**
  * 掉落数组解析 —— **据点与野怪共用**（`firstReward` / `occupyReward` / `firstKillDropId` / `normalDropId`）。
  *
- * `owner` 只用于错误文案：配错时得能一眼看出是「据点」还是「野怪」的哪一列。
+ * 错误路径包含所属表、行标识及数组下标，避免据点掉落误报为野怪字段。
  * 非数组直接抛：空数组是合法事实（没配奖励），字段缺失/写成对象则是配表事故。
  */
-function parseDropList(row: BigMapRow, field: string, owner: string): readonly IBigMapDrop[] {
-    const drops = row[field];
-    if (!Array.isArray(drops)) throw new Error(`[BigMap] ${owner}字段 ${field} 必须为掉落数组`);
-    return drops.map((drop: unknown) => {
-        if (!drop || typeof drop !== 'object' || Array.isArray(drop)) {
-            throw new Error(`[BigMap] ${owner}字段 ${field} 存在非法掉落`);
-        }
-        const item = drop as BigMapRow;
+function parseDropList(row: BigMapRow, field: string, tableName: BigMapTableName): readonly IBigMapDrop[] {
+    const path = `[BigMap] ${tableName}[id=${row.campId ?? row.monsterId}].${field}`;
+    const drops = readConfigArray(row[field], path);
+    return drops.map((drop, index) => {
+        const itemPath = `${path}[${index}]`;
+        const item = readConfigObject(drop, itemPath);
         return {
-            resId: monsterInt(item, 'resId', 1, Number.MAX_SAFE_INTEGER, `${field}.`),
-            number: monsterInt(item, 'number', 0, Number.MAX_SAFE_INTEGER, `${field}.`),
-            pro: monsterInt(item, 'pro', 0, 10000, `${field}.`),
+            resId: readConfigInteger(item.resId, itemPath + '.resId', 1),
+            number: readConfigInteger(item.number, itemPath + '.number', 0),
+            pro: readConfigInteger(item.pro, itemPath + '.pro', 0, 10000),
         };
     });
 }

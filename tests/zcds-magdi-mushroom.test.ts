@@ -19,6 +19,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
+import { loadViews } from './helpers/zcds-view-fixtures';
 import { ZCOwner } from '../assets/script/app/zcds/model/ZCMapConfig';
 import type { ZCSnapshot, ZCUnitState } from '../assets/script/app/zcds/model/ZCGameTypes';
 import type { ZCSkillRuntimeDefinition } from '../assets/script/app/zcds/model/ZCSkillRuntime';
@@ -310,6 +311,58 @@ test('五雷轰顶：参数不全（缺 boltCount / 倍率 / 半径）⇒ 返回
     const state = snapshot([caster]);
     const context = boltContext(caster, { id: 9, x: 60, y: 0 }, { boltCooldown: 12 });
     assert.equal(ZCAttackResolutionSystem.castBoltLine(state, caster, context), false);
+});
+
+// ────────────────────────────────────────────── 三·五、逐道出现（观感，2026-11-12 第三次反馈）
+
+/**
+ * 用户 2026-11-12：「五雷轰顶的技能还是没有按照先后出现，视觉感官是同时出现的」。
+ *
+ * 参数（`boltSpacing` 60 / `boltInterval` 0.15）第二轮就改完了，判伤（`nextWaveAt`）也一直
+ * 是错开的 —— 错的是**表现**：五条 `area` 事件是**同一拍**推进 `combatEvents` 的，只靠
+ * `startedAt`（未来时刻）排先后，而渲染世界原来「看到事件就建节点」：
+ * `acquire → initialize → mountVisual` 会立刻 `animation.play(默认 clip)`，`ZCCombatEffectView.render`
+ * 又把负进度钳成 0 ⇒ 五道雷**同一帧全部亮起、动画同拍**。
+ *
+ * 所以这里钉三层：① 模型 `startedAt` 逐道递增；② 「到点没」只有一个判据
+ * （`zcCombatEffectEntered`）；③ 视图建节点前必须先过这块闸。
+ */
+test('五雷轰顶：逐道 0.15s 出现 —— 任意一拍上「已到点」的道数逐道 +1，不会一起亮', () => {
+    const { load } = loadViews();
+    const entered = load('./ZCGameViewUtil').zcCombatEffectEntered as (startedAt: number, now: number) => boolean;
+    //  判据本身：等于 `startedAt <= now`（写成 `<` 会让出手那一拍的第一道消失一帧）
+    assert.equal(entered(0.15, 0.14), false);
+    assert.equal(entered(0.15, 0.15), true);
+    assert.equal(entered(0, 0), true);
+
+    const caster = unit(1, { freeX: 0, freeY: 0 });
+    const state = snapshot([caster]);
+    ZCAttackResolutionSystem.castBoltLine(state, caster, boltContext(caster, { id: 9, x: 60, y: 0 },
+        { ...BOLT_PARAMS, boltCount: 5, boltDamageRate: 2.5 }));
+
+    const visibleAt = (now: number) => state.combatEvents.filter((event) => entered(event.startedAt, now)).length;
+    assert.deepEqual(
+        [0, 0.14, 0.15, 0.3, 0.45, 0.6, 0.75].map(visibleAt),
+        [1, 1, 2, 3, 4, 5, 5],
+        '5 道雷必须是 0 / 0.15 / 0.30 / 0.45 / 0.60 逐道亮起');
+    //  全部到点只花 0.6s，短于单道特效自身时长（0.667s）⇒ 观感是「一道接一道砸下来」，
+    //  而不是「一波齐射」—— 这也是 0.15s 这个间隔能被看见的前提。
+    assert.ok(0.6 < ZC_BOLT_EFFECT_SECONDS);
+});
+
+test('五雷轰顶：渲染世界对「还没到点」的事件不建节点（节点一建动画就从第 0 帧起播）', () => {
+    const source = readFileSync(join(ROOT, 'assets', 'script', 'app', 'zcds', 'view', 'ZCGameRenderWorld.ts'), 'utf8');
+    const body = source.slice(
+        source.indexOf('private renderEffectSystem('),
+        source.indexOf('private resolveMissingEffectArt('),
+    );
+    assert.ok(body.length > 0, 'renderEffectSystem 必须还在（这条用例靠它定位）');
+    const gate = body.indexOf('!zcCombatEffectEntered(event.startedAt, now)');
+    const acquire = body.indexOf('this.pool.acquire(');
+    assert.ok(gate >= 0, '表现事件先过 `zcCombatEffectEntered` 闸');
+    assert.ok(acquire > gate, '闸门必须拦在 `pool.acquire` 之前 —— 建了节点动画就已经在播了');
+    assert.match(body, /!zcCombatEffectEntered\(projectile\.startedAt, now\)/,
+        '延迟出发的弹道同理，到点前不许先占一个弹头');
 });
 
 // ────────────────────────────────────────────── 四、触发范围闸门（五雷轰顶）

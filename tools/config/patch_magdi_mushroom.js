@@ -2,7 +2,8 @@
 //
 //   101603 五雷轰顶   —— 行为键 `bolt_strike`（新车道，`ZCSkillTriggerSystem.applyBoltStrike`）
 //   101604 磁电冲击   —— 行为键 `self_aura`（复用自身光环车道，改成「累计 8 次普攻」触发 +
-//                        身前 1px + 站桩 + 每波最多 5 人）
+//                        身前矩形雷电束（长 × 宽 = 320/360/400 × 108）+ **跟随角色、固定在身前** +
+//                        每波最多 5 人；2026-11-12 由站桩改跟随）
 //   pvpStatus `numb` —— 新设定「麻痹」是**软控**（只禁攻击 + 移速 −50%），
 //                        不能复用 `paralysis`（那是硬控，连移动都停）。
 //
@@ -92,14 +93,22 @@ const BOLT = [
     { level: 3, unlock: 24, count: 5, rate: 2.5, text: '250%' },
 ];
 
-//  磁电冲击：累计 8 次普攻，在身前 1px 放一片站桩冲击波，持续 3 秒、每秒 1 波、每波最多 5 人。
-//  三档只抬「每波伤害」与「半径」，触发门槛（8 次）/ 时长 / 人数上限不变 —— 那三个是设计给的常量。
+//  磁电冲击：累计 8 次普攻，在**角色身前**放一道矩形雷电束，持续 3 秒、每秒 1 波、每波最多 5 人。
+//  三档只抬「每波伤害」与「半长」，触发门槛（8 次）/ 时长 / 人数上限 / 跟随 不变 —— 那几项是设计给的常量。
 //  ⚠️ 解锁等级以 K 表（`K-卡牌升级.xlsx / 卡牌技能升级表` 193~198 行）为准：101603 = 9/18/24、101604 = 0/20/25。
+//  ⚠️ 这个脚本会**整块重写** `skillParamJson`，所以参数必须与线上**完全一致**：
+//     少写一个键（曾漏 `auraRectHalfHeight` / `auraFaceTarget` / `auraVisualLiftPx`）重跑一次就静默回滚。
+//     2026-11-12 起：矩形（半宽 `SHOCK_RECT_HALF_HEIGHT`）、朝目标（`auraFaceTarget: 1`）、
+//     抬升 30、`auraFollow: 1`（跟随角色、固定在身前）。改口径时**先改这里**再跑。
 const SHOCK = [
     { level: 1, unlock: 0, rate: 2.5, radius: 160 },
     { level: 2, unlock: 20, rate: 3.0, radius: 180 },
     { level: 3, unlock: 25, rate: 3.5, radius: 200 },
 ];
+/** 矩形半宽（表值逻辑 px）⇒ 宽 108；`> 0` 才启用矩形判定。 */
+const SHOCK_RECT_HALF_HEIGHT = 54;
+/** 表现竖直抬升（**屏上 px**）：抬到角色身体中心。 */
+const SHOCK_VISUAL_LIFT_PX = 30;
 
 /** K 表面板文案（与 `armySkillLevelUp.desc` / K 表 C 列同一份）。 */
 const PANEL_DESC = {
@@ -109,9 +118,9 @@ const PANEL_DESC = {
         '冷却12秒：对目标释放1道雷电并沿其背朝向再落4道（每道间隔60px、出现间隔0.15秒），每道造成250%伤害，30%概率使目标麻痹3秒',
     ],
     101604: [
-        '累计8次普攻：朝目标方向喷出一道长320、宽108的雷电束（起点在自身中心），持续3秒、每秒造成250%伤害，每波最多命中5个敌人',
-        '累计8次普攻：朝目标方向喷出一道长360、宽108的雷电束（起点在自身中心），持续3秒、每秒造成300%伤害，每波最多命中5个敌人',
-        '累计8次普攻：朝目标方向喷出一道长400、宽108的雷电束（起点在自身中心），持续3秒、每秒造成350%伤害，每波最多命中5个敌人',
+        '累计8次普攻：朝目标方向喷出一道长320、宽108的雷电束（起点在自身中心），持续3秒，全程跟随角色移动、固定在角色身前，每秒造成250%伤害，每波最多命中5个敌人',
+        '累计8次普攻：朝目标方向喷出一道长360、宽108的雷电束（起点在自身中心），持续3秒，全程跟随角色移动、固定在角色身前，每秒造成300%伤害，每波最多命中5个敌人',
+        '累计8次普攻：朝目标方向喷出一道长400、宽108的雷电束（起点在自身中心），持续3秒，全程跟随角色移动、固定在角色身前，每秒造成350%伤害，每波最多命中5个敌人',
     ],
 };
 const SKILL_NAME = { 101603: '五雷轰顶', 101604: '磁电冲击' };
@@ -160,17 +169,25 @@ function applyPlan(tables) {
             skillLevel: item.level, unlockHeroLevel: item.unlock,
             skillKind: 'active_cd', passiveScope: 'battle', triggerEvent: 'active',
             behaviorKey: 'self_aura',
-            desc: '累计 8 次普攻：在身前 1 像素处释放 1 道雷电冲击波，持续 3 秒、每秒造成'
-                + ` ${Math.round(item.rate * 100)}% 攻击力伤害，每波最多命中 5 个敌人`,
+            desc: '累计 8 次普攻：朝目标方向喷出一道长'
+                + ` ${item.radius * 2}、宽 ${SHOCK_RECT_HALF_HEIGHT * 2} 的雷电束（起点在自身中心），`
+                + '持续 3 秒，全程跟随角色移动、固定在角色身前，'
+                + `每秒造成 ${Math.round(item.rate * 100)}% 攻击力伤害，每波最多命中 5 个敌人`,
             [PARAM]: JSON.stringify({
                 auraEvery: 8,
                 auraSeconds: 3,
                 auraInterval: 1,
                 auraRadius: item.radius,
+                auraRectHalfHeight: SHOCK_RECT_HALF_HEIGHT,
                 auraDamageRate: item.rate,
-                auraForward: 1,            // 「身前 1px」
-                auraFollow: 0,             // 冲击波站桩，不跟着本体跑
+                //  「身前 N px」既是出生点偏移、也是跟随落点的距离（`castSelfAura` 里
+                //  `followForward` 直接取它）。取 `item.radius` ⇒ 矩形左缘压在本体脚点。
+                auraForward: item.radius,
+                //  2026-11-12：由 0 改 1 —— 跟随角色移动、固定在角色身前。
+                auraFollow: 1,
+                auraFaceTarget: 1,          // 朝当前目标，不固定朝右
                 auraWaveMaxTargets: 5,
+                auraVisualLiftPx: SHOCK_VISUAL_LIFT_PX,
             }),
         }));
     }

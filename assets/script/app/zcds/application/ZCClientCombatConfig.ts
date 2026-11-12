@@ -40,10 +40,10 @@ export function ownerRatesOf(unit: ZCBattleUnit | undefined): IZCBattleRates | u
     if (attack !== null && (!Number.isFinite(attack) || attack < 0)) {
         throw new Error(`服务端攻击倍率无效：${attack}`);
     }
-    return {
-        ...(hp === null ? {} : { hpRate: hp }),
-        ...(attack === null ? {} : { attackRate: attack }),
-    };
+    return Object.assign({},
+        hp === null ? {} : { hpRate: hp },
+        attack === null ? {} : { attackRate: attack },
+    );
 }
 
 function battleUnitsByOwner(
@@ -52,7 +52,7 @@ function battleUnitsByOwner(
     selfRoleId?: string,
 ): Readonly<Partial<Record<ZCOwner, ZCBattleUnit>>> {
     const owners = ownersForPlayerCount(playerCount);
-    const units = [...(battle?.units ?? [])].sort((left, right) => left.campId - right.campId);
+    const units = Array.from(battle?.units ?? []).sort((left, right) => left.campId - right.campId);
     const self = (selfRoleId
         ? units.find((unit) => unit.roleId !== '' && unit.roleId === selfRoleId)
         : undefined) ?? units[0];
@@ -96,7 +96,7 @@ function battleMapOf(config: ZCMatchConfig, battle: ZCBattleStart | null | undef
     }
     const sectionOf = (section: number): ZCSection => section === 0 ? 0 : (indexes.indexOf(section - 1) + 1) as ZCSection;
     const sections = map.sections?.map(sectionOf);
-    const regions = map.regions?.map(region => ({ ...region, section: sectionOf(region.section) }));
+    const regions = map.regions?.map(region => Object.assign({}, region, { section: sectionOf(region.section) }));
     const occupied = new Set<number>();
     const resourcePoints = (info.resourcePoints ?? []).map(point => {
         const hexId = point.row * map.columns + point.column;
@@ -110,20 +110,20 @@ function battleMapOf(config: ZCMatchConfig, battle: ZCBattleStart | null | undef
         occupied.add(hexId);
         return { row: point.row, column: point.column, groupId: point.groupId, section: sections?.[hexId] ?? 0 };
     });
-    return {
-        ...map, id: info.id, name: info.name, version: info.version, cityMode: needsSelection ? 'select' : 'fixed',
+    return Object.assign({}, map, {
+        id: info.id, name: info.name, version: info.version, cityMode: needsSelection ? 'select' : 'fixed',
         homes, playerHomeId: needsSelection ? map.playerHomeId : homes[0],
         enemyHomeId: needsSelection ? map.enemyHomeId : homes[1], sections, regions,
         owners: map.owners.map(owner => owner === 'neutral' ? owner : owners[indexes.indexOf(owners.indexOf(owner))]),
-        homeCandidates: map.homeCandidates?.map(region => ({ ...region, section: sectionOf(region.section) })),
+        homeCandidates: map.homeCandidates?.map(region => Object.assign({}, region, { section: sectionOf(region.section) })),
         resourcePoints,
         resolvedResources: (info.resourcePoints ?? []).map((point, index) => {
             const hexId = point.row * map.columns + point.column;
             const depth = regions?.find(region => region.cells.includes(hexId))?.depth;
-            return { hexId, section: resourcePoints[index].section, itemId: point.resourceId,
-                ...(depth === undefined ? {} : { depth }) };
+            return Object.assign({ hexId, section: resourcePoints[index].section, itemId: point.resourceId },
+                depth === undefined ? {} : { depth });
         }),
-    };
+    });
 }
 
 /** 后端英雄阵容只替换英雄卡；无 unitId 的金矿、塔等系统卡始终由本地表保留。 */
@@ -146,10 +146,10 @@ function buildBattleDeck(
         const card = heroCardsById.get(String(hero.heroId));
         if (card) {
             const buildingHp = unit?.heroAttrs?.find((entry) => entry.heroId === hero.heroId)?.attributes.buildingHp;
-            selected.push(buildingHp === undefined ? card : { ...card, baseHp: buildingHp });
+            selected.push(buildingHp === undefined ? card : Object.assign({}, card, { baseHp: buildingHp }));
         }
     }
-    return [...selected, ...systemCards];
+    return selected.concat(systemCards);
 }
 
 function uniqueHeroIds(values: readonly number[]): number[] {
@@ -287,9 +287,9 @@ function compileOwnerLoadouts(
         const hasSkillPlan = selectZCSkillPlans(String(generalId), skillPlanLevel, catalogs).length > 0;
         if (!hasGeneral && !serverAttributes && !hasSkillPlan) continue;
         try {
-            loadouts.push(...compileZCCombatBuild({
+            const compiled = compileZCCombatBuild(Object.assign({
                 unitId: String(generalId),
-                ...growthSelectionOf(catalogs, generalId, hero.level),
+            }, growthSelectionOf(catalogs, generalId, hero.level), {
                 //  ⚠️ 必须无条件传：`compileZCCombatBuild` 只在 `heroLevel != null` 时才去编技能计划。
                 heroLevel: skillPlanLevel,
                 //  ⚠️ 星级表（`generalStar`）2026-11-10 起**弃用且不再参与构筑**：
@@ -299,7 +299,8 @@ function compileOwnerLoadouts(
                 //  （按品质分档：1→45 / 2→55 / 3→65 / 4→75），
                 //  见 `tools/config/patch_general_star_removal_growth.js`。
                 serverAttributes,
-            }, config.units, catalogs));
+            }), config.units, catalogs);
+            for (const loadout of compiled) loadouts.push(loadout);
         } catch (error) {
             skipped.push({
                 owner,
@@ -344,7 +345,7 @@ export function buildZCClientCombatConfig(
     const playerDeck = ownerDecks.player ?? config.playerDeck;
     const enemyDeck = ownerDecks.enemy ?? config.enemyDeck;
     return {
-        config: captureZCMatchConfig({ ...config, map: battleMapOf(config, battle, selfRoleId), playerDeck, enemyDeck, ownerDecks, modifiers, ownerRates }, options),
+        config: captureZCMatchConfig(Object.assign({}, config, { map: battleMapOf(config, battle, selfRoleId), playerDeck, enemyDeck, ownerDecks, modifiers, ownerRates }), options),
         skipped,
     };
 }

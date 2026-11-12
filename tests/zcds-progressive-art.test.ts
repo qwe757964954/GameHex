@@ -139,7 +139,33 @@ test('后补美术只加不降级：空壳补丁不能冲掉首帧已备好的�
     });
     const after = (effects as unknown as { art: Record<string, any> }).art;
     assert.equal(after.hitFxPrefabs.size, 4, '增量补丁不能把其余职业删掉');
+    assert.notEqual(after.hitFxPrefabs, art.hitFxPrefabs, '合并生成独立 Map，保留此前快照');
+    made.length = 0;
+    art.hitFxPrefabs.get('射手').make();
+    assert.deepEqual(made, ['hit-射手'], '此前快照保留旧的同名资源');
     made.length = 0;
     after.hitFxPrefabs.get('射手').make();
     assert.deepEqual(made, ['hit-射手2'], '同名键应以新补丁为准');
+});
+
+test('后补和运行期弹道资源合并保留旧快照，新资源覆盖同名键', () => {
+    const { load, FakeNode } = loadViews();
+    const oldPrefab = {}, newPrefab = {}, extraPrefab = {};
+    const original = new Map([['old', oldPrefab], ['shared', oldPrefab]]);
+    const world = new (load('./ZCGameRenderWorld').ZCGameRenderWorld)({ mapLayer: new FakeNode(), effectVisualPrefabs: original });
+    const patch = new Map([['shared', newPrefab], ['extra', extraPrefab]]);
+    world.applyDeferredArt({
+        effectVisualPrefabs: patch, hitFxPrefabs: new Map(),
+        spawnFxPrefab: null, deathFxPrefab: null, buildingDestroyFxPrefab: null,
+    });
+    const snapshot = world.effectVisualPrefabs;
+    assert.equal(snapshot.get('old'), oldPrefab);
+    assert.equal(snapshot.get('shared'), newPrefab);
+    assert.equal(snapshot.get('extra'), extraPrefab);
+    assert.equal(original.get('shared'), oldPrefab);
+    assert.equal(original.has('extra'), false);
+    assert.equal(patch.size, 2);
+    world.applyEffectPrefab('runtime', newPrefab);
+    assert.equal(world.effectVisualPrefabs.get('runtime'), newPrefab);
+    assert.equal(snapshot.has('runtime'), false);
 });

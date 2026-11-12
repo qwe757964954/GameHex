@@ -42,7 +42,10 @@ test('同一作用域中的重复建筑资源仅加载一次，布局指定背�
     assert.ok(!calls.some((path) => path.includes('/base_ground/')));
     assert.equal(art.buildings.size, 23);
     assert.equal(art.resources.size, 5);
-    assert.equal(art.ui.size, 9);
+    // 2026-11-12：`IBigMapArt.ui` 那 9 张已摘除，只剩 `stamina` 走资源图标兜底 ——
+    // 钉「同一张只请求一次」，并确认其余 UI 件不再被请求（`detail` 图已随清单删库，这里守的是代码侧零请求）。
+    assert.equal(calls.filter((path) => path.endsWith('/concept/ui/stamina/spriteFrame')).length, 1);
+    assert.equal(calls.some((path) => path.endsWith('/concept/ui/detail/spriteFrame')), false);
 });
 
 test('基础贴图未完成时其他资源组已经发起，不串行等待六批资源', async () => {
@@ -76,7 +79,7 @@ test('页面加载前关闭不会发起资源请求，加载途中关闭不会�
     assert.equal(late.home, null);
     assert.equal(late.baseBackground, null);
     assert.equal(late.tiledBackground, null);
-    assert.ok([...late.ui.values()].every((frame) => frame === null));
+    assert.ok([...late.resources.values()].every((frame) => frame === null));
 });
 
 test('连续背景缺失时保留自定义布局背景，不再加载旧地皮', async () => {

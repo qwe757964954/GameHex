@@ -1,3 +1,6 @@
+import {
+    readConfigArray as array, readConfigNumber, readConfigObject as object, readConfigText as text,
+} from '../../../core/config/ConfigValue';
 import { ZCDC_LOG_WARNINGS } from '../ZCDCLogSwitch';
 import type {
     ZCAttackProfile,
@@ -18,25 +21,6 @@ import {
 
 
 
-export function object(value: unknown, field: string): Record<string, unknown> {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) {
-        throw new Error(field + ' 必须是对象');
-    }
-    return value as Record<string, unknown>;
-}
-
-export function array(value: unknown, field: string): unknown[] {
-    if (!Array.isArray(value)) throw new Error(field + ' 必须是数组');
-    return value;
-}
-
-export function text(value: unknown, field: string): string {
-    if (typeof value !== 'string' || value.trim().length === 0) {
-        throw new Error(field + ' 必须是非空字符串');
-    }
-    return value;
-}
-
 function optionalText(value: unknown, field: string): string | undefined {
     if (value === null || value === undefined || value === '') return undefined;
     if (typeof value !== 'string') throw new Error(field + ' 必须是字符串');
@@ -44,16 +28,16 @@ function optionalText(value: unknown, field: string): string | undefined {
 }
 
 export function number(value: unknown, field: string, min = 0, allowZero = false): number {
-    if (typeof value !== 'number' || !Number.isFinite(value) || (allowZero ? value < min : value <= min)) {
-        throw new Error(field + ' 必须是' + (allowZero ? '不小于' : '大于') + ' ' + min + ' 的数字');
+    const parsed = readConfigNumber(value, field);
+    if (allowZero ? parsed < min : parsed <= min) {
+        throw new Error(field + ' 必须是' + (allowZero ? '不小于' : '大于') + ' ' + min + ' 的数字，收到 ' + parsed);
     }
-    return value;
+    return parsed;
 }
 
 function optionalNumber(value: unknown, field: string): number | undefined {
     if (value === null || value === undefined || value === '') return undefined;
-    if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(field + ' 必须是数字');
-    return value;
+    return readConfigNumber(value, field);
 }
 
 function assetPath(value: unknown, field: string): string | undefined {
@@ -210,37 +194,38 @@ export function isHqCard(card: { type: ZCCardType }): boolean {
 /** 解析一行 pvpCard；配置编译与卡牌阵容页共用。 */
 export function parseCard(value: unknown): ZCDeckCard & { enabled: boolean } {
     const raw = object(value, 'cards[]');
-    const unitId = raw.unitId === null || raw.unitId === undefined ? undefined : text(String(raw.unitId), 'cards[].unitId');
-    const name = text(raw.name, 'cards[].name');
+    const field = `pvpCard[id=${String(raw.id)}]`;
+    const unitId = raw.unitId === null || raw.unitId === undefined ? undefined : text(String(raw.unitId), field + '.unitId');
+    const name = text(raw.name, field + '.name');
     const type = parseCardType(raw.type, name);
     return {
         enabled: raw.enabled === true,
-        id: text(String(raw.id), 'cards[].id'),
+        id: text(String(raw.id), field + '.id'),
         name,
         type,
         rarity: parseCardRarity(raw.rarity),
         unitId,
-        unitPrefabPath: assetPath(raw.unitPrefabPath, 'cards[].unitPrefabPath'),
+        unitPrefabPath: assetPath(raw.unitPrefabPath, field + '.unitPrefabPath'),
         // 兵种美术等比缩放：与 `parseUnits` 同一列、同一个解析口径（留空 1、0/负数抛）。
         // 阵容页站台预览要按它体现体型差，所以卡这边也得带上。
-        prefabSize: parsePrefabSize(raw.prefabSize, 'cards[].prefabSize'),
+        prefabSize: parsePrefabSize(raw.prefabSize, field + '.prefabSize'),
         traits: parseTraits(raw.traits),
-        buildSeconds: optionalNumber(raw.buildSeconds, 'cards[].buildSeconds'),
+        buildSeconds: optionalNumber(raw.buildSeconds, field + '.buildSeconds'),
         cycleSeconds: parseCardCycleSeconds(raw, type),
         // 建筑耐久：基础值必填 —— 它是建筑血量的**唯一来源**（表缺这列会在这里立刻炸，
         // 而不是变成一碰就碎的 0 血建筑）。品级系数与产金数量缺省 0。
-        baseHp: number(raw.baseHp, 'cards[].baseHp'),
-        cyclePerTierValue: optionalNumber(raw.cyclePerTierValue, 'cards[].cyclePerTierValue'),
-        buildDigGoldNum: optionalNumber(raw.buildDigGoldNum, 'cards[].buildDigGoldNum'),
-        cycleBaseValue: optionalNumber(raw.cycleBaseValue, 'cards[].cycleBaseValue'),
+        baseHp: number(raw.baseHp, field + '.baseHp'),
+        cyclePerTierValue: optionalNumber(raw.cyclePerTierValue, field + '.cyclePerTierValue'),
+        buildDigGoldNum: optionalNumber(raw.buildDigGoldNum, field + '.buildDigGoldNum'),
+        cycleBaseValue: optionalNumber(raw.cycleBaseValue, field + '.cycleBaseValue'),
         // 头像：值是 icon.json 的图标名（不是资源名），留空合法（该卡暂无头像）。
         // 不在这里校验它是否真能在 icon.json 里解出来 —— 表与图的同步由
         // `tests/card-head-icon.test.ts` 那条「读真表 + 查真目录」的用例钉死。
-        headIcon: optionalText(raw.headIcon, 'cards[].headIcon'),
+        headIcon: optionalText(raw.headIcon, field + '.headIcon'),
         // 建筑外观图名（image/buildings 下图片名），留空合法，视图按建筑类型回退。
-        buildIcon: optionalText(raw.buildIcon, 'cards[].buildIcon'),
+        buildIcon: optionalText(raw.buildIcon, field + '.buildIcon'),
         // 该卡的技能编号（顺序即 UI 顺序）；空数组合法 —— 主城/金矿没有技能。
-        skillIds: parseSkillIds(raw.skillList, 'cards[].skillList'),
+        skillIds: parseSkillIds(raw.skillList, field + '.skillList'),
     };
 }
 

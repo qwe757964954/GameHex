@@ -1,4 +1,9 @@
 # -*- coding: utf-8 -*-
+#  ⚠️ 历史脚本，口径已被后续轮次覆盖（101603 = 60px/0.15s；101604 = 矩形 + 跟随角色）。
+#     重跑会把 pvpSkillPlan 的描述**回滚**到第三轮文案。当前真源：
+#       · 配表：tools/config/patch_magdi_mushroom.js（整块重写，已与线上一致）
+#       · 描述：patch_magdi_shock_follow.js（两份 JSON）+ patch_skill_k_desc_excel.py
+#       · 设计案：patch_skill_design_magdi_follow.py
 """`pvpSkillPlan.desc` 里 101603 / 101604 六行的描述同步（2026-11-11 第三轮补漏）。
 
 ⚠️ 为什么要单独一个脚本：`armySkillLevelUp.desc` 那张表（卡片 UI 读它）已经由

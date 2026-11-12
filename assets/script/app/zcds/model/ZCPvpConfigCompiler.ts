@@ -1,3 +1,4 @@
+import { readConfigObject as object, readConfigText as text } from '../../../core/config/ConfigValue';
 import type { ZCAttackProfile, ZCBondRule, ZCCounterRule, ZCDeckCard, ZCUnitDefinition, ZCUnitId } from './ZCCombatCatalog';
 import type { ZCPvpTables, ZCRuntimeRules } from './ZCGameRuntimeConfig';
 import { parseZCLegacySkillEffectConfig, parseZCLegacySkillViewBindings } from './ZCLegacySkillEffect';
@@ -12,7 +13,6 @@ import {
     kvToObject,
     normalizeCardRow,
     number,
-    object,
     parseAttackProfiles,
     parseBondRules,
     parseCard,
@@ -21,7 +21,6 @@ import {
     parseTileWeights,
     parseUnits,
     refBool, refNullable,
-    text,
 } from './ZCPvpTableParser';
 import type { ZCPvpTileConfig, ZCPvpTileTypeWeight } from './ZCPvpTileRules';
 import { ZCPvpTileType } from './ZCPvpTileRules';

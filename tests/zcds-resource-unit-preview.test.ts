@@ -376,6 +376,63 @@ test('★自选出生点阶段：兵力资源点与对局一致（站待机兵�
 });
 
 
+test('割草机静态朝左下，触发后六向切图，刷新与复用不残留方向', () => {
+    installZCNeutralTestCatalog([{ groupId: 1, id: 1, groupName: '割草机', resourceType: 8, weight: 1,
+        param: { damageRate: 1, speed: 2 } }]);
+    try {
+        const { load, cc, bar } = loadViews();
+        const view = stubHexView(load, cc, bar);
+        const frames = new Map(['extension', 'extension_right_up', 'extension_up', 'extension_down']
+            .map(name => [name, { name, originalSize: { width: 150, height: 150 } }]));
+        view.setNeutralResourceFrames(frames);
+        const world = new (load('./ZCGameRenderWorld').ZCGameRenderWorld)({});
+        world.hexEntityBySource.set(7, 1);
+        world.hexEntityBySource.set(8, 2);
+        world.hexViews.set(1, view);
+        view.setMowerSpeed(1);
+        const p = { state: resourceHexState(1, { neutralFeature: { claimed: true } }),
+            canDevelop: false, playerGold: 0, cooldown: null, now: 1 };
+        view.render(p);
+        assert.equal(view.iconSprite.spriteFrame, frames.get('extension'));
+        assert.ok(view.iconSprite.node.scale.x < 0);
+        for (const [dx, dy, key, flip] of [
+            [1, 1, 'extension_right_up', 1], [-1, 1, 'extension_right_up', -1],
+            [1, -1, 'extension', 1], [-1, -1, 'extension', -1],
+            [0, 1, 'extension_up', 1], [0, -1, 'extension_down', 1],
+        ] as const) {
+            view.setNeutralResourceFrames(frames);
+            view.render(p);
+            // 启动帧位移为零，方向仍取路线；末段和静态刷新后也必须一致。
+            for (const distance of [0, 100, 200]) {
+                view.renderMower(dx * distance, dy * distance, true, dx, dy);
+                assert.equal(view.iconSprite.spriteFrame, frames.get(key));
+                assert.equal(Math.sign(view.iconSprite.node.scale.x), flip);
+                assert.equal(Math.abs(view.iconSprite.node.scale.x), view.iconSprite.node.scale.y);
+            }
+            const origin = view.node.position;
+            world.scene.get = (entity: number) => ({ node: { position: entity === 1 ? origin
+                : { x: origin.x + dx * 100, y: origin.y + dy * 100, z: 0 } } });
+            for (const elapsedSeconds of [0, 0.5, 1.5]) {
+                view.setNeutralResourceFrames(frames);
+                view.render(p);
+                world.renderNeutralFeatures({ mapConfig: { cityMode: 'fixed' }, snapshot: {
+                    elapsedSeconds, status: 'playing', hexes: [{ id: 7, neutralFeature: {
+                        claimed: true, startedAt: 0, lineHexIds: [7, 8],
+                    } }],
+                } });
+                assert.equal(view.iconSprite.spriteFrame, frames.get(key));
+                assert.equal(Math.sign(view.iconSprite.node.scale.x), flip);
+            }
+        }
+        view.initialize(() => {});
+        view.render(p);
+        assert.equal(view.iconSprite.spriteFrame, frames.get('extension'));
+        assert.ok(view.iconSprite.node.scale.x < 0);
+        view.render({ ...p, state: resourceHexState(null) });
+        assert.ok(view.iconSprite.node.scale.x > 0, '换成普通格后解除镜像');
+    } finally { installZCNeutralTestCatalog(); }
+});
+
 test('割草机结束后刷新、地块动画和换层均不回显，复用后恢复', () => {
     installZCNeutralTestCatalog([{ groupId: 1, id: 1, groupName: '割草机', resourceType: 8, weight: 1,
         param: { damageRate: 1, speed: 2 } }]);

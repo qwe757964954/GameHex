@@ -108,111 +108,6 @@
       "sha256": "2b3d9673e3b3ded89b46fb11065a2e9c0b0c5548247704d184a0b54d967cca92"
     },
     {
-      "path": "ui/header.png",
-      "size": [
-        405,
-        134
-      ],
-      "cell": 0,
-      "sourceRect": [
-        0,
-        0,
-        418,
-        418
-      ],
-      "sha256": "c33e1bdbe5e3daace4898bed72df1f9ec347281e47b1ba40bd43fd7c2f8c7f56"
-    },
-    {
-      "path": "ui/detail.png",
-      "size": [
-        408,
-        256
-      ],
-      "cell": 1,
-      "sourceRect": [
-        418,
-        0,
-        836,
-        418
-      ],
-      "sha256": "1390c281ee621013b09a0049a187cb3cbf38a4e6c1a4c124b32803dde4c24376"
-    },
-    {
-      "path": "ui/button.png",
-      "size": [
-        391,
-        158
-      ],
-      "cell": 2,
-      "sourceRect": [
-        836,
-        0,
-        1254,
-        418
-      ],
-      "sha256": "1841161c6df868e4f0fb59ff8617c6f2dc2e1c9bfb20dbab86af2f82c484cd35"
-    },
-    {
-      "path": "ui/tab_idle.png",
-      "size": [
-        404,
-        161
-      ],
-      "cell": 3,
-      "sourceRect": [
-        0,
-        418,
-        418,
-        836
-      ],
-      "sha256": "223bce280eeb7926b0917f774dbcdf40e85e016faaf3c8a0a4e1f399010f9cb5"
-    },
-    {
-      "path": "ui/tab_active.png",
-      "size": [
-        405,
-        161
-      ],
-      "cell": 4,
-      "sourceRect": [
-        418,
-        418,
-        836,
-        836
-      ],
-      "sha256": "7a289121603b28ba2aa9bd0cfaf4ada73fcd7665637f4ef100b3f0422407b72e"
-    },
-    {
-      "path": "ui/badge.png",
-      "size": [
-        392,
-        119
-      ],
-      "cell": 5,
-      "sourceRect": [
-        836,
-        418,
-        1254,
-        836
-      ],
-      "sha256": "875080f6edabdb2de25b09c002b7a5a6a45a23fc5275e2ed60603077b83215b5"
-    },
-    {
-      "path": "ui/plot.png",
-      "size": [
-        405,
-        309
-      ],
-      "cell": 6,
-      "sourceRect": [
-        0,
-        836,
-        418,
-        1254
-      ],
-      "sha256": "1265aa934a7383041211052938a2c4d8c569825e5efaacdf6e4d625b4171153a"
-    },
-    {
       "path": "ui/stamina.png",
       "size": [
         349,
@@ -226,21 +121,6 @@
         1254
       ],
       "sha256": "26dc6fc04b02ba027be3200e281740b4ad99d851e16b0229c7f3dea28c0975b4"
-    },
-    {
-      "path": "ui/home.png",
-      "size": [
-        304,
-        276
-      ],
-      "cell": 8,
-      "sourceRect": [
-        836,
-        836,
-        1254,
-        1254
-      ],
-      "sha256": "52a3fc6a8bb00de9ef2a5826b0c30c7c4f122e65d6fe9901184cc7a9d34f3a53"
     }
   ]
 }

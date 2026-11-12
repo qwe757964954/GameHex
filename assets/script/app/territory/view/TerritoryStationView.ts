@@ -140,13 +140,19 @@ export const TERRITORY_BOTTOM_ANCHOR_BUILD_IDS: readonly number[] = [
 /**
  * 底部对齐那一档再**整体往下**偏的像素（`+` 是往下）。
  *
- * 用户 2026-10-27 逐图验收：「69010~69013 的对齐中心点往下偏移 4px」。
- * 原因：树干底下还有一圈**落地影子**，影子算进包围盒 ⇒ 按"可见底边"对齐时本体被抬起约 4px。
+ * 三笔叠加，都是**地图像素**（= 1:1 缩放下的屏幕像素），不乘 `buildSize`：
+ *  · **4px**（2026-10-27 逐图验收）：树干底下还有一圈**落地影子**，影子算进包围盒 ⇒
+ *    按"可见底边"对齐时本体被抬起约 4px，用户原话「对齐中心点往下偏移 4px」；
+ *  · **10px**（2026-11-12 用户，附截图圈出红框里的树）：「装饰节点是树这一类的
+ *    建筑id 69010~69013 统一往下挪动10px」⇒ 在已有 4px 之上**再**整体下移 10px；
+ *  · **4px**（2026-11-12 用户追加）：「还可以再往下挪4个像素」⇒ 再叠加 4px。
+ * ⇒ 合计 **18px**。
  *
- * ⚠️ 单位是**地图像素**（= 1:1 缩放下的屏幕像素），不乘 `buildSize`：位置写在父节点（地图）空间里，
- *    与 `Icon` 自身的缩放无关。改它只需要改这一个数。
+ * ⚠️ 位置写在父节点（地图）空间里，与 `Icon` 自身的缩放无关。改它只需要改这一个数：
+ *    `applyIconPlacement`（实心建筑 + 虚影）与 `applyLevelBubblePosition`（气泡抬升）同源，
+ *    站点 / 随机格 / 虚影三条渲染路径一起生效。
  */
-export const TERRITORY_BOTTOM_ANCHOR_DROP_PX = 4;
+export const TERRITORY_BOTTOM_ANCHOR_DROP_PX = 18;
 
 /** `buildId` 是否走「底部对齐格心」那一档（非有限值一律 `false`）。 */
 export function territoryUsesBottomAnchor(buildId: number): boolean {
@@ -669,7 +675,8 @@ export class TerritoryStationView extends Component {
         // 底部对齐那一档：把可见区**整体上抬半个可见高** ⇒ 可见底边从"格心下方半步"变成"正好落在格心"。
         // 推导：可见中心原本被摆在格心，底边就在 格心 − 可见高/2；
         //       要让底边 = 格心，节点得再上抬 可见高/2（缩放后）。
-        // 再减 `TERRITORY_BOTTOM_ANCHOR_DROP_PX`：树干下的**落地影子**也进了包围盒 ⇒ 上抬过头约 4px。
+        // 再减 `TERRITORY_BOTTOM_ANCHOR_DROP_PX`（4px 影子补偿 + 10px + 4px = 18px）：
+        // 三笔都是地图像素，不乘 scale / buildSize。
         const visibleHeight = trimmed.height * canvasScaleY;
         const anchorLiftY = this.bottomAnchored
             ? visibleHeight * scale * 0.5 - TERRITORY_BOTTOM_ANCHOR_DROP_PX

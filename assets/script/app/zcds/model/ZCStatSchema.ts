@@ -1,3 +1,6 @@
+import {
+    readConfigArray, readConfigNumber, readConfigObject, readConfigText,
+} from '../../../core/config/ConfigValue';
 import type { ZCUnitDefinition } from './ZCCombatCatalog';
 import { ZCCombatEventType } from './ZCCombatCatalog';
 import type { ZCModifierRecord } from './ZCModifierEngine';
@@ -367,8 +370,7 @@ function bool(value: unknown): boolean {
 }
 
 function text(value: unknown, path: string): string {
-    if (typeof value !== 'string' || !value.trim()) throw new Error(`[ZCStatSchema] ${path} 必须是非空字符串`);
-    return value.trim();
+    return readConfigText(value, `[ZCStatSchema] ${path}`).trim();
 }
 
 export function isZCTextAttackValue(statId: ZCTextStatId, value: unknown): value is string {
@@ -391,9 +393,7 @@ function textOverrideValue(statId: ZCTextStatId, value: unknown, path: string): 
 
 function number(value: unknown, path: string, fallback?: number): number {
     if ((value === '' || value == null) && fallback !== undefined) return fallback;
-    const result = Number(value);
-    if (!Number.isFinite(result)) throw new Error(`[ZCStatSchema] ${path} 必须是有限数字`);
-    return result;
+    return readConfigNumber(Number(value), `[ZCStatSchema] ${path}`);
 }
 
 function optionalNumber(value: unknown, path: string): number | undefined {
@@ -412,18 +412,14 @@ function jsonValue(value: unknown, path: string): unknown {
 
 function stringArray(value: unknown, path: string): string[] {
     if (value == null || value === '') return [];
-    const source = jsonValue(value, path);
-    if (!Array.isArray(source)) throw new Error(`[ZCStatSchema] ${path} 必须是 JSON 数组`);
+    const source = readConfigArray(jsonValue(value, path), `[ZCStatSchema] ${path}`);
     const result = source.map((item, index) => text(String(item ?? ''), `${path}[${index}]`));
     if (new Set(result).size !== result.length) throw new Error(`[ZCStatSchema] ${path} 不能包含重复单位`);
     return result;
 }
 
 function overrideValueObject(value: unknown, path: string): Record<string, unknown> {
-    const source = jsonValue(value, path);
-    if (!source || typeof source !== 'object' || Array.isArray(source)) {
-        throw new Error(`[ZCStatSchema] ${path} 必须是对象 JSON`);
-    }
+    const source = readConfigObject(jsonValue(value, path), `[ZCStatSchema] ${path}`);
     const entries = Object.entries(source);
     if (!entries.length) throw new Error(`[ZCStatSchema] ${path} 不能为空对象`);
     return Object.fromEntries(entries.map(([key, child]) => [text(key, `${path}.key`), child]));
@@ -443,11 +439,8 @@ function hasConfiguredValue(value: unknown): boolean {
  */
 function parseSkillParams(value: unknown, path: string): Readonly<Record<string, number>> | undefined {
     if (!hasConfiguredValue(value)) return undefined;
-    const raw = jsonValue(value, path);
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-        throw new Error(`[ZCStatSchema] ${path} 必须是对象 JSON`);
-    }
-    const entries = Object.entries(raw as Record<string, unknown>);
+    const raw = readConfigObject(jsonValue(value, path), `[ZCStatSchema] ${path}`);
+    const entries = Object.entries(raw);
     if (!entries.length) return undefined;
     return Object.fromEntries(entries.map(([key, child]) => [text(key, `${path}.key`), number(child, `${path}.${key}`)]));
 }

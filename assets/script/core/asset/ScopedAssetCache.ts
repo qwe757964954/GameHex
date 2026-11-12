@@ -45,11 +45,11 @@ export class ScopedAssetCache implements AssetService {
     }
 
     load<T>(path: string, type: AssetType<T>, options: AssetLoadOptions = {}): Promise<T> {
-        return this.acquire('asset', path, type, options, (scope, priority) => this.delegate.load(path, type, { ...options, scope, priority }));
+        return this.acquire('asset', path, type, options, (scope, priority) => this.delegate.load(path, type, Object.assign({}, options, { scope, priority })));
     }
 
     loadDir<T>(path: string, type: AssetType<T>, options: AssetLoadOptions = {}): Promise<T[]> {
-        return this.acquire('directory', path, type, options, (scope, priority) => this.delegate.loadDir(path, type, { ...options, scope, priority }));
+        return this.acquire('directory', path, type, options, (scope, priority) => this.delegate.loadDir(path, type, Object.assign({}, options, { scope, priority })));
     }
 
     /** 后台只填充空位；已有前台缓存不因预热被淘汰。 */

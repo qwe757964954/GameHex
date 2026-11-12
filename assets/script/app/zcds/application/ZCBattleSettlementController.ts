@@ -99,13 +99,12 @@ export class ZCBattleSettlementController extends ControllerBase {
         if (this.isDisposed) return;
         const rewards = result ? await this.services.rewards.loadRewards(result) : [];
         if (this.isDisposed) return;
-        this.options = {
+        this.options = Object.assign({
             victory: result ? result.code === 1 : request.localVictory, rewards,
-            ...(result?.warScore !== undefined ? {
-                rankName: '战功', scoreText: String(result.warScore), addScoreText: `+${result.warScore}`,
-                rankHint: `本次战斗获得 ${result.warScore} 战功`,
-            } : {}),
-        };
+        }, result?.warScore !== undefined ? {
+            rankName: '战功', scoreText: String(result.warScore), addScoreText: `+${result.warScore}`,
+            rankHint: `本次战斗获得 ${result.warScore} 战功`,
+        } : {});
         await this.open();
     }
     /**

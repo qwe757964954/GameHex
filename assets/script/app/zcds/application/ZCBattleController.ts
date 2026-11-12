@@ -124,7 +124,7 @@ export class ZCBattleController<T extends IZCBattleRuntime> extends ControllerBa
             if (battle) {
                 const result = await battle;
                 if (this.isDisposed) throw new Error('对局准备已取消');
-                this.params = { ...this.params, battle: result };
+                this.params = Object.assign({}, this.params, { battle: result });
             }
             if (this.isDisposed) throw new Error('对局准备已取消');
             const prepared = await this.options.prepareDirect(this.scope, this.params, this.resources);
@@ -144,8 +144,9 @@ export class ZCBattleController<T extends IZCBattleRuntime> extends ControllerBa
         this.adopted = true;
         this.detachOwner?.();
         this.detachOwner = context.resources.defer(() => this.dispose());
-        const { session: _session, ...entryParams } = params ?? {};
-        this.params = { ...this.params, ...entryParams };
+        const entryParams = Object.assign({}, params);
+        delete entryParams.session;
+        this.params = Object.assign({}, this.params, entryParams);
         try {
             await this.ready;
         } catch (error) {

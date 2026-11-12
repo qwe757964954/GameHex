@@ -25,16 +25,14 @@ export const ZC_BATTLE_DOWNLOAD_PREFABS = [
     ZC_BATTLE_SHELL_PATHS.wallLayer, ZC_BATTLE_SHELL_PATHS.floatText,
 ] as const;
 
-const ZC_BATTLE_COMMON_FX_PREFABS = [
+const ZC_BATTLE_COMMON_FX_PREFABS: readonly string[] = Array.of<string>(
     ZC_BATTLE_FX_PATHS.spawn, ZC_BATTLE_FX_PATHS.death, ZC_BATTLE_FX_PATHS.buildingDestroy,
-    ...ZC_ATTACK_TRAITS.map(trait => `${ZC_BATTLE_FX_PATHS.hitDirectory}/${trait}受击/${trait}受击`),
-] as const;
+).concat(ZC_ATTACK_TRAITS.map(trait => `${ZC_BATTLE_FX_PATHS.hitDirectory}/${trait}受击/${trait}受击`));
 
-export const ZC_BATTLE_COMMON_PREFABS = [
-    ...ZC_BATTLE_DOWNLOAD_PREFABS,
-    ZC_BATTLE_SHELL_PATHS.cardReveal, ZC_BATTLE_SHELL_PATHS.legendBanner, ZC_BATTLE_SHELL_PATHS.decor,
-    ...ZC_BATTLE_COMMON_FX_PREFABS,
-] as const;
+export const ZC_BATTLE_COMMON_PREFABS: readonly string[] = Array.from<string>(ZC_BATTLE_DOWNLOAD_PREFABS).concat(
+    [ZC_BATTLE_SHELL_PATHS.cardReveal, ZC_BATTLE_SHELL_PATHS.legendBanner, ZC_BATTLE_SHELL_PATHS.decor],
+    ZC_BATTLE_COMMON_FX_PREFABS,
+);
 
 /** 只从表字段收集下载路径；不创建卡牌、地图或对局状态。 */
 export function buildZCBattleWarmupPaths(
@@ -51,7 +49,7 @@ export function buildZCBattleWarmupPaths(
         const row = rowOf(value);
         if (row && row.enabled === 1) add(row.unitPrefabPath);
     }
-    for (const path of [...ZC_BATTLE_COMMON_PREFABS, ZC_BATTLE_SHELL_PATHS.spawnSelection, ZC_BATTLE_SHELL_PATHS.bossPanel]) {
+    for (const path of ZC_BATTLE_COMMON_PREFABS.concat([ZC_BATTLE_SHELL_PATHS.spawnSelection, ZC_BATTLE_SHELL_PATHS.bossPanel])) {
         paths.add(path);
     }
     for (const value of skills) {

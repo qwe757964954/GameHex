@@ -5,9 +5,9 @@ import { bundleForPath } from '../../../core/asset/BundleCatalog';
 import type { BigMapResType, IBigMapBuildingConfig, IBigMapCampConfig } from '../model/BigMapTypes';
 import {
     BIGMAP_BASE_BACKGROUND, BIGMAP_BASE_FALLBACK_ART, BIGMAP_CONCEPT_ROOT, BIGMAP_HUD_UI_FILES, BIGMAP_HUD_UI_KEYS,
-    BIGMAP_PLATE_FILES, BIGMAP_PLATE_FLAG_FILE, BIGMAP_PLATE_KEYS, BIGMAP_UI_KEYS,
+    BIGMAP_PLATE_FILES, BIGMAP_PLATE_FLAG_FILE, BIGMAP_PLATE_KEYS, BIGMAP_STAMINA_ART,
     BIGMAP_WORLD_CITY_ART, BIGMAP_WORLD_HOME_ART, worldCampArtFor,
-    type IBigMapHudUiKey, type IBigMapPlateKey, type IBigMapUiKey,
+    type IBigMapHudUiKey, type IBigMapPlateKey,
 } from './BigMapArtCatalog';
 
 export { toBigMapArtPath } from './BigMapArtCatalog';
@@ -28,7 +28,6 @@ export interface IBigMapArt {
     readonly construction: SpriteFrame | null;
     readonly buildings: ReadonlyMap<number, SpriteFrame | null>;
     readonly camps: ReadonlyMap<number, SpriteFrame | null>;
-    readonly ui: ReadonlyMap<IBigMapUiKey, SpriteFrame | null>;
     /** 据点名条（按归属四选一）与「谁占着」小旗。缺图时标记退回手画角标，不影响布局。 */
     readonly plates: ReadonlyMap<IBigMapPlateKey, SpriteFrame | null>;
     readonly plateFlag: SpriteFrame | null;
@@ -129,16 +128,6 @@ export async function loadBigMapArt(
         // 换成真实图名后 `worldCampArtFor` 原样返回，不用再动这里。
         [camp.campId, camp.iconPath ? await load(worldCampArtFor(camp.iconPath, camp.campId)) : null] as const
     )));
-    const uiTask = Promise.all(BIGMAP_UI_KEYS.map(async (key) => {
-        const frame = await load(`${BIGMAP_CONCEPT_ROOT}/ui/${key}`);
-        if (frame && key !== 'plot' && key !== 'stamina' && key !== 'home') {
-            frame.insetLeft = 28;
-            frame.insetRight = 28;
-            frame.insetTop = 28;
-            frame.insetBottom = 28;
-        }
-        return [key, frame] as const;
-    }));
     const hudTask = Promise.all(BIGMAP_HUD_UI_KEYS.map(async (key) => {
         // 按钮的九宫边 / 圆角走各自 `.png.meta` 的导入设置，不在这里覆写 ——
         // 覆写会和导入设置打架，改一次图就错一次（`btn_quick_fight` 本来就没有九宫边）。
@@ -154,22 +143,21 @@ export async function loadBigMapArt(
             if (frame) return [key, frame] as const;
         }
         // 没配 itemId / 表还没导 / 图缺失 ⇒ 退回大地图自己的概念图，绝不留空图标。
-        return [key, key === 'stamina'
-            ? (await uiTask).find(([name]) => name === 'stamina')?.[1] ?? null
-            : await sprite(key)] as const;
+        // `stamina` 那张图在 `image/concept/ui/` 下（不在 sprites），2026-11-12 起单独直读。
+        return [key, key === 'stamina' ? await load(BIGMAP_STAMINA_ART) : await sprite(key)] as const;
     }));
     const baseTask = Promise.all([
         load(BIGMAP_BASE_BACKGROUND), sprite('construction'), sprite('rocks'), sprite('grass'),
     ]);
-    // 名条原尺寸贴图：**不**走 `uiTask`，那组会统一覆写九宫边（见 `BIGMAP_PLATE_KEYS` 注释）。
+    // 名条是整条原尺寸贴图，走自己的加载分支、不参与任何九宫覆写（见 `BIGMAP_PLATE_KEYS` 注释）。
     const plateTask = Promise.all(BIGMAP_PLATE_KEYS.map(async (key) => (
         [key, await load(BIGMAP_PLATE_FILES[key])] as const
     )));
     const plateFlagTask = load(BIGMAP_PLATE_FLAG_FILE);
-    const [[backdrop, home, city, monster, rock, grass, tiledBackground], buildingEntries, uiEntries,
+    const [[backdrop, home, city, monster, rock, grass, tiledBackground], buildingEntries,
         hudEntries, resourceEntries, [baseBackground, construction, conceptRock, conceptGrass], campEntries,
         plateEntries, plateFlag] = await Promise.all([
-        terrainTask, buildingTask, uiTask, hudTask, resourceTask, baseTask, campTask, plateTask, plateFlagTask,
+        terrainTask, buildingTask, hudTask, resourceTask, baseTask, campTask, plateTask, plateFlagTask,
     ]);
     const buildings = new Map(buildingEntries);
     if (missedIcons.length > 0) {
@@ -182,6 +170,6 @@ export async function loadBigMapArt(
         rock: conceptRock ?? rock, grass: conceptGrass ?? grass,
         baseBackground, construction, buildings,
         camps: new Map(campEntries.map(([id, frame]) => [id, frame ?? city])),
-        ui: new Map(uiEntries), hud: new Map(hudEntries), plates: new Map(plateEntries), plateFlag,
+        hud: new Map(hudEntries), plates: new Map(plateEntries), plateFlag,
         resources: new Map(resourceEntries) };
 }
